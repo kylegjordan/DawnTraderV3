@@ -4,15 +4,17 @@
 
 ---
 
-## ⛔ NOT CLOSED. ONE ITEM OPEN, AND IT IS KYLE'S, STATED AT THE TOP RATHER THAN BURIED
+## ⛔ NOT CLOSED. ONE ITEM OPEN — AND IT IS A RULE CONFLICT WITH LANGSTON, NOT A KYLE YES/NO
 
-| item | owner | home | closing condition | failure condition |
-|---|---|---|---|---|
-| **P11 — `na-skip \| system_manual`** | **KYLE** | `GOVERNANCE_EXCEPTIONS.md`, row filed `PENDING KYLE` 2026-08-31T19:18:49Z | Kyle confirms the System Manual is genuinely N/A for this batch; the row's `confirmed_by` becomes `kyle` | **Kyle rules it APPLICABLE** ⇒ the batch reopens at Step 10 and a System Manual entry is written before close |
+| item | owner | closing condition | failure condition |
+|---|---|---|---|
+| **the `SYSTEM_MANUAL.md` row** | **LANGSTON** (he set the class) | either the class is re-declared, or a System Manual entry is written | **neither happens** ⇒ the batch cannot close, because a REQUIRED row is unfilled |
 
-**WHY IT IS HIS AND NOT LANGSTON'S, quoted from the ledger's own tiering rule:** *"Three-way (escalate Kyle) for an N/A that OVERRIDES a REQUIRED doc (esp. SYSTEM_MANUAL/SIM on an arch batch)."* `architecture` **requires** the System Manual; I am asking to mark it N/A; that is three-way by construction.
-⛔ **I did NOT cite `B-DIAG-387` as precedent, although it is the identical shape** — arch-class, System Manual marked N/A. **That row cleared itself `langston`-alone as *"AGREES with correct config"*, which on an arch batch the rule says it does not.** ★ **Copying it would launder a mis-tiering into standing practice**, which is this batch's own subject.
-**SUBSTANCE:** the batch changes a SessionStart hook that refreshes governed rule files in each laptop clone. **Zero engine, strategy, regime, filter, signal-pipeline or math.** Nothing in System-Manual scope exists to update. **SIM WAS applicable and LANDED.**
+⛔⛔ **`workflow-10-governance` FORBIDS THE THING I DID:** *"A `REQUIRED` ROW CANNOT TAKE `N/A`. If it is genuinely not applicable, THE CLASS IS WRONG — re-declare it, do not write `N/A` against an obligation."*
+⚠️ **I filed an `na-skip | system_manual` row and escalated it to Kyle as a yes/no. THAT OPTION DOES NOT EXIST, so the question was malformed and is withdrawn** (the row is annotated in place rather than deleted, so the malformed escalation is not silently repeatable).
+**THE FACTS EITHER WAY:** `architecture` REQUIRES the System Manual. **Nothing under `server/`, `client/` or `shared/` changed** — the batch is a laptop-side SessionStart hook — so there is no System-Manual-scope content to write. **By the skill's own logic that means the CLASS is wrong.**
+⛔ **I will not re-declare it myself.** Langston overruled my declared `non_architecture` to `architecture`, and the standing rule is **never declare a LOWER class at close than the one the reviewer graded** — that is downgrading unreviewed. **So it is his to settle, and Kyle's only if we deadlock.**
+★ **I also did NOT cite `B-DIAG-387`** — arch-class with the System Manual marked N/A, cleared `langston`-alone. **Copying it would launder a mis-tiering into standing practice**, which is this batch's own subject.
 
 ---
 
@@ -70,11 +72,48 @@ Deployed sha `2af2e0bacc1430a6452559b83ba7d3be15adc7be` (`--by CC-C`). Diff to o
 4. **SIM said `load-own-memory.mjs` carries a "three-entry" clone map; it has carried four since 2026-08-26.** **DISPOSITION: folded into this batch** — corrected, and stamped *read the map's length from the code, not from here*.
 5. **`B-FRESHNESS-LOG-READER` was in NO plan file when I twice told Langston it was "already homed".** **DISPOSITION: folded — genuinely placed at 2.6's predecessor 2.5.** ★ **§9.4's own named failure — *naming is not placing* — committed by the session quoting the rule at the reviewer.**
 
-## 8. GOVERNANCE FILES CHANGED — transcribed from the Step-10 work, not from recollection
+## 8. THE TIER LEDGER — transcribed from the governance commit message `0d768bae1`, not from recollection
 
-`1-system-manual/SYSTEM_IMPACT_MAP.md` *(row 1 rewritten — it described this hook in the words the batch exists to retire; broken table repaired; stale clone-map count corrected)* · `1-system-manual/RUNNING_ISSUES.md` *(`#753` update + `:3838` amendment + `#979` filed)* · `1-system-manual/PHASE_19_PLAN.md` *(2.5 `B-FRESHNESS-LOG-READER`, 2.6 `B-SHARED-TMP-ISOLATION`)* · `1-system-manual/GOVERNANCE_EXCEPTIONS.md` *(P11 row, **PENDING KYLE**)* · `1-system-manual/DELETED_COMPONENTS_LOG.md` · `1-system-manual/_archive/deleted-code/` ×3 · `.gitattributes` · `.claude/hooks/fresh-rules.mjs` · `.claude/skills/workflow-03-implementation/SKILL.md` · `.claude/memory/MEMORY_CC_B.md` · both scope files · `BATCH_19G_HF2/INSTRUCTIONS.md` · `Claude Comms and Packages/Langston/{AGENTS.md, skills/dt-master-workflow/SKILL.md, skills/dt-replit-ops/SKILL.md}`
+**CHANGE-CLASS: `architecture`** *(declared in the scope header; the System Manual row is DISPUTED)*
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | OK | row added: mechanism, A14 freeze, the fix, the seven-instance finding, close-pending |
+| T1 | PHASE_HISTORY.md | OK | Phase 19 governance entry; phase status explicitly unchanged, no engine surface touched |
+| T1 | PHASE_19_PLAN.md | OK | B-FRESHNESS-LOG-READER placed at 2.5, B-SHARED-TMP-ISOLATION at 2.6 |
+| T1 | shared MEMORY.md + MEMORY_CC_B.md | OK | own file at STEP 10, #979 and the seven-instance pattern folded in; shared file untouched |
+| T1 | batch SCOPE | OK | change-class corrected to architecture; OBJ-1 and P10 dispositions appended |
+| T1 | batch PRE_AUDIT | OK | Step-7 rig-contamination finding appended; header class corrected |
+| T1 | COMPLETION_REPORT | OK | written and pushed, filed OPEN on the System Manual row |
+| T1 | Langston's /home/langston/MEMORY.md | OK | synced; five CLOSED batches collapsed per the lean rule (-13,088 B), 216 -> 170 lines |
+| T2 | SYSTEM_MANUAL.md | DISPUTED | REQUIRED at architecture and cannot take N/A; nothing under server/ client/ shared/ changed |
+| T2 | SYSTEM_IMPACT_MAP.md | OK | hook row rewritten, split table repaired, stale three-entry clone map corrected to four |
+| T2 | RUNNING_ISSUES.md | OK | #753 updated and its conclusion amended in place; #979 filed |
+| T2 | CHANGES_AND_FIXES.md | OK | FIX-2026-08-31-B: both halves of the defect, the fix, the live confirmation, the residual |
+| T2 | MISTAKE_PATTERNS.md | OK | enumerator-blind-spot (n=7) and shared-tmp-message (n=1) filed; worktree-not-ref added under wrong-object |
+| T2 | GOVERNANCE_EXCEPTIONS.md | OK | P11 row filed PENDING KYLE -- and per the skill it should not have been written at all |
+| T2 | DELETED_COMPONENTS_LOG.md | OK | three REPLIT_PUSH_SCRIPT.sh copies with the blob table and blast radius |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | no stable rule changed; #979's rule-25.c amendment is a later batch's deliverable |
+| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md rule added or materially changed |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | no phase-level change; both placements went to PHASE_19_PLAN.md |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A | no parameter-adjustment governance touched |
+| T2 | AUTHORITY_BASELINE.md | N/A | constitutional baseline untouched |
+| T2 | STORAGE_POLICY.md | N/A | no retention tier or per-table policy changed |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | N/A | no xStock/crypto expansion surface touched |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | no asset-class onboarding learning surfaced |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | no role, gate or method changed; the fixes were to one hook |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | his model, runtime, invocation, read path and auth unchanged |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | ack/resolve process unchanged |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | no column, field or ownership change; I only moved a card |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | the daily model/feature check did not run in this batch |
+
+⛔⛔ **THE LEDGER IS WHAT CAUGHT THE GAP, WHICH IS THE REASON IT IS POSTED WHOLE.** I reported Step 10 complete having updated the two most interesting documents. **Enumerating every row surfaced FOUR REQUIRED documents I had never touched** — `BATCH_CATALOG.md` and `PHASE_HISTORY.md` (mandatory in EVERY change class), Langston's `MEMORY.md`, and `CHANGES_AND_FIXES.md` / `MISTAKE_PATTERNS.md` by trigger.
+
+⚠️ **EVERY ZERO WAS POSITIVE-CONTROLLED BEFORE IT BECAME AN ABSENCE CLAIM** — 79 / 60 / 17 `P19` matches in the first three files. ★ **`MISTAKE_PATTERNS.md`'s first control ALSO returned zero and was therefore uninformative**, so it was re-controlled on `wrong-object` (12 matches) before its absence counted for anything.
+
 **DELETED:** `REPLIT_PUSH_SCRIPT.sh` (root) · `Claude Comms and Packages/REPLIT_PUSH_SCRIPT.sh` · `attached_assets/REPLIT_PUSH_SCRIPT_1772132688227.sh`
-**`SYSTEM_MANUAL.md` — N/A, PENDING KYLE (§ top).**
+
+**Langston's `MEMORY.md`:** five CLOSED batches collapsed to their headings per the §3.2 lean rule — they already carry ref, CI run and ruling arc. **55,053 → 45,605 B; 216 → 170 lines.** Under the 200-line cap; **still 21,029 B over the 24,576-byte cap.** ⛔ **The remainder is his REVIEWER LEDGER, whose own header says it survives every prune, and his STANDING NOTES — his working rules, not mine to cut.** The residual is stated with its measurement rather than resolved unilaterally. Backup: `/home/langston/MEMORY.md.bak-20260901-ccb`.
 
 ## 9. THE PATTERN THIS BATCH PRODUCED SEVEN TIMES — the transferable part
 
