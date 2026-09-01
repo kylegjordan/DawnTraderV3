@@ -60,8 +60,41 @@ def _safe(path: str) -> bool:
     return not any(p in NEVER_TOUCH for p in parts)
 
 
+# The store may not be written to for a little while (a quiet hour, a stalled
+# sweep). Archiving a file that is merely IDLE would be wrong; archiving one
+# still being appended to would be worse. This guards the second.
+STILL_WARM_SECONDS = 3600
+
+
 def _age_days(path: str, now: datetime) -> float:
-    return (now - datetime.fromtimestamp(os.path.getmtime(path), UTC)).total_seconds() / 86400.0
+    """How old the DATA is, taken from the filename date -- not from mtime.
+
+    ⛔⛔ MTIME WAS THE WRONG CLOCK AND IT COST A DAY OF HOT STORAGE. These are
+       APPEND-ONLY DAILY FILES: `2026-08-31.jsonl` is written to all through
+       the 31st, so its mtime is 23:59 that night and its "age" only passes
+       one day at 23:59 on the 1st -- meaning it is archived on the 2nd.
+       TWO days hot, where the approved scope (§4) says ONE:
+         "birth payload + follow-up series (bulky) | hot 1 day | daily
+          .jsonl.gz -> warm -> cold"
+       Measured 2026-09-01: three nightly runs, 0 bytes moved, and the 08-31
+       file sat at 0.23 days old at 05:38 on 09-01 -- ineligible, by a clock
+       that measures when we last touched the file rather than what the file
+       IS. The date in the name is the data's own date and cannot drift.
+
+    ⚠️ THE MTIME GUARD IS KEPT, NARROWED TO ITS REAL JOB: never archive a file
+       still being appended to. That is a safety property; it was never an
+       age measurement, and using it as one is what caused the extra day.
+    """
+    name = os.path.basename(path)
+    stamp = name.split(".")[0]
+    try:
+        day = datetime.strptime(stamp, "%Y-%m-%d").replace(tzinfo=UTC)
+    except ValueError:
+        # Not a dated file -- fall back to mtime rather than guessing an age.
+        return (now - datetime.fromtimestamp(os.path.getmtime(path), UTC)).total_seconds() / 86400.0
+    if (now - datetime.fromtimestamp(os.path.getmtime(path), UTC)).total_seconds() < STILL_WARM_SECONDS:
+        return 0.0                      # actively being written -- never move it
+    return (now.replace(hour=0, minute=0, second=0, microsecond=0) - day).total_seconds() / 86400.0
 
 
 # ⛔ EVERY BULKY STORE THAT TIERS, AND ITS COLD-NAME PREFIX.
@@ -126,7 +159,12 @@ def tier_payloads(now: datetime | None = None) -> dict:
             refused += 1
             LOG.error("REFUSED to tier a protected path: %s", src)
             continue
-        if _age_days(src, now) <= BULKY_HOT_DAYS:
+        # ⛔ STRICTLY LESS-THAN, AND THE BOUNDARY IS THE WHOLE POINT. `<=` keeps a
+        #    file for a SECOND day: yesterday's file is exactly 1 day old, and
+        #    `1 <= 1` skips it. The approved scope is TODAY hot, YESTERDAY
+        #    archived -- Kyle, 2026-09-01: "a full day comes in, the next day we
+        #    keep that, the day before is archived." So age 1 must MOVE.
+        if _age_days(src, now) < BULKY_HOT_DAYS:
             continue
 
         dst = os.path.join(COLD_DIR, "%s-%s.gz" % (prefix, name))

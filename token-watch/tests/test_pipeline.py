@@ -45,7 +45,16 @@ def section(t):
 
 
 store.ensure_dirs()
-T0 = datetime(2026, 8, 28, 12, 0, 0, tzinfo=UTC)
+# ⛔ ANCHORED TO THE CURRENT MONTH, NOT A FIXED DATE. The credit budget is
+#    accounted PER CALENDAR MONTH, and block 4 injects spend at T0 then calls
+#    `pool_liquidity()` with NO `now` -- so it queries the REAL clock. With a
+#    hard-coded August T0 the two fell into different months the moment
+#    September began, spend read as 0, and the gate correctly allowed a call
+#    the test expected it to refuse. GREEN ALL AUGUST, RED AT MIDNIGHT.
+# ★ Not a code regression -- a test pinned to a date, in a suite whose
+#   subject is a MONTHLY budget. The bomb had a monthly timer on it.
+_now = datetime.now(UTC)
+T0 = _now.replace(day=min(_now.day, 28), hour=12, minute=0, second=0, microsecond=0)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

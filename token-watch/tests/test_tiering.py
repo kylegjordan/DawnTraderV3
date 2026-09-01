@@ -83,17 +83,28 @@ body = gzip.open(os.path.join(COLD_DIR, cold_files()[0]), "rb").read().decode()
 check("POSITIVE CONTROL — the archived bytes come back out", '"body": "x"' in body, body[:40])
 
 print("\n=== 3. THE ONE-DAY HOT WINDOW ACTUALLY BINDS")
+# ELIGIBILITY IS DRIVEN BY THE FILENAME DATE, NOT BY mtime (changed 2026-09-01).
+#    These are append-only DAILY files, so mtime tracks when we last wrote --
+#    not what the data IS -- and using it as an age kept every file hot for a
+#    second day against scope section 4. mtime now does one job: never archive
+#    a file still being appended to. So this block backdates the NAME, and
+#    calls age() only to clear that still-warm guard.
 reset()
-fresh = os.path.join(provenance.RAW_DIR, "2026-08-28.jsonl")
-open(fresh, "w", encoding="utf-8").write('{"body": "today"}\n')
-age(fresh, 0.5)                       # half a day old — INSIDE the window
+today = os.path.join(provenance.RAW_DIR, NOW.strftime("%Y-%m-%d") + ".jsonl")
+open(today, "w", encoding="utf-8").write(json.dumps({"body": "today"}) + chr(10))
+age(today, 1)                          # past the still-warm guard, TODAY by name
 out = tier.tier_payloads(NOW)
 check("a file inside the hot window is LEFT ALONE", out["moved"] == 0, out)
-check("and it is still hot", os.path.exists(fresh))
-# NEGATIVE CONTROL: the same file, one day older, must move.
-age(fresh, BULKY_HOT_DAYS + 1)
+check("and it is still hot", os.path.exists(today))
+# NEGATIVE CONTROL: the SAME content dated yesterday must move, or "left
+# alone" is indistinguishable from a tierer that moves nothing at all.
+yday = os.path.join(provenance.RAW_DIR,
+                    (NOW - timedelta(days=BULKY_HOT_DAYS)).strftime("%Y-%m-%d") + ".jsonl")
+open(yday, "w", encoding="utf-8").write(json.dumps({"body": "yesterday"}) + chr(10))
+age(yday, 1)
 out = tier.tier_payloads(NOW)
-check("NEGATIVE CONTROL — past the window the SAME file moves", out["moved"] == 1, out)
+check("NEGATIVE CONTROL - one day older BY DATE, the file moves", out["moved"] == 1, out)
+check("...and today is STILL hot after that run", os.path.exists(today), out)
 
 print("\n=== 4. ⛔ THE COLLISION — same date, two stores, must NOT overwrite")
 # ★ AN INJECTED THIRD SOURCE, so the guarantee is tested independently of how
@@ -175,6 +186,55 @@ reset()
 out = tier.tier_payloads(NOW)
 check("every configured source is reported, even at zero",
       set(out["by_source"]) == {"provenance-raw", "provenance-follow-up"}, out["by_source"])
+
+print("\nBLOCK: TODAY HOT, YESTERDAY ARCHIVED -- the approved scope, exactly")
+# ⛔⛔ THE DEFECT, MEASURED LIVE 2026-09-01. The age test used MTIME, and these
+#    are APPEND-ONLY DAILY FILES: 2026-08-31.jsonl is written all through the
+#    31st, so at 05:38 on the 1st its mtime age was 0.24 days -- ineligible --
+#    and it would not have moved until the 2nd. TWO days hot, where scope §4
+#    says ONE. Three nightly runs had moved 0 bytes and reported success.
+# ★ THE FIX IS THE CLOCK, NOT THE THRESHOLD: age comes from the DATE IN THE
+#   FILENAME, which is what the data IS and cannot drift. mtime is narrowed to
+#   its real job -- never archive a file still being appended to.
+_ty = datetime.now(timezone.utc)
+_today = _ty.strftime("%Y-%m-%d")
+_yday = (_ty - timedelta(days=1)).strftime("%Y-%m-%d")
+
+for _d in (os.path.join(ROOT, "provenance", "raw"),):
+    os.makedirs(_d, exist_ok=True)
+    for _n, _stamp in ((_today, _today), (_yday, _yday)):
+        _p = os.path.join(_d, _n + ".jsonl")
+        with open(_p, "w", encoding="utf-8") as _fh:
+            _fh.write(json.dumps({"body": "x" * 200}) + chr(10))
+    # Age BOTH files past the still-being-written guard, so the only thing
+    # separating them is the date in the name -- which is the property
+    # under test. Without this, "today stayed" would pass for the wrong
+    # reason (it was warm) and the suite would not test the clock at all.
+    _old = _ty.timestamp() - 2 * tier.STILL_WARM_SECONDS
+    for _n in (_today, _yday):
+        os.utime(os.path.join(_d, _n + ".jsonl"), (_old, _old))
+
+check("positive control: yesterday IS eligible by the data's own date",
+      tier._age_days(os.path.join(ROOT, "provenance", "raw", _yday + ".jsonl"),
+                     _ty) >= BULKY_HOT_DAYS)
+check("...and today is NOT",
+      tier._age_days(os.path.join(ROOT, "provenance", "raw", _today + ".jsonl"),
+                     _ty) < BULKY_HOT_DAYS)
+
+_r = tier.tier_payloads(_ty)
+check("yesterday was archived", not os.path.exists(
+      os.path.join(ROOT, "provenance", "raw", _yday + ".jsonl")), str(_r))
+check("today is STILL HOT", os.path.exists(
+      os.path.join(ROOT, "provenance", "raw", _today + ".jsonl")), str(_r))
+check("...and it moved a non-zero number of bytes",
+      _r.get("freed_bytes", 0) > 0, str(_r))
+
+# ⛔ A file being written RIGHT NOW must never move, whatever its name says.
+_live = os.path.join(ROOT, "provenance", "raw", _yday + ".jsonl")
+with open(_live, "w", encoding="utf-8") as _fh:
+    _fh.write(json.dumps({"body": "still writing"}) + chr(10))
+check("a file touched seconds ago is NOT archived, whatever its date",
+      tier._age_days(_live, _ty) == 0.0, str(tier._age_days(_live, _ty)))
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 shutil.rmtree(ROOT, ignore_errors=True)
