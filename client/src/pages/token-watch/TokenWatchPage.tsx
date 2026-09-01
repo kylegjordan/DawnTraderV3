@@ -56,6 +56,12 @@ type Response =
   | { available: false; reason: string }
   | { available: true; stale: boolean; ageSeconds: number | null; summary: Summary };
 
+const DEATH_LABEL: Record<string, string> = {
+  faded: 'Faded — pool alive, no trading in 24h',
+  liquidity_pulled: 'Liquidity pulled — the pool itself is gone',
+  unknown: 'Unclassified — evidence did not distinguish',
+};
+
 const AGE_LABEL: Record<string, string> = {
   '1h': '1 hour',
   '6h': '6 hours',
@@ -269,6 +275,64 @@ export default function TokenWatchPage() {
           totalLabel="Died in total"
           caption={s.died.note}
         />
+      </section>
+
+      {/* DEATHS BY TYPE, with the definitions ON the table (Kyle, 2026-09-01).
+          The two classes both end at zero, so a win/lose column would treat
+          them identically -- but they are different events and the study
+          treats that difference as a primary object, not a footnote. A reader
+          who has to go elsewhere for the definition will read the label
+          instead, and the labels are not self-explanatory. */}
+      <section className="rounded-lg border border-border bg-card">
+        <div className="border-b border-border px-4 py-3">
+          <h3 className="font-medium">How they died</h3>
+          <div className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+            <p>
+              <strong className="text-foreground">Faded</strong> — the trading pool
+              still exists, but nothing has traded in 24 hours. The token is still
+              listed; nobody is buying or selling it.
+            </p>
+            <p>
+              <strong className="text-foreground">Liquidity pulled</strong> — the
+              trading pool itself is gone, where we had previously seen one. There
+              is nothing left to trade against.
+            </p>
+            <p>
+              <strong className="text-foreground">Unclassified</strong> — the token
+              is not trading, but the evidence does not distinguish the two above.
+              Recorded as unclassified rather than guessed, because a death wearing
+              a class it did not earn is worse than one with no class at all.
+            </p>
+          </div>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="px-4 py-2 font-medium">Type</th>
+              <th className="px-4 py-2 text-right font-medium">Tokens</th>
+              <th className="px-4 py-2 text-right font-medium">Share of deaths</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(s.died.by_class).map(([cls, n]) => (
+              <tr key={cls} className="border-b border-border/50">
+                <td className="px-4 py-2">{DEATH_LABEL[cls] ?? cls}</td>
+                <td className="px-4 py-2 text-right tabular-nums">{n.toLocaleString()}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                  {s.died.total > 0 ? `${((n / s.died.total) * 100).toFixed(2)}%` : '—'}
+                </td>
+              </tr>
+            ))}
+            {/* A token dies once, under one class, so this total IS the sum. */}
+            <tr className="border-t-2 border-border bg-muted/30 font-medium">
+              <td className="px-4 py-2">Died in total</td>
+              <td className="px-4 py-2 text-right tabular-nums">
+                {s.died.total.toLocaleString()}
+              </td>
+              <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">100.00%</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section className="rounded-lg border border-border bg-card">

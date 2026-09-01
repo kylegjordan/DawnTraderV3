@@ -299,6 +299,32 @@ check("POSITIVE CONTROL: the scan CAN detect an outbound primitive",
       "if it detected nothing anywhere, the empty list above would prove nothing")
 
 
+section("DEAD TOKENS ARE STILL OBSERVED -- measuring the rule, not relaxing it")
+# Kyle, 2026-09-01: "let us keep checking to see if any of these trade again."
+# THE PROBLEM HE FOUND: the pre-registration says dead tokens are never
+#   re-checked, and that was implemented by making them UNREACHABLE. So if a
+#   "dead" token ever traded again we could not find out -- the accuracy of
+#   the death definition was unanswerable from our own data, BY CONSTRUCTION.
+# ⛔ THE SURVIVAL DEFINITION IS UNCHANGED and that is the point of this block:
+#   a tombstone still means dead everywhere it is reported. What changes is
+#   that we keep LOOKING and record separately if the corpse moves.
+import store as _st  # noqa: E402
+_dead_mint = "DEADCHECK1"
+_when = datetime.now(UTC)
+_st.record_death(_dead_mint, _when, "faded", "1h", {"volume_h24": 0})
+check("POSITIVE CONTROL: the tombstone exists", _dead_mint in _st.dead_set())
+
+# The due queue must still HAND US the dead token -- that is the whole change.
+_st._append(_st.due_path(_when), {"mint": _dead_mint, "age": "6h",
+                                  "due_at": (_when - timedelta(minutes=1)).isoformat()})
+_served = [e["mint"] for e in _st.due_now(_when)]
+check("★ a DEAD token is still served by the due queue",
+      _dead_mint in _served, str(_served))
+
+# NEGATIVE CONTROL -- it must not have been resurrected in the tombstone set.
+check("...and it is STILL recorded dead, not un-killed",
+      _dead_mint in _st.dead_set())
+
 print("\n" + "=" * 60)
 print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")
 shutil.rmtree(ROOT, ignore_errors=True)

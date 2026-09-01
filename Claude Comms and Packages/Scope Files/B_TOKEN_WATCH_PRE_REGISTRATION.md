@@ -411,3 +411,29 @@ A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE
 **IMPLEMENTATION:** scheduling moved to BIRTH for every launch (`store.record_birth`), and the socials sweep no longer schedules (it would double-schedule). ★ **A second consequence, unplanned and good:** a non-carrier's clock previously started only when the socials sweep reached it, so its 1h checkpoint was gated on sweep lag. It now starts at birth. The per-run bound is **derived** from coverage rather than chosen — the prior flat 1,500/hour was 25% of what full coverage needs and had been bounding ~8,800 launches out of a single sweep.
 
 **Verified live at the amendment:** every one of 33,309 recorded launches has a grid; zero without. Reverting to arm-gated collection is caught by two suites. 13 suites, 0 failures.
+
+---
+
+## AMENDMENT 9 — DEAD TOKENS ARE STILL OBSERVED (Kyle, 2026-09-01)
+
+**Kyle's question, which found a hole nobody had named:** *"If that's based off of trading volume or the money behind it, is there any way for that token to be revived or considered to be survived again?"*
+
+**THE ANSWER WAS NO, AND NOT FOR A GOOD REASON.** §6 says *"Death defined ex ante; dead tokens are never re-checked"* — and that rule was implemented by making dead tokens **UNREACHABLE**. ⛔ **So the accuracy of the death definition was unanswerable from our own data, by construction.** If a token we called dead ever traded again, we had removed the only instrument that could have told us.
+
+**WHAT CHANGES: NOTHING ABOUT THE DEFINITION.** `faded` and `liquidity_pulled` are unchanged, the tombstone still stands, and **every reported survival figure still counts a dead token as dead.** What changes is that we keep OBSERVING: a dead token retains its remaining grid points, its observations are marked `post_mortem`, and if it ever trades again that is recorded as a `revived` event in its own right. ★ **Measuring a rule is not the same as relaxing it. Observing a corpse is not resurrecting it.**
+
+**THE EVIDENCE THAT PROMPTED IT, AND IT CUTS BOTH WAYS.** Re-queried 120 already-dead tokens (60 of 3,003 `liquidity_pulled`, 60 of 1,693 `faded`), hours after death:
+
+| class | pair present again | trading again |
+|---|---|---|
+| `liquidity_pulled` | **0 / 60** | **0 / 60** |
+| `faded` | **55 / 60** | **0 / 60** |
+
+⇒ **The missing pair is NOT the provider forgetting.** Every one of the 60 pulled tokens is still absent; if this were a transient indexing gap some would have returned within hours. That materially strengthens the `liquidity_pulled` classification, which rests on an absence and which the code's own comment flags as ambiguous.
+⇒ **`faded` tokens keep their pool and still are not trading.** Consistent with real death so far — but this is ONE re-check at ONE moment, and it cannot speak to whether a token revives on day nine.
+
+⚠️ **THE MEASUREMENT NOBODY HAS: every death in the census — all 4,696 — rests on an ABSENCE.** Not one was recorded from positively observing liquidity at zero; `liquidity_usd` was `null` on every single tombstone, so that branch has never fired. The two live branches are *no volume in 24h* and *no pair where we had seen one*. Both are absences, and this amendment exists so that at least one of them stops being unfalsifiable.
+
+**KYLE'S STANDING DIRECTION ON WHAT HAPPENS NEXT:** *"we should look at these numbers over the next week or so. And if we're seeing a lot of these look like they're coming back online, then we reset our window and we reset our definitions or we adjust our definitions accordingly."* ⇒ **The 90-day clock is EXPLICITLY resettable if the revival data shows the definitions are wrong.** He said it plainly: *"We can reset our ninety day window to start over if it means that we're getting this absolutely right."* That is the decider's call, recorded here before the data exists so the reset cannot later look like a reaction to an inconvenient result.
+
+**COST:** follow-ups are the free leg — zero credits — and full coverage runs at 34% of the provider ceiling, so continuing to observe the dead is affordable. ⚠️ **It compounds: deaths accumulate over 90 days, so the arithmetic must be re-derived rather than assumed, and it is not yet.**

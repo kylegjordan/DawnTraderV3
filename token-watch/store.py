@@ -430,10 +430,18 @@ def due_now(hour: datetime):
        rather than at write time keeps the queue append-only: we never rewrite
        a bucket to remove entries.
     """
-    dead = dead_set()
+    # ⛔ DEAD TOKENS ARE NO LONGER FILTERED OUT HERE (Kyle, 2026-09-01).
+    #    The pre-registration says dead tokens are never re-checked, and that
+    #    rule was implemented by making them UNREACHABLE. The consequence Kyle
+    #    spotted: if a "dead" token ever traded again we could not find out,
+    #    because we had stopped looking -- so the accuracy of the death
+    #    definition was unanswerable from our own data, by construction.
+    # ★ THE SURVIVAL DEFINITION IS UNCHANGED. A tombstone still means dead for
+    #   every reported figure. What changes is that we keep OBSERVING, and
+    #   record separately whether the corpse ever moves. Measuring a rule is
+    #   not the same as relaxing it.
     for entry in _read(due_path(hour)):
-        if entry["mint"] not in dead:
-            yield entry
+        yield entry
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -120,7 +120,7 @@ check("...exactly once per grid point, never twice",
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-section("2. DEAD TOKENS ARE NEVER RE-CHECKED (pre-registration §6)")
+section("2. DEAD TOKENS ARE STILL OBSERVED — the rule is MEASURED, not relaxed")
 # ─────────────────────────────────────────────────────────────────────────────
 due_at_1h = created + GRID[0]
 before = [e for e in store.due_now(due_at_1h) if e["mint"] == "MINT_A"]
@@ -128,7 +128,19 @@ check("POSITIVE CONTROL: MINT_A IS due before it dies", len(before) == 1, f"got 
 
 store.record_death("MINT_A", due_at_1h, "liquidity_pulled", "1h", {"liquidity_usd": 0})
 after = [e for e in store.due_now(due_at_1h) if e["mint"] == "MINT_A"]
-check("dead token dropped from the due queue", len(after) == 0, f"got {len(after)}")
+# ⛔ THIS ASSERTED `len(after) == 0` UNTIL 2026-09-01. The pre-registration says
+#    dead tokens are never re-checked, and that was implemented by making them
+#    UNREACHABLE -- so if a "dead" token ever traded again we could not find
+#    out. Kyle: "let us keep checking to see if any of these trade again." The
+#    accuracy of the death definition was unanswerable from our own data, by
+#    construction, and that is what changed.
+# ★ THE DEFINITION ITSELF IS UNTOUCHED. The tombstone still stands and every
+#   reported survival figure still counts this token dead -- asserted next.
+#   Observing a corpse is not resurrecting it.
+check("★ a dead token is STILL SERVED by the due queue", len(after) == 1,
+      f"got {len(after)}")
+check("...and the tombstone still stands — it is not un-killed",
+      "MINT_A" in store.dead_set())
 
 # The tombstone is a record, not a deletion: the due entries still exist on
 # disk, which keeps the store append-only and the schedule auditable.

@@ -167,6 +167,7 @@ def run_hour(now: datetime | None = None) -> dict:
     #    absent-as-valid shape record_observation forbids for `observed`: a
     #    reader would need a default to interpret its absence.
     stats = {"due": 0, "observed": 0, "dead": 0, "shed": 0, "unclassified": 0,
+             "revived": 0, "post_mortem": 0,
              "errors": 0, "skipped": False, "folded_spend_rows": 0,
              "last_seen_pruned": 0, "unclassified_by_age": {},
              "requeued_not_yet_due": 0, "buckets_read": 0,
@@ -229,6 +230,15 @@ def run_hour(now: datetime | None = None) -> dict:
         buckets = _buckets_to_read(now)
         stats["buckets_read"] = len(buckets)
         stats["buckets_skipped_too_old"] = _buckets_too_old(now)
+        # ⛔ READ ONCE, BEFORE THE LOOP. The tombstone set decides whether each
+        #    observation is a normal one or a POST-MORTEM, and re-reading it per
+        #    token would re-parse the whole tombstone file thousands of times an
+        #    hour -- the same cost the bucketed queue exists to avoid.
+        # ⚠️ It is a SNAPSHOT: a token that dies during this run is treated as
+        #    alive for the rest of it. That is correct rather than sloppy -- its
+        #    death is recorded by the branch below and applies from the next run,
+        #    so no observation is ever attributed to the wrong side of a death.
+        dead_now = dead_set()
         for entry in _entries_across(buckets):
             stats["due"] += 1
             mint, age = entry["mint"], entry["age"]
@@ -287,6 +297,26 @@ def run_hour(now: datetime | None = None) -> dict:
                     #    the Shed marker exists to preserve, one branch over.
                     LOG.exception("liquidity read failed for %s", mint)
                     fields["chain_liquidity"] = {"error": type(e).__name__}
+
+            # ⛔ AN ALREADY-DEAD TOKEN IS OBSERVED, NOT RE-KILLED. Its
+            #    tombstone stands -- every survival figure still counts it
+            #    dead -- but the observation is marked so the analysis can
+            #    tell a post-mortem look from a live one, and a REVIVAL is
+            #    recorded as its own event rather than silently reopening a
+            #    death that the pre-registration fixed ex ante.
+            if mint in dead_now:
+                fields["post_mortem"] = True
+                stats["post_mortem"] += 1
+                if state.get("alive"):
+                    fields["revived"] = True
+                    stats["revived"] += 1
+                    LOG.warning("REVIVAL: %s traded again at %s after being "
+                                "recorded dead", mint, age)
+                record_observation(mint, age, now, fields)
+                stats["observed"] += 1
+                prev[mint] = {"pairs": state.get("pairs"),
+                              "alive": state.get("alive")}
+                continue
 
             record_observation(mint, age, now, fields)
             stats["observed"] += 1
