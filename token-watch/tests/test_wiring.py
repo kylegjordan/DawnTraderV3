@@ -313,7 +313,8 @@ _pub = json.load(open(_sm.SUMMARY_PATH, encoding="utf-8"))
 check("and it carries the census the receiver actually recorded",
       _pub["launches"]["total"] > 0, _pub["launches"]["total"])
 check("★ and it states the tracked denominator, so the page cannot mislabel it",
-      "never over all launches" in _pub["tracked"]["note"])
+      "EVERY launch is now followed" in _pub["tracked"]["note"],
+      _pub["tracked"]["note"])
 
 import promote as _pm  # noqa: E402
 section("10. THE SOCIALS SWEEP IS REACHED BY THE HOURLY JOB (#973)")

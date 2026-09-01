@@ -96,8 +96,12 @@ followed2, reason2 = receiver.follow_decision(non, {}, 0.1)
 # The control draw NO LONGER happens at birth (Kyle, 2026-08-31): at birth only
 # SIZE is knowable, so a non-carrier is DEFERRED, not assigned to an arm. The
 # arm is decided once, at the first sweep, when the socials answer exists.
-check("a non-carrier is NOT followed at birth",
-      followed2 is False, (followed2, reason2))
+# EVERY LAUNCH IS FOLLOWED (Amendment 8, Kyle 2026-09-01). This asserted the
+# opposite while the arm decided who was observed. The flag is now True for
+# everything and the REASON carries the arm -- so what is worth asserting is
+# that the two are still DISTINGUISHABLE, which is the next check.
+check("a non-carrier IS followed at birth -- coverage is not conditional",
+      followed2 is True, (followed2, reason2))
 check("* and it is DEFERRED, not assigned - not-decided-yet and decided-not-to "
       "are different facts",
       reason2 == "deferred", reason2)

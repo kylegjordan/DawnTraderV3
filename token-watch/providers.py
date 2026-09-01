@@ -165,6 +165,24 @@ def _socials(pair: dict) -> dict:
     }
 
 
+def _sol_usd(pair: dict):
+    """SOL/USD at the moment of THIS observation, from this pair.
+
+    A pair quoted in SOL prices the token both in USD and in SOL, so the ratio
+    is the SOL price -- no extra call, no global constant, and it is stamped
+    with the same timestamp as everything else in the row.
+    Returns None when the pair is not SOL-quoted, rather than guessing.
+    """
+    if ((pair.get("quoteToken") or {}).get("symbol") or "").upper() != "SOL":
+        return None
+    try:
+        native = float(pair.get("priceNative"))
+        usd = float(pair.get("priceUsd"))
+    except (TypeError, ValueError):
+        return None
+    return (usd / native) if native > 0 else None
+
+
 def token_state(mint: str) -> dict:
     """One call returns everything a checkpoint needs.
 
@@ -220,6 +238,25 @@ def token_state(mint: str) -> dict:
         "sells_h24": txns.get("sells"),
         "liquidity_usd": liq,          # None on a bonding curve — a field gap
         "pair_created_at": p.get("pairCreatedAt"),
+        # FIELDS THE PROVIDER ALREADY SENDS AND WE WERE DISCARDING (Kyle,
+        #    2026-09-01). The raw response was persisted above, so these were
+        #    never LOST -- but nothing parsed them, so the study could not read
+        #    a token's NAME without re-parsing archived payloads. The comment
+        #    four lines up predicted exactly this: "the choice of which eight
+        #    is a decision made TODAY about what matters."
+        "name": (p.get("baseToken") or {}).get("name"),
+        "symbol": (p.get("baseToken") or {}).get("symbol"),
+        "market_cap_usd": p.get("marketCap"),
+        "fdv_usd": p.get("fdv"),
+        "chart_url": p.get("url"),
+        # THE SOL PRICE AT THIS OBSERVATION, NOT A GLOBAL MEDIAN (Langston).
+        #    "value now vs at launch" is meant to isolate the TOKEN's move;
+        #    applying one rate to both ends folds SOL's own move into the
+        #    comparison. Today the daily range is ~1%, but this is a 90-day
+        #    artifact and SOL will not stay in a 2% band for 90 days.
+        #    Derived from this pair when it is quoted in SOL: a SOL-quoted
+        #    pair's priceUsd / priceNative IS the SOL price at that moment.
+        "sol_usd": _sol_usd(p),
         # SOCIALS RIDE THIS RESPONSE, FREE. The webhook payload carries none —
         # both branches receiver.parse_creation reads are empty on every real
         # creation (#973) — but the follow-up call we ALREADY make returns them

@@ -134,12 +134,22 @@ check("no channel found", st["with_channel"] == 0, st)
 #    could not fail, written minutes after Langston bounced me twice for that
 #    exact shape. It is the reflex of reaching for something that turns the
 #    line green rather than something that MEASURES.
+# ⛔ SCAN EVERY BUCKET, NOT THE ONE MATCHING THE DUE TIME. `schedule_grid`
+#    deliberately pushes a point still due THIS HOUR into the NEXT bucket --
+#    the same-hour orphan fix: the hourly job fires just past the hour and
+#    reads once, so an entry written into the current bucket is written and
+#    never read. A test that looks only in the due-time bucket therefore reads
+#    6 of 7 and blames the code. It did.
+import glob as _glob
 _grid = []
-for _d in GRID:
-    _grid += [x for x in store.due_now(NOW - timedelta(minutes=30) + _d)
-              if x["mint"] == "NOSOC1"]
+for _f in _glob.glob(os.path.join(ROOT, "due", "*.jsonl")):
+    with open(_f, encoding="utf-8") as _fh:
+        _grid += [json.loads(x) for x in _fh
+                  if x.strip() and json.loads(x).get("mint") == "NOSOC1"]
 check("★ a NON-carrier is FOLLOWED ANYWAY -- the arm is a label, not a filter",
-      len(_grid) == len(GRID), f"{len(_grid)} of {len(GRID)} grid points scheduled")
+      len({x["age"] for x in _grid}) == len(GRID),
+      f"{len({x['age'] for x in _grid})} of {len(GRID)} ages scheduled: "
+      f"{sorted({x['age'] for x in _grid})}")
 check("...and exactly once each, so nothing double-schedules",
       len({(x["mint"], x["age"]) for x in _grid}) == len(_grid),
       f"{len(_grid)} rows, {len({(x[chr(109)+chr(105)+chr(110)+chr(116)], x[chr(97)+chr(103)+chr(101)]) for x in _grid})} distinct")

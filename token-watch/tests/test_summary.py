@@ -66,9 +66,14 @@ for i in range(90):
     birth("UNTRACKED%d" % i, NOW - timedelta(days=40), False)
 p = summary.build(NOW)
 check("every launch is in the census total", p["launches"]["total"] == 100, p["launches"]["total"])
-check("but only the followed ones are 'tracked'", p["tracked"]["total"] == 10, p["tracked"]["total"])
-check("and the tracked share is stated, not left to the reader",
-      p["tracked"]["share_of_launches"] == 0.1, p["tracked"]["share_of_launches"])
+# TRACKED == LAUNCHES SINCE AMENDMENT 8. These asserted a 10% sample, which
+# was the design until Kyle directed full coverage. The share is still
+# PUBLISHED rather than assumed -- if it ever drops below 1.0 again that is a
+# fact the page must state, not one a reader should have to infer.
+check("every launch is tracked -- full coverage", p["tracked"]["total"] == 100,
+      p["tracked"]["total"])
+check("and the share is stated explicitly, not left to the reader",
+      p["tracked"]["share_of_launches"] == 1.0, p["tracked"]["share_of_launches"])
 
 print("\n=== 2. ⛔ THE TRAP — survival must NOT be computed over the census")
 # 90 of the 100 are never checked and so can never be tombstoned. If survival
@@ -78,23 +83,38 @@ for i in range(10):
                        {"volume_h24": 0},
                        created_at=(NOW - timedelta(days=40)).isoformat())
 p = summary.build(NOW)
-check("★ every TRACKED token died, so alive is ZERO", p["alive"]["total"] == 0,
+# ⛔ THE TRAP THIS BLOCK GUARDED IS NOW DISSOLVED BY CONSTRUCTION, NOT WAIVED.
+#    It existed because an UNCHECKED token could never be tombstoned, so
+#    counting it as alive inflated survival. Under full coverage every launch
+#    is checked, so there is no unchecked set left to inflate anything --
+#    survival over the census IS survival over the tracked set.
+# ★ What still needs guarding is the half that never depended on sampling: a
+#   token with a tombstone must NOT be counted alive.
+check("★ the 10 that died are NOT counted alive", p["alive"]["total"] == 90,
       p["alive"]["total"])
-check("★ and NOT 90 — the untracked are not counted as survivors",
-      p["alive"]["total"] != 90)
+check("★ and the deaths are counted, so 'alive' is not just the census",
+      p["died"]["total"] == 10, p["died"]["total"])
 # ⛔ AND THE AGING COLUMNS TOO — THE TOTAL ALONE DOES NOT PROTECT THEM.
 #    Caught by mutation: switching the aging loop from the tracked set to the
 #    census left every check above passing, because `alive.total` is computed
 #    from a different expression. The columns are what the page actually shows,
 #    so they need their own assertion or the trap reopens one field over.
 by = p["alive"]["by_age"]
-check("★ the AGING COLUMNS are zero too, not 90",
-      all(by[a] == 0 for a in p["display_ages"]), by)
+# THE COLUMNS STILL NEED THEIR OWN ASSERTION -- the original reason holds even
+# though the expected value moved: `alive.total` is a different expression from
+# the per-age columns, and a mutation once passed every total check while the
+# columns were wrong. Only WHAT is correct changed.
+check("★ the AGING COLUMNS agree with the total, not with the census",
+      all(by[a] == 90 for a in p["display_ages"] if a != "90d"), by)
+check("★ and a cohort too young for an age is NOT counted at it",
+      by["90d"] == 0, by)
 check("the deaths are all recorded", p["died"]["total"] == 10, p["died"]["total"])
 check("the census total is UNCHANGED — it is a different denominator",
       p["launches"]["total"] == 100)
 check("and the payload SAYS which population survival runs over",
-      "never over all launches" in p["tracked"]["note"])
+      "EVERY launch is now followed" in p["tracked"]["note"], p["tracked"]["note"])
+check("...and warns not to pool the earliest ages across the amendment",
+      "do not pool" in p["tracked"]["note"], p["tracked"]["note"])
 
 print("\n=== 3. WHERE THEY DIED — straight off the record")
 reset()
@@ -165,7 +185,15 @@ birth("GHOST", NOW - timedelta(days=80), False)   # never checked, never checkab
 birth("REAL", NOW - timedelta(days=79), True)
 p = summary.build(NOW)
 mints = [r["mint"] for r in p["oldest_survivors"]]
-check("⛔ the unfollowed token is NOT a survivor — it is our blind spot",
+# ⛔ THE BLIND SPOT THIS GUARDED NO LONGER EXISTS. Under the old design an
+#    unfollowed token was never checked, so listing it as a survivor listed our
+#    own ignorance as a result. Full coverage removes the unfollowed set -- so
+#    what remains is the guard that never depended on sampling: a token with a
+#    tombstone is not a survivor. GHOST is killed above to test exactly that.
+store.record_death("GHOST", NOW - timedelta(days=70), "faded", "7d", {})
+p = summary.build(NOW)
+mints = [r["mint"] for r in p["oldest_survivors"]]
+check("⛔ a token with a TOMBSTONE is not listed as a survivor",
       "GHOST" not in mints, mints)
 check("POSITIVE CONTROL — the followed one IS listed", "REAL" in mints, mints)
 

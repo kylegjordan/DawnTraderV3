@@ -33,9 +33,20 @@ type Summary = {
     created_at: string | null;
     age_days: number | null;
     initial_size: number | null;
+    initial_size_usd: number | null;
     size_source: string | null;
+    size_is_inferred: boolean | null;
     venue: string | null;
     follow_reason: string | null;
+    name: string | null;
+    symbol: string | null;
+    market_cap_usd: number | null;
+    buys_h24: number | null;
+    sells_h24: number | null;
+    chart_url: string | null;
+    sol_usd: number | null;
+    observed_at: string | null;
+    socials: { telegram?: boolean; twitter?: boolean; website?: boolean } | null;
   }>;
   display_ages: string[];
   grid_ages: string[];
@@ -214,7 +225,7 @@ export default function TokenWatchPage() {
       <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-4">
         <Database className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <p className="text-xs text-muted-foreground">
-          <strong className="text-foreground">Two different populations.</strong>{' '}
+          <strong className="text-foreground">One population — every launch.</strong>{' '}
           {s.tracked.note} {s.alive.note}
         </p>
       </div>
@@ -245,28 +256,54 @@ export default function TokenWatchPage() {
             The {s.oldest_survivors.length} longest-lived tracked tokens with no
             recorded death, oldest first.
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            <strong>*Size at launch is INFERRED</strong> — the largest transfer by
+            the launcher in the creation transaction, not a figure anyone
+            reported. It is shown in SOL and converted at the SOL price recorded
+            at that token&apos;s own last observation, never a single rate applied
+            to every row. A dash means <strong>not observed recently</strong>, which
+            is not the same as zero. Name and symbol exist only from the point we
+            began keeping them; older rows will be blank.
+          </p>
         </div>
         <div className="max-h-[32rem] overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-card">
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2 font-medium">Token</th>
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Symbol</th>
                 <th className="px-4 py-2 text-right font-medium">Age (days)</th>
-                <th className="px-4 py-2 text-right font-medium">Size at launch</th>
-                <th className="px-4 py-2 font-medium">Why tracked</th>
+                {/* The label says INFERRED because it is: the largest transfer
+                    by the fee payer, not a figure anyone reported to us. The
+                    ground-truth check is still outstanding, so it must not sit
+                    unmarked in a row of measured values. */}
+                <th className="px-4 py-2 text-right font-medium">Size at launch*</th>
+                <th className="px-4 py-2 text-right font-medium">Value now</th>
+                <th className="px-4 py-2 text-right font-medium">Buys / sells 24h</th>
+                <th className="px-4 py-2 text-center font-medium">Web</th>
+                <th className="px-4 py-2 text-center font-medium">X</th>
+                <th className="px-4 py-2 text-center font-medium">TG</th>
+                <th className="px-4 py-2 font-medium">Chart</th>
               </tr>
             </thead>
             <tbody>
               {s.oldest_survivors.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-4 py-6 text-center text-muted-foreground">
                     No tracked token has survived long enough to appear here yet.
                   </td>
                 </tr>
               )}
               {s.oldest_survivors.map((t) => (
                 <tr key={t.mint} className="border-b border-border/50 last:border-0">
-                  <td className="px-4 py-2 font-mono text-xs">{t.mint}</td>
+                  {/* A BLANK IS "NOT OBSERVED RECENTLY", NEVER "ZERO". The
+                      lookup reads a bounded window of observations, so an
+                      em-dash here means we have not looked lately -- which is
+                      a different claim from a measured nil. */}
+                  <td className="px-4 py-2">
+                    {t.name || <span className="font-mono text-xs text-muted-foreground">{t.mint.slice(0, 10)}…</span>}
+                  </td>
+                  <td className="px-4 py-2 text-xs text-muted-foreground">{t.symbol || '—'}</td>
                   <td className="px-4 py-2 text-right tabular-nums">
                     {t.age_days !== null ? t.age_days.toFixed(1) : '—'}
                   </td>
@@ -274,12 +311,39 @@ export default function TokenWatchPage() {
                     {/* ⛔ An unresolved size is shown as unresolved, never as 0.
                         The extractor labels it, and that label is why the two
                         are distinguishable at all. */}
-                    {t.size_source === 'unresolved' || t.initial_size === null
-                      ? <span className="text-muted-foreground">unresolved</span>
-                      : `${t.initial_size} SOL`}
+                    {t.size_source === 'unresolved' || t.initial_size === null ? (
+                      <span className="text-muted-foreground">unresolved</span>
+                    ) : (
+                      <>
+                        {t.initial_size} SOL
+                        {t.initial_size_usd !== null && (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            (${t.initial_size_usd.toLocaleString()})
+                          </span>
+                        )}
+                      </>
+                    )}
                   </td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">
-                    {t.follow_reason === 'trait_carrier' ? 'trait carrier' : 'random control'}
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {t.market_cap_usd !== null && t.market_cap_usd !== undefined
+                      ? `$${Math.round(t.market_cap_usd).toLocaleString()}`
+                      : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums text-xs">
+                    {t.buys_h24 !== null && t.buys_h24 !== undefined
+                      ? <span><span className="text-emerald-500">{t.buys_h24}</span>
+                          <span className="text-muted-foreground"> / </span>
+                          <span className="text-rose-500">{t.sells_h24}</span></span>
+                      : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-2 text-center">{t.socials ? (t.socials.website ? '✓' : '·') : '—'}</td>
+                  <td className="px-4 py-2 text-center">{t.socials ? (t.socials.twitter ? '✓' : '·') : '—'}</td>
+                  <td className="px-4 py-2 text-center">{t.socials ? (t.socials.telegram ? '✓' : '·') : '—'}</td>
+                  <td className="px-4 py-2 text-xs">
+                    {t.chart_url
+                      ? <a href={t.chart_url} target="_blank" rel="noreferrer"
+                           className="text-primary hover:underline">open</a>
+                      : <span className="text-muted-foreground">—</span>}
                   </td>
                 </tr>
               ))}

@@ -45,7 +45,8 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
-from config import BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS, ROOT
+from config import (BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS,
+                    OBSERVATIONS_DIR, ROOT)
 from store import (census as store_census, load_state, save_state,
                    tombstone_path, _correction_index)
 
@@ -137,8 +138,17 @@ def _fold(st: dict, now: datetime) -> dict:
             if not day:
                 continue
             born[day] = born.get(day, 0) + 1
-            if r.get("followed"):
-                followed[day] = followed.get(day, 0) + 1
+            # EVERY RECORDED LAUNCH IS FOLLOWED (Amendment 8). This used to
+            #    read `if r.get("followed")`, and that flag is STALE on every
+            #    row written before the amendment -- those launches were
+            #    backfilled onto the grid but their birth row still says False.
+            #    Counting the flag reported 10,748 tracked while 35,377
+            #    launches were actually being followed.
+            # THE FLAG IS NOT REWRITTEN. The census is append-only, so the
+            #    historical value stays exactly as recorded; what changes is
+            #    that the SUMMARY no longer treats a superseded field as the
+            #    measurement. `follow_reason` still carries the arm.
+            followed[day] = followed.get(day, 0) + 1
 
     tomb = tombstone_path()
     rows, st["tomb_cursor"] = _read_new(tomb, st.get("tomb_cursor", 0))
@@ -159,6 +169,38 @@ def _fold(st: dict, now: datetime) -> dict:
         if day:
             d_birth[day] = d_birth.get(day, 0) + 1
     return st
+
+
+def _latest_observations(mints: set, max_files: int = 3) -> dict:
+    """mint -> its most recent observation row, for the display table only.
+
+    ⛔ BOUNDED BY DESIGN, AND THE BOUND IS STATED ON THE PAGE. Observations
+       accumulate for 90 days; scanning all of them hourly on the box that runs
+       live trading is the cost the co-tenancy clause exists to prevent. So
+       this reads the newest few day-files and stops as soon as every mint it
+       was asked for is found.
+    ⚠️ A TOKEN NOT OBSERVED WITHIN THAT WINDOW SHOWS BLANKS RATHER THAN STALE
+       NUMBERS. A blank says "not looked at recently"; a stale number says
+       "this is how it is", and only one of those is true.
+    """
+    want = set(mints)
+    found = {}
+    files = (sorted(os.listdir(OBSERVATIONS_DIR), reverse=True)
+             if os.path.isdir(OBSERVATIONS_DIR) else [])
+    for name in files[:max_files]:
+        if not want:
+            break
+        try:
+            with open(os.path.join(OBSERVATIONS_DIR, name), encoding="utf-8") as fh:
+                rows = [json.loads(x) for x in fh if x.strip()]
+        except (OSError, ValueError):
+            continue
+        for r in reversed(rows):            # newest first within the file
+            m = r.get("mint")
+            if m in want and r.get("observed"):
+                found[m] = r
+                want.discard(m)
+    return found
 
 
 def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
@@ -202,7 +244,7 @@ def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
             if r.get("mint_unresolved"):
                 _unresolved += 1
                 continue
-            if not r.get("followed") or r.get("mint") in dead:
+            if r.get("mint") in dead:
                 continue
             created = r.get("created_at")
             age_days = None
@@ -222,8 +264,49 @@ def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
                 "follow_reason": r.get("follow_reason"),
             })
             if len(out) >= limit:
-                return out
-    return out
+                return _enrich(out)
+    return _enrich(out)
+
+
+def _enrich(rows: list) -> list:
+    """Attach what the provider already tells us, for the display table.
+
+    Kyle, 2026-09-01: name, symbol, market value now vs at launch, buyers vs
+    sellers, the social channels, the chart link -- and the launch size in
+    DOLLARS as well as SOL, because "3 SOL" is a unit with no anchor.
+
+    ⛔ SIZE-IN-DOLLARS IS CONVERTED AT THE OBSERVATION'S OWN SOL PRICE, not a
+       global median. Applying one rate to both ends of a "now vs at launch"
+       comparison folds SOL's own move into a number meant to isolate the
+       TOKEN's -- fine across a day, wrong across ninety.
+    ⚠️ `initial_size` REMAINS AN INFERENCE, not a measurement: it is the
+       largest transfer by the fee payer, and the ground-truth check against
+       known launches is still outstanding (A3.1 condition 3). The row carries
+       `size_is_inferred` so the page can say so rather than presenting it in a
+       column of measured values.
+    """
+    obs = _latest_observations({r["mint"] for r in rows})
+    for r in rows:
+        o = obs.get(r["mint"]) or {}
+        sol = o.get("sol_usd")
+        size = r.get("initial_size")
+        r["name"] = o.get("name")
+        r["symbol"] = o.get("symbol")
+        r["market_cap_usd"] = o.get("market_cap_usd")
+        r["buys_h24"] = o.get("buys_h24")
+        r["sells_h24"] = o.get("sells_h24")
+        r["chart_url"] = o.get("chart_url")
+        r["socials"] = o.get("socials")
+        r["sol_usd"] = sol
+        r["initial_size_usd"] = (round(size * sol, 2)
+                                 if isinstance(size, (int, float)) and sol else None)
+        r["size_is_inferred"] = True
+        # BLANK MEANS "NOT OBSERVED RECENTLY", NOT "ZERO". The lookup reads a
+        #    bounded window of observation files, so a token nobody has checked
+        #    lately shows empty cells -- which is the honest rendering of "we
+        #    do not know right now".
+        r["observed_at"] = o.get("observed_at")
+    return rows
 
 
 def _publish_dir() -> None:
@@ -309,9 +392,14 @@ def build(now: datetime = None) -> dict:
             "total": followed_total,
             "share_of_launches": (round(followed_total / launches_total, 4)
                                   if launches_total else None),
-            "note": "Trait carriers plus a fixed random control. ONLY these are "
-                    "re-checked, so every survival figure below is over this "
-                    "population — never over all launches.",
+            "note": "EVERY launch is now followed on the full grid (Amendment "
+                    "8, 2026-09-01). This used to be trait carriers plus a "
+                    "random control, and the survival figures were over that "
+                    "sample; they are now over the whole population. Launches "
+                    "recorded BEFORE the amendment were backfilled, so their "
+                    "1h and 6h checkpoints are missing where those moments had "
+                    "already passed — do not pool the earliest two ages across "
+                    "2026-09-01.",
         },
         "alive": {
             "total": alive_total,

@@ -162,12 +162,20 @@ def follow_decision(mint: str, socials: dict, initial_size) -> tuple:
        rejected on measured grounds — and it is now MEASURED rather than
        unknown, because every socials check records the token's age.
     """
+    # EVERY LAUNCH IS FOLLOWED (AMENDMENT 8, Kyle 2026-09-01). The first
+    #    element is no longer a decision -- it is True for everything, because
+    #    the grid is scheduled for every launch. The REASON is the arm, and the
+    #    arm is now a label for analysis rather than a collection filter.
+    # THIS FLAG IS WHAT THE PAGE COUNTS AS "tracked", and leaving it behind is
+    #    exactly what I did: scheduling changed, the flag did not, and the page
+    #    reported 10,748 tracked while 35,377 launches were actually being
+    #    followed. A field that records a superseded design reads as data.
     if is_trait_carrier(socials, initial_size):
         return True, "trait_carrier"
     # ⛔ NOT `not_sampled`. "We decided not to follow it" and "we have not
     #    decided yet" are different facts, and collapsing them would make the
     #    deferred set invisible to the sweep that has to resolve it.
-    return False, "deferred"
+    return True, "deferred"
 
 
 def _journal_launch(day: str, followed: bool, reason: str, size_source: str,
