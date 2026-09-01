@@ -291,6 +291,20 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ✅ **THE FIX, and it is available today: write any script containing backticks with the Write tool, then run the FILE.** ⛔ **Do not inline it.**
 **Mechanism that would retire it:** a pre-execution check refusing a Bash heredoc whose body contains an unescaped backtick. **HOME: `B-GATE-GUARD` (#744), owner CC-A, queue position 10** — same hook family, and it is a shell-shape check exactly like the bare-commit guard.
 
+### `arm-wears-the-gap’s-name` — **A TEST NAMED AFTER A GAP IS NOT EVIDENCE THE GAP IS PINNED. THE DISCRIMINATING MUTATION IS.** — **NEW 2026-09-01, n=1** · mechanism: ✅ **the closing mutation, shipped WITH the arm**
+
+★★ **LANGSTON RATIFIED THIS AS STANDING CONVENTION 2026-09-01, calling it the inverse of his own SUBJECT-vs-PROBE ruling:** *"there the subject died and the probe survived; here the NAME survived and the SUBJECT WAS NEVER REACHED."*
+
+✅ **THE CONVENTION, and it is checkable: EVERY GAP-ARM SHIPS WITH THE MUTATION THAT CLOSES ITS GAP AND TURNS IT RED. An arm still GREEN under that mutation is testing something else, and gets RENAMED to what it actually tests.**
+
+**INSTANCE 1 — `B-MEASURE-GATE` OBJ-4, arms `K3b`/`K3c`.** They were named for the `tail` gap and used `/var/log/app.log` as their subject. ⛔ **The hook’s `/var/log/` EXEMPTION returned silence BEFORE THE SHAPE WAS EVER CONSULTED** — so the arms asserted the EXEMPTION and wore the GAP’s name. **Closing the tail gap left the suite GREEN**, while the file’s own `KNOWN GAPS` block claimed that gap was pinned.
+★ **INVISIBLE FROM THE ARM.** Reading `K3b` shows a command, a silent verdict and a plausible name. **Only building the mutation that closes the gap reveals that the arm never depended on it.**
+⚠️ **AND IT IS THE SECOND FALSIFICATION OF THE SAME SENTENCE:** an earlier round had already falsified *"each gap is pinned"* for two OTHER gaps; those were fixed and the claim re-asserted, **still false for a third member of its own list.**
+
+⚠️ **n=1, not promoted.** Floor unchanged: 3+ instances across 2+ distinct batches, no severity override. ★ **But the MECHANISM ships now** — per the `vendor-docs-unread` precedent, a single severe instance earns a mechanism rather than a `§13` slot.
+
+---
+
 ### `product-not-arms` — **TWO FIXES TOUCHING THE SAME INPUT IN ONE COMMIT NEED AN ARM AT THEIR *PRODUCT*, NOT ONE ARM EACH** — **NEW 2026-09-01, n=1** · mechanism: ✅ **the product arm itself**
 
 ★★ **LANGSTON NAMED IT AND DIRECTED IT FILED SEPARATELY: *"not shell and not `fix-follows-pointer`"*.**

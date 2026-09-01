@@ -37,6 +37,19 @@
 // without it a fail-open hook's silence reads as a pass, which is the lookalike failure in the
 // enforcement layer that this batch exists to prevent.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
+// ⛔⛔⛔ THE GUARD'S SILENCE IS NON-EVIDENTIAL.
+//
+// NOBODY — the author, Langston, CC-B, CC-C, Infra — MAY CITE "THE GATE DID NOT FIRE" AS
+// EVIDENCE THAT A MEASUREMENT WAS CONTROLLED. Not in a scope, not in a review, not in a
+// completion report, not in a commit message. The value of this hook is ENTIRELY IN ITS
+// POSITIVE FIRES.
+//
+// Langston's condition 5, in his words: a predicate blind by construction is SILENT WITH ZERO
+// OPPORTUNITY, however loud its body — #661 leg 3 turned on our own instrument. ★ That sentence
+// is what stops a partial guard from becoming FALSE ASSURANCE, which is the only route by which
+// a warn-only miss actually costs anything: on its own, a missed warning costs exactly what no
+// guard at all costs.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
 // ⛔⛔ KNOWN GAPS — WHAT THIS GUARD DOES **NOT** CATCH. READ THIS BEFORE TRUSTING ITS SILENCE.
 //
 // Stated as its own block on Langston's condition, because these previously lived inside

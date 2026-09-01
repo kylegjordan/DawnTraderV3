@@ -6469,6 +6469,60 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 ⇒ **`HOME: B-GOV-REPORTING`, owner CC-A, `PHASE_19_PLAN.md` governance queue ROW 8** — the batch that already owns the change-class matrix and its missing `BLOCKED` state, i.e. governance-document consistency defects. **The repo `CLAUDE.md` and shared `MEMORY.md` halves are mine and actionable there.**
 ⚠️ **THE `/home/langston/CLAUDE.md` HALF IS NOT MINE.** Kyle ruled 2026-08-30 that Langston’s instruction file is **Infra Claude’s** responsibility (*"I don’t wanna mix that work"*). **Reconciling that copy needs Kyle’s placement in Infra’s ordering; I am not assigning it.**
 
+
+---
+
+## ⛔⛔ MEASURED 2026-09-01 — THIS IS NOT "TWO FORMS DISAGREE". **A SESSION FOLLOWING THE MANDATED REPO FORM SEES 4 OF 11 DUE ALERTS AND CANNOT KNOW WHICH SEVEN IT IS MISSING.**
+
+**Langston measured it first and I re-derived it independently** (`cat -n` over the whole file, last-state-per-id, `state=active` ∧ `acknowledged_at=null` ∧ `triggers_at<=now`):
+
+| | |
+|---|---|
+| file length | **768 lines** |
+| due + active + unacked | **11** |
+| what a `tail -50` can see | lines **719-768** |
+| ✅ **VISIBLE to the mandated form** | **4** |
+| ⛔ **INVISIBLE** | **7** — at lines **250, 352, 461, 468, 578, 620, 664** |
+
+*(Langston read 12 due / 6 invisible an hour earlier; the queue moves. **Direction and magnitude agree; the exact split is a function of when you look, which is itself the point.**)*
+
+⛔⛔ **AND THE TAIL IS NOT MERELY NARROW — IT IS STRUCTURALLY WRONG, WHICH IS WHY A BIGGER `-N` IS NOT THE FIX.** Langston’s diagnosis, re-derived from the line positions above: **the file is APPEND-ORDERED BY MINT TIME, while due-ness is `triggers_at` — the two are DECOUPLED BY DESIGN.** ⇒ **a scheduled verification minted months ago comes due long after its row has left every tail**, and the oldest due items are therefore the ones a tail is *most* likely to miss. **Exactly the wrong bias.**
+
+★ **THE FIVE OLDEST DUE ROWS ARE ALL SCHEDULED VERIFICATIONS**, and Langston notes they are *"the rotting queue that `B-ALERT-WINDOW-EXPIRY` exists for"* (`PHASE_19_PLAN` row 8.7) — so this defect and that batch are the same phenomenon seen from two ends.
+
+### ✅ WHAT THE FIX CONVERGES ON — and what it is NOT
+
+⛔ **NOT a larger `-N`.** ⛔ **NOT the tool’s own `list` either — MEASURED: `npm run system-alerts -- list` emits EVERY row (768), unfiltered.** It is complete and unusable; a session would be reading resolved breakage alerts from three days ago to find four live ones.
+✅ **AN UNBOUNDED READ WITH A `state`/`acknowledged_at`/`triggers_at` FILTER.** Verified working today, and it returns **11 lines instead of 50** — **more complete AND smaller output than the thing it replaces**, which is why this is not a cost trade.
+
+★ **INTERIM ANY SESSION CAN USE TODAY, no infrastructure needed** — tested on staging 2026-09-01:
+```
+ssh root@188.245.193.8 "python3 -c \"
+import json,datetime
+now=datetime.datetime.now(datetime.timezone.utc); last={}
+for l in open('/var/log/dawntrader/system-alerts.jsonl'):
+    l=l.strip()
+    if not l: continue
+    try: a=json.loads(l)
+    except: continue
+    last[a.get('id')]=a
+for a in last.values():
+    if a.get('state')!='active' or a.get('acknowledged_at'): continue
+    t=a.get('triggers_at') or a.get('fired_at')
+    try:
+        if datetime.datetime.fromisoformat(str(t).replace('Z','+00:00'))>now: continue
+    except: pass
+    print(a.get('id','')[:8], a.get('severity'), (a.get('title') or '')[:88])
+\""
+```
+
+### ⛔ WHY THE DOC LINES ARE **NOT** BEING CHANGED IN THIS TURN
+
+⚠️ **The fix edits `CLAUDE.md:564-565` — the per-turn command for FOUR sessions, in the always-loaded file — plus shared `MEMORY.md:16` and the allowlist variant.** That is `B-GOV-REPORTING` (row 8) work, and I am mid-`B-MEASURE-GATE` at row 6.
+★★ **AND THE PRECEDENT IS MINE AND RECENT: `#761`, where a live-service change attempted at the tail end of a DOCUMENTATION batch took CC comms down for ~4 minutes with a cause that is still unknown.** Changing what every session runs before every reply is the same shape.
+⇒ **DISPOSITION — §9.4 #2, added as an item to an existing batch: the fix rides `B-GOV-REPORTING`, row 8, item (iv). THE MEASUREMENT AND THE INTERIM COMMAND ARE RECORDED HERE SO NOBODY HAS TO RE-DERIVE THEM, AND SO ANY SESSION CAN READ THE FULL QUEUE TODAY WITHOUT WAITING FOR THE BATCH.**
+
+---
 ✅ **ALREADY MITIGATED, INDEPENDENT OF THE FIX:** all eight mandated forms from all three homes are now a committed regression fixture (`scripts/measure-gate/test-guard-measurement-shape.mjs` §M) that requires **ZERO fires**. **The guard cannot regress onto the mandated set without the suite failing** — which is Langston’s condition that this ship as a test arm, not a review step.
 
 ---

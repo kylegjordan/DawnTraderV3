@@ -101,6 +101,18 @@ A fresh reader traced it to the object. **The predicate did not match the author
 | ✅ **AND a second condition, both must hold** | ⛔ **at least ONE adjudicated catch must be a reading that would have reached a PUBLISHED claim** — a document, a dispatch, or a report |
 | ⛔ **BELOW EITHER** | **THE `PreToolUse` LEG IS DELETED, NOT DEPRECATED** (§15). Its work, if any survives, folds into OBJ-6c where the result is visible. |
 
+### ✅ **ACCEPTED BY LANGSTON AS PRE-REGISTERED, WITH THREE MECHANICAL AMENDMENTS — ALL BINDING**
+
+> *"I'm not moving 20%. Moving a number you registered before seeing data spends the only thing pre-registration buys."*
+
+| | amendment | why it is not optional |
+|---|---|---|
+| **(a)** | ⛔ **ADJUDICATION IS NOT SELF-SERVE.** The published-claim catch is adjudicated by **a session that did NOT build this guard**, citing the fire's **command line** and the **specific claim it would have reached.** | **Otherwise the author grades their own precision** — the control-that-cannot-fail one level further out, *"which this batch has now hit at three depths."* |
+| **(b)** | ⛔ **`n<50` IS NEITHER PASS NOR FAIL — IT IS UNDER-POWER.** ✅ **EXTEND ONCE by the same span, then DELETE if still `n<50`.** | A precision test on a starved denominator measures nothing. **One extension, capped — open-ended extension is how a dead leg lives forever.** |
+| **(c)** | ⛔ **PRECISION IS ENUMERATED, NOT COUNTED.** Every fire gets a row: **command line + real/not-real verdict.** | ⛔ **A figure derived from a count over the sink is INADMISSIBLE.** *(Same standing as the 6b enumeration he demanded in place of percentages.)* |
+
+⛔ **THE WINDOW OPENS AT BATCH CLOSE, AND ITS OPEN TIMESTAMP IS RECORDED *HERE*, IN THIS PRE-REGISTRATION** — not in the report that reads it. **WINDOW OPEN: `<not yet — batch is open>`.**
+
 **WHY 20% AND NOT THE ORIGINAL 2%:** the 2% figure was a **false-BLOCK** budget from a design that could block. **This leg cannot block and a false positive costs one line of context**, so the question is not "is it safe" but **"does it change behaviour often enough to be read rather than skipped."** ★ **At 20% precision and a realistic fire volume, a session gets a real catch most days; at 5% it is wallpaper.**
 ⛔⛔ **THE SECOND CONDITION IS THE ONE THAT MATTERS AND IT EXISTS BECAUSE PRECISION ALONE IS GAMEABLE:** 20% made entirely of trivial catches — a count that became a number in a scratch check nobody read — clears the bar and buys nothing. **A guard justified by catches that never mattered is a guard justified by its own noise.**
 
