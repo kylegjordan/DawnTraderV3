@@ -310,6 +310,17 @@ console.log('\n=== K. FROZEN LIMITS — asserting the KNOWN HOLES so an edit reo
   const chained = run(bash('ssh h "tail -50 /var/log/dawntrader/system-alerts.jsonl" && git log -100 --grep=MISTAKE'));
   check('K4c an unrelated measurement in the same && chain STILL fires', !!chained.ctx,
         'silent — the exemption is whole-command again, not pipeline-scoped');
+  // ⛔ K4d — the SINGLE-`&` twin of K4c. Reader-found: K4c passed while its own case went silent
+  // one character away, because `sequenceOf` split on `&&` and not on `&`.
+  const bg = run(bash('ssh h "tail -50 /var/log/dawntrader/system-alerts.jsonl" & git log -100 --grep=MISTAKE'));
+  check('K4d ...and in a single-& background chain too', !!bg.ctx,
+        'silent — sequenceOf is not splitting on a bare &');
+  // ⛔ K4e — AND THE REDIRECTION `&` MUST NOT SPLIT. Adding a bare-& split re-broke the mandated
+  // allowlisted form instantly, because `2>&1` contains one. This pins the exclusion so the next
+  // person to "fix" the & handling sees which side of the trade they are moving.
+  const redir = run(bash('tail -50 /var/log/dawntrader/system-alerts.jsonl 2>&1 | head -60'));
+  check('K4e the 2>&1 in a mandated form does NOT split the pipeline', redir.ctx === null,
+        'FIRED — a bare & split is severing redirections; the per-turn alert check now warns');
 
   // ⛔⛔ K3 — AND LANGSTON'S OWN EXAMPLE OF THE GAP IS COVERED. He wrote "nothing now catches
   // `tail -200 log | grep -c X`". MEASURED: it FIRES, on `count-from-search`, because the second
@@ -318,12 +329,20 @@ console.log('\n=== K. FROZEN LIMITS — asserting the KNOWN HOLES so an edit reo
   // running it. The REAL gap is narrower and is pinned below.
   const covered = run(bash('tail -200 /var/log/app.log | grep -c ERROR'));
   check('K3a his stated gap example IS caught (by count-from-search)', !!covered.ctx && covered.ctx.includes('count-from-search'));
-  const gap1 = run(bash('tail -200 /var/log/app.log | wc -l'));
+  // ⛔⛔ THESE USE A NON-LOG PATH, AND THAT IS THE WHOLE POINT. Their first version used
+  // `/var/log/app.log`, so the `/var/log/` EXEMPTION returned silence BEFORE THE SHAPE WAS EVER
+  // CONSULTED — they asserted the exemption, not the gap, and closing the tail gap left the
+  // suite green while KNOWN GAPS claimed gap (1) was pinned. Reader-found, by building the
+  // missing mutation. An arm can pass for a reason unrelated to what it is named after.
+  const gap1 = run(bash('tail -200 CLAUDE.md | wc -l'));
   check('K3b KNOWN GAP: tail -N into a bare line-count is NOT caught', gap1.ctx === null,
-        'this now FIRES — someone re-added tail; re-run the M fixture before keeping it');
-  const gap2 = run(bash('tail -200 /var/log/app.log > /tmp/slice.txt'));
+        'this now FIRES — tail was re-added to the shape; re-run the M fixture before keeping it');
+  const gap2 = run(bash('tail -200 CLAUDE.md > /tmp/slice.txt'));
   check('K3c KNOWN GAP: tail -N into a file, counted later, is NOT caught', gap2.ctx === null,
         'this now FIRES — check the M fixture');
+  const gap3 = run(bash('tail -200 /var/log/app.log | wc -l'));
+  check('K3d and the log-path variant is silent via the EXEMPTION, not the gap', gap3.ctx === null,
+        'moved — the exemption changed');
 }
 
 console.log('\n=== F. FAIL-OPEN ===');
@@ -380,6 +399,11 @@ if (!process.env.GUARD_UNDER_TEST) {
     ['WIDEN the log exemption to /var/', (s) => s.replace('!/\\/var\\/log\\//.test(seq)', '!/\\/var\\//.test(seq)')],
     ['CLOSE the sed gap (add sed -n to the shape)', (s) => s.replace(
       "(/\\bhead\\s+-n?\\s*\\d+/.test(st)", "(/\\bsed\\s+-n/.test(st) || /\\bhead\\s+-n?\\s*\\d+/.test(st)")],
+    // ⛔ THE MISSING ONE. KNOWN GAPS claimed gap (1) — the `tail` removal — was pinned. It was
+    // not: K3b/K3c used a /var/log path, so the exemption silenced them before the shape ran,
+    // and closing the gap left the suite green. A reader built this mutation to show it.
+    ['CLOSE the tail gap (add tail to the shape)', (s) => s.replace(
+      "(/\\bhead\\s+-n?\\s*\\d+/.test(st)", "(/\\btail\\s+-n?\\s*\\d+/.test(st) || /\\bhead\\s+-n?\\s*\\d+/.test(st)")],
   ];
   let mi = 0;
   for (const [name, mut] of MUTS) {

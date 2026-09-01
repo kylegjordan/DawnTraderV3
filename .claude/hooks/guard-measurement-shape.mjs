@@ -43,14 +43,23 @@
 // justification comments and A JUSTIFICATION READS AS "HANDLED". Its silence is not a clean bill
 // of health; these are the cases where it is quiet BY CONSTRUCTION.
 //
-// ⚠️ EACH GAP BELOW EXCEPT (3) IS PINNED — by an arm in test-guard-measurement-shape.mjs §K
-// asserting CURRENT behaviour, and by a §G mutation that must break the suite. So an edit that
-// widens or closes one fails loudly rather than silently.
-// ⛔ THAT SENTENCE WAS FALSE WHEN FIRST WRITTEN AND A READER MEASURED IT: widening the log
-// exemption to `/var/` and closing the `sed` gap BOTH left the suite green. Two arms and two
-// mutations were added to make the claim true. ★ A CLAIM THAT A THING IS PINNED IS ITSELF A
-// CLAIM, and it is the kind that reads as covered — which is this whole block's subject.
-// ⚠️ GAP (3) IS THE STATED EXCEPTION: it is not pinned, because it is not demonstrable.
+// ⛔⛔ WHICH GAPS ARE PINNED — AND THIS SENTENCE HAS NOW BEEN FALSE TWICE, SO READ THE TABLE,
+// NOT A SUMMARY. "Pinned" means: a §K arm asserts current behaviour AND a §G mutation that
+// changes it breaks the suite.
+//   (1) tail removal ................ PINNED (K3b/K3c now use a NON-log path; see below)
+//   (1b) log exemption .............. PINNED — K4a + the "WIDEN to /var/" mutation
+//   (1c) sed not covered ............ PINNED — K4b + the "CLOSE the sed gap" mutation
+//   (2) quote-unaware splitting ..... PINNED — K1
+//   (3) substitution-unaware split .. ⛔ NOT PINNED — not demonstrable with today's shapes
+//   (4) regex not a parser .......... ⛔ NOT PINNABLE — a property of the approach
+//   (5) sees the instrument not use . ⛔ NOT PINNED — no arm, no mutation. Reader-found: the
+//       previous version of this block excepted only (3) while (5) had nothing either.
+// ⚠️ FIRST FALSE VERSION: claimed every gap pinned; widening the exemption and closing the sed
+// gap both left the suite GREEN. ⚠️ SECOND FALSE VERSION: fixed those two and still claimed (1)
+// was pinned — but K3b/K3c used `/var/log/app.log`, so THE EXEMPTION RETURNED SILENCE BEFORE THE
+// SHAPE WAS EVER CONSULTED. They asserted the exemption, not the gap; closing the tail gap left
+// the suite green. ★ TWICE THE SAME MEASUREMENT FALSIFIED THE SAME SENTENCE, ON A DIFFERENT
+// MEMBER OF ITS OWN LIST. A CLAIM THAT A THING IS PINNED IS ITSELF A CLAIM.
 //
 //  1. `tail` WAS DELIBERATELY REMOVED FROM THE TRUNCATION SHAPE, AND THAT SOLD COVERAGE.
 //     `tail -200 log | wc -l` and `tail -200 log > slice` are NOT caught. The trade bought
@@ -193,7 +202,24 @@ function stages(s) {
  * mention anywhere in the command. Reader-found.
  */
 function sequenceOf(s, stage) {
-  const parts = s.split(/&&|\|\||[;\n]/);
+  // ⛔ SINGLE `&` IS A SEPARATOR HERE TOO — it was added to `stages()` for exactly this reason and
+  // not carried into this function, so K4c's own case went silent one character away (`&&` → `&`).
+  // ⚠️ BUT NOT THE `&` IN A REDIRECTION. Adding a bare `&` split IMMEDIATELY re-broke the
+  // allowlisted mandated form, because `2>&1` contains one: the split severed `tail -50 /var/log/…
+  // 2>` from `1 | head -60`, the `head` lost sight of the log path, and the per-turn alert check
+  // fired again — the permanent-floor false positive this exemption exists to prevent.
+  // ★ A READER HAD RAISED EXACTLY THIS AS A POSSIBLE REASON FOR THE ORIGINAL OMISSION AND NOTED
+  // THAT NOTHING IN THE FILE EVIDENCED IT. The evidence appears the moment you make the change.
+  // ⇒ `(?<![>&])&(?!&)` — a `&` that is not part of `&&` and not preceded by `>` or `&`.
+  const parts = s.split(/&&|\|\||[;\n]|(?<![>&])&(?!&)/);
+  // ⚠️ ORDER-DEPENDENT AND SUBSTRING-BASED, AND THAT IS A STATED LIMIT, NOT A SOLVED PROBLEM.
+  // `.includes(stage)` takes the FIRST element containing the stage AS A SUBSTRING, which is not
+  // necessarily the element the stage belongs to: a log-bearing element that merely QUOTES the
+  // same text, placed first, silences a real truncation later in the command. And a `\`-continued
+  // pipeline is split by the `\n` here, so the continued half loses sight of its own log path —
+  // which is a FALSE POSITIVE on a mandated command written that way. Both reader-found.
+  // ⛔ NOT FIXED, BY RULING: Langston ordered this component frozen — "a tokenizer is not the
+  // exit either", and four review rounds have each produced a new hole of this same class.
   return parts.find((p) => p.includes(stage)) || stage;
 }
 
