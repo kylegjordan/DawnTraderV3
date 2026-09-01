@@ -63,8 +63,8 @@ from datetime import datetime, timezone
 
 import providers
 from receiver import in_control_sample
-from config import BIRTHS_DIR, ROOT
-from store import _append, load_state, save_state, schedule_grid
+from config import EXPECTED_LAUNCHES_PER_DAY, GRID, BIRTHS_DIR, ROOT
+from store import _append, load_state, save_state
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.promote")
@@ -80,11 +80,19 @@ CHECKS_PATH = f"{ROOT}/study/social-checks.jsonl"
 CORRECTIONS_PATH = f"{ROOT}/provenance/mint-corrections.jsonl"
 STATE = "promote"
 
-# ⛔ A BOUND, so one run cannot become unbounded work on the box that also runs
-#    live trading. ~24,000 launches/day is ~1,000/hour, of which ~68% are
-#    non-carriers ⇒ ~680/hour. 1,500 leaves headroom for a catch-up after an
-#    outage without letting a long backlog run away in a single pass.
-MAX_CHECKS_PER_RUN = 1500
+# DERIVED FROM THE COVERAGE, NOT CHOSEN. The old value was a flat 1500/hour
+#   that I picked as a safety bound and never surfaced -- and it was 25% of
+#   what full coverage needs, so it silently bounded 8,801 launches out of a
+#   single sweep. A cap nobody derived is a scope decision nobody made.
+# The demand is knowable: every launch takes the full grid, so the hourly
+#   need is launches/day x grid points / 24. x2 is headroom for a catch-up
+#   after an outage without letting a long backlog run away in one pass.
+# THE PROVIDER, NOT THIS NUMBER, IS THE REAL BOUND, and it is comfortable:
+#   144,900 checks/day is 101/minute smeared, against a 300/min ceiling. At
+#   the paced 240/min an hour of work takes ~25 minutes, so runs never
+#   collide -- which is what makes spreading the calls across the hour, in
+#   place of a burst on the hour, the thing that buys full coverage.
+MAX_CHECKS_PER_RUN = int(EXPECTED_LAUNCHES_PER_DAY * len(GRID) / 24 * 2)
 
 # A LOOKUP THAT RESOLVED NOTHING IS RETRIED, NOT GUESSED (Langston, BLOCKER-A).
 # A no-pair answer is what an INDEXING GAP looks like as well as a dead token,
@@ -243,7 +251,7 @@ def run(now: datetime = None) -> dict:
     cursors = st.setdefault("cursors", {})
     tries = st.setdefault("attempts", {})   # mint -> unresolved lookups so far
     corrections = _mint_corrections()       # BLOCKER-C: recorded -> real
-    stats = {"checked": 0, "with_channel": 0, "scheduled": 0,
+    stats = {"checked": 0, "with_channel": 0,
              "control_drawn": 0, "errors": 0, "shed": False, "shed_reason": None,
              "bounded_out": 0, "unresolved_no_pairs": 0,
              "unresolved_error": 0, "resolution_exhausted": 0,
@@ -414,13 +422,14 @@ def run(now: datetime = None) -> dict:
                 arm = "not_sampled"
 
             rec["becomes"] = arm
-            if arm != "not_sampled":
-                try:
-                    schedule_grid(mint, datetime.fromisoformat(created))
-                    stats["scheduled"] += 1
-                except Exception as exc:
-                    stats["errors"] += 1
-                    LOG.warning("could not schedule %s (%s): %s", mint, arm, exc)
+            # SCHEDULING MOVED TO BIRTH -- this no longer schedules anything.
+            #   It used to read `if arm != "not_sampled": schedule_grid(...)`, which
+            #   made the ARM decide who was observed. Every launch is now scheduled at
+            #   birth, so by the time this runs the grid already exists and calling it
+            #   again would DOUBLE-SCHEDULE every checkpoint.
+            # What this block still does is the part that was always its job: assign
+            #   the arm from complete information -- size known at birth, channels known
+            #   now -- once, and never revisit it.
 
             _append(CHECKS_PATH, rec)
             consumed += nbytes

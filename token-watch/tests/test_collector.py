@@ -99,12 +99,24 @@ for delta, label in zip(GRID, GRID_LABELS):
     scheduled += [e for e in store.due_now(due_hour) if e["mint"] == "MINT_A"]
 check("all 7 grid checkpoints scheduled", len(scheduled) == 7, f"got {len(scheduled)}")
 
-# POSITIVE CONTROL: an UNFOLLOWED token schedules NOTHING — so "7" above is
-# the follow decision working, not the scheduler firing for everyone.
+# EVERY LAUNCH IS SCHEDULED NOW, CARRIER OR NOT (Kyle, 2026-09-01).
+#   This block used to assert the opposite -- that an unfollowed token
+#   scheduled NOTHING -- because the arm decided who was observed. It no
+#   longer does: the arm is a LABEL for analysis, and full coverage removes
+#   sampling error from the comparison rather than estimating around it.
+# THE CONTROL IS INVERTED, NOT DELETED. Its job was to prove that "7" came
+#   from the follow decision and not from a scheduler that fires blindly.
+#   The equivalent job now is to prove the grid is EXACTLY ONE per launch --
+#   because scheduling moved to birth and `promote` used to schedule too, so
+#   the live risk is DOUBLE-scheduling every checkpoint, not under-scheduling.
 ctrl = []
 for delta in GRID:
     ctrl += [e for e in store.due_now(T0 + delta) if e["mint"] == "MINT_CTRL"]
-check("POSITIVE CONTROL: unfollowed token schedules nothing", len(ctrl) == 0, f"got {len(ctrl)}")
+check("a NON-carrier is scheduled too -- full coverage", len(ctrl) == 7, f"got {len(ctrl)}")
+_pairs = [(x["mint"], x["age"]) for x in ctrl]
+check("...exactly once per grid point, never twice",
+      len(set(_pairs)) == len(_pairs),
+      f"{len(_pairs)} rows but {len(set(_pairs))} distinct -- a duplicate is a double-schedule")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

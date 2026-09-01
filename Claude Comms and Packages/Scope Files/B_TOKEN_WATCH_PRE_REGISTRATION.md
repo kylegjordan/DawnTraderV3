@@ -389,3 +389,25 @@ A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE
 
 ⛔ **AND `PLATFORM_DEFAULT_SIZE` IS NOT TO BE CALIBRATED FROM THIS.** A quantile fitted by the person who will analyse the data buys none of the protection A3.1's provenance clause describes — **fitting it later relocates the problem rather than fixing it.** It stays declared-and-arbitrary, `PROVISIONAL` per AMENDMENT 3, and the weight moves to the continuous dose-response, with 1.0 retained as the pre-registered binary cut **for the H2 replication only**, because the published comparator is binary.
 
+
+---
+
+## AMENDMENT 8 — FULL COVERAGE REPLACES CASE-CONTROL ON FOLLOW-UP (Kyle, 2026-09-01)
+
+**Kyle's directive, verbatim:** *"We should be tracking all launches. If we have the budget to do it, that was the reason why we went from using Gecko traffic to DexScreener and Helius… we need to be tracking all of them. We wanna learn as much as we can about these — good, bad, whether or not they're backed with social media, how they enter, how they exit, how they're backed financially."*
+
+**WHAT CHANGES.** §6's *"case-control on follow-up: 100% of trait-carriers plus a fixed random control sample of non-carriers"* is **superseded for COLLECTION**. Every recorded launch now receives the full seven-point grid. **The arm is retained as a LABEL** — `trait_carrier` / `control_sample` / `not_sampled` are still assigned once, from complete information, and remain the grouping variable for analysis. They no longer decide who is observed.
+
+**WHY THIS IS STRICTLY STRONGER, NOT A RELAXATION.** The control arm existed to estimate follow-up outcomes among non-carriers from a sample. With full coverage we hold **the whole population**, so the estimate is replaced by the quantity it was estimating. Sampling error on the comparison goes to zero and the inverse-probability weighting pre-registered in AMENDMENT 1 becomes unnecessary rather than wrong. ⚠️ **The weighting machinery is NOT deleted** — it remains correct for the pre-amendment cohort, which was sampled.
+
+**THE ARITHMETIC, MEASURED BEFORE THE CHANGE:** 20,700 launches/day × 7 grid points = **144,900 checks/day = 101/minute** smeared across the hour, against DexScreener's **300/min** ceiling — **34%**. At our paced 240/min an hour of work takes **~25 minutes**, so hourly runs cannot collide. Follow-ups cost **zero credits**. ★ **Spreading the calls across the hour rather than bursting on the hour is what makes this affordable** (Kyle's mechanism, and the pacer already implements it).
+
+**STORAGE, CORRECTED:** an earlier projection of 34 GiB over 90 days assumed no archiving and was wrong. With the one-day-hot window working (fixed the same day), hot storage stabilises near 400 MB and cold grows ~65 MB/day at a measured 6.7× compression — **under 6 GiB for 90 days** against 36 GiB free.
+
+⛔ **WHAT DOES *NOT* CHANGE, AND MUST NOT BE READ AS COVERED.** The **on-chain liquidity read remains sampled**: 6,129 affordable/day against 144,900 checks is **4.2%**. It is a *different measurement* from survival, drawn from the paid credit pool, and full coverage on survival does not extend to it. Any statement of the form *"we observe everything"* is true of survival and false of pool depth.
+
+⚠️ **THE EARLY CHECKPOINTS OF PRE-AMENDMENT LAUNCHES ARE UNRECOVERABLE AND ARE NOT INVENTED.** 22,156 launches recorded before this change had no grid at all; they were backfilled at the amendment, recovering 116,985 grid points. **38,107 points were already past and are recorded as misses.** Of 33,309 launches now under observation: 11,160 hold the full seven ages, 5,421 hold six, 16,727 hold five. **Nothing is lost relative to the prior design — those launches were never scheduled under it either — but a cohort analysis must not pool the 1h and 6h checkpoints across the amendment boundary.**
+
+**IMPLEMENTATION:** scheduling moved to BIRTH for every launch (`store.record_birth`), and the socials sweep no longer schedules (it would double-schedule). ★ **A second consequence, unplanned and good:** a non-carrier's clock previously started only when the socials sweep reached it, so its 1h checkpoint was gated on sweep lag. It now starts at birth. The per-run bound is **derived** from coverage rather than chosen — the prior flat 1,500/hour was 25% of what full coverage needs and had been bounding ~8,800 launches out of a single sweep.
+
+**Verified live at the amendment:** every one of 33,309 recorded launches has a grid; zero without. Reverting to arm-gated collection is caught by two suites. 13 suites, 0 failures.

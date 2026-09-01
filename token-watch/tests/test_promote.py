@@ -33,11 +33,24 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import promote  # noqa: E402
 import config  # noqa: E402
 import providers  # noqa: E402
+from config import GRID  # noqa: E402
 import store  # noqa: E402
 
 UTC = timezone.utc
 PASS = FAIL = 0
-NOW = datetime(2026, 8, 31, 12, 0, 0, tzinfo=UTC)
+# ANCHORED TO THE REAL CLOCK, NOT A FIXED DATE. `schedule_grid` refuses to
+#    write a grid point that is ALREADY IN THE PAST (BLOCKER-3: a bucket
+#    nobody will ever read), and it compares against the real wall clock. A
+#    pinned NOW therefore loses its early grid points the day after the date
+#    it names -- 1h and 6h silently vanish, and a test asserting 'all seven
+#    scheduled' reads 5 and looks like a code defect. Second date-pinned
+#    bomb found in this suite today; the first was the monthly budget gate.
+# NOT rounded to the hour, either: `birth()` creates at NOW-30min, so a
+#    NOW rounded DOWN puts the 1h checkpoint 30 minutes into an hour the
+#    real clock has already passed -- 6 of 7, for the same reason.
+#    The shortest grid point is 1h, so the birth must be under an hour old
+#    against the REAL clock for the whole grid to be schedulable.
+NOW = datetime.now(UTC)
 
 
 def check(label, cond, detail=""):
@@ -112,8 +125,24 @@ finally:
     providers._get = real
 check("it was checked", st["checked"] == 1, st)
 check("no channel found", st["with_channel"] == 0, st)
-check("not scheduled - no channel and not drawn into the control",
-      st["scheduled"] == 0, st)
+# ⛔ THIS ASSERTED `scheduled == 0` UNTIL 2026-09-01, when the arm stopped
+#    deciding who is observed. A non-carrier that is not drawn into the
+#    control is now labelled `not_sampled` AND STILL FOLLOWED -- that is the
+#    whole of Kyle's change, so it is asserted directly rather than inferred
+#    from a counter that no longer exists.
+# ⚠️ MY FIRST REPLACEMENT HERE WAS `hasattr(...) or True` -- a tautology that
+#    could not fail, written minutes after Langston bounced me twice for that
+#    exact shape. It is the reflex of reaching for something that turns the
+#    line green rather than something that MEASURES.
+_grid = []
+for _d in GRID:
+    _grid += [x for x in store.due_now(NOW - timedelta(minutes=30) + _d)
+              if x["mint"] == "NOSOC1"]
+check("★ a NON-carrier is FOLLOWED ANYWAY -- the arm is a label, not a filter",
+      len(_grid) == len(GRID), f"{len(_grid)} of {len(GRID)} grid points scheduled")
+check("...and exactly once each, so nothing double-schedules",
+      len({(x["mint"], x["age"]) for x in _grid}) == len(_grid),
+      f"{len(_grid)} rows, {len({(x[chr(109)+chr(105)+chr(110)+chr(116)], x[chr(97)+chr(103)+chr(101)]) for x in _grid})} distinct")
 rows = checks()
 check("★ the NEGATIVE result is PERSISTED — 'checked, none' must be "
       "distinguishable from 'never checked'", len(rows) == 1, rows)
@@ -131,7 +160,7 @@ try:
 finally:
     providers._get = real
 check("the channel is seen", st["with_channel"] == 1, st)
-check("★ and it is PROMOTED", st["scheduled"] == 1, st)
+check("★ and it is PROMOTED", checks()[0]["becomes"] == "trait_carrier", checks()[0])
 check("the check records the new arm", checks()[0]["becomes"] == "trait_carrier")
 # ★ Promotion is worthless unless it actually starts being followed.
 due = []
@@ -223,7 +252,7 @@ try:
 finally:
     providers._get = real
 check("★ and the token is picked up on the NEXT pass — a shed defers, "
-      "it does not discard", st2["checked"] == 1 and st2["scheduled"] == 1, st2)
+      "it does not discard", st2["checked"] == 1, st2)
 
 print("\n=== 7. THE PER-RUN BOUND HOLDS AND REPORTS WHAT IT LEFT")
 reset()
@@ -300,8 +329,10 @@ finally:
     providers._get = _r
 check("* a confirmed non-carrier IS drawn into the control",
       st["control_drawn"] == 1 and checks()[0]["becomes"] == "control_sample", st)
-check("and it is scheduled, so the control arm is actually observed",
-      st["scheduled"] == 1, st)
+# Scheduling moved to birth, so the arm no longer gates observation at all --
+# every launch is followed and the arm is the grouping variable.
+check("the control arm is a LABEL, assigned once, not a collection filter",
+      checks()[0]["becomes"] == "control_sample", checks()[0])
 
 # NEGATIVE CONTROL: the SAME mint, but WITH a channel, must never reach the
 # control draw -- that is precisely the contamination the old order allowed.

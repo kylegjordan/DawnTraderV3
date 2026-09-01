@@ -239,8 +239,22 @@ def record_birth(
         "follow_reason": follow_reason,
     }
     _append(birth_path(first_seen_at), rec)
-    if followed:
-        schedule_grid(mint, created_at)
+    # EVERY LAUNCH GETS THE GRID (Kyle, 2026-09-01). This used to read
+    #   `if followed:` -- so only size-carriers were scheduled at birth and
+    #   everyone else waited for the socials sweep to reach them before their
+    #   clock even started. Two consequences, both bad: most launches were
+    #   never followed at all, and the ones that were had their 1h checkpoint
+    #   gated on how far behind the sweep was.
+    # THE ARM IS NOW A LABEL, NOT A FILTER. `trait_carrier` / `control_sample`
+    #   / `not_sampled` still get assigned once socials resolve, and they are
+    #   what the analysis groups by -- but they no longer decide WHO IS
+    #   OBSERVED. Full coverage removes sampling error from the comparison
+    #   entirely: we hold the whole population rather than an estimate of it.
+    # AFFORDABLE, MEASURED: 20,700 launches x 7 grid points = 144,900
+    #   checks/day = 101/minute smeared across the hour, against a 300/min
+    #   provider ceiling. At our paced 240/min an hour of work takes 25
+    #   minutes, so runs do not collide.
+    schedule_grid(mint, created_at)
     return rec
 
 
