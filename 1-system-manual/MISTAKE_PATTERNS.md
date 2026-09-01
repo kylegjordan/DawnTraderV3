@@ -94,6 +94,42 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 
 # THE PATTERNS
 
+### `enumerator-blind-spot` — **EVERY ENUMERATOR WAS BLIND TO A DIFFERENT MEMBER CLASS, AND EACH BLIND SPOT LOOKED LIKE A CORRECT ARM** — **NEW 2026-08-31, n=7 in ONE batch** · mechanism: **SHIPPED for this instance — one shared enumerator; NONE YET for the class**
+
+⛔⛔ **THE SHAPE, AND IT IS WHY IT IS NOT `fragment-not-whole`: THE ARM WAS CORRECT EVERY TIME. WHAT WAS WRONG WAS THE *LIST IT ARMED OVER*.** A member class the enumerator cannot see scores `false` ⇒ the guard preserves ⇒ **the entry FREEZES PERMANENTLY, or a deletion sweep READS AS COMPLETE.** ★ **The failure is always in the safe direction, which is exactly what makes it invisible: nothing breaks, nothing errors, and the thing simply stops advancing.**
+
+⚠️⚠️ **`n=7` IS IN A SINGLE BATCH, SO IT DOES NOT MEET PROMOTION (3+ across 2+ distinct batches) AND IS NOT IN §13.** Recorded because **FOUR OF THE SEVEN WERE WRITTEN WHILE FIXING THE ONE BEFORE** — the density is the finding, not the count.
+
+**THE SEVEN, `B-CROSS-SESSION-BLEED` (#753), CC-B, 2026-08-31 — all in `.claude/hooks/fresh-rules.mjs`:**
+1. `git diff --name-only` — blind to **UNTRACKED** members, and a new guard arriving untracked is the modal case a behind clone produces.
+2. `status --porcelain` at default `-unormal` — **collapses an untracked SUBDIRECTORY** to `?? .claude/hooks/lib/`, itself a directory pathspec, so `hash-object` throws. *(Langston BLOCKER-2.)*
+3. Two spellings of one newline across two call sites — same value, nothing keeping them in step.
+4. Porcelain **QUOTES** a path containing a space; `slice(3)` hands the quotes to `hash-object`. *(Langston FINDING-1.)*
+5. ★ **`run()` ends in `.trim()`, which eats porcelain's leading status space on the FIRST record, so `slice(3)` cut one character INTO the path** — `.claude/hooks/a b.mjs` → `claude/hooks/a b.mjs`. **Mine, written while fixing (4).**
+6. ★ **Hashed the WORKING TREE instead of the ref** — `core.autocrlf` had normalised two distinct origin blobs to look identical, so a three-file deletion sweep verified on that hash finds ONE. **Also filed under `wrong-object`.**
+7. ★ **The deletion ARCHIVE normalised the very bytes it was preserving** — `core.autocrlf` rewrote two CRLF-stored `.removed` files to LF on `git add`, collapsing them onto a third's blob. **Mine, written while fixing (6).**
+
+★★ **TWO OF THE SEVEN SURFACED *ONLY* BECAUSE A VALUE HAPPENED TO BE PRINTED OR CHECKED** — (5) because the mangled name appeared in an output line a human reads, (7) because I compared archived-blob to source-blob by hand. **On the silent path both are permanent.** ⇒ **that is the argument for a mechanism: the class cannot be caught by care, only by a comparison that runs every time.**
+
+✅ **MECHANISM SHIPPED FOR THE INSTANCE, NOT FOR THE CLASS: one shared `dirtyMembers()` enumerator, so a sixth blind spot has ONE place to be fixed instead of several that must be kept in agreement.** ⛔ **That is containment, not prevention** — it makes the next blind spot cheaper to fix, and does nothing to make it visible.
+
+⇔ `fragment-not-whole` (tested a fragment, asserted about the whole — **there the ARM was too narrow; here the arm was right and the LIST was short**) · `wrong-object` (instance 6 is one) · `fix-relocates` (instances 5 and 7 are that too — the correction reintroduced the class one level down).
+
+---
+
+### `shared-tmp-message` — **THE PATH WAS MINE, THE FILE WAS SHARED, AND THE CONTENT ARRIVED THROUGH A CHANNEL NO GUARD INSPECTS** — **NEW 2026-08-31, n=1** · mechanism: **NONE YET — `B-SHARED-TMP-ISOLATION`, `PHASE_19_PLAN` 2.6**
+
+**INSTANCE 1 — `B-CROSS-SESSION-BLEED` P9, CC-B, 2026-08-31.** `git commit -F /tmp/m14.txt -- <my explicit paths>` produced **my change set carrying another session's commit message** (`#969: retroactive pre-audit filed…`). Artifact `a9366f5e4`; corrected at `0264f24f7` with an **identical tree hash**, so only the message moved.
+**MEASURED CAUSE (the first label said `ESTABLISHED` and Langston ruled it over-claimed — a foreign message proves a shared FILE, not WHICH file):** `cd /tmp && pwd -W` → `C:/Users/kyleg/AppData/Local/Temp` · `os.tmpdir()` → the same · **positive control: a file written via `/tmp` from one session read back at the Windows path any session would use.**
+
+⛔⛔ **IT DEFEATS ALL THREE COMMIT GUARDS BY CONSTRUCTION, WHICH IS THE REASON FOR THE SLUG:** rule 25's explicit paths protect the `--` side and **the message arrives via `-F`, which is not a path in the commit** · **rule 25.c says read the staged CONTENT — I did** — and is silent on the MESSAGE · `guard-bare-commit.mjs` checks the **FORM**. ⇒ **the only check that catches it is reading `git log -1` before pushing.**
+★ **AND THE MEASUREMENT SHARPENED THE FIX RATHER THAN CONFIRMING IT: the session scratchpad lives UNDER THE SAME ROOT** (`…/Temp/claude/<clone-slug>/<session-uuid>/`), **so isolation is the UUID SEGMENT and *"avoid the temp directory"* would not have helped.** ⇒ the guard must be an **allowlist**, not a `/tmp` denylist — *a denylist is a predicate narrower than the population* (Langston).
+⚠️ **I DID IT AGAIN TEN MINUTES AFTER FILING THE ISSUE**, for a Discord message file. **The habit is stickier than the knowledge, which is the argument against fixing this with a rule.**
+
+⇔ `wrong-object` (a matching NAME is not a matching THING — here the name was right and the FILE was another session's) · `#753` (**same class, one level up: no session wrote into another's CLONE, but the sessions share a HOST**).
+
+---
+
 ### `skipped-the-gate` — **DID THE WORK, SKIPPED THE REVIEW** — **LIVE — NOT IN §13** · mechanism: **#744, `B-GATE-GUARD`, queued** (opened 2026-08-24, CC-A; Langston required it at the hotfix gate)
 
 **DISTINCT FROM EVERYTHING ELSE IN THIS INDEX**, and that is why it gets its own slug: every other pattern here is *a wrong belief*. **This one is a correct belief and a skipped step.** No measurement was wrong; no instrument misled. The audit, the census, the controls and the announcement requirement were all genuinely done — **written into commit messages instead of a scope file, and never paused for review.**
@@ -373,6 +409,8 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 **A file test used to support a claim about a RUNNING PROCESS.** A running process holds the code it loaded at start; fixing the file does not fix the process.
 **INSTANCES:** 1 — told Kyle a wake event *"confirms the filter fix works in production"* when the running watcher still held the pre-fix code (B-CONDUCT-FILE, `5c2896938`). **Below threshold.**
 **Mechanism that would retire it:** the watcher reporting its own load time in its wake lines.
+
+**INSTANCE (new) — `B-CROSS-SESSION-BLEED` P9, CC-B, 2026-08-31: `worktree-not-ref`, and it would have shipped an incomplete deletion.** I censused three copies of `REPLIT_PUSH_SCRIPT.sh` with `git hash-object` **on my WORKING TREE** and reported them *"byte-identical, blob `b4ca7ac5c`"*. **At the ref there are TWO blobs:** root `b4ca7ac5c` (2,931 B, LF) and the other two `9cd8585c1` (3,022 B, CRLF). `core.autocrlf` had normalised them on checkout, so two distinct blobs hashed the same for me. ★ **A sweep verified against `b4ca7ac5c` removes ONE file and reads as COMPLETE while two survive.** Caught by Langston, who fetched all three at the ref and hashed them. ⚠️ **My own record had already refuted me — `RUNNING_ISSUES:3674` states the CRLF-stored blob while `:3817` asserted byte-identical: two lines of one file disagreeing.** ⛔ **And rule 25 says it in terms: quote from `origin/migration/aws-supabase`, never from your working tree.** The rule existed, was loaded, and the habit beat it.
 
 ---
 
