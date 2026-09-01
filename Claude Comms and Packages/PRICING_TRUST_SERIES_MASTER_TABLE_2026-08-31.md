@@ -34,7 +34,14 @@
 
 ---
 
-# 📋 THE PROPOSED ORDER — 17 remaining
+# 📋 THE ORDER — ⛔ SUPERSEDED HERE, AND DELIBERATELY NOT RE-COPIED
+
+> ⛔⛔ **THE LIVE ORDER LIVES IN ONE PLACE ONLY: `Claude Comms and Packages/SCRATCH_CHECKLIST_2026-07-27_Kyle-CCC.md` §⓵ (the MASTER ORDER block at its top).**
+> **The list below is MY 2026-08-31 DRAFT, kept as the record of what was proposed. LANGSTON CHANGED FIVE OF ITS PLACEMENTS the same day and added a row 0.** ⚠️ **DO NOT WORK FROM IT.**
+> ★ **Why it is not simply overwritten with the approved order: two copies of a sequence is the `#641` shape, and the copy that gets read is never reliably the one that got updated.** This document's value is the DESCRIPTIONS; the scratch list owns the ORDER.
+> **What he changed:** `3b.b` up to 2 and `3b.d` to 3 *(order by WHEN THE GATE LIFTS, not by piece size — 3b.b's gate was a decision Kyle made)* · `3b.l` up to 6 · `3b.f-b` down to 8, **after** `F-C`, because `F-C` DERIVES the bound `3b.f-b` ENFORCES · `F-F(b)` to LAST of the thirteen · **plus a ROW 0 that is not a batch: the `ws-equities` book re-probe — ✅ DONE 2026-08-31, `TSLA` 20/21 levels, thin names 1-2.**
+
+## (draft, superseded — retained as the record)
 
 > **Reasoning stated once:** Kyle's own re-order (2026-08-26) is *"6, 8, then 11"*. 6 is done. **So 8 is next** — and 8 is now two halves with different gates. **After that, the pieces that UNBLOCK 8's second half come before the pieces that merely follow it.** The tail keeps Kyle's dependency order untouched.
 
