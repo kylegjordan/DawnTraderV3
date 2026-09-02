@@ -12,6 +12,12 @@ I TOLD LANGSTON THIS COULD NOT BE SIZED FROM THE STORE. That was an asserted
    lack the fields, or do you lack access? Those have different fixes and one
    of them is cheap."
 """
+
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+_sys.path.insert(0, "/opt/token-watch")
+from fingerprint import fingerprint, print_fingerprint   # noqa: E402
+
 import json, collections
 F = '/var/lib/token-watch/provenance/follow-up/2026-09-02.jsonl'
 # #983: token_state picks ONE pair by 24h volume. For a freshly-graduated
@@ -67,3 +73,8 @@ print('  has some                                          : %d  (%.3f%%)'
 for e in examples:
     print('     %-12s chosen %-9s vol24=%-12s  live alt %-9s liq=$%s'
           % (e[0], e[1], e[2], e[3], e[4]))
+
+# THE FINGERPRINT (Langston's condition, 2026-09-02). The figures above move
+#    with every hourly sweep; without this a disagreement an hour later cannot
+#    be resolved into "the input moved" versus "the computation is wrong".
+print_fingerprint(fingerprint([F], observed_at_of=lambda r: r.get('observed_at'), rows=tokens))

@@ -150,10 +150,43 @@ def main():
     if not args.write:
         print("\ndry run -- nothing written. Re-run with --write to append.")
         return 0
+    # THE SELF-CHECK AT THE ONE SITE THAT CAN ARM THE BRANCH (Langston's
+    #    condition, 2026-09-02). `not_applied_value_mismatch` and
+    #    `ambiguous_unresolvable` cannot fire today, and that is exactly what
+    #    makes them dangerous -- a never-armed branch is silent with zero
+    #    opportunity, and its silence is not evidence.
+    # WRITING CORRECTIONS IS THE ONLY MECHANISM THAT CAN CREATE A MISMATCH,
+    #   so the check belongs here rather than in a dashboard. The BEFORE count
+    #   establishes the baseline; the AFTER count attributes any change TO
+    #   THIS RUN rather than to history.
+    # His general form, worth keeping past this batch: a countable surface
+    #   with no consumer is acceptable ONLY while nothing can make it
+    #   non-zero, and the consumer's deadline is the ARMING EVENT, not the
+    #   ship date.
+    before = store.correction_health(args.day + ".jsonl")
     for c in corrections:
         store.record_pool_sol_correction(c)
-    print("\nappended %d corrections to %s"
+    after = store.correction_health(args.day + ".jsonl")
+    print("")
+    print("appended %d corrections to %s"
           % (len(corrections), store.POOL_SOL_CORRECTIONS_PATH))
+    print("correction health  BEFORE: %s" % before)
+    print("                   AFTER : %s" % after)
+    bad = ("not_applied_value_mismatch", "ambiguous_unresolvable")
+    delta = {k: after[k] - before[k] for k in bad}
+    if any(delta.values()):
+        print("")
+        print("THIS RUN CREATED UNRESOLVED ROWS -- INVESTIGATE BEFORE TRUSTING")
+        print("THE CORRECTED READ PATH FOR THIS DAY: %s" % delta)
+        print("Both stores are append-only, so a row's value cannot change; a")
+        print("mismatch means the two stores disagree about a fact neither")
+        print("can have altered. That is a corruption signal, not a routine")
+        print("outcome.")
+        return 2
+    if any(after[k] for k in bad):
+        print("")
+        print("PRE-EXISTING unresolved rows, not created by this run: %s"
+              % {k: after[k] for k in bad})
     return 0
 
 

@@ -17,6 +17,12 @@ THE REFUSAL-BRANCH RATE TAKES NO EXCLUSIONS. "Is the quote mint the right
    answered by how often the guard refuses across EVERY curve-owned read,
    which has neither.
 """
+
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+_sys.path.insert(0, "/opt/token-watch")
+from fingerprint import fingerprint, print_fingerprint   # noqa: E402
+
 import json, base64, struct, collections
 PUMPFUN = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'
 USDC = bytes.fromhex('c6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61')
@@ -92,3 +98,8 @@ for k, v in refusal.most_common(): print('    %-34s %d' % (k, v))
 print()
 print('ACCOUNT vs AGGREGATOR LABEL (must be 1:1):')
 for k, v in label_cross.most_common(): print('    account %-16s <-> label %-8s %6d' % (k[0], k[1], v))
+
+# THE FINGERPRINT (Langston's condition, 2026-09-02). The figures above move
+#    with every hourly sweep; without this a disagreement an hour later cannot
+#    be resolved into "the input moved" versus "the computation is wrong".
+print_fingerprint(fingerprint([F], observed_at_of=lambda r: r.get('observed_at'), rows=reads))

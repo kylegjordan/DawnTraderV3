@@ -23,6 +23,12 @@ MEASURED 2026-09-02 (the population grows with every hourly sweep, so re-run
 GRADUATED CURVES ARE OUT OF THIS LEG BY CONSTRUCTION, not by choice -- a
    drained curve publishes no price to check a decode against.
 """
+
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+_sys.path.insert(0, "/opt/token-watch")
+from fingerprint import fingerprint, print_fingerprint   # noqa: E402
+
 import json, base64, struct, collections
 PUMPFUN = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'
 USDC = bytes.fromhex('c6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61')
@@ -96,3 +102,8 @@ if p is not None and a is not None:
 if trading:
     print('EXCLUSION COST: %d of %d rows removed = %.2f%% of the population'
           % (len(trading), len(rows), 100.0 * len(trading) / len(rows)))
+
+# THE FINGERPRINT (Langston's condition, 2026-09-02). The figures above move
+#    with every hourly sweep; without this a disagreement an hour later cannot
+#    be resolved into "the input moved" versus "the computation is wrong".
+print_fingerprint(fingerprint([F], observed_at_of=lambda r: r.get('observed_at'), rows=len(rows)))
