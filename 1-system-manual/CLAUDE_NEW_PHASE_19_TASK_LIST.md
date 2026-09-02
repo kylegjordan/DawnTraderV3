@@ -20,6 +20,8 @@
 | 2.5 | **`B-FRESHNESS-LOG-READER`** | Nothing reads the run record the rules-refresher writes every session start. Build the reader: freeze detector, per-path staleness ceiling (P10), the `self_at_origin` watch, the clone allowlist (report the excluded count; basename is insufficient — `DawnTraderV3` is `git clone`'s default name). | A closes |
 | 2.6 | **`B-SHARED-TMP-ISOLATION`** (`#979`) | All four sessions share `/tmp`. Sweep every writer to the shared namespace (not just `commit -F`; includes the Helsinki `scp` path), an ALLOWLIST guard that refuses `-F` outside the session scratchpad, amend rule 25.c (*the message is content too*), and the archived-blob == source-blob check. | after 2.5 |
 | 2.7 | **`B-CHANGE-CLASS-DOCSET-FIT`** | Langston's §13 from the close of A: the change-class matrix welds `SYSTEM_MANUAL` to `SIM`, but their triggers differ, so infrastructure batches (hooks, bridges, alerting, governance tooling) have no class that fits — six mis-tiered `N/A` rows in `GOVERNANCE_EXCEPTIONS` already. Bug-taxonomy outcome (2): working-as-designed, unaddressed — a scope decision. `CODE_PREFIXES` has no `.claude/` entry either. | after 2.6 |
+| 2.9 | **`B-UMBRELLA-OPEN-STATE`** | The checker has no state for a batch legitimately open until a phase closes; build the designed `umbrella-namespace` row type. | after 2.8 |
+| 2.10 | **`B-VOLATILITY-CACHE-RETIRE`** | `B-REGIME-INPUTS-LIVE`'s undone OBJ-4: retire the orphan volatility cache + `0.015` fallback after the blast-radius pass on `/dse/metrics-cache`; carries the live fail-loud exercise. | after 2.9 |
 
 ## C. Trading-side issues owned by CC-B
 
@@ -62,7 +64,7 @@
 ## F. Small owed items
 
 - **`P19-B8.5` umbrella:** Kyle ruled 2026-09-02 it stays open until Phase 19 closes; stale-open alert resolved against `GOVERNANCE_EXCEPTIONS:82`; mechanism gap → `B-UMBRELLA-OPEN-STATE` (plan 2.9, mine).
-- **Claude Old answered 2026-09-02; Kyle ruled:** `B-REGIME-INPUTS-LIVE` (alert `8aa095a2`) → **mine to close** — verified against the repo and the channel: code deployed (ancestor of the live sha), Langston Step-4 read at the ref 2026-07-20 21:05, live-verified by him 2026-08-31 (501 trades, 448 distinct regimeWeights); missing = retroactive completion report, catalog + history rows, #543/#538 disposition. `B-RETIRED-SCORE-REMOVAL` (#558, `f4ffaf53`) → **Phase 16, mine** — re-homed at `POST_AUDIT_ROADMAP` §16.7.
+- **Claude Old answered 2026-09-02; Kyle ruled:** `B-REGIME-INPUTS-LIVE` (alert `8aa095a2`) → **CLOSED 2026-09-02 (retroactive report filed; #543/#538 resolved; OBJ-4 → `B-VOLATILITY-CACHE-RETIRE`)** — was — verified against the repo and the channel: code deployed (ancestor of the live sha), Langston Step-4 read at the ref 2026-07-20 21:05, live-verified by him 2026-08-31 (501 trades, 448 distinct regimeWeights); missing = retroactive completion report, catalog + history rows, #543/#538 disposition. `B-RETIRED-SCORE-REMOVAL` (#558, `f4ffaf53`) → **Phase 16, mine** — re-homed at `POST_AUDIT_ROADMAP` §16.7.
 
 - Delete scheduled task `verify-p19-b8-5h-dbs-carry` — still listed on 2026-09-01; I asserted on 2026-07-29 that it was gone and it was not.
 - Record `#592` owner = CC-B. Write `#669`'s close.

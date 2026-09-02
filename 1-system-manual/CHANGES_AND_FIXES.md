@@ -3914,6 +3914,16 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 
 **Class:** hotfix (Kyle-directed). **The defect:** every session reaches staging as the same unix identity (root → su deploy), so `dt-deploy`'s record field `deployed_by` — the observed identity per #447 — was IDENTICAL for all deployers; the daily observation's bypass-attribution check (alert `f2c92489`) could not say WHICH session deployed. **The fix:** `--by <session>` is REQUIRED (refuse-not-guess, the `CREW_SESSION` precedent; charset-validated; Step-4 hardened — a `-*` value is a swallowed flag and refuses, a duplicate flag refuses on both arms); the record replaces `deployed_by` with `deployed_by_claimed` + `deployed_via` (claim labelled a claim, mirroring `resolved_by_claimed`; Langston verified zero readers of the old field — record truncated every run, no corpus, no parser); the lock holder names the session so concurrency refusals do too. Seven prescriptive sites swept; #649 completion report annotated, not rewritten. **Verification:** parse block exercised by execution against all refusal + happy paths; live provoked refusals at install.
 
+## FIX-2026-07-20-A (recorded 2026-09-02, retroactively) — B-REGIME-INPUTS-LIVE (#543 + #538): the RegimeWeight gate scored every signal `0.6455` and had never refused one
+
+**THE DEFECT.** `regimeWeight = 0.70×trendStrength + 0.30×(1−volatility)`. `trendStrength` was the literal `0.5` at three genesis sites and one refresh site; `volatility` came from `market-metrics.ts`'s cache, which had **no writer**, so every read fell through to `return 0.015`. `0.35 + 0.2955 = 0.6455`, identically, on every signal — a blocking quality gate that could not block. Neither placeholder was a chosen default; both were silent substitutions.
+
+**THE FIX (CC-A, `9ee4f1271` + `6d22a9b63`, Langston APPROVED at the ref).** Both inputs routed at the MCE on the genesis and refresh paths (new `regime-inputs.ts`); a missing input REFUSES the signal (`Number.isFinite` → `missing_inputs`) instead of substituting. The refresh path's own regime computation shipped next day in `B-REGIME-REFRESH-PIPE`.
+
+**VERIFIED (re-measured by CC-B at the retroactive close, `closed_trades`, active path):** pre-fix crypto 160 trades / **2** distinct scores; post-fix 273 / **273** distinct, 0.3023–0.9998; xStock 229 / 211. Langston's independent 08-31 measurement agrees. **Not yet observed: an actual refusal** (VC-2, CC-A). **Not done: OBJ-4**, the orphan cache retirement → `B-VOLATILITY-CACHE-RETIRE`.
+
+**WHY IT IS RECORDED 44 DAYS LATE.** No completion record was written; the checker's alert was acknowledged two hours after firing and never resolved, so it could only re-surface — 23 times.
+
 ## FIX-2026-08-31-B — B-CROSS-SESSION-BLEED (`#753`): the hook that prevents stale rules was itself freezing them permanently, and said the staleness was your own work
 
 **THE DEFECT, IN TWO HALVES — the second was invisible for 28 days BECAUSE the first misdescribed it.**
