@@ -2,6 +2,8 @@
 
 change-class: non_architecture
 
+> ⛔⛔ **RE-HOMED TO PHASE 16 — KYLE RULING 2026-09-02, OWNER NOW CC-B (Claude New).** Kyle: retired-score removal is cleanup and belongs in Phase 16; CC-A had held the A2 leg gated on Kyle's go since 2026-07-27 and agreed it should move. **What moves:** `#558` as the umbrella, the A2 leg (VTS-persisted `finalScore` telemetry, scope `B_RETIRED_SCORE_REMOVAL_A2_SCOPE.md`), Phase B (column DROP) and its `#582` prerequisite. **The §13 children filed under it (#574, #578, #580, #584, #586–#591, #595) keep their filed owners** — listed so the transfer is not read as absorbing them. Placed at `POST_AUDIT_ROADMAP.md` §16.7. Stale-open alert `f4ffaf53` resolved against this line; the checker cannot express *parked-until-Phase-16* — the same gap as `B-UMBRELLA-OPEN-STATE` (plan 2.9), which now covers parked batches too. 
+
 > A2 of #558. A0 (VTS convergence) ✅, A1 (RTB core finalScore removal) ✅ deployed+verified 2026-07-27. A2 = remove the retired `finalScore` from the **xStock VTS eval-cycle**. Phase B (column DROP) + #582 (RTB telemetry-reader retire) still follow.
 
 ## AUDIT FINDINGS (read in code at head `ee6474d25`, not from memory)

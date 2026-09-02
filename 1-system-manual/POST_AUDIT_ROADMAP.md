@@ -489,6 +489,10 @@ All L-Series services (17), route files (9), and utilities (2) removed. M3B vali
 - Fix remaining LSP error causes in active code
 - Target: zero or near-zero LSP errors in active codebase
 
+### 16.7 Retired-Score Removal — `B-RETIRED-SCORE-REMOVAL` (#558) — MOVED FROM PHASE 19 2026-09-02, Kyle directive; owner CC-B
+
+Kyle's 2026-07-22 directive to remove every retired score (`finalScore`, `hybridScore`, and any score no longer used) from the system. **Done so far (in Phase 19, CC-A):** A0 VTS convergence ✅ · A1 RTB core `finalScore` removal ✅ deployed + verified 2026-07-27 · A3 ranking re-source ✅ (with the #586–#591 deferrals). **Remaining, now Phase-16 cleanup:** the **A2 leg** — retire the VTS-persisted `finalScore` telemetry from `vts_open_trades` (scope + pre-audit on file; class-override `non_architecture` confirmed by Langston 2026-07-28; was gated on Kyle's go since 07-27) · **Phase B** — the column DROP, with `#582` (the RTB telemetry-reader slice) as its prerequisite · `DELETED_COMPONENTS_LOG` entries and migrations per rule 18. **Sequencing:** with the rest of Phase 16, after Phase 25, unless Kyle pulls it forward. The §13 children (#574, #578, #580, #584, #586–#591, #595) keep their filed owners and homes.
+
 ### 16.6 Trailing-Percent Code Purge (added 2026-04-25, Kyle directive)
 
 The B65.2 functional ship deleted the paper-execution-engine consumption of metadata-driven `trailingStopPercent` for exit decisions, and B65.4 replaced the moonbag pure-trail design with the ATR-based ladder. The original B65.3 sub-batch ("migrate paper percentage trailing onto ATR TEC") was therefore declared MOOT in the catalog because the migration target no longer existed. Phase 16 will delete the residual references that survived only as legacy or dashboard-write artifacts:

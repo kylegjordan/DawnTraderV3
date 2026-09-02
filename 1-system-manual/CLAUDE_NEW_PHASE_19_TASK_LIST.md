@@ -62,7 +62,7 @@
 ## F. Small owed items
 
 - **`P19-B8.5` umbrella:** Kyle ruled 2026-09-02 it stays open until Phase 19 closes; stale-open alert resolved against `GOVERNANCE_EXCEPTIONS:82`; mechanism gap → `B-UMBRELLA-OPEN-STATE` (plan 2.9, mine).
-- **Awaiting Claude Old (asked 2026-09-02):** where `B-REGIME-INPUTS-LIVE` (alert `8aa095a2`) and `B-RETIRED-SCORE-REMOVAL` (`f4ffaf53`, #558) are slotted; Kyle says either may transfer to me, and retired-score removal may re-home to Phase 16/20.
+- **Claude Old answered 2026-09-02; Kyle ruled:** `B-REGIME-INPUTS-LIVE` (alert `8aa095a2`) → **mine to close** — verified against the repo and the channel: code deployed (ancestor of the live sha), Langston Step-4 read at the ref 2026-07-20 21:05, live-verified by him 2026-08-31 (501 trades, 448 distinct regimeWeights); missing = retroactive completion report, catalog + history rows, #543/#538 disposition. `B-RETIRED-SCORE-REMOVAL` (#558, `f4ffaf53`) → **Phase 16, mine** — re-homed at `POST_AUDIT_ROADMAP` §16.7.
 
 - Delete scheduled task `verify-p19-b8-5h-dbs-carry` — still listed on 2026-09-01; I asserted on 2026-07-29 that it was gone and it was not.
 - Record `#592` owner = CC-B. Write `#669`'s close.
