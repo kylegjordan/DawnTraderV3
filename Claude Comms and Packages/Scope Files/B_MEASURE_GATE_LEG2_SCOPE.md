@@ -177,6 +177,22 @@ The shapes with a genuine **command-string** signature, each drawn from a real e
 
 ---
 
+## ✅ `[r6]` **OBJ-6c BUILT — AND THE OBSERVED `PostToolUse` SHAPE CORRECTS THIS SCOPE'S OWN WORDING**
+
+**Two stages, per this scope's new-event rule.** Stage 1 `observe-posttooluse.mjs` recorded the live payload on 2026-09-02 (it registered by hot-reload, no restart): `tool_input.{command,description}` and **`tool_response.{stdout, stderr, interrupted, isImage, noOutputExpected}`** plus `tool_use_id`, `duration_ms`, `agent_id`/`agent_type` when a subagent ran it. ⛔ **THERE IS NO EXIT CODE ON THE WIRE.** Constraint 1 above reads *"derivable from command + exit code + output"*; **the harness hands over no exit code, so the predicate is derived from command + stdout + stderr and nothing here may depend on one.** The constraint's intent (no model call, no claim) is unchanged.
+
+**Stage 2 `guard-result-shape.mjs` — warn-only, `additionalContext`, exit 0 on every path. Four legs, each named for the recorded instance it is built from, each needing BOTH a property of the command AND a property of the output (constraint 3 — never on a value):**
+| leg | command property | output property | instance |
+|---|---|---|---|
+| `cap-bound` | carries a numeric cap ≥ 5 (`head -N`, `tail -N`, `git log -N`, `grep -m N`, `LIMIT N`, `--limit N`) | has EXACTLY N lines | 3 (`-200` read as "of the last 200") |
+| `error-consumed` | pipes into a consumer (`wc`, `grep -c`, `jq`, `python`, `sort`…) — or stdout's last line is a bare integer | stderr carries a hard error signature (`fatal:`, `No such file`, `Traceback`, `404`, `ECONNREFUSED`…) | 8 / `#732` ("0 breaches of 0 rows" from an endpoint that never answered) |
+| `html-not-json` | asks an API (`curl`/`wget` to `/api/`, or piped to `jq`) | body is HTML | 8 |
+| `other-document` | fetches/shows a path whose name carries a batch id | the H1 names a DIFFERENT batch | Langston's live instance (HTTP 200, `# B-GOV-HYGIENE-ANALYST-1`) |
+
+**Proof before wiring (#761):** `test-guard-result-shape.mjs` **28/28** — every positive arm has a paired control differing in the ONE property the leg keys on; **seven mutation arms** (drop the cap floor, drop the heredoc elision, fire on the error alone, drop the API condition, drop the H1 comparison, emit a permission decision, exit 2) each fail the suite. ★ The permission-decision arm caught a check that could not fail — the invariant read the extracted string, not the raw output — which is the convention doing its job.
+✅ **DELIVERY MEASURED LIVE, from the SHIPPED hook:** the first triggering command after wiring (`seq 1 20 | head -20`) returned the `cap-bound` warning in the tool result; the sink row is `synthetic:false`, `project_dir` this clone, **`hook_sha d684cdf99df0` = the file's own CRLF-normalised hash.** That is the Step-7 condition, satisfied for 6c on day one.
+⛔ **KNOWN GAPS, in the hook header in those words:** an error swallowed by `2>&1` INTO the consumer leaves no stderr and a plausible number; a 404 body that parses as an empty list without a traceback; `interrupted` results are skipped as undecided; only the first and last 64 KB of stdout are inspected. **Its silence is non-evidential.** ★ **Instrument-agnostic by construction — the legs key on result-vs-request, never on which tool produced the error — as OBJ-6b's vacated split requires.**
+
 ## ⛔⛔ `[r4]` **THE SELF-REFERENCE HAZARD — A SHAPE-MATCHER FIRES ON TEXT *ABOUT* ITS TRIGGER, NOT ONLY ON *USE* OF IT.** *(§9.4 disposition 1 — folded into the work in hand)*
 
 ★★ **DISCOVERED BY ACCIDENT, LIVE, AND IT COULD NOT HAVE BEEN STAGED BETTER: THE HOOK BLOCKED THE POST THAT WAS WARNING THE OTHER SESSIONS ABOUT THE HOOK.** OBJ-0’s notice named the probe’s sentinel strings so the crew would know what to avoid; `probe-warn-delivery.mjs` matches `cmd.includes(sentinel)` against the **whole command string**, the heredoc carrying the notice contained them, and the blocking arm refused the command.

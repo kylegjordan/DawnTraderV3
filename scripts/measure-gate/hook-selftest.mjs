@@ -42,6 +42,8 @@ const SINKS = {
   'guard-ci-cited.mjs': join(HOME, '.claude', 'ci-cited.jsonl'),
   'observe-userpromptsubmit.mjs': join(HOME, '.claude', 'userpromptsubmit-observe.jsonl'),
   'inject-due-alerts.mjs': join(HOME, '.claude', 'inject-due-alerts.jsonl'),
+  'observe-posttooluse.mjs': join(HOME, '.claude', 'posttooluse-observe.jsonl'),
+  'guard-result-shape.mjs': join(HOME, '.claude', 'result-shape.jsonl'),
 };
 
 const norm = (buf) => buf.toString('utf8').replace(/\r\n/g, '\n');
