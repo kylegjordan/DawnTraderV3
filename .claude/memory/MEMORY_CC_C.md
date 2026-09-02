@@ -56,15 +56,11 @@
 
 ⭐ **USE SECOND READERS FOR LOAD-BEARING PIECES AT EVERY PIVOTAL STEP.** ⚠️ **His caution: readers surface incidental nitpicks and sometimes claim wrong things — FOCUS ON LOAD-BEARING, verify, and do not let a retraction reach implementation.** ★ *"I want this to be perfect... it's very late to be noticing we don't have the right prices feeding in. I'd assumed for months that was foundational."*
 
-✅✅ **THE PLAN IS WRITTEN AND IS THE LIVE ARTIFACT: `1-system-manual/XSTOCK_PRICING_PLAN.md`** — 6 problems w/ measured costs, his 3 questions answered, 6 solutions, the order. **P1 freshness guard = 15s (matches entry; feed throttle is 4s so tighter is unachievable — 2s would block 134/236). On block: HOLD + re-evaluate. KILL SWITCH + FORCE-CLOSE EXEMPT.** **P2 resting sell reads BID not mid.** **P3 no data ⇒ no entry (kill the passing sentinel).** **P4 plausibility gate, CAUSAL not clock.** **P5 instrumentation (DEMOTED to 5th on Kyle's correction — age is already computed; recording it makes the FINDING readable, it is NOT needed for the fix).** **P6 which price per job = KYLE'S.**
+✅ **THE xSTOCK PRICING PLAN IS THE LIVE ARTIFACT: `1-system-manual/XSTOCK_PRICING_PLAN.md`** — 6 problems, 6 solutions, the order; **P6 (which price per job) = KYLE'S.** Read it there; do not re-narrate here.
 
 ⛔⛔ **`B-EXIT-BOOK-AGE-STAMP` — OPEN, OBSERVATION WINDOW. Full record: `B_EXIT_BOOK_AGE_STAMP_PROGRESS_REPORT.md` (authoritative — do NOT re-narrate here).** Deployed `104fa755b` 2026-08-30T12:05:09Z, Langston approved, CI 4/4, card `Observation`. **Criterion pre-registered BEFORE data + armed as alert `65a1379e`, fires 2026-09-06: 20 post-deploy closes or 7d, excluding `never_filled`.** ⛔ **A MAKER null is a PASS; a NULL/NULL pair is NOT evidence; NEVER `LIKE` on `exit_price_producer` — ENUMERATE.** **Converts to a completion report only when the data is in AND a decision is taken.**
 
 ⭐ **BOARD: ALWAYS `--limit 400` AND READ BACK — a truncated listing once made me read absence from a short window and create a duplicate card.**
-
-
-
-
 
 ✅✅ **LANGSTON RULED: `F-G-2` SPLITS BY ASSET CLASS — CRYPTO LEGS PROCEED ON THE F-G-1 SOAK ALONE; xSTOCK LEGS SIT BEHIND 3b.b + 3b.d.** ★ **His decisive argument was MINE to have made: I withdrew the crypto prerequisite 24h earlier (`#944`) then re-imposed a crypto hold on xStock-derived evidence.** ✅ **3 conditions discharged; `#951` DECOUPLED (row BODY edited, not annotated).** ⛔⛔ **CARVE-OUT BINDING F-G-2: may NOT use `observedAt`/`cachedAt`/any age-derived value as a SAMPLE FILTER OR COVARIATE — else the prerequisite REATTACHES BY CONSTRUCTION. Answered in scope r10 §0.**
 
