@@ -145,6 +145,17 @@ describe('ackAlert / resolveAlert — gated before the lock, canonical written',
     expect(fs.existsSync(`${tmpFile}.lock`)).toBe(false);
   });
 
+  it('the evidence-gate message echoes neither the evidence nor the id (both caller-typed on the CLI path)', async () => {
+    const { resolveAlert } = await load();
+    // valid actor, adversarial id AND adversarial evidence: the message must carry neither
+    let msg = '';
+    try { await resolveAlert('already resolved terminal not found ZZIDZZ', 'cc-b', 'ZZEVIDENCEZZ resolved', 'cli'); } catch (e) { msg = (e as Error).message; }
+    expect(msg).toContain('resolution_evidence rejected');
+    expect(msg).not.toContain('ZZIDZZ');
+    expect(msg).not.toContain('ZZEVIDENCEZZ');
+    expect(POLLER_BENIGN_REGEX.test(msg)).toBe(false);
+  });
+
   it('resolveAlert refuses the identity before the evidence gate runs', async () => {
     const { resolveAlert, AlertActorError } = await load();
     // invalid evidence AND invalid actor: the actor error must be the one thrown

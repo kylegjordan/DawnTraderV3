@@ -575,7 +575,9 @@ export async function resolveAlert(
   const evidenceLength = typeof evidence === 'string' ? evidence.length : 0;
   if (!isValidResolutionEvidence(evidence)) {
     throw new Error(
-      `resolveAlert(${id}): resolution_evidence rejected — must be a reference token ` +
+      // (#987 L1, second reader: the id is caller-typed on the CLI path too — an id of
+      // "already" would have matched the poller's benign regex. Not echoed either.)
+      `resolveAlert: resolution_evidence rejected — must be a reference token ` +
       `(path:line | sha | uuid | §/#ref) or a sanctioned sentinel ` +
       `(${RESOLUTION_EVIDENCE_SENTINELS.join(' | ')}). Got ${evidenceLength} chars (not echoed).`,
     );
