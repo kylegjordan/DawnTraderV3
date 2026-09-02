@@ -73,7 +73,7 @@ The scope pre-registered five criteria (*"a fix that cannot be faked"*). **Crite
 ## 7. §9.4 — every deferral has a name and a place
 | item | disposition |
 |---|---|
-| OBJ-4 orphan retirement | **own batch — `B-VOLATILITY-CACHE-RETIRE`, CC-B, `PHASE_19_PLAN` 2.10.** Rule 18: delete on the spot **after** the blast-radius pass (`/dse/metrics-cache` reader, the integration test), log in `DELETED_COMPONENTS_LOG`, archive `.removed` |
+| OBJ-4 orphan retirement | **own batch — `B-VOLATILITY-CACHE-RETIRE`, CC-B, `PHASE_19_PLAN` 2.10.** ⚠️ **Langston's Step-11 census corrections (2026-09-02) are on the plan row: a second, MUTATING route site `routes/dse.ts:78` `clearVolatilityCache()`; a third orphan limb `getVolatilityClassification` needing an explicit disposition; test refs split subject-vs-probe.** Step 11 CONFIRMED by Langston 19:30 at `211e1e9d4`. Rule 18: delete on the spot **after** the blast-radius pass (`/dse/metrics-cache` reader, the integration test), log in `DELETED_COMPONENTS_LOG`, archive `.removed` |
 | ADX→trendStrength interim | **Phase 25 calibration** — already Langston's ruling; recorded on #538 |
 | VC-2, one observed rejection | **stays with CC-A** as alert `f6ae5419` / the `B-REGIME-REFRESH-PIPE` post-close watch |
 | live fail-loud exercise | **folded into `B-VOLATILITY-CACHE-RETIRE`** — its pre-audit starves the MCE in the rig and observes the reject, since it touches the same file |
