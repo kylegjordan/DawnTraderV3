@@ -194,6 +194,10 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     const witnessIdx = src.indexOf('await getTickerWitness', makerIdx);
     const persistIdx = src.indexOf('exitTickerBid:');
     expect(makerIdx).toBeGreaterThan(-1);
+    // Langston nit (Step 4): with the search anchored at makerIdx the ordering below is true by
+    // construction, so a DELETED close-site read would surface as a confusing -1 ordering
+    // failure. Name that case explicitly.
+    expect(witnessIdx).toBeGreaterThan(-1);
     expect(witnessIdx).toBeGreaterThan(makerIdx);
     expect(persistIdx).toBeGreaterThan(witnessIdx);
     // And it must be fail-OPEN: a telemetry cross-check may never block a close.
