@@ -824,6 +824,13 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #987 OPEN 2026-09-02 (CC-B; Kyle-directed from the alert review) — ⛔⛔ **THE ALERT OWNER RECORD IS FREE TEXT, AND THE ALWAYS-LOADED RULES FILE TELLS SESSIONS TO WRITE A NAME THAT IDENTIFIES NOBODY**
+
+**MEASURED (30 days of `system-alerts.jsonl`, population = every alert acknowledged since 2026-08-03; instrument = distinct `acknowledged_by` strings):** ~five actors, **23 distinct name strings**; **eight `cc-session-<date>` variants account for 38 acks, 15 this month** — five alerts left the due list on 2026-09-02 acked by `cc-session-2026-09-02`, a string bound to no session.
+⛔ **ROOT CAUSE IS A RULE, NOT A HABIT.** `CLAUDE.md` §10.5 step 3 instructs *"`--by <session-name>` (session names: `cc-session-<YYYY-MM-DD>` …)"* — written 2026-05-17 (B-NEW-40, `6a70b45c4`, field typed `// 'kyle' | 'cc-session-...' | 'langston' | 'system' | etc.`), **26 days before the session roster existed.** `ALERT_HANDLING_PROTOCOL.md:28` says `<CC-A|CC-B|kyle|...>` and `:30` says *"`acknowledged_by` IS the owner record."* **Two governing docs disagree and the tool accepts anything, so the owner record cannot be one.**
+★ **NOT authentication, and the scope says so — Langston's #642 trap adopted as a constraint:** a free-text reassign is *"provenance-shaped theater."* This makes the CLAIM well-formed (refuse any `--by` outside a roster-derived set, enforced in the SERVER function the way the F3b evidence gate is, so CLI/API/checker/dispatcher are all bound); `resolved_by_transport` stays the only verifiable field.
+**DISPOSITION — §9.4 #3, own batch:** `HOME: B-ALERT-ACTOR-ALLOWLIST, owner CC-B, placed in PHASE_19_PLAN.md §governance queue at 2.4, ahead of B-FRESHNESS-LOG-READER (Kyle sequenced it next, 2026-09-02).` Scope: `B_ALERT_ACTOR_ALLOWLIST_SCOPE.md`. History is NOT rewritten; the 23 strings get a mapping table in the completion report. ⇔ #447 (F3b, the model) · #642 (transfer path, untouched) · #647 (row race, untouched) · #340.
+
 ### #979 OPEN 2026-08-31 (CC-B; found by reading my own commit subject after the commit) — ⛔⛔ **A REAL CROSS-SESSION WRITE THAT IS NOT IN GIT: ALL FOUR SESSIONS SHARE `/tmp`, AND A COMMIT MESSAGE IS CONTENT**
 
 **MEASURED, NOT INFERRED.** I wrote my commit message to `/tmp/m14.txt`, staged my own explicit paths, and ran `git commit -F /tmp/m14.txt -- <my paths>`. The commit that came out carried **another session's message**:
