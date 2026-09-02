@@ -1,6 +1,6 @@
 # B-MEASURE-GATE leg 2 — COMPLETION REPORT (#623 leg 2 · CC-A / OLD Claude · closed 2026-09-02)
 
-**Batch:** convert rule 29 (measurement discipline) from prose into hooks that fire at MEASURE time. **Change-class:** architecture. **Reviewed code:** `a452ad29b` on `origin/migration/aws-supabase` (Langston Step-4 APPROVED on `debd7419b^..a452ad29b`; Step-8 CONFIRMED). **CI:** run `33617452940` on head `0f522b5ac` — Test Suite · TypeScript Check (baseline gate) · Build · Docker Build, each `success` per-job. **Deploy:** NONE — the batch touches no runtime path; staging stays at `2cc4a03ec`. **Scope/design record:** `Claude Comms and Packages/Scope Files/B_MEASURE_GATE_LEG2_SCOPE.md` (r13) · pre-audit r7 · change list r1 (amended in place through r3) · `..._OBJ4_FIRE_RATE.md` · `..._OBJ6B_RESULT.md` r3 · `..._OBJ6B_ENUMERATION.md`.
+**Batch:** convert rule 29 (measurement discipline) from prose into hooks that fire at MEASURE time. **Change-class:** non_architecture *(re-declared `non_architecture` 2026-09-02 on Langston's ruling on alert `e38db085`: the change-class is a PICKER of which documents are owed, not a rating of importance; precedents B-COMMS-IMAGES-2 / B-GOV-INTEGRITY-1 / B-LANGSTON-QUEUE-2 and his 2026-09-01 B-CROSS-SESSION-BLEED ruling; census re-derived by him: zero files under server/ client/ shared/ drizzle/ across the batch's commits)*. **Reviewed code:** `a452ad29b` on `origin/migration/aws-supabase` (Langston Step-4 APPROVED on `debd7419b^..a452ad29b`; Step-8 CONFIRMED). **CI:** run `33617452940` on head `0f522b5ac` — Test Suite · TypeScript Check (baseline gate) · Build · Docker Build, each `success` per-job. **Deploy:** NONE — the batch touches no runtime path; staging stays at `2cc4a03ec`. **Scope/design record:** `Claude Comms and Packages/Scope Files/B_MEASURE_GATE_LEG2_SCOPE.md` (r13) · pre-audit r7 · change list r1 (amended in place through r3) · `..._OBJ4_FIRE_RATE.md` · `..._OBJ6B_RESULT.md` r3 · `..._OBJ6B_ENUMERATION.md`.
 
 ## ⛔ OPEN AT CLOSE — stated first, not buried
 | item | owner | home | closes when | fails when |
@@ -55,7 +55,7 @@
 - **PREVIOUSLY STATED:** seven node spawns per Bash call. **NOW:** eight. **REASON:** Langston enumerated the ref; my prose listed six PreToolUse hooks and the sentence said five.
 
 ## Governance files changed — TRANSCRIBED FROM THE STEP-10 COMMIT MESSAGE (the tier ledger), not from memory
-CHANGE-CLASS: architecture
+CHANGE-CLASS: non_architecture *(re-declared after the governance commit `ececf99dc`, which carried `architecture` — see the note at the top; the ledger below is the commit's table with the two class-dependent rows re-rendered)*
 
 | # | document | verdict | one line |
 |---|---|---|---|
@@ -67,7 +67,7 @@ CHANGE-CLASS: architecture
 | T1 | the batch `PRE_AUDIT` | ✅ | r7 (Step 2) — unchanged this step; its P8 row pre-registered the SYSTEM_MANUAL BLOCKED reason |
 | T1 | `COMPLETION_REPORT` | ✅ | written at Step 11, ledger transcribed from this message *(the commit's wording; "this message" = commit `ececf99dc`)* |
 | T1 | Langston's `/home/langston/MEMORY.md` | ✅ | closure block appended after the last batch row (backup taken; his file is 2× the byte cap — Infra Claude's #946) |
-| T2 | `SYSTEM_MANUAL.md` | BLOCKED | pre-registered in the pre-audit (:282) and accepted by Langston at Step 8: its scope is trading architecture / strategy / regime / filter / signal pipeline / maths and this batch touches none — a chapter invented to discharge a required row would be padding, which is worse than the gap. Not N/A: a required row cannot take N/A; the class stays architecture because the hook layer IS architecture (cross-cutting session state), just not the manual's |
+| T2 | `SYSTEM_MANUAL.md` | N/A | **judged, on a checkable diff fact: zero files under `server/`, `client/`, `shared/` or `drizzle/` in any of this batch's commits (`git log 66f7c7500..a452ad29b --grep=B-MEASURE-GATE`, re-derived by Langston).** Under `non_architecture` the manual is a judged row. *The earlier BLOCKED cell (an invented third state) is retired with the re-declaration; the pre-audit's :282 reasoning stands as the judgement's text.* |
 | T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | new section "Claude Code Hook Layer (laptop sessions, NOT the app)": components, sinks, cross-cutting state, measured harness facts, known gaps, what was retired |
 | T2 | `RUNNING_ISSUES.md` | ✅ | #983 opened (fired-as-list truthiness, homed leg 3); #980 #981 #982 and the #571 obligation earlier this batch — **RENUMBERED #984 after the commit: CC-INFRA minted #983 ten minutes earlier** |
 | T2 | `CHANGES_AND_FIXES.md` | N/A | nothing under `server/`, `client/`, `drizzle/` or `shared/` changed (git diff base..a452ad29b on those paths is empty) |

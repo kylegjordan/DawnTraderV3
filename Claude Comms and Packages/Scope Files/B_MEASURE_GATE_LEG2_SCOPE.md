@@ -1,6 +1,7 @@
 # B-MEASURE-GATE leg 2 — SCOPE r2 (hooks: convert measurement/process rules into mechanisms)
 
-change-class: architecture
+change-class: non_architecture
+> **change-class AMENDED 2026-09-02 (was `architecture` from Step 1 through Step 10).** *(re-declared `non_architecture` 2026-09-02 on Langston's ruling on alert `e38db085`: the change-class is a PICKER of which documents are owed, not a rating of importance; precedents B-COMMS-IMAGES-2 / B-GOV-INTEGRITY-1 / B-LANGSTON-QUEUE-2 and his 2026-09-01 B-CROSS-SESSION-BLEED ruling; census re-derived by him: zero files under server/ client/ shared/ drizzle/ across the batch's commits)* §3.0: the class is amendable; the amendment is on the record, not quiet.
 
 **Owner:** CC-A · **Opened:** 2026-07-30 · **CONSOLIDATED r2:** 2026-08-31 · **Home:** `RUNNING_ISSUES` #623 · **Leg 1 shipped:** `b43af6c1d` (rule 29 + history §5.29)
 **Kyle directive (2026-07-30):** *"Let's proceed with Legs 2 and 3 first in order to avoid mistakes in the rest of your batch work."* ⇒ leg 2 precedes #602 / #613 / #615 / the retention legs.
