@@ -1823,9 +1823,20 @@ export class ActiveExecutionEngine {
           const _meta = ((position.metadata as Record<string, any> | null) ?? {});
           const _prior = ((_meta.fg2Shadow as Record<string, any> | undefined) ?? {});
           let _next: Record<string, any> | null = null;
+          // Langston Step-4 FINDING-2 (2026-09-02): stamp HOW the shadow arm was seeded, ON THE CYCLE
+          // THE SHADOW KEY IS CREATED (not at the first fire — by then the live state always exists).
+          // 'cold' = both arms started from the same cold seed (clean counterfactual). 'midlife' = the
+          // LIVE trailing state already existed, so the shadow inherited the live arm's ladder/mode and
+          // receives its ratcheted stop every cycle — the arms entangle if trailing is ever enabled
+          // (inert today by CONFIG, not by design: trailing_enabled_active=false on all four classes).
+          // Pre-registered: 'midlife' rows are EXCLUDED from OBJ-0's 2×2; the run ABORTS if trailing is
+          // enabled mid-window. Written once; never overwritten.
+          if (_shadowSeed !== undefined && !_prior.seededFrom) {
+            _next = { ..._prior, seededFrom: existingTecStatePE ? 'midlife' : 'cold' };
+          }
           if (shadowDecision.shouldExit && !_prior.bidFirstExit) {
             _next = {
-              ..._prior,
+              ...(_next ?? _prior),
               bidFirstExit: {
                 reason: shadowDecision.exitReason,
                 bid: fg2BookBid,
