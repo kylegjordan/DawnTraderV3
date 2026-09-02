@@ -621,6 +621,57 @@ def dead_set() -> set:
 # OBSERVATIONS — the follow-up results. Append-only; a checkpoint is never
 # overwritten, so a re-run produces a second row rather than losing the first.
 # ─────────────────────────────────────────────────────────────────────────────
+def read_observations_uncorrected(day_file: str):
+    """The RAW observation rows, `pool_sol` exactly as first recorded.
+
+    THE NAME IS THE MECHANISM, and this pair exists because I built the
+    correction store WITHOUT it (Langston, 2026-09-02, BLOCKER). Sixty lines
+    above, `read_census_uncorrected` states the invariant this violated --
+    "a raw store plus a correction set joined by convention is two objects
+    that must be combined correctly by every reader forever, and it fails
+    quietly in whichever one forgot" -- and I wrote the sibling that ignores
+    it, same file, same day, one function apart. His words: that pattern is
+    why he reads files instead of trusting them.
+
+    NOTHING READS `pool_sol` YET, WHICH IS WHY THE FIX IS FREE TODAY. The
+    tracking page that will display it is still owed. A corrections file that
+    the default path does not apply is not a repair; it is a repair the next
+    reader has to remember, and an omission is invisible while a named call
+    is a census.
+
+    Legitimate callers: anything auditing the correction itself, and anything
+    that must reproduce what was recorded at the time.
+    """
+    return list(_read(f"{ROOT}/observations/{day_file}"))
+
+
+def observations(day_file: str, _idx=None):
+    """Observation rows with `pool_sol` CORRECTED -- the default read path.
+
+    Applies `pool_sol_correction_index` by (mint, observed_at). A row whose
+    key is POISONED -- two different corrections for one key -- is returned
+    with its `pool_sol` marked rather than silently uncorrected: an
+    unresolvable row must not be indistinguishable from a clean one.
+    """
+    idx = pool_sol_correction_index() if _idx is None else _idx
+    out = []
+    for rec in read_observations_uncorrected(day_file):
+        key = (rec.get("mint"), rec.get("observed_at"))
+        if key in idx:
+            corrected = idx[key]
+            if corrected is None:
+                # AMBIGUOUS: two corrections disagree for this key. Flagged,
+                #    never quietly left as the known-wrong original.
+                rec = dict(rec)
+                rec["pool_sol_correction"] = "ambiguous_unresolvable"
+            else:
+                rec = dict(rec)
+                rec["pool_sol"] = corrected
+                rec["pool_sol_correction"] = "applied"
+        out.append(rec)
+    return out
+
+
 def observation_path(when: datetime) -> str:
     return f"{OBSERVATIONS_DIR}/{when.strftime('%Y-%m-%d')}.jsonl"
 

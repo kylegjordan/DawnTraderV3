@@ -6566,7 +6566,17 @@ for a in last.values():
 
 **Why it matters more than a stale number:** graduation is the study's **secondary outcome**. An error that lands specifically on tokens that graduate is correlated with an outcome rather than spread across the sample — precision loss versus validity loss, the same distinction Langston drew when the budget gate could shed a graduated pool mid-read.
 
-⚠️ **NOT YET SIZED, AND SAYING SO IS THE POINT.** The observation store keeps only the CHOSEN pair, so the affected count cannot be recovered from it — `pairs` (the count) is stored and is the population at risk, but which of those had a live alternative is not. **Sizing it requires a forward measurement, and no number should be quoted until that runs.**
+⚠️ **UPDATE 2026-09-02, SAME DAY — I SAID THIS COULD NOT BE SIZED FROM THE STORE. THAT WAS AN ASSERTED ABSENCE AND IT WAS WRONG (#453).** My words were *"the observation store keeps only the CHOSEN pair, so the affected count cannot be recovered from it."* True of the OBSERVATION store and irrelevant, because **the PROVENANCE store keeps the whole aggregator response, every pair included** — the alternative pools were sitting there the entire time. Langston predicted the shape before seeing the answer: *"does the store lack the fields, or do you lack access? Those have different fixes and one of them is cheap."* It was the cheap one, and I had not looked.
+
+✅ **MEASURED over 2026-09-02, whole population of distinct tokens carrying an aggregator response that day — re-derivable via `token-watch/tools/measure_dead_pool_observation.py`:**
+
+| | count | share |
+|---|---|---|
+| distinct tokens with an aggregator response | **28,149** | — |
+| ...listing more than one pair at all | **784** | 2.79% |
+| ⛔ **observed through a DEAD pool** — the chosen pair is a pumpfun curve with no liquidity while another pair has some | **213** | **0.757%** |
+
+⭐ **AND THE SEVERITY IS NOT PROPORTIONAL TO THE SHARE.** `TIPSYDOG`'s chosen pair carried 12,834 in 24h volume and NO liquidity figure, while its live pumpswap pool held **$17,828**. `IM`: 99,073 volume on the dead pair, **$2,504** live elsewhere. **A token is not mis-measured slightly; it is measured at the wrong venue entirely** — and these are exactly the tokens that graduated, which is the outcome the study exists to measure.
 
 **HOME: `B-TOKENWATCH-PAIR-SELECT`, owner CC-INFRA, placed in `PHASE_19_PLAN.md` immediately after `B-TOKEN-WATCH` and before `B-HELSINKI-MOUNT-WATCH`.** ⚠️ **No date, per §9.4** — it is positioned, not booked. **§9.4 disposition (3): its own batch, placed in the plan.** Scope: decide the pair-selection rule (candidate — prefer the pair with a live liquidity figure, falling back to volume; the account's own state is authoritative over the aggregator's label, per the same reasoning that keyed the liquidity branch on the owner program), then measure the affected share forward.
 

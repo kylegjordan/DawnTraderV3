@@ -365,6 +365,22 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 
 ---
 
+### `rename-orphans-the-verifier` — **A FIELD RENAME TURNS EVERY EXISTING VERIFICATION QUERY INTO A FALSE-NEGATIVE GENERATOR** — **NEW 2026-09-02, n=1** · mechanism: **NONE YET**
+
+★★ **LANGSTON NAMED IT AND DIRECTED IT FILED SEPARATELY, 2026-09-02:** *"it is distinct from `verification-weaker-than-claim`, because the check was strong enough and was simply pointed at a field that no longer existed."*
+
+⭐ **THE SHAPE, AND IT IS WHY IT IS ITS OWN SLUG: THE QUERY DOES NOT THROW. IT RETURNS ZERO. AND ZERO IS THE ANSWER THE AUTHOR WAS HOPING FOR.** A renamed field leaves every prior query syntactically valid, semantically empty, and pointed at nothing — so an instrument that used to work now reports a clean absence, silently, at exactly the moment someone is trying to establish one.
+
+**INSTANCE 1 — `B-TOKEN-WATCH`, pre-registration AMENDMENT 10.** The corrected liquidity read had just been renamed from writing `chain_liquidity` to writing `pool_sol`. I closed the amendment with *"no observation in the census carries a counterfeit zero from this cause"*, supported by a query counting observations whose `chain_liquidity` carried a source. **It returned zero because the read no longer writes that field.** The sweep had in fact run within a minute of the deploy; **100 rows were affected** — 29 counterfeit zeros and up to 71 thousand-fold understatements.
+
+⚠️ **RULE 29(b) WAS THE APPLICABLE RULE AND IT IS AUTO-LOADED:** *prove the instrument before silence is evidence.* The instrument was never shown returning a known positive. ★ **But note WHERE it failed — not at announce time, when the rule reads, but at MEASURE time, in the seconds between wanting to know and typing the query.** Same failure location as rule 29's own origin.
+
+✅ **THE CHECK THAT WOULD HAVE CAUGHT IT, and it is one line: run the query against a row you KNOW is affected before running it against the population.** A field name is a claim about the data like any other, and a rename is exactly the event that falsifies it.
+
+⚠️ **n=1, not promoted.** Floor unchanged: 3+ instances across 2+ distinct batches, no severity override.
+
+---
+
 ### `named-not-measured` — **THE NAME ASSERTED A MEASUREMENT THE CALL NEVER MADE, AND THE NAME IS WHAT HID IT** — **NEW 2026-09-02, n=2** · mechanism: **NONE YET**
 
 ★★ **THE DISTINCTION FROM `wrong-object`, WHICH IS THE NEAREST NEIGHBOUR: THERE, A READER MEASURES THE WRONG THING AND THE NAME IS INCIDENTAL. HERE THE NAME IS THE CAUSE.** A well-chosen identifier is read by every later reader as a description of behaviour, and it is never re-derived, because re-deriving it is precisely the work the name exists to save. ⇒ **A NAME IS AN UNTESTED ASSERTION THAT IS QUOTED AS EVIDENCE.**

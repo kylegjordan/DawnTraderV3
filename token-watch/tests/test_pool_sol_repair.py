@@ -153,5 +153,68 @@ idx2 = store.pool_sol_correction_index()
 check("★ a record missing its key adds NO entry",
       len(idx2) == _before, "%d entries before, %d after" % (_before, len(idx2)))
 
+
+print("")
+print("BLOCK 4 -- THE DEFAULT READ PATH CORRECTS. THIS IS LANGSTON'S BLOCKER.")
+# HE CAUGHT ME BUILDING THE CORRECTION STORE WITHOUT THIS, sixty lines below a
+#    docstring of mine stating the exact invariant it violates:
+#    "a raw store plus a correction set joined by convention is two objects
+#    that must be combined correctly by every reader forever, and it fails
+#    quietly in whichever one forgot. So the DEFAULT read path corrects."
+#    Same file, same day, one function apart. Nothing reads `pool_sol` yet,
+#    which is precisely why the fix was still free -- a corrections file the
+#    default path does not apply is not a repair, it is a repair the next
+#    reader has to remember.
+from datetime import datetime, timezone  # noqa: E402
+
+WHEN = datetime(2026, 9, 2, 9, 7, 47, tzinfo=timezone.utc)
+DAY = WHEN.strftime("%Y-%m-%d") + ".jsonl"
+WRONG = {"sol": 0.0, "source": "bonding_curve_real_reserves"}
+RIGHT = {"sol": None, "source": "curve_complete_graduated", "graduated": True}
+UNTOUCHED = {"sol": 1.25, "source": "bonding_curve_real_reserves"}
+
+store.record_observation("GRAD1", "1h", WHEN, {"pool_sol": dict(WRONG)})
+store.record_observation("CLEAN1", "1h", WHEN, {"pool_sol": dict(UNTOUCHED)})
+store.record_pool_sol_correction(
+    {"mint": "GRAD1", "observed_at": WHEN.isoformat(), "corrected": dict(RIGHT)})
+
+_raw = {r["mint"]: r for r in store.read_observations_uncorrected(DAY)}
+_cor = {r["mint"]: r for r in store.observations(DAY)}
+
+check("the corrected row comes back CORRECTED from the default path",
+      _cor["GRAD1"]["pool_sol"]["source"] == "curve_complete_graduated",
+      str(_cor["GRAD1"]["pool_sol"]))
+check("...and is marked as having been corrected, not silently swapped",
+      _cor["GRAD1"].get("pool_sol_correction") == "applied", str(_cor["GRAD1"]))
+# THE DISCRIMINATING CONTROL. If both paths returned the same thing the
+#    default-corrects claim would be untested -- the two must DIFFER on
+#    exactly this row, which is the entire point of the pair.
+check("the RAW path still returns the original wrong value",
+      _raw["GRAD1"]["pool_sol"]["sol"] == 0.0
+      and _raw["GRAD1"]["pool_sol"]["source"] == "bonding_curve_real_reserves",
+      str(_raw["GRAD1"]["pool_sol"]))
+check("...so the two paths DIFFER on the corrected row",
+      _raw["GRAD1"]["pool_sol"] != _cor["GRAD1"]["pool_sol"], "identical")
+check("a row with no correction is unchanged by either path",
+      _raw["CLEAN1"]["pool_sol"] == _cor["CLEAN1"]["pool_sol"] == UNTOUCHED,
+      str(_cor["CLEAN1"]["pool_sol"]))
+check("...and carries no correction marker",
+      "pool_sol_correction" not in _cor["CLEAN1"], str(_cor["CLEAN1"]))
+
+# AN AMBIGUOUS KEY IS FLAGGED, NEVER LEFT LOOKING CLEAN. Returning the
+#    known-wrong original with no marker would make an unresolvable row
+#    indistinguishable from a correct one -- the absent-as-valid shape.
+store.record_observation("AMB1", "1h", WHEN, {"pool_sol": dict(WRONG)})
+for _val in (1.0, 2.0):
+    store.record_pool_sol_correction(
+        {"mint": "AMB1", "observed_at": WHEN.isoformat(),
+         "corrected": {"sol": _val, "source": "bonding_curve_real_reserves"}})
+_cor = {r["mint"]: r for r in store.observations(DAY)}
+check("a row whose corrections disagree is FLAGGED unresolvable",
+      _cor["AMB1"].get("pool_sol_correction") == "ambiguous_unresolvable",
+      str(_cor["AMB1"]))
+check("...and is not quietly given either of the disagreeing values",
+      _cor["AMB1"]["pool_sol"] == WRONG, str(_cor["AMB1"]["pool_sol"]))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

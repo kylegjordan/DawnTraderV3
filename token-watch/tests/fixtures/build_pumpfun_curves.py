@@ -20,7 +20,7 @@ THE SELECTION IS DELIBERATELY DIVERSE, NOT RANDOM: one record per distinct
    the population is distributed. Population figures are printed by this
    script over the whole day and belong in the commit message, not the test.
 """
-import json, base64, struct, collections, random
+import json, base64, struct, collections
 PUMPFUN = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'
 USDC_Q = bytes.fromhex('c6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61')
 F = '/var/lib/token-watch/provenance/follow-up/2026-09-02.jsonl'
@@ -93,9 +93,7 @@ print('QUIET CURVES DECODED: %d' % n)
 print('  within 0.1%% of the published price: %d  (%.2f%%)' % (within, 100.0*within/n))
 print('  median ratio %.6f' % bad[n//2][1])
 print('  five worst: %s' % [(s_, round(r_, 5)) for s_, r_ in bad[-5:]])
-random.seed(7)
 qs = sorted(q, key=lambda o: o['provider_price_native'])
-step = max(1, len(qs)//28)
 # ONE CURVE PER DISTINCT PUBLISHED PRICE. The fixture's whole job is to VARY;
 # a price-stepped sample still repeated values, and the spread control caught
 # it -- 19 distinct across 30 records. Fixed in the SELECTION, not by lowering
