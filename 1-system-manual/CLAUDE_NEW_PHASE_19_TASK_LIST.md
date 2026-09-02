@@ -51,7 +51,7 @@
 
 | alert | owner | asks | state at this write |
 |---|---|---|---|
-| **`2b0a4688`** — `#605` pin proof | **CC-B** | verify the `hasGovernance` pin on a batch that has naturally aged out of the 300-commit window — only the clear path was ever exercised | due since 2026-08-08; **cleared from the due list between 06:00 and 06:30Z on 2026-09-01 — by whom, to be checked** |
+| **`2b0a4688`** — `#605` pin proof | CC-B | verify the `hasGovernance` pin on a naturally aged-out batch | **CLOSED 2026-09-02 — PASS, resolved by cc-b with the two-check evidence; record at `#605`** |
 | `27860643` — B-STORAGE-HARDEN Wave C | CC-A (body) | verify first natural `signal_eval_archive` tiering | due |
 | `ae2e739b` — exit checks skipped, MDT/USD | unowned | mark older than ceiling | due, NEW |
 | `f6ae5419` · `c5cf4a87` · `23f004a4` | CC-A (body) | VC-2 decision point · vts GC knob revisit · `#602` first learning write | cleared from the due list 2026-09-01 ~06:30Z |
@@ -59,6 +59,9 @@
 ⚠️ **None of the five carried an owner in metadata — owner appears only in body text.** That is `#647`'s subject (CC-C).
 
 ## F. Small owed items
+
+- **`P19-B8.5` umbrella:** Kyle ruled 2026-09-02 it stays open until Phase 19 closes; stale-open alert resolved against `GOVERNANCE_EXCEPTIONS:82`; mechanism gap → `B-UMBRELLA-OPEN-STATE` (plan 2.9, mine).
+- **Awaiting Claude Old (asked 2026-09-02):** where `B-REGIME-INPUTS-LIVE` (alert `8aa095a2`) and `B-RETIRED-SCORE-REMOVAL` (`f4ffaf53`, #558) are slotted; Kyle says either may transfer to me, and retired-score removal may re-home to Phase 16/20.
 
 - Delete scheduled task `verify-p19-b8-5h-dbs-carry` — still listed on 2026-09-01; I asserted on 2026-07-29 that it was gone and it was not.
 - Record `#592` owner = CC-B. Write `#669`'s close.
