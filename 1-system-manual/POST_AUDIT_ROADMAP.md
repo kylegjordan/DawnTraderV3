@@ -647,7 +647,7 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 ### 21.2 Paper-to-Live Transition Testing
 - Run parallel paper+live (small position sizes) to validate consistency
 - Compare paper sim results with live execution results
-- Validate fee/slippage models against actual Kraken fills
+- Validate fee/slippage models against actual Kraken fills — **➕ 2026-09-02 (F-G-2 OBJ-5, `#914` residual): this item now explicitly includes the VTS 0.05%/leg slippage CONSTANT (INVARIANT F2, Directive 11.3B / BUG-028) checked against measured fills; one crypto one-leg read on 2026-09-01 gave 0.0612%. A Phase-25 CALIBRATION question, NOT a defect — the constant is a design decision, re-discovered three times by sessions that censused without reading provenance.**
 - Validate cost-model accuracy against real Kraken fee schedules
 
 ### 21.4 POST-LAUNCH REVISIT — the strong-trend lane's absent volume floor, and the unread half of the order book

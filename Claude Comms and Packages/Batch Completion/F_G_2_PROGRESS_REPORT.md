@@ -58,3 +58,41 @@ Exit decisions read a book MIDPOINT — a price nobody can transact at — while
 - Langston Step-4 condition 3: state that the open-trades table renders 0.60/0.60 per fee leg on a maker row while `context` carries 0.40/0.80 — same row, two surfaces.
 - The 4a-4d results against the criteria AS WRITTEN above, and the decision taken on each.
 - Governance: System Impact Map (the shadow arm, `vts-exit-booking.ts`, `composeBookedFriction`, the twin re-price in `planTwin`), System Manual (VTS booking semantics: mark-booked exits, one-maker-leg friction; the seam on xStock), STORAGE/ADJUSTMENT as applicable (epoch bump recorded per `calibration-epoch.ts` amendment 2), `RUNNING_ISSUES` (#914 partially retired — the PRICE half; #943 seam owed), `BATCH_CATALOG`, `PHASE_HISTORY`, `PHASE_19_PLAN`, the scratch master order (row 1 → observation), **`MEMORY.md` — mine (`MEMORY_CC_C.md` + its mirror) AND Langston's `/home/langston/MEMORY.md` (Step 10.b): a required row in every change class.**
+
+## 8. GOVERNANCE — THE TIER LEDGER (Step 10, presented in the `workflow-10-governance` form, 2026-09-02)
+
+**CHANGE-CLASS: architecture** (scope header, declared at Step 1 and unchanged through r12; the diff changes what VTS BOOKS on every row, which is the class the checker cross-checks against core engine paths).
+
+**TIER 1 — every batch, no exceptions**
+
+| document | status | one line |
+|---|---|---|
+| `BATCH_CATALOG.md` | ✅ | new `F-G-2` entry (`1ea557d43`) |
+| `PHASE_HISTORY.md` | ✅ | new Phase-19 entry for the crypto half + folded OBJ-5 (`1ea557d43`) |
+| `PHASE_19_PLAN.md` | ✅ | row 3c: crypto half + OBJ-5 deployed `2cc4a03ec`, ⏳ in observation; xStock legs still held (`1ea557d43`) |
+| MEMORY — own `MEMORY_CC_C.md` | ✅ | position block STEP 10 done → 11 CONVERTS; ordered pre-run actions (`1ea557d43`) |
+| MEMORY — shared `MEMORY.md` | ✅ | one consensus-truth line: what VTS now books, the epoch boundary, never pool across it (this commit; truth file + mirror) |
+| Scope file `B_EXIT_TRANSACTABLE_SIDE_2_SCOPE.md` | ✅ | r12 — OBJ-5a/5b/5c folded in on Kyle's 2026-09-02 direction (`1ea557d43`) |
+| Completion report | ✅ as PROGRESS REPORT | `F_G_2_PROGRESS_REPORT.md` r3 + this ledger as §8; converts at Step 11 only when the windows close AND a decision is taken |
+
+**TIER 2 — when applicable, judged out loud**
+
+| document | status | one line |
+|---|---|---|
+| `MULTI_ASSET_VTS_EXPANSION_PLAN.md` (working list) | ✅ | dated note: xStock VTS epoch 5→6 (crypto 4→5) at `2cc4a03ec`; any replay spanning the switch splits at the epoch; items A–F unchanged (this commit) |
+| `SYSTEM_MANUAL.md` | ✅ | §7 supersession note (VTS books the observed mark on crypto, clamp on xStock) + P19-B7.2c TWIN FRICTION bullet (`1ea557d43`) |
+| `SYSTEM_IMPACT_MAP.md` | ✅ | §7.1 VTS Runner block — `vts-exit-booking` seam, `composeBookedFriction`, `planTwin` inputs — + §2.1.2 shadow-arm provenance (`1ea557d43`) |
+| `CHANGES_AND_FIXES.md` | ✅ | `FIX-2026-09-02-A` — taker fee on maker rows (564 rows, three write paths), clamp booked as fill (102/102), stale `OpenVirtualTrade` interface (this commit) |
+| `POST_AUDIT_ROADMAP.md` | ✅ | §21.2 fee/slippage validation bullet now names the 0.05%/leg VTS slippage constant as a Phase-25 calibration question, not a defect (this commit) |
+| `ADJUSTMENT_FRAMEWORK.md` | N/A | no knob or threshold VALUE changed; its own epoch rule (:551-555) puts the bump in the completion report, and §3 of this report carries it |
+| `AUTHORITY_BASELINE.md` | N/A | no invariant added or altered — INVARIANT F2 (slippage is a constant) is UNCHANGED at 0.05%/leg; the diff changes fee COMPOSITION and exit BOOKING, not a baseline |
+| `RUNNING_ISSUES.md` | ✅ | `#914` price-half retired forward-only, two residuals stay open; `#943` gains the seam owed + DE/USD evidence (`1ea557d43`) |
+| `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | no onboarding learning surfaced — the crypto/xStock asymmetry in the seam is a `#943` consequence, recorded on that issue |
+| `STORAGE_POLICY.md` | N/A | no retention window, tier or cadence changed; the migration UPDATEs two `module_constants` rows and creates nothing |
+| `CLAUDE.md` | N/A | no rule added or changed — the diff is `server/**`, one migration, two test files and documents |
+| `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | follows `CLAUDE.md`; no rule changed |
+| `BUILD_METHOD_PLAYBOOK.md` | N/A | no role, gate or tool changed; folding a mid-batch finding into the open batch is §9.4 disposition 1, already in the method |
+| `LANGSTON_ARCHITECTURE.md` | N/A | his build untouched — same model, runtime, invocation and read path; only his MEMORY content changed |
+| Langston `/home/langston/MEMORY.md` | ✅ | F-G-2 block appended 2026-09-02 (his file 51,240 B — his cap, his call) |
+| `MISTAKE_PATTERNS.md` *(rule 28.a — not in the tier list, mandated by the trailer rule)* | ✅ | the batch's six trailers recorded: `wrong-object` ×2, `verification-weaker-than-claim` ×2, new slug `skipped-provenance` n=1 (this commit) |
+| `DELETED_COMPONENTS_LOG.md` *(rule 18)* | N/A | nothing removed — the interface fields were ADDED; no file, route or helper deleted |
