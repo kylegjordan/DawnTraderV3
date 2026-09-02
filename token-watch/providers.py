@@ -324,6 +324,109 @@ def _rpc(method: str, params: list):
     return _request(req)
 
 
+def decode_curve_account(val):
+    """Everything the bonding-curve branch does, given one account value.
+
+    ONE IMPLEMENTATION, TWO CALLERS. `pool_sol_reserves` calls this after
+       fetching; the repair pass calls it on responses already saved in the
+       provenance store. A repair that re-implemented the decode would be free
+       to drift from the live one -- and a correction written by a second
+       implementation is a second chance to be wrong, not a check on the first.
+       (`fix-relocates`, MISTAKE_PATTERNS: the correction is written by the
+       same reasoning that produced the error unless the code is shared.)
+
+    NO NETWORK, NO BUDGET, NO CLOCK-DEPENDENT BRANCHING -- it is a pure
+       function of the account bytes, which is what makes the repair auditable
+       and the tests able to drive it directly.
+    """
+    try:
+        raw = base64.b64decode((val.get("data") or ["", ""])[0])
+        # 8-byte discriminator, then five u64s. real_sol_reserves is the
+        # fourth -- the one the trap above is about.
+        _vtok, _vsol, _rtok, rsol, _supply = struct.unpack_from("<QQQQQ", raw, 8)
+    except (ValueError, struct.error, IndexError, TypeError):
+        return {"sol": None, "source": "curve_decode_failed",
+                "read_at": datetime.now(UTC).isoformat()}
+    # THE CURVE IS DRAINED ON GRADUATION AND THE MONEY MOVES ELSEWHERE.
+    #    MEASURED 2026-09-02 on CERNEY and EGGS: both had every reserve
+    #    field at zero and the `complete` flag at byte 48 SET, while their
+    #    real liquidity -- $5,703 and $20 -- sat in a pumpswap pool the
+    #    aggregator listed as a separate pair. A live curve (Doge-1) has
+    #    the same flag CLEAR, which is the control that makes the flag
+    #    mean something rather than merely co-occur.
+    # THIS USED TO RETURN `sol: 0.0` UNDER `bonding_curve_real_reserves`:
+    #    a confident, NAMED zero for a token holding thousands of dollars.
+    #    Zero is the single most consequential value this field can hold,
+    #    because zero is what a rug pull looks like -- so GRADUATION, the
+    #    study's secondary outcome, was being recorded as a liquidity
+    #    collapse. That is not a coverage gap; it is error correlated with
+    #    an outcome, the same bias class as the mid-read shed Langston
+    #    blocked. A drained curve is now reported as ITSELF, never as an
+    #    amount.
+    if len(raw) > 48 and raw[48] == 1:
+        return {"sol": None, "source": "curve_complete_graduated",
+                "graduated": True,
+                "read_at": datetime.now(UTC).isoformat()}
+    # `_vtok` is the pricing DENOMINATOR and the protocol seeds it at
+    #    ~1.073e15, so a zero there is structurally impossible for a live
+    #    curve: the account is uninitialised or closed, not empty. Guarded
+    #    SEPARATELY from the flag above so the two causes stay
+    #    distinguishable in the record instead of collapsing into one.
+    if not _vtok:
+        return {"sol": None, "source": "curve_uninitialised",
+                "read_at": datetime.now(UTC).isoformat()}
+    # ⛔ THE VIRTUAL PAIR AND THE REMAINING TOKEN RESERVE ARE RETURNED, NOT
+    #    DISCARDED, and each has a caller that needs it:
+    #    - `implied_price_native` lets a TEST re-derive the published price
+    #      from the decoder's own output. Without it the self-check can
+    #      only compare literals to literals -- which is what Langston
+    #      blocked: the fence passed with the decoder deleted.
+    #    - `real_token_reserves` is the discriminator between "nobody ever
+    #      bought" and "bought, then everyone exited". Both land at
+    #      rsol == 0; only the first still holds the FULL initial token
+    #      reserve, because the protocol retains fees on the way out. I was
+    #      about to report the first from evidence that only supports the
+    #      disjunction, and the field that separates them was being
+    #      unpacked and thrown away.
+    # THE DENOMINATION IS READ BEFORE ANY NUMBER IS DIVIDED. Guessing SOL
+    #    is what produced the 1,000x understatement described at
+    #    QUOTE_MINT_SPAN above.
+    lo, hi = QUOTE_MINT_SPAN
+    if len(raw) < hi:
+        # FAIL CLOSED. No account this short exists in the measured
+        #    population, and an account that cannot state its denomination
+        #    must not be assumed into the common one.
+        return {"sol": None, "source": "curve_quote_unreadable",
+                "account_len": len(raw),
+                "read_at": datetime.now(UTC).isoformat()}
+    qraw = bytes(raw[lo:hi])
+    if qraw not in QUOTE_ASSETS:
+        # A NEW QUOTE ASSET IS A SILENT WRONG NUMBER, NOT A MISSING ONE --
+        #    its decimals are unknown, so any amount we returned would be
+        #    wrong by an unknown power of ten. Recorded, named, refused.
+        return {"sol": None, "source": "curve_unknown_quote_asset",
+                "quote_mint_hex": qraw.hex(),
+                "read_at": datetime.now(UTC).isoformat()}
+    qsym, qdec = QUOTE_ASSETS[qraw]
+    scale = float(10 ** qdec)
+    implied = (_vsol / scale) / (_vtok / 1e6) if _vtok else None
+    # `sol` STAYS SOL. A USDC amount in a field named `sol` is the exact
+    #    mistake this batch filed as `named-not-measured` this morning, and
+    #    mixing two denominations in one column corrupts every distribution
+    #    taken over pool size. The quote-denominated amount is returned
+    #    beside it, under its own name and carrying its own unit.
+    return {"sol": (rsol / scale) if qsym == "SOL" else None,
+            "quote_amount": rsol / scale,
+            "quote_symbol": qsym,
+            "quote_decimals": qdec,
+            "source": "bonding_curve_real_reserves",
+            "virtual_quote": _vsol / scale,
+            "real_token_reserves": _rtok,
+            "implied_price_native": implied,
+            "read_at": datetime.now(UTC).isoformat()}
+
+
+
 def pool_sol_reserves(pair_address: str) -> dict:
     """THE REAL MONEY IN THE POOL, in SOL. The number this study always meant.
 
@@ -380,91 +483,7 @@ def pool_sol_reserves(pair_address: str) -> dict:
     provenance.record_follow_up(pair_address, "helius_pool_account", info)
 
     if val.get("owner") == PUMPFUN_PROGRAM:
-        try:
-            raw = base64.b64decode((val.get("data") or ["", ""])[0])
-            # 8-byte discriminator, then five u64s. real_sol_reserves is the
-            # fourth -- the one the trap above is about.
-            _vtok, _vsol, _rtok, rsol, _supply = struct.unpack_from("<QQQQQ", raw, 8)
-        except (ValueError, struct.error, IndexError, TypeError):
-            return {"sol": None, "source": "curve_decode_failed",
-                    "read_at": datetime.now(UTC).isoformat()}
-        # THE CURVE IS DRAINED ON GRADUATION AND THE MONEY MOVES ELSEWHERE.
-        #    MEASURED 2026-09-02 on CERNEY and EGGS: both had every reserve
-        #    field at zero and the `complete` flag at byte 48 SET, while their
-        #    real liquidity -- $5,703 and $20 -- sat in a pumpswap pool the
-        #    aggregator listed as a separate pair. A live curve (Doge-1) has
-        #    the same flag CLEAR, which is the control that makes the flag
-        #    mean something rather than merely co-occur.
-        # THIS USED TO RETURN `sol: 0.0` UNDER `bonding_curve_real_reserves`:
-        #    a confident, NAMED zero for a token holding thousands of dollars.
-        #    Zero is the single most consequential value this field can hold,
-        #    because zero is what a rug pull looks like -- so GRADUATION, the
-        #    study's secondary outcome, was being recorded as a liquidity
-        #    collapse. That is not a coverage gap; it is error correlated with
-        #    an outcome, the same bias class as the mid-read shed Langston
-        #    blocked. A drained curve is now reported as ITSELF, never as an
-        #    amount.
-        if len(raw) > 48 and raw[48] == 1:
-            return {"sol": None, "source": "curve_complete_graduated",
-                    "graduated": True,
-                    "read_at": datetime.now(UTC).isoformat()}
-        # `_vtok` is the pricing DENOMINATOR and the protocol seeds it at
-        #    ~1.073e15, so a zero there is structurally impossible for a live
-        #    curve: the account is uninitialised or closed, not empty. Guarded
-        #    SEPARATELY from the flag above so the two causes stay
-        #    distinguishable in the record instead of collapsing into one.
-        if not _vtok:
-            return {"sol": None, "source": "curve_uninitialised",
-                    "read_at": datetime.now(UTC).isoformat()}
-        # ⛔ THE VIRTUAL PAIR AND THE REMAINING TOKEN RESERVE ARE RETURNED, NOT
-        #    DISCARDED, and each has a caller that needs it:
-        #    - `implied_price_native` lets a TEST re-derive the published price
-        #      from the decoder's own output. Without it the self-check can
-        #      only compare literals to literals -- which is what Langston
-        #      blocked: the fence passed with the decoder deleted.
-        #    - `real_token_reserves` is the discriminator between "nobody ever
-        #      bought" and "bought, then everyone exited". Both land at
-        #      rsol == 0; only the first still holds the FULL initial token
-        #      reserve, because the protocol retains fees on the way out. I was
-        #      about to report the first from evidence that only supports the
-        #      disjunction, and the field that separates them was being
-        #      unpacked and thrown away.
-        # THE DENOMINATION IS READ BEFORE ANY NUMBER IS DIVIDED. Guessing SOL
-        #    is what produced the 1,000x understatement described at
-        #    QUOTE_MINT_SPAN above.
-        lo, hi = QUOTE_MINT_SPAN
-        if len(raw) < hi:
-            # FAIL CLOSED. No account this short exists in the measured
-            #    population, and an account that cannot state its denomination
-            #    must not be assumed into the common one.
-            return {"sol": None, "source": "curve_quote_unreadable",
-                    "account_len": len(raw),
-                    "read_at": datetime.now(UTC).isoformat()}
-        qraw = bytes(raw[lo:hi])
-        if qraw not in QUOTE_ASSETS:
-            # A NEW QUOTE ASSET IS A SILENT WRONG NUMBER, NOT A MISSING ONE --
-            #    its decimals are unknown, so any amount we returned would be
-            #    wrong by an unknown power of ten. Recorded, named, refused.
-            return {"sol": None, "source": "curve_unknown_quote_asset",
-                    "quote_mint_hex": qraw.hex(),
-                    "read_at": datetime.now(UTC).isoformat()}
-        qsym, qdec = QUOTE_ASSETS[qraw]
-        scale = float(10 ** qdec)
-        implied = (_vsol / scale) / (_vtok / 1e6) if _vtok else None
-        # `sol` STAYS SOL. A USDC amount in a field named `sol` is the exact
-        #    mistake this batch filed as `named-not-measured` this morning, and
-        #    mixing two denominations in one column corrupts every distribution
-        #    taken over pool size. The quote-denominated amount is returned
-        #    beside it, under its own name and carrying its own unit.
-        return {"sol": (rsol / scale) if qsym == "SOL" else None,
-                "quote_amount": rsol / scale,
-                "quote_symbol": qsym,
-                "quote_decimals": qdec,
-                "source": "bonding_curve_real_reserves",
-                "virtual_quote": _vsol / scale,
-                "real_token_reserves": _rtok,
-                "implied_price_native": implied,
-                "read_at": datetime.now(UTC).isoformat()}
+        return decode_curve_account(val)
 
     # Graduated: the SOL is a wrapped-SOL token account the pool owns.
     # NO SECOND BUDGET GATE HERE -- see the note at the top of this function.

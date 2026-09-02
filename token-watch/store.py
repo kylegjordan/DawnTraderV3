@@ -343,6 +343,44 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
 
 
 MINT_CORRECTIONS_PATH = f"{ROOT}/provenance/mint-corrections.jsonl"
+POOL_SOL_CORRECTIONS_PATH = f"{ROOT}/provenance/pool-sol-corrections.jsonl"
+
+
+def record_pool_sol_correction(rec: dict) -> None:
+    """Append ONE corrected `pool_sol` for an observation already written.
+
+    THE OBSERVATION FILE IS NOT REWRITTEN. Both stores are append-only, so a
+       correction is a new record and the original stands beside it. Same
+       shape as the mint corrections, and for the same reason: a store you
+       can edit in place is a store whose history cannot be audited.
+    WRITTEN BY `repair_pool_sol.py`, whose header carries the defect these
+       correct -- a graduated curve reported as an empty pool, and a
+       USDC-quoted reserve scaled as though it were SOL.
+    """
+    _append(POOL_SOL_CORRECTIONS_PATH, rec)
+
+
+def pool_sol_correction_index():
+    """(mint, observed_at) -> corrected `pool_sol`, for analysis to apply.
+
+    AMBIGUOUS KEYS ARE DROPPED, NOT GUESSED -- the same rule the mint index
+       follows. If one key ever carries two different corrections we cannot
+       tell which observation each belongs to, and a wrong substitution is
+       undetectable in a way a missing one is not.
+    LAST WRITE WINS ONLY WHEN THE VALUES AGREE; otherwise the key is poisoned
+       to None and the caller must treat that row as uncorrected.
+    """
+    idx = {}
+    for rec in _read(POOL_SOL_CORRECTIONS_PATH):
+        key = (rec.get("mint"), rec.get("observed_at"))
+        val = rec.get("corrected")
+        if not all(key) or not isinstance(val, dict):
+            continue
+        if key in idx and idx[key] != val:
+            idx[key] = None
+            continue
+        idx[key] = val
+    return idx
 
 
 def _correction_index():
