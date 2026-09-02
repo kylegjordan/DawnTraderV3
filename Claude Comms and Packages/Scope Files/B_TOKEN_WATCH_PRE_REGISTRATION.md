@@ -602,3 +602,42 @@ He re-derived every figure independently and **all seven reproduce exactly**. Th
 4. ⛔ **FOR BONDING CURVES — 90.5% of the findings — THE CHAIN IS THE ONLY SOURCE.** No aggregator publishes a liquidity figure for them at any n, for any duration, so an instruction-level read is not an enhancement there; it is the only route that exists.
 
 ⇒ **THE 200 ARE RESTATED, and this replaces the earlier wording:** 200 tokens whose pool balance fell to ≤10% between two readings, while the study called them alive. **That is money leaving. It is NOT a count of rug pulls, and nothing in this batch has yet established the mechanism for a single one of them.**
+
+---
+
+## ⛔⛔ AMENDMENT 14 — `liquidity_pulled` IS A CATEGORY ERROR FOR 99.8% OF THE TOKENS IT IS APPLIED TO (CC-INFRA, 2026-09-02)
+
+**Kyle asked why my account of rug detection had changed. It had not — I had described two different signals and called both "rug pulls".** Chasing that properly produced the finding below, which is larger than the wording problem that started it.
+
+**THE TWO SIGNALS, DISJOINT — measured, 0 overlap:**
+
+| signal | what it observes | population | study's verdict |
+|---|---|---|---|
+| **A — the pool VANISHES** from the aggregator between hourly checks | absence | **21,112** | `liquidity_pulled` (dead) |
+| **B — the pool REMAINS and its balance collapses** | a fall between two readings | **253** | **alive** |
+
+⛔⛔ **AND SIGNAL A IS MEASURING SOMETHING THAT CANNOT HAPPEN TO THE TOKENS IT IS APPLIED TO.**
+
+**MEASURED: 21,078 of the 21,112 — 99.8% — were on `pumpfun`, a BONDING CURVE, at their last sighting.** ★ **A bonding curve has no liquidity-provider position. The program holds the SOL, and the only thing that moves it is a buy or a sell. THERE IS NOTHING TO WITHDRAW.** "Liquidity pulled" describes an action that is structurally impossible on the venue where 99.8% of these deaths occurred.
+
+✅ **AND THE CHAIN AGREES, tested directly for the first time** (`tools/test_liquidity_pulled_class.py`, 25 pools sampled evenly across the 2,306 whose pool address is still recoverable):
+
+| verdict on the last transactions before the pool went quiet | count |
+|---|---|
+| **trading only** — ordinary buys and sells | **23** |
+| withdrawal — someone removed the money | **0** |
+| neither | 2 |
+
+Instruction mix across every transaction examined: `Sell` 50, `SellV2` 21, `Buy` 33, plus routine `Burn`/`CloseAccount` cleanup. **No withdrawal instruction of any kind.**
+
+⛔ **A FIRST PASS OF THIS TEST RETURNED "16 of 25 WITHDRAWAL-SHAPED" AND I NEARLY REPORTED IT.** My word list counted `Burn` and `CloseAccount` as withdrawals. Those are **routine cleanup** when a curve completes — leftover tokens burned, temporary accounts closed — and say nothing about anyone taking money out. ★ **A loose definition manufactures the finding it is looking for.** With the strict list the count is **zero**.
+
+⚠️ **THE LIMIT, STATED: this is the last SIX transactions per pool.** A withdrawal earlier in a pool's life would not appear. The result is *"no withdrawal in the window examined"*, never *"no withdrawal ever"*. ⚠️ **And only 2,306 of 21,112 have a recoverable pool address at all** — a coverage limit, not a result.
+
+## ⇒ WHAT THIS MEANS FOR THE STUDY
+
+✅ **SIGNAL A STILL WORKS AS A DEATH DETECTOR.** A token whose pool stops being indexed, and which does not come back (0 of 60 on re-check hours later), is dead. **That finding is unaffected.**
+⛔ **WHAT IS WRONG IS THE CAUSE IT ASSERTS.** It is not detecting liquidity removal. It is detecting **tokens dying** — sold into the ground and abandoned.
+★ **AND ON A BONDING CURVE, A RUG LOOKS LIKE SELLING, because selling is the only mechanism available.** The pump.fun rug pattern is **the creator dumping their own allocation** — which appears as `Sell` instructions, indistinguishable from ordinary selling except by **WHO** sold and **WHEN**. ⇒ **The discriminator is not the instruction type. It is the seller's identity and the size and timing of their exit.** That is the measurement this study does not yet make, and it is the honest answer to *"how do we tell a rug from a token that just died."*
+
+⚠️ **NOTHING IS RECLASSIFIED BY THIS AMENDMENT.** Per Langston's standing ruling the stored class is not renamed — that rewrites history in an append-only store. **The disclosure belongs at the reporting layer**, and this amendment is that disclosure: `liquidity_pulled` means *the pool stopped being indexed and did not return*, and for 99.8% of the tokens carrying it, **no liquidity was, or could have been, pulled.** This is the substance behind `B-TOKENWATCH-DEATH-EVIDENCE-LABEL`.
