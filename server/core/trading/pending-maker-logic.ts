@@ -82,6 +82,18 @@ export type TwinPlan =
         state: 'pending' | 'open';
         makerLimitPrice: number | undefined;
         makerDeadline: number | undefined;
+        /**
+         * F-G-2 OBJ-5b — the twin's OWN booked friction. Without these the twin inherits the
+         * chosen leg's friction via `...chosenTrade` under the OPPOSITE mode's stamp — the exact
+         * record-vs-subtraction divergence the batch exists to kill, on the comparison records
+         * whose purpose is fee-mode honesty (450 of 564 affected rows were twins). Present only
+         * when the caller supplied the chosen leg's friction + entry fee; absent otherwise so a
+         * pre-OBJ-5b caller degrades to the old inherit behaviour rather than to a fabricated 0.
+         */
+        frictionCost?: number;
+        costFeeFraction?: number;
+        costEntryFeeFraction?: number;
+        costExitFeeFraction?: number;
       };
     };
 
@@ -113,6 +125,9 @@ export function planTwin(params: {
    *  the same point it used to, not on every twin evaluation). */
   makerMaxPendingMs: () => number;
   nowMs: number;
+  /** F-G-2 OBJ-5b: the chosen leg's BOOKED friction and the entry fee it was priced with. */
+  chosenFrictionCost?: number;
+  chosenEntryFeeRate?: number;
 }): TwinPlan {
   if (!params.twinEnabled) return { kind: 'skip', reason: 'twin_disabled' };
   const twinMode: 'taker' | 'maker' | null =
@@ -122,12 +137,26 @@ export function planTwin(params: {
     return { kind: 'skip', reason: 'marketable_maker' };
   }
   if (twinMode == null) return { kind: 'skip', reason: 'degenerate_fallback' };
+  const twinEntryFee = twinMode === 'maker' ? params.feeRateMaker : params.feeRateTaker;
+  // F-G-2 OBJ-5b: booked friction = chosen leg's friction with its ENTRY fee swapped for the
+  // twin's. The exit leg is taker on both (exits take liquidity), slippage and spread are the
+  // chosen leg's own, so only the entry-fee delta moves.
+  const repriced =
+    Number.isFinite(params.chosenFrictionCost) && Number.isFinite(params.chosenEntryFeeRate)
+      ? {
+          frictionCost: (params.chosenFrictionCost as number) + (twinEntryFee - (params.chosenEntryFeeRate as number)),
+          costFeeFraction: (twinEntryFee + params.feeRateTaker) / 2,
+          costEntryFeeFraction: twinEntryFee,
+          costExitFeeFraction: params.feeRateTaker,
+        }
+      : {};
   return {
     kind: 'open',
     twinMode,
     overlay: {
       chosenEntryMode: twinMode,
-      entryFeeRate: twinMode === 'maker' ? params.feeRateMaker : params.feeRateTaker,
+      entryFeeRate: twinEntryFee,
+      ...repriced,
       ...(twinMode === 'maker'
         ? { state: 'pending' as const, makerLimitPrice: params.limitPrice, makerDeadline: params.nowMs + params.makerMaxPendingMs() }
         : { state: 'open' as const, makerLimitPrice: undefined, makerDeadline: undefined }),

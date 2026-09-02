@@ -1481,7 +1481,8 @@ export class ActiveExecutionEngine {
           avgPrice,
           stopLoss,
           takeProfit,
-          engineTraceId
+          engineTraceId,
+          _bookX && _bookX.bids.length > 0 ? _bookX.bids[0].price : null,
         );
 
         // I7-ROOT-FIX: Track exit evaluation for diagnostics
@@ -1659,7 +1660,10 @@ export class ActiveExecutionEngine {
     avgPrice: number,
     stopLoss: number | null,
     takeProfit: number | null,
-    traceId?: string
+    traceId?: string,
+    // F-G-2 OBJ-0: the decision-time BOOK BID for the crypto shadow arm (null on xStock — held,
+    // §7.4 row 1 — and when no book is held). Never used by the LIVE decision.
+    fg2BookBid: number | null = null,
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
     const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;
@@ -1769,6 +1773,99 @@ export class ActiveExecutionEngine {
         // B80: Option C+ seed (only on first cycle post-restart).
         seed: tecSeedPE,
       });
+
+      // ── F-G-2 OBJ-0: THE SHADOW ARM — shadow first, switch second (crypto only) ──────────
+      // The live decision above read the book MID. This asks the SAME evaluator what it would
+      // have decided on the book BID — the side a long actually sells on — and records the
+      // FIRST exit each arm would take, so OBJ-0's pre-registered 2×2 (bid-arm first exit ×
+      // live close reason; the DISCORDANT cell is the kill criterion) can be read off
+      // closed_trades.metadata.fg2Shadow at Step 7/8. It NEVER closes a position. Trailing
+      // state is keyed `${position.id}:fg2bid` so the bid-arm's ratchets evolve on their own
+      // and cannot touch the live key — ONE evaluator, two keys (OBJ-4), not two evaluators.
+      // The bid comes from the SAME mini-book snapshot the live provenance stamps (`_bookX`),
+      // so both arms see one book state. xStock: fg2BookBid is null by construction.
+      if (fg2BookBid !== null && Number.isFinite(fg2BookBid) && fg2BookBid > 0 && positionAssetClass === 'crypto_spot') {
+        try {
+          const _shadowId = `${position.id}:fg2bid`;
+          const _shadowSeed = _getTSForSeed(_shadowId)
+            ? undefined
+            : {
+                tradeMode: ((position as any).tradeMode === 'TRAILING_TAKE'
+                  ? 'TRAILING_TAKE'
+                  : 'TARGET') as 'TARGET' | 'TRAILING_TAKE',
+                ladderRung: (position as any).ladderRungsHit ?? 0,
+                originalStopPrice:
+                  (position as any).originalStopPrice ?? (stopLoss ?? undefined),
+              };
+          const shadowDecision = await evaluateTECExit({
+            tradeId: _shadowId,
+            symbol: position.symbol,
+            entryPrice: avgPrice,
+            stopPrice: stopLoss ?? -Infinity,
+            targetPrice: takeProfit ?? Infinity,
+            currentPrice: fg2BookBid,
+            atr: atrAtOpen,
+            holdDurationMs: 0,
+            maxHoldMs: Infinity,
+            context: {
+              exchange: 'kraken',
+              assetClass: positionAssetClass,
+              strategy: position.strategyName,
+            },
+            useTrailing: true,
+            DI: diAtOpen,
+            volNoise: volNoiseAtOpen,
+            callerMode: this.mode === 'live' ? 'live' : 'paper',
+            sourcePool: (position as any).sourcePool ?? null,
+            currentSlotTotal,
+            seed: _shadowSeed,
+          });
+          const _meta = ((position.metadata as Record<string, any> | null) ?? {});
+          const _prior = ((_meta.fg2Shadow as Record<string, any> | undefined) ?? {});
+          let _next: Record<string, any> | null = null;
+          if (shadowDecision.shouldExit && !_prior.bidFirstExit) {
+            _next = {
+              ..._prior,
+              bidFirstExit: {
+                reason: shadowDecision.exitReason,
+                bid: fg2BookBid,
+                mid: currentPrice,
+                clamp: shadowDecision.exitPrice,
+                atMs: Date.now(),
+              },
+            };
+          }
+          if (decision.shouldExit && !((_next ?? _prior).midFirstExit)) {
+            _next = {
+              ...(_next ?? _prior),
+              midFirstExit: {
+                reason: decision.exitReason,
+                mid: currentPrice,
+                bid: fg2BookBid,
+                atMs: Date.now(),
+              },
+            };
+          }
+          if (_next !== null) {
+            // P5 — the third read-out: the contemporaneous venue BBO from the INDEPENDENT ticker
+            // witness (#911, separate socket, raw sides — never the `c` field, #952), per arm.
+            try {
+              const { getTickerWitness } = await import('./execution/depth-source.js');
+              const _w = await getTickerWitness(normalizeToInternalSymbol(position.symbol), 'crypto_spot');
+              if (_w) _next.witnessAtEvent = { bid: _w.bid, ask: _w.ask, capturedAtMs: _w.capturedAtMs };
+            } catch { /* fail-open: telemetry only */ }
+            const _merged = { ..._meta, fg2Shadow: _next };
+            await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _merged } as any);
+            position.metadata = _merged;
+            console.log(
+              `[F-G-2][OBJ-0][SHADOW_ARM] ${position.symbol} bidFirst=${_next.bidFirstExit?.reason ?? '-'} ` +
+              `midFirst=${_next.midFirstExit?.reason ?? '-'} bid=${fg2BookBid} mid=${currentPrice}`,
+            );
+          }
+        } catch (err) {
+          console.error(`[F-G-2][OBJ-0][SHADOW_ARM_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
+        }
+      }
 
       // B65.2: if the engine ratcheted the stop (break-even lock, target
       // lock, or trailing), write the new stop back to the open-position
@@ -2278,6 +2375,11 @@ export class ActiveExecutionEngine {
       // `.returning()`, so the PERSISTED row is in hand with NO extra read — which is why the
       // engine-vs-persisted round-trip check (the one P&L invariant never checked) costs nothing.
       const _persistedTrade = await storage.updateClosedTrade(this.mode, trade.id, {
+        // F-G-2 OBJ-0: the shadow arm's record rides from the position onto the closed row so the
+        // 2×2 is readable where the close reason lives. Only when one exists — never a wipe.
+        ...(((position.metadata as Record<string, any> | null)?.fg2Shadow)
+          ? { metadata: { ...(((trade as any).metadata as Record<string, unknown> | null) ?? {}), fg2Shadow: (position.metadata as Record<string, any>).fg2Shadow } }
+          : {}),
         exitPrice: actualExitPrice.toString(),
         pnl: netPnl.toString(),
         pnlPercent: pnlPercent.toString(),
@@ -2506,6 +2608,8 @@ export class ActiveExecutionEngine {
     try {
       const { clearTrailingState } = await import('./trailing-exit-controller.js');
       clearTrailingState(position.id);
+      // F-G-2 OBJ-0: the shadow arm's own trailing state (keyed `${id}:fg2bid`) — cleared with the live key.
+      clearTrailingState(`${position.id}:fg2bid`);
     } catch (err) {
       console.error(`[B65.2][TEC] Failed to clear trailing state for positionId=${position.id} symbol=${position.symbol}:`, err);
     }

@@ -87,7 +87,7 @@ import { getPerClassTargetGate } from '../../core/calculations/expectancy.js';
 import { computeRealHybridScore, computeRealDecayPenalty } from '../../core/utils/vts-real-score.js';
 import { getPredictiveConfidence } from '../../core/utils/score-calculator.js';
 import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
-import { getCachedCostMetrics, getFrictionForAssetClass } from '../../core/math/cost-model.js';
+import { getCachedCostMetrics, getFrictionForAssetClass, composeBookedFriction } from '../../core/math/cost-model.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver.js'; // B-NEW-53 shared forming-bar snapshot
 import { buildMacroSnapshot } from './macro-snapshot.js'; // P19-B5b (#94): xStock decision-time macro snapshot
@@ -1001,6 +1001,14 @@ export async function evaluateXstockPairForVTS(
         // ordering preserved (admitted-archival stays decoupled from open success).
         const dollarValue = 150;
         const quantity = entryPrice > 0 ? dollarValue / entryPrice : 0;
+        // F-G-2 OBJ-5b (P11 iii): the xStock lane composed `totalFriction` taker-both-legs at
+        // :772 while :1012 records the mode-aware entry fee — same divergence as crypto, second
+        // file. Booked friction priced at the EFFECTIVE mode; `totalFriction` stays the
+        // pre-decision estimate the EV gate read. A FEE constant, not a price — exempt from the
+        // §0 xStock hold (Langston (b), 2026-09-02).
+        const _xEntryFee = _xEffectiveMode === 'maker' ? _xFriction.feeRateMaker : _xFriction.feeRateTaker;
+        const _xExitFee = _xFriction.feeRateTaker;
+        const _xBookedFriction = composeBookedFriction(_xEntryFee, _xExitFee, costMetrics.slippage, costMetrics.spread);
         const xOpenTrade = {
           symbol,
           assetClass: ASSET_CLASS,
@@ -1029,12 +1037,14 @@ export async function evaluateXstockPairForVTS(
           positionSize: dollarValue,
           dollarValue,
           quantity,
-          frictionCost: totalFriction,
+          frictionCost: _xBookedFriction,
           // P19-B8.7 Step-9 (#527): the components behind totalFriction, for the
           // UI cost 5-col split — the SAME three terms summed into the blend
           // above (post rule-23 fix: costMetrics.spread, measured-with-fallback),
           // so the split reconciles to frictionCost exactly.
-          costFeeFraction: costMetrics.fee,
+          costFeeFraction: (_xEntryFee + _xExitFee) / 2,
+          costEntryFeeFraction: _xEntryFee,
+          costExitFeeFraction: _xExitFee,
           costSlippageFraction: costMetrics.slippage,
           costSpreadFraction: costMetrics.spread,
           regime,

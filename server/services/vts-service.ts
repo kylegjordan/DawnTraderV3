@@ -872,6 +872,12 @@ export class VTSService extends EventEmitter {
     regimeWeight: number;
     decayPenalty: number;
     frictionCost: number;
+    /** F-G-2 OBJ-5b (P12): the fractions behind frictionCost, so a closed row can reconstruct it. */
+    costFeeFraction?: number;
+    costSlippageFraction?: number;
+    costSpreadFraction?: number;
+    costEntryFeeFraction?: number;
+    costExitFeeFraction?: number;
     pool: 'ideal' | 'rotational';
     sourcePool?: string; // Batch 45: Family-qualified source pool
     expectedEdge?: number; // Batch 45: Actual computed expected edge
@@ -959,6 +965,11 @@ export class VTSService extends EventEmitter {
       decayPenalty: tradeData.decayPenalty,
       expectedEdge: expectedEdge,
       frictionCost: tradeData.frictionCost,
+      costFeeFraction: tradeData.costFeeFraction,
+      costSlippageFraction: tradeData.costSlippageFraction,
+      costSpreadFraction: tradeData.costSpreadFraction,
+      costEntryFeeFraction: tradeData.costEntryFeeFraction,
+      costExitFeeFraction: tradeData.costExitFeeFraction,
       regime: tradeData.regime,
       pool: tradeData.pool,
       source: 'vts'  // HF6: Fix source tag so closed trades pass H5.10/H5.45 filter
@@ -998,6 +1009,11 @@ export class VTSService extends EventEmitter {
       decayPenalty: tradeData.decayPenalty,
       expectedEdge: expectedEdge,
       frictionCost: tradeData.frictionCost,
+      costFeeFraction: tradeData.costFeeFraction,
+      costSlippageFraction: tradeData.costSlippageFraction,
+      costSpreadFraction: tradeData.costSpreadFraction,
+      costEntryFeeFraction: tradeData.costEntryFeeFraction,
+      costExitFeeFraction: tradeData.costExitFeeFraction,
       signalType: normalizedSignalType,
       strategy: tradeData.strategy,
       regime: tradeData.regime,
