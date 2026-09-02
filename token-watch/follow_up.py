@@ -75,10 +75,13 @@ def classify_death(state: dict, previous: dict | None) -> str | None:
     #    a term defined ex ante would break comparability with everything
     #    already recorded under it. The DISPLAY says what was actually
     #    observed instead, which is where a reader meets it.
-    # ⚠️ AND THE SEPARATE on-chain liquidity read (`chain_liquidity`) NEVER
-    #    FED THIS AT ALL: it only runs for tokens that are ALIVE. Its two-day
-    #    outage cost us depth and concentration data on LIVE tokens; it did
-    #    not affect a single death classification.
+    # ⚠️ AND THE SEPARATE on-chain read NEVER FED THIS AT ALL: it only runs
+    #    for tokens that are ALIVE. Its two-day outage did not affect a single
+    #    death classification -- and worse, when it DID run it returned holder
+    #    concentration rather than liquidity. It now reads the pool's real SOL
+    #    (`pool_sol`), which is what could make this branch honest: a fall from
+    #    a real balance to zero BETWEEN two checks is a pull caught in the act,
+    #    rather than a pool found already gone.
     if state.get("evidence") == "no_pairs_returned":
         # ⚠️ NO PAIR IS AMBIGUOUS: it is what a pulled pool looks like AND what
         # an indexing gap looks like. If we ever saw a pool for this token,
@@ -303,15 +306,27 @@ def run_hour(now: datetime | None = None) -> dict:
                 record_identity(mint, state.get("name"), state.get("symbol"))
             fields["observed"] = True
 
-            # Liquidity is read on-chain ONLY where the free leg cannot supply
-            # it — a bonding-curve pool reports no liquidity figure. This is
-            # the first leg to shed, and it sheds without touching births.
-            if state.get("alive") and state.get("liquidity_usd") is None:
+            # ⛔⛔ THE REAL MONEY IN THE POOL, IN SOL -- the measurement this
+            #    study always meant and never took. It replaces a call named
+            #    `pool_liquidity` that actually returned who holds the most
+            #    TOKENS: holder concentration, not liquidity. The budget was
+            #    reserved for a liquidity figure and spent for two days without
+            #    ever producing one, and `liquidity_pulled` has never been
+            #    backed by a liquidity number.
+            # ★ IT READS THE POOL, NOT THE MINT. Liquidity is a property of the
+            #   pot; the mint is only the label on one side of it. That is why
+            #   the corrected call takes `pair_address`.
+            # ⚠️ STILL THE FIRST LEG TO SHED, unchanged: it is credit-metered,
+            #    the carve affords ~6,100/day against ~30,000 live
+            #    observations, so it is SAMPLED and the shed is expected rather
+            #    than exceptional. Births are never touched by it.
+            if state.get("alive"):
                 try:
-                    fields["chain_liquidity"] = providers.pool_liquidity(mint)
+                    fields["pool_sol"] = providers.pool_sol_reserves(
+                        state.get("pair_address"))
                 except providers.Shed:
                     stats["shed"] += 1
-                    fields["chain_liquidity"] = {"shed": True}
+                    fields["pool_sol"] = {"sol": None, "source": "shed"}
                 except Exception as e:
                     # ⛔ A FAILED READ MUST NOT LOOK LIKE A READ THAT WAS NEVER
                     #    DUE. Previously this branch wrote nothing, so the key
@@ -321,7 +336,7 @@ def run_hour(now: datetime | None = None) -> dict:
                     #    the observation stream, which is the discrimination
                     #    the Shed marker exists to preserve, one branch over.
                     LOG.exception("liquidity read failed for %s", mint)
-                    fields["chain_liquidity"] = {"error": type(e).__name__}
+                    fields["pool_sol"] = {"sol": None, "source": "error", "error": type(e).__name__}
 
             # ⛔ AN ALREADY-DEAD TOKEN IS OBSERVED, NOT RE-KILLED. Its
             #    tombstone stands -- every survival figure still counts it

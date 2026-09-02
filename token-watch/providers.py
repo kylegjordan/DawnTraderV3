@@ -26,6 +26,8 @@ module in this package imports urllib.
 
 from __future__ import annotations
 
+import base64
+import struct
 import json
 import os
 import urllib.error
@@ -249,6 +251,10 @@ def token_state(mint: str) -> dict:
         "market_cap_usd": p.get("marketCap"),
         "fdv_usd": p.get("fdv"),
         "chart_url": p.get("url"),
+        # THE POOL'S OWN ADDRESS. The corrected liquidity read needs the POOL,
+        #    not the mint: liquidity is a property of the pot, and the mint is
+        #    only the label on one side of it.
+        "pair_address": p.get("pairAddress"),
         # THE SOL PRICE AT THIS OBSERVATION, NOT A GLOBAL MEDIAN (Langston).
         #    "value now vs at launch" is meant to isolate the TOKEN's move;
         #    applying one rate to both ends folds SOL's own move into the
@@ -274,7 +280,105 @@ def token_state(mint: str) -> dict:
 # ⛔ FIRST IN THE SHED ORDER. If the budget is tight this stops and births
 #   continue — that ordering is the whole of OBJ-9.
 # ─────────────────────────────────────────────────────────────────────────────
-def pool_liquidity(mint: str) -> dict:
+# Wrapped SOL. Named because it appears in two unrelated places and a bare
+# 44-character literal in each is how a typo becomes a silent zero.
+WSOL_MINT = "So11111111111111111111111111111111111111112"
+
+PUMPFUN_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+
+
+def _rpc(method: str, params: list):
+    """One Helius JSON-RPC call, through the paced chokepoint."""
+    body = json.dumps({"jsonrpc": "2.0", "id": "token-watch",
+                       "method": method, "params": params}).encode()
+    req = urllib.request.Request(
+        f"https://mainnet.helius-rpc.com/?api-key={helius_key()}",
+        data=body, headers={"Content-Type": "application/json",
+                            "User-Agent": USER_AGENT})
+    return _request(req)
+
+
+def pool_sol_reserves(pair_address: str) -> dict:
+    """THE REAL MONEY IN THE POOL, in SOL. The number this study always meant.
+
+    ⛔⛔ WHAT THIS REPLACES, AND WHY IT MATTERS. The previous function was named
+       `pool_liquidity` and called `getTokenLargestAccounts` -- which returns
+       who holds the most TOKENS. That is holder concentration, not liquidity.
+       So the study reserved a credit budget for a liquidity measurement, spent
+       it for two days, and never once measured liquidity. The death class
+       `liquidity_pulled` has never been backed by a liquidity figure.
+
+    TWO SHAPES, AND THE ACCOUNT ITSELF SAYS WHICH -- we do not trust a label:
+      - A PUMP.FUN BONDING CURVE (97% of live observations). The curve account
+        stores its own reserves. `real_sol_reserves` is the money that is
+        actually there.
+      - A GRADUATED POOL (the other 3%). The SOL sits in a wrapped-SOL token
+        account owned by the pool.
+
+    ⚠️ THE TRAP THAT VALIDATION CAUGHT, AND EITHER WOULD HAVE SHIPPED SILENTLY:
+      - The pool address's PLAIN balance is the account's rent minimum, not the
+        liquidity. Measured 0.0030 SOL against a true 6.1933.
+      - The curve also reports VIRTUAL reserves -- a pricing device, not money.
+        Measured 30.0676 SOL virtual against 0.0676 SOL real, a 445x
+        overstatement that would have looked entirely plausible.
+
+    ★ VALIDATED AGAINST GROUND TRUTH BEFORE IT WAS BUILT (2026-09-02):
+      - graduated: provider said 6.1933 SOL, this returns 6.193328353.
+      - bonding curve: the provider reports NO liquidity, so instead the decode
+        SELF-CHECKS -- the price implied by the decoded reserves is
+        0.00000002809 against the provider's own 0.00000002808, a ratio of
+        1.0002. A decode that reproduces an independently-published price is
+        not a plausible number; it is the right one.
+    """
+    if not budget.allowed("liquidity"):
+        raise Shed("liquidity")
+    if not pair_address:
+        return {"sol": None, "source": "no_pool_address",
+                "read_at": datetime.now(UTC).isoformat()}
+
+    info = _rpc("getAccountInfo", [pair_address, {"encoding": "base64"}])
+    budget.charge("liquidity", 1)
+    val = ((info or {}).get("result") or {}).get("value") or {}
+    provenance.record_follow_up(pair_address, "helius_pool_account", info)
+
+    if val.get("owner") == PUMPFUN_PROGRAM:
+        try:
+            raw = base64.b64decode((val.get("data") or ["", ""])[0])
+            # 8-byte discriminator, then five u64s. real_sol_reserves is the
+            # fourth -- the one the trap above is about.
+            _vtok, _vsol, _rtok, rsol, _supply = struct.unpack_from("<QQQQQ", raw, 8)
+        except (ValueError, struct.error, IndexError, TypeError):
+            return {"sol": None, "source": "curve_decode_failed",
+                    "read_at": datetime.now(UTC).isoformat()}
+        return {"sol": rsol / 1e9, "source": "bonding_curve_real_reserves",
+                "read_at": datetime.now(UTC).isoformat()}
+
+    # Graduated: the SOL is a wrapped-SOL token account the pool owns.
+    if not budget.allowed("liquidity"):
+        raise Shed("liquidity")
+    accts = _rpc("getTokenAccountsByOwner",
+                 [pair_address, {"mint": WSOL_MINT}, {"encoding": "jsonParsed"}])
+    budget.charge("liquidity", 1)
+    vals = ((accts or {}).get("result") or {}).get("value") or []
+    for v in vals:
+        amt = ((((v.get("account") or {}).get("data") or {})
+                .get("parsed") or {}).get("info") or {}).get("tokenAmount") or {}
+        ui = amt.get("uiAmount")
+        if ui is not None:
+            return {"sol": float(ui), "source": "graduated_pool_wsol_account",
+                    "read_at": datetime.now(UTC).isoformat()}
+    return {"sol": None, "source": "no_wsol_account_found",
+            "read_at": datetime.now(UTC).isoformat()}
+
+
+def holder_concentration(mint: str) -> dict:
+    """Who holds the most of this token. NOT liquidity -- renamed 2026-09-02.
+
+    ★ THE DATA IS GOOD AND IS KEPT: two holders with one of them holding
+      essentially the entire supply is a strong signal in its own right. It was
+      only ever mislabelled, and the label is what made a missing measurement
+      invisible for two days.
+    """
     if not budget.allowed("liquidity"):
         raise Shed("liquidity")
     key = helius_key()

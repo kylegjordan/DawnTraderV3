@@ -131,7 +131,9 @@ section("4. THE BUDGET GATE SITS IN FRONT OF THE NETWORK, not beside it")
 budget.inject_spend("liquidity", LIQUIDITY_AUDIT_CARVE, T0)
 raised = False
 try:
-    providers.pool_liquidity("MINT_Z")   # would need a key and a socket
+    # The corrected read takes a POOL address, not a mint -- liquidity is a
+    #    property of the pot. The gate must refuse before it ever looks.
+    providers.pool_sol_reserves("PoolZ")   # would need a key and a socket
 except providers.Shed:
     raised = True
 except Exception as e:  # anything else means it got PAST the gate
