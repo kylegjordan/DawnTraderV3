@@ -1632,7 +1632,10 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook}`);
+    // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
+    this.fg2ShadowEntered = 0;
+    this.fg2ShadowSkippedNoBook = 0;
   }
 
   /**
@@ -1645,6 +1648,10 @@ export class ActiveExecutionEngine {
    * destructive direction (Langston caveat, 2026-07-24). Seeded FALSE (paper+live), so the
    * max_holding_period branch never fires today.
    */
+  // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle shadow-arm denominator counters.
+  private fg2ShadowEntered = 0;
+  private fg2ShadowSkippedNoBook = 0;
+
   private isMaxHoldEnabled(): boolean {
     const key = this.mode === 'live' ? 'enabled_live' : 'enabled_paper';
     try {
@@ -1784,7 +1791,27 @@ export class ActiveExecutionEngine {
       // and cannot touch the live key — ONE evaluator, two keys (OBJ-4), not two evaluators.
       // The bid comes from the SAME mini-book snapshot the live provenance stamps (`_bookX`),
       // so both arms see one book state. xStock: fg2BookBid is null by construction.
+      if (positionAssetClass === 'crypto_spot' && !(fg2BookBid !== null && Number.isFinite(fg2BookBid) && fg2BookBid > 0)) {
+        // Langston FINDING-2 (2026-09-02): OBJ-0's denominator is *crypto positions that ENTERED the
+        // shadow arm*, measured — not *open crypto positions*. A crypto row that did not enter says
+        // why, ONCE, on the row (`fg2ShadowSkip`), and the cycle counter carries it (`shadowSkippedNoBook`
+        // in the EVAL_EXIT line). The other absence causes — pending-maker `continue`, price-skip
+        // `continue` — leave the loop before this line and already log their own reason.
+        this.fg2ShadowSkippedNoBook++;
+        const _metaS = ((position.metadata as Record<string, any> | null) ?? {});
+        if (!_metaS.fg2ShadowSkip && !_metaS.fg2Shadow) {
+          try {
+            const _mergedS = { ..._metaS, fg2ShadowSkip: { reason: 'no_book_bid', atMs: Date.now() } };
+            await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _mergedS } as any);
+            position.metadata = _mergedS;
+            console.log(`[F-G-2][OBJ-0][SHADOW_SKIP] ${position.symbol} reason=no_book_bid`);
+          } catch (err) {
+            console.error(`[F-G-2][OBJ-0][SHADOW_SKIP_STAMP_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
+          }
+        }
+      }
       if (fg2BookBid !== null && Number.isFinite(fg2BookBid) && fg2BookBid > 0 && positionAssetClass === 'crypto_spot') {
+        this.fg2ShadowEntered++;
         try {
           const _shadowId = `${position.id}:fg2bid`;
           const _shadowSeed = _getTSForSeed(_shadowId)
@@ -1834,7 +1861,10 @@ export class ActiveExecutionEngine {
           if (_shadowSeed !== undefined && !_prior.seededFrom) {
             _next = { ..._prior, seededFrom: existingTecStatePE ? 'midlife' : 'cold' };
           }
-          if (shadowDecision.shouldExit && !_prior.bidFirstExit) {
+          // Which arm(s) land a FIRST exit on THIS cycle — the only cycles that fetch a witness.
+          const _bidLands = Boolean(shadowDecision.shouldExit && !_prior.bidFirstExit);
+          const _midLands = Boolean(decision.shouldExit && !_prior.midFirstExit);
+          if (_bidLands) {
             _next = {
               ...(_next ?? _prior),
               bidFirstExit: {
@@ -1846,7 +1876,7 @@ export class ActiveExecutionEngine {
               },
             };
           }
-          if (decision.shouldExit && !((_next ?? _prior).midFirstExit)) {
+          if (_midLands) {
             _next = {
               ...(_next ?? _prior),
               midFirstExit: {
@@ -1857,17 +1887,23 @@ export class ActiveExecutionEngine {
               },
             };
           }
+          const _isExitEvent = _bidLands || _midLands;
           if (_next !== null) {
             // P5 — the third read-out: the contemporaneous venue BBO from the INDEPENDENT ticker
-            // witness (#911, separate socket, raw sides — never the `c` field, #952), per arm.
-            // Langston Step-4 rider (2026-09-02): ONLY when an exit EVENT is being written. The
-            // seed-only cycle (seededFrom stamp, no first exit) must not stamp a BBO under a name
-            // that asserts at-event — #546 class. Rows with no first exit carry no witness.
-            const _isExitEvent = Boolean(_next.bidFirstExit || _next.midFirstExit);
+            // witness (#911, separate socket, raw sides — never the `c` field, #952), PER ARM.
+            // Langston riders (2026-09-02): fetched ONLY on a cycle where a first exit lands (the
+            // seed-only cycle stamps seededFrom alone), and written ONLY beside the field landing
+            // this cycle — `witnessAtBidExit` / `witnessAtMidExit` — NEVER overwritten. A bid-then-
+            // mid ordering is the batch thesis, not an edge case; a single `witnessAtEvent` would
+            // have kept the LAST one under a name that reads as THE event (#546, moved downstream).
             if (_isExitEvent) try {
               const { getTickerWitness } = await import('./execution/depth-source.js');
               const _w = await getTickerWitness(normalizeToInternalSymbol(position.symbol), 'crypto_spot');
-              if (_w) _next.witnessAtEvent = { bid: _w.bid, ask: _w.ask, capturedAtMs: _w.capturedAtMs };
+              if (_w) {
+                const _stamp = { bid: _w.bid, ask: _w.ask, capturedAtMs: _w.capturedAtMs };
+                if (_bidLands && !_next.witnessAtBidExit) _next.witnessAtBidExit = _stamp;
+                if (_midLands && !_next.witnessAtMidExit) _next.witnessAtMidExit = _stamp;
+              }
             } catch { /* fail-open: telemetry only */ }
             const _merged = { ..._meta, fg2Shadow: _next };
             await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _merged } as any);
