@@ -85,13 +85,13 @@ console.log('=== OBJ-2 guard-stale-fetch ===');
 }
 {
   const dir = repoWithFetchAge(null);
-  writeFileSync(join(dir, '.git', 'config'), '[core]\n'); // clone written just now
+  writeFileSync(join(dir, '.git', 'description'), '[core]\n'); // clone written just now
   const r = run(FETCH_GUARD, 'git commit -F m.txt -- a.md', dir);
   check('a seconds-old clone (no FETCH_HEAD, fresh config) is silent', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
 }
 {
   const dir = repoWithFetchAge(null);
-  const cfg = join(dir, '.git', 'config'); writeFileSync(cfg, '[core]\n');
+  const cfg = join(dir, '.git', 'description'); writeFileSync(cfg, '[core]\n');
   const t = new Date(Date.now() - 3 * 3600000); utimesSync(cfg, t, t); // cloned 3h ago, never fetched
   const r = run(FETCH_GUARD, 'git commit -F m.txt -- a.md', dir);
   check('an hours-old clone never fetched WARNS', !!r.ctx && /NEVER been fetched/.test(r.ctx));
@@ -99,6 +99,23 @@ console.log('=== OBJ-2 guard-stale-fetch ===');
 {
   const r = run(FETCH_GUARD, 'git -C C:/somewhere push origin x', repoWithFetchAge(120));
   check('git -C <dir> push is still gated', !!r.ctx, 'silent');
+}
+// r3 reader arms.
+{
+  const r = run(FETCH_GUARD, 'git -C "C:/x y" push origin x', repoWithFetchAge(120));
+  check('git -C "<dir with a space>" push is still gated', !!r.ctx, 'silent');
+}
+{
+  const r = run(FETCH_GUARD, 'MSG="$(git fetch origin 2>&1)" && git push origin x', repoWithFetchAge(120));
+  check('a real fetch inside a quoted $( ) substitution silences', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
+}
+{
+  const dir = repoWithFetchAge(null);
+  const d = join(dir, '.git', 'description'); writeFileSync(d, 'x\n');
+  const t = new Date(Date.now() - 3 * 3600000); utimesSync(d, t, t);
+  writeFileSync(join(dir, '.git', 'config'), '[user]\n'); // identity set JUST NOW on an hours-old clone
+  const r = run(FETCH_GUARD, 'git commit -F m.txt -- a.md', dir);
+  check('setting identity on an hours-old never-fetched clone does NOT reset the clock', !!r.ctx && /NEVER been fetched/.test(r.ctx), 'silent');
 }
 
 console.log('\n=== OBJ-3 guard-ci-cited ===');
@@ -125,7 +142,7 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
 }
 {
   const r = run(CI_GUARD, `git commit -F /nonexistent/path.txt -- docs/B_Z_COMPLETION_REPORT.md`);
-  check('unreadable msgfile WARNS (cannot verify is not verified)', !!r.ctx && /could not be read/.test(r.ctx));
+  check('unreadable msgfile + no id anywhere in the command WARNS, naming the unreadable file', !!r.ctx && /could not be read/.test(r.ctx));
 }
 {
   const r = run(CI_GUARD, `git commit -F ${without} -- reports/B_X_COMPLETION_REPORT.md`);
@@ -181,8 +198,34 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
   check('git -C <dir> commit is still the trigger', !!r.ctx, 'silent');
 }
 {
-  const r = run(CI_GUARD, `git commit --file=${without} -- reports/B_X_COMPLETION_REPORT.md`);
-  check('--file=<msgfile> is read like -F', !!r.ctx && !/could not be read/.test(r.ctx), 'ctx: ' + String(r.ctx).slice(0, 70));
+  // Discriminating form: the citation lives ONLY in the pre-existing file; the command carries no digits.
+  const r = run(CI_GUARD, `git commit --file=${withRun} -- reports/B_X_COMPLETION_REPORT.md`);
+  check('--file=<pre-existing msgfile> holding the citation → silent', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
+}
+// r4 reader arms — THE ONE THAT INVERTED r3: a reused /tmp name holds the PREVIOUS message.
+{
+  const name = 'reused-' + Date.now() + '.txt';
+  writeFileSync(join(tmpdir(), name), 'previous close. run 26730239909.\n'); // stale, cited
+  const r = run(CI_GUARD, `printf 'B-Y close. CI green, trust me.\\n' > /tmp/${name} && git commit -F /tmp/${name} -- reports/B_Y_COMPLETION_REPORT.md`);
+  check('a REUSED /tmp msgfile holding an OLD citation does NOT silence an uncited close', !!r.ctx, 'silent — read the stale file');
+}
+{
+  const name = 'reused-b-' + Date.now() + '.txt';
+  writeFileSync(join(tmpdir(), name), 'previous close, uncited.\n');
+  const r = run(CI_GUARD, `printf 'B-Y close. run 26730239909.\\n' > /tmp/${name} && git commit -F /tmp/${name} -- reports/B_Y_COMPLETION_REPORT.md`);
+  check('…and the mirror: stale uncited file, command writes a cited message → silent', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
+}
+{
+  const r = run(CI_GUARD, `git commit -F /nonexistent/x.txt -- reports/B_X_COMPLETION_REPORT.md && cc-send --message 'discord id 1525096267'`);
+  check('a 10-digit id in a LATER stage does not silence the commit', !!r.ctx, 'silent');
+}
+{
+  const r = run(CI_GUARD, `git commit -m 'B-X close' -m 'CI 4/4 green, run 26730239909' -- reports/B_X_COMPLETION_REPORT.md`);
+  check('multi -m with the id in the second → silent', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
+}
+{
+  const r = run(CI_GUARD, `git -C "C:/x y" commit -F ${without} -- reports/B_X_COMPLETION_REPORT.md`);
+  check('git -C "<dir with a space>" commit is still the trigger', !!r.ctx, 'silent');
 }
 
 // Mutation arms — the convention: each patches a copy, re-runs this suite, requires FAILURE.
@@ -201,7 +244,15 @@ if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
     ['obj3: never check the message (cited always true)', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace('const cited = /\\b\\d{10,11}\\b/.test(msg);', 'const cited = true;')],
     ['obj3: drop the command-text fallback (the 35/47 form regresses)', CI_GUARD, 'GUARD3_UNDER_TEST',
-      (s) => s.replace("if (msg === null) { msg = cmd;", "if (msg === null) { msg = '';")],
+      (s) => s.replace("if (msg === null) { msg = commandText;", "if (msg === null) { msg = '';")],
+    ['obj3: read the file even when the command writes it (the reused-name inversion returns)', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace("if (writtenInCommand) { msgSource = 'written-in-command'; }", 'if (false) { }')],
+    ['obj3: drop the --file alias', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace('/(?:-F|--file)[\\s=]+', '/(?:-F)[\\s=]+')],
+    ['obj3: let a LATER stage\'s digits count as the message', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace('const commandText = cmd.slice(0, ci) + (stageEnd === -1 ? post : post.slice(0, stageEnd));', 'const commandText = cmd;')],
+    ['obj2: read the clock from .git/config again', FETCH_GUARD, 'GUARD2_UNDER_TEST',
+      (s) => s.replace("statSync(join(repo, '.git', 'description'))", "statSync(join(repo, '.git', 'config'))")],
     ['obj3: drop the MSYS path resolution', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace('for (const cand of msysCandidates(p, payload && payload.cwd))', 'for (const cand of [p])')],
     ['obj3: make it block (exit 2)', CI_GUARD, 'GUARD3_UNDER_TEST',

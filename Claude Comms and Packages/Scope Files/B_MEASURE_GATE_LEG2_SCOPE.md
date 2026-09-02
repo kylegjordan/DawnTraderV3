@@ -193,6 +193,22 @@ The shapes with a genuine **command-string** signature, each drawn from a real e
 ✅ **DELIVERY MEASURED LIVE, from the SHIPPED hook:** the first triggering command after wiring (`seq 1 20 | head -20`) returned the `cap-bound` warning in the tool result; the sink row is `synthetic:false`, `project_dir` this clone, **`hook_sha d684cdf99df0` = the file's own CRLF-normalised hash.** That is the Step-7 condition, satisfied for 6c on day one.
 ⛔ **KNOWN GAPS, in the hook header in those words:** an error swallowed by `2>&1` INTO the consumer leaves no stderr and a plausible number; a 404 body that parses as an empty list without a traceback; `interrupted` results are skipped as undecided; only the first and last 64 KB of stdout are inspected. **Its silence is non-evidential.** ★ **Instrument-agnostic by construction — the legs key on result-vs-request, never on which tool produced the error — as OBJ-6b's vacated split requires.**
 
+## 📐 `[r7]` **OBJ-6d STAGE 1 — THE AGENT HOOK OBSERVED, NOT DESIGNED. MEASURED 2026-09-02, TWO PROBES.**
+
+**What the docs say:** `type: "agent"` exists (`prompt`, `timeout` default 60 s, up to 50 tool turns, returns only `ok`/`reason`); **its support on `PostToolUse` is NOT documented** (the only example is `Stop`), no `model` field, no documented way for a command hook to gate an agent hook. *(`code.claude.com/docs/en/hooks-guide`, §Agent-based hooks.)*
+**What is measured** (an agent hook registered on `PostToolUse`, matcher `Bash`, **`if: "Bash(echo AGENT-HOOK-PROBE*)"`**, fired by a deliberate probe command):
+| property | measured |
+|---|---|
+| fires on `PostToolUse` at all | ✅ **yes, twice** — undocumented, now observed |
+| the `if` argument-gate holds | ✅ probe calls 9.7 s / 38.6 s; the plain command immediately after, **2.5 s** (baseline ~1.3 s with two command hooks) — ordinary Bash calls do not spawn it |
+| its `reason` reaches the turn | ✅ delivered as *"PostToolUse:Bash hook blocking error … Agent hook condition was not met: <reason>"*; **the turn continues** (this scope edit is being made in that turn) |
+| receives `tool_response` | ✅ `has_tool_response=true`, `stdout_bytes` reported |
+| tools it can use | **Read ✅ · Grep ✅ · Bash ✅** (`true` permitted on r2; a `printf >> ~/.claude/…` redirect was **DENIED** on r1 — *"permission denied in don't ask mode"*) · **Write ❌ DENIED** |
+| cost per fire | **10–40 s wall-clock, one subagent**, synchronous |
+
+★★ **WHAT THIS SETTLES FOR THE DESIGN:** the epistemic requirement holds — **the agent CAN re-execute a read-only measurement against the object** (git show, grep, a read query) and its verdict is admissible under the pre-registration (it cites tool output it produced). **Its record cannot be a file it writes**; the verdict IS the `reason`, which is delivered.
+⛔ **WHAT IT DOES NOT SETTLE, AND IS THE DESIGN QUESTION FOR LANGSTON:** **no mechanism gates an agent hook on 6c's VERDICT.** The `if` field is argument-level only; hooks in one event run in parallel, so a command hook cannot precede and gate an agent hook. An agent hook on every Bash result costs ≥10 s per call — unaffordable, and the ≤2 % escalation bar is about noise, not cost. **Two candidate shapes, neither pre-approved:** (A) an agent hook on **`Stop`** — once per turn, reads the 6c sink for this turn's survivors, re-derives only those, `ok:false` with the re-derivation when a survivor is real (cost: one subagent per turn, ~10 s when there are no survivors); (B) **the 6c command hook itself spawns a headless `claude -p` with tools, in the background, ONLY when it fires** — zero cost on clean calls, verdict written to a file the OBJ-1 injector surfaces on the next prompt (asynchronous; not a hook-type agent, but the same independent re-derivation). **Dispatched as a design ask, not built.**
+
 ## ⛔⛔ `[r4]` **THE SELF-REFERENCE HAZARD — A SHAPE-MATCHER FIRES ON TEXT *ABOUT* ITS TRIGGER, NOT ONLY ON *USE* OF IT.** *(§9.4 disposition 1 — folded into the work in hand)*
 
 ★★ **DISCOVERED BY ACCIDENT, LIVE, AND IT COULD NOT HAVE BEEN STAGED BETTER: THE HOOK BLOCKED THE POST THAT WAS WARNING THE OTHER SESSIONS ABOUT THE HOOK.** OBJ-0’s notice named the probe’s sentinel strings so the crew would know what to avoid; `probe-warn-delivery.mjs` matches `cmd.includes(sentinel)` against the **whole command string**, the heredoc carrying the notice contained them, and the blocking arm refused the command.

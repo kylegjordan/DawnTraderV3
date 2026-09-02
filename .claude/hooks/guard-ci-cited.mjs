@@ -77,7 +77,7 @@ function main() {
     .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ')
     .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ');
   // `git -C <dir> commit` / `git -c k=v commit` are the same commit (reader B3/B4).
-  const stage = elided.split(/&&|\|\||[;\n]/).find((s) => /\bgit\b(?:\s+-[Cc]\s*\S+)*\s+commit\b/.test(s));
+  const stage = elided.split(/&&|\|\||[;\n]/).find((s) => /\bgit\b(?:\s+-[Cc]\s*(?:"[^"]*"|'[^']*'|\S+))*\s+commit\b/.test(s));
   if (!stage || !/COMPLETION_REPORT/i.test(stage)) {
     note({ decided: true, fired: false }); return;
   }
@@ -96,22 +96,39 @@ function main() {
   // fallback of record: when the file is created in-command, its content IS in the command.
   // KNOWN LIMIT (3): a run id anywhere in the raw command silences it — a commit command that
   // carries a 10-11 digit run number is, in this population, citing it.
+  // ⛔ r4 — READER-FOUND, LOAD-BEARING, and it inverted r3's fix: in Git-Bash `/tmp` IS `$TEMP`
+  // (measured: `cd /tmp && pwd -W` → C:/Users/kyleg/AppData/Local/Temp) and those files PERSIST,
+  // while names are reused constantly (`/tmp/m2.txt` 9×, `/tmp/msg.txt` 7× across 3,948 commit
+  // commands). So r3's "read the file first" read the PREVIOUS commit's message at hook time —
+  // a reused name holding an old citation SILENCED an uncited close. ⇒ if the command itself
+  // WRITES the msgfile (a `>`/`>>`/`tee` naming it in an earlier stage) the file on disk is
+  // stale BY CONSTRUCTION and the command text is the only honest source. The file is read
+  // only when nothing in the command writes it (authored earlier, e.g. by the Write tool).
+  // The command-text source is the command UP TO AND INCLUDING the commit stage (plus a heredoc
+  // feeding `-F -`): a run id in a LATER stage (`… && cc-send --message 'id 1525096267'`) is
+  // not this commit's message. Inline -m and `-F -` need no branch of their own — both are
+  // literally in that text, which is why r3's -m branch could be deleted with the suite green.
+  const COMMIT_RE = /\bgit\b(?:\s+-[Cc]\s*(?:"[^"]*"|'[^']*'|\S+))*\s+commit\b/;
+  const ci = cmd.search(COMMIT_RE);
+  const post = cmd.slice(ci);
+  const stageEnd = post.search(/&&|\|\|(?!\|)|;/);
+  const commandText = cmd.slice(0, ci) + (stageEnd === -1 ? post : post.slice(0, stageEnd));
+
   let msg = null, msgSource = null;
   const fm = /(?:-F|--file)[\s=]+("([^"]+)"|'([^']+)'|(\S+))/.exec(cmdStage);
   if (fm) {
     const p = fm[2] || fm[3] || fm[4];
-    if (p === '-') { msgSource = 'stdin'; }
+    const base = p.split(/[\\/]/).pop();
+    const writtenInCommand = p === '-' || (base && new RegExp('(?:>{1,2}\\|?|\\btee\\b(?:\\s+-a)?)\\s*(?:"[^"]*"|\'[^\']*\'|\\S*)?' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(cmd.slice(0, ci)));
+    if (writtenInCommand) { msgSource = 'written-in-command'; }
     else {
       for (const cand of msysCandidates(p, payload && payload.cwd)) {
         try { msg = readFileSync(cand, 'utf8'); msgSource = 'msgfile'; break; } catch { /* next */ }
       }
       if (msg === null) msgSource = 'msgfile-unreadable';
     }
-  } else {
-    const im = /-m\s+("([^"]*)"|'([^']*)')/.exec(cmdStage);
-    if (im) { msg = im[2] || im[3] || ''; msgSource = 'inline'; }
   }
-  if (msg === null) { msg = cmd; msgSource = (msgSource ? msgSource + '+' : '') + 'command-text'; }
+  if (msg === null) { msg = commandText; msgSource = (msgSource ? msgSource + '+' : '') + 'command-text'; }
 
   // A GitHub Actions run id is a 10-11 digit number. A commit sha is hex and will not match.
   const cited = /\b\d{10,11}\b/.test(msg);

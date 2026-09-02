@@ -186,6 +186,17 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-result-shape.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "if": "Bash(echo AGENT-HOOK-PROBE*)",
+        "hooks": [
+          {
+            "type": "agent",
+            "timeout": 45,
+            "prompt": "You are OBJ-6d stage 1: a LIVENESS PROBE for an agent-type PostToolUse hook (B-MEASURE-GATE). RULE 1 — RECURSION BREAKER: if the input's tool_input.command does not begin with the exact text `echo AGENT-HOOK-PROBE`, respond {\"ok\": true} IMMEDIATELY with no tool call at all. RULE 2 — otherwise, r2 (Bash was PERMISSION-DENIED to this hook on r1, measured): attempt, in order, (a) the Read tool on the file named in the input's cwd + '/.claude/hooks/observe-posttooluse.mjs' — note whether it was permitted and its first line; (b) the Grep tool for the string 'OBJ-6c' in that same file — note permitted or denied and the match count; (c) the Write tool creating the file <cwd>/.claude/agent-hook-probe-r2.txt containing one line 'tool_use_id=<tool_use_id from input> event=<hook_event_name> has_tool_response=<true/false> stdout_bytes=<n or -1>' — note permitted or denied; (d) the Bash tool running  true  — note permitted or denied. Then respond {\"ok\": false, \"reason\": \"AGENT-HOOK-PROBE r2: Read=<permitted|denied>, Grep=<permitted|denied count=N>, Write=<permitted|denied>, Bash=<permitted|denied>; has_tool_response=<true/false>; stdout_bytes=<n>\"}. Do not retry a denied tool. Input: $ARGUMENTS"
+          }
+        ]
       }
     ],
     "SessionStart": [
