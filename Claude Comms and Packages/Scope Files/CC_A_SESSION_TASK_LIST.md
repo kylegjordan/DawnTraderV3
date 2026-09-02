@@ -1,4 +1,4 @@
-# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-03
+# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-02
 
 > **Kyle asked for the running list in one place, in words he can read (2026-09-02).** The authoritative ORDER is `PHASE_19_PLAN.md` §governance; this file is that list read from CC-A's seat with each item's PURPOSE in plain language. When the two disagree, the plan wins and this file is corrected. **Nothing here adds a rule: every item is a tool, a format, a removal, or an investigation.** Rows have positions, not dates (§9.4).
 
@@ -51,10 +51,10 @@ Kyle's diagnosis (08-20 → 08-31): every step burns time on sessions announcing
 **Handed off 09-02:** `#558` A2 → CC-B / Phase 16 (Kyle) · `B-REGIME-INPUTS-LIVE` → CC-B, closed retroactively at `e3328d131`.
 
 ## 4. Placement debts
-**Cleared 2026-09-03 (`ce8d25c68`):** `B-INSTRUMENTS-OVER-RULES` is plan row 3.5 · `B-TRADING-ENGINE-REMOVAL` (#578) is row 11.5 · `B-FINALSCORE-TELEMETRY-RETIRE` (#582) is row 11.6.
+**Cleared 2026-09-02 (`ce8d25c68`):** `B-INSTRUMENTS-OVER-RULES` is plan row 3.5 · `B-TRADING-ENGINE-REMOVAL` (#578) is row 11.5 · `B-FINALSCORE-TELEMETRY-RETIRE` (#582) is row 11.6.
 **Still open:** the §5 items marked *unplaced* below. They sit under the arc's one tracked row (`PHASE_19_PLAN` GOV-ARC #668) as a list, not as positioned rows — which is exactly the "named but not placed" failure §9.4 forbids. Next plan edit gives each a numbered row in the governance queue.
 
-## 5. Database cataloguing and "governance to industry standard" — RECOVERED 2026-09-03
+## 5. Database cataloguing and "governance to industry standard" — RECOVERED 2026-09-02
 *Recovered from Kyle's voice notes (30-31 July, 7 August), the two design asks (`B_CATALOG_WHAT_WE_DO_NOT_DOCUMENT_r1.md`, `B_GOVERNANCE_REMEDIATION_PLAN_r1.md`), `RUNNING_ISSUES` #668/#671/#672/#601, `STORAGE_POLICY.md`, `PHASE_19_PLAN.md` and 103 transcript hits (17 June → 2 September). Nothing here is from memory.*
 
 **What Kyle asked for, in his words.** 30 July: *"do we have a catalog of all of our database tables and what they're used for, what they're capturing… what system they are part of? This is something that is done as an industry standard."* 31 July: *"is there other documentation that we should be doing for our system that is industry standard that we're not doing?"* 7 August: *"we need to standardize our governance system according to industry standards… make sure that each of those have cards as well as… are in the issues file, in the road map, in the phase nineteen plan."*
@@ -81,6 +81,6 @@ Kyle's diagnosis (08-20 → 08-31): every step burns time on sessions announcing
 
 **Deliberately CUT (so nobody revives them):** reshaping our existing documents into arc42 / C4 form; a written set of "quality targets". Recorded in the remediation plan §3.5.
 
-### 5c. Recommended order for these, to be settled with Langston and then written into the plan
-*(Corrected after a fresh read against the ref, 2026-09-03: Kyle's recorded order is rules file → decision history → catalogues (remediation plan line 170) and nothing at the ref reverses it; the lookalike register is ruled NOT to queue behind the catalogue (#672 HOME); the ORM-vs-database drift check ships with `B-CATALOG-1`, not `-2` (plan line 162); the trailing-state file already has its own placed home, `B-TEC-STATE-DURABILITY` (#678), so only #601's log-folder remainder folds into the catalogue. Everything from item 3 on is ledger-sequenced BEHIND `B-RULES-1e` (queue row 1, in flight) unless that is lifted.)*
+### 5c. The order — Langston PROCEED 2026-09-02 with the `B-RULES-1e` gate LIFTED (circular: 1e is optional and parked behind these very items); written into `PHASE_19_PLAN` as governance-queue rows 12.1-12.6
+*(Corrected after a fresh read against the ref, 2026-09-02: Kyle's recorded order is rules file → decision history → catalogues (remediation plan line 170) and nothing at the ref reverses it; the lookalike register is ruled NOT to queue behind the catalogue (#672 HOME); the ORM-vs-database drift check ships with `B-CATALOG-1`, not `-2` (plan line 162); the trailing-state file already has its own placed home, `B-TEC-STATE-DURABILITY` (#678), so only #601's log-folder remainder folds into the catalogue. Everything from item 3 on is ledger-sequenced BEHIND `B-RULES-1e` (queue row 1, in flight) unless that is lifted.)*
 1. **rulings-durability fix** — first break, exempt from the sequencing (small; the loss is irreversible) · 2. **the lookalike register** — also first break, by Langston's ruling · 3. **`B-DECISION-RECORDS`** (#671) — Kyle's order puts decision history before catalogues · 4. **`B-CATALOG-1`** (#672) — scope it with the ORM-vs-database drift check and the glossary page inside it; close `B-STORAGE-CATALOG` on paper at the same time and fold #601's log-folder remainder in (the trailing-state file stays with #678) · 5. **`B-CATALOG-2` family** — one catalogue per small batch, the diagnostic-coverage map first · 6. **decommission residue** — a rule-18 removal batch after the catalogue names what is dead.
