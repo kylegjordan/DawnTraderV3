@@ -84,7 +84,9 @@ const REMOTE = [
   // wire, defeating the positive control with file content. The remote now strips \r\n and the
   // field separator from every emitted string, so one file row can only ever be one wire line.
   "    def clean(s): return str(s or '').replace(chr(13),' ').replace(chr(10),' ').replace('|','/')[:110]",
-  "    print('ALERT|%s|%s|%s' % (clean(a.get('id'))[:8], clean(a.get('severity')), clean(a.get('title'))))",
+  // The FULL id crosses the wire (Langston, Step 4): the CLI's ack/resolve no-op on a prefix —
+  // "Alert <id> not found", exit 1 — so a line carrying only 8 chars cannot be acted on.
+  "    print('ALERT|%s|%s|%s' % (clean(a.get('id')), clean(a.get('severity')), clean(a.get('title'))))",
   "print('COUNT|%d|%d' % (n, len(last)))",
 ].join('\n');
 // Injected-count bound. The file holds ~770 ids and grows; a runaway queue must not become a
@@ -135,11 +137,11 @@ function main() {
   const shown = alerts.slice(0, MAX_INJECT);
   const body = shown.map((l) => {
     const [, id, sev, ...rest] = l.split('|');
-    return `• ${id} [${sev}] ${rest.join('|')}`;
+    return `• ${id.slice(0, 8)}… [${sev}] ${rest.join('|')}  (full id: ${id})`;
   }).join('\n');
   const more = alerts.length > MAX_INJECT ? `\n… +${alerts.length - MAX_INJECT} more due alerts NOT shown (cap ${MAX_INJECT}) — read the file.` : '';
   emit(`§10.5 DUE ALERTS — ${due} active, unacknowledged, due now (whole file, ${total} ids; ${ms}ms):\n${body}${more}\n` +
-       `Surface each in plain language; ack only what you own; resolve only when fixed.`);
+       `Surface each in plain language; ack only what you own; resolve only when fixed — with the FULL id: the CLI no-ops on a prefix.`);
 }
 
 try { main(); } catch (e) {

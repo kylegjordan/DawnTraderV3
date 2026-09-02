@@ -59,9 +59,14 @@
 //       job (re-execute against the object), not a shape's.
 //   (2) an error swallowed inside a consumer that prints only a number (no signature reaches
 //       stdout) is invisible; (3) multi-stage commands are outside cap-bound and other-document
-//       by design; (4) `interrupted` results are skipped as undecided; (5) only the first and
-//       last 64 KB of stdout are inspected; (6) a real `tail -50` that genuinely overflowed fires
-//       every time — ~10/day at current cadence — and that is the predicate, not a defect.
+//       by design; (4) `interrupted` results are skipped as undecided; (5) ABOVE 128 KB THE WHOLE
+//       GUARD RUNS ON A WINDOW — the first and last 64 KB are joined before anything is counted,
+//       so cap-bound's line count is then the window's, not the output's (an exact-cap output
+//       over 128 KB is invisible; silent direction); (6) a real `tail -50` that genuinely
+//       overflowed fires every time — ~10/day at current cadence — and that is the predicate,
+//       not a defect; (7) the cap-bound dedupe file (~/.claude/result-shape-dedupe.json) is a
+//       shared-$HOME read-modify-write with no atomic rename and four sessions share that home
+//       — worst case a lost key and one extra terse line.
 // FAIL-OPEN: every path exits 0. Sink: ~/.claude/result-shape.jsonl (GUARD_SYNTHETIC marks tests).
 import { readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -155,7 +160,7 @@ function caps(p) {
 // r3: `\b404\b` alone matched issue "#404" in governance text (4 false fires); the HTTP form is
 // required. `python3` was removed from the counters — it was matching the program that THREW
 // the traceback, not a counter (26 of 41 replayed fires).
-const ERROR_SIG = /^(fatal|error|ERROR|Error):|No such file or directory|Traceback \(most recent call last\)|command not found|Permission denied|HTTP\S*\s+404\b|\b404 Not Found\b|\bNot Found\b|Cannot GET|ECONNREFUSED|ETIMEDOUT|Connection refused|does not exist in|Could not resolve host|unknown revision or path/m;
+const ERROR_SIG = /^(fatal|error|ERROR|Error):|No such file or directory|Traceback \(most recent call last\)|command not found|Permission denied|HTTP\S*\s+404\b|\b404 Not Found\b|Cannot GET|ECONNREFUSED|ETIMEDOUT|Connection refused|does not exist in|Could not resolve host|unknown revision or path/m;
 // A real counter as the LAST stage of the (single) pipeline — the number is then that count.
 const COUNTER_LAST = /(?:^|\|)\s*(wc\b|grep\s+(?:-[a-zA-Z]*)?c\b[^|]*|uniq\s+-c\b|jq\s+(?:-r\s+)?'?\.?(?:length|\|\s*length)'?)[^|]*$/;
 const BATCH_ID = /\b(B-[A-Z0-9][A-Z0-9-]*[A-Z0-9]|P\d+-B[0-9][0-9A-Za-z.]*)\b/;

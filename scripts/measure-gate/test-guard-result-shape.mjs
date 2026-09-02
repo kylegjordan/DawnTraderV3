@@ -130,7 +130,7 @@ if (!process.env.GUARD6C_UNDER_TEST) {
     ['stop recursing into NESTED wrappers (ssh → su -c)', (s) => s.replace('if (w && depth < 2)', 'if (w && depth < 1)')],
     ['reject wrappers with trailing text after the quote (inner caps read again)', (s) => s.replace("((?:\\s*\\d?>[>&]?\\S*)*(?:\\s*\\|\\s*(?:head|tail)\\s+(?:-n\\s*|-)\\d+\\b\\S*)?)\\s*$/", '()\\s*$/')],
     ['drop the cwd-notice stripping (the notice pads every count by two)', (s) => s.replace("const errRest = rawErr.replace(/^\\s*Shell cwd was reset[^\\n]*\\n?/gm, '').trim();", 'const errRest = rawErr.trim();')],
-    ['match a bare 404 again (issue #404 fires)', (s) => s.replace('HTTP\\S*\\s+404\\b|\\b404 Not Found\\b|\\bNot Found\\b', '\\b404\\b|\\bNot Found\\b')],
+    ['match a bare 404 again (issue #404 fires)', (s) => s.replace('HTTP\\S*\\s+404\\b|\\b404 Not Found\\b', '\\b404\\b|\\bNot Found\\b')],
     ['drop the tail cap', (s) => s.replace('/\\btail\\s+(?:-n\\s*|-)(\\d+)\\b/g,', '')],
     ['swallow the heredoc start line again', (s) => s.replace("/<<-?\\s*(['\"]?)([A-Za-z_][A-Za-z0-9_-]*)\\1([^\\n]*)\\n[\\s\\S]*?^\\s*\\2\\s*$/gm, '[heredoc $2]$3 [heredoc-elided] '", "/<<-?\\s*(['\"]?)([A-Za-z_][A-Za-z0-9_-]*)\\1[\\s\\S]*?^\\s*\\2\\s*$/gm, ' [heredoc-elided] '")],
     // NOT an arm: "let the unterminated pass re-match a terminated heredoc" was tried and leaves the

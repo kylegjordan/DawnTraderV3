@@ -2,8 +2,9 @@
 // OBJ-4 — B-MEASURE-GATE leg 2 (#623). Rule 29 measurement discipline as a PreToolUse check on
 // the SHAPE of a command, before it runs.
 //
-// ⛔⛔ WARN-ONLY. It emits `additionalContext` and nothing else; the string `permissionDecision`
-// does not appear in this file. Every written exit is `process.exit(0)`.
+// ⛔⛔ WARN-ONLY. It emits `additionalContext` and nothing else; NO CODE PATH emits a permission
+// decision (the word appears only in this sentence — a mechanical grep must read it that way).
+// Every written exit is `process.exit(0)`.
 // ⚠️ "CANNOT BLOCK" IS A CLAIM ABOUT UNREACHABILITY THAT THE FILE'S STRUCTURE DOES NOT BY ITSELF
 // ESTABLISH — an uncaught throw exits 1, not 0. r2 therefore wraps EVERY stage, including the
 // top-level identity computation, so no throw can escape. Exit 1 would still not block (measured

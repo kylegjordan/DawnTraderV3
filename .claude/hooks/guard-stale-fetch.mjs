@@ -61,14 +61,32 @@ function main() {
   // r3, reader-found: `-C "C:/x y"` (a quoted directory with a space) must be spanned, or the
   // push behind it is not recognised as a push at all.
   const GIT = /\bgit\b(?:\s+-[Cc]\s*(?:"[^"]*"|'[^']*'|\S+))*\s+/;
-  const stages = cmd.split(/&&|\|\||[;\n]/);
-  const gatedAt = stages.findIndex((s) => new RegExp(GIT.source + '(commit|push)\\b').test(s));
+  // r4 (Langston, Step 4): the GATE split must be quote-aware like guard-ci-cited's — a quote-blind
+  // split put `echo "git commit"` at stage 0, so a correctly-fetched commit after it warned.
+  const stages = [];
+  {
+    let q = null, start = 0;
+    for (let i = 0; i < cmd.length; i++) {
+      const c = cmd[i];
+      if (q) { if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") { q = c; continue; }
+      const two = cmd.slice(i, i + 2);
+      if (two === '&&' || two === '||') { stages.push(cmd.slice(start, i)); start = i + 2; i++; continue; }
+      if (c === ';' || c === '\n') { stages.push(cmd.slice(start, i)); start = i + 1; }
+    }
+    stages.push(cmd.slice(start));
+  }
+  // Quoted spans are prose, not commands: `echo "remember to git pull"` is not a fetch and
+  // `echo "git commit"` is not a commit — EXCEPT a command substitution, which RUNS:
+  // `MSG="$(git fetch origin 2>&1)"` is a real fetch (r3). The gate and the silencer both read
+  // the unquoted text (r4).
+  const substitutions = (s) => (s.match(/\$\(([^()]*)\)/g) || []).join(' ');
+  // A quoted span becomes a placeholder TOKEN, not a space — `git -C "C:/x y" push` must still
+  // read as `git -C <dir> push` after stripping.
+  const unquoted = (s) => s.replace(/"[^"]*"|'[^']*'/g, 'QUOTED') + ' ' + substitutions(s);
+  const gatedAt = stages.findIndex((s) => new RegExp(GIT.source + '(commit|push)\\b').test(unquoted(s)));
   const gated = gatedAt !== -1;
   if (!gated) return; // not this guard's population — no sink row for every Bash call
-  // Quoted spans are prose, not commands: `echo "remember to git pull"` is not a fetch — EXCEPT
-  // a command substitution, which RUNS: `MSG="$(git fetch origin 2>&1)"` is a real fetch (r3).
-  const substitutions = (s) => (s.match(/\$\(([^()]*)\)/g) || []).join(' ');
-  const unquoted = (s) => s.replace(/"[^"]*"|'[^']*'/g, ' ') + ' ' + substitutions(s);
   const fetching = stages.slice(0, gatedAt).map(unquoted).some((s) =>
     new RegExp(GIT.source + '(fetch|pull)\\b').test(s) && !/--dry-run\b/.test(s));
   if (fetching) { note({ decided: true, fired: false, gated, fetching }); return; }

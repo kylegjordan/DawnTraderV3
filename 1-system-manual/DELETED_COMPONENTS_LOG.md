@@ -6,6 +6,18 @@
 
 ---
 
+## OBJ-6d agent-hook probe — REGISTERED AND REMOVED INSIDE ONE BATCH, NEVER AT A GRADED REF (2026-09-02, B-MEASURE-GATE leg 2; logged on Langston's Step-4 ruling "log it anyway")
+
+**What:** a `type: "agent"` hook on `PostToolUse` (matcher `Bash`, `if: "Bash(echo AGENT-HOOK-PROBE*)"`, timeout 45 s) in `.claude/settings.local.json`, live for ~25 minutes on CC-A's clone only. **Never committed, never pushed** — so it is not reviewable as a diff, and this entry exists precisely because its absence from every ref would otherwise read as "never happened" (#453).
+**What it measured (scope `B_MEASURE_GATE_LEG2_SCOPE.md` [r7], the authoritative record):** an agent hook DOES fire on `PostToolUse` (undocumented); its `reason` reaches the turn as a non-fatal *"hook blocking error"*; it receives `tool_response`; it can Read, Grep and run Bash but the Write tool is denied (a `>>` redirect was denied too); **the `if` argument gate did NOT hold** — it fired on a non-matching command and ran its full probe, so it was running on every Bash call with the agent's own judgment as the only recursion bound, which failed once in three; a subagent's Bash calls re-enter `PostToolUse`.
+**Why removed:** the gate finding — an ungated agent per Bash call is a cost and a recursion surface. Removed the same minute the finding landed.
+**Blast radius:** none beyond CC-A's own session (the file was local and unpushed; no other clone ever held it). **Restore path:** none needed; the design inputs carry into `B-CLAIM-REDERIVE` (#981).
+
+## `probe-warn-delivery.mjs` — UNREGISTERED 2026-09-02 (B-MEASURE-GATE leg 2 Step-4 BLOCKER-1, Langston); FILE DELETION SCHEDULED FOR THE SAME BATCH'S STEP 10
+
+**What:** the OBJ-4 delivery-channel instrument (`.claude/hooks/probe-warn-delivery.mjs`, six arms: three stderr, three JSON). Its purpose — measuring which hook output channels reach the model — is discharged (scope [r7]: `additionalContext` delivers non-blocking; stderr only on a blocking exit). **It was the one file in the set that could BLOCK** (`exit 2` and `permissionDecision:'deny'` arms) and its sentinel match was a raw substring test with no mention-elision, so a crew post or a log entry QUOTING a sentinel would have tripped it — the use-vs-mention class, in the file that can block.
+**Disposition (rule 18 (b), concrete):** registration removed from `.claude/settings.local.json` at this commit; the FILE is deleted at this batch's Step 10 with the `.removed` archive copy under `1-system-manual/_archive/deleted-code/`, after Step 7 has shown delivery from the shipped guards' own sink rows. **Left intentionally until then:** the file itself and its sink `~/.claude/probe-warn-delivery.jsonl`, which holds the r1-r8 measurement rows the scope cites.
+
 ## `PAYLOAD_DIR` (token-watch) — DELETED 2026-08-28 (Kyle asked; it never had a writer)
 
 **WHAT:** the storage constant `PAYLOAD_DIR = f"{ROOT}/payload"` (`token-watch/config.py`), its entry in `store.ensure_dirs()`, and its entry in `tier.TIERED_SOURCES`. `PAYLOAD_HOT_DAYS` was **renamed to `BULKY_HOT_DAYS`, not deleted** — it governs the tiering loop for every source, so a name tied to one store would have read as if the surviving store had no stated retention.

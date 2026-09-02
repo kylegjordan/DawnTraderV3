@@ -192,7 +192,9 @@ function main() {
   if (fm) {
     const p = fm[2] || fm[3] || fm[4];
     const base = p.split(/[\\/]/).pop();
-    const writtenInCommand = p === '-' || (base && new RegExp('(?:>{1,2}\\|?|\\btee\\b(?:\\s+-a)?)\\s*(?:"[^"]*"|\'[^\']*\'|\\S*)?' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(cmd.slice(0, ci)));
+    // The basename is anchored to a path separator or the token start (Langston, Step 4):
+    // `> /tmp/other-m.txt` must not read as a write of `m.txt`.
+    const writtenInCommand = p === '-' || (base && new RegExp('(?:>{1,2}\\|?|\\btee\\b(?:\\s+-a)?)\\s*(?:"[^"]*"|\'[^\']*\'|(?:\\S*[\\\\/])?)?' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(cmd.slice(0, ci)));
     if (writtenInCommand) { msgSource = 'written-in-command'; }
     else {
       // r6 (Langston): "undecidable from the object" was the wrong word — the file is on the box

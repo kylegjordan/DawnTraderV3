@@ -106,6 +106,14 @@ console.log('=== OBJ-2 guard-stale-fetch ===');
   check('git -C "<dir with a space>" push is still gated', !!r.ctx, 'silent');
 }
 {
+  // Step-4 finding 2: a quoted "git commit" before a real fetch must not be the gated stage.
+  const r = run(FETCH_GUARD, 'echo "git commit" && git fetch origin && git commit -F m.txt -- a.md', repoWithFetchAge(120));
+  check('a QUOTED "git commit" before a real fetch does not steal the gate (fetched → silent)', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
+  // …and a ";" INSIDE that quoted string must not split it into a stage that reads as the gate.
+  const r2 = run(FETCH_GUARD, 'echo "note; git commit later" && git fetch origin && git commit -F m.txt -- a.md', repoWithFetchAge(120));
+  check('a ";" inside a quoted string does not create a fake gated stage (fetched → silent)', r2.ctx === null, 'fired: ' + String(r2.ctx).slice(0, 60));
+}
+{
   const r = run(FETCH_GUARD, 'MSG="$(git fetch origin 2>&1)" && git push origin x', repoWithFetchAge(120));
   check('a real fetch inside a quoted $( ) substitution silences', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
 }
@@ -220,6 +228,13 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
   check('a 10-digit id in a LATER stage does not silence the commit', !!r.ctx, 'silent');
 }
 {
+  // Step-4 finding 3: writing a DIFFERENT file whose name ends in the basename is not a write of the msgfile.
+  const name = 'm-' + Date.now() + '.txt';
+  writeFileSync(join(tmpdir(), name), 'B-X close. run 26730239909.\n'); // pre-existing, cited, fresh
+  const r = run(CI_GUARD, `printf 'note' > /tmp/other-${name} && git commit -F /tmp/${name} -- reports/B_X_COMPLETION_REPORT.md`);
+  check('a write to /tmp/other-<name> does not count as writing /tmp/<name> (the cited file is read → silent)', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
+}
+{
   const r = run(CI_GUARD, `git commit -m 'B-X close' -m 'CI 4/4 green, run 26730239909' -- reports/B_X_COMPLETION_REPORT.md`);
   check('multi -m with the id in the second → silent', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
 }
@@ -317,6 +332,10 @@ if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
       (s) => s.replace('const TURN_MAX_BACK = 8 * 1024 * 1024;', 'const TURN_MAX_BACK = 512 * 1024;')],
     ['obj3: take a task-notification entry as the turn boundary', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace("if (/^\\s*(<task-notification>|\\[SYSTEM NOTIFICATION|<system-reminder>)/.test(text)) continue;", '')],
+    ['obj2: make the GATE split quote-BLIND again', FETCH_GUARD, 'GUARD2_UNDER_TEST',
+      (s) => s.replace("if (c === '\"' || c === \"'\") { q = c; continue; }", '')],
+    ['obj3: let a different file ending in the basename count as the msgfile write', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace("|(?:\\\\S*[\\\\\\\\/])?)?' + base", "|\\\\S*)?' + base")],
     ['obj3: make the stage split quote-BLIND again', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace("if (c === '\"' || c === \"'\") { q = c; continue; }", '')],
     ['obj3: take the FIRST git-commit stage instead of the one naming the report', CI_GUARD, 'GUARD3_UNDER_TEST',
