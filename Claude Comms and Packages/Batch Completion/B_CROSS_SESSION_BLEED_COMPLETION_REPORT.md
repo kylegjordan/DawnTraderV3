@@ -4,17 +4,11 @@
 
 ---
 
-## ⛔ NOT CLOSED. ONE ITEM OPEN — AND IT IS A RULE CONFLICT WITH LANGSTON, NOT A KYLE YES/NO
+## ✅ CLOSED 2026-09-01 — Langston Approved; awaiting Kyle's acknowledgement (Step 11's second half)
 
-| item | owner | closing condition | failure condition |
-|---|---|---|---|
-| **the `SYSTEM_MANUAL.md` row** | **LANGSTON** (he set the class) | either the class is re-declared, or a System Manual entry is written | **neither happens** ⇒ the batch cannot close, because a REQUIRED row is unfilled |
-
-⛔⛔ **`workflow-10-governance` FORBIDS THE THING I DID:** *"A `REQUIRED` ROW CANNOT TAKE `N/A`. If it is genuinely not applicable, THE CLASS IS WRONG — re-declare it, do not write `N/A` against an obligation."*
-⚠️ **I filed an `na-skip | system_manual` row and escalated it to Kyle as a yes/no. THAT OPTION DOES NOT EXIST, so the question was malformed and is withdrawn** (the row is annotated in place rather than deleted, so the malformed escalation is not silently repeatable).
-**THE FACTS EITHER WAY:** `architecture` REQUIRES the System Manual. **Nothing under `server/`, `client/` or `shared/` changed** — the batch is a laptop-side SessionStart hook — so there is no System-Manual-scope content to write. **By the skill's own logic that means the CLASS is wrong.**
-⛔ **I will not re-declare it myself.** Langston overruled my declared `non_architecture` to `architecture`, and the standing rule is **never declare a LOWER class at close than the one the reviewer graded** — that is downgrading unreviewed. **So it is his to settle, and Kyle's only if we deadlock.**
-★ **I also did NOT cite `B-DIAG-387`** — arch-class with the System Manual marked N/A, cleared `langston`-alone. **Copying it would launder a mis-tiering into standing practice**, which is this batch's own subject.
+**THE ONE OPEN ITEM WAS RESOLVED BY LANGSTON VACATING HIS OWN OVERRULE.** Class is **`non_architecture`**. His words: *"I used the class as a LEVER to force one document. The change-class is a doc-set selector, not a severity rating."* He had graded on stakes, reached for `architecture` to make the SIM required, and dragged `SYSTEM_MANUAL` in because the matrix welds them. ★ **And he found he had done it before — `B-DIAG-387`, 2026-06-27, *"reclassified architecture so the checker requires the SIM doc"* — which is exactly the row I refused to cite. Two instances, one author; that row is now marked superseded/mis-tiered in place.**
+**Correct precedent, his:** `B-COMMS-IMAGES-2` (`GOVERNANCE_EXCEPTIONS:32`) — laptop-side plumbing, `non_architecture`, System Manual `N/A` on a diff fact, cleared Langston-alone because the `N/A` AGREES with the config. **No new exceptions row is needed for this batch.** The withdrawn row stays withdrawn in place.
+★ **The taxonomy gap he named is real and is placed:** `B-CHANGE-CLASS-DOCSET-FIT`, CC-B, plan row 2.7 (§7 item 6).
 
 ---
 
@@ -41,7 +35,7 @@
 | **OBJ-4** | record the occurrences and the tracing artefacts | ✅ **YES** | `#753` update at `:3838`+; pre-audit A1–A14; four refuted claims recorded so nobody re-runs them |
 | **OBJ-5** | distinguish hook-residue from genuine local edits; fix the skip wording | ✅ **YES** | `isHookResidue` + `dirtyMembers`; wording states the **evidence** rather than asserting ownership. **Mutation-proved: remove the residue arm ⇒ the freeze RETURNS** |
 
-**P-items:** P2/P3/P4/P5 ✅ · **P6** ✅ SIM · **P7** ✅ census · **P8** ✅ `#753` · **P9** ✅ *(Langston-authorised, census corrected)* · **P10** → homed on `B-FRESHNESS-LOG-READER` · **P11** ⛔ **OPEN, KYLE**
+**P-items:** P2/P3/P4/P5 ✅ · **P6** ✅ SIM · **P7** ✅ census · **P8** ✅ `#753` · **P9** ✅ *(Langston-authorised, census corrected)* · **P10** → homed on `B-FRESHNESS-LOG-READER` · **P11** ✅ dissolved — class vacated to `non_architecture`, System Manual judged `N/A` on a diff fact
 
 ## 4. CI — per-job, not the run-level conclusion
 
@@ -66,6 +60,8 @@ Deployed sha `2af2e0bacc1430a6452559b83ba7d3be15adc7be` (`--by CC-C`). Diff to o
 
 ## 7. NEW FINDINGS OUTSIDE SCOPE — each with its disposition
 
+6. **The change-class taxonomy has no member for infrastructure batches** (Langston §13 at close): the matrix welds `SYSTEM_MANUAL` to `SIM` while their triggers differ, so hooks/bridges/alerting/governance tooling either under-declare or take a mis-tiered `N/A` — six such rows already. **DISPOSITION: own batch — `B-CHANGE-CLASS-DOCSET-FIT`, CC-B, `PHASE_19_PLAN` 2.7.** Outcome (2), a scope decision.
+7. **Langston's REVIEWER LEDGER (34,605 B) alone exceeds his file's 24,576-B cap while claiming to survive every prune.** **DISPOSITION: own batch — `B-LANGSTON-LEDGER-SPLIT`, Langston + Infra, plan row 2.8.**
 1. ⛔ **`#979` — ALL FOUR SESSIONS SHARE `/tmp`, AND A COMMIT MESSAGE IS CONTENT.** My commit emerged carrying another session's message (`a9366f5e4`; corrected at `0264f24f7`, **tree hash identical**, so only the message moved). **MEASURED:** `/tmp` → `C:/Users/kyleg/AppData/Local/Temp`, with a positive control. ★ **The measurement sharpened the fix: my scratchpad is UNDER THAT SAME ROOT — isolation is the session-UUID SEGMENT, so *"avoid the temp directory"* would not have helped and the guard must be an ALLOWLIST.** **It defeats all three existing guards by construction** (rule 25 protects the `--` side, the message arrives via `-F`; rule 25.c is silent on the MESSAGE; `guard-bare-commit` checks FORM). **DISPOSITION: own batch — `B-SHARED-TMP-ISOLATION`, CC-B, `PHASE_19_PLAN` 2.6.**
 2. **An archive that normalises is not an archive.** `core.autocrlf` rewrote two CRLF-stored `.removed` files to LF on `git add`, collapsing them onto a third's blob — **destroying the exact distinction whose loss made the deletion census wrong one step earlier.** **DISPOSITION: folded — deliverable (d) of `B-SHARED-TMP-ISOLATION`** *(Langston's §13, folded at his invitation rather than given a second home)*.
 3. **My own rig contaminated the run record** — 34 of 466 entries stamped `clone: "c1"`, concentrated in the freeze and residue classes the log exists to detect. **Not rewritten: an append-only record edited to tidy my own mess destroys the provenance.** **DISPOSITION: folded — allowlist requirement on `B-FRESHNESS-LOG-READER`.** ⚠️ **A BASENAME allowlist is insufficient — `DawnTraderV3` is `git clone`'s default name; and the forward control is `USERPROFILE`, not `HOME`, because node's `os.homedir()` ignores `HOME` on Windows.**
@@ -74,7 +70,7 @@ Deployed sha `2af2e0bacc1430a6452559b83ba7d3be15adc7be` (`--by CC-C`). Diff to o
 
 ## 8. THE TIER LEDGER — transcribed from the governance commit message `0d768bae1`, not from recollection
 
-**CHANGE-CLASS: `architecture`** *(declared in the scope header; the System Manual row is DISPUTED)*
+**CHANGE-CLASS: `non_architecture`** *(re-rendered 2026-09-01 after Langston vacated his `architecture` overrule; required set under this class = scope · pre-audit · completion report · `BATCH_CATALOG` · `PHASE_HISTORY`, all landed)*
 
 | # | document | verdict | one line |
 |---|---|---|---|
@@ -86,12 +82,12 @@ Deployed sha `2af2e0bacc1430a6452559b83ba7d3be15adc7be` (`--by CC-C`). Diff to o
 | T1 | batch PRE_AUDIT | OK | Step-7 rig-contamination finding appended; header class corrected |
 | T1 | COMPLETION_REPORT | OK | written and pushed, filed OPEN on the System Manual row |
 | T1 | Langston's /home/langston/MEMORY.md | OK | synced; five CLOSED batches collapsed per the lean rule (-13,088 B), 216 -> 170 lines |
-| T2 | SYSTEM_MANUAL.md | DISPUTED | REQUIRED at architecture and cannot take N/A; nothing under server/ client/ shared/ changed |
-| T2 | SYSTEM_IMPACT_MAP.md | OK | hook row rewritten, split table repaired, stale three-entry clone map corrected to four |
+| T2 | SYSTEM_MANUAL.md | N/A | zero changes under `server/`, `client/` or `shared/`; the diff is `.claude/hooks/fresh-rules.mjs` — judged under `non_architecture`, and the fact is checkable without me |
+| T2 | SYSTEM_IMPACT_MAP.md | OK (judged, and DONE — a downgrade does not erase real work) | hook row rewritten, split table repaired, stale three-entry clone map corrected to four |
 | T2 | RUNNING_ISSUES.md | OK | #753 updated and its conclusion amended in place; #979 filed |
 | T2 | CHANGES_AND_FIXES.md | OK | FIX-2026-08-31-B: both halves of the defect, the fix, the live confirmation, the residual |
 | T2 | MISTAKE_PATTERNS.md | OK | enumerator-blind-spot (n=7) and shared-tmp-message (n=1) filed; worktree-not-ref added under wrong-object |
-| T2 | GOVERNANCE_EXCEPTIONS.md | OK | P11 row filed PENDING KYLE -- and per the skill it should not have been written at all |
+| T2 | GOVERNANCE_EXCEPTIONS.md | OK | the malformed P11 row withdrawn in place; `B-DIAG-387` marked superseded/mis-tiered in place on Langston's ruling |
 | T2 | DELETED_COMPONENTS_LOG.md | OK | three REPLIT_PUSH_SCRIPT.sh copies with the blob table and blast radius |
 | T2 | CLAUDE.md / CONDUCT.md | N/A | no stable rule changed; #979's rule-25.c amendment is a later batch's deliverable |
 | T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md rule added or materially changed |

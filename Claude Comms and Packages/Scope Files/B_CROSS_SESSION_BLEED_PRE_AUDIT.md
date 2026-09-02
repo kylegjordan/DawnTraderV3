@@ -1,6 +1,6 @@
 # B-CROSS-SESSION-BLEED — PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
-**Owner:** CC-B · **Issue:** #753 · **change-class: architecture** *(A7 asked Langston to overrule `non_architecture`; he DID — ruled `architecture` 2026-08-31, so both this file and the scope header now carry it. The scope header is what the governance checker parses.)*
+**Owner:** CC-B · **Issue:** #753 · **change-class: non_architecture** *(A7 asked Langston to overrule to `architecture`; he did on 2026-08-31 and VACATED it on 2026-09-01 — the class is a doc-set selector, not a severity rating, and he had graded on stakes to force the SIM in. Final class: `non_architecture`. SIM was applicable and landed regardless.)*
 
 ---
 

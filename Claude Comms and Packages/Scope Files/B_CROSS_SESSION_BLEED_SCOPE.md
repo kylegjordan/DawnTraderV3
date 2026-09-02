@@ -1,7 +1,7 @@
 # B-CROSS-SESSION-BLEED — SCOPE (r4 — read to the end; r1's central claim is superseded)
 
-change-class: architecture
-**Owner:** CC-B (taken over from CC-A 2026-08-31) · **Issue:** #753 · **Queue:** governance position 2, Kyle-directed 2026-08-27 ahead of the measurement gate · **Status:** Step 4 — Langston re-review at `9a161c9971f452a0100bf2319326c95cb4584f63`
+change-class: non_architecture
+**Owner:** CC-B (taken over from CC-A 2026-08-31) · **Issue:** #753 · **Queue:** governance position 2, Kyle-directed 2026-08-27 ahead of the measurement gate · **Status:** CLOSED 2026-09-01 — Langston Approved; class VACATED back to `non_architecture` by Langston on 2026-09-01 (*"I used the class as a lever to force one document"*), so the System Manual is judged and `N/A` on a checkable fact: zero changes under `server/`, `client/`, `shared/`
 
 ---
 
