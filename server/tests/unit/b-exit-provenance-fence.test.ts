@@ -188,7 +188,10 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     // missed call. Assert it sits after the branch closes, not inside it.
     const src = code(AEE);
     const makerIdx = src.indexOf('options?.makerExitFill');
-    const witnessIdx = src.indexOf('await getTickerWitness');
+    // F-G-2 OBJ-0 (2026-09-02) added a DECISION-TIME witness read inside checkExitConditions,
+    // ABOVE the maker/taker split. This fence pins the CLOSE-SITE read, so it searches from the
+    // split down — the same object it always asserted, now stated rather than assumed.
+    const witnessIdx = src.indexOf('await getTickerWitness', makerIdx);
     const persistIdx = src.indexOf('exitTickerBid:');
     expect(makerIdx).toBeGreaterThan(-1);
     expect(witnessIdx).toBeGreaterThan(makerIdx);
