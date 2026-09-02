@@ -249,6 +249,15 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
   check('with NO readable transcript the file is read (age undetermined, stated) → silent', r3.ctx === null, 'fired: ' + String(r3.ctx).slice(0, 70));
   const r4 = run(CI_GUARD, `git commit -F ${old} -- reports/B_X_COMPLETION_REPORT.md`, undefined, { transcript_path: transcript });
   check('…and a tool_result entry (also type "user") is NOT taken as the turn boundary', !!r4.ctx, 'silent');
+  // A background task-notification is stored as a "user" TEXT entry; it must not start a turn either
+  // (measured: a Write-tool msgfile committed 7.5 min later across four such entries).
+  const t2 = join(scratch, 'transcript-notif.jsonl');
+  writeFileSync(t2,
+    JSON.stringify({ type: 'user', timestamp: new Date(Date.now() - 20 * 60000).toISOString(), message: { role: 'user', content: [{ type: 'text', text: 'real turn, 20 min ago' }] } }) + '\n' +
+    JSON.stringify({ type: 'user', timestamp: new Date(Date.now() + 3600000).toISOString(), message: { role: 'user', content: [{ type: 'text', text: '<task-notification>\n<task-id>x</task-id>\n</task-notification>' }] } }) + '\n');
+  const midTurn = join(scratch, 'mid-turn-cited.txt'); writeFileSync(midTurn, 'B-X close. run 26730239909.\n'); // written inside the real turn
+  const r5 = run(CI_GUARD, `git commit -F ${midTurn} -- reports/B_X_COMPLETION_REPORT.md`, undefined, { transcript_path: t2 });
+  check('a task-notification "user" entry is NOT a turn boundary (msgfile written in the real turn is read → silent)', r5.ctx === null, 'fired: ' + String(r5.ctx).slice(0, 70));
 }
 // r5 object-round arms — the stage split must be quote-aware and the source must stop at the stage end.
 {
@@ -295,6 +304,8 @@ if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
       (s) => s.replace('if (turnStart !== null && statMtime < turnStart) {', 'if (false) {')],
     ['obj3: take a tool_result entry as the turn boundary', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace("(Array.isArray(c) && c.some((b) => b && b.type === 'text'))", '(Array.isArray(c))')],
+    ['obj3: take a task-notification entry as the turn boundary', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace("if (/^\\s*(<task-notification>|\\[SYSTEM NOTIFICATION|<system-reminder>)/.test(text)) continue;", '')],
     ['obj3: make the stage split quote-BLIND again', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace("if (c === '\"' || c === \"'\") { q = c; continue; }", '')],
     ['obj3: take the FIRST git-commit stage instead of the one naming the report', CI_GUARD, 'GUARD3_UNDER_TEST',

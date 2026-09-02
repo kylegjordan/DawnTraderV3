@@ -74,6 +74,12 @@ function turnStartMs(transcriptPath) {
       const c = e.message.content;
       const isText = typeof c === 'string' || (Array.isArray(c) && c.some((b) => b && b.type === 'text'));
       if (!isText) continue;
+      // A harness notification (a background task finishing, a system notice) is stored as a
+      // "user" text entry but is NOT a turn boundary — the measurement found a Write-tool msgfile
+      // committed 7.5 min later across four such entries; reading them as turns would have called
+      // that file stale. Only a real user message starts a turn.
+      const text = typeof c === 'string' ? c : c.filter((b) => b && b.type === 'text').map((b) => b.text || '').join('\n');
+      if (/^\s*(<task-notification>|\[SYSTEM NOTIFICATION|<system-reminder>)/.test(text)) continue;
       const t = Date.parse(e.timestamp);
       return Number.isFinite(t) ? t : null;
     }
