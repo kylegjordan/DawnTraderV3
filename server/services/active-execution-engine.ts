@@ -1860,7 +1860,11 @@ export class ActiveExecutionEngine {
           if (_next !== null) {
             // P5 — the third read-out: the contemporaneous venue BBO from the INDEPENDENT ticker
             // witness (#911, separate socket, raw sides — never the `c` field, #952), per arm.
-            try {
+            // Langston Step-4 rider (2026-09-02): ONLY when an exit EVENT is being written. The
+            // seed-only cycle (seededFrom stamp, no first exit) must not stamp a BBO under a name
+            // that asserts at-event — #546 class. Rows with no first exit carry no witness.
+            const _isExitEvent = Boolean(_next.bidFirstExit || _next.midFirstExit);
+            if (_isExitEvent) try {
               const { getTickerWitness } = await import('./execution/depth-source.js');
               const _w = await getTickerWitness(normalizeToInternalSymbol(position.symbol), 'crypto_spot');
               if (_w) _next.witnessAtEvent = { bid: _w.bid, ask: _w.ask, capturedAtMs: _w.capturedAtMs };
@@ -1868,9 +1872,11 @@ export class ActiveExecutionEngine {
             const _merged = { ..._meta, fg2Shadow: _next };
             await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _merged } as any);
             position.metadata = _merged;
+            // The log line is NOT the event population (Langston rider): it also prints on the
+            // seed cycle. Count events by fg2Shadow.bidFirstExit / midFirstExit on the rows.
             console.log(
-              `[F-G-2][OBJ-0][SHADOW_ARM] ${position.symbol} bidFirst=${_next.bidFirstExit?.reason ?? '-'} ` +
-              `midFirst=${_next.midFirstExit?.reason ?? '-'} bid=${fg2BookBid} mid=${currentPrice}`,
+              `[F-G-2][OBJ-0][SHADOW_ARM] ${position.symbol} ${_isExitEvent ? 'EVENT' : 'SEED'} seededFrom=${_next.seededFrom ?? '-'} ` +
+              `bidFirst=${_next.bidFirstExit?.reason ?? '-'} midFirst=${_next.midFirstExit?.reason ?? '-'} bid=${fg2BookBid} mid=${currentPrice}`,
             );
           }
         } catch (err) {
