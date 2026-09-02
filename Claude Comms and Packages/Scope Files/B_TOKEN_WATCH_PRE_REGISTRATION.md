@@ -526,3 +526,21 @@ A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE
 ⚠️ **THAT IS MARKING, NOT CORRECTING.** The rows are still taken at the dead pool; the flag only means nobody has to discover that for themselves. **Correcting it — choosing the right pair — is `B-TOKENWATCH-PAIR-SELECT` (`#983`), and it is a design question with a second one behind it: whether the right pair changes over a token's life.**
 
 ⚠️ **AND A SECOND MEASURAND CAVEAT IS NOW ON THE RECORD AT `#986`:** `observed_at` is the clock the calling run read, not the instant of the reading, so on a catch-up sweep a row is stamped with the run that consumed it. **For a study indexed by age checkpoints that bears on the measurand, and it is a scope decision rather than a fix.**
+
+---
+
+## ⛔ AMENDMENT 13 — THE DEATH DEFINITION CANNOT SEE A LIQUIDITY PULL, AND NOW WE CAN MEASURE WHAT IT MISSES (CC-INFRA, 2026-09-02)
+
+**Nothing is changed by this amendment.** No death class is redefined, no tombstone is re-graded, and every survival figure still counts exactly what it counted before. This records a MEASUREMENT that did not exist when the definition was written, and states plainly what the definition is blind to, so that a decision to change it — or not to — is made against evidence rather than in its absence.
+
+**THE BLIND SPOT.** `alive` is *has a pair AND has 24h volume*. A liquidity pull leaves both true: **volume continues precisely because people are still trading, now against an emptied pool.** So the event the class `liquidity_pulled` is named after is the one event the definition cannot observe.
+
+✅ **MEASURED, re-derivable via `token-watch/tools/measure_liquidity_collapse.py`, over every observation on disk 2026-08-31 → 2026-09-02:** of **3,238** tokens with a real balance series, **200** fell to ≤10% of their earlier reading, and **the study calls all 200 alive.** Of the 19 where an independent source can see, **19 agree the money left and 0 disagree**; the other 181 are bonding curves, for which no other source publishes a liquidity figure at all.
+
+★ **THE CLEAREST CASE:** `6Bob3ZBh…` — **$1,194,336 → $2,121 of liquidity in under five hours**, the aggregator's own figure and ours moving together on the SAME pool address, while the token traded **$1.39M that day** and the study recorded it as alive.
+
+⚠️ **THE LIMITS, STATED BEFORE THE NUMBER IS USED FOR ANYTHING.** (a) The corrected balance read went live at **09:07 UTC on 2026-09-02** — the series is hours long. (b) It is **SAMPLED**: 3,238 of 18,174 observed tokens have two or more readings, so **200 is a floor on a partial view and is not a rate.** (c) 181 of the 200 rest on our read alone — verified against three independent producers, and still reported separately from the corroborated 19, never pooled.
+
+⛔ **WHY THE DEFINITION IS NOT CHANGED HERE.** Changing a death rule mid-study **splits the cohort**: deaths before the change are inferred-from-absence, deaths after would be measured-from-a-fall. That is a comparability break inside a pre-registered outcome and it is not a call an implementer makes. **Kyle's standing direction at AMENDMENT 9 already anticipates the shape of it** — *"We can reset our ninety day window to start over if it means that we're getting this absolutely right"* — which is recorded there, before this data existed, so that a reset cannot later look like a reaction to an inconvenient result.
+
+**⇒ THE OPEN QUESTION, PUT PLAINLY:** a token whose pool has been emptied while it keeps trading is, on any ordinary reading, the thing this study exists to detect. The definition we pre-registered calls it alive. **Whether to change the definition, and whether to restart the window if we do, is Kyle's decision with Langston's ruling on comparability.** `RUNNING_ISSUES` #989 carries the evidence.

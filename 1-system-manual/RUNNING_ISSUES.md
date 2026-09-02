@@ -6580,6 +6580,39 @@ for a in last.values():
 **ESCALATED 15:40 — NO LONGER INTERMITTENT, AND IT BLOCKS DEPLOY AND ROLLBACK.** Alert `65c1acaa` = 3 consecutive failed ticks (14:30, 15:00, 15:30). **Reproduced as the service user with `GIT_TRACE_CURL=1` at 15:34 from the checker clone (`/opt/governance-checker/DawnTraderV3`):** `GET …/info/refs?service=git-upload-pack` → **200**; `POST …/git-upload-pack` → **HTTP/2 401** → `fatal: could not read Username` → `fatal: expected flush after ref listing`, exit 128. **The hypothesis is now measured: GitHub is refusing the anonymous PACK request from this box and demanding authentication** (the earlier "ls-remote works" was the GET only, which is why it misled). **The deploy clone `/home/deploy/dawntrader` fails identically (exit 128 at 15:36) — `dt-deploy` fetches first, so NO DEPLOY AND NO ROLLBACK is possible on staging until the fetch is authenticated.** Last successful deploy 13:09 (`2cc4a03ec`… F-G-2). The running app is unaffected.
 **The fix, and who holds each part:** `/home/deploy/.ssh/id_ed25519` exists (fingerprint `SHA256:diAylFEGZCwBu3qwelXpLgXFDMbi1s8UWejwh4dMgjw`, comment `deploy@staging-188.245.19…`) but **GitHub rejects it** (`ssh -T git@github.com` → `Permission denied (publickey)`) — it was never registered. **(1) Kyle registers the PUBLIC half as a read-only deploy key on `kylegjordan/DawnTraderV3`** (GitHub → repo Settings → Deploy keys; a session may not create credentials). **(2) Infra Claude (or Kyle's go to CC-A) switches both clones' remote to SSH** — `git remote set-url origin git@github.com:kylegjordan/DawnTraderV3.git` in `/opt/governance-checker/DawnTraderV3` and `/home/deploy/dawntrader` — reversible in one command; `known_hosts` already carries github.com. **(3) Verify:** one checker tick fetches (alert self-resolves) and `dt-deploy` of the current sha completes. Announced to Infra Claude + Langston + Kyle on Discord 15:39 with `--notify`. **CC-A has changed nothing on the box.**
 
+### #989 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; found answering Kyle's question — *"how do we know it's working, and can that be taken as had the rope pulled or is still alive and kicking"*) — ⛔ A TOKEN CAN LOSE 99.8% OF ITS LIQUIDITY AND THE STUDY STILL COUNTS IT ALIVE
+
+**The death definition cannot see a liquidity pull, because it has never had a liquidity figure to see one with.** `alive` is *has a pair AND has 24h volume*. A pull leaves both true — **volume continues precisely BECAUSE people are still trading, now against an emptied pool.** So the event the class `liquidity_pulled` is named after is the one event the definition cannot observe.
+
+✅ **THE MEASUREMENT NOW EXISTS. Re-derivable: `token-watch/tools/measure_liquidity_collapse.py`.** Over every observation on disk, 2026-08-31 → 2026-09-02:
+
+| | count |
+|---|---|
+| tokens with a real balance SERIES — 2+ readings, the minimum a pull can be seen in | **3,238** of 18,174 seen |
+| ...whose pool fell to **≤10%** of its earlier reading | **200** |
+| excluded because the pool ADDRESS changed between reads (a venue change, not a collapse) | **0** |
+| ⛔ **the study currently calls every one of them `alive`** | **200** |
+
+⛔⛔ **AND IT IS NOT OUR OPINION. WHERE AN INDEPENDENT SOURCE CAN SEE, IT AGREES — AND NOTHING DISAGREES.** For graduated pools the aggregator publishes its own liquidity figure from its own data:
+
+| | count |
+|---|---|
+| the aggregator's OWN figure also collapsed | **19** |
+| the aggregator DISAGREES with our read | **0** |
+| nothing to check against — a bonding curve, for which **no other source publishes a figure at all** | **181** |
+
+★ **THE CLEAREST CASE, and it is unambiguous:** `6Bob3ZBh…` went from **$1,194,336 to $2,121 of liquidity in under five hours** — their figure and ours moving together, on the **same pool address at both ends** — while still trading **$1.39M a day**, and the study recorded `alive=True`. Five more of the same shape between $266k and $840k.
+
+⚠️ **GRADUATION IS RULED OUT, NOT ASSUMED.** A graduating curve is drained legitimately — the money moves to a new pool. Every case above reads `graduated_pool_wsol_account` at BOTH ends with the same pool address at both ends, so the venue did not change under us.
+
+**TAXONOMY — OUTCOME (2), WORKING-AS-DESIGNED BUT UNADDRESSED (`CONDUCT.md` §9).** The classifier does exactly what it was pre-registered to do; **nothing malfunctions.** What is missing is a DECISION about whether a definition written around a measurement we did not have should now use the measurement we do.
+
+⛔ **AND THAT DECISION IS NOT AN IMPLEMENTER'S, for a reason that is not deference:** changing a death rule mid-study **splits the cohort** — deaths before are inferred-from-absence, deaths after would be measured-from-a-fall — which is a comparability break inside a pre-registered outcome. **Kyle's standing direction anticipates it** (pre-registration AMENDMENT 9): *"We can reset our ninety day window to start over if it means that we're getting this absolutely right."*
+
+⚠️ **THE LIMITS, STATED BEFORE ANYONE ACTS ON THE 200.** (a) The corrected balance read went live at **09:07 UTC on 2026-09-02** — the series is hours long, not days. (b) It is **SAMPLED**: 3,238 of 18,174 tokens have two readings, so **200 is a floor on a partial view and is not a rate.** (c) **181 of the 200 are uncorroborated by construction** and rest on our read alone — that read is now verified against three independent producers, which is why they are reported rather than discarded, but they are reported SEPARATELY and never pooled with the 19.
+
+**HOME: the MEASUREMENT is folded into `B-TOKEN-WATCH` (§9.4 disposition 1) and is shipped. The DEFINITION CHANGE is a scope decision for Kyle with Langston's ruling on comparability, and is not taken unilaterally.** Recorded as pre-registration AMENDMENT 13 so it sits beside the outcome it could move.
+
 ### #986 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; CAUSE DIAGNOSED BY LANGSTON at `b25ec3006`, who re-derived it at the ref in three minutes after I had shipped a fix without it) — ⛔ `observed_at` IS A CALLER'S CLOCK, NOT AN OBSERVATION TIME — SO IT IS NOT UNIQUE AND IT IS NOT A JOIN KEY
 
 **Symptom, measured:** **5 duplicate `(mint, observed_at)` pairs in 47,093 rows**, one of which carries a **different `pool_sol` on each row**. Found by chasing a one-row discrepancy in the correction read path (86 corrections applied, 87 rows differing) rather than dismissing it.
