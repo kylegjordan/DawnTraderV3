@@ -6529,6 +6529,16 @@ for a in last.values():
 
 ---
 
+### #981 OPEN 2026-09-02 (CC-A; Langston refused both OBJ-6d shapes on principle and named the one he would accept) — ⛔ RESULT-INSPECTION CANNOT REACH `wrong-object`'S MOTIVATING CASE; THE RE-DERIVATION MUST BE SOURCED FROM THE **CLAIM**
+
+**Symptom, measured:** `B-MEASURE-GATE` leg 2's OBJ-6c (`guard-result-shape.mjs`) inspects Bash results for shapes that could not have answered their request. Over 75,819 real results it fires on 3.00 % — 99.96 % of them `cap-bound`. **Instance 8 of `wrong-object` as it actually occurred — `/api/trades/closed` returning a JSON 404 body that python parsed cleanly and printed as "0 of 0 closed" — produces NO shape.** Nothing in the output identifies it. OBJ-6d proposed two agent-escalation designs (a `Stop`-hook agent reading 6c's survivors; a headless `claude -p` spawned by 6c when it fires) and **Langston refused both**: each gates the expensive re-derivation on 6c's fire, *"a signal that is blind by construction to 6d's motivating case — a wiring defect, not a tuning one, and it survives any rate you tune to."*
+
+**What he would accept, verbatim in substance:** the `Stop` event with a different SOURCE — gated deterministically on **the turn's final message carrying a load-bearing number**, re-deriving *that* against the object. The scope's own line was *"if it needs the CLAIM, that is 6d"*; both proposals sourced it from the result.
+
+**Measured design inputs (scope [r7], 2026-09-02, two probes):** an agent-type hook DOES fire on `PostToolUse` (not documented); its `ok:false` reason reaches the turn as a non-fatal *"hook blocking error"* and the turn continues; it receives `tool_response`; it can Read, Grep and run Bash, **the Write tool is denied** (and a `>>` redirect was denied); **the `if` argument gate did NOT hold** — the hook fired on a non-matching command and ran its full probe, so it was running on every Bash call with the agent's own judgment as the recursion bound, which failed one in three; a subagent's own Bash calls re-enter `PostToolUse`. **The `Stop` event is the one that avoids the re-entry.**
+
+**HOME: B-CLAIM-REDERIVE, owner CC-A, placed in PHASE_19_PLAN at row 6.6, after B-MEASURE-GATE leg 3 (#623's own next leg).** OBJ-6d is closed in leg 2 as *"observed, not built"*, bars unmet and stated (scope [r11]).
+
 ### #949 UPDATE 2026-08-31 — ✅ THE RE-PROBE RAN ON A LIVE MARKET. **THE LADDER IS REAL, AND IT IS NOT UNIFORM.**
 
 **This is the ROW-0 fact Langston required before `3b.d` could be scoped** — his words: *"until you have the observed level count per side on a liquid and a thin name, 3b.d has no scope to write."*
