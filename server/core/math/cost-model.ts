@@ -165,6 +165,19 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
 }
 
 /**
+ * F-G-2 OBJ-5b — the BOOKED round-trip friction for a trade whose ENTRY leg paid a
+ * mode-specific fee. `feeEntry` is the effective entry mode's rate (maker or taker);
+ * `feeExit` is ALWAYS the taker rate — exits take liquidity. One maker leg, never two
+ * (Langston condition 3, 2026-09-02). Shared by all three VTS write paths (crypto
+ * inline, the twin overlay via planTwin, the xStock eval-cycle) so the formula cannot
+ * drift between them — computeTotalRoundTripCost above stays the PRE-decision,
+ * taker-both-legs estimate the admission guard reads (pre-audit P13).
+ */
+export function composeBookedFriction(feeEntry: number, feeExit: number, slippage: number, spread: number): number {
+  return feeEntry + feeExit + (slippage * 2) + spread;
+}
+
+/**
  * P19-B8.10 (OBJ-4): the ONE pair-friction DISPLAY index — round-trip friction in
  * bps ÷ 3, capped at 100. Extracted verbatim from vts-runner's inline closure so
  * the VTS open-trade capture and the active-path genesis capture cannot drift.
@@ -187,8 +200,10 @@ export function getCachedCostMetrics(symbol: string, assetClass: AssetClass): Co
   // When cost-cache gains an asset_class dimension (B81 filter-as-first-class),
   // this dispatch collapses back into a single cache lookup.
   if (assetClass === 'crypto_spot') {
-    // P19-B7.2a (#330): the cache serves MEASURED microstructure only (spread/
-    // slippage); the FEE is composed here at READ time from the B-4.5 single
+    // P19-B7.2a (#330): the cache serves the MEASURED spread (written by the two live
+    // scanner callers of setCostMetrics) and the CANONICAL slippage constant (the
+    // DEFAULT_SLIPPAGE seed — Directive 11.3B / BUG-028; NO caller measures slippage,
+    // F-G-2 OBJ-5 census 2026-09-02); the FEE is composed here at READ time from the B-4.5 single
     // merge site — one road to the fee fact. A poisoned/stale cache entry can
     // no longer affect the fee, a fee_model change is visible on the next read
     // (no cache TTL on the fee), and the governed fee never meets the

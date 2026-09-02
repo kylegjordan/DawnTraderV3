@@ -11,7 +11,9 @@
  *
  *   - spreadRateDefault: 12 bps mid-range of 5-15 bps observed for top
  *     XStocks pairs in the B79 pre-audit.
- *   - slippageRateDefault: 5 bps — tighter than crypto_spot (10-15 bps)
+ *   - slippageRateDefault: 5 bps — the SAME canonical DEFAULT_SLIPPAGE crypto_spot uses
+ *     (F-G-2 OBJ-5, 2026-09-02: the former "tighter than crypto_spot (10-15 bps)" was false —
+ *     both classes are 5 bps by Directive 11.3B / BUG-028)
  *     due to ARCA-aligned book depth on US equity hours.
  *   - maxCostBound: per-COMPONENT sanity clamp (types.ts contract), aligned
  *     to the global 0.02 in B-4.5. The previous 0.005 here carried a WRONG

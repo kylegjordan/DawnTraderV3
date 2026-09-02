@@ -195,3 +195,4 @@
 2026-08-23-b-phantom-fill-reconstruct.sql
 2026-08-26-b-exit-provenance.sql
 2026-08-30-b-exit-book-age-stamp.sql
+2026-09-02-fg2-obj5c-vts-epoch-bump.sql

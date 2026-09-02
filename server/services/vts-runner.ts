@@ -67,7 +67,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { ohlcCache } from './ohlc-cache.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
-import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass, computePairFrictionIndex } from '../core/math/cost-model.js';
+import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass, computePairFrictionIndex, composeBookedFriction } from '../core/math/cost-model.js';
 // P19-B7.2b (OBJ-A): the SHARED maker/taker best-of-both entry decision (same pure
 // function the active path calls — F6) + its per-class DB-governed haircut resolver.
 // The VTS calls it before its Net-EV gate so VTS evaluates on best-of-both too.
@@ -75,6 +75,7 @@ import { decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker
 import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled } from './maker-taker-config.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
+import { resolveVtsBookedExitPrice } from '../core/trading/vts-exit-booking.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
@@ -574,6 +575,9 @@ interface Phase10TradeRecord {
   costFeeFraction?: number;
   costSlippageFraction?: number;
   costSpreadFraction?: number;
+  /** F-G-2 OBJ-5b: the per-leg fees behind costFeeFraction (entry = effective mode, exit = taker). */
+  costEntryFeeFraction?: number;
+  costExitFeeFraction?: number;
 }
 
 /**
@@ -612,6 +616,19 @@ interface OpenVirtualTrade {
   // + the vts_trades_*.json closed payload for the fee-mode UI column.
   chosenEntryMode?: 'taker' | 'maker';
   entryFeeRate?: number;
+  // F-G-2 OBJ-5b (2026-09-02): the cost fractions have been WRITTEN onto every open trade
+  // since P19-B8.7 (:2128) and READ by the 5-col renderer (:5818+) without ever being declared
+  // here — a stale interface the baseline tsc gate was carrying. Declared now because OBJ-5b
+  // adds the per-leg fee split beside them; all five are optional (pre-B8.7 rows lack them).
+  costFeeFraction?: number;
+  costSlippageFraction?: number;
+  costSpreadFraction?: number;
+  costEntryFeeFraction?: number;
+  costExitFeeFraction?: number;
+  // Same class of omission, unmasked by the declaration above (tsc reports one excess property
+  // per literal): the IMF filter tier is WRITTEN at registerOpenVtsTrade and READ at the closed
+  // record (:3463) and the persist payload (:3562). Type mirrors Phase10TradeRecord.
+  filterTier?: 'standard' | 'relaxed';
   // P19-B7.2c: pending-maker lifecycle. A maker-chosen VTS trade is born state='pending'
   // resting at makerLimitPrice (= entryPrice) until the resolve pre-pass fills it on an
   // honest trade-through or drops it past makerDeadline (epoch ms; never a closed trade).
@@ -2099,6 +2116,14 @@ async function generatePhase10Signal(
     }
   }
 
+  // ── F-G-2 OBJ-5b: the BOOKED friction, priced at the EFFECTIVE entry mode ──────────────
+  // `frictionCost` (born :1795, taker both legs) stays the PRE-decision estimate the admission
+  // guard (`minViableDistance`) reads — admission is deliberately unchanged (pre-audit P13).
+  // The RECORD gets the honest figure: one entry leg at the mode actually paid, one taker exit.
+  const _vtsEntryFee = _vtsEffectiveMode === 'maker' ? _vtsFriction.feeRateMaker : _vtsFriction.feeRateTaker;
+  const _vtsExitFee = _vtsFriction.feeRateTaker;
+  const bookedFrictionCost = composeBookedFriction(_vtsEntryFee, _vtsExitFee, costMetrics.slippage, costMetrics.spread);
+
   const openTrade: OpenVirtualTrade = {
     id: tradeId,
     symbol,
@@ -2122,10 +2147,14 @@ async function generatePhase10Signal(
     positionSize,
     dollarValue,      // Directive 11.6H: Fixed USD exposure
     quantity,         // Directive 11.6H: Variable coin units
-    frictionCost,
+    frictionCost: bookedFrictionCost,
     // P19-B8.7 Step-9: the components behind frictionCost, persisted (context
     // jsonb) so the UI cost 5-col split renders honestly. Fractions, per leg.
-    costFeeFraction: costMetrics.fee,
+    // F-G-2 OBJ-5b: costFeeFraction is the MEAN of the two legs so the renderer's fee×2
+    // reconstruction still reconciles; the true per-leg values ride beside it (P12).
+    costFeeFraction: (_vtsEntryFee + _vtsExitFee) / 2,
+    costEntryFeeFraction: _vtsEntryFee,
+    costExitFeeFraction: _vtsExitFee,
     costSlippageFraction: costMetrics.slippage,
     costSpreadFraction: costMetrics.spread,
     regime,
@@ -2316,7 +2345,7 @@ async function generatePhase10Signal(
     // #558 A3: expectedEdge → kernel NET EV in RETURN-SPACE (÷entryPrice, guarded) — see the
     // openTrade site above for the full units/basis/guard rationale. B79.0m.b twin-lock.
     expectedEdge: entryPrice > 0 ? _vtsMtDecision.taker.netEV / entryPrice : 0,
-    frictionCost, // M50: Schema parity with VirtualTrade
+    frictionCost: bookedFrictionCost, // M50: Schema parity with VirtualTrade — F-G-2 OBJ-5b: the BOOKED (mode-priced) figure
     regime,
     regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for UI display
     pool,
@@ -2349,10 +2378,13 @@ async function generatePhase10Signal(
     predictiveConfidence,
     regimeWeight,
     decayPenalty,
-    frictionCost,
+    frictionCost: bookedFrictionCost,
     // P19-B8.7 Step-9: friction components onto the closed-archive record too,
-    // so the closed-trades cost 5-col split renders honestly.
-    costFeeFraction: costMetrics.fee,
+    // so the closed-trades cost 5-col split renders honestly. F-G-2 OBJ-5b: mode-priced
+    // (4th writer of costFeeFraction — named in pre-audit P11, kept in step with :2128).
+    costFeeFraction: (_vtsEntryFee + _vtsExitFee) / 2,
+    costEntryFeeFraction: _vtsEntryFee,
+    costExitFeeFraction: _vtsExitFee,
     costSlippageFraction: costMetrics.slippage,
     costSpreadFraction: costMetrics.spread,
     entry: entryPrice,
@@ -3235,7 +3267,10 @@ async function resolveOpenVirtualTrades(): Promise<{
     tradesToClose.push({
       id: tradeId,
       trade,
-      exitPrice: decision.exitPrice,
+      // F-G-2 OBJ-5a: book the OBSERVED mark, not TEC's clamp (crypto rows; xStock keeps the
+      // clamp behind the §7.4 seam; null mark keeps the evaluator's own price). Shared resolver
+      // with the shadow lane below — zero drift.
+      exitPrice: resolveVtsBookedExitPrice(trade.assetClass, currentPrice, decision.exitPrice),
       exitReason: normalizedReason,
     });
   }
@@ -3315,6 +3350,14 @@ async function resolveOpenVirtualTrades(): Promise<{
       regimeWeight: trade.regimeWeight,
       decayPenalty: trade.decayPenalty,
       frictionCost: trade.frictionCost,
+      // F-G-2 OBJ-5b (P12): the fractions behind frictionCost reach the closed record too —
+      // before this the closed payload carried frictionCost + entryFeeRate and NOTHING that
+      // could reconstruct them (Langston (a), 2026-09-02).
+      costFeeFraction: trade.costFeeFraction,
+      costSlippageFraction: trade.costSlippageFraction,
+      costSpreadFraction: trade.costSpreadFraction,
+      costEntryFeeFraction: trade.costEntryFeeFraction,
+      costExitFeeFraction: trade.costExitFeeFraction,
       entry: trade.entryPrice,
       exit: exitPrice,
       profit: dollarPnl,
@@ -3412,6 +3455,12 @@ async function resolveOpenVirtualTrades(): Promise<{
         regimeWeight: trade.regimeWeight,
         decayPenalty: trade.decayPenalty,
         frictionCost: trade.frictionCost,
+        // F-G-2 OBJ-5b (P12): fractions onto the persist payload as well (see the closed record).
+        costFeeFraction: trade.costFeeFraction,
+        costSlippageFraction: trade.costSlippageFraction,
+        costSpreadFraction: trade.costSpreadFraction,
+        costEntryFeeFraction: trade.costEntryFeeFraction,
+        costExitFeeFraction: trade.costExitFeeFraction,
         pool: trade.pool,
         sourcePool: trade.sourcePool, // Batch 45: Propagate family-qualified sourcePool to closed trade
         expectedEdge: trade.expectedEdge, // Batch 45: Propagate actual computed expectedEdge
@@ -3912,7 +3961,8 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     }
     if (!decision.shouldExit) continue;
     const reason = decision.exitReason === 'stale_timeout' ? 'shadow_max_hold' : (decision.exitReason ?? 'timeout');
-    toClose.push({ id: tradeId, trade, exitPrice: decision.exitPrice, exitReason: reason });
+    // F-G-2 OBJ-5a: same resolver as the real lane (:3238) — the shadow lane books the same way.
+    toClose.push({ id: tradeId, trade, exitPrice: resolveVtsBookedExitPrice(trade.assetClass, currentPrice, decision.exitPrice), exitReason: reason });
   }
 
   for (const { id, trade, exitPrice, exitReason } of toClose) {
@@ -4081,6 +4131,9 @@ export interface RegisterOpenVtsTradeInput {
   costFeeFraction?: number;
   costSlippageFraction?: number;
   costSpreadFraction?: number;
+  /** F-G-2 OBJ-5b: the per-leg fees behind costFeeFraction (entry = effective mode, exit = taker). */
+  costEntryFeeFraction?: number;
+  costExitFeeFraction?: number;
   regime: MarketRegimeType;
   regimeScore: number;
   signalType: CanonicalSignalType;
@@ -4218,6 +4271,8 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     costFeeFraction: input.costFeeFraction,
     costSlippageFraction: input.costSlippageFraction,
     costSpreadFraction: input.costSpreadFraction,
+    costEntryFeeFraction: input.costEntryFeeFraction,
+    costExitFeeFraction: input.costExitFeeFraction,
     regime: input.regime,
     regimeScore: input.regimeScore,
     signalType: input.signalType,
@@ -4361,6 +4416,11 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       // Lazy — resolved only in the maker-twin open branch, exactly where the
       // inline block called the fail-hard resolver (behavior-identity).
       makerMaxPendingMs: () => resolveMakerMaxPendingMs(tradeAssetClass),
+      // F-G-2 OBJ-5b: the twin's friction is re-priced INSIDE planTwin from the chosen leg's
+      // record — this is the ONE seam both VTS lanes call (vts-runner + eval-cycle), so xStock
+      // twins are covered here too (pre-audit §7.4 row 3, fee exemption).
+      chosenFrictionCost: chosenTrade.frictionCost,
+      chosenEntryFeeRate: chosenTrade.entryFeeRate,
       nowMs: Date.now(),
     });
     if (plan.kind === 'skip') {
