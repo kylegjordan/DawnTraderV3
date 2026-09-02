@@ -437,3 +437,25 @@ A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE
 **KYLE'S STANDING DIRECTION ON WHAT HAPPENS NEXT:** *"we should look at these numbers over the next week or so. And if we're seeing a lot of these look like they're coming back online, then we reset our window and we reset our definitions or we adjust our definitions accordingly."* ⇒ **The 90-day clock is EXPLICITLY resettable if the revival data shows the definitions are wrong.** He said it plainly: *"We can reset our ninety day window to start over if it means that we're getting this absolutely right."* That is the decider's call, recorded here before the data exists so the reset cannot later look like a reaction to an inconvenient result.
 
 **COST:** follow-ups are the free leg — zero credits — and full coverage runs at 34% of the provider ceiling, so continuing to observe the dead is affordable. ⚠️ **It compounds: deaths accumulate over 90 days, so the arithmetic must be re-derived rather than assumed, and it is not yet.**
+
+---
+
+## AMENDMENT 10 — A DRAINED CURVE IS NOT AN EMPTY POOL, AND THE ERROR POINTED AT AN OUTCOME (CC-INFRA, 2026-09-02)
+
+**This is a MEASURAND correction, not a definition change.** No death class changes, no survival figure moves, and no already-recorded tombstone is re-graded. What changes is what the on-chain liquidity read is permitted to REPORT.
+
+**THE DEFECT.** On graduation, a pump.fun bonding curve is drained: every reserve field goes to zero, a `complete` flag is set, and the money moves to a different pool. The decoder read those zeroed fields and returned **`sol: 0.0` under the ordinary source name `bonding_curve_real_reserves`** — a confident, named zero.
+
+⛔ **ZERO IS THE SINGLE MOST CONSEQUENTIAL VALUE THIS FIELD CAN HOLD, BECAUSE ZERO IS WHAT A RUG PULL LOOKS LIKE.** So the reading a graduated token produced was indistinguishable from the reading a rugged token produces.
+
+⛔⛔ **AND GRADUATION IS THIS STUDY'S SECONDARY OUTCOME.** That makes the error **correlated with an outcome** rather than spread evenly across the sample — the same class of fault Langston blocked when the budget gate could shed a graduated pool mid-read, and for the same reason: **a coverage gap costs precision, an outcome-correlated error costs validity.**
+
+**MEASURED 2026-09-02, with a control.** CERNEY and EGGS both read zero on every reserve field with the `complete` flag SET, while their real liquidity — **$5,703 and $20** — sat in a pumpswap pool the aggregator listed as a separate pair. Doge-1, a live curve carrying 11.43 SOL, has the same flag CLEAR. **The flag is what separates them, not a coincidence the two shared.**
+
+**WHAT THE READ NOW DOES.** A drained curve is reported as itself — `sol: None`, `source: "curve_complete_graduated"`, `graduated: true` — never as an amount. Separately, a curve whose virtual token reserve is zero (the pricing denominator, which the protocol seeds at ~1.073e15 and which cannot legitimately reach zero on a live curve) is reported as `curve_uninitialised`. **The two causes are kept distinguishable in the record rather than collapsed into one "unreadable".**
+
+★ **THIS EXTENDS A RULE THE STUDY ALREADY HELD RATHER THAN INTRODUCING ONE:** *a failure is a recorded value, never a silent zero.* The rule was in place and tested; it guarded **decode failure** and not **decoded nonsense**, and a drained curve decodes perfectly.
+
+⚠️ **WHAT IS NOT FIXED HERE, AND IT IS FILED, NOT SWALLOWED.** The aggregator picks a token's pair by 24-hour volume, so for a freshly-graduated token it can still return the DEAD curve rather than the live pool — carrying that pool's price and volume into the observation. The liquidity field no longer lies about it. **The other fields are unexamined, and that is a separate finding with its own home** (`RUNNING_ISSUES`, disposition below), not a thing this amendment quietly covers.
+
+⚠️ **NO BACK-CORRECTION IS POSSIBLE OR CLAIMED.** The corrected liquidity read only reached production at 09:07 UTC today and its first sweep had not yet run, so **no observation in the census carries a counterfeit zero from this cause.** The defect is fixed before it produced data, which is the only reason this is an amendment and not a retraction.

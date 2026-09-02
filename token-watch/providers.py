@@ -284,6 +284,32 @@ def token_state(mint: str) -> dict:
 # 44-character literal in each is how a typo becomes a silent zero.
 WSOL_MINT = "So11111111111111111111111111111111111111112"
 
+# THE CURVE NAMES ITS OWN QUOTE ASSET, AND NOT EVERY CURVE IS QUOTED IN SOL.
+#    MEASURED 2026-09-02 over the whole population of curve reads the study had
+#    recorded that day -- 2,199 of them -- bytes 83..115 hold the quote mint:
+#      all zeroes  -> native SOL      2,128 reads
+#      USDC mint   -> USDC               71 reads
+#    and the correspondence with the aggregator's own quote label is 1:1 with
+#    no third value. Both account lengths in the population (115 and 151 bytes)
+#    carry the field.
+# WHY IT MATTERS RATHER THAN BEING A CURIOSITY: the reserve is in the QUOTE
+#    asset's units, and USDC has 6 decimals where SOL has 9. Dividing a USDC
+#    reserve by 1e9 understates it BY A FACTOR OF 1,000 -- measured, a curve
+#    holding 394.04 USDC was reported as `0.394036` and labelled SOL. A
+#    thousand-fold understatement of pool depth reads as a pool with nothing
+#    in it, which is the rug-pull signature this read exists to detect.
+# ★ KEYED ON THE ACCOUNT, NEVER ON THE AGGREGATOR'S `quoteToken` LABEL -- the
+#   same reasoning as branching on the owner program: a label can be stale or
+#   wrong, the account cannot.
+QUOTE_MINT_SPAN = (83, 115)
+QUOTE_SOL_BYTES = bytes(32)
+QUOTE_USDC_BYTES = bytes.fromhex(
+    "c6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61")
+QUOTE_ASSETS = {
+    QUOTE_SOL_BYTES: ("SOL", 9),
+    QUOTE_USDC_BYTES: ("USDC", 6),
+}
+
 PUMPFUN_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
 
 
@@ -362,6 +388,34 @@ def pool_sol_reserves(pair_address: str) -> dict:
         except (ValueError, struct.error, IndexError, TypeError):
             return {"sol": None, "source": "curve_decode_failed",
                     "read_at": datetime.now(UTC).isoformat()}
+        # THE CURVE IS DRAINED ON GRADUATION AND THE MONEY MOVES ELSEWHERE.
+        #    MEASURED 2026-09-02 on CERNEY and EGGS: both had every reserve
+        #    field at zero and the `complete` flag at byte 48 SET, while their
+        #    real liquidity -- $5,703 and $20 -- sat in a pumpswap pool the
+        #    aggregator listed as a separate pair. A live curve (Doge-1) has
+        #    the same flag CLEAR, which is the control that makes the flag
+        #    mean something rather than merely co-occur.
+        # THIS USED TO RETURN `sol: 0.0` UNDER `bonding_curve_real_reserves`:
+        #    a confident, NAMED zero for a token holding thousands of dollars.
+        #    Zero is the single most consequential value this field can hold,
+        #    because zero is what a rug pull looks like -- so GRADUATION, the
+        #    study's secondary outcome, was being recorded as a liquidity
+        #    collapse. That is not a coverage gap; it is error correlated with
+        #    an outcome, the same bias class as the mid-read shed Langston
+        #    blocked. A drained curve is now reported as ITSELF, never as an
+        #    amount.
+        if len(raw) > 48 and raw[48] == 1:
+            return {"sol": None, "source": "curve_complete_graduated",
+                    "graduated": True,
+                    "read_at": datetime.now(UTC).isoformat()}
+        # `_vtok` is the pricing DENOMINATOR and the protocol seeds it at
+        #    ~1.073e15, so a zero there is structurally impossible for a live
+        #    curve: the account is uninitialised or closed, not empty. Guarded
+        #    SEPARATELY from the flag above so the two causes stay
+        #    distinguishable in the record instead of collapsing into one.
+        if not _vtok:
+            return {"sol": None, "source": "curve_uninitialised",
+                    "read_at": datetime.now(UTC).isoformat()}
         # ⛔ THE VIRTUAL PAIR AND THE REMAINING TOKEN RESERVE ARE RETURNED, NOT
         #    DISCARDED, and each has a caller that needs it:
         #    - `implied_price_native` lets a TEST re-derive the published price
@@ -375,9 +429,39 @@ def pool_sol_reserves(pair_address: str) -> dict:
         #      about to report the first from evidence that only supports the
         #      disjunction, and the field that separates them was being
         #      unpacked and thrown away.
-        implied = (_vsol / 1e9) / (_vtok / 1e6) if _vtok else None
-        return {"sol": rsol / 1e9, "source": "bonding_curve_real_reserves",
-                "virtual_sol": _vsol / 1e9,
+        # THE DENOMINATION IS READ BEFORE ANY NUMBER IS DIVIDED. Guessing SOL
+        #    is what produced the 1,000x understatement described at
+        #    QUOTE_MINT_SPAN above.
+        lo, hi = QUOTE_MINT_SPAN
+        if len(raw) < hi:
+            # FAIL CLOSED. No account this short exists in the measured
+            #    population, and an account that cannot state its denomination
+            #    must not be assumed into the common one.
+            return {"sol": None, "source": "curve_quote_unreadable",
+                    "account_len": len(raw),
+                    "read_at": datetime.now(UTC).isoformat()}
+        qraw = bytes(raw[lo:hi])
+        if qraw not in QUOTE_ASSETS:
+            # A NEW QUOTE ASSET IS A SILENT WRONG NUMBER, NOT A MISSING ONE --
+            #    its decimals are unknown, so any amount we returned would be
+            #    wrong by an unknown power of ten. Recorded, named, refused.
+            return {"sol": None, "source": "curve_unknown_quote_asset",
+                    "quote_mint_hex": qraw.hex(),
+                    "read_at": datetime.now(UTC).isoformat()}
+        qsym, qdec = QUOTE_ASSETS[qraw]
+        scale = float(10 ** qdec)
+        implied = (_vsol / scale) / (_vtok / 1e6) if _vtok else None
+        # `sol` STAYS SOL. A USDC amount in a field named `sol` is the exact
+        #    mistake this batch filed as `named-not-measured` this morning, and
+        #    mixing two denominations in one column corrupts every distribution
+        #    taken over pool size. The quote-denominated amount is returned
+        #    beside it, under its own name and carrying its own unit.
+        return {"sol": (rsol / scale) if qsym == "SOL" else None,
+                "quote_amount": rsol / scale,
+                "quote_symbol": qsym,
+                "quote_decimals": qdec,
+                "source": "bonding_curve_real_reserves",
+                "virtual_quote": _vsol / scale,
                 "real_token_reserves": _rtok,
                 "implied_price_native": implied,
                 "read_at": datetime.now(UTC).isoformat()}
