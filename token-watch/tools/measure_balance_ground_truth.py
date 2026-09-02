@@ -107,6 +107,17 @@ def main():
         print("   NONE DERIVABLE -- no drained curves in this population.")
         return 1
 
+    # ⛔ READS ARE NOT POOLS, AND THIS HEADLINE SAID "CURVES" WHILE COUNTING
+    #    ROWS. Langston, third instance in one day: I fixed it in the strata
+    #    SELECTOR and left the class alone, which is `fix-follows-pointer`
+    #    landing inside the batch that fixed it. A pool read twice and
+    #    agreeing twice is not a fabrication -- it is a DENOMINATOR defect,
+    #    not a validity defect -- but the number must say which it is.
+    print("")
+    print("POPULATION, STATED AS BOTH: %d reads across %d DISTINCT pool addresses"
+          % (len(rows), len({r["pool"] for r in rows})))
+    _per = collections.Counter(collections.Counter(r["pool"] for r in rows).values())
+    print("   reads per pool: %s" % dict(sorted(_per.items())))
     print("")
     print("DOES THE RUNTIME'S LAMPORT BALANCE AGREE WITH THE PROGRAM'S RESERVE FIELD?")
     print("(SOL-quoted only: for those two fields describe the same money.)")
@@ -127,6 +138,8 @@ def main():
     tot = sum(agree.values())
     for k, v in agree.most_common():
         print("   %-34s %6d  (%.3f%%)" % (k, v, 100.0 * v / tot if tot else 0))
+    _sol_pools = {r["pool"] for r in rows if r["quote"] == "SOL" and not r["graduated"]}
+    print("   ...over %d reads spanning %d DISTINCT pools" % (tot, len(_sol_pools)))
     if worst:
         worst.sort(reverse=True)
         print("   five largest mismatches (lamports):")

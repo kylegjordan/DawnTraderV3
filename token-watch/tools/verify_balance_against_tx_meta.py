@@ -34,6 +34,7 @@ USAGE:  python3 verify_balance_against_tx_meta.py [strata.json]
 import base64
 import json
 import os
+import os
 import struct
 import sys
 import time
@@ -189,8 +190,16 @@ def main():
     print("EXACT %d   MISMATCH %d   SKIPPED %d   ERROR %d" % (ok, bad, skip, err))
     strata = sorted({r.get("stratum") for r in results if str(r.get("verdict", "")).startswith("EXACT")})
     print("strata with at least one confirmed match: %s" % (strata or "NONE"))
-    json.dump(results, open("/tmp/tw_gt_tx_results.json", "w"), indent=1, default=str)
-    print("full results written to /tmp/tw_gt_tx_results.json")
+    # ⛔ THE OUTPUT PATH IS DERIVED FROM THE SCRIPT THAT RAN, and this is not
+    #    tidiness. The positive controls are COPIES of this file with a
+    #    deliberate defect injected; when they wrote to a fixed path they
+    #    OVERWROTE the real results, and I then read a sabotaged run's numbers
+    #    and nearly reported them to Langston as the verification's arm counts.
+    #    A control that destroys the evidence it was meant to validate is
+    #    worse than no control.
+    out_path = "/tmp/%s_results.json" % os.path.basename(__file__).rsplit(".", 1)[0]
+    json.dump(results, open(out_path, "w"), indent=1, default=str)
+    print("full results written to %s" % out_path)
     return 1 if bad or err else 0
 
 

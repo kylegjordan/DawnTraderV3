@@ -544,3 +544,31 @@ A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE
 ⛔ **WHY THE DEFINITION IS NOT CHANGED HERE.** Changing a death rule mid-study **splits the cohort**: deaths before the change are inferred-from-absence, deaths after would be measured-from-a-fall. That is a comparability break inside a pre-registered outcome and it is not a call an implementer makes. **Kyle's standing direction at AMENDMENT 9 already anticipates the shape of it** — *"We can reset our ninety day window to start over if it means that we're getting this absolutely right"* — which is recorded there, before this data existed, so that a reset cannot later look like a reaction to an inconvenient result.
 
 **⇒ THE OPEN QUESTION, PUT PLAINLY:** a token whose pool has been emptied while it keeps trading is, on any ordinary reading, the thing this study exists to detect. The definition we pre-registered calls it alive. **Whether to change the definition, and whether to restart the window if we do, is Kyle's decision with Langston's ruling on comparability.** `RUNNING_ISSUES` #989 carries the evidence.
+
+---
+
+### ⛔ CORRECTION TO AMENDMENT 13 — 2026-09-02, SAME DAY, ON LANGSTON'S RULING
+
+He re-derived every figure independently and **all seven reproduce exactly**. Three things in my wording were wrong, and one of them was the headline of the ground-truth work.
+
+**1. "IT IS NOT A SERIES. IT IS A PAIR."** Measured: **3,237 of the 3,238 have exactly TWO readings**; the falls span 3.90–5.89 hours (median 4.99); the entire balance record runs **09:07:47 → 18:01:10 on one day.** ⛔ *"Balance series" flatters a pair of points. With n=2 a pull, a transient, a re-fill and one bad read are the same observation.*
+
+**2. "NOT A FLOOR" — I claimed a direction the design cannot support.** Under-counting pressures are real, but **n=2 is two-sided: one anomalous read manufactures a pull.** ✅ **The statement he would sign, and which replaces mine:**
+
+> On 2026-09-02, between 09:07 and 18:01, **3,238 of 18,174 tracked mints were read twice. At the second reading 200 held ≤10% of the first. The study called all 200 alive.** This is a count under one definition over one interval on one day — **not a rate, and not yet a floor.**
+
+**3. THE 19/181 SPLIT IS A DETERMINISTIC PARTITION, NOT A SAMPLING GAP.** Cross-tabulated across every read: `bonding_curve_real_reserves` → an aggregator liquidity figure present on **0 of 19,345**; `graduated_pool_wsol_account` → present on **752 of 752**. ⇒ **The 181 are not "awaiting corroboration" and no n or duration closes it — at any n, for any duration.** And my "0 disagreements" is a control that ran **entirely on 19 graduated pools.**
+
+✅ **THE CONTROL HE REQUIRED BEFORE PUBLICATION — RUN, AND THE FALL SURVIVES IT.** 75 of the 200 have their first reading on the pre-quote-fix decoder. Re-decoded from the stored raw bodies with the current decoder (`tools/control_decode_straddle.py`): **75 of 75 REACHED, 0 never reached; 74 unchanged, 1 changed; the fall SURVIVES in 75 of 75 and dissolves in 0.**
+
+✅ **AND THE ARM COUNT HE CONDITIONED HIS RULING ON: `curve_liq_none` = 3 of 3 EXACT** in the 12-pool verification. So the 181 are properly described as **"corroborated instrument, uncorroborated reading"** — the decode is verified against three independent producers; those specific readings have no second publisher because **for a bonding curve no second publisher exists.** ⛔ **Reported beside the 19, NEVER pooled into one total.**
+
+## ⛔⛔ HIS RULING ON THE DEFINITION — DO NOT CHANGE IT. NEITHER SPLIT NOR RESET.
+
+★ **AND HE CORRECTED MY PREMISE, WHICH IS THE WHOLE RULING: I am not about to create a comparability break. ONE ALREADY EXISTS AND IS PUBLISHED.** `liquidity_pulled` has never once been backed by a liquidity figure, and **18,818 rows carry that class.** So the study already reports one label over two evidence bases. ⇒ **Changing the definition does not introduce the inferred-vs-measured split; it REVEALS it. Refusing to change does not avoid it.**
+
+- **`alive` stays byte-identical.** No retro-application.
+- ⛔ **A WINDOW RESET IS REFUSED.** AMENDMENT 9 pre-authorises one; *"the pre-authorisation is not the argument for spending it."* A reset costs the whole cohort — **79,922 launches and 25,277 deaths across three days** — to buy a definition whose instrument is **nine hours old, n=2 per token, with zero corroboration reach into 90.5% of its own findings.** ★ ***"You do not reset a window onto an unproven instrument."***
+- ✅ **ADDITIVE, NOT SUBSTITUTIVE: record the fall as its own observable and its own death class, alongside the existing ones.** It accumulates in parallel; nothing reclassifies; the cohort stays comparable on the old definition while the new one grows its own.
+- **PROMOTION PRE-CONDITION, pre-registered now while it costs nothing:** a series **longer than 2**, over a span **longer than one sweep interval**, covering the **full observed lifetime** of the tokens it judges — and a corroboration story for bonding curves **that is not the aggregator**, because the aggregator structurally has none.
+- ⛔ **DO NOT RENAME THE 18,818 STORED VALUES** — that rewrites history in an append-only store. **Disclose at the reporting layer that the class is inferred-from-absence, not measured-from-a-fall.** *(An inferred value must not wear a measured value's clothes — his #546.)* Homed as `B-TOKENWATCH-DEATH-EVIDENCE-LABEL`, owner CC-INFRA, placed after this amendment and **before any death-definition change.**
