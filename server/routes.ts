@@ -6695,14 +6695,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   //      Query params: ?state=<s>, ?category=<c>
   //
   // POST /api/system-alerts/:id/acknowledge
-  //      Body: { "by": "kyle" | "cc-session-..." | "langston" | "system" }
-  //      Moves an entry to state=acknowledged.
+  //      Body: { "by": <a canonical actor — see ALERT_ACTORS in the service> }
+  //      Moves an entry to state=acknowledged. An unrecognised `by` is refused
+  //      with 400 + the allowed set (B-ALERT-ACTOR-ALLOWLIST #987); free text
+  //      and the retired `cc-session-<date>` form are no longer accepted.
   //
   // See `server/services/system-alerts.ts` for the storage library.
 
   apiRouter.get('/system-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { listAlerts, listSurfaceable, ALERT_CATEGORIES, GRANDFATHERED_ALERT_CATEGORIES } =
+      const { listAlerts, listSurfaceable, ALERT_CATEGORIES, GRANDFATHERED_ALERT_CATEGORIES, ALERT_ACTORS } =
         await import('./services/system-alerts.js');
       // Narrow query strings to values that can actually appear in stored rows;
       // reject unknown values (silently → undefined → no filter) rather than
@@ -6743,6 +6745,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           scheduled: entries.filter((a) => a.state === 'scheduled').length,
           surfaceableNow: surfaceable.length,
         },
+        // #987: the allowed actor set, served from the SSOT so the UI's ack
+        // control is a <select> over it — never a hand-maintained client literal.
+        actors: ALERT_ACTORS.map(({ value, tag }) => ({ value, tag })),
         entries,
       });
     } catch (error: any) {
@@ -6756,18 +6761,34 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   apiRouter.post('/system-alerts/:id/acknowledge', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { ackAlert } = await import('./services/system-alerts.js');
+      const { ackAlert, ALERT_ACTORS, AlertActorError } = await import('./services/system-alerts.js');
       const id = req.params.id;
       const by = (req.body && typeof req.body.by === 'string' && req.body.by.trim()) || undefined;
       if (!by) {
         res.status(400).json({
           ok: false,
           error: 'Missing required field: by',
-          message: 'POST body must include { "by": "<actor-identifier>" } for audit trail',
+          message: 'POST body must include { "by": "<canonical actor>" } for audit trail',
+          actors: ALERT_ACTORS.map((a) => a.value),
         });
         return;
       }
-      const updated = await ackAlert(id, by);
+      let updated;
+      try {
+        updated = await ackAlert(id, by);
+      } catch (err) {
+        // #987 OBJ-2b: a refused identity is a client error naming the set, not a 500.
+        if (err instanceof AlertActorError) {
+          res.status(400).json({
+            ok: false,
+            error: 'Unrecognised actor',
+            message: err.message,
+            actors: ALERT_ACTORS.map((a) => a.value),
+          });
+          return;
+        }
+        throw err;
+      }
       if (!updated) {
         res.status(404).json({ ok: false, error: 'Alert not found', id });
         return;

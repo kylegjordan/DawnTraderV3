@@ -25,17 +25,17 @@
 
 4. **Route + claim.** The wake filter (`cc-wake-filter.py`) routes the wake to the **named owner** (the other CC stands down; `owner=Kyle` wakes no CC — he sees it in-channel). The owning party **acknowledges the alert**, which records ownership:
    ```
-   npm run system-alerts -- ack <id> --by <CC-A|CC-B|kyle|...>
+   npm run system-alerts -- ack <id> --by <cc-a|cc-b|cc-c|cc-infra|kyle|langston>
    ```
-   `--by` is mandatory — an ownerless ack is meaningless. `acknowledged_by` IS the owner record.
+   `--by` is mandatory — an ownerless ack is meaningless. `acknowledged_by` IS the owner record. **Since B-ALERT-ACTOR-ALLOWLIST (#987) it must be a canonical actor from `ALERT_ACTORS` in `server/services/system-alerts.ts` (`cc-a` | `cc-b` | `cc-c` | `cc-infra` | `governance-checker` | `governance-checker-heartbeat` | `b-new-40-soak-verify` | `kyle` | `langston`); the stored value is the canonical form, and free text — including the retired `cc-session-<date>` — is refused with the set named.**
 
 5. **Do the follow-through.** The owner does the actual work (the `action`), through the normal workflow if it's a code/governance change.
 
 6. **Resolve.** When the underlying condition is genuinely fixed + verified, the owner closes it:
    ```
-   npm run system-alerts -- resolve <id> --by <owner>
+   npm run system-alerts -- resolve <id> --by <canonical actor> --evidence <path:line | sha | uuid | §/#ref | NO-EVIDENCE-GIVEN>
    ```
-   **Only `resolve` ends the alert.** Acking does not — see the closure guarantee.
+   **`--evidence` is mandatory and hard-gated (B-GOV-INTEGRITY-1 F3b) — this line taught the flag-less form for 8 weeks after the CLI began refusing it (#987 fix).** **Only `resolve` ends the alert.** Acking does not — see the closure guarantee.
 
 7. **Closure guarantee (no silent drop).** If an alert stays un-`resolved` past its TTL, the dispatcher **re-surfaces** it (re-posts to Discord, Langston re-engages and re-routes to the owner) on a **widening back-off**, and **escalates to Kyle by name** on the 2nd+ re-surface. So a diagnosed-but-unfixed alert can never silently rot. TTLs (`computeResurfaceStale`):
    - **un-acked `active`** (nobody owns it — the worse state) re-surfaces *faster*: **critical 2h / warning 6h**.

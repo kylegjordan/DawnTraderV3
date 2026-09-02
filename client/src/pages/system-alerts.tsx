@@ -3,7 +3,8 @@
  *
  * Lists alerts in `state: active | scheduled` from the server-side
  * `/var/log/dawntrader/system-alerts.jsonl` queue. 30-second polling refresh.
- * Ack button moves an entry to `acknowledged` state.
+ * Ack button moves an entry to `acknowledged` state, as the actor chosen from
+ * the server-served allowed set (B-ALERT-ACTOR-ALLOWLIST #987 — no free text).
  *
  * Minimum viable per B_NEW_40_SCOPE.md §2.8.e. UI polish (filtering,
  * sorting, search, detail view, history) explicitly deferred to a future batch
@@ -29,10 +30,17 @@ interface SystemAlert {
   metadata: Record<string, unknown>;
 }
 
+interface AlertActorOption {
+  value: string;
+  tag: 'roster' | 'machine' | 'human';
+}
+
 interface SystemAlertsResponse {
   ok: boolean;
   capturedAt: string;
   counts: { active: number; scheduled: number; surfaceableNow: number };
+  /** #987: the allowed actor set, from the server SSOT. The ack control selects from it. */
+  actors: AlertActorOption[];
   entries: SystemAlert[];
 }
 
@@ -73,7 +81,9 @@ function fmtTs(iso: string | null): string {
 
 export default function SystemAlertsPage() {
   const queryClient = useQueryClient();
-  const [actorOverride, setActorOverride] = useState<string>('kyle');
+  // #987: the chosen actor. Default 'kyle'; the options come from the server's
+  // allowed set, so nothing typed here can reach the file unrecognised.
+  const [actor, setActor] = useState<string>('kyle');
 
   const { data, isLoading, error, refetch } = useQuery<SystemAlertsResponse>({
     queryKey: ['/api/system-alerts'],
@@ -118,6 +128,8 @@ export default function SystemAlertsPage() {
 
   const entries = data?.entries ?? [];
   const counts = data?.counts ?? { active: 0, scheduled: 0, surfaceableNow: 0 };
+  const actors = data?.actors ?? [];
+  const ackError = ackMutation.error ? (ackMutation.error as Error).message : null;
 
   return (
     <div className="p-6 max-w-screen-2xl mx-auto">
@@ -144,15 +156,30 @@ export default function SystemAlertsPage() {
       </div>
 
       <div className="mb-3 flex items-center gap-2 text-sm">
-        <label className="text-gray-600">Ack as:</label>
-        <input
-          value={actorOverride}
-          onChange={(e) => setActorOverride(e.target.value)}
-          className="px-2 py-1 border rounded text-sm w-40"
-          placeholder="kyle"
-        />
-        <span className="text-gray-400 text-xs">(written to acknowledged_by audit field)</span>
+        <label className="text-gray-600" htmlFor="ack-actor">Ack as:</label>
+        <select
+          id="ack-actor"
+          value={actor}
+          onChange={(e) => setActor(e.target.value)}
+          className="px-2 py-1 border rounded text-sm w-56 bg-white"
+        >
+          {actors.length === 0 ? (
+            <option value="kyle">kyle</option>
+          ) : (
+            actors.map((a) => (
+              <option key={a.value} value={a.value}>
+                {a.value} ({a.tag})
+              </option>
+            ))
+          )}
+        </select>
+        <span className="text-gray-400 text-xs">(written to acknowledged_by; only these names are accepted)</span>
       </div>
+      {ackError && (
+        <div className="mb-3 text-sm text-red-600 border border-red-200 bg-red-50 rounded px-3 py-2">
+          Ack failed: {ackError}
+        </div>
+      )}
 
       {entries.length === 0 ? (
         <div className="border rounded p-8 text-center text-gray-500 bg-white">
@@ -192,7 +219,7 @@ export default function SystemAlertsPage() {
                   <td className="px-3 py-2">
                     {alert.state === 'active' && (
                       <button
-                        onClick={() => ackMutation.mutate({ id: alert.id, by: actorOverride })}
+                        onClick={() => ackMutation.mutate({ id: alert.id, by: actor })}
                         disabled={ackMutation.isPending}
                         className="px-3 py-1 border rounded text-xs hover:bg-green-50 hover:border-green-300 disabled:opacity-50"
                       >
@@ -217,12 +244,12 @@ export default function SystemAlertsPage() {
             This is the canonical queue of system events that need human or AI review. AI sessions
             (CC + Langston) read the same data on every conversation turn per CLAUDE.md §10.5. The
             server-side dispatcher promotes scheduled alerts to active when their trigger time
-            arrives. Critical-severity alerts also fire a Telegram notification.
+            arrives. Warning/critical alerts (and every governance or breakage alert) also post to Discord.
           </p>
           <p>
-            Acknowledging an alert moves it out of the surfaceable set. Use the "Ack as" field
-            above to record who's acknowledging. Resolved alerts are kept in history but not
-            shown here.
+            Acknowledging an alert moves it out of the surfaceable set. Use the "Ack as" selector
+            above to record who's acknowledging — the choices are the canonical actor set served by
+            the API; anything else is refused. Resolved alerts are kept in history but not shown here.
           </p>
           <p>
             Sources: <code>/var/log/dawntrader/system-alerts.jsonl</code> · CLI:{' '}

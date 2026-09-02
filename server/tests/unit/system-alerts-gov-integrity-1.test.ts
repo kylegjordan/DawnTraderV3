@@ -56,7 +56,7 @@ describe('OBJ-1 — resolution_evidence hard gate', () => {
     const r = await resolveAlert(a.id, 'CC-A', 'server/x.ts:10', 'cli');
     expect(r!.state).toBe('resolved');
     expect(r!.resolved_at).not.toBeNull();
-    expect(r!.resolved_by_claimed).toBe('CC-A');
+    expect(r!.resolved_by_claimed).toBe('cc-a'); // #987: stored CANONICAL — 'CC-A' normalises to cc-a
     expect(r!.resolved_by_transport).toBe('cli');
     expect(r!.resolution_evidence).toBe('server/x.ts:10');
   });

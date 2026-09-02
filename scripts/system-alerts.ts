@@ -21,7 +21,12 @@
  *   npm run system-alerts -- fire-due
  *   npm run system-alerts -- list --state active
  *   npm run system-alerts -- ack abc-123-uuid --by kyle
- *   npm run system-alerts -- resolve abc-123-uuid --by cc-session-2026-05-31
+ *   npm run system-alerts -- resolve abc-123-uuid --by cc-b --evidence server/x.ts:42
+ *
+ * Identity (B-ALERT-ACTOR-ALLOWLIST #987): `--by` must be a canonical actor —
+ * cc-a | cc-b | cc-c | cc-infra | governance-checker | governance-checker-heartbeat |
+ * b-new-40-soak-verify | kyle | langston (see ALERT_ACTORS in the service). The
+ * retired `cc-session-<date>` form and any other free text are REFUSED.
  *
  * Discord push: reads the secret alerts-webhook URL from ALERTS_DISCORD_WEBHOOK_URL
  * or /etc/langston/discord-alerts-webhook.env (B-DISCORD OBJ-5). Langston's bridge
@@ -41,6 +46,7 @@ import {
   listAlerts,
   ackAlert,
   resolveAlert,
+  AlertActorError,
   processResurface,
   shouldDeliverToDiscord,
   ALERTS_FILE,
@@ -169,7 +175,7 @@ function frameResurface(alert: SystemAlert, d: ResurfaceDecision, nowMs: number)
   return {
     ...alert,
     title: `⏰ RE-SURFACE #${d.resurfaceCount} — STILL UNRESOLVED: ${alert.title}`,
-    body: `${owner}, open ~${hrs}h. ${alert.body}\nClose it: resolve ${alert.id} --by <you>.${kyle}`,
+    body: `${owner}, open ~${hrs}h. ${alert.body}\nClose it: resolve ${alert.id} --by <your canonical actor> --evidence <ref>.${kyle}`,
   };
 }
 
@@ -268,11 +274,23 @@ async function cmdList(args: string[]): Promise<void> {
 async function cmdAck(args: string[]): Promise<void> {
   const id = args[1];
   if (!id || id.startsWith('--')) {
-    console.error('Usage: ack <id> --by <user>');
+    console.error('Usage: ack <id> --by <canonical actor>');
     process.exit(1);
   }
   const by = requireFlag(args, 'by');
-  const updated = await ackAlert(id, by);
+  // #987: a refused identity prints ONE line and exits 1 — the same shape as
+  // cmdResolve's evidence refusal. Without this catch the AlertActorError fell
+  // through to main().catch as `Fatal:` + a stack.
+  let updated: Awaited<ReturnType<typeof ackAlert>>;
+  try {
+    updated = await ackAlert(id, by);
+  } catch (err) {
+    if (err instanceof AlertActorError) {
+      console.error(err.message);
+      process.exit(1);
+    }
+    throw err;
+  }
   if (!updated) {
     console.error(`Alert ${id} not found`);
     process.exit(1);
@@ -283,7 +301,7 @@ async function cmdAck(args: string[]): Promise<void> {
 async function cmdResolve(args: string[]): Promise<void> {
   const id = args[1];
   if (!id || id.startsWith('--')) {
-    console.error('Usage: resolve <id> --by <user> --evidence <reference-or-sentinel>');
+    console.error('Usage: resolve <id> --by <canonical actor> --evidence <reference-or-sentinel>');
     process.exit(1);
   }
   const by = requireFlag(args, 'by');

@@ -6,11 +6,19 @@
  * Persistent queue of "events that someone needs to look at" — both human
  * operators (UI tab) and AI agents (per-turn check in CC + Langston sessions).
  *
- * Three writers touch this file concurrently:
- *   - The CLI (`scripts/system-alerts.ts`) — operator/AI-invoked
- *   - The dispatcher cron (15-min systemd timer on staging) — promotes
- *     scheduled events to active when their `triggers_at` arrives
+ * Writers that touch this file concurrently (census: B_ALERT_ACTOR_ALLOWLIST_PRE_AUDIT §A3):
+ *   - The CLI (`scripts/system-alerts.ts`) — operator/AI-invoked, incl. Langston over SSH
+ *   - The dispatcher timer (15-min systemd timer on staging) — promotes
+ *     scheduled events to active when their `triggers_at` arrives; writes no identity
+ *   - The governance-checker timers (poller + heartbeat) — add + resolve via the CLI
  *   - The HTTP API (`/api/system-alerts/:id/acknowledge`) — UI ack button
+ *   - Direct library importers: `scripts/b-new-40-soak-verify.ts` (ack) and the
+ *     one-shot resolve-provenance backfill script
+ *   - The liveness watchdog (`server/scripts/staging-liveness-watchdog.mjs`) —
+ *     appends rows itself, outside this library and its lock (#647)
+ *
+ * Identity: every `by` that reaches ackAlert/resolveAlert must normalise into
+ * ALERT_ACTORS (B-ALERT-ACTOR-ALLOWLIST, #987) — free text is refused before the lock.
  *
  * Concurrency model: O_EXCL-based file lock (`/var/log/dawntrader/system-
  * alerts.jsonl.lock`). Same primitive that `proper-lockfile` uses under the
@@ -93,7 +101,7 @@ export const GRANDFATHERED_ALERT_CATEGORIES = [
 export function assertCategoryCreatable(c: string): AlertCategory {
   if ((ALERT_CATEGORIES as readonly string[]).includes(c)) return c as AlertCategory;
   throw new Error(
-    `addAlert: category ${JSON.stringify(c)} is not creatable. ` +
+    `addAlert: category (${c.length} chars, not echoed) is not creatable. ` +
     `Allowed: ${ALERT_CATEGORIES.join(' | ')}. ` +
     `(Grandfathered-historical categories are accepted on read but cannot be created.)`,
   );
@@ -175,6 +183,94 @@ export function isValidResolutionEvidence(s: unknown): s is string {
   );
 }
 
+// ─── B-ALERT-ACTOR-ALLOWLIST (#987, 2026-09-02): who may act on an alert ───────
+//
+// `acknowledged_by` / `resolved_by_claimed` were free text: 782 rows carried 75
+// distinct strings, most of them dated one-offs (`cc-session-<date>`) that
+// identify nobody — the retired convention CLAUDE.md §10.5 step 3 itself taught
+// for 26 days before the session roster existed. The identity is now ONE
+// canonical table, defined here, tagged by what each entry IS, applied at BOTH
+// write paths before the lock. Free text is refused, never mapped by guesswork:
+// the normalisation table below is EXACT strings after trim + lowercase — never a
+// prefix, never a regex — so `langston (transport: …)` is refused, not mapped
+// (Langston Step-2 condition L3). Historical rows are NOT rewritten (OBJ-5).
+export type AlertActorTag = 'roster' | 'machine' | 'human';
+export interface AlertActor {
+  readonly value: string;
+  readonly tag: AlertActorTag;
+  readonly why: string;
+}
+export const ALERT_ACTORS = [
+  // roster — the four Claude Code sessions, bound in .claude/cc-session-roster.json
+  { value: 'cc-a',     tag: 'roster', why: 'Claude Old (OLD Claude) — roster-bound session' },
+  { value: 'cc-b',     tag: 'roster', why: 'Claude New (NEW Claude) — roster-bound session' },
+  { value: 'cc-c',     tag: 'roster', why: 'Claude Analyst (ANALYST Claude) — roster-bound session' },
+  { value: 'cc-infra', tag: 'roster', why: 'Infra Claude — roster-bound session' },
+  // machine — timers and scripts that act on the file with a fixed name
+  { value: 'governance-checker',           tag: 'machine', why: 'scripts/governance-checker/poller.mjs (30-min timer): add + auto-resolve' },
+  { value: 'governance-checker-heartbeat', tag: 'machine', why: 'scripts/governance-checker/heartbeat-check.mjs (15-min timer)' },
+  { value: 'b-new-40-soak-verify',         tag: 'machine', why: 'scripts/b-new-40-soak-verify.ts — acks the soak alert it verifies' },
+  // human
+  { value: 'kyle',     tag: 'human', why: 'the decider; the alerts-page default' },
+  { value: 'langston', tag: 'human', why: 'the reviewer, acting through the CLI over SSH from Helsinki' },
+] as const satisfies readonly AlertActor[];
+export type CanonicalAlertActor = typeof ALERT_ACTORS[number]['value'];
+const ALERT_ACTOR_VALUES: ReadonlySet<string> = new Set(ALERT_ACTORS.map((a) => a.value));
+
+// Exact-string aliases (matched AFTER trim + lowercase) that the live history
+// actually used for a canonical actor. Anything not listed here and not in
+// ALERT_ACTORS is refused — including every `cc-session-<date>`, the govflood
+// and `cc-<alias>-<date>` forms, `phase4-*`, `b-new-43-*`, `test`, and a canonical
+// name with text appended. A refused string is never silently mapped.
+export const ALERT_ACTOR_NORMALISATION: Readonly<Record<string, CanonicalAlertActor>> = {
+  'cc-a-old-claude':     'cc-a',
+  'cc-analyst':          'cc-c',
+  'cc-c-analyst':        'cc-c',
+  'infra-claude':        'cc-infra',
+  'langston (reviewer)': 'langston',
+  'langston-reviewer':   'langston',
+  'kyle-direct':         'kyle',   // the dt-deploy convention (scripts/dt-deploy.sh)
+};
+
+/**
+ * Typed refusal. The message deliberately does NOT echo the refused string:
+ * the governance-checker poller classifies a resolve failure as benign — and
+ * prints nothing — when stderr matches /not found|already|terminal|resolved/i
+ * (poller.mjs), so an echoed value containing one of those words would make
+ * the refusal vanish. Length + the allowed set is enough for the caller, who
+ * typed the value. (Same class fix applied to the category and evidence gates.)
+ */
+export class AlertActorError extends Error {
+  readonly refusedLength: number;
+  constructor(refusedLength: number) {
+    super(
+      `alert actor refused (${refusedLength} chars, not echoed); allowed: ` +
+      `[${ALERT_ACTORS.map((a) => a.value).join(' | ')}]`,
+    );
+    this.name = 'AlertActorError';
+    this.refusedLength = refusedLength;
+  }
+}
+
+/** Trim + lowercase, then exact membership or exact alias. Null = refused. */
+export function normaliseAlertActor(by: unknown): CanonicalAlertActor | null {
+  if (typeof by !== 'string') return null;
+  const key = by.trim().toLowerCase();
+  if (ALERT_ACTOR_VALUES.has(key)) return key as CanonicalAlertActor;
+  return ALERT_ACTOR_NORMALISATION[key] ?? null;
+}
+
+/**
+ * The gate. Called by ackAlert and resolveAlert BEFORE ensureFileExists()/withLock,
+ * mirroring the evidence gate: a refusal touches no file and takes no lock.
+ * Returns the canonical value — that is what gets written, never the raw input.
+ */
+export function assertAlertActor(by: unknown): CanonicalAlertActor {
+  const canonical = normaliseAlertActor(by);
+  if (canonical) return canonical;
+  throw new AlertActorError(typeof by === 'string' ? by.length : 0);
+}
+
 export interface SystemAlert {
   schema_version: 1;
   id: string;                                      // uuid
@@ -182,7 +278,7 @@ export interface SystemAlert {
   triggers_at: string;                             // ISO-8601 — when this should fire
   fired_at: string | null;                         // ISO-8601 — when dispatcher promoted scheduled → active
   acknowledged_at: string | null;                  // ISO-8601
-  acknowledged_by: string | null;                  // 'kyle' | 'cc-session-...' | 'langston' | 'system' | etc.
+  acknowledged_by: string | null;                  // a CanonicalAlertActor since #987 (historical rows hold the 75 legacy strings — never rewritten)
   // ─── B-GOV-INTEGRITY-1 (F3b, 2026-07-10): resolve provenance ──────────────
   // Closure must be a RECORD, not an assertion. Two identity fields at DIFFERENT
   // trust levels — never merge them, or a claim launders into a fact:
@@ -430,10 +526,12 @@ export async function fireDue(nowMs: number = Date.now()): Promise<SystemAlert[]
 }
 
 /**
- * Mark an alert as acknowledged. `by` is required for audit trail.
+ * Mark an alert as acknowledged. `by` must normalise into ALERT_ACTORS (#987) —
+ * refused before any file or lock is touched; the CANONICAL value is written.
  * Returns the updated alert, or null if not found.
  */
 export async function ackAlert(id: string, by: string): Promise<SystemAlert | null> {
+  const actor = assertAlertActor(by); // #987: before ensureFileExists/withLock, like the evidence gate
   ensureFileExists();
   let result: SystemAlert | null = null;
   await withLock(() => {
@@ -443,7 +541,7 @@ export async function ackAlert(id: string, by: string): Promise<SystemAlert | nu
     if (found.state === 'active') {
       found.state = 'acknowledged';
       found.acknowledged_at = new Date().toISOString();
-      found.acknowledged_by = by;
+      found.acknowledged_by = actor;
       result = { ...found };
       writeAllAlertsAtomic(all);
     } else {
@@ -464,15 +562,22 @@ export async function resolveAlert(
   evidence: string,
   transport: ResolveTransport,
 ): Promise<SystemAlert | null> {
+  // B-ALERT-ACTOR-ALLOWLIST (#987): identity is gated first, before any file or
+  // lock — a repeat resolve (the checker re-resolves by design) is bound too.
+  const actor = assertAlertActor(by);
   // B-GOV-INTEGRITY-1 (F3b): closure is a RECORD, not a state flag. The hard
   // evidence gate is enforced HERE (not only in the CLI) so EVERY resolve path —
   // CLI, dispatcher, API, governance-checker — is bound by it. A close with no
-  // legitimate basis is refused, loudly, before any write.
+  // legitimate basis is refused, loudly, before any write. The refused value is
+  // NOT echoed (#987 L1: the poller's benign-failure regex would swallow it).
+  // Length is taken BEFORE the guard: inside the false branch the type guard has
+  // narrowed `evidence` to `never`, so `.length` there is a tsc error.
+  const evidenceLength = typeof evidence === 'string' ? evidence.length : 0;
   if (!isValidResolutionEvidence(evidence)) {
     throw new Error(
       `resolveAlert(${id}): resolution_evidence rejected — must be a reference token ` +
       `(path:line | sha | uuid | §/#ref) or a sanctioned sentinel ` +
-      `(${RESOLUTION_EVIDENCE_SENTINELS.join(' | ')}). Got: ${JSON.stringify(evidence)}`,
+      `(${RESOLUTION_EVIDENCE_SENTINELS.join(' | ')}). Got ${evidenceLength} chars (not echoed).`,
     );
   }
   ensureFileExists();
@@ -484,12 +589,12 @@ export async function resolveAlert(
     const now = new Date().toISOString();
     found.state = 'resolved';
     found.resolved_at = now;
-    found.resolved_by_claimed = by;          // the caller's claim
+    found.resolved_by_claimed = actor;       // the caller's claim, canonicalised (#987)
     found.resolved_by_transport = transport; // the code-stamped, verifiable channel
     found.resolution_evidence = evidence.trim();
     if (!found.acknowledged_at) {
       found.acknowledged_at = now;
-      found.acknowledged_by = by;
+      found.acknowledged_by = actor;
     }
     result = { ...found };
     writeAllAlertsAtomic(all);

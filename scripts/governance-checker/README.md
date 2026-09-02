@@ -73,6 +73,6 @@ Rock-solid/deterministic: required-doc presence, emptiness, pre-audit filed + ci
 ## Deploy (after Langston Step-4) — NOT YET DONE
 1. Local clone to `/opt/governance-checker/DawnTraderV3` (plain disk, NOT gdrive — C6).
 2. `mkdir -p /var/lib/governance-checker` (state dir, outside the repo).
-3. No CLI change needed: the poller calls the existing `system-alerts add` (parses the printed alert `.id`) and `resolve <id> --by`; it dedupes via its own state file (logical-key → alert-id), and carries the logical key in `--metadata` for forensics.
+3. No CLI change needed: the poller calls the existing `system-alerts add` (parses the printed alert `.id`) and `resolve <id> --by governance-checker --evidence <ref>` (`--evidence` is mandatory since B-GOV-INTEGRITY-1; `governance-checker` is a member of the actor allowlist since #987 — a refusal there would be swallowed by the poller's benign-failure regex, which is why the library's refusal message never echoes the refused value); it dedupes via its own state file (logical-key → alert-id), and carries the logical key in `--metadata` for forensics.
 4. Install the unit + timer; `systemctl enable --now governance-checker.timer`.
 5. Confirm a tick runs clean and the heartbeat lands in `state.json`.

@@ -99,7 +99,7 @@ async function ackAlert(id: string, by: string): Promise<void> {
   const { ackAlert: doAck } = await import('../server/services/system-alerts.js');
   const result = await doAck(id, by);
   if (result) {
-    console.log(`[soak-verify] acknowledged alert ${id} as ${by}`);
+    console.log(`[soak-verify] acknowledged alert ${id} as ${by} (pid ${process.pid})`);
   } else {
     console.warn(`[soak-verify] alert ${id} not found — skipping ack`);
   }
@@ -123,7 +123,10 @@ async function main(): Promise<void> {
   const logPaths = logPathsFlag ? logPathsFlag.split(',') : DEFAULT_LOG_PATHS;
 
   const ackAlertId = getFlag(args, 'ack-alert-id');
-  const ackBy = getFlag(args, 'ack-by') ?? `b-new-40-soak-verify-${process.pid}`;
+  // #987: the default is the fixed canonical actor (the PID lives in the log line,
+  // not in the identity). `--ack-by` stays for a caller naming another canonical
+  // actor; anything else is refused by the library's gate, not here.
+  const ackBy = getFlag(args, 'ack-by') ?? 'b-new-40-soak-verify';
 
   const now = new Date();
   const elapsedMs = now.getTime() - deployTs.getTime();

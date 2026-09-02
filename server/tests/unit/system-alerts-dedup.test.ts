@@ -51,7 +51,7 @@ describe('B-NEW-51 system-alerts dedup', () => {
   it('allows a new alert once the same-key alert is resolved', async () => {
     const { addAlert, resolveAlert, readAllAlerts } = await load();
     const a = await addAlert({ ...base, dedupe_key: 'k2' });
-    await resolveAlert(a.id, 'test', 'NO-EVIDENCE-GIVEN', 'cli');
+    await resolveAlert(a.id, 'cc-b', 'NO-EVIDENCE-GIVEN', 'cli');
     const c = await addAlert({ ...base, dedupe_key: 'k2' });
     expect(c.id).not.toBe(a.id);            // fresh alert created
     expect(readAllAlerts()).toHaveLength(2); // resolved + new
@@ -61,7 +61,7 @@ describe('B-NEW-51 system-alerts dedup', () => {
     const { addAlert, fireDue, ackAlert, readAllAlerts } = await load();
     const a = await addAlert({ ...base, dedupe_key: 'k3' });
     await fireDue();                  // scheduled → active
-    await ackAlert(a.id, 'test');     // active → acknowledged (non-terminal)
+    await ackAlert(a.id, 'cc-b');     // active → acknowledged (non-terminal)
     const d = await addAlert({ ...base, dedupe_key: 'k3' });
     expect(d.id).toBe(a.id);
     expect(readAllAlerts()).toHaveLength(1);
