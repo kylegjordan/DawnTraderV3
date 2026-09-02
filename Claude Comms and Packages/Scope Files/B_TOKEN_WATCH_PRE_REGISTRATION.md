@@ -572,3 +572,33 @@ He re-derived every figure independently and **all seven reproduce exactly**. Th
 - ✅ **ADDITIVE, NOT SUBSTITUTIVE: record the fall as its own observable and its own death class, alongside the existing ones.** It accumulates in parallel; nothing reclassifies; the cohort stays comparable on the old definition while the new one grows its own.
 - **PROMOTION PRE-CONDITION, pre-registered now while it costs nothing:** a series **longer than 2**, over a span **longer than one sweep interval**, covering the **full observed lifetime** of the tokens it judges — and a corroboration story for bonding curves **that is not the aggregator**, because the aggregator structurally has none.
 - ⛔ **DO NOT RENAME THE 18,818 STORED VALUES** — that rewrites history in an append-only store. **Disclose at the reporting layer that the class is inferred-from-absence, not measured-from-a-fall.** *(An inferred value must not wear a measured value's clothes — his #546.)* Homed as `B-TOKENWATCH-DEATH-EVIDENCE-LABEL`, owner CC-INFRA, placed after this amendment and **before any death-definition change.**
+
+---
+
+### ⛔⛔ SECOND CORRECTION TO AMENDMENT 13 — 2026-09-02. A FALLING BALANCE IS NOT EVIDENCE OF A PULL, AND I WROTE IT AS THOUGH IT WERE.
+
+**Kyle asked what looked like a wording question — *"you said the definition is blind to a rug, then you said it can tell a pull from alive; which is it?"* — and answering it properly found a substantive error in how the 200 were framed.**
+
+**FIRST, THE PART THAT WAS ONLY SLOPPY WRITING.** Two different things were run together: the **MEASUREMENT** (the balance read) and the **CLASSIFIER** (the rule that decides alive or dead). The measurement can now see the money leave; the classifier does not use it. ⇒ **We can see it; the study does not act on it.** Both statements were true of different subjects and I wrote them as though of one.
+
+⛔⛔ **SECOND, AND THIS ONE IS A REAL DEFECT IN THE CLAIM: A DRAINED POOL HAS TWO COMPLETELY DIFFERENT CAUSES, AND A BALANCE SERIES CANNOT TELL THEM APART.**
+
+| | what happened | what the balance shows |
+|---|---|---|
+| **RUG PULL** | the liquidity provider WITHDRAWS the pool — one party takes the money out | pool falls to near zero |
+| **ORDINARY DEATH** | holders SELL — the money leaves through hundreds of normal trades | pool falls to near zero |
+
+⇒ **IDENTICAL IN A BALANCE TIME SERIES. ONLY THE INSTRUCTION THAT MOVED THE MONEY DISTINGUISHES THEM.** A withdrawal is one large transfer by the pool's owner; a collapse is many small swaps by many people.
+
+**MEASURED on the largest of the 200** (`6Bob3ZBh…`, $1,194,336 → $2,121): on the account that actually holds the money — the pool's wrapped-SOL account, **not** the pool address, which is a distinction that itself cost a wrong-object probe — a sample of 30 transactions spread across the available window shows **Buy 24, Sell 10, and NO withdrawal-shaped instruction at all.** The individual movements are **trade-sized** — −1.6949, −0.5599, +0.3388, −0.3029 SOL — **not one large removal.**
+
+⚠️ **AND THE HONEST LIMIT ON THAT, STATED RATHER THAN LEFT AS A CONCLUSION:** `getSignaturesForAddress` returned its 1,000-row maximum spanning **10:50 → 15:35**, while the first reading was at **09:07**. **The bulk of the fall may have happened before the window I examined.** ⇒ **I do not know what drained these pools. The balance says the money left; the mechanism is unestablished, and "no withdrawal found" here is a sample over the wrong interval, not a finding.**
+
+## ✅ WHAT IS ACTUALLY REQUIRED TO TELL A RUG FROM AN ORDINARY DEATH
+
+1. ⛔ **READ THE INSTRUCTION, NOT THE BALANCE.** Walk the transactions across the whole fall window — which needs **pagination**, because one request reaches back only ~5 hours on an active pool. A rug is a *withdrawal by the owner*; a collapse is *many swaps by many people*. That is the discriminator, and it is on-chain and readable.
+2. **ON THE ACCOUNT THAT HOLDS THE MONEY**, not the pool address. For a graduated pool the SOL sits in a separate wrapped-SOL account; the pool account's own balance barely moves on trades, so transactions on it are the wrong population.
+3. **MORE THAN TWO BALANCE READINGS, CLOSER TOGETHER.** Currently n=2 over ~5 hours: a pull-and-refill is invisible, and one anomalous read manufactures a fall.
+4. ⛔ **FOR BONDING CURVES — 90.5% of the findings — THE CHAIN IS THE ONLY SOURCE.** No aggregator publishes a liquidity figure for them at any n, for any duration, so an instruction-level read is not an enhancement there; it is the only route that exists.
+
+⇒ **THE 200 ARE RESTATED, and this replaces the earlier wording:** 200 tokens whose pool balance fell to ≤10% between two readings, while the study called them alive. **That is money leaving. It is NOT a count of rug pulls, and nothing in this batch has yet established the mechanism for a single one of them.**
