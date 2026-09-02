@@ -493,3 +493,34 @@ Everything in §10-§12 keys on the feed. This keys on the **trade outcome**, wh
 3. **OBJ-0's branch rule (§5) is answered on the evidence so far as: NOT transition-instant.** Formally called only when the full run completes (the pre-market body alone decides it), but nine weekdays already exceed the branch threshold by two orders of magnitude.
 4. **What Step 2 owes, after the readers:** (i) the `:15` offset is settled as a feed property (OHLC lag p50 952 s) — the remaining question, Kraken-side cause, has no instrument on our side; **extend the EXISTING `rawcap.cjs` capture to the 20:15 and 08:15 UTC windows** (three boundaries, depth on the held names) rather than build one; (ii) the pre-market question is ANSWERED (selection, not the ceiling) — what remains is the causal link between the entry-side gates and the thin-name exclusion, a census of which gate rejects the 40 flickering names; (iii) the reconnect-minute exclusion and the post-hoc hollow-book count for OBJ-0's read-out (§15.5).
 
+## 16. OBJ-0 READ-OUT — THE FULL RUN (2026-08-03 → 2026-09-02; job launched 18:35Z, complete 22:05Z 2026-09-02; `obj0_bid_drop.csv` + `obj0_readout.py` on staging; every number below re-derivable from those two files)
+
+**Instrument, as pre-registered (§5 OBJ-0):** drop = `bid ≤ 0.90 × the same symbol's previous bid`, previous snap ≤ 5 min earlier, ask within 2% of its previous value; 15-min UTC buckets; off-hours + the 19:30 run-in; all symbols; `xstock_spot_ticker_snap`, 31 daily partitions. **Exclusions applied at BUCKET granularity (§15.5): any 15-min bucket containing an archiver reconnect / stall / restart minute** (129 log-derived minutes 08-19 → 09-02 in `obj0_reconnect_minutes.txt`; 24 signature minutes — rows = symbols ≥ 470 with median spread > 20% — across all days in `obj0_reconnect_sig.csv`; the signature set is every Monday 00:00/00:13 UTC = the Sunday-open snapshots of the stale Friday book, plus eight weekend/reconnect minutes; **none of the 24 falls at 00:15 / 08:15 / 20:15 on a weekday**). ⚠️ **Three weekdays are MISSING — 08-14, 08-17, 08-21 — their per-partition queries died on the 900 s statement timeout while the same DB served the readers' queries; 20 of 23 weekdays read. Stated, not hidden; the medians below are over the 20.**
+
+| zone (ET → UTC) | weekday-days | bid drops, median (min–max) | symbols with a drop, median (max) | drops per 1,000 snaps, median | buckets excluded |
+|---|---|---|---|---|---|
+| **T 8:15 PM ET** (00:15–00:30Z) | 20 | **73** (9–98) | **65** (90) | **2.70** | 2 of 40 |
+| **T 4:15 AM ET** (08:00–08:30Z) | 20 | 66 (23–150) | 34 (45) | 1.55 | 1 of 60 |
+| **T 4:15 PM ET** (20:15–20:30Z) | 20 | 37 (14–73) | 20 (32) | 0.99 | 2 of 40 |
+| 9:30 AM ET open (13:30Z) | 16 | 2 (0–16) | 2 (5) | 0.11 | 0 of 16 |
+| pre-market body (08:45–13:15Z) | 20 | **220** (49–661) | 63 (113) | 0.97 | 28 of 380 |
+| after-hours body (20:45–23:45Z) | 20 | 65 (20–425) | 39 (67) | 0.50 | 16 of 252 |
+| overnight body (00:45–07:45Z) | 20 | 41 (1–184) | 13 (46) | 0.15 | 18 of 580 |
+| weekends (08-08/09, 15/16, 22/23, 29/30) | 8 | 0 outside the Friday-night 00:15 bucket (Sat 00:15: 74, 29, 19, 29 — Friday's 8:15 PM handoff) | | | |
+
+**THE BRANCH RULE, applied as registered** — *drops confined to the transition buckets, the rest of the off-hours carrying drops in ≤ 1% of symbol-minutes ⇒ TRANSITION-INSTANT batch; recurring through the session ⇒ session-behaviour, Kyle's decision.* Symbol-minutes, two denominators: (a) snaps ÷ 4 (the 4 s archive throttle) — 1 drop per 1,000 snaps ≈ 0.4% of symbol-minutes; (b) quoting symbols × minutes in the zone.
+| session body | median drops | (a) | (b) |
+|---|---|---|---|
+| pre-market (4:45–9:15 ET) | 220 | ≈ 0.39% | 220 / (≈300 × 270) = **0.27%** |
+| after-hours (4:45–7:45 PM ET) | 65 | ≈ 0.20% | 65 / (≈350 × 180) = **0.10%** |
+| overnight (8:45 PM–3:45 AM ET) | 41 | ≈ 0.06% | 41 / (≈280 × 420) = **0.03%** |
+⇒ ✅ **BRANCH: TRANSITION-DOMINATED — every session body is under the 1% line on both denominators; the collapse mass sits at the three handoffs, with 8:15 PM ET carrying most of it (65 of ~479 names on a median night) and the 9:30 AM open carrying none.** ⇒ **This is the SMALL batch. Kyle is NOT asked the stub question** (the premise he refused on 08-31 — *"the book is a stub for most of the day"* — is refuted by the run: it is a stub for most NAMES at three MOMENTS, and for a minority of names for the rest of one session).
+
+⚠️ **FOUR QUALIFICATIONS THAT TRAVEL WITH THE CALL, none of which flips it:**
+1. **"Instant" describes the ONSET, not the duration.** At the 8:15 PM handoff a quarter to a third of the collapsed names stay collapsed for more than an hour, some until the 4 AM handoff (§15.4: 11 of 47 on 09-01; 27 of 85 on 08-05). The guard therefore has to be a per-tick test of the BOOK, not a rule about the minute (§15.7) — which is what the branch's "small batch" already means.
+2. **The pre-market body is the largest absolute count (220 median) and still under the line because it is a FLICKER on ~40 thin names that are never held** (§15.6, the fresh reader's 102-position-day join). It is under the threshold by rate, and irrelevant by exposure; both are stated because either alone would be read as the whole story.
+3. **The registered predicate UNDER-COUNTS the damaging shape.** The trade record's worst rows moved BOTH sides (§15.5); the ask-holds test does not see them. A post-hoc hollow-book count (spread > 20% of mid, bid ≤ 0.90 × prior mid, `last` unchanged) is running on three days and is published in §16.1 when it lands — as POST-HOC, beside the registered figure, never in its place.
+4. **Three weekdays are missing** (timeouts) and 62 of 1,368 weekday buckets were excluded for reconnect minutes; the medians are robust to both (the min–max ranges are shown), but n = 20, not 23.
+
+⇒ **WHAT THE BATCH NOW IS:** OBJ-0 closes the investigation half. The remedy is scoped next — Step 1 re-dispatch to Langston with §2.1b (the revived band, re-triggered on book state), §13.1b (the daily-loss-budget consumer), §15 (the three handoffs and the feed's quarter-hour lag) and this section — after a fresh reader on this read-out, per Kyle's instruction. **Build now, deploy after the 09-07 window closes.**
+
