@@ -360,5 +360,46 @@ check("...and this block's two unresolvable rows are among them",
 check("...and counts uncorrected rows too, so the denominator is present",
       "uncorrected" in _health, str(_health))
 
+
+print("")
+print("BLOCK 8 -- RE-RUNNING THE REPAIR MUST NOT POISON WHAT IT ALREADY FIXED")
+# ⛔ MEASURED ON THE LIVE STORE THE MOMENT THE HEALTH CHECK SHIPPED, AND ONLY
+#    BECAUSE IT SHIPPED: re-running the repair appended 86 identical
+#    corrections differing ONLY in `read_at` -- the time the RE-PARSE ran, not
+#    anything about the observation. The index compared whole entries, so all
+#    86 keys poisoned, and the corrected read path went from 86 rows corrected
+#    to 86 rows `ambiguous_unresolvable`. A live degradation caused by the
+#    safety mechanism's own comparison being too strict.
+# ★ Langston's condition earned its keep on its FIRST REAL RUN: the surface he
+#   required turned a silent regression into a non-zero count.
+RR_WHEN = datetime(2026, 9, 2, 14, 0, 0, tzinfo=timezone.utc)
+RR_DAY = RR_WHEN.strftime("%Y-%m-%d") + ".jsonl"
+RR_WAS = {"sol": 0.0, "source": "bonding_curve_real_reserves"}
+store.record_observation("RERUN", "1h", RR_WHEN, {"pool_sol": dict(RR_WAS)})
+for _stamp in ("2026-09-02T10:32:28.774972+00:00",
+               "2026-09-02T11:38:49.909397+00:00"):
+    store.record_pool_sol_correction(
+        {"mint": "RERUN", "observed_at": RR_WHEN.isoformat(), "was": dict(RR_WAS),
+         "corrected": {"sol": None, "source": "curve_complete_graduated",
+                       "read_at": _stamp}})
+
+_rr = [r for r in store.observations(RR_DAY) if r.get("mint") == "RERUN"]
+check("two runs of the same repair leave the row CORRECTED, not poisoned",
+      len(_rr) == 1 and _rr[0].get("pool_sol_correction") == "applied", str(_rr))
+check("...and the corrected value is the one both runs agreed on",
+      _rr and _rr[0]["pool_sol"]["source"] == "curve_complete_graduated", str(_rr))
+
+# ⛔ THE DISCRIMINATING HALF. Ignoring `read_at` must NOT become ignoring
+#    disagreement: two runs that produce genuinely DIFFERENT corrections still
+#    have to poison the key, or the fix for over-strictness would have made
+#    the index blind.
+store.record_pool_sol_correction(
+    {"mint": "RERUN", "observed_at": RR_WHEN.isoformat(), "was": dict(RR_WAS),
+     "corrected": {"sol": 3.0, "source": "bonding_curve_real_reserves",
+                   "read_at": "2026-09-02T12:00:00+00:00"}})
+_rr = [r for r in store.observations(RR_DAY) if r.get("mint") == "RERUN"]
+check("★ a genuinely DIFFERENT correction still poisons the key",
+      _rr and _rr[0].get("pool_sol_correction") == "ambiguous_unresolvable", str(_rr))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

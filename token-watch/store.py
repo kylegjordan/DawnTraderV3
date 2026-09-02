@@ -377,6 +377,28 @@ def record_pool_sol_correction(rec: dict) -> None:
     _append(POOL_SOL_CORRECTIONS_PATH, rec)
 
 
+# ⛔ `read_at` RECORDS WHEN THE RE-PARSE RAN, NOT ANYTHING ABOUT THE
+#    OBSERVATION -- so two re-parses of the same bytes producing the same
+#    values ARE the same correction, and comparing on it makes the repair
+#    non-idempotent.
+# ⛔⛔ MEASURED THE MOMENT THE HEALTH CHECK SHIPPED, WHICH IS THE ONLY REASON
+#    IT WAS SEEN: re-running the repair appended 86 identical corrections
+#    differing ONLY in `read_at`, the index poisoned all 86 keys, and the
+#    corrected read path went from 86 rows corrected to 86 rows
+#    `ambiguous_unresolvable` -- a LIVE degradation, caused by the safety
+#    mechanism's own comparison being too strict.
+# ★ Langston's condition earned its keep on its first real run: the surface he
+#   required is what turned a silent regression into a non-zero count and a
+#   non-zero exit.
+_VOLATILE_CORRECTION_FIELDS = ("read_at",)
+
+
+def _stable(d: dict) -> dict:
+    """A correction's meaning, with the fields that change on every run removed."""
+    return {k: v for k, v in (d or {}).items()
+            if k not in _VOLATILE_CORRECTION_FIELDS}
+
+
 def pool_sol_correction_index():
     """(mint, observed_at) -> corrected `pool_sol`, for analysis to apply.
 
@@ -393,7 +415,7 @@ def pool_sol_correction_index():
         val = rec.get("corrected")
         if not all(key) or not isinstance(val, dict):
             continue
-        entry = {"corrected": val, "was": rec.get("was") or {}}
+        entry = {"corrected": _stable(val), "was": _stable(rec.get("was") or {})}
         # ⛔ POISONED ON THE WHOLE ENTRY, NOT ON `corrected` ALONE (Langston,
         #    2026-09-02, and this was a FALSE POSITIVE BUILT INTO THE INDEX).
         #    `repair_pool_sol` re-decodes both duplicate-key twins from the
