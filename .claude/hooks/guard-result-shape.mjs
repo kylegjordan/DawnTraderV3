@@ -32,12 +32,14 @@
 //                     MAY have bounded it — a 50-line file under `tail -50` also has 50 lines; the
 //                     count is not evidence either way, which is exactly why it must be re-run.
 //                     Floor 5: a cap of 1 equals its output constantly.
-//   error-counted   — stdout carries a hard error signature (fatal:, No such file, Traceback,
-//                     command not found, 404, ECONNREFUSED…) AND its last line is a bare integer
-//                     AND the command carries a counting/parsing stage (wc, grep -c, jq, python,
-//                     awk, sort|uniq) ⇒ an error was printed and then a number was produced
-//                     anyway — the number describes the failure. 88 such results in the replay
-//                     (`grep: /tmp/x: No such file or directory` → `0`).
+//   error-counted   — ONE pipeline whose LAST stage is a real counter (wc, grep -c, uniq -c,
+//                     jq length), stdout carries a hard error signature (fatal:, No such file,
+//                     Traceback, command not found, HTTP 404…) AND its last line is a bare
+//                     integer ⇒ an error was printed and the count was produced anyway — the
+//                     number describes the failure (`grep: /tmp/x: No such file` → `0`).
+//                     r3: the r2 version allowed any stage and any "python"/"sort" — 60 replayed
+//                     fires, 0 on a single pipeline, every number a value or another stage's
+//                     count. That was a value leg wearing an error leg's name.
 //   html-not-json   — the command asked an API (curl/wget to /api/ or piped to jq) and the body
 //                     is HTML ⇒ a login page or an error page was read as data.
 //   other-document  — one pipeline that fetches/shows ONE path whose name carries a batch id, and
@@ -92,16 +94,42 @@ function note(row) {
 
 function elide(cmd) {
   return cmd
-    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ')
-    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ')
+    // r3: keep the heredoc's OWN first line (`cat <<'EOF' | head -20` carries a cap there);
+    // elide from the newline after the tag to the terminator.
+    // The retained start line must not still read as a heredoc opener, or the unterminated pass
+    // below re-matches it and elides every later stage (found by a mutation arm, r3).
+    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1([^\n]*)\n[\s\S]*?^\s*\2\s*$/gm, '[heredoc $2]$3 [heredoc-elided] ')
+    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1([^\n]*)\n[\s\S]*$/m, '[heredoc $2]$3 [unterminated-heredoc-elided] ')
     .replace(/(?:-m\s+|--message(?:=|\s+)|\becho\s+(?:-[a-zA-Z]+\s+)?)("[^"]*"|'[^']*')/g, ' [quoted-prose-elided] ');
 }
 
-/** The single pipeline the harness's stdout belongs to, or null if the command is multi-stage. */
-function singlePipeline(ec) {
-  const stages = ec.split(/&&|\|\||[;\n]/).map((s) => s.trim()).filter(Boolean);
-  const body = stages.filter((s) => !/^(cd|export|set|source|pushd|popd)\b/.test(s));
-  return body.length === 1 ? body[0] : null;
+/** Quote-aware stage split: `;`, `&&`, `||`, newline OUTSIDE quotes. r3, reader-found: the r2
+ *  split was quote-blind, so `psql -c "select 1; select 2 LIMIT 20"` read as two stages and
+ *  65 genuine exact-cap results in the replay were silenced. */
+function splitStages(s) {
+  const out = []; let q = null, start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { if (c === q) q = null; continue; }
+    if (c === '"' || c === "'") { q = c; continue; }
+    const two = s.slice(i, i + 2);
+    if (two === '&&' || two === '||') { out.push(s.slice(start, i)); start = i + 2; i++; continue; }
+    if (c === ';' || c === '\n') { out.push(s.slice(start, i)); start = i + 1; }
+  }
+  out.push(s.slice(start));
+  return out.map((x) => x.trim()).filter(Boolean);
+}
+
+/** The single pipeline the harness's stdout belongs to, or null if the command is multi-stage.
+ *  A remote/sub-shell wrapper (`ssh host '…'`, `sh -c '…'`, `su - x -c '…'`) is single only if
+ *  its quoted payload is single too — the payload's stages produce the stdout. */
+function singlePipeline(ec, depth = 0) {
+  const body = splitStages(ec).filter((s) => !/^(cd|export|set|source|pushd|popd)\b/.test(s));
+  if (body.length !== 1) return null;
+  const one = body[0];
+  const w = /^(?:ssh\b[^"']*|(?:bash|sh|su\b[^"']*)\s+(?:-l?c|-c)\s*)("([^"]*)"|'([^']*)')\s*$/.exec(one);
+  if (w && depth < 2) return singlePipeline(w[2] !== undefined ? w[2] : w[3], depth + 1);
+  return one;
 }
 
 /** Every numeric cap the pipeline carries. */
@@ -116,10 +144,12 @@ function caps(p) {
   return out;
 }
 
-const ERROR_SIG = /^(fatal|error|ERROR|Error):|No such file or directory|Traceback \(most recent call last\)|command not found|Permission denied|\b404\b|Not Found|Cannot GET|ECONNREFUSED|ETIMEDOUT|Connection refused|does not exist in|Could not resolve host|unknown revision or path/m;
-// Counting / parsing stages ANYWHERE in the command — not `| head`/`| sed`/`| tail`, which r1
-// counted as consumers and which matched 69% of all commands (reader, r2).
-const COUNTER = /\b(wc\b|grep\s+-[a-zA-Z]*c\b|jq\b|python3?\b|node\b|awk\b|uniq\s+-c\b|sort\b)/;
+// r3: `\b404\b` alone matched issue "#404" in governance text (4 false fires); the HTTP form is
+// required. `python3` was removed from the counters — it was matching the program that THREW
+// the traceback, not a counter (26 of 41 replayed fires).
+const ERROR_SIG = /^(fatal|error|ERROR|Error):|No such file or directory|Traceback \(most recent call last\)|command not found|Permission denied|HTTP\S*\s+404\b|\b404 Not Found\b|\bNot Found\b|Cannot GET|ECONNREFUSED|ETIMEDOUT|Connection refused|does not exist in|Could not resolve host|unknown revision or path/m;
+// A real counter as the LAST stage of the (single) pipeline — the number is then that count.
+const COUNTER_LAST = /(?:^|\|)\s*(wc\b|grep\s+(?:-[a-zA-Z]*)?c\b[^|]*|uniq\s+-c\b|jq\s+(?:-r\s+)?'?\.?(?:length|\|\s*length)'?)[^|]*$/;
 const BATCH_ID = /\b(B-[A-Z0-9][A-Z0-9-]*[A-Z0-9]|P\d+-B[0-9][0-9A-Za-z.]*)\b/;
 const STOP_WORDS = new Set(['B', 'P', 'SCOPE', 'PRE', 'AUDIT', 'PLAN', 'REPORT', 'COMPLETION', 'LEG', 'LEG1', 'LEG2', 'LEG3', 'RESULT', 'ENUMERATION', 'MD', 'R1', 'R2', 'R3', 'R4', 'R5', 'SUB', 'BATCH', 'PROGRESS']);
 
@@ -148,9 +178,12 @@ function shapes(cmd, stdout) {
     }
   }
 
+  // r3: SINGLE PIPELINE ONLY, counter LAST. The r2 leg fired 60 times in the replay, 0 of them
+  // on a single pipeline: every trailing integer was a value (a max issue number, a file mode)
+  // or a count from a LATER stage — error-anywhere + integer-anywhere. That is a value leg.
   const lastOut = nLines ? outLines[nLines - 1].trim() : '';
   const sig = ERROR_SIG.exec(stdout);
-  if (sig && /^\d+$/.test(lastOut) && COUNTER.test(ec)) {
+  if (pipe && sig && /^\d+$/.test(lastOut) && COUNTER_LAST.test(pipe)) {
     hits.push(['error-counted', `the output carries "${sig[0]}" and still ends in the bare number ${lastOut} — an error was printed and a count was produced anyway. That number describes the failure, not the object.`]);
   }
 
@@ -188,8 +221,13 @@ function main() {
   if (resp.interrupted) { note({ decided: false, reason: 'interrupted' }); return; }
   // stderr is merged into stdout on the wire (measured); if a future harness ever separates
   // them, an error on stderr must not vanish — so the two are joined here, stderr first.
-  let stdout = (typeof resp.stderr === 'string' && resp.stderr && !/^Shell cwd was reset/.test(resp.stderr) ? resp.stderr + '\n' : '')
-    + (typeof resp.stdout === 'string' ? resp.stdout : '');
+  // r3, reader-found: every one of the 4,359 real notices begins with a NEWLINE ("\nShell cwd was
+  // reset to …"), so r2's `^Shell cwd` matched 0 of them and the notice was joined as two lines —
+  // 85 spurious cap-bound fires (cap−2 outputs) and 241 silenced exact-cap results. The notice
+  // is stripped WHEREVER it sits and the remainder joined only if anything is left.
+  const rawErr = typeof resp.stderr === 'string' ? resp.stderr : '';
+  const errRest = rawErr.replace(/^\s*Shell cwd was reset[^\n]*\n?/gm, '').trim();
+  let stdout = (errRest ? errRest + '\n' : '') + (typeof resp.stdout === 'string' ? resp.stdout : '');
   if (stdout.length > 2 * WINDOW) stdout = stdout.slice(0, WINDOW) + '\n' + stdout.slice(-WINDOW);
 
   const hits = shapes(cmd, stdout);

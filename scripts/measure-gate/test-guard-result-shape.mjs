@@ -44,6 +44,21 @@ check('a MULTI-STAGE command (echo hdr; grep | head -20) with 20 total lines is 
 check('a heredoc MENTIONING head -50 with 50 lines of unrelated output is SILENT', run("cat > /tmp/n.txt <<'EOF'\nnever trust head -50 as a population\nEOF\ncat /tmp/list.txt", lines(50)).ctx === null);
 check('a commit message QUOTING head -50 with 50 lines of output is SILENT', run('git commit -m "the head -50 read was wrong" -- a.md', lines(50)).ctx === null,
       'fired: ' + String(run('git commit -m "the head -50 read was wrong" -- a.md', lines(50)).ctx).slice(0, 60));
+// r3 arms — quote-aware split, wrapper recursion, each cap form, heredoc start line, the real notice.
+check('a ";" INSIDE a quoted argument keeps it one pipeline (psql -c "…; … LIMIT 20") → FIRES', fires('cap-bound', run('psql -c "select 1; select id from t LIMIT 20"', lines(20))));
+check('ssh host \'tail -50 file\' (single remote stage) with 50 lines FIRES', fires('cap-bound', run("ssh root@188.245.193.8 'tail -50 /var/log/dawntrader/system-alerts.jsonl'", lines(50))));
+check('ssh host "a; b | tail -20" (multi-stage remote payload) with 20 lines is SILENT', run('ssh root@x "echo hdr; grep foo f | tail -20"', lines(20)).ctx === null);
+check('two commands split by a NEWLINE with 20 total lines is SILENT', run('echo hdr\ngrep foo x | head -20', lines(20)).ctx === null);
+check('a cap on the heredoc START line (cat <<EOF | head -20) with 20 lines FIRES', fires('cap-bound', run("cat <<'EOF' | head -20\nline\nEOF", lines(20))));
+check('a stage AFTER a terminated heredoc is still seen (heredoc; then grep | head -20 with 20 lines is multi-stage → SILENT, and its cap is not lost: same with the heredoc removed FIRES)',
+      run("cat > /tmp/x.txt <<'EOF'\nbody\nEOF\ngrep foo f | head -20", lines(20)).ctx === null && fires('cap-bound', run('grep foo f | head -20', lines(20))));
+check('tail -50 at exactly 50 lines FIRES', fires('cap-bound', run('tail -50 /var/log/x.log', lines(50))));
+check('grep -m 10 at exactly 10 lines FIRES', fires('cap-bound', run('grep -m 10 foo x.log', lines(10))));
+check('--limit 30 at exactly 30 lines FIRES', fires('cap-bound', run('gh run list --limit 30', lines(30))));
+check('gh -L 12 at exactly 12 lines FIRES', fires('cap-bound', run('gh pr list -L 12', lines(12))));
+check('git log -n 15 at exactly 15 lines FIRES', fires('cap-bound', run('git log -n 15 --oneline', lines(15))));
+check('the REAL cwd notice ("\\nShell cwd was reset…") on stderr does not shift the count: head -20 with 20 rows FIRES', fires('cap-bound', run('grep foo x | head -20', lines(20), '\nShell cwd was reset to G:\\My Drive\\x\n')));
+check('…and with 18 rows is SILENT (the notice must not pad it to 20)', run('grep foo x | head -20', lines(18), '\nShell cwd was reset to G:\\My Drive\\x\n').ctx === null);
 
 console.log('\n=== error-counted (the merged wire: an error printed, then a number anyway) ===');
 const FATAL = "fatal: path '1-system-manual/FOO.md' does not exist in 'origin/x'\n";
@@ -55,7 +70,13 @@ check('a counter with a clean number and no error signature is SILENT (never fir
 check('a clean count with empty stderr is SILENT (never fire on a value)', run('psql -c "select count(*) from trades"', '0\n').ctx === null);
 check('an empty stdout is SILENT (never fire on a value)', run('grep -c breach /var/log/x.log', '').ctx === null);
 check('an error arriving on a SEPARATE stderr (a future harness) is still seen', fires('error-counted', run('git show origin/x:FOO.md | wc -l', '0\n', FATAL)));
-check('the harness cwd notice on stderr is not an error', run('cat f.txt | wc -l', '3\n', 'Shell cwd was reset to C:/x\n').ctx === null);
+check('the REAL harness cwd notice ("\\nShell cwd was reset…") on stderr is not an error', run('cat f.txt | wc -l', '3\n', '\nShell cwd was reset to G:\\My Drive\\x\n').ctx === null);
+// r3 arms — the replayed false fires, each pinned silent.
+check('MULTI-STAGE: a python Traceback then a later "grep -c" count is SILENT (python is not a counter; the count is another stage\'s)',
+      run("python3 - <<'PY'\nraise SystemExit(1)\nPY\nnpx tsc --noEmit | grep -c 'error TS'", 'Traceback (most recent call last):\n  File "<stdin>", line 1\nSystemExit: 1\n384\n').ctx === null);
+check('"error:" then a max issue number from sort -n | tail -1 is SILENT (a value, multi-stage)', run("git pull -q; grep -oE '#[0-9]+' RUNNING_ISSUES.md | sort -n | tail -1", 'error: cannot pull with rebase\n#915\n'.replace('#915', '915')).ctx === null);
+check('issue "#404" in governance text is not an HTTP 404 (SILENT)', run('grep -c "#430" 1-system-manual/RUNNING_ISSUES.md', 'see #404 for the prior\n3\n').ctx === null);
+check('"HTTP/1.1 404 Not Found" then a jq length of 0 FIRES', fires('error-counted', run("curl -si http://x/api/rows | jq 'length'", 'HTTP/1.1 404 Not Found\n0\n')));
 
 console.log('\n=== html-not-json (a page read as data) ===');
 check('curl to /api/ returning an HTML document FIRES', fires('html-not-json', run('curl -s http://188.245.193.8/api/vts/filter-diagnostics | head -c 400', '<!DOCTYPE html>\n<html><head><title>Sign in</title></head><body>…</body></html>\n')));
@@ -73,6 +94,7 @@ check('a RENAMED batch sharing a word (B_EXIT_GRID_REPRESENTABILITY → # F-G-1 
 check('a parent scope answering a sub-batch path (B_GOV_4_SCOPE → # B-GOV) is SILENT', run('head -5 B_GOV_4_SCOPE.md', '# B-GOV governance batch\n' + lines(3)).ctx === null);
 check('a MULTI-STAGE command reading two files (first H1 belongs to the other file) is SILENT', run('head -8 GOVERNANCE_EXCEPTIONS.md; head -3 B_REPO_RELOCATE_MIGRATION_PLAN.md', '# (B-GOV) exceptions\n' + lines(7) + '# B-REPO-RELOCATE plan\n' + lines(2)).ctx === null);
 check('an H1 past the first 20 lines is not compared (SILENT)', run(RAW, lines(25) + '# B-GOV-HYGIENE-ANALYST-1\n').ctx === null);
+check('an H1 on line 10 (inside the window) IS compared → FIRES', fires('other-document', run(RAW, lines(9, 'front-matter') + '# B-GOV-HYGIENE-ANALYST-1\n' + lines(3))));
 check('a batch file whose H1 carries no batch id is SILENT', run('git show origin/migration/aws-supabase:"Claude Comms and Packages/Scope Files/B_MEASURE_GATE_LEG2_SCOPE.md"', '# Scope\n\nbody…\n').ctx === null);
 
 console.log('\n=== invariants ===');
@@ -97,7 +119,18 @@ if (!process.env.GUARD6C_UNDER_TEST) {
     ['drop the heredoc and quoted-prose elision (fires on a MENTION of head -50)', (s) => s.replace('const ec = elide(cmd);', 'const ec = cmd;')],
     ['key the error leg on stderr again (zero reachable inputs on this wire)', (s) => s.replace('const sig = ERROR_SIG.exec(stdout);', "const sig = ERROR_SIG.exec(typeof resp === 'undefined' ? '' : '');")],
     ['let ANY output count as an error signature', (s) => s.replace('const sig = ERROR_SIG.exec(stdout);', 'const sig = /./.exec(stdout);')],
-    ['drop the counting-stage condition (fires on any error + number)', (s) => s.replace('if (sig && /^\\d+$/.test(lastOut) && COUNTER.test(ec))', 'if (sig && /^\\d+$/.test(lastOut))')],
+    ['drop the counter-last condition (fires on any error + number)', (s) => s.replace('if (pipe && sig && /^\\d+$/.test(lastOut) && COUNTER_LAST.test(pipe))', 'if (pipe && sig && /^\\d+$/.test(lastOut))')],
+    ['let error-counted fire on MULTI-STAGE commands again', (s) => s.replace('if (pipe && sig && /^\\d+$/.test(lastOut) && COUNTER_LAST.test(pipe))', 'if (sig && /^\\d+$/.test(lastOut) && COUNTER_LAST.test(ec))')],
+    ['make the stage split quote-BLIND again', (s) => s.replace("if (c === '\"' || c === \"'\") { q = c; continue; }", '')],
+    ['stop recursing into ssh/sh -c payloads', (s) => s.replace('if (w && depth < 2)', 'if (false)')],
+    ['drop the cwd-notice stripping (the notice pads every count by two)', (s) => s.replace("const errRest = rawErr.replace(/^\\s*Shell cwd was reset[^\\n]*\\n?/gm, '').trim();", 'const errRest = rawErr.trim();')],
+    ['match a bare 404 again (issue #404 fires)', (s) => s.replace('HTTP\\S*\\s+404\\b|\\b404 Not Found\\b|\\bNot Found\\b', '\\b404\\b|\\bNot Found\\b')],
+    ['drop the tail cap', (s) => s.replace('/\\btail\\s+(?:-n\\s*|-)(\\d+)\\b/g,', '')],
+    ['swallow the heredoc start line again', (s) => s.replace("/<<-?\\s*(['\"]?)([A-Za-z_][A-Za-z0-9_-]*)\\1([^\\n]*)\\n[\\s\\S]*?^\\s*\\2\\s*$/gm, '[heredoc $2]$3 [heredoc-elided] '", "/<<-?\\s*(['\"]?)([A-Za-z_][A-Za-z0-9_-]*)\\1[\\s\\S]*?^\\s*\\2\\s*$/gm, ' [heredoc-elided] '")],
+    // NOT an arm: "let the unterminated pass re-match a terminated heredoc" was tried and leaves the
+    // suite GREEN — the re-match only ever makes the guard MORE silent (later stages vanish → one
+    // stage with no cap), and every arm where that happens is silent already. It was found
+    // through the multi-stage error-counted mutation, which is the arm that pins it.
     ['drop the API condition (fires on any HTML)', (s) => s.replace("const asksApi = /\\b(curl|wget|Invoke-WebRequest|iwr)\\b/.test(ec) && (", 'const asksApi = true || (')],
     ['drop the shared-word tolerance (renamed batches fire)', (s) => s.replace('if (gw.size && !shared)', 'if (gw.size)')],
     ['drop the H1 line window', (s) => s.replace('const H1_LINES = 20;', 'const H1_LINES = 1e9;')],
