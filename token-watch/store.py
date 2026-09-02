@@ -356,7 +356,24 @@ def record_pool_sol_correction(rec: dict) -> None:
     WRITTEN BY `repair_pool_sol.py`, whose header carries the defect these
        correct -- a graduated curve reported as an empty pool, and a
        USDC-quoted reserve scaled as though it were SOL.
+
+    `was` IS REQUIRED AND A RECORD WITHOUT IT IS REJECTED HERE (Langston,
+       2026-09-02). The read-path validator was `if was and ...` -- OPT-IN BY
+       THE PRESENCE OF A FIELD -- so a correction written without `was` would
+       falsify the guard and drop through to the unconditional apply: the
+       key-only join that had just been removed, restored by an ABSENT FIELD.
+    ⛔ AND THE OPT-OUT BEING AN OMISSION IS THE EXACT DISTINCTION DRAWN SIXTY
+       LINES UP: an omission is invisible, a named call is a census. I wrote
+       the sibling that ignores it AGAIN, one function apart, inside the fix
+       for the first instance -- his third `fix-follows-pointer` in this batch.
+    ⇒ A correction that cannot be validated must not be able to ENTER the
+       store, which is why this raises rather than the reader coping.
     """
+    if not isinstance(rec.get("was"), dict) or not rec["was"]:
+        raise ValueError(
+            "a pool_sol correction must carry `was` -- the value it was "
+            "computed from. Without it the read path cannot tell which row a "
+            "correction belongs to, and (mint, observed_at) is not unique.")
     _append(POOL_SOL_CORRECTIONS_PATH, rec)
 
 
@@ -377,8 +394,16 @@ def pool_sol_correction_index():
         if not all(key) or not isinstance(val, dict):
             continue
         entry = {"corrected": val, "was": rec.get("was") or {}}
-        if key in idx and idx[key] is not None \
-                and idx[key]["corrected"] != val:
+        # ⛔ POISONED ON THE WHOLE ENTRY, NOT ON `corrected` ALONE (Langston,
+        #    2026-09-02, and this was a FALSE POSITIVE BUILT INTO THE INDEX).
+        #    `repair_pool_sol` re-decodes both duplicate-key twins from the
+        #    SAME pair address, so twins yield two corrections with the SAME
+        #    `corrected` and DIFFERENT `was`. Comparing `corrected` alone left
+        #    them unpoisoned, last-write-wins kept one `was`, and the other
+        #    twin was then marked `not_applied_value_mismatch` DESPITE a
+        #    correct correction for it existing. Keyed on both, the twins
+        #    poison the key and neither is silently mismatched.
+        if key in idx and idx[key] is not None and idx[key] != entry:
             idx[key] = None
             continue
         idx[key] = entry
@@ -681,9 +706,12 @@ def observations(day_file: str, _idx=None):
         #    value. A row whose stored value is not the one the correction was
         #    derived from is MARKED, never silently overwritten -- the
         #    correction may belong to its twin.
+        # UNCONDITIONAL. It read `if was and ...`, which made the whole
+        #    validator opt-in by the presence of a field. `was` is now
+        #    required at write time, so there is no opt-out left to forget.
         was = entry.get("was") or {}
         cur = rec.get("pool_sol") or {}
-        if was and any(cur.get(k) != v for k, v in was.items()):
+        if any(cur.get(k) != v for k, v in was.items()):
             rec = dict(rec)
             rec["pool_sol_correction"] = "not_applied_value_mismatch"
             out.append(rec)
@@ -693,6 +721,30 @@ def observations(day_file: str, _idx=None):
         rec["pool_sol_correction"] = "applied"
         out.append(rec)
     return out
+
+
+def correction_health(day_file: str):
+    """Counts of each correction outcome for one day. NON-ZERO MEANS LOOK.
+
+    ⛔ WHY THIS EXISTS RATHER THAN THE READ PATH RAISING (Langston, 2026-09-02,
+       and the split is his): a read path must not raise on a data condition
+       -- that trades a wrong number for no page at all, and the failure lands
+       on consumers who did nothing wrong. So the ROW is marked and the RUN is
+       counted.
+    ⛔ BUT A MISMATCH IS NOT A ROUTINE OUTCOME. Both stores are append-only, so
+       a row's value cannot change; a mismatch means the corrections store and
+       the observation store disagree about a fact neither can have altered.
+       That is a CORRUPTION SIGNAL WEARING A ROUTINE MARKER.
+    ★ AND IT CANNOT FIRE TODAY -- every correction was computed from the value
+      currently stored -- which is exactly the property that makes it
+      dangerous: a never-armed branch is silent with zero opportunity, and its
+      silence is not evidence.
+    """
+    counts = {"applied": 0, "not_applied_value_mismatch": 0,
+              "ambiguous_unresolvable": 0, "uncorrected": 0}
+    for rec in observations(day_file):
+        counts[rec.get("pool_sol_correction") or "uncorrected"] += 1
+    return counts
 
 
 def observation_path(when: datetime) -> str:

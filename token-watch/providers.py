@@ -230,6 +230,24 @@ def token_state(mint: str) -> dict:
     txns = (p.get("txns") or {}).get("h24") or {}
     liq = (p.get("liquidity") or {}).get("usd")
     vol = float((p.get("volume") or {}).get("h24") or 0)
+    # ⛔⛔ THE CHOSEN PAIR CAN BE A DEAD ONE, AND THE ROW MUST SAY SO (`#983`,
+    #    Langston 2026-09-02 splitting the issue: MARKING folds in now,
+    #    SELECTING stays its own batch).
+    #    The pair is chosen by 24-HOUR VOLUME. On graduation the liquidity
+    #    moves to a new pool while the day's volume still sits on the drained
+    #    curve, so for a freshly-graduated token the pair we OBSERVE -- its
+    #    price, its volume, its buy/sell counts -- can be the emptied one.
+    # MEASURED 2026-09-02 over 28,149 distinct tokens: 213 (0.757%) are
+    #    observed this way. SEVERITY IS NOT PROPORTIONAL TO SHARE -- TIPSYDOG
+    #    carried 12,834 in 24h volume on a chosen pair with NO liquidity while
+    #    its live pool held $17,828. That is not a weak measurement of
+    #    liquidity; it is not a measurement of liquidity.
+    # ⇒ A wrong-venue observation must not be indistinguishable from a good
+    #   one. Marking it is cheap and the data is already in hand; CHOOSING
+    #   better is a design question and is `B-TOKENWATCH-PAIR-SELECT`.
+    alt_liquid = [q for q in pairs if q is not p
+                  and float((q.get("liquidity") or {}).get("usd") or 0) > 0]
+    observed_dead_pool = bool(not liq and alt_liquid)
     return {
         "alive": vol > 0,
         "pairs": len(pairs),
@@ -255,6 +273,14 @@ def token_state(mint: str) -> dict:
         #    not the mint: liquidity is a property of the pot, and the mint is
         #    only the label on one side of it.
         "pair_address": p.get("pairAddress"),
+        # `#983` -- TRUE when the pair we are observing has no liquidity while
+        #    ANOTHER pair for this token does. The alternative's depth is
+        #    recorded too, because "there is a live pool elsewhere" and "there
+        #    is a live pool elsewhere holding $17,828" are different findings.
+        "observed_dead_pool": observed_dead_pool,
+        "alt_pool_liquidity_usd": (
+            max(float((q.get("liquidity") or {}).get("usd") or 0)
+                for q in alt_liquid) if alt_liquid else None),
         # THE SOL PRICE AT THIS OBSERVATION, NOT A GLOBAL MEDIAN (Langston).
         #    "value now vs at launch" is meant to isolate the TOKEN's move;
         #    applying one rate to both ends folds SOL's own move into the

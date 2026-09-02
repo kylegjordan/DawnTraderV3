@@ -375,5 +375,63 @@ providers._rpc = _REAL_RPC
 check("the real RPC layer is restored, not left stubbed",
       providers._rpc is _REAL_RPC, "still stubbed")
 
+
+print("")
+print("BLOCK 7 -- #983: A WRONG-VENUE OBSERVATION MARKS ITSELF")
+# The pair is chosen by 24-HOUR VOLUME. On graduation the liquidity moves to a
+#    new pool while the day's volume still sits on the drained curve, so the
+#    pair we OBSERVE -- its price, its volume, its buy/sell counts -- can be
+#    the emptied one. MEASURED over 28,149 distinct tokens: 213 (0.757%).
+# Langston split the issue: MARKING folds in now while nothing reads the
+#    field, SELECTING a better pair stays its own batch.
+_REAL_GET = providers._get
+
+
+def _stub_get(pairs):
+    providers._get = lambda url, **kw: {"pairs": pairs}
+
+
+def _pair(dex, vol, liq, addr):
+    return {"dexId": dex, "pairAddress": addr, "priceUsd": "0.000001",
+            "priceNative": "0.00000001",
+            "volume": {"h24": vol}, "liquidity": ({"usd": liq} if liq else {}),
+            "txns": {"h24": {"buys": 1, "sells": 1}},
+            "baseToken": {"address": "MINT1", "symbol": "SYM", "name": "N"}}
+
+
+# THE CASE. The chosen pair is the DEAD one precisely because it carries the
+#    volume -- which is the whole mechanism, not an incidental detail.
+_stub_get([_pair("pumpfun", 12834.27, None, "DEADPOOL"),
+           _pair("pumpswap", 12.0, 17828.41, "LIVEPOOL")])
+_st = providers.token_state("MINT1")
+check("the higher-volume DEAD pair is the one that gets chosen",
+      _st["pair_address"] == "DEADPOOL" and _st["liquidity_usd"] is None, str(_st))
+check("★ ...and the observation MARKS itself as taken at a dead pool",
+      _st["observed_dead_pool"] is True, str(_st))
+check("★ ...and records how much is in the live pool it is NOT reading",
+      abs(_st["alt_pool_liquidity_usd"] - 17828.41) < 1e-6, str(_st))
+
+# ⛔ THE CONTROL THAT MATTERS MOST. 97% of this study's tokens are bonding
+#    curves, and a bonding curve NEVER publishes a liquidity figure. Without
+#    this check the flag would read TRUE for almost every token in the census
+#    and mean nothing -- a marker that fires everywhere is not a marker.
+_stub_get([_pair("pumpfun", 500.0, None, "SOLOPOOL")])
+_st = providers.token_state("MINT1")
+check("★ a lone bonding curve with no liquidity figure is NOT flagged",
+      _st["observed_dead_pool"] is False and _st["alt_pool_liquidity_usd"] is None,
+      str(_st))
+
+# And a token whose chosen pair DOES have liquidity is not flagged either,
+#    even when other pairs exist.
+_stub_get([_pair("pumpswap", 900.0, 5000.0, "GOODPOOL"),
+           _pair("meteora", 10.0, 42.0, "OTHERPOOL")])
+_st = providers.token_state("MINT1")
+check("a chosen pair that DOES report liquidity is not flagged",
+      _st["observed_dead_pool"] is False, str(_st))
+
+providers._get = _REAL_GET
+check("the real HTTP layer is restored, not left stubbed",
+      providers._get is _REAL_GET, "still stubbed")
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

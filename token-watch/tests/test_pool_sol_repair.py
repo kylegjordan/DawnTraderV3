@@ -112,6 +112,7 @@ check("★ while a DRAINED curve at the same zero IS distinguished from it",
 print("\nBLOCK 3 -- THE CORRECTIONS STORE")
 store.record_pool_sol_correction(
     {"mint": "M1", "observed_at": "2026-09-02T09:07:47+00:00",
+     "was": {"sol": 0.0},
      "corrected": {"sol": None, "source": "curve_complete_graduated"}})
 idx = store.pool_sol_correction_index()
 check("a correction is retrievable by (mint, observed_at)",
@@ -131,9 +132,11 @@ check("...and the value it was computed FROM, for the self-validating join",
 #    is not.
 store.record_pool_sol_correction(
     {"mint": "M2", "observed_at": "2026-09-02T09:07:47+00:00",
+     "was": {"sol": 0.0},
      "corrected": {"sol": 1.0, "source": "bonding_curve_real_reserves"}})
 store.record_pool_sol_correction(
     {"mint": "M2", "observed_at": "2026-09-02T09:07:47+00:00",
+     "was": {"sol": 0.0},
      "corrected": {"sol": 2.0, "source": "bonding_curve_real_reserves"}})
 idx = store.pool_sol_correction_index()
 check("★ a key with two DIFFERENT corrections is poisoned, never guessed",
@@ -143,6 +146,7 @@ check("★ a key with two DIFFERENT corrections is poisoned, never guessed",
 #    does not poison every key it already wrote.
 store.record_pool_sol_correction(
     {"mint": "M1", "observed_at": "2026-09-02T09:07:47+00:00",
+     "was": {"sol": 0.0},
      "corrected": {"sol": None, "source": "curve_complete_graduated"}})
 idx = store.pool_sol_correction_index()
 check("★ re-running the repair is idempotent, not self-poisoning",
@@ -153,7 +157,7 @@ check("★ re-running the repair is idempotent, not self-poisoning",
 #    here, which is the shape Langston has bounced twice in this batch: a
 #    check that cannot come out differently is not a check.
 _before = len(idx)
-store.record_pool_sol_correction({"corrected": {"sol": 1.0}})
+store.record_pool_sol_correction({"was": {"sol": 0.0}, "corrected": {"sol": 1.0}})
 idx2 = store.pool_sol_correction_index()
 check("★ a record missing its key adds NO entry",
       len(idx2) == _before, "%d entries before, %d after" % (_before, len(idx2)))
@@ -181,7 +185,8 @@ UNTOUCHED = {"sol": 1.25, "source": "bonding_curve_real_reserves"}
 store.record_observation("GRAD1", "1h", WHEN, {"pool_sol": dict(WRONG)})
 store.record_observation("CLEAN1", "1h", WHEN, {"pool_sol": dict(UNTOUCHED)})
 store.record_pool_sol_correction(
-    {"mint": "GRAD1", "observed_at": WHEN.isoformat(), "corrected": dict(RIGHT)})
+    {"mint": "GRAD1", "observed_at": WHEN.isoformat(),
+     "was": dict(WRONG), "corrected": dict(RIGHT)})
 
 _raw = {r["mint"]: r for r in store.read_observations_uncorrected(DAY)}
 _cor = {r["mint"]: r for r in store.observations(DAY)}
@@ -213,6 +218,7 @@ store.record_observation("AMB1", "1h", WHEN, {"pool_sol": dict(WRONG)})
 for _val in (1.0, 2.0):
     store.record_pool_sol_correction(
         {"mint": "AMB1", "observed_at": WHEN.isoformat(),
+         "was": dict(WRONG),
          "corrected": {"sol": _val, "source": "bonding_curve_real_reserves"}})
 _cor = {r["mint"]: r for r in store.observations(DAY)}
 check("a row whose corrections disagree is FLAGGED unresolvable",
@@ -264,6 +270,95 @@ check("the TWIN row is NOT overwritten by a correction that is not its own",
 check("...and it is MARKED, so an unapplied correction is never invisible",
       _miss and _miss[0]["pool_sol_correction"] == "not_applied_value_mismatch",
       str(_miss))
+
+
+print("")
+print("BLOCK 6 -- THE FIX ITSELF FAILED OPEN, AND THE INDEX HAD A FALSE POSITIVE")
+# BOTH FOUND BY LANGSTON, 2026-09-02, reading the fix for the previous defect.
+
+# ── 6a. THE VALIDATOR WAS OPT-IN BY THE PRESENCE OF A FIELD ───────────────
+# `if was and any(...)` -- a correction written WITHOUT `was` got {}, which
+#    falsified the guard and dropped through to the unconditional apply: the
+#    key-only join that had just been removed, restored by an ABSENT FIELD.
+#    His words: the opt-out being an omission is the exact distinction drawn
+#    sixty lines up, and I wrote the sibling that ignores it again, one
+#    function apart, inside the fix for the first instance.
+_rejected = False
+try:
+    store.record_pool_sol_correction(
+        {"mint": "NOWAS", "observed_at": "2026-09-02T12:00:00+00:00",
+         "corrected": {"sol": None, "source": "curve_complete_graduated"}})
+except ValueError:
+    _rejected = True
+check("a correction with no `was` is REJECTED AT WRITE TIME",
+      _rejected, "it was accepted")
+# THE DISCRIMINATING HALF: rejected at the door, not merely ignored later.
+#    A record that entered the store and was skipped on read would leave the
+#    fail-open one careless reader away from returning.
+check("...and does not enter the store at all",
+      ("NOWAS", "2026-09-02T12:00:00+00:00") not in store.pool_sol_correction_index(),
+      "it is in the index")
+_rejected_empty = False
+try:
+    store.record_pool_sol_correction(
+        {"mint": "EMPTYWAS", "observed_at": "2026-09-02T12:00:00+00:00",
+         "was": {}, "corrected": {"sol": 1.0}})
+except ValueError:
+    _rejected_empty = True
+check("an EMPTY `was` is rejected too, not treated as present",
+      _rejected_empty, "an empty dict was accepted")
+
+# ── 6b. THE INDEX POISONED ON `corrected` ALONE, WHICH WAS A FALSE POSITIVE
+# The repair re-decodes both duplicate-key twins from the SAME pair address,
+#    so twins yield two corrections with the SAME `corrected` and DIFFERENT
+#    `was`. Comparing `corrected` alone left them unpoisoned, last-write-wins
+#    kept one `was`, and the OTHER twin was then marked
+#    `not_applied_value_mismatch` DESPITE a correct correction existing for it.
+FP_WHEN = datetime(2026, 9, 2, 13, 0, 0, tzinfo=timezone.utc)
+FP_DAY = FP_WHEN.strftime("%Y-%m-%d") + ".jsonl"
+A = {"sol": 0.0, "source": "bonding_curve_real_reserves"}
+B = {"sol": 9.5, "source": "bonding_curve_real_reserves"}
+SAME = {"sol": None, "source": "curve_complete_graduated"}
+store.record_observation("FPTWIN", "1h", FP_WHEN, {"pool_sol": dict(A)})
+store.record_observation("FPTWIN", "24h", FP_WHEN, {"pool_sol": dict(B)})
+for _w in (A, B):
+    store.record_pool_sol_correction(
+        {"mint": "FPTWIN", "observed_at": FP_WHEN.isoformat(),
+         "was": dict(_w), "corrected": dict(SAME)})
+
+_idx = store.pool_sol_correction_index()
+check("twins with the same correction but different `was` POISON the key",
+      _idx.get(("FPTWIN", FP_WHEN.isoformat()), "missing") is None, str(_idx))
+_fp = [r for r in store.observations(FP_DAY) if r.get("mint") == "FPTWIN"]
+_mismatch = [r for r in _fp if r.get("pool_sol_correction") == "not_applied_value_mismatch"]
+_amb = [r for r in _fp if r.get("pool_sol_correction") == "ambiguous_unresolvable"]
+# THE DISCRIMINATING HALF: before the fix exactly one twin was marked
+#    MISMATCHED -- the wrong verdict, because a correct correction for it was
+#    in the store. Now neither is, and both are marked unresolvable instead.
+check("NEITHER twin is falsely marked mismatched", len(_mismatch) == 0, str(_fp))
+check("...both are marked unresolvable instead", len(_amb) == 2, str(_fp))
+check("...and neither value is silently overwritten",
+      sorted(r["pool_sol"]["sol"] for r in _fp) == [0.0, 9.5], str(_fp))
+
+# ── 6c. THE MARKERS ARE A COUNTABLE SURFACE ───────────────────────────────
+# A read path must not raise on a data condition -- that trades a wrong number
+#    for no page at all. So the ROW is marked and the RUN is counted, and a
+#    non-zero count is what someone looks at. Langston's split, not mine.
+# ⚠️ THE DENOMINATOR IS THE WHOLE DAY, NOT THIS BLOCK. My first version of
+#    this check asserted 2 ambiguous and 0 applied -- the FPTWIN rows only --
+#    and failed against 3 and 2, because BLOCK 4 and BLOCK 5 write into the
+#    same day file. Naming the wrong population inside the suite that exists
+#    to catch wrong populations, so it is written down rather than quietly
+#    corrected.
+_health = store.correction_health(FP_DAY)
+_rows = store.observations(FP_DAY)
+check("EVERY row is counted exactly once -- the counts sum to the row total",
+      sum(_health.values()) == len(_rows),
+      "%d counted vs %d rows -- %s" % (sum(_health.values()), len(_rows), _health))
+check("...and this block's two unresolvable rows are among them",
+      _health["ambiguous_unresolvable"] >= 2, str(_health))
+check("...and counts uncorrected rows too, so the denominator is present",
+      "uncorrected" in _health, str(_health))
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

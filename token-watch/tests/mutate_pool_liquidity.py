@@ -30,6 +30,12 @@ MUTATIONS = [
     ("M11 drop the uninitialised-curve guard",
      "if not _vtok:",
      "if False:"),
+    ("M12 flag a dead pool on liquidity alone, ignoring the alternative",
+     "observed_dead_pool = bool(not liq and alt_liquid)",
+     "observed_dead_pool = bool(not liq)"),
+    ("M13 stop recording how much is in the live pool we are NOT reading",
+     '"alt_pool_liquidity_usd": (',
+     '"alt_pool_liquidity_usd": None and ('),
 ]
 
 original = io.open(SRC, encoding="utf-8").read()
