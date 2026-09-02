@@ -47,20 +47,34 @@ function main() {
   const cmd = ((payload && (payload.tool_input || payload.toolInput)) || {}).command;
   if (typeof cmd !== 'string' || !cmd) { note({ decided: false, reason: 'no_command' }); return; }
 
-  // The trigger: a git commit whose COMMAND names a completion-report path.
-  if (!/\bgit\s+commit\b/.test(cmd) || !/COMPLETION_REPORT/i.test(cmd)) {
+  // The trigger: a git commit whose OWN STAGE names a completion-report path.
+  // ⛔ r2 — LOCALITY, and it was proven necessary ONE MINUTE after wiring: the r1 trigger
+  // matched `git commit` and `COMPLETION_REPORT` ANYWHERE in the command, and a compound
+  // command that committed settings and then posted a crew notice MENTIONING completion
+  // reports in a heredoc fired it. The exact use-vs-mention class OBJ-4 took four review
+  // rounds over, reproduced in this guard on its first live command. Heredoc bodies are
+  // elided first (same marker discipline: the marker must not contain `<<`), then the token
+  // must sit in the SAME sequence element as the `git commit`.
+  const elided = cmd
+    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ')
+    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ');
+  const stage = elided.split(/&&|\|\||[;\n]/).find((s) => /\bgit\s+commit\b/.test(s));
+  if (!stage || !/COMPLETION_REPORT/i.test(stage)) {
     note({ decided: true, fired: false }); return;
   }
+  const cmdStage = stage;
 
   // Where is the message? Tier-1 form: -F <msgfile>. Fallback: inline -m.
+  // ⚠️ Read from the COMMIT'S OWN STAGE — an -F elsewhere in a compound command is not this
+  // commit's message.
   let msg = null, msgSource = null;
-  const fm = /-F\s+("([^"]+)"|'([^']+)'|(\S+))/.exec(cmd);
+  const fm = /-F\s+("([^"]+)"|'([^']+)'|(\S+))/.exec(cmdStage);
   if (fm) {
     const p = fm[2] || fm[3] || fm[4];
     try { msg = readFileSync(p, 'utf8'); msgSource = 'msgfile'; }
     catch { msgSource = 'msgfile-unreadable'; }
   } else {
-    const im = /-m\s+("([^"]*)"|'([^']*)')/.exec(cmd);
+    const im = /-m\s+("([^"]*)"|'([^']*)')/.exec(cmdStage);
     if (im) { msg = im[2] || im[3] || ''; msgSource = 'inline'; }
   }
 

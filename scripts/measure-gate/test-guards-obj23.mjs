@@ -101,6 +101,23 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
   const r = run(CI_GUARD, `git commit -F ${without} -- reports/B_X_COMPLETION_REPORT.md`);
   check('it NEVER blocks: exit 0 even when firing', r.status === 0, 'exit=' + r.status);
 }
+{
+  // ⛔ THE LIVE FALSE POSITIVE, one minute after wiring: a compound command committing SETTINGS
+  // and then posting a crew notice that MENTIONS completion reports in a heredoc. r1 matched
+  // `git commit` + `COMPLETION_REPORT` anywhere in the command — cross-stage, no elision — the
+  // exact use-vs-mention class OBJ-4 took four rounds over, reproduced here on first contact.
+  const r = run(CI_GUARD,
+    'git commit -F msg.txt -- .claude/settings.local.json && cat > /tmp/notice.txt <<\'EOF\'\n' +
+    'a guard warns when a commit adding a *COMPLETION_REPORT* path has no run id\n' +
+    'EOF\nscp /tmp/notice.txt host:');
+  check('a commit of OTHER paths + a notice MENTIONING completion reports is silent', r.ctx === null,
+        'fired: ' + String(r.ctx).slice(0, 70));
+}
+{
+  // And locality must not silence the real case: commit stage itself names the report.
+  const r = run(CI_GUARD, `echo pre && git commit -F ${without} -- docs/B_W_COMPLETION_REPORT.md && echo post`);
+  check('the real case inside a compound command still warns', !!r.ctx);
+}
 
 // Mutation arms — the convention: each patches a copy, re-runs this suite, requires FAILURE.
 if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
