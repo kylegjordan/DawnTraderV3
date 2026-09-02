@@ -1,6 +1,6 @@
 # B-CROSS-SESSION-BLEED — COMPLETION REPORT
 
-**Batch:** `B-CROSS-SESSION-BLEED` · **Issue:** `#753` · **Owner:** CC-B (transferred from CC-A 2026-08-31 at Kyle's direction) · **change-class:** `architecture` *(Langston overruled my declared `non_architecture`)* · **Queue:** `PHASE_19_PLAN` §governance position 2
+**Batch:** `B-CROSS-SESSION-BLEED` · **Issue:** `#753` · **Owner:** CC-B (transferred from CC-A 2026-08-31 at Kyle's direction) · **change-class:** `non_architecture` *(declared by me; Langston overruled to `architecture` 2026-08-31, then VACATED his own overrule 2026-09-02)* · **Queue:** `PHASE_19_PLAN` §governance position 2
 
 ---
 
@@ -78,7 +78,7 @@ Deployed sha `2af2e0bacc1430a6452559b83ba7d3be15adc7be` (`--by CC-C`). Diff to o
 | T1 | PHASE_HISTORY.md | OK | Phase 19 governance entry; phase status explicitly unchanged, no engine surface touched |
 | T1 | PHASE_19_PLAN.md | OK | B-FRESHNESS-LOG-READER placed at 2.5, B-SHARED-TMP-ISOLATION at 2.6 |
 | T1 | shared MEMORY.md + MEMORY_CC_B.md | OK | own file at STEP 10, #979 and the seven-instance pattern folded in; shared file untouched |
-| T1 | batch SCOPE | OK | change-class corrected to architecture; OBJ-1 and P10 dispositions appended |
+| T1 | batch SCOPE | OK | change-class final `non_architecture` (overrule vacated); OBJ-1 and P10 dispositions appended |
 | T1 | batch PRE_AUDIT | OK | Step-7 rig-contamination finding appended; header class corrected |
 | T1 | COMPLETION_REPORT | OK | written and pushed, filed OPEN on the System Manual row |
 | T1 | Langston's /home/langston/MEMORY.md | OK | synced; five CLOSED batches collapsed per the lean rule (-13,088 B), 216 -> 170 lines |
