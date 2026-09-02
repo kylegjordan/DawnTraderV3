@@ -436,6 +436,17 @@ Everything in §10-§12 keys on the feed. This keys on the **trade outcome**, wh
 | within 5 min | 7 |
 | within 30 min | 1 |
 | **more than 4 hours (through the whole overnight)** | ⛔ **11 of 47 = 23%** (ARE recovers 05:35 UTC, COR 08:22 UTC — i.e. at the 4 AM ET handoff back to the exchanges) |
+**The same read on the busiest day of the run, 2026-08-05, by ZONE (drop = the pre-registered definition; recovery = bid back within 2% of its pre-drop value, bounded lookahead 4 h):**
+| zone | drops | symbols | mean / median drop | mean spread at the drop | recovered < 60 s | < 5 min | < 1 h | > 1 h or never |
+|---|---|---|---|---|---|---|---|---|
+| T 8:15 PM ET (00:15–00:30Z) | 85 | **78** | 20.2% / 14.2% | 32.4% | 38 | 7 | 13 | ⛔ **27 (32%)** |
+| T 4:15 AM ET (08:00–08:30Z) | 63 | 33 | **30.4% / 28.1%** | 45.8% | 38 | 8 | 9 | 8 |
+| T 4:15 PM ET (20:15–20:30Z) | 34 | 25 | 18.1% / 13.6% | 25.7% | 12 | 9 | 2 | 11 |
+| pre-market body (08:45–13:30Z) | **661** | **41** | 25.3% / 18.5% | 44.2% | **551 (83%)** | 47 | 50 | 13 |
+| after-hours body (20:45–23:59Z) | 94 | 10 | 13.2% / 12.5% | 19.9% | 18 | 31 | 34 | 11 |
+| overnight body (00:45–07:59Z) | 5 | 4 | 14.9% / 16.7% | 24.6% | 0 | 1 | 1 | 3 |
+| edges (13:30–13:45Z, 19:30–20:15Z) | 100 | 17 | 25.8% / 14.8% | 41.7% | 77 | 17 | 4 | 2 |
+⇒ **Two different animals.** The HANDOFFS hit MANY symbols once each (78 names at 8:15 PM) and a THIRD of them stay collapsed for over an hour. The PRE-MARKET BODY's 661 drops sit on only 41 names — ~16 repeated flickers per name — and 83% recover within a minute: **a small set of names whose bid flickers all morning, not the whole book.** The after-hours body is 94 drops on 10 names. ⇒ a book-state guard sees both; a count of drops alone mistakes the pre-market flicker for the bigger problem.
 ⇒ **Kyle's account holds for three-quarters of the affected names (one collapsed reading, then normal within a minute) and FAILS for one in four: those bids stay collapsed for the ENTIRE Blue Ocean session.** So the handoff is BOTH a transition instant AND, for ~2% of the universe (11 of 479), a session-long condition. ⇒ **a guard that acts on book STATE covers both; a guard on the clock covers neither properly.**
 
 ### 15.5 THE SAME READ ACROSS DAYS (the OBJ-0 full run, first 9 weekdays 2026-08-03 → 08-13; weekend 08-08/09 shown; cells = bid drops / symbols with a drop; the run continues to 09-02)
