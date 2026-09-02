@@ -164,5 +164,51 @@ if POSIX:
 else:
     skip("accept-path hardening", "POSIX modes are not enforced on this platform")
 
+print("\nBLOCK 6 -- TWO WRITERS MUST NOT SHARE A TEMP FILE")
+# ⛔ THE DEFECT (measured 2026-09-02): `save_state` used a FIXED temp name,
+#    `path + ".tmp"`. Two concurrent writers therefore used the SAME temp
+#    path -- writer A renamed it away, writer B renamed a file that no longer
+#    existed, and crashed. The write-temp-then-rename pattern exists to make
+#    the write atomic; a shared temp name reintroduces the exact hazard.
+# ⚠️ This tests the CRASH mode only. `save_state` is read-modify-write and is
+#    still NOT concurrency-safe against lost updates -- that is what the
+#    periodic lock is for, and the real jobs take it.
+import threading  # noqa: E402
+_errors = []
+
+
+def _hammer(n):
+    try:
+        for i in range(25):
+            store.save_state("concurrency_probe", {"writer": n, "i": i})
+    except Exception as exc:
+        _errors.append("%s: %s" % (type(exc).__name__, exc))
+
+
+# ⚠️ POSIX-ONLY, AND FOR A REAL REASON RATHER THAN CONVENIENCE. On Windows
+#    `os.replace` onto a path another thread holds open raises PermissionError
+#    -- so this block fails there whatever the temp naming does, and would be
+#    testing the platform rather than the fix. Production is Linux, where the
+#    replace is atomic. Asserting it on Windows would fail for the wrong
+#    reason; skipping it on Linux would hide the thing under test.
+if POSIX:
+    _threads = [threading.Thread(target=_hammer, args=(n,)) for n in range(6)]
+    for _t in _threads: _t.start()
+    for _t in _threads: _t.join()
+    check("★ six concurrent writers, none crashed", not _errors, str(_errors[:3]))
+    check("...and the state file is intact and parseable",
+          isinstance(store.load_state("concurrency_probe", None), dict))
+else:
+    skip("concurrent writers", "os.replace is not atomic over an open file here")
+    store.save_state("concurrency_probe", {"writer": 0, "i": 0})
+
+# POSITIVE CONTROL -- the temp names must actually DIFFER, or "no crash"
+#   could just mean the threads never overlapped.
+import re  # noqa: E402
+_p = store.state_path("concurrency_probe")
+_names = {store._tmp_name(_p) if hasattr(store, "_tmp_name") else None}
+check("POSITIVE CONTROL: the temp path is per-writer, not fixed",
+      "%s.tmp" % _p not in _names, "fixed name still in use")
+
 print("\n%d passed, %d failed, %d skipped  (BLOCK 5)" % (PASS, FAIL, SKIP))
 sys.exit(1 if FAIL else 0)

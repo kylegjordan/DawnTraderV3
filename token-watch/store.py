@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -629,7 +630,20 @@ def save_state(name: str, value: dict) -> None:
     path = state_path(name)
     _dir = os.path.dirname(path)
     os.makedirs(_dir, exist_ok=True)
-    tmp = path + ".tmp"
+    # ⛔ A UNIQUE TEMP NAME PER WRITER. It was `path + ".tmp"` -- a FIXED name,
+    #    so two concurrent writers use the SAME temp path: writer A renames it
+    #    away, and writer B then renames a file that no longer exists.
+    #    MEASURED 2026-09-02: FileNotFoundError on budget.json.tmp when a probe
+    #    ran beside the hourly sweep. The atomic replace was atomic PER
+    #    PROCESS and unsafe across processes -- which is the one hazard the
+    #    write-temp-then-rename pattern exists to remove.
+    # ⚠️ THIS FIXES THE CRASH, NOT THE LOST UPDATE. `save_state` is
+    #    read-modify-write, so two writers still overwrite each other's
+    #    changes; that is what `periodic_lock` is for, and the real jobs take
+    #    it. The primitive itself is NOT concurrency-safe and must not be
+    #    called from anything that skips the lock. My probe did, which is how
+    #    this surfaced.
+    tmp = "%s.%d.%s.tmp" % (path, os.getpid(), uuid.uuid4().hex[:8])
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(value, fh, sort_keys=True)
         fh.flush()
