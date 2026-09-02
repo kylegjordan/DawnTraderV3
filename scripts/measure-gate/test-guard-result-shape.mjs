@@ -48,6 +48,9 @@ check('a commit message QUOTING head -50 with 50 lines of output is SILENT', run
 check('a ";" INSIDE a quoted argument keeps it one pipeline (psql -c "…; … LIMIT 20") → FIRES', fires('cap-bound', run('psql -c "select 1; select id from t LIMIT 20"', lines(20))));
 check('ssh host \'tail -50 file\' (single remote stage) with 50 lines FIRES', fires('cap-bound', run("ssh root@188.245.193.8 'tail -50 /var/log/dawntrader/system-alerts.jsonl'", lines(50))));
 check('ssh host "a; b | tail -20" (multi-stage remote payload) with 20 lines is SILENT', run('ssh root@x "echo hdr; grep foo f | tail -20"', lines(20)).ctx === null);
+check('…and STILL silent with trailing 2>&1 after the quote (r4: 40 replayed fires on an inner cap)', run('ssh root@x "echo hdr; grep foo f | tail -20" 2>&1', lines(20)).ctx === null, 'fired');
+check('ssh host \'single\' 2>&1 | tail -18 with 18 lines FIRES on the OUTER cap', fires('cap-bound', run("ssh root@x 'wc -l MEMORY.md' 2>&1 | tail -18", lines(18))));
+check('su - deploy -c \'multi; stage | head -5\' inside ssh with 5 lines is SILENT', run("ssh root@x \"su - deploy -c 'ls x | head -5 && grep y z | tail -8'\"", lines(5)).ctx === null);
 check('two commands split by a NEWLINE with 20 total lines is SILENT', run('echo hdr\ngrep foo x | head -20', lines(20)).ctx === null);
 check('a cap on the heredoc START line (cat <<EOF | head -20) with 20 lines FIRES', fires('cap-bound', run("cat <<'EOF' | head -20\nline\nEOF", lines(20))));
 check('a stage AFTER a terminated heredoc is still seen (heredoc; then grep | head -20 with 20 lines is multi-stage → SILENT, and its cap is not lost: same with the heredoc removed FIRES)',
@@ -123,6 +126,8 @@ if (!process.env.GUARD6C_UNDER_TEST) {
     ['let error-counted fire on MULTI-STAGE commands again', (s) => s.replace('if (pipe && sig && /^\\d+$/.test(lastOut) && COUNTER_LAST.test(pipe))', 'if (sig && /^\\d+$/.test(lastOut) && COUNTER_LAST.test(ec))')],
     ['make the stage split quote-BLIND again', (s) => s.replace("if (c === '\"' || c === \"'\") { q = c; continue; }", '')],
     ['stop recursing into ssh/sh -c payloads', (s) => s.replace('if (w && depth < 2)', 'if (false)')],
+    ['stop recursing into NESTED wrappers (ssh → su -c)', (s) => s.replace('if (w && depth < 2)', 'if (w && depth < 1)')],
+    ['reject wrappers with trailing text after the quote (inner caps read again)', (s) => s.replace("((?:\\s*\\d?>[>&]?\\S*)*(?:\\s*\\|\\s*(?:head|tail)\\s+(?:-n\\s*|-)\\d+\\b\\S*)?)\\s*$/", '()\\s*$/')],
     ['drop the cwd-notice stripping (the notice pads every count by two)', (s) => s.replace("const errRest = rawErr.replace(/^\\s*Shell cwd was reset[^\\n]*\\n?/gm, '').trim();", 'const errRest = rawErr.trim();')],
     ['match a bare 404 again (issue #404 fires)', (s) => s.replace('HTTP\\S*\\s+404\\b|\\b404 Not Found\\b|\\bNot Found\\b', '\\b404\\b|\\bNot Found\\b')],
     ['drop the tail cap', (s) => s.replace('/\\btail\\s+(?:-n\\s*|-)(\\d+)\\b/g,', '')],

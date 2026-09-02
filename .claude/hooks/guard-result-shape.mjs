@@ -127,8 +127,16 @@ function singlePipeline(ec, depth = 0) {
   const body = splitStages(ec).filter((s) => !/^(cd|export|set|source|pushd|popd)\b/.test(s));
   if (body.length !== 1) return null;
   const one = body[0];
-  const w = /^(?:ssh\b[^"']*|(?:bash|sh|su\b[^"']*)\s+(?:-l?c|-c)\s*)("([^"]*)"|'([^']*)')\s*$/.exec(one);
-  if (w && depth < 2) return singlePipeline(w[2] !== undefined ? w[2] : w[3], depth + 1);
+  // r4 (round-3 reader): 8,091 of 15,293 real wrapper stages carry text AFTER the closing quote
+  // (`2>&1`, `2>/dev/null`, `| tail -N`); anchoring on the quote let those fall through as one
+  // pipeline whose INNER multi-stage caps were read — 40 replayed fires on an inner cap. The
+  // trailing text may be redirections and a final head/tail; the payload must still be single.
+  const w = /^(?:ssh\b[^"']*|(?:bash|sh|su\b[^"']*)\s+(?:-l?c|-c)\s*)("([^"]*)"|'([^']*)')((?:\s*\d?>[>&]?\S*)*(?:\s*\|\s*(?:head|tail)\s+(?:-n\s*|-)\d+\b\S*)?)\s*$/.exec(one);
+  if (w && depth < 2) {
+    const inner = singlePipeline(w[2] !== undefined ? w[2] : w[3], depth + 1);
+    if (inner === null) return null;
+    return w[4] && w[4].trim() ? one : inner; // trailing outer cap counts too, so keep the outer stage
+  }
   return one;
 }
 
