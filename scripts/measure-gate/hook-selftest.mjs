@@ -38,6 +38,10 @@ const SINKS = {
   'guard-measurement-shape.mjs': join(HOME, '.claude', 'measurement-shape.jsonl'),
   'probe-warn-delivery.mjs': join(HOME, '.claude', 'probe-warn-delivery.jsonl'),
   'log-instructions-loaded.mjs': join(HOME, '.claude', 'instructions-loaded.jsonl'),
+  'guard-stale-fetch.mjs': join(HOME, '.claude', 'stale-fetch.jsonl'),
+  'guard-ci-cited.mjs': join(HOME, '.claude', 'ci-cited.jsonl'),
+  'observe-userpromptsubmit.mjs': join(HOME, '.claude', 'userpromptsubmit-observe.jsonl'),
+  'inject-due-alerts.mjs': join(HOME, '.claude', 'inject-due-alerts.jsonl'),
 };
 
 const norm = (buf) => buf.toString('utf8').replace(/\r\n/g, '\n');
