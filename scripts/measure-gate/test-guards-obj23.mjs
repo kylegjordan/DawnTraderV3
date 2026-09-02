@@ -227,6 +227,23 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
   const r = run(CI_GUARD, `git -C "C:/x y" commit -F ${without} -- reports/B_X_COMPLETION_REPORT.md`);
   check('git -C "<dir with a space>" commit is still the trigger', !!r.ctx, 'silent');
 }
+// r5 object-round arms — the stage split must be quote-aware and the source must stop at the stage end.
+{
+  const r = run(CI_GUARD, `git commit -m "close; see the report" -- reports/B_X_COMPLETION_REPORT.md`);
+  check('a ";" INSIDE the quoted -m does not break the trigger (5 of 58 real closes)', !!r.ctx, 'silent');
+}
+{
+  const r = run(CI_GUARD, `git commit -F /nonexistent/z.txt -- reports/B_X_COMPLETION_REPORT.md\ncc-send --message 'discord id 1525096267'`);
+  check('a 10-digit id in a NEWLINE-separated later stage does not silence', !!r.ctx, 'silent');
+}
+{
+  const r = run(CI_GUARD, `echo "git commit later" && git commit -F /nonexistent/z.txt -- reports/B_X_COMPLETION_REPORT.md`);
+  check('an echoed "git commit" before the real one does not hide it', !!r.ctx, 'silent');
+}
+{
+  const r = run(CI_GUARD, `git commit -F - -- reports/B_X_COMPLETION_REPORT.md <<'MSG'\nB-X close.\nCI green && run 26730239909 cited.\nMSG`);
+  check('-F - heredoc whose body contains "&&" before the citation → silent (the body is one stage)', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
+}
 
 // Mutation arms — the convention: each patches a copy, re-runs this suite, requires FAILURE.
 if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
@@ -250,7 +267,11 @@ if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
     ['obj3: drop the --file alias', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace('/(?:-F|--file)[\\s=]+', '/(?:-F)[\\s=]+')],
     ['obj3: let a LATER stage\'s digits count as the message', CI_GUARD, 'GUARD3_UNDER_TEST',
-      (s) => s.replace('const commandText = cmd.slice(0, ci) + (stageEnd === -1 ? post : post.slice(0, stageEnd));', 'const commandText = cmd;')],
+      (s) => s.replace('const commandText = cmd.slice(0, commitStage.end);', 'const commandText = cmd;')],
+    ['obj3: make the stage split quote-BLIND again', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace("if (c === '\"' || c === \"'\") { q = c; continue; }", '')],
+    ['obj3: take the FIRST git-commit stage instead of the one naming the report', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace('.find((st) => COMMIT_RE.test(st.text) && /COMPLETION_REPORT/i.test(st.text));', '.find((st) => COMMIT_RE.test(st.text));\n  if (commitStage && !/COMPLETION_REPORT/i.test(commitStage.text)) { note({ decided: true, fired: false }); return; }')],
     ['obj2: read the clock from .git/config again', FETCH_GUARD, 'GUARD2_UNDER_TEST',
       (s) => s.replace("statSync(join(repo, '.git', 'description'))", "statSync(join(repo, '.git', 'config'))")],
     ['obj3: drop the MSYS path resolution', CI_GUARD, 'GUARD3_UNDER_TEST',

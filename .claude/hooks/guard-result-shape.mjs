@@ -12,37 +12,54 @@
 //      the result ALONE — the output-anomaly arm was rejected outright as a banner-blindness
 //      generator. Every leg below needs BOTH a property of the command AND a property of the output.
 //
-// ⛔ BUILT AGAINST THE OBSERVED SHAPE, NOT THE DOCUMENTED ONE: observe-posttooluse.mjs recorded the
-// live payload 2026-09-02 — tool_response is { stdout, stderr, interrupted, isImage,
-// noOutputExpected }. THERE IS NO EXIT CODE. The scope wrote "command + exit code + output"; the
-// harness hands over no exit code, so nothing here may depend on one.
+// ⛔ BUILT AGAINST THE OBSERVED WIRE, NOT THE DOCUMENTED ONE. Two measurements, both load-bearing:
+//   (a) observe-posttooluse.mjs, 2026-09-02: tool_response is { stdout, stderr, interrupted,
+//       isImage, noOutputExpected }. THERE IS NO EXIT CODE.
+//   (b) r2 reader, 75,739 real Bash results replayed: STDERR IS STRUCTURALLY EMPTY. The harness
+//       merges the child's stderr INTO stdout — 46 `fatal:` lines from git show, an index.lock
+//       failure with no 2>&1, all arrived on stdout; the only non-empty stderr ever seen was the
+//       harness's own "Shell cwd was reset" notice. r1 keyed the error leg on stderr and had
+//       ZERO reachable inputs. Every leg now reads stdout only.
 //
-// THE FOUR LEGS, each named for the recorded instance it is built from:
-//   cap-bound       — the command carries a numeric cap (head -N, tail -N, git log -N, -m N,
-//                     LIMIT N, --limit N) and the output has EXACTLY N lines ⇒ the cap did the
-//                     filtering; the population is unbounded by the query. Instance 3
-//                     (`git log -200 --grep` read as "of the last 200"). Floor: cap ≥ 5 — a cap
-//                     of 1 equals its output constantly and would fire on every `head -1`.
-//   error-consumed  — stderr carries a hard error signature (fatal:, No such file, Traceback,
-//                     command not found, 404, ECONNREFUSED…) AND the command piped into a
-//                     consumer (wc, grep -c, jq, sort, python…) or stdout's last line is a bare
-//                     integer ⇒ an error was swallowed and then COUNTED. The #980/#732 shape:
-//                     "0 breaches of 0 rows" from an endpoint that never answered.
+// THE LEGS, each named for the recorded instance it is built from, each on a SINGLE-PIPELINE
+// command (r2): the harness returns the whole command's stdout, so a cap or an H1 can only be
+// compared against it when the command IS one pipeline (leading `cd`/`export` stages allowed).
+// On `echo hdr; grep | head -20` the count includes the header and the leg INVERTS — 65% of r1's
+// replayed cap-bound fires were on multi-stage commands, where it was wrong both ways.
+//   cap-bound       — one pipeline carrying a numeric cap N ≥ 5 (head/tail -N, git log -N,
+//                     grep -m N, LIMIT N, --limit N) and stdout has EXACTLY N lines. Instance 3
+//                     (`git log -200 --grep` read as "of the last 200"). ⚠️ HONEST WORDING: the cap
+//                     MAY have bounded it — a 50-line file under `tail -50` also has 50 lines; the
+//                     count is not evidence either way, which is exactly why it must be re-run.
+//                     Floor 5: a cap of 1 equals its output constantly.
+//   error-counted   — stdout carries a hard error signature (fatal:, No such file, Traceback,
+//                     command not found, 404, ECONNREFUSED…) AND its last line is a bare integer
+//                     AND the command carries a counting/parsing stage (wc, grep -c, jq, python,
+//                     awk, sort|uniq) ⇒ an error was printed and then a number was produced
+//                     anyway — the number describes the failure. 88 such results in the replay
+//                     (`grep: /tmp/x: No such file or directory` → `0`).
 //   html-not-json   — the command asked an API (curl/wget to /api/ or piped to jq) and the body
-//                     is HTML ⇒ a login page or an error page was read as data. Instance 8.
-//   other-document  — the command fetched or showed a path whose name carries a batch id, and
-//                     the document's H1 names a DIFFERENT batch ⇒ the wrong file answered.
-//                     Langston's own live instance: HTTP 200, 7,968 B, `# B-GOV-HYGIENE-ANALYST-1`
-//                     — a different batch's scope, caught only because the H1 named it.
+//                     is HTML ⇒ a login page or an error page was read as data.
+//   other-document  — one pipeline that fetches/shows ONE path whose name carries a batch id, and
+//                     the document's H1 (within its first 20 lines) names a batch that shares NO
+//                     word with the path's ⇒ the wrong file answered. Langston's live instance:
+//                     HTTP 200, `# B-GOV-HYGIENE-ANALYST-1` for a B_MEASURE_GATE path. Renamed or
+//                     sub-batch files (`# F-G-1 — B-GRID-REPRESENTABILITY` for B_EXIT_GRID_…) share
+//                     a word and stay silent — all 7 of r1's replayed fires were of that kind.
 //
-// SELF-REFERENCE: caps and consumers are read from the command with heredoc bodies ELIDED, the
-// OBJ-4 discipline — a notice that MENTIONS `head -50` is not a command that runs it.
+// SELF-REFERENCE: heredoc bodies AND quoted message strings (-m/--message/echo "…") are elided
+// before caps are read — a commit message that MENTIONS `head -50` is not a command that runs it.
 //
-// ⛔ THE GUARD'S SILENCE IS NON-EVIDENTIAL. Four shapes are not the class; a result can fail to
-// answer its request in every way not listed here. KNOWN GAPS: (1) an error swallowed by `2>&1`
-// INTO the consumer leaves no stderr and a plausible number — invisible here; (2) a 404 body
-// that parses as an empty list without a traceback — invisible; (3) `interrupted` results are
-// skipped as undecided; (4) only the first and last 64 KB of stdout are inspected.
+// ⛔ THE GUARD'S SILENCE IS NON-EVIDENTIAL. Four shapes are not the class. KNOWN GAPS, stated:
+//   (1) ★ INSTANCE 8 AS IT ACTUALLY OCCURRED IS NOT CAUGHT: `/api/trades/closed` returned a JSON
+//       404 body `{"error":"Not Found"}`, python parsed it cleanly and printed "0 of 0 closed" —
+//       no signature, no HTML, no traceback. Nothing in the output identifies it; that is 6d's
+//       job (re-execute against the object), not a shape's.
+//   (2) an error swallowed inside a consumer that prints only a number (no signature reaches
+//       stdout) is invisible; (3) multi-stage commands are outside cap-bound and other-document
+//       by design; (4) `interrupted` results are skipped as undecided; (5) only the first and
+//       last 64 KB of stdout are inspected; (6) a real `tail -50` that genuinely overflowed fires
+//       every time — ~10/day at current cadence — and that is the predicate, not a defect.
 // FAIL-OPEN: every path exits 0. Sink: ~/.claude/result-shape.jsonl (GUARD_SYNTHETIC marks tests).
 import { readFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -52,6 +69,7 @@ import { fileURLToPath } from 'node:url';
 
 const CAP_FLOOR = 5;
 const WINDOW = 64 * 1024;
+const H1_LINES = 20;
 
 let SINK = null, SELF = null;
 try {
@@ -75,47 +93,65 @@ function note(row) {
 function elide(cmd) {
   return cmd
     .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ')
-    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ');
+    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ')
+    .replace(/(?:-m\s+|--message(?:=|\s+)|\becho\s+(?:-[a-zA-Z]+\s+)?)("[^"]*"|'[^']*')/g, ' [quoted-prose-elided] ');
 }
 
-/** Every numeric cap the command carries, with the stage it sits in. */
-function caps(cmd) {
+/** The single pipeline the harness's stdout belongs to, or null if the command is multi-stage. */
+function singlePipeline(ec) {
+  const stages = ec.split(/&&|\|\||[;\n]/).map((s) => s.trim()).filter(Boolean);
+  const body = stages.filter((s) => !/^(cd|export|set|source|pushd|popd)\b/.test(s));
+  return body.length === 1 ? body[0] : null;
+}
+
+/** Every numeric cap the pipeline carries. */
+function caps(p) {
   const out = [];
   const pats = [
     /\bhead\s+(?:-n\s*|-)(\d+)\b/g, /\btail\s+(?:-n\s*|-)(\d+)\b/g,
-    /\bgit\s+log\b[^|;&\n]*?\s-(\d+)\b/g, /\bgit\s+log\b[^|;&\n]*?\s(?:-n|--max-count)[\s=](\d+)\b/g,
-    /\bgrep\b[^|;&\n]*?\s-m\s*(\d+)\b/g, /\bLIMIT\s+(\d+)\b/gi, /\s--limit[\s=](\d+)\b/g, /\bgh\b[^|;&\n]*?\s-L\s*(\d+)\b/g,
+    /\bgit\s+log\b[^|]*?\s-(\d+)\b/g, /\bgit\s+log\b[^|]*?\s(?:-n|--max-count)[\s=](\d+)\b/g,
+    /\bgrep\b[^|]*?\s-m\s*(\d+)\b/g, /\bLIMIT\s+(\d+)\b/gi, /\s--limit[\s=](\d+)\b/g, /\bgh\b[^|]*?\s-L\s*(\d+)\b/g,
   ];
-  for (const p of pats) { let m; while ((m = p.exec(cmd))) out.push(Number(m[1])); }
+  for (const re of pats) { let m; while ((m = re.exec(p))) out.push(Number(m[1])); }
   return out;
 }
 
 const ERROR_SIG = /^(fatal|error|ERROR|Error):|No such file or directory|Traceback \(most recent call last\)|command not found|Permission denied|\b404\b|Not Found|Cannot GET|ECONNREFUSED|ETIMEDOUT|Connection refused|does not exist in|Could not resolve host|unknown revision or path/m;
-const CONSUMER = /\|\s*(wc\b|grep\s+-c|grep\s+-[a-zA-Z]*c|jq\b|sort\b|uniq\b|awk\b|cut\b|python3?\b|node\b|sed\b|tr\b|head\b|tail\b)/;
-const BATCH_ID = /\b(B-[A-Z0-9][A-Z0-9-]*[A-Z0-9]|P\d+-B[0-9][0-9a-z.]*)\b/;
+// Counting / parsing stages ANYWHERE in the command — not `| head`/`| sed`/`| tail`, which r1
+// counted as consumers and which matched 69% of all commands (reader, r2).
+const COUNTER = /\b(wc\b|grep\s+-[a-zA-Z]*c\b|jq\b|python3?\b|node\b|awk\b|uniq\s+-c\b|sort\b)/;
+const BATCH_ID = /\b(B-[A-Z0-9][A-Z0-9-]*[A-Z0-9]|P\d+-B[0-9][0-9A-Za-z.]*)\b/;
+const STOP_WORDS = new Set(['B', 'P', 'SCOPE', 'PRE', 'AUDIT', 'PLAN', 'REPORT', 'COMPLETION', 'LEG', 'LEG1', 'LEG2', 'LEG3', 'RESULT', 'ENUMERATION', 'MD', 'R1', 'R2', 'R3', 'R4', 'R5', 'SUB', 'BATCH', 'PROGRESS']);
 
-function batchIdFromPath(cmd) {
-  const m = /([A-Za-z0-9_.-]*?)(B_[A-Z0-9][A-Z0-9_]*[A-Z0-9]|P\d+_B[0-9][0-9a-z.]*)[A-Za-z0-9_.-]*\.md\b/.exec(cmd);
-  return m ? m[2].replace(/_/g, '-') : null;
+function words(id) {
+  return new Set(id.toUpperCase().split(/[-_.\s]+/).filter((w) => w && !STOP_WORDS.has(w) && !/^\d+[A-Z]?$/.test(w)));
 }
 
-function shapes(cmd, stdout, stderr) {
+function pathIdWords(p) {
+  const m = /([A-Za-z0-9_.-]*?)((?:B_[A-Z0-9][A-Z0-9_]*)|(?:P\d+_B[0-9][0-9A-Za-z._]*))\.md\b/.exec(p);
+  return m ? words(m[2]) : null;
+}
+
+function shapes(cmd, stdout) {
   const hits = [];
   const ec = elide(cmd);
+  const pipe = singlePipeline(ec);
   const outLines = stdout.replace(/\r\n/g, '\n').replace(/\n+$/, '').split('\n');
   const nLines = stdout.trim() === '' ? 0 : outLines.length;
 
-  for (const cap of caps(ec)) {
-    if (cap >= CAP_FLOOR && nLines === cap) {
-      hits.push(['cap-bound', `the output is EXACTLY ${cap} lines and the command capped at ${cap} — the cap did the filtering, so this is the cap, not the population. The real count is ≥ ${cap}; re-run unbounded before it becomes a number.`]);
-      break;
+  if (pipe) {
+    for (const cap of caps(pipe)) {
+      if (cap >= CAP_FLOOR && nLines === cap) {
+        hits.push(['cap-bound', `the output is EXACTLY ${cap} lines and the command capped at ${cap}. The cap MAY have done the filtering — the count is not evidence either way, so this is not yet the population. If it becomes a count, a share or an absence, re-run it unbounded first.`]);
+        break;
+      }
     }
   }
 
-  const errLine = ERROR_SIG.exec(stderr) || (stderr === '' ? null : null);
   const lastOut = nLines ? outLines[nLines - 1].trim() : '';
-  if (errLine && (CONSUMER.test(ec) || /^\d+$/.test(lastOut))) {
-    hits.push(['error-consumed', `stderr carries "${errLine[0]}" and the pipeline went on to consume the result${/^\d+$/.test(lastOut) ? ` (last stdout line is the bare number ${lastOut})` : ''} — an error was swallowed and then counted. That number describes the failure, not the object.`]);
+  const sig = ERROR_SIG.exec(stdout);
+  if (sig && /^\d+$/.test(lastOut) && COUNTER.test(ec)) {
+    hits.push(['error-counted', `the output carries "${sig[0]}" and still ends in the bare number ${lastOut} — an error was printed and a count was produced anyway. That number describes the failure, not the object.`]);
   }
 
   const asksApi = /\b(curl|wget|Invoke-WebRequest|iwr)\b/.test(ec) && (/\/api\//.test(ec) || /\|\s*jq\b/.test(ec) || /application\/json/.test(ec));
@@ -124,12 +160,18 @@ function shapes(cmd, stdout, stderr) {
     hits.push(['html-not-json', 'the command asked an API for data and the body is HTML — a login page, a redirect or an error page was returned, not the data. Nothing parsed from it is about the object.']);
   }
 
-  const wanted = batchIdFromPath(ec);
-  if (wanted) {
-    const h1 = /^#\s+(.+)$/m.exec(stdout.slice(0, 4096));
-    const got = h1 && BATCH_ID.exec(h1[1]);
-    if (got && !got[1].startsWith(wanted) && !wanted.startsWith(got[1])) {
-      hits.push(['other-document', `the path asked for ${wanted} and the document's H1 names ${got[1]} — a different batch's file answered (HTTP 200 does not make it the right file).`]);
+  if (pipe) {
+    const wanted = pathIdWords(pipe);
+    if (wanted && wanted.size) {
+      const h1 = /^#\s+(.+)$/m.exec(outLines.slice(0, H1_LINES).join('\n'));
+      const got = h1 && BATCH_ID.exec(h1[1]);
+      if (got) {
+        const gw = words(got[1]);
+        const shared = [...gw].some((w) => wanted.has(w));
+        if (gw.size && !shared) {
+          hits.push(['other-document', `the path asked for a ${[...wanted].join('-')} file and the document's H1 names ${got[1]} — no word in common: a different batch's file answered (HTTP 200 does not make it the right file).`]);
+        }
+      }
     }
   }
   return hits;
@@ -144,11 +186,13 @@ function main() {
   const resp = payload.tool_response || {};
   if (typeof cmd !== 'string' || !cmd) { note({ decided: false, reason: 'no_command' }); return; }
   if (resp.interrupted) { note({ decided: false, reason: 'interrupted' }); return; }
-  let stdout = typeof resp.stdout === 'string' ? resp.stdout : '';
-  const stderr = typeof resp.stderr === 'string' ? resp.stderr : '';
+  // stderr is merged into stdout on the wire (measured); if a future harness ever separates
+  // them, an error on stderr must not vanish — so the two are joined here, stderr first.
+  let stdout = (typeof resp.stderr === 'string' && resp.stderr && !/^Shell cwd was reset/.test(resp.stderr) ? resp.stderr + '\n' : '')
+    + (typeof resp.stdout === 'string' ? resp.stdout : '');
   if (stdout.length > 2 * WINDOW) stdout = stdout.slice(0, WINDOW) + '\n' + stdout.slice(-WINDOW);
 
-  const hits = shapes(cmd, stdout, stderr);
+  const hits = shapes(cmd, stdout);
   note({ decided: true, fired: hits.length > 0, legs: hits.map((h) => h[0]), out_lines: stdout ? stdout.split('\n').length : 0 });
   if (!hits.length) return;
   try {
@@ -158,7 +202,7 @@ function main() {
         additionalContext:
           'RESULT-SHAPE WARNING (rule 29 — warn-only, after the fact; this hook cannot speak for what it does not list):\n' +
           hits.map(([leg, why]) => `• ${leg}: ${why}`).join('\n') +
-          '\nIf this result is about to become a claim, it could not have answered the request as asked — re-run against the object.',
+          '\nIf this result is about to become a claim, it may not have answered the request as asked — re-run against the object.',
       },
     }));
   } catch { /* fail-open */ }

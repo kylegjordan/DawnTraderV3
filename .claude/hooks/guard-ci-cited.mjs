@@ -73,15 +73,39 @@ function main() {
   // rounds over, reproduced in this guard on its first live command. Heredoc bodies are
   // elided first (same marker discipline: the marker must not contain `<<`), then the token
   // must sit in the SAME sequence element as the `git commit`.
-  const elided = cmd
-    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ')
-    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ');
-  // `git -C <dir> commit` / `git -c k=v commit` are the same commit (reader B3/B4).
-  const stage = elided.split(/&&|\|\||[;\n]/).find((s) => /\bgit\b(?:\s+-[Cc]\s*(?:"[^"]*"|'[^']*'|\S+))*\s+commit\b/.test(s));
-  if (!stage || !/COMPLETION_REPORT/i.test(stage)) {
-    note({ decided: true, fired: false }); return;
+  // r5 (reader, object round): the stage split must be QUOTE-AWARE. `git commit -m "close; see R"
+  // -- R` split inside the quotes, and the stage holding `git commit` no longer held the path —
+  // 5 of 58 real closes were missed that way. And the FIRST stage matching `git commit` is not
+  // necessarily the commit (`echo "git commit later" && git commit …`): every commit stage is
+  // tried, and the one naming the report wins. Heredoc bodies are elided first; each stage keeps
+  // its offset into the RAW command so the message source below can be sliced precisely.
+  const COMMIT_RE = /\bgit\b(?:\s+-[Cc]\s*(?:"[^"]*"|'[^']*'|\S+))*\s+commit\b/;
+  const heredocSpans = [];
+  const hre = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1[\s\S]*?^\s*\2\s*$/gm;
+  let hm; while ((hm = hre.exec(cmd))) heredocSpans.push([hm.index, hm.index + hm[0].length]);
+  const inHeredoc = (i) => heredocSpans.some(([a, b]) => i >= a && i < b);
+  const stages = [];
+  {
+    let q = null, start = 0;
+    for (let i = 0; i < cmd.length; i++) {
+      const c = cmd[i];
+      if (inHeredoc(i)) continue;
+      if (q) { if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") { q = c; continue; }
+      const two = cmd.slice(i, i + 2);
+      if (two === '&&' || two === '||') { stages.push({ start, end: i }); start = i + 2; i++; continue; }
+      if (c === ';' || c === '\n') { stages.push({ start, end: i }); start = i + 1; }
+    }
+    stages.push({ start, end: cmd.length });
   }
-  const cmdStage = stage;
+  const elideText = (s) => s
+    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ')
+    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_-]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ');
+  const commitStage = stages
+    .map((st) => ({ ...st, text: elideText(cmd.slice(st.start, st.end)) }))
+    .find((st) => COMMIT_RE.test(st.text) && /COMPLETION_REPORT/i.test(st.text));
+  if (!commitStage) { note({ decided: true, fired: false }); return; }
+  const cmdStage = commitStage.text;
 
   // Where is the message? Tier-1 form: -F <msgfile>. Fallback: inline -m.
   // ⚠️ Read from the COMMIT'S OWN STAGE — an -F elsewhere in a compound command is not this
@@ -108,11 +132,12 @@ function main() {
   // feeding `-F -`): a run id in a LATER stage (`… && cc-send --message 'id 1525096267'`) is
   // not this commit's message. Inline -m and `-F -` need no branch of their own — both are
   // literally in that text, which is why r3's -m branch could be deleted with the suite green.
-  const COMMIT_RE = /\bgit\b(?:\s+-[Cc]\s*(?:"[^"]*"|'[^']*'|\S+))*\s+commit\b/;
-  const ci = cmd.search(COMMIT_RE);
-  const post = cmd.slice(ci);
-  const stageEnd = post.search(/&&|\|\|(?!\|)|;/);
-  const commandText = cmd.slice(0, ci) + (stageEnd === -1 ? post : post.slice(0, stageEnd));
+  // r5: the source is the raw command from its start to the END OF THE COMMIT STAGE as the
+  // quote-aware split found it — a newline-separated later stage (`\ncc-send … 1525096267`) is
+  // excluded exactly like an `&&` one, and a heredoc feeding `-F -` is INSIDE the stage (its
+  // `&&` cannot cut it), so a citation after an `&&` in the body still counts.
+  const ci = commitStage.start + cmd.slice(commitStage.start, commitStage.end).search(COMMIT_RE);
+  const commandText = cmd.slice(0, commitStage.end);
 
   let msg = null, msgSource = null;
   const fm = /(?:-F|--file)[\s=]+("([^"]+)"|'([^']+)'|(\S+))/.exec(cmdStage);
