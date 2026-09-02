@@ -330,6 +330,18 @@ def pool_sol_reserves(pair_address: str) -> dict:
         1.0002. A decode that reproduces an independently-published price is
         not a plausible number; it is the right one.
     """
+    # ⛔⛔ THE BUDGET IS CHECKED ONCE, FOR THE WORST CASE, BEFORE ANY CALL.
+    #    Langston, 2026-09-02: the graduated branch made a SECOND call and
+    #    re-checked the budget between them. As the carve depletes, graduated
+    #    pools become strictly more likely to be shed MID-READ than curve
+    #    pools -- and GRADUATION IS THE STUDY'S SECONDARY OUTCOME. That is
+    #    missingness correlated with an outcome, which is not a coverage gap;
+    #    it is a bias.
+    # ⚠️ AND THE ACCOUNTING DISAGREED WITH ITSELF: the mid-read shed fired
+    #    AFTER the first call had been made, charged and its provenance
+    #    written, so a row reading `source: "shed"` had already spent a credit.
+    # ⇒ Either the whole read happens or none of it does. Charge is still
+    #   per-call actual, so the 97% single-call path pays one.
     if not budget.allowed("liquidity"):
         raise Shed("liquidity")
     if not pair_address:
@@ -350,12 +362,30 @@ def pool_sol_reserves(pair_address: str) -> dict:
         except (ValueError, struct.error, IndexError, TypeError):
             return {"sol": None, "source": "curve_decode_failed",
                     "read_at": datetime.now(UTC).isoformat()}
+        # ⛔ THE VIRTUAL PAIR AND THE REMAINING TOKEN RESERVE ARE RETURNED, NOT
+        #    DISCARDED, and each has a caller that needs it:
+        #    - `implied_price_native` lets a TEST re-derive the published price
+        #      from the decoder's own output. Without it the self-check can
+        #      only compare literals to literals -- which is what Langston
+        #      blocked: the fence passed with the decoder deleted.
+        #    - `real_token_reserves` is the discriminator between "nobody ever
+        #      bought" and "bought, then everyone exited". Both land at
+        #      rsol == 0; only the first still holds the FULL initial token
+        #      reserve, because the protocol retains fees on the way out. I was
+        #      about to report the first from evidence that only supports the
+        #      disjunction, and the field that separates them was being
+        #      unpacked and thrown away.
+        implied = (_vsol / 1e9) / (_vtok / 1e6) if _vtok else None
         return {"sol": rsol / 1e9, "source": "bonding_curve_real_reserves",
+                "virtual_sol": _vsol / 1e9,
+                "real_token_reserves": _rtok,
+                "implied_price_native": implied,
                 "read_at": datetime.now(UTC).isoformat()}
 
     # Graduated: the SOL is a wrapped-SOL token account the pool owns.
-    if not budget.allowed("liquidity"):
-        raise Shed("liquidity")
+    # NO SECOND BUDGET GATE HERE -- see the note at the top of this function.
+    #    Shedding between the two calls is what made the shed correlate with
+    #    graduation. The read is admitted or refused as one unit.
     accts = _rpc("getTokenAccountsByOwner",
                  [pair_address, {"mint": WSOL_MINT}, {"encoding": "jsonParsed"}])
     budget.charge("liquidity", 1)

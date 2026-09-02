@@ -45,6 +45,15 @@ os.environ.setdefault("TOKEN_WATCH_ROOT", tempfile.mkdtemp(prefix="token-watch-l
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import providers  # noqa: E402
+import provenance  # noqa: E402
+
+# ⛔ NEUTERED STRUCTURALLY, NOT BY TRUSTING AN ENV VAR (Langston, 2026-09-02).
+#    `pool_sol_reserves` persists every raw response. These blocks drive it
+#    with fabricated pool addresses, so a run with TOKEN_WATCH_ROOT unset
+#    would inject invented rows into the study's own provenance corpus.
+#    Verified none ever reached the live store -- 0 `PoolAddr` rows against 15
+#    real ones as the control -- but "it happened not to" is not a guard.
+provenance.record_follow_up = lambda *a, **k: None
 
 PASS = FAIL = 0
 
@@ -72,8 +81,15 @@ def curve_bytes():
     return b"\x00" * 8 + struct.pack("<QQQQQ", V_TOKEN, V_SOL, R_TOKEN, R_SOL, SUPPLY)
 
 
+_REAL_RPC = providers._rpc
+
+
 def stub(responses):
-    """Replace the RPC layer. Each call pops the next canned response."""
+    """Replace the RPC layer. Each call pops the next canned response.
+
+    ⚠️ The real `_rpc` is captured above and restored at the end of the file.
+       A stub left installed leaks into whatever imports this module next.
+    """
     calls = []
 
     def _fake(method, params):
@@ -107,16 +123,32 @@ print("\nBLOCK 2 — THE SELF-CHECK: the decode reproduces the published price")
 #    bonding curve, so there is nothing to compare the SOL against directly.
 #    But price IS published, and price is a function of the same reserves — so
 #    a correct decode must reproduce it. A wrong field offset would not.
-implied = (V_SOL / 1e9) / (V_TOKEN / 1e6)
-ratio = implied / PROVIDER_PRICE_NATIVE
-check("★ implied price matches the provider's, within 0.1%",
+# ⛔⛔ THIS BLOCK USED TO COMPUTE `implied` FROM THE MODULE CONSTANTS AND NEVER
+#    TOUCH `r`. Langston: "delete `pool_sol_reserves` entirely and BLOCK 2
+#    still passes." It asserted that I had typed consistent literals. It is
+#    the block my own commit message called "why the decode is trusted at
+#    all", and it fenced nothing -- the same shape he had already ruled on
+#    once, a fence re-pointed at a function that hardcodes the asserted value.
+# ⇒ THE RATIO NOW COMES OUT OF THE DECODER'S OWN OUTPUT.
+calls = stub([{"result": {"value": {"owner": providers.PUMPFUN_PROGRAM,
+                                    "lamports": 69558322,
+                                    "data": [data, "base64"]}}}])
+r2 = providers.pool_sol_reserves("PoolAddrSelfCheck")
+ratio = r2["implied_price_native"] / PROVIDER_PRICE_NATIVE
+check("★ the DECODER's implied price matches the provider's, within 0.1%",
       abs(ratio - 1.0) < 0.001, "ratio %.5f" % ratio)
-# POSITIVE CONTROL: the check can fail. Shift the offset by one field and the
-# implied price must go far wrong — otherwise the comparison proves nothing.
-wrong = (R_SOL / 1e9) / (V_TOKEN / 1e6)
-check("POSITIVE CONTROL: a wrong field offset FAILS this check",
-      abs((wrong / PROVIDER_PRICE_NATIVE) - 1.0) > 0.5,
-      "wrong-offset ratio %.5f" % (wrong / PROVIDER_PRICE_NATIVE))
+
+# ⛔ POSITIVE CONTROL: feed the DECODER a byte layout with the fields shifted
+#    by one slot. A control built from the same literals proves the arithmetic
+#    can go wrong; only feeding the decoder bad BYTES proves the DECODER can.
+shifted = bytes(8) + struct.pack("<QQQQQ", V_SOL, V_TOKEN, R_SOL, R_TOKEN, SUPPLY)
+calls = stub([{"result": {"value": {"owner": providers.PUMPFUN_PROGRAM,
+                                    "data": [base64.b64encode(shifted).decode(),
+                                             "base64"]}}}])
+r3 = providers.pool_sol_reserves("PoolAddrShifted")
+bad = r3["implied_price_native"] / PROVIDER_PRICE_NATIVE
+check("POSITIVE CONTROL: shifted BYTES make the decoder fail this check",
+      abs(bad - 1.0) > 0.5, "shifted ratio %.5f" % bad)
 
 print("\nBLOCK 3 — A GRADUATED POOL: the wrapped-SOL account it owns")
 calls = stub([

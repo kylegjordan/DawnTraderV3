@@ -327,6 +327,24 @@ check("★ a DEAD token is still served by the due queue",
 check("...and it is STILL recorded dead, not un-killed",
       _dead_mint in _st.dead_set())
 
+section("AN ABSENT VOLUME IS NOT A DEATH")
+# ⛔ THE DEFECT (Langston, 2026-09-02): `(state.get("volume_h24") or 0) <= 0`
+#    coerced a MISSING volume to zero, so an ABSENT reading was recorded as a
+#    `faded` death -- a death classified from data we never had. The line two
+#    above it handles the identical hazard correctly. Same function, opposite
+#    treatment of the same absence.
+from follow_up import classify_death as _cd  # noqa: E402
+check("★ a MISSING volume is unclassified, not faded",
+      _cd({"alive": False, "pairs": 1}, {"pairs": 1}) is None,
+      str(_cd({"alive": False, "pairs": 1}, {"pairs": 1})))
+# POSITIVE CONTROL -- a volume that is genuinely ZERO must still be faded, or
+#   the fix above would have bought its correctness by never classifying.
+check("POSITIVE CONTROL: a real zero volume IS still faded",
+      _cd({"alive": False, "pairs": 1, "volume_h24": 0}, {"pairs": 1}) == "faded")
+check("...and a pool that vanished is still liquidity_pulled",
+      _cd({"alive": False, "pairs": 0, "evidence": "no_pairs_returned"},
+          {"pairs": 1}) == "liquidity_pulled")
+
 print("\n" + "=" * 60)
 print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")
 shutil.rmtree(ROOT, ignore_errors=True)

@@ -90,7 +90,16 @@ def classify_death(state: dict, previous: dict | None) -> str | None:
     liq = state.get("liquidity_usd")
     if liq is not None and float(liq) <= 0:
         return "liquidity_pulled"
-    if (state.get("volume_h24") or 0) <= 0:
+    # ⛔ `or 0` COERCED A MISSING VOLUME TO ZERO, so an ABSENT reading was
+    #    classified `faded` -- a death recorded from data we never had.
+    #    Langston, 2026-09-02: the line two above handles the identical hazard
+    #    correctly (`if liq is not None`), and the two sat in the same function
+    #    with opposite treatment of the same absence. #546, absent-as-valid.
+    # ★ An absent volume now returns None -- unclassified -- which costs one
+    #   more observation and is the trade this function already states: a
+    #   misclassified death is worse than an unclassified one.
+    vol = state.get("volume_h24")
+    if vol is not None and float(vol) <= 0:
         return "faded"
     return None
 
@@ -364,9 +373,15 @@ def run_hour(now: datetime | None = None) -> dict:
             if not state.get("alive"):
                 cls = classify_death(state, prev.get(mint))
                 if cls:
-                    record_death(mint, now, cls, age,
-                                 {k: state.get(k) for k in
-                                  ("volume_h24", "liquidity_usd", "pairs", "evidence")},
+                    _ev = {k: state.get(k) for k in
+                           ("volume_h24", "liquidity_usd", "pairs", "evidence")}
+                    # The magnitude, carried from the last observation at which
+                    # this token was alive. None where we never sampled it --
+                    # and None is NOT zero, which is the whole point.
+                    _p = prev.get(mint) or {}
+                    _ev["last_pool_sol"] = _p.get("pool_sol")
+                    _ev["last_pool_sol_source"] = _p.get("pool_sol_source")
+                    record_death(mint, now, cls, age, _ev,
                                  created_at=entry.get("created_at"))
                     stats["dead"] += 1
                 else:
@@ -375,7 +390,21 @@ def run_hour(now: datetime | None = None) -> dict:
                     # so ambiguity costs one more observation, not a record.
                     stats["unclassified"] += 1
                     unclassified_by_age[age] = unclassified_by_age.get(age, 0) + 1
-            prev[mint] = {"pairs": state.get("pairs"), "alive": state.get("alive")}
+            # ⛔ THE LAST-KNOWN POOL BALANCE RIDES `prev` SO IT CAN BE STAMPED
+            #    ON THE TOMBSTONE. Langston's ruling: `pool_sol` becomes an
+            #    ATTRIBUTE of the death, never the CLASSIFIER. Nothing is
+            #    redefined, no cohort splits, and every `liquidity_pulled`
+            #    death gains a MAGNITUDE -- the pot held 6.19 SOL when we last
+            #    looked, versus it held 0.0000 and always had. That difference
+            #    is what the pre-registration calls a primary object.
+            # ★ AND IT SURVIVES SAMPLING, WHICH IS WHY IT IS AN ATTRIBUTE: at
+            #   ~20% coverage an attribute is a stated subsample with a number
+            #   attached, while a CLASS whose membership depends on whether we
+            #   happened to look is a record of our sampler, not of the token.
+            prev[mint] = {"pairs": state.get("pairs"),
+                          "alive": state.get("alive"),
+                          "pool_sol": (fields.get("pool_sol") or {}).get("sol"),
+                          "pool_sol_source": (fields.get("pool_sol") or {}).get("source")}
 
         # ⛔ PRUNE `last_seen` AGAINST THE TOMBSTONES — Langston, Step-4 item 5,
         # and he is right that this is the defect I had just fixed one file
