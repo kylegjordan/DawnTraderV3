@@ -3,7 +3,7 @@
 **Batch:** `B-ALERT-ACTOR-ALLOWLIST` · **Owner:** CC-B (Claude New) · **change-class: `non_architecture`** (declared at Step 1, unchanged through OBJ-7) · **Closed:** 2026-09-02
 **Reviewed code:** `dbcca4a9f` + `448084d13` (compare `0dc49be06..448084d13`) · **Deployed:** `fa563982c8e8db08b40f509b97326ec34ac76b57` at 2026-09-02T21:05:50Z via `dt-deploy --by CC-B` (previous sha `093d1878f` — the rollback target)
 **CI:** run `33682325747` at `fa563982c` — TypeScript Check (baseline gate) ✅ · Test Suite ✅ · Build ✅ · Docker Build ✅ (per-job; `448084d13` is an ancestor and the six code files are blob-identical)
-**Langston:** Step 1 APPROVED `8c93a2fa3` · Step 2 APPROVED `7ddbac0d9` (+OBJ-7, six conditions L1–L6) · Step 4 APPROVED at the pinned compare (four conditions) · Step 8 CONFIRMED 21:16Z (Review = Approved; two findings folded — change list §10) · Step 11 <STEP11>
+**Langston:** Step 1 APPROVED `8c93a2fa3` · Step 2 APPROVED `7ddbac0d9` (+OBJ-7, six conditions L1–L6) · Step 4 APPROVED at the pinned compare (four conditions) · Step 8 CONFIRMED 21:16Z (Review = Approved; two findings folded — change list §10) · Step 11 APPROVED 2026-09-02 ~21:52Z at `8f18292ff` (Review = Approved; r1 sent back on two withdrawn numbers, r2 confirmed with one residual — the seventh carrier at `system-alerts.ts:186` — r3 approved)
 **Records:** scope r4, pre-audit r4, change list r3 (§9 carries the Steps 5–7 evidence), `scripts/batch-verify/b-alert-actor-allowlist/` (capture, compare, verify scripts), captures on staging `/home/deploy/p987-pre.json` / `p987-post.json`.
 
 ## NOTHING LEFT OPEN IN SCOPE. Two follow-ons placed, both CC-B, neither a deferral of this batch's objectives:

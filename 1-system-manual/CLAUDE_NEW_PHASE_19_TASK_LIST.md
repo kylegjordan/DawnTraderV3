@@ -10,13 +10,15 @@
 
 | item | state | record |
 |---|---|---|
-| **B-CROSS-SESSION-BLEED** — the rules-refresher fix | Steps 1–11 done. Langston vacated his `architecture` overrule 2026-09-01 (class is `non_architecture`); closing now. | `#753` · completion report |
+| *(nothing in flight)* | **Closed 2026-09-02:** `B-CROSS-SESSION-BLEED` (#753) and `B-ALERT-ACTOR-ALLOWLIST` (#987, deployed `fa563982c`). **Next per Kyle's order: the item-by-item review of the acknowledged-not-resolved alerts with him, then his pruning pass on this list; then 2.4a.** | the two completion reports |
 
 ## B. Batches placed in `PHASE_19_PLAN.md` §governance queue, owned by CC-B
 
 | plan row | batch | what it is | starts when |
 |---|---|---|---|
-| 2.4 | **`B-ALERT-ACTOR-ALLOWLIST`** (`#987`) | Refuse alert acks/resolves from unrecognised identities; fix the two disagreeing docs. **Step 1 APPROVED by Langston 2026-09-02 18:21 (scope r3 folds his one finding); Step 2 next.** | now |
+| 2.4 | ~~`B-ALERT-ACTOR-ALLOWLIST`~~ (`#987`) | ✅ **CLOSED 2026-09-02** — one canonical actor table gating both alert write paths; deployed `fa563982c`; Langston Steps 1/2/4/8/11 approved. | done |
+| 2.4a | **`B-DEPLOY-ACTOR-ALLOWLIST`** (`#656` residual) | The deploy record's `--by` is validated by SHAPE only (`dt-deploy.sh:81`); import `ALERT_ACTORS`, exact-match, refuse otherwise. **First item: date the bare `782 rows` in the `ALERT_ACTORS` header comment (`system-alerts.ts:186`).** Langston's Step-4 find on #987. | after Kyle's alert review |
+| 2.4b | **`B-ALERT-QUEUE-INTEGRITY`** (`#647` named home) | Three items in the alert-file family: the watchdog's lock-free append (`staging-liveness-watchdog.mjs:108`), the lossy rewrite (`system-alerts.ts:301-325`), poller-vs-heartbeat benign-regex drift (`poller.mjs:394` vs `heartbeat-check.mjs:63`). Latent today (0 malformed / 0 dups measured 2026-09-02). | after 2.4a |
 | 2.5 | **`B-FRESHNESS-LOG-READER`** | Nothing reads the run record the rules-refresher writes every session start. Build the reader: freeze detector, per-path staleness ceiling (P10), the `self_at_origin` watch, the clone allowlist (report the excluded count; basename is insufficient — `DawnTraderV3` is `git clone`'s default name). | A closes |
 | 2.6 | **`B-SHARED-TMP-ISOLATION`** (`#979`) | All four sessions share `/tmp`. Sweep every writer to the shared namespace (not just `commit -F`; includes the Helsinki `scp` path), an ALLOWLIST guard that refuses `-F` outside the session scratchpad, amend rule 25.c (*the message is content too*), and the archived-blob == source-blob check. | after 2.5 |
 | 2.7 | **`B-CHANGE-CLASS-DOCSET-FIT`** | Langston's §13 from the close of A: the change-class matrix welds `SYSTEM_MANUAL` to `SIM`, but their triggers differ, so infrastructure batches (hooks, bridges, alerting, governance tooling) have no class that fits — six mis-tiered `N/A` rows in `GOVERNANCE_EXCEPTIONS` already. Bug-taxonomy outcome (2): working-as-designed, unaddressed — a scope decision. `CODE_PREFIXES` has no `.claude/` entry either. | after 2.6 |
@@ -62,6 +64,8 @@
 ⚠️ **None of the five carried an owner in metadata — owner appears only in body text.** That is `#647`'s subject (CC-C).
 
 ## F. Small owed items
+
+- **Board card "July storage migration (run manually, end of August)" → move to Complete:** the 2026-09-01 02:15Z nightly did it (xstock_spot_ticker_snap/2026-07, 31/31 slices verified, hot partition dropped; Langston resolved alert `4869c830`; Claude Old closed the review as #991). Told by Claude Old 2026-09-02; card not yet moved.
 
 - **`P19-B8.5` umbrella:** Kyle ruled 2026-09-02 it stays open until Phase 19 closes; stale-open alert resolved against `GOVERNANCE_EXCEPTIONS:82`; mechanism gap → `B-UMBRELLA-OPEN-STATE` (plan 2.9, mine).
 - **Claude Old answered 2026-09-02; Kyle ruled:** `B-REGIME-INPUTS-LIVE` (alert `8aa095a2`) → **CLOSED 2026-09-02 (retroactive report filed; #543/#538 resolved; OBJ-4 → `B-VOLATILITY-CACHE-RETIRE`)** — was — verified against the repo and the channel: code deployed (ancestor of the live sha), Langston Step-4 read at the ref 2026-07-20 21:05, live-verified by him 2026-08-31 (501 trades, 448 distinct regimeWeights); missing = retroactive completion report, catalog + history rows, #543/#538 disposition. `B-RETIRED-SCORE-REMOVAL` (#558, `f4ffaf53`) → **Phase 16, mine** — re-homed at `POST_AUDIT_ROADMAP` §16.7.
