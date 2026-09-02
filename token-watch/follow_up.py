@@ -60,6 +60,25 @@ def classify_death(state: dict, previous: dict | None) -> str | None:
     """
     if state.get("alive"):
         return None
+    # ⛔⛔ THE CLASS NAME OVERSTATES THE EVIDENCE, AND IT MISLED BOTH KYLE AND
+    #    ME (2026-09-02). "liquidity_pulled" sounds like we read a liquidity
+    #    figure and saw it at zero. WE NEVER HAVE. MEASURED over the whole
+    #    tombstone population: 10,146 of 10,146 liquidity_pulled deaths came
+    #    from `no_pairs_returned` with `pairs: 0`, and ZERO of 14,365 deaths
+    #    ever carried a liquidity NUMBER at all -- the `liq <= 0` branch below
+    #    has never once fired.
+    # ★ THE CLASSIFICATION IS STILL SOUND: the pool vanishing is real evidence,
+    #   and a re-check hours later found 0 of 60 had returned. But it is
+    #   EVIDENCE, not a measurement of money removed, and the name claims the
+    #   stronger thing.
+    # ⚠️ THE STORED CLASS IS PRE-REGISTERED AND IS NOT RENAMED HERE -- renaming
+    #    a term defined ex ante would break comparability with everything
+    #    already recorded under it. The DISPLAY says what was actually
+    #    observed instead, which is where a reader meets it.
+    # ⚠️ AND THE SEPARATE on-chain liquidity read (`chain_liquidity`) NEVER
+    #    FED THIS AT ALL: it only runs for tokens that are ALIVE. Its two-day
+    #    outage cost us depth and concentration data on LIVE tokens; it did
+    #    not affect a single death classification.
     if state.get("evidence") == "no_pairs_returned":
         # ⚠️ NO PAIR IS AMBIGUOUS: it is what a pulled pool looks like AND what
         # an indexing gap looks like. If we ever saw a pool for this token,

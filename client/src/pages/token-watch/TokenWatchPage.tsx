@@ -294,8 +294,15 @@ export default function TokenWatchPage() {
             </p>
             <p>
               <strong className="text-foreground">Liquidity pulled</strong> — the
-              trading pool itself is gone, where we had previously seen one. There
-              is nothing left to trade against.
+              trading pool has DISAPPEARED, where we had previously seen one.
+              There is nothing left to trade against.{' '}
+              <strong className="text-foreground">The name overstates what we
+              measured.</strong>{' '}
+              This is inferred entirely from the pool vanishing — we have never
+              read a liquidity figure at the moment of death, on any of these.
+              A vanished pool is strong evidence (re-checked hours later, none
+              of a 60-token sample had returned), but it is evidence, not a
+              measurement of money removed.
             </p>
             <p>
               <strong className="text-foreground">Unclassified</strong> — the token
