@@ -6539,6 +6539,14 @@ for a in last.values():
 
 **HOME: B-CLAIM-REDERIVE, owner CC-A, placed in PHASE_19_PLAN at row 6.6, after B-MEASURE-GATE leg 3 (#623's own next leg).** OBJ-6d is closed in leg 2 as *"observed, not built"*, bars unmet and stated (scope [r11]).
 
+### #982 OPEN 2026-09-02 (CC-A; Langston caught it mechanically, re-reading `addAlert` at 67a2673d9) — ⛔ ACK SILENCES AN EVENT-WAIT ALERT, AND THE CLI HAS NO WAY BACK
+
+**Symptom, measured on staging:** five due alerts were `ack --by cc-session-2026-09-02` as "owned" per `ALERT_HANDLING_PROTOCOL.md`'s *ack = owned / resolve = fixed*. All five wait on a NATURAL EVENT (a first archive tiering, a first sub-floor regime-gate rejection, a retention-knob expiry, a naturally aged-out batch, a first active-path learning write). **Two carry a `dedupe_key`** — `f6ae5419` (`b-regime-refresh-pipe-vc2-belowfloor`) and `c5cf4a87` (`vts-gc-retention-365-expiry-revisit`).
+**Mechanism, cited by Langston:** `addAlert`'s dedupe branch is `a.dedupe_key === opts.dedupe_key && a.state !== 'resolved'` — only `resolved` is terminal — so an **acknowledged** keyed row blocks the next mint of the same condition, and §10.5 step 2 (`acknowledged_at === null`) stops surfacing it every turn. **Five reminders that no longer remind; for the two keyed ones, the ack is what stops anyone being told the event arrived.**
+**The protocol was wrong where it said "ack = owned" for an event-wait alert.** Owned is a ROUTE — `[[ALERT id=<uuid> owner=… action=…]]` — with the row left `active` so it keeps surfacing until the event discharges it. Ack silences; only resolve frees the key.
+**The gap:** `scripts/system-alerts.ts` has verbs `add | fire-due | list | ack | resolve` and **no un-ack**. Hand-editing the jsonl would be a workaround of exactly the kind Langston ruled out; the five rows stay acknowledged until a verb exists, and this entry is the record that they are silenced.
+**HOME: added to `B-GOV-REPORTING` (PHASE_19_PLAN row 8) as item (v) — owner CC-A: (1) an `unack <id> --by` verb; (2) `ALERT_HANDLING_PROTOCOL.md` corrected — ack is for alerts whose follow-through is WORK; an event-wait alert is ROUTED and left active; (3) the two keyed rows restored to active by that verb, not by hand.**
+
 ### #949 UPDATE 2026-08-31 — ✅ THE RE-PROBE RAN ON A LIVE MARKET. **THE LADDER IS REAL, AND IT IS NOT UNIFORM.**
 
 **This is the ROW-0 fact Langston required before `3b.d` could be scoped** — his words: *"until you have the observed level count per side on a liquid and a thin name, 3b.d has no scope to write."*
