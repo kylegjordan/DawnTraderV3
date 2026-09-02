@@ -394,3 +394,82 @@ Everything in §10-§12 keys on the feed. This keys on the **trade outcome**, wh
 ### 13.3 ⛔ PROCESS — A REDISCOVERY WAS OPENED AND WITHDRAWN THE SAME DAY
 `B-XSTOCK-SESSION-TRANSITION` was scoped 2026-08-31 against this same phenomenon and taken through **two reader rounds** before Kyle caught it: *"the answer was already determined."* **WITHDRAWN** — see that file for the full error record.
 ★★ **THE LESSON, AND IT IS ABOUT THE LEDGER SEARCH ITSELF: I ran `§9.5(b-ii)`, it returned `#943`, and I read the ISSUE while never opening THE SCOPE FILE OF THE BATCH I WAS RE-SCOPING.** ⇒ **the search must ask "has this been WORKED", not "does an issue exist" — a batch with a 35 KB Step-1 scope reads identically to a bare issue number if you only ever grep the ledger.**
+
+## 15. THE FOUR SESSION TRANSITIONS — KYLE'S QUESTION OF 2026-09-02, RESEARCHED (vendor documentation + code + the archive + the trade record)
+
+> **Kyle:** *"at no point have we talked about the 4:15 PM Eastern or the 4 AM Eastern versions of that same phenomenon … previously we were saying that everything outside of the 8:15 transition, particularly in the overnight session, the spreads were just much wider, but the bid price had not dropped dramatically like it does at 8:15 PM. All of that needs to be confirmed."* ⇒ **Confirmed in part, refuted in part — below, by source.**
+
+### 15.1 WHAT THE VENDOR DOCUMENTS SAY (read 2026-09-02; the `vendor-docs-unread` lesson applied BEFORE measuring further)
+- **Kraken, *Market hours explained*:** four sessions — **Overnight 8 PM–4 AM ET** (*"Blue Ocean ATS, a venue that provides overnight markets for the underlying equity assets"*), **Pre-market 4 AM–9:30 AM ET** and **After hours 4 PM–8 PM ET** (*"live prices from the extended hours markets of the underlying exchanges such as Nasdaq and NYSE"*), **Market open 9:30 AM–4 PM ET**. Window *"8:00 PM ET on Sunday through 8:00 PM ET on Friday"*, no weekends, no market holidays. *"During non-standard hours, liquidity may be lower, which can lead to greater price volatility."*
+- **Kraken, *xStocks FAQ*:** *"During regular market hours, xStock prices are anchored to the official exchange price of the underlying equity. Outside market hours (extended hours and weekends), market makers use alternative data sources including ATS platforms, index futures, and internal models to approximate fair value."* *"Spreads are wider outside market hours."* Ten symbols trade 24/7 (TSLAx, QQQx, SPYx, NVDAx, CRCLx, AAPLx, HOODx, MSTRx, GLDx, GOOGLx).
+- **Kraken, *Extended hours trading (EHT)*:** sessions only (4:00–9:30 pre, 9:30–16:00 regular, 16:00–20:00 post); generic risk language (*"wider than normal spreads"*, *"prices … may not reflect the prices on other concurrently operating extended hours trading systems"*); **NOTHING on how quotes behave at a session boundary.**
+- **Blue Ocean ATS Trading Rules (the overnight venue's own rulebook, PDF):** *"Subscribers may submit orders to the ATS beginning at 6:15 p.m. ET … Matching … occurs from 8:00 p.m. ET to 4:00 a.m."*; *"The ATS accepts only Limit Day orders … does not accept market orders or pegged orders"*; *"All Limit Day orders on the ATS book are expired and cancelled at the end of the trading session"*; *"a 15% price band such that orders … priced at more than 15% away from the reference price … will be rejected. The reference price is (i) the last sale price of the symbol in the Nasdaq or NYSE Arca Post Session as of 7:50 p.m. ET with respect to orders submitted prior to the beginning of trading on the ATS, or (ii) the inside market for that symbol on the ATS during the hours of operation"*; *"trades executed on the ATS are not priced according to and do not relate to the NBBO, which is not available during the ATS' overnight operating hours. Rather, reference prices … are based on best available bid and offer on the ATS at the time of the trade."* No Friday session (no TRF Saturday).
+- ⇒ **THE VENDOR-DOCUMENTED SHAPE OF EACH BOUNDARY:** **8 PM ET** = Kraken's reference source HANDS OFF from the exchanges' post-session to a **fresh, limit-only, order-book that is rebuilt from empty every night**, whose only price band is ±15% around the 7:50 PM last sale — **a lone resting bid 10–15% below the last sale is a LEGAL best bid on that book.** **4 AM ET** = that book is **expired and cancelled** and the reference hands back to the exchanges' pre-market. **4 PM ET** = the exchange close hands to the exchanges' post-session (thin, fragmented — the EHT doc's own warnings). **9:30 AM ET** = the opening auction; a full book from the first print. ⇒ **three handoffs into thin or empty books, one into a full one.** Nothing in any document says quotes are pulled or halted at a boundary; the hollow bid is a *property of the receiving book*, not a documented event.
+
+### 15.2 WHAT OUR CODE KNOWS ABOUT SESSIONS: NOTHING (census at `origin/migration/aws-supabase`, tests excluded)
+- Kraken's equities ticker carries **`is_extended_hours`**; the archiver stores it (`equity-spot-archiver.ts:165` → `xstock_spot_ticker_snap.is_extended_hours`). **Read by NOTHING** — the only other hits for `extended_hours | overnight | pre-market | session` in the xStock path are three COMMENTS (`friction-sample-store.ts:31`, `amr-weather-report.ts:357`, `price-discontinuity-detector.ts:19`). **The exit path, the σ-ceiling, the friction store and the archiver all treat the xStock feed as ONE continuous market.** The four handoffs the vendor documents are invisible to the engine.
+- **And the flag itself is BINARY** (measured 2026-09-01, every off-hours snap): `true` from the 20:15 UTC bucket to 13:30 UTC, `false` in RTH — it does **not** distinguish after-hours / overnight / pre-market, so even a session-aware guard cannot be keyed on it alone; the clock (in ET, holiday-aware) would be needed — **which is exactly the 20:15 rule Kyle forbade.** ⇒ **the guard keys on BOOK STATE (§2.1b), and the session is telemetry, not a trigger.**
+
+### 15.3 WHERE THE BID COLLAPSES, BY THE MINUTE (2026-09-01, all four boundaries, per-minute resolution; drop = bid ≤ 0.90 × own previous bid ≤ 5 min earlier with the ask within 2%)
+| boundary (ET → UTC) | the minute | snaps that minute | symbols quoting | bid drops / symbols | wide (>20%) snaps |
+|---|---|---|---|---|---|
+| **8 PM ET → 00:00 UTC** | `00:00`–`00:14` | 570–750 / min | 220–345 | **1–4 / min** (ordinary) | 5–17 |
+| | ⛔ **`00:15`** | **3,237** | **478 of 479** | **47 / 47** | **741** |
+| | `00:16` | 1,707 | 378 | 8 / 7 | 184 |
+| | `00:17`–`00:25` | ~1,000 → 700 | 300 → 150 | 1–3 | 53 → 1 |
+| **4 AM ET → 08:00 UTC** | `08:05`–`08:14` | 800–1,350 | 160–440 | 1 / min | 0–13 |
+| | ⛔ **`08:15`** | **3,174** | **475** | **8 / 8** | 47 |
+| | `08:16`–`08:33` | 800–1,400 | 200–370 | 1–3 | 4–27 |
+| **9:30 AM ET → 13:30 UTC** | `13:21`–`13:40` | 1,200–1,600 | 255–479 | 1–3 / min | 0–5 |
+| **4 PM ET → 20:00 UTC** | ⛔ **`20:15`** | **3,457** | **479** | **8 / 8** | 62 |
+| | `20:16`–`20:36` | 900–1,800 | 330–479 | 0–5 | 7–21 |
+⇒ **(a) The event is a WHOLE-BOOK RE-QUOTE BURST: in one minute every symbol re-quotes (3,200–3,500 snaps vs ~700 in an ordinary minute), and the collapsed bids ride inside that burst.** **(b) It lands at `:15` past the hour on all THREE thin-book handoffs — never at `:00`, the documented boundary — and the exchange OPEN (9:30 ET) produces NO burst and no drop cluster.** **(c) 8 PM ET is the big one by symbol reach (47 symbols on this day, 72 median across nine weekdays), 4 AM and 4 PM ET are real but a fraction of it (8 symbols each on this day).**
+⚠️ **THE `:15` OFFSET — HYPOTHESIS, NOT ESTABLISHED:** Kraken's own `is_extended_hours` flag flips false→true inside the **20:15** UTC bucket (76 `false` snaps then all `true`), not at 20:00 — so the OFFSET IS IN THE FEED KRAKEN SENDS US, not only in our archive; and `#559` measured a *"uniform ~15.7-minute archive lag."* Blue Ocean's data is published to non-subscribers at a **15-minute delay** (Bloomberg/BOATS notice). **A 15-minute-delayed reference feed would place every boundary at `:15`, which is what we observe.** The archive stores no venue timestamp (`metadata = {"schema_version": 1}`), so this cannot be settled from stored rows; **the settling instrument is a raw capture of the equities WS message timestamps across one 20:00–20:20 UTC window** — a Step-2 objective, not assumed.
+
+### 15.4 HOW LONG THE BID STAYS COLLAPSED — RECOVERY AT THE 8 PM ET HANDOFF (2026-09-01, the 47 symbols that dropped in `00:15`–`00:16`; recovery = bid back within 2% of its pre-drop value)
+| drop size | value |
+|---|---|
+| mean / max drop vs own previous bid | **17.6% / 63.3%** (CTVA 81.44 → 29.92; EWN 64.34 → 24.32; LECO 245 → 129.21) |
+| mean spread at the drop | **31.1%** of mid |
+| gap between snaps around the drop (median) | **6 s** — **there is NO multi-minute feed silence in the archive** at this handoff |
+| recovered within 60 s | **28 of 47** |
+| within 5 min | 7 |
+| within 30 min | 1 |
+| **more than 4 hours (through the whole overnight)** | ⛔ **11 of 47 = 23%** (ARE recovers 05:35 UTC, COR 08:22 UTC — i.e. at the 4 AM ET handoff back to the exchanges) |
+⇒ **Kyle's account holds for three-quarters of the affected names (one collapsed reading, then normal within a minute) and FAILS for one in four: those bids stay collapsed for the ENTIRE Blue Ocean session.** So the handoff is BOTH a transition instant AND, for ~2% of the universe (11 of 479), a session-long condition. ⇒ **a guard that acts on book STATE covers both; a guard on the clock covers neither properly.**
+
+### 15.5 THE SAME READ ACROSS DAYS (the OBJ-0 full run, first 9 weekdays 2026-08-03 → 08-13; weekend 08-08/09 shown; cells = bid drops / symbols with a drop; the run continues to 09-02)
+| day | 4:15 PM ET (20:15–20:30Z) | 8:15 PM ET (00:15–00:30Z) | 4:15 AM ET (08:00–08:30Z) | 9:30 AM ET (13:30Z) | after-hours body (20:45–23:45Z) | overnight body (00:45–07:45Z) | pre-market body (08:45–13:15Z) |
+|---|---|---|---|---|---|---|---|
+| 08-03 Mon | 37/23 | 93/72 | 66/35 | 5/3 | 60/41 | **106/32** | 105/58 |
+| 08-04 Tue | 34/24 | 98/90 | 84/34 | 6/5 | 76/41 | 56/24 | 345/110 |
+| 08-05 Wed | 54/32 | 85/78 | 124/39 | 16/3 | 94/48 | 5/5 | **661/113** |
+| 08-06 Thu | 37/20 | 71/65 | 150/45 | 8/4 | 99/67 | 18/10 | 322/86 |
+| 08-07 Fri | 58/30 | 48/48 | 106/38 | 2/2 | 84/58 | 8/4 | 253/92 |
+| 08-08 Sat | 0/0 | 74/71 (Friday's 8 PM handoff) | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 |
+| 08-09 Sun | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 | 0/0 |
+| 08-10 Mon | 69/32 | 59/59 | 108/41 | 1/1 | 60/42 | 41/14 | 288/110 |
+| 08-11 Tue | 47/25 | 76/72 | 82/35 | 3/2 | 101/67 | 11/8 | 391/94 |
+| 08-12 Wed | 19/9 | 63/60 | 67/33 | 1/1 | 62/38 | 12/5 | 263/90 |
+| 08-13 Thu | 50/20 | 83/77 | 65/34 | 10/3 | 65/44 | 88/23 | 111/69 |
+| **weekday median (n=9)** | **47 / 24** | **76 / 72** | **84 / 35** | 5 / 3 | **76 / 44** | 18 / 10 | ⛔ **288 / 92** |
+⇒ ⛔ **THE EARLIER CLAIM IS REFUTED FOR TWO OF THE THREE OFF-HOURS SESSIONS.** *"Outside 8:15 the spreads are wider but the bid does not drop dramatically"* is TRUE of the **overnight body** (the Blue Ocean session itself: median 18 drops / 10 symbols across 7 hours) and FALSE of the **after-hours body** (median 76 / 44 in 3 hours) and emphatically FALSE of the **pre-market body** (median 288 / 92 in 4.5 hours — MORE collapsed bids than any transition instant, on a quarter of the universe). ⇒ **The calm session is the one fed by the single consolidated limit book (Blue Ocean); the noisy ones are the two fed by the exchanges' fragmented extended-hours quotes.** The 09-01 one-day probe (pre-market ~30 drops) was a QUIET day — a one-day read would have called the branch wrong, which is why the branch rule waits for the full run.
+
+### 15.6 WHAT REACHES THE TRADE RECORD, BY ZONE (every xStock `stop_hit` since 2026-07-17, n=153; the stub fingerprint = booked more than 1% ABOVE the stop it was cut at; `stop_loss` and `exit_price` on the row)
+| zone of the close (UTC clock proxy) | stop-outs | booked >1% above the stop | $ booked above the stop | median exit vs stop |
+|---|---|---|---|---|
+| ⛔ **8:15 PM ET handoff** (00:15–00:30Z) | **42** | **32** | **$300.17** | **+2.81%** |
+| ⛔ **4:15 PM ET handoff** (20:15–20:30Z) | **14** | **7** | **$39.12** | **+1.25%** |
+| 4:15 AM ET handoff (08:00–08:30Z) | 3 | 0 | $0.00 | −0.04% |
+| after-hours body | 3 | 0 | $0.04 | +0.03% |
+| overnight body | 10 | 0 | $0.26 | −0.06% |
+| pre-market body | 20 | 0 | $0.34 | −0.09% |
+| RTH (13:30–20:15Z) | 61 | 1 | $10.60 | +0.02% |
+⇒ **THE DAMAGE IS AT TWO HANDOFFS, NOT ONE: 8:15 PM ET carries most of it, and 4:15 PM ET carries half its stop-outs with the same fingerprint — the 4:15 PM transition was never discussed and it IS in the record.** The 4:15 AM handoff and all three session BODIES have produced NO stub-priced closes despite the pre-market body carrying the most bid drops of all. ⚠️ **WHY — HYPOTHESIS, untested:** in the pre-market hours the σ-ceiling skips most exit checks (*"Exit checks skipped — mark older than ceiling"* fires on xStock names between 04:00 and 09:30 ET daily — `b1f58a01`'s class), so the collapsed prints are mostly not ACTED on there; and pre-market drops recover fast (§15.4's pattern) between the throttled evaluations. **The freshness ceiling is accidentally protecting the pre-market; nothing protects the two handoffs, where the print arrives FRESH (`ageMs=1479` on NOW/USD) inside a burst.**
+
+### 15.7 ⇒ WHAT THIS DOES TO THE BATCH
+1. **The remedy is NOT a transition-instant rule and NOT a session rule — it is a BOOK-STATE guard** (§2.1b): collapsed bids occur at three handoffs AND recur through two session bodies AND persist for a quarter of the affected names all night. Only a per-tick test of the book itself covers all of that. This is also the only shape consistent with Kyle's three constraints (no blackout, no 20:15 rule, own-history comparator).
+2. **The damage cohort for OBJ-4 widens from one handoff to two** (8:15 PM and 4:15 PM ET); the daily-loss-budget figure in §13.1b (n=41, $300) is the 8:15 PM half only — the 4:15 PM half adds 7 fingerprinted rows and $39.
+3. **OBJ-0's branch rule (§5) is answered on the evidence so far as: NOT transition-instant.** Formally called only when the full run completes (the pre-market body alone decides it), but nine weekdays already exceed the branch threshold by two orders of magnitude.
+4. **Two instruments are owed to Step 2, not assumed:** (i) the raw WS timestamp capture that settles the `:15` offset; (ii) the pre-market "why no damage" hypothesis — a count of exit evaluations that RAN vs were SKIPPED by the ceiling, by zone, from the engine log.
+
