@@ -198,6 +198,9 @@ def record_birth(
     followed: bool,
     follow_reason: str,
     signature: str | None = None,
+    creator_tokens=None,
+    creator_share=None,
+    creator_stake_source: str = "not_extracted",
 ) -> dict:
     """Record one launch and schedule its whole observation grid.
 
@@ -235,6 +238,18 @@ def record_birth(
         "size_source": size_source,
         "initial_liquidity": initial_liquidity,
         "creator": creator,
+        # ⛔ THE CREATOR'S OPENING STAKE. These three are added as EXPLICIT
+        #    PARAMETERS rather than left to ride along in a dict, because
+        #    `record_birth` takes named arguments and `ingest` passes them one
+        #    by one -- so a field the parser produces and the signature does
+        #    not name is SILENTLY DROPPED. The parser had them and nothing
+        #    carried them; this is that gap closed.
+        # ★ The default is `not_extracted`, never 0 or None alone: a birth
+        #   recorded before this shipped must be distinguishable from a
+        #   creator who genuinely took nothing.
+        "creator_tokens": creator_tokens,
+        "creator_share": creator_share,
+        "creator_stake_source": creator_stake_source,
         "socials": socials,
         "followed": followed,
         "follow_reason": follow_reason,
@@ -344,6 +359,41 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
 
 MINT_CORRECTIONS_PATH = f"{ROOT}/provenance/mint-corrections.jsonl"
 POOL_SOL_CORRECTIONS_PATH = f"{ROOT}/provenance/pool-sol-corrections.jsonl"
+CREATOR_STAKE_PATH = f"{ROOT}/provenance/creator-stake.jsonl"
+
+
+def record_creator_stake(rec: dict) -> None:
+    """Append ONE backfilled creator stake for a birth already written.
+
+    The birth files are append-only, so this is a separate record set and the
+    originals stand. `census()` applies it on the DEFAULT read path.
+    """
+    if not rec.get("mint") or not rec.get("creator_stake_source"):
+        raise ValueError("a creator-stake record needs a mint and a source")
+    _append(CREATOR_STAKE_PATH, rec)
+
+
+def creator_stake_index():
+    """mint -> backfilled stake. Ambiguous keys are DROPPED, not guessed.
+
+    A mint is launched once, so two DIFFERENT stakes for one mint means the
+    extraction disagreed with itself and neither can be trusted. Identical
+    repeats are idempotent, so re-running the backfill does not poison what it
+    already wrote -- the lesson from the pool_sol corrections, where a
+    re-run undid 86 fixes because the comparison included a run timestamp.
+    """
+    idx = {}
+    for rec in _read(CREATOR_STAKE_PATH):
+        m = rec.get("mint")
+        if not m:
+            continue
+        val = {k: rec.get(k) for k in
+               ("creator_tokens", "creator_share", "creator_stake_source")}
+        if m in idx and idx[m] is not None and idx[m] != val:
+            idx[m] = None
+            continue
+        idx[m] = val
+    return idx
 
 
 def record_pool_sol_correction(rec: dict) -> None:
@@ -489,6 +539,14 @@ def census(day_file: str, _idx=None):
     auditable from the row itself rather than only from the index.
     """
     idx = _correction_index() if _idx is None else _idx
+    # ⛔ THE BACKFILLED CREATOR STAKE IS APPLIED HERE, ON THE DEFAULT PATH.
+    #    Langston's rule, earned in this batch: a raw store plus a correction
+    #    set joined by convention is two objects that must be combined
+    #    correctly by every reader forever, and it fails quietly in whichever
+    #    one forgot. A row whose backfill is ambiguous is MARKED rather than
+    #    silently left reading `not_extracted`, which would be
+    #    indistinguishable from never having been backfilled at all.
+    _stake = creator_stake_index()
     out = []
     for r in read_census_uncorrected(day_file):
         key = (r.get("mint"), r.get("created_at"))
@@ -507,6 +565,18 @@ def census(day_file: str, _idx=None):
                 r = dict(r, mint_unresolved=True)
             elif real != r.get("mint"):
                 r = dict(r, mint=real, recorded_mint=r.get("mint"))
+        # APPLY THE BACKFILLED STAKE, and only where the row does not already
+        #    carry one -- a live extraction always wins over a backfill,
+        #    because the live one saw the payload at the moment it arrived.
+        if r.get("creator_stake_source", "not_extracted") == "not_extracted":
+            got = _stake.get(r.get("mint"))
+            if got is None and r.get("mint") in _stake:
+                # The backfill disagreed with itself for this mint. Marked,
+                #    never left reading `not_extracted`, which would be
+                #    indistinguishable from never having been backfilled.
+                r = dict(r, creator_stake_source="backfill_ambiguous")
+            elif got:
+                r = dict(r, **got)
         out.append(r)
     return out
 

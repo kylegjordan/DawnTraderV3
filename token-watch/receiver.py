@@ -178,6 +178,71 @@ def follow_decision(mint: str, socials: dict, initial_size) -> tuple:
     return True, "deferred"
 
 
+# ⛔⛔ THE CREATOR'S LAUNCH STAKE — AND WHY IT IS EXTRACTED HERE RATHER THAN
+#    READ FROM THE CHAIN (Kyle directed creator-sell detection, 2026-09-02).
+#
+#    THE BUDGET DECIDED THE SHAPE. Cap 1,000,000 credits/month; births reserve
+#    803,000; the liquidity carve is 190,000 and was spending ~2,300/hour, so
+#    it exhausts in about three days. UNALLOCATED is 7,000 and is deliberate
+#    SEPARATION, not spare capacity. There was no budget for a new per-token
+#    RPC read, and a design that needed one would have been unaffordable on
+#    the day it shipped.
+# ★ THE PAYLOAD WE ALREADY STORE CARRIES IT. `tokenTransfers` names who
+#   received how many tokens in the creation transaction, so the creator's
+#   opening stake costs ZERO CREDITS and is backfillable over every birth
+#   already recorded.
+#
+# ⛔ WHY THE STAKE IS THE RIGHT MEASURAND, and this is the finding that led
+#    here: on a bonding curve there is no liquidity-provider position to
+#    withdraw, so a rug LOOKS LIKE SELLING because selling is the only
+#    mechanism that exists. What separates a rug from a token that simply died
+#    is WHO sold, HOW MUCH, and HOW EARLY. The creator's opening stake is the
+#    HOW MUCH, and it is the half obtainable without spending anything.
+#
+# ⚠️ MEASURED over 24,256 CREATE payloads before this was written: 84.4% carry
+#    a creator token transfer; median stake 15,755,428 tokens (1.58% of the
+#    standard 1,000,000,000 supply); MAXIMUM 793,100,000 — 79.3% of supply in
+#    one wallet at launch, which is the classic setup.
+# ★ AND THE 15.6% ARE NOT FAILURES. 3,198 payloads carry NO token transfers at
+#   all — a creator who launched and bought nothing — and 589 move tokens to
+#   somebody OTHER than the creator. Both are measured states with their own
+#   names. There is no "unknown" bucket, because an extraction failure and a
+#   creator who took nothing must never share a value (`size_source` above
+#   exists for exactly this reason, one field up).
+STANDARD_SUPPLY = 1_000_000_000     # pump.fun's fixed mint; NAMED, not assumed
+
+
+def creator_stake(event: dict, creator: str) -> tuple:
+    """(tokens, share_of_standard_supply, source) for the creator's opening buy.
+
+    ⛔ SUMS EVERY TRANSFER TO THE CREATOR, never the first or the largest.
+       A creator can receive their allocation in several transfers in one
+       transaction, and taking one of them would understate the stake by an
+       unknown amount while looking resolved -- the same failure `size_source`
+       was introduced to make loud.
+    """
+    transfers = event.get("tokenTransfers") or []
+    if not creator:
+        return None, None, "no_creator"
+    if not transfers:
+        # A launch where the creator bought nothing. A REAL state, not a gap.
+        return 0.0, 0.0, "no_token_transfers"
+    # The mint under creation is the one the transfers are about.
+    mint = next((t.get("mint") for t in transfers if t.get("mint")), None)
+    total, seen = 0.0, False
+    for t in transfers:
+        if t.get("toUserAccount") == creator and t.get("mint") == mint:
+            try:
+                total += float(t.get("tokenAmount") or 0)
+                seen = True
+            except (TypeError, ValueError):
+                pass
+    if not seen:
+        # Tokens moved, but to somebody else. Also a real state.
+        return 0.0, 0.0, "transfers_to_others_only"
+    return total, total / STANDARD_SUPPLY, "creator_token_transfer"
+
+
 def _journal_launch(day: str, followed: bool, reason: str, size_source: str,
                     now: datetime) -> None:
     """One append per launch, carrying BOTH the credit spend and the inclusion
@@ -379,12 +444,21 @@ def parse_creation(event: dict) -> dict | None:
         size_source = ("feePayer_largest_of_%d" % len(mine)) if len(mine) > 1 \
             else "feePayer_sole_transfer"
 
+    stake, stake_share, stake_source = creator_stake(event, creator)
+
     return {
         "mint": mint,
         "created_at": created,
         "venue": event.get("source") or "unknown",
         "initial_size": size,
         "size_source": size_source,
+        # THE CREATOR'S OPENING STAKE -- free, from the payload we already
+        #    store. `creator_stake_source` names the route for the same reason
+        #    `size_source` does: a creator who took nothing and an extraction
+        #    that failed must never share a value.
+        "creator_tokens": stake,
+        "creator_share": stake_share,
+        "creator_stake_source": stake_source,
         "initial_liquidity": None,
         "creator": creator,
         "socials": socials,
@@ -424,6 +498,9 @@ def ingest(events: list) -> int:
                 size_source=launch["size_source"],
                 initial_liquidity=launch["initial_liquidity"],
                 creator=launch["creator"],
+                creator_tokens=launch["creator_tokens"],
+                creator_share=launch["creator_share"],
+                creator_stake_source=launch["creator_stake_source"],
                 socials=launch["socials"],
                 signature=launch.get("signature"),
                 followed=followed,
