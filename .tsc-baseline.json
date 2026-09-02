@@ -1,8 +1,8 @@
 {
   "version": 2,
   "format": "per-file per-code per-MESSAGE counts (#579, B-TSC-BASELINE-FIX 2026-07-27; was v1 per-file per-code counts)",
-  "frozen_at_commit": "f812e729d",
-  "frozen_at_iso": "2026-09-02T08:25:43.262Z",
+  "frozen_at_commit": "d3e643032",
+  "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
   "total_errors": 377,
   "file_count": 48,
