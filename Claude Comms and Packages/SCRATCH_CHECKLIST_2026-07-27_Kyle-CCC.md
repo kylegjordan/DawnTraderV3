@@ -11,7 +11,7 @@
 
 | # | piece | deploy-eligible | note |
 |---|---|---|---|
-| **1** | **`F-G-2` — CRYPTO half** | now | Step-2 doc is **not** soak-gated. ⛔ **Langston's condition: it absorbs the three last-48h inputs BEFORE it reaches him, or he bounces it at Step 2 without reading the substance.** |
+| **1** | **`F-G-2` — CRYPTO half** ✅ **DEPLOYED 2026-09-02 `2cc4a03ec` — ⏳ IN OBSERVATION (record `F_G_2_PROGRESS_REPORT.md`); OBJ-5 (the VTS exit/fee/epoch change) folded in on Kyle's direction** | done → observation | Step-2 doc is **not** soak-gated. ⛔ **Langston's condition: it absorbs the three last-48h inputs BEFORE it reaches him, or he bounces it at Step 2 without reading the substance.** |
 | **2** | **`3b.b` `B-XSTOCK-FEED-SANITY`** | ⛔ **≥ 09-07** | scope + build now, **deploy after the last window closes** — it changes the xStock exit price path. ⛔⛔ **DO NOT BUILD A 20:15 RULE.** ⭐ **ITS `OBJ-0` IS THE BID-DROP DISCRIMINATOR — see ⓹. The result BRANCHES the batch's size, so it runs before the remedy is scoped.** |
 | **3** | `3b.d` `B-XSTOCK-BOOK-LADDER` | ⛔ capture-only until 09-07 | ⛔⛔ **ANSWER THIS BEFORE SCOPING IT: does `F-G-2`'s xStock half need DEPTH, or only SIDE?** We already have both sides at top-of-book. **If only side, this is NOT F-G-2's prerequisite and drops to the tail.** |
 | **4** | `3b.e` `B-XSTOCK-LIVE-FEED` | after 3 | the feed was built as an archive and became the trading feed without a decision |
