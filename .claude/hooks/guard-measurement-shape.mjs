@@ -135,7 +135,14 @@ function note(row) {
     // explicitly rather than left undefined: an absent key must not be ambiguous between "real
     // traffic" and "written by a hook version that predates the marker". Both reader-found.
     const synthetic = process.env.GUARD_SYNTHETIC === '1';
-    appendFileSync(SINK, JSON.stringify({ ts: new Date().toISOString(), hook_sha: SELF, synthetic, ...row }) + '\n', 'utf8');
+    // `project_dir` — r4. The round-2 review flagged the sink carrying no clone/session field and
+    // it was recorded as a limit rather than fixed; the OBJ-5 self-test then could not attribute
+    // a single one of this guard's rows to any clone. It also serves the pre-registered window:
+    // §4b requires excluding this batch's own sessions, which needs an attribution field to exist.
+    appendFileSync(SINK, JSON.stringify({
+      ts: new Date().toISOString(), hook_sha: SELF, synthetic,
+      project_dir: process.env.CLAUDE_PROJECT_DIR || null, ...row,
+    }) + '\n', 'utf8');
   } catch { /* a sink we cannot write must never affect the session */ }
 }
 

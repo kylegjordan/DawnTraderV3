@@ -223,6 +223,16 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/observe-userpromptsubmit.mjs\""
+          }
+        ]
+      }
     ]
   },
   "defaultMode": "bypassPermissions"

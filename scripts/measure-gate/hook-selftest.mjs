@@ -68,25 +68,37 @@ function registered(clone) {
   return out;
 }
 
-/** Last row a hook wrote to its own sink. The ONLY evidence of RUNNING. */
-function lastRun(file) {
+/** Last row a hook wrote to its own sink FROM THE GIVEN CLONE.
+ * r2, reader-found: the sinks are USER-GLOBAL, and r1 accepted any row with a `ts` — so the
+ * freshest row, written by -analyst, was credited to -old as "yes, 0.0h ago". A hook stale or
+ * missing in the measured clone could show RUNNING off another clone's writes. ⛔ AND THE FIX
+ * WAS SITTING UNUSED IN THE VERY ROWS BEING READ: every row carries `project_dir` and
+ * `hook_sha`. Rows without `project_dir` are counted but attributed to nothing.
+ * ⛔ 'NO' IS RETIRED. A user-global sink cannot prove a NEGATIVE about one clone — and the old
+ * `NO (sink absent)` made the proof suite's CONTROL arm fail on a healthy fixture whenever the
+ * machine profile carried no live sinks, which entangled an "offline" proof with live state. */
+function lastRun(file, cloneDir) {
   const sink = SINKS[file];
   if (!sink) return { state: 'unknown', why: 'this hook writes no sink' };
-  if (!existsSync(sink)) return { state: 'NO', why: 'sink absent' };
+  if (!existsSync(sink)) return { state: 'unknown', why: 'sink absent on THIS machine profile' };
   try {
     const size = statSync(sink).size;
     const buf = readFileSync(sink);
-    const tail = buf.subarray(Math.max(0, size - 65536)).toString('utf8').trim().split('\n');
+    const tail = buf.subarray(Math.max(0, size - 262144)).toString('utf8').trim().split('\n');
+    const want = String(cloneDir).replace(/\\/g, '/').toLowerCase();
+    let unattributed = 0;
     for (let i = tail.length - 1; i >= 0; i--) {
-      try {
-        const ts = JSON.parse(tail[i]).ts;
-        if (ts) {
-          const ageH = (Date.now() - Date.parse(ts)) / 3.6e6;
-          return { state: 'YES', ts, ageH };
-        }
-      } catch { /* keep scanning back */ }
+      let r;
+      try { r = JSON.parse(tail[i]); } catch { continue; }
+      if (!r.ts) continue;
+      const pd = r.project_dir ? String(r.project_dir).replace(/\\/g, '/').toLowerCase() : null;
+      if (pd === null) { unattributed++; continue; }
+      if (pd !== want) continue;
+      const ageH = (Date.now() - Date.parse(r.ts)) / 3.6e6;
+      return { state: 'YES', ts: r.ts, ageH, hook_sha: r.hook_sha || null };
     }
-    return { state: 'NO', why: 'sink has no parseable row' };
+    return { state: 'unknown',
+      why: 'no row FROM THIS CLONE in the last 256KB' + (unattributed ? ` (${unattributed} rows carry no project_dir)` : '') };
   } catch (e) {
     return { state: 'unknown', why: 'sink unreadable: ' + e.message };
   }
@@ -122,15 +134,20 @@ for (const clone of clones) {
     if (present && originBlobs.has(file)) {
       current = sha12(norm(readFileSync(p))) === originBlobs.get(file) ? 'yes' : 'STALE';
     }
-    // RUNNING is only observable in THIS clone's own session — a sink is user-global, so it is
-    // reported once, not per clone, and that limit is printed rather than implied.
-    const run = clone === clones[0] ? lastRun(file) : { state: '(see first clone)' };
-    const runTxt = run.state === 'YES' ? `yes, ${run.ageH.toFixed(1)}h ago`
-      : run.state === 'unknown' ? `unknown (${run.why})` : run.state === 'NO' ? `NO (${run.why})` : run.state;
+    const run = lastRun(file, clone);
+    // If the row names which VERSION ran, compare it to origin — a clone can be CURRENT on disk
+    // while its last EXECUTION was a stale version (hooks load at pickup, not per call).
+    let verTxt = '';
+    if (run.state === 'YES' && run.hook_sha && originBlobs.has(file)) {
+      verTxt = run.hook_sha === originBlobs.get(file) ? ' [current ver]' : ` [ver ${run.hook_sha} — NOT current]`;
+    }
+    const runTxt = run.state === 'YES' ? `yes, ${run.ageH.toFixed(1)}h ago${verTxt}`
+      : `unknown (${run.why})`;
     console.log('    ' + pad(file,32) + pad([...info.events].join(','),22) + pad(present ? 'yes' : 'MISSING',9) + pad(current,9) + runTxt);
     if (!present) problems.push(`${basename(clone)}: ${file} REGISTERED BUT MISSING`);
     if (current === 'STALE') problems.push(`${basename(clone)}: ${file} stale vs origin`);
-    if (run.state === 'NO') problems.push(`${file} REGISTERED BUT HAS NEVER RUN (${run.why})`);
+    // r2: no problems row for RUNNING — `unknown` is not a defect and `NO` is retired; a
+    // user-global sink cannot prove a per-clone negative (#453).
   }
   // Present-but-unregistered: a hook file nobody invokes.
   for (const f of originBlobs.keys()) {
@@ -164,8 +181,11 @@ if (!existsSync(il)) {
   // rows whose `project_dir` was absent so the session id was used as the fallback key. That is
   // an unreadable wall, and an unreadable report is an unread report: the two STALE clones in the
   // verdict were the finding, and they were buried under 190 lines of noise.
-  const clonesRows = [...bySession].filter(([k]) => /^[A-Za-z]:\\/.test(k)).sort();
-  const others = [...bySession].filter(([k]) => !/^[A-Za-z]:\\/.test(k));
+  // r2: the bare drive-letter filter also caught `~/.claude/projects/...` paths, printing
+  // non-clones as clone rows. A clone is a directory that exists and holds a .git.
+  const isClone = (k) => /^[A-Za-z]:\\/.test(k) && existsSync(join(k, '.git'));
+  const clonesRows = [...bySession].filter(([k]) => isClone(k)).sort();
+  const others = [...bySession].filter(([k]) => !isClone(k));
   for (const [k, ts] of clonesRows) {
     const ageH = ts ? (Date.now() - Date.parse(ts)) / 3.6e6 : null;
     console.log('    ' + String(k).padEnd(30) + ' last start ' + (ts || '?') +
@@ -177,7 +197,9 @@ if (!existsSync(il)) {
       others.length, (stamps[0] || '?').slice(0, 10), (stamps[stamps.length - 1] || '?').slice(0, 10));
     console.log('      ⚠️ THOSE CANNOT BE ATTRIBUTED TO A CLONE, so this view is INCOMPLETE, not clean.');
   }
-  console.log('    ⛔ A CLONE ABSENT FROM THIS LIST HAS NOT STARTED A SESSION AND IS RUNNING WHATEVER IT LAST PICKED UP.');
+  // r2: the old line said "HAS NOT STARTED A SESSION" — an absolute its own output contradicted
+  // two lines up, since rows without project_dir cannot be attributed to any clone.
+  console.log('    ⛔ A clone absent from this list has NO EVIDENCED start — not proven dormant.');
 }
 
 console.log('\n=== VERDICT ===');

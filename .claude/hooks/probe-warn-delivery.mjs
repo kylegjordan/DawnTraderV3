@@ -52,7 +52,14 @@ const SINK = join(homedir(), '.claude', 'probe-warn-delivery.jsonl');
 // FIVE clones currently run THREE versions of this file and HEAD does not tell you which.
 let SELF = null;
 try {
-  SELF = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex').slice(0, 12);
+  // ⛔ NORMALISE LINE ENDINGS BEFORE HASHING — r8, found by the OBJ-5 self-test, which read this
+  // probe's freshest row as "[ver … NOT current]" while the file on disk was current. The raw
+  // bytes are CRLF in a checkout and LF in the blob, so the unnormalised hash gave one source
+  // version two identities. Its sibling guard-measurement-shape was fixed for exactly this on
+  // 08-31 and this file was not — the same defect, one file over, surviving the named fix.
+  SELF = createHash('sha256')
+    .update(readFileSync(fileURLToPath(import.meta.url), 'utf8').replace(/\r\n/g, '\n'))
+    .digest('hex').slice(0, 12);
 } catch { /* fail-open: identity is diagnostic, never a precondition */ }
 
 // stderr arms (r6, kept so the result stays reproducible)
