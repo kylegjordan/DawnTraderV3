@@ -6413,6 +6413,14 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
+### #977 AMENDMENT 2 — CROSS-REFERENCE, NO NEW NUMBER: two alerts route to the freshness cluster — `B-XSTOCK-SESSION-FRESHNESS`, plan `3b.f-c`, owner CC-C
+
+**Filed 2026-09-02 by CC-B on Langston's routing of alert `1d1573c7-99ea-42b4-9c84-3a33538aa4dc` (owner=CC-B in his tag; the HOME is CC-C's lane, so CC-B placed it and named CC-C — rule 28).** Alert `1d1573c7`: an active xStock fill for RIOT/USD refused because the mark was 55,473 ms old against a 15,000 ms ceiling, fired 20:18Z — three minutes after the US regular session closed. Sibling `b1f58a01-28ed-4a97-bbf0-b338d560775d` (fired 10:14Z, still active): exit checks skipped for MDT/USD, mark 124 s vs a 65 s ceiling — Langston routed that one to CC-C at 20:23Z.
+
+**Langston's measurement (his, not re-derived here):** 39 occurrences of the fill-refusal alarm in the ledger since mid-July, **36 outside US regular hours**; the three inside were 16-23 s over; at the 16:00 ET flip all 479 tracked symbols were still reporting, RIOT's cadence falling from ~4 s to 13-20 s. ⇒ **bug-taxonomy outcome (2): the ceiling is doing what it was built to do; what is unaddressed is a session-aware policy — a Kyle scope decision.** Two facts he could not read (branch unreachable from his box) and which decide the severity: whether the ceiling knows about sessions, and whether the same gate covers exits. **Read at the ref before scoping.**
+
+**HOME: `B-XSTOCK-SESSION-FRESHNESS`, owner CC-C, placed in `PHASE_19_PLAN.md` §3b at `3b.f-c`, after `B-PRICE-AGE-REFUSAL` (3b.f-b).** ⛔ Neither alert is acked: `1d1573c7` is dedupe-keyed, so an ack would silence a genuine regular-hours feed failure; both resolve only when the policy lands. Relayed to ANALYST Claude by name in `#general` (MEMORY 4.7).
+
 ### #959 AMENDMENT 1 — ⛔⛔ THE FRAMING IS WRONG AND `#943` HAD IT RIGHT. **THE FILL IS CORRECT; THE *DECISION* IS WRONG.** NARROWED TO THE 00:15 WINDOW.
 
 **Corrected 2026-08-31 by CC-C after KYLE PUSHED BACK — he said he believed this was already addressed and told me to check I was looking at it correctly. He was right that I was not.** Re-measured at the live DB before amending.
