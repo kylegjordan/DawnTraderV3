@@ -7,12 +7,12 @@ Base for the diff: `66f7c7500` (the commit before the Step-2 amendment `24f4b39b
 | path | status | lines | role |
 |---|---|---|---|
 | `.claude/hooks/guard-measurement-shape.mjs` | NEW | 349 | **OBJ-4** — PreToolUse, three pre-execution measurement shapes |
-| `.claude/hooks/guard-stale-fetch.mjs` | NEW | 116 | **OBJ-2** — PreToolUse, §7.1 step 0 |
+| `.claude/hooks/guard-stale-fetch.mjs` | NEW | ~132 (r2) | **OBJ-2** — PreToolUse, §7.1 step 0 |
 | `.claude/hooks/guard-ci-cited.mjs` | NEW | 246 | **OBJ-3** — PreToolUse, rule 19's citation (r7 at `fcabe3254`: the turn-start read widened to 8 MB) |
 | `.claude/hooks/guard-result-shape.mjs` | NEW | 285 | **OBJ-6c** — PostToolUse, result-vs-request |
 | `.claude/hooks/observe-userpromptsubmit.mjs` · `observe-posttooluse.mjs` | NEW | 62 · 51 | **OBJ-1 / 6c stage 1** — payload-shape observers, keys+types only |
 | `.claude/hooks/inject-due-alerts.mjs` | NEW | 149 | **OBJ-1 stage 2** — UserPromptSubmit, §10.5 whole-file alert read |
-| `.claude/hooks/probe-warn-delivery.mjs` | MODIFIED, **UNREGISTERED at r2** | +129 / −9 (12 → 132 lines) | **OBJ-4's gate instrument** — six delivery arms. ⛔ **Langston BLOCKER-1: the one file in the set that can block, with a raw substring sentinel match and no mention-elision. Registration removed at r2; file deletion scheduled for Step 10 (`DELETED_COMPONENTS_LOG` entry landed).** |
+| `.claude/hooks/probe-warn-delivery.mjs` | MODIFIED, **UNREGISTERED at r2** | +129 / −9 (12 → 132 lines) | **OBJ-4's gate instrument** — six delivery arms. ⛔ **Langston BLOCKER-1: the one file in the set that can block, with a raw substring sentinel match and no mention-elision. Registration removed at r2; **file DELETED at r3** — the hook self-test flagged it *present but NOT REGISTERED*, the very class it exists to catch — archived as `.removed`, `DELETED_COMPONENTS_LOG` entry updated.** |
 | `.claude/settings.local.json` | MODIFIED | +57 at r1, +48 at r2 | registrations: PreToolUse ×2 new blocks after r2 (measurement-shape, stale-fetch, ci-cited in two blocks), PostToolUse (new event), UserPromptSubmit (new event); **the OBJ-6d agent-hook probe was registered and REMOVED within the batch** — not at any ref; logged in `DELETED_COMPONENTS_LOG` on Langston's ruling |
 | `scripts/measure-gate/hook-selftest.mjs` + `test-hook-selftest.mjs` | NEW | 220 · 103 | **OBJ-5** — REGISTERED / PRESENT / CURRENT / RUNNING per hook, 5/5 |
 | `scripts/measure-gate/test-guard-measurement-shape.mjs` | NEW | 424 | 79/79, 11 mutations |
@@ -34,17 +34,17 @@ Three shapes at `:250-295`: `worktree-not-ref` (size/hash on the working tree in
 
 ### OBJ-2 `guard-stale-fetch.mjs`
 ```js
-// :61-75 — the gate and the silencer, quote-aware, ordered
+// :63-91 (r2, Langston finding 2) — the gate and the silencer, BOTH quote-aware, ordered
 const GIT = /\bgit\b(?:\s+-[Cc]\s*(?:"[^"]*"|'[^']*'|\S+))*\s+/;
-const stages = cmd.split(/&&|\|\||[;\n]/);
-const gatedAt = stages.findIndex((s) => new RegExp(GIT.source + '(commit|push)\\b').test(s));
-if (!gated) return;                                   // no sink row for non-git calls
+const stages = [];  /* :66-80 quote-aware split on && || ; newline — a ";" inside quotes is not a stage break */
 const substitutions = (s) => (s.match(/\$\(([^()]*)\)/g) || []).join(' ');
-const unquoted = (s) => s.replace(/"[^"]*"|'[^']*'/g, ' ') + ' ' + substitutions(s);
+const unquoted = (s) => s.replace(/"[^"]*"|'[^']*'/g, 'QUOTED') + ' ' + substitutions(s);   // a placeholder TOKEN, so `git -C "C:/x y" push` still reads as a push
+const gatedAt = stages.findIndex((s) => new RegExp(GIT.source + '(commit|push)\\b').test(unquoted(s)));
+if (!gated) return;                                   // :89 — no sink row for non-git calls
 const fetching = stages.slice(0, gatedAt).map(unquoted).some((s) =>
   new RegExp(GIT.source + '(fetch|pull)\\b').test(s) && !/--dry-run\b/.test(s));
 ```
-Clock: `.git/FETCH_HEAD` mtime, threshold 30 min; absent → `.git/description` age (written once at clone, verified on git 2.53; `.git/config` is rewritten by `git config user.name`, the step before a new clone's first commit) — `:80-88`.
+Clock: `.git/FETCH_HEAD` mtime (`:97`), threshold 30 min; absent → `.git/description` age (`:107`; written once at clone, verified on git 2.53; `.git/config` is rewritten by `git config user.name`, the step before a new clone's first commit).
 **Attack:** the KNOWN LIMIT — FETCH_HEAD says WHEN you fetched, not WHETHER origin moved since; the guard does not claim the race.
 
 ### OBJ-3 `guard-ci-cited.mjs` — six reader rounds; the message source is the whole design
@@ -99,7 +99,7 @@ Replayed rates at r3 (your `RULED ON REPORTED FACT` stands — the corpus is on 
 Four columns per registered hook: REGISTERED (settings) · PRESENT (file) · CURRENT (sha vs origin) · RUNNING (a sink row FROM THIS CLONE, attributed by `project_dir`; hooks with no sink read `unknown`, never `NO`). Control D: an untouched fixture reports no problems — **red while any hook is edited-uncommitted, which is the correct reading of a diverged tree.**
 
 ## 4. Judgement calls I want attacked
-1. ~~probe stays through Step 7~~ **RULED (BLOCKER-1): unregistered at r2.** The shipped set's delivery is demonstrable from the four guards' own `additionalContext` fires; the probe's marginal evidence was its deny/exit-2 arms, which the shipped set does not use. File deletion at Step 10, logged.
+1. ~~probe stays through Step 7~~ **RULED (BLOCKER-1): unregistered at r2.** The shipped set's delivery is demonstrable from the four guards' own `additionalContext` fires; the probe's marginal evidence was its deny/exit-2 arms, which the shipped set does not use. File deleted at r3 (the self-test would not let it linger), logged.
 2. **Per-Bash-call cost — the ABSOLUTE beside the delta (Langston):** at r2 the Bash matcher carries **five PreToolUse hooks across four blocks** (governed-read, bare-commit, tsc-baseline in one block; measurement-shape, stale-fetch, ci-cited) **plus two PostToolUse** — **seven node spawns per Bash call** (eight before the probe was unregistered). The 47-85 ms/hook figure is mine, from one laptop, unmeasured by anyone else; ~350-600 ms per call at the absolute. Judged acceptable for warn-only instruments; the absolute is what decides tolerability and is now stated.
 3. **`cap-bound` dedupe state** (`~/.claude/result-shape-dedupe.json`, session + pipeline hash, 500 keys) — scope confirmed as intended: session-keyed, so no cross-clone silencing. **Stated (Langston):** it is a shared-`$HOME` read-modify-write with no atomic rename and four sessions share that home; worst case a lost key and one extra terse line. In the hook's KNOWN GAPS as (7).
 4. **The OBJ-6d agent-hook probe** — **RULED: logged anyway.** One `DELETED_COMPONENTS_LOG` entry naming the measurement it produced and pointing at scope [r7]; landed at r2.

@@ -36,7 +36,6 @@ const HOME = homedir();
 // Sinks a hook writes ITSELF. Only these can evidence RUNNING.
 const SINKS = {
   'guard-measurement-shape.mjs': join(HOME, '.claude', 'measurement-shape.jsonl'),
-  'probe-warn-delivery.mjs': join(HOME, '.claude', 'probe-warn-delivery.jsonl'),
   'log-instructions-loaded.mjs': join(HOME, '.claude', 'instructions-loaded.jsonl'),
   'guard-stale-fetch.mjs': join(HOME, '.claude', 'stale-fetch.jsonl'),
   'guard-ci-cited.mjs': join(HOME, '.claude', 'ci-cited.jsonl'),
