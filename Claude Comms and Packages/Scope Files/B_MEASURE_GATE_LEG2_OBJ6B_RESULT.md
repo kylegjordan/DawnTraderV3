@@ -5,7 +5,39 @@
 
 ---
 
-# ⛔⛔ THE HEADLINE, AND IT IS A RETRACTION OF MY OWN
+# ⛔⛔ `r3` — LANGSTON CLEARED THE ENUMERATION AND **VACATED THE BUCKET COLUMN**. THE SPLIT MAY NOT BE RESTATED ANYWHERE.
+
+**He ran the generator's logic himself against the Helsinki mirror at my stated ref and reproduced the rows** — 95 instances / 92 commits, every sha opens. ✅ **That half is off `RULED ON REPORTED FACT`: the ENUMERATION is cleared and citable.**
+
+⛔⛔ **THE BUCKET COLUMN IS REFUTED, NOT MERELY UNEVIDENCED.** The classifier regexed the **whole commit body** and reported the result as a fact about **the instrument that produced the error**. Those are different objects. **Eight of eight BASH rows he opened, the matched token was not the instrument:**
+- `593721d30` — every token came from **one sentence saying the search returned NOTHING** — a list of search terms inside a negative result, read as evidence of Bash usage.
+- ten commits got `script` from **`tsc 384 = 384`, my standing verification footer.**
+- `9d4fa247a` — `http` from **"HTTP 429"**, the subject matter of the finding.
+- `0eb29c79d` — `remote/log` from **"the governance-tooling tail"** — the English noun.
+- `ef9f09801` — `git` from **another session's** `git status`.
+- `a738adb15`, `0d2e22b47` — `grep` used **metaphorically** (*"the grep-shaped hole"*).
+
+★★ **HIS WORDS: *"a correct regex run against the adjacent object — the batch's own thesis failing inside the batch's own evidence."*** And the honest finding was already written in prose in `593721d30` and then **overwritten by the table's numbers.**
+
+**RE-DERIVED, scoped to the trailer that actually claims to describe the mistake:**
+
+| scoping | BASH | NON-BASH | AMBIG | UNATTRIB |
+|---|---|---|---|---|
+| whole body (r1, refuted) | 44 | 5 | 4 | 42 |
+| Langston, trailer paragraph, 95 inst. | 6 | 6 | 0 | **83 (87%)** |
+| mine, single trailer line, 99 inst. (branch had moved) | 1 | 1 | 0 | **97 (98%)** |
+
+⚠️ **The two trailer-scoped figures differ (his window took the paragraph, mine the line) and it does not matter: THE CORPUS DOES NOT CARRY INSTRUMENT ATTRIBUTION, at 87% or 98% depending on how generously you read it.** Both are stated; neither is the split.
+
+### ✅ THE DESIGN CHOICE THIS FORCES — both routes clear with Langston; taking BOTH
+1. **OBJ-6c/6d are designed INSTRUMENT-AGNOSTIC.** The escalation predicate keys on *a result that could not have answered the request*, which is a property of result-vs-request and names no tool. **They proceed on the enumeration; they are BLOCKED only if either is scoped off an instrument proportion — and now nothing is.**
+2. **The `MISTAKE:` trailer gains an optional `via:<tool>` field going forward**, so the split becomes measurable in a month **from a recorded field rather than a regex over prose.** Recorded on the trailer convention, not enforced — a rule that fires at announce time is the failure class this batch exists to mechanise, and this is the cheap honest version.
+
+*(Also fixed: the four `AMBIGUOUS` rows rendered broken — a literal `|` in the basis cell; now `/`.)*
+
+---
+
+# ⛔⛔ THE HEADLINE (r2), AND IT IS A RETRACTION OF MY OWN
 
 **`r1` reported the erroring windows to be Bash-enriched by +11.1 pp over other activity, and argued from that: *"the enrichment is what makes the result mean something."*** ⛔ **THAT IS WRONG. AGAINST A PROPER CONTROL THE ENRICHMENT IS `+0.3 pp`.**
 

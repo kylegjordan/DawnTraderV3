@@ -39,6 +39,21 @@ function note(row) {
   } catch { /* never affects the session */ }
 }
 
+// The places an MSYS/Git-Bash path can actually live on this laptop. Node is not MSYS: `/tmp/x`
+// resolves to `C:\tmp\x` and `/c/Users/…` to `C:\c\Users\…`, neither of which exists.
+function msysCandidates(p, cwd) {
+  const out = [p];
+  const m = /^\/([a-zA-Z])\/(.*)$/.exec(p);
+  if (m) out.push(`${m[1].toUpperCase()}:/${m[2]}`);
+  if (p.startsWith('/tmp/')) {
+    const rest = p.slice(5);
+    for (const t of [process.env.TMP, process.env.TEMP, process.env.TMPDIR]) if (t) out.push(join(t, rest));
+    out.push(join('C:/Program Files/Git/tmp', rest));
+  }
+  if (cwd && !/^([a-zA-Z]:|\/)/.test(p)) out.push(join(cwd, p));
+  return out;
+}
+
 function main() {
   let payload;
   try { payload = JSON.parse(readFileSync(0, 'utf8')); }
@@ -46,6 +61,9 @@ function main() {
 
   const cmd = ((payload && (payload.tool_input || payload.toolInput)) || {}).command;
   if (typeof cmd !== 'string' || !cmd) { note({ decided: false, reason: 'no_command' }); return; }
+  // r3, reader-found: a sink row per Bash call, git or not, is an unrotated append on every
+  // command. Non-commit commands are not this guard's population; they leave no row.
+  if (!/\bgit\b[^\n;|&]*\bcommit\b/.test(cmd)) return;
 
   // The trigger: a git commit whose OWN STAGE names a completion-report path.
   // ⛔ r2 — LOCALITY, and it was proven necessary ONE MINUTE after wiring: the r1 trigger
@@ -58,7 +76,8 @@ function main() {
   const elided = cmd
     .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ')
     .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ');
-  const stage = elided.split(/&&|\|\||[;\n]/).find((s) => /\bgit\s+commit\b/.test(s));
+  // `git -C <dir> commit` / `git -c k=v commit` are the same commit (reader B3/B4).
+  const stage = elided.split(/&&|\|\||[;\n]/).find((s) => /\bgit\b(?:\s+-[Cc]\s*\S+)*\s+commit\b/.test(s));
   if (!stage || !/COMPLETION_REPORT/i.test(stage)) {
     note({ decided: true, fired: false }); return;
   }
@@ -67,26 +86,42 @@ function main() {
   // Where is the message? Tier-1 form: -F <msgfile>. Fallback: inline -m.
   // ⚠️ Read from the COMMIT'S OWN STAGE — an -F elsewhere in a compound command is not this
   // commit's message.
+  // ⛔ r3 — READER-FOUND, LOAD-BEARING: this hook runs BEFORE the command, so a msgfile written
+  // by the SAME command (`printf … > m.txt && git commit -F m.txt`) does not exist yet — 35 of 47
+  // real closes since 07-23 take that form — and `-F -` fed by a heredoc had its body elided at
+  // :59 before the read. Both read as "unreadable" and a CORRECTLY CITED close still warned; the
+  // suite's "cited → silent" arm was proven only on a pre-existing Windows-absolute path (9/47).
+  // Node also resolves MSYS `/tmp/x` to `C:\tmp\x` and `/c/…` to `C:\c\…` (14+1 of 47).
+  // ⇒ the message is now taken from EVERY place it can live, and the RAW command text is the
+  // fallback of record: when the file is created in-command, its content IS in the command.
+  // KNOWN LIMIT (3): a run id anywhere in the raw command silences it — a commit command that
+  // carries a 10-11 digit run number is, in this population, citing it.
   let msg = null, msgSource = null;
-  const fm = /-F\s+("([^"]+)"|'([^']+)'|(\S+))/.exec(cmdStage);
+  const fm = /(?:-F|--file)[\s=]+("([^"]+)"|'([^']+)'|(\S+))/.exec(cmdStage);
   if (fm) {
     const p = fm[2] || fm[3] || fm[4];
-    try { msg = readFileSync(p, 'utf8'); msgSource = 'msgfile'; }
-    catch { msgSource = 'msgfile-unreadable'; }
+    if (p === '-') { msgSource = 'stdin'; }
+    else {
+      for (const cand of msysCandidates(p, payload && payload.cwd)) {
+        try { msg = readFileSync(cand, 'utf8'); msgSource = 'msgfile'; break; } catch { /* next */ }
+      }
+      if (msg === null) msgSource = 'msgfile-unreadable';
+    }
   } else {
     const im = /-m\s+("([^"]*)"|'([^']*)')/.exec(cmdStage);
     if (im) { msg = im[2] || im[3] || ''; msgSource = 'inline'; }
   }
+  if (msg === null) { msg = cmd; msgSource = (msgSource ? msgSource + '+' : '') + 'command-text'; }
 
   // A GitHub Actions run id is a 10-11 digit number. A commit sha is hex and will not match.
-  const cited = msg !== null && /\b\d{10,11}\b/.test(msg);
+  const cited = /\b\d{10,11}\b/.test(msg);
   const fired = !cited;
   note({ decided: true, fired, msg_source: msgSource, cited });
   if (!fired) return;
 
-  const why = msg === null
-    ? `the commit message could not be read (${msgSource || 'no -F or -m found'})`
-    : 'the message contains no CI run id (a 10-11 digit GitHub Actions run number)';
+  const why = /unreadable/.test(msgSource || '')
+    ? 'its message file could not be read at hook time and the command text carries no CI run id (a 10-11 digit GitHub Actions run number)'
+    : `the message (${msgSource}) contains no CI run id (a 10-11 digit GitHub Actions run number)`;
   try {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {

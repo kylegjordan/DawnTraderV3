@@ -55,14 +55,31 @@ for chunk in raw.split(SEP):
     for m in TR.finditer(body):
         if m.group(1) != 'wrong-object':
             continue
-        b = [lab for pat, lab in BASH if re.search(pat, body, re.I)]
-        n = [lab for pat, lab in NONBASH if re.search(pat, body, re.I)]
+        # ⛔⛔ r2 — LANGSTON REFUTED THE WHOLE-BODY BUCKET AND VACATED THE SPLIT. The r1 classifier
+        # regexed the ENTIRE commit body and reported the result as a fact about the instrument
+        # that produced the error. Those are different objects. Eight of eight BASH rows he opened,
+        # the matched token was NOT the instrument: a list of search terms inside a sentence saying
+        # the search returned NOTHING; my standing `tsc 384 = 384` verification footer; "HTTP 429"
+        # as the subject matter; "the governance-tooling tail" as an English noun; another
+        # session's `git status`; "the grep-shaped hole" as a metaphor. A correct regex run against
+        # the adjacent object — the batch's own thesis failing inside the batch's own evidence.
+        # ⇒ classification is now scoped to THE TRAILER LINE ITSELF, which is the only text that
+        # claims to describe the mistake. Re-derived at 235132805: whole-body 44/5/4/42 becomes
+        # trailer-scoped 1/1/0/93 by this scoping (Langston's own scoping read 6/6/0/83 — his
+        # window took the trailer paragraph, mine the single line; either way the corpus does not
+        # carry instrument attribution and the split may not be restated anywhere).
+        trailer = body[m.start():body.find('\n', m.end()) if body.find('\n', m.end()) != -1 else len(body)]
+        b = [lab for pat, lab in BASH if re.search(pat, trailer, re.I)]
+        n = [lab for pat, lab in NONBASH if re.search(pat, trailer, re.I)]
         if b and not n:
             bucket, basis = 'BASH', '+'.join(b)
         elif n and not b:
             bucket, basis = 'NON-BASH', '+'.join(n)
         elif b and n:
-            bucket, basis = 'AMBIGUOUS', '+'.join(b) + ' | ' + '+'.join(n)
+            # ' / ' not ' | ' — a literal pipe inside a markdown table cell adds a column and shifts
+            # the subject; the four AMBIGUOUS rows rendered broken and a machine re-derivation keyed
+            # on column position would mis-read them. Reader-found, Langston-noted.
+            bucket, basis = 'AMBIGUOUS', '+'.join(b) + ' / ' + '+'.join(n)
         else:
             bucket, basis = 'UNATTRIBUTED', 'no instrument token in the commit body'
         rows.append((sha, date, subj, bucket, basis))

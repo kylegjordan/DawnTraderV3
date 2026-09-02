@@ -80,9 +80,16 @@ const REMOTE = [
   "        if datetime.datetime.fromisoformat(str(t).replace('Z','+00:00'))>now: continue",
   "    except Exception: pass",
   "    n+=1",
-  "    print('ALERT|%s|%s|%s' % (a.get('id','')[:8], a.get('severity'), (a.get('title') or '')[:110]))",
+  // r2, reader-found: a TITLE containing a newline forged ALERT lines and a fake COUNT on the
+  // wire, defeating the positive control with file content. The remote now strips \r\n and the
+  // field separator from every emitted string, so one file row can only ever be one wire line.
+  "    def clean(s): return str(s or '').replace(chr(13),' ').replace(chr(10),' ').replace('|','/')[:110]",
+  "    print('ALERT|%s|%s|%s' % (clean(a.get('id'))[:8], clean(a.get('severity')), clean(a.get('title'))))",
   "print('COUNT|%d|%d' % (n, len(last)))",
 ].join('\n');
+// Injected-count bound. The file holds ~770 ids and grows; a runaway queue must not become a
+// runaway context injection. Everything past this is summarised as a count, never dropped silently.
+const MAX_INJECT = 25;
 
 function main() {
   const t0 = Date.now();
@@ -92,8 +99,11 @@ function main() {
     // spaces and the remote shell re-parses it, so a multi-line script passed via `-c` arrived
     // mangled and python exited 2 — the live path failed on first test while the unreachable
     // path passed. stdin needs no quoting at all, on either side.
+    // StrictHostKeyChecking=yes, not accept-new — reader-found: the host is env-overridable, and
+    // accept-new would TOFU-accept a stranger AND write ~/.ssh/known_hosts, which is not this
+    // hook's sink. Staging has been in known_hosts for months; an unknown key now FAILS VISIBLY.
     r = spawnSync('ssh', [
-      '-o', 'ConnectTimeout=3', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new',
+      '-o', 'ConnectTimeout=3', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
       HOST, 'python3', '-',
     ], { encoding: 'utf8', input: REMOTE, timeout: TIMEOUT_MS, windowsHide: true });
   } catch (e) {
@@ -103,7 +113,9 @@ function main() {
 
   const failed = !r || r.error || r.status !== 0 || typeof r.stdout !== 'string';
   const lines = failed ? [] : r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
-  const countLine = lines.find((l) => l.startsWith('COUNT|'));
+  // The LAST count line: it is printed after every ALERT line, so a truncated stream cannot have
+  // it, and (belt) a forged early one could not stand in for it.
+  const countLine = [...lines].reverse().find((l) => l.startsWith('COUNT|'));
   const alerts = lines.filter((l) => l.startsWith('ALERT|'));
 
   if (failed || !countLine) {
@@ -120,11 +132,13 @@ function main() {
   note({ decided: true, due: Number(due), total_ids: Number(total), ms });
   if (!alerts.length) return; // genuine "no alerts" — the COUNT line proves the filter ran.
 
-  const body = alerts.map((l) => {
-    const [, id, sev, title] = l.split('|');
-    return `• ${id} [${sev}] ${title}`;
+  const shown = alerts.slice(0, MAX_INJECT);
+  const body = shown.map((l) => {
+    const [, id, sev, ...rest] = l.split('|');
+    return `• ${id} [${sev}] ${rest.join('|')}`;
   }).join('\n');
-  emit(`§10.5 DUE ALERTS — ${due} active, unacknowledged, due now (whole file, ${total} ids; ${ms}ms):\n${body}\n` +
+  const more = alerts.length > MAX_INJECT ? `\n… +${alerts.length - MAX_INJECT} more due alerts NOT shown (cap ${MAX_INJECT}) — read the file.` : '';
+  emit(`§10.5 DUE ALERTS — ${due} active, unacknowledged, due now (whole file, ${total} ids; ${ms}ms):\n${body}${more}\n` +
        `Surface each in plain language; ack only what you own; resolve only when fixed.`);
 }
 

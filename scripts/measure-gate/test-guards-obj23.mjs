@@ -70,6 +70,36 @@ console.log('=== OBJ-2 guard-stale-fetch ===');
   const r = run(FETCH_GUARD, 'git commit -F m.txt -- a.md', repoWithFetchAge(120));
   check('it NEVER blocks: exit 0 even when firing', r.status === 0, 'exit=' + r.status);
 }
+// r2 reader arms — the silencer's REACH: a fetch must precede the gated stage and be real.
+{
+  const r = run(FETCH_GUARD, 'git commit -F m.txt -- a.md && git fetch origin', repoWithFetchAge(120));
+  check('a fetch AFTER the commit does NOT silence', !!r.ctx, 'silent');
+}
+{
+  const r = run(FETCH_GUARD, 'git fetch --dry-run origin && git push origin x', repoWithFetchAge(120));
+  check('a --dry-run fetch does NOT silence', !!r.ctx, 'silent');
+}
+{
+  const r = run(FETCH_GUARD, 'echo "remember to git pull later" && git push origin x', repoWithFetchAge(120));
+  check('the word "pull" inside a string does NOT silence', !!r.ctx, 'silent');
+}
+{
+  const dir = repoWithFetchAge(null);
+  writeFileSync(join(dir, '.git', 'config'), '[core]\n'); // clone written just now
+  const r = run(FETCH_GUARD, 'git commit -F m.txt -- a.md', dir);
+  check('a seconds-old clone (no FETCH_HEAD, fresh config) is silent', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
+}
+{
+  const dir = repoWithFetchAge(null);
+  const cfg = join(dir, '.git', 'config'); writeFileSync(cfg, '[core]\n');
+  const t = new Date(Date.now() - 3 * 3600000); utimesSync(cfg, t, t); // cloned 3h ago, never fetched
+  const r = run(FETCH_GUARD, 'git commit -F m.txt -- a.md', dir);
+  check('an hours-old clone never fetched WARNS', !!r.ctx && /NEVER been fetched/.test(r.ctx));
+}
+{
+  const r = run(FETCH_GUARD, 'git -C C:/somewhere push origin x', repoWithFetchAge(120));
+  check('git -C <dir> push is still gated', !!r.ctx, 'silent');
+}
 
 console.log('\n=== OBJ-3 guard-ci-cited ===');
 const scratch = mkdtempSync(join(tmpdir(), 'cimsg-'));
@@ -118,6 +148,42 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
   const r = run(CI_GUARD, `echo pre && git commit -F ${without} -- docs/B_W_COMPLETION_REPORT.md && echo post`);
   check('the real case inside a compound command still warns', !!r.ctx);
 }
+// r3 reader arms — THE LOAD-BEARING ONE: the hook runs BEFORE the command, so a msgfile the
+// command itself creates does not exist yet. 35 of 47 real closes since 07-23 take that form,
+// and every one of them warned even when correctly cited.
+{
+  const notYet = join(scratch, 'sub', 'not-yet-' + Date.now() + '.txt');
+  const r = run(CI_GUARD, `printf 'B-X close.\\nCI 4/4 green, run 26730239909.\\n' > ${notYet} && git commit -F ${notYet} -- reports/B_X_COMPLETION_REPORT.md`);
+  check('msgfile CREATED IN THE SAME COMMAND, cited → silent (the 35/47 form)', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
+}
+{
+  const notYet = join(scratch, 'sub', 'not-yet-b-' + Date.now() + '.txt');
+  const r = run(CI_GUARD, `printf 'B-X close.\\nCI is green, trust me.\\n' > ${notYet} && git commit -F ${notYet} -- reports/B_X_COMPLETION_REPORT.md`);
+  check('msgfile created in the same command, NOT cited → warns', !!r.ctx, 'silent');
+}
+{
+  const r = run(CI_GUARD, `git commit -F - -- reports/B_X_COMPLETION_REPORT.md <<'MSG'\nB-X close.\nCI 4/4 green, run 26730239909.\nMSG`);
+  check('-F - fed by a heredoc, cited → silent', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
+}
+{
+  const r = run(CI_GUARD, `git commit -F - -- reports/B_X_COMPLETION_REPORT.md <<'MSG'\nB-X close.\nCI green.\nMSG`);
+  check('-F - fed by a heredoc, NOT cited → warns', !!r.ctx, 'silent');
+}
+{
+  // MSYS path: Node resolves /tmp/x to C:\tmp\x. The real file lives under $TEMP.
+  const name = 'msys-cited-' + Date.now() + '.txt';
+  writeFileSync(join(tmpdir(), name), 'B-X close. run 26730239909.\n');
+  const r = run(CI_GUARD, `git commit -F /tmp/${name} -- reports/B_X_COMPLETION_REPORT.md`);
+  check('an MSYS /tmp/ msgfile path is resolved, cited → silent', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 70));
+}
+{
+  const r = run(CI_GUARD, `git -C C:/DawnTraderV3-old commit -F ${without} -- reports/B_X_COMPLETION_REPORT.md`);
+  check('git -C <dir> commit is still the trigger', !!r.ctx, 'silent');
+}
+{
+  const r = run(CI_GUARD, `git commit --file=${without} -- reports/B_X_COMPLETION_REPORT.md`);
+  check('--file=<msgfile> is read like -F', !!r.ctx && !/could not be read/.test(r.ctx), 'ctx: ' + String(r.ctx).slice(0, 70));
+}
 
 // Mutation arms — the convention: each patches a copy, re-runs this suite, requires FAILURE.
 if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
@@ -127,9 +193,17 @@ if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
     ['obj2: make it block (exit 2)', FETCH_GUARD, 'GUARD2_UNDER_TEST',
       (s) => s.replace(/process\.exit\(0\);\s*$/, 'process.exit(2);')],
     ['obj2: silence the never-fetched case', FETCH_GUARD, 'GUARD2_UNDER_TEST',
-      (s) => s.replace("ageMin = Infinity; // never fetched — the exact case the rule exists for", 'return;')],
-    ['obj3: drop the msgfile read (message never checked)', CI_GUARD, 'GUARD3_UNDER_TEST',
-      (s) => s.replace("try { msg = readFileSync(p, 'utf8'); msgSource = 'msgfile'; }", "try { msg = '99999999999'; msgSource = 'msgfile'; }")],
+      (s) => s.replace('ageMin = cloneAgeMin <= THRESHOLD_MIN ? cloneAgeMin : Infinity;', 'return;')],
+    ['obj2: WIDEN the silencer back to anywhere-in-command', FETCH_GUARD, 'GUARD2_UNDER_TEST',
+      (s) => s.replace('stages.slice(0, gatedAt).map(unquoted).some(', 'stages.map(unquoted).some(')],
+    ['obj2: drop the fresh-clone exemption', FETCH_GUARD, 'GUARD2_UNDER_TEST',
+      (s) => s.replace('ageMin = cloneAgeMin <= THRESHOLD_MIN ? cloneAgeMin : Infinity;', 'ageMin = Infinity;')],
+    ['obj3: never check the message (cited always true)', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace('const cited = /\\b\\d{10,11}\\b/.test(msg);', 'const cited = true;')],
+    ['obj3: drop the command-text fallback (the 35/47 form regresses)', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace("if (msg === null) { msg = cmd;", "if (msg === null) { msg = '';")],
+    ['obj3: drop the MSYS path resolution', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace('for (const cand of msysCandidates(p, payload && payload.cwd))', 'for (const cand of [p])')],
     ['obj3: make it block (exit 2)', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace(/process\.exit\(0\);\s*$/, 'process.exit(2);')],
   ];

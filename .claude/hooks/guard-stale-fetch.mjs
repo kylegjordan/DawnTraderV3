@@ -55,9 +55,19 @@ function main() {
 
   // Fires only on the two operations the sync gate governs. `git fetch`/`git pull` in the same
   // command means the session is doing step 0 right now — silent.
-  const gated = /\bgit\s+(commit|push)\b/.test(cmd);
-  const fetching = /\bgit\s+(fetch|pull)\b/.test(cmd);
-  if (!gated || fetching) { note({ decided: true, fired: false, gated, fetching }); return; }
+  // r2, reader-found: the r1 silencer matched `fetch|pull` ANYWHERE — a fetch AFTER the commit,
+  // a `--dry-run`, or the word inside a quoted string all silenced it. The fetch must sit in a
+  // stage BEFORE the first gated stage, and must be a real fetch.
+  const GIT = /\bgit\b(?:\s+-[Cc]\s*\S+)*\s+/;
+  const stages = cmd.split(/&&|\|\||[;\n]/);
+  const gatedAt = stages.findIndex((s) => new RegExp(GIT.source + '(commit|push)\\b').test(s));
+  const gated = gatedAt !== -1;
+  if (!gated) return; // not this guard's population — no sink row for every Bash call
+  // Quoted spans are prose, not commands: `echo "remember to git pull"` is not a fetch.
+  const unquoted = (s) => s.replace(/"[^"]*"|'[^']*'/g, ' ');
+  const fetching = stages.slice(0, gatedAt).map(unquoted).some((s) =>
+    new RegExp(GIT.source + '(fetch|pull)\\b').test(s) && !/--dry-run\b/.test(s));
+  if (fetching) { note({ decided: true, fired: false, gated, fetching }); return; }
 
   const repo = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   let ageMin = null;
@@ -65,7 +75,12 @@ function main() {
     ageMin = (Date.now() - statSync(join(repo, '.git', 'FETCH_HEAD')).mtimeMs) / 60000;
   } catch (e) {
     if (e && e.code === 'ENOENT') {
-      ageMin = Infinity; // never fetched — the exact case the rule exists for
+      // Never fetched — the exact case the rule exists for. EXCEPT a clone younger than the
+      // threshold: `git clone` writes no FETCH_HEAD (measured, git 2.53), and a seconds-old clone
+      // IS a fresh picture of origin. Clone age is read from .git/config, written at clone time.
+      let cloneAgeMin = Infinity;
+      try { cloneAgeMin = (Date.now() - statSync(join(repo, '.git', 'config')).mtimeMs) / 60000; } catch { /* unknown → treat as old */ }
+      ageMin = cloneAgeMin <= THRESHOLD_MIN ? cloneAgeMin : Infinity;
     } else {
       note({ decided: false, reason: 'fetch_head_unreadable', error: String(e && e.message) });
       return;
