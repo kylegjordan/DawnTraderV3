@@ -14,7 +14,7 @@
 // `git add <report> && git commit` in two separate turns is invisible to it. The command-visible
 // case is the mandated Tier-1 form (`git commit -F <msg> -- <paths>`), which names its paths.
 // FAIL-OPEN: every path exits 0.
-import { readFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, statSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -52,6 +52,33 @@ function msysCandidates(p, cwd) {
   }
   if (cwd && !/^([a-zA-Z]:|\/)/.test(p)) out.push(join(cwd, p));
   return out;
+}
+
+/** Timestamp (ms) of the last real user message in the session transcript — the turn's start.
+ *  Reads only the tail of the file; a tool_result entry is also type "user" and is skipped. */
+function turnStartMs(transcriptPath) {
+  if (!transcriptPath) return null;
+  try {
+    const fd = openSync(transcriptPath, 'r');
+    const size = fstatSync(fd).size;
+    const len = Math.min(size, 512 * 1024);
+    const buf = Buffer.alloc(len);
+    readSync(fd, buf, 0, len, size - len);
+    closeSync(fd);
+    const lines = buf.toString('utf8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i];
+      if (!l.includes('"type":"user"')) continue;
+      let e; try { e = JSON.parse(l); } catch { continue; }
+      if (e.type !== 'user' || !e.message) continue;
+      const c = e.message.content;
+      const isText = typeof c === 'string' || (Array.isArray(c) && c.some((b) => b && b.type === 'text'));
+      if (!isText) continue;
+      const t = Date.parse(e.timestamp);
+      return Number.isFinite(t) ? t : null;
+    }
+  } catch { /* fall through */ }
+  return null;
 }
 
 function main() {
@@ -147,10 +174,26 @@ function main() {
     const writtenInCommand = p === '-' || (base && new RegExp('(?:>{1,2}\\|?|\\btee\\b(?:\\s+-a)?)\\s*(?:"[^"]*"|\'[^\']*\'|\\S*)?' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(cmd.slice(0, ci)));
     if (writtenInCommand) { msgSource = 'written-in-command'; }
     else {
+      // r6 (Langston): "undecidable from the object" was the wrong word — the file is on the box
+      // and its mtime is a property of the object. The comparator is THIS TURN'S START (the last
+      // user message in the transcript the payload names), not an age threshold: a Write-tool
+      // msgfile authored this turn is newer than the turn start however old its NAME is; a file
+      // older than the turn start was written in an earlier turn and is stale by construction.
+      // If the transcript cannot be read, the file is read and the reason is stated in the sink.
+      let statMtime = null, found = null;
       for (const cand of msysCandidates(p, payload && payload.cwd)) {
-        try { msg = readFileSync(cand, 'utf8'); msgSource = 'msgfile'; break; } catch { /* next */ }
+        try { statMtime = statSync(cand).mtimeMs; found = cand; break; } catch { /* next */ }
       }
-      if (msg === null) msgSource = 'msgfile-unreadable';
+      if (found === null) { msgSource = 'msgfile-unreadable'; }
+      else {
+        const turnStart = turnStartMs(payload && payload.transcript_path);
+        if (turnStart !== null && statMtime < turnStart) {
+          msgSource = 'msgfile-predates-turn';
+        } else {
+          try { msg = readFileSync(found, 'utf8'); msgSource = turnStart === null ? 'msgfile(age-undetermined: transcript unreadable)' : 'msgfile'; }
+          catch { msgSource = 'msgfile-unreadable'; }
+        }
+      }
     }
   }
   if (msg === null) { msg = commandText; msgSource = (msgSource ? msgSource + '+' : '') + 'command-text'; }

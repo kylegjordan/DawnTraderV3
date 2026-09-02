@@ -63,7 +63,7 @@
 //       last 64 KB of stdout are inspected; (6) a real `tail -50` that genuinely overflowed fires
 //       every time — ~10/day at current cadence — and that is the predicate, not a defect.
 // FAIL-OPEN: every path exits 0. Sink: ~/.claude/result-shape.jsonl (GUARD_SYNTHETIC marks tests).
-import { readFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -241,15 +241,42 @@ function main() {
   const hits = shapes(cmd, stdout);
   note({ decided: true, fired: hits.length > 0, legs: hits.map((h) => h[0]), out_lines: stdout ? stdout.split('\n').length : 0 });
   if (!hits.length) return;
+
+  // ⛔ TWO CHANNELS (Langston, 2026-09-02): cap-bound is 99.96 % of fires and its own text says
+  // the count is not evidence either way — delivered at full length ~10×/day it buries the one
+  // true html-not-json fire in 75,819 results behind an identical daily banner. So cap-bound
+  // gets ONE TERSE LINE, deduplicated per session and per pipeline (a state file keyed by
+  // session_id); the other three legs get the full warning every time. Rates are reported per
+  // leg, never in aggregate — a 3.00 % headline concealed a 99.96 / 0.04 split.
+  const rare = hits.filter(([leg]) => leg !== 'cap-bound');
+  const capHit = hits.find(([leg]) => leg === 'cap-bound');
+  let capLine = '';
+  if (capHit) {
+    const key = createHash('sha256').update(String(payload.session_id || '') + '\n' + (singlePipeline(elide(cmd)) || cmd)).digest('hex').slice(0, 16);
+    let seen = false;
+    if (process.env.GUARD_SYNTHETIC === '1') { /* test runs never dedupe and never write state */ } else try {
+      const dedupePath = join(homedir(), '.claude', 'result-shape-dedupe.json');
+      let state = {};
+      try { state = JSON.parse(readFileSync(dedupePath, 'utf8')); } catch { state = {}; }
+      seen = !!state[key];
+      if (!seen) {
+        state[key] = Date.now();
+        const keys = Object.keys(state);
+        if (keys.length > 500) for (const k of keys.slice(0, keys.length - 500)) delete state[k];
+        writeFileSync(dedupePath, JSON.stringify(state));
+      }
+    } catch { seen = false; }
+    if (!seen) capLine = `cap-bound: output is exactly the cap (${(capHit[1].match(/EXACTLY (\d+) lines/) || [])[1] || '?'} lines) — MAY be truncated; re-run unbounded before it becomes a number. (once per session per command)`;
+  }
+  if (!rare.length && !capLine) return;
+  const text = rare.length
+    ? 'RESULT-SHAPE WARNING (rule 29 — warn-only, after the fact; this hook cannot speak for what it does not list):\n' +
+      rare.map(([leg, why]) => `• ${leg}: ${why}`).join('\n') + (capLine ? '\n• ' + capLine : '') +
+      '\nThis result could not have answered the request as asked — re-run against the object before it becomes a claim.'
+    : capLine;
   try {
     process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'PostToolUse',
-        additionalContext:
-          'RESULT-SHAPE WARNING (rule 29 — warn-only, after the fact; this hook cannot speak for what it does not list):\n' +
-          hits.map(([leg, why]) => `• ${leg}: ${why}`).join('\n') +
-          '\nIf this result is about to become a claim, it may not have answered the request as asked — re-run against the object.',
-      },
+      hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: text },
     }));
   } catch { /* fail-open */ }
 }

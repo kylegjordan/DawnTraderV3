@@ -15,9 +15,9 @@ const CI_GUARD = process.env.GUARD3_UNDER_TEST || join(ROOT, '.claude', 'hooks',
 let pass = 0, fail = 0;
 const check = (n, ok, d) => { ok ? (pass++, console.log('  PASS  ' + n)) : (fail++, console.log('  FAIL  ' + n + (d ? '  <- ' + d : ''))); };
 
-function run(hook, command, projectDir) {
+function run(hook, command, projectDir, extra = {}) {
   const r = spawnSync(process.execPath, [hook], {
-    input: JSON.stringify({ tool_name: 'Bash', tool_input: { command } }), encoding: 'utf8',
+    input: JSON.stringify({ tool_name: 'Bash', tool_input: { command }, ...extra }), encoding: 'utf8',
     env: { ...process.env, GUARD_SYNTHETIC: '1', CLAUDE_PROJECT_DIR: projectDir || ROOT },
   });
   let ctx = null;
@@ -227,6 +227,29 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
   const r = run(CI_GUARD, `git -C "C:/x y" commit -F ${without} -- reports/B_X_COMPLETION_REPORT.md`);
   check('git -C "<dir with a space>" commit is still the trigger', !!r.ctx, 'silent');
 }
+// r6 arms (Langston): a pre-existing msgfile is compared against THIS TURN'S START, read from the
+// transcript the payload names. Older than the turn → written in an earlier turn → stale by construction.
+{
+  const transcript = join(scratch, 'transcript.jsonl');
+  const fiveMinAgo = new Date(Date.now() - 5 * 60000).toISOString();
+  writeFileSync(transcript,
+    JSON.stringify({ type: 'user', timestamp: new Date(Date.now() - 3 * 3600000).toISOString(), message: { role: 'user', content: 'earlier turn' } }) + '\n' +
+    JSON.stringify({ type: 'assistant', timestamp: fiveMinAgo, message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } }) + '\n' +
+    JSON.stringify({ type: 'user', timestamp: fiveMinAgo, message: { role: 'user', content: [{ type: 'text', text: 'this turn' }] } }) + '\n' +
+    // A tool_result entry stamped in the FUTURE: if it were wrongly taken as the boundary, every file would predate it.
+    JSON.stringify({ type: 'user', timestamp: new Date(Date.now() + 3600000).toISOString(), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: 'not a turn boundary' }] } }) + '\n');
+  const old = join(scratch, 'old-cited.txt'); writeFileSync(old, 'previous close. run 26730239909.\n');
+  const t = new Date(Date.now() - 2 * 3600000); utimesSync(old, t, t); // written two hours ago — an earlier turn
+  const r1 = run(CI_GUARD, `git commit -F ${old} -- reports/B_X_COMPLETION_REPORT.md`, undefined, { transcript_path: transcript });
+  check('a cited msgfile OLDER than this turn\'s start WARNS (written in an earlier turn — stale by construction)', !!r1.ctx, 'silent — read the earlier-turn file');
+  const fresh = join(scratch, 'fresh-cited.txt'); writeFileSync(fresh, 'B-X close. run 26730239909.\n'); // mtime = now, after the turn start
+  const r2 = run(CI_GUARD, `git commit -F ${fresh} -- reports/B_X_COMPLETION_REPORT.md`, undefined, { transcript_path: transcript });
+  check('a cited msgfile NEWER than this turn\'s start is read → silent (Write-tool authored this turn)', r2.ctx === null, 'fired: ' + String(r2.ctx).slice(0, 70));
+  const r3 = run(CI_GUARD, `git commit -F ${old} -- reports/B_X_COMPLETION_REPORT.md`, undefined, { transcript_path: join(scratch, 'no-such-transcript.jsonl') });
+  check('with NO readable transcript the file is read (age undetermined, stated) → silent', r3.ctx === null, 'fired: ' + String(r3.ctx).slice(0, 70));
+  const r4 = run(CI_GUARD, `git commit -F ${old} -- reports/B_X_COMPLETION_REPORT.md`, undefined, { transcript_path: transcript });
+  check('…and a tool_result entry (also type "user") is NOT taken as the turn boundary', !!r4.ctx, 'silent');
+}
 // r5 object-round arms — the stage split must be quote-aware and the source must stop at the stage end.
 {
   const r = run(CI_GUARD, `git commit -m "close; see the report" -- reports/B_X_COMPLETION_REPORT.md`);
@@ -268,6 +291,10 @@ if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
       (s) => s.replace('/(?:-F|--file)[\\s=]+', '/(?:-F)[\\s=]+')],
     ['obj3: let a LATER stage\'s digits count as the message', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace('const commandText = cmd.slice(0, commitStage.end);', 'const commandText = cmd;')],
+    ['obj3: ignore the turn boundary (read an earlier-turn file as fresh)', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace('if (turnStart !== null && statMtime < turnStart) {', 'if (false) {')],
+    ['obj3: take a tool_result entry as the turn boundary', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace("(Array.isArray(c) && c.some((b) => b && b.type === 'text'))", '(Array.isArray(c))')],
     ['obj3: make the stage split quote-BLIND again', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace("if (c === '\"' || c === \"'\") { q = c; continue; }", '')],
     ['obj3: take the FIRST git-commit stage instead of the one naming the report', CI_GUARD, 'GUARD3_UNDER_TEST',

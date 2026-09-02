@@ -29,7 +29,8 @@ function run(command, stdout, stderr = '', extra = {}) {
   return { status: r.status, ctx, raw: r.stdout };
 }
 const lines = (n, p = 'row') => Array.from({ length: n }, (_, i) => `${p} ${i + 1}`).join('\n') + '\n';
-const fires = (leg, r) => new RegExp('• ' + leg + ':').test(r.ctx || '');
+// cap-bound is delivered as ONE terse line (no bullet) — the two-channel rule; the other legs as bullets.
+const fires = (leg, r) => new RegExp('(^|• )' + leg + ':').test(r.ctx || '');
 
 console.log('=== cap-bound (instance 3: the cap MAY have done the filtering) ===');
 check('git log -20 returning exactly 20 lines FIRES', fires('cap-bound', run('git log --oneline -20 --grep=MISTAKE', lines(20))));
