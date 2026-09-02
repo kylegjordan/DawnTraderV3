@@ -60,7 +60,7 @@ CHANGE-CLASS: architecture
 | # | document | verdict | one line |
 |---|---|---|---|
 | T1 | `BATCH_CATALOG.md` | ✅ | new row: what shipped, the reviewed ref, CI run, no-deploy, the findings, CLOSED 2026-09-02 |
-| T1 | `PHASE_HISTORY.md` | ✅ | Phase-19 governance block: rule 29 gained its mechanism; the five measured findings; the OBJ-6d refusal |
+| T1 | `PHASE_HISTORY.md` | ✅ | Phase-19 governance block: rule 29 gained its mechanism; the five measured findings; the OBJ-6d refusal — **its record line first read `#980`-`#983` as a RANGE, which annexed CC-INFRA's #983 and omitted my #984 (Langston, Step-11 send-back); corrected to an enumeration in the re-file commit** |
 | T1 | `PHASE_19_PLAN.md` | ✅ | row 6 marked LEG 2 CLOSED; rows 6.6 (`B-CLAIM-REDERIVE`) and 8 (v) placed earlier this batch |
 | T1 | shared `MEMORY.md` + `MEMORY_CC_A.md` | ✅ | shared: the hook layer is live, the injector does the §10.5 read, ack silences an event-wait alert; own: position → Step 10/11 |
 | T1 | the batch `SCOPE` | ✅ | r13 is current — the OBJ-6c replays, the 6d close, the OBJ-3 measurement, the Step-7 evidence |
