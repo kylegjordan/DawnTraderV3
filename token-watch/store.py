@@ -376,10 +376,12 @@ def pool_sol_correction_index():
         val = rec.get("corrected")
         if not all(key) or not isinstance(val, dict):
             continue
-        if key in idx and idx[key] != val:
+        entry = {"corrected": val, "was": rec.get("was") or {}}
+        if key in idx and idx[key] is not None \
+                and idx[key]["corrected"] != val:
             idx[key] = None
             continue
-        idx[key] = val
+        idx[key] = entry
     return idx
 
 
@@ -657,17 +659,38 @@ def observations(day_file: str, _idx=None):
     out = []
     for rec in read_observations_uncorrected(day_file):
         key = (rec.get("mint"), rec.get("observed_at"))
-        if key in idx:
-            corrected = idx[key]
-            if corrected is None:
-                # AMBIGUOUS: two corrections disagree for this key. Flagged,
-                #    never quietly left as the known-wrong original.
-                rec = dict(rec)
-                rec["pool_sol_correction"] = "ambiguous_unresolvable"
-            else:
-                rec = dict(rec)
-                rec["pool_sol"] = corrected
-                rec["pool_sol_correction"] = "applied"
+        if key not in idx:
+            out.append(rec)
+            continue
+        entry = idx[key]
+        if entry is None:
+            # AMBIGUOUS: two corrections disagree for this key. Flagged,
+            #    never quietly left as the known-wrong original.
+            rec = dict(rec)
+            rec["pool_sol_correction"] = "ambiguous_unresolvable"
+            out.append(rec)
+            continue
+        # ⛔⛔ THE KEY IS NOT UNIQUE, MEASURED -- 5 duplicate
+        #    (mint, observed_at) pairs in 47,093 rows, and ONE of those pairs
+        #    carries a DIFFERENT `pool_sol` on each row. So a correction
+        #    matched on the key alone would be applied to two rows and be
+        #    wrong for one of them. Found by chasing a one-row discrepancy
+        #    (86 corrections, 87 rows differing) rather than rounding it off.
+        # ⇒ THE JOIN VALIDATES ITSELF: a correction records the value it was
+        #    computed FROM, so it is applied only to a row still holding that
+        #    value. A row whose stored value is not the one the correction was
+        #    derived from is MARKED, never silently overwritten -- the
+        #    correction may belong to its twin.
+        was = entry.get("was") or {}
+        cur = rec.get("pool_sol") or {}
+        if was and any(cur.get(k) != v for k, v in was.items()):
+            rec = dict(rec)
+            rec["pool_sol_correction"] = "not_applied_value_mismatch"
+            out.append(rec)
+            continue
+        rec = dict(rec)
+        rec["pool_sol"] = entry["corrected"]
+        rec["pool_sol_correction"] = "applied"
         out.append(rec)
     return out
 

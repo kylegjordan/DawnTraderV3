@@ -118,8 +118,13 @@ check("a correction is retrievable by (mint, observed_at)",
       idx.get(("M1", "2026-09-02T09:07:47+00:00", )) is not None
       or idx.get(("M1", "2026-09-02T09:07:47+00:00")) is not None, str(idx))
 check("...and carries the corrected value, not just a marker",
-      (idx.get(("M1", "2026-09-02T09:07:47+00:00")) or {}).get("source")
-      == "curve_complete_graduated", str(idx))
+      ((idx.get(("M1", "2026-09-02T09:07:47+00:00")) or {}).get("corrected")
+       or {}).get("source") == "curve_complete_graduated", str(idx))
+# THE INDEX ALSO CARRIES THE VALUE THE CORRECTION WAS COMPUTED FROM, which is
+#    what lets the join validate itself against a non-unique key -- measured,
+#    5 duplicate (mint, observed_at) pairs in 47,093 live rows.
+check("...and the value it was computed FROM, for the self-validating join",
+      "was" in (idx.get(("M1", "2026-09-02T09:07:47+00:00")) or {}), str(idx))
 
 # ⛔ AMBIGUOUS KEYS ARE DROPPED, NOT GUESSED -- the rule the mint index already
 #    follows. A wrong substitution is undetectable in a way a missing one
@@ -141,8 +146,8 @@ store.record_pool_sol_correction(
      "corrected": {"sol": None, "source": "curve_complete_graduated"}})
 idx = store.pool_sol_correction_index()
 check("★ re-running the repair is idempotent, not self-poisoning",
-      (idx.get(("M1", "2026-09-02T09:07:47+00:00")) or {}).get("source")
-      == "curve_complete_graduated", str(idx))
+      ((idx.get(("M1", "2026-09-02T09:07:47+00:00")) or {}).get("corrected")
+       or {}).get("source") == "curve_complete_graduated", str(idx))
 # A record with no key must add NO entry. Asserted by comparing the index
 #    size across the write -- an earlier draft of this file asserted `True`
 #    here, which is the shape Langston has bounced twice in this batch: a
@@ -215,6 +220,50 @@ check("a row whose corrections disagree is FLAGGED unresolvable",
       str(_cor["AMB1"]))
 check("...and is not quietly given either of the disagreeing values",
       _cor["AMB1"]["pool_sol"] == WRONG, str(_cor["AMB1"]["pool_sol"]))
+
+
+print("")
+print("BLOCK 5 -- THE KEY IS NOT UNIQUE, AND THE JOIN VALIDATES ITSELF")
+# MEASURED ON THE LIVE STORE: 5 duplicate (mint, observed_at) pairs in 47,093
+#    rows, and ONE of those pairs carries a DIFFERENT pool_sol on each row. So
+#    a correction matched on the key alone is applied to BOTH rows and is
+#    wrong for one of them.
+# FOUND BY CHASING A ONE-ROW DISCREPANCY -- 86 corrections applied, 87 rows
+#    differing -- rather than rounding it off. The extra row was my own
+#    verification collapsing a duplicate key, and the collapse was the finding.
+# THE FIX: a correction records the value it was computed FROM, so it applies
+#    only to a row still holding that value. Its twin is MARKED, never
+#    silently overwritten with a correction that may not belong to it.
+TWIN_WHEN = datetime(2026, 9, 2, 11, 0, 0, tzinfo=timezone.utc)
+TWIN_DAY = TWIN_WHEN.strftime("%Y-%m-%d") + ".jsonl"
+MINE = {"sol": 0.0, "source": "bonding_curve_real_reserves"}
+THEIRS = {"sol": 4.5, "source": "bonding_curve_real_reserves"}
+
+# Two rows, SAME mint and SAME observed_at, different pool_sol -- the shape
+#    that exists in the live store.
+store.record_observation("TWIN", "1h", TWIN_WHEN, {"pool_sol": dict(MINE)})
+store.record_observation("TWIN", "24h", TWIN_WHEN, {"pool_sol": dict(THEIRS)})
+store.record_pool_sol_correction(
+    {"mint": "TWIN", "observed_at": TWIN_WHEN.isoformat(),
+     "was": dict(MINE),
+     "corrected": {"sol": None, "source": "curve_complete_graduated"}})
+
+_rows = [r for r in store.observations(TWIN_DAY) if r.get("mint") == "TWIN"]
+_hit = [r for r in _rows if r.get("pool_sol_correction") == "applied"]
+_miss = [r for r in _rows if r.get("pool_sol_correction") == "not_applied_value_mismatch"]
+check("both rows sharing the key are returned", len(_rows) == 2, str(len(_rows)))
+check("EXACTLY ONE of them takes the correction",
+      len(_hit) == 1, "%d applied" % len(_hit))
+check("...and it is the row the correction was computed FROM",
+      _hit and _hit[0]["pool_sol"]["source"] == "curve_complete_graduated",
+      str(_hit))
+# THE DISCRIMINATING HALF. Without this the block would pass on an
+#    implementation that corrected both rows and happened to check only one.
+check("the TWIN row is NOT overwritten by a correction that is not its own",
+      len(_miss) == 1 and _miss[0]["pool_sol"] == THEIRS, str(_miss))
+check("...and it is MARKED, so an unapplied correction is never invisible",
+      _miss and _miss[0]["pool_sol_correction"] == "not_applied_value_mismatch",
+      str(_miss))
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
