@@ -44,6 +44,7 @@
 - Whether the guards are USEFUL: the pre-registered window decides it, by enumeration, adjudicated by someone who did not write them. **This report does not and may not say "catches N % of `wrong-object`"** — that inference is unavailable from a set selected on *noticed*.
 - The replayed rates are one laptop's transcripts, unreplicated.
 - `error-counted` has zero real fires in 75,819 results — proven on fixtures only.
+- **The completion-report guard did not trigger on THIS report's own commit** (`ci-cited.jsonl` 10:33: `fired:false, cited:null`): the paths were passed through a shell array and the message file through `"$TEMP/…"`, and both indirect forms are invisible to a command-text trigger. The "sees 53 of 84 real closes" figure therefore overstates its reach for variable-indirect commit forms — filed as #984 (b)/(c), leg 3. Found by the batch's own sink, an hour after the ledger closed.
 - Other clones run whatever their last session start refreshed (`B-HOOK-ESTATE-VERSION`, CC-C).
 - Per-Bash-call cost: eight node spawns at the ref, ~47-85 ms each on one laptop — Langston accepted it as warn-only instruments, the absolute stated.
 
