@@ -26,6 +26,7 @@ USAGE (on the host holding the store):
 import argparse
 import collections
 import glob
+import gzip
 import json
 import os
 import sys
@@ -68,8 +69,18 @@ def main():
     sources = collections.Counter()
     records = []
     seen = set()
-    for f in sorted(glob.glob(RAW + "/*.jsonl")):
-        for line in open(f, encoding="utf-8", errors="replace"):
+    # ⛔ COLD STORAGE COUNTS. The raw payloads tier to `cold/` after a day and
+    #    are GZIPPED, not deleted -- the first version of this read only the
+    #    hot directory and reported 59,562 births as "not reachable from any
+    #    stored payload", which was true of where it LOOKED and false of the
+    #    store. An absence produced by not looking is not an absence.
+    payload_files = sorted(glob.glob(RAW + "/*.jsonl")) +         sorted(glob.glob("/var/lib/token-watch/cold/provenance-raw-*.jsonl.gz"))
+    print("payload files to scan: %d hot, %d cold"
+          % (len(glob.glob(RAW + "/*.jsonl")),
+             len(glob.glob("/var/lib/token-watch/cold/provenance-raw-*.jsonl.gz"))))
+    for f in payload_files:
+        opener = gzip.open if f.endswith(".gz") else open
+        for line in opener(f, "rt", encoding="utf-8", errors="replace"):
             try:
                 rec = json.loads(line)
             except Exception:
@@ -98,8 +109,9 @@ def main():
     print("births needing one                     : %d" % len(need))
     print("...for which a CREATE payload was found: %d" % len(records))
     print("...NOT reachable from any stored payload: %d" % (len(need) - len(records)))
-    print("   (that last figure is a coverage limit, not a result -- the raw")
-    print("    store tiers to cold at one day, so older births are out of reach)")
+    print("   (a coverage limit, not a result. It read 59,562 before this tool")
+    print("    learned to read COLD storage -- an absence produced by not")
+    print("    looking is not an absence.)")
     print("")
     print("EXTRACTION ROUTE:")
     for k, c in sources.most_common():
