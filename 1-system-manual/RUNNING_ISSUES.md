@@ -826,7 +826,7 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
-### #987 OPEN 2026-09-02 (CC-B; Kyle-directed from the alert review) — ⛔⛔ **THE ALERT OWNER RECORD IS FREE TEXT, AND THE ALWAYS-LOADED RULES FILE TELLS SESSIONS TO WRITE A NAME THAT IDENTIFIES NOBODY**
+### #987 CLOSED 2026-09-02 (B-ALERT-ACTOR-ALLOWLIST, CC-B; deployed `fa563982c` 21:05Z; Langston Steps 1/2/4/8 approved; record `B_ALERT_ACTOR_ALLOWLIST_COMPLETION_REPORT.md`) — was OPEN 2026-09-02 (CC-B; Kyle-directed from the alert review) — ⛔⛔ **THE ALERT OWNER RECORD IS FREE TEXT, AND THE ALWAYS-LOADED RULES FILE TELLS SESSIONS TO WRITE A NAME THAT IDENTIFIES NOBODY**
 
 **MEASURED (30 days of `system-alerts.jsonl`, population = every alert acknowledged since 2026-08-03; instrument = distinct `acknowledged_by` strings):** ~five actors, **23 distinct name strings**; **eight `cc-session-<date>` variants account for 38 acks, 15 this month** — five alerts left the due list on 2026-09-02 acked by `cc-session-2026-09-02`, a string bound to no session.
 ⛔ **ROOT CAUSE IS A RULE, NOT A HABIT.** `CLAUDE.md` §10.5 step 3 instructs *"`--by <session-name>` (session names: `cc-session-<YYYY-MM-DD>` …)"* — written 2026-05-17 (B-NEW-40, `6a70b45c4`, field typed `// 'kyle' | 'cc-session-...' | 'langston' | 'system' | etc.`), **26 days before the session roster existed.** `ALERT_HANDLING_PROTOCOL.md:28` says `<CC-A|CC-B|kyle|...>` and `:30` says *"`acknowledged_by` IS the owner record."* **Two governing docs disagree and the tool accepts anything, so the owner record cannot be one.**

@@ -276,6 +276,8 @@ The TOP-OF-REPORT declaration makes the gap impossible to miss.
 
 ## §10.5 — System Alerts per-turn check (Kyle directive 2026-05-17 — context)
 
+**2026-09-02 — step 3's session name retired (B-ALERT-ACTOR-ALLOWLIST, #987).** The step read *`--by <session-name>` (session names: `cc-session-<YYYY-MM-DD>` or `langston` or `kyle-direct`)* from 2026-05-17 — 26 days before the session roster (§6.9, 2026-06-12) bound names to sessions. Measured 2026-09-02 on the alert file: 782 rows, 75 distinct identity strings, 43 of them `cc-session-<date>` spellings identifying nobody. The line now names the canonical set (`ALERT_ACTORS` in `server/services/system-alerts.ts` — cc-a | cc-b | cc-c | cc-infra | governance-checker | governance-checker-heartbeat | b-new-40-soak-verify | kyle | langston) and says the tool refuses anything else; a resolve also needs `--evidence`. The lesson recorded with it: an always-loaded rules file that TEACHES a value is a producer of that value at scale — the ledger's worst identity form was not a habit, it was an instruction.
+
 **Why this is mandatory.** Sessions can be days or weeks apart; whoever is at the keyboard at the moment a scheduled check is due is the one who picks it up. Telegram messages don't get reliably read because there's so much technical CC↔Langston chatter. The per-turn check ensures alerts get seen by either Claude or Kyle (via Claude's plain-language surfacing) regardless of which channel Kyle is using to interact.
 
 **Why per-turn, not session-start-only.** Alerts can fire between turns of a long session. Failure to perform this check on every turn is a process violation.
