@@ -40,6 +40,7 @@ The alert file's owner record (`acknowledged_by`, and the claimed half of resolv
 - **Deleted component with a live re-installer in the repo** (B-TELEGRAM-DECOMM-2's miss). Folded as OBJ-7.
 - **`dt-deploy.sh:81` shape-only `--by`** and **poller-vs-heartbeat classifier drift** (Langston, Step 4). Placed: 2.4a, 2.4b.
 - **Side work, same evening, not this batch:** three after-hours xStock price-staleness alerts (`1d1573c7`, `b1f58a01`, `6339b2d9`) placed under `B-XSTOCK-SESSION-FRESHNESS` (3b.f-c, CC-C) with two close criteria; the acknowledged BABA/USD row muting its dedupe key since 08-30 resolved (7 rows on the key, 0 non-terminal).
+- **The number sweep at Step 11 was not complete, and the commit that filed it said it was (instance 8 of `fix-follows-pointer`, Langston):** six governance files carried the undated 782 and were dated; a SEVENTH carrier — the `ALERT_ACTORS` header comment at `server/services/system-alerts.ts:186`, *"782 rows carried 75 distinct strings"*, bare — is in the DEPLOYED tree (blob-identical with `fa563982c`) and is deliberately left as is rather than re-opening the code for a comment. **HOME: `B-DEPLOY-ACTOR-ALLOWLIST` (2.4a), owner CC-B, its FIRST item — that batch imports `ALERT_ACTORS` from this file and touches the header anyway.**
 - **Startup errors after the deploy:** `unique_global_alert` (1,765 prior lines) and `/home/runner` EACCES (#148) — pre-existing, not this batch's.
 
 ## 5 · L2 — THE 75 IDENTITY STRINGS, EVERY ONE PLACED (object: `acknowledged_by` over the whole file at the pre-deploy capture, 784 rows; the 76th key is `None` = 11 never-acked rows)
@@ -53,7 +54,7 @@ The alert file's owner record (`acknowledged_by`, and the claimed half of resolv
 | **seam-test artifacts** (B-GOV-INTEGRITY-0, Langston L2) | `cc-b-seam-test` 1 · `cc-b-seam-test-cleanup` 1 | REFUSED (2 strings, 2 rows) |
 | **canonical + appended text** | `langston (transport: langston ssh key via deploy@staging)` 1 | REFUSED — exact-string table (1 string, 1 row) |
 | never acked | `null` | 11 rows |
-**Totals, re-derived from `/home/deploy/p987-pre.json` by class (script in the commit message): 9 + 7 + 44 + 7 + 5 + 2 + 1 = 75 distinct non-null strings; 405 + 43 + 251 + 29 + 42 + 2 + 1 + 11 = 784 rows = the capture's row count.** ⚠️ PREVIOUSLY STATED (first draft of this table): 43 `cc-session-` spellings and `CC-A`/`CC-C`/`Langston` under "alias". NOW: 44, and those three are case-variants of members, not aliases. REASON: re-derived by classifier over the multiset rather than by hand.
+**Totals, re-derived from `/home/deploy/p987-pre.json` by class (script in the commit message): 9 + 7 + 44 + 7 + 5 + 2 + 1 = 75 distinct non-null strings; 405 + 43 (the alias class's ROW count, not the withdrawn spelling count) + 251 + 29 + 42 + 2 + 1 + 11 = 784 rows = the capture's row count.** ⚠️ PREVIOUSLY STATED (first draft of this table): 43 `cc-session-` spellings and `CC-A`/`CC-C`/`Langston` under "alias". NOW: 44, and those three are case-variants of members, not aliases. REASON: re-derived by classifier over the multiset rather than by hand.
 
 ## 6 · GOVERNANCE FILES CHANGED — transcribed from the Step-10 tier ledger in the governance commit
 *(transcribed from the governance commit message, not from memory)*
@@ -83,7 +84,7 @@ CHANGE-CLASS: non_architecture
 | T2 | CLAUDE.md / CONDUCT.md | ✅ | CLAUDE.md §10.5 step 3 retires cc-session-<date> and names the set (in the Step-3 commit dbcca4a9f); CONDUCT.md untouched |
 | T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | ✅ | §10.5 backstory: the mandated form predated the roster by 26 days and produced 44 spellings (re-derived; the hand-count of 43 withdrawn) |
 | T2 | DELETED_COMPONENTS_LOG.md | ✅ | row under B-TELEGRAM-DECOMM-2: the two repo files, the Helsinki measurement, the two backups left intentionally (Step-3 commit) |
-| T2 | MISTAKE_PATTERNS.md | ✅ | enumerator-blind-spot instance 8 (second batch — promotion threshold now met on both legs); fix-follows-pointer instance 6 |
+| T2 | MISTAKE_PATTERNS.md | ✅ | enumerator-blind-spot instance 8 (second batch — promotion threshold now met on both legs); fix-follows-pointer instances 6, 7 and 8 written into its table (7: the number sweep stopped at the report; 8: the sweep claimed complete with a code-comment carrier left) |
 | T2 | GOVERNANCE_EXCEPTIONS.md | N/A | no exception granted; class stayed non_architecture throughout |
 | T2 | ALERT_HANDLING_PROTOCOL.md | ✅ | :28 names the set, :36 gains the mandatory --evidence it had omitted (Step-3 commit) |
 | T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | no column, field or ownership changed |
