@@ -506,3 +506,23 @@ A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE
 ⚠️ **THE FIGURES MOVE WITH EVERY HOURLY SWEEP** — this is a growing store, so the numbers above are stamped to the day and the script is the authority, not this table. **Do not quote a stored figure; run the tool.**
 
 ⚠️ **GRADUATED CURVES ARE OUT OF THIS LEG BY CONSTRUCTION, NOT BY CHOICE** — a drained curve publishes no price for a decode to be checked against. They are covered by the guard-coverage leg instead, whose denominator is every curve-owned read with **no exclusions at all**: refusal rate **0 of 2,845 = 0.000%**.
+
+---
+
+## ⛔ AMENDMENT 12 — A KNOWN REPRESENTATIVENESS BIAS, NAMED BESIDE THE CRITERIA IT COULD MOVE (CC-INFRA, 2026-09-02)
+
+**Langston's instruction, and the reason it lands here rather than only in `RUNNING_ISSUES`:** *"name the bias on the pre-registration, not only in `RUNNING_ISSUES` — that is #596-class representativeness, and it belongs beside the criteria it could move."*
+
+⛔ **UNTIL `B-TOKENWATCH-PAIR-SELECT` LANDS, EVERY ANALYSIS RUNS OVER A POPULATION IN WHICH SOME TOKENS ARE MEASURED AT THE WRONG VENUE.** The aggregator is asked for a token's pair and returns the one with the most 24-hour volume. On graduation the liquidity moves to a new pool while the day's volume still sits on the drained curve, so the pair we observe — **its price, its volume, its buy/sell counts** — can be the emptied one.
+
+**MEASURED 2026-09-02, whole population, re-derivable via `token-watch/tools/measure_dead_pool_observation.py`: 213 of 28,149 distinct tokens = 0.757%.**
+
+⛔⛔ **THE SHARE UNDERSTATES IT IN TWO DIRECTIONS, AND BOTH MATTER MORE THAN THE NUMBER.**
+1. **IT IS NOT A WEAK MEASUREMENT, IT IS NOT A MEASUREMENT.** `TIPSYDOG` carried **12,834 in 24-hour volume on a chosen pair reporting NO liquidity** while its live pool held **$17,828**. `IM`: 99,073 on the dead pair, **$2,504** live elsewhere. A quantity read where it is not present is not a noisy estimate of that quantity.
+2. ★ **IT IS CONCENTRATED IN THE GRADUATED TAIL — the population this study exists to characterise.** A bias that lands on the outcome is not a precision cost, and 0.757% spread evenly would be a very different fact from 0.757% sitting on the survivors.
+
+✅ **WHAT IS IN PLACE NOW, in this batch, so the bias is at least VISIBLE rather than silent:** every observation carries `observed_dead_pool`, true when the pair being read reports no liquidity while another pair for the same token does, together with `alt_pool_liquidity_usd` — because *"there is a live pool elsewhere"* and *"there is a live pool elsewhere holding $17,828"* are different findings. **A wrong-venue observation is no longer indistinguishable from a good one, and any analysis can exclude or stratify on it.**
+
+⚠️ **THAT IS MARKING, NOT CORRECTING.** The rows are still taken at the dead pool; the flag only means nobody has to discover that for themselves. **Correcting it — choosing the right pair — is `B-TOKENWATCH-PAIR-SELECT` (`#983`), and it is a design question with a second one behind it: whether the right pair changes over a token's life.**
+
+⚠️ **AND A SECOND MEASURAND CAVEAT IS NOW ON THE RECORD AT `#986`:** `observed_at` is the clock the calling run read, not the instant of the reading, so on a catch-up sweep a row is stamped with the run that consumed it. **For a study indexed by age checkpoints that bears on the measurand, and it is a scope decision rather than a fix.**

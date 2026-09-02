@@ -6563,6 +6563,28 @@ for a in last.values():
 **Two dispositions, Kyle's call (the change-class taxonomy is his directive, B-GOV-2):** (A) a short System Manual section for the session-side enforcement layer — discharges both alerts today, but records tooling in the book that describes how trading works; (B) a new change-class (`tooling`: repo-side, reviewed at the ref, never runs in the app) whose required set is architecture's minus the System Manual plus the SIM — the structural fix, touching `config.mjs` `CLASS_DOCSET`, `CLAUDE.md` §3.0 and the `workflow-10` matrix, then re-declaring both batches into it WITH Langston's approval on the record rather than quietly.
 **Interim:** the alert stays ACTIVE and unacked (an ack would silence it); it resolves with evidence when the chosen fix lands. **HOME: `B-GOV-REPORTING` (row 8) item (vi), owner CC-A — alongside item (iii)'s missing BLOCKED state, which is the same defect seen from the checker's side.**
 
+### #986 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; CAUSE DIAGNOSED BY LANGSTON at `b25ec3006`, who re-derived it at the ref in three minutes after I had shipped a fix without it) — ⛔ `observed_at` IS A CALLER'S CLOCK, NOT AN OBSERVATION TIME — SO IT IS NOT UNIQUE AND IT IS NOT A JOIN KEY
+
+**Symptom, measured:** **5 duplicate `(mint, observed_at)` pairs in 47,093 rows**, one of which carries a **different `pool_sol` on each row**. Found by chasing a one-row discrepancy in the correction read path (86 corrections applied, 87 rows differing) rather than dismissing it.
+
+⛔ **CAUSE, CITED TO THE LINE (Langston).** `store.py:717` takes `when` **from the caller**. The caller reads a clock ONCE and stamps it on every row it writes. Three call shapes emit multiple rows per clock read:
+1. **`store.py:284` + `:309-315`** — `schedule_grid` reads `now` once, then the past-grid-point branch calls `record_observation(mint, label, now, …)` **inside the loop**. A birth discovered late enough that two grid points are already past writes two rows with identical `(mint, observed_at)` differing **only in `age`** — in one function call, no outage required. **It scales with discovery lag.**
+2. **`follow_up.py:195`** — `now` read once per sweep and passed to all three write sites (`:303`, `:364`, `:370`), while `_buckets_to_read` (`:130-155`) returns **every unread bucket** on a lagging cursor and `_entries_across` flattens them into one loop. Two due entries for one mint across those buckets → two real reads, one stamp. **This is the driver that fits the different-`pool_sol` pair.**
+3. **`_append_next_bucket` (`follow_up.py:185-191`)** — a requeued entry can land in a bucket already holding another entry for the same mint.
+
+⛔⛔ **THREE CONSEQUENCES, AND THE FIRST IS THE ONE I WOULD HAVE GOT WRONG.**
+- **0.011% IS A LEVEL WHOSE DRIVER IS AN EVENT RATE.** Driver 1 scales with discovery lag, driver 2 with sweep lag. **One outage plus a catch-up buys as many collisions as the backlog holds.** Quoting the level as the exposure is the shape Langston has bounced before, and he would have bounced it here.
+- **`observed_at` CANNOT BE A JOIN KEY FOR ANYTHING**, not just corrections. Any consumer building a dict on it collapses rows. **Mine did — that is the 87th row**, and it is the evidence that the defect is in the record rather than in the correction path.
+- ⛔ **IT IS A STATEMENT ABOUT THE MEASURAND, NOT ABOUT PLUMBING.** `follow_up.py:289-290` claims *"the true age is always recoverable from `created_at` and `observed_at`."* It is recoverable to **caller-clock granularity**, and on a catch-up sweep the row is stamped with **the run that consumed it, not the moment it was read.** For a study whose measurand is *token state at age checkpoints*, that is not a nuisance.
+
+**TAXONOMY — OUTCOME (2), WORKING-AS-DESIGNED BUT UNADDRESSED (`CONDUCT.md` §9).** `record_observation` takes `when` as a parameter and every caller hands it a caller-scoped clock. **Nothing malfunctions.** ⇒ **It is a scope decision, not a fix, so it is NOT made unilaterally inside this batch.**
+
+★ **AND WHEN IT IS FIXED, DO NOT FIX IT AS "MAKE THE KEY UNIQUE" (Langston).** Stamp `observed_at` from the **actual read**, and if a join key is wanted, give the row an **id**. Uniqueness then holds **by construction** rather than by guessing which fields separate rows — the same argument that made validating on the derived-from value the right choice over lengthening the key.
+
+✅ **WHAT IS ALREADY DEFENDED, and it stays regardless of the disposition:** the correction read path validates on the value each correction was computed FROM, so a non-unique key cannot cause a wrong correction to be applied. **That defends one reader; it does not repair the record.**
+
+**HOME: `B-TOKENWATCH-OBSERVED-AT`, owner CC-INFRA, placed in `PHASE_19_PLAN.md` immediately after `B-TOKEN-WATCH` and before `B-TOKENWATCH-PAIR-SELECT`.** ⚠️ **No date, per §9.4.** It is placed ahead of the pair-selection batch deliberately: this one touches the age measurand every other reading is indexed by, so it is the more fundamental of the two.
+
 ### #983 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; found while validating the corrected liquidity read) — ⛔ THE AGGREGATOR'S PAIR IS CHOSEN BY 24-HOUR VOLUME, SO A FRESHLY-GRADUATED TOKEN IS OBSERVED THROUGH ITS **DEAD** POOL
 
 **Mechanism, cited:** `providers.token_state` picks one pair with `max(pairs, key=volume.h24)` and takes **price, volume, buy/sell counts, liquidity and the pool address from that one pair**. On graduation a token's liquidity moves from its pump.fun bonding curve to a pumpswap pool, but the 24-hour volume figure still favours the **curve**, because that is where the day's trading happened. **The chosen pair is then the drained one.**
