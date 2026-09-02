@@ -38,7 +38,7 @@ Kyle's diagnosis (08-20 → 08-31): every step burns time on sessions announcing
 ## 3. Outside the governance programme — CC-A's other open items
 | item | what it is, plainly | state |
 |---|---|---|
-| **`B-JULY-RETENTION-SWEEP`** (plan row 6.9) | **Kyle's directive 09-01:** July's data never moved from hot to warm/cold storage; June needed a slicing script over several nights in early August (the failing July run says mode=sliced and stopped at an offset); July gets the same treatment | **NEXT** |
+| **`B-JULY-RETENTION-SWEEP`** (plan row 6.9) | **Kyle's directive 09-01.** Reviewed 09-02: **nothing to sweep** — the overnight archive job finished July by itself on its second attempt (31 daily pieces stored and verified, the fast-storage copy released). June was the same job run by hand once, in 35 minutes, not a multi-night script. The upload step still has no automatic retry; the decision not to build one (from August the biggest table moves in small daily pieces that never hit the failing path) stands and is now written in the issues ledger (#991) instead of only on a board card | **DONE — closed as a review** |
 | OBJ-4 observation window (measurement gate) | the new pre-execution guard earns its keep or is deleted: at least fifty real firings, enumerated, judged by a session that did NOT write it | open; ~1-2 weeks of normal work |
 | `#761` | the 30 August comms outage — cause unknown; evidence kept on the Helsinki box | folded into row 5 |
 | `#571` `B-WS-SUBSCRIBE-BOUNDARY-CLASS` | the venue price-feed subscribe boundary; obligations #44 #45 #46 (09-02: a 13.8-minute post-restart gap with no alert) | Phase 19, mine |
