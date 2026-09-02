@@ -35,6 +35,7 @@ from store import (
     load_state,
     periodic_lock,
     record_death,
+    record_identity,
     record_observation,
     save_state,
 )
@@ -276,6 +277,11 @@ def run_hour(now: datetime | None = None) -> dict:
                 continue
 
             fields = dict(state)
+            # IDENTITY IS RECORDED SEPARATELY FROM THE MEASUREMENT. It rides
+            #    this response for free, and storing it here means a token
+            #    whose next check is days away still has a name on the page.
+            if state.get("name") or state.get("symbol"):
+                record_identity(mint, state.get("name"), state.get("symbol"))
             fields["observed"] = True
 
             # Liquidity is read on-chain ONLY where the free leg cannot supply

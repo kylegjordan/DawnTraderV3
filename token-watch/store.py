@@ -423,6 +423,42 @@ def census(day_file: str, _idx=None):
     return out
 
 
+IDENTITY_PATH = f"{ROOT}/study/identity.jsonl"
+
+
+def record_identity(mint: str, name: str, symbol: str) -> None:
+    """A token's NAME and SYMBOL — a fact that does not change, stored once.
+
+    ⛔ NOT AN OBSERVATION, AND DELIBERATELY NOT IN THE OBSERVATION STREAM. An
+       observation is a measurement at a moment; identity is a property.
+       Appending identity as observations would inflate the observation counts
+       that survival is computed from -- a display convenience corrupting a
+       study measurement, which is the trade this store exists to refuse.
+
+    ★ WHY IT EXISTS AT ALL (Kyle, 2026-09-02): the page showed 89 of 100
+      tokens with no name. The provider had ALWAYS sent it and we persisted
+      the raw reply, but nothing parsed it until 2026-09-01 -- and the tokens
+      on that table are the OLDEST, whose next scheduled check is days away.
+      So the table was guaranteed to show precisely the rows whose data was
+      stalest. Identity is recoverable from the raw store; a name is not a
+      time series and does not need re-observing.
+    """
+    if not mint or not (name or symbol):
+        return
+    _append(IDENTITY_PATH, {"mint": mint, "name": name, "symbol": symbol})
+
+
+def identity_map() -> dict:
+    """mint -> {name, symbol}. Last write wins, which is right: if a provider
+    ever corrects a name, the correction is what we want."""
+    out = {}
+    for r in _read(IDENTITY_PATH):
+        m = r.get("mint")
+        if m:
+            out[m] = {"name": r.get("name"), "symbol": r.get("symbol")}
+    return out
+
+
 def due_now(hour: datetime):
     """Everything scheduled for this hour, minus anything already dead.
 

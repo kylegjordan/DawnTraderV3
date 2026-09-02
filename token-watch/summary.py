@@ -47,7 +47,7 @@ from datetime import datetime, timedelta, timezone
 
 from config import (BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS,
                     OBSERVATIONS_DIR, ROOT)
-from store import (census as store_census, load_state, save_state,
+from store import (census as store_census, identity_map as _identity_map, load_state, save_state,
                    tombstone_path, _correction_index)
 
 UTC = timezone.utc
@@ -286,12 +286,21 @@ def _enrich(rows: list) -> list:
        column of measured values.
     """
     obs = _latest_observations({r["mint"] for r in rows})
+    # ⛔ NAME AND SYMBOL COME FROM THE IDENTITY STORE, NOT THE OBSERVATION.
+    #    The oldest survivors are exactly the tokens whose next check is
+    #    furthest away, so reading identity off "the latest observation" showed
+    #    a blank for 89 of 100 -- the table was structurally guaranteed to be
+    #    the stalest view we could build. Identity does not change, so it does
+    #    not need re-observing; the volatile fields still come from the
+    #    observation and still blank out when it is old, which is correct.
+    ids = _identity_map()
     for r in rows:
         o = obs.get(r["mint"]) or {}
         sol = o.get("sol_usd")
         size = r.get("initial_size")
-        r["name"] = o.get("name")
-        r["symbol"] = o.get("symbol")
+        _id = ids.get(r["mint"]) or {}
+        r["name"] = o.get("name") or _id.get("name")
+        r["symbol"] = o.get("symbol") or _id.get("symbol")
         r["market_cap_usd"] = o.get("market_cap_usd")
         r["buys_h24"] = o.get("buys_h24")
         r["sells_h24"] = o.get("sells_h24")
