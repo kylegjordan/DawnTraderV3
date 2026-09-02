@@ -56,33 +56,48 @@ function msysCandidates(p, cwd) {
 
 /** Timestamp (ms) of the last real user message in the session transcript — the turn's start.
  *  Reads only the tail of the file; a tool_result entry is also type "user" and is skipped. */
+const TURN_CHUNK = 512 * 1024;
+const TURN_MAX_BACK = 8 * 1024 * 1024;
+
 function turnStartMs(transcriptPath) {
   if (!transcriptPath) return null;
   try {
     const fd = openSync(transcriptPath, 'r');
     const size = fstatSync(fd).size;
-    const len = Math.min(size, 512 * 1024);
-    const buf = Buffer.alloc(len);
-    readSync(fd, buf, 0, len, size - len);
-    closeSync(fd);
-    const lines = buf.toString('utf8').split('\n');
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const l = lines[i];
-      if (!l.includes('"type":"user"')) continue;
-      let e; try { e = JSON.parse(l); } catch { continue; }
-      if (e.type !== 'user' || !e.message) continue;
-      const c = e.message.content;
-      const isText = typeof c === 'string' || (Array.isArray(c) && c.some((b) => b && b.type === 'text'));
-      if (!isText) continue;
-      // A harness notification (a background task finishing, a system notice) is stored as a
-      // "user" text entry but is NOT a turn boundary — the measurement found a Write-tool msgfile
-      // committed 7.5 min later across four such entries; reading them as turns would have called
-      // that file stale. Only a real user message starts a turn.
-      const text = typeof c === 'string' ? c : c.filter((b) => b && b.type === 'text').map((b) => b.text || '').join('\n');
-      if (/^\s*(<task-notification>|\[SYSTEM NOTIFICATION|<system-reminder>)/.test(text)) continue;
-      const t = Date.parse(e.timestamp);
-      return Number.isFinite(t) ? t : null;
+    // r7 (Langston's 512 KB question, measured): a single 512 KB tail found NO real user message
+    // for 32 of 94 pre-existing-msgfile commits — tool traffic between a user's message and the
+    // commit reaches 2.5 MB. So the tail is read BACKWARDS in 512 KB chunks, up to 8 MB, and
+    // only a genuinely absent user message yields null (read the file, source labelled
+    // "age-undetermined"). A completion-report commit is rare (~1/day); 8 MB is cheap there.
+    let end = size, carry = '';
+    while (end > 0 && size - end < TURN_MAX_BACK) {
+      const start = Math.max(0, end - TURN_CHUNK);
+      const buf = Buffer.alloc(end - start);
+      readSync(fd, buf, 0, end - start, start);
+      const chunk = buf.toString('utf8') + carry;
+      const lines = chunk.split('\n');
+      carry = start > 0 ? lines.shift() : ''; // a line cut by the chunk boundary completes next round
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const l = lines[i];
+        if (!l.includes('"type":"user"')) continue;
+        let e; try { e = JSON.parse(l); } catch { continue; }
+        if (e.type !== 'user' || !e.message) continue;
+        const c = e.message.content;
+        const isText = typeof c === 'string' || (Array.isArray(c) && c.some((b) => b && b.type === 'text'));
+        if (!isText) continue;
+        // A harness notification (a background task finishing, a system notice) is stored as a
+        // "user" text entry but is NOT a turn boundary — the measurement found a Write-tool
+        // msgfile committed 7.5 min later across four such entries. Only a real user message
+        // starts a turn.
+        const text = typeof c === 'string' ? c : c.filter((b) => b && b.type === 'text').map((b) => b.text || '').join('\n');
+        if (/^\s*(<task-notification>|\[SYSTEM NOTIFICATION|<system-reminder>)/.test(text)) continue;
+        closeSync(fd);
+        const t = Date.parse(e.timestamp);
+        return Number.isFinite(t) ? t : null;
+      }
+      end = start;
     }
+    closeSync(fd);
   } catch { /* fall through */ }
   return null;
 }

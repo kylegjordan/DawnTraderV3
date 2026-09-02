@@ -258,6 +258,15 @@ writeFileSync(without, 'B-X close.\nCI is green, trust me.\n');
   const midTurn = join(scratch, 'mid-turn-cited.txt'); writeFileSync(midTurn, 'B-X close. run 26730239909.\n'); // written inside the real turn
   const r5 = run(CI_GUARD, `git commit -F ${midTurn} -- reports/B_X_COMPLETION_REPORT.md`, undefined, { transcript_path: t2 });
   check('a task-notification "user" entry is NOT a turn boundary (msgfile written in the real turn is read → silent)', r5.ctx === null, 'fired: ' + String(r5.ctx).slice(0, 70));
+  // r7: the real user message can sit MORE than 512 KB of tool traffic before the commit (32 of 94
+  // real cases; max 2.5 MB). The reader must reach it, or an old file is read as age-undetermined.
+  const t3 = join(scratch, 'transcript-deep.jsonl');
+  const filler = JSON.stringify({ type: 'assistant', timestamp: fiveMinAgo, message: { role: 'assistant', content: [{ type: 'text', text: 'x'.repeat(200 * 1024) }] } }) + '\n';
+  writeFileSync(t3,
+    JSON.stringify({ type: 'user', timestamp: fiveMinAgo, message: { role: 'user', content: [{ type: 'text', text: 'this turn, 1.2 MB of tool traffic ago' }] } }) + '\n' +
+    filler + filler + filler + filler + filler + filler);
+  const r6 = run(CI_GUARD, `git commit -F ${old} -- reports/B_X_COMPLETION_REPORT.md`, undefined, { transcript_path: t3 });
+  check('the turn start is found 1.2 MB back (an earlier-turn cited file still WARNS)', !!r6.ctx, 'silent — read the old file as age-undetermined');
 }
 // r5 object-round arms — the stage split must be quote-aware and the source must stop at the stage end.
 {
@@ -304,6 +313,8 @@ if (!process.env.GUARD2_UNDER_TEST && !process.env.GUARD3_UNDER_TEST) {
       (s) => s.replace('if (turnStart !== null && statMtime < turnStart) {', 'if (false) {')],
     ['obj3: take a tool_result entry as the turn boundary', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace("(Array.isArray(c) && c.some((b) => b && b.type === 'text'))", '(Array.isArray(c))')],
+    ['obj3: read only ONE 512 KB tail chunk (32 of 94 real cases become age-undetermined)', CI_GUARD, 'GUARD3_UNDER_TEST',
+      (s) => s.replace('const TURN_MAX_BACK = 8 * 1024 * 1024;', 'const TURN_MAX_BACK = 512 * 1024;')],
     ['obj3: take a task-notification entry as the turn boundary', CI_GUARD, 'GUARD3_UNDER_TEST',
       (s) => s.replace("if (/^\\s*(<task-notification>|\\[SYSTEM NOTIFICATION|<system-reminder>)/.test(text)) continue;", '')],
     ['obj3: make the stage split quote-BLIND again', CI_GUARD, 'GUARD3_UNDER_TEST',
