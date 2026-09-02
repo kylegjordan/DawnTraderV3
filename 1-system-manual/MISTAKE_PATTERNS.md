@@ -222,6 +222,7 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ⚠️ **HONEST LIMIT:** it fires only once a defect has been NAMED. It does nothing for a class nobody has pointed at yet — that is what the fresh-reader loop is for, and the two mechanisms are complements rather than substitutes.
 
 ### `fix-relocates` — **THE CORRECTION REINTRODUCED THE SAME DEFECT CLASS IN A NEW PLACE** — **LIVE — NOT IN §13** · mechanism: **the fresh-reader LOOP, already mandated in `workflow-02/-04/-07/-11` and unblocked by Kyle's standing authorisation 2026-08-28** (opened 2026-08-28, CC-INFRA)
+- **2026-09-02 · B-MEASURE-GATE leg 2:** r3 of the completion-report guard moved the defect from "warns on every real close" to "decided by whatever last sat at the reused `/tmp` name" — the same class one level down, found by the next fresh reader (`12aa27eed` → `ff0fbe9e2`).
 
 ⛔ **FAILS THE §13 BATCH-DIVERSITY LEG AND IS RECORDED ANYWAY.** Five instances, **all inside `B-TOKEN-WATCH`** — one context, not two batches, so it does **not** promote under the 3+/2-batches floor. **It is here because the instance COUNT is unusually high for a single batch and because a mechanism already exists**, which is the state this file says a pattern should reach.
 
@@ -252,6 +253,7 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 **THE COUNTER-HABIT, one line:** before drawing a conclusion from a record, read what the record says **about itself** — its type field, its source field, its own stated scope.
 
 ### `fragment-not-whole` — **TESTED A FRAGMENT, ASSERTED ABOUT THE WHOLE** — **LIVE — NOT IN §13** · mechanism: **NONE YET** (opened 2026-08-23, CC-A, at Langston’s direction)
+- **2026-09-02 · B-MEASURE-GATE leg 2 (two trailers):** the suite's cwd-notice control used a notice WITHOUT its leading newline — a shape the real wire never sends — so it proved a fence the wire never touched; and "the five rows stay acknowledged" named the rows I had touched, not the set the mechanism acts on (three keyed rows, one I never acked).
 
 ⚠️ **SPLIT OUT OF `read-the-field` BY LANGSTON, AND THE DISTINCTION IS REAL RATHER THAN PEDANTIC.** I had filed this as a third instance of that pattern. His correction: *"a regex doesn’t describe itself, and the twelve lines below it aren’t metadata, they’re the rest of the control flow."* ⇒ **there is no self-describing field here to have missed** — the failure is asserting whole-system behaviour from a component tested in isolation. Same family as **#675**.
 
@@ -379,6 +381,7 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 ---
 
 ### `wrong-object` — **PROMOTED TO §13** · mechanism: **NONE YET**
+- **2026-09-02 · B-MEASURE-GATE leg 2 (three trailers):** the "cited → silent" arm of the completion-report guard was proven on a pre-existing message file — a shape 9 of 47 real closes take — while the mandated form writes the file in the same command, where it cannot exist at hook time; both OBJ-6d designs sourced the re-derivation from the RESULT when the scope said the CLAIM; "ack = owned" was applied to event-wait alerts without reading what ack DOES in the code (an acked keyed row is a silenced one, #982).
 **Right name, wrong thing.** The path is correct, the file is correct, the command runs — and it measures something other than what the claim is about.
 **INSTANCES (attributed, condition 4 — no grandfathering):**
 | # | instance | batch | ref |
@@ -408,6 +411,7 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 ⚠️ **Kept here, not deleted:** a retired entry is the RECORD that the pattern was real and is now mechanised. **Deleting it would let the pattern be re-discovered from scratch.**
 
 ### `silence-not-evidence` — **LIVE — NOT IN §13** · mechanism: **PARTIAL**
+- **2026-09-02 · B-MEASURE-GATE leg 2:** a 2.5 s plain command was read as proof that an agent hook's `if` gate held; it was consistent with the agent answering `ok:true` on every call, and the next non-matching command proved it was running on all of them (scope [r7]).
 **A check that CANNOT FAIL, mistaken for a check that passed.** Silence from a broken instrument is indistinguishable from silence from a healthy one.
 **INSTANCES (attributed):**
 | # | instance | batch | ref |

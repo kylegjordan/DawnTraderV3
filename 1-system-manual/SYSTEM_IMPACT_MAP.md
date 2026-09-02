@@ -2787,6 +2787,26 @@ These two Python bridges run on the Hetzner Helsinki agent box (`204.168.141.77`
 
 ---
 
+## Claude Code Hook Layer (laptop sessions, NOT the app) — Added B-MEASURE-GATE leg 2 (2026-09-02)
+
+> **What it is:** a set of `PreToolUse` / `PostToolUse` / `UserPromptSubmit` hooks registered in `.claude/settings.local.json` that run inside each Claude Code session on Kyle's laptop. **Nothing here runs on staging or in the app** — it is registered here because it is cross-cutting state the four sessions share (one `$HOME`, one settings file per clone refreshed from origin at session start) and because the hooks are the ENFORCEMENT layer for rule 29 (measurement discipline). Owner CC-A; scope + design record `Claude Comms and Packages/Scope Files/B_MEASURE_GATE_LEG2_SCOPE.md` (r13 is current).
+>
+> **Components (all warn-only, fail-open, last line `process.exit(0)`, output = `additionalContext` only):**
+> | hook | event | what it does | sink (`~/.claude/`) |
+> |---|---|---|---|
+> | `guard-measurement-shape.mjs` | PreToolUse/Bash | three pre-execution shapes — worktree-not-ref, truncation-is-not-population (`head -N`, `git log -N`), count-from-search (`grep -c`) | `measurement-shape.jsonl` |
+> | `guard-stale-fetch.mjs` | PreToolUse/Bash | §7.1 step 0 — warns on `git commit`/`push` when `.git/FETCH_HEAD` is >30 min old (clone age via `.git/description`) | `stale-fetch.jsonl` |
+> | `guard-ci-cited.mjs` | PreToolUse/Bash | rule 19 — a commit whose own stage names a `COMPLETION_REPORT` path with no 10-11-digit CI run id in its message (message source: command text when the msgfile is written in-command; the file otherwise, compared against the turn start read from the session transcript) | `ci-cited.jsonl` |
+> | `guard-result-shape.mjs` | PostToolUse/Bash | after-the-fact result-vs-request: `cap-bound` (terse, deduped per session), `error-counted`, `html-not-json`, `other-document` — single-pipeline commands only; stderr is merged into stdout on this wire | `result-shape.jsonl` |
+> | `inject-due-alerts.mjs` | UserPromptSubmit | the §10.5 per-turn alert read as a hook: SSH to staging, whole-file filter (active + unacked + due), full ids injected, VISIBLE failure line if unreachable (3 s cap, enforced twice) | `inject-due-alerts.jsonl` |
+> | `observe-userpromptsubmit.mjs` · `observe-posttooluse.mjs` | those events | payload-shape observers, keys + types only — the "observe before you build against it" rule | `userpromptsubmit-observe.jsonl` · `posttooluse-observe.jsonl` |
+> | `scripts/measure-gate/hook-selftest.mjs` | run by hand | REGISTERED / PRESENT / CURRENT / RUNNING per hook per clone, attributed by `project_dir` | reads the sinks |
+>
+> **Cross-cutting state:** every sink row carries `hook_sha` (sha256 of the hook file, CRLF-normalised, 12 hex — one source, one identity), `synthetic` (`GUARD_SYNTHETIC=1` marks suite traffic), `project_dir`, and `decided:false` for "bailed" as distinct from "clean". `result-shape-dedupe.json` is a shared-`$HOME` read-modify-write with no atomic rename (worst case a lost key). **Per-Bash-call cost at the ref: eight node spawns** (six PreToolUse across four blocks + two PostToolUse), ~47-85 ms each on one laptop, unreplicated.
+> **What was measured about the harness (design inputs, recorded so nobody re-derives them):** stderr is structurally EMPTY on the PostToolUse wire — the harness merges the child's stderr into stdout and the only stderr content ever seen is its own `"\nShell cwd was reset…"` notice; there is NO exit code on the wire; `additionalContext` delivers non-blocking on PreToolUse, PostToolUse and UserPromptSubmit; hooks hot-reload within a session; an agent-type hook fires on PostToolUse but its `if` argument gate does not hold and its subagent's Bash calls re-enter PostToolUse (scope [r7]; the probe was removed the same minute).
+> **Known gaps, stated:** each hook's header carries a KNOWN GAPS table and the sentence *the guard's silence is non-evidential*. The completion-report guard sees 53 of 84 real closes (the `git add`-only form is invisible to a command-text trigger); the result guard does not catch `wrong-object` instance 8 as it occurred (a JSON 404 body parsed cleanly) — that is `B-CLAIM-REDERIVE` (#981). **Other clones run the version their last session start refreshed** — `B-HOOK-ESTATE-VERSION` (CC-C) owns the estate-versioning story.
+> **Retired in this batch:** `probe-warn-delivery.mjs` (the delivery-channel instrument — could block, raw substring sentinel; unregistered and deleted, `DELETED_COMPONENTS_LOG`).
+
 ## Price-Discontinuity Detector — Added B-NEW-42b (2026-05-17)
 
 NEW component shipped with B-NEW-42b commit `d8e0f5885`. Closes the 3 structural TEC gaps surfaced by B-NEW-42's Phase 0 audit.
