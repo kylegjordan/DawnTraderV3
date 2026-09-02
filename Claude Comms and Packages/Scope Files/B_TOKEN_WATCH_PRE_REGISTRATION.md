@@ -459,3 +459,28 @@ A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE
 ⚠️ **WHAT IS NOT FIXED HERE, AND IT IS FILED, NOT SWALLOWED.** The aggregator picks a token's pair by 24-hour volume, so for a freshly-graduated token it can still return the DEAD curve rather than the live pool — carrying that pool's price and volume into the observation. The liquidity field no longer lies about it. **The other fields are unexamined, and that is a separate finding with its own home** (`RUNNING_ISSUES`, disposition below), not a thing this amendment quietly covers.
 
 ⚠️ **NO BACK-CORRECTION IS POSSIBLE OR CLAIMED.** The corrected liquidity read only reached production at 09:07 UTC today and its first sweep had not yet run, so **no observation in the census carries a counterfeit zero from this cause.** The defect is fixed before it produced data, which is the only reason this is an amendment and not a retraction.
+
+### ⛔ CORRECTION TO AMENDMENT 10 — 2026-09-02, SAME DAY. ITS CLOSING CLAIM WAS FALSE.
+
+**AMENDMENT 10 ended:** *"the corrected liquidity read only reached production at 09:07 UTC today and its first sweep had not yet run, so no observation in the census carries a counterfeit zero from this cause."*
+
+⛔ **IT HAD RUN.** The 09:07 sweep began at 09:07:47 — within a minute of the deploy — and wrote **2,163 observations carrying a bonding-curve `pool_sol`**. I wrote the amendment while that sweep's rows were already on disk, and the check I ran to support the claim looked for the field name `chain_liquidity` when the corrected read writes `pool_sol`. **The instrument was aimed at the wrong key and returned zero, and I read that zero as an absence** — the `wrong-object` pattern, inside a paragraph asserting that nothing was affected.
+
+**MEASURED, over today's whole observation file:**
+
+| | count |
+|---|---|
+| observations carrying a `pool_sol` result | **2,922** |
+| of which bonding-curve decodes | **2,163** (all in the 09:07 sweep) |
+| ⛔ **counterfeit zeros — a drained curve reported as an empty pool** | **29** |
+| ⛔ **USDC-quoted curves, understated 1,000x and labelled SOL** | **up to 71** (71 USDC-quoted pool accounts were read today) |
+| named read failures during the upstream outage | **662** — recorded as `error`, never as a zero, which is the design working |
+| graduated pools read correctly via their wrapped-SOL account | **91** |
+
+⚠️ **AND ONE MORE SWEEP IS AFFECTED, STATED BEFORE IT LANDS.** The corrected module was swapped in at 10:11 UTC while the 10:02 sweep was mid-run; a running Python process holds the module it already imported, so **that sweep finishes on the old code.** The first fully-correct sweep is 11:02 UTC.
+
+✅ **NOTHING IS LOST AND NO ROW IS UNRECOVERABLE.** Every one of these observations has its raw `getAccountInfo` body in `provenance/follow-up/`, which is exactly why that store exists — an extraction defect costs a re-parse rather than the observation. The affected rows are identifiable without ambiguity: the drained curves by their `complete` flag, the USDC ones by their quote mint.
+
+**DISPOSITION (§9.4, outcome 1 — folded into the work in hand):** a re-parse pass over the 09:07 and 10:02 sweeps, rewriting `pool_sol` for the affected rows from the stored raw bodies, stays with `B-TOKEN-WATCH` as remaining work. It is not deferred and not a new batch: it is the cleanup of a defect this batch introduced and found, in the same day.
+
+★ **WHY THIS IS RECORDED AS A CORRECTION RATHER THAN AN EDIT.** The pre-registration is append-only, so a claim that turned out false is struck in a dated block and the original text is left standing. Rewriting it would leave a document that had always been right, which is the one thing a pre-registration must never be able to be.
