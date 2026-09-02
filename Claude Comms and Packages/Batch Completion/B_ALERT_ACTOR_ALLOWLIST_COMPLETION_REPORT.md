@@ -11,7 +11,7 @@
 - **`B-ALERT-QUEUE-INTEGRITY`** — 2.4b (#647 named home): lock-free watchdog append, lossy rewrite, poller-vs-heartbeat classifier drift. Closing condition: one lock discipline for every writer and one classifier. Failure condition: a row appended during a library rewrite is lost.
 
 ## 1 · WHAT IT WAS FOR
-The alert file's owner record (`acknowledged_by`, and the claimed half of resolve provenance) was free text: **782 rows, 75 distinct strings**, most of them the dated `cc-session-<date>` form that `CLAUDE.md` §10.5 step 3 itself mandated from 2026-05-17 — 26 days before the session roster existed. An identity that identifies nobody defeats owner-routing, re-surface escalation and every "who has this" question. The batch replaces it with ONE canonical actor table applied at both write paths, refuses everything else, and never rewrites history.
+The alert file's owner record (`acknowledged_by`, and the claimed half of resolve provenance) was free text: **782 rows at scope time (2026-09-02, sha `d5cbd5a2…`) and 784 at the 21:05Z pre-deploy capture — two alerts fired in between (`1d1573c7` 20:30Z, `6339b2d9` 20:45Z) — 75 distinct strings in both**, most of them the dated `cc-session-<date>` form that `CLAUDE.md` §10.5 step 3 itself mandated from 2026-05-17 — 26 days before the session roster existed. An identity that identifies nobody defeats owner-routing, re-surface escalation and every "who has this" question. The batch replaces it with ONE canonical actor table applied at both write paths, refuses everything else, and never rewrites history.
 
 ## 2 · OBJECTIVES — every one green, with its evidence
 | # | objective | result | evidence |
@@ -81,7 +81,7 @@ CHANGE-CLASS: non_architecture
 | T2 | BUILD_METHOD_PLAYBOOK.md | N/A | the method did not change — the fresh-reader loop was used as already written |
 | T2 | LANGSTON_ARCHITECTURE.md | N/A | his build unchanged; the handler deleted in OBJ-7 was already absent from his box |
 | T2 | CLAUDE.md / CONDUCT.md | ✅ | CLAUDE.md §10.5 step 3 retires cc-session-<date> and names the set (in the Step-3 commit dbcca4a9f); CONDUCT.md untouched |
-| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | ✅ | §10.5 backstory: the mandated form predated the roster by 26 days and produced 43 spellings |
+| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | ✅ | §10.5 backstory: the mandated form predated the roster by 26 days and produced 44 spellings (re-derived; the hand-count of 43 withdrawn) |
 | T2 | DELETED_COMPONENTS_LOG.md | ✅ | row under B-TELEGRAM-DECOMM-2: the two repo files, the Helsinki measurement, the two backups left intentionally (Step-3 commit) |
 | T2 | MISTAKE_PATTERNS.md | ✅ | enumerator-blind-spot instance 8 (second batch — promotion threshold now met on both legs); fix-follows-pointer instance 6 |
 | T2 | GOVERNANCE_EXCEPTIONS.md | N/A | no exception granted; class stayed non_architecture throughout |
