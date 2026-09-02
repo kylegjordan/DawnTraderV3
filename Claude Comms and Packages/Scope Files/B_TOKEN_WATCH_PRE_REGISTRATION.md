@@ -484,3 +484,25 @@ A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE
 **DISPOSITION (§9.4, outcome 1 — folded into the work in hand):** a re-parse pass over the 09:07 and 10:02 sweeps, rewriting `pool_sol` for the affected rows from the stored raw bodies, stays with `B-TOKEN-WATCH` as remaining work. It is not deferred and not a new batch: it is the cleanup of a defect this batch introduced and found, in the same day.
 
 ★ **WHY THIS IS RECORDED AS A CORRECTION RATHER THAN AN EDIT.** The pre-registration is append-only, so a claim that turned out false is struck in a dated block and the original text is left standing. Rewriting it would leave a document that had always been right, which is the one thing a pre-registration must never be able to be.
+
+---
+
+## ⛔ AMENDMENT 11 — THE PRICE-AGREEMENT LEG, PUBLISHED BOTH WAYS (CC-INFRA, 2026-09-02)
+
+**Langston's ruling, applying his own `F-G-2` A3 form.** The `quiet`/`trading` split is accepted as PRIMARY: the split variable is the aggregator's **own** 5-minute trade count, independent of the decode under test, fixed before looking at agreement, with a measured mechanism — the published price sat **frozen across five samples over a minute while the curve itself moved 7%**. A price that predates the trades cannot check a decode of the state that follows them.
+
+⛔ **BUT IT IS STILL A RULE I CHOSE THAT EXCLUDES ROWS, so it publishes with the excluded arm visible and the delta stated.** Measured 2026-09-02; re-derivable via `token-watch/tools/measure_price_agreement.py`:
+
+| arm | rows | distinct mints | within 0.1% | median ratio |
+|---|---|---|---|---|
+| **PRIMARY** — quiet (no trade in 5 min) | 3,103 | 3,100 | **99.39%** | 1.000322 |
+| *excluded* — trading | 43 | 43 | **88.37%** | 1.000117 |
+| **SENSITIVITY** — all rows, no exclusion | 3,146 | 3,143 | **99.24%** | 1.000322 |
+
+**DELTA: +0.15 percentage points. EXCLUSION COST: 43 of 3,146 rows = 1.37% of the population.**
+
+★ **THE RESIDUAL HE NAMED IS NOW ANSWERED RATHER THAN RESTATED.** His words: *"excluding every trading curve means the validation says nothing about the decode on active tokens — which is exactly where a rug pull happens."* It now says something: **38 of the 43 traded curves agree within 0.1%, and their median ratio is 1.000117.** The decode is not weaker on active tokens; the five that miss are the staleness cases the split exists to name, and they are five, not forty-three.
+
+⚠️ **THE FIGURES MOVE WITH EVERY HOURLY SWEEP** — this is a growing store, so the numbers above are stamped to the day and the script is the authority, not this table. **Do not quote a stored figure; run the tool.**
+
+⚠️ **GRADUATED CURVES ARE OUT OF THIS LEG BY CONSTRUCTION, NOT BY CHOICE** — a drained curve publishes no price for a decode to be checked against. They are covered by the guard-coverage leg instead, whose denominator is every curve-owned read with **no exclusions at all**: refusal rate **0 of 2,845 = 0.000%**.
