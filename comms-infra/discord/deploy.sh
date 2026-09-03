@@ -35,6 +35,13 @@ echo "== 4. switch config + cc-send =="
 mkdir -p /etc/dawntrader
 [ -f /etc/dawntrader/comms-active.env ] || cp "$BRIDGE_DIR/comms-active.env" /etc/dawntrader/comms-active.env
 install -m 0755 "$BRIDGE_DIR/cc-send" /usr/local/bin/cc-send
+# dt-push-notice.sh — mirrored + installed here 2026-09-03 (#995 OBJ-9, Langston blocker).
+# It lived ONLY on the box for months: not in the tree, so Langston's Step-4 gate could not
+# see it and four live edits shipped unreviewable. Installed the same way as cc-send, and
+# deliberately NOT parked in a mirror-only folder: a mirror buys reviewability but NOT
+# convergence, and every drift this week went box->repo. Deploying it from the tree makes
+# the repo the source of truth for it (§7.1) instead of a copy that agrees by hand.
+install -m 0755 "$BRIDGE_DIR/dt-push-notice.sh" /usr/local/bin/dt-push-notice.sh
 
 echo "== 5. config sanity =="
 for f in /etc/langston/discord-cc-bot.env /etc/langston/discord-langston-bot.env /etc/dawntrader/discord-comms.env; do

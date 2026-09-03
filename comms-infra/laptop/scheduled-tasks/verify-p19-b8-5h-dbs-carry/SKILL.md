@@ -1,0 +1,15 @@
+---
+name: verify-p19-b8-5h-dbs-carry
+description: RETIRED 2026-08-16 — job done (P19-B8.5h xStock DBS carry LIVE-VERIFIED + sustained 18 days, 699/699). Disabled here because a task cannot delete itself; safe to delete from any session.
+---
+
+You are CC-B (NEW Claude). This is the DEFERRED live-verification for batch P19-B8.5h (the xStock DBS at-queue carry, closing #560 ≡ #377), deployed 2026-07-27 at commit 8345718fd. The code fix is complete, Langston-approved, and CI-green; only the §9.3 live proof was deferred because the ready-to-buy pool was empty (the #570 net-EV/fee drought — working-as-designed, Langston-confirmed).
+
+THE FIX: for xStock signals, `dbs_score_at_queue` on rtb_signals is now sourced from the class-keyed MCE context (was NULL because the carry read the crypto-only FX5 pool → measured 0/28 xStock carry). Crypto is unchanged. DI is intentionally NOT carried for xStock (di_at_queue stays null — EV-inert per #377 H1 + unreconciled basis #502).
+
+WHAT TO DO THIS RUN:
+1. Read staging rtb_signals: SSH root@188.245.193.8, then `su - deploy -c 'cd /home/deploy/dawntrader && set -a && . ./.env && psql "$DATABASE_URL" -t -c "<query>"'`. Query for xStock rows and their dbs_score_at_queue / di_at_queue, grouped by asset_class (asset_class values look like 'xstock_spot'; use a temp SQL file or careful quoting — nested single quotes through su -c are the known trap, dollar-quoting $$...$$ gets clobbered by the shell PID, so prefer writing the SQL to /tmp/q.sql and `psql "$DATABASE_URL" -f /tmp/q.sql`).
+2. IF there is at least one xStock rtb_signals row with a NON-NULL dbs_score_at_queue in [-1,1]: THE FIX IS LIVE-VERIFIED. Confirm crypto rows still carry their dbs_score_at_queue and that xStock di_at_queue is null (the ratified non-carry). Post a plain-language confirmation to Kyle on Discord #general via `ssh root@204.168.141.77 "cc-send --sender 'NEW Claude' --message '...'"` and in the desktop chat: "The xStock regime-score fix is now confirmed live — xStock ready-to-buy signals carry their regime score (was blank before), crypto unchanged." Then update the P19-B8.5h completion report + RUNNING_ISSUES #560/#377 to LIVE-VERIFIED, and DELETE this scheduled task (it has done its job).
+3. IF there are still zero xStock rtb_signals rows (the #570 drought persists): take NO action, do not alarm — this is expected. The rtb pool is transient (signals queued then EV-rejected + deleted), so also consider sampling a few times across ~1 minute (remote `sleep` inside the ssh command, not a foreground sleep) to catch a transient xStock row. If still none, just note "still drought-dry, will re-check next run" quietly and stop — no Kyle-facing message on a dry run.
+
+Do the §10.5 alert check first per CLAUDE.md. Plain language to Kyle. This is a quiet background verify — only surface something to Kyle when the fix is confirmed (case 2), not on a dry run (case 3).
