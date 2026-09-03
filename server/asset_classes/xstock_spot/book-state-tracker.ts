@@ -54,6 +54,13 @@ export function advanceBookStateComparator(
   const prev = _comparators.get(key);
   const spreads = (prev?.spreads ?? []).concat((frame.ask - frame.bid) / mid);
   while (spreads.length > Math.max(5, windowSnaps)) spreads.shift();
+  // THE EMITTER'S POSITIVE CONTROL (Langston, 2026-09-03 01:26Z): the guard's skip/yield lines fire only
+  // on hollow ticks, so a night with no hollow tick on a held name is indistinguishable from an unarmed
+  // guard. This line fires ONCE per symbol, on the first two_sided verdict that seeds its comparator —
+  // proof the guard ran on that symbol before any zero on it is read as evidence.
+  if (!prev) {
+    console.log(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_SEEDED mid=${mid} spread=${((frame.ask - frame.bid) / mid).toFixed(5)} at=${new Date(frame.atMs).toISOString()}`);
+  }
   _comparators.set(key, {
     priorMid: mid, priorBid: frame.bid, priorAsk: frame.ask,
     priorLast: frame.last, priorAtMs: frame.atMs, spreads,
