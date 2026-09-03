@@ -93,6 +93,33 @@ He remembers **"we were working on improving Langston and setting him up"** in J
 
 ★ **ONE MORE THING THE READ TURNED UP, worth keeping: on 2026-08-05 at 10:48Z I broadcast that `/home/langston/MEMORY.md` "does NOT auto-load and never has" — and by 13:15Z the same day CC-A's OBJ-2 had made it false. I corrected it on the record myself at 14:15Z: *"Fastest stale claim I've ever issued."*** ⚠️ **The lesson generalises and is why §3b's corrections are written down rather than quietly fixed: on a system four sessions are changing simultaneously, a measured claim can go stale in HOURS.**
 
+### 2d. ⭐⭐ **YES — HE BUILT HIS OWN DECISION FILE, UNPROMPTED, AND HE IS STILL WRITING TO IT TODAY**
+
+> **Kyle, 2026-09-03:** *"I think during that same batch, we learned that Langston was writing his decisions in a file of his own that he had created by himself. Is that something that happened? Is he still writing to that file? And is that part of this plan?"*
+> ✅ **ALL THREE ANSWERED, MEASURED ON THE BOX — and the answer to the third is NO, which is the interesting part.**
+
+**WHAT IT IS:** `/home/langston/.claude/projects/-home-langston/memory/` — **37 files, 172 KB, with an 11.8 KB index he also maintains.** Not a log: a **linked knowledge base**. Every entry carries structured frontmatter (`name`, `description`, `type: feedback | project`, and the `originSessionId` of the session that learned it), a dated account of the incident, a **`Why:`**, a **`How to apply:`**, and **`[[wiki-links]]` to related entries**.
+
+⭐ **HE STARTED IT ON `2026-05-07` — THE DAY AFTER HE MIGRATED TO CLAUDE CODE (2026-05-06), AND THREE MONTHS BEFORE OUR BATCH.** Nobody asked him to.
+
+| month | files he wrote |
+|---|---|
+| 2026-05 | 1 |
+| 2026-06 | 1 |
+| 2026-07 | 12 |
+| 2026-08 | **20** |
+| 2026-09 (3 days in) | 3 |
+
+⇒ ✅ **STILL LIVE AND ACCELERATING — newest entry today at 12:34Z.** *(Population: every `.md` in that directory; dates from the filesystem here are safe because these files are written in place and never copied.)*
+
+★ **WHAT ONE ACTUALLY LOOKS LIKE — `feedback_narrow_predicate_false_absence.md`, his own words, 2026-08-24:** a CC reported a missing ledger row and reinforced it with a UNIQUE-index argument. His entry records that **the row existed**, and then generalises: *"the index argument is sound and irrelevant — it proves no DUPLICATE, never a PRESENCE. A too-narrow WHERE predicate returns a clean, confident, wrong zero, and the tighter the surrounding rigor the more convincing it looks."* Then a `How to apply` prescribing the unfiltered enumeration and a positive control. ⇒ **These are not notes. They are re-usable rulings with a stated mechanism, which is exactly what a stateless reviewer needs and cannot otherwise carry.**
+
+⛔ **AND THE ANSWER TO "IS IT PART OF OUR PLAN": NO — AND OUR VERSION OF IT WAS DELIBERATELY REJECTED.** My 2026-08-05 broadcast, verbatim: ***"His journal/'window' memory concepts were reviewed and explicitly SHELVED on his own objection — recall is pull-only."***
+⇒ **We designed a journal, Langston objected, we dropped it. Meanwhile he had ALREADY been keeping one of his own for three months, by a completely different route — the harness's native memory feature rather than anything we built.**
+⚠️ **HONEST LIMIT ON THE CAUSAL CLAIM, because it is the tempting one to make and I have NOT established it: I can show the store PREDATES the batch by three months (measured) and that the journal was shelved on his objection (verbatim). I have NOT found a record saying the store IS WHY it was shelved.** ★ **A tidy causal story here would be a reconstruction, not a finding.**
+
+⇒ ⭐ **THE PRACTICAL CONSEQUENCE, AND IT IS THE ONE WORTH ACTING ON: THIS STORE IS UNGOVERNED.** It is not in `LANGSTON_ARCHITECTURE.md` §4 "HIS FILES", carries **no cap and no prune** while every other memory file in this project has one, has **no backup** (unlike his `CLAUDE.md`/`MEMORY.md`, which get a dated pre-image on every change), and **nothing verifies it loads**. **It is the single most valuable artifact he owns — four months of his own hard-won rulings — and it is the least protected thing on that box.** ⇒ **Add it to `LANGSTON_ARCHITECTURE.md` §4 and give it a backup, ahead of any restructure work.**
+
 ## 3. The Langston memory-FILE trim — a DIFFERENT job, handed to me by Kyle via Old Claude
 
 **Already shipped:** the recall tool (Phase B), two-way Discord images so the sessions can see what Kyle posts, and the crew-status page.
