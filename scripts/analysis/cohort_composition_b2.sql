@@ -98,6 +98,24 @@
 --   ★ **Sector keying is vindicated as the key: median 33 peers against `S`'s 5, with a real tail
 --     to zero the design must handle.** That is the grouping I wrongly said did not exist.
 --
+-- ⛔⛔⛔ THE MINUTE POPULATION EXCLUDES TOTALLY-DARK MINUTES BY CONSTRUCTION, AND THAT BREAKS THE
+--     HEADLINE CLAIM. `per_min` GROUPS the tick table, so a minute in which NO symbol ticked has
+--     NO ROW and is silently absent. **MEASURED against a generated minute grid, 2026-08-27 to
+--     09-02 inside the 24/5 window: overnight has 2,400 minutes and only 2,387 were observed —
+--     13 TOTAL-DARK MINUTES (0.54%). RTH, pre-market and after-hours: zero dark.**
+--   ⇒ ⛔ **"THE COMPARISON SET NEVER WENT THIN — THE WORST MINUTE HAD 88 LIVE BOOKS" IS WRONG.
+--     88 is the minimum AMONG MINUTES IN WHICH AT LEAST ONE SYMBOL TICKED. THE TRUE OVERNIGHT
+--     MINIMUM IS ZERO, on 13 minutes.**
+--   ★ **FOUND BY APPLYING LANGSTON'S POINT ABOUT CC-B'S DENOMINATOR TO MY OWN** — he noted that a
+--     rate derived from live-minutes excludes the total-dark minutes, making it a LOWER BOUND
+--     rather than a rate. Same defect, my instrument, one level over.
+--   ✅ **THE ENTRY-LEG RESULT IS UNAFFECTED, AND NOW VERIFIED RATHER THAN ASSUMED:** a dispatch in
+--     a dark minute would `coalesce` to 0 peers and be COUNTED as a zero-peer event, and
+--     `events_with_zero_peers = 0` says none of the 17 fell in one.
+--   ⇒ **IT ALSO STRENGTHENS CC-B'S EXIT-LEG FINDING RATHER THAN COMPETING WITH IT: empty is not
+--     merely routine on the exit leg, it occurs feed-wide too, and my instrument was blind to it.**
+--   Instrument: `scripts/analysis/cohort_dark_minutes.sql`.
+--
 set statement_timeout = 600000;
 
 with bounds as (
