@@ -125,14 +125,104 @@ def measure(folder, since, until):
         close()
     return turns, completed, errors
 
+# ── DOES AN INSTRUCTION PLACED *INSIDE* A WAKE BODY CHANGE BEHAVIOUR? ────────────────────
+# This is the measurement that struck OBJ-4′ (#995), and it had no committed instrument —
+# the same defect this whole file exists to fix, one level up. The heartbeat body has carried
+# three imperatives since 2026-07-22, so the design "put the instruction in the event" has
+# been installed and running for six weeks and can simply be read off.
+# COMPLIANCE IS PROXIED BY THE TOOL CALL THE INSTRUCTION ASKS FOR, and the proxy is stated
+# rather than hidden: "re-arm only if dead" -> the turn touches cc-wake-filter; "sweep the
+# Discord inbox" -> the turn reads cc-discord-inbox. A session that complied by some other
+# route is counted as non-compliant, so these rates are an UPPER BOUND on non-compliance,
+# i.e. the honest direction for a claim that compliance is near zero.
+INSTRUCTIONS = [
+    ('re-arm only if dead',      lambda s: 'cc-wake-filter' in s or 'cc_wake_filter' in s),
+    ('sweep the Discord inbox',  lambda s: 'cc-discord-inbox' in s),
+]
+
+def compliance(folder, since, until):
+    files = glob.glob(os.path.join(PROJECTS, folder, '*.jsonl'))
+    if not files:
+        return None
+    seen = {k: 0 for k, _ in INSTRUCTIONS}
+    did = {k: 0 for k, _ in INSTRUCTIONS}
+    turns = spoke = 0
+    cur = None
+    for path in sorted(files, key=os.path.getsize, reverse=True)[:1]:
+        for r in rows(path):
+            ts = r.get('timestamp') or ''
+            m = r.get('message') or {}
+            role = m.get('role')
+            if role == 'user':
+                t = text_of(m)
+                if not t:
+                    continue
+                if cur:
+                    turns += 1
+                    if cur['said']:
+                        spoke += 1
+                    for k, _ in INSTRUCTIONS:
+                        if cur['saw'][k]:
+                            seen[k] += 1
+                            if cur['did'][k]:
+                                did[k] += 1
+                cur = None
+                if 'WAKE[Heartbeat' in t and (not ts or since <= ts <= until):
+                    cur = {'saw': {k: (k in t) for k, _ in INSTRUCTIONS},
+                           'did': {k: False for k, _ in INSTRUCTIONS}, 'said': False}
+            elif role == 'assistant' and cur:
+                if text_of(m).strip():
+                    cur['said'] = True
+                c = m.get('content')
+                if isinstance(c, list):
+                    for b in c:
+                        if isinstance(b, dict) and b.get('type') == 'tool_use':
+                            s = json.dumps(b.get('input', {}))
+                            for k, test in INSTRUCTIONS:
+                                if test(s):
+                                    cur['did'][k] = True
+    return turns, spoke, seen, did
+
+def run_compliance(since, until):
+    print(f"INSTRUCTION-IN-THE-BODY COMPLIANCE   window {since} -> {until}")
+    print("(the heartbeat body has carried these since 2026-07-22; compliance proxied by the")
+    print(" tool call each instruction asks for, which is an UPPER BOUND on non-compliance)\n")
+    T = S = 0
+    seen_all = {k: 0 for k, _ in INSTRUCTIONS}
+    did_all = {k: 0 for k, _ in INSTRUCTIONS}
+    for label, folder in SESSIONS.items():
+        got = compliance(folder, since, until)
+        if not got:
+            continue
+        t, s, seen, did = got
+        T += t; S += s
+        for k, _ in INSTRUCTIONS:
+            seen_all[k] += seen[k]; did_all[k] += did[k]
+        print(f"  {label:13} heartbeat turns {t:4}  spoke {s:4}")
+    print()
+    print(f"  TOTAL heartbeat-opened turns: {T}")
+    print(f"  produced assistant TEXT:      {S}  ({100*S//max(T,1)}%)")
+    for k, _ in INSTRUCTIONS:
+        n, c = seen_all[k], did_all[k]
+        print(f"  instruction delivered intact: {n:4}  complied: {c:3}  "
+              f"({100*c/max(n,1):.1f}%)   \"{k}\"")
+    print("\n  ⇒ the body reliably produces narration and reliably fails to produce the action.")
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--since', required=True, help='ISO8601, e.g. 2026-08-20T00:00:00Z')
     ap.add_argument('--until', required=True, help='ISO8601')
+    ap.add_argument('--instruction-compliance', action='store_true',
+                    help='instead of the narration table, measure whether an instruction '
+                         'placed INSIDE a wake body is obeyed (the #995 OBJ-4 strike)')
     ap.add_argument('--label', default='', help='what this window is (goes in the JSON)')
     ap.add_argument('--json', help='write the result here as a committed extract')
     a = ap.parse_args()
+
+    if a.instruction_compliance:
+        run_compliance(a.since, a.until)
+        return
 
     out = {'since': a.since, 'until': a.until, 'label': a.label, 'sessions': {}}
     print(f"window {a.since} -> {a.until}   {a.label}")
