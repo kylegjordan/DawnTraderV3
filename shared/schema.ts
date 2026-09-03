@@ -1861,7 +1861,10 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  HAPPENED; A NULL IS RE-CUTTABLE: crypto, a disabled guard, cold knobs, no tick and a flatten with no
    *  decision verdict all leave NULL — never `unknown` under basis `guard` (Langston Step-4 B2).
    *  ⛔ NEVER READ THE STATE WITHOUT ITS BASIS. `exit_book_state_basis` ∈ {guard, decision_price,
-   *  market_state_predicate, minute_proxy} says what produced the label: `guard` = a live in-memory
+   *  market_state_predicate, minute_proxy} says what produced `exit_book_state` — and ONLY that column
+   *  (`at_fill` is written only by the live assessment, basis `guard` by construction). INVARIANT, fenced:
+   *  a non-NULL basis ⇒ a non-NULL `exit_book_state`; the re-cut touches only rows where both are NULL
+   *  (Langston Step-4 BLOCKER-3). `guard` = a live in-memory
    *  frame WAS ASSESSED at the instant (the only basis that saw the decision frame); `decision_price` = the row's
    *  own exit_decision_price against the archive; `market_state_predicate` = the archived frame ≤5s
    *  before close (session bodies only — the archive keeps one row per symbol per 4s and MISSES the

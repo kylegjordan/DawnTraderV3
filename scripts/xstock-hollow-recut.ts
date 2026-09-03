@@ -26,7 +26,8 @@
  * the exit loop reads every frame — 9 of 11 handoff closes with a decision price have NO archived frame
  * within 0.03 % of it (§A.11). The archive predicate would read those closes `two_sided` and be wrong.
  *
- * Idempotent: only rows with `exit_book_state IS NULL` are touched; `never_filled`, `engine_stop_cleanup`
+ * Idempotent: only rows with `exit_book_state IS NULL AND exit_book_state_basis IS NULL` are touched (a row
+ * that carries a basis already had a look — never re-attributed to a proxy); `never_filled`, `engine_stop_cleanup`
  * and `hard_reset` are skipped (no exit of the market's making). Positive controls are printed: NOW/TGT
  * must read hollow under (a); a known RTH two-sided close must read two_sided under (c).
  */
@@ -73,7 +74,8 @@ async function main(): Promise<void> {
   const { rows } = await c.query<Row>(`
     select id::text, symbol, close_reason, closed_at, exit_decision_price::float8 exit_decision_price
       from closed_trades
-     where asset_class = 'xstock_spot' and closed_at is not null and exit_book_state is null
+     where asset_class = 'xstock_spot' and closed_at is not null
+       and exit_book_state is null and exit_book_state_basis is null
        and close_reason not in ('never_filled','engine_stop_cleanup','hard_reset')
      order by closed_at`);
   const counts: Record<string, number> = { decision_price: 0, minute_proxy: 0, market_state_predicate: 0, unknown: 0 };
@@ -129,7 +131,9 @@ async function main(): Promise<void> {
     counts[basis]++; stateCounts[`${basis}:${state}`] = (stateCounts[`${basis}:${state}`] ?? 0) + 1;
     if (['NOW/USD', 'TGT/USD', 'WEN/USD', 'MOH/USD'].includes(r.symbol) && basis === 'decision_price') controls.push(`${r.symbol} ${r.closed_at.toISOString()} → ${state} (${note}) [expected hollow]`);
     if (!DRY) {
-      await c.query(`update closed_trades set exit_book_state = $2, exit_book_state_basis = $3 where id = $1 and exit_book_state is null`, [r.id, state, basis]);
+      // ⛔ BOTH predicates, here as in the SELECT (Langston Step-4 BLOCKER-3): a row that carries a basis
+      // already had a look; the re-cut must never re-attribute it to a proxy.
+      await c.query(`update closed_trades set exit_book_state = $2, exit_book_state_basis = $3 where id = $1 and exit_book_state is null and exit_book_state_basis is null`, [r.id, state, basis]);
     }
   }
   console.log(`[recut] rows considered=${rows.length} dry=${DRY}`);

@@ -112,6 +112,31 @@ describe('F-C3 — every production reader of exit_book_state also reads exit_bo
   });
 });
 
+describe('F-INV — a non-NULL basis implies a non-NULL exit_book_state (Langston Step-4 BLOCKER-3)', () => {
+  const src = code(AEE);
+  const RECUT = code(readFileSync(join(ROOT, 'scripts', 'xstock-hollow-recut.ts'), 'utf8'));
+  it('the persisted basis is keyed on the DECISION label alone — never on the fill label', () => {
+    const basisLines = src.split('\n').filter(l => /exitBookStateBasis\s*:/.test(l));
+    expect(basisLines.length).toBeGreaterThan(0);
+    for (const l of basisLines) {
+      expect(l, l.trim()).toMatch(/bookStateAtDecision/);
+      expect(l, l.trim()).not.toMatch(/_bsAtFill|bookStateAtFill/);
+    }
+  });
+  it('the re-cut selects AND updates only rows with a NULL basis (a row with a basis already had a look)', () => {
+    const selects = RECUT.match(/where[\s\S]*?exit_book_state is null[\s\S]*?close_reason/g) ?? [];
+    expect(selects.length).toBeGreaterThan(0);
+    for (const s of selects) expect(s).toMatch(/exit_book_state_basis is null/);
+    const updates = RECUT.match(/update closed_trades set[^`]*/g) ?? [];
+    expect(updates.length).toBeGreaterThan(0);
+    for (const u of updates) expect(u).toMatch(/exit_book_state is null and exit_book_state_basis is null/);
+  });
+  it('CONTROL: the pre-fix shapes are caught', () => {
+    expect("exitBookStateBasis: (a != null || _bsAtFill !== null) ? 'guard' : null,").toMatch(/_bsAtFill/);
+    expect('update closed_trades set exit_book_state = $2 where id = $1 and exit_book_state is null').not.toMatch(/exit_book_state is null and exit_book_state_basis is null/);
+  });
+});
+
 describe('F-$ — the label never appears in a money expression', () => {
   const moneyRe = /HONEST_PNL|grossPnl\s*=|netPnl\s*=|net_pnl|reconstructed_net_pnl|dailyLoss|daily_loss/;
   const files = walk(SERVER);

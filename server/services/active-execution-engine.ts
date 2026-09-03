@@ -2678,7 +2678,13 @@ export class ActiveExecutionEngine {
         // NULL on crypto (no guard) and on rows not written here. A NULL is re-cuttable; a value is a look.
         exitBookState: options?.exitProvenance?.bookStateAtDecision ?? null,
         exitBookStateAtFill: _bsAtFill,
-        exitBookStateBasis: (options?.exitProvenance?.bookStateAtDecision != null || _bsAtFill !== null) ? 'guard' : null,
+        // ⛔ THE BASIS DESCRIBES `exit_book_state` ALONE (Langston Step-4 BLOCKER-3). `at_fill` is written
+        // only by the live assessment above, so its basis is `guard` by construction and needs no
+        // column. Keying the basis on BOTH labels produced (NULL, hollow, guard) on a flatten — a row
+        // asserting "no assessment, re-cuttable" and "the guard looked" at once — and the re-cut would
+        // then overwrite that `guard` with a clock proxy. Invariant, fenced: a non-NULL basis ⇒ a
+        // non-NULL `exit_book_state`.
+        exitBookStateBasis: options?.exitProvenance?.bookStateAtDecision != null ? 'guard' : null,
         totalCost: totalCost.toString(),
         grossPnl: grossPnl.toString(),
         netPnl: netPnl.toString(),
