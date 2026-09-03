@@ -316,3 +316,23 @@ describe('F-SEED — the comparator seed gate', () => {
     expect(calls).toBe(1);
   });
 });
+
+/**
+ * ⛔ F-CROSSED — the crossed-book refusal lives in the WRITER (Langston condition 1).
+ * `no_comparator` guarantees both sides POSITIVE but not `ask >= bid`, so a crossed frame is
+ * seedable at the call site. The invariant belongs where every caller inherits it — putting it in
+ * the caller's condition is exactly the shape that produced the deadlock this batch is fixing.
+ */
+describe('F-CROSSED — the writer refuses a crossed book', () => {
+  const TRACKER = readFileSync(join(SERVER, 'asset_classes', 'xstock_spot', 'book-state-tracker.ts'), 'utf8');
+  it('advanceBookStateComparator returns early unless ask >= bid', () => {
+    expect(code(TRACKER)).toMatch(/if\s*\(!\(frame\.ask\s*>=\s*frame\.bid\)\)\s*return;/);
+  });
+  it('CONTROL: the guard is in the WRITER, not only in the engine call site', () => {
+    expect(code(TRACKER)).toMatch(/frame\.ask\s*>=\s*frame\.bid/);
+  });
+  it('no stale claim survives that the comparator advances ONLY on two_sided', () => {
+    expect(TRACKER).not.toMatch(/advances ONLY on a `two_sided` verdict/);
+    expect(TRACKER).not.toMatch(/on the first two_sided verdict that seeds/);
+  });
+});

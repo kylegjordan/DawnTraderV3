@@ -9,9 +9,10 @@
  *
  * ★ SIM CROSS-CUTTING RUNTIME STATE — a NEW module singleton, registered as such: `_comparators`
  * is MODE-INVARIANT market data (both engines read the same feed; the same class as S2/S5), one
- * writer (`advanceBookStateComparator`, called by the engine after a `two_sided` verdict), any
+ * writer (`advanceBookStateComparator`, called by the engine on a `two_sided` verdict AND on the
+ * first frame of a symbol, where only `unknown`/`no_comparator` is reachable), any
  * number of readers (`assessBookStateNow`). Never keyed by mode. Never persisted. Empties on
- * restart (the first frames after boot read `unknown` until a two-sided frame seeds it — which is
+ * restart (the FIRST frame after boot seeds it and reads `unknown`; judging starts on the second — which is
  * the honest cold state, and it is labelled).
  *
  * ⛔ THE COMPARATOR ADVANCES ONLY ON A `two_sided` VERDICT. A hollow frame must never become the
@@ -42,7 +43,20 @@ export function readBookStateComparator(symbol: string): BookStateComparator | n
   return _comparators.get(symbol.toUpperCase()) ?? null;
 }
 
-/** Advance the pair's comparator with a frame the predicate read as `two_sided`. */
+/**
+ * Advance the pair's comparator. Called on a `two_sided` verdict, and — since the seeding fix —
+ * on the FIRST frame of a symbol, where the predicate can only return `unknown`/`no_comparator`.
+ *
+ * ⛔⛔ THE WRITER OWNS ITS OWN INVARIANT, AND THAT IS THE LESSON OF THE DEADLOCK THIS REPLACED
+ * (Langston condition 1, 2026-09-03). The old rule "only a two_sided frame may become the
+ * reference" lived in the CALLER's condition — and the caller is exactly what was wrong. A rule
+ * enforced only by its callers is enforced by whoever remembers it.
+ * ⇒ `no_comparator` guarantees both sides are POSITIVE (it is reached past the absent-bid and
+ *   absent-ask branches) but NOT that the book is uncrossed: `twoSidedNow` also requires
+ *   `ask >= bid`, and nothing on the seed path checked it. A CROSSED frame would seed a reference
+ *   the predicate itself would never accept, and push a NEGATIVE spread into the trailing ring.
+ * ⇒ So the check is HERE, where every caller present and future inherits it.
+ */
 export function advanceBookStateComparator(
   symbol: string,
   frame: { bid: number; ask: number; last: number | null; atMs: number },
@@ -51,12 +65,15 @@ export function advanceBookStateComparator(
   const key = symbol.toUpperCase();
   const mid = (frame.bid + frame.ask) / 2;
   if (!(mid > 0)) return;
+  // ⛔ CROSSED BOOK — never becomes the reference, whoever asks.
+  if (!(frame.ask >= frame.bid)) return;
   const prev = _comparators.get(key);
   const spreads = (prev?.spreads ?? []).concat((frame.ask - frame.bid) / mid);
   while (spreads.length > Math.max(5, windowSnaps)) spreads.shift();
   // THE EMITTER'S POSITIVE CONTROL (Langston, 2026-09-03 01:26Z): the guard's skip/yield lines fire only
   // on hollow ticks, so a night with no hollow tick on a held name is indistinguishable from an unarmed
-  // guard. This line fires ONCE per symbol, on the first two_sided verdict that seeds its comparator —
+  // guard. This line fires ONCE per symbol, on the FIRST FRAME that seeds its comparator (a
+  // `no_comparator` verdict, not a `two_sided` one — that was the deadlock) —
   // proof the guard ran on that symbol before any zero on it is read as evidence.
   if (!prev) {
     console.log(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_SEEDED mid=${mid} spread=${((frame.ask - frame.bid) / mid).toFixed(5)} at=${new Date(frame.atMs).toISOString()}`);

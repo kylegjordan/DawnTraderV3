@@ -199,3 +199,28 @@ describe('B-XSTOCK-FEED-SANITY — the seeding cycle CLOSES (deadlock regression
     expect(noBid.reasons).toContain('absent_bid');
   });
 });
+
+/**
+ * ⛔ THE WRITER'S OWN INVARIANT, EXERCISED — not asserted from source text (Langston condition 1).
+ * A crossed frame (bid > ask) reads `unknown`/`no_comparator` and is therefore seedable at the
+ * call site. The refusal lives in the writer so every caller inherits it.
+ */
+describe('B-XSTOCK-FEED-SANITY — the writer refuses a crossed book (behavioural)', () => {
+  it('a crossed frame does NOT become the reference', async () => {
+    const { advanceBookStateComparator, readBookStateComparator, _resetBookStateComparatorsForTest } =
+      await import('../../asset_classes/xstock_spot/book-state-tracker.js');
+    _resetBookStateComparatorsForTest();
+    advanceBookStateComparator('XX/USD', { bid: 101, ask: 99, last: 100, atMs: Date.now() }, 20);
+    expect(readBookStateComparator('XX/USD')).toBeNull();
+  });
+  it('CONTROL: an uncrossed frame DOES become the reference — so the refusal is not vacuous', async () => {
+    const { advanceBookStateComparator, readBookStateComparator, _resetBookStateComparatorsForTest } =
+      await import('../../asset_classes/xstock_spot/book-state-tracker.js');
+    _resetBookStateComparatorsForTest();
+    advanceBookStateComparator('YY/USD', { bid: 99, ask: 101, last: 100, atMs: Date.now() }, 20);
+    const c = readBookStateComparator('YY/USD');
+    expect(c).not.toBeNull();
+    expect(c!.priorMid).toBe(100);
+    expect(c!.spreads.every((x) => x >= 0)).toBe(true);
+  });
+});

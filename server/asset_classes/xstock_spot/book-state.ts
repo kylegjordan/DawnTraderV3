@@ -103,7 +103,9 @@ export interface BookStateInput {
   bid: number | null;
   ask: number | null;
   last: number | null;
-  /** The pair's own comparator: the last frame this predicate read as `two_sided`. */
+  /** The pair's own comparator: the last frame ACCEPTED as the reference — a `two_sided` verdict,
+ *  or the symbol's FIRST frame, which can only read `unknown`/`no_comparator`. Never a hollow
+ *  frame, and never a crossed one (the writer refuses both). */
   priorTwoSidedMid: number | null;
   priorBid: number | null;
   priorAsk: number | null;
