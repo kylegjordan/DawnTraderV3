@@ -52,7 +52,7 @@ Kyle's diagnosis (08-20 → 08-31): every step burns time on sessions announcing
 
 ## 4. Placement debts
 **Cleared 2026-09-02 (`ce8d25c68`):** `B-INSTRUMENTS-OVER-RULES` is plan row 3.5 · `B-TRADING-ENGINE-REMOVAL` (#578) is row 11.5 · `B-FINALSCORE-TELEMETRY-RETIRE` (#582) is row 11.6.
-**Still open:** the §5 items marked *unplaced* below. They sit under the arc's one tracked row (`PHASE_19_PLAN` GOV-ARC #668) as a list, not as positioned rows — which is exactly the "named but not placed" failure §9.4 forbids. Next plan edit gives each a numbered row in the governance queue.
+**Cleared 2026-09-03 (second pass):** every §5 catalogue item now has a numbered row — governance queue **12.1-12.6**. Also placed today: **4.5 `B-WAKE-QUIET`** (#995, the running-commentary fix) and **6.95 `B-ROUTINE-REHOME`** (#739, the dead daily check). **No placement debts remain.** Former text: They sit under the arc's one tracked row (`PHASE_19_PLAN` GOV-ARC #668) as a list, not as positioned rows — which is exactly the "named but not placed" failure §9.4 forbids. Next plan edit gives each a numbered row in the governance queue.
 
 ## 5. Database cataloguing and "governance to industry standard" — RECOVERED 2026-09-02
 *Recovered from Kyle's voice notes (30-31 July, 7 August), the two design asks (`B_CATALOG_WHAT_WE_DO_NOT_DOCUMENT_r1.md`, `B_GOVERNANCE_REMEDIATION_PLAN_r1.md`), `RUNNING_ISSUES` #668/#671/#672/#601, `STORAGE_POLICY.md`, `PHASE_19_PLAN.md` and 103 transcript hits (17 June → 2 September). Nothing here is from memory.*
