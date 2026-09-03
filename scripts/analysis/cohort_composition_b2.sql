@@ -36,6 +36,32 @@
 -- ⛔ THE SAMPLE-MINIMUM LIMIT CARRIES OVER UNREPAIRED: seven consecutive ORDINARY sessions, no
 --   holiday, no half-day, no venue incident. Every minimum here is a sample minimum.
 -- ═══════════════════════════════════════════════════════════════════════════════════════════
+-- ⛔⛔⛔ READ THIS BEFORE USING `S` FOR ANYTHING: `S` CHARACTERISES THE **ENTRY** LEG ONLY, AND IT
+--     IS **DISJOINT** FROM THE EXIT LEG — NOT MERELY IMPERFECT FOR IT (CC-B, 2026-09-03, measured).
+--
+--     `S` is built from overnight DISPATCH ATTEMPTS, i.e. positions OPENED overnight. The fan-out
+--     leg `#526` exists for is the **EXIT-skip alarm**, which fires on any position HELD overnight
+--     **whenever it was opened**.
+--     ⇒ **MEASURED: none of the five live alert symbols is in `S`.**
+--        `S` = BE, BTGO, CRM, MRVL, MSTR, PCG, STRK, STX, XPEV
+--        alerts = MDT, NEM, CTVA, LI, RIOT
+--     ⇒ **AND THE MECHANISM, from the open times rather than inferred:** MDT opened 09-01 08:40 ET,
+--        CTVA 09-02 09:50, NEM 09-02 10:32 — all in regular or extended hours, so they **cannot
+--        enter `S` by construction whatever the window**, because `S` requires an overnight OPEN.
+--        LI opened 09-02 21:53 ET, genuinely overnight, absent only because it falls just past the
+--        window. RIOT was an entry BLOCK and opened no position at all.
+--     ⇒ **THE MODAL SHAPE OF THE FAN-OUT LEG — opened in the session, held overnight, exit-checked
+--        overnight — IS INVISIBLE TO `S` BY CONSTRUCTION.**
+--
+--  ⚠️ MY LABEL WAS ACCURATE AND MY FRAMING WAS NOT. I wrote "symbols that actually produced an
+--     overnight dispatch attempt", which is exactly what `S` is, and then offered it as *the*
+--     peer-set proxy for a design covering BOTH legs. **A correct label does not make a figure
+--     transferable, and I did not state what `S` excludes by construction.** I had flagged the
+--     proxy as imperfect (limit 1); DISJOINT is a different and stronger fact.
+--  ⇒ **These numbers are evidence about the ENTRY leg's peer environment. The EXIT leg's is
+--     UNMEASURED. CC-B is measuring it on its own population — positions open during an overnight
+--     exit-check — as his batch and his design decision.**
+--
 set statement_timeout = 600000;
 
 with bounds as (
