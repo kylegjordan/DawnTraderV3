@@ -272,12 +272,44 @@ to measure that symbol's own volatility. **So a risk-derived entry budget is str
 to be symbol-specific precisely on the attempts it would newly admit.** Only **5 of 55** refused
 attempts carry enough of their own history to compute a symbol-specific σ at all.
 
-★ **AND THE EXISTING DESIGN ALREADY RESISTS THIS, WHICH IS WORTH SAYING PLAINLY:** the classwide
-fallback is the **90th-percentile** σ by deliberate choice (`sigma-rate.ts:28` — *"σ MUST NOT be
-derivable from a thin symbol's own thin history"*). A high σ yields a **small** ceiling, pushing it
-toward the floor — and since `floor_ms` = `L`, a classwide σ collapses the ceiling toward the entry
-limit and **shrinks D toward empty by construction.** The mechanism that makes the measurement
-inconclusive is the same mechanism that makes the proposed relaxation small.
+⛔⛔ **A PARAGRAPH THAT STOOD HERE IS WITHDRAWN — REFUTED AT THE OBJECT BY LANGSTON AND RE-DERIVED BY
+ME BEFORE STRIKING IT.** It read that *"the existing design already resists this: the classwide
+fallback is the 90th percentile, so a high σ gives a small ceiling, and since `floor_ms` = `L` a
+classwide σ collapses the ceiling toward the entry limit and shrinks D toward empty by
+construction."* ★ **I flagged it to him as the part most worth attacking, and it did not survive.**
+
+**MEASURED on the same rows, my own re-derivation reproducing his:**
+
+| σ source | n(D) | raw ceiling min | raw ceiling median | at the 300 s cap | at the 15 s floor |
+|---|---|---|---|---|---|
+| classwide | 32 | 69,136 ms | 172,680 ms | **0** | **0** |
+| own | 4 | 87,291 ms | 171,095 ms | **0** | **0** |
+
+⇒ ⛔ **NOT ONE ROW SITS WITHIN 4.6× OF THE FLOOR, nothing is at the cap, and the classwide arm did
+not shrink D — IT PRODUCED 32 OF THE 36.** Had the mechanism worked as I described, D would be
+roughly the four own-σ rows.
+★ **The reasoning was not circular; it was directionally right and QUANTITATIVELY IRRELEVANT.**
+`ceiling = 0.5 × room / σ`, and the 90th percentile moves σ one rank-order step inside a
+distribution whose product sits two orders of magnitude above the floor. **`room` is doing the work,
+not σ. A percentile choice cannot be conservative when the binding point is nowhere near it.**
+⚠️ **And the two arms' ceilings are indistinguishable in magnitude (medians 172,680 vs 171,095), so
+the fallback is not even producing systematically tighter ceilings in effect.**
+
+⛔ **TWO FURTHER REASONS THE WITHDRAWN CLAIM COULD NOT HAVE STOOD, both Langston's:**
+1. ⭐ **THE CLASSWIDE POOL IS DRAWN FROM THE `obs >= 200` WELL-FED SYMBOLS AND APPLIED TO THE
+   STARVED ONES — §12.3's own selection effect running a SECOND time, inside the fallback.** The
+   direction of that bias is unknown and unknowable from this window, *because those symbols by
+   definition lack the history to check it*. ⛔ **And per `#566` — which I surfaced myself — σ sits
+   in the DENOMINATOR, so an UNDERSTATED σ WIDENS the window: if thin names gap harder than the
+   fed-name 90th percentile, the fallback is WIDEST on exactly the names it should refuse.**
+   *"Conservative" was assumed, never established.*
+2. **"Since `floor_ms` equals `L`" is a premise §10.6 of this very document marks as a COINCIDENCE
+   of two independently-settable values in different modules that inverts silently.** ⛔ **A safety
+   argument may not rest on it.**
+
+★ **What survives, and Langston states it is STRENGTHENED rather than weakened by this:** the bar on
+a future proposer is that a budget computed from a class-average σ must be shown to mean something
+on the specific symbols it would admit.
 
 ## 12.4 What this does and does not license
 
