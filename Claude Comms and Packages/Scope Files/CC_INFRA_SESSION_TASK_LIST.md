@@ -139,6 +139,28 @@ He remembers **"we were working on improving Langston and setting him up"** in J
 ⇒ **PUT TO LANGSTON as question 8 of the consultation (2026-09-03 19:20Z), because he is the one being written into:** **(8a)** is the sync still right at all, now that he has TWO other ways to carry context — his own store since 05-07 and `langston-recall` since 08-06 — or is it a rule outliving its premise? **(8b)** if it stays, what does he actually need pushed, given his own header says *"the inbox file in a dispatch OVERRIDES anything here"*? **(8c)** who should own eviction — the closing session (symmetric, but four writers on one file is the collision we keep paying for), a scheduled sweep, or him? **(8d)** should the instruction file and the memory file have *different* maintenance rules, given his `CLAUDE.md` grew +25% with no one-in-one-out while `CONDUCT.md` has one?
 ⛔ **NOT PRE-JUDGED: rule 24 outcome (2) — §10.b working as designed but its premise changed is a SCOPE DECISION (Kyle's), never a unilateral removal.**
 
+### 2f. ⛔⛔ **KYLE'S RULING: A RULE THAT IS NOT FOLLOWED IS NOT A FIX — THE DESIGN MUST CARRY A MECHANISM** *(2026-09-03)*
+
+> **Kyle, on being shown that his own 2026-07-01 eviction rule is measurably not honoured:** *"So if we have a standing rule for stuff to be deleted and it's not being followed, then that's not the right answer. It's my decision, but I'm saying that **what I decided before in the rule that we put in to fix this is not working. So we have to come up with a solution as a part of the design.** This big design that we're coming up for for Langston — **this needs to be a part of that design.**"*
+
+⇒ ⛔ **THE RULING, OPERATIVE: the *"a CLOSED batch = ONE line"* discipline is NOT to be re-issued, re-worded or re-emphasised. It failed AS A RULE, the failure is measured, and Kyle has declined to fix it with a stronger instruction. `B-LANGSTON-CONTEXT` must deliver a MECHANISM.**
+★★ **AND IT GENERALISES BEYOND THIS FILE — it is the clearest statement anyone has given of a principle this project keeps re-learning: RE-ISSUING A SKIPPED RULE IS NOT A REMEDY. Kyle overruling his OWN prior rule on evidence is the strongest possible form of it.**
+
+★ **IT IS ALSO LANGSTON'S OWN PRINCIPLE RETURNING:** *"where possible, prefer **IMPOSSIBLE** over **INTERCEPTED** — a push from it fails at git, not at somebody's memory."* ⇒ **the eviction discipline is the purest intercepted-and-missed case we hold: correct, Kyle-directed, sitting in the header of the very file being written, and skipped by four sessions across ~32 attributed writes.**
+
+**WHAT THE PROJECT'S OWN EVIDENCE SAYS ABOUT WHICH MECHANISMS HOLD:**
+| held | failed |
+|---|---|
+| the invalid `DISABLED://` push URL — **fails at git, not at memory** | prose discipline in a file the actor does not read |
+| `guard-bare-commit` — **fires at the moment of the action** | ⛔ **a rule that fires at REPORT time when the failure happens at WORK time** — named in `workflow-10`'s own text |
+| the §9.4 disposition line + the step-10 tier ledger — **a FORMAT you cannot leave blank** | |
+
+⭐ **MY RECOMMENDATION, put to Langston 2026-09-03 19:26Z as question 9 — one approach with its weaknesses stated, not a menu: COMPOSE HIS LOADED FILE FROM PARTS INSTEAD OF EDITING ONE MONOLITH.** Sessions stop appending to `MEMORY.md`; each batch writes its own small file, owned by the session that opened it; **what he loads is GENERATED from those parts, and a batch's part is included only while that batch is OPEN.**
+⇒ ★★ **EVICTION STOPS BEING AN ACTION ANYONE MUST REMEMBER AND BECOMES A PROPERTY OF THE STRUCTURE. A closed batch does not need deleting — it stops being composed in. Nobody can forget to do a thing nobody has to do.**
+★ **AND IT CONVERGES WITH THE UNFINISHED ITEM 2 — which is the strongest argument for it.** Item 2 was *"a lean core plus on-demand rule modules"* for his `CLAUDE.md`. **That is the SAME MOVE — compose the always-loaded artifact from parts rather than maintain one growing file — applied to the other file. One mechanism, both problems**, with Langston's three original conditions still binding.
+
+⚠️ **THE FOUR WEAKNESSES I NAMED MYSELF, and asked him to find more:** **(1)** new machinery on his box, and **a generator that dies leaves him a stale or empty baseline he CANNOT NOTICE, because he is stateless** — it must fail loud and toward last-known-good, never toward empty; **(2)** it changes the write procedure for **all four sessions at once**, and a half-adopted procedure is worse than either end state; **(3)** whatever decides a batch is "OPEN" becomes load-bearing and can itself go stale — the delivery board already drifts; **(4)** ⛔ **the REVIEWER LEDGER and STANDING NOTES do not fit the pattern at all** — not per-batch, append-only by design, **22,545 B = 92% of the cap between them** — and I do not yet have an answer for where they live.
+
 ## 3. The Langston memory-FILE trim — a DIFFERENT job, handed to me by Kyle via Old Claude
 
 **Already shipped:** the recall tool (Phase B), two-way Discord images so the sessions can see what Kyle posts, and the crew-status page.
