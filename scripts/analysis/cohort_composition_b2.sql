@@ -41,10 +41,6 @@ set statement_timeout = 600000;
 with bounds as (
   select timestamptz '2026-08-27 00:00+00' as t0, timestamptz '2026-09-03 00:00+00' as t1
 ),
-is_overnight_open as (
-  -- reusable predicate: inside the 24/5 window AND in the 20:00–04:00 ET overnight band
-  select 1
-),
 pairs as (
   select symbol, date_trunc('minute', captured_at) as m
     from xstock_spot_ticker_snap, bounds
@@ -65,8 +61,20 @@ dispatches as (
     from vts_open_trades v, bounds
    where v.asset_class = 'xstock_spot'
      and v.inserted_at >= bounds.t0 and v.inserted_at < bounds.t1
+     -- the ET overnight band …
      and not ((v.inserted_at at time zone 'America/New_York')::time >= time '04:00'
               and (v.inserted_at at time zone 'America/New_York')::time < time '20:00')
+     -- ⛔ … AND the 24/5 window, which this CTE previously OMITTED (Langston, 2026-09-03).
+     --    Without it an out-of-window dispatch coalesces to 0 live peers and is scored a
+     --    DEGENERATE EVENT rather than excluded from the population. It did not bite on the
+     --    first run — and the only thing that told us so was `events_with_zero_peers = 0`,
+     --    which was doing double duty as a finding AND as the window-consistency check.
+     --    ⇒ the next reader of a non-zero degenerate count must rule out "out of window" FIRST.
+     and not (extract(dow from (v.inserted_at at time zone 'America/New_York')) = 6
+              or (extract(dow from (v.inserted_at at time zone 'America/New_York')) = 0
+                  and (v.inserted_at at time zone 'America/New_York')::time <  time '20:00')
+              or (extract(dow from (v.inserted_at at time zone 'America/New_York')) = 5
+                  and (v.inserted_at at time zone 'America/New_York')::time >= time '20:00'))
 ),
 sig_symbols as (select distinct symbol from dispatches),
 -- (2) conditioned on a DISPATCH MINUTE · (3) SELF EXCLUDED by name
@@ -95,7 +103,8 @@ select 'B2 operational (dispatch minutes, self excluded)' as output,
        count(*)                                                                  as dispatch_events,
        (select count(*) from sig_symbols)                                        as s_size,
        min(live_peers)                                                           as peers_min,
-       round(percentile_cont(0.05) within group (order by live_peers)::numeric)   as peers_p05,
+       -- ⛔ p05 REMOVED: at n=17 `percentile_cont(0.05)` interpolates inside the first two
+       --    order statistics — it is `min` wearing a percentile's clothes (Langston).
        round(percentile_cont(0.50) within group (order by live_peers)::numeric)   as peers_p50,
        max(live_peers)                                                           as peers_max,
        count(*) filter (where live_peers = 0)                                    as events_with_zero_peers
@@ -105,7 +114,7 @@ select 'B2 operational (dispatch minutes, self excluded)' as output,
 -- RESULT — run 2026-09-03. Biases (2) and (3) are now MEASURED, not argued.
 --
 -- THE OPERATIONAL QUANTITY (dispatch minutes, SELF EXCLUDED — what the trigger actually sees):
---     dispatch events 17  ·  |S| 9  ·  peers min 3  ·  p05 3  ·  p50 5  ·  max 7
+--     dispatch events 17  ·  |S| 9  ·  peers min 3  ·  p50 5  ·  max 7
 --     events with ZERO live peers: 0
 --
 -- DECOMPOSITION, both variants on dispatch minutes:
@@ -123,6 +132,21 @@ select 'B2 operational (dispatch minutes, self excluded)' as output,
 --    **ONLY 17 OVERNIGHT DISPATCH EVENTS IN THE ENTIRE WEEK.** The trigger fires on the order of
 --    two or three a night. At every one of them the peer set held between 3 and 7 live names,
 --    median 5, and **never zero** — so a peer-set test is viable and never degenerate here.
+--
+-- ⛔⛔ THE ZERO IS QUANTIFIABLE AND IT BINDS THE DESIGN (Langston, 2026-09-03). Rule of three:
+--    0 degenerate events in 17 puts the 95% upper bound on the TRUE degenerate rate at
+--    ≈ 3/17 ≈ **18%** — **roughly one degenerate night in six is fully compatible with this
+--    evidence.** ⇒ *"a peer-set test is viable and never degenerate here"* IS supported;
+--    ⛔ **"it needs no defined behaviour at |peers| = 0" IS NOT. That requirement SURVIVES this
+--    measurement** and is a scope input, not a closed question.
+--
+-- ⚠️ `S` IS POST-HOC — nine symbols drawn from the same week the figures come from. At trigger
+--    time it must be A PRIORI. That sits inside bias (1) and is a further reason no sign is
+--    claimed for the residual.
+--
+-- ✅ RE-RUN AFTER THE THREE FIXES BELOW: IDENTICAL — 17 · 9 · min 3 · p50 5 · max 7 · zero
+--    degenerate. So the missing 24/5 predicate on `dispatches` did NOT bite, and that is now
+--    VERIFIED by the numbers being unchanged rather than INFERRED from the degenerate count.
 --
 -- ⛔ SAMPLE-MINIMUM LIMIT UNREPAIRED: seven consecutive ORDINARY sessions, no holiday, no
 --    half-day, no venue incident. `min 3` and `zero degenerate events` are what those sessions
