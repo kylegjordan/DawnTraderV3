@@ -6667,9 +6667,63 @@ for a in last.values():
 
 ⚠️ **AND THE COUNT IS A FLOOR ON ATTENTION COST, NOT ON OCCURRENCES.** These are distinct alert rows; a row that re-surfaces on the dispatcher's back-off is one row and many notifications. The 178 understates how often this reached a human.
 
+⛔⛔ **THE `HOME:` LINE BELOW IS SUPERSEDED BY AMENDMENT 1 (Kyle reassigned this to CC-INFRA on 2026-09-03). It is kept, not deleted, because it was true when written and other sessions have read it — READ IT THROUGH THE AMENDMENT.**
+
 **HOME: the alert-policy change belongs with `B-PRICE-AGE-TRUTH` (`#951`) / `#977`, whose owner holds this surface — CC-INFRA is NOT taking it.** ⛔ **This entry exists so the directive and its evidence are recorded rather than living in a chat message.** Routed to that owner in `#general` the same day. ⚠️ **No date, per §9.4.**
 
 ★ **AND ONE THING THE OWNER SHOULD DECIDE RATHER THAN INHERIT:** whether the right change is to stop EMITTING during a closed session, or to keep emitting at `info` and stop NOTIFYING. Those differ in what the record retains — the first loses the ability to measure how often the protection engages, which is a real quantity for `B-PRICE-AGE-TRUTH`'s own observation window.
+
+### #994 AMENDMENT 1 (CC-INFRA, 2026-09-03, Step-1 reads) — ⛔ KYLE REASSIGNED IT TO ME, AND THE FIRST THING THE SCOPE READ FOUND IS THAT **THIS BATCH ALREADY EXISTS AND SOMEONE ELSE OWNS IT**
+
+**Kyle, 2026-09-03:** *"I want you to handle this price age truth batch number nine ninety four."* ⇒ **the entry's original `HOME:` line — *"implementation belongs to the owner of `B-PRICE-AGE-TRUTH` / `#977`, not to me… CC-INFRA is NOT taking it"* — IS SUPERSEDED BY THIS AMENDMENT.** It is left in place rather than deleted because it was true when written and other sessions have read it; **read it through this amendment.**
+
+⛔⛔ **BUT THE DIRECTIVE COLLIDES WITH A ROW THAT IS ALREADY PLACED AND ALREADY OWNED. `#994` IS NOT A NEW BATCH — IT IS CLOSE-CRITERION (ii) OF `B-XSTOCK-SESSION-FRESHNESS`, `PHASE_19_PLAN` ROW `3b.f-c`, OWNER CC-C**, placed 2026-09-02 by CC-B on Langston's alert routing. Langston's criterion, verbatim: *"(ii) EXIT: over the same window, zero `exit checks skipped` rows on xStock symbols with the policy's ceiling in force, AND every skip that does occur carries the session it happened in."* **That IS the change Kyle just asked me for.** The row names the same live alert this entry was raised on (`b1f58a01`, MDT/USD), already carries CC-C's code read, and carries the standing instruction *"Do NOT ack `1d1573c7` … or `b1f58a01`; resolve both only when the policy lands."*
+⚠️ **AND THE ROW IS EXPLICITLY COUPLED: *"3b.b and 3b.f-c must be decided TOGETHER, not separately"*** — CC-C holds both. **Splitting the exit half onto a second session re-creates the seam the coupling exists to prevent.**
+⇒ **WRENCH CALLED, NOT RESOLVED UNILATERALLY (rule 25.c / who-holds-the-wrench).** Dispatched to Langston, naming CC-C, 2026-09-03 06:37Z. **Three options put: (a) I take the exit half · (b) the whole row transfers to me · (c) it returns to CC-C. My recommendation is (c).** ⛔ **NO SCOPE DRAFTED AND NO CODE TOUCHED UNTIL THIS IS ANSWERED** — two sessions building the same gate is precisely the collision the rule exists for.
+
+---
+
+✅ **THE MEASUREMENT RE-DERIVED AT THE OBJECT, WHOLE POPULATION, WITH A POSITIVE CONTROL.** `/var/log/dawntrader/system-alerts.jsonl`, **789 rows, no rotated predecessor** ⇒ this is the entire retained history and not a tail.
+
+| | count | share |
+|---|---|---|
+| `Exit checks skipped — mark older than ceiling` | **178** | — |
+| ...outside US regular hours (weekday nights) | **155** | 87.1% |
+| ...weekend | **22** | 12.4% |
+| ⭐ **...INSIDE US regular hours** | **1** | **0.6%** |
+
+★ **POSITIVE CONTROL, and it is what makes the number mean anything: the SAME classifier over the other 611 alerts of every other kind gives 15.1% inside regular hours.** ⇒ **the classifier discriminates; the 0.6% is a property of THIS alert class, not of when the log happens to be busy.** The single exception is `DD/USD`, 2026-08-05 09:47 ET, already resolved — **the one Kyle explicitly carved out.**
+
+---
+
+⛔⛔ **AND THE PART THAT CHANGES THE DESIGN: DO NOT BUILD THE US MARKET HOLIDAY CALENDAR. WE ALREADY RECEIVE THE SESSION STATE AND THROW IT AWAY.**
+
+**(a) THERE IS NO HOLIDAY RULE, AND THAT IS BY DESIGN, NOT BY OVERSIGHT.** Every occurrence of `holiday` in the tree outside tests is a **COMMENT** — verified across `server/`, `shared/`, `client/`; not one is a date, a list or a predicate. `market-hours.ts:25` states the exclusion in its own header: *"NOT included: US equity holidays (Thanksgiving, etc.) and partially-shortened sessions. Both produce false-open results for a handful of days/year"* — and prescribes the remedy shape: *"a module_constant `xstockMarketHoursOverride`; the shape would be a list of (date, status) overrides consulted before this default."* ⇒ **bug-taxonomy outcome (2): working exactly as designed and documented; what is missing is a DECISION. NOT a defect, and it is not being treated as one.**
+
+**(b) KRAKEN ALREADY TELLS US, PER SYMBOL, AND NOTHING READS IT.** `is_extended_hours` arrives on the equities feed and is written to `xstock_spot_ticker_snap` by `equity-spot-archiver.ts:201`. **Re-derived independently of CC-C's row: across the whole tree the only TypeScript occurrences are three archiver writes plus the schema column at `shared/schema.ts:5060`. ZERO READERS.** *(Positive control: the same search returns ten files for `xstock_spot_ticker_snap`, so the instrument is not blind.)*
+
+✅ **AND IT IS REAL DATA, NOT AN EMPTY COLUMN — measured over `65,133,173` rows spanning 2026-08-04 → 2026-09-03:**
+
+| | |
+|---|---|
+| rows with **NO** session flag (null) | **0** |
+| `is_extended_hours = false` (regular session) | 47,875,626 — 73.50% |
+| `is_extended_hours = true` (extended) | 17,258,505 — 26.50% |
+
+**It tracks the session boundary exactly.** By ET hour over the last 7 days, hours **10–15 are ~100% regular** and hours **00–08 and 17–23 are ~100% extended**, with hour 09 and hour 16 mixed — i.e. the 09:30 open and the 16:00 close, landing where they should. Per-day over ET 10:00–15:59: **every open weekday is 100.00% regular on ~2.0M rows; Sunday 2026-08-30 is 0.21% regular on 479 rows; Saturday 2026-08-29 has no rows in those hours at all.**
+
+★ **WHY THIS BEATS A CALENDAR, and it is not a preference: a calendar PREDICTS the session; the venue flag OBSERVES it.** The flag is automatically right about **half-days**, about **a holiday falling on a Saturday and observed the preceding Friday**, and about an **unscheduled close or halt** — three cases a hand-maintained date list gets wrong unless someone writes three more rules, each being a thing that fails once a year in a way nobody notices until it fires. **And a calendar must be maintained forever by whoever remembers.**
+
+⚠️⚠️ **THE HONEST LIMIT, STATED BEFORE ANYONE BUILDS ON IT: THE HOLIDAY CASE IS UNTESTED AND CANNOT BE TESTED FROM RETAINED DATA.** Retention begins **2026-08-04** and **there is no US market holiday between then and today** ⇒ whether the flag reads `extended` through a closed Monday, or is a naive clock that reads `regular` exactly like any weekday, is **UNKNOWN**. ⛔ **Nobody may assert the flag handles holidays until this is measured.** *(This is also why Kyle's question — "is the holiday rule working" — could not be answered from July 4: that date is outside retention, and in 2026 it fell on a Saturday with the holiday observed Friday 2026-07-03, before the window in any case.)*
+
+⭐ **SO IT IS PRE-REGISTERED NOW, BEFORE THE DAY, RATHER THAN FITTED AFTER IT — LABOR DAY, MONDAY 2026-09-07, ET 10:00–15:59, over `xstock_spot_ticker_snap`:**
+- **PREDICTION A — the flag is session-aware:** `pct_regular` collapses to ≈0% and the row count collapses from ~2.0M toward the weekend's ~500. ⇒ **the flag can carry the policy and NO calendar is built.**
+- **PREDICTION B — the flag is a naive clock:** `pct_regular` reads ~100.00% on ~2.0M rows, **indistinguishable from the eight ordinary weekdays baselined above.** ⇒ **the flag CANNOT stand in for a holiday calendar and the calendar argument returns.**
+★ **A SECOND, INDEPENDENT DISCRIMINATOR THAT DOES NOT USE THE FLAG AT ALL: the row COUNT itself.** ~2.0M on an open weekday vs 479 on the Sunday is a 4,000× separation, so **volume alone detects a closed session even if the flag is naive.** ⚠️ **Stated as an observation, not adopted as the mechanism — a volume threshold would also fire on a feed outage, which is the exact fault this policy must NOT suppress.**
+
+⚠️ **TIMING COLLISION THAT BINDS WHOEVER TAKES THIS.** `#951`'s observation window runs **to 2026-09-07**, and `price-skip-paper-BABA/USD` (`b31833f3`) is **already acked-not-resolved inside it**, so skip alerts on that symbol cannot re-mint during the window that exists to measure them. **Suppressing more of this class before 09-07 damages that measurement further.** ⇒ **on this entry's own open question — stop EMITTING or stop NOTIFYING — the recommendation is STOP NOTIFYING and KEEP THE RECORD**, so the suppression is countable rather than invisible. **That is also what Langston's criterion (ii) needs in order to count anything.** ★ **Note Labor Day is the same day `#951`'s window closes.**
+
+**HOME: unchanged in substance — `B-XSTOCK-SESSION-FRESHNESS`, `PHASE_19_PLAN` row `3b.f-c`. What is OPEN is WHO holds it, which is with Langston and CC-C as of 06:37Z.** ⚠️ **No date, per §9.4 — except the 2026-09-07 observation, which is a measurement window whose LENGTH is the point, not a due date.**
 
 ### #989 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; found answering Kyle's question — *"how do we know it's working, and can that be taken as had the rope pulled or is still alive and kicking"*) — ⛔ A TOKEN CAN LOSE 99.8% OF ITS LIQUIDITY AND THE STUDY STILL COUNTS IT ALIVE
 
