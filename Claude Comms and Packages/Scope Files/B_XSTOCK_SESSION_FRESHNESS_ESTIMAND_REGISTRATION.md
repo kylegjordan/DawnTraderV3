@@ -130,6 +130,65 @@ is large, `ceiling` collapses toward the floor, and D goes empty for that symbol
 get no relaxation at all.** That is the design working — and it is also why arm 3 matters, since a
 classwide σ hides exactly this discrimination.
 
+## 10. LANGSTON'S SIX CONDITIONS — FOLDED IN, ALL BEFORE ANY COMPUTATION
+
+> Accepted 2026-09-03 07:34Z with six additions, each pre-registration and each cheap. He
+> independently re-derived `active_fill_max_age_ms = 15000` and `budget_k 0.5 / floor_ms 15000 /
+> cap_ms 300000` at the live DB and both code sites, and confirmed the §8 finding: *"pure
+> one-directional relaxation, confirmed independently. That reframing is correct and I want it
+> carried in the record, not softened."*
+
+### 10.1 — RECONCILE AGAINST THE DIRECT INSTRUMENT (his condition 1, and it is the sharpest)
+⛔ **The positive control in §6 validates the AGE instrument, not the OBJECT.** `refused_today` is
+reconstructed from VTS `inserted_at` — the ADJACENT lane — while the gate has a direct instrument in
+`_staleSkips` and `raiseStaleFillAlert`. **That is his own `#675` shape: a true measurement on the
+adjacent object.**
+⇒ **RECONCILIATION, pre-registered:** every alert-minted refusal in the window MUST appear as a
+reconstructed refusal. Mints are a strict subset of refusals (the key is global, so a refusal while
+another symbol's row is active mints nothing), so **containment is the testable direction: a mint
+with no matching reconstructed refusal means the reconstruction is on the wrong lane and the run is
+void.** `_staleSkips` itself cannot serve — in-memory, lost at every restart.
+
+### 10.2 — THE INSERT-TO-GATE OFFSET IS BOUNDED, NOT MERELY OBSERVED (condition 2)
+Observed on the three probes: **67, 90, 108 ms**, one-directional (understating age).
+**Pre-registered bound: 150 ms.** Reported beside the estimate: the count of attempts whose `age(a)`
+sits within 150 ms of `L`, i.e. every verdict the bound could flip. **Stress at ±500 ms as well; a
+sign flip under either ⇒ INCONCLUSIVE, never PASS.**
+
+### 10.3 — THE THREE ADJECTIVES, PINNED TO NUMBERS BEFORE THE DATA (condition 3)
+| adjective | pinned value | why this value |
+|---|---|---|
+| D is "trivially small" | **n(D) < 30** | below 30 the p95 rests on fewer than two tail order statistics, so any tail claim is noise rather than evidence |
+| the risk test's tail statistic | **p95 of `realized_adverse_move(a) / (budget_k × room(a))`; FALSIFIED if p95 ≥ 1.0** | the budget is a PER-ATTEMPT bound, so the ratio is the natural unit; p95 not max (one outlier tick must not decide it) and not median (the bar is about tail risk, not typical behaviour) |
+| arm (c)'s "most of D" | **> 50% of D resolving σ classwide** | above half, the majority of the evidence carries no symbol-specific σ, so the aggregate cannot speak to symbol-level risk |
+⛔ **These are fixed here so the verdict cannot be chosen once the distribution is visible.**
+
+### 10.4 — THE TRADING-CALENDAR FILTER, NAMED (condition 4)
+Attempts qualify only when `inserted_at` falls inside the **24/5 window: Sunday 20:00 ET to Friday
+20:00 ET**. ⚠️ **Named explicitly because my own earlier refusal shares on this exact question were
+weekend-contaminated — regular-hours stale clock read 14.0% and was 5.5% once the window was
+enforced — and were deleted rather than corrected.** **Holidays: none in 2026-08-20 to 2026-09-02;
+that span sits between Independence Day and Labor Day (2026-09-07). Stated as a calendar fact about
+THIS window, not as a property of the filter, which remains holiday-blind.**
+
+### 10.5 — DEPLOY-BOUNDARY SPLIT (condition 5, and it is my own batch that causes it)
+**F-G-1 deployed 2026-08-28, mid-window, and it rounds entry and stop onto the venue tick grid — the
+exact two columns `room(a)` is computed from.** ⇒ **A window straddling a deploy is TWO populations.**
+Pre-registered: report D **split at 2026-08-28**, both arms separately. Pool only if
+`budget_k × room` is shown immaterially changed across the boundary, and **show that rather than
+assert it.**
+
+### 10.6 — THE ONE-DIRECTIONAL PROPERTY IS A COINCIDENCE OF TWO VALUES, NOT A DESIGN GUARANTEE (condition 6)
+⛔⛔ **`floor_ms` (module `mark_staleness`) and `active_fill_max_age_ms` (module
+`xstock_fill_safety`) are INDEPENDENTLY SETTABLE IN DIFFERENT MODULES. They are equal at 15,000 ms
+TODAY, by coincidence.** ⇒ **the "cannot tighten" guarantee in §8 INVERTS SILENTLY the first time
+either knob moves, and nothing would announce it.**
+⇒ **The claim is stamped with BOTH values as read on 2026-09-03, and an invariant test ships with
+any mechanism built on it.** §13 disposition: **fold into the work in hand** as a registration
+condition — not a new batch, no date.
+
+---
+
 ## 9. What this registration does NOT do
 
 ⛔ **It leaves entry behaviour UNGATED for this close (Langston C4).** It is a delivered
