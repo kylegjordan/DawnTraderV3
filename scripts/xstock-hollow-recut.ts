@@ -6,10 +6,12 @@
  *
  * BASIS ORDER (audit §A.11 / P6; Langston C3) — the first that applies:
  *   (a) the row carries `exit_decision_price`            → basis `decision_price`: the price that DROVE
- *       the exit, judged with the book-state predicate against the archived frame at the close instant.
- *       The decision frame is reconstructed on the side that departed: a stop decision below the
- *       archived mid implies the BID that produced it (ask held); a target decision above it implies the
- *       ASK. The 21 such rows are the only historical rows that saw their own decision frame.
+ *       the exit, judged with the book-state predicate. The decision frame is reconstructed on the side
+ *       that departed (a stop decision below the archived mid implies the BID that produced it; a target
+ *       decision above it implies the ASK); the other side and `last` are the ARCHIVED frame's; the
+ *       comparator is the two-sided frame before it. ⛔ OVER-CALLS BY CONSTRUCTION: the archive dropped
+ *       the true decision frame (§A.11), so the "held" side is the archive's, and a genuine two-sided
+ *       move can read hollow. The over-call rate on the body-close control cohort is printed.
  *   (b) `closed_at` falls inside a handoff minute (00:15 / 20:15 / 08:15 UTC ± 60 s), no decision price
  *                                                          → basis `minute_proxy`, state `hollow`. A PROXY
  *       with an UNMEASURED base rate (26 rows at deploy) — which is why every consumer of the label must
@@ -77,6 +79,10 @@ async function main(): Promise<void> {
   const counts: Record<string, number> = { decision_price: 0, minute_proxy: 0, market_state_predicate: 0, unknown: 0 };
   const stateCounts: Record<string, number> = {};
   const controls: string[] = [];
+  // The DISCRIMINATING control: session-body closes that carry a decision price (the archive reproduces
+  // their decision to ≤0.03 %). Any `hollow` here is the basis over-calling a genuine move — a number,
+  // printed, so the reader knows how much to trust basis `decision_price`.
+  const bodyControl: string[] = [];
 
   for (const r of rows) {
     // the archived frame at/before the close, and the prior two-sided frame before THAT
@@ -96,14 +102,23 @@ async function main(): Promise<void> {
     } : { priorTwoSidedMid: null, priorBid: null, priorAsk: null, priorLast: null, trailingMedianSpreadFrac: null };
 
     let basis: string | null = null; let state: string | null = null; let note = '';
-    if (r.exit_decision_price !== null && prior) {
-      // (a) reconstruct the decision frame on the side that departed, the other side held.
+    if (r.exit_decision_price !== null && prior && cur) {
+      // (a) reconstruct the decision frame on the side that departed; the OTHER side and `last` come
+      // from the ARCHIVED frame at/before the close (`cur`), and the comparator from the two-sided frame
+      // before it (`prior`) — so the hold checks compare DATA to DATA. ⛔ WHAT THIS BASIS CAN AND CANNOT
+      // SEE (Langston Step-4 point 5): a first draft set the held side to `prior`'s own value, which made
+      // every hold check TRUE BY CONSTRUCTION and collapsed the basis to a bare departure-magnitude test.
+      // Even now the held side is the ARCHIVE's frame, not the decision frame's (which the archive
+      // dropped, §A.11), so this basis OVER-CALLS: a genuine >1 % two-sided move whose other side the
+      // archive caught late can read `hollow`. The over-call rate is printed below on the body-close
+      // control cohort, and the basis name says `decision_price`, not `guard`.
       const dp = r.exit_decision_price; const priorMid = priorInput.priorTwoSidedMid!;
       const frame = dp < priorMid
-        ? { bid: 2 * dp - prior.ask, ask: prior.ask, last: prior.last }   // a decision BELOW the mid: the bid produced it
-        : { bid: prior.bid, ask: 2 * dp - prior.bid, last: prior.last };  // a decision ABOVE the mid: the ask produced it
+        ? { bid: 2 * dp - (cur.ask ?? prior.ask), ask: cur.ask ?? prior.ask, last: cur.last }   // a decision BELOW the mid: the bid produced it
+        : { bid: cur.bid ?? prior.bid, ask: 2 * dp - (cur.bid ?? prior.bid), last: cur.last };  // a decision ABOVE the mid: the ask produced it
       const res = assessBookState({ ...frame, ...priorInput }, CFG);
       basis = 'decision_price'; state = res.state; note = res.reasons.join('|');
+      if (!inHandoffMinute(r.closed_at)) bodyControl.push(`${r.symbol} ${r.closed_at.toISOString()} → ${state} (${note})`);
     } else if (inHandoffMinute(r.closed_at)) {
       basis = 'minute_proxy'; state = 'hollow'; note = 'clock-proxied; base rate unmeasured';
     } else if (cur && (r.closed_at.getTime() - cur.captured_at.getTime()) / 1000 <= BODY_FRAME_MAX_AGE_S) {
@@ -122,6 +137,8 @@ async function main(): Promise<void> {
   console.log(`[recut] by basis:state: ${JSON.stringify(stateCounts)}`);
   console.log(`[recut] positive controls (decision_price rows that must read hollow):`);
   for (const l of controls) console.log(`   ${l}`);
+  console.log(`[recut] DISCRIMINATING control — session-body closes with a decision price (should read two_sided; any hollow = the basis over-calling a real move): ${bodyControl.filter(l => l.includes('→ hollow')).length} hollow of ${bodyControl.length}`);
+  for (const l of bodyControl) console.log(`   ${l}`);
   await c.end();
 }
 main().catch(e => { console.error('[recut] FATAL', e); process.exit(1); });

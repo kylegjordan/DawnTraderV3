@@ -10,7 +10,7 @@
  * be listed in `b72-warmup.ts` `PREFETCH_MODULES` or every sync read below throws on a cold cache
  * — the exact omission that took staging down on 2026-07-22 for `mark_staleness`.
  */
-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+import { getCachedNumberRequired, getCachedNumbersForModule } from '../../services/module-constants-service.js';
 import { BOOK_STATE_KNOBS, BOOK_STATE_MODULE, type BookStateConfig, type BookStateKnob } from './book-state.js';
 
 const KEY = { exchange: '*', assetClass: 'xstock_spot' as const, strategy: '*', regime: '*' };
@@ -48,11 +48,17 @@ export function resolveBookStateConfigSync(): BookStateConfig {
  * precedent). Returns the values so the warmup can log them.
  */
 export function assertBookStateKnobsAtBoot(): Record<BookStateKnob, number> {
-  const r = readBookStateKnobs();
-  const names = Object.keys(r);
-  if (names.length !== 12 || BOOK_STATE_KNOBS.length !== 12) {
-    throw new Error(`[B-XSTOCK-FEED-SANITY][warmup] book_state must have exactly 12 xstock_spot rows — got ${names.length} (${names.join(',')})`);
+  // ⛔ THE ROW SET IS READ FROM THE CACHE, NOT REBUILT FROM THE LIST (Langston Step-4 condition):
+  // iterating BOOK_STATE_KNOBS can only ever see the twelve names it iterates — a THIRTEENTH
+  // xstock_spot row (a future batch's stray seed) would be invisible. `getCachedNumbersForModule`
+  // returns whatever rows the module actually holds for the key; the set must EQUAL the list.
+  const live = getCachedNumbersForModule(BOOK_STATE_MODULE, KEY);
+  const liveNames = Object.keys(live).sort();
+  const wanted = [...BOOK_STATE_KNOBS].sort();
+  if (liveNames.length !== 12 || wanted.length !== 12 || liveNames.some((n, i) => n !== wanted[i])) {
+    throw new Error(`[B-XSTOCK-FEED-SANITY][warmup] book_state must hold EXACTLY the twelve xstock_spot rows named in BOOK_STATE_KNOBS — live rows: ${liveNames.length} (${liveNames.join(',')}); expected: ${wanted.join(',')}`);
   }
+  const r = readBookStateKnobs();
   const fail = (msg: string): never => { throw new Error(`[B-XSTOCK-FEED-SANITY][warmup] book_state ${msg} — refusing to start (fail-closed, no silent default)`); };
   if (!(r.enabled === 0 || r.enabled === 1)) fail(`enabled=${r.enabled} must be 0 or 1`);
   if (!(r.single_side_departure_k_rel > 0)) fail(`single_side_departure_k_rel=${r.single_side_departure_k_rel} must be > 0`);

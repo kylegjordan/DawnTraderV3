@@ -1854,12 +1854,15 @@ export const closedTradesTable = pgTable("closed_trades", {
   exitTickerBid: decimal("exit_ticker_bid", { precision: 20, scale: 10 }),
   exitTickerAsk: decimal("exit_ticker_ask", { precision: 20, scale: 10 }),
   /** ★ B-XSTOCK-FEED-SANITY (`#943`, closes `#567`) — WHAT THE BOOK LOOKED LIKE. A LABEL, NEVER MONEY.
-   *  `exit_book_state` ∈ {two_sided, hollow, unknown} at the DECISION instant; `exit_book_state_at_fill`
-   *  the same at the FILL instant (a resting maker fill consulted no book ⇒ `unknown`); both NULLABLE,
-   *  NO DEFAULT (a pre-deploy row must stay distinguishable from a missed stamp, #546).
+   *  `exit_book_state` ∈ {two_sided, hollow, unknown} at the DECISION instant (`unknown` = the guard
+   *  LOOKED and had no comparator yet); `exit_book_state_at_fill` the same at the FILL instant (a resting
+   *  maker fill consulted no book ⇒ NULL — no assessment, not `unknown`); both NULLABLE, NO DEFAULT
+   *  (a pre-deploy row must stay distinguishable from a missed stamp, #546). ⛔ A VALUE IS A LOOK THAT
+   *  HAPPENED; A NULL IS RE-CUTTABLE: crypto, a disabled guard, cold knobs, no tick and a flatten with no
+   *  decision verdict all leave NULL — never `unknown` under basis `guard` (Langston Step-4 B2).
    *  ⛔ NEVER READ THE STATE WITHOUT ITS BASIS. `exit_book_state_basis` ∈ {guard, decision_price,
-   *  market_state_predicate, minute_proxy} says what produced the label: `guard` = the live in-memory
-   *  frame at the instant (the only basis that saw the decision frame); `decision_price` = the row's
+   *  market_state_predicate, minute_proxy} says what produced the label: `guard` = a live in-memory
+   *  frame WAS ASSESSED at the instant (the only basis that saw the decision frame); `decision_price` = the row's
    *  own exit_decision_price against the archive; `market_state_predicate` = the archived frame ≤5s
    *  before close (session bodies only — the archive keeps one row per symbol per 4s and MISSES the
    *  handoff decision frames, audit §A.11); `minute_proxy` = the close fell in a handoff minute and

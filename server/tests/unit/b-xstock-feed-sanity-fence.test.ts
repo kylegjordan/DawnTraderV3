@@ -76,17 +76,29 @@ describe('F-C3 — every production reader of exit_book_state also reads exit_bo
   // or TS `===`/`!==`) — not a line that ASSIGNS it (the writers: `exitBookState:` / `set exit_book_state`).
   const readerRe = /exit_book_state\s*(=|<>|!=|IS DISTINCT FROM|IN\s*\()|exitBookState\s*(===|!==)|\.exitBookState\s*(===|!==)/;
   const files = walk(SERVER).concat(walk(join(ROOT, 'scripts')));
-  const readers: Array<{ file: string; line: string }> = [];
+  // The STATEMENT a reader sits in: from its line to the first line that closes it (`;`, or a
+  // template/SQL literal end), capped at 8 lines — NEVER the whole file (Langston Step-4 condition:
+  // a same-file test passes on an unrelated mention 6,000 lines away the day P7 lands in routes.ts).
+  function statementOf(lines: string[], i: number): string {
+    const out: string[] = [];
+    for (let j = i; j < Math.min(lines.length, i + 8); j++) { out.push(lines[j]); if (/;\s*$|`\s*[,)]?\s*$/.test(lines[j]) && j > i) break; if (j === i && /;\s*$/.test(lines[j])) break; }
+    return out.join('\n');
+  }
+  const readers: Array<{ file: string; line: string; statement: string }> = [];
   for (const f of files) {
     const lines = code(readFileSync(f, 'utf8')).split('\n');
-    for (const l of lines) if (readerRe.test(l)) readers.push({ file: f, line: l.trim() });
+    for (let i = 0; i < lines.length; i++) if (readerRe.test(lines[i])) readers.push({ file: f, line: lines[i].trim(), statement: statementOf(lines, i) });
   }
-  it('every derived reader references the basis on the same line or in the same file', () => {
+  it('every derived reader references the basis in the SAME STATEMENT', () => {
     for (const r of readers) {
-      const src = code(readFileSync(r.file, 'utf8'));
-      const ok = /exit_book_state_basis|exitBookStateBasis/.test(r.line) || /exit_book_state_basis|exitBookStateBasis/.test(src);
-      expect(ok, `${r.file}: ${r.line}`).toBe(true);
+      expect(/exit_book_state_basis|exitBookStateBasis/.test(r.statement), `${r.file}: ${r.line}`).toBe(true);
     }
+  });
+  it('CONTROL: statementOf stops at the statement, so a basis mention elsewhere in the file cannot satisfy it', () => {
+    const lines = ["const x = row.exitBookState === 'hollow';", '', '', "// exitBookStateBasis mentioned far away"];
+    expect(/exitBookStateBasis/.test(statementOf(lines, 0))).toBe(false);
+    const multi = ["where exit_book_state = 'hollow'", "  and exit_book_state_basis in ('guard','decision_price')`;"];
+    expect(/exit_book_state_basis/.test(statementOf(multi, 0))).toBe(true);
   });
   it('CONTROL: the reader regex fires on the P7 predicate shape and on a bare comparison', () => {
     expect(readerRe.test("AND NOT (exit_book_state = 'hollow' AND exit_book_state_basis IN ('guard','decision_price'))")).toBe(true);

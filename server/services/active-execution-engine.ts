@@ -1292,8 +1292,9 @@ export class ActiveExecutionEngine {
                 continue;
               }
               // `disabled` (knob enabled=0) or `no_tick` (unreachable here — the tick was read above;
-              // kept for the union): the guard is inert on this tick and the row says `unknown`.
-              bookStateAtDecision = 'unknown';
+              // kept for the union): the guard did NOT assess a frame, so the label stays NULL —
+              // basis `guard` asserts a look that happened, and a guard-off era must stay re-cuttable
+              // (the re-cut selects `exit_book_state IS NULL`; Langston Step-4 BLOCKER-2).
             } else {
               const { result: _r, cfg: _c, raw: _raw } = _bs;
               const _streak = this._bookStateSkipStreak.get(position.id) ?? 0;
@@ -1547,6 +1548,10 @@ export class ActiveExecutionEngine {
           // stamped HERE (once per position per tick) and persisted at the close under basis `guard`.
           bookStateAtDecision,
           bookStateYielded,
+          // The exact skip/yield record — `_recordBookStateEvent` mutates `position.metadata` on EVERY
+          // tick and throttles only the row write; `closePosition` re-fetches the row, so the closed
+          // row must take this in-memory copy or lag by up to 9 skips (Langston Step-4 point 3).
+          bookStateRecord: ((position.metadata as Record<string, any> | null)?.bookState as Record<string, unknown> | undefined) ?? null,
         };
 
         const tickEntry = {
@@ -2236,6 +2241,9 @@ export class ActiveExecutionEngine {
          *  the guard YIELDED (acted at `hollow_skip_cap` on a still-hollow book). Basis is `guard`. */
         bookStateAtDecision?: BookState | null;
         bookStateYielded?: boolean;
+        /** The loop's IN-MEMORY `metadata.bookState` at the decision (every skip counted, every tick);
+         *  `closePosition` re-fetches the row, whose copy is throttled, so the closed row takes THIS. */
+        bookStateRecord?: Record<string, unknown> | null;
       };
     }
   ): Promise<void> {
@@ -2311,8 +2319,8 @@ export class ActiveExecutionEngine {
       actualExitPrice = _mLimit;
       exitFee = _mNotional * _mRate;
       _exitSlippageOverride = 0;
-      // A resting fill consulted no book — `unknown` is the honest fill-instant label (audit A.3).
-      _bsAtFill = _closeClass === 'xstock_spot' ? 'unknown' : null;
+      // A resting fill consulted no book — NO fill-instant assessment happened, so the label stays
+      // NULL (an `unknown` under basis `guard` would assert a look that never was — Langston B2).
       console.log(`[P19-B8.6][MAKER_EXIT_FILL:${this.mode}] ${position.symbol}: filled the resting exit at ${_mLimit} (maker rate ${(100 * _mRate).toFixed(2)}%, fee ${exitFee.toFixed(4)}, slippage 0 by construction)`);
     } else {
       const _closeCfg = _closeClass ? await resolveFillDepthGateConfig(_closeClass) : null;
@@ -2320,7 +2328,7 @@ export class ActiveExecutionEngine {
       // taker walk proceeds on the ladder as it is (a flatten must close); the row records the verdict.
       if (_closeClass === 'xstock_spot') {
         const _bsNow = assessBookStateNow(position.symbol);
-        _bsAtFill = _bsNow.ok ? _bsNow.result.state : 'unknown';
+        _bsAtFill = _bsNow.ok ? _bsNow.result.state : null; // not-ok = no frame assessed ⇒ NULL, re-cuttable
       }
       const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass) : null;
       // OBJ-1: the FILL-time depth age — taken two lines before the walk that consumes it, with no
@@ -2575,8 +2583,9 @@ export class ActiveExecutionEngine {
           if (_pm.fg2Shadow) _carry.fg2Shadow = _pm.fg2Shadow;
           // B-XSTOCK-FEED-SANITY: the guard's skip/yield record rides onto the closed row beside the
           // label (with `yielded` explicit), the same mechanism as fg2Shadow. Only when present — never a wipe.
-          if (_pm.bookState || options?.exitProvenance?.bookStateYielded) {
-            _carry.bookState = { ...(_pm.bookState ?? {}), yielded: options?.exitProvenance?.bookStateYielded === true };
+          const _bsRec = options?.exitProvenance?.bookStateRecord ?? _pm.bookState; // the in-memory copy is exact
+          if (_bsRec || options?.exitProvenance?.bookStateYielded) {
+            _carry.bookState = { ...((_bsRec as Record<string, unknown> | undefined) ?? {}), yielded: options?.exitProvenance?.bookStateYielded === true };
           }
           return Object.keys(_carry).length
             ? { metadata: { ...(((trade as any).metadata as Record<string, unknown> | null) ?? {}), ..._carry } }
@@ -2662,11 +2671,12 @@ export class ActiveExecutionEngine {
         exitTickerAsk: options?.exitProvenance?.tickerAsk != null
           ? options.exitProvenance.tickerAsk.toString()
           : (_witness ? _witness.ask.toString() : null),
-        // ── B-XSTOCK-FEED-SANITY P5 — THE LABEL, outside every money expression. Basis `guard` = the
-        // live in-memory frame. Decision-instant: the exit stamp's verdict; a flatten through
-        // `forceClosePosition` carries none, so its decision label is `unknown` and its fill label is
-        // read above. NULL on crypto (no guard) and on rows not written here.
-        exitBookState: options?.exitProvenance?.bookStateAtDecision ?? (_bsAtFill !== null ? 'unknown' : null),
+        // ── B-XSTOCK-FEED-SANITY P5 — THE LABEL, outside every money expression. Basis `guard` means
+        // A LIVE FRAME WAS ASSESSED at that instant, and is written only when one was: the decision
+        // label is the exit stamp's verdict or NULL (a flatten through `forceClosePosition` carries
+        // none — NULL, not `unknown`); the fill label is read above or NULL (maker leg, guard off).
+        // NULL on crypto (no guard) and on rows not written here. A NULL is re-cuttable; a value is a look.
+        exitBookState: options?.exitProvenance?.bookStateAtDecision ?? null,
         exitBookStateAtFill: _bsAtFill,
         exitBookStateBasis: (options?.exitProvenance?.bookStateAtDecision != null || _bsAtFill !== null) ? 'guard' : null,
         totalCost: totalCost.toString(),

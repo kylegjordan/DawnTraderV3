@@ -12973,13 +12973,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // `unknown` for crypto or when the guard has no verdict; basis `guard` = the live frame now.
       // Assigned AFTER the payload literal so its inferred type (and the pre-existing baseline
       // diagnostic keyed on it) is unchanged — the columns exist on closed_trades either way.
+      // Written ONLY when the guard actually assessed a live frame (basis `guard` asserts exactly
+      // that); crypto, a guard that did not run, or no tick ⇒ NULL, re-cuttable (Langston Step-4 B2).
       if ((position as any).assetClass === 'xstock_spot') {
         const { assessBookStateNow } = await import('./asset_classes/xstock_spot/book-state-tracker.js');
         const _bs = assessBookStateNow(position.symbol);
-        Object.assign(closedTradePayload as Record<string, unknown>, {
-          exitBookState: _bs.ok ? _bs.result.state : 'unknown',
-          exitBookStateBasis: 'guard',
-        });
+        if (_bs.ok) {
+          Object.assign(closedTradePayload as Record<string, unknown>, {
+            exitBookState: _bs.result.state,
+            exitBookStateBasis: 'guard',
+          });
+        }
       }
       
       console.log('[8.8.3-B1][CLOSE_TRADE_PAYLOAD]', JSON.stringify(closedTradePayload, null, 2));
@@ -13084,14 +13088,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             openedAt: position.openedAt,
             closedAt: new Date(),
             closeReason: 'stranded_clear',
-            // B-XSTOCK-FEED-SANITY P4: the book-state LABEL at the stranded clear (label only).
-            // `unknown` when the price was the entry fallback — no book produced that number.
+            // B-XSTOCK-FEED-SANITY P4: the book-state LABEL at the stranded clear (label only). Written
+            // ONLY when a live frame was assessed: crypto, the entry-price fallback (no frame behind the
+            // number), or a guard that did not run ⇒ NULL, re-cuttable (Langston Step-4 B2).
             ...(await (async () => {
               if ((position as any).assetClass !== 'xstock_spot') return {};
-              if (fallbackType === 'entry_fallback') return { exitBookState: 'unknown', exitBookStateBasis: 'guard' };
+              if (fallbackType === 'entry_fallback') return {};
               const { assessBookStateNow } = await import('./asset_classes/xstock_spot/book-state-tracker.js');
               const _bs = assessBookStateNow(position.symbol);
-              return { exitBookState: _bs.ok ? _bs.result.state : 'unknown', exitBookStateBasis: 'guard' };
+              return _bs.ok ? { exitBookState: _bs.result.state, exitBookStateBasis: 'guard' } : {};
             })()),
             confidence: position.confidence?.toString(),
             // P19-B8.2 (OBJ-4): carry the at-open ratio stamp (NULL stays NULL).

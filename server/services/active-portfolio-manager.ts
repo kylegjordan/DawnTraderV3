@@ -672,19 +672,18 @@ export class ActivePortfolioManager {
             exitTickerBid: null,
             exitTickerAsk: null,
             // ── B-XSTOCK-FEED-SANITY P4 — THE BOOK-STATE LABEL AT A NON-`closePosition` WRITER.
-            // Label only — a close-all must never be withheld. `unknown` when the price above was
-            // the entry-price fallback (no book produced that number — audit r4) or when the guard
-            // has no verdict (crypto, no tick, knobs cold, disabled). Basis `guard` = the live
-            // in-memory frame at this instant. `at_fill` stays NULL: no fill walk happened here.
+            // Label only — a close-all must never be withheld. Basis `guard` means THE LIVE FRAME WAS
+            // ASSESSED AT THIS INSTANT, so the label is written ONLY when that is true: xStock class
+            // (crypto has no guard — NULL, matching the column comment), a live price (the entry-price
+            // fallback had no frame behind it — NULL, re-cuttable), and a guard that actually ran
+            // (disabled / no tick / knobs cold — NULL, never `unknown`+`guard`; Langston Step-4 B2).
+            // `at_fill` stays NULL: no fill walk happened here.
             ...(await (async () => {
-              if (fallbackType === 'entry_fallback') return { exitBookState: 'unknown', exitBookStateBasis: 'guard' };
-              const _cls = (position as any).assetClass;
-              if (_cls !== 'xstock_spot') return {};
+              if ((position as any).assetClass !== 'xstock_spot') return {};
+              if (fallbackType === 'entry_fallback') return {};
               const { assessBookStateNow } = await import('../asset_classes/xstock_spot/book-state-tracker.js');
               const _bs = assessBookStateNow(position.symbol);
-              return _bs.ok
-                ? { exitBookState: _bs.result.state, exitBookStateBasis: 'guard' }
-                : { exitBookState: 'unknown', exitBookStateBasis: 'guard' };
+              return _bs.ok ? { exitBookState: _bs.result.state, exitBookStateBasis: 'guard' } : {};
             })()),
           } as any);
 
