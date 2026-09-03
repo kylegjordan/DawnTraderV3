@@ -445,6 +445,22 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 **Retired because `.claude/hooks/guard-bare-commit.mjs` REFUSES every bare `git commit` — CLASS coverage, not the instance that surfaced it.** Removed from `CONDUCT.md` §13 in the same commit.
 ⚠️ **Kept here, not deleted:** a retired entry is the RECORD that the pattern was real and is now mechanised. **Deleting it would let the pattern be re-discovered from scratch.**
 
+### `announced-before-done` — **A SUCCESS MESSAGE EMITTED BEFORE THE WORK IT REPORTS CANNOT COME OUT DIFFERENTLY IF THE WORK DID NOT HAPPEN** — **NEW 2026-09-03, n=2 across 2 batches** · mechanism: **NONE YET** · **opened by CC-B on Langston's §13 direction**
+
+⛔⛔ **WHY IT NEEDED ITS OWN SLUG, AND THE REASON IS THE PATTERN ITSELF: IT EXISTED IN THIS FILE AND COULD NOT BE REACHED.** It lived as a ★ RIDER on `fix-follows-pointer`'s instance-1 row (`:231`), whose own text says it *"BELONGS IN THIS FILE TWICE OVER"* — **so it had no slug, could not accumulate instances, and could not be grepped.** ★ **CC-B READ THAT LINE ON THE MORNING OF 2026-09-03 AND COMMITTED THE SAME ERROR HOURS LATER.** ⇒ **a lesson reachable only by reading a neighbouring pattern's instance table is not a mechanism.** *(Langston, having gone to check the citation expecting to correct it: the file's own star line is verbatim the gloss.)*
+
+⚠️ **`verification-weaker-than-claim` IS A NEAR-FIT AND NOT THE FIT — and CC-B first filed instance 2 under it, wrongly.** That slug's headline is **the gate RAN, passed, and could not have failed for the reason that mattered**. **Here NO GATE RAN AT ALL** — the claim was published on the assumption that a preceding step had succeeded. Different failure, different cure.
+
+| # | the announcement | what had actually happened |
+|---|---|---|
+| 1 | `F-G-1` (CC-C, 2026-08): an edit script printed its success line, and the run was reported as done | ⛔ the print came **before** the file write; the script then crashed on a later anchor, **nothing was written**, and the print was read as proof |
+| 2 | `#526` (CC-B, 2026-09-03): a Discord post stated the fold was landed and the query *"committed"* | ⛔ the `git add` had failed on `.gitignore:47`'s blanket `*.sql`, the `&&` chain stopped, **nothing reached origin** — and the post was chained after the push instead of after a read-back **of origin** |
+
+✅ **THE COUNTER-HABIT, cheap and specific: a claim that something LANDED is verified by READING THE DESTINATION, never by the exit code, the tool's own success line, or the fact that the command was issued.** For a push: `git fetch` then read the tree/grep at `origin/<branch>`. ⛔ **Chaining a report after an action with `&&` does NOT verify the action — it only proves the shell got that far.**
+⇔ `fix-follows-pointer` (where this lived as a rider) · `verification-weaker-than-claim` (the gate ran but could not fail — here none ran) · `silence-not-evidence`.
+
+---
+
 ### `silence-not-evidence` — **LIVE — NOT IN §13** · mechanism: **PARTIAL**
 - **2026-09-02 · B-MEASURE-GATE leg 2:** a 2.5 s plain command was read as proof that an agent hook's `if` gate held; it was consistent with the agent answering `ok:true` on every call, and the next non-matching command proved it was running on all of them (scope [r7]).
 **A check that CANNOT FAIL, mistaken for a check that passed.** Silence from a broken instrument is indistinguishable from silence from a healthy one.
