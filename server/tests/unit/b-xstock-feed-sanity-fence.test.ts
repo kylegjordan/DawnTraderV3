@@ -328,11 +328,39 @@ describe('F-CROSSED — the writer refuses a crossed book', () => {
   it('advanceBookStateComparator returns early unless ask >= bid', () => {
     expect(code(TRACKER)).toMatch(/if\s*\(!\(frame\.ask\s*>=\s*frame\.bid\)\)\s*return;/);
   });
-  it('CONTROL: the guard is in the WRITER, not only in the engine call site', () => {
-    expect(code(TRACKER)).toMatch(/frame\.ask\s*>=\s*frame\.bid/);
+  // ⛔ A CONTROL MUST BE ABLE TO COME OUT DIFFERENTLY. The previous version of this one asserted
+  // `frame.ask >= frame.bid` against the WHOLE file — a substring of the assertion above it, so it
+  // could not fail while that one passed. It is now scoped to the WRITER'S OWN BODY, which is the
+  // claim ("the invariant lives in the writer, not the caller") rather than a restatement of it.
+  it('CONTROL: the guard sits inside advanceBookStateComparator, not merely somewhere in the file', () => {
+    const stripped = code(TRACKER);
+    const start = stripped.indexOf('export function advanceBookStateComparator');
+    expect(start).toBeGreaterThan(-1);
+    const rest = stripped.slice(start + 1);
+    const end = rest.search(/^export /m);
+    const body = end === -1 ? rest : rest.slice(0, end);
+    expect(body).toMatch(/if\s*\(!\(frame\.ask\s*>=\s*frame\.bid\)\)\s*return;/);
+    // and the engine call site must NOT be the only home — the caller may still test it, but the
+    // writer's copy is what every future caller inherits.
+    expect(body).toMatch(/frame\.ask/);
+  });
+
+  // ⛔⛔ A BARE NEGATIVE CANNOT TELL "THE CLAIM IS GONE" FROM "MY REGEX NEVER MATCHED ANYTHING"
+  // (#453 / rule 29(b)). MEASURED 2026-09-03, and it is why these two lines are shaped this way:
+  // the first version was case-SENSITIVE (`/advances ONLY on a `two_sided` verdict/`) while the
+  // surviving text was in caps elsewhere in the header — so the fence returned green WITH THE
+  // CLAIM STILL PRESENT. Langston caught it by running both forms. The negatives are now keyed on
+  // the CLASS, case-insensitively, and each is paired with a positive control proving the pattern
+  // can still match the retired wording. Same discipline as F-SEED one describe block up.
+  const STALE_ADVANCE = /advances\s+only\s+on\s+a\s+.?two_sided/i;
+  const STALE_SEED = /on\s+the\s+first\s+two_sided\s+verdict\s+that\s+seeds/i;
+  it('CONTROL: both stale-claim patterns still match the wording they retired', () => {
+    expect('THE COMPARATOR ADVANCES ONLY ON A `two_sided` VERDICT.').toMatch(STALE_ADVANCE);
+    expect('the comparator advances only on a `two_sided` verdict').toMatch(STALE_ADVANCE);
+    expect('seeded on the first two_sided verdict that seeds it').toMatch(STALE_SEED);
   });
   it('no stale claim survives that the comparator advances ONLY on two_sided', () => {
-    expect(TRACKER).not.toMatch(/advances ONLY on a `two_sided` verdict/);
-    expect(TRACKER).not.toMatch(/on the first two_sided verdict that seeds/);
+    expect(TRACKER).not.toMatch(STALE_ADVANCE);
+    expect(TRACKER).not.toMatch(STALE_SEED);
   });
 });

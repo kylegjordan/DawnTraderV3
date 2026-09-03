@@ -2,10 +2,12 @@
  * B-XSTOCK-FEED-SANITY — THE BOOK-STATE TRACKER: the pair's OWN comparator, and the one reader
  * every label site calls.
  *
- * WHAT LIVES HERE. Per xStock symbol, the last frame the predicate read as `two_sided` (its bid,
- * ask, last, mid, time) and a short ring of recent two-sided spreads. That is the "own price
- * history" the binding constraint names (scope §2.1b / §17.1): never a second venue, never the
- * clock, never the session.
+ * WHAT LIVES HERE. Per xStock symbol, the last frame ACCEPTED AS THE REFERENCE (its bid, ask,
+ * last, mid, time) and a short ring of recent accepted spreads. Accepted means: a frame the
+ * predicate read as `two_sided`, OR the one SEEDING frame at a symbol's cold start (see below) —
+ * and in either case only after the writer's own invariants (`mid > 0`, `ask >= bid`) hold.
+ * That is the "own price history" the binding constraint names (scope §2.1b / §17.1): never a
+ * second venue, never the clock, never the session.
  *
  * ★ SIM CROSS-CUTTING RUNTIME STATE — a NEW module singleton, registered as such: `_comparators`
  * is MODE-INVARIANT market data (both engines read the same feed; the same class as S2/S5), one
@@ -15,9 +17,17 @@
  * restart (the FIRST frame after boot seeds it and reads `unknown`; judging starts on the second — which is
  * the honest cold state, and it is labelled).
  *
- * ⛔ THE COMPARATOR ADVANCES ONLY ON A `two_sided` VERDICT. A hollow frame must never become the
- * reference the next frame is judged against — otherwise a sustained hollow run would quietly
- * re-baseline itself into "two_sided" one frame later.
+ * ⛔ A HOLLOW FRAME MUST NEVER BECOME THE REFERENCE the next frame is judged against — otherwise a
+ * sustained hollow run would quietly re-baseline itself into "two_sided" one frame later. THAT is
+ * the invariant. The header used to state it as a rule about WHICH VERDICT PERMITS AN ADVANCE, and
+ * that phrasing was WRONG — so strict that the comparator could never be seeded at all, which is
+ * precisely how this guard shipped INERT on 2026-09-03 (zero `COMPARATOR_SEEDED` in 34 min, five
+ * open positions). ⚠ The retired sentence is NOT reproduced here even as a quotation: `F-CROSSED`
+ * fences the file against that wording, and a fence you are allowed to quote past is not a fence.
+ *
+ * The SEEDING frame is not an exception to the invariant: at cold start there is no reference yet,
+ * so there is nothing a hollow frame could re-baseline. Every OTHER advance still
+ * requires `two_sided`, and the writer refuses a crossed or non-positive-mid frame outright.
  *
  * WHO READS. (1) the exit loop, at the decision instant (and it is the only ADVANCER);
  * (2) `closePosition` at the fill instant; (3) `closeAllPositions` and the two manual routes, for
