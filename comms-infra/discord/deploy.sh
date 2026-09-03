@@ -26,8 +26,30 @@ fi
 "$VENV/bin/pip" install -U "discord.py>=2.3" >/dev/null
 echo "discord.py: $("$VENV/bin/python3" -c 'import discord; print(discord.__version__)')"
 
+# ⛔ PRE-FLIGHT, ABOVE EVERY MUTATION (added 2026-09-03, #995 OBJ-9, Langston BLOCKER-1).
+# Under `set -e` a missing source file aborts MID-DEPLOY: after /usr/local/bin has been
+# written and BEFORE step 6 reinstalls the units and the self-advance drop-in — and #462's
+# own comment in this file says that drop-in silently reverts to Type=simple if a redeploy
+# does not put it back. So a partial deploy DEGRADES THE WATCHDOG rather than failing clean.
+# The existing step-5 sanity check cannot cover this: it runs AFTER step 4 has already
+# mutated /usr/local/bin. Fail before touching anything, and name every missing file at once
+# rather than one per re-run.
+MISSING=""
+for f in discord-cc-bridge.py discord-langston-bridge.py cc-send dt-push-notice.sh \
+         discord-cc-bridge.service discord-langston-bridge.service \
+         discord-bridge-failed-notify@.service \
+         discord-langston-bridge.service.d/self-advance.conf; do
+  [ -f "$BRIDGE_DIR/$f" ] || MISSING="$MISSING\n  - $BRIDGE_DIR/$f"
+done
+if [ -n "$MISSING" ]; then
+  printf "== PRE-FLIGHT FAILED — nothing has been changed. Missing source files:%b\n" "$MISSING" >&2
+  echo "   scp them into $BRIDGE_DIR and re-run." >&2
+  exit 2
+fi
+echo "== 0. pre-flight: all source files present =="
+
 echo "== 3. code (expects files already scp'd to $BRIDGE_DIR) =="
-chmod +x "$BRIDGE_DIR"/discord-cc-bridge.py "$BRIDGE_DIR"/discord-langston-bridge.py "$BRIDGE_DIR"/bridge-failed-notify.sh 2>/dev/null || true
+chmod +x "$BRIDGE_DIR"/discord-cc-bridge.py "$BRIDGE_DIR"/discord-langston-bridge.py "$BRIDGE_DIR"/bridge-failed-notify.sh "$BRIDGE_DIR"/dt-push-notice.sh 2>/dev/null || true
 # world-readable so the langston-user service can import discord_common + the venv
 chmod -R a+rX "$BRIDGE_DIR"
 

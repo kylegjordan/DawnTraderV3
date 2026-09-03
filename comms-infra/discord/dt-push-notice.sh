@@ -61,6 +61,30 @@ if [ -z "$PREV" ]; then
 fi
 [ "$SHA" = "$PREV" ] && exit 0
 
+# ── DRIFT CHECK (added 2026-09-03, #995 OBJ-9, Langston: he asked for it and the reason is
+# that deploy-time convergence CANNOT REACH BETWEEN DEPLOYS — proven the same hour, when the
+# tree held this file and $BRIDGE_DIR did not). deploy.sh installs from $BRIDGE_DIR, not from
+# the tree, and nothing in the repo performs or verifies the scp that populates it. So the
+# repo is source-of-truth VIA A RUNBOOK STEP, and a runbook step is exactly what goes unrun.
+# Compared against the backup mirror, which self-pulls from GitHub every 15 min, so this needs
+# no credential and no working copy. FAIL-QUIET BY DESIGN: any error here (mirror missing,
+# fetch behind, sha unreadable) leaves DRIFT empty and the notice proceeds untouched — a
+# broken drift check must never suppress the notice it rides on.
+MIRROR=/srv/dawntrader-backup.git
+DRIFT=""
+if [ -d "$MIRROR" ]; then
+  LIVE_SHA=$(sha256sum /usr/local/bin/dt-push-notice.sh 2>/dev/null | cut -d" " -f1)
+  TREE_SHA=$(git --git-dir="$MIRROR" show "origin/$BRANCH:comms-infra/discord/dt-push-notice.sh" 2>/dev/null | sha256sum | cut -d" " -f1)
+  if [ -n "$LIVE_SHA" ] && [ -n "$TREE_SHA" ] && [ "$LIVE_SHA" != "$TREE_SHA" ]; then
+    DRIFT="
+⚠️ DRIFT: /usr/local/bin/dt-push-notice.sh on Helsinki does NOT match the tree copy at
+comms-infra/discord/dt-push-notice.sh. One of them was edited without the other. The tree is
+source of truth (§7.1): reconcile, scp into /opt/discord-bridges/, then re-run deploy.sh."
+  fi
+fi
+
+
+
 echo "$SHA" > "$STATE"
 SHORT=$(echo "$SHA" | cut -c1-9)
 
@@ -76,7 +100,7 @@ except Exception: pass
 
 RULES=$(echo "$FILES" | grep -E '^(CLAUDE\.md|CONDUCT\.md|\.claude/hooks/|\.claude/settings\.local\.json)')
 
-MSG="OLD Claude / NEW Claude / ANALYST Claude — review branch moved to ${SHORT}. Pull before you push. (If this is your own push, ignore it.)"
+MSG="OLD Claude / NEW Claude / ANALYST Claude — review branch moved to ${SHORT}. Pull before you push. (If this is your own push, ignore it.)${DRIFT}"
 
 if [ -n "$RULES" ]; then
   LIST=$(echo "$RULES" | sed 's/^/  - /')
