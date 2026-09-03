@@ -124,17 +124,29 @@
 ⇒ ✅ **THE INVARIANT IS PER-LEG TRANSACTABILITY: each leg is expressed on the side THAT LEG transacts at, and R:R is computed from those** — never from a common basis that no leg trades on.
 
 *Verification:* a fence asserting per-leg transactability across the level-setting and trigger sites, **shipped with a positive control proving it can see a mismatch** (the standing rule this crew earned on 2026-09-03: a negative assertion must first prove it can see the thing present).
-⛔ **THE FENCE IS A PURE CONSISTENCY ASSERTION, STATED SO DELIBERATELY: when `F-G-2` OBJ-0 arms the bid-side trigger, this fence must TRIP rather than silently desync.** A fence that tolerates the other batch landing is not guarding the joint.
-⛔⛔ **ORDER, NAMED BECAUSE THE JOINT INVARIANT SPANS TWO BATCHES AND NOBODY OWNS IT (Langston's `#546` point): `F-G-2` OBJ-0 LANDS FIRST — it is deployed, its shadow arm is live, and its window is open. This batch lands SECOND and takes the joint.** If that order changes, this objective is re-scoped, not adapted.
+⛔⛔ **AND r2 STILL HAD IT WRONG — IT PINNED THE FENCE TO AN EVENT THAT DOES NOT OCCUR (Langston BLOCKER-3, re-derived at the ref).** r2 said *"`F-G-2` OBJ-0 lands first — it is deployed."* ★ **THAT CONFLATES THE INSTRUMENTATION DEPLOY WITH THE RUN.** `F_G_2_PROGRESS_REPORT.md:7` — OBJ-0 *"measures the bid-side decision as a SHADOW arm **before switching anything**"*; `:33` — *"the run is NOT armed yet"*. **The live trigger stays on the MID for the whole 14-day window**, and the switch at window close is **conditional** (`:40`: n-floor 20, Wilson upper bound < 5%, else a depth guard is a precondition). ⇒ **my declared trip event has no date and no certainty.**
+
+⇒ ⛔ **AND THE JOINT DOES NOT MOVE TO `F-G-2` EITHER (I asked; the answer was "neither"): `F-G-2` CHANGES NOTHING ON THE LIVE DECISION PATH, SO IT CANNOT OWN A JOINT IT NEVER CREATES.** The joint belongs here, because this batch owns the census.
+
+✅ **SO OBJ-3 SPLITS — IT WAS CARRYING TWO INVARIANTS UNDER ONE NAME:**
+
+**OBJ-3a — PER-LEG LEVEL TRANSACTABILITY. Internal to this batch, assertable, ships with the change.** Each leg expressed on the side that leg transacts at, and R:R computed from those.
+*Verification:* a fence asserting it across the level-setting sites, **with a positive control proving it can see a mismatch**.
+
+**OBJ-3b — LEVEL-BASIS ↔ TRIGGER-BASIS COHERENCE. ⛔ NOT ASSERTABLE DURING THE `F-G-2` WINDOW, AND THAT IS THE WHOLE POINT.** While levels sit on the bid and the trigger still fires on the mid, the two are **deliberately mismatched** — so a pure consistency assertion would **trip on its own landing**, which is a fence that punishes correct work.
+*Verification:* it ships as an **OBSERVATION COUNTER**, not an assertion; **promoted to an assertion at the `F-G-2` switch, and that promotion is a REQUIRED ROW in the switch's own checklist** so it cannot be forgotten by the session that throws the switch.
+
+⛔⛔ **AND THE ORDER IS NOT MINE TO ARRANGE — IT IS SET BY A WINDOW (Langston BLOCKER-4, pre-registered in `F-G-2` §4a this turn).** A level-basis change **moves the thing both `F-G-2` arms are compared against**, which is more perturbing than the two cadence changes A4 already enumerates and is plausibly **VOID-grade** rather than split-grade. ⇒ **OBJ-1, OBJ-2, OBJ-5 and OBJ-6 are READ-ONLY and run NOW, in parallel. Only a crypto DEPLOY is gated — and not before ~2026-09-18.**
+★ **I had written the order as convenience and Langston named it: the honest reason is a measurement window I would otherwise have voided, in a batch I also own.**
 
 **OBJ-4 — READ THE SHADOW ARM PROPERLY WHEN IT HAS A TARGET IN IT.** §2.1 is 6 rows and all stops. **The target side is unmeasured and the lag works the opposite way there.**
 *Verification:* the read is re-run against a population containing at least one `target_hit` on both arms, or it is reported as **still unmeasured on the target side** — never averaged over a population that has none.
 
-**OBJ-6 — FIX THE SITING OF THE ADJUDICATION THIS SCOPE RESTS ON (Langston FINDING-A).** `SYSTEM_MANUAL.md:8439-8440` carries a live-path adjudication inside a block whose status line says *"REMOVED … retained for historical reference only."*
-*Verification:* the text is moved to a live section or marked as live-in-place, and **this scope's §1 citation points at the corrected siting**. ⛔ **Until then §1 quotes it WITH its siting stated** — a live claim sourced from a block labelled historical is a citation that cannot survive its own reader.
-
 **OBJ-5 — RANKING: ARGUE THE "NO CHANGE" EXPLICITLY.** The expected answer is that a mid is correct for ranking, because it is a relative comparison applied identically to every candidate.
 *Verification:* stated out loud with its reason in the pre-audit, not skipped by default (§9 anti-pattern). **If ranking also sets a level, it is an OBJ-1 site and the rule governs it.**
+
+**OBJ-6 — FIX THE SITING OF THE ADJUDICATION THIS SCOPE RESTS ON (Langston FINDING-A).** `SYSTEM_MANUAL.md:8439-8440` carries a live-path adjudication inside a block whose status line says *"REMOVED … retained for historical reference only."*
+*Verification:* the text is moved to a live section or marked as live-in-place, and **this scope's §1 citation points at the corrected siting**. ⛔ **Until then §1 quotes it WITH its siting stated** — a live claim sourced from a block labelled historical is a citation that cannot survive its own reader.
 
 ---
 
