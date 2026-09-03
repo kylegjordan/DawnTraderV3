@@ -48,7 +48,7 @@ He remembers **"we were working on improving Langston and setting him up"** in J
 ### 2b. ⭐⭐ THE FULL DESIGN HAS **THREE** LAYERS, NOT ONE — and Kyle's memory of "we did maybe half" is close to right
 
 > **Kyle, 2026-09-03:** *"it was not only about giving him the ability to archive. We were also… he was writing to a short term memory file, I think, with all of his decisions. This was part of the design that you came up with… We had a whole set of changes that we were working on for Langston, and I think we only did the first third or quarter or half of it."*
-> ⛔ **I did NOT find the original plan document.** Searched: `1-system-manual/`, `Claude Comms and Packages/` (scope files, completion reports, design asks, cross-session briefs), `LANGSTON_ARCHITECTURE.md`, `BUILD_METHOD_PLAYBOOK.md`, and the transcript corpus. **The three `B_LANGSTON_QUEUE*` reports are CC-A's Discord review-QUEUE work, a different thing.** ⚠️ **So the enumeration below is RECONSTRUCTED FROM THE BUILT SYSTEM, not read off a plan — treat it as evidence of what exists and what is missing, NOT as the original list.**
+> ⛔ **SUPERSEDED BY §2c — I DID find it; it was a crew MESSAGE, not a repo document.** *(Original wording kept:)* **I did NOT find the original plan document.** Searched: `1-system-manual/`, `Claude Comms and Packages/` (scope files, completion reports, design asks, cross-session briefs), `LANGSTON_ARCHITECTURE.md`, `BUILD_METHOD_PLAYBOOK.md`, and the transcript corpus. **The three `B_LANGSTON_QUEUE*` reports are CC-A's Discord review-QUEUE work, a different thing.** ⚠️ **So the enumeration below is RECONSTRUCTED FROM THE BUILT SYSTEM, not read off a plan — treat it as evidence of what exists and what is missing, NOT as the original list.**
 
 **WHAT IS ACTUALLY BUILT — three layers, verified on the box 2026-09-03:**
 
@@ -69,6 +69,29 @@ He remembers **"we were working on improving Langston and setting him up"** in J
 ⚠️ **GAP 4 — NO USAGE INSTRUMENT ON ANY LAYER.** Nothing logs a recall query or a memory write. ⛔ **AND AN HONEST LIMIT ON MY OWN NUMBER: I measured that 163 of his 3,680 transcripts reference the auto-memory store — but I did NOT separate "the index LOADED into context" from "he WROTE a memory file that turn". Those are different facts and the distinction is load-bearing** *(this is the `wrong-object` trap, so it is named rather than glossed).* **Whether layer 1 reliably loads at invoke is UNVERIFIED — and `#651` is the precedent that says assume nothing here: his `MEMORY.md` was documented as auto-loading and had NEVER loaded.**
 
 ★ **RECOMMENDED ORDER IF KYLE WANTS THIS RESUMED:** (i) prove layer 1 actually loads at invoke — cheapest, and it is the `#651` failure mode; (ii) give layer 2 a WRITE rule, since layer 3's safety depends on it; (iii) rule which of layer 1 / layer 2 is authoritative and collapse the duplication; (iv) cap and prune layer 1. **`B-LANGSTON-LEDGER-SPLIT` (§3) touches the same files and should be sequenced with these, not separately.**
+
+### 2c. ⭐⭐⭐ **THE PLAN IS FOUND.** It was a THREE-ITEM workstream and I broadcast it myself on 2026-08-05 — **item 1 shipped, item 3 was solved by someone else, ITEM 2 WAS NEVER STARTED**
+
+> ⛔ **§2b said "I did NOT find the original plan document." THAT IS NOW SUPERSEDED — I found it.** It was never a repo file, which is why every folder search missed it: **it is my own crew broadcast in the Discord log, `2026-08-05T10:48:22Z`, sender `Infra Claude`, headed *"WHAT IS BEING BUILT (Kyle-approved, Langston-reviewed)"*.** ★ **Lesson: I searched for a DOCUMENT and the plan was a MESSAGE.** *(Found by date-filtering the crew log on the timestamp inside each record — the method Kyle asked me to prove.)*
+
+**THE THREE ITEMS, VERBATIM FROM THAT BROADCAST, WITH TODAY'S STATE VERIFIED ON THE BOX:**
+
+| # | what I said we were building | state today |
+|---|---|---|
+| **1** | *"**langston-recall** — a pull-only archive index over Langston's complete historical record… Key properties he required: latest-entry-per-ID always returned, retracted conclusions can never surface without their retraction attached, verbatim excerpts only, full provenance per hit."* | ✅ **SHIPPED 2026-08-06, live, used in 203 of his 3,680 sessions.** Every required property is present in the tool's output. |
+| **2** | *"**Instruction-file restructure** — his CLAUDE.md has grown to ~61KB loaded on every invocation. It becomes a **lean core** (identity + invariants + one-line rules with pointers) plus **on-demand rule modules** he reads when the situation triggers them, plus an **automated daily size/staleness watch**."* | ⛔⛔ **NOT STARTED — ZERO OF THREE PARTS.** `/home/langston/rules/` **does not exist**; there is **no size/staleness timer**; the core was never split. ⚠️ **And his `CLAUDE.md` is now `66,994 B` — it has grown `+5,625 B` SINCE the restructure was scoped to shrink it.** |
+| **3** | *"**His Reviewer Ledger** (retractions record) moves to a home that verifiably auto-loads."* | ✅ **ACHIEVED — but not by me and not by the restructure.** CC-A's `B-RULES-1a` OBJ-2 added `@MEMORY.md` (line 3 of his `CLAUDE.md`) on 2026-08-05, hours after my broadcast. **Verified at the object today.** |
+
+⇒ ⭐ **KYLE'S RECOLLECTION — *"we only did the first third or quarter or half"* — IS EXACTLY RIGHT: one of three shipped, one was solved incidentally by another session, and the middle item — THE CLEANUP OF HIS RULES AND MEMORY FILES, which is the part Kyle specifically remembers — was never begun.**
+
+⛔⛔ **AND HERE IS THE CONSEQUENCE THAT MATTERS, BECAUSE IT EXPLAINS §3b: ITEM 2 CONTAINED THE DAILY SIZE/STALENESS WATCH. IT WAS NEVER BUILT — WHICH IS PRECISELY WHY HIS FILE GREW `+137%` OVER 28 DAYS WITH NOBODY NOTICING.** ★ **The alarm that would have caught the growth was itself the thing that was never finished. That is not a coincidence; it is the same gap seen from both ends.**
+
+★ **LANGSTON'S THREE HARD CONDITIONS on item 2, on record from the review rounds (`2026-08-05T14:15Z`) — binding on whoever resumes it:** (i) **the core index carries the one-line RULE, not just a pointer**; (ii) **his ledger retractions auto-load via a verified mechanism**; (iii) **no module is ever named "misc"**. ★ **Condition (ii) is already satisfied by the `@MEMORY.md` import — so resuming item 2 starts with one of three conditions already discharged.**
+
+⛔⛔ **AND A DESIGN DECISION KYLE SHOULD NOT RE-OPEN BY ACCIDENT — THE JOURNAL WAS PROPOSED AND *REJECTED*, NOT FORGOTTEN.** My own broadcast, verbatim: ***"His journal/'window' memory concepts were reviewed and explicitly SHELVED on his own objection — recall is pull-only."***
+⇒ **Kyle's memory of *"he was writing to a short-term memory file with all of his decisions"* is REAL — that concept was designed — but LANGSTON HIMSELF OBJECTED AND IT WAS DROPPED, deliberately, in favour of pull-only.** ⚠️ **The 37-file auto-memory store that exists today is the HARNESS'S OWN native feature, not our shelved journal — a different thing that arrived by another route.** *(§9.5(b-ii): a Kyle-approved, Langston-reviewed DECISION must not be re-scoped later as an unfinished task.)*
+
+★ **ONE MORE THING THE READ TURNED UP, worth keeping: on 2026-08-05 at 10:48Z I broadcast that `/home/langston/MEMORY.md` "does NOT auto-load and never has" — and by 13:15Z the same day CC-A's OBJ-2 had made it false. I corrected it on the record myself at 14:15Z: *"Fastest stale claim I've ever issued."*** ⚠️ **The lesson generalises and is why §3b's corrections are written down rather than quietly fixed: on a system four sessions are changing simultaneously, a measured claim can go stale in HOURS.**
 
 ## 3. The Langston memory-FILE trim — a DIFFERENT job, handed to me by Kyle via Old Claude
 
