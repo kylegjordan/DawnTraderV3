@@ -134,7 +134,20 @@
 *Verification:* a fence asserting it across the level-setting sites, **with a positive control proving it can see a mismatch**.
 
 **OBJ-3b — LEVEL-BASIS ↔ TRIGGER-BASIS COHERENCE. ⛔ NOT ASSERTABLE DURING THE `F-G-2` WINDOW, AND THAT IS THE WHOLE POINT.** While levels sit on the bid and the trigger still fires on the mid, the two are **deliberately mismatched** — so a pure consistency assertion would **trip on its own landing**, which is a fence that punishes correct work.
-*Verification:* it ships as an **OBSERVATION COUNTER**, not an assertion; **promoted to an assertion at the `F-G-2` switch, and that promotion is a REQUIRED ROW in the switch's own checklist** so it cannot be forgotten by the session that throws the switch.
+⛔⛔ **AND r3's ANSWER — "a required row in the switch's own checklist" — WAS WORSE THAN I THOUGHT, AND NOT FOR THE REASON I GUESSED (Langston, r3).** I asked whether a row in someone else's checklist was too weak a home. **It is not weak because it is someone else's. IT IS WEAK BECAUSE NO SUCH CHECKLIST EXISTS AT THE REF, AND ITS TRIGGER IS AN EVENT THAT MAY NOT OCCUR.** `PHASE_19_PLAN.md` has **no switch row and no switch batch**. What `F-G-2` has is a **WINDOW-CLOSE** checklist — and **window close ≠ switch**: the switch is conditional, with a pre-registered branch in which the window closes and **the switch does not happen** (the guard becomes a precondition). ★ **My own §4a says 52 stop-side bid-arm first exits "may well NOT EXIST in 14 days"** — so I homed an obligation in a document that only comes into being on the branch I myself rated least likely. **And `F-G-2` already parks one deferral at that same non-event** (`false_target_rate` → the post-switch calibration decision). **Two deferrals collecting at an undated conditional is §9.4's "queued is not a home", one level up.**
+
+⇒ ✅ **THE FIX IS NOT A HARDER HOME — IT IS NO DEFERRAL AT ALL, AND THE DATES MAKE IT FREE.** This batch's deploy gate is **~2026-09-18**; the `F-G-2` window closes **2026-09-18T16:08Z**. ⇒ ⭐ **`F-G-2`'s DISPOSITION IS ALREADY KNOWN AT OBJ-3b's OWN DEPLOY.** So OBJ-3b is not pre-committed to counter-then-promote; **its FORM is decided at its deploy by reading that disposition:**
+
+| `F-G-2` disposition at window close | OBJ-3b ships as |
+|---|---|
+| **switch THROWN** | ⇒ **an ASSERTION. No counter, no promotion, no residual obligation.** |
+| **switch DEFERRED behind the depth guard** | ⇒ **counter form — AND the guard batch is placed as a REAL PLAN ROW WITH AN OWNER in the same turn, carrying OBJ-3b's promotion as one of its objectives.** ★ **A checklist row dies with its document; a plan row does not.** |
+| **window VOID / re-opened** | ⇒ **re-arms against the new window; the decision is re-taken, never inherited.** |
+| **the mismatch becomes the STANDING state** | ⇒ **OBJ-3b is promoted to an assertion OF THE MISMATCH — never left as a counter of a condition nobody intends to fix.** |
+
+*Verification:* the disposition is read from `F_G_2_PROGRESS_REPORT.md` **at the ref, on the day of this batch's deploy**, and the branch taken is recorded in this scope's status section with the ref it was read at.
+
+⛔⛔ **CONDITION ON THE COUNTER FORM, AND IT CORRECTS AN ASYMMETRY THAT WAS BACKWARDS (Langston r3):** OBJ-3a's fence carries a positive control and the counter carried none — **but the COUNTER is the one whose ZERO gets read at promotion time.** A zero with no control is indistinguishable from a counter that never fired (`#661` leg 3; the F-G-1 *"increments something nothing reads"* shape). ⇒ **the counter ships with (i) a NAMED READER, (ii) a stated READ CADENCE, and (iii) a POSITIVE CONTROL demonstrating it increments on a constructed mismatch — before any zero it reports is read as agreement.**
 
 ⛔⛔ **AND THE ORDER IS NOT MINE TO ARRANGE — IT IS SET BY A WINDOW (Langston BLOCKER-4, pre-registered in `F-G-2` §4a this turn).** A level-basis change **moves the thing both `F-G-2` arms are compared against**, which is more perturbing than the two cadence changes A4 already enumerates and is plausibly **VOID-grade** rather than split-grade. ⇒ **OBJ-1, OBJ-2, OBJ-5 and OBJ-6 are READ-ONLY and run NOW, in parallel. Only a crypto DEPLOY is gated — and not before ~2026-09-18.**
 ★ **I had written the order as convenience and Langston named it: the honest reason is a measurement window I would otherwise have voided, in a batch I also own.**
@@ -160,7 +173,7 @@
 
 ## 6. STATUS
 
-**Step 1 r2 — CHANGES-NEEDED from Langston applied; re-dispatched.**
+**Step 1 r4 — CHANGES-NEEDED (r3) applied; re-dispatched.** ⚠️ **THIS LINE READ "Step 1 r2" ON AN r3 DISPATCH (Langston r3, fix (a)) — in the one section whose entire job is to state status, which already carries a `verification-weaker-than-claim` note for exactly this.** Second instance in the same paragraph; the note below stands and this is its recurrence.
 
 ⛔ **r1 OF THIS SECTION ASSERTED THE BOARD CARD EXISTED. IT DID NOT.** Langston's census returned **77 of 77, `hasNextPage: false`, assertion passed** — a measured absence, not a query that missed it. ★ **A false statement of fact in my own scope, in the one section whose entire job is to state status.** The card now exists (board total 78, verified by the same enumeration), set `Status = Scope`, `Owner = Analyst`, `Blocked on = Langston`.
 
