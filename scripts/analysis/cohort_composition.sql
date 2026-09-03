@@ -70,6 +70,23 @@
 --    (market-cap fields only), `shared/asset-classes.ts` (registry loads from DB, no grouping in
 --    code), `information_schema` (where it was).
 --
+--  ✅ **THE EXIT LEG HAS NOW BEEN MEASURED ON ITS OWN POPULATION — CC-B, 2026-09-03, `0bce9ebea`.
+--     DO NOT RE-DERIVE IT FROM HERE, AND DO NOT TRANSFER THESE NUMBERS TO IT.**
+--     Population: HELD-symbol-minutes — every (symbol, overnight minute) with an xStock position
+--     OPEN, so an exit-check runs. n=4,834 · 15 held symbols · 7 sectors. Peers keyed on
+--     `xstock_spot_universe.sector`.
+--     **RESULT: min 0 · p05 1 · median 33 · max 78. ZERO live sector peers on 79 held-symbol-
+--     minutes (1.63%); under three peers on 557 (11.52%).**
+--   ⇒ ⛔ **THE TWO LEGS DISAGREE IN THE DIRECTION THAT MATTERS: on the ENTRY leg the peer set is
+--     never empty (min 3 over 17 events); on the EXIT leg EMPTY IS ROUTINE.** So the zero-peer
+--     fallback is a REQUIRED behaviour for an OBSERVED state, not a guard against a hypothetical
+--     — which is where Langston's rule-of-three bound on MY entry data pointed, and the exit
+--     measurement turned that bound into an observation.
+--   ⇒ **And the entry-derived band does NOT transfer: a threshold of 3 would put 11.5% of
+--     exit-check minutes into the thin branch.**
+--   ★ **Sector keying is vindicated as the key: median 33 peers against `S`'s 5, with a real tail
+--     to zero the design must handle.** That is the grouping I wrongly said did not exist.
+--
 set statement_timeout = 600000;
 
 with bounds as (
