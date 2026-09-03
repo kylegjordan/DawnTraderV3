@@ -218,3 +218,77 @@ recalled rather than re-read is a criterion that has already drifted.
 
 ⛔ **It leaves entry behaviour UNGATED for this close (Langston C4).** It is a delivered
 measurement, not an outcome bar, and **must never be written up as an entry-side pass.**
+
+---
+
+# 12. RESULT — run 2026-09-03 against the criterion above, unedited
+
+> ⛔ **THE CRITERION WAS FIXED AND COMMITTED BEFORE THIS RAN** (`0879666fa` carries the instrument
+> UNRUN; the criterion predates it). **Nothing below was chosen after seeing a number.**
+
+## 12.1 The output
+
+| arm | attempts | symbols | refused today | **n(D)** | D on own σ | D on classwide σ | flippable ±150 ms | flippable ±500 ms |
+|---|---|---|---|---|---|---|---|---|
+| pre-F-G-1 (→ 08-27) | 480 | 121 | 47 | **32** | 3 | 29 | 0 | 0 |
+| post-F-G-1 (08-28 →) | 225 | 86 | 8 | **4** | 1 | 3 | 0 | 0 |
+| **total** | **705** | — | **55** | **36** | **4** | **32** | **0** | **0** |
+
+*(705 of the 709 in-window attempts survive the §10.4 trading-window filter. §10.2 is discharged
+outright: **no attempt anywhere sits within 500 ms of `L`**, so the instrument's 67–108 ms
+one-directional offset cannot flip a single verdict.)*
+
+## 12.2 ⛔ THE PRE-REGISTERED VERDICT: **INCONCLUSIVE — NOT A PASS**
+
+**§7 arm (c) trips, and not marginally: 32 of 36 attempts in D — 88.9% — rest on a CLASSWIDE σ,
+against a registered threshold of 50%.** The budget is therefore not symbol-specific where it would
+act, and **the risk claim has no symbol evidence under it.**
+
+**§7 arm (a) additionally trips on the post-F-G-1 arm alone: n(D) = 4, against a registered floor
+of 30.** The §10.5 deploy split was mandatory, and it leaves that arm far below the floor.
+
+⇒ **Two independent registered arms return no-change-warranted. Kyle's standard stands by default,
+which is exactly what he asked for in the absence of proof.**
+★ **The §5 risk test was NOT reached, and must not be reported as passed or failed.** Arm (c) is a
+gate on whether the evidence can speak at all, and it closed first.
+
+## 12.3 ⭐ WHY IT TRIPPED — STRUCTURAL, NOT INCIDENTAL, AND THIS IS THE REAL FINDING
+
+**My first explanation was WRONG and I am recording it because the correction is the substance.** I
+expected the off-hours quoting cadence to starve the 200-observation floor. **Measured: it does
+not** — 95.6% of regular-hours attempts and **62.7% of off-hours attempts** clear the floor, median
+274 observations off-hours. **The session story is refuted.**
+
+**What is actually happening is a SELECTION effect, and it is stark:**
+
+| attempts | σ-eligible (obs ≥ 200) | median observations |
+|---|---|---|
+| admitted by the clock (age ≤ 15 s) | **93.5%** | 390 |
+| **REFUSED (age > 15 s)** | ⛔ **9.1%** | ⛔ **43** |
+
+⇒ ⭐⭐ **THE CONDITION THAT TRIGGERS THE REFUSAL IS THE SAME CONDITION THAT STARVES THE σ ESTIMATE.**
+A symbol is refused because its feed went quiet; a quiet feed is exactly a window with too few ticks
+to measure that symbol's own volatility. **So a risk-derived entry budget is structurally LEAST able
+to be symbol-specific precisely on the attempts it would newly admit.** Only **5 of 55** refused
+attempts carry enough of their own history to compute a symbol-specific σ at all.
+
+★ **AND THE EXISTING DESIGN ALREADY RESISTS THIS, WHICH IS WORTH SAYING PLAINLY:** the classwide
+fallback is the **90th-percentile** σ by deliberate choice (`sigma-rate.ts:28` — *"σ MUST NOT be
+derivable from a thin symbol's own thin history"*). A high σ yields a **small** ceiling, pushing it
+toward the floor — and since `floor_ms` = `L`, a classwide σ collapses the ceiling toward the entry
+limit and **shrinks D toward empty by construction.** The mechanism that makes the measurement
+inconclusive is the same mechanism that makes the proposed relaxation small.
+
+## 12.4 What this does and does not license
+
+✅ **Says:** on this window, a risk-derived entry budget would newly admit **at most 36 attempts out
+of 705** — about two and a half per trading day — and for 89% of them the volatility term is a class
+average rather than the symbol's own.
+⛔ **Does NOT say** the relaxation would be harmful. **The risk test was never reached.**
+⛔ **Does NOT say** the entry gate is correct as it stands. The §8 asymmetry is real and unresolved.
+⛔ **And per §9 it leaves entry behaviour UNGATED for this close.** It is a delivered measurement.
+
+★ **What a future proposer must now clear, and it is higher than before:** not merely that the
+movement stayed inside the budget, but that a budget computed from a **class-average** σ means
+anything on the specific symbols it would admit. **That is a harder claim than the one this batch
+set out to test, and it was found by running the measurement rather than by arguing about it.**
