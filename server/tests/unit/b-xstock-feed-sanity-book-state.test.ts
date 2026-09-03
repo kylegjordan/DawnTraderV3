@@ -142,3 +142,60 @@ describe('B-XSTOCK-FEED-SANITY — the one list', () => {
     expect(medianOf([3, 1, 2])).toBe(2); expect(medianOf([4, 1, 3, 2])).toBe(2.5); expect(medianOf([])).toBeNull();
   });
 });
+
+/**
+ * ⛔⛔ THE DEADLOCK REGRESSION — THE ONE PATH THE ORIGINAL SUITE NEVER RAN.
+ *
+ * As first shipped the engine advanced the comparator ONLY on a `two_sided` verdict, while the
+ * predicate returns `unknown`/`no_comparator` whenever the comparator is absent. `two_sided` was
+ * therefore unreachable, the comparator never seeded, and the guard was INERT — measured on
+ * staging 2026-09-03: zero `COMPARATOR_SEEDED` in 34 minutes with five open positions and the
+ * exit loop demonstrably running.
+ *
+ * ★ WHY THE SUITE ABOVE MISSED IT: every fixture is built by `frame(now, prior)` WITH a prior. The
+ * single no-comparator case asserts `unknown` and stops — it never asks "and then what?". A test
+ * that always supplies the state under test cannot discover that the state is never created.
+ * ⇒ THIS TEST DRIVES THE CYCLE, not a single verdict.
+ */
+describe('B-XSTOCK-FEED-SANITY — the seeding cycle CLOSES (deadlock regression)', () => {
+  const healthy = { bid: 99.5, ask: 100.5, last: 100.0 };
+
+  it('first call has no comparator and reads unknown/no_comparator', () => {
+    const r = assessBookState(frame(healthy, null), CFG);
+    expect(r.state).toBe('unknown');
+    expect(r.reasons).toContain('no_comparator');
+  });
+
+  it('⛔ THE REGRESSION: a seed rule gated ONLY on two_sided never fires, so the cycle never closes', () => {
+    const first = assessBookState(frame(healthy, null), CFG);
+    const oldRuleWouldSeed = first.state === 'two_sided';           // the shipped condition
+    expect(oldRuleWouldSeed).toBe(false);                            // ⇒ inert, forever
+  });
+
+  it('✅ THE FIX: seeding on no_comparator closes the cycle — the NEXT verdict is two_sided', () => {
+    const first = assessBookState(frame(healthy, null), CFG);
+    const newRuleWouldSeed =
+      first.state === 'two_sided' ||
+      (first.state === 'unknown' && first.reasons.includes('no_comparator'));
+    expect(newRuleWouldSeed).toBe(true);
+
+    // seed from that frame, then re-assess against it — the guard must now be able to judge
+    const second = assessBookState(frame({ bid: 99.4, ask: 100.4, last: 100.0 }, healthy), CFG);
+    expect(second.state).toBe('two_sided');
+  });
+
+  it('✅ AND THE HOLLOW INVARIANT SURVIVES: a hollow frame is still never seedable', () => {
+    const collapsed = assessBookState(frame({ bid: 80.0, ask: 100.5, last: 100.0 }, healthy), CFG);
+    expect(collapsed.state).toBe('hollow');
+    const newRuleWouldSeed =
+      collapsed.state === 'two_sided' ||
+      (collapsed.state === 'unknown' && collapsed.reasons.includes('no_comparator'));
+    expect(newRuleWouldSeed).toBe(false);
+  });
+
+  it('✅ an ABSENT side is hollow, not no_comparator — so it can never seed either', () => {
+    const noBid = assessBookState(frame({ bid: null, ask: 100.5, last: 100.0 }, null), CFG);
+    expect(noBid.state).toBe('hollow');
+    expect(noBid.reasons).toContain('absent_bid');
+  });
+});

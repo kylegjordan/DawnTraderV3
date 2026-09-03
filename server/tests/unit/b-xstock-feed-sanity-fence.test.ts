@@ -287,3 +287,32 @@ describe('F-$ — the label never appears in a money expression', () => {
     expect(moneyRe.test(l)).toBe(true); expect(l).toMatch(/exitBookState/);
   });
 });
+
+/**
+ * ⛔⛔ F-SEED — THE CALL SITE MUST BE ABLE TO TAKE THE FIRST SNAPSHOT.
+ *
+ * The behavioural suite proves the PREDICATE's cycle closes. It cannot see the ENGINE's gate, and
+ * the gate is where the deadlock lived: the shipped condition was `_r.state === 'two_sided'` alone,
+ * which `book-state.ts` can never return without a comparator. Guard the gate itself, at the source.
+ */
+describe('F-SEED — the comparator seed gate', () => {
+  // ⚠️ READ THE STRIPPED SOURCE: raw `AEE` also matches the PROSE at the top of the exit loop that
+  // quotes the call for a human reader. My first version of this fence sliced against that comment
+  // and reported the gate missing when it was present — the fence failing loudly, which is the point.
+  const AEE_CODE = code(AEE);
+  it('the seed condition admits no_comparator, not two_sided alone', () => {
+    const i = AEE_CODE.indexOf('const _seedable');
+    expect(i, 'the _seedable gate is missing at the advance call site').toBeGreaterThan(-1);
+    const seedBlock = AEE_CODE.slice(i, AEE_CODE.indexOf('advanceBookStateComparator(position.symbol', i));
+    expect(seedBlock).toMatch(/no_comparator/);
+    expect(seedBlock).toMatch(/two_sided/);
+  });
+  it('CONTROL: the retired two_sided-only gate would FAIL this fence', () => {
+    const retired = "if (_r.state === 'two_sided' && _raw.bid !== null) {";
+    expect(/no_comparator/.test(retired)).toBe(false);
+  });
+  it('advanceBookStateComparator still has exactly ONE call site in the engine', () => {
+    const calls = AEE_CODE.split('advanceBookStateComparator(position.symbol').length - 1;
+    expect(calls).toBe(1);
+  });
+});

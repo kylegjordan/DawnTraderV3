@@ -1394,9 +1394,22 @@ export class ActiveExecutionEngine {
               } else {
                 if (_streak > 0) this._bookStateSkipStreak.delete(position.id);
                 bookStateAtDecision = _r.state; // 'two_sided' | 'unknown' (no comparator yet)
-                if (_r.state === 'two_sided' && _raw.bid !== null && _raw.ask !== null) {
-                  // The comparator advances ONLY on a two_sided verdict — a hollow frame must never
-                  // become the reference the next frame is judged against.
+                // ⛔⛔ SEEDING — THE FIRST SNAPSHOT MUST ALSO BE TAKEN ON `no_comparator`, OR THE
+                // GUARD DEADLOCKS AND IS INERT. As first shipped this advanced ONLY on `two_sided`,
+                // but `book-state.ts:192` returns `unknown`/`no_comparator` whenever the comparator
+                // is absent — so `two_sided` was unreachable, the comparator never seeded, every
+                // verdict stayed `unknown`, and nothing was ever withheld.
+                // MEASURED INERT ON STAGING 2026-09-03: zero `COMPARATOR_SEEDED` lines in 34 min
+                // with five open xStock positions and `EXIT_EVAL` demonstrably running in the same
+                // log (instrument proved live before its silence was read).
+                // ✅ THE HOLLOW INVARIANT IS UNTOUCHED: a hollow verdict `continue`s or yields well
+                // above this line and can never reach it, so a hollow frame still never becomes the
+                // reference. And `no_comparator` is reached only AFTER the absent-bid and
+                // absent-ask branches, so both sides are present by construction here.
+                const _seedable =
+                  _r.state === 'two_sided' ||
+                  (_r.state === 'unknown' && _r.reasons.includes('no_comparator'));
+                if (_seedable && _raw.bid !== null && _raw.ask !== null) {
                   advanceBookStateComparator(position.symbol, { bid: _raw.bid, ask: _raw.ask, last: _raw.last, atMs: _raw.atMs }, _c.trailingSpreadWindowSnaps);
                 }
               }
