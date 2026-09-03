@@ -91,40 +91,16 @@ peers as (
     from dispatches d
     left join s_live_per_min l on l.m = d.m
 )
-select 'B2 operational (dispatch minutes, self excluded)' as output,
-       count(*)                                                                  as dispatch_events,
-       (select count(*) from sig_symbols)                                        as s_size,
-       min(live_peers)                                                           as peers_min,
-       round(percentile_cont(0.05) within group (order by live_peers)::numeric)   as peers_p05,
-       round(percentile_cont(0.50) within group (order by live_peers)::numeric)   as peers_p50,
-       max(live_peers)                                                           as peers_max,
-       count(*) filter (where live_peers = 0)                                    as events_with_zero_peers
-  from peers;
-
--- ═══════════════════════════════════════════════════════════════════════════════════════════
--- RESULT — run 2026-09-03. Biases (2) and (3) are now MEASURED, not argued.
---
--- THE OPERATIONAL QUANTITY (dispatch minutes, SELF EXCLUDED — what the trigger actually sees):
---     dispatch events 17  ·  |S| 9  ·  peers min 3  ·  p05 3  ·  p50 5  ·  max 7
---     events with ZERO live peers: 0
---
--- DECOMPOSITION, both variants on dispatch minutes:
---     with self:     min 4  ·  p50 6  ·  max 8
---     without self:  min 3  ·  p50 5  ·  max 7
---   ⇒ **BIAS (3), self-inclusion, is EXACTLY +1 ACROSS THE BOARD — the subject was live in ALL 17
---     dispatch minutes.** Which stands to reason: a minute in which a symbol produces a signal is
---     usually a minute in which it ticked. Langston's "at most 5 peers" was right to the unit.
---   ⇒ **BIAS (2), conditioning on dispatch minutes, is REAL BUT SMALL: it lifts the FLOOR from 3
---     to 4 and leaves the MEDIAN at 6.** Against the original all-minutes figure (min 3, p50 6).
---   ⇒ **BIAS (1), the upward one from S conditioning on having signalled, REMAINS UNMEASURED** and
---     is not repaired here. It needs a peer set keyed on something other than signalling.
---
--- ⭐ THE NUMBER THAT MATTERS TO THE DESIGN, and it is smaller than the count discussion suggested:
---    **ONLY 17 OVERNIGHT DISPATCH EVENTS IN THE ENTIRE WEEK.** The trigger fires on the order of
---    two or three a night. At every one of them the peer set held between 3 and 7 live names,
---    median 5, and **never zero** — so a peer-set test is viable and never degenerate here.
---
--- ⛔ SAMPLE-MINIMUM LIMIT UNREPAIRED: seven consecutive ORDINARY sessions, no holiday, no
---    half-day, no venue incident. `min 3` and `zero degenerate events` are what those sessions
---    could show, never floors. **And n=17 is a thin operational base in its own right.**
--- ═══════════════════════════════════════════════════════════════════════════════════════════
+select 'with self, dispatch minutes' as variant,
+       count(*) as events,
+       min(live_peers + self_live) as v_min,
+       round(percentile_cont(0.50) within group (order by live_peers + self_live)::numeric) as v_p50,
+       max(live_peers + self_live) as v_max
+  from (select p.*, (case when exists (select 1 from overnight_pairs op
+                                        where op.m = p.m and op.symbol = p.subject) then 1 else 0 end) as self_live
+          from peers p) z
+union all
+select 'without self, dispatch minutes', count(*), min(live_peers),
+       round(percentile_cont(0.50) within group (order by live_peers)::numeric), max(live_peers)
+  from peers
+order by 1;
