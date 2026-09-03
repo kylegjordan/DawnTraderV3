@@ -54,6 +54,13 @@ const LOG = join(homedir(), '.claude', 'dt-fresh-rules.jsonl');
 
 const FILES = [
   ['CLAUDE.md', 'the instructions — the only one auto-loaded into context'],
+  // #995 (B-WAKE-QUIET OBJ-1, 2026-09-03): CONDUCT.md was on NEITHER this list NOR the push
+  // notice's, while `load-conduct.mjs` injects it into EVERY session start with a plain
+  // readFileSync of the LOCAL working copy and no origin read. 22 commits to it in a fortnight.
+  // An always-injected rules file that nothing refreshed and nothing announced — the exact
+  // silent-wrongness asymmetry the loud notice exists for. Not realised when found (all three
+  // clones were byte-identical to origin); the PROTECTION was what was missing.
+  ['CONDUCT.md', 'behaviour rules injected every session start from the LOCAL copy — nothing else refreshes it'],
   ['.claude/hooks', 'the guards themselves — a stale guard silently does not fire'],
   ['.claude/settings.local.json', 'what registers the guards'],
   ['1-system-manual/RUNNING_ISSUES.md', 'stale copies make two sessions claim the same issue number'],
