@@ -258,6 +258,38 @@ export class ActiveExecutionEngine {
     if (!warmth.warm || !snapshot) return { pass: false, reason: warmth.reason, snapshot: null };
     const suff = assessSufficiency(snapshot, 'asks', orderNotional, config);
     if (!suff.sufficient) return { pass: false, reason: suff.reason, snapshot };
+    // ── B-XSTOCK-FEED-SANITY P9 (`#992`) — THE ENTRY SEAM READS BOTH SIDES, ON KYLE'S RULING. ────────
+    // KYLE, 2026-09-03: ONE entry standard applied identically at every hour — *"hold the same standards
+    // and protections … if those are not met, then we just don't enter trades in those hours for xStocks
+    // … that's fine"* — and explicitly NOT a clock (he refused a flat off-hours blackout: a deep,
+    // well-quoted off-hours book that clears the SQE and the RTB is one he wants traded). So there is NO
+    // session term here and there must never be one: the test is the BOOK, at any hour.
+    // WHY BOTH SIDES: the two checks above read the ASK only — the side we buy from — so a HOLLOW book
+    // (bid collapsed, ask intact) passed entry, and B-XSTOCK-FEED-SANITY's OBJ-7(ii) below would then
+    // have let a hollow-closed symbol re-queue straight into the book that just closed it (`#992`,
+    // Langston's Step-2 coupling blocker: these two ship together or neither).
+    // ⛔ xSTOCK ONLY, and deliberately: the book-state predicate is an xStock instrument (scope §17.1
+    // constraint 3 — crypto depth is the venue's own published ladder). Crypto's entry behaviour is
+    // BYTE-FOR-BYTE unchanged by this batch; widening it would be an unreviewed change to a class this
+    // batch never audited.
+    if (assetClass === 'xstock_spot') {
+      const bidWarmth = assessWarmth(snapshot, 'bids', config);
+      if (!bidWarmth.warm) {
+        recordDepthGateBlock(assetClass, `one_sided_book ${bidWarmth.reason}`);
+        return { pass: false, reason: `one_sided_book ${bidWarmth.reason}`, snapshot };
+      }
+      // The SAME predicate the exit guard uses, on the same live tick — one mechanism, one knob set.
+      // It reads the pair's own recent quotes only: never a second venue, never the clock, never the
+      // session. `unknown` (no comparator yet) and a guard that did not run both PASS — this seam may
+      // refuse an entry, but it may never invent a refusal from an absence (`#546`).
+      const bs = assessBookStateNow(symbol);
+      if (bs.ok && bs.result.state === 'hollow') {
+        const _why = `hollow_book ${bs.result.reasons.join('|')}`;
+        recordDepthGateBlock(assetClass, _why);
+        console.warn(`[B-XSTOCK-FEED-SANITY][ENTRY_GATE] ${symbol}: entry refused — ${_why} inputs=${JSON.stringify(bs.result.inputs)}`);
+        return { pass: false, reason: _why, snapshot };
+      }
+    }
     return { pass: true, reason: 'ok', snapshot };
   }
   // B72: monitoring interval read at setInterval start from module='active_execution'.

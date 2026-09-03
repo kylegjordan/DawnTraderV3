@@ -2265,6 +2265,28 @@ class ReadyToBuyService {
             AND strategy_name = ${input.strategy}
             AND close_reason = 'stop_hit'
             AND closed_at >= now() - make_interval(mins => ${_cooldownMin})
+            -- B-XSTOCK-FEED-SANITY OBJ-7(ii), issue 943 -- A HOLLOW-BOOK STOP IS NOT ANTI-THESIS EVIDENCE.
+            -- Issue 509 built this cooldown because a stop-out is evidence AGAINST the thesis. A stop
+            -- taken on a book whose bid had fallen away is evidence about the FEED, not the thesis, so
+            -- it must not hold the symbol out of the queue. ONLY A MEASURED HOLLOW RELAXES IT (Langston
+            -- Step-2 condition C3): basis guard = the live frame was assessed at that instant;
+            -- decision_price = the row's own exit-decision price judged against the archive. A
+            -- minute_proxy label (clock-derived, base rate UNMEASURED, ~26 rows at deploy) NEVER relaxes
+            -- an admission, and neither does market_state_predicate.
+            -- NULL-SAFE BY CONSTRUCTION, and that is the whole risk here: exit_book_state is NULL on
+            -- every pre-deploy row, and a bare NOT (col = 'hollow' AND ...) evaluates to NULL on those,
+            -- which SQL treats as false: it would silently drop every unlabelled stop from the block and
+            -- turn a narrow relaxation into a blanket one. COALESCE to '' keeps NULL rows BLOCKING,
+            -- which is today's behaviour and the safe default.
+            -- COUPLED, NOT INDEPENDENT: this relaxation ships ONLY alongside the both-sides entry gate
+            -- (_evaluateOpenDepthGate, issue 992). Without it a hollow-closed symbol re-queues into the
+            -- ask-only seam and straight back into the book that just closed it.
+            -- (No backticks in this comment: it lives inside a tagged template literal, where a backtick
+            --  terminates the string. That mistake broke the parse of this file once, 2026-09-03.)
+            AND NOT (
+              COALESCE(exit_book_state, '') = 'hollow'
+              AND COALESCE(exit_book_state_basis, '') IN ('guard', 'decision_price')
+            )
           ORDER BY closed_at DESC LIMIT 1`);
         const _lastStop = (r as any).rows?.[0]?.closed_at;
         if (_lastStop) {

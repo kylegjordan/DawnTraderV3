@@ -137,6 +137,68 @@ describe('F-INV — a non-NULL basis implies a non-NULL exit_book_state (Langsto
   });
 });
 
+describe('F-P9 — the entry seam reads BOTH sides and consults the guard, xStock only (Kyle 2026-09-03, option D)', () => {
+  const gate = (() => {
+    const src = code(AEE);
+    const a = src.indexOf('private async _evaluateOpenDepthGate');
+    const b = src.indexOf('\n  }', src.indexOf("return { pass: true, reason: 'ok', snapshot };", a));
+    return src.slice(a, b);
+  })();
+  it('CONTROL: the gate body was located and still contains its ask-side checks', () => {
+    expect(gate.length).toBeGreaterThan(200);
+    expect(gate).toMatch(/assessWarmth\(snapshot, 'asks'/);
+    expect(gate).toMatch(/assessSufficiency\(snapshot, 'asks'/);
+  });
+  it('reads the BID side too — the ask-only hole that #992 found is closed', () => {
+    expect(gate).toMatch(/assessWarmth\(snapshot, 'bids'/);
+  });
+  it('consults the same book-state predicate the exit guard uses, and refuses on hollow', () => {
+    expect(gate).toMatch(/assessBookStateNow\(symbol\)/);
+    expect(gate).toMatch(/state === 'hollow'/);
+  });
+  it("⛔ NO CLOCK, NO SESSION TERM — Kyle's ruling is one standard at every hour", () => {
+    expect(gate).not.toMatch(/isXstockMarketOpen|liquidFillWindow|getHours|RTH|session/i);
+  });
+  it('the new checks are class-gated to xstock_spot, so crypto entry behaviour is unchanged', () => {
+    const guardIdx = gate.indexOf("assetClass === 'xstock_spot'");
+    expect(guardIdx).toBeGreaterThan(0);
+    expect(gate.indexOf("assessWarmth(snapshot, 'bids'")).toBeGreaterThan(guardIdx);
+    expect(gate.indexOf('assessBookStateNow(symbol)')).toBeGreaterThan(guardIdx);
+  });
+});
+
+describe('F-P7ii — the re-entry relaxation is measured-only and NULL-safe', () => {
+  const RTB = code(readFileSync(join(SERVER, 'core', 'rtb', 'ready_to_buy_service.ts'), 'utf8'));
+  // ⛔ `code()` strips `//` and `/* */` — NOT SQL `--`. The predicate below is inside a SQL template whose
+  // comments legitimately NAME the two bases that must never relax the block, so asserting on the raw
+  // slice fails on its own explanation. Strip SQL line comments too, and CONTROL that the stripper works
+  // — otherwise this fence would pass by stripping everything.
+  const sqlCode = (src: string): string => src.replace(/--[^\n]*/g, '');
+  const clause = (() => {
+    const a = RTB.indexOf("AND close_reason = 'stop_hit'");
+    return sqlCode(RTB.slice(a, RTB.indexOf('ORDER BY closed_at DESC LIMIT 1', a)));
+  })();
+  it('CONTROL: the cooldown query was located and the SQL-comment stripper keeps real predicate text', () => {
+    expect(clause).toMatch(/make_interval/);
+    expect(sqlCode("AND x = 1 -- minute_proxy never relaxes")).toBe('AND x = 1 ');
+    expect(sqlCode("AND x = 1 -- note")).toMatch(/AND x = 1/);
+  });
+  it('only a MEASURED basis relaxes the block — never minute_proxy or market_state_predicate', () => {
+    expect(clause).toMatch(/exit_book_state_basis/);
+    expect(clause).toMatch(/'guard'/);
+    expect(clause).toMatch(/'decision_price'/);
+    expect(clause).not.toMatch(/minute_proxy|market_state_predicate/);
+  });
+  it('⛔ NULL-SAFE: unlabelled rows keep BLOCKING (a bare NOT(col = …) would silently drop them)', () => {
+    expect(clause).toMatch(/COALESCE\(exit_book_state,\s*''\)/);
+    expect(clause).toMatch(/COALESCE\(exit_book_state_basis,\s*''\)/);
+  });
+  it('CONTROL: the unsafe form is recognisably different from what shipped', () => {
+    const unsafe = "AND NOT (exit_book_state = 'hollow' AND exit_book_state_basis IN ('guard'))";
+    expect(unsafe).not.toMatch(/COALESCE/);
+  });
+});
+
 describe('F-$ — the label never appears in a money expression', () => {
   const moneyRe = /HONEST_PNL|grossPnl\s*=|netPnl\s*=|net_pnl|reconstructed_net_pnl|dailyLoss|daily_loss/;
   const files = walk(SERVER);
