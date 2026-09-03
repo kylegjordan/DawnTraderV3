@@ -62,6 +62,25 @@
 --     UNMEASURED. CC-B is measuring it on its own population — positions open during an overnight
 --     exit-check — as his batch and his design decision.**
 --
+-- ⛔⛔ ASSERTED ABSENCE, REFUTED BY ME 2026-09-03 — AND IT REACHED ANOTHER SESSION'S DESIGN.
+--    I stated, twice and in writing, that "no sector or liquidity grouping exists to key on
+--    today", and used that to justify `S` (symbols that signalled overnight) as the peer-set
+--    proxy. **I NEVER SEARCHED FOR ONE.** Langston flagged it as a `#453` risk — an absence that
+--    hardens into a fact nobody checked. Searched, and it is false:
+--      `xstock_spot_universe`           → `sector`, `crypto_adjacent`, `adr`, `source_chain`
+--      `xstock_spot_universe_overrides` → `sector_override`, `crypto_adjacent_override`, …
+--    AND IT IS POPULATED, which was the discriminating check (a declared-but-empty grouping
+--    would be worse than none): 496 universe rows, 473 live, **sector populated on ALL 496**,
+--    15 distinct sectors, 10 `crypto_adjacent`, 27 `adr`.
+--  ⇒ **A peer set should key on `sector` and/or `crypto_adjacent`, NOT on who signalled.** Both
+--    are A PRIORI, which also dissolves the post-hoc-`S` objection: a curated attribute is known
+--    before the trigger fires, where `S` was drawn from the same week as the figures.
+--  ⚠️ **I SEARCHED THE CODE FIRST AND THE DB LAST, AND THE ANSWER WAS ONLY EVER IN THE DB** —
+--    `shared/asset-classes.ts` even says so in a comment I had read: manual edits are no longer
+--    the pattern, add/remove via the DB tables. Corpora searched, on the record: `shared/schema.ts`
+--    (market-cap fields only), `shared/asset-classes.ts` (registry loads from DB, no grouping in
+--    code), `information_schema` (where it was).
+--
 set statement_timeout = 600000;
 
 with bounds as (
