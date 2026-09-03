@@ -1,0 +1,201 @@
+{
+ "since": "2026-08-20T00:00:00Z",
+ "until": "2026-09-03T19:00:00Z",
+ "label": "PRE-CUT baseline: the window before OBJ-10/11 shipped (cb9c14c89, ~19:00Z 2026-09-03). Pre-registered so the post-cut run has something to be judged against.",
+ "sessions": {
+  "CC-A OLD": {
+   "completed_responses": 6411,
+   "api_errors": 2,
+   "categories": {
+    "heartbeat": {
+     "turns": 34,
+     "spoke": 34,
+     "chars": 14368,
+     "chars_per_turn": 422
+    },
+    "push notice": {
+     "turns": 38,
+     "spoke": 37,
+     "chars": 3949,
+     "chars_per_turn": 103
+    },
+    "Langston": {
+     "turns": 12,
+     "spoke": 12,
+     "chars": 24259,
+     "chars_per_turn": 2021
+    },
+    "alert routed": {
+     "turns": 12,
+     "spoke": 12,
+     "chars": 9910,
+     "chars_per_turn": 825
+    },
+    "crew post": {
+     "turns": 8,
+     "spoke": 8,
+     "chars": 3960,
+     "chars_per_turn": 495
+    },
+    "own bg task": {
+     "turns": 36,
+     "spoke": 34,
+     "chars": 69856,
+     "chars_per_turn": 1940
+    },
+    "KYLE PROMPT": {
+     "turns": 264,
+     "spoke": 256,
+     "chars": 749543,
+     "chars_per_turn": 2839
+    }
+   },
+   "wake_totals": {
+    "turns": 140,
+    "spoke": 137,
+    "chars": 126302
+   }
+  },
+  "CC-B NEW": {
+   "completed_responses": 2226,
+   "api_errors": 2,
+   "categories": {
+    "heartbeat": {
+     "turns": 20,
+     "spoke": 19,
+     "chars": 6799,
+     "chars_per_turn": 339
+    },
+    "push notice": {
+     "turns": 24,
+     "spoke": 24,
+     "chars": 3089,
+     "chars_per_turn": 128
+    },
+    "Langston": {
+     "turns": 16,
+     "spoke": 16,
+     "chars": 20955,
+     "chars_per_turn": 1309
+    },
+    "alert routed": {
+     "turns": 7,
+     "spoke": 7,
+     "chars": 7047,
+     "chars_per_turn": 1006
+    },
+    "crew post": {
+     "turns": 20,
+     "spoke": 20,
+     "chars": 27481,
+     "chars_per_turn": 1374
+    },
+    "own bg task": {
+     "turns": 10,
+     "spoke": 10,
+     "chars": 5956,
+     "chars_per_turn": 595
+    },
+    "KYLE PROMPT": {
+     "turns": 32,
+     "spoke": 30,
+     "chars": 125221,
+     "chars_per_turn": 3913
+    }
+   },
+   "wake_totals": {
+    "turns": 97,
+    "spoke": 96,
+    "chars": 71327
+   }
+  },
+  "CC-C ANALYST": {
+   "completed_responses": 16359,
+   "api_errors": 9,
+   "categories": {
+    "heartbeat": {
+     "turns": 64,
+     "spoke": 64,
+     "chars": 112271,
+     "chars_per_turn": 1754
+    },
+    "push notice": {
+     "turns": 58,
+     "spoke": 57,
+     "chars": 85130,
+     "chars_per_turn": 1467
+    },
+    "Langston": {
+     "turns": 56,
+     "spoke": 56,
+     "chars": 138177,
+     "chars_per_turn": 2467
+    },
+    "alert routed": {
+     "turns": 23,
+     "spoke": 22,
+     "chars": 26974,
+     "chars_per_turn": 1172
+    },
+    "crew post": {
+     "turns": 20,
+     "spoke": 20,
+     "chars": 28795,
+     "chars_per_turn": 1439
+    },
+    "own bg task": {
+     "turns": 83,
+     "spoke": 80,
+     "chars": 177331,
+     "chars_per_turn": 2136
+    },
+    "KYLE PROMPT": {
+     "turns": 372,
+     "spoke": 354,
+     "chars": 1146145,
+     "chars_per_turn": 3081
+    }
+   },
+   "wake_totals": {
+    "turns": 304,
+    "spoke": 299,
+    "chars": 568678
+   }
+  },
+  "CC-INFRA": {
+   "completed_responses": 4479,
+   "api_errors": 1,
+   "categories": {
+    "heartbeat": {
+     "turns": 13,
+     "spoke": 13,
+     "chars": 12444,
+     "chars_per_turn": 957
+    },
+    "crew post": {
+     "turns": 1,
+     "spoke": 1,
+     "chars": 3213,
+     "chars_per_turn": 3213
+    },
+    "own bg task": {
+     "turns": 11,
+     "spoke": 10,
+     "chars": 42538,
+     "chars_per_turn": 3867
+    },
+    "KYLE PROMPT": {
+     "turns": 123,
+     "spoke": 118,
+     "chars": 437277,
+     "chars_per_turn": 3555
+    }
+   },
+   "wake_totals": {
+    "turns": 25,
+    "spoke": 24,
+    "chars": 58195
+   }
+  }
+ }
+}
