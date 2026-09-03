@@ -4700,6 +4700,38 @@ For each open position:
 
 **★ P19-B8.9 (2026-07-17) — VENUE-ONLY at-source (display chain).** The ACTIONABLE price chain (this section) went venue-only earlier (kraken_ws → same-venue REST → skip-tick rail; third-party sources rejected by `isKrakenVenueSource`). B8.9 completed the AT-SOURCE half for the DISPLAY chain (`livePricingAdapter.fetchLivePrice`, consumed by the Open Trades + RTB endpoints and the portfolio valuation fallback): the third-party fetchers (`fetchFromBinance`/`fetchFromCoinGecko`/`binanceSymbolFor`) are **deleted**, so the display fallback is **Kraken-REST-or-nothing** and the `PriceQuote`/`CachedPrice` `source` unions no longer carry `'binance'`/`'coingecko'`. The load-bearing WHY: **post-B8.9 the display fallback venue (Kraken REST) MATCHES the execution venue**, killing the split-brain where the UI could show a Binance number for a position the engine prices and exits via Kraken. For `xstock_spot` symbols the display chain SKIPS the Kraken-REST ask entirely (Kraken spot REST carries no tokenized equities) and renders the honest **venue-quiet** state — last known value + an explicit badge — instead of a bare stale number or a third-party price. Quiet is decided ONCE on the server (`priceVenueQuiet = !isKrakenVenueSource(source) || ageMs > 60s`) and shipped to both display surfaces, so they cannot drift. (B8.9 also folded in the B8.9a source-tag-honesty fixes: `updateCache` stamps the caller's true source; the last-resort stale re-serve is tagged `last_known_good`, not a false venue tag.)
 
+#### 3.5.1 The book-state guard — is the mark's VALUE a real two-sided book? (`B-XSTOCK-FEED-SANITY`, `#943`, closes `#567`)
+
+⭐ **THE GAP THIS FILLS, STATED AS A BOUNDARY BETWEEN TWO GUARDS:** the `#548` ceiling above governs how OLD a mark may be. It says **nothing whatsoever about whether the mark's VALUE is trustworthy**. A frame can be one second old and still be an artefact.
+
+**THE DEFECT.** At a Kraken session handoff (20:15 / 16:15 / 08:00 UTC) an xStock's BID collapses while the ASK and `last` hold. The exit path evaluates a **midpoint**, so the mid follows the collapsed bid downward and a stop fires **at a price nobody traded at**. The venue is quoting, the feed is healthy, and every existing guard passes: the mark is fresh, the source is the right venue, the number is finite and positive. **Nothing in the system was asking whether the two sides of the book agreed with each other.**
+
+**THE PREDICATE** (`xstock_spot/book-state.ts`, PURE — no database, no clock) classifies a frame as `two_sided`, `hollow`, or `unknown`, in this branch order:
+
+| # | branch | verdict |
+|---|---|---|
+| 1 | bid absent | `hollow` |
+| 2 | ask absent | `hollow` |
+| 3 | **no prior two-sided frame to compare against** | ⭐ **`unknown`** |
+| 4 | one side departs from the other by a symmetric RELATIVE margin (`bid_collapsed` / `ask_spiked`) | `hollow` |
+| 5 | feed-health burst (inert by knob today) | `hollow` |
+| 6 | own-mark deviation | `hollow` |
+| 7 | otherwise | `two_sided` |
+
+⛔⛔ **LABEL SEMANTICS — EVERY CONSUMER DEPENDS ON THESE AND THEY ARE NOT INTERCHANGEABLE. A VALUE IS A LOOK THAT HAPPENED. A NULL IS RE-CUTTABLE. `unknown` MEANS THE GUARD LOOKED AND HAD NO COMPARATOR.** `unknown` is **not** absence, and reading it as absence inverts the meaning of every count taken over the column.
+
+**WHAT A `hollow` VERDICT DOES.** The exit tick is **SKIPPED with no cache write** — the engine declines to evaluate a stop against a book it does not believe. ⚠️ **AND THE GUARD IS BOUNDED SO IT CAN NEVER STRAND A POSITION:** after 60 consecutive skips it **YIELDS** — it stops skipping, lets the evaluation proceed, and raises an alert. **A protection with no yield is an outage wearing a guard's clothes.**
+
+**THE COMPARATOR ADVANCES IN EXACTLY ONE PLACE** — the exit loop, keyed on the HELD position, and only on a `two_sided` verdict from a live frame (SIM **S25**). This single-writer property is load-bearing rather than incidental: the *comparator-seeded* log line is the positive control that proves the guard ran at all, and a second writer makes every zero read against it ambiguous.
+
+**PERSISTED FOR MEASUREMENT, not only for behaviour:** `closed_trades` carries the state at the exit DECISION, the state at the FILL, and the BASIS on which the decision-time state was established. The two instants are recorded separately because they can legitimately differ, and collapsing them would hide the guard's own cost.
+
+⚠️ **READ THE RESULT ON THE INTENT-SIDE COLUMNS.** The realised fill price is on a real book by construction, so it can never exhibit the defect and is useless as evidence about it — the same reading trap the venue-price-grid work documents.
+
+⛔ **NO CLOCK TERM EXISTS ANYWHERE IN THE GUARD, AND THAT IS DELIBERATE POLICY, NOT AN OVERSIGHT.** Kyle ruled on 2026-09-03 that ONE standard applies at every hour with no session softening, and he explicitly declined a flat off-hours blackout: *"if there's a deep book and it's well quoted … I'm happy to trade that. I just don't want to relax the rules so that we can get more trades in those off hours."* The predicate therefore tests the BOOK, never the time — which also means it degrades gracefully as off-hours liquidity improves, with no threshold to revisit.
+
+⛔ **CRYPTO IS DELIBERATELY NOT COVERED AND MUST NOT BE "FIXED" INTO COVERAGE.** The guard's knobs are seeded for `xstock_spot` only. Seeding crypto would create a live-looking threshold with no runtime source — the identical trap `#548` records for its own class-wide σ.
+
 ### 3.6 Exit Conditions
 
 The engine checks four exit conditions in order:
