@@ -3,7 +3,7 @@
 **Batch:** `B-XSTOCK-FEED-SANITY` (`#943`, `PHASE_19_PLAN` row 3b.b; master-order row 2) · **owner:** CC-C (Claude Analyst) · **change-class: architecture** (re-declared at scope r2.2 on Langston's ruling; the guard withholds an exit decision in the live engine)
 **Scope this audits:** `B_XSTOCK_FEED_SANITY_SCOPE.md` §17 at `6c9da695f` (Step 1 CLOSED by Langston 2026-09-02 23:40Z; the r2.2 text fix cleared 23:47Z).
 **Ref for every `path:line` below:** `origin/migration/aws-supabase` = `6c9da695f3e265ac156eddefa89408e860dfbed3` — the code is byte-identical from `cf98b4b4b` through the commit that carries this document (no `server/` or `shared/` file changed on the branch in that range; verified with `git diff --stat`). Code lines are quoted from `git show <ref>:<path>`, never from a working tree.
-**Author's date:** 2026-09-03 (draft 3, 01:5xZ — draft 1 corrected on three claim-only reader hits and two measurements; draft 2 corrected on the object-round reader's hits, §E). **⛔ DEPLOY HOLD:** nothing here deploys before the `#951` window closes on 2026-09-07 — the guard changes the xStock exit price path that window measures.
+**Author's date:** 2026-09-03 (draft 3, 2026-09-03 00:19Z — draft 1 corrected on three claim-only reader hits and two measurements; draft 2 corrected on the object-round reader's hits, §E). **⛔ DEPLOY HOLD:** nothing here deploys before the `#951` window closes on 2026-09-07 — the guard changes the xStock exit price path that window measures.
 **Order of this document, deliberately:** PART A is the AUDIT; PART B is the PLAN and every plan item names the audit finding it falls out of. An item with no finding is flagged `UNAUDITED` in place.
 
 ---
@@ -123,7 +123,7 @@
 
 ## A.9 P-A / P-B / re-cut feasibility — the pre-registration, from the measured populations
 
-**Instrument:** `/home/deploy/obj_pa_pb.cjs` (committed under `scripts/analysis/` with this batch), run on staging 2026-09-03 00:2x–00:5xZ as `deploy`; outputs `/home/deploy/obj_pa_pb/{pa_position_days,pa_episodes,recut_feasibility,pb_zero_bid}.csv`. Predicate for P-A and feasibility = §16.1's post-hoc hollow-state (spread > 20 % AND bid ≤ 0.90 × the prior two-sided NON-hollow mid AND `last` unchanged vs the prior snap); zone = US Eastern (EDT) session per the System Manual table.
+**Instrument:** `/home/deploy/obj_pa_pb.cjs` (committed under `scripts/analysis/` with this batch), run on staging 2026-09-02 23:5xZ – 2026-09-03 00:1xZ as `deploy`; outputs `/home/deploy/obj_pa_pb/{pa_position_days,pa_episodes,recut_feasibility,pb_zero_bid}.csv`. Predicate for P-A and feasibility = §16.1's post-hoc hollow-state (spread > 20 % AND bid ≤ 0.90 × the prior two-sided NON-hollow mid AND `last` unchanged vs the prior snap); zone = US Eastern (EDT) session per the System Manual table.
 
 | read | object + population | result | what it fixes |
 |---|---|---|---|
