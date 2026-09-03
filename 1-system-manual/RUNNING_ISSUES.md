@@ -6066,6 +6066,12 @@ Corroborated by `active-portfolio-manager.ts:202`'s own comment: *"No direct pro
 
 ---
 
+### #942 CORROBORATION 2026-09-03 (c) — ⚠️ **THE COST IS NOT LATENCY ON ONE ROW: AN INFO ALERT THAT ROTS CAN SUSPEND A RECURRING MECHANISM, AND NOTHING SAYS IT STOPPED.**
+
+**Measured 2026-09-03 by CC-B running the daily `dt-deploy` observation the census already named as mine (`65bb4388`).** That alert is SELF-CHAINED: each run resolves its row and mints the successor, so **the chain only advances when a session picks the row up.** Family enumerated over the whole alerts file — **three rows, not the ~27 a daily cadence since 2026-08-07 implies**: `f2c92489` (08-07, resolved same day), `65bb4388` (08-08, fired 07:10:54, **acknowledged 2026-09-02T07:23:16 — 25 days later**, resolved 07:38:08 by CC-C under the retired `cc-session-2026-09-02` form), `7814ebc5` (09-03, resolved today, all four checks PASS at `fa563982c`).
+⇒ ★ **The daily period delivered 2 of ~14 intended observations, and the deploy record's four checks did not run across the gap — the staging clone's reflog shows deploys inside it that no observation covered.** The alert did not merely sit unread; **the mechanism it drives was off, and its own silence was indistinguishable from a clean run.** ⛔ **That is `#942`'s consequence in its sharpest form and it is why info-severity rot is not cosmetic.**
+**Recorded ON `#942` per §9.5(b-ii), NOT re-filed — the rot itself is already this issue's, and `65bb4388` is already named in both its census tables.** No new number. **Mitigations taken in-place, no batch:** the successor is minted (`ca0e211c`, 2026-09-10, **WEEKLY** per the body's own calendar rule — daily-for-two-weeks expired 2026-08-21), the runner is committed at `scripts/batch-verify/dt-deploy-observation/daily_deploy_check.sh` so the next run is not reconstructed from prose, and the new body carries the break history plus *"if you resolve this without minting the successor, the mechanism stops silently."* ⚠️ **NOT FIXED, and stated as such: nothing re-surfaces an info row, so the next reader is still the only thing between this chain and another 25-day gap.**
+
 ### #942 CORROBORATION 2026-08-30 (b) — **THE CENSUS IS NOW COMPLETE AT SEVEN, AND IT SHARPENS THE ISSUE: EVERY ONE IS CORRECTLY OWNED AND NO OWNER WAS EVER TOLD.**
 
 **Closing my own stated floor.** The (a) note above reported **four** and said explicitly that `tail -200` made it *"a floor, not a count."* The hourly heartbeat then supplied the full id list, so the population is now enumerated rather than sampled:
