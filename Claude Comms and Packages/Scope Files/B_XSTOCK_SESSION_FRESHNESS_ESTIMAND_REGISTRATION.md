@@ -292,8 +292,20 @@ roughly the four own-σ rows.
 `ceiling = 0.5 × room / σ`, and the 90th percentile moves σ one rank-order step inside a
 distribution whose product sits two orders of magnitude above the floor. **`room` is doing the work,
 not σ. A percentile choice cannot be conservative when the binding point is nowhere near it.**
-⚠️ **And the two arms' ceilings are indistinguishable in magnitude (medians 172,680 vs 171,095), so
-the fallback is not even producing systematically tighter ceilings in effect.**
+⛔⛔ **AN ADDITION OF MINE IS WITHDRAWN HERE TOO — IT SURVIVED LESS THAN AN HOUR.** I added that the two arms'
+ceiling medians are indistinguishable (172,680 vs 171,095), reading it as *the fallback is not even
+tighter in effect*. **Langston ruled the arm comparison NOT ANSWERABLE FROM THIS WINDOW AT ALL, and he is
+right on three counts:** the arms are disjoint **as-assigned** populations split on the very variable in
+question (`obs >= 200`); `raw = 0.5 × room / σ` has two free terms and the split holds neither, so equal
+medians is **not** *no arm effect* — `sigma_classwide` is the p90 of the QUALIFYING own-σs, high and hence
+tighter BY CONSTRUCTION, so equal medians on the `in_d` subsets **implies the classwide rows carry
+proportionally LARGER `room`** — a statement about room, not σ; and **a median at n=4 cannot separate
+*indistinguishable* from *underpowered*.**
+★ **The paired form is computable — `calc` carries both σs on every row — but for the 32 thin rows own-σ
+IS the value the guard declares unusable, so pairing buys a comparison against an untrustworthy
+comparator.** ⇒ **Withdrawn, and not carried as support.**
+✅ **What survives is arm-FREE, which is exactly why it survives: `d_at_cap` = 0, `d_at_floor` = 0, and the
+4.6× distance from the floor. Those three carry *room is doing the work* on their own.**
 
 ⛔ **TWO FURTHER REASONS THE WITHDRAWN CLAIM COULD NOT HAVE STOOD, both Langston's:**
 1. ⭐ **THE CLASSWIDE POOL IS DRAWN FROM THE `obs >= 200` WELL-FED SYMBOLS AND APPLIED TO THE
