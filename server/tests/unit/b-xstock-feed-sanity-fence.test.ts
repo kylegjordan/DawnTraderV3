@@ -161,10 +161,10 @@ describe('F-P9 — the entry seam reads BOTH sides and consults the guard, xStoc
   // a `market-hours.js` import and `toLocaleTimeString(…, {timeZone})` all slipped through it. Broadened
   // to the import level and given its own FIRING CONTROL — a negative assertion with no control proves
   // nothing about its token list, only that the slice was found.
-  // ⚠️ `RTH` and `session` carry word boundaries: unbounded and case-insensitive they match
-  // inside `worth`, `north`, `further` and `sessionId` (Langston, non-blocking). That direction is
-  // fail-closed — it only ever costs a future author a hunt for a clock reference that is not there
-  // — but it is free to fix.
+  // ⚠️ `RTH` and `session` carry word boundaries BECAUSE unbounded and case-insensitive they match
+  // inside `worth`, `north`, `further` and `sessionId` (Langston). That direction was fail-closed —
+  // it would only ever have cost a future author a hunt for a clock reference that is not there —
+  // and it was free to fix, so it is fixed on the line below rather than left as a known wart.
   const CLOCK_TOKENS = /market-?hours|isMarketOpen|isXstockMarketOpen|liquidFillWindow|get(UTC)?Hours|getUTC(Date|Day)|toLocale|timeZone|Date\.now|\bRTH\b|\bsession\b|premarket|after_?hours|overnight/i;
   it("⛔ NO CLOCK, NO SESSION TERM — Kyle's ruling is one standard at every hour", () => {
     expect(gate).not.toMatch(CLOCK_TOKENS);
@@ -237,6 +237,38 @@ describe('F-P7ii — the re-entry relaxation is measured-only and NULL-safe', ()
   it('CONTROL: the unsafe form is recognisably different from what shipped', () => {
     const unsafe = "AND NOT (exit_book_state = 'hollow' AND exit_book_state_basis IN ('guard'))";
     expect(unsafe).not.toMatch(/COALESCE/);
+  });
+});
+
+describe('F-CTRL — no control characters in this batch\'s source (Langston: the assertion belongs in the FENCE)', () => {
+  // ⛔ WHY THIS IS A FENCE AND NOT A ONE-OFF REPAIR CHECK. Writing a regex fix through a shell heredoc
+  // turned five `\b` escapes into literal BACKSPACE (0x08) characters inside `CLOCK_TOKENS` — the word
+  // boundaries silently did not exist, the file still parsed, and only a fixture I happened to add caught
+  // it. A repair script that asserts cleanliness protects the one repair; a fence protects every future
+  // author, which is the difference Langston named. Applies to the batch's own files, which is the set
+  // this suite is responsible for.
+  const OWN_FILES = [
+    join(SERVER, 'asset_classes', 'xstock_spot', 'book-state.ts'),
+    join(SERVER, 'asset_classes', 'xstock_spot', 'book-state-config.ts'),
+    join(SERVER, 'asset_classes', 'xstock_spot', 'book-state-tracker.ts'),
+    join(SERVER, 'tests', 'unit', 'b-xstock-feed-sanity-fence.test.ts'),
+    join(SERVER, 'tests', 'unit', 'b-xstock-feed-sanity-book-state.test.ts'),
+    join(ROOT, 'scripts', 'xstock-hollow-recut.ts'),
+    join(ROOT, 'scripts', 'reset-outcome-feedback-keys.ts'),
+  ];
+  // C0 and C1 are legitimate in text: TAB (09), LF (0A) and CR (0D). Everything else in the C0 range is
+  // a mangled escape — 0x08 backspace being the one that actually happened.
+  const CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
+  it('CONTROL: the detector fires on an injected backspace (else its silence means nothing)', () => {
+    expect(CONTROL.test('abc\x08def')).toBe(true);
+    expect(CONTROL.test('abc\tdef\r\nghi')).toBe(false); // tab/CR/LF must NOT trip it
+  });
+  it('none of this batch\'s own files contains a control character', () => {
+    for (const f of OWN_FILES) {
+      const src = readFileSync(f, 'utf8');
+      const at = src.search(CONTROL);
+      expect(at, `${f} @${at}: ${JSON.stringify(src.slice(Math.max(0, at - 40), at + 40))}`).toBe(-1);
+    }
   });
 });
 
