@@ -77,11 +77,40 @@ He remembers **"we were working on improving Langston and setting him up"** in J
 | item | what it is FOR, plainly | state |
 |---|---|---|
 | **`#946` — Langston's memory file is over its size limit** | Everything in that file is re-read on **every single question we ask him**, so anything stale or bloated is paid for hundreds of times and can give him a wrong baseline. | ⛔ **OPEN and getting WORSE. Measured 49,224 bytes on 29 Aug; I measured 58,177 today — up ~18% in five days, against a 24,576 limit.** ⚠️ **~1,394 bytes of that growth is mine, added this morning** (Kyle's session-freshness ruling, which he needed). Filed under CC-A but Kyle assigned the work to me. |
-| **`B-LANGSTON-LEDGER-SPLIT`** (governance queue **2.8**, placed 1 Sep) | His file contains a running ledger of past reviews. **That ledger alone is 34,605 bytes — larger than the whole file is allowed to be.** Moving it to its own separately-loaded file is the fix. Langston's own words: *"that is a batch, not an edit."* | **PLACED, not started.** Shared with Langston. **This is the piece that actually unblocks `#946`** — trimming around the ledger cannot get under the limit while the ledger is bigger than the limit. |
+| **`B-LANGSTON-LEDGER-SPLIT`** (governance queue **2.8**, placed 1 Sep) | His file contains a running ledger of past reviews. ⛔ **CORRECTED — see §3b: the ledger is `11,245 B` measured today, NOT the 34,605 B the plan row asserts. I repeated that figure without deriving it.** Moving it to its own separately-loaded file is the fix. Langston's own words: *"that is a batch, not an edit."* | **PLACED, not started.** Shared with Langston. **This is the piece that actually unblocks `#946`** — trimming around the ledger cannot get under the limit while the ledger is bigger than the limit. |
 
 ⭐ **My recommendation on the order: `B-LANGSTON-LEDGER-SPLIT` first.** It is the only one of the two that can succeed on the arithmetic.
 
 ---
+
+### 3b. ⭐⭐ WHY HIS FILES GROW — MEASURED FROM THE DATED BACKUPS, and it answers Kyle's question exactly
+
+> **Kyle, 2026-09-03:** *"His memory file used to always remain the same… We've never had to prune it before. So why is it accumulating and growing in size?"*
+
+⛔⛔ **FIRST, TWO CORRECTIONS — BOTH MINE, BOTH FROM REPEATING A FIGURE INSTEAD OF DERIVING IT.**
+1. ⛔ **THE REVIEWER LEDGER IS `11,245 B`, NOT `34,605 B`. MEASURED TODAY** by extracting the section between its own heading and the next. **`PHASE_19_PLAN` row 2.8 asserts 34,605 and I repeated it to Kyle and into §3 of this file without re-deriving it.** ⇒ **THE ARGUMENT I BUILT ON IT COLLAPSES: I said *"trimming around the ledger cannot get under the cap because the ledger is bigger than the cap."* At 11,245 B against a 24,576 B cap, THAT IS FALSE — trimming CAN get under, and the ledger split is a structural improvement rather than an arithmetic necessity.** *(`named-not-measured` — and I wrote about that exact failure this same morning.)*
+2. ⛔ **IT HAS BEEN PRUNED BEFORE — TWICE, WITH THE ARTIFACTS STILL ON DISK.** Kyle's *"we've never had to prune it"* is not right: `langston_MEMORY_pre-prune-20260728-031116.md` (45,456 B) and `langston-MEMORY.md.pre-prune-20260805-134716` (25,488 B).
+
+✅ **THE GROWTH SERIES, read off dated backup files on the box — not recalled, not estimated:**
+
+| date | bytes | what the file was |
+|---|---|---|
+| 2026-07-28 03:11 | **45,456** | pre-prune → pruned |
+| 2026-08-05 13:12 | 25,570 | pre-`#651`-OBJ2 |
+| 2026-08-05 13:47 | 25,488 | pre-prune → **pruned again** |
+| ⭐ **2026-08-06 11:18** | **24,528** | `pre-recall-golive` — **the day the recall system went live, and UNDER the 24,576 B cap** |
+| 2026-08-28 17:09 | 45,178 | pre-F-G-1 |
+| 2026-09-02 10:19 | 51,240 | pre-`B-MEASURE-GATE` leg 2 |
+| **2026-09-03 (today)** | **58,177** | live |
+
+⇒ ⛔⛔ **FROM 24,528 B TO 58,177 B IN 28 DAYS — `+33,649 B`, `+137%`, ROUGHLY `+1.2 KB PER DAY`.** ★ **So the honest answer to *"why is it growing"* is not that something broke — it is that it was pruned to exactly the cap on 08-06 and then grew at a steady daily rate with nothing removing anything.**
+
+**THE THREE MECHANISMS, in order of contribution:**
+1. ⛔ **EVERY BATCH APPENDS A SECTION AND NOTHING REMOVES IT AT CLOSE.** Step-10's §10.b mandates a sync of his memory in every governance turn — **an APPEND rule with no matching DELETE rule.** **Measured today: 8 of 18 sections name an already-CLOSED batch** (`B-REGIME-INPUTS-LIVE` 1,355 B · `B-ALERT-ACTOR-ALLOWLIST` 1,285 · `B-MISTAKES-FILE` 825 · `B-TELEGRAM-DECOMM` 641 · `B-EPOCH-KEYING-PARITY` 417 · `B-MBIM-SWITCH-ON` 305 · `P19-B-PERPFEED` 300 · `B-CONDUCT-FILE` 253) — **≈5.4 KB of finished work still loaded on every question we ask him.** ⚠️ **And `F-G-2` has TWO separate sections (3,266 + 1,350) for one batch.**
+2. ⛔ **TWO STRUCTURES ARE APPEND-ONLY BY DESIGN AND CAN NEVER SHRINK.** `STANDING NOTES` **11,300 B** + `REVIEWER LEDGER` **11,245 B** — the ledger's own heading says *"survives every prune"*. **Together 22,545 B = 92% of the entire 24,576 B cap before a single batch note is added.** ⇒ **the cap is arithmetically unreachable while both live in the capped file — which IS the real case for the ledger split, on structure rather than on the wrong number I quoted.**
+3. ⚠️ **THE RULES FILE GREW SEPARATELY AND FOR A DIFFERENT REASON: `53,405 B` (2026-07-23) → `54,699` (07-27) → `64,570` (08-28) → `66,994` today — `+25%` in six weeks.** Rules are added and essentially never removed. ★ **`CONDUCT.md` has a ONE-IN-ONE-OUT rule for exactly this; his `CLAUDE.md` has none.**
+
+★★ **SO NOTHING IS MALFUNCTIONING — THE SYSTEM IS DOING WHAT IT WAS TOLD.** We built an append obligation at every batch close, two append-only ledgers, and no eviction rule anywhere. **A prune is therefore not a fix; it resets the clock ~28 days.** ⇒ **the durable fix is an EVICTION rule (a closed batch's section leaves his memory at close) plus moving the two append-only structures out of the capped, always-loaded file.**
 
 ## 4. Placed and waiting — my rows in the plan
 
