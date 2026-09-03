@@ -272,20 +272,37 @@ export class ActiveExecutionEngine {
     // constraint 3 — crypto depth is the venue's own published ladder). Crypto's entry behaviour is
     // BYTE-FOR-BYTE unchanged by this batch; widening it would be an unreviewed change to a class this
     // batch never audited.
+    // ⛔ NEITHER ARM BELOW CALLS `recordDepthGateBlock` — THE CALLER IS THE SOLE WRITER (`:3724`), as it
+    // is for all four arms above. Both arms did call it in the first draft, so `xstock_spot:one_sided_book`
+    // and `:hollow_book` incremented 2× per refusal while every other bucket incremented 1× — inside the
+    // one per-reason counter Step 8 reads to say whether this gate fires (Langston Step-4 BLOCKER-1).
     if (assetClass === 'xstock_spot') {
       const bidWarmth = assessWarmth(snapshot, 'bids', config);
-      if (!bidWarmth.warm) {
-        recordDepthGateBlock(assetClass, `one_sided_book ${bidWarmth.reason}`);
-        return { pass: false, reason: `one_sided_book ${bidWarmth.reason}`, snapshot };
-      }
-      // The SAME predicate the exit guard uses, on the same live tick — one mechanism, one knob set.
-      // It reads the pair's own recent quotes only: never a second venue, never the clock, never the
-      // session. `unknown` (no comparator yet) and a guard that did not run both PASS — this seam may
-      // refuse an entry, but it may never invent a refusal from an absence (`#546`).
+      if (!bidWarmth.warm) return { pass: false, reason: `one_sided_book ${bidWarmth.reason}`, snapshot };
+      // The same predicate the exit guard uses, on the same live tick: the pair's own recent quotes only —
+      // never a second venue, never the clock, never the session. `unknown` (no comparator yet) and a guard
+      // that did not run both PASS: this seam may refuse an entry, never invent one from an absence (`#546`).
+      // ⛔⛔ WHAT ACTUALLY REACHES THIS SEAM IS NARROWER THAN "THE SAME PREDICATE" SOUNDS, AND SAYING SO IS
+      // THE POINT (Langston Step-4 FINDING-1, re-derived here): `advanceBookStateComparator` has exactly ONE
+      // call site — the EXIT loop at `:1374`, keyed on `position.symbol` — so `_comparators` only ever holds
+      // symbols we ALREADY HOLD. For a symbol we are about to open there is no comparator, so
+      // `assessBookState` returns `unknown` on any two-sided quote (`book-state.ts:192-195`). ⇒ REACHABLE
+      // HERE: `absent_bid`, `absent_ask`. UNREACHABLE HERE: `bid_collapsed`, `ask_spiked`, `mark_deviation`
+      // — the relative-departure arms, i.e. the substance of the predicate; eight of the twelve knobs are
+      // inert at this seam. A held name therefore gets a STRICTER entry gate than an unheld one: fail-safe
+      // in direction, but a real hole against Kyle's one-standard ruling for the unheld case (a collapsed-
+      // but-POSITIVE bid passes `getDepthSnapshot`'s `bid > 0 AND bid_qty > 0` filter, so warmth and
+      // sufficiency do not catch it either). Pre-register any entry-refusal expectation as ABSENT-SIDE ONLY,
+      // and never compare an entry refusal on a held name with one on an unheld name — they are two gates.
+      // ⛔ AND A `two_sided` VERDICT HERE IS NOT EVIDENCE THE TICK WAS FRESH (Langston, property (d)):
+      // `assessWarmth` refuses on `snap.ageMs > warmthMaxAgeMs` (`depth-source.ts:151`) but
+      // `assessBookStateNow` never compares `raw.atMs` to anything, and `raw` advances on every frame even
+      // when the mark does not — so on a dark feed `raw` freezes and this arm passes on an arbitrarily old
+      // frame. The fail direction is covered downstream (`stale_book` + the B6.6 liveness gate); nothing may
+      // read a book-state pass as a freshness claim.
       const bs = assessBookStateNow(symbol);
       if (bs.ok && bs.result.state === 'hollow') {
         const _why = `hollow_book ${bs.result.reasons.join('|')}`;
-        recordDepthGateBlock(assetClass, _why);
         console.warn(`[B-XSTOCK-FEED-SANITY][ENTRY_GATE] ${symbol}: entry refused — ${_why} inputs=${JSON.stringify(bs.result.inputs)}`);
         return { pass: false, reason: _why, snapshot };
       }

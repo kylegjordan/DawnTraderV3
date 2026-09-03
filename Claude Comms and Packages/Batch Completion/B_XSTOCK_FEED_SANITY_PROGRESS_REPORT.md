@@ -35,6 +35,15 @@ The xStock equities feed sometimes shows a HOLLOW book — one side (usually the
 | pre-market | 29,344 | **78.6 %** | 72.9 % | 62.7 % | 38.0 % |
 | overnight | 36,774 | **80.4 %** | 76.3 % | 68.8 % | 49.7 % |
 
+**BOTH ESTIMANDS, SIDE BY SIDE, WITH THE ESTIMAND NAMED (Langston Step-4 CONDITION-3) — a later reader who recomputes by gap count must not conclude I was wrong:**
+| session | **share of GAPS longer than 15 s** (per-frame view) | **share of CLOCK spent staler than 15 s** (the decision object) |
+|---|---|---|
+| regular hours | 1.02 % | **14.0 %** |
+| after-hours | 27.17 % | **69.0 %** |
+| pre-market | 25.36 % | **78.6 %** |
+| overnight | 19.18 % | **80.4 %** |
+**The estimand that decides a refusal is the second one:** an entry attempt lands at an arbitrary instant, and the gate compares `NOW() − MAX(captured_at)` at that instant, so the denominator is elapsed CLOCK, not the number of gaps. The two differ by ~3× off-hours because long gaps occupy disproportionate time (length-biased sampling). Both are true of the same data; only the second answers "will an entry be refused".
+
 ⇒ **RECOMMENDATION, AND IT FOLLOWS FROM KYLE'S OWN RULING RATHER THAN FROM THE ARITHMETIC: LEAVE `active_fill_max_age_ms` AT 15,000 ms.** Re-basing to ≈26 s is defensible as *restoring the original rule* — but its ONLY effect is to let more entries through, ~10 points more off-hours (69 → 59 % after-hours, 80 → 76 % overnight) against ~1 point in regular hours, and Kyle's ruling is explicit: *"I just don't want to relax the rules so that we can get more trades in those off hours."* The measuring-stick argument justifies a change; he has told me which way to err.
 ⚠️ **THE DRIFT IS RECORDED RATHER THAN CORRECTED, so nobody later reads 15 s as still meaning what it meant:** at 1.8 s capture the limit sat at **1.71 × RTH p99**; at 4 s capture it sits at **1.00 ×**. **The bar has silently TIGHTENED by ~1.7× since it was written** — we are keeping the stricter number deliberately, not by inattention. If the capture throttle changes again, this ratio is the thing to re-read.
 ✅ **AND IT ANSWERS KYLE'S QUESTION ON ITS OWN TERMS:** at the current limit, an entry attempt at a random off-hours moment is refused on freshness alone **69–80 % of the time**, before the depth/book-state gate runs at all. That is the "few entries off-hours" he asked for, now measured rather than inferred — **and the ~20–30 % that do pass are the deep, well-quoted books he said he is happy to trade.**

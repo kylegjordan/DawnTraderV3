@@ -2283,8 +2283,14 @@ class ReadyToBuyService {
             -- ask-only seam and straight back into the book that just closed it.
             -- (No backticks in this comment: it lives inside a tagged template literal, where a backtick
             --  terminates the string. That mistake broke the parse of this file once, 2026-09-03.)
+            -- CLASS-GATED EXPLICITLY (Langston Step-4 CONDITION-2): this cooldown query runs for crypto
+            -- too, and crypto invariance was resting entirely on the WRITE side never labelling a crypto
+            -- row -- a property enforced in another file and fenced nowhere here. An unrelated future
+            -- change that ever labels a crypto row would silently relax the crypto cooldown. Stated in
+            -- the predicate instead, so this file carries its own guarantee.
             AND NOT (
-              COALESCE(exit_book_state, '') = 'hollow'
+              asset_class = 'xstock_spot'
+              AND COALESCE(exit_book_state, '') = 'hollow'
               AND COALESCE(exit_book_state_basis, '') IN ('guard', 'decision_price')
             )
           ORDER BY closed_at DESC LIMIT 1`);

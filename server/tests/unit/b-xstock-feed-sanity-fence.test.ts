@@ -156,8 +156,30 @@ describe('F-P9 — the entry seam reads BOTH sides and consults the guard, xStoc
     expect(gate).toMatch(/assessBookStateNow\(symbol\)/);
     expect(gate).toMatch(/state === 'hollow'/);
   });
+  // ⛔ THE FENCE THAT PROTECTS KYLE'S RULING, and the first version was narrower than it read (Langston
+  // Step-4 CONDITION-1): `/getHours/` does not match `getUTCHours()`, and `isMarketOpen`, `marketHours`,
+  // a `market-hours.js` import and `toLocaleTimeString(…, {timeZone})` all slipped through it. Broadened
+  // to the import level and given its own FIRING CONTROL — a negative assertion with no control proves
+  // nothing about its token list, only that the slice was found.
+  const CLOCK_TOKENS = /market-?hours|isMarketOpen|isXstockMarketOpen|liquidFillWindow|get(UTC)?Hours|getUTC(Date|Day)|toLocale|timeZone|Date\.now|RTH|session|premarket|after_?hours|overnight/i;
   it("⛔ NO CLOCK, NO SESSION TERM — Kyle's ruling is one standard at every hour", () => {
-    expect(gate).not.toMatch(/isXstockMarketOpen|liquidFillWindow|getHours|RTH|session/i);
+    expect(gate).not.toMatch(CLOCK_TOKENS);
+  });
+  it('CONTROL: the clock-token list actually fires on every shape it must catch', () => {
+    for (const fixture of [
+      'const h = new Date().getUTCHours();',
+      "import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';",
+      "if (isMarketOpen(symbol)) return { pass: true };",
+      "const et = d.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });",
+      'if (Date.now() > cutoff) return null;',
+      'if (session === "overnight") widen();',
+    ]) expect(CLOCK_TOKENS.test(fixture), fixture).toBe(true);
+    expect(CLOCK_TOKENS.test("const suff = assessSufficiency(snapshot, 'asks', orderNotional, config);")).toBe(false);
+  });
+  it('⛔ neither new arm records its own gate-block counter — the caller is the sole writer (BLOCKER-1)', () => {
+    expect(gate).not.toMatch(/recordDepthGateBlock/);
+    const src = code(AEE);
+    expect(src).toMatch(/recordDepthGateBlock\(_openClass, _gate\.reason\)/); // the one caller still records
   });
   it('the new checks are class-gated to xstock_spot, so crypto entry behaviour is unchanged', () => {
     const guardIdx = gate.indexOf("assetClass === 'xstock_spot'");
@@ -192,6 +214,17 @@ describe('F-P7ii — the re-entry relaxation is measured-only and NULL-safe', ()
   it('⛔ NULL-SAFE: unlabelled rows keep BLOCKING (a bare NOT(col = …) would silently drop them)', () => {
     expect(clause).toMatch(/COALESCE\(exit_book_state,\s*''\)/);
     expect(clause).toMatch(/COALESCE\(exit_book_state_basis,\s*''\)/);
+  });
+  it('⛔ CLASS-GATED IN THE SQL ITSELF — crypto invariance does not rest on another file (CONDITION-2)', () => {
+    // This query runs for crypto too. Without the class term, crypto's cooldown would depend on the
+    // WRITE side never labelling a crypto row — enforced elsewhere and fenced nowhere here.
+    expect(clause).toMatch(/asset_class\s*=\s*'xstock_spot'/);
+    const notBlock = clause.slice(clause.indexOf('AND NOT ('));
+    expect(notBlock).toMatch(/asset_class\s*=\s*'xstock_spot'/);
+  });
+  it('CONTROL: a NOT-block without the class term is recognisably different', () => {
+    const unfenced = "AND NOT (\n COALESCE(exit_book_state,'') = 'hollow'\n)";
+    expect(unfenced).not.toMatch(/asset_class\s*=\s*'xstock_spot'/);
   });
   it('CONTROL: the unsafe form is recognisably different from what shipped', () => {
     const unsafe = "AND NOT (exit_book_state = 'hollow' AND exit_book_state_basis IN ('guard'))";
