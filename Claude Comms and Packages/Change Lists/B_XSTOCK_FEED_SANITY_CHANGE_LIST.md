@@ -1,17 +1,23 @@
 # B-XSTOCK-FEED-SANITY — STEP 4 CHANGE LIST (for Langston's code review at the graded ref)
 
-**Batch:** `B-XSTOCK-FEED-SANITY` (`#943`; closes `#567`) · **owner:** CC-C · **change-class: architecture** · **READY-AT: `3b2c4966c9c9e84c659b1f96d67b2d4dc2943226`** (the Step-3 commit, pushed 2026-09-03 ~00:47Z; `origin/migration/aws-supabase`) · **CI run `33700967265`: TypeScript Check (baseline gate) ✓ · Test Suite ✓ · Build ✓ · Docker Build ✓** · **plan:** `Scope Files/B_XSTOCK_FEED_SANITY_PRE_AUDIT.md` PART B (P1–P13), cleared 00:24Z with C1–C3 folded.
+**Batch:** `B-XSTOCK-FEED-SANITY` (`#943`; closes `#567`) · **owner:** CC-C · **change-class: architecture** · **READY-AT: `2ee14d69028c67c6ce9aabe30a4e258a38dade99`** (the Step-4 fix commit on top of the Step-3 build `3b2c4966c`; two code commits, nothing else touches code between them; `origin/migration/aws-supabase`) · **CI: `3b2c4966c` run `33700967265` 4/4 green; the run at `2ee14d690` is reported per job in the dispatch** · **plan:** `Scope Files/B_XSTOCK_FEED_SANITY_PRE_AUDIT.md` PART B (P1–P13), cleared 00:24Z with C1–C3 folded.
 **⛔ DEPLOY HOLD unchanged:** nothing deploys before the `#951` window closes 2026-09-07. This is a review of the diff, not a deploy.
-**Verification at the ref:** `node scripts/check-tsc-baseline.mjs` → 377 = 377 OK · `vitest` 90/90 across `b-xstock-feed-sanity-book-state` (21, NEW), `b-xstock-feed-sanity-fence` (12, NEW), `b-exit-provenance-fence` (25), `b-new-44-equity-spot-diag` (6), `p19-b4b1-depth-gate` (10), `p19-b8-5e-mark-staleness` (16).
+**Verification at the ref:** `node scripts/check-tsc-baseline.mjs` → 377 = 377 OK · `vitest` 65/65 at the fix commit across `b-xstock-feed-sanity-book-state` (21, NEW), `b-xstock-feed-sanity-fence` (13, NEW), `b-exit-provenance-fence` (25), `b-new-44-equity-spot-diag` (6), `p19-b4b1-depth-gate` (10), `p19-b8-5e-mark-staleness` (16).
 
 ## 0. PREVIOUSLY STATED vs NOW (plan → code)
 | # | PREVIOUSLY (audit P-item) | NOW (the diff) | REASON |
 |---|---|---|---|
 | 0.1 | P3: the provenance base's `tickerBid/tickerAsk` are filled from the extended tick | **they stay NULL; the column keeps its archiver-witness producer.** The decision-instant sides are in `metadata.bookState.*.inputs`, the verdict in `exit_book_state` | filling them would silently re-define an existing column's producer on xStock — the persist site falls back to `_witness`, and on xStock the equities ticker IS the feed the mark comes from (`#641` / wrong-object) |
 | 0.2 | P3: "on a yield the cache IS updated" | as planned — the yield falls through to the existing `updateCache` at the mark hand-off; the SKIP branch `continue`s before it (C1), fenced | — |
-| 0.3 | P2: eleven knob rows | **twelve** (`trailing_spread_window_snaps` and `feed_read_enabled` are separate rows) — asserted `=== 12` at boot, and the fence asserts migration == `BOOK_STATE_KNOBS` == warmup | C2 |
+| 0.3 | P2: eleven knob rows | **twelve** (`trailing_spread_window_snaps` and `feed_read_enabled` are separate rows) — the boot assertion reads the LIVE row set (`getCachedNumbersForModule`) and requires it to EQUAL `BOOK_STATE_KNOBS` (a thirteenth row refuses too), and the fence asserts migration == `BOOK_STATE_KNOBS` == warmup | C2; Langston Step-4 condition (the first draft counted the list it iterated — a tautology) |
+| 0.4 | first push (`3b2c4966c`): `closeAllPositions` checked the entry-price fallback BEFORE the class, so a CRYPTO close-all on the fallback wrote `unknown`/`guard` | **class first; and no label at all unless the guard actually assessed a live frame** — crypto, the entry-price fallback, a disabled guard, cold knobs or no tick all leave NULL | Langston Step-4 BLOCKER-1 |
+| 0.5 | first push: a disabled guard wrote `exit_book_state = 'unknown'` with basis `guard`; the maker leg wrote `at_fill = 'unknown'`; a flatten with no decision verdict wrote `unknown` | **NULL in every case where no frame was assessed** — `unknown` now means exactly one thing: the guard LOOKED and had no comparator yet. A NULL is re-cuttable (the re-cut selects `IS NULL`); a value is a look that happened. Column and schema comments say so. | Langston Step-4 BLOCKER-2 (`#546` with the repair path welded shut) |
+| 0.6 | first push: the closed row's `bookState` record came from the RE-FETCHED position row, whose copy is throttled (≤ 9 skips short) | **the exit stamp carries the loop's in-memory record (`bookStateRecord`) and the carry prefers it** — the closed row is exact; only `active_open_positions` lags between throttled writes | Langston Step-4 point 3 |
+| 0.7 | first push: the re-cut's `decision_price` basis set the held side and `last` to the PRIOR frame's own values, so every hold check was true by construction | **the held side and `last` come from the archived frame at/before the close; the comparator from the two-sided frame before it** — data against data; the basis still OVER-CALLS (the archive dropped the true decision frame), which the header states and the body-close DISCRIMINATING control measures and prints | Langston Step-4 point 5 |
+| 0.8 | `hollow_skip_cap = 60` "covers 7 of 9 P-A episodes and nearly the p90" | **a PRE-REGISTRATION of 90 s (60 × the live 1,500 ms), not a derivation** — P-A's nine episodes are five zeroes, 9.2, 13.7, 108.9 and a 7-snap weekend artifact; 1 of 9 (GEV, 108.9 s) exceeds the cap, so one yield is expected on that shape | Langston Step-4 point 2 (audit §A.9 corrected) |
 
-## 1. THE JUDGEMENT CALLS I WANT ATTACKED
+## 1. THE JUDGEMENT CALLS I WANT ATTACKED — *Langston answered all five at 00:57Z; his rulings are folded (rows 0.4–0.8) and recorded beside each*
+*(1) keep — `unknown ⇒ actionable` at open is constraint 1; withholding on an empty comparator would trap on the post-restart path. (2) keep the repeat-yield-per-interval shape; the cap is a 90 s pre-registration, not a P-A derivation (0.8). (3) the closed row is now exact via the stamp's `bookStateRecord` (0.6). (4) keep the absent-ask arm — consistency; near-unreachable at 1.0e-07. (5) NOT honest enough as first written — the held-side checks were true by construction; fixed and the over-call is now measured (0.7).*
 1. **The comparator advances only from the engine, only on `two_sided`** (`book-state-tracker.ts` `advanceBookStateComparator`; the engine calls it at `:1338-1342`). A label read at a fill or a flatten never moves it. Consequence: a symbol not held has no comparator, so the first decision tick after an open reads `unknown` (labelled, actionable) until a two-sided frame seeds it — is `unknown ⇒ actionable` the right fail direction at open?
 2. **After a YIELD the streak resets to zero**, so a still-hollow book earns another `hollow_skip_cap` of withholding before the next yield. Bounded per interval, not once per episode — is one yield per cap-interval the intended shape of constraint 7?
 3. **`_recordBookStateEvent` throttles the row write** (first skip of a streak, every 10th, every yield) — the log line is per tick. The closed row's `bookState.hollowSkips` can therefore be up to 9 short of the true count at close. Stated; acceptable?
@@ -65,13 +71,13 @@ The existing reader (`aee:1164`) destructures `price/tsMs/kind` only — unchang
 
 ### 3.2 `server/services/active-execution-engine.ts` — P3 the guard, P4 the fill-instant read, P5 the persist
 Imports (`:152-153`): `assessBookStateNow`, `advanceBookStateComparator`, `type BookState`. State (`:285`): `_bookStateSkipStreak: Map<string, number>` beside `_priceSkipStreak`. Counters (`:1170-1171`): `hollowSkips`, `hollowYields` → EVAL_EXIT. Decls (`:1191-1192`): `bookStateAtDecision: BookState | null`, `bookStateYielded`.
-**The guard** — inserted between the ceiling breach `continue` and `currentPrice = _eqTick.price` (the `assessBookStateNow` call at `:1285`; the block runs `:1274-1346`, the hand-off `:1347`):
+**The guard** — inserted between the ceiling breach `continue` and `currentPrice = _eqTick.price` (the `assessBookStateNow` call at `:1285`; the block runs `:1274-1347`, the hand-off `:1348`):
 ```ts
 {
   const _bs = assessBookStateNow(position.symbol);
   if (!_bs.ok) {
     if (_bs.reason === 'knobs_missing') { console.error(…); withoutPrice++; await this._recordPriceSkip(position, 'book_state_knob_missing'); continue; }
-    bookStateAtDecision = 'unknown';                       // disabled by knob (or no tick — unreachable here)
+    // disabled by knob (or no tick): NO frame assessed ⇒ the label stays NULL (never `unknown`+`guard`; Langston B2)
   } else {
     const { result: _r, cfg: _c, raw: _raw } = _bs;
     const _streak = this._bookStateSkipStreak.get(position.id) ?? 0;
@@ -103,23 +109,23 @@ currentPrice = _eqTick.price;
 priceSource = 'kraken_equities_ws';
 ```
 `_recordBookStateEvent` (new private method at `:358`, before the I7 diagnostics block): merges `{ hollowSkips, lastSkip, yields[≤20] }` into `position.metadata.bookState`; persists on `yield | streak === 1 | streak % 10 === 0`.
-Provenance base (`:1548-1549`): `tickerBid/tickerAsk` stay `null` (0.1); `bookStateAtDecision`, `bookStateYielded` added. Option type (`exitProvenance`, `:2237-2238`): the two optional fields.
-**Fill instant** (`closePosition`): `let _bsAtFill: BookState | null = null;` hoisted at `:2302` beside `_fillDepthAgeMs`; maker leg (`:2315`) → `'unknown'` on xStock; taker leg (`:2322`), BEFORE `getDepthSnapshot`: `_bsAtFill = assessBookStateNow(symbol).ok ? result.state : 'unknown'`.
-**Persist** (`:2669-2671`, beside `exitTickerAsk`):
+Provenance base (`:1549-1554`, incl. `bookStateRecord`): `tickerBid/tickerAsk` stay `null` (0.1); `bookStateAtDecision`, `bookStateYielded` added. Option type (`exitProvenance`, `:2242-2246`): `bookStateAtDecision`, `bookStateYielded`, `bookStateRecord`.
+**Fill instant** (`closePosition`): `let _bsAtFill: BookState | null = null;` hoisted at `:2310` beside `_fillDepthAgeMs`; maker leg → stays NULL (no book consulted ⇒ no assessment); taker leg (`:2330`), BEFORE `getDepthSnapshot`: `_bsAtFill = assessBookStateNow(symbol).ok ? result.state : null`.
+**Persist** (`:2679-2681`, beside `exitTickerAsk`):
 ```ts
-exitBookState: options?.exitProvenance?.bookStateAtDecision ?? (_bsAtFill !== null ? 'unknown' : null),
+exitBookState: options?.exitProvenance?.bookStateAtDecision ?? null,
 exitBookStateAtFill: _bsAtFill,
 exitBookStateBasis: (options?.exitProvenance?.bookStateAtDecision != null || _bsAtFill !== null) ? 'guard' : null,
 ```
-**Metadata carry** (`:2571-2585`, `_carry.bookState` at `:2579`): the `fg2Shadow` carry generalised — `bookState` (with `yielded` explicit) rides onto the closed row when present; never a wipe.
+**Metadata carry** (`:2580-2594`; `_bsRec` at `:2586`): the `fg2Shadow` carry generalised — `bookState` rides onto the closed row from the exit stamp's `bookStateRecord` (the loop's in-memory, per-tick-exact copy), falling back to the re-fetched row's; `yielded` explicit; never a wipe.
 
-### 3.3 `server/services/active-portfolio-manager.ts` — P4 at `closeAllPositions` (`apm:680-687`)
-Inside the `updateClosedTrade` payload, after `exitTickerAsk: null`: an awaited IIFE — `fallbackType === 'entry_fallback'` ⇒ `{ exitBookState: 'unknown', exitBookStateBasis: 'guard' }`; non-xStock ⇒ `{}`; else `assessBookStateNow(symbol)` ⇒ `{ exitBookState: state | 'unknown', exitBookStateBasis: 'guard' }`. Never withholds.
+### 3.3 `server/services/active-portfolio-manager.ts` — P4 at `closeAllPositions` (`apm:672-688`, the call at `:685`)
+Inside the `updateClosedTrade` payload, after `exitTickerAsk: null`: an awaited IIFE — non-xStock ⇒ `{}` (FIRST — BLOCKER-1); the entry-price fallback ⇒ `{}` (no frame behind the number); else `assessBookStateNow(symbol)` ⇒ `{ exitBookState: state, exitBookStateBasis: 'guard' }` when it assessed, `{}` when it did not. Never withholds; never writes `unknown` for a look that did not happen.
 
 ### 3.4 `server/routes.ts` — P4 at the two manual writers
-`POST /active-engine/close-trade/:id` (`:12979-12983`): `Object.assign(closedTradePayload, { exitBookState, exitBookStateBasis: 'guard' })` for xStock AFTER the payload literal (so its inferred type and the pre-existing baseline diagnostic on it are unchanged). `POST /active-engine/force-clear-stranded` (`:13091-13097`): the same fields inside the `createClosedTrade` literal, `unknown` on the entry fallback.
+`POST /active-engine/close-trade/:id` (`:12978-12987`, `Object.assign` at `:12982`): the label assigned AFTER the payload literal (so its inferred type and the pre-existing baseline diagnostic on it are unchanged), ONLY when the guard assessed. `POST /active-engine/force-clear-stranded` (`:13093-13101`): the same inside the `createClosedTrade` literal; crypto, the entry fallback and a guard that did not run leave NULL.
 
-### 3.5 `shared/schema.ts` (`:1856-1873`; the three columns at `:1871-1873`) — three `varchar` columns with the basis discipline in the comment. `server/startup/b72-warmup.ts` (`'book_state'` at `:168`; `assertBookStateKnobsAtBoot()` at `:344`) — `'book_state'` prefetched; `assertBookStateKnobsAtBoot()` called after the `mark_staleness` block. `package.json` — two scripts. `drizzle/migrations/MANIFEST.txt` — one line.
+### 3.5 `shared/schema.ts` (`:1856-1876`; the three columns at `:1874-1876`) — three `varchar` columns with the basis discipline in the comment. `server/startup/b72-warmup.ts` (`'book_state'` at `:168`; `assertBookStateKnobsAtBoot()` at `:344`; the assertion itself reads the LIVE row set at `book-state-config.ts:55`) — `'book_state'` prefetched; `assertBookStateKnobsAtBoot()` called after the `mark_staleness` block. `package.json` — two scripts. `drizzle/migrations/MANIFEST.txt` — one line.
 
 ## 4. WHAT IS NOT IN THIS DIFF, BY DESIGN
 - **P7(ii)** (the RTB gate relaxation) and **P9** (the entry-seam gate): coupled, waiting on Kyle's A/B/C/D pick. The fence F-C3 already requires any future reader of the state to read the basis.
