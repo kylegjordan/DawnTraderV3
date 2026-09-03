@@ -178,7 +178,44 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
 **FAIL on (b)** reopens Step 3; **FAIL on (a) with hollow held names present** is a guard that does not fire — reopen Step 3.
 **The decisions the data feeds:** (1) whether the pre-registered thresholds stand; (2) **the cap** — MDT's measured episode (§4b) shows 90 s does not reach recovery on that shape, so the yield records' residual gaps decide whether the cap moves or the yield label carries the gap; (3) whether candidate (ii) is switched on (F4's re-measure of the feed-stub fraction on the guard's own telemetry). **And continuity is read beside every zero:** a symbol's zero counts only where its `COMPARATOR_SEEDED` line AND the loop's `[EVAL_EXIT]` cadence both cover the window — **both of those are in `out.log`, the skips they qualify are in `error.log`; a reader holding only one file cannot complete the read.**
 
-## 7. Governance files changed so far (Step 10 owes the rest)
+## 7. THE FILLED GOVERNANCE LEDGER (Step 10 deliverable) — transcribed from the governance commit `e07743dbe`, not from memory
+
+**CHANGE-CLASS: `architecture`** (as declared in the scope header at Step 1, unamended).
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| **T1** | `BATCH_CATALOG.md` | ✅ | Entry added: the batch, both post-deploy defects, the review record, and the first live judging evidence. |
+| **T1** | `PHASE_HISTORY.md` | ✅ | Phase-19 paragraph recording the batch OPEN in its observation window, and the shared fixture lesson. |
+| **T1** | `PHASE_19_PLAN.md` | ✅ | Row `3n` `B-PRICE-SIDE-BY-JOB` placed; row 4 reach pulled forward with its gate re-derived. |
+| **T1** | shared `MEMORY.md` + own `MEMORY_CC_C.md` | ✅ | Shared gains the four-jobs delegation as a consensus truth; own moved to `STEP: 10 of 11` with the anchored window. |
+| **T1** | the batch `SCOPE` | ✅ | Written at Step 1 with `change-class: architecture`; unchanged this turn — the class was not amended. |
+| **T1** | the batch `PRE_AUDIT` | ✅ | Written at Step 2 (PART B is the implementation plan); unchanged this turn. |
+| **T1** | the `COMPLETION_REPORT` | ✅ | Stands as the **progress report** — correct for an open window; §4c/§4d added, and this ledger transcribed into §7. |
+| **T1** | Langston's `/home/langston/MEMORY.md` | ✅ | Compact entry: deploy sha, both defects, the stated residual, the window dates, and the delegated price decision. |
+| **T2** | `SYSTEM_MANUAL.md` | ✅ | §3.5.1's comparator rule corrected — it asserted the invariant that shipped the guard inert. |
+| **T2** | `SYSTEM_IMPACT_MAP.md` | ✅ | **S25** writer clause corrected, plus three line numbers re-derived at HEAD that had moved. |
+| **T2** | `RUNNING_ISSUES.md` | ✅ | `#943` annotated to its observation state; `#996`'s quoted invariant annotated in place, not rewritten. |
+| **T2** | `CHANGES_AND_FIXES.md` | ✅ | Registry entry: the defect, the fix, both defects found in the fix, and the residual registered-not-closed. |
+| **T2** | `MISTAKE_PATTERNS.md` | ✅ | Instances 10–12 on `verification-weaker-than-claim`, plus the generalisation to negative fences. |
+| **T2** | `BUILD_METHOD_PLAYBOOK.md` | ✅ | New portable rule — *a negative assertion is a fixture that supplies the state under test, one level up*. |
+| **T2** | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level change; the re-sequencing landed as `PHASE_19_PLAN` rows `3n` and 4. |
+| **T2** | `ADJUSTMENT_FRAMEWORK.md` | N/A | No change to how parameters may be adjusted; the 12 `book_state` knobs were pre-registered in the scope and none was re-tuned. |
+| **T2** | `AUTHORITY_BASELINE.md` | N/A | No authority or risk boundary touched — the diff adds a data-quality gate, no sizing, no kill-switch, no limit. |
+| **T2** | `STORAGE_POLICY.md` | N/A | No retention window or tier changed; the log-retention figures recorded are measurements, not policy. |
+| **T2** | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | Nothing on the VTS path changed — the gate sits in the active exit loop only. |
+| **T2** | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | No asset class onboarded; `xstock_spot` already exists. |
+| **T2** | `LANGSTON_ARCHITECTURE.md` | N/A | His build is untouched — same model, runtime, invocation, read path and auth. |
+| **T2** | `CLAUDE.md` / `CONDUCT.md` | N/A | No stable rule changed; today's lesson went to `MISTAKE_PATTERNS` and the playbook. |
+| **T2** | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No `CLAUDE.md` rule was added or materially changed. |
+| **T2** | `DELETED_COMPONENTS_LOG.md` | N/A | Nothing removed — the diff adds a writer argument and a clear function. |
+| **T2** | `GOVERNANCE_EXCEPTIONS.md` | N/A | No exception granted; Kyle released a deploy hold, which is a scheduling call, not an exception to a governed rule. |
+| **T2** | `ALERT_HANDLING_PROTOCOL.md` | N/A | The ack/resolve process is unchanged; one alert was acked under the existing protocol. |
+| **T2** | `DELIVERY_BOARD_PROTOCOL.md` | N/A | No column, field or ownership change; the card moved within the existing columns. |
+| **T2** | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model/feature check did not run inside this batch. |
+
+### 7b. Step-by-step trail (retained)
+
+#### Governance files changed so far (Step 10 owes the rest)
 - `Claude Comms and Packages/Scope Files/B_XSTOCK_FEED_SANITY_SCOPE.md` (Step 1) · `…/B_XSTOCK_FEED_SANITY_PRE_AUDIT.md` (Step 2) · `Claude Comms and Packages/Change Lists/B_XSTOCK_FEED_SANITY_CHANGE_LIST.md` (Step 4) · this report.
 - `1-system-manual/RUNNING_ISSUES.md` — `#943` Step-2 annotation; `#992`, `#993` filed and homed · `1-system-manual/PHASE_19_PLAN.md` — rows 3b.f-c-a, 3b.k-a placed.
 - ✅ **LANDED at Step 10, 2026-09-03 (`dc663323e`) — the two maps, and the sweep found more than the one line Langston named:**
