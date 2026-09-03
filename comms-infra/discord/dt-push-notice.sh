@@ -84,7 +84,13 @@ DRIFT=""
 # FAIL-QUIET: any error leaves DRIFT empty and the notice proceeds untouched.
 if [ -d "$MIRROR" ] && [ -f /usr/local/bin/dt-push-notice.sh ]; then
   LIVE_BLOB=$(git --git-dir="$MIRROR" hash-object /usr/local/bin/dt-push-notice.sh 2>/dev/null)
-  if [ -n "$LIVE_BLOB" ] && ! git --git-dir="$MIRROR" cat-file -e "$LIVE_BLOB" 2>/dev/null; then
+  # ⛔ AND THE MIRROR MUST HAVE FETCHED SINCE THE FILE WAS LAST TOUCHED, or "absent" cannot be
+  # told apart from "pushed a minute ago and the puller has not run yet". Blob-existence is the
+  # right QUESTION; this is what makes the answer trustworthy. Both conditions together mean:
+  # the repo has had a chance to see this content, and it is not there.
+  MIRROR_AT=$(stat -c %Y "$MIRROR/FETCH_HEAD" 2>/dev/null || echo 0)
+  LIVE_AT=$(stat -c %Y /usr/local/bin/dt-push-notice.sh 2>/dev/null || echo 0)
+  if [ -n "$LIVE_BLOB" ] && [ "$MIRROR_AT" -gt "$LIVE_AT" ]      && ! git --git-dir="$MIRROR" cat-file -e "$LIVE_BLOB" 2>/dev/null; then
     DRIFT="
 ⚠️ DRIFT: /usr/local/bin/dt-push-notice.sh on Helsinki holds content that has NEVER been
 committed — it exists nowhere in the repository, so nobody can review it. The tree is source
