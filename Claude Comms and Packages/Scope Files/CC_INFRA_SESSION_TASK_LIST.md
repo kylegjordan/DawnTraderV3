@@ -45,6 +45,31 @@ He remembers **"we were working on improving Langston and setting him up"** in J
 
 ---
 
+### 2b. ⭐⭐ THE FULL DESIGN HAS **THREE** LAYERS, NOT ONE — and Kyle's memory of "we did maybe half" is close to right
+
+> **Kyle, 2026-09-03:** *"it was not only about giving him the ability to archive. We were also… he was writing to a short term memory file, I think, with all of his decisions. This was part of the design that you came up with… We had a whole set of changes that we were working on for Langston, and I think we only did the first third or quarter or half of it."*
+> ⛔ **I did NOT find the original plan document.** Searched: `1-system-manual/`, `Claude Comms and Packages/` (scope files, completion reports, design asks, cross-session briefs), `LANGSTON_ARCHITECTURE.md`, `BUILD_METHOD_PLAYBOOK.md`, and the transcript corpus. **The three `B_LANGSTON_QUEUE*` reports are CC-A's Discord review-QUEUE work, a different thing.** ⚠️ **So the enumeration below is RECONSTRUCTED FROM THE BUILT SYSTEM, not read off a plan — treat it as evidence of what exists and what is missing, NOT as the original list.**
+
+**WHAT IS ACTUALLY BUILT — three layers, verified on the box 2026-09-03:**
+
+| layer | what it is | state |
+|---|---|---|
+| **1. SHORT-TERM — the auto-memory store** ⭐ *(this is the thing Kyle remembers)* | `/home/langston/.claude/projects/-home-langston/memory/` — **37 typed files, 172 KB**, prefixed `feedback_*` (a lesson learned) and `proj_*` (a durable project fact), each one a distilled decision with a pointer to the detail, plus an **11.8 KB index**. | ✅ **LIVE AND ACTIVELY WRITTEN — newest file today at 12:34Z.** The index content is genuinely his decisions, distilled — exactly the design Kyle describes. |
+| **2. THE REVIEWER LEDGER** — his retractions and generalising rulings | Inside his ALWAYS-LOADED `MEMORY.md` §"REVIEWER LEDGER — MY OWN RETRACTIONS, RULINGS AND ERRORS (survives every prune)". Three subsections: retractions · rulings that generalise · rulings executed. | ⚠️ **EXISTS AND IS READ — but see the gap below.** |
+| **3. LONG-TERM — `langston-recall`** | The 79,876-record archive index across four eras. | ✅ **LIVE 2026-08-06, used in 203 of his 3,680 sessions** (§2). |
+
+⛔⛔ **GAP 1 — THE REVIEWER LEDGER HAS A READER AND NO WRITER. THIS IS THE CLEAREST MISSING HALF.**
+**MEASURED on his `CLAUDE.md`: `REVIEWER LEDGER` appears 0 times, and write-verbs near `ledger`/`retraction` appear 0 times.** *(Positive control, same file, same search shape: `langston-recall` 3 hits, `MEMORY.md` 12 hits — so the instrument finds his standing obligations when they exist.)*
+⇒ **`langston-recall` REFUSES on an unparseable ledger and prints its retractions before every result — the whole safety property of layer 3 rests on layer 2 — and NOTHING instructs him to maintain it.** It is kept by whichever CC session remembers to sync his memory. **A structure with a mandatory reader and no writer is one forgetful week from being silently stale**, and a stale retraction ledger means the recall tool confidently serves a ruling he already vacated.
+
+⛔ **GAP 2 — TWO HOMES FOR THE SAME THING, AND IT HAS ALREADY MISFIRED ONCE, IN HIS OWN WORDS.** His `MEMORY.md:123`: *"the 08-28 correction was written into the auto-memory file `proj_board_write_access.md` while the DEFECTIVE recipe stayed HERE, in the always-loaded file I actually reach for. **Two homes, one corrected.**"* He filed it himself as `fix-follows-pointer`. ⇒ **Layer 1 and layer 2 both answer "what did I decide", with no rule saying which is authoritative — the `#641` shape inside the memory system itself.**
+
+⚠️ **GAP 3 — NO CAP AND NO PRUNE ON LAYER 1.** 37 files and growing, with an index that is itself 11.8 KB. Every other memory file in this project has a stated cap; this store has none.
+
+⚠️ **GAP 4 — NO USAGE INSTRUMENT ON ANY LAYER.** Nothing logs a recall query or a memory write. ⛔ **AND AN HONEST LIMIT ON MY OWN NUMBER: I measured that 163 of his 3,680 transcripts reference the auto-memory store — but I did NOT separate "the index LOADED into context" from "he WROTE a memory file that turn". Those are different facts and the distinction is load-bearing** *(this is the `wrong-object` trap, so it is named rather than glossed).* **Whether layer 1 reliably loads at invoke is UNVERIFIED — and `#651` is the precedent that says assume nothing here: his `MEMORY.md` was documented as auto-loading and had NEVER loaded.**
+
+★ **RECOMMENDED ORDER IF KYLE WANTS THIS RESUMED:** (i) prove layer 1 actually loads at invoke — cheapest, and it is the `#651` failure mode; (ii) give layer 2 a WRITE rule, since layer 3's safety depends on it; (iii) rule which of layer 1 / layer 2 is authoritative and collapse the duplication; (iv) cap and prune layer 1. **`B-LANGSTON-LEDGER-SPLIT` (§3) touches the same files and should be sequenced with these, not separately.**
+
 ## 3. The Langston memory-FILE trim — a DIFFERENT job, handed to me by Kyle via Old Claude
 
 **Already shipped:** the recall tool (Phase B), two-way Discord images so the sessions can see what Kyle posts, and the crew-status page.
