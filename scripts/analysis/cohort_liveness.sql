@@ -32,6 +32,29 @@
 --    cohort look **THINNER than it is** ⇒ it OVER-STATES the need for a thin-cohort branch.
 --    **Conservative toward building the branch, never toward skipping it.**
 --
+-- ⛔⛔ TWO LIMITS ON THE *CONCLUSION*, NOT ON THE MEASUREMENT (Langston, 2026-09-03 — folded in
+--    the same turn, and the first one corrects a sentence I had already sent to CC-B).
+--
+--  (1) THE MINIMUM IS A *SAMPLE* MINIMUM, NEVER A POPULATION FLOOR. The 14→7-day narrowing is
+--      "the same quantity by construction" for the AGGREGATION and NOT for the WINDOW. Seven
+--      consecutive ordinary sessions contain no US market holiday, no half-day and no venue
+--      incident — exactly the states that would produce a genuinely thin cohort. If the thin
+--      state recurs monthly-or-rarer the window holds ZERO EXPECTED OCCURRENCES and the minimum
+--      is unreadable as a floor (`#661` leg 2: window span against the phenomenon's period).
+--      ⇒ ⛔ **WRITE IT AS "a state seven ordinary sessions could not have shown me", NEVER as
+--        "a state that did not occur".** The second is a claim about the world; only the first
+--        is a claim this sample can support.
+--
+--  (2) ⭐ THIS IS A *COUNT*, NOT A *COHORT*, AND THE DIFFERENCE IS THE WHOLE DESIGN QUESTION.
+--      One-against-N is comfortable only if those N are usable COMPARATORS for the symbol under
+--      test. If overnight liveness is CONCENTRATED — the same names live every night — a symbol
+--      signalling at 03:00 while its own peer set is dark has an effective cohort far below the
+--      aggregate, and this instrument cannot see that. **Composition-stability of the overnight
+--      live set, and its overlap with the symbols that actually produce overnight signals, is
+--      UNMEASURED — stated as unmeasured, assumed in neither direction.** A cohort SIZE does not
+--      establish cohort RELEVANCE (`#596` shape).
+--      ⇒ **CC-B's thin-cohort branch STAYS IN until the population question is settled.**
+--
 -- ⚠️ A REGULAR TIME GRID, NOT ATTEMPT INSTANTS — that is the entire point of this file.
 -- ═══════════════════════════════════════════════════════════════════════════════════════════
 set statement_timeout = 600000;
