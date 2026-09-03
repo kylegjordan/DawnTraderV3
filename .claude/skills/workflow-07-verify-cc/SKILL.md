@@ -36,7 +36,7 @@ With active trading on, **most changes have a staging-visible surface.** For any
 
 ## ALSO
 - PM2 logs, psql, CI status, server health — **as well as**, not instead of.
-- ⚠️ **The application log retains only a couple of hours.** An empty grep over an older window proves nothing; **state the window the instrument actually covers.**
+- ⚠️ **AN EMPTY GREP OVER AN OLDER WINDOW PROVES NOTHING — STATE THE WINDOW THE INSTRUMENT ACTUALLY COVERS.** ⛔⛔ **BUT DO NOT DECLINE THE CHECK ON THE OLD “retains only a couple of hours” CLAIM THAT STOOD HERE — IT WAS WRONG IN BOTH DIRECTIONS AND IT WOULD HAVE MADE A SESSION REFUSE A CHECK THE ARCHIVES CAN ANSWER (measured 2026-09-03, CC-C).** `pm2-logrotate` keeps **14 ROTATED FILES PER STREAM**, so **REACH = 14 × THAT STREAM'S ROTATION INTERVAL, AND THE TWO STREAMS DIFFER BY ~4× BECAUSE OF VOLUME:** the **error** stream rotates DAILY (~50 MB/day) ⇒ measured span `error__2026-08-21` → `2026-09-03` = **14 DAYS**; the **out** stream hits the 1 GB size cap several times a day ⇒ measured span `out__2026-08-31` → `2026-09-03` = **~3.5 DAYS**. ⭐ **THAT ASYMMETRY IS THE OPERATIVE FACT, because every exit-path skip/refusal line is `console.warn`/`console.error` and therefore lands in the LONG-LIVED stream** — `/var/log/dawntrader/error.log` plus its `error__<date>` archives, NEVER `out.log`. ⛔ **READ THE REACH, NEVER QUOTE IT:** `ls /var/log/dawntrader/error__*.log | head -1` gives the true floor, and it moves. A figure written here goes stale silently; the command does not.
 - **Every issue Kyle raises gets reproduced, located in code, and quoted from real data** — never dismissed, never marked N/A without evidence.
 
 ## ⛔ VERIFY THE THING THAT CHANGED, WITH THE INSTRUMENT THAT SHOWED THE PROBLEM
