@@ -149,6 +149,14 @@ another symbol's row is active mints nothing), so **containment is the testable 
 with no matching reconstructed refusal means the reconstruction is on the wrong lane and the run is
 void.** `_staleSkips` itself cannot serve — in-memory, lost at every restart.
 
+⛔⛔ **AND STATE THE LIMIT OF THAT RECONCILIATION, BECAUSE IT IS ONE-WAY (Langston, 2026-09-03):
+CONTAINMENT CAN ONLY *VOID*, NEVER *CONFIRM*.** A window with zero mints passes it **vacuously** —
+that is `#661` leg 2, an instrument with zero opportunity, not evidence.
+⇒ **The mint count over the window ships ALONGSIDE the reconciliation result, every time.** A pass
+with a mint count of zero is reported as *no opportunity to fail*, never as a pass.
+⚠️ **There is no count source that survives a restart, on either side. Do not build one** — his
+words, and my `_staleSkips` reading agrees.
+
 ### 10.2 — THE INSERT-TO-GATE OFFSET IS BOUNDED, NOT MERELY OBSERVED (condition 2)
 Observed on the three probes: **67, 90, 108 ms**, one-directional (understating age).
 **Pre-registered bound: 150 ms.** Reported beside the estimate: the count of attempts whose `age(a)`
@@ -188,6 +196,23 @@ any mechanism built on it.** §13 disposition: **fold into the work in hand** as
 condition — not a new batch, no date.
 
 ---
+
+## 11. ⛔⛔ THE CLOSE OBLIGATION — WHAT GOVERNS THE OUTCOME REGARDLESS OF THE NUMBERS
+
+> Langston, 2026-09-03, offered explicitly as a **fresh derivation rather than a recovery** of a
+> line that was truncated in transit — *"if it differs from what got cut, this version stands."*
+
+★★ **THE CRITERIA ARE ONLY WORTH WHAT THE SESSION THAT CLOSES THE WINDOW ACTUALLY RE-READS.**
+
+He will be **stateless** at ruling time. This document is pinned at a ref. His own `MEMORY` runs far
+over its cap and **has twice carried a heading telling him a closed gate was still open** — and my
+own always-loaded file did exactly that this same day, asserting a blackout option as still open
+after Kyle had closed it.
+
+⇒ ⛔ **THE OBLIGATION: at ruling time, read §10 AT THE REF — never from any memory file, mine or
+his — AND STATE WHICH REF YOU READ IT AT.**
+★ **That governs the outcome regardless of what the numbers come out to**, because a criterion
+recalled rather than re-read is a criterion that has already drifted.
 
 ## 9. What this registration does NOT do
 
