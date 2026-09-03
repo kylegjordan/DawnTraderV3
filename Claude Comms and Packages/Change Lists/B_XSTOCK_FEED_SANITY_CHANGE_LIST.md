@@ -136,3 +136,43 @@ Inside the `updateClosedTrade` payload, after `exitTickerAsk: null`: an awaited 
 
 ## 5. Reader record
 - `REVIEWER (Step 3 → 4): none spawned — the load-bearing claims of this step are the tests' assertions and the tsc comparator, both run at the ref and both reproducible by Langston with one command each.`
+
+---
+
+# SECOND INCREMENT — P9 + P7(ii), on Kyle's option-(D) ruling (2026-09-03)
+**READY-AT (code): `e1ae134a8458171b686a1aa274d2b2a566222b6e`.** CI: run **`33722064928` 4/4 green** at head `a3847a5a1` — TypeScript Check (baseline gate) ✓ · Build ✓ · Test Suite ✓ · Docker Build ✓; `git diff e1ae134a8..a3847a5a1 -- server shared scripts drizzle package.json` is EMPTY, so the graded head carries this code unchanged. Local: baseline 377 = 377; vitest **103/103** across six suites.
+**Why this increment exists:** Kyle ruled option (D) — *"a set of freshness rules that applies to all trades for entry at all hours … It doesn't soften entry rules for off hours … If anything, it should just hold the same standards and protections"* — and explicitly declined a flat off-hours blackout: a deep, well-quoted off-hours book that clears the SQE and the RTB is one he wants traded. That discharges your Step-2 coupling blocker by shipping BOTH halves.
+
+## S.1 `active-execution-engine.ts:249-297` — the entry seam reads BOTH sides and consults the guard
+Appended after the existing ask-side checks, which are untouched:
+```ts
+if (assetClass === 'xstock_spot') {                                  // :275
+  const bidWarmth = assessWarmth(snapshot, 'bids', config);          // :276  the ask-only hole (#992)
+  if (!bidWarmth.warm) { recordDepthGateBlock(...); return { pass: false, reason: `one_sided_book ${bidWarmth.reason}`, snapshot }; }
+  const bs = assessBookStateNow(symbol);                             // :285  the SAME predicate as the exit guard
+  if (bs.ok && bs.result.state === 'hollow') { recordDepthGateBlock(...); console.warn('[…][ENTRY_GATE] …'); return { pass: false, reason: `hollow_book …`, snapshot }; }
+}
+```
+**Four properties I want attacked:** (1) **no clock, no session term** — fenced, and it is the whole point of Kyle's ruling; (2) **`unknown` and a guard-that-did-not-run both PASS** — this seam may refuse an entry, never invent one from an absence (`#546`); (3) **class-gated to `xstock_spot`** so crypto entry is byte-for-byte unchanged (scope §17.1 constraint 3 — crypto depth is the venue's own ladder and this batch never audited it); (4) the predicate reads the IN-MEMORY tick while the warmth/sufficiency checks read the ARCHIVE snapshot — **two different objects in one gate**, deliberately (the archive is the ladder we would fill against; the tick is the live book state), and I state it rather than let a reader assume one.
+
+## S.2 `ready_to_buy_service.ts:2286-2289` — the re-entry relaxation, measured-only and NULL-safe
+```sql
+AND NOT (
+  COALESCE(exit_book_state, '') = 'hollow'
+  AND COALESCE(exit_book_state_basis, '') IN ('guard', 'decision_price')
+)
+```
+**`COALESCE` is the load-bearing part, not decoration:** `exit_book_state` is NULL on every pre-deploy row, and a bare `NOT (col = 'hollow' AND …)` evaluates to NULL there — SQL treats that as false, so it would have dropped **every unlabelled stop** out of the block and turned a narrow relaxation into a blanket one. NULL rows keep BLOCKING, which is today's behaviour. `minute_proxy` and `market_state_predicate` never relax it (your C3).
+
+## S.3 Fences added — `b-xstock-feed-sanity-fence.test.ts:140` (F-P9, 5 tests) and `:170` (F-P7ii, 4 tests)
+Both sides read · the guard consulted · **NO clock/session token in the gate body** · the new checks sit inside the `xstock_spot` branch (crypto unchanged) · measured-basis-only · NULL-safe. Each with a firing control. ⚠️ **One control I had to add after it bit me:** `code()` strips `//` and `/* */` but NOT SQL `--`, so F-P7ii first failed on its own explanatory comment; the stripper is now SQL-aware and is itself controlled.
+
+## S.4 PREVIOUSLY STATED vs NOW — the OBJ-9 freshness limit
+| PREVIOUSLY | NOW | REASON |
+|---|---|---|
+| the audit said the 15 s fill limit's basis had moved under it and OBJ-9 would re-base it — and I told Kyle a number would move | **`active_fill_max_age_ms` STAYS 15,000 ms** | measured (`scripts/analysis/obj9_*.sql`, committed): RTH p99 gap is **15.07 s** at the current 4 s throttle vs **8.75 s** at the 1.8 s throttle it was set from, so the original rule (p99 × 1.71) gives ≈ 26 s — but raising it ONLY admits more trades (~10 points off-hours, ~1 point RTH) and Kyle ruled against relaxing. **The drift is recorded, not corrected: 1.71 × p99 when written, 1.00 × now — deliberately stricter.** |
+| — | **the decision object is TIME-weighted, not gap-count** | the gate compares `NOW() − MAX(captured_at)` at the entry instant, so refusal probability is the share of CLOCK spent stale, not the share of gaps. By gap count off-hours reads 19–27 % refused; time-weighted **69 % after-hours / 79 % pre-market / 80 % overnight / 14 % RTH**. I nearly reported the gap-count figure, which points the opposite way. |
+
+## S.5 Not in this increment
+The OBJ-9 alert policy (Kyle's `#994`: market-shut staleness must not raise breakage, our-feed staleness must) is specified in the progress report §2d and **not built here** — it needs the feed-wide liveness discriminator, and it is the next increment. Deploy hold to 2026-09-07 unchanged.
+
