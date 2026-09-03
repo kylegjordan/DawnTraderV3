@@ -31,6 +31,16 @@ DENOMINATORS THAT MUST TRAVEL WITH THE RATE (or it reads high for the wrong reas
 import argparse, glob, json, os, sys
 from collections import defaultdict
 
+# Windows consoles default to cp1252, which cannot encode the arrows in this script's own
+# output — so the instrument printed its numbers and then DIED with a UnicodeEncodeError,
+# exit 1. A reader running the command this batch hands the reviewer found it. Same defect
+# the wake filter fixed in 2026-06 and for the same reason: a tool whose output cannot be
+# printed is a tool that reports failure after succeeding.
+try:
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
 PROJECTS = os.path.expanduser(r'~\.claude\projects')
 SESSIONS = {'CC-A OLD': 'C--DawnTraderV3-old', 'CC-B NEW': 'C--DawnTraderV3-new',
             'CC-C ANALYST': 'C--DawnTraderV3-analyst', 'CC-INFRA': 'C--DawnTraderV3-infra'}
