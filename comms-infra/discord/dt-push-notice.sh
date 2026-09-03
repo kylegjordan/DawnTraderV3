@@ -75,7 +75,15 @@ DRIFT=""
 if [ -d "$MIRROR" ]; then
   LIVE_SHA=$(sha256sum /usr/local/bin/dt-push-notice.sh 2>/dev/null | cut -d" " -f1)
   TREE_SHA=$(git --git-dir="$MIRROR" show "origin/$BRANCH:comms-infra/discord/dt-push-notice.sh" 2>/dev/null | sha256sum | cut -d" " -f1)
-  if [ -n "$LIVE_SHA" ] && [ -n "$TREE_SHA" ] && [ "$LIVE_SHA" != "$TREE_SHA" ]; then
+  # ⛔ ONLY CLAIM DRIFT WHEN THE MIRROR IS NEWER THAN THE LIVE FILE. The mirror pulls on a
+  # */15 cron, so for up to 15 minutes after ANY edit the tree copy is legitimately older and
+  # the comparison is not yet valid — reporting then is a FALSE ALARM ON EVERY EDIT, which is
+  # a self-inflicted noise source in the batch whose whole subject is noise. Observed
+  # immediately: this check fired on its own install and would have fired for 13 minutes.
+  # The two sides must be comparable before a difference means anything.
+  MIRROR_AT=$(stat -c %Y "$MIRROR/FETCH_HEAD" 2>/dev/null || echo 0)
+  LIVE_AT=$(stat -c %Y /usr/local/bin/dt-push-notice.sh 2>/dev/null || echo 0)
+  if [ -n "$LIVE_SHA" ] && [ -n "$TREE_SHA" ] && [ "$LIVE_SHA" != "$TREE_SHA" ]      && [ "$MIRROR_AT" -gt "$LIVE_AT" ]; then
     DRIFT="
 ⚠️ DRIFT: /usr/local/bin/dt-push-notice.sh on Helsinki does NOT match the tree copy at
 comms-infra/discord/dt-push-notice.sh. One of them was edited without the other. The tree is
