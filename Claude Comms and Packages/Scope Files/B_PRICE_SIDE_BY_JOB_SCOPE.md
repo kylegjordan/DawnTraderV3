@@ -31,7 +31,25 @@
 
 > ★ INTENT (Directive 8.9.1, `b4c0d2d67` 2025-12-30): last-trade goes stale on low-volume pairs, so a mid is the better mark. **THAT REASONING IS SOUND AND THE SUBSTITUTION IS NOT A DEFECT TO REMOVE.**
 
-⇒ ⛔⛔ **DISPOSITION: (2) — RELEVANT BUT NEEDS UPDATING TO TODAY'S INTENT. NOT (1), NOT (4).**
+⚠️⚠️ **AND THE ADJUDICATION I QUOTED IS SITED IN A BLOCK MARKED HISTORICAL (Langston FINDING-A, re-read at `b0e78d9a7`).** `SYSTEM_MANUAL.md:8439-8440` is verbatim as quoted — but it is housed inside the **Directive 8.9.0-B** block whose status line reads *"REMOVED — P19-B6.7 … The text below is retained for historical reference only."* **The substance describes a LIVE path; the siting says historical.** ⇒ **carried as an OBJ-6 governance item below: move it or mark it. Until then it is quoted here WITH its siting stated, never as a clean live citation.**
+
+⇒ ⛔⛔ **DISPOSITION FOR THE CRYPTO PRODUCER: (2) — RELEVANT BUT NEEDS UPDATING TO TODAY'S INTENT. NOT (1), NOT (4).**
+
+---
+
+### 1.1 ⛔⛔ BLOCKER-1 — THERE ARE **TWO** PRODUCERS AND I RAN 1.b ON ONE OF THEM (Langston, re-derived at the object)
+
+⚠️⚠️ **MY r1 CLAIM OVER-REACHED ITS BLAST RADIUS, AND IT DID SO ONTO THE EXACT POPULATION I NAMED AS THE REASON NOT TO TOUCH ANYTHING.** I argued that removing the mid would re-introduce the 8.9.1 staleness defect *"on the low-volume xStock universe, which is most of it."* **Directive 8.9.1 does not reach the xStock universe at all.**
+
+**MEASURED AT THE OBJECT:** `translateV2ToV1` has exactly **ONE** consumer — `kraken-websocket-adapter.ts:680` — so 8.9.1 governs the **crypto ticker path only**. The xStock mid is a **DIFFERENT PRODUCER**: `equity-spot-archiver.ts:173-174` via `markKindOf`. ★ **And `mark-kind.ts:9-11`, a file I had already read, states the split in its own header:** *"they cite different provenance (`8.9.1` for the translator, `P19-B8.5` for the archiver)."* **I read past it.** My own `B_EXIT_TRANSACTABLE_SIDE_2_SCOPE.md:674` says the same thing at the same ref.
+
+**THE xSTOCK PRODUCER'S OWN PROVENANCE, quoted verbatim from the code that carries it** — `equity-spot-archiver.ts:104`:
+
+> `// ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ──`
+
+⇒ ⛔ **DISPOSITION FOR THE xSTOCK PRODUCER: ALSO (2), BUT ON DIFFERENT GROUNDS AND WITH A STANDING CAUTION.** It is a **Langston design-APPROVED decision**, so §9.5(b-ii) applies directly: re-scoping it as a defect is the precise failure that rule exists to prevent. It is in scope only as *a mark serving jobs it was not chosen for* — never as *a mark that is wrong*.
+
+⛔⛔ **AND ITS FALLBACK SEMANTICS DIFFER, WHICH MATTERS FOR THIS BATCH:** `markKindOf` (`mark-kind.ts:33-35`) returns `'last'` when **EITHER** side is missing. On the xStock side a missing bid therefore falls back to the **LAST TRADE** — which is the stale-mark case `B-XSTOCK-FEED-SANITY` is measuring right now. ⇒ **The two producers fail in different directions, so a single rule that classifies both must be argued, not assumed.**
 
 ★★ **AND THIS IS THE FINDING THAT SHOULD DRIVE THE WHOLE BATCH, BECAUSE IT IS NOT THE ONE I EXPECTED TO FIND.** The midpoint was chosen — deliberately, correctly, and for a reason that still holds — to be a better **MARK**: a continuous estimate of value on a pair whose last trade goes stale. **It was never evaluated as a TRIGGER, as a LEVEL, or as a BOOKED RESULT.** It acquired those three jobs silently, by being the value sitting in the field every consumer reads.
 
@@ -45,12 +63,12 @@
 
 | # | job | where the price comes from | status |
 |---|---|---|---|
-| **1** | **SIGNAL GENERATION** — a setup exists, and **where entry/stop/target SIT** | `signal-orchestrator.ts:2387` reads the cache (a mid); `:2276-2278` derive entry/stop/target from it | ⛔ **UNSCOPED — THIS BATCH.** Kyle's catch. |
+| **1** | **SIGNAL GENERATION** — a setup exists, and **where entry/stop/target SIT** | ⚠️ **ILLUSTRATION ONLY, NOT THE CENSUS (Langston FINDING-2):** `:2387` is the scan preamble and `:2276-2278` is the **pattern-lane FALLBACK** branch (`?? currentPrice*0.97` / `*1.03`) — the same fabricated-constant class as `#927`. **The QUANT lane is where levels are actually set, and it is OBJ-1's job to enumerate it.** | ⛔ **UNSCOPED — THIS BATCH.** Kyle's catch. |
 | **2** | **RANKING** across candidates | the same cache; the 15-minute bar close on the xStock side | ◐ **THIS BATCH — expected outcome "no change", argued not assumed** |
 | **3** | **TRIGGERING** a stop or target | `active-execution-engine.ts:1503` | ✅ **`F-G-2` OBJ-0/OBJ-1 — SHADOW ARM LIVE ON CRYPTO. DO NOT RE-SCOPE.** xStock legs HELD at `F-G-2` §7.4 rows 1-2. |
 | **4** | **BOOKING** the result | the fill path | ✅ **`F-G-2` OBJ-5a/5b/5c SHIPPED** (VTS mark-booked, maker leg, epoch cut) |
 
-### 2.1 ⭐ THE SHADOW ARM HAS ALREADY ANSWERED THE TRIGGER QUESTION, AND NOBODY HAS READ IT
+### 2.1 ⚠️ THE SHADOW ARM IS RUNNING AND NOBODY HAD READ IT — WHAT IT HAS PRODUCED SO FAR, AND WHY IT SETTLES NOTHING YET
 
 **OBJECT:** `closed_trades.metadata.fg2Shadow`, which records the instant the **BID** would have triggered the exit beside the instant the **MID** actually did.
 **POPULATION:** every close since the `F-G-2` deploy `2cc4a03ec` @ 2026-09-02T08:49:47Z carrying **both** arms — **n = 6** (of 12 closes in the window; 0 carry `fg2ShadowSkip`). **Crypto only, by design.**
@@ -65,7 +83,11 @@
 | XMR/USD | `stop_hit` | `stop_hit` | 0.1 min | +0.016% |
 
 ★ **WHAT IT SAYS:** both arms agree on **WHAT** happens — 6 of 6 are `stop_hit` on both — and differ on **WHEN**. The mid fires **later every time**, by 0.1 to 33.5 minutes, and in **4 of 6** the bid we would actually have sold at is **worse** for having waited.
-⇒ **The damage is DELAY, not the half-spread accounting I have been describing to Kyle.** The mid lags the bid on the way down, so the stop fires late, and late is worse.
+⇒ **The observable damage is DELAY, not the half-spread accounting I had been describing to Kyle.**
+
+⛔⛔ **BUT I NAMED THE MECHANISM WRONG, AND IT WOULD HAVE REACHED KYLE AS REASSURANCE (Langston Q3(c)).** *"The mid lags the bid"* **is not lag.** The mid sits a **STATIC HALF-SPREAD** above the bid; the observable DELAY is that offset **÷ price velocity**. ⇒ ★★ **THAT INVERTS THE REASSURANCE: the delay is UNBOUNDED ON A QUIET TAPE and near-zero on a fast one.** So *"magnitudes are small, max 0.342%"* describes **this sample**, not **the exposure** — and the sample is six trades drawn from whatever velocity happened to obtain. **LABELLED HYPOTHESIS (rule 29(c)) until the offset-÷-velocity form is measured against realised move.**
+
+⛔⛔ **AND IT IS NON-LOAD-BEARING FOR EVERY OBJECTIVE IN THIS BATCH (Langston Q3(b)).** It is **`F-G-2`'s instrument, inside `F-G-2`'s still-open window, and `F-G-2`'s pre-registration (A1–A4) governs its interpretation.** ⇒ **No objective here may rest on it, and `F-G-2` Step 8 may NOT cite this scope back as independent support** — that would be `#452`, a reviewer ruling on a gloss of his own instrument.
 
 ⚠️⚠️ **HONEST LIMITS, STATED BEFORE THE NUMBER IS USED FOR ANYTHING: n = 6. CRYPTO ONLY. ALL SIX ARE STOPS — there is not a single `target_hit` in the population, so this says NOTHING about the target side, where the same lag would fire targets LATE and therefore FAVOURABLY.** The magnitudes are small (max 0.342%). **This is a preliminary read of a live instrument, not a result.** It is in this scope to show the decision is measurable **without a new window**, not to pre-judge it.
 
@@ -83,16 +105,33 @@
 ## 4. NUMBERED OBJECTIVES, EACH WITH ITS VERIFICATION CRITERION
 
 **OBJ-1 — ESTABLISH, AT THE CODE, EVERY SITE WHERE A MARK BECOMES A LEVEL.** Enumerate repo-wide (tests excluded) every site that derives an entry, stop or target from the price cache or from a bar close. **Not a path trace — a census at every hop** (§9.5(a)), and the entry points enumerated FIRST (§9.5(a-ii)) so a second producer cannot hide behind the first.
-*Verification:* the census is committed as a table of `path:line` at `origin/migration/aws-supabase`, each row saying whether the value it consumes is a mid, a bar close, or a transactable side. **If a list has exactly one member, it says so explicitly.**
+*Verification:* the census is committed as a table of `path:line` at `origin/migration/aws-supabase`, each row saying **which KIND** of value it consumes. **If a list has exactly one member, it says so explicitly.**
+
+⛔⛔ **AND THE TAXONOMY IN r1 WAS ALREADY FALSIFIED BEFORE IT WAS WRITTEN (Langston FINDING-1) — THIS IS THE SINGLE MOST IMPORTANT ROW OF THE CENSUS.** r1 offered three kinds (mid / bar close / transactable side). **The crypto QUANT lane's level input is none of them:** `signal-orchestrator.ts:2400` `getSmoothedPrice(...)` → `:2425 const currentPrice = smoothedPrice` → `:2456 mce.computeContext(...)` → `:2513 currentPrice: mceContext.indicators.currentPrice` → the 19-strategy dispatch. **A KALMAN-SMOOTHED MID IS A FOURTH KIND**, and by OBJ-2's own falsification clause it **falsifies the rule as r1 stated it**.
+⇒ ★★ **AND IT KILLS THE EASY IMPLEMENTATION: "put the level on the transactable side" is NOT a substitution on this lane, because a FILTER sits between the price and the level.** Smoothing a bid is not the same object as smoothing a mid, and the filter's own state carries the old basis across the change.
+⚠️ **LANGSTON'S STATED LIMIT, CARRIED VERBATIM RATHER THAN GLOSSED:** *"I verified the smoothed value is handed to MCE at `:2456` and read back at `:2513`; I did NOT verify MCE passes it through unchanged — that is OBJ-1's job and must be a census row."* ⇒ **that pass-through is a REQUIRED census row, and it is not assumed in either direction.**
 
 **OBJ-2 — DECIDE THE RULE, WITH LANGSTON, AND WRITE IT DOWN AS A RULE RATHER THAN A DIFF.** Candidate, to be attacked rather than confirmed: *a price that ESTIMATES VALUE stays the mid; a price that BECOMES A LEVEL, FIRES AN ACTION, or IS RECORDED must be the side we could transact at.*
 *Verification:* the rule lands in `SYSTEM_MANUAL.md` with its failure direction stated, and every site in OBJ-1's census is classified under it. **A site the rule cannot classify falsifies the rule.**
 
-**OBJ-3 — LEVEL/TRIGGER CONSISTENCY, AND IT IS THE OBJECTIVE MOST LIKELY TO BE GOT WRONG.** ⛔⛔ **A stop placed 3% below the MID but fired on the BID is tighter than 3% by half the spread, and nothing would say so.** Whatever OBJ-2 decides, the level and the trigger must be set on the SAME side, and that property must be enforced where it cannot be forgotten.
-*Verification:* a fence that fails if a level-setting site and its trigger site read different sides — **shipped with a positive control proving the fence can see a mismatch**, per the standing rule this crew earned on 2026-09-03.
+**OBJ-3 — PER-LEG TRANSACTABILITY. ⛔⛔ THIS OBJECTIVE WAS WRONG IN r1 AND THE CORRECTION IS THE MOST IMPORTANT THING IN THE SCOPE (Langston BLOCKER-2).**
+
+⚠️⚠️ **r1 SAID "THE LEVEL AND THE TRIGGER MUST BE ON THE SAME SIDE." THAT IS NOT ACHIEVABLE AND IT IS THE WRONG INVARIANT.** **An entry is a BUY and fills on the ASK. A stop and a target are SELLS and fire on the BID.** They are opposite sides *by construction* — demanding they match asks for something the market does not offer.
+
+⛔⛔ **THREE SIDES ARE IN PLAY, NOT TWO: the level BASIS (a mid), the entry FILL (the ask), and the exit TRIGGER (the bid).** ⇒ **a stop set 3% below a mid-derived entry, fired on the bid, against a real ask fill, has realised risk ≈ `(0.03·mid + h)/(mid + h)` for half-spread `h` — OUT BY ROUGHLY A FULL SPREAD, NOT HALF**, and **R:R moves in OPPOSITE directions on the two legs.**
+★★ **I TOLD KYLE "HALF THE SPREAD" TWICE. THAT UNDERSTATED IT BY A FACTOR OF TWO AND IT IS CORRECTED TO HIM IN THE SAME TURN AS THIS REVISION.**
+
+⇒ ✅ **THE INVARIANT IS PER-LEG TRANSACTABILITY: each leg is expressed on the side THAT LEG transacts at, and R:R is computed from those** — never from a common basis that no leg trades on.
+
+*Verification:* a fence asserting per-leg transactability across the level-setting and trigger sites, **shipped with a positive control proving it can see a mismatch** (the standing rule this crew earned on 2026-09-03: a negative assertion must first prove it can see the thing present).
+⛔ **THE FENCE IS A PURE CONSISTENCY ASSERTION, STATED SO DELIBERATELY: when `F-G-2` OBJ-0 arms the bid-side trigger, this fence must TRIP rather than silently desync.** A fence that tolerates the other batch landing is not guarding the joint.
+⛔⛔ **ORDER, NAMED BECAUSE THE JOINT INVARIANT SPANS TWO BATCHES AND NOBODY OWNS IT (Langston's `#546` point): `F-G-2` OBJ-0 LANDS FIRST — it is deployed, its shadow arm is live, and its window is open. This batch lands SECOND and takes the joint.** If that order changes, this objective is re-scoped, not adapted.
 
 **OBJ-4 — READ THE SHADOW ARM PROPERLY WHEN IT HAS A TARGET IN IT.** §2.1 is 6 rows and all stops. **The target side is unmeasured and the lag works the opposite way there.**
 *Verification:* the read is re-run against a population containing at least one `target_hit` on both arms, or it is reported as **still unmeasured on the target side** — never averaged over a population that has none.
+
+**OBJ-6 — FIX THE SITING OF THE ADJUDICATION THIS SCOPE RESTS ON (Langston FINDING-A).** `SYSTEM_MANUAL.md:8439-8440` carries a live-path adjudication inside a block whose status line says *"REMOVED … retained for historical reference only."*
+*Verification:* the text is moved to a live section or marked as live-in-place, and **this scope's §1 citation points at the corrected siting**. ⛔ **Until then §1 quotes it WITH its siting stated** — a live claim sourced from a block labelled historical is a citation that cannot survive its own reader.
 
 **OBJ-5 — RANKING: ARGUE THE "NO CHANGE" EXPLICITLY.** The expected answer is that a mid is correct for ranking, because it is a relative comparison applied identically to every candidate.
 *Verification:* stated out loud with its reason in the pre-audit, not skipped by default (§9 anti-pattern). **If ranking also sets a level, it is an OBJ-1 site and the rule governs it.**
@@ -109,4 +148,8 @@
 
 ## 6. STATUS
 
-**Step 1 — scope drafted, dispatched to Langston.** Board card `B-PRICE-SIDE-BY-JOB` created in `Scope`, `Blocked on = Langston`.
+**Step 1 r2 — CHANGES-NEEDED from Langston applied; re-dispatched.**
+
+⛔ **r1 OF THIS SECTION ASSERTED THE BOARD CARD EXISTED. IT DID NOT.** Langston's census returned **77 of 77, `hasNextPage: false`, assertion passed** — a measured absence, not a query that missed it. ★ **A false statement of fact in my own scope, in the one section whose entire job is to state status.** The card now exists (board total 78, verified by the same enumeration), set `Status = Scope`, `Owner = Analyst`, `Blocked on = Langston`.
+
+**MISTAKE: verification-weaker-than-claim** — wrote a status line describing an action I had not taken, in a document whose §1 correctly insists every claim be re-derived at the object.
