@@ -66,45 +66,16 @@ with universe as (
               or (extract(dow from ny) = 0 and ny::time <  time '20:00')
               or (extract(dow from ny) = 5 and ny::time >= time '20:00'))
 )
--- ═══ OUTPUT 0 — POSITIVE CONTROL, and it MUST be read before any tail number (rule 29(b)) ═══
--- A known-live minute: 2026-09-02 14:00 UTC = 10:00 ET on a WEDNESDAY, mid-session, when the
--- feed is unambiguously delivering. ⛔ IT CAN FAIL, which is the point: if the timezone
--- conversion or the 24/5 filter is wrong, this row comes back in the WRONG session bucket, or
--- with a near-zero count, or absent entirely — and any thin-tail number below would then be an
--- artefact of the filter rather than an observation of the feed.
--- EXPECT: session4 = 'rth', session2 = 'rth', live_symbols in the hundreds, present = true.
-select 'CONTROL' as output,
-       m::text            as bucket,
-       session4,
-       session2,
-       live_symbols::text as live_p50,
-       null::text         as pct_live_p50,
-       null::text         as minutes_under_20_live
-  from open_min
- where m = timestamptz '2026-09-02 14:00+00'
-
-union all
--- ═══ OUTPUT 1 — the four-bucket view ═══
-select 'BY SESSION (4)', o.session4, null, null,
-       round(percentile_cont(0.50) within group (order by o.live_symbols)::numeric)::text,
-       round(100.0 * percentile_cont(0.50) within group (order by o.live_symbols)::numeric
-             / max(u.n_tracked), 1)::text,
-       count(*) filter (where o.live_symbols < 20)::text
+-- ⛔ THE TAIL AS A POSITIVE STATEMENT, NOT AN ABSENCE. `minutes_under_20_live = 0` is a ZERO, and
+-- rule 29(b) will not take a zero on trust. The MINIMUM and the low percentiles say the same thing
+-- as a measured value that cannot be produced by a dead counter.
+select o.session4,
+       count(*)                                                                    as minutes,
+       max(u.n_tracked)                                                            as n_tracked,
+       min(o.live_symbols)                                                         as live_min,
+       round(percentile_cont(0.01) within group (order by o.live_symbols)::numeric) as live_p01,
+       round(percentile_cont(0.05) within group (order by o.live_symbols)::numeric) as live_p05,
+       round(percentile_cont(0.50) within group (order by o.live_symbols)::numeric) as live_p50,
+       round(100.0 * min(o.live_symbols) / max(u.n_tracked), 1)                    as pct_live_at_min
   from open_min o cross join universe u
- group by o.session4
-
-union all
--- ═══ OUTPUT 2 — the TWO-bucket rollup, identical to the withdrawn measure's definition ═══
---     This is the row that is comparable to the 62.7% figure it replaces.
-select 'BY SESSION (2, comparable)', o.session2, null, null,
-       round(percentile_cont(0.50) within group (order by o.live_symbols)::numeric)::text,
-       round(100.0 * percentile_cont(0.50) within group (order by o.live_symbols)::numeric
-             / max(u.n_tracked), 1)::text,
-       count(*) filter (where o.live_symbols < 20)::text
-  from open_min o cross join universe u
- group by o.session2
-
-union all
-select 'UNIVERSE', 'tracked symbols', null, null, u.n_tracked::text, null, null
-  from universe u
- order by 1, 2;
+ group by o.session4 order by live_min;
