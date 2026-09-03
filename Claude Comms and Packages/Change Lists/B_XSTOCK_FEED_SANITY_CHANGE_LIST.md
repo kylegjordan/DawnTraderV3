@@ -1,8 +1,8 @@
 # B-XSTOCK-FEED-SANITY — STEP 4 CHANGE LIST (for Langston's code review at the graded ref)
 
-**Batch:** `B-XSTOCK-FEED-SANITY` (`#943`; closes `#567`) · **owner:** CC-C · **change-class: architecture** · **READY-AT: `2ee14d69028c67c6ce9aabe30a4e258a38dade99`** (the Step-4 fix commit on top of the Step-3 build `3b2c4966c`; two code commits, nothing else touches code between them; `origin/migration/aws-supabase`) · **CI: `3b2c4966c` run `33700967265` 4/4 green; the run at `2ee14d690` is reported per job in the dispatch** · **plan:** `Scope Files/B_XSTOCK_FEED_SANITY_PRE_AUDIT.md` PART B (P1–P13), cleared 00:24Z with C1–C3 folded.
+**Batch:** `B-XSTOCK-FEED-SANITY` (`#943`; closes `#567`) · **owner:** CC-C · **change-class: architecture** · **READY-AT: `87f0d39bd2f8c6f4f2074da95e3e71887c5356f0`** (the BLOCKER-3 fix; the THREE code commits on the branch for this batch are `3b2c4966c` → `2ee14d690` → `87f0d39bd`, each followed by doc-only commits — nothing else touches code; `origin/migration/aws-supabase`) · **CI: `3b2c4966c` run `33700967265` 4/4; `2ee14d690` run `33702052440` 4/4; `87f0d39bd` reported per job in the dispatch** · **plan:** `Scope Files/B_XSTOCK_FEED_SANITY_PRE_AUDIT.md` PART B (P1–P13), cleared 00:24Z with C1–C3 folded.
 **⛔ DEPLOY HOLD unchanged:** nothing deploys before the `#951` window closes 2026-09-07. This is a review of the diff, not a deploy.
-**Verification at the ref:** `node scripts/check-tsc-baseline.mjs` → 377 = 377 OK · `vitest` 65/65 at the fix commit across `b-xstock-feed-sanity-book-state` (21, NEW), `b-xstock-feed-sanity-fence` (13, NEW), `b-exit-provenance-fence` (25), `b-new-44-equity-spot-diag` (6), `p19-b4b1-depth-gate` (10), `p19-b8-5e-mark-staleness` (16).
+**Verification at the ref:** `node scripts/check-tsc-baseline.mjs` → 377 = 377 OK · `vitest` 62/62 at the ref across `b-xstock-feed-sanity-book-state` (21, NEW), `b-xstock-feed-sanity-fence` (16, NEW), `b-exit-provenance-fence` (25), `b-new-44-equity-spot-diag` (6), `p19-b4b1-depth-gate` (10), `p19-b8-5e-mark-staleness` (16).
 
 ## 0. PREVIOUSLY STATED vs NOW (plan → code)
 | # | PREVIOUSLY (audit P-item) | NOW (the diff) | REASON |
@@ -14,6 +14,7 @@
 | 0.5 | first push: a disabled guard wrote `exit_book_state = 'unknown'` with basis `guard`; the maker leg wrote `at_fill = 'unknown'`; a flatten with no decision verdict wrote `unknown` | **NULL in every case where no frame was assessed** — `unknown` now means exactly one thing: the guard LOOKED and had no comparator yet. A NULL is re-cuttable (the re-cut selects `IS NULL`); a value is a look that happened. Column and schema comments say so. | Langston Step-4 BLOCKER-2 (`#546` with the repair path welded shut) |
 | 0.6 | first push: the closed row's `bookState` record came from the RE-FETCHED position row, whose copy is throttled (≤ 9 skips short) | **the exit stamp carries the loop's in-memory record (`bookStateRecord`) and the carry prefers it** — the closed row is exact; only `active_open_positions` lags between throttled writes | Langston Step-4 point 3 |
 | 0.7 | first push: the re-cut's `decision_price` basis set the held side and `last` to the PRIOR frame's own values, so every hold check was true by construction | **the held side and `last` come from the archived frame at/before the close; the comparator from the two-sided frame before it** — data against data; the basis still OVER-CALLS (the archive dropped the true decision frame), which the header states and the body-close DISCRIMINATING control measures and prints | Langston Step-4 point 5 |
+| 0.9 | second push (`2ee14d690`): the basis was keyed on EITHER label, so a flatten through `forceClosePosition` (no decision verdict + a live fill assessment) could land `(NULL, hollow, guard)` — and the re-cut, selecting on `exit_book_state IS NULL` alone, would overwrite that `guard` with a clock proxy | **the basis describes `exit_book_state` ALONE** (`at_fill` is written only by the live assessment — basis `guard` by construction, no column); the re-cut's SELECT and UPDATE both require `exit_book_state IS NULL AND exit_book_state_basis IS NULL`; fence F-INV (3 tests): a non-NULL basis ⇒ a non-NULL label, the re-cut carries the predicate, controls on the pre-fix shapes | Langston Step-4 BLOCKER-3 (created by the second push) |
 | 0.8 | `hollow_skip_cap = 60` "covers 7 of 9 P-A episodes and nearly the p90" | **a PRE-REGISTRATION of 90 s (60 × the live 1,500 ms), not a derivation** — P-A's nine episodes are five zeroes, 9.2, 13.7, 108.9 and a 7-snap weekend artifact; 1 of 9 (GEV, 108.9 s) exceeds the cap, so one yield is expected on that shape | Langston Step-4 point 2 (audit §A.9 corrected) |
 
 ## 1. THE JUDGEMENT CALLS I WANT ATTACKED — *Langston answered all five at 00:57Z; his rulings are folded (rows 0.4–0.8) and recorded beside each*
@@ -34,7 +35,7 @@
 | `scripts/xstock-hollow-recut.ts` | P6: bases `decision_price` → `minute_proxy` → `market_state_predicate` → NULL; `--dry-run`; controls | 127 |
 | `scripts/reset-outcome-feedback-keys.ts` | P8: removes exactly `paper_sim_xstock_spot_*`; keeps the pre-reset file; re-validates JSON | 50 |
 | `server/tests/unit/b-xstock-feed-sanity-book-state.test.ts` | real-row fixtures; every knob mutation-proved | 144 |
-| `server/tests/unit/b-xstock-feed-sanity-fence.test.ts` | F-C1 / F-C2 / F-C3 / F-$, each with a firing control | 117 |
+| `server/tests/unit/b-xstock-feed-sanity-fence.test.ts` | F-C1 / F-C2 / F-C3 / F-INV / F-$, each with a firing control | 160 |
 
 ## 3. FILES — MODIFIED, load-bearing hunks inline
 
@@ -111,11 +112,11 @@ priceSource = 'kraken_equities_ws';
 `_recordBookStateEvent` (new private method at `:358`, before the I7 diagnostics block): merges `{ hollowSkips, lastSkip, yields[≤20] }` into `position.metadata.bookState`; persists on `yield | streak === 1 | streak % 10 === 0`.
 Provenance base (`:1549-1554`, incl. `bookStateRecord`): `tickerBid/tickerAsk` stay `null` (0.1); `bookStateAtDecision`, `bookStateYielded` added. Option type (`exitProvenance`, `:2242-2246`): `bookStateAtDecision`, `bookStateYielded`, `bookStateRecord`.
 **Fill instant** (`closePosition`): `let _bsAtFill: BookState | null = null;` hoisted at `:2310` beside `_fillDepthAgeMs`; maker leg → stays NULL (no book consulted ⇒ no assessment); taker leg (`:2330`), BEFORE `getDepthSnapshot`: `_bsAtFill = assessBookStateNow(symbol).ok ? result.state : null`.
-**Persist** (`:2679-2681`, beside `exitTickerAsk`):
+**Persist** (`:2679-2687`, beside `exitTickerAsk`):
 ```ts
 exitBookState: options?.exitProvenance?.bookStateAtDecision ?? null,
 exitBookStateAtFill: _bsAtFill,
-exitBookStateBasis: (options?.exitProvenance?.bookStateAtDecision != null || _bsAtFill !== null) ? 'guard' : null,
+exitBookStateBasis: options?.exitProvenance?.bookStateAtDecision != null ? 'guard' : null,   // the basis describes the DECISION label alone (BLOCKER-3)
 ```
 **Metadata carry** (`:2580-2594`; `_bsRec` at `:2586`): the `fg2Shadow` carry generalised — `bookState` rides onto the closed row from the exit stamp's `bookStateRecord` (the loop's in-memory, per-tick-exact copy), falling back to the re-fetched row's; `yielded` explicit; never a wipe.
 
