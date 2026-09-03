@@ -6768,6 +6768,51 @@ MISTAKE: wrong-object [#994] — searched the ledger for the BATCH and the code 
 MISTAKE: verification-weaker-than-claim [#994] — asserted a 09:30/16:00 boundary from HOURLY buckets, an instrument that could not have detected the real ~15-minute lag.
 MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim as fact; deriving it took one query and reversed it.
 
+### #994 AMENDMENT 3 (CC-INFRA, 2026-09-03) — ✅ **KYLE HAS RULED ON BOTH QUESTIONS. `3b.f-c`'s BLOCKER IS DISCHARGED — AND THE RULING SAYS *CHANGE NOTHING* ON THE EXIT SIDE AND EXPOSES A REAL INCONSISTENCY ON THE ENTRY SIDE.**
+
+⛔ **THIS IS THE DECISION ROW `3b.f-c` WAS WAITING ON** (*"what is missing is a DECISION, Kyle's — does the active xStock lane attempt entries outside the regular session at all, and what ceiling governs EXIT checks there"*). **Relayed to CC-C, who owns the batch. CC-INFRA is not implementing it** (§4.7 relay hand-off: I asked on the owner's behalf, so I own the relay).
+
+**RULING 1 — OFF-HOURS ENTRIES: YES, ATTEMPT THEM, ON EXACTLY THE SAME BAR AS EVERYTHING ELSE.** Kyle, verbatim: *"if we have an opportunity to open a trade during off hours, after hours, premarket hours, and that signal has passed all the requirements that are required for all of the other signals to pass, meaning it's gone to the SQE, it's gone through the RTB and has been ranked high enough to get promoted, and it survives all the freshness checks — then yes, we should attempt to open that."* ⇒ **No session gate on entries. No off-hours carve-out in either direction.**
+
+**RULING 2 — EXIT FRESHNESS: THE SAME STANDARD, ROUND THE CLOCK, AND *DO NOT LOOSEN IT*.** Kyle, verbatim: *"I don't want to loosen our requirements for freshness if it means we are increasing our risk. So if that means we don't get a chance to exit overnight because we're not getting enough updates to qualify for our freshness check, then so be it. We just hold that until we start getting fresher data."* ⭐ **AND THE EVIDENCE BAR HE ATTACHED, WHICH IS THE OPERATIVE PART: *"if we can PROVE that the risk is not increased by relaxing that during off hours, then I'm willing to listen."*** ⛔ **So a relaxation is not forbidden — it is EVIDENCE-GATED, and the burden is on the proposer.** ⚠️ **And he pre-emptively refused the convenience argument: *"I don't wanna do things just because it's easier… I don't necessarily want more [overnight closes] unless it meets the same requirements that everything else has to meet."***
+
+---
+
+⛔⛔ **HIS PHRASE *"THE SAME FRESHNESS CHECK WE APPLY ON EXITS FOR ALL OUR OTHER SIGNALS"* CANNOT BE TAKEN LITERALLY, AND SAYING SO IS THE POINT — THE TWO CLASSES DO NOT SHARE A CHECK TODAY.** Read live from `module_constants` and from the code, not cited:
+
+| | **crypto exit freshness** | **xStock exit freshness** |
+|---|---|---|
+| mechanism | **flat 2,000 ms**, hardcoded — `active-execution-engine.ts:1431` `getPriceWithFallback(symbol, 2000)` + the `isKrakenVenueSource` actionability gate | **risk-derived ceiling** — `computeStalenessCeiling`, `aee.ts:1305` |
+| where it lives | in code | `module_constants`, DB-resolved, no hardcoded fallback |
+| live values | — | `budget_k 0.5` · `floor_ms 15,000` · `cap_ms 300,000` · `null_stop_budget_pct 0.005` · σ window 30 min · σ max age 15 min · σ min obs 200 · classwide pct 0.90 *(all `xstock_spot`, set 2026-07-22)* |
+| `mark_staleness` rows for `crypto_spot` | ⛔ **NONE — zero rows** | 10 rows |
+
+⇒ **LITERALLY APPLYING CRYPTO'S CHECK TO xSTOCK WOULD BE A 2-SECOND CEILING — CATASTROPHICALLY TIGHTER, NOT LOOSER.** xStocks quote roughly every 4 s *in regular hours* and every 13-20 s after hours, so a 2 s ceiling would skip essentially **every** exit check at every hour of the day. **The literal reading of the instruction produces the opposite of the intent.**
+
+✅ **AND THE xSTOCK CEILING IS ALREADY THE BETTER EXPRESSION OF WHAT HE ASKED FOR — IT IS NOT A CLOCK AT ALL.** `ceiling = clamp(budget_k × room-to-stop / σ_rate, floor, cap)` ⇒ *"tolerate a mark old enough that this symbol's typical movement could have covered at most HALF the remaining distance to this position's stop."* **A position near its stop gets the tightest window automatically; one far from its stop gets a wider one.** ⇒ **that IS a constant risk posture — Kyle's own stated goal — expressed as a risk budget rather than as a number that means different things on different symbols.** ★ **Provenance (`aee.ts:1258-1272`): the predecessor WAS a single flat 90 s for every xStock, and it was RETIRED (§18) as measured *"simultaneously TOO LOOSE on the fastest name (blind to ~4% of adverse movement) and TOO TIGHT on the safest (refused to manage it 49×/24h)"* — symbols whose risk-per-second differs ~11×. **The flat-number design has already been tried here and measured to fail in both directions at once.**
+
+⭐⭐ **THEREFORE, ON RULING 2: NOTHING CHANGES. The exit gate already applies ONE standard around the clock with NO session term** (`mark-staleness.ts` matches zero of `session|extended|market hours`). **Kyle said do not loosen it and hold when stale — that is precisely today's behaviour.** ⇒ **`3b.f-c`'s exit half resolves to a CONFIRMED-NO-CHANGE on the trading policy, and the only thing left on that side is the ALERT.** ⚠️ **Which does NOT contradict his original complaint: he objected to being NOTIFIED that the protection engaged, never to the protection engaging.** The emit-vs-notify split (amendment 2, correction 5) is exactly this and is unaffected by the ruling.
+
+---
+
+⚠️⚠️ **BUT RULING 1 AND THE CODE DISAGREE, AND THIS IS THE FINDING THE RULING PRODUCED — IT IS `3b.f-c` CRITERION (i), OWNER CC-C.**
+
+**The session block on entries is already gone** — `active-dispatch.ts:173-179`, the RTH clock gate RETIRED by `#295` as *"a proxy for 'is the book deep enough'; wrong in BOTH directions"*. ✅ **So the system does attempt off-hours entries, matching Ruling 1.**
+⛔ **But the entry FRESHNESS gate is a FLAT CLOCK WITH NO RISK TERM:** `active-dispatch.ts:180-186` — `ageMs > safety.activeFillMaxAgeMs`, live value **`active_fill_max_age_ms = 15,000 ms`** (`xstock_fill_safety`, set **2026-06-15**, five weeks BEFORE the exit side became risk-derived on 07-22).
+⇒ **OFF-HOURS QUOTING IS 13-20 s AGAINST A 15 s LIMIT, so the gate refuses a large share of off-hours entries — not on a risk judgement, but because a limit calibrated to regular-hours cadence is applied to a session that quotes 5-50× more slowly.** **Measured (Langston's census, 2026-09-02): 36 of 39 fill-refusal occurrences since mid-July fired OUTSIDE regular hours; the three inside were 16-23 s over the line; the feed was healthy — 479/479 tracked symbols reporting through the session flip.** That is alert `1d1573c7` (RIOT, mark 55 s vs 15 s, three minutes after the close).
+
+★★ **SO THE INCONSISTENCY IS ON THE ENTRY SIDE, NOT THE EXIT SIDE — AND FIXING IT IS NOT A RELAXATION.** The exit gate scales with risk; the entry gate does not. **Making the entry gate risk-derived on the same principle would APPLY Kyle's consistency requirement rather than dilute it** — and it is the cheaper side by his own stated asymmetry (*refusing an entry costs an opportunity; a skipped exit check leaves a position unwatched*).
+⛔ **NOT PRE-JUDGED AND NOT MINE TO BUILD (rule 15, and `3b.f-c` is CC-C's).** ⚠️ **AND IT MUST CLEAR KYLE'S OWN EVIDENCE BAR BEFORE IT SHIPS: he required PROOF that risk is not increased. A design that merely widens the entry clock off-hours is exactly the "easier, so more trades" move he refused; a risk-derived entry budget is a different claim and must be measured, not asserted.** ⚠️ **It is also coupled — `3b.f-c-a`/`#992` already established the entry depth gate reads the ASK side only, so a hollow book passes entry; loosening entry freshness without that is the wrong order.**
+
+---
+
+✅ **RULING 3 — HOLIDAYS: PARKED BY KYLE, EXPLICITLY.** *"Let's not worry about that right now… if there's a holiday and US markets don't open during the normal weekday span, then we just see very little activity. There's no trading. So if that's how our system reacts right now, I'm fine with that."*
+⇒ **`#392` STAYS OPEN AND STAYS UNPLACED. No calendar is built. This is a Kyle-level deferral, recorded here so a later session does not re-scope it as a gap** (§9.5(b-ii): a deliberate decision re-filed as a defect is worse than no filing).
+★ **His premise is sound and is what the code does: the system does not KNOW it is a holiday, so it behaves as if the market is open and simply finds stale prices — which the freshness gates then refuse. The protection engages correctly by accident of design rather than by knowing the date.** ⚠️ **The one COST of not knowing is not a bad trade — it is the alert noise, which is `#994`'s own subject and is handled by the notify-side fix. So the calendar's absence is fully mitigated once the alert lands.**
+⭐ **Labor Day, Monday 2026-09-07, is still watched at ZERO cost — the amendment-1 prediction stands as written, now as an observation of `#392`'s premise rather than as an input to any build.** ★ It lands inside `#951`'s observation window, which closes the same day; whoever reads that result must state that a market holiday sat in the population.
+
+**ALERT ROUTING UNCHANGED — all five stay ACTIVE and UNACKED per `3b.f-c`'s own instruction; owner CC-C.**
+
 ### #989 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; found answering Kyle's question — *"how do we know it's working, and can that be taken as had the rope pulled or is still alive and kicking"*) — ⛔ A TOKEN CAN LOSE 99.8% OF ITS LIQUIDITY AND THE STUDY STILL COUNTS IT ALIVE
 
 **The death definition cannot see a liquidity pull, because it has never had a liquidity figure to see one with.** `alive` is *has a pair AND has 24h volume*. A pull leaves both true — **volume continues precisely BECAUSE people are still trading, now against an emptied pool.** So the event the class `liquidity_pulled` is named after is the one event the definition cannot observe.
