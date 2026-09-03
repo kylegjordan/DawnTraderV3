@@ -284,16 +284,25 @@ export class ActiveExecutionEngine {
       // that did not run both PASS: this seam may refuse an entry, never invent one from an absence (`#546`).
       // ⛔⛔ WHAT ACTUALLY REACHES THIS SEAM IS NARROWER THAN "THE SAME PREDICATE" SOUNDS, AND SAYING SO IS
       // THE POINT (Langston Step-4 FINDING-1, re-derived here): `advanceBookStateComparator` has exactly ONE
-      // call site — the EXIT loop at `:1374`, keyed on `position.symbol` — so `_comparators` only ever holds
-      // symbols we ALREADY HOLD. For a symbol we are about to open there is no comparator, so
-      // `assessBookState` returns `unknown` on any two-sided quote (`book-state.ts:192-195`). ⇒ REACHABLE
-      // HERE: `absent_bid`, `absent_ask`. UNREACHABLE HERE: `bid_collapsed`, `ask_spiked`, `mark_deviation`
-      // — the relative-departure arms, i.e. the substance of the predicate; eight of the twelve knobs are
-      // inert at this seam. A held name therefore gets a STRICTER entry gate than an unheld one: fail-safe
-      // in direction, but a real hole against Kyle's one-standard ruling for the unheld case (a collapsed-
-      // but-POSITIVE bid passes `getDepthSnapshot`'s `bid > 0 AND bid_qty > 0` filter, so warmth and
-      // sufficiency do not catch it either). Pre-register any entry-refusal expectation as ABSENT-SIDE ONLY,
-      // and never compare an entry refusal on a held name with one on an unheld name — they are two gates.
+      // call site — the EXIT loop (`advanceBookStateComparator(position.symbol, …)`), keyed on the HELD
+      // position — so `_comparators` only ever holds symbols we ALREADY HOLD. For a symbol we are about to
+      // open there is no comparator, so `assessBookState` returns `unknown` on any two-sided quote
+      // (`book-state.ts:192-195`). ⇒ REACHABLE HERE: `absent_bid`, `absent_ask`. UNREACHABLE HERE:
+      // `bid_collapsed`, `ask_spiked`, `mark_deviation` — the relative-departure arms, i.e. the substance
+      // of the predicate; eight of the twelve knobs are inert at this seam. A held name therefore gets a
+      // STRICTER entry gate than an unheld one.
+      // ⛔ AND THAT ASYMMETRY IS **NOT** "FAIL-SAFE IN DIRECTION" — an earlier draft of this comment said so
+      // and it was wrong (Langston, Step-4 round 2): the WEAKER gate lands on the UNHELD name, which is the
+      // one we are about to take risk on. What this seam has is fail-OPEN-ON-ABSENCE (the `#546` discipline
+      // above), which protects against INVENTED REFUSALS — not against admissions.
+      // ⚠️ Nor is it "Kyle's ruling half-delivered": he ruled HOUR-INVARIANCE (one standard at every hour,
+      // no session term), which this seam honours. He did not rule held-vs-unheld parity. This is a newly
+      // surfaced asymmetry, which is enough on its own without borrowing his authority for it.
+      // A collapsed-but-POSITIVE bid also passes `getDepthSnapshot`'s `bid > 0 AND bid_qty > 0` filter, so
+      // warmth and sufficiency do not catch it either. HOME: `B-XSTOCK-ENTRY-COMPARATOR` (own batch, CC-C,
+      // placed after the OBJ-9 alert-policy increment) — MEASURE first, mechanism second. Pre-register any
+      // entry-refusal expectation as ABSENT-SIDE ONLY, and never compare an entry refusal on a held name
+      // with one on an unheld name: they are two different gates.
       // ⛔ AND A `two_sided` VERDICT HERE IS NOT EVIDENCE THE TICK WAS FRESH (Langston, property (d)):
       // `assessWarmth` refuses on `snap.ageMs > warmthMaxAgeMs` (`depth-source.ts:151`) but
       // `assessBookStateNow` never compares `raw.atMs` to anything, and `raw` advances on every frame even

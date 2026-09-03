@@ -161,7 +161,11 @@ describe('F-P9 — the entry seam reads BOTH sides and consults the guard, xStoc
   // a `market-hours.js` import and `toLocaleTimeString(…, {timeZone})` all slipped through it. Broadened
   // to the import level and given its own FIRING CONTROL — a negative assertion with no control proves
   // nothing about its token list, only that the slice was found.
-  const CLOCK_TOKENS = /market-?hours|isMarketOpen|isXstockMarketOpen|liquidFillWindow|get(UTC)?Hours|getUTC(Date|Day)|toLocale|timeZone|Date\.now|RTH|session|premarket|after_?hours|overnight/i;
+  // ⚠️ `RTH` and `session` carry word boundaries: unbounded and case-insensitive they match
+  // inside `worth`, `north`, `further` and `sessionId` (Langston, non-blocking). That direction is
+  // fail-closed — it only ever costs a future author a hunt for a clock reference that is not there
+  // — but it is free to fix.
+  const CLOCK_TOKENS = /market-?hours|isMarketOpen|isXstockMarketOpen|liquidFillWindow|get(UTC)?Hours|getUTC(Date|Day)|toLocale|timeZone|Date\.now|\bRTH\b|\bsession\b|premarket|after_?hours|overnight/i;
   it("⛔ NO CLOCK, NO SESSION TERM — Kyle's ruling is one standard at every hour", () => {
     expect(gate).not.toMatch(CLOCK_TOKENS);
   });
@@ -173,8 +177,12 @@ describe('F-P9 — the entry seam reads BOTH sides and consults the guard, xStoc
       "const et = d.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });",
       'if (Date.now() > cutoff) return null;',
       'if (session === "overnight") widen();',
+      'const et = nowET(); // RTH only',
     ]) expect(CLOCK_TOKENS.test(fixture), fixture).toBe(true);
     expect(CLOCK_TOKENS.test("const suff = assessSufficiency(snapshot, 'asks', orderNotional, config);")).toBe(false);
+    // and the word-boundaries hold: these must NOT match, or a future author hunts a clock that isn't there
+    for (const benign of ['const worth = 1;', 'if (north) go();', 'further();', 'const sessionId = x;'])
+      expect(CLOCK_TOKENS.test(benign), benign).toBe(false);
   });
   it('⛔ neither new arm records its own gate-block counter — the caller is the sole writer (BLOCKER-1)', () => {
     expect(gate).not.toMatch(/recordDepthGateBlock/);
