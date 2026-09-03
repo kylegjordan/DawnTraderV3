@@ -1,0 +1,19 @@
+--- MEASURED AT CAPTURE TIME:
+capture_at=2026-09-03T19:44:43Z
+--- out.log retention horizon, measured now (NOT quoted from the report):
+retained_out_files=14
+oldest_out_file=/var/log/dawntrader/out__2026-08-31_03-55-31.log
+oldest_out_first_line=2026-08-31 00:00:01 +00:00: [10.7][MTF] 
+--- error.log retention horizon:
+retained_error_files=14
+oldest_error_file=/var/log/dawntrader/error__2026-08-21_00-00-00.log
+--- THE QUALIFYING CONTROL: COMPARATOR_SEEDED (out.log):
+2026-09-03 19:28:48 +00:00: [B-XSTOCK-FEED-SANITY][BOOK_STATE] ARKK/USD COMPARATOR_SEEDED mid=87.07499999999999 spread=0.00011 at=2026-09-03T19:28:48.294Z
+2026-09-03 19:28:48 +00:00: [B-XSTOCK-FEED-SANITY][BOOK_STATE] ADBE/USD COMPARATOR_SEEDED mid=285.945 spread=0.00129 at=2026-09-03T19:28:48.006Z
+2026-09-03 19:28:48 +00:00: [B-XSTOCK-FEED-SANITY][BOOK_STATE] LI/USD COMPARATOR_SEEDED mid=12.085 spread=0.00083 at=2026-09-03T19:28:48.039Z
+2026-09-03 19:28:48 +00:00: [B-XSTOCK-FEED-SANITY][BOOK_STATE] NEM/USD COMPARATOR_SEEDED mid=130.10000000000002 spread=0.00031 at=2026-09-03T19:28:48.486Z
+2026-09-03 19:28:48 +00:00: [B-XSTOCK-FEED-SANITY][BOOK_STATE] SLV/USD COMPARATOR_SEEDED mid=60.405 spread=0.00017 at=2026-09-03T19:28:48.485Z
+--- EVAL_EXIT cadence sample (out.log, last 3):
+2026-09-03 19:44:40 +00:00: [I7-PRICE-FIX][EVAL_EXIT] cycleId=1788464680420 positionsEvaluated=5 withWsPrice=5 withRestPrice=0 withoutPrice=0 slHits=0 tpHits=0 
+2026-09-03 19:44:42 +00:00: [I7-PRICE-FIX][EVAL_EXIT] cycleId=1788464681920 positionsEvaluated=5 withWsPrice=5 withRestPrice=0 withoutPrice=0 slHits=0 tpHits=0 
+2026-09-03 19:44:43 +00:00: [I7-PRICE-FIX][EVAL_EXIT] cycleId=1788464683421 positionsEvaluated=5 withWsPrice=5 withRestPrice=0 withoutPrice=0 slHits=0 tpHits=0 
