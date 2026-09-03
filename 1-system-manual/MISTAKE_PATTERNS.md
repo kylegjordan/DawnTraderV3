@@ -461,6 +461,20 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 
 ---
 
+### `absence-never-searched` — **THE ABSENCE WAS ASSERTED FROM BELIEF; NO INSTRUMENT EVER RAN** — **LIVE — NOT IN §13** · mechanism: ✅ **NAME THE CORPORA BEFORE THE ABSENCE, IN THE SAME SENTENCE** (opened 2026-09-03, CC-C, on Langston's `#453` flag)
+
+↔ **THE SIBLING IS `silence-not-evidence`, AND THE DISTINCTION IS THE WHOLE POINT.** There, an instrument RAN and its silence was misread. **Here NOTHING RAN.** The absence was stated because it felt true, and it entered the record wearing the same clothes as a searched one — no failed check to find later, because there was no check.
+
+⛔⛔ **AND IT IS WORSE THAN A SILENT INSTRUMENT FOR A REASON THAT ONLY SHOWS UP ACROSS A SESSION BOUNDARY: AN ASSERTED ABSENCE DOES NOT MERELY FAIL TO INFORM — IT STOPS THE OTHER PARTY FROM LOOKING.** A wrong number invites a re-derivation. *"There isn't one"* closes the question.
+
+**INSTANCES (attributed):**
+| # | instance | batch | ref |
+|---|---|---|---|
+| 1 | ⭐ **CC-C, `#526`/`#943`, 2026-09-03 — TOLD ANOTHER SESSION TWICE THAT NO PEER GROUPING EXISTED, INTO THEIR DESIGN DECISION.** I justified using `S` (nine symbols that happened to signal overnight in one week) as the peer-set proxy on the grounds that *"no sector or liquidity grouping exists to key on today"*. **I never searched.** Langston flagged it as `#453` — *carry it into scope with the corpora searched, or it hardens into a fact nobody checked*. ⛔ **REFUTED IN ONE QUERY: `xstock_spot_universe` carries `sector`, `crypto_adjacent`, `adr`, `source_chain`, with a curated `_overrides` table beside it — and it is POPULATED, which was the discriminating check: 496 rows, 473 live, `sector` non-null on ALL 496, 15 distinct sectors.** ★ **THE COMPOUNDING: CC-B had just found `S` DISJOINT from his exit leg, so his natural next move was to look for a better grouping — which I had already told him was not there.** ⚠️ **AND THE PROCEDURAL TELL: I searched the CODE first and the DB last, and the answer was only ever in the DB — `shared/asset-classes.ts` says so in a comment I had already read** (*manual edits are no longer the pattern; add/remove via the DB tables*). | `#526` / `#943` | `cohort_composition.sql` banner |
+
+★★ **THE MECHANISM, and it is a format rather than a resolution: AN ABSENCE SHIPS WITH ITS CORPORA IN THE SAME SENTENCE, OR IT DOES NOT SHIP.** *"No grouping exists"* is not a finding. *"No grouping in `shared/schema.ts` or `shared/asset-classes.ts`; not checked in the DB"* is one — **and it visibly names the hole, which is exactly what would have stopped this instance.**
+⇒ ⛔ **AND WHEN THE ABSENCE IS ABOUT PER-ENTITY ATTRIBUTES, SEARCH THE DATABASE BEFORE THE CODE.** Config that was once in source has been migrating to DB tables for a year here; the code often carries only a comment saying so.
+
 ### `silence-not-evidence` — **LIVE — NOT IN §13** · mechanism: **PARTIAL**
 - **2026-09-02 · B-MEASURE-GATE leg 2:** a 2.5 s plain command was read as proof that an agent hook's `if` gate held; it was consistent with the agent answering `ok:true` on every call, and the next non-matching command proved it was running on all of them (scope [r7]).
 **A check that CANNOT FAIL, mistaken for a check that passed.** Silence from a broken instrument is indistinguishable from silence from a healthy one.
