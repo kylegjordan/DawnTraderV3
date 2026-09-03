@@ -102,3 +102,41 @@ select 'B peer-set coverage',
        null,
        (select count(*) from sig_symbols)::text
 order by 1;
+
+-- ═══════════════════════════════════════════════════════════════════════════════════════════
+-- RESULT — run 2026-09-03, against the criterion in the header above, unedited.
+--
+-- A · CONCENTRATION (479 tracked symbols × 2,387 overnight minutes)
+--     live in >=90% of overnight minutes:  51      per-symbol share  p10 0.041
+--     live in 50-90%:                      61                        p50 0.144
+--     live in 10-50%:                     175                        p90 0.911
+--     live in  <10%:                      192
+--   ⇒ THE MEDIAN SYMBOL IS LIVE IN 14.4% OF OVERNIGHT MINUTES WHILE THE TOP DECILE IS LIVE 91%,
+--     AND 192 OF 479 ARE LIVE IN UNDER A TENTH. **CONCENTRATED, NOT SPREAD.**
+--
+-- B · PEER-SET COVERAGE — the number that decides the trigger
+--     |S| = 9 symbols produced an overnight dispatch attempt in the window
+--     live symbols from S per overnight minute:  min 3  ·  p05 5  ·  p50 6
+--   ⇒ ⛔⛔ **THE RELEVANT COMPARISON SET AT A TYPICAL OVERNIGHT MINUTE IS SIX, NOT 366.**
+--
+-- ⭐ THE DECISION: an AGGREGATE count threshold would read ~131 live books, call the feed
+--    healthy, and be reasoning from names with nothing to do with the symbol under evaluation.
+--    **The trigger must test the PEER SET of the symbol being evaluated.** The measurement chose
+--    the harder code path.
+--
+-- ⛔ AND IT RETIRES A CLAIM OF MINE: "one-against-88 is comfortable" was wrong in exactly the way
+--    Langston predicted — **a COUNT is not a COHORT**, and the aggregate hid this completely.
+--
+-- THREE LIMITS, STATED:
+--  1. |S| = 9 IS SMALL and output B rests on those nine. That thinness is itself a finding — very
+--     few names signal overnight at all — but a tenth entrant would move B materially.
+--  2. S IS A PROXY FOR A PEER SET, NOT A PEER SET. No sector or liquidity grouping exists to key
+--     on. If the design keys peers on something else, RE-DERIVE against that grouping.
+--  3. ⚠️ **RESTRICTING TO S CONDITIONS ON HAVING PRODUCED A SIGNAL, WHICH CONDITIONS ON THE DATA
+--     BEING THERE — the same selection-on-the-outcome-variable that killed the 62.7%, one level
+--     down.** ⇒ output B is if anything OPTIMISTIC about peer liveness; the true peer set at a
+--     quiet moment may be thinner than 6. It does not change the direction of the conclusion,
+--     which is already "test the peer set". Flagged to Langston rather than left to sit.
+--  4. Sample minimum, not a floor: seven consecutive ORDINARY sessions, no holiday, no half-day,
+--     no venue incident. `min 3` is what seven ordinary sessions could show.
+-- ═══════════════════════════════════════════════════════════════════════════════════════════
