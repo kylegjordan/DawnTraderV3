@@ -149,7 +149,7 @@ import { markKindOf } from './market-data/mark-kind.js'; // B-EXIT-BOOK-AGE-STAM
 import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_classes/xstock_spot/mark-staleness.js';
 // B-XSTOCK-FEED-SANITY (#943, closes #567) — the book-state guard: the tracker is the one reader every
 // label site calls; the comparator advances ONLY here, after a two_sided verdict at the decision site.
-import { assessBookStateNow, advanceBookStateComparator } from '../asset_classes/xstock_spot/book-state-tracker.js';
+import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator } from '../asset_classes/xstock_spot/book-state-tracker.js';
 import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 
@@ -1362,6 +1362,14 @@ export class ActiveExecutionEngine {
                 if (_next >= _c.hollowSkipCap) {
                   // YIELD — the bounded withholding is over: act on the book as it is, loudly.
                   this._bookStateSkipStreak.delete(position.id);
+                  // ⛔⛔ AND DROP THE REFERENCE (Langston Step-8 finding, 2026-09-03). Without this
+                  // the comparator can NEVER leave a bad seed: the hollow branch `continue`s and
+                  // this yield path falls through, so the advance below — in the `else` — is
+                  // unreachable for as long as the bad reference stands. A healthy book then reads
+                  // `mark_deviation` forever and the exit loop degrades from ~1.5 s to one look per
+                  // yield, silently, until a restart. The yield IS the evidence the reference is
+                  // unusable: it took `hollowSkipCap` CONSECUTIVE unactionable verdicts to get here.
+                  clearBookStateComparator(position.symbol, `yield_after_${_next}_hollow`);
                   bookStateAtDecision = 'hollow';
                   bookStateYielded = true;
                   hollowYields++;
@@ -1402,15 +1410,29 @@ export class ActiveExecutionEngine {
                 // MEASURED INERT ON STAGING 2026-09-03: zero `COMPARATOR_SEEDED` lines in 34 min
                 // with five open xStock positions and `EXIT_EVAL` demonstrably running in the same
                 // log (instrument proved live before its silence was read).
-                // ✅ THE HOLLOW INVARIANT IS UNTOUCHED: a hollow verdict `continue`s or yields well
-                // above this line and can never reach it, so a hollow frame still never becomes the
-                // reference. And `no_comparator` is reached only AFTER the absent-bid and
-                // absent-ask branches, so both sides are present by construction here.
+                // ⛔⛔ THIS COMMENT USED TO READ "THE HOLLOW INVARIANT IS UNTOUCHED: a hollow verdict
+                // `continue`s or yields well above this line and can never reach it, so a hollow
+                // frame still never becomes the reference." THAT WAS FALSE, and it was false in the
+                // exact shape this batch keeps paying for: IT CHECKED THE VERDICT, NOT THE BOOK.
+                // A collapsed-but-positive, uncrossed frame with NO PRIOR does not read `hollow` —
+                // it reads `unknown`/`no_comparator`, because all three comparator-dependent arms
+                // (`bid_collapsed`, `ask_spiked`, `mark_deviation`) are unreachable without a prior.
+                // So it walks past the hollow branch and seeds. ⇒ A HOLLOW-SHAPED FRAME **CAN**
+                // BECOME THE REFERENCE. (Langston, Step-8, 2026-09-03; every damage row in this
+                // batch's own pre-audit is seedable by construction.)
+                // ✅ WHAT IS TRUE: the seed frame cannot be JUDGED — there is nothing to judge it
+                // against — so it is BOUNDED (the yield above drops the reference, so a bad seed can
+                // no longer latch) and LABELLED (`validated`), never guessed at with a new threshold.
                 const _seedable =
                   _r.state === 'two_sided' ||
                   (_r.state === 'unknown' && _r.reasons.includes('no_comparator'));
                 if (_seedable && _raw.bid !== null && _raw.ask !== null) {
-                  advanceBookStateComparator(position.symbol, { bid: _raw.bid, ask: _raw.ask, last: _raw.last, atMs: _raw.atMs }, _c.trailingSpreadWindowSnaps);
+                  advanceBookStateComparator(
+                    position.symbol,
+                    { bid: _raw.bid, ask: _raw.ask, last: _raw.last, atMs: _raw.atMs },
+                    _c.trailingSpreadWindowSnaps,
+                    _r.state === 'two_sided', // the one fact the writer cannot derive: the verdict
+                  );
                 }
               }
             }

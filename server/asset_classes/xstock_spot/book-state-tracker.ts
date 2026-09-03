@@ -45,6 +45,22 @@ export interface BookStateComparator {
   priorAtMs: number;
   /** Recent two-sided spreads as a fraction of mid, newest last; bounded by the knob. */
   spreads: number[];
+  /**
+   * ⛔⛔ FALSE UNTIL A `two_sided` VERDICT HAS ADVANCED THIS CHAIN — i.e. the reference is still
+   * the COLD-START SEED, which BY CONSTRUCTION was never judged against anything.
+   * ★ WHY THIS FIELD EXISTS (Langston, Step-8 finding, 2026-09-03): `no_comparator` is reached
+   * past the absent-bid/absent-ask branches, so a **collapsed-but-positive, uncrossed** book —
+   * exactly the shape this batch exists to refuse — reads `unknown/no_comparator` and IS seedable.
+   * A hollow frame therefore CAN become the reference. That cannot be fixed by judging the seed
+   * (there is nothing to judge it against); it can only be BOUNDED and LABELLED.
+   * ⇒ an unvalidated reference wearing a validated reference's label is `#546` exactly, so the
+   *   label is carried into the row rather than inferred.
+   */
+  validated: boolean;
+  /** When this reference CHAIN began (the seed frame's own time). Survives validation. */
+  seededAtMs: number;
+  /** Advances against this chain since the seed, so a fresh seed is distinguishable from a settled one. */
+  framesSinceSeed: number;
 }
 
 const _comparators = new Map<string, BookStateComparator>();
@@ -71,6 +87,14 @@ export function advanceBookStateComparator(
   symbol: string,
   frame: { bid: number; ask: number; last: number | null; atMs: number },
   windowSnaps: number,
+  /**
+   * ⛔ TRUE only when a `two_sided` VERDICT produced this advance. The writer cannot derive this —
+   * it never sees the verdict — so it is the ONE thing the caller must state. That is not a
+   * relapse into the caller-owned-invariant shape C1 fixed: an INVARIANT the writer can check
+   * itself (mid > 0, ask >= bid) stays here; a FACT only the caller holds is passed in. Defaulting
+   * to `false` is the fail-safe direction — an unstated advance is treated as unvalidated.
+   */
+  validatedByTwoSided: boolean = false,
 ): void {
   const key = symbol.toUpperCase();
   const mid = (frame.bid + frame.ask) / 2;
@@ -91,7 +115,41 @@ export function advanceBookStateComparator(
   _comparators.set(key, {
     priorMid: mid, priorBid: frame.bid, priorAsk: frame.ask,
     priorLast: frame.last, priorAtMs: frame.atMs, spreads,
+    // once validated, STAYS validated for the life of the chain — a later seed starts a new chain
+    validated: (prev?.validated ?? false) || validatedByTwoSided,
+    seededAtMs: prev?.seededAtMs ?? frame.atMs,
+    framesSinceSeed: prev ? prev.framesSinceSeed + 1 : 0,
   });
+}
+
+/**
+ * ⛔⛔ DROP THE REFERENCE — CALLED ON YIELD, AND IT IS THE FIX FOR A **LATCH**, NOT A TIDY-UP
+ * (Langston, Step-8 finding, 2026-09-03; his mechanism, my disposition).
+ *
+ * ★ THE DEFECT IT CLOSES. A hollow-shaped frame with no prior seeds the comparator (see
+ * `validated` above). From then on the engine's two exits BOTH bypass the advance: the hollow
+ * branch `continue`s, and the yield path deletes the streak and falls through — so the advance,
+ * which sits in the `else`, is unreachable while a bad reference is in place. **THE COMPARATOR CAN
+ * THEREFORE NEVER LEAVE A BAD SEED.** A healthy book measured against it reads `mark_deviation`
+ * ⇒ hollow ⇒ 60 skips ⇒ yield ⇒ still no advance ⇒ 60 skips … permanently, until a restart.
+ * Exit monitoring silently degrades from the ~1.5 s loop cadence to roughly one look per yield.
+ *
+ * ⇒ **A YIELD IS THE PROOF THE REFERENCE IS UNUSABLE.** It means this reference produced an
+ * unactionable verdict on `hollowSkipCap` CONSECUTIVE frames. Continuing to trust it is the one
+ * thing we positively know is wrong, so the yield drops it and the next frame re-seeds.
+ * ★ NO NEW KNOB — it reuses the cap that already bounds the withholding. A new threshold on a new
+ * object is what `#996` was refused for, and inventing one here would repeat that.
+ * ⚠️ **WHAT THIS DOES *NOT* FIX, STATED PLAINLY:** a genuinely hollow book at seed time still
+ * produces a reference that makes the next hollow frames read `two_sided` — the guard passing the
+ * run it exists to refuse. That arm cannot be judged relatively (there is no prior), so it is
+ * LABELLED via `validated` and measured, not guessed at with a fresh threshold.
+ */
+export function clearBookStateComparator(symbol: string, reason: string): void {
+  const key = symbol.toUpperCase();
+  const prev = _comparators.get(key);
+  if (!prev) return;
+  _comparators.delete(key);
+  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_CLEARED reason=${reason} validated=${prev.validated} framesSinceSeed=${prev.framesSinceSeed} seededAt=${new Date(prev.seededAtMs).toISOString()}`);
 }
 
 export type BookStateNow =

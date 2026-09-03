@@ -303,7 +303,7 @@ describe('F-SEED — the comparator seed gate', () => {
   it('the seed condition admits no_comparator, not two_sided alone', () => {
     const i = AEE_CODE.indexOf('const _seedable');
     expect(i, 'the _seedable gate is missing at the advance call site').toBeGreaterThan(-1);
-    const seedBlock = AEE_CODE.slice(i, AEE_CODE.indexOf('advanceBookStateComparator(position.symbol', i));
+    const seedBlock = AEE_CODE.slice(i, AEE_CODE.search(/advanceBookStateComparator\s*\(/));
     expect(seedBlock).toMatch(/no_comparator/);
     expect(seedBlock).toMatch(/two_sided/);
   });
@@ -311,9 +311,35 @@ describe('F-SEED — the comparator seed gate', () => {
     const retired = "if (_r.state === 'two_sided' && _raw.bid !== null) {";
     expect(/no_comparator/.test(retired)).toBe(false);
   });
+  // ⛔ THE PATTERN IS SHAPE-TOLERANT ON PURPOSE. It matched `advanceBookStateComparator(position.symbol`
+  // as one literal until 2026-09-03, and then read ZERO — not because a call site vanished, but
+  // because the call was wrapped across lines to take a fourth argument. **A single-writer fence
+  // that silently reads zero when the writer is REFORMATTED is a fence that stops guarding exactly
+  // when the code is being changed**, which is the only time it matters. It now counts INVOCATIONS
+  // of the symbol regardless of layout, and the import is excluded by requiring the paren.
   it('advanceBookStateComparator still has exactly ONE call site in the engine', () => {
-    const calls = AEE_CODE.split('advanceBookStateComparator(position.symbol').length - 1;
+    const calls = (AEE_CODE.match(/advanceBookStateComparator\s*\(/g) ?? []).length;
     expect(calls).toBe(1);
+  });
+  it('CONTROL: the call-site counter can see a second call — it is not structurally stuck at 1', () => {
+    const twoSites = 'advanceBookStateComparator(\n a\n);\nadvanceBookStateComparator (b);';
+    expect((twoSites.match(/advanceBookStateComparator\s*\(/g) ?? []).length).toBe(2);
+    // and it does NOT count a bare mention with no invocation
+    expect(('// see advanceBookStateComparator for why'.match(/advanceBookStateComparator\s*\(/g) ?? []).length).toBe(0);
+  });
+  // ⛔⛔ THE LATCH FIX (Langston Step-8): the yield MUST drop the reference, or a bad seed is
+  // permanent. Behavioural coverage is in the book-state suite; this is the call-site fence.
+  it('the YIELD path clears the comparator — exactly one call site, in the engine', () => {
+    const clears = (AEE_CODE.match(/clearBookStateComparator\s*\(/g) ?? []).length;
+    expect(clears).toBe(1);
+    const y = AEE_CODE.indexOf('bookStateYielded = true');
+    expect(y).toBeGreaterThan(-1);
+    // the clear sits in the same yield block, within a small window of the yield flag
+    expect(AEE_CODE.slice(Math.max(0, y - 800), y + 800)).toMatch(/clearBookStateComparator\s*\(/);
+  });
+  it('CONTROL: that window check can fail — a far-away region does NOT contain the clear', () => {
+    const y = AEE_CODE.indexOf('bookStateYielded = true');
+    expect(AEE_CODE.slice(0, Math.max(0, y - 5000))).not.toMatch(/clearBookStateComparator\s*\(/);
   });
 });
 

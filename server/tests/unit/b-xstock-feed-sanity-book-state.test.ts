@@ -184,13 +184,38 @@ describe('B-XSTOCK-FEED-SANITY — the seeding cycle CLOSES (deadlock regression
     expect(second.state).toBe('two_sided');
   });
 
-  it('✅ AND THE HOLLOW INVARIANT SURVIVES: a hollow frame is still never seedable', () => {
-    const collapsed = assessBookState(frame({ bid: 80.0, ask: 100.5, last: 100.0 }, healthy), CFG);
-    expect(collapsed.state).toBe('hollow');
-    const newRuleWouldSeed =
-      collapsed.state === 'two_sided' ||
-      (collapsed.state === 'unknown' && collapsed.reasons.includes('no_comparator'));
-    expect(newRuleWouldSeed).toBe(false);
+  // ⛔⛔ THIS TEST USED TO CLAIM "a hollow frame is still never seedable" AND IT WAS VACUOUS.
+  // Its fixture passed `healthy` as the PRIOR — so `bid_collapsed` fired and it of course read
+  // `hollow`. But THE SEEDING PATH IS `prior = null`, and that case was never run. It is verbatim
+  // the failure this same file diagnoses twelve lines above — *a test that always supplies the
+  // state under test cannot discover that the state is never created* — reproduced four `it`s
+  // later, in the regression suite written to catch it. (Langston, Step-8, 2026-09-03.)
+  it('⛔ THE DEFECT, NAMED: a collapsed-but-positive book with NO PRIOR **is** seedable', () => {
+    const collapsedNoPrior = assessBookState(frame({ bid: 80.0, ask: 100.5, last: 100.0 }, null), CFG);
+    // it does NOT read hollow — every comparator-dependent arm is unreachable without a prior
+    expect(collapsedNoPrior.state).toBe('unknown');
+    expect(collapsedNoPrior.reasons).toContain('no_comparator');
+    const wouldSeed =
+      collapsedNoPrior.state === 'two_sided' ||
+      (collapsedNoPrior.state === 'unknown' && collapsedNoPrior.reasons.includes('no_comparator'));
+    expect(wouldSeed).toBe(true); // ⇒ a hollow-SHAPED frame becomes the reference
+  });
+
+  it('CONTROL: the SAME frame WITH a prior reads hollow — so the fixture is the whole difference', () => {
+    const collapsedWithPrior = assessBookState(frame({ bid: 80.0, ask: 100.5, last: 100.0 }, healthy), CFG);
+    expect(collapsedWithPrior.state).toBe('hollow');
+    expect(collapsedWithPrior.reasons).toContain('bid_collapsed');
+    // ⇒ the retired assertion was true of THIS fixture and false of the path it claimed to cover.
+  });
+
+  it('⛔ AND THE CONSEQUENCE IS A LATCH: a bad seed makes a HEALTHY book read hollow', () => {
+    const badSeed = { bid: 80.0, ask: 100.5, last: 100.0 };   // priorMid 90.25
+    const recovered = assessBookState(frame(healthy, badSeed), CFG); // 99.5/100.5, mid 100.0
+    expect(recovered.state).toBe('hollow');
+    expect(recovered.reasons).toContain('mark_deviation');
+    // ⇒ without the yield-clears-the-reference fix the engine can never replace this reference:
+    //   the hollow branch `continue`s and the yield path falls through, so the advance is
+    //   unreachable for as long as the bad seed stands. That is the latch, not a transient.
   });
 
   it('✅ an ABSENT side is hollow, not no_comparator — so it can never seed either', () => {
@@ -222,5 +247,79 @@ describe('B-XSTOCK-FEED-SANITY — the writer refuses a crossed book (behavioura
     expect(c).not.toBeNull();
     expect(c!.priorMid).toBe(100);
     expect(c!.spreads.every((x) => x >= 0)).toBe(true);
+  });
+});
+
+/**
+ * ⛔⛔ THE YIELD DROPS THE REFERENCE — the fix for the LATCH Langston found at Step 8.
+ * A bad seed makes healthy books read `mark_deviation` forever, and BOTH engine exits bypass the
+ * advance (the hollow branch `continue`s, the yield path falls through), so the comparator could
+ * never be replaced without a restart. These are BEHAVIOURAL — they call the writer and read the
+ * state back — because a regex on the call site is the weakness that shipped `F-CROSSED` blind.
+ */
+describe('B-XSTOCK-FEED-SANITY — a bad seed cannot latch (behavioural)', () => {
+  it('clearBookStateComparator drops the reference so the next frame re-seeds', async () => {
+    const { advanceBookStateComparator, clearBookStateComparator, readBookStateComparator, _resetBookStateComparatorsForTest } =
+      await import('../../asset_classes/xstock_spot/book-state-tracker.js');
+    _resetBookStateComparatorsForTest();
+    // seed on a COLLAPSED book — the shape that reads `unknown/no_comparator` and is seedable
+    advanceBookStateComparator('ZZ/USD', { bid: 80.0, ask: 100.5, last: 100.0, atMs: 1_000 }, 20);
+    expect(readBookStateComparator('ZZ/USD')!.priorMid).toBeCloseTo(90.25, 5);
+    clearBookStateComparator('ZZ/USD', 'yield_after_60_hollow');
+    expect(readBookStateComparator('ZZ/USD')).toBeNull();
+    // the next frame re-seeds, on a healthy book this time
+    advanceBookStateComparator('ZZ/USD', { bid: 99.5, ask: 100.5, last: 100.0, atMs: 2_000 }, 20);
+    expect(readBookStateComparator('ZZ/USD')!.priorMid).toBeCloseTo(100.0, 5);
+  });
+
+  it('CONTROL: without the clear the reference SURVIVES — so the drop is not vacuous', async () => {
+    const { advanceBookStateComparator, readBookStateComparator, _resetBookStateComparatorsForTest } =
+      await import('../../asset_classes/xstock_spot/book-state-tracker.js');
+    _resetBookStateComparatorsForTest();
+    advanceBookStateComparator('ZZ/USD', { bid: 80.0, ask: 100.5, last: 100.0, atMs: 1_000 }, 20);
+    expect(readBookStateComparator('ZZ/USD')).not.toBeNull();
+    expect(readBookStateComparator('ZZ/USD')!.priorMid).toBeCloseTo(90.25, 5);
+  });
+
+  it('clearing a symbol that has no reference is a no-op, not a throw', async () => {
+    const { clearBookStateComparator, readBookStateComparator, _resetBookStateComparatorsForTest } =
+      await import('../../asset_classes/xstock_spot/book-state-tracker.js');
+    _resetBookStateComparatorsForTest();
+    expect(() => clearBookStateComparator('NOPE/USD', 'yield')).not.toThrow();
+    expect(readBookStateComparator('NOPE/USD')).toBeNull();
+  });
+
+  it('the SEED is labelled unvalidated, and only a two_sided advance validates it', async () => {
+    const { advanceBookStateComparator, readBookStateComparator, _resetBookStateComparatorsForTest } =
+      await import('../../asset_classes/xstock_spot/book-state-tracker.js');
+    _resetBookStateComparatorsForTest();
+    advanceBookStateComparator('WW/USD', { bid: 99.5, ask: 100.5, last: 100.0, atMs: 1_000 }, 20);
+    const seed = readBookStateComparator('WW/USD')!;
+    expect(seed.validated).toBe(false);          // the cold-start frame was judged against nothing
+    expect(seed.framesSinceSeed).toBe(0);
+    expect(seed.seededAtMs).toBe(1_000);
+
+    advanceBookStateComparator('WW/USD', { bid: 99.6, ask: 100.6, last: 100.1, atMs: 2_000 }, 20, true);
+    const validated = readBookStateComparator('WW/USD')!;
+    expect(validated.validated).toBe(true);
+    expect(validated.framesSinceSeed).toBe(1);
+    expect(validated.seededAtMs).toBe(1_000);    // the chain's origin survives validation
+
+    // and validation STICKS across a later unvalidated advance within the same chain
+    advanceBookStateComparator('WW/USD', { bid: 99.7, ask: 100.7, last: 100.2, atMs: 3_000 }, 20, false);
+    expect(readBookStateComparator('WW/USD')!.validated).toBe(true);
+  });
+
+  it('CONTROL: a fresh chain after a clear is unvalidated again — validation does not survive the drop', async () => {
+    const { advanceBookStateComparator, clearBookStateComparator, readBookStateComparator, _resetBookStateComparatorsForTest } =
+      await import('../../asset_classes/xstock_spot/book-state-tracker.js');
+    _resetBookStateComparatorsForTest();
+    advanceBookStateComparator('VV/USD', { bid: 99.5, ask: 100.5, last: 100.0, atMs: 1_000 }, 20, true);
+    expect(readBookStateComparator('VV/USD')!.validated).toBe(true);
+    clearBookStateComparator('VV/USD', 'yield_after_60_hollow');
+    advanceBookStateComparator('VV/USD', { bid: 80.0, ask: 100.5, last: 100.0, atMs: 4_000 }, 20);
+    const reseeded = readBookStateComparator('VV/USD')!;
+    expect(reseeded.validated).toBe(false);
+    expect(reseeded.seededAtMs).toBe(4_000);
   });
 });
