@@ -6642,6 +6642,31 @@ for a in last.values():
 **Left for Kyle (security hygiene, surfaced while on the deploy-keys page):** a third deploy key `replit-dawntrader` (added 2026-03-22, **read/write**, "last used within the last 6 months") is still registered — Replit has been FROZEN since 2026-03-30 (CLAUDE.md §5 rule 2). A live read-write key for a frozen platform is a standing risk; deleting it is Kyle's action on GitHub. Not done by CC-A.
 **Also left:** the 2-minute push-notice cadence is now authenticated but unchanged; if it was the volume trigger it is now counted against the authenticated limit, which is far higher. Infra Claude's call whether to slow it.
 
+### #994 OPEN 2026-09-03 (KYLE DIRECTIVE, given to CC-INFRA; evidence measured by CC-INFRA, **implementation belongs to the owner of `B-PRICE-AGE-TRUTH` / `#977`, not to me**) — ⛔ THE `Exit checks skipped` ALERT IS REPORTING THAT THE US STOCK MARKET IS CLOSED
+
+**Kyle's words, and the distinction in them is the whole design:** *"this is a known part of our system — xStocks will not be as fresh in off hours when the underlying stocks are not trading during regular US hours… our system is designed to protect us from exiting on bad data. So I don't think that should be an alert… If the data is stale because there's an issue with our system, that's different. But if our data is stale because that's what the market is doing… I'm fine with that."*
+
+✅ **MEASURED OVER THE WHOLE ALERT FILE, and it confirms the premise almost exactly:**
+
+| | count |
+|---|---|
+| `Exit checks skipped — mark older than ceiling` alerts on record | **178** |
+| fired during US regular hours (Mon–Fri, 13:30–20:00 UTC) | **1** |
+| fired outside them — nights, weekends | **177** |
+| **share that is off-hours** | **99.4%** |
+
+⛔ **SO THE ALERT IS FIRING ON A CALENDAR, NOT ON A FAULT.** An xStock trades 24/5 (rule 17) while the equity underneath it trades ~6.5 hours a day, so for roughly three quarters of every weekday the mark is *expected* to age past the ceiling and the engine is *expected* to decline to exit on it. **That is the protection working**, and reporting it as a warning trains the reader to ignore the class.
+
+★ **BUT DO NOT DELETE THE CLASS — THE ONE SURVIVOR IS THE WHOLE POINT.** Exactly one fired inside regular hours: `DD`, 2026-08-05T13:47:02Z, since resolved. **That is the case Kyle explicitly carved out** — staleness *not* explained by the market being shut, which is a feed fault rather than the design. ⇒ **A rule that suppresses the expected case and keeps the unexpected one would have fired ONCE in a month instead of 178 times, and it would have fired on the one that mattered.**
+
+⚠️ **THE SUPPRESSION MUST BE COMPUTED, NOT ASSUMED.** "Off-hours" is a property of the UNDERLYING equity's session — regular hours, pre/post market, weekends **and US market holidays** (rule 17: holidays pause the cadence; Memorial Day already caused one such episode). A rule keyed on a hardcoded clock without a holiday calendar would re-open the noise on every holiday and, worse, would SUPPRESS a genuine fault on a day the market was actually open.
+
+⚠️ **AND THE COUNT IS A FLOOR ON ATTENTION COST, NOT ON OCCURRENCES.** These are distinct alert rows; a row that re-surfaces on the dispatcher's back-off is one row and many notifications. The 178 understates how often this reached a human.
+
+**HOME: the alert-policy change belongs with `B-PRICE-AGE-TRUTH` (`#951`) / `#977`, whose owner holds this surface — CC-INFRA is NOT taking it.** ⛔ **This entry exists so the directive and its evidence are recorded rather than living in a chat message.** Routed to that owner in `#general` the same day. ⚠️ **No date, per §9.4.**
+
+★ **AND ONE THING THE OWNER SHOULD DECIDE RATHER THAN INHERIT:** whether the right change is to stop EMITTING during a closed session, or to keep emitting at `info` and stop NOTIFYING. Those differ in what the record retains — the first loses the ability to measure how often the protection engages, which is a real quantity for `B-PRICE-AGE-TRUTH`'s own observation window.
+
 ### #989 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; found answering Kyle's question — *"how do we know it's working, and can that be taken as had the rope pulled or is still alive and kicking"*) — ⛔ A TOKEN CAN LOSE 99.8% OF ITS LIQUIDITY AND THE STUDY STILL COUNTS IT ALIVE
 
 **The death definition cannot see a liquidity pull, because it has never had a liquidity figure to see one with.** `alive` is *has a pair AND has 24h volume*. A pull leaves both true — **volume continues precisely BECAUSE people are still trading, now against an emptied pool.** So the event the class `liquidity_pulled` is named after is the one event the definition cannot observe.
