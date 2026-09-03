@@ -641,3 +641,46 @@ Instruction mix across every transaction examined: `Sell` 50, `SellV2` 21, `Buy`
 ★ **AND ON A BONDING CURVE, A RUG LOOKS LIKE SELLING, because selling is the only mechanism available.** The pump.fun rug pattern is **the creator dumping their own allocation** — which appears as `Sell` instructions, indistinguishable from ordinary selling except by **WHO** sold and **WHEN**. ⇒ **The discriminator is not the instruction type. It is the seller's identity and the size and timing of their exit.** That is the measurement this study does not yet make, and it is the honest answer to *"how do we tell a rug from a token that just died."*
 
 ⚠️ **NOTHING IS RECLASSIFIED BY THIS AMENDMENT.** Per Langston's standing ruling the stored class is not renamed — that rewrites history in an append-only store. **The disclosure belongs at the reporting layer**, and this amendment is that disclosure: `liquidity_pulled` means *the pool stopped being indexed and did not return*, and for 99.8% of the tokens carrying it, **no liquidity was, or could have been, pulled.** This is the substance behind `B-TOKENWATCH-DEATH-EVIDENCE-LABEL`.
+
+---
+
+## ⛔⛔ AMENDMENT 15 — THE ALCHEMY ACCEPTANCE TEST WAS WRONG, AND ITS 13/13 WAS EARNED ON A CALL PATH PRODUCTION CANNOT TAKE (CC-INFRA, 2026-09-03)
+
+**Kyle asked for the TEST DESIGN to be attacked before the study's chain reads move, and named the reason:** *"we have said yes our tests are working and the data feed is working, and it turned out that it wasn't — and we had the wrong tests, or our tests were silently failing, or they were loudly failing and we weren't paying attention to it."* **A fresh reader and Langston were run in parallel on the same brief. Both were right and the switch is not cleared.**
+
+### ⛔ THE HEADLINE, REACHED INDEPENDENTLY BY BOTH
+
+**The test's own egress bypasses the provider layer.** It builds its own request and calls `urlopen` directly, so it never passes `_request` and never passes `_pace`. ⇒ **Production would raise on call one:** `_pace` refuses a host in neither rate table, and `solana-mainnet.g.alchemy.com` is in neither. The failure lands in the generic handler and every row is written `{"sol": None, "source": "error"}` — **a total, permanent loss of the liquidity leg, logged once, alarmed nowhere.** ★ **13 of 13 proved that Alchemy answers when called on a path the study never uses. It could not tell us whether the switch starts.**
+⇒ ★ **AND IT IS THE SAME TWO-EGRESS-SITES DEFECT `providers.py` ALREADY RECORDS HAVING BEEN CAUGHT FOR ONCE** — *"fix-follows-the-pointer INSIDE the fix for fix-follows-the-pointer"* — re-formed inside the tool built to prevent the next one.
+
+### ⛔ CHECKS THAT PASS WHILE WHAT THEY NAME IS FALSE — BOTH FOUND THESE
+
+1. ★ **`our decoder produces the same verdict from both` IS A TAUTOLOGY.** The anchor is selected *because* its `complete` byte is set, and that branch returns `sol: None` — so the comparison is `None == None` **by construction, on every possible run**, and the `source` half is already entailed by the byte check two lines above. **The most important-sounding assertion in the file compares nothing.**
+2. **On a total fetch failure, ONE check fails and all FOUR starred checks PASS** — `"" == ""` and `None == None`, because `or [""]`/`or {}` are the right idiom for reading a response defensively and the wrong one for comparing two. **The presence check records a FAIL and does not gate.**
+3. **That hole propagates into the load block:** it compares against the empty capture, so *"every sustained call returned the correct bytes"* **passes on 42 calls that returned nothing.**
+4. **`getTokenAccountsByOwner` is tested against a bonding curve, which owns no wrapped-SOL account** — so the check is earned by an **empty list**, on the method the docstring itself calls *"the one graduated pools need"*.
+5. **`ok > 30` is an accidental latency gate** nobody designed: when latency exceeds the pacing interval the loop free-runs, so a slow provider yields fewer calls and the threshold silently becomes a speed test.
+
+### ⛔ WHAT IT IS STRUCTURALLY BLIND TO
+
+★ **Everything time-dependent, and the anchor's virtue is exactly its blind spot.** A frozen account reads identically at every commitment level, so **lag, commitment (`processed`/`confirmed`/`finalized` — neither side pins one anywhere), reorgs and stale caches are invisible by construction.** On a live curve a difference is pre-excused as *"a trade landed between reads."* **Lag is the most likely real difference between a paid and a free tier and the suite cannot see it.**
+⇒ ✅ **THE FIX DISSOLVES THE DICHOTOMY THE FILE IS BUILT ON: SLOT-CONDITIONED EQUALITY.** `getAccountInfo` returns `context.slot` and this file throws it away. **Same slot ⇒ the bytes MUST match — a byte-equality-grade assertion available on a LIVE account, in any stratum. Different slots ⇒ not a fault but a lag measurement.** Zero extra calls, and the sibling tool one directory over already does exactly this.
+
+**THE SAMPLE IS A CONVENIENCE DRAW, not a sample** — the first record of one partial day. Measured population: **2,128 SOL-quoted against 71 USDC**, so it lands on the SOL branch ~97% of the time — **and the USDC branch is where a wrong decode is the 1,000× understatement that reads as an empty pool.** The strata are enumerable: they are the eleven return branches of the decoder, of which **two are exercised**.
+
+**THE LOAD BLOCK HAMMERS ONE FROZEN ACCOUNT** — the most cacheable object on the chain — while production reads a different pool every call. **Cache-hit throughput says nothing about cache-miss throughput.** Latency is appended only on success, so the reported median is **survivor-biased** and looks healthy during a brownout. And `0.33/sec` is a **daily mean**, not the rate the job calls at: the sweep drains an hour bucket in a tight loop against an *unpaced* host.
+
+### ⛔ WHAT BREAKS AT THE SWITCH THAT THE TEST NEVER TOUCHES
+
+- **The provenance label is a hardcoded literal.** Leave it and every Alchemy row is stamped as the old provider — **the study permanently loses the ability to separate its own two halves, which is exactly the split needed if the switch turns out wrong.** Change it and **nine** consumers break, including this test's own anchor finder. **Neither branch is tested or mentioned.**
+- **The budget is denominated in the old provider's credits**, in the wrong unit (their meter is compute units, ours charges 1 per call), and would **keep shedding against a carve on an allowance nobody is consuming.** ⚠️ And that shed is **structured missingness**: it clusters as the carve depletes late in the month, so `pool_sol` missingness correlates with birth-day-of-month, which correlates with observation age. **True today; carried past the switch it becomes a bias we chose.**
+- **A JSON-RPC error body arrives as HTTP 200 and is never checked**, becoming a named, plausible observation indistinguishable from a real one. Provider-agnostic in mechanism, **entirely provider-dependent in rate — and only the success path is exercised.**
+- **`holder_concentration` has zero callers**, hardcodes the old provider's URL and still charges the carve. **§15 lingering legacy that looks like a live chain read.**
+
+### ✅ DONE IMMEDIATELY, BECAUSE ITS DEADLINE WAS THE SWITCH ITSELF
+
+**The pre-switch source mix is frozen** (`tools/freeze_preswitch_baseline.py` → `study/preswitch-baseline.json`). Langston: *"switch first and the baseline is contaminated and this control is gone permanently."* Bands across full days: `bonding_curve_real_reserves` 92.26–96.06% · `error` 0.00–3.46% · `graduated_pool_wsol_account` 2.93–3.29% · `curve_complete_graduated` 0.58–0.84% · `no_wsol_account_found` 0.16–0.41%. ⚠️ **A baseline, not a threshold — two days is a range, not a distribution.**
+
+### ⇒ THE SWITCH IS NOT CLEARED, AND NOTHING HAS BEEN SWITCHED
+
+⛔ **The decision to move providers remains sound — the cost arithmetic is right and Langston did not block it. What is withdrawn is the claim that it has been VERIFIED.** The acceptance test may not be cited as clearance for it. **Both reviewers were run in parallel and reconciled rather than picking the flattering one**, and each found what the other did not.
