@@ -5467,6 +5467,16 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 ### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
 
+⏳ **STATE 2026-09-03: DEPLOYED, IN ITS OBSERVATION WINDOW — NOT CLOSED.** `1a71c553ba2cf941c39331206071aa1d36e2fbbb` live 19:28:48Z (Kyle released the `#951` hold). Langston's Step-4 conditions discharged and **Step 8 CONFIRMED at the running sha**. Card `Observation`. Record: `B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md` §4c/§4d — **the deploy sequence, the two post-deploy defects and the anchored window live THERE, not here.**
+
+⛔⛔ **TWO DEFECTS IN THE FIX ITSELF, BOTH FOUND AFTER DEPLOY, AND THEY ARE THE SAME SHAPE AT DIFFERENT ALTITUDES.** (1) **THE GUARD SHIPPED INERT** — the advance was gated on a `two_sided` verdict, which an EMPTY comparator can never produce (`book-state.ts` returns `unknown`/`no_comparator`) ⇒ the seeding condition was gated on a state only seeding could produce. Zero `COMPARATOR_SEEDED` in 34 minutes with five open positions, **while every pre-registered deploy check passed.** (2) **A HOLLOW FRAME CAN SEED** (Langston): `no_comparator` sits past the absent-side branches, so a collapsed-but-positive uncrossed book reads `unknown` and seeds — and a bad seed **LATCHED**, because the hollow branch `continue`s and the yield path falls through, leaving the advance unreachable. Fixed at `6d6b0e7be`: **the yield drops the reference** (no new knob — it reuses `hollowSkipCap`) and the seed is labelled `validated=false`.
+
+⚠️ **RESIDUAL, STATED AS UNCLOSED:** a genuinely hollow book at seed time still produces a reference that makes the NEXT hollow frames read `two_sided` — the guard passing the run it exists to refuse. **That arm cannot be judged relatively (there is no prior), so it is LABELLED and MEASURED rather than guessed at with a threshold invented under pressure.** Rate unmeasured: it needs a restart coincident with a hollow frame on a held name.
+
+✅ **THE GUARD IS JUDGING, NOT MERELY SEEDED — first live evidence 2026-09-03 20:2xZ:** 220 `BOOK_STATE` lines, **192 skips / 3 yields on LI/USD**, refusing a book at **2.06% spread against its own 0.083% trailing median** (`ask_spiked`, 12.06 → 12.25). Position held 2.57% above its stop throughout. Alert `d23c76c4-3556-4f48-8928-fb1a11bf9d3e` acked `--by cc-c`.
+
+★ **`#567` IS CLOSED BY CROSS-REFERENCE AT THIS BATCH'S CLOSE, NOT NOW** — the window has to read first. **Do not mark it closed on the deploy.**
+
 
 
 

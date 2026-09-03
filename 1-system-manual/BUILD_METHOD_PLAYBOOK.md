@@ -280,3 +280,11 @@ correct fix RED.)
 - **Build the dependency map before the system gets big.** Every audit that skipped it missed something.
 - **Separate implement from review from the very first commit** — retrofitting independence into a reviewer that has been implementing is much harder than starting that way.
 - **Make each agent's identity explicit and permanent immediately.** Inferred identity produces confident misattribution, which is expensive and embarrassing.
+
+### A NEGATIVE ASSERTION IS A FIXTURE THAT SUPPLIES THE STATE UNDER TEST — ONE LEVEL UP (earned 2026-09-03)
+
+**THE RULE: a test that asserts something is ABSENT must first prove it can see that thing PRESENT.** Ship every negative assertion with a positive control in the same block, asserting the pattern still matches the thing it retired.
+
+**THE INCIDENT, and it is worth carrying because the same defect appeared at three altitudes in one batch.** A guard was built to refuse untrustworthy market data. (1) **The guard shipped INERT** — its state-advance was conditioned on a verdict that could only be produced *after* the state existed, so it deadlocked; every pre-registered deploy check passed, because each verified the code was PRESENT and none verified it could RUN. (2) **The fence written to enforce the reviewer's correction was case-sensitive**, so it returned green while the retired sentence was still in the file — a bare negative cannot distinguish *"the claim is gone"* from *"my pattern never matched anything"*. (3) **The regression test asserting the invariant survived used a fixture that could not exercise the path the invariant governed** — it supplied the very state whose absence was the bug.
+
+★ **THE GENERALISATION: every fixture in that suite handed the code the state it was meant to judge, so the suite could not discover that the state was never created.** Neither the author nor the reviewer needed to read more carefully; they needed ONE test that starts from nothing. ⇒ **For any guard, write the cold-start case first. For any negative, write its positive control in the same breath.**
