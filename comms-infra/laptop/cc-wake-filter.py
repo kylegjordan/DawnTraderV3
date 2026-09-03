@@ -58,6 +58,46 @@ def is_routine_push_notice(sender, text):
     if sender != "Push notice":
         return False
     return bool(_ROUTINE_PUSH.match((text or "").strip()))
+
+
+# 2026-09-03 #995 (B-WAKE-QUIET OBJ-10, KYLE-DIRECTED: "Yes, cut both") — THE ALL-CLEAR
+# HOURLY HEARTBEAT NO LONGER WAKES ANYONE.
+# This OVERTURNS #694's explicit refusal ("the dead-man proof that the watcher is alive...
+# its cost is COMMENTARY, not the wake"). Both halves of that refusal are now measured false:
+#   (a) IT CANNOT PROVE WHAT IT CLAIMS. The heartbeat is delivered as a Discord post that
+#       each session's watcher TAILS -- so a dead watcher receives no heartbeat. It cannot
+#       detect the failure it exists for; its only absence-signal is regularity.
+#   (b) THE INSTRUCTION IT CARRIES IS NOT FOLLOWED. Whole files, three transcripts:
+#       574 deliveries of "re-arm only if dead" -> 2 sessions touched the filter (0.3%);
+#       352 of "sweep the Discord inbox" -> 41 (11.6%); the same 734 heartbeat turns
+#       produced assistant TEXT 636 times (86%). It reliably produces narration and
+#       reliably fails to produce the action.
+# CONTENT-KEYED AND FAIL-SAFE, exactly like the push notice above (Langston BLOCKER-1):
+# we suppress ONLY the ALL-CLEAR shape. A heartbeat reporting a DEAD BRIDGE or a STALE
+# inbox log is the one case where it carries information, and it is still DELIVERED.
+# An unrecognised or reworded variant wakes you; it is never silently dropped.
+_HEARTBEAT_OK = re.compile(r"hourly heartbeat:.*bridges active:\s*y(?:es)?\b", re.I | re.S)
+# ⛔ KEYED ON THE HEALTH FIELDS ONLY. An earlier version included \bdead\b and \bDOWN\b and
+# matched the heartbeat's OWN standing instruction ("re-arm only if dead"), so it classed
+# every all-clear as a problem and suppressed nothing. Caught by the behavioural test, not
+# by re-reading the line: a word that always appears in the routine body can never
+# discriminate a problem from an all-clear.
+_HEARTBEAT_BAD = re.compile(
+    r"bridges active:\s*(?:n(?:o)?\b|partial|inactive)"   # the bridge health field itself
+    r"|inbox-log[^|]*\bSTALE\b"                            # the log-age field reporting stale
+    r"|\bbridge[s]?\b[^|]{0,40}\b(?:down|dead|failed|inactive)\b",
+    re.I)
+
+def is_allclear_heartbeat(sender, text):
+    """True ONLY for an all-clear hourly heartbeat. Anything reporting a problem -> False
+    -> delivered. Alert COUNTS in the body do not make it wake-worthy: every session is
+    already shown the full due-alert list at the top of EVERY turn by inject-due-alerts."""
+    if sender != "Heartbeat":
+        return False
+    t = text or ""
+    if _HEARTBEAT_BAD.search(t):
+        return False
+    return bool(_HEARTBEAT_OK.search(t))
 MY_RE = re.compile(r"@?\b(" + "|".join(NAMES.get(ALIAS, [])) + r")\b", re.I)
 # ★ EXPLICIT ALL-HANDS, for a session post that genuinely concerns every session (a shared-file
 # change, a protocol switch). Required BECAUSE the crew-post default became name-or-nothing
@@ -91,6 +131,10 @@ OTHERS_RE = re.compile(
 ALERT_OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "Kyle")
 ALERT_OWNER_RE = re.compile(
     r"\[\[ALERT\b[^\]]*\bowner=(" + "|".join(re.escape(o) for o in ALERT_OWNERS) + r")\b", re.I)
+
+# #995 OBJ-11: used to remove routing markers before a PROSE name check — the marker carries
+# an alias in `owner=`, which is routing metadata and must not read as being addressed.
+ALERT_MARKER_STRIP = re.compile(r"\[\[ALERT\b[^\]]*\]\]", re.I)
 
 def addressed_to_me(text):
     """Return (deliver?, text)."""
@@ -275,9 +319,29 @@ for raw in sys.stdin:
                 for mo in ALERT_OWNER_RE.finditer(body_raw):
                     pass
                 if mo:
-                    if mo.group(1).upper() == ALIAS:
-                        print(f"WAKE[ALERT-OWNER->{ALIAS}]: {text}", flush=True)
-                    continue
+                    # 2026-09-03 #995 (B-WAKE-QUIET OBJ-11, KYLE-DIRECTED) — THE MARKER IS NOW
+                    # A SUPPRESSOR ONLY, NEVER A WAKER.
+                    # WHY: the dedicated ALERT-OWNER wake is a DUPLICATE. `inject-due-alerts`
+                    # puts the FULL due-alert list, with full ids, at the top of EVERY prompt in
+                    # every session -- so a session cannot miss a due alert by not being woken
+                    # for it. This branch told it a second time, out of band.
+                    # WHAT IS KEPT: a marker naming ANOTHER session still suppresses (that is
+                    # the routing this branch was built for, #340).
+                    # WHAT CHANGED: a marker naming ME no longer emits its own wake and no
+                    # longer short-circuits -- it FALLS THROUGH to the ordinary Langston rules
+                    # below, so his triage still wakes me when he ADDRESSES me by name, which
+                    # his bridge does by construction (it auto-leads with the addressee).
+                    # HONEST LOSS, stated: a marker that names me inside a message that never
+                    # names me in prose now waits for the next turn's alert list instead of
+                    # waking me between turns.
+                    if mo.group(1).upper() != ALIAS:
+                        continue
+                    # ⛔ STRIP THE MARKERS BEFORE THE NAME CHECK BELOW. The marker CONTAINS my
+                    # alias (`owner=CC-A`), so falling through with it intact made MY_RE match
+                    # every time and the cut did nothing at all. Caught by the behavioural test.
+                    # The question here is whether he ADDRESSED me in prose, and the routing
+                    # marker is not prose.
+                    text = ALERT_MARKER_STRIP.sub(" ", text)
                 # Wake when Langston (a) uses an explicit wake-tag (broadcast OK), or (b) names
                 # me specifically. NOT on his plain replies to Kyle (no name/tag) — too noisy.
                 if re.search(r"@?CC[- ]?WAKE|wake\s+(up\s+)?(cc|claude\s*code)", text, re.I):
@@ -317,6 +381,8 @@ for raw in sys.stdin:
                 # receiving. Its cost is commentary, not the wake; that is a rules fix.
                 if is_routine_push_notice(sender, text):
                     continue
+                if is_allclear_heartbeat(sender, text):
+                    continue  # #995 OBJ-10 — all-clear heartbeat; a problem-reporting one still wakes
                 if sender and sender != MY_NAME:
                     # ⛔ NAME-OR-NOTHING (Kyle 2026-08-26). This used addressed_to_me(), whose
                     # no-name-mentioned case BROADCASTS — so a session narrating its own batch, or
