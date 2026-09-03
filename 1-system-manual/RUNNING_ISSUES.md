@@ -6725,6 +6725,49 @@ for a in last.values():
 
 **HOME: unchanged in substance — `B-XSTOCK-SESSION-FRESHNESS`, `PHASE_19_PLAN` row `3b.f-c`. What is OPEN is WHO holds it, which is with Langston and CC-C as of 06:37Z.** ⚠️ **No date, per §9.4 — except the 2026-09-07 observation, which is a measurement window whose LENGTH is the point, not a due date.**
 
+### #994 AMENDMENT 2 (CC-INFRA, 2026-09-03) — ⛔⛔ **AMENDMENT 1 CARRIED THREE ERRORS. LANGSTON CAUGHT ALL THREE INSIDE THE HOUR; I RE-DERIVED EACH AT THE OBJECT RATHER THAN ACCEPTING HIS READ.** THE WRENCH GOES BACK TO CC-C AND THE SURVIVING DELIVERABLE IS **KYLE'S OWN UNMADE DECISION**
+
+⛔ **READ AMENDMENT 1 THROUGH THIS ONE. Its measurement of the alert population (178 / 177 off-hours / the 15.1% positive control) STANDS and was re-derived. Its three CONCLUSIONS do not.**
+
+**CORRECTION 1 — THE HOLIDAY CALENDAR IS NOT A NEW FINDING. IT IS `#392`, OPEN SINCE 2026-06-26, AND I CO-FILED IT.** Verified at the ref, `RUNNING_ISSUES.md:2701`: *"a deterministic US-equity exchange-holiday/half-day calendar predicate as a BEFORE-the-fact xStock fill block"*, P19-B6.6 Step-2, Langston defence-in-depth. It already cites `market-hours.ts:25-29`, already prescribes the `xstockMarketHoursOverride` `(date, status)` shape, and **already ruled the pair rather than the choice: the CALENDAR for the scheduled case, B6.6's price-discovery-liveness gate for the UNSCHEDULED one. Complement, not either/or.**
+⇒ **THE HONEST DELIVERABLE IS GIVING `#392` A REAL PLACED HOME, NOT A FRESH SCOPE.** Its current home — *"a small Phase-19 fill-safety follow-up after B6.6"* — is exactly the vagueness §9.4 was tightened to forbid, **and B6.6 closed long ago**, so the home names a moment that has passed.
+⚠️ **HOW I MISSED IT, because the search was the defect and not the corpus: I grepped the ledger for the BATCH (`#977`, `#951`, `B-PRICE-AGE-TRUTH`) and for `holiday` IN THE CODE — never for the FINDING in the ledger.** §9.5(b-ii) says search the ledger before filing; I searched it for the wrong noun and read the silence as absence.
+
+**CORRECTION 2 — ⛔⛔ THE VENUE FLAG DOES *NOT* BEAT A CALENDAR, AND THIS WAS ALREADY REFUTED ON 2026-08-30 IN AN ENTRY I WROTE.** `RUNNING_ISSUES.md:1208`, verified at the ref, mirrored at `SYSTEM_MANUAL.md:12102` and plan row `3b.b`. Two independent grounds, neither of which my measurement touched:
+- **(a) IT IS A BOOLEAN AGAINST A FOUR-WAY DISTINCTION.** **Kraken publishes FOUR sessions; a boolean collapses overnight, pre-market and after-hours into ONE bucket.** ⇒ *"The honest session key is the TIMESTAMP against Kraken's published boundaries; the flag is a CROSS-CHECK on that, NEVER the key."*
+- **(b) IT HAS ZERO PRESENCE ANYWHERE THE EXIT PATH CAN SEE IT** — one archive write, two `null` writers, a comment, a column declaration. Amendment 1 reported the same zero-reader fact and drew the OPPOSITE conclusion from it: **I read "unused" as "available", when the entry had already established it means "not on this path".**
+- **(c) AND IT ARRIVES ~15 MINUTES LATE.** `B_XSTOCK_FEED_SANITY_SCOPE.md:430`: the flag flips at **13:45 / 20:15 UTC = 09:45 / 16:15 ET**, because the feed runs ~15-16 min behind its own labels (p50 952 s over 205,581 bars). **A session tag a quarter-hour late is not an observation of the session, it is a lagged report of one — and it is late in the dangerous direction at the open.**
+⛔⛔ **AND MY OWN INSTRUMENT COULD NOT HAVE CAUGHT THAT, WHICH IS THE REAL LESSON.** Amendment 1 claimed the flag *"tracks the 09:30/16:00 ET boundary exactly"* on the strength of **HOURLY buckets**. **Hourly buckets cannot resolve a 15-minute lag — the check could not have come out differently had I been wrong** (`CONDUCT.md` §6b step 2), and the hour-09 split I cited as confirmation (406,143 regular / 254,012 extended) is a **volume ramp at the open**, not a boundary measurement. **The claim was not weakly supported; it was unfalsifiable by the instrument that produced it.**
+⚠️ **AND THE MEASUREMENT WAS ALREADY DONE — `B_XSTOCK_FEED_SANITY_SCOPE.md:411`, 2026-09-01: populated, `true` on every off-hours snap, `false` in RTH.** I spent a 65-million-row scan re-deriving a recorded fact and then over-read it.
+✅ **WHAT SURVIVES: the instinct to OBSERVE rather than PREDICT is sound — it was aimed at the wrong instrument. The observed one is B6.6's `flat_last` price-discovery-liveness gate, which is exactly what `#392` already paired the calendar with.**
+
+**CORRECTION 3 — ⛔ THE TIMING COLLISION DOES NOT EXIST. I CARRIED ANOTHER ENTRY'S CLAIM INSTEAD OF DERIVING IT.** Amendment 1 asserted `price-skip-paper-BABA/USD` was acked-not-resolved inside `#951`'s window. **Measured by me over the whole file (789 rows):**
+
+| | |
+|---|---|
+| `price-skip-*` rows / distinct keys | **228 / 79** |
+| resolved | **224** |
+| active | **4** |
+| ⭐ **acknowledged-but-NOT-resolved (the shape that silences a key)** | **0** |
+
+**`b31833f3` is RESOLVED**, and it fired **2026-08-30T12:08:08Z — BEFORE `#951`'s deploy at 2026-08-31T11:30:47Z.** ⇒ **two errors welded into one premise: wrong state AND outside the window. Nothing in this class is suppressed right now.** *(Positive control: 776 rows across all classes carry a non-null `acknowledged_at`, so the zero is a real zero and not an unpopulated field.)*
+⚠️ **THE RISK IS PROSPECTIVE AND BOUNDED, NOT PRESENT:** an ack taken tomorrow would silence **one symbol**, because the key is per-symbol.
+➕ **§9.4 disposition on a side-finding: the `B-GOV-REPORTING` item (v) entry names `b31833f3` as *"acked … never resolved, `resurface_count: 2`"*. It reads `resolved` with `resurface_count` unset today.** I cannot tell from a snapshot whether it was true when written and has since been resolved. ⇒ **disposition (2) — ADDED AS AN ITEM to `B-GOV-REPORTING` (owner CC-A): re-derive the keyed-acked-row list at build time rather than from that entry's stored example.** Not filed as a defect.
+
+**CORRECTION 4 — THE WRENCH: (c), IT STAYS WITH CC-C, EXIT HALF INCLUDED, AND THE CARVE-OUT ARGUMENT IS DROPPED AS UNNECESSARY** — `PHASE_19_PLAN.md:44` already says *"3b.b and 3b.f-c must be decided TOGETHER"* on the same line, so the row makes the argument itself. **All five live alerts stay ACTIVE and UNACKED per that row's own instruction**, routed by Langston to CC-C as criterion-(i)/(ii) evidence accumulating: `b1f58a01` · `1d1573c7` · `6339b2d9` (NEM/USD, 157 s vs 98 s) · `1ea0a78f` (CTVA/USD, 168 s vs 88 s) · `ab16f068` (LI/USD, 302 s vs 243 s, 00:25 ET).
+
+✅ **CORRECTION 5 — EMIT vs NOTIFY: KEEP THE EMIT, CUT THE NOTIFY — AND IT IS DERIVED, NOT PREFERRED.** Langston's derivation, which is stronger than Amendment 1's reasoning: criterion (ii) requires *"every skip that does occur carries the session it happened in"* — **a requirement on a PERSISTED ROW. Cut the emit and (ii) becomes unsatisfiable by construction, so the batch could never close honestly.** Two binding conditions on whoever builds it: **(a) the suppression is session-awareness IN THE CEILING, never an ack** — an ack is non-terminal and silences the key forever (`system-alerts.ts:388-389`); **(b) the skip stays COUNTABLE**, because `B-PRICE-AGE-TRUTH` wants that quantity.
+
+---
+
+⭐⭐ **WHAT KYLE'S DIRECTIVE ACTUALLY BUYS, ONCE THE WRENCH GOES BACK — AND IT IS THE WHOLE POINT.** Row `3b.f-c`'s own disposition is **rule-24 outcome (2), working-as-designed-but-unaddressed: *"what is missing is a DECISION, Kyle's — does the active xStock lane attempt entries outside the regular session at all, and what ceiling governs EXIT checks there."*** ⇒ **Kyle has handed me a batch whose blocker is his own unmade decision.** **The deliverable is to put those two questions to him in plain language with the cost asymmetry the row already states — *refusing an entry costs nothing; a skipped exit check leaves a position unwatched* — which discharges the directive, unblocks CC-C, and builds nothing twice.**
+
+⚠️ **LABOR DAY, MONDAY 2026-09-07, still costs nothing to watch — but it is now a CROSS-CHECK on `#392`'s calendar, not a candidate to replace it.** ★ **And it lands INSIDE `#951`'s observation window, which closes the same day: whoever reads that result must state that a market holiday sat in the population.**
+
+MISTAKE: wrong-object [#994] — searched the ledger for the BATCH and the code for the WORD, never the ledger for the FINDING; `#392` had been open for ten weeks.
+MISTAKE: verification-weaker-than-claim [#994] — asserted a 09:30/16:00 boundary from HOURLY buckets, an instrument that could not have detected the real ~15-minute lag.
+MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim as fact; deriving it took one query and reversed it.
+
 ### #989 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; found answering Kyle's question — *"how do we know it's working, and can that be taken as had the rope pulled or is still alive and kicking"*) — ⛔ A TOKEN CAN LOSE 99.8% OF ITS LIQUIDITY AND THE STUDY STILL COUNTS IT ALIVE
 
 **The death definition cannot see a liquidity pull, because it has never had a liquidity figure to see one with.** `alive` is *has a pair AND has 24h volume*. A pull leaves both true — **volume continues precisely BECAUSE people are still trading, now against an emptied pool.** So the event the class `liquidity_pulled` is named after is the one event the definition cannot observe.
