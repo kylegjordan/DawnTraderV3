@@ -1853,6 +1853,24 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  distinguishable only by `closed_at`, and that is the honest limit of this backfill-free change. */
   exitTickerBid: decimal("exit_ticker_bid", { precision: 20, scale: 10 }),
   exitTickerAsk: decimal("exit_ticker_ask", { precision: 20, scale: 10 }),
+  /** ★ B-XSTOCK-FEED-SANITY (`#943`, closes `#567`) — WHAT THE BOOK LOOKED LIKE. A LABEL, NEVER MONEY.
+   *  `exit_book_state` ∈ {two_sided, hollow, unknown} at the DECISION instant; `exit_book_state_at_fill`
+   *  the same at the FILL instant (a resting maker fill consulted no book ⇒ `unknown`); both NULLABLE,
+   *  NO DEFAULT (a pre-deploy row must stay distinguishable from a missed stamp, #546).
+   *  ⛔ NEVER READ THE STATE WITHOUT ITS BASIS. `exit_book_state_basis` ∈ {guard, decision_price,
+   *  market_state_predicate, minute_proxy} says what produced the label: `guard` = the live in-memory
+   *  frame at the instant (the only basis that saw the decision frame); `decision_price` = the row's
+   *  own exit_decision_price against the archive; `market_state_predicate` = the archived frame ≤5s
+   *  before close (session bodies only — the archive keeps one row per symbol per 4s and MISSES the
+   *  handoff decision frames, audit §A.11); `minute_proxy` = the close fell in a handoff minute and
+   *  nothing else is known — a PROXY with an UNMEASURED base rate. A consumer that gates on `hollow`
+   *  MUST also require a measured basis (guard | decision_price); the fence test enforces it.
+   *  ⛔ OUTSIDE EVERY MONEY EXPRESSION: HONEST_PNL, gross/net, the daily-loss budget and
+   *  `close_reason` are untouched — the money on a hollow close is real, only its label changes.
+   *  NULL on `never_filled` (no fill, no book), `engine_stop_cleanup` and `hard_reset` (administrative). */
+  exitBookState: varchar("exit_book_state", { length: 24 }),
+  exitBookStateAtFill: varchar("exit_book_state_at_fill", { length: 24 }),
+  exitBookStateBasis: varchar("exit_book_state_basis", { length: 32 }),
   // ── ENTRY LEG (OBJ-6/7/9/10) ──────────────────────────────────────────────
   /** Written AT THE FILL SEAM, never at placement, and never re-derived from the row.
    *  A maker order is INSERTED at placement and OPENS later, so a placement-time stamp

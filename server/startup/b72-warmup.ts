@@ -162,6 +162,10 @@ const PREFETCH_MODULES = [
   // wrapped error. A knob in `module_constants` is NOT usable from a sync caller until its
   // module is listed HERE. Seeds: 2026-07-21-p19-b8-5e-mark-staleness-knobs.sql.
   'mark_staleness',
+  // B-XSTOCK-FEED-SANITY (#943): the book-state guard's twelve xstock_spot knobs. Same rule as the
+  // line above — the exit loop reads them SYNC on every tick; unlisted = every read throws.
+  // Seeds: 2026-09-0x-b-xstock-feed-sanity.sql. Asserted at boot below (count + ranges).
+  'book_state',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
@@ -326,6 +330,19 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
       throw new Error(`[P19-B8.5e][warmup] mark_staleness sigma_max_age_ms=${maxAgeMs} must exceed sigma_refresh_after_ms=${refreshMs}, or every cached σ expires before its refresh is due and every position floors. Refusing to start.`);
     }
     console.log('[P19-B8.5e][warmup] mark_staleness knobs verified for xstock_spot (10 rows + floor<cap, 0<budget_k<1, refresh<maxAge)');
+  }
+
+  // ── B-XSTOCK-FEED-SANITY (#943) — the book-state guard's knobs, asserted at BOOT. ──────────────
+  // Same reasoning as the mark_staleness block above: the guard's fail-safe on a cold or missing
+  // knob is to REFUSE the tick (its own skip reason), so an unseeded deploy would silently stop the
+  // guard while the server looked healthy. The twelve names, the count and the ranges are asserted
+  // by `assertBookStateKnobsAtBoot`, which reads the SAME `BOOK_STATE_KNOBS` array the seed and the
+  // resolver read — one list, so the three cannot drift (Langston Step-2 condition C2, #641).
+  // xstock_spot ONLY, for the same reason as above: no crypto read-path exists for this guard.
+  {
+    const { assertBookStateKnobsAtBoot } = await import('../asset_classes/xstock_spot/book-state-config.js');
+    const r = assertBookStateKnobsAtBoot();
+    console.log(`[B-XSTOCK-FEED-SANITY][warmup] book_state knobs verified for xstock_spot (12 rows; enabled=${r.enabled} k_rel=${r.single_side_departure_k_rel} floor=${r.single_side_departure_floor_pct}% hold=${r.other_side_hold_pct}% cap=${r.hollow_skip_cap} feed_read=${r.feed_read_enabled})`);
   }
 
   // reorg-B2 (Piece A/B, 2026-06-20): per-class ROI gate + target-floor/min-RR must be seeded

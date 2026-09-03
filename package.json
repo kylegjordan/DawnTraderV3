@@ -19,6 +19,8 @@
     "system-alerts": "tsx scripts/system-alerts.ts",
     "crew": "tsx scripts/crew.ts",
     "b-new-40:soak-verify": "tsx scripts/b-new-40-soak-verify.ts",
+    "b-xstock-feed-sanity:recut": "tsx scripts/xstock-hollow-recut.ts",
+    "b-xstock-feed-sanity:reset-feedback": "tsx scripts/reset-outcome-feedback-keys.ts",
     "b-phase-a2:backfill": "tsx scripts/b-phase-a2-backfill.ts",
     "b-new-34b:prewarm": "tsx scripts/b-new-34b-prewarm-snapshot.ts",
     "b79-0n-rtb-backfill": "tsx scripts/b79-0n-rtb-backfill-asset-class.ts",

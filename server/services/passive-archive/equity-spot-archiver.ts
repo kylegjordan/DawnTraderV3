@@ -114,10 +114,29 @@ function parseOhlcBar(data: any): void {
 // only place that knew which — it computed the distinction and discarded it one line later, so the
 // exit monitor (the single consumer) could not tell them apart. A LITERAL FIELD-ADD: `parseTickerSnap`'s
 // logic, its guards and its #594/#636 stamp ordering are all unchanged.
-const latestEquityTick = new Map<string, { price: number; tsMs: number; kind: 'mid' | 'last' }>();
+// B-XSTOCK-FEED-SANITY P1 (#943): `raw` — the sides AS THE VENUE SENT THEM, written on EVERY frame,
+// UNCONDITIONALLY, in `parseTickerSnap` BEFORE the guarded mark write. The guard below it writes
+// `price/tsMs/kind` only when the frame yields a finite positive mark, so an absent-bid frame with no
+// `last` used to leave the PRIOR two-sided tick standing — the book-state guard would then have read
+// a stale two-sided quote instead of `absent_bid` (audit §A.11, reader r4). `raw` is what the
+// book-state guard reads; `price/tsMs/kind` stay exactly what the exit loop reads for the MARK.
+// `null` in `raw` means the side was absent in the frame (not 0 — 0 is a value the venue can send).
+export interface EquityTickRaw {
+  bid: number | null; ask: number | null; last: number | null;
+  bidQty: number | null; askQty: number | null;
+  /** Our receipt time for THIS frame (the venue's ticker frame carries no timestamp, #943 §15.3). */
+  atMs: number;
+}
+export interface EquityTick {
+  price: number; tsMs: number; kind: 'mid' | 'last';
+  /** Present once ANY frame has been parsed for the symbol; absent only on a tick seeded before
+   *  this field existed (never, post-deploy — `parseTickerSnap` always writes it first). */
+  raw?: EquityTickRaw;
+}
+const latestEquityTick = new Map<string, EquityTick>();
 
 /** Latest equities-feed tick for an internal symbol ('BIIB/USD'), or null. */
-export function getLatestEquityTick(symbol: string): { price: number; tsMs: number; kind: 'mid' | 'last' } | null {
+export function getLatestEquityTick(symbol: string): EquityTick | null {
   return latestEquityTick.get(symbol.toUpperCase()) ?? null;
 }
 
@@ -137,12 +156,29 @@ function parseTickerSnap(data: any): void {
     const _bid = data.bid != null ? Number(data.bid) : NaN;
     const _ask = data.ask != null ? Number(data.ask) : NaN;
     const _last = data.last != null ? Number(data.last) : NaN;
+    // B-XSTOCK-FEED-SANITY P1 (#943): the RAW sides, EVERY frame, BEFORE the guarded mark write.
+    // An absent side lands `null` (NaN → null), a sent 0 stays 0. The book-state guard reads THIS.
+    const _sym = String(data.symbol).toUpperCase();
+    const _now = Date.now();
+    const _raw: EquityTickRaw = {
+      bid: Number.isFinite(_bid) ? _bid : null,
+      ask: Number.isFinite(_ask) ? _ask : null,
+      last: Number.isFinite(_last) ? _last : null,
+      bidQty: data.bid_qty != null && Number.isFinite(Number(data.bid_qty)) ? Number(data.bid_qty) : null,
+      askQty: data.ask_qty != null && Number.isFinite(Number(data.ask_qty)) ? Number(data.ask_qty) : null,
+      atMs: _now,
+    };
     // B-EXIT-BOOK-AGE-STAMP P1: one predicate, one home. `_bid`/`_ask` are NaN when a side is
     // absent here (not 0 as on the crypto side) and `markKindOf` handles both — NaN > 0 is false.
     const _kind = markKindOf(_bid, _ask);
     const _mark = _kind === 'mid' ? (_bid + _ask) / 2 : _last;
     if (Number.isFinite(_mark) && _mark > 0) {
-      latestEquityTick.set(String(data.symbol).toUpperCase(), { price: _mark, tsMs: Date.now(), kind: _kind });
+      latestEquityTick.set(_sym, { price: _mark, tsMs: _now, kind: _kind, raw: _raw });
+    } else {
+      // No mark this frame (the #636 case): the MARK fields keep their prior value and age — the
+      // freshness ceiling still governs them — but `raw` moves, so the guard sees the absent side.
+      const _prev = latestEquityTick.get(_sym);
+      if (_prev) latestEquityTick.set(_sym, { ..._prev, raw: _raw });
     }
   }
   bufferTickerSnap(ASSET_CLASS, {

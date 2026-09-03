@@ -671,6 +671,21 @@ export class ActivePortfolioManager {
             exitBookAgeMs: null,
             exitTickerBid: null,
             exitTickerAsk: null,
+            // ── B-XSTOCK-FEED-SANITY P4 — THE BOOK-STATE LABEL AT A NON-`closePosition` WRITER.
+            // Label only — a close-all must never be withheld. `unknown` when the price above was
+            // the entry-price fallback (no book produced that number — audit r4) or when the guard
+            // has no verdict (crypto, no tick, knobs cold, disabled). Basis `guard` = the live
+            // in-memory frame at this instant. `at_fill` stays NULL: no fill walk happened here.
+            ...(await (async () => {
+              if (fallbackType === 'entry_fallback') return { exitBookState: 'unknown', exitBookStateBasis: 'guard' };
+              const _cls = (position as any).assetClass;
+              if (_cls !== 'xstock_spot') return {};
+              const { assessBookStateNow } = await import('../asset_classes/xstock_spot/book-state-tracker.js');
+              const _bs = assessBookStateNow(position.symbol);
+              return _bs.ok
+                ? { exitBookState: _bs.result.state, exitBookStateBasis: 'guard' }
+                : { exitBookState: 'unknown', exitBookStateBasis: 'guard' };
+            })()),
           } as any);
 
           // Log the close event

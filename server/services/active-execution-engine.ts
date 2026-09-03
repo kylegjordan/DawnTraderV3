@@ -147,6 +147,10 @@ import { markKindOf } from './market-data/mark-kind.js'; // B-EXIT-BOOK-AGE-STAM
 // (`mark-staleness`); the σ MEASUREMENT is cached (`sigma-rate-cache`) so the exit path
 // never awaits a DB read to decide whether a mark is trustworthy.
 import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_classes/xstock_spot/mark-staleness.js';
+// B-XSTOCK-FEED-SANITY (#943, closes #567) — the book-state guard: the tracker is the one reader every
+// label site calls; the comparator advances ONLY here, after a two_sided verdict at the decision site.
+import { assessBookStateNow, advanceBookStateComparator } from '../asset_classes/xstock_spot/book-state-tracker.js';
+import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 
 /**
@@ -276,6 +280,9 @@ export class ActiveExecutionEngine {
   // crossing the DB-knobbed threshold raises a §10.5 system alert (deduped per
   // symbol), not a buried log line. Streak resets on the first venue price.
   private _priceSkipStreak: Map<string, number> = new Map();
+  // B-XSTOCK-FEED-SANITY: consecutive HOLLOW-book skips per position (the bounded withholding of
+  // scope constraint 7). Reset on any non-hollow verdict; cleared at yield. Per engine instance.
+  private _bookStateSkipStreak: Map<string, number> = new Map();
 
   /**
    * P19-B8.5e — σ-cache tuning, DB-governed like the policy knobs it serves.
@@ -337,6 +344,34 @@ export class ActiveExecutionEngine {
       } catch (alertErr) {
         console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] alert raise failed (the loud log above stands):`, alertErr instanceof Error ? alertErr.message : alertErr);
       }
+    }
+  }
+
+  /**
+   * B-XSTOCK-FEED-SANITY — publish BOTH sides of the guard (scope constraint 7, Langston 23:31Z): every
+   * skip taken and every yield, with the inputs the verdict was taken on, on the position row's
+   * `metadata.bookState` — carried onto the closed row at close beside the label, so the harm the
+   * guard PREVENTS and the harm it INTRODUCES are both numbers, never arguments. The log line is
+   * per tick; the row write is throttled (first skip of a streak, every 10th, every yield) so a
+   * hollow burst does not turn into a write storm on the position table.
+   */
+  private async _recordBookStateEvent(
+    position: { id: string; symbol: string; metadata?: unknown },
+    ev: { kind: 'skip' | 'yield'; streak: number; reasons: string[]; inputs: Record<string, unknown> },
+  ): Promise<void> {
+    try {
+      const _meta = ((position.metadata as Record<string, any> | null) ?? {});
+      const _bsm: Record<string, any> = { hollowSkips: 0, yields: [], ...((_meta.bookState as Record<string, any> | undefined) ?? {}) };
+      const _stamp = { atMs: Date.now(), streak: ev.streak, reasons: ev.reasons, inputs: ev.inputs };
+      if (ev.kind === 'skip') { _bsm.hollowSkips = (_bsm.hollowSkips ?? 0) + 1; _bsm.lastSkip = _stamp; }
+      else { _bsm.yields = [...(_bsm.yields ?? []), _stamp].slice(-20); }
+      const _merged = { ..._meta, bookState: _bsm };
+      (position as any).metadata = _merged;
+      if (ev.kind === 'yield' || ev.streak === 1 || ev.streak % 10 === 0) {
+        await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _merged } as any);
+      }
+    } catch (err) {
+      console.error(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] event record failed for ${position.symbol} (the log line stands):`, err instanceof Error ? err.message : err);
     }
   }
 
@@ -1130,6 +1165,10 @@ export class ActiveExecutionEngine {
     let withoutPrice = 0;
     let slHits = 0;
     let tpHits = 0;
+    // B-XSTOCK-FEED-SANITY: OCCURRENCES this cycle (a skip is a tick withheld; a yield is a tick acted on
+    // at the cap) — printed in EVAL_EXIT. Not a row census: count events on the rows' metadata.bookState.
+    let hollowSkips = 0;
+    let hollowYields = 0;
 
     for (const position of openPositions) {
       try {
@@ -1147,6 +1186,10 @@ export class ActiveExecutionEngine {
         // wearing the right column name — R6-4).
         let priceProducer: PriceProducer;
         let priceObservedAtMs: number | null;
+        // ── B-XSTOCK-FEED-SANITY OBJ-6 — the decision-instant BOOK STATE (xStock only; null on crypto)
+        // and whether the guard YIELDED on this tick. Carried on the exit stamp, never re-derived.
+        let bookStateAtDecision: BookState | null = null;
+        let bookStateYielded = false;
 
         // ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
         // Kraken spot REST carries NO tokenized equities (empirically proven: Ticker
@@ -1227,6 +1270,78 @@ export class ActiveExecutionEngine {
               // re-querying: how old the mark is, and the ceiling it crossed.
               `mark ${Math.round(_eqAge / 1000)}s old, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s`);
             continue;
+          }
+          // ── B-XSTOCK-FEED-SANITY OBJ-6 (#943, closes #567) — THE BOOK-STATE GUARD. ──────────────
+          // AFTER the freshness ceiling (an OLD mark is refused above) and BEFORE the mark feeds the
+          // exit evaluation. It answers the question the ceiling never asks — is this FRESH mark a
+          // price anyone would trade at? — from the pair's OWN history only (the tracker's comparator):
+          // never a second venue, never the clock, never the session. On HOLLOW it withholds this
+          // tick exactly as the two skips above do, and (Langston C1) writes NOTHING to the shared
+          // cache: a collapsed-bid mid under the venue tag is indistinguishable from a real one to
+          // every reader (#546). The withholding is TIME-BOUNDED (constraint 7): at `hollow_skip_cap`
+          // consecutive hollow ticks the guard YIELDS — the evaluator runs on the book as it is, the
+          // row is labelled hollow+yielded, an alert names it. Never trap, never re-price, never widen.
+          {
+            const _bs = assessBookStateNow(position.symbol);
+            if (!_bs.ok) {
+              if (_bs.reason === 'knobs_missing') {
+                // rule 15: no silent default — the guard REFUSES to run and says so on its own reason.
+                console.error(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol}: knobs unavailable — tick NOT actionable (fail-safe skip): ${_bs.error}`);
+                withoutPrice++;
+                await this._recordPriceSkip(position, 'book_state_knob_missing');
+                continue;
+              }
+              // `disabled` (knob enabled=0) or `no_tick` (unreachable here — the tick was read above;
+              // kept for the union): the guard is inert on this tick and the row says `unknown`.
+              bookStateAtDecision = 'unknown';
+            } else {
+              const { result: _r, cfg: _c, raw: _raw } = _bs;
+              const _streak = this._bookStateSkipStreak.get(position.id) ?? 0;
+              if (_r.state === 'hollow') {
+                const _next = _streak + 1;
+                const _inputs = JSON.stringify(_r.inputs);
+                if (_next >= _c.hollowSkipCap) {
+                  // YIELD — the bounded withholding is over: act on the book as it is, loudly.
+                  this._bookStateSkipStreak.delete(position.id);
+                  bookStateAtDecision = 'hollow';
+                  bookStateYielded = true;
+                  hollowYields++;
+                  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} YIELD after ${_next} hollow ticks (cap ${_c.hollowSkipCap}) reasons=${_r.reasons.join('|')} inputs=${_inputs}`);
+                  try {
+                    const { addAlert } = await import('./system-alerts.js');
+                    await addAlert({
+                      triggers_at: new Date(),
+                      category: 'breakage',
+                      severity: 'warning',
+                      title: `Hollow book held ${position.symbol} for ${_next} ticks — exit evaluation YIELDED`,
+                      body: `The book-state guard withheld ${_next} consecutive exit-monitor ticks for the open ${this.mode} position on ${position.symbol} because the quote read HOLLOW (${_r.reasons.join(', ')}), reached hollow_skip_cap=${_c.hollowSkipCap} and YIELDED: the evaluator ran on the book as it is and the row is labelled hollow/yielded. Inputs: ${_inputs}. B-XSTOCK-FEED-SANITY (#943).`,
+                      dedupe_key: `book-state-hollow-${this.mode}-${position.symbol}`,
+                    });
+                  } catch (alertErr) {
+                    console.error(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] alert raise failed (the log line above stands):`, alertErr instanceof Error ? alertErr.message : alertErr);
+                  }
+                  await this._recordBookStateEvent(position, { kind: 'yield', streak: _next, reasons: _r.reasons, inputs: _r.inputs });
+                  // falls through: the mark hands off below and the cache IS updated — the engine is
+                  // about to act on this mark, and the cache must show what it acted on.
+                } else {
+                  this._bookStateSkipStreak.set(position.id, _next);
+                  hollowSkips++;
+                  withoutPrice++;
+                  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} SKIP hollow streak=${_next}/${_c.hollowSkipCap} reasons=${_r.reasons.join('|')} inputs=${_inputs}`);
+                  await this._recordBookStateEvent(position, { kind: 'skip', streak: _next, reasons: _r.reasons, inputs: _r.inputs });
+                  // ⛔ NO `updateCache` ON THIS BRANCH (Langston C1) — the same as the two skips above.
+                  continue;
+                }
+              } else {
+                if (_streak > 0) this._bookStateSkipStreak.delete(position.id);
+                bookStateAtDecision = _r.state; // 'two_sided' | 'unknown' (no comparator yet)
+                if (_r.state === 'two_sided' && _raw.bid !== null && _raw.ask !== null) {
+                  // The comparator advances ONLY on a two_sided verdict — a hollow frame must never
+                  // become the reference the next frame is judged against.
+                  advanceBookStateComparator(position.symbol, { bid: _raw.bid, ask: _raw.ask, last: _raw.last, atMs: _raw.atMs }, _c.trailingSpreadWindowSnaps);
+                }
+              }
+            }
           }
           currentPrice = _eqTick.price;
           priceSource = 'kraken_equities_ws';
@@ -1419,10 +1534,19 @@ export class ActiveExecutionEngine {
           // ⛔ THE BOOK'S top-of-book IS NOT THE TICKER'S. Filling these from `_bookX` would store
           // one feed under the other feed's name — the precise wrong-object substitution this whole
           // batch exists to make impossible, committed inside the instrument built to catch it.
-          // Retention is a real mechanism on a shared component and therefore a SCOPE decision,
-          // not an implementer's call: raised at Step 4 with the OBJ-3 gap named.
+          // B-XSTOCK-FEED-SANITY (2026-09-03) took that decision: the equities tick store NOW retains
+          // the raw sides (`EquityTick.raw`) — and these two payload fields STAY NULL ON PURPOSE. The
+          // COLUMN `exit_ticker_bid/ask` is the ARCHIVER's witness (the persist site falls back to
+          // `_witness`), and on xStock the equities ticker is the SAME feed the mark comes from, so
+          // filling them from `raw` would silently re-define an existing column's producer (#641 /
+          // wrong-object). The decision-instant sides live in `metadata.bookState.*.inputs` and the
+          // verdict in `exit_book_state`, where a reader cannot mistake them for a second feed.
           tickerBid: null as number | null,
           tickerAsk: null as number | null,
+          // B-XSTOCK-FEED-SANITY OBJ-6/OBJ-7: the decision-instant book state and the yield flag,
+          // stamped HERE (once per position per tick) and persisted at the close under basis `guard`.
+          bookStateAtDecision,
+          bookStateYielded,
         };
 
         const tickEntry = {
@@ -1632,7 +1756,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     this.fg2ShadowEntered = 0;
     this.fg2ShadowSkippedNoBook = 0;
@@ -2108,6 +2232,10 @@ export class ActiveExecutionEngine {
         bookAgeMs: number | null;
         tickerBid: number | null;
         tickerAsk: number | null;
+        /** B-XSTOCK-FEED-SANITY: the decision-instant book state (xStock; null on crypto) and whether
+         *  the guard YIELDED (acted at `hollow_skip_cap` on a still-hollow book). Basis is `guard`. */
+        bookStateAtDecision?: BookState | null;
+        bookStateYielded?: boolean;
       };
     }
   ): Promise<void> {
@@ -2169,6 +2297,9 @@ export class ActiveExecutionEngine {
     // ⛔ `_closeSnap` is `const`-scoped to the else block and the persist is ~280 lines below it, so
     // it is NOT in scope there — hence a hoisted `let` rather than a read at the write site.
     let _fillDepthAgeMs: number | null = null;
+    // B-XSTOCK-FEED-SANITY P4 — the FILL-instant book state (xStock only; label only — a close is NEVER
+    // withheld here, this method is also every flatten's path). Hoisted like `_fillDepthAgeMs`.
+    let _bsAtFill: BookState | null = null;
     if (options?.makerExitFill) {
       // P19-B8.6 MAKER fill leg: the resting exit filled at its limit — price = the
       // limit exactly (makerFillPrice semantics, same CI-guarded fill=limit rule as
@@ -2180,9 +2311,17 @@ export class ActiveExecutionEngine {
       actualExitPrice = _mLimit;
       exitFee = _mNotional * _mRate;
       _exitSlippageOverride = 0;
+      // A resting fill consulted no book — `unknown` is the honest fill-instant label (audit A.3).
+      _bsAtFill = _closeClass === 'xstock_spot' ? 'unknown' : null;
       console.log(`[P19-B8.6][MAKER_EXIT_FILL:${this.mode}] ${position.symbol}: filled the resting exit at ${_mLimit} (maker rate ${(100 * _mRate).toFixed(2)}%, fee ${exitFee.toFixed(4)}, slippage 0 by construction)`);
     } else {
       const _closeCfg = _closeClass ? await resolveFillDepthGateConfig(_closeClass) : null;
+      // B-XSTOCK-FEED-SANITY P4: read the book state at THIS instant, before the depth read below — the
+      // taker walk proceeds on the ladder as it is (a flatten must close); the row records the verdict.
+      if (_closeClass === 'xstock_spot') {
+        const _bsNow = assessBookStateNow(position.symbol);
+        _bsAtFill = _bsNow.ok ? _bsNow.result.state : 'unknown';
+      }
       const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass) : null;
       // OBJ-1: the FILL-time depth age — taken two lines before the walk that consumes it, with no
       // await in between. ⛔ NOT the same instant as `exit_book_age_ms`, which is built once per
@@ -2430,9 +2569,19 @@ export class ActiveExecutionEngine {
       const _persistedTrade = await storage.updateClosedTrade(this.mode, trade.id, {
         // F-G-2 OBJ-0: the shadow arm's record rides from the position onto the closed row so the
         // 2×2 is readable where the close reason lives. Only when one exists — never a wipe.
-        ...(((position.metadata as Record<string, any> | null)?.fg2Shadow)
-          ? { metadata: { ...(((trade as any).metadata as Record<string, unknown> | null) ?? {}), fg2Shadow: (position.metadata as Record<string, any>).fg2Shadow } }
-          : {}),
+        ...((() => {
+          const _pm = (position.metadata as Record<string, any> | null) ?? {};
+          const _carry: Record<string, unknown> = {};
+          if (_pm.fg2Shadow) _carry.fg2Shadow = _pm.fg2Shadow;
+          // B-XSTOCK-FEED-SANITY: the guard's skip/yield record rides onto the closed row beside the
+          // label (with `yielded` explicit), the same mechanism as fg2Shadow. Only when present — never a wipe.
+          if (_pm.bookState || options?.exitProvenance?.bookStateYielded) {
+            _carry.bookState = { ...(_pm.bookState ?? {}), yielded: options?.exitProvenance?.bookStateYielded === true };
+          }
+          return Object.keys(_carry).length
+            ? { metadata: { ...(((trade as any).metadata as Record<string, unknown> | null) ?? {}), ..._carry } }
+            : {};
+        })()),
         exitPrice: actualExitPrice.toString(),
         pnl: netPnl.toString(),
         pnlPercent: pnlPercent.toString(),
@@ -2513,6 +2662,13 @@ export class ActiveExecutionEngine {
         exitTickerAsk: options?.exitProvenance?.tickerAsk != null
           ? options.exitProvenance.tickerAsk.toString()
           : (_witness ? _witness.ask.toString() : null),
+        // ── B-XSTOCK-FEED-SANITY P5 — THE LABEL, outside every money expression. Basis `guard` = the
+        // live in-memory frame. Decision-instant: the exit stamp's verdict; a flatten through
+        // `forceClosePosition` carries none, so its decision label is `unknown` and its fill label is
+        // read above. NULL on crypto (no guard) and on rows not written here.
+        exitBookState: options?.exitProvenance?.bookStateAtDecision ?? (_bsAtFill !== null ? 'unknown' : null),
+        exitBookStateAtFill: _bsAtFill,
+        exitBookStateBasis: (options?.exitProvenance?.bookStateAtDecision != null || _bsAtFill !== null) ? 'guard' : null,
         totalCost: totalCost.toString(),
         grossPnl: grossPnl.toString(),
         netPnl: netPnl.toString(),

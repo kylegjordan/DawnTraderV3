@@ -1,0 +1,103 @@
+/**
+ * B-XSTOCK-FEED-SANITY — THE BOOK-STATE TRACKER: the pair's OWN comparator, and the one reader
+ * every label site calls.
+ *
+ * WHAT LIVES HERE. Per xStock symbol, the last frame the predicate read as `two_sided` (its bid,
+ * ask, last, mid, time) and a short ring of recent two-sided spreads. That is the "own price
+ * history" the binding constraint names (scope §2.1b / §17.1): never a second venue, never the
+ * clock, never the session.
+ *
+ * ★ SIM CROSS-CUTTING RUNTIME STATE — a NEW module singleton, registered as such: `_comparators`
+ * is MODE-INVARIANT market data (both engines read the same feed; the same class as S2/S5), one
+ * writer (`advanceBookStateComparator`, called by the engine after a `two_sided` verdict), any
+ * number of readers (`assessBookStateNow`). Never keyed by mode. Never persisted. Empties on
+ * restart (the first frames after boot read `unknown` until a two-sided frame seeds it — which is
+ * the honest cold state, and it is labelled).
+ *
+ * ⛔ THE COMPARATOR ADVANCES ONLY ON A `two_sided` VERDICT. A hollow frame must never become the
+ * reference the next frame is judged against — otherwise a sustained hollow run would quietly
+ * re-baseline itself into "two_sided" one frame later.
+ *
+ * WHO READS. (1) the exit loop, at the decision instant (and it is the only ADVANCER);
+ * (2) `closePosition` at the fill instant; (3) `closeAllPositions` and the two manual routes, for
+ * the label only. All four call `assessBookStateNow(symbol)`; none of them re-implements the read.
+ */
+import { getLatestEquityTick, type EquityTickRaw } from '../../services/passive-archive/equity-spot-archiver.js';
+import { assessBookState, medianOf, type BookStateConfig, type BookStateResult } from './book-state.js';
+import { resolveBookStateConfigSync } from './book-state-config.js';
+
+export interface BookStateComparator {
+  priorMid: number;
+  priorBid: number;
+  priorAsk: number;
+  priorLast: number | null;
+  priorAtMs: number;
+  /** Recent two-sided spreads as a fraction of mid, newest last; bounded by the knob. */
+  spreads: number[];
+}
+
+const _comparators = new Map<string, BookStateComparator>();
+
+export function readBookStateComparator(symbol: string): BookStateComparator | null {
+  return _comparators.get(symbol.toUpperCase()) ?? null;
+}
+
+/** Advance the pair's comparator with a frame the predicate read as `two_sided`. */
+export function advanceBookStateComparator(
+  symbol: string,
+  frame: { bid: number; ask: number; last: number | null; atMs: number },
+  windowSnaps: number,
+): void {
+  const key = symbol.toUpperCase();
+  const mid = (frame.bid + frame.ask) / 2;
+  if (!(mid > 0)) return;
+  const prev = _comparators.get(key);
+  const spreads = (prev?.spreads ?? []).concat((frame.ask - frame.bid) / mid);
+  while (spreads.length > Math.max(5, windowSnaps)) spreads.shift();
+  _comparators.set(key, {
+    priorMid: mid, priorBid: frame.bid, priorAsk: frame.ask,
+    priorLast: frame.last, priorAtMs: frame.atMs, spreads,
+  });
+}
+
+export type BookStateNow =
+  | { ok: true; result: BookStateResult; cfg: BookStateConfig; raw: EquityTickRaw }
+  | { ok: false; reason: 'no_tick' | 'knobs_missing' | 'disabled'; cfg?: BookStateConfig; error?: string };
+
+/**
+ * The one reader. Pure with respect to state: it reads the tick and the comparator and never
+ * advances either — the ENGINE advances after acting (so a label read at a fill or a flatten
+ * cannot move the comparator under the decision loop).
+ */
+export function assessBookStateNow(symbol: string): BookStateNow {
+  let cfg: BookStateConfig;
+  try {
+    cfg = resolveBookStateConfigSync();
+  } catch (err) {
+    return { ok: false, reason: 'knobs_missing', error: err instanceof Error ? err.message : String(err) };
+  }
+  if (!cfg.enabled) return { ok: false, reason: 'disabled', cfg };
+  const tick = getLatestEquityTick(symbol);
+  const raw: EquityTickRaw | undefined = tick?.raw;
+  if (!tick || !raw) return { ok: false, reason: 'no_tick', cfg };
+  const cmp = readBookStateComparator(symbol);
+  const result = assessBookState(
+    {
+      bid: raw.bid, ask: raw.ask, last: raw.last,
+      priorTwoSidedMid: cmp?.priorMid ?? null,
+      priorBid: cmp?.priorBid ?? null,
+      priorAsk: cmp?.priorAsk ?? null,
+      priorLast: cmp?.priorLast ?? null,
+      trailingMedianSpreadFrac: cmp ? medianOf(cmp.spreads) : null,
+      // Candidate (ii) is INERT by knob (`feed_read_enabled = 0`) until F4's re-measure lands; the
+      // cohort read is wired then, on the guard's own telemetry — not stubbed here.
+      feedStubFraction: null,
+      feedCohortN: null,
+    },
+    cfg,
+  );
+  return { ok: true, result, cfg, raw };
+}
+
+/** Test-only: reset every comparator. */
+export function _resetBookStateComparatorsForTest(): void { _comparators.clear(); }
