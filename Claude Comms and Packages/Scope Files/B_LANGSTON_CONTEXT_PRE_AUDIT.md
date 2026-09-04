@@ -65,7 +65,7 @@
 
 ## 4. FINDINGS
 
-**F-1 — THE GROWTH IS STRUCTURAL, NOT BEHAVIOURAL.** One writer (a mandate that fires every batch, four sessions), zero deleters, zero schedulers. **24,528 B at the 2026-08-06 go-live → 59,463 B today: +142%, ~1.2 KB/day, and +1,286 B during this batch's own scoping.**
+**F-1 — THE GROWTH IS STRUCTURAL, NOT BEHAVIOURAL.** ⛔ **PARTLY CORRECTED IN §7 — the file is EFFECTIVELY append-only (31 increases : 3 decreases over 1,213 invokes), NOT absolutely so. Read this finding through §7.** One writer (a mandate that fires every batch, four sessions), zero deleters, zero schedulers. **24,528 B at the 2026-08-06 go-live → 59,463 B today: +142%, ~1.2 KB/day, and +1,286 B during this batch's own scoping.**
 
 **F-2 — §10.b's STATED PREMISE WAS FALSE FOR THREE MONTHS.** *"Langston's MEMORY auto-loads every `claude -p` invocation."* It did not, and never had, until `@MEMORY.md` landed 2026-08-05. **Independently corroborated by `LANGSTON_ARCHITECTURE.md:152` and `BATCH_CATALOG.md:464`** — *"every batch's §2 10.b sync wrote to a file he never saw."* **The premise is TRUE today; it was false while the habit and most of the content formed.**
 
@@ -115,3 +115,41 @@
 **The most useful thing the audit found is that part of my own plan was wrong.** Another session had already measured this a week ago and found that **even removing every finished batch still leaves the file over its limit** — so the change I proposed cannot achieve what I said it would. They also raised an objection I had missed: **his retraction list works precisely because it is in front of him without his having to remember to go and get it, and moving it somewhere tidier could destroy that.** And a third possibility I never considered — **that the size limit may simply be wrong for him**, because for a reviewer who remembers nothing, that file is his entire memory, while for the rest of us it is a convenience.
 
 **So the plan is narrower and more honest than the scope was:** remove the part with no purpose, make the removal automatic rather than remembered, fix a governance file that understates his memory by more than half, and hand the size question back to the issue that already owns it rather than starting a second one beside it.
+
+---
+
+## ⭐ 7. FRESH-READER ROUND 1 — MODE B (claim only). FOUR HITS, ALL RE-DERIVED AT THE OBJECT, AND ONE CORRECTS F-1
+
+`REVIEWER r1: claim-only · "name the objects that would settle 'nothing deletes from his MEMORY.md', then what other states of the world are consistent with them?" · FOUR MATERIAL HITS · re-derived: YES`
+
+⛔ **THE REVIEWER'S FIRST MOVE WAS TO SPLIT MY CLAIM INTO THREE, AND IT WAS RIGHT:** **(A)** no automated deleter exists · **(B)** sessions only append · **(C)** the file grew monotonically. **Evidence for one is routinely mistaken for evidence for another — a deleter can exist while the file still grows, and no deleter can exist while it shrinks.** My F-1 ran all three together.
+
+**HIT 1 — I USED A SPARSE, SELF-SELECTING INSTRUMENT WHEN A PER-INVOKE SERIES EXISTS.** I built the growth series from **backup files** — which the reviewer correctly called *"a sampled, non-random population… a backup gets taken precisely when someone is about to do something risky, so the sample is correlated with the event being measured."*
+✅ **THE REAL INSTRUMENT: `/var/log/langston-instructions-loaded.jsonl` (+ 4 rotated `.gz`) records his `MEMORY.md` byte count AT EVERY INVOKE.** **POPULATION: 1,213 rows, 2026-08-05T13:44 → 2026-09-04T11:51, every row carrying the byte count.**
+
+⛔⛔ **CORRECTION TO F-1 — THE FILE IS NOT MONOTONIC. IT SHRANK THREE TIMES:**
+| when | change |
+|---|---|
+| 2026-08-05 13:48 | 25,488 → **23,490** (−1,998) |
+| 2026-08-06 22:41 | 24,669 → **24,491** (−178) |
+| ⭐ **2026-09-01 06:10** | 55,828 → **45,605** (**−10,223**) |
+
+⇒ **THE HONEST FORM: of 1,213 transitions, 31 are INCREASES, 3 are DECREASES, and ~1,179 are UNCHANGED.** The file is **EFFECTIVELY append-only — 31:3 — not absolutely so.** ★ **"Nothing ever deletes" was false; "additions swamp removals by ten to one, and removals are three human interventions in a month" is true and is the claim that survives.**
+⚠️ **AND IT REVISES MY "A PRUNE BUYS ~28 DAYS":** the 09-01 prune freed 10,223 B and the file was back to **59,463 B within three days — ~4,600 B/day, four times the 30-day mean of ~1,132 B/day.** ⛔ **Stated with its limit: three days is a short window and ~1,394 B of that regrowth is MINE, written during this batch.**
+✅ **CROSS-INSTRUMENT CORROBORATION: the log's earliest row (25,488 B) matches the `pre-prune-20260805` backup byte-for-byte** — two independent instruments agreeing on the same object.
+
+**HIT 2 — `langston_memory.py` NAMES HIS `MEMORY.md` AS A LEDGER SOURCE, AND I HAD NOT CHECKED WHETHER IT WRITES.** ✅ **RE-DERIVED: `:21` `LEDGER_SOURCES = ["/home/langston/LEDGER.md", "/home/langston/MEMORY.md"]`; it READS at `:239` and `:298`; its ONLY writes are `:224`/`:227` → `INDEX` and `:231`/`:233` → `META`.** ⇒ **reads-but-never-writes, now with line evidence rather than assumption — and it strengthens F-5 with the exact citation.** ⚠️ **RESIDUAL, the reviewer's, and I cannot close it from source: a root-owned `__pycache__/*.pyc` dated 2026-08-06 means the EXECUTING bytecode may differ from the source I read. I verified the SOURCE, not the RUNNING code.**
+
+⛔ **HIT 3 — TWO DIFFERENT FILES ARE BOTH NAMED `MEMORY.md`, AND THIS BATCH WALKS STRAIGHT PAST IT.**
+- `/home/langston/MEMORY.md` — **59,463 B** — the one this batch is about
+- `/home/langston/.claude/projects/-home-langston/memory/MEMORY.md` — **11,806 B** — the harness auto-memory index
+⇒ ★ **anyone verifying *"nothing prunes MEMORY.md"* can examine the wrong object and return clean.** **This is the `wrong-object` pattern sitting in this batch's own path, and it is now named so the implementer cannot walk into it.**
+
+⛔⛔ **HIT 4 — THE DELETION MECHANISM NEED NOT APPEAR IN ANY SCRIPT, AND THIS IS THE ONE THAT MOST CHANGES MY CENSUS.** The reviewer: *"these scripts construct prompts for an LLM that has `Write` and `Edit`. The deletion mechanism need not appear in any script — it can be a sentence in a prompt."* ★ **AND WORSE: `Write` is not an append primitive. A model performing an "append" RE-EMITS THE WHOLE FILE — so elision, summarisation, or silently dropping a section it judged stale is a FAILURE MODE OF THE APPEND ITSELF, invisible to any search for deletion tooling.**
+⇒ ⛔ **MY §2 ENTRY-POINT ENUMERATION SEARCHED THE WRONG POPULATION. It enumerated write-shaped COMMANDS in the repo; the actual writers are MODELS WITH A WRITE TOOL, and their instructions are prose.** ✅ **The census result stands** — one recipe, no scheduler, no automated deleter — **but its REACH is now stated: it can only ever have covered the scripted surface.**
+
+⚠️ **AND THE REVIEWER'S SHARPEST POINT, WHICH I AM RECORDING RATHER THAN ARGUING WITH: EVERY INSTRUMENT THAT COULD RECORD A REMOVAL IS OFF, ABSENT, OR STRUCTURALLY INCAPABLE** — `auditd` inactive, no version control on that host, and replace-on-write gives the file a **new inode on every save (Birth 2026-09-02 against content referencing May)**, so there is no continuity to inspect. ⇒ **the absence of deletion evidence here is OVER-DETERMINED: it would look identical whether or not sections were being removed.** ★ **The per-invoke byte log is the ONE instrument with real reach — which is exactly why HIT 1 matters more than the rest.**
+
+★ **ALSO NAMED BY THE REVIEWER AND ALREADY IN THIS AUDIT AT F-6/§10.b: the file's own header carries a 24 KB cap and a "closed batch = ONE line" rule, so a session obeying THAT rule removes content IN COMPLIANCE.** ⇒ **"sessions only append under a governance rule" named one rule and omitted its antagonist. The three decreases above are what that antagonist looks like when someone does obey it.**
+
+**PLAN IMPACT:** **P-2's verification is strengthened** — the per-invoke log is the acceptance instrument for eviction, replacing "check the file afterwards"; **P-5's watch should read that log rather than stat the file**, since it already exists and is written independently of whoever is editing; and **P-7 is partly discharged for the memory half** — the log IS the usage instrument for file loading, though not for recall queries.
