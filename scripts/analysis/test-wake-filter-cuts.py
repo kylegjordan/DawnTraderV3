@@ -22,6 +22,13 @@ HB_BAD = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly he
           "bridges active: n | inbox-log last-write: 9400s ago STALE | active-unacked alerts: none.")
 HB_REWORD = ("OLD Claude / NEW Claude — hourly heartbeat: something new we have never emitted before, "
              "please look at it now.")
+# Langston Step-4 Q2: all 13 live deliveries came through the STALE arm and SIX were negations.
+HB_NOT_STALE = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+                "bridges active: y | inbox-log last-write: quiet but not stale | "
+                "active-unacked alerts: none.")
+HB_BORDERLINE = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+                 "bridges active: y | inbox-log last-write: borderline stale | "
+                 "active-unacked alerts: none.")
 PUSH_ROUTINE = "OLD Claude / NEW Claude / ANALYST Claude — review branch moved to abc1234. Pull before you push."
 LANG_MARKER_MINE = ("NEW Claude — triage done, routing it.\n\n"
                     "[[ALERT id=deadbeef-0000-0000-0000-000000000000 owner=CC-A action=\"look at it\"]]")
@@ -37,6 +44,8 @@ CASES = [
     ("cc_outbound", "Heartbeat",   HB_OK_ALERTS,   False, "all-clear heartbeat listing due alerts is SUPPRESSED (the hook shows them every turn)"),
     ("cc_outbound", "Heartbeat",   HB_BAD,         True,  "POSITIVE CONTROL: a heartbeat reporting a DEAD BRIDGE still wakes"),
     ("cc_outbound", "Heartbeat",   HB_REWORD,      True,  "POSITIVE CONTROL: an unrecognised heartbeat shape still wakes (fail-safe)"),
+    ("cc_outbound", "Heartbeat",   HB_NOT_STALE,   False, "Q2: \"quiet but NOT stale\" is a negation, not a verdict -> SUPPRESSED"),
+    ("cc_outbound", "Heartbeat",   HB_BORDERLINE,  False, "Q2: \"borderline stale\" is hedged, not a verdict -> SUPPRESSED"),
     ("cc_outbound", "Push notice", PUSH_ROUTINE,   False, "REGRESSION GUARD: routine push notice still suppressed"),
     ("langston_outbound", None,    LANG_MARKER_MINE,       False, "marker owns me but prose names someone else -> no wake (the duplicate, cut)"),
     ("langston_outbound", None,    LANG_MARKER_MINE_NAMED, True,  "POSITIVE CONTROL: marker owns me AND he addresses me -> still wakes"),

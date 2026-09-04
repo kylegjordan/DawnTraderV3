@@ -108,7 +108,14 @@ def measure(folder, since, until):
                 turns[cur]['spoke'] += 1
         cur, cur_chars = None, 0
 
-    for path in sorted(files, key=os.path.getsize, reverse=True)[:1]:
+    # ⛔ EVERY file in the folder, not the largest one (Langston BLOCKER-1, #995 Step 4).
+    # This read `sorted(files, key=os.path.getsize, reverse=True)[:1]` — a SIZE-bounded
+    # selection, which is the exact thing lines 20-23 of this docstring reject. Worse, it
+    # made the instrument non-reproducible in the way it exists to prevent: two runs days
+    # apart read a DIFFERENT file as the transcripts grow. A session's history spans
+    # several files after any trim or restart; the window is what bounds the population,
+    # and it does that on its own.
+    for path in sorted(files):
         for r in rows(path):
             ts = r.get('timestamp') or ''
             m = r.get('message') or {}
@@ -145,20 +152,34 @@ def measure(folder, since, until):
 # Discord inbox" -> the turn reads cc-discord-inbox. A session that complied by some other
 # route is counted as non-compliant, so these rates are an UPPER BOUND on non-compliance,
 # i.e. the honest direction for a claim that compliance is near zero.
+# CONDITIONAL vs UNCONDITIONAL — the third field, and Langston BLOCKER-2 (#995) is why it exists.
+# "re-verify your wake watcher is alive; RE-ARM ONLY IF DEAD" is a CONDITIONAL, and this proxy
+# scores the CONSEQUENT. When no watcher is dead, FULL COMPLIANCE PRODUCES ZERO RE-ARMS — so a
+# near-zero rate is roughly what obedience looks like, not disobedience, and the verification
+# act itself leaves no tool trace at all. My "upper bound on non-compliance" caveat did not
+# reach that: it is not an undercount, it is the WRONG PREDICATE. The row is kept and printed
+# because deleting it would hide the error, but it is NOT evidence and must carry no claim.
 INSTRUCTIONS = [
-    ('re-arm only if dead',      lambda s: 'cc-wake-filter' in s or 'cc_wake_filter' in s),
-    ('sweep the Discord inbox',  lambda s: 'cc-discord-inbox' in s),
+    ('sweep the Discord inbox',  lambda s: 'cc-discord-inbox' in s, True),
+    ('re-arm only if dead',      lambda s: 'cc-wake-filter' in s or 'cc_wake_filter' in s, False),
 ]
 
 def compliance(folder, since, until):
     files = glob.glob(os.path.join(PROJECTS, folder, '*.jsonl'))
     if not files:
         return None
-    seen = {k: 0 for k, _ in INSTRUCTIONS}
-    did = {k: 0 for k, _ in INSTRUCTIONS}
+    seen = {k: 0 for k, _, _v in INSTRUCTIONS}
+    did = {k: 0 for k, _, _v in INSTRUCTIONS}
     turns = spoke = 0
     cur = None
-    for path in sorted(files, key=os.path.getsize, reverse=True)[:1]:
+    # ⛔ EVERY file in the folder, not the largest one (Langston BLOCKER-1, #995 Step 4).
+    # This read `sorted(files, key=os.path.getsize, reverse=True)[:1]` — a SIZE-bounded
+    # selection, which is the exact thing lines 20-23 of this docstring reject. Worse, it
+    # made the instrument non-reproducible in the way it exists to prevent: two runs days
+    # apart read a DIFFERENT file as the transcripts grow. A session's history spans
+    # several files after any trim or restart; the window is what bounds the population,
+    # and it does that on its own.
+    for path in sorted(files):
         for r in rows(path):
             ts = r.get('timestamp') or ''
             m = r.get('message') or {}
@@ -171,15 +192,15 @@ def compliance(folder, since, until):
                     turns += 1
                     if cur['said']:
                         spoke += 1
-                    for k, _ in INSTRUCTIONS:
+                    for k, _, _v in INSTRUCTIONS:
                         if cur['saw'][k]:
                             seen[k] += 1
                             if cur['did'][k]:
                                 did[k] += 1
                 cur = None
                 if 'WAKE[Heartbeat' in t and (not ts or since <= ts <= until):
-                    cur = {'saw': {k: (k in t) for k, _ in INSTRUCTIONS},
-                           'did': {k: False for k, _ in INSTRUCTIONS}, 'said': False}
+                    cur = {'saw': {k: (k in t) for k, _, _v in INSTRUCTIONS},
+                           'did': {k: False for k, _, _v in INSTRUCTIONS}, 'said': False}
             elif role == 'assistant' and cur:
                 if text_of(m).strip():
                     cur['said'] = True
@@ -188,7 +209,7 @@ def compliance(folder, since, until):
                     for b in c:
                         if isinstance(b, dict) and b.get('type') == 'tool_use':
                             s = json.dumps(b.get('input', {}))
-                            for k, test in INSTRUCTIONS:
+                            for k, test, _v in INSTRUCTIONS:
                                 if test(s):
                                     cur['did'][k] = True
     return turns, spoke, seen, did
@@ -198,25 +219,29 @@ def run_compliance(since, until):
     print("(the heartbeat body has carried these since 2026-07-22; compliance proxied by the")
     print(" tool call each instruction asks for, which is an UPPER BOUND on non-compliance)\n")
     T = S = 0
-    seen_all = {k: 0 for k, _ in INSTRUCTIONS}
-    did_all = {k: 0 for k, _ in INSTRUCTIONS}
+    seen_all = {k: 0 for k, _, _v in INSTRUCTIONS}
+    did_all = {k: 0 for k, _, _v in INSTRUCTIONS}
     for label, folder in SESSIONS.items():
         got = compliance(folder, since, until)
         if not got:
             continue
         t, s, seen, did = got
         T += t; S += s
-        for k, _ in INSTRUCTIONS:
+        for k, _, _v in INSTRUCTIONS:
             seen_all[k] += seen[k]; did_all[k] += did[k]
         print(f"  {label:13} heartbeat turns {t:4}  spoke {s:4}")
     print()
     print(f"  TOTAL heartbeat-opened turns: {T}")
     print(f"  produced assistant TEXT:      {S}  ({100*S//max(T,1)}%)")
-    for k, _ in INSTRUCTIONS:
+    for k, _, valid in INSTRUCTIONS:
         n, c = seen_all[k], did_all[k]
+        tag = '' if valid else '  <- CONDITIONAL: NOT a compliance measure, carries no claim'
         print(f"  instruction delivered intact: {n:4}  complied: {c:3}  "
-              f"({100*c/max(n,1):.1f}%)   \"{k}\"")
-    print("\n  ⇒ the body reliably produces narration and reliably fails to produce the action.")
+              f"({100*c/max(n,1):.1f}%)   \"{k}\"{tag}")
+    print()
+    print("  => what this supports, and NOTHING WIDER: the wake body produces narration on")
+    print("     essentially every delivery, while the one UNCONDITIONAL instruction it carries")
+    print("     is acted on about one time in eight.")
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,

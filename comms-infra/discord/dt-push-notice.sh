@@ -90,6 +90,20 @@ if [ -d "$MIRROR" ] && [ -f /usr/local/bin/dt-push-notice.sh ]; then
   # the repo has had a chance to see this content, and it is not there.
   MIRROR_AT=$(stat -c %Y "$MIRROR/FETCH_HEAD" 2>/dev/null || echo 0)
   LIVE_AT=$(stat -c %Y /usr/local/bin/dt-push-notice.sh 2>/dev/null || echo 0)
+  # ⛔ AND A FLOOR ON THE ORACLE ITSELF (Langston Step-4 Q3, #995). The freshness leg above
+  # requires MIRROR_AT > LIVE_AT. If the */15 puller STOPS, FETCH_HEAD's mtime freezes below
+  # every subsequent live edit and drift detection turns OFF PERMANENTLY — and because the
+  # whole check is fail-quiet, it would then report clean forever in exactly the state it
+  # exists to catch. Self-disabling, with no signal. So the oracle has to prove it is alive:
+  # a mirror that has not fetched in over 2 hours (8x its cadence) is itself the finding.
+  NOW=$(date +%s)
+  MIRROR_AGE=$(( NOW - MIRROR_AT ))
+  if [ "$MIRROR_AT" -eq 0 ] || [ "$MIRROR_AGE" -gt 7200 ]; then
+    DRIFT="
+⚠️ DRIFT CHECK IS BLIND: the backup mirror it compares against has not fetched for $(( MIRROR_AGE / 60 )) minutes
+(cadence is 15). Until that puller runs, nothing is watching /usr/local/bin/dt-push-notice.sh
+for uncommitted edits. This line is the check reporting its own oracle, not a drift finding."
+  fi
   if [ -n "$LIVE_BLOB" ] && [ "$MIRROR_AT" -gt "$LIVE_AT" ]      && ! git --git-dir="$MIRROR" cat-file -e "$LIVE_BLOB" 2>/dev/null; then
     DRIFT="
 ⚠️ DRIFT: /usr/local/bin/dt-push-notice.sh on Helsinki holds content that has NEVER been

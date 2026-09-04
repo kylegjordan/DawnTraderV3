@@ -67,11 +67,17 @@ def is_routine_push_notice(sender, text):
 #   (a) IT CANNOT PROVE WHAT IT CLAIMS. The heartbeat is delivered as a Discord post that
 #       each session's watcher TAILS -- so a dead watcher receives no heartbeat. It cannot
 #       detect the failure it exists for; its only absence-signal is regularity.
-#   (b) THE INSTRUCTION IT CARRIES IS NOT FOLLOWED. Whole files, three transcripts:
-#       574 deliveries of "re-arm only if dead" -> 2 sessions touched the filter (0.3%);
-#       352 of "sweep the Discord inbox" -> 41 (11.6%); the same 734 heartbeat turns
-#       produced assistant TEXT 636 times (86%). It reliably produces narration and
-#       reliably fails to produce the action.
+#   (b) THE BODY PRODUCES NARRATION AND NOT THE ACTION IT ASKS FOR.
+#       ⛔ DO NOT RESTATE THE FIGURES HERE. This comment used to carry them and they went
+#       stale inside one day: it said "734 turns / 636 spoke (86%)", from a turn model the
+#       instrument's own docstring records as WRONG, while the corrected run says 99%. A
+#       load-bearing number restated in a comment is the shape this file forbids elsewhere
+#       — derive, never restate (Langston FINDING-2, #995).
+#       DERIVE IT: scripts/analysis/wake_narration.py --instruction-compliance
+#       ⚠️ And read the CONDITIONAL/UNCONDITIONAL split there before quoting anything: the
+#       "re-arm only if dead" row scores the consequent of a conditional and is NOT a
+#       compliance measure. The claim rests on the unconditional "sweep" row and on the
+#       near-total speak rate.
 # CONTENT-KEYED AND FAIL-SAFE, exactly like the push notice above (Langston BLOCKER-1):
 # we suppress ONLY the ALL-CLEAR shape. A heartbeat reporting a DEAD BRIDGE or a STALE
 # inbox log is the one case where it carries information, and it is still DELIVERED.
@@ -84,7 +90,11 @@ _HEARTBEAT_OK = re.compile(r"hourly heartbeat:.*bridges active:\s*y(?:es)?\b", r
 # discriminate a problem from an all-clear.
 _HEARTBEAT_BAD = re.compile(
     r"bridges active:\s*(?:n(?:o)?\b|partial|inactive)"   # the bridge health field itself
-    r"|inbox-log[^|]*\bSTALE\b"                            # the log-age field reporting stale
+    # ⛔ NOT a bare \bSTALE\b. Langston measured all 768 live Heartbeat rows against this regex:
+    # 755 suppressed, 13 delivered — and ALL 13 came through this arm, SIX of them on bodies
+    # saying "quiet but not stale" or "borderline stale". It was matching the WORD INSIDE A
+    # NEGATION, which is not reading health at all. The token must be a verdict, not a mention.
+    r"|inbox-log[^|]*(?<!not )(?<!borderline )\bSTALE\b"    # the log-age field reporting stale
     r"|\bbridge[s]?\b[^|]{0,40}\b(?:down|dead|failed|inactive)\b",
     re.I)
 
@@ -296,13 +306,27 @@ for raw in sys.stdin:
             # — safe today because the loop rebinds each iteration, but a live trap for the next edit.
             body_raw = d.get("text") or ""
             text = _defang(body_raw[:400])
+            # ⛔ `full` IS FOR DECIDING; `text` IS FOR PRINTING. Added 2026-09-04 (#995, Langston
+            # Step-4 FINDING-1) and it CLOSES A KNOWN GAP rather than working around it.
+            # The gap: every name/tag match in this file read the TRUNCATED `text`, so a message
+            # naming a session only past byte 400 woke NOBODY — ~118 of 2,820 of Langston's
+            # non-marker replies (~4%), homed and still open. The heartbeat's "sweep the Discord
+            # inbox for anything missed" was the COMPENSATING CONTROL for exactly that class, and
+            # this batch suppresses the heartbeat — so removing the compensator while leaving the
+            # gap open was the real cost of the cut, and it was unpriced until he named it.
+            # Deciding on the full body removes the need for the compensator instead of pricing it.
+            # The 400-char cut stays on the PRINTED body: it exists so one wake line cannot flood
+            # the session, which is a display concern and was never a routing one.
+            full = _defang(body_raw)
             tp = "Discord" if d.get("transport") == "discord" else "Telegram"
             if kind == "":
-                deliver, body = addressed_to_me(text)
+                deliver, _ = addressed_to_me(full)
+                body = text
                 if deliver:
                     print(f"WAKE[KYLE via {tp}->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
             elif kind == "voice_inbound":
-                deliver, body = addressed_to_me(text)
+                deliver, _ = addressed_to_me(full)
+                body = text
                 if deliver:
                     print(f"WAKE[KYLE-VOICE->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
             elif kind == "langston_outbound":
@@ -341,14 +365,21 @@ for raw in sys.stdin:
                     # every time and the cut did nothing at all. Caught by the behavioural test.
                     # The question here is whether he ADDRESSED me in prose, and the routing
                     # marker is not prose.
+                    # ⛔ STRIP FROM BOTH. `full` is what the name check now reads (the
+                    # FINDING-1 fix above), so stripping only the printed copy left the
+                    # marker's own `owner=CC-A` satisfying MY_RE again — the SAME defect the
+                    # behavioural test caught the first time, re-created one layer along by
+                    # a later change. It caught it again.
                     text = ALERT_MARKER_STRIP.sub(" ", text)
+                    full = ALERT_MARKER_STRIP.sub(" ", full)
                 # Wake when Langston (a) uses an explicit wake-tag (broadcast OK), or (b) names
                 # me specifically. NOT on his plain replies to Kyle (no name/tag) — too noisy.
-                if re.search(r"@?CC[- ]?WAKE|wake\s+(up\s+)?(cc|claude\s*code)", text, re.I):
-                    deliver, body = addressed_to_me(text)
+                if re.search(r"@?CC[- ]?WAKE|wake\s+(up\s+)?(cc|claude\s*code)", full, re.I):
+                    deliver, _ = addressed_to_me(full)
+                    body = text
                     if deliver:
                         print(f"WAKE[LANGSTON->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
-                elif MY_RE.search(text):
+                elif MY_RE.search(full):
                     print(f"WAKE[LANGSTON->{ALIAS}]: {text}{media_suffix(d)}", flush=True)
             elif kind == "langston_outbound_media":
                 # Langston uploaded a file with his reply. That upload is mirrored as its OWN
@@ -376,9 +407,14 @@ for raw in sys.stdin:
                 # ZERO information loss: the §7.1 batch-close sync gate REQUIRES a
                 # `git fetch` before any push, so a session already learns the branch moved
                 # at the only moment the fact can change what it does.
-                # NOT suppressed: "Heartbeat" — it is the dead-man proof that this watcher
-                # is alive, and a session cannot verify that from a channel it stopped
-                # receiving. Its cost is commentary, not the wake; that is a rules fix.
+                # ⛔ THIS COMMENT IS INVERTED AS OF 2026-09-03 AND IS KEPT ONLY AS A POINTER.
+                # It read: "NOT suppressed: Heartbeat — it is the dead-man proof that this
+                # watcher is alive... its cost is commentary, not the wake; that is a rules fix."
+                # THE ALL-CLEAR HEARTBEAT IS NOW SUPPRESSED, two lines below, and the dead-man
+                # claim is false: the heartbeat travels through the very watcher it checks, so a
+                # dead watcher receives nothing (#995 OBJ-10, Kyle-directed, Langston concurred
+                # at Step 4 that his own #694 refusal was wrong). A stale comment sitting at the
+                # call site of its own inversion is `fix-follows-pointer` — he caught it here.
                 if is_routine_push_notice(sender, text):
                     continue
                 if is_allclear_heartbeat(sender, text):
@@ -395,7 +431,7 @@ for raw in sys.stdin:
                     # branch consistent with it rather than inventing a new policy.
                     # ⚠️ KYLE'S OWN POSTS ARE UNCHANGED (the kind=="" branch): an unaddressed
                     # message from him still reaches everyone, because he means it.
-                    deliver = bool(MY_RE.search(text) or CREW_ALL_RE.search(text))
+                    deliver = bool(MY_RE.search(full) or CREW_ALL_RE.search(full))
                     body = text
                     if deliver:
                         print(f"WAKE[{sender} via {tp}->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
