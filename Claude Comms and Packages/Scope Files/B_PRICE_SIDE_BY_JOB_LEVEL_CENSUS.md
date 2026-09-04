@@ -49,10 +49,29 @@ Enumerated from `shared/schema.ts` by walking every `pgTable` declaration and co
 | `trades` | 1 | 0 | `storage.ts` |
 | `trading_signals` | 2 | 0 | `services/trading-signals-cleanup.ts`, `storage.ts` |
 
-⇒ ★★ **EVERY PERSISTED LEVEL IN THE SYSTEM PASSES THROUGH EXACTLY THREE FILES:**
+⇒ ★★ **EVERY PERSISTED LEVEL IN THE SYSTEM PASSES THROUGH EXACTLY THREE FILES — AND, WITHIN THEM, 20 FUNCTIONS (§3b(4)). SAY BOTH NUMBERS; "three files" ALONE READS AS A CHOKE POINT IT IS NOT:**
 **`server/storage.ts`** · **`server/services/rtb-shadow-store.ts`** · **`server/services/trading-signals-cleanup.ts`**
 
 ✅ **NO TABLE IN THE SINK SET HAS ZERO WRITERS.** Stated explicitly: the earlier zero was an instrument artefact, not an absence.
+
+## 3b. ⛔⛔ THE "ONE ASSERTION AT THREE WRITERS" HEADLINE WAS WRONG — LANGSTON ATTACKED IT AND ALL FOUR POINTS LAND
+
+**I proposed enforcing the rule at the three writers and asked him to attack it rather than agree. He did, and the answer was "neither of your two options".** Each point below was **re-derived by me at the object before being written in.**
+
+**(1) SIDE IS UNDECIDABLE AT THE WRITER — IT IS A PROPERTY OF THE CONSTRUCTION, NOT OF THE NUMBER.** At `storage.ts` you hold a numeric string and a column name. **MEASURED: a tree-wide grep for ANY basis/provenance column — `priceBasis|price_basis|levelBasis|sideBasis|quoteSide|priceSide` — returns ZERO.** *(Control, same session: `exit_price_producer` returns 1, so the instrument reads the schema.)* ⇒ **"is this `takeProfit` the ask, the bid, or a mid?" cannot be answered from the object at the writer.** A check there can assert **shape** — finite, non-zero, on-grid — and never **side**. ★ **That is enforcement-looking and question-blind: the costume of rigor.**
+
+**(2) "TOO LATE" IS NOT HYPOTHETICAL — IT SPLITS `#927` IN TWO, AND THE SPLIT IS ALREADY FILED.** `ready_to_buy_service.ts:1788`'s `entry * 1.02` sets **pool ORDER** and reaches **none of the 26 columns**; F-G-1's report already says of that leg *"UNREACHABLE BY THIS INSTRUMENT… a PASS says nothing about it."* The **same fabrication** at `active-execution-engine.ts:3315` (`signal.targetPrice ? parseFloat(…) : entryPrice * 1.02`, verified) **does** persist to `takeProfit`. ⇒ ⛔ **A writer fence catches one leg of `#927` and is STRUCTURALLY BLIND to the other. "One assertion every level must pass" is FALSE as written — it is every PERSISTED level**, and §5's in-memory caveat is not a caveat, it is a named open issue the claim silently excluded.
+
+**(3) THE ANSWER IS NEITHER OF MINE: CONSTRUCTION *STAMPS*, PERSISTENCE *ENFORCES*.** The 70 sites each record the basis they read; the 3 writers refuse any level arriving with a null or mid basis. **Early AND single.** ★ **The decisive asymmetry: a MISSING stamp is mechanically catchable in a way a WRONG PRICE never is.** Same joint-read form as `B-PRICE-AGE-TRUTH` — `observedAtMs` is unreadable without `producer`; **a level is unreadable without its side.**
+
+**(4) AND MY "THREE FILES" HEADLINE OVER-CLAIMED, WHICH I HAD SOFTENED IN §5 INSTEAD OF FIXING.** Per-**file** closure is not a choke point: one file with N level-writing functions is N places the check has to go. **ENUMERATED: `storage.ts` holds 79 async write-shaped methods, of which 20 write a level-carrying table** — `closeTrade`, `consumeSignalBySymbol`, `createActiveOpenPosition`, `createClosedTrade`, `createExecutionAttemptAudit`, `createHistoricSignal`, `createPaperTrade`, `createTrade`, `expireAllExpiredSignals`, `expireOldSignals`, `hardResetActiveEngineTables`, `saveTradingSignal`, `updateActiveOpenPosition`, `updateClosedTrade`, `updatePaperTrade`, `updateRtbSignal`, `updateRtbSignalsBatch`, `updateSignalStatus`, `updateTrade`, `upsertRtbSignal`. ⇒ **SAY "THREE FILES, TWENTY FUNCTIONS" — NEVER "ONE ASSERTION".**
+
+## 3c. ⭐⭐ AND A SECOND INSTRUMENT ARTEFACT, CAUGHT BEFORE IT BECAME A CLAIM — IT TURNS (3) FROM RUNTIME INTO COMPILE-TIME
+
+**A refinement pass tried to narrow those 20 to "functions that actually set a level column" and returned TWO — `closeTrade` and `upsertRtbSignal`.** ⛔ **That result was FALSE and I checked it because it was implausible, not because anything flagged it.** `createActiveOpenPosition` inserts into a table whose level columns are `notNull`, so it cannot fail to write levels — and `storage.ts:3723` shows why the pattern missed it: **`db.insert(activeOpenPositions).values(normalizedPosition)`** — a **SPREAD OF A TYPED OBJECT.** The column names never appear in the function body. ⇒ **my pattern measured "names a level column in its text", which is not "writes a level". `wrong-object`, mine, caught by disbelief rather than by an instrument.**
+
+⇒ ★★ **BUT THE STRUCTURE IT REVEALED IS THE MOST USEFUL THING IN THIS DOCUMENT, AND IT STRENGTHENS LANGSTON'S (3) BEYOND WHAT HE PROPOSED: THE WRITERS TAKE A TYPED OBJECT.** ⇒ **add the basis to the TYPE, and the stamp stops being a runtime convention: every construction site must supply it or the code does not compile.** ⛔ **A MISSING STAMP BECOMES A COMPILE ERROR, NOT A MISSED CHECK** — which is the *"prefer IMPOSSIBLE over INTERCEPTED"* rule this project already holds, available here for free because the persistence layer is typed rather than positional.
+⚠️ **It also confirms the change-class: a schema + type addition ⇒ `architecture`, which the scope already declares. No re-declaration needed.**
 
 ## 4. ⭐ WHAT THIS CHANGES ABOUT THE FIX — AND IT IS THE POINT OF DOING IT BACKWARDS
 
