@@ -37,6 +37,14 @@ LANG_MARKER_MINE_NAMED = ("OLD Claude — triage done, this one is yours.\n\n"
 LANG_MARKER_THEIRS = ("NEW Claude — yours.\n\n"
                       "[[ALERT id=deadbeef-0000-0000-0000-000000000000 owner=CC-B action=\"look\"]]")
 LANG_NAMED = "OLD Claude — a plain reply addressed to you, no marker at all."
+# Langston FINDING-5: the r2 change with the largest blast radius had NO test. Deciding on
+# the FULL body flips ~118 of 2,820 of his replies from silent to waking, and the only
+# reason the marker-strip defect surfaced was that it re-broke an EXISTING assertion — the
+# new behaviour itself was unasserted. This is the case someone regresses by reinstating
+# `text` for "consistency".
+LANG_NAME_LATE = ("Kyle — a long reply that does not name any session for a while. "
+                  + ("Filler that pushes the name past the 400-character truncation. " * 8)
+                  + "OLD Claude, this part is for you.")
 LANG_OTHER = "NEW Claude — a plain reply addressed to someone else."
 
 CASES = [
@@ -51,6 +59,7 @@ CASES = [
     ("langston_outbound", None,    LANG_MARKER_MINE_NAMED, True,  "POSITIVE CONTROL: marker owns me AND he addresses me -> still wakes"),
     ("langston_outbound", None,    LANG_MARKER_THEIRS,     False, "REGRESSION GUARD: marker owns another session -> still suppressed"),
     ("langston_outbound", None,    LANG_NAMED,             True,  "POSITIVE CONTROL: plain reply addressed to me -> still wakes"),
+    ("langston_outbound", None,    LANG_NAME_LATE,         True,  "FINDING-5: my name appears only PAST byte 400 -> must WAKE (this is the ~118/2820 class the truncation used to swallow)"),
     ("langston_outbound", None,    LANG_OTHER,             False, "REGRESSION GUARD: plain reply to someone else -> silent"),
 ]
 

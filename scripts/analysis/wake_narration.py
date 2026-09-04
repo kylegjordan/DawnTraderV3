@@ -241,7 +241,10 @@ def run_compliance(since, until):
     print()
     print("  => what this supports, and NOTHING WIDER: the wake body produces narration on")
     print("     essentially every delivery, while the one UNCONDITIONAL instruction it carries")
-    print("     is acted on about one time in eight.")
+    v = [(k, seen_all[k], did_all[k]) for k, _, valid in INSTRUCTIONS if valid]
+    if v:
+        _k, n, c = v[0]
+        print(f"     is acted on {100*c/max(n,1):.1f}% of the time ({c} of {n}).")
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,

@@ -295,13 +295,18 @@ for raw in sys.stdin:
             # ⛔ `text` IS TRUNCATED (400 chars) AND IS FOR PRINTING. The OWNER-MARKER match below
             # uses `body_raw` instead: the marker is the LAST line of a triage whose median length
             # is ~2,300 chars, so [:400] discarded 99.5% of them before the regex ever ran.
-            # ⚠️ SCOPE OF THAT CLAIM, NARROWED DELIBERATELY (Langston rider 1, 2026-08-24): this comment
-            # once asserted "anything that MATCHES must use raw" — a GLOBAL invariant this file does
-            # NOT hold. The other match sites in this branch still read truncated `text`, and that is
-            # a KNOWN, HOMED gap, not an oversight: ~118 of 2,820 of his non-marker replies name a CC
-            # only past byte 400 and wake nobody (~4%, his measurement, order-of-magnitude). It fails
-            # toward SILENCE, not noise. Sweep homed to `B-CREW-BOARD-REMOVAL`, owner CC-A, due
-            # 2026-09-05. DO NOT re-broaden this comment without doing that sweep.
+            # ✅ THE GAP THIS COMMENT DESCRIBED IS CLOSED — 2026-09-04, #995 FINDING-1.
+            # It read: "the other match sites in this branch still read truncated `text`, and that
+            # is a KNOWN, HOMED gap… ~118 of 2,820 of his non-marker replies name a CC only past
+            # byte 400 and wake nobody (~4%). Sweep homed to `B-CREW-BOARD-REMOVAL`, owner CC-A,
+            # due 2026-09-05."
+            # ⛔ EVERY DELIVERY DECISION NOW READS `full` (below). The sweep's premise is
+            # discharged and it is removed from `B-CREW-BOARD-REMOVAL` in the ledger.
+            # ★ THE BODY IS EDITED, NOT STACKED ON. Langston BLOCKER-3: a correction appended
+            # under superseded text leaves the file ASSERTING AN OPEN GAP IT HAS FIXED, and
+            # completion reports are written FROM the body, so the stale half propagates.
+            # ⚠️ The struck text also carried "due 2026-09-05" — the calendar-date-on-a-batch
+            # form Kyle struck (§9.4). It goes with the rest of it.
             # ★ `body_raw`, not `raw`: `raw` is the stdin loop variable ~30 lines up (Langston rider 2)
             # — safe today because the loop rebinds each iteration, but a live trap for the next edit.
             body_raw = d.get("text") or ""
