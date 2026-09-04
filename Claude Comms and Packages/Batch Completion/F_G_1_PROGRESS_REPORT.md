@@ -551,6 +551,34 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 ⚠️ **STILL NOT A DEFECT CLAIM:** refusing is designed behaviour. **What changed is that "wholly suppressed" now travels on 620 and 71, not on 6,618 and 673.**
 
 
+
+### 3q. ✅ APPROVED — AND THE THREE THINGS LANGSTON ATTACHED TO THE APPROVAL, MEASURED
+
+⛔ **APPENDED, NOT EDITED.** **VERDICT (his, re-derived by him at `2f0c968f6`, not `RULED ON REPORTED FACT`): `crypto_spot` PASS (n=24) · `xstock_spot` UNDERPOWERED (n=19).** Board `Review = Approved`. **`F-E` unblocks.**
+
+#### ⛔⛔ (a) HIS CENSUS FOUND AN OFF-GRID ROW AND MINE DID NOT — AND THE ANSWER IS THE INSTRUMENT QUESTION, NOT THE NUMBER
+
+**He re-ran Item 1 on a WIDER window (`>= 2026-08-28T16:08:02Z`) and got 2,862 crypto triples, 2,861 on grid, ONE OFF:** `TRUMP/USD` `2.694 / 2.53885714 / 2.95257143` against tick `0.001` — stop and target raw to 8 dp, **born ~37 s before the deploy. A boundary row, not a bypass.**
+
+⛔ **HIS POINT IS THE ONE THAT MATTERS AND IT IS ABOUT MY INSTRUMENT, NOT HIS RESULT: *"0 off / 1,993" IS AN UNCONTROLLED ZERO* (29(b), `#661` leg 1).** A zero means something only if the test can return non-zero **on that corpus**. His window contains the one bad row; **mine contained nothing bad to find, so my zero proved less than it appeared to.**
+
+✅ **HE ASKED WHICH BOUNDARY MY QUERY USED, BECAUSE "the window excluded it" AND "the test could not see it" ARE DIFFERENT FACTS ABOUT THE INSTRUMENT. MEASURED — IT IS THE FORMER.** My query used **`created_at >= 2026-08-28T18:05:22Z`**, §3f's corrected exclusion-interval END; the off-grid row's `created_at` is **`2026-08-28T16:04:24.414131Z`**. ⇒ **EXCLUDED BY THE WINDOW, NOT MISSED BY THE TEST.**
+★ **That is the better of the two answers and it still does not rescue the zero: the exclusion interval exists precisely to remove pre-durability rows, so my window was guaranteed to contain no off-grid row — which means it was guaranteed to produce an uncontrolled zero.** ⇒ ⛔ **STANDING LESSON: WHEN A WINDOW IS DEFINED BY EXCLUDING THE FAILURE MODE, ITS ZERO CANNOT BE ITS OWN CONTROL. The control has to come from OUTSIDE the window — which is exactly what his wider census supplied.**
+
+#### ⚠️ (b) RESIDUAL 1 — "24/24" IS NOT 72/72 LEGS, AND MY COUNT DIFFERS FROM HIS BY ONE
+
+**MEASURED over the 24 crypto rows: 70 intent legs PRESENT and scored · 2 NULL — both ENTRY legs, `APR/USD` and `CRV/USD`.**
+⚠️ **HE SAID THREE (`CRV`, `APR`, `XPL`); I MEASURE TWO. The difference is `XPL/USD`, and it is the open-row artefact I hit myself earlier in this read:** `XPL` is a **still-open** position, so its `closed_trades` row (written AT OPEN) carries a NULL intent while `active_open_positions` carries the real one — **and my population takes open rows from the open table.** ⇒ **stated rather than silently adopting either number.**
+✅ **AND THE TWO NULLS ARE NOT UNMEASURABLE — §3p RECOVERED THEM** from `rtb_shadow_pairings` (`APR` `0.20360000`, `CRV` `0.35667000`, tick `0.00001`, both on grid). ⇒ **THE HONEST FORM: 72 of 72 legs on grid, of which 70 read directly off the position row and 2 required a second, independent source.** ⛔ **"24/24" must not be quoted as though 72 legs were read from one object.**
+
+#### ⚠️ (c) RESIDUAL 2 — 5 OF 24 **FILL** PRICES ARE OFF THE VENUE GRID, AND THAT IS `F-G-2`'s SUBJECT, NOT THIS BATCH'S
+
+**MEASURED against the live grid: fill ON grid 18 · fill OFF grid 5 · fill NULL 1 (`never_filled` / still open) = 24.**
+⚠️ **He said SIX off; I measure FIVE off plus ONE null. The likely reconciliation is the null being counted with the off — named rather than resolved by assertion.**
+✅ **EXPECTED AND NOT A DEFECT: A FILL IS NOT A SIGNAL LEG.** F-G-1 rounds the **intent** — what we ask for. **What we GET is the venue's business**, and a partial or depth-walked fill lands wherever the book lets it.
+⛔ **BUT IT IS EXACTLY WHAT A LATER READER MISTAKES FOR A SEAM BYPASS**, so it is named here: **the fill-side price belongs to `F-G-2` (`B-EXIT-TRANSACTABLE-SIDE`), not to `F-G-1`.** ★ **This is also why §3 pre-registered the read on the INTENT-side columns — `entry_price` is the FILL and is off-grid by construction on 5 of 24 rows.**
+
+
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
