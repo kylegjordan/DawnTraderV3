@@ -1,0 +1,126 @@
+# B-PRICE-SIDE-BY-JOB — PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN (Step 2)
+
+**change-class: architecture** · **Owner:** CC-C · **Reviewer:** Langston · **Plan row:** `3n` · **Scope:** `B_PRICE_SIDE_BY_JOB_SCOPE.md` (approved r4 + C1, `c9146ac09`)
+
+> **ONE document. The AUDIT comes first and the PLAN falls out of it.** Every plan item back-references the finding it derives from; anything unaudited is flagged `UNAUDITED`.
+
+---
+
+## 0. ⛔ PREVIOUSLY STATED / NOW — every number that moved since the scope
+
+> **At the TOP, not in a footnote: the reader is deciding whether to approve a plan built on these.**
+
+| # | PREVIOUSLY STATED (scope / my messages) | NOW | REASON |
+|---|---|---|---|
+| 1 | *"Signal generation reads a mid"* (scope §2, job 1) | **Signal generation reads a KALMAN-SMOOTHED mid whose gain has a median of 0.0952** — each new tick moves the estimate by <10% | measured, `n=104,465` (A-4). The scope's own OBJ-2 taxonomy could not classify it (Langston FINDING-1); the audit now quantifies how far from a mid it is |
+| 2 | *"the level-setting sites"*, illustrated by 2 line numbers | **70 construction sites across 19 files, 10 of them individual strategies** | the census (A-2). The scope's citations were the pattern-lane fallback and were demoted to illustration at r2 |
+| 3 | MCE pass-through **UNVERIFIED** (Langston's stated limit, carried verbatim into the scope) | ✅ **CONFIRMED PASS-THROUGH, verbatim** — `market-context-engine.ts:1431-1434` places the parameter into `indicators` by shorthand, untransformed | A-3. His open limit is discharged, by me, at the object |
+| 4 | *"the damage is DELAY, not the half-spread"* → then corrected to *"a STATIC OFFSET, not lag"* (Langston Q3c) | **BOTH are second-order on the LEVEL side.** The dominant term there is a **real** lag — the filter's, ~10-observation memory — which is a different mechanism from either | A-4/A-5. Stated so the two corrections are not read as converging on one cause |
+| 5 | — (not previously stated) | **`clearKalmanFilter` and `restoreState` have ZERO production callers** | A-5 census |
+
+---
+
+# PART A — THE AUDIT
+
+## A-1. ⛔ ENTRY POINTS ENUMERATED FIRST, REPO-WIDE, BEFORE ANY TRACE (§9.5(a-ii))
+
+**Tracing forward from one entry point structurally cannot discover a second.** Enumerated before tracing, tests excluded:
+
+**SIX clock subscribers** — `centralClock.subscribe`: `XstockSpotScanner` (`xstock_spot/scanner.ts:251`) · `TCL_<mode>` (`core/rtb/tcl_watchdog.ts:126`) · `trading_scheduler.ts:66` · `FX5Scanner` (`fx5-scanner.ts:611`) · `RTBRefreshService` (`rtb-refresh-service.ts:214`) · `MarketEventScheduler` (`utils/market-events.ts:411`).
+**PLUS two own-timer entry points** in `signal-orchestrator.ts` — `:414` `evaluationTimer`, `:419` `weightsRefreshTimer`.
+
+⇒ ⭐ **THE PAYOFF, AND IT IS EXACTLY WHAT THE RULE EXISTS FOR: `RTBRefreshService` IS AN ENTRY POINT A FORWARD TRACE FROM THE SCANNER NEVER VISITS.** It re-confirms and re-ranks already-generated signals on its own clock tick. **A trace that started at the scanner and followed the signal would have concluded that levels are set once, at generation.**
+✅ **CHECKED AT THE OBJECT: the refresh path does NOT re-derive entry/stop/target.** `core/rtb/ready_to_buy_service.ts:776-778` **parses** the stored values (`parseFloat(signal.entryPrice…)`) — it is a READER. **Stated explicitly because an asserted absence needs presence-evidence (rule 22).**
+⚠️ **BUT IT DOES FABRICATE ONE:** `:1789`, inside `rMultipleCore` (the RANKING path), `const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.entry * 1.02` — commented *"mirror executePromotedSignal default"*. **A ranking input invented from a constant** — the `#927` target-fabrication class, reached on the ranking leg. **Carried to OBJ-5, which is the ranking objective.**
+
+## A-2. THE LEVEL-CONSTRUCTION CENSUS — 70 SITES, 19 FILES
+
+**Repo-wide, production only, `_archive` and tests excluded:** 70 sites computing an `entryPrice` / `stopPrice` / `targetPrice` / `stopLoss` / `takeProfit` from arithmetic, across **19 files** — `ready_to_buy_service.ts`, `routes.ts`, `active-execution-engine.ts`, `pattern-recognizer.ts`, `signal-orchestrator.ts`, `strategy-engine.ts`, `vts-runner.ts`, `vts-service.ts`, `export-csv.ts`, and **10 individual strategies** (`adaptive-flow`, `defensive-hedge`, `inside-bar-reversal`, `morning-star`, `orb`, `pivot-shift`, `reverse-impulse`, `strong-bull-trend`, `support-bounce`, `volatility-edge`).
+
+⇒ **The scope's estimate of the surface was an order of magnitude low**, and its two illustrative citations were the pattern-lane fallback (demoted at r2). **This is the number the plan is sized against.**
+
+## A-3. ✅ THE CHAIN, ESTABLISHED END TO END — AND LANGSTON'S OPEN LIMIT IS DISCHARGED
+
+`signal-orchestrator.ts:2400` `getSmoothedPrice(symbol, rawPrice, ER, VolNoise)` → `:2425` `const currentPrice = smoothedPrice` → `:2456` `mce.computeContext(…, currentPrice, …)` → `market-context-engine.ts:1225` (param; **its own doc at `:1218` says *"Smoothed current price (from Kalman filter or raw)"***) → **`:1431-1434` `const indicators: MarketIndicators = { vwap, sma, currentPrice, … }`** → `signal-orchestrator.ts:2513` `currentPrice: mceContext.indicators.currentPrice` → the 19-strategy dispatch → the 70 sites of A-2.
+
+⛔ **THE VERIFICATION LANGSTON EXPLICITLY LEFT OPEN — *"I did NOT verify MCE passes it through unchanged"* — IS NOW CLOSED: it is a SHORTHAND PROPERTY at `:1434`. No transformation, no re-derivation, no fallback.** The value the strategies build levels from is the smoothed value, verbatim.
+
+## A-4. ⭐⭐ THE MEASUREMENT THAT REFRAMES THE BATCH — THE LEVEL BASIS IS A **HEAVILY DAMPED** PRICE
+
+**OBJECT:** the Kalman gain `K`, from every `[9.3][KALMAN]` line. **POPULATION:** the current `out.log`, **n = 104,465**.
+**POSITIVE CONTROL:** the `[9.3]` emitter is demonstrably live — **208,662 lines in `out.log`, 0 in `error.log`** (a `console.log` emitter, correct stream per the PM2 split).
+
+| min | p10 | **p50** | p90 | max |
+|---|---|---|---|---|
+| 0.0241 | 0.0821 | **0.0952** | 0.1094 | 0.5000 |
+
+**64.9% of ticks have `K < 0.10`; 99.7% have `K < 0.25`; 0.0% exceed 0.90.**
+
+⇒ ★★ **EACH NEW OBSERVATION MOVES THE LEVEL BASIS BY UNDER 10% OF ITS INNOVATION — AN EFFECTIVE MEMORY OF ROUGHLY 1/K ≈ 10 OBSERVATIONS.** The scope's *"signal generation reads a mid"* is materially understated: it reads a mid through a filter that discards ~90% of each tick.
+⇒ ⛔ **AND THIS IS A GENUINE LAG, WHICH NEITHER OF MY TWO EARLIER MECHANISM CLAIMS WAS.** *"The mid lags the bid"* was wrong (a static half-spread offset — Langston Q3c). **The FILTER's lag is real, is on the level side, and is the larger term.** ⇒ **the two corrections do not converge on one cause and must not be reported as if they do.**
+⇒ ⛔⛔ **IT ALSO KILLS THE NAIVE IMPLEMENTATION.** Swapping the filter's input from mid to bid does **not** move the level by half a spread — it moves it by `K ×` half a spread per tick, over ~10 ticks, **so for the whole convergence period every level is derived from a basis that is neither the old one nor the new one.**
+
+## A-5. ⛔ THE REGISTRY IS A CROSS-CUTTING SINGLETON THAT NOTHING PERSISTS, EVICTS, OR REGISTERS
+
+**§9.5(a) census on `filterRegistry` (`utils/adaptive-kalman.ts:175`, a module-level `Map<string, AdaptiveKalmanFilter>`):**
+
+| question | answer | evidence |
+|---|---|---|
+| who **writes**? | ⭐ **EXACTLY ONE** — `signal-orchestrator.ts:2400`. **Stated explicitly per rule 22.** | census |
+| who **imports** it at all, in production? | ⭐ **EXACTLY ONE FILE** — `signal-orchestrator.ts:131` (`getSmoothedPrice`, `getKalmanFilter`) | census |
+| who **deletes**? | ⛔ **NOBODY.** `clearKalmanFilter` (`:200`) is exported with **ZERO production callers** | census |
+| who **persists / restores**? | ⛔ **NOBODY.** `getState`/`restoreState` (`:111`/`:134`) have **ZERO production callers** | census |
+| does it **survive a restart**? | ⛔ **NO** | measured below |
+
+**MEASURED, WITH ITS CONTROL:** against **208,662 live `[9.3]` lines**, `[9.3][RESET]` = **0** and `[9.3][RESTORE]` = **0**. The emitter is provably live, so both zeros are real. ⇒ **the filter is never explicitly reset and never restored — it simply ceases to exist at process restart and is rebuilt lazily, cold, per symbol.**
+⚠️ **`restart_time=596` at tonight's deploy.** This is verbatim the class the deploy step warns about — *"a deploy wipes every in-memory rolling window… the component then reports its COLD behaviour while presenting as normal"* — with the AMR EV-gap window as the measured precedent.
+⇒ ⭐ **AND `clearKalmanFilter` IS THE EXACT MECHANISM A BASIS CHANGE NEEDS, SITTING UNUSED.** It is not dead code to delete under rule 18; it is **dead code this batch has a use for**. Disposition **(3) — disconnected, should be RECONNECTED.**
+
+## A-6. THE PROVENANCE READ — **THREE COMPONENTS, THREE READS, ONE SHAPE**
+
+**CORPORA SEARCHED:** `git log -S`, not path-limited (survives the P19-B-RENAME family rename) · `RUNNING_ISSUES` · `BATCH_CATALOG` · the completion reports · `SYSTEM_MANUAL` · `SYSTEM_IMPACT_MAP` · `bridge/canonical/`.
+
+| component | introducing commit, **quoted** | stated intent | disposition |
+|---|---|---|---|
+| **crypto mid** (`kraken-v2-translator`) | `b4c0d2d67` 2025-12-30 — *"implement midpoint pricing for improved accuracy on low-volume pairs"* | a better **MARK** than a stale last trade | **(2)** |
+| **xStock mid** (`equity-spot-archiver:104`) | `P19-B8.5`, *"Langston design-APPROVED 2026-07-16"* | a better **MARK**; `markKindOf` falls back to `last` when **either** side is missing | **(2)**, with §9.5(b-ii) caution — an approved decision |
+| **the Kalman filter** (`adaptive-kalman`) | `8b6a18ba9` 2026-01-01 — *"Implement Adaptive Kalman Filter class and Efficiency Ratio calculator, **integrating them into core metrics and system diagnostics**"* | ⭐ **"CORE METRICS AND SYSTEM DIAGNOSTICS" — NOT LEVELS** | **(2)** |
+
+⇒ ★★ **THE THESIS OF THIS BATCH, NOW EVIDENCED THREE TIMES FROM THREE INDEPENDENT PROVENANCE READS: EVERY PRICE COMPONENT ON THIS PATH WAS CHOSEN FOR AN *ESTIMATION* JOB AND SILENTLY INHERITED A *DECISION* JOB.** Not one of the three is a defect. **The defect is the inheritance, and it is invisible at every individual site.**
+
+**⛔ RECORDING RULE — A MEASURED ABSENCE, WITH ITS CONTROL:** `bridge/canonical/` contains **14 files** and matches *"regime"* in **10** of them (the positive control), and matches *"kalman"* in **ZERO**. ⇒ **the pre-governance corpus does not document the smoothing at all**, so its original intent is recoverable **only** from the commit above. **That silence is itself the finding**, per the rule.
+
+## A-7. ⛔ GOVERNANCE GAPS — BOTH MAPS ARE SILENT ON A COMPONENT THAT SETS EVERY CRYPTO LEVEL
+
+- **`SYSTEM_IMPACT_MAP.md`: ONE mention of "kalman", at `:475`, incidental (inside an LQ/VN/DI entry).** ⇒ **`filterRegistry` is NOT in the Cross-Cutting Runtime State registry** — despite being a module singleton, per-symbol, mode-invariant, never persisted, wiped on restart, and feeding the level basis of every crypto signal. **That is precisely the class `S25`, `S2` and `S24` are registered under.** §9 rule 5 breach.
+- **`SYSTEM_MANUAL.md`: 4 mentions, all incidental** — a tuning aside (`:900`), a phase index (`:10132`), a strengths table (`:10443`), and a **TEST-INVENTORY row (`:10000`)** listing the Kalman tests as covering *"filter registry, state persistence."* ⚠️ ★ **THE MANUAL ADVERTISES COVERAGE OF A CAPABILITY THE SYSTEM DOES NOT USE** — A-5 measured zero production callers for persistence. **No architectural section anywhere states that the signal pipeline's level basis is a filtered price.** §9 rule 4 breach.
+
+---
+
+# PART B — THE IMPLEMENTATION PLAN
+
+> **Every item back-references its audit finding. `UNAUDITED` is flagged.** ⛔ **The scope's deploy gate binds all of it: NO CRYPTO DEPLOY BEFORE `F-G-2`'s DISPOSITION IS RECORDED AT THE REF.** Items P1-P4 are read/write-to-docs and run now.
+
+| # | item | from | gate |
+|---|---|---|---|
+| **P1** | **Register `filterRegistry` in the SIM as a cross-cutting singleton** — one writer, no eviction, no persistence, restart-cold, feeds every crypto level. | **A-5, A-7** | none — do now |
+| **P2** | **System Manual: state that the crypto level basis is a SMOOTHED price**, with the measured gain and the ~10-observation memory; and **correct the test-inventory row** that advertises unused persistence. | **A-4, A-7** | none — do now |
+| **P3** | **Publish the 70-site census as a committed table** (`path:line`, price-kind per row), including the fourth kind. This is OBJ-1's deliverable. | **A-2, A-3** | none — do now |
+| **P4** | **OBJ-2's rule, re-derived against a FOUR-kind taxonomy** (transactable side / mid / bar close / **filtered**), and re-tested against all 70 rows. **A site the rule cannot classify falsifies the rule.** | **A-2, A-4** | none — do now |
+| **P5** | **Reconnect `clearKalmanFilter` as the basis-change mechanism** — a basis change MUST flush the registry, or every symbol spends ~10 observations on a mixed basis. Disposition (3), not rule-18 deletion. | **A-4, A-5** | ⛔ deploy-gated |
+| **P6** | **OBJ-3a** per-leg transactability fence + positive control. | scope OBJ-3a | ⛔ deploy-gated |
+| **P7** | **OBJ-3b** counter/assertion, form chosen at deploy from `F-G-2`'s recorded disposition; ships with named reader, cadence, positive control. | scope OBJ-3b | ⛔ deploy-gated |
+| **P8** | **OBJ-5 ranking argument** — and it must now dispose of `rMultipleCore`'s `entry * 1.02` fabricated ranking target. | **A-1** | none — do now |
+| **P9** | **OBJ-6** — fix the System Manual siting of the 8.9.1 adjudication. | scope OBJ-6 | none — do now |
+
+## ⛔ WHAT THE AUDIT DID **NOT** SETTLE, STATED AS UNSETTLED
+
+1. **Whether the filter should sit in front of the LEVEL at all.** Its provenance says *core metrics and system diagnostics*; nothing establishes that a damped price is the right basis for a stop. **That is the real question P4 must answer, and the audit does not pre-judge it.**
+2. **The xStock lane's level basis is NOT traced in this audit.** A-3 traces the crypto quant lane. **Stated as a gap rather than assumed symmetric** — the two producers already differ in their fallback (A-6).
+3. **`K`'s distribution is measured on the CURRENT `out.log` only** (~6 h at the measured rotation). It is not a claim about all time.
+
+---
+
+## STATUS
+
+**Step 2 — audit + plan written, dispatched to Langston.** Board card `Pre-Audit`, `Blocked on = Langston`.
