@@ -232,16 +232,44 @@ describe('OBJ-5 — history is not rewritten', () => {
       });
     }
 
-    it('never returns a non-string, whatever the lookup yields', async () => {
-      // The second, independent guard. `hasOwnProperty.call` stops the prototype
-      // chain; this stops ANY non-string escaping regardless of how it got into
-      // the table — which is what makes the fix robust to a FUTURE table gaining
-      // a surprising key, rather than only to this one bug.
-      const { normaliseAlertActor } = await load();
-      for (const probe of ['constructor', '__proto__', 'cc-b', 'cc-analyst']) {
-        const r = normaliseAlertActor(probe);
-        expect(r === null || typeof r === 'string').toBe(true);
+    // ⛔ Step-4 CONDITION 1 (Langston). The version of this test that shipped in the
+    // first Step-3 commit was VACUOUS and carried a comment certifying the guard it
+    // did not exercise. It probed `constructor`/`__proto__` (both short-circuit at
+    // `hasOwnProperty`), `cc-b` (short-circuits at ALERT_ACTOR_VALUES) and
+    // `cc-analyst` (reaches guard 2 and PASSES it) — then asserted
+    // `r === null || typeof r === 'string'`, which `null` satisfies. Deleting the
+    // guard left it green. #661 leg 3: a never-invoked path is silent with zero
+    // opportunity, however loud its body.
+    //
+    // The guard is genuinely reachable — `Readonly<>` is compile-time only and
+    // nothing freezes the table — so the reject path can be driven directly.
+    it('guard 2 REJECTS a non-string value planted in the table', async () => {
+      const mod = await load();
+      const table = mod.ALERT_ACTOR_NORMALISATION as unknown as Record<string, unknown>;
+      const KEY = 'ccb-c1-probe-nonstring';
+      try {
+        table[KEY] = 42; // not a string: only guard 2 can catch this
+        expect(mod.normaliseAlertActor(KEY)).toBeNull();
+        expect(() => mod.assertAlertActor(KEY)).toThrow();
+      } finally {
+        delete table[KEY];
       }
+      expect(Object.prototype.hasOwnProperty.call(table, KEY)).toBe(false); // restored
+    });
+
+    it('guard 2 REJECTS a string that maps OUTSIDE the canonical set', async () => {
+      // The second half of the same guard, which the condition did not name: a
+      // string target is not sufficient — it must also BE a canonical actor.
+      const mod = await load();
+      const table = mod.ALERT_ACTOR_NORMALISATION as unknown as Record<string, unknown>;
+      const KEY = 'ccb-c1-probe-offset';
+      try {
+        table[KEY] = 'not-a-canonical-actor';
+        expect(mod.normaliseAlertActor(KEY)).toBeNull();
+      } finally {
+        delete table[KEY];
+      }
+      expect(Object.prototype.hasOwnProperty.call(table, KEY)).toBe(false);
     });
 
     it('POSITIVE CONTROL — the real actors and aliases still pass', async () => {

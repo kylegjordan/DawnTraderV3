@@ -56,7 +56,7 @@ while [ $# -gt 0 ]; do
                    [ -z "$BY" ] || { echo "dt-deploy: REFUSED — duplicate --by (${#BY} then ${#2} chars, neither echoed): two claims, refusing to pick one." >&2; exit 1; }
                    BY="$2"; shift 2 ;;
     --pre-restart) [ $# -ge 2 ] || { echo "dt-deploy: REFUSED — --pre-restart needs a value. $USAGE" >&2; exit 1; }
-                   case "$2" in -*) echo "dt-deploy: REFUSED — --pre-restart value '$2' looks like a flag. $USAGE" >&2; exit 1 ;; esac
+                   case "$2" in -*) echo "dt-deploy: REFUSED — --pre-restart value looks like a flag (${#2} chars, not echoed). $USAGE" >&2; exit 1 ;; esac
                    [ -z "$PRE_RESTART" ] || { echo "dt-deploy: REFUSED — duplicate --pre-restart." >&2; exit 1; }
                    PRE_RESTART="$2"; shift 2 ;;
     # B-DEPLOY-ACTOR-ALLOWLIST P2: the '=' form of a KNOWN flag fell to the
@@ -136,6 +136,12 @@ BY_KEY=$(printf '%s' "$BY" | tr '[:upper:]' '[:lower:]' | sed -e 's/^[[:space:]]
 BY_CANON="${DEPLOY_ACTORS[$BY_KEY]:-}"
 # The refusal NEVER echoes the rejected value (#987): the caller typed it, and an
 # echoed value is itself a path to a record surface. Length + the set is enough.
+# Step-4 CONDITION 3 (Langston): this principle now holds for EVERY refusal in
+# this script, not just --by. It previously read as a general statement 78 lines
+# below a live counterexample at :59, which echoed a raw --pre-restart value —
+# fix-follows-pointer: the fix reached the four sites Step 2 named and missed the
+# fifth, two lines away in the same `case`. :59 is de-echoed and the parity test
+# now asserts all five, so the prose and the code agree.
 [ -n "$BY_CANON" ] || fail "--by refused (${#BY} chars, not echoed). Accepted: $DEPLOY_ACTOR_LIST."
 # The CANONICAL value is what gets recorded — at the lock holder and at the
 # record — never the raw input. NOTE: 'kyle-direct', which this script itself

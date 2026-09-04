@@ -140,6 +140,20 @@ describe('dt-deploy --by parity with ALERT_ACTORS (B-DEPLOY-ACTOR-ALLOWLIST)', (
     }
   });
 
+  it('DEPLOY_ACTOR_LIST — the REFUSAL message — names the real deploy set too', () => {
+    // Step-4 CONDITION 2 (Langston): this is a SECOND hand-maintained copy of the
+    // six, and nothing referenced it. USAGE was fenced; this was not. Add a
+    // seventh non-machine actor and the refusal would name an incomplete set TO
+    // THE PERSON BEING REFUSED — silently, and at exactly the moment they need it
+    // to be right.
+    const src = readScript();
+    const list = /^DEPLOY_ACTOR_LIST="([^"]+)"/m.exec(src);
+    if (!list) throw new Error('FAIL-CLOSED: no DEPLOY_ACTOR_LIST= line in dt-deploy.sh');
+    for (const v of deployCanonical) {
+      expect(list[1], `refusal message omits '${v}'`).toContain(v);
+    }
+  });
+
   it('the gate runs BEFORE the lock is taken', () => {
     const src = readScript();
     const gate = src.indexOf('BY_CANON="${DEPLOY_ACTORS[$BY_KEY]:-}"');
@@ -149,12 +163,17 @@ describe('dt-deploy --by parity with ALERT_ACTORS (B-DEPLOY-ACTOR-ALLOWLIST)', (
     expect(gate).toBeLessThan(lock);
   });
 
-  it('no refusal echoes the raw --by value', () => {
+  it('NO refusal in this script echoes a raw user value — all five sites', () => {
     const src = readScript();
-    // The four refusal sites found at Step 2. None may interpolate the value.
+    // Four were found at Step 2. Step-4 CONDITION 3 (Langston) found the fifth:
+    // `:59` echoed a raw --pre-restart value two lines from the --by fixes, and
+    // the change list's own evidence row claimed "no refusal interpolates the raw
+    // value" while it stood. The test is now scoped to the whole script, which is
+    // what the prose already said.
     expect(src).not.toContain("--by value '$2'");
     expect(src).not.toContain("duplicate --by ('$BY' then '$2')");
     expect(src).not.toContain("'--by $BY' must be");
     expect(src).not.toContain('unrecognised argument: $1');
+    expect(src).not.toContain("--pre-restart value '$2'");
   });
 });
