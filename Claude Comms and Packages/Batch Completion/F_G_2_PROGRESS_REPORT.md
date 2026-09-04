@@ -1,7 +1,42 @@
-# OPEN — F-G-2 / `B-EXIT-TRANSACTABLE-SIDE` — PROGRESS REPORT (observation window)
+# OPEN — F-G-2 / `B-EXIT-TRANSACTABLE-SIDE` — PROGRESS REPORT ⛔ **WINDOW VOID 2026-09-05, AWAITING RE-OPEN — SEE §0**
 
 > **Status: DEPLOYED, IN OBSERVATION. Not closed.** Converts to `F_G_2_COMPLETION_REPORT.md` only when the pre-registered data is in AND a decision has been taken on it (workflow-10 rule, 2026-08-26). Card: `Verification` → `Observation` once Step 8 clears.
 > **Written 2026-09-02 by CC-C; r2 after Langston's Step-8 verdict 09:21Z (CONFIRMED on the deployed state, SENT BACK on the record and on §4a); r3 after his 09:33 confirmation — A2 re-pre-registered as UNPRICED (his own correction) and A3's witness-absent rows as a primary/sensitivity pair. Step 8 CLOSED on his "take it as read" once these landed. Every correction is IN THE BODY, not stacked. Every number names its object and population; every criterion is pre-registered BEFORE the data it judges exists.**
+
+## 0. ⛔⛔ **WINDOW DECLARED VOID 2026-09-05 ON KYLE'S DIRECTION — RE-OPENED AFTER THE LEVEL-BASIS AND REACHABILITY WORK LANDS. READ THIS BEFORE §4a.**
+
+⛔ **THE OBJ-0 OBSERVATION WINDOW THAT OPENED `2026-09-04T16:08:02Z` IS VOID. IT IS NOT RUNNING. NOTHING BELOW THIS SECTION IS A LIVE MEASUREMENT UNTIL A NEW ANCHOR IS RECORDED HERE.**
+★ **Sited at the TOP deliberately: a reader who opens this file at §4a and finds a criterion with an anchor date would take the window as live. That is the stale-reads-as-live failure this project keeps paying for, and the fix is placement, not a footnote.**
+
+### ✅ THIS IS THE PRE-REGISTERED PATH, NOT AN IMPROVISATION
+§4a already carried it, written 2026-09-03 BEFORE either batch deployed: *"If a deploy becomes unavoidable, this window is declared **VOID and re-opened — not split** — and the reason is recorded here."* ⇒ **This section IS that record.** ⛔ **No criterion is relaxed, no floor is lowered, and nothing is re-registered to fit data — because there IS no data (see below).**
+
+### ⭐⭐ WHAT IT COSTS: **ZERO QUALIFYING OBSERVATIONS. MEASURED, WITH A CONTROL.**
+| measured at `closed_trades`, `asset_class='crypto_spot'`, `closed_at IS NOT NULL` | n |
+|---|---|
+| crypto closes **since the window opened** (`>= 2026-09-04T16:08:02Z`) | **0** |
+| …carrying an `fg2Shadow` stamp | **0** |
+| …`seededFrom='cold'` (the qualifying population) | **0** |
+| …carrying `bidFirstExit` | **0** |
+| ⭐ **POSITIVE CONTROL — same instrument, the 7 days BEFORE the window** | **24 closes, 7 carrying the stamp** |
+⇒ ✅ **The zero is REAL, not an instrument that cannot see.** ⛔ **Voiding this window discards NOTHING.** ⚠️ **My own framing to Kyle before I measured said we would "throw away the data collected so far" — the window was eight hours old and had banked nothing. Corrected here because the wrong number was the one arguing for my recommendation.**
+
+### ⛔⛔ AND THE CONTROL SURFACED SOMETHING WORSE THAN THE COLLISION — **THE FLOORS LOOK UNREACHABLE AT THE OBSERVED CLOSE RATE**
+**24 crypto active closes in 7 days ≈ 3.4/day, of which 7 carried the shadow stamp ≈ 1/day.** Against the pre-registered floors — **30** cold-seeded closes for the 2×2 and **52** stop-side bid-arm first exits for the brake — **14 days at that rate yields on the order of 14 stamped closes, and the brake's floor is 52.**
+⇒ ⛔ **AS SCOPED, THIS WINDOW LOOKS UNDERPOWERED BY A FACTOR OF SEVERAL, AND WOULD HAVE RETURNED `INCONCLUSIVE` ON THE BRAKE.** ★ **The report ALREADY pre-registered that outcome honestly** (*"52 … may well NOT EXIST in 14 days at ~30 closes/day. If the floor does not fill, THE GUARD IS THE ANSWER"*) — **so the SAFE DEFAULT was never at risk.** ⛔ **But the `~30 closes/day` figure that reasoning rests on is NOT the OBJ-0 population**: OBJ-0 counts **crypto ACTIVE closes carrying `fg2Shadow`**, and the measured rate of that population is **~1/day**. ⚠️ **STATED AS A LEAD, NOT ESTABLISHED: I have NOT traced where `~30/day` came from, and the obvious candidate is the VTS learning population, which is a different table and must never be blended with active** (`MEMORY_CC_C`, standing). **That trace is owed before the window re-opens.**
+⇒ ⭐ **SO THE VOID BUYS SOMETHING BEYOND THE SEQUENCING: the window gets re-derived on its OWN population before it runs again, instead of running 14 days to reach a foregone `INCONCLUSIVE`.**
+
+### ⇒ THE ORDER, AS KYLE DIRECTED IT (2026-09-05)
+**`B-PRICE-SIDE-BY-JOB` finishes and deploys → the reachability work (`F-5` structure → `F-E` on the closed history → the fit) → THEN this window re-opens against the changed system.**
+★ **AND THIS IS A RULE I HAD ALREADY WRITTEN AND THEN ARGUED AGAINST.** `MEMORY_CC_C`, standing: *"THE RESET IS LAST — opened earlier it measures the old ruler again."* ⛔ **This window opened 2026-09-04, BEFORE the level-basis change. By my own recorded sequencing it opened too early, and I recommended holding the change to protect it.** **Kyle caught it. Recorded because the failure is not the collision — it is that I had the rule and did not apply it to my own window.**
+
+### ⚠️ WHAT IS **NOT** VOID — THREE THINGS, SO NOTHING IS OVER-READ
+1. ✅ **OBJ-5a / 5b / 5c ARE SHIPPED AND STAY SHIPPED.** VTS mark-booked exits, the maker-fee leg and the `calibration_epoch` cut are **deployed behaviour, not window-gated.** The `vts` epoch boundary (crypto 5 / xStock 6) stands and rows must still never be pooled across it.
+2. ✅ **THE SHADOW ARM ITSELF KEEPS RUNNING — the INSTRUMENT is not being withdrawn, only the WINDOW.** ⛔ **This is a RECOMMENDATION pending Langston, not a decision taken:** leaving it armed costs nothing, keeps the seeding path exercised, and means the re-open needs only a new anchor rather than a redeploy. **If he rules it should be stood down, that is his call and it is recorded here either way.**
+3. ⛔ **THE SWITCH IS NOT MADE.** Exits still trigger and book on the MID throughout the interim. ⇒ **`B-PRICE-SIDE-BY-JOB` OBJ-3b (level-basis ↔ trigger-basis COHERENCE) has NO disposition to read at its deploy, so it does NOT ship with OBJ-3a — it waits for the re-opened window.** ★ **OBJ-3a (per-leg level transactability) is unaffected and ships: the scope split them for exactly this reason.**
+⚠️ **AND A TRANSITION ARTEFACT THAT APPLIES UNDER EITHER ORDERING, NAMED NOW: positions OPEN at the level-basis deploy carry mid-derived levels while positions opened after carry transactable-side levels.** **A mixed population, unavoidable, and it must be a stated exclusion in the re-opened window rather than discovered inside it.**
+
+---
 
 ## 1. WHAT THE BATCH IS FOR, AND WHAT SHIPPED
 Exit decisions read a book MIDPOINT — a price nobody can transact at — while a sell fills on the BID (scope §2: post-book-fix crypto stop-outs land below their stop 24 of 24). F-G-2 (a) measures the bid-side decision as a SHADOW arm before switching anything (OBJ-0/OBJ-1, crypto), and — folded in on Kyle's 2026-09-02 directive — (b) makes VTS book **mark-booked** exits instead of TEC's clamp (OBJ-5a), charge the MAKER entry fee where a maker was actually paid (OBJ-5b), and cut the VTS learning history at ONE epoch boundary (OBJ-5c). xStock decision-side legs are HELD (§7.4 rows 1-2); the xStock fee site is EXEMPT and ships (row 3).
