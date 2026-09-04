@@ -394,6 +394,53 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 ➕ **WHO READS THE HEARTBEAT (condition 3) — ANSWERED HONESTLY RATHER THAN INVENTED.** **Reader: THIS SESSION, at its own hourly crew heartbeat**, which already prompts a watcher check. ⛔ **RESIDUAL, NAMED: if the session dies, the watch dies with it and NOTHING NOTICES.** ✅✅ **CLOSED 2026-08-29 (Langston's five-minute fix): the window is now ARMED AS A SELF-RESCHEDULING SYSTEM ALERT, `2093a98a-1439-49cb-a8c6-27687c87ed77`, `triggers_at 2026-09-04T16:08:02Z`, owner CC-C, dedupe `f-g-1-close-window`.** ★ **AND THE ENTIRE READ PROCEDURE TRAVELS INSIDE THE ALERT BODY — all nine pre-registered rules, 2,233 chars — so whoever picks it up does not need this file, this session, or me.** ⚠️ **§9.4 SANCTIONS THE DATE HERE and it is the one legitimate case: a window whose LENGTH IS THE CONTENT** (30 crypto opens or 7 days from `2026-08-28T16:08:02Z`) — **a measurement parameter, not a fake commitment.** ⇒ **the criterion no longer depends on a session staying alive.** ★ **What makes that survivable is the census above, not a second watcher: the criterion reads DURABLE rows — `closed_trades` + `rtb_shadow_pairings` — so a dead watch now costs LATENCY ONLY, on every slice.** ⚠️ **That was NOT true an hour ago**, when the `never_filled` entry leg was believed perishable and the watch was genuinely load-bearing.
 
 ---
+
+### 3m. ✅✅ THE WINDOW CLOSED AND THE CRITERION IS READ — **PASS ON BOTH LEGS** (2026-09-04T17:17Z; alert `2093a98a` fired at the 7-day mark)
+
+⛔ **APPENDED, NOT EDITED. The criterion in §3 and its amendments §3d-§3l are untouched — this section is the RESULT read against them.**
+
+**WHICH ARM FIRED, SAID OUT LOUD (§3h(3)):** the **7-DAY ARM**, not the 30-count arm. Window opened `2026-08-28T16:08:02Z`, ended `2026-09-04T16:08:02Z`; **read at `2026-09-04T17:17:41Z`, i.e. AFTER the close, verified against `now()` on the database rather than assumed.** **24 crypto opens < 30**, exactly as §3h(3) predicted when it recorded *"the 7-day arm is likely to fire before the 30th open."*
+
+**POPULATION, WITH THE CLASS SPLIT MANDATORY AT READ TIME (§3h(1)):**
+
+| class | n | closed | open | source |
+|---|---|---|---|---|
+| **`crypto_spot`** | **24** | 23 | 1 | `closed_trades WHERE closed_at IS NOT NULL` + `active_open_positions` |
+| **`xstock_spot`** | **19** | 15 | 4 | same |
+
+**RESULT — every leg, both classes, exact decimal arithmetic (`mod(price, tick) = 0` on `numeric`, NOT a float tolerance):**
+
+| class | entry off-grid | stop off-grid | target off-grid |
+|---|---|---|---|
+| **`crypto_spot`** | **0** | **0** | **0** |
+| **`xstock_spot`** | **0** | **0** | **0** |
+
+✅ **NEGATIVE CONTROL, REQUIRED BEFORE ANY ZERO IS READ AS EVIDENCE:** perturbing every scoreable entry by **one tenth of its own tick** gives **`ok=0, off=22` (crypto)** and **`ok=0, off=16` (xStock)**. ⇒ **the instrument CAN say OFF-GRID, so the zeros above are measurements and not silence.**
+
+**EVERY UNSCOREABLE ROW ITEMISED — a null is not a pass:**
+| class | unscoreable | why, and the pre-registered rule that covers it |
+|---|---|---|
+| `crypto_spot` | **2** | `never_filled` (APR/USD, CRV/USD). **§3k decided BEFORE the data that these COUNT toward the 30** and legitimately carry no `intended_entry_price`; **their stop and target ARE scored and both are on-grid.** |
+| `crypto_spot` | **0 unstamped** | ⭐ **every crypto row carries `gridAtBirth` with `resolved: true`. No BYPASS finding.** |
+| `xstock_spot` | **3** | `DE/USD`, `DOW/USD`, `FANG/USD` — all three stamped **`{"resolved": false, "reason": "unresolved_grid"}`**. ⇒ **the PASSTHROUGH ARM, which §3 defines as a PASS**: *"on-grid OR the symbol absent from the derived map at open time."* |
+
+⇒ ✅✅ **CRYPTO PASSES ITS ABSOLUTE BAR: 100% of entry, stop and target on their own published grid, no tolerance, zero exceptions, n=24.**
+⇒ ✅ **xSTOCK PASSES: zero off-grid legs, and the three unscoreable rows are the designed passthrough, stamped as such rather than inferred.**
+
+### ⭐⭐ AND §3f's "IT BITES ZERO ROWS TODAY" AMENDMENT IS WHAT PREVENTED A FALSE FAIL
+
+**§3f corrected the exclusion interval from `…→17:49:00Z` to `…→18:05:22Z` and recorded: *"IT BITES ZERO ROWS TODAY — nothing opened in the gap — which is precisely why fixing it is free and why leaving it would not have been defensible. A latent false-defect trigger costs nothing until it fires."***
+⇒ ⛔ **IT NOW BITES EXACTLY ONE ROW, AND IT IS THE ONLY ROW IN THE ENTIRE WINDOW THAT CARRIES *NO* `gridAtBirth` KEY AT ALL: `WEN/USD`, opened `2026-08-28T16:25:28Z` — 17m26s after the window ref and INSIDE the corrected exclusion interval.**
+★★ **Under §3e's original interval WEN would have been IN the scored population, unstamped, with no pre-registered rule covering it — an unexplained row on a leg whose bar is absolute. The amendment Langston required when it demonstrably changed nothing is the reason this read has no unexplained row.** ⇒ **the post-exclusion `no_key` count is **0**.**
+
+### ⚠️ TWO INSTRUMENT ERRORS I MADE DURING THIS READ, CORRECTED BEFORE THE VERDICT — RECORDED BECAUSE THE VERDICT RESTS ON THE INSTRUMENT
+
+1. ⛔ **I DOUBLE-COUNTED EVERY OPEN POSITION.** My first population unioned `closed_trades` with `active_open_positions` — and **`closed_trades` rows are written AT OPEN**, so the five currently-open positions appeared in both. It reported **crypto 25 / xStock 24**; the true, non-overlapping counts are **24 / 19**. ★ **This is a trap recorded in my own working memory, verbatim — *"always filter `closed_at IS NOT NULL` (rows are written AT OPEN)"* — and I walked into it anyway.** Fixed by filtering `closed_at IS NOT NULL` on the closed arm.
+2. ⛔ **MY OWN NULL-ACCOUNTING LABEL WAS A WRONG-OBJECT.** It labelled rows `(still open)` from a NULL `close_reason`, which is true of open rows **and** of closed rows with no reason — so it reported five positions as "open with no intended entry" when **the open rows all carry intent (crypto 1/1, xStock 4/4)**. The five were `closed_trades` rows written at open. **Caught by a follow-up query that asked the open table directly rather than trusting the label.**
+
+⇒ ⚠️ **Both were caught before the verdict and neither changed it — the off-grid count was zero under every population I tried. Recorded anyway: a verdict is only as good as the instrument, and this instrument needed two corrections to become the one the criterion asks for.**
+
+
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
