@@ -118,6 +118,19 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 
 ---
 
+
+---
+
+⭐⭐ **SECOND BATCH — `B-PRICE-SIDE-BY-JOB`, CC-C, 2026-09-04. n=1, AND IT CROSSES THE 2-BATCH BOUNDARY** (promotion floor is 3+ across 2+ distinct batches; this is instance 8 across batch 2, so the FLOOR IS NOW MET — see the promotion note below).
+
+**THE INSTANCE.** A Step-2 audit enumerated every signal-production entry point repo-wide — six clock subscribers, two timers — and the enumeration was **complete and correct**. It then traced from one entry point and **concluded that all strategies build levels from a smoothed price**. `signal-orchestrator.ts` carries **TWO** price bases: `:2207` a bar close, `:2425` a smoothed mid. The audit found only the second.
+
+⛔⛔ **THE FIRST DIAGNOSIS WAS WRONG, AND THE WRONG ONE WAS THE FLATTERING ONE — RECORDED BECAUSE THAT IS THE HALF THAT TEACHES.** I wrote that the miss was *structural*: *"the pattern lane is not an entry point, so a correct enumeration cannot surface it"* — i.e. a gap in `§9.5`'s shape rather than in my execution. **Langston refuted it at the object:** `:1973 evaluateMarket()` **calls** `:2360 evaluateSymbol()` at **`:2106`**, and the missed basis sits in `evaluateMarket`'s **own top-level body**. ⇒ **the enumerated entry point DOES reach it. I followed the call I was tracing and stopped reading the function I was in.**
+⇒ ⛔ **AND THE DISCRIMINATOR I PROPOSED — *"does this ONE function carry TWO bases?"* — WOULD ALSO HAVE MISSED IT: no function does.** The two bases are in two different functions.
+
+✅ **THE DISCRIMINATOR THAT ACTUALLY FIRES, AND IT IS TWO LINES: CENSUS THE ASSIGNMENTS TO THE CONSUMED IDENTIFIER, NOT THE CALLERS OF THE FUNCTION.** `const currentPrice =` occurs **exactly twice** in that file. ⇒ **before tracing what a value DOES, enumerate everywhere that value is SET.**
+
+⛔⛔ **AND THE META-LESSON IS THE ONE WORTH THE SLOT: I ASKED FOR A FALSE GOVERNANCE GAP TO BE FILED.** Had it landed, `§9.5` would carry a recorded weakness it does not have — **eroding a rule on a false premise, which is `#453` aimed at our own governance.** ★ **A miss diagnosed as a rule's fault is a claim about the rule, and it needs presence-evidence exactly like any other absence claim.** *(Langston: "filing 'the rule could not reach this' on a case the rule does reach".)*
 ### `shared-tmp-message` — **THE PATH WAS MINE, THE FILE WAS SHARED, AND THE CONTENT ARRIVED THROUGH A CHANNEL NO GUARD INSPECTS** — **NEW 2026-08-31, n=1** · mechanism: **NONE YET — `B-SHARED-TMP-ISOLATION`, `PHASE_19_PLAN` 2.6**
 
 **INSTANCE 1 — `B-CROSS-SESSION-BLEED` P9, CC-B, 2026-08-31.** `git commit -F /tmp/m14.txt -- <my explicit paths>` produced **my change set carrying another session's commit message** (`#969: retroactive pre-audit filed…`). Artifact `a9366f5e4`; corrected at `0264f24f7` with an **identical tree hash**, so only the message moved.
