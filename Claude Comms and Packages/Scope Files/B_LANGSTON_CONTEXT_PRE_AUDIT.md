@@ -259,3 +259,25 @@
 | **P-6** | ledger WRITE rule | as §9, **PLUS fold §13: `LEDGER_SOURCES[0]` (`/home/langston/LEDGER.md`) is dangling — same object, one fix** |
 | **P-4** | ledger home | ⛔ **ABSORBS `PHASE_19_PLAN` row 2.8** (was: absorb-or-defer). The split target is already read-supported by `LEDGER_SOURCES[0]` |
 | **P-7** | usage instrumentation | ⛔ **KEPT WHOLE — not partly discharged.** The byte log **stats files and says so in its own `measures` field**; the **sentinel method** it names is the positive control |
+
+---
+
+## ✅ 12. STEP-2 APPROVED 2026-09-04 20:36Z — "proceed, P-7 first". FOUR CONDITIONS, three of them pre-P-1b
+
+**He re-derived at the object, pinning the artifact by content hash:** `MEMORY.md` sha256 `d42e946b…40ad49`, **61,155 B**, written 19:29Z. *(It has grown again: 59,463 → 61,155 B.)*
+
+⛔⛔ **C-1 — MY BLOCKER-A FIX IS NOT EXECUTABLE, AND IT IS THE SAME ERROR A THIRD TIME.** *"Heading + line at a stated ref"* fails three ways:
+1. ⛔ **HEADING IS NOT A UNIQUE KEY IN THIS FILE — two `## ` headings both name `F-G-2 / B-EXIT-TRANSACTABLE-SIDE` (`:193`, `:202`).** Both are keepers so nothing burns today, **but a non-injective key cannot be a deletion criterion.** ★ **BLOCKER-A one level further down, inside its own fix, again — that is now THREE levels: count → set → key.**
+2. ⛔ **IT DOES NOT TYPE-CHECK ACROSS MY OWN CANDIDATE SET.** `:19 :43 :44 :78 :88` are **BULLETS with no heading**; `:154 :157 :160 :163 :166` are **TRAILER lines** whose removal unit is the **enclosing section** (`:153 :156 :159 :162 :165`). **Three object types in one "set", and I never stated the removal UNIT.**
+3. ⛔ **"AT A STATED REF" IS UNDEFINED FOR THIS ARTIFACT** — it is not a git object and it has **concurrent writers** (the §10.b `scp`+`cp`). ⇒ **pin by CONTENT HASH asserted at enumeration AND RE-ASSERTED IMMEDIATELY BEFORE THE CUT.**
+
+⛔ **C-2 — `6,057` IS CHARACTERS; UTF-8 BYTES ARE `6,162`.** P-4's own criterion is *"two independent measurers get the same byte count"* — **it would fail on its first use.** ⇒ **name the UNIT and the TOOL wherever a size is asserted.**
+
+⛔⛔ **C-3 — `LEDGER_SOURCES[0]` IS NOT MERELY DANGLING, IT IS THE PRIORITY SLOT, FIRST-WINS.** ⇒ **the moment P-4/P-6 creates `/home/langston/LEDGER.md`, the tool STOPS READING `MEMORY.md`.** **The 8-entry gate must run against whichever source WINS, and if both parse and disagree in count the tool must REFUSE, not silently prefer `[0]`** — otherwise **the split is itself the silent-truncation event BLOCKER-B exists to prevent.**
+
+✅ **C-4 — CORRECT `PHASE_19_PLAN` ROW 2.8 IN PLACE, NOT MERELY SUPERSEDE IT.** Its `34,605 B` is FALSE; **he measured 11,245 B independently and matched my correction**, which is *under* the cap — so the row's argument (*"the two rules cannot both hold"*) is refuted. **Absorption inherits the premise.** ✅ **DONE 2026-09-04, corrected in place, carrying the missing-boundary finding.**
+⚠️ **AND THE SAME CLASS CAUGHT IN MY OWN PLAN: P-5's `126,457 B` is STALE — `139,955 B` today (66,994 + 61,155 + 11,806) — while P-3 in the same document says a size line must name WHERE to read, never what it is.**
+
+✅ **THE `__pycache__` RESIDUAL IS CLOSED, and he withdrew his own instrument:** *"`:298` cannot be reached without removing the ledger source; sending you at its literal was the wrong instrument."* **Closed on two measurements instead: (1) `langston-recall` runs the script as the TOP-LEVEL module, and CPython never reads or writes `__pycache__` for `__main__` — the cached bytecode is not on the execution path at all; (2) the `.pyc` is timestamp-validated (`flags=0`) with header source-mtime `1786048191` / size `21573`, both matching the current `.py`.**
+
+⇒ ⛔ **P-1b DOES NOT START UNTIL THE IDENTIFIER IS NAMED. P-7 IS CLEARED AND STARTS NOW.**
