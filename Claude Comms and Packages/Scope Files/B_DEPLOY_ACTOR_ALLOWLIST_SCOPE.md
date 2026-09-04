@@ -1,4 +1,4 @@
-# B-DEPLOY-ACTOR-ALLOWLIST — SCOPE (r1)
+# B-DEPLOY-ACTOR-ALLOWLIST — SCOPE (r2)
 
 change-class: non_architecture
 
@@ -11,9 +11,18 @@ change-class: non_architecture
 
 `scripts/dt-deploy.sh:81` validates `--by` **by SHAPE ONLY**: `^[A-Za-z0-9_-]{2,24}$`. Anything matching that charset is accepted and written to the deploy record as `deployed_by_claimed`. **`cc-session-2026-09-04` passes.** So does any typo, any abbreviation, and any spelling a session invents.
 
-**MEASURED, and the population is small by construction — stated rather than inflated:** the record at `/home/deploy/dawntrader-deploy.record` **holds only the most recent deploy** (it is overwritten, not appended), so there is no historical population to count. What I have is **direct observation across 2026-09-02→04: three deploys, three different spellings — `ANALYST-Claude`, `CC-B`, `cc-c`.** Three sessions, three forms, zero agreement. ⛔ **I am NOT claiming a rate or a total; the instrument cannot produce one.**
+⭐⭐ **THE POPULATION IN r1 WAS WRONG AND IT WAS WRONG IN MY OWN FAVOUR'S DIRECTION BUT FOR THE WRONG REASON — CORRECTED HERE BEFORE LANGSTON RULED ON IT (CC-C, 2026-09-04, re-derived by me at the objects).**
+> **PREVIOUSLY STATED:** *"three deploys, three different spellings — `ANALYST-Claude`, `CC-B`, `cc-c`. Three sessions, three forms."*
+> **NOW: three SESSIONS, FOUR spellings, five recorded deploys — and TWO OF THE SPELLINGS ARE THE SAME SESSION ONE DAY APART.**
+> **REASON:** I attributed one spelling per session by assumption. `ANALYST-Claude` and `cc-c` are BOTH CC-C — `ANALYST-Claude` on his `F-G-2` deploy `2cc4a03ec` (2026-09-02T08:49:47Z) and again on the `093d1878f` rider deploy the same day, then `cc-c` on `B-XSTOCK-FEED-SANITY` `1a71c553b` (2026-09-03T19:28:48Z, still the live record). ⛔ **I never checked WHO used which form; I inferred it from the string.** That is `wrong-object` in its purest shape: a matching name is not a matching thing.
 
-⚠️ **AND THE VALUE IS BOUNDED BY THAT SAME FACT: fixing this makes the CURRENT deploy attributable and consistent. It cannot repair history, because history is not kept.** The consumer that cares is the daily `dt-deploy` observation, which reads the record's single row.
+**THE INSTRUMENT ALSO IMPROVED, and r1 understated what was measurable.** r1 said the live record holds one row so there is no historical population — **true of the record, FALSE of the system.** The batch completion reports record the `--by` value at every deploy, and they are a real corpus.
+**MEASURED at `origin/migration/aws-supabase`, object = every `--by`/`deployed_by_claimed` occurrence in `Claude Comms and Packages/Batch Completion/`, population = all such occurrences, none excluded:** `ANALYST-Claude` ×2 (CC-C) · `cc-c` ×1 (CC-C) · `cc-a` ×1 (CC-A) · `CC-B` ×1 (CC-B). **Five attributions, three sessions, FOUR distinct spellings, and the canonical set would accept exactly ONE of the four.**
+
+⭐ **AND THE INTRA-SESSION CASE IS THE STRONGER ARGUMENT, which is why the correction helps rather than hurts (CC-C's point, and I agree with it).** Inter-session variation can be argued away with a convention, a roster line, or a note in a memory file. **Intra-session drift cannot: CC-C used one form and then the other, one day apart, having just used the first.** ⇒ **no habit, no roster and no reminder fixes an unconstrained field — only a gate does.**
+
+⚠️ **WHAT IS STILL BOUNDED, and the correction does not lift it: the live record holds only the MOST RECENT deploy. Fixing this makes every FUTURE deploy attributable and consistent. It cannot repair history — the historical evidence above lives in the reports, not in the record.** The consumer that cares is the daily `dt-deploy` observation, which reads the record's single row.
+⛔ **NO RATE AND NO PROJECTION IS CLAIMED. Five is the whole observed population, not a sample.**
 
 ---
 
@@ -73,3 +82,4 @@ change-class: non_architecture
 
 ## 9. REVIEWER LOOP RECORD
 `REVIEWER r1: <pending>`
+`CC-C r1 (unsolicited, exception (c)): claim-only, on the spelling population · HIT — two of the three spellings were one session · RE-DERIVED at the objects (F_G_2_PROGRESS_REPORT:9,:21 and the live record) · scope corrected to r2 before Langston ruled.`
