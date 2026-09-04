@@ -49,10 +49,48 @@ Enumerated from `shared/schema.ts` by walking every `pgTable` declaration and co
 | `trades` | 1 | 0 | `storage.ts` |
 | `trading_signals` | 2 | 0 | `services/trading-signals-cleanup.ts`, `storage.ts` |
 
-⇒ ★★ **EVERY PERSISTED LEVEL IN THE SYSTEM PASSES THROUGH EXACTLY THREE FILES — AND, WITHIN THEM, 20 FUNCTIONS (§3b(4)). SAY BOTH NUMBERS; "three files" ALONE READS AS A CHOKE POINT IT IS NOT:**
+⛔⛔ **SUPERSEDED BY §3a — THIS SAID *THREE* FILES AND THE TRUE ANSWER IS *FIVE*. The row below is the ORM-derived subset and is retained only so the correction is legible:**
 **`server/storage.ts`** · **`server/services/rtb-shadow-store.ts`** · **`server/services/trading-signals-cleanup.ts`**
 
 ✅ **NO TABLE IN THE SINK SET HAS ZERO WRITERS.** Stated explicitly: the earlier zero was an instrument artefact, not an absence.
+
+## 3a. ⛔⛔⛔ THE SINK SET IN §1 WAS **NOT** THE SINK SET — IT WAS THE ORM'S VIEW OF IT. THREE SEPARATE BLIND SPOTS, EACH FOUND ONLY BY A DIFFERENT INSTRUMENT
+
+⚠️⚠️ **§1 CLAIMED "9 TABLES, 26 COLUMNS, CLOSED AND CHECKABLE". THAT WAS FALSE, AND THE WHOLE METHOD RESTS ON IT** — Langston's condition was *complete by construction over the sink is only as complete as the SINK ENUMERATION*, and mine was not complete. **RE-DERIVED FROM `information_schema` ON THE LIVE DATABASE — the authoritative object, not the ORM's description of it:**
+
+### ★ THE TRUE SINK SET: **27 PHYSICAL TABLES / 14 LOGICAL** (13 of the 27 are `exit_decision_archive` monthly partitions)
+
+| logical table | level columns | in §1? |
+|---|---|---|
+| `active_open_positions` · `closed_trades` · `execution_attempt_audit` · `historic_signals` · `paper_trades` · `rtb_shadow_pairings` · `rtb_signals` · `trades` · `trading_signals` | — | ✅ had |
+| ⛔ **`vts_open_trades`** | `entry_price, stop_loss, take_profit` | **MISSED** |
+| ⛔ **`exit_decision_archive`** (+13 partitions) | `entry_price` | **MISSED** |
+| ⛔ **`paper_sim_ghost_trades`** | `entry_price, stop_loss, take_profit` | **MISSED** |
+| ⛔ **`paper_sim_trades_user_archive`** | `entry_price, stop_loss, take_profit` | **MISSED** |
+| ⛔ **`paper_sim_open_positions_user_archive`** | `stop_loss, take_profit` | **MISSED** |
+
+⇒ **I HAD 9 OF 14. THE ENUMERATION MISSED FIVE.**
+
+### ⛔⛔ THREE DISTINCT BLIND SPOTS — AND NO SINGLE INSTRUMENT WOULD HAVE FOUND ALL THREE
+
+| # | the blind spot | what it hid | how it was found |
+|---|---|---|---|
+| **1** | the walk matched only the **ORM form** `.insert(<obj>)` | `rtb_shadow_pairings` — written by **raw SQL** | the 70-site grep **control** |
+| **2** | the sink set was enumerated from **`shared/schema.ts`**, so a table with no `pgTable` declaration is invisible | ⛔ **`vts_open_trades` — WHICH DOES NOT APPEAR IN `shared/schema.ts` AT ALL** | **Langston**, grepping the CLASS after I graded the INSTANCE |
+| **3** | the raw-SQL pattern matched a **literal table name**, so a name held in a variable is invisible | ⛔ **`exit_decision_archive` — `exit-decision-archiver.ts:20` is `const TABLE = 'exit_decision_archive'`, and the SQL is built from the constant** | re-deriving the sink set from `information_schema`, then chasing the one live table with no writer |
+
+★★ **THAT IS THE RESULT WORTH KEEPING FROM THIS DOCUMENT: EACH INSTRUMENT WAS CORRECT AND EACH WAS BLIND TO A DIFFERENT MEMBER CLASS — the `enumerator-blind-spot` shape, three times, inside the census built to be complete.** ⇒ **"Complete by construction" is a claim about the ENUMERATION, never about the walk.** The only reason all three surfaced is that a *different* instrument was pointed at each: a control, a reviewer, and the database itself.
+
+### ✅ THE CORRECTED WRITER SET — **FIVE FILES, NOT THREE**
+
+`server/storage.ts` · `server/services/rtb-shadow-store.ts` *(raw)* · `server/services/trading-signals-cleanup.ts` · ⛔ **`server/services/vts-trade-persistence.ts`** *(raw — `insertOpenTrade`, `:141` `INSERT INTO vts_open_trades (… entry_price, stop_loss, take_profit …)`)* · ⛔ **`server/services/data-archive/exit-decision-archiver.ts`** *(raw, table name in a constant)*
+
+### ★ AND THREE OF THE FIVE MISSED TABLES ARE DEAD — STATED WITH EVIDENCE, NOT INFERRED FROM THEIR NAMES
+
+**MEASURED on the live database:** `paper_sim_ghost_trades` **0 rows**, `paper_sim_trades_user_archive` **0 rows**, `paper_sim_open_positions_user_archive` **0 rows** — **and ZERO production references each** across `server/` and `shared/`. ⇒ **level-carrying tables that nothing writes and nothing reads: §15 lingering legacy, disposition (5).** *(Control: `exit_decision_archive` in the same query returns **2,685 rows** and six production references, so the instrument distinguishes live from dead.)*
+⇒ **`HOME: B-ORPHAN-LEVEL-TABLES, owner CC-C, placed in `PHASE_19_PLAN` after `3n.a` (`B-ORPHAN-ROOT-SCANNER`), same lingering-legacy class.**
+
+⚠️ **CONSEQUENCE FOR THE FIX, STATED PLAINLY: the enforcement surface is FIVE writer files, and the two raw-SQL ones (`vts-trade-persistence`, `exit-decision-archiver`) plus `rtb-shadow-store` all bind columns by string literal — so all THREE need the read-back fence, not one.**
 
 ## 3b. ⛔⛔ THE "ONE ASSERTION AT THREE WRITERS" HEADLINE WAS WRONG — LANGSTON ATTACKED IT AND ALL FOUR POINTS LAND
 
@@ -80,7 +118,7 @@ The Step-2 audit found **70 sites across 19 files that COMPUTE a level**. This c
 | | population | what it is for |
 |---|---|---|
 | **CONSTRUCTION** | 70 sites / 19 files | **where the change is made** — a level constructor must read a transactable price |
-| **PERSISTENCE** | **3 files** | ⭐ **where the change can be VERIFIED** — a narrow, closed choke point |
+| **PERSISTENCE** | **5 files** (§3a; was mis-stated as 3) | ⭐ **where the change can be VERIFIED** — a narrow, closed choke point |
 
 ⇒ ⛔ **A FENCE AT THE CONSTRUCTION SITES CAN ONLY EVER BE 70 SEPARATE ASSERTIONS THAT DRIFT INDEPENDENTLY. A CHECK AT THE THREE WRITERS IS ONE ASSERTION THAT EVERY LEVEL, FROM ANY LANE AND ANY FUTURE STRATEGY, MUST PASS.** That is the difference between a rule enforced by whoever remembers it and a rule enforced by the structure — **the same lesson `B-XSTOCK-FEED-SANITY` learned the hard way when its invariant lived in the caller** (Langston's C1, 2026-09-03).
 
