@@ -186,3 +186,31 @@ The Step-2 audit found **70 sites across 19 files that COMPUTE a level**. This c
 ---
 
 **STATUS:** P3 structural half **DONE** — the sink set is named and the writer set is closed at three files. **Remaining on P3: the lane attribution (blocked on the three untraced lanes) and the in-memory pass (item 2).**
+
+---
+
+## 6. ⭐⭐ ALL FOUR LANES TRACED — AND THE BATCH'S OPENING PREMISE IS **FALSE FOR LEVEL-SETTING**
+
+**The scope opens: *"A PRICE DOES FOUR JOBS AND WE USE THE MIDPOINT FOR ALL FOUR."* For the LEVEL-SETTING job that is now traced end to end, and it is true of ONE lane out of three.**
+
+| lane | level basis, traced to its origin | a midpoint? |
+|---|---|---|
+| **crypto — QUANT** (the 19-strategy dispatch) | `getSmoothedPrice` → `signal-orchestrator.ts:2425` → `computeContext :2450` → `mce:1434` → `:2515` | ⛔ **YES — a KALMAN-SMOOTHED MIDPOINT** (median gain 0.0952) |
+| **crypto — PATTERN** (Phase 14.5) | `:2207 parseFloat(ohlcData[last].close)` ← `:2378 ohlcCache.getOHLCData(symbol, 60)` ← **`ohlc-cache.ts:91/:103 krakenService.getOHLCData(...)`**, header `:6` *"Caches Kraken OHLC candle data"* | ✅ **NO — a VENUE-PUBLISHED 60-MIN CANDLE CLOSE** |
+| **xStock — ACTIVE + VTS** *(ONE lane, not two)* | `scanner.ts:910 latestBar.close` ← `:597 xstockOhlcCache.getOHLCDataBatch(symbolList, 15)` ← `ohlc-aggregator.ts:277 FROM xstock_spot_ohlc_1m` ← **`equity-spot-archiver.ts:270 for (const bar of msg.data) parseOhlcBar(bar)` — Kraken's own WS OHLC frames** | ✅ **NO — VENUE-PUBLISHED 1-MIN CLOSES, AGGREGATED TO 15 MIN** |
+
+### ✅ THREE THINGS THIS SETTLES, EACH MEASURED
+
+**(1) xSTOCK ACTIVE AND VTS ARE ONE LANE, NOT TWO.** `evaluateXstockPairForVTS` has **exactly ONE call site repo-wide** — `scanner.ts:934`, mode `'paper'` — and **exactly ONE assignment to its price argument**: `scanner.ts:910 const price = latestBar.close`. ⇒ **the Step-2 audit's "three untraced lanes" is really TWO, and both are now traced.**
+
+**(2) THE IDENTIFIER DIFFERS BY LANE, WHICH IS WHY THE EARLIER DISCRIMINATOR DID NOT TRANSFER.** The crypto file's basis identifier is `currentPrice` (**exactly two assignments**, `:2207` and `:2425`). **The xStock lane's is `price`, and its parameter is named `lastPrice`** (`eval-cycle.ts:304`). ⇒ ⛔ **"census the assignments to the consumed identifier" is correct, but the IDENTIFIER IS PER-LANE — a single name searched repo-wide would have found one lane and silently missed the other.**
+
+**(3) A "BAR CLOSE" HERE IS A VENUE PRINT, NOT A DISGUISED MID.** `#952` establishes that the crypto v1 `c` FIELD is overwritten with a midpoint — **so the obvious worry was that the bar closes inherit it.** ⛔ **THEY DO NOT: both bar paths come from Kraken's OWN OHLC** (REST candles for crypto, WS OHLC frames for xStock), **not from our tick cache.** ⇒ **the `#952` contamination reaches the TICK path, and the BAR path is independent of it.** ★ **Checked rather than assumed, because assuming it would have produced exactly the wrong batch.**
+
+### ⇒ WHAT THIS DOES TO THE BATCH
+
+⭐ **THE LEVEL-BASIS PROBLEM IS ONE LANE WIDE, NOT FOUR.** Only the crypto QUANT lane sets levels from a midpoint — and there the midpoint is additionally **damped to under a tenth of each tick** (audit A-4). ⇒ **P4's rule still stands, but its BLAST RADIUS collapses: the severance (level constructors stop reading the smoothed value) touches the crypto quant lane ALONE.**
+⚠️ **AND THE OTHER TWO LANES ARE NOT THEREBY "CORRECT" — THEY ARE A DIFFERENT QUESTION.** A venue-published bar close is a **real print**, but it is a **historical** one: the last completed bar, up to 15 minutes old on the xStock lane. ⇒ **it is not a midpoint problem; it is a STALENESS question, and it belongs to the freshness work at `3b.f-c`, not here.** ⛔ **Stated so this batch does not silently annex it.**
+
+⚠️ **UNCHANGED BY THIS SECTION: jobs 3 and 4 (triggering and booking) are `F-G-2`'s, and the exit path's midpoint is not in question here.** This section is about **where a LEVEL comes from**, nothing else.
+
