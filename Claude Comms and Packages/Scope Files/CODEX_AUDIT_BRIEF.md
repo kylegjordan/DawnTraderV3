@@ -1,8 +1,13 @@
-# DAWNTRADER V3 — AUDIT BRIEF FOR THE CODEX ADVISOR (r1)
+# DAWNTRADER V3 — AUDIT BRIEF FOR THE CODEX ADVISOR (r2)
 
 **Written by:** Claude New (CC-B), 2026-09-04, at Kyle's direction.
 **Your standing:** **ADVISOR, not a gate.** Nothing waits on you. Langston's review gates are unchanged and Kyle remains the sole decider. You are not blocking anyone, so take the time to be right rather than fast.
 **The assignment:** one full audit, done in one pass, delivered as a single document. Not piece by piece.
+
+> ⛔ **THE COMMIT YOU AUDIT — `5a7fc2eccef6c8d30b35006f3c27c53fb4d21da1`.**
+> **The tree:** `C:\DawnTrader-Audit` — a dedicated clone, detached at that commit, push-disabled at the git level.
+> ⛔ **BEFORE YOU READ ANYTHING ELSE, RUN BOTH AND PUT THE RESULTS AT THE TOP OF YOUR DELIVERABLE:** `git rev-parse HEAD` must equal the sha above, and `git status --porcelain` must be **empty**. **Every `path:line` you write is unanchored until you have done this** — if the tree moved or is dirty, your citations point at something nobody else can reproduce.
+> *(r2, Langston's condition: r1 said "a clone pinned to a stated commit" and never stated it. This is our own worktree-versus-ref defect, one layer out.)*
 
 ---
 
@@ -14,7 +19,7 @@
 
 - **What does this system ASSUME and never check?** An assumption nobody has stated is invisible to everyone who has been here since it was made.
 - **Where does the same mistake appear in more than one place?** One instance is a bug. Three instances with one shape is a flaw in how we build, and that is worth ten bug reports.
-- **What is DESIGNED CORRECTLY and IMPLEMENTED DIFFERENTLY?** We have a System Manual describing what the system is supposed to do. Divergences between it and the code are the highest-value thing you can find.
+- **What is DESIGNED CORRECTLY and IMPLEMENTED DIFFERENTLY?** We have a System Manual describing what the system is supposed to do. Divergences between it and the code are the highest-value thing you can find. ⛔ **BUT A DIVERGENCE NEEDS A THIRD INPUT BEFORE IT IS A FINDING** *(r2, Langston)*: §4(a) says our documents carry stale content, so *"the code does not match the Manual"* is, on its own, most often **documentation debt**. **Use the git history or the batch record to say WHICH SIDE MOVED.** A divergence where the CODE moved and the Manual did not is doc debt; one where the Manual states an intent the code never implemented is the finding you are looking for.
 - **Where does the maths not survive contact with the code?** A formula that is right on paper and wrong in units, in sign, in population, or in what it is applied to.
 - **What are we systematically over- or under-confident about?**
 
@@ -63,7 +68,21 @@ These are not hypotheticals. Each has burned one of us.
 
 **(d) `bridge/canonical/` IS PRE-GOVERNANCE HISTORY.** It records what we *intended* to build in an earlier architecture. **Never cite it as current truth.** Its value is intent — why something was built the way it was.
 
-**(e) THE BIGGEST TIME-WASTER, AND WE HAVE A RULE ABOUT IT:** *a deliberate, approved, reviewed decision reported as a defect is WORSE than no finding.* It burns review cycles and impugns work that was done correctly. **Before filing anything as a flaw, search `RUNNING_ISSUES.md`, `BATCH_CATALOG.md` and the completion reports for the component AND for the symbol.** If a code comment names its own provenance — a batch id, an issue number, "Langston-approved" — **follow it rather than reading past it.** A finding that survives that check is real; one that does not is a cross-reference, and still worth telling us about, just labelled differently.
+**(e) THE BIGGEST TIME-WASTER, AND WE HAVE A RULE ABOUT IT:** *a deliberate, approved, reviewed decision reported as a defect is WORSE than no finding.* It burns review cycles and impugns work that was done correctly. **Before filing anything as a flaw, search `RUNNING_ISSUES.md`, `BATCH_CATALOG.md` and the completion reports for the component AND for the symbol.** If a code comment names its own provenance — a batch id, an issue number, "Langston-approved" — **follow it rather than reading past it.**
+
+⛔⛔ **AND REPORT THAT SEARCH AS A THREE-VALUED RESULT ON THE FACE OF EVERY FINDING — NEVER AS A SILENT CLEARANCE.** *(r2, Langston: this check has the exact failure mode §4(c) warns about — names drift, so a symbol search over a 2.4 MB corpus WILL return false absences, and a not-found would read to you as cleared.)*
+| value | meaning |
+|---|---|
+| **FOUND-AND-CLOSED** | we already decided this. Say so, cite the entry — and tell us anyway if you think the decision was wrong, but label it a challenge to a decision, not a defect. |
+| **FOUND-AND-LIVE** | a known open item. Your finding may still add evidence or reach further. Cite the entry. |
+| **NOT FOUND** | ⛔ **A WEAK RESULT, NOT A CLEARANCE.** State the exact queries you ran and the corpora you searched, so we can spot the false absence in seconds — we have the history and you do not. |
+★ **This costs you one line per finding and costs your independence nothing.** It is deliberately better than us handing you a list of our known problems, which would anchor you and destroy the only thing you bring.
+
+⛔⛔ **(f) THE PINNED TREE CANNOT SEE THE LIVE CONFIGURATION — AND OUR REVIEWER RANKS THIS ABOVE THREE OF THE FOUR ABOVE.** *(r2, Langston, from his own retracted finding.)*
+**Much of this system's behaviour is governed by values in the DATABASE, not in the repository** — a settings table and a guardrails row. **They are not in the tree you are reading, at all.** Our own reviewer once asserted a mechanism from code that was in fact gated off by two database values, and retracted it.
+⇒ ★★ **REACHABILITY IN CODE IS NOT LIVENESS. The repo does not contain the settings.**
+⇒ **This cuts BOTH ways and you must look in both directions:** a hardcoded constant making a decision that should be database-governed **and** a code path that reads as live but is switched OFF in the database, or a "default" in the code that is never the value actually used.
+⇒ **You cannot settle either from files. When behaviour depends on a setting, that is a QUESTION for §8, not a finding** — and a finding that assumes a config value without asking is the single most likely way this audit produces confident nonsense.
 
 ---
 
@@ -78,9 +97,21 @@ Your findings will be read against this, so meeting it makes them usable and mis
 - **Truncated output is not a population.** If a result becomes a count or an absence claim, re-run it unbounded or state the truncation next to the number.
 - ⭐ **Label evidence against your own interest.** If something weakens your finding, say so in the finding. We would rather have a narrower true claim than a wide arguable one.
 
+⚠️ **YOU CANNOT MEET THE POSITIVE-CONTROL BAR ON ANYTHING NEEDING RUNTIME, LOGS OR THE DATABASE — you have none of them.** *(r2, Langston.)* ⛔ **Do not let that bar go quietly unmet.** In those cases: **label the claim a HYPOTHESIS, and put the control you WOULD have run into `QUESTIONS.md` as a request for us to run it.** That converts a standard you cannot meet into a work item we can, which is honest and is exactly the traffic §8 exists for.
+
 ---
 
 ## 6. SPECIFIC THINGS WORTH ATTACKING
+
+⛔⛔ **STOP. DO NOT READ THE REST OF THIS SECTION YET.** *(r2, Langston's design, and it is the cleverest thing in this brief.)*
+
+**In your FIRST session, before reading past this line, write your own top questions into `notes\my-questions-before-section-6.md`** — what YOU would go after, given §1 to §5 and a first look at the system. Then read §6, and record the delta **both ways** in the same file:
+- what WE listed that you would not have asked
+- what YOU asked that we did not list
+
+★★ **THAT DELTA IS THE POINT, AND IT IS THE ONE ARTIFACT WE CANNOT PRODUCE OURSELVES: IT MEASURES OUR BLIND SPOT DIRECTLY.** The hooks below are the places *we* have historically been wrong — which is exactly why they may be the wrong list to hand an outsider. By construction, a map of the blind spots we already know about is not where our blind spots are. **Include the delta in your deliverable; it may be worth more than the findings.**
+
+---
 
 Offered as hooks, not as a checklist, and deliberately phrased as questions rather than suspicions. **Do not treat these as the scope — they are examples of the altitude we want.**
 
@@ -89,7 +120,7 @@ Offered as hooks, not as a checklist, and deliberately phrased as questions rath
 - **Fees are large here** — the real venue schedule is on the order of 0.80% taker and 0.40% maker. Does every place that computes expected value carry the true round-trip cost, in the right direction, for the right leg? A sign or a leg error here is invisible and expensive.
 - Is any threshold applied to a number **derived from a different population** than the one the threshold was calibrated on?
 - Does **regime detection** do what the System Manual says it does, including at the boundaries between regimes?
-- Are there **hardcoded constants making decisions** that should be governed by the database? We have a hard rule that a database-governed setting must fail loudly when absent rather than silently defaulting. Is that honoured everywhere?
+- Are there **hardcoded constants making decisions** that should be governed by the database? We have a hard rule that a database-governed setting must fail loudly when absent rather than silently defaulting. Is that honoured everywhere? ⭐ **And the INVERSE, which r1 missed: is there a path that reads as live in the code but is switched OFF by a setting — or a code "default" that is never the live value?** See §4(f); neither direction is settleable from files, so both are questions.
 - Where a value is **smoothed, averaged, clamped or defaulted**, is the resulting number still the thing its consumer believes it is?
 
 **On the machinery:**
@@ -105,7 +136,8 @@ Offered as hooks, not as a checklist, and deliberately phrased as questions rath
 
 One document in `C:\DawnTrader-Codex\out\`, written to be read as a whole.
 
-**At the top:** the commit you audited, what you actually read, and **what you did NOT reach** — an honest coverage statement is more valuable to us than the appearance of completeness, and we will trust the rest of it more.
+**At the top:** the output of `git rev-parse HEAD` and `git status --porcelain` (see the header block), then **a POSITIVE ENUMERATION of what you actually read, by path.**
+⛔ **r2, Langston's inversion, and he is right: r1 asked what you did NOT reach — which is itself an asserted absence and the easiest thing in the whole document to under-report.** **List what you READ. We derive the complement ourselves**, against a file list we already have. An honest coverage statement is worth more to us than the appearance of completeness, and it makes us trust the rest of the document more.
 
 **Then the systematic findings, most important first.** For each:
 - what the flaw IS, in one sentence, at the level of a pattern rather than an instance
@@ -116,7 +148,8 @@ One document in `C:\DawnTrader-Codex\out\`, written to be read as a whole.
 
 **Then a short section of things you could not settle** and what evidence would settle them.
 
-⛔ **Do not propose code.** Propose understanding. We implement through our own reviewed process, and a patch arriving with a finding pressures us to skip the part that catches errors.
+⛔ **Do not propose code — and the reason is not caution.** *(r2, Langston corrected my reasoning and narrowed the ban by one carve-out.)* **You cannot run the code or see the data, so a patch from you is an unverifiable claim about a fix**, and one arriving beside a finding pressures us to skip the review that catches errors.
+✅ **THE CARVE-OUT, and it is the most useful thing you can hand us: GIVE US THE FALSIFYING QUERY OR COMMAND, in executable form, wherever one exists.** §7 asks what would falsify each finding; where that is a SQL query, a grep, or a log read, write it out so we can run it. **That is evidence machinery, not a patch, and it is explicitly wanted.**
 
 ---
 
