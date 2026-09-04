@@ -1,6 +1,8 @@
 # F-G-1 / B-GRID-REPRESENTABILITY — BATCH PROGRESS REPORT
 
-## **OPEN — awaiting ONE thing: the pre-registered observation window on post-deploy trade geometry**
+## ✅ **WINDOW CLOSED 2026-09-04T16:08:02Z · DECISION TAKEN · CONVERSION NOW OWED**
+
+⛔ **BOTH HALVES OF THE CLOSE CONDITION ARE MET: the data is IN (§3m–§3q) and a DECISION HAS BEEN TAKEN** — **`crypto_spot` PASS (n=24)** on a complete §3n discharge set, **`xstock_spot` UNDERPOWERED (n=19)**, Langston-approved at `2f0c968f6` and re-derived by him. ⇒ **THIS REPORT NOW OWES ITS CONVERSION TO `F_G_1_COMPLETION_REPORT.md` (§6)** — recording what data came in AND what decision was taken on it. ⚠️ **RECORDED HERE SO IT CANNOT BECOME AN OPEN LOOP: a window that has merely ELAPSED does not close a batch, and one whose decision is taken but unconverted is a finished batch wearing an open one's clothes.** **`F-E` is unblocked and does not wait on the conversion.**
 
 ✅ **The visual UI check is DONE (2026-08-28).** Both Paper Trading Filter Diagnostics tabs navigated in Claude-in-Chrome, which carries Kyle's own session; the VPG row renders live on each — crypto **0 would-fail / 344→347 incrementing across two reads**, xStock **0 / 294**. ⚠️ **The earlier title said this needed Kyle. It did not** — I had inferred a login blocker from a rules line that listed credentials without naming which browser needs them; `CLAUDE.md` was corrected the same day.
 
