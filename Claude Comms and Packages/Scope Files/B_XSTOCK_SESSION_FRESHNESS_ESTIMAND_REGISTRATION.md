@@ -336,3 +336,46 @@ average rather than the symbol's own.
 movement stayed inside the budget, but that a budget computed from a **class-average** σ means
 anything on the specific symbols it would admit. **That is a harder claim than the one this batch
 set out to test, and it was found by running the measurement rather than by arguing about it.**
+
+---
+
+## 13. ⭐⭐ THE ENTRY-SIDE GUARD, MEASURED ON A LIVE ALERT — **AND THE WHOLE-DAY NUMBER WAS A MIXTURE ARTEFACT THAT INVERTED THE FINDING**
+
+**Langston routed alert `16500abc-16f0-47b9-ab26-62daf0ef52b5` to me on 2026-09-04T19:02:35Z with a named action:** *"confirm whether the 19.25s is re-serve cadence against a flat 15s guard or a genuine ASTS feed stall; leave active, do not ack."* ✅ **ANSWERED — and it is NEITHER of the two he offered.**
+
+### ✅ THE EVENT IS PINNED TO 16 MILLISECONDS — NOT INFERRED, RECONSTRUCTED
+⛔ **THE LOGS COULD NOT HAVE ANSWERED THIS AND I CHECKED BEFORE ASSUMING THEY COULD:** `out.log` begins **2026-09-04 19:13:11Z** (size-rotated), so the 11:43Z event is outside it; `error.log` covers from **00:00:09Z** — **1,284 lines inside the 11:4x window, so the time reach is PROVEN** — and `ASTS` appears **0 times in the whole file**, which places the block line on the `out.log` stream, now gone.
+✅ **THE GUARD READS A DURABLE TABLE, NOT A LOG.** `active-dispatch.ts:75-79` — `getLatestTickAgeMs` selects `MAX(captured_at)` from **`xstock_spot_ticker_snap`**. ⇒ **the evidence survives rotation entirely.**
+**RECONSTRUCTED AT THE OBJECT:** ASTS/USD's last snapshot before the raise was **`11:43:39.560Z`**; the next was **`11:44:00.060Z`** — **one gap of 20.500 s.** The alert's `triggers_at` is **`11:43:58.827Z`** ⇒ age at the raise = **19,267 ms**. The alert body states **19,251 ms**. ⇒ ✅ **Δ = 16 ms. This is that gap, and no other.**
+⚠️ **AND THE ALERT'S OWN TIMESTAMPS DO NOT AGREE, BY DESIGN — READ `triggers_at`, NEVER `fired_at`:** `fired_at` is `11:48:15.134Z`, four minutes later, because `dedupe_key='xstock-stale-fill-block'` reuses one row. **A reader pinning the event from `fired_at` would have searched the wrong 20 seconds.**
+
+### ⛔ IT IS NOT A FEED STALL — THE CONTROL IS DECISIVE
+**Kyle's `#994` discriminator is feed-wide liveness: the other books are the control.** **MEASURED inside the EXACT 20.5 s gap (`11:43:39.560Z` → `11:44:00.060Z`): 124 distinct xStock symbols received 260 snapshots.** Denominator: **466 distinct symbols served in the surrounding ten minutes.** ⇒ ⛔ **The feed was demonstrably serving while ASTS was not. A class-wide stall is EXCLUDED.**
+
+### ⛔ AND IT IS NOT THE `#951` RE-SERVE SAWTOOTH EITHER — **HIS OWN CAVEAT WAS CORRECT**
+He wrote: *"the rung structure I measured (14.3/29.3/44.3/59.3 s) was on a population I have not confirmed covers ASTS — do not carry it as established."* ✅ **He was right to hold it.** ASTS's own cadence has a **hard floor at exactly 4.00 s** and a **median of 4.67 s** across **10,028 gaps today** — a ~4 s throttle, **not rungs.** ⇒ **the sawtooth does not describe this lane, and importing it would have been a wrong-object explanation that fitted the number by coincidence.**
+
+### ⛔⛔ THE THIRD ANSWER — AND THE FIRST FIGURE I COMPUTED WAS **DOUBLE-WRONG**, IN TWO INDEPENDENT WAYS
+**(1) COUNT-vs-TIME.** The naive read is *"715 of 10,028 gaps exceed 15 s = 7.13%"*. ⛔ **THAT IS THE WRONG QUANTITY.** A fill attempt lands at an arbitrary INSTANT, so the exposure is the **length-weighted** share of TIME spent in a >15 s-stale state — `Σ max(gap−15,0) / Σ gap` — **not the share of gaps.** ⇒ **9,698 s of 71,889 s = 13.49%, nearly DOUBLE the count share.** ★ **Length-biased sampling: long gaps are over-represented in what a random arrival sees, exactly because they are long.**
+
+**(2) AND THE 13.49% IS ITSELF A MIXTURE ARTEFACT — SPLITTING BY REGIME INVERTS THE CONCLUSION:**
+| regime | n gaps | p50 | p95 | max | **% of TIME older than the 15 s guard** |
+|---|---|---|---|---|---|
+| **RTH (13:30–20:00Z)** | 5,138 | **4.28 s** | **5.81 s** | 24.90 s | ⭐ **0.11%** |
+| **off-hours** | 4,906 | 6.36 s | **27.55 s** | 153.12 s | ⛔ **19.91%** |
+
+⇒ ⭐⭐ **THE GUARD IS ESSENTIALLY NEVER BINDING IN REGULAR HOURS AND BINDS ONE-FIFTH OF OFF-HOURS.** ⛔ **The whole-day 13.49% describes NEITHER regime and would have supported a threshold change that RTH does not need.**
+⚠️ **AND THE ALERT FIRED AT 11:43:58Z — WHICH IS OFF-HOURS.** ⇒ **this event is the off-hours regime, in full.**
+
+### ⭐⭐ WHAT THIS ACTUALLY IS: **THE BODY STATES THE CONDITION THAT MATTERS AND THE CODE NEVER TESTS IT**
+The alert's own text reads: *"Routine if transient; **persistent staleness during US regular hours** indicates a feed problem."* ✅ **That qualifier is exactly right.** ⛔ **And `raiseStaleFillAlert` (`active-dispatch.ts:87-99`) has NO regime test, NO persistence test, and hard-codes `category: 'breakage'`.** ⇒ **a routine pre-market cadence tail is raised as BREAKAGE, with the correct discriminator written in prose one line above the code that ignores it.**
+⇒ ⛔ **BUG TAXONOMY OUTCOME (2) — WORKING AS DESIGNED, UNADDRESSED. NOT a defect to fix unilaterally: what is missing is a DECISION.** ★ **And it is Kyle's decision already, stated: `#994` — *staleness because the US market is SHUT must not raise a breakage alert; staleness because OUR feed is impaired must.* This is that rule's first measured instance, with its discriminator (feed-wide liveness) shown WORKING on a real event.**
+
+### ✅ AND IT CONFIRMS OBJ-9'S STANDING ANSWER RATHER THAN DISTURBING IT
+**`active_fill_max_age_ms` STAYS AT 15,000 ms.** ⭐ **Now better evidenced than when I answered it: on this symbol the limit costs 0.11% of RTH time.** ⇒ **Moving it would relax a constraint that is not binding in the hours that matter, in order to quiet an off-hours symptom — which is precisely the trade Kyle ruled against.**
+⚠️ **CLASS-vs-SYMBOL, STATED: my OBJ-9 re-base used a CLASS-WIDE RTH p99 of 15.07 s. ASTS's OWN whole-day p99 is 42.02 s.** ⇒ **ASTS is a wide-cadence symbol relative to its class, so a flat class-calibrated ceiling is symbol-blind by construction. That is a REAL structural point and it is NOT an argument for raising the number** — it is an argument for the alert policy, which is where it is homed.
+⛔ **POPULATION LIMIT, NAMED: ONE SYMBOL, ONE DAY (2026-09-04, n=10,028 gaps). NOT a class rate. A class-wide version of this table is what `3b.f-c` owes; this is the worked instance that shows the split matters.**
+
+### ✅ DISPOSITION
+⛔ **ALERT LEFT ACTIVE AND NOT ACKED, per Langston's routing** — and the reason is now positive rather than procedural: **the row is the standing evidence for the alert-policy decision, and acking it would silence the only live instance we have.**
+**DISPOSITION: folded into this row (`3b.f-c`) as the entry-side arm's worked instance.** ⛔ **NOTHING is written into `#526` — `B-VENUE-QUIET-ALERTING` is CC-B's, and the lane partition holds.**
