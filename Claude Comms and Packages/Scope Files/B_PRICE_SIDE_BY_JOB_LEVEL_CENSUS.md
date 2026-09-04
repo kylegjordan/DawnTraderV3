@@ -92,6 +92,29 @@ Enumerated from `shared/schema.ts` by walking every `pgTable` declaration and co
 
 ⚠️ **CONSEQUENCE FOR THE FIX, STATED PLAINLY: the enforcement surface is FIVE writer files, and the two raw-SQL ones (`vts-trade-persistence`, `exit-decision-archiver`) plus `rtb-shadow-store` all bind columns by string literal — so all THREE need the read-back fence, not one.**
 
+## 3d. ⛔⛔ WHAT THIS CENSUS DOES **NOT** CLOSE — REQUIRED READING BEFORE ANYTHING CITES IT (Langston's three conditions, all re-derived by me at the object)
+
+### (a) ⛔⛔ IT CLOSES **SINKS**, NOT **VERBS** — AND THE FIX FOR THAT IS STRONGER THAN THE ONE I PROPOSED
+
+**MEASURED: `vts-trade-persistence.ts` holds FOUR `UPDATE vts_open_trades` sites — `:192`, `:203`, `:238`, `:281` — beside the single `INSERT` at `:141`.** A read-back fence at the insert **does not bind an UPDATE that clears a basis and leaves the level standing.** ⇒ **the fifth blind spot would have been a VERB.**
+⛔ **AND THE DELETE HOP IS REAL TOO** (§9.5(a): deletes are the highest-yield hop): `server/scripts/b75-retention-sweep.ts:151` carries `{ table: 'vts_open_trades', timestampColumn: 'closed_at', retentionConstantName: … }` — a **retention GC** that mutates the table. ⇒ **STATED EXPLICITLY: in §3 and §3a, "writer" means INSERT and UPDATE. DELETE is enumerated here and is NOT part of that count.**
+
+⇒ ★★ **SO `basis NULL iff level NULL` MUST BE A **TABLE INVARIANT**, NOT AN INSERT-TIME ONE — AND THAT IS AVAILABLE AS A DATABASE `CHECK` CONSTRAINT.** ⛔ **A `CHECK` cannot be bypassed by ANY verb, ANY writer, ANY language, or any future code nobody has written yet.** ★ **This is the project's *prefer IMPOSSIBLE over INTERCEPTED* rule in its strongest available form, and it is strictly better than the read-back fence I proposed** — a fence catches what it is pointed at; a constraint catches what nobody thought to point at. **Read-back fences remain useful as a DEPLOY-TIME proof that the constraint is installed and armed — not as the enforcement.**
+
+### (b) ⚠️ "27 PHYSICAL" IS A COUNT AT TIME T, NOT A SET
+`exit_decision_archive` is **monthly-partitioned** (`scripts/b70-create-monthly-partitions.ts`). **Next month's partition is a physical sink that does not exist in the 27 and will appear without anyone acting.** ⇒ ⛔ **THE CLOSED OBJECT IS THE 14 LOGICAL TABLES. The 27 is an observation, and partitions are GENERATED — cite 14, never 27, or the number goes stale on a calendar.**
+
+### (c) ⚠️ THE CORPUS I SEARCHED, NAMED — SO THE NEXT READER KNOWS WHETHER `scripts/` WAS COVERED OR MERELY EMPTY
+**The ORM walk and both raw-SQL walks searched `server/` ONLY.** `scripts/` was **outside the searched corpus and is inside the blast radius**: **MEASURED — 10 files under `scripts/` reference `vts_open_trades`** (Langston's own grep returned eight `scripts/analysis/*.sql` plus `scripts/b-new-33-factor-backtest.ts`). **Reads today, as far as either of us has checked — but "reads today" is a claim about what was read, not about the corpus.** ⇒ **`scripts/` is UNSEARCHED for writers, stated as unsearched.**
+
+### (d) ⛔⛔ THE STRUCTURAL RESIDUE — MY NEW INSTRUMENT CANNOT REACH THE THING THAT CAUGHT THE LAST ONE
+★ **`information_schema` + chase-the-writerless-table is an ORPHAN-*TABLE* DETECTOR: it finds tables with ZERO known writers.** ⛔ **IT IS BLIND BY CONSTRUCTION TO A *SECOND* WRITER ON A TABLE THAT ALREADY HAS ONE.** ⇒ **`vts_open_trades` is the proof: it HAD a writer, so the database chase would never have surfaced it — a REVIEWER did.**
+⇒ ⛔⛔ **AFTER r3 THE **SINK** SET IS CLOSED AGAINST `information_schema`; THE **WRITER** SET IS STILL ENUMERATED BY GREP — the instrument that has now failed FOUR times.** **"Closed against `information_schema`" must NOT migrate into "the writer walk is closed."**
+
+### (e) ★ AND THE FOURTH FAILURE WAS LANGSTON'S OWN, ON HIS OWN INSTRUMENT, WHILE VERIFYING THIS CENSUS — CARRIED BECAUSE IT IS THE SAME SHAPE
+His first `dt-review grep 'vts_open_trades'` returned **30 lines, ZERO in code** — *"I nearly wrote back that your writer did not exist."* The identical command re-run returned **729 lines including `:141`**. **CAUSE: the output truncates at ~47 KB, and `1-system-manual/` + `Claude Comms/` sort BEFORE `server/`, so long documentation lines ate the entire budget and starved out exactly the class being searched for.**
+⇒ ★★ **THE TRUNCATED ARTIFACT READS AS A COMPLETE RESULT — THE CAP IS ON THE ENVELOPE, NOT IN THE FILE.** Instrument correct, blind to one member class, **blindness invisible in its own output** — the same shape as all three of mine. ⇒ ⛔ **NEVER ASSERT AN ABSENCE FROM A `dt-review grep` WITHOUT ASSERTING THE HIT COUNT IS BELOW THE CAP.**
+
 ## 3b. ⛔⛔ THE "ONE ASSERTION AT THREE WRITERS" HEADLINE WAS WRONG — LANGSTON ATTACKED IT AND ALL FOUR POINTS LAND
 
 **I proposed enforcing the rule at the three writers and asked him to attack it rather than agree. He did, and the answer was "neither of your two options".** Each point below was **re-derived by me at the object before being written in.**
