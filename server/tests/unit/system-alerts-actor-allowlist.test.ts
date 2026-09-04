@@ -208,4 +208,52 @@ describe('OBJ-5 — history is not rewritten', () => {
     expect(after).toBe(before);
     expect(readAllAlerts().find((x) => x.id === legacy.id)!.acknowledged_by).toBe('cc-session-2026-06-19');
   });
+
+  // ─── #1000 (2026-09-04) — TOTALITY REGRESSION ──────────────────────────────
+  // The gate shipped on 2026-09-02 with `ALERT_ACTOR_NORMALISATION[key]` on a
+  // PLAIN OBJECT LITERAL, so the lookup fell through to Object.prototype and the
+  // `??` — which only catches null/undefined — never saw the inherited value.
+  // Found at Step 2 of B-DEPLOY-ACTOR-ALLOWLIST by a fresh reader, then
+  // reproduced BY EXECUTION rather than by reading. These are the exact probe
+  // inputs from that reproduction.
+  //
+  // NOTE the `load()` indirection: this suite must set SYSTEM_ALERTS_FILE before
+  // the module is imported, so every reference goes through the lazy import.
+  describe('#1000 — normalise is TOTAL: no prototype key escapes the gate', () => {
+    // `constructor` was the worst of them: it returned the Object FUNCTION, the
+    // truthy check in assertAlertActor passed it, and JSON.stringify then DROPPED
+    // it — so the row landed with NO acknowledged_by key at all. An ABSENT
+    // attribution, inside the gate built to stop free-text attribution.
+    for (const evil of ['constructor', '__proto__', ' CONSTRUCTOR ', 'toString', 'valueOf', 'hasOwnProperty']) {
+      it(`refuses ${JSON.stringify(evil)}`, async () => {
+        const { normaliseAlertActor, assertAlertActor } = await load();
+        expect(normaliseAlertActor(evil)).toBeNull();
+        expect(() => assertAlertActor(evil)).toThrow();
+      });
+    }
+
+    it('never returns a non-string, whatever the lookup yields', async () => {
+      // The second, independent guard. `hasOwnProperty.call` stops the prototype
+      // chain; this stops ANY non-string escaping regardless of how it got into
+      // the table — which is what makes the fix robust to a FUTURE table gaining
+      // a surprising key, rather than only to this one bug.
+      const { normaliseAlertActor } = await load();
+      for (const probe of ['constructor', '__proto__', 'cc-b', 'cc-analyst']) {
+        const r = normaliseAlertActor(probe);
+        expect(r === null || typeof r === 'string').toBe(true);
+      }
+    });
+
+    it('POSITIVE CONTROL — the real actors and aliases still pass', async () => {
+      // Without this the block above is satisfied by a function that refuses
+      // everything.
+      const { normaliseAlertActor } = await load();
+      expect(normaliseAlertActor('cc-b')).toBe('cc-b');
+      expect(normaliseAlertActor('CC-B')).toBe('cc-b');
+      expect(normaliseAlertActor('  cc-analyst  ')).toBe('cc-c');
+      expect(normaliseAlertActor('langston (reviewer)')).toBe('langston');
+      expect(normaliseAlertActor('kyle-direct')).toBe('kyle');
+      expect(normaliseAlertActor('nonsense')).toBeNull();
+    });
+  });
 });

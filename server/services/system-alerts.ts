@@ -186,6 +186,8 @@ export function isValidResolutionEvidence(s: unknown): s is string {
 // ─── B-ALERT-ACTOR-ALLOWLIST (#987, 2026-09-02): who may act on an alert ───────
 //
 // `acknowledged_by` / `resolved_by_claimed` were free text: 782 rows carried 75
+// (MEASURED 2026-09-02, the whole alerts file at that date — a count, not a rate,
+// and it does not update itself: re-measure before citing it, never quote it from here.)
 // distinct strings, most of them dated one-offs (`cc-session-<date>`) that
 // identify nobody — the retired convention CLAUDE.md §10.5 step 3 itself taught
 // for 26 days before the session roster existed. The identity is now ONE
@@ -252,12 +254,32 @@ export class AlertActorError extends Error {
   }
 }
 
-/** Trim + lowercase, then exact membership or exact alias. Null = refused. */
+/**
+ * Trim + lowercase, then exact membership or exact alias. Null = refused.
+ *
+ * #1000 (2026-09-04) — TOTALITY. This function shipped with `ALERT_ACTOR_NORMALISATION[key]`
+ * on a PLAIN OBJECT LITERAL, so the lookup fell through to `Object.prototype` and `??` — which
+ * catches only null/undefined — never saw the inherited value. MEASURED by execution, not read:
+ * `constructor` returned the `Object` FUNCTION and `assertAlertActor`'s truthy check passed it,
+ * after which `JSON.stringify` DROPPED it and the row landed with NO `acknowledged_by` KEY AT
+ * ALL — an absent attribution inside the gate built to stop free-text attribution. `__proto__`
+ * returned `Object.prototype` and wrote `{}`. `toString`/`valueOf`/`hasOwnProperty` refused only
+ * ACCIDENTALLY, because `.toLowerCase()` mangles the key away from the prototype's spelling —
+ * nothing in the design was doing that work.
+ *
+ * TWO independent guards, deliberately not one: `hasOwnProperty.call` stops the prototype chain,
+ * and the `typeof === 'string'` check below stops ANY non-string escaping regardless of how it
+ * got into the table. The second is what makes this robust to a future table gaining a
+ * surprising key rather than to this one bug.
+ */
 export function normaliseAlertActor(by: unknown): CanonicalAlertActor | null {
   if (typeof by !== 'string') return null;
   const key = by.trim().toLowerCase();
   if (ALERT_ACTOR_VALUES.has(key)) return key as CanonicalAlertActor;
-  return ALERT_ACTOR_NORMALISATION[key] ?? null;
+  if (!Object.prototype.hasOwnProperty.call(ALERT_ACTOR_NORMALISATION, key)) return null;
+  const mapped: unknown = ALERT_ACTOR_NORMALISATION[key];
+  if (typeof mapped !== 'string' || !ALERT_ACTOR_VALUES.has(mapped)) return null;
+  return mapped as CanonicalAlertActor;
 }
 
 /**
