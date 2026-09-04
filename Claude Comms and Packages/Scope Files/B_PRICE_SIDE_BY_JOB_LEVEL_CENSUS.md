@@ -377,3 +377,58 @@ The scope traced the crypto QUANT lane through `signal-orchestrator.ts:2515` and
 ⇒ **At geometry time the constructor cannot know whether the entry will rest or cross — and BLOCKER-1 forbids it from GUESSING.**
 ★ **AND IT IS NOT CIRCULAR, WHICH IS THE PART THAT MAKES A CLEAN ANSWER POSSIBLE: `decideMakerTaker` needs BOTH sides to make its comparison** — cross now and pay the ask, or rest and pay the bid but risk no fill. **So carrying the basis to that decision feeds it something it wants anyway.**
 **MY LEAN, STATED SO IT CAN BE ATTACKED RATHER THAN RATIFIED: the stop and target resolve to the bid AT GEOMETRY TIME (both are sells for a long — their side is known and cannot change), and the ENTRY leg resolves at `:1052`, where the intent becomes known.** ⛔ **The alternative — set entry on the ask at geometry time and correct it later on the maker arm — is inferring the intent and then patching it, which is the thing BLOCKER-1 names.**
+
+---
+
+## 10. ⛔⛔ THE SPREAD IS ALREADY IN THE MODEL — **AS FRICTION.** LANGSTON'S BLOCKER, RE-DERIVED AND **CONFIRMED**, AND HIS PRESCRIBED FIX NEEDS ONE REFINEMENT
+
+**Langston, 2026-09-04T20:44Z: the fork in §9 is FALSE, and the reason is a double-count nobody had named.** ⛔ **Re-derived by me at the object before accepting a word of it — his hits are leads.**
+
+### ✅ CONFIRMED, AND THE CODE'S OWN COMMENT SAYS IT
+`cost-model.ts:163-164`:
+```
+export function computeTotalRoundTripCost(fee: number, slippage: number, spread: number): number {
+  return (fee * 2) + (slippage * 2) + spread;
+}
+```
+**Spread charged ONCE — and that once IS the mid-to-mid correction.** Buy at the ask (`mid + ½ spread`), sell at the bid (`mid − ½ spread`) ⇒ the round trip loses **one full spread** against a mid-to-mid accounting. ⇒ ★★ **THE FRICTION MODEL'S PREMISE IS THAT EVERY LEG IS MID-PRICED.** `maker-taker-decision.ts:217` states it outright: *"Round-trip cost = 2·fee + 2·slip + spread (spread applied once, at entry)."*
+
+⇒ ⛔ **SO SIDING THE LEVELS WITHOUT TOUCHING FRICTION CHARGES THE SPREAD TWICE ON THE TAKER ARM** — once in the geometry, once at `:216-220`.
+⇒ ⛔ **AND THE MAKER ARM GETS A BONUS IT NO LONGER EARNS.** `:236-238`: `makerEntryAdvantagePct = (feeRateTaker − feeRateMaker) + costs.spread + costs.slippage`. **Under sided levels the maker arm is bid-to-bid — zero spread BY CONSTRUCTION — and is credited `costs.spread` anyway.**
+⇒ ⭐ **NET SWING IN THE COMPARISON ≈ 2× SPREAD, ALL OF IT TOWARD MAKER**, against a crypto fee delta of 40 bps. **Decision-flipping, and invisible: the triple stays well-ordered, the grid rounds it, the SQE scores it, and no test downstream sees a thing.**
+
+### ⛔⛔ HIS PRESCRIBED FIX — *"`costs.spread` LEAVES THE FRICTION MODEL"* — IS RIGHT IN DIRECTION AND **CANNOT BE APPLIED TO THE SHARED FUNCTION.** MEASURED
+`computeTotalRoundTripCost` is **the canonical friction formula for the whole system**, not the maker/taker decision's private helper. **Census, repo-wide:**
+| | |
+|---|---|
+| **production files importing it** | **11** |
+| **production call sites** | **24** |
+| **test files referencing it** | **27** |
+**The consumers include** `expectancy.ts:635` (Net Expectancy itself), `ready_to_buy_service.ts`, `signal-orchestrator.ts:1921` and `:3115`, `vts-service.ts:349`, `cost-telemetry.ts:84`, `cost-drift-monitor.ts:60`/`:103`, and the `tec-costs` diagnostics API.
+⇒ ⛔ **DELETING `spread` FROM IT WOULD UNDER-CHARGE EVERY LANE WHOSE LEVELS ARE STILL MID-PRICED — which is BOTH BAR LANES AND ALL OF xSTOCK — and would silently move every cost telemetry and drift-monitor series at the same time.** ★ **This batch sides ONE lane (§6: crypto QUANT). A global formula edit would apply the correction to three lanes that never received the geometry it corrects for.**
+
+### ✅ THE REFINEMENT — **THE SPREAD'S HOME IS DECIDED PER SIGNAL, BY A STAMP, NOT GLOBALLY BY AN EDIT**
+⭐ **`computeTotalRoundTripCost` STAYS EXACTLY AS IT IS.** It is the CORRECT formula for a mid-priced triple, and after this batch three of four lanes still have one. **Nothing about it is wrong; what was wrong is applying it to geometry it does not describe.**
+⇒ ✅ **A signal whose levels came from a `LevelBasis` carries that fact as a birth stamp** — the same shape as F-G-1's `gridAtBirth`, and exactly the *stamp-at-construction, enforce-at-persistence* conclusion §3b reached. **`decideMakerTaker` reads the stamp and prices accordingly:**
+| | mid-priced triple (unchanged) | **sided triple (this batch's lane)** |
+|---|---|---|
+| taker friction | `2·fee + 2·slip + spread` | ⭐ **`2·fee + 2·slip`** — the spread is in the geometry |
+| maker advantage | `Δfee + spread + slip` | ⭐ **`Δfee + slip`** — bid-to-bid earns no spread saving |
+| entry price | one value, both arms | ⭐ **TWO: `entryTaker = basis.ask`, `entryMaker = basis.bid`** |
+★★ **AND THE TWO-ENTRY CHANGE IS NOT A CONCESSION — IT IS WHAT KILLS THE §9 FORK.** I asked *where does the entry leg resolve, given intent is known only later.* **The answer is that it does not need to resolve to ONE price at all: the comparison prices EACH ARM ON ITS OWN SIDE, which is what the comparison is FOR.** ⇒ **My §9 lean survives on stop and target and was the wrong question for entry.**
+⚠️ **AND THE ARMS' R:R NOW DIFFER, WHICH IS CORRECT AND MUST NOT BE "FIXED":** a taker entry sits a full spread above a maker entry against the same bid-side stop, so **risk and reward move in OPPOSITE directions between the arms.** That is the real economics the mid was concealing.
+
+### ⛔ SECOND BLOCKER — **pFill's REFERENT MOVES AND THE CONSTANT DOES NOT.** CONFIRMED AT `:255`
+`const pFill = clamp01(haircut.makerFillProbability);` — **a flat DB constant (crypto 0.50).**
+**Today's maker limit is a smoothed MID: inside the spread, and therefore aggressive — it is likely to fill.** ⛔ **Bid-anchored, it joins the BACK OF THE QUEUE: the true fill probability FALLS and the assumed 0.50 does not move.**
+⇒ ⛔ **THAT COMPOUNDS WITH THE DOUBLE-COUNT, IN THE SAME DIRECTION:** the maker arm gets a better entry, an unearned spread credit, AND an unchanged optimistic fill assumption. **The trade we would actually be making — fewer `MAKER_MARKETABLE_DROPPED` (§8's `:3830` point, correct) in exchange for more deadline-drops — is one the model cannot see.**
+✅ **NAMED AS REQUIRED WORK, NOT LEFT TO RIDE:** pFill re-basing ships with the sided levels, or is an **explicit deferral with the maker pick-rate and drop-rate as its named instrument.** ⛔ **Silence on it is not an option — an unmoved constant beside a moved referent is `#546`'s shape in a coefficient.**
+
+### ⇒ WHAT IS NOW SETTLED AND WHAT IS STILL OPEN
+| | |
+|---|---|
+| ✅ **the double-count** | **CONFIRMED at `cost-model.ts:164` + `maker-taker-decision.ts:216-238`** |
+| ✅ **the §9 fork** | **DISSOLVED — two entries, one per arm; stop/target still resolve at geometry time** |
+| ⛔ **the fix's SHAPE** | **stamp-driven per signal, NOT a global formula edit — 11 files / 24 sites / 27 test files say so** |
+| ⛔ **pFill** | **re-base with the change, or defer explicitly with the pick-rate instrument named** |
+| ✅ **F-G-2 interaction** | **already handled — he raised it statelessly 19 minutes after ratifying the VOID himself; the window is not open** |
