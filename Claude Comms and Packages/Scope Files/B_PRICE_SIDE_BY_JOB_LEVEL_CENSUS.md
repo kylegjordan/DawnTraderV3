@@ -197,7 +197,7 @@ The Step-2 audit found **70 sites across 19 files that COMPUTE a level**. This c
 |---|---|---|
 | **crypto — QUANT** (the 19-strategy dispatch) | `getSmoothedPrice` → `signal-orchestrator.ts:2425` → `computeContext :2450` → `mce:1434` → `:2515` | ⛔ **YES — a KALMAN-SMOOTHED MIDPOINT** (median gain 0.0952) |
 | **crypto — PATTERN** (Phase 14.5) | `:2207 parseFloat(ohlcData[last].close)` ← `:2378 ohlcCache.getOHLCData(symbol, 60)` ← **`ohlc-cache.ts:91/:103 krakenService.getOHLCData(...)`**, header `:6` *"Caches Kraken OHLC candle data"* | ✅ **NO — a VENUE-PUBLISHED 60-MIN CANDLE CLOSE** |
-| **xStock — ACTIVE + VTS** *(ONE lane, not two)* | `scanner.ts:910 latestBar.close` ← `:597 xstockOhlcCache.getOHLCDataBatch(symbolList, 15)` ← `ohlc-aggregator.ts:277 FROM xstock_spot_ohlc_1m` ← **`equity-spot-archiver.ts:270 for (const bar of msg.data) parseOhlcBar(bar)` — Kraken's own WS OHLC frames** | ✅ **NO — VENUE-PUBLISHED 1-MIN CLOSES, AGGREGATED TO 15 MIN** |
+| **xStock — ACTIVE + VTS** *(ONE lane, not two)* | `scanner.ts:910 latestBar.close` ← `:597 xstockOhlcCache.getOHLCDataBatch(symbolList, 15)` ← `ohlc-aggregator.ts:277 FROM xstock_spot_ohlc_1m` ← `equity-spot-archiver.ts:270 for (const bar of msg.data) parseOhlcBar(bar)` → `:84 bufferOhlcBar` → **`passive-archive/ohlc-batch-writer.ts`, table resolved from `tableForAssetClass` (`:44`) — `xstock_spot → xstockSpotOhlc1m`** — fed by **Kraken's own WS OHLC frames** | ✅ **NO — VENUE-PUBLISHED 1-MIN CLOSES, AGGREGATED TO 15 MIN** |
 
 ### ✅ THREE THINGS THIS SETTLES, EACH MEASURED
 
@@ -206,6 +206,13 @@ The Step-2 audit found **70 sites across 19 files that COMPUTE a level**. This c
 **(2) THE IDENTIFIER DIFFERS BY LANE, WHICH IS WHY THE EARLIER DISCRIMINATOR DID NOT TRANSFER.** The crypto file's basis identifier is `currentPrice` (**exactly two assignments**, `:2207` and `:2425`). **The xStock lane's is `price`, and its parameter is named `lastPrice`** (`eval-cycle.ts:304`). ⇒ ⛔ **"census the assignments to the consumed identifier" is correct, but the IDENTIFIER IS PER-LANE — a single name searched repo-wide would have found one lane and silently missed the other.**
 
 **(3) A "BAR CLOSE" HERE IS A VENUE PRINT, NOT A DISGUISED MID.** `#952` establishes that the crypto v1 `c` FIELD is overwritten with a midpoint — **so the obvious worry was that the bar closes inherit it.** ⛔ **THEY DO NOT: both bar paths come from Kraken's OWN OHLC** (REST candles for crypto, WS OHLC frames for xStock), **not from our tick cache.** ⇒ **the `#952` contamination reaches the TICK path, and the BAR path is independent of it.** ★ **Checked rather than assumed, because assuming it would have produced exactly the wrong batch.**
+
+### ⛔ AND VERIFYING THAT CHAIN EXPOSED A **FOURTH** BLIND-SPOT VARIANT — RECORDED BESIDE THE THREE IN §3a
+
+⚠️ **I FIRST ASSERTED THE BAR CHAIN ONE LINK SHORT.** §6 as first written cited `parseOhlcBar` as the writer. **It is not — it buffers.** A repo-wide search for `INSERT INTO xstock_spot_ohlc_1m` across every file type returns **NOTHING**, while the table itself holds **17,179,154 rows, last written the same minute I looked.** ⇒ **the write exists and no name-based search can see it.**
+✅ **FOUND BY FOLLOWING THE BUFFER RATHER THAN SEARCHING FOR THE TABLE:** `bufferOhlcBar` → `ohlc-batch-writer.ts`, where the target is **resolved from a MAP** — `tableForAssetClass` (`:44`), `xstock_spot → xstockSpotOhlc1m`.
+⇒ ★★ **VARIANT 4: A TABLE RESOLVED FROM A MAP LOOKUP IS INVISIBLE TO *BOTH* A LITERAL-NAME SEARCH *AND* A KNOWN-OBJECT SEARCH** — the literal never appears, and the object's identifier is only reachable if you already know which key the map is indexed by. **§3a's variants were: ORM-only pattern · schema-derived sink set · name-in-a-constant. This is a fourth, and it was found by TRACING A DATA PATH rather than by searching for a name.**
+★ **The correction also matters for the finding itself: the SOURCE claim (Kraken's own bars, not our mid ticks) was right, but I had published it with an unverified link in the middle. It is now verified end to end.**
 
 ### ⇒ WHAT THIS DOES TO THE BATCH
 
