@@ -1223,7 +1223,7 @@ export class SignalOrchestrator {
             targetPrice: rawSignal.targetPrice ?? null,
             stopPrice: rawSignal.stopPrice ?? null,
             // Step-4 BLOCKER-2 fix: the canonical ATR resolution on this path is
-            // marketContext?.atr ?? sizingContext.atr (:1662 parity) — sizingContext alone
+            // marketContext?.atr ?? sizingContext.atr (:1888 parity) — sizingContext alone
             // is structurally null for 100% of xStock rejects (active-dispatch builds no
             // sizingContext.atr). This is the ATR IN EFFECT at the reject (no ATR gate ran
             // on this path); the #581 parity claim covers the crypto quant/pattern stamps only.
@@ -1444,7 +1444,7 @@ export class SignalOrchestrator {
         // context.indicators?.atr` per pattern-symbol), so the value is now per-symbol-correct for
         // every consumer. Fed to atr_at_open → Open Trades display, RTB ranking, replay, VTS-parity.
         // Exit-neutral (B8.5k T1/T2; trailing off). Gated by the ≥2-distinct-atr-per-cycle fence
-        // test (p19-b8-5l). No fail-loud here — the rebuild precedes the :1548 invalid_atr gate.
+        // test (p19-b8-5l). No fail-loud here — the rebuild precedes the :1898 invalid_atr gate.
         atr: sizingContext.atr,
         // P19-B8.10 (OBJ-4): genesis capture of the display-context fields the VTS
         // records at open (regime / global regime / pair+global friction / pair+
@@ -2297,14 +2297,14 @@ export class SignalOrchestrator {
             // P19-B8.5l (#581): re-stamp atr per pattern-symbol too. The sibling regime/DBS
             // re-stamps above fixed the documented "stale cross-symbol leak" (see the comment
             // block above them) but MISSED atr — so pattern signals read the LAST QUANT
-            // SYMBOL's sizingContext.atr (stamped at :2165 during the earlier eligibleSymbols
+            // SYMBOL's sizingContext.atr (stamped at :2531 during the earlier eligibleSymbols
             // pass, which runs before this pattern pass). That fed a wrong shared atr into the
-            // :1548 reachability gate (3-arg pattern callers) live, and into the B8.5k carry.
+            // :1898 reachability gate (3-arg pattern callers) live, and into the B8.5k carry.
             // ★ Re-stamp the RAW `context.indicators?.atr` (undefined-preserving) — NOT the
             // `:1905` local `atr`, which carries a synthetic `?? (currentPrice*0.02)` fallback;
             // re-stamping the fallback would feed a fabricated ATR into the gate's `invalid_atr`
             // LOUD branch and let patterns silently pass a gate the quant path loudly rejects
-            // (quant stamps raw `mceContext.indicators.atr` at :2165, no fallback — gate parity).
+            // (quant stamps raw `mceContext.indicators.atr` at :2531, no fallback — gate parity).
             sizingContext.atr = context.indicators?.atr;
 
             const sizedSignal = await this.buildSizedSignalForStrategy(

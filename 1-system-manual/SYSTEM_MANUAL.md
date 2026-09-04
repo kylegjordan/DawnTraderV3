@@ -592,6 +592,27 @@ TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
 | Slippage | 0.15% | Estimated execution slippage |
 | Spread | 0.10% | Bid-ask spread |
 
+### The LEVEL BASIS — what `baseEntry` / `baseStop` / `baseTarget` are derived FROM
+
+⛔⛔ **THE GEOMETRY BELOW TAKES A BASE PRICE AS GIVEN. THIS SECTION SAYS WHAT THAT PRICE ACTUALLY IS, AND UNTIL 2026-09-04 THE MANUAL DID NOT SAY IT ANYWHERE** (`B-PRICE-SIDE-BY-JOB` P2). **There is no single answer: the crypto path carries TWO bases in two lanes.**
+
+| lane | base price | where it is set |
+|---|---|---|
+| **crypto QUANT** (the 19-strategy dispatch) | ⛔ **A SMOOTHED MID** — the BBO midpoint passed through an adaptive filter | `signal-orchestrator.ts:2400` → `:2425` → `mce.computeContext` `:2450` → `market-context-engine.ts:1434` (shorthand, untransformed) → `:2515` |
+| **crypto PATTERN** (Phase 14.5) | ⛔ **A BAR CLOSE** — never smoothed, never a midpoint | `signal-orchestrator.ts:2207`, reaching `patternToTradeSignal` at `:2269` |
+
+★ **"SHARED PIPELINE" IS NOT A BOOLEAN HERE — NAME THE SEAM: the two lanes are shared from `computeContext` DOWN, and NOT shared at the basis assignment ABOVE it.** `evaluateMarket` (`:1973`) holds the pattern basis in its own body and calls `evaluateSymbol` (`:2360`) at `:2106`, which holds the quant one. **`const currentPrice =` occurs exactly twice in that file.**
+
+⛔⛔ **THE FILTER IS NOT A KALMAN FILTER IN THE USUAL SENSE AND MUST NOT BE DESCRIBED AS ONE WITHOUT QUALIFICATION.** There is no measured noise model: it is an **ADAPTIVE EMA with an efficiency-ratio-driven gain**, named `AdaptiveKalmanFilter` (`utils/adaptive-kalman.ts`). Its gain is `K = P/(P+R)` with `R = max(1, min(50, 1+(1−ER)·50))` and `Q = max(0.1, VolNoise·0.5)`.
+✅ **NEITHER `R` NOR `Q` CARRIES A PRICE QUANTITY** — `VolNoise` is the MAD-over-median of **absolute log returns** (`analysis-utils.ts:144-172`), itself dimensionless. ⇒ **the gain is SCALE-FREE: independent of the symbol's price and of the market. It is a property of the code, not of any sampling window.** *(Structural claim — independently re-derived by Langston 2026-09-04, including the steady-state form numerically.)*
+⇒ ⛔ **CONSEQUENCE FOR THE GEOMETRY BELOW: the quant lane's base price LAGS the market.** Each observation moves the estimate by only a fraction of its innovation, giving an effective memory of order ten observations. **A level set on a lagging basis and triggered on a live price has a realised distance that differs from its intended distance — and asymmetrically with trend direction.**
+> ⚠️ **SINGLE-SOURCE MEASUREMENT (CC-C, 2026-09-04, staging logs; NOT independently re-run):** gain `K` over `n = 104,465` emitter lines — median **0.0952**, p10 0.0821, p90 0.1094; **64.9% below 0.10, 99.7% below 0.25**. `max = 0.5000` is the cold-start value, not a market state. **The STRUCTURAL claims above are two-party; these percentiles are not.**
+
+⛔ **AND THE FILTER STATE DOES NOT SURVIVE A RESTART.** `filterRegistry` (SIM **S26**) is an in-memory per-symbol map with **no persistence and no eviction** — `clearKalmanFilter`, `getState`, `restoreState`, `getAllKalmanDiagnostics` and `getActiveFilterCount` all have **zero production callers** *(two-party)*. ⇒ **every deploy re-seeds every symbol cold, and `adaptive-kalman.ts:70-71` returns the FIRST post-restart observation RAW** — so the level basis is **discontinuous at each restart** before it re-damps.
+> ⚠️ **SINGLE-SOURCE MEASUREMENT (CC-C):** 190 cold seeds in the 10 minutes after the 2026-09-03T19:28:48Z restart, against 6 in a no-restart control window from the same log file.
+
+⚠️ **THE xSTOCK LANES' LEVEL BASIS IS NOT DOCUMENTED HERE AND IS NOT ASSUMED SYMMETRIC** — `xstock_spot` active and VTS remain untraced as of 2026-09-04. **Stated as a gap rather than left to read as covered.**
+
 ### Net Execution Geometry
 
 The cost model computes adjusted prices accounting for friction:
@@ -8436,6 +8457,12 @@ MarketDataWebSocket (singleton)
     │   │     documented as "last trade closed", and `translateV2ToV1` substitutes the
     │   │     BBO MIDPOINT `(bid+ask)/2` into it whenever both sides are present, falling
     │   │     back to the genuine last trade ONLY on a one-sided or empty book.
+    │   │     ⛔⛔ THE PARAGRAPH BELOW DESCRIBES A **LIVE** PATH AND IS SITED INSIDE A BLOCK
+    │   │     HEADED "REMOVED … retained for historical reference only" (the 8.9.0-B secondary
+    │   │     adapter). THE SITING IS WRONG, NOT THE TEXT (B-PRICE-SIDE-BY-JOB P9, 2026-09-04).
+    │   │     ⇒ THE LIVE HOME IS "The LEVEL BASIS" section under Net Execution Geometry. Cite
+    │   │     THAT for current behaviour; this note is kept here only so the 8.9.0-B block does
+    │   │     not read as though the mark substitution died with the adapter. It did not.
     │   │     ★ INTENT (Directive 8.9.1, `b4c0d2d67` 2025-12-30): last-trade goes stale on
     │   │     low-volume pairs, so a mid is the better mark. THAT REASONING IS SOUND AND THE
     │   │     SUBSTITUTION IS NOT A DEFECT TO REMOVE.
@@ -9997,7 +10024,7 @@ Tests are organized by directive number, reflecting the phased development histo
 
 | File | Lines | Directive | What It Tests |
 |------|-------|-----------|--------------|
-| `adaptive-kalman.test.ts` | 384 | 9.3 | Kalman filter cold start, ER calculator, adaptive R/Q, filter registry, state persistence |
+| `adaptive-kalman.test.ts` | 384 | 9.3 | Cold start, ER calculator, adaptive R/Q, filter registry, and **state persistence — ⛔ WHICH THE RUNNING SYSTEM DOES NOT USE: `getState`/`restoreState` have ZERO production callers (two-party, 2026-09-04). The tests cover a capability nothing calls; see SIM S26.** |
 | `adaptive-scan-manager.test.ts` | 200 | 10.8 | Dual-pool scheduler (60/40 split), PairFailureTracker cooldown, batch generation |
 | `analysis-utils.test.ts` | 186 | 9.1.H | Core metric functions: LQ, DI, VolNoise, Sigma, filter thresholds, volume classification |
 | `canonical-validation.test.ts` | 159 | 11.4F.1 | Trade validation middleware: ghost regime normalization, legacy strategy normalization, violation levels |
