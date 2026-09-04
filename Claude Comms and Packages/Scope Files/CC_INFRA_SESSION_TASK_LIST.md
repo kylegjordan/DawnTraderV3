@@ -183,6 +183,35 @@ He remembers **"we were working on improving Langston and setting him up"** in J
 
 ⚠️ **PROCESS CORRECTION, MINE: I sent THREE long dispatches carrying NINE questions in seventeen minutes.** He has replied **13 times since** — all alert triage for Kyle and reviews for CC-C — **and picked up none of mine.** ⇒ **Nine questions across three messages is too much to land on a stateless invoke that is also carrying triage.** The 10:51Z ask is a **single** question; the earlier nine stand and were **not** resent.
 
+### 2h. ⭐⭐⭐ **IS THERE PURPOSE IN IT? ANSWERED FROM THE DESIGN — and the answer makes the usage measurement NON-BLOCKING**
+
+> **Kyle, 2026-09-04, improving the decision tree:** *"another option is that he's not using it, but if he did use it, it would be helpful… does him reading those batch summaries fit in our design? And if not, then maybe we do away with it. And even if he IS using it some way somehow, but we don't see that as fitting in with the new system we're trying to build for him, then we do away with it… right now we gotta figure out **is there purpose in it, real purpose in it for him now? And in the system we are trying to build and improve on.**"*
+> ⇒ ★★ **HE HAS REPLACED THE CRITERION AND IT IS THE RIGHT ONE: PURPOSE IN THE DESIGN, NOT OBSERVED USAGE. Usage is evidence; purpose is the test.**
+
+★★ **THE PRINCIPLE THAT DECIDES IT: *YOU CANNOT PULL WHAT YOU DO NOT KNOW EXISTS.***
+| kind of context | can he PULL it? | so it must be… |
+|---|---|---|
+| **HISTORY** — what happened in a closed batch | ✅ **YES.** When it becomes relevant, something NAMES it — a dispatch, an alert, a file citation — so **the trigger to pull arrives with the need.** | **PULL. Pushing it is duplication.** |
+| **CURRENT STATE** — what is in flight, what is blocked, who owns what | ⛔ **NO.** There is no trigger. **He does not know to ask *"what else is happening right now?"*** | **PUSH. It is the only thing that can deliver it.** |
+
+✅ **AND THE PULL HALF IS VERIFIED, NOT ASSUMED — I queried the archive for two of the closed batches whose sections sit in his memory:** `B-MBIM-SWITCH-ON` and `B-CONDUCT-FILE` both return **dated, sourced records — file and line, with an explicit `[ORIGIN — oldest record for a queried id]` marker reaching back to 2026-08-23 and 2026-08-19 respectively.** ⇒ **The archive holds that content with BETTER provenance than the pushed note: the note asserts a closure; the archive returns the actual message that announced it, with its date and its source.**
+
+⇒ ⛔⛔ **SO THE CLOSED-BATCH RECORD HAS NO PURPOSE IN THE NEW DESIGN. It is history; the archive already holds it, better; pull serves it exactly when needed; and pushing it too is the `#641` two-copies shape inside the memory system.**
+
+★★ **AND THIS IS WHY THE MEASUREMENT IS NON-BLOCKING — BOTH BRANCHES LEAD TO THE SAME ACTION.** If he never reads the closure sections, they are dead weight. If he DOES read them, what he is reading is **a thinner copy of something the archive holds with full provenance** — so the disposition is unchanged. ⇒ **we are NOT waiting on Langston's answer for this half.** *(His answer still matters for the other half — what he would actually want pushed.)*
+
+⛔ **BUT §10.b IS NOT WHOLLY WRONG — IT IS OVER-BROAD, AND THE DISTINCTION MATTERS BECAUSE "DELETE THE RULE" WOULD THROW AWAY THE TWO PARTS THAT DO EARN THEIR PLACE.** Read at the object, the rule asks for **THREE** things: *"the batch closure block + **sequencing changes** + **operational invariants**."*
+
+| §10.b asks for | category | verdict |
+|---|---|---|
+| **the batch closure block** | HISTORY | ⛔ **REDUNDANT — the archive holds it better. This is the growth driver and it goes.** |
+| **sequencing changes** | CURRENT STATE | ✅ **KEEP — unpullable by construction; he cannot ask about an ordering he does not know changed.** |
+| **operational invariants** | A RULING THAT GENERALISES | ✅ **KEEP — but see below; he may already be the better author of these.** |
+
+⭐ **THE SHARPER POINT ON THE THIRD ROW: WHAT IS WORTH CARRYING ACROSS BATCHES IS A *RULING THAT GENERALISES*, NOT A *RECORD THAT A BATCH CLOSED*.** *"`B-MBIM-SWITCH-ON` closed, ref `afb7d326c`, CI 4/4"* helps nobody later. *"An ack is non-terminal and silences the dedupe key forever"* helps everybody, forever. ★ **AND HE ALREADY WRITES THE SECOND KIND HIMSELF — 37 files of them since 2026-05-07, unprompted (§2d).** ⇒ **the design should IMPROVE AND SHARE what he is already doing, not have four sessions push him a worse substitute for it.**
+
+⇒ **RECOMMENDATION TO KYLE, one shape rather than a menu: RETIRE THE CLOSURE-BLOCK LIMB OF §10.b; KEEP SEQUENCING + INVARIANTS BUT MOVE THEM INTO THE COMPOSED-FROM-PARTS STRUCTURE (§2f) SO EVICTION IS AUTOMATIC; AND TREAT HIS OWN RULING STORE AS THE THING TO BUILD ON.** ⚠️ **Still gated on his answer for what he would actually want pushed, and it remains rule-24 outcome (2) — a scope decision, Kyle's, never a unilateral removal of a governed rule.**
+
 ## 3. The Langston memory-FILE trim — a DIFFERENT job, handed to me by Kyle via Old Claude
 
 **Already shipped:** the recall tool (Phase B), two-way Discord images so the sessions can see what Kyle posts, and the crew-status page.
