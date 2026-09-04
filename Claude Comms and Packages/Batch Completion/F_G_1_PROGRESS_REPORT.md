@@ -441,6 +441,64 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 ⇒ ⚠️ **Both were caught before the verdict and neither changed it — the off-grid count was zero under every population I tried. Recorded anyway: a verdict is only as good as the instrument, and this instrument needed two corrections to become the one the criterion asks for.**
 
 
+
+### 3o. ⛔ THE READ IS RE-FILED AGAINST §3n AND §3a — **CRYPTO `PASS (n=24)`, xSTOCK `UNDERPOWERED (n=19)`** — AND THE CO-DENOMINATOR TURNED UP A FINDING
+
+⛔ **APPENDED, NOT EDITED.** §3m stands as written and is **SUPERSEDED IN ITS VERDICT LINE** by this section.
+
+⚠️⚠️ **§3m's HEADLINE CITED A RULE THAT FORBIDS ITS OWN VERDICT (Langston, and he is right).** It opened *"the 7-DAY ARM… 24 < 30"* — and **§3 says verbatim: *"If 7 days elapse with fewer than 30, that is reported as an underpowered read, not as a pass"***, re-affirmed by §3f RIDER-1 **per leg, per class**. ⇒ **under the sentence I quoted, `n=24` is UNDERPOWERED.** ★ **PASS is available ONLY under §3n, which replaced the 30-count arm with a five-item discharge set on 2026-08-30 — and §3m never cited it.**
+★ **WHY I MISSED §3n, STATED RATHER THAN GLOSSED: my section enumeration was an EXPECTATION LIST (`3, 3d…3l`), and §3n sits at line 480, AFTER §6.** An unfiltered `grep '^#{2,4} '` returns it immediately. **`enumerator-blind-spot` again: I searched for the members I already knew about.**
+
+#### ✅ §3n's DISCHARGE SET — ITEM BY ITEM, MEASURED
+
+| # | to discharge | result |
+|---|---|---|
+| **1** | `volatility_edge` sampled once on-grid **OR** the config lock making it unreachable, cited to the line | ⛔ **NOT DISCHARGED — NEITHER ARM HOLDS.** Sampled: **0 rows** in the window (closed **0**, open **0**). *Control: seven strategies DID trade — `defensive_hedge`, `inside_bar_reversal`, `mean_reversion`, `morning_star`, `sma_trend_ride`, `support_bounce`, `vwap_pullback` — so the instrument reads strategy names and the zero is real.* Config lock: **absent** — it is registered live at `canonical-regime-strategy-map.ts:291`, carries a governance dependency at `strategy-governance.ts:44`, and the `strategies` table that could disable it holds **0 rows**. ⇒ **the `volatility_edge` arm of `roundPriceForRole` — the ONLY cap that rounds TOWARD entry — is UNTESTED BY THIS WINDOW, at ZERO OPPORTUNITY** (`#661` leg 3, which this report cites against itself). |
+| **2** | ≥1 `never_filled` crypto row read on BOTH stop and target | ✅ **DISCHARGED.** `APR/USD` and `CRV/USD`, both legs, both on-grid. |
+| **3** | `#927`'s `target/entry ≈ 1.02` count **with its denominator** | ✅ **DISCHARGED, COUNTED NOT INFERRED: 0 of 22** (crypto) and **0 of 19** (xStock) rows carrying both entry and target sit within 1e-4 of exactly 1.02. |
+| **4** | §3h(1) composition split — and `TRUMP/EUR` classified | ✅ **DISCHARGED.** **A_volatile 23 · B_stablecoin-leg 1 (`XMR/USDT`) · C_fiat-fiat 0.** Sums to 24. **`TRUMP/EUR` = A_volatile** (TRUMP is not a fiat or stable leg). ⚠️ **The zero fiat-fiat cell is itself the point: §3h(1) exists because `USDC/CAD`-shaped rows are labelled `crypto_spot`; in THIS window none opened, so the volatile leg is not diluted.** |
+| **5** | §3l's entry-leg `n ≥ 20` stands | ✅ **DISCHARGED AT n=24, NOT 22, AND NOT BY INFERENCE.** §3m marked the 2 `never_filled` rows *unscoreable on entry* — **but §3l withdrew that label and proved `rtb_shadow_pairings` recovers the entry.** **RECOVERED AND SCORED: `APR/USD` entry `0.20360000` / tick `0.00001` ⇒ ON GRID; `CRV/USD` entry `0.35667000` / tick `0.00001` ⇒ ON GRID.** ⇒ **crypto entry leg is 24/24 on-grid.** |
+
+⇒ ⛔ **4 OF 5 DISCHARGED. ITEM 1 IS OPEN AT ZERO OPPORTUNITY — SO CRYPTO'S `PASS` CARRIES THAT NAMED LIMIT, IT IS NOT A CLEAN SWEEP.**
+
+#### ✅ THE INSTRUMENT, REBUILT AGAINST BOTH OF LANGSTON'S ATTACKS
+
+**① THE NEGATIVE CONTROL NOW PERTURBS ALL THREE LEGS, AND ITS COUNTS MATCH THE SCOREABLE DENOMINATORS EXACTLY** — which is what closes the NULL hole he named (`mod(NULL,tick) → NULL`, counted as 0 and indistinguishable from on-grid):
+
+| class | scoreable n (entry / stop / target) | perturbed by ⅒ tick ⇒ OFF (entry / stop / target) |
+|---|---|---|
+| `crypto_spot` | **22 / 24 / 24** *(entry 24 after §3l recovery)* | **22 / 24 / 24** |
+| `xstock_spot` | **16 / 16 / 16** | **16 / 16 / 16** |
+
+⇒ **every scoreable row flips OFF when perturbed, on every leg. No leg's zero rests on an undemonstrated column.**
+
+**② THE TICK GRADED AGAINST IS THE ROW'S OWN `metadata.gridAtBirth.tick` — the tick STAMPED AT SIGNAL BIRTH — NOT a read-time `/0/public/AssetPairs` fetch.** ⇒ **his trap is structurally avoided: a read-time tick finer than the birth tick would make every row pass trivially and the ⅒-tick control could not catch it** (`#704`). **Stated because it is unfalsifiable from the numbers alone.**
+
+#### ⛔⛔ §3a's FOUR CO-DENOMINATORS — AND THE THIRD ONE IS A FINDING
+
+§3a: *"all four over the SAME window, or the read is not reportable"* · *"few opens + many evaluations + many refusals = a FINDING. Few opens + few evaluations = weather."*
+
+| co-denominator | value | source |
+|---|---|---|
+| **crypto positions opened** | **24** | the population above |
+| **grid refusals by reason** | ⛔ **14,652 refusal events since 2026-08-28** — **14,649 `stop_distance_after_rounding`**, **3 `unorderable_triple`** — across **88 distinct symbol/strategy pairs** | `error.log` + rotated set (reaches back to 08-21, so it covers the window) |
+| **grid evaluations** | ⚠️ **NOT AVAILABLE ON THIS WINDOW.** The counter is in-memory (`eval-cycle.ts:222 gridEvaluated`) on the xStock lane and is not exposed per-window. | — |
+| **signals generated** | ⚠️ **NOT AVAILABLE ON THIS WINDOW. 769,693 is CUMULATIVE SINCE 2026-07-14** (`active-funnel/v3 startedAt`), while the refusals exist only since the 08-28 deploy. ⛔ **DIVIDING THEM WOULD BE A DENOMINATOR MISMATCH AND NO RATE IS STATED.** | funnel endpoint |
+
+⇒ ⚠️ **SO, BY §3a's OWN WORDS, THIS READ IS NOT FULLY REPORTABLE: two of four co-denominators are unavailable on the window.** Stated rather than papered over — **and it does not soften the refusal count, which stands on its own instrument.**
+
+⭐⭐ **AND THE REFUSALS ARE A FINDING, NOT WEATHER — TWO STRATEGIES WERE REFUSED THOUSANDS OF TIMES AND OPENED NOTHING.** From the funnel's `preSqeRejectsByStrategy` (crypto): **`pivot_shift` 6,578 · `support_bounce` 3,408 · `morning_star` 2,450 (+3 unorderable) · `inside_bar_reversal` 1,290 · `reverse_impulse` 673 · `defensive_hedge` 244.**
+⛔ **`pivot_shift` (6,578 refusals) and `reverse_impulse` (673) DO NOT APPEAR AMONG THE SEVEN STRATEGIES THAT TRADED IN THE WINDOW.** ⇒ **on this evidence they are WHOLLY SUPPRESSED at the grid seam.**
+⚠️⚠️ **SYMPTOM, NOT CAUSE (`CONDUCT` §8): refusing is the seam's DESIGNED behaviour when rounding would break the geometry — *"the seam refuses or rounds, there is no third outcome"* — so a systematically tight stop relative to the tick SHOULD refuse. WHETHER THE RATE IS CORRECT OR THE CHECK IS TOO STRICT IS NOT ESTABLISHED HERE, and I am not asserting a defect.** ⇒ **`HOME: B-GRID-REFUSAL-RATE, owner CC-C, placed in `PHASE_19_PLAN` after `3n.c`** — and it is **materially relevant to the reachability work Kyle has placed next**, because a stop-distance refusal and a reachability ceiling are the same geometry seen from two ends.
+
+#### ⇒ THE VERDICT, RESTATED
+
+| leg | verdict | warrant |
+|---|---|---|
+| **`crypto_spot`** | ✅ **PASS (n=24)** | **§3n's discharge set** — 4 of 5 discharged, **item 1 open at zero opportunity and named as a limit**. Zero off-grid on entry (24/24 after §3l recovery), stop (24/24) and target (24/24), on a control that flips every scoreable row. |
+| **`xstock_spot`** | ⛔ **UNDERPOWERED (n=19)** | **§3n converted the CRYPTO 30-count arm only** — it is singular and all five items are crypto-shaped, while **§3e created TWO counters.** ⇒ **§3's blanket underpowered rule still governs the xStock leg. Zero off-grid on 19 rows is real and worth having; it is NOT a pass on that leg** — exactly what §3f RIDER-1 pre-registered to stop the class we are least sure about reading as tested. |
+
+
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
