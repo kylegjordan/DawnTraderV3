@@ -202,3 +202,33 @@
 ## STATUS
 
 **Step 2 — audit + plan written, dispatched to Langston.** Board card `Pre-Audit`, `Blocked on = Langston`.
+
+---
+
+## A-8. ⭐⭐ OBJ-5 — RANKING. **THE "NO CHANGE" ANSWER IS CORRECT AND ITS STATED REASON IS NOT**
+
+**OBJ-5 required the no-change argument be made OUT LOUD rather than skipped by default (§9 anti-pattern), and it attached a trap-door clause: *"If ranking also sets a level, it is an OBJ-1 site and the rule governs it."*** ⇒ ⛔ **THE CLAUSE FIRES. It was not decoration.**
+
+### ✅ THE ARGUMENT, MADE — AND IT SURVIVES
+**A mid is the right basis for RANKING, and the reason is that ranking is a RELATIVE comparison.** Every candidate is scored on the same construction, so a bias common to all of them shifts every score by roughly the same amount and **does not reorder the pool.** ⇒ **Paying a half-spread of accuracy to buy a less noisy comparator is a good trade when the output is an ORDER rather than a price.** ★ **This is the same reasoning that keeps the smoothed value in the estimator job — and it is why the severance is a severance and not a removal.**
+⛔ **AND ITS LIMIT, STATED: the argument is about a bias that is COMMON. It says nothing about a term applied to SOME candidates and not others.**
+
+### ⛔⛔ WHICH IS EXACTLY WHAT THE POOL DOES — `ready_to_buy_service.ts:1789`
+```
+const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.entry * 1.02; // mirror executePromotedSignal default
+```
+**This sits inside `rMultipleCore`, whose output `r` IS the sort key**, and it feeds `evaluateTradeExpectancy` directly. ⇒ ⛔ **A candidate WITH geometry is ranked on its own measured target; a candidate WITHOUT one is ranked on a flat 2%. Two sub-populations, two rules, one ordering.**
+⇒ ★★ **SO THE NO-CHANGE VERDICT SURVIVES AND ITS JUSTIFICATION DOES NOT COVER THE POOL AS IT ACTUALLY IS.** The mid is applied identically; **the fabricated target is not**, and the identity clause was doing all the work.
+⚠️ **THIS DOES NOT MAKE THE MID WRONG FOR RANKING.** It removes ONE thing from the set that argument was protecting. **Stated precisely because the tempting move is to let a real finding widen a settled verdict.**
+
+### ✅ ALREADY FILED — THIS IS A CROSS-REFERENCE, NOT A FINDING (§9.5(b-ii), and the check WORKED)
+**`RUNNING_ISSUES` `#927` OPEN 2026-08-28 — *"THE PROMOTION PATH INVENTS A TARGET PRICE IN THREE PLACES, AND ONE OF THEM IS THE RANKING KEY."*** ⛔ **Mine, filed a week ago, and it names `ready_to_buy_service.ts:1788` and the ranking key explicitly.** ★ **The ledger search found it by the SYMBOL, not by the symptom — the search discipline that took seven weeks to find `#174` the other way round.**
+⇒ ✅ **NO NEW ISSUE. The two new arguments are recorded ON `#927`:** (i) the P4 rule disqualifies `entry × 1.02` on a second independent ground — **it is not a price at all**, never printed, never quoted, carrying no age because nothing observed it; (ii) the identity-clause breakage above. **Home unchanged: `B-TARGET-FABRICATION`, owner CC-C.**
+⚠️ **THE LIVE SIBLING IS CONFIRMED AT THE OBJECT, since `#927` cites a line number that has moved:** `active-execution-engine.ts:3315` — `const targetPrice = signal.targetPrice ? parseFloat(signal.targetPrice) : entryPrice * 1.02; // Default 2% target`. ⇒ **the ranking fallback's comment (*"mirror executePromotedSignal default"*) is ACCURATE, and the promotion-path twin is live.**
+
+### ⛔ SIZING ATTEMPTED, NOT ESTABLISHED — AND THE ZERO IS DELIBERATELY NOT REPORTED AS A RESULT
+**I tried to measure the share of ranked candidates that hit the fallback. `rtb_signals` returned `0.00%` — on `n = 1`.** ⛔ **That number is discarded, not carried.** **CONTROL RUN BEFORE DRAWING ANY CONCLUSION:** the table holds **exactly one row in total**, `MIN(queued_at) = MAX(queued_at) = 2026-09-04 20:10:26.943+00`, **0 promoted, 0 expired** ⇒ **it is a LIVE QUEUE that drains, not a history table.**
+★ **A `0%` read off a drained queue is `#661` leg 3 wearing a new costume: an instrument with no reach reporting a clean result.** ⇒ **the rate is UNSIZED, the right population is whatever durably records what the pool ranked, and finding it belongs to `B-TARGET-FABRICATION` — not to this batch.**
+
+### ✅ DISPOSITION
+**OBJ-5 ANSWERED: ranking keeps the mid. Argument stated, its limit stated, and the one site where the limit bites is cross-referenced to `#927` with two new arguments recorded there.** **No scope change to this batch.**
