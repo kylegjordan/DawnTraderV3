@@ -861,3 +861,24 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 **LIVE — the guard is judging, not merely seeded (2026-09-03 20:2xZ):** 220 `BOOK_STATE` lines, 192 skips / 3 yields on LI/USD, refusing a book whose spread was **2.06% against its own trailing median of 0.083%** — a 25× widening, `ask_spiked`. Position sat 2.57% above its stop throughout.
 
 **Record:** `B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md` — converts to the completion report when the window's data is in AND a decision is taken. **Criterion pre-registered before the data:** the first two weekday 20:15 ET handoffs after deploy (2026-09-04 and 2026-09-08).
+
+---
+
+## B-DEPLOY-ACTOR-ALLOWLIST — the deploy record's `--by` becomes canonical (2026-09-04, CC-B)
+
+**`#656` residual · plan row `2.4a` · change-class `non_architecture` · deployed `a4bcbe3c1bf45efb0c92942e9ab83a03a35c9556`**
+**Langston: Step-1 APPROVED w/ conditions · Step-2 APPROVED w/ condition · Step-4 APPROVED w/ three conditions · Step-8 CONFIRMED, reproduced independently on the box.**
+
+**WHAT IT DID.** `dt-deploy --by` was validated **by SHAPE ONLY** (`^[A-Za-z0-9_-]{2,24}$`), so `cc-session-2026-09-04` passed and the deploy record's `deployed_by_claimed` was free text one namespace over from the alert file `#987` had just fixed. It is now an **exact match against a 13-key table DERIVED from `ALERT_ACTORS` where `tag !== 'machine'`** — the six deployers plus the seven aliases — **total: canonical value or refuse, no pass-through arm.** The record stores the canonical value; refusals name the set and never echo the rejected value. Parity is fenced by a **fail-closed** test.
+
+**★ THE DERIVATION IS THE POINT.** A hand-listed six would be right today and silently wrong the first time a machine actor is added. The plan's first draft said "all nine" — which would have made `governance-checker`, its heartbeat and the soak verifier into **accepted deployers**, inside a batch whose purpose was to narrow the field. Caught at Step 2 against `PHASE_19_PLAN.md:498`, which specifies six.
+
+**★ THE PROVENANCE READ CHANGED THE FRAMING.** The charset check was written to keep the record's `key=value` line parseable and its own comment says so. It was **never an identity allowlist** — so this is `§9.4` disposition (2), an extension to today's intent, **not a defect in what was built.**
+
+**FOUND AND FIXED IN FLIGHT — `#1000`.** A fresh-reader object round found the actor gate `#987` shipped was **not total**: a plain object literal meant `constructor` and `__proto__` reached `Object.prototype`, passed the gate, and then **vanished from the row** because `JSON.stringify` drops functions — an ABSENT attribution inside the gate built to prevent free-text attribution. Fixed with two independent guards and a regression that goes red when the defect is restored.
+
+**OPENED — `#1004`, and it outlives this batch.** `a4bcbe3c1`, the commit making the deploy actor set canonical, **was itself deployed by the old free-text gate**: `dt-deploy` does not install itself. Its own class (provenance, not bypass), homed `P19-B12`.
+
+**EVIDENCE, all RUN:** both fences mutation-proved with hash-verified restores · gate exercised against the real script and then **on the box** · bash subscript behaviour verified on staging, not from the manual · CI 4/4 per job at the deployed head · tsc baseline 377 = 377.
+
+**Record:** `B_DEPLOY_ACTOR_ALLOWLIST_COMPLETION_REPORT.md`.
