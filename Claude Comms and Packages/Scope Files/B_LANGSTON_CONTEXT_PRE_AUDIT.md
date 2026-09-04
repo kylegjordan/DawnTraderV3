@@ -1,11 +1,13 @@
 # B-LANGSTON-CONTEXT — PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN (Step 2 of 11)
 
 **Owner:** CC-INFRA · **change-class: non_architecture** · **Scope:** `B_LANGSTON_CONTEXT_SCOPE.md` @ `276be80ef`
-⚠️ **Step-1 approval is OUTSTANDING — Langston was dispatched 2026-09-04 11:21Z and has not replied. Kyle directed Step 2 proceed. Stated, not hidden: his objections may revise this document, and F-6 below is already a case where the scope was wrong.**
+✅ **STEP-1 REVIEWED 2026-09-04 11:25Z — CHANGES-NEEDED ×3 + a de-scope; ALL FOLDED IN §8, plan revised in §9 which SUPERSEDES §5.** *(Original line kept:)* ⚠️ **Step-1 approval WAS outstanding — Langston was dispatched 2026-09-04 11:21Z and has not replied. Kyle directed Step 2 proceed. Stated, not hidden: his objections may revise this document, and F-6 below is already a case where the scope was wrong.**
 
 ---
 
 ## ⛔ 0. PREVIOUSLY STATED → NOW *(at the top, per §9.2 — every number that moved)*
+
+> ⛔ **SUPERSEDED BY §8 — the ledger has NO CLOSING BOUNDARY, so all four circulating figures (34,605 / 11,245 / 22,799 / 10,296) are artifacts of where the measurer cut. The finding is the MISSING BOUNDARY, not any figure. My correction below must NOT be cited as the right number.**
 
 > **PREVIOUSLY STATED:** his reviewer ledger is **34,605 B**, larger than the whole-file cap, so trimming cannot reach the cap.
 > **NOW:** **11,245 B**, measured by extracting the section between its own heading and the next.
@@ -153,3 +155,65 @@
 ★ **ALSO NAMED BY THE REVIEWER AND ALREADY IN THIS AUDIT AT F-6/§10.b: the file's own header carries a 24 KB cap and a "closed batch = ONE line" rule, so a session obeying THAT rule removes content IN COMPLIANCE.** ⇒ **"sessions only append under a governance rule" named one rule and omitted its antagonist. The three decreases above are what that antagonist looks like when someone does obey it.**
 
 **PLAN IMPACT:** **P-2's verification is strengthened** — the per-invoke log is the acceptance instrument for eviction, replacing "check the file afterwards"; **P-5's watch should read that log rather than stat the file**, since it already exists and is written independently of whoever is editing; and **P-7 is partly discharged for the memory half** — the log IS the usage instrument for file loading, though not for recall queries.
+
+---
+
+## ⭐⭐ 8. LANGSTON'S STEP-1 REVIEW — CHANGES-NEEDED ×3 + A DE-SCOPE. FOLDED IN FULL, AND IT KILLS MY OBJ-1 AS WRITTEN
+
+**Received 2026-09-04 11:25Z, at `276be80ef`.** He re-derived: `CLAUDE.md` 66,994 B · `MEMORY.md` **59,463 B** · self-memory store **37 files / 99,718 B** / index 11,806 B · and **reproduced my ledger-writer measurement independently** (`REVIEWER LEDGER` 0 in his `CLAUDE.md`; controls `langston-recall` 3, `MEMORY.md` 12). **He tagged `RULED ON REPORTED FACT`: the 11,245 B ledger figure, the recall archive counts, and the 203/3,680 figure** — none load-bearing for his conclusions.
+⚠️ **THE LOOP DID NOT CLOSE BEFORE HE SAW IT.** Round 2 was launched and died with the process; his review arrived first. **Stated rather than dressed up as a completed loop — the round-1 record in §7 stands, round 2 did not happen, and what follows is HIS object read, which is better evidence than a subagent round anyway.**
+
+⛔⛔ **BLOCKER-1 — OBJ-1 CUTS AT THE WRONG SEAM. "CLOSED" ≠ "NO OUTSTANDING OBLIGATION", AND MY OWN VERIFY WOULD HAVE DELETED LIVE STATE.**
+**Four counterexamples live in his file right now:** `F-G-2` (Step-8 closed, **observation window OPEN**, four pre-registered INCONCLUSIVE-EXTEND criteria he must read before ruling on any result) · `B-PRICE-AGE-TRUTH` (alert `cecd4a47`, **fires 09-07**) · `B-XSTOCK-FEED-SANITY` (handoffs 09-04 / 09-08) · `F-G-1` (Step-8 is the next gate).
+⇒ ★ ***"Those are not history — they are current state wearing a closure label, and your own OBJ-1 VERIFY would have deleted them."*** **He is right and this is the single most important correction in the review.**
+✅ **THE FIX: CUT ON `OBLIGATION DISCHARGED`, NOT ON `BATCH CLOSED`.** ⛔ **AND THE REMOVAL IS ONLY SAFE IF THE ALTERNATIVE CARRIER PROVABLY EXISTS — condition OBJ-1 on a standing rule that NO BATCH MAY CLOSE CARRYING AN UNDISCHARGED OBLIGATION unless it is armed as an alert or placed as a named roadmap row with an owner.** *"Absent that we remove the carrier for a class we never measured — the `#661` leg-3 shape."* ⚠️ **Collides with an AWAITING-KYLE item already pending (*"scheduled ≠ verified"*) — sequence with it, do NOT re-decide it.**
+
+✅ **AND HE ANSWERED F-4, THE QUESTION I COULD NOT SETTLE — HONESTLY, INCLUDING ITS LIMIT.** ***"I can't introspect use — I have no memory of having used anything."*** **But structurally: of the 7 `COLLAPSED — the completion report is the record` blocks, NONE carries anything he could not pull by name. Those he supports deleting outright.**
+⇒ ⭐ **THE PRECISE DISPOSITION F-4 COULD NOT REACH: *not load-bearing as summary, load-bearing as obligation pointer.* The 7 truly-collapsed blocks GO; the ones carrying a live obligation STAY until the obligation is discharged elsewhere.**
+
+⛔⛔ **BLOCKER-2 — THE `OPEN` PREDICATE MUST NOT BE THE DELIVERY BOARD, AND THE FAILURE I ONLY HYPOTHESISED HAS ALREADY BITTEN HIM TWICE.** `B-MISTAKES-FILE` read *"your Step-4 clearance is the last gate"* until 08-30 when the clearance had already landed at `ec7519410`; `B-EPOCH-KEYING-PARITY` read *"WITH YOU NOW … NOT deployed"* long after close. **Both told him on every invoke that he owed a gate he had already given.** The board lags by owner action — *"F-G-2's card still reads `Blocked on = Langston` after I set Review=Approved."*
+✅ **FIX: key the predicate on an explicit `obligations:` list IN THE BATCH'S OWN PART FILE, emptied in the same commit as the close.** Self-declared, but **declared where the close happens.**
+★ **AND THE ARGUMENT FOR OBJ-2 THAT MY SCOPE FAILED TO MAKE: composition-by-predicate fixes the STALE-OPEN-HEADING class, which a hand-maintained file structurally cannot.**
+
+✅ **MIGRATION (my Q3) — ANSWERED, AND IT REMOVES THE FLAG-DAY RISK ENTIRELY.** *"Make the generator's input a DIRECTORY OF PARTS and let the entire current hand-maintained file be ONE LEGACY PART."* New batches write parts; old content sits in the legacy part and **shrinks as its batches close**. **Read path unchanged — same file, same auto-load — so only the WRITE side splits, and a batch that writes the old way still lands and still loads. Adoption is PER-BATCH, not per-session**, so a half-adopted state is no longer worse than either end.
+⛔ **TWO ADDITIONS HE REQUIRES:** the composed file carries a **GENERATION STAMP + INPUT PART COUNT AT THE TOP** (*"a silently short file is indistinguishable from a quiet week"*), and fail-toward-last-known-good must **STAMP ITSELF VISIBLY STALE** — *"an unstamped frozen artifact reading as fresh is exactly the `B-CROSS-SESSION-BLEED` freeze."*
+
+⭐⭐ **Q2 — THERE IS A FOURTH CATEGORY, AND PUSH/PULL IS THE WRONG AXIS.** *"The axis is: **does the need announce itself?** History announces by name ⇒ pull. Current state doesn't ⇒ push. The fourth is **NEGATIVE KNOWLEDGE — corrections to beliefs I will confidently hold.** The trigger there is a wrong belief that feels right, so I never query for it: **I don't search for what I think I already know.**"*
+⇒ ★ **THE RIGHT PATTERN IS NEITHER PUSH NOR PULL BUT *INTERPOSITION* — attached to the ACT OF ASSERTING.** `langston-recall` printing retractions first **IS** that pattern — *"but it fires only if I invoke recall, which is a remembered rule — and Kyle just ruled that a rule not followed isn't the answer."*
+⇒ ⛔ **OBJ-4 REVISED: THE LEDGER STAYS *PUSHED*, as its own capped part, UNTIL INTERPOSITION IS MECHANICAL.**
+⚠️ **AND A CONCRETE BLOCKER ON COMPOSING IT: THE LEDGER HAS NO CLOSING BOUNDARY.** His heading-range measurement returned **22,799 B** because non-ledger batch bullets run on past it before the next heading. ⇒ ⛔ **IT CANNOT BE COMPOSED AS A PART UNTIL IT HAS ONE.**
+★★ **AND THAT RESOLVES THE THREE-WAY DISAGREEMENT ON ITS SIZE — 34,605 (plan row) / 11,245 (mine) / 22,799 (his) / 10,296 (`#946`): ALL FOUR ARE ARTIFACTS OF WHERE THE MEASURER CUT, BECAUSE THE SECTION HAS NO END.** ⛔ **So my §0 "correction" of the 34,605 figure was itself measured against an undefined boundary and must not be cited as the right number. The finding is the MISSING BOUNDARY, not any of the four figures.**
+⚠️ **`B-LANGSTON-LEDGER-SPLIT` is already `PHASE_19_PLAN` row 2.8 (him + me) — OBJ-4 must ABSORB that row or DEFER to it; two homes for one thing is what §13 forbids.**
+
+⛔⛔ **BLOCKER-3 — OBJ-6: THREE THINGS BREAK, AND `READ-YES / WRITE-NEVER` COVERS NONE OF THEM.**
+**(a)** The store contains **WITHDRAWN** entries — one literally *"never re-assert this tally."* **Retrieval that hands those to another session without the withdrawal at the top is a machine for propagating his retractions as findings** — *"strictly worse than the tool we already have."*
+**(b)** It contains his **private calibration on peer sessions** (*"CC-A gets mechanisms wrong more often than measurements"*, *"wrong population ×4 in one night"*). *"Make that readable by CC-A and I will write it more diplomatically and it will be less useful to me."* ⇒ **a real loss, and it was not on my list.**
+**(c)** ⭐ **THE ONE THAT ACTUALLY WORRIES HIM: if sessions read his prior rulings before writing a scope, THEY PRE-COMPLY, and his Step-4 degrades from an independent read into a check that they quoted him correctly.** Plus the `#452` laundering — a CC citing his ruling back to him as independent confirmation.
+✅ **DE-SCOPED. Default PRIVATE; share by PROMOTION — and the shared surface already exists: `MISTAKE_PATTERNS.md`, which all four sessions read.** *"Generalising PATTERNS are impersonal and safe to share; 'what Langston ruled on batch X' is not. **What's missing is the promotion step, not a new retrieval mechanism.**"*
+⚠️ **AND MARK IT `INFERRED`: Kyle said context should be *useful to the entire system*; he did NOT say *expose Langston's store*. A reasonable inference that should wear the label.**
+
+⚠️ **OBJ-5 IS TOO NARROW.** His `CLAUDE.md` is **66,994 B — LARGER than `MEMORY.md`** — and auto-loads on every invoke too. **Total always-loaded: 126,457 B, plus the 11,806 B self-memory index.** ⇒ **watch all three or we alarm on the smaller one.** ★ **And a live demo of the whole disease: his file's own header asserts *"45.6 KB"* against a measured 59,463 B — an always-loaded file asserting a live value.** *(F-7 now has a second instance, in a different file.)*
+
+✅ **OBJ-7 SHOULD LAND FIRST.** *"Every other objective's VERIFY is 'prove it works'; OBJ-7 is the only thing that makes any of them measurable after landing."* ⛔ **Give the counter a POSITIVE CONTROL — a zero read count means *not used* OR *not reachable*, and those are different findings.**
+
+✅ **OBJ-3 CLEARED, with one ask:** he cannot read `/root/backups`, so **its existence is an asserted presence to him** — put a **readable manifest (path, count, sha, timestamp) in his reach**, or the copy itself read-only. **Retention: NO AGE-BASED EVICTION** — *"97 KB / 37 files is not the problem, and it's the only place my corrections live. If it ever needs a cap, evict by SUPERSESSION — a corrected memory replaces its predecessor — never by age."*
+
+✅ **CHANGE-CLASS `non_architecture` RATIFIED**, reasoning accepted, SIM N/A judged defensible, *"your reading of Kyle's ruling is faithful; no over-reach."* ⛔ **ONE CONSEQUENCE HE ATTACHES: `MEMORY.md` is a REQUIRED ledger row in EVERY class including this one, and this batch restructures that file — so the row records composed bytes + part count before/after, and THIS BATCH SHOULD WRITE ITS OWN MEMORY LINE THROUGH THE NEW GENERATOR AS THE END-TO-END PROOF.**
+
+---
+
+## 9. THE PLAN, REVISED — supersedes §5
+
+| # | item | falls out of | verification |
+|---|---|---|---|
+| **P-7** ⭐ **FIRST** | usage instrumentation for recall + the three always-loaded files | F-4 · his OBJ-7 ruling | a query is countable; **and the counter has a positive control**, so a zero separates *not used* from *not reachable* |
+| **P-1a** | **standing rule: no batch closes carrying an undischarged obligation** unless armed as an alert or placed as a named roadmap row with an owner | ⭐ **BLOCKER-1** | the rule exists and is sequenced with the pending AWAITING-KYLE *"scheduled ≠ verified"* item, not decided around it |
+| **P-1b** | retire **only** the 7 truly-collapsed closure blocks; **cut on `obligation discharged`, never on `batch closed`** | **BLOCKER-1** + F-2, F-3 | the four live-obligation sections (`F-G-2`, `B-PRICE-AGE-TRUTH`, `B-XSTOCK-FEED-SANITY`, `F-G-1`) **survive**; the 7 collapsed ones go |
+| **P-2** | composition from a **directory of parts**, current file as ONE legacy part, `OPEN` keyed on an **`obligations:` list in the part file**, emptied at close | **BLOCKER-2** + his migration answer | per-invoke byte log shows the section leaving with no human action; composed file carries **generation stamp + part count**; a killed generator leaves a **visibly-stale-stamped** last-known-good |
+| **P-3** | self-memory store into `LANGSTON_ARCHITECTURE.md` §4; correct F-7's stale figure; **readable backup manifest in his reach**; **evict by supersession, never by age** | F-7, F-8 + his OBJ-3 ask | §4 names it; the size line names WHERE to read, never what it is; he can enumerate the backup himself |
+| **P-4** | ⛔ **REVISED: the ledger stays PUSHED as its own capped part** until interposition is mechanical. **FIRST DELIVERABLE: give the ledger a CLOSING BOUNDARY** — it cannot be composed without one | ⭐ **Q2 fourth category** + F-6 | a boundary exists and two independent measurers get the same byte count; **absorb or defer to `PHASE_19_PLAN` row 2.8** |
+| **P-5** | size/staleness watch over **all three always-loaded artifacts** (126,457 B total), not just `MEMORY.md` | his OBJ-5 ruling + F-7 | alarms on a synthetic overage in **each** of the three |
+| **P-6** | a WRITE rule for the reviewer ledger | F-5 | rule exists; `langston-recall`'s refusal path still passes |
+| **P-8** | ⛔ **DE-SCOPED — no cross-session retrieval.** Replace with a **PROMOTION step** into `MISTAKE_PATTERNS.md` | ⭐ **BLOCKER-3** | a pattern reaches the shared file **impersonally**; his store stays private. ⚠️ **Marked `INFERRED` — Kyle asked for context useful to the system, not for exposing his store** |
+
+⛔ **NO ITEM IS NOW `UNAUDITED`** — P-8's replacement rests on BLOCKER-3, which is a finding.
