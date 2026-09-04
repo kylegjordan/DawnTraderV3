@@ -14,9 +14,13 @@
 |---|---|---|---|
 | 1 | *"Signal generation reads a mid"* (scope §2, job 1) | **Signal generation reads a KALMAN-SMOOTHED mid whose gain has a median of 0.0952** — each new tick moves the estimate by <10% | measured, `n=104,465` (A-4). The scope's own OBJ-2 taxonomy could not classify it (Langston FINDING-1); the audit now quantifies how far from a mid it is |
 | 2 | *"the level-setting sites"*, illustrated by 2 line numbers | **70 construction sites across 19 files, 10 of them individual strategies** | the census (A-2). The scope's citations were the pattern-lane fallback and were demoted to illustration at r2 |
-| 3 | MCE pass-through **UNVERIFIED** (Langston's stated limit, carried verbatim into the scope) | ✅ **CONFIRMED PASS-THROUGH, verbatim** — `market-context-engine.ts:1431-1434` places the parameter into `indicators` by shorthand, untransformed | A-3. His open limit is discharged, by me, at the object |
+| 3 | MCE pass-through **UNVERIFIED**, and r1 then over-generalised the answer to *all* strategies (Langston's stated limit, carried verbatim into the scope) | ✅ **CONFIRMED PASS-THROUGH, verbatim** — `market-context-engine.ts:1431-1434` places the parameter into `indicators` by shorthand, untransformed | A-3. His open limit is discharged, by me, at the object |
 | 4 | *"the damage is DELAY, not the half-spread"* → then corrected to *"a STATIC OFFSET, not lag"* (Langston Q3c) | **BOTH are second-order on the LEVEL side.** The dominant term there is a **real** lag — the filter's, ~10-observation memory — which is a different mechanism from either | A-4/A-5. Stated so the two corrections are not read as converging on one cause |
 | 5 | — (not previously stated) | **`clearKalmanFilter` and `restoreState` have ZERO production callers** | A-5 census |
+| 6 | r1 A-3: *"the strategies build levels from the smoothed value, verbatim"* | ⛔ **FALSE for the PATTERN lane — its basis is a BAR CLOSE (`:2207`), reached through a SECOND `computeContext` at `:2233`** | Langston BLOCKER-1, re-derived by me. **The sentence P3/P4 were sized against.** |
+| 7 | r1: chain refs `:2456`, `:2513`; RTB fabrication `:1789` | **`:2450`, `:2515`, `:1788`** | checked line-by-line at the object; `:2456` and `:2513` are a comment and `vwap` |
+| 8 | r1 unsettled #3: *"K measured on ~6 h only"* | ⭐ **STRUCK — it generalises BY CONSTRUCTION; `R`/`Q` carry no price quantity** | A-4. **I hedged a result that was stronger than stated** |
+| 9 | r1 A-5: restart-wipe INFERRED from a zero-caller census | ✅ **MEASURED with a control: 190 cold seeds in the 10 min after the restart vs 6 in a no-restart control window** | A-5. `[9.3][RESET]=0` is corroboration only — `reset()` is reachable solely from the zero-caller function |
 
 ---
 
@@ -31,7 +35,13 @@
 
 ⇒ ⭐ **THE PAYOFF, AND IT IS EXACTLY WHAT THE RULE EXISTS FOR: `RTBRefreshService` IS AN ENTRY POINT A FORWARD TRACE FROM THE SCANNER NEVER VISITS.** It re-confirms and re-ranks already-generated signals on its own clock tick. **A trace that started at the scanner and followed the signal would have concluded that levels are set once, at generation.**
 ✅ **CHECKED AT THE OBJECT: the refresh path does NOT re-derive entry/stop/target.** `core/rtb/ready_to_buy_service.ts:776-778` **parses** the stored values (`parseFloat(signal.entryPrice…)`) — it is a READER. **Stated explicitly because an asserted absence needs presence-evidence (rule 22).**
-⚠️ **BUT IT DOES FABRICATE ONE:** `:1789`, inside `rMultipleCore` (the RANKING path), `const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.entry * 1.02` — commented *"mirror executePromotedSignal default"*. **A ranking input invented from a constant** — the `#927` target-fabrication class, reached on the ranking leg. **Carried to OBJ-5, which is the ranking objective.**
+⚠️ **BUT IT DOES FABRICATE ONE:** `:1788`, inside `rMultipleCore` (the RANKING path), `const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.entry * 1.02` — commented *"mirror executePromotedSignal default"*. **A ranking input invented from a constant** — the `#927` target-fabrication class, reached on the ranking leg. **Carried to OBJ-5, which is the ranking objective.**
+
+### A-1b. ⛔⛔ AND A-1's OWN ENUMERATION DID NOT REACH THE SECOND LANE — THE GAP IS IN THE RULE'S SHAPE, NOT MY EXECUTION OF IT
+
+**§9.5(a-ii) says: enumerate every SCHEDULER, TIMER, CLOCK SUBSCRIPTION, `.start()`, BOOTSTRAP and CRON, repo-wide, before tracing.** I did, and it is complete: six subscribers, two timers.
+⇒ ⛔ **THE PATTERN LANE IS NOT AN ENTRY POINT. IT IS A SECOND PASS INSIDE ONE ENTRY POINT'S OWN FUNCTION** — so a correct, exhaustive entry-point enumeration cannot surface it, and mine did not.
+★ **THE GENERAL LESSON, AND IT BELONGS IN THE LEDGER RATHER THAN IN THIS BATCH: `9.5(a-ii)` FINDS UNREACHED HOPS; `9.5(a)` FINDS SECOND ACTORS AT A VISITED HOP. NEITHER ASKS "DOES THIS ONE FUNCTION CARRY TWO BASES?"** ⇒ the discriminator that would have caught it is **not** a census of callers but a census of **ASSIGNMENTS TO THE VARIABLE THE HOP CONSUMES** — which is what BLOCKER-2's lane column and the sink-inversion below now institutionalise.
 
 ## A-2. THE LEVEL-CONSTRUCTION CENSUS — 70 SITES, 19 FILES
 
@@ -41,9 +51,20 @@
 
 ## A-3. ✅ THE CHAIN, ESTABLISHED END TO END — AND LANGSTON'S OPEN LIMIT IS DISCHARGED
 
-`signal-orchestrator.ts:2400` `getSmoothedPrice(symbol, rawPrice, ER, VolNoise)` → `:2425` `const currentPrice = smoothedPrice` → `:2456` `mce.computeContext(…, currentPrice, …)` → `market-context-engine.ts:1225` (param; **its own doc at `:1218` says *"Smoothed current price (from Kalman filter or raw)"***) → **`:1431-1434` `const indicators: MarketIndicators = { vwap, sma, currentPrice, … }`** → `signal-orchestrator.ts:2513` `currentPrice: mceContext.indicators.currentPrice` → the 19-strategy dispatch → the 70 sites of A-2.
+`signal-orchestrator.ts:2400` `getSmoothedPrice(symbol, rawPrice, ER, VolNoise)` → `:2425` `const currentPrice = smoothedPrice` → `:2450` `mce.computeContext(…, currentPrice, …)` → `market-context-engine.ts:1225` (param; **its own doc at `:1218` says *"Smoothed current price (from Kalman filter or raw)"***) → **`:1431-1434` `const indicators: MarketIndicators = { vwap, sma, currentPrice, … }`** → `signal-orchestrator.ts:2515` `currentPrice: mceContext.indicators.currentPrice` → the 19-strategy dispatch → the 70 sites of A-2.
 
-⛔ **THE VERIFICATION LANGSTON EXPLICITLY LEFT OPEN — *"I did NOT verify MCE passes it through unchanged"* — IS NOW CLOSED: it is a SHORTHAND PROPERTY at `:1434`. No transformation, no re-derivation, no fallback.** The value the strategies build levels from is the smoothed value, verbatim.
+⛔ **THE VERIFICATION LANGSTON EXPLICITLY LEFT OPEN — *"I did NOT verify MCE passes it through unchanged"* — IS CLOSED: it is a SHORTHAND PROPERTY at `:1434`. No transformation, no re-derivation, no fallback.**
+
+⛔⛔ **BUT r1's HEADLINE — *"the value the strategies build levels from is the smoothed value, verbatim"* — WAS FALSE, AND IT IS THE SENTENCE P3 AND P4 WERE SIZED AGAINST (Langston BLOCKER-1, re-derived by me at the object).** ★ **THERE ARE TWO `mce.computeContext` CALLS IN THE SAME FILE, WITH TWO DIFFERENT BASES:**
+
+| lane | call site | its basis | verified |
+|---|---|---|---|
+| **QUANT** | `signal-orchestrator.ts:2450` | `:2425` `currentPrice = smoothedPrice` ⇒ **a FILTERED mid** | the chain above |
+| ⛔ **PATTERN** (Phase 14.5) | `signal-orchestrator.ts:2233` | **`:2207` `const currentPrice = parseFloat(ohlcData[ohlcData.length - 1].close)`** ⇒ **a BAR CLOSE. Never smoothed, never a mid.** | read at the object |
+
+**The pattern lane flows through the SAME `:1434` shorthand and reaches level construction at `:2269` (`patternToTradeSignal(patternSig, currentPrice, atr, …)`) and `:2276-2278`.**
+⇒ ★★ **"SHARED PIPELINE" IS NOT A BOOLEAN — NAME THE SEAM.** Shared **from `computeContext` down**; **NOT shared at the basis assignment above it.** *(Langston's own `#675` retraction shape, and he named it as such.)*
+⚠️ **AND THIS LANE HAS FORM: `#581` / `B-ATR-SOURCE-FIX` was this same pass failing to re-stamp `sizingContext.atr`, and the surviving comment at `:2303-2307` is its scar tissue. A lane with a documented history of basis-mismatch was the last one to leave untraced.**
 
 ## A-4. ⭐⭐ THE MEASUREMENT THAT REFRAMES THE BATCH — THE LEVEL BASIS IS A **HEAVILY DAMPED** PRICE
 
@@ -60,6 +81,13 @@
 ⇒ ⛔ **AND THIS IS A GENUINE LAG, WHICH NEITHER OF MY TWO EARLIER MECHANISM CLAIMS WAS.** *"The mid lags the bid"* was wrong (a static half-spread offset — Langston Q3c). **The FILTER's lag is real, is on the level side, and is the larger term.** ⇒ **the two corrections do not converge on one cause and must not be reported as if they do.**
 ⇒ ⛔⛔ **IT ALSO KILLS THE NAIVE IMPLEMENTATION.** Swapping the filter's input from mid to bid does **not** move the level by half a spread — it moves it by `K ×` half a spread per tick, over ~10 ticks, **so for the whole convergence period every level is derived from a basis that is neither the old one nor the new one.**
 
+⭐⭐ **AND THE DISTRIBUTION GENERALISES BY CONSTRUCTION — MY OWN STATED LIMITATION WAS TOO WEAK (Langston, tested rather than accepted; re-derived by me at `adaptive-kalman.ts:74-78`).** `R = max(1, min(50, 1 + (1−ER)·50))` and `Q = max(0.1, VolNoise·0.5)`: **NEITHER CARRIES A PRICE QUANTITY.** `K = P/(P+R)` with `P ← (1−K)P + Q`. ⇒ **`K` is SCALE-FREE — a function of two hardcoded constants and `ER` alone, independent of the symbol's price and of the market.** Steady state `K = (−Q+√(Q²+4RQ))/2R` ⇒ ≈0.061 at `R=25`, ≈0.27 at `R=1`. **The measured p10–p90 of 0.082–0.109 is what the constants PREDICT, not what this session happened to sample.**
+⇒ ✅ **SO LIMITATION #3 BELOW IS STRUCK AS TOO WEAK: this is not a ~6-hour observation, it is a property of the code.**
+⇒ ⭐ **AND `max = 0.5000` EXACTLY IS THE COLD-START VALUE** (`P=1`, `ER=1 ⇒ R=1 ⇒ K=0.5`). With 596 restarts, that tail is **restart signature, not market** ⇒ **steady-state damping is at least as heavy as measured. The direction of the error is favourable to the finding.**
+
+⛔⛔ **AND P4 MUST NOT ARGUE THIS AGAINST KALMAN OPTIMALITY (Langston, and he is right):** there is no measured noise model here. **This is an adaptive EMA with an ER-driven α wearing a Kalman name** — the `SYSTEM_MANUAL` wording in P2 must say so rather than *"Kalman filter"* unqualified.
+⇒ ✅ **THE DISCRIMINATOR P4 SHOULD MEASURE INSTEAD, STATED SO IT CANNOT DRIFT INTO ARGUMENT: an entry or a stop is a price the market must TOUCH; a smoothed price is an ESTIMATE of where price IS. A lagging basis makes REALISED trigger distance differ systematically from INTENDED trigger distance — and ASYMMETRICALLY with trend direction. That is measurable, and P4 measures it rather than reasoning about it.**
+
 ## A-5. ⛔ THE REGISTRY IS A CROSS-CUTTING SINGLETON THAT NOTHING PERSISTS, EVICTS, OR REGISTERS
 
 **§9.5(a) census on `filterRegistry` (`utils/adaptive-kalman.ts:175`, a module-level `Map<string, AdaptiveKalmanFilter>`):**
@@ -72,7 +100,16 @@
 | who **persists / restores**? | ⛔ **NOBODY.** `getState`/`restoreState` (`:111`/`:134`) have **ZERO production callers** | census |
 | does it **survive a restart**? | ⛔ **NO** | measured below |
 
-**MEASURED, WITH ITS CONTROL:** against **208,662 live `[9.3]` lines**, `[9.3][RESET]` = **0** and `[9.3][RESTORE]` = **0**. The emitter is provably live, so both zeros are real. ⇒ **the filter is never explicitly reset and never restored — it simply ceases to exist at process restart and is rebuilt lazily, cold, per symbol.**
+⚠️ **`[9.3][RESET]` = 0 IS CORROBORATION, NOT A SECOND INDEPENDENT MEASUREMENT (Langston, and the ledger must not read it as two):** `reset()` is reachable **only** from `clearKalmanFilter`, so a zero-caller census already implies a zero count. `[9.3][RESTORE]` = 0 against **208,662 live `[9.3]` lines** is the real observation on that leg.
+
+✅ **THE RESTART WIPE IS NOW MEASURED DIRECTLY, WITH A CONTROL — replacing the inference.** The filter emits `[9.3][INIT] <sym> seeding Kalman with first price …` on a cold seed (`adaptive-kalman.ts:70`). In `out__2026-09-04_00-00-00.log` (spanning 13:36→00:00, i.e. **covering both of tonight's deploys**), **448 `INIT` lines total**:
+
+| window | `[9.3][INIT]` lines |
+|---|---|
+| **the 10 min after the 19:28:48 restart** | **190** |
+| ⭐ **a no-restart 10-min control (17:00–17:10)** | **6** |
+
+⇒ **A 32× SPIKE AT THE RESTART, AGAINST A CONTROL FROM THE SAME FILE AND THE SAME DAY.** The registry does not survive a restart: every symbol re-seeds cold, and **the FIRST post-restart observation is returned RAW and unsmoothed** (`:70-71` seeds and returns `price`), so the level basis is discontinuous at every deploy before it re-damps.
 ⚠️ **`restart_time=596` at tonight's deploy.** This is verbatim the class the deploy step warns about — *"a deploy wipes every in-memory rolling window… the component then reports its COLD behaviour while presenting as normal"* — with the AMR EV-gap window as the measured precedent.
 ⇒ ⭐ **AND `clearKalmanFilter` IS THE EXACT MECHANISM A BASIS CHANGE NEEDS, SITTING UNUSED.** It is not dead code to delete under rule 18; it is **dead code this batch has a use for**. Disposition **(3) — disconnected, should be RECONNECTED.**
 
@@ -104,20 +141,21 @@
 | # | item | from | gate |
 |---|---|---|---|
 | **P1** | **Register `filterRegistry` in the SIM as a cross-cutting singleton** — one writer, no eviction, no persistence, restart-cold, feeds every crypto level. | **A-5, A-7** | none — do now |
-| **P2** | **System Manual: state that the crypto level basis is a SMOOTHED price**, with the measured gain and the ~10-observation memory; and **correct the test-inventory row** that advertises unused persistence. | **A-4, A-7** | none — do now |
-| **P3** | **Publish the 70-site census as a committed table** (`path:line`, price-kind per row), including the fourth kind. This is OBJ-1's deliverable. | **A-2, A-3** | none — do now |
-| **P4** | **OBJ-2's rule, re-derived against a FOUR-kind taxonomy** (transactable side / mid / bar close / **filtered**), and re-tested against all 70 rows. **A site the rule cannot classify falsifies the rule.** | **A-2, A-4** | none — do now |
+| **P2** | **System Manual: state that the crypto QUANT-lane level basis is a SMOOTHED price** (gain, ~10-observation memory) **and that the PATTERN lane's is a BAR CLOSE**; correct the test-inventory row advertising unused persistence. ⛔ **It must NOT say *"Kalman filter"* unqualified — there is no measured noise model; it is an ADAPTIVE EMA with an ER-driven α (A-4).** | **A-3, A-4, A-7** | none — do now |
+| **P3** | ⛔⛔ **REBUILT BY SINK-INVERSION, AND IT CARRIES A LANE COLUMN (Langston BLOCKER-2 + attack-1).** **Price-kind is not a property of a SITE; it is a property of `(site, lane)`** — one file carries two bases (A-3), so 70 rows with a bare price-kind column would be **70 assertions I cannot ground.** ⇒ **Do NOT try to prove the census complete by grepping harder — that is unprovable.** ★ **INVERT IT: every level is ultimately WRITTEN to a persisted `entryPrice`/`stopPrice`/`targetPrice` field. Census the WRITE sites and walk BACKWARD.** That set is closed and checkable, so the census is **complete BY CONSTRUCTION OVER THE SINK** rather than lower-bounded by a pattern — **and the lane column falls out of the same walk.** | **A-2, A-3, A-1b** | none — do now |
+| **P4** | **OBJ-2's rule against a FOUR-kind taxonomy** (transactable side / mid / bar close / **filtered**), re-tested against all 70 rows. ⛔ **DRAFTED against crypto-quant; it CANNOT CLOSE while any row is unclassifiable — which is my own falsification clause, held against me rather than a new gate (Langston).** **THREE lanes remain untraced: crypto-PATTERN, xStock-active, xStock-VTS.** ⛔ **And it argues the DISCRIMINATOR in A-4 — realised vs intended trigger distance, asymmetric with trend — NEVER Kalman optimality.** | **A-2, A-3, A-4** | none — do now |
 | **P5** | **Reconnect `clearKalmanFilter` as the basis-change mechanism** — a basis change MUST flush the registry, or every symbol spends ~10 observations on a mixed basis. Disposition (3), not rule-18 deletion. | **A-4, A-5** | ⛔ deploy-gated |
 | **P6** | **OBJ-3a** per-leg transactability fence + positive control. | scope OBJ-3a | ⛔ deploy-gated |
-| **P7** | **OBJ-3b** counter/assertion, form chosen at deploy from `F-G-2`'s recorded disposition; ships with named reader, cadence, positive control. | scope OBJ-3b | ⛔ deploy-gated |
-| **P8** | **OBJ-5 ranking argument** — and it must now dispose of `rMultipleCore`'s `entry * 1.02` fabricated ranking target. | **A-1** | none — do now |
+| **P7** | **OBJ-3b** counter/assertion, form chosen at deploy from `F-G-2`'s recorded disposition. ⭐ **ITS NAMED READER AND POSITIVE CONTROL ALREADY EXIST AND ARE DEAD: `getAllKalmanDiagnostics` and `getActiveFilterCount`, zero production callers — disposition (3) RECONNECT, same as `clearKalmanFilter` (Langston fold-in).** The counter ships with reader, cadence and control or not at all. | scope OBJ-3b, **A-5** | ⛔ deploy-gated |
+| **P8** | **OBJ-5 ranking argument** — disposing of `rMultipleCore`'s `entry * 1.02` fabricated RANKING target (`:1788`) **AND of `signal-orchestrator.ts:2277-2278`'s `currentPrice*0.97` / `*1.03`, because the `#927` fabrication class is on the SIGNAL-BIRTH leg too, not only ranking (Langston fold-in).** | **A-1, A-3** | none — do now |
 | **P9** | **OBJ-6** — fix the System Manual siting of the 8.9.1 adjudication. | scope OBJ-6 | none — do now |
 
 ## ⛔ WHAT THE AUDIT DID **NOT** SETTLE, STATED AS UNSETTLED
 
-1. **Whether the filter should sit in front of the LEVEL at all.** Its provenance says *core metrics and system diagnostics*; nothing establishes that a damped price is the right basis for a stop. **That is the real question P4 must answer, and the audit does not pre-judge it.**
-2. **The xStock lane's level basis is NOT traced in this audit.** A-3 traces the crypto quant lane. **Stated as a gap rather than assumed symmetric** — the two producers already differ in their fallback (A-6).
-3. **`K`'s distribution is measured on the CURRENT `out.log` only** (~6 h at the measured rotation). It is not a claim about all time.
+1. **Whether the filter should sit in front of the LEVEL at all.** Its provenance says *core metrics and system diagnostics*; nothing establishes that a damped price is the right basis for a stop. **That is the real question P4 must answer, and the audit does not pre-judge it** — measured via A-4's discriminator, never argued.
+2. ⛔ **THREE LANES REMAIN UNTRACED, NOT ONE (corrected from r1, which named only xStock):** **crypto-PATTERN** (found at A-3 and NOT traced beyond its basis assignment), **xStock-active** and **xStock-VTS**. **Stated as gaps rather than assumed symmetric** — the two mid producers already differ in fallback (A-6), and the two crypto lanes already differ in basis (A-3).
+3. ✅ **STRUCK — r1 SAID `K`'s DISTRIBUTION WAS *"a ~6-hour observation, not a claim about all time."* THAT WAS TOO WEAK AND UNDER-CLAIMED THE FINDING.** `R` and `Q` carry no price quantity, so `K` is scale-free and the distribution **generalises by construction** (A-4). ★ **Recorded because the error ran in the unusual direction: I hedged a result that was stronger than I said.**
+4. **The `n=104,465` K distribution and the 208,662/0 line counts are staging-log measurements Langston did NOT re-run** — he tagged that leg `RULED ON REPORTED FACT` and said the verdict does not turn on it. **Carried here so a later reader does not mistake it fortwo-party-verified.** The A-5 `INIT` 190-vs-6 control is likewise mine alone.
 
 ---
 
