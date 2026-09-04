@@ -64,7 +64,7 @@ describe('buildLevelBasis — it REFUSES, it never falls back to the mid (BLOCKE
     ['negative ask', { ...OK_BOOK, ask: -1 }, 'non_finite_side'],
     ['NaN bid', { ...OK_BOOK, bid: Number.NaN }, 'non_finite_side'],
     ['crossed book', { ...OK_BOOK, bid: 103, ask: 102 }, 'crossed_book'],
-    ['locked book', { ...OK_BOOK, bid: 102, ask: 102 }, 'crossed_book'],
+    ['locked book', { ...OK_BOOK, bid: 102, ask: 102 }, 'locked_or_synthetic_book'],
   ];
 
   for (const [name, input, expected] of cases) {
@@ -83,6 +83,15 @@ describe('buildLevelBasis — it REFUSES, it never falls back to the mid (BLOCKE
     const r = buildLevelBasis({ ...OK_BOOK, bid: 100, ask: null }, NOW);
     expect(r.ok).toBe(false);
     expect(JSON.stringify(r)).not.toContain('101'); // no fabricated mid anywhere in the result
+  });
+
+  it('⛔ a FABRICATED book from the price cache (both sides = the mark) refuses as SYNTHETIC, not crossed', () => {
+    // price-cache.ts:408-409 writes `bid: existing?.bid ?? price` — on a first write both sides
+    // become the mark. A reader told "crossed" would go looking at the venue; the fault is ours.
+    const r = buildLevelBasis({ bid: 250, ask: 250, capturedAtMs: 1_000_000, producer: 'kraken_ws' }, NOW);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe<LevelBasisRefusal>('locked_or_synthetic_book');
+    expect(r.basis).toBeUndefined();
   });
 
   it('reports the STRUCTURAL fault first: a crossed book with no capture time reads crossed_book', () => {
@@ -156,6 +165,7 @@ describe('the refusal funnel — and its POSITIVE CONTROL', () => {
       [{ ...OK_BOOK, ask: null }, 'one_sided_book'],
       [{ ...OK_BOOK, bid: 0 }, 'non_finite_side'],
       [{ ...OK_BOOK, bid: 103, ask: 102 }, 'crossed_book'],
+      [{ ...OK_BOOK, bid: 102, ask: 102 }, 'locked_or_synthetic_book'],
       [{ ...OK_BOOK, capturedAtMs: null }, 'age_unknown'],
     ];
     for (const [input, reason] of inputs) {
@@ -164,7 +174,7 @@ describe('the refusal funnel — and its POSITIVE CONTROL', () => {
       expect(getLevelBasisFunnel().byReason[reason]).toBe(1);
     }
     const f = getLevelBasisFunnel();
-    expect(f.refused).toBe(5);
+    expect(f.refused).toBe(6);
     expect(f.accepted).toBe(0);
   });
 

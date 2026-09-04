@@ -84,8 +84,18 @@ export type LevelBasisRefusal =
   | 'no_book'
   /** One side present, the other absent or non-positive. A mid is undefined here. */
   | 'one_sided_book'
-  /** bid >= ask. Crossed or locked; no transactable side can be named. */
+  /** bid > ask. A genuinely crossed book; no transactable side can be named. */
   | 'crossed_book'
+  /**
+   * bid === ask. ⛔ SPLIT OUT FROM `crossed_book` 2026-09-05 AND IT IS THE COMMON CASE, NOT
+   * THE EXOTIC ONE. `price-cache.ts:408-409` and `:424-425` write `ask: existing?.ask ?? price,
+   * bid: existing?.bid ?? price` — so on a FIRST write for a symbol BOTH SIDES BECOME THE MARK
+   * and the cache reports a two-sided book that does not exist. A genuinely locked market and a
+   * fabricated one are indistinguishable here, which is precisely why this refuses rather than
+   * guesses — but it must not be reported as "crossed", because a reader chasing a crossed book
+   * would go looking at the venue instead of at our own cache.
+   */
+  | 'locked_or_synthetic_book'
   /** A side is present but not a finite positive number. */
   | 'non_finite_side'
   /** The book carries no capture time, so its AGE cannot be stated — the age clause fails closed. */
@@ -154,7 +164,8 @@ export function buildLevelBasis(input: BookTopInput, nowMs: number): LevelBasisR
     // different fault from a side never arriving.
     return { ok: false, reason: 'non_finite_side' };
   }
-  if (input.bid >= input.ask) return { ok: false, reason: 'crossed_book' };
+  if (input.bid > input.ask) return { ok: false, reason: 'crossed_book' };
+  if (input.bid === input.ask) return { ok: false, reason: 'locked_or_synthetic_book' };
   if (!isPositiveFinite(input.capturedAtMs)) return { ok: false, reason: 'age_unknown' };
 
   return {
@@ -221,6 +232,7 @@ const _refusals: Record<LevelBasisRefusal, number> = {
   no_book: 0,
   one_sided_book: 0,
   crossed_book: 0,
+  locked_or_synthetic_book: 0,
   non_finite_side: 0,
   age_unknown: 0,
 };

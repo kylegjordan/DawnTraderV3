@@ -336,3 +336,44 @@ The Step-2 audit found **70 sites across 19 files that COMPUTE a level**. This c
 | ✅ **the side, per leg AND per intent** | taker entry ASK · resting maker entry BID · stop BID · target BID |
 | ✅ **absent/one-sided book** | **REFUSE**, with a funnel counter — never `?? mid` |
 | ⛔ **still open** | OBJ-3b's FORM, which reads `F-G-2`'s disposition at deploy — **and deploy is after 2026-09-18** |
+
+---
+
+## 9. ⛔⛔ THE WIRING CENSUS (Step 3) — **FOUR FINDINGS, AND TWO OF THEM CHANGE THE IMPLEMENTATION RATHER THAN CONFIRM IT**
+
+**§8 settled WHICH SIDE each level sits on. This section is what happened when I went to WIRE it, and it did not go the way the plan assumed.** ⛔ **Every item re-derived at the object; nothing here is inferred from the plan.**
+
+### W-1 ⭐ FOUR CONSUMERS OF `indicators.currentPrice`, NOT ONE — AND **TWO** ARE LEVEL-SETTING
+The scope traced the crypto QUANT lane through `signal-orchestrator.ts:2515` and I expected the severance to be one line. **Repo-wide, tests excluded:**
+| site | what it does | is it a level? |
+|---|---|---|
+| `signal-orchestrator.ts:2515` | hand-off into the 19-strategy dispatch | ⛔ **LEVEL** |
+| `vts-runner.ts:1520` | the VTS lane's identical hand-off | ⛔ **LEVEL** |
+| `strategy-engine.ts:718` | `atr / indicators.currentPrice` — a dimensionless ratio | ✅ estimator, correct as-is |
+| `strategy-engine.ts:1573` | a `console.log` | ✅ neither |
+| `orb.ts:244` | breakout detection, then geometry | ⚠️ **level, but xStock-only AND gated off** (`strategy_gates.enabled=false`, B-NEW-34) |
+⇒ ⛔ **CHANGING ONLY THE ORCHESTRATOR WOULD LEAVE THE VTS LANE — THE LEARNING POPULATION — STILL SETTING LEVELS FROM THE SMOOTHED MID, WHILE EVERY ACTIVE-PATH CHECK READ AS FIXED.** ★ **That is `fix-follows-pointer` exactly: the fix reaches the sites the plan named and stops one line short.**
+⚠️ **AND MY FIRST GREP FOR `decideMakerTaker` MISSED ITS CALL SITE ENTIRELY** — a `head -10` truncated before `signal-orchestrator.ts:1052`, and I nearly built the design on "the orchestrator does not decide maker/taker." **A truncated search is not a census, in the section whose whole subject is incomplete enumeration.**
+
+### W-2 ⛔⛔ THE SEVERANCE **CANNOT** BE A RE-EXPRESSION AT THE SIZED-SIGNAL CHOKEPOINT — AND THAT WAS MY PLAN
+**The attractive design was one insertion at `buildSizedSignalForStrategy`, beside F-G-1's grid: take the incoming triple and re-express each leg on its own side. ONE site, before rounding, no strategy edits.** ⛔ **IT IS WRONG AND IT WOULD HAVE SHIPPED SILENTLY.**
+**A strategy does not express geometry as offsets from one anchor.** Stops come from support levels, ATR bands, measured moves, prior-bar extremes — **each with its own construction.** ⇒ **A generic "shift entry to the ask, shift the stop to the bid" transform would CHANGE EVERY STRATEGY'S RISK GEOMETRY in ways that strategy never intended, and nothing downstream would notice** — the triple stays well-ordered, the grid rounds it, the SQE scores it.
+⇒ ✅ **THE CORRECT SHAPE IS TWO FIELDS AT THE ANCHOR, WHICH IS THE SEVERANCE STATED LITERALLY:** `currentPrice` **stays the smoothed value for DETECTION** (*"is price above the VWAP?"* — an estimator question, untouched, zero risk) and a **`levelBasis` is added for GEOMETRY**. Each strategy's geometry lines then read `priceForLevelRole(basis, role)`. **More edits, mechanical ones, and the detection logic is never touched — which is where the risk would have been.**
+
+### W-3 ⛔⛔ THE PRICE CACHE **CANNOT SOURCE A LEVEL BASIS**, AND THE REASON IS AN AGE THAT DATES THE WRONG THING
+`CachedPrice` (`price-cache.ts:41-51`) carries `bid`, `ask` and `lastUpdatedAt`, so it looks like the obvious source. **It is not:**
+1. ⛔ **THE HIGH-FREQUENCY PATH REFRESHES THE MARK AND ITS TIMESTAMP WITHOUT TOUCHING THE SIDES.** `updateFromWebSocket` / `updateFromRest` (`:402-430`) write `ask: existing?.ask ?? price, bid: existing?.bid ?? price` and stamp `lastUpdatedAt: now`. **Callers: `kraken-websocket-adapter.ts:1096` (every WS tick), `live-pricing-adapter.ts:817` and `:1038`.** Only the full-ticker REST refresh (`:176-184`, `:280`, `:355`) sets the sides from `ticker.a` / `ticker.b`.
+⇒ ★★ **`lastUpdatedAt` IS THE AGE OF THE MARK, NOT THE AGE OF THE SIDES** — refreshed by a path that provably does not refresh them. **Feeding it to the age clause would produce a basis that states an age which is TRUE for a field we do not use and FALSE for the two we do.** ⛔ **That is `wrong-object` INSIDE the clause written to prevent staleness, and it would have read as compliant.**
+2. ⛔ **AND ON A FIRST WRITE FOR A SYMBOL, `?? price` MAKES BOTH SIDES EQUAL THE MARK** — the cache reports a two-sided book **that does not exist.**
+✅ **THE MODULE ALREADY REFUSES BOTH** (a synthetic book has `bid === ask`) — **but it was reporting `crossed_book`, and that reason name sends a reader to the VENUE when the fault is OURS.** ⇒ **SPLIT this turn into `locked_or_synthetic_book`, with its own test and its own funnel counter.** ★ **The refusal was already right; the DIAGNOSIS it handed the next reader was not.**
+
+### W-4 ⛔⛔ **THE AGE CLAUSE HAS NO SOURCE TODAY.** THE MINI-BOOK IS NOT TIMESTAMPED **AT ALL**
+`kraken-websocket-adapter.ts:138` — `private orderBooks = new Map<string, { bids: Map<number, number>; asks: Map<number, number> }>()`. **No capture time, no field for one.** And the live accessor `getLatestPriceData` (`:3218-3235`) returns `{ bid, ask, mid }` — **a correct book top with no way to say how old it is.**
+⇒ ⛔ **SO LANGSTON'S AMENDMENT 1 IS NOT SATISFIABLE FROM ANY EXISTING SOURCE.** ★ **The clause did exactly what a good clause does — it named a property, and the property turned out to be missing.** ⇒ **Stamping the mini-book at update is REQUIRED WORK for this batch, not an optional nicety**, and it is why `age_unknown` exists as a refusal: **until that stamp lands, this module fails closed on every crypto symbol rather than inventing an age.**
+⚠️ **NOT YET MEASURED, AND NAMED SO IT IS NOT ASSUMED: how STALE the sides actually get.** The structural fact — that `lastUpdatedAt` dates the mark — is established at the code; **the size of the gap is not, and it needs the stamp from W-4 before it can be measured at all.**
+
+### ⇒ WHAT THIS LEAVES OPEN — **ONE DESIGN FORK, AND IT IS LANGSTON'S GATE**
+⛔ **THE ENTRY LEG'S SIDE DEPENDS ON EXECUTION INTENT (§8 BLOCKER-1) — AND THE INTENT IS DECIDED *AFTER* THE GEOMETRY IS BUILT.** Order, at the code: the strategy sets the triple → `buildSizedSignalForStrategy` rounds it to the venue grid → **`decideMakerTaker` at `signal-orchestrator.ts:1052`** → SQE → RTB → promotion, where `active-execution-engine.ts:3824` reads the book AGAIN and rests or crosses.
+⇒ **At geometry time the constructor cannot know whether the entry will rest or cross — and BLOCKER-1 forbids it from GUESSING.**
+★ **AND IT IS NOT CIRCULAR, WHICH IS THE PART THAT MAKES A CLEAN ANSWER POSSIBLE: `decideMakerTaker` needs BOTH sides to make its comparison** — cross now and pay the ask, or rest and pay the bid but risk no fill. **So carrying the basis to that decision feeds it something it wants anyway.**
+**MY LEAN, STATED SO IT CAN BE ATTACKED RATHER THAN RATIFIED: the stop and target resolve to the bid AT GEOMETRY TIME (both are sells for a long — their side is known and cannot change), and the ENTRY leg resolves at `:1052`, where the intent becomes known.** ⛔ **The alternative — set entry on the ask at geometry time and correct it later on the maker arm — is inferring the intent and then patching it, which is the thing BLOCKER-1 names.**
