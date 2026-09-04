@@ -1630,7 +1630,7 @@ Combined three-sub-batch ship: sub-batches (a) + (c) at commit `4dfe1deb6` (gove
 
 **Schema:** `paper_sim_trades.trade_mode` column added (varchar 20, NOT NULL DEFAULT 'TARGET', CHECK `IN ('TARGET','TRAILING_TAKE')`).
 
-**Stop writeback:** `paper_sim_open_positions.stop_loss` now updated on every engine ratchet (debounced 5s via `trade-safety.ts::persistTrailingStates`).
+**Stop writeback — ⛔⛔ CORRECTED 2026-09-04 (B-PRICE-SIDE-BY-JOB P3 in-memory pass). THE PREVIOUS SENTENCE WAS FALSE IN EVERY LOAD-BEARING PART and is not reproduced here.** It named a target table — `paper_sim_open_positions` — which **DOES NOT EXIST**: `information_schema` returns only `paper_sim_open_positions_user_archive` (0 rows, 0 production refs; dispositioned dead at plan row 3n.b). And it described a **database writeback** where the mechanism is a **FILE**. ✅ **WHAT ACTUALLY HAPPENS:** `trade-safety.ts:896 persistTrailingStates()` does `fs.writeFileSync(TRAILING_STATE_FILE, …)` with `TRAILING_STATE_FILE = '/tmp/trailing-states.json'` (`:891`); `loadTrailingStates()` reads it back at startup. **MEASURED live 2026-09-04T12:0xZ: 526,769 bytes, rewritten every ~60s, 863 trailing states.** ⛔ **SO THE TRAILING STOP IS A TRADE LEVEL THAT GATES A REAL EXIT (`trailing-exit-controller.ts:1581`) AND PERSISTS TO THE FILESYSTEM — a sink class no database constraint can reach.** ⚠️ **Durability is a SEPARATE open item: `B-TRAILING-STATE-DURABILITY`, plan row after 3n.b.** ★ **AND THIS IS A REPEAT DRIFT — see the 2026-08-07 note below, which records the same entry going stale once before and costing two wrong public claims.**
 
 **SIGTERM handler:** `server/index.ts` shutdown handler synchronously flushes trailing-state persistence file.
 

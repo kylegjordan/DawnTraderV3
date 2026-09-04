@@ -92,6 +92,38 @@ Enumerated from `shared/schema.ts` by walking every `pgTable` declaration and co
 
 ⚠️ **CONSEQUENCE FOR THE FIX, STATED PLAINLY: the enforcement surface is FIVE writer files, and the two raw-SQL ones (`vts-trade-persistence`, `exit-decision-archiver`) plus `rtb-shadow-store` all bind columns by string literal — so all THREE need the read-back fence, not one.**
 
+## 3e. ⛔⛔⛔ THE IN-MEMORY PASS FOUND A **FOURTH SINK CLASS** — AND IT IS ONE NO DATABASE CONSTRAINT CAN REACH
+
+**Langston named the in-memory class as the first thing to look for. It was worse than in-memory: it PERSISTS, to a place the census never contemplated.**
+
+**THE TRAILING STOP IS A LEVEL THAT GATES A REAL EXIT.** `trailing-exit-controller.ts:885` `const trailingStates = new Map<string, TrailingState>()` — a module singleton; `:1292` `state.currentStopPrice = newStopPrice` mutates the level; **`:1581` `return currentPrice <= state.currentStopPrice`** — **the in-memory level IS the exit trigger.**
+
+⇒ ⛔⛔ **AND IT PERSISTS TO THE FILESYSTEM, NOT THE DATABASE.** `trade-safety.ts:896` `persistTrailingStates()` → `fs.writeFileSync(TRAILING_STATE_FILE, …)`, with `loadTrailingStates()` reading it back at startup. **`trade-safety.ts:891`: `const TRAILING_STATE_FILE = '/tmp/trailing-states.json';`**
+**MEASURED LIVE ON STAGING 2026-09-04T12:0xZ:** the file is **526,769 bytes**, owner `deploy`, **rewritten every ~60 s** — `[9.2][PERSIST] Saved 862 trailing states to file` at 12:04:47, **863** at 12:05:47.
+
+⇒ ★★ **A FOURTH SINK CLASS: THE FILESYSTEM.** The census enumerated **database** sinks — and never said so. ⛔ **Consequences, each fatal to a claim made earlier in this document:**
+1. **It is not in `information_schema`** ⇒ invisible to the corrected sink set, which I called "closed against the authoritative object."
+2. **It is written by none of the five writer files.**
+3. ⛔⛔ **A DATABASE `CHECK` CONSTRAINT — the enforcement I proposed in §3d(a) as unbypassable — CANNOT REACH IT.** *"Cannot be bypassed by any verb, any writer, any language"* was **true of database rows and false of the system**, because I had silently scoped "sink" to mean "table."
+4. ✅ **THE ONE MECHANISM THAT DOES REACH IT IS THE TYPE-LEVEL STAMP.** `TrailingState` is a TypeScript type; a required basis field on it fails `tsc` exactly as on every other path. ⇒ **that is now the argument for putting the stamp in the type rather than only in the database — it is the only one of the three mechanisms that covers all four sink classes.**
+
+### ⚠️ AND A SEPARATE OPERATIONAL FINDING, SURFACED HERE BUT NOT THIS BATCH'S TO FIX
+
+**863 live trailing-stop levels — the state that gates real exits — are kept in `/tmp`.** **MEASURED:** `/tmp` on staging is **disk-backed** (`/dev/sda1`), **not** tmpfs, so it survives a reboot as a filesystem; and a systemd rule `D /tmp 1777 root root 30d` governs its contents.
+⛔ **STATED AS SYMPTOM, NOT CAUSE (`CONDUCT` §8): I have NOT established that anything actually deletes this file.** The file's mtime refreshes every 60 s, so an age-based sweep would not reach it while the app runs. **What IS established: state whose contract is *must survive* lives in a directory whose contract is *disposable*.**
+⇒ **`HOME: B-TRAILING-STATE-DURABILITY, owner CC-C, placed in `PHASE_19_PLAN` after `3n.b`.** Not folded into this batch — it is a durability question, not a price-basis one.
+
+### ⛔ AND THE SIM IS STALE ON THIS EXACT MECHANISM — THREE WAYS
+
+`SYSTEM_IMPACT_MAP.md:1633` states: *"**Stop writeback:** `paper_sim_open_positions.stop_loss` now updated on every engine ratchet (debounced 5s via `trade-safety.ts::persistTrailingStates`)."* **Every load-bearing part of that sentence is false:**
+| the claim | measured |
+|---|---|
+| target `paper_sim_open_positions` | ⛔ **THAT TABLE DOES NOT EXIST.** `information_schema` returns only `paper_sim_open_positions_user_archive` (0 rows, 0 refs, already dispositioned dead at `3n.b`) |
+| a **stop writeback** to a DB column | ⛔ **`persistTrailingStates` writes a FILE** (`fs.writeFileSync`), not a table |
+| via `persistTrailingStates` | ⚠️ the function name is right; **its behaviour is not what the sentence describes** |
+
+⚠️ **AND `:1673` SHOWS THIS IS A REPEAT:** *"STATE PERSISTENCE — ADDED 2026-08-07 … THIS WAS A REAL SIM GAP AND IT COST TWO WRONG PUBLIC CLAIMS."* **The gap was closed once and the entry has drifted again.** ⇒ **corrected as part of this batch's governance step, with the measurement beside it.**
+
 ## 3d. ⛔⛔ WHAT THIS CENSUS DOES **NOT** CLOSE — REQUIRED READING BEFORE ANYTHING CITES IT (Langston's three conditions, all re-derived by me at the object)
 
 ### (a) ⛔⛔ IT CLOSES **SINKS**, NOT **VERBS** — AND THE FIX FOR THAT IS STRONGER THAN THE ONE I PROPOSED
