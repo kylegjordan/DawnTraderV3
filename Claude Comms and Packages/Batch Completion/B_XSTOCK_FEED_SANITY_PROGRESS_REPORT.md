@@ -160,6 +160,39 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
 ⇒ ⛔⛔ **HANDOFF 1's QUALIFYING `out.log` EVIDENCE WILL LIKELY HAVE ROTATED OUT BEFORE HANDOFF 2 COMPLETES.** §6 already states that a symbol's zero counts only where its `COMPARATOR_SEEDED` line AND the `EVAL_EXIT` cadence cover the window — **both of those live in `out.log`, while the skips they qualify live in `error.log`.** A single extraction at the END of the window would therefore arrive with handoff 1 unqualifiable.
 ✅ **READ CONDITION TIGHTENED, and this STRENGTHENS the criterion rather than loosening it — it is not data-mining, because it changes WHEN evidence is preserved and nothing about what counts as PASS or FAIL: EXTRACT THE `out.log` SIDE AFTER EACH HANDOFF, not once at the end**, committing each capture beside this report with its own measured retention horizon. The first capture is already committed (`seed_control_2026-09-03.txt`) and covers the seeding control for all five held names.
 
+## 4e. ⛔⛔ HANDOFF 1 IS **VOID** AND THE WINDOW RE-ANCHORS AT THE LATCH-FIX DEPLOY — AND MY OWN REASONING FOR THIS WAS WRONG IN BOTH DIRECTIONS
+
+**DEPLOYED `f8870022fc6abd35e5759131d8aa2b64c8fdba6a` at 2026-09-04T19:27:07Z** (`restart_time=597`, engine resumed, identity asserted). **Carries `3ad89b699`, the latch fix for Langston's Step-8 finding.** ⛔ **`dt-deploy` takes a NAMED 40-char sha and `merge-base --is-ancestor`s it against the branch, so CC-B's two `B-DEPLOY-ACTOR-ALLOWLIST` commits are excluded BY CONSTRUCTION, not by my discipline.**
+
+### ⚠️⚠️ I PUT A TRADE-OFF TO LANGSTON AND **NEITHER SIDE OF IT WAS RIGHT**
+
+**I argued: deploying splits the window, so it is fix-now-and-re-anchor versus hold-to-Monday-and-keep-it-clean.** ⛔ **He killed both halves on arithmetic I had not done.**
+1. ⛔ **THE "COMPLICATION" DID NOT EXIST.** Handoff 1 was **Thu 2026-09-03 20:15 ET**, and **§4d already rules Friday's 20:15 ET the weekly shutdown** ⇒ **the next handoff is 2026-09-08T00:15Z WHETHER I DEPLOY TONIGHT OR MONDAY.** ⇒ **holding buys ZERO handoffs and costs FOUR DAYS of live latch.** ★ **I had written §4d myself and did not apply it to my own question.**
+2. ⛔ **AND "KEEP THE WINDOW CLEAN" DESCRIBED A WINDOW THAT WOULD MEASURE THE *UNFIXED* BUILD TWICE** — internally consistent, and **about the wrong object.**
+
+### ⛔ HANDOFF 1 IS VOID — NOT A "PRE-FIX ARM", AND THAT DISTINCTION IS THE WHOLE POINT
+
+**I proposed publishing handoff 1 as a pre-fix arm and re-anchoring around it. That is one step from choosing a window that suits me, and Langston replaced it with something he could rule WITHOUT READING ITS DATA:**
+> **§6(a) and §6(c) are read off SKIP / YIELD counts. Under the latch, those counts measure A STUCK REFERENCE — not the guard's response to a hollow book.** And **the instrument that would say whether any held name WAS latched — `COMPARATOR_CLEARED`, `validated`, `framesSinceSeed` — was in the undeployed commit.**
+⇒ ★★ **SO HANDOFF 1 IS UNQUALIFIABLE, NOT DISCARDED. That is my own `F-G-2` A4 VOID rule applied to my own batch — which is exactly why it is not window-shopping: the verdict is derivable from the CRITERION and the CODE, before anyone looks at the numbers.**
+
+### ✅ THE RE-ANCHORED CRITERION — THE BAR IS UNCHANGED, ONLY THE ANCHOR MOVES
+
+1. ⛔ **HANDOFF 1 (2026-09-04T00:15Z) IS MARKED `VOID` for the reason above.** Its **401 `BOOK_STATE` lines** are published as the void arm, and its `out.log` side is **already extracted** — `B_XSTOCK_FEED_SANITY_EVIDENCE/handoff1_outlog_2026-09-04.txt`, **605 lines / 601 `EVAL_EXIT`, UNTRUNCATED**, captured 19:23:54Z with retention **re-measured AT capture** (14 files, oldest begins `2026-09-01 12:43:07`). *(My first attempt used `tail -25`; a truncated slice is not evidence.)*
+2. ⛔ **NEW WINDOW: the first two weekday 20:15 ET handoffs after THIS deploy — `2026-09-08T00:15Z` and `2026-09-09T00:15Z`.**
+3. ✅ **EVERY PASS/FAIL CONDITION IN §6 CARRIES OVER VERBATIM AND NONE IS RELAXED** — the `error.log`/`out.log` split, the yield-record obligation, the `exit_book_state='hollow'` + `yielded=false` bypass test, the F-G-1 / `#951` non-interference clause.
+4. ➕ **ONE CONDITION ADDED, NOT REMOVED — THE FIX'S OWN POSITIVE CONTROL: the post-fix arms MUST show `COMPARATOR_CLEARED` firing on a yield.** ⛔ **Without it a post-fix zero is indistinguishable from the fix not running — which is the exact defect this batch shipped once already.** **MEASURED NOW: `COMPARATOR_CLEARED` = 0 in `error.log`, which is EXPECTED (it fires only on a yield) and is recorded as a PENDING control, NOT as a pass.**
+
+✅ **POST-DEPLOY VERIFICATION, SAME INSTRUMENT AS BEFORE:** `COMPARATOR_SEEDED` fired for **all four held xStock names at 19:27:07Z** — ARKK `86.185`, LI `12.325`, NEM `127.965`, SLV `59.685` — against a live `out.log` (last line 19:27:23Z). **The guard is seeded and running on the new build.**
+
+### ➕ CONDITION 3 — `#951`'s xSTOCK ARM GETS A SPLIT MARKER AT THIS SHA; `F-G-2`'s CRYPTO WINDOW DOES **NOT**
+
+⛔ **I named ONE window collision and there were TWO.** This deploy changes **xStock exit behaviour inside `cecd4a47`'s (`#951`) window** ⇒ **that arm is SPLIT at `f8870022f` and each side reported separately.**
+✅ **`F-G-2`'s CRYPTO window is NOT split, and the reason is checkable: `signal-orchestrator.ts` is comment-only in this range (zero non-comment added lines), so crypto is BYTE-INERT.**
+
+### ⚠️ AND A SHA THAT DOES NOT EXIST
+**Langston's own memory records the seed fix at `6d6b0e7be` — which is not at origin.** My commit was rebased; **the surviving sha is `3ad89b699`.** Corrected here and in his memory sync, because a sha that resolves to nothing is a citation that cannot be checked.
+
 ## 5. What is unproven, stated as unproven
 - ✅ **SEEDING IS PROVEN; JUDGING IS NOT, AND THE DISTINCTION IS THE WHOLE RESIDUAL (added 2026-09-03 post-deploy).** That the comparator now EXISTS for all five held names is measured (§4c). It is NOT evidence that a hollow frame is correctly REFUSED in production — that is what §6 settles, and it has not fired.
 - **The guard has never run against a live handoff.** Every fixture is a real row, but the decision frames at the handoffs were reconstructed from the price that drove the exit (A.11) — the first weekday 8:15 PM ET after deploy is the first real test.
