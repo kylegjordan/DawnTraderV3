@@ -1,0 +1,153 @@
+{
+ "since": "2026-09-03T19:30:00Z",
+ "until": "2026-09-05T00:00:00Z",
+ "label": "POST-CUT \u2014 22 heartbeats were POSTED in this window (verified on the channel)",
+ "sessions": {
+  "CC-A OLD": {
+   "completed_responses": 284,
+   "api_errors": 0,
+   "categories": {
+    "push notice": {
+     "turns": 2,
+     "spoke": 2,
+     "chars": 2512,
+     "chars_per_turn": 1256
+    },
+    "Langston": {
+     "turns": 4,
+     "spoke": 4,
+     "chars": 7263,
+     "chars_per_turn": 1815
+    },
+    "crew post": {
+     "turns": 4,
+     "spoke": 4,
+     "chars": 3014,
+     "chars_per_turn": 753
+    },
+    "other wake": {
+     "turns": 1,
+     "spoke": 1,
+     "chars": 317,
+     "chars_per_turn": 317
+    },
+    "own bg task": {
+     "turns": 1,
+     "spoke": 0,
+     "chars": 0,
+     "chars_per_turn": 0
+    },
+    "KYLE PROMPT": {
+     "turns": 13,
+     "spoke": 11,
+     "chars": 19821,
+     "chars_per_turn": 1524
+    }
+   },
+   "wake_totals": {
+    "turns": 12,
+    "spoke": 11,
+    "chars": 13106
+   }
+  },
+  "CC-B NEW": {
+   "completed_responses": 371,
+   "api_errors": 0,
+   "categories": {
+    "push notice": {
+     "turns": 4,
+     "spoke": 4,
+     "chars": 1148,
+     "chars_per_turn": 287
+    },
+    "Langston": {
+     "turns": 4,
+     "spoke": 4,
+     "chars": 3287,
+     "chars_per_turn": 821
+    },
+    "own bg task": {
+     "turns": 2,
+     "spoke": 2,
+     "chars": 1031,
+     "chars_per_turn": 515
+    },
+    "KYLE PROMPT": {
+     "turns": 20,
+     "spoke": 19,
+     "chars": 68614,
+     "chars_per_turn": 3430
+    }
+   },
+   "wake_totals": {
+    "turns": 10,
+    "spoke": 10,
+    "chars": 5466
+   }
+  },
+  "CC-C ANALYST": {
+   "completed_responses": 948,
+   "api_errors": 0,
+   "categories": {
+    "push notice": {
+     "turns": 2,
+     "spoke": 2,
+     "chars": 10592,
+     "chars_per_turn": 5296
+    },
+    "Langston": {
+     "turns": 12,
+     "spoke": 12,
+     "chars": 35946,
+     "chars_per_turn": 2995
+    },
+    "crew post": {
+     "turns": 1,
+     "spoke": 1,
+     "chars": 3382,
+     "chars_per_turn": 3382
+    },
+    "other wake": {
+     "turns": 1,
+     "spoke": 1,
+     "chars": 1559,
+     "chars_per_turn": 1559
+    },
+    "KYLE PROMPT": {
+     "turns": 14,
+     "spoke": 14,
+     "chars": 57510,
+     "chars_per_turn": 4107
+    }
+   },
+   "wake_totals": {
+    "turns": 16,
+    "spoke": 16,
+    "chars": 51479
+   }
+  },
+  "CC-INFRA": {
+   "completed_responses": 119,
+   "api_errors": 0,
+   "categories": {
+    "own bg task": {
+     "turns": 1,
+     "spoke": 0,
+     "chars": 0,
+     "chars_per_turn": 0
+    },
+    "KYLE PROMPT": {
+     "turns": 7,
+     "spoke": 7,
+     "chars": 22889,
+     "chars_per_turn": 3269
+    }
+   },
+   "wake_totals": {
+    "turns": 1,
+    "spoke": 0,
+    "chars": 0
+   }
+  }
+ }
+}
