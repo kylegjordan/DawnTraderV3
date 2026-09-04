@@ -240,7 +240,7 @@ The Step-2 audit found **70 sites across 19 files that COMPUTE a level**. This c
 
 ### ✅ THE CORRECTED RULE — IT CLASSIFIES ALL THREE, AND IT SAYS WHY
 
-> ⭐ **A LEVEL'S BASIS MUST BE A PRICE THE MARKET EITHER *ACTUALLY PRINTED* OR ONE WE COULD *ACTUALLY TRANSACT AT*. A MIDPOINT IS NEITHER — no transaction ever occurred there, and no counterparty ever offered it. A SMOOTHED midpoint is neither, and is additionally lagged.**
+> ⭐ **A LEVEL'S BASIS MUST BE A PRICE THE MARKET EITHER *ACTUALLY PRINTED* — CARRYING ITS AGE, STATED AT THE SITE — OR ONE WE COULD *ACTUALLY TRANSACT AT*. AN UNBOUNDED-AGE PRINT IS NOT AN ANCHOR, IT IS A MEMORY. A MIDPOINT IS NEITHER — no transaction ever occurred there, and no counterparty ever offered it. A SMOOTHED midpoint is neither, and is additionally lagged.**
 
 | lane | basis | printed? | transactable? | verdict |
 |---|---|---|---|---|
@@ -260,4 +260,79 @@ The Step-2 audit found **70 sites across 19 files that COMPUTE a level**. This c
 **The crypto quant lane's level constructors stop reading the smoothed midpoint and read a price that was actually printed or is actually transactable — and nothing else in the system changes.** ⇒ **The filter keeps its estimator job (ATR, VWAP, SMA, regime, noise) untouched; the two bar lanes are untouched; jobs 3 and 4 remain `F-G-2`'s.**
 
 ⚠️ **STATED AS THE OPEN DESIGN QUESTION, NOT PRE-DECIDED: WHICH replacement — the live transactable side (ask for entry, bid for stop/target, per-leg) or the venue's own last print (matching what the other two lanes already do) — IS P4's remaining choice.** ★ **The second has a strong argument I did not expect to be making at the start of this batch: it would make all three lanes consistent, and consistency across lanes is itself fidelity.** ⛔ **Not decided here; it is the one thing left for Langston's design gate.**
+✅ **RULED — see §8: (a), the live transactable side. This paragraph is left standing as the record of what was OPEN at dispatch; it is not live.**
 
+---
+
+## 8. ⭐⭐ P4 IS RULED — **(a), THE LIVE TRANSACTABLE SIDE, PER LEG.** AND RE-DERIVING HIS SECOND REASON AT THE CODE **OVERTURNED IT** — WHICH MAKES THE RULING STRONGER, NOT WEAKER
+
+**Langston ruled at `43e3bb95b` on 2026-09-04T19:02:35Z: *"the rule: ACCEPTED with one amendment. The choice: (a), and it isn't close once you look at what (b) actually is on this lane."*** ⛔ **His hits are LEADS. All three reasons re-derived below at the object; two hold, ONE DOES NOT.**
+
+### ✅ AMENDMENT 1 — APPLIED, AND APPLIED *INSIDE THE RULE* RATHER THAN BESIDE IT (§7 above)
+> *"…a price the market either ACTUALLY PRINTED **— carrying its AGE, stated at the site —** or one we could ACTUALLY TRANSACT AT. An unbounded-age print is not an anchor, it is a memory."*
+★ **His reason, and it is the one I would have had to learn the expensive way: without the clause the rule licenses exactly the `#951`-class staleness §7 explicitly declined to annex.** ⇒ **`3b.f-c` now inherits a WRITTEN obligation instead of an unwritten one.** ⛔ **The clause imposes a STATING duty, not a threshold — no number is pre-registered here, and none should be until `3b.f-c` measures one.**
+
+### ⛔⛔ REASON 2 IS **WRONG AT THE OBJECT** — AND IT IS A WRONG-OBJECT, THE PATTERN THAT COSTS ME MOST
+**He argued (b) cannot be chosen because it does not exist:** *"the crypto WS adapter emits a BBO midpoint with **no last-trade arm at all**"*, citing `B_EXIT_BOOK_AGE_STAMP_SCOPE.md:319` — ⇒ *"(b) is either building a trades feed we don't have, or falling back on the pattern lane's 60-minute candle close."*
+
+✅ **HIS CITATION IS ACCURATE AND I VERIFIED IT VERBATIM AT `:319`.** ⛔ **IT IS ABOUT THE *BOOK* PRODUCER.** `kraken-websocket-adapter.ts:908-943` → `producer:'kraken_ws_book_mid'` genuinely has no last-trade arm. **But that is not the producer (b) would draw on.**
+
+⛔ **THE *TICKER* LANE CARRIES THE VENUE'S OWN LAST-TRADE PRICE ON EVERY TICK, AND WE THROW IT AWAY ON PURPOSE:**
+- `kraken-websocket-adapter.ts:639` — the v2 ticker payload is `{symbol, bid, ask, **last**, …}`.
+- `kraken-v2-translator.ts:64` — `const last = Number(update.last ?? update.close ?? update.c?.[0] ?? 0);` **The venue's print is parsed on every tick.**
+- `:71-73` — `const markKind = markKindOf(bid, ask); const markPrice = markKind === 'mid' ? (bid + ask) / 2 : last;` ⇒ **`last` is used ONLY as the empty-book fallback.**
+
+⇒ ⛔ **(b) IS NOT "A FEED WE DO NOT HAVE." IT IS A FEED WE RECEIVE AND DISCARD.** The cost of (b) is therefore not construction — **it is reversing a policy**, which is a completely different argument and would have been decided on a false premise.
+
+### ⭐⭐ AND THE PROVENANCE READ LANDS EXACTLY ON THAT POLICY — IT IS WRITTEN IN THE CODE, AT THE DECISION
+`kraken-v2-translator.ts:66-68`, verbatim:
+> *"We prioritize Midpoint because 'Last' is often **stale on low-volume pairs**. We only use 'Last' if the order book is empty (bid or ask is 0)."*
+
+★★ **SO (b) WAS ALREADY CONSIDERED AND ALREADY REJECTED, DELIBERATELY, FOR A STATED REASON — AND THAT REASON IS *LANGSTON'S OWN AMENDMENT 1*, EIGHT MONTHS EARLY.**
+**PROVENANCE READ, DATED RATHER THAN ASSERTED (§9.5(b); `git log -S "prioritize Midpoint" --reverse`, NOT path-limited):** introduced at **`b4c0d2d67`, 2025-12-30 17:27:49 +0000**, subject *"Improve price calculation for low-volume trading pairs"*, body verbatim: *"Update Kraken WebSocket adapters to v2 and implement midpoint pricing for improved accuracy on low-volume pairs."* ⚠️ **A Replit-era agent commit (`Replit-Commit-Author: Agent`) — so the INTENT is recoverable from the message and the comment, and there is no attached human directive. Marked `INFERRED-FROM-COMMIT-MESSAGE`, not established from a decision record.**
+⛔ **AND THE INTENT IS ONLY HALF-RIGHT, WHICH IS THE FIFTH DISPOSITION, NOT THE FIRST:** the commit's own words are *"for improved **accuracy**"* — ★ **it treats the midpoint as the more ACCURATE ESTIMATE OF VALUE, and on a thin book against a stale print it genuinely is.** ⇒ ✅ **That reasoning is CORRECT for the estimator job and WRONG for the level job**, which is this batch's entire thesis: **accuracy of an estimate and transactability of a level are different requirements, and the 2025-12-30 decision never distinguished them because nothing then asked it to.** ⇒ **Disposition (2): relevant but needs updating to today's intent — the midpoint KEEPS the estimator job it was built for and LOSES the level job it was never scoped for.** A last print on a thin crypto pair is an **unbounded-age print**, which the amended rule now calls *a memory, not an anchor*.
+⇒ ✅ **(b) FAILS THE AMENDED RULE ON ITS OWN TERMS.** ⛔ **REASON 2 IS REPLACED, NOT REPAIRED:** the disqualifier is **not** that the arm is absent — it is that the arm is present, was deprioritised for staleness by an explicit policy, and would now fail the age clause added in the same ruling. ★ **Same verdict, checkable reason, and it survives someone later discovering the field.**
+⚠️ **STATED AS UNMEASURED, BECAUSE IT IS A PRECONDITION OF (b) AND NOBODY HAS RUN IT: I have NOT measured how often `update.last` is populated, nor its age distribution.** The schema admits it (`last?: number`, `:19`) and the code parses it; **that is a code claim, not a runtime one.** ⇒ **One more reason (b) is not free: choosing it would oblige that measurement first.**
+
+### ✅ REASON 1 HOLDS, WITH HIS OWN CAVEAT KEPT ATTACHED
+`B_EXIT_TRANSACTABLE_SIDE_SCOPE.md:156` reads, verbatim at the ref: *"**Kyle's correction, taken (r2):** anything that becomes a price we **TRANSACT** at — signal-time entry, stop, target, trigger — needs the transactable side."* ⇒ **That names this exact list, so (b) would re-open a taken decision.**
+⚠️ **HIS CAVEAT IS KEPT AND NOT QUIETLY DROPPED: *"it's your record of his words, not his words"*** — a transcription, so if the record is wrong it goes to Kyle and **is not settleable between Langston and me.** ✅ **I do not think it is wrong** — Kyle's test has been fidelity to live trading throughout, and on 2026-09-04 he closed the smoothed-price question with *"Understood on continuing to use the machinery for functions that we actually needed for, but not this pricing."*
+
+### ⭐ REASON 3 IS THE ONE THAT DECIDES IT, AND IT IS THE BEST ARGUMENT IN THE RULING
+> **The consistency that carries fidelity is between the LEVEL and its COMPARATOR — not across lanes.** A stop built on basis X and compared against a mark read on basis Y differs from its stated distance by (X−Y), **which is the spread — so the error VARIES WITH LIQUIDITY AND WIDENS EXACTLY WHEN IT HURTS.**
+✅ **`F-G-2` is already shadow-measuring the bid as the exit mark ⇒ a bid-basis level against a bid mark is like-for-like; a last-print level against a bid mark is not, and the residual is unbounded in a thin book.**
+★ **This overturns the argument I put to him — *"consistency across lanes is itself fidelity"* — and it overturns it correctly. Cross-lane sameness is COSMETIC. Basis-to-comparator sameness is what Kyle's test is actually about.**
+
+---
+
+### ⛔⛔ BLOCKER-1 — **CONFIRMED AT THE OBJECT.** THE SIDE IS PER-LEG **AND PER EXECUTION INTENT**
+**His claim: *"ask for entry" is not a complete rule, because the entry arm is not always a taker.* RE-DERIVED, and it holds** — `active-execution-engine.ts:3820-3841`:
+- `:3822` `const _b72cLimit = signal.entryPrice;` — **the maker limit IS the level.**
+- `:3824-3826` maker chosen ⇒ if `isMarketableAtPlacement('buy', bestAsk, limit)` the post-only would reject ⇒ taker fallback (`MARKETABLE_TAKER_FALLBACK`) or `MAKER_MARKETABLE_DROPPED`.
+- `:3839` otherwise `_b72cPendingMaker = true` — **it RESTS at the limit as a `state='pending'` position until the market trades through it.**
+⇒ ⛔ **A RESTING BUY LIMIT *IS A BID*. It is filled by a seller crossing INTO it; it never lifts an ask.** ⇒ **anchoring it on the ask would overstate the entry by a full spread on the one arm that pays no spread at all.**
+✅ **THE RULE, CORRECTED AND STATED WITH ITS LINES:** **taker entry → ASK** (`:3830`, the marketable-fallback arm and the normal immediate fill) · **resting maker entry → BID** (`:3839`) · **stop and target → BID** (both are SELLS for a long). ⛔ **Three sides, not two — and the constructor must be TOLD the execution intent, never infer it.**
+
+### ⛔⛔ BLOCKER-2 — ACCEPTED IN FULL, AND IT IS THE `#546` SHAPE
+**If the book is absent or one-sided at construction time the constructor REFUSES. It does NOT `?? mid`.** ★ **His reason is the one that makes it non-negotiable: a `?? mid` fallback is an absent basis wearing a plausible number's clothes — and WORSE than today, because today's midpoint is at least UNIFORM while a silent fallback would be intermittent and invisible.**
+✅ **AND THE REFUSAL SHIPS AS A COUNTER, NOT A LOG LINE — a funnel counter matched to the log line, to `F-G-1`'s 3/3 standard.** ⚠️ **`B-XSTOCK-FEED-SANITY` measured hollow books LAST WEEK; this is not hypothetical.**
+★ **MACHINERY THAT ALREADY EXISTS AND SHOULD BE USED RATHER THAN REBUILT: `markKindOf` is the ONE home of the mid-or-last predicate (`B-EXIT-BOOK-AGE-STAMP` P1), and `markKind` is already stamped per tick** ⇒ **the constructor can read what it was handed instead of re-deciding it.**
+
+### ✅ HIS BLOCKER 5 — THE F-G-2 WINDOW — WAS **ALREADY DISCHARGED**, AND THE STANDING RULE IS **STRICTER THAN EITHER OPTION HE OFFERED**
+**He wrote: *"A level-construction change is not among [A4's three contaminants] … Either sequence this after F-G-2's window closes, or amend A4 to name it and split at the deploy."*** ⛔ **He is STATELESS per-invoke and read at `43e3bb95b`; the amendment landed 2026-09-03.**
+✅ **`F_G_2_PROGRESS_REPORT.md` §4a already carries it, pre-registered BEFORE either batch deployed and written on his OWN earlier BLOCKER-4:** the level basis *"moves the target of the comparison itself, so a split may not be sufficient and the run may be **VOID-grade**."*
+⇒ ⛔ **THE BINDING RULE, ALREADY IN FORCE:** *"no `B-PRICE-SIDE-BY-JOB` change that moves the crypto level basis may DEPLOY inside this window … If a deploy becomes unavoidable, this window is declared **VOID and re-opened — not split**."*
+★ **So his option (ii) — amend and SPLIT — is the one thing the standing rule forbids, and the reason is his own: a split assumes the two halves are comparable, and they are not when the comparison's target moves.**
+✅ **AND IT ALREADY HAS THE DETECTOR HE WOULD ASK FOR, because he asked for it once already: the window's close enumerates every deploy record inside it and checks each sha against this batch's commit set BY ANCESTRY — non-empty intersection is `VOID`, not a judgement call — and it ships with a positive control.**
+⇒ ⛔ **CONSEQUENCE, STATED PLAINLY: this batch BUILDS and is REVIEWED now, and DEPLOYS after `F-G-2`'s window closes (opened 2026-09-04T16:08:02Z, 14 days).** ★ **That is not a delay this blocker imposed — §7 already made OBJ-3b's FORM depend on `F-G-2`'s recorded disposition, so the deploy was always downstream of it.**
+
+---
+
+### ⇒ WHAT IS NOW SETTLED, AND WHAT IS STILL OPEN
+| | |
+|---|---|
+| ✅ **the rule** | accepted, with the age clause folded INTO it |
+| ✅ **P4's choice** | **(a) the live transactable side**, on reason 3; reason 2 replaced at the object |
+| ✅ **the side, per leg AND per intent** | taker entry ASK · resting maker entry BID · stop BID · target BID |
+| ✅ **absent/one-sided book** | **REFUSE**, with a funnel counter — never `?? mid` |
+| ⛔ **still open** | OBJ-3b's FORM, which reads `F-G-2`'s disposition at deploy — **and deploy is after 2026-09-18** |
