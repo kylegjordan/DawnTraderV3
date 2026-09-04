@@ -47,7 +47,7 @@ import {
   computeNetExpectancyKernel,
   type NetExpectancyKernelResult,
 } from '../calculations/net-expectancy-kernel.js';
-import { computeTotalRoundTripCost, type CostComponents } from './cost-model.js';
+import { computeTotalRoundTripCost, composeSidedFriction, type CostComponents } from './cost-model.js';
 import type { StrategyFamily } from '../../config/canonical-regime-strategy-map.js';
 
 export type EntryMode = 'taker' | 'maker';
@@ -95,9 +95,32 @@ export interface MakerTakerHaircutConfig {
 }
 
 export interface MakerTakerDecisionInput {
+  /** The TAKER arm's entry. Under `sided` geometry this is the ASK; under `mid` it is the mid. */
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
+  /**
+   * ⛔⛔ REQUIRED, NOT OPTIONAL, AND THERE IS NO DEFAULT — B-PRICE-SIDE-BY-JOB, Langston's
+   * BLOCKER of 2026-09-04.
+   *
+   * Which geometry this signal's levels were built with. `mid` keeps the historic
+   * `computeTotalRoundTripCost` arithmetic (spread charged once as the mid-to-mid correction);
+   * `sided` uses `composeSidedFriction` because the spread is already IN the levels.
+   *
+   * ★ IT IS REQUIRED BECAUSE AN OPTIONAL FLAG HAS A DEFAULT AND THE DEFAULT IS WRONG IN THE
+   * MAKER DIRECTION: an absent stamp would fall to the `mid` branch and charge a SIDED signal
+   * its spread twice — the exact defect, arriving silently. Omitting it does not compile, and
+   * an unrecognised value THROWS rather than assuming. Same discipline as `maxAgeMs` on
+   * `buildLevelBasis`, and for the same reason.
+   */
+  levelGeometry: 'mid' | 'sided';
+  /**
+   * The MAKER arm's entry — the BID under `sided` geometry.
+   *
+   * ⛔ Under `mid` this MUST equal `entryPrice` and is asserted, not assumed: a mid-priced
+   * triple has one entry by definition, so a difference means a caller has half-migrated.
+   */
+  entryPriceMaker: number;
   /** Per-symbol TAKER cost components (fee = taker fee, + slippage + spread) —
    *  the SAME value [HF9]/[11.8B] use as the taker baseline. */
   costs: CostComponents;
@@ -186,6 +209,8 @@ export function decideMakerTaker(
     entryPrice,
     stopPrice,
     targetPrice,
+    levelGeometry,
+    entryPriceMaker,
     costs,
     feeRateMaker,
     feeRateTaker,
@@ -200,8 +225,32 @@ export function decideMakerTaker(
     haircut,
   } = input;
 
-  const kernelCommon = {
-    entryPrice,
+  // ⛔⛔ B-PRICE-SIDE-BY-JOB — THE ARMS NO LONGER SHARE AN ENTRY PRICE WHEN THE LEVELS ARE
+  // SIDED, AND THAT IS THE POINT RATHER THAN AN INCONVENIENCE (Langston, 2026-09-04).
+  // A taker buy lifts the ASK; a resting maker buy IS a BID. Against the same bid-side stop
+  // they are a FULL SPREAD apart, so risk and reward move in OPPOSITE directions between the
+  // arms. Under a mid-priced triple both arms genuinely share one entry, and `entryPriceMaker`
+  // is required to equal `entryPrice` — asserted below rather than assumed.
+  const entryTaker = entryPrice;
+  const entryMaker = entryPriceMaker;
+
+  // ⛔ REFUSE, NEVER DEFAULT. An absent or inconsistent geometry declaration must not silently
+  // pick the mid branch: on a SIDED signal that charges the spread twice — precisely the defect
+  // this change exists to remove, arriving silently. Three constructors are already known to
+  // bypass the signal-birth seam where the stamp is applied (`#927`, `#928`, `#929`), so the
+  // unstamped case is measured, not hypothetical.
+  if (levelGeometry !== 'mid' && levelGeometry !== 'sided') {
+    throw new Error(
+      `decideMakerTaker: levelGeometry must be 'mid' or 'sided', got ${String(levelGeometry)}`,
+    );
+  }
+  if (levelGeometry === 'mid' && entryMaker !== entryTaker) {
+    throw new Error(
+      'decideMakerTaker: a mid-priced triple has ONE entry — entryPriceMaker must equal entryPrice',
+    );
+  }
+
+  const kernelCommonShared = {
     stopPrice,
     targetPrice,
     DI,
@@ -213,14 +262,17 @@ export function decideMakerTaker(
   };
 
   // ── TAKER leg — identical to the [HF9]/[11.8B] taker baseline ──────────────
-  const takerFrictionPct = computeTotalRoundTripCost(
-    costs.fee,
-    costs.slippage,
-    costs.spread,
-  );
+  // ⛔ SIDED ⇒ NO `spread` TERM. The spread is in the geometry (entry on the ask, exits on the
+  // bid); billing it here as well charges it twice. `computeTotalRoundTripCost` stays the
+  // correct formula for the mid branch and is untouched — 12 production files depend on it.
+  const takerFrictionPct =
+    levelGeometry === 'sided'
+      ? composeSidedFriction(costs.fee, costs.slippage)
+      : computeTotalRoundTripCost(costs.fee, costs.slippage, costs.spread);
   const taker = computeNetExpectancyKernel({
-    ...kernelCommon,
-    totalFriction: takerFrictionPct * entryPrice,
+    ...kernelCommonShared,
+    entryPrice: entryTaker,
+    totalFriction: takerFrictionPct * entryTaker,
   });
 
   // ── MAKER leg — save the ENTRY leg's fee diff + spread + entry slippage ────
@@ -233,12 +285,19 @@ export function decideMakerTaker(
   // Q1 rider): never `costs.fee − feeRateMaker`, which would subtract a per-class maker
   // fee from a per-symbol taker fee across two resolvers. spread + entry slippage are the
   // per-symbol microstructure the maker saves.
+  // ⛔ SIDED ⇒ NO `costs.spread` CREDIT. A bid-anchored maker entry against a bid-side exit is
+  // bid-to-bid — ZERO spread by construction — so the saving is already expressed in the better
+  // entry price. Crediting it here as well is the mirror of the taker double-charge, and the two
+  // errors are SAME-SIGNED: together roughly 2× spread, all toward maker.
   const makerEntryAdvantagePct =
-    (feeRateTaker - feeRateMaker) + costs.spread + costs.slippage;
+    levelGeometry === 'sided'
+      ? (feeRateTaker - feeRateMaker) + costs.slippage
+      : (feeRateTaker - feeRateMaker) + costs.spread + costs.slippage;
   const makerFrictionPct = takerFrictionPct - makerEntryAdvantagePct;
   const maker = computeNetExpectancyKernel({
-    ...kernelCommon,
-    totalFriction: makerFrictionPct * entryPrice,
+    ...kernelCommonShared,
+    entryPrice: entryMaker,
+    totalFriction: makerFrictionPct * entryMaker,
   });
 
   // ── The conservatism knob: signal-conditioned haircut + explicit pFill ─────
@@ -252,9 +311,19 @@ export function decideMakerTaker(
     nonFillCostPct = Math.max(0, nonFillCostPct - haircut.nonFillReversalDiscount);
   }
 
+  // ⚠️ pFill IS A FLAT DB CONSTANT AND ITS REFERENT MOVES UNDER SIDED LEVELS (Langston, 2026-09-04).
+  // Today's maker limit is a smoothed mid — inside the spread, therefore aggressive. Bid-anchored
+  // it joins the BACK OF THE QUEUE, so the true fill probability FALLS while this constant does
+  // not. DEFERRED, and deferred against an ARMED INSTRUMENT rather than a promise: the maker
+  // pick-rate and drop-rate counters ship in the same commit as any move of the resting price.
+  // A deferral with no instrument can never be discharged from data.
   const pFill = clamp01(haircut.makerFillProbability);
-  const adverseSelectionPerUnit = adverseSelectionPct * entryPrice;
-  const nonFillCostPerUnit = nonFillCostPct * entryPrice;
+  // ⛔ PRICED OFF THE MAKER ARM'S OWN ENTRY — Langston's FINDING, and it is the same class as the
+  // defect being fixed. These are the maker branch's per-unit costs; scaling them by the TAKER
+  // arm's entry would price one arm's haircut off the other arm's price. Identical under `mid`,
+  // where the two entries are asserted equal above.
+  const adverseSelectionPerUnit = adverseSelectionPct * entryMaker;
+  const nonFillCostPerUnit = nonFillCostPct * entryMaker;
 
   // E[maker] = P(fill)·(netEV_onFill − adverseSelection) − P(no-fill)·nonFillCost
   // The non-fill branch is an opportunity-cost LOSS, never zero (Langston item 1).

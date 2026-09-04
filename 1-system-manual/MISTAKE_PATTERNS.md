@@ -96,6 +96,12 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 
 ### `enumerator-blind-spot` — **EVERY ENUMERATOR WAS BLIND TO A DIFFERENT MEMBER CLASS, AND EACH BLIND SPOT LOOKED LIKE A CORRECT ARM** — **NEW 2026-08-31, n=7 in ONE batch** · mechanism: **SHIPPED for this instance — one shared enumerator; NONE YET for the class**
 
+➕ **INSTANCE n=8 — 2026-09-05, CC-C, `B-PRICE-SIDE-BY-JOB` — AND THIS ONE'S BLIND SPOT IS THE *GLOB PATTERN ITSELF*, WHICH MAKES IT THE MOST PORTABLE VARIANT YET.**
+**MEASURED:** `git ls-files 'server/**/*.ts'` matches **ZERO** top-level files in `server/`; `git ls-files 'server/*.ts'` matches **10**. ⇒ ⛔ **`**` DOES NOT MATCH ZERO DIRECTORY LEVELS in git's pathspec glob**, so every census I ran with that pattern silently excluded `server/routes.ts`, `server/storage.ts` and eight others.
+⚠️ **CONSEQUENCE, CAUGHT BY LANGSTON AND NOT BY ME: I reported "11 production files carry `computeTotalRoundTripCost`"; the true count is **12**, and the missing one is `routes.ts` with **8 hits** — the single densest consumer.** ★ **The number was load-bearing: it was the evidence for refusing to edit a shared formula. It was right in its conclusion and wrong in its count, which is the worst combination — a correct decision that a reviewer can falsify.**
+✅ **RE-RAN THE OTHER CENSUSES OF THAT SESSION WITH `'server/*.ts' 'server/**/*.ts'`: the `indicators.currentPrice` consumer set is UNCHANGED at four files, so that finding survives.** ⛔ **But it survived by luck, not by method.**
+⇒ ⭐ **THE FIX IS A HABIT AND IT IS ONE CHARACTER: ALWAYS PAIR THE GLOBS — `'<dir>/*.ts' '<dir>/**/*.ts'`.** ★ **And the general lesson is the pattern's own: the enumerator looked correct, ran without error, returned plausible results, and its blind spot was in the SHAPE OF THE QUESTION rather than in the answer.**
+
 ⛔⛔ **THE SHAPE, AND IT IS WHY IT IS NOT `fragment-not-whole`: THE ARM WAS CORRECT EVERY TIME. WHAT WAS WRONG WAS THE *LIST IT ARMED OVER*.** A member class the enumerator cannot see scores `false` ⇒ the guard preserves ⇒ **the entry FREEZES PERMANENTLY, or a deletion sweep READS AS COMPLETE.** ★ **The failure is always in the safe direction, which is exactly what makes it invisible: nothing breaks, nothing errors, and the thing simply stops advancing.**
 
 ⚠️⚠️ **`n=7` IS IN A SINGLE BATCH, SO IT DOES NOT MEET PROMOTION (3+ across 2+ distinct batches) AND IS NOT IN §13.** Recorded because **FOUR OF THE SEVEN WERE WRITTEN WHILE FIXING THE ONE BEFORE** — the density is the finding, not the count.

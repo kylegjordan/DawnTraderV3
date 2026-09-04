@@ -807,6 +807,12 @@ export async function evaluateXstockPairForVTS(
         try {
           _xMtDecision = decideMakerTaker({
           entryPrice,
+          // B-PRICE-SIDE-BY-JOB: declared EXPLICITLY rather than defaulted. The xStock lane's
+          // levels are still mid-priced (census §6: venue bar closes, not a book side), so the
+          // historic friction arithmetic is correct here and the maker entry is the same entry
+          // by definition. When this lane is sided, BOTH lines change together.
+          levelGeometry: 'mid' as const,
+          entryPriceMaker: entryPrice,
           stopPrice: stopLoss,
           targetPrice: takeProfit,
           costs: costMetrics,

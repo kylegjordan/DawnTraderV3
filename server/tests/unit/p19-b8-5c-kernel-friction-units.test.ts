@@ -26,6 +26,13 @@ const FRICTION_FRACTION = computeTotalRoundTripCost(COSTS.fee, COSTS.slippage, C
 function takerLegAt(entryPrice: number) {
   return decideMakerTaker({
     entryPrice,
+    // B-PRICE-SIDE-BY-JOB: this suite's subject is friction SCALING across price regimes, on the
+    // MID geometry. Declared explicitly — the field is required precisely so a fixture cannot
+    // inherit a default. This one was built dynamically, so tsc could not see it and the RUNTIME
+    // refusal caught it instead: the guard finding a call site the type system missed is the
+    // mechanism working, not a problem with it.
+    levelGeometry: 'mid' as const,
+    entryPriceMaker: entryPrice,
     stopPrice: entryPrice * 0.95,
     targetPrice: entryPrice * 1.05,
     costs: COSTS,

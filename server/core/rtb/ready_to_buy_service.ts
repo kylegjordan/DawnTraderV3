@@ -816,6 +816,12 @@ class ReadyToBuyService {
         const _mtGK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
         const _mt = decideMakerTaker({
           entryPrice, stopPrice, targetPrice,
+          // B-PRICE-SIDE-BY-JOB: declared EXPLICITLY rather than defaulted. The RTB refresh
+          // re-decides on the geometry the signal already carries; it does not construct levels,
+          // so it inherits whatever the birth lane used. Mid today, and it changes when the
+          // source lane is sided — this is a REPEATER of the birth stamp, not an author of it.
+          levelGeometry: 'mid' as const,
+          entryPriceMaker: entryPrice,
           costs: costMetrics,
           feeRateMaker: _mtFr.feeRateMaker,
           feeRateTaker: _mtFr.feeRateTaker,

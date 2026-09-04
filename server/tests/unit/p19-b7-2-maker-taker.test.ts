@@ -36,6 +36,11 @@ const FEE_MAKER = 0.004;
 function baseInput(over: Partial<MakerTakerDecisionInput> = {}): MakerTakerDecisionInput {
   return {
     entryPrice: 100,
+    // B-PRICE-SIDE-BY-JOB: this fixture's SUBJECT is the MID arm and it stays that way
+    // (Langston, 2026-09-04) — the 0.0055 advantage below is the mid-geometry number and must
+    // not be re-pointed. The sided arm gets its own describe block at the bottom of this file.
+    levelGeometry: 'mid' as const,
+    entryPriceMaker: 100,
     stopPrice: 98,     // risk 2
     targetPrice: 105.5, // reward 5.5
     costs: CRYPTO_COSTS,
@@ -156,5 +161,127 @@ describe('P19-B7.2 — family → entry-urgency prior (no calibration data neede
     expect(entryUrgencyClassForFamily('pattern')).toBe('neutral');
     expect(entryUrgencyClassForFamily('hybrid')).toBe('neutral');
     expect(entryUrgencyClassForFamily(undefined)).toBe('neutral');
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════════════
+// B-PRICE-SIDE-BY-JOB — the SIDED arm. Its OWN block, never a re-pointing of the mid tests
+// above (Langston, 2026-09-04): the 0.0055 advantage up there is the mid-geometry number and
+// stays the subject of its own assertions.
+//
+// Fixture: mid 100, spread 0.001 (= 0.1% = 0.1 in price) ⇒ ask 100.05, bid 99.95.
+// ═══════════════════════════════════════════════════════════════════════════════════════
+const SIDED_ASK = 100.05;
+const SIDED_BID = 99.95;
+
+function sidedInput(over: Partial<MakerTakerDecisionInput> = {}): MakerTakerDecisionInput {
+  return baseInput({
+    levelGeometry: 'sided' as const,
+    entryPrice: SIDED_ASK,      // the taker lifts the ask
+    entryPriceMaker: SIDED_BID, // the resting maker IS a bid
+    ...over,
+  });
+}
+
+describe('B-PRICE-SIDE-BY-JOB — the SIDED arm does not pay the spread twice', () => {
+  it('⛔ taker friction carries NO spread term — it is in the geometry now', () => {
+    const d = decideMakerTaker(sidedInput());
+    // sided taker friction = 2*fee + 2*slip = 0.017, WITHOUT the 0.001 spread.
+    const expectedPct = 2 * 0.008 + 2 * 0.0005;
+    expect(d.takerNetEV).toBeCloseTo(
+      computeNetExpectancyKernel({
+        entryPrice: SIDED_ASK, stopPrice: 98, targetPrice: 105.5,
+        totalFriction: expectedPct * SIDED_ASK, minPWin: 0.5, maxPWin: 0.5,
+      }).netEV, 9);
+  });
+
+  it('⛔ the maker advantage carries NO spread CREDIT — bid-to-bid earns no spread saving', () => {
+    // mid geometry credits (0.008−0.004) + 0.001 + 0.0005 = 0.0055.
+    // sided credits (0.008−0.004) + 0.0005 = 0.0045. The 0.001 is the spurious bonus.
+    expect(decideMakerTaker(sidedInput()).makerEntryAdvantagePct).toBeCloseTo(0.0045, 9);
+    expect(decideMakerTaker(baseInput()).makerEntryAdvantagePct).toBeCloseTo(0.0055, 9);
+  });
+
+  it("⭐ Langston's identity: sided maker friction = fee_taker + fee_maker + one slippage leg", () => {
+    // One maker leg in, one taker leg out, one slippage leg, zero spread.
+    const d = decideMakerTaker(sidedInput());
+    const takerPct = 2 * 0.008 + 2 * 0.0005;
+    const makerPct = takerPct - d.makerEntryAdvantagePct;
+    expect(makerPct).toBeCloseTo(0.008 + 0.004 + 0.0005, 9);
+  });
+
+  it('⛔⛔ THE DOUBLE-COUNT, DEMONSTRATED: sided friction is EXACTLY one spread below mid friction', () => {
+    // This is the defect in one line. If sided friction ever equals mid friction, the spread is
+    // being charged in the geometry AND in the model — which is what shipping the levels
+    // without this change would have done.
+    const midPct = 2 * 0.008 + 2 * 0.0005 + 0.001;
+    const sidedPct = 2 * 0.008 + 2 * 0.0005;
+    expect(midPct - sidedPct).toBeCloseTo(CRYPTO_COSTS.spread, 12);
+  });
+});
+
+describe('B-PRICE-SIDE-BY-JOB — the two arms price on their OWN entries', () => {
+  it('the arms are a FULL SPREAD apart, and that is the correction', () => {
+    expect(SIDED_ASK - SIDED_BID).toBeCloseTo(CRYPTO_COSTS.spread * 100, 9);
+  });
+
+  it('⭐ R:R differs BETWEEN THE ARMS, in opposite directions — the economics the mid concealed', () => {
+    // Against the same bid-side stop of 98, a taker entry at 100.05 risks more and gains less
+    // than a maker entry at 99.95. Under the mid there was one number and this was invisible.
+    const takerRisk = SIDED_ASK - 98;
+    const makerRisk = SIDED_BID - 98;
+    expect(takerRisk).toBeGreaterThan(makerRisk);
+    const takerRR = (105.5 - SIDED_ASK) / takerRisk;
+    const makerRR = (105.5 - SIDED_BID) / makerRisk;
+    expect(makerRR).toBeGreaterThan(takerRR);
+  });
+
+  it("⛔ the maker haircut prices off the MAKER's entry, not the taker's (Langston FINDING)", () => {
+    // ⚠️ THIS TEST WAS REWRITTEN AFTER IT FAILED TO DISCRIMINATE. r1 moved `entryPriceMaker` and
+    // asserted the adjusted maker EV responded — but the KERNEL already scales with that entry,
+    // so it responded under the defect too. The mutation (haircut on `entryTaker`) stayed GREEN.
+    // ⇒ A difference test could not isolate the haircut term. This asserts the term ANALYTICALLY.
+    const d = decideMakerTaker(sidedInput());
+
+    // Rebuild the maker branch by hand, priced entirely off the MAKER entry.
+    const sidedMakerPct = 2 * 0.008 + 2 * 0.0005 - ((0.008 - 0.004) + 0.0005);
+    const makerKernel = computeNetExpectancyKernel({
+      entryPrice: SIDED_BID, stopPrice: 98, targetPrice: 105.5,
+      totalFriction: sidedMakerPct * SIDED_BID, minPWin: 0.5, maxPWin: 0.5,
+    });
+    const adverseSelectionPct = 0.0015 + 0.0035 * 0.3;          // base + mult*strength
+    const nonFillPct = Math.max(0, 0.0010 - 0.0008);            // reversal discount
+    const pFill = 0.50;
+    const expected =
+      pFill * (makerKernel.netEV - adverseSelectionPct * SIDED_BID)
+      - (1 - pFill) * nonFillPct * SIDED_BID;
+
+    expect(d.makerNetEVAdjusted).toBeCloseTo(expected, 9);
+
+    // ⭐ AND THE DISCRIMINATION, STATED: pricing the haircut off the TAKER entry instead would
+    // move the result by this much — comfortably above the 1e-9 tolerance above, so the
+    // assertion genuinely separates the two implementations rather than merely passing.
+    const gap = (pFill * adverseSelectionPct + (1 - pFill) * nonFillPct) * (SIDED_ASK - SIDED_BID);
+    expect(gap).toBeGreaterThan(1e-6);
+  });
+});
+
+describe('B-PRICE-SIDE-BY-JOB — the geometry declaration REFUSES, it never defaults', () => {
+  it('⛔ an unrecognised geometry THROWS rather than falling to the mid branch', () => {
+    // An absent stamp defaulting to `mid` would charge a SIDED signal its spread twice — the
+    // exact defect, silently. Three constructors already bypass the birth seam (#927/#928/#929).
+    expect(() =>
+      decideMakerTaker(baseInput({ levelGeometry: 'midpoint' as unknown as 'mid' })),
+    ).toThrow(/levelGeometry/);
+  });
+
+  it('⛔ a mid-priced triple with two DIFFERENT entries THROWS — a caller has half-migrated', () => {
+    expect(() => decideMakerTaker(baseInput({ entryPriceMaker: 99 }))).toThrow(/ONE entry/);
+  });
+
+  it('a mid-priced triple with matching entries is accepted, so the guard is not always-on', () => {
+    // The other arm. Without it, "throws on everything" would satisfy the two tests above.
+    expect(() => decideMakerTaker(baseInput())).not.toThrow();
   });
 });

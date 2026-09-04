@@ -122,6 +122,11 @@ describe('P19-B7.2d — xStock seam: stamp + floor semantics via the shared deci
   function xstockDecision(over: Record<string, unknown> = {}) {
     return decideMakerTaker({
       entryPrice: 25,
+      // B-PRICE-SIDE-BY-JOB: the xStock lane's levels are venue bar closes (census §6), still
+      // mid-priced, so the historic friction arithmetic is correct and the maker entry is the
+      // same entry. Declared explicitly — the field is required so a fixture cannot default.
+      levelGeometry: 'mid' as const,
+      entryPriceMaker: 25,
       stopPrice: 24,
       targetPrice: 27,
       costs: { fee: 0.006, slippage: 0.001, spread: 0.001 } as any,

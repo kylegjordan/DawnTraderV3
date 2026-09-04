@@ -1845,6 +1845,13 @@ async function generatePhase10Signal(
   const _vtsFriction = getFrictionForAssetClass(_assetClass);
   const _vtsMtDecision = decideMakerTaker({
     entryPrice,
+    // B-PRICE-SIDE-BY-JOB: declared EXPLICITLY rather than defaulted. The VTS lane is the second
+    // level-setting hand-off (census §9 W-1) and is still mid-priced, so the historic friction
+    // arithmetic is correct here. It is named in W-1 precisely so it cannot be forgotten when
+    // the active lane is sided — wiring only the orchestrator would leave the LEARNING
+    // population on the old basis while every active-path check read as fixed.
+    levelGeometry: 'mid' as const,
+    entryPriceMaker: entryPrice,
     stopPrice: stopLoss,
     targetPrice: takeProfit,
     costs: costMetrics,

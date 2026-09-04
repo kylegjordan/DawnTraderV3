@@ -178,6 +178,42 @@ export function composeBookedFriction(feeEntry: number, feeExit: number, slippag
 }
 
 /**
+ * ⛔⛔ B-PRICE-SIDE-BY-JOB (plan row 3n) — ROUND-TRIP FRICTION FOR A **SIDED** TRIPLE.
+ *
+ * `computeTotalRoundTripCost` above charges `spread` ONCE, and that once IS the mid-to-mid
+ * correction: buying at the ask is `mid + ½ spread`, selling at the bid is `mid − ½ spread`,
+ * so a round trip loses one full spread against a mid-priced accounting. **Its premise is
+ * that every leg is mid-priced** — stated in its own consumer at `maker-taker-decision.ts`
+ * ("spread applied once, at entry").
+ *
+ * ⇒ When a signal's levels are built on the TRANSACTABLE SIDES, the spread is ALREADY IN THE
+ * GEOMETRY. Charging it again here would bill it twice on the taker arm, and crediting it as
+ * a maker "saving" would hand the maker arm a bonus it no longer earns — a combined swing of
+ * roughly 2× spread, all toward maker, against a 40 bp crypto fee delta. **Decision-flipping,
+ * and invisible downstream: the triple stays well-ordered and every test still passes.**
+ * (Langston, 2026-09-04, re-derived at `cost-model.ts:163-164` + `maker-taker-decision.ts:216-238`.)
+ *
+ * ⭐ SPREAD IS EITHER GEOMETRY OR FRICTION — NEVER BOTH.
+ *
+ * ⛔⛔ WHY THIS IS A NAMED FUNCTION RATHER THAN A BARE INLINE `2·fee + 2·slip` AT THE ONE CALL
+ * SITE, and the reason is the CENSUS rather than drift (Langston's tiebreak, and he is right):
+ * the next author who sides a second lane will grep the canonical name, get
+ * `computeTotalRoundTripCost`'s 24 call sites, and **never find the formula that actually
+ * applies to their lane.** That is `fix-follows-pointer` and `enumerator-blind-spot` in one
+ * move. A named function is greppable and shows up in the instrument we actually use.
+ * House precedent is `composeBookedFriction` directly above: ONE FUNCTION PER QUESTION.
+ *
+ * ⚠️ AND `computeTotalRoundTripCost` IS DELIBERATELY LEFT UNTOUCHED. It is the CORRECT formula
+ * for a mid-priced triple, and after this batch three of four lanes still have one — measured:
+ * **12 production files carry it.** Editing it would apply a geometry correction to lanes that
+ * never received the geometry, and would move every cost-telemetry and drift series with it.
+ * The branch belongs at the DECISION, not inside a formula shared by twelve files.
+ */
+export function composeSidedFriction(fee: number, slippage: number): number {
+  return (fee * 2) + (slippage * 2);
+}
+
+/**
  * P19-B8.10 (OBJ-4): the ONE pair-friction DISPLAY index — round-trip friction in
  * bps ÷ 3, capped at 100. Extracted verbatim from vts-runner's inline closure so
  * the VTS open-trade capture and the active-path genesis capture cannot drift.

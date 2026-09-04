@@ -1051,6 +1051,14 @@ export class SignalOrchestrator {
     const _mtGlobalKey = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
     const _mtDecision = decideMakerTaker({
       entryPrice: rawSignal.entryPrice,
+      // ⛔ B-PRICE-SIDE-BY-JOB — THIS IS THE LANE THAT WILL BE SIDED, AND IT IS STILL 'mid'.
+      // The level basis is built and mutation-proved but NOT yet wired to the strategies
+      // (census §9 W-1/W-2), so the triple reaching here is still smoothed-mid-derived and the
+      // historic arithmetic is the correct one. ⇒ Flipping this to 'sided' before the levels
+      // actually are would UNDER-charge the spread — the mirror of the double-count this field
+      // exists to prevent. The two changes ship in ONE commit.
+      levelGeometry: 'mid' as const,
+      entryPriceMaker: rawSignal.entryPrice,
       stopPrice: rawSignal.stopPrice,
       targetPrice: rawSignal.targetPrice,
       costs: _mtCosts,
