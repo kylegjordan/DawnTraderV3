@@ -499,6 +499,58 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 | **`xstock_spot`** | ⛔ **UNDERPOWERED (n=19)** | **§3n converted the CRYPTO 30-count arm only** — it is singular and all five items are crypto-shaped, while **§3e created TWO counters.** ⇒ **§3's blanket underpowered rule still governs the xStock leg. Zero off-grid on 19 rows is real and worth having; it is NOT a pass on that leg** — exactly what §3f RIDER-1 pre-registered to stop the class we are least sure about reading as tested. |
 
 
+
+### 3p. ✅✅ ITEM 1 DISCHARGED ON THE **RIGHT** OBJECT — AND MY §3o ANSWER WAS NOT MERELY UNPROVEN, IT WAS BACKWARDS
+
+⛔ **APPENDED, NOT EDITED. §3o's item-1 row is SUPERSEDED by this section; everything else in §3o stands.**
+
+⚠️⚠️ **THE BLOCKER, AND IT IS THE SHARPEST WRONG-OBJECT OF THIS BATCH (Langston, re-derived by me).** §3o measured `volatility_edge` on **OPENED POSITIONS (n=24)** and concluded *"sampled 0 rows … UNTESTED at zero opportunity."* ⇒ ⛔ **THE SEAM DOES NOT RUN AT FILL. `_isCap` is `strategyId === 'volatility_edge'` at `signal-orchestrator.ts:583`, ONE LINE ABOVE `roundTripleToGrid` at `:584` — it runs at SIGNAL BIRTH, before sizing, before the SQE, before RTB.** **A fill adds nothing to the rounding question.** The discharge population is **signals ENTERING THE SEAM.**
+
+✅✅ **RE-MEASURED ON THAT POPULATION — `rtb_shadow_pairings`, in-window, `strategy = volatility_edge`, graded against the LIVE published Kraken grid:**
+
+| | |
+|---|---|
+| triples entering the seam | **1,993** |
+| carrying a live published `tick_size` | **1,993** |
+| ⭐ **ALL THREE LEGS ON GRID** | ⭐ **1,993** |
+| any leg off grid | **0** |
+| worked example | `USELESS/USD` — entry `0.24121000` · stop `0.20026000` · target `0.30945000` · tick `0.00001` |
+
+⇒ ★★ **MY ANSWER WAS NOT JUST UNPROVEN, IT WAS THE OPPOSITE OF TRUE. `volatility_edge` is not silent — with 1,993 signals it is the LARGEST signal producer of any strategy in the window** (next: `vwap_pullback` 291, `sma_trend_ride` 237). **The one arm of `roundPriceForRole` that rounds TOWARD entry is exercised 1,993 times and lands on grid every time.** ⇒ **ITEM 1 DISCHARGES ON ITS LETTER — "sampled once on-grid" — and by three orders of magnitude.**
+★ **THE LESSON, WHICH IS THE ONE MY OWN LEDGER KEEPS RECORDING: a true zero on the object ADJACENT to the claim.** `volatility_edge` opened nothing, so every fill-based instrument reports zero — **and the seam it was being asked about had already run 1,993 times.**
+
+✅ **§3n's DISCHARGE SET IS NOW 5 OF 5.**
+
+#### ✅ CONDITION — BIRTH TICK vs LIVE `AssetPairs`, REPORTED AS A COUNT
+
+§3 pre-registered a live fetch; §3o graded against the row's own `metadata.gridAtBirth.tick`. **The swap was the right call against the finer-read-time trap, but it is post-hoc and partly self-confirming — and `#933` (map fetched at boot, never retried) is the live way a stamped `venue_published` tick goes wrong.** **MEASURED against a fresh `/0/public/AssetPairs` (1,446 pairs, all carrying `tick_size`), on all 24 crypto rows: AGREE 24 · DISAGREE 0 · symbol absent from the live map 0.** ⇒ **`#933`'s failure mode is measured as not having materialised in this window. The two instruments agree exactly.**
+
+#### ⛔ THE ACCUMULATOR CAVEAT — I REFUSED THIS EXACT MOVE ONE ROW ABOVE AND THEN MADE IT
+
+⚠️⚠️ **`preSqeRejectsByStrategy` IS A MONOTONE ACCUMULATOR ON THE SAME `startedAt` AS THE 769,693 I REFUSED TO DIVIDE BY** (`active-funnel-tracker.ts` `_blank()` `:234-247`, checkpoint reload `:296-315`, **no rolling reset**). §3o quoted it beside a **7-day** `error.log` count and against a **7-day** trade list. ★ **The saving argument EXISTS and I did not make it: `GRID_REJECT` postdates the 2026-08-28 deploy, so FOR THAT REASON-KEY cumulative ≈ window.** It is stated here as an argument rather than assumed by proximity.
+⚠️ **AND THE 6-EVENT GAP IS EXPLAINED, NOT WAVED: split 14,643 vs total 14,649** — `recordActivePreSqeReject`'s `strategy` argument is **optional** (`:356`), so **strategy-less rejects are unbucketed BY DESIGN** (fenced at `p19-b8-4….test.ts:63`).
+
+#### ⭐ §3a WAS UNDER-CLAIMED — THE DISCRIMINATION IS AVAILABLE, ONLY THE RATE IS NOT
+
+**A REFUSAL *IS* AN EVALUATION.** ⇒ **`grid evaluations ≥ 14,652` on the window, as a LOWER BOUND.** ⇒ ★ **§3a's test — *"few opens + many evaluations + many refusals = a FINDING"* — is SATISFIED WITHOUT the in-memory counter.** §3o said the read was *"not fully reportable"*; **the DISCRIMINATION is reportable, and only the RATE is not.** Corrected here rather than left conservative-but-wrong.
+
+#### ⛔⛔ AND `3n.d` IS RESTATED ON **DISTINCT SIGNALS** — EVENT COUNT IS NOT SIGNAL COUNT
+
+**88 pairs against 14,652 events ≈ 166 per pair is the signature of PER-CYCLE RE-EVALUATION, not of 14,652 distinct suppressed signals (Langston).** **MEASURED — distinct `(symbol, strategy, entry, stop)` triples in the `GRID_REJECT` lines:**
+
+| strategy | refusal EVENTS | ⭐ DISTINCT triples | opened in window |
+|---|---|---|---|
+| `pivot_shift` | 6,618 | **620** | **0** |
+| `support_bounce` | 3,409 | **328** | ✅ traded |
+| `morning_star` | 2,455 | **220** | ✅ traded |
+| `inside_bar_reversal` | 1,291 | **135** | ✅ traded |
+| `reverse_impulse` | 673 | **71** | **0** |
+| `defensive_hedge` | 244 | **23** | ✅ traded |
+
+⇒ **≈1,397 distinct refused triples against ≈14,690 events — a ~10.5× inflation, exactly as predicted.** ⇒ ⛔ **THE FINDING SURVIVES BUT SHRINKS BY AN ORDER OF MAGNITUDE, AND IT IS RESTATED IN ITS DEFENSIBLE FORM: `pivot_shift` — 620 distinct triples refused, 0 opened; `reverse_impulse` — 71 distinct refused, 0 opened.** *(Cross-check on an independent table: `rtb_shadow_pairings` in-window holds 51 `pivot_shift` and 4 `reverse_impulse` promoted rows — so a small number clear the seam and still none open.)*
+⚠️ **STILL NOT A DEFECT CLAIM:** refusing is designed behaviour. **What changed is that "wholly suppressed" now travels on 620 and 71, not on 6,618 and 673.**
+
+
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
