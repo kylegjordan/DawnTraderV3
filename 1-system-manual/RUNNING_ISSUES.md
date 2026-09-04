@@ -927,6 +927,37 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #1003 ✅ BUILT + VERIFIED 2026-09-04 (CC-INFRA, at Kyle's direction; handed over by CC-B, who scoped it and correctly declined to build it) — THE CODEX ADVISOR'S CREW-CHANNEL MIRROR
+
+**WHY IT EXISTS.** Kyle added a **Codex session as an ADVISOR** (not a gate — Langston's gates are unchanged), running in the ChatGPT desktop app sandboxed to `C:\DawnTrader-Codex\`. ⛔ **IT CANNOT BE WOKEN** — a desktop session takes a turn only when a human prompts it, so a watcher would log into a terminal nobody reads. **What it CAN do is CATCH UP**, which is what this builds.
+★ **LANE CALL BY CC-B, and it was the right one:** *"it is a laptop-side scheduled process consuming the Discord inbox, which is your machinery and your pattern. Two of us building one thing is the collision we keep paying for."* **His inventory of what already existed was accurate — sandbox, `notes/`, `out/`, and the pinned read-only audit clone at `5a7fc2ecc` with a `DISABLED://` push URL — and it saved rediscovering all of it.**
+
+⛔⛔ **THE EGRESS DECISION IS KYLE'S AND IT IS RECORDED HERE AND IN THE SCRIPT HEADER, BECAUSE IT IS THE LOAD-BEARING ONE.** I measured the channel BEFORE proposing anything — **whole file, 17,844 rows: 71 (0.40%) carry a real key prefix (`sk-`/`alch_`/`oat01-`) · 77 (0.43%) a host IP · 7 an `/etc/<service>/` path** — and recommended redacting at the write, on the ground that a wholesale mirror into a folder read by a third-party desktop app is a data-egress decision rather than plumbing.
+✅ **KYLE RULED UNREDACTED, with his reason:** *"You can build the whole channel. This is my ChatGPT account on my laptop. No one else uses it."* ⇒ **THE MIRROR CARRIES EVERYTHING THE CHANNEL CARRIES.** ⚠️ **ANYONE CHANGING WHERE IT IS WRITTEN, OR WHO CAN READ THAT FOLDER, IS RE-OPENING A DECISION MADE ON THE ASSUMPTION OF A SINGLE-USER LAPTOP.**
+⚠️ **AND I NEARLY REPORTED THAT MEASUREMENT WRONG:** my first pass lumped a UUID pattern in with the key patterns and returned ***"14.9% API-key-ish"*** — alarming and false, since alert and message ids are UUIDs (2,652 rows, 14.86%). **Separated, with a positive control proving the key regex still matches a synthetic.** *(`wrong-object`, caught before it reached Kyle.)*
+
+**WHAT WAS BUILT.** `comms-infra/codex-channel-mirror.py` + `comms-infra/install-codex-mirror-task.cmd`. Pulls new rows from `/var/log/cc-discord-inbox.jsonl` past a cursor, appends to a durable local cache, and regenerates a readable `C:\DawnTrader-Codex\notes\crew-channel.md`. **Windows scheduled task `codex-channel-mirror`, every 15 minutes.**
+
+★ **THREE PROPERTIES, EACH FROM SOMETHING THIS PROJECT HAS ALREADY BEEN BITTEN BY:**
+1. **IT STATES ITS OWN FRESHNESS AT THE TOP** — generation time, last-message time, and count. **An advisor cannot tell a quiet channel from a dead writer**, and an unstamped stale artifact reading as current is the `B-CROSS-SESSION-BLEED` freeze.
+2. **IT FAILS TOWARD STOPPING, NEVER TOWARD A PARTIAL FILE** — atomic `temp + os.replace` from an append-only cache; on any fetch failure the previous good file is left **exactly** as it was and the run exits non-zero. **A truncated record an advisor reads as fact is worse than no file.**
+3. **ITS CURSOR LIVES OUTSIDE THE SANDBOX** (`~/.claude/`) — Codex can write to its own folder *by design*, so state kept there is state the reader can perturb.
+
+✅ **VERIFIED END-TO-END, NOT ASSUMED — and the distinction matters because "registered" is not "runs":**
+| check | result |
+|---|---|
+| cold run | 17,847 rows pulled and cached |
+| second run | **0 new** — the cursor holds |
+| ⭐ **scheduler actually executes** | forced a run: header `GENERATED` moved **20:17:28Z → 20:18:13Z**, **`Last Result: 0`** |
+| rendered size | **125,293 B / 65 messages** |
+
+⚠️ **TWO THINGS THE BUILD ITSELF FOUND, both fixed and both recorded in the code:**
+- ⛔ **`subprocess` with `text=True` DIED ON THE FIRST COLD RUN** — the channel is full of emoji and em-dashes and Windows decoded as cp1252 (`UnicodeDecodeError` at byte `0x8f`). **Encoding is now explicit.** ★ **The fail-toward-stopping property worked on its first real test: exit 2, output file untouched.**
+- ⛔ **THE FIRST RENDER WAS 736,901 B for 400 messages — roughly 180k tokens, which a chat session cannot actually read.** ⇒ **the window is now bounded by BYTES (120 KB budget), not by message count.** **The CACHE keeps everything; the RENDERED file is a window.** *(Handing an advisor the whole 17.8k-row channel is not a brief, it is a denial of service.)*
+
+**HOME (§9.4): disposition (1) — built and closed in the same turn at Kyle's explicit direction (*"Please quickly build this now and then return to your open batch"*).** ⛔ **DELIBERATELY NOT FOLDED INTO `B-LANGSTON-CONTEXT`**, which is mid-flight at Step 2 — bolting a new capability onto an in-flight batch is the scope creep this crew keeps catching. **No plan row needed: it is complete, verified, and has no follow-on work.**
+⚠️ **RESIDUALS, NAMED:** (a) the task runs only while the laptop is awake — same limit as every other laptop-side scheduled task here; (b) **nothing yet alarms if the mirror stops** — the freshness header makes a stall *visible to a reader* but does not *notify anyone*, and I am not adding an alarm for an advisor that is not a gate; (c) I have **not** verified that Codex actually reads the file — that is Kyle's to observe in use, and it is the honest boundary of what "verified" covers here.
+
 ### #987 CLOSED 2026-09-02 (B-ALERT-ACTOR-ALLOWLIST, CC-B; deployed `fa563982c` 21:05Z; Langston Steps 1/2/4/8 approved; record `B_ALERT_ACTOR_ALLOWLIST_COMPLETION_REPORT.md`) — was OPEN 2026-09-02 (CC-B; Kyle-directed from the alert review) — ⛔⛔ **THE ALERT OWNER RECORD IS FREE TEXT, AND THE ALWAYS-LOADED RULES FILE TELLS SESSIONS TO WRITE A NAME THAT IDENTIFIES NOBODY**
 
 **MEASURED (30 days of `system-alerts.jsonl`, population = every alert acknowledged since 2026-08-03; instrument = distinct `acknowledged_by` strings):** ~five actors, **23 distinct name strings**; **eight `cc-session-<date>` variants account for 38 acks, 15 this month** — five alerts left the due list on 2026-09-02 acked by `cc-session-2026-09-02`, a string bound to no session.
