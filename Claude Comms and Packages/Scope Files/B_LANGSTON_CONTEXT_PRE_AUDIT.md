@@ -206,7 +206,7 @@
 
 | # | item | falls out of | verification |
 |---|---|---|---|
-| **P-7** ⭐ **FIRST** | usage instrumentation for recall + the three always-loaded files | F-4 · his OBJ-7 ruling | a query is countable; **and the counter has a positive control**, so a zero separates *not used* from *not reachable* |
+| **P-7** ⭐ **FIRST** ⛔ *(see §11 — kept WHOLE; the byte log stats files, it does not observe loading)* | usage instrumentation for recall + the three always-loaded files | F-4 · his OBJ-7 ruling | a query is countable; **and the counter has a positive control**, so a zero separates *not used* from *not reachable* |
 | **P-1a** | **standing rule: no batch closes carrying an undischarged obligation** unless armed as an alert or placed as a named roadmap row with an owner | ⭐ **BLOCKER-1** | the rule exists and is sequenced with the pending AWAITING-KYLE *"scheduled ≠ verified"* item, not decided around it |
 | **P-1b** | retire **only** the 7 truly-collapsed closure blocks; **cut on `obligation discharged`, never on `batch closed`** | **BLOCKER-1** + F-2, F-3 | the four live-obligation sections (`F-G-2`, `B-PRICE-AGE-TRUTH`, `B-XSTOCK-FEED-SANITY`, `F-G-1`) **survive**; the 7 collapsed ones go |
 | **P-2** | composition from a **directory of parts**, current file as ONE legacy part, `OPEN` keyed on an **`obligations:` list in the part file**, emptied at close | **BLOCKER-2** + his migration answer | per-invoke byte log shows the section leaving with no human action; composed file carries **generation stamp + part count**; a killed generator leaves a **visibly-stale-stamped** last-known-good |
@@ -217,3 +217,45 @@
 | **P-8** | ⛔ **DE-SCOPED — no cross-session retrieval.** Replace with a **PROMOTION step** into `MISTAKE_PATTERNS.md` | ⭐ **BLOCKER-3** | a pattern reaches the shared file **impersonally**; his store stays private. ⚠️ **Marked `INFERRED` — Kyle asked for context useful to the system, not for exposing his store** |
 
 ⛔ **NO ITEM IS NOW `UNAUDITED`** — P-8's replacement rests on BLOCKER-3, which is a finding.
+
+---
+
+## ⭐⭐ 10. LANGSTON'S STEP-2 REVIEW — CHANGES-NEEDED ×3, ALL THREE RE-DERIVED AND FOLDED
+
+**Received 2026-09-04 17:31Z.** He re-derived the load-bearing numbers himself rather than ruling on report: the byte series (**1,219 rows now — 31 inc / 3 dec / 1,184 unchanged, all three decreases matching my values byte-for-byte**), `langston_memory.py:21/:239/:298`, the ledger-writer controls (0 / 3 / 12), and the three sizes. **§7 HIT 1 stands as measured.**
+
+⛔⛔ **BLOCKER-A — *"THE 7 COLLAPSED BLOCKS"* IS A COUNT, NOT A SET, AND IT IS THE DELETION CRITERION. THIS IS BLOCKER-1 REPRODUCING ONE LEVEL DOWN INSIDE ITS OWN FIX.**
+✅ **RE-DERIVED, AND IT IS WORSE THAN HE FOUND — FOUR PASSES HAVE NOW PRODUCED FOUR DIFFERENT ANSWERS:**
+| pass | result |
+|---|---|
+| my folded claim | **7** |
+| his enumeration | **9** (3 phrasings) |
+| my line-numbered enumeration | **11** — lines `19 · 43 · 44 · 49 · 78 · 88 · 154 · 157 · 160 · 163 · 166` |
+| my naive `grep -c` | **13** matching LINES |
+⇒ ★ **AND `:49` IS NOT EVEN A MEMBER — it is the RULE *about* collapsing (*"batch entries get collapsed to pointers"*), so my own 11 contains a false positive.** ⛔ **THE SET IS UNDEFINED BY CONSTRUCTION AND NO PHRASE-MATCH WILL EVER RESOLVE IT.**
+⚠️ **AND HIS SUBSTANTIVE CATCH STANDS INDEPENDENTLY OF THE COUNT: `:43` reads *"STILL-OPEN items kept: entry-slip investigation = CC-A · #529 (+regimeWeight-0.5 rider)…"* — UNHOMED OPEN THREADS, not fetchable by batch id.** ⇒ **the folded claim *"NONE carries anything he could not pull by name"* is FALSE for at least one member, and I had adopted it from his own Step-1 answer without testing it against the members.**
+✅ **P-1b's VERIFICATION IS REPLACED: the removal set is named by HEADING + LINE AT A STATED REF, each member carrying an `obligations: none` DERIVED BY READING IT. Never by phrase-match, never by count.**
+
+⛔⛔ **BLOCKER-B — P-1b AND P-2 CAN SILENTLY BREAK `langston-recall`, AND ONLY P-6 CARRIED THE CHECK.**
+✅ **RE-DERIVED:** `/home/langston/LEDGER.md` **does not exist (ENOENT)** ⇒ **`MEMORY.md` is the SOLE surviving ledger source**, and `:298` refuses without it. **The parse is a MACHINE CONTRACT:** `:242` `re.search(r"###\s*Retractions.*?(?=\n##|\Z)")` then a `\n- ` split ⇒ **the literal heading text, the sibling-heading LEVEL, and top-level `- ` bullet indentation are ALL load-bearing on a file this batch proposes to regenerate.**
+⛔ **AND THE FAILURE IS SILENT: `:297` `if not retr` catches only EMPTY — a generator that drops HALF the entries parses clean and prints fewer, with no signal.** ★ **Same *"a silently short file is indistinguishable from a quiet week"* class he flagged for the composed file, now inside the retraction overlay — the one thing that stops him re-asserting a withdrawn ruling.**
+✅ **BASELINE CONFIRMED AT THE OBJECT: `LEDGER CHECK: … (8 on file at /home/langston/MEMORY.md)`.** ⇒ **P-1b AND P-2 each gate on `langston-recall` returning a KNOWN-POSITIVE WITH A PARSED-ENTRY COUNT — baseline 8 entries / 6,057 B. ⛔ NON-EMPTY IS NOT THE ASSERTION.**
+
+⛔ **BLOCKER-C — MY §7 *"P-7 IS PARTLY DISCHARGED FOR THE MEMORY HALF"* CONTRADICTS THE INSTRUMENT'S OWN SELF-DESCRIPTION.** Every row carries verbatim: ***"candidate set — path existence + size at invoke time; NOT proof the harness loaded them (load proof = sentinel method)."*** ⇒ **it STATS files; it does not observe LOADING. Right instrument for the byte series, WRONG one for use — `#661` leg 1.**
+✅ **P-7 STAYS WHOLE. The SENTINEL METHOD the log itself names becomes the positive control I owed.** ⚠️ **I read a size series and called it a usage series — the instrument told me so in its own `measures` field and I did not read it.**
+
+✅ **§13 — `LEDGER_SOURCES[0]` IS A DANGLING PATH.** Disposition **(1) FOLD INTO P-6** — same object. ★ **And it reads as forward-wiring for `B-LANGSTON-LEDGER-SPLIT`, which is an argument for P-4 ABSORBING `PHASE_19_PLAN` row 2.8 rather than deferring to it: the split target is already read-supported.** ⇒ **P-4 ABSORBS 2.8.**
+
+◐ **THE `__pycache__` RESIDUAL IS NARROWED, NOT CLOSED — and I am not recording it as closed.** He judged it closeable in one run by matching the `:298` refusal literal; **my attempt did not produce the match** (the empty-query path returned no matching literal). ✅ **What IS established behaviourally: the RUNNING tool parses the ledger out of `MEMORY.md` and reports `8 on file`, which is the source's `LEDGER_SOURCES` logic executing.** ⇒ **the bytecode agrees with the source ON THE READ PATH; the refusal path remains unverified.**
+
+---
+
+## 11. PLAN, REVISION 3 — the three verification repairs *(supersedes §9 for these rows only)*
+
+| # | item | verification, REPAIRED |
+|---|---|---|
+| **P-1b** | retire the collapsed closure blocks | ⛔ **the removal set is enumerated by HEADING + LINE at a stated ref, each member carrying `obligations: none` derived by READING it** — never a phrase-match, never a count. **`:43` is excluded on its face** (unhomed open threads). **PLUS: `langston-recall` returns 8 parsed retraction entries after the removal** |
+| **P-2** | composition from parts | as §9, **PLUS the same `langston-recall` 8-entry gate** — the composed file must satisfy the `###\s*Retractions` + `\n- ` machine contract, and **a short parse is a FAILURE, not a pass** |
+| **P-6** | ledger WRITE rule | as §9, **PLUS fold §13: `LEDGER_SOURCES[0]` (`/home/langston/LEDGER.md`) is dangling — same object, one fix** |
+| **P-4** | ledger home | ⛔ **ABSORBS `PHASE_19_PLAN` row 2.8** (was: absorb-or-defer). The split target is already read-supported by `LEDGER_SOURCES[0]` |
+| **P-7** | usage instrumentation | ⛔ **KEPT WHOLE — not partly discharged.** The byte log **stats files and says so in its own `measures` field**; the **sentinel method** it names is the positive control |
