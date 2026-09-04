@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   buildLevelBasis,
+  getLevelBasisFunnelRow,
   priceForLevelRole,
   recordLevelBasisOutcome,
   getLevelBasisFunnel,
@@ -21,9 +22,11 @@ import {
 
 const OK_BOOK = { bid: 100, ask: 102, capturedAtMs: 1_000_000, producer: 'kraken_ws_book' };
 const NOW = 1_000_500;
+/** Generous by design: the age tests set their own ceiling explicitly. */
+const MAX_AGE = 5_000;
 
 function basisOrThrow(): LevelBasis {
-  const r = buildLevelBasis(OK_BOOK, NOW);
+  const r = buildLevelBasis(OK_BOOK, NOW, MAX_AGE);
   if (!r.ok || !r.basis) throw new Error(`expected a basis, got ${r.reason}`);
   return r.basis;
 }
@@ -45,7 +48,7 @@ describe('buildLevelBasis — acceptance and the age clause', () => {
   it('REFUSES a book with no capture time — the age clause fails CLOSED, not open', () => {
     // If this ever returns ok:true, an unbounded-age basis can anchor a level, which is
     // exactly "a memory, not an anchor".
-    const r = buildLevelBasis({ ...OK_BOOK, capturedAtMs: null }, NOW);
+    const r = buildLevelBasis({ ...OK_BOOK, capturedAtMs: null }, NOW, MAX_AGE);
     expect(r.ok).toBe(false);
     expect(r.reason).toBe<LevelBasisRefusal>('age_unknown');
   });
@@ -69,7 +72,7 @@ describe('buildLevelBasis — it REFUSES, it never falls back to the mid (BLOCKE
 
   for (const [name, input, expected] of cases) {
     it(`refuses ${name} with reason ${expected}, and returns NO basis`, () => {
-      const r = buildLevelBasis(input, NOW);
+      const r = buildLevelBasis(input, NOW, MAX_AGE);
       expect(r.ok).toBe(false);
       expect(r.reason).toBe(expected);
       // ⛔ THE LOAD-BEARING HALF: a refusal must not hand back a usable price. If a basis
@@ -80,7 +83,7 @@ describe('buildLevelBasis — it REFUSES, it never falls back to the mid (BLOCKE
 
   it('a one-sided book is NOT rescued by inventing the missing side', () => {
     // The hollow books B-XSTOCK-FEED-SANITY measured are exactly this shape.
-    const r = buildLevelBasis({ ...OK_BOOK, bid: 100, ask: null }, NOW);
+    const r = buildLevelBasis({ ...OK_BOOK, bid: 100, ask: null }, NOW, MAX_AGE);
     expect(r.ok).toBe(false);
     expect(JSON.stringify(r)).not.toContain('101'); // no fabricated mid anywhere in the result
   });
@@ -88,7 +91,7 @@ describe('buildLevelBasis — it REFUSES, it never falls back to the mid (BLOCKE
   it('⛔ a FABRICATED book from the price cache (both sides = the mark) refuses as SYNTHETIC, not crossed', () => {
     // price-cache.ts:408-409 writes `bid: existing?.bid ?? price` — on a first write both sides
     // become the mark. A reader told "crossed" would go looking at the venue; the fault is ours.
-    const r = buildLevelBasis({ bid: 250, ask: 250, capturedAtMs: 1_000_000, producer: 'kraken_ws' }, NOW);
+    const r = buildLevelBasis({ bid: 250, ask: 250, capturedAtMs: 1_000_000, producer: 'kraken_ws' }, NOW, MAX_AGE);
     expect(r.ok).toBe(false);
     expect(r.reason).toBe<LevelBasisRefusal>('locked_or_synthetic_book');
     expect(r.basis).toBeUndefined();
@@ -96,7 +99,7 @@ describe('buildLevelBasis — it REFUSES, it never falls back to the mid (BLOCKE
 
   it('reports the STRUCTURAL fault first: a crossed book with no capture time reads crossed_book', () => {
     // Ordering is load-bearing — the two reasons send a reader to different places.
-    const r = buildLevelBasis({ bid: 103, ask: 102, capturedAtMs: null, producer: 'x' }, NOW);
+    const r = buildLevelBasis({ bid: 103, ask: 102, capturedAtMs: null, producer: 'x' }, NOW, MAX_AGE);
     expect(r.reason).toBe<LevelBasisRefusal>('crossed_book');
   });
 });
@@ -150,11 +153,13 @@ describe('priceForLevelRole — per leg AND per execution intent (BLOCKER-1)', (
   });
 });
 
+const KEY = { lane: 'active' as const, assetClass: 'crypto_spot' };
+
 describe('the refusal funnel — and its POSITIVE CONTROL', () => {
   beforeEach(() => __resetLevelBasisFunnelForTest());
 
   it('starts empty', () => {
-    expect(getLevelBasisFunnel()).toMatchObject({ attempted: 0, accepted: 0, refused: 0 });
+    expect(getLevelBasisFunnel()).toEqual([]);
   });
 
   it('⭐ POSITIVE CONTROL — the counter INCREMENTS on every refusal reason', () => {
@@ -169,28 +174,88 @@ describe('the refusal funnel — and its POSITIVE CONTROL', () => {
       [{ ...OK_BOOK, capturedAtMs: null }, 'age_unknown'],
     ];
     for (const [input, reason] of inputs) {
-      const r = buildLevelBasis(input, NOW);
-      recordLevelBasisOutcome(r);
-      expect(getLevelBasisFunnel().byReason[reason]).toBe(1);
+      const r = buildLevelBasis(input, NOW, MAX_AGE);
+      recordLevelBasisOutcome(KEY, r);
+      expect(getLevelBasisFunnelRow(KEY)!.byReason[reason]).toBe(1);
     }
-    const f = getLevelBasisFunnel();
+    const f = getLevelBasisFunnelRow(KEY)!;
     expect(f.refused).toBe(6);
     expect(f.accepted).toBe(0);
   });
 
   it('counts acceptances too, so a refusal RATE has a denominator', () => {
-    recordLevelBasisOutcome(buildLevelBasis(OK_BOOK, NOW));
-    recordLevelBasisOutcome(buildLevelBasis({ ...OK_BOOK, ask: null }, NOW));
-    const f = getLevelBasisFunnel();
+    recordLevelBasisOutcome(KEY, buildLevelBasis(OK_BOOK, NOW, MAX_AGE));
+    recordLevelBasisOutcome(KEY, buildLevelBasis({ ...OK_BOOK, ask: null }, NOW, MAX_AGE));
+    const f = getLevelBasisFunnelRow(KEY)!;
     expect(f).toMatchObject({ attempted: 2, accepted: 1, refused: 1 });
   });
 
   it('the funnel ARITHMETIC closes — attempted equals accepted plus every refusal', () => {
     for (const input of [OK_BOOK, { ...OK_BOOK, ask: null }, { ...OK_BOOK, bid: 103, ask: 102 }]) {
-      recordLevelBasisOutcome(buildLevelBasis(input, NOW));
+      recordLevelBasisOutcome(KEY, buildLevelBasis(input, NOW, MAX_AGE));
     }
-    const f = getLevelBasisFunnel();
+    const f = getLevelBasisFunnelRow(KEY)!;
     const summed = Object.values(f.byReason).reduce((a, b) => a + b, 0);
     expect(f.attempted).toBe(f.accepted + summed);
+  });
+});
+
+describe('the age clause is ENFORCED, not merely stated (Langston catch 2)', () => {
+  it('REFUSES a book older than the ceiling the caller declared', () => {
+    // r1 returned this as ok:true and trusted the caller to look at ageMs. A guard that
+    // cannot fire is the funnel-that-shipped-inert shape one layer up.
+    const r = buildLevelBasis({ ...OK_BOOK, capturedAtMs: NOW - 60_000 }, NOW, 5_000);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe<LevelBasisRefusal>('stale_book');
+    expect(r.basis).toBeUndefined();
+  });
+
+  it('accepts a book INSIDE the ceiling, so the guard is not simply always-on', () => {
+    // The other arm. Without it, "refuses everything" would pass the test above.
+    const r = buildLevelBasis({ ...OK_BOOK, capturedAtMs: NOW - 1_000 }, NOW, 5_000);
+    expect(r.ok).toBe(true);
+    expect(r.basis!.ageMs).toBe(1_000);
+  });
+
+  it('the ceiling is the CALLER\u2019s: the same book passes under a loose one and fails under a tight one', () => {
+    const book = { ...OK_BOOK, capturedAtMs: NOW - 3_000 };
+    expect(buildLevelBasis(book, NOW, 10_000).ok).toBe(true);
+    expect(buildLevelBasis(book, NOW, 1_000).reason).toBe<LevelBasisRefusal>('stale_book');
+  });
+
+  it('a STRUCTURAL fault outranks staleness — an ancient one-sided book reads one_sided_book', () => {
+    // Otherwise a malformed book gets reported as merely old and the real fault is hidden.
+    const r = buildLevelBasis({ ...OK_BOOK, ask: null, capturedAtMs: NOW - 999_999 }, NOW, 5_000);
+    expect(r.reason).toBe<LevelBasisRefusal>('one_sided_book');
+  });
+
+  it('a capture stamped in the FUTURE is age_unknown, never silently fresh', () => {
+    // Clock skew between the venue and this box. Not stale, and not trustworthy either.
+    const r = buildLevelBasis({ ...OK_BOOK, capturedAtMs: NOW + 10_000 }, NOW, 5_000);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe<LevelBasisRefusal>('age_unknown');
+  });
+});
+
+describe('the funnel is KEYED by lane and class (Langston catch 1)', () => {
+  beforeEach(() => __resetLevelBasisFunnelForTest());
+
+  it('⛔ an active-crypto refusal and a vts-xstock refusal do NOT share a bucket', () => {
+    // W-1 wires BOTH lanes. r1's flat counters would have merged these and answered
+    // questions about neither population.
+    const active = { lane: 'active' as const, assetClass: 'crypto_spot' };
+    const vts = { lane: 'vts' as const, assetClass: 'xstock_spot' };
+    recordLevelBasisOutcome(active, buildLevelBasis({ ...OK_BOOK, ask: null }, NOW, MAX_AGE));
+    recordLevelBasisOutcome(vts, buildLevelBasis({ ...OK_BOOK, bid: null }, NOW, MAX_AGE));
+    recordLevelBasisOutcome(vts, buildLevelBasis(OK_BOOK, NOW, MAX_AGE));
+
+    expect(getLevelBasisFunnelRow(active)).toMatchObject({ attempted: 1, accepted: 0, refused: 1 });
+    expect(getLevelBasisFunnelRow(vts)).toMatchObject({ attempted: 2, accepted: 1, refused: 1 });
+    expect(getLevelBasisFunnel()).toHaveLength(2);
+  });
+
+  it('a lane/class never attempted returns undefined rather than a zero row', () => {
+    // A zero row would read as "measured, and nothing happened". Nothing was measured.
+    expect(getLevelBasisFunnelRow({ lane: 'vts', assetClass: 'crypto_spot' })).toBeUndefined();
   });
 });

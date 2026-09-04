@@ -99,7 +99,24 @@ export type LevelBasisRefusal =
   /** A side is present but not a finite positive number. */
   | 'non_finite_side'
   /** The book carries no capture time, so its AGE cannot be stated — the age clause fails closed. */
-  | 'age_unknown';
+  | 'age_unknown'
+  /**
+   * The book is older than the caller's declared ceiling.
+   *
+   * ⛔ ADDED 2026-09-05 ON LANGSTON'S CATCH, AND THE CATCH IS THAT THE CLAUSE WAS DECORATIVE.
+   * r1 STATED `ageMs` and never ENFORCED it: a ten-minute-old book returned `ok:true` and the
+   * module trusted every caller to look at a field it had no reason to look at. `age_unknown`
+   * refuses on the ABSENCE of a stamp, which is a different thing from refusing on STALENESS.
+   * ⇒ That is the funnel-that-shipped-inert shape one layer up — a guard present, readable,
+   * and incapable of firing.
+   *
+   * ★ `maxAgeMs` IS THEREFORE A REQUIRED PARAMETER, NOT AN OPTION WITH A DEFAULT. A call site
+   * cannot forget it, because omitting it does not compile. That is fail-closed BY CONSTRUCTION
+   * rather than by discipline — and it buys the property WITHOUT inventing a threshold we have
+   * not measured: the VALUE is the caller's to declare and is set from measurement later
+   * (`3b.f-c`), while the OBLIGATION to declare one lands now.
+   */
+  | 'stale_book';
 
 /**
  * A transactable basis for level construction.
@@ -152,7 +169,11 @@ function isPositiveFinite(n: unknown): n is number {
  * `crossed_book` — the structural fault — rather than `age_unknown`, because the two send a
  * reader to different places.
  */
-export function buildLevelBasis(input: BookTopInput, nowMs: number): LevelBasisResult {
+export function buildLevelBasis(
+  input: BookTopInput,
+  nowMs: number,
+  maxAgeMs: number,
+): LevelBasisResult {
   const bidPresent = input.bid !== null && input.bid !== undefined;
   const askPresent = input.ask !== null && input.ask !== undefined;
 
@@ -168,6 +189,15 @@ export function buildLevelBasis(input: BookTopInput, nowMs: number): LevelBasisR
   if (input.bid === input.ask) return { ok: false, reason: 'locked_or_synthetic_book' };
   if (!isPositiveFinite(input.capturedAtMs)) return { ok: false, reason: 'age_unknown' };
 
+  // ⛔ THE AGE CLAUSE, ENFORCED RATHER THAN STATED. Checked LAST, after every structural fault,
+  // so a malformed book is never reported as merely old. A negative age (a capture stamped in
+  // the future — clock skew between the venue and this box) is NOT stale and is NOT silently
+  // accepted as fresh either: it is a structural fault about the stamp, so it refuses as
+  // `age_unknown`, the reason that already means "this stamp cannot date anything".
+  const ageMs = nowMs - input.capturedAtMs;
+  if (ageMs < 0) return { ok: false, reason: 'age_unknown' };
+  if (ageMs > maxAgeMs) return { ok: false, reason: 'stale_book' };
+
   return {
     ok: true,
     basis: {
@@ -175,7 +205,7 @@ export function buildLevelBasis(input: BookTopInput, nowMs: number): LevelBasisR
       ask: input.ask,
       mid: (input.bid + input.ask) / 2,
       capturedAtMs: input.capturedAtMs,
-      ageMs: nowMs - input.capturedAtMs,
+      ageMs,
       producer: input.producer,
     },
   };
@@ -228,43 +258,96 @@ export function priceForLevelRole(basis: LevelBasis, role: LevelRole): number {
  * `#661` leg 3 and it is the defect this batch's sibling shipped once already. The unit
  * tests drive every refusal reason.
  */
-const _refusals: Record<LevelBasisRefusal, number> = {
-  no_book: 0,
-  one_sided_book: 0,
-  crossed_book: 0,
-  locked_or_synthetic_book: 0,
-  non_finite_side: 0,
-  age_unknown: 0,
-};
-let _accepted = 0;
+/**
+ * ⛔⛔ KEYED, NOT FLAT — LANGSTON'S CATCH, AND r1 WAS FLAT.
+ *
+ * Every sibling counter in this system is keyed by lane and class (e.g.
+ * `recordActivePreSqeReject(mode, assetClass, …)`). r1's funnel was a pair of module-level
+ * singletons — and W-1 wires BOTH the active orchestrator and the VTS runner, so a VTS
+ * xStock refusal and an active crypto refusal would have landed in ONE bucket and neither
+ * would have been readable. A counter that aggregates two populations answers questions
+ * about neither.
+ *
+ * ⇒ The key is `<lane>:<assetClass>`, both REQUIRED, so a call site cannot omit the
+ * dimension that makes the number mean something.
+ */
+export type LevelBasisLane = 'active' | 'vts';
 
-export function recordLevelBasisOutcome(result: LevelBasisResult): void {
-  if (result.ok) {
-    _accepted++;
-    return;
-  }
-  if (result.reason) _refusals[result.reason]++;
+export interface LevelBasisFunnelKey {
+  lane: LevelBasisLane;
+  assetClass: string;
 }
 
-/**
- * The funnel, as an invariant rather than a bag of numbers: `attempted` must equal
- * `accepted` plus every refusal. A reader can check the arithmetic without trusting it.
- */
-export function getLevelBasisFunnel(): {
+interface FunnelCell {
+  accepted: number;
+  byReason: Record<LevelBasisRefusal, number>;
+}
+
+function emptyCell(): FunnelCell {
+  return {
+    accepted: 0,
+    byReason: {
+      no_book: 0,
+      one_sided_book: 0,
+      crossed_book: 0,
+      locked_or_synthetic_book: 0,
+      non_finite_side: 0,
+      age_unknown: 0,
+      stale_book: 0,
+    },
+  };
+}
+
+const _funnel = new Map<string, FunnelCell>();
+
+function keyOf(k: LevelBasisFunnelKey): string {
+  return `${k.lane}:${k.assetClass}`;
+}
+
+export function recordLevelBasisOutcome(key: LevelBasisFunnelKey, result: LevelBasisResult): void {
+  const id = keyOf(key);
+  let cell = _funnel.get(id);
+  if (!cell) {
+    cell = emptyCell();
+    _funnel.set(id, cell);
+  }
+  if (result.ok) {
+    cell.accepted++;
+    return;
+  }
+  if (result.reason) cell.byReason[result.reason]++;
+}
+
+export interface LevelBasisFunnelRow {
+  key: string;
   attempted: number;
   accepted: number;
   refused: number;
   byReason: Record<LevelBasisRefusal, number>;
-} {
-  const byReason = { ..._refusals };
-  const refused = Object.values(byReason).reduce((a, b) => a + b, 0);
-  return { attempted: _accepted + refused, accepted: _accepted, refused, byReason };
+}
+
+/**
+ * The funnel, as an invariant rather than a bag of numbers: for every row, `attempted`
+ * must equal `accepted` plus every refusal. A reader can check the arithmetic without
+ * trusting it.
+ *
+ * ⛔ RETURNS ROWS, NEVER A TOTAL. A single summed figure across lanes and classes is the
+ * very thing the keying exists to prevent, so this does not offer one.
+ */
+export function getLevelBasisFunnel(): LevelBasisFunnelRow[] {
+  return [...(_funnel.entries())].map(([key, cell]) => {
+    const byReason = { ...cell.byReason };
+    const refused = Object.values(byReason).reduce((a, b) => a + b, 0);
+    return { key, attempted: cell.accepted + refused, accepted: cell.accepted, refused, byReason };
+  });
+}
+
+/** One row, or `undefined` when that lane/class has never been attempted. */
+export function getLevelBasisFunnelRow(key: LevelBasisFunnelKey): LevelBasisFunnelRow | undefined {
+  return getLevelBasisFunnel().find((r) => r.key === keyOf(key));
 }
 
 /** Test-only reset. Never called from the running system. */
 export function __resetLevelBasisFunnelForTest(): void {
-  _accepted = 0;
-  (Object.keys(_refusals) as LevelBasisRefusal[]).forEach((k) => {
-    _refusals[k] = 0;
-  });
+  _funnel.clear();
 }
