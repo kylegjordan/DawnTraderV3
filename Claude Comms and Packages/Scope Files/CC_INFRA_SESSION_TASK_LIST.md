@@ -161,6 +161,28 @@ He remembers **"we were working on improving Langston and setting him up"** in J
 
 ⚠️ **THE FOUR WEAKNESSES I NAMED MYSELF, and asked him to find more:** **(1)** new machinery on his box, and **a generator that dies leaves him a stale or empty baseline he CANNOT NOTICE, because he is stateless** — it must fail loud and toward last-known-good, never toward empty; **(2)** it changes the write procedure for **all four sessions at once**, and a half-adopted procedure is worse than either end state; **(3)** whatever decides a batch is "OPEN" becomes load-bearing and can itself go stale — the delivery board already drifts; **(4)** ⛔ **the REVIEWER LEDGER and STANDING NOTES do not fit the pattern at all** — not per-batch, append-only by design, **22,545 B = 92% of the cap between them** — and I do not yet have an answer for where they live.
 
+### 2g. ⛔ **DOES HE ACTUALLY USE THE BATCH-CLOSURE WRITES? UNPROVEN IN BOTH DIRECTIONS — three instruments, two confounded, one too weak to report**
+
+> **Kyle, 2026-09-03, narrowing the ask to a decision tree:** *"Is Langston using any of what they write? I don't understand why them writing into one of his files after the batch closes… I don't know how that helps with Langston making decisions and corrections and suggestions for the batch **while it's in progress**. So if it doesn't help, and if Langston is not reading it or using it for anything, **then should it be a requirement?** And if he is using it… then we have to have a **mechanism for pruning** the file so that it stays at the size caps we set."*
+
+**WHICH FILE, plainly: `MEMORY.md` — not the rules file.** All four sessions, at every batch close, under `workflow-10`'s MANDATORY 10.b. Live attributions: **CC-B 13 · CC-A 10 · CC-C 8 · Infra 1.**
+
+★★ **KYLE'S LOGIC HOLDS INDEPENDENTLY OF ANY MEASUREMENT, and it is the strongest thing here: a closure record written AFTER a batch ends CANNOT inform the review of that batch, because the review already happened.** ⇒ **its only possible value is CROSS-batch — which reframes what §10.b should be asking for even before we know whether he reads it.**
+
+**THREE ATTEMPTS. REPORTING THE FAILURES RATHER THAN THE PRETTIEST ONE:**
+
+| # | instrument | result | why it does not settle it |
+|---|---|---|---|
+| 1 | count batch names in **his own outbound messages** (4,407 msgs; controls: `RULED ON REPORTED FACT` 673, `graded ref` 290) | all nine closed batches present, **3-45 hits each** | ⛔ **CONFOUNDED, and I nearly reported it.** He names a batch because he **REVIEWED** it, not because he read a note written after it closed. **I caught the injection-vs-use trap and walked straight into reviewed-it-vs-read-the-note, one level down.** |
+| 2 | **timing** — mentions before vs after close | every closed batch keeps appearing after close, often more than before: `B-TELEGRAM-DECOMM` closed **2026-07-02**, still raised **2026-09-02**; `B-CROSS-SESSION-BLEED` **2 before / 14 after** | ⚠️ **The topics stay live — but this does not attribute the carrying to his `MEMORY.md`** rather than the dispatch, `langston-recall`, his own auto-memory, or the repo. Less confounded; still not attribution. |
+| 3 | **attribution probe** — strings unique to the memory file, discarding any that also appear in messages sent TO him | 2 candidates **DISCARDED** (a dispatch could carry them), 2 **never emitted**. Net **zero attributed** | ⛔ **NOT reported as evidence of non-use.** The candidates were **headings and stock phrases, which nobody quotes.** **A null from a weak instrument is not a finding** — reporting it as one would be the `silence-not-evidence` failure exactly. |
+
+⇒ ⛔ **HONEST STATE: UNPROVEN IN BOTH DIRECTIONS. I cannot tell Kyle he uses it, and I cannot tell him he does not.**
+
+✅ **ASKED HIM DIRECTLY 2026-09-04 10:51Z, IN A FALSIFIABLE FORM RATHER THAN A SELF-REPORT:** for each of the **eight** closed-batch sections in his memory, has he USED it — **and a "yes" must CITE THE OCCASION so I can check it against the log.** *"I would use it if X came up"* explicitly does not count, and I told him an honest *"I have never read that"* is the more useful answer.
+
+⚠️ **PROCESS CORRECTION, MINE: I sent THREE long dispatches carrying NINE questions in seventeen minutes.** He has replied **13 times since** — all alert triage for Kyle and reviews for CC-C — **and picked up none of mine.** ⇒ **Nine questions across three messages is too much to land on a stateless invoke that is also carrying triage.** The 10:51Z ask is a **single** question; the earlier nine stand and were **not** resent.
+
 ## 3. The Langston memory-FILE trim — a DIFFERENT job, handed to me by Kyle via Old Claude
 
 **Already shipped:** the recall tool (Phase B), two-way Discord images so the sessions can see what Kyle posts, and the crew-status page.
