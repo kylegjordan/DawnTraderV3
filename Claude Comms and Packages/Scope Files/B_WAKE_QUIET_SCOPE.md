@@ -81,3 +81,8 @@ Object: the last 12 MB of each session's largest transcript. Turn model: a user 
 Objectives 1-3 shipped ahead of this document under a direct Kyle instruction with Langston's concurrence — **recorded as an irregularity: the scope should have existed first.**
 **r1 → r2 → r3 is the three-round cap and r3 ENDS ON AN OBJECT ROUND** (the 574/352/734 table above is mine, re-derived, not the reader's). ⛔ **Two rounds struck two objectives each, at the premises, both times. The correct response to that is not a fourth rebuild — it is to stop proposing mechanisms and report the negative result, which is what §6 now does.**
 **REMAINING BUILD: OBJ-7, OBJ-8 (the instrument), OBJ-9 (the mirror + its home).** Everything else is struck or shipped.
+
+## 9. STEP 6 — NOT APPLICABLE (Kyle-approved 2026-09-04)
+**This batch has no deployable surface.** Files touched: `comms-infra/` (16), `scripts/analysis/` (2), `.claude/` (1), `1-system-manual/` (2), `Claude Comms and Packages/` (2). **Nothing under `server/`, `client/`, `shared/`, `drizzle/` or a package file.** `grep -rl` over the app for this batch's paths returns **0**, control **39**.
+⛔ **NOT the same as unshipped:** the wake filter is live on the laptop (content-identical to the repo copy) and the notice script is live on Helsinki (its blob exists in the repo). Both verified 2026-09-04.
+★ **The check surfaced `#1001` — staging 55 commits behind with five live-trading files undeployed, owned by CC-C. Routed, not adopted.**
