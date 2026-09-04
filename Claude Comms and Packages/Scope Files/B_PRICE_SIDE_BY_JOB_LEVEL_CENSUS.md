@@ -221,3 +221,43 @@ The Step-2 audit found **70 sites across 19 files that COMPUTE a level**. This c
 
 ⚠️ **UNCHANGED BY THIS SECTION: jobs 3 and 4 (triggering and booking) are `F-G-2`'s, and the exit path's midpoint is not in question here.** This section is about **where a LEVEL comes from**, nothing else.
 
+---
+
+## 7. ⛔⛔ P4 — THE RULE, TESTED AGAINST THE LANES. **IT FAILED ITS OWN FALSIFICATION CLAUSE, AND THE CORRECTION IS THE DELIVERABLE**
+
+**OBJ-2 pre-registered its own kill switch: *"A site the rule cannot classify FALSIFIES the rule."* Run against the three traced lanes, the rule as drafted CANNOT CLASSIFY TWO OF THEM.**
+
+### THE RULE AS DRAFTED (scope §2, r1 → r4)
+> *"A price that ESTIMATES VALUE stays the mid. A price that BECOMES A LEVEL, FIRES AN ACTION, or IS RECORDED must be **the side we could transact at**."*
+
+| lane | its basis | does the rule classify it? |
+|---|---|---|
+| crypto **QUANT** | a Kalman-smoothed midpoint | ✅ **YES — fails the rule. Change required.** |
+| crypto **PATTERN** | a Kraken 60-min candle close | ⛔ **NO. A venue candle close is NOT "the side we could transact at" — and it is NOT a midpoint either.** |
+| **xStock** | a Kraken 1-min close, 15-min aggregated | ⛔ **NO. Same.** |
+
+⇒ ⛔⛔ **THE RULE IS FALSIFIED ON ITS OWN TERMS BY TWO OF THREE LANES.** It offers two categories — *mid* and *transactable side* — and **a venue-published bar close is neither.** ★ **Under the drafted rule I would have had to call two lanes "wrong" and changed them, when what they use is a REAL TRADED PRICE. That is the batch this rule would have produced, and it would have been the wrong one.**
+
+### ✅ THE CORRECTED RULE — IT CLASSIFIES ALL THREE, AND IT SAYS WHY
+
+> ⭐ **A LEVEL'S BASIS MUST BE A PRICE THE MARKET EITHER *ACTUALLY PRINTED* OR ONE WE COULD *ACTUALLY TRANSACT AT*. A MIDPOINT IS NEITHER — no transaction ever occurred there, and no counterparty ever offered it. A SMOOTHED midpoint is neither, and is additionally lagged.**
+
+| lane | basis | printed? | transactable? | verdict |
+|---|---|---|---|---|
+| crypto **QUANT** | smoothed mid | ❌ | ❌ | ⛔ **FAILS — the batch's whole subject** |
+| crypto **PATTERN** | venue 60-min candle close | ✅ | ❌ (historical) | ✅ **PASSES the basis test** |
+| **xStock** | venue 1-min close, 15-min agg | ✅ | ❌ (historical) | ✅ **PASSES the basis test** |
+
+★★ **WHY "PRINTED **OR** TRANSACTABLE" RATHER THAN "TRANSACTABLE" ALONE — AND THIS IS THE SUBSTANCE, NOT A WORDING TWEAK.** A stop is not a price we are transacting at *now*; it is **an anchor for a price we intend to transact at LATER**. Anchoring *"3% below where it last traded"* to a real print is coherent. Anchoring it to a number **no counterparty ever offered** is not — **there is nothing 3% below, because the thing you measured from never existed.** ⇒ **The defect is not "we used the wrong side"; it is "we used a price that was never a price."**
+
+### ⚠️ WHAT THE CORRECTED RULE DELIBERATELY DOES **NOT** SETTLE
+
+⛔ **THE BAR LANES PASS THE *BASIS* TEST AND RAISE A *DIFFERENT* ONE: A VENUE BAR CLOSE IS A REAL PRICE BUT A HISTORICAL ONE — up to 15 minutes old on the xStock lane.** ⇒ **that is STALENESS, it is `3b.f-c`'s subject, and this batch does NOT annex it.** ★ **Naming it here is what stops the next reader reading "PASSES the basis test" as "is fine."**
+⛔ **AND IT SAYS NOTHING ABOUT THE TRIGGER.** Which price is compared *against* a level is `F-G-2`'s (jobs 3 and 4). **The joint — level-basis ↔ trigger-basis coherence — is OBJ-3b, whose FORM is chosen at deploy from `F-G-2`'s recorded disposition.**
+
+### ⇒ THE CHANGE THIS BATCH MAKES, IN ONE SENTENCE
+
+**The crypto quant lane's level constructors stop reading the smoothed midpoint and read a price that was actually printed or is actually transactable — and nothing else in the system changes.** ⇒ **The filter keeps its estimator job (ATR, VWAP, SMA, regime, noise) untouched; the two bar lanes are untouched; jobs 3 and 4 remain `F-G-2`'s.**
+
+⚠️ **STATED AS THE OPEN DESIGN QUESTION, NOT PRE-DECIDED: WHICH replacement — the live transactable side (ask for entry, bid for stop/target, per-leg) or the venue's own last print (matching what the other two lanes already do) — IS P4's remaining choice.** ★ **The second has a strong argument I did not expect to be making at the start of this batch: it would make all three lanes consistent, and consistency across lanes is itself fidelity.** ⛔ **Not decided here; it is the one thing left for Langston's design gate.**
+
