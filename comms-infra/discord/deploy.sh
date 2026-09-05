@@ -35,7 +35,7 @@ echo "discord.py: $("$VENV/bin/python3" -c 'import discord; print(discord.__vers
 # mutated /usr/local/bin. Fail before touching anything, and name every missing file at once
 # rather than one per re-run.
 MISSING=""
-for f in discord-cc-bridge.py discord-langston-bridge.py cc-send dt-push-notice.sh \
+for f in discord-cc-bridge.py discord-langston-bridge.py cc-send dt-push-notice.sh dt-deploy-drift.sh \
          discord-cc-bridge.service discord-langston-bridge.service \
          discord-bridge-failed-notify@.service \
          discord-langston-bridge.service.d/self-advance.conf; do
@@ -49,7 +49,7 @@ fi
 echo "== 0. pre-flight: all source files present =="
 
 echo "== 3. code (expects files already scp'd to $BRIDGE_DIR) =="
-chmod +x "$BRIDGE_DIR"/discord-cc-bridge.py "$BRIDGE_DIR"/discord-langston-bridge.py "$BRIDGE_DIR"/bridge-failed-notify.sh "$BRIDGE_DIR"/dt-push-notice.sh 2>/dev/null || true
+chmod +x "$BRIDGE_DIR"/discord-cc-bridge.py "$BRIDGE_DIR"/discord-langston-bridge.py "$BRIDGE_DIR"/bridge-failed-notify.sh "$BRIDGE_DIR"/dt-push-notice.sh "$BRIDGE_DIR"/dt-deploy-drift.sh 2>/dev/null || true
 # world-readable so the langston-user service can import discord_common + the venv
 chmod -R a+rX "$BRIDGE_DIR"
 
@@ -64,6 +64,26 @@ install -m 0755 "$BRIDGE_DIR/cc-send" /usr/local/bin/cc-send
 # convergence, and every drift this week went box->repo. Deploying it from the tree makes
 # the repo the source of truth for it (§7.1) instead of a copy that agrees by hand.
 install -m 0755 "$BRIDGE_DIR/dt-push-notice.sh" /usr/local/bin/dt-push-notice.sh
+
+# dt-deploy-drift.sh — B-DEPLOY-DRIFT-LINE (#1002), 2026-09-05. Hourly, as langston.
+# Installed HERE and not left to a runbook step, because the same omission is what #995 OBJ-9
+# found: dt-push-notice.sh ran on this box for weeks while existing in no repository and no
+# installer, so nobody could review the object or reproduce the host.
+install -m 0755 "$BRIDGE_DIR/dt-deploy-drift.sh" /usr/local/bin/dt-deploy-drift.sh
+# The job runs as langston (it needs that user's staging key), so the log must be writable by
+# them BEFORE first run — otherwise every line is a permission error and the job reports
+# MEASUREMENT FAILED for the wrong reason. Caught by the job's own --dry-run.
+touch /var/log/dt-deploy-drift.log
+chown langston:langston /var/log/dt-deploy-drift.log
+# Hourly. One compare call per run against a shared 60/hr unauthenticated budget; the */2
+# push notice spends from the same budget but only when the branch head has moved.
+CRON_LINE='17 * * * * /usr/local/bin/dt-deploy-drift.sh >/dev/null 2>&1'
+if ! sudo -u langston crontab -l 2>/dev/null | grep -Fq 'dt-deploy-drift.sh'; then
+  ( sudo -u langston crontab -l 2>/dev/null; echo "$CRON_LINE" ) | sudo -u langston crontab -
+  echo "   installed langston cron: $CRON_LINE"
+else
+  echo "   langston cron already present for dt-deploy-drift.sh"
+fi
 
 echo "== 5. config sanity =="
 for f in /etc/langston/discord-cc-bot.env /etc/langston/discord-langston-bot.env /etc/dawntrader/discord-comms.env; do

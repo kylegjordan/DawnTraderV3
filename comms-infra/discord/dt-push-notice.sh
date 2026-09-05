@@ -120,18 +120,69 @@ echo "$SHA" > "$STATE"
 SHORT=$(echo "$SHA" | cut -c1-9)
 
 # Which files moved? Failure here must NOT suppress the ordinary notice.
-FILES=$(curl -s --max-time 25 "$API/$PREV...$SHA" 2>/dev/null \
-  | python3 -c "
+#
+# ⛔ #1008 (2026-09-05) — THIS BLOCK COULD MISS A RULES CHANGE AND SAY NOTHING. Two ways:
+#
+#   1. THE FILE LIST IS CAPPED AT 300 with no Link header and no `truncated` flag. On a push
+#      whose range exceeds that, a CLAUDE.md change can fall outside the returned list and the
+#      escalated alarm stays silent — a false negative in the alarm whose entire job is telling
+#      every session the rules moved. Narrow in steady state ($PREV...$SHA is one push) but it
+#      widens exactly when this notice has been DOWN and the range spans everything since,
+#      which is when a missed rules change costs most.
+#   2. `curl -s ... 2>/dev/null` into a try/except yielding [] made a NETWORK FAILURE, a
+#      RATE-LIMIT REFUSAL and a 404 indistinguishable from "nothing rules-related changed" —
+#      and the routine notice still fired, so the outage was invisible.
+#
+# Both are the same shape: an instrument reporting an absence it was never able to detect.
+# `page=1&per_page=100` is here for the same reason it is in dt-deploy-drift.sh: WITHOUT a
+# pagination parameter the API returns a TRAILING window rather than the first page.
+CMP="$(mktemp /tmp/dt-push-notice-cmp-XXXXXX)"
+curl -sS --max-time 25 -o "$CMP" "$API/$PREV...$SHA?page=1&per_page=100" 2>>"$LOG"
+CMP_RC=$?          # EXIT STATUS, never the HTTP code: a 200 means the fetch happened, not
+                   # that the bytes landed (Langston hit exactly this during review — his
+                   # -w HTTP:%{http_code} printed 200 on a write that failed with EACCES).
+
+FILES=""
+FILES_TRUNCATED=0
+FILES_UNREADABLE=0
+if [ $CMP_RC -ne 0 ] || [ ! -s "$CMP" ]; then
+  FILES_UNREADABLE=1
+else
+  FILES=$(python3 -c "
 import sys,json
 try:
-    d=json.load(sys.stdin)
-    for f in d.get('files',[]): print(f['filename'])
-except Exception: pass
-" 2>/dev/null)
+    d=json.load(open(sys.argv[1]))
+except Exception:
+    print('__UNREADABLE__'); raise SystemExit(0)
+fs=d.get('files')
+if fs is None:
+    print('__UNREADABLE__'); raise SystemExit(0)
+if len(fs) >= 300: print('__TRUNCATED__')
+for f in fs: print(f['filename'])
+" "$CMP" 2>>"$LOG")
+  case "$FILES" in
+    __UNREADABLE__*) FILES_UNREADABLE=1; FILES="" ;;
+    __TRUNCATED__*)  FILES_TRUNCATED=1; FILES="${FILES#__TRUNCATED__}" ;;
+  esac
+fi
+rm -f "$CMP"
 
 RULES=$(echo "$FILES" | grep -E '^(CLAUDE\.md|CONDUCT\.md|\.claude/hooks/|\.claude/settings\.local\.json)')
 
-MSG="OLD Claude / NEW Claude / ANALYST Claude — review branch moved to ${SHORT}. Pull before you push. (If this is your own push, ignore it.)${DRIFT}"
+# ⛔ AN UNREADABLE OR TRUNCATED LIST IS NOT "NO RULES CHANGED". Say so in the notice rather
+# than letting silence stand for a clean result — the whole point of #1008.
+RULES_CAVEAT=""
+if [ "$FILES_UNREADABLE" = "1" ]; then
+  RULES_CAVEAT="
+⚠️ COULD NOT READ THE CHANGED-FILE LIST for this push (fetch exit $CMP_RC). This notice CANNOT
+tell you whether the rules files moved — treat it as unknown, not as a clean result, and pull."
+elif [ "$FILES_TRUNCATED" = "1" ]; then
+  RULES_CAVEAT="
+⚠️ THE CHANGED-FILE LIST HIT ITS 300 CAP for this push, so a rules-file change could be outside
+it. Absence of the banner below is NOT evidence the rules held still — pull and reload."
+fi
+
+MSG="OLD Claude / NEW Claude / ANALYST Claude — review branch moved to ${SHORT}. Pull before you push. (If this is your own push, ignore it.)${RULES_CAVEAT}${DRIFT}"
 
 if [ -n "$RULES" ]; then
   LIST=$(echo "$RULES" | sed 's/^/  - /')
