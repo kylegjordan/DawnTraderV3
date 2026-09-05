@@ -129,6 +129,13 @@ import { normalizeAndGateTarget } from '../core/calculations/signal-target-norma
 // import { captureSignalForVTS } from './vts-runner.js';
 // Directive 9.3: Adaptive Kalman Filter integration
 import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
+// B-PRICE-SIDE-BY-JOB (plan row 3n) — the level basis. SHADOW at this commit: built and
+// COUNTED, consumed by nothing. See the observation block at the hand-off below.
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
+import {
+  buildLevelBasis, recordLevelBasisOutcome,
+  LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+} from '../core/calculations/level-basis.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 // Batch 19G VN HF: SYSTEM_GUARDS import removed — deprecated filter constants deleted.
@@ -2517,6 +2524,47 @@ export class SignalOrchestrator {
 
       // Phase 13: Use MCE pre-computed indicators (eliminates duplicate VWAP/SMA)
       // B63: Pass through DBS fields so detect() guards + strong_bull_trend can read them.
+      // ⛔⛔ B-PRICE-SIDE-BY-JOB — LEVEL-BASIS SHADOW ARM. BUILT AND COUNTED; CONSUMED BY NOTHING.
+      //
+      // The severance this batch makes is TWO FIELDS AT THE ANCHOR (census §9 W-2):
+      // `currentPrice` stays the SMOOTHED value for DETECTION — "is price above the VWAP?" is an
+      // estimator question and the filter is right for it — and a separate transactable basis
+      // carries GEOMETRY. ★ A generic re-expression at the sized-signal chokepoint was the
+      // attractive design and it is WRONG: strategies build stops from support levels, ATR
+      // bands, measured moves and prior-bar extremes, so a blanket shift would change 19
+      // strategies' risk geometry invisibly.
+      //
+      // ⛔ SHADOW FIRST, DELIBERATELY. Nothing reads `_levelBasis` yet. The refusal funnel is
+      // the point of this commit: Langston's condition is that the positive control for the
+      // wiring is a NON-ZERO `accepted` COUNT, not a green test suite — a zero funnel proves
+      // nothing (`#661` leg 3), and this batch's sibling already shipped one guard INERT while
+      // every deploy check passed. So the accept rate is measured BEFORE any geometry depends
+      // on it.
+      //
+      // ⚠️ CRYPTO ONLY, BY CONSTRUCTION AND NOT BY OVERSIGHT: `getBookForFill` is the Kraken WS
+      // mini-book. The xStock lane has a different feed and its levels are venue bar closes
+      // (census §6), which are NOT the defect this batch fixes. `null` here is the correct
+      // xStock answer, mirroring `active-execution-engine.ts:1601`.
+      const _lbClass = sizingContext.assetClass;
+      if (_lbClass === 'crypto_spot') {
+        const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);
+        const _lbResult = buildLevelBasis(
+          {
+            bid: _lbBook && _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
+            ask: _lbBook && _lbBook.asks.length > 0 ? _lbBook.asks[0].price : null,
+            // ⛔ `getBookForFill` hands back an AGE, not a capture time, so the capture instant is
+            // reconstructed rather than invented. This is the ONE place the two representations
+            // meet and it is written out so nobody later "simplifies" it into `Date.now()`.
+            capturedAtMs: _lbBook ? Date.now() - _lbBook.ageMs : null,
+            producer: 'kraken_ws_book',
+          },
+          Date.now(),
+          LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
+          LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+        );
+        recordLevelBasisOutcome({ lane: 'active', assetClass: _lbClass }, _lbResult);
+      }
+
       const indicators = {
         vwap: mceContext.indicators.vwap,
         sma: mceContext.indicators.sma,

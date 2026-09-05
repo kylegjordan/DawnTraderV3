@@ -1,3 +1,11 @@
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
+// B-PRICE-SIDE-BY-JOB (plan row 3n) — the level basis, SHADOW arm. This is the SECOND
+// level-setting hand-off (census §9 W-1); wiring only the orchestrator would leave the
+// LEARNING population on the smoothed mid while every active-path check read as fixed.
+import {
+  buildLevelBasis, recordLevelBasisOutcome,
+  LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+} from '../core/calculations/level-basis.js';
 /**
  * ══════════════════════════════════════════════════════════════════════════════
  * 🔒 LOCKED MODULE — Directive 11.0E.1 (Upgraded from 8.8.4-M5C)
@@ -1514,6 +1522,30 @@ async function generatePhase10Signal(
   // vwap_pullback consumes the override per Item 11 to use Variant E geometry (4×ATR stop, 3R target).
   // Other strategies routed via this lane ignore the field and use their own geometry.
   const isStrongTrendLane = sourcePool === 'quant-strong_trend';
+
+  // ⛔ B-PRICE-SIDE-BY-JOB — LEVEL-BASIS SHADOW ARM, VTS LANE. Built and COUNTED; consumed by
+  // nothing. Keyed `lane:'vts'` so its refusals never pool with the active lane's — a counter
+  // that aggregates two populations answers questions about neither (Langston's catch).
+  // ⚠️ Crypto only, by construction: `getBookForFill` is the Kraken WS mini-book and the xStock
+  // lane has a different feed whose levels are venue bar closes, not a book side.
+  if (_assetClass === 'crypto_spot') {
+    const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);
+    recordLevelBasisOutcome(
+      { lane: 'vts', assetClass: _assetClass },
+      buildLevelBasis(
+        {
+          bid: _lbBook && _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
+          ask: _lbBook && _lbBook.asks.length > 0 ? _lbBook.asks[0].price : null,
+          capturedAtMs: _lbBook ? Date.now() - _lbBook.ageMs : null,
+          producer: 'kraken_ws_book',
+        },
+        Date.now(),
+        LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
+        LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+      ),
+    );
+  }
+
   const stratDetectIndicators = {
     vwap: mceContext.indicators.vwap,
     sma: mceContext.indicators.sma,

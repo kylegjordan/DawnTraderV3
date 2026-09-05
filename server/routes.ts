@@ -1,3 +1,4 @@
+import { getLevelBasisFunnel } from './core/calculations/level-basis.js';
 import type { Express, Request, Response, NextFunction, Router as ExpressRouter } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
@@ -8171,6 +8172,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         gridAbsentSymbols: _gridAbsentSymbols,
         gridEvaluated: lt?.gridEvaluated ?? 0,
         gridTags: lt?.gridTags ?? {},
+        // ⛔ B-PRICE-SIDE-BY-JOB — THE LEVEL-BASIS FUNNEL, EXPOSED BECAUSE A COUNTER NOBODY CAN
+        // READ IS THE DEFECT THIS BATCH KEEPS FINDING. It is emitted the moment the shadow arm
+        // ships, not later: `B-XSTOCK-FEED-SANITY` spent a whole deploy cycle on a guard that ran
+        // INERT while every deploy check passed, precisely because nothing counted what it did.
+        // ROWS, never a total — one per lane × asset class. A single summed figure across lanes
+        // is exactly what the keying exists to prevent (Langston, 2026-09-04).
+        // ⚠️ IN-MEMORY AND PROCESS-LIFETIME, stated rather than discovered: a restart zeroes it,
+        // so read it as a rate WITHIN a lifetime and never as a historical series.
+        levelBasisFunnel: getLevelBasisFunnel(),
         nullReasonDetail: lt?.nullReasonAggregate ?? {},
         // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates now
         // separately maintained in eval-cycle.ts. Was emitting the combined
