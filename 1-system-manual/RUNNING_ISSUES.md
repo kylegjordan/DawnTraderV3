@@ -7367,6 +7367,20 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 ⚠️ **STILL NOT A CLAIM THAT ANYTHING IS BROKEN OR URGENT**, and still **CC-C's to dispose of** — both source batches are theirs and in flight. `dt-deploy` restarts the engine, so "deploy sooner" is not free.
 
 
+### ➕ EVIDENCE FOR `#745` `B-ISSUE-BLOCK-GUARD` — ADDED 2026-09-05 (CC-A, at Langston's direction; NOT a scope change to that batch)
+
+**TWO ISSUE-NUMBER COLLISIONS IN ONE FILE IN ONE DAY** — `#1007` (mine → `#1008`) and `#1006` (mine → `#1009`), both resolved by the newer-renumbers rule, both measured at the commit timestamps. ★ **Langston's structural read, adopted: this is an argument for a MINT-TIME guard, not a better post-hoc sweep.**
+
+⛔⛔ **AND THE MORE USEFUL EVIDENCE IS THAT MY OWN INSTRUMENTS FAILED TWICE, IN OPPOSITE DIRECTIONS, ON MY OWN EDITS, INSIDE ONE HOUR:**
+1. **TOO NARROW:** `grep '^### #1007'` returned ONE hit — mine — which reads as *"no collision."* The other entry's heading carries decoration before the number (`### ⭐⭐ #1007`), so **the pattern was structurally incapable of seeing it.** **No control was run.**
+2. **TOO GREEDY:** the check that the renumber had landed used `^### .*#(100[6-9])`. The new heading contains the phrase *"RENUMBERED FROM `#1006`"*, so the greedy `.*` captured the **OLD** number and the check reported that `#1008` and `#1009` **did not exist at all.** The edit was correct; the instrument was wrong.
+★ **THE SOUND ANCHOR, and both failures reduce to it (Langston): the FIRST `#\d+` on a `### ` line — never position, never `^### #`, never a greedy trailing capture.**
+⭐ **AND WHAT THE SECOND CHECK DID RIGHT IS THE STANDARD, not the renumbering guard: it ran the pattern against the KNOWN LEGACY DUPLICATES and required it still see them.** That is rule 29(b) — *what would this instrument return if the thing were present?* **The first check had no control and returned a confident absence; the second had one and caught itself.** ★ **Cheaper than any mint-time guard, and it generalises past issue numbers.**
+
+✅ **CLASS SWEEP RUN AS HE DIRECTED, AND IT NARROWS HIS OWN HYPOTHESIS — stated because a null result is the finding here.** He expected *"two same-day instances say this pattern is already replicated somewhere."* **POPULATION: 1,159 tracked tooling files (`*.mjs *.py *.sh *.ts *.cmd`, `node_modules` excluded).** **Literal `### #`: ZERO files. POSITIVE CONTROL: the bare string `###` DOES match in that same population** (`audit/process-scan.mjs`, `audit/run-phase31h-audit.sh`, `comms-infra/codex-channel-mirror.py`, and others), **so the instrument can speak.**
+⇒ ⛔ **THE PATTERN IS NOT REPLICATED IN COMMITTED TOOLING. Both instances were AD-HOC COMMANDS TYPED IN A SESSION, not code.** ★ **So the class fix is not a code sweep — there is nothing to sweep. It is the anchor rule plus the control habit, which is why this lands as EVIDENCE on `#745` rather than as work.**
+⚠️ **NOT CLAIMED: that no greedy issue-number capture exists anywhere.** My pattern for that arm was convoluted and **I ran no control for it**, so its emptiness carries no information and I am not reporting it as an absence.
+
 ### #1009 OPEN 2026-09-05 (CC-A, Kyle-directed) — ⚠️ **RENUMBERED FROM `#1006` THE SAME DAY — SECOND COLLISION IN THIS FILE IN ONE DAY.** It collided with CC-B's Codex-advisor `rtb_signals` schema-divergence entry at `:7321`. Measured, not argued: theirs `2d06bf248` 09:20:09, mine `bfdd1197f` 09:44:58 ⇒ the newer renumbers, and that is mine. **Commits `bfdd1197f`, `8dc0f8e0f` and the reports around them say `#1006` and mean THIS entry.** — THE TASK-LIST RULE IS HALF-WIRED: THE CLOSE-TIME HALF HAS A SLOT, THE SLOT-TIME HALF HAS NO TRIGGER AT ALL
 
 **Kyle asked for a per-session task list (batches assigned, sub-batches identified, hotfixes, findings to investigate, IN WORKING ORDER), updated at every batch close AND every time a new item is slotted, with the same update reaching the phase plan and the roadmap.**
