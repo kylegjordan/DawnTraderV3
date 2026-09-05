@@ -101,10 +101,65 @@ export interface PriceTickEvent {
    * means a fourth producer is a COMPILE ERROR rather than a silent absence (#546).
    */
   producer: PriceProducer;
+  /**
+   * ⛔⛔ B-PRICE-SIDE-BY-JOB (plan row 3n) — THE TWO TRANSACTABLE SIDES, REQUIRED, NEVER OPTIONAL.
+   *
+   * ★ THE DEFECT THIS CLOSES, measured 2026-09-05: the venue sends `bid`, `ask` and the mark on
+   * ONE frame; `handleV2TickerUpdate` PARSES all three (`:684-685`); and this event carried only
+   * the mark. So the two prices we can actually transact at were read and discarded at the event
+   * boundary, and every consumer downstream — the price cache, the exit monitor, the level
+   * constructors — was left with a MIDPOINT and no way back to the sides it was built from.
+   *
+   * ⚠️ AND THE MIDPOINT IS BUILT *FROM* THESE. `kraken-v2-translator.ts:73` computes
+   * `(bid + ask) / 2` and writes it into the `c` field. ⇒ **we had both sides in hand at the
+   * moment we averaged them, and then kept only the average.**
+   *
+   * ★ REQUIRED RATHER THAN OPTIONAL, for the reason this interface already gives for `producer`:
+   * *"Required + closed means a fourth producer is a COMPILE ERROR rather than a silent absence
+   * (#546)."* The same argument applies exactly — an optional side is a side that goes missing
+   * quietly on the one producer nobody re-checked.
+   *
+   * ⛔ `null` IS PERMITTED AND IS NOT THE SAME AS ABSENT: a genuinely one-sided or empty book has
+   * no bid, and saying so is honest. What is forbidden is a producer that never states it.
+   */
+  bid: number | null;
+  ask: number | null;
+  /**
+   * When the SIDES were observed — NOT when the mark was.
+   *
+   * ⛔ THEY ARE DIFFERENT INSTANTS AND CONFLATING THEM IS THE `W-3` DEFECT: `price-cache.ts`
+   * refreshes `lastUpdatedAt` on a path that does not refresh `bid`/`ask`, so that stamp dates the
+   * MARK and says nothing about the sides. A level anchored on a side must be able to ask how old
+   * THAT side is, not how old some other field on the same row is.
+   */
+  sidesCapturedAtMs: number | null;
   traceId?: string;
 }
 
 export class KrakenWebSocketAdapter extends EventEmitter {
+  /**
+   * ⛔⛔ THE TYPED EMIT — B-PRICE-SIDE-BY-JOB, 2026-09-05. **ADDED BECAUSE THE GUARANTEE
+   * `PriceTickEvent` CLAIMS FOR ITSELF WAS NOT TRUE.**
+   *
+   * That interface says, of `producer`: *"Required + closed means a fourth producer is a COMPILE
+   * ERROR rather than a silent absence (#546)."* ⛔ **IT WAS NOT.** `EventEmitter.emit` is typed
+   * `emit(event: string, ...args: any[])` — **every argument is `any`, so NOTHING on a `priceTick`
+   * payload was ever type-checked.** Two of the three emitters additionally wrote
+   * `as PriceTickEvent`, which made the call *look* checked while suppressing even the weak
+   * excess-property check an untyped literal would have received.
+   *
+   * ★ MEASURED THE HARD WAY: adding two REQUIRED fields to `PriceTickEvent` produced **ZERO**
+   * compile errors across all three emitters. A required field that nothing requires.
+   *
+   * ⇒ **Routing every emit through a normal function parameter is what makes the interface's own
+   * sentence true.** A missing or misspelled field is now a compile error at the emitter, which is
+   * the property the comment has been asserting all along. ⛔ **NEVER call `this.emit('priceTick', …)`
+   * directly again — the cast-shaped hole is exactly what this closes.**
+   */
+  private emitPriceTick(evt: PriceTickEvent): void {
+    this.emit('priceTick', evt);
+  }
+
   private ws: WebSocket | null = null;
   private isConnected: boolean = false;
   private isConnecting: boolean = false;
@@ -703,12 +758,22 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // B-EXIT-BOOK-AGE-STAMP P2: the producer now states the KIND. `_mid` on essentially every
       // tick; `_last` only on a one-sided or empty book. Carried from `translateV2ToV1`, never
       // re-derived here — see `mark-kind.ts` for why re-derivation downstream is unsafe.
-      this.emit('priceTick', {
+      // ⭐⭐ THE SIDES TRAVEL — AND THIS IS THE ONE THAT MATTERS. `bid` and `ask` are parsed ~50
+      // lines above from the SAME frame, and the midpoint in `lastPrice` was computed FROM them
+      // (`kraken-v2-translator.ts:73`). Until 2026-09-05 they were discarded here, so every
+      // downstream consumer — the price cache, the exit trigger, the level constructors — received
+      // the average and no route back to the two prices it was averaged from.
+      // ⛔ `a`/`b` are the venue's RAW sides; only `c` is the field we overwrite. Verified at
+      // `kraken-v2-translator.ts:78-80`.
+      this.emitPriceTick({
         symbol: internalSymbol,
         price: lastPrice,
         source: 'kraken_ws',
         producer: safeData.markKind === 'mid' ? 'kraken_ws_ticker_mid' : 'kraken_ws_ticker_last',
-      } as PriceTickEvent);
+        bid: Number.isFinite(bid) && bid > 0 ? bid : null,
+        ask: Number.isFinite(ask) && ask > 0 ? ask : null,
+        sidesCapturedAtMs: now,
+      });
       this.priceTickCount++;
 
       // priceCache is updated by live-pricing-adapter's priceTick handler (cycle-broken)
@@ -953,7 +1018,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // ★ #741: THE CONTAMINATED PATH. This midpoint comes from the mini-book whose truncation
       // defect let ghost bids sit above the real ask, and it is emitted with the SAME `source`
       // as a ticker print — which is exactly why the exit monitor could not tell them apart.
-      this.emit('priceTick', { symbol: internalSymbol, price: midpoint, source: 'kraken_ws', producer: 'kraken_ws_book_mid' } as PriceTickEvent);
+      // ⭐ THE SIDES TRAVEL NOW. `bestBid`/`bestAsk` are the very values the midpoint above was
+      // computed from — they were in scope and were being discarded one line later.
+      this.emitPriceTick({
+        symbol: internalSymbol, price: midpoint, source: 'kraken_ws', producer: 'kraken_ws_book_mid',
+        bid: bestBid, ask: bestAsk, sidesCapturedAtMs: Date.now(),
+      });
       this.priceTickCount++;
       
       // Broadcast to connected clients (throttled - using separate throttle key for book updates)
@@ -1089,7 +1159,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // #742: producer #3 is UNREACHABLE — handleTickerUpdate has no caller and handleMessage
       // routes only v2 by `message.channel`. Stamped anyway so a later reader sees three of
       // three producers labelled, not two-of-three plus a suspected missed stamp.
-      this.emit('priceTick', { symbol: internalSymbol, price: lastPrice, source: 'kraken_ws', producer: 'kraken_ws_ticker_v1', traceId } as PriceTickEvent);
+      // ⛔ NULL, AND HONESTLY SO. This is the raw v1 fallback path; it does not parse the sides,
+      // so it STATES that rather than omitting the field. An absent side and an unstated side are
+      // different things, and only one of them is safe to build a level on.
+      this.emitPriceTick({
+        symbol: internalSymbol, price: lastPrice, source: 'kraken_ws', producer: 'kraken_ws_ticker_v1',
+        bid: null, ask: null, sidesCapturedAtMs: null, traceId,
+      });
       this.priceTickCount++;
       
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
