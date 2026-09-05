@@ -333,3 +333,45 @@
 - ⛔ **THE "WHEN NOT TO" IS A RULE, NOT A MECHANISM, AND I AM NOT PRETENDING OTHERWISE.** Nothing can stop him consulting the archive early. **What CAN be done is remove the incentive: if Tier 1 fires automatically, the main reason to reach for the archive pre-emptively disappears.**
 
 ⚠️ **UNREVIEWED. This is my design as designer, per Kyle's instruction. It goes to Langston to attack — and §13.4 point 2 is the one I most expect him to push back on, because it constrains him more than anything currently does.**
+
+---
+
+## ⭐⭐⭐ 14. WHAT ANTHROPIC ACTUALLY DOCUMENTS ABOUT RULE ADHERENCE — and it reframes this batch
+
+> **Kyle, 2026-09-05:** *"one of the other sessions did research on the rules… it came back with a finding that stating positive rules as opposed to negatives is more effective… take a look at what Anthropic recommends for rules and how to best make sure that they are actually followed and enforced."*
+
+⛔⛔ **FIRST, THE HONEST ANSWER TO THE QUESTION AS ASKED: ANTHROPIC'S DOCS ARE **SILENT** ON POSITIVE-VS-NEGATIVE FRAMING. It is folklore, not documented guidance.** ⚠️ **That does NOT make the other session's finding wrong — it may well be true — but it is not sourced from Anthropic and must not be cited as though it were.** ✅ **What IS documented in that space is SPECIFICITY, not direction:** *"Use 2-space indentation"* beats *"format code properly"*; *"Run `npm test` before committing"* beats *"test your changes"*. ⇒ **the documented principle is CONCRETE ENOUGH TO VERIFY, and a positive ordering rule satisfies it as well as a prohibition does — so restate positively for readability, not because the docs demand it.**
+
+⭐⭐ **AND THE FINDING THAT ACTUALLY MATTERS, BECAUSE IT IS DOCUMENTED AND IT DESCRIBES OUR EXACT SITUATION:**
+> ### ***"If Claude keeps doing something you don't want despite having a rule against it, the file is probably too long and the rule is getting lost."***
+> *(Anthropic, `best-practices.md`)* — alongside: **files over ~200 lines *"consume more context and reduce adherence"*** (`memory.md`).
+
+⇒ ⛔⛔ **LANGSTON'S ALWAYS-LOADED SET IS ~139,955 B (`CLAUDE.md` 66,994 + `MEMORY.md` 61,155 + the self-memory index 11,806).** ★★ **SO THE DOCUMENTED EXPLANATION FOR HIS §19 RECALL TRIGGER NOT RELIABLY FIRING IS NOT THAT IT IS BADLY FRAMED — IT IS THAT THE FILE IT LIVES IN IS TOO LONG AND THE RULE IS GETTING LOST.**
+★ **That is a real reframe of this whole batch: we have been treating SIZE and RULE-ADHERENCE as two problems. Anthropic documents them as ONE.** ⇒ **every objective that shrinks the always-loaded set is also an adherence fix, and P-2's composition earns its place twice.**
+
+⚠️ **AND A SECOND DOCUMENTED LINE THAT ALREADY APPLIES TO US:** *"if two rules contradict each other, Claude may pick one arbitrarily."* ★ **His `MEMORY.md` header carries a 24,576 B cap while the file is 61,155 B, and §10.b tells four sessions to keep appending — a documented arbitrary-pick condition sitting in the file this batch is about.**
+
+⛔⛔ **THE ENFORCEMENT ANSWER, AND IT IS THE ONE KYLE ASKED FOR — the docs draw the line explicitly:**
+| **DETERMINISTIC** — fires regardless of the model's attention | **PROBABILISTIC** — the model must choose to comply |
+|---|---|
+| **hooks** (`PreToolUse` / `PostToolUse` / `SessionStart`) | **`CLAUDE.md` instructions** |
+| **`settings.json` permissions** (deny / protected paths) | **skill descriptions** (auto-invocation) |
+| **managed policy settings** (fail-closed) | **auto-memory** (he writes it and chooses to read it) |
+✅ **VERBATIM:** *"Claude treats [`CLAUDE.md` and auto memory] as context, not enforced configuration. **To block an action regardless of what Claude decides, use a PreToolUse hook instead.**"*
+⇒ ★ **THIS VINDICATES KYLE'S OWN RULING AND LANGSTON'S — *"a rule that is not followed is not the answer"* and *"prefer IMPOSSIBLE over INTERCEPTED"* are, in Anthropic's own words, the difference between context and configuration.**
+
+✅ **SKILL AUTO-INVOCATION UNRELIABILITY IS DOCUMENTED, not folklore** — descriptions drop out when the listing overflows its budget, and matching is on **literal keywords**, not semantic reasoning. *"Seeing a skill trigger tells you Claude found it, not that it did what you intended."* ⇒ **our own `CLAUDE.md` §0.a already says the skill leg is a coin flip; that is now sourced.**
+
+⛔⛔ **AND A CORRECTION THIS FORCES ON OUR OWN PLAN — P-2 AS WRITTEN MAY NOT DELIVER WHAT IT PROMISES.** Documented: ***"[imported files] still load and enter the context window at launch."*** ⇒ **splitting `MEMORY.md` into parts and re-assembling via `@import` improves ORGANISATION and EVICTION but does NOT reduce what he loads.** ★ **The mechanism that actually reduces load is PATH-SCOPED RULES (`.claude/rules/` with `paths:` frontmatter), which load only when the work matches.** ⇒ **P-2 must state which of the two it is buying — eviction, or context reduction — because the composed-file design buys the first and NOT the second.** *(This is exactly the `#661` shape: the right mechanism for one goal, the wrong one for the other.)*
+
+⚠️ **HONEST RESIDUAL, from the research itself: Anthropic documents instruction design for a USER instructing Claude. There is no public guidance on an AGENT instructing ANOTHER AGENT — which is our case. The patterns above are documented; their transfer to Langston is INFERENCE and is labelled as such.**
+
+### 14.1 — §13.4 RESTATED POSITIVELY *(supersedes the four prohibitions)*
+
+⛔ **The four `NEVER`s in §13.4 are withdrawn AS THE PRIMARY STATEMENT** — not because they were wrong, but because they were four rules where one ordering rule generates all four:
+
+> ## **THE ARCHIVE RULE, POSITIVE FORM — ONE SENTENCE**
+> ### **Read the object. Form your judgement. *Then* consult the archive — to learn whether the question was already answered, never to learn what the answer should be.**
+
+★ **Every prohibition falls out of it and none needs stating separately:** consulting before the read violates the ORDER; looking up his own prior conclusion violates *"never to learn what the answer should be"*; precedent-hunting violates the same clause; substituting a lookup for a re-derivation violates *"read the object"*. ⇒ **one rule, concrete enough to verify, and it is what a reader can actually hold.**
+⚠️ **THE PROHIBITIONS ARE KEPT IN §13.4 AS THE DERIVATION, NOT AS THE RULE** — a reader who wants to know *why* can find it; a reader who needs the rule gets one sentence.
