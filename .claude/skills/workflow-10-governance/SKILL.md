@@ -129,6 +129,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 | **T1** | the batch `SCOPE` | written at Step 1 |  |  |
 | **T1** | ★ **the batch `PRE_AUDIT`** | written at Step 2. ⛔ **REQUIRED by the governance checker for BOTH change classes (`config.mjs:127,:131`) and it was ABSENT from this ledger — so a fully-filled table could still FAIL the checker.** |  |  |
 | **T1** | the `COMPLETION_REPORT` | written at Step 11 |  |  |
+| **T1** | ★ **YOUR OWN SESSION TASK LIST** — `CC_<X>_SESSION_TASK_LIST.md` | ⛔ **EVERY batch close, EVERY class (Kyle directive 2026-09-05).** It holds the batches assigned to you, the sub-batches identified, the hotfixes and the findings to investigate, **IN WORKING ORDER** — and the SAME update goes to the **phase plan** and, where it is roadmap-level, `POST_AUDIT_ROADMAP.md`. ⚠️ **Derive it FROM the plan; if the two disagree the LIST is stale.** ★ It exists because *"we keep losing track of which session is working on which batches, and what order."* |  |  |
 | **T1** | ★ **Langston’s `/home/langston/MEMORY.md`** | ⛔ **PROMOTED FROM TIER 2 (Langston):** §10.b says *"in the same turn you update your own"* — **unconditional. A verdict cell on a mandatory item lets an `N/A` be written against it.** |  |  |
 | **T2** | `SYSTEM_MANUAL.md` | architecture · strategy logic · regime detection · filter design · signal pipeline · quantitative math | | |
 | **T2** | `SYSTEM_IMPACT_MAP.md` | any component added / removed / re-keyed, or cross-cutting state | | |

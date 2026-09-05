@@ -7350,3 +7350,18 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 **WHAT WOULD FALSIFY THIS:** a checked-in migration I missed that reconciles the declared index to three columns; **or** a documented, approved rule that same-symbol cross-class signals are intentionally one identity at every RTB operation, which would move the `asset_class` half to working-as-designed-needing-a-decision and leave the schema/database divergence standing on its own.
 
 ⇒ **HOME: unplaced pending Kyle + Langston.** ⛔ **I am NOT self-assigning it.** It is not adjacent to my queue, the `asset_class` half needs a product decision, and `#1004`'s lesson is that guessing a home for someone else's surface is how an item ends up owned by nobody. **Two candidate placements to choose between: its own batch in the Phase 19 governance queue, or folded into whoever next opens the RTB surface.**
+
+
+### ➕ #1001 ADDENDUM 2026-09-05 (CC-A) — RE-MEASURED AT KYLE'S REQUEST: STAGING WAS DEPLOYED OVERNIGHT. THE 55 IS STALE. THE GAP IS NOT CLOSED.
+
+**Kyle: *"I believe that that's all been updated as of last night... please confirm whether that fifty five commits behind is still correct."* ✅ HE IS RIGHT, AND THE FIGURE MUST NOT BE REPEATED.**
+
+**MEASURED 2026-09-05 09:2xZ, staging clone read AS `deploy` (as root it returns a dubious-ownership refusal that reads like an answer — the same trap recorded in the parent entry):**
+- **Deployed HEAD is now `a4bcbe3c1`** — *"B-XSTOCK-FEED-SANITY §4e: latch fix DEPLOYED…"*, **2026-09-04 23:29:19 +0400.** The `1a71c553b` in the parent entry is superseded.
+- **`git rev-list --count a4bcbe3c1..origin/migration/aws-supabase` = 27**, down from 55.
+- ⛔ **BUT THE GAP STILL INCLUDES LIVE-PATH CODE — 8 non-test files under `server/`:** `signal-orchestrator.ts` · `core/rtb/ready_to_buy_service.ts` · `core/math/cost-model.ts` · `core/math/maker-taker-decision.ts` · `core/calculations/level-basis.ts` · `asset_classes/xstock_spot/eval-cycle.ts` · `routes.ts` (+ 4 unit tests).
+- ✅ **What the overnight deploy DID close: `active-execution-engine.ts` and `book-state-tracker.ts` are now deployed.** The single most alarming item in the parent entry is resolved.
+- **POSITIVE CONTROL:** the same command against the parent entry's old sha still returns **19** app files, so the instrument is not silently returning an empty set.
+
+★★ **AND THIS STRENGTHENS `#1002` RATHER THAN WEAKENING IT.** The parent entry could be read as *"someone forgot to deploy for a day."* **It re-opened to 27 commits within about ten hours of being closed to zero — so the gap is not an incident, it is the STEADY STATE of a shared branch with three sessions pushing and deploys owned per-batch.** ⇒ **the value of a drift line is not catching a one-off lapse; it is making a continuously-varying distance VISIBLE, and nothing measures it today.**
+⚠️ **STILL NOT A CLAIM THAT ANYTHING IS BROKEN OR URGENT**, and still **CC-C's to dispose of** — both source batches are theirs and in flight. `dt-deploy` restarts the engine, so "deploy sooner" is not free.

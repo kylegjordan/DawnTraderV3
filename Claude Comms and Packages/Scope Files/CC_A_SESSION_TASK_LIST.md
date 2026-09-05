@@ -1,4 +1,55 @@
-# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-02
+# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-05
+
+> ⛔⛔ **KYLE'S STANDING RULE, 2026-09-05: EVERY SESSION KEEPS ITS OWN TASK LIST, AND IT IS UPDATED IN THREE PLACES OR IT IS NOT UPDATED.**
+> **WHAT IT HOLDS:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — **in the order they will be worked.**
+> **WHEN IT IS UPDATED:** (1) **every time a batch closes**, and (2) **every time a new batch, sub-batch, hotfix or investigation is decided and slotted.**
+> **THE THREE PLACES, ALL IN THE SAME TURN:** **this file** → **`PHASE_19_PLAN.md`** (or the active phase plan) → **`POST_AUDIT_ROADMAP.md`** where it is a roadmap-level item.
+> ★ **HIS REASON, IN HIS WORDS:** *"we keep losing track of which session is working on which batches, and what order they need to work on those things in. And as we add more things with each of these sessions, we lose track of what else we were working on and when we need to work on these things."*
+> ⚠️ **THE PLAN IS THE AUTHORITY; THIS FILE IS THE INDEX.** Every row below is derived from `PHASE_19_PLAN.md` — **if the two disagree, the plan wins and this file is stale.** Re-derive rather than hand-edit the order.
+
+---
+
+## 0. ⭐ THE QUEUE — WHAT I AM WORKING ON, IN ORDER (derived from `PHASE_19_PLAN.md`, 2026-09-05: 29 CC-A rows, **24 open**)
+
+| plan row | item | kind | state |
+|---|---|---|---|
+| — | **`B-DEPLOY-DRIFT-LINE`** (`#1002`, row 4.55) | batch | ⭐ **NEXT — Kyle: *"slot it after this batch"***. Nothing compares the deployed sha to the branch head |
+| 4.6 | **`B-RULES-LAYER`** (`#998`) | batch | **KYLE-DIRECTED to follow `B-WAKE-QUIET`.** Failure condition pre-registered |
+| 1 | `B-RULES-1e` | batch | **IN FLIGHT, parked at Step 2** with Langston |
+| 6 | `B-MEASURE-GATE` (legs beyond leg 2) | batch | Step 1 approved, in flight at Step 2 |
+| 8 | `B-GOV-REPORTING` | batch | ⛔ **PUSHED, UNREVIEWED — a review gate is owed on work already on the branch** |
+| 12.1 | rulings-durability fix (`#671`) | sub-item | **FIRST BREAK** — exempt from the sequencing |
+| 12.2 | lookalike register (`#672`) | sub-item | **FIRST BREAK** |
+| 4.7 | `B-HEARTBEAT-RESCOPE` (`#999`) | batch | Langston's condition from `#995` |
+| 3.5 | `B-INSTRUMENTS-OVER-RULES` | batch | placed 2026-09-02 |
+| 4 | `B-REVIEWER-LOOP` (`#758`) | batch | placed 2026-08-28 |
+| 5 | `B-CHUNK-ADDRESSING` (`#749`/`#761`) | batch | placed 2026-08-29 |
+| 6.5 | `B-STATE-ASSERTION-LINT` | batch | placed 2026-08-31 |
+| 6.6 | `B-CLAIM-REDERIVE` | batch | placed 2026-09-02 |
+| 7 | `B-EXIT-LATCH-INVESTIGATION` (`#732`) | investigation | placed by Kyle, after `B-MEASURE-GATE` |
+| 8.7 | `B-ALERT-WINDOW-EXPIRY` | batch | Langston §13 home |
+| 9 | `B-EOL-NORMALISE` (`#751`) | batch | queued |
+| 10 | `B-GATE-GUARD` (`#744`) + `B-ISSUE-BLOCK-GUARD` (`#745`) | batch | queued — ⛔ **now also carries `#754`'s three unbuilt checker legs, returned to priority by the `#1005` tripwire hit** |
+| 11 | `B-CREW-BOARD-REMOVAL` | batch | ⛔ **GATED ON KYLE** (Infra Claude's onboarding is his call) |
+| 11.5 | `B-TRADING-ENGINE-REMOVAL` (`#578`) | batch | held behind the retired-score work |
+| 11.6 | `B-FINALSCORE-TELEMETRY-RETIRE` (`#582`) | batch | Langston Step-4 deferral from `#558` |
+| 12.3 | `B-DECISION-RECORDS` | batch | after the rules arc's substantive legs |
+| 12.4 | `B-CATALOG-1` | batch | after 12.3 |
+| 12.5 | `B-CATALOG-2` | batch | after 12.4 |
+| 12.6 | decommission residue (rule-18 removal) | batch | after 12.4 |
+
+### ⛔ OPEN LOOPS THAT ARE NOT BATCHES — they have no row and will be lost if they are not listed here
+- ⛔ **OWED TO KYLE, 52 DAYS: Langston's `AWAITING KYLE` block** — whether the guards fail-open or fail-CLOSED, plus two standing-rule proposals. **An undecided thing is the one class that cannot be refetched.**
+- ⛔ **OWED TO LANGSTON: the alert-verb design (`#982`)** — two questions put to him and unanswered: must a hold leave the back-off untouched, and must it require an existing ack so it can never orphan.
+- **`#761`** — the comms outage; evidence kept at `/root/evidence/761/`, **cause still unknown.**
+- **Event-wait alerts I own** (`23f004a4`, `f6ae5419`, `c5cf4a87`, `2b0a4688`, `27860643`) — **acked = silenced** (`#982`); Kyle 2026-09-02: nothing urgent, slot them.
+- **`#1001`** — raised by me, **owned by CC-C**: staging's deploy gap. Re-measured 2026-09-05 (see below); not mine to close.
+
+### ✅ CLOSED SINCE THIS FILE WAS LAST WRITTEN
+- **`B-WAKE-QUIET`** (`#995`, row 4.5) — CLOSED 2026-09-05. Langston confirmed. Spawned rows 4.55, 4.6, 4.7 and `#1005` (this batch skipped its own Step 2).
+
+---
+
 
 > **Kyle asked for the running list in one place, in words he can read (2026-09-02).** The authoritative ORDER is `PHASE_19_PLAN.md` §governance; this file is that list read from CC-A's seat with each item's PURPOSE in plain language. When the two disagree, the plan wins and this file is corrected. **Nothing here adds a rule: every item is a tool, a format, a removal, or an investigation.** Rows have positions, not dates (§9.4).
 

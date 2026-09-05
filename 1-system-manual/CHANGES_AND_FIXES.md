@@ -3999,3 +3999,16 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 **ALSO IN THIS BATCH, AND IT COST MORE THAN THE FIX DID.** A deployed-vs-committed drift check was added to `dt-push-notice.sh` and **went through three versions on a live 2-minute cron.** Version 1 asked *"does the live file match the mirror's current copy"* — a race against a `*/15` puller, so it alarmed after every ordinary edit, roughly every two minutes for half an hour. **The property wanted was provenance (*has this content ever been committed*), not staleness, and mtimes cannot bridge those.** The final form requires blob-absence **and** mirror-fetched-since-edit **and** a two-hour oracle-staleness floor. ⛔ **A syntax error also reached that live cron once** — an apostrophe escaped for a heredoc when the text lands in a double-quoted string; restored from backup inside the minute, no notice fired in the window. **Method changed and it is the durable part: patch a CANDIDATE copy, `sh -n` the candidate, install only on pass.**
 
 **RISK REGISTERED, NOT CLOSED.** `_HEARTBEAT_BAD` — the expression deciding whether a heartbeat is bad enough to wake a session — is a **hand-written word list**, and every live delivery came through its `STALE` arm, six of them matching the word inside a **negation**. Homed at `PHASE_19_PLAN` row 4.7, `B-HEARTBEAT-RESCOPE` (`#999`); deliberately not bolted on mid-batch.
+
+
+## FIX-2026-09-05-B — the black terminal window flashing on Kyle's screen four times an hour was the Codex channel mirror, launched by the CONSOLE python
+
+**THE SYMPTOM (Kyle, 2026-09-05):** *"these terminal windows keep briefly popping open… It's happening a couple of times each hour."*
+
+**THE CAUSE, and both halves of the evidence are on the screenshot he sent:** the scheduled task `codex-channel-mirror` runs **every 15 minutes** (`PT15M` — four times an hour, matching his count) and its action was **`C:\Python313\python.exe`**, which is the CONSOLE build and **allocates a window**. The window title in his screenshot is `C:\Python313\python.exe`; the task's last run was **09:18:01** and the screenshot clock reads **9:18**. ★ **Every other laptop task of this kind already used `pythonw.exe`, the windowless build — this one was the outlier, not the pattern.**
+
+**THE FIX.** The live task now runs `pythonw.exe`. **Verified by running it: exit code 0, no window.**
+
+⛔ **AND THE OTHER HALF, WHICH IS THE PART THAT LASTS:** `comms-infra/install-codex-mirror-task.cmd` still created the task with `python.exe`, **so any reinstall would have silently restored the flashing.** Fixed there too, with the reason written beside it. ★ **This is `fix-follows-pointer` — the pattern this session recorded three instances of the same week — caught this time BEFORE shipping the half-fix rather than after.**
+
+⚠️ **OWNERSHIP NOTE:** the mirror script itself lives in Infra Claude's clone (`C:\DawnTraderV3-infra\`). **Only the launcher was changed — no behaviour of the mirror was touched** — and Infra Claude is told.
