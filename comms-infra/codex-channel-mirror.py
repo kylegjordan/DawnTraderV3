@@ -86,8 +86,18 @@ def fetch_since(last_line):
     # ⛔ encoding MUST be explicit. The channel is full of emoji and em-dashes;
     #    on Windows `text=True` decodes as cp1252 and dies at the first one
     #    (measured: UnicodeDecodeError at byte 0x8f on the first cold run).
+    #
+    # ⛔⛔ CREATE_NO_WINDOW IS THE ACTUAL FIX FOR THE FLASHING BLACK WINDOW, AND
+    #    SWITCHING THE TASK TO pythonw.exe WAS NOT ENOUGH — that was the first
+    #    fix and Kyle reported it STILL popping up four times an hour.
+    #    WHY: pythonw gives the PYTHON process no console, but `ssh.exe` is a
+    #    CONSOLE application, so Windows allocates a BRAND NEW console for the
+    #    CHILD. The window was never python's; it was ssh's.
+    #    ⇒ the flag must be on the SUBPROCESS, not on the interpreter.
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # 0 on non-Windows
     p = subprocess.run(cmd, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", timeout=180)
+                       encoding="utf-8", errors="replace", timeout=180,
+                       creationflags=flags)
     if p.returncode != 0:
         raise RuntimeError("fetch failed rc=%d: %s" % (p.returncode, p.stderr[:200]))
     lines = [l for l in p.stdout.split("\n") if l.strip()]
