@@ -7,6 +7,11 @@ infra/helsinki/*.sh text eol=lf
 # edit can't ship CRLF into a shebang / systemd unit and break execution (B-DISCORD-INBOUND-LIVENESS).
 comms-infra/discord/** text eol=lf
 
+# B-LANGSTON-CONTEXT (P-7): the recall/archive engine runs on Helsinki and had NO repo
+# copy at all until 2026-09-05 - it existed on exactly one server, unversioned. Same LF
+# reasoning as the Discord bridges: a Windows-authored edit must not ship CRLF into a shebang.
+comms-infra/langston-memory/** text eol=lf
+
 # B-DEPLOY-LOCK (#649): ALL shell scripts ship LF — a CRLF working copy broke
 # dt-deploy.sh's shebang on staging (exit 127). Same class as the helsinki rule.
 *.sh text eol=lf
