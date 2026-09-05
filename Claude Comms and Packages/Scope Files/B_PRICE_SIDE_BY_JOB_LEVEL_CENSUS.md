@@ -367,7 +367,33 @@ The scope traced the crypto QUANT lane through `signal-orchestrator.ts:2515` and
 2. ⛔ **AND ON A FIRST WRITE FOR A SYMBOL, `?? price` MAKES BOTH SIDES EQUAL THE MARK** — the cache reports a two-sided book **that does not exist.**
 ✅ **THE MODULE ALREADY REFUSES BOTH** (a synthetic book has `bid === ask`) — **but it was reporting `crossed_book`, and that reason name sends a reader to the VENUE when the fault is OURS.** ⇒ **SPLIT this turn into `locked_or_synthetic_book`, with its own test and its own funnel counter.** ★ **The refusal was already right; the DIAGNOSIS it handed the next reader was not.**
 
-### W-4 ⛔⛔ **THE AGE CLAUSE HAS NO SOURCE TODAY.** THE MINI-BOOK IS NOT TIMESTAMPED **AT ALL**
+### ⛔⛔⛔ **W-4 IS WITHDRAWN — IT WAS FALSE, AND IT IS THE WORST KIND OF FALSE: I DECLARED MISSING A THING I SHIPPED MYSELF SIX DAYS AGO**
+
+**W-4 (below, struck) claimed the mini-book carries no capture time and therefore *"Langston's amendment 1 is not satisfiable from any existing source"*, making a book-stamping change REQUIRED WORK for this batch.** ⛔ **ALL OF THAT IS WRONG.**
+
+**MEASURED AT THE OBJECT, 2026-09-05:**
+- `kraken-websocket-adapter.ts:170` — `private bookUpdatedAt = new Map<string, number>();`
+- `:918` — `this.bookUpdatedAt.set(internalSymbol, Date.now());` — stamped on **every applied delta**, and sited with care: **AFTER the checksum arm**, so a desynced book that resubscribes is never dated, and **BEFORE the BBO-validity `continue`**, so *"a transiently one-sided book still records its age"* (the comment says so).
+- `:3245-3265` — **`getBookForFill(symbol)` RETURNS `{ asks, bids, ageMs }`**: both sides, sorted, zero-filtered, **with the age**, and **fail-closed** — `null` when there is no stamp or no two-sided book.
+- ✅ **AND IT IS ALREADY IN USE:** `active-execution-engine.ts:1619` `bookAgeMs: _bookX ? _bookX.ageMs : null`.
+
+⇒ ★★ **THE AGE CLAUSE'S SOURCE IS `getBookForFill`, IT IS EXACTLY THE SHAPE `buildLevelBasis` NEEDS, AND IT WAS SHIPPED BY `B-EXIT-BOOK-AGE-STAMP` — MY OWN BATCH, DEPLOYED `104fa755b` ON 2026-08-30.**
+
+### ⛔ HOW I GOT IT WRONG, BECAUSE THE MECHANISM IS THE REUSABLE PART
+**I read the `orderBooks` Map's VALUE TYPE — `Map<string, { bids; asks }>` — saw no time field, and concluded the capability was absent.** ⛔ **The stamp lives in a SIBLING MAP keyed by the same symbol.** ★ **A container's shape is not an inventory of what the class knows.** ⇒ **`wrong-object`: I inspected the wrong noun and generalised from it — the same pattern that already costs me most, arriving through a new door.**
+⚠️ **AND THE SEARCH THAT WOULD HAVE CAUGHT IT WAS ONE I DID NOT RUN: I grepped for `timestamp` inside the adapter and for the type declaration. I never grepped for the CAPABILITY** — *"what in this file records when a book changed"* — which is exactly `workflow-01`'s *"grep the repo for the CAPABILITY, not just for the name you would give it."*
+
+### ⛔⛔ AND THE CONSEQUENCE IS NOT COSMETIC — IT PROPAGATED INTO A REVIEWER'S RULING
+**Langston tagged W-3 and W-4 `RULED ON REPORTED FACT`: he did NOT re-derive them.** ⇒ **My false claim entered the record UNCHALLENGED, and he built an ordering on it** — *"W-4's ordering follows: the stamp lands FIRST, and its positive control is a non-zero `accepted` count … until then the module refuses 100% of crypto."*
+⇒ ✅ **THAT DEPENDENCY DOES NOT EXIST. There is no stamp to land. The level basis can be wired NOW.** ★ **This is precisely why `RULED ON REPORTED FACT` is disqualifying for a PROCEED on the leg it covers — the tag did its job by marking the leg he could not stand behind, and the leg was the one that was wrong.**
+
+⚠️ **W-3 IS *NOT* WITHDRAWN AND IS UNAFFECTED.** It is about `CachedPrice` — a different object — and I read `price-cache.ts:402-430` directly and quoted it. Its conclusion (*the price cache cannot source a level basis*) still holds; it simply no longer matters, because `getBookForFill` is the better source and always was.
+
+⛔ **THE ORIGINAL W-4 IS PRESERVED BELOW RATHER THAN DELETED, because a withdrawn claim that vanishes teaches nobody, and Langston's ruling cites it by name.**
+
+---
+
+### ~~W-4~~ ⛔ **WITHDRAWN — SEE ABOVE. PRESERVED AS WRITTEN:** ~~**THE AGE CLAUSE HAS NO SOURCE TODAY.** THE MINI-BOOK IS NOT TIMESTAMPED **AT ALL**~~
 `kraken-websocket-adapter.ts:138` — `private orderBooks = new Map<string, { bids: Map<number, number>; asks: Map<number, number> }>()`. **No capture time, no field for one.** And the live accessor `getLatestPriceData` (`:3218-3235`) returns `{ bid, ask, mid }` — **a correct book top with no way to say how old it is.**
 ⇒ ⛔ **SO LANGSTON'S AMENDMENT 1 IS NOT SATISFIABLE FROM ANY EXISTING SOURCE.** ★ **The clause did exactly what a good clause does — it named a property, and the property turned out to be missing.** ⇒ **Stamping the mini-book at update is REQUIRED WORK for this batch, not an optional nicety**, and it is why `age_unknown` exists as a refusal: **until that stamp lands, this module fails closed on every crypto symbol rather than inventing an age.**
 ⚠️ **NOT YET MEASURED, AND NAMED SO IT IS NOT ASSUMED: how STALE the sides actually get.** The structural fact — that `lastUpdatedAt` dates the mark — is established at the code; **the size of the gap is not, and it needs the stamp from W-4 before it can be measured at all.**

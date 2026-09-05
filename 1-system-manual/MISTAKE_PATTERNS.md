@@ -94,6 +94,10 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 
 # THE PATTERNS
 
+➕ **`wrong-object` INSTANCE — 2026-09-05, CC-C, `B-PRICE-SIDE-BY-JOB` W-4 — *I DECLARED MISSING A CAPABILITY I HAD SHIPPED MYSELF SIX DAYS EARLIER.*** I read the `orderBooks` Map's VALUE TYPE (`Map<string, {bids; asks}>`), saw no time field, and concluded the mini-book carried no capture time — writing into the census that Langston's age clause was *"not satisfiable from any existing source"* and that stamping the book was REQUIRED WORK. ⛔ **The stamp lives in a SIBLING MAP: `bookUpdatedAt` (`:170`), set on every applied delta (`:918`), and already exposed by `getBookForFill` (`:3245`) which returns `{asks, bids, ageMs}` fail-closed — shipped by my OWN `B-EXIT-BOOK-AGE-STAMP`, deployed `104fa755b` on 2026-08-30, and already consumed at `active-execution-engine.ts:1619`.**
+★ **THE MECHANISM, AND IT IS THE REUSABLE PART: a container's SHAPE is not an inventory of what the class KNOWS.** I inspected the wrong noun and generalised from it. ⇒ **The search I skipped is the one `workflow-01` already prescribes: grep for the CAPABILITY (*"what records when a book changed"*), never only for the name you would give it or for the type you expect it to live in.**
+⚠️ **COST: the false claim reached Langston, who tagged it `RULED ON REPORTED FACT` and built a sequencing ruling on it — *"the stamp lands FIRST"*. It propagated because it was in the one leg he could not re-derive. ★ That is the tag WORKING: it marked the leg he could not stand behind, and that was the leg that was wrong.**
+
 ### `enumerator-blind-spot` — **EVERY ENUMERATOR WAS BLIND TO A DIFFERENT MEMBER CLASS, AND EACH BLIND SPOT LOOKED LIKE A CORRECT ARM** — **NEW 2026-08-31, n=7 in ONE batch** · mechanism: **SHIPPED for this instance — one shared enumerator; NONE YET for the class**
 
 ➕ **INSTANCE n=8 — 2026-09-05, CC-C, `B-PRICE-SIDE-BY-JOB` — AND THIS ONE'S BLIND SPOT IS THE *GLOB PATTERN ITSELF*, WHICH MAKES IT THE MOST PORTABLE VARIANT YET.**
