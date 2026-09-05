@@ -431,3 +431,34 @@
 ⇒ ⛔⛔ **SO THE BATCH NEEDS A DECISION IT DOES NOT HAVE, AND IT IS KYLE'S: does Langston get a cap of his own — covering ALL THREE always-loaded artifacts — and at what number?**
 ⚠️ **`#946`'s arithmetic already showed that what remains after every easy cut exceeds 24,576 B on its own** ⇒ **adopting 24,576 for him is choosing a number he cannot currently meet.**
 ★ **THE HONEST OPTIONS: (a) adopt ~24 KB and accept a long consolidation programme · (b) adopt the ~40 KB product-warning threshold PER FILE · (c) set a different number deliberately and record the reasoning.** ⛔ **I am not choosing that alone — it is a scope decision with a real cost either way.**
+
+---
+
+## ⭐⭐⭐ 17. IS THERE EVIDENCE HIS PERFORMANCE DEGRADED AS THE FILES GREW? *(Kyle, 2026-09-05)*
+
+> **Kyle:** *"with his files being as large as they currently are, are there any indications of degradation, incorrect rulings, lots of mistakes and errors — anything we can point to to say that his performance has suffered as a result of increasing file sizes?"*
+
+⛔⛔ **THE ANSWER IS NOT "NO". IT IS *WE CANNOT MEASURE IT* — AND THE REASON IS THE FINDING: EVERY QUALITY INSTRUMENT WE HOLD WAS CREATED DURING THE SAME WINDOW THE FILES GREW.**
+
+**ATTEMPT 1 — HIS RETRACTION LEDGER. Looked like a hit; it is an artifact.**
+His 8 retractions date: `2026-03-31 · 05-05 · 07-28 · 08-07 ×2 · 08-10 · 08-13 · 09-02`. ⇒ **6 of 8 fall in the last five weeks — exactly the growth window.**
+⛔ **KILLED BY THE INSTRUMENT'S OWN BIRTHDATE. MEASURED against the dated pre-images: the `REVIEWER LEDGER` section is ABSENT from the 2026-07-28 image and PRESENT in the 2026-08-05 one.** ⇒ **the ledger was created between those dates, so "6 of 8 since late July" is precisely what a newly-started recorder produces.** ★ **The two earlier entries were back-filled. The clustering is when RECORDING began, not when ERRORS began.**
+
+**ATTEMPT 2 — HIS OWN `RULED ON REPORTED FACT` MARKER.** Chosen because it is *his* low-confidence self-tag and looked like it spanned both sides. Per 100 messages he composed: **June 0.0 · July 12.1 · Aug 20.7 · Sep 46.6.** A clean-looking monotonic rise.
+⛔ **KILLED TWICE OVER.** **(a) The marker FIRST APPEARS ANYWHERE ON 2026-07-10**, so June's 0.0 is *definitional* — the whole "rise" is adoption of a new discipline. **(b) AND IT IS THE WRONG INSTRUMENT EVEN WITH A CLEAN BASELINE: it measures DISCLOSURE, NOT ERROR.** ★ **More of it plausibly means MORE care, not less** — a reviewer flagging that he did not re-derive something is behaving better, not worse. ⇒ **a rising disclosure rate read as rising error rate would have been a confident, tidy, completely wrong story.**
+
+**ATTEMPT 3 — `CHANGES-NEEDED` RATE.** June 8.4 · July 5.5 · Aug 15.4 · Sep 10.8 per 100.
+⛔ **WRONG OBJECT ENTIRELY: that measures the quality of OUR work, not his.** A rising send-back rate is a statement about what we hand him.
+
+⇒ ⛔⛔ **THE HONEST CONCLUSION: THE MEASUREMENT KYLE WANTS IS NOT AVAILABLE, AND THE REASON IS STRUCTURAL, NOT LAZY. Every signal postdates or coincides with the growth:** `RULED ON REPORTED FACT` from **2026-07-10** · the reviewer ledger from **~2026-07-28** · the per-invoke byte log from **2026-08-05**. ★ **We instrumented the reviewer at almost exactly the moment his files began growing, so the two are confounded by construction.**
+⚠️ **AND THE DIRECTION MATTERS FOR HOW THIS IS REPORTED: a null here is NOT reassurance.** ⛔ **"No evidence of degradation" and "no instrument capable of detecting degradation" look identical from the outside, and only the second is true.** *(`silence-not-evidence`, on the largest possible object.)*
+
+✅ **WHAT WOULD ACTUALLY ANSWER IT — AND ONE OF THESE IS CHEAP AND RUNNABLE NOW:**
+| | approach | verdict |
+|---|---|---|
+| **A** | ⭐ **A CONTROLLED A/B: hand him the SAME review twice — once at his current ~143,856 B load, once at a trimmed load — and compare the rulings.** | ⭐ **RUNNABLE, CHEAP, AND IT IS THE ONLY ONE THAT ISOLATES FILE SIZE FROM EVERYTHING ELSE.** He is stateless, so the second run genuinely cannot remember the first — **his statelessness is what makes the experiment valid, and no interactive session could be tested this way.** |
+| **B** | rulings of his later OVERTURNED by evidence, from `RUNNING_ISSUES` | spans a longer period, but conflates his errors with ours and depends on someone having filed it |
+| **C** | an independent judge scoring a date-blind sample of his rulings | rigorous, expensive, and needs a rubric we do not have |
+
+⇒ ⭐ **RECOMMENDATION: RUN (A), AND RUN IT AS PART OF THIS BATCH.** ★ **It converts P-7 from "count whether he uses things" into "measure whether the size hurts", which is the question actually worth answering — and it gives every later trim a before/after it can be judged against instead of an assumption.**
+⚠️ **DESIGN CAVEAT, STATED NOW SO IT IS NOT DISCOVERED LATER: a single paired run is n=1 and reviews are not deterministic. It needs several distinct review tasks, and a pre-registered statement of what counts as a difference, written BEFORE the runs.**
