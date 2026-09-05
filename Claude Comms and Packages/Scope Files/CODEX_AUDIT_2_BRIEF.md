@@ -1,4 +1,4 @@
-# DAWNTRADER V3 — CODEX ADVISOR, ASSIGNMENT 2: THE TRADING LOGIC, THE MATHS, AND WHAT TO BUILD (r3)
+# DAWNTRADER V3 — CODEX ADVISOR, ASSIGNMENT 2: THE TRADING LOGIC, THE MATHS, AND WHAT TO BUILD (r4)
 
 **Written by:** Claude New (CC-B), 2026-09-05, at Kyle's direction, after Langston's design review.
 **Your standing is unchanged: ADVISOR, not a gate.** Langston's review gates are untouched and Kyle remains the sole decider. Nothing waits on you.
@@ -90,29 +90,54 @@ You cannot assess whether a strategy can work without the constraints it operate
 |---|---|---|
 | **closed paper trades** | what the **whole pipeline** produced, post-selection | not a strategy sample — selection and execution are confounded, and it is **duration-censored short** (§3) |
 | **the passive-system corpus** | what the strategy families do across nearly the whole opportunity set | **no quality gate, no ranking contest** — a much larger and *differently* selected population, **truncated long** (§3) |
-| ⛔ **the ranking-counterfactual corpus** | **NOT a matched control — r2 called it one and that was WRONG. See the block below before touching it.** | **fee-free, arm-confounded, and not joinable to any real trade** |
+| ⭐ **the ranking-counterfactual corpus** | **A CONSERVATIVE ONE-SIDED INSTRUMENT — not the matched control r2 claimed, and not the dead end r3 claimed either. Read the block below in full before using it.** | fee-free in its STORED labels — which is fixable, because the PRIMITIVES are retained |
 | **the decline corpus** | why signals were rejected | ⛔ **a decline carries its REASON and not the geometry that caused it** — see §5 |
 | **open positions with age** | the censored tail | required for §3, not a performance sample |
 
-⛔⛔ **THE RANKING-COUNTERFACTUAL CORPUS — r2 CALLED THIS "THE MATCHED CONTROL" AND THAT WAS WRONG. A FRESH READER WAS SENT TO CHECK IT BEFORE IT CARRIED PART 2, AND IT DOES NOT DO WHAT WE SAID.** *(r3. Every claim below re-derived at the ref before it was written here.)*
+⭐⭐ **THE RANKING-COUNTERFACTUAL CORPUS — WHAT IT IS, AFTER TWO WRONG DESCRIPTIONS OF IT.** *(r2 called it a matched control: wrong. r3 called the selection question unanswerable: also wrong, and over-declared — an asserted absence needs presence-grade evidence. r4 is the settled position, every claim re-derived at the ref.)*
 
-**WHAT IT ACTUALLY IS:** a **simulation-versus-simulation** comparison of ranked candidates. **Every row is a shadow simulation, including the ones flagged as promoted.** The real trade's outcome is **not in the table and cannot be joined to it.**
+**IT IS A SIMULATION-VERSUS-SIMULATION CORPUS OF RANKED CANDIDATES.** Every row is a shadow simulation, including the ones flagged promoted. It cannot be joined to any real trade — `promoted` is `i < limit` (the ranker's top-N, `ready_to_buy_service.ts:1950`), `shared/schema.ts:2170-2177` says **"NOT execution-confirmed"** in those words, and `promoted_trade_id` is never written.
 
-⛔ **THE FOUR THINGS THAT DISQUALIFY IT AS A SELECTION CONTROL, each verified at the ref:**
+### ⭐ WHY IT IS STILL USABLE — THE BIAS HAS A KNOWN SIGN
 
-1. ⛔⛔ **IT IS FEE-FREE, AND THIS ASSIGNMENT IS ABOUT FEES.** `vts-runner.ts:929` hardcodes `frictionCost: 0` on the shadow shell, and `:3827` computes `netPnl = grossPnl - frictionCost`. ⇒ **`net_pnl` is IDENTICALLY EQUAL to `gross_pnl` on every row.** **A candidate whose edge is smaller than a round trip scores exactly the same as one that clears it.** An analysis of this corpus showing the ranker picks well is **fully consistent with it picking badly once friction is applied** — which is the entire question.
-2. ⛔ **`promoted` DOES NOT MEAN "TRADED".** It is `i < limit` (`ready_to_buy_service.ts:1950`) — the ranker's top-N — and `shared/schema.ts:2170-2177` states it is **"NOT execution-confirmed."** After the flag is stamped the engine can still defer or fail. **`promoted_trade_id` is never written on this table, so no row can be joined to a real trade.**
-3. ⛔ **THE FLAG IS FROZEN AT FIRST APPEARANCE.** The writer returns early on a duplicate, so a signal that sits in the pool for eight cycles and then wins is stored **`promoted=false` forever.** Any difference between the arms is equally consistent with a **timing effect and no ranking content at all.**
-4. ⛔ **THE PAIR GUARD ALONE COULD PRODUCE THE ENTIRE RESULT.** A promoted symbol becomes an active trade and is then **excluded from every later pool**; a rejected symbol **re-enters indefinitely.** The two arms are therefore drawn from **systematically different symbol-states**, with no ranking content required to produce a difference.
+⛔ **The stored outcome is FEE-FREE.** `vts-runner.ts:929` hardcodes `frictionCost: 0`; `:3827` computes `netPnl = grossPnl − frictionCost`. ⇒ **`net_pnl` is IDENTICALLY `gross_pnl` on every shadow row, both arms.** *(Real passive trades DO carry a booked friction; the shadow arm alone does not.)*
+✅ **BUT THE RANKER ITSELF IS FEE-AWARE AT DECISION TIME** — `predicted_r_multiple` is net expected value over risk, and a net-EV gate sits in front of it. **Only the OUTCOME is fee-blind.**
+⇒ ★★ **SO THE BIAS RUNS IN ONE KNOWN DIRECTION: it FLATTERS exactly the candidates the ranker DECLINED because friction ate their edge.** That makes this a **conservative one-sided instrument**, not a broken one:
+- **Ranker wins on this data ⇒ a REAL LOWER BOUND.** The bias was working against it. **That answers the question.**
+- **Ranker ties or loses ⇒ INCONCLUSIVE. NEVER a fail.** The bias points that way by construction. ⛔ **Do not report a loss as a finding.**
 
-⚠️ **AND ITS COVERAGE IS NOT CONTINUOUS.** The ranker's sort **changed on 2026-06-30**, so `promotion_rank` means a different thing either side of that date. Three ranking columns were **0 non-null across 14,232 rows** until re-pointed. The hold ceiling went **6h → 48h on 2026-08-11**, and the 6h version had truncated **27.3% of shadow closes (10,804 of 39,641)**. **No rows are captured at all when the system is at capacity or warming up**, so busy periods are absent **by construction, not by chance.**
+### ✅ AND THE STORED LABELS CAN BE DISCARDED — THE PRIMITIVES ARE THERE
 
-⇒ ✅ **WHAT IT CAN STILL BE USED FOR, narrowly:** whether our ranking score correlates with **GROSS** outcome, within one coverage window, with the arm confound stated every time. ⛔ **It cannot answer whether our selection finds or destroys edge NET of fees, and it cannot be compared against real trades.**
-⇒ ⛔⛔ **SO PART 2's SELECTION QUESTION HAS NO CLEAN INSTRUMENT, AND WE ARE NOT INVENTING ONE.** If you conclude something about selection quality, **say which of the four confounds above you could not remove.** ★ **"We cannot answer this with the data that exists" is an acceptable and useful finding here.**
+**VERIFIED against the live table (38 columns):** the row retains `entry_price`, `exit_price`, `stop_price`, `target_price`, `opened_at`, `closed_at`, `holding_ms` and `close_reason`, alongside the derived `gross_pnl` / `net_pnl` / `r_multiple`.
+⇒ ⛔ **THROW AWAY EVERY STORED DERIVED LABEL AND RECOMPUTE FROM THE PRIMITIVES, applying whatever fee model you choose.** This is Kyle's gross-not-net instruction applied one level up, and it is the single most useful thing you can do with this corpus. **A stored `net_pnl` here is not a net figure; it is a gross figure wearing the wrong column name.**
+
+### ⛔ THE CUT — use this design, not a naive comparison
+
+**WITHIN-CYCLE PAIRED.** Use `rtb_shadow_pool_members`, which — unlike the pairings table — is **deliberately NOT deduped** and records rank and promotion **per cycle**. Compare **rank 0 against ranks 1..N inside the SAME `cycle_key`.**
+✅ **This neutralises two confounds by construction:** every member of one cycle was **equally eligible at the same instant**, which removes both the symbol-state effect *(a traded symbol is excluded from later pools while a rejected one re-enters)* and any regime or timing drift.
+⛔ **RESTRICT to members whose shadow first appeared at THAT cycle** — the shadow opens at a signal's first appearance, so a candidate promoted at cycle 8 carries a cycle-1 entry price. **That price-basis freeze is the real residual defect, and subsetting is what removes it.**
+⛔ **SPLIT, NEVER POOL:** the ranker's sort **changed on 2026-06-30**, so rank means a different thing either side. The **6-hour hold-ceiling era is its own arm** and is never pooled with the 48-hour era — the 6h ceiling truncated **27.3% of shadow closes (10,804 of 39,641)**.
+⛔ **PUBLISH THE SUBSET `n` BEFORE THE RESULT.** After these restrictions the usable sample may be small; we would rather know that first.
+⚠️ **STILL NAMED AS A POPULATION LIMIT ON EITHER READING:** nothing is captured when the system is at capacity or warming up, so **busy periods are absent by construction, not by chance.**
 
 ⚠️ **PRE-ORDER-BOOK-FIX PAPER DATA SHIPS LABELLED AND SEPARATED.** Never blended into a headline number. Report it as a **labelled sensitivity arm**, and require the primary and the sensitivity to agree in **sign** — silently excluding it is its own bias.
 
-⚠️ **THERE IS NO EPOCH MARKER ON THE TRADE ROWS.** *(My earlier claim that there was is withdrawn.)* You **cannot** split the export by one. Instead the provenance sheet ships an explicit **table of UTC boundary instants per source and asset class**. **There are several, not one** — the order-book fix, the metrics reset, and three later changes to cost accounting and pricing. **A window straddling any of them is two populations.** ⛔ **Do not date a boundary from a row's `updated_at`; those are known stale by months.**
+### ⛔⛔ THE FEE HISTORY — MEASURED, AND THE CONTAMINATION IS NOT WHERE ANYONE EXPECTED
+
+⭐ **THE RATES CHANGED ONCE, NOT REPEATEDLY.** `spot_taker_fee 0.008` / `spot_maker_fee 0.004`, both classes, written **2026-06-10 21:50:44Z** and untouched since. Before that, 0.26%/0.16% hardcoded in three copies.
+⇒ ⛔⛔ **WHAT CHANGED REPEATEDLY IS *WHICH LEGS GET CHARGED WHICH RATE*, AND THAT IS THE WORSE CONTAMINATION — because the RATE is identical across the boundary, it is INVISIBLE in any per-row fee number.** Charging-rule boundaries:
+| from | rule |
+|---|---|
+| → 2026-06-10 | taker on both legs @ 0.26%, hardcoded |
+| **2026-06-10 21:50Z** | taker on both legs @ 0.80%, database-governed |
+| **2026-07-01/02** | maker **activated** — the entry leg may now be 0.40% |
+| **2026-09-02 08:49:47Z** | the passive system starts charging the maker entry leg at all three write paths |
+| **not yet** | a 0.05%-per-leg slippage constant is **welded into every friction number to date** and has not been separated |
+
+⛔ **THERE IS NO PER-ROW ERA KEY ANYWHERE.** Measured: **0** columns matching `%epoch%` across the whole schema, against a positive control of **22** `%fee%` columns over 7,752. ⇒ **the date table is not a convenience, it is the ONLY join available.**
+⛔ **AND THE OBVIOUS DATE SOURCE IS UNSOUND.** At least one migration sets a constant's value and author but **not its `updated_at`** — a live row right now reads a **September author against a June timestamp.** Migration *filenames* are not write times either. ⇒ **Boundaries are built from deploy times in the batch records, and where we only have the day, the brief states an INTERVAL rather than an instant.**
+⚠️ **`calibration_epoch` values are NOT comparable across classes** — the passive crypto and xStock scopes carry different integers for reasons unrelated to time.
+⇒ ⛔⛔ **AND THE DEEPEST CONSEQUENCE, which Kyle identified and which applies to EVERY corpus: THE NET-EV GATE THAT DECIDED WHAT GOT TRADED WAS ITSELF COMPUTED FROM THESE CHANGING RULES.** So it is not only the outcomes that carry a stale fee model — **it is the SELECTION.** A candidate rejected in July for negative net expected value might pass today. ⇒ **"what we traded" is not a stable population across the window. Report per fee-era as well as pooled, and never treat the pooled population as one thing.**
 
 ---
 
@@ -158,6 +183,9 @@ You cannot assess whether a strategy can work without the constraints it operate
 One document, as before. Header check first; then the **positive enumeration of what you read, by path**; then the numbered audit findings; then the proposals, each naming its findings.
 
 ⛔ **THE OUTPUT IS BOUND BY THE SAME SHAPE AS THE INPUT** *(Langston's condition)*: **every number names its object, its population and its denominator. Every zero or absence carries a positive control** stating what the instrument would have returned had the thing been present. **Twenty pages of confident absences is the outcome we most want to avoid.**
+
+⭐⭐ **AND KYLE'S STANDING INSTRUCTION ON THE DATA, which supersedes any export we might have pre-designed: TELL US WHAT YOU NEED.**
+We are **not** pre-baking a perfect export, because — as the section above shows — **we can only partially date our own data.** What exists and what state it is in is described here **including its defects, as defects**. ✅ **If you need something rawer, with fewer of our calculations already applied, ASK FOR IT.** Kyle's words: the Codex may tell us what it needs instead. **A request for cleaner primitives is a good outcome, not a failure of the brief.**
 
 **Questions go to `QUESTIONS.md` as before** — numbered, each stating what you would do differently depending on the answer. **Do not block; record the assumption you proceeded under.**
 
