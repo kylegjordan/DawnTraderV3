@@ -4,7 +4,11 @@
 # N2 (in-body dates are per-record; pad minute-precision), N3 (coverage line),
 # N4 (dedupe carries recurrence), C3 ruling (cross-corpus id caution, exact predicate),
 # slot ruling (4-tier deprioritise-never-exclude, self-output = exact marker match).
-# Pull-only by construction: writes ONLY under /opt/langston-memory/index/.
+# Pull-only by construction: writes ONLY under /opt/langston-memory/ —
+#   index/ (the corpus index) and usage/ (P-7's own usage log, added 2026-09-05).
+# ⛔ The usage log was deliberately NOT put in /var/log: this line said the tool
+#   writes only under its own ROOT, and an instrument that falsifies the
+#   invariant it is installed to measure is worse than no instrument.
 
 import json, os, re, sys, glob, datetime, hashlib
 
@@ -32,6 +36,55 @@ SELF_MARKERS = ("=== langston-recall:", FOOTER)   # exact self-generated output 
 
 def now_utc():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+# ---------------- P-7 usage instrument (B-LANGSTON-CONTEXT, 2026-09-05) -------
+# WHY IT EXISTS: F-4 — "does Langston actually use recall?" — was unprovable
+# because NO instrument existed. The per-invoke byte log next door stats the
+# always-loaded FILES and says so in its own `measures` field; it observes
+# nothing about this tool. So the count had to come from somewhere, and the
+# right somewhere is the tool itself: it already knows its own hit counts, so
+# nothing outside has to infer them from parsing its output.
+#
+# ⛔ WHAT A ROW DOES AND DOES NOT PROVE — stated in every row, not just here:
+#    it records that recall was REACHED FOR and what it RETURNED. It cannot see
+#    whether the caller then used the answer. Do not read a row as "this
+#    informed a ruling"; read it as "the tool was asked."
+#
+# ★ THE REFUSAL PATHS ARE INSTRUMENTED TOO, AND THAT IS THE POINT. A refusal is
+#   a reach that produced nothing, which is exactly the difference between
+#   NOT USED and NOT REACHABLE — the distinction P-7 exists to make. A silent
+#   refusal would read, afterwards, as though nobody had asked.
+USAGE_LOG = os.path.join(ROOT, "usage", "recall-usage.jsonl")
+
+
+def _caller():
+    """Best-effort identity of whatever invoked us — separates a human reach for
+    recall from the nightly index timer. Never raises; returns a string always."""
+    try:
+        with open("/proc/%d/cmdline" % os.getppid(), "rb") as fh:
+            return fh.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()[:200] or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _usage(outcome, **kw):
+    """FAIL-OPEN BY CONSTRUCTION: the entire body sits inside one bare except, so
+    any fault of any kind — unwritable path, full disk, bad JSON — leaves recall's
+    behaviour and exit code untouched. An instrument that can break the thing it
+    measures is not an instrument, it is a new failure mode."""
+    try:
+        row = {"ts": now_utc(), "outcome": outcome, "caller": _caller(),
+               "argv": sys.argv[1:][:20],
+               "measures": ("one row per invocation, written by the tool itself: counts "
+                            "REACHES and RESULTS, NOT whether the answer was used"),
+               "population": "every invocation of langston_memory.py, success or refusal"}
+        row.update(kw)
+        os.makedirs(os.path.dirname(USAGE_LOG), exist_ok=True)
+        with open(USAGE_LOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
 
 def rec(ts, cls, ref, text, ts_quality="exact"):
     if not ts or not text or not str(text).strip():
@@ -231,6 +284,7 @@ def build_index():
     with open(META + ".tmp", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
     os.replace(META + ".tmp", META)
+    _usage("index", index_total=len(deduped), duplicates_removed=dupes, counts=counts)
     print(json.dumps(meta, indent=2))
 
 # ---------------- ledger overlay ----------------
@@ -277,6 +331,7 @@ def freshness(meta):
 
 def query(terms):
     if not os.path.isfile(INDEX) or not os.path.isfile(META):
+        _usage("refused", reason="index-not-built")
         print("REFUSED: index not built. Run: langston-recall index"); sys.exit(2)
     meta = json.load(open(META))
     problems = []
@@ -290,6 +345,7 @@ def query(terms):
         if sh["required"] and unreadable:
             problems.append(f"{sh['name']}: {len(unreadable)} unreadable file(s), e.g. {unreadable[0]}")
     if problems:
+        _usage("refused", reason="corpus-degraded", problems=problems[:10])
         print("REFUSED: corpus degraded — results would be silently partial: " + "; ".join(problems))
         sys.exit(2)
 
@@ -297,6 +353,7 @@ def query(terms):
     if not retr:
         print("REFUSED: no parseable Reviewer Ledger found (checked: " + ", ".join(LEDGER_SOURCES) + "). "
               "Recall without the retraction overlay is a machine for re-asserting withdrawn conclusions.")
+        _usage("refused", reason="no-parseable-ledger", ledger_sources=LEDGER_SOURCES)
         sys.exit(2)
 
     built, newer_rows, newer_files = freshness(meta)
@@ -413,6 +470,15 @@ def query(terms):
         only_classes = {cls for (_, cls) in classes}
         mirror = "  ⚠ ALL hits are one class — you are holding a mirror, not the record" if len(only_classes) == 1 and len(shown) > 1 else ""
         print(f"CLASS MIX (tier order t0 posted/dispatch/crew → t1 archives → t2 tool-evidence → t3 self-output): {mix}{mirror}")
+    _usage("query",
+           terms=[str(t) for t in terms][:20],
+           hits_shown=len(shown),
+           hits_not_shown=len(not_shown),
+           class_mix={"t%d/%s" % (tier, cls): n for (tier, cls), n in sorted(classes.items())},
+           ledger_source=lsrc,
+           retractions_loaded=len(retr),
+           index_built_at=meta.get("built_at"),
+           index_total=meta.get("total"))
     print("---")
     print(FOOTER)
 

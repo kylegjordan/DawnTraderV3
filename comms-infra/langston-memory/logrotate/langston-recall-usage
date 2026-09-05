@@ -1,0 +1,25 @@
+# B-LANGSTON-CONTEXT P-7 — rotation for the recall usage log.
+# Matched DELIBERATELY to /etc/logrotate.d/langston-instructions-loaded, its sibling
+# instrument, so the two observability logs age the same way rather than each carrying
+# a different half-remembered policy.
+# ⛔ IT EXISTS BECAUSE THIS BATCH IS ABOUT UNBOUNDED APPEND-ONLY GROWTH. Shipping a new
+#    append-only artifact with no eviction rule would rebuild, in the instrument, the
+#    exact failure the batch was opened to fix.
+# copytruncate: the writer opens and closes per row, so `create` would also work — but
+#    copytruncate preserves the inode and therefore the langston:langston ownership.
+# ⛔⛔ `su` IS LOAD-BEARING, NOT BOILERPLATE — MEASURED 2026-09-05. Without it logrotate
+#    REFUSES this file outright: "parent directory has insecure permissions". The usage
+#    directory is created by the tool under langston's umask, so it is group-writable,
+#    and logrotate will not rotate into a directory it does not consider safe.
+# ★ IT FAILED SILENTLY IN THE SENSE THAT MATTERS: the config was valid, the file was
+#    installed, and NOTHING would ever have rotated. A rotation rule that never runs
+#    reads as coverage and provides none. Caught only by FORCING a rotation and looking
+#    at the result, not by installing the config and assuming.
+/opt/langston-memory/usage/recall-usage.jsonl {
+    su langston langston
+    weekly
+    rotate 8
+    compress
+    notifempty
+    copytruncate
+}
