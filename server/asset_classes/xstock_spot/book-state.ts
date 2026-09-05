@@ -201,8 +201,29 @@ export function assessBookState(input: BookStateInput, cfg: BookStateConfig): Bo
     cfg.kRel * (trailing ?? ((priorAsk - priorBid) / priorMid)),
     cfg.floorPct / 100,
   );
-  const bidDep = (priorMid - bid) / priorMid;          // positive when the bid fell away
-  const askDep = (ask - priorMid) / priorMid;          // positive when the ask spiked away
+  // ⛔⛔ D1 FIX 2026-09-05 — MEASURED AGAINST THEIR OWN PRIOR SIDE, NOT AGAINST THE MID.
+  //
+  // WAS: `bidDep = (priorMid - bid) / priorMid`. That is the bid's distance from the MIDPOINT,
+  // which on a wide book is ~half the spread FOREVER, however still the bid is. ⇒ a book that
+  // has simply been wide all night reads as "the bid collapsed" on EVERY frame, permanently.
+  //
+  // ⭐ MEASURED LIVE, and the evidence is as strong as evidence gets — the frames were
+  // BYTE-IDENTICAL: SLV/USD `{"bid":55,"priorBid":55,"ask":63.5,"priorAsk":63.5,"priorMid":59.25}`
+  // with `bidDepartureFrac = 0.0717` against a threshold of `0.01`. THE BID HAD NOT MOVED A CENT
+  // and the predicate fired anyway, 60 times in 91 seconds, then yielded — and repeated all night.
+  // (2026-09-05T00:15Z, the weekly shutdown; four symbols; Langston flagged it, I re-derived it.)
+  //
+  // ★ A DEPARTURE IS A CHANGE, SO IT IS MEASURED AGAINST WHAT THE THING WAS — not against a
+  // different quantity that happens to sit nearby. The discriminator was already computed three
+  // lines below and unused on this arm: `bidHeld` was TRUE on every one of those frames.
+  //
+  // ⚠️ WHAT THIS DOES **NOT** FIX, STATED SO IT IS NOT ASSUMED: a book that was ALREADY wide when
+  // the comparator was seeded now reads `two_sided` rather than falsely `hollow`. That is honest —
+  // relative to its own history nothing has changed — but it means the RELATIVE test structurally
+  // cannot see a book that was broken before we started looking. Catching that needs an ABSOLUTE
+  // plausibility test, which changes exit behaviour and is therefore a separate, gated decision.
+  const bidDep = (priorBid - bid) / priorBid;          // positive when the bid fell FROM WHERE IT WAS
+  const askDep = (ask - priorAsk) / priorAsk;          // positive when the ask spiked FROM WHERE IT WAS
   const askHeld = Math.abs(ask - priorAsk) / priorAsk <= cfg.otherSideHoldPct / 100;
   const bidHeld = Math.abs(bid - priorBid) / priorBid <= cfg.otherSideHoldPct / 100;
   // `last` held: vacuously true when either print is absent — an absent print cannot disprove a

@@ -101,11 +101,19 @@ describe('B-XSTOCK-FEED-SANITY — every threshold is mutation-proved (one bound
     expect(assessBookState(f, CFG).state).toBe('hollow');
     expect(assessBookState(f, { ...CFG, floorPct: 2.0 }).state).toBe('two_sided');
   });
-  it('k_rel: with a 0.5 % trailing spread, a 1.2 % drop is hollow at k=2 (1.0 %) and two_sided at k=3 (1.5 %)', () => {
+  it('k_rel: with a 0.5 % trailing spread, a 1.2 % BID drop is hollow at k=2 (1.0 %) and two_sided at k=3 (1.5 %)', () => {
+    // ⚠️ FIXTURE RE-DERIVED 2026-09-05 WITH THE D1 FIX, AND THE INTENT IS UNCHANGED — this is a
+    // BOUNDARY test for `k_rel` and it still straddles the boundary. What moved is the arithmetic:
+    // the old fixture's "1.2 % drop" was the bid's distance from the prior MID (100.05 → 98.85),
+    // while the bid itself had only moved 0.95 % (99.8 → 98.85). Under the corrected predicate a
+    // departure is measured against the bid's OWN prior value, so the fixture now drops the bid by
+    // the 1.2 % the test claims: 99.8 × (1 − 0.012) = 98.6024.
+    // ⛔ THE ASSERTION IS NOT WEAKENED — same two knob values, same two expected verdicts. Had the
+    // fix been wrong, no restatement of this fixture could have made both lines pass.
     const wide = { bid: 99.8, ask: 100.3, last: 100.05 }; // 0.5 % spread on mid 100.05
-    const f = frame({ bid: 98.85, ask: 100.3, last: 100.05 }, wide);
-    expect(assessBookState(f, { ...CFG, kRel: 2 }).state).toBe('hollow');
-    expect(assessBookState(f, { ...CFG, kRel: 3 }).state).toBe('two_sided');
+    const f = frame({ bid: 98.6024, ask: 100.3, last: 100.05 }, wide); // bid −1.2 % from 99.8
+    expect(assessBookState(f, { ...CFG, kRel: 2 }).state).toBe('hollow');    // threshold 1.0 %
+    expect(assessBookState(f, { ...CFG, kRel: 3 }).state).toBe('two_sided'); // threshold 1.5 %
   });
   it('other_side_hold_pct: an ask that moved 0.4 % is "held" at 0.5 % (hollow) and not at 0.3 % (two_sided)', () => {
     const f = frame({ bid: 94.0, ask: 100.5, last: 100.05 }, prior); // ask moved +0.4 % vs prior ask 100.1
@@ -321,5 +329,105 @@ describe('B-XSTOCK-FEED-SANITY — a bad seed cannot latch (behavioural)', () =>
     const reseeded = readBookStateComparator('VV/USD')!;
     expect(reseeded.validated).toBe(false);
     expect(reseeded.seededAtMs).toBe(4_000);
+  });
+});
+
+
+describe('B-XSTOCK-FEED-SANITY — D1: a STATIC WIDE BOOK IS NOT A COLLAPSED BID (live defect, 2026-09-05)', () => {
+  // ⚠️⚠️ THIS FIXTURE IS BUILT BY HAND RATHER THAN VIA `frame()`, AND THE REASON IS THAT MY FIRST
+  // VERSION OF THESE TESTS PROVED NOTHING. `frame()` derives `trailingMedianSpreadFrac` from the
+  // PRIOR frame, so on a wide book it produced a 43 % threshold — under which the old, defective
+  // formula ALSO returned `two_sided`, and the mutation (restore the mid-based departure) stayed
+  // GREEN on all 40 tests. ⇒ The live condition is the opposite and is what makes the defect bite:
+  // the trailing median was TIGHT (the book had been tight all day, `departureThresholdFrac: 0.01`
+  // in the live log = the 1 % FLOOR), and the book then went WIDE. Only that combination
+  // discriminates. A fixture that cannot fail on the broken code is not a fence.
+  const SLV_TRAILING_TIGHT = 0.0024; // the book's own median spread before it widened
+  function liveWideFrame(bid: number, ask: number, last: number) {
+    return {
+      bid, ask, last,
+      priorTwoSidedMid: (bid + ask) / 2,   // seeded from THIS same wide frame — D2's shape
+      priorBid: bid, priorAsk: ask, priorLast: last,  // byte-identical, per the live log
+      trailingMedianSpreadFrac: SLV_TRAILING_TIGHT,
+    };
+  }
+
+  it('⛔⛔ THE EXACT LIVE FRAME: byte-identical prior and current, reads two_sided rather than "bid collapsed"', () => {
+    // SLV/USD at the weekly shutdown, from the guard's own log, verbatim:
+    //   {"bid":55,"ask":63.5,"last":59.87,"priorMid":59.25,"priorBid":55,"priorAsk":63.5,
+    //    "priorLast":59.87,"departureThresholdFrac":0.01,"bidDepartureFrac":0.0717299578}
+    // THE BID HAD NOT MOVED A CENT. The old predicate measured it against the MID — permanently
+    // ~half a spread away on a wide book — and fired `bid_collapsed` 60 times in 91 seconds,
+    // then yielded, then re-seeded and did it again, all night, on four symbols.
+    const r = assessBookState(liveWideFrame(55, 63.5, 59.87), CFG);
+    expect(r.state).toBe('two_sided');
+    expect(r.reasons).not.toContain('bid_collapsed');
+  });
+
+  it('and the same on the other three names that fired that night', () => {
+    for (const [bid, ask, last] of [[80.01, 105, 85.95], [11.7, 12.6, 12.36], [122.0, 132.1, 127.05]] as const) {
+      const r = assessBookState(liveWideFrame(bid, ask, last), CFG);
+      expect(r.state).toBe('two_sided');
+      expect(r.reasons).not.toContain('bid_collapsed');
+    }
+  });
+
+  it('⭐ AND THE DEFECT IS REPRODUCED ON THE OLD ARITHMETIC, so the fixture is proved able to fail', () => {
+    // The mutation control, written into the suite rather than run by hand once: the OLD quantity
+    // computed inline on this exact fixture clears the threshold, which is why it fired live.
+    const priorMid = (55 + 63.5) / 2;
+    const oldBidDep = (priorMid - 55) / priorMid;
+    const newBidDep = (55 - 55) / 55;
+    const threshold = Math.max(CFG.kRel * SLV_TRAILING_TIGHT, CFG.floorPct / 100);
+    expect(threshold).toBeCloseTo(0.01, 6);       // the live `departureThresholdFrac`
+    expect(oldBidDep).toBeGreaterThan(threshold);  // ⇒ old formula: FIRES
+    expect(oldBidDep).toBeCloseTo(0.0717, 4);      // and matches the live `bidDepartureFrac`
+    expect(newBidDep).toBeLessThan(threshold);     // ⇒ new formula: does not
+  });
+
+  it('⭐ THE OTHER ARM: on a NORMAL book a real bid collapse is still caught — the fix does not disarm the guard', () => {
+    // Essential, and it must be on a TIGHT book: without this, "refuses everything" and
+    // "detects nothing" both pass the tests above.
+    const prior = { bid: 100.0, ask: 100.1, last: 100.05 }; // 0.1 % spread ⇒ threshold = floor 1 %
+    const r = assessBookState(frame({ bid: 97.0, ask: 100.1, last: 100.05 }, prior), CFG);
+    expect(r.state).toBe('hollow');
+    expect(r.reasons).toContain('bid_collapsed');
+  });
+
+  it('⛔⛔ AND THE FINDING THE FIX EXPOSED: ON A WIDE BOOK THE THRESHOLD IS SO LARGE THE RELATIVE GUARD IS INERT', () => {
+    // ⚠️ MY FIRST VERSION OF THIS TEST ASSERTED THE OPPOSITE AND FAILED — I expected a 5 % bid
+    // drop on the SLV book to be caught. It is not, and the CODE IS RIGHT: the threshold is
+    // `max(kRel × trailingSpread, floorPct)` = max(3 × 0.14346, 0.01) = 0.4304. ⇒ ON A BOOK THAT
+    // IS 14.3 % WIDE, THE BID MUST FALL 43 % BEFORE THE GUARD CALLS IT A DEPARTURE.
+    //
+    // ★★ THIS IS THE SHARPEST STATEMENT OF THE DEFECT, AND IT IS WORSE THAN "the reason was
+    // mislabelled": the old formula was firing on these books ONLY through the mid-offset
+    // artifact — i.e. it produced roughly the right BEHAVIOUR (withhold on a wide book) through a
+    // mechanism that had nothing to do with the question. Correcting the formula reveals that the
+    // INTENDED mechanism could never have policed these books at all.
+    // ⇒ Catching a book that was ALREADY broken needs an ABSOLUTE plausibility test. That changes
+    // exit behaviour, so it is a separate gated decision — recorded here so the gap is visible in
+    // the fence rather than only in a report.
+    const prior = { bid: 55, ask: 63.5, last: 59.87 };          // 14.346 % wide
+    const threshold = Math.max(CFG.kRel * ((63.5 - 55) / 59.25), CFG.floorPct / 100);
+    expect(threshold).toBeCloseTo(0.4304, 4);
+
+    const drop5pct = assessBookState(frame({ bid: 52.25, ask: 63.5, last: 59.87 }, prior), CFG);
+    expect(drop5pct.state).toBe('two_sided');                    // 5 % is nowhere near 43 %
+
+    const drop50pct = assessBookState(frame({ bid: 27.5, ask: 63.5, last: 59.87 }, prior), CFG);
+    expect(drop50pct.state).toBe('hollow');                      // 50 % clears it — the arm DOES work
+    expect(drop50pct.reasons).toContain('bid_collapsed');
+  });
+
+  it('⭐ the ASK arm on a wide book is caught by mark_deviation FIRST, which is correct precedence', () => {
+    // ⚠️ ALSO NOT WHAT I FIRST ASSERTED. An ask spike 63.5 → 70 moves the mid 59.25 → 62.5, a
+    // 5.5 % move against `ownMarkDeviationDPct = 5`, so the MID arm fires before the single-side
+    // arm is reached. The book IS caught — by a different, absolute-ish test — and the reason is
+    // accurate. Recorded rather than "fixed": the precedence is the design.
+    const prior = { bid: 55, ask: 63.5, last: 59.87 };
+    const r = assessBookState(frame({ bid: 55, ask: 70.0, last: 59.87 }, prior), CFG);
+    expect(r.state).toBe('hollow');
+    expect(r.reasons).toContain('mark_deviation');
   });
 });

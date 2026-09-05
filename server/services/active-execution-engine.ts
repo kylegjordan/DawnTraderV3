@@ -1355,6 +1355,11 @@ export class ActiveExecutionEngine {
               // (the re-cut selects `exit_book_state IS NULL`; Langston Step-4 BLOCKER-2).
             } else {
               const { result: _r, cfg: _c, raw: _raw } = _bs;
+              // ⛔ D3 (2026-09-05) — THE CONSUMER `validated` NEVER HAD. Carried onto every
+              // BOOK_STATE line below so a `two_sided` verdict from a comparator that was never
+              // validated can be told apart from a trusted one when this batch's window is graded.
+              // ⚠️ It changes NO verdict — see the field's docstring. It stops the label lying.
+              const _cmpV = `validated=${_bs.comparatorValidated ?? 'none'} framesSinceSeed=${_bs.comparatorFramesSinceSeed ?? 'none'}`;
               const _streak = this._bookStateSkipStreak.get(position.id) ?? 0;
               if (_r.state === 'hollow') {
                 const _next = _streak + 1;
@@ -1373,7 +1378,7 @@ export class ActiveExecutionEngine {
                   bookStateAtDecision = 'hollow';
                   bookStateYielded = true;
                   hollowYields++;
-                  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} YIELD after ${_next} hollow ticks (cap ${_c.hollowSkipCap}) reasons=${_r.reasons.join('|')} inputs=${_inputs}`);
+                  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} YIELD after ${_next} hollow ticks (cap ${_c.hollowSkipCap}) reasons=${_r.reasons.join('|')} ${_cmpV} inputs=${_inputs}`);
                   try {
                     const { addAlert } = await import('./system-alerts.js');
                     await addAlert({
@@ -1394,7 +1399,7 @@ export class ActiveExecutionEngine {
                   this._bookStateSkipStreak.set(position.id, _next);
                   hollowSkips++;
                   withoutPrice++;
-                  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} SKIP hollow streak=${_next}/${_c.hollowSkipCap} reasons=${_r.reasons.join('|')} inputs=${_inputs}`);
+                  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} SKIP hollow streak=${_next}/${_c.hollowSkipCap} reasons=${_r.reasons.join('|')} ${_cmpV} inputs=${_inputs}`);
                   await this._recordBookStateEvent(position, { kind: 'skip', streak: _next, reasons: _r.reasons, inputs: _r.inputs });
                   // ⛔ NO `updateCache` ON THIS BRANCH (Langston C1) — the same as the two skips above.
                   continue;

@@ -153,7 +153,32 @@ export function clearBookStateComparator(symbol: string, reason: string): void {
 }
 
 export type BookStateNow =
-  | { ok: true; result: BookStateResult; cfg: BookStateConfig; raw: EquityTickRaw }
+  | {
+      ok: true; result: BookStateResult; cfg: BookStateConfig; raw: EquityTickRaw;
+      /**
+       * ⛔⛔ D3 FIX 2026-09-05 — `validated` HAD ZERO CONSUMERS. IT IS NOW RETURNED, SO IT CAN
+       * HAVE ONE.
+       *
+       * The flag was written at the advance, printed in the CLEARED line, and READ BY NOTHING —
+       * a census repo-wide (tests excluded) found no reader at all. So the field this batch added
+       * to bound a bad seed changed no behaviour whatsoever. ★ The file's own docstring predicted
+       * it exactly: *"an unvalidated reference wearing a validated reference's label is `#546`."*
+       * I wrote that sentence, shipped the field, and never wired the consumer.
+       *
+       * ⚠️ WHAT THIS DOES AND DOES NOT DO, STATED SO IT IS NOT OVER-READ. It makes the fact
+       * READABLE and RECORDABLE — a `two_sided` verdict from a comparator that has never been
+       * validated by an independently-plausible frame can now be told apart from a trusted one,
+       * at the decision site and in the record. **It does NOT change any verdict.**
+       * ⛔ It CANNOT: the circularity is real — a comparator seeded from a hollow frame makes the
+       * next hollow frame read `two_sided`, and that verdict is what would validate it. Breaking
+       * that needs an ABSOLUTE plausibility test which no reference can supply, and that changes
+       * exit behaviour, so it is a separate gated decision. **This fix stops the field lying; it
+       * does not close the hole.**
+       */
+      comparatorValidated: boolean | null;
+      /** Frames since this comparator was seeded — `null` when there is no comparator. */
+      comparatorFramesSinceSeed: number | null;
+    }
   | { ok: false; reason: 'no_tick' | 'knobs_missing' | 'disabled'; cfg?: BookStateConfig; error?: string };
 
 /**
@@ -188,7 +213,11 @@ export function assessBookStateNow(symbol: string): BookStateNow {
     },
     cfg,
   );
-  return { ok: true, result, cfg, raw };
+  return {
+    ok: true, result, cfg, raw,
+    comparatorValidated: cmp ? cmp.validated : null,
+    comparatorFramesSinceSeed: cmp ? cmp.framesSinceSeed : null,
+  };
 }
 
 /** Test-only: reset every comparator. */
