@@ -548,3 +548,62 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
 **The WebSocket subscribes the union of the `openTrade`, `readyToBuy`, `fx5Snapshot` and `vtsSimulation` bucket memberships, at depth 10, tracked dynamically as buckets churn, with a subscribed-count ceiling that opens a second connection rather than dropping symbols.** `buildLevelBasis` then has a book at all three moments Kyle named — active birth, VTS birth, and RTB refresh — and the RTB refresh additionally re-reads the book so its re-ranking and its maker/taker re-decision run on current transactable prices rather than on an inherited birth number. ⛔ **Staged: ramp the subscribed set, watch CPU and event-loop lag, and let the funnel's `accepted` rate report the gain at each step — the arm is already live and already counting, so the ramp is self-measuring.**
 
 **Sources for the venue limits:** [Book (Level 2) — Kraken API](https://docs.kraken.com/api/docs/websocket-v2/book/) · [Orders (Level 3) — Kraken API](https://docs.kraken.com/api/docs/websocket-v2/level3/)
+
+---
+
+## 13. ⭐⭐⭐ THE PROVENANCE READ (Kyle-directed, 2026-09-05) — **THE STOREHOUSE ALREADY EXISTS, IT IS THE ORIGINAL ARCHITECTURE, AND ONE WRITER THROWS THE SIDES AWAY**
+
+**Kyle stopped the design work and directed a full provenance read: SIM, System Manual, batch reports, `bridge/canonical/`, and the pre-governance archive — *"we can't just go off of quick scans, quick looks, quick headlines."*** ⛔ **He was right to stop it. §12's design is SUPERSEDED by what the read found, and §12's binding constraint was also WRONG.**
+
+### ⛔ FIRST, A CORRECTION TO §12 — THE 200-SYMBOL CEILING IS **NOT** ESTABLISHED FOR THE BOOK CHANNEL
+**§12 asserted *"200 symbols per WebSocket connection"* as the constraint that shaped the whole design.** ⛔ **That figure is documented on Kraken's **LEVEL3** page — *"The total number of symbols per websocket connection is 200. A client can open multiple websockets connections to increase symbol coverage."*** ✅ **Re-fetched the BOOK page and asked directly: it states NO limit on symbols per connection, none at all.**
+⇒ ⛔ **I IMPORTED ONE CHANNEL'S CEILING ONTO ANOTHER — `wrong-object`, at the venue-documentation layer.** ⚠️ **The wording *"per websocket connection"* makes it PLAUSIBLE the limit is connection-wide and binds the book channel too — but plausible is not documented, and a design must not rest on my inference about someone else's API. ⇒ UNESTABLISHED. It is confirmed by asking Kraken or by an empirical ramp, not by reading it into the sentence.**
+✅ **What IS documented and stands: allowed book depths are `10, 25, 100, 500, 1000` — there is no depth-1 tier — and multiple connections are explicitly permitted.**
+
+### ⭐⭐ THE PROVENANCE FINDING: **KYLE'S "STOREHOUSE" IS NOT A NEW COMPONENT. IT IS THE ORIGINAL DESIGN, AND IT IS STILL THERE.**
+**`bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` §4.1, verbatim:**
+> **"The Price Cache is the SINGLE SOURCE OF TRUTH for all price data, consolidating multiple sources with rate limiting."**
+
+**And its documented shape is exactly what Kyle described this morning:**
+| the canonical design | today |
+|---|---|
+| **four buckets** — `openTrade` 2 s · `readyToBuy` 15 s · `fx5Snapshot` 30 s · `vtsSimulation` 60 s | ✅ **unchanged, `price-cache.ts:59-62`** |
+| **rate-governed** — 10 weighted req/s, 100-symbol batches, token bucket | ✅ still there |
+| **a source HIERARCHY** — WS primary, REST fallback, Binance, CoinGecko | ✅ still there |
+| ⭐ **`CachedPrice` CARRIES `ask` AND `bid`** | ✅ **still declared, `price-cache.ts:41-51`** |
+⇒ ★★ **THE ARCHITECTURE ALREADY IS "ONE STORE, MANY CONSUMERS, FED BY SEVERAL SOURCES." The four buckets ARE the four consumers Kyle named. Nothing needs inventing.** ⇒ **DISPOSITION (2) — RELEVANT BUT NEEDS UPDATING TO TODAY'S INTENT. Not (3), not a new build.**
+
+### ⛔⛔ AND HERE IS THE BREAK — **ONE HOP, AND THE STORE'S OWN WRITE METHOD CANNOT CARRY THE SIDES**
+| step | line | what happens |
+|---|---|---|
+| the venue sends bid, ask and mark on one frame | — | all three present |
+| the handler PARSES all three | `kraken-websocket-adapter.ts:684-685` — `const bid = parseFloat(safeData.b[0]); const ask = parseFloat(safeData.a[0]);` | ✅ **the sides are in hand** |
+| ⛔ **it writes only the mark** | `:1096` — `priceCache.updateFromWebSocket(internalSymbol, lastPrice)` | **bid and ask DROPPED** |
+| ⛔ **and the store COULD NOT take them anyway** | `price-cache.ts:402` — `updateFromWebSocket(symbol: string, price: number): void` | **there is no parameter for a side** |
+⇒ ⭐⭐ **THE SIDES ARE PARSED AND THROWN AWAY AT THE STORE BOUNDARY, ON THE HIGHEST-FREQUENCY WRITER, BECAUSE THE WRITE METHOD HAS NO SLOT FOR THEM.** ⇒ **the store's `bid`/`ask` are stale leftovers from the slower REST poll while its `price` updates continuously — and `lastUpdatedAt` therefore dates the MARK, not the SIDES (W-3).**
+✅ **AND THE SIM ALREADY SAYS SO, at `SYSTEM_IMPACT_MAP.md:348`: *"`price-cache.ts:402-416` sets `ask: existing?.ask ?? price` … And the `priceTick` emit DROPS bid/ask. The kind is decided where the price is built and carried."*** ⚠️ **So this was KNOWN and written down. What was missing is that nobody had connected it to level construction — the SIM records it as a provenance-of-kind problem, not as "the store cannot hold a transactable side."**
+
+### ⇒ WHAT THIS DOES TO THE DESIGN — **IT COLLAPSES IT**
+⛔ **§12 PROPOSED SUBSCRIBING THE FOUR BUCKET MEMBERSHIPS TO THE WEBSOCKET BOOK CHANNEL. THAT IS NOW THE WRONG SHAPE FOR THE PRIMARY FIX.**
+✅ **THE PRIMARY FIX IS ONE HOP: let the store hold the sides the venue already sends, and stamp them with their own capture time.** No new service, no new subscription, no new table, and it reaches **every one of the four buckets at once** — because they all read the same store.
+★ **AND IT ANSWERS KYLE'S SCANNER CHALLENGE, WHICH WAS CORRECT:** *"the scanner sweep… I don't know that we need order books right then and there."* ⇒ **Right. The scanner reads the Price Cache. If the store's sides are maintained, the scanner needs NO subscription of its own — the population it sweeps is already bucketed and already polled.**
+⚠️ **WHAT THE MINI-BOOK IS STILL FOR, so this is not read as replacing it: DEPTH.** The depth-10 book answers *"how much can I fill and at what average price"* — the fill simulation and the depth gate. **A top-of-book side is not a depth ladder.** ⇒ **two different jobs, two different sources, and the book stays exactly where it is for the hot set.**
+
+### ⛔ THE ASSET-CLASS ANSWER KYLE ASKED FOR — **THE TWO CLASSES ARE NOT SYMMETRIC, AND xSTOCK IS ALREADY AHEAD**
+| | crypto | xStock |
+|---|---|---|
+| live top-of-book | in-memory WS mini-book, **hot set only** | — |
+| **durable tick archive** | ⛔ **none** | ✅ **`xstock_spot_ticker_snap`** — append-only, index-served `(symbol, captured_at DESC)` |
+| **durable derived spread + depth** | ⛔ **none** | ⭐ **`xstock_qd_probe_history`** — every ~5 min, per symbol, spread + top-of-book depth + freshness |
+| bar archive | `ohlc-cache` (REST candles) | `xstock_spot_ohlc_1m` → aggregator → 15m/60m snapshot tables |
+⭐⭐ **AND THE ONE THAT MATTERS MOST: `xstock_qd_probe_history` IS LIVE, LIVE-VERIFIED AT 486 ROWS PER FIRE ACROSS A 490-SYMBOL UNIVERSE, RETAINED 90 DAYS — AND IT IS `CAPTURE-ONLY`. NOTHING CONSUMES IT.** *(SIM `:2422-2424`; the only readers repo-wide are the probe itself, its metrics module, `index.ts` and the B75 retention sweep.)* ⇒ **a top-of-book spread/depth storehouse for xStock already exists, was built for exactly this class of question, and its consumer was homed to B81/Phase-25 and never built.**
+⇒ ⛔ **SO THE HONEST ASSET-CLASS ANSWER: the level-basis problem is a CRYPTO problem. xStock's levels come from venue bar closes (census §6), and where xStock needs spread/depth evidence it already has a 90-day store that nobody reads.**
+
+### ⛔ THE STORAGE QUESTION — **THE PRIMARY FIX NEEDS NO NEW STORAGE, AND THE POLICY ALREADY EXISTS FOR THE REST**
+**The Price Cache is IN-MEMORY and that is correct for a hot store** — it answers *"what is the price now"*, not *"what was it last Tuesday"*. ⇒ **holding the sides there adds no rows and no retention obligation.**
+✅ **Where durable capture IS wanted, the machinery is built and governed: the B75 retention sweep, per-table `data_lifecycle.<table>.hot_retention_days`, hot/warm/cold tiers and a move-not-delete path, with `1-system-manual/STORAGE_POLICY.md` as the canonical statement.** ⇒ **`xstock_qd_probe_history` already runs on it at 90 days.** ⛔ **A crypto equivalent would inherit that policy rather than invent one — and it is a SEPARATE question from the primary fix, not a precondition of it.**
+
+### ⇒ WHAT I AM PUTTING TO LANGSTON NOW, AND WHAT I AM NOT
+✅ **PROPOSED (primary):** widen the store's write path so the venue's bid and ask reach `CachedPrice` with their own capture stamp, and have `buildLevelBasis` read the store rather than the mini-book. **One hop, reaches all four consumers, no new component.**
+⛔ **NOT PROPOSED ANY MORE:** §12's four-bucket book subscription. **It solved a problem that turns out to be a dropped parameter.**
+⚠️ **STILL OPEN AND HONESTLY UNMEASURED:** (a) whether REST-poll cadence (2/15/30/60 s) is fresh enough for a LEVEL — that is `3b.f-c`'s subject and the reason `maxAgeMs` is already a required parameter; ✅ **(b) RESOLVED WHILE WRITING THIS, at `kraken-v2-translator.ts:78-80`: `a: [String(ask)]`, `b: [String(bid)]`, `c: [String(markPrice)]`.** ⇒ **ONLY `c` is the substituted field. The sides are the venue's own values, untouched by `#952`.** ★ **So the honest transactable prices have been arriving on every ticker frame the whole time, beside the one field we overwrote — and the store simply had nowhere to put them.** (c) the crypto durable-capture question, deferred, inheriting `STORAGE_POLICY`.
