@@ -1,10 +1,12 @@
-# DAWNTRADER V3 — CODEX ADVISOR, ASSIGNMENT 2: THE TRADING LOGIC, THE MATHS, AND WHAT TO BUILD (r1)
+# DAWNTRADER V3 — CODEX ADVISOR, ASSIGNMENT 2: THE TRADING LOGIC, THE MATHS, AND WHAT TO BUILD (r2)
 
 **Written by:** Claude New (CC-B), 2026-09-05, at Kyle's direction, after Langston's design review.
 **Your standing is unchanged: ADVISOR, not a gate.** Langston's review gates are untouched and Kyle remains the sole decider. Nothing waits on you.
 **Read `CODEX_AUDIT_BRIEF.md` first** — the workspace rules, the two paths, the crew mirror, the evidence standard and the three-valued ledger check all carry over and are **not** repeated here.
 
-> ⛔ **THE COMMIT: `<PIN>`** — the audit clone will be re-pinned before this starts and the sha written here. **Run `git rev-parse HEAD` and `git status --porcelain` and put both at the top of your deliverable**, as before.
+> ⛔ **THE COMMIT: `c7f18c5c7291b14a21a654ca3a35625c0533ca38`** — the audit clone `C:\DawnTrader-Audit` is re-pinned there, detached, clean, push-disabled.
+> **Run `git rev-parse HEAD` and `git status --porcelain` and put both at the top of your deliverable**, as before.
+> *(r2, Langston's condition 3: this sha was verified PRESENT AT ORIGIN before being written here — `git ls-remote` names it as a remote ref tip. A `rev-parse HEAD` on a rebased clone can name an object that does not exist upstream, and we ate exactly that on another batch last week. The clone now fetches from GitHub directly rather than through another clone, so its provenance is the review branch itself.)*
 
 ---
 
@@ -39,10 +41,16 @@ He believes we may have built something that cannot work, and he wants an outsid
 You cannot assess whether a strategy can work without the constraints it operates under. Establish each **from the code and the data**, not from this brief:
 
 1. **Two asset classes** — crypto and xStocks — with different venues, hours, tick behaviour and liquidity.
-2. **The fee schedule.** ⛔ **Do not take the headline numbers from any document, including this one.** Part 1's fee question is a **measurement** question: derive the **realized per-trade friction** from the trade records. We have an honest fill model now; use what actually happened.
+2. ⛔⛔ **THE FEE QUESTION IS TWO OBJECTS AND THEY MUST NOT BE COLLAPSED.** *(r2, Langston BLOCKER-1 — r1 asked for one measurement that the instrument cannot reach, on the one question this whole assignment turns on.)*
+   - **(a) THE SCHEDULE is a MECHANISM READ.** The venue's published ladder, and **the line of our code that implements it.** Cite both. ⛔ **Do not take it from any document, including this one.**
+   - **(b) THE REALIZED FRICTION is a MODEL OUTPUT and must be labelled as one.** ⛔ **We have ZERO live fills.** Friction derived from our trade records measures **what our fee model produced**, not what the venue charged. **If the implemented tier is wrong, that measurement reproduces the error with a confident denominator and a clean-looking population** — the exact shape §5 bans, one section earlier.
+   - **(c) ⭐ THE DIVERGENCE BETWEEN (a) AND (b) IS ITSELF A FINDING, and possibly the most valuable one in Part 1.** If the ladder we implement is not the ladder the venue publishes, every expected-value number in the system is wrong by that amount and nothing downstream could tell.
+   ⇒ **Report (a) and (b) separately, always. A single "friction is X" is not an acceptable answer** — it would have no way to be wrong.
 3. **The regime categories, their numeric RANGES, and the strategy routing those ranges imply.** Which regime a pair is judged to be in decides which strategies may run on it. **That mapping is a design decision we made and have never had audited by anyone outside it.**
 4. **Long-only.** No shorting. Every proposal must respect it.
-5. **The risk envelope** — kill-switch, daily-loss budget, position sizing, concurrency caps. **These are hard boundaries, never dials.** A proposal that needs them loosened is refused on sight; say so rather than assuming.
+5. **The risk envelope** — kill-switch, daily-loss budget, position sizing, concurrency caps. **These are hard boundaries set by Kyle, never dials, and no proposal may quietly assume one moved.**
+   ✅ **BUT A PROPOSAL THAT NEEDS ONE RELAXED IS NOT DISCARDED — IT IS QUARANTINED.** *(r2, Langston condition 1, correcting me: r1 said "refused on sight", which contradicts §8. "Your risk envelope is what makes this horizon unprofitable" IS the well-evidenced no that §8 calls the most valuable outcome available — and r1 would have discarded it unread.)*
+   ⇒ **Say it in the proposal's first line, and put the proposal in a SEPARATE SECTION ADDRESSED TO KYLE.** The default set stays clean, the boundary stays his, **and the information still reaches him.**
 
 ---
 
@@ -59,7 +67,18 @@ You cannot assess whether a strategy can work without the constraints it operate
 
 ✅ **REQUIRED:** the export ships **open positions with their age at export** alongside the closed rows, and **every row is stamped with its lane's force-close state.** **Any duration analysis is done as survival analysis with censoring, or it is not done.**
 
-⚠️ **AND ONE NUMBER IS IN DISPUTE, unresolved:** two governed documents disagree on the passive system's maximum-hold value — one says 7 days, another says 6 hours hardcoded. **Nobody has read the constant.** *(My own search found 3 rows matching `max_hold` against 67 matching `hold` — the constant namespace is wider than one pattern reaches, so treat any single lookup here as narrow until proven otherwise.)* **Do not build a duration claim on either figure. Ask.**
+✅ **THE MAX-HOLD QUESTION IS SETTLED — Langston read the constants at the ref, and the answer is more complicated than either figure in our documents.** *(r2, condition 2. r1 told you to ask; do not ask, use this.)*
+| constant | value | what it bounds |
+|---|---|---|
+| `vts-runner.ts:1149` `MAX_HOLD_MS` | **7 days** | the **real** passive pass |
+| `vts-runner.ts:780` `SHADOW_MAX_HOLD_MS` | **48 hours** | the **shadow/counterfactual** arm. Its own comment reads *"48h (was 6h pre-OBJ-2)"* |
+| `vts-service.ts:160` `TRADE_DURATION` | 3 hours | a **third, unrelated** constant — named here because it is a likely source of confusion |
+
+⛔ **The "6 hours" in our governed documents is STALE** and survives in three other places in the tree. **Do not use it.**
+**Live switch rows, all three enumerated:** `enabled_vts=true`, `enabled_paper=false`, `enabled_live=false`. Both passive caps apply as `enabled ? cap : Infinity`.
+
+⇒ ⛔⛔ **THIS CHANGES WHAT §3 REQUIRES, AND IT IS NOT A LABELLING NICETY.** The active lanes genuinely have **no** force close — confirmed. But the passive side is **NOT one ceiling: it is a MIXTURE of two** (7 days real, 48 hours shadow). **A pooled passive duration distribution therefore has TWO right-hand walls and no single truncation point.**
+⇒ ✅ **THE STAMP IS PER-ARM, NOT PER-LANE.** Every exported row names **which arm produced it** and **which cap applied to it**. **A survival model fitted to the pooled passive corpus is fitted to a mixture and its truncation term is meaningless.**
 
 ---
 
