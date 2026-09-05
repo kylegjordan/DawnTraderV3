@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+"""P-5 — the size/staleness watch over Langston's always-loaded set, and the
+instrument that makes the #1007 ratchet bind instead of being decoration.
+
+⛔⛔ WHY THIS EXISTS, AND IT IS NOT A HYPOTHETICAL. Item 2 of the 2026-08-05
+   Langston plan CONTAINED a daily size watch. It was never started. That is
+   precisely why his MEMORY.md grew +137% in 28 days with nobody noticing — the
+   alarm was itself the unfinished item. A ceiling nobody measures is a number
+   in a document, and this project has paid for that shape repeatedly.
+
+★ THE RULE IT ENFORCES (Langston 2026-09-05, Kyle approved same day, #1007):
+    the CEILING is the SUM of everything auto-loaded per invoke, and it may
+    ONLY EVER DECREASE. Any batch touching any of the three leaves the total at
+    or below the value it found.
+
+⛔ THE UNIT IS THE SUM, NEVER THE FILE — and that is load-bearing, not style. A
+   per-file cap is satisfiable by SPLITTING a file while the loaded total is
+   unchanged; Langston rejected a per-file number for exactly that reason.
+
+⛔⛔ IT DOES NOT RATCHET AUTOMATICALLY, AND THAT IS A DELIBERATE DESIGN CHOICE.
+   An automatic ratchet-down on any observed dip would lock in a TRANSIENT — a
+   file caught mid-edit, a truncated write — and the next legitimate restore
+   would then read as a breach. So: the watch OBSERVES, RECORDS and ALARMS. The
+   ceiling is lowered DELIBERATELY, by whoever lands a trim, as part of that
+   batch — which is where Langston's rule puts the obligation ("stated in the
+   governance ledger") rather than in a background job's judgement.
+
+★ MONOTONICITY IS ENFORCED, NOT REMEMBERED: `--set-ceiling` REFUSES to raise the
+  value. Per CLAUDE.md §29's standing preference — prefer IMPOSSIBLE over
+  INTERCEPTED — a raise fails at the tool, not at somebody's discipline.
+
+⛔ THE LIVE VALUE LIVES HERE, IN A STATE FILE, AND NOWHERE ELSE. A ratchet
+   ratchets, so the number changes by design; governance text names this FILE,
+   never the number. Measured cost of ignoring that rule: the Langston-model
+   line was wrong for 17 days, and PHASE_19_PLAN row 2.8 carried a false
+   34,605 B for weeks with an argument built on top of it.
+
+USAGE:
+    langston-size-watch                 measure, record a run row, alarm on breach
+    langston-size-watch --quiet         same, but never post to Discord (for testing)
+    langston-size-watch --status        print state and exit; records nothing
+    langston-size-watch --set-ceiling N lower the ceiling to N (REFUSES to raise)
+    langston-size-watch --self-test     positive control: prove it CAN alarm
+"""
+
+import json, os, subprocess, sys, datetime
+
+HOME = "/home/langston"
+WATCHED = [
+    (os.path.join(HOME, "CLAUDE.md"), "harness auto-load (persona+rules)"),
+    (os.path.join(HOME, "MEMORY.md"), "@MEMORY.md import from CLAUDE.md"),
+    (os.path.join(HOME, ".claude/projects/-home-langston/memory/MEMORY.md"), "harness auto-memory index"),
+]
+STATE = "/opt/langston-memory/usage/ratchet-state.json"
+RUNLOG = "/opt/langston-memory/usage/size-watch.jsonl"
+SENDER = "Infra Claude"
+NL = chr(10)
+STALE_HOURS = 48
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def iso(dt=None):
+    return (dt or utc()).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def measure():
+    """⛔ A MISSING FILE IS NOT ZERO BYTES, IT IS A DIFFERENT AND WORSE EVENT.
+    Summing it as 0 would show the total FALLING and read as a successful trim —
+    the ratchet would then congratulate us for losing his rules."""
+    files, total, missing = [], 0, []
+    for path, why in WATCHED:
+        try:
+            st = os.stat(path)
+            files.append({"path": path, "why": why, "bytes": st.st_size,
+                          "mtime": iso(datetime.datetime.fromtimestamp(st.st_mtime,
+                                                                       datetime.timezone.utc))})
+            total += st.st_size
+        except OSError as e:
+            files.append({"path": path, "why": why, "bytes": None, "error": str(e)})
+            missing.append(path)
+    return files, total, missing
+
+
+def _own(path):
+    """⛔ ROOT-CREATED LOGS IN A LANGSTON-OWNED DIRECTORY BREAK ROTATION, MEASURED
+    2026-09-05. logrotate must run as langston here (the directory is group-writable, so
+    it refuses to act as root), but these tools run as root and created root:root 644
+    files — which langston can read and cannot truncate. Forced rotation failed with
+    "Permission denied" on exactly the two root-owned logs while the langston-owned one
+    rotated fine. ★ Caught only by FORCING a rotation; the dry run reported zero errors.
+    ⇒ hand ownership to langston so the whole directory is uniform and one `su` covers it."""
+    try:
+        if os.geteuid() != 0:
+            return
+        import pwd, grp
+        os.chown(path, pwd.getpwnam("langston").pw_uid, grp.getgrnam("langston").gr_gid)
+        os.chmod(path, 0o664)
+    except Exception:
+        pass
+
+
+def load_state():
+    try:
+        with open(STATE, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return None
+
+
+def save_state(st):
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    tmp = STATE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(st, fh, indent=2)
+    os.replace(tmp, STATE)
+    _own(STATE)
+
+
+def post(msg, quiet):
+    """Discord is best-effort; a failed post must never make the watch fail. But it IS
+    recorded in the run row, so a silent delivery failure is visible in the log rather
+    than being indistinguishable from 'nothing was wrong'."""
+    if quiet:
+        return "suppressed (--quiet)"
+    try:
+        p = subprocess.run(["/usr/local/bin/cc-send", "--sender", SENDER, "--notify",
+                            "--message", msg],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=120)
+        return "sent" if p.returncode == 0 else "FAILED rc=%d %s" % (p.returncode, (p.stderr or "")[:200])
+    except Exception as e:
+        return "FAILED %s: %s" % (type(e).__name__, e)
+
+
+def run(quiet=False, injected_total=None):
+    files, total, missing = measure()
+    if injected_total is not None:      # --self-test only; never reachable in a real run
+        total = injected_total
+    st = load_state()
+
+    if st is None:
+        # ⛔ FIRST RUN SEEDS THE CEILING AT WHAT IT FINDS. It cannot alarm on a value it
+        #    has never seen, and pretending otherwise would make run one meaningless.
+        st = {"ceiling_bytes": total, "set_at": iso(), "set_by": "first-run seed",
+              "history": [{"ts": iso(), "ceiling": total, "by": "first-run seed"}]}
+        save_state(st)
+
+    ceiling = st["ceiling_bytes"]
+    over = total - ceiling
+    last = st.get("last_run_ts")
+    gap_h = None
+    if last:
+        try:
+            prev = datetime.datetime.strptime(last, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=datetime.timezone.utc)
+            gap_h = round((utc() - prev).total_seconds() / 3600.0, 1)
+        except Exception:
+            gap_h = None
+
+    if missing:
+        status = "MISSING-FILE"
+    elif over > 0:
+        status = "BREACH"
+    elif over < 0:
+        status = "UNDER"          # a trim landed; lowering the ceiling is a DELIBERATE act
+    else:
+        status = "AT-CEILING"
+
+    alarm = None
+    drill = injected_total is not None
+    prefix = ("🧪 FIRE DRILL — THIS IS A TEST OF THE ALARM PATH, NOT A REAL BREACH. "
+              "Nothing is wrong with Langston's files; ignore the numbers below. "
+              "Posted deliberately by Infra Claude to prove the alarm can reach a human. "
+              + NL + NL) if drill else ""
+
+    if status == "MISSING-FILE":
+        alarm = ("⛔ LANGSTON LOAD SET — A FILE IS MISSING, which is not the same as it being "
+                 "small and is worse: " + ", ".join(missing) + ". Nothing he loads should ever "
+                 "vanish. The byte total is meaningless until this is resolved.")
+    elif status == "BREACH":
+        alarm = ("⛔ LANGSTON LOAD SET IS OVER ITS CEILING by " + str(over) + " B. "
+                 "Total " + str(total) + " B against a ceiling of " + str(ceiling) + " B "
+                 "(set " + str(st.get("set_at")) + " by " + str(st.get("set_by")) + "). "
+                 "The rule (#1007) is that the total may only ever DECREASE, so whatever "
+                 "landed here has to be paid for by a trim in the same work — or the "
+                 "ceiling was lowered and this addition was not accounted for. "
+                 "Per file: " + "; ".join("%s=%s" % (os.path.basename(f["path"]), f["bytes"])
+                                          for f in files) + ". "
+                 "⛔ Do NOT raise the ceiling to make this go away — the tool refuses it.")
+    elif gap_h is not None and gap_h > STALE_HOURS:
+        alarm = ("⚠️ LANGSTON SIZE WATCH WAS DOWN — " + str(gap_h) + "h since its previous run, "
+                 "against a daily schedule. It is running now and the current total is "
+                 "compliant, but anything that happened in that window went unwatched.")
+
+    delivery = post(prefix + alarm, quiet) if alarm else "no alarm"
+
+    # ⛔ A SYNTHETIC ROW MUST SAY SO, IN THE ROW. The first fire drill wrote a row that
+    #    was indistinguishable from a real breach — same status, same shape, a plausible
+    #    total. A run log that cannot tell a drill from an event is a confidently wrong
+    #    record, which is worse than no record: the next reader would investigate a
+    #    breach that never happened, or dismiss a real one as "probably another test".
+    row = {"ts": iso(), "drill": drill, "status": status,
+           "total_bytes": total, "ceiling_bytes": ceiling,
+           "over_by": over, "files": files, "missing": missing,
+           "hours_since_previous_run": gap_h, "alarm": bool(alarm), "delivery": delivery,
+           "measures": ("SUM of the auto-loaded set vs the recorded ceiling. It observes and "
+                        "alarms; it NEVER lowers the ceiling itself — that is a deliberate act "
+                        "in the batch that lands the trim (#1007)."),
+           "population": "the three files in WATCHED, all of them, every run"}
+    try:
+        os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
+        with open(RUNLOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + NL)
+        _own(RUNLOG)
+    except Exception:
+        pass
+
+    if injected_total is None:
+        st["last_run_ts"] = row["ts"]
+        st["last_total_bytes"] = total
+        st["last_status"] = status
+        save_state(st)
+
+    print(json.dumps({k: row[k] for k in ("ts", "drill", "status", "total_bytes", "ceiling_bytes",
+                                          "over_by", "hours_since_previous_run", "alarm",
+                                          "delivery")}, indent=2, ensure_ascii=False))
+    return 1 if status in ("BREACH", "MISSING-FILE") else 0
+
+
+def set_ceiling(new):
+    st = load_state()
+    if st is None:
+        print("REFUSED: no state yet — run the watch once so a ceiling exists to lower.")
+        return 2
+    cur = st["ceiling_bytes"]
+    if new >= cur:
+        # ★ THE MONOTONICITY IS ENFORCED HERE, MECHANICALLY. A rule that can be broken by
+        #   typing a bigger number is a habit; this is a refusal.
+        print("REFUSED: the ceiling may only ever DECREASE. Current %d B, asked for %d B."
+              % (cur, new))
+        print("If a real addition is justified, it is paid for by a trim elsewhere in the "
+              "same work — the total is what is capped, never any single file.")
+        return 2
+    files, total, missing = measure()
+    if total > new:
+        print("REFUSED: %d B is below the CURRENT total of %d B — that would be a ceiling "
+              "already breached on the day it was set." % (new, total))
+        return 2
+    st["history"].append({"ts": iso(), "ceiling": new, "by": os.environ.get("SUDO_USER") or "unknown",
+                          "from": cur, "measured_total": total})
+    st["ceiling_bytes"], st["set_at"] = new, iso()
+    st["set_by"] = os.environ.get("SUDO_USER") or "unknown"
+    save_state(st)
+    print("ceiling lowered %d B -> %d B (current total %d B)" % (cur, new, total))
+    return 0
+
+
+def self_test():
+    """★ POSITIVE CONTROL. A watch that has never alarmed and a watch that CANNOT alarm
+    look identical from outside, and only one of them is doing its job. This drives a
+    synthetic overage through the real run path with delivery suppressed."""
+    st = load_state()
+    if st is None:
+        print("no state yet — run the watch once first")
+        return 2
+    ceiling = st["ceiling_bytes"]
+    print("positive control: injecting a synthetic total of ceiling+1 B (%d)" % (ceiling + 1))
+    rc = run(quiet=True, injected_total=ceiling + 1)
+    ok_breach = rc == 1
+    print("  %s  synthetic overage produced a BREACH" % ("PASS" if ok_breach else "FAIL"))
+    print("positive control: injecting ceiling-1 B (%d)" % (ceiling - 1))
+    rc2 = run(quiet=True, injected_total=ceiling - 1)
+    ok_under = rc2 == 0
+    print("  %s  a value under the ceiling did NOT alarm" % ("PASS" if ok_under else "FAIL"))
+    print("⚠️  both rows are written to the run log with a synthetic total — they are "
+          "labelled by their impossible-in-practice shape, and neither touched the state file.")
+    return 0 if (ok_breach and ok_under) else 1
+
+
+def main():
+    if "--status" in sys.argv:
+        st = load_state()
+        files, total, missing = measure()
+        print(json.dumps({"state": st, "measured_total": total, "missing": missing,
+                          "files": files}, indent=2, ensure_ascii=False))
+        return 0
+    if "--self-test" in sys.argv:
+        return self_test()
+    if "--fire-drill" in sys.argv:
+        # ⛔ THE LAST LEG NEEDS ITS OWN PROOF. --self-test suppresses delivery, so it
+        #    verifies the DECISION to alarm and says nothing about whether an alarm can
+        #    actually reach a person. An instrument that detects perfectly and cannot
+        #    reach anyone is indistinguishable, from outside, from one that never fired.
+        #    This injects a breach and REALLY posts, labelled so nobody acts on it.
+        st = load_state()
+        if st is None:
+            print("no state yet — run the watch once first")
+            return 2
+        print("FIRE DRILL — a real Discord post will be made, labelled as a drill.")
+        rc = run(quiet=False, injected_total=st["ceiling_bytes"] + 4242)
+        return 0 if rc == 1 else 1
+    if "--set-ceiling" in sys.argv:
+        i = sys.argv.index("--set-ceiling")
+        if i + 1 >= len(sys.argv) or not sys.argv[i + 1].isdigit():
+            print("usage: --set-ceiling <bytes>")
+            return 2
+        return set_ceiling(int(sys.argv[i + 1]))
+    return run(quiet="--quiet" in sys.argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

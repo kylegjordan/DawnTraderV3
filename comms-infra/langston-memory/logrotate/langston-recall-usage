@@ -23,3 +23,18 @@
     notifempty
     copytruncate
 }
+
+# The other two P-7/P-5 logs. Same policy, same `su` reasoning — all three live in the
+# same group-writable directory, so all three need it.
+# ⛔ ADDED IN THE SAME BREATH AS THE INSTRUMENTS THEMSELVES, deliberately: this batch
+#    exists because an append-only artifact grew unwatched. Shipping three new
+#    append-only artifacts without eviction would be the same mistake, three times.
+/opt/langston-memory/usage/load-canary.jsonl
+/opt/langston-memory/usage/size-watch.jsonl {
+    su langston langston
+    weekly
+    rotate 8
+    compress
+    notifempty
+    copytruncate
+}

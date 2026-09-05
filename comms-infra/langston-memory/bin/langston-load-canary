@@ -61,6 +61,24 @@ def read(path):
         return fh.read()
 
 
+def _own(path):
+    """⛔ ROOT-CREATED LOGS IN A LANGSTON-OWNED DIRECTORY BREAK ROTATION, MEASURED
+    2026-09-05. logrotate must run as langston here (the directory is group-writable, so
+    it refuses to act as root), but these tools run as root and created root:root 644
+    files — which langston can read and cannot truncate. Forced rotation failed with
+    "Permission denied" on exactly the two root-owned logs while the langston-owned one
+    rotated fine. ★ Caught only by FORCING a rotation; the dry run reported zero errors.
+    ⇒ hand ownership to langston so the whole directory is uniform and one `su` covers it."""
+    try:
+        if os.geteuid() != 0:
+            return
+        import pwd, grp
+        os.chown(path, pwd.getpwnam("langston").pw_uid, grp.getgrnam("langston").gr_gid)
+        os.chmod(path, 0o664)
+    except Exception:
+        pass
+
+
 def build_probes():
     """Ground truth is DERIVED FROM THE FILES AT RUN TIME, never hard-coded — a stored
     expected answer goes stale the first time a file is edited and would then report a
@@ -280,6 +298,7 @@ def main():
         os.makedirs(os.path.dirname(LOG), exist_ok=True)
         with open(LOG, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + NL)
+        _own(LOG)
     except Exception:
         pass
 

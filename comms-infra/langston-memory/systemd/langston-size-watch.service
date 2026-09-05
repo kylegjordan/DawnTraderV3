@@ -1,0 +1,11 @@
+[Unit]
+Description=Langston always-loaded set — size ratchet watch (B-LANGSTON-CONTEXT P-5, #1007)
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/langston-size-watch
+# ⛔ NOT Restart= — a oneshot that retries on failure would post the same alarm repeatedly.
+# The next daily run is the retry, and the run log makes a skipped run readable.
+TimeoutStartSec=300
