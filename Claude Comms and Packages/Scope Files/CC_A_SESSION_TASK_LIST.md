@@ -28,7 +28,7 @@
 | plan row | item | kind | state |
 |---|---|---|---|
 | 4.55 | **`B-DEPLOY-DRIFT-LINE`** (`#1002`) | batch | ⭐⭐ **IN FLIGHT — Step 1 APPROVED by Langston 2026-09-05 at `25f64f93c`, moving to Step 2.** He ruled all three conflicts and WITHDREW two of his own instructions |
-| 4.57 | **`B-TASK-LIST-SLOT`** (`#1006`) | batch | ⭐ **NEXT, AND THE POSITION IS KYLE'S, FIXED 2026-09-05 after he read this queue** — *"then we go to the b task list slot next… it needs to be cleaned up."* **Ahead of 4.6 `B-RULES-LAYER`, which he had previously directed to follow `B-WAKE-QUIET`** |
+| 4.57 | **`B-TASK-LIST-SLOT`** (`#1009`) | batch | ⭐ **NEXT, AND THE POSITION IS KYLE'S, FIXED 2026-09-05 after he read this queue** — *"then we go to the b task list slot next… it needs to be cleaned up."* **Ahead of 4.6 `B-RULES-LAYER`, which he had previously directed to follow `B-WAKE-QUIET`** |
 | 4.6 | **`B-RULES-LAYER`** (`#998`) | batch | ⚠️ **SUPERSEDED ORDER: Kyle directed this to follow `B-WAKE-QUIET`, then on 2026-09-05 put `B-TASK-LIST-SLOT` ahead of it.** Still his; just not next. Failure condition pre-registered |
 | 1 | `B-RULES-1e` | batch | **IN FLIGHT, parked at Step 2** with Langston |
 | 6 | `B-MEASURE-GATE` (legs beyond leg 2) | batch | Step 1 approved, in flight at Step 2 |

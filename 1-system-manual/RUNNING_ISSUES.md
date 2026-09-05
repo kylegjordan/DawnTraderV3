@@ -7367,7 +7367,7 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 ⚠️ **STILL NOT A CLAIM THAT ANYTHING IS BROKEN OR URGENT**, and still **CC-C's to dispose of** — both source batches are theirs and in flight. `dt-deploy` restarts the engine, so "deploy sooner" is not free.
 
 
-### #1006 OPEN 2026-09-05 (CC-A, Kyle-directed) — THE TASK-LIST RULE IS HALF-WIRED: THE CLOSE-TIME HALF HAS A SLOT, THE SLOT-TIME HALF HAS NO TRIGGER AT ALL
+### #1009 OPEN 2026-09-05 (CC-A, Kyle-directed) — ⚠️ **RENUMBERED FROM `#1006` THE SAME DAY — SECOND COLLISION IN THIS FILE IN ONE DAY.** It collided with CC-B's Codex-advisor `rtb_signals` schema-divergence entry at `:7321`. Measured, not argued: theirs `2d06bf248` 09:20:09, mine `bfdd1197f` 09:44:58 ⇒ the newer renumbers, and that is mine. **Commits `bfdd1197f`, `8dc0f8e0f` and the reports around them say `#1006` and mean THIS entry.** — THE TASK-LIST RULE IS HALF-WIRED: THE CLOSE-TIME HALF HAS A SLOT, THE SLOT-TIME HALF HAS NO TRIGGER AT ALL
 
 **Kyle asked for a per-session task list (batches assigned, sub-batches identified, hotfixes, findings to investigate, IN WORKING ORDER), updated at every batch close AND every time a new item is slotted, with the same update reaching the phase plan and the roadmap.**
 
@@ -7384,7 +7384,7 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 **HOME: `B-TASK-LIST-SLOT`, owner CC-A, placed in `PHASE_19_PLAN` at row 4.57, after 4.55 `B-DEPLOY-DRIFT-LINE` and before 4.6 `B-RULES-LAYER`.** ⚠️ **Kyle has NOT ratified that position** — he asked to see the whole queue before fixing the order.
 
 
-### ➕ #1006 AMENDMENT 2026-09-05 (Kyle, same day) — THE LIST'S PRIMARY JOB IS THE **STARTED-AND-ABANDONED** WORK, NOT THE QUEUE; AND NOTHING REVIEWS THE GOVERNANCE STEP
+### ➕ #1009 AMENDMENT 2026-09-05 (Kyle, same day; filed as `#1006`, renumbered) — THE LIST'S PRIMARY JOB IS THE **STARTED-AND-ABANDONED** WORK, NOT THE QUEUE; AND NOTHING REVIEWS THE GOVERNANCE STEP
 
 **⭐ KYLE'S ADDITION, AND IT CHANGES WHAT THE LIST IS FOR.** *"We've got four batches open that we've started and are just left sitting there… without it, we lose visibility into what we've opened and started and then got distracted and interrupted and left flapping in the wind."*
 ⇒ **A QUEUE OF WORK NOT YET STARTED IS THE EASY HALF AND IT IS NOT THE POINT.** The list must carry, as its own section and at the TOP: **every batch this session has OPENED and not closed, with the step it stalled at and what it is waiting on.** ★ **Measured on CC-A the day the rule was written: FOUR simultaneously open** — `B-RULES-1e` (Step 2), `B-MEASURE-GATE` (Step 2), `B-INSTRUMENTS-OVER-RULES` (open, small objectives left), and `B-GOV-REPORTING` (**pushed to the branch, review gate never run**). **None of them was visible anywhere as a single list until this morning.**
