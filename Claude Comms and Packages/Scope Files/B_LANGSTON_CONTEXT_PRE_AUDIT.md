@@ -281,3 +281,55 @@
 ✅ **THE `__pycache__` RESIDUAL IS CLOSED, and he withdrew his own instrument:** *"`:298` cannot be reached without removing the ledger source; sending you at its literal was the wrong instrument."* **Closed on two measurements instead: (1) `langston-recall` runs the script as the TOP-LEVEL module, and CPython never reads or writes `__pycache__` for `__main__` — the cached bytecode is not on the execution path at all; (2) the `.pyc` is timestamp-validated (`flags=0`) with header source-mtime `1786048191` / size `21573`, both matching the current `.py`.**
 
 ⇒ ⛔ **P-1b DOES NOT START UNTIL THE IDENTIFIER IS NAMED. P-7 IS CLEARED AND STARTS NOW.**
+
+---
+
+## ⭐⭐ 13. WHEN SHOULD LANGSTON USE THE ARCHIVE — THE DESIGN, ANSWERED AS DESIGNER *(Kyle-directed 2026-09-05)*
+
+> **Kyle:** *"I want that to be something that you tell me based on the design… When does it make the most sense for Langston to use his archive with the system we're trying to design for him in terms of how he makes his rulings, evaluations, and decisions? When is it best and most helpful and ideal? That's where we should start from, and then we figure out how to enforce that."*
+> ⇒ **Design first, enforcement second, Langston pokes holes third. This section is the design. It is MINE and it is not yet reviewed.**
+
+### 13.1 — THE ONE PRINCIPLE EVERYTHING ELSE FALLS OUT OF
+
+**Start from what he IS: a reviewer with NO memory, and that is the product, not a limitation.** He cannot inherit yesterday's belief, cannot think *"I already checked that"*, and has no recollection of forming a conviction — **which is precisely why he catches what we miss.** The archive gives him reach into history **without** giving him memory. ⇒ **the design question is not "how much history should he get" but "which uses of history preserve his independence and which destroy it."**
+
+⛔⛔ **THE PRINCIPLE, AND IT IS THE WHOLE DESIGN:**
+> ### **USE THE ARCHIVE TO FIND OUT WHETHER THE QUESTION HAS ALREADY BEEN ANSWERED.**
+> ### **NEVER TO FIND OUT WHAT THE ANSWER SHOULD BE.**
+
+★ **It cuts cleanly because it separates FACT from JUDGEMENT.** *"Was this decided?"* · *"Did I withdraw this?"* · *"What was it built to do?"* are **facts about the past**, and looking them up costs him nothing. *"Is this diff correct?"* · *"Is this number right?"* · *"Should we do X?"* are **judgements about the present**, and looking up a prior opinion — **his own most of all** — reintroduces exactly the anchoring his statelessness exists to remove.
+
+### 13.2 — ⭐ THE ORDERING IS THE MECHANISM, AND IT IS THE PART NOBODY HAS STATED
+
+**WHEN in a review he consults it matters more than whether.**
+- **Consult BEFORE forming his own read ⇒ he anchors.** The archive becomes a prior, and his verdict is a check that we quoted precedent correctly.
+- **Consult AFTER forming his own read ⇒ the archive can only OVERTURN or CONFIRM. It can never SEED.**
+
+⇒ ⛔ **THE RULE: READ THE OBJECT → FORM THE JUDGEMENT → *THEN* CONSULT THE ARCHIVE.**
+★★ **AND THIS RETROSPECTIVELY VINDICATES HIS EXISTING §19 TRIGGER FOR A REASON NOBODY WROTE DOWN.** *"Before any verdict token"* is not merely a convenient hook — **the verdict is the LAST thing he emits, so "before the verdict" IS "after the work."** The placement was right; **the justification was missing, which is why it reads as arbitrary and therefore skippable.**
+
+### 13.3 — THE THREE USES, AND ONLY ONE OF THEM CAN BE A REMEMBERED RULE
+
+| tier | what it answers | when | enforcement it needs |
+|---|---|---|---|
+| **1 — NEGATIVE KNOWLEDGE** *(his retractions)* | *"Am I about to re-assert something I already withdrew?"* | **EVERY verdict, automatically** | ⛔ **INTERPOSED — attached to the act of asserting, NEVER invoked.** ★ **This is the ONE tier where a remembered rule PROVABLY cannot work: the trigger is a wrong belief that FEELS RIGHT, so he never queries for it. His own words: *"I don't search for what I think I already know."*** |
+| **2 — SETTLED-QUESTION** *(has this been decided?)* | *"Is this scope re-litigating a Kyle-approved, Langston-reviewed decision? Has this defect been filed and refuted?"* | **before the verdict, AFTER the read** | **remembered is ACCEPTABLE here** — the cost of forgetting is bounded and **visible downstream** (a re-litigation gets caught). §9.5(b-ii). |
+| **3 — PROVENANCE** *(what was it built to do?)* | *"Why is it this way? What did it replace?"* | **on demand, his judgement** | **discretionary.** Expensive, usually unnecessary, and **wrong to mandate** — mandating it on every review is how a gate becomes ceremony. |
+
+### 13.4 — ⛔ WHEN HE SHOULD **NOT** USE IT — the half with no answer in his instructions today
+
+**Not merely wasteful — actively WRONG, because each one converts a fresh reviewer into a precedent-follower:**
+1. ⛔ **NEVER before reading the object.** The archive is a check on his read, not a substitute for it.
+2. ⛔ **NEVER to look up what he previously concluded about a question he is being asked FRESH.** ★ **His own prior ruling is the single most anchoring thing he could read**, and unlike ours it arrives wearing his own authority.
+3. ⛔ **NEVER to find how a SIMILAR case was ruled.** *"We did X last time"* is precedent-following, and precedent-following is what a stateless reviewer is FOR NOT DOING.
+4. ⛔ **NEVER as a substitute for re-deriving a number.** A hit is a lead; `RULED ON REPORTED FACT` already covers this and it applies to the archive exactly as to us.
+
+★★ **THE COMMON SHAPE, AND IT IS THE SAME OBJECTION HE USED TO DE-SCOPE OBJ-6 — NOW POINTED AT HIMSELF:** he refused to let US read his rulings because *"they pre-comply, and my Step-4 degrades from an independent read into a check that they quoted me correctly."* ⇒ **exactly the same hazard applies when HE reads his own rulings before forming a view. The de-scope argument generalises, and it generalises onto its author.**
+
+### 13.5 — WHAT THIS MEANS FOR THE BUILD
+
+- ✅ **Tier 2 and 3 are already correctly served by `langston-recall` and need no new mechanism** — only the *justification* written into §19 so the trigger stops reading as arbitrary.
+- ⛔ **Tier 1 is the one that needs building, and it is the only genuinely NEW mechanism this design implies.** It must fire on the **SHAPE OF AN ASSERTION**, not on his remembering. ★ **`langston-recall` already does exactly this — it prints his retractions first, before any result — but only once he has invoked it, which makes a mechanical interposition depend on a remembered rule.** ⇒ **the fix is to detach the retraction check from the recall invocation.**
+- ⛔ **THE "WHEN NOT TO" IS A RULE, NOT A MECHANISM, AND I AM NOT PRETENDING OTHERWISE.** Nothing can stop him consulting the archive early. **What CAN be done is remove the incentive: if Tier 1 fires automatically, the main reason to reach for the archive pre-emptively disappears.**
+
+⚠️ **UNREVIEWED. This is my design as designer, per Kyle's instruction. It goes to Langston to attack — and §13.4 point 2 is the one I most expect him to push back on, because it constrains him more than anything currently does.**
