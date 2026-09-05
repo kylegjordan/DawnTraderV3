@@ -1,10 +1,10 @@
-# B-DEPLOY-DRIFT-LINE — SCOPE (Step 1), **r4**
+# B-DEPLOY-DRIFT-LINE — SCOPE (Step 1), **r5 — APPROVED TO STEP 2**
 
 **change-class: non_architecture**
 > ⚠️ **CLASS NOTE:** a scheduled Helsinki job plus a staging observation runner. **No trading-path file, no schema, no formula.** ⛔ **`sim` is CONDITIONAL for this class (`config.mjs:134`) and Langston has RULED IT INCLUDED** — see OBJ-6. The diff is the evidence.
 
 **owner:** CC-A · **issue:** `#1002` · **plan row:** `PHASE_19_PLAN` 4.55 · **origin:** `#1001`
-**Langston:** r2 **SENT BACK, r3 required** — 2 blockers, 3 questions ruled, 1 fold-in ordered. **r3 rewrites the body; it does not stack a correction on top of wrong text, which is what he asked for.**
+**Langston:** ✅ **r4 APPROVED to Step 2 at `25f64f93c` (2026-09-05).** He ruled all three conflicts, **WITHDREW two of his own instructions**, and set **no r5 gate** — fold in and run Step 2. *(History: r2 **SENT BACK, r3 required** — 2 blockers, 3 questions ruled, 1 fold-in ordered. **r3 rewrote the body rather than stacking a correction on wrong text.)*
 
 ---
 
@@ -38,7 +38,7 @@
 
 | component | what it is | blast radius |
 |---|---|---|
-| ⭐ **THE NEW SCHEDULED JOB** (Helsinki) — reads staging's `BUILD_SHA` over SSH, the branch head over the GitHub API, and **WRITES TO THE ALERT STORE FROM A THIRD HOST** | the batch's principal deliverable; did not exist before | ⛔⛔ **HIGH, AND IT IS THE ONE THAT NEEDED NAMING.** **A NEW WRITER TO THE ALERT STORE, FROM A HOST THAT HAS NEVER WRITTEN TO IT.** ⇒ **it lands directly on `#647` / `B-ALERT-QUEUE-INTEGRITY` (lock-free append + lossy rewrite; CC-B, plan row 2.4b).** **INTERACTION STATED: a third-host writer raises the concurrent-write surface that batch exists to fix, so this job must write through the supported CLI path and NEVER by appending to the file itself** — and if that is not possible from Helsinki, **the batch stops and says so** rather than adding a second unlocked writer. |
+| ⭐ **THE NEW SCHEDULED JOB** (Helsinki) — reads staging's `BUILD_SHA` over SSH, the branch head over the GitHub API, and **WRITES TO THE ALERT STORE FROM A THIRD HOST** | the batch's principal deliverable; did not exist before | ⛔⛔ **HIGH, AND IT IS THE ONE THAT NEEDED NAMING.** ⚠️ **A FREQUENCY INCREASE ON THE EXISTING LOCK-FREE APPEND — NOT a new writer class (Langston corrected my r4 wording, which overstated the kind): the store lives ON STAGING, so the supported path is `ssh staging` + the CLI, the same writer everything else uses.** ⇒ **it lands directly on `#647` / `B-ALERT-QUEUE-INTEGRITY` (lock-free append + lossy rewrite; CC-B, plan row 2.4b).** **INTERACTION STATED: a third-host writer raises the concurrent-write surface that batch exists to fix, so this job must write through the supported CLI path and NEVER by appending to the file itself** — and if that is not possible from Helsinki, **the batch stops and says so** rather than adding a second unlocked writer. |
 | `scripts/batch-verify/dt-deploy-observation/daily_deploy_check.sh` (+ sibling `daily_deploy_close.sh`, the actual chain mechanism, itself unscheduled) | staging, hand-run off a self-chained alert, weekly | **LOW** — read-only today. ⚠️ **OBJ-5 would add a `git fetch`, which writes the clone's object store and remote-tracking refs.** ⭐ **CORRECTED BY LANGSTON: that makes `dt-deploy.sh:191`'s ancestor gate MORE PERMISSIVE IN THE CORRECT DIRECTION** — a stale `origin` ref **refuses legitimately-reviewed shas.** *(My r2 wording — "confirm nothing depends on it being stale" — had the risk backwards.)* **It is CC-B's instrument.** |
 | `comms-infra/discord/dt-push-notice.sh` | Helsinki `/usr/local/bin/`, cron `*/2` | ⚠️ **MEDIUM, and ONLY because of the FOLD-IN (OBJ-4).** ⛔ **NOT a drift-measurement vehicle any more** — see §1. |
 | `scripts/dt-deploy.sh` · the deploy record | the deploy path and its record | **NONE — read only, not modified.** |
@@ -68,7 +68,7 @@ Searched `RUNNING_ISSUES`, `BATCH_CATALOG`, `CHANGES_AND_FIXES`, `PHASE_19_PLAN`
 
 ---
 
-## 5. OBJECTIVES — r4
+## 5. OBJECTIVES — r5
 
 **OBJ-1 — THE PREDICATE IS ⭐ AGE, NOT COUNT (Langston, Q2).**
 **Primary: hours since the OLDEST UNDEPLOYED COMMIT touching a runtime path** (`server/`, `client/`, `shared/`, excluding tests). Commit count, file count and the file list ride in the body **as context, never as the trigger**.
@@ -120,6 +120,7 @@ Searched `RUNNING_ISSUES`, `BATCH_CATALOG`, `CHANGES_AND_FIXES`, `PHASE_19_PLAN`
 `REVIEWER r2: OBJECT (scope at rest) · "what other states are consistent with this document" · FOUR hits — the early exit, the anchored regex, the missing main arm, two VERIFYs that could not fail · re-derived: yes, at the ref, before rewriting`
 `LANGSTON r1 (Step 1, at a373dea7f): SENT BACK — 2 blockers, 3 questions ruled, 1 fold-in ordered. He re-read the scope, dt-push-notice.sh:52-157, cc-wake-filter.py:47-60 and the checker config himself, and took his own live drift measurement. He tagged the scheduler sweep, dt-deploy.sh:191/:40 and the alert-chain history RULED ON REPORTED FACT and rested no ruling on them.`
 `REVIEWER r3: OBJECT (r3 against Langston's ruling, clause by clause) · "is each requirement MET or merely MENTIONED" · SIX hits mine to fix (no sink for MEASUREMENT FAILED, the unnamed reader, OBJ-7 dropped from the fallback list, a frozen magnitude in §0, self-grading in §7, the API rate-limit arithmetic) and THREE CONFLICTS INSIDE THE RULINGS THEMSELVES · re-derived: yes, its line citations checked at the objects`
+`LANGSTON r2 (Step 1, at 25f64f93c): APPROVED to Step 2. All three conflicts ruled — he WITHDREW two of his own instructions (the --left-right flag, and Q1(b)'s ack redefinition) and replaced the third's cut-point. No r5 gate. He tagged my fold-in re-derivation RULED ON REPORTED FACT and rested nothing on it.`
 ⛔ **A CLEAN IS NOT EVIDENCE. Only hits moved this document.**
 
 ---
@@ -130,24 +131,42 @@ Searched `RUNNING_ISSUES`, `BATCH_CATALOG`, `CHANGES_AND_FIXES`, `PHASE_19_PLAN`
 
 **CONFLICT 1 — `--left-right` REQUIRES A CLONE; THE SAME BULLET BLOCK FORBIDS ONE.**
 BLOCKER-2 mandates *"no fetch, no clone, no working copy"* and, three lines later, *"`--left-right A...B` on both arms."* ⛔ **`--left-right` is a `git rev-list` flag and needs a local repository holding both commits. The GitHub compare API returns `ahead_by`/`behind_by`, not left-right marks.**
-★ **MY READ: the INTENT is satisfied — `ahead_by`/`behind_by` IS direction, expressed differently, and it is what you used yourself to get 39.** ⚠️ **But the flag is named as a requirement, so I am confirming the intent rather than substituting for it.**
+✅✅ **RULED: SUBSTITUTION GRANTED, HIS FLAG WITHDRAWN.** *"`--left-right` was me naming an implementation. The invariant is DIRECTION MUST BE READ, NEVER INFERRED."*
+⇒ **Take the compare API's NAMED `status` (`identical|ahead|behind|diverged`) — never a sign derived from a count.**
+⛔ **AND `behind`/`diverged` IS ITS OWN OUTCOME, NEVER A DRIFT MAGNITUDE:** the deployed sha carrying commits absent from the branch is **an anomaly, not a distance**.
+⛔ **A 404/422 on compare (force-push, sha not in the repo) is `MEASUREMENT FAILED`, not zero.**
 
 **CONFLICT 2 — Q1(a) SAYS NO MAGNITUDE IN THE BODY; Q2 PUTS COUNT AND FILE LIST IN THE BODY.**
 Q1(a): *"the body carries NO number and names where to read the current one."* Q2: *"count and file list go in the body as context."* ⛔ **Counts and file lists ARE magnitudes and they freeze at mint exactly like the 67.8%-for-eight-days case Q1(a) cites as its whole reason.**
-★ **MY READ: Q1(a) governs, and the context belongs in the log the body points at.** ⚠️ **Ruling needed, because a body with no context at all may be too thin to act on — which is the opposite failure.**
+✅✅ **RULED, AND MY READ WAS RIGHT ABOUT WHICH GOVERNS BUT WRONG ABOUT WHERE THE CUT FALLS — his wording put it there.** *"The 67.8% case was harmful because the number was UNSTAMPED, not because it was a number."*
+⇒ ✅ **THE RULE: a magnitude MAY sit in a re-surfacing body IFF it carries its observation timestamp AND the two shas it was computed from. UNSTAMPED magnitudes are forbidden.**
+⇒ **So count, the (capped) file list and age ALL go in the body, each stamped `as at <ts>, <deployed sha> vs <head sha>`, plus the log pointer for the current value.**
+★ **The precedent is this scope's own §0**, which already stamps its numbers to a ref — he pointed at it and told me to apply the same form to the body.
 
 **CONFLICT 3 — Q1(b) ALTERS THE `ack` CONTRACT THAT §3 FORBIDS ALTERING, AND COLLIDES WITH THE DEDUPE KEY.**
 §3 (mine, and I still believe it): *"the batch ADDS A PRODUCER to a mechanism whose CONSUMER contract is settled; it must not alter the contract."* ⛔ **`ALERT_HANDLING_PROTOCOL` defines ack = OWNED.** Q1(b) makes ack mean *snooze-until-next-run* — so **a session that acks to CLAIM the work has the row resolved and re-minted underneath them**, which is the opposite of owning it. **And resolve-and-re-mint on every acked run produces a NEW ROW each cycle**, against OBJ-6's required dedupe key and `#340`'s re-surface/back-off contract, which both assume a persisting row.
-★ **MY READ: this needs a THIRD state, not a redefinition of ack** — which is exactly the `held`/`hold` design already owed to you on `#982`. ⚠️ **If you want Q1(b) as written, say so and I will implement it, but the protocol change should be recorded as one rather than arriving as a side effect of a drift job.**
+✅✅ **RULED: Q1(b) IS WITHDRAWN. *"You're right and §3 is yours to hold. I redefined a settled consumer contract from inside a drift job."*** The third state stays `#982`'s, not this batch's.
+⇒ ⭐ **REPLACEMENT, ENTIRELY PRODUCER-SIDE, SO NOTHING DOWNSTREAM CHANGES: the DEDUPE KEY carries a bounded, monotone AGE BUCKET — four rungs, escalate only, return-to-zero resolves all.**
+⇒ **An ack then silences ONE RUNG. Worsening drift crosses into a new key and re-mints on its own.** ★ **Dedupe keys are the producer's to choose, so this alters no consumer contract at all** — which is the property Q1(b) lacked.
+⛔ **The body carries one line telling owners to RESOLVE, NOT ACK** (his standing rule on dedupe-keyed rows), **and OBJ-6 records the ack-silence dependency on `#982`.**
 
 ---
 
 ## 5e. ⛔ A FEASIBILITY QUESTION THE READER RAISED THAT COULD SINK OBJ-1's PREDICATE
 
 **The age predicate needs the oldest undeployed commit TOUCHING A RUNTIME PATH.** ⛔ **The GitHub compare API returns an AGGREGATE file list for the range, not per-commit file lists** — so identifying WHICH commit is the oldest runtime-touching one may need **one call per undeployed commit**. At your own measured 39 commits that is up to 39 calls per run, against a **60/hr unauthenticated budget already being spent from the same host by `dt-push-notice.sh` on a `*/2` cron.**
-★ **NOT presented as a refutation — there may be a cheaper formulation** (e.g. walk newest-first and stop at the first runtime-touching commit, or authenticate the calls). ⚠️ **But r3 asserted *"hourly cadence is fine"* as settled arithmetic, and it is not settled until the per-commit cost is counted. Stated rather than discovered at Step 3.**
+✅ **RULED, AND BOTH OF US WERE PARTLY WRONG.** He withdrew *"hourly cadence is fine"* as settled arithmetic. **And my proposed newest-first walk FINDS THE WRONG COMMIT** — it finds the *newest* runtime-touching commit, not the oldest.
+⇒ ⭐ **THE PREDICATE SURVIVES AT ONE CALL PER RUN.** Compare returns an aggregate file list **and** `commits[]` with dates. **Gate on *does the range touch runtime paths at all*; magnitude = the age of the OLDEST UNDEPLOYED COMMIT, which is an UPPER BOUND on the oldest runtime-touching one.**
+★ **Over-stating age ⇒ fires early ⇒ FAIL-SAFE for a reporting trigger.** ⛔ **But it MUST BE LABELLED AS THE BOUND IT IS — in the alert body and in the SIM entry — never as "the oldest runtime commit."**
 
-⛔ **AND ONE FEASIBILITY GATE HAS NO STEP THAT ASKS IT:** §2 says the job *"must write through the supported CLI path and never by appending to the file itself"*, and that the batch **stops** if that is impossible from Helsinki — **but no objective ever determines whether it IS possible.** The supported path is an `npm run system-alerts` invocation on staging. ⇒ **Step 2 answers this FIRST; the principal deliverable has no legal write path until it does.**
+⛔⛔ **AND THE ONE THING THIS FORMULATION MUST SURVIVE, WHICH HE HAS NOT MEASURED AND NEITHER HAVE I: COMPARE TRUNCATES (~250 commits / ~300 files) AND WE DO NOT KNOW THAT IT FLAGS IT.**
+★ **If `files` is truncated, "no runtime files in range" is a FALSE NEGATIVE** — his words: *"the same silent short-page that has cost me three false absences on the board."*
+⇒ **STEP-2 VERIFICATION, AT THE API: if `total_commits > commits.length`, or the file list sits at its cap, the gate is UNDECIDABLE ⇒ `MEASUREMENT FAILED`.**
+⇒ **If truncation cannot be detected, the walk comes back and the calls are AUTHENTICATED** (zero-scope token, public repo, 5,000/hr — precedent is his own board token).
+⇒ **Budget exhaustion is also `MEASUREMENT FAILED`: read `X-RateLimit-Remaining` and REFUSE a walk you cannot finish rather than half-measure it.**
+
+⛔ **AND ONE FEASIBILITY GATE HAS NO STEP THAT ASKS IT:** §2 says the job *"must write through the supported CLI path and never by appending to the file itself"*, and that the batch **stops** if that is impossible from Helsinki — **but no objective ever determines whether it IS possible.** The supported path is an `npm run system-alerts` invocation on staging. ⇒ ✅ **AGREED BY LANGSTON, AND HE RAISED THE BAR: STEP 2 ANSWERS IT FIRST, WITH A POSITIVE CONTROL RATHER THAN AN INSPECTION.** *"Actually write a throwaway alert from Helsinki through the CLI path, read the row back, resolve it."*
+⛔⛔ **AND HE CORRECTED MY BLAST-RADIUS KIND, WHICH I HAD OVERSTATED: the alert store lives ON STAGING, so the supported path is `ssh staging` + the CLI ⇒ this is a FREQUENCY INCREASE ON THE EXISTING LOCK-FREE APPEND, NOT A NEW WRITER CLASS.** It still lands on `#647` — **and §2 must say it in those terms.**
 
 ---
 
@@ -157,5 +176,6 @@ Q1(a): *"the body carries NO number and names where to read the current one."* Q
 - ⛔ **It does not add a second unlocked writer to the alert store.** If the supported CLI path cannot be used from Helsinki, **the batch stops and says so** (§2, `#647`).
 - ⛔ **It does not decide what an acceptable distance is.** The threshold is a reporting trigger, not a policy.
 
-## 7. STEP-1 STATE
-**r3**, body rewritten per BLOCKER-1 rather than corrected on top of wrong text. **Both blockers ANSWERED and all three rulings ADOPTED — stated as what was attempted, not as a grade.** ⛔ **r3 said "addressed", which is me marking my own homework before the reviewer sees it (reader hit).** The fold-in is accepted and its wake defect re-derived at the ref. Card in `Scope`; `Blocked on = Langston` on re-dispatch.
+## 7. STEP-1 STATE — ✅ COMPLETE
+**r3**, body rewritten per BLOCKER-1 rather than corrected on top of wrong text. **Both blockers ANSWERED and all three rulings ADOPTED — stated as what was attempted, not as a grade.** ⛔ **r3 said "addressed", which is me marking my own homework before the reviewer sees it (reader hit).** The fold-in is accepted and its wake defect re-derived at the ref. ✅ **APPROVED. Card moves to `Pre-Audit`, `Review = Approved`, `Blocked on = Nothing`.**
+⛔ **STEP 2 ORDER IS FIXED BY THE RULING: (1) the write-path positive control — mint a throwaway alert from Helsinki through the CLI, read it back, resolve it; (2) the compare-API truncation probe. Everything else waits on those two.**
