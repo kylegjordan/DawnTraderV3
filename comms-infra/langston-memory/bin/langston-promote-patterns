@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""P-8 — the PROMOTION step: move generalisable LESSONS out of Langston's private
+store into the shared `MISTAKE_PATTERNS.md`, without exposing the store itself.
+
+⛔⛔ THIS REPLACES A DIFFERENT DESIGN THAT LANGSTON BLOCKED, AND HIS THREE REASONS
+    ARE THE SPEC. The original objective was "make his rulings retrievable by the
+    other sessions, read-only." He rejected it:
+
+    (a) His store contains WITHDRAWN entries — one says literally *"never
+        re-assert this tally."* Retrieval that hands those to another session
+        without the withdrawal attached is a machine for propagating his own
+        retractions as findings: strictly worse than the tool we already have.
+    (b) It contains his private CALIBRATION ON PEER SESSIONS. In his words:
+        *"make that readable by CC-A and I will write it more diplomatically and
+        it will be less useful to me."* That is a real loss, not a privacy nicety.
+    (c) ⭐ THE ONE THAT ACTUALLY WORRIES HIM: if sessions read his prior rulings
+        before writing a scope, THEY PRE-COMPLY — and his Step-4 degrades from an
+        independent read into a check that they quoted him correctly. Plus the
+        #452 laundering shape: a session citing his ruling back to him as
+        independent confirmation.
+
+★ SO: DEFAULT PRIVATE, SHARE BY PROMOTION. Generalising PATTERNS are impersonal
+  and safe to share; *"what Langston ruled on batch X"* is not. The shared surface
+  already exists and all four sessions read it. What was missing was never a
+  retrieval mechanism — it was this step.
+
+⛔⛔ IT NEVER WRITES TO `MISTAKE_PATTERNS.md`. It produces a PROPOSAL for a human
+    or a session to land inside a batch. An automated writer into a shared
+    governance file is the confidently-wrong-second-record shape this project
+    keeps paying for, and the promotion threshold there (3+ instances across 2+
+    distinct batches) is a judgement, not a string match.
+
+★ AND THE LEAK SCREEN IS MECHANICAL, NOT TRUSTED. He is asked to nominate nothing
+  personal — and then the output is SCANNED for session names and retraction
+  markers anyway, and the proposal is REFUSED if any appear. Per CLAUDE.md §29's
+  standing preference: prefer impossible over intercepted. An instruction he
+  follows 99 times out of 100 is not a control on the 100th.
+
+USAGE:  langston-promote-patterns [--dry-run | --screen-test]
+"""
+
+import json, os, re, subprocess, sys, tempfile, datetime
+
+HOME = "/home/langston"
+STORE = os.path.join(HOME, ".claude/projects/-home-langston/memory")
+OUTDIR = "/opt/langston-memory/usage"
+RUNLOG = os.path.join(OUTDIR, "pattern-promotion.jsonl")
+MODEL = "claude-opus-5[1m]"
+NL = chr(10)
+
+# ⛔ THE SCREEN. Anything here appearing in the proposal REFUSES the whole run.
+#    Session names cover BLOCKER-3(b); the retraction words cover (a).
+BANNED = [
+    r"\bCC-A\b", r"\bCC-B\b", r"\bCC-C\b", r"\bCC-INFRA\b",
+    r"\bOLD Claude\b", r"\bNEW Claude\b", r"\bANALYST Claude\b", r"\bInfra Claude\b",
+    r"\bClaude Old\b", r"\bClaude New\b", r"\bClaude Analyst\b",
+    r"\bretract(?:ed|ion|ions)\b", r"\bwithdrawn\b", r"\bvacated\b",
+]
+
+PROMPT = (
+    "PATTERN PROMOTION — you are nominating LESSONS, not rulings, and nothing personal." + NL + NL
+    + "Read your own memory store at " + STORE + " (37-ish entries; you may use your tools "
+      "for this one, unlike the load canary)." + NL + NL
+    + "⛔ WHAT I AM ASKING FOR, AND WHY THE SHAPE MATTERS. The other three sessions share a "
+      "file of recurring mistake patterns that all of them read. Your store holds lessons that "
+      "would help them, but handing them your store directly was blocked — by you — for three "
+      "reasons I am holding to: withdrawn entries would propagate as findings; your calibration "
+      "on individual sessions would stop being written honestly the moment it was readable; and "
+      "sessions reading your prior rulings would PRE-COMPLY, turning your Step-4 into a check "
+      "that they quoted you correctly rather than an independent read." + NL + NL
+    + "⇒ SO NOMINATE ONLY WHAT SURVIVES BEING MADE IMPERSONAL:" + NL
+    + "  · the lesson must generalise beyond the incident that produced it;" + NL
+    + "  · it must NOT name any session, any person, or any specific batch;" + NL
+    + "  · it must NOT come from an entry you have withdrawn, retracted or vacated;" + NL
+    + "  · it must NOT be 'what I ruled', it must be 'what goes wrong and how to see it'." + NL + NL
+    + "⚠️ A MECHANICAL SCREEN RUNS OVER YOUR OUTPUT AND REFUSES THE WHOLE PROPOSAL if it finds a "
+      "session name or a retraction word. That is not distrust of you — it is that an instruction "
+      "followed 99 times in 100 is not a control on the 100th. Write around it." + NL + NL
+    + "FORMAT — return ONLY this, no preamble, no closing remarks:" + NL + NL
+    + "### `<kebab-slug>` — **<THE PATTERN, STATED AS WHAT GOES WRONG, IN CAPS>**" + NL
+    + "**THE SHAPE:** <two or three sentences: what it looks like from inside, why it is "
+      "convincing at the time.>" + NL
+    + "**HOW TO SEE IT:** <the check that would catch it — concrete, runnable where possible.>" + NL
+    + "**HOW OFTEN I HAVE SEEN IT:** <your own count and rough span. Say 'once' if once — the "
+      "shared file's promotion floor is 3 instances across 2 distinct batches, and I would rather "
+      "carry an honest 'once' than a padded three.>" + NL + NL
+    + "Nominate AT MOST FIVE, fewest that are genuinely worth another session's attention. "
+      "If none qualify, return exactly: NO NOMINATIONS." + NL
+)
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _own(path):
+    """Same reasoning as langston-size-watch._own — root-created files here break rotation."""
+    try:
+        if os.geteuid() != 0:
+            return
+        import pwd, grp
+        os.chown(path, pwd.getpwnam("langston").pw_uid, grp.getgrnam("langston").gr_gid)
+        os.chmod(path, 0o664)
+    except Exception:
+        pass
+
+
+def screen(text):
+    """⛔ REFUSES ON ANY HIT. Returns (clean, hits). Deliberately over-broad: a false
+    refusal costs one re-run; a false pass leaks his peer calibration into a file all
+    four sessions read, permanently, under his name."""
+    hits = []
+    for pat in BANNED:
+        for m in re.finditer(pat, text, re.I):
+            frag = text[max(0, m.start() - 40):m.end() + 40].replace(NL, " ")
+            hits.append({"pattern": pat, "matched": m.group(0), "context": frag})
+    return (not hits), hits
+
+
+def screen_test():
+    """★ POSITIVE CONTROL FOR THE SCREEN. A filter that has never rejected anything and a
+    filter that CANNOT reject anything look identical from outside."""
+    cases = [
+        ("clean impersonal pattern", "### `wrong-object`" + NL + "**THE SHAPE:** the path is right and the thing is not.", True),
+        ("names a session", "### `x`" + NL + "**THE SHAPE:** CC-A got the population wrong.", False),
+        ("names a display name", "### `x`" + NL + "**THE SHAPE:** NEW Claude measured the worktree.", False),
+        ("carries a retraction word", "### `x`" + NL + "**THE SHAPE:** this was later withdrawn.", False),
+        ("retraction word, different case", "### `x`" + NL + "**THE SHAPE:** I RETRACTED the tally.", False),
+    ]
+    ok = True
+    for name, text, want_clean in cases:
+        clean, hits = screen(text)
+        good = clean == want_clean
+        ok = ok and good
+        print("  %-4s %-38s expected %-8s got %-8s %s"
+              % ("PASS" if good else "FAIL", name,
+                 "clean" if want_clean else "refuse",
+                 "clean" if clean else "refuse",
+                 ("<- " + hits[0]["matched"]) if hits else ""))
+    return ok
+
+
+def main():
+    if "--screen-test" in sys.argv:
+        print("leak-screen mutation check:")
+        return 0 if screen_test() else 1
+    if "--dry-run" in sys.argv:
+        print(PROMPT)
+        print("--- screen would reject any of: " + ", ".join(BANNED))
+        return 0
+
+    fd, ppath = tempfile.mkstemp(prefix="langston-promote-", suffix=".md", dir="/tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(PROMPT)
+    os.chmod(ppath, 0o644)
+
+    # ⛔ Token never in argv — /proc has no hidepid on this box.
+    # ⚠️ Tools are ON here, unlike the load canary: he has to READ his own store.
+    inner = ("set -a; . /etc/langston/oauth.env; set +a; "
+             "exec /usr/bin/claude -p --model '%s' --permission-mode bypassPermissions" % MODEL)
+    cmd = ["sudo", "-u", "langston", "env", "HOME=" + HOME, "sh", "-c", inner]
+    try:
+        with open(ppath, encoding="utf-8") as stdin_fh:
+            proc = subprocess.run(cmd, cwd=HOME, stdin=stdin_fh, capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace", timeout=1200)
+        reply, rc = (proc.stdout or ""), proc.returncode
+        if rc != 0:
+            reply += NL + "[stderr] " + (proc.stderr or "")[:800]
+    finally:
+        try:
+            os.unlink(ppath)
+        except OSError:
+            pass
+
+    clean, hits = screen(reply)
+    nominations = len(re.findall(r"^### ", reply, re.M))
+    none_offered = "NO NOMINATIONS" in reply
+
+    out = None
+    if clean and nominations and not none_offered:
+        out = os.path.join(OUTDIR, "pattern-promotion-proposal-%s.md"
+                           % datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+        body = []
+        body.append("# Pattern promotion PROPOSAL — not yet landed anywhere")
+        body.append("")
+        body.append("> **GENERATED:** " + utc() + " by `langston-promote-patterns` (P-8).")
+        body.append("> ⛔ **THIS IS A PROPOSAL. IT HAS NOT BEEN WRITTEN TO `MISTAKE_PATTERNS.md`**")
+        body.append("> **and must not be, without a session reading it and landing it inside a**")
+        body.append("> **batch.** That file's promotion floor — 3 instances across 2 distinct")
+        body.append("> batches — is a judgement, not a string match, and the counts below are")
+        body.append("> **his own claim, unverified by me.**")
+        body.append("")
+        body.append("> ✅ **LEAK SCREEN: PASSED.** No session name and no retraction word appears")
+        body.append("> below. The screen is mechanical and over-broad by design — see the tool.")
+        body.append("")
+        body.append("---")
+        body.append("")
+        body.append(reply.strip())
+        body.append("")
+        with open(out, "w", encoding="utf-8") as fh:
+            fh.write(NL.join(body) + NL)
+        _own(out)
+
+    row = {"ts": utc(), "rc": rc, "screen_clean": clean, "screen_hits": hits[:10],
+           "nominations": nominations, "none_offered": none_offered,
+           "proposal": os.path.basename(out) if out else None,
+           "measures": ("nominations Langston offered for promotion into the shared patterns file, "
+                        "after a mechanical screen for session names and retraction words; it does "
+                        "NOT verify his instance counts and does NOT land anything"),
+           "population": "his self-memory store as it stood at this run"}
+    try:
+        os.makedirs(OUTDIR, exist_ok=True)
+        with open(RUNLOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + NL)
+        _own(RUNLOG)
+    except Exception:
+        pass
+
+    print(json.dumps({k: row[k] for k in ("ts", "rc", "screen_clean", "nominations",
+                                          "none_offered", "proposal")},
+                     indent=2, ensure_ascii=False))
+    if not clean:
+        print("⛔ PROPOSAL REFUSED — the screen fired. Nothing was written. Hits:")
+        for h in hits[:5]:
+            print("   %-24s ...%s..." % (h["matched"], h["context"][:100]))
+        return 1
+    if none_offered or not nominations:
+        print("no nominations offered — nothing written, and that is a valid outcome")
+        return 0
+    print("proposal written: " + str(out))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
