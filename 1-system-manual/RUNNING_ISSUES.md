@@ -7428,7 +7428,7 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langston's files for months; the rule scopes itself, in its own text, to the CC session memory files and has never covered him.
 
 
-### #1007 OPEN 2026-09-05 (CC-A, found at `B-DEPLOY-DRIFT-LINE` Step 2 by an object-round reader) — ⛔ THE ESCALATED RULES-CHANGED ALARM CAN MISS A `CLAUDE.md` CHANGE, BECAUSE ITS FILE LIST IS SILENTLY CAPPED AT 300
+### #1008 OPEN 2026-09-05 (CC-A, found at `B-DEPLOY-DRIFT-LINE` Step 2 by an object-round reader) — ⚠️ **RENUMBERED FROM `#1007` THE SAME DAY: collided with CC-INFRA's Langston-cap entry. Measured rather than argued — theirs committed `c09109025` 11:18:56, mine `6a33848dd` 12:35:05, so by the standing rule the NEWER entry renumbers and that is mine. Commit `6a33848dd` and the messages around it say `#1007`; they mean THIS entry.** — ⛔ THE ESCALATED RULES-CHANGED ALARM CAN MISS A `CLAUDE.md` CHANGE, BECAUSE ITS FILE LIST IS SILENTLY CAPPED AT 300
 
 **`comms-infra/discord/dt-push-notice.sh:123` calls the GitHub compare API with NO pagination parameter and reads `d.get('files',[])`.** ⛔ **That array is capped at 300 entries, with NO `Link` header and NO `truncated` flag** — measured on a real range: **300 returned against a local truth of 761.**
 ⇒ **On a push whose range exceeds 300 changed files, a `CLAUDE.md` / `CONDUCT.md` / `.claude/hooks/` change can fall outside the returned list and the escalated *"THE RULES CHANGED IN THIS PUSH"* alarm STAYS SILENT.** ★ **A false negative in the alarm whose entire job is telling every session the rules moved.**
