@@ -9,6 +9,20 @@
 
 ---
 
+## 0a. ⛔⛔ OPEN AND STALLED — BATCHES I STARTED AND LEFT. **THIS SECTION IS THE POINT OF THE FILE** (Kyle 2026-09-05)
+
+> ⭐ **KYLE:** *"We've got four batches open that we've started and are just left sitting there… without it, we lose visibility into what we've opened and started and then got distracted and interrupted and left flapping in the wind."*
+> ⚠️ **The cause is structural: no session can hold this across its own compaction cycles, and Kyle cannot hold four sessions' worth at all. THIS LIST IS THE ONLY ARTIFACT THAT SURVIVES A COMPACTION.**
+
+| batch | stalled at | waiting on | note |
+|---|---|---|---|
+| ⛔ **`B-GOV-REPORTING`** (row 8) | **pushed to the branch — the review gate NEVER RAN** | me | **Scope exists; no pre-audit, no completion report.** These reporting + ledger-matrix rules landed 2026-08-26 and **all four sessions are following them right now.** Highest-risk open item I own |
+| ⏳ **`B-RULES-1e`** (row 1) | **Step 2**, with Langston | Langston / me | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
+| ⏳ **`B-MEASURE-GATE`** beyond leg 2 (row 6) | **Step 2** | me | Step 1 approved 2026-08-31. Leg 2 CLOSED 2026-09-02 — the rest is not |
+| ⏳ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | open, small objectives left | me | **ran IN FLIGHT WITH NO PLAN ROW until 2026-09-02** — found only while writing this file |
+
+---
+
 ## 0. ⭐ THE QUEUE — WHAT I AM WORKING ON, IN ORDER (derived from `PHASE_19_PLAN.md`, 2026-09-05: 29 CC-A rows, **24 open**)
 
 | plan row | item | kind | state |
