@@ -267,6 +267,44 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
 
 ---
 
+## 4h. ✅ D1 + D3 FIXED AND MUTATION-PROVED · **D2 RULED — AND MY LEAN WAS WRONG ON MECHANISM, NOT ON TASTE**
+
+**Langston ruled at `4dc231e57` (2026-09-05T07:36Z), re-derived at the object, not `RULED ON REPORTED FACT`. VERDICT: option (a) refuse-to-seed. Option (b) — an absolute `hollow` with no comparator — REFUSED.** ⛔ **(b) was MY lean. Both of his mechanism claims verified by me before accepting:**
+
+### ⛔⛔ WHY (b) IS REFUSED: **THIS GUARD CANNOT PREVENT A SALE. IT CAN ONLY DELAY ONE.**
+| his claim | verified at | verdict |
+|---|---|---|
+| the yield ACTS on the mark | `active-execution-engine.ts:1396`, verbatim: *"falls through: the mark hands off below and the cache IS updated — the engine is about to act on this mark"* | ✅ **CONFIRMED** |
+| clearing is a no-op with no prior ⇒ the cycle repeats | `book-state-tracker.ts:150` — `if (!prev) return;` | ✅ **CONFIRMED** |
+⇒ ⛔ **(b) WOULD READ `hollow`, SKIP 60 TICKS (~91 s, measured), AND THEN SELL INTO THE 27% SPREAD ANYWAY** — every wide name spending the shutdown at one exit look per 91 seconds, with a re-surfacing alert each cycle. ★ **That is the exact degradation `clearBookStateComparator`'s own docstring says it exists to close.**
+★★ **AND THE CORRECTION IS SHARPER THAN THE VERDICT: I JUSTIFIED (b) WITH *"selling into a 27% spread is what this guard exists to prevent."* IT IS NOT. This guard WITHHOLDS AN EVALUATION; it has no power to refuse a price.** ⇒ **Refusing a bad exit PRICE is the level-basis / `F-G-2` side's job. I attributed to this guard a job it structurally cannot do, and then argued for a change on that basis.**
+
+### ⭐ AND (a) IS WORTH MORE THAN THE "HONEST LABEL" I PRICED IT AT — **IT SUBTRACTS FALSE WITHHOLDS**
+**His point, re-derived by me with the numbers: the damage is not only during the shutdown, it is at the RE-OPEN.** A comparator seeded from the wide book carries that book's MIDPOINT as its reference. When the market reopens healthy, the healthy frame is judged against that stale mid:
+**ARKK — seed frame bid 80.01 / ask 105.00 ⇒ `priorMid` 92.505, against a real price near 85.95** ⇒ the healthy re-open mid departs by **≈ 7.1%** against `ownMarkDeviationDPct = 5` ⇒ ⛔ **`mark_deviation` → hollow → 60 skips → yield → clear → re-seed. A FALSE 60-TICK WITHHOLD AND A FALSE ALERT ON A GOOD BOOK.**
+⚠️ **AND IT IS SYMBOL-DEPENDENT, WHICH IS WHY IT WOULD HAVE BEEN MISSED: SLV's wide mid (59.25) sits ~1% from its true price and would NOT trip it.** ⇒ **the fault appears on some names and not others, from the same cause.**
+⇒ ✅ **(a) SUBTRACTS FALSE WITHHOLDS RATHER THAN ADDING REAL ONES — the right direction for a change on the class we understand least.**
+
+### ⛔⛔ HIS BLOCKER ON (a), AND IT WOULD HAVE SHIPPED A THIRD INERT GUARD
+**I wrote that both batches *"want the same predicate."* True of the SHAPE, false of the VALUE.** The only ceiling in the tree is `LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION = 0.50`, deliberately generous. ⛔ **`0.143 < 0.50` and `0.270 < 0.50` — SO IMPORTING IT WOULD ADMIT BOTH LIVE BOOKS AND REFUSE NOTHING.**
+★ **That is the third inert-guard near-miss in this batch's family** — after the guard that shipped inert on 09-03 and the `validated` field that had no consumers. ⚠️ **And it is forbidden on its own terms: `level-basis.ts` states the value is the caller's and *"is NOT INVENTED HERE"*, and by my own stated non-claim I have not measured how often a book is implausibly wide at seed time OUTSIDE the shutdown window. Minting a threshold on an unmeasured population is what `#996` was refused for.**
+
+### ⇒ DISPOSITION (§9.4 #2) — **FOLD INTO `3b.f-c`, OWNER CC-C. NOT INTO THIS BATCH.**
+**The ceiling and BOTH its consumers — `level-basis.ts` and the seed refusal — land together off ONE DB-governed value, DB-resolved and fail-hard on an empty read.** ⛔ **Nothing forces it into this batch: the window cannot open on the current build regardless, and D3 makes the interim honest because an unvalidated comparator is now distinguishable in the record.**
+✅ **PLACEMENT IS RULED, NOT FREE CHOICE: the refusal goes in `advanceBookStateComparator`, after `:103`'s crossed-book refusal — the WRITER OWNS ITS OWN INVARIANT.** Not a branch in `assessBookState` (that is (b)), not a caller condition.
+✅ **The 13th knob is then a coordinated THREE-SITE change — `BOOK_STATE_KNOBS`, the migration, and the literal `toBe(12)` at `b-xstock-feed-sanity-book-state.test.ts:144` — fail-closed by set-equality at `book-state-config.ts:57-59`. Ordinary, not a hazard.**
+
+### ✅ WHAT IS FIXED AND READY, AND WHAT STILL BLOCKS THE WINDOW
+| | |
+|---|---|
+| ✅ **D1** | departure measured against its own prior side · mutation-proved (2 red) · **and the first version of that fence proved NOTHING — caught by the mutation, rebuilt to reproduce the live tight-trailing condition** |
+| ✅ **D3** | `validated` returned as `comparatorValidated` + `comparatorFramesSinceSeed`, carried on every SKIP and YIELD line · changes no verdict, and says so |
+| ⏳ **D2** | **folded to `3b.f-c` with the DB-governed ceiling** |
+| ⛔ **the window** | **CANNOT open on the deployed build** — D1 corrupted the recorded reason, so grading the 09-08/09-09 handoffs against it would be grading a mislabelled instrument |
+**Langston on the test work, quoted because it is the standard the next fence is held to:** *"the mutation catch is the right call … the in-suite control that computes both formulas on one fixture and reproduces the live 0.0717 is the right shape; keep it. And you were right to rewrite the two tests that asserted the opposite rather than the code — the 50% control is what stops that rewrite reading as disarming the arm."*
+
+---
+
 ## 5. What is unproven, stated as unproven
 - ✅ **SEEDING IS PROVEN; JUDGING IS NOT, AND THE DISTINCTION IS THE WHOLE RESIDUAL (added 2026-09-03 post-deploy).** That the comparator now EXISTS for all five held names is measured (§4c). It is NOT evidence that a hollow frame is correctly REFUSED in production — that is what §6 settles, and it has not fired.
 - **The guard has never run against a live handoff.** Every fixture is a real row, but the decision frames at the handoffs were reconstructed from the price that drove the exit (A.11) — the first weekday 8:15 PM ET after deploy is the first real test.
