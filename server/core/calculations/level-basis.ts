@@ -116,7 +116,30 @@ export type LevelBasisRefusal =
    * not measured: the VALUE is the caller's to declare and is set from measurement later
    * (`3b.f-c`), while the OBLIGATION to declare one lands now.
    */
-  | 'stale_book';
+  | 'stale_book'
+  /**
+   * The book is two-sided and structurally valid but too WIDE to price a level from.
+   *
+   * ⛔⛔ ADDED 2026-09-05 FROM LIVE EVIDENCE, NOT FROM IMAGINATION. At the weekly xStock
+   * shutdown (`2026-09-05T00:15Z` = Fri 20:15 ET), `B-XSTOCK-FEED-SANITY`'s guard recorded
+   * real books as liquidity withdrew:
+   *   ARKK/USD  bid 80.01 / ask 105.00 — spread 27.0% of mid, ask 22.2% ABOVE the last trade
+   *   SLV/USD   bid 55.00 / ask  63.50 — spread 14.3% of mid, ask  6.1% above the last trade
+   *   LI/USD    bid 11.70 / ask  12.60 — spread  7.4% of mid
+   * ⇒ ★ EVERY ONE OF THOSE PASSES EVERY STRUCTURAL CHECK IN THIS MODULE: two-sided, both
+   * positive, `bid < ask`, and freshly stamped. **A taker entry would have anchored on an ask
+   * 22% above the last traded price**, and the age clause would have called it fresh — because
+   * it WAS fresh. It was current, and it was untradeable.
+   *
+   * ★ THE POINT: `stale_book` catches a price that is OLD. Nothing was catching a price that is
+   * WIDE. They are different faults and only one of them had a guard.
+   *
+   * ⚠️ AND THIS IS THE SAME REQUIREMENT LANGSTON ALREADY PRE-REGISTERED ON THE OTHER SIDE OF
+   * THE TRADE: `F-G-2`'s brake names "a depth/plausibility guard on the bid" as a PRECONDITION
+   * of switching exits to the bid. The exit side and the level side need the same guard; this
+   * is that guard, arriving at level construction.
+   */
+  | 'implausible_spread';
 
 /**
  * A transactable basis for level construction.
@@ -173,6 +196,15 @@ export function buildLevelBasis(
   input: BookTopInput,
   nowMs: number,
   maxAgeMs: number,
+  /**
+   * ⛔ REQUIRED, LIKE `maxAgeMs`, AND FOR THE IDENTICAL REASON: a call site cannot forget a
+   * parameter that does not compile when omitted. Expressed as a FRACTION OF THE MID so it is
+   * comparable across a $12 token and a $127 one — an absolute cent value would be a different
+   * rule per symbol, which is how a threshold silently becomes per-pair.
+   * ⚠️ THE VALUE IS THE CALLER'S AND IS NOT INVENTED HERE. It is set from measurement at
+   * `3b.f-c`; what lands now is the OBLIGATION to declare one.
+   */
+  maxSpreadFraction: number,
 ): LevelBasisResult {
   const bidPresent = input.bid !== null && input.bid !== undefined;
   const askPresent = input.ask !== null && input.ask !== undefined;
@@ -198,12 +230,20 @@ export function buildLevelBasis(
   if (ageMs < 0) return { ok: false, reason: 'age_unknown' };
   if (ageMs > maxAgeMs) return { ok: false, reason: 'stale_book' };
 
+  // ⛔ PLAUSIBILITY, LAST — a wide book is a real book, so this is the weakest fault and must
+  // not mask a structural one. Measured against the MID rather than either side, because the
+  // question "is this book tradeable?" is symmetric and neither side is privileged.
+  const mid = (input.bid + input.ask) / 2;
+  if ((input.ask - input.bid) / mid > maxSpreadFraction) {
+    return { ok: false, reason: 'implausible_spread' };
+  }
+
   return {
     ok: true,
     basis: {
       bid: input.bid,
       ask: input.ask,
-      mid: (input.bid + input.ask) / 2,
+      mid,
       capturedAtMs: input.capturedAtMs,
       ageMs,
       producer: input.producer,
@@ -294,6 +334,7 @@ function emptyCell(): FunnelCell {
       non_finite_side: 0,
       age_unknown: 0,
       stale_book: 0,
+      implausible_spread: 0,
     },
   };
 }

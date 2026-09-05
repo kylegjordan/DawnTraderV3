@@ -193,6 +193,44 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
 ### ⚠️ AND A SHA THAT DOES NOT EXIST
 **Langston's own memory records the seed fix at `6d6b0e7be` — which is not at origin.** My commit was rebased; **the surviving sha is `3ad89b699`.** Corrected here and in his memory sync, because a sha that resolves to nothing is a citation that cannot be checked.
 
+## 4f. ✅✅ THE PENDING CONTROL IS **DISCHARGED** — THE LATCH FIX IS PROVEN LIVE, END TO END. ⛔ AND IT IS **NOT** A QUALIFYING WINDOW ARM
+
+**§4e added ONE condition to the re-anchored criterion: *"the post-fix arms MUST show `COMPARATOR_CLEARED` firing on a yield … MEASURED NOW: 0, which is EXPECTED and is recorded as a PENDING control, NOT as a pass."*** ✅ **IT HAS NOW FIRED.**
+
+### ✅ THE FULL DESIGNED CYCLE, OBSERVED, ON FOUR NAMES
+| time (UTC) | what | evidence |
+|---|---|---|
+| 00:15:00 | first hollow frame | `ARKK/USD SKIP hollow streak=1/60 reasons=mark_deviation` |
+| 00:15:00 → 00:16:31 | the guard judges, it does not block | **236 `SKIP` lines** |
+| 00:16:29-31 | **the bounded yield fires** | **4 `YIELD after 60 hollow ticks (cap 60)`** |
+| 00:16:29-31 | ⭐ **THE FIX ITSELF** | **4 `COMPARATOR_CLEARED reason=yield_after_60_hollow`** — ARKK, LI, NEM, SLV |
+| 00:16:32 | ⭐ **AND IT RE-SEEDS ONE SECOND LATER** | `NEM/USD COMPARATOR_SEEDED mid=127.05 spread=0.07950` · `SLV/USD … mid=59.25` |
+⇒ ⭐⭐ **THE REFERENCE GENUINELY DROPS AND IS REBUILT FROM A FRESH TWO-SIDED FRAME. That is the whole of Langston's Step-8 finding, fixed and demonstrated — not asserted from the diff.**
+✅ **AND EVERY CLEARED LINE CARRIES `validated=true`** (`framesSinceSeed` 4,412-10,992) ⇒ **these were LEGITIMATE seeds validated by a real two-sided frame, NOT the bad-seed-latched case.** ⛔ **So this discharges the control WITHOUT also being evidence about the residual §4e names — the genuinely-hollow-at-seed case is still unobserved.**
+⚠️ **INSTRUMENT NOTE, because the naive read is a false alarm: `COMPARATOR_SEEDED` = 0 in `error.log` and 4 in `out.log`; `COMPARATOR_CLEARED` = 4 in `error.log`.** That is the **PM2 stream split** (`console.log` → `out.log`, `console.warn` → `error.log`), not a missing seed. **Reading either file alone would have produced a confident wrong answer in one direction or the other.**
+
+### ⛔⛔ AND IT IS **NOT** ONE OF THE TWO QUALIFYING ARMS — I ALMOST RECORDED IT AS ONE
+**`2026-09-05T00:15Z` IS `2026-09-04` 20:15 **ET** — FRIDAY — WHICH IS THE WEEKLY SHUTDOWN, NOT A WEEKDAY HANDOFF.** ✅ **CONFIRMED INDEPENDENTLY: `[B-NEW-36][SCAN_PAUSED] … no-op (weekend window)` from 04:10Z onward.**
+⇒ ✅ **§4d AND §4e WERE RIGHT AND ARE UNCHANGED: the window's two arms remain `2026-09-08T00:15Z` and `2026-09-09T00:15Z`.**
+★ **RECORDED BECAUSE OF THE DIRECTION OF THE NEAR-MISS: treating tonight as arm 1 would have pulled the window's completion FORWARD BY THREE DAYS — the error would have favoured me, which is exactly when a calendar gets checked rather than recalled.** I computed the weekday rather than trusting my own §4d.
+
+### ⭐⭐ AND THE SHUTDOWN BOOKS ARE A **FINDING FOR `B-PRICE-SIDE-BY-JOB`**, NOT JUST FOR THIS BATCH
+**The yield inputs are not empty books. They are WIDE ones** — liquidity withdrawing as the venue closes, both sides still quoted:
+| symbol | bid | ask | last | spread as % of mid | ask vs last trade |
+|---|---|---|---|---|---|
+| **ARKK/USD** | 80.01 | **105.00** | 85.95 | **27.0%** | ⛔ **+22.2%** |
+| **SLV/USD** | 55.00 | 63.50 | 59.87 | 14.3% | +6.1% |
+| **LI/USD** | 11.70 | 12.60 | 12.36 | 7.4% | +1.9% |
+⇒ ⛔⛔ **EVERY ONE OF THOSE PASSES EVERY STRUCTURAL CHECK IN `level-basis.ts` AS IT STOOD: two-sided, both positive, `bid < ask`, freshly stamped.** ★ **A taker entry would have anchored on an ask 22% above the last traded price, and the age clause would have called it FRESH — because it WAS fresh. It was current, and it was untradeable.**
+★★ **`stale_book` catches a price that is OLD. NOTHING WAS CATCHING A PRICE THAT IS WIDE.** ⇒ **`implausible_spread` added to `level-basis.ts` this turn, as a REQUIRED `maxSpreadFraction` parameter** (same fail-closed-by-construction discipline as `maxAgeMs`; the VALUE stays uninvented and is set from measurement at `3b.f-c`). **Mutation-proved: removing the guard turns 3 tests red.**
+✅ **AND IT IS THE SAME GUARD LANGSTON ALREADY PRE-REGISTERED ON THE OTHER SIDE OF THE TRADE** — `F-G-2`'s brake names *"a depth/plausibility guard on the bid"* as a **precondition** of switching exits to the bid. **The exit side and the level side need the same guard, and this batch just supplied the level side its evidence.**
+
+### ⚠️ THE ALERTS — EXPOSURE-CHECKED, LEFT ACTIVE
+`ef3ac2a5` (NEM) and `35a57f4e` (SLV) are **this guard's own emissions**, and `712f8308` is the exit-skip class. **MEASURED before dispositioning, per the standing rule:** SLV **3.03%** above its stop, LI **3.58%**, NEM **3.99%** — *(`active_open_positions`, `current_price` vs `stop_loss`)*. **No position is near its stop.**
+⛔ **ALL LEFT ACTIVE AND UNACKED: they ARE the observation window's signal, and acking them silences the only live instances we have.**
+
+---
+
 ## 5. What is unproven, stated as unproven
 - ✅ **SEEDING IS PROVEN; JUDGING IS NOT, AND THE DISTINCTION IS THE WHOLE RESIDUAL (added 2026-09-03 post-deploy).** That the comparator now EXISTS for all five held names is measured (§4c). It is NOT evidence that a hollow frame is correctly REFUSED in production — that is what §6 settles, and it has not fired.
 - **The guard has never run against a live handoff.** Every fixture is a real row, but the decision frames at the handoffs were reconstructed from the price that drove the exit (A.11) — the first weekday 8:15 PM ET after deploy is the first real test.
