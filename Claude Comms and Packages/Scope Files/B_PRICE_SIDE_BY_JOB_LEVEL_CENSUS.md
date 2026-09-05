@@ -501,3 +501,50 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
 ### ⚠️ AND A DISCOVERABILITY WART IN MY OWN INSTRUMENT, RECORDED RATHER THAN LEFT
 **The funnel is exposed at `/api/xstocks/filter-diagnostics` (`routes.ts:8175`) — and it carries CRYPTO counters.** ⛔ **I read `/api/vts/filter-diagnostics` first, found nothing, and briefly took a working reader for a broken one.** ★ **The control that caught it: its neighbour `gridAbsentSymbols` was ALSO absent from that payload while `gridTags` appeared twice — so the block I edited was not the block that endpoint serves.**
 ⇒ **DISPOSITION (§9.4 #2): move it to a crypto-appropriate surface, added to this batch's remaining work.** ⚠️ **Not urgent — it is reachable and now documented — but a crypto counter reachable only from the xStock diagnostics page is a trap for the next reader, and this batch's whole subject is instruments that mislead.**
+
+---
+
+## 12. ⭐⭐ THE SUBSCRIPTION DESIGN — **KYLE WIDENED IT TO VTS AND THE RTB REFRESH (2026-09-05), AND THE WIDENING IS WHAT MAKES IT TRACTABLE**
+
+**Kyle's directive:** *"with the order books needed when the signals are born, we need to do that for the VTS as well. We also need to make sure that our RTB refresh cycle incorporates the right order book numbers as well."* ⇒ **THREE consumers, not one.**
+
+### ⛔ WHY THE RTB HALF IS NOT OPTIONAL — CONFIRMED AT THE OBJECT
+**`ready_to_buy_service.ts:814-825`: the refresh recomputes `refreshedFinalScore` and RE-RUNS `decideMakerTaker` — on `_mtInputs`' STORED `entryPrice / stopPrice / targetPrice`.** ⇒ ⛔ **the refresh does not re-derive the geometry; it INHERITS whatever basis birth used and then re-ranks and re-decides maker-vs-taker on it.** ★ **So a mid-derived level is not a one-off error at birth — it is re-consumed on every refresh cycle, by the ranking key AND by the execution-mode decision.**
+⚠️ **AND MY OWN COMMENT AT THAT CALL SITE SAID SO AND STILL UNDER-READ IT:** I wrote *"it does not construct levels, so it inherits whatever the birth lane used"* and marked it a REPEATER. **True — and the consequence I did not draw is that a repeater re-decides `maker | taker` on the inherited number, which is a live economic choice, not a passive carry.**
+
+### ⭐ THE STRUCTURAL FIND: **THE SYSTEM ALREADY MAINTAINS EXACTLY THESE FOUR POPULATIONS — IT JUST POINTS THEM AT REST**
+`price-cache.ts:59-62` holds **four buckets**, and they map one-to-one onto the consumers:
+| bucket | refresh | the consumer it exists for | needs a book at that moment? |
+|---|---|---|---|
+| `openTrade` | 2 s | positions we hold — exits, depth gate | ✅ **has one today** |
+| `readyToBuy` | 15 s | ⭐ **the RTB pool — refresh + promotion** | ⛔ **NO — Kyle's second addition** |
+| `fx5Snapshot` | 30 s | ⭐ **the active scanner sweep — signal birth** | ⛔ **NO** |
+| `vtsSimulation` | 60 s | ⭐ **the VTS lane — signal birth** | ⛔ **NO — Kyle's first addition** |
+⇒ ★★ **THE DESIGN IS THEREFORE NOT "INVENT A SUBSCRIPTION POLICY." IT IS: POINT THE WEBSOCKET AT THE BUCKET MEMBERSHIP THE CACHE ALREADY COMPUTES.** ⛔ **The symbol sets exist, are already maintained, already churn correctly, and are already the right answer to "which symbols does this consumer care about right now." Building a second, parallel notion of the hot set is how the two drift apart (`#641`).**
+
+### ⛔⛔ THE BINDING CONSTRAINT, FROM THE VENUE'S OWN DOCS — **200 SYMBOLS PER CONNECTION**
+★ **Read the operator's documentation FIRST, per my own `vendor-docs-unread` rule — this is not a number to discover by instrumenting.**
+1. ⛔ **`depth: 1` IS NOT A VALID KRAKEN VALUE. The allowed set is `10, 25, 100, 500, 1000`, default 10.** ⇒ **there is no "cheap top-of-book" tier to buy: the floor is depth 10.**
+2. ⛔ **200 symbols per WebSocket connection.**
+**MEASURED AGAINST OUR OWN DEMAND (7 days, `crypto_spot`):**
+| population | distinct symbols | note |
+|---|---|---|
+| **VTS opens** | **206 over 7d · 35-128 PER DAY** | 3,490 opens |
+| **active opens** | **14 over 7d** | 22 opens |
+| **scanner sweep** | **~132 per scan** | 24,887 MCE lines in the sample window |
+⇒ ✅ **THE DAILY UNION FITS INSIDE ONE CONNECTION — comfortably at the median (~38) and tightly at the observed daily max (128).** ⛔ **THE 7-DAY UNION (206) DOES NOT.** ⇒ **the subscription must be DYNAMIC — it tracks live bucket membership and unsubscribes on eviction — not a static list, and a static list is what a naive reading of "subscribe the universe" would build.**
+⚠️ **AND THE HEADROOM IS REAL BUT NOT LARGE: 128 of 200 on the worst observed day is 64% of one connection's ceiling, on crypto alone.** ★ **Kraken permits multiple connections, so growth is answered by a SECOND CONNECTION — never by shedding symbols (rule 15: backpressure is never asset-class shedding).**
+
+### ⛔ WHAT IS **NOT** MEASURED, AND MUST BE BEFORE THIS SHIPS
+1. ⛔ **THE LOAD. 200 depth-10 books is a different machine than 2.** Every book update runs a truncation, a crossed-book check and a **CRC checksum** (`computeBookChecksum`) — the checksum is per-update, per-symbol, and it is the term that scales worst. **UNMEASURED. It needs a staged ramp with CPU and event-loop lag watched, not a flip.**
+2. ⛔ **THE xSTOCK SIDE IS A DIFFERENT ADAPTER AND IS NOT COVERED BY ANY OF THIS.** `getBookForFill` is the Kraken crypto WS mini-book. **Whether the equities feed can supply a book at all is unestablished** — and census §6 says the xStock lane's levels are venue bar closes, so it may not even want one. **Stated rather than assumed.**
+3. ⛔ **WHETHER A BOOK ARRIVES FAST ENOUGH TO BE USED AT BIRTH.** A newly-subscribed symbol has no book until its first snapshot. **A signal born in that gap still refuses** — so the funnel's `no_book` will not go to zero, and the residual rate is itself a measurement this design owes.
+
+### ➕ AND A DEFECT FOUND WHILE READING THE DOCS — RECORDED, NOT CHASED
+**`kraken-websocket-adapter.ts:2493` subscribes the book channel with `depth: 1` — NOT one of Kraken's five allowed values.** ✅ **Reachable: `switchToBookChannel` has exactly ONE caller, `:2456`, so it is a live path.** ⚠️ **NOT yet established that it fails — no subscription errors in `error.log` (12 subscribe-related lines, none matching an error pattern) — but that window is one process-lifetime and the path may simply not have fired.**
+⇒ **DISPOSITION (§9.4 #2): added to this batch as a verification item — instrument that one path and confirm whether the subscription is accepted or silently dropped.** ★ **`RUNNING_ISSUES` rule 14 territory: a venue value that does not exist belongs in `KNOWN_NONEXISTENT_NAMES` once confirmed.**
+
+### ⇒ THE PROPOSED DESIGN, IN ONE PARAGRAPH, FOR LANGSTON TO ATTACK
+**The WebSocket subscribes the union of the `openTrade`, `readyToBuy`, `fx5Snapshot` and `vtsSimulation` bucket memberships, at depth 10, tracked dynamically as buckets churn, with a subscribed-count ceiling that opens a second connection rather than dropping symbols.** `buildLevelBasis` then has a book at all three moments Kyle named — active birth, VTS birth, and RTB refresh — and the RTB refresh additionally re-reads the book so its re-ranking and its maker/taker re-decision run on current transactable prices rather than on an inherited birth number. ⛔ **Staged: ramp the subscribed set, watch CPU and event-loop lag, and let the funnel's `accepted` rate report the gain at each step — the arm is already live and already counting, so the ramp is self-measuring.**
+
+**Sources for the venue limits:** [Book (Level 2) — Kraken API](https://docs.kraken.com/api/docs/websocket-v2/book/) · [Orders (Level 3) — Kraken API](https://docs.kraken.com/api/docs/websocket-v2/level3/)
