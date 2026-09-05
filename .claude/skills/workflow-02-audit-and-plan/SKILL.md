@@ -11,6 +11,11 @@ description: STEP 2 ONLY of the DawnTrader batch workflow - the Pre-Implementati
 ## ⛔ THE ORDERING IS THE WHOLE POINT
 **The AUDIT comes FIRST in the document; the PLAN falls out of it.** Under the old two-document way the plan was approved first, so **an audit that overturned the design arrived after the approval was already spent.** This ordering is what let an audit kill a design *before* a plan was built on it.
 
+## ⛔⛔ THE DOCUMENT'S OWN TITLE SAYS BOTH HALVES (Kyle directive 2026-09-05)
+**The first line of the file reads `# <BATCH-ID> — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN`.** The filename stays `<BATCH>_PRE_AUDIT.md` — **it is cited across the corpus and the governance checker keys on it** — but the TITLE inside must name the plan.
+★ **WHY, and it is not cosmetic: the step was merged in `#694` piece 5 and the NAME never followed, so the workflow read as two steps for months.** A document titled only *"Pre-Audit"* invites a session to write only the audit half and feel finished — **the plan is then missing and nothing in the document's own header asks for it.**
+⚠️ **MEASURED 2026-09-05 across the existing pre-audits: NOT ONE of them titles itself with both halves** — they read *"pre-audit"*, *"PRE-AUDIT (Step-2)"*, *"Pre-Implementation Audit"*. **The convention did not exist until now; do not read an old file's title as the standard.**
+
 ## ⛔ BINDING FORMAT REQUIREMENT
 **Every plan item back-references the audit finding it falls out of.** Anything in the plan with **no** audit treatment is flagged **`UNAUDITED`** in-document.
 *Why: on this format's first use, an item that appeared only in the plan half was never audited — and it was precisely the risk the audit had already identified.*

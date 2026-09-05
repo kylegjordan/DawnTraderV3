@@ -14,6 +14,7 @@
 | plan row | item | kind | state |
 |---|---|---|---|
 | — | **`B-DEPLOY-DRIFT-LINE`** (`#1002`, row 4.55) | batch | ⭐ **NEXT — Kyle: *"slot it after this batch"***. Nothing compares the deployed sha to the branch head |
+| 4.57 | **`B-TASK-LIST-SLOT`** (`#1006`) | batch | **NEW, Kyle-directed 2026-09-05.** The close-time half is built (ledger row); the **slot-time trigger does not exist**. Also normalises the four lists — **only mine conforms; CC-C has none** |
 | 4.6 | **`B-RULES-LAYER`** (`#998`) | batch | **KYLE-DIRECTED to follow `B-WAKE-QUIET`.** Failure condition pre-registered |
 | 1 | `B-RULES-1e` | batch | **IN FLIGHT, parked at Step 2** with Langston |
 | 6 | `B-MEASURE-GATE` (legs beyond leg 2) | batch | Step 1 approved, in flight at Step 2 |

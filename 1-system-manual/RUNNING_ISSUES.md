@@ -7365,3 +7365,20 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 
 ★★ **AND THIS STRENGTHENS `#1002` RATHER THAN WEAKENING IT.** The parent entry could be read as *"someone forgot to deploy for a day."* **It re-opened to 27 commits within about ten hours of being closed to zero — so the gap is not an incident, it is the STEADY STATE of a shared branch with three sessions pushing and deploys owned per-batch.** ⇒ **the value of a drift line is not catching a one-off lapse; it is making a continuously-varying distance VISIBLE, and nothing measures it today.**
 ⚠️ **STILL NOT A CLAIM THAT ANYTHING IS BROKEN OR URGENT**, and still **CC-C's to dispose of** — both source batches are theirs and in flight. `dt-deploy` restarts the engine, so "deploy sooner" is not free.
+
+
+### #1006 OPEN 2026-09-05 (CC-A, Kyle-directed) — THE TASK-LIST RULE IS HALF-WIRED: THE CLOSE-TIME HALF HAS A SLOT, THE SLOT-TIME HALF HAS NO TRIGGER AT ALL
+
+**Kyle asked for a per-session task list (batches assigned, sub-batches identified, hotfixes, findings to investigate, IN WORKING ORDER), updated at every batch close AND every time a new item is slotted, with the same update reaching the phase plan and the roadmap.**
+
+⛔ **HE THEN STRUCK MY FIRST IMPLEMENTATION THE SAME MORNING, AND HE WAS RIGHT: *"I don't think that this becomes a new rule. I think this gets added into each of the skills files for the steps in the workflow. Or maybe it is its own skill file — anytime a session has to create or slot in a new task… that skill is triggered."*** I had written six lines of rule text into `CLAUDE.md`, which is the always-loaded file `#998` measured as the weakest layer and the one whose growth weakens every other rule in it. **Shrunk to a pointer; the enforcement moved to a ledger row.**
+
+**WHERE IT STANDS — EXACTLY HALF DONE:**
+- ✅ **CLOSE-TIME: has a slot.** A Tier-1 row in `workflow-10-governance` naming **all four lists**, so every session sees all four at every close and updates its own. Kyle's reason for listing the others: *"the vast majority of the time they're not going to be messing with anybody else's task list, but it's just good to see them all there."*
+- ⛔ **SLOT-TIME: NO TRIGGER EXISTS.** §9.4 fires *"the moment you find the thing"* — which by its own text can happen with **no batch and no step open**. ⇒ **a step skill cannot carry it**, for exactly the reason `§9.5`'s trigger is pinned in `CLAUDE.md` rather than in `workflow-02`: a gated skill would refuse to load at two of the three moments the rule fires.
+
+**★ THE OPEN DESIGN QUESTION, WHICH IS KYLE'S OWN AND IS NOT YET ANSWERED:** its own skill invoked at slot time, versus a clause repeated in every step skill. ⚠️ **The second option is the `#641` shape by construction — the same text in eleven files, which drifts.** **The first needs an invocation the model actually reaches, and skill auto-invocation is measured-unreliable in this project.** ⇒ **neither is free; the batch must argue the trade and state which failure it is accepting.**
+
+**MEASURED 2026-09-05 — the convention does not exist yet, which is why this is worth a batch rather than a habit:** of four sessions, **one list conforms** (`CC_A_SESSION_TASK_LIST.md`), **one is non-conforming** (`CC_INFRA_SESSION_TASK_LIST.md`, 48 KB), **one sits in the wrong folder under a phase-scoped name** (`1-system-manual/CLAUDE_NEW_PHASE_19_TASK_LIST.md`, CC-B's), and **CC-C has none at all.** *(Instrument: `git ls-files | grep -iE "task_list"` — the index, not the filesystem.)*
+
+**HOME: `B-TASK-LIST-SLOT`, owner CC-A, placed in `PHASE_19_PLAN` at row 4.57, after 4.55 `B-DEPLOY-DRIFT-LINE` and before 4.6 `B-RULES-LAYER`.** ⚠️ **Kyle has NOT ratified that position** — he asked to see the whole queue before fixing the order.

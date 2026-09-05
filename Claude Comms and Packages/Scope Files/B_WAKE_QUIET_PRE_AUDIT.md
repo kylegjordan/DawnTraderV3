@@ -1,8 +1,9 @@
-# B-WAKE-QUIET — PRE-IMPLEMENTATION AUDIT
+# B-WAKE-QUIET — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
 > ⛔⛔ **WRITTEN RETROSPECTIVELY AT STEP 10 ON 2026-09-05. IT DID NOT GATE THE IMPLEMENTATION, AND NOTHING HERE MAY BE CITED AS THOUGH IT DID.**
 > **THE BATCH RAN STEP 1 → STEP 3 WITH STEP 2 ABSENT.** The scope's §2 (mandatory 1.a architectural read), §3 (provenance read) and §4 (does-it-already-exist) are **Step-1** obligations and are not a pre-audit; no `PRE_AUDIT` document existed until this one. `PRE_AUDIT` is **REQUIRED** for `non_architecture` in the governance checker (`scripts/governance-checker/config.mjs`, `CLASS_DOCSET.non_architecture.required`).
 > ⚠️ **This is exactly the `#754` shape the rules file warns about — `1 → 3` with 2 silently absent — and the batch's own memory position block never carried a `STEP: 2` line to make the skip visible.** Filed as `#1005`.
+> ⛔ **AND IT HAS NO IMPLEMENTATION-PLAN HALF, WHICH THE TITLE NOW MAKES VISIBLE.** The step requires ONE document carrying the audit AND the plan, with every plan item back-referencing the finding it falls out of. **This document is audit-only, because the code was already written when it was created.** Under the format, the whole plan half is `UNAUDITED` by construction — stated here rather than left for a reader to notice.
 > ✅ **WHAT THIS DOCUMENT IS FOR:** to state honestly what a Step-2 audit *would* have examined, and to record which of those things the batch got right anyway and which it paid for.
 
 **change-class: non_architecture** — declared in `B_WAKE_QUIET_SCOPE.md` and unchanged. **Evidence: the batch's own 26 files touch nothing under `server/`, `client/` or `shared/`.**
