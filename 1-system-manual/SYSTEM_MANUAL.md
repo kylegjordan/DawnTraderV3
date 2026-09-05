@@ -592,6 +592,49 @@ TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
 | Slippage | 0.15% | Estimated execution slippage |
 | Spread | 0.10% | Bid-ask spread |
 
+### ⭐⭐⭐ WHICH PRICE DOES WHICH JOB — THE PROVENANCE TABLE (Kyle-directed, 2026-09-05)
+
+> ⛔ **THIS TABLE EXISTS BECAUSE THE ANSWER WAS NOT WRITTEN DOWN ANYWHERE AND HAD TO BE RE-TRACED THROUGH SIX FILES.** Kyle's instruction, verbatim: *"we need to have it documented where we are using which price … so that this is not something we ever have to question and not be sure of the answer."*
+> ⚠️ **AND THE COST OF ITS ABSENCE IS ON THE RECORD: while it was undocumented, a session (me) described the stored value by its FIELD NAME rather than its CONTENTS and told Kyle we keep "the last price" — when the field named `c` ("last trade closed") holds a MIDPOINT. Reading the label instead of the value is the exact defect `B-PRICE-SIDE-BY-JOB` exists to fix, committed while explaining that batch.**
+
+**⛔ THERE ARE TWO DIFFERENT MIDPOINTS FROM TWO DIFFERENT KRAKEN CHANNELS. THEY ARE NOT INTERCHANGEABLE AND THEY DO DIFFERENT JOBS.**
+
+| # | midpoint | channel | built at | producer tag | what consumes it |
+|---|---|---|---|---|---|
+| **1** | **TICKER BBO mid** | `ticker` | `kraken-v2-translator.ts:71-73` — `markPrice = markKind === 'mid' ? (bid+ask)/2 : last`, written into `c` | `kraken_ws_ticker_mid` / `_last` | ⭐ **the ENTRY levels and the EXIT trigger** |
+| **2** | **BOOK mid** | `book` (depth 10) | `kraken-websocket-adapter.ts:929` — `(bestBid + bestAsk) / 2` from the mini-book | `kraken_ws_book_mid` | the depth/fill path + the exit provenance stamp — **NOT the trigger** |
+
+#### ⛔ THE CRYPTO CHAIN, END TO END — EVERY HOP, WITH ITS LINE
+1. Kraken **`ticker`** channel sends `{ bid, ask, last }` on one frame.
+2. `kraken-v2-translator.ts:78-80` — `a: [ask]`, `b: [bid]` are the venue's **raw sides, untouched**; `c: [markPrice]` is **OVERWRITTEN with the midpoint** whenever the book is two-sided (`#952`). ⛔ **`c` is Kraken's "last trade closed" field. Its NAME is a lie about its CONTENTS, by our own hand, and that is deliberate and documented — not an accident.**
+3. `kraken-websocket-adapter.ts:684` — `const lastPrice = parseFloat(safeData.c[0]);` ⚠️ **a variable named `lastPrice` holding a midpoint. The name is retained deliberately (`OBJ-3` forbids the rename); `safeData.markKind` carries the truth.**
+4. `:684-685` — `bid` and `ask` **are parsed here and are available**.
+5. `:~706` — `emit('priceTick', { price: lastPrice, producer: markKind === 'mid' ? 'kraken_ws_ticker_mid' : 'kraken_ws_ticker_last' })`. ⛔ **THE SIDES ARE NOT ON THE EVENT.**
+6. `:1096` — `priceCache.updateFromWebSocket(internalSymbol, lastPrice)`. ⛔ **`price-cache.ts:402` declares `(symbol: string, price: number)` — the store HAS `bid`/`ask` columns (`:41-51`) but its high-frequency writer has NO PARAMETER for them, so they keep whatever the slower REST poll last set.**
+7. **ENTRY:** `signal-orchestrator.ts:2387` `priceCache.getCachedPrice(symbol)` → `:2400` `getSmoothedPrice(...)` (adaptive Kalman) → `:2425` `currentPrice = smoothedPrice` → `:2515` into the 19-strategy dispatch → **entry, stop and target are derived from a SMOOTHED TICKER MIDPOINT.**
+8. **EXIT:** `active-execution-engine.ts:1485` `livePricingAdapter.getPriceWithFallback(symbol, 2000)` → `:1492-1498` `currentPrice = priceResult.price`, `priceProducer = priceResult.producer` → compared against stop/target ⇒ **the exit trigger is the UNSMOOTHED TICKER MIDPOINT.**
+
+#### ⇒ THE ONE-LINE ANSWER TO "WHICH PRICE DO WE ENTER AND EXIT ON?"
+⭐ **BOTH THE ENTRY LEVELS AND THE EXIT TRIGGER USE THE `ticker`-CHANNEL BBO MIDPOINT. NEITHER USES THE ORDER BOOK, AND NEITHER USES A TRADED PRICE.** **The entry side is additionally SMOOTHED by the adaptive filter; the exit side is not.** ⇒ **the two are the same quantity at different lags, which is why an exit can trigger against a level the entry never saw.**
+
+#### ⛔ THE ORDER BOOK IS A DIFFERENT THING AND IS NOT INTERCHANGEABLE WITH THE TICKER
+| | **order book** (`book` channel) | **ticker snapshot** (`ticker` channel) |
+|---|---|---|
+| shape | **10 price levels per side, size at each — a LADDER** | **best bid + best ask only, with size AT the best — ONE level per side** |
+| lives in | `orderBooks` Map, **in-memory**, lost on restart | ⭐ `crypto_spot_ticker_snap` / `xstock_spot_ticker_snap` — **durable, partitioned, retained** |
+| coverage | **the hot set only** — symbols explicitly subscribed by the trading adapter | ⭐ **the archived universe** — 506 crypto symbols measured 2026-09-05 |
+| fed by | `subscribeToSymbols` (event-driven: opens, promotions, audits) | the **passive archive**, `crypto-spot-archiver.ts:177`, hash-mod sharded at 300 symbols per connection |
+| answers | *"how much can I fill, at what average price"* | *"what are the two prices right now"* |
+⇒ ⛔ **A LEVEL NEEDS THE TOP OF BOOK. A FILL SIMULATION NEEDS THE LADDER. Using one where the other is required is a category error, and the two are NOT the same numbers from the same feed.**
+⚠️ **UNMEASURED, STATED SO IT IS NOT ASSUMED: whether the ticker's best bid/ask equals the book's top level at the same instant. Two feeds from one venue; they should agree closely, and nobody has checked.**
+
+#### ✅ AND THE TWO SIDES ARE ALREADY CAPTURED DURABLY — FOR BOTH CLASSES
+`crypto_spot_ticker_snap`, `crypto_perp_ticker_snap`, `xstock_spot_ticker_snap`, `xstock_perp_ticker_snap` all carry **`bid`, `bid_qty`, `ask`, `ask_qty`**, written by `passive-archive/ticker-batch-writer.ts` from the venue's ticker frames. **Live-measured 2026-09-05: crypto 356,629 rows / 24 h, 506 distinct symbols, newest 1.5 s old, ZERO null or zero sides, ~32 snapshots per symbol per hour.**
+✅ **The read path already exists and is per-class:** `execution/depth-source.ts` — `getDepthSnapshot()` (fail-CLOSED, the ladder, for fills) and `getTickerWitness()` (fail-OPEN by design, returns `{ bid, ask, capturedAtMs }`, for telemetry cross-checks).
+⛔ **`getTickerWitness` IS DELIBERATELY FAIL-OPEN — *"it must never be able to block or delay a close."* It therefore MUST NOT be reused as-is for level construction, which has to fail CLOSED.** ★ **Same source, same shape, opposite failure policy — and the policy is the part that matters.**
+
+---
+
 ### The LEVEL BASIS — what `baseEntry` / `baseStop` / `baseTarget` are derived FROM
 
 ⛔⛔ **THE GEOMETRY BELOW TAKES A BASE PRICE AS GIVEN. THIS SECTION SAYS WHAT THAT PRICE ACTUALLY IS, AND UNTIL 2026-09-04 THE MANUAL DID NOT SAY IT ANYWHERE** (`B-PRICE-SIDE-BY-JOB` P2). **There is no single answer: the crypto path carries TWO bases in two lanes.**
