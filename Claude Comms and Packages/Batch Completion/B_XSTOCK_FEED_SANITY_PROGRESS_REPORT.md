@@ -231,6 +231,42 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
 
 ---
 
+## 4g. ⛔⛔⛔ **§4f's HEADLINE IS CORRECTED: THE RE-SEED WAS *NOT* HEALTHY. I MISREAD A UNIT AND IT INVERTED THE CONCLUSION** — plus THREE live defects, all mine
+
+**§4f concluded the fix works end to end and cited the re-seed as proof: *"re-seeds one second later … `NEM/USD COMPARATOR_SEEDED mid=127.05 spread=0.07950`"* and *"rebuilt from a fresh two-sided frame."*** ⛔ **THAT IS WRONG.**
+
+### ⛔ THE UNIT ERROR, AT THE CODE
+`book-state-tracker.ts:113` — `spread=${((frame.ask - frame.bid) / mid).toFixed(5)}`. ⇒ **THE LOGGED `spread` IS A FRACTION OF THE MID, NOT AN ABSOLUTE PRICE.**
+| | logged | I read it as | it actually is |
+|---|---|---|---|
+| **NEM** | `0.07950` | ~8 cents on $127 — tight | ⛔ **7.95% wide — a $10.10 spread** |
+| **SLV** | `0.14346` | ~14 cents on $59 — tight | ⛔ **14.35% wide** |
+| **ARKK** | `0.27015` | ~27 cents on $92 — tight | ⛔ **27.0% wide** |
+✅ **ARITHMETIC CONFIRMS THE UNIT EXACTLY: `(63.5 − 55) / 59.25 = 0.14346` and `(105 − 80.01) / 92.505 = 0.27015` — both match the logged values to five decimals.**
+⇒ ★★ **THE RE-SEED TOOK THE SAME GROTESQUELY WIDE BOOK AS ITS NEW REFERENCE, ON ALL FOUR NAMES.** ⛔ **And the seed frame's own stamp gives it away — `at=2026-09-05T00:15:00.704Z`, which is the frame that STARTED the streak, 91 seconds before the re-seed was logged.**
+⚠️ **HOW IT SLIPPED: a plausible number in the wrong unit reads as confirmation. "0.0795 on a $127 stock" is exactly what a healthy spread looks like — which is why I did not check the unit.** ★ **`wrong-object` in its purest form: right field, right symbol, right moment, wrong DIMENSION.** ⇒ **Langston flagged the re-seed independently; I re-derived it and he is right.**
+
+### ⛔ D1 — `bid_collapsed` MEASURES THE BID AGAINST THE **MID**, SO A STATIC WIDE BOOK IS *PERMANENTLY* "COLLAPSED"
+`book-state.ts:203` — `const bidDep = (priorMid - bid) / priorMid;` ⇒ **the bid's distance from the MID, which on a wide book is ~half the spread FOREVER, however still the bid is.**
+⭐ **THE EVIDENCE IS AS STRONG AS EVIDENCE GETS — THE FRAMES ARE BYTE-IDENTICAL:** `{"bid":55,"ask":63.5,"last":59.87,"priorMid":59.25,"priorBid":55,"priorAsk":63.5,"priorLast":59.87}`. **`priorBid` = `bid` = 55. THE BID DID NOT MOVE AT ALL** — and `bidDepartureFrac = 0.0717` against `departureThresholdFrac = 0.01`, so it fires.
+⇒ ⛔ **THE PREDICATE FIRES ON A BOOK THAT IS *WIDE* AND REPORTS IT AS A BID THAT *FELL*.** ★ **The discriminator was already sitting in the same function, computed and unused on this arm: `bidHeld = |bid − priorBid| / priorBid <= otherSideHoldPct` — which is TRUE here.** ⇒ **the `bid_collapsed` arm requires `askHeld` and never requires that the bid actually MOVED.**
+⚠️ **CONSEQUENCES, BOTH REAL: (a) the recorded REASON is wrong on every such frame, which will mis-grade this batch's own window; (b) it guarantees a yield roughly every 90 s, all night, on any name whose overnight spread exceeds ~2×threshold.**
+
+### ⛔⛔ D2 — THE YIELD RE-SEEDS FROM THE HOLLOW FRAME, VIOLATING **THIS FILE'S OWN STATED INVARIANT**
+`book-state-tracker.ts:20-22`, verbatim: *"⛔ A HOLLOW FRAME MUST NEVER BECOME THE REFERENCE the next frame is judged against — otherwise a sustained hollow run would quietly re-baseline itself into `two_sided` one frame later. THAT is the invariant."*
+⇒ ⛔ **THE LATCH FIX TRADED ONE DEFECT FOR ANOTHER.** Before: a bad seed latched forever. Now: the yield clears the comparator and **the very next frame — still hollow — seeds it**, so the wide book becomes the new normal and subsequent identical frames read `two_sided`. **This is the residual §4e named, now OBSERVED rather than hypothesised.**
+
+### ⛔⛔ D3 — **AND THE LABEL THAT WAS SUPPOSED TO BOUND D2 HAS ZERO CONSUMERS.** MINE, AND NOT ONE LANGSTON NAMED
+**§4e's answer to the residual was: *"LABELLED and measured, never a fresh threshold"* — the `validated` flag.** **CENSUS, repo-wide, tests excluded: `validated` is WRITTEN at `:119`, LOGGED at `:152`, and READ BY NOTHING.** ⇒ ⛔ **It changes no behaviour. A `two_sided` verdict from an unvalidated comparator is trusted exactly as much as one from a validated comparator.**
+★★ **THE FILE'S OWN COMMENT AT `:56` PREDICTS THIS EXACTLY: *"an unvalidated reference wearing a validated reference's label is `#546`."*** ⇒ **I wrote that sentence, shipped the field, and never wired the consumer — so the label IS the thing its own docstring warns against.**
+
+### ⇒ DISPOSITION — **FOLD INTO THE WORK IN HAND (§9.4 disposition 1). THE WINDOW CANNOT OPEN ON THIS BUILD.**
+**All three are defects in the instrument the 09-08/09-09 window exists to read.** ⛔ **D1 corrupts the recorded REASON; D2 corrupts the STATE; D3 removes the only bound on D2.** ⇒ **fixing them is not scope creep, it is the precondition for the window meaning anything.**
+⚠️ **AND §4f's PASS ON THE CONTROL STANDS, NARROWED: `COMPARATOR_CLEARED` DID fire on a yield, so the CLEARING half is proven. What is NOT proven — and what §4f wrongly claimed — is that the re-seed is healthy.** ★ **The control tested one half and I reported it as both.**
+⛔ **§4f IS LEFT IN PLACE WITH THIS SECTION IMMEDIATELY AFTER IT, NOT REWRITTEN: it is cited in a commit message and in a report to Kyle, and a claim that silently changes is worse than one that is visibly corrected.**
+
+---
+
 ## 5. What is unproven, stated as unproven
 - ✅ **SEEDING IS PROVEN; JUDGING IS NOT, AND THE DISTINCTION IS THE WHOLE RESIDUAL (added 2026-09-03 post-deploy).** That the comparator now EXISTS for all five held names is measured (§4c). It is NOT evidence that a hollow frame is correctly REFUSED in production — that is what §6 settles, and it has not fired.
 - **The guard has never run against a live handoff.** Every fixture is a real row, but the decision frames at the handoffs were reconstructed from the price that drove the exit (A.11) — the first weekday 8:15 PM ET after deploy is the first real test.
