@@ -212,7 +212,7 @@
 | **P-2** | composition from a **directory of parts**, current file as ONE legacy part, `OPEN` keyed on an **`obligations:` list in the part file**, emptied at close | **BLOCKER-2** + his migration answer | per-invoke byte log shows the section leaving with no human action; composed file carries **generation stamp + part count**; a killed generator leaves a **visibly-stale-stamped** last-known-good |
 | **P-3** | self-memory store into `LANGSTON_ARCHITECTURE.md` §4; correct F-7's stale figure; **readable backup manifest in his reach**; **evict by supersession, never by age** | F-7, F-8 + his OBJ-3 ask | §4 names it; the size line names WHERE to read, never what it is; he can enumerate the backup himself |
 | **P-4** | ⛔ **REVISED: the ledger stays PUSHED as its own capped part** until interposition is mechanical. **FIRST DELIVERABLE: give the ledger a CLOSING BOUNDARY** — it cannot be composed without one | ⭐ **Q2 fourth category** + F-6 | a boundary exists and two independent measurers get the same byte count; **absorb or defer to `PHASE_19_PLAN` row 2.8** |
-| **P-5** | size/staleness watch over **all three always-loaded artifacts** (126,457 B total), not just `MEMORY.md` | his OBJ-5 ruling + F-7 | alarms on a synthetic overage in **each** of the three |
+| **P-5** | size/staleness watch over **all three always-loaded artifacts** (**143,856 B total, measured 2026-09-05** -- stale 126,457 B corrected per §18.g), not just `MEMORY.md` | his OBJ-5 ruling + F-7 | alarms on a synthetic overage in **each** of the three |
 | **P-6** | a WRITE rule for the reviewer ledger | F-5 | rule exists; `langston-recall`'s refusal path still passes |
 | **P-8** | ⛔ **DE-SCOPED — no cross-session retrieval.** Replace with a **PROMOTION step** into `MISTAKE_PATTERNS.md` | ⭐ **BLOCKER-3** | a pattern reaches the shared file **impersonally**; his store stays private. ⚠️ **Marked `INFERRED` — Kyle asked for context useful to the system, not for exposing his store** |
 
@@ -462,3 +462,85 @@ His 8 retractions date: `2026-03-31 · 05-05 · 07-28 · 08-07 ×2 · 08-10 · 0
 
 ⇒ ⭐ **RECOMMENDATION: RUN (A), AND RUN IT AS PART OF THIS BATCH.** ★ **It converts P-7 from "count whether he uses things" into "measure whether the size hurts", which is the question actually worth answering — and it gives every later trim a before/after it can be judged against instead of an assumption.**
 ⚠️ **DESIGN CAVEAT, STATED NOW SO IT IS NOT DISCOVERED LATER: a single paired run is n=1 and reviews are not deterministic. It needs several distinct review tasks, and a pre-registered statement of what counts as a difference, written BEFORE the runs.**
+
+---
+
+## ⭐⭐⭐ 18. SETTLED — THE CEILING IS ADOPTED, THE A/B IS STRUCK *(Langston ruled 2026-09-05; Kyle: "Go with the ceiling, skip the A/B")*
+
+### 18.a WHAT LANGSTON RULED, AND HE REJECTED ALL THREE OPTIONS I PUT TO HIM
+
+⛔ **HE VERIFIED BEFORE RULING — `wc -c` on the box himself, and CONFIRMED the scope claim at `e61325b0b` against `CLAUDE.md:108` and `:419`.** Explicitly **NOT** `RULED ON REPORTED FACT`. **His files have never been in the cap's scope.**
+
+| my option | his ruling |
+|---|---|
+| (a) adopt ~24,576 B | ⛔ **rejected — below an unmeasured floor.** `#946` proves 24,576 B unreachable; it does **not** establish what *is* reachable. **Setting a cap below a floor nobody has measured is a fake commitment — the same class as dating a batch (§9.4).** |
+| (b) adopt ~40,960 B **per file** | ⛔⛔ **rejected, and THE UNIT IS WRONG BEFORE THE NUMBER IS.** ★ **A per-file cap is satisfiable by SPLITTING a file while the loaded total is unchanged** — the exact shape of the line-rule failure already lived through (compliant in form, 5.8 KB on one line). **And 40,960 B per file licenses ~92 KB while wearing the word "compliant."** |
+| (c) a different number, reasoned | ⛔ rejected as posed — still an absolute number against an unmeasured floor |
+
+✅⭐ **WHAT HE RULED INSTEAD — A MONOTONE RATCHET, AND IT IS BETTER THAN ANYTHING I OFFERED:**
+> **CEILING := the total of everything auto-loaded per invoke, measured today = `143,856 B`. IT MAY ONLY EVER DECREASE.**
+> **Any batch touching any of the three leaves the total ≤ the value it FOUND** — `wc -c` before and after, stated in the governance ledger.
+
+★ **WHY THIS IS THE RIGHT SHAPE, in his terms: it is MEETABLE BY CONSTRUCTION, it is ENFORCEABLE, and it flips the default from *"growth is free"* to *"growth must be paid for."*** ⇒ **it needs no floor measurement to start binding, which is precisely why it can ship today while (a)-(c) could not.**
+
+⛔ **THE UNIT IS THE SUM, NOT THE FILE. Do not restate this rule per-file anywhere** — that reintroduces the split-and-comply hole he rejected it for.
+
+★ **AND HE NAMED WHERE THE CHEAP BYTES ARE, which the batch should act on rather than rediscover:** `MEMORY.md` grows **BY DESIGN** and its prune is a manual step with no predicate (the 75%-compliance shape). ⭐ **`CLAUDE.md` is RULES — it should be stable, it is the LARGEST of the three at `66,994 B`, and it has never been governed at all.**
+
+### 18.b ⛔⛔ THE RATCHET'S CURRENT VALUE MAY NOT LIVE IN PROSE — AND THIS IS OUR OWN STANDING LESSON, NOT A NEW ONE
+
+⚠️ **A RATCHET RATCHETS: the moment a batch reduces the total, the NEW LOWER TOTAL becomes the ceiling.** ⇒ **the value CHANGES, by design, and anything asserting it goes stale on the next successful trim.**
+⛔ **THE SHARED `MEMORY.md`'s OWN STANDING LESSON APPLIES VERBATIM: *an always-loaded file must NAME WHERE to read a live value, NEVER WHAT IT CURRENTLY IS.*** ★ **Measured cost of ignoring it: the Langston-model line was wrong for 17 days, and the `34,605 B` figure in `PHASE_19_PLAN` row 2.8 was false for weeks and carried an argument on its back.**
+⇒ ✅ **THE VALUE LIVES IN A STATE FILE THAT THE WATCH READS AND WRITES. Governance text names the FILE, never the number.**
+
+⛔⛔ **AND A RATCHET WITH NO INSTRUMENT IS THE FAILURE THAT ALREADY HAPPENED HERE — this is not a hypothetical.** `CLAUDE.md` §3.2 says of our own cap: *"NOTHING ENFORCES THIS — it is checked by whoever is writing, which is why it has been breached repeatedly."* ★ **And item 2 of the original 2026-08-05 plan CONTAINED the daily size watch, was never started, and that is exactly why his `MEMORY.md` grew `+137%` in 28 days with nobody noticing. The alarm was itself the unfinished item.**
+⇒ ⭐ **THE CEILING IS THE VALUE; `P-5` IS THE INSTRUMENT. They ship together or the ceiling is decoration.**
+
+### 18.c THE A/B IS STRUCK — AND THE REASON IS LANGSTON'S OWN, NOT A BUDGET CUT
+
+He ruled it **sound in principle and under-specified in four ways**, and then said the thing that decided it: ⛔ **he EXPECTS IT TO COME BACK NULL.**
+
+**His four gaps, recorded because they generalise to any future version of this test:**
+1. ⭐ **IT DOES NOT SEPARATE SIZE FROM CONTENT.** The trimmed arm is not *"the same thing, smaller"* — **it is different text.** Needs a **third arm: trimmed + INERT PADDING back to `143,856 B`.** Trimmed beats padded ⇒ size is the lever. Tie, both beating full ⇒ it was **content**, and *"trim"* was the wrong verb.
+2. ⛔⛔ **THE LEAK I DID NOT SEE: HE IS STATELESS; HIS ARTIFACTS ARE NOT.** `langston-recall` indexes Discord nightly at 04:10Z — **if arm 1's reply lands in the archive and arm 2 calls recall, he reads his own first answer verbatim.** Same for the board, the inbox, `RUNNING_ISSUES`. ⇒ both arms need a **frozen ref, a sealed inbox, and to run before the index rebuild**, and **neither may write anywhere the other reads.**
+3. **Non-author adjudicator + PRE-REGISTERED difference categories** — verdict flip, blocker found/missed, `RULED ON REPORTED FACT` vs re-derived. ⛔ **Not prose quality.**
+4. ⭐⭐ **THE ONE THAT DECIDES WHETHER A NULL IS READABLE — A POSITIVE CONTROL:** at least one task whose correct ruling **depends on a line present in the full arm and cut in the trimmed one.** ⛔ **If trimmed still gets it right, the instrument cannot detect content loss and its null means NOTHING — you would have rebuilt the null you already have, with more ceremony (`#661` leg 1).**
+
+⇒ ✅ **KYLE'S DECISION, 2026-09-05: *"Go with the ceiling, skip the A/B."*** ★ **Consistent with his standing constraint — he had already said he wants to avoid spending days on something that yields no evidence either way, and the reviewer being tested says he expects no evidence.**
+
+### 18.d ⛔ HOW THE TRIM IS TO BE ARGUED FROM NOW ON — LANGSTON'S CONDITION, AND IT BINDS THE COMPLETION REPORT
+
+> **The case for trimming does NOT rest on demonstrated harm and must NOT be sold as if it did.** It rests on **DIRECTION**: the quantity is **monotone**, he has **no shedding lever** (no compaction, ever), and **unbounded monotone growth fails eventually.**
+
+⛔⛔ **SO THE REPORTABLE FINDING IS: we measured `143,856 B` AND A GROWTH TREND. WE DID NOT MEASURE DEGRADATION.** ★ **§17's headline stands as the governing sentence: *"no evidence of degradation" and "no instrument capable of detecting it" look identical from outside, and only the second is true.*** ⛔ **Any later document that justifies a trim by asserting his performance suffered is contradicting the evidence in this batch.**
+
+### 18.e ⭐ THE ONE INSTRUMENT I DID NOT TRY, AND ITS BIRTHDATE IS NOT CONFOUNDED *(Langston's, offered unprompted)*
+
+**CORRECTIONS OF HIM RECORDED BY OTHERS** — CC pushbacks in the Discord/Telegram archive, reachable via `langston-recall`, normalised per ruling.
+✅ **Why it survives the §17 objection that killed all three of mine: the CC sessions' recording practice did NOT change on 07-10, 07-28 or 08-05, so the series REACHES THE PRE-GROWTH WINDOW.**
+⚠️ **Its real weakness, stated by him: it partly measures the CORRECTORS' vigilance, not his accuracy.** ⇒ **it is the only series we have that predates the growth, and it is not clean.**
+**DISPOSITION (§9.4): (4) A SCHEDULED REVIEW — folded into `B-LANGSTON-FILE-FLOOR` as an optional read, NOT its own batch and NOT a gate on anything.** ⛔ **It does not re-open the A/B; Kyle struck that.**
+
+### 18.f ⭐ THE CROSS-SESSION READ — ONE ANSWER IN, AND IT CARRIES A REAL MISS
+
+**Asked of CC-A, CC-B and CC-C 2026-09-05, explicitly capped at first-hand judgement with NO investigation** (Kyle's constraint). **CC-A answered; CC-B and CC-C had not at the time of writing.**
+
+| question | CC-A |
+|---|---|
+| extreme / unnecessary blockers | **none nameable.** Every blocker on `B-WAKE-QUIET` correct; **two were things CC-A should have caught** |
+| proven wrong afterwards | **none.** The only corrections in the window were **his own**, vacating a ruling a fresh invoke could not see — ⇒ **statelessness, not error** |
+| ⛔ **missed something** | ⛔ **YES, AND IT IS FRESH: he APPROVED `B-WAKE-QUIET` at Step 4 without noticing THE BATCH HAD NO STEP 2 AT ALL** — no pre-audit existed; the workflow ran **1 → 3**. Caught at Step 10 by the tier ledger's own pre-audit row (`#1005`), two days later |
+| sharper / same / duller | **SAME; on measurement discipline SHARPER** |
+
+⭐⭐ **CC-A'S CAVEAT IS THE SHARPEST THING IN THE WHOLE EXCHANGE AND IT MAY BE THE ACTUAL ANSWER TO KYLE'S QUESTION: *"he reviews what I HAND HIM… He cannot miss what was never in front of him."*** The Step-4 dispatch was a change list and diff snippets; **nothing in it said what the document set should be.**
+⇒ ⛔ **THIS ALSO INDEPENDENTLY KILLS THE A/B ON A GROUND LANGSTON DID NOT RAISE: *"if you want to test degradation you have to hold the dispatch constant, and I do not think any of us can."*** ★ **Two parties reached "do not run it" from different directions.**
+
+### 18.g WHAT CHANGES IN THIS BATCH'S PLAN
+
+| row | change |
+|---|---|
+| **P-5** | ⭐ **acquires the ceiling as its THRESHOLD, and owns the state file holding the live value.** ⚠️ **Its `126,457 B` figure is STALE — measured total today is `143,856 B`; corrected in place.** |
+| **P-3** | `LANGSTON_ARCHITECTURE.md` §4 edit **names the state file**, never the number (18.b) |
+| **new** | **`B-LANGSTON-FILE-FLOOR`** — measure the floor, then set the real number. **HOME below.** |
+
+> **HOME: `B-LANGSTON-FILE-FLOOR`, owner Infra Claude + Langston, placed in `PHASE_19_PLAN.md` at row 2.8a, after `B-LANGSTON-LEDGER-SPLIT` (2.8)** — his placement, *"same files, same hands"*, and accepted.
