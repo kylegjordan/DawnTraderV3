@@ -396,3 +396,38 @@
 ⚠️ **HONEST NOTE ON MY OWN PROSE: I have used "characters" to Kyle in plain-language reports because it reads more naturally than "bytes". That was a readability choice and it is now WITHDRAWN — the two diverge on our files, so the friendlier word was quietly the wrong one.**
 
 ★ **TOKENS ARE A THIRD QUANTITY AND WE DO NOT CURRENTLY MEASURE THEM.** They are what actually consumes the model's budget, and bytes are only a proxy for them. **Stated so nobody later treats a byte figure as a token figure** — if the context-limit research returns token-denominated guidance, that is a fourth unit and it gets its own column, never a conversion asserted from bytes.
+
+---
+
+## ⭐⭐ 16. SHOULD A STATELESS SERVER REVIEWER GET THE SAME CAP AS AN INTERACTIVE SESSION? *(Kyle's question, 2026-09-05)*
+
+> **Kyle:** *"the way that Langston works, sitting on a Hetzner server, being stateless — does that mean we should restrict his loads to the same sizes and context levels as the desktop app sessions? Or because of the way he's set up, does it mean he could take in more context, or less? How do we determine that?"*
+
+⛔⛔ **MY INTUITION WAS WRONG, AND THE ARGUMENT THAT KILLS IT IS ONE I HAD NOT CONSIDERED.**
+**I framed it as:** *a one-shot process has a nearly-empty context, so a big instruction file competes with less and the cap should matter LESS.*
+⇒ ⛔ **THAT MISSES THE LEVER. AN INTERACTIVE SESSION HAS COMPACTION — a mechanism to free context when it fills. A HEADLESS SINGLE-TURN PROCESS HAS NO SUCH LEVER AND NEVER WILL.**
+★ **So the two are not "more history vs less history". They are: the interactive session carries more AND can shed it; Langston carries less AND can shed nothing.** ⇒ **his instruction files are the only thing occupying his budget and there is no recovery path.** ★ **If anything that argues the cap matters MORE for him — the opposite of where I started.**
+
+⚠️⚠️ **AND MY TWO RESEARCH PASSES DISAGREE WITH EACH OTHER. FLAGGED RATHER THAN RESOLVED IN FAVOUR OF THE ONE I PREFER.**
+- **Pass 1 reported:** Claude Code's `memory.md` documents *"files over 200 lines consume more context and reduce adherence."*
+- **Pass 2 reported:** *"Anthropic's official prompting docs do NOT state a size guideline for user instruction files in ANY unit."*
+✅ **Both CAN be true — different corpora (the Claude Code product docs vs the general prompting docs) — but I have not verified that reconciliation myself.** ⛔ **UNRESOLVED. Not to be cited as settled either way until someone reads the actual page.**
+
+⚠️ **SECOND HONESTY NOTE ON THE EVIDENCE: pass 2 cited academic papers I have NOT opened, at least two carrying identifiers I cannot vouch for.** ⛔ **None of the conclusions below rests on them.** *(A subagent hit is a lead, not evidence — same standing as `langston-recall`.)*
+
+✅ **WHAT SURVIVES AS USABLE — less than the research volume suggests:**
+| finding | standing |
+|---|---|
+| ⭐ **NOTHING published distinguishes headless from interactive on instruction-file size** — not Anthropic, not the forums, not the issue tracker | **this IS the answer to Kyle's question: nobody has written it down, so we are deciding it ourselves** |
+| **~40 KB is Claude Code's own warning threshold** — where the app itself signals degradation | ⚠️ **the one concrete product-sourced number, UNVERIFIED BY ME.** ⇒ **his `CLAUDE.md` (66,994 B) and `MEMORY.md` (65,056 B) EACH exceed it; with the index the set is 143,856 B** |
+| **practitioner guidance is stated FLATLY at ~200 lines, no headless exception** | practitioner consensus, not documentation |
+| **instruction POSITION effects are mixed for Claude specifically** | ⇒ **no design may depend on position within the file** |
+
+⇒ ⭐ **RECOMMENDATION — A JUDGEMENT, NOT A CITATION: APPLY A CAP TO LANGSTON, AND DO NOT ASSUME STATELESSNESS BUYS HIM HEADROOM.** Instruction text competes for a **model-level** attention budget, and that competition does not care about session architecture. **The compaction asymmetry argues slightly stricter for him, not looser.**
+
+⛔⛔ **BUT THE NUMBER IS NOT INHERITABLE, AND THE BATCH MUST NOT FUDGE THIS: our 24,576 B cap SCOPES ITSELF, in its own text, to the shared `MEMORY.md` and the per-session `MEMORY_CC_A/B/C.md`. IT HAS NEVER COVERED LANGSTON.**
+⇒ **quoting it at his files — which `#946`, my own audit, and this batch have ALL done — has been citing a rule outside its stated scope.** ✅ **The only rule genuinely binding any of his files is the ~24 KB line in his own `MEMORY.md` header, which HE approved 2026-07-28.** ⚠️ **And his `CLAUDE.md`, the LARGEST of the three, has no size rule of any kind.**
+
+⇒ ⛔⛔ **SO THE BATCH NEEDS A DECISION IT DOES NOT HAVE, AND IT IS KYLE'S: does Langston get a cap of his own — covering ALL THREE always-loaded artifacts — and at what number?**
+⚠️ **`#946`'s arithmetic already showed that what remains after every easy cut exceeds 24,576 B on its own** ⇒ **adopting 24,576 for him is choosing a number he cannot currently meet.**
+★ **THE HONEST OPTIONS: (a) adopt ~24 KB and accept a long consolidation programme · (b) adopt the ~40 KB product-warning threshold PER FILE · (c) set a different number deliberately and record the reasoning.** ⛔ **I am not choosing that alone — it is a scope decision with a real cost either way.**
