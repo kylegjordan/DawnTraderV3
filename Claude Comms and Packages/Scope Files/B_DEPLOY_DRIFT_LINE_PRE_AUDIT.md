@@ -1,5 +1,7 @@
 # B-DEPLOY-DRIFT-LINE — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
+> ✅✅ **STEP 2 ACCEPTED by Langston 2026-09-05 08:39Z, at `6a33848dd`.** *"Both gates pass, the A7 correction is right, and I'm not reversing anything."* He re-derived `shouldDeliverToDiscord` and the hook's filter himself rather than taking them reported. **Both open questions RULED; his conditions are folded in below and marked ⭐ LANGSTON.**
+
 **change-class: non_architecture** · **owner:** CC-A · **issue:** `#1002` · **plan row:** `PHASE_19_PLAN` 4.55
 **Scope approved at `25f64f93c`** (Langston, r4 → r5 folded). **Step-2 order was fixed by his ruling: the two gates first, everything else behind them.**
 
@@ -120,16 +122,26 @@ Measured: `commits[0]` = `871d04570`, dated **2026-09-03**; the true oldest comm
 - **`total_commits` rides in the body as context.** ⛔ **It does NOT double as the truncation detector once P3 mandates `per_page=100` — object round: `total_commits > len(commits)` would then be true for ANY gap over 100 commits, so it detects the PAGE SIZE, not truncation.** ✅ **The `files` cap (`len(files) == 300`) is the detector that still discriminates, and it is unaffected by pagination — measured 300 across all four query forms.**
 - ✅ **NOTHING GOES BACK TO HIM AS A BLOCKER ON THIS.** ★ **An earlier draft of this document proposed reversing his Q2 ruling. That draft was wrong, and it was wrong because I stopped at the first sufficient explanation of the observation — exactly the failure §9.5(a) is written against.**
 
-**P4 — TRUNCATION IS AN EXPLICIT OUTCOME, AND IT NOW BEARS ONLY ON THE FILE GATE.** ⇐ **A5 + A8b + A8c**. `len(files) == 300` (the cap) ⇒ **the runtime-path gate is UNDECIDABLE.** ⚠️ **AND HERE I OVERREACHED, PER THE OBJECT ROUND: the scope's §5e RULED a capped file list to be `MEASUREMENT FAILED`, and P6 reserves severity to Langston and Kyle. I cannot both cite that ruling and set "maximum severity" against it.**
-⇒ ✅ **AS WRITTEN: the outcome is `MEASUREMENT FAILED`, per the ruling.** ★ **The argument for treating it as top-rung instead — that a range that large is itself the alarm, and going quiet on the biggest visible gap is this batch's own failure mode — is put to Langston as a QUESTION, not taken as a decision.**
+**P4 — TRUNCATION IS AN EXPLICIT OUTCOME, AND IT NOW BEARS ONLY ON THE FILE GATE.** ⇐ **A5 + A8b + A8c**. `len(files) == 300` (the cap) ⇒ **the runtime-path gate is UNDECIDABLE.** ✅✅ **RULED ⭐ LANGSTON: §5e STANDS — AND MY PREMISE WAS FALSE AT THE OBJECT.** *"`MEASUREMENT FAILED` is not silence: scope §5a `:107` already gives it a destination — it mints its own alert naming which operand could not be read. So on a 761-file range the alarm fires; it just fires honestly."* ★ **I argued against going quiet, on a design that was never quiet. I had read my own scope's §5a and did not connect it.**
+⭐ **BUT HE ADDED THE CLAUSE I HAD CORRECTLY SENSED A HOLE UNDER, AND IT GOES IN P4:**
+> ⛔ **THE RUNTIME-PATH GATE MAY NEVER GATE THE AGE ALARM'S *EMISSION* — ONLY ANNOTATE IT.** On `len(files) == 300` the age operand is measured and sound (A8b), so **the alert carries the stamped age at its rung with `runtime_path: UNDECIDABLE`**, and the `MEASUREMENT FAILED` row names the file gate as the failed operand.
+⛔ **AND WHY HE WILL NOT RUNG ON IT: *"300 is a CAP, not a measurement. A saturated gauge cannot order anything"*** — same defect as the `min(1,n/100)` damper in `B-ARM-REMOVAL`. ★ ***"'A range that large is itself top-rung' is a magnitude adjective on a censored observation."*** **The age bucket is the measured ladder and it already carries the case I was worried about.**
 ✅ **The AGE operand is no longer affected by truncation, because of the pagination parameter in P3.**
 
 > ⚠️ **FORMAT DEBT, NAMED RATHER THAN LEFT: P5, P8, P9 and P13 back-reference SCOPE RULINGS, not Part-A findings, and the format requires an audit finding or an explicit `UNAUDITED` flag.** ★ **P9 (`main` arm) is the sharpest: NO A-item measures the `main` comparison it depends on.** ⇒ **all four are hereby flagged `UNAUDITED-BY-THIS-STEP, carried on a prior ruling` — which is the honest label, since a ruling is not a measurement.**
 
-**P5 — THREE OUTCOMES.** ⇐ **BLOCKER-2.** `measured` · `zero` · `MEASUREMENT FAILED` (a 404/422, a failed `ssh`, an exhausted budget read from `X-RateLimit-Remaining`, or disagreeing operands). **`MEASUREMENT FAILED` mints its own alert.** ⛔ **`behind`/`diverged` is its own outcome, never a magnitude.**
+**P5 — THREE OUTCOMES. ⭐ AND `MEASUREMENT FAILED` IS READ OFF THE *EXIT STATUS*, NEVER OFF AN HTTP CODE OR A NON-EMPTY FILE (LANGSTON, from a live incident he hit THIS TURN).**
+> ⛔ **His own case, and it nearly changed a ruling:** his first fetch of the scope returned **a different batch's document**. `/tmp/scope.md` on Helsinki is **root-owned, mode 644, dated 2026-07-20**; his `curl -o` got `EACCES`, `-s` swallowed the warning, and his only success token was `-w HTTP:%{http_code}` — **which prints 200 on a transfer whose write FAILED.** Reproduced: `HTTP:200`, `curl_exit=23`, file unchanged. **He nearly ruled on a seven-week-old unrelated document.**
+> ★ **An HTTP 200 means the fetch happened, not that the bytes landed** — *"which is `exit 0` means the command RAN, one layer down, and is this batch's own subject."*
+> ⭐ **AND I HIT THE IDENTICAL TRAP IN THE SAME HOUR, INDEPENDENTLY:** my first compare probe wrote to `/tmp/cmp.json` on Helsinki, got `curl: (23) Failure writing output to destination`, and my reader parsed **a different file** — returning `ahead_by 5` for a 2,486-commit range. **I caught it on the visible `rc=23` and switched to `mktemp -d`; he caught his on the content being from another batch.** ⚠️ **Two sessions, same host, same shared path, same hour, same silent-write failure.**
+> **DISPOSITION: (1) folded into P5 here — exit status is the success token, and the `dt-push-notice.sh` `curl -s … 2>/dev/null → []` path takes the same treatment; (2) the general Helsinki `/tmp` collision is added as an item to `B-SHARED-TMP-ISOLATION` (`#979`, plan row 2.6) — different host from the laptop case, same class.**
+ ⇐ **BLOCKER-2.** `measured` · `zero` · `MEASUREMENT FAILED` (a 404/422, a failed `ssh`, an exhausted budget read from `X-RateLimit-Remaining`, or disagreeing operands). **`MEASUREMENT FAILED` mints its own alert.** ⛔ **`behind`/`diverged` is its own outcome, never a magnitude.**
 
 **P6 — THE ALERT: `health_check`, and severity is a QUESTION, not a decision I am taking.** ⇐ **A2 + A1x**. `info` surfaces to every session and posts nothing; `warning` posts to `#general` and invokes Langston on every re-surface.
-⛔ **RECOMMENDED: `info`. Asked, not assumed** — a drift on live trading code may deserve the louder channel, and that is Langston's and Kyle's call, not mine.
+✅✅ **RULED ⭐ LANGSTON: `info` + `health_check` — AND HE TOOK IT HIMSELF RATHER THAN ROUTING IT TO KYLE.** His reason: *"the word 'severity' appears zero times in the scope at `6a33848dd`, so I'm not overruling a prior ruling of my own — and this moves neither risk nor authority, so routing it to Kyle would be the ceremonial second approval I've already logged myself for manufacturing."* **THREE CONDITIONS:**
+- ⛔ **RECORD THE REASON AS *CLASS*, NOT SEVERITY.** The code comment must read *quiet because `health_check` ∉ `ALWAYS_DELIVER_CATEGORIES` (`system-alerts.ts:121-124`)*. ★ **My own point turned back on me: a later category change silently re-arms Discord, and nobody working from "info is quiet" would look.**
+- ⛔⛔ **NAME THE REAL COST OF `info` IN THE SIM ENTRY — IT IS NOT "QUIET".** An active row **injects into EVERY session's EVERY prompt until someone deploys.** ★ **That is a standing nag on exactly the party who can clear it, which is the property he wants — but it is not a free channel and P10 must say so.**
+- ⛔ **ESCALATION IS MEASURED, NEVER PREDICTED. Do not build a severity ladder now.** **PRE-REGISTERED: if a top-rung row survives N consecutive re-surfaces unactioned, that is evidence `info` did not reach an actor, and severity is revisited THEN.** ★ **`B-WAKE-QUIET`'s negative result is the precedent — three instruction-shaped fixes, all failed. He will not buy a louder channel on a prediction.**
 
 **P7 — DEDUPE KEY CARRIES A BOUNDED MONOTONE BUCKET; FOUR RUNGS; ESCALATE ONLY; RETURN-TO-ZERO RESOLVES ALL.** ⇐ **A4** (the flag already exists) and Langston's CONFLICT-3 replacement. **Body carries one line: RESOLVE, do not ACK.** ✅ **BUCKETS ARE ON THE AGE, per P3 and per his CONFLICT-3 ruling verbatim (*"a bounded, monotone AGE BUCKET"*).** ⛔ **An earlier draft said "on the COUNT" — a surviving fragment of the reversal this document withdraws, caught by the object round. It would have changed the rung boundaries and the key string.**
 
@@ -137,7 +149,9 @@ Measured: `commits[0]` = `871d04570`, dated **2026-09-03**; the true oldest comm
 
 **P9 — `main` ARM: measured, logged, never fires.** ⇐ Q3 ruling.
 
-**P10 — THE SIM ENTRY** — host, trigger + cadence, operands, dedupe key, failure mode ⇐ Langston's ruling; **plus the unbounded-growth property from A4x's delete census**, and **the gap that the observation runner and its chain are absent from the SIM at all**.
+**P10 — THE SIM ENTRY** — host, trigger + cadence, operands, dedupe key, failure mode ⇐ Langston's ruling; **plus the unbounded-growth property from A4x's delete census.**
+⛔ **⭐ LANGSTON CONDITION: it must NAME THE REAL COST OF `info`, which is not "quiet" — an active row injects into EVERY session's EVERY prompt until someone deploys.** ★ **A standing nag on exactly the party who can clear it.**
+⚠️ **AND THE 'SIM IS SILENT' CLAIM IS STRUCK** — see the A3x correction; the entry is owed on its own merits.
 
 **P10b — THREE LIMITS THE OBJECT ROUND NAMED THAT THE PLAN CARRIES RATHER THAN CLOSES.**
 - ⚠️ **`commits[0]` is the ANCESTRALLY first commit, not necessarily the date-oldest.** A merge carrying older-dated commits would sit later in the array. **Checked: this range is linear today** (min committer date over all 2,486 = `e31d8f306` = `commits[0]`), consistent with §7.1's fast-forward-only flow. ⇒ **the plan reads `commits[0]` and never takes min(date); stated as an assumption on the branch's shape, not a proof.**
@@ -147,6 +161,8 @@ Measured: `commits[0]` = `871d04570`, dated **2026-09-03**; the true oldest comm
 **P11 — CORRECT `#1002`'s TEXT** ⇐ §1 of the scope. **`UNAUDITED`: nothing — it is a documentation correction with no runtime surface.**
 
 **P12 — FILE THE `triggers_at: "now"` TRAP AS ITS OWN ITEM** ⇐ **A2x**. Not fixed here.
+
+⚠️ **NUMBERING NOTE: the rules-alarm finding is `#1008`, NOT `#1007`.** It was filed as `#1007`, collided with CC-INFRA's Langston-cap entry, and **renumbered after Langston's acceptance message was written** — so his text, commit `6a33848dd` and the Step-2 dispatch all say `#1007` and mean **this** finding. **`#1007` now belongs to someone else.** Measured, not argued: theirs `c09109025` 11:18:56, mine `6a33848dd` 12:35:05, newer renumbers.
 
 **P13 — OFFER THE WEEKLY-OBSERVATION LINE TO CC-B** ⇐ scope OBJ-5. Their instrument.
 
