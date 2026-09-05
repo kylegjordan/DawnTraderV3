@@ -34,8 +34,9 @@ SSH_ID="/home/langston/.ssh/id_ed25519"
 SSH_OPTS="-i $SSH_ID -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# --dry-run performs EVERY read and NO write. It exists because this job's first proof
-# must not be taken against the live alert store, and because Step 7 has to be re-runnable.
+# --dry-run performs every read and writes NOTHING TO THE ALERT STORE. It still appends to
+# $LOG and creates a scratch dir -- the guarantee is "cannot mint or resolve", not "cannot
+# write at all", and the weaker claim is the true one. It exists because this job's first
 DRY=0
 BASE_OVERRIDE=""
 while [ $# -gt 0 ]; do
@@ -45,6 +46,9 @@ while [ $# -gt 0 ]; do
     # distinguished from "always zero" is untestable, so the job must be pointable at a range
     # with a KNOWN non-zero answer. Forcing --dry-run here means a test can never mint.
     --base) shift; BASE_OVERRIDE="${1:-}"; DRY=1 ;;
+    # A mistyped flag must REFUSE, not run live. Without this, `--dryrun` (one hyphen
+    # short) leaves DRY=0 and the "a test can never mint" guarantee is void.
+    *) echo "dt-deploy-drift: unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
 done
@@ -96,7 +100,11 @@ trap 'rm -rf "$WORK"' EXIT
 # ⚠️ A LATER CATEGORY CHANGE SILENTLY RE-ARMS DISCORD. Anyone reasoning from "info is quiet"
 #    will not look here. That is why the reason is recorded as the class.
 mint_alert() {
-  local key="$1" title="$2" body="$3"
+  # Strip apostrophes: title/body land inside a SINGLE-QUOTED remote command, and the
+  # PARSE_ERROR detail is a python exception message, which can contain one. An unescaped
+  # quote would break the remote command and the failure would be invisible.
+  local q="'" 
+  local key="${1//$q/}" title="${2//$q/}" body="${3//$q/}"
   local at; at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   # triggers_at MUST be a real ISO-8601 stamp. fireDue compares it as a STRING
   # (system-alerts.ts:536), so the literal "now" is never <= an ISO timestamp and such a row
@@ -115,7 +123,11 @@ mint_alert() {
     "cd /home/deploy/dawntrader && npm run --silent system-alerts -- add \
        --triggers-at '$at' --category health_check --severity info \
        --dedupe-key '$key' --title '$title' --body '$body'" >> "$LOG" 2>&1
-  return $?
+  local rc=$?
+  # An ssh failure here means the alert was NEVER FILED. Saying so in the log is the only
+  # trace left; swallowing it would make an unfiled alert look like a filed one.
+  [ $rc -ne 0 ] && echo "$TS MINT_FAILED rc=$rc key=$key" >> "$LOG"
+  return $rc
 }
 
 # ── OPERAND 1: the deployed sha ───────────────────────────────────────────────────────
@@ -134,7 +146,13 @@ fi
 RECORD=""
 if [ -z "$BASE_OVERRIDE" ]; then
 RECORD="$(ssh $SSH_OPTS "$STAGING_SSH" \
-  "grep -E '^sha=' /home/deploy/dawntrader-deploy.record | tail -1 | cut -d= -f2" 2>>"$LOG")"
+  "test -r /home/deploy/dawntrader-deploy.record && grep -E '^sha=' /home/deploy/dawntrader-deploy.record | tail -1 | cut -d= -f2 || echo __NO_RECORD__" 2>>"$LOG")"
+fi
+# An UNREADABLE record is not agreement. Before this guard, a missing or renamed record
+# returned empty and the comparison was skipped, so the base read as verified when it was
+# never checked -- the #546 shape inside the check that cites #546.
+if [ "$RECORD" = "__NO_RECORD__" ]; then
+  fail_measurement "deploy_record" "the deploy record is missing or unreadable, so the base sha cannot be corroborated against dist/BUILD_SHA. Not treated as agreement."
 fi
 if [ -n "$RECORD" ] && [ "$RECORD" != "$DEPLOYED" ]; then
   fail_measurement "base_ambiguous" "dist/BUILD_SHA=$DEPLOYED disagrees with record.sha=$RECORD — publishing which two shas disagree, never a number derived from them"
@@ -210,6 +228,15 @@ print("OK %s %d %.2f %s %d %d %s" % (
 PY
 )"
 
+# THE FOURTH OUTCOME THAT MUST NOT EXIST. If the reader produced nothing -- python3 absent,
+# the heredoc failing, an uncaught IndexError on an empty commits[] -- then `set -- $READ`
+# leaves no positionals and $3 kills the script under `set -u`, with no alert and no log
+# line, and the cron entry discards stderr. That is an instrument reporting an absence it
+# was never able to detect: this batch's own subject, rebuilt inside the fix.
+case "$READ" in
+  ""|" ") fail_measurement "compare_reader" "the compare reader produced no output at all (python3 missing, or an uncaught exception outside its json guard)" ;;
+esac
+
 case "$READ" in
   PARSE_ERROR*) fail_measurement "compare_api" "${READ#PARSE_ERROR }" ;;
   ANOMALY*)
@@ -235,24 +262,30 @@ if [ "$READ" = "ZERO" ]; then
   log "ZERO deployed=$DEPLOYED head=$HEAD_SHA — resolving any open drift rows"
   ssh $SSH_OPTS "$STAGING_SSH" \
     "cd /home/deploy/dawntrader && npm run --silent system-alerts -- list --state active" \
-    > "$WORK/active.json" 2>>"$LOG"
-  # RETURN TO ZERO RESOLVES ALL RUNGS — the level is cleared, not just the current one.
-  for K in 1 2 3 4; do
-    ID="$(python3 -c "
-import json,sys,re
-try: rows=json.load(open('$WORK/active.json'))
-except Exception: raise SystemExit(0)
-for r in rows if isinstance(rows,list) else []:
-    if r.get('dedupe_key')=='deploy-drift-rung-$K': print(r['id']); break" 2>/dev/null)"
-    if [ -n "$ID" ]; then
-      if [ "$DRY" = "1" ]; then
-        echo "WOULD RESOLVE rung $K -> $ID"
-      else
-        ssh $SSH_OPTS "$STAGING_SSH" \
-          "cd /home/deploy/dawntrader && npm run --silent system-alerts -- resolve $ID --by cc-a --evidence '#1002'" >> "$LOG" 2>&1
-      fi
+    > "$WORK/active.txt" 2>>"$LOG"
+  # RETURN TO ZERO RESOLVES EVERY RUNG — the level is cleared, not just the current one.
+  # ⛔ PARSE THE TEXT, NOT JSON. `system-alerts list` prints padded human-readable lines
+  #   carrying `id=<uuid>` (cmdList, scripts/system-alerts.ts:256-272) and has no --json
+  #   flag. An earlier revision json.load()ed this and swallowed the exception, so the
+  #   resolve loop was a PERMANENT SILENT NO-OP while the alert body promised operators
+  #   that deploying would clear it. Caught before install; it had no test because both
+  #   evidence runs were non-zero and never reached this branch.
+  # The list output carries no dedupe_key, so rows are matched on the TITLE this job mints.
+  RESOLVED_N=0
+  while read -r ID; do
+    [ -z "$ID" ] && continue
+    if [ "$DRY" = "1" ]; then
+      echo "WOULD RESOLVE $ID"
+    else
+      ssh $SSH_OPTS "$STAGING_SSH" \
+        "cd /home/deploy/dawntrader && npm run --silent system-alerts -- resolve $ID --by cc-a --evidence '#1002'" >> "$LOG" 2>&1
     fi
-  done
+    RESOLVED_N=$((RESOLVED_N + 1))
+  done <<EOF
+$(grep -E "Deploy drift" "$WORK/active.txt" 2>/dev/null | grep -oE "id=[0-9a-f-]{36}" | cut -d= -f2)
+EOF
+  log "ZERO resolved=$RESOLVED_N drift rows"
+  exit 0
   exit 0
 fi
 
