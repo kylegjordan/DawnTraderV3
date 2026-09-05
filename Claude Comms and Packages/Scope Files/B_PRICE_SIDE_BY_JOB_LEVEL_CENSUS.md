@@ -458,3 +458,31 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
 | ⛔ **the fix's SHAPE** | **stamp-driven per signal, NOT a global formula edit — 11 files / 24 sites / 27 test files say so** |
 | ⛔ **pFill** | **re-base with the change, or defer explicitly with the pick-rate instrument named** |
 | ✅ **F-G-2 interaction** | **already handled — he raised it statelessly 19 minutes after ratifying the VOID himself; the window is not open** |
+
+---
+
+## 11. ⭐⭐ THE SHADOW ARM IS LIVE AND IT EARNED ITS KEEP ON DAY ONE — **THE LEVEL BASIS CAN BE BUILT FOR ~0.5% OF CRYPTO EVALUATIONS**
+
+**Deployed `4dc231e5714f34405b958975d92c3983e04bfcfc` at 2026-09-05T08:12:21Z.** ✅ **Langston's positive control is SATISFIED — `accepted` is NON-ZERO on both lanes, so the mechanism runs end to end on live data.** ⛔ **And the rate is the finding.**
+
+| lane | attempted | accepted | refused | every refusal reason |
+|---|---|---|---|---|
+| `active:crypto_spot` | 218 | ⛔ **1** | 217 | **`no_book` 217** — every other reason ZERO |
+| `vts:crypto_spot` | 166 | ⛔ **1** | 165 | **`no_book` 165** — every other reason ZERO |
+
+### ⭐ THE CAUSE IS **COVERAGE, NOT QUALITY** — AND THAT IS READABLE STRAIGHT OFF THE FUNNEL
+**Every single refusal is `no_book`. `one_sided_book`, `crossed_book`, `locked_or_synthetic_book`, `non_finite_side`, `age_unknown` and `implausible_spread` are ALL ZERO.** ⇒ ★ **The books we DO have are fine. We simply do not have them.** ⛔ **That is the opposite of the failure this batch was braced for — I built five quality refusals and the one that fires is the one that says the input never arrived.**
+**MEASURED, WITH ITS CONTROL:** in the same window the scanner evaluated **132 distinct crypto symbols** (24,887 `[Phase13][MCE]` lines) while `WS_BOOK_TICK FIRST` fired for **2**. ⇒ **the mini-book is maintained for a small subset — plausibly open positions and RTB candidates — not for the universe we generate signals over.**
+
+### ⛔ THE LIMIT ON THAT NUMBER, STATED BEFORE ANYONE ACTS ON IT
+⚠️ **THE PROCESS WAS ~10 MINUTES OLD.** `WS_BOOK_TICK FIRST` fires once per symbol per process, and the app restarted at 08:12:21Z. ⇒ **`2` is a COLD-START reading and I am NOT claiming it as steady state.** **The 218-attempt funnel is from that same warm-up window, so the two are consistent with each other and neither is yet a rate.**
+⇒ ✅ **RE-READ REQUIRED AFTER A FULL SESSION BEFORE THIS NUMBER DECIDES ANYTHING. That re-read IS the shadow arm's job, and it is why the arm ships before the geometry.**
+
+### ⛔⛔ THE DESIGN QUESTION IT RAISES, AND IT IS LOAD-BEARING FOR THE WHOLE BATCH
+**If book coverage stays anywhere near this low, `buildLevelBasis` cannot be the SOLE source of crypto level construction — it would refuse nearly every signal, and a batch that refuses to price 99% of signals has not improved fidelity, it has stopped trading.**
+⇒ **Three shapes, none chosen here:** (a) **subscribe books for the evaluated universe** — a real feed-load question, not a free one; (b) **build levels only where a book exists and leave the rest on today's basis** — honest but splits the population, which is its own measurement problem; (c) **accept a narrower scope for this batch** — side the levels only for symbols we already hold a book for, which is the promotion path and may be most of what matters.
+★ **This is exactly what a shadow arm is FOR: the question arrived as a measured rate on day one instead of as a surprise at the switch.** ⛔ **Langston's gate, once the steady-state rate is in.**
+
+### ⚠️ AND A DISCOVERABILITY WART IN MY OWN INSTRUMENT, RECORDED RATHER THAN LEFT
+**The funnel is exposed at `/api/xstocks/filter-diagnostics` (`routes.ts:8175`) — and it carries CRYPTO counters.** ⛔ **I read `/api/vts/filter-diagnostics` first, found nothing, and briefly took a working reader for a broken one.** ★ **The control that caught it: its neighbour `gridAbsentSymbols` was ALSO absent from that payload while `gridTags` appeared twice — so the block I edited was not the block that endpoint serves.**
+⇒ **DISPOSITION (§9.4 #2): move it to a crypto-appropriate surface, added to this batch's remaining work.** ⚠️ **Not urgent — it is reachable and now documented — but a crypto counter reachable only from the xStock diagnostics page is a trap for the next reader, and this batch's whole subject is instruments that mislead.**
