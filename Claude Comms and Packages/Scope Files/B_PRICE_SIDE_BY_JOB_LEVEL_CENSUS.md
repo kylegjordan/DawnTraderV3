@@ -472,7 +472,22 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
 
 ### ⭐ THE CAUSE IS **COVERAGE, NOT QUALITY** — AND THAT IS READABLE STRAIGHT OFF THE FUNNEL
 **Every single refusal is `no_book`. `one_sided_book`, `crossed_book`, `locked_or_synthetic_book`, `non_finite_side`, `age_unknown` and `implausible_spread` are ALL ZERO.** ⇒ ★ **The books we DO have are fine. We simply do not have them.** ⛔ **That is the opposite of the failure this batch was braced for — I built five quality refusals and the one that fires is the one that says the input never arrived.**
-**MEASURED, WITH ITS CONTROL:** in the same window the scanner evaluated **132 distinct crypto symbols** (24,887 `[Phase13][MCE]` lines) while `WS_BOOK_TICK FIRST` fired for **2**. ⇒ **the mini-book is maintained for a small subset — plausibly open positions and RTB candidates — not for the universe we generate signals over.**
+**MEASURED, WITH ITS CONTROL:** in the same window the scanner evaluated **132 distinct crypto symbols** (24,887 `[Phase13][MCE]` lines) while `WS_BOOK_TICK FIRST` fired for **2**.
+
+### ⭐⭐ AND THE CAUSE IS NOW MEASURED, NOT GUESSED — **IT IS NOT A BOOK-SUBSCRIPTION GAP AT ALL**
+⚠️ **r1 OF THIS SECTION SAID *"plausibly open positions and RTB candidates"*. THAT WAS A GUESS WITH A HEDGE ON IT. Traced:**
+1. ⛔ **BOOKS AND TICKERS ARE SUBSCRIBED TOGETHER, FROM ONE LIST.** `kraken-websocket-adapter.ts:1280` (ticker) and `:1296` (book) both take `krakenSymbols` — the same array, in the same `subscribeToSymbols()` call. ⇒ **there is no book-specific shortfall to find. Book coverage EQUALS ticker coverage by construction.**
+2. ✅ **CONFIRMED LIVE:** `Subscribing to 2 symbols (ticker+book)`; `WS_TICK_V2 FIRST` = **2**; `WS_BOOK_TICK FIRST` = **2**. **Identical.**
+3. ⭐ **SO THE REAL NUMBER IS THE SUBSCRIBED SET, AND IT TIES OUT EXACTLY: `active_open_positions` holds 2 open `crypto_spot` rows, and the subscribed set is 2** (`TRIA/USD`, `XPL/USD`).
+⇒ ★★ **THE LIVE ORDER BOOK IS MAINTAINED FOR SYMBOLS WE ALREADY HOLD — NOT FOR THE SYMBOLS WE ARE CHOOSING BETWEEN.**
+
+### ⛔⛔ THERE ARE **TWO SEPARATE PRICE PATHS**, AND THE SCANNER IS ON THE ONE WITHOUT A BOOK
+| path | fed by | covers | has a real order book? |
+|---|---|---|---|
+| **WebSocket** → mini-book | ~10 event-driven `subscribeToSymbols` call sites, mostly `[symbol]` singular — opens, promotions, audits | **the hot set: what we HOLD** | ✅ **yes** |
+| **REST polling** → `priceCache` | four buckets: `openTrade` 2 s · `readyToBuy` 15 s · **`fx5Snapshot` 30 s** · `vtsSimulation` 60 s | **the 132-symbol sweep** | ⛔ **NO — a 30-second REST snapshot, whose `bid`/`ask` additionally go stale independently of its timestamp (W-3)** |
+⇒ ⛔⛔ **THIS IS EXACTLY BACKWARDS FOR THIS BATCH: WE NEED THE BOOK AT SIGNAL BIRTH, TO SET THE LEVELS — AND WE ONLY HAVE IT AFTER WE HAVE ALREADY BOUGHT.**
+★ **The 0.5% is therefore NOT a statistical rate awaiting more samples. It is `hot set ÷ evaluated set`, and both terms are known.** ⇒ **more shadow time cannot move it; only a design decision can.**
 
 ### ⛔ THE LIMIT ON THAT NUMBER, STATED BEFORE ANYONE ACTS ON IT
 ⚠️ **THE PROCESS WAS ~10 MINUTES OLD.** `WS_BOOK_TICK FIRST` fires once per symbol per process, and the app restarted at 08:12:21Z. ⇒ **`2` is a COLD-START reading and I am NOT claiming it as steady state.** **The 218-attempt funnel is from that same warm-up window, so the two are consistent with each other and neither is yet a rate.**
