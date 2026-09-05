@@ -375,3 +375,24 @@
 
 ★ **Every prohibition falls out of it and none needs stating separately:** consulting before the read violates the ORDER; looking up his own prior conclusion violates *"never to learn what the answer should be"*; precedent-hunting violates the same clause; substituting a lookup for a re-derivation violates *"read the object"*. ⇒ **one rule, concrete enough to verify, and it is what a reader can actually hold.**
 ⚠️ **THE PROHIBITIONS ARE KEPT IN §13.4 AS THE DERIVATION, NOT AS THE RULE** — a reader who wants to know *why* can find it; a reader who needs the rule gets one sentence.
+
+---
+
+## ⭐ 15. UNITS — ONE UNIT FOR SIZE, AND IT IS BYTES *(Kyle-directed 2026-09-05)*
+
+> **Kyle:** *"let's keep the units straight… we need to be consistent about our size discussions and not go back and forth between file size and number of characters. I get that number of lines is an important consideration that is different than size, but when we're talking about size, we need to keep the same units, same metrics."*
+
+⛔⛔ **THE CONVENTION, BINDING ON THIS BATCH AND PROPOSED AS STANDING:**
+| quantity | unit | how it is measured | how it is written |
+|---|---|---|---|
+| **SIZE** | ⭐ **BYTES**, and KB only as a rounded aid **beside** the byte figure | **`wc -c`** — name the tool | `65,056 B (~64 KB)` |
+| **LENGTH** | **LINES** — a *separate* quantity, never a size | `wc -l` | `206 lines` |
+| ⛔ **CHARACTERS** | **NOT USED** | — | ⛔ **never quoted as a size** |
+
+★ **WHY BYTES AND NOT CHARACTERS — AND THIS IS NOT PEDANTRY, IT HAS ALREADY COST US A DISAGREEMENT IN THIS BATCH.** The cap is written in bytes, `wc -c` returns bytes, and **our files are dense with emoji and box-drawing glyphs that are 3-4 bytes each.** ⇒ **MEASURED TODAY: `MEMORY.md` 65,056 B vs 64,109 chars (+947, +1.5%); `CLAUDE.md` 66,994 B vs 66,380 chars (+614, +0.9%).**
+⚠️ **AND IT IS EXACTLY LANGSTON'S C-2 CONDITION: he measured the retraction ledger at 6,057 and I measured 6,162 — the SAME section, and the whole gap was characters-vs-bytes.** His words: *"P-4's own criterion is 'two independent measurers get the same byte count' — it would fail on its first use. Name the unit and the tool."*
+
+⇒ ⛔ **EVERY SIZE IN THIS BATCH IS RE-STATED IN BYTES WITH `wc -c` NAMED, AND EVERY FUTURE ONE MUST BE.** ✅ **A figure without a stated unit and tool is not a measurement — it is the `named-not-measured` shape wearing a number.**
+⚠️ **HONEST NOTE ON MY OWN PROSE: I have used "characters" to Kyle in plain-language reports because it reads more naturally than "bytes". That was a readability choice and it is now WITHDRAWN — the two diverge on our files, so the friendlier word was quietly the wrong one.**
+
+★ **TOKENS ARE A THIRD QUANTITY AND WE DO NOT CURRENTLY MEASURE THEM.** They are what actually consumes the model's budget, and bytes are only a proxy for them. **Stated so nobody later treats a byte figure as a token figure** — if the context-limit research returns token-denominated guidance, that is a fourth unit and it gets its own column, never a conversion asserted from bytes.
