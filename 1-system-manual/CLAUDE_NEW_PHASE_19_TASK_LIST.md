@@ -2,7 +2,15 @@
 
 > **Owner:** Claude New (CC-B). **Created 2026-09-01 at Kyle's direction.** This is the one place my open work is enumerated — batches, hotfixes, investigations, alerts and small owed items — so it can be reviewed and pruned. ⚠️ **Kyle's expectation, stated when he asked for it: many of these will be REMOVED, because Claude Old is reworking the governance system and Analyst Claude is working the pricing issues, and several of my items will dissolve under that work. Nothing here is being re-prioritised yet; this is the census.**
 >
-> ⭐⭐ **MANDATORY, KYLE 2026-09-05: EVERY TIME A TASK IS SLOTTED, IT GOES IN THIS FILE IN THE SAME TURN.** His words — *"this is going to become a mandatory thing, and every time we slot in a new task it goes into this file, so we can keep an updated list of what we're working on for each session."* ⚠️ **MEASURED 2026-09-05: this is the ONLY session task-list file that exists** — `git ls-tree` over `1-system-manual/` returns exactly one match. **CC-A, CC-C and CC-INFRA have none.** Kyle intends the practice to be per-session, so the other three need one.
+> ⭐⭐ **MANDATORY, KYLE 2026-09-05: EVERY TIME A TASK IS SLOTTED, IT GOES IN THIS FILE IN THE SAME TURN.** His words — *"this is going to become a mandatory thing, and every time we slot in a new task it goes into this file, so we can keep an updated list of what we're working on for each session."* ⛔ **CORRECTED SAME DAY — MY FIRST CENSUS WAS WRONG AND KYLE CAUGHT IT.** I wrote *"this is the ONLY session task-list file that exists"*. **FALSE.** I searched ONE folder (`1-system-manual/`) with one spelling, and the "positive control" I ran only proved MY OWN file existed — **an instrument that could not have detected the others.** Re-run over the WHOLE repo: **THREE exist.**
+> | session | file |
+> |---|---|
+> | CC-B (this one) | `1-system-manual/CLAUDE_NEW_PHASE_19_TASK_LIST.md` |
+> | CC-A | `Claude Comms and Packages/Scope Files/CC_A_SESSION_TASK_LIST.md` |
+> | CC-INFRA | `Claude Comms and Packages/Scope Files/CC_INFRA_SESSION_TASK_LIST.md` |
+> | **CC-C** | ⛔ **NONE** |
+>
+> ⭐ **AND THE INCONSISTENCY IS ITSELF THE FINDING: two folders, two naming conventions.** Mine is `CLAUDE_NEW_PHASE_19_*` under `1-system-manual/`; theirs are `CC_<X>_SESSION_*` under `Scope Files/`. **That is exactly why a folder-scoped search missed them**, and it will keep doing so for anyone else who looks. **If this is becoming a mandatory system-wide practice it needs ONE location and ONE naming rule** — flagged for Kyle, not decided here.
 >
 > **RULES FOR THIS FILE.** Every row points at its authoritative record (`RUNNING_ISSUES` number, plan row, alert id) — **the record is the truth; this file is the index.** A row leaves by being marked `CLOSED — <where>` or `REMOVED — <why, who decided>`, never by deletion, so the pruning Kyle described is visible. Built from the repo and the alert queue on 2026-09-01, not from memory — two memory items were found stale in the process and are recorded in §G.
 
