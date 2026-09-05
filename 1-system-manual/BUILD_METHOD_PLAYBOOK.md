@@ -288,3 +288,24 @@ correct fix RED.)
 **THE INCIDENT, and it is worth carrying because the same defect appeared at three altitudes in one batch.** A guard was built to refuse untrustworthy market data. (1) **The guard shipped INERT** — its state-advance was conditioned on a verdict that could only be produced *after* the state existed, so it deadlocked; every pre-registered deploy check passed, because each verified the code was PRESENT and none verified it could RUN. (2) **The fence written to enforce the reviewer's correction was case-sensitive**, so it returned green while the retired sentence was still in the file — a bare negative cannot distinguish *"the claim is gone"* from *"my pattern never matched anything"*. (3) **The regression test asserting the invariant survived used a fixture that could not exercise the path the invariant governed** — it supplied the very state whose absence was the bug.
 
 ★ **THE GENERALISATION: every fixture in that suite handed the code the state it was meant to judge, so the suite could not discover that the state was never created.** Neither the author nor the reviewer needed to read more carefully; they needed ONE test that starts from nothing. ⇒ **For any guard, write the cold-start case first. For any negative, write its positive control in the same breath.**
+
+---
+
+## ⛔⛔ A RULE THE AGENT CAN READ IS NOT A RULE THE AGENT FOLLOWS — MEASURED, THREE WAYS, ALL NEGATIVE (added 2026-09-05 from `B-WAKE-QUIET`)
+
+**THE PROBLEM, in the shape any project will meet it:** the human decider says the agents talk too much. A rule forbidding exactly that already exists, is loaded at every session start, and is byte-identical to the canonical copy in every working clone. **Nothing is stale, nothing is misconfigured, and the rule is not followed.** Measured here: **all three sessions answered ~97% of automatic wake events with text.**
+
+**THREE FIXES OF INSTRUCTION SHAPE WERE TRIED AND MEASURED. ALL THREE FAILED.**
+| what was tried | result |
+|---|---|
+| the rule as written, in the always-loaded conduct file | **96-98% speak rate** |
+| the same rule restated more emphatically | no movement |
+| ★ an instruction delivered **at the moment of the event**, inside the wake line itself | **0.5%** and **11.8%** compliance on two separate instructions |
+
+⇒ ★★ **THE ONLY THING THAT CHANGED THE BEHAVIOUR WAS NOT DELIVERING THE EVENT AT ALL.** Two classes of automatic wake were removed outright. **The lesson generalises past this project: if an agent is doing something you have a rule against, adding text is the intervention with the worst measured record. Remove the trigger, or change the layer the instruction lives in.**
+
+**⚠️ TWO HONEST CAVEATS, KEPT BECAUSE THEY ARE NOT REFUTED.**
+1. **The measurement counts turns that produced text.** It does not measure whether the text was worth having, and a named dissent holds that the narration keeps a long session coherent.
+2. **A fourth attempt is queued and is the same family** — moving the behavioural rules from a user-message layer into the system-prompt layer, which the vendor documents as outranking it. **Its failure condition is pre-registered**, because it differs from the three failures only in WHERE the instruction lives, not in BEING an instruction.
+
+**★ AND THE SECOND-ORDER FINDING, which is about rules files in general and is vendor-documented: adherence FALLS as the rules file grows.** *"If Claude keeps doing something you don't want despite having a rule against it, the file is probably too long and the rule is getting lost."* ⇒ **every rule added to fix a behaviour weakens the others — including the safety-critical ones sharing the file.** A project that responds to each failure by appending a rule is buying each fix with a small tax on all its existing ones.

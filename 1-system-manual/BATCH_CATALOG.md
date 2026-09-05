@@ -882,3 +882,27 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 **EVIDENCE, all RUN:** both fences mutation-proved with hash-verified restores · gate exercised against the real script and then **on the box** · bash subscript behaviour verified on staging, not from the manual · CI 4/4 per job at the deployed head · tsc baseline 377 = 377.
 
 **Record:** `B_DEPLOY_ACTOR_ALLOWLIST_COMPLETION_REPORT.md`.
+
+## B-WAKE-QUIET — the running commentary, and the fixes that did not work (2026-09-05, CC-A) — Phase 19, plan row 4.5 · `#995`
+
+**WHAT IT WAS FOR.** Kyle flagged on 2026-09-03 that the sessions talk too much. Measured: **all three sessions answer ~97% of automatic wakes with text**, which `CONDUCT.md` §5 already forbids. `CONDUCT.md` was loaded and byte-identical to origin in every clone; no setting had changed. **The rule was present, loaded, and not being followed.**
+
+**★★ THE HEADLINE IS A NEGATIVE RESULT, AND IT IS THE MOST USEFUL THING THE BATCH PRODUCED.** Three instruction-shaped fixes were measured and all three failed: the rule as written (96-98% speak rate), the rule restated, and an instruction delivered **at the event** in the wake line itself (0.5% and 11.8% compliance on two separate instructions). ⇒ **NOTHING THAT ARRIVES AS TEXT CHANGES THE BEHAVIOUR. Only not delivering the wake does.** `B-RULES-LAYER` (`#998`, plan row 4.6) is the follow-on and is a fourth of the same family, differing only in WHERE the instruction lives — its failure condition is pre-registered.
+
+**WHAT SHIPPED.**
+- **Two wake cuts (Kyle: *"Yes, cut both"*).** The all-clear hourly heartbeat no longer wakes anyone; a heartbeat reporting a dead bridge still does. The duplicate alert-owner wake is gone. Both suppressions are **content-keyed and fail SAFE** — anything not matching the routine shape is delivered.
+- **`CONDUCT.md` onto the escalated push notice AND onto `fresh-rules.mjs`** — it was on neither, while being injected at every session start from a local copy nothing refreshed.
+- **The issues ledger and the rule-history archive OFF the escalated notice** — that alarm was 73% false, firing mid-task on ledger edits. ⛔ **Langston's standing condition: re-opened if plan row 10 `B-ISSUE-BLOCK-GUARD` (`#745`) drifts.**
+- **The alarm's recovery recipe fixed** — it taught a bare `git checkout <ref> -- <path>`, which writes the index as well as the worktree, so following the message left origin content staged under a path the session recognised as its own. It now prescribes checkout **and** reset, in order, with the reason.
+- **`dt-push-notice.sh` is in the repository at all**, for the first time — Langston could not review the object the batch was editing (OBJ-9, his blocker) — plus a deployed-vs-committed drift check and its installer line.
+- **The measurement ships as a committed instrument** (`scripts/analysis/wake_narration.py`) with pre- and post-cut baselines, so the numbers are second-party re-derivable rather than reported.
+
+**STRUCK WITH EVIDENCE, NOT DEFERRED:** OBJ-4/4′ (silence is reachable — the premise was refuted), OBJ-5, OBJ-6/6′ (**the heartbeat is delivered THROUGH the watcher it reports on, so it cannot detect a dead one**).
+
+**⛔ THE GOVERNANCE FAILURE, STATED BY THE BATCH ITSELF: STEP 2 WAS SKIPPED.** No pre-audit existed until Step 10. This is the `#754` shape and it **hit the step-skip tripwire in `MISTAKE_PATTERNS.md`** — which the tripwire's own grep could not see, because a step skipped in silence writes no commit that says so. `#1005`; retrospective document written and labelled as such.
+
+**FINDINGS THAT OUTLIVED IT.** `#1001` — **staging was 55 commits behind the review branch with the execution engine and the signal orchestrator undeployed** while active paper trading ran; found by accident, by a session checking whether its own inert files needed shipping. `#1002` `B-DEPLOY-DRIFT-LINE` (row 4.55) — **nothing compares the deployed sha to the branch head**; every existing check reported healthy throughout. `#999` `B-HEARTBEAT-RESCOPE` (row 4.7).
+
+**STEP 6 NOT APPLICABLE, Kyle-approved:** the batch's 26 files touch nothing under `server/`, `client/` or `shared/`, so a deploy triggered by it would have shipped other sessions' undeployed trading-engine changes under this batch's id.
+
+**Record:** `B_WAKE_QUIET_COMPLETION_REPORT.md`.

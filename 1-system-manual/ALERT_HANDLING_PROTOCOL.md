@@ -23,6 +23,11 @@
    ```
    The owner is **who must carry the fix to closure.** The per-class table below is the default; **Langston's domain read overrides it** (e.g. an alert whose *category* is `governance` but whose *cause* is a breakage symptom → he can route it to CC-B). No-action alerts still get a marker: `owner=Kyle action="FYI — no action needed"`.
 
+   ⛔⛔ **CHANGED 2026-09-05 — `B-WAKE-QUIET` (`#995`, Kyle: *"Yes, cut both"*): THE MARKER NO LONGER WAKES THE OWNER BY ITSELF. IT IS A SUPPRESSOR ONLY.**
+   ★ **Why it is safe: Langston's bridge auto-leads every reply with the addressee's name, so the owner is already woken by the PROSE NAME, and the marker was a DUPLICATE wake on the same message.** The marker still stands the OTHER sessions down.
+   ⚠️ **MEASURED REACH, and the first figure published for it was WRONG — Langston re-derived it at Step 8 and his number is the one that stands: 28 markers across 25 messages, of which 21 STILL WAKE THEIR OWNER through the prose-name fall-through; only 4 were marker-only.** *(My original "28 posted / 0 delivered" was a tautology: the same change deleted the log label the instrument classified on.)*
+   ⇒ **THE OPERATIVE CONSEQUENCE FOR A TRIAGE: if you want the owner woken, NAME THEM IN THE PROSE. A marker alone now reaches nobody.**
+   ★ **Related, same batch: the filter now decides on the FULL body rather than the 400-character print truncation**, which is what the note above records as discarding 99.6% of markers before the regex ran.
 4. **Route + claim.** The wake filter (`cc-wake-filter.py`) routes the wake to the **named owner** (the other CC stands down; `owner=Kyle` wakes no CC — he sees it in-channel). The owning party **acknowledges the alert**, which records ownership:
    ```
    npm run system-alerts -- ack <id> --by <cc-a|cc-b|cc-c|cc-infra|kyle|langston>
