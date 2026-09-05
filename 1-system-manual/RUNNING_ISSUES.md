@@ -7426,3 +7426,20 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 **HOME: `B-LANGSTON-FILE-FLOOR`, owner Infra Claude + Langston, placed in `PHASE_19_PLAN.md` at row 2.8a, after 2.8 `B-LANGSTON-LEDGER-SPLIT`** (Langston's placement — *"same files, same hands"*). **The ratchet itself is `PHASE_19_PLAN` row 2.8b and ships INSIDE `B-LANGSTON-CONTEXT` as plan row `P-5`, not as a standalone batch.**
 
 MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langston's files for months; the rule scopes itself, in its own text, to the CC session memory files and has never covered him.
+
+
+### #1007 OPEN 2026-09-05 (CC-A, found at `B-DEPLOY-DRIFT-LINE` Step 2 by an object-round reader) — ⛔ THE ESCALATED RULES-CHANGED ALARM CAN MISS A `CLAUDE.md` CHANGE, BECAUSE ITS FILE LIST IS SILENTLY CAPPED AT 300
+
+**`comms-infra/discord/dt-push-notice.sh:123` calls the GitHub compare API with NO pagination parameter and reads `d.get('files',[])`.** ⛔ **That array is capped at 300 entries, with NO `Link` header and NO `truncated` flag** — measured on a real range: **300 returned against a local truth of 761.**
+⇒ **On a push whose range exceeds 300 changed files, a `CLAUDE.md` / `CONDUCT.md` / `.claude/hooks/` change can fall outside the returned list and the escalated *"THE RULES CHANGED IN THIS PUSH"* alarm STAYS SILENT.** ★ **A false negative in the alarm whose entire job is telling every session the rules moved.**
+
+**PROVENANCE, AND IT IS MINE:** that line shipped in `B-WAKE-QUIET` (`#995`, `d971f9d81`, 2026-09-03) — **three days ago, in the batch whose subject was making that alarm trustworthy.** The installed copy on Helsinki is byte-identical to the tracked one (`sha256sum` match), so this is live.
+
+⚠️ **HOW NARROW IT ACTUALLY IS, STATED SO IT IS NOT OVER-SOLD:** the range is `$PREV...$SHA`, i.e. ONE push in steady state, and a 300-file push is rare. ⛔ **But it widens precisely when the notice has been DOWN** — the range then spans every push since — **which is exactly when a missed rules change costs most.** Same for a large merge or a bulk rename.
+
+⛔ **A SECOND, INDEPENDENT SILENT-FAILURE PATH ON THE SAME LINE:** the call is `curl -s … 2>/dev/null` piped into a `try/except` that yields an empty list. **A network failure, a rate-limit refusal or a 404 therefore produces `FILES=''` ⇒ no rules match ⇒ no escalation, indistinguishable from "nothing rules-related changed."** ★ **The routine notice still fires, so the outage is invisible: the loud half fails while the quiet half keeps working.**
+
+**FIX — DISPOSITION §9.4 (1), FOLDED INTO `B-DEPLOY-DRIFT-LINE`:** it is the same one-parameter correction the batch already needs (`?page=1&per_page=100`), plus a truncation guard: **when `len(files)` is at the cap, the notice must say the file list was truncated rather than report a clean absence.** ⛔ **And the `curl` failure must be distinguishable from an empty result.**
+★ **It is folded rather than given its own batch because the object, the API and the fix are identical to `#1002`'s, and splitting them would put two sessions in the same file.**
+
+**★ THE GENERALISABLE PART, and it is why this is worth its lines:** *"no rules files in the changed list"* and *"the changed list was cut short before we got there"* are **different states that render identically**, and nothing in the response distinguishes them without checking the cap. **Same class as `#661` leg 3 and as this batch's own subject: an instrument that reports absence when it simply could not see.**
