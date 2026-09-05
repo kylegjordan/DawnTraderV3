@@ -1,0 +1,12 @@
+[Unit]
+Description=Backup Langston's self-built decision store, verified by reproduction (B-LANGSTON-CONTEXT P-3)
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/langston-selfmemory-backup
+# ⛔ No Restart=. A failed verification DISCARDS the new archive and leaves every older
+# snapshot untouched, so nothing is lost by waiting for tomorrow — and retrying inside
+# the same window would just re-post the same alarm.
+TimeoutStartSec=600

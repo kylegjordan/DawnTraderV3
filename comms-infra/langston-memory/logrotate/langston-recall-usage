@@ -30,7 +30,8 @@
 #    exists because an append-only artifact grew unwatched. Shipping three new
 #    append-only artifacts without eviction would be the same mistake, three times.
 /opt/langston-memory/usage/load-canary.jsonl
-/opt/langston-memory/usage/size-watch.jsonl {
+/opt/langston-memory/usage/size-watch.jsonl
+/opt/langston-memory/usage/selfmemory-backup.jsonl {
     su langston langston
     weekly
     rotate 8

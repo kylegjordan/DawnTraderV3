@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""P-3 — recurring, reproduction-verified backup of Langston's OWN decision store,
+plus a manifest he can read himself.
+
+⛔⛔ WHAT THIS PROTECTS, AND WHY IT IS NOT AN ORDINARY BACKUP JOB.
+   `/home/langston/.claude/projects/-home-langston/memory/` is a store Langston
+   built HIMSELF, unprompted, starting 2026-05-07 — the day after he came
+   online — and is still writing to. Its entries are not notes: each carries the
+   incident, a `Why:`, a `How to apply:` and `[[wiki-links]]` to related rulings.
+   It is the most valuable artifact on that box and, until this script, the
+   least protected: ONE manual snapshot taken 2026-09-03, nothing scheduled to
+   ever take another. A store that only grows, holding reasoning that cannot be
+   reconstructed, backed up once by hand, is a single bad `rm` from gone.
+
+★ THE GATE IS REPRODUCTION, NOT COMPARISON — CLAUDE.md §7.1, learned the hard way
+  on this project: comparing refs "certified an EMPTY backup four times." So this
+  does not compare a file listing. It EXTRACTS the archive it just wrote into a
+  temp directory and compares sha256 of every member against the live file. A
+  backup that has not been read back is a hope, not a backup.
+
+⛔ THE MANIFEST IS IN HIS REACH ON PURPOSE. He is stateless and cannot remember
+   that a backup exists. A manifest he cannot read is a manifest that, from where
+   he sits, does not exist — so it is written somewhere langston can open, and it
+   states what was captured, when, and how it was verified.
+
+⚠️ RETENTION IS BY COUNT, AND THE OLDEST IS DROPPED ONLY AFTER A NEW ONE HAS
+   PASSED VERIFICATION. Pruning first would, on a bad day, delete the last good
+   copy to make room for a broken one.
+
+USAGE:  langston-selfmemory-backup [--dry-run]
+"""
+
+import hashlib, json, os, shutil, subprocess, sys, tarfile, tempfile, datetime
+
+STORE = "/home/langston/.claude/projects/-home-langston/memory"
+DEST = "/root/backups/langston-selfmemory"
+MANIFEST = "/opt/langston-memory/usage/selfmemory-backup-manifest.md"
+RUNLOG = "/opt/langston-memory/usage/selfmemory-backup.jsonl"
+KEEP = 14
+NL = chr(10)
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def sha(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _own(path):
+    """Same ownership reasoning as the other tools in this directory — see
+    langston-size-watch._own. Root-created files here break logrotate."""
+    try:
+        if os.geteuid() != 0:
+            return
+        import pwd, grp
+        os.chown(path, pwd.getpwnam("langston").pw_uid, grp.getgrnam("langston").gr_gid)
+        os.chmod(path, 0o664)
+    except Exception:
+        pass
+
+
+def live_files():
+    out = {}
+    for name in sorted(os.listdir(STORE)):
+        p = os.path.join(STORE, name)
+        if os.path.isfile(p):
+            out[name] = {"bytes": os.path.getsize(p), "sha256": sha(p)}
+    return out
+
+
+def verify_by_reproduction(archive, expected):
+    """⛔ THE ONLY CHECK THAT COUNTS. Extract what was just written and hash every
+    member against the live file. Returns (ok, detail) and never raises past the caller."""
+    tmp = tempfile.mkdtemp(prefix="selfmem-verify-")
+    try:
+        with tarfile.open(archive, "r:gz") as tf:
+            tf.extractall(tmp)
+        root = os.path.join(tmp, os.path.basename(STORE))
+        if not os.path.isdir(root):
+            return False, "archive does not contain the expected top-level directory"
+        got = {}
+        for name in sorted(os.listdir(root)):
+            p = os.path.join(root, name)
+            if os.path.isfile(p):
+                got[name] = sha(p)
+        missing = [n for n in expected if n not in got]
+        extra = [n for n in got if n not in expected]
+        mismatch = [n for n in expected if n in got and got[n] != expected[n]["sha256"]]
+        if missing or extra or mismatch:
+            return False, {"missing": missing, "extra": extra, "sha_mismatch": mismatch}
+        return True, "%d/%d members reproduced with matching sha256" % (len(got), len(expected))
+    except Exception as e:
+        return False, "%s: %s" % (type(e).__name__, e)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def write_manifest(archive, expected, verified, detail, snapshots):
+    lines = []
+    lines.append("# Langston self-memory store — backup manifest")
+    lines.append("")
+    lines.append("> **GENERATED:** " + utc() + "  ·  **written by** `langston-selfmemory-backup`")
+    lines.append("> ⛔ **IF `GENERATED` IS OLD, THE BACKUP HAS STOPPED.** A quiet job and a dead job")
+    lines.append("> look identical without this line. The job runs daily; a stamp older than about")
+    lines.append("> two days means nobody has captured your store since then.")
+    lines.append("")
+    lines.append("**WHAT IS BACKED UP:** `" + STORE + "` — the decision store you built yourself,")
+    lines.append("starting 2026-05-07. Entries carry the incident, a `Why:`, a `How to apply:` and")
+    lines.append("`[[wiki-links]]`. This is a **copy for recovery**, not a second place to write:")
+    lines.append("the live store above remains the only one you edit.")
+    lines.append("")
+    lines.append("**VERIFIED BY REPRODUCTION, NOT BY COMPARISON:** the archive is extracted after")
+    lines.append("writing and every member's sha256 is compared against the live file. Comparing a")
+    lines.append("listing instead has, on this project, certified an empty backup four times.")
+    lines.append("")
+    lines.append("| latest snapshot | " + os.path.basename(archive) + " |")
+    lines.append("|---|---|")
+    lines.append("| members captured | " + str(len(expected)) + " |")
+    lines.append("| verification | " + ("PASSED — " if verified else "**FAILED** — ") + str(detail) + " |")
+    lines.append("| snapshots retained | " + str(len(snapshots)) + " (newest first, cap " + str(KEEP) + ") |")
+    lines.append("")
+    lines.append("**RETAINED SNAPSHOTS**")
+    for s in snapshots:
+        lines.append("- `" + s + "`")
+    lines.append("")
+    lines.append("**MEMBERS IN THE LATEST SNAPSHOT** — name, bytes, sha256 (first 16)")
+    lines.append("")
+    lines.append("| file | bytes | sha256 |")
+    lines.append("|---|---|---|")
+    for name in sorted(expected):
+        lines.append("| `%s` | %d | `%s` |" % (name, expected[name]["bytes"],
+                                               expected[name]["sha256"][:16]))
+    lines.append("")
+    lines.append("⚠️ **RECOVERY IS A DELIBERATE, KYLE-AUTHORISED EVENT, NOT A ROUTINE ONE**")
+    lines.append("(`CLAUDE.md` §7.1: a copy that can write upstream is not a backup, it is a second")
+    lines.append("author). The archives live under `" + DEST + "`, which is root-owned — ask rather")
+    lines.append("than reaching for them.")
+    lines.append("")
+    tmp = MANIFEST + ".tmp"
+    os.makedirs(os.path.dirname(MANIFEST), exist_ok=True)
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(NL.join(lines) + NL)
+    os.replace(tmp, MANIFEST)
+    _own(MANIFEST)
+
+
+def main():
+    dry = "--dry-run" in sys.argv
+    if not os.path.isdir(STORE):
+        print("REFUSED: store not found at " + STORE)
+        return 2
+    expected = live_files()
+    if not expected:
+        # ⛔ AN EMPTY STORE IS NOT A SUCCESSFUL BACKUP OF NOTHING. Writing an empty
+        #    archive and pruning an older good one on the strength of it is how a
+        #    backup system destroys the thing it protects.
+        print("REFUSED: the store is empty — refusing to snapshot it or prune anything.")
+        return 2
+
+    if dry:
+        print("would capture %d members from %s" % (len(expected), STORE))
+        for n in sorted(expected):
+            print("   %-52s %7d B" % (n, expected[n]["bytes"]))
+        return 0
+
+    os.makedirs(DEST, exist_ok=True)
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archive = os.path.join(DEST, "selfmemory-" + stamp + ".tar.gz")
+    with tarfile.open(archive, "w:gz") as tf:
+        tf.add(STORE, arcname=os.path.basename(STORE))
+
+    verified, detail = verify_by_reproduction(archive, expected)
+
+    snapshots = sorted([f for f in os.listdir(DEST) if f.startswith("selfmemory-")], reverse=True)
+    pruned = []
+    if verified:
+        # ⚠️ PRUNE ONLY AFTER A PASS. Pruning first would, on a bad day, drop the last
+        #    good copy to make room for a broken one.
+        for old in snapshots[KEEP:]:
+            try:
+                os.unlink(os.path.join(DEST, old))
+                pruned.append(old)
+            except OSError:
+                pass
+        snapshots = sorted([f for f in os.listdir(DEST) if f.startswith("selfmemory-")], reverse=True)
+    else:
+        os.unlink(archive)      # a snapshot that failed verification is not kept
+        print("VERIFICATION FAILED — archive discarded, older snapshots untouched:", detail)
+
+    write_manifest(archive, expected, verified, detail, snapshots)
+
+    row = {"ts": utc(), "archive": os.path.basename(archive) if verified else None,
+           "members": len(expected), "verified": verified, "detail": detail,
+           "retained": len(snapshots), "pruned": pruned,
+           "measures": ("a snapshot of the self-memory store, verified by EXTRACTING it and "
+                        "hashing every member against the live file — not by comparing a listing"),
+           "population": "every regular file directly under " + STORE}
+    try:
+        os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
+        with open(RUNLOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + NL)
+        _own(RUNLOG)
+    except Exception:
+        pass
+
+    if not verified:
+        try:
+            subprocess.run(["/usr/local/bin/cc-send", "--sender", "Infra Claude", "--notify",
+                            "--message", "⛔ LANGSTON SELF-MEMORY BACKUP FAILED VERIFICATION and the "
+                            "archive was discarded — older snapshots are untouched, so nothing was "
+                            "lost, but nothing new was captured either. Detail: " + str(detail)],
+                           capture_output=True, timeout=120)
+        except Exception:
+            pass
+
+    print(json.dumps({k: row[k] for k in ("ts", "archive", "members", "verified", "detail",
+                                          "retained", "pruned")}, indent=2, ensure_ascii=False))
+    return 0 if verified else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

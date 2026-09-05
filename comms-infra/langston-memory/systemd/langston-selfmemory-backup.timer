@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily backup of Langston's self-built decision store
+
+[Timer]
+OnCalendar=*-*-* 05:20:00 UTC
+# 05:20Z: after the 04:10Z archive index rebuild, before the 05:40Z size watch, so the
+# three Langston-side jobs run in a fixed order and never contend for the same files.
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
