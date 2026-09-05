@@ -7317,3 +7317,36 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 **RETROSPECTIVE DOCUMENT WRITTEN, AND LABELLED.** `Claude Comms and Packages/Scope Files/B_WAKE_QUIET_PRE_AUDIT.md` states on its first line that it was written at Step 10 and did not gate the implementation. ⛔ **It may not be cited as though it did.** Its §3 records what a real Step-2 pass would have caught: `dt-push-notice.sh` being absent from the repo, the drift check's predicate going unstated until its third version, a syntax error reaching a live 2-minute cron, and the alert-marker measurement being a tautology.
 
 **★ ONE THING THIS ENTRY DOES NOT CLAIM:** that the skip caused those four. Three of them were caught in-batch by other gates. **The claim is narrower and it is enough — the batch had no pass whose job was to catch them, and it did not notice for two days.**
+
+### #1006 OPEN 2026-09-05 (surfaced by the CODEX ADVISOR's first audit; every citation re-derived and the decisive branch MEASURED by CC-B) — ⭐⭐ THE CHECKED-IN SCHEMA DESCRIBES A DIFFERENT `rtb_signals` UNIQUE INDEX THAN THE ONE THE DATABASE ACTUALLY HAS, UNDER THE SAME NAME — AND `asset_class` IS IN NEITHER
+
+**PROVENANCE: found by the Codex advisor (its `FULL_SYSTEM_AUDIT_2026-09-05.md`, finding 1), not by a Claude session.** ⛔ **It is filed here because I RE-DERIVED every citation at the audited commit `5a7fc2ecc` and then settled the branch it could not reach, not because it was reported.** *(A reviewer HIT is a lead; it moves nothing until re-derived.)*
+
+⛔⛔ **THE MEASURED FACT, from the live staging database:**
+```
+           index_name            | is_unique |        columns
+---------------------------------+-----------+------------------------
+ rtb_signals_pkey                | t         | {id}
+ rtb_signals_symbol_strategy_idx | t         | {mode,symbol,strategy}
+```
+**The LIVE index is THREE columns. `shared/schema.ts:2142` declares an index of the SAME NAME as FOUR** — `(mode, symbol, strategy, status)` — **and `migrations/meta/0001_snapshot.json:15052-15078` records four.** Both re-derived at the ref.
+
+⇒ ✅ **THE UPSERT IS EXECUTABLE.** `server/storage.ts:4329-4331` targets `(mode, symbol, strategy)` and that constraint exists live, so nothing is failing today. ⛔ **THE REPOSITORY DOES NOT DESCRIBE THE DATABASE**, and that is the defect.
+
+⛔⛔ **TWO CONSEQUENCES, AND THE FIRST IS A BEHAVIOURAL CLAIM NOT A TIDINESS ONE:**
+1. **A READER OF THE SCHEMA BELIEVES SOMETHING FALSE ABOUT HOW THE QUEUE BEHAVES.** With `status` in the identity, a `queued` row and a `promoted` row for the same `(mode, symbol, strategy)` could coexist. **Live, they cannot** — one row exists per `(mode, symbol, strategy)` whatever its status. Anyone reasoning about RTB occupancy, replacement or promotion from the checked-in schema is reasoning about a different table.
+2. ⛔ **A FRESH DATABASE PROVISIONED FROM THIS REPOSITORY WOULD GET THE FOUR-COLUMN INDEX, AND THE UPSERT WOULD THEN FAIL** — Postgres `ON CONFLICT (cols)` needs a matching unique constraint. **The break is deferred to whoever next builds an environment**, which is precisely the reader least equipped to diagnose it.
+
+**THE THIRD INPUT — WHICH SIDE MOVED (Codex ran it; I accept the history as reported and have NOT re-run the blame):** `assetClass`, its filter index, the dual-write and the event field were added together by `8dd10c7474` on 2026-05-27; the unique index and the conflict target date from `a3d5c4f509` on 2026-03-19 and **were never evolved.** ⇒ **the CODE moved and the identity did not.**
+
+⭐ **AND THE `asset_class` HALF IS SEPARATE AND ALSO REAL:** `asset_class` is in the live index, the declared index and the conflict target — **none of them.** `server/lib/event-bus.ts:57-66` **explicitly documents that same-symbol-across-classes is structurally possible** and supplies `assetClass` so consumers can disambiguate; `ready_to_buy_service.ts:519-524,572-584` (promotion cleanup) and `:1373-1380,2163-2208` (incumbent selection and R-multiple replacement) **ignore it.** ⇒ two different underlying assets sharing a canonical symbol can alias at every RTB identity operation.
+
+⚠️⚠️ **REALIZED INCIDENCE IS UNMEASURED, AND "0 COLLISIONS" WOULD BE A FALSE READING — THE CONTROL IS WHY.** The collision query returns 0 rows, but the positive control shows **`rtb_signals` holds ONE row**: it is a continuously-cleared working queue, not a history. **An instrument with a population of one cannot detect a collision.** ⛔ **Do NOT record realized severity as low. It is UNMEASURED**, and settling it means the archive, not this table.
+
+**LEDGER CHECK, three-valued, on the face of this entry: NOT FOUND — a WEAK result, not a clearance.** Queries run over `RUNNING_ISSUES.md`, `BATCH_CATALOG.md` and every file under `Claude Comms and Packages/Batch Completion/`: `rtb_signals_symbol_strategy_idx` · `three-column` · `3-column.*conflict` · plus Codex's own eleven patterns. **Positive control: `rtb_signals` appears on 21 lines of the ledger, so the corpus is reachable and the term is present.** ⭐ **What the search DID find is adjacent and makes the absence more interesting, not less:** `BATCH_79_0m_a_COMPLETION_REPORT.md:87` **explicitly requested a retrospective audit of other tables that gained `asset_class` without updating their unique indexes.** **That requested audit produced no issue entry, and this is the table it would have found.**
+
+⭐ **ONE STAGE LATER, THE SAME SHAPE, FLAGGED NOT FILED:** `active_open_positions` carries an asset class and is **unique on SYMBOL ALONE** (`shared/schema.ts:1937-1944,2013`; `server/storage.ts:3726-3739`). **That may be a deliberate portfolio-wide one-position-per-canonical-symbol rule** — it should be **decided explicitly rather than inherited from symbol spelling.** ⛔ **Not filed as a defect here: it needs a Kyle decision, not a fix (rule-24 outcome 2).**
+
+**WHAT WOULD FALSIFY THIS:** a checked-in migration I missed that reconciles the declared index to three columns; **or** a documented, approved rule that same-symbol cross-class signals are intentionally one identity at every RTB operation, which would move the `asset_class` half to working-as-designed-needing-a-decision and leave the schema/database divergence standing on its own.
+
+⇒ **HOME: unplaced pending Kyle + Langston.** ⛔ **I am NOT self-assigning it.** It is not adjacent to my queue, the `asset_class` half needs a product decision, and `#1004`'s lesson is that guessing a home for someone else's surface is how an item ends up owned by nobody. **Two candidate placements to choose between: its own batch in the Phase 19 governance queue, or folded into whoever next opens the RTB surface.**
