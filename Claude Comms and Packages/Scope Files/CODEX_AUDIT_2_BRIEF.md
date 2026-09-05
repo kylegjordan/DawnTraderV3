@@ -1,4 +1,4 @@
-# DAWNTRADER V3 — CODEX ADVISOR, ASSIGNMENT 2: THE TRADING LOGIC, THE MATHS, AND WHAT TO BUILD (r4)
+# DAWNTRADER V3 — CODEX ADVISOR, ASSIGNMENT 2: THE TRADING LOGIC, THE MATHS, AND WHAT TO BUILD (r5)
 
 **Written by:** Claude New (CC-B), 2026-09-05, at Kyle's direction, after Langston's design review.
 **Your standing is unchanged: ADVISOR, not a gate.** Langston's review gates are untouched and Kyle remains the sole decider. Nothing waits on you.
@@ -108,8 +108,12 @@ You cannot assess whether a strategy can work without the constraints it operate
 
 ### ✅ AND THE STORED LABELS CAN BE DISCARDED — THE PRIMITIVES ARE THERE
 
-**VERIFIED against the live table (38 columns):** the row retains `entry_price`, `exit_price`, `stop_price`, `target_price`, `opened_at`, `closed_at`, `holding_ms` and `close_reason`, alongside the derived `gross_pnl` / `net_pnl` / `r_multiple`.
-⇒ ⛔ **THROW AWAY EVERY STORED DERIVED LABEL AND RECOMPUTE FROM THE PRIMITIVES, applying whatever fee model you choose.** This is Kyle's gross-not-net instruction applied one level up, and it is the single most useful thing you can do with this corpus. **A stored `net_pnl` here is not a net figure; it is a gross figure wearing the wrong column name.**
+**VERIFIED against the live table `rtb_shadow_pairings` (38 columns):** the row retains `entry_price`, `exit_price`, `stop_price`, `target_price`, `opened_at`, `closed_at`, `holding_ms` and `close_reason`, alongside the derived `gross_pnl` / `net_pnl` / `r_multiple`.
+⇒ ✅ **THROW AWAY EVERY STORED DERIVED LABEL AND RECOMPUTE FROM THE PRIMITIVES.** This is Kyle's gross-not-net instruction applied one level up. **A stored `net_pnl` here is not a net figure; it is a gross figure wearing the wrong column name.**
+
+⛔⛔ **BUT THAT IS ONLY TRUE IN RATIO CURRENCIES, AND r4 OVER-STATED IT.** *(r5, Langston.)* **MEASURED with a positive control: `rtb_shadow_pairings` has ZERO columns matching quantity, size, side, direction, fee, friction or notional — while the SAME query over the real closed-trades table returns EIGHT** (`quantity`, `side`, `entry_fee`, `entry_fee_rate`, `exit_fee`, `exit_fee_mode`, `fees`, `total_fee`). **The instrument works; the absence is real.**
+✅ **SO RECOMPUTE IN RATIO CURRENCY ONLY** — R-multiple, `(exit − entry) / (entry − stop)`, and per-unit return. **Both are fee-free by construction and are the RIGHT currency for comparing a ranker's ordering anyway.**
+⛔ **A DOLLAR-DENOMINATED RECOMPUTATION IS CIRCULAR AND YOU MUST NOT DO ONE SILENTLY.** The only route to position size is backing quantity out of `gross_pnl` — **the very column you were just told to discard** — and it additionally assumes a long-only direction **that this table does not record.** If you need dollars, **state the quantity derivation and the long-only assumption as assumptions we may challenge**, and put the question in `QUESTIONS.md`.
 
 ### ⛔ THE CUT — use this design, not a naive comparison
 
