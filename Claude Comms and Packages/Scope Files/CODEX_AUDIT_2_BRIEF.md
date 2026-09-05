@@ -1,4 +1,4 @@
-# DAWNTRADER V3 — CODEX ADVISOR, ASSIGNMENT 2: THE TRADING LOGIC, THE MATHS, AND WHAT TO BUILD (r2)
+# DAWNTRADER V3 — CODEX ADVISOR, ASSIGNMENT 2: THE TRADING LOGIC, THE MATHS, AND WHAT TO BUILD (r3)
 
 **Written by:** Claude New (CC-B), 2026-09-05, at Kyle's direction, after Langston's design review.
 **Your standing is unchanged: ADVISOR, not a gate.** Langston's review gates are untouched and Kyle remains the sole decider. Nothing waits on you.
@@ -90,14 +90,25 @@ You cannot assess whether a strategy can work without the constraints it operate
 |---|---|---|
 | **closed paper trades** | what the **whole pipeline** produced, post-selection | not a strategy sample — selection and execution are confounded, and it is **duration-censored short** (§3) |
 | **the passive-system corpus** | what the strategy families do across nearly the whole opportunity set | **no quality gate, no ranking contest** — a much larger and *differently* selected population, **truncated long** (§3) |
-| ⭐ **the ranking-counterfactual corpus** | **the matched control, and the reason this assignment can answer more than the last one** | see below |
+| ⛔ **the ranking-counterfactual corpus** | **NOT a matched control — r2 called it one and that was WRONG. See the block below before touching it.** | **fee-free, arm-confounded, and not joinable to any real trade** |
 | **the decline corpus** | why signals were rejected | ⛔ **a decline carries its REASON and not the geometry that caused it** — see §5 |
 | **open positions with age** | the censored tail | required for §3, not a performance sample |
 
-⭐⭐ **THE RANKING-COUNTERFACTUAL CORPUS IS THE IMPORTANT ONE AND IT IS BETTER THAN ANYTHING I EXPECTED TO HAND YOU.** For each ranking cycle it records **every candidate in the pool — the one we promoted AND the ones that lost — with the decision-time ranking inputs attached and the counterfactual outcome.** **MEASURED: 53,794 rows, 29,186 cycles, 35,025 promoted, 18,769 that lost the ranking, 53,296 with outcomes, 487 symbols, both classes.**
+⛔⛔ **THE RANKING-COUNTERFACTUAL CORPUS — r2 CALLED THIS "THE MATCHED CONTROL" AND THAT WAS WRONG. A FRESH READER WAS SENT TO CHECK IT BEFORE IT CARRIED PART 2, AND IT DOES NOT DO WHAT WE SAID.** *(r3. Every claim below re-derived at the ref before it was written here.)*
 
-⇒ **It answers "is our selection finding edge, or destroying it?" DIRECTLY — same instant, same pool, same population.**
-⚠️ ⛔ **AND IT SUPERSEDES THE OBVIOUS APPROACH, WHICH IS WRONG.** Differencing the paper corpus against the passive corpus does **not** isolate selection, because the passive system has **no quality gate and no ranking contest at all** — the difference carries every population and lane difference between two systems, not the selection step. **Kyle raised exactly this objection on 2026-08-10 and it was conceded then.** I proposed it again anyway; Langston caught it. **Do not repeat it.**
+**WHAT IT ACTUALLY IS:** a **simulation-versus-simulation** comparison of ranked candidates. **Every row is a shadow simulation, including the ones flagged as promoted.** The real trade's outcome is **not in the table and cannot be joined to it.**
+
+⛔ **THE FOUR THINGS THAT DISQUALIFY IT AS A SELECTION CONTROL, each verified at the ref:**
+
+1. ⛔⛔ **IT IS FEE-FREE, AND THIS ASSIGNMENT IS ABOUT FEES.** `vts-runner.ts:929` hardcodes `frictionCost: 0` on the shadow shell, and `:3827` computes `netPnl = grossPnl - frictionCost`. ⇒ **`net_pnl` is IDENTICALLY EQUAL to `gross_pnl` on every row.** **A candidate whose edge is smaller than a round trip scores exactly the same as one that clears it.** An analysis of this corpus showing the ranker picks well is **fully consistent with it picking badly once friction is applied** — which is the entire question.
+2. ⛔ **`promoted` DOES NOT MEAN "TRADED".** It is `i < limit` (`ready_to_buy_service.ts:1950`) — the ranker's top-N — and `shared/schema.ts:2170-2177` states it is **"NOT execution-confirmed."** After the flag is stamped the engine can still defer or fail. **`promoted_trade_id` is never written on this table, so no row can be joined to a real trade.**
+3. ⛔ **THE FLAG IS FROZEN AT FIRST APPEARANCE.** The writer returns early on a duplicate, so a signal that sits in the pool for eight cycles and then wins is stored **`promoted=false` forever.** Any difference between the arms is equally consistent with a **timing effect and no ranking content at all.**
+4. ⛔ **THE PAIR GUARD ALONE COULD PRODUCE THE ENTIRE RESULT.** A promoted symbol becomes an active trade and is then **excluded from every later pool**; a rejected symbol **re-enters indefinitely.** The two arms are therefore drawn from **systematically different symbol-states**, with no ranking content required to produce a difference.
+
+⚠️ **AND ITS COVERAGE IS NOT CONTINUOUS.** The ranker's sort **changed on 2026-06-30**, so `promotion_rank` means a different thing either side of that date. Three ranking columns were **0 non-null across 14,232 rows** until re-pointed. The hold ceiling went **6h → 48h on 2026-08-11**, and the 6h version had truncated **27.3% of shadow closes (10,804 of 39,641)**. **No rows are captured at all when the system is at capacity or warming up**, so busy periods are absent **by construction, not by chance.**
+
+⇒ ✅ **WHAT IT CAN STILL BE USED FOR, narrowly:** whether our ranking score correlates with **GROSS** outcome, within one coverage window, with the arm confound stated every time. ⛔ **It cannot answer whether our selection finds or destroys edge NET of fees, and it cannot be compared against real trades.**
+⇒ ⛔⛔ **SO PART 2's SELECTION QUESTION HAS NO CLEAN INSTRUMENT, AND WE ARE NOT INVENTING ONE.** If you conclude something about selection quality, **say which of the four confounds above you could not remove.** ★ **"We cannot answer this with the data that exists" is an acceptable and useful finding here.**
 
 ⚠️ **PRE-ORDER-BOOK-FIX PAPER DATA SHIPS LABELLED AND SEPARATED.** Never blended into a headline number. Report it as a **labelled sensitivity arm**, and require the primary and the sensitivity to agree in **sign** — silently excluding it is its own bias.
 
