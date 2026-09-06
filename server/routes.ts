@@ -1,5 +1,6 @@
 import { getLevelBasisFunnel } from './core/calculations/level-basis.js';
 import { getVenueTimestampPresence } from './exchanges/kraken/kraken-websocket-adapter.js';
+import { getSideAgeRows } from './core/calculations/level-basis.js';
 import type { Express, Request, Response, NextFunction, Router as ExpressRouter } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
@@ -8187,6 +8188,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // denominator a zero would be unreadable: "the venue is silent" and "our parse is wrong"
         // look identical. In-memory and process-lifetime, like the funnel beside it.
         venueTimestampPresence: getVenueTimestampPresence(),
+        // ⭐ How old the quote was at the instant a level was built — rows, never a total.
+        sideAgeAtLevelBuild: getSideAgeRows(),
         nullReasonDetail: lt?.nullReasonAggregate ?? {},
         // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates now
         // separately maintained in eval-cycle.ts. Was emitting the combined

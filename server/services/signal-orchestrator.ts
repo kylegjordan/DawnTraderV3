@@ -133,7 +133,7 @@ import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 // COUNTED, consumed by nothing. See the observation block at the hand-off below.
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import {
-  buildLevelBasis, recordLevelBasisOutcome,
+  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeObservation,
   LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
 } from '../core/calculations/level-basis.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
@@ -2546,6 +2546,34 @@ export class SignalOrchestrator {
       // (census §6), which are NOT the defect this batch fixes. `null` here is the correct
       // xStock answer, mirroring `active-execution-engine.ts:1601`.
       const _lbClass = sizingContext.assetClass;
+
+      // ⭐⭐ SIDE-AGE PROBE — SHADOW, NOTHING GATES ON IT. How old is the quote this process
+      // holds at the instant a level is built? Langston required this number and correctly
+      // refused the archive-derived one as a proxy: the archiver is a different subscriber with
+      // its own socket and throttle, so it bounds the VENUE's cadence and not our entry's age.
+      //
+      // ⛔ DELIBERATELY OUTSIDE THE CRYPTO GATE BELOW. The refusal funnel is crypto-only because
+      // `getBookForFill` is the Kraken mini-book, but the price cache holds BOTH classes and Kyle
+      // asked for this to cover the VTS side too. Measuring costs nothing and the xStock reading
+      // is informative in its own right.
+      // ⚠️ IT IS A MEASUREMENT OF THE CACHE, NOT A STATEMENT THAT xSTOCK LEVELS COME FROM IT —
+      // census §6 says they are venue bar closes. Do not read this row as gating xStock geometry.
+      {
+        const _cached = priceCache.getCachedPrice(symbol);
+        if (!_cached) {
+          recordSideAgeObservation({ lane: 'active', assetClass: _lbClass }, { kind: 'absent' });
+        } else if (_cached.sidesCapturedAtMs === null) {
+          // ⛔ NOT age zero. An entry whose sides no writer ever supplied is UNSTAMPED, and
+          // counting it as fresh is exactly the absent-as-valid failure this batch keeps finding.
+          recordSideAgeObservation({ lane: 'active', assetClass: _lbClass }, { kind: 'unstamped' });
+        } else {
+          recordSideAgeObservation(
+            { lane: 'active', assetClass: _lbClass },
+            { kind: 'observed', ageMs: Date.now() - _cached.sidesCapturedAtMs },
+          );
+        }
+      }
+
       if (_lbClass === 'crypto_spot') {
         const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);
         const _lbResult = buildLevelBasis(

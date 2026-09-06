@@ -415,3 +415,152 @@ export function __resetLevelBasisFunnelForTest(): void {
  */
 export const LEVEL_BASIS_OBSERVATION_MAX_AGE_MS = 60_000;
 export const LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION = 0.50;
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * ⭐⭐ SIDE-AGE OBSERVATION — HOW OLD IS THE QUOTE WE WOULD BUILD A LEVEL FROM?
+ *
+ * ⛔ WHY THIS EXISTS AND WHY IT IS NOT THE ARCHIVE. I answered "how fresh is our pricing"
+ * from the durable ticker archive and Langston was right to call it a proxy: the archiver is a
+ * DIFFERENT SUBSCRIBER — its own socket, its own 4 s write throttle, its own symbol shards — so
+ * it bounds the VENUE'S cadence and says nothing about the age of the entry THIS process holds
+ * at the instant a level is constructed. **Those are different quantities and only the second
+ * one can set a gate.** This records the second one, at the site, on the real population.
+ *
+ * ⛔⛔ A HISTOGRAM, DELIBERATELY — NOT A RESERVOIR AND NOT A RUNNING MEAN.
+ *  - A reservoir SAMPLES, and every sampling scheme here would have to be defended against the
+ *    exact length-bias that made the archive number wrong by ~65×. A histogram counts every
+ *    observation, so there is no sampling story to get wrong.
+ *  - A mean would be dominated by the tail and would hide the shape that IS the finding: the
+ *    archive's spread ran from ~32 s on the busiest symbols to ~78 min on the quietest.
+ *  - Bounded memory, deterministic, and readable without trusting the reader.
+ *
+ * ⛔ AND QUANTILES ARE REPORTED AS BUCKET RANGES, NEVER AS A POINT. Interpolating inside a
+ * bucket would manufacture precision the instrument does not have, which is the same sin as the
+ * number this replaces. `p95: "300000-900000"` is the honest answer; `p95: 412_337` is not.
+ *
+ * ⚠️ THREE OUTCOMES, KEPT APART, BECAUSE COLLAPSING THEM IS #546's SHAPE:
+ *   `absent`    — no cache entry at all for that symbol
+ *   `unstamped` — an entry exists but no writer ever supplied a side (`sidesCapturedAtMs` null)
+ *   `observed`  — a real side with a real capture instant
+ * **An unstamped entry is NOT a fresh one and must never be counted as age 0.**
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Upper edges in ms. A value lands in the first bucket whose edge it is strictly below. */
+export const SIDE_AGE_BUCKET_EDGES_MS: readonly number[] = [
+  1_000, 2_000, 5_000, 10_000, 30_000, 60_000,
+  120_000, 300_000, 900_000, 1_800_000, 3_600_000,
+];
+
+export type SideAgeObservation =
+  | { kind: 'observed'; ageMs: number }
+  | { kind: 'absent' }
+  | { kind: 'unstamped' };
+
+interface SideAgeCell {
+  observed: number;
+  absent: number;
+  unstamped: number;
+  /**
+   * ⛔ COUNTED SEPARATELY BECAUSE THE HISTOGRAM CANNOT SHOW IT. A negative age and a zero age
+   * both land in the first bucket and leave `maxMs` untouched, so without this field the
+   * "recorded, not clamped" promise in the block comment above is UNVERIFIABLE — a clamp could
+   * be added and every test would still pass. Caught by asking whether the test would come out
+   * differently if the code were wrong; it would not have. This field is what makes it.
+   */
+  negative: number;
+  maxMs: number;
+  buckets: number[];
+}
+
+function emptySideAgeCell(): SideAgeCell {
+  return {
+    observed: 0, absent: 0, unstamped: 0, negative: 0, maxMs: 0,
+    buckets: new Array(SIDE_AGE_BUCKET_EDGES_MS.length + 1).fill(0),
+  };
+}
+
+const _sideAge = new Map<string, SideAgeCell>();
+
+/**
+ * ⛔ A NEGATIVE AGE IS RECORDED, NOT CLAMPED. It means the capture stamp is in this process's
+ * future — a real condition worth seeing (clock skew, or a stamp taken from a venue clock and
+ * differenced against ours) and exactly the thing capturing the venue timestamp was meant to
+ * expose. Clamping it to zero would report the healthiest possible reading for the unhealthiest
+ * possible state.
+ */
+export function recordSideAgeObservation(key: LevelBasisFunnelKey, obs: SideAgeObservation): void {
+  const id = keyOf(key);
+  let cell = _sideAge.get(id);
+  if (!cell) { cell = emptySideAgeCell(); _sideAge.set(id, cell); }
+
+  if (obs.kind === 'absent') { cell.absent++; return; }
+  if (obs.kind === 'unstamped') { cell.unstamped++; return; }
+
+  cell.observed++;
+  if (obs.ageMs < 0) cell.negative++;
+  if (obs.ageMs > cell.maxMs) cell.maxMs = obs.ageMs;
+  let i = SIDE_AGE_BUCKET_EDGES_MS.findIndex((edge) => obs.ageMs < edge);
+  if (i < 0) i = SIDE_AGE_BUCKET_EDGES_MS.length;
+  cell.buckets[i]++;
+}
+
+export interface SideAgeRow {
+  key: string;
+  attempted: number;
+  observed: number;
+  absent: number;
+  unstamped: number;
+  /** Observations whose age was NEGATIVE — the capture stamp sat in this process's future. */
+  negative: number;
+  maxMs: number;
+  /** Bucket label -> count. Labels are ranges so the reader cannot mistake one for a point. */
+  histogram: Record<string, number>;
+  /** Bucket RANGE containing the quantile, or null when nothing was observed. */
+  p50Bucket: string | null;
+  p95Bucket: string | null;
+}
+
+function bucketLabel(i: number): string {
+  const lo = i === 0 ? 0 : SIDE_AGE_BUCKET_EDGES_MS[i - 1];
+  const hi = i === SIDE_AGE_BUCKET_EDGES_MS.length ? null : SIDE_AGE_BUCKET_EDGES_MS[i];
+  return hi === null ? `${lo}+` : `${lo}-${hi}`;
+}
+
+function quantileBucket(cell: SideAgeCell, q: number): string | null {
+  if (cell.observed === 0) return null;
+  const target = q * cell.observed;
+  let cum = 0;
+  for (let i = 0; i < cell.buckets.length; i++) {
+    cum += cell.buckets[i];
+    if (cum >= target) return bucketLabel(i);
+  }
+  return bucketLabel(cell.buckets.length - 1);
+}
+
+/**
+ * ⛔ ROWS, NEVER A TOTAL — same rule as the refusal funnel, for the same reason: a single figure
+ * pooled across lanes and asset classes is precisely what the keying exists to prevent.
+ */
+export function getSideAgeRows(): SideAgeRow[] {
+  return [...(_sideAge.entries())].map(([key, cell]) => {
+    const histogram: Record<string, number> = {};
+    cell.buckets.forEach((n, i) => { histogram[bucketLabel(i)] = n; });
+    return {
+      key,
+      attempted: cell.observed + cell.absent + cell.unstamped,
+      observed: cell.observed,
+      absent: cell.absent,
+      unstamped: cell.unstamped,
+      negative: cell.negative,
+      maxMs: cell.maxMs,
+      histogram,
+      p50Bucket: quantileBucket(cell, 0.5),
+      p95Bucket: quantileBucket(cell, 0.95),
+    };
+  });
+}
+
+/** Test-only reset. Never called from the running system. */
+export function __resetSideAgeForTest(): void {
+  _sideAge.clear();
+}

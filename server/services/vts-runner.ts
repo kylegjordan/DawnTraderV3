@@ -3,7 +3,7 @@ import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-ada
 // level-setting hand-off (census §9 W-1); wiring only the orchestrator would leave the
 // LEARNING population on the smoothed mid while every active-path check read as fixed.
 import {
-  buildLevelBasis, recordLevelBasisOutcome,
+  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeObservation,
   LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
 } from '../core/calculations/level-basis.js';
 /**
@@ -1528,6 +1528,25 @@ async function generatePhase10Signal(
   // that aggregates two populations answers questions about neither (Langston's catch).
   // ⚠️ Crypto only, by construction: `getBookForFill` is the Kraken WS mini-book and the xStock
   // lane has a different feed whose levels are venue bar closes, not a book side.
+  // ⭐⭐ SIDE-AGE PROBE — SHADOW, VTS LANE. Mirrors the active lane's probe and is keyed
+  // `lane:'vts'` for the same reason the refusal funnel is: the two lanes see different symbol
+  // populations at different cadences, so a pooled age would describe neither.
+  // ⛔ OUTSIDE the crypto gate below — the price cache holds both classes, and Kyle asked
+  // explicitly for the VTS side to be covered, not just the active one.
+  {
+    const _cached = priceCache.getCachedPrice(symbol);
+    if (!_cached) {
+      recordSideAgeObservation({ lane: 'vts', assetClass: _assetClass }, { kind: 'absent' });
+    } else if (_cached.sidesCapturedAtMs === null) {
+      recordSideAgeObservation({ lane: 'vts', assetClass: _assetClass }, { kind: 'unstamped' });
+    } else {
+      recordSideAgeObservation(
+        { lane: 'vts', assetClass: _assetClass },
+        { kind: 'observed', ageMs: Date.now() - _cached.sidesCapturedAtMs },
+      );
+    }
+  }
+
   if (_assetClass === 'crypto_spot') {
     const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);
     recordLevelBasisOutcome(
