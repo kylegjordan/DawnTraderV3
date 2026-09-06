@@ -410,12 +410,26 @@ TOTAL="$3"; AGE_H="$4"; OLDEST="$5"; RUNTIME_N="$6"; CAPPED="$7"
 # The list comes from its own file, so no filename can ever shift a scalar.
 LIST="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | paste -sd, -)"
 
+AGE_INT="${AGE_H%.*}"
+
 # ── THE RUNG: A BOUNDED, MONOTONE AGE BUCKET ON THE DEDUPE KEY ────────────────────────
 # Four rungs, escalate only, return-to-zero resolves all. This is entirely PRODUCER-side:
 # dedupe keys are the producer's to choose, so it alters no consumer contract — which is the
 # property the withdrawn "resolve-and-re-mint per acked run" design lacked.
 # An ack then silences ONE RUNG; worsening drift crosses into a new key and re-mints on its own.
-AGE_INT="${AGE_H%.*}"
+# ⛔ THE GATE LANGSTON RULED, WHICH THE CODE DID NOT HAVE UNTIL NOW. His words: "gate on DOES
+#   THE RANGE TOUCH RUNTIME PATHS AT ALL; magnitude = age of the oldest undeployed commit."
+#   I built the magnitude and not the gate, and the alert BODY described the gate as though it
+#   existed. Caught at Step 7 by the job firing in production on 10 commits with ZERO runtime
+#   files — a gap made entirely of governance commits, which carries no runtime risk and is
+#   exactly what #1001 was NOT about.
+# ⚠️ CAPPED IS NOT ZERO. At the 300-file cap the gate is UNDECIDABLE, and his separate ruling
+#   is that the file gate may never gate EMISSION in that case — only annotate it. So the gate
+#   passes on capped, and the body says UNDECIDABLE rather than a number.
+if [ "$CAPPED" != "1" ] && [ "$RUNTIME_N" -eq 0 ]; then
+  log "NO_RUNTIME_PATHS age=${AGE_INT}h total=$TOTAL — the range touches no runtime file, so there is nothing to be behind ON. Not reported."
+  exit 0
+fi
 if   [ "$AGE_INT" -ge 72 ]; then RUNG=4
 elif [ "$AGE_INT" -ge 24 ]; then RUNG=3
 elif [ "$AGE_INT" -ge 8 ];  then RUNG=2
