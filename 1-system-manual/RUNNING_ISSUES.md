@@ -6652,6 +6652,10 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 **⇒ RULE 24 OUTCOME (2): WORKING AS DESIGNED, BUT UNADDRESSED.** ⛔ **NOT a defect — no code is doing something other than what it says.** **What is missing is a DECISION: nobody chose that the active lane should inherit a simulation refresh cadence, and the comment's wording is why nobody noticed they were choosing it.** Per `CONDUCT.md` §9 that is a scope call for Kyle, **never a unilateral code change**, and I am not proposing one here.
 
+⚠️⚠️ **CORRECTED 2026-09-06 BY MEASUREMENT (census §19): THE CLAUSE ABOVE — *"for the ~180 symbols only VTS subscribed, that is 60 seconds"* — IS TRUE OF AT MOST HALF THE ACTIVE LANE'S READS, NOT OF THE LANE.**
+**The settled read-site histogram has THREE discrete spikes, and the middle one is active-only: `15000-30000` carries 47.9% of active reads (598 of 1,249) and EXACTLY ZERO VTS reads.** ⇒ ★ **the active lane has a price population VTS does not share**, so roughly half its reads come from a source on a 15-30 s cadence that the VTS bucket never touches. ⛔ **What that source is remains UNESTABLISHED — `readyToBuy` is the 15,000 ms bucket but the health line reads `rtb=3`, and three symbols cannot supply 598 observations, so the obvious candidate fails its own arithmetic. Named, not guessed.**
+✅ **THE OUTCOME-(2) DISPOSITION IS UNAFFECTED:** the buckets are still cadences rather than partitions, `getCachedPrice` still takes no bucket, and the active lane still inherits whatever cadence a symbol was subscribed under. **What narrows is the SCOPE of the VTS-cadence claim, not the finding.**
+
 ⚠️ **WHAT IS STILL NOT ESTABLISHED, and it bounds everything above: NO HARM IS MEASURED.** The 60 s figure is the bucket's DECLARED interval. The interval-differenced age distribution — the only one free of the post-restart contamination described in amendment 3 — is still being collected. **A slow cadence on a symbol nothing is trading is worth nothing; the consequence depends entirely on how often an active signal is born on a VTS-only symbol, which is a number I do not yet have.**
 
 ---
