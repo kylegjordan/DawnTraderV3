@@ -49,7 +49,7 @@ USAGE:
                                         touch the heartbeat.
 """
 
-import json, os, subprocess, sys, datetime
+import json, os, shlex, subprocess, sys, datetime
 
 HOME = "/home/langston"
 WATCHED = [
@@ -162,7 +162,22 @@ def post(msg, quiet):
 def _alerts(argv):
     """Run the staging alert CLI as langston over his IP-restricted key. Returns
     (rc, stdout, stderr). NEVER raises — the caller records the outcome in the run row."""
-    inner = STAGING_CMD + " " + " ".join(["'%s'" % a for a in argv])
+    # ⛔⛔ BLOCKER-3 (Langston, Step-4 r2) — AND HE FOUND IT BY RUNNING THE ARTIFACT,
+    #    NOT BY READING THIS LINE. The old form wrapped each argument in LITERAL single
+    #    quotes. The alert body contains `Langston's`; that apostrophe CLOSED the quote,
+    #    `s` concatenated, the remaining words became 27 stray positional arguments — and
+    #    `#1007` opened a SHELL COMMENT that swallowed everything after it INCLUDING the
+    #    unmatched trailing quote.
+    # ★ SO THE COMMAND PARSED, rc=0 CAME BACK, THE TOOL PRINTED `armed <id>`, AND THE
+    #   LIVE ROW CARRIED A 38-CHARACTER BODY: "The daily ratchet watch over Langstons".
+    #   Not "THE WATCH IS DOWN", not #1007, not which timer to check, not the owner.
+    # ⛔ Worse: whether it armed AT ALL was decided by the accident of a `#` in the body.
+    #   He reproduced rc=2 on the same string with the `#` removed — without that comment
+    #   it is a syntax error. A control whose success depends on a coincidence in its own
+    #   payload is not a control.
+    # ⇒ shlex.quote. This is my OWN standing lesson — never hand structured text to a
+    #   shell — broken inside a tool whose entire job is to be readable at 05:20.
+    inner = STAGING_CMD + " " + " ".join(shlex.quote(a) for a in argv)
     cmd = ["sudo", "-u", "langston", "ssh", "-o", "ConnectTimeout=25",
            "-o", "BatchMode=yes", "staging", inner]
     try:
@@ -210,7 +225,9 @@ def heartbeat(st, status):
         "add", "--triggers-at", fire_at, "--category", "health_check",
         "--severity", "warning", "--dedupe-key", HEARTBEAT_KEY,
         "--title", "Langston size watch has not run",
-        "--body", ("The daily ratchet watch over Langston's always-loaded files did not run "
+        # ⚠️ NO APOSTROPHE, deliberately — shlex.quote makes it safe, but this string's
+        #    only job is to survive every transport between here and a human's phone.
+        "--body", ("The daily ratchet watch over the always-loaded files did not run "
                    "within " + str(HEARTBEAT_HOURS) + "h. Each successful run resolves this "
                    "and arms the next, so this alert firing MEANS THE WATCH IS DOWN and the "
                    "#1007 ceiling currently has no instrument. Check "
