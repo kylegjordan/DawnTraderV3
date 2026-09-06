@@ -7723,3 +7723,17 @@ Kyle opened Kraken Pro's **Fees** dialog signed in, on three live markets, and c
 ★ **AND IT BINDS THE DISPATCH THAT PROPOSED IT: `B-LANGSTON-CONTEXT`'s own Step-4 dispatch did not carry these fields either. That is the argument, not a criticism.**
 
 MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit baseline in a Step-4 change list; it is NOT an ancestor of origin (quoted from local history after a rebase), so nobody but me could resolve it. The artifact was right, the citation was not. Real baseline `57216944d`, same blob sha256, same 21,573 B.
+
+
+### #1010 OPEN 2026-09-06 (CC-A, hit at `B-DEPLOY-DRIFT-LINE` Step 7) — ⛔ CLAUDE-IN-CHROME PRESENTED A LOGIN WALL ON STAGING TODAY, WHICH IS THE ONE THING THE RULES RECORD AS MEASURED-IMPOSSIBLE
+
+**MEASURED 2026-09-06 ~17:20Z.** Navigated to `https://188.245.193.8.sslip.io/system-alerts` in **Claude-in-Chrome** — the surface `workflow-07-verify-cc` names as **the only** one for staging. Result: the accessibility tree carried **only a sign-in form**; the root URL **redirected to `/login`** and rendered *"Welcome Back / Sign in to your trading account / Username / Password / Sign In"*. ⛔ **I typed nothing** — a session may not type a password into a form, which is a hard boundary and not a permission.
+
+⚠️ **WHAT THIS DOES *NOT* CLAIM.** Not that the 2026-08-28 measurement was wrong when it was taken — it is recorded as observed, with the panels it saw named. **The likeliest cause is the dullest: Kyle's browser session expired.** That is a thirty-second fix and it may already be fixed by the time anyone reads this.
+
+⛔⛔ **WHY IT IS WORTH AN ENTRY ANYWAY, AND IT IS ABOUT THE RULE RATHER THAN THE SESSION.** `workflow-07-verify-cc` states as **measured fact** that *"the full dashboard loads with NO LOGIN"*, and that line exists **specifically to stop sessions telling Kyle they cannot verify** — Kyle: *"I keep getting sessions telling me that they can't go to the staging site because they need a login and password. They don't need one."*
+⇒ **A session that hits this wall today is in the exact position the rule was written to prevent, and the rule tells it the wall does not exist.** ★ **The rule asserts a LIVE STATE as a fixed fact — the same class as the model-line that was wrong for 17 days and the retired memory cap that understated a breach by half.** An always-loaded instruction must name **where to check**, never **what is currently true**.
+
+**WHAT THIS COST THIS BATCH: nothing substantive.** `B-DEPLOY-DRIFT-LINE`'s verification is at the **alert store**, which is the object; the alerts page only renders it. The batch adds no field and no new category, so nothing about rendering changed. **UI verification is recorded as ATTEMPTED-AND-UNAVAILABLE rather than skipped, per §9.3's own instruction to state the judgement rather than pass over the step.**
+
+**DISPOSITION §9.4 (4) — A SCHEDULED REVIEW, NOT A BATCH.** ⛔ **The first move is Kyle's and it is thirty seconds: open staging in his own Chrome and confirm whether he is signed in.** If he is, this was transient and the entry closes on his word. **If sessions hit it again, the fix is to the RULE** — make it name the check (*"if you see a sign-in form, tell Kyle his session has dropped"*) instead of asserting the wall is absent. **Raised to Kyle 2026-09-06.**
