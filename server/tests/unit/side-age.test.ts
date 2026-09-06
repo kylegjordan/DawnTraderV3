@@ -213,6 +213,22 @@ describe('side-age instrument', () => {
     expect(usdc.meanMs).toBeGreaterThan(btc.meanMs * 100);
   });
 
+  it('15. ⛔ the 30-60 s band is SPLIT — the resolution the first live reading lacked', () => {
+    // The first read put 1,634 active and 546 VTS observations in a single `30000-60000` cell at
+    // both p50 and p95. That is not a tight distribution; it is a bucket wider than the thing
+    // measured. These edges exist so a 30 s-cadence population and a 60 s-cadence one cannot
+    // share a cell — removing either edge makes this test red rather than quietly losing sight.
+    recordSideAgeAttempt(K, attempt({ sidesCapturedAtMs: NOW - 32_000 }));  // 30-45
+    recordSideAgeAttempt(K, attempt({ sidesCapturedAtMs: NOW - 58_000 }));  // 45-60
+    recordSideAgeAttempt(K, attempt({ sidesCapturedAtMs: NOW - 12_000 }));  // 10-15
+    const r = row()!;
+    expect(r.histogram['30000-45000']).toBe(1);
+    expect(r.histogram['45000-60000']).toBe(1);
+    expect(r.histogram['10000-15000']).toBe(1);
+    // And the two 30-60 s observations must NOT share a cell, which is the whole point.
+    expect(r.histogram['30000-45000']).not.toBe(2);
+  });
+
   it('14. lanes, asset classes and stages never pool', () => {
     recordSideAgeAttempt({ lane: 'active', assetClass: 'crypto_spot' }, attempt());
     recordSideAgeAttempt({ lane: 'vts', assetClass: 'crypto_spot' }, attempt({ stage: 'vts_signal_birth', cacheEntryPresent: false }));

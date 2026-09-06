@@ -499,9 +499,24 @@ export interface SideAgeAttempt {
   feedWindowMs: number | null;
 }
 
-/** Upper edges in ms. A value lands in the first bucket whose edge it is strictly below. */
+/**
+ * Upper edges in ms. A value lands in the first bucket whose edge it is strictly below.
+ *
+ * ⛔⛔ 15 s AND 45 s WERE ADDED 2026-09-06 BECAUSE THE FIRST READING HAD NO RESOLUTION WHERE IT
+ * MATTERED. Every observation — 1,634 active and 546 VTS — landed in the single `30000-60000`
+ * bucket at BOTH p50 and p95, which is not evidence of a tight distribution: it is evidence that
+ * the bucket was wider than the thing being measured. **A histogram whose modal bucket contains
+ * everything has told you nothing except where to put the next edge.**
+ *
+ * ★ THE EDGES ARE CHOSEN AGAINST THE CACHE'S OWN REFRESH CADENCE (`price-cache.ts:95-98`:
+ * 2 s / 15 s / 30 s / 60 s), because that is what the distribution is made of — the ages are one
+ * poll cycle, not market staleness. ⇒ **edges at 15 s, 30 s, 45 s and 60 s let a reader see WHICH
+ * bucket's cadence a symbol is being served by**, which the previous edges could not distinguish.
+ * ⚠️ Deliberately NOT tuned to make the numbers look better: 45 s is a midpoint with no cadence of
+ * its own, and it is there precisely so the 30 s and 60 s populations cannot hide in one cell.
+ */
 export const SIDE_AGE_BUCKET_EDGES_MS: readonly number[] = [
-  1_000, 2_000, 5_000, 10_000, 30_000, 60_000,
+  1_000, 2_000, 5_000, 10_000, 15_000, 30_000, 45_000, 60_000,
   120_000, 300_000, 900_000, 1_800_000, 3_600_000,
 ];
 
