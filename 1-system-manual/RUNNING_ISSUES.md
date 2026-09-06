@@ -6618,6 +6618,26 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
+### ⛔⛔ #977 AMENDMENT 3 — 2026-09-06 (CC-C measured, Langston found the bucket and I re-derived it independently) — **THE ACTIVE TRADING LANE IS SERVED FROM THE BUCKET BUILT TO KEEP SIMULATION *OUT* OF THE LIVE CACHE**
+
+**TWO ITEMS, added here rather than as a new batch (Langston's §13 ruling: this row was opened on precisely these symptoms).**
+
+**ITEM (a) — `open=0 / fx5=0 / weight=0/10` RE-MEASURED UNCHANGED.** Six consecutive `[PriceCache][HEALTH]` ticks, staging `out.log`, 2026-09-06 10:50:06Z → 10:55:06Z: **`open=0 rtb=2 fx5=0 vts=180 weight=0/10 cacheSize=185`** (final tick `vts=185 cacheSize=190`). ⇒ **this row's original finding is live and unchanged today** — the 2-second lane still has zero subscribers.
+
+**ITEM (b) — NEW, AND IT IS THE ONE THAT MATTERS.** `vtsSimulation` holds **180 of 185** cache entries. Its own declaration says what it is for — `price-cache.ts:91-92`, quoted verbatim:
+> *"Directive 11.0E.2: Added vtsSimulation bucket (60s refresh) for cache sandboxing / VTS data isolation prevents simulation from affecting live trading cache"*
+
+⛔ **AND 1,634 `active` crypto SIGNAL-BIRTH reads were served from it in a single 10-minute window** (`sideAgeAtLevelBuild`, row `active:crypto_spot:active_signal_birth`, measured at `5838d64b2`). ⇒ **the bucket whose stated purpose is to keep simulation data away from the live trading cache is the bucket the live lane reads its level-setting prices from.**
+
+⚠️ **STATED AS A TAXONOMY QUESTION, NOT A DEFECT (rule 24 / `CONDUCT.md` §9): I have NOT established which of the three outcomes this is.** It may be a real defect; it may be working-as-designed with the isolation intent long since overtaken; it may be legacy that no longer fits. **The subscription decision has to be read in code before anyone prices the consequence**, and the `bucketType` argument at each `priceCache.subscribe` call is where that read starts.
+⛔ **NO CONSEQUENCE IS CLAIMED HERE.** The 60 s cadence is the bucket's declared interval, not a measured harm.
+
+⚠️⚠️ **AND THE AGE NUMBER THAT LED ME HERE IS PARTLY WITHDRAWN — recorded because the withdrawn version is the more alarming one.** I reported the active-lane side age as p50 **`30000-60000`**. **The instrument is a MONOTONE ACCUMULATOR since process start and had eaten the post-restart cold period**, when every entry was stale-until-first-poll. **246 seconds later the same cumulative p50 read `2000-5000`** — it did not drift, it fell two decades as real observations outnumbered the cold ones. ⇒ **the typical age is a few seconds; the `30000-60000` TAIL (p95) is what persists and is the number worth watching, because a cold start cannot manufacture a tail that survives it.**
+★ **THE SAME TRAP THIS LEDGER ALREADY CARRIES AT `3b.d`'s `GRID_REJECT` — cumulative-since-deploy read as a window.** I wrote that one up nine days ago and did not apply it to the instrument I was building. **Fix needs no redeploy: difference two full histograms and read the INTERVAL.**
+✅ **AND LANGSTON'S OWN INFERENCE IS NARROWED IN THE SAME BREATH, in his favour and mine: his *"a 30 s cycle cannot produce a p50 above 30,000"* reasoned from that contaminated p50. THE CONCLUSION SURVIVES ON THE HEALTH LINE ALONE — `fx5=0` is dispositive without any p50 — so the p50 leg is struck rather than repaired.**
+
+---
+
 ### #977 AMENDMENT 2 — CROSS-REFERENCE, NO NEW NUMBER: two alerts route to the freshness cluster — `B-XSTOCK-SESSION-FRESHNESS`, plan `3b.f-c`, owner CC-C
 
 **Filed 2026-09-02 by CC-B on Langston's routing of alert `1d1573c7-99ea-42b4-9c84-3a33538aa4dc` (owner=CC-B in his tag; the HOME is CC-C's lane, so CC-B placed it and named CC-C — rule 28).** Alert `1d1573c7`: an active xStock fill for RIOT/USD refused because the mark was 55,473 ms old against a 15,000 ms ceiling, fired 20:18Z — three minutes after the US regular session closed. Sibling `b1f58a01-28ed-4a97-bbf0-b338d560775d` (fired 10:14Z, still active): exit checks skipped for MDT/USD, mark 124 s vs a 65 s ceiling — Langston routed that one to CC-C at 20:23Z.
