@@ -19,6 +19,9 @@
  */
 
 import { priceCache } from './price-cache';
+import { recordSideAgeAttempt } from '../core/calculations/level-basis.js';
+/** Trailing window for the feed-liveness symbol count. Recorded beside every count. */
+const FEED_LIVENESS_WINDOW_MS = 60_000;
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service';
 import { centralClock, type ClockTick } from './central-clock.js';
 import type { TradingMode } from './guardrail-policy';
@@ -429,9 +432,42 @@ class RTBRefreshService {
 
     const prices = await priceCache.getBatch('readyToBuy', symbols);
 
+    // ⭐⭐ SIDE-AGE PROBE — `rtb_refresh` STAGE. SHADOW, NOTHING GATES ON IT.
+    // ⛔ WIRED BECAUSE KYLE ASKED FOR IT EXPLICITLY: *"we also need to make sure that our RTB
+    // refresh cycle incorporates the right order book numbers as well."* The stage was already
+    // declared in `LevelBasisStage` and recorded NOTHING, which renders as an ABSENT row rather
+    // than a zero — honest, but invisible, and invisible is how a gate ships inert.
+    // ⚠️ THIS IS THE RE-RANKING READ, and it is a DIFFERENT population from signal birth: these
+    // are symbols already in the queue, re-priced on a bucket cadence. Keyed by its own stage so
+    // it can never pool with the birth read — the two answer different questions.
+    const _rtbNow = Date.now();
+    const _rtbFeedAny = priceCache.countSymbolsWithMessageSince(_rtbNow - FEED_LIVENESS_WINDOW_MS);
+    const _rtbFeedWs = priceCache.countSymbolsWithWsMessageSince(_rtbNow - FEED_LIVENESS_WINDOW_MS);
+
     const validPrices = new Map<string, number>();
     for (const symbol of symbols) {
       const cached = prices.get(symbol);
+
+      // ⛔ RECORDED BEFORE THE `price > 0` GATE BELOW, DELIBERATELY. A symbol dropped by that
+      // gate is exactly the case worth measuring; recording only the survivors would make the
+      // instrument agree with the filter by construction.
+      const _rtbClass = safeResolveAssetClass(symbol, 'kraken') ?? 'unknown';
+      recordSideAgeAttempt(
+        { lane: 'active', assetClass: _rtbClass },
+        {
+          stage: 'rtb_refresh',
+          symbol,
+          nowMs: _rtbNow,
+          cacheEntryPresent: !!cached,
+          sidesCapturedAtMs: cached?.sidesCapturedAtMs ?? null,
+          venueObservedAtMs: cached?.venueObservedAtMs ?? null,
+          symbolLastMessageAtMs: cached?.lastUpdatedAt ?? null,
+          feedDistinctSymbolsInWindow: _rtbFeedAny,
+          feedDistinctWsSymbolsInWindow: _rtbFeedWs,
+          feedWindowMs: FEED_LIVENESS_WINDOW_MS,
+        },
+      );
+
       if (cached && cached.price > 0) {
         validPrices.set(symbol, cached.price);
       }
