@@ -363,10 +363,13 @@ for line in open('$WORK/alerts.jsonl', encoding='utf-8', errors='replace'):
     try: d=json.loads(line)
     except Exception: continue
     k=d.get('dedupe_key') or ''
-    if k.startswith('deploy-drift-'): seen[d['id']]=d.get('state')
+    if not k.startswith('deploy-drift-'): continue
+    rid=d.get('id')
+    if rid: seen[rid]=d.get('state')
 for i,s in seen.items():
     if s!='resolved': print(i)
-" > "$WORK/open.txt" 2>>"$LOG"
+" > "$WORK/open.txt" 2>>"$LOG" \
+  || fail_measurement "alert_store" "could not parse the alert store while clearing drift rows. Rows may still be open, and an empty result here would otherwise read as nothing-to-clear."
 
   RESOLVED_N=0; FAILED_N=0
   while read -r ID; do
@@ -385,6 +388,13 @@ for i,s in seen.items():
 fi
 
 set -- $READ                # OK status total age_h oldest_iso runtime_count capped  (the file list moved to $WORK/rtlist.txt)
+# ENUMERATING THE BAD SHAPES CANNOT CLOSE THIS; ONLY REQUIRING THE GOOD ONE CAN. The case
+# arm above lists known-BAD prefixes, but the reader 60 lines up validates against a
+# known-GOOD set -- so any non-empty, unmatched, SHORT result fell through to `set --` and
+# died on $3 under `set -u`: no mint, no log line, cron discards stderr. Measured: a
+# tab-only READ and a truncated "OK ahead" both did exactly that. One line closes it by
+# construction rather than by extending a list of things that have gone wrong so far.
+[ $# -ge 7 ] || fail_measurement "compare_reader" "the compare reader returned $# field(s), expected 7 — output was: ${READ:0:120}"
 TOTAL="$3"; AGE_H="$4"; OLDEST="$5"; RUNTIME_N="$6"; CAPPED="$7"
 # The list comes from its own file, so no filename can ever shift a scalar.
 LIST="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | paste -sd, -)"
