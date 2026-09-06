@@ -71,6 +71,19 @@ export interface CachedPrice {
    * turn out to be about the wrong population.
    */
   venueObservedAtMs: number | null;
+  /**
+   * ⭐⭐ WHEN THE VENUE LAST *PUSHED* ABOUT THIS SYMBOL — advanced ONLY by `updateFromWebSocket`.
+   *
+   * ⛔⛔ ADDED 2026-09-06 BECAUSE THE LIVENESS TERM I SHIPPED THIS MORNING WAS INERT AND I FOUND
+   * IT BY READING THE LIVE NUMBERS, NOT THE CODE. The feed-liveness count was built on
+   * `lastUpdatedAt`, which THREE REST WRITERS ALSO ADVANCE. Measured on staging minutes after
+   * deploy: 161 of 170 cache entries were `kraken_rest`-sourced. ⇒ a REST poller running on its
+   * own schedule would have kept the "feed is alive" count high **while the WebSocket was dead** —
+   * so the term could never detect the one failure it exists to catch.
+   * ★ Same shape as the defect this whole batch is about: a field that is right for one job
+   * (`lastUpdatedAt` genuinely dates the last cache write) used for another it cannot serve.
+   */
+  lastWsMessageAtMs: number | null;
 }
 
 class UnifiedPriceCache {
@@ -212,6 +225,8 @@ class UnifiedPriceCache {
               // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
               // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
               venueObservedAtMs: null,
+              // ⛔ REST path — NOT a push. Carries forward, never advances.
+              lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
               lastUpdatedAt: now,
             };
             
@@ -318,6 +333,8 @@ class UnifiedPriceCache {
             // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
             // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
             venueObservedAtMs: null,
+            // ⛔ REST path — NOT a push. Carries forward, never advances.
+            lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
             lastUpdatedAt: now,
           };
           
@@ -352,6 +369,20 @@ class UnifiedPriceCache {
   countSymbolsWithMessageSince(sinceMs: number): number {
     let n = 0;
     for (const p of this.cache.values()) if (p.lastUpdatedAt >= sinceMs) n++;
+    return n;
+  }
+
+  /**
+   * ⭐⭐ THE ONE THAT CAN ACTUALLY SEE A DEAD SOCKET — counts symbols the venue PUSHED to us.
+   * ⛔ Both counters are recorded, never just this one: the DIFFERENCE between them is the
+   * measurement that says whether the REST poller is masking a WebSocket outage. A single
+   * "is the feed healthy" number would have thrown that away.
+   */
+  countSymbolsWithWsMessageSince(sinceMs: number): number {
+    let n = 0;
+    for (const p of this.cache.values()) {
+      if (p.lastWsMessageAtMs !== null && p.lastWsMessageAtMs >= sinceMs) n++;
+    }
     return n;
   }
 
@@ -417,6 +448,8 @@ class UnifiedPriceCache {
                 // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
                 // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
                 venueObservedAtMs: null,
+              // ⛔ REST path — NOT a push. Carries forward, never advances.
+              lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
                 lastUpdatedAt: now,
               };
               
@@ -503,6 +536,10 @@ class UnifiedPriceCache {
       // refresh the sides would date one observation while describing another — W-3 again,
       // one field over. When no side was supplied the previous stamp is carried, untouched.
       venueObservedAtMs: (bid !== null || ask !== null) ? venueObservedAtMs : (existing?.venueObservedAtMs ?? null),
+      // ⭐ ADVANCED HERE AND NOWHERE ELSE — this is the only writer fed by a venue PUSH. Every
+      // other writer carries the previous value forward untouched, which is what makes a silent
+      // socket death visible instead of masked by the REST poller.
+      lastWsMessageAtMs: now,
       lastUpdatedAt: now,
     });
   }
@@ -525,6 +562,7 @@ class UnifiedPriceCache {
       // here on the first pass and caught it; the sides keep the age they actually have.
       sidesCapturedAtMs: existing?.sidesCapturedAtMs ?? null,
       venueObservedAtMs: existing?.venueObservedAtMs ?? null,
+      lastWsMessageAtMs: existing?.lastWsMessageAtMs ?? null,
       lastUpdatedAt: now,
     });
   }

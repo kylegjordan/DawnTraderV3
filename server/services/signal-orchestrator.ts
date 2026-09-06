@@ -2582,6 +2582,9 @@ export class SignalOrchestrator {
             symbolLastMessageAtMs: _c?.lastUpdatedAt ?? null,
             feedDistinctSymbolsInWindow:
               priceCache.countSymbolsWithMessageSince(_now - FEED_LIVENESS_WINDOW_MS),
+            // Both counts, never one: their DIFFERENCE says whether REST is masking a WS outage.
+            feedDistinctWsSymbolsInWindow:
+              priceCache.countSymbolsWithWsMessageSince(_now - FEED_LIVENESS_WINDOW_MS),
             feedWindowMs: FEED_LIVENESS_WINDOW_MS,
           },
         );

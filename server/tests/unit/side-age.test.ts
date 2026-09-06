@@ -47,6 +47,7 @@ function attempt(over: Partial<SideAgeAttempt> = {}): SideAgeAttempt {
     venueObservedAtMs: NOW - 600,
     symbolLastMessageAtMs: NOW - 500,
     feedDistinctSymbolsInWindow: 460,
+    feedDistinctWsSymbolsInWindow: 455,
     feedWindowMs: 60_000,
     ...over,
   };
@@ -162,6 +163,20 @@ describe('side-age instrument', () => {
     expect(r.feedDistinctSymbolsMax).toBe(460);
     // ⛔ A COUNT WITHOUT ITS WINDOW IS UNINTERPRETABLE, so the window travels with it.
     expect(r.feedWindowMs).toBe(60_000);
+  });
+
+  it('10b. ⛔ the WS-push count is tracked SEPARATELY — a REST poller cannot mask a dead socket', () => {
+    // The shape that matters: any-write count stays high because REST keeps polling, while the
+    // push count collapses. Recording only the first would have reported a healthy feed.
+    recordSideAgeAttempt(K, attempt({ feedDistinctSymbolsInWindow: 460, feedDistinctWsSymbolsInWindow: 455 }));
+    recordSideAgeAttempt(K, attempt({ feedDistinctSymbolsInWindow: 458, feedDistinctWsSymbolsInWindow: 0 }));
+    const r = row()!;
+    // ⛔ THE DISCRIMINATING ASSERTION: the any-write floor never dropped, and the push floor did.
+    expect(r.feedDistinctSymbolsMin).toBe(458);
+    expect(r.feedDistinctWsSymbolsMin).toBe(0);
+    expect(r.feedDistinctWsSymbolsMax).toBe(455);
+    // A single "is the feed healthy" number built on the first count would read 458 and be wrong.
+    expect(r.feedDistinctSymbolsMin! - r.feedDistinctWsSymbolsMin!).toBe(458);
   });
 
   it('11. the symbol gap is recorded even when the sides are unusable', () => {

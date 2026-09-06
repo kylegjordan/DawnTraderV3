@@ -484,7 +484,18 @@ export interface SideAgeAttempt {
   sidesCapturedAtMs: number | null;
   venueObservedAtMs: number | null;
   symbolLastMessageAtMs: number | null;
+  /** DISTINCT symbols with ANY cache write inside the trailing window. */
   feedDistinctSymbolsInWindow: number | null;
+  /**
+   * ⭐⭐ DISTINCT symbols the venue PUSHED to us in the same window — the liveness term that can
+   * actually see a dead socket.
+   * ⛔ BOTH COUNTS TRAVEL, never just this one: their DIFFERENCE is what says whether the REST
+   * poller is masking a WebSocket outage. The first version of this instrument recorded only the
+   * any-write count, which tracked OUR OWN POLL LOOP and could never have detected the failure it
+   * was built for — measured on staging within minutes of deploy, 161 of 170 entries were
+   * REST-sourced. Found by reading the live numbers, not the code.
+   */
+  feedDistinctWsSymbolsInWindow: number | null;
   feedWindowMs: number | null;
 }
 
@@ -529,6 +540,8 @@ interface SideAgeCell {
   feedCountN: number;
   feedCountMin: number | null;
   feedCountMax: number | null;
+  wsCountMin: number | null;
+  wsCountMax: number | null;
   feedWindowMs: number | null;
 }
 
@@ -537,7 +550,8 @@ function emptySideAgeCell(): SideAgeCell {
     observed: 0, absent: 0, unstamped: 0, negative: 0, maxMs: 0, buckets: newBuckets(),
     venueStampPresent: 0, venueStampAbsent: 0,
     symbolGapBuckets: newBuckets(), symbolGapObserved: 0, symbolGapUnknown: 0,
-    feedCountN: 0, feedCountMin: null, feedCountMax: null, feedWindowMs: null,
+    feedCountN: 0, feedCountMin: null, feedCountMax: null,
+    wsCountMin: null, wsCountMax: null, feedWindowMs: null,
   };
 }
 
@@ -567,6 +581,11 @@ export function recordSideAgeAttempt(key: LevelBasisFunnelKey, a: SideAgeAttempt
     const c = a.feedDistinctSymbolsInWindow;
     cell.feedCountMin = cell.feedCountMin === null ? c : Math.min(cell.feedCountMin, c);
     cell.feedCountMax = cell.feedCountMax === null ? c : Math.max(cell.feedCountMax, c);
+  }
+  if (a.feedDistinctWsSymbolsInWindow !== null) {
+    const w = a.feedDistinctWsSymbolsInWindow;
+    cell.wsCountMin = cell.wsCountMin === null ? w : Math.min(cell.wsCountMin, w);
+    cell.wsCountMax = cell.wsCountMax === null ? w : Math.max(cell.wsCountMax, w);
   }
   if (a.feedWindowMs !== null) cell.feedWindowMs = a.feedWindowMs;
 
@@ -612,6 +631,8 @@ export interface SideAgeRow {
   symbolGapHistogram: Record<string, number>;
   feedDistinctSymbolsMin: number | null;
   feedDistinctSymbolsMax: number | null;
+  feedDistinctWsSymbolsMin: number | null;
+  feedDistinctWsSymbolsMax: number | null;
   feedWindowMs: number | null;
 }
 
@@ -655,6 +676,8 @@ export function getSideAgeRows(): SideAgeRow[] {
     symbolGapHistogram: histogramOf(c.symbolGapBuckets),
     feedDistinctSymbolsMin: c.feedCountMin,
     feedDistinctSymbolsMax: c.feedCountMax,
+    feedDistinctWsSymbolsMin: c.wsCountMin,
+    feedDistinctWsSymbolsMax: c.wsCountMax,
     feedWindowMs: c.feedWindowMs,
   }));
 }
