@@ -82,34 +82,39 @@ DRIFT=""
 # in the repo, the file was edited on the box and never committed, which is precisely the
 # unreviewable state OBJ-9 exists to catch, and no amount of waiting will change it.
 # FAIL-QUIET: any error leaves DRIFT empty and the notice proceeds untouched.
-if [ -d "$MIRROR" ] && [ -f /usr/local/bin/dt-push-notice.sh ]; then
-  LIVE_BLOB=$(git --git-dir="$MIRROR" hash-object /usr/local/bin/dt-push-notice.sh 2>/dev/null)
-  # ⛔ AND THE MIRROR MUST HAVE FETCHED SINCE THE FILE WAS LAST TOUCHED, or "absent" cannot be
-  # told apart from "pushed a minute ago and the puller has not run yet". Blob-existence is the
-  # right QUESTION; this is what makes the answer trustworthy. Both conditions together mean:
-  # the repo has had a chance to see this content, and it is not there.
+# ⛔ WATCH EVERY EXECUTABLE THIS ESTATE INSTALLS, NOT JUST THIS ONE (Langston, #1002 Step 4).
+#   This blob-checked ONLY dt-push-notice.sh — while deploy.sh installs cc-send and, as of
+#   #1002, dt-deploy-drift.sh into the SAME directory by the SAME route. The batch that carries
+#   the drift check was adding an instance of the #1004 class the check exists to catch.
+#   The ORACLE-BLIND test below is about the MIRROR, so it fires once; the BLOB test is per-file.
+WATCHED="/usr/local/bin/dt-push-notice.sh /usr/local/bin/dt-deploy-drift.sh /usr/local/bin/cc-send"
+if [ -d "$MIRROR" ]; then
   MIRROR_AT=$(stat -c %Y "$MIRROR/FETCH_HEAD" 2>/dev/null || echo 0)
-  LIVE_AT=$(stat -c %Y /usr/local/bin/dt-push-notice.sh 2>/dev/null || echo 0)
-  # ⛔ AND A FLOOR ON THE ORACLE ITSELF (Langston Step-4 Q3, #995). The freshness leg above
-  # requires MIRROR_AT > LIVE_AT. If the */15 puller STOPS, FETCH_HEAD's mtime freezes below
-  # every subsequent live edit and drift detection turns OFF PERMANENTLY — and because the
-  # whole check is fail-quiet, it would then report clean forever in exactly the state it
-  # exists to catch. Self-disabling, with no signal. So the oracle has to prove it is alive:
-  # a mirror that has not fetched in over 2 hours (8x its cadence) is itself the finding.
   NOW=$(date +%s)
   MIRROR_AGE=$(( NOW - MIRROR_AT ))
+  # ⛔ A FLOOR ON THE ORACLE ITSELF (Langston, #995). The freshness leg requires
+  # MIRROR_AT > LIVE_AT. If the */15 puller STOPS, FETCH_HEAD's mtime freezes below every
+  # subsequent live edit and drift detection turns OFF PERMANENTLY — and because the check is
+  # fail-quiet it would report clean forever in exactly the state it exists to catch.
   if [ "$MIRROR_AT" -eq 0 ] || [ "$MIRROR_AGE" -gt 7200 ]; then
     DRIFT="
 ⚠️ DRIFT CHECK IS BLIND: the backup mirror it compares against has not fetched for $(( MIRROR_AGE / 60 )) minutes
-(cadence is 15). Until that puller runs, nothing is watching /usr/local/bin/dt-push-notice.sh
+(cadence is 15). Until that puller runs, nothing is watching the installed comms executables
 for uncommitted edits. This line is the check reporting its own oracle, not a drift finding."
-  fi
-  if [ -n "$LIVE_BLOB" ] && [ "$MIRROR_AT" -gt "$LIVE_AT" ]      && ! git --git-dir="$MIRROR" cat-file -e "$LIVE_BLOB" 2>/dev/null; then
-    DRIFT="
-⚠️ DRIFT: /usr/local/bin/dt-push-notice.sh on Helsinki holds content that has NEVER been
-committed — it exists nowhere in the repository, so nobody can review it. The tree is source
-of truth (§7.1): commit it from comms-infra/discord/dt-push-notice.sh, or restore the tree
-copy onto the box."
+  else
+    for WF in $WATCHED; do
+      [ -f "$WF" ] || continue
+      LIVE_BLOB=$(git --git-dir="$MIRROR" hash-object "$WF" 2>/dev/null)
+      LIVE_AT=$(stat -c %Y "$WF" 2>/dev/null || echo 0)
+      # Blob-existence is the right QUESTION; the freshness leg is what makes the answer
+      # trustworthy — "absent" must be distinguishable from "pushed a minute ago".
+      if [ -n "$LIVE_BLOB" ] && [ "$MIRROR_AT" -gt "$LIVE_AT" ] && ! git --git-dir="$MIRROR" cat-file -e "$LIVE_BLOB" 2>/dev/null; then
+        DRIFT="$DRIFT
+⚠️ DRIFT: $WF on Helsinki holds content that has NEVER been committed — it exists nowhere in
+the repository, so nobody can review it. The tree is source of truth (§7.1): commit it, or
+restore the tree copy onto the box."
+      fi
+    done
   fi
 fi
 
@@ -166,6 +171,13 @@ for f in fs: print(f['filename'])
   esac
 fi
 rm -f "$CMP"
+
+# ⛔ FINDING 1 (Langston): this fix rebuilt the very outcome it names. If python3 is missing or
+#   the heredoc fails, FILES is empty, NO sentinel is printed, FILES_UNREADABLE stays 0, and the
+#   notice reads as "no rules changed". dt-deploy-drift.sh guards exactly this case; its sibling
+#   in the same batch did not. A real compare NEVER returns an empty file list for a push that
+#   moved the branch, so treating empty as unreadable fails in the safe direction.
+[ -z "$FILES" ] && FILES_UNREADABLE=1
 
 RULES=$(echo "$FILES" | grep -E '^(CLAUDE\.md|CONDUCT\.md|\.claude/hooks/|\.claude/settings\.local\.json)')
 

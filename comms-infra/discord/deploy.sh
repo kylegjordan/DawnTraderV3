@@ -75,6 +75,11 @@ install -m 0755 "$BRIDGE_DIR/dt-deploy-drift.sh" /usr/local/bin/dt-deploy-drift.
 # MEASUREMENT FAILED for the wrong reason. Caught by the job's own --dry-run.
 touch /var/log/dt-deploy-drift.log
 chown langston:langston /var/log/dt-deploy-drift.log
+# The daily main-arm cap keeps its stamp here. Without this directory the stamp write fails
+# SILENTLY (mkdir -p and the redirect are both 2>/dev/null-able) and the cap never engages —
+# measured: the main arm ran on every invocation while appearing to be capped.
+mkdir -p /var/lib/dt-deploy-drift
+chown langston:langston /var/lib/dt-deploy-drift
 # Hourly. One compare call per run against a shared 60/hr unauthenticated budget; the */2
 # push notice spends from the same budget but only when the branch head has moved.
 CRON_LINE='17 * * * * /usr/local/bin/dt-deploy-drift.sh >/dev/null 2>&1'

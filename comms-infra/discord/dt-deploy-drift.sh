@@ -31,7 +31,18 @@ LOG="/var/log/dt-deploy-drift.log"
 # is a hidden operand; the explicit form has none.
 STAGING_SSH="deploy@188.245.193.8"
 SSH_ID="/home/langston/.ssh/id_ed25519"
-SSH_OPTS="-i $SSH_ID -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+# -n IS LOAD-BEARING: without it ssh READS STDIN, and in the resolve loop stdin is the list
+# being iterated. Measured by Langston on this host, same key, 3 ids in: 1 of 3 resolved
+# without -n, 3 of 3 with it. The loop that could never resolve became one that resolves one.
+SSH_OPTS="-n -i $SSH_ID -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+
+# The actor is a MACHINE identity. An hourly cron claiming `cc-a` is the #987/#1004
+# provenance class and the gate cannot catch it, because it passes. `deploy-drift-monitor`
+# is NOT YET in ALERT_ACTORS, so a resolve REFUSES until the one-line follow-on lands —
+# fail-closed and loud. The Step-6 install is gated on it.
+ACTOR="deploy-drift-monitor"
+ALERTS="/var/log/dawntrader/system-alerts.jsonl"
+MAIN_STAMP="/var/lib/dt-deploy-drift/main-arm.stamp"
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # --dry-run performs every read and writes NOTHING TO THE ALERT STORE. It still appends to
@@ -45,7 +56,12 @@ while [ $# -gt 0 ]; do
     # VERIFICATION ONLY, AND IT REFUSES TO WRITE. A drift instrument whose "zero" cannot be
     # distinguished from "always zero" is untestable, so the job must be pointable at a range
     # with a KNOWN non-zero answer. Forcing --dry-run here means a test can never mint.
-    --base) shift; BASE_OVERRIDE="${1:-}"; DRY=1 ;;
+    --base)
+      shift
+      # A missing value must REFUSE. `${1:-}` left it empty and the run proceeded against
+      # the REAL deployment while looking like a test.
+      [ -z "${1:-}" ] && { echo "dt-deploy-drift: --base requires a sha" >&2; exit 2; }
+      BASE_OVERRIDE="$1"; DRY=1 ;;
     # A mistyped flag must REFUSE, not run live. Without this, `--dryrun` (one hyphen
     # short) leaves DRY=0 and the "a test can never mint" guarantee is void.
     *) echo "dt-deploy-drift: unknown argument: $1" >&2; exit 2 ;;
@@ -53,7 +69,11 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-log() { echo "$TS $*" >> "$LOG"; [ "$DRY" = "1" ] && echo "LOG: $TS $*"; }
+# `; return 0` IS LOAD-BEARING. The last command was the [ "$DRY" = "1" ] test, FALSE on a
+# live run, so log() returned 1 — and log() is the last line of this script, so a run that
+# measured, minted and logged correctly exited 1, identical to fail_measurement. This
+# file's own header says success is read off the exit status; that was false of its own.
+log() { echo "$TS $*" >> "$LOG"; [ "$DRY" = "1" ] && echo "LOG: $TS $*"; return 0; }
 
 # ── MEASUREMENT FAILED IS A FIRST-CLASS OUTCOME, NOT A SILENT ZERO ────────────────────
 # Three outcomes, never two: measured · zero · MEASUREMENT FAILED. The third NEVER renders
@@ -67,7 +87,9 @@ fail_measurement() {
   local operand="$1" detail="$2"
   log "MEASUREMENT_FAILED operand=$operand detail=$detail"
   mint_alert \
-    "deploy-drift-measurement-failed" \
+    # THE OPERAND IS IN THE KEY. One key for every failure pins the FIRST operand's body and
+    # replays it for every later, different failure — this file's own stale-magnitude lesson.
+    "deploy-drift-measurement-failed-$operand" \
     "Deploy drift: MEASUREMENT FAILED ($operand)" \
     "The deploy-drift job could not complete a reading at $TS.
 
@@ -144,17 +166,24 @@ fi
 # The deploy RECORD must agree with what was BUILT. If they disagree the distance has an
 # ambiguous base and any number derived from it is meaningless (#546).
 RECORD=""
-if [ -z "$BASE_OVERRIDE" ]; then
-RECORD="$(ssh $SSH_OPTS "$STAGING_SSH" \
-  "test -r /home/deploy/dawntrader-deploy.record && grep -E '^sha=' /home/deploy/dawntrader-deploy.record | tail -1 | cut -d= -f2 || echo __NO_RECORD__" 2>>"$LOG")"
-fi
+# THE READ IS SPLIT FROM THE PARSE. Previously the remote command was
+#   test -r … && grep … | cut … || echo __NO_RECORD__
+# and the || bound to a PIPELINE whose status is cut's, so a record present but carrying no
+# sha= line exited 0, the sentinel never fired, RECORD came back empty and [ -n "$RECORD" ]
+# SKIPPED the comparison. Absent-as-valid inside the check that cites #546. Parsing locally
+# removes the remote pipeline from the status path entirely.
+RECORD_RAW="$(ssh $SSH_OPTS "$STAGING_SSH" 'cat /home/deploy/dawntrader-deploy.record' 2>>"$LOG")"
+RECORD_RC=$?
+[ $RECORD_RC -ne 0 ] && fail_measurement "deploy_record" "could not read the deploy record (ssh exit $RECORD_RC). An unreadable record is NOT agreement."
+RECORD="$(echo "$RECORD_RAW" | grep -E '^sha=' | tail -1 | cut -d= -f2)"
+# FINDING 6 of my six: a rebase rewrites committer dates, so publish a magnitude it cannot
+# rewrite alongside the one it can.
+DEPLOYED_AT="$(echo "$RECORD_RAW" | grep -E '^deployed_at=' | tail -1 | cut -d= -f2)"
+[ -z "$RECORD" ] && fail_measurement "deploy_record" "the deploy record carries no sha= line, so the base cannot be corroborated against dist/BUILD_SHA. Not treated as agreement."
 # An UNREADABLE record is not agreement. Before this guard, a missing or renamed record
 # returned empty and the comparison was skipped, so the base read as verified when it was
 # never checked -- the #546 shape inside the check that cites #546.
-if [ "$RECORD" = "__NO_RECORD__" ]; then
-  fail_measurement "deploy_record" "the deploy record is missing or unreadable, so the base sha cannot be corroborated against dist/BUILD_SHA. Not treated as agreement."
-fi
-if [ -n "$RECORD" ] && [ "$RECORD" != "$DEPLOYED" ]; then
+if [ -z "$BASE_OVERRIDE" ] && [ "$RECORD" != "$DEPLOYED" ]; then
   fail_measurement "base_ambiguous" "dist/BUILD_SHA=$DEPLOYED disagrees with record.sha=$RECORD — publishing which two shas disagree, never a number derived from them"
 fi
 
@@ -190,7 +219,10 @@ except Exception as e:
 
 status = d.get('status')            # identical | ahead | behind | diverged
 if status is None:
-    print("PARSE_ERROR no status field (rate limited or 404/422?)"); raise SystemExit(0)
+    # A rate limit and a 404 on the deployed sha are DIFFERENT findings — a 404 means the
+    # deployed sha is not in the repository, which is itself a #1001-class result.
+    print("PARSE_ERROR no status field; api_message=%r" % (d.get("message") or "(none)"))
+    raise SystemExit(0)
 
 total   = d.get('total_commits') or 0
 commits = d.get('commits') or []
@@ -218,6 +250,9 @@ files_capped = len(files) >= 300
 # commits[0] of page 1 is the ANCESTRALLY first commit in the range. On a fast-forward-only
 # branch (§7.1) that is also the date-oldest; stated as an assumption about the branch's
 # shape, not proved here.
+if not commits:
+    print("PARSE_ERROR status=%s total=%d but commits[] empty" % (status, total)); raise SystemExit(0)
+
 oldest = commits[0]['commit']['committer']['date']
 age_h = (datetime.datetime.now(datetime.timezone.utc)
          - datetime.datetime.fromisoformat(oldest.replace('Z', '+00:00'))).total_seconds() / 3600.0
@@ -248,44 +283,65 @@ esac
 # ── main ARM: MEASURED, LOGGED, NEVER FIRED ON ────────────────────────────────────────
 # Plan row 4.55 asks for it. Deployed-vs-main is a GOVERNANCE-BACKLOG number, not a runtime-risk
 # number — main advances only at batch close — so firing on it would desensitise the alert we
-# actually need.
-MAIN_SHA="$(git ls-remote "$REMOTE" refs/heads/main 2>>"$LOG" | cut -f1)"
-if [ -n "$MAIN_SHA" ] && fetch "$API/$DEPLOYED...$MAIN_SHA?page=1&per_page=100" "$WORK/main.json"; then
-  MAIN_READ="$(python3 -c "
-import json,sys
+# `main` advances only at batch close, so hourly was 24 calls/day for a number that NEVER
+# FIRES, against a 60/hr unauthenticated budget shared with the */2 push notice on the same
+# IP — and exhaustion converts into MEASUREMENT FAILED noise. Once a day is enough for a
+# governance-backlog figure.
+MAIN_TODAY="$(date -u +%Y-%m-%d)"
+if [ "$(cat "$MAIN_STAMP" 2>/dev/null)" != "$MAIN_TODAY" ]; then
+  MAIN_SHA="$(git ls-remote "$REMOTE" refs/heads/main 2>>"$LOG" | cut -f1)"
+  if [ -n "$MAIN_SHA" ] && fetch "$API/$DEPLOYED...$MAIN_SHA?page=1&per_page=100" "$WORK/main.json"; then
+    log "main_arm $(python3 -c "
+import json
 d=json.load(open('$WORK/main.json'))
-print('%s %s' % (d.get('status'), d.get('total_commits')))" 2>>"$LOG")"
-  log "main_arm $MAIN_READ (logged only, never fires)"
+print('%s %s' % (d.get('status'), d.get('total_commits')))" 2>>"$LOG") (logged only, never fires)"
+    # If the stamp cannot be written the cap does NOT engage, so say so rather than
+    # running uncapped while appearing capped. deploy.sh creates the directory.
+    if ! echo "$MAIN_TODAY" > "$MAIN_STAMP" 2>/dev/null; then
+      log "main_arm STAMP_UNWRITABLE ($MAIN_STAMP) — the daily cap is NOT in effect"
+    fi
+  fi
 fi
 
 if [ "$READ" = "ZERO" ]; then
-  log "ZERO deployed=$DEPLOYED head=$HEAD_SHA — resolving any open drift rows"
-  ssh $SSH_OPTS "$STAGING_SSH" \
-    "cd /home/deploy/dawntrader && npm run --silent system-alerts -- list --state active" \
-    > "$WORK/active.txt" 2>>"$LOG"
-  # RETURN TO ZERO RESOLVES EVERY RUNG — the level is cleared, not just the current one.
-  # ⛔ PARSE THE TEXT, NOT JSON. `system-alerts list` prints padded human-readable lines
-  #   carrying `id=<uuid>` (cmdList, scripts/system-alerts.ts:256-272) and has no --json
-  #   flag. An earlier revision json.load()ed this and swallowed the exception, so the
-  #   resolve loop was a PERMANENT SILENT NO-OP while the alert body promised operators
-  #   that deploying would clear it. Caught before install; it had no test because both
-  #   evidence runs were non-zero and never reached this branch.
-  # The list output carries no dedupe_key, so rows are matched on the TITLE this job mints.
-  RESOLVED_N=0
+  log "ZERO deployed=$DEPLOYED head=$HEAD_SHA — clearing open drift rows"
+  # READ THE STORE, NOT THE CLI LIST. `cmdList` prints padded text carrying id and title and
+  # NOT dedupe_key (scripts/system-alerts.ts:256-272), so matching on a title substring would
+  # catch any future alert titled that way BY ANY AUTHOR. §10.5's sanctioned read is the store
+  # itself, which carries the true key. ~800 rows; trivial.
+  ssh $SSH_OPTS "$STAGING_SSH" "cat $ALERTS" > "$WORK/alerts.jsonl" 2>>"$LOG"
+  LIST_RC=$?
+  # An unreachable store is NOT "nothing to clear". Unchecked, it logged resolved=0 —
+  # "nothing to clear" for "could not look", which is this job's own subject.
+  [ $LIST_RC -ne 0 ] && fail_measurement "alert_store" "could not read the alert store to clear drift rows (ssh exit $LIST_RC). Rows may still be open."
+
+  python3 -c "
+import json
+seen={}
+for line in open('$WORK/alerts.jsonl', encoding='utf-8', errors='replace'):
+    line=line.strip()
+    if not line: continue
+    try: d=json.loads(line)
+    except Exception: continue
+    k=d.get('dedupe_key') or ''
+    if k.startswith('deploy-drift-'): seen[d['id']]=d.get('state')
+for i,s in seen.items():
+    if s!='resolved': print(i)
+" > "$WORK/open.txt" 2>>"$LOG"
+
+  RESOLVED_N=0; FAILED_N=0
   while read -r ID; do
     [ -z "$ID" ] && continue
-    if [ "$DRY" = "1" ]; then
-      echo "WOULD RESOLVE $ID"
-    else
-      ssh $SSH_OPTS "$STAGING_SSH" \
-        "cd /home/deploy/dawntrader && npm run --silent system-alerts -- resolve $ID --by cc-a --evidence '#1002'" >> "$LOG" 2>&1
-    fi
-    RESOLVED_N=$((RESOLVED_N + 1))
-  done <<EOF
-$(grep -E "Deploy drift" "$WORK/active.txt" 2>/dev/null | grep -oE "id=[0-9a-f-]{36}" | cut -d= -f2)
-EOF
-  log "ZERO resolved=$RESOLVED_N drift rows"
-  exit 0
+    if [ "$DRY" = "1" ]; then echo "WOULD RESOLVE $ID"; RESOLVED_N=$((RESOLVED_N+1)); continue; fi
+    # --evidence is a DISCHARGE, not a pointer (#447): it states what was observed.
+    ssh $SSH_OPTS "$STAGING_SSH" \
+      "cd /home/deploy/dawntrader && npm run --silent system-alerts -- resolve $ID --by $ACTOR --evidence 'ZERO at $TS deployed=$DEPLOYED head=$HEAD_SHA'" >> "$LOG" 2>&1
+    # COUNT RESOLUTIONS, NOT ITERATIONS. A resolve is a claim about a row (#987/#1000).
+    if [ $? -eq 0 ]; then RESOLVED_N=$((RESOLVED_N+1)); else FAILED_N=$((FAILED_N+1)); fi
+  done < "$WORK/open.txt"
+
+  log "ZERO resolved=$RESOLVED_N failed=$FAILED_N"
+  [ "$FAILED_N" -gt 0 ] && fail_measurement "resolve" "$FAILED_N drift row(s) could not be resolved — they remain open and will read as current drift that is not there."
   exit 0
 fi
 
@@ -301,7 +357,15 @@ AGE_INT="${AGE_H%.*}"
 if   [ "$AGE_INT" -ge 72 ]; then RUNG=4
 elif [ "$AGE_INT" -ge 24 ]; then RUNG=3
 elif [ "$AGE_INT" -ge 8 ];  then RUNG=2
-else                             RUNG=1
+elif [ "$AGE_INT" -ge 4 ];  then RUNG=1
+else
+  # THE FLOOR, not the boundaries, was the problem. Rung 1 previously fired at total>=1,
+  # so a row went active the moment anyone pushed and cleared only on a deploy-to-head —
+  # with our push cadence there would nearly always be an active row, and an always-on row
+  # carries no information. The floor sits above the routine deploy interval; 8/24/72
+  # above it are arbitrary-but-labelled and trigger REPORTING, not action.
+  log "BELOW_FLOOR age=${AGE_INT}h total=$TOTAL runtime=$RUNTIME_N — under the 4h floor, not reported"
+  exit 0
 fi
 
 # ⛔ THE FILE GATE ANNOTATES; IT NEVER GATES EMISSION (Langston). When the file list is at its
@@ -314,7 +378,9 @@ if [ "$CAPPED" = "1" ]; then
     "Deploy drift: runtime-path gate UNDECIDABLE (file list capped)" \
     "The compare returned a changed-file list at its 300 cap at $TS, so the runtime-path gate could not be evaluated. The age reading is sound and is reported separately. deployed=$DEPLOYED head=$HEAD_SHA"
 else
-  RUNTIME_LINE="runtime files undeployed: $RUNTIME_N${LIST:+ — $LIST}"
+  # A clipped enumeration beside a full count, unmarked, reads as the whole set.
+  SHOWN="$(echo "$LIST" | tr ',' '\n' | grep -c .)"
+  RUNTIME_LINE="runtime files undeployed: $RUNTIME_N${LIST:+ (showing $SHOWN of $RUNTIME_N) — $LIST}"
 fi
 
 # ── THE BODY: EVERY MAGNITUDE CARRIES ITS STAMP ───────────────────────────────────────
@@ -326,7 +392,10 @@ mint_alert "deploy-drift-rung-$RUNG" \
   "Deploy drift rung $RUNG: staging is ${AGE_INT}h behind the review branch" \
 "AS AT $TS, deployed $DEPLOYED vs $BRANCH head $HEAD_SHA:
 
-  oldest undeployed commit: $OLDEST  (${AGE_INT}h — this is the PRIMARY reading)
+  oldest undeployed commit: $OLDEST  (${AGE_INT}h by COMMITTER DATE — the primary reading)
+  last deploy:              ${DEPLOYED_AT:-unknown}  (a rebase CANNOT rewrite this. If the
+                            two disagree materially, the committer dates were rewritten and
+                            the age above is under-stated.)
   commits behind:           $TOTAL
   $RUNTIME_LINE
 
