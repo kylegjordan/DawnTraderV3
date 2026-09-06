@@ -6698,6 +6698,27 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
+### ✅✅ #977 AMENDMENT 6 — 2026-09-06 (CC-C; the positive evidence Langston held me to under 29(c)) — **THE ENROLMENT LINE WAS SPECIFIED IN THE DESIGN AND NEVER IMPLEMENTED. OUTCOME (1), A DEFECT — NOT A DECISION.**
+
+**AM. 5 PROVED ONLY THE NEGATIVE** (`'openTrade'` appears twice, both in `price-cache.ts`, never passed to `subscribe()`). **Langston refused to re-base severity on that alone and required the positive: the line that WOULD enrol an open position, or evidence none was ever written. Here it is.**
+
+⛔ **THE NEGATIVE, NOW CONTROL-BACKED:** `git log -S "'openTrade')" --all -- server/` returns **ZERO commits**. ✅ **POSITIVE CONTROL, identical search form: `'readyToBuy')` returns 3 commits in `server/` and `vtsSimulation` returns 3.** ⇒ **the instrument finds bucket-subscribe calls where they exist, so the absence is real and not a broken search.** **No commit has EVER added an `openTrade` subscribe to the implementation.**
+
+⭐⭐ **AND THE LINE EXISTS — IN THE DESIGN.** `acdf84934` (2025-12-30, Replit era) carries the spec in `bridge/reference/DawnTrader_Chat_Archive_12.30.25.md`, which states, alongside the bucket definition and the type union that DID ship:
+> `subscribe(trade.symbol, 'openTrade');`
+
+**and specifies the telemetry it expected:**
+> `[PriceCache][HEALTH] activeBuckets=3 openTrade=15 rtb=120 fx5=60 weightUsage=6/15 avgLatency=0.7s`
+
+**LIVE, 2026-09-06T11:49:05Z: `open=0 rtb=3 fx5=0 vts=214 weight=0/10 cacheSize=219`.**
+⇒ ★★ **THE BUCKET SHIPPED. THE TYPE SHIPPED. THE HEALTH LINE SHIPPED — AND HAS BEEN PRINTING `open=0` EVER SINCE. THE ONE THING THAT DID NOT SHIP IS THE SUBSCRIBE CALL.** ⇒ **the design's own telemetry has been reporting its own unimplemented half for the entire life of the feature, in a log line nobody read as an assertion.**
+
+**⇒ RULE 24 OUTCOME (1): A REAL DEFECT AGAINST A DOCUMENTED DESIGN.** ⛔ **This is DIFFERENT from am. 4's `vtsSimulation` finding, which is outcome (2) — working as designed, decision never taken.** Here the design is explicit, the code omits it, and no decision to omit it is recorded anywhere. **Two findings on one issue with two different taxonomies; do not collapse them.**
+⚠️ **STILL NOT A SEVERITY CLAIM.** Per am. 5's retraction the exposure framing is withdrawn, and per Langston the denominator is `births ∪ (open positions × exit evaluations)`. **What this amendment establishes is the DISPOSITION, not the cost.**
+⚠️ **CITATION HYGIENE: `bridge/reference/` is one of the two trees `#1013` flags as carrying committed access tokens. The quotes above are the design lines only; do not bulk-read that file.**
+
+---
+
 ### #977 AMENDMENT 2 — CROSS-REFERENCE, NO NEW NUMBER: two alerts route to the freshness cluster — `B-XSTOCK-SESSION-FRESHNESS`, plan `3b.f-c`, owner CC-C
 
 **Filed 2026-09-02 by CC-B on Langston's routing of alert `1d1573c7-99ea-42b4-9c84-3a33538aa4dc` (owner=CC-B in his tag; the HOME is CC-C's lane, so CC-B placed it and named CC-C — rule 28).** Alert `1d1573c7`: an active xStock fill for RIOT/USD refused because the mark was 55,473 ms old against a 15,000 ms ceiling, fired 20:18Z — three minutes after the US regular session closed. Sibling `b1f58a01-28ed-4a97-bbf0-b338d560775d` (fired 10:14Z, still active): exit checks skipped for MDT/USD, mark 124 s vs a 65 s ceiling — Langston routed that one to CC-C at 20:23Z.
