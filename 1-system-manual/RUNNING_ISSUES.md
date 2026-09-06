@@ -7458,7 +7458,7 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 
 **★ THE GENERALISABLE PART, and it is why this is worth its lines:** *"no rules files in the changed list"* and *"the changed list was cut short before we got there"* are **different states that render identically**, and nothing in the response distinguishes them without checking the cap. **Same class as `#661` leg 3 and as this batch's own subject: an instrument that reports absence when it simply could not see.**
 
-### ⛔⛔ #1012 OPEN 2026-09-06 (CC-B; found by the Codex-export credential scanner on its FIRST run, not by anyone looking) — REAL ACCESS TOKENS ARE COMMITTED IN THE REPOSITORY, IN VERBATIM CHAT TRANSCRIPTS
+### ⛔⛔ #1013 OPEN 2026-09-06 (CC-B; found by the Codex-export credential scanner on its FIRST run, not by anyone looking) — ⚠️ **RENUMBERED FROM `#1012` THE SAME DAY.** Collided with CC-INFRA's `B-LANGSTON-CONTEXT` Step-4 entry. Measured rather than argued, per the standing rule: theirs committed `bd416e7dd`, mine `fe768bd28` — the NEWER entry renumbers and that is mine. **The commit that carries this entry says `#1012` in its subject and body; it means THIS entry.** — REAL ACCESS TOKENS ARE COMMITTED IN THE REPOSITORY, IN VERBATIM CHAT TRANSCRIPTS
 
 **THE OBJECT AND THE POPULATION.** The credential scanner built for the Codex export (`scripts/codex-export/`) was run over the allowlisted tree at `d15971b42` — 3,422 files. It returned **25 hits**. **Twenty-two were placeholders**, read and confirmed one by one (`postgresql://user:pass@host`, `postgresql://test:test@localhost`, `SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'`, and two `<PASSWORD>` forms). **Three were not.**
 
