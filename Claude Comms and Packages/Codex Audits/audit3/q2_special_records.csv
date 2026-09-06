@@ -1,0 +1,10 @@
+id,mode,trade_mode,strategy_name,asset_class,close_reason,symbol,opened_at,closed_at,actual_entry_price,actual_exit_price
+f1e4c0bd-6f2c-4173-a563-18cb82f5e03b,paper,TARGET,vwap_pullback,xstock_spot,max_holding_period,PM/USD,2026-07-22 14:54:43.714000+00:00,2026-07-23 14:54:44.921000+00:00,192.04,191.3
+51d21628-6edb-44cd-945a-9fb256fc2651,paper,TARGET,vwap_pullback,xstock_spot,max_holding_period,MARA/USD,2026-07-22 19:33:08.404000+00:00,2026-07-23 19:33:09.190000+00:00,12.37,12.82
+1b77d7e3-cc6c-423f-aaa0-90c659e1e47f,paper,TARGET,vwap_pullback,xstock_spot,max_holding_period,NOC/USD,2026-07-22 20:19:22.366000+00:00,2026-07-23 20:19:23.135000+00:00,530.0,521.0
+4b98c306-4a46-4f3c-978a-96191eff2d26,paper,TARGET,vwap_pullback,xstock_spot,max_holding_period,MOS/USD,2026-07-22 20:20:51.753000+00:00,2026-07-23 20:20:53.132000+00:00,22.73210714,22.15
+4e85e002-1434-4ec0-be5d-1206f4902464,paper,TARGET,vwap_pullback,xstock_spot,,SLV/USD,2026-09-02 14:25:59.854000+00:00,,,
+1e322c3d-6622-4661-a02a-be5d967833f1,paper,TARGET,vwap_pullback,xstock_spot,,NEM/USD,2026-09-02 14:32:29.769000+00:00,,,
+8fbe266a-cb42-4575-8b5f-fc55a96ba7fb,paper,TARGET,vwap_pullback,xstock_spot,,LI/USD,2026-09-03 01:53:15.916000+00:00,,,
+4568097c-74e7-422f-b2f4-12a1ee63da57,paper,TARGET,vwap_pullback,crypto_spot,,XPL/USD,2026-09-04 14:49:05.331000+00:00,,,
+73374153-d0e5-40f9-9e0e-03ed49811766,paper,TARGET,sma_trend_ride,crypto_spot,,XAN/USD,2026-09-06 07:08:17.762000+00:00,,,

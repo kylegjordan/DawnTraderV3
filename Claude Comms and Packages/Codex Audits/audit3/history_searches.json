@@ -1,0 +1,1935 @@
+[
+  {
+    "group": "price_accounting",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "active-execution-engine",
+    "matched_lines": 74,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 18,
+        "excerpt": "- **#604 OPEN 2026-07-28 (CC-B; measured + code-traced in B-AMR-INPUT-INTEGRITY leg A. ⚠ **ATTRIBUTION CORRECTED 2026-07-28:** this entry originally read *\"Langston-verified at the ref\"* **before his confirmation existed**. It is true NOW — he independently re-read `:159-160`/`:167` and the sole-caller census — but the citation PRECEDED the ruling,"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 52,
+        "excerpt": "  **HOME: its OWN batch `B-AMR-CONTEXT-BONUS-REWIRE` (Langston-ruled: a live-path wiring decision plus a soak clock, NOT a comment fix — folding it into #591's remediation makes the soak dependency disappear).** (1) **Restore** the `contextBonus` parameter + per-family cap; correct the three mis-citing comments + the stale `@param`. (2) ★ **RE-WIRE"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 53,
+        "excerpt": "  ★★ **LIMB B'S PROPOSED REPAIR WAS ALSO WRONG — LANGSTON, 2026-07-28, at Step-1 of `B-AMR-CONTEXT-BONUS-REWIRE`. CC-A PROPOSED BUILDING A SECOND CORPSE.** He re-read independently (`ranking-weights.ts` in full, `amr-context-bonus-shadow.ts:152-233`, `ready_to_buy_service.ts:1813-1915`+`:2237-2242`, `signal-orchestrator.ts` full grep, `vts-runner.t"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 142,
+        "excerpt": "- **#578 OPEN 2026-07-25 (CC-A; surfaced by the #558 pre-audit; KYLE-RULED the disposition) — THE LEGACY `TradingEngine` (`server/services/trading-engine.ts`) IS DEAD IN BOTH MODES AND IS SCHEDULED FOR REMOVAL (rule 18).** **WHAT IT IS:** an older, separate engine class (Phase-27 era) distinct from the current active pipeline. It runs in **NEITHER "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 143,
+        "excerpt": "- **#577 RESOLVED 2026-07-24 (CC-B; P19-B8.5j) - THE 24h MAX-HOLD FORCE-CLOSE IS NOW A GOVERNED SWITCH, SHIPPED OFF (paper+live); THE MAX-HOLD POLICY ITSELF IS DEFERRED TO A KYLE-LED DEBATE.** **Trigger:** P19-B8.5f (#550) repaired the `maxHoldingMs` carry, so the 24h exit fired for the FIRST time in `closed_trades` history - 4 xStock `vwap_pullbac"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 152,
+        "excerpt": "- **#569 OPEN 2026-07-23 (CC-B; surfaced by KYLE — the real systemic stakes behind the #548/#566 freshness work; NAMED HOME per §9.4, replacing the earlier improper \"folded into #566\" deferral) — ★★ THE OFF-HOURS SLOT-STARVATION + UNREACHABLE-TIME-EXIT PROBLEM. Batch `B-OFFHOURS-BEHAVIOUR` (Phase 19; scope = an OPTIONS PAPER to Kyle, NOT unilateral"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 159,
+        "excerpt": "- **#563 OPEN 2026-07-22 (surfaced by the B8.5e OBJ-4 external research Kyle directed; homed at Langston's insistence rather than deferred as \"bigger, later\" — §13) — ★★ OUR PROTECTIVE EXIT IS CONTINGENT ON OUR OWN PROCESS BEING ALIVE. THE INDUSTRY'S IS NOT. THIS IS THE ONLY THING THAT ACTUALLY REMOVES THE STALE-MARK EXPOSURE.** **THE ASYMMETRY:** "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 162,
+        "excerpt": "- **#562 OPEN 2026-07-22 (KYLE directive — *\"the trailing exit should be an on and off switch, and it shouldn't be dependent or have any impacts on any of the data we're receiving\"*) — ★★ TRAILING HAS NO ON/OFF SWITCH AT ALL. THE VOLATILITY DATA *IS* THE SWITCH, WHICH IS WHY RESTORING IT TURNS TRAILING ON. KYLE'S INSTINCT WAS CORRECT.** **VERIFIED "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 166,
+        "excerpt": "- **#559 ⚠️ OBJ-2 RESOLVED 2026-07-23 (CC-A) — THE 5s SUBSCRIPTION STORM IS DEAD; OBJ-1 continues as #571.** `71ec83f36`, CI green, Langston Step-1+Step-4 APPROVED (both re-read at ref), deployed + LIVE-VERIFIED. Fix: filter the I8C open-positions provider (`active-execution-engine.ts:526`) to crypto by the AUTHORITATIVE stored `asset_class` (stamp"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 167,
+        "excerpt": "- **#559 OPEN 2026-07-22 (CC-A; Kyle directive to diagnose after the heartbeat surfaced 10 \"Open position unmanageable\" alerts) — THE CRYPTO WEBSOCKET SUBSCRIBE SET IS NOT ASSET-CLASS FILTERED, so xStock positions are retried against a venue that structurally cannot serve them — 133,386 futile skips/day.** **MECHANISM (traced end-to-end, exact site"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 186,
+        "excerpt": "- **#556 OPEN 2026-07-22 (CC-B; surfaced by P19-B8.5f OBJ-3, and REQUIRED as a §13 home by Langston's Step-8 — \"Kyle decision owed\" living only in a completion report is an open loop) — ★★ KYLE DECISION: THE ATR TRAILING EXIT IS SWITCHED ON IN CONFIG AND HELD OFF ONLY BY A BUG. RESTORING THE VALUE *IS* ENABLING THE BEHAVIOUR — THERE IS NO SAFE HALF"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 188,
+        "excerpt": "- **#550 OPEN 2026-07-20 (CC-B; Kyle §9.3 UI catch — positions lingering 3-5 days without hitting stop or target, \"the crypto trade seems dead\") — ★★ THE 24-HOUR MAX-HOLD TIME-EXIT IS COMPUTED ON EVERY SIGNAL BUT NEVER REACHES THE OPEN POSITION, SO IT HAS NEVER FIRED. A REAL TRADING-BEHAVIOUR DEFECT (rule 24 outcome 1).** **VERIFIED end-to-end:** ("
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 189,
+        "excerpt": "- **#549 OPEN 2026-07-20 (CC-B; Kyle §9.3 UI catch on the Open Trades table — \"inconsistent data feeding in... needs to be investigated and fixed\") — ★ OPEN-TRADES FIELD-POPULATION INTEGRITY: FOUR DISTINCT GAPS, NOT ONE, with DIFFERENT causes (rule 24 — do NOT collapse them).** Measured on `active_open_positions`, all 15 live rows, 2026-07-20 20:xx"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 191,
+        "excerpt": "- **#547 OPEN 2026-07-20 (surfaced by ANALYST Claude across the 07-19/20 soak analysis; FILED BY CC-B because ANALYST's lane is READ-ONLY and cannot land its own findings — see the ACCESS-BOUNDARY note at the end, which is the structural point) — ★ GOVERNANCE-HYGIENE BUNDLE: FOUR ANALYST FINDINGS, ALL ENDORSED BY LANGSTON AND ALL PREVIOUSLY UN-HOME"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 197,
+        "excerpt": "- **#531 ADDENDUM-2 2026-07-19/20 (CC-B; Langston code-read at deployed HEAD `bfb365fa7`; folded here per Langston+CC-B agreement rather than opening a 4th thread) — ★ FIX-D: THE xSTOCK EXIT LEG GUARDS FRESHNESS BUT NOT PLAUSIBILITY, AND KYLE HAS RULED ACCEPT-AND-OBSERVE FOR THE 2026-07-19 SUNDAY 8PM ET REOPEN.** **HOW IT SURFACED:** ANALYST Claude"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 306,
+        "excerpt": "- **#532 ⚠️ CORE DEFECT CLOSED 2026-07-22 (OBJ-1), ISSUE REMAINS OPEN for OBJ-2b/3/4/5/6 — THE DUPLICATE SCHEDULER IS GONE.** Mechanism A retired (`d2306518e` + `373d73612`; Langston Step-4 APPROVED, all three asks re-derived at the ref; CI 4-green; deployed). **ONE scheduler now runs over the RTB queue: the bucketed `RTBRefreshService`**, started "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 328,
+        "excerpt": "- **#514 OPEN 2026-07-16 (Langston closure condition on the B8.5 OBJ-6 design APPROVAL; CC-B) — BURY-OR-RESURRECT the HF8 confidence floor + HF9 governance gate on the ACTIVE path; PRECONDITION: real active-path drift/volZ stability wiring.** B8.5 OBJ-6 retired both gates from BLOCKING on the active path (gen + both RTB-refresh SQE call sites pass "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 339,
+        "excerpt": "- **#506 OPEN 2026-07-15 (Langston §13 condition on the B8.5 mini-cycle-3 APPROVE; CC-B) — QUEUE-TIME WS BOOK SUBSCRIPTIONS ACCUMULATE WITH NO UNSUBSCRIBE-ON-DEQUEUE (growth bound = distinct crypto symbols queued between reconnects).** The mini-cycle-3 fix subscribes the Kraken WS book+ticker at RTB QUEUE time (`ready_to_buy_service.ts` queueSQESig"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 340,
+        "excerpt": "- **#505 OPEN 2026-07-15 (Langston Step-4 find on the exploration-lane diff; CC-B fixed FORWARD in the same diff) — HISTORICAL `closed_trades.asset_class` IS THE SCHEMA DEFAULT `crypto_spot` ON EVERY ROW (the insert never set it).** `storage.ts:3126` spreads the trade object unchanged and the engine's closed-trade insert (`active-execution-engine.t"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 362,
+        "excerpt": "- **#406 — [B-RENAME W3 Deploy-2 finding, Langston Step-8 CONFIRMED 2026-07-03] `closed_trades` has ZERO VTS writers — the vts-trade-persistence Q5 header (\"atomic close-migration into closed_trades\") describes an UNWIRED design.** Facts (both independently traced): the sole insert path is `storage.createClosedTrade` (:~3137) with FOUR callers, all"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 385,
+        "excerpt": "- **#418 — [P19-B8.3b Step-4/8 forward-condition, Langston 2026-07-07] The B8.4 active-path closer MUST populate `closed_trades.net_pnl` (the `default('0')` non-null column silently zeros a trade's P&L out of BOTH the headline and per-class if left to default).** #415's OBJ-3 fix standardized both the headline and byAssetClass on `num(t.netPnl ?? t"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1183,
+        "excerpt": "⚠️ **THE ONE CAVEAT, AND IT DECIDES WHICH SOURCE IS DURABLE: `closed_trades.stop_loss` equals the original ONLY BECAUSE THE RATCHET IS OFF.** Break-even is `false` on all four asset classes and 0 of 705 trailing states ever latched, so the stop has never moved from where it was placed. ⇒ ⛔ **IF BREAK-EVEN IS EVER TURNED ON, `stop_loss` BECOMES THE "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1194,
+        "excerpt": "**RE-DERIVED:** `active-execution-engine.ts:1507-1508` calls `evaluatePendingMaker({ side:'sell', currentPrice, limit:_exitRestLimit })` — and on xStock `currentPrice` is `_eqTick.price` (`:1230`), **the MIDPOINT.** The log line itself reads *\"venue price ${currentPrice} **traded through** the resting exit\"* — **treating a mid as a traded price.** "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1214,
+        "excerpt": "- **ENTRY** `active-execution-engine.ts:251-253`: `getDepthSnapshot(...)` → **`assessWarmth(snapshot,'asks',config)`** → `if (!warmth.warm) return { pass:false }`. `depth-source.ts:150-152` blocks on `snap.ageMs > config.warmthMaxAgeMs`; live value **`warmth_max_age_ms = 15000`** for `xstock_spot`."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1255,
+        "excerpt": "| **the TRIGGER** (decide to exit) | the in-memory **mid** | `getLatestEquityTick`, `active-execution-engine.ts:1163` | **unthrottled** |"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1363,
+        "excerpt": "| **the exit monitor** | the **MIDPOINT** `(bid+ask)/2`, or `last` if a side is zero — **untagged**, from an in-memory map | **unthrottled** | `equity-spot-archiver.ts:131-139` → `active-execution-engine.ts:1163`, `:1230-1231` |"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1395,
+        "excerpt": "⇒ ⛔ **THE DECISION WAS IN A CODE COMMENT** — `active-execution-engine.ts:1501-1505`, *\"**D1 (Langston-approved INTENTIONAL divergence from entry semantics)** … Do not 'fix' this into entry-parity.\"* **Three lines above the comparator.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1533,
+        "excerpt": "4. `active-execution-engine.ts:1257` — **the CRYPTO exit read** — calls `getPriceWithFallback(position.symbol, 2000)`."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1541,
+        "excerpt": "⇒ ★★ **SO THE BRANCH ALSO DEFEATS THE `#743` CARRY — and `#743` is the guarantee the exit stamp explicitly rests on.** `active-execution-engine.ts:1271-1274`, verbatim: *\"★ **THE ONLY GENUINE CARRY OF THE THREE** … `observedAt` is the ORIGINAL venue observation time, **carried through last-known-good re-serves unrefreshed (#743), which is exactly w"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1699,
+        "excerpt": "★ **MECHANISM, CITED NOT MEASURED (rule 29c).** In `parseTickerSnap` the `!data?.symbol` guard is **unconditional**, but the mark write is **conditional** — `Number.isFinite(_mark) && _mark > 0`. ⇒ **a snap can pass the guard, be archived, stamp `lastDataMsgAt`, and write NO mark** ⇒ the DATA-liveness clock reads fresh while `latestEquityTick` — **"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1769,
+        "excerpt": "**✅ WHAT SURVIVES, and only this:** the failure line at `active-execution-engine.ts:2513-2516` is real; the three reason-strings (`MAKER_MARKETABLE_DROPPED`, `GUARDRAIL_BLOCK: Max Total Portfolio Exposure exceeded`, `TRADE_INSERT_ERROR: … enum pattern_type \"ABCD\"`) are real and appear in the logs; the ablation-emitter is ruled out as a cause (fire-"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1776,
+        "excerpt": "**THE MECHANISM (`active-execution-engine.ts:2513-2516`).** On failure the engine logs `[RTB-Promotion] ⚠️ Failed to execute promoted signal: <reason>` **then** `[8.8.4-A3.R1][PROMOTION_ORDER] Signal <sym> was removed from RTB but trade failed - signal not restored`. ⇒ **the signal is REMOVED from the queue, the trade does NOT open, and the signal "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1913,
+        "excerpt": "**MECHANISM (accurate, and not in dispute).** `daily-loss-budget.ts:119` sets `windowStart = sessionStart && sessionStart > twentyFourHoursAgo ? sessionStart : twentyFourHoursAgo`. `getEngineSessionStart` (`active-execution-engine.ts:199`) reads an **in-memory `Map`** (`:197`) whose only non-null write is `engineSessionStart.set(this.mode, new Date"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1934,
+        "excerpt": "**MEASURED (Langston, re-derived independently; CC-A's counts matched exactly):** `exit_decision_archive` rows captured after the 2026-07-30T00:35Z deploy = **123**. Grouped by source: **`vts-runner`/`vts` = 106, of which 106 carry `chosenEntryMode` — 100%.** The **17** rows lacking it are **ALL `active-execution-engine`/`paper_sim`**, and `active-"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2464,
+        "excerpt": "> **⚠️ CAVEAT ON THE TOLERANCE MECHANISM ITSELF (Langston joint 1):** the rail IS deliberate (`active-execution-engine.ts:266-273`, \"SKIP-THIS-TICK safety rail\"; risk-derived per-symbol ceiling `:1109-1140`) — **but `_ceiling.floorBoundNearStop` (`:1131-1134`) exists because #563's exposure is \"an argument instead of a number\", so a SUBSET of those"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2476,
+        "excerpt": "**WHY IT EXISTS:** at Step-4 the C5 P/L reconciliation (`c5-financial-diagnostics.ts` `logPnlReconciliation`) was **demoted to `OBSERVED`** because, once re-anchored to the shared model, it compared two spellings of the SAME number and **could not fail** — `active-execution-engine.ts:2268` passes `grossPnl` and `netPnl` from ONE `computeRealizedPnl"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2477,
+        "excerpt": "**★ THE BLOCKER IS SCOPE, NOT FLAKINESS — correcting a false constraint CC-C wrote into the code comment (Langston).** An earlier draft justified deferring it as site 6's race-between-two-live-reads class. **It is not.** `active-execution-engine.ts:1995-2027` writes `pnl: netPnl.toString()` to the row **BY `trade.id`, BEFORE `:2268` fires** ⇒ a re-"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2660,
+        "excerpt": "**MEASURED (5 independent lines, all consistent):** (1) `shared/schema.ts` `activeOpenPositions` defines **NO `regime` column** — asserted with a **control**: the same grep over the same block returns `symbol`/`assetClass`/`strategyName`, so the search demonstrably works. (2) `ActiveOpenPosition = typeof activeOpenPositions.$inferSelect` (`shared/s"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2882,
+        "excerpt": "**MECHANISM, re-derived at the code by BOTH of us independently (not on report):** `system-alerts.ts:389` suppresses a re-raise while a same-`dedupe_key` alert is `state !== 'resolved'`; **`acknowledged` is NON-terminal ⇒ an ack does not unblock the key, it CREATES a blind spot.** The engine raises at `active-execution-engine.ts:331` (`streak === t"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2913,
+        "excerpt": "**WRITE PATH (Langston, re-read at `ca88b15f`):** `active-execution-engine.ts:1577-1581` ratchets the live stop back into **`active_open_positions.stopLoss` — the OPEN row, the only place the in-force stop lives** — and that row does not survive the close. `closed_trades.stop_loss` is written **ONCE at open** (`:3324`, from `signal.stopPrice`) and "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2926,
+        "excerpt": "⛔ **WHY \"FINDING 1\" (the perfect co-variation of `original_stop_price` and `rung_target_history`) PROVED NOTHING:** they are written in the **same object literal**, unconditionally, at `trailing-exit-controller.ts:956-957`; and at close `active-execution-engine.ts:1995-1997` fans **ONE lookup** into three `_finalState?.X ?? null`. ⇒ **all three go "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2947,
+        "excerpt": "⛔⛔ **CROSS-REF ADDED 2026-08-07 (CC-A, #677 — NOT a claim about the NULLs, which remain this entry’s open question; a claim about the NON-NULLS): \"CAPTURED AT INIT, NEVER MODIFIED\" IS TRUE OF THE MECHANISM AND FALSE OF ITS INPUT ON THE ACTIVE PATH AFTER A RESTART.** `active-execution-engine.ts:1541-42` seeds `initializeTrailingState` with `original"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3110,
+        "excerpt": "`aj18-rtb-diagnostic.ts:406` — `strategiesEvaluated: this.currentCycleStats.symbolsEvaluated * 9`. **Verified live-path and running, not dormant:** imported at `active-execution-engine.ts:83` and session-started at `:518`. The canonical strategy count is **19** (`STRATEGY_DISPLAY_NAMES` SSOT), so every `strategiesEvaluated` figure this Phase-8.8.3 "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3203,
+        "excerpt": "⛔ **THE PRECISE DEFECT (Langston’s narrowing, adopted — my first framing was TOO BROAD and is corrected here):** ★ **THE `tradeMode` LEG FUNCTIONS.** `active_open_positions` carries `trade_mode`, and the TEC **writes it back onto the row** (`trailing-exit-controller.ts:671/:679` `updateActiveOpenPosition(..., { tradeMode })`; `active-execution-engi"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3229,
+        "excerpt": "**MEASURED at `origin/migration/aws-supabase`:** `server/services/active-execution-engine.ts:1474` declares `position: any`. ⇒ **TypeScript provides ZERO protection across the entire exit-check call site.** The `(position as any)` casts inside it are **casts on an already-`any` value** — they silence nothing and were never load-bearing."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3337,
+        "excerpt": "- **WRITER:** the active engine records every close through **`storage.createClosedTrade(this.mode, …)`** (`active-execution-engine.ts:3330`) — mode-parametrised, writing **`closed_trades`** for BOTH modes. **Grep for a `createTrade(` / legacy-`trades` write anywhere on the active path: ZERO.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3596,
+        "excerpt": "**MEASURED ASSESSMENT (object: `closed_trades`, 36 traded days; live guardrails; code read at `daily-loss-budget.ts` + `guardrail-settings.ts`):** ① it counts **REALIZED P&L only** and is **evaluated only on trade close** (`evaluateDailyLossBudgetOnClose`, single call site `active-execution-engine.ts:398`, no periodic evaluator) ⇒ unrealized loss o"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3702,
+        "excerpt": "**THE CHAIN, all at `9813fdb41`:** `kraken-websocket-adapter.ts:884-891` — **inside `handleV2BookUpdate`, the function patched for #507** — computes `bestBid = Math.max(...book.bids.keys())`, `bestAsk = Math.min(...book.asks.keys())`, `midpoint = (bestBid+bestAsk)/2`; `:916` emits it as `priceTick` **stamped `source:'kraken_ws'`**; `live-pricing-ad"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 4350,
+        "excerpt": "**⚠️ ADDENDUM 2026-08-23 (CC-C) — THE 75.1% IS ITSELF SUSPECT, AND THE REASON IS `#741`.** The maker ENTRY leg fills iff `currentPrice <= limit`, and `active-execution-engine.ts:1252` feeds `_processPendingMaker` **the same book-derived midpoint** that `#741` shows was pushed UP by ghost bids. **On the rows where we OBSERVED the error, the mid was "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 4534,
+        "excerpt": "**`REVIEWER r2: object · \"is 14-of-14 a defect or a definition?\" · HIT · re-derived y`** — ⛔ **IT IS A DEFINITION, AND MY CROSS-BUCKET COMPARISON MEASURED A CLAMP.** On latch the stop floor becomes **target + cost buffer** and is monotonic (`trailing-exit-controller.ts:1117/1205/1208`), and the close fires only at `currentPrice <= currentStopPrice`"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 4540,
+        "excerpt": "⛔⛔ **WHICH RE-OPENS IT, AND THIS IS WHAT THE INVESTIGATION INHERITS: THE TAUTOLOGY EXPLANATION REQUIRES A RATCHETED STOP, AND THERE ISN’T ONE.** Sample rows: `tp 1.53142429, exit 1.55397000, original_stop = stop_loss = 1.37124143`. **The exit price sits far ABOVE the only stop the row ever recorded.** ⇒ **`currentPrice <= currentStopPrice` cannot b"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 4551,
+        "excerpt": "★ **HYPOTHESIS FOR THE INVESTIGATION TO TEST OR KILL — LABELLED A HYPOTHESIS, NOT A FINDING (rule 24.a: cause claims need tested reach).** The live `§10.5` alert class **\"Exit checks SKIPPED — mark older than ceiling\"** (`4da8950d` MOH/USD, `29c6ada8` TGT/USD, emitter `active-execution-engine.ts:176`, measured intermittent at 25-65% of cycles) desc"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 4591,
+        "excerpt": "**A SECOND EMIT SITE EXISTS and it collapses two meanings** — `active-execution-engine.ts:1673-1682`: `moonbag_timeout` **deliberately returns `type: 'trailing_stop_hit'`**, commented *\"Reuse the existing trailing_stop_hit exit bucket on the DB side so we don't need a new enum.\"* ⇒ **`trailing_stop_hit` in `closed_trades` already means EITHER a tra"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5083,
+        "excerpt": "**`active-execution-engine.ts` logs `ageMs=${diffMs}` where `diffMs` is `now − lastTick`** — the engine's **inter-tick CADENCE for that symbol**, i.e. *how long since we last looked*, **not how old the price is**. Two different quantities; one name."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5127,
+        "excerpt": "**Langston refuted one arm of my \"both cannot be true\" by measurement rather than leaving it open: THE RECORDED STOP *IS* THE EVALUATED STOP.** `closed_trades` and `active_open_positions` are written from the SAME `signal.stopPrice` at the same seam (`active-execution-engine.ts:3605`/`:3706`, one object, post-overlay); the ratchet only ever RAISES "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5144,
+        "excerpt": "**THE SYSTEM ALREADY MODIFIES A PRICE WITHOUT RE-VALIDATING.** On the paper taker open, `active-execution-engine.ts:3416` sets `actualEntryPrice = _openFill.fillPrice` — **the depth-walked VWAP fill, NOT `signal.entryPrice`** — and the position is written with that entry at `:3604`, while `stopLoss` and `takeProfit` carry the **UNMODIFIED** `signal"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5148,
+        "excerpt": "**CONTROL, reported by the reader and the reason this is not just an assertion:** the geometry-validation token set (`applyGlobalGuards|normalizeAndGateTarget|validateRR|validateStopDistance|validateReachability|invalid_geometry|minRR|min_rr`) returns **0 across the 4,440-line `active-execution-engine.ts`**, while the identical pattern returns **11"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5172,
+        "excerpt": "- **The exit DECISION is genuinely SHARED.** `tec-evaluator.ts` `evaluateTECExit` is imported by **both** `vts-runner.ts:48` and `active-execution-engine.ts:59`, and its stop branch returns **`exitPrice: input.stopPrice`** (`:275`). **Kyle is right that the lanes share their inputs and their decision logic.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5408,
+        "excerpt": "★ **AND KYLE'S \"BIGGER PROBLEM\" INSTINCT IS ALREADY EVIDENCED, NOT SPECULATIVE: THREE post-VPG mutation sites are on the record — this one, plus `#939`(a) `trading-engine.ts:536` and `#939`(b) `active-execution-engine.ts:4317-4318` — AND ALL THREE WERE FOUND INCIDENTALLY. Nobody has ever enumerated them.** F-G-1 rounds at signal BIRTH; **what happe"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5742,
+        "excerpt": "**(b) `active-execution-engine.ts:4317-4318` — `signalAny.stopPrice` recomputed from AMR overlay multipliers, downstream of the VPG seam.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5924,
+        "excerpt": "- **The guard:** `active-execution-engine.ts:2821` — `const targetPrice = signal.targetPrice ? parseFloat(signal.targetPrice) : entryPrice * 1.02;`"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5934,
+        "excerpt": "`active-execution-engine.ts:2821` reads `signal.targetPrice ? parseFloat(...) : entryPrice * 1.02` — a fabricated 2% target when the stored one is null. The same `entry * 1.02` is re-implemented at `ready_to_buy_service.ts:1788` (inside `rMultipleCore`, which is the **ranking** key) and again at `:1943` (shadow-pool sim). **So the order in which th"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6004,
+        "excerpt": "`sizeActivePositionForSignal` has exactly two production callers: `signal-orchestrator.ts` (downstream of the VPG seam) and **`active-execution-engine.ts:4356`**, the fallback-sizing arm reached whenever a promoted signal lacks `quantity`/`estimatedValue`. Nothing on that arm consults the VPG."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6200,
+        "excerpt": "`active-execution-engine.ts:3570-3606` —"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6417,
+        "excerpt": "**RE-DERIVED AT THE REF.** The crypto exit's price gate is `active-execution-engine.ts:1277`. On failure its **else-arm (`:1289-1300`)** calls `this.krakenService.getTicker(restPair)` → `kraken.ts:259` → `makePublicRequest` (`:177`) → **a bare `fetch`.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6554,
+        "excerpt": "⇒ **THE COLLISION, and it is the SAME NUMBER on both sides:** the exit monitor asks for **2000 ms** freshness (`active-execution-engine.ts:1257`) while the lane built to deliver **2000 ms** holds zero symbols — so it falls to `fetchFromKrakenRest`, floor **60 s**. **Thirty times coarser than the design intent, with the designed answer running and e"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6612,
+        "excerpt": "⚠️ **xSTOCK IS UNMEASURED AND IS NOT COVERED BY THAT MITIGATION:** `BE/USD` and `PLTR/USD` are open and take `observedAt` from the equities tick at `active-execution-engine.ts:1244` — **a different path, which `B-PRICE-AGE-TRUTH` does not touch and which I have not measured.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6952,
+        "excerpt": "| mechanism | **flat 2,000 ms**, hardcoded — `active-execution-engine.ts:1431` `getPriceWithFallback(symbol, 2000)` + the `isKrakenVenueSource` actionability gate | **risk-derived ceiling** — `computeStalenessCeiling`, `aee.ts:1305` |"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7090,
+        "excerpt": "**MEASURED (Langston re-derived the RANGE at the ref; the EXECUTION-PATH premise was his error and he retracted it at 12:12Z — recorded in the body, not stacked):** the F-G-2 pre-run deploy of `093d1878f` would have carried **44 commits / 48 files** over the box's `2cc4a03ec` (`2cc4a03ec…8be306da0` = 60 commits / 55 files by 12:12Z), **13 of them u"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7107,
+        "excerpt": "**MEASURED at `origin/migration/aws-supabase` (`cf98b4b4b`):** `_evaluateOpenDepthGate` (`active-execution-engine.ts:245-258`) calls `assessWarmth(snapshot, 'asks', …)` and `assessSufficiency(snapshot, 'asks', …)` — the bid side is never assessed at entry; the fill freshness gate passes a FRESH hollow snap by construction. The RTB re-entry gate (`s"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7111,
+        "excerpt": "**MEASURED at the ref:** `scripts/governance-checker/config.mjs:187-196` `CORE_ENGINE_PATHS` = signal-orchestrator, market-context-engine, signal_quality_evaluator, tec-evaluator, strategy-engine, `server/strategies`, market-regime, regime-phase, canonical-regime-strategy-map, `server/asset_classes` — **`server/services/active-execution-engine` is "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7186,
+        "excerpt": "**MEASURED at `origin/migration/aws-supabase`:** `advanceBookStateComparator` has exactly ONE production call site — the EXIT loop in `active-execution-engine.ts`, keyed on `position.symbol` — so `_comparators` only ever holds symbols we ALREADY HOLD. For a symbol we are about to open there is no comparator and `assessBookState` returns `unknown` o"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7267,
+        "excerpt": "  `server/services/active-execution-engine.ts` · `server/services/signal-orchestrator.ts` · `server/asset_classes/xstock_spot/book-state-tracker.ts` · `server/tests/unit/b-xstock-feed-sanity-book-state.test.ts` · `server/tests/unit/b-xstock-feed-sanity-fence.test.ts`"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7368,
+        "excerpt": "- ✅ **What the overnight deploy DID close: `active-execution-engine.ts` and `book-state-tracker.ts` are now deployed.** The single most alarming item in the parent entry is resolved."
+      }
+    ]
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "PaperOrderPlacer",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "closeOrder",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1215,
+        "excerpt": "- **CLOSE** `:1996-2003`: fetches the **same object**, resolves the **same config** — and passes `bookBids: _closeSnap?.bids` **straight into `closeOrder`**, taking only `beyondDepthPenaltyBps` from the config. ⛔ **`assessWarmth` is NEVER CALLED. `ageMs` is computed and DISCARDED.**"
+      }
+    ]
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "B-COST-ACCOUNTING-HONESTY",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 19,
+        "excerpt": "- **#603 OPEN 2026-07-28 (CC-C; surfaced + measured by B-COST-ACCOUNTING-HONESTY, §9.4-homed at close) — SLIPPAGE CONFLATES *SIGNAL STALENESS* WITH *EXECUTION COST*; THE PEROLD SPLIT NEEDS AN ARRIVAL PRICE WE DO NOT PERSIST.** Entry slippage is measured as `(fillPrice − intendedPrice) × qty` where `intendedPrice = signal.entryPrice` — the price at "
+      }
+    ]
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "B-EXIT-PROVENANCE",
+    "matched_lines": 22,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 188,
+        "excerpt": "- **#550 OPEN 2026-07-20 (CC-B; Kyle §9.3 UI catch — positions lingering 3-5 days without hitting stop or target, \"the crypto trade seems dead\") — ★★ THE 24-HOUR MAX-HOLD TIME-EXIT IS COMPUTED ON EVERY SIGNAL BUT NEVER REACHES THE OPEN POSITION, SO IT HAS NEVER FIRED. A REAL TRADING-BEHAVIOUR DEFECT (rule 24 outcome 1).** **VERIFIED end-to-end:** ("
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 189,
+        "excerpt": "- **#549 OPEN 2026-07-20 (CC-B; Kyle §9.3 UI catch on the Open Trades table — \"inconsistent data feeding in... needs to be investigated and fixed\") — ★ OPEN-TRADES FIELD-POPULATION INTEGRITY: FOUR DISTINCT GAPS, NOT ONE, with DIFFERENT causes (rule 24 — do NOT collapse them).** Measured on `active_open_positions`, all 15 live rows, 2026-07-20 20:xx"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1125,
+        "excerpt": "### #954 OPEN 2026-08-30 (CC-C; measured at the B-EXIT-PROVENANCE close) — ⚠️ THE CRYPTO TICKER ARCHIVE HOLDS **NO `/EUR` PAIRS AT ALL**, SO EVERY `/EUR` CLOSE IS WITNESS-BLIND — AND THE OBSERVATION WAS **ORPHANED BY MY OWN WITHDRAWAL**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1321,
+        "excerpt": "⚠️ **AND THE CORRECTION HAD LANDED IN `#959` AND NOT HERE, WHERE THE ORIGINAL CLAIM SITS — the one-file-and-not-its-sibling shape I criticised in the canonical corpus, committed in my own ledger four hours later.** *(Marks that were evaluated and did NOT trigger remain unrecoverable.)* ★ **That is `B-EXIT-PROVENANCE` earning its keep for the second"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1484,
+        "excerpt": "⛔⛔ **AND MY CONSEQUENCE WAS OVER-CLAIMED — WITHDRAWN IN THE NARROW FORM (Langston, re-derived by me at the ref).** I wrote that *\"F-G-2 cannot verify its own work with the instrument it would naturally reach for.\"* **FALSE for crypto.** The instrument F-G-2 reaches for is **`getTickerWitness` (`depth-source.ts:107`)**, built by `B-EXIT-PROVENANCE` "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1695,
+        "excerpt": "★ **WHAT THIS DOES *NOT* SHOW, stated so it is not read across:** the marks we DO act on are sound. The policy is fail-closed and refused every mark it could not trust — **no position was mispriced.** This is an availability-of-evaluation exposure (↔ **#563**), **not** a price-integrity one, and it does **not** belong to the `B-EXIT-PROVENANCE` pri"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3672,
+        "excerpt": "### #743 OPEN 2026-08-23 (CC-C; Langston found it re-deriving my `B-EXIT-PROVENANCE` pre-audit, then found the worse half himself) — ★★ **THE LAST-KNOWN-GOOD RE-SERVE HAS NO AGE BOUND AND RE-STAMPS ITS OWN FRESHNESS, SO A STALE PRICE READS AS FRESH INDEFINITELY — AND FOR xSTOCK IT IS CONTINUOUS, NOT EXCEPTIONAL**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3676,
+        "excerpt": "**★ THE NUMBER THAT WOULD CATCH IT IS COMPUTED AND ONLY LOGGED.** Both outage legs do `const cacheAge = Date.now() - cached.cachedAt;` and then `console.log(...age=${cacheAge}ms...)`. **It is never compared to anything.** Same shape as `B-EXIT-PROVENANCE`'s founding finding, where `exitPriceSource` is computed at close and thrown into `[B8.PNL][CLO"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3682,
+        "excerpt": "**SCOPE BOUNDARY, held deliberately:** `B-EXIT-PROVENANCE` makes this staleness **RECOVERABLE** (an `observedAt` carried through the re-stamp, so true age at an exit decision is `closed_at − exit_price_observed_at`). **It does NOT bound it.** Recoverability is not a bound, and a behaviour change does not belong in a batch whose entire safety case i"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3684,
+        "excerpt": "**HOME (§9.4): named batch `B-PRICE-STALENESS-BOUND`, owner CC-C, due 2026-09-05** (Langston picked it; same date as `B-WS-V1-RESIDUE-SWEEP`, both this subsystem). Carries the age-unbounded re-serve **and** the continuous xStock leg. ↔ `#741`, `#742`, `B-EXIT-PROVENANCE`. **OPEN (homed, batch named, dated).**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3686,
+        "excerpt": "### #742 OPEN 2026-08-23 (CC-C; surfaced during the `B-EXIT-PROVENANCE` Step-2 census — **I proposed deleting it in-batch and Langston refused, on better grounds than my proposal**) — **A DEAD KRAKEN v1 TICKER HANDLER STILL EMITS A `priceTick`, AND IT IS PROBABLY NOT THE ONLY v1 RESIDUE IN A 3,483-LINE ADAPTER**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3690,
+        "excerpt": "**WHY IT MATTERS BEYOND TIDINESS.** It is the **third `priceTick` producer** (`:692` v2 ticker · `:916` v2 book-mid · `:1049` v1 ticker). `B-EXIT-PROVENANCE` stamps each producer with a distinct label so a ghost book midpoint can never again be mistaken for a ticker print (`#741`) — so an unreachable producer sits inside a vocabulary that is otherw"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3692,
+        "excerpt": "**★ MY PROPOSAL WAS TO DELETE IT IN-BATCH. LANGSTON REFUSED AND HE IS RIGHT, ON THREE GROUNDS:** (1) `B-EXIT-PROVENANCE`'s entire safety case is *\"no decision path changes\"*, and **a rule-18 deletion changes what ROLLBACK MEANS** — today rollback is \"drop the columns\"; (2) **under design (B) my own argument for deleting it evaporates** — a handler "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3694,
+        "excerpt": "**IN `B-EXIT-PROVENANCE` (only):** one comment at `:938` recording that this producer is unreachable, so the two-of-three stamping cannot be misread."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3696,
+        "excerpt": "**HOME (§9.4): named batch `B-WS-V1-RESIDUE-SWEEP`, owner CC-C, due 2026-09-05.** Scope: census the whole adapter for v1-era residue (handlers, message shapes, dead branches), then rule-18 dispositions — delete on the spot with `DELETED_COMPONENTS_LOG` + `_archive/deleted-code/*.removed`, or a dated deletion. ⚠️ **Do the `#568` deletion-time STATE-"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5085,
+        "excerpt": "**WHY IT IS FILED RATHER THAN FIXED IN `B-EXIT-PROVENANCE`:** that batch does not otherwise touch this log line, and it defended against the trap **structurally instead** — the column is named `exit_tick_cadence_ms`, `observedAtMs` is forbidden from taking `diffMs`, and the fence mutation-proves that prohibition (M2). **So the DATA is safe; the LOG"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5089,
+        "excerpt": "**HOME: `#743`'s batch (the last-known-good age-bound work), owner CC-C — now recorded HERE, in the ledger, rather than only in a scope file.** ⚠️ NO DATE, per `§9.4`. ↔ `#743`, `B-EXIT-PROVENANCE`."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5185,
+        "excerpt": "### #911 OPEN 2026-08-26 (CC-C; **Langston's Step-4 ruling on B-EXIT-PROVENANCE**) — ⛔ OBJ-3 SHIPS HALF-BLIND: THE ONLY INDEPENDENT WITNESS IS NOT RETAINED"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5187,
+        "excerpt": "**THIS IS A CLOSE GATE, NOT A FOLLOW-ON.** Langston's words: *\"deploy this ref. OBJ-3 stays OPEN, and B-EXIT-PROVENANCE DOES NOT CLOSE until the ticker-retention leg lands.\"* Filed at the moment of the ruling per §13, so the batch cannot quietly read as delivered."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5198,
+        "excerpt": "**HOME: `B-EXIT-PROVENANCE-TICKER-RETENTION`, owner CC-C, slotted as the CLOSE GATE of `B-EXIT-PROVENANCE` — it runs before that batch closes, not after.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5203,
+        "excerpt": "**(b) IT IS PROBABLY A READ, NOT A BUILD.** The does-it-already-exist check (run properly, late) says the bid/ask are **already archived for both classes**: `crypto_spot_ticker_snap` holds **12,559,233 rows, every one with non-null `bid` AND `ask`**, newest write 2026-08-26T20:41Z; `xstock_spot_ticker_snap` is the same shape and is **already** the "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6402,
+        "excerpt": "★ **WHY IT MATTERS ENOUGH TO HOME RATHER THAN NOTE.** The defect `B-PRICE-AGE-TRUTH` fixes lives **exactly at this seam**: `B-EXIT-PROVENANCE` built a careful provenance vocabulary on the *second* cache, and the leg it missed is the one belonging to the second cache's *own* rate limiter — a mechanism the canonical design did not expect to exist at "
+      }
+    ]
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "active-execution-engine",
+    "matched_lines": 22,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_COST_ACCOUNTING_HONESTY_COMPLETION_REPORT.md",
+        "line": 31,
+        "excerpt": "The formula was **duplicated at three sites**, each documented in-code as a deliberate mirror: (1) `active-execution-engine.ts` engine close; (2) `routes.ts` **manual close**; (3) `routes.ts` **open-positions live display**. **A forward path-trace from the engine would have found site 1 and stopped.** Fixing only the engine would make an engine-clo"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EVIDENCE_SINK_COMPLETION_REPORT.md",
+        "line": 12,
+        "excerpt": "| OBJ-2 | Capture the 3 proofs at their decision points | ✅ | emit at SQE `signal_quality_evaluator.ts` (async+sync), 11.8B `active-execution-engine.ts`, `decideMakerTaker` via `signal-orchestrator.ts` |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_OPEN_TRADES_DISPLAY_COMPLETION_REPORT.md",
+        "line": 14,
+        "excerpt": "- `active-execution-engine.ts` — the `createActiveOpenPosition` write now stamps the six at-entry regime values into the position **metadata** (the identical `_b67_2_1_*` values the `createClosedTrade` write two blocks above already uses). Honest-null when the MCE context was absent at open."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_OUTCOME_FEEDBACK_WIRE_COMPLETION_REPORT.md",
+        "line": 12,
+        "excerpt": "## WHAT SHIPPED (three edits + fence, `server/services/active-execution-engine.ts` + `server/tests/unit/b-outcome-feedback-wire.test.ts`)"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md",
+        "line": 76,
+        "excerpt": "➕ **THE INFORMATIVE xSTOCK READ, PRE-REGISTERED 2026-09-02 (Langston disposition, §13 fold-in) — AND THE ALERT ROWS SIT IN TWO REGIMES, SO THEY MAY NOT BE COUNTED.** The boundary this window is expected to show is Langston's own: *\"crypto exits are fed, xStock exits are unknown.\"* Its instrument is the `Exit checks skipped — mark older than ceiling"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_RTB_REFRESH_CONSOLIDATE_OBJ1_COMPLETION_REPORT.md",
+        "line": 32,
+        "excerpt": "**Deleted:** `executePerSignalRefresh` · `refreshSingleSignal` · `startRefreshCycle` · `stopRefreshCycle` · the `centralClock.subscribe('RTB_${mode}')` subscription · the `clockTickHandlers` and `refreshIntervals` fields · `RTB_REFRESH_INTERVAL_SECONDS` · the orphaned `executeRefreshCycle` (zero callers, swept per §15) · `isRefreshCycleRunning`. St"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_TEC_REGIME_PARAM_REMOVAL_COMPLETION_REPORT.md",
+        "line": 12,
+        "excerpt": "| 1 | Remove the dead `regime` read | **YES** | `active-execution-engine.ts` — key gone, 19-line comment landed `:1561-1579`; Langston re-derived at the ref |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_WAKE_QUIET_COMPLETION_REPORT.md",
+        "line": 64,
+        "excerpt": "- **`#1001` — staging ran 55 commits behind the review branch, with `active-execution-engine.ts` and `signal-orchestrator.ts` undeployed, while active paper trading was on.** Found by accident, by this batch checking whether its own inert files needed shipping. Routed to CC-C, who owns both in-flight batches. **DISPOSITION: added to the owner's wor"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_WS_SUBSCRIBE_CLASS_FILTER_COMPLETION_REPORT.md",
+        "line": 22,
+        "excerpt": "Filter the **I8C open-positions provider** (`active-execution-engine.ts:526`) — the **one confirmed storm source** — using the **AUTHORITATIVE stored `asset_class`**, not symbol re-resolution:"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md",
+        "line": 127,
+        "excerpt": "**Alert enumeration, HOMED (Langston §13 01:34Z — \"recorded as a lead\" is not one of the five dispositions; the SET corrected on his 01:39Z read — `MISTAKE: count-is-not-a-set`, the first sentence said \"thirteen resolved\", summed to twelve, listed NEM as resolved and omitted CTVA):** **the cut, named (Langston 01:43Z — a title match is a census of "
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md",
+        "line": 277,
+        "excerpt": "| the yield ACTS on the mark | `active-execution-engine.ts:1396`, verbatim: *\"falls through: the mark hands off below and the cache IS updated — the engine is about to act on this mark\"* | ✅ **CONFIRMED** |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md",
+        "line": 367,
+        "excerpt": "  - `SYSTEM_IMPACT_MAP.md` **S25** — the writer clause corrected (it asserted *only after a `two_sided` verdict*, which is the wording that shipped the guard inert), **plus three line numbers re-derived at HEAD that had MOVED**: `_comparators` decl `:39`→`:50`, writer `active-execution-engine.ts:1400`→`:1413`, reader `:2388`→`:2401`. Correct and un"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\F_G_1_PROGRESS_REPORT.md",
+        "line": 134,
+        "excerpt": "⛔ **THE ONE UNPROVEN HOP, AND IT IS A GATE ON STEP 8:** `rtb_signals` row → promoted signal object, a **fourth** curated rebuild in the same family as `enrichedMetadata`, `maxHoldingMs` and `atr_at_open`. **Code evidence:** that conversion **spreads** (`active-execution-engine.ts` — `metadata: { ...((signal.metadata as any) ?? {}), … }`) and its ow"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\F_G_2_PROGRESS_REPORT.md",
+        "line": 56,
+        "excerpt": "| 6b pre-run deploy of the riders | `dt-deploy 093d1878fa8ec232a52eea7865c2fc3f4b366c9a --by ANALYST-Claude`, `deployed_at=2026-09-02T13:09:04Z`, engine resumed, identity asserted (`dist/BUILD_SHA` = `093d1878f`), no new migration, no lockfile change. Carries `f36c8f496` + `f2cc6ee29` (Langston: riders verified 09:16 / CLEAR 11:10; timing ruling 12"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_4b_COMPLETION_REPORT.md",
+        "line": 34,
+        "excerpt": "| 8 | promoted (single home) | ✅ | `active-execution-engine.checkRtbPromotion` on promotion-success |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_4b_COMPLETION_REPORT.md",
+        "line": 66,
+        "excerpt": "`server/services/signal-orchestrator.ts`, `server/services/rtb-refresh-service.ts`, `server/core/rtb/ready_to_buy_service.ts`, `server/services/active-execution-engine.ts`, `server/core/observability/active-funnel-tracker.ts`, `shared/active-funnel-envelope.ts`, `client/src/components/vts/vts-filter-diagnostics-panel.tsx`, `server/tests/unit/p19-b8"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5a_COMPLETION_REPORT.md",
+        "line": 17,
+        "excerpt": "| OBJ-3 | Net-EV → SQE ADMISSION: `chosenNetEv` sign-check gate in the SQE (async + sync variants), fed at all 3 call sites; fail-open-if-absent (Langston-ratified); 11.8B demoted to STILL-BLOCKS drift backstop (Kyle default) with `recordOpenFailed('EV_REJECT')` documented as the GATES-DRIFTED alarm (expected ~0 post-B8.5a) | ✅ DONE + DEPLOYED | Ca"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5a_COMPLETION_REPORT.md",
+        "line": 42,
+        "excerpt": "`server/core/filters/signal_quality_evaluator.ts` · `server/services/signal-orchestrator.ts` · `server/core/rtb/ready_to_buy_service.ts` · `server/services/vts-runner.ts` · `server/services/active-execution-engine.ts` · `server/asset_classes/xstock_spot/eval-cycle.ts` · `server/startup/b72-warmup.ts` · `server/tests/unit/p19-b8-5a-sqe-gates.test.ts"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5E_COMPLETION_REPORT.md",
+        "line": 30,
+        "excerpt": "| 5 | Exit path wired, non-blocking | **YES** | `active-execution-engine.ts`; sync cache read, async refresh never awaited |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5I_COMPLETION_REPORT.md",
+        "line": 74,
+        "excerpt": "3. `active-execution-engine.ts:1581-1587` — `case 'target_hit'` → `{ type: 'target_hit' }`"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5I_COMPLETION_REPORT.md",
+        "line": 75,
+        "excerpt": "4. `active-execution-engine.ts:1801` — writer persists `closeReason: exitCondition.type` = **`'target_hit'`**"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 34,
+        "excerpt": "| OBJ-2 | Gate the active (paper/live) enforcement | ✅ | `active-execution-engine.ts` `checkExitConditions` `if (maxHoldingMs !== undefined && this.isMaxHoldEnabled())`; `isMaxHoldEnabled` resolves `enabled_live`/`enabled_paper` by `this.mode`. |"
+      }
+    ]
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "PaperOrderPlacer",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B3a_COMPLETION_REPORT.md",
+        "line": 23,
+        "excerpt": "Thin port wrapping ONLY the fill (slippage+fee math → `FillResult`); the engine keeps all bookkeeping (P/L, learning, archive, position write) and consumes `FillResult.{fillPrice,feeQuote,slippageQuote}`. `PaperOrderPlacer` always returns `filled`; the `partial/delayed/rejected` variants + the **close-seam state rule** (a non-filled close leaves th"
+      }
+    ]
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "closeOrder",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_6_COMPLETION_REPORT.md",
+        "line": 58,
+        "excerpt": "- **④:** `orderPlacer.closeOrder` verified pure-compute (types.ts:155 binding rule)."
+      }
+    ]
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "B-COST-ACCOUNTING-HONESTY",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_COST_ACCOUNTING_HONESTY_COMPLETION_REPORT.md",
+        "line": 1,
+        "excerpt": "# B-COST-ACCOUNTING-HONESTY — COMPLETION REPORT"
+      }
+    ]
+  },
+  {
+    "group": "price_accounting",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "B-EXIT-PROVENANCE",
+    "matched_lines": 8,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EXIT_BOOK_AGE_STAMP_PROGRESS_REPORT.md",
+        "line": 54,
+        "excerpt": "**POPULATION — stated so it cannot be quietly reshaped:** rows in `closed_trades` with `closed_at > 12:05:09Z` **AND `close_reason <> 'never_filled'`** *(that cohort carries NULL provenance BY DESIGN — `B-EXIT-PROVENANCE`'s own carve-out)*."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EXIT_PROVENANCE_COMPLETION_REPORT.md",
+        "line": 1,
+        "excerpt": "# B-EXIT-PROVENANCE — COMPLETION REPORT"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EXIT_PROVENANCE_COMPLETION_REPORT.md",
+        "line": 3,
+        "excerpt": "**Batch:** `B-EXIT-PROVENANCE` (+ its close gate `B-EXIT-PROVENANCE-TICKER-RETENTION`, `#911`)"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EXIT_PROVENANCE_COMPLETION_REPORT.md",
+        "line": 12,
+        "excerpt": "**The governance for this batch was NOT landed when the code shipped, and the batch was surfaced by the automated governance checker, not by me.** Alert `2200283b` — *\"Governance overdue: B-EXIT-PROVENANCE code pushed 66h ago, no governance push\"* — fired 2026-08-30T03:55Z and is correct."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EXIT_PROVENANCE_COMPLETION_REPORT.md",
+        "line": 15,
+        "excerpt": "| document | B-EXIT-PROVENANCE | ✅ control (`B-MBIM-SWITCH-ON` / `B-GRID-REPRESENTABILITY`) |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EXIT_PROVENANCE_COMPLETION_REPORT.md",
+        "line": 81,
+        "excerpt": "> ✅ **`B-EXIT-PROVENANCE` CLOSES.** The exit stamp is proven at 19/19 across both asset classes; the independent witness is proven at 17/17 on the population where it can exist. **The `/EUR` shortfall is an archive-universe gap, not a batch defect, and it is homed at `#954` rather than left inside this report.**"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_PHANTOM_FILL_RECONSTRUCT_COMPLETION_REPORT.md",
+        "line": 4,
+        "excerpt": "> ⛔ **CORRECTED 2026-08-26 — THIS REPORT DECLARED `non_architecture` WHILE ITS OWN SCOPE DECLARED `architecture`.** Langston refused the N/A and he is right: the scope declares architecture **specifically because** the batch changes the canonical meaning of realized P&L for every reader. **A completion report that contradicts its own scope on the c"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md",
+        "line": 19,
+        "excerpt": "⛔ **THIS IS NOT A NEW PROVENANCE BATCH AND IT STORES NOTHING NEW.** No schema change, no migration. `exit/entry_price_producer` and `exit/entry_observed_at_ms` were created by `B-EXIT-PROVENANCE` on 2026-08-26. **This batch changes only the VALUES written into them.**"
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "equity-spot-archiver",
+    "matched_lines": 12,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 20,
+        "excerpt": "- **#594 ✅ RESOLVED 2026-07-31 (CC-B — `B-XSTOCK-FEED-LIVENESS`; closed status is stated in full at the END of this entry) — filed 2026-07-28, measured by CC-B, mechanism traced + §13 home named by Langston; out of the 11 xStock exit-skip alerts) — ★ THE xSTOCK EQUITY-FEED SILENT-STALL WATCHDOG CANNOT SEE THE FAILURE IT EXISTS FOR: ITS LIVENESS CLO"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 167,
+        "excerpt": "- **#559 OPEN 2026-07-22 (CC-A; Kyle directive to diagnose after the heartbeat surfaced 10 \"Open position unmanageable\" alerts) — THE CRYPTO WEBSOCKET SUBSCRIBE SET IS NOT ASSET-CLASS FILTERED, so xStock positions are retried against a venue that structurally cannot serve them — 133,386 futile skips/day.** **MECHANISM (traced end-to-end, exact site"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 518,
+        "excerpt": "- **#448 OPEN 2026-07-10 (CC-A + Langston Step-2 Findings B/C, both independently verified in code by CC-A) — there are THREE uncoordinated definitions of the alert `category` vocabulary, and the HTTP endpoint's allowlist omits `governance` — so 181 of 254 alerts (71% of the ledger) cannot be filtered in the UI at all.** `server/routes.ts:6628` har"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1235,
+        "excerpt": "- `loadEquitySpotUniverse` has **exactly ONE call site repo-wide** (`equity-spot-archiver.ts:404`), and `state.symbols` is assigned there and **never reassigned** *(control: the same grep returns the import at `:23` and the loader's own definition, so it finds real usage)*."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1324,
+        "excerpt": "❗ **AND THERE IS NO DROP COUNTER: `bufferTickerSnap`'s boolean return is DISCARDED at `equity-spot-archiver.ts:140`, and `cumulativeTickerSnaps` counts FRAMES PARSED, never ROWS WRITTEN.** The system cannot report its own data loss."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1341,
+        "excerpt": "**(a) IT HAS ZERO PRESENCE ANYWHERE THE EXIT PATH CAN SEE IT.** Whole-tree, tests excluded, the string exists in **five** places: ONE real write into the ARCHIVE (`equity-spot-archiver.ts:157`), two explicit `null` writers (crypto, futures), a comment, and the column declaration (`shared/schema.ts:5002`). ✅ *Control: `bidQty` returns 12 hits, so th"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1363,
+        "excerpt": "| **the exit monitor** | the **MIDPOINT** `(bid+ask)/2`, or `last` if a side is zero — **untagged**, from an in-memory map | **unthrottled** | `equity-spot-archiver.ts:131-139` → `active-execution-engine.ts:1163`, `:1230-1231` |"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1580,
+        "excerpt": "4. ⛔ **NOT SUBSCRIBED TO.** `equity-spot-archiver.ts:237-247` subscribes to **`ohlc` and `ticker` only** — that is the complete list. A repo-wide search for a `book`-channel subscription across the market-data and passive-archive services returns **zero**."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3568,
+        "excerpt": "**★ RIDER 1 — VERIFIED, and it is a real exposure I created:** `dedupe_key` is **`'xstock-stale-fill-block'` — GLOBAL, not per-symbol** (`active-dispatch.ts:96`). ⇒ **my ack silences stale-fill alerting for the ENTIRE BOOK, not FCEL.** That is tolerable **only** because real-halt detection is deferred to the equity-feed silent-stall watchdog — **wh"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3586,
+        "excerpt": "**CITATION CORRECTIONS (Langston, verified):** the watchdog's own interval is **`equity-spot-archiver.ts:401`** (`STALL_WATCHDOG_CHECK_MS`, 30 s), **not `:293`** — `:293` is an unrelated `setInterval` above the C3 section at `:314`. `addAlert :336` and `dedupe_key :342` stand."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5642,
+        "excerpt": "**STEP-2 ANNOTATION (CC-C, 2026-09-03 00:19Z; audit `B_XSTOCK_FEED_SANITY_PRE_AUDIT.md` §A.11) — THE ARCHIVE IS BLIND TO THE HANDOFF DECISION FRAMES, measured with a control.** `xstock_spot_ticker_snap` keeps one row per symbol per 4 s (`passive_archive.b74_ticker_snapshot_min_interval_ms = 4000`; `ticker-batch-writer.ts:107-120`) while the exit lo"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6870,
+        "excerpt": "**(b) KRAKEN ALREADY TELLS US, PER SYMBOL, AND NOTHING READS IT.** `is_extended_hours` arrives on the equities feed and is written to `xstock_spot_ticker_snap` by `equity-spot-archiver.ts:201`. **Re-derived independently of CC-C's row: across the whole tree the only TypeScript occurrences are three archiver writes plus the schema column at `shared/"
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "bufferTickerSnap",
+    "matched_lines": 2,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1324,
+        "excerpt": "❗ **AND THERE IS NO DROP COUNTER: `bufferTickerSnap`'s boolean return is DISCARDED at `equity-spot-archiver.ts:140`, and `cumulativeTickerSnaps` counts FRAMES PARSED, never ROWS WRITTEN.** The system cannot report its own data loss."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1714,
+        "excerpt": "⚠️ **POPULATION LIMIT, NAMED:** this counts snaps that WERE archived. `bufferTickerSnap` **throttles** per `assetClass:symbol`, so it is a throttled sample of arrivals, not every arrival — and a frame rejected by the `!data?.symbol` guard upstream never reaches the table. Neither can manufacture the `no_mark_written` case this bucket counts, so the"
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "b74_ticker_snapshot_min_interval_ms",
+    "matched_lines": 2,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 377,
+        "excerpt": "- **#440 — [B-STORAGE-HARDEN Wave D OBJ-4, Langston §13 fold-out 2026-07-08] A large slice of thin xStock tokens is already past the 15 s fill-freshness gate at ANY capture cadence — a native-liquidity problem, not a throttle problem.** The clean RTH measurement found **83 of 475** xStock symbols with a max inter-tick gap ≥ 15 s even at the fastest"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 5642,
+        "excerpt": "**STEP-2 ANNOTATION (CC-C, 2026-09-03 00:19Z; audit `B_XSTOCK_FEED_SANITY_PRE_AUDIT.md` §A.11) — THE ARCHIVE IS BLIND TO THE HANDOFF DECISION FRAMES, measured with a control.** `xstock_spot_ticker_snap` keeps one row per symbol per 4 s (`passive_archive.b74_ticker_snapshot_min_interval_ms = 4000`; `ticker-batch-writer.ts:107-120`) while the exit lo"
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "B-PRICE-AGE-TRUTH",
+    "matched_lines": 20,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 277,
+        "excerpt": "  **(b) `live_peers = 0` WELDED TWO DIFFERENT DEFECTS, and only one of them is this batch's.** `live_in_sector − (self live ? 1 : 0)` returns 0 both when the held symbol is live and ALONE (1−1) and when NOTHING in the sector ticked, self included (0−0). **SPLIT, on the corrected base: 72 minutes / 1 symbol (0.88%) are ZERO PEERS, SELF LIVE — a genu"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1506,
+        "excerpt": "**SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-PRICE-AGE-TRUTH`, placed in `PHASE_19_PLAN` at row **3b.f**, WITH the other price-provenance prerequisites and BEFORE `F-G-2`, because F-G-2's before/after arms both read a price whose age this branch can fabricate.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1554,
+        "excerpt": "⚠️ **CITATION DRIFT CORRECTED 2026-08-31 (found by a fresh reader during `B-PRICE-AGE-TRUTH` Step 2).** This entry's line numbers were resolved against HEAD and are stale by ~45 lines in the adapter: `:627-631`→**`:627-631`**, `:540-549`→**`:540-549`**, `:470-486`→**`:470-486`**, `:1013`→**`:1058`**, and in the engine `:1249`→**`:1257`**. ⛔ **The f"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6379,
+        "excerpt": "**OPEN** · ⚠️ **RENUMBERED #970 → #971 on 2026-08-31: CC-A minted `#970` and pushed first, so by the standing rule the NEWER entry renumbers. Their `#970` (records-disagree-with-themselves) is intact and untouched at this file's `:827`.** · surfaced 2026-08-31 during `B-PRICE-AGE-TRUTH` Step-2, by the **`bridge/canonical/` provenance read** — which"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6402,
+        "excerpt": "★ **WHY IT MATTERS ENOUGH TO HOME RATHER THAN NOTE.** The defect `B-PRICE-AGE-TRUTH` fixes lives **exactly at this seam**: `B-EXIT-PROVENANCE` built a careful provenance vocabulary on the *second* cache, and the leg it missed is the one belonging to the second cache's *own* rate limiter — a mechanism the canonical design did not expect to exist at "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6408,
+        "excerpt": "> ⚠️ **STALE LINE CITATIONS CORRECTED 2026-08-31 (`B-PRICE-AGE-TRUTH` Step 2, BLOCKER-3).** The adapter gained ~45 lines and the engine ~8, so every absolute citation to them written before 2026-08-30 resolves to unrelated code. Mapping applied: `:582-586`→`:627-631` · `:496-505`→`:540-549` · `:425-441`→`:470-486` · `lpa:1013`→`:1058` · `aee:1249`→"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6415,
+        "excerpt": "**Folded 2026-08-31 on Langston's §13 disposition 2 at `B-PRICE-AGE-TRUTH` Step 2 — *\"literally the same divergence, so it gets a home without manufacturing a batch.\"***"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6431,
+        "excerpt": "**OPEN** · surfaced 2026-08-31 by a claim-only reader during `B-PRICE-AGE-TRUTH` Step 2, **after Kyle required that a restored objective go back through review** · owner **CC-C**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6447,
+        "excerpt": "⚠️ **NOT a prerequisite of `B-PRICE-AGE-TRUTH`** — that batch fixes the instance on its own path."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6527,
+        "excerpt": "**OPEN** · surfaced 2026-08-31 by **Kyle**, who challenged the premise of `B-PRICE-AGE-TRUTH` — *\"if Kraken throttles us because we exceed their rate limits, then we're treating a symptom\"* · owner **CC-C**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6568,
+        "excerpt": "✅ **`B-PRICE-AGE-TRUTH` (3b.f) IS NOT INVALIDATED and continues:** a price must not misreport its age at ANY refresh rate. **But it does not address WHY the price is old** — Kyle's *\"treating a symptom\"* lands on that half, and this issue is the other half."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6593,
+        "excerpt": "✅ **WHERE THE `SYSTEM_MANUAL` WITHDRAWAL WENT (Langston's non-blocking note: he found zero hits for `#951` and zero for the withdrawn absolute, consistent with withdrawal-by-deletion but not RECORDED anywhere).** The absolute — *\"`price_producer` is NOT consulted by any gate, so widening it can never change a trading decision\"* — **was not deleted."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6612,
+        "excerpt": "⚠️ **xSTOCK IS UNMEASURED AND IS NOT COVERED BY THAT MITIGATION:** `BE/USD` and `PLTR/USD` are open and take `observedAt` from the equities tick at `active-execution-engine.ts:1244` — **a different path, which `B-PRICE-AGE-TRUTH` does not touch and which I have not measured.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6776,
+        "excerpt": "**HOME: added to `B-GOV-REPORTING` (PHASE_19_PLAN row 8) as item (v) — owner CC-A: (1) an `unack <id> --by` verb; (2) `ALERT_HANDLING_PROTOCOL.md` corrected — ack is for alerts whose follow-through is WORK; an event-wait alert is ROUTED and left active; (3) the keyed rows restored to active by that verb, not by hand — **THREE, not two (Langston enu"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6816,
+        "excerpt": "### #994 OPEN 2026-09-03 (KYLE DIRECTIVE, given to CC-INFRA; evidence measured by CC-INFRA, **implementation belongs to the owner of `B-PRICE-AGE-TRUTH` / `#977`, not to me**) — ⛔ THE `Exit checks skipped` ALERT IS REPORTING THAT THE US STOCK MARKET IS CLOSED"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6839,
+        "excerpt": "**HOME: the alert-policy change belongs with `B-PRICE-AGE-TRUTH` (`#951`) / `#977`, whose owner holds this surface — CC-INFRA is NOT taking it.** ⛔ **This entry exists so the directive and its evidence are recorded rather than living in a chat message.** Routed to that owner in `#general` the same day. ⚠️ **No date, per §9.4.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6841,
+        "excerpt": "★ **AND ONE THING THE OWNER SHOULD DECIDE RATHER THAN INHERIT:** whether the right change is to stop EMITTING during a closed session, or to keep emitting at `info` and stop NOTIFYING. Those differ in what the record retains — the first loses the ability to measure how often the protection engages, which is a real quantity for `B-PRICE-AGE-TRUTH`'s"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6845,
+        "excerpt": "**Kyle, 2026-09-03:** *\"I want you to handle this price age truth batch number nine ninety four.\"* ⇒ **the entry's original `HOME:` line — *\"implementation belongs to the owner of `B-PRICE-AGE-TRUTH` / `#977`, not to me… CC-INFRA is NOT taking it\"* — IS SUPERSEDED BY THIS AMENDMENT.** It is left in place rather than deleted because it was true when"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6901,
+        "excerpt": "⚠️ **HOW I MISSED IT, because the search was the defect and not the corpus: I grepped the ledger for the BATCH (`#977`, `#951`, `B-PRICE-AGE-TRUTH`) and for `holiday` IN THE CODE — never for the FINDING in the ledger.** §9.5(b-ii) says search the ledger before filing; I searched it for the wrong noun and read the silence as absence."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6926,
+        "excerpt": "✅ **CORRECTION 5 — EMIT vs NOTIFY: KEEP THE EMIT, CUT THE NOTIFY — AND IT IS DERIVED, NOT PREFERRED.** Langston's derivation, which is stronger than Amendment 1's reasoning: criterion (ii) requires *\"every skip that does occur carries the session it happened in\"* — **a requirement on a PERSISTED ROW. Cut the emit and (ii) becomes unsatisfiable by c"
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "B-EXIT-BOOK-AGE-STAMP",
+    "matched_lines": 2,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1151,
+        "excerpt": "**SEVERITY: medium — it is a WRONG-ARTIFACT-TO-REVIEWER mechanism, not a data defect. OWNER: CC-C. DISPOSITION: §9.4 (3) — its own batch, `B-DISPATCH-STAGING-VERIFY`, owner CC-C, placed in `PHASE_19_PLAN.md` at **row 3b.i**, after `B-EXIT-BOOK-AGE-STAMP` (3b.h) and before `F-G-2` (3c). ⭐ **PLACED, not merely named — the row exists and states its fo"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 6264,
+        "excerpt": "| `65a1379e` — `B-EXIT-BOOK-AGE-STAMP` close criterion | **`warning`** | `scheduled`, fires 2026-09-06T12:05:09 | ✅ **will push and re-surface** |"
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "equity-spot-archiver",
+    "matched_lines": 5,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_XSTOCK_FEED_LIVENESS_COMPLETION_REPORT.md",
+        "line": 63,
+        "excerpt": "`SYSTEM_IMPACT_MAP.md` (content update — the watchdog's clock, the blast-radius census, the sibling-archiver trap, the retained-not-ever verification note) · `RUNNING_ISSUES.md` (#594 closed; #635 + #636 filed) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `PHASE_19_PLAN.md` · `GOVERNANCE_EXCEPTIONS.md` (the in-flight `open` row, now dischargeable) ·"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md",
+        "line": 106,
+        "excerpt": "**Langston's sharpened exit-seam question (04:03Z, via CC-B's CTVA hand-off 04:04Z): CTVA and MDT booked `stop_hit` within 0.5 s of each other \"after hours of stale marks\" — did a LATE-ARRIVING mark book a stop that was ALREADY BREACHED while the mark was stale? ANSWERED AT THE OBJECT: NO, on all three.** The test: the stop against every archived q"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_74_COMPLETION_REPORT.md",
+        "line": 37,
+        "excerpt": "| `server/services/passive-archive/equity-spot-archiver.ts` | NEW | 182 |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_78_1_COMPLETION_REPORT.md",
+        "line": 84,
+        "excerpt": "System functions because B74 passive archivers (separate WS connections via `equity-spot-archiver`, `equity-perp-archiver`, crypto-spot shards) carry their own data and `live-pricing-adapter.fetchFromKrakenRest` REST fallback fills price gaps. VTS evaluation continues via REST + B74 paths; ablation cadence on crypto_spot remains healthy at 25/facto"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_79_0k_COMPLETION_REPORT.md",
+        "line": 90,
+        "excerpt": "- **B79.0k.2** — Configure Kraken Pro credentials in staging, verify weekend feed flows, update equity-spot-archiver to use new feed-tier, update governance docs."
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "bufferTickerSnap",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md",
+        "line": 106,
+        "excerpt": "**Langston's sharpened exit-seam question (04:03Z, via CC-B's CTVA hand-off 04:04Z): CTVA and MDT booked `stop_hit` within 0.5 s of each other \"after hours of stale marks\" — did a LATE-ARRIVING mark book a stop that was ALREADY BREACHED while the mark was stale? ANSWERED AT THE OBJECT: NO, on all three.** The test: the stop against every archived q"
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "b74_ticker_snapshot_min_interval_ms",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "B-PRICE-AGE-TRUTH",
+    "matched_lines": 3,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md",
+        "line": 1,
+        "excerpt": "# B-PRICE-AGE-TRUTH — BATCH PROGRESS REPORT"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md",
+        "line": 5,
+        "excerpt": "**Batch:** `B-PRICE-AGE-TRUTH` · **Issue:** `#951` · **Owner:** CC-C · **Phase 19, plan row 3b.f**"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\F_G_2_PROGRESS_REPORT.md",
+        "line": 73,
+        "excerpt": "- **Abort / annotate (Langston A4):** if `trailing_enabled_active` or `moonbag_qualifying_strategies` flips on for `crypto_spot` inside the window, the run is VOID (arms entangle silently; measured inert today by CONFIG on all four classes). **And two changes ALREADY ON THE PLAN inside the window move `Σ shortfall_avoided` directly, because that su"
+      }
+    ]
+  },
+  {
+    "group": "clock_sampling",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "B-EXIT-BOOK-AGE-STAMP",
+    "matched_lines": 2,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EXIT_BOOK_AGE_STAMP_PROGRESS_REPORT.md",
+        "line": 1,
+        "excerpt": "# B-EXIT-BOOK-AGE-STAMP — BATCH PROGRESS REPORT"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_EXIT_BOOK_AGE_STAMP_PROGRESS_REPORT.md",
+        "line": 5,
+        "excerpt": "**Batch:** `B-EXIT-BOOK-AGE-STAMP` (`#961` + `#962`) · **change-class:** `non_architecture` · **Owner:** CC-C · **Phase 19, plan row 3b.h**"
+      }
+    ]
+  },
+  {
+    "group": "dhma",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "DHMA",
+    "matched_lines": 5,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 30,
+        "excerpt": "| `dhma` | **301** | **0** | `strategy_internal` |"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 39,
+        "excerpt": "  **THE MEASUREMENT (live DB, 2026-07-28).** SSOT = `STRATEGY_DISPLAY_NAMES` in `canonical-regime-strategy-map.ts:511` = **19 strategies**. `vts_open_trades` grouped by `strategy`, ALL-TIME (table reaches back to 2026-05-11), returns **13 distinct values**. The other **six appear ZERO times, ever**: **`abcd_long` · `adaptive_flow` · `breakout` · `d"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 617,
+        "excerpt": "| 12b | **dhma thresholds too strict** — DHMA_MIN_SEPARATION/LOOKBACK need relaxation for crypto. Zero signals. | RESOLVED | **2026-04-09 — Regime-gated, not threshold issue.** DHMA mapped exclusively to IMPULSE_EXPANSION regime. Current regime is RANGE_BOUND_STABLE. Will activate when market enters that regime. No code change needed. |"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2813,
+        "excerpt": "- **#371 — reorg-B2.1 OBJ-5 guard-equivalence DELTA: measure GUARD-5 reachability over-rejection vs the retiring normalizer (HOME: reorg-B2.1 OBJ-5, the normalizer-retirement gate; CC-B + Langston Step-4 2026-06-21).** OBJ-2/3 added `validateReachability` (GUARD-5) to `applyGlobalGuards` using the strategy's `getEffectiveATR` (clamped) — while the "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2814,
+        "excerpt": "- **#372 — Per-strategy minRR calibration: the reorg-B2 `min_rr=2.5` seed SUPPRESSES most of the strategy suite (HOME: Phase-25, pairs with 25-2/3/10 / #336; INSTRUMENTATION PRECURSOR in reorg-B2.1 OBJ-4; CC-B + Langston 2026-06-21).** Per-strategy analysis (`Scope Files/REORG_B2_1_OBJ4_PER_STRATEGY_ANALYSIS_2026-06-21.md`): the per-class `min_rr=2"
+      }
+    ]
+  },
+  {
+    "group": "dhma",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "detectDHMA",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "dhma",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "calculateVolatility",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "dhma",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "realizedVol",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2813,
+        "excerpt": "- **#371 — reorg-B2.1 OBJ-5 guard-equivalence DELTA: measure GUARD-5 reachability over-rejection vs the retiring normalizer (HOME: reorg-B2.1 OBJ-5, the normalizer-retirement gate; CC-B + Langston Step-4 2026-06-21).** OBJ-2/3 added `validateReachability` (GUARD-5) to `applyGlobalGuards` using the strategy's `getEffectiveATR` (clamped) — while the "
+      }
+    ]
+  },
+  {
+    "group": "dhma",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "strategy.dhma",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "dhma",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "DHMA",
+    "matched_lines": 14,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_32_COMPLETION_REPORT.md",
+        "line": 15,
+        "excerpt": "Strategies instrumented: detectVWAPPullback, detectABCDLong, detectSMATrendRide, detectBreakout, detectMeanReversion, detectRangeTrading, detectVWAPBounce, detectLiquidityTrap, detectDHMA"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_54_COMPLETION_REPORT.md",
+        "line": 109,
+        "excerpt": "1. **5 regime-map decisions** — adaptive_flow, pivot_shift, defensive_hedge, liquidity_trap, dhma (Langston: defer, insufficient evidence)"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_54_COMPLETION_REPORT.md",
+        "line": 110,
+        "excerpt": "2. **DHMA implementation mismatch** — uses OBI/microprice, not HMA per canonical map (Langston: resolve design-vs-code first)"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_2_COMPLETION_REPORT.md",
+        "line": 36,
+        "excerpt": "| 3 | `6c42dc370` | `server/services/strategy-engine.ts` | HIGH-blast: `breakout`, `mean_reversion`, `range_trade` (method `detectRangeTrading`), `vwap_bounce`, `dhma` detect* methods — full param resolution from `module_constants`. Numeric levers via `getCachedNumbersForModule`; string-enum levers via `getCachedConstant<string>` (4 string enums to"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_2_COMPLETION_REPORT.md",
+        "line": 71,
+        "excerpt": "[B72][warmup] strategy.dhma rows=25"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_COMPLETION_REPORT.md",
+        "line": 233,
+        "excerpt": "The canonical regime → strategy map (`server/config/canonical-regime-strategy-map.ts`) references **8 additional legacy keys** — `vwap_pullback, mean_reversion, range_trade/range_trading, abcd_long, sma_trend_ride, breakout, vwap_bounce, dhma, liquidity_trap` — that are NOT implemented as standalone strategy files. They appear only as exit-conditio"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_COMPLETION_REPORT.md",
+        "line": 271,
+        "excerpt": "- **9 in-class quant** strategies (`vwap_pullback`, `abcd_long`, `sma_trend_ride`, `breakout`, `mean_reversion`, `range_trade`, `vwap_bounce`, `liquidity_trap`, `dhma`) live as instance `detect*` methods inside `server/services/strategy-engine.ts` (lines 87–1344). They were **MISSED by B72 main** despite being actively dispatched from 6 production "
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\Batch_Completion_45_04.01.26.md",
+        "line": 20,
+        "excerpt": "| 7 | Disable DHMA short branch | **YES** | Only longSignal proceeds. shortSignal returns null with short_disabled_long_only. |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\Batch_Completion_47_04.02.26.md",
+        "line": 47,
+        "excerpt": "- Round 2 (DHMA, indicator filters) may help with the remaining ~22% of nulls."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCHES_1-19C_RETROACTIVE_REPORT.md",
+        "line": 160,
+        "excerpt": "### Batch 8 — Wave 1 Safe Deletions (LATTi/DHMA)"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCHES_1-19C_RETROACTIVE_REPORT.md",
+        "line": 166,
+        "excerpt": "| **Summary** | Removed ~1,254 lines of dead code across 13 files: deleted orphaned DHMA strategy module + LATTi safety monitor component. 3 server surgery files (routes.ts, index.ts, schema.ts), 7 client surgery files (goals components), 1 interface cleanup (signal-orchestrator.ts). |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\Batches_48-51_HF_Report_04.06.26.md",
+        "line": 128,
+        "excerpt": "- Multiple pending decisions on dhma thresholds, regime eligibility, defensive_hedge status"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\Batches_48-51_HF_Report_04.06.26.md",
+        "line": 160,
+        "excerpt": "7. Pending Kyle decisions: DI 12→8, regime-gated strategy dormancy, dhma thresholds, defensive_hedge"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\RUNNING_ISSUES.md",
+        "line": 30,
+        "excerpt": "| 12b | **dhma thresholds too strict** — DHMA_MIN_SEPARATION/LOOKBACK need relaxation for crypto. Zero signals. | RESOLVED | **2026-04-09 — Regime-gated, not threshold issue.** DHMA mapped exclusively to IMPULSE_EXPANSION regime. Current regime is RANGE_BOUND_STABLE. Will activate when market enters that regime. No code change needed. |"
+      }
+    ]
+  },
+  {
+    "group": "dhma",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "detectDHMA",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_32_COMPLETION_REPORT.md",
+        "line": 15,
+        "excerpt": "Strategies instrumented: detectVWAPPullback, detectABCDLong, detectSMATrendRide, detectBreakout, detectMeanReversion, detectRangeTrading, detectVWAPBounce, detectLiquidityTrap, detectDHMA"
+      }
+    ]
+  },
+  {
+    "group": "dhma",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "calculateVolatility",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "dhma",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "realizedVol",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "dhma",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "strategy.dhma",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_2_COMPLETION_REPORT.md",
+        "line": 71,
+        "excerpt": "[B72][warmup] strategy.dhma rows=25"
+      }
+    ]
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "strong_bull_trend",
+    "matched_lines": 10,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 16,
+        "excerpt": "- **#607 OPEN 2026-07-28 (measured by Langston at `42a9ff34` from PERSISTED data, surfaced out of #604 leg (d)) — ★ `frictionCost` IS NON-FINITE ON ~7% OF VTS CLOSES, AND IT — NOT A MISSING `expectedEdge` — IS WHAT SILENTLY DISCARDS AMR EV-GAP OBSERVATIONS.** **MEASURED, `logs/virtual_trades/` 07-24→07-28, 247 rows: 18 non-finite `expectedEdge` (7."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 40,
+        "excerpt": "  **The 13 that DO trade, all-time / last-30d:** support_bounce 10,915/10,819 · morning_star 6,011/4,619 · pivot_shift 4,299/4,125 · vwap_pullback 3,294/1,244 · strong_bull_trend 3,109/1,155 · reverse_impulse 2,741/2,357 · inside_bar_reversal 2,614/2,611 · sma_trend_ride 2,198/1,304 · volatility_edge 1,839/1,831 · vwap_bounce 1,113/926 · defensive_"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 400,
+        "excerpt": "- **#445 OPEN 2026-07-10 (CC-B trace + Langston queue-forensics + OLD Claude; the finding behind #443) — FOUR batches were CLOSED on the promise of a live/at-scale verification that was NEVER PERFORMED, and the governance status fields still read \"alert-gated\" to this day.** This is **ONE process gap that produced four instances**, not four indepen"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 855,
+        "excerpt": "| 105 | ✅ RESOLVED 2026-05-13 (BATCH_80) — TEC re-keyed by tradeId. Engine state per-trade. Option C+ rehydrate seed preserves in-flight `tradeMode` + `ladderRung` + `originalStopPrice` across restarts with engine-side defensive coercion for null-rung TRAILING_TAKE seeds. Runtime invariant `[B80][TEC_KEYING_INVARIANT_VIOLATION]` on every exit-cycle"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2071,
+        "excerpt": "**Resolution:** B-4.7 chunk B (deployed `2c986c231`, 2026-06-11) made the authored flat map a PRIVATE base, moved `ASSET_CLASS_OVERRIDES` from sync-canonical-bridge into the source module, and re-exported `CANONICAL_REGIME_STRATEGY_MAP` same-name with the per-class materialized shape (compile-forced re-point of all flat readers — actual production "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2218,
+        "excerpt": "The Hidden-Contextual-Edge study's data-integrity pass found 25 VTS trades (of 22,810) with a corrupt entry-stop price — `signal.stopLoss` more than 50% off the entry price (e.g. STX entry $0.2518 with stop $818.93, an unreachable units-scale-wrong stop). The split is **21 xStock + 4 crypto** — ~0.9% xStock incidence vs ~0.02% crypto, **~45x higher"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2683,
+        "excerpt": "Surfaced while wiring B-NEW-53 crypto provenance. `Phase10TradeRecord` (`vts-runner.ts:469`) declares `entry` (NOT `entryPrice`) and does **not** declare `stopLoss`/`takeProfit`/`quantity`/`expectedEdge`/`atrAtOpen`/`pairIdHash`/`regimeConfidenceRaw`/`macroModifierValue`/`phase`/`phaseAgeSeconds`/`strategyPhaseWeight`; the literal at `L1598` sets `"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2814,
+        "excerpt": "- **#372 — Per-strategy minRR calibration: the reorg-B2 `min_rr=2.5` seed SUPPRESSES most of the strategy suite (HOME: Phase-25, pairs with 25-2/3/10 / #336; INSTRUMENTATION PRECURSOR in reorg-B2.1 OBJ-4; CC-B + Langston 2026-06-21).** Per-strategy analysis (`Scope Files/REORG_B2_1_OBJ4_PER_STRATEGY_ANALYSIS_2026-06-21.md`): the per-class `min_rr=2"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2815,
+        "excerpt": "  - **★ 48h WINDOW READ 2026-06-23 (clean: pm2 uptime 48.2h, restart#408, no mid-window wipe; CC-B pulled `/api/diagnostics/guard-eval-stats` live).** The global `min_rr=2.5` wildcard suppresses **62–100% of every recorded strategy** (11 of 17 guard-active had signals; 6 none). 100%: strong_bull_trend (1433/0, meanRR 2.00), vwap_bounce (256/0, 2.00"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3630,
+        "excerpt": "**Context:** mark-verify check 1 fired the >15% revisit branch (50.5% marginal unreachable vs ~9% expected; ledger f245ac3a7). Langston ruled HOLD the row, rejected the wait-for-volatility trigger, ordered two volatility-matched discriminators, and corrected the \"−35% can't explain 2×\" argument as a category error (reachDrops = tail mass vs a fixed"
+      }
+    ]
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "detectStrongBullTrend",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "favoredListExcludes",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2071,
+        "excerpt": "**Resolution:** B-4.7 chunk B (deployed `2c986c231`, 2026-06-11) made the authored flat map a PRIVATE base, moved `ASSET_CLASS_OVERRIDES` from sync-canonical-bridge into the source module, and re-exported `CANONICAL_REGIME_STRATEGY_MAP` same-name with the per-class materialized shape (compile-forced re-point of all flat readers — actual production "
+      }
+    ]
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "getAllowedStrategies",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "B-4.7",
+    "matched_lines": 14,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 3,
+        "excerpt": "> **Last Updated:** 2026-06-18 (P19-B6.5d close — the live `A/EUR@kraken` classify fall-through (alert `58367b27`) RESOLVED by the single-letter resolver widen + carry-the-stamp invariant; #327 opened (signal-orchestrator dead dynamic `resolveAssetClass` import — PRE-EXISTING, HOME = P19-B6.5e) + JC#4 captured (the `[STAMP_MISSING_ACTIVE]` active-p"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 59,
+        "excerpt": "  ★★ **THE SHARPENED ROOT CAUSE — WORSE AND MORE PRECISE THAN \"I MIS-CITED AN ISSUE\": THE CLAIM WAS *INHERITED*, AND IT NAMED A PENDING DECISION I THEN RE-RESOLVED THE OPPOSITE WAY.** The verbatim comment A3 deleted was pre-existing code, not CC-A's words: `0, // contextBonus — DECLARED-NEVER-WIRED (B-4.7 C2 finding): the CONTEXT_BONUS pair-vs-glob"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 399,
+        "excerpt": "- **#443 OPEN 2026-07-10 (CC-B, surfaced by Langston after 36h of phantom re-surfacing on alert `c4c98925`) — governance doc-gap alerts are not auto-resolved by a Langston-confirmed GOVERNANCE_EXCEPTIONS N/A row, and NO sweep exists for alerts stuck in `acknowledged`.** **Root:** `ALERT_HANDLING_PROTOCOL.md:40` already states the intended behavior "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 400,
+        "excerpt": "- **#445 OPEN 2026-07-10 (CC-B trace + Langston queue-forensics + OLD Claude; the finding behind #443) — FOUR batches were CLOSED on the promise of a live/at-scale verification that was NEVER PERFORMED, and the governance status fields still read \"alert-gated\" to this day.** This is **ONE process gap that produced four instances**, not four indepen"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1597,
+        "excerpt": "**MEASURED:** `git log -- bridge/canonical/` returns governance-era commits touching it — `69b3ed8f2` (B-NEW-34), `af99bd5dd` (B79.0n.STRATEGY), `8ef70628d` (B-4.7). Per-file last-commit dates run **2025-12-13 → 2026-06-11**. A session told \"pre-governance corpus\" dates the regime mapping four months wrong."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2063,
+        "excerpt": "### #162 ✅ RESOLVED 2026-06-11 (B-4.7 chunk A) — Global REGIME is NOT per-class"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2064,
+        "excerpt": "**Resolution:** B-4.7 chunk A (deployed `b8ab812de`, 2026-06-11) deleted BOTH mixed-class dominant-regime votes (MCE + telemetry-aggregator) and replaced them with `getDominantRegimeForClass(assetClass)` (MIN 5 same-class pairs, null below = CLASS_IDLE); `getMarketIndicators(assetClass)` REQUIRED with per-class regime/friction/DBS and an explicit `"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2070,
+        "excerpt": "### #163 ✅ RESOLVED 2026-06-11 (B-4.7 chunk B) — `CANONICAL_REGIME_STRATEGY_MAP` source restructure to byAssetClass"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2071,
+        "excerpt": "**Resolution:** B-4.7 chunk B (deployed `2c986c231`, 2026-06-11) made the authored flat map a PRIVATE base, moved `ASSET_CLASS_OVERRIDES` from sync-canonical-bridge into the source module, and re-exported `CANONICAL_REGIME_STRATEGY_MAP` same-name with the per-class materialized shape (compile-forced re-point of all flat readers — actual production "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2362,
+        "excerpt": "**★ RULE-24 DISPOSITION: OUTCOME 3 (legacy that no longer fits today's intent), with an OUTCOME-2 decision attached. NOT outcome 1 — every line does what it was written to do.** PROVENANCE (§2 1.b): the null is B-4.7's deliberate semantic — `26be9a8c2` (2026-06-xx) *\"per-class dominant regime … idle/cold null semantics\"*, and the code comment state"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2709,
+        "excerpt": "**#217 OPEN 2026-06-11 (B-4.7; STATUS UPDATED 2026-06-12 B-5) — RTB CONTEXT_BONUS: WIRED-AT-SHADOW by B-5 (Obj-10), but shadow evidence is STRUCTURALLY NULL until the selection path runs.** B-5 wired the bonus computation (per ranked set, AFTER selection — provably cannot alter it) + ledger stamping (rank1Changed, ceilingSaturationRate #221). Langs"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2711,
+        "excerpt": "**#218 OPEN 2026-06-11 (B-4.7) — Phase-16 register: dead `getMarketContextFields()` (trade-model.ts) carrying a hardcoded Tier-6 fee default.** Zero callers (grep-verified); carries `fee: number = 0.0026` as a DEFAULT PARAM — invisible to the B-4.5 importer sweep (new residue pattern: default params don't import). Register-note added in code; expli"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2713,
+        "excerpt": "**#219 OPEN 2026-06-11 (B-4.7, Langston pre-audit item d) — dormant flipRate feed.** `applyGovernance` (regime-stability path) has zero production callers — the flip-rate governance input is dead config. Phase 16 review."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2715,
+        "excerpt": "**#220 OPEN 2026-06-11 (B-4.7 Step-8, Langston finding — PRE-EXISTING, not B-4.7) — frozen `setNullReason is not defined` error-log anomaly.** pm2 stderr held 64,494 instances of `[11.0E.1][VTS] Strategy execution failed: ReferenceError: setNullReason is not defined` (top: FARTCOIN/USD 5,405; FET/USD 4,239). Count FROZEN — zero growth live, zero po"
+      }
+    ]
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "strong_bull_trend",
+    "matched_lines": 28,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B-NEW-36_COMPLETION_REPORT.md",
+        "line": 88,
+        "excerpt": "- Inversion survives single-strategy stratification: `strong_bull_trend` alone, n=5,514 — monotonic-down."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B-NEW-36_COMPLETION_REPORT.md",
+        "line": 113,
+        "excerpt": "| strategy | 1,383.7 | 8 | vwap_pullback 65.1% unmatched, strong_bull_trend 44.9% |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B-NEW-36_DIAGNOSTIC.md",
+        "line": 88,
+        "excerpt": "| strong_bull_trend | 5514 | 33.4% | monotonic-down | ✓ |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B-NEW-36_DIAGNOSTIC.md",
+        "line": 103,
+        "excerpt": "| strong_bull_trend | 14985 | 12235 | 27220 | 44.9% |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B79_0n_STRATEGY_COMPLETION_REPORT.md",
+        "line": 165,
+        "excerpt": "| `strategy-sync.ts` per-class loop + CORE_STRATEGIES 17→19 | Crypto rows preserve existing `enabled` state; new strong_bull_trend + orb rows added with `enabled: false` (default). |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_1_5_COMPLETION_REPORT.md",
+        "line": 53,
+        "excerpt": "- `strong_bull_trend` excluded globally (B63 sourcePool routing, not canonical-favored)"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_1_5_COMPLETION_REPORT.md",
+        "line": 59,
+        "excerpt": "**Contract lock:** new `server/tests/unit/sync-canonical-bridge.test.ts` (9 tests) asserts: (1) top-level byAssetClass shape; (2) crypto_spot + xstock_spot both present; (3) every regime has favoredStrategies + favoredSignalTypes + minConfidence + riskMultiplier; (4) crypto HVU CONTAINS defensive_hedge; (5) xstock HVU NOT contains defensive_hedge; "
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_4_7_COMPLETION_REPORT.md",
+        "line": 22,
+        "excerpt": "2. **Diff-B (Langston R1/R2 — the batch's biggest catch):** the bridge's ASSET_CLASS_OVERRIDES conflated class-INELIGIBILITY with favored-LIST curation. The naive tree re-point would have **silently disabled the quant-strong_trend lane** (strong_bull_trend excluded from every materialized tree; the VTS eval loop derives entirely from the tree) — a "
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_4_7_COMPLETION_REPORT.md",
+        "line": 32,
+        "excerpt": "- **R2 full closure:** first fresh TFS/IE strong_bull_trend admit through chunk-B code (both classes sat in STRUCTURAL_TRANSITION all post-deploy) — system-alert `b47_sbt_fresh_admit` fires 2026-06-12T19:00Z."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_63_COMPLETION_REPORT.md",
+        "line": 46,
+        "excerpt": "| 5 | `strong_bull_trend` strategy | Implementation | ✅ SHIPPED | `server/strategies/strong-bull-trend.ts` live since B63.1 |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_63_COMPLETION_REPORT.md",
+        "line": 413,
+        "excerpt": "Either **(a)** build a new dedicated `strong_bull_pullback` strategy with its own detector tuned for actual continuation patterns (not the existing pullback geometry), OR **(b)** remove vwap_pullback from the strong-trend lane entirely and let `strong_bull_trend` carry the lane alone."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_63_COMPLETION_REPORT.md",
+        "line": 433,
+        "excerpt": "| `strong_bull_trend` (lane-mate) WR in same windows | **23.9%** |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_63_COMPLETION_REPORT.md",
+        "line": 435,
+        "excerpt": "| `strong_bull_trend` WR excluding 2026-04-22 | 32.3% (n=282) |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_65_5_COMPLETION_REPORT.md",
+        "line": 14,
+        "excerpt": "The 57-trade vwap_pullback cohort that produced the B63 Item 13 BUILD_DEDICATED verdict was contaminated by a single catastrophic day (2026-04-22) that drove virtually all of the cohort net loss. Sibling-strategy WR in the same ±60min windows was 25.8% (vs. cohort 27.0%), and the lane-mate `strong_bull_trend` was at 23.9% in the same windows. Exclu"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_2_COMPLETION_REPORT.md",
+        "line": 79,
+        "excerpt": "strong_bull_trend   542"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_2_COMPLETION_REPORT.md",
+        "line": 115,
+        "excerpt": "5. **`CLAUDE.md` \"17 canonical strategies\" reference:** STALE — actual count is **18** (B63 added `strong_bull_trend` to the original 17)."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_COMPLETION_REPORT.md",
+        "line": 38,
+        "excerpt": "| **Slice 3b** — 6 remaining strategy files | `9f30df9a` | `strategy.{inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, support_bounce, strong_bull_trend}` | 57 | Boot warmup all 6 modules; identifySupportLevels helper also bulk-reads its module |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_COMPLETION_REPORT.md",
+        "line": 72,
+        "excerpt": "| B72-STRAT-004 | SBT_ANTI_EXHAUSTION_ATR | Slice 3b migrated as part of `strategy.strong_bull_trend` bulk read. |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_COMPLETION_REPORT.md",
+        "line": 166,
+        "excerpt": "[B72][warmup] prefetched module_constants module='strategy.strong_bull_trend' rows=9"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_COMPLETION_REPORT.md",
+        "line": 173,
+        "excerpt": "- Strategy signal generation post-deploy: `[B63][STRONG_BULL_TREND] SIGNAL ... DBS=0.528 ... confidence=0.832` confirmed (Commit A boot test)."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_COMPLETION_REPORT.md",
+        "line": 231,
+        "excerpt": "`server/strategies/` contains **9** active canonical strategy files post-Phase-15b: `adaptive_flow, defensive_hedge, inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, strong_bull_trend, support_bounce, volatility_edge`."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_72_COMPLETION_REPORT.md",
+        "line": 269,
+        "excerpt": "- **18 canonical strategies** (verified: `STRATEGY_DISPLAY_NAMES` in `server/config/canonical-regime-strategy-map.ts:365–385`). The CLAUDE.md \"17 canonical\" reference is stale — actual count is 18 (B63 added `strong_bull_trend` to the original 17)."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_73_PROGRESS_REPORT.md",
+        "line": 36,
+        "excerpt": "**Verified end-to-end:** ad-hoc `npm run b67:replay-ablation` matched 4 rows (FLOW/USD strong_bull_trend close); API returns `bothAdmit=1 replayed=1` per factor; B73 first post-fix close populated 12 differentiated rows (A=`source: realized_truth`, B-L=`source: realized_inherited` with metadata explaining why each didn't fire)."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_79_0d_COMPLETION_REPORT.md",
+        "line": 24,
+        "excerpt": "| 3 | Register ORB dispatch block in signal-orchestrator | YES | Block after strong_bull_trend with `resolveAssetClass(symbol,'kraken') === 'xstock_spot'` guard |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\BATCH_B_NEW_53_1_COMPLETION_REPORT.md",
+        "line": 10,
+        "excerpt": "1. **All 13 fields populate on crypto admitted rows — YES.** Live-confirmed: the first post-deploy admitted row (ESPORTS/USD `strong_bull_trend`, 02:38Z) populated all 13 at 100% (entryPrice/target/stopLoss/quantity/expectedEdge/atrAtOpen/pairIdHash/regimeConfidenceRaw/macroModifierValue/phase/phaseAgeSeconds/strategyPhaseWeight + regimeConfidenceM"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_REORG_B2_3_COMPLETION_REPORT.md",
+        "line": 22,
+        "excerpt": "- **crypto_spot:** mean_reversion 2.88, vwap_pullback 2.44, strong_bull_trend 1.95, range_trade 1.71, reverse_impulse 2.40, morning_star 1.39, support_bounce 1.0, volatility_edge 1.0; `*` default 2.0."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_REORG_B3_3_COMPLETION_REPORT.md",
+        "line": 48,
+        "excerpt": "`[reorg-B3.2][VTS][TAG_NO_DROP]` markers FIRED post-deploy — e.g. `USDC/AUD/strong_bull_trend"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_REORG_B3_3_COMPLETION_REPORT.md",
+        "line": 84,
+        "excerpt": "(`USDC/AUD/strong_bull_trend rr=2.00`, `USDT/GBP/volatility_edge`) — the strategy-level un-strangle confirmed"
+      }
+    ]
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "detectStrongBullTrend",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "favoredListExcludes",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_4_7_COMPLETION_REPORT.md",
+        "line": 22,
+        "excerpt": "2. **Diff-B (Langston R1/R2 — the batch's biggest catch):** the bridge's ASSET_CLASS_OVERRIDES conflated class-INELIGIBILITY with favored-LIST curation. The naive tree re-point would have **silently disabled the quant-strong_trend lane** (strong_bull_trend excluded from every materialized tree; the VTS eval loop derives entirely from the tree) — a "
+      }
+    ]
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "getAllowedStrategies",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "strong_trend",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "B-4.7",
+    "matched_lines": 4,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_4_7_COMPLETION_REPORT.md",
+        "line": 1,
+        "excerpt": "# B-4.7 COMPLETION REPORT — Per-asset-class regime (#162) + canonical map per-class source (#163)"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_5_AMR_COMPLETION_REPORT.md",
+        "line": 57,
+        "excerpt": "| lifecycle | xstock | fixtures + history | — | — | Obj-3a fixtures CI-green; live overnight flip + ladder damping evidenced; weekend history unavailable (out.log truncated in B-4.6-A; events.json carries none) → prior B-NEW-49/B-4.7 weekend verifications cited; **first AMR weekend = Jun 13-15 soak alert** |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_XSTOCK_GLOBALS_COMPLETION_REPORT.md",
+        "line": 13,
+        "excerpt": "`B-4.7` made `registerOpenVtsTrade` (vts-runner.ts:3062, 3076-3078) **caller-pass-only** — `input.X ?? undefined`, no cache back-fill (kept the fill only for `pairFriction`). The crypto inline open-path (vts-runner.ts:1561-1576) passes the four globals; the **xStock caller** (`eval-cycle.ts` xOpenTrade) set only `pairDirectionalBias[Score]`, never "
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B7_2a_COMPLETION_REPORT.md",
+        "line": 18,
+        "excerpt": "| 2 | Every fee read composes from the merge site, class per site | **YES** | cost-model crypto lane + tec-costs + routes cost-diag (`crypto_spot` — the crypto-only cache lane, Langston-verified justified); market-indicators (fn `assetClass` param — class-filtered sample, xstock routed to the store pre-loop); telemetry-aggregator (at-write entry st"
+      }
+    ]
+  },
+  {
+    "group": "holding",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "maxHoldingMs",
+    "matched_lines": 5,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 143,
+        "excerpt": "- **#577 RESOLVED 2026-07-24 (CC-B; P19-B8.5j) - THE 24h MAX-HOLD FORCE-CLOSE IS NOW A GOVERNED SWITCH, SHIPPED OFF (paper+live); THE MAX-HOLD POLICY ITSELF IS DEFERRED TO A KYLE-LED DEBATE.** **Trigger:** P19-B8.5f (#550) repaired the `maxHoldingMs` carry, so the 24h exit fired for the FIRST time in `closed_trades` history - 4 xStock `vwap_pullbac"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 147,
+        "excerpt": "- **#574 OPEN 2026-07-23 (CC-A; surfaced by the #558 pre-implementation audit; Langston re-read the two load-bearing cites at the ref) — THE LIVE `r_multiple` RANKER'S EXPECTANCY KERNEL RUNS ON A FABRICATED `VolNoise=0.3` (**DI is FINE — claim corrected, see below**), AND THE ONE LOG THAT WOULD SHOW IT IS SUPPRESSED ON THAT EXACT PATH.** **STRUCTUR"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 164,
+        "excerpt": "- **#560 RESOLVED 2026-07-27 (P19-B8.5h; ≡ #377) (KYLE spotted it in the RTB table and narrowed it himself — \"it's just for xStock where we're not getting a DBS in the RTB\") — ★★ xSTOCK DBS + DI ARE COMPUTED AND THEN NEVER REACH THE RTB CARRY. MEASURED: crypto 83/83 carry both; xStock 0/28 carry either. TOTAL, not partial.** **ROOT CAUSE (traced at"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 188,
+        "excerpt": "- **#550 OPEN 2026-07-20 (CC-B; Kyle §9.3 UI catch — positions lingering 3-5 days without hitting stop or target, \"the crypto trade seems dead\") — ★★ THE 24-HOUR MAX-HOLD TIME-EXIT IS COMPUTED ON EVERY SIGNAL BUT NEVER REACHES THE OPEN POSITION, SO IT HAS NEVER FIRED. A REAL TRADING-BEHAVIOUR DEFECT (rule 24 outcome 1).** **VERIFIED end-to-end:** ("
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 189,
+        "excerpt": "- **#549 OPEN 2026-07-20 (CC-B; Kyle §9.3 UI catch on the Open Trades table — \"inconsistent data feeding in... needs to be investigated and fixed\") — ★ OPEN-TRADES FIELD-POPULATION INTEGRITY: FOUR DISTINCT GAPS, NOT ONE, with DIFFERENT causes (rule 24 — do NOT collapse them).** Measured on `active_open_positions`, all 15 live rows, 2026-07-20 20:xx"
+      }
+    ]
+  },
+  {
+    "group": "holding",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "max_hold_switch",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 143,
+        "excerpt": "- **#577 RESOLVED 2026-07-24 (CC-B; P19-B8.5j) - THE 24h MAX-HOLD FORCE-CLOSE IS NOW A GOVERNED SWITCH, SHIPPED OFF (paper+live); THE MAX-HOLD POLICY ITSELF IS DEFERRED TO A KYLE-LED DEBATE.** **Trigger:** P19-B8.5f (#550) repaired the `maxHoldingMs` carry, so the 24h exit fired for the FIRST time in `closed_trades` history - 4 xStock `vwap_pullbac"
+      }
+    ]
+  },
+  {
+    "group": "holding",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "P19-B8.5j",
+    "matched_lines": 1,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 143,
+        "excerpt": "- **#577 RESOLVED 2026-07-24 (CC-B; P19-B8.5j) - THE 24h MAX-HOLD FORCE-CLOSE IS NOW A GOVERNED SWITCH, SHIPPED OFF (paper+live); THE MAX-HOLD POLICY ITSELF IS DEFERRED TO A KYLE-LED DEBATE.** **Trigger:** P19-B8.5f (#550) repaired the `maxHoldingMs` carry, so the 24h exit fired for the FIRST time in `closed_trades` history - 4 xStock `vwap_pullbac"
+      }
+    ]
+  },
+  {
+    "group": "holding",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "maxHoldingMs",
+    "matched_lines": 12,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\F_G_1_PROGRESS_REPORT.md",
+        "line": 134,
+        "excerpt": "⛔ **THE ONE UNPROVEN HOP, AND IT IS A GATE ON STEP 8:** `rtb_signals` row → promoted signal object, a **fourth** curated rebuild in the same family as `enrichedMetadata`, `maxHoldingMs` and `atr_at_open`. **Code evidence:** that conversion **spreads** (`active-execution-engine.ts` — `metadata: { ...((signal.metadata as any) ?? {}), … }`) and its ow"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 9,
+        "excerpt": "> **THE FIX WORKS, with direct evidence: 8 of 8 `rtb_signals` BUILT since the deploy (`queued_at > 2026-07-22T11:16Z`) carry `maxHoldingMs`.**"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 11,
+        "excerpt": "> **★ BUT THE TRIGGER I ARMED FIRED FALSE, AND THE REASON IS THE TRANSFERABLE PART.** I wrote the criterion as *\"a position OPENED after the deploy that lacks the value ⇒ REOPEN\"*. On re-check, **`SKHY/USD` opened 12:33Z — 77 minutes post-deploy — with `maxHoldingMs` NULL**, which by my own wording meant reopen the batch. It is not a failure: **the"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 17,
+        "excerpt": "> **⚠️ EXPECTED RESIDUAL, so nobody later reads it as a defect: pre-deploy queued signals will keep producing positions without `maxHoldingMs` until the queue turns over.** Self-limiting, and NOT failures."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 22,
+        "excerpt": "> **OBJ-1's carry is UNIT-proven and deployed, but NOT yet proven in production.** At deploy time all 15 open positions **predated the deploy**, so `maxHoldingMs` was absent on 0/15 **by expectation, not by failure** — the fix only affects positions opened after 11:16Z. A verification alert is armed (fires 18:00Z) carrying the exact query and an ex"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 30,
+        "excerpt": "| **1 — close the max-hold drop** | ✅ shipped, ⏳ live-unproven | `maxHoldingMs` carried at the rebuild; `:3143` spreads it onto the position. Fence test fails pre-fix. |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 31,
+        "excerpt": "| **2 — fix the carry MECHANISM, not the field** | ✅ | `SQESignalInput.metadata` narrowed from `Record<string, unknown>` to `SQESignalMetadata` with `maxHoldingMs` **required** ⇒ omission is a **compile error**. |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 38,
+        "excerpt": "**One root, three symptoms.** `signal-orchestrator.ts` builds the sized-signal metadata as a **fresh object from an explicit field list** and never spreads `rawSignal.metadata`. So `maxHoldingMs` and `atr` died there while `regime` survived — it rides `_displayContext`, which *is* spread. **The 0/15-vs-13/15 asymmetry was two transit paths, not inc"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 66,
+        "excerpt": "- **`MAX_HOLD` over `TIME_EXIT`** — ruled correct, and it is **§16 canonical-terms governance**, not preference: the system's own `max_holding_period`/`maxHoldingMs` vocabulary beats the industry paraphrase."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5F_COMPLETION_REPORT.md",
+        "line": 67,
+        "excerpt": "- **The throw is not too aggressive** — he traced whether it could refuse a *legitimate* signal and proved it cannot: `stampMaxHoldingMs` always assigns a positive finite value earlier in the same function, and the VTS never enters this build path. It fires only on an `as any`/JSON bypass."
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 25,
+        "excerpt": "and there is no xStock row. **P19-B8.5f (#550) repaired the `maxHoldingMs` carry**, so the exit fired for"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 34,
+        "excerpt": "| OBJ-2 | Gate the active (paper/live) enforcement | ✅ | `active-execution-engine.ts` `checkExitConditions` `if (maxHoldingMs !== undefined && this.isMaxHoldEnabled())`; `isMaxHoldEnabled` resolves `enabled_live`/`enabled_paper` by `this.mode`. |"
+      }
+    ]
+  },
+  {
+    "group": "holding",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "max_hold_switch",
+    "matched_lines": 5,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 33,
+        "excerpt": "| OBJ-1 | Three DB-governed switches (`enabled_paper/live/vts`) | ✅ | `module_constants.max_hold_switch`, GLOBAL_KEY (lane-keyed, not asset-class). |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 38,
+        "excerpt": "| OBJ-5 | Warmup | ✅ | `max_hold_switch` added to `b72-warmup.ts PREFETCH_MODULES`; live-verified 0 \"not warm\" throws. |"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 61,
+        "excerpt": "  booleans** (paper=false, live=false, vts=true) → THEN build+restart. `max_hold_switch` warmed (0 \"not"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 74,
+        "excerpt": "a transient triggered by any restart, a different cache from `max_hold_switch`. Exit monitor evaluating 12"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 79,
+        "excerpt": "SYSTEM_IMPACT_MAP (new `max_hold_switch` module + two gated sites), SYSTEM_MANUAL (the switch, the fail-safe"
+      }
+    ]
+  },
+  {
+    "group": "holding",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "P19-B8.5j",
+    "matched_lines": 2,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 1,
+        "excerpt": "# P19-B8.5j — COMPLETION REPORT"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B8_5J_COMPLETION_REPORT.md",
+        "line": 4,
+        "excerpt": "**Batch:** P19-B8.5j · **change-class:** architecture (per scope header) · **Owner:** CC-B"
+      }
+    ]
+  },
+  {
+    "group": "venue_fees",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "#1010",
+    "matched_lines": 7,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7485,
+        "excerpt": "### ⭐⭐ #1010 OPEN 2026-09-06 (CC-B; Kyle supplied the venue captures, every figure re-derived at the ref and in the live database) — ⛔⛔ WE CHARGE xSTOCK THE CRYPTO FEE SCHEDULE. THE VENUE'S PUBLISHED xSTOCK TAKER IS **8× LOWER** AND ITS MAKER IS A **REBATE**, SO OUR MAKER FEE HAS THE WRONG SIGN"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7508,
+        "excerpt": "### ➕ #1010 AMENDMENT 2026-09-06 (same day; Kyle supplied the AUTHENTICATED in-account fee dialogs) — ✅✅ BOTH OPEN CONDITIONS ARE NOW CLOSED, THE DIVERGENCE IS CONFIRMED ON OUR OWN ACCOUNT, AND A **SECOND** DEFECT IS NOW VISIBLE"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7514,
+        "excerpt": "⭐⭐ **AND THE DIVERGENCE IS CONFIRMED PER-ORDER, NOT MERELY PER-SCHEDULE:** the market header reads **`FEES  Maker rebate  −0.02% / 0.10%`** and the order form's own estimator reads **`Est. trading fee   Maker rebate   −0.0001 USD`**. ⇒ **the venue quotes Kyle's account a REBATE on the xStock maker leg while we book a 0.40 % charge. `#1010` stands, "
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7522,
+        "excerpt": "⚠️ **Spot volume is 0.00 today only because nothing has ever traded LIVE.** ⇒ **within days of go-live the hardcoded Tier 1 is stale in the OPPOSITE direction — we would over-charge ourselves and reject candidates that actually clear.** ★ **So `#1010` is not \"put the right two numbers in\": it is \"the fee model must resolve a tier, per product, from"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7525,
+        "excerpt": "**MISTAKE: wrong-object [`#1010`] — I priced a lever against a ladder without ever measuring the account's position on it.**"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7531,
+        "excerpt": "### #1011 OPEN 2026-09-06 (CC-B, filed with `#1010` — same root, different failure) — ⚠️ NOTHING WATCHES THE VENUE'S PUBLISHED FEE SCHEDULE, AND IT CHANGED 59 DAYS BEFORE WE NOTICED"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7537,
+        "excerpt": "⛔⛔ **THE DESIGN CONSTRAINT, and it is the whole finding: THERE ARE THREE OBJECTS, NOT TWO** — the live PAGES, our TRANSCRIPTION (`external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md`), and the DATABASE (`module_constants` / `fee_model`). ⇒ **a watcher that only diffs the pages catches the NEXT venue change and is structurally blind to the drift we"
+      }
+    ]
+  },
+  {
+    "group": "venue_fees",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "fee_model",
+    "matched_lines": 8,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 16,
+        "excerpt": "- **#607 OPEN 2026-07-28 (measured by Langston at `42a9ff34` from PERSISTED data, surfaced out of #604 leg (d)) — ★ `frictionCost` IS NON-FINITE ON ~7% OF VTS CLOSES, AND IT — NOT A MISSING `expectedEdge` — IS WHAT SILENTLY DISCARDS AMR EV-GAP OBSERVATIONS.** **MEASURED, `logs/virtual_trades/` 07-24→07-28, 247 rows: 18 non-finite `expectedEdge` (7."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 352,
+        "excerpt": "- **#330 — Two fee-source paths (EV gate `getCachedCostMetrics` vs fill `getFrictionForAssetClass`).** Both resolve the same DB `fee_model` today (no live divergence) but are two code paths to one fact. **HOME (revised 2026-07-01, P19-B7.2 Step-4 Q1 — SPLIT, CC-B + Langston consensus):** SPLIT OUT of P19-B7.2 into its OWN dedicated dated small-batc"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1759,
+        "excerpt": "**(2) CRYPTO NEGATIVE NET-EV AT GENERATION — Kyle's question answered with geometry, not fees.** Fees are IDENTICAL by class (fee_model: 0.8%/0.4% both — #645). **MEASURED over 14d closed trades: crypto avg target 2.26% / stop 1.59%; xStock avg target 5.65% / stop 3.77%.** Round-trip taker friction ~1.8% consumes **~80% of crypto's average target v"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1853,
+        "excerpt": "**★ AND IT IS NOT A FEE ASYMMETRY — ruled out by measurement.** `module_constants.fee_model`: `spot_taker_fee = 0.008` and `spot_maker_fee = 0.004` for **BOTH** `crypto_spot` and `xstock_spot`. **Identical.** ⇒ the observed split (crypto fills the exploration lane, xStock trades organically — #644) is **not** crypto paying more to trade."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 2810,
+        "excerpt": "- **#337 — `expectancy_gates.friction_safety_buffer` per-class evaluation (HOME: Phase-25 calibration item 25-18 ↔ this issue; surfaced by Langston Step-8 2026-06-20).** reorg-B2 split the 6 ROI gate knobs per-class but kept `friction_safety_buffer` a single global `'*'` row BY DESIGN — it is a uniform safety **margin** on top of the friction **mod"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7490,
+        "excerpt": "| `fee_model` / `xstock_spot` | `spot_taker_fee` | **0.008** | **0.0010** | **8× too high** |"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7491,
+        "excerpt": "| `fee_model` / `xstock_spot` | `spot_maker_fee` | **0.004** | **−0.0002** | **WRONG SIGN — we book a cost where the venue pays a rebate** |"
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7537,
+        "excerpt": "⛔⛔ **THE DESIGN CONSTRAINT, and it is the whole finding: THERE ARE THREE OBJECTS, NOT TWO** — the live PAGES, our TRANSCRIPTION (`external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md`), and the DATABASE (`module_constants` / `fee_model`). ⇒ **a watcher that only diffs the pages catches the NEXT venue change and is structurally blind to the drift we"
+      }
+    ]
+  },
+  {
+    "group": "venue_fees",
+    "corpus": "ledger",
+    "literal_case_insensitive_query": "spot_maker_fee",
+    "matched_lines": 2,
+    "matches": [
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 1853,
+        "excerpt": "**★ AND IT IS NOT A FEE ASYMMETRY — ruled out by measurement.** `module_constants.fee_model`: `spot_taker_fee = 0.008` and `spot_maker_fee = 0.004` for **BOTH** `crypto_spot` and `xstock_spot`. **Identical.** ⇒ the observed split (crypto fills the exploration lane, xStock trades organically — #644) is **not** crypto paying more to trade."
+      },
+      {
+        "file": "1-system-manual\\RUNNING_ISSUES.md",
+        "line": 7491,
+        "excerpt": "| `fee_model` / `xstock_spot` | `spot_maker_fee` | **0.004** | **−0.0002** | **WRONG SIGN — we book a cost where the venue pays a rebate** |"
+      }
+    ]
+  },
+  {
+    "group": "venue_fees",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "#1010",
+    "matched_lines": 0,
+    "matches": []
+  },
+  {
+    "group": "venue_fees",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "fee_model",
+    "matched_lines": 3,
+    "matches": [
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\B_4_5_COMPLETION_REPORT.md",
+        "line": 9,
+        "excerpt": "| 1 | Fees DB-governed, per-asset-class, fail-hard | **YES** — `fee_model` rows (0.008/0.004 decimal × crypto_spot/xstock_spot), b72 PREFETCH + strict boot assertion (both constants × both classes + (0,0.05] sanity rails). Boot evidence: `[B45][warmup] fee_model verified: crypto taker=0.008 maker=0.004 | xstock ...` on both deploy restarts. Resolve"
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_B7_2a_COMPLETION_REPORT.md",
+        "line": 20,
+        "excerpt": "| 4 | Tests + docs | **YES** | NEW `p19-b7-2a-fee-consolidation.test.ts` 5/5 (poisoned-fee-cannot-leak; fee_model-visibility/no-TTL; **friction identity BOTH classes + the diverged-fees leg that fails on any friction hardcode**; clamp-for-measurements-only w/ a 3%-above-bound fee passing unclamped; stats-wrapper shape); cost_cache + cost_telemetry "
+      },
+      {
+        "file": "Claude Comms and Packages\\Batch Completion\\P19_REORG_B2_COMPLETION_REPORT.md",
+        "line": 54,
+        "excerpt": "`expectancy_gates.friction_safety_buffer` retains its single global `'*'` row — it was **not** split per-class, by design. It is a uniform safety **margin** applied on top of the friction **model**, and the model itself is already per-class (`fee_model` + per-class spreads carry the crypto-vs-xStock fee/spread/settlement differences). So the materi"
+      }
+    ]
+  },
+  {
+    "group": "venue_fees",
+    "corpus": "batch_reports",
+    "literal_case_insensitive_query": "spot_maker_fee",
+    "matched_lines": 0,
+    "matches": []
+  }
+]

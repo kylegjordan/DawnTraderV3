@@ -1,0 +1,226 @@
+[
+  {
+    "asset_class": "crypto_spot",
+    "population": "bar-origin weighted, continuous sequences only, overlapping, fee-only scenarios",
+    "horizon_min": 5,
+    "n_origins": 214070,
+    "n_symbols": 379,
+    "absolute_endpoint_bps_p50": 14.413171758429488,
+    "absolute_endpoint_bps_p90": 89.24853164475722,
+    "up_excursion_bps_p50": 11.159252706764988,
+    "up_excursion_bps_p90": 89.1812005988777,
+    "current_rung_scenarios": {
+      "TT": {
+        "hurdle_bps": 161.290322580645,
+        "fraction_endpoint_above": 0.024683514738169758,
+        "fraction_up_excursion_above": 0.0484467697482132
+      },
+      "MT": {
+        "hurdle_bps": 120.96774193548487,
+        "fraction_endpoint_above": 0.03693184472368851,
+        "fraction_up_excursion_above": 0.06979025552389405
+      },
+      "MM": {
+        "hurdle_bps": 80.32128514056325,
+        "fraction_endpoint_above": 0.060578315504274304,
+        "fraction_up_excursion_above": 0.11188396318961087
+      }
+    }
+  },
+  {
+    "asset_class": "crypto_spot",
+    "population": "bar-origin weighted, continuous sequences only, overlapping, fee-only scenarios",
+    "horizon_min": 15,
+    "n_origins": 120006,
+    "n_symbols": 200,
+    "absolute_endpoint_bps_p50": 19.686992009825268,
+    "absolute_endpoint_bps_p90": 141.77903150291547,
+    "up_excursion_bps_p50": 18.461265154881,
+    "up_excursion_bps_p90": 155.89860048044636,
+    "current_rung_scenarios": {
+      "TT": {
+        "hurdle_bps": 161.290322580645,
+        "fraction_endpoint_above": 0.05077246137693115,
+        "fraction_up_excursion_above": 0.09636184857423795
+      },
+      "MT": {
+        "hurdle_bps": 120.96774193548487,
+        "fraction_endpoint_above": 0.06733829975167908,
+        "fraction_up_excursion_above": 0.1272269719847341
+      },
+      "MM": {
+        "hurdle_bps": 80.32128514056325,
+        "fraction_endpoint_above": 0.0983700814959252,
+        "fraction_up_excursion_above": 0.1832575037914771
+      }
+    }
+  },
+  {
+    "asset_class": "crypto_spot",
+    "population": "bar-origin weighted, continuous sequences only, overlapping, fee-only scenarios",
+    "horizon_min": 60,
+    "n_origins": 67388,
+    "n_symbols": 75,
+    "absolute_endpoint_bps_p50": 24.476560018921177,
+    "absolute_endpoint_bps_p90": 180.23933610931223,
+    "up_excursion_bps_p50": 27.46022049461616,
+    "up_excursion_bps_p90": 218.37045658450543,
+    "current_rung_scenarios": {
+      "TT": {
+        "hurdle_bps": 161.290322580645,
+        "fraction_endpoint_above": 0.07482044280880869,
+        "fraction_up_excursion_above": 0.1247106309728735
+      },
+      "MT": {
+        "hurdle_bps": 120.96774193548487,
+        "fraction_endpoint_above": 0.09587760432124413,
+        "fraction_up_excursion_above": 0.1599097762212857
+      },
+      "MM": {
+        "hurdle_bps": 80.32128514056325,
+        "fraction_endpoint_above": 0.13453433845788568,
+        "fraction_up_excursion_above": 0.24014661364041076
+      }
+    }
+  },
+  {
+    "asset_class": "crypto_spot",
+    "population": "bar-origin weighted, continuous sequences only, overlapping, fee-only scenarios",
+    "horizon_min": 240,
+    "n_origins": 46022,
+    "n_symbols": 19,
+    "absolute_endpoint_bps_p50": 31.99355990087249,
+    "absolute_endpoint_bps_p90": 207.2634603254775,
+    "up_excursion_bps_p50": 47.18836020448425,
+    "up_excursion_bps_p90": 208.05843983406248,
+    "current_rung_scenarios": {
+      "TT": {
+        "hurdle_bps": 161.290322580645,
+        "fraction_endpoint_above": 0.07492069010473251,
+        "fraction_up_excursion_above": 0.1462995958454652
+      },
+      "MT": {
+        "hurdle_bps": 120.96774193548487,
+        "fraction_endpoint_above": 0.10638390335057146,
+        "fraction_up_excursion_above": 0.21422363217591586
+      },
+      "MM": {
+        "hurdle_bps": 80.32128514056325,
+        "fraction_endpoint_above": 0.168028334274912,
+        "fraction_up_excursion_above": 0.3440963017687193
+      }
+    }
+  },
+  {
+    "asset_class": "xstock_spot",
+    "population": "bar-origin weighted, continuous sequences only, overlapping, fee-only scenarios",
+    "horizon_min": 5,
+    "n_origins": 483172,
+    "n_symbols": 476,
+    "absolute_endpoint_bps_p50": 8.709958385754168,
+    "absolute_endpoint_bps_p90": 35.18692536706426,
+    "up_excursion_bps_p50": 7.167577976014972,
+    "up_excursion_bps_p90": 33.00388734525696,
+    "current_rung_scenarios": {
+      "TT": {
+        "hurdle_bps": 20.02002002001957,
+        "fraction_endpoint_above": 0.11490111181939351,
+        "fraction_up_excursion_above": 0.19925616550627934
+      },
+      "MT": {
+        "hurdle_bps": 8.00800800800916,
+        "fraction_endpoint_above": 0.2665158577069863,
+        "fraction_up_excursion_above": 0.4671297177816595
+      },
+      "MM": {
+        "hurdle_bps": -3.9992001599675753,
+        "fraction_endpoint_above": 0.638683532986183,
+        "fraction_up_excursion_above": 0.9780057619232903
+      }
+    }
+  },
+  {
+    "asset_class": "xstock_spot",
+    "population": "bar-origin weighted, continuous sequences only, overlapping, fee-only scenarios",
+    "horizon_min": 15,
+    "n_origins": 354332,
+    "n_symbols": 455,
+    "absolute_endpoint_bps_p50": 16.14817794738488,
+    "absolute_endpoint_bps_p90": 63.52581977566418,
+    "up_excursion_bps_p50": 14.60629398486235,
+    "up_excursion_bps_p90": 62.83802588689106,
+    "current_rung_scenarios": {
+      "TT": {
+        "hurdle_bps": 20.02002002001957,
+        "fraction_endpoint_above": 0.21940157818091507,
+        "fraction_up_excursion_above": 0.39679170947021436
+      },
+      "MT": {
+        "hurdle_bps": 8.00800800800916,
+        "fraction_endpoint_above": 0.3649289367034307,
+        "fraction_up_excursion_above": 0.6688303624849011
+      },
+      "MM": {
+        "hurdle_bps": -3.9992001599675753,
+        "fraction_endpoint_above": 0.5859504645360848,
+        "fraction_up_excursion_above": 0.9896311933440953
+      }
+    }
+  },
+  {
+    "asset_class": "xstock_spot",
+    "population": "bar-origin weighted, continuous sequences only, overlapping, fee-only scenarios",
+    "horizon_min": 60,
+    "n_origins": 200790,
+    "n_symbols": 329,
+    "absolute_endpoint_bps_p50": 33.074307970772935,
+    "absolute_endpoint_bps_p90": 129.57756260460187,
+    "up_excursion_bps_p50": 33.90287022534633,
+    "up_excursion_bps_p90": 141.38763142219267,
+    "current_rung_scenarios": {
+      "TT": {
+        "hurdle_bps": 20.02002002001957,
+        "fraction_endpoint_above": 0.3581353653070372,
+        "fraction_up_excursion_above": 0.6588624931520494
+      },
+      "MT": {
+        "hurdle_bps": 8.00800800800916,
+        "fraction_endpoint_above": 0.45326460481099656,
+        "fraction_up_excursion_above": 0.8362816873350266
+      },
+      "MM": {
+        "hurdle_bps": -3.9992001599675753,
+        "fraction_endpoint_above": 0.5639175257731959,
+        "fraction_up_excursion_above": 0.9954679017879376
+      }
+    }
+  },
+  {
+    "asset_class": "xstock_spot",
+    "population": "bar-origin weighted, continuous sequences only, overlapping, fee-only scenarios",
+    "horizon_min": 240,
+    "n_origins": 57562,
+    "n_symbols": 154,
+    "absolute_endpoint_bps_p50": 72.46376811594347,
+    "absolute_endpoint_bps_p90": 293.43315223530067,
+    "up_excursion_bps_p50": 79.14381649964386,
+    "up_excursion_bps_p90": 337.3670700403375,
+    "current_rung_scenarios": {
+      "TT": {
+        "hurdle_bps": 20.02002002001957,
+        "fraction_endpoint_above": 0.46747854487335394,
+        "fraction_up_excursion_above": 0.8366978214794483
+      },
+      "MT": {
+        "hurdle_bps": 8.00800800800916,
+        "fraction_endpoint_above": 0.5182585733643723,
+        "fraction_up_excursion_above": 0.9274173934192697
+      },
+      "MM": {
+        "hurdle_bps": -3.9992001599675753,
+        "fraction_endpoint_above": 0.572443626003266,
+        "fraction_up_excursion_above": 0.9972377610228971
+      }
+    }
+  }
+]

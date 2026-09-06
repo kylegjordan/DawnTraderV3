@@ -1,0 +1,144 @@
+[
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "BTC/USD",
+    "horizon": 5,
+    "n": 7740,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "BTC/USD",
+    "horizon": 15,
+    "n": 7720,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "BTC/USD",
+    "horizon": 60,
+    "n": 7630,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "BTC/USD",
+    "horizon": 240,
+    "n": 7270,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "ETH/USD",
+    "horizon": 5,
+    "n": 7739,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "ETH/USD",
+    "horizon": 15,
+    "n": 7719,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "ETH/USD",
+    "horizon": 60,
+    "n": 7629,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "ETH/USD",
+    "horizon": 240,
+    "n": 7269,
+    "result": "PASS"
+  },
+  {
+    "check": "Q1 per-instrument totals and nonnegative admitted spreads",
+    "class": "crypto",
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "NVDA/USD",
+    "horizon": 5,
+    "n": 4394,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "NVDA/USD",
+    "horizon": 15,
+    "n": 3873,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "NVDA/USD",
+    "horizon": 60,
+    "n": 2992,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "NVDA/USD",
+    "horizon": 240,
+    "n": 1335,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "A/USD",
+    "horizon": 5,
+    "n": 610,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "A/USD",
+    "horizon": 15,
+    "n": 231,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "A/USD",
+    "horizon": 60,
+    "n": 0,
+    "result": "PASS"
+  },
+  {
+    "check": "independent datetime dictionary all-intervening-minutes",
+    "symbol": "A/USD",
+    "horizon": 240,
+    "n": 0,
+    "result": "PASS"
+  },
+  {
+    "check": "Q1 per-instrument totals and nonnegative admitted spreads",
+    "class": "xstock",
+    "result": "PASS"
+  },
+  {
+    "check": "57 fee hurdles settle to zero exact net quote cashflow",
+    "result": "PASS"
+  },
+  {
+    "check": "hourly descriptive range",
+    "class": "crypto",
+    "min_hour": "2026-09-03 17:00:00+00:00",
+    "min_bps": 4.990953915488615,
+    "max_hour": "2026-09-04 12:00:00+00:00",
+    "max_bps": 10.565860567047064
+  },
+  {
+    "check": "hourly descriptive range",
+    "class": "xstock",
+    "min_hour": "2026-09-04 19:00:00+00:00",
+    "min_bps": 4.543733434305359,
+    "max_hour": "2026-09-04 08:00:00+00:00",
+    "max_bps": 42.54950471221395
+  }
+]

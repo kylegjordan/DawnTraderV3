@@ -1,0 +1,7 @@
+# ⛔ FROZEN EVIDENCE — BYTE-EXACT, NO LINE-ENDING CONVERSION.
+# This set is hash-verified: SUBMISSION.md carries a SHA256 for REPORT.md and
+# ARTIFACT_SHA256.json hashes all 40 artifacts. Git's LF->CRLF conversion would
+# change the bytes on checkout, every hash would fail, and a reviewer re-verifying
+# the freeze would correctly distrust the whole set for a reason that had nothing
+# to do with its contents.
+* -text

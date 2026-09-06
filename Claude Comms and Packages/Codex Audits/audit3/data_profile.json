@@ -1,0 +1,220 @@
+{
+  "trade_rows": 706,
+  "columns": [
+    "id",
+    "symbol",
+    "asset_class",
+    "exchange",
+    "base_currency",
+    "mode",
+    "trade_mode",
+    "strategy_name",
+    "signal_type",
+    "pattern_type",
+    "pattern_strength",
+    "source_pool",
+    "filter_tier",
+    "side",
+    "quantity",
+    "intended_entry_price",
+    "actual_entry_price",
+    "entry_price",
+    "stop_loss",
+    "original_stop_price",
+    "take_profit",
+    "target_exit_price",
+    "actual_exit_price",
+    "exit_price",
+    "opened_at",
+    "closed_at",
+    "close_reason",
+    "confidence",
+    "regime_confidence_raw",
+    "regime_confidence_modulated",
+    "phase",
+    "phase_age_seconds",
+    "strategy_phase_weight",
+    "calibration_state",
+    "chosen_entry_mode",
+    "exit_fee_mode",
+    "exit_rest_outcome",
+    "exit_rested_at_price",
+    "exit_rest_duration_ms",
+    "ladder_rungs_hit",
+    "phantom_fill_suspect",
+    "entry_price_producer",
+    "entry_price_source",
+    "entry_decision_price",
+    "entry_observed_at_ms",
+    "entry_book_age_ms",
+    "exit_price_producer",
+    "exit_price_source",
+    "exit_decision_price",
+    "exit_observed_at_ms",
+    "exit_book_mid",
+    "exit_book_age_ms",
+    "exit_ticker_bid",
+    "exit_ticker_ask",
+    "exit_tick_cadence_ms",
+    "exit_fill_depth_age_ms",
+    "exit_book_state",
+    "exit_book_state_at_fill",
+    "exit_book_state_basis"
+  ],
+  "axes": {
+    "mode": {
+      "paper": 706
+    },
+    "trade_mode": {
+      "TARGET": 706
+    },
+    "asset_class": {
+      "crypto_spot": 442,
+      "xstock_spot": 264
+    },
+    "exchange": {
+      "kraken": 706
+    },
+    "close_reason": {
+      "stop_hit": 339,
+      "target_hit": 254,
+      "never_filled": 90,
+      "trailing_stop_hit": 14,
+      "<NULL>": 5,
+      "max_holding_period": 4
+    },
+    "entry_price_producer": {
+      "<NULL>": 642,
+      "crypto_ws_book_walk": 28,
+      "xstock_ticker_snap_walk": 23,
+      "kraken_ws_book_mid": 10,
+      "kraken_equities_ws": 1,
+      "kraken_rest_poller": 1,
+      "kraken_equities_ws_mid": 1
+    },
+    "exit_price_producer": {
+      "<NULL>": 644,
+      "kraken_ws_book_mid": 35,
+      "kraken_equities_ws_mid": 18,
+      "kraken_equities_ws": 9
+    },
+    "chosen_entry_mode": {
+      "maker": 394,
+      "taker": 312
+    },
+    "exit_fee_mode": {
+      "taker": 343,
+      "maker": 249,
+      "<NULL>": 114
+    }
+  },
+  "null_counts": {
+    "id": 0,
+    "symbol": 0,
+    "asset_class": 0,
+    "exchange": 0,
+    "base_currency": 0,
+    "mode": 0,
+    "trade_mode": 0,
+    "strategy_name": 0,
+    "signal_type": 0,
+    "pattern_type": 431,
+    "pattern_strength": 706,
+    "source_pool": 105,
+    "filter_tier": 706,
+    "side": 0,
+    "quantity": 0,
+    "intended_entry_price": 95,
+    "actual_entry_price": 95,
+    "entry_price": 0,
+    "stop_loss": 0,
+    "original_stop_price": 541,
+    "take_profit": 0,
+    "target_exit_price": 95,
+    "actual_exit_price": 95,
+    "exit_price": 95,
+    "opened_at": 0,
+    "closed_at": 5,
+    "close_reason": 5,
+    "confidence": 0,
+    "regime_confidence_raw": 124,
+    "regime_confidence_modulated": 124,
+    "phase": 124,
+    "phase_age_seconds": 124,
+    "strategy_phase_weight": 124,
+    "calibration_state": 0,
+    "chosen_entry_mode": 0,
+    "exit_fee_mode": 114,
+    "exit_rest_outcome": 441,
+    "exit_rested_at_price": 441,
+    "exit_rest_duration_ms": 441,
+    "ladder_rungs_hit": 0,
+    "phantom_fill_suspect": 0,
+    "entry_price_producer": 642,
+    "entry_price_source": 642,
+    "entry_decision_price": 642,
+    "entry_observed_at_ms": 693,
+    "entry_book_age_ms": 655,
+    "exit_price_producer": 644,
+    "exit_price_source": 644,
+    "exit_decision_price": 644,
+    "exit_observed_at_ms": 644,
+    "exit_book_mid": 671,
+    "exit_book_age_ms": 671,
+    "exit_ticker_bid": 652,
+    "exit_ticker_ask": 652,
+    "exit_tick_cadence_ms": 644,
+    "exit_fill_depth_age_ms": 679,
+    "exit_book_state": 703,
+    "exit_book_state_at_fill": 704,
+    "exit_book_state_basis": 703
+  },
+  "trade_times": {
+    "opened_at": {
+      "min": "2026-07-15 05:58:04.916+00",
+      "max": "2026-09-06 07:08:17.762+00"
+    },
+    "closed_at": {
+      "min": "2026-07-15 06:18:24.493+00",
+      "max": "2026-09-06 04:51:24.507+00"
+    }
+  },
+  "hashes": {
+    "code_changes_exit_path.csv": {
+      "bytes": 8778,
+      "sha256": "61f4ace846341a5051df6cc859c54cf8746033d970da3a9851cd99c34c4957fe"
+    },
+    "DATA_MANIFEST.md": {
+      "bytes": 8800,
+      "sha256": "cb535f4e1ef402429df8901c2b26f1cf25a0b7844a45f5e2ebbe59244d132ecb"
+    },
+    "deploys.txt": {
+      "bytes": 247,
+      "sha256": "c8b22a209499fbd665da5e530a7e137c3f96c908fcda291ab3c3382e0ebdd886"
+    },
+    "fee_ladder.csv": {
+      "bytes": 581,
+      "sha256": "1b7e20150f199690efc7e3feb197ca54b4d8e5f5d1c3b9494bad30565bcb6f11"
+    },
+    "quotes_crypto.csv": {
+      "bytes": 182394900,
+      "sha256": "914b8590befbb70c05961c9e9b4e51cee5acac09cde6b73cfcac026ac04f3298"
+    },
+    "quotes_xstock.csv": {
+      "bytes": 571949741,
+      "sha256": "f3d3a053da15f6ace4fbf86a2b840903746d34dd32d2ee5e3f22fef01390c47c"
+    },
+    "tape_1m_crypto.csv": {
+      "bytes": 100404530,
+      "sha256": "baafc4800ca895fb9ae1a61b0ed61ecedfaca57a89147f4df8f15f6d18a1763e"
+    },
+    "tape_1m_xstock.csv": {
+      "bytes": 111297477,
+      "sha256": "f51865f7c1ed50411e656354246490a53857759f49708ba225a1580c6971b672"
+    },
+    "trades_closed.csv": {
+      "bytes": 292423,
+      "sha256": "fb67b697fd943ffa2afa7fd3c0ccf1cf261997e45c0422a9760f1366c0fc6160"
+    }
+  }
+}

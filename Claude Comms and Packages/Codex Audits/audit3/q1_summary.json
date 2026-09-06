@@ -1,0 +1,74 @@
+[
+  {
+    "asset_class": "crypto_spot",
+    "population": "archived rows, event weighted unless stated",
+    "rows": 1068352,
+    "symbols": 528,
+    "start": "2026-09-03 09:13:41.993000+00:00",
+    "end": "2026-09-06 09:13:36.725000+00:00",
+    "exchanges": {
+      "kraken": 1068352
+    },
+    "valid_spreads": 1068352,
+    "nonpositive_or_nonfinite_sides": 0,
+    "crossed_positive": 0,
+    "locked_positive": 14202,
+    "duplicate_symbol_time": 0,
+    "positive_size_valid_quotes": 1068352,
+    "spread_bps_quantiles": {
+      "0.1": 0.09999750006315354,
+      "0.5": 6.670372429127669,
+      "0.9": 48.22597313124397,
+      "0.95": 83.65057057593981,
+      "0.99": 290.7230058000019
+    },
+    "receipt_gap_s_quantiles": {
+      "0.01": 4.051,
+      "0.1": 4.871,
+      "0.5": 16.245,
+      "0.9": 184.88070000000008,
+      "0.99": 1600.0370100000096
+    },
+    "equal_instrument_median_spread_bps": 25.419435229465023,
+    "symbols_with_zero_typical_1m_range": 368,
+    "symbols_with_measurable_typical_range": 160,
+    "equal_instrument_median_fraction_spread_ge_half_typical_range": 0.9939409831024888,
+    "equal_instrument_median_fraction_spread_ge_typical_range": 0.9191836568892107
+  },
+  {
+    "asset_class": "xstock_spot",
+    "population": "archived rows, event weighted unless stated",
+    "rows": 2887660,
+    "symbols": 467,
+    "start": "2026-09-04 00:00:00.214000+00:00",
+    "end": "2026-09-04 23:59:59.998000+00:00",
+    "exchanges": {
+      "kraken-equities": 2887660
+    },
+    "valid_spreads": 2887221,
+    "nonpositive_or_nonfinite_sides": 432,
+    "crossed_positive": 7,
+    "locked_positive": 194,
+    "duplicate_symbol_time": 0,
+    "positive_size_valid_quotes": 2884223,
+    "spread_bps_quantiles": {
+      "0.1": 1.9819641264497618,
+      "0.5": 7.689350249904175,
+      "0.9": 51.67209948086547,
+      "0.95": 115.28523156430099,
+      "0.99": 704.2932947419204
+    },
+    "receipt_gap_s_quantiles": {
+      "0.01": 4.0,
+      "0.1": 4.034,
+      "0.5": 4.618,
+      "0.9": 11.02,
+      "0.99": 134.4366400000006
+    },
+    "equal_instrument_median_spread_bps": 7.816163826793366,
+    "symbols_with_zero_typical_1m_range": 67,
+    "symbols_with_measurable_typical_range": 400,
+    "equal_instrument_median_fraction_spread_ge_half_typical_range": 0.999300488313436,
+    "equal_instrument_median_fraction_spread_ge_typical_range": 0.9450023959608151
+  }
+]

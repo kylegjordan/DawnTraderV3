@@ -1,0 +1,50 @@
+{
+  "n_records": 706,
+  "n_closed_timestamp": 701,
+  "n_missing_close": 5,
+  "n_never_filled": 90,
+  "n_negative_open_close_interval": 0,
+  "n_max_holding_period": 4,
+  "n_strata_inventory": 47,
+  "max_hold_records": [
+    {
+      "id": "f1e4c0bd-6f2c-4173-a563-18cb82f5e03b",
+      "symbol": "PM/USD",
+      "opened_at": "2026-07-22 14:54:43.714000+00:00",
+      "closed_at": "2026-07-23 14:54:44.921000+00:00"
+    },
+    {
+      "id": "51d21628-6edb-44cd-945a-9fb256fc2651",
+      "symbol": "MARA/USD",
+      "opened_at": "2026-07-22 19:33:08.404000+00:00",
+      "closed_at": "2026-07-23 19:33:09.190000+00:00"
+    },
+    {
+      "id": "1b77d7e3-cc6c-423f-aaa0-90c659e1e47f",
+      "symbol": "NOC/USD",
+      "opened_at": "2026-07-22 20:19:22.366000+00:00",
+      "closed_at": "2026-07-23 20:19:23.135000+00:00"
+    },
+    {
+      "id": "4b98c306-4a46-4f3c-978a-96191eff2d26",
+      "symbol": "MOS/USD",
+      "opened_at": "2026-07-22 20:20:51.753000+00:00",
+      "closed_at": "2026-07-23 20:20:53.132000+00:00"
+    }
+  ],
+  "strategy_counts_inventory": {
+    "sma_trend_ride": 157,
+    "vwap_pullback": 151,
+    "morning_star": 125,
+    "inside_bar_reversal": 68,
+    "pivot_shift": 65,
+    "reverse_impulse": 64,
+    "support_bounce": 47,
+    "volatility_edge": 11,
+    "defensive_hedge": 9,
+    "vwap_bounce": 7,
+    "mean_reversion": 2
+  },
+  "exit_change_rows": 39,
+  "exit_change_unique_commits": 32
+}

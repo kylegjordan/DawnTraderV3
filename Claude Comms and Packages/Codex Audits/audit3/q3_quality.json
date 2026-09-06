@@ -1,0 +1,32 @@
+[
+  {
+    "asset_class": "crypto_spot",
+    "rows": 814356,
+    "symbols": 571,
+    "start": "2026-09-01 00:00:00+00:00",
+    "end": "2026-09-06 09:13:00+00:00",
+    "exchanges": {
+      "kraken": 814356
+    },
+    "duplicate_key_rows_all_excluded": 0,
+    "invalid_ohlc_rows": 420,
+    "zero_volume_rows": 420,
+    "flat_bars": 359043,
+    "admitted_valid_unique_bars": 813936
+  },
+  {
+    "asset_class": "xstock_spot",
+    "rows": 807914,
+    "symbols": 480,
+    "start": "2026-09-01 00:00:00+00:00",
+    "end": "2026-09-05 00:00:00+00:00",
+    "exchanges": {
+      "kraken-equities": 807914
+    },
+    "duplicate_key_rows_all_excluded": 0,
+    "invalid_ohlc_rows": 0,
+    "zero_volume_rows": 0,
+    "flat_bars": 198531,
+    "admitted_valid_unique_bars": 807914
+  }
+]
