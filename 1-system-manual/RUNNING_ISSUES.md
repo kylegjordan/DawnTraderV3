@@ -7540,3 +7540,23 @@ Kyle opened Kraken Pro's **Fees** dialog signed in, on three live markets, and c
 
 ⚠️ **WHY IT IS A RIDER AND NOT ITS OWN BATCH:** `#744` already owns *"did the work, skipped the review"*, and this is the same family one level down — **a review that ran but could not have failed.** Langston: *"worth homing as its own item rather than folding into this batch — if you want it as a rider on `B-GATE-GUARD` I'd support that placement."*
 ⛔ **NOT folded into `B-DEPLOY-DRIFT-LINE`, which is where it was FOUND, not where it BELONGS.**
+---
+
+### ⭐ #1012 OPEN 2026-09-06 (CC-INFRA, from Langston's `B-LANGSTON-CONTEXT` Step-4 ruling) — ⛔ "NO BATCH CLOSES CARRYING AN UNDISCHARGED OBLIGATION" IS A **PREDICATE**, NOT A SENTENCE — AND A STEP-4 DISPATCH MUST CARRY ITS OWN DOCUMENT SET
+
+**TWO ITEMS, ONE ROOT: BOTH ARE ABOUT AN ABSENCE THAT NOTHING IS POSITIONED TO SEE.**
+
+**⛔ (A) `P-1a` IS NOT BEING WRITTEN AS A RULE, AND LANGSTON GAVE A BETTER REASON THAN THE ONE I STOPPED FOR.** I declined to add *"no batch closes carrying an undischarged obligation"* because Kyle had struck a similar rules addition of mine that same morning and `#998` holds that every rule added to an always-loaded file weakens the others, **including the risk rules.** ★ **His reason is stronger and it is structural: this is a PREDICATE OVER A BATCH'S LEDGER, which is what `#451` says a checker should evaluate and what `#998` says a sentence cannot.**
+⇒ ⭐ **EVERY INSTANCE OF THIS CLASS WE HAVE WAS CAUGHT BY A READER, NEVER BY A RULE** — an OBJ-4 left undone through his own approval condition on `B-REGIME-INPUTS-LIVE`; `B-MISTAKES-FILE`'s stale open-gate heading. **Adding a sentence would have caught none of them.**
+**HOME: folded into `B-GATE-GUARD` (`#744`) as a CHECKER PREDICATE, alongside `#754`'s unbuilt legs — owner CC-A, placed in `PHASE_19_PLAN` where `#744` already sits.** ⚠️ **Not a new batch and not a new rule.**
+✅ **AND AN INTERIM SHAPE THAT COSTS NOTHING, his suggestion:** the governance ledger's new change-class header (`d8d4999bb`) is the right form — **an `OBLIGATIONS` row, `required` in every class, unable to take `N/A`.** A row that cannot be marked not-applicable is a question that must be answered.
+
+**⛔⛔ (B) A STEP-4 DISPATCH NOW CARRIES ITS DECLARED CHANGE-CLASS, ITS DOC SET ROW BY ROW, AND ITS STEP-2 REFERENCE — OR THE LITERAL LINE `NO STEP 2 — <reason>`.** ✅ **BUILT 2026-09-06 in `.claude/skills/workflow-04-code-review/SKILL.md`.**
+★★ **THE MEASURED CASE: `B-WAKE-QUIET` WAS APPROVED AT STEP 4 WHILE HAVING NO STEP 2 AT ALL** — no pre-audit existed, the workflow ran **1 → 3**, and it went unnoticed for two days until the tier ledger's own pre-audit row caught it (`#1005`).
+⇒ **The dispatch was a change list and diff snippets; nothing in it said what the document set should be, so the absence was not something the reviewer read past — it was something he could not see.** *(CC-A's framing.)*
+⚠️ **LANGSTON ACCEPTED IT AS FACTUALLY RIGHT ABOUT THAT DISPATCH AND REFUSED IT AS A DISCHARGE OF HIMSELF: §16's 2026-06-16 amendment puts the doc-set check on him at Step 2 AND Step 4, unconditionally. He could have asked for the doc set and did not — second of its class.** ★ **Both true, and the structural half is the one worth building, because *"remember to ask"* is an instruction to a session that has never seen the last one.**
+✅ **WHY A FIELD LIST RATHER THAN A RULE, and this is what satisfies `#998`: it is a shape requirement on an artifact you are already writing, living in the step file that governs writing it. It adds NOTHING to any always-loaded file.**
+⛔ **HONEST LIMIT, STATED: NOTHING CHECKS IT.** A session that skipped Step 2 can write `NO STEP 2 — n/a` as easily as the truth. **What it buys is that the absence becomes VISIBLE TO THE REVIEWER rather than invisible — he can rule on a stated `NO STEP 2` and cannot rule on a silence.** The enforcing predicate is (A), homed at `#744`.
+★ **AND IT BINDS THE DISPATCH THAT PROPOSED IT: `B-LANGSTON-CONTEXT`'s own Step-4 dispatch did not carry these fields either. That is the argument, not a criticism.**
+
+MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit baseline in a Step-4 change list; it is NOT an ancestor of origin (quoted from local history after a rebase), so nobody but me could resolve it. The artifact was right, the citation was not. Real baseline `57216944d`, same blob sha256, same 21,573 B.

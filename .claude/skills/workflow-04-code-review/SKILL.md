@@ -17,6 +17,23 @@ He reviews **`origin/migration/aws-supabase` — i.e. AFTER the push to the revi
 - **State the ref, correctly.** A mis-stated READY-AT sends the reviewer to the wrong object.
 - **Name the judgement calls you want attacked.** A review that only confirms is a review you wasted.
 
+## ⛔⛔ THE DISPATCH HEADER — THREE FIELDS, EVERY TIME, OR HE CANNOT RULE ON WHAT IS ABSENT
+
+★★ **MEASURED, AND IT IS THE ARGUMENT: `B-WAKE-QUIET` WAS APPROVED AT STEP 4 WHILE HAVING NO STEP 2 AT ALL.** No pre-audit existed; the workflow ran **1 → 3**. Nobody noticed for two days, and it was caught at Step 10 by the tier ledger's own pre-audit row (`#1005`), not by the reviewer and not by the owner.
+⇒ ⛔ **THE DISPATCH WAS A CHANGE LIST AND DIFF SNIPPETS. NOTHING IN IT SAID WHAT THE DOCUMENT SET SHOULD HAVE BEEN — so the absence was not something he read past, it was something he could not see.** *(CC-A's framing, and Langston accepted it as factually right about that dispatch while refusing it as a discharge: §16's 2026-06-16 amendment puts the doc-set check on him at Step 2 AND Step 4, unconditionally. He could have asked and did not. **Both true; the structural half is the one worth building, because "remember to ask" is an instruction to a session that has never seen the last one.**)*
+
+**EVERY STEP-4 DISPATCH CARRIES THESE THREE, AT THE TOP:**
+
+| # | field | what it must say |
+|---|---|---|
+| **i** | **DECLARED CHANGE-CLASS** | the class from the scope header, verbatim — `architecture` \| `non_architecture` \| `sub_batch` \| `hotfix` |
+| **ii** | **THAT CLASS'S DOC SET, ROW BY ROW** | each required document marked **present** (with its path), **absent**, or **judged N/A with the reason**. ⛔ **A row you leave off is the failure this exists to prevent — the list must be COMPLETE for the declared class, not a list of what you happen to have.** |
+| **iii** | **THE STEP-2 REFERENCE** | the pre-audit's path at the ref — **or the literal line `NO STEP 2 — <reason>`.** ⭐ **There is no third option, and no blank.** A dispatch that simply does not mention Step 2 is exactly the one that shipped. |
+
+★ **WHY A FIELD LIST AND NOT A NEW RULE (Langston's own reasoning, and it satisfies `#998`): this is a shape requirement on an artifact you are already writing, living in the step file that governs writing it. It adds nothing to any always-loaded file, so it does not spend the budget that every added rule takes from the risk rules.**
+⚠️ **HONEST LIMIT, STATED RATHER THAN GLOSSED: NOTHING CHECKS THIS.** It is a field list a session fills in, and a session that skipped Step 2 can write `NO STEP 2 — n/a` just as easily as the truth. ⇒ **what it buys is that the ABSENCE BECOMES VISIBLE TO THE REVIEWER rather than invisible** — he can rule on a stated `NO STEP 2` and cannot rule on a silence. **The enforcing predicate belongs in the checker; it is homed at `B-GATE-GUARD` (`#744`).**
+⛔ **AND IT BINDS THE DISPATCH THAT PROPOSED IT: the `B-LANGSTON-CONTEXT` Step-4 dispatch did not carry these fields either. That is the argument, not a criticism** — the requirement was written because its own author did not think to supply them.
+
 ## ⛔ HE IS STATELESS PER-INVOKE
 Each message spins a fresh session with **no memory of his own prior turns.** Anything multi-turn must carry its context **in the prompt or in a committed file.** Never assume he recalls what he said.
 
