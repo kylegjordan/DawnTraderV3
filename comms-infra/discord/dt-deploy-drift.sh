@@ -36,10 +36,16 @@ SSH_ID="/home/langston/.ssh/id_ed25519"
 # without -n, 3 of 3 with it. The loop that could never resolve became one that resolves one.
 SSH_OPTS="-n -i $SSH_ID -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 
-# The actor is a MACHINE identity. An hourly cron claiming `cc-a` is the #987/#1004
-# provenance class and the gate cannot catch it, because it passes. `deploy-drift-monitor`
-# is NOT YET in ALERT_ACTORS, so a resolve REFUSES until the one-line follow-on lands —
-# fail-closed and loud. The Step-6 install is gated on it.
+# ⛔ THE ACTOR IS A MACHINE IDENTITY, NOT A SESSION (#987/#1004): an hourly robot must not
+#   claim a roster name, and the gate cannot catch it because it passes.
+# ⛔⛔ STEP-6 INSTALL ORDER IS A PRECONDITION, NOT A NOTE. `deploy-drift-monitor` must be
+#   PRESENT IN THE DEPLOYED SOURCE before this cron is installed — the CLI is `tsx
+#   scripts/system-alerts.ts`, i.e. source-run, so staging enforces whatever tree it is at.
+#   Install the cron first and every ZERO run's resolve is refused → FAILED_N>0 → mints
+#   `deploy-drift-measurement-failed-resolve` → whose key starts `deploy-drift-` → the next
+#   ZERO picks it up → refused → re-mints. UNCLEARABLE, live.
+#   ORDER: deploy the actor, verify with a RETURNING `grep -c deploy-drift-monitor` on the
+#   staging worktree, and only then install the cron.
 ACTOR="deploy-drift-monitor"
 ALERTS="/var/log/dawntrader/system-alerts.jsonl"
 MAIN_STAMP="/var/lib/dt-deploy-drift/main-arm.stamp"
@@ -287,6 +293,12 @@ PY
 # was never able to detect: this batch's own subject, rebuilt inside the fix.
 
 case "$READ" in
+  # RESTORED r5. r4 deleted this arm believing the two case blocks were duplicates — they were
+  #   DISJOINT, and the dedup matched on the opening line alone. The explanation above survived
+  #   over a block that no longer handled the case it described. Same shape as the comment that
+  #   broke mint_alert: an edit in a comment region destroying a live statement, invisible to
+  #   `bash -n`. One block now, so the comment cannot be orphaned from the arm again.
+  ""|" ") fail_measurement "compare_reader" "the compare reader produced no output at all (python3 missing, the heredoc failing, or an uncaught exception outside its json guard)" ;;
   PARSE_ERROR*) fail_measurement "compare_api" "${READ#PARSE_ERROR }" ;;
   ANOMALY*)
     set -- $READ
@@ -305,20 +317,27 @@ MAIN_TODAY="$(date -u +%Y-%m-%d)"
 if [ "$(cat "$MAIN_STAMP" 2>/dev/null)" != "$MAIN_TODAY" ]; then
   MAIN_SHA="$(git ls-remote "$REMOTE" refs/heads/main 2>>"$LOG" | cut -f1)"
   if [ -n "$MAIN_SHA" ] && fetch "$API/$DEPLOYED...$MAIN_SHA?page=1&per_page=100" "$WORK/main.json"; then
+    # VALIDATE AGAINST THE SAME KNOWN SET AS THE PRIMARY READER. json.load SUCCEEDS on an
+    # error body, so an emptiness test catches only the throw — the case that actually happens
+    # returns "404 None" or "None None", both non-empty, both of which stamped the day and
+    # logged a line that reads like a status. My own MISTAKE line named this class and the fix
+    # had travelled only to the instance Langston pointed at.
     MAIN_READ="$(python3 -c "
 import json
 d=json.load(open('$WORK/main.json'))
-print('%s %s' % (d.get('status'), d.get('total_commits')))" 2>>"$LOG")"
+s=d.get('status')
+print('%s %s' % (s, d.get('total_commits')) if s in ('identical','ahead','behind','diverged') else 'INVALID %s %s' % (s, d.get('message')))" 2>>"$LOG")"
     # STAMP ON A PARSED STATUS, NEVER ON THE FETCH ALONE. If the parse errored, $() was empty,
     # the line logged as `main_arm  (logged only...)` with nothing in it, the daily budget was
     # spent and the stamp was written anyway -- so the reading was lost AND the retry suppressed.
-    if [ -n "$MAIN_READ" ]; then
+    if [ -n "$MAIN_READ" ] && [ "${MAIN_READ#INVALID}" = "$MAIN_READ" ]; then
       log "main_arm $MAIN_READ (logged only, never fires)"
       if ! echo "$MAIN_TODAY" > "$MAIN_STAMP" 2>/dev/null; then
         log "main_arm STAMP_UNWRITABLE ($MAIN_STAMP) — the daily cap is NOT in effect"
       fi
     else
-      log "main_arm PARSE_EMPTY — not stamped, so the next run retries rather than skipping a day"
+      # NOT STAMPED: a failed reading must not spend the day's budget AND suppress the retry.
+      log "main_arm FAILED ${MAIN_READ:-(empty)} — not stamped; the next run retries"
     fi
   fi
 fi
@@ -365,7 +384,7 @@ for i,s in seen.items():
   exit 0
 fi
 
-set -- $READ                # OK status total age_h oldest_iso runtime_count capped list
+set -- $READ                # OK status total age_h oldest_iso runtime_count capped  (the file list moved to $WORK/rtlist.txt)
 TOTAL="$3"; AGE_H="$4"; OLDEST="$5"; RUNTIME_N="$6"; CAPPED="$7"
 # The list comes from its own file, so no filename can ever shift a scalar.
 LIST="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | paste -sd, -)"
