@@ -2,7 +2,7 @@
 
 > **What this is.** The venue's own PUBLISHED fee schedule, captured from Kraken's public pages, transcribed here so that any session can check what we implement against what the venue charges **without an account login and without asking Kyle.**
 > ⛔ **THIS FILE IS A TRANSCRIPTION OF AN EXTERNAL DOCUMENT. IT IS NOT OUR CONFIGURATION AND IT IS NOT AUTHORITATIVE FOR WHAT WE CHARGE.** What we charge lives in the database (`module_constants`, module `fee_model`) and in `server/services/cost-model.ts`. **The whole point of this file is that those two can DISAGREE, and until 2026-09-06 nothing in the system could tell.**
-> ⚠️ **THE PUBLISHED SCHEDULE IS NOT THE ACCOUNT'S SCHEDULE.** It states the ladder; it does not state which rung Kyle's account sits on. **An account-specific confirmation is still owed** and only Kyle can obtain it.
+> ✅ **THE ACCOUNT IS NOW CONFIRMED — see §0.b. Kyle captured the authenticated in-app fee dialogs on 2026-09-06 and they AGREE with the public pages line for line.** The caveat this file shipped with (*"the published schedule is not the account's schedule"*) is **DISCHARGED for spot crypto, Pro xStocks and futures.**
 
 ---
 
@@ -19,6 +19,36 @@
 ⛔ **THE CAPTURES ARE IMAGES, NOT TEXT.** `pdftotext` returns zero lines from all three. They were read by rendering each page. **A future automated check cannot parse these files** — it must fetch the live pages.
 
 ⚠️ **ONE CAPTURE DEFECT, STATED BECAUSE IT NEARLY COST US THE TABLE:** on `kraken.com/features/fee-schedule` the tier tables are horizontally scrollable and the capture froze them at the left edge, so **the percentage columns are absent from both fee-schedule PDFs** — the page itself says *"Scroll table to the right to view percentages."* **The rates in §1 come from the SUPPORT ARTICLE capture, which renders every column.** A future capture of the main page must scroll the table first, or it records tier thresholds and no prices.
+
+### 0.b ✅✅ THE AUTHENTICATED IN-ACCOUNT VIEW — CAPTURED 2026-09-06, AND IT MATCHES
+
+Kyle opened Kraken Pro's own **Fees** dialog on three live markets while signed in, and screenshotted each. **This is the account's actual schedule, not the public ladder** — it names his tier and his qualifying measures.
+
+| | reading |
+|---|---|
+| **Fee tier** | **Tier 1**, on all three markets |
+| 30-day spot volume | **0.00 USD** |
+| 30-day futures volume | **0.00 USD** |
+| **Assets on Platform (AoP)** | **836.13 USD** *(holdings: 824.11 USDC + 0.05576100 NVDAx ≈ 12.79 USD)* |
+| next tier needs | +$2,501 spot volume **or** +$5,000,001 futures volume. ⛔ **No AoP route to Tier 2 — the AoP column reads N/A there** |
+
+✅ **EVERY FIGURE IN §1, §2 AND THE FUTURES ROW OF §3 WAS CROSS-CHECKED AGAINST THESE DIALOGS AND MATCHES.** Spot Tier 1 `0.40 / 0.80`; the in-app ladder's tier 12 `0.00 / 0.10` and tier 17 `0.00 / 0.05` are the public page's Tier 12 and Pro 5. **The in-app view numbers the rungs 1-17 where the public page names the top five “Pro 1-5” — same ladder, different labels.** Futures Tier 1 `0.0200 / 0.0500`, maker negative from rung 11.
+
+⭐⭐ **AND THE DIALOG CONFIRMS `#1010` ON OUR OWN ACCOUNT, ON A SYMBOL WE ACTUALLY TRADE.** `pro.kraken.com/app/trade/xstocks-nvda-usd` shows the market header **`FEES  Maker rebate  −0.02% / 0.10%`**, the tier table `maker −0.02 % / taker 0.10 %`, and the order form's own estimate reading **`Est. trading fee   Maker rebate   −0.0001 USD`**. ⇒ **the rebate is not a published aspiration; it is what the venue quotes Kyle's account, per order.**
+
+### 0.c ⛔⛔ xSTOCK FEES ARE **NOT** CROSS-PLATFORM, AND THAT CHANGES THE FIX
+
+**The xStocks fee dialog has ONE qualifying column — `Min spot volume`.** No futures column. **No AoP column.** Its Tier 2 needs **$100,000,001** of spot volume.
+
+⇒ ★ **xSTOCK IS EFFECTIVELY A CONSTANT: maker −0.02 %, taker 0.10 %, permanently.** No tier modelling is needed for it at all — which makes the `#1010` correction simpler than the crypto side, not harder.
+⇒ ⛔ **AND IT KILLS THE AoP LEVER FOR xSTOCK.** Assets on Platform moves the **crypto** tier and does nothing whatever for xStocks. **Any argument that depositing funds improves xStock economics is wrong.**
+
+### 0.d ⚠️ THE AoP LEVER, RE-MEASURED AGAINST THE ACCOUNT — SMALLER AND SLOWER THAN FIRST STATED
+
+**PREVIOUSLY STATED (this file, first revision): “$20,000 held on the platform is Tier 3.” NOW: true, but the account holds $836.13, so it is a ~$19,165 DEPOSIT, not a reshuffle of money already there. REASON: the authenticated dialog supplied the current AoP, which the public page could not.**
+
+✅ **AND THE CHEAPER ROUTE IS VOLUME, NOT DEPOSIT:** **Tier 2 needs only $2,501 of 30-day spot volume** — crypto taker 0.80 % → 0.60 %, maker 0.40 % → 0.30 %. **Tier 3 is $10,001 of volume OR $20,001 of AoP** → 0.38 % / 0.22 %.
+⚠️ **Neither is reachable today: 30-day spot volume is 0.00 because we have never traded live.** ⇒ **the tier improves on its own once live trading starts, and the first rung is cheap.** ⛔ **A fee model that hardcodes Tier 1 forever will be wrong within days of go-live** — which is a second, separate defect from `#1010` and is recorded on it.
 
 ---
 
@@ -46,7 +76,7 @@
 | Pro 4 | $400M+ | ≥ $2B | 80m | 0.0 % | 0.06 % |
 | Pro 5 | $500M+ | > $5B | 100m | 0.0 % | 0.05 % |
 
-★ **WE IMPLEMENT `0.004 / 0.008` FOR CRYPTO, WHICH IS EXACTLY TIER 1 — so the crypto rate is RIGHT, conditional on the account actually being Tier 1.** ⛔ **That condition has never been verified against the account.**
+✅ **WE IMPLEMENT `0.004 / 0.008` FOR CRYPTO, WHICH IS EXACTLY TIER 1 — AND §0.b CONFIRMS THE ACCOUNT IS ON TIER 1. THE CRYPTO RATE IS CORRECT, VERIFIED ON BOTH SIDES.** ⚠️ **It is correct TODAY ONLY: the tier is reassessed after every trade and 30-day spot volume is currently 0.00 because nothing has traded live. See §0.d.**
 
 ### ⭐ THE AoP COLUMN IS THE ONE NOBODY HAS COSTED
 **Assets on Platform is assessed POINT-IN-TIME — the current balance, not a 30-day average** — and it is an independent route to a tier. **$20,000 held on the platform is Tier 3: taker 0.80 % → 0.38 %, maker 0.40 % → 0.22 %.** That is better than halving our single largest cost, and it is bought by *moving money*, not by trading more.
@@ -101,10 +131,11 @@
 
 ## 4. ⛔ WHAT IS STILL NOT ESTABLISHED
 
-1. ⛔⛔ **WHICH TIER KYLE'S ACCOUNT IS ON.** Everything above is the public ladder. **Only an authenticated read settles the rung**, and no session may log in to obtain it (`CLAUDE.md` §7 — a session may not type a password into a form). **KYLE ACTION.**
-2. **Whether the xStocks we trade reach us through Kraken Pro's xStocks market** (schedule §2) or by some other route. The volume-inclusion text says Pro xStocks markets count toward spot volume, which implies the §2 schedule — **but our own venue path has not been traced against it in this document.**
-3. **The Spot Maker Rebate eligible-pair list**, which could make some crypto pairs cheaper than the §1 ladder.
-4. **The 0.05 %-per-leg slippage constant** welded into our friction numbers is OURS, not Kraken's, and is not separable in any historical row. It is not part of this contract.
+1. ✅ **~~WHICH TIER KYLE'S ACCOUNT IS ON~~ — SETTLED 2026-09-06, §0.b. Tier 1 on all three products, AoP $836.13, spot and futures volume both 0.00.**
+2. ✅ **~~WHETHER OUR xSTOCKS REACH US THROUGH KRAKEN PRO'S xSTOCKS MARKET~~ — SETTLED 2026-09-06.** The authenticated dialog was opened at `pro.kraken.com/app/trade/xstocks-nvda-usd` and served the §2 schedule. **NVDAx is a symbol we trade and it is on the Pro xStocks market.**
+3. ⚠️ **STILL OPEN, AND NEWLY VISIBLE: WE HAVE NO TIER-TRACKING AT ALL.** The fee model holds two flat numbers. **Kraken reassesses the tier after every trade**, and crypto has 17 rungs. ⇒ the moment live trading generates $2,501 of 30-day volume our crypto rate is stale in the other direction — **we would over-charge ourselves and reject candidates that clear.** Recorded on `#1010`; it is a design requirement of the fix, not a separate finding.
+4. **The Spot Maker Rebate eligible-pair list**, which could make some crypto pairs cheaper than the §1 ladder.
+5. **The 0.05 %-per-leg slippage constant** welded into our friction numbers is OURS, not Kraken's, and is not separable in any historical row. It is not part of this contract.
 
 ---
 
@@ -118,4 +149,4 @@
 
 ---
 
-*Captures: `1-system-manual/external-references/kraken-fees/2026-09-06/`. Our implementation: `module_constants` module `fee_model`, and `server/services/cost-model.ts`.*
+*Public-page captures: `1-system-manual/external-references/kraken-fees/2026-09-06/`. The authenticated in-account dialogs of §0.b were screenshotted by Kyle and transcribed here; **the images themselves are NOT committed — they show live balances.** Our implementation: `module_constants` module `fee_model`, and `server/services/cost-model.ts`.*

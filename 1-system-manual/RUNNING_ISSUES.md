@@ -7481,6 +7481,29 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 
 ---
 
+### ➕ #1010 AMENDMENT 2026-09-06 (same day; Kyle supplied the AUTHENTICATED in-account fee dialogs) — ✅✅ BOTH OPEN CONDITIONS ARE NOW CLOSED, THE DIVERGENCE IS CONFIRMED ON OUR OWN ACCOUNT, AND A **SECOND** DEFECT IS NOW VISIBLE
+
+Kyle opened Kraken Pro's **Fees** dialog signed in, on three live markets, and captured each. **This is the account's schedule, not the public ladder.**
+
+✅ **CONDITION (a) — WHICH TIER — SETTLED. `Tier 1` on all three products.** 30-day spot volume **0.00 USD**, 30-day futures volume **0.00 USD**, **AoP 836.13 USD** (824.11 USDC + 0.05576100 NVDAx). ⇒ **our crypto `0.004 / 0.008` is CORRECT and now verified on BOTH sides.**
+✅ **CONDITION (b) — WHICH MARKET — SETTLED.** The xStock dialog was opened at `pro.kraken.com/app/trade/xstocks-nvda-usd`. **NVDAx is a symbol we trade, it IS on Kraken Pro's xStocks market, and that market serves this schedule.**
+⭐⭐ **AND THE DIVERGENCE IS CONFIRMED PER-ORDER, NOT MERELY PER-SCHEDULE:** the market header reads **`FEES  Maker rebate  −0.02% / 0.10%`** and the order form's own estimator reads **`Est. trading fee   Maker rebate   −0.0001 USD`**. ⇒ **the venue quotes Kyle's account a REBATE on the xStock maker leg while we book a 0.40 % charge. `#1010` stands, unqualified.**
+✅ **INDEPENDENT CROSS-CHECK OF THE TRANSCRIPTION:** every figure in the reference file matched the authenticated dialogs, including the far end of the ladder (in-app rung 12 `0.00 / 0.10`, rung 17 `0.00 / 0.05` = the public page's Tier 12 and Pro 5). **The in-app view numbers 1-17 where the public page labels the top five “Pro 1-5” — same ladder.**
+
+⛔⛔ **NEW, AND IT CHANGES THE FIX: xSTOCK FEES ARE NOT CROSS-PLATFORM.** The xStocks dialog has **ONE** qualifying column, `Min spot volume` — **no futures column, no AoP column** — and its Tier 2 needs **$100,000,001**.
+⇒ ★ **xStock is effectively a CONSTANT: maker −0.02 %, taker 0.10 %, permanently. No tier modelling is needed for it** — the correction is simpler than the crypto side, not harder.
+⇒ ⛔ **AoP does NOTHING for xStock.** Any claim that depositing funds improves xStock economics is false.
+
+⛔⛔ **SECOND DEFECT, SURFACED BY THIS EVIDENCE AND FOLDED INTO THE SAME BATCH: WE HAVE NO TIER TRACKING AT ALL.** The fee model holds two flat numbers per class. **Kraken reassesses the tier AFTER EVERY TRADE**, crypto has **17 rungs**, and **Tier 2 costs only $2,501 of 30-day spot volume** (0.80 → 0.60 taker, 0.40 → 0.30 maker).
+⚠️ **Spot volume is 0.00 today only because nothing has ever traded LIVE.** ⇒ **within days of go-live the hardcoded Tier 1 is stale in the OPPOSITE direction — we would over-charge ourselves and reject candidates that actually clear.** ★ **So `#1010` is not "put the right two numbers in": it is "the fee model must resolve a tier, per product, from a live measure."** **DISPOSITION: folded into `B-XSTOCK-FEE-CONTRACT`** — same code, same batch, and shipping the rate fix without it would bank a defect with a known expiry date.
+
+⚠️ **CORRECTION TO MY OWN EARLIER FRAMING, recorded because it reached Kyle:** I called AoP-to-Tier-3 a lever *"bought by moving money, not by trading more."* **The account holds $836.13, so Tier 3 by AoP is a ~$19,165 DEPOSIT, not a reshuffle.** The public page could not have told me that; the authenticated dialog did. **The genuinely cheap rung is Tier 2 at $2,501 of VOLUME, which live trading generates on its own.**
+**MISTAKE: wrong-object [`#1010`] — I priced a lever against a ladder without ever measuring the account's position on it.**
+
+**The authenticated screenshots are NOT committed: they show live balances.** Their content is transcribed in `external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md` §0.b-0.d.
+
+---
+
 ### #1011 OPEN 2026-09-06 (CC-B, filed with `#1010` — same root, different failure) — ⚠️ NOTHING WATCHES THE VENUE'S PUBLISHED FEE SCHEDULE, AND IT CHANGED 59 DAYS BEFORE WE NOTICED
 
 **Kraken revised its fee schedule on 2026-07-09** (its own stated "last updated"). **We learned of it on 2026-09-06, by hand, because Kyle happened to look at the page.** In between, the system continued pricing against a model nothing had compared to the source.
