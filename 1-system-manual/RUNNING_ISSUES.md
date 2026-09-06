@@ -7458,6 +7458,25 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 
 **★ THE GENERALISABLE PART, and it is why this is worth its lines:** *"no rules files in the changed list"* and *"the changed list was cut short before we got there"* are **different states that render identically**, and nothing in the response distinguishes them without checking the cap. **Same class as `#661` leg 3 and as this batch's own subject: an instrument that reports absence when it simply could not see.**
 
+### ⛔⛔ #1012 OPEN 2026-09-06 (CC-B; found by the Codex-export credential scanner on its FIRST run, not by anyone looking) — REAL ACCESS TOKENS ARE COMMITTED IN THE REPOSITORY, IN VERBATIM CHAT TRANSCRIPTS
+
+**THE OBJECT AND THE POPULATION.** The credential scanner built for the Codex export (`scripts/codex-export/`) was run over the allowlisted tree at `d15971b42` — 3,422 files. It returned **25 hits**. **Twenty-two were placeholders**, read and confirmed one by one (`postgresql://user:pass@host`, `postgresql://test:test@localhost`, `SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'`, and two `<PASSWORD>` forms). **Three were not.**
+
+⛔ **`bridge/reference/DawnTrader_Chat_Archive_*.md` and `docs/restoration/truth/DawnTrader_Chat_Archive_*.md` contain lines of the form `TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZjNTkxODAxL…"` — genuine HS256 JWTs carrying real UUID id claims.** These are Replit-era session transcripts, captured verbatim, with the shell command and its token pasted in. **13 files across the two directories.**
+
+⚠️ **WHAT I AM *NOT* CLAIMING, stated because the tempting version of this finding is the alarming one:** I have **not** established that any token is still valid. They date to **2025-11 / 2025-12**, the Replit era, on a stack that has since been rebuilt and migrated — **expiry is overwhelmingly likely.** ⇒ **the severity here is NOT "live credentials are exposed."** It is:
+1. ⛔ **The repository has a class of file that captures whatever was on the terminal, verbatim, with no scrubbing** — and nothing has ever checked those files. **The next such capture could contain a live token and the outcome would be identical: committed, pushed, and unnoticed.**
+2. ⛔ **NOTHING IN THIS PROJECT SCANS FOR COMMITTED SECRETS.** Not CI, not a pre-commit hook, not the governance checker. **This was found by a script written for an unrelated purpose, on its first execution.** ⇒ **the instrument's reach here is "one directory tree, one time" — the whole-history population is UNMEASURED and I am not implying it is clean.**
+3. ⚠️ **They are in git HISTORY, so excluding them from the export removes them from the EXPORT and from nothing else.** Removing them properly is a history rewrite on a branch three sessions push to daily — **not a thing to do casually, and explicitly not something I have done.**
+
+✅ **IMMEDIATE CONTAINMENT, DONE:** both paths are excluded from the Codex export by name (`scripts/codex-export/MANIFEST.txt`), and **the exporter aborts if either exclusion ever matches zero files** — so a rename cannot silently re-admit them.
+
+⭐ **AND THE VERIFICATION LESSON, which is the transferable half and is already fixed in the tool:** the scanner's FIRST clean run was a **false clean**. A 530 KB `.md` Telegram archive carried a stray NUL byte, was classified binary, and was therefore **neither redacted nor scanned** — it shipped with **15 occurrences of a host address** while the run printed `scan clean`. ⇒ ⛔ **SKIPPED MEANT UNSEEN, AND UNSEEN WAS REPORTED AS CLEAN.** Caught only because the independent grep ran a **positive control** and the control ALSO returned zero, which is what exposed the instrument rather than the data. **Fixed two ways: files are read as `latin1` so a NUL cannot cause a skip, and any file that still cannot be text-passed gets a raw BYTE scan that hard-fails.** Same class as `#661` leg 3 and as every silence-is-not-evidence entry in this file.
+
+**HOME:** ⚠️ **NOT dispositioned by me — this is a repository-hygiene and history question that touches every session's branch, and the disposition is Kyle's and Langston's, not CC-B's unilaterally.** The two candidate shapes are (a) a secret-scanning gate in CI plus a pre-commit hook, forward-looking only, and (b) a history rewrite, which is a different order of decision. **Raised, contained for the export, and awaiting a placement.**
+
+---
+
 ### ⭐⭐ #1010 OPEN 2026-09-06 (CC-B; Kyle supplied the venue captures, every figure re-derived at the ref and in the live database) — ⛔⛔ WE CHARGE xSTOCK THE CRYPTO FEE SCHEDULE. THE VENUE'S PUBLISHED xSTOCK TAKER IS **8× LOWER** AND ITS MAKER IS A **REBATE**, SO OUR MAKER FEE HAS THE WRONG SIGN
 
 **THE OBJECT AND THE POPULATION.** `module_constants`, queried UNBOUNDED — every row whose `constant_name` matches fee/maker/taker/slippage/friction, every scope, no module filter (43 rows returned). **Two rows decide this:**

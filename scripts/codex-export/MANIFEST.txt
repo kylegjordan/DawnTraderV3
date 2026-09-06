@@ -1,0 +1,94 @@
+# CODEX REPO EXPORT — THE ALLOWLIST
+#
+# ⛔ THIS IS AN ALLOWLIST, NOT A DENYLIST, AND THAT IS THE WHOLE DESIGN.
+#    Anything not named here DOES NOT GO. A denylist over a repo four sessions commit to
+#    daily is stale on the next commit and FAILS SILENTLY when it is. This fails LOUDLY:
+#    the exporter refuses to run if any line below resolves to zero paths at the ref.
+#
+# FORMAT: one git pathspec per line. Blank lines and #-comments ignored.
+#         Paths containing spaces are fine — the whole line is one pathspec.
+#
+# ⚠️ ADDING A LINE IS A DISCLOSURE DECISION. The export goes to a third-party service.
+#    Kyle granted the current set explicitly; it is scoped to this material, not standing.
+#    Do not widen it without asking him.
+
+# ── SOURCE ────────────────────────────────────────────────────────────────────
+# The system itself. Tests are included deliberately: they are the clearest
+# statement of what a component is SUPPOSED to do, which is what an auditor needs.
+server
+client
+shared
+types
+config
+drizzle
+
+# ── BUILD / TOOLING CONFIG ────────────────────────────────────────────────────
+# Enough to understand how the thing is assembled. No CI (secret names live there).
+package.json
+tsconfig.json
+drizzle.config.ts
+vite.config.ts
+vitest.config.ts
+tailwind.config.ts
+postcss.config.js
+components.json
+
+# ── GOVERNANCE — THE HISTORY AND INTENT ───────────────────────────────────────
+# ⭐ This is the block Kyle's overrule added, and it is the reason the export exists
+#    in this shape at all: WITHOUT the history the advisor can only guess at intent,
+#    and its output is then a claim the reviewer is pre-committed to bouncing.
+#    ⚠️ These files carry host addresses and operational detail — the exporter
+#    REDACTS them and then PROVES the redaction worked. See scripts/codex-export/.
+1-system-manual
+CLAUDE.md
+CONDUCT.md
+Claude Comms and Packages
+
+# ── PRE-GOVERNANCE CORPUS — ORIGINAL INTENT ONLY ──────────────────────────────
+# ⛔ NEVER current truth. The architecture has changed completely since.
+bridge
+Archived Reports - Pre-Phase 12 Governance Implementation
+
+# ── DOCUMENTATION ─────────────────────────────────────────────────────────────
+docs
+README.md
+CHANGELOG.md
+design_guidelines.md
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ⛔ DELIBERATELY ABSENT — named here so a later reader knows this was DECIDED,
+#    not overlooked. An unexplained absence gets "fixed" by the next session.
+#
+#   .claude/            — hooks, the session roster, session UUIDs
+#   comms-infra/        — bridge scripts and everything that talks to them
+#   .github/            — CI workflows; secret NAMES are themselves information
+#   scripts/            — dt-deploy, the alerts CLI, deploy procedure
+#                         (analysis SQL under scripts/analysis/ is useful and can be
+#                          re-admitted as its own line if the advisor asks for it)
+#   deploy/             — deployment machinery
+#   .env.example        — variable names map the secret surface
+#   Dockerfile, docker-compose*, ecosystem.config.cjs, .replit
+#   e2e/, test-results/, diagnostics/, audit/, logs/, exports/, data/
+#   attached_assets/, context_uploads/, downloads/, rollback_points/
+#   backups and data dumps/, DT_Frozen_Snapshots/, dawntrader-v2/, chaplet/,
+#   token-watch/, models/, migrations/, test_ingest*/
+#   every root-level .png, .zip, .sql, .sh, .txt, cookies.txt
+#
+#   ⚠️ Root-level loose files (PHASE_27.*.md, TECHNICAL_BRIEF.md, the many one-off
+#      reports) are OUT for now — they are pre-governance era and largely superseded
+#      by 1-system-manual/. Re-admit individually on request rather than wholesale.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── ⛔ TARGETED EXCLUSIONS INSIDE ADMITTED TREES ──────────────────────────────
+# A '!' line removes something an allowlist line above already admitted. It does NOT
+# turn this into a denylist: nothing is admitted by default.
+#
+# ⛔⛔ THESE FILES CARRY REAL ACCESS TOKENS. Measured 2026-09-06 by the exporter's own
+#    credential scan: verbatim chat transcripts from the Replit era contain lines of the
+#    form TOKEN="eyJhbGciOi…" — genuine HS256 JWTs with real id claims, not placeholders.
+#    They are almost certainly long expired; they are excluded anyway, because "probably
+#    expired" is not a property this script can verify.
+#    ⚠️ THE UNDERLYING LEAK IS A SEPARATE PROBLEM AND IS FILED — excluding them from THIS
+#       export does not remove them from the repository.
+!bridge/reference/DawnTrader_Chat_Archive_*.md
+!docs/restoration/truth/DawnTrader_Chat_Archive_*.md
