@@ -52,31 +52,33 @@ Kyle opened Kraken Pro's own **Fees** dialog on three live markets while signed 
 
 ---
 
-## 1. ⛔⛔ SPOT CRYPTO — THE TIER LADDER (effective 2026-07-09)
+## 1. ✅ SPOT CRYPTO — THE CONFIRMED LADDER (17 rungs)
 
-**Tier is the BEST OF three measures**, assessed independently: 30-day spot volume **OR** 30-day futures volume **OR** Assets on Platform. Qualifying on more than one at the same tier gives no extra benefit.
+> ✅ **AUTHENTICATED. Transcribed from Kyle's signed-in Kraken Pro Fees dialog, `pro.kraken.com/app/trade/sui-usd#dialog/fee-level`, 2026-09-06.** It agrees with the public support article line for line, so the public page's Tier 1-12 + Pro 1-5 and this 1-17 numbering are **the same ladder under two labellings.** ⛔ **Cite the RUNG NUMBER from this table, never "Pro 3" — the in-app view is what an operator sees.**
 
-| Tier | Spot 30d vol | Futures 30d vol | AoP (USD) | **Spot maker** | **Spot taker** |
+**Qualifying measure = the BEST OF three, assessed independently:** 30-day spot volume **OR** 30-day futures volume **OR** Assets on Platform. Meeting several at one rung gives no extra benefit. **Reassessed after every trade.**
+
+| Rung | Min spot vol | or Min futures vol | or Min AoP | **Maker** | **Taker** |
 |---|---|---|---|---|---|
-| **1** | $0+ | < $5M | N/A | **0.40 %** | **0.80 %** |
-| 2 | $2.5K+ | ≥ $5M | N/A | 0.30 % | 0.60 % |
-| **3** | $10K+ | ≥ $10M | **20k** | **0.22 %** | **0.38 %** |
-| 4 | $25K+ | ≥ $15M | 50k | 0.20 % | 0.35 % |
-| 5 | $50K+ | ≥ $25M | 100k | 0.15 % | 0.30 % |
-| 6 | $100K+ | ≥ $40M | 200k | 0.12 % | 0.25 % |
-| 7 | $250K+ | ≥ $50M | 400k | 0.10 % | 0.22 % |
-| 8 | $500K+ | ≥ $75M | 600k | 0.08 % | 0.20 % |
-| 9 | $1M+ | ≥ $100M | 1m | 0.06 % | 0.18 % |
-| 10 | $2.5M+ | ≥ $150M | 2.5m | 0.04 % | 0.15 % |
-| 11 | $5M+ | ≥ $250M | 5m | 0.02 % | 0.12 % |
-| 12 | $10M+ | ≥ $300M | 10m | **0.0 %** | 0.10 % |
-| Pro 1 | $50M+ | ≥ $400M | 20m | 0.0 % | 0.09 % |
-| Pro 2 | $100M+ | ≥ $500M | 25m | 0.0 % | 0.08 % |
-| Pro 3 | $250M+ | ≥ $1B | 50m | 0.0 % | 0.07 % |
-| Pro 4 | $400M+ | ≥ $2B | 80m | 0.0 % | 0.06 % |
-| Pro 5 | $500M+ | > $5B | 100m | 0.0 % | 0.05 % |
+| **1** ⭐ *current* | — | — | — | **0.40 %** | **0.80 %** |
+| 2 | $2,501 | $5,000,001 | — | 0.30 % | 0.60 % |
+| 3 | $10,001 | $10,000,001 | $20,001 | 0.22 % | 0.38 % |
+| 4 | $25,001 | $15,000,001 | $50,001 | 0.20 % | 0.35 % |
+| 5 | $50,001 | $25,000,001 | $100,001 | 0.15 % | 0.30 % |
+| 6 | $100,001 | $40,000,001 | $200,001 | 0.12 % | 0.25 % |
+| 7 | $250,001 | $50,000,001 | $400,001 | 0.10 % | 0.22 % |
+| 8 | $500,001 | $75,000,001 | $600,001 | 0.08 % | 0.20 % |
+| 9 | $1,000,001 | $100,000,001 | $1,000,001 | 0.06 % | 0.18 % |
+| 10 | $2,500,001 | $150,000,001 | $2,500,001 | 0.04 % | 0.15 % |
+| 11 | $5,000,001 | $250,000,001 | $5,000,001 | 0.02 % | 0.12 % |
+| 12 | $10,000,001 | $300,000,001 | $10,000,001 | **0.00 %** | 0.10 % |
+| 13 | $50,000,001 | $400,000,001 | $20,000,001 | 0.00 % | 0.09 % |
+| 14 | $100,000,001 | $500,000,001 | $25,000,001 | 0.00 % | 0.08 % |
+| 15 | $250,000,001 | $1,000,000,001 | $50,000,001 | 0.00 % | 0.07 % |
+| 16 | $400,000,001 | $2,000,000,001 | $80,000,001 | 0.00 % | 0.06 % |
+| 17 | $500,000,001 | $5,000,000,001 | $100,000,001 | 0.00 % | 0.05 % |
 
-✅ **WE IMPLEMENT `0.004 / 0.008` FOR CRYPTO, WHICH IS EXACTLY TIER 1 — AND §0.b CONFIRMS THE ACCOUNT IS ON TIER 1. THE CRYPTO RATE IS CORRECT, VERIFIED ON BOTH SIDES.** ⚠️ **It is correct TODAY ONLY: the tier is reassessed after every trade and 30-day spot volume is currently 0.00 because nothing has traded live. See §0.d.**
+✅ **WE IMPLEMENT `0.004 / 0.008`, WHICH IS EXACTLY RUNG 1, AND THE ACCOUNT IS CONFIRMED ON RUNG 1. CORRECT, VERIFIED BOTH SIDES.** ⚠️ **Correct only while we are in paper: see §0.d and §2.c.**
 
 ### ⭐ THE AoP COLUMN IS THE ONE NOBODY HAS COSTED
 **Assets on Platform is assessed POINT-IN-TIME — the current balance, not a 30-day average** — and it is an independent route to a tier. **$20,000 held on the platform is Tier 3: taker 0.80 % → 0.38 %, maker 0.40 % → 0.22 %.** That is better than halving our single largest cost, and it is bought by *moving money*, not by trading more.
@@ -90,27 +92,71 @@ Kyle opened Kraken Pro's own **Fees** dialog on three live markets while signed 
 
 ## 2. ⛔⛔⛔ PRO xSTOCKS — A COMPLETELY DIFFERENT SCHEDULE, AND WE DO NOT IMPLEMENT IT
 
-**Kraken Pro's xStocks schedule is flat and has two rows. There is no tier ladder.**
+> ✅ **AUTHENTICATED**, from `pro.kraken.com/app/trade/xstocks-nvda-usd#dialog/fee-level`, 2026-09-06. Account is on **rung 1**.
 
-| 30-day volume (USD) | **Maker** | **Taker** |
-|---|---|---|
-| **$0 +** | **−0.02 %  (a REBATE — the venue PAYS the maker)** | **0.10 %** |
-| $100,000,000 + | −0.02 % | 0.08 % |
+**Two rungs, and ONE qualifying column — `Min spot volume`. No futures column. No AoP column.**
 
-*(The $100M row is footnoted as institutional: 30-day spot-crypto **and** xStocks volume over $100M plus activity on Kraken Futures, Custody or Staked.)*
+| Rung | Min spot vol | **Maker** | **Taker** |
+|---|---|---|---|
+| **1** ⭐ *current* | — | **−0.02 %  (a REBATE — the venue PAYS the maker)** | **0.10 %** |
+| 2 | **$100,000,001** | −0.02 % | 0.08 % |
+
+⭐ **THE ORDER FORM QUOTES IT PER ORDER, NOT JUST THE SCHEDULE PAGE:** the NVDAx market header reads `FEES  Maker rebate  −0.02% / 0.10%` and a live limit order's own estimate reads `Est. trading fee   Maker rebate   −0.0001 USD`.
+*(The public page footnotes the rung-2 row as institutional: 30-day spot-crypto **and** xStocks volume over $100M plus activity on Kraken Futures, Custody or Staked. **The in-app dialog states the volume threshold only.**)*
 
 ⇒ ⛔⛔ **WE CHARGE xSTOCK THE CRYPTO SCHEDULE. MEASURED in `module_constants`, unbounded across every scope, 2026-09-06:**
 
-| | our `fee_model` value | Kraken's published Pro xStocks rate | error |
+| | our `fee_model` value | Kraken's rate, **account-confirmed** | error |
 |---|---|---|---|
 | `spot_taker_fee` @ `xstock_spot` | **0.008** | **0.0010** | **8× too high** |
 | `spot_maker_fee` @ `xstock_spot` | **0.004** | **−0.0002** | **wrong SIGN — we book a cost where the venue pays a rebate** |
 
-**A taker-in / taker-out xStock round trip: we model 1.60 %. The published schedule is 0.20 %.**
+**A taker-in / taker-out xStock round trip: we model 1.60 %. The confirmed schedule is 0.20 %.**
 
-★ **AND THE CONSEQUENCE IS NOT ONLY MIS-BOOKED OUTCOMES — IT IS MIS-SELECTION.** The net-EV gate that decides what gets traded is computed from these rates, so **every xStock candidate has been graded against a cost roughly eight times the published one.** Rejections attributed to a fee wall are not evidence of a fee wall until this is corrected and re-run.
+★ **AND THE CONSEQUENCE IS NOT ONLY MIS-BOOKED OUTCOMES — IT IS MIS-SELECTION.** The net-EV gate that decides what gets traded is computed from these rates, so **every xStock candidate has been graded against a cost roughly eight times the confirmed one.** Rejections attributed to a fee wall are not evidence of a fee wall until this is corrected and re-run.
 
-⚠️ **BOTH xStock rows were written 2026-06-10 21:50:44Z and have not been touched since** — they predate Kraken's own 2026-07-09 revision by a month. **There is no per-class override anywhere: the xStock rows are byte-identical to the crypto rows.**
+⚠️ **BOTH xStock rows were written 2026-06-10 21:50:44Z by `b45-tier1-seed` and have not been touched since** — a month before Kraken's own 2026-07-09 revision. **They are byte-identical to the crypto rows, timestamp included.**
+
+⛔ **CORRECTION — an earlier revision of this file said "there is no per-class override anywhere," and that is WRONG (Langston, re-derived at the ref).** `asset_class` **is a primary-key column** and `xstock_spot` **holds its own row**, which the resolvers already key on (`cost-model.ts:114-119`, `slippage-fee-model.ts:39-42`). ⇒ ★ **THE PER-CLASS DIMENSION EXISTS AND IS HONOURED. The defect is the VALUE seeded into an existing per-class slot** — which makes the fix smaller, and means the correction must also reach `drizzle/migrations/2026-06-11-b45-fee-model-tier1.sql:39-42`, **which seeds all four rows from ONE Tier-1 literal and would re-seed the defect into any fresh database.**
+
+### 2.b ✅ FUTURES / PERPETUALS — THE CONFIRMED LADDER (17 rungs)
+
+> ✅ **AUTHENTICATED**, from `pro.kraken.com/app/trade/futures-btc-usd-perp#dialog/fee-level`, 2026-09-06. **Same three qualifying measures as spot crypto, same rung thresholds — only the rates differ.** Account is on **rung 1**.
+
+| Rung | Min spot vol | or Min futures vol | or Min AoP | **Maker** | **Taker** |
+|---|---|---|---|---|---|
+| **1** ⭐ *current* | — | — | — | **0.0200 %** | **0.0500 %** |
+| 2 | $2,501 | $5,000,001 | — | 0.0175 % | 0.0450 % |
+| 3 | $10,001 | $10,000,001 | $20,001 | 0.0150 % | 0.0400 % |
+| 4 | $25,001 | $15,000,001 | $50,001 | 0.0125 % | 0.0350 % |
+| 5 | $50,001 | $25,000,001 | $100,001 | 0.0100 % | 0.0300 % |
+| 6 | $100,001 | $40,000,001 | $200,001 | 0.0075 % | 0.0275 % |
+| 7 | $250,001 | $50,000,001 | $400,001 | 0.0050 % | 0.0250 % |
+| 8 | $500,001 | $75,000,001 | $600,001 | 0.0050 % | 0.0225 % |
+| 9 | $1,000,001 | $100,000,001 | $1,000,001 | **0.0000 %** | 0.0200 % |
+| 10 | $2,500,001 | $150,000,001 | $2,500,001 | 0.0000 % | 0.0180 % |
+| 11 | $5,000,001 | $250,000,001 | $5,000,001 | **−0.0030 %** | 0.0175 % |
+| 12 | $10,000,001 | $300,000,001 | $10,000,001 | −0.0030 % | 0.0170 % |
+| 13 | $50,000,001 | $400,000,001 | $20,000,001 | −0.0030 % | 0.0160 % |
+| 14 | $100,000,001 | $500,000,001 | $25,000,001 | −0.0050 % | 0.0150 % |
+| 15 | $250,000,001 | $1,000,000,001 | $50,000,001 | −0.0060 % | 0.0135 % |
+| 16 | $400,000,001 | $2,000,000,001 | $80,000,001 | −0.0060 % | 0.0130 % |
+| 17 | $500,000,001 | $5,000,000,001 | $100,000,001 | −0.0060 % | 0.0125 % |
+
+⛔ **FUTURES MAKER GOES NEGATIVE FROM RUNG 11 — a SECOND signed-fee product.** ⇒ **the `(0, 0.05]` boot rail is not only an xStock problem; any future perps work hits it too.** Recorded here so the `#1010` rail redesign is scoped once, not twice.
+⚠️ **DO NOT CONFUSE THIS WITH THE RETAIL "Perps" PRODUCT in §3**, which is a flat 0.25 % open / 0.25 % close. **This ladder is what Kraken Pro quotes on `BTC Perp`.** Same word, two prices.
+⚠️ **We do not trade this class today** (`crypto_perp` / `xstock_perp` exist as `module_constants` scopes but carry no fee rows). Recorded for completeness at Kyle's instruction, and because rung 1 futures is **16× cheaper on the taker leg than spot crypto** — a fact nobody has costed against our strategy set.
+
+### 2.c ⛔ THE THREE LADDERS DO NOT MOVE TOGETHER — THE RUNG IS PER PRODUCT
+
+| product | qualifying measures | rungs | account is on | can our activity move it? |
+|---|---|---|---|---|
+| **spot crypto** | spot vol **OR** futures vol **OR** AoP | 17 | **1** | **Yes** — rung 2 at $2,501 of 30-day spot volume |
+| **Pro xStocks** | **spot vol ONLY** | **2** | **1** | **Effectively no** — rung 2 needs $100,000,001 |
+| **futures / perps** | spot vol **OR** futures vol **OR** AoP | 17 | **1** | Yes, same thresholds as spot crypto |
+
+⛔⛔ **SO A FEE MODEL THAT RESOLVES ONE TIER FOR THE ACCOUNT IS WRONG BY CONSTRUCTION.** The rung is a property of **(account, product)**, not of the account. **xStocks does not share the cross-platform measures at all** — AoP and futures volume move the crypto and futures rungs and do nothing for xStocks.
+✅ **AND THE ONE PIECE OF GOOD NEWS: xSTOCKS IS A CONSTANT FOR US AT ANY REALISTIC SCALE** — maker −0.02 %, taker 0.10 %, flat below $100M. **Model it as a constant, not as a ladder.**
 
 ---
 
@@ -122,7 +168,7 @@ Kyle opened Kraken Pro's own **Fees** dialog on three live markets while signed 
 | **Kraken (retail) xStocks** | **No trading fee** when purchased with USDG or USD; the 1 % instant fee applies with other assets; a spread may be embedded. ⛔ **This is the RETAIL product and is NOT the Pro schedule in §2 — do not conflate them.** |
 | **Stocks / Pro Stocks (real US equities)** | Commission-free; regulatory pass-through fees apply. US only. **A different asset class from xStocks.** |
 | **Perps** | 0.25 % of notional to open, 0.25 % of closed notional to close. |
-| **Futures** | maker 0.0200 % → 0.0125 %, taker 0.0500 % → 0.0125 % across Tier 1 → Pro 5. **Futures maker goes NEGATIVE from Tier 11 (−0.0030 %).** |
+| **Futures / Perps on Kraken Pro** | ⛔ **See §2.b for the full confirmed ladder — not restated here.** |
 | **Spot Maker Rebate programme** | A separate maker incentive on selected lower-liquidity spot pairs, on the same best-of tier basis. **Eligible-pair list NOT captured — fetch it before relying on this.** |
 
 **Fee mechanics stated by Kraken:** charged per trade; calculated as a percentage of the trade's **quote-currency** volume by default (some pairs allow base-currency via a Fee Currency option); volume measured in the listed Fee Volume Currency, which **may differ from the pair's base or quote currency**; tiers reassessed after every trade.
