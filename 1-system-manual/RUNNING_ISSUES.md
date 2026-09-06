@@ -7564,6 +7564,25 @@ Kyle opened Kraken Pro's **Fees** dialog signed in, on three live markets, and c
 
 ⚠️ **WHY IT IS A RIDER AND NOT ITS OWN BATCH:** `#744` already owns *"did the work, skipped the review"*, and this is the same family one level down — **a review that ran but could not have failed.** Langston: *"worth homing as its own item rather than folding into this batch — if you want it as a rider on `B-GATE-GUARD` I'd support that placement."*
 ⛔ **NOT folded into `B-DEPLOY-DRIFT-LINE`, which is where it was FOUND, not where it BELONGS.**
+
+---
+
+### ➕ SECOND CLAUSE, ADDED 2026-09-06 — ⭐ A CONTROL STATES ITS EXPECTED OUTPUT BEFORE IT RUNS, OR ITS EXIT STATUS CARRIES NO INFORMATION
+
+⛔⛔ **THIS IS THE SAME ITEM, NOT A NEW ONE — LANGSTON RULED IT SO, AND MY OWN EVIDENCE IS WHAT DECIDED IT.** *"You DID run the failure branch first and still got a PASS-shaped result from a control that processed nothing. Failure-branch-first did not catch it; the pre-stated expected output did. Filed as two independent items, either can be satisfied alone and neither alone catches this case."*
+
+**THE INSTANCE, from `B-DEPLOY-DRIFT-LINE` r6, and it happened while testing a fix for silent zeros:** a control for the alert-store reader built its fixture through two `ssh` hops of shell quoting, produced **no valid JSON at all**, and returned **`rc=0` with zero output.** ★ **A pass-shaped result from a control that processed nothing — the fourth instance of that failure recorded on this project.**
+✅ **WHAT CAUGHT IT: the expected output had been written down FIRST.** I was looking for two specific ids; neither appeared, and `rc=0` stopped meaning anything. ⛔ **Without the pre-statement, `rc=0` reads as success and the control is worse than none — it launders an untested change as a verified one.**
+
+⇒ **THE TWO CLAUSES ARE INDEPENDENT AND BOTH ARE REQUIRED:**
+| clause | what it catches | what it MISSES alone |
+|---|---|---|
+| **(1) exercise the FAILURE branch against a real response from the external contract** | a guard written against a model of the interface rather than the interface | **a control that ran nothing at all** — measured |
+| **(2) state the expected output BEFORE running** | a control that processed nothing, or the wrong thing | **a guard that is never exercised on its failure path** |
+
+★ **AND (2) SUBSUMES THE OLD POSITIVE-CONTROL HABIT WITHOUT REPLACING IT:** rule 29(b) says *show the instrument returning a known positive before its silence counts.* **This says what that positive must be, and that it is named in advance** — which is the difference between a control and a demonstration.
+**Owner CC-A, same home (`#744`), no new plan row** — his placement.
+
 ---
 
 ### ⭐ #1012 OPEN 2026-09-06 (CC-INFRA, from Langston's `B-LANGSTON-CONTEXT` Step-4 ruling) — ⛔ "NO BATCH CLOSES CARRYING AN UNDISCHARGED OBLIGATION" IS A **PREDICATE**, NOT A SENTENCE — AND A STEP-4 DISPATCH MUST CARRY ITS OWN DOCUMENT SET

@@ -302,6 +302,11 @@ case "$READ" in
   PARSE_ERROR*) fail_measurement "compare_api" "${READ#PARSE_ERROR }" ;;
   ANOMALY*)
     set -- $READ
+    # SAME GUARD, SAME REASON, TWENTY LINES UP. The class member Langston named got the
+    # count guard and the one he did not name did not -- fix-follows-pointer landing on
+    # the very commit that recorded it. A truncated "ANOMALY behind" would read $3 under
+    # `set -u` and die with no mint, no log line, and stderr discarded by cron.
+    [ $# -eq 3 ] || fail_measurement "compare_reader" "malformed ANOMALY result, $# field(s): ${READ:0:120}"
     fail_measurement "direction_anomaly" "compare status=$2 — the deployed sha carries $3 commit(s) absent from $BRANCH. This is an anomaly (force-push? deploy of an unmerged ref?), not a distance."
     ;;
 esac
@@ -357,6 +362,7 @@ if [ "$READ" = "ZERO" ]; then
   python3 -c "
 import json
 seen={}
+skipped=0
 for line in open('$WORK/alerts.jsonl', encoding='utf-8', errors='replace'):
     line=line.strip()
     if not line: continue
@@ -366,8 +372,13 @@ for line in open('$WORK/alerts.jsonl', encoding='utf-8', errors='replace'):
     if not k.startswith('deploy-drift-'): continue
     rid=d.get('id')
     if rid: seen[rid]=d.get('state')
+    else: skipped += 1
 for i,s in seen.items():
     if s!='resolved': print(i)
+# A skipped row cannot be resolved by ANY path, so nothing is lost -- but the run would
+# otherwise log resolved=N failed=0 and exit clean while a row it could not touch stays open.
+import sys as _s
+if skipped: print('SKIPPED %d' % skipped, file=_s.stderr)
 " > "$WORK/open.txt" 2>>"$LOG" \
   || fail_measurement "alert_store" "could not parse the alert store while clearing drift rows. Rows may still be open, and an empty result here would otherwise read as nothing-to-clear."
 
@@ -394,7 +405,7 @@ set -- $READ                # OK status total age_h oldest_iso runtime_count cap
 # died on $3 under `set -u`: no mint, no log line, cron discards stderr. Measured: a
 # tab-only READ and a truncated "OK ahead" both did exactly that. One line closes it by
 # construction rather than by extending a list of things that have gone wrong so far.
-[ $# -ge 7 ] || fail_measurement "compare_reader" "the compare reader returned $# field(s), expected 7 — output was: ${READ:0:120}"
+[ $# -eq 7 ] && [ "$1" = "OK" ] || fail_measurement "compare_reader" "the compare reader returned $# field(s) leading with ${1:-<empty>}; expected exactly 7 leading with OK. Output was: ${READ:0:120}"
 TOTAL="$3"; AGE_H="$4"; OLDEST="$5"; RUNTIME_N="$6"; CAPPED="$7"
 # The list comes from its own file, so no filename can ever shift a scalar.
 LIST="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | paste -sd, -)"
