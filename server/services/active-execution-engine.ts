@@ -1463,7 +1463,9 @@ export class ActiveExecutionEngine {
           // ⛔ ONLY THE PRODUCER SPLITS. The third argument is the `source`, and
           // `isKrakenVenueSource` tests `source === 'kraken_equities_ws'` — splitting THAT would gate
           // real prices. Two axes, deliberately: source = policy, producer = provenance.
-          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws', priceProducer);
+          // ⛔ NULL SIDES, STATED NOT OMITTED: the equities tick carries a mark, not a book side.
+          // Saying so keeps `sidesCapturedAtMs` honest rather than inheriting the mark's freshness.
+          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws', priceProducer, null, null, null);
         } else {
 
         // Phase 8.8.3-I7-WS-D (D5): Use WebSocket cache FIRST with 2-second stale threshold
@@ -1554,7 +1556,8 @@ export class ActiveExecutionEngine {
             // Phase 8.8.3-I7: Broadcast this REST price to frontend
             // Normalize to internal format for consistent cache keys
             const internalSymbol = normalizeToInternalSymbol(position.symbol);
-            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest', priceProducer);
+            // ⛔ NULL SIDES, STATED NOT OMITTED — the REST engine fallback resolves a mark only.
+            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest', priceProducer, null, null, null);
             console.log(`[I7][REST_BROADCAST] symbol=${internalSymbol} price=${currentPrice}`);
           } catch (krakenError) {
             console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);

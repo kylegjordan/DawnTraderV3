@@ -47,7 +47,20 @@ export interface CachedPrice {
   high24h: number;
   low24h: number;
   lastSource: PriceSourceTag;
+  /**
+   * ⛔ WHEN THE **MARK** WAS LAST WRITTEN — NOT THE SIDES. Read `sidesCapturedAtMs` for those.
+   * ⚠️ MEASURED 2026-09-05 (`B-PRICE-SIDE-BY-JOB` W-3): this stamp is refreshed on every
+   * WebSocket tick by a path that does not touch `bid`/`ask`, so it dates a field we do not
+   * build levels from and says nothing about the two we do. Anything anchoring on a SIDE
+   * must read the side's own stamp.
+   */
   lastUpdatedAt: number;
+  /**
+   * ⭐ WHEN `bid`/`ask` WERE OBSERVED. `null` when no writer has ever supplied them for this
+   * symbol — which is honest, and is what a level constructor must refuse on rather than
+   * guess. ⛔ NEVER advanced by a writer that did not actually observe a side.
+   */
+  sidesCapturedAtMs: number | null;
 }
 
 class UnifiedPriceCache {
@@ -183,6 +196,9 @@ class UnifiedPriceCache {
               high24h: parseFloat(ticker.h?.[1] || '0'),
               low24h: parseFloat(ticker.l?.[1] || '0'),
               lastSource: 'kraken_rest',
+              // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
+              // them — unlike the tick paths, which refresh the mark and leave the sides alone.
+              sidesCapturedAtMs: Date.now(),
               lastUpdatedAt: now,
             };
             
@@ -283,6 +299,9 @@ class UnifiedPriceCache {
             high24h: parseFloat(ticker.h?.[1] || '0'),
             low24h: parseFloat(ticker.l?.[1] || '0'),
             lastSource: 'kraken_rest',
+            // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
+            // them — unlike the tick paths, which refresh the mark and leave the sides alone.
+            sidesCapturedAtMs: Date.now(),
             lastUpdatedAt: now,
           };
           
@@ -358,6 +377,9 @@ class UnifiedPriceCache {
                 high24h: parseFloat(ticker.h?.[1] || '0'),
                 low24h: parseFloat(ticker.l?.[1] || '0'),
                 lastSource: 'kraken_rest',
+                // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
+                // them — unlike the tick paths, which refresh the mark and leave the sides alone.
+                sidesCapturedAtMs: Date.now(),
                 lastUpdatedAt: now,
               };
               
@@ -399,18 +421,46 @@ class UnifiedPriceCache {
     };
   }
 
-  updateFromWebSocket(symbol: string, price: number): void {
+  /**
+   * ⛔⛔ B-PRICE-SIDE-BY-JOB — `bid`, `ask` AND THEIR CAPTURE INSTANT ARE NOW PARAMETERS.
+   *
+   * ★ THE DEFECT THIS CLOSES: this method took `(symbol, price)` only. The venue sends all three
+   * on ONE frame and the adapter parses all three — but there was NO PARAMETER to carry the
+   * sides, so they were dropped at the call while `lastUpdatedAt` was refreshed on every tick.
+   * ⇒ the store's timestamp was TRUE of the mark and FALSE of the sides, and every level built
+   * from a side inherited that.
+   *
+   * ⛔ A STATED `null` MEANS "this writer did not observe a side" AND IS NOT COERCED. The legacy
+   * `?? price` substitution survives ONLY for the cold case where nothing has ever been stored —
+   * which is where the fabricated `bid === ask === price` book came from, now confined to it.
+   */
+  updateFromWebSocket(
+    symbol: string,
+    price: number,
+    bid: number | null = null,
+    ask: number | null = null,
+    sidesCapturedAtMs: number | null = null,
+  ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
+    // ⭐ A STATED side wins; an unstated one keeps what was there; and ONLY when neither exists
+    // does the legacy mark-substitution apply — so the fabricated two-sided book is confined to
+    // the cold-start case it came from rather than re-created on every tick.
+    const _bid = bid ?? existing?.bid ?? price;
+    const _ask = ask ?? existing?.ask ?? price;
     this.cache.set(symbol, {
       symbol,
       price,
-      ask: existing?.ask ?? price,
-      bid: existing?.bid ?? price,
+      ask: _ask,
+      bid: _bid,
       volume24h: existing?.volume24h ?? 0,
       high24h: existing?.high24h ?? price,
       low24h: existing?.low24h ?? price,
       lastSource: 'kraken_ws',
+      // ⛔ ADVANCED ONLY WHEN A SIDE WAS ACTUALLY SUPPLIED. Re-stamping on a tick that did not
+      // refresh the sides is the W-3 defect itself; leaving it alone is what lets a reader ask
+      // "how old is this side?" and get a true answer.
+      sidesCapturedAtMs: (bid !== null || ask !== null) ? (sidesCapturedAtMs ?? Date.now()) : (existing?.sidesCapturedAtMs ?? null),
       lastUpdatedAt: now,
     });
   }
@@ -427,6 +477,11 @@ class UnifiedPriceCache {
       high24h: existing?.high24h ?? price,
       low24h: existing?.low24h ?? price,
       lastSource: 'kraken_rest',
+      // ⛔⛔ PRESERVED, NEVER RE-STAMPED. `updateFromRest(symbol, price)` takes the MARK only and
+      // carries the previous sides forward untouched. Dating them "now" would assert an
+      // observation that never happened — W-3 rebuilt one line further down. I wrote `Date.now()`
+      // here on the first pass and caught it; the sides keep the age they actually have.
+      sidesCapturedAtMs: existing?.sidesCapturedAtMs ?? null,
       lastUpdatedAt: now,
     });
   }

@@ -269,6 +269,17 @@ interface CachedPrice {
   /** ★ #743: original venue observation time. `cachedAt` may advance; THIS MUST NOT. */
   observedAt: number;
   cachedAt: number;
+  /**
+   * ⭐ B-PRICE-SIDE-BY-JOB — THE TWO TRANSACTABLE SIDES, CARRIED ONTO THE ENTRY THE EXIT TRIGGER
+   * READS. `getPriceWithFallback` returns this object, and `active-execution-engine.ts:1485`
+   * consumes it — so before this field the exit path held a midpoint and had no route back to
+   * the two prices it was built from.
+   * ⛔ `null` MEANS "this producer did not observe a side" and is never coerced to the mark.
+   */
+  bid: number | null;
+  ask: number | null;
+  /** When the SIDES were observed — NOT `observedAt`/`cachedAt`, which date the MARK. */
+  sidesCapturedAtMs: number | null;
 }
 
 // P19-B8.9a (Langston amendment 1 — encode the concept once, never a per-site whitelist):
@@ -536,7 +547,13 @@ export class LivePricingAdapter {
             // observation time through, so `cachedAt` advancing on a re-serve no longer erases how
             // old the price really is.
             observedAt: quote.observedAt ?? Date.now(),
-            cachedAt: Date.now()
+            cachedAt: Date.now(),
+            // ⛔ NULL SIDES, STATED NOT OMITTED — this writer resolves a MARK only and never
+            // observed a book side. Omitting them would let a level constructor read the mark's
+            // freshness as the side's, which is the W-3 defect this field exists to end.
+            bid: null,
+            ask: null,
+            sidesCapturedAtMs: null,
           });
         }
 
@@ -1011,6 +1028,18 @@ export class LivePricingAdapter {
     // caller as whichever producer happened to be most common — the conflation this batch exists
     // to end. Every call site states its own.
     producer: CachedProducer,
+    /**
+     * ⛔⛔ B-PRICE-SIDE-BY-JOB — THE TWO TRANSACTABLE SIDES. REQUIRED, for exactly the reason
+     * `producer` above is required: a default here would silently mislabel a future caller. An
+     * OPTIONAL side is worse than a wrong one — it goes missing on the caller nobody re-checked,
+     * and a level built on the survivor is indistinguishable from one built on a real quote.
+     * ⛔ `null` IS LEGITIMATE AND IS NOT "OMITTED": a one-sided book, or the v1 fallback that does
+     * not parse sides at all, has no bid — and SAYING SO is the honest answer.
+     */
+    bid: number | null,
+    ask: number | null,
+    /** When the SIDES were observed. ⛔ NOT `observedAt`/`cachedAt`, which date the MARK (W-3). */
+    sidesCapturedAtMs: number | null,
     traceId?: string,
   ): void {
     const pipelineStart = Date.now(); // Directive 9.0.C: Track pipeline time
@@ -1031,11 +1060,19 @@ export class LivePricingAdapter {
       // A genuine tick from a live feed: observed now. This is the one writer where
       // "observed" and "cached" legitimately coincide.
       observedAt: now,
-      cachedAt: now
+      cachedAt: now,
+      // ⭐ THE SIDES, WITH THEIR OWN CAPTURE INSTANT. This entry is what `getPriceWithFallback`
+      // returns and therefore what the EXIT TRIGGER reads — so until this commit the exit path
+      // held a midpoint with no route back to the two prices it was built from.
+      bid,
+      ask,
+      sidesCapturedAtMs,
     });
     
     // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
-    priceCache.updateFromWebSocket(normalized, price);
+    // ⭐ AND THE SHARED STORE GETS THEM TOO — one write reaching BOTH the exit trigger (the map
+    // above) and SIGNAL GENERATION (the shared cache, read at `signal-orchestrator.ts:2387`).
+    priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs);
     
     // Phase 8.8.3-I7-WS-D (D6): Diagnostic log for cache write
     console.log(`[I7-WS-D][CACHE_WRITE] symbol=${normalized} price=${price} source=${source}`);
@@ -1108,7 +1145,13 @@ export class LivePricingAdapter {
       source: 'entry_seed',
       producer: 'entry_seed',
       observedAt: Date.now(),
-      cachedAt: Date.now()
+      cachedAt: Date.now(),
+      // ⛔ NULL SIDES, STATED NOT OMITTED — this writer resolves a MARK only and never
+      // observed a book side. Omitting them would let a level constructor read the mark's
+      // freshness as the side's, which is the W-3 defect this field exists to end.
+      bid: null,
+      ask: null,
+      sidesCapturedAtMs: null,
     });
     
     // Ensure symbol is tracked
@@ -1360,7 +1403,13 @@ krakenWebSocketAdapter.on('priceTick', (evt: PriceTickEvent) => {
     // away is how the #448 literal-assertion drift starts. If it is ever null, there is nothing to
     // cache and we skip rather than invent a producer.
     const _p = toCachedProducer(evt.producer);
-    if (_p !== null) livePricingAdapter.updateCache(evt.symbol, evt.price, evt.source, _p, evt.traceId);
+    // ⭐ THE LAST HOP. `evt.bid`/`evt.ask` are REQUIRED on `PriceTickEvent` via the typed emit,
+    // so a producer that does not state them cannot compile.
+    if (_p !== null) {
+      livePricingAdapter.updateCache(
+        evt.symbol, evt.price, evt.source, _p, evt.bid, evt.ask, evt.sidesCapturedAtMs, evt.traceId,
+      );
+    }
   } catch (err) {
     // Subscriber error must not propagate back to ws-adapter (fire-and-forget invariant)
     console.error('[B78.1][PRICING_TICK_HANDLER] error processing priceTick event:', err);
