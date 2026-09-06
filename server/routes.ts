@@ -1,4 +1,5 @@
 import { getLevelBasisFunnel } from './core/calculations/level-basis.js';
+import { getVenueTimestampPresence } from './exchanges/kraken/kraken-websocket-adapter.js';
 import type { Express, Request, Response, NextFunction, Router as ExpressRouter } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
@@ -8181,6 +8182,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // ⚠️ IN-MEMORY AND PROCESS-LIFETIME, stated rather than discovered: a restart zeroes it,
         // so read it as a rate WITHIN a lifetime and never as a historical series.
         levelBasisFunnel: getLevelBasisFunnel(),
+        // ⭐ B-PRICE-SIDE-BY-JOB §14 — DOES THE VENUE ACTUALLY SEND ITS OWN TIMESTAMP? Counted per
+        // channel, present vs absent, and exposed the moment the parse ships. ⛔ Without the
+        // denominator a zero would be unreadable: "the venue is silent" and "our parse is wrong"
+        // look identical. In-memory and process-lifetime, like the funnel beside it.
+        venueTimestampPresence: getVenueTimestampPresence(),
         nullReasonDetail: lt?.nullReasonAggregate ?? {},
         // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates now
         // separately maintained in eval-cycle.ts. Was emitting the combined

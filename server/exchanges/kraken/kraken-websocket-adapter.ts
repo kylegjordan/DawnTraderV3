@@ -133,7 +133,64 @@ export interface PriceTickEvent {
    * THAT side is, not how old some other field on the same row is.
    */
   sidesCapturedAtMs: number | null;
+  /**
+   * ⭐⭐ THE VENUE'S OWN TIMESTAMP — B-PRICE-SIDE-BY-JOB §14, 2026-09-05. REQUIRED.
+   *
+   * ⛔ KYLE'S CATCH, and it is the sharpest question asked of this batch: *"a best price on the
+   * ticker could have been recorded fifteen minutes ago, but we put a time stamp on it as having
+   * happened just now because that's when we received it."* **He is right. Every stamp this system
+   * held was our RECEIVE-or-WRITE instant.**
+   *
+   * ✅ AND KRAKEN SENDS ITS OWN ON BOTH CHANNELS — we simply never read it: `ticker` carries
+   * `timestamp` (RFC3339, *"The ticker data timestamp"*) and `book` carries `timestamp` (*"The book
+   * order update timestamp"*, per MESSAGE — individual price levels have none, which is a venue
+   * fact, not a gap in our parsing).
+   *
+   * ★ THIS IS A KNOWN, NAMED TRAP OUTSIDE OUR CODE: `nautechsystems/nautilus_trader` issue #3926,
+   * *"Kraken spot WebSocket quote ticks do not use the ticker timestamp"* — a professional
+   * framework carried the identical defect. Kraken ADDED these fields and implementations kept
+   * using local reception time; the stated consequence is inaccurate latency measurement and
+   * event-time ORDERING.
+   *
+   * ⛔⛔ DELIBERATELY A SEPARATE FIELD FROM `sidesCapturedAtMs` RATHER THAN A REPLACEMENT, AND THE
+   * REASON IS THAT THE GAP IS THE MEASUREMENT WE ACTUALLY WANT. Keeping both lets us compute
+   * `ourClock − venueClock` for the first time — which is the only honest answer to *"how fresh is
+   * our pricing really"*. Overwriting one with the other would destroy the very quantity Kyle is
+   * asking about.
+   * ⚠️ AND THE LIMIT, STATED: Kraken documents what each timestamp is CALLED and NOT which moment
+   * it refers to — quote formation, or message emission. ⇒ this is the VENUE'S clock instead of
+   * ours, which is strictly better and is still not proof of when the price came into existence.
+   */
+  venueObservedAtMs: number | null;
   traceId?: string;
+}
+
+/**
+ * Parse a venue RFC3339 timestamp to epoch ms, or `null`.
+ *
+ * ⛔ RETURNS `null` ON ANYTHING UNPARSEABLE RATHER THAN FALLING BACK TO `Date.now()`. A fabricated
+ * venue time is worse than an absent one: absent is refusable, fabricated is indistinguishable
+ * from real and would re-create the exact defect this field exists to end.
+ */
+export function parseVenueTimestampMs(raw: unknown): number | null {
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * ⭐ PRESENCE COUNTER — because a field we have never seen arrive is a field we must not depend on.
+ * Shadow-first, exactly as the level-basis funnel: MEASURE that the venue actually sends it before
+ * any gate reads it. A zero here would mean the parse is wrong, not that the venue is silent — and
+ * those are indistinguishable without the denominator.
+ */
+const _venueTsSeen: Record<string, { present: number; absent: number }> = {};
+export function recordVenueTimestampPresence(channel: string, present: boolean): void {
+  const c = _venueTsSeen[channel] ?? (_venueTsSeen[channel] = { present: 0, absent: 0 });
+  if (present) c.present++; else c.absent++;
+}
+export function getVenueTimestampPresence(): Record<string, { present: number; absent: number }> {
+  return JSON.parse(JSON.stringify(_venueTsSeen));
 }
 
 export class KrakenWebSocketAdapter extends EventEmitter {
@@ -758,6 +815,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // B-EXIT-BOOK-AGE-STAMP P2: the producer now states the KIND. `_mid` on essentially every
       // tick; `_last` only on a one-sided or empty book. Carried from `translateV2ToV1`, never
       // re-derived here — see `mark-kind.ts` for why re-derivation downstream is unsafe.
+      // ⭐ Parse the venue stamp BEFORE the emit so the counter sees every frame, present or not.
+      const _venueTs = parseVenueTimestampMs((update as any)?.timestamp);
+      recordVenueTimestampPresence('ticker', _venueTs !== null);
       // ⭐⭐ THE SIDES TRAVEL — AND THIS IS THE ONE THAT MATTERS. `bid` and `ask` are parsed ~50
       // lines above from the SAME frame, and the midpoint in `lastPrice` was computed FROM them
       // (`kraken-v2-translator.ts:73`). Until 2026-09-05 they were discarded here, so every
@@ -773,6 +833,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         bid: Number.isFinite(bid) && bid > 0 ? bid : null,
         ask: Number.isFinite(ask) && ask > 0 ? ask : null,
         sidesCapturedAtMs: now,
+        // ⭐ THE VENUE'S OWN TIME, read from the raw frame rather than invented. `update` is the
+        // unmodified venue object (`:699`), so this is Kraken's stamp, not ours.
+        venueObservedAtMs: _venueTs,
       });
       this.priceTickCount++;
 
@@ -849,6 +912,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     const updates = message.data || [];
     
     for (const update of updates) {
+      // ⭐ B-PRICE-SIDE-BY-JOB §14 — the venue's own stamp on this book update, parsed rather
+      // than invented. Counted whether present or absent, so a zero later is readable as "the
+      // venue did not send one" rather than "our parse is wrong" — those are indistinguishable
+      // without the denominator.
+      const _bookVenueTs = parseVenueTimestampMs((update as any)?.timestamp);
+      recordVenueTimestampPresence('book', _bookVenueTs !== null);
       const krakenPair = update.symbol;
       const internalSymbol = this.mapKrakenPairToInternalSymbol(krakenPair);
       
@@ -1023,6 +1092,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       this.emitPriceTick({
         symbol: internalSymbol, price: midpoint, source: 'kraken_ws', producer: 'kraken_ws_book_mid',
         bid: bestBid, ask: bestAsk, sidesCapturedAtMs: Date.now(),
+        // ⭐ The book message carries its own `timestamp` ("The book order update timestamp").
+        // ⛔ PER MESSAGE, NOT per price level — the venue does not stamp individual levels, so this
+        // dates the UPDATE that produced this top-of-book, which is the finest grain that exists.
+        venueObservedAtMs: _bookVenueTs,
       });
       this.priceTickCount++;
       
@@ -1164,7 +1237,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // different things, and only one of them is safe to build a level on.
       this.emitPriceTick({
         symbol: internalSymbol, price: lastPrice, source: 'kraken_ws', producer: 'kraken_ws_ticker_v1',
-        bid: null, ask: null, sidesCapturedAtMs: null, traceId,
+        bid: null, ask: null, sidesCapturedAtMs: null,
+        // ⛔ The raw v1 fallback frame carries no venue timestamp we parse. Stated, not omitted.
+        venueObservedAtMs: null, traceId,
       });
       this.priceTickCount++;
       

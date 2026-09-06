@@ -278,8 +278,14 @@ interface CachedPrice {
    */
   bid: number | null;
   ask: number | null;
-  /** When the SIDES were observed — NOT `observedAt`/`cachedAt`, which date the MARK. */
+  /** When the SIDES were observed BY US — NOT `observedAt`/`cachedAt`, which date the MARK. */
   sidesCapturedAtMs: number | null;
+  /**
+   * ⭐ THE VENUE'S OWN TIMESTAMP (§14). `null` when the producer did not supply one.
+   * ⛔ Kept beside our clock rather than replacing it, so `sidesCapturedAtMs − venueObservedAtMs`
+   * is computable — that difference is the first honest measurement of our end-to-end price lag.
+   */
+  venueObservedAtMs: number | null;
 }
 
 // P19-B8.9a (Langston amendment 1 — encode the concept once, never a per-site whitelist):
@@ -554,6 +560,9 @@ export class LivePricingAdapter {
             bid: null,
             ask: null,
             sidesCapturedAtMs: null,
+            // ⛔ This REST quote path resolves a mark and carries no venue stamp we parse.
+            // Stated, not omitted — an unstated time is indistinguishable from a fresh one.
+            venueObservedAtMs: null,
           });
         }
 
@@ -1038,8 +1047,14 @@ export class LivePricingAdapter {
      */
     bid: number | null,
     ask: number | null,
-    /** When the SIDES were observed. ⛔ NOT `observedAt`/`cachedAt`, which date the MARK (W-3). */
+    /** When the SIDES were observed BY US. ⛔ NOT `observedAt`/`cachedAt`, which date the MARK (W-3). */
     sidesCapturedAtMs: number | null,
+    /**
+     * ⭐ THE VENUE'S OWN TIMESTAMP (§14). Kept ALONGSIDE our clock, never instead of it — the GAP
+     * between the two is the measurement Kyle actually asked for ("how fresh is our pricing
+     * really"), and overwriting one with the other would destroy it.
+     */
+    venueObservedAtMs: number | null,
     traceId?: string,
   ): void {
     const pipelineStart = Date.now(); // Directive 9.0.C: Track pipeline time
@@ -1067,6 +1082,7 @@ export class LivePricingAdapter {
       bid,
       ask,
       sidesCapturedAtMs,
+      venueObservedAtMs,
     });
     
     // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
@@ -1152,6 +1168,7 @@ export class LivePricingAdapter {
       bid: null,
       ask: null,
       sidesCapturedAtMs: null,
+      venueObservedAtMs: null,
     });
     
     // Ensure symbol is tracked
@@ -1407,7 +1424,8 @@ krakenWebSocketAdapter.on('priceTick', (evt: PriceTickEvent) => {
     // so a producer that does not state them cannot compile.
     if (_p !== null) {
       livePricingAdapter.updateCache(
-        evt.symbol, evt.price, evt.source, _p, evt.bid, evt.ask, evt.sidesCapturedAtMs, evt.traceId,
+        evt.symbol, evt.price, evt.source, _p, evt.bid, evt.ask, evt.sidesCapturedAtMs,
+        evt.venueObservedAtMs, evt.traceId,
       );
     }
   } catch (err) {
