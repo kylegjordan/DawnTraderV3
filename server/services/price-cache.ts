@@ -61,6 +61,16 @@ export interface CachedPrice {
    * guess. ⛔ NEVER advanced by a writer that did not actually observe a side.
    */
   sidesCapturedAtMs: number | null;
+  /**
+   * ⭐ THE VENUE'S OWN STAMP for the observation that produced these sides, `null` when the
+   * producing path did not carry one.
+   * ⛔⛔ KEPT AS A SEPARATE FIELD FROM `sidesCapturedAtMs`, NEVER AS A DIFFERENCE (Langston's
+   * condition 2, 2026-09-06): *"A delta can't be re-derived when one side turns out to be the
+   * wrong object."* Storing `ourClock − venueClock` would discard the only thing that lets a
+   * later reader discover WHICH clock was wrong — and this batch has already had two numbers
+   * turn out to be about the wrong population.
+   */
+  venueObservedAtMs: number | null;
 }
 
 class UnifiedPriceCache {
@@ -199,6 +209,9 @@ class UnifiedPriceCache {
               // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
               // them — unlike the tick paths, which refresh the mark and leave the sides alone.
               sidesCapturedAtMs: Date.now(),
+              // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
+              // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
+              venueObservedAtMs: null,
               lastUpdatedAt: now,
             };
             
@@ -302,6 +315,9 @@ class UnifiedPriceCache {
             // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
             // them — unlike the tick paths, which refresh the mark and leave the sides alone.
             sidesCapturedAtMs: Date.now(),
+            // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
+            // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
+            venueObservedAtMs: null,
             lastUpdatedAt: now,
           };
           
@@ -319,6 +335,24 @@ class UnifiedPriceCache {
       console.warn(`[A4.R10R-1][PriceCache] getPrice error for ${symbol}:`, err.message);
       return cached || null;
     }
+  }
+
+  /**
+   * ⭐ FEED LIVENESS AS A COUNT OF DISTINCT SYMBOLS, NOT AS A RECENCY GAUGE (Langston, 2026-09-06).
+   *
+   * ⛔ THE FORM MATTERS AND THE OBVIOUS FORM IS WRONG. A feed-wide "last message age" stays green
+   * on ONE chatty name, so it cannot see a feed that has gone silent except for a handful of
+   * symbols. This batch measured exactly that failure in its own data: THREE stablecoins carried
+   * the busiest decile of a 460-symbol pool. Counting DISTINCT SYMBOLS heard from is the only
+   * form of the control that works.
+   *
+   * ⛔ Returns a RAW COUNT and never a "healthy" boolean — the caller records the number and the
+   * window beside it, and the threshold is set later from the observed distribution.
+   */
+  countSymbolsWithMessageSince(sinceMs: number): number {
+    let n = 0;
+    for (const p of this.cache.values()) if (p.lastUpdatedAt >= sinceMs) n++;
+    return n;
   }
 
   getAllCachedPrices(): CachedPrice[] {
@@ -380,6 +414,9 @@ class UnifiedPriceCache {
                 // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
                 // them — unlike the tick paths, which refresh the mark and leave the sides alone.
                 sidesCapturedAtMs: Date.now(),
+                // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
+                // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
+                venueObservedAtMs: null,
                 lastUpdatedAt: now,
               };
               
@@ -440,6 +477,7 @@ class UnifiedPriceCache {
     bid: number | null = null,
     ask: number | null = null,
     sidesCapturedAtMs: number | null = null,
+    venueObservedAtMs: number | null = null,
   ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
@@ -461,6 +499,10 @@ class UnifiedPriceCache {
       // refresh the sides is the W-3 defect itself; leaving it alone is what lets a reader ask
       // "how old is this side?" and get a true answer.
       sidesCapturedAtMs: (bid !== null || ask !== null) ? (sidesCapturedAtMs ?? Date.now()) : (existing?.sidesCapturedAtMs ?? null),
+      // ⛔ MOVES ONLY WITH THE SIDES IT DATES. A venue stamp advanced on a tick that did not
+      // refresh the sides would date one observation while describing another — W-3 again,
+      // one field over. When no side was supplied the previous stamp is carried, untouched.
+      venueObservedAtMs: (bid !== null || ask !== null) ? venueObservedAtMs : (existing?.venueObservedAtMs ?? null),
       lastUpdatedAt: now,
     });
   }
@@ -482,6 +524,7 @@ class UnifiedPriceCache {
       // observation that never happened — W-3 rebuilt one line further down. I wrote `Date.now()`
       // here on the first pass and caught it; the sides keep the age they actually have.
       sidesCapturedAtMs: existing?.sidesCapturedAtMs ?? null,
+      venueObservedAtMs: existing?.venueObservedAtMs ?? null,
       lastUpdatedAt: now,
     });
   }

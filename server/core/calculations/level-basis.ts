@@ -416,34 +416,77 @@ export function __resetLevelBasisFunnelForTest(): void {
 export const LEVEL_BASIS_OBSERVATION_MAX_AGE_MS = 60_000;
 export const LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION = 0.50;
 
+
 /* ────────────────────────────────────────────────────────────────────────────
- * ⭐⭐ SIDE-AGE OBSERVATION — HOW OLD IS THE QUOTE WE WOULD BUILD A LEVEL FROM?
+ * SIDE-AGE OBSERVATION — HOW OLD IS THE QUOTE WE WOULD BUILD A LEVEL FROM?
  *
- * ⛔ WHY THIS EXISTS AND WHY IT IS NOT THE ARCHIVE. I answered "how fresh is our pricing"
- * from the durable ticker archive and Langston was right to call it a proxy: the archiver is a
- * DIFFERENT SUBSCRIBER — its own socket, its own 4 s write throttle, its own symbol shards — so
- * it bounds the VENUE'S cadence and says nothing about the age of the entry THIS process holds
- * at the instant a level is constructed. **Those are different quantities and only the second
- * one can set a gate.** This records the second one, at the site, on the real population.
+ * ⛔ WHY THIS IS NOT THE ARCHIVE. I answered "how fresh is our pricing" from the durable ticker
+ * archive and Langston refused it as a proxy: the archiver is a DIFFERENT SUBSCRIBER — its own
+ * socket, its own 4 s write throttle, its own shards — so it bounds the VENUE'S cadence and says
+ * nothing about the entry THIS process holds when a level is built. Different quantities; only
+ * the second one can set a gate.
  *
- * ⛔⛔ A HISTOGRAM, DELIBERATELY — NOT A RESERVOIR AND NOT A RUNNING MEAN.
- *  - A reservoir SAMPLES, and every sampling scheme here would have to be defended against the
- *    exact length-bias that made the archive number wrong by ~65×. A histogram counts every
- *    observation, so there is no sampling story to get wrong.
- *  - A mean would be dominated by the tail and would hide the shape that IS the finding: the
- *    archive's spread ran from ~32 s on the busiest symbols to ~78 min on the quietest.
- *  - Bounded memory, deterministic, and readable without trusting the reader.
+ * ⛔⛔ A HISTOGRAM, NOT A RESERVOIR. A reservoir SAMPLES, and any sampling scheme here would have
+ * to be defended against the exact length-bias that made the archive number wrong by ~65x. A
+ * histogram counts every observation. Quantiles are reported as bucket RANGES, never interpolated
+ * points — inventing precision the instrument lacks is the same sin one level down.
  *
- * ⛔ AND QUANTILES ARE REPORTED AS BUCKET RANGES, NEVER AS A POINT. Interpolating inside a
- * bucket would manufacture precision the instrument does not have, which is the same sin as the
- * number this replaces. `p95: "300000-900000"` is the honest answer; `p95: 412_337` is not.
+ * ⚠️ THREE OUTCOMES, KEPT APART, because collapsing them is #546's shape:
+ *   absent (no cache entry) · unstamped (entry exists, no writer ever supplied a side) ·
+ *   observed. AN UNSTAMPED ENTRY IS NOT AGE 0 — age 0 is the freshest possible reading and
+ *   "we never observed a side" is the least informative one.
  *
- * ⚠️ THREE OUTCOMES, KEPT APART, BECAUSE COLLAPSING THEM IS #546's SHAPE:
- *   `absent`    — no cache entry at all for that symbol
- *   `unstamped` — an entry exists but no writer ever supplied a side (`sidesCapturedAtMs` null)
- *   `observed`  — a real side with a real capture instant
- * **An unstamped entry is NOT a fresh one and must never be counted as age 0.**
+ * ★★ WHY THREE TERMS AND NOT ONE — LANGSTON, 2026-09-06, CORRECTING ME.
+ * I proposed gating on age AND feed-not-live. ⛔ A TERM ANDED ONTO A FAIL-CLOSED GATE CAN ONLY
+ * WIDEN IT, and that conjunction opens the one door we most need shut: PER-SYMBOL SUBSCRIPTION
+ * DEATH BEHIND A HEALTHY SOCKET — a resubscribe that did not take, a delist, a silent drop. The
+ * feed reads green, the other ~460 symbols are fine, and that symbol's quote is a memory we may
+ * hold a position against. Age-only would refuse it; my conjunction would have passed it.
+ * ⇒ THREE CELLS, NOT TWO: (a) old + feed dead -> refuse, whole-feed · (b) old + feed live ->
+ * PER-SYMBOL SUSPICION, NO AUTOMATIC PASS · (c) fresh -> transact.
+ *
+ * ★ AND THE TERM THAT DISCRIMINATES INSIDE (b) IS THE SYMBOL'S OWN EXPECTED INTER-ARRIVAL, not
+ * feed liveness. "Quiet" is symbol-specific: 20 minutes silent is normal for USDC/USD and
+ * alarming for BTC/USD. Age-only fails because it measures every symbol against ONE CONSTANT —
+ * the same defect that produced this batch's decile-10 artifact. Feed liveness is the THIRD term
+ * and it is a CLASSIFIER, not a gate.
+ *
+ * ⛔⛔ LIVENESS IS COUNTED IN DISTINCT SYMBOLS, NEVER AS A FEED-WIDE LAST-MESSAGE AGE. One chatty
+ * name keeps a recency gauge green — measured proof from this batch: THREE stablecoins carried
+ * decile 10 of a 460-symbol pool. Counting symbols is the only form of the control that works.
+ *
+ * ⛔ EVERY CLOCK IS CARRIED RAW AND SEPARATE — never a stored difference, never a precomputed
+ * "live" boolean. Langston: "A delta can't be re-derived when one side turns out to be the wrong
+ * object." This batch has already had two numbers turn out to be about the wrong population.
+ *
+ * ⛔ NOTHING GATES ON ANY OF THIS. Shadow arm only. No threshold is pre-registered until the
+ * read-site distribution exists and the refusal rate has been measured PER CELL — pooled would be
+ * carried by the quiet tail exactly as the repeat rate was.
  * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * WHERE in the pipeline the attempt happened. ⛔ Langston's condition 1: quantiles come out PER
+ * STAGE, never classwide. A stage in this union that is never recorded is ABSENT from the rows —
+ * the honest rendering of "not instrumented", which is not the same as zero.
+ */
+export type LevelBasisStage =
+  | 'active_signal_birth'
+  | 'vts_signal_birth'
+  | 'rtb_refresh'
+  | 'exit_trigger';
+
+/** ⛔ RAW FIELDS ONLY. The recorder derives; the call site never hands over a difference. */
+export interface SideAgeAttempt {
+  stage: LevelBasisStage;
+  symbol: string;
+  nowMs: number;
+  cacheEntryPresent: boolean;
+  sidesCapturedAtMs: number | null;
+  venueObservedAtMs: number | null;
+  symbolLastMessageAtMs: number | null;
+  feedDistinctSymbolsInWindow: number | null;
+  feedWindowMs: number | null;
+}
 
 /** Upper edges in ms. A value lands in the first bucket whose edge it is strictly below. */
 export const SIDE_AGE_BUCKET_EDGES_MS: readonly number[] = [
@@ -451,10 +494,18 @@ export const SIDE_AGE_BUCKET_EDGES_MS: readonly number[] = [
   120_000, 300_000, 900_000, 1_800_000, 3_600_000,
 ];
 
-export type SideAgeObservation =
-  | { kind: 'observed'; ageMs: number }
-  | { kind: 'absent' }
-  | { kind: 'unstamped' };
+function newBuckets(): number[] { return new Array(SIDE_AGE_BUCKET_EDGES_MS.length + 1).fill(0); }
+
+function bucketIndex(v: number): number {
+  const i = SIDE_AGE_BUCKET_EDGES_MS.findIndex((edge) => v < edge);
+  return i < 0 ? SIDE_AGE_BUCKET_EDGES_MS.length : i;
+}
+
+function bucketLabel(i: number): string {
+  const lo = i === 0 ? 0 : SIDE_AGE_BUCKET_EDGES_MS[i - 1];
+  const hi = i === SIDE_AGE_BUCKET_EDGES_MS.length ? null : SIDE_AGE_BUCKET_EDGES_MS[i];
+  return hi === null ? String(lo) + '+' : String(lo) + '-' + String(hi);
+}
 
 interface SideAgeCell {
   observed: number;
@@ -462,46 +513,85 @@ interface SideAgeCell {
   unstamped: number;
   /**
    * ⛔ COUNTED SEPARATELY BECAUSE THE HISTOGRAM CANNOT SHOW IT. A negative age and a zero age
-   * both land in the first bucket and leave `maxMs` untouched, so without this field the
-   * "recorded, not clamped" promise in the block comment above is UNVERIFIABLE — a clamp could
-   * be added and every test would still pass. Caught by asking whether the test would come out
-   * differently if the code were wrong; it would not have. This field is what makes it.
+   * both land in the first bucket and leave maxMs untouched, so without this field the
+   * "recorded, not clamped" promise above is UNVERIFIABLE — a clamp could be added and every
+   * test would still pass. Found by asking whether the test would come out differently if the
+   * code were wrong; it would not have.
    */
   negative: number;
   maxMs: number;
   buckets: number[];
+  venueStampPresent: number;
+  venueStampAbsent: number;
+  symbolGapBuckets: number[];
+  symbolGapObserved: number;
+  symbolGapUnknown: number;
+  feedCountN: number;
+  feedCountMin: number | null;
+  feedCountMax: number | null;
+  feedWindowMs: number | null;
 }
 
 function emptySideAgeCell(): SideAgeCell {
   return {
-    observed: 0, absent: 0, unstamped: 0, negative: 0, maxMs: 0,
-    buckets: new Array(SIDE_AGE_BUCKET_EDGES_MS.length + 1).fill(0),
+    observed: 0, absent: 0, unstamped: 0, negative: 0, maxMs: 0, buckets: newBuckets(),
+    venueStampPresent: 0, venueStampAbsent: 0,
+    symbolGapBuckets: newBuckets(), symbolGapObserved: 0, symbolGapUnknown: 0,
+    feedCountN: 0, feedCountMin: null, feedCountMax: null, feedWindowMs: null,
   };
 }
 
+/** Per-symbol gap summary — bounded by the symbol universe, four numbers each. */
+interface SymbolGapSummary { n: number; sum: number; sumsq: number; max: number }
+
 const _sideAge = new Map<string, SideAgeCell>();
+const _symbolGap = new Map<string, SymbolGapSummary>();
+
+function sideAgeKey(k: LevelBasisFunnelKey, stage: LevelBasisStage): string {
+  return k.lane + ':' + k.assetClass + ':' + stage;
+}
 
 /**
- * ⛔ A NEGATIVE AGE IS RECORDED, NOT CLAMPED. It means the capture stamp is in this process's
- * future — a real condition worth seeing (clock skew, or a stamp taken from a venue clock and
- * differenced against ours) and exactly the thing capturing the venue timestamp was meant to
- * expose. Clamping it to zero would report the healthiest possible reading for the unhealthiest
- * possible state.
+ * ⛔ A NEGATIVE AGE IS RECORDED, NOT CLAMPED. It means the capture stamp sits in this process's
+ * future — clock skew, or a venue stamp differenced against ours — and it is exactly what
+ * capturing the venue timestamp exists to expose. Clamping to zero would report the healthiest
+ * possible number for the unhealthiest possible state.
  */
-export function recordSideAgeObservation(key: LevelBasisFunnelKey, obs: SideAgeObservation): void {
-  const id = keyOf(key);
+export function recordSideAgeAttempt(key: LevelBasisFunnelKey, a: SideAgeAttempt): void {
+  const id = sideAgeKey(key, a.stage);
   let cell = _sideAge.get(id);
   if (!cell) { cell = emptySideAgeCell(); _sideAge.set(id, cell); }
 
-  if (obs.kind === 'absent') { cell.absent++; return; }
-  if (obs.kind === 'unstamped') { cell.unstamped++; return; }
+  if (a.feedDistinctSymbolsInWindow !== null) {
+    cell.feedCountN++;
+    const c = a.feedDistinctSymbolsInWindow;
+    cell.feedCountMin = cell.feedCountMin === null ? c : Math.min(cell.feedCountMin, c);
+    cell.feedCountMax = cell.feedCountMax === null ? c : Math.max(cell.feedCountMax, c);
+  }
+  if (a.feedWindowMs !== null) cell.feedWindowMs = a.feedWindowMs;
 
+  if (a.symbolLastMessageAtMs === null) {
+    cell.symbolGapUnknown++;
+  } else {
+    const gap = a.nowMs - a.symbolLastMessageAtMs;
+    cell.symbolGapObserved++;
+    cell.symbolGapBuckets[bucketIndex(gap)]++;
+    let sum = _symbolGap.get(a.symbol);
+    if (!sum) { sum = { n: 0, sum: 0, sumsq: 0, max: 0 }; _symbolGap.set(a.symbol, sum); }
+    sum.n++; sum.sum += gap; sum.sumsq += gap * gap;
+    if (gap > sum.max) sum.max = gap;
+  }
+
+  if (!a.cacheEntryPresent) { cell.absent++; return; }
+  if (a.sidesCapturedAtMs === null) { cell.unstamped++; return; }
+
+  if (a.venueObservedAtMs === null) cell.venueStampAbsent++; else cell.venueStampPresent++;
+
+  const ageMs = a.nowMs - a.sidesCapturedAtMs;
   cell.observed++;
-  if (obs.ageMs < 0) cell.negative++;
-  if (obs.ageMs > cell.maxMs) cell.maxMs = obs.ageMs;
-  let i = SIDE_AGE_BUCKET_EDGES_MS.findIndex((edge) => obs.ageMs < edge);
-  if (i < 0) i = SIDE_AGE_BUCKET_EDGES_MS.length;
-  cell.buckets[i]++;
+  if (ageMs < 0) cell.negative++;
+  if (ageMs > cell.maxMs) cell.maxMs = ageMs;
+  cell.buckets[bucketIndex(ageMs)]++;
 }
 
 export interface SideAgeRow {
@@ -510,57 +600,83 @@ export interface SideAgeRow {
   observed: number;
   absent: number;
   unstamped: number;
-  /** Observations whose age was NEGATIVE — the capture stamp sat in this process's future. */
   negative: number;
   maxMs: number;
-  /** Bucket label -> count. Labels are ranges so the reader cannot mistake one for a point. */
   histogram: Record<string, number>;
-  /** Bucket RANGE containing the quantile, or null when nothing was observed. */
   p50Bucket: string | null;
   p95Bucket: string | null;
+  venueStampPresent: number;
+  venueStampAbsent: number;
+  symbolGapObserved: number;
+  symbolGapUnknown: number;
+  symbolGapHistogram: Record<string, number>;
+  feedDistinctSymbolsMin: number | null;
+  feedDistinctSymbolsMax: number | null;
+  feedWindowMs: number | null;
 }
 
-function bucketLabel(i: number): string {
-  const lo = i === 0 ? 0 : SIDE_AGE_BUCKET_EDGES_MS[i - 1];
-  const hi = i === SIDE_AGE_BUCKET_EDGES_MS.length ? null : SIDE_AGE_BUCKET_EDGES_MS[i];
-  return hi === null ? `${lo}+` : `${lo}-${hi}`;
-}
-
-function quantileBucket(cell: SideAgeCell, q: number): string | null {
-  if (cell.observed === 0) return null;
-  const target = q * cell.observed;
+function quantileBucket(buckets: number[], total: number, q: number): string | null {
+  if (total === 0) return null;
+  const target = q * total;
   let cum = 0;
-  for (let i = 0; i < cell.buckets.length; i++) {
-    cum += cell.buckets[i];
+  for (let i = 0; i < buckets.length; i++) {
+    cum += buckets[i];
     if (cum >= target) return bucketLabel(i);
   }
-  return bucketLabel(cell.buckets.length - 1);
+  return bucketLabel(buckets.length - 1);
+}
+
+function histogramOf(buckets: number[]): Record<string, number> {
+  const h: Record<string, number> = {};
+  buckets.forEach((n, i) => { h[bucketLabel(i)] = n; });
+  return h;
 }
 
 /**
- * ⛔ ROWS, NEVER A TOTAL — same rule as the refusal funnel, for the same reason: a single figure
- * pooled across lanes and asset classes is precisely what the keying exists to prevent.
+ * ⛔ ROWS, NEVER A TOTAL — and now keyed by STAGE as well as lane and class, because a figure
+ * pooled across stages describes none of them.
  */
 export function getSideAgeRows(): SideAgeRow[] {
-  return [...(_sideAge.entries())].map(([key, cell]) => {
-    const histogram: Record<string, number> = {};
-    cell.buckets.forEach((n, i) => { histogram[bucketLabel(i)] = n; });
-    return {
-      key,
-      attempted: cell.observed + cell.absent + cell.unstamped,
-      observed: cell.observed,
-      absent: cell.absent,
-      unstamped: cell.unstamped,
-      negative: cell.negative,
-      maxMs: cell.maxMs,
-      histogram,
-      p50Bucket: quantileBucket(cell, 0.5),
-      p95Bucket: quantileBucket(cell, 0.95),
-    };
+  return [...(_sideAge.entries())].map(([key, c]) => ({
+    key,
+    attempted: c.observed + c.absent + c.unstamped,
+    observed: c.observed,
+    absent: c.absent,
+    unstamped: c.unstamped,
+    negative: c.negative,
+    maxMs: c.maxMs,
+    histogram: histogramOf(c.buckets),
+    p50Bucket: quantileBucket(c.buckets, c.observed, 0.5),
+    p95Bucket: quantileBucket(c.buckets, c.observed, 0.95),
+    venueStampPresent: c.venueStampPresent,
+    venueStampAbsent: c.venueStampAbsent,
+    symbolGapObserved: c.symbolGapObserved,
+    symbolGapUnknown: c.symbolGapUnknown,
+    symbolGapHistogram: histogramOf(c.symbolGapBuckets),
+    feedDistinctSymbolsMin: c.feedCountMin,
+    feedDistinctSymbolsMax: c.feedCountMax,
+    feedWindowMs: c.feedWindowMs,
+  }));
+}
+
+export interface SymbolGapRow { symbol: string; n: number; meanMs: number; sdMs: number; maxMs: number }
+
+/**
+ * ⭐ THE SYMBOL'S OWN EXPECTED INTER-ARRIVAL, DERIVED AT THE READ SITE — not from the archive.
+ * ⛔ Langston's condition 3 binds the NORMALISER as hard as it binds the threshold: an
+ * archive-derived "normal quiet" would smuggle the same wrong-population inference back in
+ * through the side door.
+ */
+export function getSymbolGapRows(): SymbolGapRow[] {
+  return [...(_symbolGap.entries())].map(([symbol, s]) => {
+    const mean = s.sum / s.n;
+    const variance = Math.max(0, s.sumsq / s.n - mean * mean);
+    return { symbol, n: s.n, meanMs: mean, sdMs: Math.sqrt(variance), maxMs: s.max };
   });
 }
 
 /** Test-only reset. Never called from the running system. */
 export function __resetSideAgeForTest(): void {
   _sideAge.clear();
+  _symbolGap.clear();
 }

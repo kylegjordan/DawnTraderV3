@@ -1,6 +1,6 @@
 import { getLevelBasisFunnel } from './core/calculations/level-basis.js';
 import { getVenueTimestampPresence } from './exchanges/kraken/kraken-websocket-adapter.js';
-import { getSideAgeRows } from './core/calculations/level-basis.js';
+import { getSideAgeRows, getSymbolGapRows } from './core/calculations/level-basis.js';
 import type { Express, Request, Response, NextFunction, Router as ExpressRouter } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
@@ -8190,6 +8190,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         venueTimestampPresence: getVenueTimestampPresence(),
         // ⭐ How old the quote was at the instant a level was built — rows, never a total.
         sideAgeAtLevelBuild: getSideAgeRows(),
+        // The symbol's OWN expected inter-arrival, derived at the read site — the second gate
+        // term. Never taken from the archive: Langston's condition 3 binds the normaliser as
+        // hard as the threshold, and an archive-derived "normal quiet" would smuggle the same
+        // wrong-population inference back in through the side door.
+        symbolGapAtLevelBuild: getSymbolGapRows(),
         nullReasonDetail: lt?.nullReasonAggregate ?? {},
         // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates now
         // separately maintained in eval-cycle.ts. Was emitting the combined

@@ -3,7 +3,7 @@ import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-ada
 // level-setting hand-off (census §9 W-1); wiring only the orchestrator would leave the
 // LEARNING population on the smoothed mid while every active-path check read as fixed.
 import {
-  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeObservation,
+  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeAttempt,
   LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
 } from '../core/calculations/level-basis.js';
 /**
@@ -55,6 +55,8 @@ import { getPredictiveConfidence } from '../core/utils/score-calculator.js';
 import { logSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
 import { priceCache, type CachedPrice, type CacheBucketType } from './price-cache.js';
+/** Trailing window for the feed-liveness symbol count. Recorded beside every count. */
+const FEED_LIVENESS_WINDOW_MS = 60_000;
 // B65.2: centralized exit-decision primitive (stale / timeout / stop / target / trailing)
 import { evaluateTECExit } from './tec-evaluator.js';
 // B65.2-HF2 (2026-04-23): ML dashboard needs trailing-engine state for VTS
@@ -1528,24 +1530,43 @@ async function generatePhase10Signal(
   // that aggregates two populations answers questions about neither (Langston's catch).
   // ⚠️ Crypto only, by construction: `getBookForFill` is the Kraken WS mini-book and the xStock
   // lane has a different feed whose levels are venue bar closes, not a book side.
-  // ⭐⭐ SIDE-AGE PROBE — SHADOW, VTS LANE. Mirrors the active lane's probe and is keyed
-  // `lane:'vts'` for the same reason the refusal funnel is: the two lanes see different symbol
-  // populations at different cadences, so a pooled age would describe neither.
-  // ⛔ OUTSIDE the crypto gate below — the price cache holds both classes, and Kyle asked
-  // explicitly for the VTS side to be covered, not just the active one.
-  {
-    const _cached = priceCache.getCachedPrice(symbol);
-    if (!_cached) {
-      recordSideAgeObservation({ lane: 'vts', assetClass: _assetClass }, { kind: 'absent' });
-    } else if (_cached.sidesCapturedAtMs === null) {
-      recordSideAgeObservation({ lane: 'vts', assetClass: _assetClass }, { kind: 'unstamped' });
-    } else {
-      recordSideAgeObservation(
+    // SIDE-AGE PROBE — SHADOW, NOTHING GATES ON IT. How old is the quote this process holds
+    // at the instant a level is built? Langston required this number and correctly refused the
+    // archive-derived one as a proxy: the archiver is a different subscriber with its own socket
+    // and throttle, so it bounds the VENUE's cadence, not our entry's age.
+    //
+    // Three raw clocks and a liveness COUNT, never a stored difference and never a precomputed
+    // "live" boolean (his condition 2) — a delta cannot be re-derived once one side turns out
+    // to be the wrong object, and this batch has already had two numbers turn out that way.
+    //
+    // The liveness term counts DISTINCT SYMBOLS heard from in a trailing window, not feed-wide
+    // recency: one chatty name keeps a recency gauge green, which this batch measured directly
+    // when three stablecoins carried the busiest decile of a 460-symbol pool.
+    //
+    // OUTSIDE the crypto-only block below: the refusal funnel is crypto because the mini-book
+    // is, but the price cache holds both classes and Kyle asked for the VTS side to be covered.
+    {
+      const _now = Date.now();
+      const _c = priceCache.getCachedPrice(symbol);
+      recordSideAgeAttempt(
         { lane: 'vts', assetClass: _assetClass },
-        { kind: 'observed', ageMs: Date.now() - _cached.sidesCapturedAtMs },
+        {
+          stage: 'vts_signal_birth',
+          symbol: symbol,
+          nowMs: _now,
+          cacheEntryPresent: _c !== null,
+          sidesCapturedAtMs: _c?.sidesCapturedAtMs ?? null,
+          venueObservedAtMs: _c?.venueObservedAtMs ?? null,
+          // `lastUpdatedAt` dates the MARK and is refreshed on every tick — which is exactly
+          // WRONG for dating the sides (the W-3 defect) and exactly RIGHT for "when did we last
+          // hear anything about this symbol". Same field, opposite verdicts, one job apart.
+          symbolLastMessageAtMs: _c?.lastUpdatedAt ?? null,
+          feedDistinctSymbolsInWindow:
+            priceCache.countSymbolsWithMessageSince(_now - FEED_LIVENESS_WINDOW_MS),
+          feedWindowMs: FEED_LIVENESS_WINDOW_MS,
+        },
       );
     }
-  }
 
   if (_assetClass === 'crypto_spot') {
     const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);

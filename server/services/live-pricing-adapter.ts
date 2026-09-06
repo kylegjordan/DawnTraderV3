@@ -1088,7 +1088,11 @@ export class LivePricingAdapter {
     // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
     // ⭐ AND THE SHARED STORE GETS THEM TOO — one write reaching BOTH the exit trigger (the map
     // above) and SIGNAL GENERATION (the shared cache, read at `signal-orchestrator.ts:2387`).
-    priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs);
+    // ⛔ THE VENUE CLOCK TRAVELS THIS HOP TOO. It reached the map above and STOPPED HERE until
+    // 2026-09-06 — the same one-consumer-not-the-other shape as W-3, one field over: the exit
+    // trigger could see the venue's stamp and signal generation could not, so a level built from
+    // the shared cache had no route to the only clock that is not ours.
+    priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs);
     
     // Phase 8.8.3-I7-WS-D (D6): Diagnostic log for cache write
     console.log(`[I7-WS-D][CACHE_WRITE] symbol=${normalized} price=${price} source=${source}`);

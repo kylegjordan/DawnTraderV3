@@ -133,7 +133,7 @@ import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 // COUNTED, consumed by nothing. See the observation block at the hand-off below.
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import {
-  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeObservation,
+  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeAttempt,
   LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
 } from '../core/calculations/level-basis.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
@@ -144,6 +144,8 @@ import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calcu
 import { ohlcCache } from './ohlc-cache.js';
 // Batch 18: Use priceCache for ticker data instead of per-symbol getTicker calls
 import { priceCache } from './price-cache.js';
+/** Trailing window for the feed-liveness symbol count. Recorded beside every count. */
+const FEED_LIVENESS_WINDOW_MS = 60_000;
 // Directive 12.3.1: Canonical regime calculator for pair-level regime
 import { calculatePairRegime } from '../core/metrics/market-regime.js';
 import type { OHLCData } from '../types/market-regime.types';
@@ -2547,31 +2549,42 @@ export class SignalOrchestrator {
       // xStock answer, mirroring `active-execution-engine.ts:1601`.
       const _lbClass = sizingContext.assetClass;
 
-      // ⭐⭐ SIDE-AGE PROBE — SHADOW, NOTHING GATES ON IT. How old is the quote this process
-      // holds at the instant a level is built? Langston required this number and correctly
-      // refused the archive-derived one as a proxy: the archiver is a different subscriber with
-      // its own socket and throttle, so it bounds the VENUE's cadence and not our entry's age.
+      // SIDE-AGE PROBE — SHADOW, NOTHING GATES ON IT. How old is the quote this process holds
+      // at the instant a level is built? Langston required this number and correctly refused the
+      // archive-derived one as a proxy: the archiver is a different subscriber with its own socket
+      // and throttle, so it bounds the VENUE's cadence, not our entry's age.
       //
-      // ⛔ DELIBERATELY OUTSIDE THE CRYPTO GATE BELOW. The refusal funnel is crypto-only because
-      // `getBookForFill` is the Kraken mini-book, but the price cache holds BOTH classes and Kyle
-      // asked for this to cover the VTS side too. Measuring costs nothing and the xStock reading
-      // is informative in its own right.
-      // ⚠️ IT IS A MEASUREMENT OF THE CACHE, NOT A STATEMENT THAT xSTOCK LEVELS COME FROM IT —
-      // census §6 says they are venue bar closes. Do not read this row as gating xStock geometry.
+      // Three raw clocks and a liveness COUNT, never a stored difference and never a precomputed
+      // "live" boolean (his condition 2) — a delta cannot be re-derived once one side turns out
+      // to be the wrong object, and this batch has already had two numbers turn out that way.
+      //
+      // The liveness term counts DISTINCT SYMBOLS heard from in a trailing window, not feed-wide
+      // recency: one chatty name keeps a recency gauge green, which this batch measured directly
+      // when three stablecoins carried the busiest decile of a 460-symbol pool.
+      //
+      // OUTSIDE the crypto-only block below: the refusal funnel is crypto because the mini-book
+      // is, but the price cache holds both classes and Kyle asked for the VTS side to be covered.
       {
-        const _cached = priceCache.getCachedPrice(symbol);
-        if (!_cached) {
-          recordSideAgeObservation({ lane: 'active', assetClass: _lbClass }, { kind: 'absent' });
-        } else if (_cached.sidesCapturedAtMs === null) {
-          // ⛔ NOT age zero. An entry whose sides no writer ever supplied is UNSTAMPED, and
-          // counting it as fresh is exactly the absent-as-valid failure this batch keeps finding.
-          recordSideAgeObservation({ lane: 'active', assetClass: _lbClass }, { kind: 'unstamped' });
-        } else {
-          recordSideAgeObservation(
-            { lane: 'active', assetClass: _lbClass },
-            { kind: 'observed', ageMs: Date.now() - _cached.sidesCapturedAtMs },
-          );
-        }
+        const _now = Date.now();
+        const _c = priceCache.getCachedPrice(symbol);
+        recordSideAgeAttempt(
+          { lane: 'active', assetClass: _lbClass },
+          {
+            stage: 'active_signal_birth',
+            symbol: symbol,
+            nowMs: _now,
+            cacheEntryPresent: _c !== null,
+            sidesCapturedAtMs: _c?.sidesCapturedAtMs ?? null,
+            venueObservedAtMs: _c?.venueObservedAtMs ?? null,
+            // `lastUpdatedAt` dates the MARK and is refreshed on every tick — which is exactly
+            // WRONG for dating the sides (the W-3 defect) and exactly RIGHT for "when did we last
+            // hear anything about this symbol". Same field, opposite verdicts, one job apart.
+            symbolLastMessageAtMs: _c?.lastUpdatedAt ?? null,
+            feedDistinctSymbolsInWindow:
+              priceCache.countSymbolsWithMessageSince(_now - FEED_LIVENESS_WINDOW_MS),
+            feedWindowMs: FEED_LIVENESS_WINDOW_MS,
+          },
+        );
       }
 
       if (_lbClass === 'crypto_spot') {
