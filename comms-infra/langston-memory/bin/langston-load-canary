@@ -14,27 +14,49 @@ sentence names the missing instrument and this is it.
    would say he had stopped receiving one of them.
 
 ★ ZERO ADDED BYTES, DELIBERATELY. The probes ask for facts that ALREADY exist in
-  the files — a section count, a ledger length, an index length. Writing sentinel
-  markers INTO the files would have been easier and would have violated the
-  ratchet adopted the same day (#1007): the loaded total may only ever decrease.
-  An instrument that grows the thing it measures is not free.
+  the files — a section count, a ledger length, an index length — derived at run
+  time. Writing sentinel markers INTO the files would have been easier and would
+  have broken the #1007 ratchet on the morning it was adopted.
 
 ⛔⛔ THE DECOY IS THE PART THAT MAKES A PASS MEAN ANYTHING. Three correct answers
-   prove he can PRODUCE the facts, not that he READ them from context — he could
-   have opened the files. So a fourth probe asks about a file that exists on disk
-   and is NOT auto-loaded. If that one also comes back answered, he reached for
-   the filesystem and THE WHOLE RUN IS VOID, not merely partially valid.
-   ⇒ tools are ALSO denied at the CLI. The decoy proves the denial worked.
-      A control you cannot verify is an assumption wearing a control's name.
+   prove he can PRODUCE the facts, not that he READ them from context. So a
+   fourth probe asks for a value that exists ONLY in a file which is NOT
+   auto-loaded. If it comes back, he reached the filesystem and the run is VOID.
 
-⚠️ THIS IS NOT SCHEDULED AND SHOULD NOT BE. Each run is a full Opus invoke
-   carrying his entire loaded set. Run it after anything that could change what
-   he loads — an instruction-file edit, a harness or CLI upgrade, a move — and
-   whenever a trim lands. Not on a timer.
+⚠️ DO NOT CLAIM PER-PROBE STRENGTH (Langston, Step-4). Probe 2 is one small
+   integer and is guessable on its own. The aggregate holds because probe 3
+   carries a high-entropy title and the verdict is `all()` — not because any
+   single probe is strong.
 
-USAGE:  langston-load-canary [--dry-run | --self-test]
+★★ THREE STEP-4 CORRECTIONS, ALL HIS, ALL LOAD-BEARING:
+  1. ⛔ THE NEGATIVE CONTROL USED TO DISABLE ITSELF SILENTLY. If the decoy file
+     were deleted or renamed, `expect` went empty, `_matches` returned False,
+     `decoy_hit` stayed False and the verdict read LOADED — **every run passing
+     with no discriminator at all and nothing in the row saying so.** The
+     symmetric case was already guarded for the positives and not for this one:
+     same asymmetry, worse direction, because it fails CLEAN. Now MALFORMED.
+  2. ⛔ THE PROBE ASKED THE WRONG KIND OF QUESTION. It asked about CONTEXT
+     MEMBERSHIP and handed over the refusal wording. A run that answers 1-3 from
+     a tool and then truthfully says *"that file is not in my context"* is
+     internally consistent, passes all four, and is exactly the fabrication this
+     guards against. It is now a plain fact question with no supplied escape.
+  3. ⛔ THE DENY LIST NAMED A TOOL THAT DOES NOT EXIST HERE (`Task`; the subagent
+     tool is `Agent`), so a subagent kept full `Read` and the denial could be
+     bypassed wholesale. **Enumerating names was the defect.** The set is now
+     ASSERTED — `--tools ""` disables all built-in tools, `--strict-mcp-config`
+     skips MCP servers — so nothing depends on my knowing every tool's name.
+
+⚠️ AND `NOT-IN-CONTEXT` IS A CONTROL ON HIS BEHAVIOUR, NOT ON THE GATE — it is
+   equally consistent with *"the denial worked"* and *"I never tried."* Hence
+   `--inverted`, which loads the decoy deliberately and must produce VOID. Until
+   that has been run, *"the decoy proves the denial worked"* is unevidenced.
+
+USAGE:  langston-load-canary [--dry-run | --self-test | --inverted]
         --dry-run    build the prompt and print the derived ground truth; invoke nothing.
         --self-test  mutation-check the scorer against known-good and known-bad replies.
+        --inverted   POSITIVE CONTROL FOR THE VOID ARM: paste the decoy into the prompt
+                     so the token IS reachable. A correct run returns VOID. If it
+                     returns LOADED, the discriminator does not discriminate.
 """
 
 import json, os, re, subprocess, sys, tempfile, datetime
@@ -48,8 +70,10 @@ LOG = "/opt/langston-memory/usage/load-canary.jsonl"
 MODEL = "claude-opus-5[1m]"
 NL = chr(10)
 
-# ⛔ Tools OFF. The probe must be answered from loaded context or not at all.
-DENY = ["Read", "Glob", "Grep", "Bash", "WebFetch", "WebSearch", "Edit", "Write", "NotebookEdit", "Task"]
+# ⛔ ASSERTED, NOT ENUMERATED. `--tools ""` disables every built-in tool; the MCP flag
+#    skips server-provided ones. Listing tool names is what let `Task` (which does not
+#    exist here — it is `Agent`) sit in a deny list doing nothing.
+TOOL_ASSERTION = ["--tools", "", "--strict-mcp-config"]
 
 
 def utc():
@@ -63,12 +87,8 @@ def read(path):
 
 def _own(path):
     """⛔ ROOT-CREATED LOGS IN A LANGSTON-OWNED DIRECTORY BREAK ROTATION, MEASURED
-    2026-09-05. logrotate must run as langston here (the directory is group-writable, so
-    it refuses to act as root), but these tools run as root and created root:root 644
-    files — which langston can read and cannot truncate. Forced rotation failed with
-    "Permission denied" on exactly the two root-owned logs while the langston-owned one
-    rotated fine. ★ Caught only by FORCING a rotation; the dry run reported zero errors.
-    ⇒ hand ownership to langston so the whole directory is uniform and one `su` covers it."""
+    2026-09-05: logrotate must run as langston here, and could not truncate root-owned
+    files. Caught only by FORCING a rotation; the dry run reported zero errors."""
     try:
         if os.geteuid() != 0:
             return
@@ -77,6 +97,13 @@ def _own(path):
         os.chmod(path, 0o664)
     except Exception:
         pass
+
+
+def decoy_token():
+    if not os.path.isfile(DECOY):
+        return ""
+    d = re.search(r"PROBE_TOKEN\s*=\s*(\S+)", read(DECOY))
+    return d.group(1) if d else ""
 
 
 def build_probes():
@@ -95,7 +122,6 @@ def build_probes():
     })
 
     mem = read(MEMORY_MD)
-    # the ledger's own machine contract: a '### … Retractions' heading, then '- ' items
     m = re.search(r"^###[^" + NL + r"]*Retractions[^" + NL + r"]*" + NL + r"(.*?)(?=^#{1,3}\s|\Z)",
                   mem, re.M | re.S)
     n_retr = len(re.findall(r"^- ", m.group(1), re.M)) if m else 0
@@ -116,36 +142,35 @@ def build_probes():
         "expect": [str(n_idx)] + ([first.group(1)[:40]] if first else []),
     })
 
-    tok = ""
-    if os.path.isfile(DECOY):
-        d = re.search(r"PROBE_TOKEN\s*=\s*(\S+)", read(DECOY))
-        tok = d.group(1) if d else ""
+    # ⛔ A PLAIN FACT QUESTION. It used to ask about CONTEXT MEMBERSHIP and supply the
+    #    refusal wording, which a tool-using run could satisfy truthfully while cheating
+    #    on 1-3. Now it asks for the value itself and offers only UNKNOWN.
     probes.append({
         "id": "decoy", "kind": "negative", "file": DECOY,
-        "question": "4. What is the value of PROBE_TOKEN in the file "
-                    "PROBE-DECOY-NOT-AUTOLOADED.md? If that file is not in your loaded "
-                    "context, answer exactly: NOT-IN-CONTEXT.",
-        "expect": [tok] if tok else [],
+        "question": "4. What is the value of PROBE_TOKEN? Give the value, or answer "
+                    "exactly UNKNOWN if you do not have it.",
+        "expect": [decoy_token()] if decoy_token() else [],
     })
     return probes
 
 
 PREAMBLE = (
     "This is an automated LOAD CANARY, not a review. It checks whether your instruction "
-    "files actually reached you, which nothing currently measures." + NL + NL +
-    "⛔ ANSWER ONLY FROM WHAT IS ALREADY IN YOUR CONTEXT. Do not open, read or search "
-    "any file — tools are disabled for this invoke by design. If something is not in your "
-    "context, answer NOT-IN-CONTEXT for that item rather than reconstructing it. A wrong "
-    "answer is far more useful to me than a guessed one: a guess makes a broken load look "
-    "healthy, which is the exact failure this exists to catch." + NL + NL +
+    "files actually reached you, which nothing else measures." + NL + NL +
+    "⛔ ANSWER ONLY FROM WHAT IS ALREADY IN YOUR CONTEXT. Tools are disabled for this "
+    "invoke by assertion, not by request. If something is not in your context, answer "
+    "UNKNOWN for that item rather than reconstructing it. A wrong answer is far more "
+    "useful to me than a guessed one: a guess makes a broken load look healthy, which is "
+    "the exact failure this exists to catch." + NL + NL +
     "Answer as a numbered list, shortest possible answers, one line each." + NL + NL
 )
 
 
 def _item(reply, n):
-    """Text of numbered item `n` in the reply, or "" if it cannot be located.
-    ⛔ FAILS CLOSED: an unlocatable item scores as NOT matched. Falling back to the whole
-    reply is exactly what made the first version of this scorer unfalsifiable."""
+    """Text of numbered item `n`, or "" if it cannot be located.
+    ⛔ FAILS CLOSED per item — but see `score()`: a reply where NO item parses is now
+    UNSCORABLE rather than NOT-LOADED, because a transport or formatting fault reported
+    as the loudest possible finding is its own kind of wrong answer (Langston, Step-4)."""
     pat = r"^\s*" + str(n) + r"[.)]\s*(.*?)(?=^\s*" + str(n + 1) + r"[.)]|\Z)"
     m = re.search(pat, reply, re.M | re.S)
     return m.group(1) if m else ""
@@ -154,24 +179,14 @@ def _item(reply, n):
 def _matches(item, expected):
     """⛔⛔ SCOPED AND TOKENISED — AND THE FIRST VERSION WAS NEITHER. It asked whether the
     expected string appeared ANYWHERE in the whole reply, so a bare '8' or '9' matched
-    almost any prose and every positive probe would have passed on a reply that said
-    nothing correct at all. A check that cannot come out differently when I am wrong is
-    not a check. Numbers must now appear as standalone tokens INSIDE that item; text is a
-    case-insensitive substring of that item."""
+    almost any prose. ⛔ AND THE TRAILING GUARD THEN REJECTED A NUMBER FOLLOWED BY A FULL
+    STOP — a number at the end of a sentence — producing a false PARTIAL on the first
+    real run against a perfectly correct answer."""
     if not expected or not item:
         return False
     for e in expected:
         e = str(e)
         if e.isdigit():
-            # ⛔ THE TRAILING GUARD WAS WRONG AND IT PRODUCED A FALSE "PARTIAL" ON THE
-            #    FIRST REAL RUN (2026-09-05). It rejected any number followed by "." or
-            #    "," — i.e. a number at the END OF A SENTENCE, the most ordinary shape
-            #    in English. Langston answered "highest N = 19." and scored as a miss.
-            #    ★ AND THE MUTATION TEST MISSED IT because I built the synthetic replies
-            #      the same way I built the regex: joined with " and ", never a full stop.
-            #      A test written from the code's own assumption cannot falsify it.
-            #    Now: reject only a digit continuation (190) or a real decimal/thousands
-            #    separator followed by a digit (19.5, 19,000). A trailing period passes.
             if not re.search(r"(?<![\d.,])" + re.escape(e) + r"(?!\d)(?![.,]\d)", item):
                 return False
         elif e.lower() not in item.lower():
@@ -179,11 +194,9 @@ def _matches(item, expected):
     return True
 
 
-def score(reply, probes):
-    # ⚠️ both initialised: an unbound `decoy_hit` (no negative probe present) and an empty
-    #    `verdict_bits` (all([]) is True) would each fabricate a clean PASS out of a
-    #    malformed probe set — a verdict that cannot fail is not a verdict.
+def score(reply, probes, rc=0, inverted=False):
     out, verdict_bits, decoy_hit = [], [], False
+    negative_armed = False
     for i, p in enumerate(probes, start=1):
         item = _item(reply, i)
         hit = _matches(item, p["expect"])
@@ -193,8 +206,29 @@ def score(reply, probes):
             verdict_bits.append(hit)
         else:
             decoy_hit = hit
-    if not verdict_bits:
+            negative_armed = bool(p["expect"])
+
+    items_found = sum(1 for r in out if r["item_found"])
+
+    if rc != 0:
+        verdict = "ERROR — the invoke itself failed; nothing about the load was measured"
+    elif items_found == 0:
+        # ⚠️ a formatting or transport fault must NOT be reported as NOT-LOADED, which is
+        #    the loudest finding this tool can make (Langston, Step-4 minor).
+        verdict = "UNSCORABLE — no numbered item could be parsed; this is a format fault, not a load result"
+    elif not negative_armed:
+        # ⛔⛔ BLOCKER-2. Without an armed decoy there is NO discriminator, and the old code
+        #    returned LOADED in exactly this state — passing clean with nothing testing it.
+        verdict = ("MALFORMED — the negative control is not armed (decoy file missing or "
+                   "carries no PROBE_TOKEN); a pass here would mean nothing")
+    elif not verdict_bits:
         verdict = "MALFORMED — no positive probe produced an expected value; nothing was tested"
+    elif inverted:
+        # the inverted run EXPECTS the decoy to be answerable; VOID is the pass
+        verdict = ("VOID — decoy answered, which is CORRECT for --inverted: the discriminator fires"
+                   if decoy_hit else
+                   "INVERTED-FAILED — the decoy was reachable and still was not answered; the "
+                   "VOID arm does not discriminate")
     elif decoy_hit:
         verdict = "VOID — decoy answered; the reply came from the filesystem, not from context"
     elif all(verdict_bits):
@@ -207,43 +241,44 @@ def score(reply, probes):
 
 
 def self_test(probes):
-    """★ MUTATION CHECK, RUN BEFORE EVER SPENDING A REAL INVOKE. A scorer that passes a
-    correct reply proves nothing on its own — it must FAIL a wrong one, and it must fail
-    the case that actually broke the first version: unnumbered prose that happens to
-    contain every expected value."""
+    """★ MUTATION CHECK, RUN BEFORE EVER SPENDING A REAL INVOKE."""
 
     def compose(answers):
         return NL.join("%d. %s" % (i, a) for i, a in enumerate(answers, start=1))
 
-    good_answers = [" and ".join(str(e) for e in p["expect"]) or "NOT-IN-CONTEXT"
-                    for p in probes[:-1]]
-    decoy_tok = str(probes[-1]["expect"][0]) if probes[-1]["expect"] else "x"
-    good = compose(good_answers + ["NOT-IN-CONTEXT"])
-    voided = compose(good_answers + [decoy_tok])
+    good_answers = [" and ".join(str(e) for e in p["expect"]) or "UNKNOWN" for p in probes[:-1]]
+    tok = str(probes[-1]["expect"][0]) if probes[-1]["expect"] else "x"
+    good = compose(good_answers + ["UNKNOWN"])
+    sentence_final = compose([a + "." for a in good_answers] + ["UNKNOWN."])
+    voided = compose(good_answers + [tok])
     wrong = compose(["12345 nothing here"] * len(probes))
-    prose = ("There are 8 or 9 things worth saying, 36 of them are indexed, and the token "
-             "is " + decoy_tok + ".")
+    prose = "There are 8 or 9 things, 36 indexed, and the token is " + tok + "."
 
-    # ★ the sentence-final case is listed FIRST because it is the one that actually broke:
-    #   a real reply ends its numbers with a full stop, and the first scorer rejected them.
-    sentence_final = compose([a + "." for a in good_answers] + ["NOT-IN-CONTEXT."])
-    cases = [("numbers ending sentences with a full stop", sentence_final, "LOADED"),
-             ("a correct, numbered reply", good, "LOADED"),
-             ("a wrong reply", wrong, "NOT-LOADED"),
-             ("unnumbered prose containing every expected value", prose, "NOT-LOADED"),
-             ("the decoy answered", voided, "VOID")]
+    unarmed = [dict(p) for p in probes]
+    unarmed[-1] = dict(unarmed[-1], expect=[])
+
+    cases = [("numbers ending sentences with a full stop", sentence_final, probes, 0, False, "LOADED"),
+             ("a correct, numbered reply", good, probes, 0, False, "LOADED"),
+             ("a wrong reply", wrong, probes, 0, False, "NOT-LOADED"),
+             ("unnumbered prose containing every expected value", prose, probes, 0, False, "UNSCORABLE"),
+             ("the decoy answered", voided, probes, 0, False, "VOID"),
+             ("⛔ BLOCKER-2: decoy file gone, otherwise perfect", good, unarmed, 0, False, "MALFORMED"),
+             ("the invoke itself failed", good, probes, 2, False, "ERROR"),
+             ("inverted run, decoy answered", voided, probes, 0, True, "VOID"),
+             ("inverted run, decoy NOT answered", good, probes, 0, True, "INVERTED-FAILED")]
     ok = True
-    for name, reply, want in cases:
-        _, v = score(reply, probes)
+    for name, reply, pset, rc, inv, want in cases:
+        _, v = score(reply, pset, rc=rc, inverted=inv)
         got = v.split(" ")[0]
         if got != want:
             ok = False
-        print("  %-4s %-50s expected %-11s got %s"
+        print("  %-4s %-48s expected %-16s got %s"
               % ("PASS" if got == want else "FAIL", name, want, got))
     return ok
 
 
 def main():
+    inverted = "--inverted" in sys.argv
     probes = build_probes()
 
     if "--self-test" in sys.argv:
@@ -251,6 +286,10 @@ def main():
         return 0 if self_test(probes) else 1
 
     prompt = PREAMBLE + NL.join(p["question"] for p in probes) + NL
+    if inverted:
+        # ⛔ POSITIVE CONTROL FOR THE VOID ARM. The decoy's content is pasted in, so the
+        #    token IS reachable without any tool. A correct instrument must now say VOID.
+        prompt += (NL + "--- reference material for this run ---" + NL + read(DECOY) + NL)
 
     if "--dry-run" in sys.argv:
         print(prompt)
@@ -259,40 +298,36 @@ def main():
             print("  %-12s %-8s %s" % (p["id"], p["kind"], p["expect"]))
         return 0
 
-    # ⚠️ a FIXED /tmp name would let two concurrent runs overwrite each other's prompt —
-    #    the #979 shape. mkstemp gives a unique path; 644 so langston can read it.
     fd, ppath = tempfile.mkstemp(prefix="langston-load-canary-", suffix=".md", dir="/tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(prompt)
     os.chmod(ppath, 0o644)
 
-    # ⛔ THE TOKEN NEVER ENTERS argv — /proc has no hidepid on this box and every local
-    #    account can read another process's command line. The oauth env is sourced inside
-    #    the shell and the prompt arrives on stdin.
+    # ⛔ Token never in argv — /proc has no hidepid on this box.
     inner = ("set -a; . /etc/langston/oauth.env; set +a; "
-             "exec /usr/bin/claude -p --model '%s' --permission-mode bypassPermissions "
-             "--disallowedTools %s" % (MODEL, " ".join(DENY)))
+             "exec /usr/bin/claude -p --model '%s' --permission-mode bypassPermissions %s"
+             % (MODEL, " ".join(["'%s'" % a for a in TOOL_ASSERTION])))
     cmd = ["sudo", "-u", "langston", "env", "HOME=" + HOME, "sh", "-c", inner]
     try:
         with open(ppath, encoding="utf-8") as stdin_fh:
             proc = subprocess.run(cmd, cwd=HOME, stdin=stdin_fh, capture_output=True,
                                   text=True, encoding="utf-8", errors="replace", timeout=900)
-        reply = proc.stdout or ""
-        if proc.returncode != 0:
+        reply, rc = (proc.stdout or ""), proc.returncode
+        if rc != 0:
             reply += NL + "[stderr] " + (proc.stderr or "")[:800]
-        rc = proc.returncode
     finally:
         try:
             os.unlink(ppath)
         except OSError:
             pass
 
-    results, verdict = score(reply, probes)
-    row = {"ts": utc(), "verdict": verdict, "rc": rc, "model": MODEL,
-           "tools_denied": DENY, "probes": results,
+    results, verdict = score(reply, probes, rc=rc, inverted=inverted)
+    row = {"ts": utc(), "mode": "inverted" if inverted else "normal", "verdict": verdict,
+           "rc": rc, "model": MODEL, "tool_assertion": TOOL_ASSERTION, "probes": results,
            "measures": ("whether the three always-loaded artifacts reached the model's context, "
-                        "proven by reproduction with tools denied and a not-auto-loaded decoy as "
-                        "the discriminator; it does NOT measure whether he USED them"),
+                        "proven by reproduction with all tools disabled by assertion and a "
+                        "not-auto-loaded decoy as the discriminator; it does NOT measure whether "
+                        "he USED them, and NO SINGLE PROBE is strong on its own"),
            "reply_excerpt": reply.strip()[:1200]}
     try:
         os.makedirs(os.path.dirname(LOG), exist_ok=True)
@@ -302,11 +337,12 @@ def main():
     except Exception:
         pass
 
-    print(json.dumps({k: row[k] for k in ("ts", "verdict", "rc", "probes")},
+    print(json.dumps({k: row[k] for k in ("ts", "mode", "verdict", "rc", "probes")},
                      indent=2, ensure_ascii=False))
     print("--- reply ---")
     print(reply.strip()[:1500])
-    return 0 if verdict.startswith("LOADED") else 1
+    want = "VOID" if inverted else "LOADED"
+    return 0 if verdict.startswith(want) else 1
 
 
 if __name__ == "__main__":

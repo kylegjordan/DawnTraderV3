@@ -30,11 +30,20 @@ store into the shared `MISTAKE_PATTERNS.md`, without exposing the store itself.
     keeps paying for, and the promotion threshold there (3+ instances across 2+
     distinct batches) is a judgement, not a string match.
 
-★ AND THE LEAK SCREEN IS MECHANICAL, NOT TRUSTED. He is asked to nominate nothing
-  personal — and then the output is SCANNED for session names and retraction
-  markers anyway, and the proposal is REFUSED if any appear. Per CLAUDE.md §29's
-  standing preference: prefer impossible over intercepted. An instruction he
-  follows 99 times out of 100 is not a control on the 100th.
+⛔⛔ THE SCREEN COVERS (b). IT DOES NOT COVER (a), AND SAYING OTHERWISE WAS THE
+    DEFECT — LANGSTON, STEP-4, FINDING-3.
+    · For (b), SESSION NAMES: a literal match IS the leak, so the ban is a real
+      mechanical control and it stands.
+    · For (a), WITHDRAWN PROVENANCE: banning the WORDS catches the MARKER, not
+      the SOURCE. A nomination drawn from a withdrawn entry, written impersonally
+      and without those words, passes clean. ★ WORSE: the prompt used to say
+      'write around it', which removed the only trace a later reader could have
+      spotted. That is `matching-literal-not-shared-root` — one of the patterns
+      this very tool promoted — committed inside the tool that promoted it.
+    ⇒ (a) now rests on TWO things, both stated rather than implied: a REQUIRED
+      per-nomination SOURCE-ENTRY STATUS field, and his compliance in filling it
+      honestly. The word-ban is kept only as a WEAK TRIPWIRE, and the screen
+      refuses any proposal whose nominations omit the field.
 
 USAGE:  langston-promote-patterns [--dry-run | --screen-test]
 """
@@ -49,13 +58,19 @@ MODEL = "claude-opus-5[1m]"
 NL = chr(10)
 
 # ⛔ THE SCREEN. Anything here appearing in the proposal REFUSES the whole run.
-#    Session names cover BLOCKER-3(b); the retraction words cover (a).
+#    Session names cover BLOCKER-3(b). ⚠️ The retraction words do NOT cover (a) —
+#    they catch a marker, never a provenance. Never cite them as covering it.
 BANNED = [
     r"\bCC-A\b", r"\bCC-B\b", r"\bCC-C\b", r"\bCC-INFRA\b",
     r"\bOLD Claude\b", r"\bNEW Claude\b", r"\bANALYST Claude\b", r"\bInfra Claude\b",
     r"\bClaude Old\b", r"\bClaude New\b", r"\bClaude Analyst\b",
     r"\bretract(?:ed|ion|ions)\b", r"\bwithdrawn\b", r"\bvacated\b",
 ]
+
+# ⛔ REQUIRED ON EVERY NOMINATION. This is the actual (a) control: the screen cannot
+#    see provenance, so provenance must be DECLARED — in a field whose ABSENCE is
+#    mechanically detectable even though its TRUTH is not.
+STATUS_FIELD = "**SOURCE-ENTRY STATUS:**"
 
 PROMPT = (
     "PATTERN PROMOTION — you are nominating LESSONS, not rulings, and nothing personal." + NL + NL
@@ -73,9 +88,13 @@ PROMPT = (
     + "  · it must NOT name any session, any person, or any specific batch;" + NL
     + "  · it must NOT come from an entry you have withdrawn, retracted or vacated;" + NL
     + "  · it must NOT be 'what I ruled', it must be 'what goes wrong and how to see it'." + NL + NL
-    + "⚠️ A MECHANICAL SCREEN RUNS OVER YOUR OUTPUT AND REFUSES THE WHOLE PROPOSAL if it finds a "
-      "session name or a retraction word. That is not distrust of you — it is that an instruction "
-      "followed 99 times in 100 is not a control on the 100th. Write around it." + NL + NL
+    + "⚠️ A MECHANICAL SCREEN REFUSES THE WHOLE PROPOSAL if it finds a session name, or if any "
+      "nomination omits the SOURCE-ENTRY STATUS field. ⛔ DO NOT WRITE AROUND THE SCREEN — an "
+      "earlier version of this prompt said exactly that, and you were right that it removed the "
+      "only trace a later reader could spot. If a lesson genuinely comes from an entry you later "
+      "withdrew, SAY SO in the status field and argue why the lesson outlives the finding. The "
+      "screen cannot see provenance; only you can, and that limit is stated in the landed "
+      "section rather than papered over." + NL + NL
     + "FORMAT — return ONLY this, no preamble, no closing remarks:" + NL + NL
     + "### `<kebab-slug>` — **<THE PATTERN, STATED AS WHAT GOES WRONG, IN CAPS>**" + NL
     + "**THE SHAPE:** <two or three sentences: what it looks like from inside, why it is "
@@ -83,7 +102,12 @@ PROMPT = (
     + "**HOW TO SEE IT:** <the check that would catch it — concrete, runnable where possible.>" + NL
     + "**HOW OFTEN I HAVE SEEN IT:** <your own count and rough span. Say 'once' if once — the "
       "shared file's promotion floor is 3 instances across 2 distinct batches, and I would rather "
-      "carry an honest 'once' than a padded three.>" + NL + NL
+      "carry an honest 'once' than a padded three.>" + NL
+    + STATUS_FIELD + " <REQUIRED, and it is the only real control on withdrawn material. "
+      "State whether the entry or entries this lesson came from are STANDING, or whether any "
+      "was later withdrawn, retracted or superseded — and if so, say so, and say why the "
+      "LESSON survives even though the FINDING did not. A missing field refuses the whole "
+      "proposal.>" + NL + NL
     + "Nominate AT MOST FIVE, fewest that are genuinely worth another session's attention. "
       "If none qualify, return exactly: NO NOMINATIONS." + NL
 )
@@ -110,6 +134,15 @@ def screen(text):
     refusal costs one re-run; a false pass leaks his peer calibration into a file all
     four sessions read, permanently, under his name."""
     hits = []
+    # ★ THE (a) CONTROL: every nomination must DECLARE its source-entry status. The
+    #   presence of the field is checkable; its truth is not, and that is said out loud
+    #   rather than implied. A heading/field count mismatch IS the hit.
+    n_nom = len(re.findall(r'^### ', text, re.M))
+    n_status = text.count(STATUS_FIELD)
+    if n_nom and n_status < n_nom:
+        hits.append({'pattern': 'missing ' + STATUS_FIELD,
+                     'matched': '%d nominations, %d status fields' % (n_nom, n_status),
+                     'context': 'every nomination must declare its source-entry status'})
     for pat in BANNED:
         for m in re.finditer(pat, text, re.I):
             frag = text[max(0, m.start() - 40):m.end() + 40].replace(NL, " ")
@@ -121,12 +154,28 @@ def screen_test():
     """★ POSITIVE CONTROL FOR THE SCREEN. A filter that has never rejected anything and a
     filter that CANNOT reject anything look identical from outside."""
     cases = [
-        ("clean impersonal pattern", "### `wrong-object`" + NL + "**THE SHAPE:** the path is right and the thing is not.", True),
-        ("names a session", "### `x`" + NL + "**THE SHAPE:** CC-A got the population wrong.", False),
-        ("names a display name", "### `x`" + NL + "**THE SHAPE:** NEW Claude measured the worktree.", False),
-        ("carries a retraction word", "### `x`" + NL + "**THE SHAPE:** this was later withdrawn.", False),
-        ("retraction word, different case", "### `x`" + NL + "**THE SHAPE:** I RETRACTED the tally.", False),
+        ("clean pattern WITH a status field",
+         "### `wrong-object`" + NL + "**THE SHAPE:** the path is right and the thing is not."
+         + NL + STATUS_FIELD + " STANDING.", True),
+        ("names a session — status PRESENT, so ONLY the name can refuse it",
+         "### `x`" + NL + STATUS_FIELD + " STANDING." + NL + "**THE SHAPE:** CC-A got the population wrong.", False),
+        ("names a display name — status PRESENT",
+         "### `x`" + NL + STATUS_FIELD + " STANDING." + NL + "**THE SHAPE:** NEW Claude measured the worktree.", False),
+        ("retraction word — status PRESENT, so the weak tripwire is what fires",
+         "### `x`" + NL + STATUS_FIELD + " STANDING." + NL + "**THE SHAPE:** this was later withdrawn.", False),
+        ("retraction word, different case — status PRESENT",
+         "### `x`" + NL + STATUS_FIELD + " STANDING." + NL + "**THE SHAPE:** I RETRACTED the tally.", False),
+        ("⛔ FINDING-3: a nomination with NO source-entry status",
+         "### `x`" + NL + "**THE SHAPE:** clean impersonal text, no status line.", False),
+        ("two nominations, only one status field",
+         "### `a`" + NL + STATUS_FIELD + " STANDING." + NL + "### `b`" + NL + "**THE SHAPE:** none.", False),
     ]
+    # ⛔⛔ EVERY REFUSING CASE CARRIES A VALID STATUS FIELD ON PURPOSE. Without one
+    #    the (a) check fires first, and the session-name ban is never exercised — the
+    #    cases would all still PASS while proving nothing about the control they name.
+    #    That is `a-guard-that-cannot-go-red`, one of the patterns this very tool
+    #    promoted, reintroduced inside the test for it. The printed hit names which
+    #    control actually fired, so a green run is readable rather than merely green.
     ok = True
     for name, text, want_clean in cases:
         clean, hits = screen(text)

@@ -39,8 +39,13 @@ USAGE:
     langston-size-watch                 measure, record a run row, alarm on breach
     langston-size-watch --quiet         same, but never post to Discord (for testing)
     langston-size-watch --status        print state and exit; records nothing
-    langston-size-watch --set-ceiling N lower the ceiling to N (REFUSES to raise)
+    langston-size-watch --set-ceiling N --by <actor>
+                                        lower the ceiling to N. REFUSES to raise, refuses a
+                                        value already below the current total, and refuses a
+                                        --by outside the actor allowlist.
     langston-size-watch --self-test     positive control: prove it CAN alarm
+    langston-size-watch --fire-drill    prove the alarm can REACH a human — injects a breach
+                                        and really posts, labelled as a drill
 """
 
 import json, os, subprocess, sys, datetime
@@ -142,8 +147,25 @@ def run(quiet=False, injected_total=None):
     st = load_state()
 
     if st is None:
-        # ⛔ FIRST RUN SEEDS THE CEILING AT WHAT IT FINDS. It cannot alarm on a value it
-        #    has never seen, and pretending otherwise would make run one meaningless.
+        # ⛔⛔ BLOCKER-1 (Langston, Step-4). SEEDING IS REFUSED WHILE ANY FILE IS MISSING,
+        #    and this is not defensive tidiness — it was a one-way trap.
+        #    `measure()` deliberately does NOT count a missing file as zero, so `total`
+        #    EXCLUDES it. Seeding on that short total saves a ceiling below the true set;
+        #    status correctly reads MISSING-FILE, but the number is already poisoned. And
+        #    `--set-ceiling` REFUSES TO RAISE — by design — so the ratchet would sit in
+        #    permanent BREACH with the only exit being a hand-edit of the state file.
+        # ★ THAT DEFEATS THE EXACT PROPERTY THE TOOL IS BUILT ON: a monotonicity you can
+        #    only escape by editing state by hand is intercepted, not impossible.
+        if missing:
+            print(json.dumps({"ts": iso(), "status": "SEED-REFUSED",
+                              "reason": "cannot seed a ceiling while files are missing",
+                              "missing": missing,
+                              "note": ("the total excludes missing files, so seeding here would "
+                                       "lock in a short ceiling that can never be raised")},
+                             indent=2, ensure_ascii=False))
+            return 2
+        # ⛔ FIRST RUN SEEDS AT WHAT IT FINDS. It cannot alarm on a value it has never
+        #    seen, and pretending otherwise would make run one meaningless.
         st = {"ceiling_bytes": total, "set_at": iso(), "set_by": "first-run seed",
               "history": [{"ts": iso(), "ceiling": total, "by": "first-run seed"}]}
         save_state(st)
@@ -230,7 +252,19 @@ def run(quiet=False, injected_total=None):
     return 1 if status in ("BREACH", "MISSING-FILE") else 0
 
 
-def set_ceiling(new):
+# ⛔ THE ACTOR IS AN ALLOWLIST, NOT FREE TEXT — mirrors ALERT_ACTORS in
+#    server/services/system-alerts.ts (#987) and the deploy-record allowlist (#656).
+#    Langston flagged the old `SUDO_USER or "unknown"` as the THIRD instance of this
+#    class in one week: a free-text actor field produces a history nobody can attribute,
+#    which is precisely what those two batches closed elsewhere.
+ACTORS = ("cc-a", "cc-b", "cc-c", "cc-infra", "kyle", "langston")
+
+
+def set_ceiling(new, by):
+    if by not in ACTORS:
+        print("REFUSED: --by must be one of: " + ", ".join(ACTORS))
+        print("A free-text actor produces a history nobody can attribute (#987, #656).")
+        return 2
     st = load_state()
     if st is None:
         print("REFUSED: no state yet — run the watch once so a ceiling exists to lower.")
@@ -249,10 +283,10 @@ def set_ceiling(new):
         print("REFUSED: %d B is below the CURRENT total of %d B — that would be a ceiling "
               "already breached on the day it was set." % (new, total))
         return 2
-    st["history"].append({"ts": iso(), "ceiling": new, "by": os.environ.get("SUDO_USER") or "unknown",
+    st["history"].append({"ts": iso(), "ceiling": new, "by": by,
                           "from": cur, "measured_total": total})
     st["ceiling_bytes"], st["set_at"] = new, iso()
-    st["set_by"] = os.environ.get("SUDO_USER") or "unknown"
+    st["set_by"] = by
     save_state(st)
     print("ceiling lowered %d B -> %d B (current total %d B)" % (cur, new, total))
     return 0
@@ -305,9 +339,13 @@ def main():
     if "--set-ceiling" in sys.argv:
         i = sys.argv.index("--set-ceiling")
         if i + 1 >= len(sys.argv) or not sys.argv[i + 1].isdigit():
-            print("usage: --set-ceiling <bytes>")
+            print("usage: --set-ceiling <bytes> --by <" + "|".join(ACTORS) + ">")
             return 2
-        return set_ceiling(int(sys.argv[i + 1]))
+        by = ""
+        if "--by" in sys.argv:
+            j = sys.argv.index("--by")
+            by = sys.argv[j + 1] if j + 1 < len(sys.argv) else ""
+        return set_ceiling(int(sys.argv[i + 1]), by)
     return run(quiet="--quiet" in sys.argv)
 
 

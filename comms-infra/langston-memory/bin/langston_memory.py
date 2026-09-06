@@ -360,6 +360,13 @@ def query(terms):
     if not terms:
         print(f"langston-recall — usage: langston-recall <term> [more terms]   (index: {meta['total']} records, built {built})")
         print("REFUSED: empty query returns no dump by design. Give an issue id (#605), a batch id, or a subject term.")
+        # ⛔ FINDING-1 (Langston, Step-4): this refusal wrote NO ROW, and it is the one
+        #    that mattered most. An empty-query reach is precisely a REACH THAT PRODUCED
+        #    NOTHING — the NOT-USED vs NOT-REACHABLE distinction P-7 exists to make — so
+        #    its absence made the very case the instrument was built for invisible.
+        # ★ Three of four refusals were instrumented and the enumeration was called
+        #    complete: `enumerator-blind-spot`, in the tool that promoted that pattern.
+        _usage("refused", reason="empty-query", index_total=meta.get("total"))
         sys.exit(1)
 
     tl = [t.lower() for t in terms]
