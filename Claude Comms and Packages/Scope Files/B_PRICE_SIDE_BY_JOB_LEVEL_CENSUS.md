@@ -734,3 +734,31 @@ Two full histograms captured 7 minutes apart at `5838d64b2` and **subtracted**, 
 
 ### ⇒ DISPOSITION (§9.4 #1): FOLD INTO THE WORK IN HAND
 **The remaining unknown is the one that prices everything: how often an active signal is born on a symbol served only by the slow bucket.** That is a rate, not an age, and it is the number `#977` am. 4 says is missing before severity can be argued. **No threshold, no gate and no scope change until it exists.**
+
+---
+
+## 18. ✅ THE 60-SECOND CADENCE IS CONFIRMED **EMPIRICALLY** — AND THE MIX IS TRENDING, SO NO SHARE IS CLAIMED
+
+Three consecutive ~6-minute intervals on the sharpened edges (`15 s` / `45 s` added), differenced pairwise, all four snapshots HTTP-200-asserted.
+
+### ✅ THE DECISIVE HALF — THE 45 s EDGE PAID FOR ITSELF ON ITS FIRST RUN
+**The VTS lane's slow mode is ENTIRELY in `45000-60000`, with ZERO in `30000-45000`, across all three intervals: 156 / 259 / 207 against 0 / 0 / 0.**
+⇒ ⭐⭐ **A 30-SECOND CADENCE CANNOT PRODUCE THAT. A 60-SECOND ONE DOES.** This confirms the `vtsSimulation` (60,000 ms) attribution **from the age data alone**, independently of the code read in `#977` am. 4 and of the health line Langston used.
+★ **THIS IS THE EDGE I ADDED PRECISELY TO SPLIT THAT BAND, AND IT SEPARATED THE TWO HYPOTHESES ON ITS FIRST DEPLOY.** Before it, both cadences shared one cell and the question was unanswerable from this instrument.
+
+### ✅ AND THE `rtb_refresh` PROBE IS LIVE, NOT INERT
+**n = 3 / 3 / 4 per interval.** ⛔ **Tiny — but NON-ZERO, which is the only property being claimed here.** It fires. *(The rate is unsurprising: `rtb_signals` holds 2 rows all-time, so there is almost nothing to refresh.)*
+
+### ⛔⛔ THE HALF I AM NOT CLAIMING — THE MIX IS TRENDING, NOT SETTLING
+| interval | active fast <5 s | active slow 30-60 s | active other | VTS slow 30-60 s |
+|---|---|---|---|---|
+| 0 → 1 | **44.2%** | 44.7% | 11.1% | 82.5% |
+| 1 → 2 | **23.8%** | 36.9% | 39.3% | 92.8% |
+| 2 → 3 | **13.1%** | 45.4% | 41.4% | 97.2% |
+
+⇒ **The fast mode falls monotonically (44.2 → 23.8 → 13.1) while `other` rises (11.1 → 39.3 → 41.4).** The active slow mode's own split also MOVES between the two sub-buckets: `[30-45 | 45-60]` = `500|14`, then `218|226`, then `134|437`.
+⛔⛔ **TWO EXPLANATIONS FIT AND I CANNOT SEPARATE THEM WITH THREE INTERVALS:** **(a) WARM-UP SETTLING** — the run began ~5 minutes after a deploy, so early reads hit freshly-written entries and the distribution is relaxing toward its steady state; or **(b) DEGRADATION** — the refresh loop falling behind as subscriptions accumulate (the cache grew 185 → 202 during the earlier run). **These predict opposite things about the next hour.**
+⇒ ★ **NO SHARE IS CLAIMED, AND THE TREND IS NOT CALLED A FINDING.** A longer six-interval run is collecting to see whether it flattens (a) or continues (b). ⚠️ **This is the fourth number in this batch that would have been wrong if reported from one window — and the second I am withholding rather than retracting.**
+
+### ⇒ WHAT THIS DOES *NOT* CHANGE
+**The bimodality (§17) and the 60 s attribution stand.** The trend is about the MIX, not about the existence of the two modes — and the VTS 45-60 s result is stable across all three intervals while everything else moves, which is itself evidence the instrument is discriminating rather than drifting.
