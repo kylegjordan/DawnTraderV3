@@ -9,12 +9,22 @@
 | file | rows | what it is |
 |---|---|---|
 | `trades_closed.csv` | **706** | Every closed trade we have. Prices, sides, quantities, times, exit reasons, and the full **price-provenance** block. |
-| `tape_1m_crypto.csv` | ~814,000 | 1-minute bars, **7 days**, every crypto symbol (571). |
-| `tape_1m_xstock.csv` | ~808,000 | 1-minute bars, **7 days**, every xStock symbol (480). |
-| `quotes_crypto.csv` | ~1,068,000 | Full-resolution bid/ask/last snapshots, **3 days**, every crypto symbol. |
-| `quotes_xstock.csv` | ~2,690,000 | Full-resolution bid/ask/last snapshots, **1 day** (2026-09-04), every xStock symbol. |
+| `tape_1m_crypto.csv` | **814,356** | 1-minute bars, **7 days**, every crypto symbol (571). |
+| `tape_1m_xstock.csv` | **807,914** | 1-minute bars, **7 days**, every xStock symbol (480). |
+| `quotes_crypto.csv` | **1,068,352** | Full-resolution bid/ask/last snapshots, **3 days**, every crypto symbol. |
+| `quotes_xstock.csv` | **2,887,660** | Full-resolution bid/ask/last snapshots, **1 day** (2026-09-04), every xStock symbol. |
 | `fee_ladder.csv` | 19 | The venue's **account-confirmed** fee ladders. ⛔ **NOT from our database.** |
-| `deploys.txt` | — | The staging deploy record: sha and time. Needed to split the holding-period window. |
+| `deploys.txt` | **1 record** | ⛔ **The CURRENT deploy only — NOT a history. See the warning below.** |
+| `code_changes_exit_path.csv` | **39** | Commits touching exit-path code since 2026-08-25. ⚠️ **COMMIT times, not deploy times.** |
+
+⚠️ **ONE COLUMN LOOKS LIKE AN ECONOMIC FIGURE AND IS NOT: `exit_fee_mode` is a LABEL** — it says
+whether the exit leg rested as a maker or crossed as a taker. **No amount, no rate.** It is kept
+because which leg was which is a fact about the order, and you cannot reconstruct it from prices.
+⇒ **Pair it with `chosen_entry_mode` for the entry side.**
+
+**Total on disk: ~966 MB uncompressed.** The two quote files are ~78 % of that; the tape and the
+trades are small. **Start with the small ones** — `trades_closed.csv` is 706 rows and answers more
+per byte than anything else here.
 
 ---
 
@@ -48,6 +58,8 @@
 
 **The venue's ticker frame carries no timestamp at all** — that is stated in our own code (`server/services/passive-archive/equity-spot-archiver.ts:127`, issue `#943`). ⇒ **every age derived from this column includes network transit, queueing and our own processing latency.**
 
+⚠️ **AS OF THE EXPORT, AND ALREADY MOVING: work landed on 2026-09-06 that parses a venue-supplied timestamp and carries it BESIDE our own clock rather than replacing it** (`B-PRICE-SIDE-BY-JOB` §14). ⇒ **the "no timestamp at all" statement is true of the archived rows IN THIS EXPORT and is being actively worked on the live system.** It does not change what you can compute here; it does mean **a recommendation of "capture the venue clock" is already in flight, so aim past it.**
+
 ⚠️ **This is the central open question in your brief, not a footnote.** We run staleness ceilings, skip exit checks and raise alerts against this clock, and **we cannot currently distinguish "the venue is quiet" from "our feed is lagging."** If your honest conclusion is that staleness is not knowable without a venue timestamp, **say that** — it is the answer we most need.
 
 ---
@@ -58,7 +70,11 @@
 - ⚠️ **Crypto and xStock are structurally different instruments.** A crypto tick size is the venue's published statement; an xStock increment is **inferred by us**. Do not pool them.
 - ⚠️ **The trade population is small (706) and unevenly split** across strategies, classes and time. Several strategies have never traded at all. **A per-strategy statement on this population is a statement about a handful of rows** — state the n every time.
 - ⚠️ **Holding periods are censored, and not uniformly.** The active lanes have **no force close** (right-censored). The passive side has **two different ceilings — 7 days real, 48 hours shadow** — which are different instruments. ⛔ **A ceiling-terminated trade is CENSORED, not an event.** Count it as an observed exit and you manufacture a mode at the wall.
-- ⚠️ **Exit mechanics changed inside the window.** Use `deploys.txt` to enumerate the exit-touching deploys and split there. **Do not assume one population.**
+- ⛔⛔ **WE CANNOT GIVE YOU DEPLOY BOUNDARIES, AND THE BRIEF ASKS YOU TO SPLIT ON THEM. Read this before deciding what to do about it.**
+  **`deploys.txt` holds ONE record — the deploy currently live.** There is no deploy history table: measured, **zero tables in the schema match `%deploy%`**, and the on-host record is overwritten each time. **So the instant each exit change went live is not recoverable from anything we hold.**
+  ✅ **What we CAN give you is `code_changes_exit_path.csv`: 39 commits touching the exit path since 2026-08-25**, each with its file and subject. ⚠️ **These are COMMIT times. A commit is not a deploy** — the gap between them is unmeasured and is sometimes days.
+  ⇒ ⛔ **DO NOT SILENTLY TREAT COMMIT TIME AS DEPLOY TIME.** Either state the assumption explicitly wherever you rely on it, or **declare the stratification `INSUFFICIENT`** — which is a first-class verdict here and, on this particular question, may well be the correct one. **Telling us the holding-period split cannot be made honestly is more useful than a split built on a proxy.**
+- ⚠️ **Exit mechanics DID change inside the window** — that much is certain from the commit list above. **Do not assume one population.**
 - ⚠️ **`trade_mode` and `mode` are different fields and mean different things.** Check both before filtering.
 
 ---
