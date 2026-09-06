@@ -6656,7 +6656,21 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
-### 🟥🟥 #977 AMENDMENT 5 — 2026-09-06 (CC-C; Langston's census call, run at the object) — **THE PRICE OF THIS ISSUE IS NOW MEASURED: THREE OPEN POSITIONS WENT 27 MINUTES WITHOUT AN EXIT EVALUATION**
+### ⛔⛔ #977 AMENDMENT 5 — ⚠️⚠️ **CORRECTED 2026-09-06, ~25 MINUTES AFTER FILING. ITS HEADLINE WAS WRONG IN TWO WAYS AND BOTH ARE RETRACTED HERE, ABOVE THE ORIGINAL, SO NOBODY READS THE WRONG VERSION FIRST.** *(Langston caught both; I re-derived both at the object.)*
+
+**RETRACTION 1 — THIS IS NOT AN EXPOSURE EVENT. IT IS THE POSTURE KYLE RULED ON 2026-09-03**, in `#994` am. 1-3, **naming `LI/USD` and `NEM/USD` explicitly**: exit freshness does not loosen out of session — *"if that means we don't get a chance to exit overnight… so be it. We just hold."* **`SLV` / `LI` / `NEM` are `xstock_spot` and it was SATURDAY; that market is shut.** ⛔ **I invoked `CONDUCT.md` §8's exposure exception on a decision already taken — `§9.5(b-ii)`'s named failure, which the step-1 skill calls WORSE THAN NO FINDING.** I matched the alert against its own history and not against the ruling behind it. **The exposure framing is withdrawn WHOLE, not narrowed until something survives.**
+*(Also corrected: six OPEN + one PENDING, not seven open — `JUP/USD` is `pending`, which dissolves the "fourth stale position" I flagged.)*
+
+**RETRACTION 2 — THE MECHANISM BELOW IS FALSIFIED BY MY OWN NUMBER.** I wrote *"when the push stops, nothing else refreshes it."* ⛔ **A push-only row after Friday's close would read ~15 HOURS. Mine read 27 minutes.** Re-derived: process start **11:10:02.116Z**, and the three rows written **11:10:24.649 / 11:10:25.934 / 11:10:26.026Z — 12-24 s after startup, within 1.4 s of each other, untouched since.** ⇒ ★ **A STARTUP BATCH SEED, not seven independent feeds dying.** The falsifying figure was in my own table and I read past it.
+
+✅ **WHAT SURVIVES, AND IT IS SMALLER:** `'openTrade'` appears exactly twice (`price-cache.ts:32`, `:95`) and is never passed to `subscribe()`, control-confirmed. ⛔ **BUT THAT IS THE *NEGATIVE* ONLY.** The positive — the line that WOULD enrol an open position, or evidence none was ever written — **is still owed, and `#977`'s severity is NOT re-based until it exists** (Langston's 29(c) hold).
+★ **AND ONE FINDING SURVIVES THAT IS THIS BATCH'S OWN SUBJECT: the row is stamped 33 min old because that is when WE WROTE IT, while the market producing the value shut Friday.** `lastUpdatedAt` dates our bookkeeping, not the observation — Kyle's founding question for `3n`, landing on the position-marking path, and why `venueStampAbsent` ~97.5% is load-bearing and the AGE is not. ⚠️ **NOT established that the seeded value IS the Friday close — labelled HYPOTHESIS, because inferring a value from a market calendar is the same step that produced both retractions above.**
+
+---
+
+**⬇ THE ORIGINAL AMENDMENT 5 FOLLOWS, UNEDITED. Its census is sound; its headline and mechanism are retracted above.**
+
+### ~~🟥🟥 #977 AMENDMENT 5 — THE PRICE OF THIS ISSUE IS NOW MEASURED: THREE OPEN POSITIONS WENT 27 MINUTES WITHOUT AN EXIT EVALUATION~~ *(headline WITHDRAWN — see the retraction directly above)*
 
 ⛔⛔ **THIS ROW WAS FILED AS *"a lane nobody subscribes to."* ITS CONSEQUENCE IS THAT A STOP IS NOT EVALUATED ON A HELD POSITION FOR AS LONG AS THE VENUE PUSH IS ABSENT.**
 
