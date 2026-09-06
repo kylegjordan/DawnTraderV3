@@ -6656,6 +6656,34 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
+### 🟥🟥 #977 AMENDMENT 5 — 2026-09-06 (CC-C; Langston's census call, run at the object) — **THE PRICE OF THIS ISSUE IS NOW MEASURED: THREE OPEN POSITIONS WENT 27 MINUTES WITHOUT AN EXIT EVALUATION**
+
+⛔⛔ **THIS ROW WAS FILED AS *"a lane nobody subscribes to."* ITS CONSEQUENCE IS THAT A STOP IS NOT EVALUATED ON A HELD POSITION FOR AS LONG AS THE VENUE PUSH IS ABSENT.**
+
+**THE CENSUS (Langston's method — at 8 entries this is a census, not a rate, and it closes with no observation window).** All 8 `kraken_ws`-sourced cache entries, enumerated live:
+| symbol | age | open position? |
+|---|---|---|
+| JUP/USD · ZEC/USD · ZEC/EUR | 28 / 28 / 29 ms | ✅ |
+| CSPR/USD | 719 ms | ✗ |
+| XPL/USD | 1,955 ms | ✅ |
+| **NEM/USD** | **1,612,421 ms — 26.9 min** | ✅ |
+| **LI/USD** | **1,612,513 ms — 26.9 min** | ✅ |
+| **SLV/USD** | **1,613,798 ms — 26.9 min** | ✅ |
+⇒ ★ **SEVEN OF EIGHT ARE THE SEVEN OPEN POSITIONS.** The WS lane serves what we HOLD — the same structure as the mini-book (census §11), arriving on the ticker path.
+
+✅ **THE `#994` DISCRIMINATOR SAYS OUR SIDE, NOT THE VENUE'S: exactly 3 of 217 entries exceed 10 minutes; the other 214 sit at p50 = p95 = 10,713 ms.** A quiet venue takes the class down together. **This took three — precisely the three that are open AND WS-sourced. The 214 are the control and they are alive.**
+
+✅✅ **THE MECHANISM IS NOW PROVEN AT THE CODE, NOT INFERRED — WITH A CONTROL.** `'openTrade'` appears **exactly TWICE** in `server/` + `shared/`, tests excluded: **`price-cache.ts:32`** (the type union that declares it) and **`price-cache.ts:95`** (the bucket definition). ⛔ **IT IS NEVER PASSED TO `subscribe()`. No code path can enrol anything into the open-position lane.** ✅ **CONTROL: the same grep returns `'readyToBuy'` at `rtb-refresh-service.ts:430` and `'vtsSimulation'` at `vts-runner.ts:3028/:3964/:4687` — so the instrument finds bucket names where they are used.**
+
+**⇒ THE CHAIN, END TO END:** the 2 s lane has no subscribers and cannot acquire any → an open position is written ONLY by a venue push → the 60 s VTS poll covers the 212 symbols IT subscribed, not these → when the push stops, **nothing refreshes the row** → it freezes while `lastSource` still reads `kraken_ws` (*"frozen while wearing push provenance"* — Langston's phrase, confirmed) → the exit path correctly refuses the stale mark and emits `Exit checks skipped`.
+**Alert history on the three: LI ×5, SLV ×2, NEM ×1.** `5b2849e0` (SLV) is the row that surfaced on every turn this session and was being treated as an alerting-economics question.
+
+⚠️ **WHAT IS *NOT* CLAIMED. The system FAILED SAFE — it refused to act on a mark it knew was stale rather than trading on it, so NO BAD FILL IS ALLEGED and no loss is claimed.** The harm is an unevaluated stop, which is a risk-control gap rather than a realised cost. ⛔ **And the fix is NOT obvious-and-therefore-mine: subscribing open positions to a 2 s lane changes refresh load and touches live trading. Kyle's scope call, Langston's design review.**
+
+★ **AND IT REFRAMES AM. 4, WHICH I WROTE TOO NARROWLY (Langston's correction):** the denominator is **`signal births ∪ (open positions × exit evaluations)`**. Am. 4 priced entry only. **The harm here recurs every exit cycle for the whole hold**, which is why it showed up on three held names and not on a signal.
+
+---
+
 ### #977 AMENDMENT 2 — CROSS-REFERENCE, NO NEW NUMBER: two alerts route to the freshness cluster — `B-XSTOCK-SESSION-FRESHNESS`, plan `3b.f-c`, owner CC-C
 
 **Filed 2026-09-02 by CC-B on Langston's routing of alert `1d1573c7-99ea-42b4-9c84-3a33538aa4dc` (owner=CC-B in his tag; the HOME is CC-C's lane, so CC-B placed it and named CC-C — rule 28).** Alert `1d1573c7`: an active xStock fill for RIOT/USD refused because the mark was 55,473 ms old against a 15,000 ms ceiling, fired 20:18Z — three minutes after the US regular session closed. Sibling `b1f58a01-28ed-4a97-bbf0-b338d560775d` (fired 10:14Z, still active): exit checks skipped for MDT/USD, mark 124 s vs a 65 s ceiling — Langston routed that one to CC-C at 20:23Z.
