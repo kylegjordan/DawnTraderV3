@@ -762,3 +762,33 @@ Three consecutive ~6-minute intervals on the sharpened edges (`15 s` / `45 s` ad
 
 ### ⇒ WHAT THIS DOES *NOT* CHANGE
 **The bimodality (§17) and the 60 s attribution stand.** The trend is about the MIX, not about the existence of the two modes — and the VTS 45-60 s result is stable across all three intervals while everything else moves, which is itself evidence the instrument is discriminating rather than drifting.
+
+---
+
+## 19. ✅ THE MIX SETTLED — AND THE SHAPE IS **THREE DISCRETE SPIKES WITH EXACT ZEROS BETWEEN**, WHICH REFINES §17'S "BIMODAL"
+
+**Six consecutive ~6-minute intervals, differenced pairwise, all seven snapshots HTTP-200-asserted.**
+
+### ✅ FIRST — §18's OPEN QUESTION IS ANSWERED: IT WAS WARM-UP (a), NOT DEGRADATION (b)
+Active fast<5 s across the six intervals: **44.2 → 23.8 → 13.1 → 2.6 → 3.9 → 2.3 → 2.5 → 2.8%.** ⇒ **it decayed and then held flat for five intervals.** A settling curve, not a runaway. **The mix is now claimable and §18's withholding is discharged.**
+
+### ⭐⭐ THE SHAPE, FULL HISTOGRAM, LAST SETTLED INTERVAL
+| bucket | active (n=1,249) | VTS (n=249) |
+|---|---|---|
+| **0-1000 ms** | **31 — 2.5%** | **7 — 2.8%** |
+| 1000-2000 · 2000-5000 · 5000-10000 · 10000-15000 | 1 · 3 · **0** · **0** | 0 · 0 · **0** · **0** |
+| **15000-30000** | **598 — 47.9%** | ⛔ **0** |
+| **30000-45000** | ⛔ **0** | ⛔ **0** |
+| **45000-60000** | **616 — 49.3%** | **242 — 97.2%** |
+| 60000+ (all five higher buckets) | ⛔ **0** | ⛔ **0** |
+
+⇒ ★★ **THREE SPIKES, AND THE ZEROS ARE EXACT — not small, ZERO.** 5-15 s, 30-45 s and everything above 60 s are empty on both lanes. **A continuous process cannot produce that. Discrete refresh cadences can, and nothing else plausibly does.**
+⇒ ⛔ **§17's "bimodal" is REFINED, not overturned: the two-humps-and-a-hole reading was directionally right and under-resolved.** The 15-30 s population was inside §17's coarse "other" bucket and invisible until the 15 s edge landed.
+
+### ⛔⛔ THE PART THAT REFUTES MY OWN §16 / `#977` am. 4 CHARACTERISATION
+**`15000-30000` is 47.9% of the ACTIVE lane and EXACTLY ZERO on the VTS lane.**
+⇒ ★ **The active lane therefore has a price population the VTS lane does not share** — so *"the active lane inherits the VTS cadence for the ~180 VTS-only symbols"* is true of **at most half** its reads, not of the lane. **Roughly half its reads come from a source on a 15-30 s cadence that VTS never touches.**
+⛔ **WHAT PRODUCES IT IS UNESTABLISHED AND I AM NOT GUESSING.** `readyToBuy` is the 15,000 ms bucket but the health line reads `rtb=3` — three symbols cannot supply 598 observations, so the obvious candidate does not survive its own arithmetic. **Named as the next question, not answered.**
+
+### ⇒ DISPOSITION (§9.4 #1): FOLD INTO THE WORK IN HAND
+**`#977` am. 4 needs a correction noting the VTS-cadence claim covers at most half the active lane**, and the 15-30 s source is the open question. ⛔ **No severity moves on this** — it is a shape refinement, and the cost still depends on the birth-rate number Langston is holding.
