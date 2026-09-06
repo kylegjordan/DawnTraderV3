@@ -7519,3 +7519,24 @@ Kyle opened Kraken Pro's **Fees** dialog signed in, on three live markets, and c
 **HOME: `B-KRAKEN-FEE-WATCH`, owner CC-B, placed in `PHASE_19_PLAN.md` immediately after `B-XSTOCK-FEE-CONTRACT`** — deliberately after, not before: the watcher's first job is to confirm the corrected values, and building it against known-wrong ones would bake the error into its baseline.
 
 ---
+
+
+### ➕ #744 `B-GATE-GUARD` RIDER — ADDED 2026-09-06 (CC-A; placement is Langston's own suggestion) — ⭐ A GUARD WRITTEN AGAINST AN EXTERNAL CONTRACT MUST BE EXERCISED AGAINST A REAL RESPONSE FROM THAT CONTRACT, AND THE BRANCH EXERCISED IS THE FAILURE BRANCH
+
+**THE OBSERVATION, from `B-DEPLOY-DRIFT-LINE` across four review rounds: THREE OF THE LAST FOUR DEFECTS WERE FOUND BY EXECUTION AND NONE BY READING** — and the fresh-reader loop every session runs is entirely a reading protocol.
+
+⛔ **LANGSTON REFUSED THE LOOSE VERSION, AND THE REFUSAL IS THE FINDING.** *"Reading doesn't work"* is false, and he refuted it with his own catches: reading found the compare API's trailing-window pagination, the `||` binding to a pipeline's status rather than a command's, and `log()` returning 1 on its success path. **What execution caught, in all three cases, was ONE CLASS: A CLAIM ABOUT WHAT AN INTERFACE RETURNS.**
+
+| the claim | what running it showed |
+|---|---|
+| *"`mint_alert` receives its arguments"* | a comment between the line-continuation and its arguments meant it received **NONE** — every `MEASUREMENT FAILED` path was store-silent, and **`bash -n` exits 0 on it** |
+| *"GitHub returns no `status` field on an error"* | its 404 body **carries `status: "404"`**, so an `is None` guard never fired, `total_commits` was absent, and **a 404 RENDERED AS ZERO — all-clear, from an instrument that could not see the repository at all** |
+| *"the reader emits output"* | an orphaned continuation line made it emit nothing — and the guard for exactly that had been deleted as a supposed duplicate |
+
+★★ **HIS RULE, ADOPTED VERBATIM: *"Reading verifies our own logic against our own model of the world; only running it tests the model."***
+⇒ **THE OBLIGATION IS NOT "RUN EVERYTHING".** It is: **any guard written against an EXTERNAL contract is exercised against a REAL response from that contract, and the branch exercised is the FAILURE branch.**
+
+✅ **AND IT IS THE INSTRUMENT WE ALREADY HAVE, ONE QUESTION FURTHER ON.** Rule 29(b) asks *what does the probe return when the thing IS present.* **This asks *what does the guard do when the contract IS BROKEN.*** ⇒ **make "show me the failure-path artifact" a required object in the fresh-reader round, exactly as a positive control already is.**
+
+⚠️ **WHY IT IS A RIDER AND NOT ITS OWN BATCH:** `#744` already owns *"did the work, skipped the review"*, and this is the same family one level down — **a review that ran but could not have failed.** Langston: *"worth homing as its own item rather than folding into this batch — if you want it as a rider on `B-GATE-GUARD` I'd support that placement."*
+⛔ **NOT folded into `B-DEPLOY-DRIFT-LINE`, which is where it was FOUND, not where it BELONGS.**
