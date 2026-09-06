@@ -45,7 +45,8 @@ USAGE:
                                         --by outside the actor allowlist.
     langston-size-watch --self-test     positive control: prove it CAN alarm
     langston-size-watch --fire-drill    prove the alarm can REACH a human — injects a breach
-                                        and really posts, labelled as a drill
+                                        and really posts, labelled as a drill. Does NOT
+                                        touch the heartbeat.
 """
 
 import json, os, subprocess, sys, datetime
@@ -61,6 +62,24 @@ RUNLOG = "/opt/langston-memory/usage/size-watch.jsonl"
 SENDER = "Infra Claude"
 NL = chr(10)
 STALE_HOURS = 48
+
+# ⛔⛔ THE HEARTBEAT — LANGSTON, STEP-4 POINT (2), AND HE NAMED THE RIGHT RESIDUAL.
+#    My worry was that the ceiling only falls when someone remembers to lower it.
+#    That is SLACK: the rule still binds directionally, a late trim is not a breach.
+#    ★ THE ONE THAT ACTUALLY BITES IS THAT THE WATCH ATTESTS ITS OWN LIVENESS.
+#    `gap_h` can only be computed on a run that HAPPENS, so a disabled or erroring
+#    unit reports nothing, forever, and the ratchet quietly has no instrument —
+#    which is the 2026-08-05 failure this whole tool exists to answer, rebuilt one
+#    level up. A watchdog that can only bark while it is alive is not a watchdog.
+# ⇒ EVERY SUCCESSFUL RUN RESOLVES THE PENDING ALERT AND ARMS THE NEXT ONE 26h OUT.
+#    If tomorrow's run happens it resolves in time; if it does NOT, the alert fires
+#    on staging and re-surfaces on the dispatcher's widening back-off until a human
+#    acts. ★ The absence of a run becomes the event, and the thing that notices is
+#    NOT this process. Same shape as B-STAGING-LIVENESS-WATCH, same dedupe-key
+#    discipline so an outage produces ONE alert rather than one per missed day.
+HEARTBEAT_KEY = "langston-size-watch-heartbeat"
+HEARTBEAT_HOURS = 26        # the daily timer plus slack for RandomizedDelaySec
+STAGING_CMD = "cd /home/deploy/dawntrader && npm run --silent system-alerts --"
 
 
 def utc():
@@ -138,6 +157,75 @@ def post(msg, quiet):
         return "sent" if p.returncode == 0 else "FAILED rc=%d %s" % (p.returncode, (p.stderr or "")[:200])
     except Exception as e:
         return "FAILED %s: %s" % (type(e).__name__, e)
+
+
+def _alerts(argv):
+    """Run the staging alert CLI as langston over his IP-restricted key. Returns
+    (rc, stdout, stderr). NEVER raises — the caller records the outcome in the run row."""
+    inner = STAGING_CMD + " " + " ".join(["'%s'" % a for a in argv])
+    cmd = ["sudo", "-u", "langston", "ssh", "-o", "ConnectTimeout=25",
+           "-o", "BatchMode=yes", "staging", inner]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=180)
+        return p.returncode, (p.stdout or ""), (p.stderr or "")
+    except Exception as e:
+        return 255, "", "%s: %s" % (type(e).__name__, e)
+
+
+def heartbeat(st, status):
+    """Resolve the pending heartbeat, then arm the next. Returns a short outcome string
+    that goes into the run row, so a heartbeat that quietly stops working is visible in
+    the same place as everything else rather than being another silent absence."""
+    notes = []
+    # ⛔ EVIDENCE MUST BE A REFERENCE TOKEN, NOT PROSE — measured 2026-09-06: a sentence
+    #    was REFUSED ("must be a reference token (path:line | sha | uuid | §/#ref)").
+    # ★ AND THE RIGHT REFERENCE IS THE ROW THIS RUN IS ABOUT TO WRITE, so the evidence
+    #    points at the artifact that discharges the alert rather than describing it.
+    try:
+        with open(RUNLOG, encoding="utf-8") as fh:
+            next_line = sum(1 for _ in fh) + 1
+    except Exception:
+        next_line = 1
+    evidence = "%s:%d" % (RUNLOG, next_line)
+
+    prev = st.get("heartbeat_alert_id")
+    if prev:
+        rc, _out, err = _alerts(["resolve", prev, "--by", "cc-infra", "--evidence", evidence])
+        notes.append("resolved %s" % prev if rc == 0
+                     else "RESOLVE FAILED rc=%d %s" % (rc, err[:120]))
+        # ⛔⛔ THE RESOLVE IS LOAD-BEARING, NOT TIDINESS. `--dedupe-key` makes the re-arm
+        #    below collapse onto a STILL-OPEN alert of the same key — returning the old
+        #    id AND THE OLD `triggers_at`. So a failed resolve does not merely leave a
+        #    stale row: it means the heartbeat FIRES AT THE ORIGINAL TIME however many
+        #    healthy runs follow, and the liveness alarm becomes a false positive that
+        #    trains everyone to ignore it. Refusing to re-arm on a failed resolve keeps
+        #    the failure visible instead of burying it under a spurious alert.
+        if rc != 0:
+            notes.append("re-arm SKIPPED — dedupe would collapse onto the unresolved alert")
+            return "; ".join(notes)
+
+    fire_at = (utc() + datetime.timedelta(hours=HEARTBEAT_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rc, out, err = _alerts([
+        "add", "--triggers-at", fire_at, "--category", "health_check",
+        "--severity", "warning", "--dedupe-key", HEARTBEAT_KEY,
+        "--title", "Langston size watch has not run",
+        "--body", ("The daily ratchet watch over Langston's always-loaded files did not run "
+                   "within " + str(HEARTBEAT_HOURS) + "h. Each successful run resolves this "
+                   "and arms the next, so this alert firing MEANS THE WATCH IS DOWN and the "
+                   "#1007 ceiling currently has no instrument. Check "
+                   "langston-size-watch.timer on Helsinki. Owner CC-INFRA."),
+    ])
+    if rc == 0:
+        try:
+            new_id = json.loads(out).get("id")
+            st["heartbeat_alert_id"] = new_id
+            notes.append("armed %s for %s" % (new_id, fire_at))
+        except Exception:
+            notes.append("armed, but the id could not be parsed from the reply")
+    else:
+        notes.append("ARM FAILED rc=%d %s" % (rc, err[:120]))
+    return "; ".join(notes)
 
 
 def run(quiet=False, injected_total=None):
@@ -224,6 +312,20 @@ def run(quiet=False, injected_total=None):
     #    total. A run log that cannot tell a drill from an event is a confidently wrong
     #    record, which is worse than no record: the next reader would investigate a
     #    breach that never happened, or dismiss a real one as "probably another test".
+    # ⛔ THE HEARTBEAT RUNS BEFORE THE ROW IS BUILT, SO ONE RUN PRODUCES ONE ROW.
+    #    It used to run after the write and append a second `heartbeat_followup` line —
+    #    which meant a reader had to JOIN TWO ROWS to answer 'was this run healthy?',
+    #    and any reader who didn't know that would see a clean row and a live watch
+    #    while the liveness alert had silently failed to arm.
+    # ⛔ A DRILL MUST NOT TOUCH IT: resolving a real pending alert on the strength of a
+    #    synthetic total would re-arm liveness from a run that never measured anything.
+    hb = heartbeat(st, status) if injected_total is None else "skipped (drill)"
+    # ⚠️ A HEARTBEAT THAT STOPS WORKING IS ITSELF A SILENT ABSENCE, so it is loud.
+    if "FAILED" in hb and not quiet:
+        post("⚠️ LANGSTON SIZE WATCH RAN, BUT ITS HEARTBEAT COULD NOT BE RE-ARMED on "
+             "staging: " + hb + ". The size check itself is fine (" + status + "); what is "
+             "broken is the thing that would tell you if the watch STOPPED running.", quiet)
+
     row = {"ts": iso(), "drill": drill, "status": status,
            "total_bytes": total, "ceiling_bytes": ceiling,
            "over_by": over, "files": files, "missing": missing,
@@ -231,6 +333,7 @@ def run(quiet=False, injected_total=None):
            "measures": ("SUM of the auto-loaded set vs the recorded ceiling. It observes and "
                         "alarms; it NEVER lowers the ceiling itself — that is a deliberate act "
                         "in the batch that lands the trim (#1007)."),
+           "heartbeat": hb,
            "population": "the three files in WATCHED, all of them, every run"}
     try:
         os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
@@ -247,7 +350,7 @@ def run(quiet=False, injected_total=None):
         save_state(st)
 
     print(json.dumps({k: row[k] for k in ("ts", "drill", "status", "total_bytes", "ceiling_bytes",
-                                          "over_by", "hours_since_previous_run", "alarm",
+                                          "over_by", "hours_since_previous_run", "alarm", "heartbeat",
                                           "delivery")}, indent=2, ensure_ascii=False))
     return 1 if status in ("BREACH", "MISSING-FILE") else 0
 
