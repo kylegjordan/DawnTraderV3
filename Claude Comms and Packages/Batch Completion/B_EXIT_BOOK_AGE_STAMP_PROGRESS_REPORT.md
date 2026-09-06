@@ -113,3 +113,18 @@ The exit fill walks a depth ladder and **never recorded how old it was**, so `#9
 ### ⇒ DISPOSITION — THE WINDOW ELAPSED, SO THIS IS A RESULT, NOT A DELAY
 **`workflow-10`: an observation that does not meet its criterion converts to a completion report recording the outcome, or reopens at the step needing redoing. It never quietly waits.**
 ⇒ **C4 needs ONE live pairing on the NEXT crypto taker close — minutes-to-hours of watching, not another 7-day window.** Proportionate to the single missing cell, and the only thing between this batch and its close. ⛔ **The bar is NOT lowered and C4 is NOT waived.**
+
+---
+
+## 10. ⏳ C4 DEFERRED TO A SELF-FIRING ALERT — **NOT WAIVED. AND THE CLOSURE DECISION IS LANGSTON'S, NOT MINE.**
+
+**A 3.3-hour live watch (2026-09-06, 40 polls) caught NO qualifying crypto taker close.** ✅ **That is the EXPECTED result, not a failure: 11 crypto taker closes in 7 days ≈ 1.5/day, so a 3.3-hour window catching zero is what the rate predicts.** ⛔ **Reported rather than silently re-armed.**
+
+✅ **ARMED: alert `6cbef7d0-8067-4085-ab8c-8cc4c1fe19e5`, category `verification`, fires `2026-09-07T13:00:00Z`, dedupe-key `b-exit-book-age-stamp-c4`.** ★ **Its body carries C4 VERBATIM plus the discharge procedure, everything that already passed, and the known defect in C1's PASS wording — so whoever picks it up needs neither this file nor this conversation.** It also carries the two instrument traps that bit me today: **check `out.log`'s reach FIRST and state it**, and **read `error.log` too, because warn/error lines never reach `out.log` and a one-file grep manufactures a zero.**
+
+### ⛔ WHETHER THIS BATCH MAY CLOSE IS A RULING I AM NOT MAKING
+**The case FOR closing:** `workflow-10`'s alert-gated composition explicitly permits it — *"a batch may close with a genuinely deferred item PROVIDED the alert carries the criterion and the result is written back when it fires"* — with `P19-B8.5l` (fence deferred to a named alert) and `B-MBIM-SWITCH-ON` (retention flip still armed) as ratified precedents. C1-C3 pass, V1-V3 are observed, V4 is cited, and the deferred item is carried by a self-firing alert that cannot quietly elapse.
+**The case AGAINST:** **C4 is the only assertion that checks the column's VALUE rather than its PRESENCE.** C2 proves 27/27 rows are populated; **C4 is what would catch a populated column recording the wrong number.** Closing with it unverified means closing with the one correctness check outstanding.
+⇒ ⛔ **PUT TO LANGSTON. I have over-claimed repeatedly today and the disciplined move is to state both cases and let the reviewer rule** — not to grade my own batch's exit on the reading that finishes it.
+
+**Until he rules: card stays in `Observation`, the `RUNNING_ISSUES` entries stay open, and §8's conversion condition is unmet.**
