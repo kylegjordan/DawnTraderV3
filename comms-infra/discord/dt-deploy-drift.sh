@@ -86,9 +86,14 @@ log() { echo "$TS $*" >> "$LOG"; [ "$DRY" = "1" ] && echo "LOG: $TS $*"; return 
 fail_measurement() {
   local operand="$1" detail="$2"
   log "MEASUREMENT_FAILED operand=$operand detail=$detail"
-  mint_alert \
     # THE OPERAND IS IN THE KEY. One key for every failure pins the FIRST operand's body and
     # replays it for every later, different failure — this file's own stale-magnitude lesson.
+  # NOTHING MAY SIT BETWEEN A LINE-CONTINUATION AND ITS ARGUMENTS. A comment here ENDS the
+  #   logical line, so mint_alert ran with ZERO ARGUMENTS and every MEASUREMENT FAILED path
+  #   was STORE-SILENT -- this batch's own subject, rebuilt inside the batch, by the comment
+  #   that explained the fix. `bash -n` exits 0 on it. Langston extracted the block and RAN
+  #   it; that is what caught it, and running it is now the only check that would.
+  mint_alert \
     "deploy-drift-measurement-failed-$operand" \
     "Deploy drift: MEASUREMENT FAILED ($operand)" \
     "The deploy-drift job could not complete a reading at $TS.
@@ -106,6 +111,10 @@ one rung; only a resolve clears it."
 
 # Private scratch. NEVER a fixed /tmp path: two sessions collided on shared /tmp on this
 # host inside one hour during this batch's own audit (#979, plan row 2.6).
+# STATED PROPERTY, not an accident of ordering (Langston): a scratch-dir failure here is
+# STORE-SILENT, because mint_alert is not defined until further down. It logs and exits 1.
+# That is acceptable only because it cannot be confused with a clean run -- the exit status
+# is 1 and nothing is minted, so no row ever claims a reading that did not happen.
 WORK="$(mktemp -d /tmp/dt-drift-XXXXXX)" || { log "MEASUREMENT_FAILED operand=scratch detail=mktemp"; exit 1; }
 trap 'rm -rf "$WORK"' EXIT
 
@@ -210,18 +219,24 @@ fetch "$API/$DEPLOYED...$HEAD_SHA?page=1&per_page=100" "$WORK/cmp.json" \
   || fail_measurement "compare_api" "curl exit status non-zero (the bytes did not land; an HTTP 200 would not have told us)"
 [ -s "$WORK/cmp.json" ] || fail_measurement "compare_api" "compare response empty"
 
-READ="$(python3 - "$WORK/cmp.json" <<'PY'
+READ="$(python3 - "$WORK/cmp.json" "$WORK/rtlist.txt" <<'PY'
 import json, sys, datetime
 try:
     d = json.load(open(sys.argv[1]))
 except Exception as e:
     print("PARSE_ERROR %s" % e); raise SystemExit(0)
 
-status = d.get('status')            # identical | ahead | behind | diverged
-if status is None:
-    # A rate limit and a 404 on the deployed sha are DIFFERENT findings — a 404 means the
-    # deployed sha is not in the repository, which is itself a #1001-class result.
-    print("PARSE_ERROR no status field; api_message=%r" % (d.get("message") or "(none)"))
+status = d.get('status')
+# VALIDATE AGAINST THE KNOWN SET, NOT AGAINST None. GitHub's ERROR bodies carry their own
+# `status` field -- a 404 returns {"message":"Not Found","status":"404"} -- so a
+# `status is None` guard NEVER FIRES on the case it was written for. With total_commits
+# absent, `total = ... or 0` then made the zero test true and a 404 RENDERED AS ZERO:
+# all-clear, from an instrument that could see nothing at all. That is this batch's own
+# subject, and it survived two reviews; my own end-to-end test on a garbage sha caught it.
+VALID = ('identical', 'ahead', 'behind', 'diverged')
+if status not in VALID:
+    print("PARSE_ERROR compare returned status=%r (not one of %s); api_message=%r"
+          % (status, "|".join(VALID), d.get("message") or "(none)"))
     raise SystemExit(0)
 
 total   = d.get('total_commits') or 0
@@ -257,9 +272,11 @@ oldest = commits[0]['commit']['committer']['date']
 age_h = (datetime.datetime.now(datetime.timezone.utc)
          - datetime.datetime.fromisoformat(oldest.replace('Z', '+00:00'))).total_seconds() / 3600.0
 
-print("OK %s %d %.2f %s %d %d %s" % (
-    status, total, age_h, oldest, len(runtime_files),
-    1 if files_capped else 0, ','.join(runtime_files[:12])))
+# THE FILE LIST DOES NOT RIDE THE POSITIONAL LINE. `set -- $READ` word-splits, and this repo
+# has tracked paths containing spaces. It is safe today only because runtime() filters to
+# three space-free prefixes -- i.e. safe by a coincidence of the filter, not by construction.
+open(sys.argv[2], "w", encoding="utf-8").write("\n".join(runtime_files))
+print("OK %s %d %.2f %s %d %d" % (status, total, age_h, oldest, len(runtime_files), 1 if files_capped else 0))
 PY
 )"
 
@@ -268,9 +285,6 @@ PY
 # leaves no positionals and $3 kills the script under `set -u`, with no alert and no log
 # line, and the cron entry discards stderr. That is an instrument reporting an absence it
 # was never able to detect: this batch's own subject, rebuilt inside the fix.
-case "$READ" in
-  ""|" ") fail_measurement "compare_reader" "the compare reader produced no output at all (python3 missing, or an uncaught exception outside its json guard)" ;;
-esac
 
 case "$READ" in
   PARSE_ERROR*) fail_measurement "compare_api" "${READ#PARSE_ERROR }" ;;
@@ -291,14 +305,20 @@ MAIN_TODAY="$(date -u +%Y-%m-%d)"
 if [ "$(cat "$MAIN_STAMP" 2>/dev/null)" != "$MAIN_TODAY" ]; then
   MAIN_SHA="$(git ls-remote "$REMOTE" refs/heads/main 2>>"$LOG" | cut -f1)"
   if [ -n "$MAIN_SHA" ] && fetch "$API/$DEPLOYED...$MAIN_SHA?page=1&per_page=100" "$WORK/main.json"; then
-    log "main_arm $(python3 -c "
+    MAIN_READ="$(python3 -c "
 import json
 d=json.load(open('$WORK/main.json'))
-print('%s %s' % (d.get('status'), d.get('total_commits')))" 2>>"$LOG") (logged only, never fires)"
-    # If the stamp cannot be written the cap does NOT engage, so say so rather than
-    # running uncapped while appearing capped. deploy.sh creates the directory.
-    if ! echo "$MAIN_TODAY" > "$MAIN_STAMP" 2>/dev/null; then
-      log "main_arm STAMP_UNWRITABLE ($MAIN_STAMP) — the daily cap is NOT in effect"
+print('%s %s' % (d.get('status'), d.get('total_commits')))" 2>>"$LOG")"
+    # STAMP ON A PARSED STATUS, NEVER ON THE FETCH ALONE. If the parse errored, $() was empty,
+    # the line logged as `main_arm  (logged only...)` with nothing in it, the daily budget was
+    # spent and the stamp was written anyway -- so the reading was lost AND the retry suppressed.
+    if [ -n "$MAIN_READ" ]; then
+      log "main_arm $MAIN_READ (logged only, never fires)"
+      if ! echo "$MAIN_TODAY" > "$MAIN_STAMP" 2>/dev/null; then
+        log "main_arm STAMP_UNWRITABLE ($MAIN_STAMP) — the daily cap is NOT in effect"
+      fi
+    else
+      log "main_arm PARSE_EMPTY — not stamped, so the next run retries rather than skipping a day"
     fi
   fi
 fi
@@ -346,7 +366,9 @@ for i,s in seen.items():
 fi
 
 set -- $READ                # OK status total age_h oldest_iso runtime_count capped list
-TOTAL="$3"; AGE_H="$4"; OLDEST="$5"; RUNTIME_N="$6"; CAPPED="$7"; LIST="${8:-}"
+TOTAL="$3"; AGE_H="$4"; OLDEST="$5"; RUNTIME_N="$6"; CAPPED="$7"
+# The list comes from its own file, so no filename can ever shift a scalar.
+LIST="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | paste -sd, -)"
 
 # ── THE RUNG: A BOUNDED, MONOTONE AGE BUCKET ON THE DEDUPE KEY ────────────────────────
 # Four rungs, escalate only, return-to-zero resolves all. This is entirely PRODUCER-side:
@@ -379,7 +401,7 @@ if [ "$CAPPED" = "1" ]; then
     "The compare returned a changed-file list at its 300 cap at $TS, so the runtime-path gate could not be evaluated. The age reading is sound and is reported separately. deployed=$DEPLOYED head=$HEAD_SHA"
 else
   # A clipped enumeration beside a full count, unmarked, reads as the whole set.
-  SHOWN="$(echo "$LIST" | tr ',' '\n' | grep -c .)"
+  SHOWN="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | grep -c .)"
   RUNTIME_LINE="runtime files undeployed: $RUNTIME_N${LIST:+ (showing $SHOWN of $RUNTIME_N) — $LIST}"
 fi
 
