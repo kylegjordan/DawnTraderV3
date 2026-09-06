@@ -681,3 +681,26 @@ An **age-only fail-CLOSED gate** refuses on a stale stamp. But a stale stamp is 
 
 ### ⇒ DISPOSITION (§9.4 #1): FOLD INTO THIS BATCH — and it is a GATE question, not an instrument question
 **Put to Langston: does the gate become `age AND feed-not-live`, or stay age-only with quiet-symbol refusals accepted as a known cost?** If it gains the liveness term the read-site instrument needs a third per-attempt field — feed-wide last-message age at the same instant — which is cheaper to add now than to re-instrument later. **No threshold is pre-registered until that is settled**, per his condition 3.
+
+---
+
+## 16. §9.4 DISPOSITIONS — THE THREE ITEMS LANGSTON REQUIRED A `HOME:` ON (2026-09-06)
+
+> ⛔ **He asked for the `HOME:` FORM on each rather than a note, and he was right to: the rule's own measured failure is that every ceremony of homing gets performed and the item still has no place anyone can look up.**
+
+### (i) THE OWED STEADY-STATE RE-READ — **DISPOSITION 1: FOLD INTO THE WORK IN HAND**
+The `161 REST / 9 WS` cache split was read **2.5 minutes after a restart**, and REST backfills faster than WebSocket subscriptions populate ⇒ **warm-up is UNEXCLUDED and it is NOT a finding.**
+⇒ **It is a PRE-REGISTRATION INPUT for Langston's condition 3** (*threshold set from the read-site distribution, refusal rate measured per cell*), so the current batch depends on it — disposition 1, not a follow-up.
+**HOME: folded into `3n` `B-PRICE-SIDE-BY-JOB` as a named prerequisite of the threshold objective; no threshold may be pre-registered until it lands.**
+⛔ **THE READ MUST STATE APP UPTIME BESIDE EVERY SAMPLE** — without it the next reader cannot tell a warm-up artifact from a steady state, which is the whole reason this item exists.
+
+### (ii) THE DIAGNOSTICS SELF-RATE-LIMIT — **DISPOSITION 3: ITS OWN BATCH, PLACED**
+A `429` on the diagnostics login renders as an **empty body**, so **rate-limited, unauthenticated and service-dead are indistinguishable** — `#661` leg 1, an instrument whose silence carries no information.
+**HOME: `B-DIAG-READ-INTEGRITY` (`#1014`), owner CC-C, placed in `PHASE_19_PLAN.md` at row `3n.f`, after `3n.e`.**
+⚠️ **DELIBERATELY NOT FOLDED INTO `3n`: `3n` READS this instrument, and a batch that both depends on a tool and fixes it grades its own dependency.**
+
+### (iii) THE ONE-FIELD-THREE-JOBS PATTERN — **DISPOSITION 5-ADJACENT: RECORDED, NO NEW SLUG**
+Langston: *file it in the same family as "a module's own writers are not the census of its writers" — the discriminator is that you adopted the field on the strength of its **name plus one writer**. Name the shape, don't add a fifth near-duplicate.*
+**HOME: `MISTAKE_PATTERNS.md`, as an instance under `enumerator-blind-spot` — the DEGENERATE case, an enumerator of size one.**
+★ **THE DISCRIMINATOR FROM `named-not-measured`, which was my first instinct and is wrong:** there the name alone is the cause. **Here the name was CORROBORATED by a real writer that really does advance the field** — and **one confirming instance is what made the census feel already done.** ⇒ **a single confirming writer is the most dangerous evidence there is for this class: it converts an assumption into a belief while leaving the population unexamined.**
+⚠️ **AND FILING IT SURFACED A COLLISION IN THAT INDEX: two different instances were both numbered EIGHT.** True total is TEN across three batches. **I first filed mine as n=9 by trusting the header's number — enumerating by reading one label instead of counting the members, which is the pattern's own shape inside the pattern's own index.**

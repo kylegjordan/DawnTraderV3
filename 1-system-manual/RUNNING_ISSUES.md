@@ -7463,6 +7463,21 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 
 **★ THE GENERALISABLE PART, and it is why this is worth its lines:** *"no rules files in the changed list"* and *"the changed list was cut short before we got there"* are **different states that render identically**, and nothing in the response distinguishes them without checking the cap. **Same class as `#661` leg 3 and as this batch's own subject: an instrument that reports absence when it simply could not see.**
 
+### ⚠️ #1014 OPEN 2026-09-06 (CC-C; found by rate-limiting my own measurement, then reading the status code instead of the body) — **A `429` ON THE DIAGNOSTICS LOGIN RENDERS AS AN EMPTY BODY, AND AN EMPTY BODY IS INDISTINGUISHABLE FROM THE SERVICE BEING DOWN**
+
+**THE OBJECT AND THE POPULATION.** The authenticated staging diagnostics path (`CLAUDE.md` §7's *"Authenticated API call"*) obtains a **fresh token on every invocation**. A poll doing that every 150 s trips the login limiter: **measured `login_http=429`, body `{"error":"Too many login attempts, please try again later."}`** — 3 consecutive samples, `/api/diagnostics/ia-price-cache/status`.
+
+⛔⛔ **WHY THIS IS AN INSTRUMENT-REACH DEFECT AND NOT A POLLING NUISANCE (`#661` leg 1).** The token extraction pipes through `python3 -c` with stderr discarded, so a 429 yields an **EMPTY `TOKEN`**, the subsequent request goes out unauthenticated, and the caller sees an empty body. **My harness printed `READ_FAILED` — which is exactly what it prints when the app is down.** ⇒ **three states render identically: rate-limited, unauthenticated, and service-dead.** I read three `READ_FAILED` samples and had no way to tell which; only `-w "%{http_code}"` separated them.
+⚠️ **AND THE SELF-INFLICTED PART IS THE LEAST INTERESTING PART. The defect is that the failure mode is SILENT AND AMBIGUOUS**, so any future session measuring staging under load will draw the same blank and may read it as an outage — or, worse, as a legitimate zero.
+
+**WHAT IT IS NOT:** not a claim that the limiter is misconfigured (it is doing its job), and not a claim that any published number was affected — the readings that landed came back `200` with bodies, and the three that did not were discarded, not used.
+
+**THE FIX, WHICH IS TWO LINES OF DISCIPLINE AND ONE OF TOOLING:** a measurement harness **logs in ONCE and reuses the token**, and **every read asserts the HTTP status before parsing** so a 429/401 can never masquerade as an empty result. Optionally publish the diagnostics behind a read-only path that does not re-authenticate per call.
+
+**HOME: `B-DIAG-READ-INTEGRITY`, owner CC-C, placed in `PHASE_19_PLAN.md` at row `3n.f`, after `3n.e` (`B-CANONICAL-CORPUS-ACCURACY`).** ⚠️ **Not folded into `3n`: `3n` reads this instrument, and a batch that both depends on a tool and fixes it grades its own dependency.**
+
+---
+
 ### ⛔⛔ #1013 OPEN 2026-09-06 (CC-B; found by the Codex-export credential scanner on its FIRST run, not by anyone looking) — ⚠️ **RENUMBERED FROM `#1012` THE SAME DAY.** Collided with CC-INFRA's `B-LANGSTON-CONTEXT` Step-4 entry. Measured rather than argued, per the standing rule: theirs committed `bd416e7dd`, mine `fe768bd28` — the NEWER entry renumbers and that is mine. **The commit that carries this entry says `#1012` in its subject and body; it means THIS entry.** — REAL ACCESS TOKENS ARE COMMITTED IN THE REPOSITORY, IN VERBATIM CHAT TRANSCRIPTS
 
 **THE OBJECT AND THE POPULATION.** The credential scanner built for the Codex export (`scripts/codex-export/`) was run over the allowlisted tree at `d15971b42` — 3,422 files. It returned **25 hits**. **Twenty-two were placeholders**, read and confirmed one by one (`postgresql://user:pass@host`, `postgresql://test:test@localhost`, `SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'`, and two `<PASSWORD>` forms). **Three were not.**
