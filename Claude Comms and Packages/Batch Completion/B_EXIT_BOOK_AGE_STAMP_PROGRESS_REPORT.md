@@ -83,3 +83,33 @@ The exit fill walks a depth ladder and **never recorded how old it was**, so `#9
 ## 8. CONVERSION
 ⛔ **This becomes `B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md` only when BOTH halves are done: the data is in AND a decision or action has been taken on it.** A window that has merely elapsed does not close the batch.
 **Card stays in `Observation`. The `RUNNING_ISSUES` entries stay open.**
+
+---
+
+## 9. ⏱ THE CRITERION FIRED 2026-09-06T12:05:09Z — EVALUATED AGAINST §4 AS WRITTEN. **THREE PASS, ONE UNEVALUABLE, AND THE BATCH DOES NOT CLOSE TODAY.**
+
+**Alert `65a1379e-a382-43fe-960a-9e47f68e76eb` fired on schedule and is ACKED `--by cc-c`.** Population exactly as pre-registered — `closed_at > 2026-08-30T12:05:09Z` AND `close_reason <> 'never_filled'` ⇒ **39 rows.**
+
+| # | assertion | result |
+|---|---|---|
+| **C1** | the split is live; ANY coarse producer ⇒ FAIL | ✅ **PASS — ZERO coarse rows.** Producers ENUMERATED, never `LIKE`: `kraken_ws_book_mid` 21 · `kraken_equities_ws_mid` 18 |
+| **C2** | every `taker` close carries a non-null `exit_fill_depth_age_ms` | ✅ **PASS — 27 taker closes, 27 non-null, ZERO failures** |
+| **C3** | no new close class; maker/taker mix not visibly shifted | ✅ **PASS** — taker **69.2%** post (27/39) vs **63.0%** pre (75/119); **6 pp on n=39, inside the ±7.4 pp standard error.** No new `close_reason` class post-deploy |
+| **C4** | the paired log agrees with the column on ≥1 crypto close | ⛔ **UNEVALUABLE — explicitly NOT passed** |
+
+⚠️ **C1's PASS WORDING WAS UNDER-ENUMERATED AND THE DATA EXPOSED IT.** §4 says *"carries one of the six `_mid`/`_last` members"* — **but 21 of 39 rows carry `kraken_ws_book_mid`, which is a SEVENTH, legitimate producer whose own declaration (`live-pricing-adapter.ts:71`) reads "NOT SPLIT".** ⇒ **the verdict is carried by C1's FAIL clause (no coarse forms), which is unambiguous and passes. The PASS clause was wrong when I wrote it.** Recorded rather than silently reinterpreted.
+
+### ⛔ C4 — AND THE REASON IS AN INSTRUMENT-REACH DEFECT IN MY OWN CRITERION
+**`out.log` covers 09:14:43Z → 12:15:01Z — THREE HOURS. The window is SEVEN DAYS.** All 11 qualifying crypto taker closes predate that retention, so **the paired lines have rotated away.** The query returns **0 rows**, and that zero is the instrument's reach, not evidence.
+⇒ ★ **I WROTE A 7-DAY CRITERION WHOSE PROOF LIVES IN A 3-DAY SIZE-ROTATED LOG — unverifiable by construction.** I put the `out.log`-rotation warning into my own memory nine days ago for a different batch. **C4 is UNEVALUATED, not failed — a weaker and more honest verdict.**
+
+### ⛔ V4 — CITED, NOT OBSERVED (which §4 explicitly permits)
+**Zero closes carry `kraken_rest_engine_fallback_mid`/`_last`.** ✅ **CITED REASON: across 7,197 `EVAL_EXIT` cycles in the log window, `withRestPrice=0` on EVERY ONE** — the REST arm supplied none of the exit-evaluation prices, and a close's producer is stamped from that price. ⚠️ **REACH: 3 hours, not 7 days.**
+⚠️ **NEAR-MISS RECORDED: I first read `REST_TICK` ×1,730 against `withRestPrice=0` as a contradiction. IT IS NOT.** `EVAL_EXIT`'s counter covers the **4 open positions evaluated for exit**; `REST_TICK` fires over a **wider price-fetch set including BTC/ETH/SOL/XRP/ADA, which we do not hold.** **Two adjacent log lines, two populations — I nearly filed my own `wrong-object` as an engine defect.**
+
+### ⚠️ ONE OBSERVATION OUTSIDE C1-C4 — RECORDED, NOT DISPOSITIONED
+**`trailing_stop_hit`: 8 pre-deploy, 0 post-deploy.** ⛔ **C3's failure condition is a NEW class; a class going quiet is not that, so this is NOT a C3 failure.** Consistent with the ratchet being off (0 break-even latches in 705 states, `break_even_enabled=false` since May). **Flagged so it is not lost; not claimed as a finding.**
+
+### ⇒ DISPOSITION — THE WINDOW ELAPSED, SO THIS IS A RESULT, NOT A DELAY
+**`workflow-10`: an observation that does not meet its criterion converts to a completion report recording the outcome, or reopens at the step needing redoing. It never quietly waits.**
+⇒ **C4 needs ONE live pairing on the NEXT crypto taker close — minutes-to-hours of watching, not another 7-day window.** Proportionate to the single missing cell, and the only thing between this batch and its close. ⛔ **The bar is NOT lowered and C4 is NOT waived.**
