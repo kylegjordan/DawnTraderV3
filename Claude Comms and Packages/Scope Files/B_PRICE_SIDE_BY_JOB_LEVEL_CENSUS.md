@@ -607,3 +607,38 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
 ✅ **PROPOSED (primary):** widen the store's write path so the venue's bid and ask reach `CachedPrice` with their own capture stamp, and have `buildLevelBasis` read the store rather than the mini-book. **One hop, reaches all four consumers, no new component.**
 ⛔ **NOT PROPOSED ANY MORE:** §12's four-bucket book subscription. **It solved a problem that turns out to be a dropped parameter.**
 ⚠️ **STILL OPEN AND HONESTLY UNMEASURED:** (a) whether REST-poll cadence (2/15/30/60 s) is fresh enough for a LEVEL — that is `3b.f-c`'s subject and the reason `maxAgeMs` is already a required parameter; ✅ **(b) RESOLVED WHILE WRITING THIS, at `kraken-v2-translator.ts:78-80`: `a: [String(ask)]`, `b: [String(bid)]`, `c: [String(markPrice)]`.** ⇒ **ONLY `c` is the substituted field. The sides are the venue's own values, untouched by `#952`.** ★ **So the honest transactable prices have been arriving on every ticker frame the whole time, beside the one field we overwrote — and the store simply had nowhere to put them.** (c) the crypto durable-capture question, deferred, inheriting `STORAGE_POLICY`.
+
+---
+
+## 14. ⭐⭐⭐ THE VENUE SENDS US THE TIME EACH PRICE HAPPENED AND WE OVERWRITE IT WITH OUR OWN CLOCK — **AND THE CORRECT PARSER SITS TWELVE LINES ABOVE THE WRONG ONE**
+
+**Kyle, 2026-09-05: *"a best price on the ticker could have been recorded fifteen minutes ago, but we put a time stamp on it as having happened just now because that's when we received it."*** ⛔ **HE IS RIGHT, IT IS WORSE THAN HE FRAMED IT, AND IT APPLIES TO BOTH FEEDS AND TO THE DURABLE ARCHIVE.**
+
+### ✅ WHAT KRAKEN ACTUALLY SENDS — READ FROM THE VENUE'S OWN DOCS, NOT INFERRED
+| channel | venue timestamp? | granularity |
+|---|---|---|
+| **`ticker`** | ✅ **YES — `timestamp`, RFC3339** (*"The ticker data timestamp"*, e.g. `2023-09-25T09:04:31.742648Z`) | per message |
+| **`book`** | ✅ **YES — `timestamp`** (*"The book order update timestamp"*) | ⛔ **per MESSAGE, NOT per price level** |
+⇒ ★ **ANSWER TO KYLE'S DIRECT QUESTION: NO, individual book price levels do NOT carry their own timestamps.** The book message has one; the bids and asks inside it do not. **So there is no per-price clock on either feed, and that is a venue fact rather than a gap in our parsing.**
+
+### ⛔⛔ AND WE PARSE NEITHER — MEASURED, WITH A CONTROL
+**Zero parses of a venue timestamp in the ticker or book handlers** (`kraken-websocket-adapter.ts`, lines 630-1000). ✅ **CONTROL: the same instrument finds 23 `timestamp` matches in that file overall, so its silence in the range is real and not a broken search.** Every stamp we hold is our own receive-or-write instant:
+- `kraken-websocket-adapter.ts:790`, `:812` — `new Date().toISOString()`
+- `live-pricing-adapter.updateCache` — `observedAt: now`, and its comment calls this *"a genuine tick from a live feed: observed now"* ⚠️ **so a field NAMED for venue observation carries our clock, which is `#546`'s shape in a timestamp**
+- `passive-archive/crypto-spot-archiver.ts:128` — `capturedAt: new Date()`, **on the very same call that writes `bid` and `ask`**
+
+### ⭐⭐ AND HERE IS THE PART THAT SETTLES IT — **WE ALREADY DO IT CORRECTLY, TWELVE LINES ABOVE**
+| line | function | timestamp taken from |
+|---|---|---|
+| **`:111`** | `parseOhlcBar` | ⭐ **`intervalBegin: new Date(data.interval_begin)` — THE VENUE'S OWN TIME, PARSED AND STORED** |
+| **`:128`** | `parseTickerSnap` | ⛔ **`capturedAt: new Date()` — OUR CLOCK, while `data.timestamp` sits unread in the same object** |
+⇒ ★★ **THE TWO PARSERS ARE IN THE SAME FILE, TWELVE LINES APART, HANDLING FRAMES FROM THE SAME SOCKET. ONE TAKES THE VENUE'S TIME; THE OTHER TAKES OURS AND IGNORES THE VENUE'S.** ⛔ **So this is not a capability we lack — it is a capability we USE, on the adjacent function, and did not apply here.** ★ **Kyle predicted exactly this: *"it's happened numerous times where you've told me we don't capture this data… and then they dig a little bit further, and they find that we do have that data."* He was right again, and the correct instance was one screen away.**
+
+### ✅ CORROBORATED OUTSIDE OUR OWN CODE — THIS IS A NAMED, PUBLIC DEFECT CLASS
+**`nautechsystems/nautilus_trader` issue #3926 — *"Kraken spot WebSocket quote ticks do not use the ticker timestamp."*** ⇒ **a professional trading framework carried the identical bug and filed it: Kraken ADDED timestamp fields to the ticker feed, and implementations kept using local reception time.** ★ **The stated consequence is ours exactly: using local receive time makes latency measurement and event-time ORDERING inaccurate.** ⇒ **We are not reasoning from first principles here; the correct behaviour is documented and the wrong behaviour is a known trap.**
+
+### ⇒ WHAT THIS CHANGES, AND WHAT IT DELIBERATELY DOES NOT
+✅ **IT REMOVES THE TIMESTAMP ARGUMENT FROM THE TICKER-vs-BOOK DECISION ENTIRELY.** Both feeds carry a venue stamp; both are discarded; **fixing it helps whichever feed wins.** ⇒ **it must NOT be used as an argument for either side.**
+⭐ **IT IS THE THIRD INSTANCE OF ONE SHAPE IN THIS BATCH: the venue hands us something and we drop it before storing.** The two SIDES (fixed), and now their TIME. ★ **The pattern is not "the data is missing" — it is "the write path was narrower than the read."**
+⚠️ **HONEST LIMIT, AND IT IS THE ONE THAT KEEPS KYLE'S UNCERTAINTY ALIVE: Kraken documents what each timestamp is CALLED and not precisely WHICH MOMENT it refers to** — quote formation, or message emission. ⇒ **capturing it gets us the VENUE'S clock instead of ours, which is strictly better and still not proof of the instant the price came into existence.** ⛔ **A freshness gate built on our `captured_at` today measures our receive-and-write latency PLUS the venue's, and cannot separate them. Capturing the venue stamp lets us measure the difference for the first time — which is itself the experiment that answers how fresh our pricing really is.**
+⇒ **DISPOSITION (§9.4 #1): FOLD INTO THIS BATCH.** Parsing the venue timestamp on both feeds is one line per parser in a file that already does it correctly next door, it is feed-agnostic, and **it is a precondition for any honest freshness gate — including `3b.f-c`'s.**
