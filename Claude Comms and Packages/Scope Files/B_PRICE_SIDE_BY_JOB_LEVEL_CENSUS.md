@@ -642,3 +642,42 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
 ⭐ **IT IS THE THIRD INSTANCE OF ONE SHAPE IN THIS BATCH: the venue hands us something and we drop it before storing.** The two SIDES (fixed), and now their TIME. ★ **The pattern is not "the data is missing" — it is "the write path was narrower than the read."**
 ⚠️ **HONEST LIMIT, AND IT IS THE ONE THAT KEEPS KYLE'S UNCERTAINTY ALIVE: Kraken documents what each timestamp is CALLED and not precisely WHICH MOMENT it refers to** — quote formation, or message emission. ⇒ **capturing it gets us the VENUE'S clock instead of ours, which is strictly better and still not proof of the instant the price came into existence.** ⛔ **A freshness gate built on our `captured_at` today measures our receive-and-write latency PLUS the venue's, and cannot separate them. Capturing the venue stamp lets us measure the difference for the first time — which is itself the experiment that answers how fresh our pricing really is.**
 ⇒ **DISPOSITION (§9.4 #1): FOLD INTO THIS BATCH.** Parsing the venue timestamp on both feeds is one line per parser in a file that already does it correctly next door, it is feed-agnostic, and **it is a precondition for any honest freshness gate — including `3b.f-c`'s.**
+
+---
+
+## 15. ⭐⭐⭐ THE VENUE DOES NOT TICK WHEN NOTHING HAPPENS — **SO A STALE STAMP MEANS A QUIET SYMBOL, NOT A LOST PRICE, AND AN AGE-ONLY GATE WOULD HAVE REFUSED GOOD QUOTES**
+
+**Langston's §7 second half asked whether Kraken pushes on CHANGE or on an INTERVAL, and named why it decides the design: under interval-pushing a long gap means the price genuinely went missing; under change-pushing it means the price DID NOT MOVE, and a freshness gate would be refusing a correct quote.** He proposed a free discriminator — the exact-repeat rate between consecutive snapshots — rather than another instrument. **It ran. The first answer was wrong and the second is decisive.**
+
+### ⛔ ROUND 1 — THE POOLED NUMBER WAS A COMPOSITION ARTIFACT, AND IT POINTED THE WRONG WAY
+Row-based deciles gave **decile 10 = 44.61% exact repeats**, which reads cleanly as *interval-driven, gaps are real absence*. ⛔ **It is carried entirely by assets whose price does not move.** Per symbol, same window:
+| symbol | pairs | exact-repeat |
+|---|---|---|
+| `USDC/USD` | 6,241 | **100.00%** |
+| `USDT/USD` | 9,232 | 86.97% |
+| `BTC/USD` | 11,830 | 68.84% |
+| `ZEC/USD` | 6,827 | **1.44%** |
+| `BNB/USD` | 5,879 | 1.05% |
+| `DOGE/USD` | 4,407 | 1.47% |
+| `USELESS/USD` | 4,599 | **0.17%** |
+⇒ ★ **THE REPEAT RATE MEASURES WHETHER THE ASSET'S PRICE MOVES, NOT THE VENUE'S PUSH POLICY.** Both hypotheses predict repeats for a pinned stablecoin and differences for a moving altcoin, so the statistic does not discriminate. **Langston's row-decile 10 held THREE symbols.** ⚠️ Same shape as this batch's other two errors: a number computed over the wrong population, reported with confidence.
+
+### ✅ ROUND 2 — THE TEST THAT DOES DISCRIMINATE: ON A SYMBOL WHOSE QUOTE NEVER MOVES, DID *ANY* FIELD CHANGE?
+**`USDC/USD`, 6,242 consecutive pairs, 24 h window ending 6 h ago: the quote was unchanged in 6,242 of 6,242 — and the FULL payload was identical in exactly ONE. Pure-heartbeat rate 0.02%.**
+✅ **CONTROLS, same query, so the result is not a fact about stablecoins:** `BTC/USD` **0.00%** (11,828 pairs) · `ZEC/USD` **0.00%** (6,827) · `DOGE/USD` **0.00%** (4,410). **29,307 pairs, essentially zero heartbeat messages.**
+⇒ ⭐⭐ **KRAKEN'S TICKER CHANNEL IS EVENT-DRIVEN. A LONG GAP MEANS NO MARKET EVENT FOR THAT SYMBOL — NOT THAT WE LOST THE PRICE.** A resting BBO does not evaporate because nobody traded.
+
+⚠️ **THE INFERENCE I AM NOT MAKING, and it is the tidy version so it is the dangerous one: I CANNOT say "every push was a trade."** `volume_24h` is a ROLLING window that decays as old trades age out, so a changed volume does not prove a new trade occurred. **What the data supports is narrower and sufficient: there are no all-fields-identical messages, and gaps run to minutes and hours ⇒ the venue is not emitting on a timer.**
+
+### ⛔⛔ WHAT THIS DOES TO THE DESIGN — IT UNDERCUTS THE PREMISE OF THE SHAPE LANGSTON HAD CONFIRMED
+An **age-only fail-CLOSED gate** refuses on a stale stamp. But a stale stamp is now known to mean *quiet*, not *wrong*. ⇒ **it would refuse quotes that are still exactly the venue's live quote, hardest on the quietest symbols — and QUIET IS NOT A PROXY FOR WRONG.**
+★★ **AGE ALONE CANNOT SEPARATE THE TWO STATES THAT MATTER:**
+| state | what we see on that symbol |
+|---|---|
+| quiet symbol, quote still valid | a stale capture stamp |
+| **our feed died, quote is a memory** | **a stale capture stamp** |
+⇒ **THE DISCRIMINATOR IS FEED-WIDE LIVENESS: the other ~460 symbols are the control.** A dead socket takes them all silent together; a quiet altcoin is silent alone.
+⇒ ★ **THIS CONVERGES WITH `#994`, WHICH KYLE DIRECTED ON THE EXIT SIDE IN THE SAME WORDS** — *staleness because the market is shut must not raise a breakage alert; staleness because OUR feed is impaired must.* **Same distinction, same discriminator, opposite end of the pipeline.** ⛔ **`#994` is OWNED BY CC-B and nothing here is built into it** — this section records the convergence, it does not claim the work.
+
+### ⇒ DISPOSITION (§9.4 #1): FOLD INTO THIS BATCH — and it is a GATE question, not an instrument question
+**Put to Langston: does the gate become `age AND feed-not-live`, or stay age-only with quiet-symbol refusals accepted as a known cost?** If it gains the liveness term the read-site instrument needs a third per-attempt field — feed-wide last-message age at the same instant — which is cheaper to add now than to re-instrument later. **No threshold is pre-registered until that is settled**, per his condition 3.
