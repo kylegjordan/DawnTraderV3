@@ -1,149 +1,160 @@
-# ASSIGNMENT 3: MARKET STRUCTURE, HOLDING PERIOD, AND THE COST HURDLE — WITH A CONSTRAINED DESIGN ANNEX (r1)
+# ASSIGNMENT 3: WHAT IS STOPPING THIS SYSTEM FROM DOING WHAT IT IS FOR (r2)
 
-> **Read this whole file before starting.** It is shorter than assignment 2 **on purpose** — the largest question from that assignment has been **deliberately removed**, and §1 says why. Do not reconstruct it.
+> **r2 rewrote r1 on Kyle's direction.** Three things changed and they change the character of the assignment: the **lens** (§1), the **repo copy** — which dissolves the reason two questions were excluded (§2) — and the **removal of the design annex** in favour of designs as a separate next step (§8).
 
 ---
 
-## 0. WHAT CHANGED SINCE ASSIGNMENT 2 — READ THIS FIRST, IT INVALIDATES PART OF YOUR OWN EVIDENCE BASE
+## 1. ⭐⭐ THE LENS — READ THIS BEFORE THE QUESTIONS. IT IS NOT PREAMBLE.
 
-⭐⭐ **YOUR FINDING 1 WAS RIGHT, AND ACTING ON IT FOUND AN 8× ERROR.** You asked whether our fee model is externally identified and **refused to rule without authenticated evidence.** That refusal is the reason we went and looked. What we found:
+**Everything below is asked in service of ONE question, and Kyle has stated it directly:**
 
-| | our `fee_model` held | Kraken charges, **account-confirmed** |
+> ### **What is going on in this system that is preventing it from achieving what it is intended to do?**
+
+**THE INTENTION, in his words, because the audit has to be measured against the real target and not a modest one:** an autonomous trading platform that is **more profitable than any retail trading tool available, and more profitable than in-house trading-firm systems.** **Professional grade.** Returns as **large**, as **fast** and as **frequent** as possible — **a high win rate as well as a high profit rate.** The bar set as high as it can be set. **The purpose of the whole thing is to build wealth for Kyle and his family.**
+
+⇒ ⛔ **SO THE FOUR QUESTIONS BEHIND EVERY SECTION ARE:**
+> **What are we MISSING? · What are we doing that is RIGHT? · What are we doing that NEEDS IMPROVEMENT? · What are we doing that is WRONG?**
+
+⛔⛔ **AND A CORRECTION TO HOW A PREVIOUS DRAFT OF THIS BRIEF FRAMED YOUR ROLE, because it was wrong and Kyle said so:** an earlier revision told you to **state divergence loudly**. ⛔ **That is not what is wanted.** You are **not** here to prove the current build crew wrong, and disagreement is not the product.
+✅ **YOU ARE HERE TO FIND WHAT IS MOST CORRECT.** In his words: *"with all this stuff there are multiple options, and many of them can be right in their own way, to lesser or greater degrees. What I want is the best and most correct answer for what we are trying to do."*
+⇒ **Where you agree with the existing design, SAY SO and say why — that is a finding of equal value to a defect** (question two of the four). **Where several approaches are defensible, rank them against the intention above and say which is best and what it costs.** Where we are wrong, say that plainly. **The measure is always: does this get us closer to the intention, or further from it?**
+
+★ **AND ONE ANSWER MUST ALWAYS BE AVAILABLE TO YOU, ranking equally with the rest: `STRUCTURAL CONSTRAINT — NOT A DEFECT`.** If something limits returns and is **not fixable by us** — a venue cost floor, a market-microstructure reality, an information limit — **say that, and size it.** ⛔ **An audit conducted against a very high bar can be pushed into manufacturing optimism, and a constraint reported as a defect sends people to work on something that cannot move.** Naming a real wall accurately is worth more than a hopeful fix.
+
+---
+
+## 2. ✅ YOU NOW HAVE A REPO COPY — WHICH RESTORES TWO QUESTIONS AND CHANGES YOUR OBLIGATIONS
+
+**r1 excluded two subjects on the grounds that you had no access to the history and intent behind them.** **Kyle overruled that, correctly: with a repo copy you HAVE the history — you just need to know where to look.** So the exclusion is lifted and the obligation replaces it.
+
+### 2.a WHERE THINGS LIVE — the map, so "I could not find the history" is not available as an excuse
+
+| what you want | where it is | ⛔ |
+|---|---|---|
+| **Current architecture + the maths** | `1-system-manual/SYSTEM_MANUAL.md` | Chapters + a table of contents at the top. **Read its "how to read & maintain" note first.** |
+| **Component wiring, upstream/downstream, shared state** | `1-system-manual/SYSTEM_IMPACT_MAP.md` | Per-batch history is archived at the **bottom**; the live map is the top. |
+| **Every open and closed issue** | `1-system-manual/RUNNING_ISSUES.md` | Numbered `#NNN`. **The single most useful file in the repo for you.** Search it before filing anything. |
+| **What each batch did** | `1-system-manual/BATCH_CATALOG.md` + `Claude Comms and Packages/Batch Completion/` | The catalog is the index; the completion reports are the detail. |
+| **What is planned and in what order** | `1-system-manual/PHASE_19_PLAN.md`, `POST_AUDIT_ROADMAP.md` | **In-flight work lives here.** Check before proposing something already queued. |
+| **Scopes + pre-audits for work in progress** | `Claude Comms and Packages/Scope Files/` | Includes this brief and the two before it. |
+| **The venue's own fee contract** | `1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md` | ⛔ **Take fee figures from HERE, never from our code or database.** |
+| **The rules the crew works under** | `CLAUDE.md`, `CONDUCT.md` | Useful for understanding *why* a decision was made the way it was. |
+| ⛔ **ARCHIVE — NOT CURRENT TRUTH** | `1-system-manual/_archive/`, `bridge/canonical/`, `Archived Reports - Pre-Phase 12 Governance Implementation/`, the bottom sections of the SIM | ⛔⛔ **`bridge/canonical/` is the PRE-GOVERNANCE corpus. The architecture has changed COMPLETELY since. Its value is ORIGINAL INTENT — why something was built as it was — and it is NEVER evidence of current behaviour.** |
+
+⛔⛔ **THE OBLIGATION THAT COMES WITH THE ACCESS: BEFORE FILING ANY BEHAVIOUR AS A DEFECT, SEARCH THE LEDGER AND THE BATCH REPORTS FOR THE COMPONENT *AND* THE SYMBOL.** A deliberate, reviewed, Kyle-approved decision reported back to us as a defect is **worse than no finding** — it burns review time and impugns work that was done correctly. **State the search outcome, including a NOT-FOUND, and show a positive control** — a search that returns nothing proves nothing until you have shown the same search returning something.
+★ **AND WHEN A CODE COMMENT NAMES ITS OWN PROVENANCE — a batch id, an issue number, "Langston-approved" — FOLLOW IT.** Do not read it and move on. That pointer is the history.
+
+### 2.b THE TWO SUBJECTS RESTORED
+Both were found by you or by your predecessor session and both are now scoped as our own work — **which is exactly why your read is still worth having, now that you can check our reasoning rather than guess at it.**
+- **The DHMA volatility-units defect.** Its stop and target add `k × σ` to a price where σ is a **standard deviation of fractional returns**, i.e. dimensionless. Confirmed at the code and against live settings (`k_tp = 1.5`, `entry_premium_mult = 1.001`, one scope, no per-symbol override). **Our reading is that its target can only clear its own entry for instruments priced under roughly $1.50.** ⇒ **Check that reading, and tell us what the RIGHT volatility object is** — the history is in the repo.
+- **Strong-trend lane reachability.** We measured zero `strong_bull_trend` evaluations on the active/paper lane across two days while the passive lane evaluated thousands, and the pre-filter routed 53,121 pairs into that family on the active lane the same day. ⚠️ **Our own measurement has a stated hole: the active lane records no internal-rejection rows for ANY strategy, so "zero rows" may mean "not recorded" rather than "not run."** **The history of how that lane was built is in the batch reports.**
+
+---
+
+## 3. ⭐⭐ THE NEW QUESTION KYLE ADDED — WHICH PRICE, FOR WHICH JOB, AND HOW FRESH MUST IT BE
+
+**This is a LIVE, UNRESOLVED internal debate. Kyle wants your eyes on it while it is being decided, not after.** It is not a defect hunt; it is a design question we have not settled.
+
+**THE SITUATION.** A price does at least four different jobs in this system: **generating a signal** (where the entry, stop and target levels get set), **ranking candidates**, **triggering an action** (a stop or target being hit), and **booking a result**. ⛔ **We currently use the MIDPOINT for all four**, and because it is built at the feed layer, both asset classes and both trading modes inherit it.
+
+**The proposal under debate:** where a price only *estimates value*, the midpoint is right; where it **becomes a level, fires an action, or is recorded as a result**, it should be the side you could actually transact on. ⛔ **And per-leg: an entry is a BUY on the ask, a stop and a target are SELLS on the bid — opposite by construction, so the error is a FULL SPREAD, not half of one.**
+
+**THE OTHER HALF, AND IT IS THE ONE KYLE MOST WANTS LOOKED AT — WHAT A TIMESTAMP ON A PRICE ACTUALLY MEANS HERE:**
+⛔⛔ **MEASURED AND CONFIRMED IN OUR OWN CODE: the venue's ticker frame carries NO timestamp at all** (`server/services/passive-archive/equity-spot-archiver.ts:127` — *"Our receipt time for THIS frame (the venue's ticker frame carries no timestamp)"*, issue `#943`). ⇒ **every age we compute is measured from OUR RECEIPT, not from when the price occurred at the exchange.** That receipt time includes network transit, queueing and our own processing.
+⇒ ⛔ **CONSEQUENCE WE HAVE NOT RESOLVED: our freshness machinery cannot distinguish "the venue is quiet" from "our feed is lagging."** We run staleness ceilings, we skip exit checks when a mark ages past one, and we raise alerts on it — **all keyed to a clock that is ours, not the venue's.**
+
+**WHAT WE WANT FROM YOU ON THIS:**
+1. **Which price should do which job**, and why — judged against the intention in §1, not against elegance.
+2. **What a receipt-time-based age can and cannot support.** Which of our freshness decisions are sound on that clock, which are not, and what would have to change. **If the honest answer is "you cannot know staleness without a venue timestamp," say so and say what the second-best estimator is.**
+3. **Is there a better available source** — the order book, trade prints, anything else the venue publishes — and what does it cost in latency, complexity or coverage?
+4. ⚠️ **Crypto and xStock differ structurally and must not be pooled.** A crypto tick is the venue's published statement; an xStock increment is inferred by us.
+
+**Read `RUNNING_ISSUES` `#943`, `#952`, `#941` and the `B-PRICE-SIDE-BY-JOB` plan row before answering. This debate has history and it is written down.**
+
+---
+
+## 4. WHAT WE ALREADY FOUND AND FIXED SINCE YOUR LAST ASSIGNMENT — SO YOU DO NOT RE-FIND IT
+
+⭐ **YOUR FINDING 1 WAS RIGHT AND IT PAID.** You asked whether our fee model is externally identified and **refused to rule without authenticated evidence.** That refusal is why we looked.
+
+| | our model held | Kraken charges, **account-confirmed** |
 |---|---|---|
 | `xstock_spot` taker | `0.008` | **`0.0010`** — **8× too high** |
-| `xstock_spot` maker | `0.004` | **`−0.0002`** — **a REBATE. Our sign was inverted.** |
-| `crypto_spot` both | `0.008 / 0.004` | ✅ **correct** — spot rung 1, account confirmed |
+| `xstock_spot` maker | `0.004` | **`−0.0002`** — **a REBATE; our sign was inverted** |
+| `crypto_spot` both | `0.008 / 0.004` | ✅ **correct** — spot rung 1, confirmed |
 
-**The xStock rows were byte-identical to the crypto rows, same write timestamp, same author.** A taker/taker xStock round trip: **we modelled 1.60 %, the real figure is 0.20 %.** Confirmed on the account, per order: the venue's own order form quotes `Est. trading fee — Maker rebate — −0.0001 USD`.
+**A taker/taker xStock round trip: we modelled 1.60 %; the real figure is 0.20 %.** The xStock rows were byte-identical to the crypto rows, same timestamp, same author. **The correction is in flight, not yet deployed.**
 
-⛔⛔ **THE CONSEQUENCE FOR YOU IS NOT THE NUMBER. IT IS THAT OUR SELECTION HISTORY IS CONTAMINATED.** The net-expectancy gate that decides which candidates are admitted is computed from these rates. ⇒ **every xStock candidate for three months was admitted or refused against roughly eight times the real cost.**
-- ✅ **COST IS RECOMPUTABLE** from primitives. Not a problem.
-- ⛔ **SELECTION IS NOT.** A candidate the gate refused was never simulated, so **there is no counterfactual to recover.** You cannot re-derive which trades *would* have existed from the set that does.
-- ✅ **AND WHAT IS *NOT* CONTAMINATED, which is what makes this assignment possible: SIGNAL GENERATION IS FEE-FREE.** A detector's entry, stop and target are built from price, ATR and structure with **no cost input** (`strategy-engine.ts:244-262` is representative). **The candidate SET was generated identically. Only filtering, mode choice and ranking were distorted.**
+⛔⛔ **THE PART THAT CONSTRAINS THIS ASSIGNMENT: OUR SELECTION HISTORY IS CONTAMINATED.** The gate deciding which candidates are admitted is computed from those rates, so **every xStock candidate for three months was admitted or refused against roughly eight times the real cost.**
+- ✅ **Cost is recomputable** from primitives.
+- ⛔ **Selection is not.** A refused candidate was never simulated. **There is no counterfactual to recover.**
+- ✅ **But SIGNAL GENERATION IS FEE-FREE** — detector geometry is price, ATR and structure with no cost input. **The candidate SET is uncontaminated. Only filtering, mode choice and ranking were distorted.**
 
-⇒ **THE EXTERNAL CONTRACT NOW HAS A GOVERNED HOME: `1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md`** — all three account-confirmed ladders (spot crypto 17 rungs, Pro xStocks 2 rungs, futures 17 rungs), the qualifying measures, and what is still open. **Use it. Do not take a fee figure from our database or our code.**
-
-⚠️ **THE CORRECTION IS NOT DEPLOYED YET** (`B-XSTOCK-FEE-CONTRACT`, in flight). It is not a constant edit: a startup rail refuses any fee outside `(0, 5 %]`, so a negative maker rate currently prevents the server booting.
-
----
-
-## 1. ⛔⛔ WHAT WAS CUT, AND WHY YOU MUST NOT RECONSTRUCT IT
-
-**"Does our selection add value?" — the ranking-counterfactual question that assignment 2's brief spent a whole section on — IS WITHDRAWN. It does not go now and it does not go after the fee correction either.**
-
-**The reasoning, in our reviewer's words:** measured on this window it grades **the broken selector**, and that verdict has **no forward validity** once the operator changes. It can only be asked of a population the *corrected* system produces.
-
-⛔⛔ **AND IT HAS A DISGUISE YOU MUST WATCH FOR.** *"Which strategies clear real costs, measured as per-strategy net expectancy on the trades we have"* **IS the selection question wearing a cost question's clothes** — and it is more dangerous than the original because **it comes back carrying a number, which reads as a finding.** §4's Q3 is the admissible re-cut. **If you find yourself computing a per-strategy net-EV ranking, you have reconstructed the withdrawn question — stop and say so.**
-
-★ **THIS IS WHY THE DATA MANIFEST OMITS EVERY FEE-DERIVED AND GATE-OUTCOME COLUMN RATHER THAN LABELLING THEM.** It is not distrust. **We measured, on ourselves, that instruction-shaped safeguards fail** — three separate attempts to change a behaviour by instruction, three failures; only removing the thing worked. **An absent column cannot be audited as market structure. A caveated one can.** If a column you need is missing, **bounce it back — do not substitute a proxy.**
+⇒ ⛔⛔ **THEREFORE ONE QUESTION IS OFF THE TABLE AND YOU MUST NOT RECONSTRUCT IT: "does our selection add value."** Measured on this window it grades **the broken selector**, and that verdict expires the moment the operator changes.
+⛔ **IT HAS A DISGUISE.** *"Which strategies clear real costs, measured as per-strategy net expectancy on the trades we have"* **is the same question in a cost question's clothes** — and worse, because it returns a number that reads like a finding. **If you find yourself building a per-strategy net-EV ranking, you have reconstructed it. Stop and say so.** §5's Q3 is the admissible re-cut.
 
 ---
 
-## 2. YOUR ACCESS, AND ITS BOUNDARIES
+## 5. THE MEASUREMENT QUESTIONS
 
-| | |
-|---|---|
-| **Repo** | A read-only copy, **allowlisted** — enumerated in, refused by default, re-resolved at every refresh, **failing closed if the manifest does not resolve.** Not a denylist: a denylist over a repo four sessions commit to daily is stale on the next commit and fails silently when it is. |
-| **Data** | A raw export. Manifest in §5. |
-| **Never** | ⛔ **Any authenticated account material.** The published ladder answers every cost question; the account view buys nothing and costs the whole confidentiality boundary. Do not ask for balances, positions, or account screenshots. |
-| **Write** | None. The pin is enforced by the filesystem, not by your restraint. |
+### Q1 — SPREAD AND TICK BEHAVIOUR, PER CLASS  *(ship first)*
+Quoted spread distribution per class and instrument, its variation across the session, the venue tick where published and the inferred increment where not, and how often the spread is a material fraction of a typical move.
+★ **First because it has zero dependence on our fees, our gates or our selection — and §3's decision needs it.**
 
-**Kyle has explicitly decided to grant the repo copy and the data export**, understanding that this is a third-party service. **That decision is his and is recorded.** Its scope is *this* material — it is not a standing grant.
+### Q2 — HOLDING PERIOD  *(bounded, not disqualified — three binding constraints)*
+**How long do positions last, and what ends them?** The selector picks *which* trades exist; it does not set exit geometry, so contamination is a per-stratum reweighting rather than a distortion inside a stratum. **All three constraints bind:**
+1. ⛔ **Stratify by `strategy × class × exit reason`. NEVER a pooled distribution** — a pooled median is a mixture average weighted by the broken selector.
+2. ⛔ **Survival curves with censoring explicit; the two walls NEVER pooled.** Active lanes have **no force close** (right-censored). The passive side has **two different walls — 7 days real, 48 hours shadow.** ⛔ **A wall-terminated trade is CENSORED, not an event — count it as observed and you manufacture a mode at the wall.**
+3. ⛔ **Split at deploy boundaries inside the window. ENUMERATE the exit-touching deploys; do not assume one population.** *(Candidates include a 2026-09-04 xStock change and a 2026-09-07 exit change — candidates, not an enumeration either of us has done.)*
 
-**Your standing, unchanged and stated plainly so you can calibrate:** your output is **evidence, never a gate.** It enters as a **claim** and clears the same bar as any claim from any session — object, population, a positive control on any zero or absence, a mechanism citing an implementing line or else labelled `HYPOTHESIS`. **You never count as independent confirmation of our reviewer's ruling** — if you and he agree having read the same framing, that is two readings, not corroboration. **Nothing routes to you and nothing resolves by you.**
+⛔ **The population statement is a required column on every row, not a trailing caveat.**
 
-⭐ **AND THE REASON YOU ARE HERE, in Kyle's own framing: you run on a different model from the rest of the crew.** The value is that you **think differently** and can therefore check us — not that you are a second opinion from the same place. **Where your reading diverges from ours, say so loudly rather than reconciling toward it.**
-
----
-
-## 3. ✅ `INSUFFICIENT / REFUSE` IS A FIRST-CLASS VERDICT
-
-**Any question may be answered `INSUFFICIENT`** — naming what is missing and what would settle it. This is **not** a failure mode and carries no penalty.
-
-★ **It is here because your single best measured behaviour was refusing to rule without authenticated evidence, and that refusal produced the 8× finding.** A format with no no-answer exit **pressures the answerer to manufacture one.**
+### Q3 — THE COST HURDLE AGAINST THE TAPE
+⛔ **NOT "which strategies clear costs."** **(a)** The round-trip cost hurdle in basis points per class and instrument under the confirmed ladder — taker/taker, maker/taker, maker/maker given the xStock rebate. **(b)** The distribution of **available move sizes on the tape**, per class and instrument, over horizons you choose and state — **and what fraction of it clears each hurdle.**
+★ **A property of the MARKET, not of our trades.** ⛔ **No per-strategy ranking, no net-EV output.**
 
 ---
 
-## 4. THE QUESTIONS — THREE, IN SHIP ORDER
+## 6. THE DATA
 
-### ⭐ Q1 — SPREAD AND TICK BEHAVIOUR, PER ASSET CLASS  *(first: zero fee dependency, and a batch is waiting on it)*
+**You get RAW PRIMITIVES and you derive everything yourself.** Fills, sides, quantities, prices, timestamps, venue, symbol, strategy, mode, entry/stop/target as set at signal birth, open and close times, close reason.
 
-**What is the observed spread and tick/grid structure per class and per instrument, and how does it behave across the session?** Quoted spread distribution, its variation by time of day, the venue tick size where it is published and the inferred increment where it is not, and how often the quoted spread is a material fraction of a typical move.
-
-★ **This is the highest value per turn in the assignment.** It has **no dependence on our fees, our gates or our selection**, and an in-flight batch (`B-PRICE-SIDE-BY-JOB`) needs exactly this input. **A partial answer here beats a complete answer anywhere else.**
-⚠️ **Crypto and xStock are structurally different and must not be pooled:** a crypto tick is the venue's published statement; an xStock increment is inferred by us.
-
-### Q2 — HOLDING PERIOD  *(the question Kyle keeps asking — bounded, not disqualified)*
-
-**How long do positions actually last, and what terminates them?**
-
-**RULING: the selector picks *which* trades exist; it does not set exit geometry.** ⇒ contamination is a **per-stratum reweighting**, not a distortion *inside* a stratum. **Three constraints make it admissible, and all three are binding:**
-
-1. ⛔ **STRATIFY BY `strategy × asset class × exit reason`. NEVER a pooled distribution.** A pooled median is a mixture average weighted by the broken selector.
-2. ⛔ **SURVIVAL CURVES WITH CENSORING MODELLED EXPLICITLY, AND THE TWO WALLS NEVER POOLED.** The active lanes have **no force close** (right-censored short). The passive side has **two different walls — 7 days real, 48 hours shadow** — which are **different instruments.** ⛔ **A wall-terminated trade is CENSORED, not an event: count it as an observed exit and you manufacture a mode at the wall.**
-3. ⛔ **SPLIT AT DEPLOY BOUNDARIES INSIDE THE WINDOW.** Holding period is set by exit mechanics and those changed mid-window. **ENUMERATE the exit-touching deploys and split there** — do not assume one population. *(We have not enumerated them for you; the export carries deploy timestamps. Candidates include a 2026-09-04 xStock change and a 2026-09-07 exit-side change.)*
-
-⛔ **THE POPULATION STATEMENT IS A REQUIRED COLUMN ON EVERY ROW, not a trailing caveat** — same reason we withheld columns instead of labelling them.
-
-### Q3 — THE COST HURDLE AGAINST THE TAPE  *(re-cut; read the boundary in §1)*
-
-⛔ **NOT** "which strategies clear costs." **The admissible estimand is a property of the MARKET, not of our trades:**
-
-**(a) What is the round-trip cost hurdle, in basis points, per class and per instrument**, under the confirmed ladder — taker/taker, maker/taker, and maker/maker, given the xStock maker rebate. **(b) What is the distribution of available move sizes on the tape**, per class and per instrument, measured over horizons you choose and state — **and what fraction of that distribution clears each hurdle in (a)?**
-
-⛔ **NO per-strategy ranking and NO net-EV output anywhere in this answer.** If your working needs one, you have crossed into §1's withdrawn question.
-★ **Why this is worth asking now: it is answerable against a CORRECT ladder for the first time**, and it answers *"is there enough movement to pay for the trading"* without reference to which trades we happened to take.
+⛔⛔ **YOU DO NOT GET OUR DERIVED OUTCOMES, our cost figures, our expected-value numbers or our gate decisions — AND THAT IS DELIBERATE.** Kyle's own instruction: *"we don't have to give it our actual outcomes, especially if they were tainted."*
+★ **The reason it is an OMISSION rather than a warning label: we measured, on ourselves, that instruction-shaped safeguards fail** — three separate attempts to change a behaviour by instruction, three failures. **An absent column cannot be mistaken for market structure. A caveated one can.**
+⇒ ⛔ **BOUNCE, DO NOT SUBSTITUTE.** If a question needs a column the export does not carry, **say so and stop that question.** A proxy silently changes what is being measured and **we would not be able to tell from the report that it happened.** **A request for more or cleaner primitives is a good outcome, not a failure of this brief.**
 
 ---
 
-## 5. THE DESIGN ANNEX — GOES NOW, CONSTRAINED
+## 7. STANDARDS
 
-**Design proposals are wanted in this assignment, not deferred.** Kyle wants designed fixes, not only findings.
-
-⛔⛔ **THE LINE THAT MAKES THIS SAFE — MECHANISM vs SELECTION, and you must declare which side every proposal sits on:**
-
-| | | |
-|---|---|---|
-| ✅ **MECHANISM** | how a level is set · how an exit is priced · where a stop sits · tick and grid structure | **selection-invariant ⇒ goes forward as a proposal** |
-| ⛔ **SELECTION** | which strategy, symbol or regime to favour | **inherits the contamination SILENTLY ⇒ marked `HELD-PENDING-RESELECTION`** — not a proposal, not eligible for a work slot |
-
-★ **WHY THE DISTINCTION IS DRAWN HERE AND NOT LEFT TO JUDGEMENT: a FINDING states its population; a DESIGN just looks reasonable.** A design built on a contaminated population carries the flaw invisibly, which a finding does not.
-
-**EVERY proposal carries four fields. A missing field makes it MALFORMED and refusable:**
-1. **Parent finding id**
-2. **That finding's population**
-3. **The measurement that would FALSIFY it**
-4. **Which side of the mechanism/selection line it claims to be on**
-
-⚠️ **A proposal is a CANDIDATE, never a scope.** It enters our disposition process under a named session and is accepted, rejected, deferred or withdrawn there.
-
-**⛔ EXPLICITLY OUT OF SCOPE — do not propose fixes for these:** the **DHMA volatility-units defect** and the **strong-trend lane reachability** question. Both are already scoped as our own batches. **Not because the ground is settled, but because you have no access to the history and intent behind those scopes** — so what you return is a claim our reviewer is pre-committed to bouncing. **Building a lane whose output is bounced by construction wastes your turns and ours.**
-
----
-
-## 6. RULES CARRIED FORWARD FROM ASSIGNMENTS 1 AND 2
-
-- **Pin the commit.** Run `git rev-parse HEAD` and `git status --porcelain` and put both at the top of the deliverable.
-- **Provenance before filing.** Search our issue ledger, batch catalog and completion reports for the component **and** the symbol before recording any behaviour as a defect. **State the search outcome including a NOT-FOUND, and show a positive control** — a search that returns nothing proves nothing until the instrument is shown able to return something.
-- **Evidence against.** Every finding states what would argue the other way.
-- **Confidence and falsifier** on every finding.
-- **Name the object and the population** on every number.
+- **Pin the commit.** `git rev-parse HEAD` and `git status --porcelain` at the top of the deliverable.
+- ✅ **`INSUFFICIENT / REFUSE` is a first-class verdict, carrying no penalty** — name what is missing and what would settle it. **It is here because your best measured behaviour was refusing to rule without evidence, and that refusal produced the fee finding.** A format with no no-answer exit pressures the answerer to invent one.
+- ✅ **`STRUCTURAL CONSTRAINT — NOT A DEFECT` is equally first-class** (§1).
+- **Name the object and the population on every number.** A positive control on every zero or absence.
 - **A mechanism claim cites the implementing line, or is labelled `HYPOTHESIS`.**
-- **Recompute from primitives.** Discard any stored derived value; apply your own cost model from the confirmed ladder.
-- **Do not revise a frozen report to accommodate later evidence** — issue a separately labelled supplement.
+- **Every finding states the evidence AGAINST it**, plus a confidence and a falsifier.
+- **Recompute from primitives.** Never trust a stored derived value.
+- **Do not revise a frozen report** to accommodate later evidence — issue a labelled supplement.
+
+**Your standing:** your output is **evidence, never a gate.** It enters as a claim and clears the same bar as any claim from any session. **Nothing routes to you; nothing resolves by you.**
 
 ---
 
-## 7. DELIVERABLES
+## 8. ⛔ DESIGNS ARE THE NEXT STEP, NOT THIS ONE — BUT AUDIT WITH THEM IN MIND
+
+**Kyle's direction: for now, auditing and analysis. Designs that can be turned into real plans and code are the step after.**
+
+⇒ ✅ **SO WRITE THIS AUDIT KNOWING A DESIGN ASSIGNMENT FOLLOWS IT.** Pull the issues **into the light** — clearly enough, and with enough of the mechanism named, that a fix can be designed **from your finding** without the ground being re-covered. **Where a direction is obvious, you may say so in a sentence. Do not build out proposals here.**
+★ **The reason for the order: we want to understand what is wrong or missing BEFORE anyone designs against it.** A design written against a misunderstood problem is more expensive than no design.
+
+---
+
+## 9. DELIVERABLES
 
 | file | contents |
 |---|---|
-| `REPORT.md` | Pinned sha + porcelain at the top. Q1, Q2, Q3, each with population, method, evidence-against, confidence, falsifier — or `INSUFFICIENT` with what would settle it. Then the design annex. |
-| `QUESTIONS.md` | Anything you need that the export does not carry. **A request for cleaner primitives is a good outcome, not a failure of this brief.** |
+| `REPORT.md` | Pinned sha + porcelain first. Then §3 (price side + freshness), §2.b (the two restored subjects), Q1, Q2, Q3 — each with population, method, evidence-against, confidence, falsifier; or `INSUFFICIENT`; or `STRUCTURAL CONSTRAINT`. **Close with the four questions of §1 answered directly: what is missing, what is right, what needs improvement, what is wrong.** |
+| `QUESTIONS.md` | Anything you need that the export or the repo does not carry. |
 | `SUBMISSION.md` | Freeze record + hash. |
 
-⛔ **BOUNCE, DO NOT SUBSTITUTE.** If Q1 or Q3 needs a column the manifest does not carry, **say so and stop that question.** A proxy silently changes the estimand, and we will not be able to tell from the report that it happened.
-
----
-
-*Ship order is Q1 → Q2 → Q3 → design annex. A complete Q1 delivered early is worth more than four partial answers.*
+*Ship order: §3 → Q1 → §2.b → Q2 → Q3. **§3 is first because a live decision is waiting on it.** A complete answer to one question beats partial answers to five.*
