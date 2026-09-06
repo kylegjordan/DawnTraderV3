@@ -7457,3 +7457,42 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 ★ **It is folded rather than given its own batch because the object, the API and the fix are identical to `#1002`'s, and splitting them would put two sessions in the same file.**
 
 **★ THE GENERALISABLE PART, and it is why this is worth its lines:** *"no rules files in the changed list"* and *"the changed list was cut short before we got there"* are **different states that render identically**, and nothing in the response distinguishes them without checking the cap. **Same class as `#661` leg 3 and as this batch's own subject: an instrument that reports absence when it simply could not see.**
+
+### ⭐⭐ #1010 OPEN 2026-09-06 (CC-B; Kyle supplied the venue captures, every figure re-derived at the ref and in the live database) — ⛔⛔ WE CHARGE xSTOCK THE CRYPTO FEE SCHEDULE. THE VENUE'S PUBLISHED xSTOCK TAKER IS **8× LOWER** AND ITS MAKER IS A **REBATE**, SO OUR MAKER FEE HAS THE WRONG SIGN
+
+**THE OBJECT AND THE POPULATION.** `module_constants`, queried UNBOUNDED — every row whose `constant_name` matches fee/maker/taker/slippage/friction, every scope, no module filter (43 rows returned). **Two rows decide this:**
+| scope | constant | our value | Kraken's PUBLISHED Pro xStocks rate | error |
+|---|---|---|---|---|
+| `fee_model` / `xstock_spot` | `spot_taker_fee` | **0.008** | **0.0010** | **8× too high** |
+| `fee_model` / `xstock_spot` | `spot_maker_fee` | **0.004** | **−0.0002** | **WRONG SIGN — we book a cost where the venue pays a rebate** |
+
+⛔ **THE xSTOCK ROWS ARE BYTE-IDENTICAL TO THE CRYPTO ROWS AND CARRY THE SAME WRITE TIMESTAMP, `2026-06-10 21:50:44Z`.** There is no per-class override anywhere in the table. **The crypto figures are CORRECT — `0.004 / 0.008` is exactly Kraken's spot Tier 1** — so this is not a bad number, it is **a schedule applied to the wrong product**, which is why it has read as plausible for three months.
+
+**THE EXTERNAL CONTRACT, transcribed with its provenance: `1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md` §2**, from Kraken's public pages captured 2026-09-06 (PDFs committed alongside). Pro xStocks is FLAT, two rows, no tier ladder: **maker −0.02 %, taker 0.10 %** at $0+ volume.
+
+⭐⭐ **THE CONSEQUENCE IS SELECTION, NOT JUST BOOKKEEPING — THIS IS THE HALF THAT MATTERS.** The net-EV gate that decides WHAT GETS TRADED is computed from these rates. ⇒ **every xStock candidate for three months has been graded against a round-trip cost of 1.60 % when the published one is 0.20 %.** A taker/taker round trip is mis-modelled by **140 basis points**. **So "the fee wall rejects xStock candidates" is not evidence of a fee wall until this is corrected and the population re-run** — the instrument produced the finding.
+
+⚠️ **WHAT IS NOT ESTABLISHED, stated so nobody treats this as fully settled:** (a) **which tier Kyle's account actually sits on** — the ladder is public, the rung is not, and no session may log in to read it (§7); (b) **whether our xStocks reach us through Kraken Pro's xStocks market**, which is what schedule §2 governs — Kraken's own volume-inclusion text implies yes, but our venue path has not been traced against it. **Both are inputs to the fix, not reasons to doubt the divergence**, which is measured on both sides.
+
+⛔ **DO NOT HOT-EDIT THE TWO ROWS.** Changing a fee constant re-prices every live EV gate at once and silently splits the historical population at an undated boundary — the exact contamination `#`-family charging-rule changes already inflicted. **It is a batch: correct the rates, give the fee model a per-product identity so a schedule can never again be inherited by the wrong asset class, and stamp the boundary instant.**
+
+**HOME: `B-XSTOCK-FEE-CONTRACT`, owner CC-B, placed in `PHASE_19_PLAN.md` ahead of every other item in my queue** — it precedes `B-ALERT-QUEUE-INTEGRITY` (2.4b), because every xStock viability question queued behind it is unanswerable until the cost input is right. Task-list row added the same turn.
+**Surfaced by:** the Codex advisor's Finding 1 asked whether our fee contract is externally identified and correctly REFUSED to rule without authenticated evidence; **Kyle supplied the evidence by capturing the public pages.** Neither half alone would have found this.
+
+---
+
+### #1011 OPEN 2026-09-06 (CC-B, filed with `#1010` — same root, different failure) — ⚠️ NOTHING WATCHES THE VENUE'S PUBLISHED FEE SCHEDULE, AND IT CHANGED 59 DAYS BEFORE WE NOTICED
+
+**Kraken revised its fee schedule on 2026-07-09** (its own stated "last updated"). **We learned of it on 2026-09-06, by hand, because Kyle happened to look at the page.** In between, the system continued pricing against a model nothing had compared to the source.
+
+⭐ **THE PAGES ARE PUBLIC — no login, no paywall, no credential** (`kraken.com/features/fee-schedule`, `support.kraken.com/articles/cross-platform-fee-tier-changes`), so this is cheap to watch and there is no access reason it was not.
+
+⛔⛔ **THE DESIGN CONSTRAINT, and it is the whole finding: THERE ARE THREE OBJECTS, NOT TWO** — the live PAGES, our TRANSCRIPTION (`external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md`), and the DATABASE (`module_constants` / `fee_model`). ⇒ **a watcher that only diffs the pages catches the NEXT venue change and is structurally blind to the drift we ALREADY HAVE** — which is `#1010`, and which a page-diff would never have raised. **It must compare all three, and the page-vs-database leg is the one that earns its keep.**
+
+⚠️ **KNOWN OBSTACLE, measured:** the committed captures are IMAGES — `pdftotext` returns **zero lines** from all three PDFs, so they cannot be re-parsed. **A watcher must fetch the live pages, not read our archive.** And the tier tables are horizontally scrollable: a naive capture freezes them at the left edge and records **tier thresholds with no percentages** — which is exactly what two of Kyle's three captures did, and why the rates in the reference file come from the support article instead.
+
+**A second, smaller drift found in the same sweep and recorded here rather than as its own entry:** `cost_model` / `kraken` still carries `default_taker_fee = 0.0026`, the pre-2026-07-09 0.26 % rate, written 2026-05-05. It is a fallback and its reach is unmeasured. **Whoever takes this establishes whether anything reads it before deciding its disposition.**
+
+**HOME: `B-KRAKEN-FEE-WATCH`, owner CC-B, placed in `PHASE_19_PLAN.md` immediately after `B-XSTOCK-FEE-CONTRACT`** — deliberately after, not before: the watcher's first job is to confirm the corrected values, and building it against known-wrong ones would bake the error into its baseline.
+
+---
