@@ -6638,6 +6638,24 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
+### ✅ #977 AMENDMENT 4 — 2026-09-06 (CC-C, read in code as amendment 3 required before pricing anything) — **THE TAXONOMY QUESTION IS ANSWERED: OUTCOME (2), WORKING AS DESIGNED AND UNDECIDED. THE BUCKETS ARE REFRESH CADENCES, NOT DATA PARTITIONS — SO THE "ISOLATION" NEVER ISOLATED THE DATA.**
+
+**THE READ, and it is short because the code is unambiguous.**
+- **`price-cache.ts:101` — `private cache: Map<string, CachedPrice> = new Map();`. ONE map, keyed by SYMBOL.**
+- **`subscribe(symbol, bucketType)` does exactly one thing: `bucket.symbols.add(symbol)`.** It adds the symbol to a **refresh SCHEDULE**. It does not create, select or namespace a store.
+- ✅ **ENTRY-POINT CENSUS, repo-wide, tests excluded — FOUR `priceCache.subscribe` call sites, and I state the count explicitly because an asserted absence needs presence-evidence:** `rtb-refresh-service.ts:430` (`'readyToBuy'`) and **three in `vts-runner.ts` (`:3031`, `:3966`, `:4689`), each preceded by a hardcoded `const bucketType: CacheBucketType = 'vtsSimulation'`** (`:3028`, `:3964`, `:4687`).
+
+⇒ ⭐ **THE VTS RUNNER IS DOING THE RIGHT THING. It subscribes ITS symbols to the VTS cadence, which is exactly what the bucket is for. There is no misrouting and no defect at any subscribe site.**
+⇒ ⛔ **BUT THE ACTIVE LANE READS `priceCache.getCachedPrice(symbol)` OUT OF THE SAME SINGLE MAP, BY SYMBOL, WITH NO BUCKET ARGUMENT — so it inherits whatever cadence that symbol happened to be subscribed under.** For the ~180 symbols only VTS subscribed, that is **60 seconds**.
+
+★★ **SO THE COMMENT AT `:91-92` IS TRUE ONLY IN A NARROWER SENSE THAN IT READS.** *"VTS data isolation prevents simulation from affecting live trading cache"* holds for **REFRESH LOAD** — VTS subscribing 180 symbols does not force the live cache to poll them faster. **It does NOT isolate the DATA, because there is only one store.** ⇒ **a reader who trusts that sentence concludes the live path cannot be reading simulation-cadence prices. It can, and it is.**
+
+**⇒ RULE 24 OUTCOME (2): WORKING AS DESIGNED, BUT UNADDRESSED.** ⛔ **NOT a defect — no code is doing something other than what it says.** **What is missing is a DECISION: nobody chose that the active lane should inherit a simulation refresh cadence, and the comment's wording is why nobody noticed they were choosing it.** Per `CONDUCT.md` §9 that is a scope call for Kyle, **never a unilateral code change**, and I am not proposing one here.
+
+⚠️ **WHAT IS STILL NOT ESTABLISHED, and it bounds everything above: NO HARM IS MEASURED.** The 60 s figure is the bucket's DECLARED interval. The interval-differenced age distribution — the only one free of the post-restart contamination described in amendment 3 — is still being collected. **A slow cadence on a symbol nothing is trading is worth nothing; the consequence depends entirely on how often an active signal is born on a VTS-only symbol, which is a number I do not yet have.**
+
+---
+
 ### #977 AMENDMENT 2 — CROSS-REFERENCE, NO NEW NUMBER: two alerts route to the freshness cluster — `B-XSTOCK-SESSION-FRESHNESS`, plan `3b.f-c`, owner CC-C
 
 **Filed 2026-09-02 by CC-B on Langston's routing of alert `1d1573c7-99ea-42b4-9c84-3a33538aa4dc` (owner=CC-B in his tag; the HOME is CC-C's lane, so CC-B placed it and named CC-C — rule 28).** Alert `1d1573c7`: an active xStock fill for RIOT/USD refused because the mark was 55,473 ms old against a 15,000 ms ceiling, fired 20:18Z — three minutes after the US regular session closed. Sibling `b1f58a01-28ed-4a97-bbf0-b338d560775d` (fired 10:14Z, still active): exit checks skipped for MDT/USD, mark 124 s vs a 65 s ceiling — Langston routed that one to CC-C at 20:23Z.
