@@ -704,3 +704,33 @@ Langston: *file it in the same family as "a module's own writers are not the cen
 **HOME: `MISTAKE_PATTERNS.md`, as an instance under `enumerator-blind-spot` — the DEGENERATE case, an enumerator of size one.**
 ★ **THE DISCRIMINATOR FROM `named-not-measured`, which was my first instinct and is wrong:** there the name alone is the cause. **Here the name was CORROBORATED by a real writer that really does advance the field** — and **one confirming instance is what made the census feel already done.** ⇒ **a single confirming writer is the most dangerous evidence there is for this class: it converts an assumption into a belief while leaving the population unexamined.**
 ⚠️ **AND FILING IT SURFACED A COLLISION IN THAT INDEX: two different instances were both numbered EIGHT.** True total is TEN across three batches. **I first filed mine as n=9 by trusting the header's number — enumerating by reading one label instead of counting the members, which is the pattern's own shape inside the pattern's own index.**
+
+---
+
+## 17. ⭐⭐⭐ THE READ-SITE DISTRIBUTION IS **BIMODAL**, AND EVERY "TYPICAL AGE" I REPORTED WAS A MIDPOINT OF A GAP
+
+⛔⛔ **I GAVE KYLE TWO DIFFERENT TYPICAL AGES AND BOTH WERE MISLEADING FOR THE SAME REASON: THERE IS NO TYPICAL CASE.** p50 `30000-60000` (cold-start contaminated), then p50 `2000-5000` (cumulative), then an interval p50 back at `30000-60000`. **Three answers, one distribution, and the statistic was never the problem — the SHAPE was.**
+
+### THE MEASUREMENT — INTERVAL-DIFFERENCED, 7 MINUTES, FREE OF THE COLD START
+Two full histograms captured 7 minutes apart at `5838d64b2` and **subtracted**, so the post-restart period is arithmetically excluded rather than waited out. **HTTP status asserted 200 on BOTH snapshots before parsing** (`#1014` — a non-200 renders as an empty body).
+
+| bucket | active lane | share | VTS lane | share |
+|---|---|---|---|---|
+| **0-1000 ms** | **551** | **40.0%** | **20** | **10.7%** |
+| 1000-2000 | 53 | 3.8% | 0 | — |
+| 2000-5000 | 54 | 3.9% | 0 | — |
+| 5000-10000 | 0 | — | 0 | — |
+| 10000-30000 | 25 | 1.8% | 0 | — |
+| **30000-60000** | **672** | **48.7%** | **167** | **89.3%** |
+| 60000-120000 | 23 | 1.7% | 0 | — |
+| **total new observations** | **1,378** | | **187** | |
+
+⇒ ★★ **TWO SPIKES AND A HOLE. Between 5 s and 30 s the active lane recorded 25 of 1,378 — 1.8%; the VTS lane recorded ZERO across the entire 1 s-to-30 s span.** **An age distribution produced by market activity is smooth. This one is two mechanisms.**
+⇒ ✅ **IT CORROBORATES §16 / `#977` am. 4 INDEPENDENTLY OF THE CODE READ:** the fast mode is the WebSocket push path, the slow mode is the `vtsSimulation` 60,000 ms poll. **The code read predicted a bimodal age; the age came back bimodal.** Two instruments, one conclusion, neither derived from the other.
+
+### ⛔ WHAT IS ROBUST ACROSS ALL FOUR STEADY-STATE SAMPLES, AND WHAT IS NOT
+✅ **ROBUST (uptime 642 s → 1,382 s):** WS-sourced cache entries **pinned at 8** while REST grew **177 → 194** ⇒ **the push feed is not expanding to cover what we trade.** `feedWS` **5..7** every sample. Venue stamp present **39/1634 → 93/3728**, a stable **~2.4-2.5%**. `unstamped=0` and `absent=0` on all 3,728 attempts.
+⛔ **NOT ROBUST — THE MIX BETWEEN THE TWO MODES.** The 7-minute interval put the slow mode at **48.7%**; the cumulative p50 across ~23 minutes sits at `2000-5000`, so the fast mode dominates over the longer window. **The mix MOVES between windows and no share is claimed here.** ⇒ **the cost argument stays unmade until it settles** — this is the third number in this batch that would have been wrong if I had reported it early, and the first one I am withholding instead.
+
+### ⇒ DISPOSITION (§9.4 #1): FOLD INTO THE WORK IN HAND
+**The remaining unknown is the one that prices everything: how often an active signal is born on a symbol served only by the slow bucket.** That is a rate, not an age, and it is the number `#977` am. 4 says is missing before severity can be argued. **No threshold, no gate and no scope change until it exists.**
