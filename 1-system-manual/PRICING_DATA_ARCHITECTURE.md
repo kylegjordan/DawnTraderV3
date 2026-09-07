@@ -103,6 +103,27 @@
 
 ---
 
+### ✅✅ 1.5 WHY THE BOOK IS ABSENT ON 93% — **IT IS NEVER SUBSCRIBED, NOT POLLED-AND-MISSED** *(Kyle's question, traced 2026-09-07)*
+
+**Kyle asked the exact right question about §1.4: is the book missing because we do not subscribe to it, or because we ask and fail?** ⇒ ⭐ **NEITHER OF MY EARLIER FRAMINGS. WE NEVER SUBSCRIBE, AND HIS RECOLLECTION — *"it's only the signals that are open as trades"* — IS CORRECT.**
+
+**THE TRACE, end to end, all at the object:**
+1. `kraken-websocket-adapter.ts:1443-1450` — **`ticker` and `book` are subscribed with the SAME `krakenSymbols` list, on the same socket, in the same call.** ⇒ **the book is never the narrower of the two; whatever the ticker gets on the WS, the book gets.**
+2. **The only public entry point is `subscribeToSymbols` (`:1380`)** — one method, and its only EXTERNAL caller is a manual diagnostic endpoint (`routes.ts:10131`). Live coverage is therefore set from INSIDE the adapter.
+3. The two bulk internal drivers are **`i8cSubscribeAllOpenPositions` (`:2854`)** and **`i8cResubscribeAllOpenPositions` (`:2892`)** — both read `this.i8cOpenPositionsProvider()`.
+4. ⭐ **That provider is registered at `active-execution-engine.ts:626` and it returns `storage.getActiveOpenPositions(mode)`, filtered to `crypto_spot`.**
+
+⇒ ⛔⛔ **THE WEBSOCKET SUBSCRIPTION SET IS *OPEN POSITIONS*. Not the scan universe, not the ready-to-buy pool, not the candidates being ranked.** Every other symbol's ticker arrives via **REST polling**, and **REST has no order-book equivalent in our code at all.**
+⇒ ★★ **SO THE 93% IS ARITHMETIC, NOT FAILURE: a symbol we do not hold has a REST ticker and cannot have a book, because nothing ever asked for one.**
+
+### ⇒ THE CONSEQUENCE, AND IT IS THE MOST IMPORTANT LINE IN PART 1
+⛔⛔ **THE ORDER BOOK COVERS ONLY WHAT WE ALREADY HOLD, SO IT STRUCTURALLY CANNOT INFORM WHAT WE ARE CHOOSING BETWEEN.** Signal generation, ranking and promotion all act on symbols we do NOT yet hold — **by construction the book is absent for every one of them.** ⇒ **any design that puts the book under signal-time level-setting is not a tuning change; it requires changing what we subscribe to.**
+⚠️ **AND THE SAME NARROWNESS APPLIES TO THE WS TICKER** — it shares the list. The broad ticker coverage we do have is REST-polled, which is why §1.1's cadence findings and this section are the same fact seen from two ends.
+
+⚠️ **NOT ESTABLISHED HERE: whether subscribing the book more widely is affordable** (connection limits, rate limits, message volume). That is §5's question and no claim is made about it yet.
+
+---
+
 ---
 
 ## 2. ⏳ THE HISTORY — WHAT EACH FEED WAS ORIGINALLY FOR *(IN PROGRESS)*
