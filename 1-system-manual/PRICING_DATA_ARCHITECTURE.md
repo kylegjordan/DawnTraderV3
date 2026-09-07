@@ -582,10 +582,59 @@ Per CC-C's coupling point, adopted: §6 builds **one** matrix from these rows, f
 
 ---
 
-## 6. ⏳ THE TARGET STATE — NOT YET FILLED
+## 6. ✅ THE TARGET STATE — **ONE MATRIX: WHICH FEED AND WHICH SIDE, PER JOB × LANE × ASSET CLASS** *(CC-C + Langston, DRAFT 1 — 2026-09-07)*
 
-**The recommendation: which feed serves which job, in which lane, for which asset class — and WHY, in terms of what makes that data more trustworthy for that job.** Including whether any job should draw on a **mix** of two or three feeds.
+> ⛔⛔ **READ THIS SECTION DIFFERENTLY FROM THE OTHERS. §1-§5b DESCRIBE WHAT IS; §6 IS A *SPECIFICATION*.**
+> ★ **AND THAT IS FORCED BY §3.0's finding, not chosen: the `live` lane HAS NO SEPARATE PRICE-CONSUMPTION CODE.** `order-placer.ts` defines a paper placer only. ⇒ **the first live arm will be written against whatever this section says.** ⚠️ **A `live` cell filled by inheritance from `paper` is therefore not a description of anything — it is a decision, made silently. Every one is filled deliberately below.**
 
-⛔ **This section is written LAST and only after Parts 2-4 are verified.** Writing it first would be the piecemeal habit this document exists to end.
+### ⛔⛔ 6.0 THE TWO AXES ARE ANSWERED IN ONE TABLE, BECAUSE ANSWERED SEPARATELY THEY CONTRADICT
+**`B-PRICE-SIDE-BY-JOB` cuts by SIDE (mid vs bid vs ask). This document cuts by FEED (ticker vs book vs candles). They are the same nine jobs on two axes** — and a feed decision that ignores side, or a side decision that ignores which feed can reach that lane, ships a matrix that disagrees with itself.
 
-**STATUS: NOT YET FILLED.**
+**THREE CONSTRAINTS BIND EVERY CELL** *(Langston's, adopted):*
+1. ⛔ **A cell may not name a feed its lane cannot reach.** *(Naming the book at signal time is not a tuning change — §1.5: the book covers only what we already hold.)*
+2. ⛔ **A midpoint cell must name WHERE THE KIND IS RECORDED.** *(F1: an unlabelled mixture of a print and a mid is worse than either.)*
+3. ⛔ **`live` cells are filled deliberately, never inherited.**
+
+### ⭐ 6.1 THE GOVERNING RULE, IN ONE LINE
+> **A price that ESTIMATES VALUE may be a midpoint. A price that BECOMES A LEVEL, FIRES AN ACTION, or IS RECORDED must be the side that leg would actually transact at.**
+
+⛔⛔ **AND *"THE TRANSACTABLE SIDE"* IS PER LEG, NOT PER TRADE — THE TWO LEGS ARE OPPOSITE BY CONSTRUCTION.** **Entry is a BUY and lifts the ASK. Stop and target are SELLS and hit the BID.** ⇒ ★ **an error that puts both on one side is A FULL SPREAD, not half of one — and it moves the two legs' reward-to-risk in OPPOSITE directions, so it cannot be netted out.**
+
+### ✅ 6.2 THE MATRIX
+
+| # | job | crypto | xStock | ⛔ the reason |
+|---|---|---|---|---|
+| **1** | **SIGNAL GENERATION** — where entry, stop and target are SET | **`bbo`-triggered TICKER**, both sides carried; entry level off the **ASK**, stop/target off the **BID** | **same rule**, but the input is a **bar close up to an hour old** — so the level must be **re-validated against a live quote before it can fire** | ★ **THE HIGHEST-LEVERAGE ROW IN THE TABLE.** Every later job inherits these numbers. ⛔ **The book cannot serve here** — constraint 1. ⛔ **And the ticker must be `bbo`-triggered first (`#1017`), or the basis is silent between trades on exactly the names that need it most.** |
+| **2** | **RANKING** | **no market price** — unchanged | same | ✅ **Correct as-is.** Ranking compares stored candidate geometry; introducing a live read here adds a race, not information. |
+| **3** | **ENTRY TRIGGER** | **the ASK** — the same side row 1 set the entry on | same | ⛔ **The trigger must read the side the LEVEL was set on**, or the level and the test disagree by a spread. |
+| **4** | **FILL SIMULATION** | ✅ **THE BOOK** — walk the ladder | ✅ **the book, once the ladder is more than one level (`§4.3`)** | ★ **THE ONE JOB WHERE THE BOOK IS BOTH AVAILABLE AND NECESSARY** — it happens AFTER the choice, on a symbol we now hold, and depletion is exactly what depth is for. ⚠️ **Today's xStock ladder cannot express depletion at all.** |
+| **5** | **POSITION MARKING & EXIT TRIGGER** | **the BID** for a long's stop and target | same | ⛔ **A stop that fires on a midpoint fires where nobody would have bought.** ⚠️ **This is the fidelity defect Kyle's test names: a simulation that flatters us is worse than useless, because we size real capital from it.** |
+| **6** | **EXIT FILL** | **book at the touch**, taker; **the resting side** for a maker | same | Consistent with row 4. ⚠️ **`#962` — a resting maker sell currently books at the limit when the MIDPOINT reaches it.** |
+| **7** | **BOOKING THE RESULT** | **whatever actually transacted**, with **`markKind` REQUIRED** on the row | same | ⛔ **The learning corpus is the one place a mislabelled basis compounds** — every future calibration reads it. **Constraint 2 binds hardest here.** |
+| **8** | **SIZING** | **no market price** — unchanged | same | ✅ Correct as-is. |
+| **9** | **SCANNER SWEEP** | **REST-polled ticker**, broad and slow | **the local 1-minute archive** — no alternative exists (§2) | ✅ **Correct as-is, and deliberately cheap.** A sweep decides only what to look at more closely. |
+
+★★ **WHAT THE TABLE MAKES OBVIOUS AND THE PROSE DID NOT: the book appears in TWO of nine jobs, and both are AFTER the choice is made. SIX of nine read no market price at all.** ⇒ ⛔ **The whole feed argument turns on ROW 1** — and row 1 is the row where the book is structurally unavailable.
+
+### ⛔⛔ 6.3 THE ANSWER TO KYLE'S COUNTERFACTUAL — *"IF RESOURCES WERE NO OBJECT, WHICH FEED?"*
+✅ **STILL THE TICKER FOR PRICE — BUT NOT FOR THE REASON I FIRST GAVE, AND NOT THE TICKER WE HAVE.**
+- ⛔ **MY ORIGINAL REASON IS WITHDRAWN.** I argued the ticker is a venue-published scalar while our book is an unchecksummed local reconstruction (`#507`). **That trust argument is real, but it does not beat a staleness argument — and as configured, the ticker is the STALE one on the 93%.**
+- ✅ **THE REASON THAT SURVIVES: fix the trigger and the ticker wins on BOTH axes at once.** A `bbo`-triggered ticker is venue-published, carries both sides, updates on every quote change, and — unlike the book — **can be subscribed across the whole universe** (§5.1: Kraken publishes no barrier).
+- ✅ **DEPTH REMAINS THE BOOK'S JOB, on the candidate set rather than the universe.** Sizing and slippage live inside expected value, and neither is answerable from the touch.
+⚠️ **AND THE HONEST SHAPE OF THIS ANSWER: it is contingent on a subscribe ACK we have not seen.** The archive records `event_trigger:'bbo'` being tried and **rejected by production v2**. Kraken's docs list it today. ⛔ **If the ACK refuses, row 1's answer changes, and the book-versus-nothing question reopens on the cold tail.**
+
+### ⛔ 6.4 WHAT MUST BE MEASURED BEFORE THIS IS RATIFIED — **THREE ARMS, NOT TWO**
+**A cold-slice comparison of `trades`-ticker against `book` CONFOUNDS *"the book carries price information"* with *"our ticker was stale."*** ⇒ **Run three arms on the SAME rotating cold slice: `trades`-ticker · `bbo`-ticker · `book`.**
+✅ **THE PRE-REGISTERED READING, written before any data:** **if arm 2 tracks arm 3 on cold names the way arm 1 tracks arm 3 on hot names, the book stays out of price PERMANENTLY and we have earned that conclusion.** **If it does not, row 1 is wrong and the book belongs in signal generation whatever it costs.**
+⛔ **AND THE AGREEMENT INSTRUMENT MUST BE FIXED FIRST (`D1`): carry the producer onto the sample, or the comparison is again a store against its own writer.**
+
+### ⚠️ 6.5 WHAT THIS SECTION DOES **NOT** SETTLE
+- ⛔ **The mixture ratio of print-vs-mid in the crypto cache (F1). The instrument does not exist**, so no cell above can claim to know what basis today's crypto signal-birth price carried.
+- ⛔ **Whether `bbo` is cheaper than the book by a USEFUL margin.** One message per quote change against ten levels of delta is cheaper in principle; **no rate has been measured for either.**
+- ⛔ **The true book frame rate per symbol** — §5.2's denominator is under question until `B-WS-UNSUB-CHANNEL-PARITY` resolves (`D2`).
+- ⛔ **`equity_perp`** — ten perpetual futures captured by B74 and absent from every other section of this document. **Current state unestablished.**
+- ★ **AND THE LIVE LANE IS SPECIFIED HERE, NOT OBSERVED.** Every `live` cell is a decision taken in advance of the code that will implement it.
+
+---
+
+
