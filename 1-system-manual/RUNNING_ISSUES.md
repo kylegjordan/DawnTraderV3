@@ -7805,6 +7805,18 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit
 
 ---
 
+### ➕ `#968` — **SECOND LIVE INSTANCE, 2026-09-07: THE CHECKER RAISED A FALSE GOVERNANCE MISS ON A BATCH THAT DECLARED ITS CLASS CORRECTLY**
+
+**Alert `1960cdff-9a0f-4736-b6de-d0aa0d4b1bc9`:** *"Change-class undeclared for `B-EXIT-BOOK-AGE-STAMP` — defaulting to strictest (architecture)."*
+⛔ **IT IS DECLARED.** `B_EXIT_BOOK_AGE_STAMP_SCOPE.md:3` reads:
+> `**Batch:** `B-EXIT-BOOK-AGE-STAMP` · **change-class:** non_architecture · **Owner:** CC-C · **Phase:** 19`
+⇒ ★ **BOTH `#968` CONDITIONS ARE VIOLATED AT ONCE, WHICH IS WHY THE PARSE FAILS: the marker is NOT at line-start (it follows `**Batch:** … · `), and the COLON SITS INSIDE THE BOLD (`**change-class:**` rather than `**change-class**:`).**
+⇒ ⚠️ **THE FAILURE MODE IS FAIL-CLOSED AND THEREFORE QUIET-IN-THE-WRONG-DIRECTION:** an unparseable class defaults to `architecture` and raises a flag, so **the batch is graded against the STRICTEST doc-set it never claimed.** The close still held — the ledger is complete either way — **but it was graded on the wrong contract, and a session reading only the alert would conclude the scope was negligent.**
+⛔ **NOT FIXED HERE, AND THE SCOPE IS NOT EDITED TO SUIT THE PARSER.** Rewriting the header would clear the alert and leave the defect — the next batch writing the same natural form trips it again. **`#968` owns the parser fix; this is its second confirmed instance and the first with a live alert attached.**
+**DISPOSITION: recorded on `#968` (existing issue, plan row `3b.k`). No new batch, no new number.**
+
+---
+
 ### #1019 OPEN 2026-09-07 (CC-C) — ⚠️ **THE tsc-BASELINE PUSH GUARD REFUSED A MARKDOWN-ONLY PUSH, THEN PASSED THE IDENTICAL PUSH ON RETRY WITH NOTHING CHANGED BETWEEN**
 
 **OBSERVED, both runs within minutes, no file touched between them:**
@@ -7823,6 +7835,12 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit
 ⚠️⚠️ **WHY THIS IS WORTH A NUMBER RATHER THAN A SHRUG: A GATE THAT REFUSES CORRECT WORK INTERMITTENTLY IS THE MOST CORROSIVE FAILURE A GATE CAN HAVE.** `workflow-05`: *"a gate that blocks correct work teaches people to route around gates — and that is how a real regression eventually gets waved through."* ★ **The sanctioned escape hatch (`--regen-acknowledged`) is one keystroke, and a session under time pressure that has been refused once and passed once will reach for it. The precedent is on file: `e5ea15830` (2026-08-21) regenerated the baseline precisely because it *"was blocking every session's push, including CC-A's unrelated work."***
 ⛔ **I did NOT use the escape hatch and did NOT regenerate the baseline.** The push landed on a plain retry.
 
-**HOME:** `B-TSC-GUARD-DETERMINISM`, owner **CC-C**, placed in `PHASE_19_PLAN.md` at **row 3b.h-3**, after `B-UNIVERSE-REFRESH-ACTS`. No date.
+**HOME:** `B-TSC-GUARD-DETERMINISM`, owner **CC-A** *(Kyle-assigned 2026-09-07: the batch goes to whoever implemented the most recent push/deploy guard)*, placed in `PHASE_19_PLAN.md` at **row 3b.h-3**, after `B-UNIVERSE-REFRESH-ACTS`. No date.
+✅ **WHY CC-A, AND IT IS THE SAME ANSWER ON BOTH READINGS OF *"MOST RECENT"* — checked rather than assumed:**
+- **The most recently implemented push/deploy guard is `B-DEPLOY-DRIFT-LINE` (`#1002`, deployed 2026-09-06/07) — CC-A's**, 14 of 18 owner-tokens in its plan row.
+- **AND the most recent change to THIS guard is CC-A's too: `4a988bf32` (2026-08-21), whose own subject names *"the false-absence push gate"*** — the commit body speaks of *"MY index"* against *"CC-A's index"*, so the attribution is the author's own.
+⭐ **THAT SECOND POINT IS NOT A COINCIDENCE AND IT RAISES THE PRIOR: CC-A HAS ALREADY FIXED A FALSE-ABSENCE IN THIS EXACT GUARD ONCE.** `#1019` is a false refusal by the same gate five weeks later. **Whether these are the same defect is the first thing the batch should test** — and it is a question only somebody holding that history can ask cheaply.
+⚠️ **ORIGINAL BUILD WAS CC-B (`#680` `B-TSC-PUSH-GATE`, 2026-08-07), and the drop-check that fired here is literally that batch's deliverable** — *"fail on any unexplained drop."* **Recorded so the assignment does not erase where the behaviour came from.**
+⛔ **CC-C (me) FOUND IT AND DOES NOT OWN IT. The evidence above is handed over, not held.**
 **FIRST OBJECTIVE IS THE MEASUREMENT, NOT THE FIX:** run the guard N times against an unchanged tree and record the verdict distribution. ⛔ **A one-shot reproduction attempt that passes proves nothing about an intermittent fault** — and if it proves deterministic after all, the disposition becomes a stale-baseline regen with the reason recorded, which is a different batch.
 
