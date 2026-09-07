@@ -71,6 +71,38 @@
 | **The venue's own timestamp on OHLC** | ✅ **ALREADY CORRECT** — `parseOhlcBar` stores `intervalBegin` from the venue's `interval_begin`. **The one feed that always got this right.** |
 | **Any durable record of the order book** | ⛔ **NONE.** No table, no archiver, no retention policy. |
 
+### ✅ 1.4 DO THE TICKER AND THE ORDER BOOK AGREE? — MEASURED 2026-09-07, THE COMPARISON KYLE ASKED FOR
+
+⛔ **IT COULD ONLY BE TAKEN IN-PROCESS: the book is never persisted, so no pair of stored rows exists to compare.** Both feeds read at the same instant at the level-construction site, deployed `17a102477`. Three reads, growing sample; the largest is reported and the smaller two agree with it.
+
+| | crypto_spot, n = 3,427 level evaluations |
+|---|---|
+| **both feeds present** | **232 — 6.8%** |
+| **ticker present, NO book** | **3,195 — 93.2%** |
+| book present, no ticker | **0** |
+| neither | 0 |
+
+**WHERE BOTH EXIST, THEY AGREE ALMOST EXACTLY:**
+| | result |
+|---|---|
+| ⛔ **CROSSED against each other** (ticker bid ≥ book ask, or ticker ask ≤ book bid) | ✅ **0** |
+| **exact match, both sides** | **231 of 232 — 99.6%** |
+| the single disagreement | bid **2.41 bp**, ask **1.79 bp** |
+| max difference observed | **2.41 bp** |
+
+⇒ ✅ **NO INVERSION, NO MATERIAL DISAGREEMENT.** On the population where the comparison is possible, the ticker's two sides ARE the book's two sides.
+
+⇒ ⛔⛔ **AND THE PRE-REGISTERED READING HOLDS: THIS IS *INCONCLUSIVE*, NOT A LICENCE — and the measurement now says exactly how narrow it is.** The check was possible on **6.8%** of evaluations, and those are by construction the hot names, which is where the two would agree anyway. **It says nothing about the 93.2%.**
+
+★★ **THE 93.2% IS THE ACTUAL FINDING, AND IT IS A COVERAGE FACT, NOT AN AGREEMENT FACT:**
+- **A level built from the ORDER BOOK would have no price at all on 93.2% of evaluations.**
+- **A level built from the TICKER has a price on 100% of them — and on 93.2% there is no second feed to check it against.**
+- ★ **`bookOnly = 0`: there is never a book without a ticker. The book's coverage is a STRICT SUBSET of the ticker's.**
+
+⚠️ **WHAT THIS DOES NOT SETTLE:** it compares the two feeds' *top-of-book prices*. **It says nothing about DEPTH** — the book's ten levels have no ticker counterpart beyond `bid_qty`/`ask_qty` at the touch — and nothing about whether either is fresh (§5).
+
+---
+
 ---
 
 ## 2. ⏳ THE HISTORY — WHAT EACH FEED WAS ORIGINALLY FOR *(IN PROGRESS)*
