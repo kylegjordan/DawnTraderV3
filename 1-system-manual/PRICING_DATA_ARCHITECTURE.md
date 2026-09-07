@@ -176,32 +176,16 @@ Each open position, each cycle: try the WS cache (freshness window 2,000 ms, ven
 
 ⚠️ **AND IT REVISES A CITATION OF MINE ELSEWHERE:** `B-EXIT-BOOK-AGE-STAMP`'s V4 cited `withRestPrice=0` as the reason the REST-fallback producer cannot appear on a close. **The zero is real but its CAUSE is a healthy WS subscription, not a dead code path** — a distinction that matters if subscriptions ever degrade.
 
-### ⛔ THE CHANNEL-SWITCH HINT LIST — DEMOTED TO WHAT IT IS
-**Everything recorded below about the hardcoded `prefer_book` four remains factually true and is a genuine `§15` vestige — but it is NOT the mechanism Kyle was describing, and reporting it as such over-weighted a dead detail against a live system.**
+### ⛔ A DEAD MECHANISM THAT SHOULD BE STRIPPED OUT — kept SHORT deliberately
 
-### ⛔⛔ THE ADAPTIVE CHANNEL SWITCH — IT EXISTS, IT IS A HARDCODED LIST OF FOUR, AND IT HAS NEVER FIRED
-**Kyle's recollection, checked 2026-09-07:** *"if the REST signal is too weak and not feeding enough, then it subscribes to the WebSocket… set up long before the new governance batches."*
-⇒ ★ **THE MECHANISM IS REAL AND IT IS NOT WHAT IT SOUNDS LIKE. It is a ticker→BOOK channel switch, `Phase 8.8.3-I7-WS-G (G3)`, at `kraken-websocket-adapter.ts:2602-2611`** — *"Check if we should switch to book channel for low-liquidity pairs."* **Same intent Kyle remembers: when the ticker is not feeding enough, get the data elsewhere.**
+**`Phase 8.8.3-I7-WS-G (G3)`, `kraken-websocket-adapter.ts:316-318` + `:2602-2611`.** A ticker→book channel switch *"for low-liquidity pairs"*, driven by a **hardcoded list of four symbols**, with a companion `low_liquidity` list of seven that nothing reads.
 
-⛔ **BUT IT IS NOT ADAPTIVE. IT MEASURES NOTHING.** The trigger is a **hardcoded literal** at `:316-318`:
-- `prefer_book: ['TIA/USD', 'BAND/USD', 'SC/USD', 'RLC/EUR']` — **four symbols**, the only ones the switch can ever fire for
-- `low_liquidity: ['TIA/USD', 'FORTH/USD', 'PROVEEUR', 'BAND/USD', 'SC/USD', 'RLC/EUR', 'OGN/USD']` — ⛔ **read NOWHERE except a diagnostic getter. Dead data.**
+⛔ **IT CANNOT FIRE. The predicate tests a SLASHED canonical symbol against a DE-SLASHED hint** — `'TIA/USD'.includes('TIAUSD')` is `false`, permanently *(Langston, verified at the object)*. It is also unreachable for two further reasons: the four are not subscribed, and none is held.
+⇒ ⛔⛔ **AND THAT IS EXACTLY WHY `CHANNEL_SWITCH = 0` PROVES NOTHING — three independent sufficient causes. STANDING RULE FOR THIS DOCUMENT: an over-determined zero is not evidence for any one of its causes; cite the mechanism.**
 
-⛔⛔ **A FOURTH INERTNESS, AND IT IS STRONGER THAN THE OTHER THREE — THE PREDICATE IS UNSATISFIABLE BY CONSTRUCTION (Langston, 2026-09-07; verified at the object by me).** `:2602-2604` reads:
-> `const shouldUseBook = this.KRAKEN_CHANNEL_HINTS.prefer_book.some(hint => internalSymbol.includes(hint.replace('/', '')));`
+★ **HISTORICAL VALUE, WHICH IS THE ONLY REASON IT IS HERE:** it is a **third independent artefact** of one design intent — alongside the architecture's *"book: BBO updates, continuous for illiquid pairs"* and the trade-triggered ticker (§2). **The system knew the ticker goes quote-blind on cold names and built a compensation three times over. All three are inert.**
 
-**It tests a SLASHED canonical symbol against a DE-SLASHED hint.** `normalizeToInternalSymbol` returns `BASE/QUOTE` on every resolving path, and all four hints carry slashes ⇒ **`'TIA/USD'.includes('TIAUSD')` is `false`. Forever.** ★ **Hold all four, freeze all four, and `shouldUseBook` still never goes true.**
-
-⛔⛔ **AND THAT RUINS MY OWN EVIDENCE, WHICH IS THE POINT WORTH KEEPING: `CHANNEL_SWITCH = 0` IS NOW *OVER-DETERMINED*.** Three independent sufficient causes — never subscribed · none held · **predicate unsatisfiable** — and **a zero with more than one sufficient cause discriminates between none of them.** ⇒ ⛔ **THE ZERO MAY NOT BE CITED AS EVIDENCE FOR ANY ONE CAUSE.** Cite the **PREDICATE**: a code fact needing no window, no control, and no log retention. It survives every objection the zero invites.
-*(Kept as a standing rule for this document: **an over-determined zero is not evidence.**)*
-
-✅ **MEASURED, AND NOW ONLY AS CORROBORATION RATHER THAN PROOF: `CHANNEL_SWITCH` has fired ZERO times.** ✅ **POSITIVE CONTROL, same logs, same window: 4,900,795 `I7-WS` lines — the instrument sees this family in enormous volume, so the zero is real and not a broken search.**
-⇒ ⛔⛔ **AND IT IS DOUBLY UNREACHABLE: the switch can only fire for a SUBSCRIBED symbol, and §1.5 established that only OPEN POSITIONS are subscribed. We hold `DASH/USD`, `LINK/EUR`, `LINK/USD`, `LINK/USDC`, `ZEC/EUR`, `ZEC/USD` — none of the four.** **Even if one of the four became illiquid, nothing would happen unless we already held it.**
-
-★ **WHY THIS MATTERS BEYOND THE VESTIGE: it is the THIRD independent piece of evidence for the same design intent.** The original architecture's comment (*"book: BBO updates, continuous for illiquid pairs"*), Langston's `event_trigger` finding (the ticker is trade-triggered and therefore quote-blind on cold names), and now this switch — **all three say the system KNEW the ticker goes blind on illiquid pairs and built a compensation. All three compensations are inert or unreachable in the current configuration.**
-⇒ **DISPOSITION: rule 18 / §15 lingering legacy — a hardcoded hint list from the pre-governance era that no longer does what it was built for. It is NOT a defect causing harm; it is a mechanism that reads as coverage and provides none.** Homed into this document's target state rather than fixed piecemeal.
-
-⚠️ **AND ONE INVERSION WORTH RECORDING:** `DawnTrader_System_Architecture_Execution_Flow.md` lists the price hierarchy as **1. Kraken WebSocket (primary) · 2. Kraken REST (fallback) · 3. Binance · 4. CoinGecko.** ⇒ **TODAY THAT IS INVERTED IN PRACTICE — §1.5 and the cache census measured ~93% REST-sourced.** The designed primary is now the exception.
+⇒ **DISPOSITION: `rule 18` / `§15` — delete through the workflow with a blast-radius check and a `DELETED_COMPONENTS_LOG` entry. It rides with whatever the `event_trigger` decision yields; NOT its own batch.**
 
 ### ⏳ STILL TO READ
 The old batch and directive reports from before the 2026-01/02 governance change; `Phase_8/9/10/11_Implementation_History.md`; the batch reports that introduced the order book and the midpoint. **STATUS: IN PROGRESS — nothing further asserted yet.**

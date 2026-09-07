@@ -2,10 +2,12 @@
 
 > **⛔ THIS IS THE BRIEF, NOT THE DOCUMENT UNDER REVIEW.** The document under review is
 > **`1-system-manual/PRICING_DATA_ARCHITECTURE.md`**. This file tells you what it is, what we
-> want from you, and what to distrust.
+> want from you, and what we are asking you to do with it.
 >
-> **STATUS: §1-§4 drafted by CC-C. §5 "WHAT TO DISTRUST" is Langston's and is NOT YET WRITTEN.**
-> **Do not dispatch this brief until §5 lands.**
+> **STATUS: COMPLETE and ready to dispatch.** *(A "what to distrust" section was drafted and then
+> REMOVED on the owner's instruction — pointing the reviewer at our own suspected weak points
+> would steer his search toward what we already doubt. The general evidence standards survive in
+> §3; the specific pointers are deliberately absent.)*
 
 ---
 
@@ -40,7 +42,11 @@ It trades cryptocurrency spot pairs and tokenized equities ("xStocks") on Kraken
 
 **You have the repository. Use it.** Where the document cites a file and line, open it. Where it states a census ("N call sites", "nothing reads this"), re-run the search yourself and satisfy yourself the search could have found a counterexample. **Where it asserts an absence, ask what the instrument's reach was.**
 
-⚠️ **We are telling you this because the authors have a measured track record of getting mechanism claims wrong** — see §5.
+⚠️ **We are telling you this because the authors have a measured track record of getting MECHANISM claims wrong while their MEASUREMENTS hold up.** ⛔ **We are deliberately NOT listing which claims we suspect.** The owner's reasoning, and we think he is right: naming them would steer your search, and a search steered by our own doubts can only find what we already doubt. **Check what the code tells you, not what we flag.**
+
+**Two standards we hold ourselves to and ask you to apply:**
+- **An asserted absence needs presence-evidence.** Before accepting "nothing does X", satisfy yourself the search could have found an X.
+- ⛔ **A zero with more than one sufficient cause is not evidence for any one of them.** If a thing never happens and there are three independent reasons it could never happen, the observation discriminates between none of them — cite the mechanism, not the zero.
 
 **Three asks, in order:**
 
@@ -61,16 +67,6 @@ It trades cryptocurrency spot pairs and tokenized equities ("xStocks") on Kraken
 
 ---
 
-## 5. ⏳ WHAT TO DISTRUST — **LANGSTON'S SECTION, NOT YET WRITTEN**
-
-> **This section is authored by Langston, the independent reviewer who has falsified the primary
-> author's claims repeatedly during this work. It will name the specific claims most likely to be
-> wrong, the corpora that would falsify each, and the standing evidence rules that apply.**
->
-> **PLACEHOLDER — DO NOT DISPATCH THIS BRIEF UNTIL THIS SECTION IS COMPLETE.**
-
----
-
-## 6. HOW TO RETURN YOUR REVIEW
+## 5. HOW TO RETURN YOUR REVIEW
 
 Address each of the three asks in §3 separately. **For every factual correction, cite the file and line you checked** so we can re-derive it. Where you are uncertain, say so — **an explicit "I could not establish this" is more useful to us than a confident guess**, and that standard applies to us as much as to you.
