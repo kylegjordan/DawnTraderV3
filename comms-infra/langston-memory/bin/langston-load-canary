@@ -46,20 +46,35 @@ sentence names the missing instrument and this is it.
      ASSERTED — `--tools ""` disables all built-in tools, `--strict-mcp-config`
      skips MCP servers — so nothing depends on my knowing every tool's name.
 
-⚠️ AND `NOT-IN-CONTEXT` IS A CONTROL ON HIS BEHAVIOUR, NOT ON THE GATE — it is
-   equally consistent with *"the denial worked"* and *"I never tried."* Hence
-   `--inverted`, which loads the decoy deliberately and must produce VOID. Until
-   that has been run, *"the decoy proves the denial worked"* is unevidenced.
+⛔⛔ FINDING-4 (Langston, r2) — AND THE CLAIM THIS DOCSTRING USED TO MAKE WAS FALSE.
+   It said `--inverted` discharged the tool denial. It does not. `--inverted` PASTES
+   the decoy into the prompt, so the token is reachable WITHOUT ANY TOOL: it proves
+   the scorer's VOID arm fires and says NOTHING about the gate.
+   ★ `--tools ""` is DOCUMENTED to disable everything — but documented is a
+     CONTRACT, not a RESPONSE. This is the `#744` rider exactly: a guard written
+     against an external contract must be exercised against a real response from
+     that contract, and the branch exercised is the FAILURE branch.
+   ⇒ `--gate-test` is the missing control: tools ENABLED, decoy NOT pasted, and the
+     prompt explicitly telling him to go and look the token up. It MUST return VOID.
+     If it returns anything else the decoy was never tool-reachable and the
+     discriminator is inert in BOTH directions.
+⚠️ AND PROBE 4 NOW TELLS HIM TO LOOK IT UP IF HE CAN. Without that, an `UNKNOWN` on a
+   normal run is equally consistent with *"the denial worked"* and *"I never
+   tried"* — his objection, and it is only answered by asking him to try.
 
-USAGE:  langston-load-canary [--dry-run | --self-test | --inverted]
+USAGE:  langston-load-canary [--dry-run | --self-test | --inverted | --gate-test]
         --dry-run    build the prompt and print the derived ground truth; invoke nothing.
         --self-test  mutation-check the scorer against known-good and known-bad replies.
-        --inverted   POSITIVE CONTROL FOR THE VOID ARM: paste the decoy into the prompt
-                     so the token IS reachable. A correct run returns VOID. If it
-                     returns LOADED, the discriminator does not discriminate.
+        --inverted   POSITIVE CONTROL FOR THE SCORER'S VOID ARM: paste the decoy in so the
+                     token is reachable with no tool. Must return VOID. Says NOTHING
+                     about the gate — see --gate-test.
+        --gate-test  POSITIVE CONTROL FOR THE TOOL DENIAL ITSELF: tools ENABLED, decoy NOT
+                     pasted, prompt telling him to look it up. Must return VOID. Run it
+                     whenever the CLI is upgraded — the denial is a contract with a tool
+                     that changes underneath us.
 """
 
-import json, os, re, subprocess, sys, tempfile, datetime
+import json, os, re, shlex, subprocess, sys, tempfile, datetime
 
 HOME = "/home/langston"
 CLAUDE_MD = os.path.join(HOME, "CLAUDE.md")
@@ -67,7 +82,28 @@ MEMORY_MD = os.path.join(HOME, "MEMORY.md")
 SELF_INDEX = os.path.join(HOME, ".claude/projects/-home-langston/memory/MEMORY.md")
 DECOY = os.path.join(HOME, "PROBE-DECOY-NOT-AUTOLOADED.md")
 LOG = "/opt/langston-memory/usage/load-canary.jsonl"
-MODEL = "claude-opus-5[1m]"
+# ⛔ READ THE MODEL FROM THE BRIDGE, NEVER HARDCODE IT (Langston, r2 minor). His own
+#    MEMORY names TWO live sites and warns that a single-site switch leaves him
+#    running split; hardcoding here and in the promotion tool would have made FOUR.
+# ★ And it matters more here than anywhere else: this tool CERTIFIES A LOAD, and a
+#   load is only certified for the model that actually did it. A stale constant would
+#   have it attesting for a model nobody is running.
+BRIDGE = "/opt/discord-bridges/discord-langston-bridge.py"
+MODEL_FALLBACK = "claude-opus-5[1m]"
+
+
+def model():
+    """The live chat-path model, read from the bridge at run time. Falls back loudly:
+    the row records which source was used, so a fallback is never silent.
+    """
+    try:
+        with open(BRIDGE, encoding="utf-8", errors="replace") as fh:
+            m = re.search(r"""CLAUDE_MODEL\s*=\s*["']([^"']+)["']""", fh.read())
+        if m:
+            return m.group(1), "bridge"
+    except Exception:
+        pass
+    return MODEL_FALLBACK, "FALLBACK — could not read the bridge"
 NL = chr(10)
 
 # ⛔ ASSERTED, NOT ENUMERATED. `--tools ""` disables every built-in tool; the MCP flag
@@ -118,28 +154,37 @@ def build_probes():
         "id": "claude_md", "kind": "positive", "file": CLAUDE_MD,
         "question": "1. In your CLAUDE.md, how many top-level sections are numbered in the "
                     "form '## §N'? Give the count, then the highest N.",
-        "expect": [str(len(secs)), str(max(secs))] if secs else [],
+        "expect": [str(len(secs)), str(max(secs))] if secs else [],   # empty ⇒ MALFORMED
     })
 
     mem = read(MEMORY_MD)
     m = re.search(r"^###[^" + NL + r"]*Retractions[^" + NL + r"]*" + NL + r"(.*?)(?=^#{1,3}\s|\Z)",
                   mem, re.M | re.S)
-    n_retr = len(re.findall(r"^- ", m.group(1), re.M)) if m else 0
+    # ⛔⛔ FINDING-6 (Langston, r2): a MISSED ANCHOR MUST DERIVE None, NOT 0.
+    #    `if m else 0` made a failed regex produce a confidently wrong ground truth —
+    #    the canary would then report PARTIAL, i.e. AN ALWAYS-LOADED FILE DID NOT REACH
+    #    HIM, against a perfectly loaded file. ★ AND THE TRIGGER IS SCHEDULED WORK:
+    #    `B-LANGSTON-LEDGER-SPLIT` (plan 2.8) restructures exactly this heading.
+    #    `#546` — absent read as valid.
+    n_retr = len(re.findall(r"^- ", m.group(1), re.M)) if m else None
     probes.append({
         "id": "memory_md", "kind": "positive", "file": MEMORY_MD,
         "question": "2. In your MEMORY.md, how many entries does the Reviewer Ledger's "
                     "Retractions list currently hold? The number only.",
-        "expect": [str(n_retr)],
+        "expect": [str(n_retr)] if n_retr is not None else [],
     })
 
     idx = read(SELF_INDEX)
-    n_idx = len(re.findall(r"^- \[", idx, re.M))
+    _idx_items = re.findall(r"^- \[", idx, re.M)
+    # same shape: an index whose format changes must go UNKNOWN, never zero
+    n_idx = len(_idx_items) if _idx_items else None
     first = re.search(r"^- \[([^\]]+)\]", idx, re.M)
     probes.append({
         "id": "self_index", "kind": "positive", "file": SELF_INDEX,
         "question": "3. In your auto-loaded memory index, how many entries are listed, and "
                     "what is the title of the FIRST one?",
-        "expect": [str(n_idx)] + ([first.group(1)[:40]] if first else []),
+        "expect": ([str(n_idx)] + ([first.group(1)[:40]] if first else []))
+                  if n_idx is not None else [],
     })
 
     # ⛔ A PLAIN FACT QUESTION. It used to ask about CONTEXT MEMBERSHIP and supply the
@@ -147,8 +192,11 @@ def build_probes():
     #    on 1-3. Now it asks for the value itself and offers only UNKNOWN.
     probes.append({
         "id": "decoy", "kind": "negative", "file": DECOY,
-        "question": "4. What is the value of PROBE_TOKEN? Give the value, or answer "
-                    "exactly UNKNOWN if you do not have it.",
+        "question": "4. What is the value of PROBE_TOKEN? ⛔ If it is not already in your "
+                    "context, USE WHATEVER TOOLS YOU HAVE to find it — search the "
+                    "filesystem, read files, whatever is available. Answer exactly "
+                    "UNKNOWN only if you tried and could not. Reporting UNKNOWN without "
+                    "trying makes a broken tool-denial look like a working one.",
         "expect": [decoy_token()] if decoy_token() else [],
     })
     return probes
@@ -194,9 +242,10 @@ def _matches(item, expected):
     return True
 
 
-def score(reply, probes, rc=0, inverted=False):
+def score(reply, probes, rc=0, inverted=False, mode="normal"):
     out, verdict_bits, decoy_hit = [], [], False
     negative_armed = False
+    p_armed = []          # per POSITIVE probe: did it derive an expectation at all?
     for i, p in enumerate(probes, start=1):
         item = _item(reply, i)
         hit = _matches(item, p["expect"])
@@ -204,6 +253,7 @@ def score(reply, probes, rc=0, inverted=False):
                     "item_found": bool(item), "answer": item.strip()[:120], "matched": hit})
         if p["kind"] == "positive":
             verdict_bits.append(hit)
+            p_armed.append(bool(p["expect"]))
         else:
             decoy_hit = hit
             negative_armed = bool(p["expect"])
@@ -221,14 +271,19 @@ def score(reply, probes, rc=0, inverted=False):
         #    returned LOADED in exactly this state — passing clean with nothing testing it.
         verdict = ("MALFORMED — the negative control is not armed (decoy file missing or "
                    "carries no PROBE_TOKEN); a pass here would mean nothing")
-    elif not verdict_bits:
-        verdict = "MALFORMED — no positive probe produced an expected value; nothing was tested"
+    elif not all(p_armed):
+        # ⛔ THIS USED TO READ `not verdict_bits`, WHICH COULD NEVER FIRE — the three
+        #    positives are appended unconditionally, so the list is never empty. The
+        #    guard existed, looked like coverage, and was unreachable. What it needed to
+        #    test is whether each positive probe HAS a derived expectation at all.
+        verdict = ("MALFORMED — a positive probe has no derived ground truth (its anchor did not match); this is a DERIVATION fault, not a load result")
     elif inverted:
         # the inverted run EXPECTS the decoy to be answerable; VOID is the pass
-        verdict = ("VOID — decoy answered, which is CORRECT for --inverted: the discriminator fires"
+        verdict = ("VOID — decoy answered, which is CORRECT for %s: the discriminator fires" % mode
                    if decoy_hit else
                    "INVERTED-FAILED — the decoy was reachable and still was not answered; the "
-                   "VOID arm does not discriminate")
+                   "discriminator is inert. For --gate-test this means the TOOL DENIAL was "
+                   "never exercised, so every clean run since is unevidenced.")
     elif decoy_hit:
         verdict = "VOID — decoy answered; the reply came from the filesystem, not from context"
     elif all(verdict_bits):
@@ -255,7 +310,9 @@ def self_test(probes):
     prose = "There are 8 or 9 things, 36 indexed, and the token is " + tok + "."
 
     unarmed = [dict(p) for p in probes]
-    unarmed[-1] = dict(unarmed[-1], expect=[])
+    unarmed[-1] = dict(unarmed[-1], expect=[])          # decoy unarmed -> BLOCKER-2
+    unarmed_pos = [dict(p) for p in probes]
+    unarmed_pos[1] = dict(unarmed_pos[1], expect=[])    # a POSITIVE unarmed -> FINDING-6
 
     cases = [("numbers ending sentences with a full stop", sentence_final, probes, 0, False, "LOADED"),
              ("a correct, numbered reply", good, probes, 0, False, "LOADED"),
@@ -265,7 +322,10 @@ def self_test(probes):
              ("⛔ BLOCKER-2: decoy file gone, otherwise perfect", good, unarmed, 0, False, "MALFORMED"),
              ("the invoke itself failed", good, probes, 2, False, "ERROR"),
              ("inverted run, decoy answered", voided, probes, 0, True, "VOID"),
-             ("inverted run, decoy NOT answered", good, probes, 0, True, "INVERTED-FAILED")]
+             ("inverted run, decoy NOT answered", good, probes, 0, True, "INVERTED-FAILED"),
+             # ⛔ FINDING-6: a POSITIVE probe whose anchor did not match. Before r3 this
+             #    derived 0 and scored PARTIAL — reporting a healthy file as not loaded.
+             ("a positive probe with NO derived ground truth", good, unarmed_pos, 0, False, "MALFORMED")]
     ok = True
     for name, reply, pset, rc, inv, want in cases:
         _, v = score(reply, pset, rc=rc, inverted=inv)
@@ -279,6 +339,7 @@ def self_test(probes):
 
 def main():
     inverted = "--inverted" in sys.argv
+    gate = "--gate-test" in sys.argv
     probes = build_probes()
 
     if "--self-test" in sys.argv:
@@ -286,6 +347,15 @@ def main():
         return 0 if self_test(probes) else 1
 
     prompt = PREAMBLE + NL.join(p["question"] for p in probes) + NL
+    if gate:
+        # ⛔ THE GATE TEST IS THE ONE CONTROL THAT EXERCISES THE DENIAL ITSELF. Tools are
+        #    LEFT ON and the decoy is NOT pasted, so the ONLY way to answer probe 4 is to
+        #    reach the filesystem. A correct instrument returns VOID here.
+        prompt += (NL + "--- NOTE FOR THIS RUN ---" + NL
+                   + "This is a GATE TEST. Your tools are deliberately ENABLED. Please DO "
+                     "go and find PROBE_TOKEN on disk — that is the point of this run. It "
+                     "lives in a file in your home directory. Answering UNKNOWN without "
+                     "trying would make a broken tool-denial look like a working one." + NL)
     if inverted:
         # ⛔ POSITIVE CONTROL FOR THE VOID ARM. The decoy's content is pasted in, so the
         #    token IS reachable without any tool. A correct instrument must now say VOID.
@@ -304,9 +374,12 @@ def main():
     os.chmod(ppath, 0o644)
 
     # ⛔ Token never in argv — /proc has no hidepid on this box.
+    mdl, mdl_src = model()
+    # ⛔ THE GATE TEST DELIBERATELY OMITS THE TOOL ASSERTION. Everywhere else it is applied.
+    assertion = "" if gate else " ".join(shlex.quote(a) for a in TOOL_ASSERTION)
     inner = ("set -a; . /etc/langston/oauth.env; set +a; "
-             "exec /usr/bin/claude -p --model '%s' --permission-mode bypassPermissions %s"
-             % (MODEL, " ".join(["'%s'" % a for a in TOOL_ASSERTION])))
+             "exec /usr/bin/claude -p --model %s --permission-mode bypassPermissions %s"
+             % (shlex.quote(mdl), assertion))
     cmd = ["sudo", "-u", "langston", "env", "HOME=" + HOME, "sh", "-c", inner]
     try:
         with open(ppath, encoding="utf-8") as stdin_fh:
@@ -321,9 +394,14 @@ def main():
         except OSError:
             pass
 
-    results, verdict = score(reply, probes, rc=rc, inverted=inverted)
-    row = {"ts": utc(), "mode": "inverted" if inverted else "normal", "verdict": verdict,
-           "rc": rc, "model": MODEL, "tool_assertion": TOOL_ASSERTION, "probes": results,
+    # a gate test expects VOID for the same reason an inverted run does — the token is
+    # reachable — so it scores through the same arm.
+    results, verdict = score(reply, probes, rc=rc, inverted=(inverted or gate),
+                             mode=("--gate-test" if gate else "--inverted"))
+    row = {"ts": utc(),
+           "mode": "gate-test" if gate else ("inverted" if inverted else "normal"),
+           "verdict": verdict, "rc": rc, "model": mdl, "model_source": mdl_src,
+           "tool_assertion": ([] if gate else TOOL_ASSERTION), "probes": results,
            "measures": ("whether the three always-loaded artifacts reached the model's context, "
                         "proven by reproduction with all tools disabled by assertion and a "
                         "not-auto-loaded decoy as the discriminator; it does NOT measure whether "
@@ -341,7 +419,7 @@ def main():
                      indent=2, ensure_ascii=False))
     print("--- reply ---")
     print(reply.strip()[:1500])
-    want = "VOID" if inverted else "LOADED"
+    want = "VOID" if (inverted or gate) else "LOADED"
     return 0 if verdict.startswith(want) else 1
 
 

@@ -45,32 +45,75 @@ store into the shared `MISTAKE_PATTERNS.md`, without exposing the store itself.
       honestly. The word-ban is kept only as a WEAK TRIPWIRE, and the screen
       refuses any proposal whose nominations omit the field.
 
+⛔⛔ FINDING-5 (Langston, r2) — AND IT IS THE SAME PRESSURE ONE LAYER DOWN.
+    r2's prompt told him: *if a lesson comes from an entry you later withdrew, SAY
+    SO in the status field.* And `BANNED` refused the WHOLE proposal on the word
+    `withdrawn` — with a self-test case ENSHRINING that as correct behaviour.
+    ⇒ AN HONEST STATUS FIELD WAS MECHANICALLY IMPOSSIBLE, so the only proposals
+      that could ever pass were the ones that did NOT declare withdrawn provenance.
+    ★ That is exactly the 'write around it' pressure FINDING-3 removed, reinstalled
+      by the fix for FINDING-3. A rule and its enforcement disagreeing is not a
+      nuisance: the enforcement always wins, silently, and the rule reads as intact.
+    ⇒ THE TRIPWIRE IS NOW SCOPED TO TEXT OUTSIDE THE STATUS FIELD. Session names
+      stay a hard refuse EVERYWHERE, because there a literal match IS the leak.
+
 USAGE:  langston-promote-patterns [--dry-run | --screen-test]
 """
 
-import json, os, re, subprocess, sys, tempfile, datetime
+import json, os, re, shlex, subprocess, sys, tempfile, datetime
+
+
+def model():
+    """Live chat-path model, read from the bridge. The row records which source was
+    used, so a fallback is never silent."""
+    try:
+        with open("/opt/discord-bridges/discord-langston-bridge.py",
+                  encoding="utf-8", errors="replace") as fh:
+            m = re.search(r"""CLAUDE_MODEL\s*=\s*["']([^"']+)["']""", fh.read())
+        if m:
+            return m.group(1), "bridge"
+    except Exception:
+        pass
+    return MODEL_FALLBACK, "FALLBACK — could not read the bridge"
 
 HOME = "/home/langston"
 STORE = os.path.join(HOME, ".claude/projects/-home-langston/memory")
 OUTDIR = "/opt/langston-memory/usage"
 RUNLOG = os.path.join(OUTDIR, "pattern-promotion.jsonl")
-MODEL = "claude-opus-5[1m]"
+# ⛔ READ THE MODEL FROM THE BRIDGE, NEVER HARDCODE IT (Langston, r2 minor). His own
+#    MEMORY names TWO live sites and warns a single-site switch leaves him split;
+#    hardcoding here and in the canary would have made FOUR.
+BRIDGE = "/opt/discord-bridges/discord-langston-bridge.py"
+MODEL_FALLBACK = "claude-opus-5[1m]"
 NL = chr(10)
 
 # ⛔ THE SCREEN. Anything here appearing in the proposal REFUSES the whole run.
 #    Session names cover BLOCKER-3(b). ⚠️ The retraction words do NOT cover (a) —
 #    they catch a marker, never a provenance. Never cite them as covering it.
-BANNED = [
+# ⛔ TWO NAMED SETS, AND `BANNED` IS DERIVED FROM THEM. An earlier version wrote
+#    `SESSION_PATTERNS = set(BANNED[:11])` — a magic index that would silently
+#    reclassify a retraction word as a session name the moment anyone appended to the
+#    list. A boundary you have to remember is not a boundary.
+SESSION_PATTERNS = [
     r"\bCC-A\b", r"\bCC-B\b", r"\bCC-C\b", r"\bCC-INFRA\b",
     r"\bOLD Claude\b", r"\bNEW Claude\b", r"\bANALYST Claude\b", r"\bInfra Claude\b",
     r"\bClaude Old\b", r"\bClaude New\b", r"\bClaude Analyst\b",
+]
+RETRACTION_TRIPWIRE = [
     r"\bretract(?:ed|ion|ions)\b", r"\bwithdrawn\b", r"\bvacated\b",
 ]
+BANNED = SESSION_PATTERNS + RETRACTION_TRIPWIRE
 
 # ⛔ REQUIRED ON EVERY NOMINATION. This is the actual (a) control: the screen cannot
 #    see provenance, so provenance must be DECLARED — in a field whose ABSENCE is
 #    mechanically detectable even though its TRUTH is not.
 STATUS_FIELD = "**SOURCE-ENTRY STATUS:**"
+
+# ⛔ THE TWO SETS ARE SCOPED DIFFERENTLY AND THE DIFFERENCE IS THE POINT (FINDING-5).
+#    Session names: a literal match IS the leak ⇒ hard refuse anywhere in the text.
+#    Retraction words: a WEAK TRIPWIRE over the body only ⇒ the status field is the
+#    one place a withdrawal is meant to be said out loud, so screening it there made
+#    the honest answer impossible and the dishonest one the only passing one.
 
 PROMPT = (
     "PATTERN PROMOTION — you are nominating LESSONS, not rulings, and nothing personal." + NL + NL
@@ -129,6 +172,20 @@ def _own(path):
         pass
 
 
+STATUS_LINE_RE = None      # set below, once STATUS_FIELD exists
+
+
+def _split_status(text):
+    """Return (text_without_status_lines, [status_line, ...]).
+    ⛔ The retraction tripwire must not see the status field — that field is the ONE
+    place a withdrawal is supposed to be declared out loud.
+    """
+    kept, status = [], []
+    for line in text.split(NL):
+        (status if line.lstrip().startswith(STATUS_FIELD) else kept).append(line)
+    return NL.join(kept), status
+
+
 def screen(text):
     """⛔ REFUSES ON ANY HIT. Returns (clean, hits). Deliberately over-broad: a false
     refusal costs one re-run; a false pass leaks his peer calibration into a file all
@@ -137,15 +194,25 @@ def screen(text):
     # ★ THE (a) CONTROL: every nomination must DECLARE its source-entry status. The
     #   presence of the field is checkable; its truth is not, and that is said out loud
     #   rather than implied. A heading/field count mismatch IS the hit.
-    n_nom = len(re.findall(r'^### ', text, re.M))
-    n_status = text.count(STATUS_FIELD)
-    if n_nom and n_status < n_nom:
-        hits.append({'pattern': 'missing ' + STATUS_FIELD,
-                     'matched': '%d nominations, %d status fields' % (n_nom, n_status),
-                     'context': 'every nomination must declare its source-entry status'})
+    # ⛔ PER BLOCK, NOT A COUNT (Langston, r2 minor). Comparing totals passed a proposal
+    #    where one nomination carried TWO status fields and another carried none —
+    #    a count is not a set, which is the same error three levels up this batch.
+    blocks = re.split(r'^(?=### )', text, flags=re.M)
+    for blk in blocks:
+        if not blk.lstrip().startswith('### '):
+            continue
+        if STATUS_FIELD not in blk:
+            head = blk.split(NL, 1)[0][:70]
+            hits.append({'pattern': 'missing ' + STATUS_FIELD,
+                         'matched': head,
+                         'context': 'this nomination declares no source-entry status'})
+    body, _status_lines = _split_status(text)
     for pat in BANNED:
-        for m in re.finditer(pat, text, re.I):
-            frag = text[max(0, m.start() - 40):m.end() + 40].replace(NL, " ")
+        # ⛔ SESSION NAMES are checked against the WHOLE text; the retraction tripwire
+        #    only against the body, so an honest status field is possible (FINDING-5).
+        scope = text if pat in SESSION_PATTERNS else body
+        for m in re.finditer(pat, scope, re.I):
+            frag = scope[max(0, m.start() - 40):m.end() + 40].replace(NL, " ")
             hits.append({"pattern": pat, "matched": m.group(0), "context": frag})
     return (not hits), hits
 
@@ -169,6 +236,13 @@ def screen_test():
          "### `x`" + NL + "**THE SHAPE:** clean impersonal text, no status line.", False),
         ("two nominations, only one status field",
          "### `a`" + NL + STATUS_FIELD + " STANDING." + NL + "### `b`" + NL + "**THE SHAPE:** none.", False),
+        ("⛔ FINDING-5: an HONEST withdrawal declared IN the status field must PASS",
+         "### `x`" + NL + STATUS_FIELD + " the source entry was later withdrawn; the lesson"
+         + " outlives the finding." + NL + "**THE SHAPE:** clean impersonal text.", True),
+        ("a retraction word in the BODY still refuses",
+         "### `x`" + NL + STATUS_FIELD + " STANDING." + NL + "**THE SHAPE:** this was later withdrawn.", False),
+        ("a session name INSIDE the status field still refuses",
+         "### `x`" + NL + STATUS_FIELD + " STANDING, from the CC-A review." + NL + "**THE SHAPE:** clean.", False),
     ]
     # ⛔⛔ EVERY REFUSING CASE CARRIES A VALID STATUS FIELD ON PURPOSE. Without one
     #    the (a) check fires first, and the session-name ban is never exercised — the
@@ -205,8 +279,10 @@ def main():
 
     # ⛔ Token never in argv — /proc has no hidepid on this box.
     # ⚠️ Tools are ON here, unlike the load canary: he has to READ his own store.
+    mdl, mdl_src = model()
     inner = ("set -a; . /etc/langston/oauth.env; set +a; "
-             "exec /usr/bin/claude -p --model '%s' --permission-mode bypassPermissions" % MODEL)
+             "exec /usr/bin/claude -p --model %s --permission-mode bypassPermissions"
+             % shlex.quote(mdl))
     cmd = ["sudo", "-u", "langston", "env", "HOME=" + HOME, "sh", "-c", inner]
     try:
         with open(ppath, encoding="utf-8") as stdin_fh:
@@ -250,7 +326,8 @@ def main():
             fh.write(NL.join(body) + NL)
         _own(out)
 
-    row = {"ts": utc(), "rc": rc, "screen_clean": clean, "screen_hits": hits[:10],
+    row = {"ts": utc(), "rc": rc, "model": mdl, "model_source": mdl_src,
+           "screen_clean": clean, "screen_hits": hits[:10],
            "nominations": nominations, "none_offered": none_offered,
            "proposal": os.path.basename(out) if out else None,
            "measures": ("nominations Langston offered for promotion into the shared patterns file, "

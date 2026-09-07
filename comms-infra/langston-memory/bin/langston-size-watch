@@ -189,6 +189,9 @@ def _alerts(argv):
 
 
 def heartbeat(st, status):
+    # ⚠️ `status` was accepted and never used (Langston, r2 minor). An argument a function
+    #    ignores is a claim about what it considers, so it is now IN the alert body: if the
+    #    watch dies, the reader gets the last thing it saw before it went quiet.
     """Resolve the pending heartbeat, then arm the next. Returns a short outcome string
     that goes into the run row, so a heartbeat that quietly stops working is visible in
     the same place as everything else rather than being another silent absence."""
@@ -206,9 +209,19 @@ def heartbeat(st, status):
 
     prev = st.get("heartbeat_alert_id")
     if prev:
-        rc, _out, err = _alerts(["resolve", prev, "--by", "cc-infra", "--evidence", evidence])
-        notes.append("resolved %s" % prev if rc == 0
-                     else "RESOLVE FAILED rc=%d %s" % (rc, err[:120]))
+        rc, out, err = _alerts(["resolve", prev, "--by", "cc-infra", "--evidence", evidence])
+        # ⛔ AN ALREADY-RESOLVED OR MISSING PRIOR IS A DISCHARGED PRIOR, NOT A FAILURE
+        #    (Langston, r2 minor). A human resolving the row by hand is a NORMAL thing to
+        #    do; treating it as a failure would latch the refuse-to-re-arm guard below and
+        #    leave a hand-edit of the state file as the only exit — which is BLOCKER-1's
+        #    shape, rebuilt in the fix for BLOCKER-1's sibling.
+        blob = (out + " " + err).lower()
+        if rc != 0 and ("already" in blob or "not found" in blob or "no such" in blob):
+            notes.append("prior %s was already discharged" % prev)
+            rc = 0
+        else:
+            notes.append("resolved %s" % prev if rc == 0
+                         else "RESOLVE FAILED rc=%d %s" % (rc, err[:120]))
         # ⛔⛔ THE RESOLVE IS LOAD-BEARING, NOT TIDINESS. `--dedupe-key` makes the re-arm
         #    below collapse onto a STILL-OPEN alert of the same key — returning the old
         #    id AND THE OLD `triggers_at`. So a failed resolve does not merely leave a
@@ -227,7 +240,8 @@ def heartbeat(st, status):
         "--title", "Langston size watch has not run",
         # ⚠️ NO APOSTROPHE, deliberately — shlex.quote makes it safe, but this string's
         #    only job is to survive every transport between here and a human's phone.
-        "--body", ("The daily ratchet watch over the always-loaded files did not run "
+        "--body", ("Last observed status before this alert was armed: " + str(status) + ". "
+                   "The daily ratchet watch over the always-loaded files did not run "
                    "within " + str(HEARTBEAT_HOURS) + "h. Each successful run resolves this "
                    "and arms the next, so this alert firing MEANS THE WATCH IS DOWN and the "
                    "#1007 ceiling currently has no instrument. Check "
@@ -237,6 +251,11 @@ def heartbeat(st, status):
         try:
             new_id = json.loads(out).get("id")
             st["heartbeat_alert_id"] = new_id
+            # ⛔ PERSIST IMMEDIATELY (Langston, r2 minor). This used to be written only at
+            #    the END of run(), so a crash in that window left an alert armed on staging
+            #    that this tool no longer knew about — and the next run would refuse to
+            #    re-arm forever, exit-by-hand-edit. Same shape as BLOCKER-1.
+            save_state(st)
             notes.append("armed %s for %s" % (new_id, fire_at))
         except Exception:
             notes.append("armed, but the id could not be parsed from the reply")
