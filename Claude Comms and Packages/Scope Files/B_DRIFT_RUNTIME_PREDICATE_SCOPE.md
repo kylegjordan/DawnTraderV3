@@ -44,13 +44,16 @@
 
 ⛔⛔ **`#1016`'s FIX SENTENCE SAYS *"derive the set from WHAT THE DEPLOY EXECUTES"*, AND TAKEN LITERALLY THAT SELECTS EVERY TRACKED FILE IN THE REPOSITORY.** `scripts/dt-deploy.sh:204` is `git reset --hard "$SHA"` — **the deploy rewrites the entire working tree before it runs anything.** ⇒ every tracked file is, in the plainest sense, "deployed", and a criterion that admits everything is not a gate.
 
-✅ **THE CRITERION THIS BATCH USES INSTEAD — WHICH CHANGED PATHS CAN ALTER THE BEHAVIOUR OF THE RUNNING SYSTEM AFTER THE RESTART. THREE SINKS, AND EVERY ENTRY IN THE NEW SET MUST NAME THE ONE IT FEEDS:**
+✅ **THE CRITERION THIS BATCH USES INSTEAD — WHICH CHANGED PATHS CAN ALTER THE BEHAVIOUR OF THE RUNNING SYSTEM AFTER THE RESTART. ⭐ **FOUR** SINKS, AND EVERY ENTRY IN THE NEW SET MUST NAME THE ONE IT FEEDS:**
 | # | sink | what reaches it |
 |---|---|---|
 | **1** | **what ends up in `dist/`** (the bundle `pm2` re-execs) | `server/**`, `shared/**`, `client/**`, `vite.config.ts`, `tsconfig.json`, `tailwind.config.ts`, `postcss.config.js`, `index.html` |
 | **2** | **what the database SCHEMA becomes** | `drizzle/migrations/**`, **`MANIFEST.txt`**, and `scripts/db-migrate.ts` (the tool that produces this sink) |
 | **3** | **what the process RESOLVES at runtime** | `package-lock.json`, `package.json` |
-| **4** | ⭐ **what the process READS OFF DISK at runtime** — *added after a fresh reader found it, and it is the row I would have shipped without* | ⛔ **`audit/coherency_rules.yaml`** · ⛔ **`config/vts.json`** · `1-system-manual/authority-baseline-v1.json` · `bridge/canonical/phase9_predictive-learning.json` · `bridge/canonical/mapping-regime-strategy.json` · **`replit.md`** · **`data/models/ara_model.json`** |
+| **4** | ⭐ **what the process READS OFF DISK at runtime** — *added after a fresh reader found it, and it is the row I would have shipped without* | **NOT under a sink-1 prefix ⇒ new OBJ-2 entries:** ⛔ `audit/coherency_rules.yaml` · ⛔ `config/vts.json` · `1-system-manual/authority-baseline-v1.json` · `bridge/canonical/phase9_predictive-learning.json` · `bridge/canonical/mapping-regime-strategy.json` · `data/models/ara_model.json` <br> ⭐ **ALREADY under `server/` ⇒ NO new entry, but LISTED, per Langston condition 2:** `server/config/crypto-universe-filter.json` · `server/config/equity-perp-universe.json` · the TypeScript source `back_audit_engine.ts:200,:545` reads off disk at runtime |
+
+⛔⛔ **LANGSTON CONDITION 2, AND IT IS SUBTLER THAN A LIST: A SINK-4 MEMBER THAT HAPPENS TO SIT UNDER A SINK-1 PREFIX MUST STILL BE LISTED, OR THE DERIVATION RECORDS A WRONG REASON FOR A RIGHT ANSWER.**
+`server/config/crypto-universe-filter.json` (`passive-archive/universe-loader.ts:162` — `allowedQuotes`, `minVolume24hUsd`) and `server/config/equity-perp-universe.json` (`:44`) are caught today by the `server/` prefix — **but they are caught for SINK 1's reason, and esbuild does not bundle a `readFile` TARGET.** ⇒ **OBJ-2's path set does not change; the DERIVATION does.** ★ **This is my own *"the control passed for the wrong reason"* one layer down, and he found it in my correction to that very failure.**
 
 ⛔⛔ **SINK 4 IS THE ONE THAT NEARLY GOT AWAY, AND THE REASON IS INSTRUCTIVE: THREE SINKS WERE NOT ENOUGH, AND MY NEGATIVE CONTROL WAS ONE OF THE MISSING FILES.**
 `server/core/boot_orchestrator.ts:76` calls `loadBaseline()`; `server/config/authority-baseline.ts:88` resolves **`path.resolve(process.cwd(), '1-system-manual/authority-baseline-v1.json')`** and `:107` `readFileSync`s it **at boot**. The file is **tracked** (`git ls-files` returns it). Same shape at `server/core/archival/regime-archiver.ts:26` and `server/bootstrap/schema-validator.ts:37,43`, both reading tracked JSON under `bridge/canonical/`.
@@ -60,7 +63,8 @@
 ⚠️ **My sink-4 search was anchored on the two directory NAMES I had already found — `1-system-manual/` and `bridge/canonical/` — rather than on an enumeration of `readFileSync` / `path.join(process.cwd(), …)` sites. It could not have reached `audit/` or `config/`.** ★ **The same instrument-reach failure this batch exists to fix, committed inside the scope that fixes it, for the second time.**
 ⛔ **`audit/coherency_rules.yaml` IS THE RISK ENVELOPE.** `server/services/guardrail-policy.ts:191` reads it via `path.join(process.cwd(),'audit','coherency_rules.yaml')` from the constructor; `:742` exports a **module-level singleton**, so it loads on import; and `:197` **THROWS** — `Cannot initialize GuardrailPolicy without coherency rules`. Its `RULE_001` is `portfolio_risk_per_trade_pct <= daily_loss_kill_switch_pct * 0.5`. ⇒ **an undeployed edit here is an undeployed change to the Core-Four coherency constraints, which `CLAUDE.md` §0 makes a HARD boundary. There is no reading on which that is low-consequence.**
 ⛔ **`config/vts.json`** — `server/services/vts-runner.ts:519`, spread over `DEFAULT_CONFIG`; carries `targetProfit`, `stopLoss`, `minVolume24h`, `strategies[]`. ⇒ **undeployed, it silently leaves VTS stop/target geometry and universe filtering on the old values.**
-★ **`replit.md` and `data/models/ara_model.json` are IN on the same footing as the three low-consequence files already listed — decided explicitly rather than left silent**, which is what the earlier draft did to `audit/` and `config/` by omission.
+★ **`data/models/ara_model.json` is IN on a MEASURED READER, not on parity** — `training-audit-service.ts:159`, a TLVA checksum input. ⚠️ **Langston struck my "on the same footing as" reasoning: parity is not a reason, a reader line is.**
+⛔ **`replit.md` IS *NOT* A SINK-4 ROW — IT IS A DEPLOY BLOCKER, WHICH IS A DIFFERENT AND WORSE THING (Langston condition 3).** He found the sharper fact I missed: **the running app WRITES to it.** `routes.ts:21998` appends to `path.join(process.cwd(),'replit.md')` **from an authenticated API route**, and `server/scripts/generate-kraken-docs.ts:17` does the same — while **`dt-deploy.sh:194-196` REFUSES a dirty worktree.** ⇒ ★ **a tracked file our own application appends to is a SELF-INFLICTED DEPLOY BLOCKER with no diff to see — the same family as the untracked `.sql`, not the same family as a config the process reads.** **Homed to `P19-B12`; see §7.**
 ✅ **What survives of the old bound, narrowed to what is true: the three ORIGINALLY-named files are individually low-consequence** — `loadBaseline` warns and continues when absent (`:118-120`), and `schema-validator.ts` has no callers I could find. ⛔ **That says nothing about the sink, and it is exactly the sentence that let two risk-bearing files sit outside it.**
 
 ★ **AND THAT is why `scripts/db-migrate.ts` is IN and `scripts/analysis/*` is OUT — a sink test, not a folder test.** ⚠️ **It is a judgement, and naming it as one is the point: `#1016`'s own wording hid a judgement inside what looked like a mechanical derivation.**
@@ -104,13 +108,15 @@
 
 ## 6. OBJECTIVES
 
-### OBJ-1 — REPLACE THE FOLDER CONVENTION WITH THE **THREE-SINK** CRITERION, AND MAKE THE DERIVATION READABLE IN THE FILE
-Every entry in the new set carries, as an in-file comment, **which of §4's three sinks it feeds and the `dt-deploy.sh` or `db-migrate.ts` line that carries it there.**
+### OBJ-1 — REPLACE THE FOLDER CONVENTION WITH THE **FOUR-SINK** CRITERION, AND MAKE THE DERIVATION READABLE IN THE FILE
+Every entry in the new set carries, as an in-file comment, **which of §4's FOUR sinks it feeds and the `dt-deploy.sh`, `db-migrate.ts` or reader line that carries it there.**
 ⛔ **NOT "what the deploy executes" — `dt-deploy.sh:204` `git reset --hard` makes that every tracked file.** The file must say so, so the next reader does not "simplify" the criterion back to the sentence in `#1016`.
 **VERIFY:** every entry names a sink AND cites a line; **every sink in §4's table has at least one entry**; no entry lacks either. **And the negative case is verified too: `scripts/analysis/*` is shown excluded BY THE SINK TEST, not by an exclusion list** — an exclusion list would be the same folder convention wearing a different name.
 
 ### OBJ-2 — WIDEN THE GATE TO THE EXECUTED SET *(unconditional)*
-Add, each tagged with its sink: `drizzle/migrations/**` (**incl. `MANIFEST.txt`**) and `scripts/db-migrate.ts` → **sink 2** · `package-lock.json`, `package.json` → **sink 3** · `vite.config.ts`, `tsconfig.json`, `tailwind.config.ts`, `postcss.config.js` → **sink 1** · ⛔ **`audit/coherency_rules.yaml`**, ⛔ **`config/vts.json`**, `1-system-manual/authority-baseline-v1.json`, `bridge/canonical/phase9_predictive-learning.json`, `bridge/canonical/mapping-regime-strategy.json`, `replit.md`, `data/models/ara_model.json` → **sink 4**.
+Add, each tagged with its sink: `drizzle/migrations/**` (**incl. `MANIFEST.txt`**) and `scripts/db-migrate.ts` → **sink 2** · `package-lock.json`, `package.json` → **sink 3** · `vite.config.ts`, `tsconfig.json`, `tailwind.config.ts`, `postcss.config.js` → **sink 1** · ⛔ **`audit/coherency_rules.yaml`**, ⛔ **`config/vts.json`**, `1-system-manual/authority-baseline-v1.json`, `bridge/canonical/phase9_predictive-learning.json`, `bridge/canonical/mapping-regime-strategy.json`, `data/models/ara_model.json` → **sink 4**.
+⛔ **`replit.md` IS STRUCK FROM THIS LIST — Langston condition 3; it is a `P19-B12` residual, not a sink-4 row. See §7.**
+★ **`data/models/ara_model.json` is a SINGLE-FILE entry, never a `data/models/**` prefix** — reader `training-audit-service.ts:159`, a TLVA checksum input, **and it is the only tracked file under `data/models/`**. *(Langston's correction: cite the reader line, and do not widen a prefix to cover one file.)*
 ⛔ **`index.html` IS STRUCK FROM THIS LIST — IT DOES NOT EXIST.** `git ls-tree -r` returns exactly one such path, **`client/index.html`**, because `vite.config.ts:18` sets `root: <repo>/client`. **As a prefix entry it would match nothing while READING as coverage in the sink comments OBJ-1 mandates** — and `client/` already covers it. *(Control: `vite.config.ts`, `tsconfig.json`, `tailwind.config.ts`, `postcss.config.js` all DO exist at root, so the instrument was not simply returning nothing.)*
 **VERIFY, and the negative case is now a real one rather than an accidental pass:** a synthetic range of **only** `drizzle/migrations/0123_x.sql` opens the gate; a range of **only** `1-system-manual/authority-baseline-v1.json` **opens it** (sink 4); a range of **only** `1-system-manual/BATCH_CATALOG.md` does **not**. **All run against the real reader, before and after — the before-run is the positive control showing the test can fail.**
 
@@ -118,7 +124,13 @@ Add, each tagged with its sink: `drizzle/migrations/**` (**incl. `MANIFEST.txt`*
 When the range touches `MANIFEST.txt`, the alert body says the deploy can **hard-fail**, not merely that a migration is waiting.
 **VERIFY:** the body line for a manifest-touching range is distinguishable from an ordinary migration range, checked by running the body builder on both.
 
-### OBJ-4 — REDUCE THE OVER-REPORT *(gated, fail-safe, and droppable)*
+### ⛔⛔ OBJ-4 — **CUT BY LANGSTON AT STEP 1 (2026-09-07). NOT BUILT. THE TEXT BELOW IS THE PRESERVED STARTING POSITION FOR A FUTURE QUIETENING BATCH, NOT AN OBJECTIVE OF THIS ONE.**
+> **His ruling, and it turns my own asymmetry back on me:** *"over-reporting costs attention, under-reporting costs a schema. Value already shrunk to ~one observed shape, four conjunctive clauses, a mutation test, and a declared unknown — that is the whole risk budget of the batch spent on the half that can only make it quieter."*
+★ **KEEP ON THE RECORD: clause (d) `CAPPED != 1` and the `patch`-PRESENCE key are the correct starting position if a quietening batch is ever homed.** ⇒ **THE BATCH SHIPS OBJ-1, 2, 3, 5, 6.** ⚠️ **The over-report therefore REMAINS — a comment-only `server/` change still opens the gate, and `#1016` stays open on that half.**
+
+<details><summary>preserved specification, not to be built in this batch</summary>
+
+**(CUT) OBJ-4 — REDUCE THE OVER-REPORT** *(gated, fail-safe, and droppable — and it was dropped)*
 A range whose every changed hunk in every otherwise-qualifying file is **comment-or-blank** does not open the gate.
 ⛔⛔ **AND AS FIRST WRITTEN THIS OBJECTIVE WAS **NOT** FAIL-SAFE. IT REBUILT THIS BATCH'S PARENT DEFECT INSIDE THE BATCH'S OWN FIX, AND A FRESH READER CAUGHT IT.**
 *"Every changed hunk is comment-or-blank"* is **universally quantified**, so **an EMPTY hunk set satisfies it VACUOUSLY** ⇒ suppressed.
@@ -137,7 +149,9 @@ A range whose every changed hunk in every otherwise-qualifying file is **comment
 ⛔ **Everything else unmatched — a string containing `//`, a line inside a block comment, an unparseable hunk, a truncated file list — REPORTS.** Doubt resolves toward the nag.
 ⛔ **NEVER APPLIES TO `drizzle/migrations/**` OR `package-lock.json`** — a "comment" in SQL or a lockfile is not a safe concept.
 **VERIFY:** the 2026-09-07 range (`17a102477..0c9e2b5e8`) is suppressed; a range with one real code line is not; a range mixing a comment fix and a migration is **not**; ⭐ **and `82e542ff4^..82e542ff4` — the real patch-less rename — is NOT suppressed.** ⭐ **and a CAPPED range is NOT suppressed** (clause d). ⛔ **AND A MUTATION TEST: break the pattern matcher and confirm the suppression stops firing — a filter that never suppresses passes every one of the tests above.**
-★ **THIS OBJECTIVE MAY BE CUT WITHOUT AFFECTING OBJ-1..3.** If it does not converge, ship the widening alone.
+★ **THIS OBJECTIVE MAY BE CUT WITHOUT AFFECTING OBJ-1..3.** If it does not converge, ship the widening alone. — **AND IT WAS. See the CUT banner above.**
+
+</details>
 
 ### OBJ-5 — DO **NOT** COUPLE TO THE GOVERNANCE CHECKER, AND SAY WHY IN THE FILE
 Record in-file that `CODE_PREFIXES` was read, is wider, and is **deliberately not imported**: it answers *"is this commit code-bearing"*, ours answers *"does this need a deploy"*. `scripts/` belongs in theirs and mostly not in ours; a future edit to either for its own reasons must not silently move the other.
@@ -163,6 +177,25 @@ Extend `scripts/analysis/test-drift-shape-guards.sh` with the OBJ-2/OBJ-4 cases,
 
 ⛔⛔ **AND THE SAME MECHANISM HAS A SECOND LOCATION, AUTHOR-SIDE, WHICH BOUNDS WHAT OBJ-2 IS ALLOWED TO CLAIM.** `.gitignore:47` is **`*.sql`**, so every one of the tracked files under `drizzle/migrations/` was **force-added**. ⇒ **a migration the author forgot to `git add -f` is untracked in THEIR clone — never committed, never pushed, never in a compare range.**
 ★ **THE WIDENED GATE IS EXACTLY AS BLIND TO THAT AS THE NARROW ONE, AND FOR THE SAME REASON AS THE STAGING CASE: THERE IS NO DIFF.** ⇒ **OBJ-2 may claim only *"the gate can now see a HELD migration that was PUSHED"* — never *"we can no longer lose a migration."*** **Recorded on `#1016`; same `P19-B12` home.**
+
+### 🟨 THIRD `P19-B12` RESIDUAL — **OUR OWN APP APPENDS TO A TRACKED FILE, AND THE DEPLOY REFUSES A DIRTY TREE** *(Langston condition 3)*
+`routes.ts:21998` appends to `path.join(process.cwd(),'replit.md')` from an **authenticated API route**; `server/scripts/generate-kraken-docs.ts:17` does the same; **`dt-deploy.sh:194-196` refuses a dirty worktree.** ⇒ **a route anyone can call can block every subsequent deploy, and no branch-side instrument can see it because there is no commit.**
+**DISPOSITION (§9.4 #2): ADDED TO `P19-B12`** alongside the untracked-`.sql` and force-add holes. **Same family — host state the branch cannot see. Recorded on `#1016`.**
+
+---
+
+## 7c. ✅ LANGSTON — STEP-1 VERDICT: **APPROVED, FOUR CONDITIONS**, re-derived at `521e315eb` (NOT `RULED ON REPORTED FACT`)
+
+| # | condition | lands |
+|---|---|---|
+| **1** | ⛔ **Step 2 enumerates sink 4 BY CALL-SHAPE** — `readFileSync`, `fs.promises`/`await fs.readFile`, `readdirSync`, `createReadStream`, `require()`, dynamic `import` — **stating the pattern set, the population, and what it CANNOT reach** (`training-audit-service.ts:159` builds `${component}_model.json` from a variable; **that class is unreachable by any grep**). | **Step 2** |
+| **2** | ⛔ **Sink 4 must list members that ALSO sit under a sink-1 prefix**, or the derivation records a wrong reason for a right answer. | ✅ **done in §4** |
+| **3** | ⛔ **`replit.md` → `P19-B12` residual**, with the three lines — not an ordinary sink-4 row. | ✅ **done above** |
+| **4** | ⛔ **The spec still said THREE above a four-row table.** *"A reader building 'the three-sink criterion' builds the version without the risk envelope."* | ✅ **done — §4 and OBJ-1** |
+
+⛔⛔ **AND HIS OWN CENSUS IS THE ARGUMENT THAT COMPLETENESS IS *NOT* ESTABLISHED — THIS IS THE MOST IMPORTANT LINE IN HIS REVIEW.** He ran `readFileSync` + `readdirSync` + json-import across `server/ shared/ client/` and **found nothing new**; a broader `readFile(` then returned three more. ★ **AND HIS FIRST INSTRUMENT COULD NOT SEE `config/vts.json` AT ALL — it is `await fs.readFile`, not `readFileSync`. THE FILE I CALL RISK-BEARING WAS INVISIBLE TO HIS CENSUS.** ⇒ **no single-shape census settles this**, which is exactly why condition 1 is a call-shape enumeration with a stated unreachable class rather than one more grep.
+
+⚠️ **WHAT THE APPROVAL DOES AND DOES NOT MEAN, in his words: *"I am approving a document whose author states a third reader was still finding real defects when the cap stopped him, and my own read added one more. That is survivable BECAUSE the unconditional half rests on citations I re-derived, and because Step 2 is where the census closes."*** ⛔ **He is deliberately NOT setting the board `Review` field: a Step-1 clearance is not batch approval and the card must not read that way.**
 
 ## 7b. ⛔ THE FRESH-READER ROUND RECORD — **THE CAP WAS REACHED AND THE DOCUMENT WAS STILL MOVING**
 
