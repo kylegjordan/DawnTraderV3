@@ -5937,6 +5937,21 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 ### #927 OPEN 2026-08-28 (CC-C, surfaced by a fresh-context reader on F-G-1) — THE PROMOTION PATH INVENTS A TARGET PRICE IN THREE PLACES, AND ONE OF THEM IS THE RANKING KEY
 
+➕ **2026-09-07 (CC-C) — THE CLASS WAS GREPPED REPO-WIDE FOR THE FIRST TIME, AND `#927` NAMES TWO OF FOUR LIVE SITES.** *(Langston's `fix-follows-pointer` condition on §6 r2: grep the class before the section lands, and state what the grep returned.)*
+**Pattern: a price multiplier standing in as a DEFAULT LEVEL. `server/`, tests excluded:**
+| site | fabrication | in `#927`? |
+|---|---|---|
+| `ready_to_buy_service.ts:1949` | `targetPrice … ?? entryPrice * 1.02` | ✅ named |
+| `ready_to_buy_service.ts:1794` | same class *(cited by Langston)* | ✅ named |
+| ⛔ **`active-execution-engine.ts:3323`** | `signal.targetPrice ? … : entryPrice * 1.02` — *"Default 2% target"* | ⛔⛔ **NOT NAMED — AND IT IS THE ORIGINAL** |
+| ⛔ **`signal-orchestrator.ts:2294`** | `stopPrice ?? currentPrice * 0.97` | ⛔ **NOT NAMED** |
+| ⛔ **`signal-orchestrator.ts:2295`** | `targetPrice ?? currentPrice * 1.03` | ⛔ **NOT NAMED** |
+| ⚠️ `signal-orchestrator.ts:2269` | `atr ?? (currentPrice * 0.02)` — a fabricated **VOLATILITY**, which then feeds level construction | ⛔ **NOT NAMED**, and it is upstream of the other two |
+
+⭐⭐ **THE ONE THAT MATTERS MOST IS `active-execution-engine.ts:3323`, BECAUSE `#927`'s OWN CITED SITE POINTS AT IT.** `ready_to_buy_service.ts:1949`'s comment reads *"mirror executePromotedSignal's default"* — **so the issue named the MIRROR and not the ORIGINAL, and a reader following the comment one hop would have found it.** ⇒ ⛔ **`fix-follows-pointer`: the pointer was in the code, in the same line as the citation, and unfollowed.**
+⇒ ⛔ **WHY IT BEARS ON PRICING AT ALL: a fabricated level has NO SIDE AND NO BASIS.** It cannot be re-expressed on a transactable side because it was never a quote — so every one of these sites is a hole in §6's row 1b, which assumes a level derives from *something*.
+**DISPOSITION: recorded on `#927` (existing issue). No new number, no new batch — `#927` owns the fix and now owns four sites instead of two.**
+
 `active-execution-engine.ts:2821` reads `signal.targetPrice ? parseFloat(...) : entryPrice * 1.02` — a fabricated 2% target when the stored one is null. The same `entry * 1.02` is re-implemented at `ready_to_buy_service.ts:1788` (inside `rMultipleCore`, which is the **ranking** key) and again at `:1943` (shadow-pool sim). **So the order in which the RTB pool ranks candidates can depend on an invented number**, and the rule has three homes — the `B-EPOCH-KEYING-PARITY` shape.
 ⛔ **SPLIT 2026-08-28 (Langston's condition): the string-truthiness leg is NOT part of this issue and is now `#930`.** It is an independent live-path defect, not a footnote of a rounding batch — and he was right to refuse it as `RULED ON REPORTED FACT` until the guard line and the column type were cited. They now are, on `#930`.
 ⛔ **NOT FOLDED INTO F-G-1.** F-G-1 rounds at signal BIRTH; this is a fabrication at PROMOTION, on a path F-G-1 does not touch, and pulling it in would widen a rounding batch into the ranking key.
