@@ -126,7 +126,7 @@
 
 ---
 
-## 2. ⏳ THE HISTORY — WHAT EACH FEED WAS ORIGINALLY FOR *(IN PROGRESS)*
+## 2. ✅ THE HISTORY — WHAT EACH FEED WAS ORIGINALLY FOR **(BOTH ASSET CLASSES, VERIFIED 2026-09-07)**
 
 > ⛔ **KYLE'S REASON FOR THIS SECTION, AND IT IS NOT DECORATION:** *"so that we could understand intent, and then show how that intent is no longer relevant in the system that we want to build… that's why we need to change this or improve on that."*
 > ★ **IT HAS ALREADY PAID FOR ITSELF: the passage quoted below is what caught the wrong claim now corrected in §1.2.**
@@ -175,6 +175,33 @@ Each open position, each cycle: try the WS cache (freshness window 2,000 ms, ven
 ★ **Kyle observed the back-and-forth BEFORE Phase 8 closed — which is precisely why `I8C` ("subscription reliability") was built. The behaviour he remembers was the problem; the audit is the fix; the fix is working, so the fallback no longer fires.**
 
 ⚠️ **AND IT REVISES A CITATION OF MINE ELSEWHERE:** `B-EXIT-BOOK-AGE-STAMP`'s V4 cited `withRestPrice=0` as the reason the REST-fallback producer cannot appear on a close. **The zero is real but its CAUSE is a healthy WS subscription, not a dead code path** — a distinction that matters if subscriptions ever degrade.
+
+
+### ✅✅ THE ARCHIVE'S ORIGINAL INTENT — **IT WAS BUILT TO BE WRITE-ONLY, AND SAYS SO IN ITS OWN INTRODUCING COMMIT**
+
+⛔ **Everything above this point is CRYPTO history. The document is required to be cut by asset class, and §1.2's error was caused by exactly that omission — so the archive and the xStock side get their own provenance here.**
+
+**`ce4a7e408`, 2026-05-01, "B74: Passive OHLC + ticker archive pipeline (Equity + Crypto)" — quoted verbatim, not summarised:**
+> *"Continuous 1-min OHLC + ticker-snapshot capture across three asset universes, persisted to month-partitioned dump tables for B70 archival takeover later. **NO signal-pipeline impact, NO admission gates, NO consumers in v1 — pure passive accumulation.**"*
+
+⇒ ★★ **THE CRYPTO ARCHIVE BEING WRITE-ONLY IS NOT NEGLECT AND NOT DRIFT — IT IS THE DESIGN, DISCHARGED EXACTLY AS WRITTEN.** ⛔ **This is `rule 24` outcome (2), not outcome (1): the system is doing what it was built to do. What is missing is a DECISION about whether that is still what we want — which is a scope call, never a unilateral fix.**
+
+⭐ **AND THE UNIVERSE SIZE WAS SPECIFIED IN ADVANCE, IN THAT SAME COMMIT:** *"crypto_spot — USD/USDT/USDC pairs ≥ $10k 24h volume **(~400-600)**"*. ⇒ **today's 388-469 range (§5b.1) sits inside the band the design predicted four months ago.** ★ **The number nobody could explain this morning was written down before it was ever measured.**
+
+⚠️ **ONE FEED IN THAT ORIGINAL SET IS NOW ABSENT FROM THIS DOCUMENT ENTIRELY:** the commit names **three** universes — `equity_spot`, `crypto_spot`, and **`equity_perp` — 10 `PF_*XUSD` perpetuals via the Kraken Futures WebSocket.** **Perpetuals are not in §1's feed table, are not in the subscription map, and play no part in any pricing path described here.** ⇒ **DISPOSITION: recorded as an open question for Part 6, not a finding** — whether that universe is still captured, and whether it should be, is a target-state question and neither of us has established its current state.
+
+### ✅✅ WHY THE TWO ASSET CLASSES DIVERGED — **A VENUE FACT, STATED IN THE CODE'S OWN WORDS**
+
+**`server/asset_classes/xstock_spot/ohlc-aggregator.ts`, header, verbatim:**
+> *"mirroring crypto's `ohlcCache` consumer pattern but **sourcing from local DB instead of Kraken REST (because Kraken has no public equities REST endpoint** — see BATCH_79_0k investigation + B-NEW-34 design ask Round 2 §0)."*
+
+⇒ ★★ **THE ASYMMETRY IN §1.2 IS NOT AN INCONSISTENCY WE DRIFTED INTO. IT IS THE ONLY AVAILABLE ANSWER TO A VENUE CONSTRAINT.** Kraken publishes a REST OHLC endpoint for crypto and none for equities ⇒ crypto pulls history on demand; **xStock has no history except the one we captured ourselves.**
+⇒ ⛔⛔ **AND THAT IS WHY THE SAME ARCHIVE HAS OPPOSITE STATUS IN THE TWO CLASSES: for crypto it remains the write-only store B74 designed; for xStock it was PROMOTED to load-bearing by B-NEW-34, because nothing else exists.** ★ **The promotion is a real departure from the original intent — a deliberate, reviewed one, and the kind of change this history section exists to make visible.**
+
+⚠️ **THE CONSEQUENCE FOR RELIABILITY, WHICH FOLLOWS DIRECTLY AND IS NOT COMFORTABLE:** ⛔ **for xStock, a gap in our own capture is a permanent hole in the record — there is no endpoint to backfill from.** For crypto the same gap is recoverable with a REST call. ⇒ **the two classes have different worst cases from the same failure, and only one of them is repairable.**
+
+★ **THE RENAME THAT HIDES THIS HISTORY FROM A NAIVE SEARCH:** these tables were `equity_*` until **`aca52acdc`, 2026-05-10 (B79.0e)**, which renamed 4 parents, 52 partitions and 112 indexes to `xstock_*`. ⛔ **A provenance search on today's name returns NOTHING written before that date** — the former-filename rule, and it is why B74's own origin was nearly missed here.
+
 
 ### ⛔ A DEAD MECHANISM THAT SHOULD BE STRIPPED OUT — kept SHORT deliberately
 
