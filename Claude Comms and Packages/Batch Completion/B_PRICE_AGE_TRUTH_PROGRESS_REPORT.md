@@ -144,3 +144,27 @@ When our own REST rate limiter declines to ask Kraken for a price, the code re-s
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model/feature check did not run as part of this batch. |
 
 **SPAWNED-READER RECORD:** `REVIEWER r1: object · implementation · HIT (regression + non-failing test) · re-derived y` · `REVIEWER r2: object · fence adequacy · HIT (4 evasions) · re-derived y` · `REVIEWER r3: object · terminating round · HIT (the :538 gap, the third slice, the missing positive control) · re-derived y`.
+
+---
+
+## 9. ⏱ THE WINDOW CLOSED 2026-09-07 — **THE CRITERION IS UNEVALUABLE. THE BATCH DOES NOT CLOSE, AND ITS OWN PRE-REGISTERED RULE SAYS EXTEND.**
+
+**Alert `cecd4a47` fired on schedule.** Population read exactly as pre-registered — `closed_trades` where `closed_at >= 2026-08-31T11:30:47Z`, **44 rows**.
+
+**Producers present, ENUMERATED never `LIKE`:** `kraken_ws_book_mid` **25** · `kraken_equities_ws_mid` **17** · `(null)` **2**.
+
+⛔⛔ **THE TOUCHED ARM HAS ZERO ROWS.** The criterion's three PASS conditions are all scoped to `exit_price_producer IN ('kraken_rest_poller','kraken_rest_rate_limited_reserve')`. **Neither producer appears in the window. `touched_arm_rows = 0`.**
+⇒ ✅ **THE PRE-REGISTERED RULE FOR THIS EXACT CASE APPLIES: *"ZERO reserve rows = EXTEND, not pass/fail."*** The batch does **not** close, and it did **not** fail — **the arm it instruments was never exercised.**
+
+⚠️⚠️ **AND A CORRECTION I OWE, RECORDED BEFORE THE RESULT: I REPORTED THIS GATE AS "PASSING 44/44" EARLIER TODAY. THAT WAS THE WRONG ARM.** I measured `exit_observed_at_ms` across **all** producers and found 44/44 non-null — **true, and about producers the criterion does not test.** The criterion asks only about the two REST arms, and there are none. ⇒ **A real measurement of the wrong population, reported as a pass. `wrong-object`, caught by reading the criterion instead of trusting my own earlier query.**
+
+### ★ WHY THE ARM IS EMPTY — AND IT IS THE SAME FINDING AS `B-EXIT-BOOK-AGE-STAMP`'s C4
+**The REST fallback is not firing because the WebSocket path is healthy.** Measured the same day: `withRestPrice=0` across 7,197 exit-evaluation cycles; `ENGINE_WS_PRICE` 19,842 vs `REST_FALLBACK` 0; the 5-second subscription audit reporting `total_positions=6 subscribed=6 missing=0 stale=0`.
+⇒ ⛔ **THIS BATCH INSTRUMENTED A DEGRADED-MODE PATH, AND THE SYSTEM IS NOT DEGRADED.** The criterion can only be satisfied by a condition we do not want to occur.
+
+### ⇒ DISPOSITION — BOUNDED, NOT AN OPEN WAIT
+⛔ **`workflow-10`: an observation that does not meet its criterion is a RESULT, not a delay, and must never quietly wait forever.**
+**This is the SECOND batch this week whose criterion requires an unexercised failure path** (`B-EXIT-BOOK-AGE-STAMP` C4 is the first). **Langston's stopping rule there — five fires, then the criterion is declared undischargeable with this instrument and the disposition is recorded — is the right shape here and is adopted:**
+1. **EXTEND once**, re-armed with the same criterion, unchanged.
+2. ⛔ **If the arm is still empty at the next fire, that is the RESULT: the criterion is not satisfiable while the WS path stays healthy**, and the batch converts recording that — either by re-scoping the assertion to a path that IS exercised, or by retiring it with the reason stated. **Not a third window.**
+⚠️ **The bar is NOT lowered. Nothing about the three PASS conditions changes.**
