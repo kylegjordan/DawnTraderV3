@@ -220,7 +220,34 @@ The old batch and directive reports from before the 2026-01/02 governance change
 
 ---
 
-## 4. ⏳ WHERE THE PRICE IS TRANSFORMED BEFORE USE — NOT YET FILLED
+## 4. ✅ WHERE THE PRICE IS TRANSFORMED BEFORE USE — **VERIFIED 2026-09-07**
+
+> ⛔ **Kyle: *"where our pricing is being manipulated one way or another, such as the midpoint stuff, that needs to be highlighted."***
+
+### ⛔⛔ 4.1 THE ONE THAT REACHES EVERYTHING — THE FEED-LAYER MIDPOINT OVERWRITE
+**`server/services/market-data/kraken-v2-translator.ts`.** The v2→v1 translator's own comment states it, and it is quoted rather than summarised:
+> *"`c` is nominally 'last trade closed' and this function **OVERWRITES it with a midpoint whenever both sides exist** (`#952`), so **every consumer downstream was reading a mid under a print's name** — including a variable literally called `lastPrice`."*
+
+⇒ ★★ **THIS HAPPENS AT THE FEED LAYER, WHICH IS WHY IT REACHES EVERY CONSUMER.** Crypto and xStock, paper and VTS, entry and exit all inherit it — nobody downstream opted in, and the field's NAME says the opposite of its contents.
+✅ **PARTIALLY MITIGATED, AND THE MITIGATION IS A LABEL RATHER THAN A REMOVAL:** `markKind: 'mid' | 'last'` now travels beside it, **REQUIRED not optional** — *"an optional field lets a future producer omit it, and that absence is indistinguishable from a missed stamp."* ⛔ **The overwrite still happens; consumers can now TELL, if they look.**
+⚠️ **AND THE COMMENT CARRIES ITS OWN WARNING AGAINST THE OBVIOUS SHORTCUT:** *"Do NOT re-derive this from `a`/`b` at a consumer. It round-trips exactly TODAY because both are written from the same locals below, but that is an unstated invariant of a function neither end owns."*
+
+### ✅ 4.2 THE OTHER MIDPOINT COMPUTATIONS — CENSUSED, AND MOST ARE LEGITIMATE
+**The batch's own rule decides each one: a price that ESTIMATES VALUE may be a midpoint; a price that BECOMES A LEVEL, FIRES an action, or is RECORDED must be the side we could transact at.**
+
+| site | what it computes | verdict under the rule |
+|---|---|---|
+| `kraken-websocket-adapter.ts:1063,:1093` | book best-bid/best-ask → `kraken_ws_book_mid`, emitted as a price tick | ⛔ **BECOMES A MARK** — inherits the same issue as 4.1 |
+| `active-execution-engine.ts:1532` | REST fallback: `_restKind === 'mid' ? (ask+bid)/2 : lastTrade` | ⛔ **BECOMES AN EXIT-EVALUATION MARK** — but note it is `markKind`-aware, so the KIND is stated |
+| `xstock_spot/book-state.ts:169` | `midNow` for book-state comparison | ✅ **ESTIMATE** — used to judge book shape, never a level |
+| `xstock_spot/qd-probe-metrics.ts:110` | mid as a spread denominator | ✅ **ESTIMATE** — correct use |
+| `xstock_spot/scanner.ts:661` | `((ask-bid)/((ask+bid)/2))*100` — spread percent | ✅ **ESTIMATE** — a spread needs a midpoint denominator by definition |
+
+⇒ ★ **THE PATTERN IS CLEAN: every midpoint used as a DENOMINATOR or a SHAPE JUDGEMENT is correct. Every midpoint used as a MARK is the defect.** The three marks all trace to the same decision — mid-as-default at the point the price is built.
+
+⚠️ **NOT YET CENSUSED, STATED SO THE GAP IS VISIBLE: non-midpoint transformations** — smoothing, clamping, rounding-to-tick, last-known-good re-serves, and the entry/exit slippage adjustments. **Only midpoints were enumerated here. `#743`'s last-known-good re-serve and the venue price grid's tick rounding are known to exist and are NOT yet placed in this table.**
+
+
 
 ⛔ **Kyle: *"where our pricing is being manipulated one way or another, such as the midpoint stuff, that needs to be highlighted."***
 **Known entry point for the audit (verified previously, to be re-verified here): the v2→v1 translator overwrites the `last` field with a computed midpoint, at the FEED layer — so every downstream consumer inherits it whether or not a midpoint is the right input for that consumer.**
