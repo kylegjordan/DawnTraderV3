@@ -5963,6 +5963,16 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 ### #928 OPEN 2026-08-28 (CC-C, same reader) — AN HTTP PATH REACHES TRADE EXECUTION WITH A PRICE TRIPLE THAT IS NEVER SHAPE-CHECKED
 
+➕ **2026-09-07 (CC-C; Langston BLOCKER-6, verified by me at the object) — A SIXTH FABRICATED-LEVEL SITE, AND IT IS A REGISTERED ROUTE THAT BOOKS A TRADE ON A HARDCODED PRICE TABLE.**
+**`server/routes.ts:5563` — `POST /api/paper/trade/test`, `authenticateToken`, and the handler's own comment says *"Permanent"*.** Its fallback arm sets `mockPrice` from a literal table — **`BTC 68000 / ETH 3500 / SOL 170 / else 100`** — then `:5607-5609`:
+> `const entryPrice = mockPrice;`
+> `const stopPrice = action === 'buy' ? mockPrice * 0.98 : mockPrice * 1.02;`
+> `const targetPrice = action === 'buy' ? mockPrice * 1.03 : mockPrice * 0.97;`
+… and **commits through `commitTradeAndUpdatePortfolio`.**
+⛔⛔ **IT FABRICATES THE ENTRY, NOT ONLY THE LEVELS.** Every other site in the `#927` family invents a level from a REAL price; **this one invents the price.** ⇒ **a trade booked here carries a stop and a target derived from a number that was never a quote, on a symbol whose real price is irrelevant to the row.**
+★ **WHY IT SURVIVED A CENSUS THAT WAS LOOKING FOR EXACTLY THIS: my grep swept where levels are EXPECTED to be built — the orchestrator, the RTB service, the execution engine. This is a ROUTE HANDLER.** ⇒ **the same enumerator blind spot the pricing document's own §9.5(a) rule exists to name, committed inside the section demonstrating it.**
+**DISPOSITION: recorded on `#928` (existing issue, HTTP-intent class). No new number.** ⚠️ **NOT dispositioned as a defect here — whether a permanent authenticated test-booking route should exist at all is `#928`'s call, and it may be intended.**
+
 `routes.ts:11176-11182` → `intent-executor.ts:441` takes `intent.signal` **straight from the request body** and calls `processSignal` (`:512` paper, `:487` live), bypassing the signal orchestrator and therefore the VPG seam entirely. Its own guard validates `symbol` and `strategy` only — **while its error string claims "(symbol, strategy, prices)"**, which is the message telling a reader the check is wider than it is. Downstream, `pre-execution-validator.ts:133` uses `Math.abs(entryPrice - stopPrice)`, so **an inverted triple passes silently.**
 ⛔ **NOT FOLDED IN, and the reason is honest scope rather than convenience:** F-G-1's guarantee is "prices are on the venue grid **as the orchestrator emits them**", and this path does not go through the orchestrator. Widening the batch to a second executor entry point after four review rounds is how a batch stops converging.
 ⚠️ **AND IT MUST BE SAID IN F-G-1's COMPLETION REPORT AS A LIMIT OF THE GUARANTEE**, not left to be discovered by someone who reads "one rounding seam" as "every path".
