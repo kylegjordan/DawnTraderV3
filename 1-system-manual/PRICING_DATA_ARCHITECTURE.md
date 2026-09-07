@@ -145,6 +145,22 @@
 
 ★ **AND THE SCAN LOOP'S ORIGINAL SHAPE:** *"Fetch OHLC history (721 candles) → Calculate indicators → Determine market regime → Check macro-state → Select compatible strategies."* **Candles drove analysis; the ticker supplied the live price.**
 
+### ⛔⛔ THE ADAPTIVE CHANNEL SWITCH — IT EXISTS, IT IS A HARDCODED LIST OF FOUR, AND IT HAS NEVER FIRED
+**Kyle's recollection, checked 2026-09-07:** *"if the REST signal is too weak and not feeding enough, then it subscribes to the WebSocket… set up long before the new governance batches."*
+⇒ ★ **THE MECHANISM IS REAL AND IT IS NOT WHAT IT SOUNDS LIKE. It is a ticker→BOOK channel switch, `Phase 8.8.3-I7-WS-G (G3)`, at `kraken-websocket-adapter.ts:2602-2611`** — *"Check if we should switch to book channel for low-liquidity pairs."* **Same intent Kyle remembers: when the ticker is not feeding enough, get the data elsewhere.**
+
+⛔ **BUT IT IS NOT ADAPTIVE. IT MEASURES NOTHING.** The trigger is a **hardcoded literal** at `:316-318`:
+- `prefer_book: ['TIA/USD', 'BAND/USD', 'SC/USD', 'RLC/EUR']` — **four symbols**, the only ones the switch can ever fire for
+- `low_liquidity: ['TIA/USD', 'FORTH/USD', 'PROVEEUR', 'BAND/USD', 'SC/USD', 'RLC/EUR', 'OGN/USD']` — ⛔ **read NOWHERE except a diagnostic getter. Dead data.**
+
+✅ **MEASURED: `CHANNEL_SWITCH` has fired ZERO times.** ✅ **POSITIVE CONTROL, same logs, same window: 4,900,795 `I7-WS` lines — the instrument sees this family in enormous volume, so the zero is real and not a broken search.**
+⇒ ⛔⛔ **AND IT IS DOUBLY UNREACHABLE: the switch can only fire for a SUBSCRIBED symbol, and §1.5 established that only OPEN POSITIONS are subscribed. We hold `DASH/USD`, `LINK/EUR`, `LINK/USD`, `LINK/USDC`, `ZEC/EUR`, `ZEC/USD` — none of the four.** **Even if one of the four became illiquid, nothing would happen unless we already held it.**
+
+★ **WHY THIS MATTERS BEYOND THE VESTIGE: it is the THIRD independent piece of evidence for the same design intent.** The original architecture's comment (*"book: BBO updates, continuous for illiquid pairs"*), Langston's `event_trigger` finding (the ticker is trade-triggered and therefore quote-blind on cold names), and now this switch — **all three say the system KNEW the ticker goes blind on illiquid pairs and built a compensation. All three compensations are inert or unreachable in the current configuration.**
+⇒ **DISPOSITION: rule 18 / §15 lingering legacy — a hardcoded hint list from the pre-governance era that no longer does what it was built for. It is NOT a defect causing harm; it is a mechanism that reads as coverage and provides none.** Homed into this document's target state rather than fixed piecemeal.
+
+⚠️ **AND ONE INVERSION WORTH RECORDING:** `DawnTrader_System_Architecture_Execution_Flow.md` lists the price hierarchy as **1. Kraken WebSocket (primary) · 2. Kraken REST (fallback) · 3. Binance · 4. CoinGecko.** ⇒ **TODAY THAT IS INVERTED IN PRACTICE — §1.5 and the cache census measured ~93% REST-sourced.** The designed primary is now the exception.
+
 ### ⏳ STILL TO READ
 The old batch and directive reports from before the 2026-01/02 governance change; `Phase_8/9/10/11_Implementation_History.md`; the batch reports that introduced the order book and the midpoint. **STATUS: IN PROGRESS — nothing further asserted yet.**
 
