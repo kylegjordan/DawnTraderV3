@@ -718,3 +718,181 @@ export function __resetSideAgeForTest(): void {
   _sideAge.clear();
   _symbolGap.clear();
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * TICKER vs ORDER BOOK — DO THE TWO FEEDS AGREE ON THE TRANSACTABLE PRICE?
+ *
+ * ⛔ WHY THIS EXISTS AND WHY IT CANNOT BE DONE FROM HISTORY. Kyle asked for this comparison
+ * directly: *"we need to know what we're working with, and whether or not the data matches up."*
+ * **The order book is NEVER PERSISTED** — it lives only in memory, only while the process runs,
+ * and only for the symbols we hold or promote. The ticker IS persisted. ⇒ **there is no pair of
+ * stored rows to compare, and no amount of querying the archive can produce one.** The two feeds
+ * can only be compared by reading BOTH AT THE SAME INSTANT, in-process, which is this.
+ *
+ * ⛔⛔ THE CONCLUSION IS ONE-DIRECTIONAL, PRE-REGISTERED BEFORE ANY DATA (Langston's condition on
+ * the divergence study, and it binds the reading of this instrument):
+ *   **DIVERGENCE ⇒ DISPOSITIVE.** If the two disagree on a symbol where both exist, the ticker's
+ *   two sides are not the book's two sides, and anything setting a level from the ticker is
+ *   setting it somewhere the book says you cannot trade.
+ *   ⛔ **AGREEMENT ⇒ INCONCLUSIVE, AND MAY NEVER BE READ AS A LICENCE.** Both feeds coexist ONLY
+ *   where the book is subscribed — the hot set, i.e. what we already hold or promote, i.e. the
+ *   most liquid names. **That is exactly the population where they would agree anyway.** It says
+ *   nothing about the ~200 symbols carrying a ticker and no book.
+ *
+ * ⛔ NO TOLERANCE IS BUILT IN. The difference is recorded in basis points and bucketed; what
+ * counts as "agreement" is a judgement made LATER, from the distribution, by a human. A threshold
+ * chosen now would be chosen before seeing the data, which is the thing pre-registration exists
+ * to prevent — and it would decide the answer by picking the bucket edge.
+ *
+ * ⛔ COVERAGE IS COUNTED SEPARATELY FROM AGREEMENT, because "we could not compare" and "they
+ * matched" are different states and collapsing them reports the healthiest possible reading for
+ * the least informative one. Four outcomes: both present · book only · ticker only · neither.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** Absolute difference buckets in BASIS POINTS (1 bp = 0.01%). */
+export const FEED_AGREEMENT_BPS_EDGES: readonly number[] = [
+  0.0001, 1, 2, 5, 10, 25, 50, 100, 250, 1000,
+];
+
+export interface FeedAgreementSample {
+  assetClass: string;
+  /** Top-of-book from the reconstructed order book. `null` when no book exists for the symbol. */
+  bookBid: number | null;
+  bookAsk: number | null;
+  /** The two sides carried on the ticker-fed shared cache. `null` when no entry/sides exist. */
+  tickerBid: number | null;
+  tickerAsk: number | null;
+}
+
+interface AgreementCell {
+  bothPresent: number;
+  bookOnly: number;
+  tickerOnly: number;
+  neither: number;
+  /** |ticker − book| in bps, bucketed, per side. */
+  bidBuckets: number[];
+  askBuckets: number[];
+  /** Direction, counted rather than averaged: an average of signed errors hides a two-sided spread. */
+  bidTickerHigher: number;
+  bidTickerLower: number;
+  bidExact: number;
+  askTickerHigher: number;
+  askTickerLower: number;
+  askExact: number;
+  /**
+   * ⛔ THE ONE THAT WOULD BE A REAL DEFECT: the two feeds CROSSED against each other — the
+   * ticker's bid at or above the book's ask, or the ticker's ask at or below the book's bid.
+   * That is not a difference of degree; it means one feed says you can sell where the other says
+   * you can buy, and a level built on either is unsafe.
+   */
+  crossedAgainstBook: number;
+  maxBidBps: number;
+  maxAskBps: number;
+}
+
+function newAgreementBuckets(): number[] {
+  return new Array(FEED_AGREEMENT_BPS_EDGES.length + 1).fill(0);
+}
+
+function emptyAgreementCell(): AgreementCell {
+  return {
+    bothPresent: 0, bookOnly: 0, tickerOnly: 0, neither: 0,
+    bidBuckets: newAgreementBuckets(), askBuckets: newAgreementBuckets(),
+    bidTickerHigher: 0, bidTickerLower: 0, bidExact: 0,
+    askTickerHigher: 0, askTickerLower: 0, askExact: 0,
+    crossedAgainstBook: 0, maxBidBps: 0, maxAskBps: 0,
+  };
+}
+
+function agreementBucketIndex(bps: number): number {
+  const i = FEED_AGREEMENT_BPS_EDGES.findIndex((edge) => bps < edge);
+  return i < 0 ? FEED_AGREEMENT_BPS_EDGES.length : i;
+}
+
+function agreementBucketLabel(i: number): string {
+  const lo = i === 0 ? 0 : FEED_AGREEMENT_BPS_EDGES[i - 1];
+  const hi = i === FEED_AGREEMENT_BPS_EDGES.length ? null : FEED_AGREEMENT_BPS_EDGES[i];
+  if (i === 0) return 'exact';
+  return hi === null ? `${lo}bp+` : `${lo}-${hi}bp`;
+}
+
+const _agreement = new Map<string, AgreementCell>();
+
+export function recordFeedAgreement(s: FeedAgreementSample): void {
+  let cell = _agreement.get(s.assetClass);
+  if (!cell) { cell = emptyAgreementCell(); _agreement.set(s.assetClass, cell); }
+
+  const haveBook = s.bookBid !== null && s.bookAsk !== null
+    && Number.isFinite(s.bookBid) && Number.isFinite(s.bookAsk)
+    && (s.bookBid as number) > 0 && (s.bookAsk as number) > 0;
+  const haveTicker = s.tickerBid !== null && s.tickerAsk !== null
+    && Number.isFinite(s.tickerBid) && Number.isFinite(s.tickerAsk)
+    && (s.tickerBid as number) > 0 && (s.tickerAsk as number) > 0;
+
+  if (!haveBook && !haveTicker) { cell.neither++; return; }
+  if (!haveBook) { cell.tickerOnly++; return; }
+  if (!haveTicker) { cell.bookOnly++; return; }
+
+  cell.bothPresent++;
+  const bb = s.bookBid as number, ba = s.bookAsk as number;
+  const tb = s.tickerBid as number, ta = s.tickerAsk as number;
+
+  // ⛔ CROSSED CHECK FIRST — it is the qualitative failure and must not be diluted into a bucket.
+  if (tb >= ba || ta <= bb) cell.crossedAgainstBook++;
+
+  const bidBps = Math.abs(tb - bb) / bb * 10_000;
+  const askBps = Math.abs(ta - ba) / ba * 10_000;
+  cell.bidBuckets[agreementBucketIndex(bidBps)]++;
+  cell.askBuckets[agreementBucketIndex(askBps)]++;
+  if (bidBps > cell.maxBidBps) cell.maxBidBps = bidBps;
+  if (askBps > cell.maxAskBps) cell.maxAskBps = askBps;
+
+  if (tb > bb) cell.bidTickerHigher++; else if (tb < bb) cell.bidTickerLower++; else cell.bidExact++;
+  if (ta > ba) cell.askTickerHigher++; else if (ta < ba) cell.askTickerLower++; else cell.askExact++;
+}
+
+export interface FeedAgreementRow {
+  assetClass: string;
+  attempted: number;
+  bothPresent: number;
+  bookOnly: number;
+  tickerOnly: number;
+  neither: number;
+  bidHistogram: Record<string, number>;
+  askHistogram: Record<string, number>;
+  bidDirection: { tickerHigher: number; tickerLower: number; exact: number };
+  askDirection: { tickerHigher: number; tickerLower: number; exact: number };
+  crossedAgainstBook: number;
+  maxBidBps: number;
+  maxAskBps: number;
+}
+
+export function getFeedAgreementRows(): FeedAgreementRow[] {
+  return [...(_agreement.entries())].map(([assetClass, c]) => {
+    const hist = (b: number[]) => {
+      const h: Record<string, number> = {};
+      b.forEach((n, i) => { h[agreementBucketLabel(i)] = n; });
+      return h;
+    };
+    return {
+      assetClass,
+      attempted: c.bothPresent + c.bookOnly + c.tickerOnly + c.neither,
+      bothPresent: c.bothPresent,
+      bookOnly: c.bookOnly,
+      tickerOnly: c.tickerOnly,
+      neither: c.neither,
+      bidHistogram: hist(c.bidBuckets),
+      askHistogram: hist(c.askBuckets),
+      bidDirection: { tickerHigher: c.bidTickerHigher, tickerLower: c.bidTickerLower, exact: c.bidExact },
+      askDirection: { tickerHigher: c.askTickerHigher, tickerLower: c.askTickerLower, exact: c.askExact },
+      crossedAgainstBook: c.crossedAgainstBook,
+      maxBidBps: c.maxBidBps,
+      maxAskBps: c.maxAskBps,
+    };
+  });
+}
+
+/** Test-only reset. Never called from the running system. */
+export function __resetFeedAgreementForTest(): void {
+  _agreement.clear();
+}

@@ -1,6 +1,6 @@
 import { getLevelBasisFunnel } from './core/calculations/level-basis.js';
 import { getVenueTimestampPresence } from './exchanges/kraken/kraken-websocket-adapter.js';
-import { getSideAgeRows, getSymbolGapRows } from './core/calculations/level-basis.js';
+import { getSideAgeRows, getSymbolGapRows, getFeedAgreementRows } from './core/calculations/level-basis.js';
 import type { Express, Request, Response, NextFunction, Router as ExpressRouter } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
@@ -8195,6 +8195,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // hard as the threshold, and an archive-derived "normal quiet" would smuggle the same
         // wrong-population inference back in through the side door.
         symbolGapAtLevelBuild: getSymbolGapRows(),
+        // ⭐ TICKER vs ORDER BOOK at the same instant. Divergence dispositive; agreement
+        // INCONCLUSIVE — both feeds coexist only where the book is subscribed.
+        tickerVsBookAgreement: getFeedAgreementRows(),
         nullReasonDetail: lt?.nullReasonAggregate ?? {},
         // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates now
         // separately maintained in eval-cycle.ts. Was emitting the combined

@@ -133,7 +133,7 @@ import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 // COUNTED, consumed by nothing. See the observation block at the hand-off below.
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import {
-  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeAttempt,
+  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeAttempt, recordFeedAgreement,
   LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
 } from '../core/calculations/level-basis.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
@@ -2592,6 +2592,25 @@ export class SignalOrchestrator {
 
       if (_lbClass === 'crypto_spot') {
         const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);
+
+        // ⭐⭐ TICKER vs ORDER BOOK — Kyle asked for this comparison directly, and THIS is the only
+        // instant it can be taken: both feeds are in hand here, and the book is NEVER PERSISTED, so
+        // no pair of stored rows exists to compare after the fact.
+        // ⛔ ONE-DIRECTIONAL BY PRE-REGISTRATION: divergence is dispositive; agreement is
+        // INCONCLUSIVE, because both feeds coexist only on the hot set — the names we already hold
+        // or promote — which is exactly where they would agree anyway.
+        {
+          const _agBook = _lbBook;
+          const _agCache = priceCache.getCachedPrice(symbol);
+          recordFeedAgreement({
+            assetClass: _lbClass,
+            bookBid: _agBook && _agBook.bids.length > 0 ? _agBook.bids[0].price : null,
+            bookAsk: _agBook && _agBook.asks.length > 0 ? _agBook.asks[0].price : null,
+            tickerBid: _agCache?.bid ?? null,
+            tickerAsk: _agCache?.ask ?? null,
+          });
+        }
+
         const _lbResult = buildLevelBasis(
           {
             bid: _lbBook && _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
