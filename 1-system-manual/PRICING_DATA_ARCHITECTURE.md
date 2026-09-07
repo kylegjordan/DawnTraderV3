@@ -171,7 +171,54 @@ The old batch and directive reports from before the 2026-01/02 governance change
 
 ---
 
-## 5. ⏳ WHERE WE HAVE TROUBLE GETTING THE DATA — NOT YET FILLED
+## 5. ✅ WHAT WOULD IT COST TO SUBSCRIBE THE BOOK BROADLY? — **MEASURED 2026-09-07**
+
+> **Kyle's directive: establish the resource cost and feasibility FIRST, and only then ask which feed we would prefer if resources were no object.** This section is the first half. **It makes no recommendation.**
+
+### ✅ 5.1 THE VENUE'S SIDE — READ FROM KRAKEN'S OWN DOCUMENTATION, NOT INFERRED
+⛔ **Read the operator's docs before instrumenting — my own `vendor-docs-unread` lesson, applied.**
+
+| question | Kraken's published answer |
+|---|---|
+| **max simultaneous connections** | **No number published.** Only: *"The WebSocket API limits the maximum number of simultaneous connections to provide protection against misuse."* |
+| **can one connection carry many subscriptions?** | ✅ **YES, and they state the consequence explicitly:** *"it is possible to stream all available market data for all currency pairs without reaching the WebSocket connection limits."* |
+| **symbol limit on the `book` channel** | ⛔ **NONE STATED.** Multiple symbols per subscription are supported. *(The 200-symbol figure that has been cited before belongs to the **level3** page, NOT `book`.)* |
+| **book depth options** | `10` · `25` · `100` · `500` · `1000`, default `10`. ⚠️ **We already use 10 — the MINIMUM. There is no headroom below us.** |
+| **message rate limit** | **No number.** *"will vary depending upon the load on the system"*; exceeding it returns `{"Error": "Exceeded msg rate"}`. |
+
+⇒ ★★ **KRAKEN DOES NOT PUBLISH A BARRIER TO THIS, AND STATES THE ALL-PAIRS CASE IS POSSIBLE. THE BINDING CONSTRAINT IS THEREFORE OURS — MESSAGE VOLUME AND WHAT IT COSTS US TO PROCESS — NOT A VENUE CAP.**
+
+### ✅ 5.2 OUR SIDE — THE MEASURED RATE
+**Two timed samples of the per-channel frame counters, 120 s apart, live:**
+| channel | frames in 120 s | rate |
+|---|---|---|
+| **`book`** | **26,735** | **222.8 / sec** |
+| `ticker` | 191 | 1.6 / sec |
+
+**Denominator, measured not assumed: the subscription set is 6 crypto open positions** — `DASH/USD`, `LINK/EUR`, `LINK/USD`, `LINK/USDC`, `ZEC/EUR`, `ZEC/USD`. ⇒ **≈ 37 book frames/sec per subscribed symbol.**
+★ **THE BOOK IS ~139× THE TICKER'S FRAME RATE ON THE SAME SYMBOLS.** That ratio is the cost of depth.
+
+### ⛔ 5.3 THE EXTRAPOLATION — AND WHY THE NAIVE ONE IS WRONG
+⛔ **A linear 6 → 465 scaling gives ~17,000 frames/sec and IS NOT CREDIBLE: the six symbols are ones we CHOSE TO HOLD, i.e. selected for liquidity.** Scaling from a selected sample to the population is the wrong-population error this document keeps catching.
+✅ **BETTER, USING THE ACTIVITY DISTRIBUTION (24 h, `crypto_spot_ticker_snap`, 465 symbols, 346,019 snapshots):**
+- **The six account for 17,521 snapshots = 5.06% of all activity.**
+- Per-symbol activity is heavily skewed: **p25 = 74 · p50 = 207 · p75 = 798 · p95 = 3,351 · max = 12,788** (`BTC/USD`). The six average 2,920 — **between p75 and p95, active but NOT the busiest; we do not hold BTC, ETH or SOL.**
+⇒ **222.8 / 0.0506 ≈ 4,400 book frames/sec for the full 465-symbol universe.**
+
+⚠️ **TWO STATED LIMITS ON THAT NUMBER:**
+1. **ASSUMPTION: book frame rate scales with ticker activity.** Plausible — both are driven by market events — **but NOT verified.** It is an estimate, not a measurement.
+2. ⭐ **THE BIAS DIRECTION IS KNOWN AND IT MAKES 4,400 AN OVERESTIMATE:** the archive's ticker is **throttled at 4 s per symbol**, which compresses busy symbols more than quiet ones ⇒ the six's TRUE activity share is **higher** than 5.06% ⇒ the true multiplier is **lower** than 19.8×.
+
+### ⚠️ 5.4 WHAT SCALING WOULD ALSO RAISE, STATED NOT COSTED
+- ⛔ **Book integrity is NOT validated today — `#507`: the CRC32 checksum was never implemented.** At 6 symbols an undetected corrupt book is one position; at 465 it is the whole selection surface. **Scaling the subscription without the checksum scales the blast radius of a defect we already know is open.**
+- **Per-symbol memory is small** (10 levels × 2 sides) and is not the constraint; **CPU per frame and the event loop are.** Not measured here.
+- ★ **AND THE SET MAY NOT NEED TO BE "ALL 465":** signal-time levels are only needed for symbols actually being RANKED. **The candidate set is far smaller than the universe and larger than the 6 we hold — that middle option is unmeasured and is the obvious thing to size next.**
+
+**⇒ NO RECOMMENDATION IS MADE HERE. §6 asks the preference question separately, per Kyle's ordering.**
+
+---
+
+## 5b. ⏳ OTHER DATA-ACQUISITION PROBLEMS — NOT YET FILLED
 
 To cover: coverage gaps by symbol and by asset class · API rate limits · silent stalls (an open socket delivering nothing) · restart behaviour · retention reach of each store.
 
