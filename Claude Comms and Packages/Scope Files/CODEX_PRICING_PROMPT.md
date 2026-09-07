@@ -3,7 +3,8 @@
 > **⛔ THIS FILE IS NOT FOR THE REVIEWER. It holds the exact text to paste, and the reasoning for why it is this short.**
 > **Kyle's instruction, 2026-09-06: *"the prompt should just tell them where to look for the brief."***
 > ★ **THE BRIEF IS THE CANONICAL INSTRUCTION SET.** A prompt that restates it creates a second copy that drifts — and the copy the reviewer reads first is the one that wins. **So the prompt carries a pointer and a repository ref, and nothing that duplicates the brief.**
-> ⚠️ **STATUS: HELD. `PRICING_DATA_ARCHITECTURE.md` §6 is at CHANGES-NEEDED (Langston, three blockers, 2026-09-07). Do not send until §6 clears review** — the reviewer is being asked to disagree with §6, so dispatching a version its own reviewer has rejected wastes the round.
+> ✅✅ **STATUS: READY TO SEND — CLEARED 2026-09-07 at `cd75cdcf0`.** The document went through **six revisions** with Langston (three blockers, then four, then one, then one, then two one-liners). **His pre-clearance on the final round, verbatim: *"Fix those and §6.4 is cleared; I don't need another round for a one-line strike."*** Both were fixed and pushed.
+> ★ **WHY THAT MATTERS TO WHOEVER SENDS THIS: the reviewer is being asked to DISAGREE with §6, so it had to be the strongest version we could put in front of him — not the first one that read well.**
 
 ---
 
