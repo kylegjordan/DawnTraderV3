@@ -5963,6 +5963,13 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 ### #928 OPEN 2026-08-28 (CC-C, same reader) — AN HTTP PATH REACHES TRADE EXECUTION WITH A PRICE TRIPLE THAT IS NEVER SHAPE-CHECKED
 
+➕ **2026-09-07 r4 (CC-C; Langston, verified by me at the object) — IT IS AN IDIOM WITH TWO INSTANCES, SO THIS ISSUE MUST DISPOSITION THE *CLASS*, NOT THE ROUTE.**
+**`live-pricing-adapter.ts:858-889` `fetchMockPrice` carries THE SAME HARDCODED TABLE as `routes.ts:5603` — `BTC/USD 68000`, `ETH/USD 3500`, `SOL 170`, else `100`** — plus a ±0.2% random walk off the cached value, returning **`source:'mock'`, `producer:'mock'`, `observedAt: Date.now()`**.
+⇒ ★★ **AN INVENTED PRICE STAMPED AS OBSERVED-NOW, INSIDE THE FEED LAYER.** The `observedAt` is the part that matters: **a fabricated number carrying a freshness stamp is indistinguishable downstream from a real one**, and this project has spent two batches making `observedAt` trustworthy.
+✅ **DECISION-INERT TODAY — NOT A LIVE DEFECT AND NOT ESCALATED:** gated on `ENABLE_MOCK_PRICING` (`index.ts:1025`) and **measured OFF on staging — zero of 72 environment entries on the live PID match `MOCK`** *(Langston's measurement, and the population is named)*.
+⇒ ⛔ **THE DISPOSITION CHANGE: fixing the ROUTE alone leaves the IDIOM.** Two independent sites reaching for an identical literal price table is a pattern, not a one-off — **so `#928` rules on the class: whether a hardcoded price table may exist anywhere behind a flag, and what stamps it must NOT carry.** *(`fix-follows-pointer`: the route was the nearer object.)*
+⚠️ **STILL NOT DISPOSITIONED BY ME.** Whether a permanent authenticated test-booking route and a flagged mock feed should exist is this issue's call, and both may be intended.
+
 ➕ **2026-09-07 (CC-C; Langston BLOCKER-6, verified by me at the object) — A SIXTH FABRICATED-LEVEL SITE, AND IT IS A REGISTERED ROUTE THAT BOOKS A TRADE ON A HARDCODED PRICE TABLE.**
 **`server/routes.ts:5563` — `POST /api/paper/trade/test`, `authenticateToken`, and the handler's own comment says *"Permanent"*.** Its fallback arm sets `mockPrice` from a literal table — **`BTC 68000 / ETH 3500 / SOL 170 / else 100`** — then `:5607-5609`:
 > `const entryPrice = mockPrice;`
