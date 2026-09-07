@@ -7798,6 +7798,25 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit
 
 **FIX: derive the set from WHAT THE DEPLOY EXECUTES, not from where files live** — read `dt-deploy.sh` and `package.json`'s scripts, and treat the union as the runtime surface.
 ⚠️ **NOT BLOCKING `B-DEPLOY-DRIFT-LINE`, and Langston said so explicitly: the shipped gate is strictly better than the ungated version it replaced.**
+
+---
+
+**⭐ 2026-09-07, CC-A — THE FIRST PRODUCTION FIRING SHOWED THE SAME PREDICATE FAILING IN THE *OPPOSITE* DIRECTION. THE SCOPE OF THIS ISSUE WIDENS; THE FIX DOES NOT CHANGE.**
+
+Alert `81135510` (`deploy-drift-rung-2`, `2026-09-07T20:23:32Z`) fired correctly and every magnitude re-derived at the two shas it named. ⛔ **But the ONE file that opened the gate — `server/services/market-scanner.ts`, the only `server|client|shared` path in a 24-file range — is a COMMENT-ONLY change: two line-anchor corrections, `:820` → `:855`, 2 insertions / 2 deletions, ZERO executable change** (`git diff 17a102477..0c9e2b5e8 -- server/services/market-scanner.ts`).
+⇒ **The alert asked for a deploy — which restarts live trading — to ship two comments.**
+
+★★ **ONE CAUSE, TWO FAULTS, AND STATING BOTH IS WHAT MAKES THE FIX CHECKABLE: THE GATE ASKS *WHERE A FILE LIVES* AND NEVER *WHAT CHANGED IN IT*.**
+
+| direction | what it misses | cost |
+|---|---|---|
+| **UNDER-reports** (Langston, above) | `drizzle/migrations/**`, the lockfile, the build configs — executed by `dt-deploy`, invisible to the gate | ⛔ **a held schema migration, silently** |
+| **OVER-reports** (this addendum) | a comment, a test fixture, a type-only edit — all live under `server/` and all open the gate | a false nag, and a restart requested for nothing |
+
+⚠️ **THE ASYMMETRY IS DELIBERATE AND `B-DRIFT-RUNTIME-PREDICATE` MUST PRESERVE IT: over-reporting costs ATTENTION, under-reporting costs a SCHEMA.** A fix that narrows the gate to reduce false nags, and in doing so lets one migration through, has made the tool worse while making its output look better. **Widen the set first; narrow it only with evidence.**
+★ **AND THE CHEAP HALF OF THE NARROWING IS SAFE: a diff whose every hunk is comment-or-whitespace changes nothing the runtime executes**, and that is a property of the DIFF, not of the path — which is the same move the fix already requires.
+
+⚠️ **POPULATION, STATED: ONE episode.** This is a single observed instance of over-reporting, not a rate. **The under-reporting half still rests on Langston's 400-commit measurement; nothing here re-measures it.**
 **HOME: `B-DRIFT-RUNTIME-PREDICATE`, owner CC-A, `PHASE_19_PLAN` row 4.56, immediately after 4.55.** No date.
 
 ---

@@ -1,6 +1,6 @@
 # B-DEPLOY-DRIFT-LINE — PROGRESS REPORT
 
-# ⛔ OPEN — WAITING ON THE FIRST *CORRECT* ALERT IN PRODUCTION
+# ⛔ OPEN — FIRST TRUE POSITIVE RETURNED (criteria 1+2 PASS); CRITERIA 3 AND 4 UNEXERCISED
 
 **Batch:** `B-DEPLOY-DRIFT-LINE` · **owner:** CC-A · **issues:** `#1002`, folds `#1008` · **plan row:** `PHASE_19_PLAN` 4.55
 **change-class:** `non_architecture` · **installed:** 2026-09-07, hourly on Helsinki
@@ -46,11 +46,41 @@ That is how staging sat **55 commits behind with `active-execution-engine.ts` an
 
 ⛔ **NEITHER PASS NOR FAIL: no qualifying gap occurs inside 21 days.** That means the window did not exercise the path — **NOT that the job works.** In that case **EXTEND the window and say so; do not pass it.** *(A silent instrument with zero opportunity is not evidence — `#661` leg 3.)*
 
+## 3a. ⭐ FIRST QUALIFYING EPISODE — 2026-09-07, **CRITERIA 1 AND 2 PASS**
+
+**Alert `81135510`, `deploy-drift-rung-2`, fired `2026-09-07T20:23:32Z`, reading as at `20:17:01Z`.** Operands: deployed `17a1024776e55eb5b708ff5406d4de7307b8e8ad` vs head `0c9e2b5e81a305e280c48027084bbc3b7bd5283f`.
+
+**⭐ CRITERION 1 — FIRES AT THE CORRECT RUNG WITHIN ONE HOURLY CYCLE: PASS.**
+⚠️ **AND IT ONLY PASSES ONCE YOU MEASURE THE RIGHT CLOCK, WHICH IS NOT THE OBVIOUS ONE.** The oldest undeployed commit crossed **8 h at `15:50:56Z`** and the alert fired at `20:23Z` — **4½ hours later, which reads as a fail.** ⇒ **It is not, because the RUNG is age-driven but the FIRING is GATE-driven:** the range held no runtime path until `06e59701e` landed at **`19:55:45Z`**. **The gate opened at 19:55; the very next hourly run — `:17` — fired it.** ★ **The two clocks are separate by design and the criterion is about the gate's.**
+★ **Rung 2 is correct, and the escalate-only design shows here: it did NOT walk up from rung 1.** At the moment the gate opened the age was already 12 h, so it minted straight into the right band. **Rung 1 never fired and should not have.**
+
+**⭐ CRITERION 2 — MAGNITUDES MATCH AN INDEPENDENT RE-DERIVATION: PASS, ALL FOUR.** Re-derived with `git` at the two shas the body names — **a different instrument from the compare API the job uses**, which is the point.
+
+| body claims | `git` at the two shas | |
+|---|---|---|
+| commits behind **34** | `rev-list --count` → **34** | ✅ |
+| oldest undeployed **`2026-09-07T07:50:56Z`** | `log --reverse --format=%cI` → **`2026-09-07T11:50:56+04:00`** = `07:50:56Z` | ✅ |
+| runtime files **1 — `server/services/market-scanner.ts`** | `diff --name-only … -- server client shared` → **exactly that one file** | ✅ |
+| last deploy `2026-09-07T07:50:22Z` | deploy record `migrate_ran_at=2026-09-07T07:50:10Z`, `deployed_by_claimed=cc-c` | ✅ |
+
+**AND THE TWO ASSUMPTIONS §4 FLAGS WERE BOTH CHECKED RATHER THAN ASSUMED ON:** `rev-list --merges` over the range = **0**, and the **ancestrally-first commit IS the date-oldest** (`sort | head -1` returns the same timestamp) — so `commits[0]` was the right operand *on this range*. ★ **That is a check of the assumption, not a proof of it for all time.**
+**The gate also DISCRIMINATED rather than passing everything through: 24 files changed in the range, 1 of them runtime.** The 23 governance files did not open the gate — which is the whole reason the batch's earlier ungated firing was withdrawn.
+
+**⛔ CRITERIA 3 AND 4 ARE NOT YET EXERCISED, AND NEITHER IS A PASS.** Escalation to rung 3 needs the gap to survive to `2026-09-08T07:50:56Z`; clearing needs a deploy. **The row is `active` and stays open.**
+
+### 🟨 AND THE EPISODE PRODUCED A FINDING AGAINST THE GATE — **IT OVER-REPORTS, FROM THE OPPOSITE SIDE TO `#1016`**
+⛔ **THE ONE "RUNTIME" FILE IN THE RANGE IS A COMMENT-ONLY CHANGE: two line-anchor corrections, `:820` → `:855`, `2 insertions / 2 deletions`, ZERO executable change.** A deploy of this range would restart live trading to ship two comments.
+★ **THIS IS `#1016`'S PREDICATE FAILING IN THE OTHER DIRECTION, and it is worth as much as the first half.** `#1016` says a **directory convention** cannot see `drizzle/migrations/**` — it **under**-reports. **This episode shows the same convention cannot tell executable code from a comment — it OVER-reports.** ⇒ **both faults have one cause: the gate asks WHERE a file lives, never WHAT CHANGED IN IT.**
+⚠️ **Over-reporting is the cheaper fault and must stay that way** — a false nag costs attention, a missed migration costs a schema. **`B-DRIFT-RUNTIME-PREDICATE` must not trade the second for the first.**
+**DISPOSITION: added to `#1016` / `B-DRIFT-RUNTIME-PREDICATE`, plan row 4.56 — no new issue.**
+
 ## 4. WHAT IS UNPROVEN, STATED AS UNPROVEN
 
-⛔ **THE JOB HAS NEVER FIRED A CORRECT ALERT IN PRODUCTION.** Every firing so far was either a deliberate test or **the one ungated firing that has since been withdrawn** (`762170b7`, resolved). **The emit path has therefore been exercised, but never on a true positive.**
+✅ **CORRECTED 2026-09-07 — THIS SECTION LED WITH *"THE JOB HAS NEVER FIRED A CORRECT ALERT IN PRODUCTION"*, AND §3a IS THAT SENTENCE BEING RETIRED BY DATA.** It is left visible rather than deleted: it was true when written, and the whole design of §3 was that the criterion be fixed BEFORE the observation arrived.
 
-⚠️ **The current silence is NOT evidence that it works.** At the time of writing the gap is genuinely governance-only, so `NO_RUNTIME_PATHS` is the correct output — but a job that never fired and a job that fires correctly look identical from here.
+⛔ **STILL UNPROVEN, AND THESE ARE THE REAL RESIDUALS: THE JOB HAS NEVER ESCALATED A RUNG IN PRODUCTION, AND HAS NEVER BEEN CLEARED BY A DEPLOY.** Criteria 3 and 4 have had **zero opportunity**, not zero failures — `#661` leg 3, and the distinction is the point. **One correct firing licenses the DETECT path only.**
+
+⚠️ **AND ONE TRUE POSITIVE IS NOT A FALSE-NEGATIVE RATE.** The failure this batch exists to prevent is the alert that DOESN'T fire on a qualifying gap, and a single positive episode says nothing about it. **The gate has now been observed discriminating once** — 23 governance files did not open it, 1 runtime file did.
 
 ⚠️ **`commits[0]` is the ancestrally-first commit, not necessarily the date-oldest.** They coincide on a fast-forward-only branch, and `git rev-list --merges` over the tested range returned 0. **That is an assumption about the branch's shape, re-checkable but not proved for all time.**
 
