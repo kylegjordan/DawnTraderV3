@@ -90,6 +90,15 @@
 | the single disagreement | bid **2.41 bp**, ask **1.79 bp** |
 | max difference observed | **2.41 bp** |
 
+
+⛔⛔ **BLOCKER, ADDED 2026-09-07 AFTER THE ABOVE WAS WRITTEN — THE CONCLUSION IMMEDIATELY BELOW IS WITHDRAWN. THIS COMPARISON IS, AT LEAST IN PART, THE BOOK COMPARED AGAINST ITSELF.** *(Langston, traced at the object; the mechanism is his, the instrument was mine.)*
+**The "ticker" arm of this instrument does NOT read the ticker feed. It reads `_agCache?.bid/.ask` (`signal-orchestrator.ts:2609-2610`) — the SHARED CACHE.** And **`kraken-websocket-adapter.ts:1093-1096` emits `bid: bestBid, ask: bestAsk` — the SAME top-of-book values the book arm reads — which flow through `live-pricing-adapter.ts:1095` into exactly those cache fields.**
+⇒ ★★ **231 of 232 EXACT between two INDEPENDENT feeds would be remarkable. Between a STORE AND ITS OWN WRITER it is FORCED.** The REST full-ticker writer also sets those sides, so **the sample is a mixture of the two writers in an unknown proportion, and the instrument records nothing that separates them.**
+⇒ ⛔ **THEREFORE WITHDRAWN: *"the ticker's two sides ARE the book's two sides."* It is unsupported by its own instrument.**
+⇒ ⛔ **AND `bookOnly = 0` FOLLOWS FROM THE WRITE PATH, NOT FROM COVERAGE** — an over-determined zero, inside the very document that made that rule.
+✅ **WHAT SURVIVES UNTOUCHED: THE COVERAGE FACT.** A book exists on **6.8%** of level evaluations and the ticker-fed cache has a price on **100%** of them. **That is a subscription fact (§1.5), independent of which writer filled the fields**, and it is the finding this section is actually carrying.
+✅ **CHEAP FIX, and it is the right one: carry `producer`/`source` onto `FeedAgreementSample` and re-run, so the two writers can be told apart.** **DISPOSITION: added as an item to `B-PRICE-SIDE-BY-JOB` (row `3n`).**
+
 ⇒ ✅ **NO INVERSION, NO MATERIAL DISAGREEMENT.** On the population where the comparison is possible, the ticker's two sides ARE the book's two sides.
 
 ⇒ ⛔⛔ **AND THE PRE-REGISTERED READING HOLDS: THIS IS *INCONCLUSIVE*, NOT A LICENCE — and the measurement now says exactly how narrow it is.** The check was possible on **6.8%** of evaluations, and those are by construction the hot names, which is where the two would agree anyway. **It says nothing about the 93.2%.**
@@ -115,6 +124,13 @@
 
 ⇒ ⛔⛔ **THE WEBSOCKET SUBSCRIPTION SET IS *OPEN POSITIONS*. Not the scan universe, not the ready-to-buy pool, not the candidates being ranked.** Every other symbol's ticker arrives via **REST polling**, and **REST has no order-book equivalent in our code at all.**
 ⇒ ★★ **SO THE 93% IS ARITHMETIC, NOT FAILURE: a symbol we do not hold has a REST ticker and cannot have a book, because nothing ever asked for one.**
+
+
+⚠⚠ **QUALIFIED 2026-09-07 — THIS IS A CLAIM ABOUT *OUR BOOKKEEPING*, NOT ABOUT THE VENUE'S STATE.** *(Langston, D2.)*
+**`unsubscribeFromSymbols:1480` sends `channel: 'ticker'` ONLY — the code says so itself at `:3542`.** ⇒ **`clearAllSubscriptions:2024` leaves BOOK streams live at Kraken while clearing our local state, and `refreshChannel:3212` re-issues a book subscribe with no cancel.**
+⇒ ★ **THE DIVERGENCE CAN ONLY RUN ONE WAY: THE VENUE MAY BE SENDING US MORE THAN WE THINK.** Nothing here can make coverage narrower than stated — only wider.
+⛔ **AND IT PUTS §5.2's DENOMINATOR IN QUESTION:** the ≈37 book frames/sec/symbol is divided by **6**, our believed subscription count. **If the venue is streaming books we no longer track, the true per-symbol rate is LOWER and §5.3's 4,400 inherits the error.**
+**HOME: `B-WS-UNSUB-CHANNEL-PARITY`, owner CC-C, placed in `PHASE_19_PLAN` after row `3n`.** ⛔ **It GATES any book-widening decision** — we should not widen a subscription set we cannot reliably narrow.
 
 ### ⇒ THE CONSEQUENCE, AND IT IS THE MOST IMPORTANT LINE IN PART 1
 ⛔⛔ **THE ORDER BOOK COVERS ONLY WHAT WE ALREADY HOLD, SO IT STRUCTURALLY CANNOT INFORM WHAT WE ARE CHOOSING BETWEEN.** Signal generation, ranking and promotion all act on symbols we do NOT yet hold — **by construction the book is absent for every one of them.** ⇒ **any design that puts the book under signal-time level-setting is not a tuning change; it requires changing what we subscribe to.**
@@ -219,15 +235,178 @@ The old batch and directive reports from before the 2026-01/02 governance change
 
 ---
 
-## 3. ⏳ WHERE WE USE PRICING — NOT YET FILLED
+## 3. ✅ WHERE WE USE PRICING — EVERY READ SITE, BY JOB × LANE × ASSET CLASS **(LANGSTON, VERIFIED AT `54533d0a`)**
 
-**To be established by audit, in code and runtime logs, for EVERY consumption site.** For each: which of the three feeds is the input today, and which *should* be, with the reason.
+> **Author: Langston. Written 2026-09-07 for `1-system-manual/PRICING_DATA_ARCHITECTURE.md` §3. Drop in verbatim; CC-C owns the commit.**
+>
+> ⛔ **EVERY CLAIM BELOW WAS RE-DERIVED BY ME AT THE GRADED REF `54533d0a99b643e61f97f4c730252e869e6421bc`, IN THE CODE, TODAY. Nothing here is `RULED ON REPORTED FACT`** — where I lean on a measurement of CC-C's rather than a code read, the row says so and names it.
+>
+> ⚠️ **ONE INSTRUMENT HAZARD, STATED BECAUSE IT BIT ME MID-AUDIT:** `dt-review grep` pulls the branch head, and during this audit the head moved to `8965fc036`. Two of my greps returned line numbers stamped at that newer sha. **Every line number printed in this section was re-pinned by `curl`-ing the file at `54533d0a` and grepping the downloaded copy** — none is carried over from a `dt-review` result. A reader at a later ref must expect drift and re-pin; the existing `SYSTEM_MANUAL.md:642` citation of `signal-orchestrator.ts:2387` is already 17 lines stale and is corrected below.
 
-⛔ **THE TABLE MUST BE CUT THREE WAYS, PER KYLE: by JOB, by TRADING LANE (VTS · paper · live), and by ASSET CLASS** — because the asset classes are scanned by different scanners with different data available to them.
+---
 
-**Jobs to enumerate:** signal generation (where the levels are SET) · ranking · entry trigger · exit trigger (stop and target separately) · fill simulation · position marking · booking the result · sizing · the scanner sweep.
+## 3.0 THE AXES — AND ONE OF THE THREE IS NOT WHAT THE FRAMING ASSUMED
 
-**STATUS: NOT YET VERIFIED. Nothing is asserted here yet.**
+Kyle asked for the cut by **job × lane × asset class**. Two of those axes are real and load-bearing. The third needs a correction before the table can be read honestly.
+
+### ⛔⛔ THE `live` LANE DOES NOT EXIST AS A PRICE-CONSUMPTION PATH. IT IS A MODE LABEL ON THE ACTIVE PATH, WITH NO SEPARATE CODE.
+**Measured, whole-file, at the ref:** `active-execution-engine.ts` contains **exactly three** occurrences of a live-mode test — `:1886` (a config key name, `enabled_live` vs `enabled_paper`), `:2007` and `:2075` (a `callerMode` string stamped onto telemetry). **There is no live branch in the price-resolution chain, the fill, the mark or the booking.** And the port that would carry one is unimplemented: `server/services/execution/order-placer.ts` is 123 lines and defines **`PaperOrderPlacer` only** — its own header calls the live implementation *"the live-swap seam"*, i.e. a seam, not a limb.
+
+⇒ ★ **THE LANE AXIS IS THEREFORE `VTS` vs `ACTIVE`, and `paper` / `live` is a MODE flag riding on the active lane.** Every "paper" row below is *also* the live row as the code stands today, and the only thing Phase 21 changes is the **destination of the order**, not the price the decision was made on.
+⇒ ⛔ **THIS IS A FINDING, NOT A CAVEAT.** The whole premise of paper mode is sim-to-live parity. Parity is currently trivially satisfied on the pricing axis because there is only one implementation — **but that also means no design decision in this document has ever been tested against a second consumer, and the first time a live arm is written it will be written against whatever §3 describes.** That is an argument for settling §6 *before* the live arm exists, not after.
+
+⚠️ **The columns are still printed as `VTS` / `paper (active)` / `live` below**, because the *table* is the deliverable Kyle asked for and a missing column reads as an oversight. The `live` column says `— same code` wherever that is the verified answer, which is everywhere.
+
+### THE JOBS, AS THE CODE ACTUALLY SEPARATES THEM
+Kyle's list was: signal generation · ranking · entry trigger · exit trigger (stop and target separately) · fill simulation · position marking · booking · sizing · the scanner sweep. **Two of those turn out not to be independent price consumers, and saying so is more useful than inventing rows for them:**
+- ⭐ **SIZING READS NO PRICE FEED AT ALL.** `active-position-sizing.ts:137` destructures `{ portfolioValue, guardrails, entryPrice, stopPrice, … }` and every downstream arithmetic (`:156` stop distance, `:229` quantity, `:236` notional) is expressed in those two **levels** plus the portfolio value. **Sizing inherits whatever basis the levels carry and adds no basis of its own.** ⇒ any error in the level's basis is multiplied by the position, never corrected by it.
+- ⭐ **STOP AND TARGET ARE NOT SEPARATE PRICE CONSUMERS AT THE TRIGGER.** Both are compared against **one** mark, resolved once per position per tick, well above the comparison. Splitting the row would imply a choice that is not in the code. **They ARE separate at BIRTH** (§3.1 row 1) **and at BOOKING** (row 7), and that is where the split is drawn.
+
+---
+
+## 3.1 ⛔ THE MASTER TABLE — WHICH PRICE EACH JOB READS, AND WHAT THAT PRICE ACTUALLY IS
+
+**Legend for the BASIS column, and the distinction is the whole point of the section:**
+`MID` = a midpoint of two sides · `PRINT` = a price the venue reports as traded · `BAR` = a venue-published candle close · `WALK` = a size-weighted walk of a real depth ladder · `LEVEL` = not a market read at all, but a number this system wrote earlier.
+
+### ROW 1 — SIGNAL GENERATION (where entry, stop and target are SET)
+
+| lane | crypto_spot | xstock_spot |
+|---|---|---|
+| **VTS** | `vts-runner.ts:1429` `mce.computeContext(symbol, ohlcData, priceData.price, …)` — **the RAW cache price, NOT smoothed** — read back at `:1595` as `mceContext.indicators.currentPrice` into the detect indicators. **BASIS: RAW MID (mixture — see §3.2 F1).** | `scanner.ts:910` `const price = latestBar.close` → threaded as `lastPrice` into `evaluateXstockPairForVTS` (`eval-cycle.ts:304`), which hands it to the global filter (`:346`), the pattern filter (`:349`) and MCE (`:381`). **BASIS: BAR — the close of the most recent locally-aggregated 60-minute bar.** |
+| **paper (active)** | `signal-orchestrator.ts:2404` `priceCache.getCachedPrice(symbol)` → `:2405` `const rawPrice = cachedPrice?.price \|\| 0` → `:2417` `getSmoothedPrice(...)` → `:2442` `const currentPrice = smoothedPrice` → the 19-strategy dispatch. **BASIS: SMOOTHED MID (mixture).** | ⭐ **THE SAME BAR CLOSE.** The xStock active lane is not a second evaluation: `eval-cycle.ts` detects on `lastPrice`, builds entry/stop/target there, and `active-dispatch.ts:137 dispatchXstockActiveSignal` routes the **already-formed** signal onto the shared active pipeline. **BASIS: BAR.** |
+| **live** | — same code | — same code |
+
+⛔ **CORRECTION TO AN EXISTING GOVERNED DOC, OWED HERE:** `SYSTEM_MANUAL.md:642` cites this chain at `signal-orchestrator.ts:2387`. At the graded ref the read is at **`:2404`**. The Manual's *description* is right; its anchor has drifted 17 lines. Fix it in the same commit as this section or it will be re-cited stale.
+
+⛔⛔ **AND A LANE SPLIT INSIDE ONE CLASS THAT I DO NOT THINK ANYONE HAS WRITTEN DOWN: CRYPTO VTS AND CRYPTO ACTIVE DO NOT BUILD LEVELS ON THE SAME NUMBER.** The active lane smooths (`signal-orchestrator.ts:2417` → `:2442` → `:2467 computeContext(…, currentPrice, …)`); the VTS lane does not (`vts-runner.ts:1429 computeContext(…, priceData.price, …)`). **MCE does not smooth internally — it passes the argument straight through** (`market-context-engine.ts:1434`), and its own parameter doc admits the ambiguity in as many words: `:1218` *"@param currentPrice - Smoothed current price (from Kalman filter or raw)"*.
+⇒ ★ **A parameter contract that accepts "smoothed or raw" is not a contract.** The consequence is concrete: **the VTS corpus we train selection on and the active path we trade on are anchored on two different prices for the same symbol at the same instant** — the smoothed one lags, the raw one does not. **Every VTS-vs-active comparison anyone has drawn carries this difference silently.**
+
+★★ **THIS ROW IS THE ASSET-CLASS TRAP KYLE KEEPS GETTING CAUGHT BY, AND IT IS THE STARKEST IN THE DOCUMENT.** Crypto levels are born on a **smoothed midpoint of a live quote**. xStock levels are born on a **venue-published bar close that can be up to an hour old**. These are not variants of one design — they are different *kinds* of number, with opposite failure modes: the crypto anchor is fresh and untransactable, the xStock anchor is transactable-in-principle and potentially very stale. ⇒ **any sentence in §6 of the form "levels should use X" is wrong about one class unless it names both.**
+
+### ROW 2 — RANKING (which candidate wins the slot)
+
+| lane | crypto_spot | xstock_spot |
+|---|---|---|
+| **VTS** | n/a — VTS does not rank; it opens everything that passes its floor. | n/a — same. |
+| **paper (active)** | ⭐ **NO MARKET READ.** `ready_to_buy_service.ts:1690-1699` and `:1756` parse `signal.entryPrice` / `signal.stopLoss` off the queued row. **BASIS: LEVEL.** The ranker is comparing this system's own earlier arithmetic against itself. | same — the queue is class-agnostic at this hop. |
+| **live** | — same code | — same code |
+
+⛔ **AND THE ONE FABRICATION IN THIS ROW IS REAL AND ALREADY FILED (`#927`):** `ready_to_buy_service.ts:1949` `const targetPrice = num(s.targetPrice) ?? entryPrice * 1.02` — and again at `:1794` for the shadow-sim path, each with the comment *"mirror `executePromotedSignal`'s default"*. **A missing target becomes a 2% target.** That is `#546` exactly: an absent value wearing a plausible number's clothes, inside the ranking key.
+
+### ROW 3 — ENTRY TRIGGER (does the queued signal become a position)
+
+| lane | crypto_spot | xstock_spot |
+|---|---|---|
+| **VTS** | opens on the eval-cycle's own admit gate; no second price read. **BASIS: LEVEL.** ⚠️ Except the maker bifurcation: `eval-cycle.ts:956` `isMarketableAtPlacement('buy', lastPrice, entryPrice)` — compares the level against the **bar close** (xStock) / the smoothed mid (crypto). | as left. |
+| **paper (active)** | ⭐ **THE ONE JOB THAT READS A REAL BOOK.** `active-execution-engine.ts:3790` `_evaluateOpenDepthGate(...)` → `depth-source.ts:43-45` `krakenWebSocketAdapter.getBookForFill(symbol)`, `source: 'crypto_ws_book'` — the live 10-level WS mini-book. The marketable-at-placement test at `:3833` reads `_gate.snapshot.asks[0]?.price` — **a real best ask.** **BASIS: BOOK (ask side).** | `depth-source.ts:47-69` — the latest **`xstock_spot_ticker_snap` top-of-book row, one level**, `source: 'xstock_ticker_snap'`, plus the class-only liveness gate at `active-execution-engine.ts:3787-3796`. **BASIS: ARCHIVED TOP-OF-BOOK, one level.** |
+| **live** | — same code | — same code |
+
+★ **This is the only job in the whole table whose crypto arm uses the order book, and §1.5 of this document explains why it is also the only one that *can*: the book is subscribed for open positions and for nothing else, so it is available at the moment we are about to hold a symbol and unavailable at every moment we are choosing between symbols.**
+
+### ROW 4 — FILL SIMULATION (what price the position actually opens at)
+
+| lane | crypto_spot | xstock_spot |
+|---|---|---|
+| **VTS** | ⛔ **NO FILL MODEL.** VTS opens at the level. **BASIS: LEVEL.** | ⛔ same. |
+| **paper (active)** | `active-execution-engine.ts:3940` passes `bookAsks: _gate.snapshot.asks` to the placer → `:3967` `actualEntryPrice = _openFill.fillPrice`, `:3969` `totalSlippage = _openFill.slippageQuote`. **BASIS: WALK** — a size-weighted walk of the real ask ladder, no flat slippage constant (`:115-116`, retired at P19-B4b.1). ⚠️ **Maker arm: `:3936` `totalSlippage = 0` and the fill is the resting limit — correct by construction, not a modelling gap.** | **BASIS: WALK over a ONE-LEVEL ladder.** The same placer, fed a snapshot that has exactly one level per side. A walk over one level is a walk that cannot express depletion — it will report a clean fill at the touch for any size the top level can nominally cover. **This is the sharpest silent asymmetry in the table and I do not think it has been stated anywhere as a sentence.** |
+| **live** | — same code (the placer's live sibling is not written) | — same code |
+
+⚠️ **AND ONE PAPER-ONLY LEG THAT IS NOT A PRICE READ BUT BELONGS IN THE PICTURE:** `active-execution-engine.ts:3852-3862` sends every paper open to Kraken `AddOrder validate=true` before filling internally. It vets **well-formedness**, never price. It is explicitly paper-only by construction.
+
+### ROW 5 — POSITION MARKING & EXIT TRIGGER (the mark stops and targets are compared against)
+
+| lane | crypto_spot | xstock_spot |
+|---|---|---|
+| **VTS** | `vts-runner.ts:3037` `priceCache.getBatch('vtsSimulation', cryptoSymbolList)`. **BASIS: MID (mixture).** ⚠️ And the bucket is a **cadence**, not a partition — `getCachedPrice` takes no bucket argument, so the active lane and VTS read the same single map (`RUNNING_ISSUES:6649`). | ⭐⭐ **THE ONLY NON-MIDPOINT LANE IN THE ENTIRE SYSTEM.** `vts-runner.ts:3050` — `SELECT DISTINCT ON (symbol) … last::text AS price FROM xstock_spot_ticker_snap … INTERVAL '5 minutes'` (real lane); the shadow lane's twin is at `:3977`. **BASIS: PRINT.** |
+| **paper (active)** | `active-execution-engine.ts:1473` `livePricingAdapter.getPriceWithFallback(symbol, 2000)`; accepted only if `isKrakenVenueSource` (`:1493`), else the direct-REST leg at `:1531-1532` `currentPrice = _restKind === 'mid' ? (ask + bid) / 2 : lastTrade`, else **skip the tick.** **BASIS: MID (mixture), with a stated `markKind` on the REST leg only.** | `:1265` `getLatestEquityTick(position.symbol)` → `:1445` `currentPrice = _eqTick.price`, which `equity-spot-archiver.ts:173-174` builds as `markKindOf(bid,ask) === 'mid' ? (bid+ask)/2 : last`. **BASIS: MID, and it CARRIES ITS KIND** (`:131` `kind: 'mid' \| 'last'`). ⛔ **Freshness is BLOCKING and risk-derived** (`:1296-1340`, `computeStalenessCeiling`); **no REST fallback exists for this class and cannot** (Kraken publishes no equities REST). |
+| **live** | — same code | — same code |
+
+★ **Kyle's exit-freshness ruling of 2026-09-03 lands here and nowhere else, and it resolves to *change nothing on the exit side*: `mark-staleness.ts` carries no session term, so the standard is already the same round the clock.** The inconsistency he was pointed at is on the **entry** side — `active_fill_max_age_ms` is a flat 15,000 ms while the exit ceiling is risk-derived per symbol. Same document, different job, different row.
+
+### ROW 6 — EXIT FILL (what price the exit executes at)
+
+| lane | crypto_spot | xstock_spot |
+|---|---|---|
+| **VTS** | ⛔ **MARK-BOOKED, and F-G-2 OBJ-5 changed exactly this.** `vts-exit-booking.ts:22-29 resolveVtsBookedExitPrice` — crypto now books **the mark the evaluator actually saw**, not the TEC clamp. **BASIS: MID.** ⛔ **"Mark-booked" is not "transactable": the booked mark is still the cache mid, favourable by ~half a spread.** | ⛔ **STILL THE CLAMP, DELIBERATELY.** `:26` `if (assetClass !== 'crypto_spot') return clampPrice` — every xStock VTS stop books at exactly the stop and every target at exactly the target. **BASIS: LEVEL.** The seam is on the BOOKING only, never the decision, and its removal is owed to `B-XSTOCK-FEED-SANITY` (plan row 3b.b). |
+| **paper (active)** | `active-execution-engine.ts:2454` `actualExitPrice = _closeFill.fillPrice` — a depth walk of the **bid** ladder. **BASIS: WALK.** Maker exit arm `:2415-2425`: fills at the resting limit, maker fee, **slippage 0 by construction.** | same seam, one-level ladder (row 4). |
+| **live** | — same code | — same code |
+
+### ROW 7 — BOOKING THE RESULT (what the learning corpus and the P&L record)
+
+| lane | crypto_spot | xstock_spot |
+|---|---|---|
+| **VTS** | `vts-runner.ts:3355` / `:4047` both call `resolveVtsBookedExitPrice`; P&L at `:3370` `(exitPrice - trade.entryPrice) / trade.entryPrice`. **BASIS: MID vs LEVEL** — the exit is a market read, the entry is not. | **BASIS: LEVEL vs LEVEL.** ⇒ ★ **an xStock VTS trade is scored entirely on numbers this system wrote itself**, with the market entering only through the *decision* to close. |
+| **paper (active)** | `:2376` `avgPrice` (the walked entry) vs `:2454` `actualExitPrice` (the walked exit), with explicit and implicit costs separated at `:2490-2492`. **BASIS: WALK vs WALK — the only end-to-end honest pair in the table.** | same construction, one-level ladders both ends. |
+| **live** | — same code | — same code |
+
+### ROW 8 — SIZING
+**No price read, either class, either lane.** `active-position-sizing.ts:137` — see §3.0.
+
+### ROW 9 — THE SCANNER SWEEP (what gets into the universe at all)
+
+| lane | crypto_spot | xstock_spot |
+|---|---|---|
+| **both** | `market-scanner.ts:850` (quant) and `:1063` (pattern) — `const currentPrice = parseFloat(ticker.c[0])` from `krakenService.getTicker()`. ⭐ **This is a RAW REST call** — `kraken.ts:258-261 makePublicRequest('Ticker')`, **no translator** — so `c[0]` here is Kraken's own **last trade closed**. **BASIS: PRINT.** Drives the min/max-price gates and, at `:855` / `:1066` (`volume24hCoins * currentPrice`), the 24-h dollar-volume gate. ⚠️ **The file's own comment at `:699` cites that multiplication as `:820`, which is stale by 35 lines** — a small thing, but it is the citation a reader of `#966` follows. | `scanner.ts:910` bar close (row 1) plus a **separate** two-sided enrichment read from `xstock_spot_ticker_snap` for the spread gate (`:646`, a 30-minute window) and a **rolling-median** top-of-book depth-USD (`:688`, a 20-minute window). **BASIS: BAR for the price gates, ARCHIVED QUOTE for the liquidity gates.** |
+
+---
+
+## 3.2 ⛔ WHAT THE TABLE ESTABLISHES — EIGHT FINDINGS, IN DESCENDING ORDER OF HOW MUCH THEY CHANGE §6
+
+### ⛔⛔ F1 — "THE MIDPOINT REACHES EVERY CONSUMER" IS TOO STRONG, AND THE TRUE STATEMENT IS WORSE
+§4.1 of this document says the feed-layer midpoint overwrite *"happens at the feed layer, which is why it reaches every consumer."* **Traced to the writers, that is not what happens.** `priceCache` has **three** writers and they do not agree:
+
+| writer | what it writes as `price` | tag it lands under |
+|---|---|---|
+| `price-cache.ts:215`, `:323`, `:438` — the cache's own REST poller | `parseFloat(ticker.c?.[0])` from the **raw REST `Ticker` endpoint** (`kraken.ts:258-261`, no translator) ⇒ **the venue's LAST TRADE** | `kraken_rest` |
+| `live-pricing-adapter.ts:831` → `:843 updateFromRest(normalized, midpoint)` | `markKindOf(bid,ask) === 'mid' ? (ask+bid)/2 : lastTrade` ⇒ **a MIDPOINT computed from REST sides** | `kraken_rest` |
+| `live-pricing-adapter.ts:1095 updateFromWebSocket(...)` | the adapter's `price`, which is `translateV2ToV1`'s `markPrice` (`kraken-v2-translator.ts:72-73`) ⇒ **a MIDPOINT** | `kraken_ws` |
+
+⇒ ★★ **TWO WRITERS WITH DIFFERENT BASES SHARE ONE TAG, AND `CachedPrice` DOES NOT RECORD WHICH.** Measured, whole-file, with a positive control: **`grep -c markKind price-cache.ts` = 0; the same grep on `kraken-v2-translator.ts` = 6.** The `markKind` mitigation §4.1 credits — *"consumers can now TELL, if they look"* — **does not reach the shared price cache at all.** `lastSource` answers *which transport*, never *which quantity*.
+
+⇒ ⛔ **SO THE HONEST FORM IS: the crypto signal-birth price is a MIXTURE of a last trade and a midpoint, in an unknown and time-varying ratio, and the field that would tell you which is not stored.** That is strictly worse than a uniform midpoint, because a uniform bias can be reasoned about and a mixture cannot. ⇒ **§4.1 needs the amendment; §6 cannot specify "the mark" for crypto without first making the basis readable at the read site.**
+⚠️ **NOT MEASURED HERE: the ratio.** CC-C's §2 snapshot (n=217, 209 `kraken_rest` / 8 `kraken_ws`) splits by **transport**, not by basis, and cannot answer this. **The instrument to settle it does not exist yet — that is the finding, not a gap in my search.**
+
+### ⛔ F2 — THE BOOK IS AVAILABLE ONLY WHERE WE ARE NOT CHOOSING
+Read down the table: the order book appears in **exactly one job** (row 3/4, crypto active) and it is the job that happens *after* the choice is made. §1.5 already established the mechanism — the subscription set is open positions. **Row 1 is where that constraint bites: no crypto level in this system has ever been built from a book, and none can be without changing what we subscribe to.** The shadow arm at `signal-orchestrator.ts:2614 buildLevelBasis(...)` is measuring precisely this, and its result is recorded and discarded (`:2628 recordLevelBasisOutcome`) — telemetry, not a level. **That is the correct current state and it must not be misread as "the level basis is live."**
+
+### ⛔ F3 — SIX OF THE NINE JOBS NEVER READ A MARKET PRICE
+Ranking, sizing, VTS entry, VTS fill, the xStock VTS exit booking, and the whole entry side of every P&L are **LEVEL** rows. They consume numbers this system wrote earlier. ⇒ ★ **the leverage of getting row 1 right is far higher than the table's shape suggests: one basis decision at signal birth propagates, uncorrected, through six downstream jobs and into the learning corpus.**
+
+### ⛔ F4 — THE TWO CLASSES DISAGREE ON THE ONE THING §6 MUST DECIDE
+Crypto: fresh, untransactable, smoothed, mixed-basis. xStock: transactable-in-principle, unsmoothed, single-basis, **up to an hour old**. Every one of Kyle's four `B-PRICE-SIDE-BY-JOB` jobs sits on top of that split. **The by-job cut and the by-side cut are the same jobs on two axes — and this table says the two axes are not independent, because for xStock the "side" question is partly moot: a bar close has no side.**
+
+### ⛔ F5 — THE xSTOCK ONE-LEVEL LADDER
+Row 4. The fill machinery is shared and correct; the *input* to it is one level for xStock and ten for crypto. A depth walk over one level cannot model depletion. **I have not measured what this costs** — that needs a comparison of walked-fill vs top-of-book fill on xStock opens, which nothing currently records. **Stated as a structural fact, not priced.**
+
+### ⭐ F6 — THE xSTOCK MARK IS BETTER-LABELLED THAN THE CRYPTO ONE
+`EquityTick` carries `kind: 'mid' | 'last'` (`equity-spot-archiver.ts:131`); `CachedPrice` carries nothing (F1). **The class with the worse feed has the more honest data structure.** Whatever §6 concludes, the label belongs on both.
+
+### ⛔ F7 — THE SMOOTHING IS A **LANE** PROPERTY, NOT A SYSTEM PROPERTY
+Row 1. Crypto active smooths before building levels; crypto VTS does not; MCE accepts either without discriminating (`market-context-engine.ts:1218`, `:1434`). ⇒ **the training lane and the trading lane are anchored differently, by construction, and nothing in the data records which.** This is the same defect shape as F1 one layer up: **a value whose basis varies is stored in a field whose name asserts it does not.** ⇒ **§6 must state the smoothing decision per lane, not once.**
+
+### ⭐ F8 — VTS xSTOCK IS THE ONLY LANE READING A PRINT, AND IT IS THE LANE WE LEARN FROM
+Row 5. `xstock_spot_ticker_snap.last`. ⇒ **the learning corpus for one class is built on a different quantity than the trading decision for that same class.** Not necessarily wrong — but it is a cross-basis comparison sitting inside the training data, and it is invisible unless the table is laid out this way.
+
+---
+
+## 3.3 ⛔ WHAT I DID **NOT** ESTABLISH — STATED SO THE GAPS ARE VISIBLE, NOT IMPLIED
+
+1. **The mixture ratio in F1.** No instrument exists. Naming the instrument is a scope decision, not a fix.
+2. **Whether `getBookForFill`'s ladder is checksum-valid.** `#507` (CRC32 never implemented) is open and I did not re-derive it.
+3. **The cost of F5.** Unmeasured.
+4. **Non-midpoint transformations.** §4.2 already flags this gap for smoothing, clamping, tick-rounding and last-known-good re-serves; **I did not close it, and row 1's `getSmoothedPrice` is squarely inside it** — the Kalman filter is a transformation this section names but does not characterise.
+5. **The UI/API read sites.** `routes.ts:4634`, `routes/vts-audit.ts:91`, `trading-state-sync.ts:296` all read `getCachedPrice` unbounded. **They are display and reconciliation, not decisions, so they are out of this section's scope by design** — but they are not out of the *system's* scope and someone should say which document owns them.
+6. **Whether the xStock 60-minute bar's age is bounded in practice.** `#559` recorded a uniform ~15.7-minute archive-write lag on the newest bar and stated it should be measured before acting. **It still should. I did not measure it, and row 1's honesty depends on it.**
+
+---
+
+## 3.4 THE HOOK INTO §6 — THE ROWS THIS SECTION HANDS FORWARD
+
+Per CC-C's coupling point, adopted: §6 builds **one** matrix from these rows, feed and side on the same axes. The nine jobs above are the row keys. **Three constraints this section imposes on that matrix before it is written:**
+- ⛔ **A cell may not name a feed the job's lane can reach.** Row 1 crypto cannot name the book without a subscription change (F2). Row 5 xStock cannot name REST at all.
+- ⛔ **A cell that names a midpoint must also name where the KIND is recorded** — because F1 proves the label does not currently travel with the number.
+- ⛔ **`live` cells must be filled deliberately, not by inheritance.** Today they inherit because there is no live code. The first live arm will be written against this matrix, which makes §6 a specification rather than a description.
 
 ---
 
@@ -239,7 +418,19 @@ The old batch and directive reports from before the 2026-01/02 governance change
 **`server/services/market-data/kraken-v2-translator.ts`.** The v2→v1 translator's own comment states it, and it is quoted rather than summarised:
 > *"`c` is nominally 'last trade closed' and this function **OVERWRITES it with a midpoint whenever both sides exist** (`#952`), so **every consumer downstream was reading a mid under a print's name** — including a variable literally called `lastPrice`."*
 
-⇒ ★★ **THIS HAPPENS AT THE FEED LAYER, WHICH IS WHY IT REACHES EVERY CONSUMER.** Crypto and xStock, paper and VTS, entry and exit all inherit it — nobody downstream opted in, and the field's NAME says the opposite of its contents.
+⇒ ★★ **THIS HAPPENS AT THE FEED LAYER, WHICH IS WHY IT REACHES EVERY CONSUMER *THAT GOES THROUGH THE TRANSLATOR*.** ⛔ **THE UNQUALIFIED FORM OF THIS SENTENCE IS WITHDRAWN — SEE THE CORRECTION BELOW; THE REST-CACHE PATH DOES NOT GO THROUGH IT, AND THAT IS WORSE, NOT BETTER.** Crypto and xStock, paper and VTS, entry and exit all inherit it — nobody downstream opted in, and the field's NAME says the opposite of its contents.
+
+⛔⛔ **CORRECTED 2026-09-07 — *"IT REACHES EVERY CONSUMER"* IS TOO STRONG, AND THE TRUE STATEMENT IS WORSE THAN THE ONE IT REPLACES.** *(Langston, §3 F1, with a positive control.)*
+**`priceCache` has THREE writers, and two of them share ONE TAG while carrying DIFFERENT BASES:**
+- **`price-cache.ts:215` / `:323` / `:438` write raw REST `ticker.c[0]` — a LAST TRADE** (`kraken.ts:258-261`; **no translator on that path, so no midpoint overwrite**).
+- **`live-pricing-adapter.ts:843` writes a MIDPOINT.**
+- ⛔ **BOTH LAND AS `kraken_rest`.**
+✅ **POSITIVE CONTROL, so the absence is evidenced rather than asserted: `grep -c markKind price-cache.ts` = **0**, against **6** in the translator.** ⇒ **the field that would say WHICH basis a cached price carries is not stored on this path at all.**
+
+⇒ ★★ **SO THE CRYPTO SIGNAL-BIRTH PRICE IS A *MIXTURE* OF A PRINT AND A MID, IN AN UNKNOWN RATIO, WITH NOTHING RECORDING WHICH.** ⛔ **THAT IS STRICTLY WORSE THAN A UNIFORM BIAS.** A uniform midpoint bias is wrong in a known direction by a known amount and can be corrected; **a mixture in an unknown ratio cannot be corrected at all, and it makes two runs of the same measurement non-comparable.**
+⚠️ **AND §2's `lastSource` split (n=217, 209 `kraken_rest` vs 8 `kraken_ws`) CANNOT SETTLE THE RATIO — it splits by TRANSPORT, not by BASIS.** ⇒ ⛔ **The instrument does not exist. That is the finding, not a gap in the search.**
+**DISPOSITION: folded into `B-PRICE-SIDE-BY-JOB` (row `3n`) with F7 — both are basis-per-job questions and that is the batch that owns them.**
+
 ✅ **PARTIALLY MITIGATED, AND THE MITIGATION IS A LABEL RATHER THAN A REMOVAL:** `markKind: 'mid' | 'last'` now travels beside it, **REQUIRED not optional** — *"an optional field lets a future producer omit it, and that absence is indistinguishable from a missed stamp."* ⛔ **The overwrite still happens; consumers can now TELL, if they look.**
 ⚠️ **AND THE COMMENT CARRIES ITS OWN WARNING AGAINST THE OBVIOUS SHORTCUT:** *"Do NOT re-derive this from `a`/`b` at a consumer. It round-trips exactly TODAY because both are written from the same locals below, but that is an unstated invariant of a function neither end owns."*
 
@@ -266,6 +457,12 @@ The old batch and directive reports from before the 2026-01/02 governance change
 **STATUS: NOT YET FILLED.**
 
 ---
+
+
+### ⛔ 4.3 THE xSTOCK DEPTH WALK RUNS OVER A ONE-LEVEL LADDER — **A WALK THAT CANNOT EXPRESS DEPLETION** *(Langston §3 F5)*
+**`xstock_spot/depth-source.ts:47-69` builds the ladder the fill walks, and it has exactly ONE level.** ⇒ ⛔ **A depth walk over a single level can never report that an order exhausted the available size — the one thing a depth walk exists to detect.** It will always report the touch, whatever the order size.
+**HOME: `B-XSTOCK-DEPTH-LADDER-FIDELITY`, owner CC-C, placed in `PHASE_19_PLAN` after row `3b.b`** — it depends on the feed-sanity seam that batch establishes. No date.
+
 
 ## 5. ✅ WHAT WOULD IT COST TO SUBSCRIBE THE BOOK BROADLY? — **MEASURED 2026-09-07**
 
@@ -303,7 +500,7 @@ The old batch and directive reports from before the 2026-01/02 governance change
 
 ⚠️ **TWO STATED LIMITS ON THAT NUMBER:**
 1. **ASSUMPTION: book frame rate scales with ticker activity.** Plausible — both are driven by market events — **but NOT verified.** It is an estimate, not a measurement.
-2. ⭐ **THE BIAS DIRECTION IS KNOWN AND IT MAKES 4,400 AN OVERESTIMATE:** the archive's ticker is **throttled at 4 s per symbol**, which compresses busy symbols more than quiet ones ⇒ the six's TRUE activity share is **higher** than 5.06% ⇒ the true multiplier is **lower** than 19.8×.
+2. ⛔⛔ **CORRECTED 2026-09-07 — THE BIAS DIRECTION IS *NOT* ESTABLISHED, AND I STATED IT AS IF IT WERE.** *(Langston.)* **Book frames are QUOTE-driven; the ticker share I scaled by is TRADE-triggered and quote-blind on cold names (§2, `#1017`) ⇒ that biases the estimate DOWN on the quiet tail — the OPPOSITE direction to the throttle bias below.** ⇒ **Two biases of opposite sign and unknown magnitude, so no single direction can be claimed.** ✅ **AND A SMALL EXPERIMENT REPLACES THE WHOLE EXTRAPOLATION: subscribe `book` for a few p25/p50 names and measure.** ⚠️ **The throttle bias, which I originally gave as decisive, is only one of the two:** the archive's ticker is **throttled at 4 s per symbol**, which compresses busy symbols more than quiet ones ⇒ the six's TRUE activity share is **higher** than 5.06% ⇒ the true multiplier is **lower** than 19.8×.
 
 ### ⚠️ 5.4 WHAT SCALING WOULD ALSO RAISE, STATED NOT COSTED
 - ⛔ **Book integrity is NOT validated today — `#507`: the CRC32 checksum was never implemented.** At 6 symbols an undetected corrupt book is one position; at 465 it is the whole selection surface. **Scaling the subscription without the checksum scales the blast radius of a defect we already know is open.**
