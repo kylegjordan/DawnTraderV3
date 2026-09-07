@@ -31,7 +31,7 @@
 | **`book`** | **ten levels of depth on each side** — price + quantity per level | the queue behind the best price | `kraken-websocket-adapter.ts` `handleV2BookUpdate` |
 | **`ohlc`** | open · high · low · close · volume · vwap · trade count, per **1-minute** interval, **carrying the venue's own `interval_begin`** | one bar per minute | `crypto-spot-archiver.ts` `parseOhlcBar` |
 
-⛔⛔ **AND THERE IS A FOURTH CAPTURED UNIVERSE THIS TABLE DID NOT LIST UNTIL r2 — PERPETUAL FUTURES.** **`xstock_perp_ticker_snap`** (renamed from `equity_perp_*` by B79.0e), fed by `passive-archive/equity-perp-archiver.ts` over the **Kraken FUTURES** WebSocket. ✅ **MEASURED 2026-09-07 and it is LIVE, not dormant: 104 partitions, `191,041` rows across `10` symbols in 24 h, `7,149,106` all-time, newest minutes old.** ⚠️ **It trades nothing today and reaches NO pricing path described in this document — but a document claiming to describe every source of price data must say it exists.** ★ **It was named in B74's own introducing commit as one of three universes and then never mentioned again in any section — which is exactly the buried-detail failure §9's framing rule calls a governance failure rather than a documentation miss.**
+⛔⛔ **AND THERE IS A FOURTH CAPTURED UNIVERSE THIS TABLE DID NOT LIST UNTIL r2 — PERPETUAL FUTURES.** **`xstock_perp_ticker_snap`** (renamed from `equity_perp_*` by B79.0e), fed by `passive-archive/equity-perp-archiver.ts` over the **Kraken FUTURES** WebSocket. ✅ **MEASURED 2026-09-07 and it is LIVE, not dormant: 104 partitions, `191,041` rows across `10` symbols in 24 h, `7,149,106` all-time, newest minutes old.** ✅✅ **KYLE'S RULING 2026-09-07: recording ONLY — no trades, no signal generation, no filters; an asset class to be ADDED LATER.** ⇒ **working as intended, `rule 24` outcome (2). No pricing path reads the table** *(its only readers are the `b74` partition and `b75` retention scripts)* — though `xstock_perp` IS listed in the RTB active classes, so *"unwired"* would be wrong. ★ **It was named in B74's own introducing commit as one of three universes and then never mentioned again in any section — which is exactly the buried-detail failure §9's framing rule calls a governance failure rather than a documentation miss.**
 
 ★ **THE TICKER CARRIES SIZE AT THE TOUCH, WHICH IS EASY TO MISS AND MATTERS:** `bid_qty` and `ask_qty` are parsed and stored. **So the ticker is not price-without-size — it is price-with-size-at-the-touch-only.** The book's contribution is the *queue behind* the touch, not the existence of size.
 
@@ -294,7 +294,7 @@ Kyle's list was: signal generation · ranking · entry trigger · exit trigger (
 | **paper (active)** | ⭐ **NO MARKET READ.** `ready_to_buy_service.ts:1690-1699` and `:1756` parse `signal.entryPrice` / `signal.stopLoss` off the queued row. **BASIS: LEVEL.** The ranker is comparing this system's own earlier arithmetic against itself. | same — the queue is class-agnostic at this hop. |
 | **live** | — same code | — same code |
 
-⛔ **AND THE ONE FABRICATION IN THIS ROW IS REAL AND ALREADY FILED (`#927`):** `ready_to_buy_service.ts:1949` `const targetPrice = num(s.targetPrice) ?? entryPrice * 1.02` — and again at `:1794` for the shadow-sim path, each with the comment *"mirror `executePromotedSignal`'s default"*. **A missing target becomes a 2% target.** That is `#546` exactly: an absent value wearing a plausible number's clothes, inside the ranking key.
+⛔ **AND THE ONE FABRICATION IN THIS ROW IS REAL AND ALREADY FILED (`#927`) — WITH THE TWO SITES THE RIGHT WAY ROUND, CORRECTED 2026-09-07 (r3):** ✅ **`ready_to_buy_service.ts:1794` `p.target … : p.entry * 1.02` IS THE RANKING SITE** — `rMultipleCore` (`:1780`) ← `signalRMultiple` (`:1748`) ← **`computeRankKey` (`:1711`)**. **`:1949` is `captureShadowPool` (`:1919`) — SHADOW TELEMETRY, which ranks nothing.** Both carry the comment *"mirror `executePromotedSignal`'s default"*. ⚠️ **This row originally had them SWAPPED, citing the shadow path for a claim about ranking; `RUNNING_ISSUES:5955` had it right at the older anchors and the swap entered here.** **A missing target becomes a 2% target.** That is `#546` exactly: an absent value wearing a plausible number's clothes, inside the ranking key.
 
 ### ROW 3 — ENTRY TRIGGER (does the queued signal become a position)
 
@@ -617,14 +617,14 @@ Per CC-C's coupling point, adopted: §6 builds **one** matrix from these rows, f
 | **1b** | **LEVEL CONSTRUCTION** — *becomes a level* | **paper** | ⛔ **PRICE-ANCHORED levels re-expressed per leg: entry off the ASK, stop/target off the BID.** ✅ **STRUCTURE-DERIVED levels are NOT re-expressed** — a support level, an ATR band, a measured move or a prior-bar extreme is a *market fact*, not a quote, and shifting it by a spread corrupts the strategy's geometry rather than correcting it | **same rule** — but the input is a **bar close up to an hour old**, so see `B-XSTOCK-LEVEL-REVALIDATE` below |
 | | | **VTS** | **same as paper** — ⚠️ **but see the ratification bar: changing this rewrites the learning corpus mid-flight** | **same**, same caveat |
 | | | **live** | **— same code as paper.** ⛔ **DELIBERATE: this is the cell the live arm is written against.** | **— same code as paper** |
-| **2** | **RANKING** | all three | ✅ **NO MARKET PRICE — correct, and NOT for the reason r1 gave.** ⛔ **r1 said *"ranking compares stored candidate geometry"*; `RUNNING_ISSUES:5944(ii)` already refuted that: `ready_to_buy_service.ts:1949` fabricates `entryPrice * 1.02` when a target is missing (`#927`), so candidates WITH geometry rank on a measured target and candidates WITHOUT rank on a flat 2% — two sub-populations, one sort key.** ✅ **THE CONCLUSION SURVIVES ON A DIFFERENT REASON: a live read at rank time adds a race and no information.** **`#927` is a precondition of this cell being honest.** | same |
+| **2** | **RANKING** | all three | ✅ **NO MARKET PRICE — correct, and NOT for the reason r1 gave.** ⛔ **r1 said *"ranking compares stored candidate geometry"*; `RUNNING_ISSUES:5944(ii)` already refuted that: **`ready_to_buy_service.ts:1794` fabricates `p.entry * 1.02` when a target is missing (`#927`) — INSIDE `computeRankKey` ITSELF** — so candidates WITH geometry rank on a measured target and candidates WITHOUT rank on a flat 2%: **two sub-populations, one sort key.** ⚠️ **r2 cited `:1949` here, which is the SHADOW-telemetry site and ranks nothing — the right conclusion resting on the adjacent object. Corrected r3.** ✅ **THE CONCLUSION SURVIVES ON A DIFFERENT REASON: a live read at rank time adds a race and no information.** **`#927` is a precondition of this cell being honest.** | same |
 | **3** | **ENTRY TRIGGER** | paper · live | **THE ASK** — the side row 1b set the entry on | **same** — ⚠️ **incoherent until 1b xStock lands: a bar close has no side** *(F4)* |
 | | | **VTS** | **— no trigger hop** *(VTS admits on level, `BASIS: LEVEL`)* | **— none** |
 | **4** | **FILL SIMULATION** | **paper** | ✅ **THE BOOK** — walk the ladder | ✅ **the book, once the ladder exceeds one level (`§4.3`)** |
 | | | **VTS** | ⛔ **NO FILL MODEL AT ALL, AND NO BOOK IS REACHABLE** — VTS holds no position, so constraint 1 forbids naming one. **r1 breached this.** | ⛔ **same** |
 | | | **live** | **THE BOOK for pre-trade sizing; the VENUE's own fill is the truth.** ⛔ **DELIBERATE: in live, our walk is an ESTIMATE, not the outcome.** | **same** |
 | **5** | **POSITION MARK & EXIT TRIGGER** | **paper** | **THE BID** for a long's stop and target | **THE BID** — ⚠️ **cannot ratify before `3b.b` closes (see the bar below)** |
-| | | **VTS** | ⛔ **UNRESOLVED — DO NOT SHIP EITHER WAY YET.** Binding it rewrites the learning corpus mid-flight and collides with `F-G-2` OBJ-5, in its observation window now; NOT binding it forks training and trading further apart, which is F7's complaint. **The fork must be decided, not inherited.** | ⛔ **same** |
+| | | **VTS** | ✅ **DEFERRED TO `B-VTS-MARK-SIDE` — A PLACED ROW, NOT AN OPEN CELL** *(Langston ruling, §9.4 disposition (3), 2026-09-07)*: **do NOT bind while `F-G-2` OBJ-5's window is open** — binding rewrites the learning corpus mid-flight against the very comparison that window measures, and **F7's fork survives a few more weeks intact where a voided window does not.** Owner CC-C, `PHASE_19_PLAN` immediately after `3n`, **gated on `F-G-2`'s disposition being recorded at the ref.** ⚠️ **r2 wrote this cell as *"unresolved"*, which §9.4 does not accept as a disposition.** | ✅ **same — deferred to the same row** |
 | | | **live** | **— same code as paper.** ⛔ **DELIBERATE.** | **— same code as paper** |
 | **6** | **EXIT FILL** | paper · live | **book at the touch** (taker); **the resting side** (maker). ⚠️ **`#962`: a resting maker sell currently books at the limit when the MIDPOINT reaches it** | **same** |
 | | | **VTS** | ⛔ **no fill model** — books at the level | ⛔ **same** |
@@ -634,16 +634,27 @@ Per CC-C's coupling point, adopted: §6 builds **one** matrix from these rows, f
 
 ★★ **WHAT THE MATRIX MAKES OBVIOUS: the book appears in TWO of nine jobs and both are AFTER the choice is made. SIX of nine read no market price at all.** ⇒ ⛔ **The whole feed argument turns on ROW 1 — the row where the book is structurally unavailable.**
 
-#### ⛔ THE FABRICATED-LEVEL CLASS — **GREPPED BEFORE THIS SECTION LANDS, AND HERE IS WHAT IT RETURNED** *(`fix-follows-pointer`)*
-**Pattern: a price multiplier standing in as a DEFAULT LEVEL. Repo-wide over `server/`, tests excluded — FOUR live sites, not one:**
-| site | what it fabricates |
-|---|---|
-| `ready_to_buy_service.ts:1949` | `targetPrice … ?? entryPrice * 1.02` — **already `#927`** |
-| `active-execution-engine.ts:3323` | `entryPrice * 1.02` — *"Default 2% target"*. ⛔ **THE ONE `#927` DID NOT NAME, and it is the comment `:1949` says it mirrors** |
-| `signal-orchestrator.ts:2294` | `stopPrice ?? currentPrice * 0.97` |
-| `signal-orchestrator.ts:2295` | `targetPrice ?? currentPrice * 1.03` |
-**Plus `signal-orchestrator.ts:2269` `atr ?? (currentPrice * 0.02)`** — a fabricated *volatility*, which then feeds level construction.
-⇒ ⛔ **A fabricated level is a level with NO SIDE and NO BASIS — it cannot be re-expressed transactably because it was never a quote.** **Recorded on `#927` as three further sites; the disposition is `#927`'s, not §6's.**
+#### ⛔⛔ THE FABRICATED-LEVEL CLASS — **SIX SITES, AND r2's COUNT OF FOUR WAS ITSELF AN INCOMPLETE ENUMERATION** *(r3)*
+★ **The section that exists to demonstrate enumerator blind spots had one. Recorded rather than quietly corrected.**
+
+| # | site | what it fabricates | in `#927`? |
+|---|---|---|---|
+| 1 | ⭐ **`ready_to_buy_service.ts:1794`** | `p.target … : p.entry * 1.02` | ⛔⛔ **MISSED BY r2 — AND IT IS THE RANKING KEY** |
+| 2 | `ready_to_buy_service.ts:1949` | `targetPrice … ?? entryPrice * 1.02` | shadow telemetry |
+| 3 | ⛔ **`active-execution-engine.ts:3323`** | `entryPrice * 1.02` — *"Default 2% target"* | **the ORIGINAL both comments mirror** |
+| 4 | `signal-orchestrator.ts:2294` | `stopPrice ?? currentPrice * 0.97` | not named |
+| 5 | `signal-orchestrator.ts:2295` | `targetPrice ?? currentPrice * 1.03` | not named |
+| 6 | ⛔⛔ **`server/routes.ts:5607-5609`** | **a registered route that books a trade on a HARDCODED PRICE TABLE** | **`#928`'s HTTP-intent class** |
+| ⚠️ | `signal-orchestrator.ts:2269` | `atr ?? (currentPrice * 0.02)` — a fabricated **VOLATILITY**, upstream of 4 and 5 | not named |
+
+⛔⛔ **AND SITE 1 CORRECTS ROW 2 OF THE MATRIX ABOVE, WHICH CITED THE ADJACENT OBJECT.** Verified at the ref: **`:1794` sits in `rMultipleCore` (`:1780`) ← `signalRMultiple` (`:1748`) ← `computeRankKey` (`:1711`) — THE RANK KEY.** **`:1949` sits in `captureShadowPool` (`:1919`) — SHADOW TELEMETRY, which ranks nothing.**
+⇒ ★ **r2 justified a claim about RANKING by citing the SHADOW path.** The conclusion is unchanged and the mechanism is now the right one: **the fabricated 2% target enters `computeRankKey` itself**, so candidates with a measured target and candidates without are sorted by one key on two bases. *(`RUNNING_ISSUES:5955` had it right at the older anchors; the swap entered via §3.1 row 2 and is corrected in both places in this commit.)*
+
+⛔ **SITE 6 IS A DIFFERENT SHAPE AND THAT IS WHY THE GREP MISSED IT.** `POST /api/paper/trade/test` (`routes.ts:5563`, `authenticateToken`, comment *"Permanent"*): its fallback arm sets `mockPrice` from a **hardcoded table** — `BTC 68000 / ETH 3500 / SOL 170 / else 100` — then `stop = ×0.98`, `target = ×1.03`, and **commits through `commitTradeAndUpdatePortfolio`.**
+⇒ ⛔ **IT FABRICATES THE ENTRY TOO, NOT ONLY THE LEVELS — the one site here where the price itself is invented rather than derived from a real one.** ★ **My grep swept where levels are EXPECTED to be built; this is a route handler. Same enumerator blind spot the section documents, one level up.**
+
+⇒ ⛔ **WHY ANY OF IT BEARS ON §6: a fabricated level has NO SIDE AND NO BASIS.** It cannot be re-expressed transactably because it was never a quote ⇒ **each site is a hole in row 1b, which assumes a level derives from something.**
+**DISPOSITION: sites 1-5 and the ATR recorded on `#927`; site 6 recorded on `#928`. No new number, no new batch.**
 
 ### ⛔⛔ 6.2b THE RATIFICATION BAR — **WHAT MAY NOT SHIP UNTIL WHAT**
 | cell | blocked on | why |
@@ -662,26 +673,36 @@ Per CC-C's coupling point, adopted: §6 builds **one** matrix from these rows, f
 - ✅ **DEPTH REMAINS THE BOOK'S JOB**, on the candidate set rather than the universe.
 ✅ **THE CONTINGENCY HAS A PLACED HOME, NOT A HAZARD NOTE: `B-TICKER-BBO-TRIGGER`, owner CC-C, `PHASE_19_PLAN` row `3b.h-1`, immediately before `3n`.** ⛔ **The archive records `event_trigger:'bbo'` being tried and REJECTED by production v2; the docs list it today ⇒ THE CONTROL IS A LIVE SUBSCRIBE ACK, NOT A DOC READ. If the ACK refuses, row 1 changes and the cold-tail question reopens.**
 
-### ✅ 6.4 THE MEASUREMENT THAT RATIFIES ROW 1 — **THREE ARMS, AND NOW AN ACTUAL CRITERION**
-⚠️ **r1's *"if arm 2 tracks arm 3 the way arm 1 tracks arm 3"* was a SENTIMENT, not a criterion — no statistic, no threshold, no n-floor, no INCONCLUSIVE branch.**
+### ✅ 6.4 THE MEASUREMENT THAT RATIFIES ROW 1 — **THREE ARMS, AND NOW ACTUALLY EXECUTABLE** *(r3)*
+
+⛔⛔ **r2's VERSION WAS UNREACHABLE BY CONSTRUCTION, AND MY OWN §1.5 IS WHAT KILLED IT.** PASS read *"median(arm2→arm3) on COLD names"* — **arm 3 is the book, and §1.5 traces the book's subscription set to `i8cOpenPositionsProvider` → `aee:626` → `getActiveOpenPositions`: OPEN POSITIONS ONLY.** ⇒ ★ **THERE IS NO ARM 3 ON A COLD NAME. A cold name is by definition one we do not hold.**
+⛔ **And the obvious fix collided with my own VOID clause:** obtaining a cold-name book means issuing a subscribe (`subscribeToSymbols:1380`), **and the VOID clause voided the window on a re-issued subscription.** ⇒ **every run would have landed INCONCLUSIVE, forever, and the criterion would have read as rigorous while being unsatisfiable.** *(Langston BLOCKER-4.)*
+
 **ARMS, on ONE slice: (1) `trades`-ticker · (2) `bbo`-ticker · (3) `book`.** *(Two arms would confound "the book carries price information" with "our ticker was stale.")*
+
 | element | pre-registered value |
 |---|---|
-| **statistic** | **per-symbol median absolute deviation of top-of-book MID, arm-vs-arm, in basis points**, plus **the count of CROSSED observations** (qualitative, never diluted into a bucket) |
-| **n-floor** | ⛔ **≥ 200 paired observations per symbol AND ≥ 20 symbols.** Below either ⇒ **EXTEND**, never PASS |
-| **PASS** | **median(arm2→arm3) on COLD names ≤ median(arm1→arm3) on HOT names**, and **crossed = 0 in arm 2** ⇒ the book stays out of price permanently |
-| **FAIL** | **median(arm2→arm3) on cold names > 2× that hot-name reference**, or **any crossed observation in arm 2** ⇒ row 1 is wrong; the book belongs in signal generation whatever it costs |
+| ✅ **arm-3 reachability** *(the r2 defect)* | ⛔ **THE ARM-3 SUBSCRIPTION SET IS PINNED AND **ACK-VERIFIED** TOGETHER WITH THE SLICE, BEFORE THE WINDOW OPENS.** The cold-name book subscriptions are established as part of opening the window, their ACKs recorded, and **only a re-issue AFTER that point voids.** ⇒ **the subscribe that makes the measurement possible is part of the setup, not a mid-window perturbation.** |
+| ✅ **`COLD` / `HOT`, PINNED** *(r2 left them undefined — the exact confounder slice-pinning exists to prevent)* | **From `crypto_spot_ticker_snap` over the 7 days BEFORE the window opens: `HOT` = symbols at or above the 75th percentile of ticker-snapshot count; `COLD` = at or below the 25th.** ⛔ **The partition is computed ONCE, written into the record with the symbol list, and never recomputed mid-window.** *(r2 pinned the symbols and not the partition, while the PASS test is a double difference across two populations AND two arm-pairs.)* |
+| ✅ **`CROSSED`, DEFINED** | ⛔ **CROSS-ARM, matching §1.4 exactly: arm-2 bid ≥ arm-3 ask, or arm-2 ask ≤ arm-3 bid.** *(r2 said "crossed in arm 2", which reads as within-arm. **A zero-tolerance FAIL trigger may not be ambiguous about its own object.**)* |
+| **statistic** | **per-symbol median absolute deviation of top-of-book MID, arm-vs-arm, in basis points** |
+| **n-floor** | ⛔ **≥ 200 paired observations per symbol AND ≥ 20 symbols IN EACH PARTITION.** Below either ⇒ **EXTEND** |
+| **PASS** | **median(arm2→arm3) on COLD ≤ median(arm1→arm3) on HOT**, AND **crossed = 0** ⇒ the book stays out of price permanently |
+| **FAIL** | **median(arm2→arm3) on COLD > 2× the HOT reference**, OR **any crossed observation** ⇒ row 1 is wrong; the book belongs in signal generation whatever it costs |
 | ⛔ **INCONCLUSIVE** | **anything between** ⇒ **EXTEND. Discordant or thin ⇒ EXTEND, never PASS** *(the `F-G-2` A1 lesson)* |
-| **the slice** | ⛔ **ENUMERATED AND PINNED IN ADVANCE, NEVER PREDICATED** — a fixed symbol list written into the record before the window opens, so **arm assignment cannot be confounded with symbol identity** |
-| ⛔ **VOID clause** | **if `event_trigger` changes on any arm mid-window, or a subscription is re-issued, the window VOIDS and restarts** *(A4-shaped)* |
+| ⛔ **VOID** | **a trigger change on any arm, or a subscription re-issue AFTER the pinned setup, voids and restarts the window** |
 | **precondition** | ⛔ **`D1` FIRST: carry `producer`/`source` onto `FeedAgreementSample`, or the comparison is again a store against its own writer** |
 
 ### ⚠️ 6.5 WHAT THIS SECTION DOES **NOT** SETTLE
 - ⛔ **The print-vs-mid MIXTURE RATIO in the crypto cache (F1). The instrument does not exist**, so no cell above knows what basis today's crypto signal-birth price carried.
 - ⛔ **Whether `bbo` is cheaper than the book by a USEFUL margin** — cheaper in principle, **no rate measured for either.**
 - ⛔ **The true per-symbol book frame rate** — §5.2's denominator is under question until `B-WS-UNSUB-CHANNEL-PARITY` resolves (`D2`).
-- ✅ **PERPETUAL FUTURES — CLOSED, NOT LEFT AS AN ABSENCE CLAIM.** r1 said *"current state unestablished"*, which is an absence claim about our own system. **MEASURED 2026-09-07: the universe is LIVE and capturing — `xstock_perp_ticker_snap` (renamed from `equity_perp_*` by B79.0e), 104 partitions, `191,041` rows across `10` symbols in 24 h, `7,149,106` all-time, newest minutes old; the archiver is `passive-archive/equity-perp-archiver.ts`.**
-  ⇒ ⛔⛔ **SO THERE IS A **FOURTH** CAPTURED UNIVERSE, RUNNING CONTINUOUSLY, THAT §1's feed table does not list and NO section of this document covers.** ★ **It trades nothing today and reaches no pricing path described here — but a governance document claiming to describe every source of price data must say it exists.** **DISPOSITION: folded into §1 as a row in the same commit; whether it should feed anything is a Kyle scope call, not ours.**
+- ✅ **PERPETUAL FUTURES — CLOSED, AND NOW CARRYING KYLE'S RULING.**
+  ✅ **RE-DERIVED BY LANGSTON INDEPENDENTLY ON STAGING AND MY FIGURES HELD: `191,044` rows/24 h · `10` symbols · `7,150,239` all-time · newest `20:00:31Z`. LIVE.**
+  ⛔⛔ **BUT MY *"104 partitions"* WAS A WRONG OBJECT AND IS WITHDRAWN.** **104 was the ROW COUNT OF MY OWN ENUMERATION QUERY** — every table matching `%perp%` OR `equity_%` — **which I then reported as a partition count of one table.** ✅ **THE REAL NUMBERS, named by what was counted: `xstock_perp_ticker_snap` has **13 child partitions** (`pg_inherits`), 14 objects with the parent, and **32 tables across the whole `xstock_perp*` family**.** ★ **A number with no object is not a measurement — and this one was produced by the very query I ran to avoid guessing a name.**
+  ⚠️ **AND *"unwired"* WOULD HAVE BEEN WRONG: `xstock_perp` IS in the RTB active-class lists (`ready_to_buy_service.ts:1450`, `index.ts:432`).** ✅ **THE PRECISE STATEMENT: NO PRICING PATH READS THE TABLE** — its only readers are the `b74` partition and `b75` retention scripts.
+  ✅✅ **KYLE'S RULING, 2026-09-07 — THIS IS NOW A DECIDED INTENT, NOT AN OPEN QUESTION:** *"right now we are recording perpetual futures only — no trades, signal generation, or filters. This is an asset class to be added later."*
+  ⇒ ★ **SO THE CAPTURE IS WORKING AS INTENDED AND IS NOT A DEFECT: it is a deliberate archive being accumulated ahead of an asset class we have not yet built.** ⛔ **`rule 24` outcome (2) — exactly like the crypto spot archive (§2), and for the same reason: B74 built these universes to accumulate first and consume later.** ⛔ **NOTHING IS TO BE WIRED, REMOVED OR "FIXED" HERE, and a future audit finding a captured feed nothing reads should stop at this line.**
 - ★ **AND THE LIVE LANE IS SPECIFIED, NOT OBSERVED.** Every `live` cell above is a decision taken in advance of the code that will implement it.
 
 ---
