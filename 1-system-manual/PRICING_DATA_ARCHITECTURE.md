@@ -287,11 +287,74 @@ The old batch and directive reports from before the 2026-01/02 governance change
 
 ---
 
-## 5b. ⏳ OTHER DATA-ACQUISITION PROBLEMS — NOT YET FILLED
+## 5b. ✅ OTHER DATA-ACQUISITION PROBLEMS — **VERIFIED 2026-09-07**
 
-To cover: coverage gaps by symbol and by asset class · API rate limits · silent stalls (an open socket delivering nothing) · restart behaviour · retention reach of each store.
+### ✅✅ 5b.1 WHY WE ARCHIVE ~450 CRYPTO PAIRS AND NOT ~1,400 — **KYLE'S QUESTION, AND HIS PREMISE NEEDS CORRECTING IN TWO PLACES**
 
-**STATUS: NOT YET FILLED.**
+> **Kyle's question, twice: *"why are we only archiving four hundred and sixty five coins… are they still possible trade options… do we have a mechanism built in so that we can check on these nine hundred and sixty one?"*** and his own hypothesis: *"I'm guessing we put this snapshot limitation in in order to try and conserve either storage space or rate limit calls."*
+
+⛔⛔ **CORRECTION 1 — IT IS NOT A LIMIT WE IMPOSED TO CONSERVE ANYTHING. THERE IS NO CAP, NO QUOTA AND NO CEILING IN THE CONFIG.** `server/config/crypto-universe-filter.json` contains exactly two criteria: **`allowedQuotes: ["USD","USDT","USDC"]`** and **`minVolume24hUsd: 10000`**. Its own comment states the purpose — *"Filters out dead pairs and stablecoin/stablecoin degenerates."* ⇒ **the number that comes out is a RESULT, not a setting.** Neither storage nor rate limits appear anywhere in the decision.
+
+⛔⛔ **CORRECTION 2 — "465" IS A SINGLE-DAY SNAPSHOT OF A NUMBER THAT MOVES EVERY DAY, AND WE HAVE BOTH BEEN QUOTING IT AS IF IT WERE FIXED.** The universe is recomputed daily. **Last ten runs: 469 · 388 · 440 · 413 · 442 · 427 · 449 · 455 · 417 · 443.** ⇒ ★ **RANGE 388-469 — an 81-pair swing, ~18% of the universe, with no configuration change at all.** *(Rule 13, on our own metric: a snapshot is not the rolling window.)*
+⚠️ **AND THE "465" ITSELF WAS A DIFFERENT OBJECT FROM THE ONE WE THOUGHT.** Measured today: **464 distinct symbols written over 24 h**, but **428 in the last hour**, against a computed universe of **443**. ⇒ **the 465 was a 24-HOUR DISTINCT COUNT — it includes pairs dropped part-way through the day. It was never the subscription size.**
+
+#### ⭐ THE DECOMPOSITION — WHERE THE OTHER ~950 ACTUALLY GO *(2026-09-07 run; the shape is stable across the 130 runs on file)*
+| bucket | count | what it means |
+|---|---|---|
+| **wrong quote currency** | **661** | ⛔ **THE BIGGEST BUCKET, AND IT IS NOT 661 MISSING COINS.** These are pairs quoted in EUR, GBP, BTC, ETH etc. **Largely THE SAME COINS we already carry on a USD quote.** Excluding `SOL/EUR` does not exclude SOL. |
+| **below the volume floor ("dead")** | **287** | Under **$10,000** of 24 h volume. ★ **THE ONLY GENUINELY DISCRETIONARY EXCLUSION — the only one that is a policy choice rather than a duplicate or a venue fact.** |
+| **offline at the venue** | **55** | **Kraken itself says the pair is not trading.** Not our decision. |
+| ✅ **archived** | **443** | |
+
+⇒ ★★ **SO THE ANSWER TO *"ARE THE OTHER ~961 STILL POSSIBLE TRADE OPTIONS?"* IS: MOSTLY THEY ARE NOT A SEPARATE SET AT ALL.** Roughly two-thirds are the same assets on a quote currency we do not trade, and 55 are shut at the venue. **The real question is only about the ~287 below the floor.**
+
+#### ✅ AND YES — THERE IS A DAILY RE-CHECK MECHANISM, AND IT HAS RUN 130 TIMES
+**`server/scripts/b74-refresh-universe.ts`, invoked from ROOT'S CRONTAB at 03:00 UTC daily** — re-queries Kraken's `AssetPairs`, recomputes the universe, and logs exactly which pairs joined and dropped versus yesterday.
+✅ **MEASURED REACH: 130 runs, `2026-05-01T03:00:02Z` → `2026-09-07T03:00:02Z`.** **Today: 58 added, 32 dropped, 385 kept.** ⇒ **the long tail is re-examined every single day, and roughly 90 pairs change side on a normal day.**
+⚠️ **NEAR-MISS RECORDED, because it is the exact error this document is built to catch: the cron is NOT in `/etc/cron.d/` and NOT in `deploy`'s crontab, and a grep of those two would have returned nothing.** It lives in **root's crontab**. **The log proved it had run ten hours earlier.** ⇒ **an asserted absence needs presence-evidence — I had the false absence in hand and the log refuted it.**
+
+#### ⛔⛔ THE ONE REAL GAP HERE — **THE RE-CHECK RECOMPUTES BUT DOES NOT ACT**
+**The script's own docstring, verbatim:** *"Does NOT modify the running archiver subscriptions (those happen at next full PM2 restart, which is rare). The daily refresh is informational."*
+⇒ ⛔ **A pair that crossed the $10k floor this morning is IN today's computed universe and NOT in the running archiver's subscription until the process next restarts.** ★ **The mitigation is accidental rather than designed: we deploy often, and every deploy restarts the process — so the assumption "restarts are rare", true when it was written, is now false in the direction that happens to help us.** ⚠️ **Depending on an accident is not the same as having a mechanism, and the drift is invisible while it is small.**
+⇒ **DISPOSITION: own batch — `B-UNIVERSE-REFRESH-ACTS`, owner CC-C, placed in `PHASE_19_PLAN` after `B-TICKER-BBO-TRIGGER`.** No date.
+
+#### ⭐ AND THE FLOOR IS A LIVE, TUNABLE POLICY NUMBER — NOT A CONSTANT
+**`module_constants.passive_archive.b74_crypto_min_volume_24h_usd` overrides the file at runtime, no redeploy.** ✅ **LIVE VALUE CONFIRMED FROM THE RUN ITSELF: the refresh line prints `floor=$10000`** — read from the running resolution, not from the config file. **The config's own comment records Langston's standing view that $10k is conservative and $5k would still filter garbage.** ⇒ **the ~287 excluded pairs are excluded by a dial we can turn, and turning it is a decision about how thin a market we are willing to trade — Kyle's, not ours.**
+
+### ⚠️ 5b.2 THE COVERAGE ASYMMETRY BETWEEN WHAT WE ARCHIVE AND WHAT WE TRADE ON
+**Three different symbol sets, and they are routinely confused:**
+| set | size today | what it is |
+|---|---|---|
+| **archived** | **~443** | the passive OHLC + ticker capture universe (this section) |
+| **in the live price cache** | **~185** | what the trading path has a current price for |
+| ⛔ **WebSocket-subscribed** | **6** | **open crypto positions only** (§1.5) |
+
+⇒ ⛔ **EACH IS A STRICT SUBSET OF THE ONE ABOVE, AND A CLAIM TRUE OF ONE IS ROUTINELY FALSE OF THE OTHERS.** ★ **This is the single most common wrong-object in this whole area** — including in earlier drafts of this document.
+
+### ⚠️ 5b.3 RATE LIMITS — THE ASYMMETRY THAT SHAPES THE WHOLE DESIGN
+**A REST price poll costs one request PER SYMBOL. A WebSocket subscription carries MANY symbols on one connection** — Kraken states plainly that *"it is possible to stream all available market data for all currency pairs without reaching the WebSocket connection limits"* (§5.1).
+⇒ ★ **The venue charges us per REQUEST on REST and effectively per CONNECTION on WebSocket.** That asymmetry is why broad coverage is REST-polled at a slow cadence while the WebSocket is reserved for the few symbols we hold — **and it is also why widening the WebSocket set is cheaper than it intuitively sounds** (§5).
+⚠️ **NOT ESTABLISHED: our actual REST request rate against Kraken's counter, or how close we run to it.** Unmeasured, and named here rather than assumed comfortable.
+⛔ **AND WE HAVE RATE-LIMITED *OURSELVES* — `#1014`:** repeated logins to our own staging API returned **429**, which the reading script rendered as a generic read failure. **A rate limit that surfaces as "no data" rather than "slow down" is an instrument that lies about the world.**
+
+### ⚠️ 5b.4 SILENT STALLS — AN OPEN SOCKET DELIVERING NOTHING
+**The dangerous failure is not a dropped connection — that is loud. It is a connection that stays open and stops carrying a given symbol.** ✅ **There IS a defence: a subscription audit runs every 5 seconds over open positions and reports `subscribed / missing / stale`.** ⚠️ **Its scope is OPEN POSITIONS — the same 6-symbol set as the subscription itself.** ⇒ ⛔ **nothing audits per-symbol liveness across the ~443 archived or ~185 cached symbols.**
+⛔⛔ **AND THE DISCRIMINATOR THAT MATTERS IS NOT RECENCY — IT IS A DISTINCT-SYMBOL COUNT.** One chatty pair keeps a feed-wide freshness gauge green while a hundred quiet ones have gone silent. *(Carried from `#994`: staleness because a market is SHUT must not raise a breakage alert; staleness because OUR feed is impaired must — and the rest of the feed is the control that tells them apart.)*
+
+### ⚠️ 5b.5 RESTART BEHAVIOUR — WHAT A DEPLOY DESTROYS
+- ⛔ **The order book is IN-MEMORY ONLY. A restart empties it completely** and it refills only as updates arrive for the symbols we hold.
+- ⛔ **Rolling in-memory windows are wiped and then report their COLD behaviour while presenting as normal.** **Measured precedent: the AMR's EV-gap window held ZERO observations across ~2,878 cycles/day for five days after restarts, and nothing announced it.**
+- ⇒ ⛔⛔ **ANY MEASUREMENT TAKEN SHORTLY AFTER A DEPLOY IS READING A COLD SYSTEM.** ★ **This produced at least three retracted numbers during this work alone** — including a price-age percentile read 2.5 minutes after a restart that read completely differently 246 seconds later. **Read the INTERVAL between two samples of a monotone counter, never the running total.**
+
+### ⚠️ 5b.6 RETENTION REACH — HOW FAR BACK EACH STORE CAN ACTUALLY ANSWER
+| store | reach | ⛔ the trap |
+|---|---|---|
+| **`crypto_spot_ticker_snap` / the OHLC archives** | months; partitioned monthly, swept by a nightly retention job | the durable record — **and the ONLY one that can answer a question about last week** |
+| ⛔ **the order book** | **NONE — never persisted** | **no historical book question can be answered, ever.** Any book comparison must be taken live, in-process |
+| **application log `out.log`** | ⚠️ **~18 hours** — a live file rotating every ~1-1.5 h **PLUS 14 retained archives** | ⛔⛔ **`retain 14` IS A FILE COUNT, NOT A DURATION. I read the live file alone, called it "3 hours", and declared a batch criterion unevaluable that the archives already answered.** *(`B-EXIT-BOOK-AGE-STAMP` §11.)* |
+| **`error.log`** | same rotation, **separate stream** | ⛔ **`console.warn`/`console.error` NEVER appear in `out.log`.** Every exit-path skip and refusal line is on this stream — **a one-file grep manufactures a zero.** |
+
+⇒ ★★ **THREE SEPARATE WRONG-REACH ERRORS IN THIS WORK, ALL IN THE SAME DIRECTION: making a real answer look unavailable.** ⛔ **STATE AN INSTRUMENT'S REACH BEFORE READING ITS SILENCE AS EVIDENCE — and for a rotating log, count the archives.**
 
 ---
 
