@@ -696,7 +696,7 @@ export async function collectAdaptiveBatch(
   //   ⇒ correct claim FOR THE STANDARD PROFILE: they become ELIGIBLE TO BE ASSESSED. ⛔ It is
   //   FALSE for the strong_trend route, which has no volume floor — hence the guard at `:889`.
   // ⚠️ AND THE REASON THEY FAIL IS A UNITS DEFECT THAT IS LIVE TODAY, INDEPENDENT OF THIS FIX:
-  //   `:820` computes `volume24hCoins * currentPrice`, and `currentPrice` is `ticker.c[0]` —
+  //   `:855` computes `volume24hCoins * currentPrice`, and `currentPrice` is `ticker.c[0]` —
   //   the price in the QUOTE currency. The comment at `:818` states the invariant ("All filter
   //   thresholds are in USD. Must compare like units") and the arithmetic satisfies it ONLY
   //   when the quote IS USD. For `/XBT` the product is BTC-denominated and is compared against
@@ -910,7 +910,7 @@ export async function collectAdaptiveBatch(
       // ⇒ THE WHOLE "they only become eligible to be ASSESSED" ARGUMENT RESTS ON THE STANDARD
       //   PROFILE'S VOLUME FLOOR, AND THIS ROUTE DOES NOT HAVE ONE.
       // ⚠️ WHY THE BYPASS IS UNSAFE HERE SPECIFICALLY, rather than merely untested: the money
-      //   gates it skips are denominated wrong for a non-USD quote (`:820` multiplies coin
+      //   gates it skips are denominated wrong for a non-USD quote (`:855` multiplies coin
       //   volume by the QUOTE-currency price — see #966). A zero-volume bypass is only ever
       //   safe if the thing being bypassed was measuring the right quantity.
       // ✅ THIS IS A NO-OP FOR TODAY: the 31 already fail `low_volume` on the standard profile

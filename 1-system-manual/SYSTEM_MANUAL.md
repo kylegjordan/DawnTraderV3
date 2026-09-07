@@ -639,7 +639,7 @@ TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
 4. `:684-685` — `bid` and `ask` **are parsed here and are available**.
 5. `:~706` — `emit('priceTick', { price: lastPrice, producer: markKind === 'mid' ? 'kraken_ws_ticker_mid' : 'kraken_ws_ticker_last' })`. ⛔ **THE SIDES ARE NOT ON THE EVENT.**
 6. `:1096` — `priceCache.updateFromWebSocket(internalSymbol, lastPrice)`. ⛔ **`price-cache.ts:402` declares `(symbol: string, price: number)` — the store HAS `bid`/`ask` columns (`:41-51`) but its high-frequency writer has NO PARAMETER for them, so they keep whatever the slower REST poll last set.**
-7. **ENTRY:** `signal-orchestrator.ts:2387` `priceCache.getCachedPrice(symbol)` → `:2400` `getSmoothedPrice(...)` (adaptive Kalman) → `:2425` `currentPrice = smoothedPrice` → `:2515` into the 19-strategy dispatch → **entry, stop and target are derived from a SMOOTHED TICKER MIDPOINT.**
+7. **ENTRY:** `signal-orchestrator.ts:2404` `priceCache.getCachedPrice(symbol)` → `:2400` `getSmoothedPrice(...)` (adaptive Kalman) → `:2425` `currentPrice = smoothedPrice` → `:2515` into the 19-strategy dispatch → **entry, stop and target are derived from a SMOOTHED TICKER MIDPOINT.**
 8. **EXIT:** `active-execution-engine.ts:1485` `livePricingAdapter.getPriceWithFallback(symbol, 2000)` → `:1492-1498` `currentPrice = priceResult.price`, `priceProducer = priceResult.producer` → compared against stop/target ⇒ **the exit trigger is the UNSMOOTHED TICKER MIDPOINT.**
 
 #### ⇒ THE ONE-LINE ANSWER TO "WHICH PRICE DO WE ENTER AND EXIT ON?"

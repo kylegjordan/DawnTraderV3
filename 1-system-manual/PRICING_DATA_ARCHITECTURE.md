@@ -31,6 +31,8 @@
 | **`book`** | **ten levels of depth on each side** — price + quantity per level | the queue behind the best price | `kraken-websocket-adapter.ts` `handleV2BookUpdate` |
 | **`ohlc`** | open · high · low · close · volume · vwap · trade count, per **1-minute** interval, **carrying the venue's own `interval_begin`** | one bar per minute | `crypto-spot-archiver.ts` `parseOhlcBar` |
 
+⛔⛔ **AND THERE IS A FOURTH CAPTURED UNIVERSE THIS TABLE DID NOT LIST UNTIL r2 — PERPETUAL FUTURES.** **`xstock_perp_ticker_snap`** (renamed from `equity_perp_*` by B79.0e), fed by `passive-archive/equity-perp-archiver.ts` over the **Kraken FUTURES** WebSocket. ✅ **MEASURED 2026-09-07 and it is LIVE, not dormant: 104 partitions, `191,041` rows across `10` symbols in 24 h, `7,149,106` all-time, newest minutes old.** ⚠️ **It trades nothing today and reaches NO pricing path described in this document — but a document claiming to describe every source of price data must say it exists.** ★ **It was named in B74's own introducing commit as one of three universes and then never mentioned again in any section — which is exactly the buried-detail failure §9's framing rule calls a governance failure rather than a documentation miss.**
+
 ★ **THE TICKER CARRIES SIZE AT THE TOUCH, WHICH IS EASY TO MISS AND MATTERS:** `bid_qty` and `ask_qty` are parsed and stored. **So the ticker is not price-without-size — it is price-with-size-at-the-touch-only.** The book's contribution is the *queue behind* the touch, not the existence of size.
 
 ### ✅ 1.1 THE SUBSCRIPTION MAP — WHO SUBSCRIBES TO WHAT
@@ -582,58 +584,105 @@ Per CC-C's coupling point, adopted: §6 builds **one** matrix from these rows, f
 
 ---
 
-## 6. ✅ THE TARGET STATE — **ONE MATRIX: WHICH FEED AND WHICH SIDE, PER JOB × LANE × ASSET CLASS** *(CC-C + Langston, DRAFT 1 — 2026-09-07)*
+## 6. ✅ THE TARGET STATE — **ONE MATRIX: FEED **AND** SIDE, PER JOB × LANE × ASSET CLASS** *(CC-C + Langston — **r2**, 2026-09-07)*
 
 > ⛔⛔ **READ THIS SECTION DIFFERENTLY FROM THE OTHERS. §1-§5b DESCRIBE WHAT IS; §6 IS A *SPECIFICATION*.**
-> ★ **AND THAT IS FORCED BY §3.0's finding, not chosen: the `live` lane HAS NO SEPARATE PRICE-CONSUMPTION CODE.** `order-placer.ts` defines a paper placer only. ⇒ **the first live arm will be written against whatever this section says.** ⚠️ **A `live` cell filled by inheritance from `paper` is therefore not a description of anything — it is a decision, made silently. Every one is filled deliberately below.**
+> ★ **FORCED BY §3.0's finding, not chosen: the `live` lane HAS NO SEPARATE PRICE-CONSUMPTION CODE** (`order-placer.ts` defines a paper placer only; `active-execution-engine.ts` has three `live` tests — one config key at `:1886`, telemetry tags at `:2007`/`:2075`). ⇒ **the first live arm will be written against whatever this section says.**
+> ⚠️ **r1 DROPPED THE LANE COLUMN AND THEREBY BREACHED TWO OF ITS OWN THREE CONSTRAINTS — it printed "fill every `live` cell deliberately" in a table that had no lane cells at all, so every one was filled by inheritance.** ★ **It also made cells FALSE: r1 assigned the order book to fill simulation with no lane, and VTS HAS NO FILL MODEL and holds no position, so it cannot reach a book.** **The column is restored below. `— same code` is a legitimate cell; a missing column is not.**
 
 ### ⛔⛔ 6.0 THE TWO AXES ARE ANSWERED IN ONE TABLE, BECAUSE ANSWERED SEPARATELY THEY CONTRADICT
-**`B-PRICE-SIDE-BY-JOB` cuts by SIDE (mid vs bid vs ask). This document cuts by FEED (ticker vs book vs candles). They are the same nine jobs on two axes** — and a feed decision that ignores side, or a side decision that ignores which feed can reach that lane, ships a matrix that disagrees with itself.
+**`B-PRICE-SIDE-BY-JOB` cuts by SIDE (mid / bid / ask). This document cuts by FEED (ticker / book / candles). Same nine jobs, two axes.**
 
 **THREE CONSTRAINTS BIND EVERY CELL** *(Langston's, adopted):*
-1. ⛔ **A cell may not name a feed its lane cannot reach.** *(Naming the book at signal time is not a tuning change — §1.5: the book covers only what we already hold.)*
+1. ⛔ **A cell may not name a feed its lane cannot reach.** *(The book covers only what we already hold — §1.5. VTS holds nothing.)*
 2. ⛔ **A midpoint cell must name WHERE THE KIND IS RECORDED.** *(F1: an unlabelled mixture of a print and a mid is worse than either.)*
 3. ⛔ **`live` cells are filled deliberately, never inherited.**
 
-### ⭐ 6.1 THE GOVERNING RULE, IN ONE LINE
+### ⭐ 6.1 THE GOVERNING RULE
 > **A price that ESTIMATES VALUE may be a midpoint. A price that BECOMES A LEVEL, FIRES AN ACTION, or IS RECORDED must be the side that leg would actually transact at.**
 
-⛔⛔ **AND *"THE TRANSACTABLE SIDE"* IS PER LEG, NOT PER TRADE — THE TWO LEGS ARE OPPOSITE BY CONSTRUCTION.** **Entry is a BUY and lifts the ASK. Stop and target are SELLS and hit the BID.** ⇒ ★ **an error that puts both on one side is A FULL SPREAD, not half of one — and it moves the two legs' reward-to-risk in OPPOSITE directions, so it cannot be netted out.**
+⛔⛔ **PER LEG, NOT PER TRADE — THE TWO LEGS ARE OPPOSITE BY CONSTRUCTION.** **Entry is a BUY and lifts the ASK; stop and target are SELLS and hit the BID.** ⇒ **an error putting both on one side is A FULL SPREAD, not half — and it moves the two legs' reward-to-risk in OPPOSITE directions, so it cannot net out.**
 
 ### ✅ 6.2 THE MATRIX
 
-| # | job | crypto | xStock | ⛔ the reason |
+#### ⛔⛔ ROW 1 IS SPLIT, AND THE SPLIT IS THE MOST IMPORTANT CHANGE IN r2
+⚠️ **r1's row 1 read *"entry level off the ASK, stop/target off the BID"* and said nothing about detection.** ⛔ **Read as a specification by whoever writes the live arm, THAT IS A BLANKET SHIFT OF THE DETECTION INPUT — and `signal-orchestrator.ts:2529-2537` forbids it in its own words:** *"a generic re-expression at the sized-signal chokepoint … is WRONG: strategies build stops from support levels, ATR bands, measured moves and prior-bar extremes, so a blanket shift would change 19 strategies' risk geometry invisibly."*
+⇒ ★ **The shipped code already commits to a SEVERANCE: `currentPrice` stays SMOOTHED for DETECTION (an estimator question); a separate transactable basis carries GEOMETRY. r1 collapsed it. r2 restores it as two rows.**
+
+| # | job | lane | crypto | xStock |
 |---|---|---|---|---|
-| **1** | **SIGNAL GENERATION** — where entry, stop and target are SET | **`bbo`-triggered TICKER**, both sides carried; entry level off the **ASK**, stop/target off the **BID** | **same rule**, but the input is a **bar close up to an hour old** — so the level must be **re-validated against a live quote before it can fire** | ★ **THE HIGHEST-LEVERAGE ROW IN THE TABLE.** Every later job inherits these numbers. ⛔ **The book cannot serve here** — constraint 1. ⛔ **And the ticker must be `bbo`-triggered first (`#1017`), or the basis is silent between trades on exactly the names that need it most.** |
-| **2** | **RANKING** | **no market price** — unchanged | same | ✅ **Correct as-is.** Ranking compares stored candidate geometry; introducing a live read here adds a race, not information. |
-| **3** | **ENTRY TRIGGER** | **the ASK** — the same side row 1 set the entry on | same | ⛔ **The trigger must read the side the LEVEL was set on**, or the level and the test disagree by a spread. |
-| **4** | **FILL SIMULATION** | ✅ **THE BOOK** — walk the ladder | ✅ **the book, once the ladder is more than one level (`§4.3`)** | ★ **THE ONE JOB WHERE THE BOOK IS BOTH AVAILABLE AND NECESSARY** — it happens AFTER the choice, on a symbol we now hold, and depletion is exactly what depth is for. ⚠️ **Today's xStock ladder cannot express depletion at all.** |
-| **5** | **POSITION MARKING & EXIT TRIGGER** | **the BID** for a long's stop and target | same | ⛔ **A stop that fires on a midpoint fires where nobody would have bought.** ⚠️ **This is the fidelity defect Kyle's test names: a simulation that flatters us is worse than useless, because we size real capital from it.** |
-| **6** | **EXIT FILL** | **book at the touch**, taker; **the resting side** for a maker | same | Consistent with row 4. ⚠️ **`#962` — a resting maker sell currently books at the limit when the MIDPOINT reaches it.** |
-| **7** | **BOOKING THE RESULT** | **whatever actually transacted**, with **`markKind` REQUIRED** on the row | same | ⛔ **The learning corpus is the one place a mislabelled basis compounds** — every future calibration reads it. **Constraint 2 binds hardest here.** |
-| **8** | **SIZING** | **no market price** — unchanged | same | ✅ Correct as-is. |
-| **9** | **SCANNER SWEEP** | **REST-polled ticker**, broad and slow | **the local 1-minute archive** — no alternative exists (§2) | ✅ **Correct as-is, and deliberately cheap.** A sweep decides only what to look at more closely. |
+| **1a** | **CONTEXT / INDICATOR / REGIME INPUT** — *estimates value* | **paper** | ✅ **MIDPOINT, smoothed** — unchanged. ⛔ **`markKind` REQUIRED on the value** *(constraint 2 gets its teeth here — this is the only midpoint cell in the matrix)* | ✅ **MIDPOINT** from the bar close, **unsmoothed** |
+| | | **VTS** | ⚠️ **MIDPOINT, *UNSMOOTHED*** — `vts-runner.ts:1429` passes `priceData.price` raw while active smooths (`:2417→:2442→:2467`). ⛔ **THE LANES ALREADY DIFFER AND NOTHING RECORDS IT** *(F7)* | ✅ **MIDPOINT**, unsmoothed |
+| | | **live** | **— same code as paper.** ⛔ **DELIBERATE: detection must NOT move to a side.** | **— same code as paper**, same reason |
+| **1b** | **LEVEL CONSTRUCTION** — *becomes a level* | **paper** | ⛔ **PRICE-ANCHORED levels re-expressed per leg: entry off the ASK, stop/target off the BID.** ✅ **STRUCTURE-DERIVED levels are NOT re-expressed** — a support level, an ATR band, a measured move or a prior-bar extreme is a *market fact*, not a quote, and shifting it by a spread corrupts the strategy's geometry rather than correcting it | **same rule** — but the input is a **bar close up to an hour old**, so see `B-XSTOCK-LEVEL-REVALIDATE` below |
+| | | **VTS** | **same as paper** — ⚠️ **but see the ratification bar: changing this rewrites the learning corpus mid-flight** | **same**, same caveat |
+| | | **live** | **— same code as paper.** ⛔ **DELIBERATE: this is the cell the live arm is written against.** | **— same code as paper** |
+| **2** | **RANKING** | all three | ✅ **NO MARKET PRICE — correct, and NOT for the reason r1 gave.** ⛔ **r1 said *"ranking compares stored candidate geometry"*; `RUNNING_ISSUES:5944(ii)` already refuted that: `ready_to_buy_service.ts:1949` fabricates `entryPrice * 1.02` when a target is missing (`#927`), so candidates WITH geometry rank on a measured target and candidates WITHOUT rank on a flat 2% — two sub-populations, one sort key.** ✅ **THE CONCLUSION SURVIVES ON A DIFFERENT REASON: a live read at rank time adds a race and no information.** **`#927` is a precondition of this cell being honest.** | same |
+| **3** | **ENTRY TRIGGER** | paper · live | **THE ASK** — the side row 1b set the entry on | **same** — ⚠️ **incoherent until 1b xStock lands: a bar close has no side** *(F4)* |
+| | | **VTS** | **— no trigger hop** *(VTS admits on level, `BASIS: LEVEL`)* | **— none** |
+| **4** | **FILL SIMULATION** | **paper** | ✅ **THE BOOK** — walk the ladder | ✅ **the book, once the ladder exceeds one level (`§4.3`)** |
+| | | **VTS** | ⛔ **NO FILL MODEL AT ALL, AND NO BOOK IS REACHABLE** — VTS holds no position, so constraint 1 forbids naming one. **r1 breached this.** | ⛔ **same** |
+| | | **live** | **THE BOOK for pre-trade sizing; the VENUE's own fill is the truth.** ⛔ **DELIBERATE: in live, our walk is an ESTIMATE, not the outcome.** | **same** |
+| **5** | **POSITION MARK & EXIT TRIGGER** | **paper** | **THE BID** for a long's stop and target | **THE BID** — ⚠️ **cannot ratify before `3b.b` closes (see the bar below)** |
+| | | **VTS** | ⛔ **UNRESOLVED — DO NOT SHIP EITHER WAY YET.** Binding it rewrites the learning corpus mid-flight and collides with `F-G-2` OBJ-5, in its observation window now; NOT binding it forks training and trading further apart, which is F7's complaint. **The fork must be decided, not inherited.** | ⛔ **same** |
+| | | **live** | **— same code as paper.** ⛔ **DELIBERATE.** | **— same code as paper** |
+| **6** | **EXIT FILL** | paper · live | **book at the touch** (taker); **the resting side** (maker). ⚠️ **`#962`: a resting maker sell currently books at the limit when the MIDPOINT reaches it** | **same** |
+| | | **VTS** | ⛔ **no fill model** — books at the level | ⛔ **same** |
+| **7** | **BOOKING THE RESULT** | all three | **whatever actually transacted, `markKind` REQUIRED on the row** | **same.** ⭐ **F6/F8: the xStock VTS mark reads a PRINT (`xstock_spot_ticker_snap.last`) — the only lane reading a print, and it is the lane we learn from** |
+| **8** | **SIZING** | all three | ✅ **NO MARKET PRICE — BY DESIGN, AND CONDITIONAL ON ROW 1b.** ⛔ **NOT basis-neutral: under 1b the entry moves to the ask and the stop to the bid ⇒ the stop distance widens by a FULL SPREAD ⇒ quantity falls on every trade, with no code change in sizing** (`active-position-sizing.ts:137`, `:156`, `:229`, `:236` read no feed). ★ **SIZING IS WHERE THE SPREAD ERROR BECOMES A CAPITAL ALLOCATION.** Small at crypto's 0.199% median; **not small on xStock's worst decile** | **same, and materially larger** |
+| **9** | **SCANNER SWEEP** | all three | **REST-polled ticker**, broad and slow — correct, deliberately cheap | ⛔ **r1's *"no alternative exists"* is STRUCK — it was false at the object.** ✅ **THE NARROW TRUE STATEMENT: the bar close is the price gate's basis today; `xstock_spot_ticker_snap` IS a reachable alternative — already subscribed, already archived, already read in the same function for the spread gate (`scanner.ts:646`, 30-min window) and a rolling-median top-of-book depth-USD (`:688`, 20-min) — and its coverage over the SWEEP universe (not the held set) is UNMEASURED. That measurement is the open item.** |
 
-★★ **WHAT THE TABLE MAKES OBVIOUS AND THE PROSE DID NOT: the book appears in TWO of nine jobs, and both are AFTER the choice is made. SIX of nine read no market price at all.** ⇒ ⛔ **The whole feed argument turns on ROW 1** — and row 1 is the row where the book is structurally unavailable.
+★★ **WHAT THE MATRIX MAKES OBVIOUS: the book appears in TWO of nine jobs and both are AFTER the choice is made. SIX of nine read no market price at all.** ⇒ ⛔ **The whole feed argument turns on ROW 1 — the row where the book is structurally unavailable.**
 
-### ⛔⛔ 6.3 THE ANSWER TO KYLE'S COUNTERFACTUAL — *"IF RESOURCES WERE NO OBJECT, WHICH FEED?"*
-✅ **STILL THE TICKER FOR PRICE — BUT NOT FOR THE REASON I FIRST GAVE, AND NOT THE TICKER WE HAVE.**
-- ⛔ **MY ORIGINAL REASON IS WITHDRAWN.** I argued the ticker is a venue-published scalar while our book is an unchecksummed local reconstruction (`#507`). **That trust argument is real, but it does not beat a staleness argument — and as configured, the ticker is the STALE one on the 93%.**
-- ✅ **THE REASON THAT SURVIVES: fix the trigger and the ticker wins on BOTH axes at once.** A `bbo`-triggered ticker is venue-published, carries both sides, updates on every quote change, and — unlike the book — **can be subscribed across the whole universe** (§5.1: Kraken publishes no barrier).
-- ✅ **DEPTH REMAINS THE BOOK'S JOB, on the candidate set rather than the universe.** Sizing and slippage live inside expected value, and neither is answerable from the touch.
-⚠️ **AND THE HONEST SHAPE OF THIS ANSWER: it is contingent on a subscribe ACK we have not seen.** The archive records `event_trigger:'bbo'` being tried and **rejected by production v2**. Kraken's docs list it today. ⛔ **If the ACK refuses, row 1's answer changes, and the book-versus-nothing question reopens on the cold tail.**
+#### ⛔ THE FABRICATED-LEVEL CLASS — **GREPPED BEFORE THIS SECTION LANDS, AND HERE IS WHAT IT RETURNED** *(`fix-follows-pointer`)*
+**Pattern: a price multiplier standing in as a DEFAULT LEVEL. Repo-wide over `server/`, tests excluded — FOUR live sites, not one:**
+| site | what it fabricates |
+|---|---|
+| `ready_to_buy_service.ts:1949` | `targetPrice … ?? entryPrice * 1.02` — **already `#927`** |
+| `active-execution-engine.ts:3323` | `entryPrice * 1.02` — *"Default 2% target"*. ⛔ **THE ONE `#927` DID NOT NAME, and it is the comment `:1949` says it mirrors** |
+| `signal-orchestrator.ts:2294` | `stopPrice ?? currentPrice * 0.97` |
+| `signal-orchestrator.ts:2295` | `targetPrice ?? currentPrice * 1.03` |
+**Plus `signal-orchestrator.ts:2269` `atr ?? (currentPrice * 0.02)`** — a fabricated *volatility*, which then feeds level construction.
+⇒ ⛔ **A fabricated level is a level with NO SIDE and NO BASIS — it cannot be re-expressed transactably because it was never a quote.** **Recorded on `#927` as three further sites; the disposition is `#927`'s, not §6's.**
 
-### ⛔ 6.4 WHAT MUST BE MEASURED BEFORE THIS IS RATIFIED — **THREE ARMS, NOT TWO**
-**A cold-slice comparison of `trades`-ticker against `book` CONFOUNDS *"the book carries price information"* with *"our ticker was stale."*** ⇒ **Run three arms on the SAME rotating cold slice: `trades`-ticker · `bbo`-ticker · `book`.**
-✅ **THE PRE-REGISTERED READING, written before any data:** **if arm 2 tracks arm 3 on cold names the way arm 1 tracks arm 3 on hot names, the book stays out of price PERMANENTLY and we have earned that conclusion.** **If it does not, row 1 is wrong and the book belongs in signal generation whatever it costs.**
-⛔ **AND THE AGREEMENT INSTRUMENT MUST BE FIXED FIRST (`D1`): carry the producer onto the sample, or the comparison is again a store against its own writer.**
+### ⛔⛔ 6.2b THE RATIFICATION BAR — **WHAT MAY NOT SHIP UNTIL WHAT**
+| cell | blocked on | why |
+|---|---|---|
+| **1b xStock** | **`B-XSTOCK-LEVEL-REVALIDATE`** *(owner CC-C, `PHASE_19_PLAN` after `3n`)* | ⛔ **THE TABLE CITES THE HOME; IT DOES NOT SPECIFY THE GATE.** Three things must be settled first: **(a)** something ALREADY re-validates at the trigger hop — `depth-source.ts:47-69` reads the archived top-of-book and `aee:3787-3796` is a class-only liveness gate at `active_fill_max_age_ms` 15,000 ms ⇒ **what is missing is re-validation of the GEOMETRY, not of the fill price**, and saying otherwise publishes *"we don't do this"* about something we partly do; **(b)** *"re-validated"* hides a **THREE-WAY FORK** — refuse / re-derive the levels off the fresh quote / fire with old levels and a fresh entry — three different systems; **(c)** ⛔ **NO THRESHOLD CAN BE SET YET: the bar's real age is UNMEASURED** (§3.3 item 6; `#559`'s ~15.7-min write lag says measure first). **The measurement is objective 1 of that batch.** |
+| **5 xStock** | **`3b.b` `B-XSTOCK-FEED-SANITY` (`#943`)** window closing | ⛔ **The 11.784% p90 spread is drawn from the very population `3b.b` is deciding whether to trust** — a hollow or one-sided book INFLATES a measured spread. **Row `3n`'s own note already requires *"a collapsing bid must be non-authoritative before anything triggers on the bid."*** |
+| **5 xStock**, again | **1b xStock** | Row 3's rule is *"the trigger reads the side the LEVEL was set on."* **The xStock level is a bar close and F4 says a bar close has NO SIDE** ⇒ row 5 xStock would compare a bid against a sideless level. ⇒ ★ **1b and 5 on xStock are ONE dependency, not two. Neither ships alone.** |
+| **5 VTS**, both classes | an explicit decision | **Not blocked on evidence — blocked on somebody deciding.** See the cell. |
+
+⭐ **AND THE PRE-REGISTERED PREDICTION FOR ROW 5 xSTOCK, WRITTEN BEFORE THE CHANGE AND FALSIFIABLE** *(Langston's, adopted — my *"stricter"* framing was wrong):* ⛔ **the two legs move in OPPOSITE directions — stops fire EARLIER, targets fire LATER.** ⇒ **on the xStock worst decile an ~11.8% spread does not tighten the exit distribution, it can INVERT it: near-total stop-outs and near-zero target hits, because a target set off a bar close and tested against a bid ~11.8% under the mid will not be reached before the stop is.** ✅ **If that is not observed, the cell is wrong and this prediction is what says so.**
+
+### ⛔⛔ 6.3 KYLE'S COUNTERFACTUAL — *"IF RESOURCES WERE NO OBJECT, WHICH FEED?"*
+✅ **STILL THE TICKER FOR PRICE — NOT FOR MY ORIGINAL REASON, AND NOT THE TICKER WE HAVE.**
+- ⛔ **WITHDRAWN: my trust argument** (venue-published scalar vs our unchecksummed local reconstruction, `#507`). **It is real, but a trust argument does not beat a staleness argument — and as configured the ticker is the STALE one on the 93%.**
+- ✅ **THE SURVIVING REASON: fix the trigger and the ticker wins on BOTH axes at once.** A `bbo`-triggered ticker is venue-published, carries both sides, updates on every quote change, and — unlike the book — **can be subscribed universe-wide** (§5.1: Kraken publishes no barrier).
+- ✅ **DEPTH REMAINS THE BOOK'S JOB**, on the candidate set rather than the universe.
+✅ **THE CONTINGENCY HAS A PLACED HOME, NOT A HAZARD NOTE: `B-TICKER-BBO-TRIGGER`, owner CC-C, `PHASE_19_PLAN` row `3b.h-1`, immediately before `3n`.** ⛔ **The archive records `event_trigger:'bbo'` being tried and REJECTED by production v2; the docs list it today ⇒ THE CONTROL IS A LIVE SUBSCRIBE ACK, NOT A DOC READ. If the ACK refuses, row 1 changes and the cold-tail question reopens.**
+
+### ✅ 6.4 THE MEASUREMENT THAT RATIFIES ROW 1 — **THREE ARMS, AND NOW AN ACTUAL CRITERION**
+⚠️ **r1's *"if arm 2 tracks arm 3 the way arm 1 tracks arm 3"* was a SENTIMENT, not a criterion — no statistic, no threshold, no n-floor, no INCONCLUSIVE branch.**
+**ARMS, on ONE slice: (1) `trades`-ticker · (2) `bbo`-ticker · (3) `book`.** *(Two arms would confound "the book carries price information" with "our ticker was stale.")*
+| element | pre-registered value |
+|---|---|
+| **statistic** | **per-symbol median absolute deviation of top-of-book MID, arm-vs-arm, in basis points**, plus **the count of CROSSED observations** (qualitative, never diluted into a bucket) |
+| **n-floor** | ⛔ **≥ 200 paired observations per symbol AND ≥ 20 symbols.** Below either ⇒ **EXTEND**, never PASS |
+| **PASS** | **median(arm2→arm3) on COLD names ≤ median(arm1→arm3) on HOT names**, and **crossed = 0 in arm 2** ⇒ the book stays out of price permanently |
+| **FAIL** | **median(arm2→arm3) on cold names > 2× that hot-name reference**, or **any crossed observation in arm 2** ⇒ row 1 is wrong; the book belongs in signal generation whatever it costs |
+| ⛔ **INCONCLUSIVE** | **anything between** ⇒ **EXTEND. Discordant or thin ⇒ EXTEND, never PASS** *(the `F-G-2` A1 lesson)* |
+| **the slice** | ⛔ **ENUMERATED AND PINNED IN ADVANCE, NEVER PREDICATED** — a fixed symbol list written into the record before the window opens, so **arm assignment cannot be confounded with symbol identity** |
+| ⛔ **VOID clause** | **if `event_trigger` changes on any arm mid-window, or a subscription is re-issued, the window VOIDS and restarts** *(A4-shaped)* |
+| **precondition** | ⛔ **`D1` FIRST: carry `producer`/`source` onto `FeedAgreementSample`, or the comparison is again a store against its own writer** |
 
 ### ⚠️ 6.5 WHAT THIS SECTION DOES **NOT** SETTLE
-- ⛔ **The mixture ratio of print-vs-mid in the crypto cache (F1). The instrument does not exist**, so no cell above can claim to know what basis today's crypto signal-birth price carried.
-- ⛔ **Whether `bbo` is cheaper than the book by a USEFUL margin.** One message per quote change against ten levels of delta is cheaper in principle; **no rate has been measured for either.**
-- ⛔ **The true book frame rate per symbol** — §5.2's denominator is under question until `B-WS-UNSUB-CHANNEL-PARITY` resolves (`D2`).
-- ⛔ **`equity_perp`** — ten perpetual futures captured by B74 and absent from every other section of this document. **Current state unestablished.**
-- ★ **AND THE LIVE LANE IS SPECIFIED HERE, NOT OBSERVED.** Every `live` cell is a decision taken in advance of the code that will implement it.
+- ⛔ **The print-vs-mid MIXTURE RATIO in the crypto cache (F1). The instrument does not exist**, so no cell above knows what basis today's crypto signal-birth price carried.
+- ⛔ **Whether `bbo` is cheaper than the book by a USEFUL margin** — cheaper in principle, **no rate measured for either.**
+- ⛔ **The true per-symbol book frame rate** — §5.2's denominator is under question until `B-WS-UNSUB-CHANNEL-PARITY` resolves (`D2`).
+- ✅ **PERPETUAL FUTURES — CLOSED, NOT LEFT AS AN ABSENCE CLAIM.** r1 said *"current state unestablished"*, which is an absence claim about our own system. **MEASURED 2026-09-07: the universe is LIVE and capturing — `xstock_perp_ticker_snap` (renamed from `equity_perp_*` by B79.0e), 104 partitions, `191,041` rows across `10` symbols in 24 h, `7,149,106` all-time, newest minutes old; the archiver is `passive-archive/equity-perp-archiver.ts`.**
+  ⇒ ⛔⛔ **SO THERE IS A **FOURTH** CAPTURED UNIVERSE, RUNNING CONTINUOUSLY, THAT §1's feed table does not list and NO section of this document covers.** ★ **It trades nothing today and reaches no pricing path described here — but a governance document claiming to describe every source of price data must say it exists.** **DISPOSITION: folded into §1 as a row in the same commit; whether it should feed anything is a Kyle scope call, not ours.**
+- ★ **AND THE LIVE LANE IS SPECIFIED, NOT OBSERVED.** Every `live` cell above is a decision taken in advance of the code that will implement it.
 
 ---
 
