@@ -7803,3 +7803,26 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit
 **HOME:** `B-UNIVERSE-REFRESH-ACTS`, owner **CC-C**, placed in `PHASE_19_PLAN.md` at **row 3b.h-2**, after `B-TICKER-BBO-TRIGGER`. No date.
 **Evidence:** `PRICING_DATA_ARCHITECTURE.md` §5b.1.
 
+---
+
+### #1019 OPEN 2026-09-07 (CC-C) — ⚠️ **THE tsc-BASELINE PUSH GUARD REFUSED A MARKDOWN-ONLY PUSH, THEN PASSED THE IDENTICAL PUSH ON RETRY WITH NOTHING CHANGED BETWEEN**
+
+**OBSERVED, both runs within minutes, no file touched between them:**
+| run | current | baseline | verdict |
+|---|---|---|---|
+| **push hook** (`guard-push-tsc-baseline.mjs`) | **377** | **377** | ⛔ **REFUSED** — *"209 (file, code, message) counts dropped in files this push DID NOT TOUCH"* |
+| **`node scripts/check-tsc-baseline.mjs`** by hand, seconds later | **377** | **377** | ✅ **"OK — no regressions above baseline"** |
+| **push hook**, retry, same commit | — | — | ✅ **PASSED** |
+
+⛔ **THE PUSH CONTAINED NO TYPESCRIPT AT ALL** — `git diff --name-only origin/…..HEAD` returned markdown and docs only. **The guard's own message names the danger as errors vanishing from files the push did not touch; here the push touched no code files whatsoever.**
+
+✅ **WHAT IS ESTABLISHED, AND IT IS THE PART THAT MATTERS: THE ERRORS HAVE NOT VANISHED.** Positive control on a file the guard listed as dropping to zero — `server/storage.ts` `TS2339` — **tsc reports 9 of them right now.** ⇒ **`tsc` IS reading the code; the guard's "not seeing the code" hypothesis is FALSE here, and the identical 377 total on both runs confirms it** (a partial parse LOWERS the total).
+⇒ ★ **So the drops are a MESSAGE-KEY difference, not an error difference: the same errors are being keyed under different message text.** *(TypeScript prints table types with elision counts — `"... 7 more ..."` — which shift when a schema type gains a column. `B-EXIT-BOOK-AGE-STAMP` added two columns to `shared/schema.ts`.)*
+⛔⛔ **THAT IS A HYPOTHESIS, NOT A FINDING — AND IT DOES NOT EXPLAIN THE RETRY PASSING.** If a stale message key were the whole cause, the guard would refuse **deterministically**, every time. It did not. **Something is non-deterministic between invocations and I have not identified it. Stated as unexplained rather than dressed as understood.**
+
+⚠️⚠️ **WHY THIS IS WORTH A NUMBER RATHER THAN A SHRUG: A GATE THAT REFUSES CORRECT WORK INTERMITTENTLY IS THE MOST CORROSIVE FAILURE A GATE CAN HAVE.** `workflow-05`: *"a gate that blocks correct work teaches people to route around gates — and that is how a real regression eventually gets waved through."* ★ **The sanctioned escape hatch (`--regen-acknowledged`) is one keystroke, and a session under time pressure that has been refused once and passed once will reach for it. The precedent is on file: `e5ea15830` (2026-08-21) regenerated the baseline precisely because it *"was blocking every session's push, including CC-A's unrelated work."***
+⛔ **I did NOT use the escape hatch and did NOT regenerate the baseline.** The push landed on a plain retry.
+
+**HOME:** `B-TSC-GUARD-DETERMINISM`, owner **CC-C**, placed in `PHASE_19_PLAN.md` at **row 3b.h-3**, after `B-UNIVERSE-REFRESH-ACTS`. No date.
+**FIRST OBJECTIVE IS THE MEASUREMENT, NOT THE FIX:** run the guard N times against an unchanged tree and record the verdict distribution. ⛔ **A one-shot reproduction attempt that passes proves nothing about an intermittent fault** — and if it proves deterministic after all, the disposition becomes a stale-baseline regen with the reason recorded, which is a different batch.
+
