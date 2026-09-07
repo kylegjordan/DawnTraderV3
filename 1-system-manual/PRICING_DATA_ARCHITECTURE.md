@@ -1,6 +1,6 @@
 # PRICING DATA ARCHITECTURE — what we collect, what we use it for, and what we should use instead
 
-> **⛔ STATUS: IN PROGRESS. PART 1 IS VERIFIED; PARTS 2-5 ARE FRAMED AND NOT YET FILLED.**
+> **⛔ STATUS: IN PROGRESS. PART 1 IS VERIFIED (with one same-day correction, recorded in place); PART 2 IS STARTED; PARTS 3-6 ARE FRAMED AND NOT YET FILLED.**
 > **Owner: CC-C, co-authored with Langston. Reviewed afterwards by the ChatGPT Codex reviewer.**
 > **Created 2026-09-07 on Kyle's directive.**
 
@@ -50,8 +50,18 @@
 
 ⚠️ **ON THE DEPTH-1 SUBSCRIPTION (`:2642`): it does NOT produce a 1-level book.** The code's own comment records that **Kraken REJECTS `depth: 1`** (*"Subscription depth not supported"*) so the depth-10 stream keeps flowing, and depth is recorded from the subscribe **ACK** (`result.depth`) — what Kraken GRANTED, not what we asked for. ⇒ **in practice there is ONE book depth: 10.**
 
-### ⛔ 1.2 WHAT IS COLLECTED BUT NEVER READ
-**`ohlc` is subscribed, parsed and stored — and NOTHING IN THE LIVE TRADING PATH READS IT.** Verified: the only production consumer of the stored candles is `server/scripts/b70-b62-relabel-runner.ts`, an **offline re-labelling script**. ⇒ **the candles are collected and archived for retrospective analysis only.**
+### ⛔ 1.2 THE CANDLES — AND THE TWO ASSET CLASSES DO **OPPOSITE** THINGS WITH THEM
+
+⚠️⚠️ **THIS SECTION FIRST SAID *"NOTHING IN THE LIVE TRADING PATH READS THE STORED CANDLES."* THAT WAS WRONG FOR xSTOCK AND IS CORRECTED HERE THE SAME DAY.** I grepped the **crypto** table only and generalised to both classes — a wrong-object of exactly the kind this document's evidence rule exists to stop. ★ **It was caught by the historical read Kyle directed**, which recorded that the xStock bars are *"locally aggregated from `xstock_spot_ohlc_1m` because Kraken has no equities REST API."*
+
+| | crypto_spot | xstock_spot |
+|---|---|---|
+| **where 60-min bars come from** | **Kraken REST, on demand** — `services/ohlc-cache.ts:103` → `krakenService.getOHLCData`, 5-min TTL | **the STORED 1-minute WS archive**, rolled up — `xstock_spot/ohlc-aggregator.ts` → `services/xstock-ohlc-cache.ts` |
+| **is the stored WS candle archive read live?** | ⛔ **NO** — only production consumer is `scripts/b70-b62-relabel-runner.ts`, an **offline re-labelling script** | ✅ **YES — IT IS THE ONLY SOURCE** |
+| **why** | Kraken publishes a REST OHLC endpoint for crypto | ⛔ **Kraken has NO equities REST API**, so the archive is the only history that exists |
+
+⇒ ★★ **THE SAME FEED HAS OPPOSITE STATUS IN THE TWO CLASSES: for crypto the WS candle archive is write-only; for xStock it is load-bearing.** Both converge at `core/metrics/regime-inputs.ts:141-149`, which branches on asset class and hands 60-minute bars to regime detection either way.
+⇒ ⛔ **ANY STATEMENT ABOUT "THE CANDLES" THAT DOES NOT NAME THE ASSET CLASS IS WRONG ABOUT ONE OF THEM.** This is why Kyle required the document be cut by asset class, and the requirement had already earned itself before Part 2 was written.
 
 ### ⭐ 1.3 WHAT IS MISSING FROM WHAT WE COLLECT
 | gap | status |
@@ -63,7 +73,31 @@
 
 ---
 
-## 2. ⏳ WHERE WE USE PRICING — NOT YET FILLED
+## 2. ⏳ THE HISTORY — WHAT EACH FEED WAS ORIGINALLY FOR *(IN PROGRESS)*
+
+> ⛔ **KYLE'S REASON FOR THIS SECTION, AND IT IS NOT DECORATION:** *"so that we could understand intent, and then show how that intent is no longer relevant in the system that we want to build… that's why we need to change this or improve on that."*
+> ★ **IT HAS ALREADY PAID FOR ITSELF: the passage quoted below is what caught the wrong claim now corrected in §1.2.**
+> **Sources: `bridge/canonical/` (the pre-governance corpus), the old batch and directive reports, and the phase implementation histories.** ⚠️ **The canonical corpus records what we INTENDED to build then. It is NEVER current-state truth — `DawnTrader_System_Architecture_Execution_Flow.md` names `server/core/cache/ohlc-cache.ts`, a path that no longer exists.**
+
+### ✅ THE ORIGINAL DESIGN — `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md`
+**The MARKET DATA LAYER had four boxes: Kraken REST (OHLC, Ticker) · Kraken WebSocket (Real-time Ticks) · Binance/CoinGecko (Fallback) · OHLC Cache (721 candles).**
+⇒ ⛔⛔ **THERE IS NO ORDER BOOK IN THE ORIGINAL ARCHITECTURE AT ALL.** The WebSocket adapter's own description is *"Real-time ticker subscriptions"* — nothing else. **The book was added later; the system was designed as candles-for-analysis plus ticker-for-current-price.**
+
+**What each feed was FOR, in the original design:**
+| feed | original purpose, verbatim |
+|---|---|
+| **OHLC** | *"Used for IMF calculations and regime detection"* — 721 candles at **60-minute** intervals, *"1-hour candles = ~30 days of swing-tradable history"* |
+| **ticker (WS)** | *"Real-time ticks"* — the current price |
+| **book** | ⛔ **ABSENT** |
+
+★ **AND THE SCAN LOOP'S ORIGINAL SHAPE:** *"Fetch OHLC history (721 candles) → Calculate indicators → Determine market regime → Check macro-state → Select compatible strategies."* **Candles drove analysis; the ticker supplied the live price.**
+
+### ⏳ STILL TO READ
+The old batch and directive reports from before the 2026-01/02 governance change; `Phase_8/9/10/11_Implementation_History.md`; the batch reports that introduced the order book and the midpoint. **STATUS: IN PROGRESS — nothing further asserted yet.**
+
+---
+
+## 3. ⏳ WHERE WE USE PRICING — NOT YET FILLED
 
 **To be established by audit, in code and runtime logs, for EVERY consumption site.** For each: which of the three feeds is the input today, and which *should* be, with the reason.
 
@@ -75,7 +109,7 @@
 
 ---
 
-## 3. ⏳ WHERE THE PRICE IS TRANSFORMED BEFORE USE — NOT YET FILLED
+## 4. ⏳ WHERE THE PRICE IS TRANSFORMED BEFORE USE — NOT YET FILLED
 
 ⛔ **Kyle: *"where our pricing is being manipulated one way or another, such as the midpoint stuff, that needs to be highlighted."***
 **Known entry point for the audit (verified previously, to be re-verified here): the v2→v1 translator overwrites the `last` field with a computed midpoint, at the FEED layer — so every downstream consumer inherits it whether or not a midpoint is the right input for that consumer.**
@@ -84,7 +118,7 @@
 
 ---
 
-## 4. ⏳ WHERE WE HAVE TROUBLE GETTING THE DATA — NOT YET FILLED
+## 5. ⏳ WHERE WE HAVE TROUBLE GETTING THE DATA — NOT YET FILLED
 
 To cover: coverage gaps by symbol and by asset class · API rate limits · silent stalls (an open socket delivering nothing) · restart behaviour · retention reach of each store.
 
@@ -92,7 +126,7 @@ To cover: coverage gaps by symbol and by asset class · API rate limits · silen
 
 ---
 
-## 5. ⏳ THE TARGET STATE — NOT YET FILLED
+## 6. ⏳ THE TARGET STATE — NOT YET FILLED
 
 **The recommendation: which feed serves which job, in which lane, for which asset class — and WHY, in terms of what makes that data more trustworthy for that job.** Including whether any job should draw on a **mix** of two or three feeds.
 
