@@ -7804,6 +7804,12 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit
 
 ### #1017 OPEN 2026-09-07 (CC-C; Langston verified at the object, third independent witness) — ⛔⛔ **WE ASK KRAKEN FOR THE PRICE ONLY WHEN SOMEBODY TRADES. ON A QUIET PAIR THAT IS SILENCE WHILE THE REAL QUOTE MOVES.**
 
+➕ **2026-09-07 (CC-C; Langston, verified by me at the object) — AN ITEM FOR `B-WS-UNSUB-CHANNEL-PARITY` (`D2`), SAME SUBSYSTEM: THE PER-SYMBOL CHANNEL WATCHDOG IS DEAD BY CONSTRUCTION.**
+**`kraken-websocket-adapter.ts:startChannelWatchdog:3159` has NO ARMING CALLER.** Only two callers exist: **`resetChannelWatchdog:3194`**, guarded by `if (this.channelWatchdogTimers.has(normalizedSymbol))` — **it can only RE-arm an existing timer** — and **`refreshChannel:3222`, itself downstream of the watchdog firing.**
+⇒ ★ **CIRCULAR: the watchdog can only be armed by something that requires it to already be armed.** `channelWatchdogTimers` can never become non-empty ⇒ `handleChannelTimeout` → `refreshChannel` cannot fire and `sentinelResets` cannot increment.
+✅ **THE USEFUL HALF IS THE NEGATIVE ONE: refresh-churn is therefore NOT a reaper of a pinned subscription set** — established by MECHANISM, not by an unobserved zero *(an over-determined zero would have proven nothing)*.
+⚠️ **The other half is a dead per-symbol watchdog carrying a diagnostic counter that can never move.** **DISPOSITION: item on `B-WS-UNSUB-CHANNEL-PARITY`, not its own batch — same subsystem, already owned, already placed.**
+
 **`kraken-websocket-adapter.ts:1427-1434` sends `{channel:'ticker', symbol, snapshot:true}` — with NO `event_trigger` field.** Kraken's published values are `bbo` | `trades` and **the default is `trades`**: *"on every trade"* versus *"on a change in the best-bid-offer price levels."*
 ✅ **PRESENCE-EVIDENCE FOR THE ABSENCE:** a whole-tree search for `event_trigger` under `server/` returns **zero hits** — every occurrence in the corpus is a December-2025 chat archive.
 
