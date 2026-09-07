@@ -7742,3 +7742,22 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit
 **VERIFIED AFTER THE FIX, at the object:** `https://188.245.193.8.sslip.io/system-alerts` loaded in Claude-in-Chrome with **no login**, rendering the alerts table and the canonical actor list. ⇒ **the `workflow-07-verify-cc` rule is CORRECT as written and needs no change.**
 ⚠️ **THE RESIDUAL STANDS AND IS DELIBERATELY NOT CLOSED WITH THE ISSUE: the rule still asserts a LIVE STATE as a fixed fact.** When the session next expires, the next session meets a wall the rule says is absent, and the rule gives it no move. ★ **The cheap fix is one clause — *if you see a sign-in form, the shared session has dropped; tell Kyle* — which converts a contradiction into an instruction.** **HOME: it rides `B-RULES-LAYER` (`#998`, plan row 4.6), whose whole subject is instructions asserting things they cannot keep true.** Not a batch of its own.
 
+
+
+### #1016 OPEN 2026-09-07 (Langston, Step-8 finding on `B-DEPLOY-DRIFT-LINE`; owner CC-A) — ⛔ THE DRIFT GATE DEFINES "RUNTIME" BY WHERE FILES LIVE, AND `dt-deploy` EXECUTES MORE THAN THAT
+
+**THE DEFECT, taxonomy outcome (1) — a real defect, not a design decision reported as one.** `dt-deploy-drift.sh`'s reader uses `RUNTIME = ('server/', 'client/', 'shared/')`. **That is a directory convention.** What `dt-deploy` actually EXECUTES is wider:
+- **`npm ci`** — on a `package-lock.json` diff
+- **`npm run build`** — reading `vite.config.ts`, `tsconfig.json`, `tailwind.config.ts`, `postcss.config.js`
+- **`npm run db:migrate`** = `tsx scripts/db-migrate.ts` over **`drizzle/migrations/**`**
+
+⇒ **A gap made only of those logs `NO_RUNTIME_PATHS` and files nothing.** ⛔⛔ **AN UNDEPLOYED SCHEMA MIGRATION IS THE HIGHEST RUNTIME RISK WE CARRY, and it is exactly what this gate cannot see.** ★ **The predicate does not answer its own stated question** — the body says *"does the range touch runtime paths at all"*, and it means *"does it touch three directories."*
+
+✅ **REACHABILITY MEASURED RATHER THAN ASSERTED, which is why this is LATENT and not live.** Last **400** commits on `origin/migration/aws-supabase`: **3 touch a deploy-executed path, and all 3 ALSO carry `server/` files ⇒ ZERO gate-invisible today.**
+★ **THE NEAR-MISS IS THE ARGUMENT, though:** `3b2c4966c` (`B-XSTOCK-FEED-SANITY`, whose deploy was held four days) carried `drizzle/migrations/*.sql` **and** `package.json` — **and only spoke because runtime files happened to ride along.** Remove those and the alarm is silent on a held migration.
+
+⚠️ **AND LANGSTON CORRECTED HIS OWN MEASUREMENT IN FLIGHT, which is worth keeping because it is the same class the finding is about:** his first pass used `scripts/` + `migrations/` and returned **42** — over-broad on `scripts/` (mostly analysis, not deploy-executed) and a **FALSE ZERO on `migrations/`, because the real path is `drizzle/migrations/`.** **A path guessed from convention rather than read from the deploy script — the very error the finding names.**
+
+**FIX: derive the set from WHAT THE DEPLOY EXECUTES, not from where files live** — read `dt-deploy.sh` and `package.json`'s scripts, and treat the union as the runtime surface.
+⚠️ **NOT BLOCKING `B-DEPLOY-DRIFT-LINE`, and Langston said so explicitly: the shipped gate is strictly better than the ungated version it replaced.**
+**HOME: `B-DRIFT-RUNTIME-PREDICATE`, owner CC-A, `PHASE_19_PLAN` row 4.56, immediately after 4.55.** No date.
