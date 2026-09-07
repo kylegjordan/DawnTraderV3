@@ -7725,7 +7725,7 @@ Kyle opened Kraken Pro's **Fees** dialog signed in, on three live markets, and c
 MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit baseline in a Step-4 change list; it is NOT an ancestor of origin (quoted from local history after a rebase), so nobody but me could resolve it. The artifact was right, the citation was not. Real baseline `57216944d`, same blob sha256, same 21,573 B.
 
 
-### #1010 OPEN 2026-09-06 (CC-A, hit at `B-DEPLOY-DRIFT-LINE` Step 7) — ⛔ CLAUDE-IN-CHROME PRESENTED A LOGIN WALL ON STAGING TODAY, WHICH IS THE ONE THING THE RULES RECORD AS MEASURED-IMPOSSIBLE
+### #1015 OPEN 2026-09-06 (CC-A, hit at `B-DEPLOY-DRIFT-LINE` Step 7) — ⚠️ **RENUMBERED FROM `#1010` — THIRD COLLISION IN THIS FILE IN TWO DAYS, and mine each time.** It collided with CC-B's Kraken fee-schedule entry. Measured, not argued: theirs `8ecc67156` 11:09:43, mine `b89d52a44` 21:22:08 ⇒ the newer renumbers. **Commit `b89d52a44` says `#1010` and means THIS entry.** ★ **Three collisions from three different sessions in two days is the mint-time argument `#744` now carries.** — ⛔ CLAUDE-IN-CHROME PRESENTED A LOGIN WALL ON STAGING TODAY, WHICH IS THE ONE THING THE RULES RECORD AS MEASURED-IMPOSSIBLE
 
 **MEASURED 2026-09-06 ~17:20Z.** Navigated to `https://188.245.193.8.sslip.io/system-alerts` in **Claude-in-Chrome** — the surface `workflow-07-verify-cc` names as **the only** one for staging. Result: the accessibility tree carried **only a sign-in form**; the root URL **redirected to `/login`** and rendered *"Welcome Back / Sign in to your trading account / Username / Password / Sign In"*. ⛔ **I typed nothing** — a session may not type a password into a form, which is a hard boundary and not a permission.
 
