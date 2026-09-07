@@ -757,7 +757,10 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 
 ---
 
-## B-EXIT-BOOK-AGE-STAMP (CC-C, ⛔ **OPEN — OBSERVATION WINDOW**, deployed 2026-08-30) — Phase 19, plan row 3b.h · `#961` + `#962`
+## B-EXIT-BOOK-AGE-STAMP (CC-C, ✅ **CLOSED 2026-09-07**, deployed 2026-08-30) — Phase 19, plan row 3b.h · `#961` + `#962`
+
+✅ **CLOSED 2026-09-07 — all four close conditions PASS.** C1-C3 evaluated 2026-09-06; **C4 — the only condition that checks the column's VALUE rather than its presence — passed on an exact pairing: `JUP/USD` log `ageMs=40` against the row's `exit_fill_depth_age_ms::text = '40'`, compared at full precision with an equality predicate.** ⚠️ **C4 was first declared UNEVALUABLE by me on a wrong reach figure: I read the live `out.log` alone as the instrument's whole span ("3 hours") when `pm2-logrotate` retains 14 rotated archives beside it (~18 h). Langston opened the archives and the evidence was already there.** **Decision taken by Langston 2026-09-07T13:12Z at the graded ref; converted to `B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md` §11-§12; alert `6cbef7d0` resolved against `03df1620b`.** ⚠️ **Carried out, not swept: `trailing_stop_hit` 8→0 is homed to `B-RATCHET-RE-ASK`.**
+
 
 **WHAT:** records two facts on every close and **changes no behaviour** — the age of the depth snapshot the FILL walked (new column `exit_fill_depth_age_ms`), and whether the number that DROVE the exit was a MIDPOINT or a LAST TRADE. Deployed `104fa755bf28b852c7c648081aa32a9683424d9f` at **2026-08-30T12:05:09Z**.
 

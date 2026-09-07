@@ -1189,6 +1189,9 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ### #962 OPEN 2026-08-30 (CC-C; round-2 reader, re-derived by me at the ref) — ⛔⛔ A RESTING MAKER SELL IS DECLARED FILLED WHEN THE **MIDPOINT** REACHES THE LIMIT, THEN BOOKED **AT** THE LIMIT WITH SLIPPAGE ZERO — **59% OF xSTOCK MAKER EXITS BOOKED AT A PRICE NO BID EVER REACHED**
 
+⚠️ **2026-09-07 — `B-EXIT-BOOK-AGE-STAMP` (the batch that INSTRUMENTED this) CLOSED, and this issue STAYS OPEN.** ⛔ **The batch recorded two facts on every close and CHANGED NO BEHAVIOUR by design (its OBJ-3). Measuring a defect is not fixing it** — closing the issue on the batch's close would convert an instrument into a repair. **What is now READ rather than reconstructed: `exit_fill_depth_age_ms` on every close, and which KIND of number drove the exit (midpoint vs last trade) via the split `exit_price_producer`.** Record: `B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md`.
+
+
 **SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (2) — added as an item to `B-EXIT-TRIGGER-FILL-PARITY` (plan row **3b.c**), because it is the OTHER half of that batch's subject and 5 of that batch's own 9-row sample are maker rows.**
 
 **RE-DERIVED:** `active-execution-engine.ts:1507-1508` calls `evaluatePendingMaker({ side:'sell', currentPrice, limit:_exitRestLimit })` — and on xStock `currentPrice` is `_eqTick.price` (`:1230`), **the MIDPOINT.** The log line itself reads *"venue price ${currentPrice} **traded through** the resting exit"* — **treating a mid as a traded price.** Then `:1991` `actualExitPrice = _mLimit` and `:1993` `_exitSlippageOverride = 0` — *"slippage 0 by construction."*
@@ -1207,6 +1210,9 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 ---
 
 ### #961 OPEN 2026-08-30 (CC-C; round-2 reader, re-derived by me at the ref) — ⛔⛔⛔ **THE EXIT FILL WALKS A BOOK OF UNBOUNDED AGE. THE ENTRY REFUSES ONE OLDER THAN 15 SECONDS — THROUGH THE SAME FUNCTION, FIFTEEN HUNDRED LINES APART.**
+
+⚠️ **2026-09-07 — `B-EXIT-BOOK-AGE-STAMP` (the batch that INSTRUMENTED this) CLOSED, and this issue STAYS OPEN.** ⛔ **The batch recorded two facts on every close and CHANGED NO BEHAVIOUR by design (its OBJ-3). Measuring a defect is not fixing it** — closing the issue on the batch's close would convert an instrument into a repair. **What is now READ rather than reconstructed: `exit_fill_depth_age_ms` on every close, and which KIND of number drove the exit (midpoint vs last trade) via the split `exit_price_producer`.** Record: `B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md`.
+
 
 **SEVERITY: high, and OUTSIDE the 00:15 burst — this fires on ordinary days. OWNER: CC-C. DISPOSITION: §9.4 (1) — FOLD INTO `B-EXIT-TRIGGER-FILL-PARITY` (plan row **3b.c**) as its FIRST item, ahead of the trigger/fill divergence that named the batch.**
 
@@ -7761,3 +7767,39 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit
 **FIX: derive the set from WHAT THE DEPLOY EXECUTES, not from where files live** — read `dt-deploy.sh` and `package.json`'s scripts, and treat the union as the runtime surface.
 ⚠️ **NOT BLOCKING `B-DEPLOY-DRIFT-LINE`, and Langston said so explicitly: the shipped gate is strictly better than the ungated version it replaced.**
 **HOME: `B-DRIFT-RUNTIME-PREDICATE`, owner CC-A, `PHASE_19_PLAN` row 4.56, immediately after 4.55.** No date.
+
+---
+
+### #1017 OPEN 2026-09-07 (CC-C; Langston verified at the object, third independent witness) — ⛔⛔ **WE ASK KRAKEN FOR THE PRICE ONLY WHEN SOMEBODY TRADES. ON A QUIET PAIR THAT IS SILENCE WHILE THE REAL QUOTE MOVES.**
+
+**`kraken-websocket-adapter.ts:1427-1434` sends `{channel:'ticker', symbol, snapshot:true}` — with NO `event_trigger` field.** Kraken's published values are `bbo` | `trades` and **the default is `trades`**: *"on every trade"* versus *"on a change in the best-bid-offer price levels."*
+✅ **PRESENCE-EVIDENCE FOR THE ABSENCE:** a whole-tree search for `event_trigger` under `server/` returns **zero hits** — every occurrence in the corpus is a December-2025 chat archive.
+
+⭐⭐ **THREE INDEPENDENT ARTEFACTS OF THE SAME DESIGN INTENT, ALL SAYING THE SYSTEM KNEW ABOUT THIS — AND ALL THREE INERT:**
+1. **The adapter's own comment two lines above the payload (`:1425-1426`), verbatim:** *"ticker: provides trade-based updates (fast for liquid pairs)"* / *"book: provides BBO updates (continuous for illiquid pairs)."*
+2. **The original architecture** (`bridge/canonical/`) has **no order book at all** — it was added later, and this is what it was added for.
+3. **The dead `prefer_book` channel-switch** (`:316-318` + `:2602-2611`), a hardcoded four-symbol list that **cannot fire** because it tests a slashed symbol against a de-slashed hint.
+
+⇒ ★★ **THE BOOK EXISTS BECAUSE THE TICKER IS QUOTE-BLIND ON COLD NAMES — which is exactly the ~93% of level evaluations where no book is subscribed either (`PRICING_DATA_ARCHITECTURE.md` §1.4/§1.5).** ⛔ **So the population with no second feed to check against is also the population where the one feed we do have is at its least responsive.**
+
+⚠️ **AND IT RE-READS THE TICKER-VS-BOOK AGREEMENT RESULT (231/232 exact): that is agreement BY CONSTRUCTION OF THE SAMPLE.** Both feeds coexist only on names we hold — liquid, densely traded — where trade-triggered ≈ quote-triggered. **It was never evidence that the book adds nothing; it is evidence that the book adds nothing WHERE THE TICKER'S TRIGGER DOES NOT BIND.**
+
+⚠️ **NOT YET ESTABLISHED, AND THE CONTROL IS NOT A DOC READ:** the archive records `event_trigger:'bbo'` being tried and **REJECTED by production v2**. Kraken's docs list it now. ⇒ **the control is a LIVE SUBSCRIBE ACK.** Also unmeasured: that `bbo` is cheaper than the book by a useful margin is a **hypothesis** — one message per top-of-book change against ten levels of delta, with no measured rate for either.
+
+**HOME:** `B-TICKER-BBO-TRIGGER`, owner **CC-C**, placed in `PHASE_19_PLAN.md` at **row 3b.h-1**, immediately before `3n` `B-PRICE-SIDE-BY-JOB`. No date. ⛔ **The ordering is load-bearing: `3n` cannot rule on which price sets a level while that basis is silent between trades.**
+⭐ **AND THE MEASUREMENT NEEDS THREE ARMS, NOT TWO (Langston):** a cold-slice comparison of `trades`-ticker vs `book` confounds *"the book carries price information"* with *"our ticker was stale."* Run **`trades`-ticker · `bbo`-ticker · `book`** on the same slice. **If arm 2 tracks arm 3 on cold names the way arm 1 tracks arm 3 on hot names, the book stays out of price permanently and we have earned that.**
+
+---
+
+### #1018 OPEN 2026-09-07 (CC-C) — ⚠️ **THE DAILY CRYPTO-UNIVERSE RE-CHECK RECOMPUTES AND LOGS, BUT DOES NOT ACT**
+
+**`server/scripts/b74-refresh-universe.ts`, root crontab, 03:00 UTC — 130 runs on file, `2026-05-01` → `2026-09-07`, and it works: today 58 pairs added, 32 dropped, 385 kept.**
+⛔ **But its own docstring says what it does NOT do, verbatim:** *"Does NOT modify the running archiver subscriptions (those happen at next full PM2 restart, which is rare). The daily refresh is informational."*
+⇒ **A pair that crossed the $10,000 24 h volume floor this morning is in the computed universe and NOT in the running archiver's subscription until the process next restarts.**
+
+★ **THE MITIGATION IS ACCIDENTAL, NOT DESIGNED:** we now deploy often and every deploy restarts the process, so *"restarts are rare"* — true when written — **is now false in the direction that happens to help us.** ⚠️ **Depending on an accident is not the same as having a mechanism, and the drift is invisible while it is small.**
+✅ **MEASURED TODAY:** computed universe **443** · distinct symbols written in the last hour **428** · over 24 h **464**. **The universe ranges 388-469 across the last ten runs with no configuration change** — so *"we archive 465 coins"* was a 24-hour distinct count of a moving number, never a subscription size.
+
+**HOME:** `B-UNIVERSE-REFRESH-ACTS`, owner **CC-C**, placed in `PHASE_19_PLAN.md` at **row 3b.h-2**, after `B-TICKER-BBO-TRIGGER`. No date.
+**Evidence:** `PRICING_DATA_ARCHITECTURE.md` §5b.1.
+
