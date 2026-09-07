@@ -145,6 +145,40 @@
 
 ★ **AND THE SCAN LOOP'S ORIGINAL SHAPE:** *"Fetch OHLC history (721 candles) → Calculate indicators → Determine market regime → Check macro-state → Select compatible strategies."* **Candles drove analysis; the ticker supplied the live price.**
 
+### ✅✅ THE OPEN-TRADE PRICE PATH — **KYLE'S MEMORY IS CORRECT IN FULL, AND MY FIRST ANSWER WAS ABOUT THE WRONG MECHANISM**
+
+⛔ **I was asked whether a REST-too-weak → subscribe-to-WebSocket mechanism exists and still runs. I found the hardcoded four-symbol `prefer_book` hint list, reported it as the answer, and it is NOT the mechanism.** Kyle pushed back with a specific observation — *"I could see whether a trade was being updated based on REST or on the WebSocket, and it was happening back and forth for many pairs"* — and he is right on every point.
+
+**THE ACTUAL MECHANISM, THREE PARTS, ALL LIVE:**
+
+**(1) THE PER-TICK RESOLUTION CHAIN — `active-execution-engine.ts:1478-1520`, stated in the code's own words:**
+> `kraken_ws → kraken_rest → SKIP-THIS-TICK`
+
+Each open position, each cycle: try the WS cache (freshness window 2,000 ms, venue-source predicate) ⇒ `withWsPrice++` and `[I7-WS-D][ENGINE_WS_PRICE]`. Otherwise a **direct Kraken REST ticker call** ⇒ `[I7][REST_FALLBACK]` and `withRestPrice++`. Otherwise the position is **skipped this tick**, with a consecutive-skip escalation rail. ⇒ ★ **THIS IS THE PER-PAIR BACK-AND-FORTH KYLE WATCHED IN THE OPEN-TRADES TABLE.**
+
+**(2) THE SUBSCRIPTION AUDIT — `i8cRunSubscriptionAudit`, every 5,000 ms (`I8C_AUDIT_INTERVAL_MS`).** For every open position it checks subscription state AND tick age, and **resubscribes on either failure**:
+- `!isSubscribed` ⇒ `[I8C-AUDIT][FIX] reason=missing_subscription` ⇒ resubscribe
+- `isStale` ⇒ resubscribe. ⭐ **`I8C_STALE_THRESHOLD_MS = 30000`.**
+- ⭐ **AND THE TUNING IS THE PART THAT CONFIRMS THE INTENT — `Phase 8.8.3-I8E`, verbatim:** *"Only truly stale (>30s) should trigger resubscription. Low-volume pairs (5-25s without tick) are expected and should NOT resubscribe."* **A quiet pair is deliberately distinguished from a broken one.**
+
+⇒ ★★ **THAT IS EXACTLY KYLE'S DESCRIPTION: not enough pricing updates arriving ⇒ resubscribe to the WebSocket.** It is not a hint list; it is a live 5-second health loop over open positions.
+
+**(3) LIVE STATE, MEASURED 2026-09-07 11:47Z:** `[I8C-AUDIT][SUMMARY] total_positions=6 subscribed=6 low_volume=0 missing=0 stale=0`, firing every 5 s. **`ENGINE_WS_PRICE` 19,842 · `REST_FALLBACK` 0 · audit `FIX` events 0.**
+⇒ **The mechanism is not absent — it is healthy and therefore idle.** The fallback exists and is currently never needed for the 6 held positions.
+
+### ⛔⛔ AND THIS RECONCILES THE APPARENT CONTRADICTION WITH §1.5 — TWO POPULATIONS, TWO ANSWERS
+| population | how it is priced | evidence |
+|---|---|---|
+| **the 6 OPEN POSITIONS** | ⭐ **100% WebSocket**, audited every 5 s, **zero REST fallbacks** | `ENGINE_WS_PRICE` 19,842 vs `REST_FALLBACK` 0 |
+| **the ~217-symbol shared cache** | ⭐ **~93% REST-polled** | cache census: 209 `kraken_rest` vs 8 `kraken_ws` |
+⇒ ⛔ **MY EARLIER "93% REST-SOURCED" WAS NUMERICALLY RIGHT AND MISLEADING ABOUT THE OPEN-TRADE PATH, WHICH IS THE PATH THE QUESTION WAS ABOUT.** The broad cache is REST because those symbols are **never WS-subscribed at all** (§1.5); the held positions are WS because they **are** subscribed, and audited into staying so.
+★ **Kyle observed the back-and-forth BEFORE Phase 8 closed — which is precisely why `I8C` ("subscription reliability") was built. The behaviour he remembers was the problem; the audit is the fix; the fix is working, so the fallback no longer fires.**
+
+⚠️ **AND IT REVISES A CITATION OF MINE ELSEWHERE:** `B-EXIT-BOOK-AGE-STAMP`'s V4 cited `withRestPrice=0` as the reason the REST-fallback producer cannot appear on a close. **The zero is real but its CAUSE is a healthy WS subscription, not a dead code path** — a distinction that matters if subscriptions ever degrade.
+
+### ⛔ THE CHANNEL-SWITCH HINT LIST — DEMOTED TO WHAT IT IS
+**Everything recorded below about the hardcoded `prefer_book` four remains factually true and is a genuine `§15` vestige — but it is NOT the mechanism Kyle was describing, and reporting it as such over-weighted a dead detail against a live system.**
+
 ### ⛔⛔ THE ADAPTIVE CHANNEL SWITCH — IT EXISTS, IT IS A HARDCODED LIST OF FOUR, AND IT HAS NEVER FIRED
 **Kyle's recollection, checked 2026-09-07:** *"if the REST signal is too weak and not feeding enough, then it subscribes to the WebSocket… set up long before the new governance batches."*
 ⇒ ★ **THE MECHANISM IS REAL AND IT IS NOT WHAT IT SOUNDS LIKE. It is a ticker→BOOK channel switch, `Phase 8.8.3-I7-WS-G (G3)`, at `kraken-websocket-adapter.ts:2602-2611`** — *"Check if we should switch to book channel for low-liquidity pairs."* **Same intent Kyle remembers: when the ticker is not feeding enough, get the data elsewhere.**
