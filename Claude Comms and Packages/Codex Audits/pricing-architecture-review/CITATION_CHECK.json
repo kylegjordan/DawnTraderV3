@@ -1,0 +1,516 @@
+{
+  "pin": "9c2b50e7391758ef7fd2df0a48f0368fbcef13e0",
+  "checked": 102,
+  "references": [
+    {
+      "path": "server/core/rtb/ready_to_buy_service.ts",
+      "line": 2407,
+      "text": "    const signal = await storage.upsertRtbSignal(insertData);"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 2866,
+      "text": "  i8cSubscribeNewTrade(symbol: string, reason: string = 'new_trade'): void {"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 1427,
+      "text": "    const tickerSubscribe = {"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "line": 2594,
+      "text": "        const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 547,
+      "text": "    if (this.pendingSubscriptions.size > 0) {"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 895,
+      "text": "  private handleInstrumentMessage(message: any): void {"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 1022,
+      "text": "      if (typeof update.checksum === 'number') {"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 3496,
+      "text": "  static computeBookChecksumFromRaw("
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 3396,
+      "text": "  getBookForFill(symbol: string): {"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 3523,
+      "text": "  async softResubscribe(symbol: string): Promise<void> {"
+    },
+    {
+      "path": "server/services/execution/depth-source.ts",
+      "line": 47,
+      "text": "  if (assetClass === 'xstock_spot') {"
+    },
+    {
+      "path": "server/services/execution/depth-walk.ts",
+      "line": 44,
+      "text": "export function walkBook(orderQty: number, levels: readonly BookLevel[]): WalkResult {"
+    },
+    {
+      "path": "server/services/execution/order-placer.ts",
+      "line": 63,
+      "text": "  async openOrder(req: OpenOrderRequest): Promise<FillResult> {"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3953,
+      "text": "    // P19-B4b.1 (Langston hold #1): SIZE DOWN to the ACTUAL filled qty. Reassigning"
+    },
+    {
+      "path": "server/services/execution/depth-source.ts",
+      "line": 192,
+      "text": "export function assessSufficiency("
+    },
+    {
+      "path": "server/services/execution/depth-walk.ts",
+      "line": 82,
+      "text": "export function closeFillFull("
+    },
+    {
+      "path": "server/services/execution/order-placer.ts",
+      "line": 98,
+      "text": "  async closeOrder(req: CloseOrderRequest): Promise<FillResult> {"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3790,
+      "text": "    const _gate = await this._evaluateOpenDepthGate(signal.symbol, _openClass, signal.entryPrice * quantity);"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3808,
+      "text": "      const _live = await evaluateXstockPriceLiveness(signal.symbol);"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3909,
+      "text": "      const _venueCheck = await validatePaperOrderWithVenue({"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3938,
+      "text": "    const _openFill = await this.orderPlacer.openOrder({"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3971,
+      "text": "    const positionValue = actualEntryPrice * quantity;"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 4185,
+      "text": "        entryBookAgeMs: _gate.snapshot.ageMs,"
+    },
+    {
+      "path": "server/services/execution/venue-validate.ts",
+      "line": 66,
+      "text": "export const VALIDATE_TIMEOUT_MS = 4000;"
+    },
+    {
+      "path": "server/services/execution/venue-validate.ts",
+      "line": 122,
+      "text": "export async function validatePaperOrderWithVenue(req: VenueValidateRequest): Promise<VenueValidateOutcome> {"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3920,
+      "text": "      if (_venueCheck.outcome === 'skipped') {"
+    },
+    {
+      "path": "server/asset_classes/xstock_spot/scanner.ts",
+      "line": 597,
+      "text": "      const ohlcBatch = await xstockOhlcCache.getOHLCDataBatch(symbolList, 15);"
+    },
+    {
+      "path": "server/asset_classes/xstock_spot/scanner.ts",
+      "line": 898,
+      "text": "          const ohlc = ohlcBatch.get(symbol) ?? [];"
+    },
+    {
+      "path": "server/core/metrics/regime-inputs.ts",
+      "line": 143,
+      "text": "    if (assetClass === 'xstock_spot') {"
+    },
+    {
+      "path": "server/services/xstock-ohlc-cache.ts",
+      "line": 285,
+      "text": "    if (intervalMinutes === 15) {"
+    },
+    {
+      "path": "server/asset_classes/xstock_spot/ohlc-aggregator.ts",
+      "line": 275,
+      "text": "      SELECT DISTINCT ON (symbol, interval_begin)"
+    },
+    {
+      "path": "server/services/ohlc-cache.ts",
+      "line": 77,
+      "text": "  async getOHLCData("
+    },
+    {
+      "path": "server/services/xstock-ohlc-cache.ts",
+      "line": 285,
+      "text": "    if (intervalMinutes === 15) {"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "line": 2404,
+      "text": "      const cachedPrice = priceCache.getCachedPrice(symbol);"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "line": 2442,
+      "text": "      const currentPrice = smoothedPrice;"
+    },
+    {
+      "path": "server/services/vts-runner.ts",
+      "line": 1429,
+      "text": "  const mceContext = mce.computeContext(symbol, ohlcData, priceData.price, priceData.volume24h ?? 0, undefined, propagatedDbs, _assetClass);"
+    },
+    {
+      "path": "server/services/market-context-engine.ts",
+      "line": 1246,
+      "text": "    const cacheKey = `${symbol}:${assetClass}`;"
+    },
+    {
+      "path": "server/services/market-context-engine.ts",
+      "line": 1959,
+      "text": "let mceInstance: MarketContextEngine | null = null;"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "line": 2221,
+      "text": "          const { ohlc: ohlcData } = await ohlcCache.getOHLCData(symbol, 60);"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "line": 2250,
+      "text": "          const context = mce.computeContext(symbol, ohlcForContext, currentPrice, volume24h, undefined, propagatedDbs, sizingContext.assetClass);"
+    },
+    {
+      "path": "server/utils/adaptive-kalman.ts",
+      "line": 63,
+      "text": "  update(price: number, ER: number, VolNoise: number): number {"
+    },
+    {
+      "path": "server/utils/adaptive-kalman.ts",
+      "line": 175,
+      "text": "const filterRegistry = new Map<string, AdaptiveKalmanFilter>();"
+    },
+    {
+      "path": "server/services/active-position-sizing.ts",
+      "line": 137,
+      "text": "  const { portfolioValue, guardrails, entryPrice, stopPrice, symbol, strategy, mode } = params;"
+    },
+    {
+      "path": "server/services/active-position-sizing.ts",
+      "line": 225,
+      "text": "  const exposureBudget = portfolioValue * (safeMaxTotalExposurePct / 100);"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3750,
+      "text": "    if (this.mode === 'paper' && signal.quantity && signal.quantity > 0) {"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 467,
+      "text": "    this.orderPlacer = new PaperOrderPlacer((s, ac) => this.feePercentFor(s, ac)); // P19-B6.5d (OBJ-4): thread the carried class to the fill-fee resolver"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 1750,
+      "text": "        if (this.mode === 'paper' && _exitRestLimit !== null && Number.isFinite(_exitRestLimit) && !_isStopClass) {"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3750,
+      "text": "    if (this.mode === 'paper' && signal.quantity && signal.quantity > 0) {"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 3861,
+      "text": "    if (this.mode === 'paper') {"
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 109,
+      "text": "const globalLiveEngine = new TradingEngine('live');"
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 3944,
+      "text": "          let liveEngineEnabled = false;"
+    },
+    {
+      "path": "server/services/trading-engine.ts",
+      "line": 316,
+      "text": "    if (this.mode === 'live') {"
+    },
+    {
+      "path": "server/services/price-cache.ts",
+      "line": 41,
+      "text": "export interface CachedPrice {"
+    },
+    {
+      "path": "server/services/price-cache.ts",
+      "line": 215,
+      "text": "              price: parseFloat(ticker.c?.[0] || '0'),"
+    },
+    {
+      "path": "server/services/live-pricing-adapter.ts",
+      "line": 831,
+      "text": "      const midpoint = markKindOf(bid, ask) === 'mid' ? (ask + bid) / 2 : lastTrade;"
+    },
+    {
+      "path": "server/services/market-data/kraken-v2-translator.ts",
+      "line": 72,
+      "text": "  const markKind = markKindOf(bid, ask);"
+    },
+    {
+      "path": "server/services/price-cache.ts",
+      "line": 507,
+      "text": "  updateFromWebSocket("
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 1493,
+      "text": "        if (priceResult !== null && priceResult.price !== null && isKrakenVenueSource(priceResult.source)) {"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 1468,
+      "text": "          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws', priceProducer, null, null, null, null);"
+    },
+    {
+      "path": "server/services/live-pricing-adapter.ts",
+      "line": 1061,
+      "text": "    const normalized = this.normalizeSymbol(symbol);"
+    },
+    {
+      "path": "server/services/price-cache.ts",
+      "line": 101,
+      "text": "  private cache: Map<string, CachedPrice> = new Map();"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "line": 2594,
+      "text": "        const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 1093,
+      "text": "        symbol: internalSymbol, price: midpoint, source: 'kraken_ws', producer: 'kraken_ws_book_mid',"
+    },
+    {
+      "path": "server/services/live-pricing-adapter.ts",
+      "line": 1095,
+      "text": "    priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs);"
+    },
+    {
+      "path": "server/core/calculations/level-basis.ts",
+      "line": 757,
+      "text": "export interface FeedAgreementSample {"
+    },
+    {
+      "path": "server/core/calculations/level-basis.ts",
+      "line": 825,
+      "text": "  const haveBook = s.bookBid !== null && s.bookAsk !== null"
+    },
+    {
+      "path": "1-system-manual/PRICING_DATA_ARCHITECTURE.md",
+      "line": 96,
+      "text": "\u26d4\u26d4 **BLOCKER, ADDED 2026-09-07 AFTER THE ABOVE WAS WRITTEN \u2014 THE CONCLUSION IMMEDIATELY BELOW IS WITHDRAWN. THIS COMPARISON IS, AT LEAST IN PART, THE BOOK COMPARED AGAINST ITSELF.** *(Langston, traced at the object; the mechanism is his, the instrument was mine.)*"
+    },
+    {
+      "path": "server/core/rtb/ready_to_buy_service.ts",
+      "line": 1794,
+      "text": "    const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.entry * 1.02; // mirror executePromotedSignal default"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "line": 1906,
+      "text": "    const _b2 = normalizeAndGateTarget({"
+    },
+    {
+      "path": "server/core/rtb/ready_to_buy_service.ts",
+      "line": 1949,
+      "text": "      const targetPrice = num(s.targetPrice) ?? entryPrice * 1.02; // mirror executePromotedSignal's default"
+    },
+    {
+      "path": "server/core/trading/pending-maker-logic.ts",
+      "line": 21,
+      "text": "export function tradedThrough(side: PendingSide, currentPrice: number, limit: number): boolean {"
+    },
+    {
+      "path": "server/core/trading/pending-maker-logic.ts",
+      "line": 40,
+      "text": "export function evaluatePendingMaker(args: {"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "line": 1750,
+      "text": "        if (this.mode === 'paper' && _exitRestLimit !== null && Number.isFinite(_exitRestLimit) && !_isStopClass) {"
+    },
+    {
+      "path": "server/services/vts-runner.ts",
+      "line": 3118,
+      "text": "    // \u2500\u2500 P19-B7.2c: PENDING maker pre-pass (parity with paper's _processPendingMaker)."
+    },
+    {
+      "path": "server/core/trading/vts-exit-booking.ts",
+      "line": 22,
+      "text": "export function resolveVtsBookedExitPrice("
+    },
+    {
+      "path": "server/services/vts-runner.ts",
+      "line": 3370,
+      "text": "    const grossPnl = (exitPrice - trade.entryPrice) / trade.entryPrice;"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 1480,
+      "text": "  unsubscribeFromSymbols(symbols: string[]): void {"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 911,
+      "text": "  private handleV2BookUpdate(message: any): void {"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 3523,
+      "text": "  async softResubscribe(symbol: string): Promise<void> {"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 3159,
+      "text": "  startChannelWatchdog(symbol: string): void {"
+    },
+    {
+      "path": "server/services/passive-archive/equity-spot-archiver.ts",
+      "line": 408,
+      "text": "export async function runStallWatchdogTick(now: Date = new Date()): Promise<void> {"
+    },
+    {
+      "path": "server/services/price-cache.ts",
+      "line": 203,
+      "text": "    for (let i = 0; i < symbols.length; i += this.BATCH_SIZE) {"
+    },
+    {
+      "path": "server/services/price-cache.ts",
+      "line": 427,
+      "text": "        for (let i = 0; i < missingSymbols.length; i += this.BATCH_SIZE) {"
+    },
+    {
+      "path": "server/services/passive-archive/universe-loader.ts",
+      "line": 192,
+      "text": "  const BATCH = 100;"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken.ts",
+      "line": 259,
+      "text": "  async getTicker(pair?: string): Promise<Record<string, KrakenTicker>> {"
+    },
+    {
+      "path": "server/services/passive-archive/universe-loader.ts",
+      "line": 156,
+      "text": "export async function loadCryptoSpotUniverse(opts?: {"
+    },
+    {
+      "path": "server/services/passive-archive/crypto-spot-archiver.ts",
+      "line": 231,
+      "text": "  const result = await loadCryptoSpotUniverse();"
+    },
+    {
+      "path": "server/scripts/b74-refresh-universe.ts",
+      "line": 42,
+      "text": "  const result = await loadCryptoSpotUniverse();"
+    },
+    {
+      "path": "server/config/crypto-universe-filter.json",
+      "line": 8,
+      "text": "    \"allowedQuotes\": [\"USD\", \"USDT\", \"USDC\"],"
+    },
+    {
+      "path": "server/core/rtb/ready_to_buy_service.ts",
+      "line": 2421,
+      "text": "    // fire-and-forget, never throws into the queue path."
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "line": 547,
+      "text": "    if (this.pendingSubscriptions.size > 0) {"
+    },
+    {
+      "path": "server/scripts/b74-refresh-universe.ts",
+      "line": 42,
+      "text": "  const result = await loadCryptoSpotUniverse();"
+    },
+    {
+      "path": "server/services/drift-dashboard-aggregator.ts",
+      "line": 864,
+      "text": "  const universeConfigs = ["
+    },
+    {
+      "path": "server/services/drift-dashboard-aggregator.ts",
+      "line": 922,
+      "text": "  for (const cfg of universeConfigs) {"
+    },
+    {
+      "path": "server/services/passive-archive/kraken-futures-archiver.ts",
+      "line": 162,
+      "text": "      event: 'subscribe',"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "line": 2529,
+      "text": "      // \u26d4\u26d4 B-PRICE-SIDE-BY-JOB \u2014 LEVEL-BASIS SHADOW ARM. BUILT AND COUNTED; CONSUMED BY NOTHING."
+    },
+    {
+      "path": "1-system-manual/PRICING_DATA_ARCHITECTURE.md",
+      "line": 713,
+      "text": "- \u2705 **PERPETUAL FUTURES \u2014 CLOSED, AND NOW CARRYING KYLE'S RULING.**"
+    },
+    {
+      "path": "server/services/live-pricing-adapter.ts",
+      "line": 858,
+      "text": "  private async fetchMockPrice(symbol: string): Promise<PriceQuote> {"
+    },
+    {
+      "path": "server/routes.ts",
+      "line": 5563,
+      "text": "  apiRouter.post(\"/paper/trade/test\", authenticateToken, requireJson, async (req: AuthenticatedRequest, res, next) => {"
+    },
+    {
+      "path": "server/asset_classes/xstock_spot/scanner.ts",
+      "line": 661,
+      "text": "          ? ((ask - bid) / ((ask + bid) / 2)) * 100"
+    },
+    {
+      "path": "1-system-manual/PRICING_DATA_ARCHITECTURE.md",
+      "line": 670,
+      "text": "\u2b50 **AND THE PRE-REGISTERED PREDICTION FOR ROW 5 xSTOCK, WRITTEN BEFORE THE CHANGE AND FALSIFIABLE** *(Langston's, adopted \u2014 my *\"stricter\"* framing was wrong):* \u26d4 **the two legs move in OPPOSITE directions \u2014 stops fire EARLIER, targets fire LATER.** \u21d2 **on the xStock worst decile an ~11.8% spread does not tighten the exit distribution, it can INVERT it: near-total stop-outs and near-zero target hits, because a target set off a bar close and tested against a bid ~11.8% under the mid will not be reached before the stop is.** \u2705 **If that is not observed, the cell is wrong and this prediction is what says so.**"
+    },
+    {
+      "path": "server/services/passive-archive/ticker-batch-writer.ts",
+      "line": 51,
+      "text": "// Throttle: track last-captured timestamp per (assetClass:symbol)"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "ref": "54533d0a99b643e61f97f4c730252e869e6421bc",
+  "checks": {
+    "server/core/rtb/ready_to_buy_service.ts": [
+      {
+        "line": 2426,
+        "text": "          krakenWebSocketAdapter.i8cSubscribeNewTrade(normalizedSymbol, 'rtb_queued');"
+      }
+    ],
+    "server/exchanges/kraken/kraken-websocket-adapter.ts": [
+      {
+        "line": 1028,
+        "text": "          const ours = this.computeBookChecksum(raw, prec);"
+      },
+      {
+        "line": 3496,
+        "text": "  static computeBookChecksumFromRaw("
+      },
+      {
+        "line": 3516,
+        "text": "  private computeBookChecksum("
+      },
+      {
+        "line": 3520,
+        "text": "    return KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw, prec);"
+      }
+    ],
+    "server/asset_classes/xstock_spot/scanner.ts": [
+      {
+        "line": 597,
+        "text": "      const ohlcBatch = await xstockOhlcCache.getOHLCDataBatch(symbolList, 15);"
+      }
+    ],
+    "server/services/active-position-sizing.ts": [
+      {
+        "line": 229,
+        "text": "  let quantity = bufferedMaxNotional / entryPrice;"
+      }
+    ]
+  }
+}

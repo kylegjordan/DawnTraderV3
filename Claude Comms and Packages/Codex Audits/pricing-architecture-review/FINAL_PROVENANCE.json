@@ -1,0 +1,183 @@
+{
+  "pin": "9c2b50e7391758ef7fd2df0a48f0368fbcef13e0",
+  "final_head": "9c2b50e7391758ef7fd2df0a48f0368fbcef13e0",
+  "branch": "migration/aws-supabase",
+  "origin": "https://github.com/kylegjordan/DawnTraderV3.git",
+  "git_status_porcelain": "?? .claude/launch.json\n",
+  "git_status_stderr": "warning: unable to access 'C:\\Users\\kyleg/.config/git/ignore': Permission denied\nwarning: unable to access 'C:\\Users\\kyleg/.config/git/ignore': Permission denied\n",
+  "captured_at_utc": "2026-09-07T21:33:12.236218+00:00",
+  "pinned_source_files": [
+    {
+      "path": "1-system-manual/PRICING_DATA_ARCHITECTURE.md",
+      "sha256": "ed9fa83a1e627325d1dd9ca07cefa94c9fc3d70d6a8dbc20a9874e2464a6948b"
+    },
+    {
+      "path": "Claude Comms and Packages/Scope Files/CODEX_PRICING_ARCHITECTURE_BRIEF.md",
+      "sha256": "1eaad234f06ec998e749b894b0d5f6208c0ddfe7d3d8241c02c0431bae99616c"
+    },
+    {
+      "path": "server/asset_classes/xstock_spot/active-dispatch.ts",
+      "sha256": "07cda6aacf91cbd0c684427162eaad6c5af90d0fb7aa3ac8c82990d67ccb9d60"
+    },
+    {
+      "path": "server/asset_classes/xstock_spot/ohlc-aggregator.ts",
+      "sha256": "ba66226b260795cc88824ab057ee67b9937b46b29c1c935b74ed7442b0d97de4"
+    },
+    {
+      "path": "server/asset_classes/xstock_spot/scanner.ts",
+      "sha256": "d7aa41c44a847ca9a72dea2c52cddb184d7ccf307ce932b9247c3a85226d9295"
+    },
+    {
+      "path": "server/config/crypto-universe-filter.json",
+      "sha256": "069ad30b44db58ff18a6977176ca1da335dd807ecf5c8cdf3639c385cdded89d"
+    },
+    {
+      "path": "server/core/calculations/level-basis.ts",
+      "sha256": "28660e7ddaf3d591d774d922deb9c6291a2f62c77f699b43812058c041dddc0b"
+    },
+    {
+      "path": "server/core/calculations/venue-price-grid.ts",
+      "sha256": "9484f92c6b430a5c65747f79fd45fa8b4d1155572fbe491c46092f2a0777b1e7"
+    },
+    {
+      "path": "server/core/math/cost-model.ts",
+      "sha256": "b6c3e44e96800b68d6bbdf86afd22c0fd61b45057ebb30e97a63905d462ac991"
+    },
+    {
+      "path": "server/core/metrics/cost-metrics.ts",
+      "sha256": "945d2e4a0d119d30bfa1e114c1936bd64cd83c0d844ee2b6b288168833594e27"
+    },
+    {
+      "path": "server/core/metrics/regime-inputs.ts",
+      "sha256": "e1988893b28d422761e77a1655c74782f117f2c8f5b7556e2b13bc5e665ba3e1"
+    },
+    {
+      "path": "server/core/rtb/ready_to_buy_service.ts",
+      "sha256": "30e6fd00063073d62d0c95191d6ccddfd598dff61ec1996716c254e54149861d"
+    },
+    {
+      "path": "server/core/trading/pending-maker-logic.ts",
+      "sha256": "1fe21f2f65ebc5797f8bc82960d0a14a44cec021e7211fefa0f20deccbb1b433"
+    },
+    {
+      "path": "server/core/trading/vts-exit-booking.ts",
+      "sha256": "244318a6f8924fce3dbb07645eab7435e73fc54d87f1348f1177cc055e95fcd8"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken-websocket-adapter.ts",
+      "sha256": "fa6a37c30a6be23d9e173157573de96ad407c2905dec8d5d7a3b947813578089"
+    },
+    {
+      "path": "server/exchanges/kraken/kraken.ts",
+      "sha256": "42c67e6296ef364922a7d0a7503ac27dcbfc50eeefdbfa95c12c26a39d56db42"
+    },
+    {
+      "path": "server/routes.ts",
+      "sha256": "0e895c32c7cdbf169b0597f6c1e08d0125e88658299589b432e15c47c808ad2c"
+    },
+    {
+      "path": "server/scripts/b74-refresh-universe.ts",
+      "sha256": "101b03089432ec30165580ca59abc30fc17672ecdef64466d2ace3c33a48546c"
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "sha256": "88fc7c5ee9fac77a146693a3063e15f48c03c0090d011b5031b560d73b95b8fc"
+    },
+    {
+      "path": "server/services/active-position-sizing.ts",
+      "sha256": "62b4bf2ea2b01079cabe7e4a1136ccc40283c1fa125e74abaf6e7a70874a1665"
+    },
+    {
+      "path": "server/services/drift-dashboard-aggregator.ts",
+      "sha256": "b99a99f3c65d62fa9361e5ec74c64bf2293251fcee4f7ed64aaa0a16b001af73"
+    },
+    {
+      "path": "server/services/execution/depth-source.ts",
+      "sha256": "fab826b00183a225325d154d31176ca9f06625de862f0d6e185f44978e738afa"
+    },
+    {
+      "path": "server/services/execution/depth-walk.ts",
+      "sha256": "32896cca753b9fe0ce52943901dcd3f69ff7cf53d74675ab617050a2a3bc7ae4"
+    },
+    {
+      "path": "server/services/execution/order-placer.ts",
+      "sha256": "2985a303d8f6e306463b37e5e4cfb93fc2ce25746147a411f0bcbf169ee2ffcb"
+    },
+    {
+      "path": "server/services/execution/venue-validate.ts",
+      "sha256": "2f2c177dec43b26b85c996b8dd4da2b0fdd18de66d3fbe3dd738cab38259c653"
+    },
+    {
+      "path": "server/services/live-pricing-adapter.ts",
+      "sha256": "9a879f60f9a73a952cc8110b33816286b30e4c184954bf5369e56dd94576c214"
+    },
+    {
+      "path": "server/services/market-context-engine.ts",
+      "sha256": "be90935608cf7e999b688643c73595ec31ac0d8de6fa3756ae2c7087626357a9"
+    },
+    {
+      "path": "server/services/market-data/kraken-v2-translator.ts",
+      "sha256": "f6f92f7d63cab0e9365503e528c417f14d983de1798271bd9b89c96ab73a4e34"
+    },
+    {
+      "path": "server/services/market-scanner.ts",
+      "sha256": "b1f4e2829d3a65c4a7905160bdfcd34ef4ecca0d802369116305916616d2023f"
+    },
+    {
+      "path": "server/services/ohlc-cache.ts",
+      "sha256": "e00cafcea5fc9eec85656421b8bc9a72b5b740e5aefabfd205bebbba5c19090c"
+    },
+    {
+      "path": "server/services/passive-archive/crypto-perp-archiver.ts",
+      "sha256": "1202b6d5cf44474eb25014018e015a9567d3f1b1c2312071bbe05c47ccfe2363"
+    },
+    {
+      "path": "server/services/passive-archive/crypto-spot-archiver.ts",
+      "sha256": "e45940e1396bc5ccbbc54ba5f18d224dac06145c22429243dae18b493369b987"
+    },
+    {
+      "path": "server/services/passive-archive/equity-perp-archiver.ts",
+      "sha256": "7158c6b3e28b8dbb0ef633a7713ed13857a237a3877180ca0766e6d2d52e377e"
+    },
+    {
+      "path": "server/services/passive-archive/equity-spot-archiver.ts",
+      "sha256": "c691dad2533a671bf8ef6647c57fb464005498f6b5084448c82ee3f28a9692bb"
+    },
+    {
+      "path": "server/services/passive-archive/kraken-futures-archiver.ts",
+      "sha256": "1e5766fd0a494e5fa08120bfc1402092769b5f33ddbcfe778a83d8aa052a863d"
+    },
+    {
+      "path": "server/services/passive-archive/ticker-batch-writer.ts",
+      "sha256": "3187744282b19c2a1fd276ce0844be7e766e58c58121cc45a0c658e23337a76a"
+    },
+    {
+      "path": "server/services/passive-archive/universe-loader.ts",
+      "sha256": "2d67feebf7213a431384bd27ea9c79adf9671cc04281c21018024cc400dda9d6"
+    },
+    {
+      "path": "server/services/price-cache.ts",
+      "sha256": "ca5a91717d535d1bdbb41b521e995f43bc2ddd35227f9a36ea94651f38892da4"
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "sha256": "8f8d936e521206f8c8ac0ea29257f5887a113680472c82f97a1c6ee899cbf26d"
+    },
+    {
+      "path": "server/services/trading-engine.ts",
+      "sha256": "f1e64c017457e24fa56fdcb1a224b62a60a8fd3f1a050fc167693144b75293e6"
+    },
+    {
+      "path": "server/services/vts-runner.ts",
+      "sha256": "56e1817f661e27bff14c6ecb3d130ce72e707e14c8936081bb616fecc0ac36c8"
+    },
+    {
+      "path": "server/services/xstock-ohlc-cache.ts",
+      "sha256": "e18ee428d4f828eb36d0c5c2f83a72c04a832c78a745f9e999840652f48020e8"
+    },
+    {
+      "path": "server/utils/adaptive-kalman.ts",
+      "sha256": "fb3fa558e550337269c3bfd702ab15b9cd86616d52e0de3aae07caf8b17cf87c"
+    }
+  ]
+}

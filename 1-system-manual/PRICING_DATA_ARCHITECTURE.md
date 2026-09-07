@@ -6,6 +6,15 @@
 
 ---
 
+> ⛔⛔⛔ **NOT CANONICAL — UNDER CORRECTION AS OF 2026-09-08. THE CODEX REVIEW RETURNED 14 CORRECTIONS AND ONE OF THEM OVERTURNS THIS DOCUMENT'S CENTRAL STRUCTURAL CLAIM.**
+> **Report at `Claude Comms and Packages/Codex Audits/pricing-architecture-review/REPORT.md`** (frozen, SHA-256 verified byte-identical on copy), reviewed against pinned `9c2b50e7`.
+> ⛔⛔ **A1, RE-DERIVED BY ME AT THE PINNED REF AND CONFIRMED: §1.5's *"the WebSocket subscription set is OPEN POSITIONS"* IS WRONG.** **`ready_to_buy_service.ts:2411-2431` subscribes an unsubscribed crypto candidate AT QUEUE TIME**, via `i8cSubscribeNewTrade(symbol, 'rtb_queued')` — which reaches `subscribeToSymbols`, which subscribes **ticker AND depth-10 book**.
+> ★ **AND ITS OWN COMMENT EXPLAINS WHY, DATED 2026-07-15 (`P19-B8.5`), NAMING TWO LIVE CASUALTIES (`SYN/USD`, `TRX/USD`):** the depth gate needs a warm book BEFORE a position can open, and the only prior subscribe ran AFTER trade creation — *"a strict ordering inversion."* ⇒ ⛔ **A DELIBERATE, DOCUMENTED FIX THAT MY AUDIT REPORTED AS A STRUCTURAL LIMITATION — §9.5(b-ii), pointed at myself.**
+> ⚠️ **HOW I MISSED IT, because the shape matters more than the miss: I enumerated the external callers of `subscribeToSymbols` and found only the diagnostic route. The RTB service calls `i8cSubscribeNewTrade` — a DIFFERENT public method that wraps it. I enumerated one entry point's callers, not the CLASS of entry points.** ★ **Third instance of that shape in this document's own review cycle.**
+> ⛔ **WHAT THIS CASCADES INTO, none of it yet rewritten:** §1.4's reading of the 6.8% *(book presence in a sampled instrument is not subscription coverage, and does not establish the CAUSE of absence)* · §3's F2 *"the book is available only where we are not choosing"* · §6.2 row 4's lane logic · **and `BLOCKER-4`'s premise that there is no arm 3 on a cold name — which Langston and I spent two rounds building a pinning mechanism around.**
+> ✅ **A NARROWER VERSION MAY SURVIVE** — a name never queued still has no book — **but the scope is far smaller than this document claims and the mechanism is not what it says.** ⛔ **DO NOT CITE THIS DOCUMENT AS CURRENT TRUTH UNTIL THE CORRECTION LANDS.**
+
+
 ## 0. WHY THIS DOCUMENT EXISTS — KYLE'S FRAMING, RECORDED BECAUSE IT IS THE BAR
 
 > *"We are just fixing pieces and then sometimes going back and looking at that piece and saying, no, this is not the right thing to do — forgetting that we have just updated it. We're not getting to a final design state that is the best possible setup for our system."*

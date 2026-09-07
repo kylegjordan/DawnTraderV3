@@ -1,0 +1,77 @@
+{
+  "pin": "9c2b50e7391758ef7fd2df0a48f0368fbcef13e0",
+  "passed": 7,
+  "results": [
+    {
+      "probe": "one-level open detects exhaustion",
+      "input": {
+        "orderQty": 3,
+        "levels": [
+          {
+            "price": 100,
+            "qty": 1
+          }
+        ]
+      },
+      "result": {
+        "filledQty": 1,
+        "avgFillPrice": 100,
+        "consumedNotional": 100,
+        "exhausted": true
+      }
+    },
+    {
+      "probe": "one-level close prices unseen remainder synthetically",
+      "input": {
+        "orderQty": 3,
+        "levels": [
+          {
+            "price": 100,
+            "qty": 1
+          }
+        ],
+        "penaltyBps": 100
+      },
+      "result": {
+        "filledQty": 3,
+        "avgFillPrice": 99.33333333333333,
+        "consumedNotional": 298,
+        "exhausted": false
+      }
+    },
+    {
+      "probe": "mid-trigger maker fill despite bid below sell limit",
+      "input": {
+        "bid": 99,
+        "ask": 101,
+        "mid": 100,
+        "sellLimit": 100
+      },
+      "result": "fill",
+      "scope": "verifies comparator behavior, not any historical fill"
+    },
+    {
+      "probe": "post-deadline observation wins without event time",
+      "result": "fill",
+      "scope": "does not establish that the crossing occurred before expiration"
+    },
+    {
+      "probe": "VTS booking is class-dependent",
+      "crypto": 99,
+      "xstock": 100
+    },
+    {
+      "probe": "exact MCE method returns cached price despite changed currentPrice argument",
+      "argument": 200,
+      "returned": 100,
+      "scope": "cache-hit branch only; macro, indicator computation and production scheduling not exercised"
+    },
+    {
+      "probe": "fabricated target affects fallback rank, finite chosen EV overwrites it",
+      "fallbackTarget": 102,
+      "chosenRank": 2,
+      "fallbackRank": 7,
+      "scope": "exact rank method, expectancy dependency stubbed; not an EV validation"
+    }
+  ]
+}
