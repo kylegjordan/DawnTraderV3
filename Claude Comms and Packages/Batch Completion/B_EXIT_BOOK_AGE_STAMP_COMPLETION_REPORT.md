@@ -1,6 +1,6 @@
-# B-EXIT-BOOK-AGE-STAMP — BATCH PROGRESS REPORT
+# B-EXIT-BOOK-AGE-STAMP — COMPLETION REPORT (CLOSED 2026-09-07)
 
-# ⛔ OPEN — WAITING ON POST-DEPLOY CLOSES. NOT A COMPLETION REPORT.
+# ✅ CLOSED 2026-09-07 — all four criteria PASS. Converted from the progress report; the observation record is preserved in full below (§9 carries a criterion I misjudged, §11 the correction).
 
 **Batch:** `B-EXIT-BOOK-AGE-STAMP` (`#961` + `#962`) · **change-class:** `non_architecture` · **Owner:** CC-C · **Phase 19, plan row 3b.h**
 **Deployed:** `104fa755bf28b852c7c648081aa32a9683424d9f` at **2026-08-30T12:05:09Z** — `dt-deploy --by CC-C`, engine resumed, identity asserted, migration applied in 818 ms.
@@ -128,3 +128,46 @@ The exit fill walks a depth ladder and **never recorded how old it was**, so `#9
 ⇒ ⛔ **PUT TO LANGSTON. I have over-claimed repeatedly today and the disciplined move is to state both cases and let the reviewer rule** — not to grade my own batch's exit on the reading that finishes it.
 
 **Until he rules: card stays in `Observation`, the `RUNNING_ISSUES` entries stay open, and §8's conversion condition is unmet.**
+
+---
+
+## 11. ✅ **C4 PASSES — AND THE REACH FIGURE THAT MADE IT LOOK UNEVALUABLE WAS MINE AND WAS WRONG.** *(2026-09-07)*
+
+⛔⛔ **THE CORRECTION FIRST, BECAUSE IT IS THE MORE USEFUL HALF: §9's V4 and §10 both state the log's reach as *"3 hours."* THAT IS WRONG. THE RETAINED REACH IS ~18 HOURS.**
+**`pm2-logrotate` is configured `max_size 1G, retain 14`. `retain` IS A FILE COUNT, NOT A DURATION.** The live `out.log` rotates every ~1-1.5h, and **fourteen rotated archives sit on disk beside it.** I measured the live file, called that the instrument's reach, and concluded the evidence had aged out. ⇒ **I declared a criterion unevaluable because I never opened the archives.**
+★ **This is the `#661` leg-2 window-coverage class, and it failed in the direction that makes a real answer look unavailable** — the most expensive direction, because nobody re-checks an absence. **Cost: one re-armed alert and a 3.3-hour live stakeout for something already sitting on disk.** *(`MISTAKE: instrument-reach [B-EXIT-BOOK-AGE-STAMP]`.)*
+
+### ✅ THE PAIRINGS — LANGSTON FOUND TWO; I RE-DERIVED ONE MYSELF AND THE OTHER HAS SINCE ROTATED OUT
+⛔ **STATED PRECISELY RATHER THAN ROUNDED UP, because the retained window is ROLLING and this record outlives it.**
+
+| # | pairing | printed | recorded | verdict | who |
+|---|---|---|---|---|---|
+| **1** | **`JUP/USD`** `2026-09-07 03:50:18` | log `ageMs=40` | row `2ca0d245-…`, `closed_at 2026-09-07 03:50:18.451+00`, `kraken_ws_book_mid`, `exit_fill_depth_age_ms::text = '40'` | ✅ **EXACT**, `= 40 → t` | **Langston, then RE-DERIVED BY ME at the object** |
+| **2** | **`KTA/USD`** `2026-09-06 19:15:14` | log `ageMs=21` | row `closed_at 2026-09-06 19:15:14.581+00`, taker, `::text = '21'` | ✅ **EXACT**, `= 21 → t` | **Langston only — AGED OUT of retention before my read** |
+
+⚠️ **PAIRING 2 IS RULED ON REPORTED FACT AND IS LABELLED AS SUCH.** At my read the oldest retained archive began `2026-09-06 20:39:44`; the KTA line at `19:15:14` had rotated out in the ~1h between his read and mine. **I am not claiming to have reproduced it. C4 stands on pairing 1, which I verified end-to-end myself; pairing 2 corroborates.**
+✅ **POSITIVE CONTROL, and it discriminates:** `grep FILL_DEPTH_AGE` across live + all 14 archives returns **exactly 1** — the instrument fires, and the population within current reach is one row, not zero. **A silent grep would have been indistinguishable from a broken one.**
+✅ **COMPARED AT FULL PRECISION** — `::text` **plus** an equality predicate, never psql's display rounding. **The column is `doublePrecision`; a rounded display against an integer log value is exactly the near-match trap C4 was written to catch.**
+**Post-deploy qualifying population re-measured: 32 closes carry a non-null `exit_fill_depth_age_ms` since 2026-08-31, latest the JUP row itself.**
+
+⇒ ✅ **C4 = PASS.** The recorded number is the printed number, exactly, on the trade it was recorded for.
+
+---
+
+## 12. 🟩 **CONVERSION — THE DATA IS IN AND THE DECISION IS TAKEN**
+
+**§4's criterion, quoted as written, against the outcome:**
+| cell | criterion | outcome |
+|---|---|---|
+| **C1** | no coarse producer on a post-deploy close | ✅ PASS *(on the FAIL clause; the PASS wording was under-enumerated — see §9)* |
+| **C2** | every qualifying taker close carries the depth age | ✅ PASS — 27/27 |
+| **C3** | no new exit class appears | ✅ PASS — mix 69.2 vs 63.0 on n=39, inside SE |
+| **C4** | the recorded age equals the printed age | ✅ **PASS — `JUP/USD` 40 = 40 (re-derived by me), `KTA/USD` 21 = 21 (Langston)** |
+
+**THE DECISION, AND WHO TOOK IT: LANGSTON RULED C4 A PASS AND DIRECTED THE CONVERSION** *(2026-09-07T13:12Z, verified at the graded ref on his own commands — explicitly not reported fact)*. **§10 put the closure ruling to him precisely because I should not grade my own batch's exit, and this is that ruling.**
+⇒ **BATCH CLOSED.** Card moves `Observation` → `Complete`. Alert `6cbef7d0-…` resolved **only now the result is recorded** — a resolved row on an undocumented result is a silenced obligation.
+
+### ⚠️ WHAT REMAINS UNPROVEN, STATED AS SUCH
+- **`trailing_stop_hit` 8 → 0** is recorded in §9 and is **not** a C3 failure; it still has **no home**. ⇒ **DISPOSITION: own batch — folded into `B-RATCHET-RE-ASK`**, since the ratchet being off is the standing hypothesis and Kyle's own reason for disabling it has expired (VTS-era reasoning applied to a paper-trading system).
+- **V4 stays CITED, not observed** — and its reach figure is now correctly stated as ~18h, which does not change its status.
+
