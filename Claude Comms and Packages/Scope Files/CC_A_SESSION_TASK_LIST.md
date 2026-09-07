@@ -17,6 +17,7 @@
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
 | ⛔ **`B-GOV-REPORTING`** (row 8) | **pushed to the branch — the review gate NEVER RAN** | me | **Scope exists; no pre-audit, no completion report.** These reporting + ledger-matrix rules landed 2026-08-26 and **all four sessions are following them right now.** Highest-risk open item I own |
+| ⛔ **`B-DEPLOY-DRIFT-LINE`** (row 4.55) | **OPEN — observation window, NOT stalled** | a real drift gap carrying runtime files | Installed hourly 2026-09-07; Langston confirmed Step 8. **It has never fired a CORRECT alert** — every firing was a test or the ungated one. A true positive is a WAIT, not a test |
 | ⏳ **`B-RULES-1e`** (row 1) | **Step 2**, with Langston | Langston / me | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
 | ⏳ **`B-MEASURE-GATE`** beyond leg 2 (row 6) | **Step 2** | me | Step 1 approved 2026-08-31. Leg 2 CLOSED 2026-09-02 — the rest is not |
 | ⏳ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | open, small objectives left | me | **ran IN FLIGHT WITH NO PLAN ROW until 2026-09-02** — found only while writing this file |
@@ -28,6 +29,8 @@
 | plan row | item | kind | state |
 |---|---|---|---|
 | 4.55 | **`B-DEPLOY-DRIFT-LINE`** (`#1002`) | batch | ⭐⭐ **IN FLIGHT — Step 1 APPROVED by Langston 2026-09-05 at `25f64f93c`, moving to Step 2.** He ruled all three conflicts and WITHDREW two of his own instructions |
+| 3b.h-3 | **`B-TSC-GUARD-DETERMINISM`** (`#1019`) | batch | ⭐ **KYLE-ASSIGNED 2026-09-07**, on his rule *"whoever implemented the most recent push/deploy guard"*. The tsc-baseline guard refused a push containing ZERO TypeScript, citing 209 groups dropping below baseline; running the checker by hand seconds later returned OK on identical 377-vs-377 totals, and a retry passed with nothing changed. ⛔ **CC-C wrote it up as a HYPOTHESIS, not a finding, because it predicts a DETERMINISTIC refusal and the retry passed** — something is non-deterministic between invocations and they did not find it |
+| 4.56 | **`B-DRIFT-RUNTIME-PREDICATE`** (`#1016`) | batch | **Langston's Step-8 finding.** The drift gate calls `server/ client/ shared/` "runtime" — a directory convention — while `dt-deploy` also runs `npm ci`, the build configs and **`drizzle/migrations/**`**. Measured latent: 3 of the last 400 commits touch a deploy-executed path and all 3 carry `server/` too |
 | 4.57 | **`B-TASK-LIST-SLOT`** (`#1009`) | batch | ⭐ **NEXT, AND THE POSITION IS KYLE'S, FIXED 2026-09-05 after he read this queue** — *"then we go to the b task list slot next… it needs to be cleaned up."* **Ahead of 4.6 `B-RULES-LAYER`, which he had previously directed to follow `B-WAKE-QUIET`** |
 | 4.6 | **`B-RULES-LAYER`** (`#998`) | batch | ⚠️ **SUPERSEDED ORDER: Kyle directed this to follow `B-WAKE-QUIET`, then on 2026-09-05 put `B-TASK-LIST-SLOT` ahead of it.** Still his; just not next. Failure condition pre-registered |
 | 1 | `B-RULES-1e` | batch | **IN FLIGHT, parked at Step 2** with Langston |

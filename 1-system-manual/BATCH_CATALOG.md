@@ -909,3 +909,19 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 **STEP 6 NOT APPLICABLE, Kyle-approved:** the batch's 26 files touch nothing under `server/`, `client/` or `shared/`, so a deploy triggered by it would have shipped other sessions' undeployed trading-engine changes under this batch's id.
 
 **Record:** `B_WAKE_QUIET_COMPLETION_REPORT.md`.
+
+
+## B-DEPLOY-DRIFT-LINE (CC-A, ⛔ **OPEN — OBSERVATION WINDOW**, installed 2026-09-07) — Phase 19, plan row 4.55 · `#1002`, folds `#1008`
+
+**WHAT IT IS FOR.** Every deploy check we owned compared the deployment **against itself**. `dt-deploy.sh:191` gates the deploy EVENT on branch membership; `daily_deploy_check.sh` compares `record.sha` to `dist/BUILD_SHA` and to the staging clone's local `HEAD`. **The review branch is not an operand of any of them**, so none could see the branch advancing after a deploy — which is how staging sat 55 commits behind with `active-execution-engine.ts` and `signal-orchestrator.ts` undeployed while paper trading ran, with every check green (`#1001`).
+
+**WHAT SHIPPED.** `dt-deploy-drift.sh` on Helsinki, hourly, running as `langston`. It reads the deployed sha over ssh, the branch head via `git ls-remote`, and the range via the GitHub compare API — **no clone, no fetch, no working copy**, which deletes stale-ref risk by construction. It files a quiet `health_check`/`info` alert on a **bounded, monotone AGE bucket** (4/8/24/72h, escalate-only), gated on the range touching a runtime path, and **resolves every rung itself on return to zero.** Plus `#1008`: the rules-changed alarm's file list is paginated, exit-status-checked, and now **says so** when truncated or unreadable instead of reading as a clean absence.
+
+**⛔⛔ THE DEFECT THAT MATTERS MOST, and it is this batch's own subject rebuilt inside the batch: A 404 FROM THE COMPARE API RENDERED AS *ZERO DRIFT*.** GitHub's error bodies carry their own `status` field, so an `is None` guard never fired and **an instrument that could not see the repository reported all-clear.** Found by RUNNING the failure branch, not by reading it — after it had survived my own review, a fresh-reader object round, and two Langston reviews.
+
+**★ THE METHOD FINDING OUTLIVES THE BATCH.** Three of the last four defects were found by execution and none by reading, and all three were **claims about what an external interface returns**. Filed as a two-clause rider on `#744`: *exercise the failure branch against a real response*, **and** *state the expected output before running* — the second because the failure branch WAS run and still returned a pass from a control that processed nothing.
+
+**REVIEW.** Langston reviewed at five refs across Steps 1-4 and confirmed Step 8 on his own commands with controls. **Blockers he raised and I fixed: a mint call receiving zero arguments; `ssh` without `-n` eating the resolve loop's stdin (1 of 3 rows resolved); `log()` returning 1 so a successful run exited 1; three surviving absent-as-valid paths; a permanently unclearable actor design; and a guard I deleted believing it a duplicate.**
+
+**OPEN — the batch does NOT close on the install.** The job has **not yet fired a correct alert in production**; every firing so far was a test or the ungated one, since withdrawn. A first true positive needs a real gap carrying runtime files, which is a wait rather than a test. **Record: `B_DEPLOY_DRIFT_LINE_PROGRESS_REPORT.md`.**
+**Spawned: `#1016` `B-DRIFT-RUNTIME-PREDICATE` (row 4.56)** — Langston's Step-8 finding that the gate defines runtime by directory convention while `dt-deploy` also executes `npm ci`, the build configs and **`drizzle/migrations/**`**; measured latent, not live.

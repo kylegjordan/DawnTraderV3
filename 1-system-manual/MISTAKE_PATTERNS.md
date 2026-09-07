@@ -671,3 +671,25 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 ⚠️⚠️ **BELOW THE PROMOTION FLOOR AND HE SAID SO HIMSELF — SEEN ONCE, NOMINATED ON CONSEQUENCE.** ★ **It is kept because he declined to pad the count when padding would have been undetectable, and because of where it lands: this file is the one place where a WRONG root does the most damage.** ⛔ **A missing pattern is a gap; a wrong one actively sends the next reader to fix the wrong thing.** *(Landed as a deliberate exception to the 3-instances floor, per that rule's own wording — it is a FLOOR that judgement may decline, not a threshold that admits automatically.)*
 **THE SHAPE:** Two incidents mention the same constant, so they are merged into one pattern with one root. **The literal really did appear in both places; the causal link is assumed rather than tested.** In the case he measured, the true cause was the **PLACEMENT of a check between two writes** — *a completely correct constant produces the identical failure.*
 **HOW TO SEE IT:** ⭐ **COUNTERFACTUAL INVARIANCE, BEFORE MERGING: hold the suspected cause FIXED at its correct value and ask whether the failure still occurs. If it does, that is not the root — file two patterns with two roots.** ★ ***A matching number is not a matching thing, and that applies to CAUSES exactly as it applies to counts.***
+
+
+### `guard-tests-the-wrong-absence` — **THE GUARD ASKED WHETHER A FIELD WAS MISSING; THE FAILURE MODE FILLS IT** — **NEW 2026-09-07, n=2 in one batch** · mechanism: ✅ **VALIDATE AGAINST THE KNOWN-GOOD SET, NEVER AGAINST ABSENCE**
+
+**The most expensive defect in `B-DEPLOY-DRIFT-LINE`, and it is the batch's own subject rebuilt inside the batch.**
+| # | instance | why the guard could not fire |
+|---|---|---|
+| 1 | ⛔ **A 404 FROM THE GITHUB COMPARE API RENDERED AS *ZERO DRIFT* — all-clear from an instrument that could not see the repository at all.** The guard was `if status is None`. | **GitHub's ERROR bodies carry their own `status` field**: a 404 returns `{"message":"Not Found","status":"404"}`. The field is never absent, so the guard never fired; `total_commits` was absent instead, and `or 0` made the zero test true. |
+| 2 | The `main`-arm reading logged `main_arm 404 None (logged only…)` **and stamped the daily cap**, spending the budget on a failed reading and suppressing the retry. The guard was a test for EMPTINESS. | `json.load` **succeeds** on an error body, so an emptiness test catches only the throw — and the throw is not the case that happens. |
+★★ **THE RULE: a guard on an EXTERNAL contract tests for the GOOD SHAPE, because a broken contract FILLS the field rather than emptying it.** ⚠️ **And "require the good shape" must be the WHOLE shape** — a follow-up fix used `[ $# -ge 7 ]` with no leader test, which is enumeration wearing a requirement's clothes: it rules out only the failures already seen. `[ $# -eq 7 ] && [ "$1" = "OK" ]`.
+⛔ **BOTH INSTANCES ARE IN ONE BATCH ⇒ the 2+-distinct-batches leg is NOT met ⇒ NOT promoted to §13.** Recorded because the mechanism is cheap, checkable, and generalises past this API.
+
+### `instrument-too-narrow` — **MY OWN SEARCH WINDOW HID THE ANSWER, AND THE EMPTY RESULT READ AS THE ANSWER** — **NEW 2026-09-07, n=4 in two days** · mechanism: **NONE YET** — the nearest is the pre-stated-expectation clause on `#744`
+
+**Four times in two days a search of MINE returned nothing and I nearly reported the nothing.**
+| # | instance | what the window could not reach |
+|---|---|---|
+| 1 | `grep '^### #1007'` returned ONE hit — mine — reading as *"no collision, Infra is mistaken."* | the other heading carries **decoration before the number** (`### ⭐⭐ #1007`) |
+| 2 | The check that a renumber had landed used a GREEDY `^### .*#(100[6-9])`, and the new heading contains *"RENUMBERED FROM `#1006`"* ⇒ it captured the OLD number and reported that `#1008`/`#1009` **did not exist at all.** | the greedy `.*` — the edit was correct and the instrument was wrong |
+| 3 | Twice, *"has Langston replied?"* answered from a `tail -6` / `tail -N` window while his reply sat **just outside it** — once by four minutes, once by 45. | replies from other sessions had pushed mine out of the tail |
+| 4 | A grep of the tooling for a defect class returned empty **with no control**, so the emptiness carried no information until a positive control was added. | — |
+★ **THE SHAPE, and it is the same one this whole batch is about: an instrument reporting an ABSENCE it was never able to detect.** ⇒ **the sound anchor is the FIRST `#\d+` on a `### ` line — never position, never a greedy trailing capture — and a window is stated, never assumed.**

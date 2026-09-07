@@ -3622,3 +3622,23 @@ The B6.5b crypto-only dry-run proved the front half of the active crypto pipelin
 > ★ **AND THE FILTER NOW DECIDES ON THE FULL BODY, NOT THE 400-CHARACTER PRINT TRUNCATION** — a name appearing past byte 400 used to be silently swallowed, which is ~118 of 2,820 of Langston's replies.
 > ⛔ **THE ESTATE IS HETEROGENEOUS BY CONSTRUCTION: a running Monitor holds the code it armed with**, so every change here is inert for any session that has not re-armed. `B-HOOK-ESTATE-VERSION` (CC-C) owns that class.
 > **THE ESCALATED PUSH NOTICE** ("THE RULES CHANGED IN THIS PUSH") no longer fires on the issues ledger or the rule-history archive — it was **73% false**, interrupting mid-task on ledger edits — and now carries `CONDUCT.md`. ⛔ **Langston's standing condition: this removal is RE-OPENED if `B-ISSUE-BLOCK-GUARD` (`#745`) drifts.** Its recovery recipe prescribes **checkout AND `reset`**, in order, with the reason: the bare `git checkout <ref> -- <path>` it taught writes the INDEX as well as the worktree, so following the message as written left origin content staged under a path the session recognised as its own.
+
+
+### ⭐ `dt-deploy-drift.sh` — THE DEPLOYED-VS-BRANCH DRIFT LINE — Added B-DEPLOY-DRIFT-LINE (2026-09-07, `#1002`)
+
+**WHY IT EXISTS:** every deploy check we owned compared the deployment **against itself** — `dt-deploy.sh:191` gates the deploy EVENT on branch membership, `daily_deploy_check.sh` compares `record.sha` to `dist/BUILD_SHA` and to the staging clone's local `HEAD`. **The review branch is not an operand of any of them**, so none could see the branch advancing after a deploy. Staging sat 55 commits behind with `active-execution-engine.ts` and `signal-orchestrator.ts` undeployed while paper trading ran, and every check read green (`#1001`).
+
+| field | value |
+|---|---|
+| **HOST** | Helsinki `204.168.141.77`, `/usr/local/bin/dt-deploy-drift.sh`, running as **`langston`** (it needs that user's staging key) |
+| **TRIGGER + CADENCE** | `langston` crontab, **`17 * * * *`** — hourly, independent of whether anyone pushed |
+| **OPERANDS** | staging `dist/BUILD_SHA` (over ssh) · the review-branch head (`git ls-remote`) · the range (GitHub compare API). ⛔ **NO clone, NO fetch, NO working copy** — which deletes stale-ref risk by construction |
+| **`dedupe_key`** | `deploy-drift-rung-{1..4}` (a bounded, monotone AGE bucket — escalate-only, return-to-zero resolves all) · `deploy-drift-measurement-failed-<operand>` · `deploy-drift-file-gate-undecidable` |
+| **FAILURE MODE** | **three outcomes, never two: measured · zero · `MEASUREMENT FAILED`** — the third mints its own alert naming the operand, and is read off the **exit status**, never an HTTP code |
+| **ACTOR** | `deploy-drift-monitor`, tag `machine` (`system-alerts.ts:215`) — an hourly robot must not claim a session identity (`#987`/`#1004`) |
+
+⛔⛔ **IT IS THE ELEVENTH WRITER TO `system-alerts.jsonl`, AND THE SECOND THAT LIVES OUTSIDE THE APP PROCESS** (after the governance checker). ★ **It writes through the supported CLI over `ssh staging`, never by appending to the file** — so it is a **frequency increase on the existing lock-free append, not a new writer class** (Langston's correction to my own overstatement). **It still lands on `#647` / `B-ALERT-QUEUE-INTEGRITY`.**
+
+⚠️ **THE REAL COST OF `info`, WHICH IS NOT "QUIET" (Langston's condition):** `health_check` is not in `ALWAYS_DELIVER_CATEGORIES` (`system-alerts.ts:121-124`), so `shouldDeliverToDiscord()` returns false and **nothing posts to `#general`** — but an active row **injects into EVERY session's EVERY prompt until someone deploys.** That is a standing nag aimed at exactly the party who can clear it, which is the property wanted; **it is not a free channel.** ⛔ **A later CATEGORY change silently re-arms Discord, and nobody reasoning from *"info is quiet"* would look here.**
+⚠️ **NOTHING DELETES from the alert store** (censused: zero members), so a re-minting producer grows it without bound. Stated, not fixed here.
+⛔ **KNOWN GAP, `#1016` / `B-DRIFT-RUNTIME-PREDICATE` (plan row 4.56):** the gate defines "runtime" as `server/ client/ shared/` — a directory convention — while `dt-deploy` also executes `npm ci` on a `package-lock.json` diff, `npm run build` over four config files, and **`db:migrate` over `drizzle/migrations/**`**. **Measured latent, not live: last 400 commits, 3 touch a deploy-executed path and all 3 also carry `server/` files.**

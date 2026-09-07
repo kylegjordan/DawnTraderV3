@@ -309,3 +309,22 @@ correct fix RED.)
 2. **A fourth attempt is queued and is the same family** — moving the behavioural rules from a user-message layer into the system-prompt layer, which the vendor documents as outranking it. **Its failure condition is pre-registered**, because it differs from the three failures only in WHERE the instruction lives, not in BEING an instruction.
 
 **★ AND THE SECOND-ORDER FINDING, which is about rules files in general and is vendor-documented: adherence FALLS as the rules file grows.** *"If Claude keeps doing something you don't want despite having a rule against it, the file is probably too long and the rule is getting lost."* ⇒ **every rule added to fix a behaviour weakens the others — including the safety-critical ones sharing the file.** A project that responds to each failure by appending a rule is buying each fix with a small tax on all its existing ones.
+
+
+---
+
+## ⭐ READING TESTS YOUR LOGIC; ONLY RUNNING IT TESTS YOUR MODEL (added 2026-09-07 from `B-DEPLOY-DRIFT-LINE`)
+
+**Across four review rounds on one small batch, THREE of the last four defects were found by EXECUTION and none by reading** — while the review protocol in use was entirely a reading protocol.
+
+⛔ **THE LOOSE READING IS FALSE AND WAS REFUTED WITH COUNTEREXAMPLES.** Reading found real defects: a paginated API returning a trailing window, a `||` binding to a pipeline's status rather than a command's, a log function returning failure on its success path. **What execution caught, every time, was ONE CLASS: A CLAIM ABOUT WHAT SOMEONE ELSE'S INTERFACE RETURNS.**
+
+| the claim | what running it showed |
+|---|---|
+| *"this function receives its arguments"* | a comment between a line-continuation and its arguments meant it received **none**; a syntax check passes on that |
+| *"the API returns no status field on an error"* | the error body **carries** one, so the guard never fired — **and a 404 reported as all-clear** |
+| *"the reader emits output"* | it emitted nothing, and the guard for that had been deleted as a supposed duplicate |
+
+★★ **THE RULE, AND IT IS NARROWER THAN "RUN EVERYTHING": ANY GUARD WRITTEN AGAINST AN EXTERNAL CONTRACT IS EXERCISED AGAINST A REAL RESPONSE FROM THAT CONTRACT, AND THE BRANCH EXERCISED IS THE FAILURE BRANCH.**
+➕ **AND A SECOND CLAUSE, WHICH THE FIRST DOES NOT COVER: A CONTROL STATES ITS EXPECTED OUTPUT BEFORE IT RUNS.** ⚠️ **Measured in the same batch: the failure branch WAS run first, and still returned a pass-shaped result from a control that had processed nothing at all.** Only the pre-stated expectation caught it — two ids were expected and neither appeared.
+⇒ **Both clauses are independent; either is satisfiable alone; neither alone catches both cases.**
