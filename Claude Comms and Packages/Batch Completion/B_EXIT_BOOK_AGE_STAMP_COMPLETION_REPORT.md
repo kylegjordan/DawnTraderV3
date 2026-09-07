@@ -76,9 +76,31 @@ The exit fill walks a depth ladder and **never recorded how old it was**, so `#9
 ✅ **THE ACTUAL REASON: the exposure is ASYMMETRIC and only one direction exists.** Rolling the CODE back is inert — old code never names the column and a surplus column costs nothing. The only failure is **schema-behind-code**, and **with no rollback file nothing automated can produce it.** `dt-deploy` runs `db:migrate` between build and restart under `set -euo pipefail`, so a failing migrate aborts before the restart. **Throwing on a schema mismatch is the correct direction.**
 ⛔ **A guard would be a silent fallback on a DB-governed write, and would manufacture a FIFTH null state on the column whose whole contribution is enumerating four.**
 
-## 7. GOVERNANCE FILES CHANGED SO FAR
-`SYSTEM_IMPACT_MAP.md` *(new `2.1.2.a` + the split epoch + a stale "not instrumented" line corrected)* · `SYSTEM_MANUAL.md` *(the `translateV2ToV1` mark-price node)* · `PHASE_19_PLAN.md` *(rows `3b.h`, `3b.i`, and three leads homed at `3b.g`)* · `RUNNING_ISSUES.md` *(`#964` filed and placed)* · `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` *(a stale member count of mine, corrected)* · the scope, the pre-audit and the change list · `.claude/memory/MEMORY_CC_C.md`.
-⏳ **STILL OWED AT CLOSE: `BATCH_CATALOG.md`, `PHASE_HISTORY.md`, and the conversion of this report.**
+## 7. ✅ GOVERNANCE LEDGER — **EVERY DOCUMENT CHANGED, BY NAME. COMPLETE AT CLOSE.**
+
+**TIER 1 — unconditional, every batch:**
+| document | what changed |
+|---|---|
+| `BATCH_CATALOG.md` | entry flipped **OPEN → CLOSED 2026-09-07**, carrying the C4 result and the reach correction |
+| `PHASE_HISTORY.md` | Phase-19 entry flipped **OPEN → CLOSED**, same two facts, plus why `#961`/`#962` stay open |
+| `PHASE_19_PLAN.md` | row `3b.h` status flipped to CLOSED; rows `3b.i` and three leads homed at `3b.g` |
+| `B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md` | **this file** — converted from the progress report, §11 (the C4 result + my reach error) and §12 (the conversion, both halves) |
+| `B_EXIT_BOOK_AGE_STAMP_SCOPE.md` · `B_EXIT_BOOK_AGE_STAMP_PRE_AUDIT.md` · `B_EXIT_BOOK_AGE_STAMP_CHANGE_LIST.md` | the batch's own step documents |
+| `.claude/memory/MEMORY_CC_C.md` | working-state block |
+
+**TIER 2 — judged applicable and updated:**
+| document | what changed |
+|---|---|
+| `SYSTEM_IMPACT_MAP.md` | new component `2.1.2.a`; the producer SPLIT EPOCH recorded; a stale *"not instrumented"* line corrected |
+| `SYSTEM_MANUAL.md` | the `translateV2ToV1` mark-price node |
+| `RUNNING_ISSUES.md` | `#964` filed and placed; **`#961` and `#962` ANNOTATED AND LEFT OPEN** — measuring a defect is not fixing it |
+| `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` | a stale member count of mine, corrected |
+| `MISTAKE_PATTERNS.md` | a new instance under the EXISTING slug **`absence-measured-with-the-wrong-object`** — the rotating-log reach error that made C4 look unevaluable. ★ **Filed as an instance, not a new slug: the object my claim was about was the retained log SET; the object I measured was one file in it.** |
+
+**TIER 2 — judged NOT applicable, stated rather than skipped by default:**
+`ADJUSTMENT_FRAMEWORK.md` · `AUTHORITY_BASELINE.md` · `STORAGE_POLICY.md` · `MULTI_ASSET_VTS_EXPANSION_PLAN.md` — **the batch changed no parameter-adjustment governance, no authority boundary, no retention window and no VTS expansion assumption.** ★ **It added two columns and split three producer members; it changed no behaviour, by its own OBJ-3.**
+
+✅ **NOTHING REMAINS OWED.** *(The prior revision of this section listed `BATCH_CATALOG.md`, `PHASE_HISTORY.md` and this report's conversion as still owed. All three landed 2026-09-07.)*
 
 ## 8. CONVERSION
 ⛔ **This becomes `B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md` only when BOTH halves are done: the data is in AND a decision or action has been taken on it.** A window that has merely elapsed does not close the batch.
