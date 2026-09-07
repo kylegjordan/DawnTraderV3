@@ -170,7 +170,7 @@ Each open position, each cycle: try the WS cache (freshness window 2,000 ms, ven
 | population | how it is priced | evidence |
 |---|---|---|
 | **the 6 OPEN POSITIONS** | ⭐ **100% WebSocket**, audited every 5 s, **zero REST fallbacks** | `ENGINE_WS_PRICE` 19,842 vs `REST_FALLBACK` 0 |
-| **the ~217-symbol shared cache** | ⭐ **~93% REST-polled** | cache census: 209 `kraken_rest` vs 8 `kraken_ws` |
+| **the shared price cache** | ⭐ **~96% REST-sourced** | **OBJECT:** `lastSource` on each `CachedPrice` entry — *the source of that entry's most recent WRITE*, not a share of traffic. **POPULATION:** every entry resident in the cache at one instant, 2026-09-07, n=217 — **209 `kraken_rest` vs 8 `kraken_ws`**. ⚠️ **A SNAPSHOT, single-moment, NOT decision-grade** (rule 13); the earlier read was n=170 (161/9). ⛔ **It excludes symbols never cached at all, and says nothing about read frequency.** |
 ⇒ ⛔ **MY EARLIER "93% REST-SOURCED" WAS NUMERICALLY RIGHT AND MISLEADING ABOUT THE OPEN-TRADE PATH, WHICH IS THE PATH THE QUESTION WAS ABOUT.** The broad cache is REST because those symbols are **never WS-subscribed at all** (§1.5); the held positions are WS because they **are** subscribed, and audited into staying so.
 ★ **Kyle observed the back-and-forth BEFORE Phase 8 closed — which is precisely why `I8C` ("subscription reliability") was built. The behaviour he remembers was the problem; the audit is the fix; the fix is working, so the fallback no longer fires.**
 
@@ -187,7 +187,15 @@ Each open position, each cycle: try the WS cache (freshness window 2,000 ms, ven
 - `prefer_book: ['TIA/USD', 'BAND/USD', 'SC/USD', 'RLC/EUR']` — **four symbols**, the only ones the switch can ever fire for
 - `low_liquidity: ['TIA/USD', 'FORTH/USD', 'PROVEEUR', 'BAND/USD', 'SC/USD', 'RLC/EUR', 'OGN/USD']` — ⛔ **read NOWHERE except a diagnostic getter. Dead data.**
 
-✅ **MEASURED: `CHANNEL_SWITCH` has fired ZERO times.** ✅ **POSITIVE CONTROL, same logs, same window: 4,900,795 `I7-WS` lines — the instrument sees this family in enormous volume, so the zero is real and not a broken search.**
+⛔⛔ **A FOURTH INERTNESS, AND IT IS STRONGER THAN THE OTHER THREE — THE PREDICATE IS UNSATISFIABLE BY CONSTRUCTION (Langston, 2026-09-07; verified at the object by me).** `:2602-2604` reads:
+> `const shouldUseBook = this.KRAKEN_CHANNEL_HINTS.prefer_book.some(hint => internalSymbol.includes(hint.replace('/', '')));`
+
+**It tests a SLASHED canonical symbol against a DE-SLASHED hint.** `normalizeToInternalSymbol` returns `BASE/QUOTE` on every resolving path, and all four hints carry slashes ⇒ **`'TIA/USD'.includes('TIAUSD')` is `false`. Forever.** ★ **Hold all four, freeze all four, and `shouldUseBook` still never goes true.**
+
+⛔⛔ **AND THAT RUINS MY OWN EVIDENCE, WHICH IS THE POINT WORTH KEEPING: `CHANNEL_SWITCH = 0` IS NOW *OVER-DETERMINED*.** Three independent sufficient causes — never subscribed · none held · **predicate unsatisfiable** — and **a zero with more than one sufficient cause discriminates between none of them.** ⇒ ⛔ **THE ZERO MAY NOT BE CITED AS EVIDENCE FOR ANY ONE CAUSE.** Cite the **PREDICATE**: a code fact needing no window, no control, and no log retention. It survives every objection the zero invites.
+*(Kept as a standing rule for this document: **an over-determined zero is not evidence.**)*
+
+✅ **MEASURED, AND NOW ONLY AS CORROBORATION RATHER THAN PROOF: `CHANNEL_SWITCH` has fired ZERO times.** ✅ **POSITIVE CONTROL, same logs, same window: 4,900,795 `I7-WS` lines — the instrument sees this family in enormous volume, so the zero is real and not a broken search.**
 ⇒ ⛔⛔ **AND IT IS DOUBLY UNREACHABLE: the switch can only fire for a SUBSCRIBED symbol, and §1.5 established that only OPEN POSITIONS are subscribed. We hold `DASH/USD`, `LINK/EUR`, `LINK/USD`, `LINK/USDC`, `ZEC/EUR`, `ZEC/USD` — none of the four.** **Even if one of the four became illiquid, nothing would happen unless we already held it.**
 
 ★ **WHY THIS MATTERS BEYOND THE VESTIGE: it is the THIRD independent piece of evidence for the same design intent.** The original architecture's comment (*"book: BBO updates, continuous for illiquid pairs"*), Langston's `event_trigger` finding (the ticker is trade-triggered and therefore quote-blind on cold names), and now this switch — **all three say the system KNEW the ticker goes blind on illiquid pairs and built a compensation. All three compensations are inert or unreachable in the current configuration.**
