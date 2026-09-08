@@ -544,3 +544,20 @@ He ruled it **sound in principle and under-specified in four ways**, and then sa
 | **new** | **`B-LANGSTON-FILE-FLOOR`** — measure the floor, then set the real number. **HOME below.** |
 
 > **HOME: `B-LANGSTON-FILE-FLOOR`, owner Infra Claude + Langston, placed in `PHASE_19_PLAN.md` at row 2.8a, after `B-LANGSTON-LEDGER-SPLIT` (2.8)** — his placement, *"same files, same hands"*, and accepted.
+
+---
+
+## ⭐⭐ 19. KYLE QUESTIONS WHETHER LANGSTON'S LESSONS BELONG IN THE SHARED FILE AT ALL *(2026-09-08)*
+
+> **Kyle:** *"I don't know that Langston's lessons should be included in the shared mistakes file. He may need his own — because the way that he works and the way that he's set up and the things that he works on, and he's just reviewing, not actually making changes… what he learns may be different and applicable only to what he's doing and not what the others are doing, and vice versa. It's just a thought there."*
+
+⛔ **THIS IS AN OBJECTION TO WORK THAT IS ALREADY LANDED — `P-8` put five of his patterns into `MISTAKE_PATTERNS.md` at `439f81349`.** It is recorded here rather than left as a passing remark, because a design objection to shipped work with no disposition is exactly the open loop §9.4 exists to close.
+
+★ **THE ARGUMENT HAS REAL FORCE AND I DID NOT CONSIDER IT.** The whole batch reasoned about **what is safe to share** — impersonal, no session names, no withdrawn provenance. **It never asked whether the lessons are USEFUL to the people receiving them.** ⇒ **safe-to-share and worth-sharing are different tests, and I only ran the first.**
+⚠️ **AND THE ASYMMETRY IS STRUCTURAL, not stylistic: he REVIEWS, he does not IMPLEMENT.** He does not deploy, does not push, does not carry a batch through eleven steps. **A pattern earned by reading a diff at a ref may not describe anything the implementing sessions ever do — and the reverse holds too**, which is his own point about vice versa.
+
+✅ **THE COUNTER-ARGUMENT, STATED SO IT IS NOT STRAW:** the five landed patterns were selected precisely for GENERALITY, and reading them back, at least three describe failures the CC sessions have committed repeatedly under different names — *a zero describes the instrument's reach*, *a clean log with no chance to fire*, *a guard that cannot go red*. ⇒ **on their content they do transfer.** ⚠️ **But that is my judgement of his lessons, which is the same authority problem one level up.**
+
+⇒ ⭐ **DISPOSITION (§9.4): (1) FOLD INTO THE WORK IN HAND.** `P-8` is inside this batch and this batch is at Step 4 under review, so the question goes to the round rather than to a new home.
+⛔ **AND IT GOES TO LANGSTON, NOT DECIDED BY ME — they are HIS lessons, and he is the one who blocked the original retrieval design on grounds nobody else had seen.** The specific question: **does a reviewer-only pattern file serve better than a shared one, and if so does the split run per-AUTHOR (his vs ours) or per-ROLE (review-time vs implement-time)?** ★ **Per-ROLE is the sharper cut if it survives — an implementing session doing a fresh-reader round IS reviewing, and would want the review-time patterns then.**
+⚠️ **NOTHING IS UNLANDED PENDING THAT ANSWER.** The five stay where they are, carrying their provenance header, until there is a decision — removing them on an unresolved question would be worse than leaving them somewhere possibly-wrong but clearly labelled.
