@@ -74,6 +74,25 @@ That is how staging sat **55 commits behind with `active-execution-engine.ts` an
 ⚠️ **Over-reporting is the cheaper fault and must stay that way** — a false nag costs attention, a missed migration costs a schema. **`B-DRIFT-RUNTIME-PREDICATE` must not trade the second for the first.**
 **DISPOSITION: added to `#1016` / `B-DRIFT-RUNTIME-PREDICATE`, plan row 4.56 — no new issue.**
 
+## 3b. ⭐ CRITERION 3 — **ESCALATION: PASS**, 2026-09-08T08:24:13Z
+
+**The criterion, as pre-registered:** *"It escalates to the next rung if the gap survives into the next band, as a NEW key rather than an edit."*
+
+**OUTCOME.** The oldest undeployed commit (`2026-09-07T07:50:56Z`) crossed the **24 h** band at `2026-09-08T07:50:56Z`. The **`08:17:01Z` run is the first hourly run after that crossing** — the `07:17` run preceded it — and the job logged `RUNG=3 age=24h total=64 runtime=1 capped=0`. **Within one hourly cycle.**
+
+| | |
+|---|---|
+| **rung 2** `81135510` | `deploy-drift-rung-2`, fired `2026-09-07T20:23:32Z` — **still `active`, UNTOUCHED** |
+| **rung 3** `aaa13da0` | `deploy-drift-rung-3`, fired `2026-09-08T08:24:13Z` — **a NEW id under a NEW dedupe key** |
+
+★ **That is escalation as a NEW ROW, not an edit to the existing one — which is precisely what the criterion asked for**, and it is what the escalate-only design on the dedupe key is supposed to produce.
+
+**Magnitudes re-derived independently with `git` at the two shas the body names** (criterion 2's method, applied again to this firing): commits behind **64 = 64**; oldest committer date `2026-09-07T11:50:56+04:00` = **`07:50:56Z`**; runtime files **1 — `server/services/market-scanner.ts`**. All three match.
+
+⛔ **CRITERION 4 IS THE ONLY ONE LEFT, AND IT IS CURRENTLY BLOCKED — WHICH IS WORTH STATING PLAINLY RATHER THAN LOGGING AS A DELAY.** It requires *"a deploy clears every rung on the next run, resolved by `deploy-drift-monitor`, with no row left open."* **The next deploy is being REFUSED** by `#402`'s daily bridge churn (`dt-deploy.sh:194-196`, exit 3) — the defect this batch's successor surfaced. ⇒ **`B-CANONICAL-BRIDGE-CHURN` (row 4.56a) is now on the critical path to closing this window**, not merely adjacent to it.
+
+★ **STATUS: criteria 1, 2 and 3 PASS; criterion 4 unexercised. The batch stays OPEN** — three of four is not a close, and the window's own terms say so.
+
 ## 4. WHAT IS UNPROVEN, STATED AS UNPROVEN
 
 ✅ **CORRECTED 2026-09-07 — THIS SECTION LED WITH *"THE JOB HAS NEVER FIRED A CORRECT ALERT IN PRODUCTION"*, AND §3a IS THAT SENTENCE BEING RETIRED BY DATA.** It is left visible rather than deleted: it was true when written, and the whole design of §3 was that the criterion be fixed BEFORE the observation arrived.
