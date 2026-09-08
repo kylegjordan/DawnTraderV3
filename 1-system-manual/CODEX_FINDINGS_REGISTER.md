@@ -93,7 +93,7 @@
 
 ---
 
-## 3. ⏳ NEEDS INVESTIGATION · ⏳ **ROUTE: INVESTIGATE** — these become §7 Q2, in the one bundle
+## 3. ⏳ NEEDS INVESTIGATION · ⏳ **ROUTE: INVESTIGATE** — these become §6 Q2, in the one bundle
 
 | # | the question we cannot answer from code alone | why it needs evidence |
 |---|---|---|
@@ -114,18 +114,7 @@
 
 ---
 
-## 5. ⏳ EARLIER AUDITS — **NOT YET REGISTERED, RETRIEVAL REQUESTED**
-
-| assignment | subject | status |
-|---|---|---|
-| **1** | full system audit — trading logic, maths, machinery | ⛔ **report not in our repository.** Known: finding 1 → `#1006` (schema/database divergence, **still unhomed, awaiting Kyle**); a fee-contract finding → `#1010`, placed with CC-B |
-| **2** | trading logic, the maths, and what to build | ⏳ not registered |
-| **3** | what is stopping the system doing its job — spread/tick, holding period, cost hurdle | data files present in `Claude Comms and Packages/Codex Audits/audit3/`; ⏳ findings not registered |
-| ⭐ **the blind-spot delta** | *what it would have asked that we did not* | ⛔ **requested in assignment 1, not in our repository. The single artifact we cannot produce ourselves.** |
-
----
-
-## 6. ⏳ THE OTHER THREE AUDITS — **NOT YET REGISTERED, AND THE RETRIEVAL IS QUESTION 1 IN THE BUNDLE**
+## 5. ⏳ THE OTHER THREE AUDITS — **NOT YET REGISTERED, AND THE RETRIEVAL IS QUESTION 1 IN THE BUNDLE**
 
 | assignment | subject | what we hold |
 |---|---|---|
@@ -134,11 +123,11 @@
 | **3** | what is stopping the system doing its job | data files present under `Claude Comms and Packages/Codex Audits/audit3/`; ⏳ findings not registered |
 | ⭐ **the blind-spot delta** | *what it would have asked that we did not* | ⛔ **requested in assignment 1, not in our repository. The one artifact we cannot produce ourselves.** |
 
-⚠️ **WE ARE NOT ASSERTING THESE WERE NEVER PRODUCED.** Coltrane writes to its own folder and our instrument does not reach there. ⇒ **§7 Q1 asks for them.**
+⚠️ **WE ARE NOT ASSERTING THESE WERE NEVER PRODUCED.** Coltrane writes to its own folder and our instrument does not reach there. ⇒ **§6 Q1 asks for them.**
 
 ---
 
-## 7. ⭐ THE QUESTION SET FOR COLTRANE — **ONE DISPATCH, SO IT MUST BE COMPLETE**
+## 6. ⭐ THE QUESTION SET FOR COLTRANE — **ONE DISPATCH, SO IT MUST BE COMPLETE**
 
 > ⛔ **DRAFT — Langston to cut, add and rule before anything is sent.** ★ **Every question here is one we cannot answer ourselves. Anything we CAN answer has been struck deliberately — a question we could have resolved is a wasted round at his price.**
 
@@ -150,7 +139,7 @@
 
 ---
 
-## 8. ⭐ WHAT WE PROPOSE TO DO WITH IT — for Langston's and Kyle's amendment
+## 7. ⭐ WHAT WE PROPOSE TO DO WITH IT — for Langston's and Kyle's amendment
 
 1. ⛔ **GROUP CONFIRMED ITEMS INTO DESIGN UNITS BEFORE COMMISSIONING ANY DESIGN.** §1.1, §1.2, §1.5, §1.7 and §1.8 are **all the same subsystem** — what we subscribe to, what confirms it, and what travels with the resulting price. **Commissioned finding-by-finding they would return overlapping mechanisms that each look reasonable alone.** ★ *Precedent: Langston's own re-cut folded three blockers into one mechanism.*
 2. **Send Codex the grouped units for design, and §3 as questions** — not fourteen separate asks.
