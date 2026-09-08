@@ -17,7 +17,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync } from 'fs';
 import { resolve } from 'path';
 import { generateBridgeJSON, syncCanonicalBridge } from '../../scripts/sync-canonical-bridge';
 
@@ -220,7 +220,24 @@ describe('sync-canonical-bridge — skip-on-unchanged reports honestly', () => {
     for (const f of GUARDED) snapshot.set(f, readFileSync(f));
   });
   afterAll(() => {
-    for (const [f, buf] of snapshot) writeFileSync(f, buf);
+    // ⛔ RESTORE ATOMICALLY — tmp + rename, the same shape atomicWrite() uses in the script.
+    //    A bare writeFileSync is O_TRUNC-then-write, and vitest.config.ts sets no `pool` or
+    //    `fileParallelism` override, so test FILES run in parallel — while
+    //    server/tests/system/mapping_drift_integrity.test.ts reads these very paths
+    //    (the JSON at :151/:163/:180/:278, the .md at :124). A read landing inside the
+    //    truncate window returns a short file and JSON.parse throws: RED CI WITH NO DEFECT
+    //    BEHIND IT.
+    // ★ NOT observed — the window is microseconds, and that is exactly why it is closed by
+    //    CONSTRUCTION rather than by a green run. One green run against a window that narrow
+    //    contains ~zero expected occurrences, so green is not evidence it cannot fire
+    //    (#661 leg 3). Langston, Step-4 CONDITION 1.
+    // ⚠️ The first version of this block made the test safe against ITSELF. It was not safe
+    //    against the other file reading the same tree.
+    for (const [f, buf] of snapshot) {
+      const tmp = `${f}.restore.tmp.${process.pid}`;
+      writeFileSync(tmp, buf);
+      renameSync(tmp, f);
+    }
   });
 
   test('unchanged content: the FILE IS NOT REWRITTEN, and the skip is reported honestly', async () => {

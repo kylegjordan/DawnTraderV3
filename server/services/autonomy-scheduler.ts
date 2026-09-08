@@ -620,7 +620,13 @@ schedulerRegistry.registerTask({
       const result = await syncCanonicalBridge();
 
       if (result.success) {
-        console.log(`[B59][SCHEDULER] ✅ Canonical bridge sync complete — ${result.filesUpdated} files updated`);
+        // B-CANONICAL-BRIDGE-CHURN (#402): was `${result.filesUpdated} files updated`, which
+        // interpolates the ARRAY — printing joined paths, not a count — and never mentioned the
+        // skip. This is the DAILY UNATTENDED caller of the task this batch fixed, so it is the
+        // one log line a human reads when asking whether the churn actually stopped.
+        // (Langston, Step-4 CONDITION 2: I ran the class grep, found this, and filed it as a
+        //  judgement call instead of applying it — fix-follows-pointer with my own name on it.)
+        console.log(`[B59][SCHEDULER] ✅ Canonical bridge sync complete — ${result.filesUpdated.length} updated, ${result.filesUnchanged.length} unchanged`);
       } else {
         console.log(`[B59][SCHEDULER] ⚠️ Canonical bridge sync had errors: ${result.errors?.join(', ')}`);
       }
