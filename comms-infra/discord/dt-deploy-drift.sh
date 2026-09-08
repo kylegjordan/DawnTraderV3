@@ -260,9 +260,69 @@ if status == 'identical' or total == 0:
 # The FILE array is capped at 300 regardless of pagination (measured: 300 returned against a
 # local truth of 761), and no Link header or `truncated` flag is emitted. So a full list is
 # only trustworthy below the cap.
-RUNTIME = ('server/', 'client/', 'shared/')
+# ── THE PREDICATE: WHICH CHANGED PATHS CAN ALTER THE RUNNING SYSTEM AFTER THE RESTART ──────
+# ⛔⛔ NOT "what the deploy EXECUTES". #1016's fix sentence says that, and taken literally it
+#   selects EVERY TRACKED FILE: dt-deploy.sh:204 is `git reset --hard "$SHA"`, which rewrites
+#   the whole working tree before anything runs. A criterion that admits everything is not a
+#   gate. DO NOT "simplify" this back to that sentence.
+# ⇒ THE CRITERION IS FOUR SINKS. Every entry below names the one it feeds and the line that
+#   carries it there. An entry with no sink does not belong here.
+# ⚠️ AND IT IS A JUDGEMENT, said out loud: #1016's wording hid one inside what looked like a
+#   mechanical derivation. B-DRIFT-RUNTIME-PREDICATE, #1016, Step 2 audit.
+
+# SINK 1 — what ends up in dist/, the bundle pm2 re-execs.  dt-deploy.sh:213 `npm run build`
+#   = `vite build` + `esbuild server/index.ts --bundle`.
+SINK1_PREFIXES = ('server/', 'client/', 'shared/')
+SINK1_FILES    = ('vite.config.ts', 'tsconfig.json', 'tailwind.config.ts', 'postcss.config.js')
+# ⚠️ NO root 'index.html' entry: it does not exist. `vite.config.ts:18` sets root=<repo>/client,
+#   so the only such tracked path is client/index.html, already covered by the SINK1 prefix.
+#   As a prefix entry it would match nothing while READING as coverage.
+
+# SINK 2 — what the database SCHEMA becomes.  dt-deploy.sh:223 `npm run db:migrate`
+#   = `tsx scripts/db-migrate.ts` over drizzle/migrations/**.
+# ⛔ MANIFEST.txt is NOT an ordinary file in that directory: db-migrate.ts:140-148 THROWS on
+#   manifest/filesystem drift, and :152-156 validates on EVERY invocation — before filtering
+#   by what is already applied — so a drifted manifest FAILS A DEPLOY THAT HAD NO MIGRATIONS
+#   TO RUN. It aborts at :223, AFTER the build at :213 has overwritten dist/.
+SINK2_PREFIXES = ('drizzle/migrations/',)
+SINK2_FILES    = ('scripts/db-migrate.ts',)
+
+# SINK 3 — what the process RESOLVES at runtime.  dt-deploy.sh:202-207, a conditional
+#   `npm ci` triggered by a package-lock.json diff. (package.json defines no pre/post
+#   lifecycle hooks, so `npm ci`/`npm run` add no hidden file reads.)
+SINK3_FILES = ('package-lock.json', 'package.json')
+
+# SINK 4 — what the process READS OFF DISK at runtime.
+# ★ esbuild bundles IMPORTS, never readFile TARGETS, so these reach no other sink. Enumerated
+#   by CALL SHAPE (readFileSync / fs.readFile / readdirSync / createReadStream / require /
+#   dynamic import / static json import) across 586 tracked .ts under server/+shared/, tests
+#   excluded — see the Step-2 audit. Reader cited per entry; re-derive, do not trust the list.
+SINK4_FILES = (
+    'audit/coherency_rules.yaml',                                  # guardrail-policy.ts:191; module singleton :742; THROWS :197. THE CORE-FOUR RISK ENVELOPE.
+    'config/vts.json',                                             # vts-runner.ts:519 — targetProfit / stopLoss / minVolume24h / strategies[]
+    '1-system-manual/authority-baseline-v1.json',                  # authority-baseline.ts:88, boot via boot_orchestrator.ts:76
+    '1-system-manual/audits/b-new-42/dividend-calendar-seed.json', # price-discontinuity-detector.ts:157 — live service
+    'bridge/canonical/phase9_predictive-learning.json',            # recalibrate-predictive-weights.ts:221,:273 (NOT regime-archiver.ts:26 — that is a declaration)
+    'bridge/canonical/mapping-regime-strategy.json',               # routes.ts:2083-2085 reads from DISK; strategy-mapper.ts:22 is a bundled static import
+    'data/models/ara_model.json',                                  # training-audit-service.ts:159. SINGLE FILE, never a data/models/** prefix — it is the only tracked file there.
+    'replit.md',                                                   # context-loader.ts:88, boot via index.ts:624 (a DYNAMIC import — invisible to an `import … from` census)
+)
+# ⛔ PERMANENT LIMIT, NOT A GAP TO CLOSE: a path built at runtime from a variable is
+#   unreachable by any grep, so this list is a FLOOR. Four such sites exist; three target
+#   logs/ (gitignored ⇒ untracked ⇒ cannot qualify) and the fourth is the ara_model entry.
+# ⛔ scripts/analysis/* is OUT and scripts/db-migrate.ts is IN — a SINK test, not a folder
+#   test, and not an exclusion list (an exclusion list is the same folder convention renamed).
+# ⛔ DELIBERATELY NOT COUPLED TO scripts/governance-checker/config.mjs:92 CODE_PREFIXES,
+#   which is wider (adds scripts/, drizzle/). It answers "is this COMMIT code-bearing" for
+#   doc-set grading (checker.mjs:85); this answers "does this need a DEPLOY". No import, no
+#   shared constant — a future edit to either for its own reasons must not move the other.
+
 def runtime(f):
-    return f.startswith(RUNTIME) and '/tests/' not in f and not f.endswith('.test.ts')
+    if f.startswith(SINK1_PREFIXES):
+        return '/tests/' not in f and not f.endswith('.test.ts')
+    if f.startswith(SINK2_PREFIXES):
+        return True
+    return f in SINK1_FILES or f in SINK2_FILES or f in SINK3_FILES or f in SINK4_FILES
 
 names = [f['filename'] for f in files]
 runtime_files = [f for f in names if runtime(f)]
@@ -457,6 +517,17 @@ else
   # A clipped enumeration beside a full count, unmarked, reads as the whole set.
   SHOWN="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | grep -c .)"
   RUNTIME_LINE="runtime files undeployed: $RUNTIME_N${LIST:+ (showing $SHOWN of $RUNTIME_N) — $LIST}"
+  # ⛔ P-4 — MANIFEST.txt DOES NOT FAIL TO APPLY; IT FAILS THE DEPLOY. Say so, because
+  #   "a migration is waiting" and "the deploy will abort" are different instructions to
+  #   whoever reads this. db-migrate.ts:152-156 validates on EVERY invocation and :140-148
+  #   throws on manifest/filesystem drift, so this aborts even with nothing pending — at
+  #   dt-deploy.sh:223, AFTER the build at :213 has already overwritten dist/.
+  if grep -qx 'drizzle/migrations/MANIFEST\.txt' "$WORK/rtlist.txt" 2>/dev/null; then
+    RUNTIME_LINE="$RUNTIME_LINE
+  ⛔ MANIFEST.txt IS UNDEPLOYED — this is not a waiting migration, it is a HARD DEPLOY
+     FAILURE: db-migrate validates the manifest against the filesystem on every run and
+     throws on drift, aborting after the build has already replaced dist/."
+  fi
 fi
 
 # ── THE BODY: EVERY MAGNITUDE CARRIES ITS STAMP ───────────────────────────────────────
