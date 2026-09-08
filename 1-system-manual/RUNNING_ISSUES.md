@@ -4507,6 +4507,27 @@ else {                       // Live mode retains the legacy check for safety
 
 ### #732 OPEN 2026-08-20 (CC-A; KYLE spotted a `TRAIL STOP` badge on the Paper Trading screen and asked how it is possible when trailing/BE/moonbag were turned OFF) — ★★ `targetLatched` IS SET **OUTSIDE** THE MOONBAG GATE, SO A PLAIN TARGET HIT IS LABELLED `trailing_stop_hit` WITH TRAILING FULLY OFF
 
+➕ **2026-09-08 (CC-C; KYLE NAMED THE CANDIDATE AND HE IS ALMOST CERTAINLY RIGHT) — ⭐ THE 08-22 BOUNDARY LINES UP WITH `B-BOOK-TRUNCATE-HOTFIX` (`#507`), AND THE COMMIT DESCRIBES THE EXACT MECHANISM.**
+
+**Kyle's recollection, unprompted:** *"the order book issue where we had stale prices in there, and we weren't removing the prices that Kraken was removing."* ✅ **That batch exists and it lands ON the boundary.**
+
+| object | value |
+|---|---|
+| **last mislabelled row closed** | **`2026-08-22 05:10:34Z`** (`CRV/USD`) |
+| **`b95407a81` committed** | **`2026-08-22 19:17`** — *"the Kraken mini-book never truncated to its subscribed depth, so **ghost bids accumulated and paper stop-exits filled against buyers that did not exist**"* |
+| refinements | `c37e51a40` 21:20 · `592a555e2` 22:06 · `e6f7c70b3` 23:56 · checksum ARMED `3bd9f4022` **08-23 00:37** |
+| **measured by that batch** | ⭐ **32.03% of book states CROSSED before the fix; 0 after** |
+| mislabelled rows since | **0**, against **34 `target_hit`** closes |
+
+★★ **WHY THIS IS THE LEADING CANDIDATE AND NOT JUST CO-TIMING: a CROSSED book (bid above ask) yields prices that are not real.** `#732`'s mechanism needs only *"price reached target"* to latch — **so a phantom price from a ghost bid is exactly the input that would trip the latch spuriously**, and the fix removed 32% of corrupt book states.
+
+⛔⛔ **NOT ESTABLISHED, AND I AM NOT CALLING IT THE CAUSE:**
+- ⚠️ **I CANNOT TIE THE DEPLOY TIME. `/home/deploy/dawntrader-deploy.record` HOLDS EXACTLY ONE ENTRY — it is overwritten per deploy, not appended, so its reach is the LAST deploy only** *(measured: 1 `deployed_at` line, `2026-09-07`)*. **Commit time is not deploy time**, and the gap between the last mislabel (05:10Z) and the first commit (19:17Z) is ~14 h, which the timeline accommodates but does not verify.
+- ⛔ **NO MECHANISM TRACE from a ghost bid to `state.targetLatched`.** The story is coherent; the line-level path is unwalked.
+- ⛔ **AND A LINK I TESTED AND MUST DISCARD: the 14 rows are NOT identifiable as `B-PHANTOM-FILL-RECONSTRUCT`'s 21 contaminated trades via `phantom_fill_suspect`.** ✅ **POSITIVE CONTROL KILLED IT: that column is `FALSE` on **722 of 722** closed rows and TRUE on none** ⇒ **it discriminates nothing and my zero was uninformative.** *(The 21 must be identified by another column; not chased here.)*
+
+⇒ **DISPOSITION: this is now the first objective of `B-EXIT-LATCH-INVESTIGATION` — confirm or kill the `#507` link with a deploy time and a line-level path.** ⭐ **AND KYLE HAS DIRECTED THAT THE INVESTIGATION FOLD INTO THE PRICING PROGRAMME rather than run standalone** — which is right on the evidence above: **if the cause is a corrupt order book, this was never an exit-latch defect in isolation, it was a PRICE-INTEGRITY defect wearing one.**
+
 ➕ **2026-09-08 (CC-C, at Kyle's direction — he asked for the mechanism to be understood, not re-derived) — ⛔⛔ THE SYMPTOM STOPPED ON 2026-08-22. THE DEFECT DID NOT.**
 
 **POPULATION GREW, SIGNATURE UNCHANGED.** Whole table, `close_reason='trailing_stop_hit'`: **14 rows** (7 at filing), **2026-07-29 → 2026-08-22**. **All 14 carry the full `#732` signature: `trade_mode='TARGET'` 14/14, `ladder_rungs_hit=0` 14/14, `original_stop_price = stop_loss` 14/14** — the stop never ratcheted on a single one.
