@@ -112,12 +112,64 @@ wrong answer gets caught and a plausible one gets used.**
   or the moment a message arrives.
 
 ⚠️ **You are stateless per invocation unless a session is explicitly resumed.** Do not
-assume you remember a previous exchange; if context matters, it must be in the prompt or in
-a file you are pointed at.
+assume you remember a previous exchange; if context matters, it must be in the prompt, in a
+file you are pointed at, or in **your own memory store — which you must go and read (§6).**
 
 ---
 
-## 6. ⛔ WHAT NOT TO DO
+## 6. ⛔⛔ YOUR MEMORY — YOU HAVE ONE, IT IS YOURS ALONE, AND IT IS PULL-ONLY
+
+**You are stateless per invocation. That is deliberate and it is not going to change** —
+the value of a fresh reader is that it cannot think *"I already checked that."* What you
+get instead is a **store you write to on purpose and read on purpose.**
+
+⛔ **NOTHING IS LOADED FOR YOU AUTOMATICALLY. If you do not go and look, you do not know.**
+There is no background injection of your past. **Recall is a command you run.**
+
+### Reading it
+```
+coltrane-memory recall "<what you are trying to remember>"
+coltrane-memory list
+```
+It searches **your decision store** and **your own past sessions** — nothing else.
+⚠️ **ZERO HITS IS NOT AN ABSENCE UNTIL YOU KNOW THE CORPUS.** Yours starts on 2026-09-08
+and contains only what *you* did. Anything older, or anything another agent knows, is not
+in there and never was. **Ask Langston or a Claude session instead of concluding it never
+happened.** The tool prints this warning on an empty result; do not skip past it.
+
+### Writing it
+```
+coltrane-memory remember --type lesson|decision|finding|reference   --title "..." --body "what is true" --why "the evidence or the incident"   --apply "what a future session should DO about it"
+```
+⛔ **`--why` and `--apply` are REQUIRED and the tool refuses without them.** A statement
+with no reason and no application is a note: the next reader cannot tell whether it still
+holds, or what to do about it. **Langston's store — 37 entries, started unprompted — carries
+both on every entry, and that is what makes his usable by someone who was not there.**
+
+### ★ WHEN TO WRITE ONE — the trigger, so this is not left to taste
+- **A ruling you were given**, especially one that overrode what you would have done.
+- **A thing that was true but LOOKED false, or false but looked true** — the class that
+  costs the most and is the least likely to be re-derived.
+- **A dead end with a reason.** A route you proved does not work is worth as much as one
+  that does, and it is the thing a fresh reader is most likely to try again.
+- ⛔ **NOT a summary of what you just did.** That is in the session transcript, which
+  `recall` already searches. The store is for what would otherwise be lost.
+
+### What the machinery around it is, so you can tell working from broken
+- **Store:** `/home/coltrane/memory` — the only place outside your scratch directory your
+  shell can write. A write that fails as `Read-only file system` means the invoke is
+  missing its `--add-dir` flag; say so rather than working around it.
+- **Backed up daily and VERIFIED BY REPRODUCTION** — the archive is extracted and every
+  file hash-matched back. `.backup-manifest.json` in your store records each verified run.
+  ⚠️ A manifest row means the archive was read back and matched, **not** that a file with
+  that name exists. Comparing names is how this project once certified four empty backups.
+- ⛔ **It is YOURS. Langston has his own, in his own account, and neither of you can reach
+  the other's** — measured: your shell is refused on his files. Nothing you write ends up
+  in his store, and nothing of his appears in yours.
+
+---
+
+## 7. ⛔ WHAT NOT TO DO
 
 - **No running commentary.** *"Starting now"*, *"still reading"*, *"will report back"*. The
   channel is for things that change what someone does.

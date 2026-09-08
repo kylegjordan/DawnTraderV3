@@ -36,6 +36,27 @@ COMMS_FILE = "/etc/dawntrader/discord-comms.env"
 RUNLOG = "/var/log/coltrane-invokes.jsonl"
 INBOX = "/var/log/cc-discord-inbox.jsonl"
 USER, HOME = "coltrane", "/home/coltrane"
+# ⛔ cwd is a SCRATCH directory, and that is the fence rather than a tidiness choice.
+#    Codex's workspace-write sandbox makes the working directory writable. With cwd
+#    = /home/coltrane that would have handed the agent write access to its whole home,
+#    including ~/.codex. Pointing cwd at a scratch dir means the writable set is exactly
+#    scratch + its memory store (config.toml writable_roots), and nothing else.
+WORKDIR = "/home/coltrane/work"
+MEMDIR = "/home/coltrane/memory"
+# ⛔⛔ THE SANDBOX IS SET BY THESE FLAGS, NOT BY config.toml — MEASURED, AND THE CONFIG
+#    ROUTE LOOKS LIKE IT WORKS. `sandbox_mode = "workspace-write"` was written into
+#    ~/.codex/config.toml and the very next probe still came back
+#    "mkdir: cannot create directory: Read-only file system" for the agent's OWN store.
+#    `codex exec` defaults to read-only and takes the flag; nothing warns that the config
+#    key was ignored.
+#    ⇒ WITHOUT THIS LINE the agent is told in its instructions to record what it learns,
+#      is handed a store it cannot write to, and every write fails silently inside its own
+#      shell. The store would read as "it never had anything worth recording."
+# ★ MEASURED FENCE, with the negative controls that make it mean something:
+#      writable: the memory store, and the scratch cwd
+#      REFUSED:  /home/coltrane itself, /etc, and Langston's OAuth token
+#                (`cat /etc/langston/oauth.env` -> Permission denied)
+SANDBOX = "-s workspace-write --add-dir " + MEMDIR
 NL = chr(10)
 
 NAME_RE = re.compile(r"\b(coltrane|codex)\b", re.I)
@@ -125,7 +146,8 @@ def invoke(message_text, why, history):
         with open(p, encoding="utf-8") as fh:
             r = subprocess.run(
                 ["sudo", "-u", USER, "env", "HOME=" + HOME, "sh", "-c",
-                 "cd " + HOME + " && codex exec --skip-git-repo-check -"],
+                 "cd " + WORKDIR + " && codex exec --skip-git-repo-check "
+                 + SANDBOX + " -"],
                 stdin=fh, capture_output=True, text=True,
                 encoding="utf-8", errors="replace", timeout=900)
         return r.returncode, (r.stdout or "").strip(), (r.stderr or "")

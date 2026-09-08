@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""Back up Coltrane's decision store — and prove the backup by REPRODUCING it.
+
+⛔⛔ THE GATE IS REPRODUCTION, NOT COMPARISON, AND THIS PROJECT HAS PAID FOR THAT LESSON.
+    §7.1: comparing refs "certified an EMPTY backup four times" — the pointers agreed and
+    there were no objects behind them. So this does not compare a file list, a count, or a
+    size. It EXTRACTS the archive it just wrote into a scratch directory and compares the
+    SHA-256 of every file against the live store. A backup that cannot be read back is not
+    a backup; it is a file with a reassuring name.
+
+⛔ AND IT IS MUTATION-PROVED ON DEMAND. `--prove` deliberately corrupts one byte of the
+   extracted copy before comparing, and the run MUST come out FAIL. A verifier that cannot
+   be made to fail has not been shown to discriminate — it has only been shown to be quiet.
+   ⚠️ Run it after any change to this script. `--prove` never touches the live store or the
+   real archive; it only corrupts the throwaway extraction.
+
+★ WHY COLTRANE'S STORE NEEDS ITS OWN BACKUP AT ALL. Everything else about this agent is
+  reconstructable — the account, the config, the bot, this script are all in the repo. Its
+  decision store is the ONE artifact that exists nowhere else the moment it is written, and
+  it is written by an agent that cannot itself reach the backup location. Losing it loses
+  the only thing the agent knows that we did not tell it.
+
+⚠️ SEPARATE FROM LANGSTON'S BACKUP, deliberately (Kyle: *"He needs to have his own setup,
+   separate from Langston."*). Different source, different destination, different unit.
+   Nothing here reads or writes anything under /home/langston.
+"""
+
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+
+STORE = "/home/coltrane/memory"
+DEST = "/srv/coltrane-backup"
+MANIFEST = os.path.join(STORE, ".backup-manifest.json")
+KEEP = 30
+NL = chr(10)
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def sha(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def live_hashes():
+    """Every regular file under the store, relative path -> sha256.
+
+    ⚠️ INCLUDES the dotfiles (`.usage/`, this manifest). They are part of the store's state
+    and excluding them would make the backup silently partial."""
+    out = {}
+    for root, _dirs, files in os.walk(STORE):
+        for f in files:
+            p = os.path.join(root, f)
+            if os.path.islink(p) or not os.path.isfile(p):
+                continue
+            out[os.path.relpath(p, STORE)] = sha(p)
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split(NL)[0])
+    ap.add_argument("--prove", action="store_true",
+                    help="corrupt the EXTRACTED copy on purpose; the run must FAIL")
+    ap.add_argument("--quiet", action="store_true", help="print only the verdict line")
+    a = ap.parse_args()
+
+    if not os.path.isdir(STORE):
+        print("FAIL: store %s does not exist. This is an absence of the SOURCE, not of a "
+              "backup — do not read it as 'nothing to back up'." % STORE)
+        return 2
+
+    before = live_hashes()
+    if not before:
+        # ⛔ AN EMPTY STORE IS A REAL STATE AND MUST NOT SILENTLY "PASS". Archiving nothing
+        #    and verifying nothing succeeds trivially, which is exactly how an empty backup
+        #    certifies itself.
+        print("SKIPPED: the store is empty (0 files under %s). Nothing was archived, and "
+              "nothing was verified. This is NOT a passing backup." % STORE)
+        return 0
+
+    os.makedirs(DEST, exist_ok=True)
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    # ⛔ A PROVE RUN NEVER SHARES A FILENAME WITH A REAL ARCHIVE — MEASURED, IT DESTROYED
+    #    ONE. The first --prove ran inside the same second as the real backup, produced the
+    #    identical stamped name, overwrote it, and then deleted it on the way out as
+    #    designed. The verifier proved itself by wiping the thing it verifies, and the only
+    #    symptom was an empty backup directory afterwards. A test that can reach production
+    #    state is not a test.
+    arc = os.path.join(DEST, "%scoltrane-memory-%s.tar.gz"
+                       % ("PROVE-DISCARD-" if a.prove else "", stamp))
+
+    with tarfile.open(arc, "w:gz") as tf:
+        tf.add(STORE, arcname="memory")
+
+    # ---- REPRODUCE: extract what we just wrote and hash it back.
+    tmp = tempfile.mkdtemp(prefix="coltrane-backup-verify-")
+    try:
+        with tarfile.open(arc, "r:gz") as tf:
+            tf.extractall(tmp)
+        root = os.path.join(tmp, "memory")
+
+        if a.prove:
+            # mutation: flip one byte in one extracted file. The verdict MUST become FAIL.
+            victim = None
+            for r, _d, fs in os.walk(root):
+                for f in sorted(fs):
+                    victim = os.path.join(r, f)
+                    break
+                if victim:
+                    break
+            with open(victim, "ab") as fh:
+                fh.write(b"\x00")
+            if not a.quiet:
+                print("PROVE MODE: corrupted the extracted copy of %s"
+                      % os.path.relpath(victim, root))
+
+        after = {}
+        for r, _d, fs in os.walk(root):
+            for f in fs:
+                p = os.path.join(r, f)
+                if os.path.isfile(p) and not os.path.islink(p):
+                    after[os.path.relpath(p, root)] = sha(p)
+
+        missing = sorted(set(before) - set(after))
+        extra = sorted(set(after) - set(before))
+        differ = sorted(k for k in set(before) & set(after) if before[k] != after[k])
+        ok = not (missing or extra or differ)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    if not a.quiet:
+        print("archive : %s (%d bytes)" % (arc, os.path.getsize(arc)))
+        print("files   : %d in the live store" % len(before))
+        for label, items in (("MISSING from the archive", missing),
+                             ("EXTRA in the archive", extra),
+                             ("CONTENT DIFFERS", differ)):
+            if items:
+                print("  %s: %s" % (label, ", ".join(items[:10])))
+
+    n, plural = len(before), "" if len(before) == 1 else "s"
+    if ok:
+        print("PASS — %d file%s reproduced from the archive and hash-matched against the "
+              "live store." % (n, plural))
+    else:
+        # ⛔ THE FAILURE LINE SAID "reproduced and hash-matched" TOO. A verdict word is not
+        #    a sentence: read aloud, the FAIL line asserted the very thing that had just
+        #    failed, and anyone skimming past the word FAIL would have read it as fine.
+        print("FAIL — the archive does NOT reproduce the live store (%d file%s expected; "
+              "%d missing, %d extra, %d differing)."
+              % (n, plural, len(missing), len(extra), len(differ)))
+
+    if a.prove:
+        os.unlink(arc)
+        if ok:
+            print("⛔ PROVE FAILED: a deliberately corrupted copy still verified. This "
+                  "checker does not discriminate — fix it before trusting any PASS.")
+            return 3
+        print("✅ PROVE OK: the corrupted copy was rejected, so a PASS means something.")
+        return 0
+
+    if not ok:
+        os.rename(arc, arc + ".UNVERIFIED")
+        print("⛔ The archive is kept as %s.UNVERIFIED — it must not be counted as a "
+              "backup." % arc)
+        return 4
+
+    # ---- manifest, written INTO the store so the agent can see its own backups.
+    #      ⚠️ It is a RECORD, never the evidence: the evidence is the reproduction above.
+    try:
+        hist = []
+        if os.path.exists(MANIFEST):
+            with open(MANIFEST, encoding="utf-8") as fh:
+                hist = json.load(fh).get("backups", [])
+        hist.append({"ts": utc(), "archive": os.path.basename(arc),
+                     "files": len(before), "bytes": os.path.getsize(arc),
+                     "verified_by": "reproduction: extracted and sha256-matched every file"})
+        with open(MANIFEST, "w", encoding="utf-8") as fh:
+            json.dump({"note": ("Written by coltrane-selfmemory-backup. A row here means the "
+                                "archive was extracted and every file hash-matched — not "
+                                "that a file with that name exists."),
+                       "destination": DEST, "backups": hist[-90:]}, fh, indent=2)
+        shutil.chown(MANIFEST, "coltrane", "coltrane")
+    except Exception as e:
+        print("⚠️ archive verified, but the manifest could not be written: %s" % e)
+
+    # ---- retention
+    arcs = sorted(f for f in os.listdir(DEST)
+                  if f.endswith(".tar.gz") and not f.startswith("PROVE-DISCARD-"))
+    for old in arcs[:-KEEP]:
+        os.unlink(os.path.join(DEST, old))
+    if not a.quiet and len(arcs) > KEEP:
+        print("pruned  : %d archive(s) beyond the newest %d" % (len(arcs) - KEEP, KEEP))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""Coltrane's own memory — its decision store, and recall over its own past sessions.
+
+⛔⛔ COLTRANE HAS NO NATIVE MEMORY, AND THE THING THAT LOOKS LIKE ONE IS EMPTY.
+    Langston's decision store is written by his harness's own memory feature — he began
+    using it unprompted on 2026-05-07 and it now holds 37 entries. Codex ships something
+    that LOOKS equivalent: `~/.codex/memories_1.sqlite`. MEASURED 2026-09-08 after ten
+    sessions: `stage1_outputs` 0 rows, `jobs` 0 rows. Only the migrations table has
+    anything in it.
+    ⇒ Relying on it would have produced a store that stays empty while every part of the
+      setup reads as present and correct — a file exists, a feature exists, nothing is in
+      it. So the store here is PLAIN FILES the agent writes itself, which is the same
+      shape Langston's ended up as and is inspectable without a database.
+
+⛔ SEPARATE FROM LANGSTON'S BY CONSTRUCTION, NOT BY CONVENTION (Kyle, twice: *"He needs to
+   have his own setup, separate from Langston."*). Different directory, different unix
+   account, different tool name. Coltrane's shell cannot write outside its own store, and
+   it cannot read Langston's OAuth token — both measured with the refusal quoted in
+   `coltrane-bot.py`. There is no path by which one's memory lands in the other's.
+
+★ WHAT ITS ARCHIVE ACTUALLY IS. Langston's recall runs over an inherited corpus (Telegram,
+  OpenClaw) plus his transcripts. Coltrane has no history to inherit — it was created
+  today — so its corpus is exactly two things: its own decision store, and its own session
+  rollouts under `~/.codex/sessions/`. ⚠️ That is a REAL limit and is stated rather than
+  papered over: asking it about a batch from July returns nothing, correctly, because it
+  was not there.
+
+⚠️ HARNESS-INJECTED MESSAGES ARE TAGGED, NOT SILENTLY DROPPED. A rollout carries plugin
+   listings, skill listings and multi-agent preambles as `role: user` — they are Codex
+   talking to itself, not anybody addressing Coltrane. Counting them as conversation would
+   inflate every result. They are classified `harness` by a STATED heuristic (the text
+   opens with an `<xml_like_tag>`) and excluded by default; `--include-harness` shows them.
+   The heuristic is visible so a wrong classification is arguable rather than invisible.
+"""
+
+import argparse
+import datetime
+import glob
+import json
+import os
+import re
+import sys
+
+STORE = "/home/coltrane/memory"
+SESSIONS = "/home/coltrane/.codex/sessions"
+USAGE = os.path.join(STORE, ".usage", "memory-usage.jsonl")
+NL = chr(10)
+
+# ⚠️ THE STATED HEURISTIC. A harness preamble opens with a lowercase xml-ish tag on line 1.
+HARNESS_RE = re.compile(r"^<[a-z][a-z0-9_]*>")
+
+TYPES = ("decision", "lesson", "finding", "reference")
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def usage(action, **kw):
+    """⛔ THE USAGE LOG LIVES INSIDE THE TOOL, NOT AROUND IT. A wrapper that logs is a
+    wrapper that can be bypassed by calling the thing it wraps; this cannot be. It also
+    lives inside the store, because the store is the only place the agent can write."""
+    row = {"ts": utc(), "action": action}
+    row.update(kw)
+    try:
+        os.makedirs(os.path.dirname(USAGE), exist_ok=True)
+        with open(USAGE, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + NL)
+    except Exception:
+        pass                    # never let bookkeeping break the tool
+
+
+def slugify(s):
+    s = re.sub(r"[^a-z0-9]+", "-", s.strip().lower()).strip("-")
+    return s[:60] or "untitled"
+
+
+# ---------------------------------------------------------------- the store
+
+def store_files():
+    return sorted(glob.glob(os.path.join(STORE, "*.md")))
+
+
+def read_entry(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            raw = fh.read()
+    except Exception as e:
+        return {"path": path, "error": str(e), "title": "", "type": "", "body": ""}
+    meta, body = {}, raw
+    if raw.startswith("---" + NL):
+        end = raw.find(NL + "---", 3)
+        if end != -1:
+            for line in raw[4:end].split(NL):
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    meta[k.strip()] = v.strip()
+            body = raw[end + 4:].lstrip(NL)
+    return {"path": path, "title": meta.get("title", ""), "type": meta.get("type", ""),
+            "date": meta.get("date", ""), "body": body, "raw": raw}
+
+
+def cmd_remember(a):
+    """⛔ THE SHAPE IS ENFORCED HERE RATHER THAN ASKED FOR IN THE INSTRUCTIONS. An entry
+    with no `why` and no `how to apply` is a note, not a lesson — Langston's entries all
+    carry both, and that is what makes them usable by a session that was not there."""
+    if not a.why or not a.apply:
+        print("REFUSED: an entry needs both --why and --apply.")
+        print("  A statement with no reason and no application is a note. The next session")
+        print("  reading it cannot tell whether it still holds, or what to do about it.")
+        usage("remember", result="refused", reason="missing why/apply")
+        return 2
+    if a.type not in TYPES:
+        print("REFUSED: --type must be one of: " + ", ".join(TYPES))
+        usage("remember", result="refused", reason="bad type")
+        return 2
+
+    name = slugify(a.title)
+    path = os.path.join(STORE, "%s_%s.md" % (a.type, name))
+    if os.path.exists(path) and not a.update:
+        print("REFUSED: %s already exists. Pass --update to replace it deliberately." % path)
+        print("  ⚠️ Replacing is how a store stays true; doing it by accident is how one")
+        print("     loses the ruling that still governs. Say which you mean.")
+        usage("remember", result="refused", reason="exists", path=path)
+        return 3
+
+    doc = (
+        "---" + NL
+        + "title: " + a.title.strip() + NL
+        + "type: " + a.type + NL
+        + "date: " + utc()[:10] + NL
+        + "---" + NL + NL
+        + a.body.strip() + NL + NL
+        + "**Why:** " + a.why.strip() + NL + NL
+        + "**How to apply:** " + a.apply.strip() + NL
+    )
+    if a.links:
+        doc += NL + "Related: " + " ".join("[[%s]]" % x.strip() for x in a.links.split(",")) + NL
+    try:
+        os.makedirs(STORE, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(doc)
+    except Exception as e:
+        print("FAILED to write %s: %s: %s" % (path, type(e).__name__, e))
+        print("  ⚠️ If this says 'Read-only file system', the invoke is missing its")
+        print("     `--add-dir %s` flag — see coltrane-bot.py." % STORE)
+        usage("remember", result="failed", error=str(e))
+        return 4
+    print("WROTE " + path)
+    usage("remember", result="ok", path=path, entry_type=a.type)
+    return 0
+
+
+def cmd_list(a):
+    files = store_files()
+    if not files:
+        print("The store is EMPTY (%s)." % STORE)
+        print("⚠️ That is a real state, not a broken read: the directory exists and is")
+        print("   readable. Nothing has been recorded yet.")
+        usage("list", count=0)
+        return 0
+    print("%d entr%s in %s:" % (len(files), "y" if len(files) == 1 else "ies", STORE))
+    for p in files:
+        e = read_entry(p)
+        print("  [%-9s] %-40s %s" % (e["type"] or "?", os.path.basename(p), e["title"]))
+    usage("list", count=len(files))
+    return 0
+
+
+# ---------------------------------------------------------- own transcripts
+
+def rollout_files():
+    return sorted(glob.glob(os.path.join(SESSIONS, "**", "rollout-*.jsonl"), recursive=True))
+
+
+def rollout_messages(path):
+    """Yield (role, text, kind) for the conversational messages in one rollout.
+
+    ⚠️ `kind` is 'harness' for a Codex-injected preamble and 'talk' for real conversation.
+    The caller decides what to do with each — this function never drops anything."""
+    try:
+        fh = open(path, encoding="utf-8", errors="replace")
+    except Exception:
+        return
+    with fh:
+        for line in fh:
+            try:
+                d = json.loads(line)
+            except Exception:
+                continue
+            if d.get("type") != "response_item":
+                continue
+            p = d.get("payload") or {}
+            if p.get("type") != "message":
+                continue
+            role = p.get("role") or ""
+            if role not in ("user", "assistant"):
+                continue            # 'developer' is the harness's own scaffolding
+            parts = []
+            for c in (p.get("content") or []):
+                if isinstance(c, dict) and c.get("text"):
+                    parts.append(c["text"])
+            text = NL.join(parts).strip()
+            if not text:
+                continue
+            kind = "harness" if (role == "user" and HARNESS_RE.match(text)) else "talk"
+            yield role, text, kind, d.get("timestamp") or ""
+
+
+def cmd_recall(a):
+    q = a.query.strip()
+    if not q:
+        print("REFUSED: empty query.")
+        return 2
+    rx = re.compile(re.escape(q) if not a.regex else q, re.I)
+
+    hits = 0
+    print("=== DECISION STORE (%s)" % STORE)
+    files = store_files()
+    if not files:
+        print("  (store is empty — nothing has been recorded yet)")
+    for p in files:
+        e = read_entry(p)
+        if rx.search(e["raw"]):
+            hits += 1
+            print("  %s — %s" % (os.path.basename(p), e["title"]))
+            for line in e["body"].split(NL):
+                if rx.search(line):
+                    print("      " + line.strip()[:300])
+
+    print()
+    print("=== OWN SESSIONS (%s)" % SESSIONS)
+    rolls = rollout_files()
+    if not rolls:
+        print("  (no session transcripts on disk)")
+    scanned, harness_skipped = 0, 0
+    for p in rolls:
+        shown = False
+        for role, text, kind, ts in rollout_messages(p):
+            scanned += 1
+            if kind == "harness" and not a.include_harness:
+                harness_skipped += 1
+                continue
+            if not rx.search(text):
+                continue
+            hits += 1
+            if not shown:
+                print("  %s" % os.path.basename(p))
+                shown = True
+            for line in text.split(NL):
+                if rx.search(line):
+                    print("      [%s %s] %s" % (ts[:19], role, line.strip()[:300]))
+
+    print()
+    print("--- %d hit%s. Scanned %d entr%s in the store and %d message%s across %d session%s."
+          % (hits, "" if hits == 1 else "s",
+             len(files), "y" if len(files) == 1 else "ies",
+             scanned, "" if scanned == 1 else "s",
+             len(rolls), "" if len(rolls) == 1 else "s"))
+    if harness_skipped and not a.include_harness:
+        print("--- %d harness-injected message%s excluded (plugin/skill/multi-agent preambles). "
+              "Pass --include-harness to see them." % (harness_skipped,
+                                                      "" if harness_skipped == 1 else "s"))
+    if hits == 0:
+        # ⛔ AN EMPTY RESULT IS NOT AN ABSENCE UNTIL THE CORPUS IS NAMED. Whoever reads this
+        #    must be able to tell "it never happened" from "it happened before I existed".
+        print("--- ⚠️ ZERO HITS. Before reading that as an absence: this corpus is ONLY")
+        print("    Coltrane's own store and its own sessions. It holds nothing from before")
+        print("    2026-09-08, and nothing any other agent said. Ask Langston or a Claude")
+        print("    session for anything older.")
+    usage("recall", query=q, hits=hits, store_entries=len(files), sessions=len(rolls))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="coltrane-memory", description=__doc__.split(NL)[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("remember", help="record a decision, lesson, finding or reference")
+    r.add_argument("--title", required=True)
+    r.add_argument("--type", required=True, choices=TYPES)
+    r.add_argument("--body", required=True, help="what happened / what is true")
+    r.add_argument("--why", required=True, help="why it is true — the evidence or the incident")
+    r.add_argument("--apply", required=True, help="what a future session should DO about it")
+    r.add_argument("--links", default="", help="comma-separated names of related entries")
+    r.add_argument("--update", action="store_true", help="deliberately replace an existing entry")
+    r.set_defaults(fn=cmd_remember)
+
+    l = sub.add_parser("list", help="list the decision store")
+    l.set_defaults(fn=cmd_list)
+
+    c = sub.add_parser("recall", help="search the store and Coltrane's own past sessions")
+    c.add_argument("query")
+    c.add_argument("--regex", action="store_true", help="treat the query as a regular expression")
+    c.add_argument("--include-harness", action="store_true",
+                   help="also search Codex's own injected preambles")
+    c.set_defaults(fn=cmd_recall)
+
+    a = ap.parse_args()
+    return a.fn(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
