@@ -1,0 +1,41 @@
+# AppArmor: permit ONLY the sandbox helpers to create unprivileged user namespaces.
+# Deploy to /etc/apparmor.d/codex-sandbox on the Helsinki box.
+#
+# ⛔⛔ WHY THIS EXISTS AND WHY IT IS NARROW. Ubuntu 24.04 ships
+#    `kernel.apparmor_restrict_unprivileged_userns=1`, which stops an unprivileged user
+#    creating the namespaces bubblewrap needs. MEASURED 2026-09-08: the Codex agent
+#    running as `coltrane` failed with `bwrap: loopback: Failed RTM_NEWADDR: Operation
+#    not permitted`, and as `bwrap: setting up uid map: Permission denied` — while the
+#    SAME command as root succeeded. That positive control is what identified the cause
+#    as the AppArmor policy rather than a broken install.
+#
+# ★ THE BLUNT FIX WAS AVAILABLE AND WAS NOT TAKEN. Setting that sysctl to 0 would have
+#   worked in one line — and would have removed the protection from EVERY unprivileged
+#   binary on a box that also holds Langston's OAuth token and the crew's comms bridges.
+#   ⇒ This grants the capability to the sandbox helpers ALONE. Everything else on the
+#     machine stays exactly as restricted as it was.
+#
+# ⚠️ HONEST LIMIT, STATED: `flags=(unconfined)` means this profile does not otherwise
+#    confine bwrap — it exists to hand back ONE capability, not to sandbox the sandboxer.
+#    That is the same shape Ubuntu itself ships for chrome and lxc-usernsexec. The real
+#    confinement of what the agent may touch is Codex's own `--sandbox` mode, which is
+#    what bubblewrap is being used to enforce in the first place.
+#
+# ⇒ Net effect: the agent gets a WORKING sandbox. Without this it had NO sandbox and no
+#   ability to edit; the alternative on offer was `--dangerously-bypass-approvals-and-
+#   sandbox`, which is the opposite of what we want on this host.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile codex-bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/codex-bwrap>
+}
+
+# Codex also ships its OWN sandbox helper, extracted per-user under CODEX_HOME.
+# The path carries a random component, so it is matched by glob rather than named.
+profile codex-linux-sandbox /home/*/.codex/tmp/arg0/*/codex-linux-sandbox flags=(unconfined) {
+  userns,
+  include if exists <local/codex-linux-sandbox>
+}
