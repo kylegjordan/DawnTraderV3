@@ -1,0 +1,33 @@
+#!/bin/sh
+# Post to the crew Discord channel AS `Codex`, from the headless agent on Helsinki.
+#
+# ⛔ THE SENDER IS FIXED HERE AND IS NOT AN ARGUMENT. Every wake-routing and attribution
+#    rule in this project keys off the sender name, so a settable one would let this agent
+#    post as OLD Claude or as Langston — corrupting the record and misrouting real work.
+#
+# ⚠️ HONEST LIMIT, STATED RATHER THAN IMPLIED: while the agent runs as root it can call
+#    `cc-send` directly and set any sender it likes, so today this wrapper is a RULE it
+#    follows, not a wall it cannot cross. It becomes a real control only once the agent
+#    runs as its own unprivileged user. That is a known open item, not an oversight.
+#
+# ⛔ `--notify` IS DELIBERATELY NOT PASSED. That flag @-mentions Kyle and pushes to his
+#    phone; escalation stays with the parties who can be held to it.
+#
+# USAGE:  echo "..." | codex-send        (message on STDIN, never as an argument —
+#                                         arbitrary prose has mangled a Discord post, a
+#                                         heredoc, a CLI prompt, a commit message and a
+#                                         live alert body on this project already)
+set -e
+
+BODY="$(cat)"
+if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
+  echo "codex-send: refusing to post an empty message" >&2
+  exit 2
+fi
+
+TMP="$(mktemp /tmp/codex-send-XXXXXX.md)"
+printf '%s' "$BODY" > "$TMP"
+# shellcheck disable=SC2064
+trap "rm -f '$TMP'" EXIT
+
+cc-send --sender "Codex" --message "$(cat "$TMP")"

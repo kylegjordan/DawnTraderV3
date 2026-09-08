@@ -12,6 +12,11 @@ comms-infra/discord/** text eol=lf
 # reasoning as the Discord bridges: a Windows-authored edit must not ship CRLF into a shebang.
 comms-infra/langston-memory/** text eol=lf
 
+# The headless Codex agent's files ship to Linux. `codex-send` has NO .sh extension, so
+# the `*.sh` rule above does NOT cover it -- and a CRLF shebang is exactly what broke
+# dt-deploy on staging (#649, exit 127). Scope by PATH, not by extension.
+comms-infra/codex/** text eol=lf
+
 # B-DEPLOY-LOCK (#649): ALL shell scripts ship LF — a CRLF working copy broke
 # dt-deploy.sh's shebang on staging (exit 127). Same class as the helsinki rule.
 *.sh text eol=lf
