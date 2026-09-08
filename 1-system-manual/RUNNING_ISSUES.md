@@ -4507,6 +4507,19 @@ else {                       // Live mode retains the legacy check for safety
 
 ### #732 OPEN 2026-08-20 (CC-A; KYLE spotted a `TRAIL STOP` badge on the Paper Trading screen and asked how it is possible when trailing/BE/moonbag were turned OFF) — ★★ `targetLatched` IS SET **OUTSIDE** THE MOONBAG GATE, SO A PLAIN TARGET HIT IS LABELLED `trailing_stop_hit` WITH TRAILING FULLY OFF
 
+➕ **2026-09-08 (CC-C, at Kyle's direction — he asked for the mechanism to be understood, not re-derived) — ⛔⛔ THE SYMPTOM STOPPED ON 2026-08-22. THE DEFECT DID NOT.**
+
+**POPULATION GREW, SIGNATURE UNCHANGED.** Whole table, `close_reason='trailing_stop_hit'`: **14 rows** (7 at filing), **2026-07-29 → 2026-08-22**. **All 14 carry the full `#732` signature: `trade_mode='TARGET'` 14/14, `ladder_rungs_hit=0` 14/14, `original_stop_price = stop_loss` 14/14** — the stop never ratcheted on a single one.
+
+✅✅ **AND IT HAS NOT RECURRED SINCE 2026-08-22 — WITH A CONTROL THAT DISCRIMINATES.** Since that date: **34 `target_hit` closes and ZERO `trailing_stop_hit`** *(plus 76 `stop_hit`, 3 `never_filled`; window `> 2026-08-22`, read `2026-09-08`)*. ⇒ ⛔ **The silence is NOT "no target hits happened" — 34 happened and none carried the label.** ★ **Without that control the zero would have been over-determined and worth nothing.**
+
+⛔⛔ **BUT THE CAUSE IS STILL IN THE CODE, AND THAT IS THE POINT OF THIS AMENDMENT.** `tec-evaluator.ts:407` still reads `exitReason = 'trailing_stop_hit'`, and **`git log` over `trailing-exit-controller.ts` and `tec-evaluator.ts` from 2026-08-15 to 2026-09-08 returns NO COMMITS.** ⇒ ★★ **THE MECHANISM `#732` DESCRIBES IS UNCHANGED AND STILL REACHABLE. ONLY THE SYMPTOM STOPPED, AND NOTHING WE DID STOPPED IT.**
+⇒ ⚠️ **THE TRAP THIS CREATES, WHICH IS WHY IT IS RECORDED RATHER THAN LEFT: ANYONE MEASURING INCIDENCE TODAY SEES ZERO AND CLOSES THE ISSUE.** **A defect whose symptom lapses for an unknown reason is not a fixed defect** — and we do not know the reason, so we cannot know what would bring it back.
+
+⚠️ **WHAT I DID *NOT* ESTABLISH, stated so the next reader does not inherit a guess:** why it stopped. Candidates not discriminated — a `module_constants` change, an upstream condition ceasing to be reached, or a population effect. **No deploy or config change has been tied to the 08-22/23 boundary.** ⇒ **that identification is the first objective of `B-EXIT-LATCH-INVESTIGATION`.**
+
+⛔ **AND THE "ALL FAVOURABLE" READING IS NOT AVAILABLE AS REASSURANCE.** All 14 exited at or ABOVE target (**+0.198% to +4.158%, 0 below**). ★ **`#732`'s own r2 round already ruled that this comparison can measure a CLAMP rather than a fact** — and its counter-observation still stands: the tautology explanation requires a ratcheted stop, and `original_stop_price = stop_loss` on all 14 says there is none. **14 favourable observations do not bound the downside of holding past target with no ratchet beneath it.**
+
 ⛔ **KYLE WAS RIGHT THAT IT SHOULD BE OFF, AND IT IS OFF. THE TRAILING LADDER NEVER RUNS. THE LABEL IS WRONG.**
 
 **THE SWITCHES — ALL EIGHT FALSE, measured in `module_constants` at the live DB:** `trailing_enabled_active` **false** × 4 asset classes and `trailing_enabled_vts` **false** × 4, all `updated_by p19-b8.5i`, `2026-07-23 00:52:56Z` · `break_even_enabled` **false** × 4 (B79.TEC; xstock_spot by `kyle-directive-2026-05-21-disable-xstock-be`) · `moonbag_qualifying_strategies` **`[]`** × 4.
