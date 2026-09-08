@@ -67,15 +67,47 @@ Top-level keys: **`_metadata`, `_schema`, `byAssetClass`.** `!k.startsWith("_")`
 
 | # | item | falls out of |
 |---|---|---|
-| **P-1** | In `syncCanonicalBridge`, skip the JSON write when a checksum over the payload **excluding exactly `_metadata.updatedAt` and `_metadata.generatedAt`** matches the file on disk. **Reuse the sibling's MECHANISM, not its key set.** | **A3**, BLOCKER-1 |
-| **P-2** | Stamp `updatedAt`/`generatedAt` only on a genuine change, and **correct the committed `2026-06-11T01:17:10.255Z` pair in the same commit** — it is a churn artifact, not a content date. | **A1**, F-3 |
+| **P-1** | In `syncCanonicalBridge`, skip the JSON write when a checksum over the payload **excluding exactly `_metadata.updatedAt` and `_metadata.generatedAt`** matches the file on disk. **Reuse the sibling's MECHANISM, not its key set.** ⛔ **AND STATE THE SKIP: omit the JSON from `filesUpdated`, log `unchanged` not `Updated`** — `routes.ts:2107` feeds that straight to the force-sync button. | **A3**, BLOCKER-1, **COND B** |
+| **P-2** | Stamp `updatedAt`/`generatedAt` only on a genuine change, and **correct the committed `2026-06-11T01:17:10.255Z` pair to the DERIVED `2026-05-24T00:30:18Z`, citing `af99bd5dd` in the diff** — the last commit that actually changed `byAssetClass`. **The current value overstates freshness by 18 days.** | **A1**, F-3, **COND C** |
 | **P-3** | `analytics.tsx:2844`: **`Last Sync:` → `Map Updated:`**. The string is named here, not at implementation. | OBJ-2, Langston's condition |
 | **P-4** | Record "the sync ran" in the existing ignored `logs/` stream (`sync-canonical-bridge.ts:62`). **No tracked field, no new file.** | OBJ-3, F-1 |
-| **P-5** | ⭐ **THE CI ASSERTION — `generateBridgeJSON()`'s `byAssetClass` vs the committed `byAssetClass`, same two-entry exclusion.** Placed in `sync-canonical-bridge.test.ts`, which already imports the generator. **FOLDED AS AN OBJECTIVE, per Langston's "fold it if it is the one assertion I think it is" — A4 confirms it is.** | **A4** |
+| **P-5** | ⭐ **THE CI ASSERTION — `generateBridgeJSON()`'s `byAssetClass` vs the committed `byAssetClass`, same two-entry exclusion.** In `sync-canonical-bridge.test.ts`. ⛔ **`resolve(__dirname, '../../../bridge/canonical/...')`, NOT `process.cwd()`, and NO `existsSync` guard — an absent file MUST fail.** | **A4**, **COND A** |
 | **P-6** | The same-commit obligation goes at the **head of `canonical-regime-strategy-map.ts`** — ⛔ **NOT the sync script.** *(Langston: that would be `fix-follows-pointer` — the obligation fires when someone edits the TS map, and a note in the sync script is read by whoever edits the sync script.)* Plus the SIM entry as the durable record. | Langston, this round |
 | **P-7** | `#402` closed; **the sibling's disposition filed with owner + plan row, carrying its inherited `_schema` defect at `:251` AND `:274`.** No code. | OBJ-5 |
 
 ⛔ **NOT IN THE PLAN:** untrack-and-ignore (**A2 row 1** — build-time import); any change to `dt-deploy`'s refusal; the sibling's own untrack work.
+
+## B2. ✅ LANGSTON'S STEP-2 CONDITIONS — ALL THREE RE-DERIVED AT THE OBJECT
+
+### ⛔⛔ CONDITION B (BLOCKER-GRADE) — THE FUNCTION MUST NOT REPORT WORK IT DID NOT DO
+`sync-canonical-bridge.ts:253-256` is unconditional:
+```ts
+atomicWrite(jsonPath, jsonContent);
+filesUpdated.push(jsonPath);
+logEvent(`Updated ${jsonPath}`);
+```
+…and **`routes.ts:2107` returns `filesUpdated` STRAIGHT TO THE UI force-sync button.** ⇒ **a skipped run would tell the operator who just clicked it that the JSON was updated, and P-4's `logs/` line would say `Updated` when nothing was.**
+✅ **REQUIRED: the skip is stated explicitly** — the JSON is **omitted from `filesUpdated`** (or reported in a distinct `filesUnchanged`), and the log line reads **`unchanged`**, never `Updated`.
+★ **His framing, and it is the batch's own subject turned on itself: *"We are building an instrument this batch; it may not ship reporting work it did not do."***
+
+### ✅ CONDITION A — P-5 STAYS IN THE UNIT FILE, AND MY OBJECTION DISSOLVED UNDER HIS MEASUREMENT
+I worried that a disk-reading unit test was a category change. **It is not, and both halves are measured:** `vitest.config.ts:8` has **ONE** config, `include: ['server/**/*.test.ts']` — unit and system run in the same invocation, same root, same cwd — and `readFileSync` appears **118 times under `server/tests/unit/`**. **Disk-reading unit tests are the house pattern.**
+⛔ **REQUIRED, and the reason is the failure it prevents: resolve the committed JSON with `resolve(__dirname, '../../../bridge/canonical/...')` — NOT `process.cwd()` — and with NO `existsSync` guard. AN ABSENT FILE MUST FAIL.**
+
+### ⛔ AND CHASING HIS OWN BAD CITE FOUND A REAL DEFECT IN THE SUITE WE ARE LEANING ON
+He retracted `:200` (it is `aggregateDriftStats`); the `_schema` assertions are `mapping_drift_integrity.test.ts:154-155` and `:279`. ⚠️ **But `:277-280` wraps the `:279` comparison in `if (fs.existsSync(bridgePath))` — so an ABSENT FILE PASSES THAT TEST SILENTLY.** Verified at the object.
+★ **That is the `#546` absent-as-valid shape sitting inside the very suite this batch relies on**, and it is why Condition A forbids the guard rather than merely not requiring it. **`process.cwd()`-relativity is what made that guard feel necessary in the first place.**
+**DISPOSITION (§9.4 #2): recorded on `#402` and named in the completion report as a defect of the EXISTING suite — not silently fixed here** (it is not this batch's file), **and not left unnamed either.**
+
+### ✅ CONDITION C — THE REPLACEMENT TIMESTAMP IS **DERIVED**, AND HERE IS THE DERIVATION
+**Requirement:** the value must be the last commit that actually changed `byAssetClass`, **cited by sha in the diff** — *"a hand-picked date is the same defect in new clothes, and P-5 will not catch it."*
+**METHOD:** walked all **9** commits touching the file newest→oldest, parsing each and comparing **`byAssetClass` only** (the stamps excluded, exactly as P-1's checksum will).
+⭐ **RESULT: `af99bd5dd` — *"B79.0n.STRATEGY Step 3: per-asset-class strategy plumbing"* — committer date `2026-05-24T02:30:18+02:00` = **`2026-05-24T00:30:18Z`**.**
+⚠️ **AND THE SIZE OF THE ERROR IT CORRECTS: the committed stamp is `2026-06-11T01:17:10.255Z` — EIGHTEEN DAYS LATER than the last real content change.** The current value overstates freshness by more than two weeks, which is precisely the failure Condition C exists to stop me repeating.
+✅ **Cross-check, independent of my walk: `SIM:866` names the same sha for the same shape change** — *"silently drifted from the consumer since B79.0n.STRATEGY `af99bd5` (2026-05-24)."*
+
+### ⚠️ LEDGER LINE, NOT BLOCKING — P-1 GUARDS THE JSON ONLY
+**The two `.md` writes stay unconditional.** They are byte-stable **today** because their generators interpolate the constant `CANONICAL_SCHEMA_METADATA.updatedAt` — **but that is a property of the generators, not a guarantee.** Stated here rather than left implied: **if either generator ever interpolates a live value, it churns and this batch does not cover it.**
 
 ## ⭐ WHY P-5 IS THE ITEM THAT OUTLIVES THE BATCH
 Once P-1 lands, **a dirty tree on this file stops being noise and becomes the signal** — it will mean the committed JSON disagrees with the TS map, which is RISK-017's undetected condition. **`dt-deploy`'s `exit 3` becomes RISK-017's detector instead of its victim.**
