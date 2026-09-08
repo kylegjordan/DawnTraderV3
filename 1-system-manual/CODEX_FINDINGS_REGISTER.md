@@ -1,29 +1,41 @@
-# CODEX FINDINGS REGISTER — every finding, in plain language, with what we owe it
+# CODEX FINDINGS REGISTER — **THE SINGLE DOCUMENT. EVERY FINDING, WHAT IT IS WORTH, AND WHERE IT GOES.**
 
-> ⛔ **STATUS: DRAFT r1 (CC-C, 2026-09-08). NOT FINAL — awaiting Langston's review rounds, then Kyle.**
-> **Kyle's directive, 2026-09-07:** a plain-language list of every finding from every Codex audit — *"whether or not the finding is correct and means we need to make changes to the system and what that change is, whether the finding needs investigating, whether the finding was wrong and how we know it was wrong"* — finalised with Langston, documented, then sent back to Codex for **designs** on confirmed items and **follow-up questions** on investigation items.
-> ⭐ **HIS BINDING SENTENCE, and it is the test every row is written against:** *"if we believe findings are real and will lead to meaningful improvements, then we have to capitalize on the opportunity to make those improvements."*
+> ⛔ **STATUS: DRAFT r2 (CC-C, 2026-09-08). Agreement with Langston, then ONE dispatch to Coltrane.**
+> **Kyle's directive:** *"I want all of this in one document. And then from there, we can build a plan around it."* **Pricing findings feed the pricing programme; everything else becomes its own sequence — but nothing is forgotten, so it all lives here.**
+> ⭐ **HIS TEST FOR EVERY ROW:** *"if we believe findings are real and will lead to meaningful improvements, then we have to capitalize on the opportunity to make those improvements."*
+
+## ⛔⛔ THE PROCESS — DELIBERATELY NOT OUR NORMAL WORKFLOW *(Kyle, 2026-09-08)*
+> **CC-C + Langston agree the plan AND the question set → ONE dispatch to Coltrane for review and feedback → converge on the overall plan → design → implement.**
+> ⭐ **HIS FRAMING: *"I want to be thorough and have quality work done, but I want this to move faster than our normal workflow."***
+> ⛔⛔ **THE OPERATIVE CONSEQUENCE, AND IT SHAPES THIS WHOLE FILE: COLTRANE IS EXPENSIVE AND WE GET **ONE** ROUND.** ⇒ **every question we need answered must be IN that dispatch. There is no cheap follow-up.** ★ **That is why §6's retrieval is written as a QUESTION IN THE BUNDLE rather than a separate ask — a second dispatch to collect it would cost more than the answer.**
 
 ---
 
-## 0. ⛔⛔ TWO LIMITS ON THIS REGISTER, STATED BEFORE THE CONTENT
+## 0. ⛔ METHOD, AND TWO LIMITS STATED BEFORE THE CONTENT
 
-**(1) THE DENOMINATOR IS INCOMPLETE AND I WILL NOT PRETEND OTHERWISE.** This register covers the **pricing-architecture review in full (14 findings)**. The three earlier assignments are **NOT yet covered**: assignment 3's measurement outputs are in the repository, but **assignment 1's `FULL_SYSTEM_AUDIT_2026-09-05.md` is referenced in our ledger by name and the document itself is not in our repository.** ⇒ ⛔ **A register that silently omitted them would be a register of the findings we happened to keep.** **Retrieval is requested; §5 holds the placeholder.**
+**(1) THE DENOMINATOR IS INCOMPLETE.** This covers the **pricing-architecture review in full (14 findings)**. **Assignments 1-3 are NOT yet registered** — see §6. ⇒ ⛔ **Until that closes, this document is a complete register of ONE audit and an incomplete register of four.** **Said here rather than discovered later.**
 
-**(2) ACCEPTING A CORRECTION IS ITSELF A CLAIM** *(Langston's ruling, and it shapes every row)*. Rule 29 binds it exactly as it binds making one. **So every row states HOW it was settled, not merely what was decided.** Three dispositions:
+**(2) ACCEPTING A CORRECTION IS ITSELF A CLAIM** *(Langston)*. Rule 29 binds it as it binds making one. **Every row states HOW it was settled:**
 | tag | meaning |
 |---|---|
-| ✅ **CONFIRMED — RE-DERIVED** | we went to the code ourselves, at the pinned ref, with **our own** citation |
-| ⚠️ **ACCEPTED — REPORTED FACT** | taken on Codex's citation. ⛔ **Permitted ONLY where the item is decision-inert** — never for anything a recommendation rests on |
-| ⛔ **DISPUTED — WITH CITATION** | we think it is wrong, and the row says why, with a line |
+| ✅ **CONFIRMED — RE-DERIVED** | we went to the code ourselves, with **our own** citation |
+| ⚠️ **ACCEPTED — REPORTED FACT** | on Coltrane's citation. ⛔ **Only where the item is decision-inert** |
+| ⛔ **DISPUTED — WITH CITATION** | we think it is wrong, and say why, with a line |
 
-⭐ **RUNNING SCORE: OF THE FOUR FINDINGS WE HAVE RE-DERIVED SO FAR, CODEX IS RIGHT ON FOUR.**
-⛔⛔ **AND THAT BUYS CREDIBILITY, NOT A PASS — KYLE'S RULING, 2026-09-08, CORRECTING ME.** His words: *"just because the codex got a few things right, doesn't mean we blindly accept anything. I don't care who's giving us details or findings. We have to validate everything."*
-⚠️ **r1 OF THIS FILE SAID THE WORKING PRIOR SHOULD BE *CORRECT UNTIL SHOWN OTHERWISE*. THAT IS STRUCK.** ★ **It was drifting toward exactly the reported-fact acceptance Langston had ruled against two messages earlier, and I wrote it anyway — a track record is not evidence about the NEXT claim.** ⇒ **the source of a finding changes nothing about the standard applied to it.**
+⭐ **SCORE SO FAR: 4 re-derived, 4 correct.**
+⛔⛔ **THAT BUYS CREDIBILITY, NOT A PASS — KYLE'S RULING:** *"just because the codex got a few things right, doesn't mean we blindly accept anything… We have to validate everything."* ⚠️ **r1 of this file proposed a *correct-until-shown-otherwise* prior. STRUCK.** ★ **A track record is not evidence about the NEXT claim.**
+
+**(3) ROUTING — every row carries one:**
+| route | meaning |
+|---|---|
+| ⭐ **PRICING** | folds into the one sequenced pricing programme |
+| ➕ **SEPARATE** | real, but not pricing — its own batch or sequence, **placed, not forgotten** |
+| ⏳ **INVESTIGATE** | needs evidence before it can be dispositioned |
+| ⬜ **DOC-ONLY** | our document was wrong; the system is fine |
 
 ---
 
-## 1. ✅ CONFIRMED — NEEDS A CHANGE
+## 1. ✅ CONFIRMED — NEEDS A CHANGE · ⭐ **ROUTE: PRICING PROGRAMME**
 
 ### 1.1 ⛔⛔ **A1 — The order book IS subscribed for candidates in the queue, not only for positions we hold.** *(the biggest single correction)*
 **PLAIN:** We wrote that the system only asks the exchange for the full order book on coins we already own. It doesn't. **When a coin enters the ready-to-buy queue, it gets subscribed right there — ticker and full book.**
@@ -68,7 +80,7 @@
 
 ---
 
-## 2. ✅ CONFIRMED — NO SYSTEM CHANGE, DOCUMENT CORRECTION ONLY
+## 2. ✅ CONFIRMED — DOCUMENT CORRECTION · ⬜ **ROUTE: DOC-ONLY** *(except A8, which is `➕ SEPARATE` — it bears on go-live)*
 
 | # | plain summary | how settled |
 |---|---|---|
@@ -81,7 +93,7 @@
 
 ---
 
-## 3. ⏳ NEEDS INVESTIGATION — send Codex a follow-up question
+## 3. ⏳ NEEDS INVESTIGATION · ⏳ **ROUTE: INVESTIGATE** — these become §7 Q2, in the one bundle
 
 | # | the question we cannot answer from code alone | why it needs evidence |
 |---|---|---|
@@ -113,7 +125,32 @@
 
 ---
 
-## 6. ⭐ WHAT WE PROPOSE TO DO WITH IT — for Langston's and Kyle's amendment
+## 6. ⏳ THE OTHER THREE AUDITS — **NOT YET REGISTERED, AND THE RETRIEVAL IS QUESTION 1 IN THE BUNDLE**
+
+| assignment | subject | what we hold |
+|---|---|---|
+| **1** | full system audit — trading logic, maths, machinery | ⛔ **report not in our repository.** Known downstream: finding 1 → `#1006` *(repository/database schema divergence — **STILL UNHOMED, awaiting Kyle**)*; a fee-contract finding → `#1010` → `B-XSTOCK-FEE-CONTRACT`, CC-B |
+| **2** | trading logic, the maths, and what to build | ⏳ not registered |
+| **3** | what is stopping the system doing its job | data files present under `Claude Comms and Packages/Codex Audits/audit3/`; ⏳ findings not registered |
+| ⭐ **the blind-spot delta** | *what it would have asked that we did not* | ⛔ **requested in assignment 1, not in our repository. The one artifact we cannot produce ourselves.** |
+
+⚠️ **WE ARE NOT ASSERTING THESE WERE NEVER PRODUCED.** Coltrane writes to its own folder and our instrument does not reach there. ⇒ **§7 Q1 asks for them.**
+
+---
+
+## 7. ⭐ THE QUESTION SET FOR COLTRANE — **ONE DISPATCH, SO IT MUST BE COMPLETE**
+
+> ⛔ **DRAFT — Langston to cut, add and rule before anything is sent.** ★ **Every question here is one we cannot answer ourselves. Anything we CAN answer has been struck deliberately — a question we could have resolved is a wasted round at his price.**
+
+**Q1 — RETURN YOUR EARLIER FINDINGS, AS A LIST.** Assignments 1-3, one line each, with the disposition you would give it today. **Plus the blind-spot delta if it exists.** *(We hold your pricing review in full and almost nothing else. We are not asking you to redo the work — only to hand back the list.)*
+**Q2 — THE FIVE RUNTIME QUESTIONS FROM §4**, which need evidence rather than a code read: the context-cache staleness, the gate-time snapshot interval, maker-fill incidence, the fabricated-target incidence, and the real upper bound on the book-resync gap.
+**Q3 — REVIEW THE PROGRAMME SHAPE, NOT THE FINDINGS.** We propose one sequenced pricing programme with the spine *"which number, from which feed, at what age, on which side, verified how, reaches which decision."* **Is that the right cut? What must be excluded for it to ship? What ordering would you impose?**
+**Q4 — WHERE WOULD YOU START IF YOU HAD ONE CHANGE?** Ranked by effect on the objective, not by how broken something looks.
+⛔ **Q5 — WHAT DID WE GET WRONG IN THIS REGISTER?** Including any row where we accepted your finding for the wrong reason.
+
+---
+
+## 8. ⭐ WHAT WE PROPOSE TO DO WITH IT — for Langston's and Kyle's amendment
 
 1. ⛔ **GROUP CONFIRMED ITEMS INTO DESIGN UNITS BEFORE COMMISSIONING ANY DESIGN.** §1.1, §1.2, §1.5, §1.7 and §1.8 are **all the same subsystem** — what we subscribe to, what confirms it, and what travels with the resulting price. **Commissioned finding-by-finding they would return overlapping mechanisms that each look reasonable alone.** ★ *Precedent: Langston's own re-cut folded three blockers into one mechanism.*
 2. **Send Codex the grouped units for design, and §3 as questions** — not fourteen separate asks.
