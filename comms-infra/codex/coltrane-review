@@ -1,0 +1,99 @@
+#!/bin/sh
+# coltrane-review — Coltrane's whole-tree read of the repo at the graded ref.
+#
+# ★ THE SHAPE IS LANGSTON'S, DELIBERATELY (Kyle: *"however Langston is set up repo wise,
+#   that should be the setup for Coltrane as well"*). Same rule: single files are read off
+#   the review branch directly; this exists for the case that needs the WHOLE tree at once
+#   — "every caller of X", "appears nowhere else", a blast-radius census.
+#
+# ⛔⛔ ONE THING IS DIFFERENT AND IT IS NOT A SHORTCUT — IT IS FORCED, AND THE SUBSTITUTE
+#     IS STRICTER. `dt-review` fetches from GitHub before every read and refuses if the
+#     fetch fails. Coltrane's shell has NO NETWORK by design, so it cannot do that.
+#     ⇒ Instead the mirror is refreshed OUTSIDE the sandbox on a timer, and THIS SCRIPT
+#       REFUSES TO READ A MIRROR THAT HAS NOT BEEN REFRESHED RECENTLY. The guarantee is
+#       the same one Kyle's rule is actually for — never hand back possibly-stale bytes —
+#       reached by bounding staleness instead of by fetching on demand.
+#     ⚠️ AND THE REFUSAL IS THE POINT. A read that silently returned month-old code would
+#       be worse than no read at all: every line number, every "appears nowhere else",
+#       every absence claim would be confidently wrong about a tree that has moved.
+#
+# ⚠️ THE FRESHNESS STAMP IS WRITTEN ONLY ON A SUCCESSFUL FETCH. A mirror that stops
+#    updating goes stale-and-refusing, not stale-and-quiet. Do not "fix" a refusal by
+#    touching the stamp; fix the fetch.
+#
+# ⛔ READ PATH ONLY. The push URL on this mirror is a deliberately invalid DISABLED:// value
+#    (§7.1: *"a push from it fails at git, not at somebody's memory"*), so nothing here can
+#    write upstream even if something tried.
+
+REPO=/srv/coltrane-repo.git
+BRANCH=migration/aws-supabase
+STAMP=/srv/coltrane-repo.git/LAST_FETCH_OK
+MAX_AGE_MIN=90
+
+if [ ! -d "$REPO" ]; then
+  echo "coltrane-review: mirror $REPO does not exist. This is the absence of the MIRROR," >&2
+  echo "coltrane-review: not of the code — do not read it as 'the repo has no such file'." >&2
+  exit 1
+fi
+
+if [ ! -f "$STAMP" ]; then
+  echo "coltrane-review: no successful-fetch stamp. The mirror has never been confirmed" >&2
+  echo "coltrane-review: current, so its contents prove nothing. REFUSING." >&2
+  exit 1
+fi
+
+age=$(( ( $(date +%s) - $(stat -c %Y "$STAMP") ) / 60 ))
+if [ "$age" -gt "$MAX_AGE_MIN" ]; then
+  echo "coltrane-review: last successful refresh was ${age} minutes ago (limit ${MAX_AGE_MIN})." >&2
+  echo "coltrane-review: REFUSING to read a possibly-stale tree. Say so rather than" >&2
+  echo "coltrane-review: quoting it — an absence found here would not be evidence." >&2
+  exit 1
+fi
+
+REF=$(git --git-dir="$REPO" rev-parse "$BRANCH" 2>/dev/null)
+if [ -z "$REF" ]; then
+  echo "coltrane-review: branch $BRANCH not present in the mirror. REFUSING." >&2
+  exit 1
+fi
+
+cmd="$1"; shift 2>/dev/null
+case "$cmd" in
+  grep)
+    pat="$1"; shift 2>/dev/null
+    echo "# whole-tree search at $REF (mirror refreshed ${age} min ago)"
+    if [ $# -gt 0 ]; then
+      git --git-dir="$REPO" grep -n -e "$pat" "$REF" -- "$@"
+    else
+      git --git-dir="$REPO" grep -n -e "$pat" "$REF"
+    fi
+    ;;
+  show)
+    echo "# $1 at $REF (mirror refreshed ${age} min ago)"
+    git --git-dir="$REPO" show "$REF:$1"
+    ;;
+  ls)
+    git --git-dir="$REPO" ls-tree -r --name-only "$REF"
+    ;;
+  log)
+    git --git-dir="$REPO" log --oneline -n "${1:-20}" "$BRANCH"
+    ;;
+  ref)
+    echo "$REF"
+    echo "# mirror refreshed ${age} min ago; limit ${MAX_AGE_MIN} min"
+    ;;
+  *)
+    cat >&2 <<EOF
+coltrane-review — read the repo at the graded ref ($BRANCH).
+
+  coltrane-review show <path>              one file at the ref
+  coltrane-review grep <pattern> [paths]   whole-tree search at the ref
+  coltrane-review ls                       every path at the ref
+  coltrane-review log [n]                  recent commits on the branch
+  coltrane-review ref                      the ref, and how fresh the mirror is
+
+⛔ Quote path:line from THIS, never from a copy in your scratch directory. A copy is a
+   copy and goes stale; every line number in a review has to resolve at the ref.
+EOF
+    exit 2
+    ;;
+esac

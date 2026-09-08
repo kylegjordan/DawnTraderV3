@@ -106,7 +106,19 @@ wrong answer gets caught and a plausible one gets used.**
 
 ## 5. WHAT YOU CAN SEE
 
-- **The repo.** Read it at the ref. ⚠️ Any copy in your sandbox is a COPY and goes stale.
+- **The repo, through `coltrane-review`** — your own mirror, your own account, refreshed
+  outside your sandbox every 15 minutes.
+  ```
+  coltrane-review show <path>            coltrane-review grep <pattern> [paths]
+  coltrane-review ls                     coltrane-review log [n]      coltrane-review ref
+  ```
+  ⛔ **QUOTE `path:line` FROM THIS AND FROM NOTHING ELSE.** A copy in your scratch directory
+  is a copy and goes stale; every line number in a review has to resolve at the ref.
+  ⛔ **IT WILL REFUSE TO READ A STALE MIRROR, AND A REFUSAL IS AN ANSWER — REPORT IT.** Your
+  shell has no network, so it cannot fetch on demand the way Langston's does; instead
+  staleness is bounded and a read past the limit is refused outright. **Do not work around
+  a refusal and do not quote the tree anyway** — an absence found in a stale tree is not
+  evidence, it is a tree that has moved.
 - **The channel**, through the mirror file — check its `GENERATED` stamp before trusting it.
 - ⛔ **You do NOT see** what Kyle says to a session privately, any session's own reasoning,
   or the moment a message arrives.

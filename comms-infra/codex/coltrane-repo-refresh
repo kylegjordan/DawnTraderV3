@@ -1,0 +1,44 @@
+#!/bin/sh
+# coltrane-repo-refresh — keep Coltrane's own repo mirror current, and stamp ONLY on success.
+#
+# ⛔⛔ THE STAMP IS THE WHOLE MECHANISM. `coltrane-review` refuses to read a mirror whose
+#     last-successful-fetch stamp is older than its limit. So this script must touch the
+#     stamp ONLY after a fetch that actually succeeded — a stamp written unconditionally
+#     would convert a dead fetch into a silently-stale read, which is the exact failure the
+#     refusal exists to prevent.
+#
+# ★ WHERE IT PULLS FROM, AND THE COUPLING STATED RATHER THAN HIDDEN. It fetches from the
+#   Helsinki mirror at /srv/dawntrader-backup.git, which self-pulls from GitHub. GitHub
+#   remains the source of truth for both agents (§7.1); this is a second hop, not a second
+#   source. ⚠️ COST OF THE HOP: Coltrane's tree can lag GitHub by the sum of both cadences.
+#   ⚠️ AND IT IS A DEPENDENCY: if Langston's mirror stops updating, Coltrane's stops too —
+#     and stops LOUDLY, because the stamp goes stale and reads start refusing.
+#   ⇒ REMOVING THE HOP NEEDS A GITHUB DEPLOY KEY FOR COLTRANE, which is Kyle's action and
+#     was not taken unilaterally. Until then the hop is the honest arrangement, not the
+#     ideal one.
+#
+# ⛔ ONE DIRECTION ONLY. This reads Langston's mirror and writes Coltrane's. It never writes
+#   anything under /home/langston or /srv/dawntrader-backup.git, and the push URL on
+#   Coltrane's mirror is a deliberately invalid DISABLED:// value.
+
+set -e
+
+SRC=/srv/dawntrader-backup.git
+REPO=/srv/coltrane-repo.git
+BRANCH=migration/aws-supabase
+STAMP="$REPO/LAST_FETCH_OK"
+
+if [ ! -d "$SRC" ]; then
+  echo "coltrane-repo-refresh: source mirror $SRC missing — NOT stamping." >&2
+  exit 1
+fi
+
+if ! git --git-dir="$REPO" fetch --quiet "$SRC" "+refs/heads/$BRANCH:refs/heads/$BRANCH"; then
+  echo "coltrane-repo-refresh: fetch FAILED — NOT stamping. Reads will refuse once the" >&2
+  echo "coltrane-repo-refresh: existing stamp ages out, which is the intended behaviour." >&2
+  exit 1
+fi
+
+date -u +%Y-%m-%dT%H:%M:%SZ > "$STAMP"
+chown coltrane:coltrane "$STAMP"
+echo "coltrane-repo-refresh: OK $(git --git-dir="$REPO" rev-parse --short "$BRANCH") at $(cat "$STAMP")"
