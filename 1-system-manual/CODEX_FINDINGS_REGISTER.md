@@ -17,7 +17,9 @@
 | ⚠️ **ACCEPTED — REPORTED FACT** | taken on Codex's citation. ⛔ **Permitted ONLY where the item is decision-inert** — never for anything a recommendation rests on |
 | ⛔ **DISPUTED — WITH CITATION** | we think it is wrong, and the row says why, with a line |
 
-⭐ **RUNNING SCORE, and it is the most decision-relevant number here: OF THE FOUR FINDINGS WE HAVE RE-DERIVED SO FAR, CODEX IS RIGHT ON FOUR.** ⇒ **the working prior is that a Codex finding is CORRECT until shown otherwise.** ⚠️ **That does NOT license accepting the rest unverified — it raises the cost of the ones we get wrong, because a wrong acceptance now inherits our confidence.**
+⭐ **RUNNING SCORE: OF THE FOUR FINDINGS WE HAVE RE-DERIVED SO FAR, CODEX IS RIGHT ON FOUR.**
+⛔⛔ **AND THAT BUYS CREDIBILITY, NOT A PASS — KYLE'S RULING, 2026-09-08, CORRECTING ME.** His words: *"just because the codex got a few things right, doesn't mean we blindly accept anything. I don't care who's giving us details or findings. We have to validate everything."*
+⚠️ **r1 OF THIS FILE SAID THE WORKING PRIOR SHOULD BE *CORRECT UNTIL SHOWN OTHERWISE*. THAT IS STRUCK.** ★ **It was drifting toward exactly the reported-fact acceptance Langston had ruled against two messages earlier, and I wrote it anyway — a track record is not evidence about the NEXT claim.** ⇒ **the source of a finding changes nothing about the standard applied to it.**
 
 ---
 
