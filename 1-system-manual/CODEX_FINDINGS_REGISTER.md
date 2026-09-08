@@ -7,7 +7,9 @@
 ## ⛔⛔ THE PROCESS — DELIBERATELY NOT OUR NORMAL WORKFLOW *(Kyle, 2026-09-08)*
 > **CC-C + Langston agree the plan AND the question set → ONE dispatch to Coltrane for review and feedback → converge on the overall plan → design → implement.**
 > ⭐ **HIS FRAMING: *"I want to be thorough and have quality work done, but I want this to move faster than our normal workflow."***
-> ⛔⛔ **THE OPERATIVE CONSEQUENCE, AND IT SHAPES THIS WHOLE FILE: COLTRANE IS EXPENSIVE AND WE GET **ONE** ROUND.** ⇒ **every question we need answered must be IN that dispatch. There is no cheap follow-up.** ★ **That is why §6's retrieval is written as a QUESTION IN THE BUNDLE rather than a separate ask — a second dispatch to collect it would cost more than the answer.**
+> ✅✅ **SCOPE IS NOT LIMITED BY COST — KYLE'S RULING, 2026-09-08, CORRECTING ME:** *"I do not want this document and the assignment we give to Coltrane to be limited because of costs. If his usage is about to break the bank, I will press pause for a bit. But that's my call."*
+> ⚠️ **r2 OF THIS FILE STRUCK QUESTIONS ON COST GROUNDS AND SAID SO OUT LOUD. THAT WAS ME MAKING KYLE'S BUDGET DECISION FOR HIM, INSIDE A DOCUMENT ABOUT NOT LOSING FINDINGS.** ⇒ **restored: ask what the work needs.**
+> ⭐ **WHAT SURVIVES FROM r2, because it is about QUALITY rather than price: the dispatch should still be COMPLETE.** A question we can answer ourselves is not worth his round — **not because it costs money, but because it spends a reviewer's attention on something we already know.** ⛔ **The bundle is bounded by what only HE can answer, never by what we can afford.**
 
 ---
 
