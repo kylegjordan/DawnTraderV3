@@ -29,16 +29,27 @@ def load_shipped_predicate():
     """Compile the predicate out of the shipped file, so this tests the real thing."""
     t = io.open(SRC, encoding='utf-8').read()
     start_marker = u'# ── THE PREDICATE:'
-    end_marker = 'names = [f['
+    end_marker = 'runtime_files = ['
     if start_marker not in t or end_marker not in t:
         sys.exit('ABORT: predicate markers not found in %s — the script changed shape; '
                  'fix this extractor rather than deleting the test.' % SRC)
     block = t[t.index(start_marker):t.index(end_marker, t.index(start_marker))]
     ns = {}
     exec(compile(block, 'predicate-from-shipped-file', 'exec'), ns)
-    if 'runtime' not in ns:
-        sys.exit('ABORT: extracted block defines no runtime()')
-    return ns['runtime']
+    # ⛔⛔ ONE MARKED REGION, ENDING AT `runtime_files = [` — it must contain BOTH runtime()
+    #   AND qualifies(). BLOCKER-2 (Langston, r3): the earlier version ended at
+    #   `names = [f[`, and qualifies() is defined BELOW that line, so it sat OUTSIDE the
+    #   extracted block and had NO CONTROL AT ALL. Mutation-confirmed by him: stripping the
+    #   previous_filename arm PASSED, exit 0; deleting qualifies() entirely PASSED, exit 0.
+    #   The whole judgement-call-5 fix could be deleted and this control would certify it.
+    # ⚠️ AND I TOLD HIM THE OPPOSITE — that there were 'two extractions with two markers'.
+    #   There was ONE marker pair used twice. I asserted a property of my own test without
+    #   reading it; asking what the second marker actually was would have caught it.
+    for need in ('runtime', 'qualifies'):
+        if need not in ns:
+            sys.exit('ABORT: extracted block defines no %s() — the marked region no longer '
+                     'covers the whole predicate. Fix the markers, do not narrow the test.' % need)
+    return ns['runtime'], ns['qualifies']
 
 # The PRE-FIX predicate, verbatim. This is the control, not a spare implementation.
 def runtime_prefix(f):
@@ -117,6 +128,26 @@ EXPECTED_ENTRIES = {
     'replit.md',
 }
 
+
+# ⛔⛔ ENTRY-SHAPED CASES — THESE EXERCISE qualifies(), WHICH HAD NO CONTROL AT ALL UNTIL
+#   Langston's r3. A rename that moves a sink file OUT of its path leaves only the new,
+#   unmatched name in files[].filename, so without the previous_filename arm the gate goes
+#   quiet on a state it cannot see — this batch's own subject, inside the fix for it.
+ENTRY_CASES = [
+    ({'filename': 'config/vts-old.json', 'previous_filename': 'config/vts.json'},
+     1, 'sink file renamed OUT of its path — caught only via previous_filename'),
+    ({'filename': 'config/vts.json', 'previous_filename': 'config/vts-old.json'},
+     1, 'renamed INTO a sink path — caught on the current name'),
+    ({'filename': 'server/services/a.ts', 'previous_filename': 'server/services/b.ts'},
+     1, 'rename within a sink prefix'),
+    ({'filename': 'docs/a.md', 'previous_filename': 'docs/b.md'},
+     0, 'non-sink rename — must stay quiet'),
+    ({'filename': 'config/vts.json'},
+     1, 'plain modify, no previous_filename key at all'),
+    ({'filename': 'docs/a.md'},
+     0, 'plain non-sink modify'),
+]
+
 def repo_root():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
 
@@ -125,7 +156,7 @@ def check_set_integrity():
     and on an entry that is not a tracked path, which no behavioural case can see."""
     import subprocess
     t = io.open(SRC, encoding='utf-8').read()
-    block = t[t.index(u'# ── THE PREDICATE:'):t.index('names = [f[')]
+    block = t[t.index(u'# ── THE PREDICATE:'):t.index('runtime_files = [')]
     ns = {}
     exec(compile(block, 'predicate-from-shipped-file', 'exec'), ns)
     shipped = set()
@@ -165,7 +196,7 @@ def check_set_integrity():
 
 
 def main():
-    runtime = load_shipped_predicate()
+    runtime, qualifies = load_shipped_predicate()
     integrity_problems = check_set_integrity()
     print()
     fails = discriminates = 0
@@ -178,8 +209,17 @@ def main():
         if got != old:
             discriminates += 1
         print('  %-48s %-4d %-4d %s%s' % (path, got, old, why, '' if got == want else '   <<< FAIL'))
+    print()
+    for entry, want, why in ENTRY_CASES:
+        got = 1 if qualifies(entry) else 0
+        ok = (got == want)
+        if not ok:
+            fails += 1
+        prev = entry.get('previous_filename', '-')
+        print('  %-28s prev=%-26s %-4d %s%s'
+              % (entry['filename'], prev, got, why, '' if ok else '   <<< FAIL'))
     print('\n  cases: %d   failures: %d   new-differs-from-prefix: %d'
-          % (len(CASES), fails, discriminates))
+          % (len(CASES) + len(ENTRY_CASES), fails, discriminates))
     if integrity_problems:
         print('  RESULT: FAIL — the SET is not intact (%d problem(s) above).' % integrity_problems)
         print('          A behavioural pass here would be the exact failure this batch is')

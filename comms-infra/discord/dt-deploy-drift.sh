@@ -330,8 +330,6 @@ def runtime(f):
         return 'rollback' not in f.lower()
     return f in SINK1_FILES or f in SINK2_FILES or f in SINK3_FILES or f in SINK4_FILES
 
-names = [f['filename'] for f in files]
-
 # ⛔⛔ A RENAME IS CHECKED ON *BOTH* NAMES. Renaming a sink file OUT of its path (say
 #   config/vts.json -> config/vts-old.json) leaves only the new, unmatched name in
 #   files[].filename, so the gate would report all-clear on a state it could not see —
@@ -536,9 +534,24 @@ fi
 # cap the AGE operand is still measured and sound, so the alert fires at its rung and carries
 # runtime_path: UNDECIDABLE. 300 is a CAP, not a measurement — a saturated gauge cannot order
 # anything, so it must not become a rung.
-# ⛔ MANIFEST NOTE — COMPUTED BEFORE THE BRANCH, BECAUSE PRESENCE IS DECIDABLE EVEN WHEN THE
-#   LIST IS CAPPED. Only ABSENCE is undecidable under a cap; a name that IS in the list is a
-#   positive fact. Computing it inside the else lost the annotation on the biggest windows.
+# ⛔⛔ MANIFEST NOTE — UNCAPPED ONLY, AND THE REASON HERE USED TO BE THE OPPOSITE ONE.
+# ⚠️ IT SAID: "computed before the branch, because PRESENCE is decidable even when the list
+#   is capped; only ABSENCE is undecidable." That was true of the ORIGINAL single-clause
+#   note, which tested presence alone. It became FALSE in the same commit that gated the
+#   note on 'no .sql beside it' — BECAUSE THAT SECOND CLAUSE IS AN ABSENCE, read off a list
+#   that truncates at 300. Under a cap the note would assert 'no migration .sql beside it'
+#   from a list that simply stopped early, and point at a deploy abort on that basis.
+# ★ REACHABILITY MEASURED, so this is not hypothetical: 24h = 54 commits / 43 files,
+#   72h = 168 commits / 151 files ⇒ about six days at this cadence saturates 300. The top
+#   rung has no ceiling and the row persists until a deploy, SO THE CAP IS HIT EXACTLY WHEN
+#   A DEPLOY HAS STALLED — which is exactly when a migration is most likely to be waiting.
+# ⇒ GATED ON CAPPED=0. Under a cap the body already says runtime_path: UNDECIDABLE, which
+#   is the honest answer; appending a confident absence-claim to it is worse than silence.
+#   (Langston, Step-4 r3 — FINDING-3's own class, a comment left carrying the old reason,
+#   recreated in the very commit that fixed FINDING-3.)
+# ★ ROLLBACK-ONLY RANGES DO FIRE IT, DELIBERATELY: rollbacks never reach rtlist.txt, so
+#   MANIFEST + rollback-only looks like MANIFEST-alone here — and db-migrate :120-125 THROWS
+#   if a rollback is even LISTED in the manifest, so that shape earns exactly this look.
 # ⛔⛔ IT IS NOT A VERDICT, AND IT FIRES ONLY ON THE DISCRIMINATING CASE. An earlier draft
 #   asserted "HARD DEPLOY FAILURE" on any range containing MANIFEST.txt.
 # ⚠️ MEASURED, and my first figure was a WRONG INTERSECTION (Langston, rule 29(a)): I wrote
@@ -555,7 +568,8 @@ fi
 #   and Langston struck it: only the OTHER mode — a stale untracked .sql on staging that
 #   `reset --hard` does not remove — is genuinely invisible here.
 MANIFEST_NOTE=""
-if grep -qx 'drizzle/migrations/MANIFEST\.txt' "$WORK/rtlist.txt" 2>/dev/null \
+if [ "$CAPPED" != "1" ] \
+   && grep -qx 'drizzle/migrations/MANIFEST\.txt' "$WORK/rtlist.txt" 2>/dev/null \
    && ! grep -qE '^drizzle/migrations/.*\.sql$' "$WORK/rtlist.txt" 2>/dev/null; then
   MANIFEST_NOTE="
   ⚠️ MANIFEST.txt is undeployed WITH NO MIGRATION .sql BESIDE IT — the uncommon shape, and
