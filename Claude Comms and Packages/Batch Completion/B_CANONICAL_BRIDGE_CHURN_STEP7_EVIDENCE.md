@@ -47,7 +47,20 @@ ls -l --time-style=+%H:%M:%S bridge/canonical/
 | 3 | `git checkout --` restore | tree clean |
 | 4 | invoke the real sync again | `filesUnchanged` = **[json]** ⇒ ✅ **SKIP BRANCH FIRED**, tree clean |
 
-✅ **The key is NOT degenerate: it discriminates a real content change from a stamp-only one, proved by mutation on the deployed code, not by reading it.**
+⛔⛔ **THAT FIRST MUTATION WAS TOO WEAK, AND A SECOND FRESH READER CAUGHT IT AT THE CODE. RECORDED IN FULL BECAUSE THE FAILURE IS THE INTERESTING PART.**
+**I injected a key INTO `byAssetClass` — so ANY key that hashes `byAssetClass` at all passes it, INCLUDING THE EXACT DEGENERACY LANGSTON BLOCKED ON.** A `!k.startsWith("_")` filter — the sibling's approach, which BLOCKER-1 exists to prevent — **would have produced identical output at all four steps above.** So would a key hashing only key-NAMES, or only `Object.keys(byAssetClass)`.
+⇒ ★ **My mutation excluded a TOTALLY degenerate key and nothing narrower. The claim "the key is not degenerate" was not what the test supported** — and the drift shape this batch's sibling assertion exists to catch (`RISK-017`) is a **VALUE** change, which a structure-only probe does not touch either.
+
+**TWO DISCRIMINATING MUTATIONS RE-RUN ON THE DEPLOYED CODE, each with its expectation written first:**
+
+| # | mutation | what a degenerate key would do | RESULT |
+|---|---|---|---|
+| **A** | bump **`_schema` ONLY** (`regime-mapping/v3.0.0` → `v9.9.9-PROBE`) — nothing else touched | a `!k.startsWith("_")` key **SKIPS** ⇒ BLOCKER-1 live | ✅ **`filesUpdated=[json,.md,.md]` — WRITE FIRED. `_schema` IS inside the key.** |
+| **B** | change a **VALUE, no new key**: `crypto_spot / HIGH_VOLATILITY_UNSTABLE / favoredSignalTypes[0]` `QUANT` → `QUANT_PROBEVAL` | a key over names/structure only **SKIPS** | ✅ **`filesUpdated=[json,.md,.md]` — WRITE FIRED. The key is VALUE-SENSITIVE.** |
+| — | restore, re-run | — | ✅ **`filesUnchanged=[json]`, tree `[]` — SKIP FIRED.** |
+
+✅ **NOW the claim is earned: the key covers `_schema` (the blocked class) AND is value-sensitive (the real drift shape) — established by mutation on the deployed code, not by reading it.**
+★ **AND THE SHAPE IS THE LESSON, not the fix: a mutation that changes the thing you already believe is covered proves nothing. The probe has to be aimed at the SPECIFIC degeneracy that was feared** — here, the one named in the code's own docblock at `:66-76`, which I had read and still did not aim at.
 
 ⭐ **AND STEP 2 EXERCISED THE SIGNAL THIS BATCH'S OWN DOCBLOCK TEACHES.** The write left the tree dirty — `git diff` = **exactly 2 insertions / 2 deletions, both stamps** (`generatedAt`/`updatedAt` → `2026-09-08T20:01:40.706Z`). **That is correct and by design:** a genuine content change moves the stamp, and the resulting dirty file IS the intended signal that the committed JSON disagrees with the TypeScript map. **The batch did not remove the dirty-tree signal; it removed the FALSE one.**
 
@@ -88,6 +101,7 @@ Claude-in-Chrome, `https://188.245.193.8.sslip.io/analytics` → **Mapping Drift
 Schema: regime-mapping/v3.0.0    Map Updated: 2026-05-24T00:30:18Z
 ```
 Not `Last Sync:`, and carrying the **derived** value. Source at the deployed sha: `client/src/pages/analytics.tsx:2874`.
+⛔ **THIS IS NOT INDEPENDENT EVIDENCE OF OBJ-1, AND THE WORDING BELOW INVITED THAT READ — corrected after a fresh reader checked the source.** `analytics.tsx:2848` is `const lastUpdated = canonicalData?._metadata?.updatedAt || 'Unknown'` — **the UI reads the same machine stamp it always read; the only code change is the LABEL at `:2874`.** ⇒ **the observed DOM is fully explained by "label renamed + committed JSON hand-edited" and would look IDENTICAL if the skip logic did nothing.** It corroborates the batch's UI objective and **carries no weight for OBJ-1**, which stands on §2/§2b alone.
 ⚠️ **The label and the value had to change together.** `Map Updated` would have been a false claim while the field still held a sync timestamp, and the old value (`2026-06-11T01:17:10.255Z`) **overstated the map's freshness by 18 days**.
 ⚠️ **RECORD POINT (Langston's Condition-C instruction, so nobody hunts for it in the file's history):** `2026-05-24T00:30:18Z` is **`af99bd5dd`'s COMMIT timestamp**, NOT the value the file carried at that commit — which was `2026-05-24T00:00:00Z`. The derived number is the better one (the round value was hand-authored); this line exists so a future reader does not conclude it was invented.
 
@@ -113,17 +127,39 @@ Both rungs → `state=resolved`, `resolved_by_claimed=deploy-drift-monitor`, `re
 |---|---|---|
 | installed file `/usr/local/bin/dt-deploy-drift.sh` (filesystem) | `ad45948a847f112a658944d9abc449659f3a7e160e3149ea756919117d6aa7d2` | 41535 |
 | blob `git show origin/migration/aws-supabase:comms-infra/discord/dt-deploy-drift.sh` (object store) | `ad45948a847f112a658944d9abc449659f3a7e160e3149ea756919117d6aa7d2` | 41535 |
+⭐ **RE-DERIVED PINNED TO A SHA after a fresh reader noted the blob side named a MOVING REF (`origin/migration/aws-supabase`) while §1 pins identity at a sha — with three sessions pushing, "installed == branch head" is not "installed == reviewed":** the same `ad45948a…` is the blob at **`977e61d7d`** (the deployed sha) AND at **`ecd42d9a0`** — the sha Langston actually CONFIRMED `B-DRIFT-RUNTIME-PREDICATE` at. ⇒ **installed == REVIEWED, established rather than assumed.**
 **Both sides name their surface** — the standing rule after `#751`, where a ref-side and a worktree-side reading were compared and the CRLF delta read as content drift.
 Scheduling: `crontab -u langston -l` → `17 * * * * /usr/local/bin/dt-deploy-drift.sh`. **90 distinct run stamps**, `2026-09-05T14:04:57Z` → `2026-09-08T19:52:24Z` (`grep -oE '^20[0-9-]+T[0-9:]+Z' … | sort -u | wc -l`).
 ⚠️ **A CORRECTION MADE BEFORE DISPATCH, RECORDED BECAUSE IT IS THE PATTERN NOT THE SLIP:** I first reported **16** runs from a `grep -c` that counted only the `ZERO`/`rung` LINES. **A line count is not a run count** — same family as every other `grep -c` miscount in this project's history. Re-derived above.
 
 ## 6. ONE LINE CHECKED AND DELIBERATELY **NOT** FILED AS A DEFECT
 `2026-09-06T08:23:40Z ZERO deployed=0000000000000000000000000000000000000000` — an all-zero base reported as zero drift, which is exactly the shape `B-DRIFT-RUNTIME-PREDICATE` closed (a broken read FILLING the field rather than emptying it).
-**It is not live.** `DEPLOYED` is read from `dist/BUILD_SHA` with an empty-guard (`:174`) and a record-agreement guard (`:197`, `:203`); the all-zero value can only arrive via the `--base` test-mode override (`:176-179`), whose `TEST MODE` notice goes to **stdout, not the log** — hence a dry-run leaves a ZERO line with no visible marker. Dated **two days before** the installed copy. **Recorded here so the next reader does not re-find it and re-open it.**
+**It is not live.** `DEPLOYED` is read from `dist/BUILD_SHA` with an empty-guard (`:174`) and a record-agreement guard (`:197`, `:203`); the all-zero value can only arrive via the `--base` test-mode override (`:176-179`), whose `TEST MODE` notice goes to **stdout, not the log** — hence a dry-run leaves a ZERO line with no visible marker. Dated **two days before** the installed copy. ⛔⛔ **DOWNGRADED FROM "NOT LIVE" TO "UNEXPLAINED" — a fresh reader caught the reasoning gap and it is a good one: I explained a 09-06 log line using the guards in the CURRENT object, while the same paragraph says the installed copy is dated 09-08. ⇒ THE GUARDS I VERIFIED MAY NOT BE THE GUARDS THAT PRODUCED THE LINE.** ★ **The alternative I cannot exclude without reading the THEN-installed script: it lacked the empty-guard and a broken read filled the field — which is precisely the `B-DRIFT-RUNTIME-PREDICATE` shape this paragraph was dismissing.** ⇒ **RECORDED AS UNEXPLAINED, NOT CLOSED.** The current object's guards (`:174`, `:197`, `:203`) are confirmed present and the `--base` path is confirmed to bypass them; that is all this establishes. **Same failure class as citing a stale rule: reasoning about an artifact using a DIFFERENT artifact's contents.**
 
+
+## 6b. 🟨 A NEW FINDING THE SECOND READER SURFACED — "Map Updated" HAS NO KEEPER
+
+⛔ **THE BATCH DELIBERATELY EXCLUDED THE TWO STAMPS FROM THE NEW `committed JSON matches generator` ASSERTION** — the test file calls them *"the only fields the sync is now allowed to leave stale."* **That exclusion is correct and is the whole point of the fix.**
+⚠️ **BUT IT LEAVES THE FIELD THE UI NOW LABELS `Map Updated` WITH NOTHING WATCHING IT.** After a genuine map change: the sync rewrites the JSON with a true stamp, and **the stamp becomes durable ONLY IF A HUMAN COMMITS the regenerated file.** If instead someone runs `git checkout --` on it, or a deploy resets the worktree, **the stamp silently reverts to the older committed value and NOTHING DETECTS IT** — `byAssetClass` and `_schema` equality is enforced by the new test; **freshness of the labelled field is not.**
+★ **I DEMONSTRATED THIS MYSELF WITHOUT NOTICING: §2b step 3 and both mutations above ended in exactly that `git checkout --`.**
+⇒ ⭐ **IT IS A SMALLER VERSION OF THE PROBLEM §3 SAYS THIS BATCH FIXED — a stamp that overstates freshness — and the relabel to `Map Updated` RAISES the stakes, because the label now makes a stronger promise than the old `Last Sync` did.**
+
+**DISPOSITION (§9.4 #2): ADDED AS AN ITEM TO `P19-B12`**, owner CC-A, alongside the two residuals already homed there. **NOT folded into this batch:** the fix is a monitoring/assertion decision (does the committed stamp get a keeper, or does the label retreat to something it can honour?), it is a design call rather than a defect in the shipped code, and this batch's class was confirmed on the basis that it changes no runtime behaviour.
+⚠️ **NOT filed as a fresh issue number: it belongs to `#402`'s residual set** and is recorded on that entry with the other three (§9.5(b-ii) — a finding that duplicates an existing home is a cross-reference).
 
 ## 7. FRESH-READER ROUNDS (the record is mandatory — without a denominator the bar never rises above "one run")
 `REVIEWER r1: claim-only (mode B, mandatory — mechanism + absence claims) · "name the settling objects, then what other states of the world are consistent with them?" · HITS on all five claims · re-derived y`
+`REVIEWER r2: OBJECT round (the evidence doc + sync-canonical-bridge.ts + the test file at 977e61d7d) · same question, asked against the artifacts · 5 CONFIRMED hits + 3 flagged speculative · re-derived y`
+⛔ **THE LOOP TERMINATED ON AN OBJECT ROUND, as required — a `claim-only` clean may never close it (a reader that never reached the artifact is silent with zero opportunity).**
+**What r2 moved, and it is the round that mattered most:**
+1. ⛔⛔ **It showed my mutation test did not test what I said it tested** — the probe passed every degeneracy except a totally-constant key, INCLUDING the exact BLOCKER-1 class. ⇒ two discriminating mutations re-run (§2b). **This is the one that would have shipped a ✅ the evidence did not support.**
+2. It caught §3 being read as independent evidence for OBJ-1 when `analytics.tsx:2848` shows it cannot be.
+3. It caught §5 comparing against a MOVING REF rather than a sha ⇒ re-pinned, and now stronger (matches at `ecd42d9a0`, the reviewed sha).
+4. It caught §6 explaining a log line with a different artifact's code ⇒ downgraded to UNEXPLAINED.
+5. It surfaced §6b, a genuine new residual, now homed.
+⭐ **AND IT CLOSED THINGS TOO, at the code:** `contentKey` strips exactly two keys at exactly the level the generator stamps them (`:80-82` vs `:174-175`); null-handling falls through to the write on either side (`:303`) so *broken never reads as agreement* holds; `sortObjectKeys` plus string-only arrays plus parse-before-hash means **no ordering, locale, float or CRLF instability**; and a repo-wide search found no other production writer.
+⚠️ **THREE SPECULATIVE POINTS IT FLAGGED AND DID NOT ESTABLISH, carried rather than actioned:** a possible CI false-green if vitest's cwd ever diverges from the repo root (the script resolves `BRIDGE_DIR` from `process.cwd()` at `:32` while the test resolves from `__dirname`); no lock between the scheduled task and a Force Sync click; and the unconditional `.md` rewrites could dirty a Windows clone under `core.autocrlf`. **Flagged as SPECULATIVE by the reader and not re-derived by me — they are leads, not findings, and are recorded as such.**
+
 **What r1 actually moved, and it earned its keep twice:**
 1. ⛔ **It caught a FALSE published claim** — "self-resolved, not mine" (§4). Corrected above.
 2. ⛔ **It named the degenerate-key alternative** that §2 could not exclude ⇒ §2b's mutation test exists because of it. **That is the one that would have shipped a fix that never fires.**
