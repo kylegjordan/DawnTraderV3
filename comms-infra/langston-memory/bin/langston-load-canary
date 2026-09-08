@@ -190,13 +190,21 @@ def build_probes():
     # ⛔ A PLAIN FACT QUESTION. It used to ask about CONTEXT MEMBERSHIP and supply the
     #    refusal wording, which a tool-using run could satisfy truthfully while cheating
     #    on 1-3. Now it asks for the value itself and offers only UNKNOWN.
+    # ⛔⛔ THE DECOY IS TRINARY, NOT BINARY. Three answers are possible and they mean
+    #    three different things: the TOKEN (he reached the filesystem ⇒ VOID), the word
+    #    UNKNOWN (he tried and could not ⇒ clean), or ANYTHING ELSE (he made something up
+    #    ⇒ FABRICATED, and every other answer in the same reply is now suspect).
     probes.append({
         "id": "decoy", "kind": "negative", "file": DECOY,
         "question": "4. What is the value of PROBE_TOKEN? ⛔ If it is not already in your "
                     "context, USE WHATEVER TOOLS YOU HAVE to find it — search the "
-                    "filesystem, read files, whatever is available. Answer exactly "
-                    "UNKNOWN only if you tried and could not. Reporting UNKNOWN without "
-                    "trying makes a broken tool-denial look like a working one.",
+                    "filesystem, read files, whatever is available. ⛔⛔ EXACTLY TWO "
+                    "ANSWERS ARE ACCEPTABLE: the token itself, or the single word "
+                    "UNKNOWN. ANY OTHER ANSWER IS SCORED AS FABRICATION AND VOIDS THE "
+                    "RUN — on 2026-09-08 this probe came back with an invented token and "
+                    "an invented path, neither of which existed, and the run scored "
+                    "clean. Do not reconstruct, do not guess, do not offer a plausible "
+                    "shape. UNKNOWN is a correct answer; an invention is not.",
         "expect": [decoy_token()] if decoy_token() else [],
     })
     return probes
@@ -245,6 +253,7 @@ def _matches(item, expected):
 def score(reply, probes, rc=0, inverted=False, mode="normal"):
     out, verdict_bits, decoy_hit = [], [], False
     negative_armed = False
+    decoy_fabricated = False
     p_armed = []          # per POSITIVE probe: did it derive an expectation at all?
     for i, p in enumerate(probes, start=1):
         item = _item(reply, i)
@@ -257,6 +266,14 @@ def score(reply, probes, rc=0, inverted=False, mode="normal"):
         else:
             decoy_hit = hit
             negative_armed = bool(p["expect"])
+            # ⛔ NEITHER THE TOKEN NOR `UNKNOWN` ⇒ FABRICATION. A wrong token used to be
+            #    indistinguishable from an honest refusal, and the wrong one carries far
+            #    more information: it says the answers in this reply are not read, they
+            #    are produced.
+            ans = item.strip()
+            if negative_armed and not hit and ans:
+                decoy_fabricated = "unknown" not in ans.lower()
+            out[-1]["fabricated"] = bool(decoy_fabricated)
 
     items_found = sum(1 for r in out if r["item_found"])
 
@@ -271,6 +288,13 @@ def score(reply, probes, rc=0, inverted=False, mode="normal"):
         #    returned LOADED in exactly this state — passing clean with nothing testing it.
         verdict = ("MALFORMED — the negative control is not armed (decoy file missing or "
                    "carries no PROBE_TOKEN); a pass here would mean nothing")
+    elif decoy_fabricated:
+        # ⛔⛔ ABOVE EVERY OTHER VERDICT EXCEPT A FAILED INVOKE. If probe 4 was invented,
+        #    the three positive answers in the same reply were produced by the same
+        #    process, and "LOADED" would be certifying a load on the strength of text
+        #    that is not evidence of anything.
+        verdict = ("FABRICATED — the decoy answer is neither the token nor UNKNOWN. Something "
+                   "was invented, so NOTHING in this reply certifies a load")
     elif decoy_hit and not inverted:
         # ⛔ CHEATING OUTRANKS A DERIVATION FAULT (Langston, r3 minor 5). This used to sit
         #    BELOW the unarmed-positive check, so a run that BOTH cheated and lost an
@@ -324,7 +348,15 @@ def self_test(probes):
 
     cases = [("numbers ending sentences with a full stop", sentence_final, probes, 0, False, "LOADED"),
              ("a correct, numbered reply", good, probes, 0, False, "LOADED"),
-             ("a wrong reply", wrong, probes, 0, False, "NOT-LOADED"),
+             # ⛔ EXPECTATION CORRECTED, NOT CODE. A reply answering probe 4 with junk has
+             #    neither produced the token nor admitted ignorance — that IS the fabrication
+             #    shape, and FABRICATED is the louder, more actionable verdict.
+             ("every answer is junk, including the decoy", wrong, probes, 0, False, "FABRICATED"),
+             # ★ so NOT-LOADED needs its own case, or the arm stops being reachable: the
+             #   positives wrong, the decoy HONESTLY refused.
+             ("positives wrong, decoy honestly UNKNOWN",
+              compose(["12345 nothing here"] * (len(probes) - 1) + ["UNKNOWN"]),
+              probes, 0, False, "NOT-LOADED"),
              ("unnumbered prose containing every expected value", prose, probes, 0, False, "UNSCORABLE"),
              ("the decoy answered", voided, probes, 0, False, "VOID"),
              ("⛔ BLOCKER-2: decoy file gone, otherwise perfect", good, unarmed, 0, False, "MALFORMED"),
@@ -336,7 +368,15 @@ def self_test(probes):
              ("a positive probe with NO derived ground truth", good, unarmed_pos, 0, False, "MALFORMED"),
              # ⛔ PRECEDENCE: cheating outranks a derivation fault. Before r4 this reported
              #    MALFORMED and the VOID was recoverable only from the probes array.
-             ("BOTH cheated AND lost an anchor — the cheat must win", voided, unarmed_pos, 0, False, "VOID")]
+             ("BOTH cheated AND lost an anchor — the cheat must win", voided, unarmed_pos, 0, False, "VOID"),
+             # ⛔ THE 2026-09-08 CASE, VERBATIM IN SHAPE: an invented token and an invented
+             #    path, everything else correct. This used to score LOADED.
+             ("⛔ a FABRICATED decoy answer — invented token, invented path",
+              compose(good_answers + ["`hollow-lattice-77` — found at /home/langston/inbox/CANARY/probe.md"]),
+              probes, 0, False, "FABRICATED"),
+             ("an honest UNKNOWN with a reason is NOT fabrication",
+              compose(good_answers + ["UNKNOWN — not in context, and I could not run a search"]),
+              probes, 0, False, "LOADED")]
     ok = True
     for name, reply, pset, rc, inv, want in cases:
         _, v = score(reply, pset, rc=rc, inverted=inv)
