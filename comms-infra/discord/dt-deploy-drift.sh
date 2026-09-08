@@ -321,7 +321,13 @@ def runtime(f):
     if f.startswith(SINK1_PREFIXES):
         return '/tests/' not in f and not f.endswith('.test.ts')
     if f.startswith(SINK2_PREFIXES):
-        return True
+        # ⛔ A ROLLBACK .sql REACHES NO SINK AND MUST NOT OPEN THE GATE. db-migrate.ts:118
+        #   filters `!includes('rollback')` out of the executed set, and :120-125 THROWS if
+        #   one is even LISTED in the manifest — they are never run. MEASURED: 87 of the 247
+        #   tracked migration .sql are rollbacks, so without this a rollback-only range fires
+        #   the alert on a file that can never execute. This mirrors db-migrate's own filter
+        #   deliberately: if that filter changes, this one is wrong and must follow it.
+        return 'rollback' not in f.lower()
     return f in SINK1_FILES or f in SINK2_FILES or f in SINK3_FILES or f in SINK4_FILES
 
 names = [f['filename'] for f in files]
@@ -508,26 +514,37 @@ fi
 # cap the AGE operand is still measured and sound, so the alert fires at its rung and carries
 # runtime_path: UNDECIDABLE. 300 is a CAP, not a measurement — a saturated gauge cannot order
 # anything, so it must not become a rung.
+# ⛔ MANIFEST NOTE — COMPUTED BEFORE THE BRANCH, BECAUSE PRESENCE IS DECIDABLE EVEN WHEN THE
+#   LIST IS CAPPED. Only ABSENCE is undecidable under a cap; a name that IS in the list is a
+#   positive fact. Computing it inside the else lost the annotation on the biggest windows.
+# ⛔⛔ AND IT IS DELIBERATELY NOT A VERDICT. An earlier draft asserted "HARD DEPLOY FAILURE"
+#   here. MEASURED: of 109 commits since 2026-06-01 touching a migration .sql, 84 also touch
+#   MANIFEST.txt — so the manifest being in the range is the ORDINARY case for any migration
+#   commit, and a self-consistent migration commit deploys fine. `dt-deploy.sh:204` resets to
+#   the target sha, so manifest and .sql arrive together.
+# ⇒ THE REAL ABORT MODE IS THE INVERSE AND CANNOT BE SEEN FROM THE RANGE: a manifest line
+#   whose .sql was never `git add -f`'d (they are gitignored, §7.1), or a stale untracked .sql
+#   on staging that `reset --hard` does not remove. So this line says CHECK THIS, not THIS
+#   WILL FAIL — a false "the deploy will abort" is a worse output than no line at all.
+MANIFEST_NOTE=""
+if grep -qx 'drizzle/migrations/MANIFEST\.txt' "$WORK/rtlist.txt" 2>/dev/null; then
+  MANIFEST_NOTE="
+  ⚠️ MANIFEST.txt is in this range — ordinary for a migration commit, and normally fine.
+     WORTH ONE CHECK: db-migrate validates the manifest against the filesystem on EVERY run
+     (db-migrate.ts:152-156) and throws on drift (:140-148), aborting at dt-deploy.sh:223
+     AFTER the build has already replaced dist/. Migration .sql files are gitignored and
+     force-added, so a line whose .sql was never 'git add -f'd fails the deploy this way."
+fi
+
 if [ "$CAPPED" = "1" ]; then
-  RUNTIME_LINE="runtime_path: UNDECIDABLE — the changed-file list is at its 300 cap, so whether runtime code is undeployed cannot be determined from it. The age below is unaffected."
+  RUNTIME_LINE="runtime_path: UNDECIDABLE — the changed-file list is at its 300 cap, so whether runtime code is undeployed cannot be determined from it. The age below is unaffected.${MANIFEST_NOTE}"
   mint_alert "deploy-drift-file-gate-undecidable" \
     "Deploy drift: runtime-path gate UNDECIDABLE (file list capped)" \
     "The compare returned a changed-file list at its 300 cap at $TS, so the runtime-path gate could not be evaluated. The age reading is sound and is reported separately. deployed=$DEPLOYED head=$HEAD_SHA"
 else
   # A clipped enumeration beside a full count, unmarked, reads as the whole set.
   SHOWN="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | grep -c .)"
-  RUNTIME_LINE="runtime files undeployed: $RUNTIME_N${LIST:+ (showing $SHOWN of $RUNTIME_N) — $LIST}"
-  # ⛔ P-4 — MANIFEST.txt DOES NOT FAIL TO APPLY; IT FAILS THE DEPLOY. Say so, because
-  #   "a migration is waiting" and "the deploy will abort" are different instructions to
-  #   whoever reads this. db-migrate.ts:152-156 validates on EVERY invocation and :140-148
-  #   throws on manifest/filesystem drift, so this aborts even with nothing pending — at
-  #   dt-deploy.sh:223, AFTER the build at :213 has already overwritten dist/.
-  if grep -qx 'drizzle/migrations/MANIFEST\.txt' "$WORK/rtlist.txt" 2>/dev/null; then
-    RUNTIME_LINE="$RUNTIME_LINE
-  ⛔ MANIFEST.txt IS UNDEPLOYED — this is not a waiting migration, it is a HARD DEPLOY
-     FAILURE: db-migrate validates the manifest against the filesystem on every run and
-     throws on drift, aborting after the build has already replaced dist/."
-  fi
+  RUNTIME_LINE="runtime files undeployed: $RUNTIME_N${LIST:+ (showing $SHOWN of $RUNTIME_N) — $LIST}${MANIFEST_NOTE}"
 fi
 
 # ── THE BODY: EVERY MAGNITUDE CARRIES ITS STAMP ───────────────────────────────────────

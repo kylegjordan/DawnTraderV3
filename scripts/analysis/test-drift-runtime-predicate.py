@@ -64,10 +64,78 @@ CASES = [
     ('server/tests/foo.ts',                            0, 'tests filter still applies'),
     ('scripts/analysis/whatever.sh',                   0, 'a SINK test, not a folder test — scripts/ is not blanket-included'),
     ('index.html',                                     0, 'no root index.html exists; a matching entry would read as coverage'),
+    # the six entries the earlier version left unasserted, and the rollback case a reader found
+    ('tsconfig.json',                                  1, 'SINK 1 build config'),
+    ('tailwind.config.ts',                             1, 'SINK 1 build config'),
+    ('postcss.config.js',                              1, 'SINK 1 build config'),
+    ('package.json',                                   1, 'SINK 3 — and there is exactly one tracked package.json'),
+    ('bridge/canonical/phase9_predictive-learning.json', 1, 'SINK 4 — recalibrate-predictive-weights.ts:221'),
+    ('1-system-manual/audits/b-new-42/dividend-calendar-seed.json', 1, 'SINK 4 — live service read'),
+    ('drizzle/migrations/0099_x_rollback.sql',         0, 'ROLLBACK sql NEVER executes — db-migrate.ts:118 filters it, :120-125 throws if listed'),
+    ('drizzle/migrations/0099_ROLLBACK.sql',           0, 'rollback match is case-insensitive, mirroring db-migrate'),
 ]
+
+# ⛔⛔ THE SET ITSELF IS ASSERTED, NOT JUST ITS BEHAVIOUR — AND THIS EXISTS BECAUSE A FRESH
+#   READER BROKE THE EARLIER VERSION OF THIS TEST AND IT STILL PRINTED PASS. They deleted
+#   'package.json', cut SINK1_FILES to one entry and typo'd two SINK4 paths; the run reported
+#   17 cases, 0 failures, exit 0, because the behavioural cases covered only 9 of 15 entries.
+# ⇒ A test that exercises a SUBSET of a set cannot detect deletions from the rest of it.
+#   Behavioural cases prove the predicate ANSWERS correctly; this proves the SET IS INTACT.
+EXPECTED_ENTRIES = {
+    # SINK 1
+    'vite.config.ts', 'tsconfig.json', 'tailwind.config.ts', 'postcss.config.js',
+    # SINK 2
+    'scripts/db-migrate.ts',
+    # SINK 3
+    'package-lock.json', 'package.json',
+    # SINK 4
+    'audit/coherency_rules.yaml',
+    'config/vts.json',
+    '1-system-manual/authority-baseline-v1.json',
+    '1-system-manual/audits/b-new-42/dividend-calendar-seed.json',
+    'bridge/canonical/phase9_predictive-learning.json',
+    'bridge/canonical/mapping-regime-strategy.json',
+    'data/models/ara_model.json',
+    'replit.md',
+}
+
+def check_set_integrity():
+    """Fails on deletion, addition, or a one-character typo in any exact-match entry —
+    and on an entry that is not a tracked path, which no behavioural case can see."""
+    import subprocess
+    t = io.open(SRC, encoding='utf-8').read()
+    block = t[t.index(u'# ── THE PREDICATE:'):t.index('names = [f[')]
+    ns = {}
+    exec(compile(block, 'predicate-from-shipped-file', 'exec'), ns)
+    shipped = set()
+    for name in ('SINK1_FILES', 'SINK2_FILES', 'SINK3_FILES', 'SINK4_FILES'):
+        shipped |= set(ns[name])
+
+    problems = []
+    for extra in sorted(shipped - EXPECTED_ENTRIES):
+        problems.append('ADDED but not in this test\'s expected set: %s' % extra)
+    for missing in sorted(EXPECTED_ENTRIES - shipped):
+        problems.append('MISSING from the shipped set: %s' % missing)
+
+    # ⛔ AN ENTRY THAT IS NOT A TRACKED PATH MATCHES NOTHING WHILE READING AS COVERAGE —
+    #   exactly the reason the root 'index.html' entry was struck at Step 2.
+    repo = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
+    for entry in sorted(shipped):
+        r = subprocess.run(['git', 'ls-files', '--error-unmatch', entry],
+                           cwd=repo, capture_output=True, text=True)
+        if r.returncode != 0:
+            problems.append('NOT A TRACKED PATH (matches nothing, reads as coverage): %s' % entry)
+
+    print('  set integrity: %d shipped entries, %d expected' % (len(shipped), len(EXPECTED_ENTRIES)))
+    for p in problems:
+        print('    <<< %s' % p)
+    return len(problems)
+
 
 def main():
     runtime = load_shipped_predicate()
+    integrity_problems = check_set_integrity()
+    print()
     fails = discriminates = 0
     print('  %-48s %-4s %-4s %s' % ('path', 'new', 'old', 'why'))
     for path, want, why in CASES:
@@ -80,6 +148,11 @@ def main():
         print('  %-48s %-4d %-4d %s%s' % (path, got, old, why, '' if got == want else '   <<< FAIL'))
     print('\n  cases: %d   failures: %d   new-differs-from-prefix: %d'
           % (len(CASES), fails, discriminates))
+    if integrity_problems:
+        print('  RESULT: FAIL — the SET is not intact (%d problem(s) above).' % integrity_problems)
+        print('          A behavioural pass here would be the exact failure this batch is')
+        print('          about: a control reporting all-clear from a state it cannot see.')
+        return 3
     if fails:
         print('  RESULT: FAIL — the predicate does not match its stated specification.')
         return 1
