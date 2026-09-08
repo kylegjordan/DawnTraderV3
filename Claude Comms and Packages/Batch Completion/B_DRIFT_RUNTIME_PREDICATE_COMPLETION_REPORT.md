@@ -79,6 +79,17 @@ Its fix sentence says *derive the set from **what the deploy executes***. Taken 
 ## 8. SPAWNED
 **`B-CANONICAL-BRIDGE-CHURN`** — under existing **`#402`** (open since 2026-06-30), owner CC-A, **`PHASE_19_PLAN` row 4.56a**. A **daily** scheduled task rewrites a tracked file with a fresh timestamp, dirtying the staging tree, and `dt-deploy` refuses a dirty tree — **it has already refused one deploy.** ⭐ **This batch's census settles the a/b question `#402` left open since June: `routes.ts:2083-2085` reads that file from disk ⇒ option (b), content-hash compare; gitignore is off the table.**
 
+## 8b. ⭐⭐ THE SPAWNED BATCH IS NO LONGER AN INFERENCE — THE PREDICTION CONFIRMED AT `07:50:18Z`
+
+**Written BEFORE the event, and amended before it could fail:** *if no deploy or restart occurs before ~`2026-09-08T07:50:17Z`, `git status --porcelain` on staging will list **exactly one** file — `bridge/canonical/mapping-regime-strategy.json` — **and NOT the two `.md` siblings**.*
+
+**OUTCOME, read at `07:53:50Z`: exactly that.** One line, `M bridge/canonical/mapping-regime-strategy.json`. All three files carry mtime `2026-09-08 07:50:18.455946309`, so the task fired at **07:50:18 against a predicted 07:50:17**. The app was **not** restarted (`up since 2026-09-07T07:50:11Z`, 604 restarts, unchanged) ⇒ **the test is VALID, not void.**
+**The diff is `#402`'s signature verbatim — 2 insertions, 2 deletions:** `generatedAt` and `updatedAt` moving `2026-06-11T01:17:10.255Z` → `2026-09-08T07:50:18.456Z`. Nothing else.
+
+★ **THE AMENDED HALF IS WHAT MAKES IT A TEST RATHER THAN A GUESS.** The two `.md` siblings **were rewritten in the same run** — identical mtimes prove it — **and did NOT dirty the tree**, because their generators interpolate a CONSTANT while only `generateBridgeJSON` stamps a fresh time. ⛔ **My original prediction named all three and would have FAILED on a mechanism that is correct.** Langston caught it with three hours to spare, off the reflog: those two had survived **five** `git reset --hard` operations with mtimes unchanged, so they were clean at every one.
+
+⛔⛔ **OPERATIONAL, AND TRUE RIGHT NOW: the staging tree is dirty, so `dt-deploy` refuses the next deploy (`dt-deploy.sh:194-196`, exit 3).** Crew warned on Discord with the clear command **and** an explicit instruction not to go hunting for what they broke. **That manual clear is the loop `#402` exists to end, not a fix.**
+
 ## 9. GOVERNANCE FILES CHANGED
 **Batch Catalog · Phase History · Phase 19 Plan · System Impact Map · Running Issues · Changes and Fixes · Mistake Patterns · this batch's Scope, Pre-Implementation Audit and Implementation Plan, and Change List · this Completion Report · the CC-A session task list · the shared memory file and my own.**
 **Judged not applicable, stated rather than skipped:** System Manual · Post-Audit Roadmap · Adjustment Framework · Authority Baseline · Storage Policy · Multi-Asset VTS Plan · Asset Class Onboarding · Build Method Playbook · Langston Architecture · CLAUDE.md / CONDUCT.md · the rule-history archive · Deleted Components Log · Governance Exceptions · Delivery Board Protocol.
