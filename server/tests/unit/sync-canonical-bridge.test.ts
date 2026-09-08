@@ -16,8 +16,8 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { describe, test, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { describe, test, expect, beforeAll, afterAll } from 'vitest';
+import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { generateBridgeJSON, syncCanonicalBridge } from '../../scripts/sync-canonical-bridge';
 
@@ -200,22 +200,53 @@ describe('sync-canonical-bridge — committed JSON matches generator output', ()
 // routes.ts feeds filesUpdated straight back to the Force Sync button, so a skipped
 // run that still said "updated" would lie to the operator who just clicked it.
 describe('sync-canonical-bridge — skip-on-unchanged reports honestly', () => {
-  test('unchanged content: JSON is in filesUnchanged, NOT in filesUpdated', async () => {
+  // ⛔⛔ THIS BLOCK CALLS THE REAL syncCanonicalBridge() AGAINST THE REAL bridge/canonical/,
+  //     because that is the only way to exercise the real decision. That makes it capable of
+  //     WRITING to tracked files, and the first version of this block did exactly that:
+  //     on a drifted tree, run 1 failed AND silently regenerated the file (destroying the
+  //     derived stamp), so run 2 passed. Red became green on re-run, with a canonical file
+  //     the developer never authored and the RISK-017 drift repaired instead of traced —
+  //     the self-defeating-detector shape this whole batch argues against.
+  // ⇒ snapshot and restore unconditionally, INCLUDING on failure, which is when it matters.
+  const BRIDGE = resolve(__dirname, '../../../bridge/canonical');
+  const GUARDED = [
+    'mapping-regime-strategy.json',
+    'DawnTrader_Regime_Strategy_Mapping.md',
+    'DawnTrader_Regime_Strategy_Signal_Pattern_Mapping.md',
+  ].map(f => resolve(BRIDGE, f));
+  const snapshot = new Map<string, Buffer>();
+
+  beforeAll(() => {
+    for (const f of GUARDED) snapshot.set(f, readFileSync(f));
+  });
+  afterAll(() => {
+    for (const [f, buf] of snapshot) writeFileSync(f, buf);
+  });
+
+  test('unchanged content: the FILE IS NOT REWRITTEN, and the skip is reported honestly', async () => {
+    const jsonPath = resolve(BRIDGE, 'mapping-regime-strategy.json');
+    const before = readFileSync(jsonPath);
+
     const result = await syncCanonicalBridge();
     expect(result.success).toBe(true);
 
+    // ⭐ THE PRIMARY OBJECTIVE, asserted directly: the bytes on disk did not move.
+    //    The reporting assertions below would still pass if the code wrote the file and
+    //    merely *said* it had not — this is the one that catches that.
+    expect(readFileSync(jsonPath).equals(before)).toBe(true);
+
     const jsonEntries = (arr: string[]) =>
       arr.filter(p => p.endsWith('mapping-regime-strategy.json'));
-
-    // The committed file already matches the generator (the assertion above proves it),
-    // so this run must SKIP.
     expect(jsonEntries(result.filesUnchanged)).toHaveLength(1);
     expect(jsonEntries(result.filesUpdated)).toHaveLength(0);
   });
 
   test('a second run is also a skip — the decision is stable, not a first-run artifact', async () => {
+    const jsonPath = resolve(BRIDGE, 'mapping-regime-strategy.json');
+    const before = readFileSync(jsonPath);
     await syncCanonicalBridge();
     const result = await syncCanonicalBridge();
+    expect(readFileSync(jsonPath).equals(before)).toBe(true);
     expect(result.filesUnchanged.filter(p => p.endsWith('mapping-regime-strategy.json')))
       .toHaveLength(1);
   });
