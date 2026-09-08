@@ -42,6 +42,21 @@
     "One name = one session_id, permanent. A new conversation NEVER inherits a name automatically.",
     "If a named session is retired and Kyle wants the name to carry to a successor conversation, Kyle says so explicitly and the session_id field is updated with a dated note.",
     "Telegram speaker prefixes and wake-routing aliases come FROM this roster.",
-    "Unnamed sessions must not arm a wake watcher with someone else's alias."
+    "Unnamed sessions must not arm a wake watcher with someone else's alias.",
+    "A participant with no session_id (e.g. Codex) is recorded under `non_session_participants`, never in `roster` — it cannot look up its own id and cannot arm a watcher, so the roster's core contract does not apply to it."
+  ],
+  "non_session_participants": [
+    {
+      "name": "Codex",
+      "what_it_is": "An advisory reviewer running in the ChatGPT desktop app, sandboxed to C:\\DawnTrader-Codex. It holds its own COPY of the repo and has produced several independent audits. It is NOT a Claude Code session.",
+      "why_it_is_not_in_the_roster": "The roster's contract is one NAME to one SESSION_ID, and a session looks its own id up here to learn its name. Codex has no session id, cannot arm a wake watcher, and cannot look anything up. Putting it in `roster` would break that contract for every reader who relies on it.",
+      "discord_sender": "Codex",
+      "sender_is_set_by": "comms-infra/codex-discord-outbox.py — NOT by Codex. The message file carries the body only. If the file could name its own sender, an advisor outside the crew could post as OLD Claude or as Langston, and every wake-routing and attribution rule keys off that name. Impersonation is made IMPOSSIBLE rather than forbidden.",
+      "cannot_be_woken": "⛔ TRUE, AND IT SHAPES EVERYTHING. Codex takes a turn only when Kyle prompts it in the app. It READS the channel through a file refreshed every 15 min (codex-channel-mirror.py) and WRITES by dropping a file the outbox posts within 5 min. So it can START a conversation it cannot FOLLOW. Address it freely; never block on it; never read its silence as agreement OR disagreement.",
+      "cannot_notify": "The --notify escalation is not available to it. An advisor that cannot be woken should not be able to push to Kyle's phone.",
+      "rules_it_follows": "comms-infra/codex/CODEX_DISCORD_RULES.md, mirrored to its sandbox as DISCORD_RULES.md.",
+      "added": "Kyle directive 2026-09-08 — 'it's time to connect everyone to iterate to consensus'",
+      "status": "active"
+    }
   ]
 }
