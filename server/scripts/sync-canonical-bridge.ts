@@ -13,8 +13,9 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { writeFileSync, mkdirSync, existsSync, renameSync, appendFileSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, renameSync, appendFileSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
+import { createHash } from 'crypto';
 import {
   CANONICAL_REGIME_STRATEGY_MAP,
   getFavoredListExcludes,
@@ -52,6 +53,43 @@ function atomicWrite(filePath: string, content: string): void {
   const tempPath = `${filePath}.tmp.${Date.now()}`;
   writeFileSync(tempPath, content, 'utf8');
   renameSync(tempPath, filePath);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// B-CANONICAL-BRIDGE-CHURN (#402, 2026-09-08): CONTENT KEY FOR SKIP-ON-UNCHANGED
+// ──────────────────────────────────────────────────────────────────────────────
+// WHY THIS EXISTS: generateBridgeJSON() stamps _metadata.updatedAt and .generatedAt
+// with new Date() on every call, so an unchanged map still produced different bytes.
+// This file is TRACKED, so every daily sync dirtied the staging worktree — and
+// dt-deploy.sh:194-199 REFUSES a dirty worktree (exit 3). It refused a real deploy on
+// 2026-08-17 (#402), and again on 2026-09-08.
+//
+// ⛔ THE EXCLUSION SET IS EXACTLY TWO KEYS, AND THAT IS DELIBERATE (Langston BLOCKER-1).
+// The obvious move is to copy recalibrate-predictive-weights.ts:251, which filters
+// `!k.startsWith("_")`. DO NOT. Top-level keys here are _metadata, _schema and
+// byAssetClass, so that filter would reduce the comparison to byAssetClass ALONE and
+// leave _schema OUTSIDE change detection. Consequence: bump CANONICAL_SCHEMA_VERSION
+// without touching byAssetClass and the sync would SILENTLY REFUSE TO WRITE IT —
+// schema-validator.ts:49-53 then errors at boot, analytics.tsx renders a stale Schema
+// badge, and the Force Sync button appears to do nothing. _metadata also carries
+// _changelog, _fields, canonical, generator, includesDriftScore and source: all CONTENT.
+// ⇒ exclude the two STAMPS, nothing else.
+function contentKey(jsonText: string): string | null {
+  try {
+    const parsed = JSON.parse(jsonText);
+    if (parsed && typeof parsed === 'object' && parsed._metadata) {
+      delete parsed._metadata.updatedAt;
+      delete parsed._metadata.generatedAt;
+    }
+    return createHash('sha256')
+      .update(JSON.stringify(sortObjectKeys(parsed)))
+      .digest('hex');
+  } catch {
+    // ⛔ UNPARSEABLE ON DISK MUST NOT READ AS "UNCHANGED". Returning null makes the
+    //    caller's equality test false, so a corrupt file is REWRITTEN rather than
+    //    silently preserved — absent/broken is never treated as agreement (#546).
+    return null;
+  }
 }
 
 function logEvent(message: string): void {
@@ -241,20 +279,36 @@ function generateSignalPatternMarkdown(): string {
 export async function syncCanonicalBridge(): Promise<{
   success: boolean;
   filesUpdated: string[];
+  filesUnchanged: string[];
   errors: string[];
 }> {
   const filesUpdated: string[] = [];
+  // ⛔ B-CANONICAL-BRIDGE-CHURN, Langston BLOCKER-GRADE CONDITION B: a skipped write
+  //    must NOT be reported as an update. routes.ts feeds filesUpdated straight back to
+  //    the Force Sync button, so without this a skipped run would tell the operator who
+  //    just clicked it that the file was written. "We are building an instrument this
+  //    batch; it may not ship reporting work it did not do."
+  const filesUnchanged: string[] = [];
   const errors: string[] = [];
-  
+
   try {
     ensureDir(BRIDGE_DIR);
-    
+
     const jsonPath = join(BRIDGE_DIR, 'mapping-regime-strategy.json');
     const jsonContent = generateBridgeJSON();
-    atomicWrite(jsonPath, jsonContent);
-    filesUpdated.push(jsonPath);
-    logEvent(`Updated ${jsonPath}`);
-    
+    // Skip the write when only the two stamps would differ. An absent or unparseable
+    // file yields null from contentKey() ⇒ never equal ⇒ always rewritten.
+    const existingKey = existsSync(jsonPath) ? contentKey(readFileSync(jsonPath, 'utf8')) : null;
+    const candidateKey = contentKey(jsonContent);
+    if (existingKey !== null && candidateKey !== null && existingKey === candidateKey) {
+      filesUnchanged.push(jsonPath);
+      logEvent(`Unchanged (content identical, stamps not rewritten) ${jsonPath}`);
+    } else {
+      atomicWrite(jsonPath, jsonContent);
+      filesUpdated.push(jsonPath);
+      logEvent(`Updated ${jsonPath}`);
+    }
+
     const regimeMdPath = join(BRIDGE_DIR, 'DawnTrader_Regime_Strategy_Mapping.md');
     const regimeMdContent = generateRegimeStrategyMarkdown();
     atomicWrite(regimeMdPath, regimeMdContent);
@@ -267,15 +321,17 @@ export async function syncCanonicalBridge(): Promise<{
     filesUpdated.push(signalMdPath);
     logEvent(`Updated ${signalMdPath}`);
     
-    logEvent(`Sync complete: ${filesUpdated.length} files updated`);
-    
-    return { success: true, filesUpdated, errors };
+    // P-4: the sync ALWAYS records that it ran, in the already-gitignored logs/ stream —
+    // so scheduler liveness survives without a tracked field advancing.
+    logEvent(`Sync complete: ${filesUpdated.length} updated, ${filesUnchanged.length} unchanged`);
+
+    return { success: true, filesUpdated, filesUnchanged, errors };
     
   } catch (err: any) {
     const errorMsg = `Sync failed: ${err.message}`;
     errors.push(errorMsg);
     logEvent(errorMsg);
-    return { success: false, filesUpdated, errors };
+    return { success: false, filesUpdated, filesUnchanged, errors };
   }
 }
 
@@ -287,6 +343,7 @@ try {
         if (result.success) {
           console.log('✅ Canonical bridge sync complete');
           console.log('Files updated:', result.filesUpdated);
+          console.log('Files unchanged:', result.filesUnchanged);
         } else {
           console.error('❌ Sync failed:', result.errors);
           process.exit(1);

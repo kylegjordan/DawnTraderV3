@@ -9,6 +9,23 @@
  * ALL subsystems (VTS, Signal Orchestrator, Telemetry, DSE, RTB, Bridge) MUST
  * import from this file. Local inference or mapping logic is PROHIBITED.
  *
+ * ⛔⛔ IF YOU CHANGE THE MAP BELOW, REGENERATE THE BRIDGE JSON AND COMMIT IT IN THE
+ *     SAME COMMIT — `npx tsx server/scripts/sync-canonical-bridge.ts`.
+ *     (B-CANONICAL-BRIDGE-CHURN, #402, 2026-09-08.)
+ *
+ *     WHY, and it changed on 2026-09-08 so do not assume the old behaviour: the sync
+ *     used to rewrite bridge/canonical/mapping-regime-strategy.json on every run with a
+ *     fresh timestamp, which dirtied the staging worktree daily and made dt-deploy
+ *     REFUSE deploys (exit 3). It now SKIPS the write when content is unchanged.
+ *
+ *     ⇒ A DIRTY mapping-regime-strategy.json ON STAGING IS NO LONGER NOISE. It now means
+ *     the committed JSON DISAGREES WITH THIS FILE — which is exactly RISK-017's
+ *     previously-undetected staleness condition. The deploy refusal became the detector.
+ *
+ *     If you skip the regeneration, CI fails on the committed-matches-generator assertion
+ *     in server/tests/unit/sync-canonical-bridge.test.ts — on YOUR commit, not someone
+ *     else's later. That assertion is why this is a note and not a hope.
+ *
  * Schema Version: regime-mapping/v2.0.0
  * Last Updated: 2026-03-05
  *

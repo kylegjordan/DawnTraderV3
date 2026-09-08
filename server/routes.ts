@@ -2105,6 +2105,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.json({
         ok: result.success,
         filesUpdated: result.filesUpdated,
+        filesUnchanged: result.filesUnchanged,
         errors: result.errors,
         timestamp: new Date().toISOString()
       });

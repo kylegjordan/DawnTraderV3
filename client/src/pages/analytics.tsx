@@ -2871,7 +2871,7 @@ function MappingDriftSection() {
         <div>
           <p className="text-sm text-muted-foreground">
             Schema: <Badge variant="outline">{schemaVersion}</Badge>
-            <span className="ml-4">Last Sync: {lastUpdated}</span>
+            <span className="ml-4">Map Updated: {lastUpdated}</span>
           </p>
         </div>
         <div className="flex gap-2">

@@ -17,7 +17,9 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { generateBridgeJSON } from '../../scripts/sync-canonical-bridge';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import { generateBridgeJSON, syncCanonicalBridge } from '../../scripts/sync-canonical-bridge';
 
 interface BridgeJsonEntry {
   favoredStrategies: string[];
@@ -153,5 +155,68 @@ describe('sync-canonical-bridge — generateBridgeJSON producer-consumer contrac
         expect(entry.riskMultiplier).toBeLessThanOrEqual(3);
       }
     }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// B-CANONICAL-BRIDGE-CHURN (#402, 2026-09-08) — THE COMMITTED FILE MUST MATCH THE GENERATOR
+// ══════════════════════════════════════════════════════════════════════════════
+// THE GAP THIS CLOSES: before this, the two halves lived in different files and were
+// never joined. This suite called generateBridgeJSON() and never touched disk;
+// mapping_drift_integrity.test.ts read the committed file and never called the
+// generator. So a change to the TS map that added or dropped a favoredStrategies
+// member left EVERY test green while the committed JSON silently disagreed — which is
+// RISK-017 (SYSTEM_MANUAL), open and undetected since April.
+//
+// ⛔ NO existsSync GUARD, DELIBERATELY. mapping_drift_integrity.test.ts:277-280 wraps
+//    its own comparison in one, so an ABSENT FILE PASSES THAT TEST SILENTLY — the #546
+//    absent-as-valid shape. An absent file here must FAIL.
+// ⛔ resolve(__dirname, ...) NOT process.cwd(): cwd-relativity is what made that guard
+//    feel necessary in the first place. (Langston, Step-2 CONDITION A.)
+//
+// The two stamps are excluded because they are the only fields the sync is now allowed
+// to leave stale — same exclusion set as contentKey() in the sync script.
+describe('sync-canonical-bridge — committed JSON matches generator output', () => {
+  const COMMITTED = resolve(__dirname, '../../../bridge/canonical/mapping-regime-strategy.json');
+
+  test('committed byAssetClass equals generateBridgeJSON() byAssetClass', () => {
+    const committed = JSON.parse(readFileSync(COMMITTED, 'utf8')) as BridgeJson;
+    const generated = JSON.parse(generateBridgeJSON()) as BridgeJson;
+    expect(committed.byAssetClass).toEqual(generated.byAssetClass);
+  });
+
+  test('committed _schema equals generateBridgeJSON() _schema', () => {
+    const committed = JSON.parse(readFileSync(COMMITTED, 'utf8')) as BridgeJson;
+    const generated = JSON.parse(generateBridgeJSON()) as BridgeJson;
+    expect(committed._schema).toBe(generated._schema);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// B-CANONICAL-BRIDGE-CHURN — THE SKIP, AND THE HONEST REPORT OF IT
+// ══════════════════════════════════════════════════════════════════════════════
+// OBJ-1 + Langston's BLOCKER-GRADE CONDITION B. The failure being prevented is not
+// just "the file got rewritten" — it is the function REPORTING a write it did not do.
+// routes.ts feeds filesUpdated straight back to the Force Sync button, so a skipped
+// run that still said "updated" would lie to the operator who just clicked it.
+describe('sync-canonical-bridge — skip-on-unchanged reports honestly', () => {
+  test('unchanged content: JSON is in filesUnchanged, NOT in filesUpdated', async () => {
+    const result = await syncCanonicalBridge();
+    expect(result.success).toBe(true);
+
+    const jsonEntries = (arr: string[]) =>
+      arr.filter(p => p.endsWith('mapping-regime-strategy.json'));
+
+    // The committed file already matches the generator (the assertion above proves it),
+    // so this run must SKIP.
+    expect(jsonEntries(result.filesUnchanged)).toHaveLength(1);
+    expect(jsonEntries(result.filesUpdated)).toHaveLength(0);
+  });
+
+  test('a second run is also a skip — the decision is stable, not a first-run artifact', async () => {
+    await syncCanonicalBridge();
+    const result = await syncCanonicalBridge();
+    expect(result.filesUnchanged.filter(p => p.endsWith('mapping-regime-strategy.json')))
+      .toHaveLength(1);
   });
 });
