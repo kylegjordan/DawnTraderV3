@@ -190,3 +190,20 @@ Scheduling: `crontab -u langston -l` → `17 * * * * /usr/local/bin/dt-deploy-dr
 
 ⚠️ **NEITHER GAP IS A DEFECT AND NEITHER BLOCKS THE FIX — they are the difference between *proved on the code path* and *proved on the schedule*.** ★ **Stated as a window rather than glossed, because "it works when I run it" is exactly the claim that hid the drift-monitor error in §4.**
 **WINDOW SHAPE: a set QUANTITY, not a period — ONE unattended run of each. Expected within 24h; no due date on the batch (§9.4 — a date is only legitimate when the LENGTH is the content, and here the COUNT is).**
+
+
+## 9. THE FIRST UNATTENDED CRON RUN AFTER THE DEPLOY — AND MY PREDICTION WAS WRONG WHILE THE SYSTEM WAS RIGHT
+
+**Armed BEFORE the run, expectation written first:** *"a `:17` run stamp should exist, reporting ZERO, and NOTHING should re-mint."*
+
+| run | what it logged |
+|---|---|
+| `19:17:01Z` (pre-deploy) | `RUNG=3 age=35h total=88 runtime=6 capped=0 deployed=17a1024776e… head=cb1be3a79…` |
+| **`20:17:01Z` (post-deploy, UNATTENDED)** | **`NO_RUNTIME_PATHS age=0h total=5 — the range touches no runtime file, so there is nothing to be behind ON. Not reported.`** |
+
+⚠️ **MY EXPECTATION WAS MIS-SPECIFIED AND I AM RECORDING THAT RATHER THAN THE FLATTERING READ.** I predicted `ZERO`. It logged `NO_RUNTIME_PATHS` — **because I had pushed five governance commits since the deploy, so `deployed == head` was no longer true and the run never reached the `ZERO` branch.** ⇒ **I wrote a prediction that did not account for my own actions during the window.**
+✅ **THE SYSTEM WAS CORRECT, AND BETTER THAN THE PREDICTION:** those five commits are markdown only, `B-DRIFT-RUNTIME-PREDICATE`'s four-sink predicate classified them as touching **no runtime path**, and the job **stayed silent instead of raising a rung on a documentation-only gap.** ★ **That is the over-reporting half of `#1016` working in production, unprompted** — the half the plan row notes was widened by the comment-only episode.
+⛔ **AND NOTHING RE-MINTED**, which was the other half of the expectation and did hold.
+
+⛔ **U-2 (§8) REMAINS UNOBSERVED, AND THIS RUN COULD NOT HAVE SETTLED IT.** An unattended run CLEARING rungs needs open rungs to clear; my manual run had already cleared them. **Stated as still open rather than counted as satisfied by a run that had nothing to do.**
+★ **This is the same discipline as §4: a run that had zero opportunity is not evidence, however good its output looks.**

@@ -58,7 +58,7 @@
 | 12.6 | decommission residue (rule-18 removal) | batch | after 12.4 |
 
 ### ⛔ OPEN LOOPS THAT ARE NOT BATCHES — they have no row and will be lost if they are not listed here
-- ⛔ **OWED TO KYLE, 52 DAYS: Langston's `AWAITING KYLE` block** — whether the guards fail-open or fail-CLOSED, plus two standing-rule proposals. **An undecided thing is the one class that cannot be refetched.**
+- ✅ **NOT MINE — Langston's `AWAITING KYLE` block was RE-HOMED BY KYLE 2026-08-30 to INFRA CLAUDE'S instruction-file workstream** (*"that is the responsibility of Infra Claude… I don't wanna mix that work"*), and removed from CC-A's queue entirely — see `RUNNING_ISSUES` at the `AWAITING KYLE` entry. ⛔ **THIS LINE SAID "OWED TO KYLE, 52 DAYS" UNTIL 2026-09-08 AND WAS STALE BY NINE DAYS.** ★ **Caught only because I went to read the item before raising it to Kyle — had I trusted this file I would have put another session's re-homed work in his chat, which is exactly what rule 28 forbids.** **What STAYS with CC-A: the matrix's missing `BLOCKED` state, in `B-GOV-REPORTING` at queue 8.**
 - ⛔ **OWED TO LANGSTON: the alert-verb design (`#982`)** — two questions put to him and unanswered: must a hold leave the back-off untouched, and must it require an existing ack so it can never orphan.
 - **`#761`** — the comms outage; evidence kept at `/root/evidence/761/`, **cause still unknown.**
 - **Event-wait alerts I own** (`23f004a4`, `f6ae5419`, `c5cf4a87`, `2b0a4688`, `27860643`) — **acked = silenced** (`#982`); Kyle 2026-09-02: nothing urgent, slot them.
@@ -114,7 +114,7 @@ Kyle's diagnosis (08-20 → 08-31): every step burns time on sessions announcing
 | `#571` `B-WS-SUBSCRIBE-BOUNDARY-CLASS` | the venue price-feed subscribe boundary; obligations #44 #45 #46 (09-02: a 13.8-minute post-restart gap with no alert) | Phase 19, mine |
 | `#578` `B-TRADING-ENGINE-REMOVAL` | delete the legacy trading engine that runs in neither paper nor live mode (Kyle-ruled legacy, July) | **own batch, UNPLACED — to be given a row (see §4)** |
 | `#582` `B-FINALSCORE-TELEMETRY-RETIRE` | retire the report-only readers of the retired score (the prerequisite for dropping its columns) | **own batch, UNPLACED — to be given a row (see §4)** |
-| Langston's `AWAITING KYLE` block | 51 days waiting: should the new guards FAIL OPEN (warn and let the command run) or FAIL CLOSED (block)? plus two standing-rule proposals | to be put to Kyle in three sentences |
+| Langston's `AWAITING KYLE` block | ✅ **RE-HOMED BY KYLE 2026-08-30 to Infra Claude's instruction-file workstream; OUT of CC-A's queue.** The fail-open vs fail-closed question and the two standing-rule proposals go with it. | **not CC-A's — do not put it to Kyle** |
 | the five event-wait alerts CC-A owns | acknowledged = silenced (#982); restored when the undo command exists | nothing urgent (Kyle 09-02) |
 | `#990` (was #986) | GitHub began refusing anonymous downloads from both Hetzner servers; fixed 09-02 with two read-only deploy keys Kyle registered; left for Kyle: delete the stale Replit read/write key | resolved; Replit key = Kyle's click |
 
