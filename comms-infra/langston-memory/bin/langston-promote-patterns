@@ -67,8 +67,9 @@ def model():
     """Live chat-path model, read from the bridge. The row records which source was
     used, so a fallback is never silent."""
     try:
-        with open("/opt/discord-bridges/discord-langston-bridge.py",
-                  encoding="utf-8", errors="replace") as fh:
+        # ⚠️ USE THE CONSTANT. `BRIDGE` was defined and then this line duplicated the
+        #    literal — twin-site drift inside the fix for the twin-site minor.
+        with open(BRIDGE, encoding="utf-8", errors="replace") as fh:
             m = re.search(r"""CLAUDE_MODEL\s*=\s*["']([^"']+)["']""", fh.read())
         if m:
             return m.group(1), "bridge"
@@ -172,17 +173,34 @@ def _own(path):
         pass
 
 
-STATUS_LINE_RE = None      # set below, once STATUS_FIELD exists
-
-
 def _split_status(text):
-    """Return (text_without_status_lines, [status_line, ...]).
+    """Return (text_without_the_status_BLOCK, [status_block, ...]).
     ⛔ The retraction tripwire must not see the status field — that field is the ONE
     place a withdrawal is supposed to be declared out loud.
+    ⛔⛔ FINDING-7 (Langston, r3): THIS SPLIT BY *LINE*, so a status declaration that
+    WRAPPED put `withdrawn` back into the body and refused the proposal anyway —
+    FINDING-5 one notch narrower. ★ And the prompt explicitly invites a multi-sentence
+    answer, while the self-test's honest case was a SINGLE LINE, so it never
+    exercised the shape the prompt asks for.
+    ⇒ the status field now runs from its marker to the next blank line, the next
+    `**FIELD:**` marker, or the next `### ` heading — whichever comes first.
     """
-    kept, status = [], []
+    kept, status, in_status, block = [], [], False, []
     for line in text.split(NL):
-        (status if line.lstrip().startswith(STATUS_FIELD) else kept).append(line)
+        s = line.lstrip()
+        if s.startswith(STATUS_FIELD):
+            in_status, block = True, [line]
+            continue
+        if in_status:
+            ends = (not s) or s.startswith("### ") or (s.startswith("**") and ":**" in s)
+            if not ends:
+                block.append(line)
+                continue
+            status.append(NL.join(block))
+            in_status, block = False, []
+        kept.append(line)
+    if block:
+        status.append(NL.join(block))
     return NL.join(kept), status
 
 
@@ -239,6 +257,10 @@ def screen_test():
         ("⛔ FINDING-5: an HONEST withdrawal declared IN the status field must PASS",
          "### `x`" + NL + STATUS_FIELD + " the source entry was later withdrawn; the lesson"
          + " outlives the finding." + NL + "**THE SHAPE:** clean impersonal text.", True),
+        ("⛔ FINDING-7: the SAME declaration WRAPPED over two lines must also pass",
+         "### `x`" + NL + STATUS_FIELD + " the source entry was later" + NL
+         + "   withdrawn, and superseded, but the lesson outlives the finding." + NL
+         + NL + "**THE SHAPE:** clean impersonal text.", True),
         ("a retraction word in the BODY still refuses",
          "### `x`" + NL + STATUS_FIELD + " STANDING." + NL + "**THE SHAPE:** this was later withdrawn.", False),
         ("a session name INSIDE the status field still refuses",
@@ -303,6 +325,10 @@ def main():
 
     out = None
     if clean and nominations and not none_offered:
+        # ⛔ CREATE THE DIRECTORY BEFORE WRITING INTO IT (Langston, r3 minor 4). It was
+        #    created later, at the run-log write — so a FIRST run on a fresh box would
+        #    lose a 20-minute Opus invoke and leave no run row explaining why.
+        os.makedirs(OUTDIR, exist_ok=True)
         out = os.path.join(OUTDIR, "pattern-promotion-proposal-%s.md"
                            % datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
         body = []
@@ -315,8 +341,22 @@ def main():
         body.append("> batches — is a judgement, not a string match, and the counts below are")
         body.append("> **his own claim, unverified by me.**")
         body.append("")
-        body.append("> ✅ **LEAK SCREEN: PASSED.** No session name and no retraction word appears")
-        body.append("> below. The screen is mechanical and over-broad by design — see the tool.")
+        body.append("> ✅ **SESSION-NAME SCREEN: PASSED.** No session name appears below, and that")
+        body.append("> check is mechanical and covers the whole text — a literal match IS the")
+        body.append("> leak, so this one is a real control.")
+        body.append(">")
+        body.append("> ⛔⛔ **IT DOES NOT CERTIFY PROVENANCE, AND AN EARLIER VERSION OF THIS")
+        body.append("> HEADER SAID IT DID.** It read *no session name and no retraction word")
+        body.append("> appears below* — which the FINDING-5 fix made **false by design**,")
+        body.append("> because a withdrawal declared in the status field now passes and DOES")
+        body.append("> appear below. ★ So the first time the honest path was used, the only")
+        body.append("> artifact this tool emits would have told the lander that the withdrawn")
+        body.append("> provenance had been screened out — defeating the one thing the status")
+        body.append("> field exists to do.")
+        body.append(">")
+        body.append("> ⇒ **READ EVERY `SOURCE-ENTRY STATUS` DECLARATION YOURSELF BEFORE LANDING")
+        body.append("> ANYTHING.** Nothing mechanical checks whether it is TRUE; the screen only")
+        body.append("> checks that it is THERE.")
         body.append("")
         body.append("---")
         body.append("")

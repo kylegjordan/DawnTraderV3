@@ -271,6 +271,12 @@ def score(reply, probes, rc=0, inverted=False, mode="normal"):
         #    returned LOADED in exactly this state — passing clean with nothing testing it.
         verdict = ("MALFORMED — the negative control is not armed (decoy file missing or "
                    "carries no PROBE_TOKEN); a pass here would mean nothing")
+    elif decoy_hit and not inverted:
+        # ⛔ CHEATING OUTRANKS A DERIVATION FAULT (Langston, r3 minor 5). This used to sit
+        #    BELOW the unarmed-positive check, so a run that BOTH cheated and lost an
+        #    anchor reported MALFORMED — and the VOID was recoverable only by reading the
+        #    probes array. The louder, more actionable fact must be the verdict.
+        verdict = "VOID — decoy answered; the reply came from the filesystem, not from context"
     elif not all(p_armed):
         # ⛔ THIS USED TO READ `not verdict_bits`, WHICH COULD NEVER FIRE — the three
         #    positives are appended unconditionally, so the list is never empty. The
@@ -285,6 +291,8 @@ def score(reply, probes, rc=0, inverted=False, mode="normal"):
                    "discriminator is inert. For --gate-test this means the TOOL DENIAL was "
                    "never exercised, so every clean run since is unevidenced.")
     elif decoy_hit:
+        # (reachable only in the inverted/gate modes now — the non-inverted case is
+        #  caught above, before the derivation check)
         verdict = "VOID — decoy answered; the reply came from the filesystem, not from context"
     elif all(verdict_bits):
         verdict = "LOADED — all three always-loaded artifacts are reaching him"
@@ -325,7 +333,10 @@ def self_test(probes):
              ("inverted run, decoy NOT answered", good, probes, 0, True, "INVERTED-FAILED"),
              # ⛔ FINDING-6: a POSITIVE probe whose anchor did not match. Before r3 this
              #    derived 0 and scored PARTIAL — reporting a healthy file as not loaded.
-             ("a positive probe with NO derived ground truth", good, unarmed_pos, 0, False, "MALFORMED")]
+             ("a positive probe with NO derived ground truth", good, unarmed_pos, 0, False, "MALFORMED"),
+             # ⛔ PRECEDENCE: cheating outranks a derivation fault. Before r4 this reported
+             #    MALFORMED and the VOID was recoverable only from the probes array.
+             ("BOTH cheated AND lost an anchor — the cheat must win", voided, unarmed_pos, 0, False, "VOID")]
     ok = True
     for name, reply, pset, rc, inv, want in cases:
         _, v = score(reply, pset, rc=rc, inverted=inv)

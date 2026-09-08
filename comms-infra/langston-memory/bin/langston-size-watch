@@ -391,11 +391,19 @@ def run(quiet=False, injected_total=None):
     return 1 if status in ("BREACH", "MISSING-FILE") else 0
 
 
-# ⛔ THE ACTOR IS AN ALLOWLIST, NOT FREE TEXT — mirrors ALERT_ACTORS in
-#    server/services/system-alerts.ts (#987) and the deploy-record allowlist (#656).
-#    Langston flagged the old `SUDO_USER or "unknown"` as the THIRD instance of this
-#    class in one week: a free-text actor field produces a history nobody can attribute,
-#    which is precisely what those two batches closed elsewhere.
+# ⛔ THE ACTOR IS AN ALLOWLIST, NOT FREE TEXT. The old `SUDO_USER or "unknown"` was the
+#    THIRD instance of that class in one week (#987, #656): a free-text actor produces a
+#    history nobody can attribute.
+# ⚠️ THIS IS A KNOWINGLY UNFENCED HAND-COPY, AND THE DERIVATION IS STATED SO A LATER
+#    READER CAN CHECK IT RATHER THAN TRUST THE WORD "mirrors" (Langston, r3 minor 3).
+#    `ALERT_ACTORS` in server/services/system-alerts.ts has NINE entries. This is the
+#    same subset `B-DEPLOY-ACTOR-ALLOWLIST` used: tag !== 'machine' — i.e. the four
+#    roster sessions plus the two humans — canonical values only, aliases NOT accepted.
+#    The three machine actors are excluded because no timer sets this ceiling; a human
+#    or a session does.
+# ⛔ NOTHING SYNCS THE TWO. If `ALERT_ACTORS` gains a roster session this list will not
+#    know, and the failure is a REFUSAL of a legitimate actor — loud, not silent, which
+#    is why the copy is acceptable and the silence about it was not.
 ACTORS = ("cc-a", "cc-b", "cc-c", "cc-infra", "kyle", "langston")
 
 
@@ -418,6 +426,21 @@ def set_ceiling(new, by):
               "same work — the total is what is capped, never any single file.")
         return 2
     files, total, missing = measure()
+    # ⛔⛔ BLOCKER-4 (Langston, r3) — BLOCKER-1's ONE-WAY TRAP AT THE OTHER WRITER, and the
+    #    tell was an unused variable sitting at the guard site: `missing` was bound here
+    #    and never read.
+    # ★ `measure()` deliberately excludes a missing file, so with one file gone the total
+    #   is SHORT, a lower ceiling is accepted, and `--set-ceiling` then refuses to raise —
+    #   permanent BREACH, exit by hand-editing state. `run()` guards exactly this and
+    #   `set_ceiling()` did not, so the batch had one guarded writer and one unguarded.
+    # ⛔ AND THE TRIGGER IS SCHEDULED WORK: `B-LANGSTON-LEDGER-SPLIT` (plan 2.8) MOVES
+    #   these files, and lowering the ceiling is precisely what a trim batch does.
+    if missing:
+        print("REFUSED: cannot lower the ceiling while files are missing: "
+              + ", ".join(missing))
+        print("The measured total EXCLUDES a missing file, so any ceiling set now would be "
+              "short — and this tool refuses to raise it again. Restore the file first.")
+        return 2
     if total > new:
         print("REFUSED: %d B is below the CURRENT total of %d B — that would be a ceiling "
               "already breached on the day it was set." % (new, total))
