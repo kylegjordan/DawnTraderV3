@@ -13,16 +13,21 @@ the crew channel, and post its reply back.
     stop being authorised — and it fails in the same way, at the same moment, as
     everything else that reads that file.
 
-⛔⛔ THE RUNAWAY GUARD IS THE POINT, NOT A NICETY. Kyle's standing constraint is
-    COST: *"it's gonna cost more, and so I want to be mindful of the usage."* An
-    agent that replies in a channel it also reads is one bad predicate away from
-    talking to itself at several thousand tokens a turn.
-    THREE INDEPENDENT BRAKES, because any one of them can be wrong:
-      1. NEVER engage on our own post (`sender == "Codex"`). Self-wake is the
-         loop that actually happens.
+⛔⛔ THE LOOP GUARDS ARE THE POINT — AND THE THROTTLES ARE DELIBERATELY GONE.
+    Kyle, 2026-09-08: *"I don't want that to prevent Coltrane from carrying out his
+    work or replying just because he's hit the ceiling. I don't want any limitations
+    on that. If that happens, it's a cost. I will make sure to pay. And I'll be
+    monitoring this as well."*
+    ⇒ THE RATE COOLDOWN AND THE HOURLY CEILING ARE REMOVED. A throttle that silences
+      a correct answer is a worse failure than a bill, and it fails in the direction
+      nobody notices: the reply that never came.
+    ★ WHAT REMAINS IS NOT A THROTTLE — IT IS LOOP PREVENTION, AND IT STAYS:
+      1. NEVER engage on our own post (`sender == "Codex"`). Self-wake is the loop
+         that actually happens, and it is unbounded rather than merely expensive.
       2. NEVER engage on automated traffic — push notices, heartbeats, alerts.
-      3. A COOLDOWN and a per-hour ceiling. Exceeded, it logs and stays silent
-         rather than queueing, because a queue drains into the same spend.
+    ⚠️ THE DIFFERENCE MATTERS: a brake that stops runaway RECURSION protects against
+      an unbounded failure; a brake that caps legitimate WORK just loses answers.
+      Only the first kind is left.
 
 ⚠️ EVERY INVOKE IS LOGGED WITH ITS TOKEN COUNT. If this thing ever costs more than
    expected, the answer must be readable rather than reconstructed from a bill.
@@ -47,8 +52,8 @@ CREW_RE = re.compile(r"@crew\b|\bALL SESSIONS\b", re.I)
 MACHINE_SENDERS = {"Codex", "Push notice", "Heartbeat"}
 MACHINE_KINDS = {"cc_outbound_media", "langston_alert_inbound"}
 
-COOLDOWN_SECONDS = 45          # minimum gap between invokes
-MAX_PER_HOUR = 12              # ceiling; exceeded => stay silent and say so in the log
+# ⛔ NO COOLDOWN, NO HOURLY CEILING — removed on Kyle's instruction 2026-09-08. If you
+#    are about to re-add one, read the docstring first: he made this call knowing the cost.
 PROMPT_MAX = 12_000            # bytes of channel context handed to one invoke
 
 
@@ -168,8 +173,6 @@ def main():
         pos = fh.tell()
     log({"ts": utc(), "event": "bridge started", "tail_from_byte": pos})
 
-    last_invoke, hour_bucket, hour_count = 0.0, None, 0
-
     while True:
         time.sleep(5)
         try:
@@ -190,23 +193,9 @@ def main():
             if not engage:
                 continue
 
-            now = time.time()
-            bucket = int(now // 3600)
-            if bucket != hour_bucket:
-                hour_bucket, hour_count = bucket, 0
-            # ⛔ BRAKE 3 — cooldown and ceiling. Declining is LOGGED, never silent.
-            if now - last_invoke < COOLDOWN_SECONDS:
-                log({"ts": utc(), "declined": "cooldown", "why": why})
-                continue
-            if hour_count >= MAX_PER_HOUR:
-                log({"ts": utc(), "declined": "hourly ceiling %d reached" % MAX_PER_HOUR,
-                     "why": why})
-                continue
-
             text = str(row.get("text") or row.get("message") or "")
             t0 = time.time()
             rc, out, err = invoke(text, why)
-            last_invoke, hour_count = time.time(), hour_count + 1
 
             toks = ""
             m = re.search(r"tokens used[\s:]*([\d,]+)", err)
