@@ -7931,6 +7931,30 @@ Alert `81135510` (`deploy-drift-rung-2`, `2026-09-07T20:23:32Z`) fired correctly
 
 ---
 
+### #1020 OPEN 2026-09-08 (CC-A) — ⛔ THE PUSH GUARD'S TSC MEASUREMENT INHERITS THE **PREVIOUS TOOL CALL'S** WORKING DIRECTORY, AND REFUSES ON A FALSE ZERO
+
+⛔⛔ **MEASURED, WITH A CONTROL, 2026-09-08. `guard-push-tsc-baseline.mjs` refused a push with *"current tsc reported 0 errors but baseline is 377"*. Run from a shell in the repo root the SAME comparator reports `Current: 377. Baseline: 377. OK`.** ⇒ **the gate's LOGIC is correct — it caught a suspicious zero — but its MEASUREMENT was taken somewhere the code does not exist.**
+
+**MECHANISM, at the object:**
+1. `guard-push-tsc-baseline.mjs:62` resolves the comparator path from `CLAUDE_PROJECT_DIR` — **correct, and that was the 2026-08-21 fix** for this same guard refusing on a false absence.
+2. ⛔ **`:184` `spawnSync('node', [COMPARATOR], {...})` SETS NO `cwd`**, so the child inherits the hook process's.
+3. `check-tsc-baseline.mjs:87-90` runs `npx tsc --noEmit` with `cwd: cwd()` — whatever it inherited. **Outside the repo root there is no tsconfig and no files ⇒ tsc reports 0 errors.**
+4. ⭐ **AND THE TRIGGER IS THE PART NOBODY WOULD GUESS: `PreToolUse` runs BEFORE the command it guards, so the hook sees the cwd PERSISTED FROM THE PREVIOUS TOOL CALL** — a leading `cd <repo>` in the very command being pushed has not executed yet.
+⇒ **a push issued in a call that FOLLOWS any call leaving the shell outside the repo is refused, on a measurement that processed nothing.**
+
+**CONTROL, expectation written first:** the refused push was re-issued **completely unchanged**, differing only in that the preceding call had left the shell in the repo root. **It passed** (`80ae3534f..4d7e61c37`). ⇒ the variable is the inherited cwd and nothing else.
+
+⛔ **WHY IT MATTERS MORE THAN A NUISANCE — THE REFUSAL MESSAGE POINTS THE BLOCKED SESSION AT THE ONE FLAG THAT DISABLES THE CHECK THAT JUST CAUGHT IT.** *"re-run with `--regen-acknowledged` to bypass this check."* On a **genuine** >50% drop that is right. On this **false zero** it converts a correct refusal into a pass over a measurement that never ran. ✅ **Bounded, and stated so rather than inflated: in COMPARE mode that flag only skips the silent-crash sanity check — it does NOT regenerate the baseline (generate mode is separate and manual), so the 377 cannot be silently wiped by following the message's advice.**
+⚠️ **The real cost is the one `workflow-05` already names: a fail-closed gate refusing correct work teaches sessions to route around gates, and that is how a real regression eventually gets waved through.**
+
+★★ **AND IT IS `fix-follows-pointer` IN THE GUARD WHOSE OWN HEADER DOCUMENTS THE EARLIER INSTANCE.** The 2026-08-21 fix corrected **WHERE THE COMPARATOR FILE IS FOUND** and left **WHERE IT RUNS** inheriting cwd. **Same guard, same class, one step over, and the header comment at `:54-61` explains at length why relative resolution inside a fail-closed gate is dangerous — while `:184` does exactly that for the child's cwd.**
+
+**FIX (one line):** pass `cwd: process.env.CLAUDE_PROJECT_DIR || process.cwd()` in the `:184` `spawnSync` options — the same root the comparator path is already resolved from. **Then prove it by running the guard from a cwd outside the repo and confirming it reports 377, not 0** — a fix verified by re-reading the line is not verified.
+⚠️ **AND CONSIDER THE STRONGER FORM (rule 29's *prefer impossible over intercepted*): have the comparator REFUSE when its cwd contains no `tsconfig.json`, so an unrunnable measurement can never render as a clean zero anywhere.** That closes the class rather than this call site.
+
+**DISPOSITION (§9.4 #2): ADDED AS AN ITEM TO `P19-B12`**, owner CC-A — the tooling-hygiene batch already carrying `#652`, `#1004` and this batch's residuals. **Not folded into `B-CANONICAL-BRIDGE-CHURN`:** it is a hook-layer defect, unrelated to the canonical bridge, and that batch's `non_architecture` class was confirmed on the basis that it touches no runtime behaviour.
+**Surfaced by:** hitting it while pushing `B-CANONICAL-BRIDGE-CHURN` Step-7 governance. **Related:** the hook layer registry in `SYSTEM_IMPACT_MAP` *"Claude Code Hook Layer"*; `#680` (a check whose result gates nothing is decoration); `workflow-05` *"a gate that refuses is not automatically right — and you still do not route around it."*
+
 ### #1019 OPEN 2026-09-07 (CC-C) — ⚠️ **THE tsc-BASELINE PUSH GUARD REFUSED A MARKDOWN-ONLY PUSH, THEN PASSED THE IDENTICAL PUSH ON RETRY WITH NOTHING CHANGED BETWEEN**
 
 **OBSERVED, both runs within minutes, no file touched between them:**
