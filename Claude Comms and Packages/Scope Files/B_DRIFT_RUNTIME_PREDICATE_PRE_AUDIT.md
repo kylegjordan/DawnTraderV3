@@ -170,6 +170,22 @@
 
 **DISPOSITION CHANGE: A2's *"LATENT"* is WITHDRAWN** — it is a live, scheduled deploy-blocker with a named next-fire time and a witnessed refusal on the record.
 
+## A4. ✅ STEP-8 CONDITIONS — LANGSTON, 2026-09-08, BOTH RE-DERIVED AT THE OBJECT
+
+### ⛔⛔ CONDITION 1 — **SINK 4 IS MEASURED-REACHABLE. MY "EMPTY RESULT" WAS A NARROW PREDICATE, NOT AN ABSENCE.**
+At Step 8 I reported that a search for a commit touching `audit/coherency_rules.yaml`, `config/vts.json` or the authority baseline **without** `server/` files returned nothing over 400 commits — stated as an empty result with its window, which is the right FORM for a null. ⛔ **But the predicate was narrow in a way I did not state: I searched THREE of the EIGHT sink-4 entries.**
+⭐ **HIS COUNTEREXAMPLE, RE-DERIVED HERE:** **`8ef70628d31f456f53bbb4967c3fa5fb724f3cae`** (2026-06-11, *"B-4.7 housekeeping"*). Three files — `bridge/canonical/mapping-regime-strategy.json` plus two `.md` — and **nothing under `server/`, `client/` or `shared/`** (`git diff-tree -r --name-only … -- server client shared` returns EMPTY). Run through both predicates: **OLD = 0, NEW = 1, discriminates.**
+⇒ ★ **That file is read from disk at runtime by `routes.ts:2083-2085`. It is a live config, undeployed, and the old gate would have logged `NO_RUNTIME_PATHS` and said nothing.**
+⛔ **THE RECORD MUST NOT SAY "unreachable in practice" — it is reachable, with a named instance.** ★ Same class as `feedback_narrow_predicate_false_absence`: **a null is only as wide as the predicate that produced it, and I stated the window but not the predicate.**
+
+### ⛔ CONDITION 2 — **ONLY `/usr/local/bin/dt-deploy-drift.sh` IS LIVE. THE `/opt/discord-bridges` COPY IS A MIRROR WITH ZERO INVOKERS.**
+`grep -rn 'discord-bridges/dt-deploy-drift' /opt/discord-bridges /usr/local/bin /etc/systemd/system /etc/cron.d` → **no matches** (exit 1). ✅ **CONTROL, so the null is evidenced:** the same instrument DOES find the live invoker — `/var/spool/cron/crontabs/langston` carries `17 * * * * /usr/local/bin/dt-deploy-drift.sh`.
+⇒ **`/opt/discord-bridges/dt-deploy-drift.sh` exists only as `deploy.sh`'s staging source (`BRIDGE_DIR`, `:14`), never as a runtime artifact.** ⛔ **Recorded because an un-invoked second copy is exactly the `#1004` stale-copy shape this batch's own hash check exists to catch — a future reader who updates the mirror and not `/usr/local/bin` changes nothing and will believe they have.**
+
+### ⭐ AND HIS POPULATION REPLACES MY SINGLE FIXTURE
+I verified with ONE real commit and said plainly it was one, chosen by me, and not shown representative. **He ran both predicates over 4,890 commits since 2026-05-01 from the backup bare repo: the discriminating class (OLD=0, NEW>0) has 66 MEMBERS.** Qualifying files across them: `drizzle/migrations/*` ×149, `package.json` ×6 commits, `scripts/db-migrate.ts` ×2; **nine are MANIFEST-only — the exact shape the note now fires on, so that branch has a real population too.**
+★ **My 400-commit window simply sat in a dense `server/`-touching stretch.** ⇒ **the fixture was representative of a recurring class; I could not have known that from the window I used, and the honest report of one was still the right report to make.**
+
 ## A3. §9.5(a) CENSUS AT THE HOP + ENTRY-POINT ENUMERATION
 **Entry points to the predicate, repo-wide:** `runtime()` at `dt-deploy-drift.sh:265` is called from **exactly one** place — the list comprehension at `:266-268` inside the same embedded reader. **One producer, one consumer.** No scheduler, timer or second caller: the script's only entry point is the `17 * * * *` cron installed by `comms-infra/discord/deploy.sh`.
 **Who WRITES / READS / MUTATES / DELETES the value:** `RUNTIME_N` written once (`:409`), read at `:429 :443 :459 :489`; `runtime_files` written to `$WORK/rtlist.txt` (`:277`), read as `LIST`/`SHOWN` (`:411`, `:458`). **Deleters: none — `$WORK` is an `mktemp -d` removed on exit.**

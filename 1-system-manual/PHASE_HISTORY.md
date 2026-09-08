@@ -1144,3 +1144,18 @@ Nothing in the system measured how far the running code had fallen behind the re
 **Two things are worth carrying forward.** The first is a defect: **a "not found" answer from the service we query renders, if you are careless, as "no drift"** — because its error reply fills the same field a success reply uses. An instrument that could not see the repository at all reported all-clear. It survived one self-review, one independent reader and two reviews by Langston, and fell out in thirty seconds of actually running the failure case.
 
 The second is the method finding that follows from it. **Three of the last four defects in this batch were found by running the code and none by reading it** — and every one of the three was a claim about what somebody else's interface hands back. Langston's formulation is the one recorded: *reading verifies our own logic against our own model of the world; only running it tests the model.* That is now a two-clause rule against the queued batch on skipped reviews, the second clause being that a control states its expected output before it runs — added because the failure branch WAS run first and still returned a pass from a control that had processed nothing.
+
+
+### 2026-09-08 — B-DRIFT-RUNTIME-PREDICATE (CC-A, `#1016`, plan row 4.56) — CLOSED
+
+The hourly check that warns us when the live server is behind decided whether waiting work mattered by looking at **which folder a file sat in**. That shortcut was wrong twice over: it could not see a waiting database change — the most dangerous thing to leave undeployed — and it treated a corrected comment as a reason to restart trading.
+
+**It now asks a question about consequences instead: can this change what the server does after it restarts?** Four routes — what gets built, what the database becomes, what the program loads, and what it reads off disk when it starts. The obvious alternative, *"list whatever the deploy runs"*, turned out to select the entire repository, because the deploy rewrites every file before it does anything.
+
+**The fourth route was found by a second reader, and one file on it holds our risk limits** — the consistency rules for the Core Four, which the running system reads at startup and refuses to start without. A draft of this batch had written that whole category off as low-consequence.
+
+**The uncomfortable part is worth recording plainly: five separate defects were found in this batch's own safety checks, by other readers, and every one was the same mistake.** Each time a check was shown blind in one place; each time it was fixed in that place and nowhere else; each time the identical hole was still standing one step over. Once, the test certified a fix that could have been deleted entirely. That is not carelessness in any single repair — it is a missing step before repairing: ask whether the same hole exists elsewhere, and say what you found.
+
+**Proved on real history rather than invented examples.** A genuine commit from August adds a database migration and touches no server code; the old logic saw nothing to deploy, the new one sees it. Langston widened that from one example to **66 across nearly five thousand commits**, and separately overturned an empty result of mine — my search had covered three of eight cases, so its silence meant less than I said it did.
+
+**One thing it surfaced that is not its own:** a daily background job rewrites a stored file with the current time in it, which can make the deploy tool refuse to run. It has already done so once. That now has its own slot rather than a line on a list.

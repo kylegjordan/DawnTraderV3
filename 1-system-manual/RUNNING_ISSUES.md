@@ -7817,7 +7817,14 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — cited `e0f46fe4b` as the pre-edit
 
 
 
-### #1016 OPEN 2026-09-07 (Langston, Step-8 finding on `B-DEPLOY-DRIFT-LINE`; owner CC-A) — ⛔ THE DRIFT GATE DEFINES "RUNTIME" BY WHERE FILES LIVE, AND `dt-deploy` EXECUTES MORE THAN THAT
+### #1016 ✅ CLOSED 2026-09-08 (fixed by `B-DRIFT-RUNTIME-PREDICATE`, CC-A; Langston Step-8 CONFIRMED)
+
+✅ **CLOSED.** The gate is now a **four-sink consequence test**, not a directory convention. **BOTH directions of the defect are fixed:** the under-report (`drizzle/migrations/**`, the lockfile, the build configs, and a whole fourth sink of files the process READS OFF DISK — including `audit/coherency_rules.yaml`, the Core-Four risk envelope) and the over-report the first firing exposed (a comment-only `server/` change) — the latter **only partially**: `OBJ-4`, the quietening half, was **CUT by Langston at Step 1** as the whole risk budget spent on making the tool quieter. **A comment-only change still opens the gate; that is a known, accepted residual.**
+**MEASURED, not asserted:** discriminating class = **66 commits of 4,890** since 2026-05-01. Named instances re-derived at the object: `fe097912d` (a migration, no `server/`) and `8ef70628d` (`bridge/canonical/mapping-regime-strategy.json`, read from disk at `routes.ts:2083-2085`) — both **OLD=0, NEW=1**.
+⚠️ **RESIDUALS CARRIED, NOT CLOSED:** a runtime path built from a VARIABLE is unreachable by any grep (four sites — a floor, not a population); and **only `/usr/local/bin/dt-deploy-drift.sh` is live**, the `/opt/discord-bridges` copy having zero invokers.
+**Record: `B_DRIFT_RUNTIME_PREDICATE_COMPLETION_REPORT.md`. Original finding below, unaltered.**
+
+### #1016 (ORIGINAL, 2026-09-07 — Langston, Step-8 finding on `B-DEPLOY-DRIFT-LINE`; owner CC-A) — ⛔ THE DRIFT GATE DEFINES "RUNTIME" BY WHERE FILES LIVE, AND `dt-deploy` EXECUTES MORE THAN THAT
 
 **THE DEFECT, taxonomy outcome (1) — a real defect, not a design decision reported as one.** `dt-deploy-drift.sh`'s reader uses `RUNTIME = ('server/', 'client/', 'shared/')`. **That is a directory convention.** What `dt-deploy` actually EXECUTES is wider:
 - **`npm ci`** — on a `package-lock.json` diff

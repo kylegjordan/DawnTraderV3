@@ -699,3 +699,23 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 | 3 | Twice, *"has Langston replied?"* answered from a `tail -6` / `tail -N` window while his reply sat **just outside it** — once by four minutes, once by 45. | replies from other sessions had pushed mine out of the tail |
 | 4 | A grep of the tooling for a defect class returned empty **with no control**, so the emptiness carried no information until a positive control was added. | — |
 ★ **THE SHAPE, and it is the same one this whole batch is about: an instrument reporting an ABSENCE it was never able to detect.** ⇒ **the sound anchor is the FIRST `#\d+` on a `### ` line — never position, never a greedy trailing capture — and a window is stated, never assumed.**
+
+
+### `fix-follows-pointer` — **FIVE INSTANCES IN ONE BATCH, 2026-09-08** · `B-DRIFT-RUNTIME-PREDICATE` (`#1016`)
+> **Recorded under the EXISTING slug at Langston's §13 disposition — no new pattern, and no new rule.** Its mechanism clause already names the missing step: **grep the CLASS before fixing the instance, and STATE what the grep returned.**
+
+| # | pointed at | fixed | THE HOLE LEFT STANDING ONE STEP OVER |
+|---|---|---|---|
+| 1 | control blind to damage in `SINK*_FILES` | asserted the FILES set | ⛔ `SINK1_PREFIXES` — **deleting `'server/'`, the prefix the entire alert exists for, still printed PASS exit 0** |
+| 2 | prefixes now asserted | added `EXPECTED_PREFIXES` | ⛔ **`qualifies()` had NO control at all** — both extractions shared ONE marker pair and it sat below the end marker; the whole rename fix could be deleted and the control certified it |
+| 3 | MANIFEST note asserted a verdict | downgraded to advisory | ⛔ it still fired on the ORDINARY case — **78 of 109 migration commits carry MANIFEST.txt** |
+| 4 | header comment giving a FALSE REASON | corrected it, quoted-and-struck | ⛔ **a NEW header comment giving the old reason, in the same commit** — the note now turned on an ABSENCE read off a list that truncates at 300 |
+| 5 | rollback case added to the control | wrote the case | ⛔ **it duplicated case 1's input under a different label** — caught by me before it shipped, the only one of the five that was |
+
+★★ **AND THE SHARPEST INSTANCE IS NOT IN THE CODE AT ALL: I ASSERTED A PROPERTY OF MY OWN TEST WITHOUT READING IT.** I told Langston the control had *"two extractions with two markers, so more surface to go stale"* and offered to trade that cost away. **There was ONE marker pair used twice, and the real defect sat underneath the cost I was offering to fix.**
+⇒ ⛔ **A CLAIM ABOUT YOUR OWN INSTRUMENT GETS THE SAME RULE-29(a) TREATMENT AS A CLAIM ABOUT THE SYSTEM** (Langston's formulation). **Naming a property of your own tooling is a measurement, and it needs the object.**
+⚠️ **Threshold: five instances, ONE batch — the 2+-distinct-batches leg is NOT met, so this does not move §13 on its own.** Recorded because the within-batch recurrence is itself the signal: **the same shape survived four consecutive corrections by the same author.**
+
+### `feedback_narrow_predicate_false_absence` — **NEW INSTANCE 2026-09-08** · `B-DRIFT-RUNTIME-PREDICATE`
+I reported a null in the correct FORM — *"searched N commits, found nothing, window stated"* — and it was still wrong, **because I stated the WINDOW and not the PREDICATE.** The search covered **three of the eight** sink-4 entries. Langston's counterexample `8ef70628d` (2026-06-11) changes `bridge/canonical/mapping-regime-strategy.json`, read from disk at `routes.ts:2083-2085`, with nothing under `server/` — OLD=0, NEW=1.
+★ **A NULL IS ONLY AS WIDE AS THE PREDICATE THAT PRODUCED IT. State the predicate beside the window, or the reader cannot tell a measured absence from an unasked question.**
