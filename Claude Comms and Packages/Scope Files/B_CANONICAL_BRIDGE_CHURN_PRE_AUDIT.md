@@ -55,6 +55,7 @@ Top-level keys: **`_metadata`, `_schema`, `byAssetClass`.** `!k.startsWith("_")`
 
 ⇒ ⛔ **NOTHING COMPARES GENERATOR OUTPUT TO COMMITTED BYTES.** A change to the TS map that adds or drops a `favoredStrategies` member leaves **every test green while the committed JSON disagrees** — the exact RISK-017 condition, undetected since April.
 ⚠️ **One cite of his I could not confirm and am not repeating as fact:** he places the `_schema` assertion at `mapping_drift_integrity.test.ts:200`; `:200` is `aggregateDriftStats computes correctly`. **The gap claim does not rest on it**, and I did not chase the true line.
+✅ **RESOLVED IN B2 BELOW — he retracted `:200` and gave the true lines (`:154-155`, `:279`), and chasing it turned up a real defect in that suite. Read B2 before treating this as open.**
 
 ## A5. PROVENANCE — TIER 1
 **`dbd8b3fcb` (2026-04-12, B59 Phase 15a)**, verbatim: *"**Mapping Drift sync fix** — hard-coded updatedAt timestamp now overridden with fresh date on every sync. […] **Added daily canonical_bridge_sync scheduler task.**"* · *"Langston review: approved."*
