@@ -1,0 +1,22 @@
+[Unit]
+Description=Coltrane wake bridge — invoke the headless Codex agent when it is named in the crew channel
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/codex/
+After=network-online.target discord-cc-bridge.service
+# It READS what the CC bridge writes, so it is useless before that exists. Not a hard
+# dependency: if the CC bridge restarts, this one keeps tailing and simply sees nothing
+# until messages resume — which is the correct behaviour, not an outage.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/coltrane-bridge.py
+Restart=always
+RestartSec=15
+# ⚠️ Runs as ROOT only because it must `sudo -u coltrane` to invoke the agent and read
+# the root-owned inbox log. THE AGENT ITSELF NEVER RUNS AS ROOT — that was the whole
+# point of creating the coltrane user, and the credential lives in coltrane's home at
+# mode 600 where root's own agent process cannot casually pick it up.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
