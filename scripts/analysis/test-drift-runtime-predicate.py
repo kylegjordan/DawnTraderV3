@@ -73,6 +73,14 @@ CASES = [
     ('1-system-manual/audits/b-new-42/dividend-calendar-seed.json', 1, 'SINK 4 — live service read'),
     ('drizzle/migrations/0099_x_rollback.sql',         0, 'ROLLBACK sql NEVER executes — db-migrate.ts:118 filters it, :120-125 throws if listed'),
     ('drizzle/migrations/0099_ROLLBACK.sql',           0, 'rollback match is case-insensitive, mirroring db-migrate'),
+    # ⛔ BLOCKER-1 (Langston, Step 4): there was NO POSITIVE CASE for server/ or shared/.
+    #   Both prior server/ cases expected 0 (the tests filter), so they passed whether or
+    #   not the prefix existed. Mutation-confirmed: deleting 'server/' gave PASS, exit 0 —
+    #   and server/ is the prefix the ENTIRE alert exists for (#1001 was
+    #   active-execution-engine.ts and signal-orchestrator.ts undeployed).
+    ('server/services/foo.ts',                         1, 'SINK 1 prefix — THE case the whole alert exists for'),
+    ('shared/schema.ts',                               1, 'SINK 1 prefix'),
+    ('drizzle/migrations/0100_real.sql',               1, 'SINK 2 prefix, non-rollback'),
 ]
 
 # ⛔⛔ THE SET ITSELF IS ASSERTED, NOT JUST ITS BEHAVIOUR — AND THIS EXISTS BECAUSE A FRESH
@@ -81,6 +89,16 @@ CASES = [
 #   17 cases, 0 failures, exit 0, because the behavioural cases covered only 9 of 15 entries.
 # ⇒ A test that exercises a SUBSET of a set cannot detect deletions from the rest of it.
 #   Behavioural cases prove the predicate ANSWERS correctly; this proves the SET IS INTACT.
+# ⛔⛔ BLOCKER-1: THE PREFIX TUPLES ARE ASSERTED TOO. The first version of this integrity
+#   check unioned only the four _FILES tuples — the SAME defect the fresh reader found,
+#   left standing on the other half of the predicate because I fixed exactly what was
+#   pointed at. Deleting 'server/' passed; deleting 'shared/' passed; only 'client/' was
+#   caught, and then only incidentally via the client/index.html case.
+EXPECTED_PREFIXES = {
+    'SINK1_PREFIXES': ('server/', 'client/', 'shared/'),
+    'SINK2_PREFIXES': ('drizzle/migrations/',),
+}
+
 EXPECTED_ENTRIES = {
     # SINK 1
     'vite.config.ts', 'tsconfig.json', 'tailwind.config.ts', 'postcss.config.js',
@@ -99,6 +117,9 @@ EXPECTED_ENTRIES = {
     'replit.md',
 }
 
+def repo_root():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
+
 def check_set_integrity():
     """Fails on deletion, addition, or a one-character typo in any exact-match entry —
     and on an entry that is not a tracked path, which no behavioural case can see."""
@@ -112,6 +133,17 @@ def check_set_integrity():
         shipped |= set(ns[name])
 
     problems = []
+    for name, expected in sorted(EXPECTED_PREFIXES.items()):
+        got = tuple(ns.get(name, ()))
+        if got != expected:
+            problems.append('%s is %r, expected %r' % (name, got, expected))
+    # ⭐ JUDGEMENT CALL 1 (Langston): the rollback rule is a SECOND COPY of db-migrate's.
+    #   Accepted — different languages, different hosts — but the drift is closed here for
+    #   the cost of a grep, because the file itself says: if that filter changes, this one
+    #   is wrong and must follow it.
+    mig = os.path.join(repo_root(), 'scripts', 'db-migrate.ts')
+    if "includes('rollback')" not in io.open(mig, encoding='utf-8').read():
+        problems.append('db-migrate.ts no longer contains the rollback filter this predicate mirrors; the rule has changed underneath it')
     for extra in sorted(shipped - EXPECTED_ENTRIES):
         problems.append('ADDED but not in this test\'s expected set: %s' % extra)
     for missing in sorted(EXPECTED_ENTRIES - shipped):
@@ -119,7 +151,7 @@ def check_set_integrity():
 
     # ⛔ AN ENTRY THAT IS NOT A TRACKED PATH MATCHES NOTHING WHILE READING AS COVERAGE —
     #   exactly the reason the root 'index.html' entry was struck at Step 2.
-    repo = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
+    repo = repo_root()
     for entry in sorted(shipped):
         r = subprocess.run(['git', 'ls-files', '--error-unmatch', entry],
                            cwd=repo, capture_output=True, text=True)

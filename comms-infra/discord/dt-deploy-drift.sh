@@ -331,7 +331,22 @@ def runtime(f):
     return f in SINK1_FILES or f in SINK2_FILES or f in SINK3_FILES or f in SINK4_FILES
 
 names = [f['filename'] for f in files]
-runtime_files = [f for f in names if runtime(f)]
+
+# ⛔⛔ A RENAME IS CHECKED ON *BOTH* NAMES. Renaming a sink file OUT of its path (say
+#   config/vts.json -> config/vts-old.json) leaves only the new, unmatched name in
+#   files[].filename, so the gate would report all-clear on a state it could not see —
+#   this batch's own subject. `previous_filename` is present on renamed entries.
+# ⚠️ I scoped this out at Step 4 as a stated limit; Langston ruled that wrong — it is one
+#   `or`, and stating a limit you can close in one line is not a disposition.
+# ★ The CURRENT filename is what gets reported, so a rename shows the path a reader can
+#   still find; qualifying on either name only decides WHETHER it is reported.
+def qualifies(entry):
+    if runtime(entry['filename']):
+        return True
+    prev = entry.get('previous_filename')
+    return bool(prev) and runtime(prev)
+
+runtime_files = [f['filename'] for f in files if qualifies(f)]
 files_capped = len(files) >= 300
 
 # commits[0] of page 1 is the ANCESTRALLY first commit in the range. On a fast-forward-only
@@ -345,8 +360,15 @@ age_h = (datetime.datetime.now(datetime.timezone.utc)
          - datetime.datetime.fromisoformat(oldest.replace('Z', '+00:00'))).total_seconds() / 3600.0
 
 # THE FILE LIST DOES NOT RIDE THE POSITIONAL LINE. `set -- $READ` word-splits, and this repo
-# has tracked paths containing spaces. It is safe today only because runtime() filters to
-# three space-free prefixes -- i.e. safe by a coincidence of the filter, not by construction.
+# has tracked paths containing spaces (1,653 of them), so a filename on that line could shift
+# a scalar. It does not: only len(runtime_files) rides the line, and the LIST is written here
+# to its own file and read back with `head -12 | paste -sd,` -- SAFE BY CONSTRUCTION.
+# ⚠️ THIS COMMENT USED TO SAY "safe today only because runtime() filters to three space-free
+#   prefixes -- safe by a coincidence of the filter, not by construction." THAT REASON IS NOW
+#   FALSE: the predicate admits fifteen exact-match paths as well, and the coincidence was
+#   never what made it safe -- the separate file was. Langston caught the stale reason at
+#   Step 4. A header comment that records a false REASON is a first-class false source, even
+#   when its conclusion still holds.
 open(sys.argv[2], "w", encoding="utf-8").write("\n".join(runtime_files))
 print("OK %s %d %.2f %s %d %d" % (status, total, age_h, oldest, len(runtime_files), 1 if files_capped else 0))
 PY
@@ -517,23 +539,32 @@ fi
 # ⛔ MANIFEST NOTE — COMPUTED BEFORE THE BRANCH, BECAUSE PRESENCE IS DECIDABLE EVEN WHEN THE
 #   LIST IS CAPPED. Only ABSENCE is undecidable under a cap; a name that IS in the list is a
 #   positive fact. Computing it inside the else lost the annotation on the biggest windows.
-# ⛔⛔ AND IT IS DELIBERATELY NOT A VERDICT. An earlier draft asserted "HARD DEPLOY FAILURE"
-#   here. MEASURED: of 109 commits since 2026-06-01 touching a migration .sql, 84 also touch
-#   MANIFEST.txt — so the manifest being in the range is the ORDINARY case for any migration
-#   commit, and a self-consistent migration commit deploys fine. `dt-deploy.sh:204` resets to
-#   the target sha, so manifest and .sql arrive together.
-# ⇒ THE REAL ABORT MODE IS THE INVERSE AND CANNOT BE SEEN FROM THE RANGE: a manifest line
-#   whose .sql was never `git add -f`'d (they are gitignored, §7.1), or a stale untracked .sql
-#   on staging that `reset --hard` does not remove. So this line says CHECK THIS, not THIS
-#   WILL FAIL — a false "the deploy will abort" is a worse output than no line at all.
+# ⛔⛔ IT IS NOT A VERDICT, AND IT FIRES ONLY ON THE DISCRIMINATING CASE. An earlier draft
+#   asserted "HARD DEPLOY FAILURE" on any range containing MANIFEST.txt.
+# ⚠️ MEASURED, and my first figure was a WRONG INTERSECTION (Langston, rule 29(a)): I wrote
+#   "84 of 109 touch both", but 84 is simply the count of MANIFEST-touching commits. The TRUE
+#   intersection since 2026-06-01 is 78 of 109 — plus 6 MANIFEST-ONLY and 31 .sql-without-
+#   MANIFEST. Verify: comm -12 on the two `git log --format=%H` lists, NOT two `wc -l`s.
+# ⇒ SO THE MANIFEST IN THE RANGE IS THE ORDINARY CASE (78 of them), and a self-consistent
+#   migration commit deploys fine — `dt-deploy.sh:204` resets to the target sha, so manifest
+#   and .sql arrive together. A note on all 78 trains the reader straight past it.
+# ★ THE DISCRIMINATING CASE IS THE 6: MANIFEST.txt PRESENT WITH NO .sql BESIDE IT. That is
+#   what "a manifest line whose .sql was never `git add -f`'d" looks like from the range —
+#   they are gitignored (§7.1), so a forgotten force-add leaves the manifest alone in the diff.
+# ⚠️ I had written that this mode "CANNOT be seen from the range". That was too strong (#453)
+#   and Langston struck it: only the OTHER mode — a stale untracked .sql on staging that
+#   `reset --hard` does not remove — is genuinely invisible here.
 MANIFEST_NOTE=""
-if grep -qx 'drizzle/migrations/MANIFEST\.txt' "$WORK/rtlist.txt" 2>/dev/null; then
+if grep -qx 'drizzle/migrations/MANIFEST\.txt' "$WORK/rtlist.txt" 2>/dev/null \
+   && ! grep -qE '^drizzle/migrations/.*\.sql$' "$WORK/rtlist.txt" 2>/dev/null; then
   MANIFEST_NOTE="
-  ⚠️ MANIFEST.txt is in this range — ordinary for a migration commit, and normally fine.
-     WORTH ONE CHECK: db-migrate validates the manifest against the filesystem on EVERY run
-     (db-migrate.ts:152-156) and throws on drift (:140-148), aborting at dt-deploy.sh:223
-     AFTER the build has already replaced dist/. Migration .sql files are gitignored and
-     force-added, so a line whose .sql was never 'git add -f'd fails the deploy this way."
+  ⚠️ MANIFEST.txt is undeployed WITH NO MIGRATION .sql BESIDE IT — the uncommon shape, and
+     the one worth a look. Migration .sql files are gitignored and force-added, so a manifest
+     line whose .sql was never 'git add -f'd looks exactly like this. If that is the case here
+     the deploy ABORTS: db-migrate validates the manifest against the filesystem on every run
+     (db-migrate.ts:152-156) and throws on drift (:140-148), failing at dt-deploy.sh:223 AFTER
+     the build has already replaced dist/. If the manifest change is a reorder or a comment,
+     ignore this."
 fi
 
 if [ "$CAPPED" = "1" ]; then
