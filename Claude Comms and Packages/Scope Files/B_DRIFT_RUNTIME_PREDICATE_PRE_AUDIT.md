@@ -52,7 +52,7 @@
 | `existsSync` — reads no content but **gates behaviour** | **114** |
 | `import(` (dynamic) | **377** — overwhelmingly TS modules, which esbuild bundles ⇒ **sink 1, not sink 4** |
 | `fsp.readFile` · `promises.readFile` · `await readFile(` | **0 each** — spellings checked and absent, so their zero is a measurement, not an omission |
-| ⭐ **STATIC `import x from '*.json'`** — ⛔ **THIS ROW WAS MISSING FROM THE PATTERN SET AND A THIRD READER ADDED IT** | **3 sites** — `strategy-mapper.ts:22`, `validate-canonical.ts:18`, `routes/status.ts:8` (+`index.ts:16`) |
+| ⭐ **STATIC `import x from '*.json'`** — ⛔ **THIS ROW WAS MISSING FROM THE PATTERN SET AND A THIRD READER ADDED IT** | **4 sites** *(the cell said 3 and then named four — corrected r3)* — `strategy-mapper.ts:22`, `validate-canonical.ts:18`, `routes/status.ts:8` (+`index.ts:16`) |
 
 ⛔⛔ **AND THE MISSING ROW IS NOT A TYPO — IT IS THE CENSUS FAILING ITS OWN TEST.** A static JSON import **is bundled by esbuild**, so it is **sink 1, not sink 4** — and I used exactly that discriminator to EXCLUDE `server/version.json` while having no row that would find the shape systematically. **`version.json` was caught only by instrument 2's basename luck; `mapping-regime-strategy.json` was not caught at all.** ★ **A discriminator I applied by hand to one file, and did not encode as a pattern, is a discriminator that works once.**
 
@@ -130,6 +130,29 @@
 ⛔ **AND THE STARTUP WRITER IS SAFE FOR A REASON I FIRST GOT WRONG.** `dumpRoutes` **IS** called, at `server/index.ts:873` — my first read said it never was, **because I piped `git grep` through `head` and the call site was the line after the cut** (`instrument-too-narrow`, inside the audit about instrument reach). It is safe because **it writes `diagnostics/phase2f_route_manifest.json`, which `git ls-files --error-unmatch` reports is NOT TRACKED**; the tracked file is `diagnostics/external-pack-v2/proofs/...`, **a different path with the same basename** ⇒ instrument 2's failure mode firing on my own finding.
 
 **DISPOSITION (§9.4 #2): all seven added to the `P19-B12` residual list.** **LATENT on today's evidence, and the evidence covers three of seven.**
+
+## A2b. ⛔⛔ r3 — **"LATENT" IS WITHDRAWN. THE DEPLOY-BLOCKER HAS FIRED, IT IS ON A DAILY TIMER, AND IT IS QUIET RIGHT NOW FOR A REASON THAT EXPIRES IN HOURS.**
+
+⛔ **AND MY OWN LATENCY MEASUREMENT USED THE WRONG INSTRUMENT.** I measured `git status --porcelain --untracked-files=no`. **`dt-deploy.sh:194` runs `git status --porcelain` with NO FLAG**, so it refuses on **untracked-and-unignored files too** — a strictly wider condition than the one I tested. ⭐ **Re-measured with the exact command: still 0. The conclusion survives; the instrument that produced it did not.**
+
+### THE MECHANISM, RE-DERIVED AT THE OBJECT
+`autonomy-scheduler.ts:608` registers **`canonical_bridge_sync`**, and `:1056` **explicitly starts it — `// Daily — B59`**. It calls `syncCanonicalBridge` (`:619-620`), which `atomicWrite`s **three TRACKED files**: `bridge/canonical/mapping-regime-strategy.json` (`:252`), `DawnTrader_Regime_Strategy_Mapping.md` (`:259`), `DawnTrader_Regime_Strategy_Signal_Pattern_Mapping.md` (`:265`). ⛔ **`sync-canonical-bridge.ts:136-137` stamps `updatedAt`/`generatedAt` with `new Date().toISOString()`, so EVERY RUN PRODUCES DIFFERENT CONTENT** ⇒ the worktree goes dirty ⇒ `dt-deploy` exits 3. **No human call needed.** `phase9_predictive-learning.json` is the same shape on a **weekly** task (`:636`, started `:1057`).
+
+### IT HAS ALREADY HAPPENED — MTIMES ON STAGING
+`DawnTrader_Regime_Strategy_Mapping.md` **`2026-09-06 08:12:17.095Z`** and `..._Signal_Pattern_Mapping.md` **`.096Z`** — **one millisecond apart, which is the two sequential `atomicWrite`s**; `mapping-regime-strategy.json` **`09:29:58Z`**. ✅ **CONTROL: every OTHER file in `bridge/canonical/` still carries `2026-03-30 14:40:56` — the clone date. The instrument discriminates.**
+
+### WHY THE TREE IS CLEAN AT THIS MOMENT, AND WHY THAT IS NOT REASSURING
+The **2026-09-07T07:50** deploy's `git reset --hard` **erased those writes**, and the same restart **reset the 24-hour timer** (`pm2` reports up since `2026-09-07T07:50:11Z`, 604 restarts). ⇒ ★ **THE ONLY REASON DEPLOYS HAVE KEPT WORKING IS THAT THEY HAVE BEEN FREQUENT ENOUGH TO KEEP RESETTING THE CLOCK.** **A gap longer than 24h between restarts leaves a dirty tree, and the next deploy is REFUSED with exit 3.**
+
+### ⭐ PRE-REGISTERED, FALSIFIABLE, AND CHEAP — WRITTEN BEFORE THE EVENT
+> **IF no deploy or restart occurs before ~`2026-09-08T07:50Z`, THEN after that time `git status --porcelain` on staging will list exactly those three `bridge/canonical/` files as modified.**
+**If it does not, this mechanism is wrong and I withdraw it.** ⚠️ **A deploy in the meantime VOIDS the test rather than passing it** — it resets the clock, which is the very thing being described.
+
+### ⛔ AND `replit.md` COMES BACK — LANGSTON'S CONDITION 3 NEEDS RE-ARGUING, NOT RE-WORDING
+**`context-loader` IS reachable: `server/index.ts:624` `await import('./services/context-loader')` in the boot sequence, and `routes.ts:14492` from a live route.** Both are **dynamic** imports, so an `import … from` census returns zero — **the same instrument-reach failure this document catalogues, landing on the one entry A1.4b was written to fix.**
+⇒ **Under A1.4b's own standard `replit.md` HAS a reachable reader and QUALIFIES as sink 4** — while also being route-writable. ⛔ **THREE distinct reasons have now been given for striking it and TWO ARE DEMONSTRABLY WRONG.** **I am not re-wording it a fourth time: the disposition goes back to Langston.**
+
+**DISPOSITION CHANGE: A2's *"LATENT"* is WITHDRAWN.** The `P19-B12` residual stands, but as **a live, scheduled deploy-blocker with a named next-fire time**, not a dormant one.
 
 ## A3. §9.5(a) CENSUS AT THE HOP + ENTRY-POINT ENUMERATION
 **Entry points to the predicate, repo-wide:** `runtime()` at `dt-deploy-drift.sh:265` is called from **exactly one** place — the list comprehension at `:266-268` inside the same embedded reader. **One producer, one consumer.** No scheduler, timer or second caller: the script's only entry point is the `17 * * * *` cron installed by `comms-infra/discord/deploy.sh`.
