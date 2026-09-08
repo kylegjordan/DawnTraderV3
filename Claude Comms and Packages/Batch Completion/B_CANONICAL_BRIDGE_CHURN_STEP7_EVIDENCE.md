@@ -165,3 +165,28 @@ Scheduling: `crontab -u langston -l` → `17 * * * * /usr/local/bin/dt-deploy-dr
 2. ⛔ **It named the degenerate-key alternative** that §2 could not exclude ⇒ §2b's mutation test exists because of it. **That is the one that would have shipped a fix that never fires.**
 3. It forced A(1) and A(5) to be closed at the object rather than argued.
 ⚠️ **NOT cited as support for anything.** A reviewer HIT is a lead that was then re-derived here; a reviewer CLEAN would have been no evidence at all (`#453`).
+
+## 8. ⛔ PRE-REGISTERED CLOSE CRITERION — WRITTEN BEFORE THE DATA, WHICH IS THE ONLY THING THAT MAKES IT WORTH ANYTHING
+
+★ **A criterion chosen AFTER seeing the window can always be made to pass.** Registered here at Step 7, `2026-09-08T20:1x Z`, with both remaining gaps stated as gaps.
+
+**WHAT IS ALREADY PROVEN AND IS NOT WAITING ON ANYTHING:** the content key covers `_schema` and is value-sensitive (§2b, mutation A + B); the skip fires and leaves the tree clean; the write fires on real change; there is exactly one writer; both Langston conditions are in the running build.
+
+⛔ **WHAT IS NOT PROVEN, AND BOTH ARE THE SAME SHAPE — *the UNATTENDED path doing what the MANUAL path did*:**
+
+| # | gap | why the manual run does not settle it |
+|---|---|---|
+| **U-1** | **The DAILY SCHEDULED `canonical_bridge_sync` has not yet run post-fix.** | I invoked `POST /api/system/force-sync-canonical`. A fresh reader confirmed at the code that `autonomy-scheduler.ts:619-620` and `routes.ts:2102-2103` `await import` the **same module** and call the **same function in the same process**, so it is a genuine proxy for the **code path** — ⚠️ **but NOT for the SCHEDULING.** The daily fire is the thing that dirtied the tree for months. |
+| **U-2** | **No UNATTENDED cron run of the drift monitor has been observed CLEARING rungs** (§4). | `resolved_by` does not encode who invoked. Cannot be re-observed on these rows — they are already resolved. |
+
+**PASS — BOTH must hold, on a run NOBODY TRIGGERED:**
+1. **U-1:** after the next daily `canonical_bridge_sync`, `git status --porcelain -uall` on staging is **EMPTY**, and the scheduler log line reads **`0 updated, 1 unchanged`** for the `.json` (`autonomy-scheduler.ts:629`). ⇒ **the log line IS the positive emission** — a clean tree alone would not distinguish "skipped correctly" from "never ran."
+2. **U-2:** the next `:17` cron run logs a `ZERO` line and **NOTHING RE-MINTS** a `deploy-drift-rung-*` row while staging and the branch head agree.
+
+**FAIL — any of:**
+- the tree is dirty after the daily run with the `.json` modified and **only the two stamps changed** ⇒ **the fix did not take on the scheduled path**, and the batch reopens at Step 3;
+- the scheduler logs `1 updated` for the `.json` on a day with no real map change ⇒ same;
+- a `deploy-drift-rung-*` row re-mints while the shas agree ⇒ that is `B-DEPLOY-DRIFT-LINE`'s problem, not this batch's, and is homed there.
+
+⚠️ **NEITHER GAP IS A DEFECT AND NEITHER BLOCKS THE FIX — they are the difference between *proved on the code path* and *proved on the schedule*.** ★ **Stated as a window rather than glossed, because "it works when I run it" is exactly the claim that hid the drift-monitor error in §4.**
+**WINDOW SHAPE: a set QUANTITY, not a period — ONE unattended run of each. Expected within 24h; no due date on the batch (§9.4 — a date is only legitimate when the LENGTH is the content, and here the COUNT is).**
