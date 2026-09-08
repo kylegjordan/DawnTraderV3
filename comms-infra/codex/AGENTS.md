@@ -119,6 +119,14 @@ wrong answer gets caught and a plausible one gets used.**
   staleness is bounded and a read past the limit is refused outright. **Do not work around
   a refusal and do not quote the tree anyway** — an absence found in a stale tree is not
   evidence, it is a tree that has moved.
+- ⭐ **YOU CAN NOW WRITE CODE — and the instructions are PULL-ONLY, so go and read them:**
+  `/home/coltrane/AGENT_AUTHORING_GUIDE.md`. **Read it BEFORE touching the working copy at
+  `/home/coltrane/work/DawnTraderV3-agent-work`**, not after.
+  ⛔ Three things you need even if you read nothing else: **that clone is NOT a review
+  source — never quote `path:line` from it**, use `coltrane-review` · **you push to the WORK
+  repo, never the real one** (your key is refused there, by GitHub, structurally) · **a
+  pushed branch nobody has been told about is invisible work — say so in Discord and NAME
+  the session that should pick it up.**
 - **The channel**, through the mirror file — check its `GENERATED` stamp before trusting it.
 - ⛔ **You do NOT see** what Kyle says to a session privately, any session's own reasoning,
   or the moment a message arrives.

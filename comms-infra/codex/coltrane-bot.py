@@ -56,7 +56,25 @@ MEMDIR = "/home/coltrane/memory"
 #      writable: the memory store, and the scratch cwd
 #      REFUSED:  /home/coltrane itself, /etc, and Langston's OAuth token
 #                (`cat /etc/langston/oauth.env` -> Permission denied)
-SANDBOX = "-s workspace-write --add-dir " + MEMDIR
+# ⛔ NETWORK IS ON, AND IT IS ON FOR EXACTLY ONE REASON: PUSHING ITS OWN WORK.
+#    MEASURED 2026-09-08 with it off: the agent could `git commit` fine and the push died
+#    with "Could not resolve hostname github.com". Committing without pushing is the worst
+#    of both — work exists, nobody can see it, and the agent reports success on the commit.
+# ⚠️ THIS IS A REAL WIDENING AND IS NOT DRESSED UP AS ANYTHING ELSE: the shell can now reach
+#    the internet generally, not just GitHub. Codex's workspace-write sandbox has no
+#    per-host allowlist to narrow it to.
+# ★ WHAT STILL HOLDS, measured, so the widening is bounded rather than trusted:
+#      · it can write ONLY its memory store and its scratch cwd — /home/coltrane itself,
+#        /etc, /opt and /var all still refuse
+#      · `cat /etc/langston/oauth.env` -> Permission denied
+#      · its GitHub key reaches the WORK repo alone: aimed at the real repo, GitHub answers
+#        "Permission to kylegjordan/DawnTraderV3.git denied to deploy key"
+#      · every invoke is logged with its token count
+# ⇒ THE ALTERNATIVE, IF THIS EVER NEEDS TIGHTENING: keep the network off and have a timer
+#   OUTSIDE the sandbox push whatever it has committed. Costs a delay and a background
+#   actor; it was not worth those today.
+SANDBOX = ("-s workspace-write --add-dir " + MEMDIR
+           + " -c sandbox_workspace_write.network_access=true")
 NL = chr(10)
 
 NAME_RE = re.compile(r"\b(coltrane|codex)\b", re.I)
