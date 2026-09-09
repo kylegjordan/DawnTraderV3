@@ -445,11 +445,17 @@ fi
 # ⚠️ NO FLAP RISK IN ANY OF THE THREE, and this is why it is safe to widen: age and
 #   runtime-count only FALL on a deploy. Nothing oscillates a row back open.
 # ⛔ $1 IS THE CONDITION NAME AND IT GOES INTO THE EVIDENCE STRING. A resolve must say WHICH
-#   condition discharged it: `resolved_by` is a string the script passes and CANNOT
-#   distinguish a cron resolve from a hand-typed one — the EVIDENCE FORMAT is the only
-#   discriminator (Langston re-derived this on row 762170b7, whose human-prose evidence is
-#   what proved it was NOT an unattended clearing). Adding two clearing paths that did not
-#   wear the format would dilute the one discriminator we have.
+#   condition discharged it.
+# ⚠️ MY FIRST VERSION OF THIS COMMENT GAVE A STALE REASON AND A FRESH READER CAUGHT IT.
+#   It said `resolved_by` "CANNOT distinguish a cron resolve from a hand-typed one". That was
+#   true when Langston ruled on row 762170b7 -- and it stopped being true at #987, which made
+#   `deploy-drift-monitor` a CANONICAL MACHINE ACTOR (system-alerts.ts:215, tag=machine) that
+#   no session identity can claim. So the actor field IS a discriminator now.
+# ★ THE EVIDENCE PREFIX IS STILL WORTH HAVING, FOR A DIFFERENT AND BETTER REASON: it names
+#   WHICH of the three conditions discharged the row, which the actor field can never carry.
+#   Three clearing paths under one actor are indistinguishable without it.
+#   (Recording the correction rather than quietly restating it: this file punishes exactly
+#    this class -- a stale asserted reason -- at :364-369 and :568-582.)
 clear_open_rows() {
   local COND="$1"
   # READ THE STORE, NOT THE CLI LIST. `cmdList` prints padded text carrying id and title and
@@ -462,6 +468,11 @@ clear_open_rows() {
   # "nothing to clear" for "could not look", which is this job's own subject.
   [ $LIST_RC -ne 0 ] && fail_measurement "alert_store" "could not read the alert store to clear drift rows (ssh exit $LIST_RC). Rows may still be open."
 
+  # ⛔⛔ NO BACKTICKS ANYWHERE BELOW, INCLUDING IN COMMENTS. This python runs inside a
+  #   DOUBLE-QUOTED shell string, so a backtick is COMMAND SUBSTITUTION, not punctuation.
+  #   MEASURED 2026-09-09: two backticked words in comments I had just added made the shell
+  #   execute `fail_measurement` (with no args, tripping set -u at :93) and `resolved`.
+  #   ★ `bash -n` PASSED CLEAN -- it is valid syntax. Only RUNNING it showed the errors.
   python3 -c "
 import json
 seen={}
@@ -472,7 +483,16 @@ for line in open('$WORK/alerts.jsonl', encoding='utf-8', errors='replace'):
     try: d=json.loads(line)
     except Exception: continue
     k=d.get('dedupe_key') or ''
-    if not k.startswith('deploy-drift-'): continue
+    # ⛔⛔ RUNGS ONLY -- NOT the bare 'deploy-drift-' prefix (round-2 correction, #1021).
+    # fail_measurement mints 'deploy-drift-measurement-failed-<operand>', which SHARES that
+    # prefix. Under the old code the sweep ran only from the near-unreachable ZERO branch, so
+    # that overlap was harmless. Calling it from three exits makes it hourly, and then a FLAKY
+    # read becomes: hour N fail -> mint; hour N+1 ok -> resolve; hour N+2 fail -> a BRAND NEW row,
+    # because 'resolved' is terminal and does NOT block a fresh mint (system-alerts.ts:326,:505).
+    # One row forever would have become one row per occurrence -- spam created BY the widening.
+    # ★ AND IT WOULD ERASE THE EVIDENCE OF ITS OWN FAILURES: a later good reading does not
+    #   discharge an earlier failed one. A measurement failure is discharged by someone LOOKING.
+    if not k.startswith('deploy-drift-rung-'): continue
     rid=d.get('id')
     if rid: seen[rid]=d.get('state')
     else: skipped += 1
@@ -521,6 +541,13 @@ TOTAL="$3"; AGE_H="$4"; OLDEST="$5"; RUNTIME_N="$6"; CAPPED="$7"
 LIST="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | paste -sd, -)"
 
 AGE_INT="${AGE_H%.*}"
+# ⛔ A NEGATIVE AGE IS A BROKEN READING, NOT A SMALL ONE (round-2, #1021). `-0.50` truncates to
+#   `-0`, which passes `[ -0 -ge 4 ]` as a valid integer and routes to BELOW_FLOOR -- which now
+#   CLEARS. Clock skew or a future-dated commit could therefore discharge a rung. This job's own
+#   rule is that a failed measurement is a first-class outcome, never a silent small number.
+case "$AGE_INT" in
+  -*) fail_measurement "age" "computed a NEGATIVE range age (${AGE_H}h) — clock skew or a future-dated commit. An age that cannot be trusted must not decide a rung, and must never clear one." ;;
+esac
 
 # ── THE RUNG: A BOUNDED, MONOTONE AGE BUCKET ON THE DEDUPE KEY ────────────────────────
 # Four rungs, escalate only, return-to-zero resolves all. This is entirely PRODUCER-side:
@@ -555,9 +582,26 @@ else
   # carries no information. The floor sits above the routine deploy interval; 8/24/72
   # above it are arbitrary-but-labelled and trigger REPORTING, not action.
   log "BELOW_FLOOR age=${AGE_INT}h total=$TOTAL runtime=$RUNTIME_N — under the 4h floor, not reported"
-  # Under the floor there is nothing to report, so an open row from a WORSE earlier state is
-  # now stale. A runtime commit younger than 4h means a deploy just happened.
-  clear_open_rows BELOW_FLOOR
+  # ⛔⛔ BELOW_FLOOR CLEARS ONLY WITH CORROBORATION FROM THE DEPLOY RECORD (round-2, #1021).
+  #   The age operand is COMMITTER DATE, and :636-638 of this same file says a rebase rewrites
+  #   it and that the age is then UNDER-stated. Before this batch an under-stated age only ever
+  #   SUPPRESSED REPORTING; letting it CLEAR would promote a known-rewritable operand into one
+  #   that affirmatively discharges a rung -- a force-push on the review branch could resolve a
+  #   72h rung with no deploy at all, and escalation would restart from rung 1.
+  # ★ So we require the operand a rebase CANNOT rewrite: deployed_at from the deploy record.
+  #   Under the floor AND a deploy within the floor window = a real deploy just happened.
+  DEPLOY_AGE_S=""
+  if [ -n "$DEPLOYED_AT" ]; then
+    DEPLOY_EPOCH="$(date -u -d "$DEPLOYED_AT" +%s 2>/dev/null)"
+    [ -n "$DEPLOY_EPOCH" ] && DEPLOY_AGE_S=$(( $(date -u +%s) - DEPLOY_EPOCH ))
+  fi
+  if [ -n "$DEPLOY_AGE_S" ] && [ "$DEPLOY_AGE_S" -ge 0 ] && [ "$DEPLOY_AGE_S" -lt 14400 ]; then
+    log "BELOW_FLOOR corroborated by deploy record (deployed_at=$DEPLOYED_AT, ${DEPLOY_AGE_S}s ago) — clearing"
+    clear_open_rows BELOW_FLOOR
+  else
+    # NOT an error, and NOT silent: say which operand withheld the clearing.
+    log "BELOW_FLOOR NOT clearing — deploy record does not corroborate (deployed_at=${DEPLOYED_AT:-<absent>}, age=${DEPLOY_AGE_S:-<unreadable>}s). A rewritable committer date may not discharge a rung on its own."
+  fi
   exit 0
 fi
 
@@ -649,8 +693,13 @@ verb); worsening drift crosses into a new rung and re-mints on its own.
 
 HOW THIS ROW CLEARS: the hourly run clears every open drift row whenever it concludes there
 is nothing to report -- deployed==head (ZERO), the range touches no runtime file
-(NO_RUNTIME_PATHS), or the gap is under the 4h floor (BELOW_FLOOR). The resolve evidence
-names which one. BEFORE 2026-09-09 ONLY THE FIRST OF THOSE CLEARED, so a deploy followed by
+(NO_RUNTIME_PATHS), or the gap is under the 4h floor AND the deploy record corroborates a
+deploy inside that window (BELOW_FLOOR). The resolve evidence names which one.
+TWO STATED EXCEPTIONS, because a promise the code cannot keep is the defect this text replaced:
+  - at the 300-file cap the runtime count is UNDECIDABLE, so NO_RUNTIME_PATHS is not reached
+    and this row will NOT clear -- which is exactly the long doc-only stall case;
+  - BELOW_FLOOR alone will not clear it: a committer date is rewritable by a rebase and may
+    not discharge a rung on its own. BEFORE 2026-09-09 ONLY THE FIRST OF THOSE CLEARED, so a deploy followed by
 any documentation commit left this row open indefinitely and it read as live drift that was
 already fixed (#1021) -- measured at nine consecutive runs.
 

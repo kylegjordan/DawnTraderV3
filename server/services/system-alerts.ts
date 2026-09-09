@@ -212,7 +212,7 @@ export const ALERT_ACTORS = [
   { value: 'governance-checker',           tag: 'machine', why: 'scripts/governance-checker/poller.mjs (30-min timer): add + auto-resolve' },
   { value: 'governance-checker-heartbeat', tag: 'machine', why: 'scripts/governance-checker/heartbeat-check.mjs (15-min timer)' },
   { value: 'b-new-40-soak-verify',         tag: 'machine', why: 'scripts/b-new-40-soak-verify.ts — acks the soak alert it verifies' },
-  { value: 'deploy-drift-monitor',         tag: 'machine', why: 'comms-infra/discord/dt-deploy-drift.sh (hourly cron on Helsinki): resolves its own drift rungs on return to zero. B-DEPLOY-DRIFT-LINE #1002 — an hourly robot must not claim a session identity (#987/#1004).' },
+  { value: 'deploy-drift-monitor',         tag: 'machine', why: 'comms-infra/discord/dt-deploy-drift.sh (hourly cron on Helsinki): resolves its own drift rungs whenever a run concludes there is nothing to report — deployed==head, the range touches no runtime file, or the gap is under the floor with the deploy record corroborating (#1021; it was return-to-zero ONLY until 2026-09-09, which is the defect that batch fixed). The resolve evidence names which condition fired. B-DEPLOY-DRIFT-LINE #1002 — an hourly robot must not claim a session identity (#987/#1004).' },
   // human
   { value: 'kyle',     tag: 'human', why: 'the decider; the alerts-page default' },
   { value: 'langston', tag: 'human', why: 'the reviewer, acting through the CLI over SSH from Helsinki' },
