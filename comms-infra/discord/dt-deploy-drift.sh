@@ -433,14 +433,31 @@ print('%s %s' % (s, d.get('total_commits')) if s in ('identical','ahead','behind
   fi
 fi
 
-if [ "$READ" = "ZERO" ]; then
-  log "ZERO deployed=$DEPLOYED head=$HEAD_SHA — clearing open drift rows"
+# ── CLEARING IS A FUNCTION, NOT A BRANCH BODY (#1021) ────────────────────────────────
+# ⛔⛔ IT LIVED INSIDE `if READ = ZERO` AND THAT WAS THE DEFECT. THREE of the four terminal
+#   exits mean "there is no drift to report" and only ONE of them cleared the rows — so a
+#   deploy that GENUINELY FIXED the drift left every rung OPEN the moment any non-runtime
+#   commit moved the head, and the clearing path became unreachable.
+# ★ MEASURED, not reasoned: probe c588d5cb minted 2026-09-08T20:26Z stayed `active` across
+#   NINE consecutive unattended runs, every one logging NO_RUNTIME_PATHS.
+# ⇒ A condition that has genuinely cleared, still reported as open, is #402's own shape
+#   inside the batch built to detect it.
+# ⚠️ NO FLAP RISK IN ANY OF THE THREE, and this is why it is safe to widen: age and
+#   runtime-count only FALL on a deploy. Nothing oscillates a row back open.
+# ⛔ $1 IS THE CONDITION NAME AND IT GOES INTO THE EVIDENCE STRING. A resolve must say WHICH
+#   condition discharged it: `resolved_by` is a string the script passes and CANNOT
+#   distinguish a cron resolve from a hand-typed one — the EVIDENCE FORMAT is the only
+#   discriminator (Langston re-derived this on row 762170b7, whose human-prose evidence is
+#   what proved it was NOT an unattended clearing). Adding two clearing paths that did not
+#   wear the format would dilute the one discriminator we have.
+clear_open_rows() {
+  local COND="$1"
   # READ THE STORE, NOT THE CLI LIST. `cmdList` prints padded text carrying id and title and
   # NOT dedupe_key (scripts/system-alerts.ts:256-272), so matching on a title substring would
   # catch any future alert titled that way BY ANY AUTHOR. §10.5's sanctioned read is the store
   # itself, which carries the true key. ~800 rows; trivial.
   ssh $SSH_OPTS "$STAGING_SSH" "cat $ALERTS" > "$WORK/alerts.jsonl" 2>>"$LOG"
-  LIST_RC=$?
+  local LIST_RC=$?
   # An unreachable store is NOT "nothing to clear". Unchecked, it logged resolved=0 —
   # "nothing to clear" for "could not look", which is this job's own subject.
   [ $LIST_RC -ne 0 ] && fail_measurement "alert_store" "could not read the alert store to clear drift rows (ssh exit $LIST_RC). Rows may still be open."
@@ -468,19 +485,26 @@ if skipped: print('SKIPPED %d' % skipped, file=_s.stderr)
 " > "$WORK/open.txt" 2>>"$LOG" \
   || fail_measurement "alert_store" "could not parse the alert store while clearing drift rows. Rows may still be open, and an empty result here would otherwise read as nothing-to-clear."
 
-  RESOLVED_N=0; FAILED_N=0
+  local RESOLVED_N=0; local FAILED_N=0
   while read -r ID; do
     [ -z "$ID" ] && continue
-    if [ "$DRY" = "1" ]; then echo "WOULD RESOLVE $ID"; RESOLVED_N=$((RESOLVED_N+1)); continue; fi
+    if [ "$DRY" = "1" ]; then echo "WOULD RESOLVE $ID (cond=$COND)"; RESOLVED_N=$((RESOLVED_N+1)); continue; fi
     # --evidence is a DISCHARGE, not a pointer (#447): it states what was observed.
+    # The leading $COND is the machine-recognisable discriminator — see the header above.
     ssh $SSH_OPTS "$STAGING_SSH" \
-      "cd /home/deploy/dawntrader && npm run --silent system-alerts -- resolve $ID --by $ACTOR --evidence 'ZERO at $TS deployed=$DEPLOYED head=$HEAD_SHA'" >> "$LOG" 2>&1
+      "cd /home/deploy/dawntrader && npm run --silent system-alerts -- resolve $ID --by $ACTOR --evidence '$COND at $TS deployed=$DEPLOYED head=$HEAD_SHA'" >> "$LOG" 2>&1
     # COUNT RESOLUTIONS, NOT ITERATIONS. A resolve is a claim about a row (#987/#1000).
     if [ $? -eq 0 ]; then RESOLVED_N=$((RESOLVED_N+1)); else FAILED_N=$((FAILED_N+1)); fi
   done < "$WORK/open.txt"
 
-  log "ZERO resolved=$RESOLVED_N failed=$FAILED_N"
+  log "$COND resolved=$RESOLVED_N failed=$FAILED_N"
   [ "$FAILED_N" -gt 0 ] && fail_measurement "resolve" "$FAILED_N drift row(s) could not be resolved — they remain open and will read as current drift that is not there."
+  return 0
+}
+
+if [ "$READ" = "ZERO" ]; then
+  log "ZERO deployed=$DEPLOYED head=$HEAD_SHA — clearing open drift rows"
+  clear_open_rows ZERO
   exit 0
 fi
 
@@ -514,6 +538,10 @@ AGE_INT="${AGE_H%.*}"
 #   passes on capped, and the body says UNDECIDABLE rather than a number.
 if [ "$CAPPED" != "1" ] && [ "$RUNTIME_N" -eq 0 ]; then
   log "NO_RUNTIME_PATHS age=${AGE_INT}h total=$TOTAL — the range touches no runtime file, so there is nothing to be behind ON. Not reported."
+  # "Nothing to be behind ON" is exactly the state in which an OPEN row is wrong. This is the
+  # exit that produced the defect: after a deploy, one documentation commit routes every
+  # subsequent run here, and before #1021 none of them cleared anything.
+  clear_open_rows NO_RUNTIME_PATHS
   exit 0
 fi
 if   [ "$AGE_INT" -ge 72 ]; then RUNG=4
@@ -527,6 +555,9 @@ else
   # carries no information. The floor sits above the routine deploy interval; 8/24/72
   # above it are arbitrary-but-labelled and trigger REPORTING, not action.
   log "BELOW_FLOOR age=${AGE_INT}h total=$TOTAL runtime=$RUNTIME_N — under the 4h floor, not reported"
+  # Under the floor there is nothing to report, so an open row from a WORSE earlier state is
+  # now stale. A runtime commit younger than 4h means a deploy just happened.
+  clear_open_rows BELOW_FLOOR
   exit 0
 fi
 
@@ -614,8 +645,14 @@ range. It over-states rather than under-states, which is the safe direction for 
 trigger. It is NOT 'the oldest runtime commit'.
 
 ⛔ RESOLVE this row, do not ACK it. An ack silences THIS RUNG only (#982 — there is no unack
-verb); worsening drift crosses into a new rung and re-mints on its own. Deploying clears every
-rung on the next run.
+verb); worsening drift crosses into a new rung and re-mints on its own.
+
+HOW THIS ROW CLEARS: the hourly run clears every open drift row whenever it concludes there
+is nothing to report -- deployed==head (ZERO), the range touches no runtime file
+(NO_RUNTIME_PATHS), or the gap is under the 4h floor (BELOW_FLOOR). The resolve evidence
+names which one. BEFORE 2026-09-09 ONLY THE FIRST OF THOSE CLEARED, so a deploy followed by
+any documentation commit left this row open indefinitely and it read as live drift that was
+already fixed (#1021) -- measured at nine consecutive runs.
 
 Current value — never read the numbers above as current, they are stamped: $LOG on Helsinki."
 

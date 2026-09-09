@@ -7931,6 +7931,41 @@ Alert `81135510` (`deploy-drift-rung-2`, `2026-09-07T20:23:32Z`) fired correctly
 
 ---
 
+### #1021 OPEN 2026-09-09 (CC-A) — ⛔ THE DRIFT MONITOR CLEARS ITS OWN ROWS FROM ONLY **ONE OF FOUR** EXITS, SO A DEPLOY THAT FIXED THE DRIFT LEAVES EVERY RUNG OPEN
+
+⛔⛔ **A CONDITION THAT HAS GENUINELY CLEARED, STILL REPORTED AS OPEN — WHICH IS `#402`'S OWN SHAPE INSIDE THE BATCH BUILT TO DETECT IT.**
+
+**MECHANISM, re-derived at the object by BOTH CC-A and Langston (his words: *"your branch reading is CORRECT and I re-derived all of it myself at `8d3546e33`"*).** `dt-deploy-drift.sh` has FOUR terminal exits. **Three of them mean *there is nothing to report*. Only ONE cleared open rows:**
+
+| exit | meaning | cleared rows BEFORE this fix |
+|---|---|---|
+| `ZERO` (`:436-484`) | `deployed == head` | ✅ yes — **and it is the only one that requires an EXACT sha match** |
+| `NO_RUNTIME_PATHS` (`:515-518`) | the range touches no runtime file | ⛔ **NO — exits without touching a row** |
+| `BELOW_FLOOR` (`:523-531`) | the gap is under the 4h floor | ⛔ **NO** — ★ **Langston's catch; I found two of the three and he found the third** |
+| `RUNG=N` | real drift | correctly reports — a row SHOULD be open |
+
+⇒ **A DEPLOY FOLLOWED BY ANY NON-RUNTIME COMMIT BEFORE THE NEXT HOURLY RUN LEAVES THE RUNGS OPEN INDEFINITELY.** Every later run routes to `NO_RUNTIME_PATHS` and never reaches the clearing block. **With four sessions pushing documentation between deploys, the `deployed == head` window is narrow and easily missed.**
+⚠️ **AND THE SAME HOLDS AFTER A DEPLOY THAT LEAVES A RUNTIME COMMIT UNDER 4h OLD** — `BELOW_FLOOR`, the exit I missed.
+
+★★ **MEASURED, NOT REASONED — AND THE PREDICTION WAS WRITTEN BEFORE THE RUNS.** Probe `c588d5cb-464b-4f3a-b38d-9949d30a8cfa` (dedupe-key `deploy-drift-rung-UNATTENDED-PROBE`) was minted 2026-09-08T20:26Z with the expectation recorded in its own body: *"the next `:17` cron will NOT clear this."* **It stayed `state=active`, `resolved_at=null`, across NINE consecutive unattended runs** (`21:17` → `05:17`), every one logging `NO_RUNTIME_PATHS`.
+★ **AND ON TODAY'S OWN TIMELINE IT ALREADY BIT: at 20:17 the cron logged `NO_RUNTIME_PATHS age=0h total=5`. Had CC-A not run the job BY HAND at 19:52, the two rungs cleared by the `B-CANONICAL-BRIDGE-CHURN` deploy would still be open** — the manual run whose attribution CC-A had to correct is the only reason they closed.
+
+⚠️ **SECOND INSTANCE OF THE FALSE-COMMENT CLASS, IN THE TEXT A HUMAN ACTUALLY READS.** The alert body (`:617-618`) asserted *"Deploying clears every rung on the next run"* — **promising a discharge the code did not perform.** Same shape as the `sync-canonical-bridge.test.ts:177-178` comment in the sibling batch, same day. ★ **A comment made false by a fix is worse than one that was always wrong, because nothing about it looks suspect.**
+
+**DISPOSITION (§9.4 #1): FOLDED INTO THE WORK IN HAND — `B-DEPLOY-DRIFT-LINE` (`#1002`, plan row 4.55), owner CC-A.** ★ **Langston's ruling, and the reasoning is the point: this is that batch's OWN deliverable failing in the exact behaviour its criterion 4 measures, so running criterion 4 now would measure the DEFECT, not the criterion.** Not a new batch.
+
+**THE FIX, with his three conditions:**
+1. **Hoist the clearing block into `clear_open_rows()` and call it from `ZERO`, `NO_RUNTIME_PATHS` AND `BELOW_FLOOR`.** ⚠️ **No flap risk in any of the three — age and runtime-count only FALL on a deploy.**
+2. **(a)** each path's `--evidence` names **which condition cleared it**, in the machine-recognisable `<COND> at <ts> deployed=… head=…` shape. ★ **WHY IT IS A CONDITION AND NOT A NICETY: `resolved_by` is a string the script passes and CANNOT distinguish a cron resolve from a hand-typed one — the EVIDENCE FORMAT is the only discriminator. Langston proved that on row `762170b7`, which carries `resolved_by_claimed=deploy-drift-monitor` and would have looked like an unattended clearing, except its evidence is human prose.** Adding clearing paths that did not wear the format would dilute it.
+3. **(b)** the false alert body corrected **in the same commit**; **(c)** back through Step 4 as a diff.
+
+**VERIFIED BY RUNNING IT IN THE CASE IT WAS WRITTEN FOR, WITH A CONTROL 15 SECONDS APART, both `--dry-run` (writes nothing):**
+- **FIXED script:** `NO_RUNTIME_PATHS age=9h total=9` → `WOULD RESOLVE c588d5cb… (cond=NO_RUNTIME_PATHS)` → `NO_RUNTIME_PATHS resolved=1 failed=0`
+- **OLD installed script, same state, same moment:** `NO_RUNTIME_PATHS age=9h total=9` → **nothing; exits.**
+⇒ **the difference is the change and nothing else.**
+
+⛔ **CRITERION 4 OF `B-DEPLOY-DRIFT-LINE` CANNOT CLOSE UNTIL THIS SHIPS** — and Langston explicitly **REFUSED to close the gap by argument** (*"exactly the plausible-mechanism claim I bounce from others"*), and **RATIFIED the refusal to deploy documentation-only commits to force `deployed == head`**: *"restarting live trading to satisfy an instrument's precondition measures the forcing, not the instrument."*
+
 ### #1020 OPEN 2026-09-08 (CC-A) — ⛔ THE PUSH GUARD'S TSC MEASUREMENT INHERITS THE **PREVIOUS TOOL CALL'S** WORKING DIRECTORY, AND REFUSES ON A FALSE ZERO
 
 ⛔⛔ **MEASURED, WITH A CONTROL, 2026-09-08. `guard-push-tsc-baseline.mjs` refused a push with *"current tsc reported 0 errors but baseline is 377"*. Run from a shell in the repo root the SAME comparator reports `Current: 377. Baseline: 377. OK`.** ⇒ **the gate's LOGIC is correct — it caught a suspicious zero — but its MEASUREMENT was taken somewhere the code does not exist.**
