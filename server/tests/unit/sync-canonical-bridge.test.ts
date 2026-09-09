@@ -174,8 +174,23 @@ describe('sync-canonical-bridge — generateBridgeJSON producer-consumer contrac
 // ⛔ resolve(__dirname, ...) NOT process.cwd(): cwd-relativity is what made that guard
 //    feel necessary in the first place. (Langston, Step-2 CONDITION A.)
 //
-// The two stamps are excluded because they are the only fields the sync is now allowed
-// to leave stale — same exclusion set as contentKey() in the sync script.
+// ⛔⛔ THIS COMMENT SAID "same exclusion set as contentKey()" AND THAT WAS FALSE.
+//    Corrected 2026-09-09 (Langston Step-8 FINDING-1), re-derived at the object first.
+//    MEASURED against the committed file: _metadata carries EIGHT keys — _changelog, _fields,
+//    canonical, generatedAt, generator, includesDriftScore, source, updatedAt.
+//    contentKey() deletes exactly TWO, so SIX are inside the skip decision.
+//    THESE TESTS COMPARE ZERO OF THE EIGHT — byAssetClass and _schema only.
+//    The two sets do not merely differ; they do not overlap at all.
+// ⇒ WHAT THIS BLOCK ACTUALLY GUARANTEES: committed byAssetClass and _schema match the
+//    generator. NOTHING here covers _metadata.
+// ⚠️ THE LIVE GAP THAT FOLLOWS, homed as an item on P19-B12 (#402's residual set): change any
+//    of those six in the TypeScript source and CI stays GREEN while the next daily sync rewrites
+//    the JSON, dirties staging and returns dt-deploy exit 3 — #402's own consequence re-entering
+//    through a field no test covers. No live drift today: the observed skip proves committed
+//    _metadata-minus-stamps currently equals generated.
+// ★ A FRESH COMMENT THAT OVERSTATES ITS OWN ASSERTION IS WORSE THAN A STALE ONE, because
+//    nothing about it looks suspect. Same class as the alert body in dt-deploy-drift.sh that
+//    promised a discharge the code did not perform (#1021) — three instances in two days.
 describe('sync-canonical-bridge — committed JSON matches generator output', () => {
   const COMMITTED = resolve(__dirname, '../../../bridge/canonical/mapping-regime-strategy.json');
 
