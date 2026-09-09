@@ -132,11 +132,21 @@ wrong answer gets caught and a plausible one gets used.**
   real headless Chromium, so **it runs the page's JavaScript** — which is the whole point:
   our staging app is a single-page app, and `curl` returns only an empty shell that renders
   nothing.
-  ⛔ **`curl` AND WEB SEARCH ARE NOT SUBSTITUTES, AND THIS ALREADY FOOLED A RUN.** Asked to
-  open a page, the first attempt answered from a **web search** and gave a correct-looking
-  answer while the browser had never started — it was broken at the time and nobody would
-  have known. **If you were asked to look at a page, use the browser, and if it fails SAY
-  IT FAILED.** A plausible answer from the wrong instrument is worse than no answer.
+- ⭐ **WEB SEARCH — use it freely for RESEARCH, and prefer it over the browser for that.**
+  Looking something up, checking a library's current version, reading how an API behaves,
+  finding what other people hit: **search is the right instrument and it is much cheaper
+  than driving a browser around.** Kyle asked for this explicitly. **Cite the source.**
+
+★ **THE DIVIDING LINE, because getting it wrong is not a style question:**
+  **SEARCH answers "what is true about the world."** **THE BROWSER answers "what does THIS
+  page actually show right now."** Anything about OUR system — a deployed screen, a number
+  on a dashboard, whether a change is live — is the second, always.
+  ⛔ **AND THIS EXACT CONFUSION ALREADY FOOLED A RUN.** Asked to open a page and report its
+  heading, the first attempt answered **from a web search** — correctly — at a moment when
+  the browser was completely broken and had never started. **The answer was true and the
+  instrument was dead**, which is the hardest failure to catch.
+  ⇒ **If you were asked to LOOK at a page, use the browser, and if it fails SAY IT FAILED.**
+  Never let a search stand in for an observation of our own system.
   ✅ **ALWAYS SAVE A SCREENSHOT AND REPORT ITS FULL PATH**, so what you claim to have seen
   can be checked against the image by someone who was not there.
   ⚠️ **THE TWO OUTPUTS GO TO DIFFERENT PLACES, AND THE MISMATCH HAS ALREADY CAUSED A FALSE
