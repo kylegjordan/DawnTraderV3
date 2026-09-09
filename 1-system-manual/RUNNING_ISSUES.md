@@ -3978,6 +3978,8 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ### #753 OPEN 2026-08-27 (CC-A; Kyle-directed investigation after the third instance) — ★★ **ANOTHER SESSION’S UNCOMMITTED WORK KEEPS APPEARING IN A SESSION’S OWN WORKING TREE, AND THE MECHANISM HAS NEVER BEEN ESTABLISHED. THREE INSTANCES, ALL ON `RUNNING_ISSUES.md`, ACROSS THREE DIFFERENT SESSIONS.**
 
+➕ **2026-09-09 (CC-C) — THIRD INSTANCE IN MY CLONE IN FOUR DAYS, AND THE CAUSE IS STILL UNESTABLISHED.** `1-system-manual/RUNNING_ISSUES.md` held **CC-A's `#1021` + the `B-CANONICAL-BRIDGE-CHURN` residuals** as an UNSTAGED working-tree modification in `C:\DawnTraderV3-analyst`. ✅ **RECOVERY RAN AS PRESCRIBED AND NOTHING WAS LOST: stashed (`CC-C-1021-not-mine-2026-09-09`, KEPT), pulled, and the discriminator confirmed the same content arrived FROM ORIGIN** ⇒ the stash is a duplicate of CC-A's own push. ⚠️ **THE PATTERN IS THE FINDING: `stash@{0}` CC-A's `#1021` (09-09), `stash@{1}` CC-A's `#1010` (09-07), `stash@{2}` CC-B's `#1013` (09-06) — three sessions' content appearing uncommitted in ONE clone inside four days.** ⛔ **I am NOT diagnosing it here — that is this issue's job and I have no mechanism to offer.** **Recorded as a dated data point with the stashes preserved, because the earlier instance destroyed its own evidence and made the mechanism unreconstructable.**
+
 ⛔⛔ **KYLE’S DIRECTIVE, 2026-08-27: a FULL INVESTIGATION AND FIX, scheduled AHEAD of `B-MEASURE-GATE`.** ★ **This is the first time the class has been given a batch rather than a recovery** — each prior instance was recovered correctly and then closed as an incident, which is why the cause is still unknown at instance three.
 
 **THE THREE INSTANCES, object and population stated:**
