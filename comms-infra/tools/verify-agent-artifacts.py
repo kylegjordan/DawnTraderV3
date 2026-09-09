@@ -18,7 +18,12 @@ import hashlib
 import subprocess
 import sys
 
-REF = "origin/migration/aws-supabase"
+# ⛔⛔ PIN THE REF, DO NOT CERTIFY AGAINST A MOVING ONE. `origin/migration/aws-supabase`
+#    changes under this script as three other sessions push, so a PASS recorded on Monday
+#    is a statement about a tree that no longer exists by Tuesday. Pass a sha to certify a
+#    specific state; the branch name is the convenience default and is labelled as such in
+#    the output.
+REF = sys.argv[1] if len(sys.argv) > 1 else "origin/migration/aws-supabase"
 REPO = r"C:\DawnTraderV3-infra"
 HOST = "root@204.168.141.77"
 
@@ -45,6 +50,25 @@ def repo_sha(path):
     return hashlib.sha256(p.stdout).hexdigest(), None
 
 
+def live_modes(paths):
+    """⛔ CONTENT PARITY IS NOT DEPLOYMENT PARITY. A byte-identical file installed WITHOUT
+    the execute bit hashes the same and does not run — so a content-only comparator returns
+    MATCH on a command nobody can execute. Found by a fresh reviewer on this very script.
+    ⚠️ MEASURED at the same time: the repo copies were committed 100644 while the live ones
+    are 750/755, because `install -m` set the mode explicitly rather than copying it. So
+    nothing was broken — but a `cp`-based deploy would have been, silently, and this
+    comparator would have said MATCH."""
+    cmd = "stat -c '%a %n' " + " ".join("'%s'" % x for x in paths)
+    p = subprocess.run(["ssh", HOST, cmd], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    out = {}
+    for line in (p.stdout or "").split(chr(10)):
+        bits = line.split(None, 1)
+        if len(bits) == 2:
+            out[bits[1]] = bits[0]
+    return out
+
+
 def live_shas(paths):
     cmd = "sha256sum " + " ".join("'%s'" % x for x in paths)
     p = subprocess.run(["ssh", HOST, cmd], capture_output=True, text=True,
@@ -58,6 +82,7 @@ def live_shas(paths):
 
 
 live, err = live_shas([d for _s, d in PAIRS])
+modes = live_modes([d for _s, d in PAIRS])
 if err:
     print("ssh stderr:", err[:300])
 
@@ -72,8 +97,16 @@ for src, dest in PAIRS:
         print("  NOT-ON-BOX        %-46s -> %s" % (src, dest))
         missing += 1
     elif rs == ls:
-        print("  MATCH             %-46s" % src)
-        match += 1
+        m = modes.get(dest, "?")
+        runs = m != "?" and int(m[0]) % 2 == 1        # owner-execute bit
+        shebang = src.split("/")[-1] not in ("AGENTS.md", "AGENT_AUTHORING_GUIDE.md")
+        if shebang and not runs:
+            print("  ⛔ NOT EXECUTABLE %-46s -> %s (mode %s) — content matches and it "
+                  "CANNOT RUN" % (src, dest, m))
+            differ += 1
+        else:
+            print("  MATCH             %-46s (mode %s)" % (src, m))
+            match += 1
     else:
         print("  ⛔ DIFFERS        %-46s -> %s" % (src, dest))
         print("        repo %s" % rs[:16])
@@ -81,6 +114,7 @@ for src, dest in PAIRS:
         differ += 1
 
 print()
+print("ref: %s" % REF)
 print("match %d | DIFFER %d | missing %d  (of %d pairs)" % (match, differ, missing, len(PAIRS)))
 print()
 print("POSITIVE CONTROL — the comparator must be able to say DIFFERS. Same live file,")
