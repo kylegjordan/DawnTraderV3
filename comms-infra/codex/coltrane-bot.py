@@ -73,8 +73,18 @@ MEMDIR = "/home/coltrane/memory"
 # ⇒ THE ALTERNATIVE, IF THIS EVER NEEDS TIGHTENING: keep the network off and have a timer
 #   OUTSIDE the sandbox push whatever it has committed. Costs a delay and a background
 #   actor; it was not worth those today.
-SANDBOX = ("-s workspace-write --add-dir " + MEMDIR
-           + " -c sandbox_workspace_write.network_access=true")
+# ⛔⛔ `--approve-for-me` REPLACED `-s workspace-write`, AND THE TWO CANNOT BOTH BE PASSED
+#    (codex refuses the combination). The reason is the BROWSER: an MCP tool call raises an
+#    approval request, and under the headless default policy of "never" every single one is
+#    REFUSED — measured, three navigations in a row came back "MCP tool call requires
+#    approval, but approval policy is never".
+# ★ THE FENCE WAS RE-PROVED UNDER THE NEW FLAG RATHER THAN ASSUMED TO SURVIVE IT, because
+#   swapping the flag that names the sandbox is exactly when a fence quietly disappears.
+#   Identical results to the -s form: /home/coltrane read-only, /etc read-only,
+#   `cat /etc/langston/oauth.env` -> Permission denied, memory store writable.
+#   The refusals are the OS sandbox, not the approval layer, which is why they still fire.
+SANDBOX = ("--add-dir " + MEMDIR
+           + " -c sandbox_workspace_write.network_access=true --approve-for-me")
 NL = chr(10)
 
 NAME_RE = re.compile(r"\b(coltrane|codex)\b", re.I)

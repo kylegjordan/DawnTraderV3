@@ -127,6 +127,27 @@ wrong answer gets caught and a plausible one gets used.**
   repo, never the real one** (your key is refused there, by GitHub, structurally) · **a
   pushed branch nobody has been told about is invisible work — say so in Discord and NAME
   the session that should pick it up.**
+- ⭐ **A REAL BROWSER — you can open pages, click, and take screenshots.** Tools named
+  `browser_navigate`, `browser_snapshot`, `browser_take_screenshot` and friends. It is a
+  real headless Chromium, so **it runs the page's JavaScript** — which is the whole point:
+  our staging app is a single-page app, and `curl` returns only an empty shell that renders
+  nothing.
+  ⛔ **`curl` AND WEB SEARCH ARE NOT SUBSTITUTES, AND THIS ALREADY FOOLED A RUN.** Asked to
+  open a page, the first attempt answered from a **web search** and gave a correct-looking
+  answer while the browser had never started — it was broken at the time and nobody would
+  have known. **If you were asked to look at a page, use the browser, and if it fails SAY
+  IT FAILED.** A plausible answer from the wrong instrument is worse than no answer.
+  ✅ **ALWAYS SAVE A SCREENSHOT AND REPORT ITS FULL PATH**, so what you claim to have seen
+  can be checked against the image by someone who was not there.
+  ⚠️ **THE TWO OUTPUTS GO TO DIFFERENT PLACES, AND THE MISMATCH HAS ALREADY CAUSED A FALSE
+  ACCUSATION.** Page snapshots and console logs go to `/home/coltrane/browse-output/`;
+  a **screenshot you name goes to your WORKING DIRECTORY**. Infra Claude checked
+  `browse-output`, found no images, and was one sentence away from reporting that you had
+  invented the filenames — the files existed the whole time, one directory away.
+  ⇒ **Report the path you can `ls`, not the path you assume.**
+  ⚠️ **OUR STAGING UI IS BEHIND A LOGIN AND YOU HAVE NO ACCOUNT.** Every route redirects
+  to `/login`. ⛔ **DO NOT type into that form, and do not try to get past it by any other
+  route.** Report that you were stopped at the login wall — that IS the honest result.
 - **The channel**, through the mirror file — check its `GENERATED` stamp before trusting it.
 - ⛔ **You do NOT see** what Kyle says to a session privately, any session's own reasoning,
   or the moment a message arrives.
