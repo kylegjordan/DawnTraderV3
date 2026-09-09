@@ -249,3 +249,28 @@ After the deploy **`deployed == head` EXACTLY**, so the next cron takes the **`Z
 - **U-2a (`ZERO` path) is NOT exercised by this run** and stays outstanding. It is the pre-existing behaviour, so it is the lower-value of the two — recorded as untested rather than quietly credited.
 
 ⚠️ **THE REASON THIS CORRECTION EXISTS AT ALL IS THE POINT: a prediction written at 08:47 was invalidated by my own push at 08:49.** Left alone, either outcome would have matched *some* sentence in §10, and I could have claimed a pass whichever branch fired. **A pre-registration that survives a state change I caused is not a pre-registration.**
+
+
+## 11. ✅ U-2b RESULT — THE FIX FIRED UNATTENDED, ON THE EXIT IT WAS WRITTEN FOR
+
+**Read at 09:28Z. The run was at 09:17:01Z and NOBODY TRIGGERED IT** — it sits exactly on the `:17` cron pattern every prior run follows, and I held to not running the job by hand.
+
+```
+2026-09-09T09:17:01Z NO_RUNTIME_PATHS age=0h total=4 — the range touches no runtime file, so there is nothing to be behind ON. Not reported.
+2026-09-09T09:17:01Z NO_RUNTIME_PATHS resolved=2 failed=0
+```
+| row | dedupe_key | state before | state after | resolved_by | evidence |
+|---|---|---|---|---|---|
+| `14b031e8` | `deploy-drift-rung-2` | **active** | **resolved** | `deploy-drift-monitor` | `NO_RUNTIME_PATHS at 2026-09-09T09:17:01Z deployed=c52c577fd… head=7d1c36eda…` |
+| `c588d5cb` | `deploy-drift-rung-UNATTENDED-PROBE` | **acknowledged** | **resolved** | `deploy-drift-monitor` | same form |
+
+✅ **EVERY CLAUSE OF THE PRE-REGISTERED CRITERION MET**, and the two that carry the most weight:
+1. ⭐ **THE EVIDENCE SAYS `NO_RUNTIME_PATHS`, NOT `ZERO`.** That is the whole point of the distinction registered in §10's correction: `ZERO` cleared rows BEFORE `#1021` and would have proved nothing. **This run took one of the two exits the fix exists for.** The condition name in the evidence is what makes that checkable rather than assumed — and it is Langston's CONDITION-(a), earning its keep on its first live firing.
+2. ⭐ **AN `acknowledged` ROW WAS SWEPT.** Langston ruled this REQUIRED, not merely acceptable: if the sweep skipped acked rows, an acked rung would sit non-terminal forever and block every future re-mint of that key — `#1021`'s own shape with the ack as the freezer. **Now demonstrated on a live row rather than argued.**
+
+⇒ ✅ **`B-DEPLOY-DRIFT-LINE` CRITERION 4 IS SATISFIED: a deploy cleared every rung on the next run, resolved by `deploy-drift-monitor`, with no row left open.** Criteria 1, 2 and 3 already passed.
+
+⛔ **WHAT THIS DOES *NOT* PROVE, stated because one green run must not stand for three:**
+- **U-2a — the `ZERO` path firing unattended — remains UNTESTED.** It is pre-existing behaviour and the lower-value of the two, so it is recorded as untested rather than quietly credited.
+- **`BELOW_FLOOR` clearing remains proved by construction and dry-run only.** No live firing.
+- **U-1 is unaffected and still pending (≈ 2026-09-10T08:46Z)** — it is about the CHURN batch's daily sync, a different instrument entirely.
