@@ -120,13 +120,26 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 ---
 
-## 2b. ⛔⛔ **A8 — A SECOND TRADING ENGINE EXISTS, WITH A REAL EXCHANGE ORDER CALL, BEHIND A GATE** · ➕ **ROUTE: SEPARATE · PHASE 21 (GO-LIVE)**
+## 2b. ✅ **A8 — THE SECOND ENGINE IS A KNOWN LEGACY ARTIFACT, ALREADY KYLE-RULED AND ALREADY SCHEDULED FOR REMOVAL** · ➕ **ROUTE: SEPARATE · EXISTING ITEM**
 
-**PLAIN:** We said no separate real-order path existed. **One does.** The repository instantiates a second trading engine in live mode, reachable through a registered route behind a feature gate, **and it contains a real exchange order call followed by modelled partial-fill handling.**
-⚠️ **THIS IS NOT EVIDENCE THE GATE IS ON OR THAT IT TRADES.** It is a counterexample to a whole-repository claim we made.
-⛔ **WHY IT IS ITS OWN SECTION AND NOT A DOCUMENT FIX:** the accurate statement is that **the active order-placer seam has no live implementation, legacy live order code exists behind a gate, and paper/live equivalence has NOT been demonstrated.** ⇒ **before live is enabled, engine ownership must be settled and execution-report handling verified. Changing only the order destination is insufficient.**
-➕ **AND FROM THE SAME FAMILY (astra finding 8): the kill switch's LIVE branch logs that live flatten is future Phase-21 work rather than implementing it.** ⇒ **in paper the kill switch flattens; in live, as written, it would not.**
-⚠️ **NOT RE-DERIVED BY US.** ⛔ **Both belong to Phase 21 and must not be inherited silently by whoever opens go-live.**
+⛔⛔ **CORRECTED 2026-09-09 AFTER THE PROVENANCE READ KYLE ORDERED. r6 PRESENTED THIS AS AN OPEN GO-LIVE RISK. IT IS A DISPOSITIONED ONE, AND THE DISPOSITION IS KYLE'S OWN.**
+
+**WHAT COLTRANE FOUND, and he was careful about it:** the repository instantiates a second trading engine in live mode behind a feature gate, containing a real exchange order call. ✅ **He explicitly refused to claim the gate was enabled or that it trades** — his claim was narrow and it is accurate.
+
+✅ **WHAT THE PROVENANCE READ ADDS — and it is the whole disposition:**
+| | |
+|---|---|
+| **already filed** | ⭐ **`#578`, OPEN since 2026-07-25 (CC-A), *"THE LEGACY `TradingEngine` … IS DEAD IN BOTH MODES AND IS SCHEDULED FOR REMOVAL (rule 18)"*** — **and the ledger records the disposition as KYLE-RULED** |
+| **what it is** | an older, separate engine class from the **Phase-27 era**, distinct from the current active pipeline |
+| **origin** | introduced `5951a3195`, **2025-10-02** — the Replit era, before the migration |
+| **why it is gated** | the `live_engine_gate` was added deliberately on **2026-06-10** (`acf683c5d`, *"switch cleave — live-engine Phase-21 gate + locks"*, Langston-approved) — **the gate is the containment, not an oversight** |
+| **the plan already says so** | `PHASE_19_PLAN`: *"a `TradingEngine` that runs in neither mode (paper never starts it; live is Phase-21-gated and refuses)"* |
+
+⇒ ✅ **DISPOSITION: `#578`, existing, Kyle-ruled, scheduled for removal under rule 18. NOT a new finding and NOT a new batch.** ⛔ **It must not be re-filed, and a design must not build around it — it is going away.**
+
+➕ **ONE THING FROM THE SAME FAMILY THAT IS *NOT* COVERED BY `#578` AND STAYS OPEN:** astra finding 8 records that **the kill switch's LIVE branch logs that live flatten is future Phase-21 work rather than implementing it.** ⇒ **in paper the kill switch flattens; in live, as written, it would not.** ⚠️ **That is about the CURRENT guardrail policy, not the dead engine.** **Carried to Phase 21; not re-derived by us.**
+
+⭐⭐ **AND THIS IS THE CASE THAT JUSTIFIES THE PROVENANCE REQUIREMENT IN §6 — IT IS NOT A CRITICISM OF THE REVIEWER.** ★ **Everything he wrote was true. What he could not know, without the history, was that we had already found it, already ruled it, and already scheduled its deletion.** ⇒ **the same finding with a provenance read attached reads *"already dispositioned as `#578`, verify it is still on track"* — which is worth something — instead of *"a concrete counterexample"*, which sends people to re-investigate a closed decision.**
 
 ---
 
@@ -167,6 +180,29 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 ## 6. ⭐⭐ WHAT WE ARE ASKING COLTRANE FOR — **TWO ASKS, DELIBERATELY SEPARATE**
 
 > ⛔ **r5 WAS ONE ASK OVER 30 FINDINGS AND 1,020 BASELINE VALUES. LANGSTON RULED THAT TOO WIDE AND HE IS RIGHT** — a single document that large gets a single shallow answer. **Split, each ask is bounded and each has its own rollback.**
+
+---
+
+### ⛔⛔ A CONDITION ON BOTH ASKS — **THE PROVENANCE READ. KYLE'S REQUIREMENT, 2026-09-09.**
+
+> **"Everything that he dives into, he needs to use the provenance policy — dig into the history, look at the archival documents in the bridge canonical folder, understand the intent of what was built, understand the history of it, and then decide whether or not that intent is still relevant."**
+
+⛔ **BEFORE PROPOSING ANY CHANGE TO A COMPONENT, ESTABLISH WHAT IT WAS BUILT TO DO AND WHY.** Then say **which of these it is** — the answer changes the design, not just the wording:
+| # | disposition | meaning |
+|---|---|---|
+| **1** | **still relevant and correct** | leave it; the intent holds |
+| **2** | **relevant but needs updating to today's intent** | fix it — the purpose survives, the implementation drifted |
+| **3** | **disconnected and should be RECONNECTED** | it was meant to run and does not |
+| **4** | **connected but should be REMOVED** | it runs and should not |
+| **5** | **disconnected and should STAY disconnected, or be deleted** | genuinely dead — ⭐ **do not design around it** |
+
+**WHERE THE HISTORY LIVES:**
+- **`bridge/canonical/`** — the pre-governance corpus. ⚠️ **It records what we INTENDED to build then. It is NEVER current-state truth** — the architecture has changed completely. **Its value is the WHY.**
+- **`1-system-manual/RUNNING_ISSUES.md`, `BATCH_CATALOG.md`, and the batch completion reports** — search by **FILE and SYMBOL name**, not by symptom.
+- **`git log -S "<symbol>" --reverse`, NOT path-limited** so it survives renames — then **read the introducing commit.**
+
+⛔⛔ **WHY THIS IS A REQUIREMENT AND NOT A COURTESY:** ★ **without it, a true finding about a component we already killed reads as a live risk.** **§2b is exactly that case: a real second engine with a real order call — already found, already Kyle-ruled, already scheduled for deletion since July.** ⇒ **the finding was accurate and the disposition was missing, and the disposition is what tells us whether to act.**
+✅ **AND IT CUTS BOTH WAYS — it is not a filter for discarding findings.** **If the original intent is no longer relevant, the answer is not "leave it": it is SCRAP AND REBUILD, or refactor.** ★ **A component doing faithfully what it was built for, in a system that has since changed, is still wrong — and only the history can tell you which of those two you are looking at.**
 
 ---
 
