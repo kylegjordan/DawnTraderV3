@@ -7518,6 +7518,13 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 
 ### #1006 OPEN 2026-09-05 (surfaced by the CODEX ADVISOR's first audit; every citation re-derived and the decisive branch MEASURED by CC-B) — ⭐⭐ THE CHECKED-IN SCHEMA DESCRIBES A DIFFERENT `rtb_signals` UNIQUE INDEX THAN THE ONE THE DATABASE ACTUALLY HAS, UNDER THE SAME NAME — AND `asset_class` IS IN NEITHER
 
+✅✅ **2026-09-09 — KYLE HAS RULED, AND THIS IS NOW HOMED.** His words: *"if they're [different] asset classes, then just make sure that the uniqueness is settled by the symbol and asset class."* ⇒ **an xStock and a crypto coin sharing a ticker ARE DIFFERENT ASSETS, both are tradeable, and identity becomes `(symbol, asset_class)`.** ✅ **Langston: no reasons against.**
+✅ **AND THE COLLISION HAS ALREADY REACHED A REAL TRADE — measured, all-time: `DASH/USD` has 4 closed trades across BOTH asset classes.** Dash the cryptocurrency and DoorDash the equity, one identity. `rtb_signals`: zero collisions ever. `active_open_positions`: 5 open, none colliding.
+⚠️ **TWO NUMBERS OF MINE, CORRECTED BY LANGSTON, RECORDED BECAUSE BOTH REACHED KYLE:** I said *"13 base-ticker collisions in 7 days"* — that was measured on the **passive ticker ARCHIVE**, not on anything that trades, and it is a different population from the claim it was supporting. And I said *"we hold a DASH/USD crypto position right now"* — **FALSE, and it came from memory of an earlier session's read.** Live: `INJ/USD`, `LMT/USD`, `NEM/USD`, `SLV/USD`, `XMR/USDT`. ★ **The finding survives on one traded collision; my supporting figures did not.**
+⛔⛔ **LANGSTON'S CAUTION, WHICH IS THE PART THAT SIZES THE BATCH: THIS IS NOT A SCHEMA EDIT, IT IS A KEY-SHAPE CHANGE ACROSS EVERY SYMBOL-KEYED STORE.** `price-cache.ts:101`, `ohlc-cache`, `market-context-engine`, `market-data`, `market-volume-cache` all declare `Map<string, …>` at the ref. ⇒ **census the symbol-keyed stores BEFORE design, or we fix the one instance the last reviewer pointed at.**
+★ **AND SEQUENCE IT AS CORRECTNESS-DRIVEN, NOT INCIDENT-DRIVEN** — one collision has ever reached a trade.
+**HOME: `B-SYMBOL-CLASS-IDENTITY`, owner CC-C, placed in `PHASE_19_PLAN.md` at row `3b.h-4`, after `B-UNIVERSE-REFRESH-ACTS` (3b.h-2).** ⚠️ **Its first objective is the census, not the migration.**
+
 **PROVENANCE: found by the Codex advisor (its `FULL_SYSTEM_AUDIT_2026-09-05.md`, finding 1), not by a Claude session.** ⛔ **It is filed here because I RE-DERIVED every citation at the audited commit `5a7fc2ecc` and then settled the branch it could not reach, not because it was reported.** *(A reviewer HIT is a lead; it moves nothing until re-derived.)*
 
 ⛔⛔ **THE MEASURED FACT, from the live staging database:**
