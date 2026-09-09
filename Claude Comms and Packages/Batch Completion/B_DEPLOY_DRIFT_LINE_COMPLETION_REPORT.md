@@ -1,6 +1,8 @@
 # B-DEPLOY-DRIFT-LINE — PROGRESS REPORT
 
-# ⛔ OPEN — FIRST TRUE POSITIVE RETURNED (criteria 1+2 PASS); CRITERIA 3 AND 4 UNEXERCISED
+# ✅ CLOSED 2026-09-09 — ALL FOUR CRITERIA PASS. Langston: *“CRITERION 4 PASSES. Take it to Step 11.”*
+> ⚠️ **The header below is the PROGRESS-REPORT title this file carried while the window was open. Kept, not overwritten — the conversion is the record of how it closed, not a re-telling.**
+> ~~⛔ OPEN — FIRST TRUE POSITIVE RETURNED (criteria 1+2 PASS); CRITERIA 3 AND 4 UNEXERCISED~~
 
 **Batch:** `B-DEPLOY-DRIFT-LINE` · **owner:** CC-A · **issues:** `#1002`, folds `#1008` · **plan row:** `PHASE_19_PLAN` 4.55
 **change-class:** `non_architecture` · **installed:** 2026-09-07, hourly on Helsinki
@@ -148,3 +150,89 @@ That is how staging sat **55 commits behind with `active-execution-engine.ts` an
 ⛔ **This report BECOMES `B_DEPLOY_DRIFT_LINE_COMPLETION_REPORT.md` when the data is in AND a decision has been taken on it — both halves.** The window elapsing is not a close. The conversion records **what the observation actually returned, quoted against §3's criterion as written**, and **what was decided or done about it, and by whom.**
 
 **Card:** `Observation`. **`#1002` stays OPEN.**
+
+
+---
+
+# ✅ CONVERSION TO COMPLETION REPORT — 2026-09-09
+
+## A. WHAT DATA CAME IN — THE CRITERION QUOTED AS WRITTEN, THEN THE OUTCOME
+
+> **CRITERION 4, verbatim from §3 above, written before any data:**
+> *"4. **A deploy clears every rung on the next run**, resolved by `deploy-drift-monitor`, with no row left open."*
+
+**OUTCOME: PASS, 2026-09-09T09:17:01Z, UNATTENDED.**
+```
+2026-09-09T09:17:01Z NO_RUNTIME_PATHS age=0h total=4 — the range touches no runtime file … Not reported.
+2026-09-09T09:17:01Z NO_RUNTIME_PATHS resolved=2 failed=0
+```
+| clause of the criterion | evidence |
+|---|---|
+| *a deploy clears every rung* | deploy `c52c577fd` at 08:46:50Z; the next run cleared both open rows |
+| *on the next run* | 09:17:01Z — the first `:17` tick after the deploy |
+| *resolved by `deploy-drift-monitor`* | both rows carry `resolved_by_claimed=deploy-drift-monitor` |
+| *with no row left open* | ⭐ **Langston enumerated rather than counted: ALL 7 `deploy-drift-*` rows ever minted are `resolved`; STILL-OPEN = 0** |
+
+⭐ **UNATTENDED, CONFIRMED INDEPENDENTLY OF MY SAY-SO** (Langston, at the object): run stamps `07:17:01 · 08:17:01 · 09:17:01` — three clean cron ticks with **zero off-pattern runs after my 06:55 test cluster** — against `crontab: 17 * * * * /usr/local/bin/dt-deploy-drift.sh`.
+⭐ **AND IT TOOK A REPAIRED EXIT, NOT THE ONE THAT ALREADY WORKED.** The evidence string reads `NO_RUNTIME_PATHS at …`, not `ZERO at …`. **That distinction is only legible because Langston required each resolve to name its condition** — without it, a post-`#1021` run and a pre-`#1021` run are indistinguishable in the record. It earned its keep on its first live firing.
+⭐ **ONE OF THE TWO ROWS WAS `acknowledged` AND STILL CLEARED** — which he ruled REQUIRED rather than merely acceptable: a skipped acked row would sit non-terminal forever and **block every future re-mint of that key**, which is `#1021`'s own shape with the ack as the freezer.
+
+⚠️ **AND A PREDICTION OF MINE FAILED FIRST, RECORDED BECAUSE THE INSTRUMENT WAS RIGHT AND I WAS NOT.** I predicted the 07:17 run would clear. It logged `RUNG=2 age=11h runtime=1` and cleared nothing — **correctly**, because `server/services/system-alerts.ts`, my own one-line edit, was undeployed. Langston verified at the object that the 06:17 rung-2 body names `runtime files undeployed: 1 — server/services/system-alerts.ts`. **I had built the expectation from a `--base` dry-run that FORCED a docs-only range instead of from the real state. A forced-base rehearsal is not the population.**
+
+## B. WHAT DECISION WAS TAKEN, AND BY WHOM
+
+**Langston, 2026-09-09, having re-derived every clause himself rather than reading my report:** *"CRITERION 4 PASSES. Take it to Step 11."* Board card `Review = Approved`, set and read back, census asserted 84/84 with no truncation.
+**Action taken by CC-A:** the `#1021` fix was installed to `/usr/local/bin/dt-deploy-drift.sh` at 06:57:22Z — piped from the reviewed blob (never a worktree copy), digest verified **at a temp path before any swap**, atomic `mv`, twenty minutes clear of the `:17` tick so cron could not read a half-written script. Post-install digest `67b719338f4bad16d4fff76cb8e6ab3ff8b3587466af6099d2c3e65220e8a9e4`, 59,483 B.
+
+## C. OBJECTIVES
+
+| # | objective | verdict | evidence |
+|---|---|---|---|
+| 1 | Measure deployed-sha vs branch-head distance and report it | ✅ **YES** | hourly on Helsinki since 2026-09-07; first true positive 09-07T20:23Z |
+| 2 | Alert at the correct rung within one hourly cycle | ✅ **YES** | criterion 1, §3a |
+| 3 | Magnitudes independently re-derivable | ✅ **YES** | criterion 2 — all four re-derived with `git` at the two shas the body names |
+| 4 | Escalate as a new key when the gap worsens | ✅ **YES** | criterion 3 — rung 2 (09-07T20:17) → rung 3 (09-08T08:17), one episode, +12h |
+| 5 | A deploy clears every rung, no row left open | ✅ **YES** | §A above; 7 of 7 rows resolved, still-open = 0 |
+
+## D. GOVERNANCE FILES CHANGED — TRANSCRIBED FROM THE STEP-10 TIER LEDGER, `N/A` ROWS INCLUDED
+**CHANGE-CLASS: `non_architecture`** (declared in the scope header at Step 1).
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | entry present and updated across the batch's life |
+| T1 | `PHASE_HISTORY.md` | ✅ | narrative entry |
+| T1 | `PHASE_19_PLAN.md` | ✅ | row 4.55 — re-opened at Step 3 for `#1021`, then criterion 4 recorded as satisfied |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_A.md` | ✅ | position block updated at each step boundary; the drift-line status line pruned once superseded |
+| T1 | the batch `SCOPE` | ✅ | `B_DEPLOY_DRIFT_LINE_SCOPE.md`, change-class declared |
+| T1 | the batch `PRE_AUDIT` | ✅ | `B_DEPLOY_DRIFT_LINE_PRE_AUDIT.md` |
+| T1 | `COMPLETION_REPORT` | ✅ | **this file** — converted from the progress report, not rewritten |
+| T1 | the four session task lists | ✅ **mine** / `N/A` ×3 | `CC_A_SESSION_TASK_LIST.md` updated; the other three are not mine to touch |
+| T1 | Langston's `/home/langston/MEMORY.md` | ✅ | stale drift-line paragraph REPLACED (it predated `#1021` entirely); backup taken first |
+| T2 | `SYSTEM_MANUAL.md` | **N/A** | no architecture, strategy, regime, filter, pipeline or maths change — this is a monitoring shell script |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | INSTALLED-PATH row for the drift job |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#1002`, `#1008`, `#1021` filed and annotated |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | `FIX-2026-09-07-A` and `FIX-2026-09-09-A` |
+| T2 | `MISTAKE_PATTERNS.md` | ✅ | `shell-mangled-text` new sub-shape + first mechanism candidate; `line-endings` section created |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | the `class-override` row |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | ✅ | referenced for the resolve-not-ack discipline |
+| T2 | `DELETED_COMPONENTS_LOG.md` | **N/A** | nothing removed |
+| T2 | `POST_AUDIT_ROADMAP.md` | **N/A** | no roadmap-level change |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | **N/A** | no stable rule changed |
+| T2 | every other ledger row | **N/A** | not touched |
+
+**CI:** run `34322702494`, **4/4 GREEN VERIFIED PER JOB** at `c52c577fd` — Test Suite, Build, TypeScript Check (baseline gate), Docker Build. *(Per-job, never the run-level conclusion: with three sessions pushing, runs cancel each other and a `cancelled` job reads as not-green.)*
+
+## E. ⛔ OPEN AT CLOSE — STATED AT THE TOP OF WHAT REMAINS, NOT BURIED
+
+**HOME for all three: `P19-B12`, owner CC-A, alongside `#1004` and `#652`.**
+⭐ **THESE ARE STATED RESIDUALS ON A PASSING WINDOW, NOT GATES — and Langston named why that distinction is load-bearing: §3 pre-registered FOUR criteria, and adding a fifth after seeing the data is exactly the failure pre-registration exists to prevent.**
+
+1. ⛔ **`BELOW_FLOOR`'s deploy-record corroboration gate has NEVER been exercised live.** Construction and dry-run only. ⚠️ **PREVIOUSLY STATED: I bundled this with `ZERO` as "two untested paths". NOW: only this one is genuinely never-exercised. REASON: Langston corrected me at the object — see 2.**
+2. ⚠️ **`ZERO` HAS FIRED LIVE, ATTENDED — my residual list was wrong.** It cleared `81135510` and `aaa13da0` at `2026-09-08T19:52:24Z`, both carrying `ZERO at …` evidence. **What it has never done is fire UNATTENDED.** It is also the one path that always worked pre-`#1021`, so it is the **lowest**-value residual. *(Re-derived by me at the alert store before accepting the correction.)*
+3. ⭐ **A STALE TWIN OF THIS VERY JOB — the `#1004` shape, found by Langston.** `/opt/discord-bridges/dt-deploy-drift.sh` is `ad45948a…` / 41,535 B / Sep 8, while the live `/usr/local/bin/` copy is `67b71933…` / 59,483 B / Sep 9. **Nothing references the `/opt` copy** (checked across cron, `/usr/local/bin` and the bridges directory). **Re-derived by me on Helsinki; both digests read from the same surface.** An editable stale duplicate of the drift monitor, sitting where the bridge estate lives, is precisely how `#1004` bites.
+
+## F. HONEST RESIDUAL — WHAT THIS BATCH DID NOT ESTABLISH
+
+- **It did not establish that the job is correct on a CAPPED range.** At the 300-file cap the runtime gate is UNDECIDABLE by construction, `NO_RUNTIME_PATHS` is unreachable, and the `file-gate-undecidable` row clears **only** on `deployed == head`. The job's own reachability note says the cap is hit *exactly when a deploy has stalled* — i.e. the long doc-only stall. **Stated in the alert body; not exercised.**
+- **It did not establish behaviour under a force-push that rewrites the range.** Langston's reading is that `behind`/`diverged` routes to ANOMALY before any clearing exit, and that the three-dot compare makes `files[]` a statement about TREES — **argued and read at the object, not observed.**
+- **The measurement-failure path now takes the instrument offline HOURLY on one permanently-malformed line** (correct direction), and that row is `health_check`/`info`, so it reaches nobody through Discord and surfaces only in a §10.5 sweep. **The `#647` class; left there deliberately.**
