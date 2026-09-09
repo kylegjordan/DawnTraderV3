@@ -8046,6 +8046,28 @@ Alert `81135510` (`deploy-drift-rung-2`, `2026-09-07T20:23:32Z`) fired correctly
 
 **HOME: `B-SEC-HARDEN`, owner CC-A** — the same follow-on already carrying the `0.0.0.0:5000` bind item. Placed there rather than in a new batch because it is the same class (authorization surface on staging) and the same owner. ⚠️ **CC-INFRA is NOT taking this** — it is outside my lane; I surfaced it and I am telling CC-A in the channel.
 
+- **⭐⭐ 2026-09-09 AMENDMENT 1 (CC-INFRA) — KYLE ASKED *"are there any other ways into staging exposed in the documentation?"* AND THE ANSWER IS YES, AND IT IS WORSE THAN THE PASSWORD BECAUSE ROTATING WILL NOT CLOSE IT.**
+    ⛔⛔ **15 STATE-CHANGING ROUTES REQUIRE NO CREDENTIAL AT ALL** — not a weak one, not a shared one: **no `authenticateToken`, nothing.** Of 587 routes in `server/routes.ts`, 49 carry no authentication and 15 of those change state:
+    `POST /vtp/start` `:796` · `/vtp/stop` `:806` · `/mbim/start` `:827` · `/mbim/stop` `:837` · `/mbim/audit` `:860` · `/auth/register` `:874` (disabled, returns 403) · `/auth/refresh` `:1015` · **`/internal/active-engine/register-session` `:6009`** · **`/internal/active-engine/deregister-session` `:6034`** · `PATCH /conversations/:id` `:14255` · `/market-context/analyze` `:14597` · `/screener/test` `:15065` · `/guardrails/test` `:15118` · `/kill-switch/check` `:15315`.
+    ★ **The two `/internal/*` ones carry a comment saying *"no auth required - internal use only"* — the intent is clear and the enforcement is absent. "Internal" is a NAME, not a network boundary.**
+
+    ⛔ **AND THEY ARE REACHABLE FROM THE INTERNET — MEASURED FROM OFF-HOST, NOT INFERRED FROM THE CODE:**
+    | probe (from my laptop, no token) | result | what it proves |
+    |---|---|---|
+    | `POST /api/auth/refresh` `{}` | **400** | the app PROCESSED it — an unauthenticated POST reaches the application |
+    | `GET /api/settings` (authenticated route) | **401** | positive control: auth IS enforced where it is applied |
+    | `GET /api/zzz-not-a-real-route` | **404** | negative control: the edge is not answering everything alike |
+    | `GET /api/health` | **200** | the host is up and serving |
+    ⇒ **a 400 rather than a 401 is the whole finding: the request was understood, not refused.**
+
+    ⇒ ⛔⛔ **THIS IS A SEPARATE ENTRY PATH FROM `#1023`. Changing the staging password does nothing to it**, because nothing here ever asks for one. Both must be closed; closing one and feeling safer is the failure mode.
+    ⚠️ **I DID NOT PROBE THE STATE-CHANGING ONES.** `auth/refresh` was chosen precisely because a malformed call to it is inert. **So each of the other 14 is a CANDIDATE, evidenced by a same-class route being reachable — not an individually confirmed hole.** Confirming them means firing them, which I will not do on a live box without being asked.
+
+    ✅ **WHAT IS *NOT* EXPOSED, RE-MEASURED WITH THE INSTRUMENT PROVED IN BOTH DIRECTIONS:** the **live `DATABASE_URL`** and the **JWT signing secret** appear ONLY in `.env` and `.env.b-new-54.bak` on the staging box, **both untracked**. ⇒ **neither is in the repository.** The JWT secret mattering most of all: had it been published, anyone could forge a token for any user and no password rotation would help.
+    ★★ **AND THE FIRST RUN OF THAT CHECK WAS WORTHLESS IN THE REASSURING DIRECTION.** `git ls-files` was failing with *"detected dubious ownership"*, so **every file reported as untracked** — the answer I wanted, produced by a broken instrument. **The control I had chosen (`.env` is untracked) came from the same broken tool and could not catch it.** Re-run with `safe.directory` set and TWO controls — `package.json` must say TRACKED, `.env` must say untracked — both of which now pass. ⇒ **A CONTROL THAT SHARES THE FAILURE MODE OF THE MEASUREMENT IS NOT A CONTROL.**
+
+    ⚠️ **FLOOR, NOT TOTAL: eleven sub-routers are mounted separately** (`/status`, `/token-watch`, `/health`, `/vts` ×2, `/audit`, `/signal-audit`, `/tlva`, `/vts/predictive-adjustments`, `/back-audit`, `/calibration`) **and were NOT examined.** The 15 is a floor.
+
 ### #1023 OPEN 2026-09-09 (CC-INFRA) — 🟥 THE LIVE STAGING PASSWORD IS IN 348 FILES OF A **PUBLIC** GITHUB REPOSITORY, AND #1022 IS WHAT MAKES THAT MATTER
 
 ⛔⛔ **ANNOUNCED IMMEDIATELY RATHER THAN INVESTIGATED FIRST (`CONDUCT.md` §8's exception): this is a live, ongoing exposure, and every hour it stands is another hour anyone can act on it.**
