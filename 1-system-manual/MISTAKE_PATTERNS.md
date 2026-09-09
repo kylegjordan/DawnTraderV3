@@ -340,6 +340,20 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 
 ⚠️ **ONE INSTANCE, ONE BATCH — WELL BELOW the 3-across-2 floor. Recorded so the next one promotes by grep, not to inflate a pattern.** The counter-habit: **before switching anything on, enumerate what it DOES, not what it IS** — the §9.5(a) census applied to a component's own actions rather than to its callers.
 
+### `line-endings` — **A BYTE-FAITHFUL WRITE IS ONLY FAITHFUL TO THE SURFACE YOU READ THE CONVENTION FROM** — instances: 3 · mechanism: **read the convention from `git show <ref>:<path>`, never the worktree**
+
+➕ **INSTANCE 2026-09-09 (CC-A, `B-DEPLOY-DRIFT-LINE`) — A NEAR-MISS, CAUGHT BY THE DIFF STAT AND NOTHING ELSE, ONE COMMAND FROM A 2.6 MB WHOLE-FILE REWRITE OF A SHARED GOVERNANCE LEDGER.**
+I added **two lines** to `RUNNING_ISSUES.md`; the commit reported **`8104 insertions(+), 8102 deletions(-)`**. Re-derived at the OBJECT STORE: `HEAD~1` = **CRLF 0 / bare-LF 8102**, `HEAD` = **CRLF 8104 / bare-LF 0** — **I had committed a CRLF conversion of the whole file.**
+
+⛔⛔ **THE MECHANISM, AND IT HAS A DELAYED FUSE.** Earlier in the same session I ran `git checkout origin/<branch> -- <that file>` to refresh it. **That checkout wrote CRLF into the WORKTREE while the repo stores LF.** My edit script then did the responsible-looking thing — detect the newline convention from the file and preserve it byte-for-byte — and so faithfully wrote CRLF back.
+★ **EVERY EARLIER EDIT TO THE SAME FILE IN THE SAME SESSION WAS CLEAN**, because the worktree copy was still LF then. **The refresh armed it; the damage surfaced several commits later.**
+
+⭐⭐ **IT IS THIS PROJECT'S OWN STANDING RULE BROKEN IN THE DIRECTION NOBODY CHECKS: *both sides of a comparison must come from one surface, and each side names its surface.*** That has always been applied to READING a size or a hash. **This is the WRITE side: the convention was read from the WORKTREE surface and written to the REPO surface.**
+⚠️ **AND `git add` DID NOT SAVE IT — MEASURED, not assumed:** writing CRLF bytes stored CRLF; writing LF bytes stored LF. The *"LF will be replaced by CRLF the next time Git touches it"* warning fires constantly and is **NOT** evidence that a normalisation happens on the way in.
+
+✅ **CAUGHT BEFORE THE PUSH by comparing the DIFF STAT to the expectation** — two lines added should be two insertions. Amended; nothing force-pushed over anyone. Had it landed, three sessions editing a 2.6 MB shared ledger would have conflicted on every line.
+⭐ **THE FREE CHECK: read the convention from `git show <ref>:<path>`, never the worktree copy — and if the diff stat exceeds what you added, STOP before committing.**
+
 ### `shell-mangled-text` — **BACKTICKS INSIDE A BASH-EMBEDDED SCRIPT ARE EXECUTED, THE HEREDOC DIES, AND A STALE FILE SURVIVES TO BE USED** — **NEW 2026-08-29** · mechanism: **NONE YET**
 
 ➕ **INSTANCE 2026-08-29 (CC-C, `B-XSTOCK-FEED-SANITY`) — AND IT REACHED A REVIEWER, WHICH THE FIRST ONE DID NOT.** A Langston dispatch was built with an **UNQUOTED** heredoc (`<<RPEOF`, chosen so `$REF` would expand). The body used backticks around a field name; **the shell EXECUTED it** — `bash: line 40: last: command not found`, three times — **and substituted the empty output.** ⛔ **THE THREE BLANKED SPANS WERE THE ONE FIELD NAME THE WHOLE ARGUMENT TURNS ON** (*“the LAST field is correct in every case”* became *“the  field is correct in every case”*). **The message stayed grammatical and read as complete.** ★ **CAUGHT ONLY BECAUSE `command not found` APPEARED IN THE TOOL OUTPUT — not by reading the message back.** ⚠️ **Had the word been a real command (`date`, `head`, `test`) it would have SUCCEEDED and injected its OUTPUT into the dispatch silently.** ✅ **RULE: a dispatch body is built with a QUOTED heredoc (`<<'EOF'`) ALWAYS. If a variable must be interpolated, write the placeholder and substitute it afterwards — never buy expansion at the price of executing the prose.** Corrected to Langston in one message; no number moved.
