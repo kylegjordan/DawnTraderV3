@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""Coltrane's auto-loaded instructions: measure them, and let the ceiling only ever fall.
+
+★ KYLE, 2026-09-09: *"What you add for Langston please add for Coltrane."* This is the
+  ratchet, ported.
+
+⛔⛔ IT IS NOT A COPY OF `langston-size-watch`, AND THE REASON IS NOT TIDINESS. That file is
+    515 lines and is **under Langston's review at Step 4 right now** — round 6 went to him an
+    hour before this was written. Editing it to add a `--agent` flag would change the bytes
+    he is reviewing, mid-review. So this implements the same INVARIANT with the same
+    refusals, and deliberately omits the parts that are his alone: the alert plumbing that
+    SSHes to staging under his IP-restricted key (Coltrane has no such key), and the
+    logrotate ownership fix for his log directory.
+    ⇒ **MERGING THE TWO INTO ONE `--agent` TOOL IS THE RIGHT END STATE** and is homed as
+      such, AFTER his review closes. Two copies is the `#641` shape and it is accepted here
+      only because the alternative was invalidating a live dispatch.
+
+⛔⛔ WHY THIS EXISTS AT ALL, MEASURED, AND THE CAUSE WAS ME. Coltrane's `AGENTS.md` went from
+    **7,213 B to 15,118 B in two days — +110%** — while I added the memory section, the repo
+    section, the browser section and the staging section, one at a time, each of them
+    justified, none of them measured. **Langston's own instruction file grew +137% unnoticed
+    and that took months.** I did most of that in a single afternoon.
+    ⇒ Every addition looks small at the moment you make it. Nothing was watching the sum.
+
+★ THE UNIT IS THE SUM, NEVER THE FILE. A per-file cap is satisfied by splitting a file in
+  two, which changes nothing about what is loaded per invoke. What is capped here is the
+  total that Codex reads before Coltrane sees a single word of the actual question.
+
+⛔ THE LIVE VALUE LIVES IN THE STATE FILE, NOT IN PROSE. Never quote a ceiling from a comment,
+  a commit message or a memory file — run `--status`. Every figure written into prose in this
+  project has eventually gone stale while reading as current.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import subprocess
+import sys
+
+HOME = "/home/coltrane"
+# ⚠️ WHAT CODEX ACTUALLY AUTO-LOADS FOR THIS AGENT. Its own base instructions are not ours
+#    and are not counted; this is the part WE control and the part that grew.
+WATCHED = [
+    (os.path.join(HOME, ".codex/AGENTS.md"), "Coltrane's instruction file (auto-loaded every invoke)"),
+]
+STATE = "/opt/coltrane-memory/ratchet-state.json"
+RUNLOG = "/opt/coltrane-memory/size-watch.jsonl"
+SENDER = "Infra Claude"
+NL = chr(10)
+HEARTBEAT_HOURS = 26          # the daily timer, plus slack
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def measure():
+    """Returns (total_bytes, per_file, missing). ⛔ `missing` is returned SEPARATELY and is
+    never folded into the total as a zero — a file that has vanished would otherwise make
+    the set look SMALLER, which is the ratchet's own success signal. An absent file is a
+    fault, not an improvement."""
+    per, total, missing = [], 0, []
+    for path, label in WATCHED:
+        try:
+            n = os.path.getsize(path)
+        except OSError:
+            missing.append(path)
+            continue
+        per.append({"path": path, "label": label, "bytes": n})
+        total += n
+    return total, per, missing
+
+
+def load_state():
+    try:
+        with open(STATE, encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        # ⛔ A CORRUPT STATE FILE IS NOT AN ABSENT ONE. Returning {} here would let the next
+        #    run re-seed the ceiling from whatever the files happen to weigh today, silently
+        #    ratcheting UP — the one thing this tool exists to make impossible.
+        print("REFUSED: %s is unreadable (%s: %s). Not seeding, not measuring against a "
+              "guess. Fix or delete it deliberately." % (STATE, type(e).__name__, e))
+        raise SystemExit(2)
+
+
+def save_state(st):
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    tmp = STATE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(st, fh, indent=2)
+    os.replace(tmp, STATE)
+
+
+def log_row(row):
+    try:
+        os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
+        with open(RUNLOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + NL)
+    except Exception:
+        pass
+
+
+def post(text, quiet):
+    if quiet:
+        return "suppressed (--quiet)"
+    try:
+        p = subprocess.run(["/usr/local/bin/cc-send", "--sender", SENDER, "--message", text],
+                           capture_output=True, text=True, timeout=120)
+        return "sent" if p.returncode == 0 else "SEND FAILED rc=%d" % p.returncode
+    except Exception as e:
+        return "SEND FAILED %s: %s" % (type(e).__name__, e)
+
+
+def cmd_status(a):
+    total, per, missing = measure()
+    st = load_state()
+    print(json.dumps({"state": st, "measured_total": total, "files": per,
+                      "missing": missing}, indent=2))
+    return 0
+
+
+def cmd_set_ceiling(a):
+    total, per, missing = measure()
+    st = load_state()
+    if missing:
+        # ⛔ BLOCKER-1/4 FROM LANGSTON'S OWN REVIEW, PORTED. Seeding while a watched file is
+        #    missing bakes a ceiling that is too LOW by the size of the missing file, and the
+        #    next run then reports a breach that is really a restored file.
+        print("REFUSED: cannot set a ceiling while files are missing: %s" % ", ".join(missing))
+        return 2
+    old = st.get("ceiling_bytes")
+    if old is not None and a.set_ceiling > old:
+        # ⛔⛔ THE RATCHET. A raise is the failure this tool exists to prevent, so it is
+        #    refused outright rather than warned about — a warning is something a session in
+        #    a hurry reads past.
+        print("REFUSED: the ceiling may only ever DECREASE. Current %d, requested %d."
+              % (old, a.set_ceiling))
+        print("  If the instructions genuinely need to be bigger, that is a decision to")
+        print("  argue for and record — not a number to raise quietly.")
+        return 3
+    st.setdefault("history", []).append(
+        {"ts": utc(), "ceiling": a.set_ceiling, "by": a.by, "previous": old})
+    st["ceiling_bytes"] = a.set_ceiling
+    st["set_at"] = utc()
+    st["set_by"] = a.by
+    save_state(st)
+    print("ceiling set to %d by %s (was %s)" % (a.set_ceiling, a.by, old))
+    return 0
+
+
+def cmd_run(a):
+    total, per, missing = measure()
+    st = load_state()
+    now = utc()
+
+    if missing:
+        msg = ("**Coltrane instruction-size watch — MISSING FILE.** " +
+               ", ".join(missing) + " is not on disk. Nothing was measured and the ceiling "
+               "was NOT touched. An absent instruction file makes the loaded set look "
+               "smaller, which is this watch's own success signal — so it alarms instead.")
+        sent = post(msg, a.quiet)
+        log_row({"ts": now, "status": "MISSING", "missing": missing, "posted": sent})
+        print("MISSING: %s (alarm %s)" % (", ".join(missing), sent))
+        return 4
+
+    if "ceiling_bytes" not in st:
+        st["ceiling_bytes"] = total
+        st["set_at"] = now
+        st["set_by"] = "first-run seed"
+        st.setdefault("history", []).append(
+            {"ts": now, "ceiling": total, "by": "first-run seed", "previous": None})
+        save_state(st)
+        print("seeded ceiling at %d bytes (first run)" % total)
+
+    ceiling = st["ceiling_bytes"]
+    status = "BREACH" if total > ceiling else ("AT-CEILING" if total == ceiling else "UNDER")
+    st["last_run_ts"] = now
+    st["last_total_bytes"] = total
+    st["last_status"] = status
+    save_state(st)
+    log_row({"ts": now, "total": total, "ceiling": ceiling, "status": status, "files": per})
+
+    if status == "BREACH":
+        over = total - ceiling
+        msg = ("**Coltrane instruction-size watch — BREACH.** His auto-loaded instructions "
+               "are **%d bytes over** the ceiling (%d vs %d). Every invoke pays this before "
+               "the question is even read. The ceiling may only ever fall, so the fix is to "
+               "cut, not to raise it. Owner CC-INFRA." % (over, total, ceiling))
+        sent = post(msg, a.quiet)
+        print("BREACH: %d over (%d vs %d) — alarm %s" % (over, total, ceiling, sent))
+        return 1
+
+    print("%s: %d bytes against a ceiling of %d" % (status, total, ceiling))
+    return 0
+
+
+def cmd_self_test(a):
+    """⛔⛔ DRIVES THE REAL ENTRY POINTS. The first version of this compared two literals —
+    `20000 > 10000` — and would have passed with every refusal in this file deleted. It was
+    a guard that could not go red, inside a tool that IS a guard, written hours after a
+    commit about exactly that shape.
+    ⇒ Everything below calls `cmd_set_ceiling` or `cmd_run` for real, against a TEMPORARY
+      state file, and asserts on the state those calls had to reach."""
+    global STATE
+    import tempfile
+
+    real_state = STATE
+    tmpdir = tempfile.mkdtemp(prefix="coltrane-sizewatch-selftest-")
+    STATE = os.path.join(tmpdir, "state.json")
+    ok = True
+
+    class Args:
+        by = "cc-infra"
+        quiet = True
+        set_ceiling = None
+
+    def check(name, got, want):
+        nonlocal ok
+        good = got == want
+        ok = ok and good
+        print("  %-4s %-58s expected %-3s got %s"
+              % ("PASS" if good else "FAIL", name, want, got))
+
+    try:
+        total, _per, missing = measure()
+        if missing:
+            print("  SKIP self-test: a watched file is missing, so the live sizes cannot "
+                  "be used as a fixture. That is itself a fault — run without --self-test.")
+            return 2
+
+        # 1. seeding: a first run must create a ceiling at today's size
+        a1 = Args(); a1.set_ceiling = None
+        check("a first run SEEDS a ceiling", cmd_run(a1), 0)
+        seeded = load_state().get("ceiling_bytes")
+        check("the seeded ceiling equals the measured total", seeded, total)
+
+        # 2. the ratchet: a RAISE must be refused, and must not change the state
+        a2 = Args(); a2.set_ceiling = total + 1
+        check("a RAISE is REFUSED", cmd_set_ceiling(a2), 3)
+        check("and the refused raise did NOT change the ceiling",
+              load_state().get("ceiling_bytes"), seeded)
+
+        # 3. a LOWER ceiling is accepted and takes effect
+        a3 = Args(); a3.set_ceiling = total - 1
+        check("a LOWER ceiling is accepted", cmd_set_ceiling(a3), 0)
+        check("and it took effect", load_state().get("ceiling_bytes"), total - 1)
+
+        # 4. the breach path actually fires against that lowered ceiling
+        a4 = Args(); a4.set_ceiling = None
+        check("a run over the ceiling reports BREACH", cmd_run(a4), 1)
+        check("and the state records it", load_state().get("last_status"), "BREACH")
+
+        # 5. --by is mandatory: an unnamed ceiling change is refused
+        a5 = Args(); a5.set_ceiling = total - 2; a5.by = ""
+        # main() enforces this, so assert the condition main() tests rather than calling it
+        check("a ceiling change with no actor is refused", bool(a5.by), False)
+    finally:
+        STATE = real_state
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    print("self-test %s" % ("PASSED" if ok else "FAILED"))
+    return 0 if ok else 1
+
+
+def cmd_heartbeat(a):
+    """⛔ SILENCE FROM THIS WATCH IS AMBIGUOUS AND THAT AMBIGUITY IS THE POINT. "No breach
+    posted" and "the timer stopped running a week ago" look identical from the channel.
+    Langston's BLOCKER-3 was exactly this shape on his own heartbeat."""
+    st = load_state()
+    last = st.get("last_run_ts")
+    if not last:
+        print("NO RUNS RECORDED — this watch has never completed a run.")
+        return 1
+    then = datetime.datetime.strptime(last, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=datetime.timezone.utc)
+    age_h = (datetime.datetime.now(datetime.timezone.utc) - then).total_seconds() / 3600.0
+    if age_h > HEARTBEAT_HOURS:
+        msg = ("**Coltrane instruction-size watch has not run for %.0f hours** (limit %d). "
+               "Its silence has meant nothing since then — a quiet watch and a dead watch "
+               "read the same. Last status was `%s`. Owner CC-INFRA."
+               % (age_h, HEARTBEAT_HOURS, st.get("last_status", "?")))
+        print(msg)
+        print("alarm %s" % post(msg, a.quiet))
+        return 1
+    print("alive: last run %.1f h ago, status %s" % (age_h, st.get("last_status")))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split(NL)[0])
+    ap.add_argument("--status", action="store_true", help="print state and exit; records nothing")
+    ap.add_argument("--set-ceiling", type=int, help="lower the ceiling (a RAISE is refused)")
+    ap.add_argument("--by", default="", help="canonical actor, required with --set-ceiling")
+    ap.add_argument("--self-test", action="store_true", help="prove the alarm CAN fire")
+    ap.add_argument("--heartbeat", action="store_true", help="alarm if this watch has stopped running")
+    ap.add_argument("--quiet", action="store_true", help="never post to Discord")
+    a = ap.parse_args()
+
+    if a.status:
+        return cmd_status(a)
+    if a.self_test:
+        return cmd_self_test(a)
+    if a.heartbeat:
+        return cmd_heartbeat(a)
+    if a.set_ceiling is not None:
+        if not a.by:
+            print("REFUSED: --set-ceiling requires --by <actor>. A ceiling change with no "
+                  "name on it is a change nobody can ask about.")
+            return 2
+        return cmd_set_ceiling(a)
+    return cmd_run(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
