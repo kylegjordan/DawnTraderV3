@@ -234,3 +234,18 @@ After the deploy **`deployed == head` EXACTLY**, so the next cron takes the **`Z
 **U-2b — THE `#1021` FIX ITSELF, UNATTENDED (not yet schedulable).** Needs an OPEN rung row at a moment when the range is **non-empty but non-runtime**. After U-2a clears both rows there will be none, so this requires a fresh throwaway probe minted AFTER documentation commits have moved the head. **Registered here as OUTSTANDING rather than folded into U-2a**, because `ZERO` passing says nothing about the two exits the batch exists to fix.
 
 **U-1 — unchanged in substance, moved in time (≈ 2026-09-10T08:46Z).** After the first unattended `canonical_bridge_sync` since the deploy: `git status --porcelain -uall` EMPTY **and** the scheduler logs `0 updated, 1 unchanged`. **The log line is the positive emission; the clean tree alone cannot distinguish “skipped correctly” from “never ran” — which is exactly the mistake this section opens by recording.**
+
+
+### ⛔⛔ CORRECTION TO §10, MADE AT 08:50Z WITH THE RUN 27 MINUTES AWAY — THE STATE CHANGED AND I CHANGED IT
+
+**PUSHING §10 ITSELF MOVED THE HEAD PAST THE DEPLOYED SHA.** `deployed=c52c577fd`, `head=b620fc9bd`, and the range is **one documentation file**.
+⇒ **the 09:17Z cron will therefore take `NO_RUNTIME_PATHS`, NOT `ZERO`.**
+
+★ **THAT IS A BETTER TEST, AND I AM SAYING SO BEFORE THE RESULT RATHER THAN AFTER.** `ZERO` cleared rows before `#1021`; **`NO_RUNTIME_PATHS` is one of the two exits the fix exists for.** So the run now exercises **U-2b — THE FIX ITSELF, UNATTENDED** — which §10 registered as *"not yet schedulable"* four minutes ago.
+
+**REVISED, and this supersedes §10's U-2a for THIS run:**
+- **U-2b (now firing 09:17:01Z, unattended).** PASS: the run logs `NO_RUNTIME_PATHS age=…h total=1 … Not reported.` **AND** `NO_RUNTIME_PATHS resolved=2 failed=0`; **both** `14b031e8` (active) and `c588d5cb` (**acknowledged**) reach `state=resolved`; each resolve carries evidence beginning **`NO_RUNTIME_PATHS at …`** — the condition name in the machine-recognisable form, which is what distinguishes this from the pre-`#1021` `ZERO` behaviour and from a hand-typed resolve.
+  **FAIL:** rows stay open (the fix does not fire unattended), or the evidence says `ZERO` (it took the old path and proves nothing about `#1021`), or nothing runs.
+- **U-2a (`ZERO` path) is NOT exercised by this run** and stays outstanding. It is the pre-existing behaviour, so it is the lower-value of the two — recorded as untested rather than quietly credited.
+
+⚠️ **THE REASON THIS CORRECTION EXISTS AT ALL IS THE POINT: a prediction written at 08:47 was invalidated by my own push at 08:49.** Left alone, either outcome would have matched *some* sentence in §10, and I could have claimed a pass whichever branch fired. **A pre-registration that survives a state change I caused is not a pre-registration.**
