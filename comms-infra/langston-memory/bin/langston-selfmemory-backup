@@ -82,13 +82,31 @@ def live_files():
     return out
 
 
-def verify_by_reproduction(archive, expected):
+def verify_by_reproduction(archive, expected, prove=False):
+    """⛔ `prove=True` corrupts ONE EXTRACTED member before hashing, so the caller can watch
+    this function return False. A verifier that has never been seen to fail has only been
+    seen to be quiet."""
     """⛔ THE ONLY CHECK THAT COUNTS. Extract what was just written and hash every
     member against the live file. Returns (ok, detail) and never raises past the caller."""
     tmp = tempfile.mkdtemp(prefix="selfmem-verify-")
     try:
         with tarfile.open(archive, "r:gz") as tf:
             tf.extractall(tmp)
+        if prove:
+            # ⛔ THE LIVE STORE AND THE REAL ARCHIVE ARE NEVER TOUCHED — only this throwaway
+            #    extraction. Coltrane's equivalent learned that the hard way: its first
+            #    --prove shared a filename with the real archive and DELETED it.
+            victim = None
+            for r, _d, fs in os.walk(tmp):
+                for f in sorted(fs):
+                    victim = os.path.join(r, f)
+                    break
+                if victim:
+                    break
+            if victim is None:
+                return False, "PROVE: nothing was extracted, so nothing could be corrupted"
+            with open(victim, "ab") as vh:
+                vh.write(b"\x00")
         root = os.path.join(tmp, os.path.basename(STORE))
         if not os.path.isdir(root):
             return False, "archive does not contain the expected top-level directory"
@@ -159,8 +177,23 @@ def write_manifest(archive, expected, verified, detail, snapshots):
     _own(MANIFEST)
 
 
+# ⛔⛔ ARGPARSE, NOT `in sys.argv`. The old form silently ignored every flag it did not
+#    know and ran a normal backup, so `--prove` — and `--this-flag-does-not-exist` — both
+#    exited 0 with a PASS-shaped result. A tool that answers a question you did not ask,
+#    reassuringly, is worse than one that refuses.
+KNOWN_FLAGS = ("--dry-run", "--prove")
+
+
 def main():
+    unknown = [a for a in sys.argv[1:] if a.startswith("-") and a not in KNOWN_FLAGS]
+    if unknown:
+        print("REFUSED: unrecognised flag(s): %s. Known: %s."
+              % (", ".join(unknown), ", ".join(KNOWN_FLAGS)))
+        print("  Refusing rather than ignoring them — an ignored flag returns a clean PASS")
+        print("  for a run that did not do what was asked.")
+        return 2
     dry = "--dry-run" in sys.argv
+    prove = "--prove" in sys.argv
     if not os.path.isdir(STORE):
         print("REFUSED: store not found at " + STORE)
         return 2
@@ -180,7 +213,10 @@ def main():
 
     os.makedirs(DEST, exist_ok=True)
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    archive = os.path.join(DEST, "selfmemory-" + stamp + ".tar.gz")
+    # ⛔ A PROVE RUN NEVER SHARES A FILENAME WITH A REAL ARCHIVE (Coltrane's measured
+    #    lesson: its first --prove overwrote and then deleted the real one).
+    archive = os.path.join(DEST, ("PROVE-DISCARD-" if prove else "")
+                           + "selfmemory-" + stamp + ".tar.gz")
     with tarfile.open(archive, "w:gz") as tf:
         tf.add(STORE, arcname=os.path.basename(STORE))
 
@@ -214,7 +250,25 @@ def main():
         print(json.dumps(row, indent=2, ensure_ascii=False))
         return 1
 
-    verified, detail = verify_by_reproduction(archive, expected)
+    verified, detail = verify_by_reproduction(archive, expected, prove=prove)
+
+    if prove:
+        # ⛔⛔ THE PROVE RUN'S PASS CONDITION IS THE VERIFIER SAYING **NO**. It never prunes,
+        #    never writes a manifest, and always discards its own archive — the retention
+        #    filter below matches `selfmemory-` and a prove archive is `PROVE-DISCARD-…`,
+        #    so it is structurally outside retention as well as deleted here.
+        try:
+            os.unlink(archive)
+        except OSError:
+            pass
+        if verified:
+            print("⛔ PROVE FAILED: a deliberately corrupted extraction still verified as "
+                  "%s. This checker does not discriminate — no PASS from it means anything "
+                  "until this is fixed." % detail)
+            return 3
+        print("✅ PROVE OK: the corrupted extraction was REJECTED (%s), so a PASS from this "
+              "verifier carries information." % detail)
+        return 0
 
     snapshots = sorted([f for f in os.listdir(DEST) if f.startswith("selfmemory-")], reverse=True)
     pruned = []
