@@ -1,15 +1,26 @@
-# CODEX FINDINGS REGISTER — **THE SINGLE DOCUMENT. EVERY FINDING, WHAT IT IS WORTH, AND WHERE IT GOES.**
+# CODEX FINDINGS REGISTER — **EVERYTHING COLTRANE NEEDS TO DESIGN THE FIX**
 
-> ⛔ **STATUS: DRAFT r2 (CC-C, 2026-09-08). Agreement with Langston, then ONE dispatch to Coltrane.**
-> **Kyle's directive:** *"I want all of this in one document. And then from there, we can build a plan around it."* **Pricing findings feed the pricing programme; everything else becomes its own sequence — but nothing is forgotten, so it all lives here.**
-> ⭐ **HIS TEST FOR EVERY ROW:** *"if we believe findings are real and will lead to meaningful improvements, then we have to capitalize on the opportunity to make those improvements."*
+> ⛔ **STATUS: DRAFT r3 (CC-C, 2026-09-09). CC-C + Langston iterate to consensus, then it goes to Coltrane.**
 
-## ⛔⛔ THE PROCESS — DELIBERATELY NOT OUR NORMAL WORKFLOW *(Kyle, 2026-09-08)*
-> **CC-C + Langston agree the plan AND the question set → ONE dispatch to Coltrane for review and feedback → converge on the overall plan → design → implement.**
-> ⭐ **HIS FRAMING: *"I want to be thorough and have quality work done, but I want this to move faster than our normal workflow."***
-> ✅✅ **SCOPE IS NOT LIMITED BY COST — KYLE'S RULING, 2026-09-08, CORRECTING ME:** *"I do not want this document and the assignment we give to Coltrane to be limited because of costs. If his usage is about to break the bank, I will press pause for a bit. But that's my call."*
-> ⚠️ **r2 OF THIS FILE STRUCK QUESTIONS ON COST GROUNDS AND SAID SO OUT LOUD. THAT WAS ME MAKING KYLE'S BUDGET DECISION FOR HIM, INSIDE A DOCUMENT ABOUT NOT LOSING FINDINGS.** ⇒ **restored: ask what the work needs.**
-> ⭐ **WHAT SURVIVES FROM r2, because it is about QUALITY rather than price: the dispatch should still be COMPLETE.** A question we can answer ourselves is not worth his round — **not because it costs money, but because it spends a reviewer's attention on something we already know.** ⛔ **The bundle is bounded by what only HE can answer, never by what we can afford.**
+## ⭐⭐ WHAT THIS DOCUMENT IS FOR — **KYLE, 2026-09-09, CORRECTING THE FRAMING I HAD GIVEN IT**
+
+> **"I don't want this to be a document where we're trying to test and catch Coltrane. Right now, I just want the intent to be that we send him a document that he can look at, agree on the things that need to be fixed, come up with a design which he then shares with you and Langston."**
+> **"This is all about improving in performance, not trying to knock down another agent and test his capabilities."**
+
+⛔⛔ **r2 OF THIS FILE WAS PARTLY ADVERSARIAL AND THAT WAS MY ERROR.** It carried a *"what did we get wrong, including any row we accepted for the wrong reason"* question and a verification posture aimed at the reviewer rather than at the work. **Struck.** ★ **The register's job is to give him what he needs, not to grade him.**
+✅ **WHAT SURVIVES, because it is about OUR standard and not about him: every row still records HOW we settled it.** That is us showing our work so he can trust or challenge it — **not a trap.**
+
+### ⭐ THE OUTCOME THE DESIGN MUST SERVE — in Kyle's terms, and every row is written against it
+1. **The trading system performing at the highest possible level.**
+2. **Our simulations reproducing reality as closely as possible.**
+3. ⭐⭐ **BASELINE THRESHOLDS SET FOR EVERY KEY AREA — strategies, regime categories, reachability — at the best possible starting point**, so that the data we then collect is worth calibrating on. **That is Phase 25's input, and a bad baseline poisons it.**
+
+⇒ ★ **(3) IS THE ONE I HAD NOT CAPTURED AT ALL, and it changes what "done" means for this programme:** we are not only removing defects. **We are setting the starting values the calibration phase will learn from.** A correct price that feeds a threshold nobody chose deliberately is still a bad baseline.
+
+## ⏳ HOW THE WORK WILL BE DONE — **NOT DECIDED, AND NOT MINE TO DECIDE**
+**Kyle is iterating that with Langston and Coltrane.** The idea being tested: **Coltrane writes the code in his own repository; Langston reviews it; everything is inspected before it reaches the review branch or staging; a clear rollback exists.** ⚠️ **Whether it ships as one change or in pieces is an open question Kyle has explicitly assigned to Langston and Coltrane.**
+⛔⛔ **I HAVE STOPPED DECLARING WHAT WE WILL AND WILL NOT DO — KYLE'S CORRECTION, AND IT WAS FAIR.** I had ruled on gates, exclusions and sequencing before the approach itself was decided. **r2's process rulings are withdrawn from this file.** ★ **His framing: rules will be broken deliberately, it is a test, and if it does not work we roll back.**
+✅ **WHAT IS SETTLED AND DOES NOT NEED RE-DECIDING: everything Coltrane produces is vetted, confirmed and verified — before implementation and after.** That is Kyle's own condition, not a gate I am adding.
 
 ---
 
@@ -95,7 +106,7 @@
 
 ---
 
-## 3. ⏳ NEEDS INVESTIGATION · ⏳ **ROUTE: INVESTIGATE** — these become §6 Q2, in the one bundle
+## 3. ⏳ NEEDS INVESTIGATION · ⏳ **ROUTE: INVESTIGATE** — these are §6 item 4 — and the ask is which ones the DESIGN depends on
 
 | # | the question we cannot answer from code alone | why it needs evidence |
 |---|---|---|
@@ -116,7 +127,7 @@
 
 ---
 
-## 5. ⏳ THE OTHER THREE AUDITS — **NOT YET REGISTERED, AND THE RETRIEVAL IS QUESTION 1 IN THE BUNDLE**
+## 5. ⏳ THE OTHER THREE AUDITS — **NOT YET REGISTERED — THE RETRIEVAL IS §6 ITEM 2**
 
 | assignment | subject | what we hold |
 |---|---|---|
@@ -125,25 +136,29 @@
 | **3** | what is stopping the system doing its job | data files present under `Claude Comms and Packages/Codex Audits/audit3/`; ⏳ findings not registered |
 | ⭐ **the blind-spot delta** | *what it would have asked that we did not* | ⛔ **requested in assignment 1, not in our repository. The one artifact we cannot produce ourselves.** |
 
-⚠️ **WE ARE NOT ASSERTING THESE WERE NEVER PRODUCED.** Coltrane writes to its own folder and our instrument does not reach there. ⇒ **§6 Q1 asks for them.**
+⚠️ **WE ARE NOT ASSERTING THESE WERE NEVER PRODUCED.** Coltrane writes to its own folder and our instrument does not reach there. ⇒ **§6 item 2 asks for them.**
 
 ---
 
-## 6. ⭐ THE QUESTION SET FOR COLTRANE — **ONE DISPATCH, SO IT MUST BE COMPLETE**
+## 6. ⭐ WHAT WE ARE ASKING COLTRANE FOR
 
-> ⛔ **DRAFT — Langston to cut, add and rule before anything is sent.** ★ **Every question here is one we cannot answer ourselves. Anything we CAN answer has been struck deliberately — a question we could have resolved is a wasted round at his price.**
+> ✅ **THE ASK IS A DESIGN, NOT A VERDICT.** He has already reviewed; this is the next step. **Everything below is either something only he holds, or something his design needs from us and we should supply rather than ask for.**
 
-**Q1 — RETURN YOUR EARLIER FINDINGS, AS A LIST.** Assignments 1-3, one line each, with the disposition you would give it today. **Plus the blind-spot delta if it exists.** *(We hold your pricing review in full and almost nothing else. We are not asking you to redo the work — only to hand back the list.)*
-**Q2 — THE FIVE RUNTIME QUESTIONS FROM §4**, which need evidence rather than a code read: the context-cache staleness, the gate-time snapshot interval, maker-fill incidence, the fabricated-target incidence, and the real upper bound on the book-resync gap.
-**Q3 — REVIEW THE PROGRAMME SHAPE, NOT THE FINDINGS.** We propose one sequenced pricing programme with the spine *"which number, from which feed, at what age, on which side, verified how, reaches which decision."* **Is that the right cut? What must be excluded for it to ship? What ordering would you impose?**
-**Q4 — WHERE WOULD YOU START IF YOU HAD ONE CHANGE?** Ranked by effect on the objective, not by how broken something looks.
-⛔ **Q5 — WHAT DID WE GET WRONG IN THIS REGISTER?** Including any row where we accepted your finding for the wrong reason.
+**1 — THE DESIGN.** Given the confirmed findings in §1 and the objective in the header, **design the fix.** ⭐ **Not fourteen fixes — the smallest coherent design that serves all three outcomes**, including which parts must land together and which can follow.
+**2 — YOUR EARLIER FINDINGS, AS A LIST.** Assignments 1-3, one line each with the disposition you would give it today. ⚠️ **We hold your pricing review in full and almost nothing from the other three** — that is a gap on our side, not a test of your recall. **Plus the blind-spot delta if it exists.**
+**3 — THE BASELINE THRESHOLDS.** ⭐ **This is the outcome we most need your view on and the one our own register was weakest on.** For **strategies, regime categories and reachability** — what should the starting values be, and what makes a baseline good enough that the calibration phase can learn from the data it produces?
+**4 — THE FIVE RUNTIME QUESTIONS FROM §4** — the ones needing evidence rather than a code read: context-cache staleness, the gate-time snapshot interval, maker-fill incidence, fabricated-target incidence, and the real upper bound on the book-resync gap. **Tell us which of these your design depends on**, and we will produce the evidence.
+**5 — WHAT ELSE DO YOU NEED FROM US?** Data, measurements, history, intent, or a decision only Kyle can make. ✅ **Ask plainly** — anything we can supply, we will.
 
 ---
 
-## 7. ⭐ WHAT WE PROPOSE TO DO WITH IT — for Langston's and Kyle's amendment
+## 7. ⭐ ONE OBSERVATION WE OFFER THE DESIGNER — **NOT A PROCESS RULING**
 
-1. ⛔ **GROUP CONFIRMED ITEMS INTO DESIGN UNITS BEFORE COMMISSIONING ANY DESIGN.** §1.1, §1.2, §1.5, §1.7 and §1.8 are **all the same subsystem** — what we subscribe to, what confirms it, and what travels with the resulting price. **Commissioned finding-by-finding they would return overlapping mechanisms that each look reasonable alone.** ★ *Precedent: Langston's own re-cut folded three blockers into one mechanism.*
-2. **Send Codex the grouped units for design, and §3 as questions** — not fourteen separate asks.
-3. **Answer its evidence requests under our own gate** — object, population, positive control on every number we hand an outside reviewer.
-4. ⛔ **The document is NOT canonical until §1 and §2 land as edits to the body** — not as an errata block, because canonical documents are read from the top.
+⚠️ **r2 CARRIED FOUR PROCESS DECISIONS HERE — how to group the work, what to send, what gate to apply, when the document becomes canonical. WITHDRAWN.** ★ **Kyle has assigned the how to himself, Langston and Coltrane, and I was deciding it in a document meant to inform that decision.**
+
+✅ **WHAT IS WORTH KEEPING IS AN OBSERVATION ABOUT THE FINDINGS THEMSELVES, which the designer can use or discard:**
+**§1.1, §1.2, §1.5, §1.7 and §1.8 are all the same subsystem** — what we subscribe to, what confirms the subscription arrived, and what travels alongside the resulting price. **They read as five findings and they may be one mechanism.**
+★ **THE EVIDENCE FOR THAT, and it is ours rather than a hunch: Langston re-cut his own blocker and folded three of them into a single mechanism once he saw that the missing thing was a CONFIRMED book rather than a missing one.**
+⇒ **Offered as a starting observation for the design. Whether it holds is the designer's call.**
+
+⚠️ **AND ONE THING WE OWE REGARDLESS OF THE DESIGN: `PRICING_DATA_ARCHITECTURE.md` currently carries a claim we know is wrong** — it is banner-marked NOT CANONICAL, and §1 and §2 above are the corrections it needs. **That is our repair work, not Coltrane's.**
