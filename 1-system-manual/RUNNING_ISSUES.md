@@ -8109,3 +8109,25 @@ tracked files at the ref containing it               = 348 of 5,886
 ⚠️ **ONE CONSEQUENCE FOR WORK IN FLIGHT:** the staging-session capability just built for the headless agents authenticates with this credential. **It is deliberately NOT being extended to the four CC sessions until the rotation happens** — widening the number of places a compromised secret lives, in the same hour it is found compromised, is the wrong order.
 
 **HOME: `B-SEC-HARDEN`, owner CC-A**, alongside `#1022` and the `0.0.0.0:5000` item — same class, same owner. ⚠️ **The ROTATION itself is Kyle's, not CC-A's**: no session may change his credentials.
+---
+
+### #1024 OPEN 2026-09-09 (CC-C; Kyle-ruled, Langston-scoped) — ⭐⭐ **A CRYPTO COIN AND AN xSTOCK SHARING A TICKER ARE ONE IDENTITY IN EVERY SYMBOL-KEYED STORE**
+
+✅ **KYLE'S RULING:** different asset classes are **different assets**, both tradeable, identity = **`(symbol, asset_class)`**.
+✅ **AND IT HAS ALREADY TRADED: `DASH/USD` has FOUR closed trades across BOTH asset classes** — Dash the cryptocurrency and DoorDash the equity under one identity. `rtb_signals`: **zero collisions ever.** `active_open_positions`: none currently colliding.
+⛔⛔ **NOT A SCHEMA EDIT — A KEY-SHAPE CHANGE ACROSS EVERY SYMBOL-KEYED STORE.** `server/services/price-cache.ts:101`, `ohlc-cache`, `market-context-engine`, `market-data`, `market-volume-cache` all declare `Map<string, …>` at the ref. ⇒ **OBJECTIVE 1 IS THE CENSUS, NOT THE MIGRATION.**
+✅✅ **LANGSTON'S RULING — TWO BATCHES, AND THE REASON IS MEASURABLE RATHER THAN AESTHETIC:** `#1006` (`B-RTB-SIGNAL-IDENTITY`, CC-B, row `2.4c`) is a **database unique index — columns**; this is an **in-memory string key**. **A column tuple cannot diverge from a string encoding.** ⇒ **CC-B proceeds now, unblocked.**
+⛔ **BUT ONE ARTIFACT MAY NOT BE SPLIT — THE ENCODING SSOT: one exported `assetSymbolKey(assetClass, symbol)` and its inverse, in ONE module, declared as OBJ-1's output here.** **Neither batch defines its own; neither hand-rolls a template literal at a call site.** ★ **Otherwise whichever ships first sets the de-facto standard and the other adapts — `fix-follows-pointer` with two owners.**
+⚠️ **NUMBERING, RECORDED BECAUSE I GOT IT WRONG TWICE: I first took `#1006` (CC-B's), then `#1022` (CC-INFRA's).** ✅ **`#1024` was enumerated at the graded ref with a positive control before minting.** ⛔ **The `1007` and `1012`-`1014` gaps are NOT reusable — `1007` is VACATED, and commits exist naming a vacated number while meaning a live entry.**
+**HOME: `B-SYMBOL-CLASS-IDENTITY`, owner CC-C, `PHASE_19_PLAN` row `3b.h-4`.** **Correctness-driven, not incident-driven — one collision has ever reached a trade.**
+
+---
+
+### #1025 OPEN 2026-09-09 (CC-C; Langston-homed from a §13 surface) — ⛔ **THE tsc BASELINE PUSH GUARD BLOCKS CHANGE SETS THAT CONTAIN NO CODE**
+
+**MEASURED, not reported — Langston flagged my own claim as reported fact and asked me to verify it, which found it imprecise and then confirmed it:** the guard has refused **FOUR CONSECUTIVE pushes**, and the six blocked commits touch **16 markdown files and nothing else — zero `.ts`/`.tsx`.** Totals identical both sides: **377 against 377.**
+★ **A guard that blocks a GOVERNANCE push over a change set with no TypeScript in it is a defect, not a strictness setting** — it currently prevents the findings register from reaching the branch at all, and that register is the artifact three parties are waiting on.
+⚠️ **I have NOT used `--regen-acknowledged`.** The change set touches no TypeScript, so there is no honest basis to acknowledge a mass-fix. **The files reached the reviewer by `scp` — a workaround for him, not for the branch.**
+⛔ **OBJECTIVE 1 IS THE EXEMPTION PREDICATE AND IT MUST KEY ON CONTENT** — *does this range change TypeScript* — **not on a path list.** ★ **A path predicate is exactly what `#1016` got wrong in the other direction: a zero-non-comment-line diff opened the drift gate identically to 115 lines of live code.**
+⚠️ **ADJACENT, NOT DUPLICATE: `#1019` (CC-A) is the DETERMINISM question** — the same guard refusing and then passing on retry. **Same guard, two distinct defects.**
+**HOME: `B-TSC-GUARD-NONCODE-EXEMPT`, owner CC-C, `PHASE_19_PLAN` row `3b.h-5`.**
