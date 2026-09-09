@@ -551,7 +551,17 @@ for i,s in seen.items():
 # A skipped row cannot be resolved by ANY path, so nothing is lost -- but the run would
 # otherwise log resolved=N failed=0 and exit clean while a row it could not touch stays open.
 if skipped: print('SKIPPED %d' % skipped, file=sys.stderr)
-if dropped: print('UNPARSEABLE %d' % dropped, file=sys.stderr)
+if dropped:
+    # BLOCKER-1 (Langston, Step-4 on #1021). I ADDED THE COUNTER AND NOT THE FAILURE, which
+    # is the same silence one level up: REPRODUCED with a synthetic store whose last line is
+    # truncated -> 'UNPARSEABLE 1' on stderr, three ids emitted, EXIT 0, and the run then logs
+    # resolved=3 failed=0. A PARTIAL STORE READING AS A COMPLETE ONE -- verbatim the sentence
+    # in the fail_measurement message this exit routes to.
+    # WHY dropped FAILS AND skipped DOES NOT, and it is not symmetry: a SKIPPED row has no id,
+    # so it is unresolvable by ANY path and nothing is lost by noting it. A DROPPED line may be
+    # a resolvable OPEN RUNG the run never saw. Fail closed, exactly as LIST_RC does.
+    print('UNPARSEABLE %d' % dropped, file=sys.stderr)
+    sys.exit(3)
 PYEOF
   [ $? -ne 0 ] && fail_measurement "alert_store" "could not parse the alert store while clearing drift rows. Rows may still be open, and an empty result here would otherwise read as nothing-to-clear."
 
@@ -611,6 +621,30 @@ if [ "$CAPPED" != "1" ] && [ "$RUNTIME_N" -eq 0 ]; then
   # "Nothing to be behind ON" is exactly the state in which an OPEN row is wrong. This is the
   # exit that produced the defect: after a deploy, one documentation commit routes every
   # subsequent run here, and before #1021 none of them cleared anything.
+  #
+  # ⛔⛔ WHY THIS EXIT NEEDS NO deployed_at CORROBORATION, THOUGH BELOW_FLOOR DOES.
+  #   I asked whether a revert or a force-push could clear a rung here with no deploy, since
+  #   files[] is the NET diff. Langston's answer (Step-4, #1021) is that the hazard is already
+  #   closed ~350 lines up and I could not see it from here:
+  #     - the compare is the THREE-DOT form, $API/$DEPLOYED...$HEAD_SHA, so it is MERGE-BASE
+  #       relative. When status=='ahead' the merge base IS $DEPLOYED, hence files[] is exactly
+  #       diff(deployed_tree, head_tree) -- a statement about TREES, not about commits.
+  #     - a force-push that removes $DEPLOYED from head's ancestry yields status 'behind' or
+  #       'diverged', which the compare reader routes to ANOMALY and then fail_measurement,
+  #       exiting BEFORE any clearing exit is reachable.
+  #     - a force-push that rewrites only commits AFTER $DEPLOYED leaves the two trees
+  #       genuinely identical on runtime paths -- the same state as a revert, and clearing is
+  #       CORRECT in both.
+  # ★ So "files[] is the net diff" is NOT the hole I thought it was; it is the property that
+  #   makes the predicate right.
+  #
+  # ⚠️ AND THE PART NEITHER OF US HAD WRITTEN DOWN, stated here because BELOW_FLOOR's
+  #   equivalent is stated at its own site: RUNTIME_N==0 USED TO ONLY SUPPRESS A REPORT. IT NOW
+  #   DISCHARGES A RUNG. That is the identical authority-escalation argument made for the
+  #   committer date -- a declared FLOOR promoted from "withholds an alarm" to "cancels one".
+  #   A false negative in the runtime predicate used to cost ONE MISSED ALERT; it now costs an
+  #   ESCALATION-LADDER RESET. Accepted, because that false-negative class is enumerated and
+  #   bounded -- but accepted EXPLICITLY, not by omission.
   clear_open_rows NO_RUNTIME_PATHS
   exit 0
 fi
@@ -656,7 +690,15 @@ else
   #   that affirmatively discharges a rung -- a force-push on the review branch could resolve a
   #   72h rung with no deploy at all, and escalation would restart from rung 1.
   # ★ So we require the operand a rebase CANNOT rewrite: deployed_at from the deploy record.
-  #   Under the floor AND a deploy within the floor window = a real deploy just happened.
+  #   Under the floor AND a deploy within the window = a real deploy just happened.
+  # ⚠️ THE WINDOW'S REASON, CORRECTED (Langston CONDITION-2). I first justified 14400s as
+  #   "symmetry with the 4h floor", which is a FALSE STATED REASON of exactly the class this
+  #   file grades as a defect. The real derivation: the window only has to span DEPLOY -> NEXT
+  #   RUN, i.e. ONE CRON INTERVAL. Every value in [1h, floor] behaves identically on every
+  #   constructible case but one -- a rung minted for genuine >=4h runtime drift AFTER a
+  #   deploy, then a force-push shortening the age inside that same window, which would clear
+  #   falsely. Narrowing to ~90 min shrinks that false-clear surface ~2.7x; Langston would take
+  #   it and did not require it, so 14400 stands with its reason now true rather than tidy.
   DEPLOY_AGE_S=""
   if [ -n "$DEPLOYED_AT" ]; then
     DEPLOY_EPOCH="$(date -u -d "$DEPLOYED_AT" +%s 2>/dev/null)"
