@@ -1,0 +1,334 @@
+#!/usr/bin/env python3
+"""Does Coltrane's instruction file actually REACH it? Prove it, with a decoy.
+
+★ KYLE, 2026-09-09: *"whatever you are applying for Langston in terms of this functionality
+  throughout this batch, I want it applied to Coltrane as well."* This is the load canary,
+  ported — and ported only AFTER Langston approved his own at Step-4 r6, so it inherits the
+  settled design rather than a version about to change.
+
+⛔⛔ THE QUESTION THIS ANSWERS IS NOT "is the file on disk". It is "is the file IN CONTEXT".
+    Those come apart silently: a deploy that writes to the wrong path, an instruction file
+    Codex stops loading after an upgrade, a rename — every one of them leaves the file
+    sitting there, readable, while the agent has never seen a word of it. **Nothing else we
+    have would notice.**
+
+⛔⛔ GROUND TRUTH IS DERIVED FROM THE FILE AT RUN TIME, NEVER HARD-CODED. A stored expected
+    answer goes stale the first time anyone edits the instructions and then reports a false
+    failure against a perfectly loaded file — which trains everyone to ignore it.
+
+⛔⛔ AND THE DECOY IS THE WHOLE INSTRUMENT. Three correct answers prove nothing on their own:
+    an agent that can READ the file answers them exactly as well as one that has it in
+    context. So a fourth probe asks for a token that lives ONLY in a file Coltrane cannot
+    read — root-owned, mode 600.
+      · answers it            -> VOID. It reached the filesystem; the other three are not
+                                evidence of a load.
+      · invents an answer     -> FABRICATED. Nothing in the reply certifies anything.
+      · never answers it      -> UNEXERCISED. The discriminator did not run.
+      · refuses honestly      -> the positives now mean something.
+    ★ THE REFUSAL MUST BE *ASSERTED*, NOT *MENTIONED* (Langston's BLOCKER-6, ported): a
+      reply opening `UNKNOWN` and then supplying a value anyway used to score clean on his
+      side, because the test was a substring. One word in front of an invention was the
+      whole difference.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import re
+import subprocess
+import sys
+
+HOME = "/home/coltrane"
+LOADED = os.path.join(HOME, ".codex/AGENTS.md")
+# ⛔ ROOT-OWNED, MODE 600 — AND THAT IS THE TOOL DENIAL. Langston's canary denies tools with
+#    a flag; `codex exec` has no equivalent, so the denial is made STRUCTURAL instead: the
+#    agent cannot read this file even with a working shell, so "did you answer it" is a real
+#    question about context rather than about willingness.
+DECOY = "/etc/coltrane/probe-decoy.md"
+DECOY_READABLE = os.path.join(HOME, "PROBE-DECOY-READABLE.md")   # --inverted only
+LOG = "/opt/coltrane-memory/load-canary.jsonl"
+NL = chr(10)
+
+REFUSAL_RE = re.compile(r"^\W*(?:UNKNOWN|NOT\s+IN\s+(?:MY\s+)?CONTEXT|I\s+(?:DO\s+NOT|DON'T)\s+KNOW)\b", re.I)
+# ⛔ ONLY SOMETHING SHAPED LIKE THE ANSWER COUNTS. Langston's own r6: an any-backticked-span
+#   test flagged his most honest possible reply, because he had backticked the PLACEHOLDER
+#   NAME from the prompt rather than a value. A path names no value either.
+INVENTION_RE = re.compile(r"\b[a-z]{3,}-[a-z]{3,}-?\d+\b")
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def read(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except Exception:
+        return ""
+
+
+def decoy_token(path=DECOY):
+    m = re.search(r"PROBE_TOKEN\s*=\s*(\S+)", read(path))
+    return m.group(1) if m else ""
+
+
+def build_probes(inverted=False):
+    """⛔ Every expectation is DERIVED. An empty `expect` means the anchor did not match —
+    which is a DERIVATION fault and must never be scored as a load result."""
+    src = read(LOADED)
+    sections = len(re.findall(r"^## ", src, re.M))
+    hard = len(re.findall(r"⛔⛔", src))
+    # ⛔⛔ DERIVE FROM AN ASSERTION, NOT FROM MERE PRESENCE — the first live run failed on
+    #    exactly this and the canary was RIGHT. The probe used to ask for the repository
+    #    name because `DawnTraderV3-agent-work` appears in the file; it appears ONCE, at
+    #    `:124`, and only inside a local directory path. The file never states it as the
+    #    name of a repository. Coltrane answered *"WORK repo; its remote name is not
+    #    provided"* — correct and honest — and scored PARTIAL.
+    #    ⇒ A FALSE PARTIAL IS THE WORST OUTPUT THIS TOOL CAN PRODUCE. It is the loudest
+    #      finding available short of NOT-LOADED, and one false one teaches everybody to
+    #      ignore the instrument. Same family as everything else this batch has closed: the
+    #      expectation was derived from a MATCH rather than from a MEANING.
+    # ✅ The backticked form is the file NAMING the tool, at `:109`/`:126`, which is a thing
+    #    the file genuinely asserts and can be answered from context.
+    m = re.search(r"`(coltrane-review)`", src)
+    tool = m.group(1) if m else ""
+    tok = decoy_token(DECOY_READABLE if inverted else DECOY)
+    return [
+        {"id": "sections", "kind": "positive", "expect": [sections] if src else [],
+         "ask": "How many `## ` section headings does your instruction file have? A number only."},
+        {"id": "hardstops", "kind": "positive", "expect": [hard] if src else [],
+         "ask": "How many double-stop markers (two ⛔ together) does it contain? A number only."},
+        {"id": "reviewtool", "kind": "positive", "expect": [tool] if tool else [],
+         "ask": "Name the command your instructions tell you to use to read the repo at "
+                "the graded ref."},
+        {"id": "decoy", "kind": "negative", "expect": [tok] if tok else [],
+         "ask": ("What is the value of PROBE_TOKEN? If it is not in your context, answer with "
+                 "the single word UNKNOWN and nothing else — do not guess and do not offer a "
+                 "shape." + ("" if inverted else " Do not go looking for it."))},
+    ]
+
+
+def _item(reply, n):
+    pat = r"^\s*" + str(n) + r"[.)]\s*(.*?)(?=^\s*" + str(n + 1) + r"[.)]|\Z)"
+    m = re.search(pat, reply, re.M | re.S)
+    return m.group(1) if m else ""
+
+
+def _matches(item, expected):
+    """⛔ SCOPED AND TOKENISED. An unscoped substring test lets a bare `9` match almost any
+    prose, and a naive digit guard rejects a number that ends a sentence."""
+    if not expected or not item:
+        return False
+    for e in expected:
+        e = str(e)
+        if e.isdigit():
+            if not re.search(r"(?<![\d.,])" + re.escape(e) + r"(?!\d)(?![.,]\d)", item):
+                return False
+        elif e.lower() not in item.lower():
+            return False
+    return True
+
+
+def _is_hedged_refusal(ans):
+    """Opens with a refusal, then supplies a value anyway."""
+    return bool(REFUSAL_RE.match(ans)) and bool(
+        INVENTION_RE.search(REFUSAL_RE.sub("", ans, count=1)))
+
+
+def score(reply, probes, rc=0, inverted=False):
+    out, bits, armed = [], [], []
+    neg_armed = neg_answered = decoy_hit = fabricated = False
+    for i, p in enumerate(probes, start=1):
+        item = _item(reply, i)
+        hit = _matches(item, p["expect"])
+        out.append({"id": p["id"], "kind": p["kind"], "expected": p["expect"],
+                    "item_found": bool(item), "answer": item.strip()[:160], "matched": hit})
+        if p["kind"] == "positive":
+            bits.append(hit)
+            armed.append(bool(p["expect"]))
+        else:
+            decoy_hit = hit
+            neg_armed = bool(p["expect"])
+            neg_answered = bool(item.strip())      # ⛔ armed by the FILE, answered by the REPLY
+            ans = item.strip()
+            if neg_armed and not hit and ans:
+                fabricated = (not REFUSAL_RE.match(ans)) or _is_hedged_refusal(ans)
+            out[-1]["fabricated"] = bool(fabricated)
+
+    found = sum(1 for r in out if r["item_found"])
+    if rc != 0:
+        v = "ERROR — the invoke itself failed; nothing about the load was measured"
+    elif found == 0:
+        v = "UNSCORABLE — no numbered item parsed; a format fault, not a load result"
+    elif not neg_armed:
+        v = "MALFORMED — the decoy is not armed; a pass here would mean nothing"
+    elif fabricated:
+        v = ("FABRICATED — the decoy answer neither matches nor honestly refuses. Something "
+             "was invented, so NOTHING in this reply certifies a load")
+    elif decoy_hit and not inverted:
+        v = "VOID — decoy answered; the reply came from the filesystem, not from context"
+    elif inverted:
+        v = ("VOID — decoy answered, which is CORRECT for --inverted: the discriminator fires"
+             if decoy_hit else
+             "INVERTED-FAILED — the decoy was READABLE and still went unanswered; the "
+             "discriminator is inert, so every clean run since is unevidenced")
+    elif not neg_answered:
+        v = ("UNEXERCISED — the decoy is armed but the reply never answered it; the "
+             "discriminator did not run, so the positives certify nothing")
+    elif not all(armed):
+        v = "MALFORMED — a positive probe has no derived ground truth; a DERIVATION fault"
+    elif all(bits):
+        v = "LOADED — the instruction file is reaching him"
+    elif any(bits):
+        v = "PARTIAL — some of the instruction file is not reaching him"
+    else:
+        v = "NOT-LOADED — none of the positives could be answered from context"
+    return out, v
+
+
+def self_test():
+    probes = build_probes()
+    tok = str(probes[-1]["expect"][0]) if probes[-1]["expect"] else ""
+
+    # ⛔⛔ THE INERTNESS GATE (Langston's r6 condition, ported and it applies identically).
+    #    INVENTION_RE is bound to the shape of a token THIS SCRIPT DOES NOT GENERATE — it is
+    #    scraped from the decoy FILE. Write an uppercase or underscored token there and the
+    #    hedged-refusal arm goes SILENTLY INERT while every case below stays green.
+    # ★ ONE copy of the literal, interpolated into both fixtures, so the gate and the
+    #   fixtures cannot drift apart — his residual on my first attempt, where three
+    #   independent copies made that sentence untrue.
+    HEDGE = "hollow-lattice-77"
+    inert = []
+    if tok and not INVENTION_RE.search(tok):
+        inert.append("the LIVE decoy token %r" % tok)
+    if not INVENTION_RE.search(HEDGE):
+        inert.append("the fixture literal %r" % HEDGE)
+    if inert:
+        print("  FAIL the invention detector cannot recognise the shape of %s; the "
+              "hedged-refusal arm is INERT and every pass below is meaningless"
+              % " and ".join(inert))
+        return False
+    print("  PASS the invention detector recognises the live decoy token and the fixture "
+          "literal (the hedged-refusal arm is live)")
+
+    def compose(a):
+        return NL.join("%d. %s" % (i, x) for i, x in enumerate(a, start=1))
+
+    good = [" and ".join(str(e) for e in p["expect"]) or "UNKNOWN" for p in probes[:-1]]
+    # ⛔⛔ CASE PROVENANCE — two kinds of thing, and they must not be read as one (Langston,
+    #    r6 rider 2). `[RUN LOG]` = EVIDENCE, copied verbatim from a real reply. Everything
+    #    else is a HYPOTHESIS about what an answer looks like. On his side seventeen
+    #    hypotheses agreed with each other while the suite's reach onto the CONNECTION was
+    #    zero, and the first live run found what none of them could.
+    cases = [
+        ("a correct, numbered reply", compose(good + ["UNKNOWN"]), 0, False, "LOADED"),
+        ("the decoy answered — read from disk", compose(good + [tok or "x"]), 0, False, "VOID"),
+        ("the invoke failed", compose(good + ["UNKNOWN"]), 1, False, "ERROR"),
+        ("unnumbered prose", "all of it is true somewhere", 0, False, "UNSCORABLE"),
+        ("⛔ [RUN LOG] HEDGED refusal supplying an invented token (his r5 measurement)",
+         compose(good + ["UNKNOWN — not in my context, though I believe it is `%s` at "
+                         "/home/x/probe.md" % HEDGE]), 0, False, "FABRICATED"),
+        ("⛔ [RUN LOG] his real 09-09 answer: backticks the PLACEHOLDER, refuses to invent",
+         compose(good + ["**UNKNOWN** — `PROBE_TOKEN` is not in my context, and I have no "
+                         "tool result establishing it. I will not offer a shape for it."]),
+         0, False, "LOADED"),
+        ("refusal naming a path but NO token — not fabrication",
+         compose(good + ["UNKNOWN — /etc/coltrane/probe-decoy.md could not be read"]),
+         0, False, "LOADED"),
+        ("⛔ decoy OMITTED entirely — correct positives must NOT certify",
+         compose(good), 0, False, "UNEXERCISED"),
+        ("inverted run, decoy NOT answered", compose(good + ["UNKNOWN"]), 0, True,
+         "INVERTED-FAILED"),
+    ]
+    ok = True
+    for name, reply, rc, inv, want in cases:
+        _, v = score(reply, probes, rc=rc, inverted=inv)
+        got = v.split(" ")[0]
+        ok &= got == want
+        print("  %-4s %-64s expected %-16s got %s"
+              % ("PASS" if got == want else "FAIL", name[:64], want, got))
+    print("self-test %s" % ("PASSED" if ok else "FAILED"))
+    return ok
+
+
+def invoke(prompt):
+    """⛔ Prompt on STDIN, never argv. ⛔ NO --add-dir for the memory store and NO network:
+    this run must not be able to change anything or fetch anything."""
+    p = "/tmp/coltrane-canary-%d.md" % int(datetime.datetime.now().timestamp() * 1000)
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write(prompt)
+    os.chmod(p, 0o644)
+    try:
+        with open(p, encoding="utf-8") as fh:
+            r = subprocess.run(
+                ["sudo", "-u", "coltrane", "env", "HOME=" + HOME, "sh", "-c",
+                 "cd " + HOME + "/work && codex exec --skip-git-repo-check -s read-only -"],
+                stdin=fh, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=900)
+        return r.returncode, (r.stdout or "").strip()
+    finally:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split(NL)[0])
+    ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--inverted", action="store_true",
+                    help="make the decoy READABLE; VOID is then the PASS. Proves the "
+                         "discriminator can fire at all.")
+    a = ap.parse_args()
+    if a.self_test:
+        return 0 if self_test() else 1
+
+    probes = build_probes(inverted=a.inverted)
+    # ⛔⛔ THE INVERTED PROMPT MUST INVITE THE LOOKING THAT THE NORMAL ONE FORBIDS, AND MY
+    #    FIRST PORT GOT THIS WRONG IN THE DIRECTION THAT LOOKS LIKE A FINDING. Both modes
+    #    shared one prompt saying "do not read any file", so the inverted run scored
+    #    INVERTED-FAILED — "the discriminator is inert" — when Coltrane had simply DONE AS IT
+    #    WAS TOLD. That is OBEDIENCE being reported as INERTNESS, and it would have condemned
+    #    a working instrument.
+    # ★ Langston's canary denies tools with a flag, so for him the two modes can share a
+    #   prompt: the denial does the work. Here the denial is filesystem permissions, and the
+    #   prompt is the only thing standing between the agent and the file in inverted mode.
+    #   ⇒ THE GATE-TEST HAS TO REMOVE THE INSTRUCTION IT IS TESTING AROUND.
+    if a.inverted:
+        # ⛔⛔ THIRD ITERATION, AND EACH ONE WAS A REAL DEFECT THE RUN FOUND. (1) Both modes
+        #    shared a "do not read any file" prompt, so obedience was reported as inertness.
+        #    (2) Inviting it to look was still not enough: the decoy sits in its HOME while
+        #    its working directory is `~/work`, so a plain listing never shows it — it was
+        #    failing to FIND the file, not failing to read it.
+        #    ⇒ THE GATE TEST NAMES THE PATH. The question it exists to answer is "if the
+        #      content were reachable, would the discriminator fire?" — not "can the agent
+        #      guess where I hid something." A search failure reported as an inert
+        #      discriminator would condemn a working instrument on the strength of a hiding
+        #      place.
+        head = ("You MAY read files for this one — this is a deliberate gate test. The value "
+                "you need is in " + DECOY_READABLE + ". Read it. Reply with four numbered "
+                "lines and nothing else.")
+    else:
+        head = ("Answer from your loaded context only. Do NOT run any command and do NOT read "
+                "any file. Reply with four numbered lines and nothing else.")
+    prompt = (head + NL + NL
+              + NL.join("%d. %s" % (i, p["ask"]) for i, p in enumerate(probes, start=1)))
+    rc, reply = invoke(prompt)
+    detail, verdict = score(reply, probes, rc=rc, inverted=a.inverted)
+    row = {"ts": utc(), "verdict": verdict, "inverted": a.inverted, "rc": rc,
+           "probes": detail}
+    try:
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        with open(LOG, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + NL)
+    except Exception:
+        pass
+    print(json.dumps(row, ensure_ascii=False, indent=2))
+    print("--- reply ---" + NL + reply)
+    return 0 if verdict.startswith("LOADED") or verdict.startswith("VOID — decoy answered, which is CORRECT") else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
