@@ -8045,3 +8045,36 @@ Alert `81135510` (`deploy-drift-rung-2`, `2026-09-07T20:23:32Z`) fired correctly
 ⇒ **THE FIX THAT DOES NOT DEPEND ON 216 ROUTES BEING RIGHT: FENCE BY HTTP METHOD AT THE EDGE.** A browsing door that permits `GET`/`HEAD` and returns `405` for everything else is **one rule, independent of every handler, and cannot be defeated by an unguarded route.** §7.1's own preference: *"a push from it fails at git, not at somebody's memory"* — make it impossible rather than checked. Per-route guards remain the right long-term fix; they are not a prerequisite for safe agent browsing.
 
 **HOME: `B-SEC-HARDEN`, owner CC-A** — the same follow-on already carrying the `0.0.0.0:5000` bind item. Placed there rather than in a new batch because it is the same class (authorization surface on staging) and the same owner. ⚠️ **CC-INFRA is NOT taking this** — it is outside my lane; I surfaced it and I am telling CC-A in the channel.
+
+### #1023 OPEN 2026-09-09 (CC-INFRA) — 🟥 THE LIVE STAGING PASSWORD IS IN 348 FILES OF A **PUBLIC** GITHUB REPOSITORY, AND #1022 IS WHAT MAKES THAT MATTER
+
+⛔⛔ **ANNOUNCED IMMEDIATELY RATHER THAN INVESTIGATED FIRST (`CONDUCT.md` §8's exception): this is a live, ongoing exposure, and every hour it stands is another hour anyone can act on it.**
+
+**MEASURED, UNAUTHENTICATED, FROM OUTSIDE — no token, no login, one `curl`:**
+```
+repos/kylegjordan/DawnTraderV3 visibility            = public
+GET raw.githubusercontent.com/.../CLAUDE.md          = HTTP 200, 114,638 bytes
+staging password present in that public copy         = yes (2 lines)
+tracked files at the ref containing it               = 348 of 5,886
+```
+⚠️ **POSITIVE CONTROL, because a grep count is worthless without one:** the same instrument returns `Mission` = 1 from the same file. It finds what is there, so the 348 is real.
+
+★ **AND THE CREDENTIAL IS LIVE, NOT HISTORICAL — I USED IT MINUTES BEFORE FINDING THIS.** `agent-staging-session` authenticated with it and the API returned a valid 7-day token for `testuser123`, role `owner`. This is not a stale value in an archive.
+
+⇒ ⛔⛔ **COMPOSE IT WITH `#1022` AND THAT IS THE WHOLE FINDING: 157 of 216 state-changing routes have NO authorization guard.** ⇒ **anyone on the internet can read the password out of a public file, sign in to staging as the owner, and change configuration, settings, trading pace and the diagnostics controls.** Neither issue is alarming alone; together they are an unauthenticated path to a live system.
+
+**WHAT IS *NOT* EXPOSED — scoped deliberately, because a false alarm about the database costs as much as a missed one.** A pattern scan over all 5,886 tracked files classified every `postgres://` match: **0 real, 8 `localhost:5432` test URLs, 12 placeholders.** No Anthropic/OpenAI key, no private-key block, no AWS key, no Discord token matched. **The Supabase database is NOT in the public tree.**
+⚠️ **ABSENCE HERE IS WEAK EVIDENCE AND IS LABELLED AS SUCH: those are patterns I chose. A miss proves nothing about a secret shaped differently.**
+
+⛔⛔ **DELETING THE LINES DOES NOT FIX IT, AND ASSUMING IT DOES IS THE TRAP.** The repository is public **with its full history**. Every past commit remains fetchable by anyone. ⇒ **ROTATION IS THE ONLY REMEDY.** Making the repo private from here on does not un-publish what has already been served.
+
+**KYLE'S CALL, NOT MINE — I have changed nothing:**
+1. **Rotate the staging password.** The only action that actually closes it.
+2. **Then** decide public vs private on its own merits.
+3. Purge the value from the tree afterwards so it does not re-accumulate — housekeeping, not the fix.
+
+★ **AND IT CORRECTS MY OWN RECOMMENDATION FROM 2026-09-08.** I told Kyle to stay public, on a measured CI-cost argument (~10,600 billable minutes/month against a 2,000 free allowance on a private repo, ≈$68/month). **That arithmetic stands and the recommendation does not**, because I priced only the CI and never asked what the public tree contains. **A cost model is not a risk model, and I presented one as though it settled the other.**
+
+⚠️ **ONE CONSEQUENCE FOR WORK IN FLIGHT:** the staging-session capability just built for the headless agents authenticates with this credential. **It is deliberately NOT being extended to the four CC sessions until the rotation happens** — widening the number of places a compromised secret lives, in the same hour it is found compromised, is the wrong order.
+
+**HOME: `B-SEC-HARDEN`, owner CC-A**, alongside `#1022` and the `0.0.0.0:5000` item — same class, same owner. ⚠️ **The ROTATION itself is Kyle's, not CC-A's**: no session may change his credentials.
