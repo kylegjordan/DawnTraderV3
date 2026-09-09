@@ -47,7 +47,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 3. ⛔ **VTS EXITS ARE MARK-BOOKED, NOT TRANSACTABLE.** Crypto VTS rows book the observed mark at exit. **Do not read them as executable fills.**
 4. ⛔ **`F-G-2`'s SHADOW WINDOW MUST NOT BE SPLIT** — it is mid-observation.
 5. ⛔ **RISK LIMITS ARE BOUNDARIES, NOT DIALS.** No design may loosen a risk control to improve returns. **If growth and risk tolerance conflict, risk tolerance wins.**
-6. ⭐ **READ THE CROSS-CUTTING RUNTIME-STATE REGISTRY IN `SYSTEM_IMPACT_MAP.md` BEFORE ANY CHANGE TOUCHING SHARED STATE OR A KEY SHAPE** — singletons, shared maps and liveness live there, and a key change designed without that census fixes one instance of five.
+6. ⭐ **READ THE CROSS-CUTTING RUNTIME-STATE REGISTRY IN `1-system-manual/SYSTEM_IMPACT_MAP.md` BEFORE ANY CHANGE TOUCHING SHARED STATE OR A KEY SHAPE** — singletons, shared maps and liveness live there, and a key change designed without that census fixes one instance of five.
 
 ---
 
@@ -55,7 +55,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 ### 1.1 ⛔⛔ **A1 — The order book IS subscribed for candidates in the queue, not only for positions we hold.** *(the biggest single correction)*
 **PLAIN:** We wrote that the system only asks the exchange for the full order book on coins we already own. It doesn't. **When a coin enters the ready-to-buy queue, it gets subscribed right there — ticker and full book.**
-✅ **CONFIRMED — RE-DERIVED** at `ready_to_buy_service.ts:2422-2431`. Its own comment, dated 2026-07-15, names two coins that died on the old behaviour.
+✅ **CONFIRMED — RE-DERIVED** at `server/core/rtb/ready_to_buy_service.ts:2422-2431`. Its own comment, dated 2026-07-15, names two coins that died on the old behaviour.
 ⛔ **WHAT WE OWE:** the document's central structural claim, and everything resting on it, must be rewritten. ⭐ **AND WE MUST NOT BUILD IT AGAIN** — a proposal to "add queue-time subscription" would duplicate a fix that has existed since July.
 ★ **THE SURVIVING PROBLEM, which is not the one we described:** *a subscribe request is not a book.* The call returns nothing and its failure is swallowed into a log line. **The real gap is a CONFIRMED book, not a missing one.**
 
@@ -72,7 +72,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 ### 1.4 ⛔ **A5 — xStock signals are born on 15-minute bars, not 60, and it is a bar close, not a midpoint**
 **PLAIN:** Two errors in one cell. The interval is **15 minutes**; the 60 we cited belongs to a different job. And **a bar close is not a midpoint** — there are no two quote sides in it.
-✅ **CONFIRMED — RE-DERIVED** at `scanner.ts:597` versus `regime-inputs.ts:143`.
+✅ **CONFIRMED — RE-DERIVED** at `server/asset_classes/xstock_spot/scanner.ts:597` versus `server/core/metrics/regime-inputs.ts:143`.
 ⛔⛔ **AND THE FACT UNDER THE CORRECTION IS BIGGER THAN THE CORRECTION (Langston): A SIGNAL BORN ON 15-MINUTE BARS IS RE-GRADED AT REFRESH ON 60-MINUTE BARS — BOTH CLASSES.** *(`xstock_spot/scanner.ts:597` births at 15; `server/core/metrics/regime-inputs.ts:145`/`:147` inside `computeRefreshRegimeInputs` re-grades at 60.)* ★ **That is a DESIGN INPUT, not a documentation fix — the thing that admitted a signal is not the thing that keeps it.**
 ⛔ **WHAT WE OWE:** correct both. ⭐ **AND: neither "up to an hour old" nor "up to fifteen minutes old" is a freshness bound at all.** A forming bar can hold a recent trade; a capture gap can leave a very old one. **The bar's start time is not the age of the information in it.**
 
@@ -81,10 +81,23 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 ✅ **CONFIRMED — RE-DERIVED.**
 ⛔ **WHAT WE OWE:** correct the citation, **and the useful change is the one the correction reveals: make verified-status travel with the book** rather than being unknowable at the point of use.
 
-### 1.6 ⛔ **A3 — the exit simulation invents liquidity that was never seen**
-**PLAIN:** Our criticism was aimed at the wrong half. The **entry** walk correctly reports running out of size. **The exit walk fills the remainder at a made-up worse price using a configured penalty** — so a simulated exit can complete beyond anything observed.
-⚠️ **ACCEPTED — REPORTED FACT**, with a probe cited. ⛔ **MUST BE RE-DERIVED BEFORE ANY EDIT — it is a mechanism claim and it bears on whether our simulated results are honest.**
-⛔ **WHAT WE OWE:** name the policy explicitly and separate observed fill from extrapolated fill in what we record.
+### 1.6 ✅ **A3 — the exit simulation DOES fill beyond observed liquidity — AND IT IS A GOVERNED DESIGN DECISION, NOT AN ACCIDENT** *(re-derived 2026-09-09)*
+**PLAIN:** Our criticism was aimed at the wrong half. **The ENTRY walk correctly reports running out of size.** The **EXIT** walk always completes the order: any quantity beyond the visible book is priced at the worst bid it did touch, worsened by a penalty, and blended into the average.
+✅ **CONFIRMED — RE-DERIVED**, and the code states it in its own words at `server/services/execution/depth-walk.ts:75-81`:
+> *"CLOSE fill (sell): walk the BID side, then **ALWAYS full-fill** (R2 — a market exit always gets out, just at a worse price in a thin book; never a phantom stuck position)… **Returns `filledQty === orderQty` always.**"*
+
+⛔⛔ **AND THE PROVENANCE READ CHANGES THE DISPOSITION — THIS IS `rule 24` OUTCOME (2), NOT A DEFECT:**
+| | |
+|---|---|
+| **introduced by** | **`P19-B4b.1`, `b74526dc3`, 2026-06-16** — a governed batch that closed with SIM, System Manual ch.7, `RUNNING_ISSUES` (`#295` RESOLVED, `#300`), the phase plan, catalog, history and a completion report |
+| **the rationale is stated** | *"a market exit always gets out… never a phantom stuck position"* — **the alternative is a simulated position that can never be closed, which is its own falsification** |
+| **the penalty is NOT a magic number** | ✅ **DB-governed and verified live: `fill_depth_gate.beyond_depth_penalty_bps = 50` for BOTH `crypto_spot` and `xstock_spot`**, written by `p19-b4b1` |
+| **and that was a review condition** | the comment records it as **Langston's own Q-A condition** — he required it not be a constant |
+
+⇒ ✅ **SO THE MECHANISM IS REAL AND THE FRAMING WAS WRONG. It is not "inventing liquidity"; it is a reviewed choice to prefer a pessimistic completed exit over an un-closable simulated position.**
+⛔ **WHAT SURVIVES AS A REAL QUESTION, AND IT IS A BASELINE QUESTION — SO IT BELONGS TO ASK 2 AS MUCH AS ASK 1:** **is 50 bps the right penalty**, and **should the recorded result distinguish the OBSERVED portion of a fill from the EXTRAPOLATED portion?** ★ **Today one blended average hides which is which, so no later study can separate them.**
+
+⭐⭐ **THIRD TIME TODAY THAT A PROVENANCE READ CHANGED A FINDING'S DISPOSITION** — after A8's dead engine and `#578`. ★ **Every one was accurate on mechanism and missing the decision behind it. That is the argument for §6's provenance condition, restated by evidence rather than by assertion.**
 
 ### 1.7 ⛔ **A9 / A10 — the price cache loses provenance, and one counter mislabels transport**
 **PLAIN:** Confirms our own finding and extends it. Two writers store different kinds of number under one label; a WebSocket update can **invent both quote sides from a single price**, which cannot show a real spread. And a counter we read as "WebSocket versus REST" **counts a REST-sourced result as WebSocket**, so it cannot establish the mix.
@@ -170,7 +183,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 | # | our position | citation |
 |---|---|---|
-| **A1 scope** | **Correct for crypto only.** xStocks take **no** queue-time warm at all, so our original claim holds there unmodified — and for a never-queued crypto name. | `ready_to_buy_service.ts:2422` is `crypto_spot`-gated |
+| **A1 scope** | **Correct for crypto only.** xStocks take **no** queue-time warm at all, so our original claim holds there unmodified — and for a never-queued crypto name. | `server/core/rtb/ready_to_buy_service.ts:2422` is `crypto_spot`-gated |
 | **A13 watchdog** | **We agree it is unarmed per-symbol** — but Codex is right that a *separate aggregate* archive watchdog exists, so the conclusion stays per-symbol and must not be read as "no watchdog." | accepted narrowing |
 
 ---
@@ -209,10 +222,13 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 **WHERE THE HISTORY LIVES:**
 - **`bridge/canonical/`** — the pre-governance corpus. ⚠️ **It records what we INTENDED to build then. It is NEVER current-state truth** — the architecture has changed completely. **Its value is the WHY.**
-- **`1-system-manual/RUNNING_ISSUES.md`, `BATCH_CATALOG.md`, and the batch completion reports** — search by **FILE and SYMBOL name**, not by symptom.
+- **`1-system-manual/RUNNING_ISSUES.md`, `1-system-manual/BATCH_CATALOG.md`, and the batch completion reports** — search by **FILE and SYMBOL name**, not by symptom.
 - **`git log -S "<symbol>" --reverse`, NOT path-limited** so it survives renames — then **read the introducing commit.**
 
 ⛔⛔ **WHY THIS IS A REQUIREMENT AND NOT A COURTESY:** ★ **without it, a true finding about a component we already killed reads as a live risk.** **§2b is exactly that case: a real second engine with a real order call — already found, already Kyle-ruled, already scheduled for deletion since July.** ⇒ **the finding was accurate and the disposition was missing, and the disposition is what tells us whether to act.**
+⚠️ **AND AN HONEST GAP, STATED RATHER THAN PAPERED OVER (Langston's point): WE HAVE THREE WORKED EXAMPLES AND ALL THREE POINT THE SAME WAY.** `#578`'s dead engine, A3's governed exit policy, and the `#732` trailing label — **every one resolved to *already decided* or *working as designed*.** ⛔ **We do NOT yet have an instance where the provenance read said SCRAP AND REBUILD.**
+★ **That is a real asymmetry in the evidence and it would be dishonest to manufacture a counter-example to balance it.** ⇒ **read the policy as Kyle wrote it, not as our three cases demonstrate it** — and if the first scrap-and-rebuild case comes from Coltrane rather than from us, **that is the policy working, not failing.**
+
 ✅ **AND IT CUTS BOTH WAYS — it is not a filter for discarding findings.** **If the original intent is no longer relevant, the answer is not "leave it": it is SCRAP AND REBUILD, or refactor.** ★ **A component doing faithfully what it was built for, in a system that has since changed, is still wrong — and only the history can tell you which of those two you are looking at.**
 
 ---
@@ -243,7 +259,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 | `strategy.breakout` | 15 | 2026-06-05 | 3 | per-strategy parameters |
 | **TOTAL of the ten families** | **206** | | | |
 
-⚠️ **THE FILTERS ARE ADDITIONAL AND ARE NOT IN THE 206** — liquidity, volatility, the price floor (`#967`, already a Kyle decision) and the volume floor live in `crypto-universe-filter.json` and the filter services, not in `module_constants`. **Counted separately at scoping time; the 206 is the `module_constants` families only.** *(Langston: the earlier table implied they were inside the total.)*
+⚠️ **THE FILTERS ARE ADDITIONAL AND ARE NOT IN THE 206** — liquidity, volatility, the price floor (`#967`, already a Kyle decision) and the volume floor live in `server/config/crypto-universe-filter.json` and the filter services, not in `module_constants`. **Counted separately at scoping time; the 206 is the `module_constants` families only.** *(Langston: the earlier table implied they were inside the total.)*
 
 ⛔⛔ **THE PROVENANCE AXIS I FIRST GAVE WAS WRONG AND LANGSTON DISPROVED IT. RECORDED, BECAUSE IT REACHED KYLE.**
 **I offered *"every setting has an author, none older than 180 days, and `strategy.dhma`'s 25 values set by ONE author on ONE day"* as the signal of *set-once-never-revisited*.** ⛔ **`updated_at` measures WHEN A BATCH LAST WROTE THE ROW, not when anyone CHOSE THE VALUE.** ★ **Measured whole-table: the top three writers are `b72-step3-commit-b` (173 rows, one day), `b5-amr` (163) and `b72-2-lever-sweep` (129) — 465 of 1,020 in THREE BULK SEEDS.** ⇒ **"one author, one day" is the ORDINARY case, not an anomaly**, and both my exemplars were written by the same bulk seed.
@@ -277,4 +293,4 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 ★ **THE EVIDENCE FOR THAT, and it is ours rather than a hunch: Langston re-cut his own blocker and folded three of them into a single mechanism once he saw that the missing thing was a CONFIRMED book rather than a missing one.**
 ⇒ **Offered as a starting observation for the design. Whether it holds is the designer's call.**
 
-⚠️ **AND ONE THING WE OWE REGARDLESS OF THE DESIGN: `PRICING_DATA_ARCHITECTURE.md` currently carries a claim we know is wrong** — it is banner-marked NOT CANONICAL, and §1 and §2 above are the corrections it needs. **That is our repair work, not Coltrane's.**
+⚠️ **AND ONE THING WE OWE REGARDLESS OF THE DESIGN: `1-system-manual/PRICING_DATA_ARCHITECTURE.md` currently carries a claim we know is wrong** — it is banner-marked NOT CANONICAL, and §1 and §2 above are the corrections it needs. **That is our repair work, not Coltrane's.**
