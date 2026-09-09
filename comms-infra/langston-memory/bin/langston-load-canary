@@ -526,7 +526,31 @@ def self_test(probes):
     return ok
 
 
+# ⛔⛔ AN UNRECOGNISED FLAG MUST REFUSE, NOT FALL THROUGH TO A REAL RUN (Langston, r7).
+#    This file dispatches on `in sys.argv`, so ANY unknown flag was silently ignored and
+#    the tool proceeded with its DEFAULT behaviour while the operator believed they had
+#    asked for something else. Measured across this tool family: one wrote a real run-log
+#    row, and the load canary spent THREE live `claude -p` invokes on a typo.
+#    ⇒ the cost is not the wasted run — it is that the operator reads the output as the
+#      answer to the question they asked.
+KNOWN_FLAGS = ("--inverted", "--gate-test", "--self-test", "--dry-run",)
+
+
+def _refuse_unknown_flags():
+    unknown = [a for a in sys.argv[1:] if a.startswith("-") and a not in KNOWN_FLAGS]
+    if unknown:
+        sys.stderr.write("REFUSED: unrecognised flag(s): %s. Known: %s.%s"
+                         % (", ".join(unknown), ", ".join(KNOWN_FLAGS), chr(10)))
+        sys.stderr.write("  Refusing rather than ignoring — an ignored flag runs the "
+                         "DEFAULT action and returns its output as though it answered "
+                         "the question you asked.%s" % chr(10))
+        return True
+    return False
+
+
 def main():
+    if _refuse_unknown_flags():
+        return 2
     inverted = "--inverted" in sys.argv
     gate = "--gate-test" in sys.argv
     probes = build_probes()
