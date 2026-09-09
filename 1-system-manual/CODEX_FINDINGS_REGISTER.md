@@ -17,6 +17,54 @@
 
 ⇒ ★ **(3) IS THE ONE I HAD NOT CAPTURED AT ALL, and it changes what "done" means for this programme:** we are not only removing defects. **We are setting the starting values the calibration phase will learn from.** A correct price that feeds a threshold nobody chose deliberately is still a bad baseline.
 
+### ⛔⛔ AND THE THREE NAMES WERE AN EXAMPLE, NOT THE LIST — **KYLE, 2026-09-09**
+> **"Those are the ones that I could just think of off the top of my head, but there are others that are in our trading system that need to be reviewed… there's a number of other things that I'm sure can be looked at and seen if the baseline is a good place to start, including our filters. This is just a fresh set of eyes on everything."**
+> ⭐ **AND HIS DEFINITION OF ONE OF THEM, which is narrower and more specific than I had it:** *"by regime categories, I meant sort of the ranges where the regimes dictate the different strategies that can be applied to a signal."* ⇒ **the regime BOUNDARIES and the regime→strategy admission mapping, not regime detection in general.**
+
+⭐⭐ **SO I MEASURED THE ACTUAL SURFACE RATHER THAN LEAVING IT AS "and others" — live `module_constants`, 2026-09-09:**
+| | measured |
+|---|---|
+| **tunable settings carrying a baseline value** | **1,020** |
+| **distinct module surfaces they sit under** | **99** |
+| **distinct strategies** | **20** |
+| **distinct regimes** | **7** |
+
+**THE LARGEST SURFACES, and this is the honest scale of "review the baselines":**
+| surface | settings | what it governs |
+|---|---|---|
+| `amr_response_dials` | **64** | how the adaptive machinery responds |
+| ⚠️ `trailing_exit` | **52** | ⛔ **fifty-two tunables for a subsystem that is switched OFF** — and the one whose stale label produced `#732` |
+| `amr_weather_rules` | **42** | |
+| ⭐ `strategy_gates` | **38** | ★ **this is Kyle's "regime categories" — which strategies a signal may be routed to** |
+| `amr_input_health` · `data_lifecycle` | 30 · 30 | |
+| ⭐ `expectancy_gates` | **29** | the EV gate that admits or refuses a trade |
+| `macro_modifier` | 26 | |
+| ⭐ `strategy.dhma` · `.vwap_pullback` · `.breakout` · `.range_trade` | 25 · 18 · 15 · 15 | ★ **per-strategy parameters — Kyle's "strategies"** |
+| `price_discontinuity_detector` · `maker_taker` | 24 · 24 | |
+| ⭐ `sqe_config` | **18** *(5 asset classes)* | the signal-quality gate |
+| ⭐ `regime_classifier` · `volume_regime` · `multi_tf_agreement` | 16 · 16 · 16 | ★ **the regime RANGES themselves** |
+| `exploration_lane` | 14 | the deliberately-negative-EV learning lane |
+
+⛔ **THE FILTERS ARE IN THIS SET TOO** — the liquidity and volatility filters, the price floor (`#967`, already a Kyle decision), the volume floor, and the universe filter's own quote/volume criteria (§5b of the pricing document).
+⇒ ✅ **THE REMIT IS THEREFORE BOUNDED AND STATEABLE: 1,020 values, and the question for each family is not "is it wrong" but "was it CHOSEN, and is it a good place to START collecting from."** ★ **Many were set once, early, for a system that has since changed underneath them** — `trailing_exit`'s 52 live tunables behind an off switch is the clearest example.
+
+### ➕ ONE MORE ITEM KYLE NAMED, AND THERE ARE TWO CANDIDATES — **HE SHOULD SAY WHICH, OR WE TAKE BOTH**
+> *"I think there was an issue with the ready to buy pool database columns being misaligned."*
+
+| candidate | what it is | state |
+|---|---|---|
+| ⭐ **`#934` `B-VPG-ROW-ALIGN`** *(plan row `3l`)* | **The Filter Diagnostics Pipeline Summary renders the venue-price-grid row's would-fail count in a `colSpan={2}` cell, so under headers `Stage \| Quant \| Pattern \| Total` the number lands under the WRONG HEADING.** ★ **This is a MISALIGNED COLUMN in the literal sense and is the closest match to his words.** | OPEN, placed |
+| **the `rtb_signals.final_score` projection** *(discussed under `#142`/`#558`, not its own number)* | The column stopped being written; Drizzle still projects **every declared column on every `getRtbSignals` call**, so the dropped column sits in the SELECT list for all six callers. **A database-column problem on the ready-to-buy pool** | discussed, not separately homed |
+
+⚠️ **I am NOT collapsing these into one.** The first is a display misalignment, the second is a schema/projection issue on the RTB pool itself — **his phrase "database columns" fits the second, his word "misaligned" fits the first.** **Both are real; both belong in the remit.**
+
+### ⭐ AND THE REASON THIS SECTION EXISTS AT ALL — KYLE'S OWN FRAMING, WHICH IS THE POINT
+> **"We've gotten really deep in the weeds in Phase 19, and I just fear that we're missing the bigger picture, and that's why I've involved Coltrane."**
+
+⛔ **THAT IS A BRIEF, NOT AN ASIDE.** ★ **A fresh reviewer's value here is NOT another defect list — we are good at producing those and §1 is one. It is the question none of us has been positioned to ask: *are the starting values of this system, taken together, a sensible place to begin collecting data from?*** ⚠️ **Everyone who could answer that has spent months inside the individual settings.**
+
+
+
 ## ⏳ HOW THE WORK WILL BE DONE — **NOT DECIDED, AND NOT MINE TO DECIDE**
 **Kyle is iterating that with Langston and Coltrane.** The idea being tested: **Coltrane writes the code in his own repository; Langston reviews it; everything is inspected before it reaches the review branch or staging; a clear rollback exists.** ⚠️ **Whether it ships as one change or in pieces is an open question Kyle has explicitly assigned to Langston and Coltrane.**
 ⛔⛔ **I HAVE STOPPED DECLARING WHAT WE WILL AND WILL NOT DO — KYLE'S CORRECTION, AND IT WAS FAIR.** I had ruled on gates, exclusions and sequencing before the approach itself was decided. **r2's process rulings are withdrawn from this file.** ★ **His framing: rules will be broken deliberately, it is a test, and if it does not work we roll back.**
@@ -146,7 +194,8 @@
 
 **1 — THE DESIGN.** Given the confirmed findings in §1 and the objective in the header, **design the fix.** ⭐ **Not fourteen fixes — the smallest coherent design that serves all three outcomes**, including which parts must land together and which can follow.
 **2 — YOUR EARLIER FINDINGS, AS A LIST.** Assignments 1-3, one line each with the disposition you would give it today. ⚠️ **We hold your pricing review in full and almost nothing from the other three** — that is a gap on our side, not a test of your recall. **Plus the blind-spot delta if it exists.**
-**3 — THE BASELINE THRESHOLDS.** ⭐ **This is the outcome we most need your view on and the one our own register was weakest on.** For **strategies, regime categories and reachability** — what should the starting values be, and what makes a baseline good enough that the calibration phase can learn from the data it produces?
+**3 — THE BASELINE THRESHOLDS — ACROSS THE WHOLE SURFACE, NOT THREE NAMED AREAS.** ⭐ **The outcome we most need your view on, and the one we are weakest on.** **Measured: 1,020 tunable settings across 99 surfaces, 20 strategies, 7 regimes** — the inventory and the largest families are in the header. **Include the filters, the EV and signal-quality gates, the regime ranges and the regime→strategy admission mapping.**
+⛔ **The question per family is NOT "is this value wrong" — it is "was it CHOSEN, and is it a good place to START collecting from."** ★ **And Kyle's brief for you is wider than our findings list: we have been deep in the weeds and may be missing the bigger picture. Say so if you see it.**
 **4 — THE FIVE RUNTIME QUESTIONS FROM §4** — the ones needing evidence rather than a code read: context-cache staleness, the gate-time snapshot interval, maker-fill incidence, fabricated-target incidence, and the real upper bound on the book-resync gap. **Tell us which of these your design depends on**, and we will produce the evidence.
 **5 — WHAT ELSE DO YOU NEED FROM US?** Data, measurements, history, intent, or a decision only Kyle can make. ✅ **Ask plainly** — anything we can supply, we will.
 
