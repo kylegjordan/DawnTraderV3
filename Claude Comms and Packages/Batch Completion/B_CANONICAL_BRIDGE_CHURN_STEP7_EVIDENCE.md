@@ -207,3 +207,30 @@ Scheduling: `crontab -u langston -l` → `17 * * * * /usr/local/bin/dt-deploy-dr
 
 ⛔ **U-2 (§8) REMAINS UNOBSERVED, AND THIS RUN COULD NOT HAVE SETTLED IT.** An unattended run CLEARING rungs needs open rungs to clear; my manual run had already cleared them. **Stated as still open rather than counted as satisfied by a run that had nothing to do.**
 ★ **This is the same discipline as §4: a run that had zero opportunity is not evidence, however good its output looks.**
+
+
+## 10. ⛔⛔ THE WINDOWS RE-REGISTERED AFTER THE 2026-09-09 DEPLOY — AND ONE OF THEM MOVED BECAUSE OF THAT DEPLOY
+
+★ **§8's U-1 AND U-2 STAND. What changed is WHEN they can fire, and I am recording that rather than quietly re-reading the old text against new dates.**
+
+### WHY U-1 SLIPPED A DAY, AND IT IS MY OWN DEPLOY THAT DID IT
+`canonical_bridge_sync` is registered with `intervalMs: 24 * 60 * 60 * 1000` on a `setInterval` — **it fires 24h AFTER PROCESS START, not at a clock time.** ⇒ the 07:50 slot I had in mind was an artefact of the PREVIOUS process's start, not a schedule.
+⚠️ **SO THE SYNC HAD NOT RUN AT ALL SINCE THE 2026-09-08T19:49Z DEPLOY, AND THE CLEAN TREE I OBSERVED AT 08:44Z PROVED NOTHING ABOUT THE FIX** — exactly what §8's criterion was written to stop me concluding. **A clean tree with no run behind it is the null result wearing the pass's clothes.**
+⇒ **the 2026-09-09T08:46:50Z deploy RESET that 24h clock. U-1 is now observable at ≈ 2026-09-10T08:46Z.**
+✅ **THE TRADE, STATED: I chose to deploy anyway.** The drift alert `14b031e8` was a **genuine true positive** — real undeployed runtime code, which happened to be my own one-line `ALERT_ACTORS` edit — and **leaving a correct alert open to protect a measurement window is the tail wagging the dog.** The churn fix is already mutation-proved on the code path; U-1 is the schedule confirmation, and a day's slip costs nothing but time.
+
+### ⛔ AND THE DISTINCTION THAT MATTERS MOST, BECAUSE ONE GREEN RUN MUST NOT STAND FOR THREE
+After the deploy **`deployed == head` EXACTLY**, so the next cron takes the **`ZERO`** branch.
+★★ **`ZERO` CLEARED ROWS BEFORE `#1021` TOO. So the 09:17Z run tests CRITERION 4 — and it does NOT test my fix.** The thing `#1021` changed is clearing from **`NO_RUNTIME_PATHS`** and **`BELOW_FLOOR`**, neither of which this run will reach.
+
+**U-2a — CRITERION 4 OF `B-DEPLOY-DRIFT-LINE` (fires 2026-09-09T09:17:01Z, unattended).** PASS requires ALL of:
+1. a `:17` stamp exists that nobody triggered;
+2. it logs `ZERO deployed=c52c577fd… head=c52c577fd… — clearing open drift rows` then `ZERO resolved=2 failed=0`;
+3. **BOTH** rows reach `state=resolved` — `14b031e8` (`deploy-drift-rung-2`, active) and `c588d5cb` (`deploy-drift-rung-UNATTENDED-PROBE`, **acknowledged** — so this also demonstrates an acked row IS swept);
+4. each resolve carries evidence in the machine-recognisable form `ZERO at <ts> deployed=… head=…`, which is the discriminator separating a script resolve from a hand-typed one.
+**FAIL:** the rows stay open, or a resolve carries human prose, or nothing runs at `:17`.
+⛔ **I WILL NOT RUN THE JOB BY HAND. Doing so is precisely the error I had to correct on 2026-09-08, when I reported rungs as “self-resolved” after triggering the run myself.**
+
+**U-2b — THE `#1021` FIX ITSELF, UNATTENDED (not yet schedulable).** Needs an OPEN rung row at a moment when the range is **non-empty but non-runtime**. After U-2a clears both rows there will be none, so this requires a fresh throwaway probe minted AFTER documentation commits have moved the head. **Registered here as OUTSTANDING rather than folded into U-2a**, because `ZERO` passing says nothing about the two exits the batch exists to fix.
+
+**U-1 — unchanged in substance, moved in time (≈ 2026-09-10T08:46Z).** After the first unattended `canonical_bridge_sync` since the deploy: `git status --porcelain -uall` EMPTY **and** the scheduler logs `0 updated, 1 unchanged`. **The log line is the positive emission; the clean tree alone cannot distinguish “skipped correctly” from “never ran” — which is exactly the mistake this section opens by recording.**
