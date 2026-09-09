@@ -8019,3 +8019,29 @@ Alert `81135510` (`deploy-drift-rung-2`, `2026-09-07T20:23:32Z`) fired correctly
 ⛔ **CC-C (me) FOUND IT AND DOES NOT OWN IT. The evidence above is handed over, not held.**
 **FIRST OBJECTIVE IS THE MEASUREMENT, NOT THE FIX:** run the guard N times against an unchanged tree and record the verdict distribution. ⛔ **A one-shot reproduction attempt that passes proves nothing about an intermittent fault** — and if it proves deterministic after all, the disposition becomes a stale-baseline regen with the reason recorded, which is a different batch.
 
+### #1022 OPEN 2026-09-09 (CC-INFRA) — ⛔ BEING LOGGED IN IS NOT BEING AUTHORIZED: 157 OF 216 MUTATING ROUTES CARRY NO AUTHORIZATION GUARD, AND THE `viewer` ROLE DOES NOT MAKE AN ACCOUNT READ-ONLY
+
+⛔⛔ **SURFACED WHILE BUILDING SOMETHING ELSE (Coltrane's staging access), AND IT KILLED THAT DESIGN.** Kyle approved dedicated **read-only `viewer` accounts** for Coltrane, Langston and the four CC sessions **on my representation that the role is enforced** — *"the code checks the account type before allowing anything that changes state."* ★ **THAT REPRESENTATION WAS WRONG AND THE ACCOUNTS WERE NOT CREATED.**
+
+**MEASURED AT THE OBJECT (`server/routes.ts`, whole file, 216 mutating routes = POST/PUT/PATCH/DELETE):**
+| middleware in use on a mutating route | uses | what it actually tests |
+|---|---|---|
+| `authenticateToken` | 201 | **WHO you are. Never what you may do.** |
+| `requireAdmin` (`:244`) | 49 | `!req.user?.isAdmin` — **a BOOLEAN FLAG, not the role** |
+| `requireEditor` (`:266`) | 10 | `role !== 'owner' && role !== 'editor'` — the only guard a `viewer` trips |
+| **`requireOwner` (`:257`)** | **0** | **DEFINED AND NEVER APPLIED TO ANY ROUTE** |
+
+⇒ ⛔ **157 of 216 (73%) have NO authorization guard at all** — among them `PUT /config` (`:477`), `PUT /settings` (`:1276`), `PATCH /user/approval-matrix` (`:1054`), `PUT /system/trading-pace` (`:1323`), and the whole `POST /diagnostics/*` start/stop family. **A `viewer` can call every one of them.**
+⇒ ⛔ **`viewer` is meaningful in exactly ONE place — `intent-executor.ts:55 canExecuteMutatingIntent`, the AI-INTENT path. It governs nothing on the REST API.**
+
+**POSITIVE CONTROL ON THE ZERO (rule 29 — a zero is not evidence until the instrument is shown finding a positive):** the same `grep -o … | wc -l` returns **10** for `requireEditor,` and **92** for `requireAdmin,`. The instrument finds guards that are used, so **`requireOwner` = 0 is a real absence, not a dead search.**
+
+★★ **AND MY FIRST MEASUREMENT OF THIS WAS ITSELF WRONG, WHICH IS THE PART WORTH KEEPING.** Round 1 reported *"92% unguarded"* — because the regex hunted for guard names **I had guessed** (`requireOwner`, `requireEditor`, `role`) and **missed `requireAdmin`**, so it was about to report the admin/user-management routes as wide open when they are not. ⇒ **ENUMERATE THE MIDDLEWARE ACTUALLY PRESENT AND CLASSIFY AFTERWARDS; never count occurrences of names you supplied from memory.** Same `wrong-object` family as reading a worktree instead of a ref.
+
+⚠️ **SCOPE OF THE CLAIM, STATED:** this is `server/routes.ts` only. The sub-routers mounted at `:22375-22412` (`/status`, `/token-watch`, `/vts`, `/audit`, `/tlva`, …) are **NOT** in the denominator and were not examined — the real unguarded count is **a floor, not a total.**
+
+★ **NOT PRESENTED AS AN EXPLOIT.** The app is single-user by design (`/auth/register` is disabled with *"This is a single-user application"*), so today there is exactly one human account and no second party to abuse this. **It becomes load-bearing the moment a SECOND account exists — which is precisely what was about to be created**, and it is squarely relevant before live trading.
+
+⇒ **THE FIX THAT DOES NOT DEPEND ON 216 ROUTES BEING RIGHT: FENCE BY HTTP METHOD AT THE EDGE.** A browsing door that permits `GET`/`HEAD` and returns `405` for everything else is **one rule, independent of every handler, and cannot be defeated by an unguarded route.** §7.1's own preference: *"a push from it fails at git, not at somebody's memory"* — make it impossible rather than checked. Per-route guards remain the right long-term fix; they are not a prerequisite for safe agent browsing.
+
+**HOME: `B-SEC-HARDEN`, owner CC-A** — the same follow-on already carrying the `0.0.0.0:5000` bind item. Placed there rather than in a new batch because it is the same class (authorization surface on staging) and the same owner. ⚠️ **CC-INFRA is NOT taking this** — it is outside my lane; I surfaced it and I am telling CC-A in the channel.
