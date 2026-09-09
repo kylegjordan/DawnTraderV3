@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Mint a staging session for Coltrane's browser, so it opens already logged in.
+
+★ KYLE'S RULING, 2026-09-09, AFTER I PUT THE READ-ONLY QUESTION TO HIM TWICE:
+  *"The way it's been working now is that the sessions navigate through the browser to a
+  staging page that's already open and logged into... if you guys were going to be making
+  changes and causing problems, then that would have already happened by now... You guys can
+  do much more damage in the back end than you can from the front end. I don't need read
+  only. Let's just give the access."*
+  ⇒ **THE READ-ONLY FENCE IS DELIBERATELY NOT BUILT.** `#1022` records what a viewer account
+    would and would not have stopped; it stands as a finding for `B-SEC-HARDEN`, not as a
+    blocker on this. Do not re-litigate it here.
+
+⛔⛔ NO PASSWORD IS EVER TYPED INTO A FORM, AND THAT BOUNDARY IS UNTOUCHED. `CLAUDE.md` §7
+    permits exactly one use of the staging credentials — **the authenticated API call** — and
+    that is all this does: one POST to `/api/auth/login`, server to server. The tokens it
+    returns are written into a Playwright storage-state file, which the browser loads as its
+    starting state. **The browser therefore OPENS logged in rather than logging itself in**,
+    which is the same position Kyle's own Chrome is in when a session verifies through it.
+
+⛔ CREDENTIALS COME FROM A ROOT-ONLY FILE AND NEVER FROM argv. Langston caught a live OAuth
+   token in a command line on 2026-09-01: `ps` is world-readable, `/proc` has no hidepid, and
+   another human has a shell on that box. Same rule, same reason, different secret.
+
+⚠️ THE TOKEN LASTS 7 DAYS (`routes.ts:157`, extended from 12h because Kyle prefers no session
+   timeout), so the refresh timer runs daily — comfortably inside it. ★ A file that is merely
+   PRESENT proves nothing about whether it still works, which is why `--check` asks the API
+   rather than reading the file's timestamp.
+"""
+
+import argparse
+import json
+import os
+import ssl
+import sys
+import urllib.error
+import urllib.request
+
+ENV_FILE = "/etc/coltrane/staging.env"
+STATE_FILE = "/home/coltrane/.staging-session.json"
+BASE = "https://188.245.193.8.sslip.io"
+ORIGIN = BASE
+NL = chr(10)
+
+# ⚠️ The staging cert is for the sslip.io host and is valid, but the box also answers on a
+#    bare IP; verification is left ON and this note exists so nobody "fixes" a failure by
+#    turning it off.
+CTX = ssl.create_default_context()
+
+
+def read_env():
+    """⛔ Reads the credentials. Never prints them, never returns them to a caller that logs."""
+    out = {}
+    try:
+        with open(ENV_FILE, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    out[k.strip()] = v.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        print("REFUSED: %s does not exist. This is the absence of the CREDENTIAL FILE, not "
+              "of a session — do not read it as 'staging is down'." % ENV_FILE)
+        raise SystemExit(2)
+    except PermissionError:
+        print("REFUSED: cannot read %s. Run this as root; the file is 600 by design."
+              % ENV_FILE)
+        raise SystemExit(2)
+    if not out.get("STAGING_USER") or not out.get("STAGING_PASS"):
+        print("REFUSED: %s is missing STAGING_USER or STAGING_PASS." % ENV_FILE)
+        raise SystemExit(2)
+    return out
+
+
+def api_login(env):
+    body = json.dumps({"username": env["STAGING_USER"],
+                       "password": env["STAGING_PASS"]}).encode("utf-8")
+    req = urllib.request.Request(BASE + "/api/auth/login", data=body,
+                                 headers={"Content-Type": "application/json"},
+                                 method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=CTX) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # ⛔ Report the STATUS, never the body — a failed auth response can echo input back.
+        print("FAILED: login returned HTTP %d. The session was NOT refreshed; the old one "
+              "stays in place until it expires." % e.code)
+        raise SystemExit(3)
+    except Exception as e:
+        print("FAILED: %s: %s. The session was NOT refreshed." % (type(e).__name__, e))
+        raise SystemExit(3)
+
+
+def write_state(tokens):
+    """The storage-state shape Playwright loads. ⚠️ All THREE keys are written because
+    `client/src/lib/auth.ts:14-17` sets `accessToken`, `refreshToken` AND a legacy `token`,
+    and `getAccessToken()` falls back to the legacy one. Writing only the modern name would
+    work today and break on whichever path still reads the old key."""
+    access = tokens.get("accessToken")
+    refresh = tokens.get("refreshToken", "")
+    if not access:
+        print("FAILED: login succeeded but returned no accessToken. NOT writing a state "
+              "file — a file with no token in it is worse than none, because the browser "
+              "would open, look logged out, and nobody would know why.")
+        raise SystemExit(4)
+    state = {"cookies": [], "origins": [{"origin": ORIGIN, "localStorage": [
+        {"name": "accessToken", "value": access},
+        {"name": "refreshToken", "value": refresh},
+        {"name": "token", "value": access}]}]}
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(state, fh)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, STATE_FILE)          # atomic: never a half-written state file
+    try:
+        import shutil
+        shutil.chown(STATE_FILE, "coltrane", "coltrane")
+    except Exception as e:
+        print("WARNING: wrote %s but could not chown it: %s" % (STATE_FILE, e))
+
+
+def check():
+    """⛔ ASK THE API, DO NOT STAT THE FILE. A present, recent, well-formed state file whose
+    token has been invalidated looks identical to a working one from the outside."""
+    try:
+        with open(STATE_FILE, encoding="utf-8") as fh:
+            state = json.load(fh)
+        tok = [i["value"] for o in state["origins"] for i in o["localStorage"]
+               if i["name"] == "accessToken"][0]
+    except Exception as e:
+        print("NO SESSION: %s: %s" % (type(e).__name__, e))
+        return 1
+    # ⛔ THE ENDPOINT IS READ FROM THE CODE, NOT GUESSED. The first version probed
+    #    `/api/auth/me`, which DOES NOT EXIST — the four real ones are login, refresh,
+    #    register and verify (`routes.ts:995`). It returned 404 and the checker announced
+    #    "SESSION DEAD", which was a lie about a token that was perfectly good.
+    req = urllib.request.Request(BASE + "/api/auth/verify",
+                                 headers={"Authorization": "Bearer " + tok})
+    try:
+        with urllib.request.urlopen(req, timeout=20, context=CTX) as r:
+            who = json.loads(r.read().decode("utf-8"))
+        u = who.get("user") or {}
+        print("SESSION OK — the API accepted the stored token (user: %s, role: %s)."
+              % (u.get("username") or who.get("username") or "?", u.get("role") or "?"))
+        return 0
+    except urllib.error.HTTPError as e:
+        # ⛔⛔ 404 IS NOT 401. A missing endpoint and a rejected token are different facts and
+        #    collapsing them is how a checker reports a healthy session as dead — measured,
+        #    on this very script's first run.
+        if e.code in (401, 403):
+            print("SESSION DEAD — the API REJECTED the stored token (HTTP %d). Re-run "
+                  "without --check to mint a new one." % e.code)
+            return 1
+        print("INCONCLUSIVE — the probe endpoint returned HTTP %d, which says nothing about "
+              "the token. Check the endpoint before believing anything about the session."
+              % e.code)
+        return 2
+    except Exception as e:
+        print("UNKNOWN — could not reach staging to test the token: %s: %s" % (type(e).__name__, e))
+        return 2
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split(NL)[0])
+    ap.add_argument("--check", action="store_true",
+                    help="test the STORED token against the API; does not mint a new one")
+    a = ap.parse_args()
+    if a.check:
+        return check()
+    write_state(api_login(read_env()))
+    print("Wrote %s — Coltrane's browser will now open staging already signed in." % STATE_FILE)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -155,9 +155,17 @@ wrong answer gets caught and a plausible one gets used.**
   `browse-output`, found no images, and was one sentence away from reporting that you had
   invented the filenames — the files existed the whole time, one directory away.
   ⇒ **Report the path you can `ls`, not the path you assume.**
-  ⚠️ **OUR STAGING UI IS BEHIND A LOGIN AND YOU HAVE NO ACCOUNT.** Every route redirects
-  to `/login`. ⛔ **DO NOT type into that form, and do not try to get past it by any other
-  route.** Report that you were stopped at the login wall — that IS the honest result.
+  ✅ **YOUR BROWSER OPENS STAGING ALREADY SIGNED IN** (Kyle's ruling, 2026-09-09) — the same
+  position his own browser is in. You can verify any deployed screen: navigate, look, report
+  what is actually rendered. **`https://188.245.193.8.sslip.io`**
+  ⛔ **YOU STILL NEVER TYPE INTO THE SIGN-IN FORM.** The session is handed to your browser
+  before it starts. **If you ever land on `/login`, the session has expired — SAY SO and
+  stop.** Do not try to get past it; a human refreshes it with one command.
+  ⚠️ **YOU ARE SIGNED IN AS THE OWNER, NOT AS A READ-ONLY VIEWER, AND KYLE CHOSE THAT
+  KNOWINGLY** — the app has no working read-only role (`#1022`). **So the restraint is
+  yours, not the software's: LOOK, DO NOT CLICK THINGS THAT CHANGE STATE.** Reading a page,
+  scrolling and screenshotting are always fine. Anything that saves, starts, stops, resets
+  or submits is not yours to click unless you were asked for it by name.
 - **The channel**, through the mirror file — check its `GENERATED` stamp before trusting it.
 - ⛔ **You do NOT see** what Kyle says to a session privately, any session's own reasoning,
   or the moment a message arrives.
