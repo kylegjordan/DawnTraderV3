@@ -44,6 +44,11 @@ SSH_OPTS="-n -i $SSH_ID -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 #   Install the cron first and every ZERO run's resolve is refused → FAILED_N>0 → mints
 #   `deploy-drift-measurement-failed-resolve` → whose key starts `deploy-drift-` → the next
 #   ZERO picks it up → refused → re-mints. UNCLEARABLE, live.
+#   ⚠️ STALE AS OF #1021 (round-3): the sweep no longer selects
+#     'deploy-drift-measurement-failed-*' at all, so that key is never picked up and this
+#     particular loop cannot form. THE INSTALL-ORDER PRECONDITION BELOW STILL STANDS on its
+#     own merits; only the mechanism sentence above is dead. Left in place rather than deleted
+#     because it records why the precondition exists.
 #   ORDER: deploy the actor, verify with a RETURNING `grep -c deploy-drift-monitor` on the
 #   staging worktree, and only then install the cron.
 ACTOR="deploy-drift-monitor"
@@ -442,8 +447,19 @@ fi
 #   NINE consecutive unattended runs, every one logging NO_RUNTIME_PATHS.
 # ⇒ A condition that has genuinely cleared, still reported as open, is #402's own shape
 #   inside the batch built to detect it.
-# ⚠️ NO FLAP RISK IN ANY OF THE THREE, and this is why it is safe to widen: age and
-#   runtime-count only FALL on a deploy. Nothing oscillates a row back open.
+# ⚠️ THE SAFETY ARGUMENT, CORRECTED -- MY FIRST VERSION SAID "age and runtime-count only FALL
+#   on a deploy. Nothing oscillates a row back open." THE SECOND CLAUSE IS FALSE.
+#   AGE: true. The oldest commit in the range only changes on a deploy, so it cannot oscillate.
+#   RUNTIME-COUNT: FALSE. runtime_files is derived from the compare DEPLOYED...HEAD (:347), so
+#     pushing one server/ file RAISES it with no deploy at all. Hour N doc-only -> cleared;
+#     hour N+1 a server/ push -> the rung mints AGAIN as a brand-new row, because `resolved` is
+#     terminal and does not block a fresh mint (system-alerts.ts:503-511).
+# ★ THE BEHAVIOUR IS STILL RIGHT -- at hour N there genuinely was no runtime drift, and at
+#   hour N+1 there genuinely is -- so a NEW row is the correct report. What was wrong was the
+#   REASON, and this file grades a false stated reason as a defect in its own right (:364-369).
+# ⚠️ CONSEQUENCE, STATED RATHER THAN DISCOVERED: clearing hourly means each clear->recur cycle
+#   APPENDS a new rung row instead of reusing one. Roughly one new row per deploy per rung
+#   reached. The old code held it to one row forever only because clearing was near-unreachable.
 # ⛔ $1 IS THE CONDITION NAME AND IT GOES INTO THE EVIDENCE STRING. A resolve must say WHICH
 #   condition discharged it.
 # ⚠️ MY FIRST VERSION OF THIS COMMENT GAVE A STALE REASON AND A FRESH READER CAUGHT IT.
@@ -468,31 +484,54 @@ clear_open_rows() {
   # "nothing to clear" for "could not look", which is this job's own subject.
   [ $LIST_RC -ne 0 ] && fail_measurement "alert_store" "could not read the alert store to clear drift rows (ssh exit $LIST_RC). Rows may still be open."
 
-  # ⛔⛔ NO BACKTICKS ANYWHERE BELOW, INCLUDING IN COMMENTS. This python runs inside a
-  #   DOUBLE-QUOTED shell string, so a backtick is COMMAND SUBSTITUTION, not punctuation.
-  #   MEASURED 2026-09-09: two backticked words in comments I had just added made the shell
-  #   execute `fail_measurement` (with no args, tripping set -u at :93) and `resolved`.
-  #   ★ `bash -n` PASSED CLEAN -- it is valid syntax. Only RUNNING it showed the errors.
-  python3 -c "
-import json
+  # ⛔⛔ QUOTED HEREDOC, NOT `python3 -c "..."` — AND THAT IS A STRUCTURAL FIX, NOT A STYLE CHOICE.
+  #   The old form put this python inside a DOUBLE-QUOTED shell string, where a backtick is
+  #   COMMAND SUBSTITUTION and `#` does NOT protect it (the `#` is python's, the quoting is bash's).
+  # ★ MEASURED TWICE IN ONE SESSION, 2026-09-09, BOTH TIMES BY ME, THE SECOND TIME IN THE COMMENT
+  #   BLOCK I HAD JUST ADDED WARNING ABOUT THE FIRST:
+  #     run 1 -> executed fail_measurement (no args, tripped set -u at :93) and `resolved`
+  #     run 2 -> executed `file-gate-undecidable`
+  #   ⛔ AND THE SECOND ONE FAILED SILENTLY IN THE WORST DIRECTION: the broken parse emitted an
+  #     EMPTY list, so the run logged `resolved=0 failed=0` — which reads as "nothing to clear"
+  #     when it means "the parse died." That is precisely the confusion the comment four lines
+  #     below this one exists to prevent, produced by the code that carries the comment.
+  # ⛔ `bash -n` PASSES ON BOTH — command substitution is valid syntax. Only RUNNING it shows them.
+  # ★★ A COMMENT SAYING "no backticks" IS AN INTERCEPTION, AND IT FAILED TWICE IN ONE FILE IN ONE
+  #   HOUR. Rule 29: PREFER IMPOSSIBLE OVER INTERCEPTED. Inside <<'PYEOF' (quoted delimiter) the
+  #   shell performs NO expansion at all — backticks, $VAR and $(...) are ordinary characters — so
+  #   this class cannot recur here regardless of what anyone writes in the comments.
+  # ⚠️ THE PRICE, STATED: a quoted heredoc expands nothing, so the path can no longer be
+  #   interpolated. It is passed through argv instead, which is the safer shape anyway.
+  # ⛔ NO TRAILING BACKSLASH ON THIS LINE. A "\" here continues the COMMAND LINE into the
+  #   heredoc body, swallowing the first script line as an argv entry. MEASURED: it made
+  #   "import json, sys" an argument, the script began at "seen={}", and the run died with
+  #   NameError: name 'sys' is not defined -- surfacing as "could not parse the alert store",
+  #   i.e. a MEASUREMENT FAILED that looked like a store problem and was a quoting problem.
+  # ★ The existing heredoc at :233 already had the correct shape. I did not copy it.
+  python3 - "$WORK/alerts.jsonl" <<'PYEOF' > "$WORK/open.txt" 2>>"$LOG"
+import json, sys
 seen={}
 skipped=0
-for line in open('$WORK/alerts.jsonl', encoding='utf-8', errors='replace'):
+for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
     line=line.strip()
     if not line: continue
     try: d=json.loads(line)
     except Exception: continue
     k=d.get('dedupe_key') or ''
-    # ⛔⛔ RUNGS ONLY -- NOT the bare 'deploy-drift-' prefix (round-2 correction, #1021).
-    # fail_measurement mints 'deploy-drift-measurement-failed-<operand>', which SHARES that
-    # prefix. Under the old code the sweep ran only from the near-unreachable ZERO branch, so
-    # that overlap was harmless. Calling it from three exits makes it hourly, and then a FLAKY
-    # read becomes: hour N fail -> mint; hour N+1 ok -> resolve; hour N+2 fail -> a BRAND NEW row,
-    # because 'resolved' is terminal and does NOT block a fresh mint (system-alerts.ts:326,:505).
-    # One row forever would have become one row per occurrence -- spam created BY the widening.
-    # ★ AND IT WOULD ERASE THE EVIDENCE OF ITS OWN FAILURES: a later good reading does not
-    #   discharge an earlier failed one. A measurement failure is discharged by someone LOOKING.
-    if not k.startswith('deploy-drift-rung-'): continue
+    # TWO PREFIXES. This job mints THREE keys:
+    #   :103 deploy-drift-measurement-failed-<operand>  -> NOT swept, deliberately
+    #   :661 deploy-drift-file-gate-undecidable         -> a DRIFT report, must be swept
+    #   :675 deploy-drift-rung-<N>                      -> swept
+    # The file-gate row says "there IS drift and the file gate is saturated" - it is a rung-like
+    # report, not a measurement failure. The original broad 'deploy-drift-' selector cleared it on
+    # ZERO; narrowing to rungs alone cleared it from NOWHERE, and addAlert suppresses a re-mint
+    # while a non-terminal row with that key exists (system-alerts.ts:503-511), so it would have
+    # become ONE PERMANENTLY-ACTIVE ROW carrying a mint-time snapshot forever - #1021's own defect,
+    # in a sibling key, created by the fix for #1021.
+    # Measurement-failure rows are excluded on purpose: a later good reading does not discharge an
+    # earlier failed one. A measurement failure is discharged by someone LOOKING.
+    if not (k.startswith('deploy-drift-rung-') or k == 'deploy-drift-file-gate-undecidable'):
+        continue
     rid=d.get('id')
     if rid: seen[rid]=d.get('state')
     else: skipped += 1
@@ -500,10 +539,9 @@ for i,s in seen.items():
     if s!='resolved': print(i)
 # A skipped row cannot be resolved by ANY path, so nothing is lost -- but the run would
 # otherwise log resolved=N failed=0 and exit clean while a row it could not touch stays open.
-import sys as _s
-if skipped: print('SKIPPED %d' % skipped, file=_s.stderr)
-" > "$WORK/open.txt" 2>>"$LOG" \
-  || fail_measurement "alert_store" "could not parse the alert store while clearing drift rows. Rows may still be open, and an empty result here would otherwise read as nothing-to-clear."
+if skipped: print('SKIPPED %d' % skipped, file=sys.stderr)
+PYEOF
+  [ $? -ne 0 ] && fail_measurement "alert_store" "could not parse the alert store while clearing drift rows. Rows may still be open, and an empty result here would otherwise read as nothing-to-clear."
 
   local RESOLVED_N=0; local FAILED_N=0
   while read -r ID; do
@@ -541,13 +579,6 @@ TOTAL="$3"; AGE_H="$4"; OLDEST="$5"; RUNTIME_N="$6"; CAPPED="$7"
 LIST="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | paste -sd, -)"
 
 AGE_INT="${AGE_H%.*}"
-# ⛔ A NEGATIVE AGE IS A BROKEN READING, NOT A SMALL ONE (round-2, #1021). `-0.50` truncates to
-#   `-0`, which passes `[ -0 -ge 4 ]` as a valid integer and routes to BELOW_FLOOR -- which now
-#   CLEARS. Clock skew or a future-dated commit could therefore discharge a rung. This job's own
-#   rule is that a failed measurement is a first-class outcome, never a silent small number.
-case "$AGE_INT" in
-  -*) fail_measurement "age" "computed a NEGATIVE range age (${AGE_H}h) — clock skew or a future-dated commit. An age that cannot be trusted must not decide a rung, and must never clear one." ;;
-esac
 
 # ── THE RUNG: A BOUNDED, MONOTONE AGE BUCKET ON THE DEDUPE KEY ────────────────────────
 # Four rungs, escalate only, return-to-zero resolves all. This is entirely PRODUCER-side:
@@ -571,6 +602,24 @@ if [ "$CAPPED" != "1" ] && [ "$RUNTIME_N" -eq 0 ]; then
   clear_open_rows NO_RUNTIME_PATHS
   exit 0
 fi
+# ⛔ A NEGATIVE AGE IS A BROKEN READING, NOT A SMALL ONE. "-0.50" truncates to "-0", which
+#   passes [ -0 -ge 4 ] as a valid integer and would route to BELOW_FLOOR -- which now CLEARS.
+#   Clock skew or a future-dated commit must not discharge a rung.
+# ⛔⛔ PLACEMENT IS THE WHOLE POINT, AND I GOT IT WRONG FIRST (round-3, #1021).
+#   I originally put this immediately after AGE_INT is computed -- i.e. BEFORE the
+#   NO_RUNTIME_PATHS exit. fail_measurement exits 1, so ONE future-dated commit would have
+#   hard-failed the job EVERY HOUR: no drift reported, and clear_open_rows never reached from
+#   ANY of the three exits, leaving open rungs open for an unrelated reason.
+# ★ THAT IS #1021'S OWN SYMPTOM, RE-CREATED BY THE DEFENCE AGAINST #1021 -- the second time
+#   in one batch that a correction reproduced the defect it was correcting.
+# ★ It belongs HERE, after NO_RUNTIME_PATHS has had its chance to clear: that exit does not
+#   read the age operand at all (:566 tests CAPPED and RUNTIME_N only), so a bad date has no
+#   business blocking it. Everything the guard was written to prevent still holds, because the
+#   rung ladder and BELOW_FLOOR are both below this line.
+case "$AGE_INT" in
+  -*) fail_measurement "age" "computed a NEGATIVE range age (${AGE_H}h) — clock skew or a future-dated commit. An age that cannot be trusted must not decide a rung, and must never clear one." ;;
+esac
+
 if   [ "$AGE_INT" -ge 72 ]; then RUNG=4
 elif [ "$AGE_INT" -ge 24 ]; then RUNG=3
 elif [ "$AGE_INT" -ge 8 ];  then RUNG=2
@@ -691,11 +740,15 @@ trigger. It is NOT 'the oldest runtime commit'.
 ⛔ RESOLVE this row, do not ACK it. An ack silences THIS RUNG only (#982 — there is no unack
 verb); worsening drift crosses into a new rung and re-mints on its own.
 
-HOW THIS ROW CLEARS: the hourly run clears every open drift row whenever it concludes there
-is nothing to report -- deployed==head (ZERO), the range touches no runtime file
-(NO_RUNTIME_PATHS), or the gap is under the 4h floor AND the deploy record corroborates a
-deploy inside that window (BELOW_FLOOR). The resolve evidence names which one.
-TWO STATED EXCEPTIONS, because a promise the code cannot keep is the defect this text replaced:
+HOW THIS ROW CLEARS: the hourly run clears open RUNG rows (and the file-gate-undecidable
+row) whenever it concludes there is nothing to report -- deployed==head (ZERO), the range
+touches no runtime file (NO_RUNTIME_PATHS), or the gap is under the 4h floor AND the deploy
+record corroborates a deploy inside that window (BELOW_FLOOR). The resolve evidence names
+which one. It does NOT clear measurement-failure rows: a later good reading does not
+discharge an earlier failed one.
+EXCEPTIONS, because a promise the code cannot keep is the defect this text replaced. This is
+NOT a closed count -- ANY measurement failure exits before the clearing is reached, so a
+bad compare, an unreadable deploy record or an untrustworthy age all leave this row open:
   - at the 300-file cap the runtime count is UNDECIDABLE, so NO_RUNTIME_PATHS is not reached
     and this row will NOT clear -- which is exactly the long doc-only stall case;
   - BELOW_FLOOR alone will not clear it: a committer date is rewritable by a rebase and may
