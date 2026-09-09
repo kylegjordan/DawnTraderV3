@@ -480,7 +480,17 @@ clear_open_rows() {
   # NOT dedupe_key (scripts/system-alerts.ts:256-272), so matching on a title substring would
   # catch any future alert titled that way BY ANY AUTHOR. §10.5's sanctioned read is the store
   # itself, which carries the true key. ~800 rows; trivial.
-  ssh $SSH_OPTS "$STAGING_SSH" "cat $ALERTS" > "$WORK/alerts.jsonl" 2>>"$LOG"
+  # ⛔⛔ THE SENTINEL IS THE ONLY THING THAT CAN DETECT A CLEAN-BOUNDARY TRUNCATION.
+  #   The unparseable-line counter below catches a MID-LINE cut. A cut at a NEWLINE boundary
+  #   yields a shorter but FULLY PARSEABLE store: dropped=0, the run logs resolved=N failed=0,
+  #   and every row past the cut stays open while reading as swept -- #1021's symptom for a
+  #   third time, and invisible to every check that inspects the CONTENT.
+  # ★ Appending the sentinel INSIDE the same ssh costs no extra round-trip, and && means it is
+  #   emitted only if cat itself succeeded. Requiring it as the LAST line makes a short read
+  #   IMPOSSIBLE to mistake for a complete one, rather than merely likely to be noticed.
+  #   (Langston, Step-4 residual on #1021 -- his construction, and it is this project's own
+  #    rule 29 preference for impossible over intercepted.)
+  ssh $SSH_OPTS "$STAGING_SSH" "cat $ALERTS && echo __DT_STORE_EOF__" > "$WORK/alerts.jsonl" 2>>"$LOG"
   local LIST_RC=$?
   # An unreachable store is NOT "nothing to clear". Unchecked, it logged resolved=0 —
   # "nothing to clear" for "could not look", which is this job's own subject.
@@ -515,7 +525,17 @@ import json, sys
 seen={}
 skipped=0
 dropped=0
-for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
+# THE STORE MUST END WITH THE SENTINEL THE FETCH APPENDED. Anything else means the read was
+# cut short -- and a cut at a newline boundary is otherwise INDISTINGUISHABLE from a complete
+# store, because every line left in it parses.
+_lines = open(sys.argv[1], encoding='utf-8', errors='replace').read().split('\n')
+while _lines and not _lines[-1].strip():
+    _lines.pop()
+if not _lines or _lines[-1].strip() != '__DT_STORE_EOF__':
+    print('TRUNCATED_STORE no sentinel at EOF', file=sys.stderr)
+    sys.exit(3)
+_lines.pop()   # drop the sentinel; it is not a row
+for line in _lines:
     line=line.strip()
     if not line: continue
     try: d=json.loads(line)
