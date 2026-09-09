@@ -99,3 +99,37 @@ the ref, so the reader is looking at the same bytes you are.
   published another session's staged work before.
 - **Write a real commit message.** It is where the reasoning goes — not the Discord post,
   which scrolls away.
+
+---
+
+## 6. ⭐ YOU BOTH HAVE A BROWSER NOW, AND IT OPENS STAGING ALREADY SIGNED IN
+
+**`https://188.245.193.8.sslip.io` — navigate, look, screenshot.** A real headless Chromium,
+so it runs the page's own code. **`curl` returns an empty shell for every one of those
+addresses** and tells you nothing: the whole app draws itself in the browser, and the
+redirect to the sign-in screen happens there too. **A `200` is not a rendered page.**
+
+⛔ **YOU NEVER TYPE INTO THE SIGN-IN FORM.** The session is handed to your browser before it
+starts — the same position Kyle's own browser is in. **If you land on `/login`, the session
+has expired: SAY SO and stop.** A human refreshes it with one command. Do not try to get
+past it.
+
+⚠️ **YOU ARE SIGNED IN AS THE OWNER, NOT A READ-ONLY VIEWER, AND KYLE CHOSE THAT KNOWINGLY.**
+The app has no working read-only role — `#1022` measured it: 157 of 216 state-changing
+routes have no permission check at all, and `requireOwner` is defined and applied to nothing.
+His reasoning: *"if you guys were going to be making changes and causing problems, that would
+have already happened by now... you can do much more damage in the back end than from the
+front end."*
+⇒ ★ **SO THE RESTRAINT IS YOURS, NOT THE SOFTWARE'S. LOOK; DO NOT CLICK THINGS THAT CHANGE
+  STATE.** Reading, scrolling and screenshotting are always fine. Anything that saves,
+  starts, stops, resets or submits is not yours to click unless you were asked for it by name.
+
+✅ **SAVE A SCREENSHOT AND CONFIRM THE FILE EXISTS BEFORE YOU NAME IT.** Whoever reads your
+report was not there; the image is what lets them check you. ⚠️ Page snapshots and console
+logs go to `browse-output/`; **a screenshot you name goes to your working directory** — two
+different places, and checking the wrong one once nearly produced a false accusation.
+
+★ **AND USE WEB SEARCH FOR RESEARCH — the browser is for OBSERVING OUR SYSTEM.** Search
+answers *what is true about the world*; the browser answers *what does this page show right
+now*. ⛔ A search once answered a "look at this page" question correctly while the browser was
+completely broken — a true answer from a dead instrument. **If you were asked to look, look.**

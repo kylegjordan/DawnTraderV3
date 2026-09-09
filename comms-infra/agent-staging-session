@@ -36,8 +36,13 @@ import sys
 import urllib.error
 import urllib.request
 
-ENV_FILE = "/etc/coltrane/staging.env"
-STATE_FILE = "/home/coltrane/.staging-session.json"
+# ⛔ ONE SCRIPT, PARAMETERISED BY USER — NOT TWO COPIES. Langston needs exactly this and a
+#    second copy is the #641 shape: two files, one fix, and the one nobody edited wins.
+#    Each agent still gets its OWN credential file and its OWN session file, which is the
+#    separation Kyle asked for; what is shared is the CODE, not the state.
+AGENT = "coltrane"                       # overridden by --user
+ENV_FILE = ""                            # set in main()
+STATE_FILE = ""
 BASE = "https://188.245.193.8.sslip.io"
 ORIGIN = BASE
 NL = chr(10)
@@ -114,7 +119,7 @@ def write_state(tokens):
     os.replace(tmp, STATE_FILE)          # atomic: never a half-written state file
     try:
         import shutil
-        shutil.chown(STATE_FILE, "coltrane", "coltrane")
+        shutil.chown(STATE_FILE, AGENT, AGENT)
     except Exception as e:
         print("WARNING: wrote %s but could not chown it: %s" % (STATE_FILE, e))
 
@@ -164,11 +169,18 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split(NL)[0])
     ap.add_argument("--check", action="store_true",
                     help="test the STORED token against the API; does not mint a new one")
+    ap.add_argument("--user", default="coltrane", choices=("coltrane", "langston"),
+                    help="which agent's session to mint or check")
     a = ap.parse_args()
+    global AGENT, ENV_FILE, STATE_FILE
+    AGENT = a.user
+    ENV_FILE = "/etc/%s/staging.env" % AGENT
+    STATE_FILE = "/home/%s/.staging-session.json" % AGENT
     if a.check:
         return check()
     write_state(api_login(read_env()))
-    print("Wrote %s — Coltrane's browser will now open staging already signed in." % STATE_FILE)
+    print("Wrote %s — %s's browser will now open staging already signed in."
+          % (STATE_FILE, AGENT))
     return 0
 
 
