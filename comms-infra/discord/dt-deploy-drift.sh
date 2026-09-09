@@ -450,13 +450,15 @@ fi
 # ⚠️ THE SAFETY ARGUMENT, CORRECTED -- MY FIRST VERSION SAID "age and runtime-count only FALL
 #   on a deploy. Nothing oscillates a row back open." THE SECOND CLAUSE IS FALSE.
 #   AGE: true. The oldest commit in the range only changes on a deploy, so it cannot oscillate.
-#   RUNTIME-COUNT: FALSE. runtime_files is derived from the compare DEPLOYED...HEAD (:347), so
+#   RUNTIME-COUNT: FALSE. runtime_files is derived from the GitHub compare DEPLOYED...HEAD
+#     -- the runtime_files comprehension guarded by qualifies() -- so
 #     pushing one server/ file RAISES it with no deploy at all. Hour N doc-only -> cleared;
 #     hour N+1 a server/ push -> the rung mints AGAIN as a brand-new row, because `resolved` is
 #     terminal and does not block a fresh mint (system-alerts.ts:503-511).
 # ★ THE BEHAVIOUR IS STILL RIGHT -- at hour N there genuinely was no runtime drift, and at
 #   hour N+1 there genuinely is -- so a NEW row is the correct report. What was wrong was the
-#   REASON, and this file grades a false stated reason as a defect in its own right (:364-369).
+#   REASON, and this file grades a false stated reason as a defect in its own right (see the
+#   RUNTIME_N-is-not-a-scalar note, and the set -- $READ shape guard).
 # ⚠️ CONSEQUENCE, STATED RATHER THAN DISCOVERED: clearing hourly means each clear->recur cycle
 #   APPENDS a new rung row instead of reusing one. Roughly one new row per deploy per rung
 #   reached. The old code held it to one row forever only because clearing was near-unreachable.
@@ -512,16 +514,25 @@ clear_open_rows() {
 import json, sys
 seen={}
 skipped=0
+dropped=0
 for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
     line=line.strip()
     if not line: continue
     try: d=json.loads(line)
-    except Exception: continue
+    except Exception:
+        # COUNTED, NOT SILENT. The justification below for counting id-less rows applies here
+        # verbatim: an ssh cat that TRUNCATES exits 0, so a PARTIAL store reads as a complete
+        # one and the run logs resolved=N failed=0 while rows it never saw stay open. That is
+        # this file's own header thesis -- exit 0 means the command RAN -- one layer down.
+        dropped += 1
+        continue
     k=d.get('dedupe_key') or ''
     # TWO PREFIXES. This job mints THREE keys:
-    #   :103 deploy-drift-measurement-failed-<operand>  -> NOT swept, deliberately
-    #   :661 deploy-drift-file-gate-undecidable         -> a DRIFT report, must be swept
-    #   :675 deploy-drift-rung-<N>                      -> swept
+    # (ANCHORS, NOT LINE NUMBERS -- every :NNN written in this batch was already wrong when the
+    #  commit landed, because the inserts above them shifted every line below.)
+    #   deploy-drift-measurement-failed-<operand>  minted in fail_measurement   -> NOT swept
+    #   deploy-drift-file-gate-undecidable         minted at the CAPPED branch  -> swept
+    #   deploy-drift-rung-<N>                      minted at the rung ladder    -> swept
     # The file-gate row says "there IS drift and the file gate is saturated" - it is a rung-like
     # report, not a measurement failure. The original broad 'deploy-drift-' selector cleared it on
     # ZERO; narrowing to rungs alone cleared it from NOWHERE, and addAlert suppresses a re-mint
@@ -540,6 +551,7 @@ for i,s in seen.items():
 # A skipped row cannot be resolved by ANY path, so nothing is lost -- but the run would
 # otherwise log resolved=N failed=0 and exit clean while a row it could not touch stays open.
 if skipped: print('SKIPPED %d' % skipped, file=sys.stderr)
+if dropped: print('UNPARSEABLE %d' % dropped, file=sys.stderr)
 PYEOF
   [ $? -ne 0 ] && fail_measurement "alert_store" "could not parse the alert store while clearing drift rows. Rows may still be open, and an empty result here would otherwise read as nothing-to-clear."
 
@@ -613,11 +625,16 @@ fi
 # ★ THAT IS #1021'S OWN SYMPTOM, RE-CREATED BY THE DEFENCE AGAINST #1021 -- the second time
 #   in one batch that a correction reproduced the defect it was correcting.
 # ★ It belongs HERE, after NO_RUNTIME_PATHS has had its chance to clear: that exit does not
-#   read the age operand at all (:566 tests CAPPED and RUNTIME_N only), so a bad date has no
+#   read the age operand at all (its test is CAPPED != 1 AND RUNTIME_N == 0, which never mentions the age), so a bad date has no
 #   business blocking it. Everything the guard was written to prevent still holds, because the
 #   rung ladder and BELOW_FLOOR are both below this line.
+# ⚠️ THE RESIDUAL THIS PLACEMENT ACCEPTS, STATED RATHER THAN GLOSSED: a run with a negative
+#   age, CAPPED=0 and RUNTIME_N=0 still clears via NO_RUNTIME_PATHS with an untrusted age in
+#   scope. Deliberate: that exit does not consult the age, so its conclusion (the range touches
+#   no runtime file) is unaffected by a bad date. The alternative was taking the whole
+#   instrument offline every hour, which is strictly worse.
 case "$AGE_INT" in
-  -*) fail_measurement "age" "computed a NEGATIVE range age (${AGE_H}h) — clock skew or a future-dated commit. An age that cannot be trusted must not decide a rung, and must never clear one." ;;
+  -*) fail_measurement "age" "computed a NEGATIVE range age (${AGE_H}h) — clock skew or a future-dated commit. An age that cannot be trusted must not decide a rung, and must not discharge one on the strength of the age itself." ;;
 esac
 
 if   [ "$AGE_INT" -ge 72 ]; then RUNG=4
@@ -632,7 +649,8 @@ else
   # above it are arbitrary-but-labelled and trigger REPORTING, not action.
   log "BELOW_FLOOR age=${AGE_INT}h total=$TOTAL runtime=$RUNTIME_N — under the 4h floor, not reported"
   # ⛔⛔ BELOW_FLOOR CLEARS ONLY WITH CORROBORATION FROM THE DEPLOY RECORD (round-2, #1021).
-  #   The age operand is COMMITTER DATE, and :636-638 of this same file says a rebase rewrites
+  #   The age operand is COMMITTER DATE, and this file says TWICE -- at the DEPLOYED_AT derivation (FINDING 6 of my six) and in the rung
+  #   body (a rebase CANNOT rewrite this) -- that a rebase rewrites
   #   it and that the age is then UNDER-stated. Before this batch an under-stated age only ever
   #   SUPPRESSED REPORTING; letting it CLEAR would promote a known-rewritable operand into one
   #   that affirmatively discharges a rung -- a force-push on the review branch could resolve a
@@ -709,7 +727,7 @@ if [ "$CAPPED" = "1" ]; then
   RUNTIME_LINE="runtime_path: UNDECIDABLE — the changed-file list is at its 300 cap, so whether runtime code is undeployed cannot be determined from it. The age below is unaffected.${MANIFEST_NOTE}"
   mint_alert "deploy-drift-file-gate-undecidable" \
     "Deploy drift: runtime-path gate UNDECIDABLE (file list capped)" \
-    "The compare returned a changed-file list at its 300 cap at $TS, so the runtime-path gate could not be evaluated. The age reading is sound and is reported separately. deployed=$DEPLOYED head=$HEAD_SHA"
+    "The compare returned a changed-file list at its 300 cap at $TS, so the runtime-path gate could not be evaluated. The age reading is sound and is reported separately. deployed=$DEPLOYED head=$HEAD_SHA. HOW THIS ROW CLEARS: the same sweep as the rung rows -- but it is minted ONLY under the cap, and under a cap NO_RUNTIME_PATHS is unreachable by construction while BELOW_FLOOR is practically unreachable (a 300-file range is not under 4h old at this cadence), so IN PRACTICE THIS ROW CLEARS ONLY ON deployed==head. Said here because the rung body carries the exception list and this row -- the one the exception most applies to -- carried nothing."
 else
   # A clipped enumeration beside a full count, unmarked, reads as the whole set.
   SHOWN="$(head -12 "$WORK/rtlist.txt" 2>/dev/null | grep -c .)"
@@ -746,15 +764,17 @@ touches no runtime file (NO_RUNTIME_PATHS), or the gap is under the 4h floor AND
 record corroborates a deploy inside that window (BELOW_FLOOR). The resolve evidence names
 which one. It does NOT clear measurement-failure rows: a later good reading does not
 discharge an earlier failed one.
-EXCEPTIONS, because a promise the code cannot keep is the defect this text replaced. This is
-NOT a closed count -- ANY measurement failure exits before the clearing is reached, so a
-bad compare, an unreadable deploy record or an untrustworthy age all leave this row open:
+WHEN IT WILL NOT CLEAR, because a promise the code cannot keep is the defect this text
+replaced. NOT a closed list -- ANY measurement failure exits before the clearing is reached,
+so a bad compare, an unreadable deploy record or an untrustworthy age all leave it open:
   - at the 300-file cap the runtime count is UNDECIDABLE, so NO_RUNTIME_PATHS is not reached
     and this row will NOT clear -- which is exactly the long doc-only stall case;
-  - BELOW_FLOOR alone will not clear it: a committer date is rewritable by a rebase and may
-    not discharge a rung on its own. BEFORE 2026-09-09 ONLY THE FIRST OF THOSE CLEARED, so a deploy followed by
-any documentation commit left this row open indefinitely and it read as live drift that was
-already fixed (#1021) -- measured at nine consecutive runs.
+  - under the floor with NO corroborating deployed_at in the record: a committer date is
+    rewritable by a rebase, so the age alone may not discharge a rung.
+
+HISTORY: before 2026-09-09 clearing happened ONLY on deployed==head. A deploy followed by any
+documentation commit therefore left this row open indefinitely, reading as live drift that was
+already fixed (#1021) -- measured at nine consecutive unattended runs.
 
 Current value — never read the numbers above as current, they are stamped: $LOG on Helsinki."
 
