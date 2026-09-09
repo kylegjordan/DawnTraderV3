@@ -104,7 +104,9 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 ⚠️ **TWO FIGURES OF MINE WERE WRONG AND BOTH REACHED KYLE, so they are recorded rather than dropped:** *"13 base-ticker collisions in 7 days"* was measured on the **passive ticker archive** — a different population from anything that trades — and *"we hold a DASH position right now"* was **false, taken from memory of an earlier session's read.** ★ **The finding stands on the one collision that actually traded; my supporting numbers did not.** *(Caught by Langston.)*
 ✅✅ **KYLE'S RULING: different asset classes are DIFFERENT ASSETS, both tradeable, identity = `(symbol, asset_class)`.** Langston: no reasons against.
 ⛔⛔ **AND THE CAUTION THAT SIZES IT (Langston): THIS IS NOT A SCHEMA EDIT — IT IS A KEY-SHAPE CHANGE ACROSS EVERY SYMBOL-KEYED STORE.** `price-cache`, `ohlc-cache`, `market-context-engine`, `market-data` and `market-volume-cache` all declare `Map<string, …>` at the ref. ⇒ **census first, or we fix the one instance a reviewer happened to name.**
-**HOME: `B-SYMBOL-CLASS-IDENTITY` (`#1006`), owner CC-C, `PHASE_19_PLAN` row `3b.h-4`. Objective 1 is the census, not the migration. Correctness-driven, not incident-driven — one collision has ever reached a trade.**
+⛔⛔ **NUMBER COLLISION, CAUGHT BY LANGSTON AND SETTLED HERE: `#1006` IS ALREADY CC-B's `B-RTB-SIGNAL-IDENTITY`** (`RUNNING_ISSUES:7519`, plan row `2.4c`) — `asset_class` missing from the RTB keys. **I assigned the same number to a different batch with a different owner and a different plan row, on ADJACENT work.** ⇒ ✅ **RENUMBERED `#1022`.**
+⚠️ **AND THE DEEPER QUESTION LANGSTON RAISED IS NOT MINE TO CLOSE: are these ONE batch or two?** `#1006` is the RTB table's unique index; this is the KEY SHAPE across in-memory symbol-keyed stores. **Same root cause, different surfaces, different owners.** ⛔ **Settle it before dispatch, or Coltrane designs a key-shape change straight into CC-B's in-flight batch.** *(CC-C's view: adjacent, not identical — but this is a scoping call for Langston and Kyle, not mine.)*
+**HOME: `B-SYMBOL-CLASS-IDENTITY` (`#1022`), owner CC-C, `PHASE_19_PLAN` row `3b.h-4`. Objective 1 is the census, not the migration. Correctness-driven, not incident-driven — one collision has ever reached a trade.**
 
 ## 2. ✅ CONFIRMED — DOCUMENT CORRECTION ONLY · ⬜ **ROUTE: DOC-ONLY**
 
@@ -132,8 +134,15 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 | **already filed** | ⭐ **`#578`, OPEN since 2026-07-25 (CC-A), *"THE LEGACY `TradingEngine` … IS DEAD IN BOTH MODES AND IS SCHEDULED FOR REMOVAL (rule 18)"*** — **and the ledger records the disposition as KYLE-RULED** |
 | **what it is** | an older, separate engine class from the **Phase-27 era**, distinct from the current active pipeline |
 | **origin** | introduced `5951a3195`, **2025-10-02** — the Replit era, before the migration |
-| **why it is gated** | the `live_engine_gate` was added deliberately on **2026-06-10** (`acf683c5d`, *"switch cleave — live-engine Phase-21 gate + locks"*, Langston-approved) — **the gate is the containment, not an oversight** |
+| **why it is gated** | the `live_engine_gate` was added deliberately on **2026-06-10** (`acf683c5d`, *"switch cleave — live-engine Phase-21 gate + locks"*, Langston-approved) |
 | **the plan already says so** | `PHASE_19_PLAN`: *"a `TradingEngine` that runs in neither mode (paper never starts it; live is Phase-21-gated and refuses)"* |
+
+⛔⛔ **AND *"THE GATE IS THE CONTAINMENT"* IS FALSE — I WROTE IT, LANGSTON DISPROVED IT AT THE CODE, AND IT REACHED KYLE.** *(2026-09-09.)*
+**The gate covers `.start()` ONLY.** ⛔ **`closeTrade` (`server/services/trading-engine.ts:599`) has NO `isRunning` guard, is reached from `server/routes.ts:5056` with the mode taken OFF THE REQUEST BODY, and at `:633` issues a REAL Kraken market `sell` plus two `cancelOrder` — never reading `live_engine_gate`.** *(`processSignal`/`executeTrade` ARE properly contained — `:222` guard, `executeTrade` private. `closeTrade` is not.)*
+✅ **WHAT ACTUALLY CONTAINS IT TODAY: the legacy `trades` table is EMPTY — 0 rows, 0 live, 0 open, measured on staging — and only the gated engine writes it.**
+⇒ ⛔⛔ **THAT IS CONTAINMENT BY *DATA*, IT IS RECORDED NOWHERE, AND IT EVAPORATES THE MOMENT ANYTHING WRITES A LIVE ROW.** ★ **Same class as `#213`, which `P19-B2` chose to DELETE rather than gate, for precisely this reason.**
+➕ **COLTRANE'S ADDITION, and it raises the bar correctly:** removal must be **an explicit release blocker WITH VERIFICATION that the registered route can no longer reach legacy exchange actions.** ★ **Deleting the engine is not sufficient on its own — the route has to be shown unable to reach it.**
+⛔ **SO THE REMOVAL NEEDS A HARD FLOOR: `#578` currently sits at plan row 11.5, *"re-order on Kyle's word."* ⇒ **REMOVAL LANDS BEFORE PHASE-21 GO-LIVE.** ★ **§13 disposition: a RIDER on the existing `#578`, not a new item.**
 
 ⇒ ✅ **DISPOSITION: `#578`, existing, Kyle-ruled, scheduled for removal under rule 18. NOT a new finding and NOT a new batch.** ⛔ **It must not be re-filed, and a design must not build around it — it is going away.**
 
@@ -155,7 +164,9 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 ---
 
-## 4. ⛔ DISPUTED / PARTIALLY DISPUTED
+## 4. ✅ SCOPE NARROWED — **we agree with the finding and are bounding it**
+
+⚠️ **RENAMED from *"DISPUTED / PARTIALLY DISPUTED"* (Langston): both rows AGREE with him and merely narrow the scope. Labelling agreement as dispute is scorekeeping in a heading.**
 
 | # | our position | citation |
 |---|---|---|
@@ -168,7 +179,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 | assignment | subject | what we hold |
 |---|---|---|
-| **1** | full system audit — trading logic, maths, machinery | ⛔ **report not in our repository.** Known downstream: finding 1 → `#1006` *(repository/database schema divergence — **STILL UNHOMED, awaiting Kyle**)*; a fee-contract finding → `#1010` → `B-XSTOCK-FEE-CONTRACT`, CC-B |
+| **1** | full system audit — trading logic, maths, machinery | ⛔ **report not in our repository.** Known downstream: finding 1 → `#1006` *(repository/database schema divergence — **HOMED: CC-B's `B-RTB-SIGNAL-IDENTITY`, plan row `2.4c`**)*; a fee-contract finding → `#1010` → `B-XSTOCK-FEE-CONTRACT`, CC-B |
 | **2** | trading logic, the maths, and what to build | ⏳ not registered |
 | **3** | what is stopping the system doing its job | data files present under `Claude Comms and Packages/Codex Audits/audit3/`; ⏳ findings not registered |
 | ⭐ **the blind-spot delta** | *what it would have asked that we did not* | ⛔ **requested in assignment 1, not in our repository. The one artifact we cannot produce ourselves.** |
@@ -230,17 +241,21 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 | `multi_tf_agreement` | 16 | 2026-05-25 | 2 | ⭐ regime ranges |
 | ⚠️ `strategy.range_trade` | **15** | **2026-05-05** | **1** | ⛔ **same shape as `dhma` — one author, one day, untouched** |
 | `strategy.breakout` | 15 | 2026-06-05 | 3 | per-strategy parameters |
-| **plus the filters** | — | — | — | liquidity, volatility, the price floor (`#967`, a Kyle decision), the volume floor |
-| **TOTAL** | **206** | | | |
+| **TOTAL of the ten families** | **206** | | | |
 
-✅✅ **AND THE PROVENANCE LANGSTON ASKED FOR EXISTS — measured, whole table:**
-- **Every setting carries an author. Zero are unattributed.**
-- **654 of 1,020 (64%) have not been changed in 90 days.**
-- ⭐ **NOT ONE is older than 180 days** ⇒ **the entire configuration was established inside a single ~6-month window**, which is exactly the period the system's own architecture changed underneath it.
+⚠️ **THE FILTERS ARE ADDITIONAL AND ARE NOT IN THE 206** — liquidity, volatility, the price floor (`#967`, already a Kyle decision) and the volume floor live in `crypto-universe-filter.json` and the filter services, not in `module_constants`. **Counted separately at scoping time; the 206 is the `module_constants` families only.** *(Langston: the earlier table implied they were inside the total.)*
 
-⇒ ⛔ **SO THE QUESTION IS ANSWERABLE, AND IT IS NOT "IS THIS VALUE WRONG". IT IS:**
-> **Was this value CHOSEN for the system as it is now, or inherited from the system as it was when it was set — and is it a good place to START collecting data from?**
-★ **`strategy.dhma` is the sharpest case: 25 values, one author, one day in May, untouched since.** ⚠️ **And note it is also astra finding 2's subject — that same strategy's price geometry is said to MIX UNITS and not be invariant to nominal price scale. Two independent routes to the same file.**
+⛔⛔ **THE PROVENANCE AXIS I FIRST GAVE WAS WRONG AND LANGSTON DISPROVED IT. RECORDED, BECAUSE IT REACHED KYLE.**
+**I offered *"every setting has an author, none older than 180 days, and `strategy.dhma`'s 25 values set by ONE author on ONE day"* as the signal of *set-once-never-revisited*.** ⛔ **`updated_at` measures WHEN A BATCH LAST WROTE THE ROW, not when anyone CHOSE THE VALUE.** ★ **Measured whole-table: the top three writers are `b72-step3-commit-b` (173 rows, one day), `b5-amr` (163) and `b72-2-lever-sweep` (129) — 465 of 1,020 in THREE BULK SEEDS.** ⇒ **"one author, one day" is the ORDINARY case, not an anomaly**, and both my exemplars were written by the same bulk seed.
+
+✅✅ **THE SUBSTANCE SURVIVES AND SHARPENS — THE DISCRIMINATOR IS `updated_by`, NOT `updated_at`: SEEDED-BY-A-BATCH-AND-NEVER-REVISITED versus SUBSEQUENTLY TUNED.** Measured across the ten families:
+| status | families | settings |
+|---|---|---|
+| ⛔ **SEEDED, NEVER REVISITED** *(one author, one date)* | **`strategy.dhma` (25) · `strategy.range_trade` (15)** | **40** |
+| ✅ **TUNED SINCE** *(multiple authors AND dates)* | `strategy_gates` 38/3 · `expectancy_gates` 29/3 · `sqe_config` 18/4 · `strategy.vwap_pullback` 18/3 · `regime_classifier` **16/5** · `volume_regime` 16/2 · `multi_tf_agreement` 16/2 · `strategy.breakout` 15/3 | **166** |
+
+★ **`regime_classifier` — 16 values across FIVE authors and FIVE dates — is what genuine revision history looks like.** ⛔ **`strategy.dhma` and `strategy.range_trade` have not been touched since the seed that created them** — and `dhma` is independently **astra finding 2's subject** (price geometry said to mix units and not be scale-invariant). **Two routes, one file.**
+⇒ ⛔ **HAND HIM THE AXIS, NOT MY ORIGINAL SIGNAL: *which values were seeded by a batch and never revisited, and is that still the right starting point?***
 
 ⛔ **DELIBERATELY EXCLUDED FROM ASK 2, AND SAID OUT LOUD RATHER THAN OMITTED:** the `amr_*` families (**136 settings**) and `trailing_exit` (**52 settings behind an off switch**). ★ **They are a later question. Including them is precisely what made 1,020 unreviewable.**
 
