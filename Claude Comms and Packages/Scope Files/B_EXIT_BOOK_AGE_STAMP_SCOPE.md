@@ -1,6 +1,9 @@
 # B-EXIT-BOOK-AGE-STAMP — SCOPE (Step 1)
 
-**Batch:** `B-EXIT-BOOK-AGE-STAMP` · **change-class:** non_architecture · **Owner:** CC-C · **Phase:** 19
+change-class: non_architecture
+
+**Batch:** `B-EXIT-BOOK-AGE-STAMP` · **Owner:** CC-C · **Phase:** 19
+> ⚠️ **The bare `change-class:` line above is the CANONICAL form required by `CLAUDE.md` §3.0 — own line, colon outside any markup.** **It was previously written mid-line as `**change-class:** non_architecture`, which is NOT the documented form and the checker could not parse it** (alert `1960cdff`, graded as `architecture` by default). ★ **I initially refused to change this, arguing it would clear the alarm and leave `#968`'s parser defect for the next author. Langston overruled me and he is right: my header was genuinely non-conforming, so this is CONFORMING to the documented convention, not gaming a strict parser.** ⛔ **`#968` stays open on its own merits — the parser should also accept the natural bolded form.**
 **Created:** 2026-08-30 · **Plan:** `1-system-manual/XSTOCK_PRICING_PLAN.md` **Phase A**
 
 > ⭐ **THIS IS THE ONE STEP THAT CANNOT BE WRONG UNDER ANY LATER DECISION.** It records two facts and changes no behaviour. **Langston's ruling, 2026-08-30: split each step at the intent seam — instrumentation is intent-independent and ships now; behaviour changes wait for the decided-intent index.**

@@ -113,7 +113,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 ---
 
-### 1.9 ⭐⭐ **THE SAME TICKER IN TWO ASSET CLASSES IS ONE IDENTITY — AND IT HAS ALREADY TRADED** *(Kyle-ruled 2026-09-09)*
+## 1b. ⭐⭐ **THE SAME TICKER IN TWO ASSET CLASSES IS ONE IDENTITY — AND IT HAS ALREADY TRADED** *(Kyle-ruled 2026-09-09)*
 **PLAIN:** A crypto coin and an xStock can share a ticker. **The system treats them as the same thing** — the stored symbol strings are byte-identical (`crypto_spot | INJ/USD` versus `xstock_spot | LMT/USD`, same shape), and the shared price cache is keyed by symbol alone (`server/services/price-cache.ts:101`, `Map<string, CachedPrice>`).
 ✅ **MEASURED, ALL-TIME: `DASH/USD` has FOUR closed trades across BOTH asset classes** — Dash the cryptocurrency and DoorDash the equity, under one identity. **`rtb_signals`: zero collisions, ever. `active_open_positions`: none currently colliding.**
 ⚠️ **TWO FIGURES OF MINE WERE WRONG AND BOTH REACHED KYLE, so they are recorded rather than dropped:** *"13 base-ticker collisions in 7 days"* was measured on the **passive ticker archive** — a different population from anything that trades — and *"we hold a DASH position right now"* was **false, taken from memory of an earlier session's read.** ★ **The finding stands on the one collision that actually traded; my supporting numbers did not.** *(Caught by Langston.)*
@@ -124,6 +124,10 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 ⛔⛔ **BUT ONE ARTIFACT MAY NOT BE SPLIT — THE ENCODING SSOT.** **One exported `assetSymbolKey(assetClass, symbol)` and its inverse, in ONE module, declared as OBJ-1's output of this batch.** ⛔ **Neither batch defines its own, and neither hand-rolls a template literal at a call site.** ★ **Without it, whichever ships first sets the de-facto standard and the other adapts — `fix-follows-pointer` with TWO OWNERS, which is the version we have no guard for.**
 ⛔ **AND COLTRANE'S ASK 1 DOES NOT CARRY THIS: scope him to the IN-MEMORY census. `rtb_signals` is OUT OF BOUNDS for him.**
 **HOME: `B-SYMBOL-CLASS-IDENTITY` (`#1024`), owner CC-C, `PHASE_19_PLAN` row `3b.h-4`. Objective 1 is the census, not the migration. Correctness-driven, not incident-driven — one collision has ever reached a trade.**
+
+⛔ **MOVED OUT OF §1 (PRICING) ON LANGSTON'S RULING, 2026-09-09.** ★ **It sat under the pricing heading while carrying a home to a different batch and owner — and his two-batch ruling settles that it is NOT in Ask 1's scope.** ⛔⛔ **COLTRANE IS SCOPED TO THE IN-MEMORY CENSUS ONLY; `rtb_signals` IS OUT OF BOUNDS FOR HIM.**
+
+---
 
 ## 2. ✅ CONFIRMED — DOCUMENT CORRECTION ONLY · ⬜ **ROUTE: DOC-ONLY**
 
