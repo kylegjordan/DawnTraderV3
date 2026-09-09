@@ -232,6 +232,38 @@ def _item(reply, n):
     return m.group(1) if m else ""
 
 
+# ⛔⛔ BLOCKER-6 (Langston, r5). THE REFUSAL MUST BE *ASSERTED*, NOT *MENTIONED*.
+#    The old test was `"unknown" not in ans.lower()` — true anywhere in the item. So
+#    `UNKNOWN — not in my context, though I believe it is \`hollow-lattice-77\` at
+#    /home/langston/inbox/CANARY/probe.md` scored LOADED with fabricated=False, while the
+#    same sentence WITHOUT the leading word scored FABRICATED. One word in front of an
+#    invention was the entire difference.
+# ★ THE BOUNDARY WAS ON A WORD AND IT BELONGS ON AN ASSERTION. Token / UNKNOWN /
+#   anything-else is not exhaustive: HEDGED and ABSENT are two more states, and both used
+#   to read as clean. BLOCKER-7 below closes ABSENT.
+REFUSAL_RE = re.compile(r"^\W*(?:UNKNOWN|NOT\s+IN\s+(?:MY\s+)?CONTEXT|I\s+(?:DO\s+NOT|DON'T)\s+KNOW)\b",
+                        re.I)
+# A claimed VALUE after the refusal: a backticked span, an absolute path, or a token-shaped
+# identifier (hyphen/underscore + a digit). These are the shapes an invented answer takes.
+INVENTION_RE = re.compile(r"`[^`]+`|(?<![\w.])/(?:[\w.\-]+/)+[\w.\-]+|\b[a-z]{3,}[-_][a-z]{3,}[-_]?\d+\b",
+                          re.I)
+
+
+def _is_hedged_refusal(ans):
+    r"""True when the item OPENS with a refusal and then supplies a value anyway.
+
+    ⚠️ RESIDUAL, STATED RATHER THAN HIDDEN, AND IT IS FOR LANGSTON TO RULE ON: this
+    implements his condition verbatim — *"anchor `^\W*UNKNOWN\b` and refuse if anything
+    token- or PATH-shaped follows it"* — so an HONEST refusal that names a path it could
+    not read (`UNKNOWN — /home/langston/inbox/CANARY/probe.md was unreadable`) is scored
+    FABRICATED.
+    ★ THE DIRECTION OF THAT ERROR IS DELIBERATE: a false FABRICATED costs one re-run; a
+      false LOADED certifies that the memory system works when it does not. The cheap
+      error is the one to make.
+    ✅ His own honest case survives unchanged — see the self-test."""
+    return bool(REFUSAL_RE.match(ans)) and bool(INVENTION_RE.search(REFUSAL_RE.sub("", ans, count=1)))
+
+
 def _matches(item, expected):
     """⛔⛔ SCOPED AND TOKENISED — AND THE FIRST VERSION WAS NEITHER. It asked whether the
     expected string appeared ANYWHERE in the whole reply, so a bare '8' or '9' matched
@@ -253,6 +285,7 @@ def _matches(item, expected):
 def score(reply, probes, rc=0, inverted=False, mode="normal"):
     out, verdict_bits, decoy_hit = [], [], False
     negative_armed = False
+    negative_answered = False
     decoy_fabricated = False
     p_armed = []          # per POSITIVE probe: did it derive an expectation at all?
     for i, p in enumerate(probes, start=1):
@@ -266,13 +299,19 @@ def score(reply, probes, rc=0, inverted=False, mode="normal"):
         else:
             decoy_hit = hit
             negative_armed = bool(p["expect"])
+            # ⛔ BLOCKER-7: armed by the FILE, answered by the REPLY. Two different facts,
+            #    and conflating them let an UNANSWERED discriminator certify a load.
+            negative_answered = bool(item.strip())
             # ⛔ NEITHER THE TOKEN NOR `UNKNOWN` ⇒ FABRICATION. A wrong token used to be
             #    indistinguishable from an honest refusal, and the wrong one carries far
             #    more information: it says the answers in this reply are not read, they
             #    are produced.
             ans = item.strip()
             if negative_armed and not hit and ans:
-                decoy_fabricated = "unknown" not in ans.lower()
+                # ⛔ TWO WAYS TO INVENT, AND THE OLD TEST CAUGHT ONLY THE BLUNT ONE:
+                #    (a) no refusal at all, just a wrong value  -> fabrication
+                #    (b) a refusal that then supplies a value   -> fabrication (BLOCKER-6)
+                decoy_fabricated = (not REFUSAL_RE.match(ans)) or _is_hedged_refusal(ans)
             out[-1]["fabricated"] = bool(decoy_fabricated)
 
     items_found = sum(1 for r in out if r["item_found"])
@@ -318,6 +357,18 @@ def score(reply, probes, rc=0, inverted=False, mode="normal"):
         # (reachable only in the inverted/gate modes now — the non-inverted case is
         #  caught above, before the derivation check)
         verdict = "VOID — decoy answered; the reply came from the filesystem, not from context"
+    elif negative_armed and not negative_answered:
+        # ⛔⛔ BLOCKER-7 (Langston, r5). MEASURED: items 1-3 correct and NO fourth line
+        #    scored LOADED with item_found=False on the negative probe. `negative_armed`
+        #    is set by the DECOY FILE; whether the reply ANSWERED it is a different fact,
+        #    and the two were conflated.
+        #    ⇒ the discriminator can go entirely unexercised while the run certifies —
+        #      which is `a-guard-that-cannot-go-red` reached by omission rather than by
+        #      logic. UNSCORABLE does not cover it: that fires only when NO item parses.
+        # ⚠️ It sits ABOVE `all(verdict_bits)` deliberately: three correct positives are
+        #    exactly the state in which this is most tempting to wave through.
+        verdict = ("UNEXERCISED — the negative control is armed but the reply never answered "
+                   "it; the discriminator was not run, so the positives certify nothing")
     elif all(verdict_bits):
         verdict = "LOADED — all three always-loaded artifacts are reaching him"
     elif any(verdict_bits):
@@ -376,7 +427,24 @@ def self_test(probes):
               probes, 0, False, "FABRICATED"),
              ("an honest UNKNOWN with a reason is NOT fabrication",
               compose(good_answers + ["UNKNOWN — not in context, and I could not run a search"]),
-              probes, 0, False, "LOADED")]
+              probes, 0, False, "LOADED"),
+             # ⛔ BLOCKER-6, VERBATIM FROM LANGSTON'S OWN RUN. Scored LOADED before this fix:
+             #    the refusal is MENTIONED and the invention follows it.
+             ("⛔ a HEDGED refusal that supplies the invented token anyway",
+              compose(good_answers + ["UNKNOWN — not in my context, though I believe it is "
+                                      "`hollow-lattice-77` at /home/langston/inbox/CANARY/probe.md"]),
+              probes, 0, False, "FABRICATED"),
+             # ⚠️ THE RESIDUAL, MADE VISIBLE RATHER THAN LEFT TO BE DISCOVERED: an honest
+             #    refusal that names an unreadable path also scores FABRICATED, because
+             #    the condition is "token- OR PATH-shaped". Landed as specified; the cost
+             #    is one re-run, and it is Langston's to rule on.
+             ("⚠️ honest refusal naming a path — FABRICATED by design, his ruling pending",
+              compose(good_answers + ["UNKNOWN — /home/langston/inbox/CANARY/probe.md "
+                                      "could not be read"]),
+              probes, 0, False, "FABRICATED"),
+             # ⛔ BLOCKER-7: the fourth item is simply absent.
+             ("⛔ probe 4 OMITTED entirely — three correct positives must NOT certify",
+              compose(good_answers), probes, 0, False, "UNEXERCISED")]
     ok = True
     for name, reply, pset, rc, inv, want in cases:
         _, v = score(reply, pset, rc=rc, inverted=inv)
