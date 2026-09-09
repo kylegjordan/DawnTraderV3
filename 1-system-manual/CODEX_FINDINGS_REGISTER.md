@@ -1,74 +1,17 @@
 # CODEX FINDINGS REGISTER — **EVERYTHING COLTRANE NEEDS TO DESIGN THE FIX**
 
-> ⛔ **STATUS: DRAFT r3 (CC-C, 2026-09-09). CC-C + Langston iterate to consensus, then it goes to Coltrane.**
+> **STATUS: r6 (CC-C + Langston, 2026-09-09).** Langston ruled on r5; this carries his corrections.
 
-## ⭐⭐ WHAT THIS DOCUMENT IS FOR — **KYLE, 2026-09-09, CORRECTING THE FRAMING I HAD GIVEN IT**
-
-> **"I don't want this to be a document where we're trying to test and catch Coltrane. Right now, I just want the intent to be that we send him a document that he can look at, agree on the things that need to be fixed, come up with a design which he then shares with you and Langston."**
-> **"This is all about improving in performance, not trying to knock down another agent and test his capabilities."**
-
-⛔⛔ **r2 OF THIS FILE WAS PARTLY ADVERSARIAL AND THAT WAS MY ERROR.** It carried a *"what did we get wrong, including any row we accepted for the wrong reason"* question and a verification posture aimed at the reviewer rather than at the work. **Struck.** ★ **The register's job is to give him what he needs, not to grade him.**
-✅ **WHAT SURVIVES, because it is about OUR standard and not about him: every row still records HOW we settled it.** That is us showing our work so he can trust or challenge it — **not a trap.**
-
-### ⭐ THE OUTCOME THE DESIGN MUST SERVE — in Kyle's terms, and every row is written against it
+## ⭐⭐ THE OUTCOME THE DESIGN MUST SERVE
 1. **The trading system performing at the highest possible level.**
 2. **Our simulations reproducing reality as closely as possible.**
-3. ⭐⭐ **BASELINE THRESHOLDS SET FOR EVERY KEY AREA — strategies, regime categories, reachability — at the best possible starting point**, so that the data we then collect is worth calibrating on. **That is Phase 25's input, and a bad baseline poisons it.**
+3. ⭐ **Baseline thresholds set at the best possible starting point** — strategies, the regime ranges, the regime→strategy admission, reachability, the filters and the gates — **so the data Phase 25 calibrates on is worth having.** ★ **A correct price feeding a threshold nobody chose is still a bad baseline.**
 
-⇒ ★ **(3) IS THE ONE I HAD NOT CAPTURED AT ALL, and it changes what "done" means for this programme:** we are not only removing defects. **We are setting the starting values the calibration phase will learn from.** A correct price that feeds a threshold nobody chose deliberately is still a bad baseline.
+> ★ **KYLE'S BRIEF, and it is the instruction rather than an aside:** *"We've gotten really deep in the weeds in Phase 19, and I just fear that we're missing the bigger picture, and that's why I've involved Coltrane."*
+> ✅ **THIS IS NOT A TEST OF THE REVIEWER.** *"This is all about improving in performance, not trying to knock down another agent."* **The register shows our working so he can challenge it — that is all the settlement tags are for.**
 
-### ⛔⛔ AND THE THREE NAMES WERE AN EXAMPLE, NOT THE LIST — **KYLE, 2026-09-09**
-> **"Those are the ones that I could just think of off the top of my head, but there are others that are in our trading system that need to be reviewed… there's a number of other things that I'm sure can be looked at and seen if the baseline is a good place to start, including our filters. This is just a fresh set of eyes on everything."**
-> ⭐ **AND HIS DEFINITION OF ONE OF THEM, which is narrower and more specific than I had it:** *"by regime categories, I meant sort of the ranges where the regimes dictate the different strategies that can be applied to a signal."* ⇒ **the regime BOUNDARIES and the regime→strategy admission mapping, not regime detection in general.**
-
-⭐⭐ **SO I MEASURED THE ACTUAL SURFACE RATHER THAN LEAVING IT AS "and others" — live `module_constants`, 2026-09-09:**
-| | measured |
-|---|---|
-| **tunable settings carrying a baseline value** | **1,020** |
-| **distinct module surfaces they sit under** | **99** |
-| **distinct strategies** | **20** |
-| **distinct regimes** | **7** |
-
-**THE LARGEST SURFACES, and this is the honest scale of "review the baselines":**
-| surface | settings | what it governs |
-|---|---|---|
-| `amr_response_dials` | **64** | how the adaptive machinery responds |
-| ⚠️ `trailing_exit` | **52** | ⛔ **fifty-two tunables for a subsystem that is switched OFF** — and the one whose stale label produced `#732` |
-| `amr_weather_rules` | **42** | |
-| ⭐ `strategy_gates` | **38** | ★ **this is Kyle's "regime categories" — which strategies a signal may be routed to** |
-| `amr_input_health` · `data_lifecycle` | 30 · 30 | |
-| ⭐ `expectancy_gates` | **29** | the EV gate that admits or refuses a trade |
-| `macro_modifier` | 26 | |
-| ⭐ `strategy.dhma` · `.vwap_pullback` · `.breakout` · `.range_trade` | 25 · 18 · 15 · 15 | ★ **per-strategy parameters — Kyle's "strategies"** |
-| `price_discontinuity_detector` · `maker_taker` | 24 · 24 | |
-| ⭐ `sqe_config` | **18** *(5 asset classes)* | the signal-quality gate |
-| ⭐ `regime_classifier` · `volume_regime` · `multi_tf_agreement` | 16 · 16 · 16 | ★ **the regime RANGES themselves** |
-| `exploration_lane` | 14 | the deliberately-negative-EV learning lane |
-
-⛔ **THE FILTERS ARE IN THIS SET TOO** — the liquidity and volatility filters, the price floor (`#967`, already a Kyle decision), the volume floor, and the universe filter's own quote/volume criteria (§5b of the pricing document).
-⇒ ✅ **THE REMIT IS THEREFORE BOUNDED AND STATEABLE: 1,020 values, and the question for each family is not "is it wrong" but "was it CHOSEN, and is it a good place to START collecting from."** ★ **Many were set once, early, for a system that has since changed underneath them** — `trailing_exit`'s 52 live tunables behind an off switch is the clearest example.
-
-### ➕ ONE MORE ITEM KYLE NAMED, AND THERE ARE TWO CANDIDATES — **HE SHOULD SAY WHICH, OR WE TAKE BOTH**
-> *"I think there was an issue with the ready to buy pool database columns being misaligned."*
-
-| candidate | what it is | state |
-|---|---|---|
-| ⭐ **`#934` `B-VPG-ROW-ALIGN`** *(plan row `3l`)* | **The Filter Diagnostics Pipeline Summary renders the venue-price-grid row's would-fail count in a `colSpan={2}` cell, so under headers `Stage \| Quant \| Pattern \| Total` the number lands under the WRONG HEADING.** ★ **This is a MISALIGNED COLUMN in the literal sense and is the closest match to his words.** | OPEN, placed |
-| **the `rtb_signals.final_score` projection** *(discussed under `#142`/`#558`, not its own number)* | The column stopped being written; Drizzle still projects **every declared column on every `getRtbSignals` call**, so the dropped column sits in the SELECT list for all six callers. **A database-column problem on the ready-to-buy pool** | discussed, not separately homed |
-
-⚠️ **I am NOT collapsing these into one.** The first is a display misalignment, the second is a schema/projection issue on the RTB pool itself — **his phrase "database columns" fits the second, his word "misaligned" fits the first.** **Both are real; both belong in the remit.**
-
-### ⭐ AND THE REASON THIS SECTION EXISTS AT ALL — KYLE'S OWN FRAMING, WHICH IS THE POINT
-> **"We've gotten really deep in the weeds in Phase 19, and I just fear that we're missing the bigger picture, and that's why I've involved Coltrane."**
-
-⛔ **THAT IS A BRIEF, NOT AN ASIDE.** ★ **A fresh reviewer's value here is NOT another defect list — we are good at producing those and §1 is one. It is the question none of us has been positioned to ask: *are the starting values of this system, taken together, a sensible place to begin collecting data from?*** ⚠️ **Everyone who could answer that has spent months inside the individual settings.**
-
-
-
-## ⏳ HOW THE WORK WILL BE DONE — **NOT DECIDED, AND NOT MINE TO DECIDE**
-**Kyle is iterating that with Langston and Coltrane.** The idea being tested: **Coltrane writes the code in his own repository; Langston reviews it; everything is inspected before it reaches the review branch or staging; a clear rollback exists.** ⚠️ **Whether it ships as one change or in pieces is an open question Kyle has explicitly assigned to Langston and Coltrane.**
-⛔⛔ **I HAVE STOPPED DECLARING WHAT WE WILL AND WILL NOT DO — KYLE'S CORRECTION, AND IT WAS FAIR.** I had ruled on gates, exclusions and sequencing before the approach itself was decided. **r2's process rulings are withdrawn from this file.** ★ **His framing: rules will be broken deliberately, it is a test, and if it does not work we roll back.**
-✅ **WHAT IS SETTLED AND DOES NOT NEED RE-DECIDING: everything Coltrane produces is vetted, confirmed and verified — before implementation and after.** That is Kyle's own condition, not a gate I am adding.
+## ⏳ HOW THE WORK WILL BE DONE — **KYLE'S, WITH LANGSTON AND COLTRANE. NOT SETTLED, AND NOT OURS.**
+The idea being tested: **Coltrane writes code in his own repository; Langston reviews it; everything is inspected before the review branch or staging; a clear rollback exists.** Whether it ships as one change or in pieces is open.
 
 ---
 
@@ -83,8 +26,7 @@
 | ⚠️ **ACCEPTED — REPORTED FACT** | on Coltrane's citation. ⛔ **Only where the item is decision-inert** |
 | ⛔ **DISPUTED — WITH CITATION** | we think it is wrong, and say why, with a line |
 
-⭐ **SCORE SO FAR: 4 re-derived, 4 correct.**
-⛔⛔ **THAT BUYS CREDIBILITY, NOT A PASS — KYLE'S RULING:** *"just because the codex got a few things right, doesn't mean we blindly accept anything… We have to validate everything."* ⚠️ **r1 of this file proposed a *correct-until-shown-otherwise* prior. STRUCK.** ★ **A track record is not evidence about the NEXT claim.**
+⛔⛔ **EVERY FINDING IS VALIDATED REGARDLESS OF SOURCE — KYLE'S RULING:** *"just because the codex got a few things right, doesn't mean we blindly accept anything… We have to validate everything."* ★ **An aggregate score was struck from this file on Langston's ruling: a scoreboard reads as grading however it is captioned. The PER-ROW settlement tags are what show our work.**
 
 **(3) ROUTING — every row carries one:**
 | route | meaning |
@@ -93,6 +35,19 @@
 | ➕ **SEPARATE** | real, but not pricing — its own batch or sequence, **placed, not forgotten** |
 | ⏳ **INVESTIGATE** | needs evidence before it can be dispositioned |
 | ⬜ **DOC-ONLY** | our document was wrong; the system is fine |
+
+---
+
+## 0b. ⛔⛔ THE INVARIANTS A DESIGN MAY NOT BREAK — **these are not findings; they are the fences**
+
+> ★ **Langston's condition on r5, and he is right that the §1 rows state OUTCOMES while a designer needs the CONSTRAINTS.**
+
+1. ⛔ **FAIL LOUD ON AN ABSENT INPUT. Never `?? 0`, never a silent default** (`#546`). A missing value is a fault, not a zero.
+2. ⛔ **NO HARDCODED FALLBACK FOR A DATABASE-GOVERNED SETTING.** If it should come from the database, an empty database must REFUSE — not substitute.
+3. ⛔ **VTS EXITS ARE MARK-BOOKED, NOT TRANSACTABLE.** Crypto VTS rows book the observed mark at exit. **Do not read them as executable fills.**
+4. ⛔ **`F-G-2`'s SHADOW WINDOW MUST NOT BE SPLIT** — it is mid-observation.
+5. ⛔ **RISK LIMITS ARE BOUNDARIES, NOT DIALS.** No design may loosen a risk control to improve returns. **If growth and risk tolerance conflict, risk tolerance wins.**
+6. ⭐ **READ THE CROSS-CUTTING RUNTIME-STATE REGISTRY IN `SYSTEM_IMPACT_MAP.md` BEFORE ANY CHANGE TOUCHING SHARED STATE OR A KEY SHAPE** — singletons, shared maps and liveness live there, and a key change designed without that census fixes one instance of five.
 
 ---
 
@@ -113,11 +68,13 @@
 **PLAIN:** We argued that moving the stop to the other side of the spread would shrink every position. **It wouldn't.** Size is a fixed share of the portfolio divided by the entry price; the stop is checked for validity and then plays no part.
 ✅ **CONFIRMED — RE-DERIVED.** The code says it: `quantity = bufferedMaxNotional / entryPrice`, with a comment recording that the old stop-based form was deliberately removed, and a log line reading `Invalid fixed-notional quantity`.
 ⛔ **WHAT WE OWE:** strike the argument. **And the honest consequence is the opposite of comfortable — moving the ENTRY to the ask DOES change size, through the entry-price denominator. A different mechanism, still real.** ⚠️ **This is not a reason to loosen any limit; the exposure bounds must be re-verified against the quantity actually executed.**
+➕ **FOR THE DESIGNER (Langston): the docblock at `server/services/active-position-sizing.ts:123-131` STILL DESCRIBES THE RETIRED RISK-BASED ALGORITHM, ninety lines above the body that contradicts it.** ★ **Anyone reading the top of that file gets the wrong model of how we size.**
 
 ### 1.4 ⛔ **A5 — xStock signals are born on 15-minute bars, not 60, and it is a bar close, not a midpoint**
 **PLAIN:** Two errors in one cell. The interval is **15 minutes**; the 60 we cited belongs to a different job. And **a bar close is not a midpoint** — there are no two quote sides in it.
 ✅ **CONFIRMED — RE-DERIVED** at `scanner.ts:597` versus `regime-inputs.ts:143`.
-⛔ **WHAT WE OWE:** correct both. ⭐ **AND THE DEEPER POINT IS THE ONE THAT MATTERS: neither "up to an hour old" nor "up to fifteen minutes old" is a freshness bound at all.** A forming bar can hold a recent trade; a capture gap can leave a very old one. **The bar's start time is not the age of the information in it.**
+⛔⛔ **AND THE FACT UNDER THE CORRECTION IS BIGGER THAN THE CORRECTION (Langston): A SIGNAL BORN ON 15-MINUTE BARS IS RE-GRADED AT REFRESH ON 60-MINUTE BARS — BOTH CLASSES.** *(`xstock_spot/scanner.ts:597` births at 15; `server/core/metrics/regime-inputs.ts:145`/`:147` inside `computeRefreshRegimeInputs` re-grades at 60.)* ★ **That is a DESIGN INPUT, not a documentation fix — the thing that admitted a signal is not the thing that keeps it.**
+⛔ **WHAT WE OWE:** correct both. ⭐ **AND: neither "up to an hour old" nor "up to fifteen minutes old" is a freshness bound at all.** A forming bar can hold a recent trade; a capture gap can leave a very old one. **The bar's start time is not the age of the information in it.**
 
 ### 1.5 ⛔ **A2 — the checksum DOES exist; our "never implemented" citation is wrong**
 **PLAIN:** We said the order book's integrity check was never built. It was. ⚠️ **But you still cannot tell, downstream, whether a given book passed it** — and where the instrument's precision is unknown, verification is skipped.
@@ -141,7 +98,17 @@
 
 ---
 
-## 2. ✅ CONFIRMED — DOCUMENT CORRECTION · ⬜ **ROUTE: DOC-ONLY** *(except A8, which is `➕ SEPARATE` — it bears on go-live)*
+### 1.9 ⭐⭐ **THE SAME TICKER IN TWO ASSET CLASSES IS ONE IDENTITY — AND IT HAS ALREADY TRADED** *(Kyle-ruled 2026-09-09)*
+**PLAIN:** A crypto coin and an xStock can share a ticker. **The system treats them as the same thing** — the stored symbol strings are byte-identical (`crypto_spot | INJ/USD` versus `xstock_spot | LMT/USD`, same shape), and the shared price cache is keyed by symbol alone (`server/services/price-cache.ts:101`, `Map<string, CachedPrice>`).
+✅ **MEASURED, ALL-TIME: `DASH/USD` has FOUR closed trades across BOTH asset classes** — Dash the cryptocurrency and DoorDash the equity, under one identity. **`rtb_signals`: zero collisions, ever. `active_open_positions`: none currently colliding.**
+⚠️ **TWO FIGURES OF MINE WERE WRONG AND BOTH REACHED KYLE, so they are recorded rather than dropped:** *"13 base-ticker collisions in 7 days"* was measured on the **passive ticker archive** — a different population from anything that trades — and *"we hold a DASH position right now"* was **false, taken from memory of an earlier session's read.** ★ **The finding stands on the one collision that actually traded; my supporting numbers did not.** *(Caught by Langston.)*
+✅✅ **KYLE'S RULING: different asset classes are DIFFERENT ASSETS, both tradeable, identity = `(symbol, asset_class)`.** Langston: no reasons against.
+⛔⛔ **AND THE CAUTION THAT SIZES IT (Langston): THIS IS NOT A SCHEMA EDIT — IT IS A KEY-SHAPE CHANGE ACROSS EVERY SYMBOL-KEYED STORE.** `price-cache`, `ohlc-cache`, `market-context-engine`, `market-data` and `market-volume-cache` all declare `Map<string, …>` at the ref. ⇒ **census first, or we fix the one instance a reviewer happened to name.**
+**HOME: `B-SYMBOL-CLASS-IDENTITY` (`#1006`), owner CC-C, `PHASE_19_PLAN` row `3b.h-4`. Objective 1 is the census, not the migration. Correctness-driven, not incident-driven — one collision has ever reached a trade.**
+
+## 2. ✅ CONFIRMED — DOCUMENT CORRECTION ONLY · ⬜ **ROUTE: DOC-ONLY**
+
+✅ **A8 WAS MOVED OUT OF THIS SECTION — see §2b.** ★ **Langston's ruling and he is right: a live engine with a real exchange order call behind a gate is not a document correction, and it must not be discoverable only by reading past a banner that says it is.**
 
 | # | plain summary | how settled |
 |---|---|---|
@@ -149,12 +116,21 @@
 | **A14b** | **The volume-floor "dial" is not wired.** We said the archive floor could be changed in the database without redeploying. The loader reads a file or an explicit option; **no database read is on that path.** ⭐ *A comment about a dial is not its wiring.* | ⚠️ reported fact |
 | **A14c** | **Archive, cache and subscription sets are NOT strictly nested.** We presented them as one inside the other. They are independently selected. | ⚠️ reported fact |
 | **A14d** | **The perpetual tables have another reader** — a dashboard — so our "only retention scripts read them" was too broad. **Not a pricing consumer**, so the substance stands. | ⚠️ reported fact |
-| **A8** | ⛔ **A separate live engine EXISTS behind a gate, with a real exchange order call.** We claimed no separate real-order path existed. **It is not evidence the gate is on** — but it is a concrete counterexample, and it matters for go-live. | ⚠️ reported fact — ⛔ **RE-DERIVE: this touches Phase 21** |
 | **A10b** | **Our withdrawn agreement conclusion is still sitting in the document beside its own withdrawal.** A canonical reader should not have to choose between two authoritative statements. | ✅ correct — remove, don't annotate |
 
 ---
 
-## 3. ⏳ NEEDS INVESTIGATION · ⏳ **ROUTE: INVESTIGATE** — these are §6 item 4 — and the ask is which ones the DESIGN depends on
+## 2b. ⛔⛔ **A8 — A SECOND TRADING ENGINE EXISTS, WITH A REAL EXCHANGE ORDER CALL, BEHIND A GATE** · ➕ **ROUTE: SEPARATE · PHASE 21 (GO-LIVE)**
+
+**PLAIN:** We said no separate real-order path existed. **One does.** The repository instantiates a second trading engine in live mode, reachable through a registered route behind a feature gate, **and it contains a real exchange order call followed by modelled partial-fill handling.**
+⚠️ **THIS IS NOT EVIDENCE THE GATE IS ON OR THAT IT TRADES.** It is a counterexample to a whole-repository claim we made.
+⛔ **WHY IT IS ITS OWN SECTION AND NOT A DOCUMENT FIX:** the accurate statement is that **the active order-placer seam has no live implementation, legacy live order code exists behind a gate, and paper/live equivalence has NOT been demonstrated.** ⇒ **before live is enabled, engine ownership must be settled and execution-report handling verified. Changing only the order destination is insufficient.**
+➕ **AND FROM THE SAME FAMILY (astra finding 8): the kill switch's LIVE branch logs that live flatten is future Phase-21 work rather than implementing it.** ⇒ **in paper the kill switch flattens; in live, as written, it would not.**
+⚠️ **NOT RE-DERIVED BY US.** ⛔ **Both belong to Phase 21 and must not be inherited silently by whoever opens go-live.**
+
+---
+
+## 3. ⏳ NEEDS INVESTIGATION · ⏳ **ROUTE: INVESTIGATE** — these are §6 ASK 1 item (c) — the question is which ones the DESIGN depends on
 
 | # | the question we cannot answer from code alone | why it needs evidence |
 |---|---|---|
@@ -175,7 +151,7 @@
 
 ---
 
-## 5. ⏳ THE OTHER THREE AUDITS — **NOT YET REGISTERED — THE RETRIEVAL IS §6 ITEM 2**
+## 5. ✅ THE OTHER THREE AUDITS — **REGISTERED**
 
 | assignment | subject | what we hold |
 |---|---|---|
@@ -184,20 +160,60 @@
 | **3** | what is stopping the system doing its job | data files present under `Claude Comms and Packages/Codex Audits/audit3/`; ⏳ findings not registered |
 | ⭐ **the blind-spot delta** | *what it would have asked that we did not* | ⛔ **requested in assignment 1, not in our repository. The one artifact we cannot produce ourselves.** |
 
-⚠️ **WE ARE NOT ASSERTING THESE WERE NEVER PRODUCED.** Coltrane writes to its own folder and our instrument does not reach there. ⇒ **§6 item 2 asks for them.**
+✅ **ALL FOUR ARE NOW IN `Claude Comms and Packages/Codex Audits/`.** §6 item 2 asks him only to confirm our reading of them.
 
 ---
 
-## 6. ⭐ WHAT WE ARE ASKING COLTRANE FOR
+## 6. ⭐⭐ WHAT WE ARE ASKING COLTRANE FOR — **TWO ASKS, DELIBERATELY SEPARATE**
 
-> ✅ **THE ASK IS A DESIGN, NOT A VERDICT.** He has already reviewed; this is the next step. **Everything below is either something only he holds, or something his design needs from us and we should supply rather than ask for.**
+> ⛔ **r5 WAS ONE ASK OVER 30 FINDINGS AND 1,020 BASELINE VALUES. LANGSTON RULED THAT TOO WIDE AND HE IS RIGHT** — a single document that large gets a single shallow answer. **Split, each ask is bounded and each has its own rollback.**
 
-**1 — THE DESIGN.** Given the confirmed findings in §1 and the objective in the header, **design the fix.** ⭐ **Not fourteen fixes — the smallest coherent design that serves all three outcomes**, including which parts must land together and which can follow.
-**2 — YOUR EARLIER FINDINGS, AS A LIST.** Assignments 1-3, one line each with the disposition you would give it today. ⚠️ **We hold your pricing review in full and almost nothing from the other three** — that is a gap on our side, not a test of your recall. **Plus the blind-spot delta if it exists.**
-**3 — THE BASELINE THRESHOLDS — ACROSS THE WHOLE SURFACE, NOT THREE NAMED AREAS.** ⭐ **The outcome we most need your view on, and the one we are weakest on.** **Measured: 1,020 tunable settings across 99 surfaces, 20 strategies, 7 regimes** — the inventory and the largest families are in the header. **Include the filters, the EV and signal-quality gates, the regime ranges and the regime→strategy admission mapping.**
-⛔ **The question per family is NOT "is this value wrong" — it is "was it CHOSEN, and is it a good place to START collecting from."** ★ **And Kyle's brief for you is wider than our findings list: we have been deep in the weeds and may be missing the bigger picture. Say so if you see it.**
-**4 — THE FIVE RUNTIME QUESTIONS FROM §4** — the ones needing evidence rather than a code read: context-cache staleness, the gate-time snapshot interval, maker-fill incidence, fabricated-target incidence, and the real upper bound on the book-resync gap. **Tell us which of these your design depends on**, and we will produce the evidence.
-**5 — WHAT ELSE DO YOU NEED FROM US?** Data, measurements, history, intent, or a decision only Kyle can make. ✅ **Ask plainly** — anything we can supply, we will.
+---
+
+### ⭐ ASK 1 — **THE DESIGN, OVER THE CONFIRMED SET ONLY**
+**Given §1's confirmed findings and the invariants in §0b: design the fix.**
+- **(a)** ⛔ **The smallest coherent design, not nine fixes.** §7 offers the observation that five of them may be one mechanism — **use it or discard it, but say which.**
+- **(b)** **State what must land together and what can follow**, and what the rollback is for each piece.
+- **(c)** **Of the five open runtime questions in §3, tell us which ones your design DEPENDS on** — we will produce that evidence. **Do not design around them silently.**
+✅ **BOUNDED: nine confirmed findings, one subsystem, one rollback story.**
+
+---
+
+### ⭐ ASK 2 — **THE BASELINES — AND WE ARE HANDING YOU ~206 VALUES, NOT 1,020**
+> ⛔ **The full config is 1,020 settings across 99 surfaces. Handing you all of it would make it unreviewable, which is the same failure as handing you nothing.** ⇒ **this is the set Kyle actually named, and it is where a bad baseline poisons Phase 25.**
+
+| family | settings | last changed | authors | what it governs |
+|---|---|---|---|---|
+| `strategy_gates` | **38** | 2026-07-14 | 3 | ⭐ **which strategies a signal may be routed to — Kyle's "regime categories"** |
+| `expectancy_gates` | **29** | 2026-06-27 | 3 | the expected-value gate that admits or refuses a trade |
+| ⚠️ `strategy.dhma` | **25** | **2026-05-05** | **1** | ⛔ **set on ONE DAY by ONE AUTHOR and untouched for four months** |
+| `strategy.vwap_pullback` | 18 | 2026-06-05 | 3 | per-strategy parameters |
+| `sqe_config` | 18 | 2026-05-26 | 4 | the signal-quality gate *(5 asset classes)* |
+| `regime_classifier` | 16 | 2026-06-04 | 5 | ⭐ **the regime RANGES themselves** |
+| `volume_regime` | 16 | 2026-05-25 | 2 | ⭐ regime ranges |
+| `multi_tf_agreement` | 16 | 2026-05-25 | 2 | ⭐ regime ranges |
+| ⚠️ `strategy.range_trade` | **15** | **2026-05-05** | **1** | ⛔ **same shape as `dhma` — one author, one day, untouched** |
+| `strategy.breakout` | 15 | 2026-06-05 | 3 | per-strategy parameters |
+| **plus the filters** | — | — | — | liquidity, volatility, the price floor (`#967`, a Kyle decision), the volume floor |
+| **TOTAL** | **206** | | | |
+
+✅✅ **AND THE PROVENANCE LANGSTON ASKED FOR EXISTS — measured, whole table:**
+- **Every setting carries an author. Zero are unattributed.**
+- **654 of 1,020 (64%) have not been changed in 90 days.**
+- ⭐ **NOT ONE is older than 180 days** ⇒ **the entire configuration was established inside a single ~6-month window**, which is exactly the period the system's own architecture changed underneath it.
+
+⇒ ⛔ **SO THE QUESTION IS ANSWERABLE, AND IT IS NOT "IS THIS VALUE WRONG". IT IS:**
+> **Was this value CHOSEN for the system as it is now, or inherited from the system as it was when it was set — and is it a good place to START collecting data from?**
+★ **`strategy.dhma` is the sharpest case: 25 values, one author, one day in May, untouched since.** ⚠️ **And note it is also astra finding 2's subject — that same strategy's price geometry is said to MIX UNITS and not be invariant to nominal price scale. Two independent routes to the same file.**
+
+⛔ **DELIBERATELY EXCLUDED FROM ASK 2, AND SAID OUT LOUD RATHER THAN OMITTED:** the `amr_*` families (**136 settings**) and `trailing_exit` (**52 settings behind an off switch**). ★ **They are a later question. Including them is precisely what made 1,020 unreviewable.**
+
+---
+
+### ➕ SUPPORTING, IN EITHER ASK
+- **Confirm or correct our reading of your earlier findings** — §5 registers all four audits. **Which do you still stand behind, which would you withdraw, which are overtaken?**
+- **What else do you need from us?** Data, measurement, history, intent, or a decision only Kyle can make. ✅ **Ask plainly; anything we can supply, we will.**
+- ⚠️ **Citations in this register name files without full paths in places.** **Read at the stamped sha and tell us where a path is ambiguous** — two of five checked needed a probe.
 
 ---
 
