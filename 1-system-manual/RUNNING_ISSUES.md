@@ -8188,10 +8188,23 @@ tracked files at the ref containing it               = 348 of 5,886
 
 ---
 
-### #1027 OPEN 2026-09-10 (CC-C; surfaced by Coltrane's own refusal, then confirmed on the box) — ⛔ **COLTRANE CANNOT READ THE REPOSITORY: HIS MIRROR REFRESH HAS BEEN FAILING GIT AUTHENTICATION FOR ~37 HOURS**
+### #1027 OPEN 2026-09-10 (CC-C; surfaced by Coltrane's own refusal, then confirmed on the box) — ⛔ **COLTRANE CANNOT READ THE REPOSITORY: HIS MIRROR REFRESH IS BLOCKED BY GIT'S OWNERSHIP GUARD** *(heading corrected 2026-09-11 — it said "FAILING GIT AUTHENTICATION", which was wrong; see the amendment)*
 
 ✅ **HIS REPORT, AND IT WAS ACCURATE:** *"`coltrane-review` refused access: last successful refresh 2,252 minutes ago against a 90-minute limit."* ★ **He reported it rather than working around it.**
 ✅ **CONFIRMED AT THE OBJECT:** `coltrane-repo-refresh.service` is **FAILED**, exiting `status=1/FAILURE` with **`fatal: Could not read from remote repository. Please make sure you have the correct access rights`** — a git credential/access failure against the remote, not a disk or parse problem.
 ⭐⭐ **THE GUARD WORKED EXACTLY AS DESIGNED AND THAT DESERVES SAYING:** the service logs its own intent — *"fetch FAILED — NOT stamping. Reads will refuse once the existing stamp ages out, which is the intended behaviour."* ⇒ **stamp-only-on-success means a dead refresh degrades into a REFUSAL, never into silently stale reads.** ★ **That is `rule 29`'s *prefer impossible over intercepted* built correctly — the opposite of the `#546` absent-as-valid family, and it is why this was findable at all.**
 ⛔⛔ **BUT IT IS BLOCKING THE THING WE ARE ALL WORKING TOWARD: the findings register is being prepared for a Coltrane dispatch, and as of now HE CANNOT READ THE REPOSITORY IT CITES.** ⇒ **this must be green BEFORE the register is sent, or the dispatch lands on a reviewer who can only read what is pasted into the message — which is precisely the failure `§6.5` file-first exists to prevent.**
 **HOME: PROPOSED to CC-INFRA's Coltrane-onboarding work, routed in-channel 2026-09-10, and flagged as a PRE-CONDITION on the register dispatch. ⚠️ NOT PLACED UNTIL CC-INFRA CONFIRMS THE ROW.**
+
+➕ **AMENDMENT 2026-09-11 (CC-C) — ⛔⛔ I CALLED THIS AN AUTHENTICATION FAILURE. IT IS NOT. IT IS GIT'S OWNERSHIP GUARD, AND THE CORRECTION CHANGES THE FIX ENTIRELY.**
+
+⛔ **WHAT I READ, AND WHAT I MISSED ONE LINE ABOVE IT.** I quoted `fatal: Could not read from remote repository. Please make sure you have the correct access rights` and called it a **credential failure**, in this entry, to CC-INFRA, to Langston and to Kyle. ★ **That line is git's GENERIC WRAPPER. The actual cause is the line immediately before it:**
+> `fatal: detected dubious ownership in repository at '/srv/dawntrader-backup.git'`
+
+✅ **THE REAL MECHANISM, measured at the objects:** `/srv/dawntrader-backup.git` is owned **`langston:langston`**; `coltrane-repo-refresh.service` declares **no `User=`**, so it runs as **root**; `:36` does `git --git-dir="$REPO" fetch "$SRC" ...` with `$SRC` = that mirror. ⇒ **git's `safe.directory` protection refuses a repository owned by another user, and root is NOT exempt.** ⛔ **NOTHING TO DO WITH CREDENTIALS, TOKENS OR ACCESS RIGHTS — the message says "access rights" and means "ownership".**
+★ **THE FIX IS ONE OF THREE, and CC-INFRA picks:** add `safe.directory` for the running user · declare `User=langston` on the unit · align ownership. **A credential hunt would have found nothing, which is exactly where my wrong diagnosis was sending them.**
+
+✅✅ **AND IT BOUNDS THE BLAST RADIUS — THE §7.1 BACKUP IS NOT IMPLICATED.** The mirror's own contents are CURRENT (`migration/aws-supabase` at `6ee147e70`, 2026-09-10). **The failure is on the READER leg only** — Coltrane's mirror fetching FROM the backup — **not on the backup's self-pull from GitHub.** ⚠️ **I asserted nothing about the backup before checking, and I am recording that it was checked rather than assumed.**
+
+★ **WHY THIS IS THE SAME MISTAKE AS THE ONE I FILED YESTERDAY (`#1025`): I READ THE SYMPTOM LINE AND STOPPED.** There I read *"my push was refused"* and proposed building a guard that already existed; here I read *"correct access rights"* and reported a credential failure that never happened. ⇒ ⛔ **`fix-follows-pointer`, twice in two days, both times on an ERROR MESSAGE'S OWN WORDING rather than the object.** ✅ **The discriminator both times was ONE LINE FURTHER UP, and both times it took someone else's question to send me back to look.**
+**MISTAKE: fix-follows-pointer [#1027] — reported git's generic "access rights" wrapper as a credential failure; the causal line was directly above it. Read the whole error, not its last line.**
