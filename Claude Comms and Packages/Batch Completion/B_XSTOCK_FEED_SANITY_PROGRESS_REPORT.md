@@ -370,3 +370,31 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
   - `B_XSTOCK_FEED_SANITY_EVIDENCE/seed_control_2026-09-03.txt` — the durable capture of §6's qualifying control, with the retention horizon measured at capture time.
   - **CONTROL ON THE SWEEP:** after the edits the retired wording still matches at `RUNNING_ISSUES:7115`, the one place it is deliberately preserved as history. **That hit is what proves the search pattern works, so its absence from the two maps is a measured absence rather than a broken regex.**
 - **STILL owed at Step 10 (class `architecture` — required, not judged):** `SYSTEM_IMPACT_MAP.md` (new components `book-state.ts` / `-config` / `-tracker`; the Cross-Cutting registry row for the tracker's `_comparators`; the archiver's `raw`; the "five close paths" sentence corrected to the writes census; the `mark-staleness` entry's `#567` sentence re-pointed), `SYSTEM_MANUAL.md` (ch.3.5 gains the book-state gate after the ceiling, failure direction stated), `CHANGES_AND_FIXES.md`, `BATCH_CATALOG.md`, `PHASE_HISTORY.md`, `PHASE_19_PLAN.md` §1/§5, `RUNNING_ISSUES.md` (`#943` to observation; `#567` closed by cross-reference; `#977` amendment 2), `MISTAKE_PATTERNS.md` (the wrong-object and count-from-memory trailers from Step 2), the shared and own `MEMORY` files, Langston's `MEMORY.md`; `apm:657`'s "THE FIFTH CLOSE PATH" comment corrected to the writes census in the same commit.
+
+---
+
+## §4f — ⭐⭐ THE FIRST POST-FIX HOLLOW FIRE, CLASSIFIED AGAINST THE STATED RESIDUAL: **IT IS NOT THE RESIDUAL, AND THAT IS MEASURED RATHER THAN ASSERTED** *(2026-09-10, CC-C; Langston routed it "classify against the stated seed-time residual, do not add a threshold")*
+
+**THE EVENT.** Alert `c87b5db4`, fired **2026-09-08T20:24:59Z**: the book-state guard withheld **60 consecutive exit-monitor ticks** on the open NEM/USD position, reached `hollow_skip_cap=60`, and **YIELDED** — evaluator ran on the book as-is, row labelled hollow/yielded. Guard inputs: `askDepartureFrac 0.01597` against `departureThresholdFrac 0.01` (tripped), `bidDepartureFrac 0.00323` (did not), `spreadFrac 0.01915` against `trailingMedianSpreadFrac 0.000157`.
+
+⛔⛔ **IT WAS NOT A SPIKE — IT WAS A FROZEN ASK, AND THE SNAPSHOT TABLE SHOWS IT PLAINLY.** `xstock_spot_ticker_snap_2026_09_08`, NEM/USD, 20:20:41 → 20:34:49Z, **14 consecutive snapshots**: `ask` **129.13 UNCHANGED THROUGHOUT**, `last` **127.09 UNCHANGED THROUGHOUT**, while `bid` moved 126.70 → 127.20. ⇒ ★ **A ONE-SIDED STALE FEED HELD FOR 14+ MINUTES, not a momentary quote excursion.** ✅ **The guard's behaviour was correct: it withheld, then yielded at the cap rather than blocking the exit path indefinitely.**
+
+### ⛔ IS IT THE STATED RESIDUAL? **NO — AND THE FIRST ANSWER I GOT WAS THE WRONG ONE.**
+**The residual on record (§4d/§4e):** *the yield clears the comparator and the very next frame — still hollow — seeds it, so the wide book becomes the new norm.*
+⚠️ **MY FIRST READ SAID "CONSISTENT WITH ABSORPTION": whole-day medians 09-08 `0.1237%` → 09-09 `0.1482%` → 09-10 `0.2730%`, a near-doubling.** ⛔ **THAT WAS A TIME-OF-DAY CONFOUND AND I CAUGHT IT BEFORE REPORTING: 09-10 is a PARTIAL day holding only overnight rows, and overnight spreads are genuinely wider. I was comparing a full day against an overnight slice.**
+
+✅✅ **THE CONTROLLED MEASUREMENT — same window `00:00-04:30 UTC` on all three days, comparable n:**
+| day | n | median spread | p90 |
+|---|---|---|---|
+| 09-08 *(episode day)* | 2,823 | **0.2435%** | 0.4030% |
+| 09-09 | 2,796 | **0.2351%** | 0.3856% |
+| 09-10 *(after)* | 2,623 | **0.2730%** | 0.3985% |
+
+✅ **CONTROL SYMBOL — SLV/USD, also open, also xStock, never hollow-flagged:** `0.0831%` · `0.0835%` · `0.0819%`. **Flat.** ⇒ **the instrument is stable and there is no market-wide drift to confuse with a comparator effect.**
+⇒ ⛔⛔ **NEM'S SPREAD IS UNCHANGED ACROSS THE EPISODE — BEFORE, DAY-OF AND AFTER. THE WIDE BOOK DID NOT BECOME THE NEW NORM. THE STATED RESIDUAL DID NOT MATERIALISE ON THIS INSTANCE.** ★ **One instance is not the residual's refutation — it is one negative case, and the residual stays REGISTERED, not closed.**
+⛔ **NO THRESHOLD ADDED, per Langston's routing and §4e's own rule: the answer to this class is LABELLED AND MEASURED, never a fresh number.**
+
+### ⚠️ WHAT THIS EXPOSED, AND IT IS THE MORE USEFUL FINDING
+⛔ **I COULD ONLY ANSWER THIS BY INFERENCE FROM SPREAD STATISTICS, BECAUSE THE DIRECT EVIDENCE IS NOT RECORDED.** §4e's census already says it: **`validated` is WRITTEN at `:119`, LOGGED at `:152`, and READ BY NOTHING.** ⇒ **there is no retained per-frame seed provenance, so "did a hollow frame re-seed the comparator" cannot be read off anything — it can only be circumstantially reconstructed from downstream spread behaviour, days later, with a confound to control for.**
+★ **THAT IS THE ASK THIS FIRE EARNS: make the seed provenance READABLE — persist which frame seeded the comparator and whether it was `validated` — so the residual can be TESTED rather than argued.** ⇒ **Folded into `3b.f-c` as an objective; NOT a new batch and NOT a threshold.**
+⚠️ **INSTRUMENT REACH, STATED: `/var/log/dawntrader/error.log` begins `2026-09-10T00:00:01Z` (rotated at midnight) and CANNOT see the 09-08 fire. `BOOK_STATE` appears 17 times in today's log and ZERO times for NEM — that silence is OVER-DETERMINED (a recovered book and an absorbed comparator both produce it) and is NOT the basis for anything above.** ✅ **The snapshot tables, which are partitioned by day and do reach 09-08, are.**
