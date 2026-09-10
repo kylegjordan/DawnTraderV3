@@ -8155,3 +8155,35 @@ tracked files at the ref containing it               = 348 of 5,886
 ★ **WHAT THIS COST AND WHY IT IS RECORDED IN FULL: I filed a batch, got it Langston-homed, placed it in the phase plan, and wrote it into the findings register that goes to an outside reviewer — all on a premise I could have falsified by reading forty lines of the guard I was accusing.** ⇒ ⛔ **`fix-follows-pointer`: I read the SYMPTOM (my push refused) and proposed a fix to the FEATURE I ASSUMED WAS MISSING, without ever opening the file to check whether it was already there.**
 **MISTAKE: fix-follows-pointer [B-TSC-GUARD-NONCODE-EXEMPT] — filed and homed a batch to build an exemption the guard already implements; read the guard, not the refusal.**
 
+---
+
+### #1026 OPEN 2026-09-10 (CC-C; hit it, did not go looking for it) — ⛔⛔ **A CHUNKED LANGSTON DISPATCH LEAKS ITS NON-LEADING PARTS INTO THE CHANNEL, AND ANOTHER AGENT'S BOT CAN ANSWER ONE**
+
+✅ **MEASURED, NOT INFERRED — IT HAPPENED TO MY OWN DISPATCH AND IT COST A COLTRANE INVOCATION KYLE HAD EXPLICITLY HELD.**
+**The sequence, from the bridge log and the inbox:** my r12 dispatch led with `Langston`, exceeded 2000 chars, and was split into two parts (`grp=5d61af95 n=2`). Langston's bridge behaved perfectly — `chunk-group 5d61af95: COMPLETE 2/2 -> reassembled 3547 chars`, then `invoking claude`. ⛔ **But the two raw parts are POSTED TO THE CHANNEL individually, and part 2/2 does not carry the leading `Langston`.** **`coltrane-bot.service` engaged the orphan and replied to me.**
+★ **COLTRANE DID EVERYTHING RIGHT AND IS NOT AT FAULT:** he refused to rule on a document he could only see half of, and he did not bypass his own stale-access refusal. **The defect is in the fabric, not in his judgement.**
+
+⛔⛔ **WHY THIS IS MORE THAN NOISE: IT SPENT MONEY AGAINST AN EXPLICIT KYLE DECISION.** His instruction is that Langston and I agree the register and the question set FIRST, then it goes to Coltrane as ONE dispatch — *"he is an expensive model to run."* ⇒ **An infrastructure side-effect, not a decision by anybody, pulled him in early.** ★ **A hold that any long message can silently breach is not a hold.**
+
+⚠️ **THIS FAILURE MODE DID NOT EXIST BEFORE COLTRANE JOINED THE CHANNEL.** The chunking fix (`#553`) was correct when Langston's was the only reassembling bridge — **a leaked fragment had nobody to wake.** ⇒ **`CLAUDE.md` §6.5's stated property, *"reassembly applies ONLY to a CC dispatch that STARTS with Langston and exceeds 2000 chars"*, is still TRUE and is no longer SUFFICIENT** — it describes what gets reassembled and says nothing about what the un-reassembled parts can wake. **A correct statement whose environment changed underneath it.**
+
+➕ **THE SHAPE, for whoever fixes it:** the addressing is on the MESSAGE, but the engagement decision is made PER POST. **Any fix has to put the addressee on every part, or suppress non-leading parts from other bots' engagement.** ⛔ **Do NOT "fix" it by making Coltrane's bot quieter in general — that trades a routing bug for a deaf reviewer.**
+**HOME: PROPOSED to CC-INFRA's Coltrane-onboarding work, routed in-channel 2026-09-10. ⚠️ NOT PLACED UNTIL THEY CONFIRM THE ROW — naming is not placing, and I do not own their plan. If they decline it, it comes back to me for a placement with Langston.**
+
+---
+
+### ➕ #1007 AMENDMENT 2026-09-10 (CC-C, found while diagnosing `#1026`) — ⛔ **THE RATCHET `#1007` EXISTS TO INSTALL IS IN A FAILED STATE ON THE BOX**
+
+✅ **MEASURED:** `systemctl` reports **`langston-size-watch.service` — loaded FAILED**, `Main PID exited status=1/FAILURE`, and the unit file itself is malformed: **`/etc/systemd/system/langston-size-watch.service:3: Invalid URL, ignoring: comms-infra/langston-memory/`**, repeating since **2026-09-09 07:00**.
+⇒ ⛔ **The size ratchet on Langston's always-loaded set — the whole point of `B-LANGSTON-CONTEXT` P-5 — is not watching anything.** **Filed as an amendment rather than a new number because it is not a new defect: it is `#1007`'s own mechanism, not running.**
+⚠️ **AND THE PERSONAL NOTE, RECORDED BECAUSE IT IS THE SAME DAY: `#1007` IS THE ISSUE I PUBLISHED AS *"VACATED"* EIGHT HOURS AGO.** ★ **It is not vacated, it is live, and its watchdog is dead — which is exactly the state a false *"vacated"* would have kept anyone from looking at.** **Owner remains CC-INFRA.**
+
+---
+
+### #1027 OPEN 2026-09-10 (CC-C; surfaced by Coltrane's own refusal, then confirmed on the box) — ⛔ **COLTRANE CANNOT READ THE REPOSITORY: HIS MIRROR REFRESH HAS BEEN FAILING GIT AUTHENTICATION FOR ~37 HOURS**
+
+✅ **HIS REPORT, AND IT WAS ACCURATE:** *"`coltrane-review` refused access: last successful refresh 2,252 minutes ago against a 90-minute limit."* ★ **He reported it rather than working around it.**
+✅ **CONFIRMED AT THE OBJECT:** `coltrane-repo-refresh.service` is **FAILED**, exiting `status=1/FAILURE` with **`fatal: Could not read from remote repository. Please make sure you have the correct access rights`** — a git credential/access failure against the remote, not a disk or parse problem.
+⭐⭐ **THE GUARD WORKED EXACTLY AS DESIGNED AND THAT DESERVES SAYING:** the service logs its own intent — *"fetch FAILED — NOT stamping. Reads will refuse once the existing stamp ages out, which is the intended behaviour."* ⇒ **stamp-only-on-success means a dead refresh degrades into a REFUSAL, never into silently stale reads.** ★ **That is `rule 29`'s *prefer impossible over intercepted* built correctly — the opposite of the `#546` absent-as-valid family, and it is why this was findable at all.**
+⛔⛔ **BUT IT IS BLOCKING THE THING WE ARE ALL WORKING TOWARD: the findings register is being prepared for a Coltrane dispatch, and as of now HE CANNOT READ THE REPOSITORY IT CITES.** ⇒ **this must be green BEFORE the register is sent, or the dispatch lands on a reviewer who can only read what is pasted into the message — which is precisely the failure `§6.5` file-first exists to prevent.**
+**HOME: PROPOSED to CC-INFRA's Coltrane-onboarding work, routed in-channel 2026-09-10, and flagged as a PRE-CONDITION on the register dispatch. ⚠️ NOT PLACED UNTIL CC-INFRA CONFIRMS THE ROW.**
