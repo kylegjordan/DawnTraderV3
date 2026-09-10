@@ -8170,6 +8170,14 @@ tracked files at the ref containing it               = 348 of 5,886
 ➕ **THE SHAPE, for whoever fixes it:** the addressing is on the MESSAGE, but the engagement decision is made PER POST. **Any fix has to put the addressee on every part, or suppress non-leading parts from other bots' engagement.** ⛔ **Do NOT "fix" it by making Coltrane's bot quieter in general — that trades a routing bug for a deaf reviewer.**
 **HOME: PROPOSED to CC-INFRA's Coltrane-onboarding work, routed in-channel 2026-09-10. ⚠️ NOT PLACED UNTIL THEY CONFIRM THE ROW — naming is not placing, and I do not own their plan. If they decline it, it comes back to me for a placement with Langston.**
 
+➕ **AMENDMENT, SAME DAY, TWO HOURS LATER — I TRIED THE OBVIOUS MITIGATION ON THE VERY NEXT DISPATCH AND IT FAILED. BOTH HALVES OF THIS ARE WORTH MORE THAN THE ORIGINAL FILING.**
+
+**(a) ⛔ AN AUTHOR-SIDE LENGTH DISCIPLINE IS NOT A FIX — MEASURED ON MYSELF, WHILE ACTIVELY TRYING.** Knowing the defect, having just filed it, I wrote the next Langston dispatch *deliberately* short to stay under the 2000-char split. **It came out at 2,129 characters and split anyway** (`grp=e8497fb1 n=2`). ★ **I MISSED BY 129 CHARACTERS ON A MESSAGE WHOSE ENTIRE POINT WAS NOT TO SPLIT.** ⇒ ⛔ **"Just keep it under the limit" is not a mitigation, and it must not be written down as one: the author cannot see the boundary, has no counter, and is composing prose, not bytes.** ★ **Same class as every other rule this project has retired in favour of a mechanism — the failure happens BEFORE the moment the discipline fires.**
+
+**(b) ⚠⚠ AND THE ENGAGEMENT IS INTERMITTENT, WHICH IS WORSE THAN DETERMINISTIC.** On the second split the orphan part 2/2 **posted to the channel exactly as before** — and **`coltrane-bot` did NOT answer it this time.** *(Langston's side was flawless both times: `COMPLETE 2/2 -> reassembled 2094 chars`, then invoked.)*
+⛔⛔ **DO NOT READ THAT AS THE LEAK BEING GONE — THE LEAK IS THE ORPHANED POST, NOT THE REPLY.** The fragment was published both times; only the ENGAGEMENT differed. ★ **An intermittent waker is exactly the shape that survives: it will not reproduce on demand, it will read as fixed after any change, and it will fire again on the dispatch that matters.** ⇒ **Whoever fixes this must verify against the ORPHANED POST, never against whether a bot happened to answer.** *(`#453`: a silence is not an absence — here, one bot's silence is not the absence of a leak.)*
+⚠️ **I do NOT know why it engaged once and not twice, and I am not guessing: it could be my intervening stand-down message, content heuristics, or timing. Unresolved, and stated as unresolved.**
+
 ---
 
 ### ➕ #1007 AMENDMENT 2026-09-10 (CC-C, found while diagnosing `#1026`) — ⛔ **THE RATCHET `#1007` EXISTS TO INSTALL IS IN A FAILED STATE ON THE BOX**
