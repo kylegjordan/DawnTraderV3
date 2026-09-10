@@ -168,3 +168,35 @@ When our own REST rate limiter declines to ask Kraken for a price, the code re-s
 1. **EXTEND once**, re-armed with the same criterion, unchanged.
 2. ⛔ **If the arm is still empty at the next fire, that is the RESULT: the criterion is not satisfiable while the WS path stays healthy**, and the batch converts recording that — either by re-scoping the assertion to a path that IS exercised, or by retiring it with the reason stated. **Not a third window.**
 ⚠️ **The bar is NOT lowered. Nothing about the three PASS conditions changes.**
+
+---
+
+## 9a. ⏱ RE-READ 2026-09-09 — **THE EXTEND IS EXECUTED, NOT MERELY DECIDED. THE ARM IS STILL EMPTY, ON A POPULATION HALF AGAIN AS LARGE.**
+
+⛔ **FIRST, WHAT §9 DECIDED AND NEVER DID: the EXTEND was recorded on 09-07 and NO SUCCESSOR ALERT WAS EVER ARMED.** `cecd4a47` fired `2026-09-07T12:08:12Z` and sat **active, unacked, unresolved for two days** — enumerated at the alert store, not recalled. ★ **A disposition written into a report with nothing armed behind it is the `#1005` shape: naming is not placing.** ⇒ **today's read is the FIRST fire discharged late, NOT the second fire — so the stopping rule below has NOT yet been reached.**
+
+**Same population, same pre-registration, re-read at `2026-09-09`:** `closed_trades` where `closed_at >= 2026-08-31T11:30:47Z`. **66 rows, up from 44.**
+
+| producer *(ENUMERATED, never `LIKE`)* | n | carry `exit_observed_at_ms` | missing |
+|---|---|---|---|
+| `kraken_ws_book_mid` | **42** | **42** | 0 |
+| `kraken_equities_ws_mid` | **21** | **21** | 0 |
+| `(none)` | 3 | 0 | 3 |
+| ⛔ **the touched (REST reserve) arm** | **0** | — | — |
+
+⛔⛔ **`touched_arm_rows = 0` FOR THE SECOND CONSECUTIVE READ, on a population that grew by 22 rows.** The three PASS conditions are scoped to `exit_price_producer IN ('kraken_rest_poller','kraken_rest_rate_limited_reserve')`; neither appears. ⇒ ✅ **THE PRE-REGISTERED RULE STILL APPLIES: *"ZERO reserve rows = EXTEND, not pass/fail."***
+
+### ⚠️ A WRONG-OBJECT READ CAUGHT BY ITS OWN CONTROL, BEFORE IT WAS REPORTED
+**My first pass today returned `null_observed` equal to the FULL count on every producer — 42/42, 21/21, 3/3 — which contradicted the 09-07 record.** ⛔ **I did not report it.** The control — *enumerate the keys the object actually carries* — returned **zero** metadata keys matching `observ`/`exit`/`age`. ⇒ **`exit_observed_at_ms` is a COLUMN of `closed_trades`, not a metadata key; I had queried a key that has never existed, and a key that does not exist is null on every row.**
+★ **The discriminator that settled it: `count(exit_observed_at_ms)` all-time = 92 non-null, most recent `2026-09-09 14:01:11Z`.** **The instrument works; my first pass was pointed at the wrong object.** ⚠️ **Fifth `wrong-object` instance inside my own corrections rather than in the original code — the pattern is not in the system, it is in me.**
+✅ **AND IT IS THE SAME FAILURE §9 ALREADY RECORDS ONE TURN EARLIER, in the opposite direction:** there I measured the RIGHT column on the WRONG population and called it a pass; here I measured the WRONG object on the right population and nearly called it a regression. **Same slug, both signs.**
+
+### ⇒ DISPOSITION — EXTEND, **ARMED THIS TIME**
+1. ✅ **Successor alert armed** carrying the criterion and the stopping rule **verbatim and unchanged**. **The bar is not lowered.**
+2. ✅ **`cecd4a47` RESOLVED** — its action *(run the joint read, enumerate the arms, extend if the reserve arm is empty)* is now discharged, and the continuation lives on the successor. ⛔ **Resolved rather than acked deliberately: an ack silences the re-surface without discharging the work (`#982`), which is exactly how this one went quiet for two days.**
+3. ⛔ **AT THE SUCCESSOR'S FIRE, AN EMPTY ARM IS THE RESULT — NOT A THIRD WINDOW.** The batch then converts, recording either a re-scope of the assertion onto a path that IS exercised, or its retirement with the reason stated.
+
+### ⛔ METHOD CORRECTION — **THE RIGHT ANSWER OFF THE WRONG LIST, AND THE CONTROL IS WHAT ACTUALLY CARRIES IT**
+⚠️ **My `touched_arm_rows` query enumerated SIX producer names I supplied from memory — `kraken_rest_ticker`, `kraken_rest_book`, `kraken_rest_ohlc`, `kraken_equities_rest`, `rest_reserve`, `kraken_rest`. The criterion names exactly TWO, and NEITHER of mine was one of them:** `kraken_rest_poller` and `kraken_rest_rate_limited_reserve`. ⇒ ⛔ **That query could not have detected the arm it was written to test. A zero from it means nothing.**
+✅ **THE RESULT SURVIVES, BUT ON THE CONTROL, NOT ON THAT QUERY.** The all-time producer census returns the **complete** set of values `exit_price_producer` has ever held across all 732 closed rows: `(none)` 640 · `kraken_ws_book_mid` 61 · `kraken_equities_ws_mid` 22 · `kraken_equities_ws` 9. **Four values, exhaustively enumerated. Neither criterion producer appears anywhere in the table's history.** ⇒ **`touched_arm_rows = 0` is established BY THE EXHAUSTIVE CENSUS, and I am recording that rather than letting a guessed list stand as the method.**
+★ **This is the third `wrong-object` in a single hour's work on one gate — a metadata key that never existed, a grep that matched another record's body, and a hand-supplied enumeration that omitted both targets. Every one was caught by a control and none reached a report.** ⇒ ⛔ **The lesson is not "be careful": it is that the criterion's OWN literals must be copied from the criterion, never retyped from memory.** ✅ **The successor alert's body now carries both producer names verbatim so the next read cannot re-derive them.**
