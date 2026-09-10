@@ -406,3 +406,29 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 - **This measures ALERTS, not staleness.** A symbol whose feed died quietly and never crossed the ceiling is invisible here. **The gap-population arm (§10) is the other half and neither replaces the other.**
 - **The 13:30–20:00 UTC window is the US CASH session and ignores holidays and half-days.** ⇒ **a handful of the 6 "inside" fires may be holiday closures, which would push the signal count DOWN, not up.** **The direction of that error is stated because it makes the 33:1 a FLOOR.**
 - **`xStock trades 24/5`, so "outside the cash session" is NOT "not trading" — it is thinner trading.** ⛔ **The discriminator must therefore be feed-wide liveness (`#994`: the other ~478 books are the control), NOT a clock test.** ★ **A clock test would silence a genuine overnight feed death, which is the failure mode this whole row exists to prevent.**
+
+---
+
+## §11-W — ⛔⛔ **§11 IS WITHDRAWN IN FULL. EVERY NUMBER IN IT IS RETRACTED.** *(Langston, 2026-09-11; each finding re-derived by me at the object before accepting)*
+
+⛔ **DO NOT CITE §11. THE SCOPE MAY NOT CARRY ITS FIGURES.** ✅ **The DISPOSITION survives — discriminator, not a threshold, not a mute — because Kyle ruled that at `#994` and it never rested on this arm.** ★ **The arm does not survive. Langston opened Step 1 on `3b.f-c` and withdrew the evidence in the same ruling, which is the right shape: the decision was already made, and my table was not what made it.**
+
+### THE FOUR ERRORS, EACH RE-DERIVED
+| # | what I did | corrected |
+|---|---|---|
+| **1** | ⛔ **I binned on `fired_at`.** | **`§13` OF THIS DOCUMENT SAYS *"READ `triggers_at`, NEVER `fired_at`."*** **Re-derived: drift is NON-ZERO on 206 of 206 rows, p50 `463.8 s`, max `885.6 s`, and ZERO rows where the two agree.** It walks rows across the session boundary. |
+| **2** | ⛔ **I did not apply the weekend filter.** | **35 of 206 are WEEKEND rows** — Sat/Sun UTC, outside the `Sun 20:00 ET → Fri 20:00 ET` window. **The market is not thinly traded then, it is SHUT.** |
+| **3** | ⛔ **I counted one event as four.** | `AMZN`/`ETN`/`GEV`/`PWR` at `2026-08-01T16:40:07.189/.213/.232/.251Z` — **62 ms wide, identical bodies. ONE event across four books.** And **2026-08-01 was a SATURDAY.** |
+| **4** | ⛔ **I treated "the ceiling" as one number.** | **It is not. Measured across the class: `300 s` on 70 rows, `15 s` on 31, and ~90 OTHER distinct values** (`177`, `206`, `273`, `148`, …) — **it is computed per symbol.** My surviving in-session candidate quotes **`ceiling 300s`, the CAP, not the 15 s floor.** |
+
+⇒ ⛔⛔ **CORRECTED RESULT: the in-session count is NOT 6. IT IS 1 — a single event, `DD/USD`, `2026-08-05` Wed `13:35:56Z`, at the cap.** **206 rows · 35 weekend · 170 off-session inside 24/5 · 1 in-session.**
+
+### ⛔ "33:1 IS A FLOOR" IS WITHDRAWN, AND THE DIRECTION IS UNKNOWN — NOT SMALL
+**The dedupe key is per-symbol (`price-skip-paper-<sym>`) and ack is non-terminal.** ⇒ **an unresolved off-hours row SUPPRESSES that symbol's next in-session event.** ★ **That deflates the inside count, which is the side I claimed was safe.** ⛔ **I called a bias a floor without establishing its sign. The honest statement is that the suppression bias is UNMEASURED.**
+
+### ⚠️ ONE CLAIM OF LANGSTON'S I RE-DERIVED AND MUST CORRECT — IT DOES NOT RESCUE ANYTHING OF MINE
+**He wrote: *"there is no `resurface_count` field on these rows at all."*** ⛔ **Measured: it is present on 99 of 206 rows, alongside `last_resurfaced_at` on the same 99.** ✅ **His underlying point stands and is the one that matters: my `229` summed the field where present and silently scored ABSENT AS ZERO, so it was a LOWER BOUND presented as a total.** ⇒ **we were wrong in opposite directions about the same field, and the number is unusable either way.**
+
+### ★★ THE PART THAT IS WORSE THAN THE ARITHMETIC
+⛔ **`§10.4` OF THIS VERY DOCUMENT IS THE WEEKEND FILTER, AND IT EXISTS *BECAUSE I MADE THIS EXACT ERROR BEFORE*** — the earlier refusal shares were weekend-contaminated, `14.0%` → `5.5%`, **and were deleted rather than corrected.** ⇒ ★ **I re-committed a registered error against a filter registered in the same file, four sections below where I was writing.** ⚠️ **My own working memory carries the line *"the refusal shares once here were weekend-contaminated"* — I had the warning, in two places, and did not apply it.**
+✅ **WHAT THE NEXT ARM MUST DO, AS A CHECKLIST RATHER THAN AN INTENTION:** read `triggers_at` · drop weekend rows · collapse fires within ~2 s into one event · **split by ceiling regime (`15 s` floor / computed / `300 s` cap) because they are different mechanisms** · state the suppression bias as unmeasured.
