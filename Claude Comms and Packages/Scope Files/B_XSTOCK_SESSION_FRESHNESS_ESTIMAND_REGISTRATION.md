@@ -432,3 +432,28 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 ### ★★ THE PART THAT IS WORSE THAN THE ARITHMETIC
 ⛔ **`§10.4` OF THIS VERY DOCUMENT IS THE WEEKEND FILTER, AND IT EXISTS *BECAUSE I MADE THIS EXACT ERROR BEFORE*** — the earlier refusal shares were weekend-contaminated, `14.0%` → `5.5%`, **and were deleted rather than corrected.** ⇒ ★ **I re-committed a registered error against a filter registered in the same file, four sections below where I was writing.** ⚠️ **My own working memory carries the line *"the refusal shares once here were weekend-contaminated"* — I had the warning, in two places, and did not apply it.**
 ✅ **WHAT THE NEXT ARM MUST DO, AS A CHECKLIST RATHER THAN AN INTENTION:** read `triggers_at` · drop weekend rows · collapse fires within ~2 s into one event · **split by ceiling regime (`15 s` floor / computed / `300 s` cap) because they are different mechanisms** · state the suppression bias as unmeasured.
+
+---
+
+## §12 — ⭐⭐ STEP-1 EXISTENCE CHECK ON `3b.f-c`: **THE DISCRIMINATOR ALREADY EXISTS, IS ALREADY LANGSTON-RULED, AND IS DELIBERATELY SWITCHED OFF BEHIND A NAMED PREREQUISITE** *(2026-09-11, CC-C)*
+
+⛔⛔ **I WAS ONE STEP FROM SCOPING A BATCH TO BUILD SOMETHING THAT IS ALREADY BUILT. THIS IS `#1025` EXACTLY, AND ONLY THE STEP-1 *"DOES IT ALREADY EXIST"* CHECK CAUGHT IT.**
+
+**FOUND AT THE OBJECT, repo-wide, tests excluded:**
+| | |
+|---|---|
+| **the mechanism exists** | `feedStubFraction` / `feedCohortN` are **typed, threaded and CONSUMED** — `book-state.ts:165-166` reads them, `:254` branches on `feedStub >= cfg.feedStubFractionF` |
+| **it is database-governed** | `book-state-config.ts:36-38` binds `feed_stub_fraction_f`, `feed_stub_window_ms`, `feed_cohort_floor` |
+| ⛔ **its only producer passes a hardcoded `null`** | `book-state-tracker.ts:211-212` |
+| ✅ **and the code states WHY, in its own words** | *"Candidate (ii) is INERT by knob (`feed_read_enabled = 0`) until F4's re-measure lands; the cohort read is wired then, on the guard's own telemetry — not stubbed here."* |
+
+✅✅ **AND IT IS ALREADY GOVERNED, NOT MERELY PRESENT.** `B_XSTOCK_FEED_SANITY_PROGRESS_REPORT:75`: *"Candidate (ii), the feed-health read, is INERT by knob … until its fraction is re-measured on the guard's own first-week telemetry (**F4**). **Langston ruled it admissible as instrument health, not a second venue; Kyle may overturn** (told 2026-09-02)."*
+
+### ⇒ ⭐ WHAT `3b.f-c` ACTUALLY IS, AND IT IS MUCH SMALLER THAN WHAT I WAS ABOUT TO PROPOSE
+⛔ **NOT *"design and build a feed-wide discriminator."*** **That work is done, reviewed and merged; it is switched off behind ONE named gate.**
+✅ **IT IS: RUN `F4`'s PRE-REGISTERED RE-MEASURE on the guard's own telemetry, and if it supports the fraction, TURN THE KNOB ON.** ★ **The thing that separates *"the market is shut"* from *"our feed is impaired"* — `#994`'s discriminator — is `feed_cohort_floor` plus `feed_stub_fraction_f`, sitting in the database with a producer feeding it `null`.**
+⚠️ **RIPENESS NOT ASSERTED: `F4` says *first-week* telemetry and the guard deployed after 2026-09-07, so roughly four days exist as of today. WHETHER F4 CAN RUN YET IS OBJECTIVE 1, NOT AN ASSUMPTION.** ⛔ **I am not declaring the window ripe to make my own scope shorter.**
+⚠️ **AND `#943` IS STILL OPEN in its observation window, so this is work INSIDE an open batch, not a fresh one** — §9.4 disposition 1 or 2, for Langston to settle, not me.
+
+### ★ THE STEP-1 LESSON, RECORDED BECAUSE IT IS THE SECOND TIME IN THREE DAYS
+⛔ **`#1025`: I proposed building a push-guard exemption that already existed. Here I was about to propose building a discriminator that already exists.** ⇒ ★ **BOTH TIMES THE TRIGGER WAS A SYMPTOM I HAD MEASURED MYSELF, AND THE MEASUREMENT'S VIVIDNESS IS WHAT SUBSTITUTED FOR THE EXISTENCE CHECK.** ✅ **A big number feels like a mandate to build. It is not — it is a reason to go and look first.**
