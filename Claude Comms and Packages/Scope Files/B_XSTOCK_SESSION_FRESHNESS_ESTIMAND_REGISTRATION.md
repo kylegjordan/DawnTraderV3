@@ -379,3 +379,30 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 ### ✅ DISPOSITION
 ⛔ **ALERT LEFT ACTIVE AND NOT ACKED, per Langston's routing** — and the reason is now positive rather than procedural: **the row is the standing evidence for the alert-policy decision, and acking it would silence the only live instance we have.**
 **DISPOSITION: folded into this row (`3b.f-c`) as the entry-side arm's worked instance.** ⛔ **NOTHING is written into `#526` — `B-VENUE-QUIET-ALERTING` is CC-B's, and the lane partition holds.**
+
+---
+
+## §11 — ⭐⭐ THE CLASS-WIDE ARM `3b.f-c` OWED, MEASURED ON THE **ALERT POPULATION** *(2026-09-11, CC-C)*
+
+> ⛔ **§10 named its own limit: *"ONE SYMBOL, ONE DAY … NOT a class rate. A class-wide version of this table is what `3b.f-c` owes."*** ✅ **This is that arm, on a different and complementary object: not the GAP population (how often the guard binds) but the ALERT population (how often it SPEAKS).**
+
+**OBJECT:** every DISTINCT `Exit checks skipped — mark older than ceiling` alert ever recorded in `system-alerts.jsonl`, de-duplicated by `id`. **POPULATION: 204 rows, all-time, none excluded, zero unparseable timestamps.**
+
+| | n | share |
+|---|---|---|
+| ⛔ **fired OUTSIDE the US cash session** (not 13:30–20:00 UTC) | **198** | **97.1%** |
+| ✅ **fired INSIDE it** | **6** | **2.9%** |
+
+**AND THE ASSET-CLASS SPLIT IS TOTAL: 67 distinct symbols in the outside group, and NOT ONE IS A CRYPTO PAIR.** *(Tested by quote-currency and against a named coin list; the crypto set returned EMPTY.)* ⇒ ⭐ **this alert class is, in practice, an xStock-only phenomenon — which is what `#994` predicts, because crypto trades 24/7 and has no "market shut" state to mistake for impairment.**
+
+**THE FIRING-HOUR SHAPE, and it is the finding rather than decoration:** peaks at **20:00Z (32), 00:00Z (31), 21:00Z (23), 22:00Z (19)** — the hours at and after the 4pm-ET close — and **ZERO alerts in the 14:00, 15:00, 17:00, 18:00 and 19:00 hours**, the heart of the session. ★ **The distribution is not merely skewed; it is nearly disjoint from regular hours.**
+
+### ⇒ ⭐⭐ WHAT THIS CHANGES, AND IT IS NOT "SILENCE THEM"
+⛔ **THE NOISE-TO-SIGNAL RATIO IS 33:1, SO THE ALERT IS DESTROYING ITS OWN SIGNAL.** The 6 in-session fires are **the exact population the alert exists to catch** — `#994`'s *"staleness because OUR feed is impaired"* — and they are indistinguishable from 198 fires that mean *"the US market is shut,"* which is `#994`'s *"must not raise a breakage alert."*
+✅ **SO THE FIX IS THE DISCRIMINATOR, NOT A THRESHOLD AND NOT A MUTE.** ⛔ **Do NOT raise `active_fill_max_age_ms` — §10 already settled that it costs 0.11% of RTH time; loosening it would relax a constraint that is not binding when it matters, to quiet an alert that fires when it does not.**
+★ **AND §10 ALREADY FOUND THE CONDITION WRITTEN IN THE ALERT'S OWN TEXT AND NEVER TESTED IN CODE:** *"persistent staleness **during US regular hours** indicates a feed problem."* ⇒ **the discriminator is not a new invention — it is the qualifier the message already claims, made executable.**
+
+### ⚠️ LIMITS, STATED
+- **This measures ALERTS, not staleness.** A symbol whose feed died quietly and never crossed the ceiling is invisible here. **The gap-population arm (§10) is the other half and neither replaces the other.**
+- **The 13:30–20:00 UTC window is the US CASH session and ignores holidays and half-days.** ⇒ **a handful of the 6 "inside" fires may be holiday closures, which would push the signal count DOWN, not up.** **The direction of that error is stated because it makes the 33:1 a FLOOR.**
+- **`xStock trades 24/5`, so "outside the cash session" is NOT "not trading" — it is thinner trading.** ⛔ **The discriminator must therefore be feed-wide liveness (`#994`: the other ~478 books are the control), NOT a clock test.** ★ **A clock test would silence a genuine overnight feed death, which is the failure mode this whole row exists to prevent.**
