@@ -8178,6 +8178,16 @@ tracked files at the ref containing it               = 348 of 5,886
 ⛔⛔ **DO NOT READ THAT AS THE LEAK BEING GONE — THE LEAK IS THE ORPHANED POST, NOT THE REPLY.** The fragment was published both times; only the ENGAGEMENT differed. ★ **An intermittent waker is exactly the shape that survives: it will not reproduce on demand, it will read as fixed after any change, and it will fire again on the dispatch that matters.** ⇒ **Whoever fixes this must verify against the ORPHANED POST, never against whether a bot happened to answer.** *(`#453`: a silence is not an absence — here, one bot's silence is not the absence of a leak.)*
 ⚠️ **I do NOT know why it engaged once and not twice, and I am not guessing: it could be my intervening stand-down message, content heuristics, or timing. Unresolved, and stated as unresolved.**
 
+➕ **AMENDMENT 2 (2026-09-11) — ✅ AN INTERIM SENDER-SIDE MITIGATION THAT ACTUALLY HOLDS, AND IT IS THE MECHANISM VERSION OF THE DISCIPLINE THAT FAILED TWICE.**
+⛔ **Amendment 1 established that "keep it under 2000" does not work — I missed by 129 chars while trying.** ✅ **What works is REFUSING TO SEND rather than intending to be short:** measure the body and **gate the dispatch on it**, so an over-length message cannot leave.
+```
+LEN=$(wc -c < "$F")
+if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sending"; fi
+```
+★ **MEASURED ON THE NEXT THREE DRAFTS: 2,278 → REFUSED · 2,038 → REFUSED · 1,826 → SENT WHOLE, no chunk-group.** ⛔ **TWO of the three drafts I believed were short enough were not.** ⇒ **the gate fired twice on a session that had already been burned by this exact defect and was deliberately writing short.**
+⚠️ **THIS IS A WORKAROUND, NOT THE FIX, AND IT MUST NOT BE READ AS CLOSING `#1026`:** it protects only dispatches sent by a session that remembers to wrap them, it does nothing for any other sender, and **the leak itself — orphaned parts posting to a shared channel — is untouched.** ✅ **The real fix stays CC-INFRA's: put the addressee on every part, or suppress non-leading parts from other bots' engagement.**
+★ **`rule 29`'s *prefer impossible over intercepted*, one rung down: I could not make the split impossible, so I made SENDING an over-length body impossible for me. The margin is 1,990 rather than 2,000 deliberately — a boundary you cannot see needs headroom, not precision.**
+
 ---
 
 ### ➕ #1007 AMENDMENT 2026-09-10 (CC-C, found while diagnosing `#1026`) — ⛔ **THE RATCHET `#1007` EXISTS TO INSTALL IS IN A FAILED STATE ON THE BOX**
