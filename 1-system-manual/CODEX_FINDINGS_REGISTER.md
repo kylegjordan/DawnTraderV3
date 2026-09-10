@@ -1,6 +1,6 @@
 # CODEX FINDINGS REGISTER — **EVERYTHING COLTRANE NEEDS TO DESIGN THE FIX**
 
-> **STATUS: r12 (CC-C + Langston, 2026-09-10).** Langston ruled on r11; this carries his corrections.
+> **STATUS: r13 (CC-C + Langston, 2026-09-10).** Langston ruled r12 NOT READY on three edits; this carries them.
 > ⚠️ **THE HEADER READ `r6` WHILE THE BODY WAS `r11` — SIX REVISIONS OUT OF DATE, IN THE ONE LINE AN OUTSIDE READER CITES THE DOCUMENT BY.** ★ **Langston's FINDING-1, and it is the A10b class this document itself rules must be REMOVED rather than annotated: a stale label is not a small error in a document whose whole job is to be cited.**
 
 ## ⭐⭐ THE OUTCOME THE DESIGN MUST SERVE
@@ -18,7 +18,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 ## 0. ⛔ METHOD, AND TWO LIMITS STATED BEFORE THE CONTENT
 
-**(1) THE DENOMINATOR IS INCOMPLETE.** This covers the **pricing-architecture review in full (14 findings)**. **Assignments 1-3 are NOT yet registered** — see §6. ⇒ ⛔ **Until that closes, this document is a complete register of ONE audit and an incomplete register of four.** **Said here rather than discovered later.**
+**(1) THE DENOMINATOR IS INCOMPLETE — AND THE REASON IS READING, NOT POSSESSION (corrected r13).** This covers the **pricing-architecture review in full (14 findings)**. ✅ **WE HOLD ALL FIVE REPORTS AND BOTH BLIND-SPOT DELTAS IN THE TREE — §5 lists them with sizes at the ref.** ⛔ **Four of the five are NOT RE-DERIVED, and the two deltas are UNREAD.** ⇒ **This document is a complete register of ONE review and an unregistered inventory of four more.** ⚠️ **r12 and earlier said these were *not in our repository*. That was FALSE and is corrected here rather than annotated.** **Said here rather than discovered later.**
 
 **(2) ACCEPTING A CORRECTION IS ITSELF A CLAIM** *(Langston)*. Rule 29 binds it as it binds making one. **Every row states HOW it was settled:**
 | tag | meaning |
@@ -46,7 +46,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 1. ⛔ **FAIL LOUD ON AN ABSENT INPUT. Never `?? 0`, never a silent default** (`#546`). A missing value is a fault, not a zero.
 2. ⛔ **NO HARDCODED FALLBACK FOR A DATABASE-GOVERNED SETTING.** If it should come from the database, an empty database must REFUSE — not substitute.
 3. ⛔ **VTS EXITS ARE MARK-BOOKED, NOT TRANSACTABLE.** Crypto VTS rows book the observed mark at exit. **Do not read them as executable fills.**
-4. ⛔ **`F-G-2`'s SHADOW WINDOW MUST NOT BE SPLIT** — it is mid-observation.
+4. ⛔⛔ **NO LIVE PRE-REGISTERED OBSERVATION WINDOW MAY BE SPLIT, AND THEY MUST BE ENUMERATED AT DESIGN TIME.** ⚠️ **This named only `F-G-2`'s shadow window until r13 — right, and incomplete: a fence naming ONE member of a class fences the one window a reviewer happened to mention** (Langston, FINDING-3). **Live at the time of writing: `F-G-2`'s shadow window · `#951`'s successor gate, armed for 2026-09-16 · `B-DEPLOY-DRIFT-LINE`'s criterion 4.** ★ **Enumerate them again at design time — this list is a snapshot and will be stale.**
 5. ⛔ **RISK LIMITS ARE BOUNDARIES, NOT DIALS.** No design may loosen a risk control to improve returns. **If growth and risk tolerance conflict, risk tolerance wins.**
 6. ⭐ **READ THE CROSS-CUTTING RUNTIME-STATE REGISTRY IN `1-system-manual/SYSTEM_IMPACT_MAP.md` BEFORE ANY CHANGE TOUCHING SHARED STATE OR A KEY SHAPE** — singletons, shared maps and liveness live there, and a key change designed without that census fixes one instance of five.
 
@@ -69,7 +69,8 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 **PLAIN:** We argued that moving the stop to the other side of the spread would shrink every position. **It wouldn't.** Size is a fixed share of the portfolio divided by the entry price; the stop is checked for validity and then plays no part.
 ✅ **CONFIRMED — RE-DERIVED.** The code says it: `quantity = bufferedMaxNotional / entryPrice`, with a comment recording that the old stop-based form was deliberately removed, and a log line reading `Invalid fixed-notional quantity`.
 ⛔ **WHAT WE OWE:** strike the argument. **And the honest consequence is the opposite of comfortable — moving the ENTRY to the ask DOES change size, through the entry-price denominator. A different mechanism, still real.** ⚠️ **This is not a reason to loosen any limit; the exposure bounds must be re-verified against the quantity actually executed.**
-➕ **FOR THE DESIGNER (Langston): the docblock at `server/services/active-position-sizing.ts:123-131` STILL DESCRIBES THE RETIRED RISK-BASED ALGORITHM, ninety lines above the body that contradicts it.** ★ **Anyone reading the top of that file gets the wrong model of how we size.**
+➕➕ **AND IT CARRIES A DISPOSITION, WHICH IT LACKED UNTIL r13 (Langston's FINDING-2 — §9.4 fires on the FIND, and *"flagged for the designer"* is not one of the five): ✅ DISPOSITION 1 — FOLD INTO THE WORK IN HAND**, beside `PRICING_DATA_ARCHITECTURE.md` in the pricing programme's documentation repair. ★ **Not a separate batch: it is a stale description of the very sizing path this programme is re-deriving, and it has ALREADY cost a ratification.**
+➕ **THE DEFECT ITSELF: the docblock at `server/services/active-position-sizing.ts:123-131` STILL DESCRIBES THE RETIRED RISK-BASED ALGORITHM, ninety lines above the body that contradicts it.** ★ **Anyone reading the top of that file gets the wrong model of how we size.**
 
 ### 1.4 ⛔ **A5 — xStock signals are born on 15-minute bars, not 60, and it is a bar close, not a midpoint**
 **PLAIN:** Two errors in one cell. The interval is **15 minutes**; the 60 we cited belongs to a different job. And **a bar close is not a midpoint** — there are no two quote sides in it.
@@ -178,7 +179,12 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 ✅ **WHAT ACTUALLY CONTAINS IT TODAY: the legacy `trades` table is EMPTY — 0 rows, 0 live, 0 open, measured on staging — and only the gated engine writes it.**
 ⇒ ⛔⛔ **THAT IS CONTAINMENT BY *DATA*, IT IS RECORDED NOWHERE, AND IT EVAPORATES THE MOMENT ANYTHING WRITES A LIVE ROW.** ★ **Same class as `#213`, which `P19-B2` chose to DELETE rather than gate, for precisely this reason.**
 ➕ **COLTRANE'S ADDITION, and it raises the bar correctly:** removal must be **an explicit release blocker WITH VERIFICATION that the registered route can no longer reach legacy exchange actions.** ★ **Deleting the engine is not sufficient on its own — the route has to be shown unable to reach it.**
-⛔ **SO THE REMOVAL NEEDS A HARD FLOOR: `#578` currently sits at plan row 11.5, *"re-order on Kyle's word."* ⇒ **REMOVAL LANDS BEFORE PHASE-21 GO-LIVE.** ★ **§13 disposition: a RIDER on the existing `#578`, not a new item.**
+⛔⛔ **AND THE FLOOR IS LATER THAN THE EXPOSURE — THE COMPOSITION NOBODY HAD STATED (Langston, r12, re-derived by him at the ref; ROUTED, NOT A GATE ON THIS DOCUMENT).**
+**§2b's containment rests on the legacy `trades` table being empty. Set it beside two findings filed the same week:** `#1022` — **157 of 216 mutating routes carry NO authorization guard, and `viewer` is not read-only**; `#1023` — **the staging password is in a public repository.** ⇒ ⛔ **"authenticated" is therefore publicly obtainable, `closeTrade` needs only `authenticateToken`, and containment-by-data is the ONLY remaining layer.**
+✅ **RE-DERIVED BY LANGSTON AT THE REF, NOT REPORTED FACT:** `routes.ts:5051` is `authenticateToken` alone with `tradeMode` off `req.body.mode`; `trading-engine.ts:599` `closeTrade` carries no `isRunning` guard (they sit at `:79`/`:222`/`:678`); `:632-638` is a real Kraken market `sell`; and `live_engine_gate`/`liveEngineEnabled` **grep to ZERO in that file.**
+★ **`#1022`'s own entry names the trap: *"closing one and feeling safer is the failure mode."*** ⇒ ⛔ **A go-live floor does not bound an exposure that is live NOW.**
+**§13 disposition 2: a RIDER on `#578` naming the composition — owner CC-A, who owns `#1022` and `#1023` both. NOT Coltrane's scope and NOT a gate on this register.**
+⛔ **THE ORIGINAL FLOOR STANDS AS A FLOOR: `#578` sits at plan row 11.5, *"re-order on Kyle's word."* ⇒ **REMOVAL LANDS BEFORE PHASE-21 GO-LIVE** — but that is now the LATEST acceptable date, not the risk boundary.** ★ **§13 disposition: a RIDER on the existing `#578`, not a new item.**
 
 ⇒ ✅ **DISPOSITION: `#578`, existing, Kyle-ruled, scheduled for removal under rule 18. NOT a new finding and NOT a new batch.** ⛔ **It must not be re-filed, and a design must not build around it — it is going away.**
 
@@ -213,14 +219,22 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 
 ## 5. ✅ THE OTHER THREE AUDITS — **REGISTERED**
 
-| assignment | subject | what we hold |
-|---|---|---|
-| **1** | full system audit — trading logic, maths, machinery | ⛔ **report not in our repository.** Known downstream: finding 1 → `#1006` *(repository/database schema divergence — **HOMED: CC-B's `B-RTB-SIGNAL-IDENTITY`, plan row `2.4c`**)*; a fee-contract finding → `#1010` → `B-XSTOCK-FEE-CONTRACT`, CC-B |
-| **2** | trading logic, the maths, and what to build | ⏳ not registered |
-| **3** | what is stopping the system doing its job | data files present under `Claude Comms and Packages/Codex Audits/audit3/`; ⏳ findings not registered |
-| ⭐ **the blind-spot delta** | *what it would have asked that we did not* | ⛔ **requested in assignment 1, not in our repository. The one artifact we cannot produce ourselves.** |
+⛔⛔ **CORRECTED IN r13. THIS TABLE SAID *"NOT IN OUR REPOSITORY"* ABOUT ARTIFACTS SITTING IN THE TREE — AND SAID IT ONE LINE ABOVE A TICK SAYING WE HOLD THEM ALL.** ★ **Langston re-derived it at the ref and it is the A10b class this very document rules must be REMOVED rather than annotated — reproduced inside the register, in the section an outside reader uses to decide what we hold.** ⚠️ **AND IT WAS DECISION-BEARING: I named an artifact UNOBTAINABLE that is in the tree, unread.**
 
-✅ **ALL FOUR ARE NOW IN `Claude Comms and Packages/Codex Audits/`.** §6 item 2 asks him only to confirm our reading of them.
+✅ **WHAT WE ACTUALLY HOLD — re-derived at `origin/migration/aws-supabase`, sizes in bytes, positive control run on a known path:**
+
+| assignment | subject | what we hold | registered here? |
+|---|---|---|---|
+| **1** | full system audit — trading logic, maths, machinery | ✅ `audit1-full-system/FULL_SYSTEM_AUDIT_2026-09-05.md` **21,436 B**, plus `QUESTIONS.md` and `ANSWERS.md` | ⏳ **not re-derived** — finding 1 → `#1006`, **HOMED: CC-B's `B-RTB-SIGNAL-IDENTITY`, plan row `2.4c`** |
+| **2** | fee viability — the maths, and what to build | ✅ `audit2-fee-viability/CODEX_AUDIT_2_REPORT.md` **18,711 B** | ⏳ not re-derived |
+| **3** | what is stopping the system doing its job | ✅ `audit3/REPORT.md` **56,746 B** + the full evidence set (measurement scripts, hashes, ~18 MB of CSV). **`audit3-rederivation/` is CC-B's independent re-derivation, not a Codex artifact** | ⏳ not re-derived |
+| **astra** | independent audit, 9 findings | ✅ `astra-independent/REPORT.md` **94,658 B** + `QUESTIONS.md`, `PROVENANCE.md` | ⏳ not re-derived |
+| ⭐ **the pricing-architecture review** | the 14 findings §§1-4 cover | ✅ `pricing-architecture-review/REPORT.md` **60,847 B** + `CITATION_CHECK.json`, `FINAL_PROVENANCE.json` | ✅✅ **REGISTERED IN FULL — this is the one** |
+| ⭐ **the blind-spot delta** | *what it would have asked that we did not* | ✅✅ **THERE ARE TWO, AND BOTH ARE HERE:** `audit1-full-system/BLIND_SPOT_DELTA_audit1.md` **6,777 B** and `astra-independent/BLIND_SPOT_DELTA_astra.md` **4,102 B** | ⏳ not read |
+
+⛔ **THE HONEST STATEMENT, WHICH IS THE OPPOSITE OF WHAT THIS SECTION USED TO SAY: WE HOLD EVERYTHING. WE HAVE REGISTERED ONE OF FIVE.** ★ **The gap is READING, not POSSESSION — and that is a much better problem, because it needs no one's cooperation but ours.**
+⚠️ **`#1013` APPLIES TO THIS TREE: `bridge/reference/` and `docs/restoration/truth/` carry committed access tokens. These audit paths are NOT those, but bulk-reading the repository to chase a citation is how that gets tripped.**
+➕ **§6's supporting ask therefore narrows: not *"confirm our reading of all four"* — we have not read four of them. It is *"which of your earlier findings do you still stand behind."***
 
 ---
 
@@ -261,7 +275,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 - **(a)** ⛔ **The smallest coherent design, not nine fixes.** §7 offers the observation that five of them may be one mechanism — **use it or discard it, but say which.**
 - **(b)** **State what must land together and what can follow**, and what the rollback is for each piece.
 - **(c)** **Of the five open runtime questions in §3, tell us which ones your design DEPENDS on** — we will produce that evidence. **Do not design around them silently.**
-✅ **BOUNDED: nine confirmed findings, one subsystem, one rollback story.**
+✅ **BOUNDED: EIGHT confirmed findings (§1.1-1.8), one subsystem, one rollback story.** ⚠️ **This read *nine* until r13 — the count did not follow `§1b` when Langston's 09-09 ruling moved it out of §1 to its own section with a different owner and batch.** ★ **§7 already says five of the eight may be ONE mechanism, so the two numbers a designer scopes against were disagreeing with each other.**
 
 ---
 
@@ -301,7 +315,7 @@ The idea being tested: **Coltrane writes code in his own repository; Langston re
 ---
 
 ### ➕ SUPPORTING, IN EITHER ASK
-- **Confirm or correct our reading of your earlier findings** — §5 registers all four audits. **Which do you still stand behind, which would you withdraw, which are overtaken?**
+- **Confirm or correct your OWN earlier findings** — **which do you still stand behind, which would you withdraw, which are overtaken?** ⚠️ **CORRECTED r13: this said *"§5 registers all four audits"*, which was false on the same fact as §5's own table. §5 registers ONE of five; we hold all of them and have re-derived four of them not at all.** ★ **So this asks about YOUR standing, not about our reading — we do not yet have a reading to confirm.**
 - **What else do you need from us?** Data, measurement, history, intent, or a decision only Kyle can make. ✅ **Ask plainly; anything we can supply, we will.**
 - ⚠️ **Citations in this register name files without full paths in places.** **Read at the stamped sha and tell us where a path is ambiguous** — two of five checked needed a probe.
 
