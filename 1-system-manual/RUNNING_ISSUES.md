@@ -8130,7 +8130,7 @@ tracked files at the ref containing it               = 348 of 5,886
 
 ---
 
-### #1025 OPEN 2026-09-09 (CC-C; Langston-homed from a §13 surface) — ⛔ **THE tsc BASELINE PUSH GUARD BLOCKS CHANGE SETS THAT CONTAIN NO CODE**
+### #1025 ⛔ WITHDRAWN 2026-09-10 (CC-C; filed 2026-09-09, Langston-homed from a §13 surface — PREMISE FALSIFIED AT THE OBJECT, see the withdrawal at the foot of this entry) — ⛔ **THE tsc BASELINE PUSH GUARD BLOCKS CHANGE SETS THAT CONTAIN NO CODE**
 
 **MEASURED, not reported — Langston flagged my own claim as reported fact and asked me to verify it, which found it imprecise and then confirmed it:** the guard has refused **FOUR CONSECUTIVE pushes**, and the six blocked commits touch **16 markdown files and nothing else — zero `.ts`/`.tsx`.** Totals identical both sides: **377 against 377.**
 ★ **A guard that blocks a GOVERNANCE push over a change set with no TypeScript in it is a defect, not a strictness setting** — it currently prevents the findings register from reaching the branch at all, and that register is the artifact three parties are waiting on.
@@ -8138,3 +8138,20 @@ tracked files at the ref containing it               = 348 of 5,886
 ⛔ **OBJECTIVE 1 IS THE EXEMPTION PREDICATE AND IT MUST KEY ON CONTENT** — *does this range change TypeScript* — **not on a path list.** ★ **A path predicate is exactly what `#1016` got wrong in the other direction: a zero-non-comment-line diff opened the drift gate identically to 115 lines of live code.**
 ⚠️ **ADJACENT, NOT DUPLICATE: `#1019` (CC-A) is the DETERMINISM question** — the same guard refusing and then passing on retry. **Same guard, two distinct defects.**
 **HOME: `B-TSC-GUARD-NONCODE-EXEMPT`, owner CC-C, `PHASE_19_PLAN` row `3b.h-5`.**
+
+⛔⛔ **WITHDRAWN 2026-09-10 BY CC-C, THE SAME SESSION THAT FILED IT — §9.4 DISPOSITION 5, CARRYING THE CITATION THAT DISSOLVES IT. THE PREMISE IS FALSE AT THE OBJECT.**
+
+✅✅ **THE GUARD ALREADY KEYS ON CONTENT. IT HAS THE EXACT EXEMPTION THIS ISSUE DEMANDED BE BUILT.** `.claude/hooks/guard-push-tsc-baseline.mjs` enumerates the push range with `git diff --name-only <upstream>...HEAD`, filters it against a **TRIGGER SET** (`/\.tsx?$/`, `tsconfig*.json`, `package(-lock)?.json`, `.tsc-baseline.json`), and then:
+> `if (files.length && relevant.length === 0) { /* Nothing here can move the count. Skip silently */ process.exit(0); }`
+⇒ ⛔ **A markdown-only push reaches that branch and is skipped. "Blocks change sets containing no code" cannot be the mechanism, because the code refuses to do it.**
+
+✅ **MEASURED, NOT REASONED — A FIFTH CODE-FREE PUSH OF THE SAME SHAPE PASSED:** `1453f9709..57332538d`, **16 files, ZERO trigger-matching**, pushed clean on 2026-09-10. **The guard's own enumeration replayed at that exact range returns `files=16, relevant=0`.**
+➕ **POSITIVE CONTROL ON THAT ZERO (rule 29 — a zero is not evidence until the instrument is shown finding a positive):** the identical trigger regex over a range known to contain TypeScript returns **5**. ⇒ **the instrument can see `.ts`; the absence is real.**
+
+⛔ **SO WHAT REFUSED THE FOUR EARLIER PUSHES? NOT THIS, AND I AM NOT NAMING A CAUSE I HAVE NOT TESTED.** ★ **`#1020` (CC-A, measured WITH a control) supplies a mechanism that refuses INDEPENDENTLY OF CONTENT: the guard is `PreToolUse`, so it runs before the pushing command's own leading `cd`, and its `spawnSync` sets no `cwd` — tsc then runs wherever the PREVIOUS tool call left the shell, finds no `tsconfig`, reports **0 errors against a baseline of 377**, and refuses.** **That produces exactly the symptom I filed, on any change set whatever.**
+⚠️ **I CANNOT CONFIRM IT WAS `#1020` FOR MY FOUR INSTANCES — I NO LONGER HOLD THE REFUSAL TEXT, AND MY OWN ENTRY RECORDED *"377 against 377"* WHILE `#1020` OBSERVED *"0 against 377"*. THOSE ARE DIFFERENT MESSAGES.** ★ **Most likely my `377 against 377` was MY OWN manual comparator run, recorded beside the guard's refusal and read as the guard's output — which would make it a `wrong-object` at the point of filing.** ⛔ **Stated as unresolved rather than tidied into a clean story.**
+
+⇒ ✅ **DISPOSITION: WITHDRAWN. `B-TSC-GUARD-NONCODE-EXEMPT` IS STRUCK FROM `PHASE_19_PLAN` ROW `3b.h-5` — THERE IS NOTHING TO BUILD.** **The live defect in this guard is `#1020` (owner CC-A, homed to `P19-B12`), and `#1019`'s determinism symptom — refuse, then pass unchanged on retry — IS `#1020`'s cwd variability, not a separate non-determinism.** ⛔ **Both are CC-A's; I am handing over the evidence, not the issues.**
+★ **WHAT THIS COST AND WHY IT IS RECORDED IN FULL: I filed a batch, got it Langston-homed, placed it in the phase plan, and wrote it into the findings register that goes to an outside reviewer — all on a premise I could have falsified by reading forty lines of the guard I was accusing.** ⇒ ⛔ **`fix-follows-pointer`: I read the SYMPTOM (my push refused) and proposed a fix to the FEATURE I ASSUMED WAS MISSING, without ever opening the file to check whether it was already there.**
+**MISTAKE: fix-follows-pointer [B-TSC-GUARD-NONCODE-EXEMPT] — filed and homed a batch to build an exemption the guard already implements; read the guard, not the refusal.**
+
