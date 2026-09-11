@@ -57,6 +57,8 @@ LEAD_OUT_OF_SET = "NEW Claude — triage done." + MARK("OLD-Claude")
 LEAD_LOWER = "OLD Claude — yours, in prose." + MARK("cc-b")
 LEAD_MENTION = "OLD Claude's r2 is fine, but NEW Claude — this one is yours." + MARK("CC-B")
 LEAD_TWO_OWNERS = "OLD Claude — your answer, plus two alert notes." + MARK("CC-C") + MARK("CC-B") + MARK("CC-C")
+LEAD_LAST_MINE = "OLD Claude — your answer; a note for NEW Claude, then yours." + MARK("CC-B") + MARK("CC-A")
+LEAD_SELF_FIRST = "OLD Claude — yours first, then a note for NEW Claude." + MARK("CC-A") + MARK("CC-B")
 
 CASES = [
     ("cc_outbound", "Heartbeat",   HB_OK,          False, "all-clear heartbeat is SUPPRESSED (the cut)"),
@@ -79,6 +81,8 @@ CASES = [
     ("langston_outbound", None,    LEAD_LOWER,       True,  "condition 4: `owner=cc-b` prints the canonical CC-B, not the body's spelling", "CC-B"),
     ("langston_outbound", None,    LEAD_MENTION,     True,  "condition 5 (ACCEPTED spurious wake): a MENTION-opening matches - no separator is required, by design", "CC-B"),
     ("langston_outbound", None,    LEAD_TWO_OWNERS,  True,  "Step-8 FINDING-A: markers for CC-C, CC-B, CC-C -> the tag names BOTH distinct owners, in body order", "CC-C, CC-B"),
+    ("langston_outbound", None,    LEAD_LAST_MINE,   True,  "Step-8 FINDING-D: LAST marker is mine, an earlier one is CC-B's -> still wakes, and the tag names CC-B", "CC-B"),
+    ("langston_outbound", None,    LEAD_SELF_FIRST,  True,  "Step-8 FINDING-D self pin: markers CC-A, CC-B -> the tag EXCLUDES self on this path too", "CC-B"),
 ]
 
 # ONE SUBPROCESS PER CASE. Attribution is then unambiguous and nothing is appended to the

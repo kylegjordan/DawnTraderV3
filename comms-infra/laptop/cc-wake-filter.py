@@ -380,7 +380,21 @@ for raw in sys.stdin:
                 # stripping removes that trap rather than guarding it.)
                 text = ALERT_MARKER_STRIP.sub(" ", text)
                 full = ALERT_MARKER_STRIP.sub(" ", full)
-                routed = ""
+                # ⛔ THE ROUTING TAG IS ONE INVARIANT, ON BOTH PATHS (Langston Step-8 FINDING-A, then FINDING-D):
+                # build the distinct OTHER owners, in body order, unconditionally; tag the wake whenever there is
+                # any. The strip above deletes every marker from what the session reads, so without the tag a
+                # note for someone else vanishes silently - on EITHER side of the owner test below.
+                # SELF IS EXCLUDED on both paths ("routed to" means the others). FINDING-A's first version tagged
+                # only the other-owner path and included self there: two paths disagreeing about self is how
+                # FINDING-D started. Display only - suppression still keys on the LAST marker.
+                # Window for the figures behind this: 80 bodies with >=2 distinct owners is ALL history; since
+                # 2026-09-03 it is 38 rows, 8 of which woke a session with no tag before this fix (Langston).
+                others = []
+                for m in ALERT_OWNER_RE.finditer(body_raw):
+                    o = OWNER_CANON[m.group(1).upper()]
+                    if o.upper() != ALIAS and o not in others:
+                        others.append(o)
+                routed = f" [alert routed to {', '.join(others)}]" if others else ""
                 if mo:
                     owner = OWNER_CANON[mo.group(1).upper()]
                     if owner.upper() != ALIAS:
@@ -389,17 +403,6 @@ for raw in sys.stdin:
                         # marker is a note for someone else riding along. The wake line says so.
                         if not OPEN_RE.match(full):
                             continue
-                        # ⛔ EVERY distinct owner, in body order (Langston Step-8 FINDING-A): a triage reply
-                        # routinely carries markers for SEVERAL sessions (80 bodies with >=2 distinct owners,
-                        # 79 of them opening with a session name). Naming only the last one was a partial
-                        # census wearing a total's clothes. Display only - suppression above still keys on
-                        # the LAST marker, exactly as approved.
-                        owners = []
-                        for m in ALERT_OWNER_RE.finditer(body_raw):
-                            o = OWNER_CANON[m.group(1).upper()]
-                            if o not in owners:
-                                owners.append(o)
-                        routed = f" [alert routed to {', '.join(owners)}]"
                     # The owner == ME case falls through; the #995 note below is about it.
                     # 2026-09-03 #995 (B-WAKE-QUIET OBJ-11, KYLE-DIRECTED) — THE MARKER IS NOW
                     # A SUPPRESSOR ONLY, NEVER A WAKER.

@@ -12,7 +12,8 @@ WHAT IT PROVES, AND WHAT IT DOES NOT (scope OBJ-1):
   (c) nothing else moves: wakes on replies that do NOT open with the session's name are identical
       before and after, except the condition-3 class (a marker whose owner is outside the list is
       now stripped), which is reported by name.
-  (d) every newly-waking reply whose last marker names ANOTHER owner carries that owner's routing tag.
+  (d) EVERY wake (not only new ones) carries exactly the distinct OTHER owners as its routing tag, in body
+      order, or no tag when there are none - on both sides of the owner test (Langston Step-8 FINDING-D).
 
 CONTROLS ARE STOP CONDITIONS, NOT DECORATION (Langston, Step 1):
   POSITIVE  message 1547973065172979794 must resolve to CC-INFRA before the join is trusted.
@@ -207,19 +208,25 @@ for alias in ALIASES:
     drop_a = sum(1 for i in key if not a[i])
     newly = [i for i in range(len(replies)) if a[i] and not b[i]]
     j = {"MATCH": 0, "MISMATCH": 0, "ALERT-PATH": 0, "NON-SESSION-AUTHOR": 0, "NO-TRIGGERING-ROW": 0}
-    tag_bad = 0
+    tag_bad, tagged = 0, 0
     for i in newly:
         j[join(replies[i], alias)] += 1
-        owner = last_owner(replies[i].get("text") or "")
-        if owner and owner.upper() != alias:
-            distinct = []
-            for m in OWNER_RE.finditer(replies[i].get("text") or ""):
-                o = CANON[m.group(1).upper()]
-                if o not in distinct:
-                    distinct.append(o)
-            want = f"WAKE[LANGSTON->{alias}] [alert routed to {', '.join(distinct)}]: "
-            if not any(w.startswith(want) for w in a[i]):
-                tag_bad += 1
+    # (d) THE TAG INVARIANT, on EVERY after-wake and BOTH paths (Langston Step-8 FINDING-D): the head carries
+    #     exactly the distinct OTHER owners in body order, or no tag when there are none. Self excluded.
+    for i in range(len(replies)):
+        if not a[i]:
+            continue
+        others = []
+        for m in OWNER_RE.finditer(replies[i].get("text") or ""):
+            o = CANON[m.group(1).upper()]
+            if o.upper() != alias and o not in others:
+                others.append(o)
+        want = (f"WAKE[LANGSTON->{alias}] [alert routed to {', '.join(others)}]: " if others
+                else f"WAKE[LANGSTON->{alias}]: ")
+        if others:
+            tagged += 1
+        if not any(w.startswith(want) for w in a[i]):
+            tag_bad += 1
     cond3, unexpected = 0, []
     for i, r in enumerate(replies):
         if opens_with(alias, r.get("text") or ""):
@@ -230,7 +237,7 @@ for alias in ALIASES:
                 cond3 += 1
             else:
                 unexpected.append((r.get("message_id"), bool(b[i]), bool(a[i])))
-    tagged_ok = sum(1 for i in newly if (last_owner(replies[i].get("text") or "") or alias).upper() != alias) - tag_bad
+    tagged_ok = tagged - tag_bad if tag_bad <= tagged else 0
     print(f"{alias:9} {len(key):>19} {drop_b:>14} {drop_a:>13} {len(newly):>10} {j['MATCH']:>5} {j['MISMATCH']:>8} "
           f"{j['ALERT-PATH']:>5} {j['NON-SESSION-AUTHOR']:>8} {j['NO-TRIGGERING-ROW']:>7} {tagged_ok:>6} "
           f"{('cond-3: %d, other: %d' % (cond3, len(unexpected))):>16}")
@@ -242,7 +249,7 @@ for alias in ALIASES:
               f"{j['MISMATCH']} mismatch, {j['NON-SESSION-AUTHOR']} non-session author, {j['NO-TRIGGERING-ROW']} no triggering row")
         findings += 1
     if tag_bad:
-        print(f"  FINDING {alias}: {tag_bad} newly-waking replies with another owner's marker carry no correct routing tag")
+        print(f"  FINDING {alias}: {tag_bad} wakes whose tag does not equal the distinct other owners (or carry a tag with none)")
         findings += 1
     if unexpected:
         print(f"  FINDING {alias}: {len(unexpected)} non-opening replies changed wake outside the condition-3 class: {unexpected[:5]}")
