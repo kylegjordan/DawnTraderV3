@@ -407,4 +407,10 @@ PSQL_EXIT=0
   - **Control:** 92 xStock paper maker exits exist in all history, the last on 2026-09-10, with 0 negative exit fees — exactly as expected before the fee change.
   - **Watch:** a background check reads every 10 minutes for the first xStock row with `entry_fee < 0`, `exit_fee < 0` or `entry_fee_rate < 0` in paper closed/open or VTS.
   - ⛔ **A window without such a row is not a pass.**
-- **UI:** the VTS Closed Trades before-control is captured (xStock `Taker (0.80%)` at 20:09Z). The after-check on the Open Trades tab is still being navigated.
+- **UI — taker leg VERIFIED on the staging screen** (Claude-in-Chrome, no login; `/virtual-simulations` → Open Trades, read 20:58Z). The table's Entry Time column shows the viewer's GMT+4 clock; converted to UTC below.
+  - **After the deploy:** every xStock row opened after 20:09:47Z reads **`Taker (0.10%)` / chosen**, with Entry Fee **$0.1500 on a $150.00 position (= 0.10%)** and Est Exit Fee $0.1500. The rows are ARM, UBER, BA, CAT, WDAY, WAT, TSM, TAP and HPE, entered 20:11-20:36Z.
+  - **Control on the same screen:** SYK/USD, entered 19:57Z (before the deploy), and every older xStock row read **`Taker (0.80%)`**, Entry Fee **$1.2000 on $150.00 (= 0.80%)**.
+  - **Crypto is unchanged:** `Taker (0.80%)` and `Maker (0.40%)`.
+  - **Screen agrees with database:** the rows match the database read one-for-one (VTS xStock `entry_fee_rate` 0.001000).
+  - **Before-control:** VTS Closed Trades at 20:09Z showed xStock `Taker (0.80%)`.
+- **Step 7 remains OPEN only on the rebate leg** (§9.8 above): an xStock row booking a negative fee. The background watch is running.
