@@ -55,6 +55,11 @@ sys.dont_write_bytecode = True   # a root run must not leave a root-owned __pyca
 # ⛔ GUARD (c) condition (Langston, 20:26Z): cache_from_source honours sys.pycache_prefix, so an env var
 #    (PYTHONPYCACHEPREFIX) could relocate the loaded .pyc to a langston-owned tree the trust check never walked.
 #    Pin it None so the checked cache path IS the loaded one by construction - the env var cannot move it.
+#    ⚠️ HONEST REACH (Langston, 20:43Z, measured): this pin closes the READER leg only, not PYTHONPYCACHEPREFIX as
+#    a class. With that env var set, the interpreter caches ~18 modules under the prefix at STARTUP, before this
+#    line runs, and a header-matched planted .pyc among them executes. The only total closure is at the invocation
+#    (python3 -E/-I, or nothing exporting it) - tracked as B-PYCACHE-PREFIX-INVOCATION. Premise holds today: no
+#    PYTHON* var in any unit, /etc/environment or /etc/profile.d.
 sys.pycache_prefix = None
 
 OWNER = "langston"

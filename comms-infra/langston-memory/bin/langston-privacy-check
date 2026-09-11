@@ -318,6 +318,10 @@ def evaluate(cfg):
             if mode & (stat.S_IWGRP | stat.S_IWOTH):
                 findings.append({"kind": "root-expected-directory-group-or-other-writable", "path": d, "mode": oct(mode)})
         elif root_expected and dst.st_uid == owner_uid:
+            # DRIFT, not EXPOSURE: it opens no READ. ⚠️ CROSS-DEPENDENCY (Langston, 20:43Z): owner-ownership is only
+            # tolerable at DRIFT because langston-memory-write's guard (c) refuses a root write that would EXECUTE an
+            # owner-controlled reader. If guard (c) is ever removed, this must be promoted - a low-tier alert would
+            # otherwise silently cover a langston -> root code path.
             findings.append({"kind": "root-expected-directory-owned-by-owner", "path": d, "owner": cfg["owner"]})
         elif dst.st_uid != owner_uid:
             if dst.st_uid == 0:
