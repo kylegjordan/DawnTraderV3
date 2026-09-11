@@ -184,3 +184,127 @@
 ⛔ **r1 OF THIS SECTION ASSERTED THE BOARD CARD EXISTED. IT DID NOT.** Langston's census returned **77 of 77, `hasNextPage: false`, assertion passed** — a measured absence, not a query that missed it. ★ **A false statement of fact in my own scope, in the one section whose entire job is to state status.** The card now exists (board total 78, verified by the same enumeration), set `Status = Scope`, `Owner = Analyst`, `Blocked on = Langston`.
 
 **MISTAKE: verification-weaker-than-claim** — wrote a status line describing an action I had not taken, in a document whose §1 correctly insists every claim be re-derived at the object.
+
+
+---
+
+## 7. r5 AMENDMENT — 2026-09-11 — THIS BATCH ABSORBS THE THREE-WAY PRICING DECISIONS
+
+**change-class: architecture** (unchanged)
+
+**Why.** Kyle, 2026-09-11: the open pricing decisions are made by CC-C, Langston and Coltrane; they are implemented as one batch; no sub-batches. The decisions and their consensus record are in `Scope Files/PRICING_DECISIONS_2026-09-11.md` (D1-D10). This section turns them into objectives. **Where this section and §0-§6 disagree, this section governs.** It cites the decisions by number rather than restating them, so a round-2 wording change flows through without re-editing here.
+
+### 7.1 What earlier sections no longer say
+
+| earlier text | now |
+|---|---|
+| §3.1 — *"does not re-scope `F-G-2`"* | **SUPERSEDED.** The exit-trigger switch (D1) and VTS booking (D5) move into this batch. F-G-2 is retired as a deploy gate and keeps VOID status. Its before-record is 24 of 24 post-fix stop-outs filled below the stop, median 0.166% (D10) |
+| §3.2 — *"does not remove the midpoint mark"* | **STANDS, narrowed by D4.** The midpoint remains for valuation and features. It stops being a level, a trigger, a fill or a booked result |
+| §3.3 — *"does not touch the xStock exit-decision legs"* | **SUPERSEDED** for D1-D3 on xStock. VTS xStock clamps still stay (D5) |
+| §3.4 — *"invents no new threshold"* | **STANDS, with one declared exception.** The book-versus-ticker disagreement threshold (D3) is set at Step 2, with its derivation written down |
+| §5, falsifier 2 (the shadow arm) | **RETIRED** with F-G-2's gate. D1 is decided on fidelity, not on a window result |
+| OBJ-4 (read the shadow arm) | **WITHDRAWN** (D10) |
+| OBJ-3a (per-leg level transactability) | **KEPT** as the base of OBJ-8c. Built at `884b9289e` |
+| OBJ-3b (level-basis ↔ trigger-basis coherence) | **BECOMES ASSERTABLE** in OBJ-8c, because the trigger moves to the bid in the same layer |
+
+### 7.2 Plan rows absorbed into this batch
+
+These are marked *"absorbed into 3n r5"* in the same commit that lands this amendment.
+- **3c** — the exit switch (D1)
+- **3b.d** `B-XSTOCK-BOOK-LADDER` — the xStock book (D3)
+- **3b.h-1** `B-TICKER-BBO-TRIGGER` — the crypto best-bid/offer trigger (D3)
+- **3b.f-a** `B-OPENTRADE-REFRESH-LANE` — open-position enrolment (D7)
+- **3b.f-b** `B-PRICE-AGE-REFUSAL` — re-serve age rule and limiter (D7)
+- **3b.l** `B-TWO-CACHE-INTENT` — its question is answered by D7 (keep both caches), recorded on `#971`
+- **`#952`** — the true last-trade field (D7)
+- **`#966`** — non-USD refusal (D9)
+
+**Not absorbed:**
+- the `#951` and `#943` windows, which D10 leaves with their own rules;
+- `#927` `B-TARGET-FABRICATION`;
+- reachability (row 4 `F-5`);
+- xStock fees (CC-B's 2.4-FEE).
+
+### 7.3 Numbered objectives
+
+**OBJ-7 — THE FEED AND PLUMBING LAYER.** This is commit 1. It lands and is proven live before OBJ-8 switches on.
+
+| # | objective | verification |
+|---|---|---|
+| 7a | The crypto ticker subscribes with `event_trigger: bbo` (D3) | the live ack echoes `bbo`; Step-8 message rate and event-loop lag, before and after, at the live subscription count; a named revert |
+| 7b | ⛔ **Precondition:** the book unsubscribe is fixed — unsubscribe covers `book`, and the clear and refresh paths cancel before re-subscribing — or the subscribed set is proven bounded. **Then** the xStock 20-level book is subscribed for held and queued xStocks (D3) | a churn test conserves subscribe/unsubscribe counts; no monotonic growth in live streams |
+| 7c | Every level, trigger and mark records its basis: `book_top` · `ticker_bbo` · `ticker_default` · `venue_close` (D3) | a fixture per basis; a mutation that drops the field fails a test |
+| 7d | Touch-price selection: a valid, fresh book top; otherwise a valid ticker within D6's age; otherwise refuse, which for an exit means hold (D3, D6) | a fixture per branch, including "neither qualifies" |
+| 7e | The book-versus-ticker disagreement alert is armed on aligned observations from healthy feeds (D3) | a positive control, where injected disagreement fires; a negative control, where ordinary asynchronous delivery does not |
+| 7f | A clock-basis field (`venue` or `receipt`) on every age, never pooled. The 15 s entry limit is checked against the 14.3 s re-serve rung with one query (D6) | a fixture per basis; the query result recorded in the pre-audit |
+| 7g | Open positions are enrolled in the 2-second lane, and queued and held symbols carry their own subscription reasons (D7) | the health line's `open=` equals the open-position count; removing one reason keeps the other's subscription |
+| 7h | A rate limiter on the direct REST path. A re-serve or failed refresh never renews observation age or advances smoothing, and every action rechecks against D6 (D7) | a re-serve fixture keeps its original age; an action past the D6 limit is refused |
+| 7i | The true last trade is stored separately from the midpoint (D7, `#952`) | the field equals the venue's `last` on a captured message |
+| 7j | The smoothed estimator advances once per new observation, and restart re-warming is explicit (D7, SIM S26) | a repeated read of one observation leaves its state unchanged; a restart fixture |
+
+**OBJ-8 — THE DECISION LAYER.** This is commit 2. It switches on only after OBJ-7 is proven live.
+
+| # | objective | verification |
+|---|---|---|
+| 8a | Exits on the bid, in each level's own direction; market sells walk bid depth; missing depth follows D8; maker exits follow D2 (D1) | fixtures for each direction and order type; a mutation back to the midpoint fails |
+| 8b | Maker fill evidence: a fill requires the order to be resting, then the opposite quote reaching the limit or a trade strictly through it; a midpoint touch is not a fill; marketable-at-placement handling is preserved (D2) | fixtures, including a negative fixture for a midpoint touch |
+| 8c | Per-leg level construction for the crypto quant lane: a taker entry uses the ask, a resting maker entry the bid, and a long stop and target the bid; spread is counted once; bar lanes keep `venue_close` with age. OBJ-3a is the base, and the OBJ-3b coherence assertion is added (D4) | fixtures, plus the coherence assertion between level basis and trigger basis |
+| 8d | VTS crypto exits follow the D1 rule. This is the second epoch boundary since 2026-09-02, keyed through `calibration-epoch.ts`; the pre-switch era is labelled mid-triggered; xStock clamps stay (D5) | the epoch value on rows written after deploy; the label is present |
+| 8e | A close split field, walked versus extrapolated quantity, on `walk`, `cold_book` and `missing_config`; a missing config is recorded as an invalid estimate (D8) | all three branches write the field; a missing config never records zero |
+| 8f | Non-USD pairs are refused new admission, with a reason. Open positions keep their quote-currency exits, and their USD P&L shows as unavailable (D9) | a fixture with a BTC-quoted pair |
+
+### 7.4 Window reads — run by Langston, not CC-C (D10, with Langston's round-2 conditions)
+
+⛔ **Ordering.** The `#943` reads land **before** OBJ-7 deploys. 7b's xStock book subscription changes `book-state-tracker.ts`, which is the instrument `#943` measures; its fixes deployed on 2026-09-04 and its two-handoff window has already run. A close-gate alert, owner `langston`, is armed for the `#943` read and for the F-G-2 read, and each stays active until its read lands.
+
+**The reads:**
+
+- **F-G-2:** retired as a gate; before-record 24 of 24.
+- **`#951`:** resolved by alert `0db25f1d`'s stopping rule on 2026-09-16 — retire it, or re-point it.
+- **`#943`:** its two-handoff window runs on the corrected build.
+
+CC-C owns the batches these windows judge, so CC-C does not self-certify them.
+
+### 7.5 MANDATORY 1.a and 1.b for what this amendment newly touches
+
+**1.a — System Impact Map rows read:**
+- WebSocket adapter subscription lifecycle: `:305`, `:324`.
+- `price-cache.ts`: `:377`, plus the `ask`/`bid` cold-entry defaulting at `:349`.
+- `live-pricing-adapter` producer vocabulary and the actionable gate: `:322-325`.
+- `calibration-epoch.ts`: `:3468`.
+- `order-placer` close seam: `:946`.
+- S26, the smoothed estimator: `:163`.
+- `depth-source`: `:77`.
+
+**1.a — System Manual passages read:**
+- the level basis: `:666`;
+- the exit-trigger price table: `:632`;
+- the entry chain through the smoothed price: `:642`;
+- lane parity for the VTS pending lifecycle: `:555`.
+
+⛔ **Governance gaps, flagged rather than skipped:**
+- The System Manual has no passage on the ticker's `event_trigger`: 0 hits (instrument proved on a known positive, "Kalman" = 7).
+- It has none on the book unsubscribe path.
+- Both are Step 10 content, in this batch.
+
+**1.b — provenance, by pointer.** Each entry already carries its introducing-commit read:
+
+| topic | where the provenance read lives |
+|---|---|
+| ticker trigger | `#1017` (the adapter's own intent comment, verbatim; `bridge/canonical/` has no book) |
+| book unsubscribe | PR-A13; `PRICING_DATA_ARCHITECTURE.md:141` (Langston, at the object) |
+| 2-second lane | `#977` amendment 6 (the `acdf84934` design line) |
+| two caches and the direct REST path | `#971` (canonical `:194`, `:257`, `:633`) |
+| re-serve age | `#951` |
+| last-trade overwrite | `#952` |
+| non-USD quotes | `#966` amendments 1-2 |
+| VTS booking | F-G-2 OBJ-5 (`2cc4a03ec`) |
+| close split | REG §1.6; the P19-B4b.1 completion report |
+
+**The five dispositions:**
+- (2), updated to today's intent: the subscription lifecycle, the 2-second lane (3 — reconnect the specified enrolment), the re-serve age rule, the last-trade field and VTS booking.
+- (1), still right: both caches (D7) and full completion (D8).
+
+### 7.6 STATUS
+
+**Step 1 r5 — amendment for Langston's approval**, dispatched once the three-way consensus record closes. Board card: `Scope`, `Blocked on = Langston`.
