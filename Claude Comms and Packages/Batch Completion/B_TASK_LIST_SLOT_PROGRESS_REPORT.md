@@ -25,19 +25,39 @@ Kyle's rule (2026-09-05): every session keeps a task list, and it is updated at 
 | **4** code review | Langston **APPROVED** at `9a1ab64fb` with four conditions (he ran the matcher on all four real reports: 4/4 pass). Conditions applied at `ddadab429`: rows that do not render no longer count; leadless GFM rows accepted; `na-skip` namespace fenced by a test; the `git log` failure direction stated |
 | **5** CI | `34617169179` at `a5273ad6d` (contains `ddadab429`): TypeScript Check · Test Suite · Build · Docker Build all `success`, per job. *(Two earlier runs on heads containing the fix were CANCELLED by newer pushes, not failed.)* ⚠️ CI does not run `poller.test.mjs`; locally **165 passed, 0 failed**; backtest `OBJ-11 GATE: PASS`; 15 mutants each caught |
 | **6** deploy | The checker is not deployed by `dt-deploy`: its unit pulls the review branch before every tick. **Read back:** the `15:45:41Z` tick ran deployed HEAD `4e7f584b5`, which contains `ddadab429`; `git diff ddadab429 4e7f584b5 -- scripts/governance-checker/` is EMPTY, so the running checker is exactly the reviewed code |
-| **7** verification | §2a |
+| **7** verification | §2a — **Step 7 was sent back once by Langston (the live evidence ran on pre-approval code) and discharged offline on the approved matcher, §2b** |
 
-### 2a. STEP 7 — VERIFIED LIVE, BOTH DIRECTIONS, ON REAL REPORTS
+### 2a. STEP 7 — THE LIVE TICKS, WITH THE BUILD EACH ONE RAN
 
-| when (UTC) | what happened | what it proves |
+⛔ **CORRECTED AT STEP 8 (Langston): every positive live demonstration below ran on code that is NOT the approved build.** The approved code is `ddadab429` (Step-4 conditions). The journal HEADs, enumerated by Langston and matching mine:
+
+| tick (UTC) | deployed HEAD | contains `ddadab429`? | result |
+|---|---|---|---|
+| 13:45:41 | `2cb78e9a0` | **no** (P1) | `opened=2` — exactly the two alerts pre-registered offline before the push (`B-DRIFT-RUNTIME-PREDICATE`, `B-EXIT-BOOK-AGE-STAMP`), nothing else |
+| 14:15:41 | `6b3248a69` | **no** | `opened=1`; CC-C's report graded present after its row landed (`ca842c27b`; CC-C had resolved the alert by hand at 14:08:30) |
+| 14:45:42 | `df9f03128` | **no** | `opened=1` |
+| 15:15:42 | `18a8b29b6` | **no** (r4) | `opened=0` — the checker **resolved my alert `8ff33397` itself** (`governance-checker`, evidence `18a8b29b6`) after I added the row at `33b62ee16` |
+| 15:45:42 | `4e7f584b5` | **YES** | `opened=1` — **unrelated** (class undeclared for `B-LANGSTON-CONTEXT`); **zero** ledger-row keys open |
+
+⚠️ **What `opened` counts:** `tick` returns `opened: toOpen.length` — every OPEN intent that tick, including alerts already open and deduplicated at the sink, not only new ones. So the 14:15 and 14:45 `opened=1` are consistent with my own report's ledger-row alert still being missing, but **which key each counted was not re-derived here**; Langston read them as unrelated keys. Not load-bearing for any verdict above, and stated rather than asserted.
+
+⇒ **The approved build has been observed live exactly once, and that observation is a NULL** — zero open keys on a population where nothing was missing. The Step-4 conditions changed matcher semantics in both directions (stricter: rows in blockquoted fences and HTML comments no longer count; looser: rows without a leading pipe now do), **so the earlier live passes do not transfer to it.** §2b closes that offline.
+⛔ **CORRECTION:** an earlier version of this section said *"all three have been resolved."* **There are TWO ledger-row alerts in the whole store (879 rows, enumerated by Langston): `2ec36624` (B-EXIT-BOOK-AGE-STAMP, resolved 14:08:30 by `cc-c`, evidence `ca842c27b`) and `8ff33397` (B-DRIFT-RUNTIME-PREDICATE, resolved 15:15:51 by `governance-checker`, evidence `18a8b29b6`).**
+
+### 2b. STEP 7 DISCHARGE — THE APPROVED MATCHER, BOTH DIRECTIONS, ON THE SAME REAL REPORTS
+
+**Code:** `config.mjs`, `checker.mjs`, `poller.mjs` copied from `4e7f584b5` (the deployed HEAD) — their sha256 prefixes `e69a17507134020f` / `8422cb562f9d136d` / `beb584fb1b39159c` are **identical at `ddadab429`**. **Objects:** each real report read with `git show` at the commit before and at the commit that added its row.
+
+| real report, at | shipped `ledgerRowInText` | expected |
 |---|---|---|
-| **13:45:41** | first tick with the check: `opened=2` — **exactly the two alerts pre-registered offline before the push** (`B-DRIFT-RUNTIME-PREDICATE`, `B-EXIT-BOOK-AGE-STAMP`), nothing else | it flags real omissions and nothing else |
-| **14:08 → 14:15** | CC-C added its row (`ca842c27b`); the next tick graded that real row present | a row written by another session, in its own shape, passes |
-| **15:15:51** | after I added my row (`33b62ee16`), the checker **resolved alert `8ff33397` itself** — `resolved_by_claimed=governance-checker`, evidence `18a8b29b6` | the resolve path works with no manual step |
-| **15:45:41** | tick on the approved code: **zero ledger-row alerts open** | steady state on the reviewed ref |
-| offline | `ledger-rows-preview.mjs` over every completion report the check grades: **4 of 4 PASS**; Langston independently ran the matcher on the same four: 4/4 | nothing would be wrongly flagged today |
+| `B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md` @ `ca842c27b^` (before CC-C's row) | **false** | false ✅ |
+| same @ `ca842c27b` (after) | **true** | true ✅ |
+| `B_DRIFT_RUNTIME_PREDICATE_COMPLETION_REPORT.md` @ `33b62ee16^` (before my row) | **false** | false ✅ |
+| same @ `33b62ee16` (after) | **true** | true ✅ |
 
-**UI (§9.3):** Claude-in-Chrome, `https://188.245.193.8.sslip.io/system-alerts` (2026-09-11 15:47Z) renders the checker's open governance alerts (e.g. *"Change-class undeclared for B-LANGSTON-CONTEXT"*); **no `gov-ledgerrow` alert is listed, which matches the store — all three have been resolved.** ⚠️ **Not captured: the page while a ledger-row alert was OPEN.** The store shows them created at 13:45:49Z as `scheduled` / `warning`; the rendered row for that state was not screenshotted at the time. Stated rather than inferred.
+**Preview provenance, stated (Langston: the earlier "preview at `9a1ab64fb`" named the REPORTS' ref, not the CODE's):** `ledger-rows-preview.mjs` ran from my checkout at `98f049175`, whose `scripts/governance-checker/` is byte-identical to `4e7f584b5`'s (`git diff --quiet` exit 0) — **code = the approved build**; it read the reports at `origin` `9ceaf73e1`: **4 of 4 pass, would alert on none.**
+
+**UI (§9.3):** Claude-in-Chrome, `https://188.245.193.8.sslip.io/system-alerts` (2026-09-11 15:47Z) renders the checker's open governance alerts (e.g. *"Change-class undeclared for B-LANGSTON-CONTEXT"*); **no `gov-ledgerrow` alert is listed, which matches the store — both have been resolved.** ⚠️ **Not captured: the page while a ledger-row alert was OPEN.** The store shows them created at 13:45:49Z as `scheduled` / `warning`; the rendered row for that state was not screenshotted at the time. Stated rather than inferred.
 
 ## 3. ⛔ THE PRE-REGISTERED CLOSE CRITERION — P5, AS WRITTEN AT STEP 2 (pre-audit r3)
 
@@ -53,6 +73,18 @@ Kyle's rule (2026-09-05): every session keeps a task list, and it is updated at 
 - **"present AT CLOSE"** = the checker has no open `gov-ledgerrow` alert for that batch 30 minutes (one tick) after the report's LAST commit that closes the batch; **"present in FIRST pushed version"** = `ledgerRowInText` true on the blob at the report's first-add commit.
 - **Instrument:** `ledger-rows-preview.mjs` plus `git show <first-add>:<report>` through the shipped `ledgerRowInText`, and the alert store for open/resolved state.
 - **Result recorded as three rows** (batch · first-add sha · first-version verdict · at-close verdict), then the decision.
+
+**⛔ TIGHTENED AT STEP 8 (Langston), BEFORE ANY DATA — these supersede the at-close definition above:**
+1. **"Present at close" is a DIRECT READ ON THE BLOB, not the absence of an alert.** Run the shipped `ledgerRowInText` on the report at the closing commit **and** read the alert store for that batch; **the two must agree, and a disagreement is itself the finding.** (No open alert is satisfied three ways: the row is present · the alert was hand-resolved with free-text evidence and no row added, `#447` · **the checker never graded the batch at all** through the batch-id-from-filename weakness — silent, and it would report a pass on a check that did nothing.)
+2. **The grading tick is named.** The at-close store read counts only if the journal shows `poller running at deployed HEAD <sha>` where `<sha>` is a **descendant of the closing commit**, with `fetchFailStreak=0` in `state.json`. Otherwise the silence was read off a fetch-failed or stale tick (`#661`, `#449`) and is unreadable.
+3. **"The commit that closes the batch" is pinned mechanically:** the commit that adds the batch's row to `BATCH_CATALOG.md`, **named in the record row before the at-close read is taken.**
+4. **The author session is recorded per row.** A 3 of 3 made entirely of CC-A's own reports measures the alert firing at its own author, not the rule spreading. The bar does not move for it; the result is published as what it is.
+
+**⛔ AND THE MISSING CLAUSE:**
+- **The batch may NOT PASS on fewer than three reports**, under any circumstance. A partial result is published as partial.
+- **Any ambiguity about whether a report belongs to the population is enumerated and ruled BEFORE its verdict is read.**
+- **The stall case, stated honestly:** the population is `/COMPLETION|COMPLETE/i`, so a run of observation-window batches that ship PROGRESS reports — this batch included — keeps n at zero indefinitely. That is a real reason the window can sit, not a defect.
+- **Secondary (first pushed version) is the measure of whether the rule propagated;** primary only measures whether the net catches.
 
 ## 4. WHAT IS UNPROVEN
 
