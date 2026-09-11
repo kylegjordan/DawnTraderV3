@@ -1,4 +1,4 @@
-# P-7j predictor read, run 2026-09-11T21:22:25Z on obj7_p7j_capture_2026-09-11T2009Z_to_2039Z.txt with scripts/analysis/b_price_side_p7j_rewarm_predictor.py
+# P-7j predictor read, regenerated 2026-09-11T21:32:23Z on obj7_p7j_capture_2026-09-11T2009Z_to_2039Z.txt with scripts/analysis/b_price_side_p7j_rewarm_predictor.py (path controls and time-to-12 added after Langston 21:30Z)
 POPULATION: REWARM within 600 s of 2026-09-11 20:09:37, at least 12 KALMAN lines: 84 symbols
 1. FIDELITY: |logged K - replay with own R,Q| over 1972 lines: max 0.000132; lines above 5e-4: 0
 2. INDEX PREDICTOR, OWN (each line's own R,Q): reached 73, within +-1 72, missed 1, censored 11; misses: RIVER/USD 11 vs 15
@@ -12,3 +12,6 @@ POPULATION: REWARM within 600 s of 2026-09-11 20:09:37, at least 12 KALMAN lines
 6. CONTROL A no inflation, K1 = steady-state gain: per-symbol worst separation from the log over obs 1-12: min 0.7572 median 0.8160; symbols that would still pass 5e-4: 0 of 84
 6. CONTROL B half the constant, K1 = 0.5: per-symbol worst separation from the log over obs 1-12: min 0.4000 median 0.4000; symbols that would still pass 5e-4: 0 of 84
 6. CONTROL C a small change, K1 = 0.85: per-symbol worst separation from the log over obs 1-12: min 0.0500 median 0.0500; symbols that would still pass 5e-4: 0 of 84
+6. PATH CONTROL D one unlogged extra advance after observation 3: per-symbol worst separation from the log over obs 1-12: min 0.0406 median 0.0451; symbols that would still pass 5e-4: 0 of 84
+6. PATH CONTROL E R x 1.02 from observation 2 on: per-symbol worst separation from the log over obs 1-12: min 0.0049 median 0.0049; symbols that would still pass 5e-4: 0 of 84
+7. TIME TO OBSERVATION 12: n 84; minutes median 15.0 p90 16.5 max 17.0 (from a 30-minute capture, so the spacing maximum is itself right-censored)

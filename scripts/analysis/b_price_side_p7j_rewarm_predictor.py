@@ -1,6 +1,7 @@
 # B-PRICE-SIDE-BY-JOB r5 OBJ-7 P-7j — the model predictor behind the next-restart pre-registration, committed so every number
 # it produces is second-party checkable. Langston 2026-09-11 21:17Z: the earlier "within one observation on 72 of 72" was an
-# uncommitted ad-hoc number and did not reproduce (he measured 64 of 72).
+# uncommitted ad-hoc number and did not reproduce: with observation 12 R and Q setting the threshold it is 64 of the 73
+# symbols that reached the crossing, with each line own R and Q 72 of 73 (section 2). The verbal "64 of 72" is superseded.
 # stdin: a capture evidence file of [9.3][REWARM] and [9.3][KALMAN] lines. argv[1]: the restart instant 'YYYY-MM-DD HH:MM:SS' UTC.
 # Population: a REWARM line within 600 s of the restart and at least 12 KALMAN lines after it.
 import sys, math, time, calendar, collections
@@ -185,3 +186,34 @@ for label, k1_of in (('A no inflation, K1 = steady-state gain', lambda R, Q: kss
         seps.append(max(abs(o[3] - r) for o, r in zip(obs, replay_own_k1(obs, k1_of))))
     seps.sort()
     print('6. CONTROL %s: per-symbol worst separation from the log over obs 1-12: min %.4f median %.4f; symbols that would still pass 5e-4: %d of %d' % (label, seps[0], seps[len(seps) // 2], sum(1 for x in seps if x <= 5e-4), len(seps)))
+
+
+def replay_path_control(obs, kind):
+    """Path-breaking controls: the first gain is right (K1 = G) and the path after it is not."""
+    out = []
+    P = None
+    for i, (_, R, Q, _) in enumerate(obs):
+        r_use = R * 1.02 if (kind == 'R102' and i >= 1) else R
+        if i == 0:
+            P = r_use * G / (1 - G)
+        K = P / (P + r_use)
+        out.append(K)
+        P = (1 - K) * P + Q
+        if kind == 'EXTRA' and i == 2:
+            k_extra = P / (P + r_use)
+            P = (1 - k_extra) * P + Q
+    return out
+
+
+for label, kind in (('D one unlogged extra advance after observation 3', 'EXTRA'),
+                    ('E R x 1.02 from observation 2 on', 'R102')):
+    seps = []
+    for s in pop:
+        obs = seq[s][:12]
+        seps.append(max(abs(o[3] - r) for o, r in zip(obs, replay_path_control(obs, kind))))
+    seps.sort()
+    print('6. PATH CONTROL %s: per-symbol worst separation from the log over obs 1-12: min %.4f median %.4f; symbols that would still pass 5e-4: %d of %d' % (label, seps[0], seps[len(seps) // 2], sum(1 for x in seps if x <= 5e-4), len(seps)))
+
+# 7. Window sizing: minutes from the first live observation to the 12th, over the population.
+t12 = sorted((ts(seq[s][11][0]) - ts(seq[s][0][0])) / 60.0 for s in pop)
+print('7. TIME TO OBSERVATION 12: n %d; minutes median %.1f p90 %.1f max %.1f (from a 30-minute capture, so the spacing maximum is itself right-censored)' % (len(t12), t12[len(t12) // 2], q(t12, 0.9), t12[-1]))
