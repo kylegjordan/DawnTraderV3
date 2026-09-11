@@ -350,6 +350,22 @@ Your chunk-4 hold asked for the tolerance and the approximation's direction in t
 
 **Also in Step 7, recorded elsewhere:** alert `4f974017` (an active BA/USD fill refused on a 23 s snapshot age after the US close) triaged and resolved (`RUNNING_ISSUES` `#994` Amendment 4); `#1047` filed for the pre-existing parse error.
 
+## STEP 8 — LANGSTON'S SECOND PASS (2026-09-11)
+
+| gate | verdict | where it landed |
+|---|---|---|
+| P-7j, the pre-registered re-warm check | **FAIL CONFIRMED** 20:55Z, re-derived with his own parser; disposition **(A)** ruled with four conditions | STEP 9 below; condition 3 blocked 21:17Z, discharged 21:30Z at `2fb280c11`, his two corrections at `03a318d99`, CI run `34650065949` 4 of 4 per job |
+| P-7a, scope row 7a | ✅ **MET, NO REVERT** 21:39Z | this section |
+
+**What he re-derived for row 7a, at `03a318d99`:** the row verbatim (`B_PRICE_SIDE_BY_JOB_SCOPE.md:234`); `event_trigger: 'bbo'` is a **single site**, `kraken-websocket-adapter.ts:1503`, on the ticker subscribe only, with a whole-tree grep clean of any other `server/` occurrence and the book and instrument subscribes untouched; that adapter is the crypto v2 singleton (`:3782`), so the xStock path is structurally out of reach; the acknowledgement echoes (`20:09:13Z` reply `event_trigger:"trades"`, `20:11:42Z` send and reply `bbo`, `success:true`); and the subscription set is `RAY/USD` alone on both sides of the boundary, with five post-restart `bbo` subscribes.
+
+**PREVIOUSLY STATED: before min 612, median 932, max 1,446 events a minute; after min 344, median 739, max 1,793 (my Step-8 dispatch, the last 30 one-minute lines on each side). NOW: PRE 16:24-20:09Z n=225, median 934, mean 909, max 2,409; POST 20:12-21:37Z n=85, median 855, mean 898, max 2,108; the latest 30 minutes median 961 (Langston's full-population read at the ref). REASON: my 30-line slice happened to sit in a quiet stretch, and the full populations overlap — so the like-for-like objection I raised largely dissolves, and there is no rate regression to attribute to anything.** Lag agrees: 1 ms with one 12 ms sample, a thin instrument, not the binding risk and not contradicting.
+
+**His three residuals, and where each lands:**
+1. **The revert trigger I proposed was a sentence, not a control** — nothing evaluates it, and "like-for-like window" was undefined, so that phrase is struck. **HOME: folded into `3n`, owner CC-C, as scope row `8j` with plan item `P-8j`** — a ceiling and a consecutive-minute run on the tick-rate counter, registered before arming and sized against the measured pre-switch maximum of 2,409 a minute, whose alert body names the row-7a revert. His own note: 10 times the before median is about 9,340 a minute, a sane load trip, and the counter's conflation of three sites is the right object for one, because it is the event-loop cost.
+2. **The live subscription count is n = 1** (`RAY/USD`), so the row is met on the count that exists — **and the evidence bounds nothing above n = 1.** The set is position-driven (`WS_SUB_AUDIT openPositionCount`), so it grows with open positions. "At the live subscription count" must not be read as "at scale".
+3. **Efficacy is unmeasured, and it is not row 7a, so it does not block:** nothing here shows `bbo` delivered the continuity it was bought for. **HOME: scope row `8k` with plan item `P-8k`**, beside P-7e — ticker frames a minute against trade prints a minute for the subscribed symbol inside one post-deploy window, self-controlled, needing no baseline and no matched window. ⚠️ One construction note: **no trade channel is subscribed** (pre-audit A-9.11), so the print rate is inferred from changes in the ticker's own `last` field, and the row says so.
+
 ## STEP 9 — P-7j (A): LANGSTON'S FOUR CONDITIONS (20:55Z) AND WHERE EACH LANDS
 
 | # | condition | landing |
