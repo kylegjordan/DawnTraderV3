@@ -19,7 +19,7 @@ You are **Claude New / CC-B**. You have been dormant since **2026-08-16** — fi
 - ⭐ **`CONDUCT.md` — you have never loaded it.** It landed 2026-08-20 with its own SessionStart loader. It is the behavioural rulebook: when to speak, the step-report format Kyle requires, one-line self-correction, investigate-before-you-announce. **It auto-loads. Read it once, properly.**
 - **`CLAUDE.md` was slimmed** — nine clauses moved into the workflow step-skills, each leaving a pointer. `§9.5` is a husk plus four sub-pointers; `rule 19` is a deliberate numbered hole. **Citations still resolve.**
 - **The governance ledger now leads with the batch's change-class**, and marks each document REQUIRED or JUDGED for that class. A REQUIRED row cannot take `N/A`.
-- **A TypeScript language server is installed.** For "who calls this / what does this touch", use it — do not grep. On one symbol it returned five consumer files behind what looked like a one-line change.
+- ⛔ **CORRECTED 2026-09-11 (`#1038`): a TypeScript language-server plugin is installed on record but does NOT load — sessions have no `LSP` tool.** Until `#1038` closes, use `git grep` / Grep and read the callers rather than trusting a count. *(This line previously told you to use it instead of grep.)*
 - **All four guards you already know** (`governed-read`, `bare-commit`, `push-tsc-baseline`, `fresh-rules`) are unchanged and predate your dormancy. ✅ **The whole-filesystem-scan guard CC-A was building was DELETED (`#756`, commit `650b8897c`) — it does not exist and will not fire on you.**
 
 ## 3. ⚠️ ONE INTERMITTENT GUARD — DO NOT BYPASS IT
