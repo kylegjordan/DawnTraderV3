@@ -361,6 +361,7 @@ Your chunk-4 hold asked for the tolerance and the approximation's direction in t
 
 **Re-derived before writing, not copied:** the docblock's formula (the steady-state gain of the hourly warm model with `Q_warm = Q_live x 3600 / t`, at R 26 and Q 0.5) gives 0.845 at t = 15 s (its own 0.85), 0.754 at 30 s, 0.642 at 60 s, 0.573 at 90 s and 0.412 at 240 s.
 **Comment-only code change:** `server/utils/adaptive-kalman.ts` (the `REWARM_FIRST_LIVE_GAIN` docblock) and `server/tests/unit/b-price-side-p7j-smoother-observation.test.ts` (test 12). No runtime behaviour changes, so it rides the next deploy rather than forcing one.
+**CI, per job (rule 19):** run `34650065949` on `03a318d99`, the head carrying the P-7j change and Langston 21:30Z corrections: TypeScript Check (baseline gate) success, Test Suite success, Build success, Docker Build success. Earlier on the same code: `34649466396` on `ea4b36c4e` 4 of 4; the run on `2fb280c11` itself (`34649335216`) was cancelled at Docker Build when the next push started a newer run, with its other three jobs green.
 
 ## STEP 8 PRE-REGISTRATION r2 — THE P-7j RE-WARM CHECK FOR THE NEXT RESTART (written 2026-09-11, before any capture)
 **⛔ SUPERSEDED BY r3 BELOW — kept as struck history, not a criterion (Langston 21:17Z).** Replayed on the 2026-09-11 capture it scores 86.4% or 76.5% depending on a crossing definition it never registered, and the soundness figure it cites ("72 of the 72") was an uncommitted number that is 64 of 73 under the other definition.
