@@ -212,7 +212,12 @@ for alias in ALIASES:
         j[join(replies[i], alias)] += 1
         owner = last_owner(replies[i].get("text") or "")
         if owner and owner.upper() != alias:
-            want = f"WAKE[LANGSTON->{alias}] [alert routed to {owner}]: "
+            distinct = []
+            for m in OWNER_RE.finditer(replies[i].get("text") or ""):
+                o = CANON[m.group(1).upper()]
+                if o not in distinct:
+                    distinct.append(o)
+            want = f"WAKE[LANGSTON->{alias}] [alert routed to {', '.join(distinct)}]: "
             if not any(w.startswith(want) for w in a[i]):
                 tag_bad += 1
     cond3, unexpected = 0, []

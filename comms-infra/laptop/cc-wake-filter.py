@@ -389,7 +389,17 @@ for raw in sys.stdin:
                         # marker is a note for someone else riding along. The wake line says so.
                         if not OPEN_RE.match(full):
                             continue
-                        routed = f" [alert routed to {owner}]"
+                        # ⛔ EVERY distinct owner, in body order (Langston Step-8 FINDING-A): a triage reply
+                        # routinely carries markers for SEVERAL sessions (80 bodies with >=2 distinct owners,
+                        # 79 of them opening with a session name). Naming only the last one was a partial
+                        # census wearing a total's clothes. Display only - suppression above still keys on
+                        # the LAST marker, exactly as approved.
+                        owners = []
+                        for m in ALERT_OWNER_RE.finditer(body_raw):
+                            o = OWNER_CANON[m.group(1).upper()]
+                            if o not in owners:
+                                owners.append(o)
+                        routed = f" [alert routed to {', '.join(owners)}]"
                     # The owner == ME case falls through; the #995 note below is about it.
                     # 2026-09-03 #995 (B-WAKE-QUIET OBJ-11, KYLE-DIRECTED) — THE MARKER IS NOW
                     # A SUPPRESSOR ONLY, NEVER A WAKER.

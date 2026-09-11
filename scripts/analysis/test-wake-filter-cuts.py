@@ -56,6 +56,7 @@ LEAD_C = "NEW Claude — here is the answer to your question." + MARK("CC-A")
 LEAD_OUT_OF_SET = "NEW Claude — triage done." + MARK("OLD-Claude")
 LEAD_LOWER = "OLD Claude — yours, in prose." + MARK("cc-b")
 LEAD_MENTION = "OLD Claude's r2 is fine, but NEW Claude — this one is yours." + MARK("CC-B")
+LEAD_TWO_OWNERS = "OLD Claude — your answer, plus two alert notes." + MARK("CC-C") + MARK("CC-B") + MARK("CC-C")
 
 CASES = [
     ("cc_outbound", "Heartbeat",   HB_OK,          False, "all-clear heartbeat is SUPPRESSED (the cut)"),
@@ -77,6 +78,7 @@ CASES = [
     ("langston_outbound", None,    LEAD_OUT_OF_SET,  False, "condition 3: an owner OUTSIDE the list is now stripped, so its `OLD-Claude` no longer wakes me"),
     ("langston_outbound", None,    LEAD_LOWER,       True,  "condition 4: `owner=cc-b` prints the canonical CC-B, not the body's spelling", "CC-B"),
     ("langston_outbound", None,    LEAD_MENTION,     True,  "condition 5 (ACCEPTED spurious wake): a MENTION-opening matches - no separator is required, by design", "CC-B"),
+    ("langston_outbound", None,    LEAD_TWO_OWNERS,  True,  "Step-8 FINDING-A: markers for CC-C, CC-B, CC-C -> the tag names BOTH distinct owners, in body order", "CC-C, CC-B"),
 ]
 
 # ONE SUBPROCESS PER CASE. Attribution is then unambiguous and nothing is appended to the
