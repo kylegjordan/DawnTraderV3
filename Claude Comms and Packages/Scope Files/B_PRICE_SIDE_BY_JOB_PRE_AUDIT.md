@@ -554,7 +554,7 @@ This commit comes after commit 1 is proven live.
 
 | P | what | falls out of | verification |
 |---|---|---|---|
-| P-8a | Exits on the bid, per direction, including the REST fallback reading `b[0]` (A-9.1 row 3). The shadow instrument is removed — **only** the `fg2Shadow` carry line and its comment, keeping the `bookState` carry (A-9.5 C2) | D1; A-9.1 row 3; A-9.5 | fixtures per direction and order type; a mutation to the midpoint fails; a test pins the `bookState` carry; **live proof:** the first post-switch crypto exit carries P-7c's basis and `bid` stamp |
+| P-8a | Exits on the bid, per direction, including the REST fallback reading `b[0]` (A-9.1 row 3). The shadow instrument is removed — **only** the `fg2Shadow` carry line and its comment, keeping the `bookState` carry (A-9.5 C2) | D1; A-9.1 row 3; A-9.5 | fixtures per direction and order type; a mutation to the midpoint fails; a test pins the `bookState` carry; **live proof:** the first post-switch crypto exit carries P-7c's basis and `bid` stamp; **the window is sized on the measured stamped-close rate** (Langston's F-G-2 closing read: about 5 crypto closes a day, 14 days about 70, against the 2x2 floor of 30 and the brake floor of 52) |
 | P-8c | Level anchors converted at the level site for **both** hand-offs — the crypto quant lane (`signal-orchestrator.ts`) and the VTS level lane (`vts-runner.ts:1595`) — through one shared conversion in `level-basis.ts`; the OBJ-3b coherence assertion | D4; A-9.2; **A-9.15** | fixtures on both hand-offs; the coherence assertion; a mutation that changes only one lane fails a parity test |
 | P-8b | Maker fills read the opposite side (ask for a resting buy, bid for a resting sell) at the three monitor sites and the three placement sites that read a mark; the later-tick exit rule is preserved | D2; A-9.11 | a midpoint-touch fixture does not fill; an opposite-quote fixture does; the later-tick rule's existing test still passes |
 | P-8d | VTS crypto booking receives the D1 bid; the crypto VTS epoch increments by one; the pre-switch label is added | D5; A-9.12 | the epoch value on rows after deploy; the label present; xStock rows unchanged |
@@ -632,3 +632,10 @@ He re-derived the code facts himself at `9ceaf73e1`; board card Review = Approve
 
 **Disposition:** no code change. The D6 knife-edge note describes a coupling the code does not have; it is **raised with Langston at Step 4** rather than edited in the consensus record.
 **Where the clock basis now lives:** on every quote the touch-price rule returns (`core/calculations/touch-price.ts`). The existing age recorders already keep the clocks apart: the side-age recorder derives ages from our receipt stamp only and counts the venue stamp as present or absent (`level-basis.ts` `recordSideAgeAttempt`), and both entry freshness gates above measure receipt clocks (the archive `captured_at`; the book's `bookUpdatedAt`, stamped at apply).
+
+## STEP 3 RECORD — THE STEP-2 CONDITIONS, AS THEY STAND (2026-09-11, CC-C)
+
+1. **F-G-2 — DISCHARGED.** Langston resolved `cbb55dc9` at 17:28:11Z with his closing read: F-G-2 is retired as a deploy gate and its window stays VOID (D10); the before-record is confirmed (24 of 24 below stop, extended by him to 62 of 63 below, 1 at, 0 above). **OBJ-8a's gate is lifted.** His read homes one item on OBJ-8a — size the post-switch window on the measured stamped-close rate — now written into P-8a's verification above and scope row 8a.
+2. **A-9.5 citations** — re-derived at HEAD in the Step 4 change list (the carry block is byte-identical, shifted +68 lines).
+3. **`#943` — DISCHARGED.** Langston's closing read at 17:23Z (INCONCLUSIVE, stopped); `0fe4912e` resolved with the completion report's §4k.
+4. **`#951`** — still owed: the terminal read immediately before OBJ-7 deploys (A-9.9), then resolve `0db25f1d`.

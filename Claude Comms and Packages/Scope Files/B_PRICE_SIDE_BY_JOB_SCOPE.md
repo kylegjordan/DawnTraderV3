@@ -246,7 +246,7 @@ These are marked *"absorbed into 3n r5"* in the same commit that lands this amen
 
 | # | objective | verification |
 |---|---|---|
-| 8a | Exits on the bid, in each level's own direction; market sells walk bid depth; missing depth follows D8; maker exits follow D2 (D1) | fixtures for each direction and order type; a mutation back to the midpoint fails |
+| 8a | Exits on the bid, in each level's own direction; market sells walk bid depth; missing depth follows D8; maker exits follow D2 (D1) | fixtures for each direction and order type; a mutation back to the midpoint fails; **the post-switch observation window is sized on the measured stamped-close rate** (Langston's F-G-2 closing read, 2026-09-11: about 5 crypto closes a day, so 14 days gives about 70 stamped closes against the 2x2 floor of 30 and the brake floor of 52) |
 | 8b | Maker fill evidence: a fill requires the order to be resting, then the opposite quote reaching the limit or a trade strictly through it; a midpoint touch is not a fill; marketable-at-placement handling is preserved (D2) | fixtures, including a negative fixture for a midpoint touch |
 | 8c | Per-leg level construction for the crypto quant lane: a taker entry uses the ask, a resting maker entry the bid, and a long stop and target the bid; spread is counted once; bar lanes keep `venue_close` with age. OBJ-3a is the base, and the OBJ-3b coherence assertion is added (D4) | fixtures, plus the coherence assertion between level basis and trigger basis |
 | 8d | VTS crypto exits follow the D1 rule. This is the second epoch boundary since 2026-09-02, keyed through `calibration-epoch.ts`; the pre-switch era is labelled mid-triggered; xStock clamps stay (D5) | the epoch value on rows written after deploy; the label is present |
