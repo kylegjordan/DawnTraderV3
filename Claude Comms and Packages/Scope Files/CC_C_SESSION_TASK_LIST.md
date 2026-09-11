@@ -19,9 +19,10 @@
 | 3 | `F-G-1` `B-GRID-REPRESENTABILITY` | window closed 2026-09-04; **conversion to a completion report owed**; OBJ-9 re-opened, bounded to the ordering guarantee (`#1031`) | me |
 | 3c | `F-G-2` `B-EXIT-TRANSACTABLE-SIDE` | crypto half deployed 2026-09-02; **observation window VOID since 2026-09-05** | the level-basis and reachability work, then re-open |
 | 3b.f | `B-PRICE-AGE-TRUTH` (`#951`) | shipped 2026-08-31; in observation | a close that went through the changed path |
-| 3b.b | `B-XSTOCK-FEED-SANITY` (`#943`) | in observation | its window |
-| 3n | `B-PRICE-SIDE-BY-JOB` | **rule ruled 2026-09-04**; OBJ-3a built (`884b9289e`); OBJ-3b held | F-G-2's window re-opening |
+| 3n | `B-PRICE-SIDE-BY-JOB` r5 | decisions D1-D10 reached 2026-09-11; **OBJ-7 (P-7a..P-7j) built and pushed; Step 4 with Langston** (`Change Lists/B_PRICE_SIDE_BY_JOB_OBJ7_CHANGE_LIST.md`) | Langston's review; the `#951` read (`0db25f1d`, 09-16) before deploy |
 | 3b.f-c | `B-XSTOCK-SESSION-FRESHNESS` | open; the entry-side flat 15 s ceiling is its subject | me |
+
+**Closed 2026-09-11:** 3b.b `B-XSTOCK-FEED-SANITY` (`#943`) — window INCONCLUSIVE, stopped; the acceptance re-arms on the post-OBJ-7 instrument.
 
 ## 0b. OUTSIDE THE PLAN — current direction from Kyle
 
@@ -40,6 +41,7 @@ Derived 2026-09-11 from the plan's own rows. Rows marked ⚠️ carry a closed o
 | 3b.e | ⚠️ `B-XSTOCK-LIVE-FEED` (`#950`) |
 | 3b.f-a | `B-OPENTRADE-REFRESH-LANE` (`#977`) — placed before 3b.f-b by Kyle |
 | 3b.f-b | `B-PRICE-AGE-REFUSAL` — gated on `#971` |
+| 3b.f-d | `B-OBS-WINDOW-EVIDENCE-CAPTURE` (`#1044`) — placed 2026-09-11 after 3b.f-c |
 | 3b.b-b | `B-XSTOCK-ENTRY-COMPARATOR` (`#996`) |
 | 3b.g | `B-DECIDED-INTENT-INDEX` (`#956`) — precedes the exit-path redesign |
 | 3b.h-1 | `B-TICKER-BBO-TRIGGER` (`#1017`) — immediately before 3n |

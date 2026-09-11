@@ -1,7 +1,7 @@
-# OPEN — B-XSTOCK-FEED-SANITY: DEPLOYED 2026-09-03; observation window OPEN and now anchored
+# ✅ CLOSED — B-XSTOCK-FEED-SANITY: the observation window was graded INCONCLUSIVE and stopped (2026-09-11); the acceptance re-arms on the post-OBJ-7 instrument
 
 **Batch:** `B-XSTOCK-FEED-SANITY` (`#943`; closes `#567`) · `PHASE_19_PLAN` row 3b.b (master-order row 2) · **owner:** CC-C · **change-class: architecture** · **card:** `CI + Deploy`, blocked on Kyle's off-hours-entry pick.
-**This is a PROGRESS REPORT (workflow-10 rule): the batch cannot close yet.** It is converted into the completion report when (1) the deploy has run after 2026-09-07, (2) the pre-registered observation criterion (§6) has its data in, and (3) a decision has been taken on that data. Written while the evidence is fresh, so nobody needs the chat scrollback.
+**CONVERTED 2026-09-11 — this was the PROGRESS REPORT and is now the COMPLETION REPORT. §4k records the data that came in and the decision taken on it.** *(Original wording, kept as history:)* **This is a PROGRESS REPORT (workflow-10 rule): the batch cannot close yet.** It is converted into the completion report when (1) the deploy has run after 2026-09-07, (2) the pre-registered observation criterion (§6) has its data in, and (3) a decision has been taken on that data. Written while the evidence is fresh, so nobody needs the chat scrollback.
 
 ## 1. What the batch is for
 The xStock equities feed sometimes shows a HOLLOW book — one side (usually the bid) falls away from where the book was while the other side and the last trade stand still — concentrated in the minutes after Kraken's session handoffs (8:15 PM / 4:15 PM / 4:00 AM ET). The exit path evaluates a MIDPOINT, so the mid follows the collapsed side, the stop (or target) fires, and the position closes on a price nobody traded at. The freshness ceiling (`#548`) governs how OLD a mark may be and, by its own design note, never whether its VALUE is plausible — `#567`. This batch: **(OBJ-6)** a book-state guard on the xStock exit path that withholds a decision on a hollow quote for a bounded interval and then yields, loudly; **(OBJ-7)** a LABEL on every closed trade saying what the book looked like at the decision and at the fill, with the BASIS that produced it — never money; a one-off re-cut of the historical rows; **(OBJ-8)** the raw-frame capture extended to all three handoffs; **(OBJ-9)** the session-freshness item (plan row 3b.f-c) folded in, carrying the one decision that is Kyle's.
@@ -426,3 +426,87 @@ Unit: `[BOOK_STATE]` SKIP, YIELD and COMPARATOR_CLEARED lines in `error.log`, by
 ⚠️ **Not over-read:** the chain seeded at 06:21 reads `validated=true` by 08:07 — a later `two_sided` verdict validated it (`:119`) and each advance replaces the prior bid/ask/mid (`:116`). `validated` describes the chain's current reference, not its seed frame.
 
 **DISPOSITION:** ① and ② recorded here, before the window is graded · ③ → `3b.f-c` as live evidence for the folded D2 refusal · alert `0ff16030` resolved with this section as its evidence.
+
+## 4k. ✅ THE WINDOW'S VERDICT — INCONCLUSIVE, STOPPED, AND THE BATCH CLOSES *(2026-09-11; Langston's closing read 17:23Z, transcribed by CC-C)*
+
+**THE CRITERION, AS WRITTEN (§6, re-anchored at §4e):** PASS needs all four — (a) `SKIP` lines on a held name when one reads hollow; (b) zero hollow closes without a yield; (c) every yield carries its inputs, and a false-HOLLOW count is reported; (d) F-G-1 and `#951` unaffected. A symbol's zero counts only where its `COMPARATOR_SEEDED` line and the `EVAL_EXIT` cadence cover the window, and those live in `out.log` while the skips live in `error.log`.
+
+### THE DATA THAT CAME IN
+Langston re-derived these at the ref and on staging himself.
+
+| arm | `error.log` | `out.log` side | status |
+|---|---|---|---|
+| 2026-09-08T00:15Z (arm 1) | 0 `BOOK_STATE` lines | rotated out | the zero is unqualifiable |
+| 2026-09-09T00:15Z (arm 2) | 29 `SKIP` — LMT 25, NEM 4 | rotated out | firing is self-evidencing; the §6(c) cross-check is lost |
+| 2026-09-10T00:15Z (the pre-registered extension) | 17 `SKIP` — PPL 12, SYY 4, LMT 1 | rotated out | also unqualifiable |
+| 2026-09-11T00:15Z | 18 `SKIP` — NEM 14, MDB 3, CRWD 1 | present at the read; preserved below | a preservation record, not an arm |
+
+- Both qualifying arms ran on the D1/D3-fixed build (`validated=` on 165 of 165 lines on 09-08 and 92 of 92 on 09-09).
+- **(a)** holds on 3 of the 4 observed handoffs, across six names.
+- **(b)** `closed_trades`, xStock, all history: zero rows with `exit_book_state = 'hollow'`. Positive control: 11 non-null rows, all basis `guard` (10 `two_sided`, 1 `unknown`). **A non-FAIL, not a demonstrated pass** — a hollow close has never occurred.
+- **(c)** all 9 post-09-04 yields carry full inputs; the false-HOLLOW count is below.
+- **(d)** holds as recorded.
+- ✅ **"A `BOOK_STATE` line implies a held name" — re-derived at the code, as Langston asked:** every `[BOOK_STATE]` line is emitted inside the per-position exit loop (`active-execution-engine.ts:1392` knob refusal, `:1426` YIELD, `:1447` SKIP) or the per-position event record (`:448`). The entry seam logs under a different token, `[ENTRY_GATE]` (`:331`). So the reading holds.
+
+### WHY INCONCLUSIVE — A RECORD-KEEPING FAILURE ON THE READ, NOT A DEFECT IN THE GUARD
+§4d measured `out.log`'s retention (about 3.8 days, rotated by size) and set the condition: **extract the `out.log` side after EACH handoff.** It was done for the void arm and the seed control only. By the read, `out.log` held about 1.6 days — 14 files, the oldest beginning 2026-09-10 03:28:50 — so the qualifying side of both graded arms was gone. ⛔ **CC-C wrote that mitigation and did not execute it.**
+
+### THE FALSE-HOLLOW COUNT (§6(c)) — **0 of the 4 computable yields; 5 not computable**
+**The rule, stated before the data.** §6(c) names the count but no horizon, so this operationalisation is CC-C's and is for Langston to rule on:
+- A yield is a **false HOLLOW** when the traded price confirms the departure the guard called hollow.
+- Measured as the median of `last` over (yield, yield + 5 min], against the guard's own `priorLast`.
+- It must move in the flagged direction (`bid_collapsed` down, `ask_spiked` up, `mark_deviation` by the sign of `midDepartureFrac`) by at least the guard's own `departureThresholdFrac`.
+- +90 s and +30 min are published beside it; the class is pinned to +5 min.
+- No frames in the window means not computable, never "not false".
+- Query: `scripts/analysis/b_xstock_feed_sanity_false_hollow.sql`. Inputs are copied verbatim from each YIELD line.
+
+| # | yield (UTC) | symbol | reason | threshold | +90 s | +5 min | +30 min | class at +5 min |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 09-05 00:16:29 | ARKK | mark_deviation | 1.045% | — | — | — | not computable (Friday shutdown) |
+| 2 | 09-05 00:16:31 | LI | bid_collapsed | 2.924% | — | — | — | not computable (shutdown) |
+| 3 | 09-05 00:16:31 | NEM | bid_collapsed | 1.501% | — | — | — | not computable (shutdown) |
+| 4 | 09-05 00:16:31 | SLV | bid_collapsed | 1.000% | — | — | — | not computable (shutdown) |
+| 5 | 09-08 08:59:06 | NEM | ask_spiked | 1.000% | 0.000% | 0.000% | −0.183% | hollow held |
+| 6 | 09-08 20:16:30 | NEM | ask_spiked | 1.000% | +0.024% | +0.024% | +0.024% | hollow held |
+| 7 | 09-09 08:24:15 | LMT | ask_spiked | 1.043% | — | — (0 frames) | +0.106% | not computable |
+| 8 | 09-11 06:21:02 | NEM | bid_collapsed | 1.000% | — | +0.103% | +0.151% | hollow held |
+| 9 | 09-11 08:07:23 | NEM | bid_collapsed | 1.329% | 0.000% | 0.000% | +0.411% | hollow held |
+
+- **Positive control:** every one of the nine has frames in the 5 minutes BEFORE its yield (between 2 and 59), so "no frames after" means the venue went quiet, not that the table is missing.
+- No computable yield moved in the flagged direction by its threshold at any published horizon. The largest same-direction move is #6 at +0.024% against 1.000%.
+- ⚠️ **Limits:** all four computable yields are Newmont (§4j ②); the four shutdown yields cannot be judged by construction.
+
+### THE PRESERVATION RECORD — NOT A TEST ARM, AND IT MAY NOT FLIP THE VERDICT
+`B_XSTOCK_FEED_SANITY_EVIDENCE/preservation_outlog_errorlog_2026-09-11.txt` (commit `16d8f507b`), captured 2026-09-11T17:28:25Z:
+- window 00:10–00:25Z;
+- 601 `EVAL_EXIT` lines from `out__2026-09-11_03-17-47.log`, untruncated;
+- 18 `BOOK_STATE` SKIP lines from `error.log` — NEM 14, MDB 3, CRWD 1, the count Langston read;
+- retention measured at capture: `out.log` 14 files from 2026-09-10 03:28:50; `error.log` 14 dated files from `error__2026-08-29`.
+
+### THE DECISION (Langston, 17:23Z) — STOP, DO NOT EXTEND
+- `B-PRICE-SIDE-BY-JOB` OBJ-7 modifies this instrument (`book-state-tracker.ts`; `PRICING_DECISIONS_2026-09-11.md:146`), so more arms would grade an instrument being replaced. D2 is still live and unfixed.
+- **`#943`'s acceptance does NOT pass. The D5 VTS xStock clamps stay. The acceptance re-arms on the post-OBJ-7 instrument.**
+- **His Step-2 condition 2 on `3n` is DISCHARGED: OBJ-7 is clear to deploy on this gate.**
+
+### THE NEW HOME HIS READ NAMED (§13)
+> `HOME: B-OBS-WINDOW-EVIDENCE-CAPTURE (#1044), owner CC-C, placed in PHASE_19_PLAN.md at 3b.f-d, after 3b.f-c`
+
+Any criterion that qualifies its evidence from a size-rotated stream captures that evidence at the event, not at the read.
+
+### A RESIDUAL RAISED AT THE CLOSE, BY ANOTHER SESSION
+NEW Claude (`B-XSTOCK-FEE-CONTRACT`, finding NF3, 2026-09-11 17:41Z): this batch's rollback, `2026-09-03-b-xstock-feed-sanity-rollback.sql:14-16`, deletes the xStock `paper_sim` epoch row only where `updated_by = 'b-xstock-feed-sanity'`. Once their migration bumps that row, the rollback deletes nothing and has no post-check; and if it did delete, xStock `paper_sim` would step back to the wildcard epoch. Their recommendation: the rollback should not delete an epoch row at all. **Put to Langston at their Step 4 (fold into their batch, or route to CC-C); not acted on here.**
+
+### GOVERNANCE FILES CHANGED AT THE CLOSE
+| document | verdict | one line |
+|---|---|---|
+| this report | ✅ | Converted and renamed from `B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md`; §4k added. |
+| `BATCH_CATALOG.md` | ✅ | Entry marked CLOSED, INCONCLUSIVE, stopped; record re-pointed. |
+| `PHASE_HISTORY.md` | ✅ | Paragraph closed with the verdict and the re-arm. |
+| `PHASE_19_PLAN.md` | ✅ | Row 3b.b closed; row 3b.f-d `B-OBS-WINDOW-EVIDENCE-CAPTURE` placed after 3b.f-c. |
+| `RUNNING_ISSUES.md` | ✅ | `#943` closed with its state; `#1044` filed with its home. |
+| `CHANGES_AND_FIXES.md` | ✅ | The registry entry records the window's outcome. |
+| `CC_C_SESSION_TASK_LIST.md` | ✅ | 3b.b moved out of the open list; 3b.f-d added; 3n's row brought current. |
+| `MEMORY_CC_C.md` | ✅ | Position updated. |
+| the evidence file and the query | ✅ | `preservation_outlog_errorlog_2026-09-11.txt`, `b_xstock_feed_sanity_false_hollow.sql`. |
+| `SYSTEM_MANUAL.md`, `SYSTEM_IMPACT_MAP.md` | N/A | Nothing about the guard changed at the close; OBJ-7 of `3n` carries its own map updates. |
+| `STORAGE_POLICY.md` | N/A | The halved `out.log` retention is a measurement, recorded here and in `#1044`; whether policy should change is `#1044`'s question. |

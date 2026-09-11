@@ -849,7 +849,7 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 **Governance:** `SYSTEM_IMPACT_MAP` (second epoch on `exit_price_producer`, recorded with its instant) · `SYSTEM_MANUAL:4671` (the *"no producer is consulted by any gate"* absolute WITHDRAWN) · `ACTIVE_PATH_FLOW` hop 6 · `PHASE_19_PLAN` row 3b.f · `RUNNING_ISSUES` `#951` amendment, **`#977` opened + placed at 3b.f-a**.
 
 
-## B-XSTOCK-FEED-SANITY (CC-C, ⛔ **OPEN — OBSERVATION WINDOW**, deployed 2026-09-03) — Phase 19, plan row 3b.b · `#943` (closes `#567`)
+## B-XSTOCK-FEED-SANITY (CC-C, ✅ **CLOSED 2026-09-11 — window INCONCLUSIVE, stopped**, deployed 2026-09-03) — Phase 19, plan row 3b.b · `#943` (closes `#567`)
 
 **CLASS: `architecture`.** The exit path evaluated stops and targets against a MIDPOINT that follows a collapsing bid, so at an xStock session handoff a stop could fire at a price nobody traded at. This batch adds a per-symbol book-state predicate (`two_sided` / `hollow` / `unknown`) that measures a frame against **the pair's own recent history** — never a second venue, never the clock, never the session — and withholds the exit tick on a `hollow` verdict, bounded by a yield after 60 consecutive skips so a protection can never strand a position.
 
@@ -863,7 +863,9 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 **LIVE — the guard is judging, not merely seeded (2026-09-03 20:2xZ):** 220 `BOOK_STATE` lines, 192 skips / 3 yields on LI/USD, refusing a book whose spread was **2.06% against its own trailing median of 0.083%** — a 25× widening, `ask_spiked`. Position sat 2.57% above its stop throughout.
 
-**Record:** `B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md` — converts to the completion report when the window's data is in AND a decision is taken. **Criterion pre-registered before the data:** the first two weekday 20:15 ET handoffs after deploy (2026-09-04 and 2026-09-08).
+**CLOSED 2026-09-11 — INCONCLUSIVE, STOPPED (Langston's closing read, 17:23Z).** The `out.log` side that qualifies each skip was not captured after each handoff, as §4d required, and `out.log` retention halved to about 1.6 days, so both graded arms were unqualifiable. What survived shows the guard firing on 3 of 4 handoffs across six names and zero hollow closes without a yield in all history (a non-FAIL, not a demonstrated pass). False-HOLLOW count: 0 of 4 computable yields, 5 not computable. **The acceptance does not pass; the D5 VTS xStock clamps stay; it re-arms on the post-OBJ-7 instrument.** New home: `#1044` `B-OBS-WINDOW-EVIDENCE-CAPTURE` (3b.f-d).
+
+**Record:** `B_XSTOCK_FEED_SANITY_COMPLETION_REPORT.md` (converted 2026-09-11; §4k). **Criterion pre-registered before the data:** the first two weekday 20:15 ET handoffs after deploy (2026-09-04 and 2026-09-08).
 
 ---
 

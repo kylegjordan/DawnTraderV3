@@ -5580,7 +5580,9 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 **HOME: `B-BOOK-BBO-DIVERGENCE`, owner CC-C, placed in `PHASE_19_PLAN` at row 3b.c, after the F-G-1 soak and before F-G-2 implementation (3c).**
 
-### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
+### #943 ✅ CLOSED 2026-09-11 — INCONCLUSIVE, STOPPED (opened 2026-08-29; CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
+
+✅ **STATE 2026-09-11: CLOSED.** Langston's closing read (17:23Z) graded the window INCONCLUSIVE and stopped it: the `out.log` side that qualifies each skip was not captured after each handoff, and `out.log` retention halved, so both graded arms were unqualifiable. **The acceptance does not pass; the D5 VTS xStock clamps stay; it re-arms on the post-OBJ-7 instrument of `B-PRICE-SIDE-BY-JOB`.** False-HOLLOW: 0 of 4 computable yields, 5 not computable. Record: `B_XSTOCK_FEED_SANITY_COMPLETION_REPORT.md` §4k. The capture failure is homed at `#1044`.
 
 ⏳ **STATE 2026-09-03: DEPLOYED, IN ITS OBSERVATION WINDOW — NOT CLOSED.** `1a71c553ba2cf941c39331206071aa1d36e2fbbb` live 19:28:48Z (Kyle released the `#951` hold). Langston's Step-4 conditions discharged and **Step 8 CONFIRMED at the running sha**. Card `Observation`. Record: `B_XSTOCK_FEED_SANITY_PROGRESS_REPORT.md` §4c/§4d — **the deploy sequence, the two post-deploy defects and the anchored window live THERE, not here.**
 
@@ -8524,3 +8526,15 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ⇔ `#1040` (the batch under review when it was found) · `LANGSTON_ARCHITECTURE.md` §6 (the read model).
 
+
+### #1044 OPEN 2026-09-11 (CC-C; Langston's `#943` closing read, §13) — ⛔ **AN OBSERVATION WINDOW QUALIFIED ITS EVIDENCE FROM A SIZE-ROTATED LOG, AND THE EVIDENCE WAS GONE BY THE READ.**
+
+**WHAT HAPPENED.** `#943`'s criterion (§6) qualifies `error.log` skips with `COMPARATOR_SEEDED` and `EVAL_EXIT` lines that live in `out.log`. On 2026-09-03 §4d measured `out.log`'s retention (about 3.8 days, rotated by size) and set the mitigation: extract the `out.log` side after EACH handoff. It was done for the void arm and the seed control only. At the read `out.log` held about 1.6 days (14 files, the oldest beginning 2026-09-10 03:28:50), so both graded arms were unqualifiable and the window closed INCONCLUSIVE.
+
+**WHY IT MATTERS BEYOND `#943`.** A mitigation that depends on someone remembering to run it after an event fails silently. And the reach shrinks without warning, because the log rotates by size (1 G × 14 files), so a busier day shortens every window's reach at once.
+
+**SEVERITY:** medium — it cost an observation window; no trading impact. **OWNER:** CC-C. **DISPOSITION:** §9.4 (3), its own batch.
+
+> `HOME: B-OBS-WINDOW-EVIDENCE-CAPTURE, owner CC-C, placed in PHASE_19_PLAN.md at 3b.f-d, after 3b.f-c`
+
+⇔ `#943` (the window it cost) · `B_XSTOCK_FEED_SANITY_COMPLETION_REPORT.md` §4d, §4k.

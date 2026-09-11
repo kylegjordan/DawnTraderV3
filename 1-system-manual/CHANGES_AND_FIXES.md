@@ -3974,6 +3974,8 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 
 ### B-XSTOCK-FEED-SANITY — hollow-book exit withholding, and the two defects the deploy surfaced (2026-09-03, CC-C, deployed `1a71c553b` + `6d6b0e7be`)
 
+**OUTCOME (2026-09-11): the observation window closed INCONCLUSIVE and was stopped.** Its qualifying evidence sat in a size-rotated log that was not captured after each handoff. The acceptance does not pass and re-arms on the post-OBJ-7 instrument of `B-PRICE-SIDE-BY-JOB`; the D5 VTS xStock clamps stay. Record: `B_XSTOCK_FEED_SANITY_COMPLETION_REPORT.md` §4k; the capture failure is `#1044`.
+
 **CLASS: `architecture`.** Files: `xstock_spot/book-state.ts`, `-config.ts`, `-tracker.ts`, `active-execution-engine.ts`, 3 columns on `closed_trades`, `module_constants 'book_state'`.
 
 **DEFECT (the batch's subject, `#943`/`#567`).** At an xStock session handoff the bid collapses while the ask and last hold. The exit path evaluated a MIDPOINT, which follows the bid down, so a stop could fire at a price that never traded.
