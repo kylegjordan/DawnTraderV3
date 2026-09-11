@@ -611,3 +611,24 @@ He re-derived the code facts himself at `9ceaf73e1`; board card Review = Approve
    Fix these in the Step 4 diff description.
 
 **STEP: 3 of 11** (implementation, commit layer 1 = OBJ-7) · NEXT STEP: 4 of 11.
+
+## STEP 3 RECORD — P-7f: THE 15 s vs 14.3 s QUERY (2026-09-11, CC-C)
+
+**PREVIOUSLY STATED** (D6 in `PRICING_DECISIONS_2026-09-11.md`, and this plan's P-7f row): `active_fill_max_age_ms` is live at 15,000 and the re-serve sawtooth's densest rung is 14.3 s, so once a re-serve keeps its original age, that rung becomes visible in entry fill-age.
+**NOW:** no gate compares a re-served price's age to 15 s, and no closed trade in the provenance era entered on a re-served price.
+**REASON:** the 15 s gate and the 14.3 s rung sit on different price paths.
+
+**The code, read at the ref:**
+- The 15 s gate is xStock-only. `asset_classes/xstock_spot/active-dispatch.ts:181-182` compares `active_fill_max_age_ms` with `getLatestTickAgeMs` (`:74`), which is `NOW() - MAX(captured_at)` on the `xstock_spot_ticker_snap` archive table. It never reads the live-pricing adapter, so an adapter re-serve cannot reach it.
+- The 14.3 / 29.3 / 44.3 / 59.3 s sawtooth is the crypto adapter's rate-limited re-serve (`B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md` §3, n=975).
+- Crypto entries gate freshness on the order book's age (`fill_depth_gate.warmth_max_age_ms`, 5,000 ms for crypto; `execution/depth-source.ts:154`), not on the adapter quote's age.
+
+**The query:** `scripts/analysis/b_price_side_p7f_entry_age_rung.sql`, run on staging 2026-09-11.
+- **Q1, entry producers on closed trades opened since 2026-08-26** (when the provenance columns were created). crypto_spot: `crypto_ws_book_walk` 48, `kraken_ws_book_mid` 27, `kraken_rest_poller` 1, null 1. xstock_spot: `xstock_ticker_snap_walk` 27, null 2, `kraken_equities_ws_mid` 2, `kraken_equities_ws` 1. **Entries on `kraken_rest_rate_limited_reserve`: 0 of 109.**
+- **Q2, positive control:** the same column holds one `kraken_rest_poller` entry, so an adapter REST producer can reach it. The zero in Q1 is not a column that cannot hold the value.
+- **Q3, the instrument that looks right and is not:** `opened_at - entry_observed_at_ms` since the #951 deploy is negative for 22 of 24 crypto rows (p50 -30,382 ms; min -3,334,879 ms) and for 2 of 2 xStock rows. `opened_at` precedes the entry price read (an order can rest before it fills), so this is not an entry fill age. My first run bucketed it around 14.3 s and 15 s; those buckets are discarded.
+
+⚠️ **Limits, stated:** closed trades only; 109 rows carry a producer; the xStock gate's own age is not persisted (it reaches only the stale-fill alert and a skip counter), so its distribution near 15 s is not in the database.
+
+**Disposition:** no code change. The D6 knife-edge note describes a coupling the code does not have; it is **raised with Langston at Step 4** rather than edited in the consensus record.
+**Where the clock basis now lives:** on every quote the touch-price rule returns (`core/calculations/touch-price.ts`). The existing age recorders already keep the clocks apart: the side-age recorder derives ages from our receipt stamp only and counts the venue stamp as present or absent (`level-basis.ts` `recordSideAgeAttempt`), and both entry freshness gates above measure receipt clocks (the archive `captured_at`; the book's `bookUpdatedAt`, stamped at apply).
