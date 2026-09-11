@@ -595,10 +595,12 @@ class UnifiedPriceCache {
   /**
    * P-7k (record-only): called by the crypto quant lane with the row it read at evaluation entry, after its invalid-price
    * guard (r2, Langston chunk-4 C1). A missing row is not counted either: no price was read.
-   * ⚠️ WHAT IT DOES NOT COVER (r2, C3): the VTS level lane reads the same rows, so its mixture shows in `rowKind` only; and
-   * the crypto PATTERN lane sets entry, stop and target from a BAR CLOSE (`signal-orchestrator.ts:2224` into
-   * `patternToTradeSignal` at `:2286`, levels at `:2291-2293`), reads no cache row, and appears in NEITHER field; a
-   * `mid | last | unknown` count cannot express `venue_close`, which `price-basis.ts` names and OBJ-8 owns.
+   * ⚠️ WHAT IT DOES NOT COVER (r2, C3, and the chunk-4 hold): the VTS level lane reads the same rows, so its mixture shows
+   * in `rowKind` only. Two further level-setting lanes appear in NEITHER field: the crypto PATTERN lane sets entry, stop
+   * and target from a BAR CLOSE (`signal-orchestrator.ts:2224` into `patternToTradeSignal` at `:2286`, levels at
+   * `:2293-2295`) and reads no cache row; and the xSTOCK ACTIVE lane (`asset_classes/xstock_spot/eval-cycle.ts`, levels
+   * at `:722-726`, `:814-818`, `:1193-1197`) neither reads this cache nor counts. A `mid | last | unknown` count cannot
+   * express `venue_close`, which `price-basis.ts` names and OBJ-8 owns.
    */
   noteLevelRead(row: CachedPrice | null | undefined): void {
     if (!row) return;

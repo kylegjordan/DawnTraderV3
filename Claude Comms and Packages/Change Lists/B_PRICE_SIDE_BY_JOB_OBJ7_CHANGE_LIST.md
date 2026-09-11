@@ -235,7 +235,7 @@ Your verdicts: chunk 2 r2 APPROVED with five conditions (18:57Z); chunks 3 and 1
 Carry: a write with no print keeps the row's pair with its original stamp; the pair is unbounded in age by design (your (3)).
 
 **The instrument:** the existing HEALTH line (every 60 s) gains `rowKind=mid:N,last:N,unknown:N`, a snapshot of cache keys by kind (alias keys included, as in `cacheSize`), and `levelReadKind=mid:N,last:N,unknown:N`, the kind of each price signal generation read to set levels since the previous line, reset at every line so each line is one interval. Nothing parses the HEALTH line: a whole-tree grep finds no reader outside `price-cache.ts`.
-⚠️ **Stated limits:** `levelReadKind` counts the active crypto quant lane's read only (`signal-orchestrator.ts`); the VTS level lane reads the same rows, so its mixture shows in `rowKind`, not in a read count. The `:572` raw-symbol against `:1124` normalised-symbol difference you flagged is in the adapter's private cache, not this row; it is unchanged and still fails to absence.
+⚠️ **Stated limits:** `levelReadKind` counts the active crypto quant lane's read only (`signal-orchestrator.ts`); the VTS level lane reads the same rows, so its mixture shows in `rowKind`, not in a read count. The crypto pattern lane (levels from a bar close) and the xStock active lane (`asset_classes/xstock_spot/eval-cycle.ts`) read no cache row and appear in neither field (added at the chunk-4 hold). The `:572` raw-symbol against `:1124` normalised-symbol difference you flagged is in the adapter's private cache, not this row; it is unchanged and still fails to absence.
 
 **Proof:** 11 tests (`b-price-side-p7k-cache-mark-kind.test.ts`): each writer's kind and print; the carry with its original stamp; an `undefined` print splits nothing; a source fence on the three poller sites with its control; the adapter hop for a `_mid` and a `_last` producer; the adapter REST leg; the table total over `BASIS_BY_PRODUCER`'s keys and agreeing with every suffix; the HEALTH line's interval reset; fences on the orchestrator's count and the v1 writer. **Against the pre-P-7k sources: 11 of 11 fail.** After: 20 related test files 289/289, and the one other test file that touches the cache 25/25. tsc 377, identical file+code multiset.
 ⚠️ **Behaviour:** none; no decision reads the new fields. The HEALTH line grows two fields.
@@ -251,7 +251,7 @@ Your verdicts: chunk 4 APPROVED with four conditions (19:11Z; board `Review` uns
 |---|---|---|---|
 | **C1** — the count sat above the invalid-price guard | `priceCache.noteLevelRead(cachedPrice)` moved below the guard, so a present row with price 0 (a poller row, stated `'last'`) is not counted | `signal-orchestrator.ts` | test 10 now asserts the call sits after the guard and before the smoother starts, and not above the guard; **fails on r1** (the pre-C1 orchestrator). The first draft used a 400-byte distance and failed on the fixed code too (411 bytes on the CRLF working tree); replaced by the structural marker |
 | **C2** — the population | `levelReadKind` restated where it lives: the kind at entry to each crypto quant-lane evaluation with a usable price, an **upper bound** on level-setting reads, with the direction named (the true level-setting mixture is likely more midpoint-heavy); the two fields cover different populations and are never numerator and denominator | `price-cache.ts` `logHealthLine`, `levelReadKinds`, `noteLevelRead` docblocks | — |
-| **C3** — a third lane | the stated limits now name the crypto PATTERN lane: levels from a bar close (`signal-orchestrator.ts:2224`, `:2286`, `:2291-2293`), no cache row read, in neither field, and not expressible as `mid`/`last` (`venue_close`, OBJ-8's) | `price-cache.ts` `noteLevelRead` docblock | — |
+| **C3** — a third lane | the stated limits now name the crypto PATTERN lane: levels from a bar close (`signal-orchestrator.ts:2224`, `:2286`, `:2293-2295`, corrected at the hold), no cache row read, in neither field; at the hold, the xStock active lane (`asset_classes/xstock_spot/eval-cycle.ts`) is named too, and not expressible as `mid`/`last` (`venue_close`, OBJ-8's) | `price-cache.ts` `noteLevelRead` docblock | — |
 | **C4** — two evaluations of the kind and the print | the REST leg computes `_restKind` and `_lastTradeOrNull` once; the unified-row write and the returned result both use them | `live-pricing-adapter.ts` REST leg | tsc unchanged; p7i test 6 and p7k test 6 cover both uses |
 | CI at the ruled ref | run `34636371003` on `cc88748f7`: TypeScript Check, Test Suite, Build, Docker Build all success, per job | — | — |
 
@@ -266,6 +266,23 @@ Your verdicts: chunk 4 APPROVED with four conditions (19:11Z; board `Review` uns
 | **FINDING-3** — `restoreState` left three fields | `restoreState` clears `pendingRewarmInflation`, `lastObservationKey` and `warmedFromCloses` | `adaptive-kalman.ts` | test 16 (a warm then a restore: the restored covariance governs the first read, the warm count is 0, a key seen before the restore still advances) **fails on the HEAD smoother** |
 
 **Proof:** 20 related test files, 292/292. tsc 377, identical file+code multiset.
+
+## STEP 4 — CI FOR THE CHUNK-4 HOLD, AND ITS TWO RESIDUALS
+
+- **CI on a ref carrying both fix commits:** run `34639582983` on `3124e2d3a`, per job: TypeScript Check, Test Suite, Build, Docker Build all success. `e14053773` and `14442f622` are both ancestors of `3124e2d3a`, and nothing between `14442f622` and `3124e2d3a` touches `server/`, `shared/`, `client/`, `drizzle/`, package files, test config or CI config (six files: Langston-memory infra scripts, one analysis script, session memory). The run on `14442f622` itself (`34638551140`) was cancelled by later pushes.
+- **Residual 1:** the pattern lane's levels are at `signal-orchestrator.ts:2293-2295`, not `:2291-2293`; corrected in the `noteLevelRead` docblock and in this file.
+- **Residual 2:** the xStock active lane is a third level-setting lane outside the counter: `asset_classes/xstock_spot/eval-cycle.ts` builds entry, stop and target (`:722-726`, `:814-818`, `:1193-1197`) and contains no `priceCache`, `getCachedPrice` or `noteLevelRead` reference (positive control: the same search finds three `getCachedPrice` lines in `signal-orchestrator.ts`). Named in the docblock and in this file.
+
+## STEP 8 PRE-REGISTRATION — the P-7j re-warm check (written 2026-09-11, before any capture)
+
+Your chunk-4 hold asked for the tolerance and the approximation's direction in the plan before the capture.
+- **The comparator** is each re-warmed symbol's INSTANTANEOUS-parameter steady state, from the R and Q on its 12th `[9.3][KALMAN]` line: P = (Q + sqrt(Q^2 + 4QR)) / 2, K = P / (P + R). It is not the filter's actual steady state over observations 1-12, and the sign of the gap between them is not fixed; it depends on how R and Q moved.
+- **Tolerance:** K at observation 12 within x1.1 of the comparator (test 12's).
+- **Scope:** only symbols whose R and Q each stayed within 10% of their observation-12 values across observations 1-12. The rest are excluded and counted, because no single steady state exists for them.
+- **Population and floor:** symbols with a `[9.3][REWARM]` line in the first 10 minutes after the restart; n-floor 20 in scope.
+- **PASS:** at least 80% of in-scope symbols meet the tolerance. **FAIL:** fewer than 80%. **Below the floor:** a count, no verdict.
+- **Also expected:** K = 0.9 at observation 1 for every re-warmed symbol, and median `gapFrac` at most 0.01; above that is a scope decision, not a tuning one.
+- **Capture:** every REWARM line and each re-warmed symbol's first 12 KALMAN lines, copied from `out.log` to an evidence file within 30 minutes of the restart.
 
 ## THE ASK — one gate per dispatch
 
