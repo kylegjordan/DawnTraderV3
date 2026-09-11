@@ -170,6 +170,7 @@ describe('P-7j r2 — Langston chunk-2 BLOCKER-1: the re-warm is continuous AND 
     expect(gains[1]).toBeCloseTo(0.479, 3);
     // ⚠️ A KNIFE-EDGE PIN, deliberately: observation 11 sits at 0.142795 against a threshold of 0.142332 (0.33% margin).
     // A flip to 11 or 13 is the pin doing its job on a model change, not a flaky test.
+    // This number is this fixture's (Q/R 0.0192); production runs 0.0021-0.0235, median 0.0077.
     expect(firstWithin10Pct).toBe(12);
   });
 

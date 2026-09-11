@@ -1,0 +1,47 @@
+# P-7a AFTER-baseline, run 2026-09-11T21:05:43Z on staging at b597f1bf2 (deployed 2026-09-11T20:09:47Z), same script as the before-baseline (obj7_pre_restart_p7a_baseline_before_2026-09-11T1952Z.txt): scripts/analysis/b_price_side_p7a_baseline.sh
+=== reach: out.log first and last line timestamps ===
+2026-09-11 14:29:50 +00:00: [I7-WS-RAW] {"channel":"book","type":"update","data":[{"symbol":"ZEC/EUR","bids":[],"asks":[
+2026-09-11 21:05:45 +00:00: [B74][crypto-spot][shard1] connected=true symbols=230 last_msg_age_ms=403 rows_persisted_60s
+=== [B78.1][WS_TICK_RATE], last 30 lines (emitter kraken-websocket-adapter.ts:395) ===
+2026-09-11 20:36:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1609 (count=1609 over 60s)
+2026-09-11 20:37:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=493 (count=493 over 60s)
+2026-09-11 20:38:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=617 (count=617 over 60s)
+2026-09-11 20:39:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=374 (count=374 over 60s)
+2026-09-11 20:40:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=816 (count=816 over 60s)
+2026-09-11 20:41:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=905 (count=905 over 60s)
+2026-09-11 20:42:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=761 (count=761 over 60s)
+2026-09-11 20:43:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=739 (count=739 over 60s)
+2026-09-11 20:44:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=344 (count=344 over 60s)
+2026-09-11 20:45:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=711 (count=711 over 60s)
+2026-09-11 20:46:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=858 (count=858 over 60s)
+2026-09-11 20:47:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=685 (count=685 over 60s)
+2026-09-11 20:48:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=440 (count=440 over 60s)
+2026-09-11 20:49:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1134 (count=1134 over 60s)
+2026-09-11 20:50:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=819 (count=819 over 60s)
+2026-09-11 20:51:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=637 (count=637 over 60s)
+2026-09-11 20:52:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=683 (count=683 over 60s)
+2026-09-11 20:53:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=415 (count=415 over 60s)
+2026-09-11 20:54:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=498 (count=498 over 60s)
+2026-09-11 20:55:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=493 (count=493 over 60s)
+2026-09-11 20:56:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1149 (count=1149 over 60s)
+2026-09-11 20:57:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=791 (count=791 over 60s)
+2026-09-11 20:58:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=936 (count=936 over 60s)
+2026-09-11 20:59:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=855 (count=855 over 60s)
+2026-09-11 21:00:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=510 (count=510 over 60s)
+2026-09-11 21:01:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1297 (count=1297 over 60s)
+2026-09-11 21:02:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1793 (count=1793 over 60s)
+2026-09-11 21:03:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=815 (count=815 over 60s)
+2026-09-11 21:04:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=975 (count=975 over 60s)
+2026-09-11 21:05:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=592 (count=592 over 60s)
+=== live subscription audit: [I8C-AUDIT][SUMMARY], last 5 lines (kraken-websocket-adapter.ts:3095; absent = the audit is not emitting in out.log reach, state it) ===
+=== eventLoopLag from /api/metrics/snapshot, 5 samples 10 s apart ===
+eventLoopLag = 2
+--- sample 1 at 2026-09-11T21:05:46Z
+eventLoopLag = 1
+--- sample 2 at 2026-09-11T21:05:56Z
+eventLoopLag = 1
+--- sample 3 at 2026-09-11T21:06:06Z
+eventLoopLag = 1
+--- sample 4 at 2026-09-11T21:06:16Z
+eventLoopLag = 12
+--- sample 5 at 2026-09-11T21:06:26Z

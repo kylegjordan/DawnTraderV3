@@ -51,14 +51,19 @@ export interface KalmanDiagnostics {
  * r3 (Langston chunk-2 r2 conditions 1-3):
  * - THE DERIVATION, AND ITS CADENCE DEPENDENCE. A model-consistent warm would charge each hourly step
  *   `Q_warm = Q_live x (3600 / t)`, where `t` is the live observation cadence. At R 26 and Q 0.5 that gives a first live
- *   gain of 0.85 at t = 15 s, 0.75 at 30 s and 0.64 at 60 s; 0.9 corresponds to t of about 8.5 s. Today's crypto
- *   re-serve cadence is the `#951` sawtooth (14.3 / 29.3 / 44.3 / 59.3 s), so the model implies 0.64-0.85, and 0.9
- *   over-weights the live read by 5-26 points. That is the fail-safe direction, because the prior is a known-stale
- *   average of hourly closes. FALSIFIER: wiring the 2 s `openTrade` lane (`#977`) pushes the derived gain to about 0.97
- *   and makes 0.9 conservative; a longer cadence makes it more aggressive. One constant is exact at one (R, Q, t) only.
- * - THE DECAY LENGTH, as a number: from the inflated P the gain runs 0.900, 0.479, 0.333, 0.260 and so on, and is within
- *   10% of the steady-state gain (0.129 at R 26, Q 0.5) only at the 12th live observation (test 12). At today's cadence
- *   that is 3-12 minutes of a lightly smoothed filter after every restart.
+ *   gain of 0.85 at t = 15 s, 0.75 at 30 s, 0.64 at 60 s, 0.57 at 90 s and 0.41 at 240 s; 0.9 corresponds to t of about
+ *   8.5 s. The filter advances once per NEW observation, not per re-serve, and on staging (2026-09-11, OBJ-7 Step 7, 83
+ *   re-warmed symbols) observations arrived a median 60 s apart (p90 90 s, max 240 s). So the model implies 0.64 or less
+ *   and 0.9 over-weights the live read by 26 points or more. That is the fail-safe direction, because the prior is a
+ *   known-stale average of hourly closes. FALSIFIER: its cadence half is discharged by that measurement; wiring the 2 s
+ *   `openTrade` lane (`#977`) would push the derived gain to about 0.97 and make 0.9 conservative. One constant is exact
+ *   at one (R, Q, t) only.
+ * - THE DECAY LENGTH, as a number: from the inflated P the gain runs 0.900, 0.479, 0.333, 0.260 and so on. At test 12's
+ *   fixture (R 26, Q 0.5, Q/R 0.0192) it is within 10% of the steady-state gain (0.129) first at the 12th live
+ *   observation, and that number is the fixture's. Production Q/R runs 0.0021-0.0235, median 0.0077 (same capture): the
+ *   first live observation within 10% was a median 18, about 22 minutes after the first live read (72 of 83 reached it
+ *   inside a 30-minute capture and 11 did not, so the upper end is not measured). Each symbol's own R and Q predicted
+ *   that observation to within one on all 72 that reached it.
  * - LAZY: the warm only FLAGS the inflation, and the next `applyObservation` applies it with ITS OWN R, so the first live
  *   gain is exactly this constant whatever ER the warm used (test 14).
  * - `updateCount` includes the warm's steps (up to 720). Diagnostics only; no production reader.
