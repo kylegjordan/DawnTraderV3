@@ -284,7 +284,15 @@ const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.en
 - `getSmoothedPrice` has **one** caller: `signal-orchestrator.ts:2417`, the crypto quant lane.
 - MCE passes the price through unchanged. `market-context-engine.ts:1431-1434` reads, verbatim, `const indicators: MarketIndicators = { vwap, sma, currentPrice, …`, and `computeContext`'s parameter is documented at `:1218` as *"Smoothed current price (from Kalman filter or raw)"*.
 - That confirms the census row at `B_PRICE_SIDE_BY_JOB_LEVEL_CENSUS.md:198` at the object.
-- There are two `computeContext` calls: `signal-orchestrator.ts:2250`, the pattern lane on a bar close (`venue_close`), and `:2467`, the quant lane on the smoothed price. **Only `:2467`'s anchor changes.**
+- ⛔ **Corrected in r6 (Langston C4).** r5 said *"two `computeContext` calls"*. That is two **in `signal-orchestrator.ts`**. Repo-wide, tests excluded, there are **five** call sites:
+
+  | site | price passed | job | anchor changes? |
+  |---|---|---|---|
+  | `signal-orchestrator.ts:2250` | bar close | crypto pattern lane | no — `venue_close` passes D4 |
+  | `signal-orchestrator.ts:2467` | Kalman-smoothed price | crypto quant lane | **yes** |
+  | `vts-runner.ts:1429` | cache price (a midpoint on crypto) | VTS level lane (A-9.15) | **yes** |
+  | `vts-runner.ts:4822` | cache price | VTS pair regime and strategy mapping | no — value estimate |
+  | `xstock_spot/eval-cycle.ts:381` | `lastPrice`, a bar close | xStock | no — `venue_close` passes D4 |
 
 ⇒ **DISPOSITION: convert at the level site.**
 - The smoothed series stays a detection feature, which D4 permits.
@@ -339,6 +347,14 @@ const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.en
 - At removal: an entry in `DELETED_COMPONENTS_LOG` and the archive copy.
 - Until then it runs unchanged. It never closes a position.
 
+**r6, Langston C2 — what the removal must NOT take with it.**
+- The close-record carry at `active-execution-engine.ts:2680-2692` holds `if (_pm.fg2Shadow) _carry.fg2Shadow = _pm.fg2Shadow;` at `:2684`. The `bookState` carry sits directly beneath it (`:2685-2689`), and it was generalised from that line.
+- OBJ-8a deletes **only** the `fg2Shadow` line and its F-G-2 OBJ-0 comment (`:2681-2682`).
+- It rewrites the `B-XSTOCK-FEED-SANITY` comment at `:2686-2687`, so that it no longer cites `fg2Shadow`.
+- A test pins that the `bookState` carry survives.
+
+**OBJ-8a's live proof.** The only live bid-versus-mid instrument dies in the same commit, so the proof has to come from somewhere else. The **first crypto exit after the switch** must carry P-7c's basis and side stamp on its closed row: basis `book_top` or `ticker_bbo`, side `bid`. It is read at Step 7.
+
 ## A-9.6 3b.l — WHY THERE ARE TWO CACHES — condition 3
 
 **The introducing commit:**
@@ -357,34 +373,36 @@ const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.en
 - D7 keeps both caches going forward.
 - The WHY becomes Step 10 content, in the SIM and the System Manual.
 
-## A-9.7 THE D3 DISAGREEMENT THRESHOLD — condition 1
+## A-9.7 THE D3 DISAGREEMENT THRESHOLD — condition 1 (rewritten in r6, Langston C1 and judgement 2)
 
 **Instrument:** `scripts/analysis/book_ticker_alignment_probe.mjs`, run from the laptop on 2026-09-11 against public feeds only, with a 250 ms alignment window.
-- **Crypto:** 16 symbols, book depth 10 plus the best-bid/offer ticker.
-- **xStock:** 8 symbols, book depth 10 plus the default ticker.
 
-⛔ **The first run (r1, 20 minutes) is discarded as an INSTRUMENT DEFECT, not a feed property.**
-- r1 never truncated the book to the subscribed depth, so levels that had left the top 10 stayed in the maintained book as "ghost" levels — the same shape as `#741`.
-- r1 reported crypto p50 8.1 bps with only 25.7% exact agreement.
-- r2 truncates after every update and excludes crossed books, counting them.
-- **Positive control:** a 30-second r2 run gave crypto 3,848 aligned pairs with **100% exact** agreement, and zero crossed books.
+⛔ **The first run is discarded as an instrument defect.** r1 (20 minutes) never truncated the book to the subscribed depth, so ghost levels stayed in the maintained top — the `#741` shape. r2 truncates after every update and excludes crossed books, counting them.
 
-**r2, 5 minutes:**
-- **crypto** — aligned pairs **46,344** · exact on both sides **46,344** (100.0%) · crossed books excluded **0** · unaligned ticker updates 0 · |side difference| in bps: p50 0 · p90 0 · p99 0 · p99.9 0 · max 0
-- **xStock** — aligned pairs **328** · exact on both sides **40** (12.2%) · crossed books excluded **10,944** · unaligned ticker updates 35,367 · |side difference| in bps: p50 0.913 · p90 2.719 · p99 8.156 · p99.9 11.414 · max 13.05
+⚠️ **What the crypto result means — exact by construction.**
+- The probe's crypto ticker **was** subscribed with `event_trigger: bbo`, and Kraken emits that ticker from the same top of book.
+- So r2's **46,344 of 46,344 aligned pairs exact (max 0 bps, 0 crossed books)** is agreement **by construction**, not evidence that two independent feeds agree.
+- ⇒ **The alert's real subject is our local book maintenance, not venue disagreement.**
+  - A fire means our maintained book has drifted from the venue's own top: a desynced, untruncated or stale book.
+  - **The alert body must say exactly that.**
 
-✅ **CRYPTO THRESHOLD (derived).** The object is the aligned pairs of book top versus best-bid/offer ticker top, on 16 healthy-feed symbols; the population is the pairs above.
-- Agreement is exact on both sides in ≥99% of pairs, so the observed disagreement distribution sits at zero.
-- ⇒ **The alert fires when a symbol shows a disagreement of at least one tick on either side, on 3 consecutive aligned pairs.**
-- The one tick comes from the observed distribution; the 3-pair persistence absorbs one-off asynchronous delivery.
-- ⛔ **Alert only** (Langston condition 1). It never gates a price-dependent action.
-- P-7e ships it in record-only mode, and the first real fire is read before it is armed.
+**The positive control — a known non-zero, not a repeat.**
+- r5 cited a 30-second run as a control. It is a repeatability check, and nothing more.
+- The control is `--inject-every 5`, a 1-minute run that perturbs the BTC/USD ticker bid by one tick (0.1) on every 5th aligned BTC/USD pair.
+- **Result:** 199 perturbations injected into 998 aligned BTC/USD pairs, and **199 non-exact BTC/USD pairs detected** (BTC p99 0.013 bps, one tick). The other 15 symbols showed **0** non-exact pairs.
+- ⇒ The instrument sees a one-tick disagreement, and reports nothing where none was injected.
 
-⛔ **xSTOCK THRESHOLD NOT DERIVED — the instrument is not yet valid for xStock.**
-- Crossed books dominate the pairs (see the counts above). The book as maintained by this probe goes crossed on the equities feed, so any disagreement number from it measures the probe.
-- **This is a finding for P-7b and P-7d, not only for the alert:** the xStock 20-level book must be maintained with checksum validation (D3 says "valid, checksum passed") before it is used as a touch price.
-- ⇒ **P-7d on xStock keeps the ticker as the touch price** until P-7b's maintained book passes a checksum-validated, crossed-book-free control.
-- The xStock disagreement alert stays record-only until then.
+✅ **Crypto threshold.**
+- **Rule:** a symbol fires when its disagreement is **one tick or more on either side, on 3 consecutive aligned pairs**.
+- **Why one tick:** it sits just outside the observed distribution, which is exactly zero.
+- **Why 3 consecutive pairs:** that absorbs a single asynchronous delivery.
+- ⛔ **Alert only.** If this number ever gates a price-dependent refusal, it becomes a trading knob and needs its own argument.
+- P-7e ships it in record-only mode, and its first real fire is read before it is armed.
+
+⛔ **xStock threshold — not derived, because the instrument is not yet valid for xStock.**
+- Crossed books dominate the xStock pairs: 10,944 excluded against 328 aligned in the 5-minute run, and 1,952 against 165 in the 1-minute run.
+- **That is a property of this probe's book maintenance on the equities feed, NOT a property of the equities feed.** Recorded as such so it cannot become a false premise for the next decision.
+- ⇒ **P-7d keeps the xStock touch price on the ticker** until P-7b's maintained xStock book passes a checksum-validated control with no crossed books. The xStock disagreement alert stays record-only until then.
 
 ## A-9.8 THE BASIS ENUM GAP
 
@@ -394,9 +412,13 @@ D3 lists four bases, but A-9.1 rows 3 and 4 are REST ticker prices — a fifth s
 
 - **`#943`:** Langston's read (alert `0fe4912e`, 17:00Z) lands **before** OBJ-7 deploys, because P-7b and P-7d touch `book-state-tracker.ts`.
 - **F-G-2:** Langston's read (alert `cbb55dc9`); the shadow is removed at OBJ-8a.
-- **`#951`:** alert `0db25f1d` fires on 2026-09-16, and P-7h changes that arm.
-  - ⚠️ **Judgement call for Langston:** if OBJ-7 is ready before 09-16, either (a) hold its deploy until 09-16, or (b) end `#951`'s window at the OBJ-7 deploy and record the boundary — Coltrane's D10 principle.
-  - **CC-C recommends (b).** The window's own stopping rule already treats an empty arm as the result, and P-7h makes that arm less exercised, not more.
+- **`#951` — option (b), AGREED by Langston: READ, THEN DEPLOY.**
+  - `0db25f1d` is the second and final window, and its stopping rule is binding: an empty arm at that point is the result, not another extension.
+  - **Immediately before OBJ-7 deploys**, take the terminal read at the **pre-deploy sha**.
+  - **Copy the two producer literals from the alert body**, `kraken_rest_poller` and `kraken_rest_rate_limited_reserve`. Never retype them: this gate saw three wrong-object misses in one hour.
+  - In the same turn, execute §9 item 2's conversion.
+  - Then **resolve** `0db25f1d`, citing the read. **Never ack it.**
+  - Ending a window without discharging its stopping rule is the `#1005` shape.
 
 ## A-9.11 MAKER FILL EVIDENCE — for P-8b
 
@@ -459,6 +481,42 @@ D3 lists four bases, but A-9.1 rows 3 and 4 are REST ticker prices — a fifth s
 - ⚠️ **Consequence, stated:** stablecoin quotes (`USDT`, `USDC`) are refused too, until a conversion exists. That follows D9's "any pair not quoted in USD".
 - Open positions keep their quote-currency exits, and their USD P&L is marked unavailable.
 
+**r6, Langston C3 — the magnitude, measured.**
+
+**Object:** staging `pair_scan_archive`, `asset_class = 'crypto_spot'`, over the last 24 h (2026-09-10 15:44Z → 2026-09-11 15:44Z). **Population:** 103,469 rows, every one admitted to MCE (`scan_stage_decision.admitted = true`).
+
+| measure | USD quote | non-USD quote |
+|---|---|---|
+| distinct admitted **symbols** | 67 | **52** (EUR 16, GBP 7, USDT 6, CHF 6, USDC 6, CAD 5, AUD 4, JPY 2) — **43.7% of 119** |
+| distinct **base assets** lost if refused | — | **3 of 70 (4.3%)** — `USD`, `USDC`, `USDT` only |
+| closed active-path trades, last 30 days | 182 | **28 (13.3% of 210)** — EUR 19, USDT 3, USDC 3, GBP 2, CAD 1 |
+| open positions now | 5 | 0 |
+
+**The ten symbols with no USD-quoted twin** are USD/CAD, USD/CHF, USDC/AUD, USDC/CAD, USDC/CHF, USDC/GBP, USDT/AUD, USDT/CHF, USDT/GBP and USDT/JPY. All are stablecoin or FX pairs. Every other refused symbol is a second quote on a coin that already trades against USD.
+
+⇒ **Measured by symbols the cut is large (43.7%); measured by tradeable assets it is small (3 bases, all stablecoin/FX).**
+- 13.3% of recent closed trades were on non-USD quotes. Their gates and P&L ran on `#966`'s units error.
+- **Recommendation:** refuse, as D9 decided.
+- ⚠️ **Langston ruled that a material universe cut is Kyle's decision.** This goes to Kyle with the numbers above and the recommendation. It does not block commit 1: P-8f is in commit 2.
+
+## A-9.15 THE VTS LEVEL HAND-OFF — BLOCKER-1 (added in r6)
+
+**Langston's finding, re-derived at the object:**
+- `vts-runner.ts:1429` passes `priceData.price` into MCE. That is the cache price, and on crypto it is a midpoint.
+- `vts-runner.ts:1595` hands `currentPrice: mceContext.indicators.currentPrice` to strategy detection. **That is the VTS lane's level hand-off** — the census's `vts-runner.ts:1520` (`B_PRICE_SIDE_BY_JOB_LEVEL_CENSUS.md:351`), since drifted.
+- `vts-runner.ts:1528` holds OBJ-3a's level-basis shadow arm for the VTS lane, keyed `lane: 'vts'`. It is built and counted, and consumed by nothing.
+
+**Precision.** The VTS lane anchors on the **raw cache midpoint**, not the Kalman-smoothed one: `getSmoothedPrice` has one caller, `signal-orchestrator.ts:2417`. The census wording *"smoothed mid"* is loose on this point. **It fails D4 either way, because neither price is transactable.**
+
+⛔ **The parity consequence.** Moving only the active quant lane would leave VTS — the learning population — on mid-anchored levels while live-path levels sit on the transactable side. **That is a sim-to-live divergence, not a tidy-up**, and it is `fix-follows-pointer` exactly (census `:355`).
+
+⇒ **P-8c covers BOTH hand-offs.**
+- The two hand-offs are the active quant lane (`signal-orchestrator.ts`) and the VTS level lane (`vts-runner.ts:1595`).
+- They go through **one** shared per-leg conversion in `level-basis.ts`, switched on in the same commit.
+- The VTS shadow arm at `:1528` becomes the live path at that switch.
+- P-8d's epoch boundary then covers both the VTS booking change and the VTS level-basis change, so there is one boundary and not two.
+- The other three call sites keep their anchors (see the table in A-9.2).
+
 ## A-9.10 THE SIX SOURCES, NAMED
 
 1. **Code:** every site above, at the ref.
@@ -483,7 +541,7 @@ This commit lands **after** Langston's `#943` read, and is proven live before co
 | P-7a | Crypto ticker uses `event_trigger: bbo` | D3; `bbo_trigger_ack_probe.mjs` | live ack; Step-8 message rate and event-loop lag before/after; the revert is to drop the field |
 | P-7c | A basis field on every level, trigger and mark: `book_top`, `ticker_bbo`, `ticker_default`, `rest_ticker`, `venue_close` | A-9.1, A-9.8 | a fixture per basis; dropping the field fails a test |
 | P-7d | Touch-price selection: a valid fresh book top, then a valid ticker within D6's age, otherwise refuse | D3; A-9.1 row 5 | a fixture per branch, including "neither qualifies" |
-| P-7e | The disagreement alert records only until its first reads, then arms at the A-9.7 threshold. **Alert only** | A-9.7 | positive and negative controls; its first fire is read before the number is trusted |
+| P-7e | The disagreement alert records only until its first reads, then arms at the A-9.7 threshold. **Alert only.** Its body states that its subject is **local book maintenance** (the best-bid/offer ticker agrees with the book by construction) | A-9.7 | the one-tick injection control (199 of 199 detected, 0 false); a negative control on normal delivery; its first fire is read before the number is trusted |
 | P-7f | A clock-basis field; the query on 15 s against 14.3 s | D6 | a fixture per basis; the query result recorded in this document |
 | P-7g | Open positions enrolled in the 2-second lane; queued and held symbols carry their own subscription reasons | D7; `#977` am. 6 | the health line's `open=` equals the open-position count; a reason-removal fixture |
 | P-7h | The engine REST leg goes through the limiter, in the same commit as the re-serve age rule | A-9.4 | the forced-stale positive control |
@@ -496,12 +554,12 @@ This commit comes after commit 1 is proven live.
 
 | P | what | falls out of | verification |
 |---|---|---|---|
-| P-8a | Exits on the bid, per direction, including the REST fallback reading `b[0]` (A-9.1 row 3); the shadow instrument is removed | D1; A-9.1 row 3; A-9.5 | fixtures per direction and order type; a mutation to the midpoint fails |
-| P-8c | Quant-lane anchors converted at the level site; the OBJ-3b coherence assertion | D4; A-9.2 | fixtures, plus the assertion |
+| P-8a | Exits on the bid, per direction, including the REST fallback reading `b[0]` (A-9.1 row 3). The shadow instrument is removed — **only** the `fg2Shadow` carry line and its comment, keeping the `bookState` carry (A-9.5 C2) | D1; A-9.1 row 3; A-9.5 | fixtures per direction and order type; a mutation to the midpoint fails; a test pins the `bookState` carry; **live proof:** the first post-switch crypto exit carries P-7c's basis and `bid` stamp |
+| P-8c | Level anchors converted at the level site for **both** hand-offs — the crypto quant lane (`signal-orchestrator.ts`) and the VTS level lane (`vts-runner.ts:1595`) — through one shared conversion in `level-basis.ts`; the OBJ-3b coherence assertion | D4; A-9.2; **A-9.15** | fixtures on both hand-offs; the coherence assertion; a mutation that changes only one lane fails a parity test |
 | P-8b | Maker fills read the opposite side (ask for a resting buy, bid for a resting sell) at the three monitor sites and the three placement sites that read a mark; the later-tick exit rule is preserved | D2; A-9.11 | a midpoint-touch fixture does not fill; an opposite-quote fixture does; the later-tick rule's existing test still passes |
 | P-8d | VTS crypto booking receives the D1 bid; the crypto VTS epoch increments by one; the pre-switch label is added | D5; A-9.12 | the epoch value on rows after deploy; the label present; xStock rows unchanged |
 | P-8e | `closeOrder` returns and records `{ branch, walkedQty, extrapolatedQty }`; a missing config is an invalid estimate | D8; A-9.13 | all three branches write the field; a missing config never records zero slippage |
-| P-8f | Scanner admission refuses non-USD quotes (`non_usd_quote`) before the volume and price gates; USD P&L unavailable for open non-USD positions | D9; A-9.14 | a BTC-quoted and a USDT-quoted fixture are refused with the reason; a USD pair is unaffected |
+| P-8f | Scanner admission refuses non-USD quotes (`non_usd_quote`) before the volume and price gates; USD P&L shown as unavailable for open non-USD positions (currently 0). ⚠️ **The universe cut goes to Kyle first:** 52 of 119 symbols, but 3 of 70 bases, all stablecoin/FX | D9; A-9.14 (with the r6 magnitude) | a BTC-quoted and a USDT-quoted fixture are refused with the reason; a USD pair is unaffected |
 
 ✅ **No plan item is UNAUDITED.** P-8b, P-8d, P-8e and P-8f were read in A-9.11 to A-9.14 before dispatch.
 
@@ -517,4 +575,20 @@ This commit comes after commit 1 is proven live.
 - **The F-G-2 comparison tool** is already live. It is removed when exits switch to the bid, because it would then be comparing the bid with itself.
 - **Nobody ever recorded why there are two price caches.** The second one arrived with a Replit-era feature. We keep both, and write the reason down.
 
+- **The simulated trading lane (VTS)** also sets entry, stop and target from a midpoint. It gets the same fix, in the same step, so our learning data keeps matching real trading.
+
 **The plan:** first the feed plumbing, proven live. Then the switch to the bid, which covers maker fills that need a real buyer or seller, VTS booking, the close split, and refusing pairs not priced in US dollars.
+
+---
+
+## r6 — LANGSTON'S STEP-2 r5 CHANGES, APPLIED (2026-09-11)
+
+| item | where it is answered |
+|---|---|
+| **BLOCKER-1**, the VTS level hand-off | A-9.15; P-8c now covers both hand-offs |
+| **C1**, the alert's meaning and its positive control | A-9.7, rewritten: exact by construction; the one-tick injection detects 199 of 199; P-7e body |
+| **C2**, the carry block and the live proof | A-9.5 amendment; P-8a |
+| **C3**, the P-8f magnitude | A-9.14 amendment: 52 of 119 symbols, 3 of 70 bases, 28 of 210 recent trades; goes to Kyle |
+| **C4**, the `computeContext` census | A-9.2: five call sites repo-wide |
+| **Judgement 1**, `#951` | A-9.9: read-then-deploy; resolve `0db25f1d`, never ack |
+| **Judgement 2**, the xStock wording | A-9.7: the instrument is not yet valid for xStock; not a feed property |

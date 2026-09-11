@@ -16,6 +16,14 @@ import WebSocket from 'ws';
 
 const MINUTES = Number(process.argv[2] || 5);
 const ALIGN_MS = Number(process.argv[3] || 250);
+// POSITIVE CONTROL (Langston Step-2 r5 C1): `--inject-every N` perturbs the BTC/USD ticker bid by ONE tick (0.1)
+// on every Nth aligned BTC/USD pair BEFORE comparison. A valid instrument must then report exactly that many
+// non-exact BTC/USD pairs. Without it, a 100%-exact result cannot be told apart from an instrument that cannot
+// see a difference at all.
+const INJECT_ARG = process.argv.indexOf('--inject-every');
+const INJECT_EVERY = INJECT_ARG > 0 ? Number(process.argv[INJECT_ARG + 1]) : 0;
+const INJECT_SYMBOL = 'BTC/USD';
+const INJECT_TICK = 0.1;
 const DEPTH = 10;
 const CRYPTO = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'ADA/USD', 'DOGE/USD', 'LINK/USD', 'AVAX/USD',
   'DOT/USD', 'LTC/USD', 'ATOM/USD', 'NEAR/USD', 'FIL/USD', 'ALGO/USD', 'KSM/USD', 'MINA/USD'];
@@ -39,6 +47,7 @@ function runClass(name, url, symbols, tickerParams) {
     const diffs = [];
     const perSymbol = new Map(); // symbol -> { n, exact, diffs[] }
     let aligned = 0, unaligned = 0, noBook = 0, crossed = 0, exact = 0;
+    let injectSeen = 0, injected = 0; // positive-control counters (--inject-every)
     const acks = [], errors = [];
     const ws = new WebSocket(url);
     const done = () => {
@@ -51,6 +60,7 @@ function runClass(name, url, symbols, tickerParams) {
       }
       resolve({
         probe: 'r2', class: name, minutes: MINUTES, alignMs: ALIGN_MS, depth: DEPTH, symbols: symbols.length,
+        injectEvery: INJECT_EVERY, injectSymbol: INJECT_EVERY > 0 ? INJECT_SYMBOL : null, injectedPairs: injected,
         alignedPairs: aligned, exactBothSides: exact, exactShare: aligned ? Number((exact / aligned).toFixed(3)) : null,
         excludedCrossedBook: crossed, unalignedTickerUpdates: unaligned, tickerUpdatesWithNoBookYet: noBook,
         sideDiffsBps: { n: diffs.length, p50: pct(diffs, 0.5), p90: pct(diffs, 0.9), p99: pct(diffs, 0.99), p999: pct(diffs, 0.999), max: diffs.length ? Number(diffs[diffs.length - 1].toFixed(3)) : null },
@@ -91,7 +101,12 @@ function runClass(name, url, symbols, tickerParams) {
           const mid = (bookBid + bookAsk) / 2;
           if (!(mid > 0) || d.bid == null || d.ask == null) continue;
           aligned++;
-          const db = Math.abs(Number(d.bid) - bookBid) / mid * 1e4;
+          let tickerBid = Number(d.bid);
+          if (INJECT_EVERY > 0 && d.symbol === INJECT_SYMBOL) {
+            injectSeen++;
+            if (injectSeen % INJECT_EVERY === 0) { tickerBid += INJECT_TICK; injected++; }
+          }
+          const db = Math.abs(tickerBid - bookBid) / mid * 1e4;
           const da = Math.abs(Number(d.ask) - bookAsk) / mid * 1e4;
           diffs.push(db, da);
           const ps = perSymbol.get(d.symbol) || { n: 0, exact: 0, diffs: [] };
