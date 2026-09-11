@@ -400,3 +400,11 @@ PSQL_EXIT=0
   - **Not yet readable:** no xStock paper fill and no maker fill. A zero-fill window is not a pass.
   - ⚠️ **Where negative-fee evidence will appear:** P8 predicts that xStock maker share falls to about zero, so a negative booked fee may show first on a **maker EXIT leg** (`exit_fee_mode = 'maker'`), not a maker entry. Step 7 reads both.
 - **UI before-control** (20:09Z, on the old build): `/virtual-simulations` → Closed Trades → Entry Fee Mode shows xStock `Taker (0.80%)`.
+
+### 9.8 STEP 7 — interim read, 2026-09-11 20:16Z (the step stays OPEN)
+- **Taker leg VERIFIED.** 7 VTS xStock taker entries opened since the deploy (GLW, HPE, TAP, TSM, WAT, WDAY and CAT, the last an alias symbol) all booked `entry_fee_rate` **`0.001000`**. The control for the 7 days before is `0.008000` × 117. Their null-mode companion rows are the VTS twins/shadow entries, which carry no fee stamp.
+- **Rebate leg NOT YET OBSERVABLE.** No xStock paper position has opened or closed since the deploy, and no xStock row has booked a negative fee on any surface.
+  - **Control:** 92 xStock paper maker exits exist in all history, the last on 2026-09-10, with 0 negative exit fees — exactly as expected before the fee change.
+  - **Watch:** a background check reads every 10 minutes for the first xStock row with `entry_fee < 0`, `exit_fee < 0` or `entry_fee_rate < 0` in paper closed/open or VTS.
+  - ⛔ **A window without such a row is not a pass.**
+- **UI:** the VTS Closed Trades before-control is captured (xStock `Taker (0.80%)` at 20:09Z). The after-check on the Open Trades tab is still being navigated.
