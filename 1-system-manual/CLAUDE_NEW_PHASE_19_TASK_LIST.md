@@ -20,7 +20,8 @@
 
 | item | state | record |
 |---|---|---|
-| **`B-DEPLOY-ACTOR-ALLOWLIST`** (`#656` residual) | **Step 11 of 11 — completion report written and dispatched; awaiting Langston's confirm, then the card moves to Complete.** Deployed `a4bcbe3c1`, verified ON THE BOX, Langston Steps 1/2/4/8 all cleared. **Opened `#1004` (deploy-path provenance) and `#1006` (RTB identity) on the way through.** | `B_DEPLOY_ACTOR_ALLOWLIST_COMPLETION_REPORT.md` · plan row `2.4a` |
+| **`B-XSTOCK-FEE-CONTRACT`** (`#1010`) | **STEP: 1 of 11 · NEXT STEP: 2 of 11.** Scope r1 written 2026-09-11 on Kyle's pivot directive and dispatched to Langston. xStock is charged the crypto schedule (taker `0.008` vs account-confirmed `0.0010`; maker `0.004` vs `−0.0002`). Nine objectives: rates, a boot rail that accepts a rebate, the seed, one fee resolver, a per-site sign census, xStock-only epoch bump, the stale stored copies, subject-vs-probe tests, and a read-only shadow-pool re-rank. Card `PVTI_lAHODmulEM4BfQP4zg6h554`. | `B_XSTOCK_FEE_CONTRACT_SCOPE.md` · plan row `2.4-FEE` |
+| ~~`B-DEPLOY-ACTOR-ALLOWLIST`~~ | ✅ **CLOSED 2026-09-04** — this row still read "Step 11, awaiting Langston" a week after plan row `2.4a` recorded the close. Corrected 2026-09-11. | `B_DEPLOY_ACTOR_ALLOWLIST_COMPLETION_REPORT.md` · plan row `2.4a` |
 
 ## B. Batches placed in `PHASE_19_PLAN.md` §governance queue, owned by CC-B
 
