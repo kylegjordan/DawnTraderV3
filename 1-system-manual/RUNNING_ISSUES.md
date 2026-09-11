@@ -7193,6 +7193,14 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 
 **ALERT ROUTING UNCHANGED — all five stay ACTIVE and UNACKED per `3b.f-c`'s own instruction; owner CC-C.**
 
+### #994 AMENDMENT 4 (CC-C, 2026-09-11) — MEASURED: THE ENTRY-SIDE FLAT 15,000 ms RULE RAISED A BREAKAGE ALERT ON AFTER-CLOSE QUIET, ON ONE SYMBOL, WITH THE FEED LIVE (`4f974017`)
+
+**The event.** Alert `4f974017-f480-4518-8139-e627792dcc40` (`xstock-stale-fill-block`, created 2026-09-11T20:16:44.188Z): an active BA/USD fill was refused because the newest ticker snapshot was 23,090 ms old against `activeFillMaxAgeMs` 15,000. The gate is `server/asset_classes/xstock_spot/active-dispatch.ts:181-184`, and the age it reads is `NOW() - MAX(captured_at)` over `xstock_spot_ticker_snap` (`:74-86`), not the live cache.
+
+**The object, read at 20:36Z.** BA/USD snapshots at 20:16:21.081Z and 20:16:43.997Z: a 22.9 s gap, with the newer row stamped 191 ms before the check and not yet visible to it, so the reported 23,090 ms is exactly that gap. BA/USD cadence 20:05-20:40Z: 194 rows, about one every 10 s. Feed liveness, as distinct xStock symbols writing a snapshot within one minute: 465 at 19:16Z (US regular hours, the control), 395 at 20:16Z (the block's minute, 16 minutes after the US close), 160 in the 60 s before 20:36:51Z.
+
+**Reading.** Transient, one symbol, feed live across hundreds of symbols, after the close, and seven minutes after the OBJ-7 restart with snapshots flowing at their normal cadence. The gate refused correctly and failed closed; the alert called it breakage. This is Amendment 3's entry-side inconsistency observed live: a flat 15,000 ms rule knows nothing of a symbol's own quiet or of the session. Langston's plain-language note to Kyle in #general reads it the same way. **No new home:** the fix stays with `3b.f-c` under Kyle's ruling (Amendment 3). The alert is resolved citing this amendment's commit.
+
 ### #989 OPEN 2026-09-02 (CC-INFRA, B-TOKEN-WATCH; found answering Kyle's question — *"how do we know it's working, and can that be taken as had the rope pulled or is still alive and kicking"*) — ⛔ A TOKEN CAN LOSE 99.8% OF ITS LIQUIDITY AND THE STUDY STILL COUNTS IT ALIVE
 
 **The death definition cannot see a liquidity pull, because it has never had a liquidity figure to see one with.** `alive` is *has a pair AND has 24h volume*. A pull leaves both true — **volume continues precisely BECAUSE people are still trading, now against an emptied pool.** So the event the class `liquidity_pulled` is named after is the one event the definition cannot observe.
