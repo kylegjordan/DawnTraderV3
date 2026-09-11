@@ -22,7 +22,12 @@ SHARDS = [
     ("openclaw",    ROOT + "/corpus/openclaw/*",                                True),
     ("transcripts", "/home/langston/.claude/projects/-home-langston/*.jsonl",   True),
 ]
-LEDGER_SOURCES = ["/home/langston/LEDGER.md", "/home/langston/MEMORY.md"]
+# ⛔ TEST SEAM, Langston-approved 2026-09-11 (pre-audit §21.2): the ledger sources derive from
+#    LANGSTON_HOME so a test drives the real CLI against a scratch home - creating
+#    /home/langston/LEDGER.md for real would change live behaviour (C-3: it is the PRIORITY slot).
+#    A wrong value in production fails closed: no ledger at that home -> refusal.
+LANGSTON_HOME = os.environ.get("LANGSTON_HOME", "/home/langston")
+LEDGER_SOURCES = [os.path.join(LANGSTON_HOME, "LEDGER.md"), os.path.join(LANGSTON_HOME, "MEMORY.md")]
 
 MAX_STORE = 20000        # stored+searchable text cap (the tail must be findable)
 MAX_DISPLAY = 3000       # display clip; truncation is MARKED, never silent
@@ -274,7 +279,13 @@ def build_index():
         seen_hash[h] = len(deduped)
         deduped.append(r)
     tmp = INDEX + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    # ⛔ 0600 FROM THE FIRST BYTE (Langston, pre-audit §21.3 condition 1). The index holds the TEXT
+    #    of session records that are themselves 0600, and the rebuild replaces the file nightly -
+    #    so a chmod on the live file is undone at 04:10Z. The fchmod covers a stale .tmp left
+    #    wider by an earlier interrupted build (O_TRUNC keeps an existing file's mode).
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         for r in deduped:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     os.replace(tmp, INDEX)
@@ -289,21 +300,46 @@ def build_index():
 
 # ---------------- ledger overlay ----------------
 
+def _parse_ledger(src):
+    """Entries from one source, or None when it is unreadable or carries no Retractions section."""
+    if not os.access(src, os.R_OK):
+        return None
+    text = open(src, encoding="utf-8", errors="replace").read()
+    m = re.search(r"###\s*Retractions.*?(?=\n##|\Z)", text, re.S)
+    if not m:
+        return None
+    entries = []
+    for para in re.split(r"\n- ", m.group(0))[1:]:
+        body = "- " + para.strip()
+        entries.append({"src": src, "text": body,
+                        "ids": set(ID_RE.findall(body)), "shas": set(SHA_RE.findall(body)),
+                        "terms": set(w.lower() for w in re.findall(r"[A-Za-z][\w\-/]{5,}", body))})
+    return entries
+
+
+def ledger_state():
+    """(state, winning source, entries, per-source [(path, entries-or-None)]).
+    ⛔ C-3 (Langston, 2026-09-04, re-stated 09-05): LEDGER_SOURCES[0] is the PRIORITY slot, so the moment
+       a LEDGER.md appears the tool would stop reading MEMORY.md. If BOTH parse and their entry counts
+       DIFFER, refuse - never silently prefer [0]; that silent preference would make the ledger split
+       itself the truncation event BLOCKER-B exists to prevent.
+    ★ The two "nothing usable" states are kept apart (Langston, §21.2): a typo'd home and a corrupt
+       ledger must not wear one reason."""
+    parsed = [(src, _parse_ledger(src)) for src in LEDGER_SOURCES if os.path.isfile(src)]
+    usable = [(s, e) for s, e in parsed if e]
+    if not parsed:
+        return "no-ledger-at-home", None, [], parsed
+    if not usable:
+        return "ledger-unparseable", None, [], parsed
+    if len(usable) > 1 and len(set(len(e) for _s, e in usable)) > 1:
+        return "ledger-sources-disagree", None, [], parsed
+    return "ok", usable[0][0], usable[0][1], parsed
+
+
 def load_retractions():
-    for src in LEDGER_SOURCES:
-        if not os.path.isfile(src) or not os.access(src, os.R_OK): continue
-        text = open(src, encoding="utf-8", errors="replace").read()
-        m = re.search(r"###\s*Retractions.*?(?=\n##|\Z)", text, re.S)
-        if not m: continue
-        entries = []
-        for para in re.split(r"\n- ", m.group(0))[1:]:
-            body = "- " + para.strip()
-            entries.append({"src": src, "text": body,
-                            "ids": set(ID_RE.findall(body)), "shas": set(SHA_RE.findall(body)),
-                            "terms": set(w.lower() for w in re.findall(r"[A-Za-z][\w\-/]{5,}", body))})
-        if entries:
-            return src, entries
-    return None, []
+    """Compatibility shape for any importer: (source, entries), or (None, []) unless the state is ok."""
+    state, src, entries, _parsed = ledger_state()
+    return (src, entries) if state == "ok" else (None, [])
 
 # ---------------- query ----------------
 
@@ -349,11 +385,18 @@ def query(terms):
         print("REFUSED: corpus degraded — results would be silently partial: " + "; ".join(problems))
         sys.exit(2)
 
-    lsrc, retr = load_retractions()
-    if not retr:
-        print("REFUSED: no parseable Reviewer Ledger found (checked: " + ", ".join(LEDGER_SOURCES) + "). "
+    lstate, lsrc, retr, lparsed = ledger_state()
+    if lstate != "ok":
+        seen = "; ".join("%s -> %s" % (s, "unreadable or no Retractions section" if e is None
+                                        else "%d entries" % len(e)) for s, e in lparsed) or "no source file exists"
+        why = {"no-ledger-at-home": "no ledger file exists at this home",
+               "ledger-unparseable": "a ledger file exists but no retraction entry parsed from it",
+               "ledger-sources-disagree": "two ledger sources parse with DIFFERENT entry counts - refusing rather "
+                                          "than silently reading only the first"}[lstate]
+        print("REFUSED (" + lstate + "): " + why + " [home " + LANGSTON_HOME + "; " + seen + "]. "
               "Recall without the retraction overlay is a machine for re-asserting withdrawn conclusions.")
-        _usage("refused", reason="no-parseable-ledger", ledger_sources=LEDGER_SOURCES)
+        _usage("refused", reason=lstate, home=LANGSTON_HOME, ledger_sources=LEDGER_SOURCES,
+               parsed=[[s, None if e is None else len(e)] for s, e in lparsed])
         sys.exit(2)
 
     built, newer_rows, newer_files = freshness(meta)
@@ -437,12 +480,12 @@ def query(terms):
         cov.append(f"{name} {sp['min']}→{sp['max']}" if sp else f"{name} EMPTY")
     print("COVERAGE: " + " · ".join(cov) + " — a query outside a shard's span cannot hit that shard; thin results there are not absences")
     if entries:
-        print(f"★ LEDGER CHECK ({lsrc}): {len(entries)} retraction entr{'y' if len(entries)==1 else 'ies'} relevant — READ BEFORE USING ANY HIT:")
+        print(f"★ LEDGER CHECK ({lsrc}, home {LANGSTON_HOME}): {len(entries)} retraction entr{'y' if len(entries)==1 else 'ies'} relevant — READ BEFORE USING ANY HIT:")
         for item in entries:
             reasons = "; ".join(sorted(set(item["reasons"])))
             print(f"  [{item['label']}] ({reasons}) " + item["e"]["text"][:400].replace("\n", " "))
     else:
-        print(f"LEDGER CHECK: no retraction entries match this query or its hits ({len(retr)} on file at {lsrc})")
+        print(f"LEDGER CHECK: no retraction entries match this query or its hits ({len(retr)} on file at {lsrc}, home {LANGSTON_HOME})")
     print()
     for n, r in enumerate(shown, 1):
         drift = " · drift unknown (changed-since pending)" if r["shas"] else ""

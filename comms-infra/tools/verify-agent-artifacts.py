@@ -39,6 +39,13 @@ PAIRS = [
     ("comms-infra/codex/AGENTS.md", "/home/coltrane/.codex/AGENTS.md"),
     ("comms-infra/AGENT_AUTHORING_GUIDE.md", "/home/langston/AGENT_AUTHORING_GUIDE.md"),
     ("comms-infra/AGENT_AUTHORING_GUIDE.md", "/home/coltrane/AGENT_AUTHORING_GUIDE.md"),
+    # added 2026-09-11 (B-LANGSTON-CONTEXT increment 2) - files this batch changed that the list did not cover.
+    # NOT covered, stated rather than implied: langston-size-watch, langston-selfmemory-backup,
+    # langston-log-loaded, coltrane-selfmemory-backup, agent-work-sync, agent-unit-failure-alert.
+    ("comms-infra/langston-memory/bin/langston_memory.py", "/opt/langston-memory/bin/langston_memory.py"),
+    ("comms-infra/langston-memory/bin/langston-promote-patterns", "/usr/local/bin/langston-promote-patterns"),
+    ("comms-infra/langston-memory/bin/langston-privacy-check", "/usr/local/bin/langston-privacy-check"),
+    ("comms-infra/codex/coltrane-bridge.py", "/usr/local/bin/coltrane-bridge.py"),
 ]
 
 

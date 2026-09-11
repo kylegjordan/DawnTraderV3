@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily run of the Langston privacy check
+
+[Timer]
+# 06:00Z - after the 04:10Z index rebuild (which rewrites records.jsonl, the file most likely to
+# drift open) and after both size watches, so the check sees the day's rebuilt state.
+OnCalendar=*-*-* 06:00:00 UTC
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

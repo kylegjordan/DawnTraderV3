@@ -1,0 +1,14 @@
+[Unit]
+Description=Langston private content - daily read-as-coltrane exposure check (B-LANGSTON-CONTEXT pre-audit 21.3)
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+After=network-online.target
+
+[Service]
+# EXPOSED EXITS 1 BY DESIGN - the check ran correctly, found an exposure and armed an alert.
+# Exit 2 (a control failed, so the check cannot tell) and crashes are the real failures, and
+# those page through OnFailure=. Same reasoning as langston-size-watch.service.
+SuccessExitStatus=0 1
+Type=oneshot
+ExecStart=/usr/local/bin/langston-privacy-check
+# ⛔ NOT Restart= - the next daily run is the retry, and the run log shows a skipped day.
+TimeoutStartSec=600

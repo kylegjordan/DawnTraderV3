@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""langston-privacy-check — once a day: can an account that is neither root nor langston read
+the reviewer's private content? (B-LANGSTON-CONTEXT pre-audit §20.6 / §21.3.)
+
+★ WHY IT EXISTS. Langston ruled the exposure a HAZARD on 2026-09-11, and on INDEPENDENCE, not
+  confidentiality: Coltrane advises Kyle on the same work Langston reviews, so if it can read his
+  store, his ledger or his session records, a "second opinion" can be an echo of his with nothing
+  able to tell the difference. The fix is a handful of permission changes — and permissions drift.
+
+⛔ HIS CONDITION, AND THE REASON THIS TOOL ATTEMPTS READS INSTEAD OF COMPARING MODE BITS:
+   "a mode-bit comparison passes against an ACL grant." So every read target is opened, one byte,
+   AS the reader account. A mode check is kept as well, for the directories whose mode IS the fence.
+
+⛔ TWO CONTROLS, BOTH REQUIRED, OR THE VERDICT IS "INSTRUMENT", NEVER "PASS":
+   · the reader MUST be able to read its OWN memory folder — otherwise sudo, the account or the
+     box is broken and every "refused" below means nothing;
+   · the reader MUST be REFUSED Langston's OAuth token file — otherwise the reads are not running
+     as the reader at all (root by mistake), and every "readable" below is a false alarm.
+
+Exit: 0 PASS · 1 EXPOSED (an alert is armed; exit 1 is a CORRECT run) · 2 INSTRUMENT (a control
+failed — cannot tell) · 3 refused an unknown flag.
+"""
+import datetime, json, os, shlex, stat, subprocess, sys, tempfile, shutil
+
+READER = "coltrane"
+CONTROL_READABLE = "/home/coltrane/memory"
+CONTROL_REFUSED = "/etc/langston/oauth.env"
+LANGSTON_HOME = "/home/langston"
+SESSIONS = LANGSTON_HOME + "/.claude/projects/-home-langston"
+STORE = SESSIONS + "/memory"
+MEMDIR = "/opt/langston-memory"
+INDEX = MEMDIR + "/index/records.jsonl"
+LIVE_MEMORY = LANGSTON_HOME + "/MEMORY.md"
+STALE_LOG = "/var/log/langston-queue-forensics.log"
+RUNLOG = MEMDIR + "/usage/privacy-check.jsonl"
+STATEFILE = MEMDIR + "/usage/privacy-check-state.json"
+STAGING_CMD = "cd /home/deploy/dawntrader && npm run --silent system-alerts --"
+KEY_EXPOSED = "langston-privacy-exposed"
+KEY_INSTRUMENT = "langston-privacy-instrument"
+SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with the live file = a copy
+MIN_LINE = 40
+SCAN_MAX_BYTES = 5_000_000
+NL = chr(10)
+
+KNOWN_FLAGS = ("--self-test", "--dry-run", "--status")
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+def _refuse_unknown_flags():
+    unknown = [a for a in sys.argv[1:] if a.startswith("-") and a not in KNOWN_FLAGS]
+    if unknown:
+        sys.stderr.write("REFUSED: unrecognised flag(s): %s. Known: %s.%s"
+                         % (", ".join(unknown), ", ".join(KNOWN_FLAGS), NL))
+        return True
+    return False
+
+
+def first_file_under(root, must_contain):
+    """The first regular file whose path contains `must_contain`, or None. Stops at the first."""
+    for dp, dirs, files in os.walk(root):
+        dirs.sort()
+        if must_contain in dp:
+            for f in sorted(files):
+                p = os.path.join(dp, f)
+                if os.path.isfile(p):
+                    return p
+    return None
+
+
+def live_config():
+    targets = [LIVE_MEMORY, LANGSTON_HOME + "/CLAUDE.md", STORE + "/MEMORY.md", INDEX]
+    tool_output = first_file_under(SESSIONS, "tool-results")
+    corpus = first_file_under(MEMDIR + "/corpus", "/corpus/")
+    return {
+        "reader": READER,
+        "control_readable": CONTROL_READABLE,
+        "control_refused": CONTROL_REFUSED,
+        "read_targets": [p for p in targets + [tool_output, corpus] if p],
+        "missing_targets": [n for n, p in (("tool-output file", tool_output), ("corpus file", corpus)) if not p],
+        "closed_dirs": [LANGSTON_HOME, MEMDIR],
+        "private_files": [INDEX],
+        "live_memory": LIVE_MEMORY,
+        "scan_root": "/tmp",
+        "not_world_writable": [STALE_LOG],
+    }
+
+
+def reads_as(user, path):
+    """True if `user` can read one byte of `path` (a directory: list it). Nothing is printed."""
+    if os.path.isdir(path):
+        cmd = ["sudo", "-n", "-u", user, "ls", path]
+    else:
+        cmd = ["sudo", "-n", "-u", user, "head", "-c", "1", path]
+    r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+    return r.returncode == 0
+
+
+def copies_in(scan_root, live_memory):
+    """World-readable regular files within two levels of scan_root sharing >= SHARED_LINES distinct
+    long lines with the live file. Matches on CONTENT: a name match missed two of six real copies."""
+    with open(live_memory, encoding="utf-8", errors="replace") as fh:
+        keys = set(l.strip() for l in fh if len(l.strip()) >= MIN_LINE)
+    found, scanned = [], 0
+    base = scan_root.rstrip("/").count("/")
+    for dp, dirs, files in os.walk(scan_root):
+        if dp.rstrip("/").count("/") - base >= 2:
+            dirs[:] = []
+        for f in files:
+            p = os.path.join(dp, f)
+            try:
+                st = os.lstat(p)
+            except OSError:
+                continue
+            if (not stat.S_ISREG(st.st_mode) or not (st.st_mode & stat.S_IROTH)
+                    or st.st_size > SCAN_MAX_BYTES or os.path.realpath(p) == os.path.realpath(live_memory)):
+                continue
+            scanned += 1
+            try:
+                with open(p, encoding="utf-8", errors="replace") as fh:
+                    k = len(set(l.strip() for l in fh) & keys)
+            except OSError:
+                continue
+            if k >= SHARED_LINES:
+                found.append({"path": p, "shared_lines": k})
+    return found, scanned, len(keys)
+
+
+def evaluate(cfg):
+    """The whole decision, and nothing else. Returns a verdict and the findings behind it."""
+    controls = {
+        "reader_reads_own_folder": reads_as(cfg["reader"], cfg["control_readable"]),
+        "reader_refused_token_file": not reads_as(cfg["reader"], cfg["control_refused"]),
+    }
+    findings = []
+    if not all(controls.values()):
+        return {"verdict": "INSTRUMENT", "controls": controls, "findings": findings}
+    for p in cfg["read_targets"]:
+        if reads_as(cfg["reader"], p):
+            findings.append({"kind": "readable-by-" + cfg["reader"], "path": p})
+    for n in cfg.get("missing_targets", []):
+        findings.append({"kind": "target-not-found", "path": n})
+    for d in cfg["closed_dirs"]:
+        mode = stat.S_IMODE(os.stat(d).st_mode)
+        if mode & stat.S_IRWXO:
+            findings.append({"kind": "directory-open-to-others", "path": d, "mode": oct(mode)})
+    for f in cfg["private_files"]:
+        if os.path.exists(f):
+            mode = stat.S_IMODE(os.stat(f).st_mode)
+            if mode & 0o077:
+                findings.append({"kind": "file-not-0600", "path": f, "mode": oct(mode)})
+    for f in cfg["not_world_writable"]:
+        if os.path.exists(f) and stat.S_IMODE(os.stat(f).st_mode) & stat.S_IWOTH:
+            findings.append({"kind": "world-writable", "path": f})
+    copies, scanned, keys = copies_in(cfg["scan_root"], cfg["live_memory"])
+    for c in copies:
+        findings.append({"kind": "readable-copy-of-memory", "path": c["path"], "shared_lines": c["shared_lines"]})
+    real = [f for f in findings if f["kind"] != "target-not-found"]
+    verdict = "EXPOSED" if real else ("INSTRUMENT" if findings else "PASS")
+    return {"verdict": verdict, "controls": controls, "findings": findings,
+            "scan": {"root": cfg["scan_root"], "files_scanned": scanned, "live_lines": keys}}
+
+
+def _alerts(argv):
+    inner = STAGING_CMD + " " + " ".join(shlex.quote(a) for a in argv)
+    cmd = ["sudo", "-u", "langston", "ssh", "-o", "ConnectTimeout=25", "-o", "BatchMode=yes", "staging", inner]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
+        return p.returncode, (p.stdout or ""), (p.stderr or "")
+    except Exception as e:
+        return 255, "", "%s: %s" % (type(e).__name__, e)
+
+
+def load_state():
+    try:
+        with open(STATEFILE, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def save_state(st):
+    tmp = STATEFILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(st, fh, indent=2)
+    os.replace(tmp, STATEFILE)
+
+
+def next_runlog_line():
+    try:
+        with open(RUNLOG, encoding="utf-8") as fh:
+            return sum(1 for _ in fh) + 1
+    except OSError:
+        return 1
+
+
+def reconcile_alerts(result, st):
+    """Arm the alert matching the verdict; resolve the ones the verdict discharges. Owner resolves,
+    never acks (#982) — this tool resolves only with the run-log row as evidence."""
+    notes = []
+    evidence = "%s:%d" % (RUNLOG, next_runlog_line())
+    wanted = {"EXPOSED": KEY_EXPOSED, "INSTRUMENT": KEY_INSTRUMENT}.get(result["verdict"])
+    for key in (KEY_EXPOSED, KEY_INSTRUMENT):
+        prev = st.get(key)
+        if prev and key != wanted:
+            rc, out, err = _alerts(["resolve", prev, "--by", "cc-infra", "--evidence", evidence])
+            blob = (out + " " + err).lower()
+            if rc == 0 or "already" in blob or "not found" in blob:
+                st.pop(key, None)
+                notes.append("resolved %s" % prev)
+            else:
+                notes.append("RESOLVE FAILED %s rc=%d" % (prev, rc))
+    if wanted and not st.get(wanted):
+        lines = ["%s %s%s" % (f["kind"], f["path"], (" " + f.get("mode", "")) if f.get("mode") else "")
+                 for f in result["findings"]][:12]
+        if result["verdict"] == "EXPOSED":
+            title = "Langston private content is readable by another account"
+            body = ("The daily read-as-" + READER + " check found: " + "; ".join(lines) + ". "
+                    "Langston ruled this a hazard to review independence (B-LANGSTON-CONTEXT pre-audit 21.3). "
+                    "Owner CC-INFRA - re-close the path, then let the next run resolve this.")
+        else:
+            title = "Langston privacy check could not trust its own controls"
+            body = ("Controls: " + json.dumps(result["controls"]) + "; findings: " + "; ".join(lines) + ". "
+                    "Until this clears there is no instrument on the exposure. Owner CC-INFRA.")
+        rc, out, err = _alerts(["add", "--triggers-at", utc().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                "--category", "health_check", "--severity", "warning",
+                                "--dedupe-key", wanted, "--title", title, "--body", body])
+        if rc == 0:
+            try:
+                st[wanted] = json.loads(out).get("id")
+                notes.append("armed %s" % st[wanted])
+            except Exception:
+                notes.append("armed, id unparseable")
+        else:
+            notes.append("ARM FAILED rc=%d %s" % (rc, err[:160]))
+    save_state(st)
+    return notes
+
+
+def log_row(row):
+    with open(RUNLOG, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False) + NL)
+
+
+def self_test():
+    """⛔ DRIVES evaluate() — the same function the daily run uses — against fixtures built to be
+    EXPOSED and fixtures built to be CLOSED, as the real reader account. Nothing is armed."""
+    ok = True
+
+    def check(name, got, want):
+        nonlocal ok
+        good = got == want
+        ok = ok and good
+        print("  %-4s %-62s expected %-6s got %s" % ("PASS" if good else "FAIL", name, want, got))
+
+    top = tempfile.mkdtemp(prefix="langston-privacy-selftest-")
+    try:
+        os.chmod(top, 0o755)
+        live = os.path.join(top, "live-MEMORY.md")
+        with open(live, "w", encoding="utf-8") as fh:
+            for i in range(12):
+                fh.write("fixture ledger line %02d that is comfortably longer than forty chars\n" % i)
+        os.chmod(live, 0o600)
+
+        def make(rel, mode, content="x\n"):
+            p = os.path.join(top, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            os.chmod(p, mode)
+            return p
+
+        open_dir = os.path.join(top, "open-dir"); os.makedirs(open_dir); os.chmod(open_dir, 0o755)
+        closed_dir = os.path.join(top, "closed-dir"); os.makedirs(closed_dir); os.chmod(closed_dir, 0o750)
+        with open(live, encoding="utf-8") as fh:
+            copy_text = fh.read()
+        exposed = {
+            "reader": READER, "control_readable": CONTROL_READABLE, "control_refused": CONTROL_REFUSED,
+            "read_targets": [make("readable.md", 0o644)],
+            "closed_dirs": [open_dir],
+            "private_files": [make("index-open.jsonl", 0o644)],
+            "live_memory": live,
+            "scan_root": os.path.join(top, "scan-exposed"),
+            "not_world_writable": [make("stale.log", 0o666)],
+        }
+        make("scan-exposed/copy.md", 0o644, copy_text)
+        closed = {
+            "reader": READER, "control_readable": CONTROL_READABLE, "control_refused": CONTROL_REFUSED,
+            "read_targets": [make("private.md", 0o600)],
+            "closed_dirs": [closed_dir],
+            "private_files": [make("index-closed.jsonl", 0o600)],
+            "live_memory": live,
+            "scan_root": os.path.join(top, "scan-closed"),
+            "not_world_writable": [make("quiet.log", 0o644)],
+        }
+        make("scan-closed/copy.md", 0o600, copy_text)
+        make("scan-closed/unrelated.md", 0o644, "nothing shared here\n")
+
+        r1 = evaluate(exposed)
+        kinds = sorted(f["kind"] for f in r1["findings"])
+        check("EXPOSED fixture -> verdict", r1["verdict"], "EXPOSED")
+        check("  a 644 file is flagged readable by the reader", "readable-by-" + READER in kinds, True)
+        check("  a 755 directory is flagged open", "directory-open-to-others" in kinds, True)
+        check("  a 644 index is flagged not-0600", "file-not-0600" in kinds, True)
+        check("  a 666 log is flagged world-writable", "world-writable" in kinds, True)
+        check("  a 644 content copy is flagged (by content)", "readable-copy-of-memory" in kinds, True)
+        r2 = evaluate(closed)
+        check("CLOSED fixture -> verdict", r2["verdict"], "PASS")
+        check("  and it has no findings at all", len(r2["findings"]), 0)
+        broken = dict(closed, control_refused=closed["read_targets"][0].replace("private.md", "readable.md"))
+        r3 = evaluate(broken)
+        check("a control that cannot fail -> INSTRUMENT, never PASS", r3["verdict"], "INSTRUMENT")
+    finally:
+        shutil.rmtree(top, ignore_errors=True)
+    print("self-test %s" % ("PASSED" if ok else "FAILED"))
+    return 0 if ok else 1
+
+
+def main():
+    if _refuse_unknown_flags():
+        return 3
+    if os.geteuid() != 0:
+        print("REFUSED: run as root - the reads are attempted through sudo -u " + READER + ".")
+        return 3
+    if "--self-test" in sys.argv:
+        return self_test()
+    if "--status" in sys.argv:
+        try:
+            with open(RUNLOG, encoding="utf-8") as fh:
+                last = fh.readlines()[-1]
+            print(last.strip())
+            return 0
+        except (OSError, IndexError):
+            print("no run recorded yet at " + RUNLOG)
+            return 2
+    cfg = live_config()
+    result = evaluate(cfg)
+    row = {"ts": utc().strftime("%Y-%m-%dT%H:%M:%SZ"), "verdict": result["verdict"],
+           "controls": result["controls"], "findings": result["findings"],
+           "scan": result.get("scan"), "targets_attempted": len(cfg["read_targets"])}
+    if "--dry-run" in sys.argv:
+        print(json.dumps(row, indent=2))
+        return {"PASS": 0, "EXPOSED": 1}.get(result["verdict"], 2)
+    st = load_state()
+    row["alerts"] = reconcile_alerts(result, st)
+    log_row(row)
+    print("%s: %d finding(s); controls %s; alerts: %s"
+          % (result["verdict"], len(result["findings"]), result["controls"], "; ".join(row["alerts"]) or "none"))
+    return {"PASS": 0, "EXPOSED": 1}.get(result["verdict"], 2)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
