@@ -8227,3 +8227,25 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ★ **WHY THIS IS THE SAME MISTAKE AS THE ONE I FILED YESTERDAY (`#1025`): I READ THE SYMPTOM LINE AND STOPPED.** There I read *"my push was refused"* and proposed building a guard that already existed; here I read *"correct access rights"* and reported a credential failure that never happened. ⇒ ⛔ **`fix-follows-pointer`, twice in two days, both times on an ERROR MESSAGE'S OWN WORDING rather than the object.** ✅ **The discriminator both times was ONE LINE FURTHER UP, and both times it took someone else's question to send me back to look.**
 **MISTAKE: fix-follows-pointer [#1027] — reported git's generic "access rights" wrapper as a credential failure; the causal line was directly above it. Read the whole error, not its last line.**
+
+---
+
+### #1028 OPEN 2026-09-11 (CC-C; surfaced by critical alert `b48a743f`, investigated end to end before filing) — ⛔⛔ **A PRICE BAR WITH NO PRICE BECOMES THE TEXT "undefined", AND ONE BAD BAR DESTROYS THE WHOLE BATCH IT ARRIVED IN — UNRECOVERABLY, ON BOTH SPOT CLASSES**
+
+**THE MECHANISM, at `origin/migration/aws-supabase`:** `equity-spot-archiver.ts:92-95` builds `open: String(data.open)`, and the same for `high`, `low`, `close`, **with no guard** — while `:96-98` DO guard `volume`, `vwap` and `trades`. The only entry check, `:85`, tests `symbol` and `interval_begin`, **never a price**. ⇒ **a Kraken bar frame carrying a symbol and a timestamp but no price becomes the literal string `"undefined"`**, the numeric column rejects it, and `ohlc-batch-writer.ts:326` drops the entire chunk as PERMANENT.
+✅ **MEASURED:** exactly **1** such failure in `error.log` (`2026-09-11T05:33:02Z`, **10 rows dropped**, `xstock_spot`), against **615** successful xStock flushes and **616** crypto in the same window — **not ongoing**. `xstock_spot_ohlc_1m` still landing (18,664 rows / 6h). **The only permanent-writer alert ever raised.**
+
+⛔⛔ **CRYPTO CARRIES THE IDENTICAL DEFECT.** `crypto-spot-archiver.ts:112-115` is **byte-identical**, with the same key-only check at `:106`. **Zero crypto failures means Kraken's spot feed has not sent a bad frame yet — not that crypto is safe.**
+⛔⛔ **AND THE LOSS IS UNRECOVERABLE.** A repo-wide census of every writer finds **exactly one** REST re-fetch path for OHLC — `kraken-futures-archiver.ts` `pollOhlcOnce`, **futures only.** Both spot classes are WebSocket-only. ⇒ **up to 10 bars are permanently gone** — fewer if a later update for the same minute self-healed them — **and cannot even be identified, because the dropped rows were not logged.** *(This falsified my own `#705` sizing, which rated OHLC recoverable; amended the same day.)*
+
+⭐ **SEVERITY — A SIGNAL INPUT, NOT JUST AN ARCHIVE:** the 1-minute table is rolled up by `ohlc-aggregator.ts:277` and the xStock bar cache into `xstock_spot_ohlc_15m_snapshot`, **which the scanner reads to generate xStock signals** (`scanner.ts:593`). ⇒ **a lost minute can mis-state a 15-minute signal bar's high, low, close or volume.** ⚠️ **Mechanism established; whether the 05:33 drop actually corrupted a signal bar is UNKNOWABLE** — see above.
+
+✅ **NOT A RECENT REGRESSION:** `git log -S "open: String(data.open)"` and `git blame -L 87,98` both land on **`ce4a7e408`, B74, 2026-05-01 — latent 133 days.** `F-G-1`'s permanent-failure alerting (2026-08-28) is what SURFACED it. **B74's stated intent was *"NO consumers in v1 — pure passive accumulation"*, where a lost bar cost nothing; the table has since become a signal input.** ⇒ **rule 24 outcome (2), and a direct SYMPTOM of `#950`.**
+
+⛔ **THE OBVIOUS FIX IS WRONG:** the price columns are `NOT NULL` (`shared/schema.ts:4989-4993`), so writing `null` instead of `"undefined"` is rejected identically — **the message changes, the whole-batch drop does not.** ⇒ **reject the malformed frame at the producer, before it is buffered.**
+
+**NOT A HOTFIX** (`workflow-hotfix` §1): not broken now, one occurrence in ~14 days of instrumentation, and a symptom of a larger design fault. **Batch.**
+⛔ **ALERT `b48a743f` DELIBERATELY NOT ACKED** — its dedupe key `ohlc-writer-permanent-xstock_spot` would swallow the next genuine failure. Resolved with evidence when the guard deploys.
+**Scope:** `Claude Comms and Packages/Scope Files/B_OHLC_FRAME_GUARD_SCOPE.md` — six objectives, four judgement calls named for review, four residuals each dispositioned.
+
+**HOME: `B-OHLC-FRAME-GUARD`, owner CC-C, placed in `PHASE_19_PLAN` at row `3b.h-6`, after `3b.h-5` (struck).** ⚠️ **PROPOSED — Langston to confirm the position. NOT folded into `#950` (`B-XSTOCK-LIVE-FEED`, row `3b.e`): that batch is xStock-only and sequenced after `#943` closes, crypto carries the identical defect, and the guard is correct however the feed is later rebuilt.**
