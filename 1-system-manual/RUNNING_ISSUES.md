@@ -7521,6 +7521,15 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 **INTERIM STATE:** installed by hand at Step 7 — old copy at `/root/dt-deploy.pre-b-deploy-actor-allowlist-20260904`, deployed blob installed `install -m 755`, and **three-way hash identity verified by Langston independently: repo blob = clone = installed = `6dbfe2dd`.**
 ⇒ **HOME: `P19-B12`, alongside `#652` and the `#649` installed-copy carry.** Owner unassigned pending that batch. ⛔ **Do NOT close this with `#649`.**
 
+
+**AMENDMENT (2026-09-11, CC-INFRA, `B-WAKE-LEAD-NAME`) — ANOTHER INSTANCE OF THE CLASS, AND IT HAS TWO LAYERS.**
+- **The file:** `C:\Users\kyleg\.claude\cc-wake-filter.py` is a hand-copied install of `comms-infra/laptop/cc-wake-filter.py`. No job installs it.
+- **The process:** every running wake watcher holds the code it ARMED with, so even a correct file install changes nothing for a session until it re-arms.
+- **This batch handled both by procedure, not mechanism:**
+  - the live file compared to the reviewed blob modulo line endings (False before the install, True after);
+  - each session's re-arm measured from its watcher's `Win32_Process` start time — never inferred from silence.
+- **Measured at install:** OLD Claude had **no watcher process at all**, so a system alert with `owner=CC-A` was raised (the one route that reaches a session with no watcher).
+
 ### #1005 OPEN 2026-09-05 (CC-A, self-filed at `B-WAKE-QUIET` Step 10) — ⛔ THE BATCH SKIPPED ITS OWN STEP 2, AND THE TRIPWIRE BUILT FOR THAT EXACT FAILURE COULD NOT SEE IT
 
 **WHAT HAPPENED.** `B-WAKE-QUIET` ran **Step 1 → Step 3 with Step 2 silently absent.** No `PRE_AUDIT` document existed for the batch until Step 10, when the tier ledger's `PRE_AUDIT` row asked for one and there was nothing to point at. **`PRE_AUDIT` is REQUIRED for `non_architecture`** (`scripts/governance-checker/config.mjs`, `CLASS_DOCSET.non_architecture.required`).
@@ -8431,7 +8440,15 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 **RULE 24: a real defect in the scheduler (outcome 1).** The fix is one function; whether any task was HARMED is the open part. Many of the 30 are autonomy / ethics / cognitive modules that may be legacy (rule 18) — that census belongs to the fix batch.
 **HOME (§9.4 #3; rule 23 fix-on-find): `B-SCHEDULER-FIRST-TICK`, owner CC-A, placed in `PHASE_19_PLAN.md` §governance at row 4.58, after 4.57 `B-TASK-LIST-SLOT`.** Ahead of 4.6 because rule 23 makes a found defect a mini-cycle rather than a queued item; it starts when 4.57 closes, not before, so no batch is interleaved. OBJ: the first run happens once · census which tasks are not idempotent and whether any double run did harm · name the legacy candidates for rule 18. ↔ `#402`.
 
-### #1040 OPEN 2026-09-11 (CC-INFRA; measured by replay, found when two Langston replies never woke me) — ⛔ **THE WAKE FILTER SILENTLY DROPS A LANGSTON REPLY ADDRESSED TO A SESSION WHENEVER THE REPLY ENDS WITH ANOTHER SESSION'S ALERT MARKER**
+### #1040 ✅ FIXED 2026-09-11 (opened the same day by CC-INFRA; measured by replay, found when Langston replies never woke me) — ⛔ **THE WAKE FILTER SILENTLY DROPS A LANGSTON REPLY ADDRESSED TO A SESSION WHENEVER THE REPLY ENDS WITH ANOTHER SESSION'S ALERT MARKER**
+> ✅ **FIXED 2026-09-11 by `B-WAKE-LEAD-NAME` (plan row 4.51); the entry closes with the batch, on Kyle's acknowledgement.** Langston APPROVED Step 4 at `c05e9d1fa` and CONFIRMED Step 8, re-deriving the counterfactual himself on the live row. FINDING-A (the tag named only the last owner) was folded at `32780211d`; FINDING-D (no tag when the LAST marker is the woken session's own) at `0df01c687`. The filter was installed on the laptop at 16:49:09Z.
+> **THE NUMBERS, EACH WITH THE CONVENTION THAT PRODUCED IT:**
+> - **Replay, one entry per `langston_outbound` ROW** (no body dedup), since 2026-09-03, as of 17:14Z — newly woken per session **CC-A 28 · CC-B 28 · CC-C 29 · CC-INFRA 24**. All join MATCH to the author of the replied-to message; every tag is correct; 0 wakes changed on replies that do not open with the session's name.
+> - **Langston's replay, counting WAKE EVENTS** (not lines) **and deduplicating colliding body prefixes** — since 2026-09-03: **99/99 MATCH**. All history, newly woken: **CC-A 69 · CC-B 44 · CC-C 121 · CC-INFRA 23**.
+> - **Wakes LOST, all history: 2, both spurious** — `1541335305632747530` (CC-B) and `1544811609313116241` (CC-C). Both bodies quoted a marker TEMPLATE whose `owner=` was outside `ALERT_OWNERS`; the old code never stripped it, so the literal name woke that session. **0 real wakes lost.** This discharges Langston's Step-2 condition 3 on a measured population.
+> - **Live, on a running watcher:** Langston's 16:53:15Z reply (`1548013557478854707`) woke CC-INFRA as `WAKE[LANGSTON->CC-INFRA] [alert routed to CC-B]` — the class that was being dropped.
+> - **The 14:47Z interim is over.** Sessions are woken again, per the re-arm table in `B_WAKE_LEAD_NAME_PRE_AUDIT.md` §8.
+
 
 **SYMPTOM.** Langston answered `B-LANGSTON-CONTEXT` §20 twice (2026-09-11 14:16Z and 14:19Z), both opening *"Infra Claude —"*. The armed watcher emitted nothing for either, while it did deliver Coltrane's and OLD Claude's posts in the same window.
 
@@ -8487,3 +8504,21 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 > `HOME: item added to P19-B12 (Diagnostics + internal-health monitoring), owner CC-B, placed in PHASE_19_PLAN.md §1 at row P19-B12, beside #1041` — Langston directed the fold onto `P19-B12` in his Step-2 approval.
 
 ⇔ `#1010` · `#1041` · `#546` · SIM `SYSTEM_IMPACT_MAP.md:2039` (records the table as "pure display").
+### #1043 OPEN 2026-09-11 (found by Langston while reviewing `B-WAKE-LEAD-NAME`; filed by CC-INFRA) — ⛔ **A SHA-PINNED `raw.githubusercontent.com` READ SERVED THE WRONG FILE UNDER HTTP 200 — TWICE IN ONE AFTERNOON — AND THE REVIEWER'S READ MODEL HAS NO INTEGRITY CHECK**
+
+**SYMPTOM, TWO INSTANCES (Langston, 2026-09-11):**
+1. **Step 4, ~16:45Z:** a pinned-sha raw GET for `scripts/analysis/test-wake-filter-cuts.py` returned a 31-line `_send_chunks` chunking test instead of the 97-line file. The identical URL, re-run, returned the right file, and `dt-review show` agreed.
+2. **Step 8, ~17:00Z:** a pinned-sha raw GET for `B_WAKE_LEAD_NAME_PRE_AUDIT.md` returned **8,162 bytes of `B-GOV-HYGIENE-ANALYST-1 — PRE-AUDIT`**. That content has never existed at that path at any commit; the file at the ref is 19,199 B. The identical command four minutes later was correct.
+
+**He was one sentence from opening a review by telling the implementer the wrong document was submitted.**
+
+**MECHANISM:** a CDN wrong-object serve — **HYPOTHESIS**, since nobody can see inside it. **What is not hypothesis:** the raw endpoint returns no integrity check. `api.github.com/repos/…/contents/…?ref=<sha>` returns a git blob sha that verifies locally. He checked: `sha1("blob 19199\0"+bytes)` = `e7e51936d302…` matched, and the bad body hashes to `9423f5348b…`.
+
+**WHY IT MATTERS:** his `CLAUDE.md` pins the sha "so a mid-read push cannot fool you". **That closes the MUTATION channel and leaves the DELIVERY channel open.** Every review, verification and ruling rests on this read.
+
+**INTERIM (Langston, on himself):** any single-file read that carries a ruling gets a first-line and byte-count sanity check before he quotes it.
+
+> `HOME: B-READ-MODEL-BLOB-VERIFY, owner Infra Claude, placed in PHASE_19_PLAN.md at 4.51a, after 4.51 (B-WAKE-LEAD-NAME)` — blob-sha verification in `dt-review show`, plus the matching amendment to Langston's read-model text.
+
+⇔ `#1040` (the batch under review when it was found) · `LANGSTON_ARCHITECTURE.md` §6 (the read model).
+

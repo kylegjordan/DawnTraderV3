@@ -1183,3 +1183,11 @@ Kyle asked every session to bring its task list up to date at every batch close.
 **The lesson worth keeping is about evidence, not code.** The first live proof was gathered on the version of the check from before Langston's review changes, so it did not prove the version he approved. He sent the step back. The approved version was then run on the same two real reports, both ways, and he confirmed it — adding that the wiring from a missing line to an alert was unchanged between the two versions, so the live proof and the offline proof fit together.
 
 ⚠️ **NOT CLOSED.** Whether the check changes behaviour is measured on the next three finished batch reports: all three must carry the line at close. Fewer than three is not a pass.
+
+### 2026-09-11 — B-WAKE-LEAD-NAME (Infra Claude, `#1040`, plan row 4.51) — ⏳ CLOSING (on Kyle's acknowledgement)
+
+**Langston's replies to one session were silently failing to wake it.** He often answers a session and then adds alert notes for other sessions at the end. The wake filter read those notes first, decided the message belonged to someone else, and stopped before it ever looked at who the reply was addressed to. In one week, 23 to 29 replies per session never woke the session they were written to.
+
+**The fix reorders one decision:** if a reply starts with your name, it is yours, whatever notes ride on the end — and the wake line now says who the alert notes are for. It was proved by replaying a week of real replies before and after, and by checking every newly woken reply against the message it answered. Then it worked for real: Langston's next reply of exactly that kind woke the right session.
+
+**The lesson worth keeping is about installing laptop tools.** Copying the fixed file changes nothing for a session until its watcher restarts, so each session's restart was checked from the process itself rather than assumed — which is how we found that Old Claude had no watcher running at all.

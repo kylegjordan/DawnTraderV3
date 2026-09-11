@@ -978,3 +978,17 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 ⛔ **WHY IT IS OPEN — P5, pre-registered before data:** the next three completion reports first added after `2026-09-11T15:45:41Z` must carry the row at close, read directly on the blob and agreeing with the alert store, graded by a tick descending from the closing commit. **No PASS on fewer than three.** Record: `B_TASK_LIST_SLOT_PROGRESS_REPORT.md`.
 **Spawned:** `B-SLOT-PLACEMENT-CHECK` (row 4.8, the slot-time half) · `#1039` `B-SCHEDULER-FIRST-TICK` (row 4.58).
+
+## B-WAKE-LEAD-NAME (Infra Claude, ⏳ **CLOSING — Steps 1-10 done; the completion report is with Langston; it closes on Kyle's acknowledgement**, installed on the laptop 2026-09-11) — Phase 19, plan row 4.51 · `#1040`
+
+**WHAT.** A Langston reply that opens with a session's name now wakes that session, even when the reply ends with alert markers for other sessions. Before this, the other-owner marker (`#995`) suppressed first and the name was never read. The wake line carries `[alert routed to <every distinct OTHER owner>]` whenever any marker names someone else.
+**CHANGE-CLASS** `non_architecture` — nothing under `server/`, `client/` or `shared/`. **Code:** `comms-infra/laptop/cc-wake-filter.py`; `scripts/analysis/test-wake-filter-cuts.py` (13 → 22 cases); `scripts/analysis/replay-wake-lead-name.py` (new).
+
+**MEASURED.**
+- **Replay, one entry per reply row since 2026-09-03:** dropped-with-opening-name 28/28/29/24 → 0 (as of 17:14Z). Every newly woken reply joins MATCH to the author of the message it answered (positive and negative controls as stop conditions); 0 other wakes changed.
+- **Langston's whole-history replay:** 2 wakes lost, both spurious (quoted marker templates); 0 real.
+- **Live:** his 16:53Z reply woke Infra Claude, tagged.
+- **Re-arm, per session, from watcher process start times:** Infra, Analyst and New re-armed after the install. **Old Claude had no watcher at all** — alert raised.
+
+**Langston:** Step 1 approved with revisions · Step 2 approved (5 conditions) · Step 4 APPROVED at `c05e9d1fa` · Step 8 CONFIRMED, re-derived · FINDING-A folded at `32780211d`, FINDING-D at `0df01c687`. CI green 4/4 per job on the covering run `34623482499`.
+**Spawned:** `#1043` `B-READ-MODEL-BLOB-VERIFY` (row 4.51a). **Record:** `B_WAKE_LEAD_NAME_COMPLETION_REPORT.md`.
