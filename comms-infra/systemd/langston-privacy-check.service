@@ -2,13 +2,18 @@
 Description=Langston private content - daily read-as-coltrane exposure check (B-LANGSTON-CONTEXT pre-audit 21.3)
 Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
 After=network-online.target
+# ⛔ INLINE, NOT A MANUAL DROP-IN STEP (Langston Step-4 condition 2): a copy step in an install table is
+#    the one home a correction does not travel to. Same form as agent-work-sync.service.
+OnFailure=agent-unit-failure@%N.service
 
 [Service]
-# EXPOSED EXITS 1 BY DESIGN - the check ran correctly, found an exposure and armed an alert.
-# Exit 2 (a control failed, so the check cannot tell) and crashes are the real failures, and
-# those page through OnFailure=. Same reasoning as langston-size-watch.service.
+# EXPOSED EXITS 1 BY DESIGN - the check ran correctly, found an exposure and DELIVERED an alert.
+# Exit 2 is everything that cannot tell: a control failed, a target is missing, the alert could not be
+# delivered, or the tool crashed - entry() maps ANY exception to 2, because Python's own uncaught-exception
+# exit is 1 and would otherwise read as a correct run. Exit 2 fails the unit and pages through OnFailure.
 SuccessExitStatus=0 1
 Type=oneshot
 ExecStart=/usr/local/bin/langston-privacy-check
 # ⛔ NOT Restart= - the next daily run is the retry, and the run log shows a skipped day.
-TimeoutStartSec=600
+# The full /tmp content scan measured 32 s on 2026-09-11 (47,871 files, 5.7 GB).
+TimeoutStartSec=900

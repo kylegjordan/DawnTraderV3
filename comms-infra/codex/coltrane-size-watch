@@ -317,4 +317,15 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # ⛔ A CRASH MUST NOT EXIT 1 (Langston, B-LANGSTON-CONTEXT Step-4 BLOCKER-2, class fix 2026-09-11).
+    #    This tool's unit sets SuccessExitStatus=0 1 because 1 means "ran and found a breach" -
+    #    and Python's own uncaught-exception exit is also 1, so a crash read as a correct breach
+    #    day, OnFailure never paged, and nothing was armed. Any exception now exits 2.
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException:
+        import traceback
+        traceback.print_exc()
+        sys.exit(2)

@@ -9,7 +9,7 @@ the reviewer's private content? (B-LANGSTON-CONTEXT pre-audit §20.6 / §21.3.)
 
 ⛔ HIS CONDITION, AND THE REASON THIS TOOL ATTEMPTS READS INSTEAD OF COMPARING MODE BITS:
    "a mode-bit comparison passes against an ACL grant." So every read target is opened, one byte,
-   AS the reader account. A mode check is kept as well, for the directories whose mode IS the fence.
+   AS the reader account. Mode checks are kept as well, for the paths whose mode IS the fence.
 
 ⛔ TWO CONTROLS, BOTH REQUIRED, OR THE VERDICT IS "INSTRUMENT", NEVER "PASS":
    · the reader MUST be able to read its OWN memory folder — otherwise sudo, the account or the
@@ -17,12 +17,20 @@ the reviewer's private content? (B-LANGSTON-CONTEXT pre-audit §20.6 / §21.3.)
    · the reader MUST be REFUSED Langston's OAuth token file — otherwise the reads are not running
      as the reader at all (root by mistake), and every "readable" below is a false alarm.
 
-Exit: 0 PASS · 1 EXPOSED (an alert is armed; exit 1 is a CORRECT run) · 2 INSTRUMENT (a control
-failed — cannot tell) · 3 refused an unknown flag.
+★ SAMPLING, AND WHY IT IS ENOUGH: one tool-output file and one corpus file are attempted, not all of
+  them. That is sufficient only because `750` on /home/langston and on /opt/langston-memory is the
+  fence — both are checked directly below. If either directory opens, the samples stop being enough,
+  and the directory finding says so first.
+
+Exit codes are DISJOINT FROM PYTHON'S OWN (Langston Step-4 BLOCKER-2): an uncaught exception exits 1,
+and this unit treats 1 as a correct EXPOSED run — so entry() turns ANY exception into 2.
+  0 PASS · 1 EXPOSED (an alert is armed and delivered; a CORRECT run) · 2 INSTRUMENT (a control failed,
+  a target is missing, an alert could not be delivered, or the tool crashed — cannot tell) · 3 refused.
 """
-import datetime, json, os, shlex, stat, subprocess, sys, tempfile, shutil
+import datetime, grp, json, os, pwd, shlex, shutil, stat, subprocess, sys, tempfile, traceback
 
 READER = "coltrane"
+OWNER = "langston"
 CONTROL_READABLE = "/home/coltrane/memory"
 CONTROL_REFUSED = "/etc/langston/oauth.env"
 LANGSTON_HOME = "/home/langston"
@@ -35,11 +43,11 @@ STALE_LOG = "/var/log/langston-queue-forensics.log"
 RUNLOG = MEMDIR + "/usage/privacy-check.jsonl"
 STATEFILE = MEMDIR + "/usage/privacy-check-state.json"
 STAGING_CMD = "cd /home/deploy/dawntrader && npm run --silent system-alerts --"
+ACTOR = "langston-privacy-check"      # a MACHINE actor (condition 3): a root timer must not claim a session
 KEY_EXPOSED = "langston-privacy-exposed"
 KEY_INSTRUMENT = "langston-privacy-instrument"
 SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with the live file = a copy
 MIN_LINE = 40
-SCAN_MAX_BYTES = 5_000_000
 NL = chr(10)
 
 KNOWN_FLAGS = ("--self-test", "--dry-run", "--status")
@@ -59,10 +67,10 @@ def _refuse_unknown_flags():
 
 
 def first_file_under(root, must_contain):
-    """The first regular file whose path contains `must_contain`, or None. Stops at the first."""
+    """The first regular file whose directory path contains `must_contain`, or None."""
     for dp, dirs, files in os.walk(root):
         dirs.sort()
-        if must_contain in dp:
+        if must_contain in dp + "/":
             for f in sorted(files):
                 p = os.path.join(dp, f)
                 if os.path.isfile(p):
@@ -70,26 +78,37 @@ def first_file_under(root, must_contain):
     return None
 
 
+def scan_roots():
+    """/tmp plus root's own temp directory: the writers use mkstemp, which follows TMPDIR."""
+    return sorted(set(["/tmp", tempfile.gettempdir()]))
+
+
 def live_config():
-    targets = [LIVE_MEMORY, LANGSTON_HOME + "/CLAUDE.md", STORE + "/MEMORY.md", INDEX]
-    tool_output = first_file_under(SESSIONS, "tool-results")
+    fixed = [LIVE_MEMORY, LANGSTON_HOME + "/CLAUDE.md", STORE + "/MEMORY.md", INDEX]
+    tool_output = first_file_under(SESSIONS, "/tool-results/")
     corpus = first_file_under(MEMDIR + "/corpus", "/corpus/")
+    # ⛔ BLOCKER-4: an absent target used to read as "not exposed", because a read of a missing path
+    #    fails exactly like a refused one. Every target is checked for EXISTENCE first, as root.
+    missing = [p for p in fixed if not os.path.exists(p)]
+    missing += [label for label, p in (("a tool-output file under " + SESSIONS, tool_output),
+                                       ("a corpus file under " + MEMDIR + "/corpus", corpus)) if not p]
     return {
-        "reader": READER,
-        "control_readable": CONTROL_READABLE,
-        "control_refused": CONTROL_REFUSED,
-        "read_targets": [p for p in targets + [tool_output, corpus] if p],
-        "missing_targets": [n for n, p in (("tool-output file", tool_output), ("corpus file", corpus)) if not p],
+        "reader": READER, "owner": OWNER,
+        "control_readable": CONTROL_READABLE, "control_refused": CONTROL_REFUSED,
+        "read_targets": [p for p in fixed if os.path.exists(p)] + [p for p in (tool_output, corpus) if p],
+        "missing_targets": missing,
         "closed_dirs": [LANGSTON_HOME, MEMDIR],
         "private_files": [INDEX],
+        "store_dir": STORE,
         "live_memory": LIVE_MEMORY,
-        "scan_root": "/tmp",
+        "scan_roots": scan_roots(),
         "not_world_writable": [STALE_LOG],
     }
 
 
 def reads_as(user, path):
-    """True if `user` can read one byte of `path` (a directory: list it). Nothing is printed."""
+    """True if `user` can read one byte of `path` (a directory: list it). Nothing is printed.
+    A timeout is RAISED, not swallowed: it is an instrument failure, and entry() maps it to 2."""
     if os.path.isdir(path):
         cmd = ["sudo", "-n", "-u", user, "ls", path]
     else:
@@ -98,34 +117,78 @@ def reads_as(user, path):
     return r.returncode == 0
 
 
-def copies_in(scan_root, live_memory):
-    """World-readable regular files within two levels of scan_root sharing >= SHARED_LINES distinct
-    long lines with the live file. Matches on CONTENT: a name match missed two of six real copies."""
+def copies_in(roots, live_memory, reader):
+    """Files anywhere under `roots` that share >= SHARED_LINES distinct long lines with the live file,
+    and that the READER can read. ⛔ Condition 1: no depth limit, no size limit, and ownership-agnostic -
+    a 0600 file owned by the reader is readable by it and was invisible to a world-readable filter.
+    Every file root reads is content-matched; only the (rare) matches are then read as the reader.
+    Every skip is COUNTED BY REASON, so a zero is published with its population."""
     with open(live_memory, encoding="utf-8", errors="replace") as fh:
         keys = set(l.strip() for l in fh if len(l.strip()) >= MIN_LINE)
-    found, scanned = [], 0
-    base = scan_root.rstrip("/").count("/")
-    for dp, dirs, files in os.walk(scan_root):
-        if dp.rstrip("/").count("/") - base >= 2:
-            dirs[:] = []
-        for f in files:
-            p = os.path.join(dp, f)
-            try:
-                st = os.lstat(p)
-            except OSError:
-                continue
-            if (not stat.S_ISREG(st.st_mode) or not (st.st_mode & stat.S_IROTH)
-                    or st.st_size > SCAN_MAX_BYTES or os.path.realpath(p) == os.path.realpath(live_memory)):
-                continue
-            scanned += 1
-            try:
-                with open(p, encoding="utf-8", errors="replace") as fh:
-                    k = len(set(l.strip() for l in fh) & keys)
-            except OSError:
-                continue
-            if k >= SHARED_LINES:
-                found.append({"path": p, "shared_lines": k})
-    return found, scanned, len(keys)
+    live_real = os.path.realpath(live_memory)
+    pop = {"walked": 0, "text_scanned": 0, "skipped_binary": 0, "skipped_unreadable_by_root": 0,
+           "skipped_not_regular": 0, "matched": 0, "matched_not_readable_by_reader": 0}
+    found, seen = [], set()
+    for root in roots:
+        for dp, dirs, files in os.walk(root):
+            for f in files:
+                p = os.path.join(dp, f)
+                real = os.path.realpath(p)
+                if real in seen:
+                    continue
+                seen.add(real)
+                pop["walked"] += 1
+                try:
+                    st = os.lstat(p)
+                except OSError:
+                    pop["skipped_unreadable_by_root"] += 1
+                    continue
+                if not stat.S_ISREG(st.st_mode):
+                    pop["skipped_not_regular"] += 1
+                    continue
+                if real == live_real:
+                    continue
+                try:
+                    with open(p, "rb") as fh:
+                        if b"\0" in fh.read(4096):
+                            pop["skipped_binary"] += 1
+                            continue
+                        fh.seek(0)
+                        shared = set()
+                        for raw in fh:
+                            line = raw.decode("utf-8", "replace").strip()
+                            if line in keys:
+                                shared.add(line)
+                except OSError:
+                    pop["skipped_unreadable_by_root"] += 1
+                    continue
+                pop["text_scanned"] += 1
+                if len(shared) >= SHARED_LINES:
+                    pop["matched"] += 1
+                    if reads_as(reader, p):
+                        found.append({"path": p, "shared_lines": len(shared)})
+                    else:
+                        pop["matched_not_readable_by_reader"] += 1
+    return found, pop, len(keys)
+
+
+def store_findings(store_dir, owner):
+    """Condition 5: every store file owned by the owner and not group/other-writable. An unidentified
+    past writer (a root-owned file) becomes a DETECTED future one instead of a shrug."""
+    out = []
+    uid = pwd.getpwnam(owner).pw_uid
+    for f in sorted(os.listdir(store_dir)):
+        p = os.path.join(store_dir, f)
+        st = os.lstat(p)
+        if not stat.S_ISREG(st.st_mode):
+            continue
+        if st.st_uid != uid:
+            out.append({"kind": "store-file-not-owned-by-" + owner, "path": p,
+                        "owner": pwd.getpwuid(st.st_uid).pw_name})
+        if stat.S_IMODE(st.st_mode) & 0o022:
+            out.append({"kind": "store-file-group-or-other-writable", "path": p,
+                        "mode": oct(stat.S_IMODE(st.st_mode))})
+    return out
 
 
 def evaluate(cfg):
@@ -134,18 +197,21 @@ def evaluate(cfg):
         "reader_reads_own_folder": reads_as(cfg["reader"], cfg["control_readable"]),
         "reader_refused_token_file": not reads_as(cfg["reader"], cfg["control_refused"]),
     }
-    findings = []
     if not all(controls.values()):
-        return {"verdict": "INSTRUMENT", "controls": controls, "findings": findings}
-    for p in cfg["read_targets"]:
-        if reads_as(cfg["reader"], p):
-            findings.append({"kind": "readable-by-" + cfg["reader"], "path": p})
+        return {"verdict": "INSTRUMENT", "reason": "a control failed", "controls": controls, "findings": []}
+    findings = []
     for n in cfg.get("missing_targets", []):
         findings.append({"kind": "target-not-found", "path": n})
     for d in cfg["closed_dirs"]:
+        if not os.path.exists(d):
+            findings.append({"kind": "target-not-found", "path": d})
+            continue
         mode = stat.S_IMODE(os.stat(d).st_mode)
         if mode & stat.S_IRWXO:
             findings.append({"kind": "directory-open-to-others", "path": d, "mode": oct(mode)})
+    for p in cfg["read_targets"]:
+        if reads_as(cfg["reader"], p):
+            findings.append({"kind": "readable-by-" + cfg["reader"], "path": p})
     for f in cfg["private_files"]:
         if os.path.exists(f):
             mode = stat.S_IMODE(os.stat(f).st_mode)
@@ -154,13 +220,22 @@ def evaluate(cfg):
     for f in cfg["not_world_writable"]:
         if os.path.exists(f) and stat.S_IMODE(os.stat(f).st_mode) & stat.S_IWOTH:
             findings.append({"kind": "world-writable", "path": f})
-    copies, scanned, keys = copies_in(cfg["scan_root"], cfg["live_memory"])
+    if os.path.isdir(cfg["store_dir"]):
+        findings.extend(store_findings(cfg["store_dir"], cfg["owner"]))
+    else:
+        findings.append({"kind": "target-not-found", "path": cfg["store_dir"]})
+    copies, pop, keys = copies_in(cfg["scan_roots"], cfg["live_memory"], cfg["reader"])
     for c in copies:
         findings.append({"kind": "readable-copy-of-memory", "path": c["path"], "shared_lines": c["shared_lines"]})
-    real = [f for f in findings if f["kind"] != "target-not-found"]
-    verdict = "EXPOSED" if real else ("INSTRUMENT" if findings else "PASS")
-    return {"verdict": verdict, "controls": controls, "findings": findings,
-            "scan": {"root": cfg["scan_root"], "files_scanned": scanned, "live_lines": keys}}
+    exposures = [f for f in findings if f["kind"] != "target-not-found"]
+    if exposures:
+        verdict, reason = "EXPOSED", ""
+    elif findings:
+        verdict, reason = "INSTRUMENT", "a target is missing, so its exposure cannot be measured"
+    else:
+        verdict, reason = "PASS", ""
+    return {"verdict": verdict, "reason": reason, "controls": controls, "findings": findings,
+            "scan": {"roots": cfg["scan_roots"], "live_lines": keys, "population": pop}}
 
 
 def _alerts(argv):
@@ -197,23 +272,25 @@ def next_runlog_line():
 
 
 def reconcile_alerts(result, st):
-    """Arm the alert matching the verdict; resolve the ones the verdict discharges. Owner resolves,
-    never acks (#982) — this tool resolves only with the run-log row as evidence."""
-    notes = []
+    """Arm the alert matching the verdict; resolve the ones it discharges. Returns (notes, delivered).
+    ⛔ BLOCKER-3: the alert IS the delivery. A failed arm or resolve makes the run INSTRUMENT (exit 2), so
+       the unit's own OnFailure page carries what the alert could not."""
+    notes, delivered = [], True
     evidence = "%s:%d" % (RUNLOG, next_runlog_line())
     wanted = {"EXPOSED": KEY_EXPOSED, "INSTRUMENT": KEY_INSTRUMENT}.get(result["verdict"])
     for key in (KEY_EXPOSED, KEY_INSTRUMENT):
         prev = st.get(key)
         if prev and key != wanted:
-            rc, out, err = _alerts(["resolve", prev, "--by", "cc-infra", "--evidence", evidence])
+            rc, out, err = _alerts(["resolve", prev, "--by", ACTOR, "--evidence", evidence])
             blob = (out + " " + err).lower()
             if rc == 0 or "already" in blob or "not found" in blob:
                 st.pop(key, None)
                 notes.append("resolved %s" % prev)
             else:
-                notes.append("RESOLVE FAILED %s rc=%d" % (prev, rc))
+                delivered = False
+                notes.append("RESOLVE FAILED %s rc=%d %s" % (prev, rc, err[:120]))
     if wanted and not st.get(wanted):
-        lines = ["%s %s%s" % (f["kind"], f["path"], (" " + f.get("mode", "")) if f.get("mode") else "")
+        lines = ["%s %s%s" % (f["kind"], f["path"], (" " + f["mode"]) if f.get("mode") else "")
                  for f in result["findings"]][:12]
         if result["verdict"] == "EXPOSED":
             title = "Langston private content is readable by another account"
@@ -221,22 +298,27 @@ def reconcile_alerts(result, st):
                     "Langston ruled this a hazard to review independence (B-LANGSTON-CONTEXT pre-audit 21.3). "
                     "Owner CC-INFRA - re-close the path, then let the next run resolve this.")
         else:
-            title = "Langston privacy check could not trust its own controls"
-            body = ("Controls: " + json.dumps(result["controls"]) + "; findings: " + "; ".join(lines) + ". "
-                    "Until this clears there is no instrument on the exposure. Owner CC-INFRA.")
+            title = "Langston privacy check cannot measure the exposure"
+            body = ("Reason: " + result.get("reason", "") + ". Controls: " + json.dumps(result["controls"])
+                    + "; findings: " + "; ".join(lines) + ". Until this clears there is no instrument on "
+                    "the exposure. Owner CC-INFRA.")
         rc, out, err = _alerts(["add", "--triggers-at", utc().strftime("%Y-%m-%dT%H:%M:%SZ"),
                                 "--category", "health_check", "--severity", "warning",
                                 "--dedupe-key", wanted, "--title", title, "--body", body])
+        new_id = None
         if rc == 0:
             try:
-                st[wanted] = json.loads(out).get("id")
-                notes.append("armed %s" % st[wanted])
+                new_id = json.loads(out).get("id")
             except Exception:
-                notes.append("armed, id unparseable")
+                new_id = None
+        if new_id:
+            st[wanted] = new_id
+            notes.append("armed %s" % new_id)
         else:
-            notes.append("ARM FAILED rc=%d %s" % (rc, err[:160]))
+            delivered = False
+            notes.append("ARM FAILED rc=%d %s" % (rc, (err or out)[:160]))
     save_state(st)
-    return notes
+    return notes, delivered
 
 
 def log_row(row):
@@ -244,75 +326,152 @@ def log_row(row):
         fh.write(json.dumps(row, ensure_ascii=False) + NL)
 
 
+CODES = {"PASS": 0, "EXPOSED": 1}
+
+
+def run_once(cfg, st, dry=False):
+    """One evaluation, its alerts and its row. Returns (row, exit code)."""
+    result = evaluate(cfg)
+    row = {"ts": utc().strftime("%Y-%m-%dT%H:%M:%SZ"), "verdict": result["verdict"],
+           "reason": result.get("reason", ""), "controls": result["controls"],
+           "findings": result["findings"], "scan": result.get("scan"),
+           "targets_attempted": len(cfg["read_targets"]),
+           "sampling": "one tool-output and one corpus file; sufficient only while the closed_dirs are 750"}
+    code = CODES.get(result["verdict"], 2)
+    if dry:
+        return row, code
+    notes, delivered = reconcile_alerts(result, st)
+    row["alerts"] = notes
+    if not delivered:
+        row["evaluated_verdict"] = row["verdict"]
+        row["verdict"] = "INSTRUMENT"
+        row["reason"] = "alert delivery failed"
+        code = 2
+    log_row(row)
+    return row, code
+
+
 def self_test():
-    """⛔ DRIVES evaluate() — the same function the daily run uses — against fixtures built to be
-    EXPOSED and fixtures built to be CLOSED, as the real reader account. Nothing is armed."""
+    """⛔ DRIVES evaluate(), run_once() and entry() — the functions the daily run uses — against fixtures
+    built to be EXPOSED and fixtures built to be CLOSED, as the real reader account. Alerts are faked;
+    state and run log go to the fixture directory. Nothing on staging is touched."""
+    global RUNLOG, STATEFILE, _alerts, main
     ok = True
 
     def check(name, got, want):
         nonlocal ok
         good = got == want
         ok = ok and good
-        print("  %-4s %-62s expected %-6s got %s" % ("PASS" if good else "FAIL", name, want, got))
+        print("  %-4s %-66s expected %-10s got %s" % ("PASS" if good else "FAIL", name, want, got))
 
+    real_runlog, real_state, real_alerts, real_main = RUNLOG, STATEFILE, _alerts, main
     top = tempfile.mkdtemp(prefix="langston-privacy-selftest-")
+    reader_uid = pwd.getpwnam(READER).pw_uid
+    owner_uid, owner_gid = pwd.getpwnam(OWNER).pw_uid, grp.getgrnam(OWNER).gr_gid
     try:
         os.chmod(top, 0o755)
+        RUNLOG, STATEFILE = os.path.join(top, "run.jsonl"), os.path.join(top, "state.json")
         live = os.path.join(top, "live-MEMORY.md")
         with open(live, "w", encoding="utf-8") as fh:
             for i in range(12):
                 fh.write("fixture ledger line %02d that is comfortably longer than forty chars\n" % i)
         os.chmod(live, 0o600)
+        with open(live, encoding="utf-8") as fh:
+            copy_text = fh.read()
 
-        def make(rel, mode, content="x\n"):
+        def make(rel, mode, content="x\n", uid=None, gid=None, dirmode=0o755):
             p = os.path.join(top, rel)
-            os.makedirs(os.path.dirname(p), exist_ok=True)
+            d = os.path.dirname(p)
+            os.makedirs(d, exist_ok=True)
+            walk = d
+            while walk.startswith(top) and walk != top:
+                os.chmod(walk, dirmode)
+                walk = os.path.dirname(walk)
             with open(p, "w", encoding="utf-8") as fh:
                 fh.write(content)
             os.chmod(p, mode)
+            if uid is not None:
+                os.chown(p, uid, gid if gid is not None else -1)
             return p
 
-        open_dir = os.path.join(top, "open-dir"); os.makedirs(open_dir); os.chmod(open_dir, 0o755)
-        closed_dir = os.path.join(top, "closed-dir"); os.makedirs(closed_dir); os.chmod(closed_dir, 0o750)
-        with open(live, encoding="utf-8") as fh:
-            copy_text = fh.read()
-        exposed = {
-            "reader": READER, "control_readable": CONTROL_READABLE, "control_refused": CONTROL_REFUSED,
-            "read_targets": [make("readable.md", 0o644)],
-            "closed_dirs": [open_dir],
-            "private_files": [make("index-open.jsonl", 0o644)],
-            "live_memory": live,
-            "scan_root": os.path.join(top, "scan-exposed"),
-            "not_world_writable": [make("stale.log", 0o666)],
-        }
-        make("scan-exposed/copy.md", 0o644, copy_text)
-        closed = {
-            "reader": READER, "control_readable": CONTROL_READABLE, "control_refused": CONTROL_REFUSED,
-            "read_targets": [make("private.md", 0o600)],
-            "closed_dirs": [closed_dir],
-            "private_files": [make("index-closed.jsonl", 0o600)],
-            "live_memory": live,
-            "scan_root": os.path.join(top, "scan-closed"),
-            "not_world_writable": [make("quiet.log", 0o644)],
-        }
-        make("scan-closed/copy.md", 0o600, copy_text)
-        make("scan-closed/unrelated.md", 0o644, "nothing shared here\n")
+        def mkdir(rel, mode):
+            p = os.path.join(top, rel)
+            os.makedirs(p, exist_ok=True)
+            os.chmod(p, mode)
+            return p
 
+        base = {"reader": READER, "owner": OWNER, "control_readable": CONTROL_READABLE,
+                "control_refused": CONTROL_REFUSED, "live_memory": live, "missing_targets": []}
+        # EXPOSED: every finding kind, including the three condition-1 narrowings the first version had
+        make("store-exposed/root-owned.md", 0o644)
+        make("store-exposed/group-writable.md", 0o664, uid=owner_uid, gid=owner_gid)
+        make("store-exposed/fine.md", 0o644, uid=owner_uid, gid=owner_gid)
+        make("scan-exposed/a/b/c/deep-copy.md", 0o644, copy_text)                       # 4+ levels deep
+        make("scan-exposed/reader-owned-copy.md", 0o600, copy_text, uid=reader_uid)     # 0600, reader's own
+        make("scan-exposed/big-copy.md", 0o644, ("filler line\n" * 600000) + copy_text)  # > 5 MB
+        make("scan-exposed/root-only-copy.md", 0o600, copy_text)                        # matched, unreachable
+        with open(make("scan-exposed/binary.bin", 0o644), "wb") as fh:
+            fh.write(b"\0\1\2" + copy_text.encode())
+        exposed = dict(base, read_targets=[make("readable.md", 0o644)],
+                       closed_dirs=[mkdir("open-dir", 0o755)],
+                       private_files=[make("index-open.jsonl", 0o644)],
+                       store_dir=os.path.join(top, "store-exposed"),
+                       scan_roots=[os.path.join(top, "scan-exposed")],
+                       not_world_writable=[make("stale.log", 0o666)])
         r1 = evaluate(exposed)
-        kinds = sorted(f["kind"] for f in r1["findings"])
+        kinds = [f["kind"] for f in r1["findings"]]
+        paths = [f["path"] for f in r1["findings"] if f["kind"] == "readable-copy-of-memory"]
+        pop = r1["scan"]["population"]
         check("EXPOSED fixture -> verdict", r1["verdict"], "EXPOSED")
-        check("  a 644 file is flagged readable by the reader", "readable-by-" + READER in kinds, True)
+        check("  a 644 file is flagged readable by the reader", ("readable-by-" + READER) in kinds, True)
         check("  a 755 directory is flagged open", "directory-open-to-others" in kinds, True)
         check("  a 644 index is flagged not-0600", "file-not-0600" in kinds, True)
         check("  a 666 log is flagged world-writable", "world-writable" in kinds, True)
-        check("  a 644 content copy is flagged (by content)", "readable-copy-of-memory" in kinds, True)
+        check("  a root-owned store file is flagged (condition 5)", ("store-file-not-owned-by-" + OWNER) in kinds, True)
+        check("  a 664 store file is flagged (condition 5)", "store-file-group-or-other-writable" in kinds, True)
+        check("  the owner's own 644 store file is NOT flagged", any(p.endswith("fine.md") for p in
+              [f["path"] for f in r1["findings"]]), False)
+        check("  a copy 4 levels deep is found (condition 1)", any(p.endswith("deep-copy.md") for p in paths), True)
+        check("  a 0600 copy OWNED BY THE READER is found (condition 1)", any(p.endswith("reader-owned-copy.md") for p in paths), True)
+        check("  a copy over 5 MB is found (condition 1)", any(p.endswith("big-copy.md") for p in paths), True)
+        check("  a root-only copy is matched but NOT flagged", any(p.endswith("root-only-copy.md") for p in paths), False)
+        check("  ...and is counted as matched-not-readable", pop["matched_not_readable_by_reader"], 1)
+        check("  a binary file is skipped and counted", pop["skipped_binary"], 1)
+
+        closed = dict(base, read_targets=[make("private.md", 0o600)],
+                      closed_dirs=[mkdir("closed-dir", 0o750)],
+                      private_files=[make("index-closed.jsonl", 0o600)],
+                      store_dir=mkdir("store-closed", 0o755),
+                      scan_roots=[mkdir("scan-closed", 0o755)],
+                      not_world_writable=[make("quiet.log", 0o644)])
+        make("store-closed/fine.md", 0o644, uid=owner_uid, gid=owner_gid)
+        make("scan-closed/unrelated.md", 0o644, "nothing shared here\n")
         r2 = evaluate(closed)
         check("CLOSED fixture -> verdict", r2["verdict"], "PASS")
         check("  and it has no findings at all", len(r2["findings"]), 0)
-        broken = dict(closed, control_refused=closed["read_targets"][0].replace("private.md", "readable.md"))
-        r3 = evaluate(broken)
-        check("a control that cannot fail -> INSTRUMENT, never PASS", r3["verdict"], "INSTRUMENT")
+
+        broken = dict(closed, control_refused=exposed["read_targets"][0])
+        check("a control that cannot fail -> INSTRUMENT, never PASS", evaluate(broken)["verdict"], "INSTRUMENT")
+        gone = dict(closed, missing_targets=["/nonexistent/records.jsonl"])
+        check("BLOCKER-4: a missing target -> INSTRUMENT, not PASS", evaluate(gone)["verdict"], "INSTRUMENT")
+
+        # BLOCKER-3: a delivery failure turns EXPOSED into INSTRUMENT / exit 2
+        _alerts = lambda argv: (255, "", "ssh: connect to host staging: Connection timed out")
+        row, code = run_once(exposed, {})
+        check("BLOCKER-3: EXPOSED whose alert fails to arm -> exit", code, 2)
+        check("  ...and the row says INSTRUMENT, keeping the evaluated verdict", (row["verdict"], row.get("evaluated_verdict")),
+              ("INSTRUMENT", "EXPOSED"))
+        _alerts = lambda argv: (0, json.dumps({"id": "fixture-alert-id"}), "")
+        row, code = run_once(exposed, {})
+        check("  control: the same run with delivery working -> exit", code, 1)
+
+        # BLOCKER-2: ANY exception becomes 2, never Python's own 1
+        def boom():
+            raise RuntimeError("fixture crash")
+        main = boom
+        check("BLOCKER-2: a crash inside main() -> entry() exit", entry(), 2)
     finally:
+        RUNLOG, STATEFILE, _alerts, main = real_runlog, real_state, real_alerts, real_main
         shutil.rmtree(top, ignore_errors=True)
     print("self-test %s" % ("PASSED" if ok else "FAILED"))
     return 0 if ok else 1
@@ -329,27 +488,34 @@ def main():
     if "--status" in sys.argv:
         try:
             with open(RUNLOG, encoding="utf-8") as fh:
-                last = fh.readlines()[-1]
-            print(last.strip())
+                print(fh.readlines()[-1].strip())
             return 0
         except (OSError, IndexError):
             print("no run recorded yet at " + RUNLOG)
             return 2
     cfg = live_config()
-    result = evaluate(cfg)
-    row = {"ts": utc().strftime("%Y-%m-%dT%H:%M:%SZ"), "verdict": result["verdict"],
-           "controls": result["controls"], "findings": result["findings"],
-           "scan": result.get("scan"), "targets_attempted": len(cfg["read_targets"])}
     if "--dry-run" in sys.argv:
+        row, code = run_once(cfg, {}, dry=True)
         print(json.dumps(row, indent=2))
-        return {"PASS": 0, "EXPOSED": 1}.get(result["verdict"], 2)
-    st = load_state()
-    row["alerts"] = reconcile_alerts(result, st)
-    log_row(row)
-    print("%s: %d finding(s); controls %s; alerts: %s"
-          % (result["verdict"], len(result["findings"]), result["controls"], "; ".join(row["alerts"]) or "none"))
-    return {"PASS": 0, "EXPOSED": 1}.get(result["verdict"], 2)
+        return code
+    row, code = run_once(cfg, load_state())
+    print("%s: %d finding(s); controls %s; alerts: %s%s"
+          % (row["verdict"], len(row["findings"]), row["controls"], "; ".join(row.get("alerts", [])) or "none",
+             (" (" + row["reason"] + ")") if row.get("reason") else ""))
+    return code
+
+
+def entry():
+    """⛔ BLOCKER-2: exit codes disjoint from Python's own. An uncaught exception would exit 1, which the
+    unit treats as a correct EXPOSED run - so OnFailure would never page and nothing would be armed."""
+    try:
+        return main()
+    except SystemExit:
+        raise
+    except BaseException:
+        traceback.print_exc()
+        return 2
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(entry())

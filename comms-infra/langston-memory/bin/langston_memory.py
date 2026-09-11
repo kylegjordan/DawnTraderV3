@@ -301,44 +301,59 @@ def build_index():
 # ---------------- ledger overlay ----------------
 
 def _parse_ledger(src):
-    """Entries from one source, or None when it is unreadable or carries no Retractions section."""
+    """(status, entries-or-None). status: ok | unreadable | no-section | no-entries.
+    ⛔ Kept apart (Langston Step-4 condition 4): in a batch about permissions, a chmod accident must never
+       print as "no Retractions section"."""
     if not os.access(src, os.R_OK):
-        return None
+        return "unreadable", None
     text = open(src, encoding="utf-8", errors="replace").read()
     m = re.search(r"###\s*Retractions.*?(?=\n##|\Z)", text, re.S)
     if not m:
-        return None
+        return "no-section", None
     entries = []
     for para in re.split(r"\n- ", m.group(0))[1:]:
         body = "- " + para.strip()
         entries.append({"src": src, "text": body,
                         "ids": set(ID_RE.findall(body)), "shas": set(SHA_RE.findall(body)),
                         "terms": set(w.lower() for w in re.findall(r"[A-Za-z][\w\-/]{5,}", body))})
-    return entries
+    return ("ok", entries) if entries else ("no-entries", None)
+
+
+def _fingerprint(entries):
+    return set(hashlib.sha1(e["text"].strip().encode("utf-8", "replace")).hexdigest() for e in entries)
 
 
 def ledger_state():
-    """(state, winning source, entries, per-source [(path, entries-or-None)]).
-    ⛔ C-3 (Langston, 2026-09-04, re-stated 09-05): LEDGER_SOURCES[0] is the PRIORITY slot, so the moment
-       a LEDGER.md appears the tool would stop reading MEMORY.md. If BOTH parse and their entry counts
-       DIFFER, refuse - never silently prefer [0]; that silent preference would make the ledger split
-       itself the truncation event BLOCKER-B exists to prevent.
-    ★ The two "nothing usable" states are kept apart (Langston, §21.2): a typo'd home and a corrupt
-       ledger must not wear one reason."""
-    parsed = [(src, _parse_ledger(src)) for src in LEDGER_SOURCES if os.path.isfile(src)]
-    usable = [(s, e) for s, e in parsed if e]
+    """(state, winning source, entries, per-source [(path, status, entries-or-None)], detail).
+    ⛔ C-3 (Langston 2026-09-04/05): LEDGER_SOURCES[0] is the PRIORITY slot. Two rulings bind this:
+     · BLOCKER-1 (Step 4, 2026-09-11): compare the entry SETS, not their counts. The realistic trigger is
+       the one 2.8c creates - the split copies the section, then one retraction is AMENDED IN PLACE:
+       count unchanged, content diverged, and the priority copy would win silently. "A matching number
+       is not a matching thing." The detail says whether the difference is count or content.
+     · A present-and-unparseable PRIORITY source REFUSES: falling back to the lower-priority source IS
+       the silent preference C-3 forbids, and the survivor is the stale one. A NON-priority source that
+       fails to parse does not refuse (a header edit to a deprecated file must not kill recall), but
+       query() names every source's status on every output, the ok path included."""
+    parsed = [(src,) + _parse_ledger(src) for src in LEDGER_SOURCES if os.path.isfile(src)]
     if not parsed:
-        return "no-ledger-at-home", None, [], parsed
+        return "no-ledger-at-home", None, [], parsed, ""
+    first_path, first_status, _first = parsed[0]
+    if first_path == LEDGER_SOURCES[0] and first_status != "ok":
+        return "ledger-priority-source-unparseable", None, [], parsed, first_status
+    usable = [(s, e) for s, st, e in parsed if st == "ok"]
     if not usable:
-        return "ledger-unparseable", None, [], parsed
-    if len(usable) > 1 and len(set(len(e) for _s, e in usable)) > 1:
-        return "ledger-sources-disagree", None, [], parsed
-    return "ok", usable[0][0], usable[0][1], parsed
+        return "ledger-unparseable", None, [], parsed, ""
+    if len(usable) > 1:
+        prints = [_fingerprint(e) for _s, e in usable]
+        if any(fp != prints[0] for fp in prints[1:]):
+            how = "count" if len(set(len(e) for _s, e in usable)) > 1 else "content"
+            return "ledger-sources-disagree", None, [], parsed, how
+    return "ok", usable[0][0], usable[0][1], parsed, ""
 
 
 def load_retractions():
     """Compatibility shape for any importer: (source, entries), or (None, []) unless the state is ok."""
-    state, src, entries, _parsed = ledger_state()
+    state, src, entries, _parsed, _detail = ledger_state()
     return (src, entries) if state == "ok" else (None, [])
 
 # ---------------- query ----------------
@@ -385,18 +400,20 @@ def query(terms):
         print("REFUSED: corpus degraded — results would be silently partial: " + "; ".join(problems))
         sys.exit(2)
 
-    lstate, lsrc, retr, lparsed = ledger_state()
+    lstate, lsrc, retr, lparsed, ldetail = ledger_state()
+    lsources = "; ".join("%s -> %s" % (s, ("%d entries" % len(e)) if st == "ok" else st)
+                         for s, st, e in lparsed) or "no source file exists"
     if lstate != "ok":
-        seen = "; ".join("%s -> %s" % (s, "unreadable or no Retractions section" if e is None
-                                        else "%d entries" % len(e)) for s, e in lparsed) or "no source file exists"
         why = {"no-ledger-at-home": "no ledger file exists at this home",
-               "ledger-unparseable": "a ledger file exists but no retraction entry parsed from it",
-               "ledger-sources-disagree": "two ledger sources parse with DIFFERENT entry counts - refusing rather "
-                                          "than silently reading only the first"}[lstate]
-        print("REFUSED (" + lstate + "): " + why + " [home " + LANGSTON_HOME + "; " + seen + "]. "
+               "ledger-unparseable": "ledger files exist but none yielded a retraction entry",
+               "ledger-priority-source-unparseable": "the PRIORITY ledger source exists but is " + ldetail
+                   + " - refusing rather than falling back to the lower-priority, likely stale, source",
+               "ledger-sources-disagree": "two ledger sources parse but their entry SETS differ (by " + ldetail
+                   + ") - refusing rather than silently reading only the first"}[lstate]
+        print("REFUSED (" + lstate + "): " + why + " [home " + LANGSTON_HOME + "; " + lsources + "]. "
               "Recall without the retraction overlay is a machine for re-asserting withdrawn conclusions.")
-        _usage("refused", reason=lstate, home=LANGSTON_HOME, ledger_sources=LEDGER_SOURCES,
-               parsed=[[s, None if e is None else len(e)] for s, e in lparsed])
+        _usage("refused", reason=lstate, detail=ldetail, home=LANGSTON_HOME, ledger_sources=LEDGER_SOURCES,
+               parsed=[[s, st, None if e is None else len(e)] for s, st, e in lparsed])
         sys.exit(2)
 
     built, newer_rows, newer_files = freshness(meta)
@@ -479,6 +496,9 @@ def query(terms):
         sp = (meta["counts"].get(name) or {}).get("span")
         cov.append(f"{name} {sp['min']}→{sp['max']}" if sp else f"{name} EMPTY")
     print("COVERAGE: " + " · ".join(cov) + " — a query outside a shard's span cannot hit that shard; thin results there are not absences")
+    # ⛔ EVERY source named on EVERY output (Langston Step-4 ruling): silence about a source that was looked
+    #    at and could not be read is the thing this batch is against.
+    print("LEDGER SOURCES (home " + LANGSTON_HOME + "): " + lsources)
     if entries:
         print(f"★ LEDGER CHECK ({lsrc}, home {LANGSTON_HOME}): {len(entries)} retraction entr{'y' if len(entries)==1 else 'ies'} relevant — READ BEFORE USING ANY HIT:")
         for item in entries:
@@ -526,6 +546,7 @@ def query(terms):
            hits_not_shown=len(not_shown),
            class_mix={"t%d/%s" % (tier, cls): n for (tier, cls), n in sorted(classes.items())},
            ledger_source=lsrc,
+           ledger_sources_status=[[s, st, None if e is None else len(e)] for s, st, e in lparsed],
            retractions_loaded=len(retr),
            index_built_at=meta.get("built_at"),
            index_total=meta.get("total"))

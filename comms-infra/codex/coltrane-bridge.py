@@ -143,7 +143,7 @@ def invoke(message, why):
     )
     # ⛔ 0600 + unpredictable name, never a fixed-shape path chmod-ed 644: root opens it and
     #    passes it as stdin, so no other account needs to read it (B-LANGSTON-CONTEXT §20.6, 3(c)).
-    fd, ppath = tempfile.mkstemp(prefix="coltrane-prompt-", suffix=".md")
+    fd, ppath = tempfile.mkstemp(prefix="coltrane-prompt-", suffix=".md", dir="/tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(prompt)
     try:
