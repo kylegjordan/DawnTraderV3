@@ -72,8 +72,11 @@ NAME_TO_ALIAS = {v.lower(): k for k, v in ALIAS_NAME.items()}
 OWNER_RE = re.compile(r"\[\[ALERT\b[^\]]*\bowner=(" + "|".join(re.escape(o) for o in ALERT_OWNERS) + r")\b", re.I)
 ANY_OWNER_RE = re.compile(r"\[\[ALERT\b[^\]]*\bowner=([^\s\]]+)", re.I)
 STRIP_RE = re.compile(r"\[\[ALERT\b[^\]]*\]\]", re.I)
-# The key, stated independently of the filter's OPEN_RE: the bridge's own address-gate prefix class
-# (discord-langston-bridge.py ADDRESS_START_RE) in front of the registry's name patterns.
+# The key. ⚠️ NOT independent of the filter: this is the SAME predicate as its OPEN_RE, character for
+# character (the bridge's ADDRESS_START_RE prefix class in front of the registry's name patterns) - so,
+# as the docstring says, (a) is TRUE BY CONSTRUCTION. Only the JOIN below is independent evidence.
+# Do not "fix" that by spelling the regex differently: a second spelling of one predicate proves nothing
+# and can drift (Langston, Step-4 FINDING-1).
 OPEN = {a: re.compile(r"^[\s*_~`>#:\".\-]*(?:" + "|".join(p) + r")\b", re.I) for a, p in NAMES.items()}
 CANON = {o.upper(): o for o in ALERT_OWNERS}
 
