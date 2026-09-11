@@ -27,15 +27,28 @@ plus a manifest he can read himself.
    PASSED VERIFICATION. Pruning first would, on a bad day, delete the last good
    copy to make room for a broken one.
 
-USAGE:  langston-selfmemory-backup [--dry-run]
+⛔ TWO SOURCES SINCE P-6b (B-LANGSTON-CONTEXT, 2026-09-11). `langston-memory-write` keeps the ONLY
+   copy of every version of his MEMORY.md it overwrote, in /home/langston/.memory-archive. Langston's
+   condition: "an archive outside the backup is a removal with no durable copy, one level down." So
+   that folder is archived and REPRODUCTION-VERIFIED in the same snapshot as the store. It may not exist
+   yet (the writer creates it on its first overwrite) - an absent archive is recorded, never an error;
+   an absent or empty STORE still refuses.
+   Member names are now prefixed by their source folder (`memory/...`, `.memory-archive/...`).
+
+PATH OVERRIDES, FOR TESTING ONLY: SELFMEM_STORE, SELFMEM_ARCHIVE, SELFMEM_DEST, SELFMEM_MANIFEST,
+SELFMEM_RUNLOG. The timer sets none of them, so the scheduled run always uses the real paths.
+
+USAGE:  langston-selfmemory-backup [--dry-run] [--prove]
 """
 
 import hashlib, json, os, shutil, subprocess, sys, tarfile, tempfile, datetime
 
-STORE = "/home/langston/.claude/projects/-home-langston/memory"
-DEST = "/root/backups/langston-selfmemory"
-MANIFEST = "/opt/langston-memory/usage/selfmemory-backup-manifest.md"
-RUNLOG = "/opt/langston-memory/usage/selfmemory-backup.jsonl"
+STORE = os.environ.get("SELFMEM_STORE", "/home/langston/.claude/projects/-home-langston/memory")
+ARCHIVE = os.environ.get("SELFMEM_ARCHIVE", "/home/langston/.memory-archive")
+SOURCES = [STORE, ARCHIVE]
+DEST = os.environ.get("SELFMEM_DEST", "/root/backups/langston-selfmemory")
+MANIFEST = os.environ.get("SELFMEM_MANIFEST", "/opt/langston-memory/usage/selfmemory-backup-manifest.md")
+RUNLOG = os.environ.get("SELFMEM_RUNLOG", "/opt/langston-memory/usage/selfmemory-backup.jsonl")
 KEEP = 14
 NL = chr(10)
 
@@ -65,7 +78,7 @@ def _own(path):
         pass
 
 
-def live_files():
+def live_files(sources=None):
     """⛔ WALKS RECURSIVELY, AND THE PREVIOUS VERSION DID NOT (Langston, Step-4).
     `tarfile.add(STORE)` captures subdirectories, but verification listed only the top
     level — so anything in a subdirectory was archived and sat SILENTLY OUTSIDE THE
@@ -73,16 +86,23 @@ def live_files():
     content. ★ Naming the population is half of rule 29; this is the half where the
     population and the claim had quietly diverged."""
     out = {}
-    for root, _dirs, names in os.walk(STORE):
-        for name in sorted(names):
-            p = os.path.join(root, name)
-            if os.path.isfile(p):
-                rel = os.path.relpath(p, STORE).replace(os.sep, "/")
-                out[rel] = {"bytes": os.path.getsize(p), "sha256": sha(p)}
+    for src in (sources if sources is not None else present_sources()):
+        top = os.path.basename(src.rstrip("/"))
+        for root, _dirs, names in os.walk(src):
+            for name in sorted(names):
+                p = os.path.join(root, name)
+                if os.path.isfile(p):
+                    rel = os.path.relpath(p, src).replace(os.sep, "/")
+                    out[top + "/" + rel] = {"bytes": os.path.getsize(p), "sha256": sha(p)}
     return out
 
 
-def verify_by_reproduction(archive, expected, prove=False):
+def present_sources():
+    """The sources that exist right now. STORE is checked separately and refuses when absent."""
+    return [s for s in SOURCES if os.path.isdir(s)]
+
+
+def verify_by_reproduction(archive, expected, prove=False, tops=None):
     """⛔ `prove=True` corrupts ONE EXTRACTED member before hashing, so the caller can watch
     this function return False. A verifier that has never been seen to fail has only been
     seen to be quiet."""
@@ -107,15 +127,20 @@ def verify_by_reproduction(archive, expected, prove=False):
                 return False, "PROVE: nothing was extracted, so nothing could be corrupted"
             with open(victim, "ab") as vh:
                 vh.write(b"\x00")
-        root = os.path.join(tmp, os.path.basename(STORE))
-        if not os.path.isdir(root):
-            return False, "archive does not contain the expected top-level directory"
+        tops = tops or [os.path.basename(STORE)]
         got = {}
-        for r, _d, names in os.walk(root):
-            for name in sorted(names):
-                p = os.path.join(r, name)
-                if os.path.isfile(p):
-                    got[os.path.relpath(p, root).replace(os.sep, "/")] = sha(p)
+        for top in tops:
+            root = os.path.join(tmp, top)
+            if not os.path.isdir(root):
+                return False, "archive does not contain the expected top-level directory %r" % top
+            for r, _d, names in os.walk(root):
+                for name in sorted(names):
+                    p = os.path.join(r, name)
+                    if os.path.isfile(p):
+                        got[top + "/" + os.path.relpath(p, root).replace(os.sep, "/")] = sha(p)
+        unexpected = sorted(set(os.listdir(tmp)) - set(tops))
+        if unexpected:
+            return False, "archive holds unexpected top-level entries %s" % unexpected
         missing = [n for n in expected if n not in got]
         extra = [n for n in got if n not in expected]
         mismatch = [n for n in expected if n in got and got[n] != expected[n]["sha256"]]
@@ -137,7 +162,10 @@ def write_manifest(archive, expected, verified, detail, snapshots):
     lines.append("> look identical without this line. The job runs daily; a stamp older than about")
     lines.append("> two days means nobody has captured your store since then.")
     lines.append("")
-    lines.append("**WHAT IS BACKED UP:** `" + STORE + "` — the decision store you built yourself,")
+    lines.append("**WHAT IS BACKED UP:** `" + STORE + "` — the decision store you built yourself — and `" + ARCHIVE + "`,")
+    lines.append("every earlier version of your `MEMORY.md` that `langston-memory-write` replaced (" +
+                 ("present" if os.path.isdir(ARCHIVE) else "not created yet — the writer has not overwritten anything") + ").")
+    lines.append("The store:")
     lines.append("starting 2026-05-07. Entries carry the incident, a `Why:`, a `How to apply:` and")
     lines.append("`[[wiki-links]]`. This is a **copy for recovery**, not a second place to write:")
     lines.append("the live store above remains the only one you edit.")
@@ -197,8 +225,10 @@ def main():
     if not os.path.isdir(STORE):
         print("REFUSED: store not found at " + STORE)
         return 2
-    expected = live_files()
-    if not expected:
+    sources = present_sources()
+    expected = live_files(sources)
+    store_top = os.path.basename(STORE.rstrip("/")) + "/"
+    if not any(k.startswith(store_top) for k in expected):
         # ⛔ AN EMPTY STORE IS NOT A SUCCESSFUL BACKUP OF NOTHING. Writing an empty
         #    archive and pruning an older good one on the strength of it is how a
         #    backup system destroys the thing it protects.
@@ -206,7 +236,7 @@ def main():
         return 2
 
     if dry:
-        print("would capture %d members from %s" % (len(expected), STORE))
+        print("would capture %d members from %s" % (len(expected), ", ".join(sources)))
         for n in sorted(expected):
             print("   %-52s %7d B" % (n, expected[n]["bytes"]))
         return 0
@@ -218,14 +248,15 @@ def main():
     archive = os.path.join(DEST, ("PROVE-DISCARD-" if prove else "")
                            + "selfmemory-" + stamp + ".tar.gz")
     with tarfile.open(archive, "w:gz") as tf:
-        tf.add(STORE, arcname=os.path.basename(STORE))
+        for src in sources:
+            tf.add(src, arcname=os.path.basename(src.rstrip("/")))
 
     # ⛔ RE-HASH AFTER THE TAR. `expected` was taken BEFORE the archive was written, so a
     #    write by Langston during those seconds surfaced as `sha_mismatch` — reported as a
     #    CORRUPTED BACKUP when the truth is a moving source. Two different events with two
     #    different responses, and conflating them would send someone hunting a corruption
     #    that never happened (Langston, Step-4 minor).
-    after = live_files()
+    after = live_files(sources)
     changed = sorted([n for n in expected
                       if n not in after or after[n]["sha256"] != expected[n]["sha256"]]
                      + [n for n in after if n not in expected])
@@ -239,7 +270,7 @@ def main():
                "retained": len([f for f in os.listdir(DEST) if f.startswith("selfmemory-")]),
                "pruned": [],
                "measures": "the source moved while being archived; this is NOT a verification failure",
-               "population": "every regular file under " + STORE + ", recursively"}
+               "population": "every regular file under " + ", ".join(sources) + ", recursively"}
         try:
             os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
             with open(RUNLOG, "a", encoding="utf-8") as fh:
@@ -250,7 +281,8 @@ def main():
         print(json.dumps(row, indent=2, ensure_ascii=False))
         return 1
 
-    verified, detail = verify_by_reproduction(archive, expected, prove=prove)
+    verified, detail = verify_by_reproduction(archive, expected, prove=prove,
+                                              tops=[os.path.basename(x.rstrip("/")) for x in sources])
 
     if prove:
         # ⛔⛔ THE PROVE RUN'S PASS CONDITION IS THE VERIFIER SAYING **NO**. It never prunes,
@@ -295,7 +327,7 @@ def main():
                         "hashing every member against the live file — not by comparing a listing; "
                         "the store is re-hashed after the tar so a concurrent write is reported "
                         "as a moving source, never as corruption"),
-           "population": "every regular file under " + STORE + ", RECURSIVELY"}
+           "population": "every regular file under " + ", ".join(sources) + ", RECURSIVELY"}
     try:
         os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
         with open(RUNLOG, "a", encoding="utf-8") as fh:

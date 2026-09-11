@@ -1,0 +1,419 @@
+#!/usr/bin/env python3
+"""langston-memory-write — the ONE writer for Langston's memory file (B-LANGSTON-CONTEXT P-6b).
+
+★ WHY IT EXISTS. Until now, sessions updated /home/langston/MEMORY.md by writing it to the fixed path
+  /tmp/langston_memory.md, copying it to the same fixed path on the box, and `cp`-ing it over the live
+  file (workflow-10-governance 10.b). Three defects, all measured (pre-audit §20.6, §21.3):
+   · /tmp is 1777 and that path does not normally exist - any account can pre-create it, as a symlink
+     (a root write to a path of its choosing) or as a file it owns (rewrite the bytes between the copy
+     and the cp, i.e. inject text into every Langston invoke);
+   · no compare-and-swap - two sessions writing in the same window silently lose one write;
+   · no durable copy of what an overwrite removed - a removal with no copy is unrecoverable.
+
+⛔ WHAT IT DOES, IN ORDER (Langston r7, pre-audit §20.2-§20.3):
+   1. content arrives on STDIN - no file in a shared temp directory at any hop;
+   2. flock on a lock file inside the target's own directory;
+   3. COMPARE-AND-SWAP: the caller passes --expect-sha <sha256 it read>; under the lock the target is
+      re-hashed and the write proceeds only on a match, otherwise it refuses and prints the current hash;
+   4. the OLD content goes to the archive as <sha256>.md, created EXCLUSIVELY, plus one line in an
+      append-only index (time, shas, bytes, mode, --by, reason) - BEFORE anything is replaced;
+   5. a temp file in the TARGET'S OWN DIRECTORY, fsynced, renamed into place, mode and owner preserved;
+   6. the READER (langston_memory.py, imported - never re-implemented, rule 4) parses the written file,
+      and the ledger entry count must have moved by exactly what the call declared - otherwise the old
+      content is restored from the archive and the call refuses.
+
+⛔ --by IS RECORDED AS A CLAIM. Every session reaches this box as root (the dt-deploy precedent), so the
+   observed identity cannot attribute a write to a session; the real uid is kept beside it as `via_uid`.
+
+MODES
+   whole file:     langston-memory-write --expect-sha SHA --ledger-delta N --by WHO --reason WHY  < file
+   ledger append:  langston-memory-write --expect-sha SHA --ledger-append --entries N --by WHO --reason WHY  < entries
+     rules for an appended entry (r7):
+       (1) one entry = one '- ' at column 0; continuation lines indented, or led by '·';
+       (2) no column-0 '#' anywhere in the appended text (the reader's section lookahead would end there);
+       (3) inserted immediately above '### Rulings of mine that GENERALISE' - that heading terminates the
+           section, which makes (2) self-enforcing;
+       (4) the entry count after the write must equal the count before plus --entries.
+   self-test:      langston-memory-write --self-test
+
+EXIT  0 written · 2 refused input · 3 not root or langston · 4 compare-and-swap mismatch (nothing written)
+      5 post-write check failed and the previous content was RESTORED · 6 internal error (see stderr)
+"""
+import datetime, fcntl, hashlib, importlib.util, json, os, pwd, subprocess, sys, tempfile, time, traceback
+
+OWNER = "langston"
+LANGSTON_HOME = os.environ.get("LANGSTON_HOME", "/home/langston")
+TARGET = os.path.join(LANGSTON_HOME, "MEMORY.md")
+ARCHIVE_DIR = os.path.join(LANGSTON_HOME, ".memory-archive")
+ARCHIVE_INDEX = os.path.join(ARCHIVE_DIR, "index.jsonl")
+LOCK = os.path.join(LANGSTON_HOME, ".memory-write.lock")
+READER = os.environ.get("LANGSTON_MEMORY_READER", "/opt/langston-memory/bin/langston_memory.py")
+ANCHOR = "### Rulings of mine that GENERALISE"
+KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--ledger-append", "--entries", "--by", "--reason", "--self-test")
+VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--entries", "--by", "--reason")
+NL = chr(10)
+
+
+class Refused(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code = code
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def sha(b):
+    return hashlib.sha256(b).hexdigest()
+
+
+def parse_args(argv):
+    """Refuse unknown flags rather than ignore them (an ignored flag returns a clean result for a run
+    that did not do what was asked - the class 91ec9a543 closed in the other tools)."""
+    out, i = {}, 0
+    while i < len(argv):
+        a = argv[i]
+        if a not in KNOWN_FLAGS:
+            raise Refused(2, "REFUSED: unrecognised argument %r. Known: %s" % (a, ", ".join(KNOWN_FLAGS)))
+        if a in VALUE_FLAGS:
+            if i + 1 >= len(argv):
+                raise Refused(2, "REFUSED: %s needs a value" % a)
+            out[a] = argv[i + 1]
+            i += 2
+        else:
+            out[a] = True
+            i += 1
+    return out
+
+
+def load_reader():
+    """Rule (4): the writer IMPORTS the reader's parser rather than re-implementing it, so the two can
+    never disagree about where the ledger ends."""
+    spec = importlib.util.spec_from_file_location("langston_memory_reader", READER)
+    if spec is None or spec.loader is None:
+        raise Refused(6, "REFUSED: cannot load the reader at %s" % READER)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def ledger_count(reader, path):
+    """Entry count by the reader's own parse. 'unreadable' refuses; no section / no entries count as 0,
+    so a write that deletes the section shows up as a negative delta instead of passing."""
+    status, entries = reader._parse_ledger(path)
+    if status == "unreadable":
+        raise Refused(6, "REFUSED: the reader cannot read %s" % path)
+    return (len(entries) if status == "ok" else 0), status
+
+
+def check_entry_text(text, declared):
+    """Rules (1) and (2) on the appended text itself. Rule (4) is enforced after the write, by the reader."""
+    lines = [l for l in text.split(NL)]
+    non_empty = [l for l in lines if l.strip()]
+    if not non_empty:
+        raise Refused(2, "REFUSED: no entry text on stdin")
+    if not non_empty[0].startswith("- "):
+        raise Refused(2, "REFUSED (rule 1): an appended entry must start with '- ' at column 0")
+    for l in non_empty:
+        if l.startswith("#"):
+            raise Refused(2, "REFUSED (rule 2): a column-0 '#' inside the ledger ends the section for the reader: %r" % l[:60])
+        if not (l.startswith("- ") or l[0] in " \t" or l.startswith("·")):
+            raise Refused(2, "REFUSED (rule 1): a continuation line must be indented or led by '·': %r" % l[:60])
+    if declared < 1:
+        raise Refused(2, "REFUSED: --entries must be at least 1 for --ledger-append")
+
+
+def compose_append(current, entry_text):
+    """Rule (3): insert immediately above the GENERALISE heading, which must appear exactly once."""
+    marker = NL + ANCHOR
+    n = current.count(marker)
+    if n != 1:
+        raise Refused(2, "REFUSED (rule 3): %r appears %d times in the target; append needs exactly one" % (ANCHOR, n))
+    i = current.index(marker)
+    before, after = current[:i], current[i + 1:]
+    return before.rstrip(NL) + NL + entry_text.strip(NL) + NL + NL + after
+
+
+def archive_old(old_bytes, old_sha):
+    """Exclusive create, so an archived version can never be overwritten. If the same content was archived
+    before, the existing file must hash to the same value - otherwise the archive is corrupt and we stop."""
+    os.makedirs(ARCHIVE_DIR, mode=0o750, exist_ok=True)
+    path = os.path.join(ARCHIVE_DIR, old_sha + ".md")
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        with open(path, "rb") as fh:
+            if sha(fh.read()) != old_sha:
+                raise Refused(6, "REFUSED: archive file %s exists and does not match its name - archive corrupt" % path)
+        return path, False
+    try:
+        os.write(fd, old_bytes)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return path, True
+
+
+def append_index(row):
+    fd = os.open(ARCHIVE_INDEX, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.write(fd, (json.dumps(row, ensure_ascii=False) + NL).encode("utf-8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def replace_target(new_bytes, st):
+    """Temp file in the target's own directory, fsync, preserve mode and owner, rename, fsync the directory."""
+    d = os.path.dirname(TARGET)
+    fd, tmp = tempfile.mkstemp(prefix=".MEMORY.md.write-", suffix=".tmp", dir=d)
+    try:
+        os.write(fd, new_bytes)
+        os.fsync(fd)
+        os.fchmod(fd, st.st_mode & 0o7777)
+        if os.geteuid() == 0:
+            os.fchown(fd, st.st_uid, st.st_gid)
+    finally:
+        os.close(fd)
+    try:
+        os.replace(tmp, TARGET)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    dfd = os.open(d, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+
+def run(argv, stdin_bytes):
+    opts = parse_args(argv)
+    owner_uid = pwd.getpwnam(OWNER).pw_uid
+    if os.geteuid() not in (0, owner_uid):
+        raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
+    for req in ("--expect-sha", "--by", "--reason"):
+        if req not in opts or not str(opts[req]).strip():
+            raise Refused(2, "REFUSED: %s is required" % req)
+    append = bool(opts.get("--ledger-append"))
+    try:
+        declared = int(opts["--entries"] if append else opts["--ledger-delta"])
+    except KeyError:
+        raise Refused(2, "REFUSED: %s is required" % ("--entries" if append else "--ledger-delta"))
+    except ValueError:
+        raise Refused(2, "REFUSED: the declared entry count must be an integer")
+    try:
+        content = stdin_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Refused(2, "REFUSED: stdin is not valid UTF-8")
+    if append:
+        check_entry_text(content, declared)
+    elif not content.strip():
+        raise Refused(2, "REFUSED: empty stdin would blank the memory file")
+    reader = load_reader()
+
+    lfd = os.open(LOCK, os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(lfd, fcntl.LOCK_EX)
+        hold = float(os.environ.get("LMW_TEST_HOLD_AFTER_LOCK", "0") or 0)   # self-test only: widen the race window
+        with open(TARGET, "rb") as fh:
+            old = fh.read()
+        old_sha = sha(old)
+        if hold:
+            time.sleep(hold)
+        if old_sha != opts["--expect-sha"].strip().lower():
+            raise Refused(4, "REFUSED: compare-and-swap mismatch - nothing written. current sha256 %s" % old_sha)
+        before, _status = ledger_count(reader, TARGET)
+        new_text = compose_append(old.decode("utf-8"), content) if append else content
+        new = new_text.encode("utf-8")
+        st = os.stat(TARGET)
+        arch_path, created = archive_old(old, old_sha)
+        row = {"ts": utc(), "target": TARGET, "old_sha": old_sha, "new_sha": sha(new),
+               "old_bytes": len(old), "new_bytes": len(new), "mode": "ledger-append" if append else "whole-file",
+               "declared_entry_delta": declared, "by_claimed": opts["--by"], "via_uid": os.getuid(),
+               "reason": opts["--reason"], "archived": os.path.basename(arch_path), "archive_created": created}
+        replace_target(new, st)
+        try:
+            after, status_after = ledger_count(reader, TARGET)
+            if after - before != declared:
+                raise Refused(5, "REFUSED (rule 4): the ledger entry count moved %+d, the call declared %+d "
+                                 "(before %d, after %d, reader status %s) - previous content restored"
+                              % (after - before, declared, before, after, status_after))
+        except BaseException as e:
+            replace_target(old, st)
+            with open(TARGET, "rb") as fh:
+                restored_ok = sha(fh.read()) == old_sha
+            row.update({"outcome": "restored", "restored_byte_identical": restored_ok,
+                        "why": str(e)[:300]})
+            append_index(row)
+            if isinstance(e, Refused):
+                raise
+            raise Refused(5, "REFUSED: post-write check crashed (%s) - previous content restored, byte-identical=%s"
+                          % (type(e).__name__, restored_ok))
+        row.update({"outcome": "written", "entries_before": before, "entries_after": after})
+        append_index(row)
+        return "WRITTEN %s -> %s (%d -> %d B; ledger entries %d -> %d)" % (old_sha[:16], sha(new)[:16], len(old), len(new), before, after)
+    finally:
+        os.close(lfd)
+
+
+def self_test():
+    """Drives run() through a SUBPROCESS of this file for every case, so the entry point, stdin handling
+    and exit codes are what is tested - never the helpers alone. Each refusal asserts the target is
+    BYTE-IDENTICAL afterwards."""
+    ok = True
+    top = tempfile.mkdtemp(prefix="lmw-selftest-")
+    here = os.path.abspath(__file__)
+    reader = os.environ.get("LANGSTON_MEMORY_READER") or os.path.join(os.path.dirname(here), "langston_memory.py")
+    env = dict(os.environ, LANGSTON_HOME=top, LANGSTON_MEMORY_READER=reader)
+    target = os.path.join(top, "MEMORY.md")
+    base = NL.join([
+        "# MEMORY — fixture", "",
+        "## ★★ REVIEWER LEDGER", "",
+        "### Retractions (things I asserted and then withdrew — do NOT re-assert)",
+        "- **first retraction**, a fixture entry long enough to look like one.",
+        "- **second retraction**, with a continuation line below.",
+        "  · a continuation led by a middle dot",
+        "", ANCHOR,
+        "- a generalised ruling, which the reader must NOT count as a retraction", "",
+        "## ★ STANDING NOTES", "- a note", ""])
+
+    def reset(text=base):
+        with open(target, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        for f in os.listdir(top):
+            if f.startswith(".memory-archive"):
+                pass
+        arch = os.path.join(top, ".memory-archive")
+        if os.path.isdir(arch):
+            for f in os.listdir(arch):
+                os.unlink(os.path.join(arch, f))
+
+    def current():
+        with open(target, "rb") as fh:
+            b = fh.read()
+        return b, sha(b)
+
+    def archived():
+        arch = os.path.join(top, ".memory-archive")
+        return sorted(f for f in os.listdir(arch) if f.endswith(".md")) if os.path.isdir(arch) else []
+
+    def call(args, stdin_text, extra_env=None):
+        p = subprocess.run([sys.executable, here] + args, input=stdin_text.encode("utf-8"),
+                           capture_output=True, env=dict(env, **(extra_env or {})), timeout=120)
+        return p.returncode, (p.stdout + p.stderr).decode("utf-8", "replace")
+
+    def check(name, got, want):
+        nonlocal ok
+        good = got == want
+        ok = ok and good
+        print("  %-4s %-72s expected %-8s got %s" % ("PASS" if good else "FAIL", name, want, got))
+
+    try:
+        rd = load_reader_from(reader)
+        entries_of = lambda: (lambda st: len(st[1]) if st[0] == "ok" else 0)(rd._parse_ledger(target))
+        reset()
+        check("control: the reader counts the fixture's retractions", entries_of(), 2)
+
+        b0, s0 = current()
+        rc, out = call(["--expect-sha", "0" * 64, "--ledger-append", "--entries", "1", "--by", "t", "--reason", "t"],
+                       "- a new entry" + NL)
+        check("a stale --expect-sha refuses -> exit", rc, 4)
+        check("  ...target byte-identical", current()[0] == b0, True)
+        check("  ...archive untouched", archived(), [])
+
+        rc, out = call(["--expect-sha", s0, "--ledger-append", "--entries", "1", "--by", "t", "--reason", "t"],
+                       "- an entry" + NL + "# a column-0 heading inside it" + NL)
+        check("a column-0 '#' in an appended entry refuses -> exit", rc, 2)
+        check("  ...and it is RULE 2 that refused, not the continuation check", "(rule 2)" in out, True)
+        check("  ...target byte-identical", current()[0] == b0, True)
+
+        rc, out = call(["--expect-sha", s0, "--ledger-append", "--entries", "1", "--by", "t", "--reason", "t"],
+                       "- an entry" + NL + "a plain column-0 line the reader would silently glue on" + NL)
+        check("an unindented continuation refuses -> exit", rc, 2)
+        check("  ...and it is RULE 1 that refused (the reader's count would NOT catch this one)", "(rule 1)" in out, True)
+        check("  ...target byte-identical", current()[0] == b0, True)
+
+        rc, out = call(["--expect-sha", s0, "--ledger-append", "--entries", "1", "--by", "t", "--reason", "t"],
+                       "- one entry" + NL + "- a stray second column-0 bullet" + NL)
+        check("a stray column-0 '- ' (delta 2 != declared 1) refuses (rule 4) -> exit", rc, 5)
+        check("  ...target byte-identical after the restore", current()[0] == b0, True)
+        check("  ...the reader still counts 2", entries_of(), 2)
+
+        reset()
+        b0, s0 = current()
+        rc, out = call(["--expect-sha", s0, "--ledger-append", "--entries", "1", "--by", "t", "--reason", "t"],
+                       "- **third retraction**, appended by the writer." + NL + "  · with a continuation" + NL)
+        check("control: a valid append lands -> exit", rc, 0)
+        check("  ...the reader counts 3", entries_of(), 3)
+        check("  ...the archive gained exactly one file, named by the OLD sha", archived(), [s0 + ".md"])
+        check("  ...the GENERALISE ruling is still not counted as a retraction", entries_of(), 3)
+
+        b1, s1 = current()
+        text2 = b1.decode("utf-8").replace("- a note", "- a note, edited outside the ledger")
+        rc, out = call(["--expect-sha", s1, "--ledger-delta", "0", "--by", "t", "--reason", "t"], text2)
+        check("whole-file mode, a non-ledger edit, --ledger-delta 0 -> exit", rc, 0)
+        check("  ...one file per overwrite: the archive now holds exactly two", len(archived()), 2)
+
+        b2, s2 = current()
+        gutted = b2.decode("utf-8").replace("### Retractions", "### Something else")
+        rc, out = call(["--expect-sha", s2, "--ledger-delta", "0", "--by", "t", "--reason", "t"], gutted)
+        check("whole-file mode that REMOVES the section, declared 0 -> exit", rc, 5)
+        check("  ...target byte-identical after the restore", current()[0] == b2, True)
+
+        reset()
+        b0, s0 = current()
+        args = ["--expect-sha", s0, "--ledger-append", "--entries", "1", "--by", "t", "--reason", "t"]
+        procs = [subprocess.Popen([sys.executable, here] + args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, env=dict(env, LMW_TEST_HOLD_AFTER_LOCK="1.5"))
+                 for _ in range(2)]
+        for n, p in enumerate(procs):
+            p.stdin.write(("- racer %d" % n + NL).encode("utf-8"))
+            p.stdin.close()
+        codes = sorted(p.wait(timeout=120) for p in procs)
+        check("two concurrent writers holding the same expected sha -> exit codes", codes, [0, 4])
+        check("  ...exactly one landed: the reader counts 3", entries_of(), 3)
+
+        rc, out = call(["--expect-sha", s0, "--bogus"], "- x" + NL)
+        check("an unknown flag refuses -> exit", rc, 2)
+    finally:
+        import shutil
+        shutil.rmtree(top, ignore_errors=True)
+    print("self-test %s" % ("PASSED" if ok else "FAILED"))
+    return 0 if ok else 1
+
+
+def load_reader_from(path):
+    spec = importlib.util.spec_from_file_location("langston_memory_reader_selftest", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def main():
+    if "--self-test" in sys.argv[1:]:
+        return self_test()
+    try:
+        print(run(sys.argv[1:], sys.stdin.buffer.read()))
+        return 0
+    except Refused as r:
+        print(str(r), file=sys.stderr)
+        return r.code
+
+
+def entry():
+    try:
+        return main()
+    except SystemExit:
+        raise
+    except BaseException:
+        traceback.print_exc()
+        return 6
+
+
+if __name__ == "__main__":
+    sys.exit(entry())

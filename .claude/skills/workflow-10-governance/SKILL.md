@@ -188,6 +188,27 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 ## 10.b — LANGSTON'S MEMORY
 Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch closure, sequencing changes, operational invariants. **His MEMORY auto-loads every invocation — stale memory means a wrong baseline at the next review.** ⛔⛔ **KEEP IT UNDER THE CAP — AND THE CAP IS BOTH: `CLAUDE.md` §3.2 reads *"NO FILE MAY EXCEED 200 LINES **OR** 24,576 BYTES — whichever binds first, and it is usually the BYTES."*** ⚠️ **I wrote *"there is no line target"* here and that was WRONG — it contradicted the always-loaded rules file, which every session reads FIRST.** ★ **Langston’s *"bytes-first"* is from HIS file’s own header and is about which cap BINDS, not about the line cap ceasing to exist.** ⚠️ **This line read *"≤200 lines"* until today and that phrasing is what MANUFACTURED the overage: it is satisfiable in FORM while the file grows.** ⛔ **READ THE SIZE, DO NOT TRUST A FIGURE WRITTEN HERE: `ssh root@204.168.141.77 "wc -lc /home/langston/MEMORY.md"`.** ⚠️ **This line CARRIED a dated measurement until a fresh reader caught it — an instruction file asserting a live value, three headings above *"IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE."*** ★ **Name WHERE to read it, never WHAT it currently is.** *(It was well over when last measured; assume a prune is due until the command says otherwise.)*
 
+⛔⛔ **HOW TO WRITE IT — THROUGH `langston-memory-write`, AND ONLY THROUGH IT (B-LANGSTON-CONTEXT P-6b, 2026-09-11).**
+- **Why:** the recipe that stood below had three defects.
+  1. It went through the fixed path `/tmp/langston_memory.md`. `/tmp` is open to every account and that path does not normally exist, so any account could pre-create it — as a symlink (a root write to a path of its choosing) or as a file it owns (text injected into every Langston invoke between the copy and the `cp`).
+  2. It had no compare-and-swap, so two sessions in the same window silently lost one write.
+  3. It kept no copy of what it overwrote.
+- **The writer fixes all three:**
+  - content on STDIN, never through a temp directory;
+  - a lock, and a refusal unless the file still has the sha you read;
+  - every replaced version archived by hash, inside the daily reproduction-verified backup;
+  - the reader's ledger count must move by exactly what you declare, or the old content is restored.
+```bash
+SHA=$(ssh root@204.168.141.77 'sha256sum /home/langston/MEMORY.md' | cut -d' ' -f1)
+# the whole file, with no change to the retractions ledger:
+ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-delta 0 --by '<session>' --reason '<batch-id>'" < <local file holding the whole new content>
+# or ONE new retraction entry, appended above "### Rulings of mine that GENERALISE":
+ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-append --entries 1 --by '<session>' --reason '<batch-id>'" < <local file holding only the entry>
+```
+- **Exit 4 means someone wrote first:** re-read, redo, never force.
+- **Exit 5 means your declared entry count was wrong:** the file was restored byte-for-byte.
+- ⛔ **If `command -v langston-memory-write` prints nothing on the box, the writer is not installed yet. STOP and ask Infra Claude. Do NOT fall back to `/tmp`.**
+
 ## ⛔⛔ IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE
 **A governance document that asserts a constant, a threshold, a window size or a count is making a CLAIM ABOUT THE RUNNING SYSTEM — and it goes stale SILENTLY, because nothing compares the two.**
 **MEASURED 2026-08-21:** `SYSTEM_MANUAL.md` ch.12 **and** `POST_AUDIT_ROADMAP.md` both state that the AMR's EV-gap window warms at **"30 obs/class."** The live value for crypto is **100**. Consequence: the AMR activation checklist item requiring *EV-gap window warm (30 obs/class)* is **UNSATISFIABLE AS WRITTEN** — and nobody noticed, because the document reads perfectly plausibly.
@@ -212,12 +233,11 @@ Move the card to **`Governance`**.
 
     **MANDATORY 10.b — Langston memory sync (Kyle directive 2026-05-07):** at the same time you update your own MEMORY.md, also update Langston's `/home/langston/MEMORY.md` on Hetzner with the batch closure block + sequencing changes + operational invariants. Langston's MEMORY auto-loads every `claude -p` invocation; stale MEMORY → wrong baseline at next review. Mirror your MEMORY structure (state block, recent-batch row, sequencing update, open-issue diff). Keep ≤200 lines — ⛔ **SUPERSEDED 2026-08-28: THE LIVE CAP IS BYTES, ~24 KB, WITH NO LINE TARGET. See §10.b above.** *(This preserved-verbatim block declares itself authoritative on divergence, which is exactly why the stale number is corrected HERE and not only above.)* Sync via:
 
+    ⛔ **THE `/tmp` + `cp` RECIPE THAT STOOD HERE IS REPLACED (B-LANGSTON-CONTEXT P-6b, 2026-09-11)** — corrected in THIS block too, because it declares itself authoritative on divergence and a session reading bottom-up would otherwise follow the hazard. It wrote through the fixed, pre-creatable path `/tmp/langston_memory.md` (a symlink there steers a root write; an owned file there injects text into every Langston invoke), with no compare-and-swap and no copy of what it overwrote. Use `langston-memory-write` as shown in §10.b above:
+
     ```bash
-    cat > /tmp/langston_memory.md <<'EOF'
-    [paste new MEMORY content]
-    EOF
-    scp /tmp/langston_memory.md root@204.168.141.77:/tmp/langston_memory.md
-    ssh root@204.168.141.77 'sudo -u langston cp /tmp/langston_memory.md /home/langston/MEMORY.md && wc -lc /home/langston/MEMORY.md'
+    SHA=$(ssh root@204.168.141.77 'sha256sum /home/langston/MEMORY.md' | cut -d' ' -f1)
+    ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-delta 0 --by '<session>' --reason '<batch-id>'" < <local file holding the whole new content>
     ```
 
     Update `/home/langston/CLAUDE.md` only when comms protocol or his persona changes (rare). **Repo-side docs reach Langston off the REVIEW BRANCH — so a doc he needs must be pushed, not merely saved** (`LANGSTON_ARCHITECTURE.md` §6).

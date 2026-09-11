@@ -3697,3 +3697,23 @@ The B6.5b crypto-only dry-run proved the front half of the active crypto pipelin
 
 ⛔ **IT IS A FURTHER OUT-OF-PROCESS WRITER TO `system-alerts.jsonl`**, through the same CLI path as the drift monitor — so, like it, **a frequency increase on the existing lock-free append, not a new writer class**, and it lands on `#647` / `B-ALERT-QUEUE-INTEGRITY`. At one run a day it is the lowest-frequency writer on that path.
 ⚠️ **WHAT IT DOES NOT SEE:** a copy outside `/tmp` · a copy that does not preserve whole lines · another account that is not `coltrane` · anything between daily runs. **A PASS means the named targets are closed to that account on that day, nothing wider.**
+
+### ⭐ `langston-memory-write` — THE ONE WRITER FOR LANGSTON'S MEMORY FILE — Added B-LANGSTON-CONTEXT increment 2 (2026-09-11)
+
+**WHY IT EXISTS:** every session updated `/home/langston/MEMORY.md` at Step 10 by writing to `/tmp/langston_memory.md` and `cp`-ing it over the live file. That fixed path is pre-creatable by any account: a symlink steers a root write, and an owned file injects text into every Langston invoke. There was no compare-and-swap, and no copy of what was overwritten. **This file auto-loads into every review Langston performs, so its integrity is review integrity.**
+
+| field | value |
+|---|---|
+| **HOST** | Helsinki, `/usr/local/bin/langston-memory-write` (750 root:langston) |
+| **INVOKED BY** | every CC session at Step 10, over `ssh` as root, content on stdin; Langston himself for his one-time retrofit (plan revision 4) |
+| **WRITES** | `/home/langston/MEMORY.md` (temp file in the same directory, renamed; mode and owner preserved) · `/home/langston/.memory-archive/<sha256>.md`, created exclusively · `/home/langston/.memory-archive/index.jsonl`, append-only · lock file `/home/langston/.memory-write.lock` |
+| **READS** | the reader `/opt/langston-memory/bin/langston_memory.py`, **imported, never re-implemented** (r7 rule 4), to count ledger entries before and after |
+| **FAILURE MODE** | exit 0 written · 2 refused input · 3 not root/langston · **4 compare-and-swap mismatch, nothing written** · **5 declared entry count wrong, previous content RESTORED** · 6 internal error |
+| **ATTRIBUTION** | `--by` recorded as a CLAIM; the real uid is kept beside it (every session reaches the box as root) |
+| **BACKUP** | the archive is the only copy of removed content, so `langston-selfmemory-backup` carries it as a second, reproduction-verified source |
+| **CONTROLS** | `--self-test` drives the real entry point in a subprocess for every case. **Mutation-proved: disabling the compare-and-swap, the rule-2 refusal, the restore, the lock, or rule 1's continuation check each makes it fail** |
+
+⛔ **ITS REACH, STATED:**
+- **What it does not stop:** it guarantees only writes that go THROUGH it. A root session that edits the file by hand bypasses every check.
+- **What makes that visible:** the next writer call refuses on the changed sha (exit 4). The daily size watch reports the size change.
+
