@@ -3,7 +3,7 @@
 **Batch:** `B-XSTOCK-FEE-CONTRACT` (`#1010`, `PHASE_19_PLAN` row 2.4-FEE) · **change-class: architecture** (Langston, stands) · **Owner:** CC-B
 **Audited at:** `origin/migration/aws-supabase` `18a8b29b6`; reviewer re-derivations at `56599ad6d`, `4e7f584b5` and `9ceaf73e1` (no code under audit changed between them) · staging DB + logs read 2026-09-11 15:00–16:10Z
 **Inputs:** scope r1.1 `c891de65a` · Langston Step-1 APPROVAL with five rulings, F-1..F-5 and two gaps (2026-09-11) · Langston addendum 15:03Z (`dt-deploy` has no rollback verb; the forward-deploy window)
-**Revision:** r4 — three fresh object-round reviews folded (§D). The OBJ-9 query is committed at `scripts/analysis/b_xstock_fee_contract_obj9_rerank.sql`, **pinned to a cutoff of 2026-09-11 16:00Z** so a re-run reproduces every A9 number.
+**Revision:** r5 — Langston's Step-2 APPROVAL rulings folded (P3 rider, P4 + `#1042`, P8 three-arm pre-registration). r4 — three fresh object-round reviews folded (§D). The OBJ-9 query is committed at `scripts/analysis/b_xstock_fee_contract_obj9_rerank.sql`, **pinned to a cutoff of 2026-09-11 16:00Z** so a re-run reproduces every A9 number.
 
 ---
 
@@ -20,6 +20,7 @@
 | 7 | cost-model fold rollback: "the rollback migration re-inserts the rows first" (scope r1.1) | **a committed operator runbook step with the literal re-insert SQL** — `dt-deploy` migrates forward only | Langston 15:03Z; `scripts/dt-deploy.sh:222-234` |
 | 8 | `SYSTEM_IMPACT_MAP.md:3504` lists `calculateFees`/`modelTradeRealism`/`getConfig` as consumers | only `calculateFees` and `modelSlippage` have a caller | §A3 |
 | 9 | **OBJ-9 (r1 of this document at `56599ad6d`, and my message to Kyle): rank 0 would have changed in "188–266 of 1,512 cycles (12.4–17.6 %)"** | **Among recorded pool members: CERTAIN in 163, POSSIBLE in 340, of 1,516 cycles (10.8–22.4 %)**, pinned at 2026-09-11 16:00Z | **Method:** r1 shifted every xStock member by one bound together, which brackets crypto-led cycles but **not** xStock-led ones, where leader and challengers move by different, unknown amounts — re-derived per cycle (§A9). **Population:** the unpinned counts grew 1,512 → 1,516 as live cycles arrived between runs; the pin fixes the population |
+| 10 | P8: "falls below the 24.9 % baseline … falsified if ≥ 24.9 % at ≥ 300" | **three arms keyed to a matched PRIMARY baseline `p₀`** (the last 300 decisions before deploy): PASS ≤ `p₀ − 1.645·SE`, FALSIFIED ≥ `p₀`, between ⇒ INCONCLUSIVE-EXTEND; whole-window 24.9 % demoted to SENSITIVITY; VOID conditions named. **Preview: the last 300 before 16:10Z were 16.0 % maker (48 / 300), not 24.9 %** | Langston Step-2 ruling 3 (the old bar passes the null about half the time, and the whole window is a mixture); the preview confirms the mixture |
 
 ---
 
@@ -189,11 +190,12 @@ New `drizzle/migrations/<date>-b-xstock-fee-contract.sql`, one `BEGIN … COMMIT
 - Delete, with zero callers and no surviving reader of any state they write: `getConfig`, `modelTradeRealism`, `getAggregateStats`, `updatePriceHistory`, `priceHistory`, `VOLATILITY_WINDOW`, `TradeRealism`.
 - Delete `routes.ts:69`.
 - Fix `cost-model.ts:110-112`.
+- **Rider (Langston Step-2 ruling 1):** `estimateVolatility`'s `symbol` parameter (`:150`) is read nowhere in its body. Once it goes, `modelSlippage`'s own `symbol` (`:53`) is read only at `:75` and becomes unused too — both are dropped, and the one caller `pre-execution-validator.ts:136-141` loses its first argument.
 - `DELETED_COMPONENTS_LOG.md` entry (what / why / blast radius = §A3 census / archive `1-system-manual/_archive/deleted-code/slippage-fee-model-dead-methods.ts.removed` / commit). **Kept on purpose:** `modelSlippage`, `calculateFees` — the dormant validator still calls them; its removal belongs to `#300`(b)/`#297`/`#578`.
 
 **P4 — The other stored copies** *(A6; OBJ-7; F-3; Langston 15:03Z)*
 - Same migration: `DELETE FROM module_constants WHERE module_name = 'cost_model';` (5 rows) + remove `'cost_model'` from `PREFETCH_MODULES` (`b72-warmup.ts:46`) in the same commit. **Close `#133` and `#134`.**
-- Same migration: `calibration_ledger` xStock `feeRateTaker` → `'0.10%'`, `feeRateMaker` → `'-0.02%'`, notes cite the venue schedule (2026-09-06) and `#1010`, `updated_at = now()`. `decision_grade` stays — nothing reads it as authority (A6), and the values become account-confirmed.
+- Same migration: `calibration_ledger` xStock `feeRateTaker` → `'0.10%'`, `feeRateMaker` → `'-0.02%'`, notes cite the venue schedule (2026-09-06) and `#1010`, `updated_at = now()`. `decision_grade` stays `true` (Langston Step-2 ruling 2: the corrected rates are the venue's published schedule against a confirmed account; Phase 24 measures fill behaviour, not the fee rate). **The label itself is filed as `#1042`** — it read `true` on 0.26 %/0.16 % from 2026-06-02, has no reader and is not rendered (A6), so it has never discriminated anything (Part C).
 - **Rollback — an operator runbook step, not a promise.** Committed `drizzle/migrations/<date>-b-xstock-fee-contract-rollback.sql` (never in `MANIFEST.txt`), with the literal SQL: re-insert the five `cost_model` rows exactly as A1 lists them (`module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by`); restore xStock `0.008 / 0.004`; step the two bumped xStock epochs back and delete the `xstock_spot/live` row; restore the two ledger rows. **Runbook line in the completion report and the deploy note: run the rollback SQL BEFORE `dt-deploy` of any pre-batch sha — `dt-deploy` migrates forward only (A11), and pre-batch code refuses boot on an empty `cost_model`.**
 - **Deploy-note line (Langston 15:03Z):** between `db:migrate` and `pm2 restart` the old process keeps running, already warmed; if anything restarts OLD code inside that window (crash-restart, a failed restart) it refuses boot on the empty module. Not a gate.
 
@@ -207,8 +209,13 @@ Same migration: `vts/xstock_spot 6 → 7`, `paper_sim/xstock_spot 3 → 4` (temp
 **P7 — Tests** *(A10; OBJ-8)*
 Correct the two SUBJECT files; re-point the five PROBE files to named per-class constants; leave the three kept files alone. **New:** a rail suite (accepts `-0.0002`; refuses `-0.0011`, maker > taker, `NaN`, `Infinity`, taker `0`); `calculateFees` reads the merge site (seed a diverged xStock taker, assert it is used); the P5 locks; a migration fence asserting the corrective UPDATE carries no value predicate and the post-condition block exists.
 
-**P8 — The prediction and its instrument** *(A8; F-4)*
-Pre-registered in this document: **the xStock paper maker share of orchestrator decisions falls below the 24.9 % baseline (422 / 1,698) after deploy.** Read from `switch_on_shadow_evidence` (`proof_type = 'maker_taker'`, `asset_class = 'xstock_spot'`, `captured_at` after the deploy instant) once **≥ 300** decisions exist. **Falsified if the share is ≥ 24.9 % at ≥ 300.** Direction only — other inputs move over the same weeks.
+**P8 — The prediction and its instrument** *(A8; F-4; Langston Step-2 ruling 3)*
+Pre-registered before deploy, three arms:
+- **PRIMARY baseline `p₀`** = the xStock paper maker share of the **last 300** `maker_taker` decisions in `switch_on_shadow_evidence` captured before the deploy instant — matched n, matched composition. Measured and written into the Step-6 deploy note **before any post-deploy row is read**. **SENSITIVITY** = the whole-window 24.9 % (422 / 1,698, 2026-07-15 → 09-11). Both deltas are published; **same sign required — disagreement ⇒ EXTEND.**
+- **At n ≥ 300 post-deploy decisions:** **PASS** if the post share ≤ `p₀ − 1.645 × √(2·p₀(1−p₀)/300)` (the matched 300/300 two-proportion bound; Langston's worked value is 19.1 % at `p₀` = 24.9 %). **FALSIFIED** if the post share ≥ `p₀`. **Anything between ⇒ INCONCLUSIVE-EXTEND, never PASS.**
+- ⚠️ **Why the arms key to the measured `p₀` and not to 24.9 %:** a preview of the last 300 decisions before 2026-09-11 16:10Z reads **48 / 300 = 16.0 % maker** (2026-08-27 → 09-11) — far below the whole-window 24.9 %, which is the mixture Langston named. Against 24.9 % the pre-deploy data would already "pass". At `p₀` = 16.0 % the PASS line would be ≤ 11.1 %. The preview is not the baseline.
+- **VOID, pre-registered:** any in-window write to an xStock `maker_taker` row (last writes: `p19-b7-2` 2026-07-01, `p19-b7-2c` 2026-07-02, `p19-b8-6-maker-target-exits` 2026-07-15), or either decision site moving `levelGeometry` off `'mid'`. **Named collision: `B-PRICE-SIDE-BY-JOB` (plan row 3n)** — under `'sided'` the maker advantage loses its spread term (`maker-taker-decision.ts:292-295`) and pFill's referent moves (`:314-319`). If 3n deploys inside the window, the window splits at that sha and neither side alone claims PASS below the floor.
+- **The point form is not available — stated rather than implied:** the sink stores no entry price (its columns are fixed by `2026-07-14-b-evidence-sink.sql` and filled at `switch-on-evidence-sink.ts:43-59, 110-120`), and its only keys — `symbol`, `strategy`, `captured_at` — match no durable row exactly, so maker picks with a margin ≤ `0.0084 × entry` cannot be counted. The interval form above is used.
 
 **P9 — OBJ-9 is delivered by this document** *(A9; ruling 4)*
 Numbers, method, pinned query and limits are in A9; they go into the completion report and to Kyle in plain language, with the r1 → r4 correction stated (§0 row 9). No deploy item.
@@ -226,6 +233,7 @@ Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P5'
 | finding | disposition |
 |---|---|
 | **`#1041` — the parity gate and the health snapshot read a timing buffer nothing has written since 2026-06-16** (A7) | **2 — added as a named item to `P19-B12` (Diagnostics + internal-health monitoring), owner CC-B**, written into that plan row. Carries: do not re-encode "fees are positive" when the gate is rewired. |
+| **`#1042` — `calibration_ledger.decision_grade` is an authority label with no reader** (A6; Langston Step-2 ruling 2) | **2 — added as a named item to `P19-B12`, owner CC-B, beside `#1041`.** CC-B's call on the outcome: **the column goes** unless that item finds a consumer that needs it — `status` already carries each row's lifecycle, and rendering an unmaintained flag would hand it authority it never earned. |
 | **`T-W20C-SCALAR-LEG`** (alert `a3610acf`, routed to CC-B by Langston) | **3 — own item, placed in `PHASE_19_PLAN` as row 2.4-FEE-c**, after 2.4-FEE-b (which stays immediately after 2.4-FEE per the earlier ruling). Re-scope first: July aged out of rolling-30 retention. |
 | **`#682 B-FILTER-DIAG-XSTOCK` had no plan row** (0 hits in `PHASE_19_PLAN`; its entry carried `DUE: 2026-08-12`) | **3 — placed as row 2.4-FEE-d**, after 2.4-FEE-c; `#682` entry amended to point at the row. |
 | Legacy `TradingEngine` hardcodes `0.0026` (`trading-engine.ts:385/641`) | **5 — no new work**: `#578`, plan row 11.5 removes the engine. |
@@ -246,6 +254,8 @@ Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P5'
 
 **Rounds: four reviews across three correction cycles — the three-round cap.** Every round after the first read the object at a pushed ref. Round 3's called-out items are each folded and re-derived; its own verdict listed all six prior items satisfied. No finding in this document rests on a reviewer's clean.
 
+`LANGSTON Step 2: APPROVED 2026-09-11 16:14Z at 8ae6e98b0 · rulings: (1) delete the four methods now, and drop estimateVolatility's unused symbol · (2) keep decision_grade true, and file the label as a finding (→ #1042) · (3) replace P8 with a three-arm matched-baseline pre-registration with VOID conditions (→ P8, r5) · placements and #1041 accepted · limits (i) and (ii) go into the completion report verbatim, not paraphrased`
+
 ---
 
 ## PLAIN-LANGUAGE SUMMARY
@@ -254,4 +264,4 @@ Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P5'
 
 **What the wrong fee did.** Re-ranking the recorded pool with the correct fee changes the top pick in **at least 163 and at most 340 of the 1,516 ranking rounds (11–22 %)** where an xStock was a candidate. The clearest part: in the 174 rounds a crypto pick led beside an xStock, the xStock would move above it in 151 to 166. This measures only what was in the pool — xStock candidates the wrong fee filtered out earlier can't be counted, so the real effect is larger in ways this data can't show.
 
-**The plan.** Set the two xStock rates, let the startup check accept a small rebate, point everything at one fee reader, delete the dead cost settings, mark the change date for xStock learning only, and fix the tests. Afterwards we expect xStock to choose resting orders less often than today's 25 % — and we will measure it.
+**The plan.** Set the two xStock rates, let the startup check accept a small rebate, point everything at one fee reader, delete the dead cost settings, mark the change date for xStock learning only, and fix the tests. Afterwards we expect xStock to choose maker (resting) orders less often than it does now — and we have written down in advance what result would prove that wrong.

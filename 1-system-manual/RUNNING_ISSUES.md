@@ -8473,3 +8473,17 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 > `HOME: item added to P19-B12 (Diagnostics + internal-health monitoring), owner CC-B, placed in PHASE_19_PLAN.md §1 at row P19-B12` — placement proposed to Langston in the `B-XSTOCK-FEE-CONTRACT` Step-2 dispatch.
 
 ⇔ `#300` (the deletion) · `#301` / `#398` (the gate's other inputs) · `#1010` (where it was found).
+
+### #1042 OPEN 2026-09-11 (CC-B; Langston's Step-2 ruling 2 on `B-XSTOCK-FEE-CONTRACT`) — ⚠️ **`calibration_ledger.decision_grade` IS AN AUTHORITY LABEL WITH NO READER: IT READ `true` ON WRONG FEE RATES FROM 2026-06-02 AND HAS NEVER DISCRIMINATED ANYTHING**
+
+**MEASURED at `18a8b29b6` (re-derived by Langston at `8ae6e98b0`).** The column is written by four migrations only (`2026-06-02-b-calscore-ledger.sql`, `-02b`, `-02c`, `2026-06-10b`). It is read by one SELECT projection (`routes.ts:8395`, the `/analytics/calibration-scoreboard` endpoint) and declared on one client row type (`client/src/pages/analytics.tsx:2697`) — **and never read by the render** (`:2706-2790`; control: the same file renders the unrelated computed `isDecisionGrade` at `:2360`). No server consumer; `scripts/` has no hit. The xStock fee rows carried `decision_grade = true` on `0.26 %` / `0.16 %` — the pre-B-4.5 Tier-6 figures — while the live model used `0.8 % / 0.4 %` and the venue charges `0.10 % / −0.02 %`.
+
+**RULE 24: outcome (3)** — a label that no longer fits intent. It has refused nothing, gated nothing and displayed nothing, so its `true` carries authority it never earned: the `#546` class, an unenforced value wearing a measured value's clothes.
+
+**NOT FIXED IN `B-XSTOCK-FEE-CONTRACT` (Langston's ruling):** that batch corrects the two fee rows and keeps the flag `true`, because the corrected rates are the venue's published schedule against a confirmed account — the most authoritative form a fee input takes. **The question here is the label itself.**
+
+**CC-B's call on the outcome: the column goes**, unless the item finds a consumer that genuinely needs it. `status` (`baseline` / `planned` …) already carries each row's lifecycle, and rendering an unmaintained flag would hand it the authority it never had. Removal needs the reader census above re-run at the ref, plus a migration and the client type edit (rule 18, `DELETED_COMPONENTS_LOG`).
+
+> `HOME: item added to P19-B12 (Diagnostics + internal-health monitoring), owner CC-B, placed in PHASE_19_PLAN.md §1 at row P19-B12, beside #1041` — Langston directed the fold onto `P19-B12` in his Step-2 approval.
+
+⇔ `#1010` · `#1041` · `#546` · SIM `SYSTEM_IMPACT_MAP.md:2039` (records the table as "pure display").
