@@ -4048,3 +4048,18 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 **FIX.** A four-sink consequence test (build output / DB schema / runtime resolution / read-off-disk), every entry naming its sink and citing the line that carries it there; renames handled via `previous_filename`; rollback `.sql` excluded, mirroring `db-migrate.ts:118`; the MANIFEST note gated on the discriminating shape AND on `CAPPED=0`.
 **MEASURED.** Discriminating class = **66 commits of 4,890** since 2026-05-01 (Langston, backup bare repo). Named instances: `fe097912d` (migration, no `server/`) and `8ef70628d` (`bridge/canonical/mapping-regime-strategy.json`, read at `routes.ts:2083-2085`) — both **OLD=0, NEW=1**.
 **RESIDUALS, STATED:** a path built from a variable at runtime is unreachable by any grep (four sites — a floor, not a population); and **only `/usr/local/bin/dt-deploy-drift.sh` is live** — the `/opt/discord-bridges` copy has ZERO invokers and is `deploy.sh`'s staging source only, which is the `#1004` stale-copy shape if anyone updates the wrong one.
+
+### FIX-2026-09-11-A — a Langston reply addressed to a session never woke it when the reply ended with another session's alert note (`#1040`, `B-WAKE-LEAD-NAME`, CC-INFRA)
+**DEFECT.** In `comms-infra/laptop/cc-wake-filter.py`, the `langston_outbound` branch found the LAST `[[ALERT … owner=…]]` marker and `continue`d when its owner was another session — **before** the name check was reached. `#995` made the marker a suppressor for triage replies addressed to nobody. Since then, Langston appends triage for every due alert to ordinary replies, so a reply to one session routinely ends with markers for others, and the suppressor fired on replies it was never meant for.
+**Measured:** 25 / 27 / 26 / 15 dropped replies per session over 409 replies. For every session the dropped count equalled the other-owner-marker count.
+**FIX.** Strip every marker unconditionally, first. The other-owner suppression now applies only when the reply does NOT open with this session's name (`OPEN_RE`, built from `NAMES`). The wake line carries `[alert routed to <every distinct OTHER owner>]` whenever any marker names someone besides the woken session, on both sides of the owner test.
+**MEASURED, BOTH DIRECTIONS.**
+- **Suite:** 22 cases, all pass on the fix. The unfixed filter fails exactly the cases aimed at it.
+- **Replay, one entry per reply row** since 2026-09-03 — dropped-with-opening-name 28/28/29/24 → **0** (as of 17:14Z). Every newly woken reply joins MATCH to the author of the message it answered; 0 other wakes changed.
+- **Langston's whole-history replay:** **2 wakes lost, both spurious** — quoted marker templates. **0 real wakes lost.**
+- **Live:** his 16:53Z reply woke CC-INFRA, tagged.
+**RESIDUALS, STATED:**
+- The live filter is a hand-copied file and each running watcher holds the code it armed with (`#1004` class). Per-session re-arm was measured from process start times, not assumed.
+- OLD Claude had no watcher at all; a system alert with `owner=CC-A` was raised.
+- "Opens with the name" is reliable only on non-alert replies, where the bridge prefixes the addressee.
+**STATUS: FIXED, installed 2026-09-11.**
