@@ -66,8 +66,16 @@ export interface KalmanDiagnostics {
 export const REWARM_FIRST_LIVE_GAIN = 0.9;
 
 /** 9.3.C measurement noise, `R_t = clip(1 + (1 - ER) x 50, 1, 50)`. ONE definition, shared by the update and the re-warm. */
-function measurementNoise(ER: number): number {
+export function measurementNoise(ER: number): number {
   return Math.max(1, Math.min(50, 1 + (1 - ER) * 50));
+}
+
+/**
+ * 9.3.C process noise, `Q_t = max(0.1, VolNoise x 0.5)`, charged per step. ONE definition; exported with
+ * `measurementNoise` so a test derives its steady state from the model instead of copying numbers (Langston r3 FINDING-2).
+ */
+export function processNoise(VolNoise: number): number {
+  return Math.max(0.1, VolNoise * 0.5);
 }
 
 export class AdaptiveKalmanFilter {
@@ -181,7 +189,7 @@ export class AdaptiveKalmanFilter {
       this.pendingRewarmInflation = false;
     }
 
-    const Q = Math.max(0.1, VolNoise * 0.5);
+    const Q = processNoise(VolNoise);
 
     const K = this.P / (this.P + R);
     this.x = this.x + K * (price - this.x);
@@ -251,6 +259,12 @@ export class AdaptiveKalmanFilter {
     this.lastQ = state.lastQ;
     this.lastK = state.lastK;
     this.updateCount = state.updateCount;
+    // P-7j r3 residual (Langston FINDING-3): a restore is not a warm and carries no observation key. Without these three
+    // lines a warm-then-restore would inflate the restored covariance at the next read, and a key seen before the restore
+    // would suppress the first observation after it.
+    this.pendingRewarmInflation = false;
+    this.lastObservationKey = null;
+    this.warmedFromCloses = 0;
     console.log(`[9.3][RESTORE] ${this.symbol} filter restored (updateCount=${state.updateCount})`);
   }
 

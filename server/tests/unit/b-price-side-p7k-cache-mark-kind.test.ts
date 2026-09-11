@@ -119,11 +119,17 @@ describe('P-7k — the mixture is readable, one interval per HEALTH line', () =>
     expect(lines[0]).toMatch(/cacheSize=\d+ rowKind=/); // the existing text is unchanged up to cacheSize
   });
 
-  it('10. signal generation counts the read it sets levels from (source fence)', () => {
+  it('10. the quant lane counts its read BELOW the invalid-price guard (source fence; Langston chunk-4 C1)', () => {
     const src = readFileSync(resolve(__dirname, '../../services/signal-orchestrator.ts'), 'utf-8');
     const at = src.indexOf('const cachedPrice = priceCache.getCachedPrice(symbol);');
     expect(at).toBeGreaterThan(-1);
-    expect(src.slice(at, at + 300)).toContain('priceCache.noteLevelRead(cachedPrice);');
+    const guard = src.indexOf('Invalid price for ${symbol} (not in priceCache)', at);
+    const call = src.indexOf('priceCache.noteLevelRead(cachedPrice);', at);
+    expect(guard).toBeGreaterThan(at); // control: the guard really follows the read
+    expect(src.slice(at, guard)).not.toContain('noteLevelRead'); // r1 counted above the guard
+    expect(call).toBeGreaterThan(guard);
+    // Structural, not a byte distance (a byte bound broke on line endings): the count sits before the smoother starts.
+    expect(call).toBeLessThan(src.indexOf('Directive 9.3: Apply Adaptive Kalman Filter', at));
   });
 
   it('11. the unreachable v1 WS writer states `last` (source fence)', () => {

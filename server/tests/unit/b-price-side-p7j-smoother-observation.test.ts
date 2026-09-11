@@ -21,6 +21,8 @@ import { resolve } from 'node:path';
 import {
   AdaptiveKalmanFilter,
   REWARM_FIRST_LIVE_GAIN,
+  measurementNoise,
+  processNoise,
   getSmoothedPrice,
   clearKalmanFilter,
   getAllKalmanDiagnostics,
@@ -151,10 +153,11 @@ describe('P-7j r2 — Langston chunk-2 BLOCKER-1: the re-warm is continuous AND 
     const got = smooth(SYM, 105, ER, VN, 'obs-1', hourly);
     // r1 left P at the steady state of P^2 = Q(P + R) (R 26, Q 0.5: P about 3.86, K about 0.13), so this read was ~100.65.
     expect(got).toBeGreaterThanOrEqual(100 + REWARM_FIRST_LIVE_GAIN * 5 - 1e-9);
-    // r3 (Langston condition 2): pin the DECAY LENGTH, not just "less than the first". Steady state at R 26, Q 0.5:
-    // P solves P^2 = Q(P + R), and the gain is P / (P + R).
-    const R = 26;
-    const Q = 0.5;
+    // r3 (Langston condition 2): pin the DECAY LENGTH, not just "less than the first". The steady state comes from the
+    // model's own noise functions (r3 FINDING-2), so it cannot go stale if R or Q changes: P solves P^2 = Q(P + R), and
+    // the gain is P / (P + R). At ER 0.5 and VolNoise 1 that is R 26, Q 0.5.
+    const R = measurementNoise(ER);
+    const Q = processNoise(VN);
     const pSteady = (Q + Math.sqrt(Q * Q + 4 * Q * R)) / 2;
     const kSteady = pSteady / (pSteady + R);
     const gains = [diagOf()?.lastK as number];
@@ -165,6 +168,8 @@ describe('P-7j r2 — Langston chunk-2 BLOCKER-1: the re-warm is continuous AND 
     const firstWithin10Pct = gains.findIndex((k) => k <= kSteady * 1.1) + 1; // the 1-based live observation number
     expect(gains[0]).toBeCloseTo(REWARM_FIRST_LIVE_GAIN, 9);
     expect(gains[1]).toBeCloseTo(0.479, 3);
+    // ⚠️ A KNIFE-EDGE PIN, deliberately: observation 11 sits at 0.142795 against a threshold of 0.142332 (0.33% margin).
+    // A flip to 11 or 13 is the pin doing its job on a model change, not a flaky test.
     expect(firstWithin10Pct).toBe(12);
   });
 
@@ -195,5 +200,27 @@ describe('P-7j r2 — Langston chunk-2 BLOCKER-1: the re-warm is continuous AND 
     filter.update(110, ER, VN); // seeds
     filter.update(111, ER, VN); // first update after the seed: K = 1 / (1 + 26)
     expect(filter.getDiagnostics().lastK).toBeCloseTo(1 / 27, 9);
+  });
+
+  it('16. r3 residual (Langston FINDING-3): a restore is not a warm, so it clears a pending inflation, the key and the warm count', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const donor = new AdaptiveKalmanFilter('P7J-DONOR');
+    for (const c of CLOSES) donor.update(c, ER, VN);
+    const saved = donor.getInternalState();
+
+    const filter = new AdaptiveKalmanFilter('P7J-RESTORE');
+    filter.warmFromHistory([1, 2, 3], ER, VN, 3); // leaves an inflation pending
+    filter.restoreState(saved);
+    filter.update(110, ER, VN);
+    // the restored covariance governs the first read, not the pending 0.9
+    expect(filter.getDiagnostics().lastK).toBeCloseTo(saved.P / (saved.P + measurementNoise(ER)), 12);
+    expect(filter.getDiagnostics().warmedFromCloses).toBe(0);
+
+    const keyed = new AdaptiveKalmanFilter('P7J-RESTORE-KEY');
+    keyed.updateIfNew('k1', 100, ER, VN);
+    keyed.restoreState(saved);
+    const before = keyed.getState();
+    keyed.updateIfNew('k1', 200, ER, VN); // a key seen before the restore is still a new observation after it
+    expect(keyed.getState()).not.toBe(before);
   });
 });

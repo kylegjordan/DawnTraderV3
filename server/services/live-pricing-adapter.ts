@@ -876,7 +876,12 @@ export class LivePricingAdapter {
       const ask = parseFloat(tickerData?.a?.[0] || '0');
       const bid = parseFloat(tickerData?.b?.[0] || '0');
       const lastTrade = parseFloat(tickerData?.c?.[0] || '0');
-      const midpoint = markKindOf(bid, ask) === 'mid' ? (ask + bid) / 2 : lastTrade;
+      // r2 (Langston chunk-4 C4): the kind and the print are computed ONCE, so the unified row's stated kind is structurally
+      // the kind of the price stored, not a second evaluation that happens to agree. P-7i (A-9.1 row 4): REST `c[0]` is the
+      // venue's last trade, kept beside the midpoint.
+      const _restKind = markKindOf(bid, ask);
+      const _lastTradeOrNull = Number.isFinite(lastTrade) && lastTrade > 0 ? lastTrade : null;
+      const midpoint = _restKind === 'mid' ? (ask + bid) / 2 : lastTrade;
       
       if (midpoint <= 0 || isNaN(midpoint)) {
         console.log(`[8.9.2][KRAKEN_REST_INVALID_PRICE] ${symbol}: bid=${bid} ask=${ask} last=${lastTrade}`);
@@ -889,9 +894,7 @@ export class LivePricingAdapter {
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache from REST
       const normalized = this.normalizeSymbol(symbol);
       // B-PRICE-SIDE-BY-JOB r5 P-7k: the unified row learns which quantity this is, and REST `c[0]` as its print.
-      priceCache.updateFromRest(normalized, midpoint, markKindOf(bid, ask), Number.isFinite(lastTrade) && lastTrade > 0 ? lastTrade : null);
-      // B-PRICE-SIDE-BY-JOB r5 P-7i (A-9.1 row 4): REST `c[0]` is the venue's last trade — kept beside the midpoint.
-      const _lastTradeOrNull = Number.isFinite(lastTrade) && lastTrade > 0 ? lastTrade : null;
+      priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull);
       
       // A real venue read: `observedAt` is genuinely now, and it is the ONLY return here that
       // may say so.

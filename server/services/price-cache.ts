@@ -569,9 +569,13 @@ class UnifiedPriceCache {
   /**
    * The periodic HEALTH line (every 60 s). P-7k: extracted from the interval so its mixture fields are testable; the
    * text up to `cacheSize` is unchanged.
-   * `rowKind` is a SNAPSHOT of the cache's keys by kind (alias keys included, as in `cacheSize`). `levelReadKind` counts
-   * the kind of every price signal generation read to set levels SINCE THE PREVIOUS LINE, and is reset here, so each
-   * line reads one interval, never a running total.
+   * `rowKind` is a SNAPSHOT of the cache's keys by kind (alias keys included, as in `cacheSize`), across both asset
+   * classes and every lane. `levelReadKind` counts, SINCE THE PREVIOUS LINE (reset here, so each line is one interval),
+   * the kind of the cached price at entry to each crypto quant-lane symbol evaluation that had a usable price.
+   * ⛔ r2 (Langston chunk-4 C2, C3): `levelReadKind` is an UPPER BOUND on level-setting reads, not the set of them: most
+   * evaluations return before a level is built, and the survivors skew to hot WS-fed names, so the true level-setting
+   * mixture is likely MORE midpoint-heavy than this count. The two fields cover different populations (all rows against
+   * one lane's reads), so they are never read as numerator and denominator.
    */
   private logHealthLine(): void {
     const open = this.buckets[0].symbols.size;
@@ -585,14 +589,16 @@ class UnifiedPriceCache {
     console.log(`[A4.R10R-1][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} vts=${vts} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size} rowKind=mid:${r.mid},last:${r.last},unknown:${r.unknown} levelReadKind=mid:${l.mid},last:${l.last},unknown:${l.unknown}`);
   }
 
-  /** P-7k: kinds of the prices signal generation read to set levels, since the last HEALTH line. */
+  /** P-7k: kinds of the cached prices the crypto quant lane read at evaluation entry, since the last HEALTH line (an upper bound on level-setting reads). */
   private levelReadKinds = { mid: 0, last: 0, unknown: 0 };
 
   /**
-   * P-7k (record-only): called by signal generation with the row it is about to set levels from. A missing row is not
-   * counted: no price was read, and the caller returns without setting levels.
-   * ⚠️ Counts the active crypto quant lane's read (`signal-orchestrator.ts`) only. The VTS level lane reads the same rows,
-   * so its mixture is visible in `rowKind`, but its reads are not counted here.
+   * P-7k (record-only): called by the crypto quant lane with the row it read at evaluation entry, after its invalid-price
+   * guard (r2, Langston chunk-4 C1). A missing row is not counted either: no price was read.
+   * ⚠️ WHAT IT DOES NOT COVER (r2, C3): the VTS level lane reads the same rows, so its mixture shows in `rowKind` only; and
+   * the crypto PATTERN lane sets entry, stop and target from a BAR CLOSE (`signal-orchestrator.ts:2224` into
+   * `patternToTradeSignal` at `:2286`, levels at `:2291-2293`), reads no cache row, and appears in NEITHER field; a
+   * `mid | last | unknown` count cannot express `venue_close`, which `price-basis.ts` names and OBJ-8 owns.
    */
   noteLevelRead(row: CachedPrice | null | undefined): void {
     if (!row) return;

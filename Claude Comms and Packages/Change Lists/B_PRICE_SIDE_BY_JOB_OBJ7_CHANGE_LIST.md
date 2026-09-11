@@ -241,6 +241,32 @@ Carry: a write with no print keeps the row's pair with its original stamp; the p
 ⚠️ **Behaviour:** none; no decision reads the new fields. The HEALTH line grows two fields.
 **Attack:** (1) whether `MARK_KIND_BY_PRODUCER` belongs beside the producer union in `live-pricing-adapter.ts` instead; (2) whether the orchestrator's read is the right place to count what fed levels; (3) the REST poller's fixed `'last'`: it stores `c[0]` whatever the sides are, so its kind is fixed, not decided per read.
 
+## STEP 4 r2 — CHUNK 4's CONDITIONS, AND STEP 4 r3's RESIDUALS
+
+Your verdicts: chunk 4 APPROVED with four conditions (19:11Z; board `Review` unset until they land); Step 4 r3 APPROVED with three residuals, none gating the push (19:15Z).
+
+### Chunk 4
+
+| condition | fix | where | proof |
+|---|---|---|---|
+| **C1** — the count sat above the invalid-price guard | `priceCache.noteLevelRead(cachedPrice)` moved below the guard, so a present row with price 0 (a poller row, stated `'last'`) is not counted | `signal-orchestrator.ts` | test 10 now asserts the call sits after the guard and before the smoother starts, and not above the guard; **fails on r1** (the pre-C1 orchestrator). The first draft used a 400-byte distance and failed on the fixed code too (411 bytes on the CRLF working tree); replaced by the structural marker |
+| **C2** — the population | `levelReadKind` restated where it lives: the kind at entry to each crypto quant-lane evaluation with a usable price, an **upper bound** on level-setting reads, with the direction named (the true level-setting mixture is likely more midpoint-heavy); the two fields cover different populations and are never numerator and denominator | `price-cache.ts` `logHealthLine`, `levelReadKinds`, `noteLevelRead` docblocks | — |
+| **C3** — a third lane | the stated limits now name the crypto PATTERN lane: levels from a bar close (`signal-orchestrator.ts:2224`, `:2286`, `:2291-2293`), no cache row read, in neither field, and not expressible as `mid`/`last` (`venue_close`, OBJ-8's) | `price-cache.ts` `noteLevelRead` docblock | — |
+| **C4** — two evaluations of the kind and the print | the REST leg computes `_restKind` and `_lastTradeOrNull` once; the unified-row write and the returned result both use them | `live-pricing-adapter.ts` REST leg | tsc unchanged; p7i test 6 and p7k test 6 cover both uses |
+| CI at the ruled ref | run `34636371003` on `cc88748f7`: TypeScript Check, Test Suite, Build, Docker Build all success, per job | — | — |
+
+**Residuals for the completion report, named as you asked:** (1) a reader joining a stored producer to `MARK_KIND_BY_PRODUCER` gets `null` for `kraken_rest_poller` while that write's row states `'mid'` or `'last'`; the join site must ask the row. (2) P-7i's carry rule has two implementations, `carryLastTrade` (`price-cache.ts`) and the inline `_hasPrint` triple (`live-pricing-adapter.ts` `updateCache`); they agree today (`!= null` both).
+
+### Step 4 r3 residuals
+
+| residual | fix | where | proof |
+|---|---|---|---|
+| **FINDING-1** — condition 4 not yet evaluable | The Step-8 comparator is each symbol's OWN steady-state K from the R and Q on its 12th KALMAN line; the population is symbols with a REWARM line in the first 10 minutes after the restart; n-floor 20, below which the result is a count, not a distribution; the REWARM lines and each symbol's first 12 KALMAN lines are copied from `out.log` to an evidence file within 30 minutes of the restart | Steps 5-8 plan | — |
+| **FINDING-2** — test 12 hard-coded R and Q | `measurementNoise` is exported and `processNoise` added (the Q formula, now one definition used by `applyObservation`); test 12 derives R and Q from them, and says `toBe(12)` is a knife-edge pin (observation 11 at 0.142795 against 0.142332) | `adaptive-kalman.ts`; p7j test 12 | against the HEAD smoother test 12 fails only because `processNoise` is not exported there, which says nothing about behaviour |
+| **FINDING-3** — `restoreState` left three fields | `restoreState` clears `pendingRewarmInflation`, `lastObservationKey` and `warmedFromCloses` | `adaptive-kalman.ts` | test 16 (a warm then a restore: the restored covariance governs the first read, the warm count is 0, a key seen before the restore still advances) **fails on the HEAD smoother** |
+
+**Proof:** 20 related test files, 292/292. tsc 377, identical file+code multiset.
+
 ## THE ASK — one gate per dispatch
 
 Three dispatches, one per chunk. Each asks for a ruling on that chunk's commits only, at the ref, with this file as the context.

@@ -2402,8 +2402,6 @@ export class SignalOrchestrator {
       // Batch 18: Use priceCache instead of per-symbol getTicker — these symbols are already
       // in the fx5Snapshot bucket (refreshed every 30s). Eliminates ~N redundant API calls/cycle.
       const cachedPrice = priceCache.getCachedPrice(symbol);
-      // B-PRICE-SIDE-BY-JOB r5 P-7k (record-only): count which quantity this level-setting read got, midpoint or last trade.
-      priceCache.noteLevelRead(cachedPrice);
       const rawPrice = cachedPrice?.price || 0;
       const currentVolume = cachedPrice?.volume24h || 0;
 
@@ -2411,6 +2409,10 @@ export class SignalOrchestrator {
         console.log(`[37.A][SIGNAL] Invalid price for ${symbol} (not in priceCache)`);
         return signals;
       }
+      // B-PRICE-SIDE-BY-JOB r5 P-7k (record-only): count which quantity this evaluation read, midpoint or last trade.
+      // r2 (Langston chunk-4 C1): BELOW the invalid-price guard, so a present row with price 0 (always a poller row,
+      // stated `'last'`) is not counted as a read that went on toward levels.
+      priceCache.noteLevelRead(cachedPrice);
 
       // Directive 9.3: Apply Adaptive Kalman Filter for smoothed price
       const closePrices = ohlcData.map(c => parseFloat(c.close));
