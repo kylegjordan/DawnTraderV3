@@ -153,6 +153,21 @@ export const REQUIRED_IF = {
   phase_19_plan: (batchId) => /^P19-/i.test(batchId),
 };
 
+// B-TASK-LIST-SLOT (#1009) P1: Tier-1 LEDGER ROWS graded INSIDE a batch's completion report — rows for
+// documents the DOCS table above cannot see (the per-session task lists are not repo docs it grades).
+// Every class owes them (workflow-10-governance's Tier-1 rows are unconditional), so this table is NOT
+// class-keyed. `sinceMs` = the commit at which the row first appears in workflow-10-governance at the
+// ref; a report first added before it is NOT GRADED. It records when the requirement came into
+// existence — a fact about the repo, not deploy config — so, unlike GOV_CUTOFF, it is NOT env-overridable.
+// Scoped to ONE row deliberately (pre-audit P1): the two MEMORY rows landed before the verdict-column
+// ledger shape was in common use; extending to them is homed at PHASE_19_PLAN row 4.8, OBJ-B.
+export const LEDGER_ROWS = {
+  task_lists: {
+    names: /task[ _-]?lists?/i,
+    sinceMs: Date.parse('2026-09-05T05:45:00Z'), // bfdd1197f — workflow-10-governance:132 lands
+  },
+};
+
 // Undeclared class → strictest (architecture) + flag (Item 5 / fail-closed).
 export const DEFAULT_CLASS = 'architecture';
 

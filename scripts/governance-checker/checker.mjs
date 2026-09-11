@@ -15,7 +15,7 @@ import {
   DOCS, CLASS_DOCSET, DEFAULT_CLASS, HOLLOW_NET_LINE_FLOOR, REQUIRED_IF,
   CODE_PREFIXES, GOVERNANCE_PREFIXES, HOUSEKEEPING_ONLY_PATHS, HOUSEKEEPING_ONLY_BASENAMES,
   SCOPE_DIR, CHANGE_CLASS_MARKER, VALID_CLASSES, CORE_ENGINE_PATHS,
-  extractBatchId, batchIdToFileRegex,
+  extractBatchId, batchIdToFileRegex, LEDGER_ROWS,
 } from './config.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -141,6 +141,44 @@ function firstAddCommitMs(relPath) {
 export function completionReportCommitTime(batchId) {
   const times = findGlobDoc(batchId, 'completion_report').map(firstAddCommitMs).filter((t) => t !== null);
   return times.length ? Math.min(...times) : null;
+}
+
+// ── B-TASK-LIST-SLOT (#1009) P1: a Tier-1 LEDGER ROW, graded inside the completion report ──────────────
+// The DOCS table sees whether a DOCUMENT exists; it cannot see a ROW inside one. Measured 2026-09-09: a
+// session writing a completion report COPIES THE PREVIOUS REPORT rather than opening
+// workflow-10-governance, so a row added to the skill reaches nobody who copies a predecessor — 1 of 3
+// reports since the task-list row landed carried it, and the one that did was written after Kyle asked.
+// PURE: does `text` carry a markdown TABLE ROW (first non-space char `|`) that names the row AND has a
+// cell whose text — stripped of emphasis/code marks — BEGINS with ✅?
+//   ⇒ `✅ mine / N/A ×3` PASSES — the skill makes "N/A — not mine" the correct answer on three of four;
+//   ⇒ a PROSE mention FAILS, even one with a ✅ in it;
+//   ⇒ the skill's own row pasted with its verdict cells left empty FAILS (that row carries no ✅).
+export function ledgerRowInText(text, spec) {
+  if (typeof text !== 'string') return false;
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    if (!/^\s*\|/.test(line) || !spec.names.test(line)) continue;
+    const cells = line.split('|').slice(1).map((c) => c.replace(/[*`_]/g, '').trim());
+    if (cells.some((c) => c.startsWith('✅'))) return true;
+  }
+  return false;
+}
+
+// Per batch: { <row>: true | false | null }. null = NOT GRADED — no completion report at GOV_REF, or the
+// report was first added before the row existed (LEDGER_ROWS[row].sinceMs). Any one of the batch's
+// reports carrying the row satisfies it. A converted PROGRESS report counts from its conversion commit:
+// the rename reads as an ADD to firstAddCommitMs's path-limited `--diff-filter=A` (verified 2026-09-11 on
+// B_DEPLOY_DRIFT_LINE_COMPLETION_REPORT.md → status A at 8e7e1ba9c). Progress reports themselves are
+// outside the population on purpose: the row's trigger is a batch CLOSE, and a progress report is open.
+export function checkLedgerRows(batchId) {
+  const out = {};
+  const reports = findGlobDoc(batchId, 'completion_report');
+  const addedMs = reports.length ? completionReportCommitTime(batchId) : null;
+  for (const [row, spec] of Object.entries(LEDGER_ROWS)) {
+    if (addedMs === null || addedMs < spec.sinceMs) { out[row] = null; continue; }
+    out[row] = reports.some((p) => ledgerRowInText(showFile(gitPath(p)), spec));
+  }
+  return out;
 }
 // LATEST scope first-add (Math.MAX, not min) — Langston Step-4 Finding 1. The re-open signal is a
 // NEW scope rev filed AFTER the completion report; Math.min would always collapse to the original

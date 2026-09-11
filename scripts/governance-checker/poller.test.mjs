@@ -1,7 +1,8 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
 import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops } from './poller.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel } from './config.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS } from './config.mjs';
+import { ledgerRowInText } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse('2026-06-17T12:00:00Z');
@@ -10,6 +11,10 @@ let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => { if (cond) { pass++; } else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
 const hasKey = (arr, k) => arr.some((a) => a.dedupeKey === k);
 const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Set() };
+// B-TASK-LIST-SLOT (#1009): decideAlerts now grades ledger rows for any batch with a completion report,
+// and its default reads git. Every pre-existing test that sets hasCompletionReport injects this stub so
+// the suite stays pure (no git, no network) — the row logic has its own tests at the foot of the file.
+const noRows = () => ({});
 
 // ── batchIdToFileRegex exact-not-prefix (Langston Step-4 C8: numeric + bare-letter guards) ──
 {
@@ -54,7 +59,7 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
 {
   const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true }];
   const stubNoGap = () => ({ required: {} });
-  const { toOpen, toResolveKeys } = decideAlerts(states, noStaleOpen, NOW, { docsetCheck: stubNoGap });
+  const { toOpen, toResolveKeys } = decideAlerts(states, noStaleOpen, NOW, { ledgerRowCheck: noRows, docsetCheck: stubNoGap });
   ok('governance push resolves the deadline alert', toResolveKeys.includes('gov-deadline:P19-B9'));
   ok('no deadline re-opened once governance present', !hasKey(toOpen, 'gov-deadline:P19-B9'));
 }
@@ -63,7 +68,7 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
 {
   const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
   const stubGap = () => ({ required: { sim: false, system_manual: false } });
-  const { toOpen } = decideAlerts(states, noStaleOpen, NOW, { docsetCheck: stubGap });
+  const { toOpen } = decideAlerts(states, noStaleOpen, NOW, { ledgerRowCheck: noRows, docsetCheck: stubGap });
   ok('doc-gap opens for missing sim', hasKey(toOpen, 'gov-docgap:P19-B9:sim'));
   ok('doc-gap opens for missing system_manual', hasKey(toOpen, 'gov-docgap:P19-B9:system_manual'));
 }
@@ -72,7 +77,7 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
 {
   const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
   const stubPresent = () => ({ required: { sim: true } });
-  const { toOpen, toResolveKeys } = decideAlerts(states, noStaleOpen, NOW, { docsetCheck: stubPresent });
+  const { toOpen, toResolveKeys } = decideAlerts(states, noStaleOpen, NOW, { ledgerRowCheck: noRows, docsetCheck: stubPresent });
   ok('doc-gap RESOLVES once the required doc is present', toResolveKeys.includes('gov-docgap:P19-B9:sim'));
   ok('present doc does not (re)open a gap', !hasKey(toOpen, 'gov-docgap:P19-B9:sim'));
 }
@@ -97,7 +102,7 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
   const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
   const exc = { open: new Set(), openSince: new Map(), naConfirmed: new Set(['P19-B9:sim']) };
   const stubGap = () => ({ required: { sim: false } });
-  const { toOpen, toResolveKeys } = decideAlerts(states, exc, NOW, { docsetCheck: stubGap });
+  const { toOpen, toResolveKeys } = decideAlerts(states, exc, NOW, { ledgerRowCheck: noRows, docsetCheck: stubGap });
   ok('confirmed N/A does NOT open the doc-gap', !hasKey(toOpen, 'gov-docgap:P19-B9:sim'));
   ok('confirmed N/A resolves any existing doc-gap', toResolveKeys.includes('gov-docgap:P19-B9:sim'));
 }
@@ -289,10 +294,10 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
   const stubGap = () => ({ required: { sim: false } });
   const preReport = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: false }];
   ok('OBJ-4: governance present but NO completion report → no doc-gap (close-before-docset race eliminated)',
-    !hasKey(decideAlerts(preReport, noStaleOpen, NOW, { docsetCheck: stubGap }).toOpen, 'gov-docgap:P19-B9:sim'));
+    !hasKey(decideAlerts(preReport, noStaleOpen, NOW, { ledgerRowCheck: noRows, docsetCheck: stubGap }).toOpen, 'gov-docgap:P19-B9:sim'));
   const postReport = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
   ok('OBJ-4: completion report present + doc missing → doc-gap fires',
-    hasKey(decideAlerts(postReport, noStaleOpen, NOW, { docsetCheck: stubGap }).toOpen, 'gov-docgap:P19-B9:sim'));
+    hasKey(decideAlerts(postReport, noStaleOpen, NOW, { ledgerRowCheck: noRows, docsetCheck: stubGap }).toOpen, 'gov-docgap:P19-B9:sim'));
   const noReportOverdue = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: false, hasCompletionReport: false }];
   ok('OBJ-4: a no-report/abandoned batch still fires the DEADLINE (deadline independent of sentinel — does not go dark)',
     hasKey(decideAlerts(noReportOverdue, noStaleOpen, NOW).toOpen, 'gov-deadline:P19-B9'));
@@ -414,6 +419,59 @@ ok('#637 a plausible-but-invalid token is rejected to the sentinel (a lastTick i
   resolveEvidenceOrSentinel('1785485897377') === 'NO-EVIDENCE-GIVEN'
   && resolveEvidenceOrSentinel('lastTick=123') === 'NO-EVIDENCE-GIVEN'
   && resolveEvidenceOrSentinel('') === 'NO-EVIDENCE-GIVEN');
+
+// ── B-TASK-LIST-SLOT (#1009) P1: the Tier-1 task-list ledger row, graded inside the completion report ──
+// SEEDED cases (pre-audit P1 S1-S6). S7 — the real reports at the ref — needs git and is run by
+// ledger-rows-preview.mjs, not here.
+{
+  const spec = LEDGER_ROWS.task_lists;
+  const S1 = '| T1 | the four session task lists | ✅ **mine** / `N/A` ×3 | `CC_A_SESSION_TASK_LIST.md` updated; the other three are not mine to touch |';
+  ok('S1: "✅ mine / N/A ×3" table row PASSES (N/A-not-mine is the correct answer on three of four)', ledgerRowInText(S1, spec));
+  ok('S2: four ✅ verdicts PASS', ledgerRowInText('| **T1** | the four session task lists | ✅ | ✅ | ✅ | ✅ |', spec));
+  ok('S3: task lists named in PROSE — even carrying a ✅ — FAIL (not a table row)',
+    !ledgerRowInText("**Batch Catalog · Phase History · this batch's Scope · the session task lists (✅ mine) · this Completion Report**", spec));
+  const S4 = '| **T1** | ★ **THE FOUR SESSION TASK LISTS** — `CC_A` · `CC_B` · `CC_C` · `CC_INFRA` `_SESSION_TASK_LIST.md` | ⛔ **EVERY batch close, EVERY class (Kyle 2026-09-05).** |  |  |';
+  ok('S4: the skill\'s own row pasted with its verdict cells EMPTY FAILS', !ledgerRowInText(S4, spec));
+  ok('S4b: every verdict N/A (own list not updated) FAILS', !ledgerRowInText('| T1 | the four session task lists | N/A ×4 | not touched |', spec));
+  ok('S5: ledger with the row ABSENT FAILS — other ✅ rows do not satisfy it',
+    !ledgerRowInText('| T1 | `BATCH_CATALOG.md` | ✅ | entry added |\n| T1 | `PHASE_HISTORY.md` | ✅ | entry added |', spec));
+  ok('S5b: CRLF report text still grades', ledgerRowInText(`| x |\r\n${S1}\r\n`, spec));
+  ok('S5c: a row with no trailing pipe still grades', ledgerRowInText('| T1 | session task lists | ✅ mine', spec));
+  ok('S5d: unreadable report (null) FAILS and never throws', !ledgerRowInText(null, spec));
+}
+{
+  const closed = [{ batchId: 'P19-BL', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
+  const noGap = () => ({ required: {} });
+  const run = (states, exc, rows) => decideAlerts(states, exc, NOW, { shadow: false, docsetCheck: noGap, ledgerRowCheck: rows });
+  const missing = run(closed, noStaleOpen, () => ({ task_lists: false }));
+  ok('P1: row missing → gov-ledgerrow opens at warning',
+    missing.toOpen.some((a) => a.dedupeKey === 'gov-ledgerrow:P19-BL:task_lists' && a.severity === 'warning'));
+  const present = run(closed, noStaleOpen, () => ({ task_lists: true }));
+  ok('P1: row present → resolves and does not open',
+    present.toResolveKeys.includes('gov-ledgerrow:P19-BL:task_lists') && !hasKey(present.toOpen, 'gov-ledgerrow:P19-BL:task_lists'));
+  const s6 = run(closed, noStaleOpen, () => ({ task_lists: null }));
+  ok('S6: report predates the row (null = not graded) → resolves, never opens',
+    s6.toResolveKeys.includes('gov-ledgerrow:P19-BL:task_lists') && !hasKey(s6.toOpen, 'gov-ledgerrow:P19-BL:task_lists'));
+  const naExc = { open: new Set(), openSince: new Map(), naConfirmed: new Set(['P19-BL:task_lists']) };
+  const na = run(closed, naExc, () => ({ task_lists: false }));
+  ok('P1: confirmed N/A (na-skip value task_lists) → resolves, does not open',
+    na.toResolveKeys.includes('gov-ledgerrow:P19-BL:task_lists') && !hasKey(na.toOpen, 'gov-ledgerrow:P19-BL:task_lists'));
+  const openBatch = [{ ...closed[0], hasCompletionReport: false }];
+  const notClosed = run(openBatch, noStaleOpen, () => { throw new Error('ledger rows must not be graded before the completion report exists'); });
+  ok('P1: no completion report → the row is not graded at all (close-time obligation)',
+    !notClosed.toOpen.some((a) => a.dedupeKey.startsWith('gov-ledgerrow:')));
+}
+{
+  const openKeys = ['gov-ledgerrow:OLD-FIXED:task_lists', 'gov-ledgerrow:OLD-MISSING:task_lists', 'gov-ledgerrow:IN-WIN:task_lists'];
+  const { resolve, keep } = decideOrphanSweep(openKeys, new Set(['IN-WIN']), () => false, () => false, (bid) => bid === 'OLD-FIXED');
+  ok('P1 orphan sweep: out-of-window row now present → resolved', resolve.includes('gov-ledgerrow:OLD-FIXED:task_lists'));
+  ok('P1 orphan sweep: out-of-window row still missing → KEPT (no cry-silence)', keep.includes('gov-ledgerrow:OLD-MISSING:task_lists'));
+  ok('P1 orphan sweep: in-window row NOT swept (decideAlerts owns it)',
+    !resolve.includes('gov-ledgerrow:IN-WIN:task_lists') && !keep.includes('gov-ledgerrow:IN-WIN:task_lists'));
+  const dflt = decideOrphanSweep(['gov-ledgerrow:OLD-FIXED:task_lists'], new Set(), () => true);
+  ok('P1 orphan sweep: no ledger verifier injected → KEEP, never a silent resolve (the doc-gap verifier does not leak across)',
+    dflt.keep.includes('gov-ledgerrow:OLD-FIXED:task_lists'));
+}
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

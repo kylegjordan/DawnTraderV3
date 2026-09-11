@@ -25,7 +25,7 @@ import {
 } from './config.mjs';
 import {
   checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass,
-  docPresent, completionReportCommitTime, scopeCommitTime,
+  docPresent, completionReportCommitTime, scopeCommitTime, checkLedgerRows,
 } from './checker.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -160,7 +160,7 @@ export function propagateGovernanceToParents(batches) {
 // symptom). Resolve such orphans — but RE-VERIFY first via the injected `verify(bid,doc)` (the live
 // tick passes a whole-tree GOV_REF check), NEVER blind-resolve: a genuinely-missing doc on a closed
 // batch that merely aged out must STAY surfaced (Langston Step-2 Finding 2 — no cry-silence). PURE.
-export function decideOrphanSweep(openAlertKeys, enforceableIds, verify, isClassDeclared = () => false) {
+export function decideOrphanSweep(openAlertKeys, enforceableIds, verify, isClassDeclared = () => false, verifyLedgerRow = () => false) {
   const resolve = [], keep = [];
   for (const key of openAlertKeys) {
     const docgap = /^gov-docgap:(.+):([^:]+)$/.exec(key);
@@ -179,6 +179,16 @@ export function decideOrphanSweep(openAlertKeys, enforceableIds, verify, isClass
       const bid = cls[1];
       if (enforceableIds.has(bid)) continue;   // still in-window → handled by decideAlerts
       (isClassDeclared(bid) ? resolve : keep).push(key);
+      continue;
+    }
+    // B-TASK-LIST-SLOT (#1009): a ledger-row alert whose batch left the window gets the same
+    // re-verify-never-blind-resolve treatment as a doc-gap. With no verifier injected the default is
+    // KEEP — an un-wired caller can strand an alert, never silently clear a real gap.
+    const lrow = /^gov-ledgerrow:(.+):([^:]+)$/.exec(key);
+    if (lrow) {
+      const bid = lrow[1], row = lrow[2];
+      if (enforceableIds.has(bid)) continue;   // still in-window → handled by decideAlerts
+      (verifyLedgerRow(bid, row) ? resolve : keep).push(key);
       continue;
     }
     // other orphan key types are not swept here
@@ -306,6 +316,19 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
           dedupeKey: key, severity: sev('warning'),
           title: `Missing required governance doc: ${doc} for ${s.batchId}`,
           body: `Batch ${s.batchId} (class ${klass}) closed but required doc "${doc}" is absent or hollow. Update it, or mark it N/A (Langston-confirmed) in GOVERNANCE_EXCEPTIONS.md.`,
+        });
+      }
+      // (3b) B-TASK-LIST-SLOT (#1009) P1: Tier-1 LEDGER ROWS graded inside the completion report. Same
+      // sentinel as (3) — a close-time obligation is graded only once the close artifact exists. Every
+      // class. null = not graded (the report predates the row) ⇒ nothing owed ⇒ resolve, never open.
+      const rows = (opts.ledgerRowCheck || checkLedgerRows)(s.batchId);
+      for (const [row, graded] of Object.entries(rows)) {
+        const key = `gov-ledgerrow:${s.batchId}:${row}`;
+        if (graded !== false || na.has(`${s.batchId}:${row}`)) { toResolveKeys.push(key); continue; }
+        toOpen.push({
+          dedupeKey: key, severity: sev('warning'),
+          title: `Completion report for ${s.batchId} is missing its Tier-1 ledger row: ${row}`,
+          body: `Batch ${s.batchId}'s completion report has no ledger TABLE ROW for "${row}" with a ✅ verdict (workflow-10-governance, Tier 1). A prose mention does not count; "✅ mine / N/A ×3" does. Add the row, or mark it N/A (Langston-confirmed) in GOVERNANCE_EXCEPTIONS.md.`,
         });
       }
     }
@@ -668,8 +691,12 @@ export function tick(nowMs = Date.now()) {
     const required = checkBatchDocset(bid, classFor(bid), { requiredOnly: true }).required;
     return !(doc in required); // doc not in the effective required set for this class → not owed
   };
+  // B-TASK-LIST-SLOT (#1009): an aged-out ledger-row alert resolves when the row is now present, the
+  // report no longer grades (null), or a confirmed N/A exists — re-verified at GOV_REF, never blind.
+  const verifyLedgerRow = (bid, row) =>
+    checkLedgerRows(bid)[row] !== false || exceptions.naConfirmed.has(`${bid}:${row}`);
   const { resolve: orphanResolve, keep: orphanKeep } =
-    decideOrphanSweep(Object.keys(state.openAlerts), enforceableIds, verifyDoc, isClassDeclared);
+    decideOrphanSweep(Object.keys(state.openAlerts), enforceableIds, verifyDoc, isClassDeclared, verifyLedgerRow);
   for (const key of orphanResolve) {
     const id = state.openAlerts[key];
     if (id) { alertSink.resolve(id); delete state.openAlerts[key]; }
