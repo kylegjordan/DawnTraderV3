@@ -504,3 +504,19 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 ⇒ **Weekend excluded and collapsed to events: Newmont is 3 of the last 6 weekday events.**
 ★ **STILL DISPROPORTIONATE — one symbol, half the events — so Langston's question stands.** ✅ **And Newmont's fires hit BOTH SIDES** (`bid_collapsed` and `ask_spiked`), which fits a book thin on both sides better than a one-sided stuck feed.
 ⇒ **WORKING ANSWER, NOT A CAUSE:** Newmont may simply carry the thinnest overnight book among our holdings. **What would test it:** per-symbol overnight median spread and snapshot rate across every held xStock, same window. **Not run here.**
+
+### ➕ §16 AMENDMENT 2026-09-11 — LANGSTON RE-DERIVED IT AND FOUND A STRONGER INSTRUMENT; THE GAP INSIDE THE PIN IS NOW ESTABLISHED AS A GENUINE NEWMONT FRAME DROUGHT
+**The stronger instrument (Langston; re-derived by CC-C at `xstock_spot_ticker_snap_2026_09_11`):** during the `$124.00` pin, `bid_qty` moved 106 → **108** (06:23:47) → 106 → 109 (06:25:00); `ask_qty` moved 220 → **140** (06:19:06); `last` moved 125.42 → 125.80 → 125.81 → 125.94. ⇒ **the feed was live DURING the pin, not only around it. A stuck quote is ruled out, not merely unlikely.**
+**Magnitude, corrected:** the pin was observed **6 times over 5m47s** (06:18:31 → 06:24:18) with a **249-second observation hole, 06:19:38 → 06:23:47.** *(Langston withdrew his own "about seven minutes"; the "~6 min" above is the span, not continuous observation.)*
+
+⛔⛔ **THE HOLE IS A GENUINE NEWMONT FRAME DROUGHT — NOT A WRITE STALL AND NOT WRITE LOSS. "Not lost" did not by itself establish "no frames arrived": a TRANSIENT failure retains rows and writes them late, which would open this gap IF the timestamp were stamped at write time. Three legs, each measured:**
+| leg | measured |
+|---|---|
+| **the stamp is CAPTURE time** | `parseTickerSnap` buffers `capturedAt: new Date()`; the `ticker_snap` schema column has **no default**; `ticker-batch-writer.ts:138` is a plain insert with no `NOW()` override ⇒ a late write keeps its capture stamp and **cannot** open a gap |
+| **the writer never stalled** | **84** `[B74][ticker-writer] xstock_spot flushed` lines in 06:18–06:25, **max gap between flushes 5 s**, none over 6 s |
+| **no write failure of any kind** | **0** TRANSIENT, **0** PERMANENT, **0** SHED in 06:15–06:30 — control: **2,187** `error.log` lines in that window; all three of the ticker writer's failure wordings are visible to the search |
+
+⇒ ✅ **other xStock symbols kept flowing; NO Newmont ticker frame was captured for 249 s, on an open position, 51 s inside the 300 s cap, so nothing skipped.** A 249 s gap cannot be the per-symbol snapshot throttle.
+⚠️ **Caveat, Langston's and kept:** this is the throttled ARCHIVE, not the in-memory mark (`aee:1164`). ⇒ **this is `3b.f-c`'s own question — how long a mark stays trusted on a quiet symbol — arriving as live data.**
+
+⭐ **"THINNEST OVERNIGHT BOOK" ANSWERS HALF THE POPULATION (Langston).** In ET the six weekday events split **3 / 3**: 09-03 16:16 LI · 09-03 16:32 ARKK · 09-08 16:16 NEM — **just after the cash close** — and 09-08 04:59 NEM · 09-09 04:24 LMT · 09-11 02:21 NEM — **overnight.** ⇒ **the per-symbol spread and snapshot-rate test must run in BOTH bands, or it answers for one cluster.** The 16:16–16:32 ET alignment is flagged as a pattern, not a root: at n=8 it could be a market clock or a scheduler phase.

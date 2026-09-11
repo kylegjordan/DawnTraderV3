@@ -47,8 +47,8 @@
 ## ★★★ CURRENT POSITION (2026-09-11) — READ FIRST
 
 ⛔⛔ **THREE THINGS IN FLIGHT — READ THE RECORDS, DO NOT RE-DERIVE:**
-1. **`B-OHLC-FRAME-GUARD` (`#1028`, `3b.h-6`) — STEP 1 APPROVED WITH REVISIONS; r2 at `5451cd4e3`, awaiting his re-review.** ⛔ **r2 CORRECTS HIS CONTRACT: the database ACCEPTS `NaN` (PG 17.6), so "reject exactly what the sink rejects" would store it — r2 rejects `NaN` explicitly. Zero stored today.** `b48a743f` NOT acked; resolve on deploy.
-2. **`3b.f-c` — §14 withdrawn · §15 discriminator exists behind F4 (ripe? fold into `#943`?) · §16 Newmont = genuine thinness, 3 of 6 weekday events.** ⛔ **My appends were renumbered §11-13 → §14-16 (they collided with the originals): any `§13` citation means the ORIGINAL.** `0c9687e2` left ACTIVE per Langston.
+1. **`B-OHLC-FRAME-GUARD` (`#1028`, `3b.h-6`) — STEP 1 APPROVED at r2; STEP 2 UNDERWAY.** Conditions in scope §14: admit iff storable AND aggregatable · ±Inf rejected · partition OUT · C1 escalate · C2 counter never throttled · C3 judged rows · O3 crypto counts at the caller. ⛔ **ALERT MODEL CORRECTED: `system-alerts.ts:508` suppresses re-raise for ANY non-resolved state — ACTIVE swallows like ACKED; only RESOLVE keeps a detector live.**
+2. **`3b.f-c` — §14 withdrawn · §15 discriminator behind F4 (ripe? fold into `#943`?) · §16 Newmont = genuine thinness + a 249 s frame drought (capture-stamped, writer never stalled).** ⛔ **Appends renumbered §11-13 → §14-16: a `§13` citation means the ORIGINAL.**
 3. **`CODEX_FINDINGS_REGISTER.md` — r14, READY (Langston).** ⛔ **Do NOT dispatch to Coltrane until `#1027` clears** — his refresh fails git's OWNERSHIP guard (root vs a langston-owned mirror), NOT auth. CC-INFRA's.
 ⚠️ **`#1026`: a Langston dispatch >2000 chars splits and the orphan half can wake `coltrane-bot`. GATE EVERY SEND ON `wc -c` < 1990 — "keep it short" failed by 129 chars.**
 ⚠️ **OPEN WITH LANGSTON: he routed `price-skip-paper-*` alerts to me though my note reserves them to CC-B; I resolved them on his routing. Settle it.**
