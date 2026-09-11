@@ -3500,6 +3500,8 @@ collision from silent to loud for one session; it does nothing for the other thr
 ### #682 OPEN 2026-08-07 (CC-B; Langston-ruled option (ii)) — **`B-FILTER-DIAG-XSTOCK`: instrument the xStock active path's per-strategy decline taxonomy** *(RENUMBERED from #678 2026-08-07 — collided with CC-A's TEC `/tmp` trailing-state item at `:2273`, filed minutes earlier. Newer entry renumbers, per the standing rule. ★ This is the FOURTH mint-time collision in one day and the SECOND since #674 was filed about exactly this — which is the argument for #674's durable fix: a max-scan is valid only at the instant it runs, and with three sessions filing concurrently the slot is routinely taken between the scan and the commit. Until #674 lands, a bare number is an AMBIGUOUS OBJECT — cite this one as `#682 (B-FILTER-DIAG-XSTOCK)` with the batch name attached.)*
 
 **THE §13 NAMED HOME #675 was waiting on. OWNER: CC-B. DUE: 2026-08-12.** Langston's hold on B-FILTER-DIAG-STANDARDIZE item (3) lifts on this filing; board Review flips to Approved.
+➕ **2026-09-11 (CC-B): THE `DUE` DATE ABOVE IS STRUCK — and until today this batch had NO PLAN ROW** (0 hits for `#682` / `B-FILTER-DIAG-XSTOCK` in `PHASE_19_PLAN.md`). A date was the only home it ever had, which `§9.4` no longer accepts and which never placed it. Found while placing `T-W20C-SCALAR-LEG`, whose alert names this batch as its predecessor.
+> `HOME: B-FILTER-DIAG-XSTOCK, owner CC-B, placed in PHASE_19_PLAN.md at row 2.4-FEE-d, after 2.4-FEE-c (T-W20C-SCALAR-LEG)` — position proposed to Langston in the `B-XSTOCK-FEE-CONTRACT` Step-2 dispatch.
 
 **WHAT:** wire `recordActiveStrategyNull` (or its equivalent) into `server/asset_classes/xstock_spot/eval-cycle.ts` → `dispatchXstockActiveSignal`, so the Paper/Live **xStock** per-strategy decline table carries real data, matching the crypto side.
 
@@ -8454,3 +8456,19 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 > `HOME: B-WAKE-LEAD-NAME, owner Infra Claude, placed in PHASE_19_PLAN.md at 4.51, after 4.5 (B-WAKE-QUIET)`
 
 ⇔ `#995` (the change) · `#340` (the routing it protects) · `B-LANGSTON-CONTEXT` pre-audit §21.7 (where it was found).
+
+### #1041 OPEN 2026-09-11 (CC-B; found auditing `B-XSTOCK-FEE-CONTRACT` for Langston's F-5) — ⛔ **THE GO-LIVE PARITY GATE AND THE HEALTH SNAPSHOT AVERAGE AN EXECUTION-TIMING BUFFER THAT HAS HAD NO WRITER SINCE 2026-06-16**
+
+**SYMPTOM — by construction, not observed.** `parity-gate.ts:50` reads `executionTiming.getMetrics(50)`; `execution-timing.ts:161-196` averages the in-memory `completedTimings`, which only `markFill` (`:114-130`) fills. **`markFill` has zero production callers** at `18a8b29b6` (call-form grep on `.markFill(|.markSubmit(|.markAck(|.markDecision(` across server/shared/scripts, any receiver; control: the same form finds `.recordMakerTakerDecision(` once). ⇒ `avgFeesPerTrade = 0`, so check 5 (*"Fee modeling not active"*) always fails and **the gate can never pass**; checks 1 (latency) and 2 (slippage) pass **vacuously** on zeros. `system-health-monitor.ts:303` publishes the same zeros in the health snapshot; `routes.ts:11347` exports an empty CSV.
+
+**MECHANISM — a removed writer whose readers survived (§9.5(a-ii)).** The last caller was `realtime-paper-executor.ts:134`, the only one at `977f3be08^`. P19-B4b.2 (`977f3be08`, 2026-06-16, `#300`) deleted that file and, in the same batch, re-pointed `system-health-monitor.getExecutionMetrics()` at the buffer directly (`DELETED_COMPONENTS_LOG.md:430`) — a reader moved onto a buffer whose only writer the batch was removing. P19-B6.9 (`#398`) later repaired the gate's WS-uptime check without touching this input.
+
+**PROVENANCE.** Both files are Replit Phase 8.5 (`8f1911909`, `d1c15ac52`, 2025-10-15), built to time the old real-time paper executor. §9.5(b-ii): `execution-timing|executionTiming|markFill|completedTimings` searched across `1-system-manual/`, completion reports and scopes — no entry names the orphan; `SYSTEM_MANUAL.md:5262` and `:5878` still describe it as live.
+
+**RULE 24: outcome (1)** — a real defect in a go-live readiness check, created by an incomplete deletion census. **Not a hotfix:** nothing on the trading path reads it, and live mode is Phase 21.
+
+⛔ **CARRIED INTO THE FIX:** `parity-gate.ts:117` tests `avgFeesPerTrade > 0`. Once `B-XSTOCK-FEE-CONTRACT` lands, an xStock maker fill books a **rebate**, so a rewired buffer can legitimately average ≤ 0 over a short window. **Test that fees are recorded, never that they are positive.**
+
+> `HOME: item added to P19-B12 (Diagnostics + internal-health monitoring), owner CC-B, placed in PHASE_19_PLAN.md §1 at row P19-B12` — placement proposed to Langston in the `B-XSTOCK-FEE-CONTRACT` Step-2 dispatch.
+
+⇔ `#300` (the deletion) · `#301` / `#398` (the gate's other inputs) · `#1010` (where it was found).
