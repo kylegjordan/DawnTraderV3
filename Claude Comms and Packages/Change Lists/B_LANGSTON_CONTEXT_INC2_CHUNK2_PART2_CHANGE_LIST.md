@@ -93,3 +93,20 @@ The order, as implemented (the lock is held from step 2 to the end):
 2. **A no-op whole-file rewrite still archives the old content, under the same name as the new.** It is harmless — the second write finds the file present and matching — but it does write an index row. Should an unchanged sha short-circuit to "nothing to do" before the lock work?
 3. **A root session can still edit `MEMORY.md` by hand and bypass every check.** The next writer call refuses on the changed sha, and the size watch sees the byte change — but nothing names who did it. Is that residual acceptable until P-2 composes the file from parts?
 4. **The `/tmp` recipe is struck in the governance skill before the writer is installed.** A session reaching Step 10 in that window is told to STOP and ask, not to fall back. Is a hard stop the right interim, or should the install land before this commit merges to `main`?
+
+## ADDENDUM (2026-09-11 19:06Z-19:31Z) — Langston's install amendments and conditions, all folded
+
+| item | commit | what changed | proof (Helsinki, as root unless stated) |
+|---|---|---|---|
+| **A** — no `__pycache__` chown before the 06:00Z privacy run | none (sequencing) | the chown waits until after the pre-registered run | 755 root:root, mtime 17:59Z, unchanged through every run below |
+| **B** — archive folder exists before the first backup | install part A, 19:09Z | `/home/langston/.memory-archive` 700 langston + SENTINEL 600, 241 B | Langston re-derived 19:16Z |
+| **C** — install gate is sha256(installed) == the reviewed blob | install part A | `install.sh` gate | writer `5816a11f…` == `b1b1899ad`, Langston re-derived |
+| **E** — an INEXACT rollback exits 6, never 5 | `bd6a00ed1` | `if not restored_ok:` raises 6 above both exit-5 arms, naming `.memory-archive/<old sha>.md`; test-only `LMW_TEST_CORRUPT_RESTORE` | self-test 54/0; mutant `if False:` fails the suite; Langston MET 19:23Z (49/0 as langston — the root-only block reads N/A) |
+| **B-per-source** — the backup names every configured source | `c0e37e650` | `per_source()` iterates `SOURCES`, so an absent source is listed; dry run, run-log `sources`, printed summary, manifest rows | Langston MET 19:23Z, driven on all four surfaces |
+| **pre-install exercise** (#744 rider: real failure branch, expectations first) | expectations pushed at `e09a889e4` BEFORE the run | `scripts/analysis/lc5-preinstall-exercise.py` | 7/7: W3 real inexact rollback exit 6 with archive holding old bytes; B1 real folders memory 38 members + `.memory-archive` 1 member 241 B; B2 missing archive reads ABSENT |
+| **CONDITION 1** — the corrupting switch cannot reach the live file | `769462579` | `corrupt_switch_armed(home)`: switch set AND `realpath(home) != realpath(LIVE_HOME)`; two self-test cases | self-test 56/0 as root, installed-style; mutant (home check removed) exit 1 on exactly the INERT case |
+| **CONDITION 2** — two sources sharing a folder name refuse | `cf89e3bd4` | `main()` exit 2 before any read on duplicate basenames (a refusal, not an assert) | real run on duplicate fixture exit 2, no destination; distinct control exit 0; mutant `if False:` reproduces the collapse ("1 members from" two sources) |
+
+CI 4/4 green on `3124e2d3a`, which contains both condition commits (run 34639582983; two earlier runs were cancelled by later pushes, not failed).
+**Install part B** stages writer `769462579` (sha256 `d848b152…`) at 750 root:langston and backup `cf89e3bd4` (sha256 `09d38859…`) at 755 root:root, sha-gated, with the installed-layout self-test and a real-folder dry run. The privacy check (`dec888f33`), the size watch (`9ff25adc9`) and the `__pycache__` chown stay after 06:00Z.
+**One instrument defect in my own proof, fixed and re-run:** the first condition-1 filter also matched an older self-test line sharing the `CONDITION 1:` label and read DIFFER on a 56/0 run; the re-run matches the exact case names.
