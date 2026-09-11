@@ -1,203 +1,169 @@
-# Pricing Decisions — for consensus between CC-C, Langston and Coltrane
+# Pricing Decisions — consensus record (r2)
 
 **Kyle, 2026-09-11:** these decisions are not his. CC-C, Langston and Coltrane iterate to consensus on the open pricing decisions, do only what is needed to settle them, then implement. No new batches or sub-batches. Move quickly.
 
 **The test for every decision (Kyle, 2026-09-03):** fidelity to live trading, not better-looking results.
 
-**How to respond.** For each numbered decision, give one of:
-- **AGREE**
-- **CHANGE** — your replacement wording, and the reason
-- **NEEDS DATA** — the single measurement, and the rule that decides the question once it is in
-
-"Look at it later" is not an answer this round. If you cannot agree, say what you would decide instead. CC-C reconciles, with a maximum of three rounds. The consensus table at the end is the record.
-
-**Sources:**
-- Coltrane's design report: `Claude Comms and Packages/Codex Audits/grouped-design-2026-09-11/REPORT.md`
-- the grouped list: `Scope Files/CODEX_FINDINGS_BY_GROUP.md`
-- the level-basis rule: `Scope Files/B_PRICE_SIDE_BY_JOB_LEVEL_CENSUS.md`
+**Status of r2:**
+- **Round 1 is in from both reviewers:** Coltrane at 14:37Z and Langston at 14:40Z, both reading r1 at `be206ffa2`. Every change from either reviewer is accepted by CC-C and written into the text below.
+- **Round 2 asks each reviewer one thing:** accept the integrated text, or name only the items still in dispute.
+- **Status tags:** items marked **DECIDED** had matching or compatible answers from both. Items marked **CONFIRM** carry a change from one reviewer that the other has not yet seen.
 
 ---
 
-## Measured today — the one missing fact
+## Measured fact — Kraken's best-bid/offer ticker trigger (`#1017`)
 
-**Does Kraken production accept a ticker that updates on every best-bid/offer change?** (`#1017`)
-
-The ledger said this could only be settled by a live subscription, not by reading documentation. Probe: `scripts/analysis/bbo_trigger_ack_probe.mjs`, 2026-09-11 14:28Z, 15 s per arm, public endpoints only.
-
-| arm | result |
-|---|---|
-| crypto `wss://ws.kraken.com/v2`, `event_trigger: bbo`, BTC/USD | ✅ **accepted** (`success: true`, echoed `event_trigger: bbo`); 289 updates |
-| crypto, no `event_trigger` (control), ETH/USD | accepted; echoed `event_trigger: trades`, which confirms the default; 8 updates |
-| xStock `wss://ws-equities.kraken.com`, `event_trigger: bbo`, AAPL/USD | ⛔ **rejected**: *"Unsupported field: 'event_trigger' for params type: 'ticker'"* |
-| xStock, no `event_trigger` (control), MSFT/USD | accepted; 275 updates. The snapshot carried no timestamp field |
-
-⚠️ The update counts are different symbols over one 15-second window. They show that each arm was live, not that one trigger rate is higher than the other.
+The probe was `scripts/analysis/bbo_trigger_ack_probe.mjs`, run 2026-09-11 at 14:28Z against public endpoints.
+- **Crypto v2:** `event_trigger: bbo` was **accepted**. The control with no trigger echoed `trades`, confirming the default.
+- **xStock endpoint:** the field was **rejected** — *"Unsupported field: 'event_trigger' for params type: 'ticker'"*. The default xStock ticker was live, and its snapshot carried no timestamp field.
+- ⚠️ **Limits:** this proves **acceptance, not rate** (Langston). The update counts came from different symbols, so they are not a rate comparison. The rate check sits in D3.
 
 ---
 
-## D1. Exit side for long positions — sells are decided and filled on the bid
+## D1. Exit side for long positions — **DECIDED**
 
-**Proposed.** Split by order type, which answers Coltrane's order-type qualifier:
-- **Taker exit (market sell):**
-  - It triggers when the current valid bid is at or below the level.
-  - It fills by walking the bid side of the book for our quantity, or at the touch bid where there is no book.
-- **Maker exit (resting limit sell):**
-  - It fills only when the bid reaches the limit, or when a trade prints at or through it.
-  - The midpoint reaching the limit is not a fill.
-- These are our engine's own triggers, in paper and in live, not Kraken native stop orders. The reference price is ours to set.
+- Engine-managed long exits are our own triggers, in paper and in live — not Kraken native stop orders.
+- **A stop triggers when the valid bid ≤ stop. A taker target triggers when the valid bid ≥ target.**
+- A market sell walks valid bid depth for our quantity. Where depth is missing, completion is modelled under D8.
+- Maker exits follow D2.
 
-**Why:**
-- The level-basis rule (ruled 2026-09-04) requires a transactable price.
-- AU3 Stage B: a taker liquidation is most faithful on the current bid and depth.
-- `XSTOCK_PRICING_PLAN.md` P2: a resting sell needs a buyer.
-- Since the order-book fix of 22 August, 24 of 24 stop-outs filled below their stop (median 0.166%), because the decision read the midpoint while the sell filled at the bid.
+*Why:* the level-basis rule ruled on 2026-09-04 requires a price we could transact at. AU3 Stage B finds a taker liquidation most faithful on the current bid and depth. Since 22 August, 24 of 24 stop-outs filled below their stop (median 0.166%).
 
-**Data needed:** none. This is a fidelity decision. F-G-2's shadow window was measuring how big the change is, not which side is correct (see D10).
+## D2. Maker and taker fill evidence — **CONFIRM** (Langston)
 
-## D2. Entry side and maker fills — the mirror of D1
+- **Taker entries** walk valid asks.
+- **Resting maker orders:** once a maker order is resting, a simulated full fill at the limit, under the retained baseline, needs one of these:
+  - a valid opposite quote reaching the limit — the ask at or below a buy limit, or the bid at or above a sell limit;
+  - a later trade **strictly through** the limit.
+- **A midpoint touch does not qualify.**
+- **Marketable-at-placement handling** is preserved.
+- **Scope:** this supports a simulation assumption, not proof of queue execution. Live fills come from execution reports.
 
-**Proposed:**
-- **Taker entries** fill by walking the ask for our quantity.
-- **Maker fills in either direction** need the opposite side to reach the limit (ask at or below a buy limit; bid at or above a sell limit), or a trade printed through it. A midpoint touch is not a fill.
-- Otherwise the existing full-fill-at-limit baseline stays (see D8).
+## D3. Ticker or order book — chosen by job — **CONFIRM** (both, on each other's riders)
 
-**Why:** active-paper taker fills already walk the book (AU3 §3). Coltrane Group 3: a midpoint reaching a maker limit, with no trade or quote evidence, must not count as a fill.
+- **Touch price** (for triggers, spread checks and marks):
+  - Use the order book's top where the book is valid (checksum passed, in sync) and fresh.
+  - Otherwise use the ticker sides, but only if they are valid for that instrument and within D6's age policy.
+  - **If neither qualifies, refuse the price-dependent action.** For an exit, that means a hold, per D6.
+- **Price basis is a field.** Every level, trigger and mark records its basis beside the price — `book_top`, `ticker_bbo` or `ticker_default` — and those populations are never pooled.
+- **Crypto** moves its ticker to the best-bid/offer trigger. **xStock** keeps the default ticker.
+- **xStock 20-level book** for held and queued xStocks (`#949`). ⛔ **Precondition in the landing:** today `unsubscribeFromSymbols` sends `channel: 'ticker'` only. Cleared book streams therefore stay live at Kraken, and re-subscribes stack on top of them. Fix the book unsubscribe, or prove the subscribed set is bounded.
+- **Fill estimate for our size** walks the book's depth. Missing depth is unsupported quantity under D8. The ticker's size at the touch never stands in for depth beyond that size.
+- **The book-versus-ticker disagreement alert is armed in the landing, not after it.** It compares aligned observations from healthy feeds, with a threshold that tolerates ordinary asynchronous delivery.
+- **Step-8 condition for the best-bid/offer switch:** message rate and event-loop lag measured before and after, at the live subscription count, with a named revert.
 
-**Data needed:** none.
+## D4. Where the midpoint stays, and how levels are built — **CONFIRM** (Langston)
 
-## D3. Ticker or order book — chosen by job, not either/or
+- The midpoint is used only for valuation and features: indicators, regime inputs, ranking features and spread denominators. It is never a level, a trigger, a fill or a booked result.
+- **Crypto quant levels take execution intent explicitly, per leg:**
+  - a taker entry anchors on the **ask**;
+  - a resting maker entry anchors on the **bid**, where the order rests;
+  - a long stop and target anchor on the **bid**.
 
-**Proposed:**
-- **Touch price (best bid/ask)** for triggers, spread checks and marks:
-  - Use the order book's top where a valid book exists — checksum passed, in sync, and fresh.
-  - Otherwise use the ticker's best bid/ask, with its age.
-  - Both are the venue's best quote, so the choice is made on validity and age, not on a comparison study.
-- **Crypto:** the ticker moves to Kraken's best-bid/offer trigger, which production accepted today.
-- **xStock:**
-  - Kraken rejected that field today, so keep the default ticker (it was live today: 275 updates on MSFT/USD).
-  - Subscribe the xStock 20-level book for held and queued xStocks (`#949`), so that xStock exits and size estimates use depth.
-- **Fill estimate for our size:** walk the book's depth. Use the ticker's touch size only where there is no book.
+  Each level carries its age, stated at the site. Structural geometry is preserved, and spread is accounted for exactly once.
+- The bar lanes keep their accepted printed-price bases (venue closes), carrying their age.
 
-**Data needed:** the one missing fact was measured today (above).
-- The ticker-versus-book comparison is **not** needed to make this decision. It only matters for trusting the ticker where no book exists, and D3 already uses the book wherever one exists.
-- Keep the comparison as a check after landing: on the same symbol, a book top and a best-bid/offer ticker top that disagree beyond tolerance raise a feed-fault alert. It is not a gate.
+## D5. Booking results — **DECIDED**
 
-## D4. Where the midpoint stays
-
-**Proposed:**
-- The midpoint is used only for value estimates: indicators, regime inputs, ranking features, and spread denominators.
-- It is never a level, a trigger, a fill or a booked result.
-- The crypto quant lane's entry, stop and target anchor on the ask (for entry), with its age. The smoothed series stays as a detection feature only.
-
-**Why:** this is the level-basis rule ruled on 2026-09-04. Coltrane accepts the corrected rule.
-
-**Data needed:** none.
-
-## D5. Booking results
-
-**Proposed:**
 - **Active paper** books the simulated fill, unchanged.
-- **VTS crypto exits** move from the observed mark to the D1 rule in the same landing, so VTS's calibration era changes once, not twice.
-- **VTS xStock stop and target clamps stay**, until the `#943` bad-print guard covers the exit path.
+- **VTS crypto exits** move to the D1 rule in the same landing.
+  - This is the **second VTS epoch boundary since 2026-09-02**, keyed through `calibration-epoch.ts`.
+  - The pre-switch era is labelled mid-triggered, so future consumers can discount it.
+- **VTS xStock clamps stay** until `#943`'s window on the corrected build passes (D10). Until then they are a stated model limitation.
 
-**Data needed:** none.
+## D6. How fresh a price must be, and which clock — **DECIDED**
 
-## D6. How fresh a price must be, and which clock
+- **Exits:** the risk-derived ceiling stays (Kyle, 2026-09-03). A stale price holds the exit; the position, its exposure and its pending intent are kept.
+- **Entries:** the flat 15 s limit stays.
+- **Clock basis is a field.**
+  - Venue-clock age applies where the message carries a timestamp (the crypto ticker).
+  - Receipt-clock age applies otherwise — which today is every xStock price.
+  - The two are never pooled, and receipt age is never a claim of known source freshness.
+- **A re-served cached price keeps its original age.**
+- ⚠️ **Knife-edge, checked inside the batch with one query:** `active_fill_max_age_ms` is live at 15000, and the re-serve sawtooth's densest rung is at 14.3 s.
+  - If entry fill-age reads the re-served cache, a small shift in refresh timing would flip admissions wholesale.
+  - So a change in the refusal rate after landing is not read as a market effect.
 
-**Proposed:**
-- **Exits:** keep the risk-derived ceiling (Kyle, 2026-09-03). A stale price holds the exit rather than acting on it.
-- **Entries:** keep the flat 15 s limit. Refusing an entry only costs an opportunity.
-- **Age** is decision time minus the venue's timestamp where the message carries one, as the crypto ticker does. Otherwise it is decision time minus receipt time, flagged as "source age unknown" — the xStock ticker snapshot carried no timestamp today.
-- **A re-served cached price** keeps its original age (`#951`, shipped).
+## D7. Price caches and refresh timing — **CONFIRM** (Langston)
 
-**Data needed:** none.
+- **Keep both caches.**
+- **Enrol open positions in the 2-second refresh lane** (`#977`).
+- **Queued and held symbols carry their own subscription reasons.**
+- **Put the rate limiter on the direct REST call path.**
+- **A cache re-serve, or a failed refresh, never renews observation age or advances smoothing.** Every action rechecks the retained observation against D6. Reusing a still-valid observation is legitimate. *(This replaces r1's "stop re-served prices from triggering actions".)*
+- **Store the true last trade separately** (`#952`).
+- **The smoothed estimator** advances once per new observation. Its state survives a restart, or explicitly re-warms (SIM S26).
 
-## D7. Price caches and refresh timing
+## D8. Simulated exits — **DECIDED**
 
-**Proposed:**
-- **Keep both caches.** Do not merge them just to match the original diagram.
-- **Open positions get enrolled in the 2-second refresh lane.** The design specified that line; it was never written (`#977`).
-- **Queued and held symbols carry their own subscription reasons**, so the active lane never depends on VTS's 60-second schedule.
-- **Put the rate limiter on the direct REST call path**, then stop re-served prices from triggering actions (3b.f-b, `#971`).
-- **Store the true last trade separately**, and never overwrite it with the midpoint (`#952`).
-- **The smoothed estimator advances once per new observation**, not once per repeated read of the same cached price, and its state survives or explicitly re-warms after a restart (PR-A6, SIM S26).
+- Full completion is kept, as ratified in P19-B4b.1.
+- Walked versus extrapolated quantity is recorded on every close path.
+- A missing config is recorded as an invalid estimate, not as zero slippage.
+- Live accounting never assumes completion.
+- Revisit at Phase 21.
 
-**Data needed:** none.
+## D9. Pairs not quoted in US dollars — **DECIDED**
 
-## D8. Do simulated exits always complete in full?
+- Refuse new admission, with a specific reason, for any pair not quoted in USD, until a timestamped currency conversion exists (`#966`).
+- **Open positions keep their exits.** Their triggers are denominated in the quote currency and need no conversion. **Their USD P&L is marked unavailable, not estimated,** until the conversion exists.
 
-**Proposed:**
-- **Keep full completion** — the ratified choice (P19-B4b.1).
-- **Record walked versus extrapolated quantity** on every close path (walk, cold book, missing config). A missing config is recorded as an invalid estimate, not as zero slippage.
-- **Revisit at live readiness (Phase 21)**, when real partial fills exist.
+## D10. The three observation windows — **DECIDED** (Langston's ruling) · **CONFIRM** (Coltrane)
 
-**Data needed:** none.
-
-## D9. Pairs not quoted in US dollars
-
-**Proposed:**
-- Refuse admission, with a specific reason, for any pair not quoted in USD until a timestamped currency conversion exists.
-- Positions already open stay monitored. (`#966`, broader than BTC quotes.)
-
-**Data needed:** none.
-
-## D10. The three observation windows that would otherwise block this landing
-
-**Proposed:**
-- **F-G-2** (VOID since 2026-09-05): retire it as a gate. D1 is decided on fidelity grounds, and its recorded counts become the before-record.
-- **`#951`** (price age): close it at landing on the evidence already measured (975 re-served prices). The landing changes that path.
-- **`#943`** (xStock 00:15): close it at landing, with the data to date as the before-cohort.
-
-**Data needed:** none. This is a ruling on window rules — Langston's.
-
----
-
-## Other items Coltrane left open
-
-| item | proposed |
-|---|---|
-| **$0.25 minimum price** (`#967`) | **Keep** (Kyle, 2026-09-11). The `strong_trend` exception (`min_price 0.001`) stays. Revisit only if data argues for it |
-| **DHMA** | Stays shelved. It has never traded, and fixing its units does not fix its geometry. Not in this landing |
-| **Ranking objective** | Coltrane's proposal: the most net expected dollar profit per slot, under fixed-notional sizing, compared against holding cash. Build it after reachability |
+- **F-G-2** is retired as a deploy gate, and keeps its VOID status.
+  - Its before-record is the **24 of 24 post-fix stop-outs filled below the stop (median 0.166%)**. The OBJ-0 shadow run banked nothing.
+  - The question of how much of the record to distrust converts into D5's epoch label.
+- **`#951`** is **not** closed at landing.
+  - Alert `0db25f1d` fires on 2026-09-16 carrying the binding stopping rule: an empty arm at that fire *is* the result.
+  - Then either close it as a retirement, with the reason stated, or re-point the assertion onto the producer that is actually exercised.
+  - D7's limiter makes that arm less likely to be exercised, which weakens any reading of a zero as a pass.
+- **`#943`** is **not** closed at landing.
+  - `B-XSTOCK-FEED-SANITY`'s own fixes deploy with the landing, and its two-handoff window runs on the corrected build. That is a set quantity, and it does not gate the landing.
+  - If the window is inconclusive, apply one bounded stopping rule.
+- **Closing a window never closes its defect.**
+- **Langston runs the closing reads on all three**, not CC-C, which owns the batches those windows judge.
 
 ---
 
-## Implementation — one batch, not many
+## Other items
 
-**One pricing batch**, through the normal workflow, with one rollback point. It uses the existing home **3n `B-PRICE-SIDE-BY-JOB`** and absorbs:
-- 3c's exit switch (D1);
-- 3b.d, the xStock book (D3);
-- 3b.h-1, the crypto best-bid/offer trigger (D3);
-- 3b.f-a, open-position enrolment (D7);
-- 3b.f-b, the refusal plus the limiter (D7);
-- `#952`, the true last-trade field (D7);
-- `#966`, non-USD refusal (D9);
-- VTS booking (D5);
-- the close split field (D8).
+| item | decision | status |
+|---|---|---|
+| **$0.25 minimum price** (`#967`) | Keep it (Kyle, 2026-09-11). The `strong_trend` exception (`min_price 0.001`) stays. Revisit only if data argues for it | DECIDED |
+| **DHMA** | Stays shelved, outside this landing | DECIDED |
+| **Ranking objective** (after reachability) | Incremental expected net portfolio wealth versus cash, under fixed notional, existing caps and a common evaluation horizon — including pending reservations, non-fills and unresolved holdings. Starts as a prospective shadow. No dividing by a guessed holding time | CONFIRM (Langston) |
 
-Whether crypto and xStock deploy together or crypto first is decided at Step 2.
+---
 
-**Who implements (proposed):** CC-C implements, since it owns these rows. Coltrane checks each step against these decisions, and Langston does the code review. The alternative is that Coltrane implements a bounded part in his own repository, if you both prefer.
+## Implementation — **CONFIRM** (Coltrane: commit boundary · Langston: running the window reads)
 
-**Then:**
-1. xStock fees — CC-B's `B-XSTOCK-FEE-CONTRACT` (2.4-FEE), its top item since 2026-09-06, including the startup check that refuses a negative fee.
-2. The reachability batch — row 4 `F-5`, reachability ceilings per strategy.
+- **One pricing batch** at 3n `B-PRICE-SIDE-BY-JOB`, in one workflow. CC-C implements and Langston reviews.
+- **A named commit boundary inside the batch:**
+  1. **Feed and plumbing first:** D3's subscriptions and the unsubscribe fix, plus D7's enrolment, limiter, true last trade and smoothing. This part lands and is proven live first.
+  2. **Decision layer second:** D1, D2, D4 and D5 switch on.
+
+  Step 2 decides whether that is one deploy or two.
+- **Coltrane** takes part in bounded decision rounds only, not in every step.
+- **Then:**
+  1. **xStock fees** — CC-B's `B-XSTOCK-FEE-CONTRACT` (2.4-FEE). Startup validation accepts verified, applicable signed fees, rebates included, and rejects invalid contracts.
+  2. **Reachability** — row 4 `F-5`, reachability ceilings per strategy.
 
 ---
 
 ## Consensus record
 
-| # | CC-C | Langston | Coltrane | decided |
-|---|---|---|---|---|
-| D1 | AGREE (proposer) | | | |
-| D2 | AGREE (proposer) | | | |
-| D3 | AGREE (proposer) | | | |
-| D4 | AGREE (proposer) | | | |
-| D5 | AGREE (proposer) | | | |
-| D6 | AGREE (proposer) | | | |
-| D7 | AGREE (proposer) | | | |
-| D8 | AGREE (proposer) | | | |
-| D9 | AGREE (proposer) | | | |
-| D10 | AGREE (proposer) | | | |
-| floor / DHMA / ranking | AGREE (proposer) | | | |
-| one batch, CC-C implements | AGREE (proposer) | | | |
+| item | Langston r1 | Coltrane r1 | r2 |
+|---|---|---|---|
+| D1 | CHANGE (target direction) | CHANGE (same, plus depth → D8) | **DECIDED** |
+| D2 | AGREE | CHANGE (after resting; strictly through) | CONFIRM — Langston |
+| D3 | CHANGE (basis field; alert in landing; unsubscribe precondition; rate check) | CHANGE (age-qualified fallback; refuse if none; depth → D8) | CONFIRM — both |
+| D4 | CHANGE (per leg: sells on bid) | CHANGE (per leg, plus resting maker entry on bid) | CONFIRM — Langston (maker entry on bid) |
+| D5 | CHANGE (second epoch since 09-02; clamp condition) | AGREE | **DECIDED** |
+| D6 | CHANGE (clock basis field; 15 s knife-edge) | AGREE | **DECIDED** |
+| D7 | AGREE | CHANGE (re-serve never renews age; recheck against D6) | CONFIRM — Langston |
+| D8 | AGREE | AGREE | **DECIDED** |
+| D9 | CHANGE (exits need no conversion; USD P&L unavailable) | AGREE | **DECIDED** |
+| D10 | CHANGE (#951 waits for 09-16; #943 window on corrected build; before-record named; he runs the reads) | CHANGE (window ≠ defect; close on acceptance) | DECIDED (Langston) · CONFIRM — Coltrane |
+| floor | AGREE | AGREE | **DECIDED** |
+| DHMA | AGREE | AGREE | **DECIDED** |
+| ranking | AGREE | CHANGE (net wealth vs cash, common horizon, shadow) | CONFIRM — Langston |
+| implementation | AGREE + commit boundary; closing reads by Langston or Coltrane | CHANGE (no routine role for Coltrane; fee wording) | CONFIRM — Coltrane (boundary), Langston (runs the reads) |
