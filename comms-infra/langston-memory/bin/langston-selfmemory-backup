@@ -97,6 +97,18 @@ def live_files(sources=None):
     return out
 
 
+def per_source(expected):
+    """Every configured source BY NAME, with its member count and bytes. An absent source is listed as absent, never
+    dropped - the whole point is that a skipped archive is visible in the row (Langston, amendment B)."""
+    out = {}
+    for src in SOURCES:
+        top = os.path.basename(src.rstrip("/"))
+        members = [v for k, v in expected.items() if k.startswith(top + "/")]
+        out[top] = {"path": src, "present": os.path.isdir(src), "members": len(members),
+                    "bytes": sum(m["bytes"] for m in members)}
+    return out
+
+
 def present_sources():
     """The sources that exist right now. STORE is checked separately and refuses when absent."""
     return [s for s in SOURCES if os.path.isdir(s)]
@@ -177,6 +189,9 @@ def write_manifest(archive, expected, verified, detail, snapshots):
     lines.append("| latest snapshot | " + os.path.basename(archive) + " |")
     lines.append("|---|---|")
     lines.append("| members captured | " + str(len(expected)) + " |")
+    for top, info in per_source(expected).items():
+        lines.append("| source `" + top + "` | " + ("present" if info["present"] else "**ABSENT**") + " — " +
+                     str(info["members"]) + " members, " + str(info["bytes"]) + " B |")
     lines.append("| verification | " + ("PASSED — " if verified else "**FAILED** — ") + str(detail) + " |")
     lines.append("| snapshots retained | " + str(len(snapshots)) + " (newest first, cap " + str(KEEP) + ") |")
     lines.append("")
@@ -237,6 +252,8 @@ def main():
 
     if dry:
         print("would capture %d members from %s" % (len(expected), ", ".join(sources)))
+        for top, info in per_source(expected).items():
+            print("   source %-18s %s  members %d  bytes %d" % (top, "present" if info["present"] else "ABSENT ", info["members"], info["bytes"]))
         for n in sorted(expected):
             print("   %-52s %7d B" % (n, expected[n]["bytes"]))
         return 0
@@ -321,7 +338,7 @@ def main():
     write_manifest(archive, expected, verified, detail, snapshots)
 
     row = {"ts": utc(), "archive": os.path.basename(archive) if verified else None,
-           "members": len(expected), "verified": verified, "detail": detail,
+           "members": len(expected), "sources": per_source(expected), "verified": verified, "detail": detail,
            "retained": len(snapshots), "pruned": pruned,
            "measures": ("a snapshot of the self-memory store, verified by EXTRACTING it and "
                         "hashing every member against the live file — not by comparing a listing; "
@@ -346,7 +363,7 @@ def main():
         except Exception:
             pass
 
-    print(json.dumps({k: row[k] for k in ("ts", "archive", "members", "verified", "detail",
+    print(json.dumps({k: row[k] for k in ("ts", "archive", "members", "sources", "verified", "detail",
                                           "retained", "pruned")}, indent=2, ensure_ascii=False))
     return 0 if verified else 1
 
