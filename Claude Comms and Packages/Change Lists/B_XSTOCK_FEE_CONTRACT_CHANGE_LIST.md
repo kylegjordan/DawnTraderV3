@@ -238,7 +238,7 @@ Every other Tier-1/Tier-2 edit named in the plan's P10 lands at Step 10.
 > - **19:39Z ONE RESTART — STANDS**, with conditions 1-5 and now 6-7.
 >
 > **OBJ-7's half:** `Change Lists/B_PRICE_SIDE_BY_JOB_OBJ7_CHANGE_LIST.md`, section "STEP 6 — DEPLOY NOTE (one restart, two batches)" (CC-C). The two halves are linked, and CC-C posts the deploy sha into both.
-> **Deploy sha:** `<40-char sha — at CC-C's notice>` · **run by:** `cc-c` · **restart instant:** `<deployed_at — from the deploy record>`
+> **Deploy sha:** `b597f1bf210a954e1031e75eb939e5f75483237e` · **run by:** `cc-c` · **restart instant:** `2026-09-11T20:09:47Z` (deploy record; `migrate_ran_at` 20:09:36Z, `migrate_ms` 827, `deployed_by_claimed` cc-c)
 
 ### 9.1 Why one restart is admissible — the shared REST budget
 - **By structure** (Langston, re-derived at `b597f1bf2`):
@@ -384,3 +384,19 @@ PSQL_EXIT=0
 - **The data check:** `scripts/analysis/b_xstock_fee_contract_verify.sql`, with `deploy_at` = the recorded restart.
 - **To PASS:** an xStock maker fill booked with a negative entry fee, and xStock taker fills at 0.0010. **A window with zero xStock fills is not a pass.**
 - **Then the UI in Claude-in-Chrome:** the RTB table and the VTS and paper open/closed trades tabs.
+
+### 9.7 STEP 6 — deploy recorded, and the post-deploy state read on staging (2026-09-11 20:12Z)
+- **Deploy record:** sha `b597f1bf210a954e1031e75eb939e5f75483237e`, `deployed_at` 20:09:47Z, `migrate_ran_at` 20:09:36Z, `restart_time` 608 → 609. `dist/BUILD_SHA` equals the sha. PM2 `dawntrader` is online, and the engine ticks in paper mode with 5 positions.
+- **The migration took, exactly as simulated:**
+  - `fee_model` xStock is `0.0010` / `-0.0002`, written by `b-xstock-fee-contract` at 20:09:37Z. Crypto is unchanged at `0.008` / `0.004`.
+  - `calibration_epoch` xStock is vts `7`, paper_sim `4`, and live `3` (created). The crypto vts `5` and the wildcard rows `2/2/3` are unchanged.
+  - `cost_model` rows: `0`.
+  - `_migrations` has `2026-09-11-b-xstock-fee-contract.sql`, applied 20:09:37Z.
+  - `calibration_ledger` xStock reads `0.10%` / `-0.02%`.
+- **Boot:** a boot-rail refusal throws inside warmup, and the deploy then records nothing, because the record is written only after dt-deploy's post-restart assertions pass. The record exists and PM2 is online. ⚠️ **The rail's own log line was not isolated:** my `tail -n 20000` log window was consumed by 2.5 minutes of engine ticks. This point rests on the record's existence, not on reading that line.
+- **First Step-7 read** (`scripts/analysis/b_xstock_fee_contract_verify.sql`, `deploy_at` 20:09:47Z, read at 20:12:14Z):
+  - **Control (7 days before):** xStock taker `0.008000` (13 paper, 117 VTS) and maker `0.004000` (1 paper). Crypto `0.008000` / `0.004000`.
+  - **After:** VTS xStock taker **`0.001000` × 2**. **The new rate is booked.**
+  - **Not yet readable:** no xStock paper fill and no maker fill. A zero-fill window is not a pass.
+  - ⚠️ **Where negative-fee evidence will appear:** P8 predicts that xStock maker share falls to about zero, so a negative booked fee may show first on a **maker EXIT leg** (`exit_fee_mode = 'maker'`), not a maker entry. Step 7 reads both.
+- **UI before-control** (20:09Z, on the old build): `/virtual-simulations` → Closed Trades → Entry Fee Mode shows xStock `Taker (0.80%)`.
