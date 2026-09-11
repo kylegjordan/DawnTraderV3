@@ -110,3 +110,14 @@ The order, as implemented (the lock is held from step 2 to the end):
 CI 4/4 green on `3124e2d3a`, which contains both condition commits (run 34639582983; two earlier runs were cancelled by later pushes, not failed).
 **Install part B** stages writer `769462579` (sha256 `d848b152…`) at 750 root:langston and backup `cf89e3bd4` (sha256 `09d38859…`) at 755 root:root, sha-gated, with the installed-layout self-test and a real-folder dry run. The privacy check (`dec888f33`), the size watch (`9ff25adc9`) and the `__pycache__` chown stay after 06:00Z.
 **One instrument defect in my own proof, fixed and re-run:** the first condition-1 filter also matched an older self-test line sharing the `CONDITION 1:` label and read DIFFER on a 56/0 run; the re-run matches the exact case names.
+
+### ADDENDUM 2 (19:43Z-19:55Z) — part B installed, containment residual folded, backup reinstalled
+
+| item | commit | what | proof |
+|---|---|---|---|
+| **install part B** | writer `769462579`, backup `cf89e3bd4` | `/root/lc5-install/install.sh`, 19:43:54Z | GATE_FAIL=0; both sha256 == blob; writer self-test 56/0 as root, installed layout; real-folder dry run 39 = `memory` 38 / 102,654 B + `.memory-archive` 1 / 241 B; rollback in `/root/lc5-rollback-20260911` |
+| **containment residual** (Langston 19:43Z, folded as disposition 1) | `18bdac755` | after the basename check, refuse (exit 2) when any source's realpath equals or sits within another's | 5/5 on fixtures: nested and symlinked REAL runs refuse with no destination; distinct control exit 0; duplicate-name still refuses first; mutant keys `x.md` twice |
+| **backup-only reinstall** (Langston 19:54Z, four conditions) | `18bdac755` | `/root/lc6-install`, writer row removed — installed writer re-verified `d848b152…`, NOT reinstalled | GATE_FAIL=0 at 19:55:02Z; `ec21f300…` 755 root:root; comparator 16 MATCH / 1 DIFFERS (privacy check, the post-06:00Z hold); installed dry run 39/38/1; rollback in `/root/lc6-rollback-20260911`, separate from part B's |
+| **DEST/MANIFEST inside a source** | none | §9.4 disposition 5, WITHDRAWN | no real invocation sets `SELFMEM_*`: repo hits are the script's definitions, the exercise harness and this list; the service has no `Environment=`; no hits in systemd, cron or environment files (positive control: 8 lines in the installed script). Residue: a future fixture test with DEST inside STORE fails safe but is misdiagnosed as a source change. |
+
+The reason for the reinstall is that the comparator reads MATCH (Langston), not the 05:20Z timer — tonight's run is behaviourally identical either way.
