@@ -244,6 +244,13 @@ interface PriceQuote {
    * price reads as seconds old for ever. `null` only on the no-price arm.
    */
   observedAt: number | null;
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7i (D7; #952; pre-audit A-9.1 rows 1 and 4): the venue's TRUE LAST TRADE, kept apart from
+   * `price` (a midpoint on most producers), and WHEN WE RECEIVED the frame or response that carried it — our clock, not
+   * the trade's. `null` when nothing has carried a print for this symbol. A re-serve carries the cached pair unchanged.
+   */
+  lastTradePrice: number | null;
+  lastTradeReceivedAtMs: number | null;
 }
 
 /**
@@ -257,6 +264,9 @@ interface RestFetchResult {
   observedAt: number;
   /** Which of the two arms produced it — the caller must not infer this. */
   producer: 'kraken_rest_poller' | 'kraken_rest_rate_limited_reserve';
+  /** P-7i: the REST `c[0]` print on a real read; the cached pair on the rate-limited re-serve. */
+  lastTradePrice: number | null;
+  lastTradeReceivedAtMs: number | null;
 }
 
 interface CachedPrice {
@@ -286,6 +296,12 @@ interface CachedPrice {
    * is computable — that difference is the first honest measurement of our end-to-end price lag.
    */
   venueObservedAtMs: number | null;
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7i: the venue's TRUE LAST TRADE and our receipt time for it. ⛔ The pair moves TOGETHER: a
+   * write that carries no print keeps the row's existing pair, so a carried print never wears a new stamp.
+   */
+  lastTradePrice: number | null;
+  lastTradeReceivedAtMs: number | null;
 }
 
 // P19-B8.9a (Langston amendment 1 — encode the concept once, never a per-site whitelist):
@@ -463,6 +479,8 @@ export class LivePricingAdapter {
       source: cached.source,
       producer: cached.producer,
       observedAt: cached.observedAt,
+      lastTradePrice: cached.lastTradePrice,
+      lastTradeReceivedAtMs: cached.lastTradeReceivedAtMs,
     };
   }
 
@@ -497,6 +515,8 @@ export class LivePricingAdapter {
           source: cached.source,
           producer: cached.producer,
           observedAt: cached.observedAt,
+          lastTradePrice: cached.lastTradePrice,
+          lastTradeReceivedAtMs: cached.lastTradeReceivedAtMs,
         });
       }
     });
@@ -543,6 +563,12 @@ export class LivePricingAdapter {
         // the one #743 calls the launderer.
         const _cachedProducer = toCachedProducer(quote.producer);
         if (_cachedProducer !== null) {
+          // B-PRICE-SIDE-BY-JOB r5 P-7i: a quote that carries no print keeps the one this row already holds, WITH its
+          // own receipt time — the pair moves together.
+          const _prevRow = this.priceCache.get(symbol);
+          const _lastTrade = quote.lastTradePrice !== null
+            ? { price: quote.lastTradePrice, at: quote.lastTradeReceivedAtMs }
+            : { price: _prevRow?.lastTradePrice ?? null, at: _prevRow?.lastTradeReceivedAtMs ?? null };
           this.priceCache.set(symbol, {
             symbol: quote.symbol,
             price: quote.price,
@@ -563,6 +589,8 @@ export class LivePricingAdapter {
             // ⛔ This REST quote path resolves a mark and carries no venue stamp we parse.
             // Stated, not omitted — an unstated time is indistinguishable from a fresh one.
             venueObservedAtMs: null,
+            lastTradePrice: _lastTrade.price,
+            lastTradeReceivedAtMs: _lastTrade.at,
           });
         }
 
@@ -602,6 +630,8 @@ export class LivePricingAdapter {
             source: 'last_known_good',
             producer: 'xstock_rest_gate_reserve',
             observedAt: cachedEq.observedAt,   // #743: carried through, NOT refreshed
+            lastTradePrice: cachedEq.lastTradePrice,
+            lastTradeReceivedAtMs: cachedEq.lastTradeReceivedAtMs,
           };
         }
         return {
@@ -611,6 +641,8 @@ export class LivePricingAdapter {
           source: 'no_reliable_price',
           producer: 'no_price_produced',
           observedAt: null,
+          lastTradePrice: null,
+          lastTradeReceivedAtMs: null,
         };
       }
 
@@ -633,6 +665,8 @@ export class LivePricingAdapter {
           //    and `Date.now()` here, which is what laundered the rate-limited re-serve.
           producer: krakenResult.producer,
           observedAt: krakenResult.observedAt,
+          lastTradePrice: krakenResult.lastTradePrice,
+          lastTradeReceivedAtMs: krakenResult.lastTradeReceivedAtMs,
         };
       }
 
@@ -655,6 +689,8 @@ export class LivePricingAdapter {
           source: 'last_known_good',
           producer: 'last_known_good_all_apis_failed',
           observedAt: cached.observedAt,      // #743: carried through, NOT refreshed
+          lastTradePrice: cached.lastTradePrice,
+          lastTradeReceivedAtMs: cached.lastTradeReceivedAtMs,
         };
       }
       
@@ -667,6 +703,8 @@ export class LivePricingAdapter {
         source: 'no_reliable_price',
         producer: 'no_price_produced',
         observedAt: null,
+        lastTradePrice: null,
+        lastTradeReceivedAtMs: null,
       };
 
     } catch (error) {
@@ -688,6 +726,8 @@ export class LivePricingAdapter {
           source: 'last_known_good',
           producer: 'last_known_good_fetch_exception',
           observedAt: cached.observedAt,      // #743: carried through, NOT refreshed
+          lastTradePrice: cached.lastTradePrice,
+          lastTradeReceivedAtMs: cached.lastTradeReceivedAtMs,
         };
       }
       
@@ -699,6 +739,8 @@ export class LivePricingAdapter {
         source: 'no_reliable_price',
         producer: 'no_price_produced',
         observedAt: null,
+        lastTradePrice: null,
+        lastTradeReceivedAtMs: null,
       };
     }
   }
@@ -766,7 +808,7 @@ export class LivePricingAdapter {
         //    "do not launder a claim", a comment naming the wrong consumer is the one defect a
         //    later reader inherits verbatim.
         return cached && cached.price != null && Number.isFinite(cached.observedAt)
-          ? { price: cached.price, observedAt: cached.observedAt, producer: 'kraken_rest_rate_limited_reserve' }
+          ? { price: cached.price, observedAt: cached.observedAt, producer: 'kraken_rest_rate_limited_reserve', lastTradePrice: cached.lastTradePrice, lastTradeReceivedAtMs: cached.lastTradeReceivedAtMs }
           : null;
       }
       
@@ -841,10 +883,12 @@ export class LivePricingAdapter {
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache from REST
       const normalized = this.normalizeSymbol(symbol);
       priceCache.updateFromRest(normalized, midpoint);
+      // B-PRICE-SIDE-BY-JOB r5 P-7i (A-9.1 row 4): REST `c[0]` is the venue's last trade — kept beside the midpoint.
+      const _lastTradeOrNull = Number.isFinite(lastTrade) && lastTrade > 0 ? lastTrade : null;
       
       // A real venue read: `observedAt` is genuinely now, and it is the ONLY return here that
       // may say so.
-      return { price: midpoint, observedAt: Date.now(), producer: 'kraken_rest_poller' };
+      return { price: midpoint, observedAt: Date.now(), producer: 'kraken_rest_poller', lastTradePrice: _lastTradeOrNull, lastTradeReceivedAtMs: _lastTradeOrNull !== null ? Date.now() : null };
 
     } catch (error) {
       console.error(`[8.8.3-I6][KRAKEN_REST_EXCEPTION] ${symbol}:`, error);
@@ -887,6 +931,8 @@ export class LivePricingAdapter {
       source: 'mock',
       producer: 'mock',
       observedAt: Date.now(),
+      lastTradePrice: null,
+      lastTradeReceivedAtMs: null,
     };
   }
 
@@ -1055,6 +1101,13 @@ export class LivePricingAdapter {
      * really"), and overwriting one with the other would destroy it.
      */
     venueObservedAtMs: number | null,
+    /**
+     * B-PRICE-SIDE-BY-JOB r5 P-7i (D7; #952): the venue's TRUE LAST TRADE on this write, or `null` when this producer
+     * carried no print (a book update; the xStock mark without a parsed last). REQUIRED, like the sides.
+     * ⛔ A `null` does NOT erase the print this row already holds: the previous print is kept WITH its own receipt
+     * time, so a carried print never wears a new stamp.
+     */
+    lastTradePrice: number | null,
     traceId?: string,
   ): void {
     const pipelineStart = Date.now(); // Directive 9.0.C: Track pipeline time
@@ -1062,6 +1115,11 @@ export class LivePricingAdapter {
     const timestamp = new Date().toISOString();
     const now = Date.now();
     
+    // B-PRICE-SIDE-BY-JOB r5 P-7i: keep the row's existing print, with its receipt time, when this write carries none.
+    const _prevRow = this.priceCache.get(normalized);
+    const _lastTradePrice = lastTradePrice ?? _prevRow?.lastTradePrice ?? null;
+    const _lastTradeReceivedAtMs = lastTradePrice !== null ? now : (_prevRow?.lastTradeReceivedAtMs ?? null);
+
     // D2: Always update cache on EVERY WebSocket tick
     this.priceCache.set(normalized, {
       symbol: normalized,
@@ -1083,6 +1141,8 @@ export class LivePricingAdapter {
       ask,
       sidesCapturedAtMs,
       venueObservedAtMs,
+      lastTradePrice: _lastTradePrice,
+      lastTradeReceivedAtMs: _lastTradeReceivedAtMs,
     });
     
     // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
@@ -1166,6 +1226,9 @@ export class LivePricingAdapter {
       producer: 'entry_seed',
       observedAt: Date.now(),
       cachedAt: Date.now(),
+      // P-7i: an entry price is not a trade print.
+      lastTradePrice: null,
+      lastTradeReceivedAtMs: null,
       // ⛔ NULL SIDES, STATED NOT OMITTED — this writer resolves a MARK only and never
       // observed a book side. Omitting them would let a level constructor read the mark's
       // freshness as the side's, which is the W-3 defect this field exists to end.
@@ -1256,6 +1319,8 @@ export class LivePricingAdapter {
           source: cached.source,
           producer: cached.producer,
           observedAt: cached.observedAt,
+          lastTradePrice: cached.lastTradePrice,
+          lastTradeReceivedAtMs: cached.lastTradeReceivedAtMs,
         };
       }
       
@@ -1272,6 +1337,8 @@ export class LivePricingAdapter {
           source: cached.source,
           producer: cached.producer,
           observedAt: cached.observedAt,
+          lastTradePrice: cached.lastTradePrice,
+          lastTradeReceivedAtMs: cached.lastTradeReceivedAtMs,
         };
       }
       
@@ -1298,6 +1365,8 @@ export class LivePricingAdapter {
           source: updated.source,
           producer: updated.producer,
           observedAt: updated.observedAt,
+          lastTradePrice: updated.lastTradePrice,
+          lastTradeReceivedAtMs: updated.lastTradeReceivedAtMs,
         };
       }
     } catch (error) {
@@ -1321,6 +1390,8 @@ export class LivePricingAdapter {
       // laundering one.
       producer: 'last_known_good_reserve',
       observedAt: cached.observedAt,
+      lastTradePrice: cached.lastTradePrice,
+      lastTradeReceivedAtMs: cached.lastTradeReceivedAtMs,
     } : null;
   }
 
@@ -1429,7 +1500,7 @@ krakenWebSocketAdapter.on('priceTick', (evt: PriceTickEvent) => {
     if (_p !== null) {
       livePricingAdapter.updateCache(
         evt.symbol, evt.price, evt.source, _p, evt.bid, evt.ask, evt.sidesCapturedAtMs,
-        evt.venueObservedAtMs, evt.traceId,
+        evt.venueObservedAtMs, evt.lastTradePrice, evt.traceId,
       );
     }
   } catch (err) {

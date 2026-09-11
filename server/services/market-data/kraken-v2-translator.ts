@@ -47,6 +47,13 @@ export interface V1TickerFormat {
    * neither end owns; the moment `a`/`b` come from anywhere else the derivation drifts silently.
    */
   markKind: 'mid' | 'last';
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7i (decision D7; #952; pre-audit A-9.1 row 1): THE VENUE'S TRUE LAST TRADE, in its own
+   * field. `c` above is OVERWRITTEN with the midpoint whenever both sides exist, so it cannot carry the print; this
+   * field always does. It is the v2 frame's own `last`, or `null` when the frame has none — never the midpoint, never
+   * the `close`/`c` coalescing the mark's one-sided fallback uses, never 0. REQUIRED for the reason `markKind` is.
+   */
+  lastTrade: number | null;
 }
 
 /**
@@ -71,6 +78,9 @@ export function translateV2ToV1(update: KrakenV2TickerUpdate): V1TickerFormat {
   // it was written out in four files with no two sharing a line.
   const markKind = markKindOf(bid, ask);
   const markPrice = markKind === 'mid' ? (bid + ask) / 2 : last;
+  // B-PRICE-SIDE-BY-JOB r5 P-7i: the print, read from the frame's own `last` ONLY. The `last` local above coalesces
+  // `close` and `c` because it serves the mark's one-sided fallback, which is a different job.
+  const lastTrade = typeof update.last === 'number' && Number.isFinite(update.last) && update.last > 0 ? update.last : null;
 
   // 3. Return normalized v1 structure
   // 'c' field carries the Mark Price to the UI/Engine
@@ -79,6 +89,7 @@ export function translateV2ToV1(update: KrakenV2TickerUpdate): V1TickerFormat {
     b: [String(bid), String(update.bid_qty ?? 0)],
     c: [String(markPrice)],
     markKind,
+    lastTrade,
     v: update.volume !== undefined ? [String(update.volume)] : update.v
   };
 }

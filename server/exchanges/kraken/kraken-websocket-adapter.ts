@@ -162,6 +162,12 @@ export interface PriceTickEvent {
    * ours, which is strictly better and is still not proof of when the price came into existence.
    */
   venueObservedAtMs: number | null;
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7i (D7; #952): the venue's TRUE LAST TRADE on this frame, kept apart from `price`, which is
+   * a midpoint on a two-sided ticker and on every book update. REQUIRED, like the sides; `null` when the emitting
+   * handler saw no trade print (a book update carries none).
+   */
+  lastTradePrice: number | null;
   traceId?: string;
 }
 
@@ -836,6 +842,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         // ⭐ THE VENUE'S OWN TIME, read from the raw frame rather than invented. `update` is the
         // unmodified venue object (`:699`), so this is Kraken's stamp, not ours.
         venueObservedAtMs: _venueTs,
+        // P-7i: the frame's own `last`, carried from the translator — NOT `lastPrice`, which is the midpoint (#952).
+        lastTradePrice: safeData.lastTrade,
       });
       this.priceTickCount++;
 
@@ -1096,6 +1104,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         // ⛔ PER MESSAGE, NOT per price level — the venue does not stamp individual levels, so this
         // dates the UPDATE that produced this top-of-book, which is the finest grain that exists.
         venueObservedAtMs: _bookVenueTs,
+        lastTradePrice: null, // P-7i: a book update carries no trade print
       });
       this.priceTickCount++;
       
@@ -1240,6 +1249,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         bid: null, ask: null, sidesCapturedAtMs: null,
         // ⛔ The raw v1 fallback frame carries no venue timestamp we parse. Stated, not omitted.
         venueObservedAtMs: null, traceId,
+        // P-7i: on this raw v1 path (no translator) `c[0]` IS the venue's last trade, so the print is `lastPrice` itself.
+        lastTradePrice: Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : null,
       });
       this.priceTickCount++;
       
