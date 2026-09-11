@@ -23,6 +23,8 @@ import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-servic
 import { priceCache } from '../../services/price-cache.js';
 import { volumeClassifier, VolumeTier, TIER_THRESHOLDS } from '../../services/market-data/volume-classifier.js';
 import { translateV2ToV1, isValidV2TickerUpdate, KrakenV2TickerUpdate } from '../../services/market-data/kraken-v2-translator.js';
+import { observeBookTickerPair, buildBookTickerAlertCopy, BOOK_TICKER_ALERT_ARMED, BOOK_TICKER_FIRE_CONSECUTIVE } from '../../services/market-data/book-ticker-disagreement.js'; // B-PRICE-SIDE-BY-JOB r5 P-7e
+import { resolveVenueGrid } from '../../markets/venue-grid-resolver.js'; // P-7e: the published price tick
 import * as fs from 'fs';
 
 /**
@@ -846,6 +848,39 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         lastTradePrice: safeData.lastTrade,
       });
       this.priceTickCount++;
+
+      // ── B-PRICE-SIDE-BY-JOB r5 P-7e (D3; pre-audit A-9.7): the book-versus-ticker instrument, RECORD-ONLY ──────
+      // This ticker is best-bid/offer-triggered (P-7a), so Kraken emits it from its own top of book: on a healthy feed
+      // it EQUALS the top of the book we maintain. Compared here, against that book, when the book last updated
+      // within the probe's 250 ms window. A fire means OUR book maintenance drifted, not that the venue disagrees.
+      // It is logged and counted; no alert is raised until the first real fires are read (BOOK_TICKER_ALERT_ARMED).
+      {
+        const _bk = this.orderBooks.get(internalSymbol);
+        const _bkAt = this.bookUpdatedAt.get(internalSymbol);
+        if (_bk && _bkAt !== undefined && _bk.bids.size > 0 && _bk.asks.size > 0 && bid > 0 && ask > 0) {
+          const _o = observeBookTickerPair({
+            symbol: internalSymbol,
+            tickerBid: bid,
+            tickerAsk: ask,
+            bookBid: Math.max(..._bk.bids.keys()),
+            bookAsk: Math.min(..._bk.asks.keys()),
+            bookReceivedAtMs: _bkAt,
+            tick: resolveVenueGrid(internalSymbol, 'crypto_spot').tick,
+          }, now);
+          if (_o.verdict === 'fire') {
+            console.warn(`[P-7e][BOOK_TICKER_DISAGREE] RECORD-ONLY ${internalSymbol}: ${BOOK_TICKER_FIRE_CONSECUTIVE} consecutive aligned pairs at least one tick apart (bid ${(_o.bidTicks ?? 0).toFixed(1)} ticks, ask ${(_o.askTicks ?? 0).toFixed(1)} ticks) — subject: our local book maintenance, not the venue`);
+            if (BOOK_TICKER_ALERT_ARMED) {
+              const _copy = buildBookTickerAlertCopy(internalSymbol, _o.bidTicks ?? 0, _o.askTicks ?? 0);
+              void import('../../services/system-alerts.js')
+                .then(({ addAlert }) => addAlert({
+                  triggers_at: new Date(), category: 'breakage', severity: 'warning',
+                  title: _copy.title, body: _copy.body, dedupe_key: `book-ticker-disagree-${internalSymbol}`,
+                }))
+                .catch((e) => console.error('[P-7e][BOOK_TICKER_DISAGREE] alert raise failed:', e instanceof Error ? e.message : e));
+            }
+          }
+        }
+      }
 
       // priceCache is updated by live-pricing-adapter's priceTick handler (cycle-broken)
       
