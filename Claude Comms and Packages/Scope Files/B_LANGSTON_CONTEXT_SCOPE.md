@@ -1,6 +1,8 @@
 # B-LANGSTON-CONTEXT — SCOPE (Step 1 of 11)
 
-**Owner:** CC-INFRA (Infra Claude) · **Opened:** 2026-09-03 · **change-class: non_architecture**
+change-class: non_architecture
+
+**Owner:** CC-INFRA (Infra Claude) · **Opened:** 2026-09-03 · the change-class sits on its own line above, because the governance checker reads the marker only at the start of a line (`#968`; alert `37eefdd7`, 2026-09-11)
 **Directive:** Kyle, 2026-09-03/04 — restart the Langston-improvement work; *"design a system that incorporates with what we've already built with the archiving and our overall intent of getting the benefits of his stateless reviews, but from someone that can add context when needed. And that context could be useful to the entire system, in all of the sessions."*
 
 > ⛔ **CHANGE-CLASS REASONING, STATED RATHER THAN ASSUMED (§9 "apply the judgement OUT LOUD").** `non_architecture` because this touches **no trading code, no strategy logic, no regime/filter/signal-pipeline/math** — so `SYSTEM_MANUAL.md` is genuinely N/A, and a `REQUIRED` row may not take N/A, which is what declaring `architecture` would force. ⚠️ **`SYSTEM_IMPACT_MAP.md` is a JUDGED row here and I judge it N/A: the SIM maps the TRADING system's components; Langston's memory system has no entry there today and its home is `LANGSTON_ARCHITECTURE.md`.** **If Langston disagrees, the class is amendable (§3.0) and I would rather re-declare than defend.**

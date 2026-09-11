@@ -97,7 +97,10 @@ def live_config():
         "control_readable": CONTROL_READABLE, "control_refused": CONTROL_REFUSED,
         "read_targets": [p for p in fixed if os.path.exists(p)] + [p for p in (tool_output, corpus) if p],
         "missing_targets": missing,
-        "closed_dirs": [LANGSTON_HOME, MEMDIR],
+        # ⛔ FINDING-6 (Langston r3): the store directory and its parent join the fences. Step 6 closes them
+        #    too, and a regression of exactly those two back to 0755 was otherwise invisible here - the
+        #    store check watched only their WRITABLE bits. Other-bits AND an attempted listing, as for the rest.
+        "closed_dirs": [LANGSTON_HOME, MEMDIR, SESSIONS, STORE],
         "private_files": [INDEX],
         "store_dir": STORE,
         "live_memory": LIVE_MEMORY,
