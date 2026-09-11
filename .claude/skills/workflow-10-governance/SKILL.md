@@ -199,14 +199,18 @@ Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch clos
   - every replaced version archived by hash, inside the daily reproduction-verified backup;
   - the reader's ledger count must move by exactly what you declare, or the old content is restored.
 ```bash
-SHA=$(ssh root@204.168.141.77 'sha256sum /home/langston/MEMORY.md' | cut -d' ' -f1)
-# the whole file, with no change to the retractions ledger:
-ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-delta 0 --by '<session>' --reason '<batch-id>'" < <local file holding the whole new content>
-# or ONE new retraction entry, appended above "### Rulings of mine that GENERALISE":
-ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-append --entries 1 --by '<session>' --reason '<batch-id>'" < <local file holding only the entry>
+# 1. FETCH the bytes you will edit, and take the sha OF THOSE BYTES, now - before you edit anything
+ssh root@204.168.141.77 'cat /home/langston/MEMORY.md' > langston_MEMORY.md
+SHA=$(sha256sum langston_MEMORY.md | cut -d' ' -f1)
+# 2. edit langston_MEMORY.md (keep LF line endings), then declare the change YOU INTEND:
+#    L = change in '- ' bullets across the whole REVIEWER LEDGER block, R = change in retraction entries
+ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-delta L --retractions-delta R --by '<session>' --reason '<batch-id>'" < langston_MEMORY.md
+# or append ONE new retraction entry (both counters move by 1), still with the sha from step 1:
+ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-append --entries 1 --by '<session>' --reason '<batch-id>'" < entry.md
 ```
-- **Exit 4 means someone wrote first:** re-read, redo, never force.
-- **Exit 5 means your declared entry count was wrong:** the file was restored byte-for-byte.
+- ⛔⛔ **NEVER take the sha at write time (Langston Step-4 BLOCKER-1).** A fresh sha matches whoever wrote while you were editing, so the compare-and-swap passes and their write is silently lost — the exact defect this tool exists to stop. **The sha must be of the bytes you started from.**
+- **Exit 4 means the file changed since you fetched it.** The message says whether that was another session writing through the tool (re-fetch, redo) or a hand edit outside the tool (tell Infra Claude first). Never force.
+- **Exit 5 means a declared count was wrong:** the file was restored byte-for-byte. Re-count the change you intended; do not just try other numbers.
 - ⛔ **If `command -v langston-memory-write` prints nothing on the box, the writer is not installed yet. STOP and ask Infra Claude. Do NOT fall back to `/tmp`.**
 
 ## ⛔⛔ IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE
@@ -236,8 +240,10 @@ Move the card to **`Governance`**.
     ⛔ **THE `/tmp` + `cp` RECIPE THAT STOOD HERE IS REPLACED (B-LANGSTON-CONTEXT P-6b, 2026-09-11)** — corrected in THIS block too, because it declares itself authoritative on divergence and a session reading bottom-up would otherwise follow the hazard. It wrote through the fixed, pre-creatable path `/tmp/langston_memory.md` (a symlink there steers a root write; an owned file there injects text into every Langston invoke), with no compare-and-swap and no copy of what it overwrote. Use `langston-memory-write` as shown in §10.b above:
 
     ```bash
-    SHA=$(ssh root@204.168.141.77 'sha256sum /home/langston/MEMORY.md' | cut -d' ' -f1)
-    ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-delta 0 --by '<session>' --reason '<batch-id>'" < <local file holding the whole new content>
+    ssh root@204.168.141.77 'cat /home/langston/MEMORY.md' > langston_MEMORY.md      # the bytes you will edit
+    SHA=$(sha256sum langston_MEMORY.md | cut -d' ' -f1)                            # the sha OF THOSE BYTES - never a fresh one at write time
+    # edit, then declare the change you intend (L ledger bullets, R retraction entries):
+    ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-delta L --retractions-delta R --by '<session>' --reason '<batch-id>'" < langston_MEMORY.md
     ```
 
     Update `/home/langston/CLAUDE.md` only when comms protocol or his persona changes (rare). **Repo-side docs reach Langston off the REVIEW BRANCH — so a doc he needs must be pushed, not merely saved** (`LANGSTON_ARCHITECTURE.md` §6).
