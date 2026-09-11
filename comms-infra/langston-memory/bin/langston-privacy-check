@@ -127,10 +127,15 @@ def copies_in(roots, live_memory, reader):
         keys = set(l.strip() for l in fh if len(l.strip()) >= MIN_LINE)
     live_real = os.path.realpath(live_memory)
     pop = {"walked": 0, "text_scanned": 0, "skipped_binary": 0, "skipped_unreadable_by_root": 0,
-           "skipped_not_regular": 0, "matched": 0, "matched_not_readable_by_reader": 0}
+           "skipped_not_regular": 0, "skipped_symlinked_dir": 0, "matched": 0,
+           "matched_not_readable_by_reader": 0}
     found, seen = [], set()
     for root in roots:
         for dp, dirs, files in os.walk(root):
+            # ⛔ FINDING-2: os.walk does not follow a symlinked directory, and it lands in `dirs`, not
+            #    `files` - so a copy under one was neither scanned nor counted. It is COUNTED now; it is
+            #    still not followed (following would let a link loop or leave the scan root).
+            pop["skipped_symlinked_dir"] += sum(1 for d in dirs if os.path.islink(os.path.join(dp, d)))
             for f in files:
                 p = os.path.join(dp, f)
                 real = os.path.realpath(p)
@@ -177,6 +182,11 @@ def store_findings(store_dir, owner):
     past writer (a root-owned file) becomes a DETECTED future one instead of a shrug."""
     out = []
     uid = pwd.getpwnam(owner).pw_uid
+    # ⛔ FINDING-1: the store DIRECTORY and its parent, not just the files - both measured 0775 on 2026-09-11.
+    for d in (store_dir, os.path.dirname(store_dir.rstrip("/"))):
+        dm = stat.S_IMODE(os.stat(d).st_mode)
+        if dm & 0o022:
+            out.append({"kind": "store-directory-group-or-other-writable", "path": d, "mode": oct(dm)})
     for f in sorted(os.listdir(store_dir)):
         p = os.path.join(store_dir, f)
         st = os.lstat(p)
@@ -209,6 +219,10 @@ def evaluate(cfg):
         mode = stat.S_IMODE(os.stat(d).st_mode)
         if mode & stat.S_IRWXO:
             findings.append({"kind": "directory-open-to-others", "path": d, "mode": oct(mode)})
+        # ⛔ FINDING-1: a mode comparison is the thing this tool's docstring forbids - adding the reader to
+        #    the owner's group would open everything while the other-bits still read 0. Attempt it.
+        if reads_as(cfg["reader"], d):
+            findings.append({"kind": "directory-listable-by-" + cfg["reader"], "path": d, "mode": oct(mode)})
     for p in cfg["read_targets"]:
         if reads_as(cfg["reader"], p):
             findings.append({"kind": "readable-by-" + cfg["reader"], "path": p})
@@ -235,7 +249,11 @@ def evaluate(cfg):
     else:
         verdict, reason = "PASS", ""
     return {"verdict": verdict, "reason": reason, "controls": controls, "findings": findings,
-            "scan": {"roots": cfg["scan_roots"], "live_lines": keys, "population": pop}}
+            "scan": {"roots": cfg["scan_roots"], "live_lines": keys, "population": pop,
+                     # ⛔ FINDING-3 (#661 leg 1): whole stripped lines are matched, so a copy stored ESCAPED
+                     #    (a JSON prompt body, a transcript) cannot match. The zero means exactly this:
+                     "claim": "no LINE-PRESERVING copy of the live MEMORY.md readable by the reader; "
+                              "escaped copies (JSON bodies, transcripts) are outside this instrument's reach"}}
 
 
 def _alerts(argv):
@@ -269,6 +287,26 @@ def next_runlog_line():
             return sum(1 for _ in fh) + 1
     except OSError:
         return 1
+
+
+def alert_is_live(alert_id):
+    """(live, why). ⛔ BLOCKER-5 (Langston, #982): addAlert returns the EXISTING row on a dedupe hit
+    whenever state != resolved - and acknowledged is not terminal. So an `add` after someone acked the
+    alert hands back the silenced row's id, and "armed" would be a claim about a row nobody will see.
+    Arm/resolve/delivered are claims about a row, so the row is read back."""
+    rc, out, err = _alerts(["list", "--category", "health_check"])
+    if rc != 0:
+        return False, "read-back failed rc=%d %s" % (rc, (err or out)[:120])
+    rows = [l for l in out.splitlines() if ("id=" + str(alert_id)) in l]
+    if not rows:
+        return False, "alert %s not found on read-back" % alert_id
+    line = rows[0]
+    if "(acked by" in line:
+        return False, "alert %s is ACKNOWLEDGED - silenced; resolve it to free the key" % alert_id
+    state = line.split()[0] if line.split() else ""
+    if state not in ("active", "scheduled"):
+        return False, "alert %s is in state %s" % (alert_id, state)
+    return True, "live (%s)" % state
 
 
 def reconcile_alerts(result, st):
@@ -305,18 +343,29 @@ def reconcile_alerts(result, st):
         rc, out, err = _alerts(["add", "--triggers-at", utc().strftime("%Y-%m-%dT%H:%M:%SZ"),
                                 "--category", "health_check", "--severity", "warning",
                                 "--dedupe-key", wanted, "--title", title, "--body", body])
-        new_id = None
+        new_id, row = None, {}
         if rc == 0:
             try:
-                new_id = json.loads(out).get("id")
+                row = json.loads(out)
+                new_id = row.get("id")
             except Exception:
                 new_id = None
-        if new_id:
+        if new_id and row.get("acknowledged_at"):
+            delivered = False
+            notes.append("ARM RETURNED A SILENCED ROW %s (acknowledged_at %s)" % (new_id, row.get("acknowledged_at")))
+        elif new_id:
             st[wanted] = new_id
             notes.append("armed %s" % new_id)
         else:
             delivered = False
             notes.append("ARM FAILED rc=%d %s" % (rc, (err or out)[:160]))
+    # ⛔ BLOCKER-5, every run: the tracked alert for this verdict must still be LIVE - one that someone
+    #    acknowledged since the last run is silenced, and silence is not delivery.
+    if wanted and delivered and st.get(wanted):
+        live, why = alert_is_live(st[wanted])
+        notes.append("read-back: " + why)
+        if not live:
+            delivered = False
     save_state(st)
     return notes, delivered
 
@@ -455,13 +504,49 @@ def self_test():
         gone = dict(closed, missing_targets=["/nonexistent/records.jsonl"])
         check("BLOCKER-4: a missing target -> INSTRUMENT, not PASS", evaluate(gone)["verdict"], "INSTRUMENT")
 
+        # FINDING-1: a directory whose other-bits are 0 but that the reader can list through its GROUP
+        reader_gid = pwd.getpwnam(READER).pw_gid
+        group_dir = mkdir("group-open-dir", 0o750)
+        os.chown(group_dir, 0, reader_gid)
+        store_open = mkdir("store-open-dir", 0o775)
+        make("store-open-dir/fine.md", 0o644, uid=owner_uid, gid=owner_gid)
+        os.chmod(store_open, 0o775)   # make() resets every parent to 0755; re-open the directory under test
+        fence = dict(closed, closed_dirs=[group_dir], store_dir=store_open)
+        rf = evaluate(fence)
+        fk = [f["kind"] for f in rf["findings"]]
+        check("FINDING-1: other-bits 0 but listable via GROUP -> flagged", ("directory-listable-by-" + READER) in fk, True)
+        check("  ...and the mode-bit check alone would have missed it", "directory-open-to-others" in fk, False)
+        check("FINDING-1: a 0775 store directory is flagged", "store-directory-group-or-other-writable" in fk, True)
+        # FINDING-2: a symlinked directory holding a copy is COUNTED, not silently skipped
+        outside = mkdir("outside-scan", 0o755)
+        make("outside-scan/copy-behind-link.md", 0o644, copy_text)
+        linkroot = mkdir("scan-with-link", 0o755)
+        os.symlink(outside, os.path.join(linkroot, "linked-dir"))
+        rl = evaluate(dict(closed, scan_roots=[linkroot]))
+        check("FINDING-2: a symlinked directory is counted", rl["scan"]["population"]["skipped_symlinked_dir"], 1)
+        check("FINDING-3: the scan publishes its reach", "LINE-PRESERVING" in rl["scan"]["claim"], True)
+        # BLOCKER-5: an add that returns an ACKNOWLEDGED row, and a tracked alert acked since the last run
+        acked_row = json.dumps({"id": "fixture-acked", "acknowledged_at": "2026-09-11T00:00:00Z"})
+        _alerts = lambda argv: (0, acked_row, "") if argv[0] == "add" else (0, "", "")
+        row, code = run_once(exposed, {})
+        check("BLOCKER-5: add returns a SILENCED row -> exit", code, 2)
+        listing = "acknowledged  [warning ] health_check       triggers_at=x id=fixture-tracked  t (acked by kyle at y)"
+        _alerts = lambda argv: (0, listing, "") if argv[0] == "list" else (0, "{}", "")
+        row, code = run_once(exposed, {KEY_EXPOSED: "fixture-tracked"})
+        check("BLOCKER-5: tracked alert acked since last run -> exit", code, 2)
+        live_listing = "active        [warning ] health_check       triggers_at=x id=fixture-tracked  t"
+        _alerts = lambda argv: (0, live_listing, "") if argv[0] == "list" else (0, "{}", "")
+        row, code = run_once(exposed, {KEY_EXPOSED: "fixture-tracked"})
+        check("  control: tracked alert still active -> exit", code, 1)
+
         # BLOCKER-3: a delivery failure turns EXPOSED into INSTRUMENT / exit 2
         _alerts = lambda argv: (255, "", "ssh: connect to host staging: Connection timed out")
         row, code = run_once(exposed, {})
         check("BLOCKER-3: EXPOSED whose alert fails to arm -> exit", code, 2)
         check("  ...and the row says INSTRUMENT, keeping the evaluated verdict", (row["verdict"], row.get("evaluated_verdict")),
               ("INSTRUMENT", "EXPOSED"))
-        _alerts = lambda argv: (0, json.dumps({"id": "fixture-alert-id"}), "")
+        _alerts = lambda argv: ((0, json.dumps({"id": "fixture-alert-id"}), "") if argv[0] == "add" else
+                                (0, "active        [warning ] health_check       triggers_at=x id=fixture-alert-id  t", ""))
         row, code = run_once(exposed, {})
         check("  control: the same run with delivery working -> exit", code, 1)
 

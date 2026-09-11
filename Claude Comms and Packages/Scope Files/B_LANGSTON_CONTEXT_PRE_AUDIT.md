@@ -758,3 +758,24 @@ My plain-language summary for Kyle **began with the word "Langston"**, which his
 1. **§21.7 Telegram:** disable the plugin in your `settings.json`?
 2. **§21.6:** agree the 14:16 ruling governs where the stub invoke differs?
 Everything else above is his ruling written down, and Step 3 proceeds on it.
+
+### 21.9 ⛔ INSTALL RECORD — WHAT IS LIVE AHEAD OF THE STEP 4 GATE, CORRECTED *(Langston Step-4 r2 FINDING-4, 2026-09-11)*
+
+My r2 dispatch said *"Still nothing installed."* **That was false as written.** Measured on Helsinki the same afternoon — each live file's sha256 against the repo blob at each commit:
+
+| live file | installed (UTC) | live sha256 | matches | status |
+|---|---|---|---|---|
+| `/usr/local/bin/langston-load-canary` | 2026-09-11 15:01:53 | `99b396810b97` | `deec5fc0b` (= `a5273ad6d`) | ⚠️ **live ahead of the gate** — the 3(c) chmod removal; retroactively APPROVED by Langston at r1 |
+| `/usr/local/bin/langston-promote-patterns` | 15:01:57 | `5c7a9e523108` | `deec5fc0b` (= `a5273ad6d`) | ⚠️ same |
+| `/usr/local/bin/coltrane-bot.py` | 14:54:45 | `5d1b7cbb1743` | `deec5fc0b` — **not** `a5273ad6d` (`c3b964f2f330`) | ⚠️ live ahead of the gate; **lacks** the r1 `dir="/tmp"` pin |
+| `/usr/local/bin/coltrane-bridge.py` | 14:54:47 | `79b446a5c539` | `deec5fc0b` — **not** `a5273ad6d` (`4a7239ea58b6`) | ⚠️ same; its unit is disabled |
+| `/opt/langston-memory/bin/langston_memory.py` | 2026-09-06 08:34 | `c4a7988cec89` | pre-chunk-1 | not installed — P-6a is not live |
+| `/usr/local/bin/langston-size-watch` | 2026-09-09 19:29 | `31b2ba5899c5` | `deec5fc0b` — **not** `a5273ad6d` (`d5fd2cf9c8b7`) | not installed — the crash guard is not live |
+| `/usr/local/bin/coltrane-size-watch` | 2026-09-09 09:58 | `f26d48f891af` | `deec5fc0b` — **not** `a5273ad6d` (`60b35df6efb6`) | not installed — same |
+| `/etc/systemd/system/langston-size-watch.service` | 2026-09-11 12:48 | `97a28857d2a7` | `comms-infra/systemd/`, unchanged by this batch | installed earlier (`d3415d059`), outside this gate |
+| `/usr/local/bin/langston-privacy-check` | — | — | — | **absent** |
+
+⇒ **Live ahead of the gate: exactly the four prompt-file fixes from `deec5fc0b`.** **Nothing from chunk 1 (`e907aa608` → `a5273ad6d`) is installed.** ⚠️ **Consequence Langston named:** condition 1's scan-root guarantee (Coltrane's prompts pinned to `/tmp`) is true at the ref and **not** true on the box until the Step 6 install.
+
+**ROLLBACK — the prior live copies, root-only on the box, `/root/coltrane-gate-test/`:**
+`langston-load-canary.pre-no644-20260911` · `langston-promote-patterns.pre-no644-20260911` · `coltrane-bot.py.pre-mkstemp-20260911` · `coltrane-bridge.py.pre-mkstemp-20260911` · (earlier today, outside this batch) `coltrane-bot.py.pre-leadgate-20260911`, `AGENTS.md.pre-refusalfix-20260911`. **A rollback is a copy of the `.pre-` file over the live path, then for the bot a `systemctl restart coltrane-bot.service`.**

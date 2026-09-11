@@ -889,3 +889,20 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 ⚠️⚠️ **AND THE ARCHIVE ITSELF SILENTLY BROKE THE THING IT WAS PRESERVING — caught by verifying the claim instead of asserting it.** I wrote the three `.removed` files straight from the ref, then checked whether each STAGED blob equalled the ref blob it came from. **Two did not.** `core.autocrlf` rewrote the CRLF-stored pair to LF on `git add`, so both archives collapsed onto the root blob `b4ca7ac5c` — **destroying the exact CRLF-vs-LF distinction whose loss had made the deletion census wrong one step earlier.** ★ **An archive that normalises is not an archive**, and this one would have read as complete and faithful while holding two files that never existed in that form. ⇒ **`.gitattributes` now carries `1-system-manual/_archive/deleted-code/REPLIT_PUSH_SCRIPT*.removed -text`**, and all three archived blobs are re-verified **equal to the ref blobs** at this commit.
 
 ⚠⚠ **SCOPED TO THESE THREE, AND THE NARROWING IS ITSELF THE FINDING.** My first attempt was the directory-wide `deleted-code/** -text`, and staging it showed **45 pre-existing `.removed` files from other batches flip to MODIFIED in one move** — the rule would have rewritten every archive in the folder, under my name, in a commit whose subject is three files. ★ **Rule 25.c exactly: the path is right, so the explicit-path habit cannot see it — the CONTENT was not mine to change.** Caught by reading the staged name-status instead of the stat summary. ⛔ **A future deletion archived here does NOT inherit the protection** — add its own pattern, or it will be normalised the same way. **Stated as a live gap rather than fixed broadly, because fixing it broadly is the thing that just went wrong.**
+
+## `comms-infra/langston-memory/systemd/` — ALL FOUR TWIN UNIT FILES DELETED (2026-09-11, `B-LANGSTON-CONTEXT` Step-4 r2 FINDING-5, Langston-directed)
+
+**WHAT WAS REMOVED:** a second copy of Langston's two scheduled units, in a directory nothing references.
+
+| path | blob **AT THE REF** | bytes | stored EOL |
+|---|---|---|---|
+| `comms-infra/langston-memory/systemd/langston-size-watch.service` | `7057d159ba7cf460fba2913ea8bfce7a94952776` | 481 | LF |
+| `comms-infra/langston-memory/systemd/langston-size-watch.timer` | `cee0c1cc3c76b8bc4911cc54aa7a39ed9f6bde41` | 734 | LF |
+| `comms-infra/langston-memory/systemd/langston-selfmemory-backup.service` | `5be4a7185f5275bfe91a9edd324f56e57ee069ef` | 556 | LF |
+| `comms-infra/langston-memory/systemd/langston-selfmemory-backup.timer` | `0367bb09d002754c37f3ae487dfcce6d467862a6` | 357 | LF |
+
+**WHY REMOVED:** the copies were added at `f2a90077a` (2026-09-05, P-5). The host config was brought into `comms-infra/systemd/` at `d3415d059` (2026-09-11), and **that** directory is the one the install map names and the live units match. **The size-watch twin lacks `SuccessExitStatus=0 1`**, which the canonical unit and the live `/etc/systemd/system/langston-size-watch.service` (sha256 `97a28857d2a7`, equal to the canonical blob) both carry. A reinstall from the twin would have marked every correct breach day as failed. The other three were identical to their canonical copies, line endings ignored. A second copy that drifts is `fix-follows-pointer` waiting to happen: a correction lands in one and not the other.
+
+**BLAST RADIUS — VERIFIED, NOT ASSUMED:** `grep -rnF 'langston-memory/systemd'` across the tree (excluding `node_modules`, `.git`) returned **zero** references. **Positive control:** the same search for `comms-infra/systemd` finds it named in 2 files. No install script, no verifier pair and no unit points at the twin directory. Langston's own `dt-review grep` returned zero hits for it as well.
+
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/langston-memory-systemd.<file>.20260911.removed` (four files, byte-for-byte from the ref). Git history is authoritative.
