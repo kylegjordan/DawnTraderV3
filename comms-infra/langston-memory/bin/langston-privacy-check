@@ -55,9 +55,12 @@ NSSWITCH = "/etc/nsswitch.conf"
 #    would pass silently.
 ENUMERABLE_SOURCES = ("files", "systemd", "compat")
 # ⛔ CONDITION 2: these kinds are DRIFT - the fence changed shape - and they do NOT claim anyone can read.
-#    An exposure is a group holder other than the owner or root; a directory owned by another non-root account is
-#    caught as an exposure by the read attempted as the reader, not by this label.
-DRIFT_KIND_PREFIXES = ("directory-not-owned-by-", "directory-group-drift")
+#    An exposure is a group holder other than the owner or root, OR an owner other than the owner or root.
+#    ⚠️ A directory owned by a THIRD account is an EXPOSURE, never drift (Langston, 18:27Z). The read runs as the
+#    reader only, so it catches a reader-owned fence and nothing else; a 0700 fence owned by any other account passes
+#    other-bits and the group check while that account has owner-bit read AND chmod. Only ROOT as owner is drift
+#    (root holds DAC_OVERRIDE regardless).
+DRIFT_KIND_PREFIXES = ("directory-owned-by-root", "directory-group-drift")
 SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with the live file = a copy
 MIN_LINE = 40
 NL = chr(10)
@@ -134,7 +137,9 @@ def nsswitch_enumerable(path):
         line = line.split("#", 1)[0].strip()
         for db in ("passwd", "group"):
             if line.startswith(db + ":"):
-                found[db] = [t for t in line[len(db) + 1:].split() if not t.startswith("[") and "=" not in t]
+                # UNION over every line for the database (Langston, 18:27Z): last-line-wins let an enumerable second
+                # line mask a non-enumerable first one, whichever precedence glibc applies. A union fails closed.
+                found.setdefault(db, []).extend(t for t in line[len(db) + 1:].split() if not t.startswith("[") and "=" not in t)
     bad = []
     for db in ("passwd", "group"):
         if db not in found:
@@ -294,8 +299,17 @@ def evaluate(cfg):
         #    zero secondary members - this is a reach limit being closed, not an exposure.)
         owner_uid = pwd.getpwnam(cfg["owner"]).pw_uid
         if dst.st_uid != owner_uid:
-            findings.append({"kind": "directory-not-owned-by-" + cfg["owner"], "path": d,
-                             "owner": pwd.getpwuid(dst.st_uid).pw_name})
+            if dst.st_uid == 0:
+                # DRIFT: root as owner is inside "root holds DAC_OVERRIDE regardless"
+                findings.append({"kind": "directory-owned-by-root", "path": d, "owner": "root"})
+            else:
+                # EXPOSURE: any other owner has owner-bit read and chmod, and the reader-only read cannot see it.
+                # An ORPHANED uid (no account) is an exposure too, deliberately - nothing vouches for whoever gets it next.
+                try:
+                    owner_name = pwd.getpwuid(dst.st_uid).pw_name
+                except KeyError:
+                    owner_name = "uid %d (no account)" % dst.st_uid
+                findings.append({"kind": "directory-owned-by-another-account", "path": d, "owner": owner_name})
         holders = group_members(dst.st_gid)
         others = holders - {cfg["owner"], "root"}
         if others:
@@ -642,11 +656,31 @@ def self_test():
         check("  ...and other-bits alone would have passed it", "directory-open-to-others" in sk, False)
         rootown = mkdir("root-owned-fence", 0o750)
         os.chown(rootown, 0, owner_gid)
-        check("P-6a.1: a fence not owned by the owner -> flagged",
-              ("directory-not-owned-by-" + OWNER) in [f["kind"] for f in evaluate(dict(closed, closed_dirs=[rootown]))["findings"]], True)
+        check("P-6a.1: a fence owned by root -> flagged as directory-owned-by-root",
+              "directory-owned-by-root" in [f["kind"] for f in evaluate(dict(closed, closed_dirs=[rootown]))["findings"]], True)
         check("  ...and the shared-group fence is an EXPOSURE verdict", rs["verdict"], "EXPOSED")
         check("  ...and a root-owned fence alone is DRIFT, not an exposure",
               evaluate(dict(closed, closed_dirs=[rootown]))["verdict"], "DRIFT")
+        # OWNER SPLIT (Langston, 18:27Z): a THIRD account as owner is an EXPOSURE, and so is an orphaned uid
+        third = next((pw for pw in pwd.getpwall() if pw.pw_uid not in (0, owner_uid, reader_uid)), None)
+        check("OWNER SPLIT fixture: a third account exists on this box", third is not None, True)
+        if third is not None:
+            d3 = mkdir("third-owner-fence", 0o700)
+            os.chown(d3, third.pw_uid, owner_gid)
+            r3 = evaluate(dict(closed, closed_dirs=[d3]))
+            check("OWNER SPLIT: a 0700 fence owned by a third account -> EXPOSED", r3["verdict"], "EXPOSED")
+            check("  ...as directory-owned-by-another-account",
+                  "directory-owned-by-another-account" in [f["kind"] for f in r3["findings"]], True)
+            check("  ...which the read as the reader alone would have missed",
+                  ("directory-listable-by-" + READER) in [f["kind"] for f in r3["findings"]], False)
+        used = {pw.pw_uid for pw in pwd.getpwall()}
+        orphan = next(u for u in range(54321, 59999) if u not in used)
+        d4 = mkdir("orphan-owner-fence", 0o700)
+        os.chown(d4, orphan, owner_gid)
+        r4 = evaluate(dict(closed, closed_dirs=[d4]))
+        check("OWNER SPLIT: a fence owned by an ORPHANED uid -> EXPOSED, not a crash", r4["verdict"], "EXPOSED")
+        check("  ...naming the uid", any("no account" in str(f.get("owner", "")) for f in r4["findings"]), True)
+
         # CONDITION 2: a group with NO holders is drift, never "readable by another account"
         empty_gid = next((g.gr_gid for g in grp.getgrall() if not group_members(g.gr_gid)), None)
         check("CONDITION 2 fixture: a zero-holder group exists on this box", empty_gid is not None, True)
@@ -673,6 +707,9 @@ def self_test():
         check("  ...and the reason names the source", "sss" in rn["reason"], True)
         rm_ = evaluate(dict(closed, nsswitch=os.path.join(top, "no-such-nsswitch.conf")))
         check("CONDITION 1: an unreadable nsswitch -> INSTRUMENT", rm_["verdict"], "INSTRUMENT")
+        twice = make("nsswitch-twice.conf", 0o644, "passwd: sss" + chr(10) + "passwd: files systemd" + chr(10) + "group: files systemd" + chr(10))
+        check("FINDING: two passwd lines, the enumerable one LAST -> INSTRUMENT (union, not last-wins)",
+              evaluate(dict(closed, nsswitch=twice))["verdict"], "INSTRUMENT")
         unknown = make("nsswitch-unknown.conf", 0o644, "passwd: files mynewsource" + chr(10) + "group: files" + chr(10))
         check("CONDITION 1: a source nobody listed -> INSTRUMENT (allowlist, not blocklist)",
               evaluate(dict(closed, nsswitch=unknown))["verdict"], "INSTRUMENT")
