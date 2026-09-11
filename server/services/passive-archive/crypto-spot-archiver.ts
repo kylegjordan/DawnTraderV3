@@ -25,6 +25,8 @@ import WebSocket from 'ws';
 import { loadCryptoSpotUniverse } from './universe-loader.js';
 import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
+import { validateOhlcFrame } from './ohlc-frame-validator.js';
+import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 
 const WS_URL = 'wss://ws.kraken.com/v2';
@@ -32,16 +34,22 @@ const WS_URL = 'wss://ws.kraken.com/v2';
 const ASSET_CLASS = 'crypto_spot' as const;
 const SHARD_SIZE = 300;
 
-interface Shard {
+export interface Shard {
   id: number;
   ws: WebSocket | null;
   symbols: string[];
   backoff: BackoffPolicy;
   lastMsgAt: number;
+  /** *persisted*: OHLC bars BUFFERED in the last minute — the health line's `rows_persisted_60s`.
+   *  ⚠️ Buffered, not rows persisted (pre-audit R5). Bumped only when `parseOhlcBar` returns true (#1029). */
   rowsPersistedLastMinute: number;
   // B74 v2 cumulative counters
+  /** *scanned*: every OHLC bar received, accepted or not — the panel's "scanned (since PID)" (J8). */
   cumulativeOhlcRows: number;
+  /** *scanned*: every ticker snap received, malformed and throttled ones included. */
   cumulativeTickerSnaps: number;
+  /** *skipped*: OHLC bars the frame guard REJECTED (#1028). Never rate-limited (Step-2 condition C2). */
+  ohlcFramesSkipped: number;
 }
 
 const state = {
@@ -54,17 +62,20 @@ export function getCryptoSpotStats(): {
   configuredSymbols: number;
   cumulativeOhlcRows: number;
   cumulativeTickerSnaps: number;
+  ohlcFramesSkipped: number;
   shardCount: number;
 } {
   const totalSymbols = state.shards.reduce((s, sh) => s + sh.symbols.length, 0);
   const totalOhlc = state.shards.reduce((s, sh) => s + sh.cumulativeOhlcRows, 0);
   const totalTicker = state.shards.reduce((s, sh) => s + sh.cumulativeTickerSnaps, 0);
+  const totalSkipped = state.shards.reduce((s, sh) => s + sh.ohlcFramesSkipped, 0);
   const allConnected = state.shards.length > 0 && state.shards.every(sh => sh.ws?.readyState === WebSocket.OPEN);
   return {
     connected: allConnected,
     configuredSymbols: totalSymbols,
     cumulativeOhlcRows: totalOhlc,
     cumulativeTickerSnaps: totalTicker,
+    ohlcFramesSkipped: totalSkipped,
     shardCount: state.shards.length,
   };
 }
@@ -102,21 +113,40 @@ function assignToShard(symbols: string[], shardCount: number): string[][] {
   return buckets;
 }
 
-function parseOhlcBar(data: any): void {
-  if (!data?.symbol || !data?.interval_begin) return;
+/** B-OHLC-FRAME-GUARD (#1028): returns whether the bar was BUFFERED. The counters stay in the caller,
+ *  which holds the shard (pre-audit J3). `volume ?? '0'` is the existing absence default (J6). */
+function parseOhlcBar(data: any): boolean {
+  const verdict = validateOhlcFrame({
+    symbol: data?.symbol,
+    intervalBegin: data?.interval_begin,
+    open: data?.open,
+    high: data?.high,
+    low: data?.low,
+    close: data?.close,
+    volume: data?.volume ?? '0',
+    vwap: data?.vwap,
+    trades: data?.trades,
+  });
+  if (!verdict.ok) {
+    noteOhlcFrameRejected('crypto-spot', ASSET_CLASS, { symbol: data?.symbol, intervalBegin: data?.interval_begin }, verdict);
+    return false;
+  }
+  const bar = verdict.row;
   bufferOhlcBar(ASSET_CLASS, {
-    symbol: data.symbol,
+    symbol: bar.symbol,
     assetClass: ASSET_CLASS,
     exchange: 'kraken',
-    intervalBegin: new Date(data.interval_begin),
-    open: String(data.open),
-    high: String(data.high),
-    low: String(data.low),
-    close: String(data.close),
-    volume: String(data.volume ?? '0'),
-    vwap: data.vwap != null ? String(data.vwap) : null,
-    tradeCount: data.trades != null ? Number(data.trades) : null,
+    intervalBegin: bar.intervalBegin,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
+    vwap: bar.vwap,
+    tradeCount: bar.tradeCount,
   } as any);
+  noteOhlcFrameAccepted(ASSET_CLASS, bar.symbol);
+  return true;
 }
 
 function parseTickerSnap(data: any): void {
@@ -154,9 +184,11 @@ function handleMessage(shard: Shard, raw: WebSocket.RawData): void {
   }
   if (msg.channel === 'ohlc' && Array.isArray(msg.data)) {
     for (const bar of msg.data) {
-      parseOhlcBar(bar);
-      shard.rowsPersistedLastMinute++;
+      // *scanned* stays unconditional — every bar received (J8); *persisted* follows the return value
+      // (#1029 — it used to count bars the old guard discarded); a rejected bar is *skipped*.
       shard.cumulativeOhlcRows++;
+      if (parseOhlcBar(bar)) shard.rowsPersistedLastMinute++;
+      else shard.ohlcFramesSkipped++;
     }
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
     for (const snap of msg.data) {
@@ -247,6 +279,7 @@ export async function startCryptoSpotArchiver(): Promise<void> {
     rowsPersistedLastMinute: 0,
     cumulativeOhlcRows: 0,
     cumulativeTickerSnaps: 0,
+    ohlcFramesSkipped: 0,
   }));
 
   console.log(
@@ -267,3 +300,13 @@ export function stopCryptoSpotArchiver(): void {
   }
   state.shards = [];
 }
+
+// B-OHLC-FRAME-GUARD P8 (test-only): drive real frames through `handleMessage` against a detached shard,
+// so the counter tests read the same bumps production makes (pre-audit A9).
+export function _makeShardForTests(id = 0, symbols: string[] = []): Shard {
+  return {
+    id, ws: null, symbols, backoff: makeBackoff(30), lastMsgAt: 0,
+    rowsPersistedLastMinute: 0, cumulativeOhlcRows: 0, cumulativeTickerSnaps: 0, ohlcFramesSkipped: 0,
+  };
+}
+export { handleMessage as _handleCryptoMessageForTests };

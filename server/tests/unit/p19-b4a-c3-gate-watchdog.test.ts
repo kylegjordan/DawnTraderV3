@@ -346,6 +346,19 @@ describe('#594 stamp sites — which frames move which clock', () => {
     expect(c.lastDataMsgAt).toBe(2_000);
   });
 
+  it('a validator-REJECTED OHLC frame advances the CONNECTION clock but NOT the DATA clock', () => {
+    // B-OHLC-FRAME-GUARD (#1028, pre-audit A14): the frame guard REPLACED the old truthiness check and runs
+    // BEFORE the data-clock stamp — the twin of the malformed-ticker case above. A bar whose close is not a
+    // number is junk, and junk is not proof of life. Moving the stamp above the validator turns this red.
+    _handleMessageForTests(frame({
+      channel: 'ohlc',
+      data: [{ symbol: 'AAPL/USD', interval_begin: '2026-07-31T09:00:00Z', open: 1, high: 2, low: 1, close: 'NaN' }],
+    }));
+    const c = _getArchiverClocksForTest();
+    expect(c.lastMsgAt).toBeGreaterThan(1_000);
+    expect(c.lastDataMsgAt).toBe(2_000);
+  });
+
   it('unparseable JSON advances the CONNECTION clock and neither parser runs', () => {
     _handleMessageForTests(Buffer.from('{not json'));
     const c = _getArchiverClocksForTest();

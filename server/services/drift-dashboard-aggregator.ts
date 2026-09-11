@@ -680,12 +680,18 @@ export interface PassiveArchiveUniverseStats {
   // Stored (DB)
   ohlcRowsInWindow: number;
   tickerRowsInWindow: number;
-  // Scanned (in-process counters; reset on PM2 restart)
+  // Scanned (in-process counters; reset on PM2 restart). *scanned* = every item the parser RECEIVES —
+  // counted before the frame guard in every producer since B-OHLC-FRAME-GUARD (#1029).
   cumulativeOhlcScanned: number;
   cumulativeTickerScanned: number;
+  // *skipped* = OHLC bars the frame guard rejected since the process started (#1028). Never rate-limited.
+  ohlcFramesSkipped: number;
   // Connection state
   wsConnected: boolean;
-  // Drift indicator: scanned-but-not-stored fraction
+  // Store fraction = stored rows in the window / scanned since PID, clamped to 1 (its complement is the
+  // scanned-but-not-stored share).
+  // ⚠️ Step-2 C7: on a futures leg a rejected candle is re-scanned every poll, so a mass rejection INFLATES
+  // scanned and COLLAPSES this ratio — a counting artifact, not a feed collapse. Read ohlcFramesSkipped.
   ohlcStoreFraction: number | null;   // stored / scanned, null when scanned=0
   tickerStoreFraction: number | null;
   // Health note
@@ -973,6 +979,7 @@ export async function computePassiveArchiveStatus(
       tickerRowsInWindow: tickerCount,
       cumulativeOhlcScanned: cfg.stats.cumulativeOhlcRows,
       cumulativeTickerScanned: cfg.stats.cumulativeTickerSnaps,
+      ohlcFramesSkipped: cfg.stats.ohlcFramesSkipped,
       wsConnected: cfg.stats.connected,
       ohlcStoreFraction,
       tickerStoreFraction,

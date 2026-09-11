@@ -30,7 +30,7 @@ import { startEquitySpotArchiver } from '../services/passive-archive/equity-spot
 import { startEquityPerpArchiver } from '../services/passive-archive/equity-perp-archiver.js';
 import { startCryptoSpotArchiver } from '../services/passive-archive/crypto-spot-archiver.js';
 import { startCryptoPerpArchiver } from '../services/passive-archive/crypto-perp-archiver.js';
-import { getConstant } from '../services/module-constants-service.js';
+import { getConstant, prefetchModule } from '../services/module-constants-service.js';
 import { cutoverForTable } from '../services/data-archive/daily-partition-cutover.js';
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
@@ -177,6 +177,16 @@ async function checkPartitionHeadroom(): Promise<void> {
 
 export async function passiveArchiveBootstrap(): Promise<void> {
   console.log('[B74][bootstrap] starting passive archive pipeline...');
+
+  // B-OHLC-FRAME-GUARD (#1028, Step-2 condition C6): warm `passive_archive` in the SYNC cache explicitly.
+  // The frame guard's alert threshold is read synchronously from inside a parser; the reads below would
+  // warm the module only as a side effect of `getConstant`, and the module-constants refresher re-warms
+  // every cached module every 60 s, so a retune lands without a deploy. Deliberately NOT in b72-warmup's
+  // lists and deliberately non-fatal — the reader keeps its cold default — because a REQUIRED read is what
+  // took production down at B-GOV-HYGIENE OBJ-3.
+  await prefetchModule('passive_archive').catch(err => {
+    console.warn('[B74][bootstrap] passive_archive prefetch failed (the frame guard alert threshold keeps its cold default until the module warms):', err instanceof Error ? err.message : err);
+  });
 
   // Read kill-switch + tuning constants
   const equityEnabled = (await getConstant<boolean>('passive_archive', 'b74_equity_capture_enabled', { exchange: '*', assetClass: '*', strategy: '*', regime: '*' })) ?? true;

@@ -151,8 +151,11 @@ async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<voi
     // ⛔⛔ THIS IS `#705`'s UNRECOVERABLE LEG, AND IT IS THE ONE THAT MATTERS MOST.
     // `#705`'s own title records Langston correcting my original sizing: *"I sized the risk on
     // the OHLC writer, where it is recoverable, and the UNRECOVERABLE instance is the ticker
-    // writer."* OHLC bars are REST-replayable — which is exactly why `#704`'s 15-hour outage cost
-    // nil actual data. TICKER ROWS ARE POINT-IN-TIME SNAPSHOTS WITH NO RE-FETCH PATH AT ALL.
+    // writer."* Only the FUTURES legs' OHLC bars are replayable — from the REST endpoint, and only across a
+    // restart, because the poll's in-memory mark does not re-read a minute otherwise (`#1030`) — which is
+    // why `#704`'s 15-hour crypto_perp outage cost nil actual data. BOTH SPOT CLASSES' OHLC BARS ARE
+    // WEBSOCKET-ONLY, AND TICKER ROWS ARE POINT-IN-TIME SNAPSHOTS WITH NO RE-FETCH PATH AT ALL.
+    // (Corrected by B-OHLC-FRAME-GUARD P6: this read "OHLC bars are REST-replayable", false for spot.)
     // A dropped ticker flush is permanently gone.
     // ⚠️ I fixed the OHLC writer first and left this one untouched — reproducing, in the FIX, the
     // same mis-sizing Langston had already corrected me on once.

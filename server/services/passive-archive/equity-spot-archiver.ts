@@ -23,6 +23,8 @@ import WebSocket from 'ws';
 import { loadEquitySpotUniverse } from './universe-loader.js';
 import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
+import { validateOhlcFrame } from './ohlc-frame-validator.js';
+import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
 import { markKindOf } from '../market-data/mark-kind.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 // P19-B4a (C3) — silent-stall watchdog deps.
@@ -46,11 +48,18 @@ interface ArchiverState {
    *  "are PRICES arriving?" and is stamped ONLY in the parsers. Seeded at ws-open so "never yet
    *  had a price" can never read as infinitely stale. */
   lastDataMsgAt: number;
+  /** *persisted*: OHLC bars BUFFERED in the last minute — the health line's `rows_persisted_60s`.
+   *  ⚠️ Buffered, not rows persisted: rows land later, in the batch writer's flush (pre-audit R5). */
   rowsPersistedLastMinute: number;
   rowsPersistedLastMinuteWindowStart: number;
   // B74 v2: cumulative counters for monitor panel
+  /** *scanned*: every OHLC bar the parser RECEIVES, accepted or not — the panel's "scanned (since PID)"
+   *  and the store ratio's denominator. Bumped before the guard since B-OHLC-FRAME-GUARD (#1029). */
   cumulativeOhlcRows: number;
+  /** *scanned*: every ticker snap the parser receives, malformed and throttled ones included. */
   cumulativeTickerSnaps: number;
+  /** *skipped*: OHLC bars the frame guard REJECTED (#1028). Never rate-limited (Step-2 condition C2). */
+  ohlcFramesSkipped: number;
 }
 
 const state: ArchiverState = {
@@ -65,6 +74,7 @@ const state: ArchiverState = {
   rowsPersistedLastMinuteWindowStart: Date.now(),
   cumulativeOhlcRows: 0,
   cumulativeTickerSnaps: 0,
+  ohlcFramesSkipped: 0,
 };
 
 export function getEquitySpotStats(): {
@@ -72,33 +82,57 @@ export function getEquitySpotStats(): {
   configuredSymbols: number;
   cumulativeOhlcRows: number;
   cumulativeTickerSnaps: number;
+  ohlcFramesSkipped: number;
 } {
   return {
     connected: state.ws?.readyState === WebSocket.OPEN,
     configuredSymbols: state.symbols.length,
     cumulativeOhlcRows: state.cumulativeOhlcRows,
     cumulativeTickerSnaps: state.cumulativeTickerSnaps,
+    ohlcFramesSkipped: state.ohlcFramesSkipped,
   };
 }
 
 function parseOhlcBar(data: any): void {
-  if (!data?.symbol || !data?.interval_begin) return;
+  // *scanned* counts every bar RECEIVED, so it is bumped before the guard (#1029 — it sat after the
+  // buffer, so a discarded bar never reached the store ratio's denominator).
+  state.cumulativeOhlcRows++;
+  // B-OHLC-FRAME-GUARD (#1028): the validator REPLACES the old truthiness check and runs BEFORE the #594
+  // data-clock stamp — a rejected bar is not proof of life (pre-audit A14). `volume ?? '0'` is the
+  // existing absence default, applied before validation (J6).
+  const verdict = validateOhlcFrame({
+    symbol: data?.symbol,
+    intervalBegin: data?.interval_begin,
+    open: data?.open,
+    high: data?.high,
+    low: data?.low,
+    close: data?.close,
+    volume: data?.volume ?? '0',
+    vwap: data?.vwap,
+    trades: data?.trades,
+  });
+  if (!verdict.ok) {
+    state.ohlcFramesSkipped++;
+    noteOhlcFrameRejected('equity-spot', ASSET_CLASS, { symbol: data?.symbol, intervalBegin: data?.interval_begin }, verdict);
+    return;
+  }
   state.lastDataMsgAt = Date.now(); // #594: DATA-liveness — after the guard, same rule as parseTickerSnap.
+  const bar = verdict.row;
   bufferOhlcBar(ASSET_CLASS, {
-    symbol: data.symbol,
+    symbol: bar.symbol,
     assetClass: ASSET_CLASS,
     exchange: 'kraken-equities',
-    intervalBegin: new Date(data.interval_begin),
-    open: String(data.open),
-    high: String(data.high),
-    low: String(data.low),
-    close: String(data.close),
-    volume: String(data.volume ?? '0'),
-    vwap: data.vwap != null ? String(data.vwap) : null,
-    tradeCount: data.trades != null ? Number(data.trades) : null,
+    intervalBegin: bar.intervalBegin,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
+    vwap: bar.vwap,
+    tradeCount: bar.tradeCount,
   } as any);
   state.rowsPersistedLastMinute++;
-  state.cumulativeOhlcRows++;
+  noteOhlcFrameAccepted(ASSET_CLASS, bar.symbol);
 }
 
 // ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
@@ -141,6 +175,8 @@ export function getLatestEquityTick(symbol: string): EquityTick | null {
 }
 
 function parseTickerSnap(data: any): void {
+  // *scanned* counts every snap RECEIVED, so it is bumped before the guard (#1029). Nothing else here changes.
+  state.cumulativeTickerSnaps++;
   if (!data?.symbol) return;
   // #594: DATA-liveness stamp — AFTER the malformed-payload guard (a junk snap must not count as
   // proof of life) and BEFORE the mark branch (which is conditional on a finite positive mark;
@@ -202,7 +238,6 @@ function parseTickerSnap(data: any): void {
     openInterest: data.open_interest != null ? String(data.open_interest) : null,
     fundingRate: null, // n/a for spot
   } as any);
-  state.cumulativeTickerSnaps++;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -465,7 +500,8 @@ export function stopEquitySpotArchiver(): void {
 // P19-B4a (C3) test-only: patch the watchdog-relevant archiver state so unit
 // tests can exercise runStallWatchdogTick without a live socket.
 export function _setArchiverStateForTest(
-  patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'lastDataMsgAt' | 'ws'>>,
+  patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'lastDataMsgAt' | 'ws'
+    | 'cumulativeOhlcRows' | 'cumulativeTickerSnaps' | 'ohlcFramesSkipped' | 'rowsPersistedLastMinute'>>,
 ): void {
   Object.assign(state, patch);
 }
@@ -480,4 +516,13 @@ export function _setArchiverStateForTest(
 export { handleMessage as _handleMessageForTests };
 export function _getArchiverClocksForTest(): { lastMsgAt: number; lastDataMsgAt: number } {
   return { lastMsgAt: state.lastMsgAt, lastDataMsgAt: state.lastDataMsgAt };
+}
+// B-OHLC-FRAME-GUARD P8 (test-only): the three OHLC counters plus ticker *scanned*, read after real frames.
+export function _getArchiverCountersForTest(): { scanned: number; persisted: number; skipped: number; tickerScanned: number } {
+  return {
+    scanned: state.cumulativeOhlcRows,
+    persisted: state.rowsPersistedLastMinute,
+    skipped: state.ohlcFramesSkipped,
+    tickerScanned: state.cumulativeTickerSnaps,
+  };
 }

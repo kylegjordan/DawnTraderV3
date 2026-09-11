@@ -24,6 +24,8 @@
 import WebSocket from 'ws';
 import { bufferOhlcBar, type ArchiveAssetClass } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
+import { validateOhlcFrame } from './ohlc-frame-validator.js';
+import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 
 const WS_URL = 'wss://futures.kraken.com/ws/v1';
@@ -44,6 +46,8 @@ export interface KrakenFuturesArchiverStats {
   configuredSymbols: number;
   cumulativeOhlcRows: number;
   cumulativeTickerSnaps: number;
+  /** OHLC candles the frame guard REJECTED (#1028). */
+  ohlcFramesSkipped: number;
 }
 
 export class KrakenFuturesArchiver {
@@ -52,12 +56,19 @@ export class KrakenFuturesArchiver {
   private backoff: BackoffPolicy = makeBackoff(30);
   private enabled = false;
   private lastMsgAt = 0;
+  /** *persisted*: candles BUFFERED in the last minute — the health line's `rows_persisted_60s`.
+   *  ⚠️ Buffered, not rows persisted (pre-audit R5). */
   private rowsPersistedLastMinute = 0;
   private lastOhlcInterval: Map<string, number> = new Map();
   private restPollTimer: NodeJS.Timeout | null = null;
   private healthTimer: NodeJS.Timeout | null = null;
+  /** *scanned*: every candle EVALUATED (above the mark), accepted or not — the panel's "scanned (since PID)".
+   *  ⚠️ A rejected candle is re-evaluated, and re-counted, every poll until a newer one is accepted (C7). */
   private cumulativeOhlcRows = 0;
+  /** *scanned*: every ticker snap received, malformed and throttled ones included. */
   private cumulativeTickerSnaps = 0;
+  /** *skipped*: candles the frame guard REJECTED (#1028). An INSTANCE field — two legs, no cross-talk. */
+  private ohlcFramesSkipped = 0;
 
   constructor(private readonly cfg: KrakenFuturesArchiverConfig) {}
 
@@ -67,6 +78,7 @@ export class KrakenFuturesArchiver {
       configuredSymbols: this.symbols.length,
       cumulativeOhlcRows: this.cumulativeOhlcRows,
       cumulativeTickerSnaps: this.cumulativeTickerSnaps,
+      ohlcFramesSkipped: this.ohlcFramesSkipped,
     };
   }
 
@@ -76,29 +88,55 @@ export class KrakenFuturesArchiver {
     try {
       const resp = await fetch(`${REST_BASE}/${symbol}/1m`);
       if (!resp.ok) return 0;
-      const data = await resp.json() as { candles?: Array<{ time: number; open: string; high: string; low: string; close: string; volume?: string }> };
+      const data = await resp.json() as { candles?: Array<{ time: number; open: string; high: string; low: string; close: string; volume?: string } | null> };
       if (!data.candles || data.candles.length === 0) return 0;
       const lastSeen = this.lastOhlcInterval.get(symbol) ?? 0;
       let newCount = 0;
       let maxTime = lastSeen;
       for (const candle of data.candles) {
-        if (candle.time <= lastSeen) continue;
+        // B-OHLC-FRAME-GUARD (#1028): the skip and the mark are TODAY'S (pre-audit P2, r4). `candle?.time`,
+        // so a null element cannot throw; a numeric time at or below the mark is skipped exactly as before.
+        const time = candle?.time;
+        if (typeof time === 'number' && time <= lastSeen) continue;
+        // Every other candle is EVALUATED, and *scanned* counts it whether or not it is buffered.
+        // ⚠️ C7: a rejected candle stays above the mark and is re-scanned every poll until a newer one is
+        // accepted, so a renamed field inflates *scanned* and collapses the panel's store % — a counting
+        // artifact, not a feed collapse; read *skipped* beside it. The mark and the re-read are `#1030`.
+        this.cumulativeOhlcRows++;
+        const verdict = validateOhlcFrame({
+          symbol,
+          intervalBegin: time,
+          open: candle?.open,
+          high: candle?.high,
+          low: candle?.low,
+          close: candle?.close,
+          volume: candle?.volume ?? '0',
+          vwap: null,
+          trades: null,
+        });
+        if (!verdict.ok) {
+          // The mark does NOT move for a rejected candle.
+          this.ohlcFramesSkipped++;
+          noteOhlcFrameRejected('kraken-futures', this.cfg.assetClass, { symbol, intervalBegin: time }, verdict);
+          continue;
+        }
+        const bar = verdict.row;
         bufferOhlcBar(this.cfg.assetClass, {
           symbol,
           assetClass: this.cfg.assetClass,
           exchange: 'kraken-futures',
-          intervalBegin: new Date(candle.time),
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-          volume: candle.volume ?? '0',
+          intervalBegin: bar.intervalBegin,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: bar.volume,
           vwap: null,
           tradeCount: null,
         } as any);
+        noteOhlcFrameAccepted(this.cfg.assetClass, symbol);
         newCount++;
-        this.cumulativeOhlcRows++;
-        if (candle.time > maxTime) maxTime = candle.time;
+        if (typeof time === 'number' && time > maxTime) maxTime = time;
       }
       if (maxTime > lastSeen) this.lastOhlcInterval.set(symbol, maxTime);
       return newCount;
@@ -123,6 +161,8 @@ export class KrakenFuturesArchiver {
   // ── WebSocket for ticker ─────────────────────────────────────────────────
 
   private parseTickerSnap(msg: any): void {
+    // *scanned* counts every snap RECEIVED, so it is bumped before the guard (#1029).
+    this.cumulativeTickerSnaps++;
     if (!msg?.product_id) return;
     bufferTickerSnap(this.cfg.assetClass, {
       symbol: msg.product_id,
@@ -145,7 +185,6 @@ export class KrakenFuturesArchiver {
       openInterest: msg.openInterest != null ? String(msg.openInterest) : null,
       fundingRate: msg.funding_rate != null ? String(msg.funding_rate) : null,
     } as any);
-    this.cumulativeTickerSnaps++;
   }
 
   private handleMessage(raw: WebSocket.RawData): void {

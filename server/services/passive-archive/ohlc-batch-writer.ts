@@ -63,7 +63,8 @@ const ALL_ARCHIVE_CLASSES = Object.keys(tableForAssetClass) as ArchiveAssetClass
 // ⛔ WHY THE DROP IS WORTH FIXING AT ALL, since the counts are small: it is not the count, it is
 // the SHAPE. `:108` empties the buffer BEFORE the try and the catch re-adds nothing, so ANY
 // persistent error becomes permanent, total, per-flush loss. #704 is the proof — 368,841 bars,
-// 0 rows landed, ~15 hours — and it cost nothing ONLY because that leg was REST-replayable.
+// 0 rows landed, ~15 hours — and it cost nothing ONLY because that leg (`crypto_perp`, a futures leg
+// polled over REST) was REST-replayable.
 // #704 residual (b) states the boundary exactly: "acceptable for replayable REST bars and NOT
 // for WS-only ones." The two WS legs (crypto_spot, xstock_spot) have NO re-fetch path at all.
 
@@ -164,9 +165,15 @@ export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', asse
       category: 'breakage',
       severity: 'critical',
       title: `${writer.toUpperCase()} archive writer failing PERMANENTLY — ${assetClass}`,
-      body: `${dropped} rows dropped and every further flush for this class will fail the same way `
-        + `until it is fixed. This is the #704 shape: bars stop landing while stdout looks healthy, `
-        + `because success logs to stdout and failure to stderr. Detail: ${detail}`,
+      // B-OHLC-FRAME-GUARD P7 (#1028, A11): this read "every further flush for this class will fail the same
+      // way until it is fixed" — refuted live (3,632 and 3,297 bars landed in the next two hours). Assert only
+      // what ONE failed flush supports.
+      body: `${dropped} rows dropped in this flush. The error was classified permanent, so these rows were `
+        + `discarded rather than retried, which lets the next flush for this class succeed if the fault was `
+        + `specific to them. If the fault persists, later flushes drop their rows too and this alert is raised `
+        + `again once its re-arm window passes (a re-raise is suppressed while this alert is unresolved). `
+        + `This is the #704 shape: bars stop landing while stdout looks healthy, because success logs to `
+        + `stdout and failure to stderr. Detail: ${detail}`,
       metadata: { assetClass, dropped, detail, source: `${writer}-batch-writer`, issue: '#705' },
       // ⛔ THE LATCH ABOVE DIES WITH THE PROCESS — so without this, every restart re-raises the
       // SAME permanent fault as a fresh alert, and a fault that survives restarts (which is what

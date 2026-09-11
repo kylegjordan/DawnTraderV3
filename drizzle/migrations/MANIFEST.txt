@@ -197,3 +197,4 @@
 2026-08-30-b-exit-book-age-stamp.sql
 2026-09-02-fg2-obj5c-vts-epoch-bump.sql
 2026-09-03-b-xstock-feed-sanity.sql
+2026-09-11-b-ohlc-frame-guard.sql
