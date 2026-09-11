@@ -47,7 +47,7 @@
 ## ★★★ CURRENT POSITION (2026-09-11) — READ FIRST
 
 ⛔⛔ **THREE THINGS IN FLIGHT — READ THE RECORDS, DO NOT RE-DERIVE:**
-1. **`B-OHLC-FRAME-GUARD` (`#1028`, `3b.h-6`) — STEP 1 APPROVED at r2; STEP 2 UNDERWAY.** Conditions in scope §14: admit iff storable AND aggregatable · ±Inf rejected · partition OUT · C1 escalate · C2 counter never throttled · C3 judged rows · O3 crypto counts at the caller. ⛔ **ALERT MODEL CORRECTED: `system-alerts.ts:508` suppresses re-raise for ANY non-resolved state — ACTIVE swallows like ACKED; only RESOLVE keeps a detector live.**
+1. **`B-OHLC-FRAME-GUARD` (`#1028`, `3b.h-6`) — STEP: 2 of 11 · NEXT STEP: 3 of 11.** Pre-audit r2 + scope r3 at `960174839`; Step-2 gate with Langston. Folded `#1029` (crypto's *scanned* placement is CORRECT per `b8eba807e`; only *persisted* `:158` is wrong — J8 disagrees with part of O3) · `#1030` (futures poller freezes the in-progress minute; OBJ-8 check script committed). ⛔ **`system-alerts.ts:508`: ANY non-resolved state suppresses re-raise — only RESOLVE keeps a detector live.**
 2. **`3b.f-c` — §14 withdrawn · §15 discriminator behind F4 (ripe? fold into `#943`?) · §16 Newmont = genuine thinness + a 249 s frame drought (capture-stamped, writer never stalled).** ⛔ **Appends renumbered §11-13 → §14-16: a `§13` citation means the ORIGINAL.**
 3. **`CODEX_FINDINGS_REGISTER.md` — r14, READY (Langston).** ⛔ **Do NOT dispatch to Coltrane until `#1027` clears** — his refresh fails git's OWNERSHIP guard (root vs a langston-owned mirror), NOT auth. CC-INFRA's.
 ⚠️ **`#1026`: a Langston dispatch >2000 chars splits and the orphan half can wake `coltrane-bot`. GATE EVERY SEND ON `wc -c` < 1990 — "keep it short" failed by 129 chars.**
