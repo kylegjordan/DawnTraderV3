@@ -13,6 +13,8 @@
 // STEP 4 r2 (Langston chunk-2 BLOCKER-1): tests 11-13 fail against r1 (`f61dcbae2`), where the warm left P at the per-step
 // model's steady state, so the first live read moved the estimate only ~13% of the way and the REWARM line carried no
 // live price. Tests 6 and 7 now build their reference with the same P inflation.
+// STEP 4 r3 (Langston chunk-2 r2 conditions 2-3): test 12 pins the DECAY LENGTH (the 12th live observation is the first
+// within 10% of the steady-state gain) and test 14 pins the LAZY inflation; test 14 fails against r2 (`ba36cc5ad`).
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -149,9 +151,21 @@ describe('P-7j r2 — Langston chunk-2 BLOCKER-1: the re-warm is continuous AND 
     const got = smooth(SYM, 105, ER, VN, 'obs-1', hourly);
     // r1 left P at the steady state of P^2 = Q(P + R) (R 26, Q 0.5: P about 3.86, K about 0.13), so this read was ~100.65.
     expect(got).toBeGreaterThanOrEqual(100 + REWARM_FIRST_LIVE_GAIN * 5 - 1e-9);
-    // and the gain then decays on its own: the next NEW observation is weighted less than the first
-    smooth(SYM, 105, ER, VN, 'obs-2');
-    expect(diagOf()?.lastK).toBeLessThan(REWARM_FIRST_LIVE_GAIN);
+    // r3 (Langston condition 2): pin the DECAY LENGTH, not just "less than the first". Steady state at R 26, Q 0.5:
+    // P solves P^2 = Q(P + R), and the gain is P / (P + R).
+    const R = 26;
+    const Q = 0.5;
+    const pSteady = (Q + Math.sqrt(Q * Q + 4 * Q * R)) / 2;
+    const kSteady = pSteady / (pSteady + R);
+    const gains = [diagOf()?.lastK as number];
+    for (let i = 2; i <= 14; i++) {
+      smooth(SYM, 105, ER, VN, `obs-${i}`);
+      gains.push(diagOf()?.lastK as number);
+    }
+    const firstWithin10Pct = gains.findIndex((k) => k <= kSteady * 1.1) + 1; // the 1-based live observation number
+    expect(gains[0]).toBeCloseTo(REWARM_FIRST_LIVE_GAIN, 9);
+    expect(gains[1]).toBeCloseTo(0.479, 3);
+    expect(firstWithin10Pct).toBe(12);
   });
 
   it('13. ★ the REWARM line names the live price and |x - raw| / raw, so a deploy is a measurement', () => {
@@ -162,5 +176,24 @@ describe('P-7j r2 — Langston chunk-2 BLOCKER-1: the re-warm is continuous AND 
     expect(line).toBeDefined();
     expect(line).toContain('rawPrice=110.0000');
     expect(line).toContain(`gapFrac=${(Math.abs(warmed - 110) / 110).toFixed(6)}`);
+  });
+
+  it('14. ★ r3 LAZY: the first live gain is REWARM_FIRST_LIVE_GAIN even when the live read carries a different ER', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const filter = new AdaptiveKalmanFilter('P7J-LAZY');
+    filter.warmFromHistory(CLOSES, 0.95, VN, 110); // R 3.5 at the warm
+    filter.update(110, 0.05, VN); // R 48.5 at the live read
+    // r2 inflated against the warm's R: P 31.5, so K was about 0.39 here.
+    expect(filter.getDiagnostics().lastK).toBeCloseTo(REWARM_FIRST_LIVE_GAIN, 9);
+  });
+
+  it('15. r3: a reset clears a pending inflation, so a re-seeded filter starts from the legacy covariance', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const filter = new AdaptiveKalmanFilter('P7J-RESET');
+    filter.warmFromHistory(CLOSES, ER, VN, 110);
+    filter.reset();
+    filter.update(110, ER, VN); // seeds
+    filter.update(111, ER, VN); // first update after the seed: K = 1 / (1 + 26)
+    expect(filter.getDiagnostics().lastK).toBeCloseTo(1 / 27, 9);
   });
 });

@@ -47,6 +47,8 @@ describe('P-7h r2 — the engine carries the streak\'s reason histogram into the
     const src = readFileSync(resolve(__dirname, '../../services/active-execution-engine.ts'), 'utf-8');
     const deletes = src.match(/this\._priceSkipReasons\.delete\(position\.id\)/g) ?? [];
     expect(deletes.length).toBe(1);
+    // r3 (Langston condition 5): the fence is symmetric; a second streak-delete site would break the lockstep silently.
+    expect((src.match(/this\._priceSkipStreak\.delete\(position\.id\)/g) ?? []).length).toBe(1);
     const at = src.indexOf('this._priceSkipStreak.delete(position.id);');
     expect(src.slice(at, at + 120)).toContain('this._priceSkipReasons.delete(position.id);');
     expect(src).not.toMatch(/_priceSkipReasons\.(clear|set\(position\.id, new Map)/);

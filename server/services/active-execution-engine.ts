@@ -175,6 +175,10 @@ export function buildPriceSkipAlertCopy(input: {
    * B-PRICE-SIDE-BY-JOB r5 P-7h r2 (Langston chunk-2 BLOCKER-2): how many ticks of the STREAK each reason accounts for.
    * The streak is per position and reason-blind, and one leg can interleave four reasons, so the tick that crosses the
    * threshold is one object and the streak is another. `reason` stays the LAST tick's. Omitted = every tick carried it.
+   * ⚠️ r3 (Langston chunk-2 r2 condition 5): the dominant is a REASON, not a fact class. A streak of 15 `rest_token_exhausted`,
+   * 13 `rest_no_data` and 12 `rest_failed` takes the self-throttled copy at 37.5% while 62.5% of it was the venue failing,
+   * so the consequence sentence can be contradicted by the minority. Class-first ranking (fact class, then reason within
+   * it, with that fixture) is scope 8h; if 8h slips, this comes back.
    */
   reasonCounts?: Readonly<Record<string, number>>;
 }): {

@@ -48,6 +48,20 @@ export interface KalmanDiagnostics {
  * Inflating `P` at the end of the warm states the un-modelled gap honestly: the first live read carries this share of
  * the weight, the prior keeps the rest, and the gain then decays on its own as live observations arrive.
  * A model constant, like the R clip (1..50) and the Q floor (0.1) below; not a tuning knob.
+ * r3 (Langston chunk-2 r2 conditions 1-3):
+ * - THE DERIVATION, AND ITS CADENCE DEPENDENCE. A model-consistent warm would charge each hourly step
+ *   `Q_warm = Q_live x (3600 / t)`, where `t` is the live observation cadence. At R 26 and Q 0.5 that gives a first live
+ *   gain of 0.85 at t = 15 s, 0.75 at 30 s and 0.64 at 60 s; 0.9 corresponds to t of about 8.5 s. Today's crypto
+ *   re-serve cadence is the `#951` sawtooth (14.3 / 29.3 / 44.3 / 59.3 s), so the model implies 0.64-0.85, and 0.9
+ *   over-weights the live read by 5-26 points. That is the fail-safe direction, because the prior is a known-stale
+ *   average of hourly closes. FALSIFIER: wiring the 2 s `openTrade` lane (`#977`) pushes the derived gain to about 0.97
+ *   and makes 0.9 conservative; a longer cadence makes it more aggressive. One constant is exact at one (R, Q, t) only.
+ * - THE DECAY LENGTH, as a number: from the inflated P the gain runs 0.900, 0.479, 0.333, 0.260 and so on, and is within
+ *   10% of the steady-state gain (0.129 at R 26, Q 0.5) only at the 12th live observation (test 12). At today's cadence
+ *   that is 3-12 minutes of a lightly smoothed filter after every restart.
+ * - LAZY: the warm only FLAGS the inflation, and the next `applyObservation` applies it with ITS OWN R, so the first live
+ *   gain is exactly this constant whatever ER the warm used (test 14).
+ * - `updateCount` includes the warm's steps (up to 720). Diagnostics only; no production reader.
  */
 export const REWARM_FIRST_LIVE_GAIN = 0.9;
 
@@ -80,6 +94,8 @@ export class AdaptiveKalmanFilter {
    * diagnostics so a cold filter never presents as a warm one.
    */
   private warmedFromCloses = 0;
+  /** P-7j r3 (Langston chunk-2 r2 condition 3): set by the re-warm; the next observation applies the inflation with its own R. */
+  private pendingRewarmInflation = false;
 
   constructor(symbol: string = 'UNKNOWN') {
     this.symbol = symbol;
@@ -136,13 +152,12 @@ export class AdaptiveKalmanFilter {
     const warmed = this.getState();
     if (n > 0 && warmed !== null) {
       this.warmedFromCloses = n;
-      // K = P / (P + R) on the first live read, so P = R * g / (1 - g). Never LOWERS P.
-      const R = measurementNoise(ER);
-      this.P = Math.max(this.P, (R * REWARM_FIRST_LIVE_GAIN) / (1 - REWARM_FIRST_LIVE_GAIN));
+      // r3: FLAG, do not compute. The next observation inflates P with its own R (K = P / (P + R), so P = R * g / (1 - g)).
+      this.pendingRewarmInflation = true;
       const live = liveObservation !== undefined && Number.isFinite(liveObservation) && liveObservation > 0 ? liveObservation : null;
       const rawText = live === null ? 'n/a' : live.toFixed(4);
       const gapText = live === null ? 'n/a' : (Math.abs(warmed - live) / live).toFixed(6);
-      console.log(`[9.3][REWARM] ${this.symbol} re-warmed from ${n} bar closes x=${warmed.toFixed(4)} rawPrice=${rawText} gapFrac=${gapText} P=${this.P.toFixed(4)}`);
+      console.log(`[9.3][REWARM] ${this.symbol} re-warmed from ${n} bar closes x=${warmed.toFixed(4)} rawPrice=${rawText} gapFrac=${gapText} firstLiveGain=${REWARM_FIRST_LIVE_GAIN}`);
     }
     return n;
   }
@@ -159,6 +174,12 @@ export class AdaptiveKalmanFilter {
     }
 
     const R = measurementNoise(ER);
+    if (this.pendingRewarmInflation) {
+      // P-7j r3: the re-warm's inflation, applied with THIS observation's R, so the first live gain is exactly the constant.
+      // Never LOWERS P.
+      this.P = Math.max(this.P, (R * REWARM_FIRST_LIVE_GAIN) / (1 - REWARM_FIRST_LIVE_GAIN));
+      this.pendingRewarmInflation = false;
+    }
 
     const Q = Math.max(0.1, VolNoise * 0.5);
 
@@ -191,6 +212,7 @@ export class AdaptiveKalmanFilter {
     this.updateCount = 0;
     this.lastObservationKey = null;
     this.warmedFromCloses = 0;
+    this.pendingRewarmInflation = false;
     console.log(`[9.3][RESET] ${this.symbol} filter reset`);
   }
 

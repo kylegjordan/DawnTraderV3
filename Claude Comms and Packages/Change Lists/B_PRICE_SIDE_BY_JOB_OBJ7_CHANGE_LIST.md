@@ -199,6 +199,25 @@ Also recorded from your F-G-2 closing read: §0b in `F_G_2_PROGRESS_REPORT.md`, 
 
 **Proof for all three:** 18 related test files, 263/263. tsc 377, identical file+code multiset to chunk 1 r2's.
 
+## STEP 4 r3 — CHUNK 2 r2's FIVE CONDITIONS, AND YOUR TWO RULINGS
+
+Your verdicts: chunk 2 r2 APPROVED with five conditions (18:57Z); chunks 3 and 1 r2 APPROVED, all six conditions discharged, BLOCKER-2 carried to Step 6 (19:03Z). None of the five gates the deploy; they are folded in before Step 5 so CI grades one head.
+
+| condition | fix | where | proof |
+|---|---|---|---|
+| **1** — the 0.9's derivation and its cadence dependence | Written into `REWARM_FIRST_LIVE_GAIN`'s docblock with your numbers: `Q_warm = Q_live x 3600/t`; 0.85 / 0.75 / 0.64 at 15 / 30 / 60 s; 0.9 at about 8.5 s; 0.64-0.85 at the `#951` sawtooth; the fail-safe direction; the falsifier (the 2 s `openTrade` lane makes it about 0.97); one constant is exact at one (R, Q, t) only; and `updateCount` includes the warm's steps (diagnostics only) | `adaptive-kalman.ts` | — |
+| **2** — pin the decay length | Test 12 computes the steady-state gain from `P^2 = Q(P + R)` and asserts the trajectory: 0.9 at observation 1, 0.479 at 2, and the 12th live observation is the first within 10% of steady state | p7j test 12 | passes on r2 by design (one ER throughout); it pins the number |
+| **3** — lazy inflation | The warm only sets `pendingRewarmInflation`; the next `applyObservation` inflates `P` with its own R; `reset()` clears the flag. The REWARM line prints `firstLiveGain=0.9` instead of a P it has not applied | `adaptive-kalman.ts` | test 14 (warm at ER 0.95, live read at ER 0.05: first live K = 0.9) **fails on r2**, where K was about 0.39; test 15 (a reset clears the flag) passes on r2 by design |
+| **4** — the Step-8 expectation, before the read | `gapFrac` distribution at the restart, and `K` at live observations 1 and 12 per symbol. Expected: K = 0.9 at 1; within 10% of steady state at 12; **median `gapFrac` at most 0.01**; above that is a scope decision, not a tuning one | Steps 5-8 plan | — |
+| **5** — class versus reason | Noted at the object (`buildPriceSkipAlertCopy`'s `reasonCounts` docblock, with the 15/13/12 case); class-first ranking with that fixture folded into **scope 8h / pre-audit P-8h**; the fence is symmetric: the streak's delete site is pinned at one as well | `aee` docblock; scope 8h; skip-streak test 2 | — |
+
+| ruling | recorded |
+|---|---|
+| **1** — the depth-1 path: rule 18 (b) APPROVED as 8i, with three census conditions (the `currentChannel` field and its diagnostics reader; the channel-hints route's new shape with `low_liquidity` kept; the RESUBSCRIBE-only behaviour change named) | scope 8i and pre-audit P-8i, in their bodies |
+| **2** — `bookDepth`: disposition 5 AGREED, with the re-open trigger as written | this file, the chunk 1 r2 table |
+
+**Proof:** control against the r2 smoother at HEAD: 1 of 15 p7j tests fails (14). After: 20 related test files, 291/291. tsc 377, identical file+code multiset.
+
 ## CHUNK 4 — P-7k (record-only; placed at Step 4 by your chunk-3 ruling (2))
 
 ### P-7k — the unified price cache says which quantity each price is
