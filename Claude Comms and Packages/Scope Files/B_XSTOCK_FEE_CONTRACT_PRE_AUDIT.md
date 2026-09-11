@@ -3,7 +3,7 @@
 **Batch:** `B-XSTOCK-FEE-CONTRACT` (`#1010`, `PHASE_19_PLAN` row 2.4-FEE) · **change-class: architecture** (Langston, stands) · **Owner:** CC-B
 **Audited at:** `origin/migration/aws-supabase` `18a8b29b6`; reviewer re-derivations at `56599ad6d`, `4e7f584b5` and `9ceaf73e1` (no code under audit changed between them) · staging DB + logs read 2026-09-11 15:00–16:10Z
 **Inputs:** scope r1.1 `c891de65a` · Langston Step-1 APPROVAL with five rulings, F-1..F-5 and two gaps (2026-09-11) · Langston addendum 15:03Z (`dt-deploy` has no rollback verb; the forward-deploy window)
-**Revision:** r5 — Langston's Step-2 APPROVAL rulings folded (P3 rider, P4 + `#1042`, P8 three-arm pre-registration). r4 — three fresh object-round reviews folded (§D). The OBJ-9 query is committed at `scripts/analysis/b_xstock_fee_contract_obj9_rerank.sql`, **pinned to a cutoff of 2026-09-11 16:00Z** so a re-run reproduces every A9 number.
+**Revision:** r6 — Langston's P8 ruling (16:39Z) folded: per-pick classification is the gate, PASS line 1.0 %. r5 — Langston's Step-2 APPROVAL rulings folded (P3 rider, P4 + `#1042`, P8 three-arm pre-registration). r4 — three fresh object-round reviews folded (§D). The OBJ-9 query is committed at `scripts/analysis/b_xstock_fee_contract_obj9_rerank.sql`, **pinned to a cutoff of 2026-09-11 16:00Z** so a re-run reproduces every A9 number.
 
 ---
 
@@ -20,7 +20,7 @@
 | 7 | cost-model fold rollback: "the rollback migration re-inserts the rows first" (scope r1.1) | **a committed operator runbook step with the literal re-insert SQL** — `dt-deploy` migrates forward only | Langston 15:03Z; `scripts/dt-deploy.sh:222-234` |
 | 8 | `SYSTEM_IMPACT_MAP.md:3504` lists `calculateFees`/`modelTradeRealism`/`getConfig` as consumers | only `calculateFees` and `modelSlippage` have a caller | §A3 |
 | 9 | **OBJ-9 (r1 of this document at `56599ad6d`, and my message to Kyle): rank 0 would have changed in "188–266 of 1,512 cycles (12.4–17.6 %)"** | **Among recorded pool members: CERTAIN in 163, POSSIBLE in 340, of 1,516 cycles (10.8–22.4 %)**, pinned at 2026-09-11 16:00Z | **Method:** r1 shifted every xStock member by one bound together, which brackets crypto-led cycles but **not** xStock-led ones, where leader and challengers move by different, unknown amounts — re-derived per cycle (§A9). **Population:** the unpinned counts grew 1,512 → 1,516 as live cycles arrived between runs; the pin fixes the population |
-| 10 | P8: "falls below the 24.9 % baseline … falsified if ≥ 24.9 % at ≥ 300" | **three arms keyed to a matched PRIMARY baseline `p₀`** (the last 300 decisions before deploy): PASS ≤ `p₀ − 1.645·SE`, FALSIFIED ≥ `p₀`, between ⇒ INCONCLUSIVE-EXTEND; whole-window 24.9 % demoted to SENSITIVITY; VOID conditions named. **Preview: the last 300 before 16:10Z were 16.0 % maker (48 / 300), not 24.9 %** | Langston Step-2 ruling 3 (the old bar passes the null about half the time, and the whole window is a mixture); the preview confirms the mixture |
+| 10 | P8: "falls below the 24.9 % baseline … falsified if ≥ 24.9 % at ≥ 300" | **per-pick classification is the gate.** PASS = zero class-(iii) mechanism bypasses AND xStock maker share ≤ **1.0 %** at n ≥ 300; share ≥ the frozen post-`f8870022f` `p₀` (24.0 %, 24 / 100 at 16:45Z) = NO IMPROVEMENT OBSERVED; between = INCONCLUSIVE-EXTEND; **n = 300 is ~21 days after deploy** | Langston Step-2 ruling 3 and P8 ruling 16:39Z. My 16.0 % preview was a mixture across `f8870022f` (201 pre rows at 11.9 % + 99 post at 24.2 %), and the whole window drifts (25.7 → 17.2 % by 300-row block), so no share-only comparator is sound |
 
 ---
 
@@ -117,6 +117,10 @@ Readers: `active-execution-engine.ts:2899 getCalibrationEpoch(_learnSource, _ass
 - **Durable, and sufficient:** `switch_on_shadow_evidence` rows with `proof_type = 'maker_taker'`, one per orchestrator decision, carrying `asset_class` and `chosen_entry_mode` (`switch-on-evidence-sink.ts:96`, written at `signal-orchestrator.ts:1107` — before the SQE check at `:1126`, so the net-EV gate does not filter what it records).
 - **Baseline, whole retained window, paper:** **xStock maker 422 / taker 1,276 — 24.9 % maker of 1,698** (2026-07-15 → 2026-09-11). Crypto maker 876,075 / taker 30,728 (96.6 % maker). Control: 908,501 `maker_taker` rows in total.
 - **Why the direction is determined, not guessed:** both decision sites run `levelGeometry: 'mid'` with the maker entry equal to the taker entry (`signal-orchestrator.ts:1069-1070`, `ready_to_buy_service.ts:823-824`). **The taker arm prices its fee from `costs.fee`, not from `feeRateTaker`** (`maker-taker-decision.ts:268-271`); for xStock `costs.fee` resolves to the same `fee_model` taker row — `getCachedCostMetrics` at birth (`signal-orchestrator.ts:1056`) and at refresh (`ready_to_buy_service.ts:781`), with `fee: overrides.feeRateTaker ?? friction.feeRateTaker` (`cost-model.ts:134`) and no xStock per-pair overrides. So after the fix the taker arm's net EV rises by `0.014 × entry` and the maker arm's by `pFill × 0.0112 × entry` = `0.0056 × entry` (xStock `maker_taker.maker_fill_probability = 0.50`). The maker-minus-taker margin therefore falls by `0.0084 × entry` at every decision; ties go to taker (`maker-taker-decision.ts:343`, strict `>`), so every decision where maker led by **at most** `0.0084 × entry` flips to taker and none flips the other way. The hard floor (`:335-341`) only ever forces taker, and cannot fire at seeded values (xStock strength = `scoring_base.flat_pwin_base 0.317` against `hard_floor_continuation_strength 0.70`).
+- **The three constants, each at its implementing line (Langston's rule-29(c) condition):**
+  - **0.014 · E** — the taker arm prices `computeTotalRoundTripCost(costs.fee, …)` (`maker-taker-decision.ts:268-271` → `cost-model.ts:163-165`, `fee × 2`), scaled by entry at `:275`, and `netEV = rawEV − totalFriction` (`net-expectancy-kernel.ts:115`). Δ friction = 2 × (0.0010 − 0.008) = −0.014 of entry ⇒ taker net EV **+0.014 · E**.
+  - **0.0112 · E → 0.0056 · E** — maker friction is `takerFrictionPct − makerEntryAdvantagePct` (`:296`), with advantage `(feeRateTaker − feeRateMaker) + spread + slippage` (`:295`). The advantage moves by 0.0012 − 0.004 = −0.0028, so maker friction moves by −0.014 + 0.0028 = −0.0112 ⇒ maker net EV on fill **+0.0112 · E** (`:297-301`). `makerNetEVAdjusted = pFill × (…) − (1 − pFill) × C` (`:331-332`) scales that by 0.50 ⇒ **+0.0056 · E**.
+  - **0.0084 · E — THE OPERATIVE FLIP CONSTANT** — is the differential of the two: Δ(maker_adj − taker) = 0.0056 · E − 0.014 · E = **−0.0084 · E**, compared at `:343` (strict `>`). Executed in `b-xstock-fee-contract-signed-fees.test.ts` ("the margin moves toward taker").
 - **Reach limit:** the sink records orchestrator decisions only; RTB-refresh re-decisions (`ready_to_buy_service.ts:817`) and VTS decisions are not in it. **Would stop holding** under a future `'sided'` switch, where the maker arm is priced off a different entry, or if xStock ever gains a per-pair fee override.
 
 ## A9. OBJ-9 — what the wrong fee did to xStock ranking (run at Step 2, read-only)
@@ -209,13 +213,32 @@ Same migration: `vts/xstock_spot 6 → 7`, `paper_sim/xstock_spot 3 → 4` (temp
 **P7 — Tests** *(A10; OBJ-8)*
 Correct the two SUBJECT files; re-point the five PROBE files to named per-class constants; leave the three kept files alone. **New:** a rail suite (accepts `-0.0002`; refuses `-0.0011`, maker > taker, `NaN`, `Infinity`, taker `0`); `calculateFees` reads the merge site (seed a diverged xStock taker, assert it is used); the P5 locks; a migration fence asserting the corrective UPDATE carries no value predicate and the post-condition block exists.
 
-**P8 — The prediction and its instrument** *(A8; F-4; Langston Step-2 ruling 3)*
-Pre-registered before deploy, three arms:
-- **PRIMARY baseline `p₀`** = the xStock paper maker share of the **last 300** `maker_taker` decisions in `switch_on_shadow_evidence` captured before the deploy instant — matched n, matched composition. Measured and written into the Step-6 deploy note **before any post-deploy row is read**. **SENSITIVITY** = the whole-window 24.9 % (422 / 1,698, 2026-07-15 → 09-11). Both deltas are published; **same sign required — disagreement ⇒ EXTEND.**
-- **At n ≥ 300 post-deploy decisions:** **PASS** if the post share ≤ `p₀ − 1.645 × √(2·p₀(1−p₀)/300)` (the matched 300/300 two-proportion bound; Langston's worked value is 19.1 % at `p₀` = 24.9 %). **FALSIFIED** if the post share ≥ `p₀`. **Anything between ⇒ INCONCLUSIVE-EXTEND, never PASS.**
-- ⚠️ **Why the arms key to the measured `p₀` and not to 24.9 %:** a preview of the last 300 decisions before 2026-09-11 16:10Z reads **48 / 300 = 16.0 % maker** (2026-08-27 → 09-11) — far below the whole-window 24.9 %, which is the mixture Langston named. Against 24.9 % the pre-deploy data would already "pass". At `p₀` = 16.0 % the PASS line would be ≤ 11.1 %. The preview is not the baseline.
-- **VOID, pre-registered:** any in-window write to an xStock `maker_taker` row (last writes: `p19-b7-2` 2026-07-01, `p19-b7-2c` 2026-07-02, `p19-b8-6-maker-target-exits` 2026-07-15), or either decision site moving `levelGeometry` off `'mid'`. **Named collision: `B-PRICE-SIDE-BY-JOB` (plan row 3n)** — under `'sided'` the maker advantage loses its spread term (`maker-taker-decision.ts:292-295`) and pFill's referent moves (`:314-319`). If 3n deploys inside the window, the window splits at that sha and neither side alone claims PASS below the floor.
-- **The point form is not available — stated rather than implied:** the sink stores no entry price (its columns are fixed by `2026-07-14-b-evidence-sink.sql` and filled at `switch-on-evidence-sink.ts:43-59, 110-120`), and its only keys — `symbol`, `strategy`, `captured_at` — match no durable row exactly, so maker picks with a margin ≤ `0.0084 × entry` cannot be counted. The interval form above is used.
+**P8 — The prediction and its instrument** *(A8; F-4; Langston Step-2 ruling 3 and P8 ruling 2026-09-11 16:39Z — re-derived by CC-B on staging at 16:45Z)*
+
+**The prediction, per decision.** Join each `switch_on_shadow_evidence` row (`proof_type = 'maker_taker'`, `asset_class = 'xstock_spot'`) to its `rtb_shadow_pairings` row on symbol + strategy + asset_class within ±600 s. Measured to 16:45Z: **1,419 / 1,704 joined, 0 ambiguous.** ⭐ **What carries the join is its direction, not its uniqueness** — in **all 1,419** the evidence was written BEFORE the pairing (lag −538.3 s … −0.4 s, median −16.9 s, zero the other way): a causal ordering. Uniqueness alone is near-vacuous, because the same symbol + strategy recurs only every few days (Langston). The margin ratio is `r = (maker_net_ev_adjusted − taker_net_ev) / (0.0084 × entry)`; a maker pick flips to taker at `r ≤ 1` (the operative constant, A8).
+
+| arm | maker picks joined | flip at r ≤ 1 | worst-case r |
+|---|---|---|---|
+| post-`f8870022f` — the baseline regime | 24 | 24 | **0.3614** — survives only a 2.8× entry error |
+| pre-`f8870022f` | 326 | 326 | **0.9155** — one row clears the boundary by 8.5 % |
+
+The unjoinable rows are not a hidden maker cluster: 72 / 285 = 25.3 % maker, against 24.7 % among joined rows.
+
+**Every post-deploy xStock maker pick is classified into exactly ONE class — this enumeration is the gate:**
+- **(i) UNJOINABLE** — no pairing within ±600 s, **or `hard_floor_fired = true`** (a path with 0 observations in 1,704, outside the prediction). Published, and excluded from the numerator.
+- **(ii) JOINABLE, r > 1 at its own entry** — a legitimate deep-negative-taker survivor. The mechanism worked.
+- **(iii) JOINABLE, r ≤ 1** — **MECHANISM BYPASS: the corrected fee did not reach that decision. Any class-(iii) row is itself a finding, whatever the aggregate does.**
+- ⚠️ **Honest limit, for Step 4:** a genuine survivor whose post-fix margin is thin (≤ 0.0084 · E) also lands in (iii). Where that decision opened a position, its booked `entry_fee_rate` shows which rate reached it, and the row is published with that evidence either way.
+
+**Verdict at n ≥ 300 post-deploy decisions:**
+- **PASS** = **zero class-(iii) rows AND maker share ≤ 1.0 %** (≤ 3 of 300). Langston's derivation: unjoinable 1 % × 25.3 % ≈ 0.25 %, plus rule-of-three on 0 / 344 non-flippers ≈ 0.22 % ⇒ ≈ 0.5 %, doubled. Not F-G-1's absolute zero, because class (ii) is correct behaviour.
+- **NO IMPROVEMENT OBSERVED** = share ≥ `p₀`, where `p₀` = the post-`f8870022f` share **frozen and published with its n at the deploy instant** (24.0 %, 24 / 100, at 16:45Z).
+- **INCONCLUSIVE-EXTEND** = anything between.
+- **VOID** = any in-window write to an xStock `maker_taker` row (last writes: `p19-b7-2` 2026-07-01, `p19-b7-2c` 2026-07-02, `p19-b8-6-maker-target-exits` 2026-07-15); either decision site leaving `'mid'`; or `B-PRICE-SIDE-BY-JOB` (row 3n) deploying inside the window — then the window splits at that sha, and neither side alone claims PASS.
+
+**⏳ Time budget — stated so nobody reads the window as short:** post-`f8870022f` decisions arrive at **~14.5 / day** (100 in the 6.9 days since that deploy), so **n ≥ 300 is ~21 days after the fee deploy.**
+
+**Context only, never a comparator:** the whole-window 24.8 % and its 300-row blocks (25.7 → 31.3 → 27.3 → 22.3 → 22.3 → 17.2 %) — a drifting series (Langston's case (b)).
 
 **P9 — OBJ-9 is delivered by this document** *(A9; ruling 4)*
 Numbers, method, pinned query and limits are in A9; they go into the completion report and to Kyle in plain language, with the r1 → r4 correction stated (§0 row 9). No deploy item.
@@ -255,6 +278,8 @@ Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P5'
 **Rounds: four reviews across three correction cycles — the three-round cap.** Every round after the first read the object at a pushed ref. Round 3's called-out items are each folded and re-derived; its own verdict listed all six prior items satisfied. No finding in this document rests on a reviewer's clean.
 
 `LANGSTON Step 2: APPROVED 2026-09-11 16:14Z at 8ae6e98b0 · rulings: (1) delete the four methods now, and drop estimateVolatility's unused symbol · (2) keep decision_grade true, and file the label as a finding (→ #1042) · (3) replace P8 with a three-arm matched-baseline pre-registration with VOID conditions (→ P8, r5) · placements and #1041 accepted · limits (i) and (ii) go into the completion report verbatim, not paraphrased`
+
+`LANGSTON P8 ruling 2026-09-11 16:39Z (re-derived on staging by him ~17:0xZ, and the lag / margin / unjoinable / rate figures again by CC-B at 16:45Z): PASS = zero class-(iii) bypasses AND share ≤ 1.0 % at n ≥ 300 · the join is justified by lag direction, not uniqueness · 0.0084 named as the operative differential with its lines · the ~21-day budget stated · P3 census corrections: estimateVolatility name collision (quality_index.ts:207 is live), and modelSlippage had two callers before the deletion → folded as r6`
 
 ---
 

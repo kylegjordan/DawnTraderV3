@@ -73,7 +73,8 @@ The per-constant rail branches on the loop variable; `maker ≤ taker` runs per 
 - `estimateVolatility` never read `symbol`, from its first commit `8f1911909`.
 - `priceHistory` was write-only from birth. Its sole writer, `realtime-paper-executor.ts:46`, was deleted in `977f3be08`.
 - Per-symbol slippage on the active path is `execution/depth-walk.ts`; this file serves only the dormant validator (`#300`(b)).
-- Caller census: `modelSlippage` has one caller.
+- Caller census, stated in its order (Langston's correction): before the deletion `modelSlippage` had **two** callers — the validator and the internal `:225` inside `modelTradeRealism` — and the set closes because `modelTradeRealism` is deleted too.
+- ⚠️ Name collision: `quality_index.ts:207` exports a live, unrelated `estimateVolatility`, and it is untouched. Recorded in `DELETED_COMPONENTS_LOG.md`.
 
 **Import cycle check:** `cost-model.ts` does not import `slippage-fee-model.ts`, directly or transitively through its imports (`module-constants-service`, `cost-cache`, the friction modules, `friction-sample-store`).
 
@@ -155,5 +156,5 @@ Names the three false premises and points at the correcting migration. The file 
 
 Every other Tier-1/Tier-2 edit named in the plan's P10 lands at Step 10.
 
-## 6. STILL OPEN BEFORE DEPLOY (not code)
-**P8's PASS line.** Langston's four conditions (16:25Z) are answered at 16:33Z with the pre/post-`f8870022f` split, the 300-row blocks, the sink's columns and join evidence, and a point-form proposal. The point form predicts a **~0 %** xStock maker share after the fix (344 / 344 joined maker picks flip). His ruling on the line is folded into the plan before Step 6.
+## 6. P8 — RULED (not code)
+**Langston ruled 16:39Z; folded into the plan as r6.** Per-pick classification is the gate: PASS = zero class-(iii) mechanism bypasses AND xStock maker share ≤ 1.0 % at n ≥ 300. `p₀` is frozen at the deploy instant. ~21 days to n = 300.
