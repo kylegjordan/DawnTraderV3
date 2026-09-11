@@ -8588,6 +8588,18 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ⇔ `#987` · `#1004` · `B-LANGSTON-CONTEXT` P-6b.
 
+### #1048 OPEN 2026-09-11 (Langston, GATE-1 approval of `B-LANGSTON-CONTEXT` P-6b guard (c); filed by CC-INFRA) — ⛔ **THE `sys.pycache_prefix` PIN CLOSES ONE MODULE'S CACHE LEG, NOT `PYTHONPYCACHEPREFIX` AS A CLASS**
+
+**WHAT.** `langston-memory-write`'s guard (c) pins `sys.pycache_prefix = None` so the reader's bytecode cache cannot be relocated by the `PYTHONPYCACHEPREFIX` environment variable to a langston-owned tree the trust check never walks. That closes the READER leg. **But the interpreter caches ~18 modules under the prefix at STARTUP** (`sitecustomize`, `encodings/*`, `functools`, `threading`, `apport_python_hook`), before the pin line runs — and a header-matched planted `.pyc` among those executes (Langston reproduced it on the box: `V is now 99`).
+
+**REACH TODAY (Langston, measured; premise holds):** no `PYTHON*` variable in any systemd unit, `/etc/environment` or `/etc/profile.d`. Reach limit stated: he cannot read root's crontab or rc files. So the class is latent, not live — the pin plus today's clean invocation environment covers it.
+
+**DISPOSITION — §9.4 disposition 3 (Langston named the home):** the only TOTAL closure is at the invocation — run the reader-executing tools under `python3 -E` / `-I` (or guarantee nothing exports `PYTHON*`), plus a check that no unit or wrapper introduces the variable. A one-sentence honest-reach note was folded into the guard docstring with GATE-1 (§13 disposition 1); this is the real fix.
+
+> `HOME: B-PYCACHE-PREFIX-INVOCATION, owner Infra Claude, placed in PHASE_19_PLAN.md at 2.4e, after 2.4d (B-WRITER-ACTOR-ALLOWLIST), and sequenced after the B-LANGSTON-CONTEXT P-6b install`
+
+⇔ `B-LANGSTON-CONTEXT` P-6b guard (c) · `#1046`.
+
 ### #1047 OPEN 2026-09-11 (surfaced at `B-PRICE-SIDE-BY-JOB` OBJ-7 Step 7; filed by CC-C) — ⚠️ **THE KRAKEN WEBSOCKET ADAPTER DROPS ABOUT ELEVEN MESSAGES A DAY ON A PARSE ERROR, IN EVERY ERROR FILE SINCE 2026-09-09**
 
 **WHAT.** `error.log` carries `[KrakenWS] Error parsing message: TypeError: Cannot read properties of undefined (reading 'toUpperCase')`, from the catch at `kraken-websocket-adapter.ts:667`, which drops the whole message. Counts on staging, 2026-09-11 20:13Z: 11 in `error__2026-09-09_00-00-00.log`, 11 in `error__2026-09-10_00-00-00.log`, 4 in `error__2026-09-11_00-00-00.log`, 12 in the current `error.log` (first line 00:00:01Z) before the OBJ-7 restart and 1 after it (20:11:42Z).
