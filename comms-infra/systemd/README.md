@@ -13,7 +13,7 @@
 | `systemd/coltrane-bot.service.d/onfailure.conf` | `/etc/systemd/system/coltrane-bot.service.d/onfailure.conf` |
 | `tools/agent-unit-failure-alert` | `/usr/local/bin/agent-unit-failure-alert` (755) |
 | `tools/agent-work-sync` | `/usr/local/bin/agent-work-sync` (755) |
-| `langston-memory/bin/langston-privacy-check` | `/usr/local/bin/langston-privacy-check` (755); its `.service` also gets `onfailure.conf` |
+| `langston-memory/bin/langston-privacy-check` | `/usr/local/bin/langston-privacy-check` (**750 root:root** — a root-only tool; installed that way 2026-09-11, and 755 would be a needless reader class. Langston Step-6 FINDING-8: this cell said 755 while the live file and the SIM said 750); its `.service` also gets `onfailure.conf` |
 
 Then `systemctl daemon-reload`.
 

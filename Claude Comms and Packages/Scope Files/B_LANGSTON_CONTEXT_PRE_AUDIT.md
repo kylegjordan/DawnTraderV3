@@ -797,3 +797,26 @@ My r2 dispatch said *"Still nothing installed."* **That was false as written.** 
 **ROLLBACK — root-only, `/root/lc2-rollback-20260911/` (700):** the prior copy of every replaced file as `<name>.pre-lc2` · `MODES.before` (install targets) · `MODES.fence` (all 44 step-4 targets, recorded before the change) · `quarantine/langston-queue-forensics.log` · `selftest.out`. **The actor rollback is a deploy of `29cce1076`**; the actor is inert without the check.
 
 **FINDING-7 (Langston, governance) — folded, §13 disposition 1:** `SYSTEM_IMPACT_MAP.md` now carries a `langston-privacy-check` section after the drift monitor's, and the B-ALERT-ACTOR-ALLOWLIST paragraph's nine-name actor list is **replaced by a pointer to `ALERT_ACTORS`** rather than extended to eleven. My scope's "SIM N/A" was wrong: the SIM enumerates the actors by name.
+
+### 21.11 STEP 6 — APPROVED BY LANGSTON *(2026-09-11 16:53Z)*, THREE FINDINGS, DISPOSITIONS
+
+**He re-derived, not on report:**
+- staging `HEAD` = `a5273ad6d`;
+- the actor gate — his refusal *moved to the next gate*: evidence, not actor;
+- the `35766f20` row;
+- both run-log lines, read by field;
+- `namei -l` traversal on all six paths;
+- **every non-root account** (not only coltrane) has no route in — group `987` has zero secondary members;
+- unit parity by `diff`, and the `OnFailure` template exists;
+- `langston_memory.py` `git hash-object` == the blob at the ref;
+- recall, `agent-work-sync` and coltrane-bot alive post-fence;
+- the SIM section at the ref.
+
+**RULED ON REPORTED FACT, permanently under this install mode, and stated so it never reads as verified:** the root-only self-test (30/30), six of the eight sha256s, and the rollback folder's contents. His account cannot read a `root:root 750` tool, a `700` folder or the journal. **The self-test leg has no independent reviewer check.**
+
+| finding | what | disposition |
+|---|---|---|
+| **8** | `comms-infra/systemd/README.md` said the check installs **755**; the SIM and the live file say **750**. A re-install that follows the README re-opens it, and `verify-agent-artifacts.py` reports modes without asserting an expected one. | **FOLDED NOW** (earlier than his "chunk 2", because it is one cell): the README says 750, with the reason. The comparator-asserts-no-mode half joins chunk 2. |
+| **9** | The instrument tests world bits and reads *as coltrane*. A `750 langston:langston` fence is invisible to both if a second account ever joins group `987`. **Empty today (zero members) — a reach limit, not an exposure.** | **§9.4 disposition 2 — added to this batch as plan item P-6a.1, chunk 2:** assert that each fenced directory's owning group has exactly one member and that the owner is `langston`, else a finding. |
+| **10** | The exposure alert body listed 12 findings; the run found 23, and the evidence pointer lives only on the resolve. Triage off the alert under-counts about twofold. | **Disposition 1 — plan item P-6a.2, chunk 2:** the body leads with `23 findings; N shown; full set at /opt/langston-memory/usage/privacy-check.jsonl:<line>`. |
+| — | My leg-7 line *"the size watch runs as root and reads your store index"* was an **inference** sitting in a list of measurements. Its last run was 05:40:41Z, **pre-fence**, and none has run since. | **Moved to Step 7's column** (condition 3 already queues the 05:40Z/05:51Z runs). |
