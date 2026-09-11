@@ -393,7 +393,14 @@ PSQL_EXIT=0
   - `cost_model` rows: `0`.
   - `_migrations` has `2026-09-11-b-xstock-fee-contract.sql`, applied 20:09:37Z.
   - `calibration_ledger` xStock reads `0.10%` / `-0.02%`.
-- **Boot:** a boot-rail refusal throws inside warmup, and the deploy then records nothing, because the record is written only after dt-deploy's post-restart assertions pass. The record exists and PM2 is online. ⚠️ **The rail's own log line was not isolated:** my `tail -n 20000` log window was consumed by 2.5 minutes of engine ticks. This point rests on the record's existence, not on reading that line.
+- **Boot — the signed rail ACCEPTED the rebate, read from the log line itself** (`/var/log/dawntrader/out.log`, 838 MB, full-file search, 2026-09-11 20:09:40Z). Control: 68 `[B72][warmup] prefetched` lines at 20:09, so the search reached the restart.
+  - `[B72][warmup] prefetched module_constants module='fee_model' rows=4`
+  - `[B72][warmup] prefetched module_constants module='calibration_epoch' rows=7`
+  - `[ITEM4][warmup] calibration_epoch verified: vts=3 paper_sim=2 live=2` — the boot assertion reads the wildcard rows, as designed.
+  - `[B45][warmup] fee_model verified: crypto taker=0.008 maker=0.004 | xstock taker=0.001 maker=-0.0002`
+  - **No `module='cost_model'` prefetch line**, which confirms the PREFETCH removal.
+  - `error.log`: 128 lines stamped 20:09, and none match fee_model, calibration_epoch, cost_model or `refusing`.
+  - *(The earlier `tail -n 20000` read missed these lines: 2.5 minutes of engine ticks filled that window. The full-file search replaces it.)*
 - **First Step-7 read** (`scripts/analysis/b_xstock_fee_contract_verify.sql`, `deploy_at` 20:09:47Z, read at 20:12:14Z):
   - **Control (7 days before):** xStock taker `0.008000` (13 paper, 117 VTS) and maker `0.004000` (1 paper). Crypto `0.008000` / `0.004000`.
   - **After:** VTS xStock taker **`0.001000` × 2**. **The new rate is booked.**
