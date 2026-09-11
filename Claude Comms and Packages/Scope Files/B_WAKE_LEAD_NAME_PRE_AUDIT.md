@@ -108,3 +108,40 @@ change-class: non_architecture
 **What the audit found:** when the reviewer answers one Claude session, he often tacks alert notes for other sessions onto the end, and the wake filter reads those notes as "not for you" — so it stays silent even though the reply starts with that session's name. I checked all 104 such replies since 09-03 against the message each one was answering. **Every one was genuinely addressed to the session it named first**, so "a reply that starts with your name wakes you" is the right rule. The only other thing that reads the wake lines is a measurement script, and adding a short routing note at the end of the line does not change what it counts.
 
 **The plan:** reorder one block of the filter so the name at the start of a reply is checked before those alert notes can silence it, and add a routing note, so a woken session can see the alert belongs to someone else. Prove it by re-running the same 104-reply check before and after, plus three new test cases. Then copy the filter to the laptop and have every session restart its watcher.
+
+---
+
+## 7. STEPS 4-6 RECORD *(2026-09-11)*
+
+**Step 4 — APPROVED by Langston at `c05e9d1fa`, 16:48Z.** He re-derived rather than took on report:
+- the diff (+49/-18, three files);
+- **both suite runs** — AFTER 19/19, BEFORE exactly 4 FAIL: (a), and conditions 3, 4, 5;
+- `OWNER_CANON` cannot KeyError, because `ALERT_OWNER_RE` is built from the same tuple;
+- `wake_narration.classify()` returns `'Langston'` on three tagged lines;
+- a whole-tree search for `WAKE[` consumers found no third reader.
+
+**RULED ON REPORTED FACT, his words:** the 107-row replay table — he read the join, the sentinel ordering and the stop conditions, but did not re-run it.
+**FINDING-1** was a comment claiming the replay's key was independent of `OPEN_RE`; it is the same predicate. Fixed in `e4d6d01db`, no re-review. **FINDING-2** was accepted as stated: condition 3 has zero real rows, so it is pinned by fixture only, and it removes an accidental exemption rather than losing a wake.
+
+**Step 5 — CI green 4/4** on run `34623482499` (head `aee2bc191`, which contains `c05e9d1fa`). My own run `34623470603` was cancelled by a later push; each job was verified on the covering run.
+
+**Step 6 — P-5, the install (no staging surface — this is a laptop tool, so `dt-deploy` does not apply).**
+
+| check | result |
+|---|---|
+| rollback copy | `C:\Users\kyleg\.claude\cc-wake-filter.py.pre-lead-name-20260911` |
+| live file == `c05e9d1fa` blob, **modulo line endings** (condition 2) | before install **False** · after **True** · sha256 of the LF form `ac327ab0a1cc…` on both sides · installed 16:49:09Z |
+| suite against the installed live file | 19/19 |
+
+**Condition 1 — per session, from the OBJECT: the watcher process's start time against the 16:49:09Z install** (`Win32_Process`, command line `cc-wake-filter.py <ALIAS>`). **A posted request is not evidence, and silence is not the fix working.**
+
+| session | watcher start (UTC) | status at 16:52Z |
+|---|---|---|
+| CC-INFRA | 16:51:28 | ✅ **VERIFIED** — and a liveness probe at 16:51:51Z came back through it |
+| CC-B | 14:53:48 | ⏳ **UNVERIFIED** — running the pre-install code |
+| CC-C | 09:40:26 | ⏳ **UNVERIFIED** — running the pre-install code |
+| CC-A | — | ⚠️ **NO WATCHER RUNNING AT ALL** — not a re-arm gap, a session that cannot be woken by anything right now |
+
+A crew note asking for the re-arm went out at 16:50Z. A process watch reports each session as its watcher restarts. **The close will carry this table as measured then, not this snapshot.**
+
+**Step 7, still owed:** a REAL Langston reply to a session, ending in another owner's marker, producing a tagged `WAKE` line on a re-armed watcher.
