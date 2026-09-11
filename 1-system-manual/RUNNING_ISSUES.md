@@ -6496,7 +6496,7 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 | | canonical intent | today |
 |---|---|---|
 | caches | **one**, `price-cache.ts` | **two** — `price-cache.ts` **and** `live-pricing-adapter.ts:258` `private priceCache: Map<string, CachedPrice>` |
-| rate limiting | **one** governed layer | **two** — the unified cache's buckets **and** the adapter's own `restRateLimiter` (`:627`) |
+| rate limiting | **one** governed layer | **two** — the unified cache's buckets **and** the adapter's own `restRateLimiter` (`:714` — was `:627`; re-derived 2026-09-11, 3n r5) |
 | venue calls | **"no direct Kraken calls"** | the adapter calls Kraken REST **directly** (`fetchFromKrakenRest`, `:624`) |
 | the type | one `CachedPrice` | **two interfaces sharing the name** — `price-cache.ts:41` (exported) and `live-pricing-adapter.ts:207` (file-local) |
 
@@ -6520,8 +6520,8 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 **Folded 2026-08-31 on Langston's §13 disposition 2 at `B-PRICE-AGE-TRUTH` Step 2 — *"literally the same divergence, so it gets a home without manufacturing a batch."***
 
-**RE-DERIVED AT THE REF.** The crypto exit's price gate is `active-execution-engine.ts:1277`. On failure its **else-arm (`:1289-1300`)** calls `this.krakenService.getTicker(restPair)` → `kraken.ts:259` → `makePublicRequest` (`:177`) → **a bare `fetch`.**
-⛔ **`restRateLimiter.check` has EXACTLY ONE production caller — `live-pricing-adapter.ts:627`.** ⇒ **the engine's own fallback REST call is NOT rate-limited.**
+**RE-DERIVED AT THE REF.** The crypto exit's price gate is `active-execution-engine.ts:1493` (was `:1277`; re-derived 2026-09-11, 3n r5). On failure its **else-arm (`:1505-1532`, the REST call at `:1516` — was `:1289-1300`)** calls `this.krakenService.getTicker(restPair)` → `kraken.ts:259` → `makePublicRequest` (`:177`) → **a bare `fetch`.**
+⛔ **`restRateLimiter.check` has EXACTLY ONE production caller — `live-pricing-adapter.ts:714` (was `:627`).** ⇒ **the engine's own fallback REST call is NOT rate-limited.**
 
 ⇒ ★★ **THIS IS THE CANONICAL VIOLATION IN ITS PUREST FORM.** `bridge/canonical/…Execution_Flow.md:633` says **"All pricing from unified Price Cache (no direct Kraken calls)"** — and here is a direct Kraken call, on the live exit path, bypassing the only rate limiter in production.
 ⚠️ **NOT filed as a live defect: today it is SUPPRESSED by the very laundering `#951` is about** — the mislabelled `kraken_rest` tag passes the gate, so the else-arm is not taken. ⛔ **Fixing the label without fixing this would UNSUPPRESS it.** ★ **A defect currently hidden by another defect, and the fix order matters.**
