@@ -171,18 +171,26 @@ const TIER_CELL = /^T1\b/i;
 const nameText = (s) => s.replace(/[*`]/g, '').replace(/\u00a0/g, ' ');
 export function ledgerRowInText(text, spec) {
   if (typeof text !== 'string') return false;
-  let fence = null;
+  let fence = null, comment = false;
   for (const raw of text.split('\n')) {
     const line = raw.replace(/\r$/, '');
-    const f = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    // r5 (Langston Step 4, finding 1a): strip blockquote markers FIRST, so a fence inside a blockquote is seen.
+    const body = line.replace(/^ {0,3}(> ?)+/, '');
+    const f = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(body);
     if (fence) {
       if (f && f[1][0] === fence.ch && f[1].length >= fence.len && f[2].trim() === '') fence = null;
       continue;
     }
     if (f && !(f[1][0] === '`' && f[2].includes('`'))) { fence = { ch: f[1][0], len: f[1].length }; continue; }
-    const body = line.replace(/^ {0,3}(> ?)+/, '');
-    if (!/^ {0,3}\|/.test(body) || !spec.names.test(nameText(body))) continue;
-    const rawCells = body.split('|').slice(1);
+    // r5 (finding 1b): an HTML comment does not render, so a row inside one does not count.
+    if (comment) { if (body.includes('-->')) comment = false; continue; }
+    if (/^ {0,3}<!--/.test(body)) { if (!body.slice(body.indexOf('<!--') + 4).includes('-->')) comment = true; continue; }
+    // r5 (finding 2): GFM allows a row with no LEADING pipe; the first cell is then the text before the first pipe.
+    // Such a row needs at least two pipes, so a prose sentence that starts "T1 …" and contains one pipe is not a row.
+    if (!body.includes('|') || !spec.names.test(nameText(body))) continue;
+    const lead = /^ {0,3}\|/.test(body);
+    if (!lead && body.split('|').length < 3) continue;
+    const rawCells = lead ? body.split('|').slice(1) : body.split('|');
     const cells = rawCells.map((c) => c.replace(/[*`_\[\]★⭐]/g, '').trim());
     // r4: the tier marker must be the FIRST cell — `T1` at the start of a notes cell does not make a row a ledger row.
     if (!TIER_CELL.test(cells[0] || '')) continue;
@@ -207,7 +215,10 @@ export function ledgerRowInText(text, spec) {
 // callers pass nothing and get the real readers. KNOWN EDGES, stated: a batch's date is its EARLIEST report
 // (a re-opened batch whose first report predates `sinceMs` is not graded); a failed `git show` reads as a
 // missing row (⇒ alert, the same failure direction as docPresent), while a failed `git ls-tree` reads as
-// no report (⇒ not graded) — tick() aborts before grading when its own fetch fails. INHERITED EDGE (reader r2): the
+// no report (⇒ not graded) — tick() aborts before grading when its own fetch fails. A failed `git log` in
+// firstAddCommitMs ALSO returns null ⇒ not graded ⇒ an OPEN alert RESOLVES — the opposite direction from a failed
+// `git show`; it shows as a flap plus a spurious governance-checker resolve, not a silent loss (Langston Step 4, c4).
+// INHERITED EDGE (reader r2): the
 // report list comes from findGlobDoc → batchIdToFileRegex (config.mjs), which accepts a separator-led suffix, so
 // a batch id can match a NEIGHBOUR's report (`B-DISCORD` ↔ `B_DISCORD_<X>_COMPLETION_REPORT.md`): the earliest
 // of them sets the date and any of them can carry the row. Every doc-set check shares this; not changed here.

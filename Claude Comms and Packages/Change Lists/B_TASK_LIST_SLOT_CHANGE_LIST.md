@@ -120,7 +120,7 @@ export function makeVerifyLedgerRow(naConfirmed, check = checkLedgerRows) {
 
 ## 5. JUDGEMENT CALLS — ATTACK THESE
 
-1. **The `T1` tier marker is REQUIRED, and must be the FIRST cell.** It is what separates the ledger row from an objectives row naming the lists; all four real rows, and the last two before the cutoff, put it first. A ledger written without a tier column now alerts. The skill template has the column.
+1. **The `T1` tier marker is REQUIRED, and must be the FIRST cell.** It is what separates the ledger row from an objectives row naming the lists; all four real rows, and the last two before the cutoff, put it first. A ledger written without a tier column now alerts, **and so does a tier column spelled `Tier 1`** (Langston condition 2 — stated, not relaxed; test W5). The skill template has the column. **A row with no LEADING pipe is accepted** since r5 (GFM allows it), provided it has at least two pipes (W4, W6).
 2. **Name match** `session task list(s)` (separator, markup and NBSP tolerant) or the `_SESSION_TASK_LIST` filename somewhere in the row. A row saying only "four task lists" with no filename anywhere alerts.
 3. **Verdict tokens are ✅, N/A, ❌ only** (a leading ★/⭐ is stripped). ✓, ☑, `[x]`, "yes" and `⚠️ ✅ partial` alert — deliberate; workflow-10 defines two tokens. Say if you want synonyms.
 4. **An unclosed fence hides every row after it** — deliberate, because that is how the report renders. Reader r3: a fence opened at ≤3 spaces and closed at ≥4 spaces (nested list) never closes; none of the 314 reports at the ref ends with a fence open.
@@ -128,6 +128,9 @@ export function makeVerifyLedgerRow(naConfirmed, check = checkLedgerRows) {
 6. **Population:** inherits `completion_report`; progress reports excluded; a converted report counts from its conversion (rename reads as an add to the path-limited `--diff-filter=A` — control `8e7e1ba9c`).
 7. **INHERITED, NOT CHANGED:** `batchIdToFileRegex` accepts a separator-led suffix, so a batch id can match a neighbour batch's report — the earliest sets the date and any can carry the row. Every doc-set check shares it; stated in code and in the SIM.
 8. **Residual:** `tick()` has no unit test, so dropping the verifier argument at its call site is uncaught — the same exposure as the existing doc-gap orphan wiring.
+9. **Text that does not render does not count** (Langston condition 1, FIXED at r5, not just stated): a fence inside a blockquote is now seen (blockquote markers are stripped before the fence probe — W1), and a row inside an HTML comment is skipped (W2; a single-line comment does not hide the next row — W3).
+10. **`na-skip` values share one flat `batchId:value` set with the doc-gap resolve** (condition 3): a `LEDGER_ROWS` key equal to a `DOCS` key would cross-resolve silently. Commented beside `LEDGER_ROWS`; test W7 asserts the key sets are disjoint (`task_lists` ∉ `DOCS` today).
+11. **A failed `git log` resolves instead of alerting** (condition 4): `firstAddCommitMs` returns null ⇒ not graded ⇒ an open alert resolves — the opposite direction from a failed `git show`. It shows as a flap and a spurious `governance-checker` resolve, not a silent loss. Stated in the `checkLedgerRows` docstring; not changed.
 
 ## 6. P3 / P4 — DOCUMENTS ONLY (`33b62ee16`, wording aligned at `ad38011f2`)
 

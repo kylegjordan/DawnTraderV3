@@ -1,7 +1,7 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
 import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow } from './poller.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS } from './config.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
@@ -490,6 +490,18 @@ ok('#637 a plausible-but-invalid token is rejected to the sentinel (a lastTick i
   ok('Z7: "N/A ×3 · ✅ mine" — a middle-dot separator — PASSES', ledgerRowInText('| T1 | the four session task lists | N/A ×3 · ✅ mine | ok |', spec));
   ok('Z8: "★ ✅ mine" — a star before the check — PASSES', ledgerRowInText('| T1 | the four session task lists | ★ ✅ mine | ok |', spec));
   ok('Z9: a later NOTES cell beginning ❌ does not veto a ✅ verdict', ledgerRowInText('| T1 | the four session task lists | ✅ mine / N/A ×3 | ❌ none outstanding |', spec));
+  // r5 — Langston Step 4 conditions
+  ok('W1: a fence INSIDE A BLOCKQUOTE hides the row inside it (it renders as code)',
+    !ledgerRowInText('> ' + F3 + '\n> | T1 | the four session task lists | ✅ mine | ok |\n> ' + F3, spec));
+  ok('W2: a row inside a multi-line HTML comment does not count (it does not render)',
+    !ledgerRowInText('<!--\n| T1 | the four session task lists | ✅ mine | ok |\n-->', spec));
+  ok('W3: a single-line HTML comment does not hide the row after it',
+    ledgerRowInText('<!-- ledger below -->\n| T1 | the four session task lists | ✅ mine | ok |', spec));
+  ok('W4: a GFM row with NO leading pipe PASSES', ledgerRowInText('T1 | session task lists | ✅ mine', spec));
+  ok('W5: a tier column spelled "Tier 1" ALERTS — stated in the change list, not relaxed', !ledgerRowInText('| Tier 1 | session task lists | ✅ mine |', spec));
+  ok('W6: prose starting "T1" with a single pipe is not a row', !ledgerRowInText('T1 is done for the session task lists | ✅ mine', spec));
+  ok('W7 (condition 3): LEDGER_ROWS keys and DOCS keys are disjoint — na-skip values share one namespace',
+    Object.keys(LEDGER_ROWS).every((k) => !(k in DOCS)));
   ok('Q12: a 4-backtick fence is closed only by ≥4 backticks — a 3-backtick line inside does not close it',
     !ledgerRowInText('````\n' + F3 + '\n| T1 | the four session task lists | ✅ | example |\n````', spec));
 }

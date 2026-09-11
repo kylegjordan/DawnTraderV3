@@ -161,6 +161,10 @@ export const REQUIRED_IF = {
 // existence — a fact about the repo, not deploy config — so, unlike GOV_CUTOFF, it is NOT env-overridable.
 // Scoped to ONE row deliberately (pre-audit P1): the two MEMORY rows landed before the verdict-column
 // ledger shape was in common use; extending to them is homed at PHASE_19_PLAN row 4.8, OBJ-B.
+// ⚠️ (Langston Step 4, condition 3) a confirmed `na-skip` row is stored as ONE flat `batchId:value` set, shared by the
+// doc-gap resolve (value = a DOCS key) and the ledger-row resolve (value = a LEDGER_ROWS key). A LEDGER_ROWS key must
+// NEVER equal a DOCS key, or an N/A confirmed for one silently resolves the other. poller.test.mjs asserts the two
+// key sets are disjoint.
 export const LEDGER_ROWS = {
   task_lists: {
     // "session task list(s)" or a CC_<X>_SESSION_TASK_LIST filename — NOT any "task list": an objectives
