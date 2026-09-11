@@ -60,7 +60,7 @@
 
 **★★ A GUARD ON AN EXTERNAL CONTRACT TESTS FOR THE GOOD SHAPE, NEVER FOR ABSENCE (`B-DEPLOY-DRIFT-LINE`, 2026-09-07):** a 404 rendered as ZERO DRIFT because the error body FILLS the field the guard tested for emptiness. ⛔ **Validate against the known-good set.** Full text + the `#744` two-clause rider: `MISTAKE_PATTERNS.md`.
 
-⛔⛔ **IF `dt-deploy` REFUSES ON A DIRTY TREE, CHECK THIS FIRST (`#402` → `B-CANONICAL-BRIDGE-CHURN`, row 4.56a, CC-A).** A DAILY task (`autonomy-scheduler.ts:608`, started `:1056`) rewrites the TRACKED `bridge/canonical/mapping-regime-strategy.json` with a fresh timestamp, so the tree dirties ~24h after each restart — **and it has already refused a real deploy.** ★ **NOT your stray edit: if the only diff is the two timestamp lines, that is this.** Fix settled (content-hash compare). *(The drift gate itself widened to four sinks on 2026-09-08, `#1016` — read the sink table in `SYSTEM_IMPACT_MAP.md`, never from here.)*
+✅ **THE DAILY BRIDGE SYNC NO LONGER DIRTIES THE STAGING TREE (`#402`, `B-CANONICAL-BRIDGE-CHURN`, CLOSED 2026-09-11)** — it skips the JSON when only its two stamps would change. ⭐ **SO A DIRTY `bridge/canonical/mapping-regime-strategy.json` NOW MEANS SOMETHING: the committed JSON disagrees with the TS map (RISK-017's alarm). A map change must commit the regenerated JSON IN THE SAME COMMIT.** *(The drift gate widened to four sinks on 2026-09-08, `#1016` — read the sink table in `SYSTEM_IMPACT_MAP.md`, never from here.)*
 
 **★ RUNNING_ISSUES numbering: blocks exhausted — grep the max # after `git pull`, take next, commit promptly; collision → newer entry renumbers.**
 

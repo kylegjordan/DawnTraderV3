@@ -1146,7 +1146,7 @@ Nothing in the system measured how far the running code had fallen behind the re
 The second is the method finding that follows from it. **Three of the last four defects in this batch were found by running the code and none by reading it** — and every one of the three was a claim about what somebody else's interface hands back. Langston's formulation is the one recorded: *reading verifies our own logic against our own model of the world; only running it tests the model.* That is now a two-clause rule against the queued batch on skipped reviews, the second clause being that a control states its expected output before it runs — added because the failure branch WAS run first and still returned a pass from a control that had processed nothing.
 
 
-### 2026-09-08 — B-CANONICAL-BRIDGE-CHURN (CC-A, `#402`, plan row 4.56a) — OPEN, OBSERVATION
+### 2026-09-08 — B-CANONICAL-BRIDGE-CHURN (CC-A, `#402`, plan row 4.56a) — ✅ CLOSED 2026-09-11
 
 A nightly housekeeping task rewrote one tracked file every run, stamping a fresh "updated at" time into it even when the mapping it describes had not changed by a single character. Git saw a changed file; the deploy tool refuses to run against a changed file; so deploys were blocked until somebody cleared it by hand. **It had already refused one real deploy, and the issue had been open since June.**
 
@@ -1155,6 +1155,8 @@ A nightly housekeeping task rewrote one tracked file every run, stamping a fresh
 **The stamp shown on screen was also wrong, and the two had to be fixed together.** The badge read `Last Sync:` and carried the time of the last *run*, which was always minutes ago. It now reads `Map Updated:` and carries the date the mapping content last genuinely changed — derived by walking every commit that touched the file and comparing the payload rather than the file. The old value overstated the map's freshness by eighteen days. Relabelling it without re-deriving the value would have made the label a lie.
 
 ⭐ **THE PART WORTH REMEMBERING IS THE TEST, NOT THE FIX.** The new test suite ran the real task against the real directory — so on a drifted tree it silently REPAIRED the drift its sibling assertion exists to detect. Measured with the expectation written first: run 1 failed twice and regenerated the file; run 2, with no human action, passed. **Red became green on re-run, leaving a file nobody authored.** Fixed by snapshotting and restoring the files around the suite, including on failure, and by asserting the bytes are unmoved rather than only that the report says so.
+
+✅ **CLOSED 2026-09-11.** The daily run was then observed unattended on two days, reporting the tracked file unchanged on the fixed build, with the tree clean throughout; Langston re-derived every leg and ruled the criterion met. *(The paragraph below was the state before.)*
 
 ⚠️ **NOT CLOSED.** Two things are proved on the code path but not yet on the schedule: that the DAILY unattended run leaves the tree clean, and — for the sibling batch — that an unattended run clears its own warnings. The close criterion for both was pre-registered before the data, in `B_CANONICAL_BRIDGE_CHURN_STEP7_EVIDENCE.md` §8.
 

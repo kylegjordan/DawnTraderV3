@@ -1,4 +1,4 @@
-# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-05
+# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-11
 
 > ⛔⛔ **KYLE'S STANDING RULE, 2026-09-05: EVERY SESSION KEEPS ITS OWN TASK LIST, AND IT IS UPDATED IN THREE PLACES OR IT IS NOT UPDATED.**
 > **WHAT IT HOLDS:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — **in the order they will be worked.**
@@ -17,11 +17,11 @@
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
 | ⛔ **`B-GOV-REPORTING`** (row 8) | **pushed to the branch — the review gate NEVER RAN** | me | **Scope exists; no pre-audit, no completion report.** These reporting + ledger-matrix rules landed 2026-08-26 and **all four sessions are following them right now.** Highest-risk open item I own |
-| ✅ **`B-DEPLOY-DRIFT-LINE`** (row 4.55) | **Step 4 APPROVED 2026-09-09, INSTALLED** | one unattended cron run | `#1021` folded in: the clearing path reached only ONE of four exits, so a deploy that fixed the drift left every rung open. Fix installed `67b71933…` at 06:57Z (piped from the blob, digest verified at a temp path, atomic `mv`). **Criteria 1-3 PASS. U-2b — the fix firing UNATTENDED — is pre-registered and due 09:17Z. I am NOT running it by hand.** |
-| ⛔ **`B-CANONICAL-BRIDGE-CHURN`** (row 4.56a) | **Step 10 — governance landing** | one unattended daily sync (≈ 09-10T08:46Z) | Deployed, Langston Step-8 CONFIRMED. BATCH_CATALOG / PHASE_HISTORY / CHANGES_AND_FIXES / PHASE_19_PLAN landed. **Open ONLY because the fix is proved on the CODE PATH and not on the SCHEDULE** — and `canonical_bridge_sync` fires 24h from PROCESS START, so my own deploy reset that clock. Four residuals homed to `P19-B12`. |
+| ⭐ **`B-TASK-LIST-SLOT`** (row 4.57) | **Step 3 — the checker half is built, pushed and live on staging (it auto-deploys from the branch); Step 4 with Langston next** | Langston | P3 (folder convention, move this file) and P4 (SIM entry, list shape) still to do; the slot-time half is split out to row 4.8 |
+| ⛔ **`B-SCHEDULER-FIRST-TICK`** (row 4.58, `#1039`) | **not started — found 2026-09-11** | 4.57 closing | every scheduler task runs twice at its first interval after a restart; impact per task unmeasured |
 | ⏳ **`B-RULES-1e`** (row 1) | **Step 2**, with Langston | Langston / me | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
 | ⏳ **`B-MEASURE-GATE`** beyond leg 2 (row 6) | **Step 2** | me | Step 1 approved 2026-08-31. Leg 2 CLOSED 2026-09-02 — the rest is not |
-| ⏳ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | open, small objectives left | me | **ran IN FLIGHT WITH NO PLAN ROW until 2026-09-02** — found only while writing this file |
+| ⛔ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | **OBJ-1 REOPENED 2026-09-11 (`#1038`)** | **Kyle** — the reinstall is a download | the code search plugin never loaded in any session, and the plan had it marked done |
 
 ---
 
@@ -29,11 +29,12 @@
 
 | plan row | item | kind | state |
 |---|---|---|---|
-| 4.55 | **`B-DEPLOY-DRIFT-LINE`** (`#1002`) | batch | ⭐⭐ **IN FLIGHT — Step 1 APPROVED by Langston 2026-09-05 at `25f64f93c`, moving to Step 2.** He ruled all three conflicts and WITHDREW two of his own instructions |
+| 4.55 | ✅ **CLOSED 2026-09-09** — `B-DEPLOY-DRIFT-LINE` (`#1002`) | batch | all four criteria met |
 | 3b.h-3 | **`B-TSC-GUARD-DETERMINISM`** (`#1019`) | batch | ⭐ **KYLE-ASSIGNED 2026-09-07**, on his rule *"whoever implemented the most recent push/deploy guard"*. The tsc-baseline guard refused a push containing ZERO TypeScript, citing 209 groups dropping below baseline; running the checker by hand seconds later returned OK on identical 377-vs-377 totals, and a retry passed with nothing changed. ⛔ **CC-C wrote it up as a HYPOTHESIS, not a finding, because it predicts a DETERMINISTIC refusal and the retry passed** — something is non-deterministic between invocations and they did not find it |
-| 4.56a | ⭐ **`B-CANONICAL-BRIDGE-CHURN`** (under existing `#402`, OPEN since 2026-06-30) | batch | **NEXT.** A DAILY scheduled task (`autonomy-scheduler.ts:608`, started `:1056`) rewrites the TRACKED `bridge/canonical/mapping-regime-strategy.json` with a fresh `updatedAt`/`generatedAt`, dirtying the staging tree — and `dt-deploy.sh:194-196` REFUSES a dirty tree. **It has already refused one deploy** (`#402`'s 2026-08-17 annotation, P19-B-FEEVIABILITY). ⭐ **The a/b question `#402` left open is SETTLED by this batch's census: `routes.ts:2083-2085` reads it from disk ⇒ OPTION (b), content-hash compare; gitignore is off the table.** Placed by Langston 2026-09-08 |
+| 4.56a | ✅ **CLOSED 2026-09-11** — `B-CANONICAL-BRIDGE-CHURN` (`#402`) | batch | U-1 met; five residuals at `P19-B12` |
 | 4.56 | ✅ **CLOSED 2026-09-08** — **`B-DRIFT-RUNTIME-PREDICATE`** (`#1016`) | batch | **Langston's Step-8 finding.** The drift gate calls `server/ client/ shared/` "runtime" — a directory convention — while `dt-deploy` also runs `npm ci`, the build configs and **`drizzle/migrations/**`**. Measured latent: 3 of the last 400 commits touch a deploy-executed path and all 3 carry `server/` too |
-| 4.57 | **`B-TASK-LIST-SLOT`** (`#1009`) | batch | ⭐ **NEXT, AND THE POSITION IS KYLE'S, FIXED 2026-09-05 after he read this queue** — *"then we go to the b task list slot next… it needs to be cleaned up."* **Ahead of 4.6 `B-RULES-LAYER`, which he had previously directed to follow `B-WAKE-QUIET`** |
+| 4.57 | **`B-TASK-LIST-SLOT`** (`#1009`) | batch | ⭐ **IN FLIGHT — Step 3 (checker live), Step 4 next.** Kyle fixed this position 2026-09-05 |
+| 4.58 | `B-SCHEDULER-FIRST-TICK` (`#1039`) | batch | found 2026-09-11; starts when 4.57 closes (rule 23) |
 | 4.6 | **`B-RULES-LAYER`** (`#998`) | batch | ⚠️ **SUPERSEDED ORDER: Kyle directed this to follow `B-WAKE-QUIET`, then on 2026-09-05 put `B-TASK-LIST-SLOT` ahead of it.** Still his; just not next. Failure condition pre-registered |
 | 1 | `B-RULES-1e` | batch | **IN FLIGHT, parked at Step 2** with Langston |
 | 6 | `B-MEASURE-GATE` (legs beyond leg 2) | batch | Step 1 approved, in flight at Step 2 |
@@ -41,6 +42,7 @@
 | 12.1 | rulings-durability fix (`#671`) | sub-item | **FIRST BREAK** — exempt from the sequencing |
 | 12.2 | lookalike register (`#672`) | sub-item | **FIRST BREAK** |
 | 4.7 | `B-HEARTBEAT-RESCOPE` (`#999`) | batch | Langston's condition from `#995` |
+| 4.8 | `B-SLOT-PLACEMENT-CHECK` (`#1009` P2) | batch | the slot-time half, split out of 4.57 at Step 2 |
 | 3.5 | `B-INSTRUMENTS-OVER-RULES` | batch | placed 2026-09-02 |
 | 4 | `B-REVIEWER-LOOP` (`#758`) | batch | placed 2026-08-28 |
 | 5 | `B-CHUNK-ADDRESSING` (`#749`/`#761`) | batch | placed 2026-08-29 |
@@ -66,6 +68,8 @@
 - **`#1001`** — raised by me, **owned by CC-C**: staging's deploy gap. Re-measured 2026-09-05 (see below); not mine to close.
 
 ### ✅ CLOSED SINCE THIS FILE WAS LAST WRITTEN
+- **`B-DEPLOY-DRIFT-LINE`** (`#1002`, row 4.55) — CLOSED 2026-09-09. All four criteria met; `#1021` folded in.
+- **`B-CANONICAL-BRIDGE-CHURN`** (`#402`, row 4.56a) — CLOSED 2026-09-11. Langston ruled U-1 met. Five residuals at `P19-B12`; spawned `#1039`.
 - **`B-WAKE-QUIET`** (`#995`, row 4.5) — CLOSED 2026-09-05. Langston confirmed. Spawned rows 4.55, 4.6, 4.7 and `#1005` (this batch skipped its own Step 2).
 
 ---

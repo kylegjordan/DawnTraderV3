@@ -1,5 +1,16 @@
-# B-CANONICAL-BRIDGE-CHURN — STEP 7 VERIFICATION EVIDENCE
+# B-CANONICAL-BRIDGE-CHURN — COMPLETION REPORT
 
+**✅ CLOSED 2026-09-11 — Langston ruled U-1 MET at 13:30Z, re-deriving every leg himself.** change-class `non_architecture` · owner CC-A · `#402` · plan row 4.56a.
+**CONVERTED, NOT REWRITTEN:** this file was `B_CANONICAL_BRIDGE_CHURN_STEP7_EVIDENCE.md`, the record written while the evidence was fresh. §1-§11 are unchanged; §12-§16 close it.
+
+## ⛔ OPEN AT CLOSE — stated first
+- **Five residuals, homed to `P19-B12`, owner CC-A** (four from Step 7, one added at close): the force-sync UI discards the body it is now sent · a stranded `*.tmp.<ms>` blocks `dt-deploy` with an unfamiliar signal · the two `.md` files have no committed-matches-generator assertion · `Map Updated` has no keeper · ★ **NEW at close (Langston, §9.4 disposition 2): the two markdown files are rewritten unconditionally, so a day on which zero bytes changed logs `2 updated` — reporting work the task did not do, which is this batch's own Condition-B principle one file over.**
+- **`#1039`** — every scheduler-registry task runs twice at its first interval after a restart. Found while verifying U-1; verdict-neutral here (both runs reported the JSON skipped). → row 4.58 `B-SCHEDULER-FIRST-TICK`.
+- **RISK-017 stays DOWNGRADED (LOW), not closed** — its three residuals in `SYSTEM_MANUAL.md` still stand.
+
+> **PREVIOUSLY STATED (§8, §10): U-1 passes when the scheduler logs `0 updated, 1 unchanged`. NOW: that string is unreachable on any successful run; the discriminating half is `1 unchanged`. REASON: the two markdown outputs are counted as updated unconditionally (`sync-canonical-bridge.ts:315`, `:321`), so a successful no-change run can only log `2 updated, 1 unchanged`. Ruled a mis-specification by Langston, not a goalpost move.**
+
+---
 **Deployed sha `977e61d7d7b57c78fc971410604a8160ab765f95`, by `cc-a`, 2026-09-08T19:49:42Z.** Reviewed and APPROVED by Langston at `238c2a321`; both his conditions applied; CI 4/4 at the deployed sha.
 **Committed per `workflow-08`: a measurement only the implementer can see is not second-party checkable. Every figure below names the command that re-derives it.**
 
@@ -274,3 +285,86 @@ After the deploy **`deployed == head` EXACTLY**, so the next cron takes the **`Z
 - **U-2a — the `ZERO` path firing unattended — remains UNTESTED.** It is pre-existing behaviour and the lower-value of the two, so it is recorded as untested rather than quietly credited.
 - **`BELOW_FLOOR` clearing remains proved by construction and dry-run only.** No live firing.
 - **U-1 is unaffected and still pending (≈ 2026-09-10T08:46Z)** — it is about the CHURN batch's daily sync, a different instrument entirely.
+
+---
+
+## 12. ✅ U-1 RESULT — THE DATA, AGAINST THE CRITERION AS WRITTEN
+
+**The criterion, quoted as pre-registered in §8:**
+> 1. **U-1:** after the next daily `canonical_bridge_sync`, `git status --porcelain -uall` on staging is **EMPTY**, and the scheduler log line reads **`0 updated, 1 unchanged`** for the `.json` (`autonomy-scheduler.ts:629`). ⇒ **the log line IS the positive emission** — a clean tree alone would not distinguish "skipped correctly" from "never ran."
+
+**And as re-registered in §10 after the 2026-09-09 deploy moved the clock:**
+> **U-1 — unchanged in substance, moved in time (≈ 2026-09-10T08:46Z).** After the first unattended `canonical_bridge_sync` since the deploy: `git status --porcelain -uall` EMPTY **and** the scheduler logs `0 updated, 1 unchanged`. **The log line is the positive emission; the clean tree alone cannot distinguish “skipped correctly” from “never ran” — which is exactly the mistake this section opens by recording.**
+
+| leg | observation | where it was read |
+|---|---|---|
+| **unattended runs** | `2026-09-10 08:46:47` — `Canonical bridge sync complete — 2 updated, 1 unchanged`, **twice** (two real runs — `#1039`); `2026-09-11 08:46:47` — the same line, once | staging `out__2026-09-10_11-58-16.log`, `out__2026-09-11_09-37-17.log` |
+| **`1 unchanged` has one producer** | `filesUnchanged.push` exists at exactly one site, `sync-canonical-bridge.ts:304`, inside the content-hash skip branch; a throw returns `success:false`, which the scheduler logs as `had errors` (`autonomy-scheduler.ts:631`), never the N/M line (`:629`) | read at `55135b3fc` |
+| **the fixed build was running** | the skip branch (`b6a5bc3a7`) and the N/M log format (`977e61d7d`) are both ancestors of `c52c577fd`, the deploy before both runs; control `29cce1076` is not. Langston: `filesUnchanged` does not exist at `b6a5bc3a7^` (count 0, control 7) — no pre-fix build can print `1 unchanged` at all | git |
+| **the tree stayed clean through the window** | `mapping-regime-strategy.json` mtime `2026-09-08 20:11:19Z` — untouched by both runs AND by CC-C's `11:19:37Z` reset; both `.md` files mtime `2026-09-11 08:46:47.05Z` — the run is their last writer, nothing restored them after; `git status` clean. **Control:** files that `11:19:37Z` reset DID rewrite carry `11:19:14Z`, so a hand restore would have shown | Langston measured 13:30Z; CC-A re-derived with the control |
+| ⛔ **NOT cited** | a clean `git status` read taken after `11:19:37Z` — `dt-deploy` resets the tree, so it proves nothing about 08:46 | object-round reader r2 |
+
+**OUTCOME:** the `1 unchanged` half and the clean-tree half are MET on two unattended days. The `0 updated` half is unmet **by construction** — it was mis-specified, not missed.
+
+## 13. THE DECISION, AND WHO TOOK IT
+
+**Langston, 2026-09-11T13:30Z: U-1 MET on the unattended lines, the fixed build, and the clean tree** — and he closed the 08:46–11:19 hand-clean gap I had offered to accept, by measuring file mtimes rather than inferring from the deploy gate. He marked none of it `RULED ON REPORTED FACT`.
+**His two dispositions, applied:**
+1. **§9.4 #5 — no work, withdrawn:** can the markdown files re-acquire the churn? `new Date()` appears at exactly three sites in the sync (`:96` a log line, `:174`, `:175` the JSON `_metadata`); neither markdown generator reaches one. Structurally stamp-free.
+2. **§9.4 #2 — added to `P19-B12`:** the markdowns are rewritten every run and reported as `2 updated` on a no-change day. No git churn, so not a blocker — the fifth residual above.
+**Action taken by CC-A:** this conversion; the ledger rows in §15; the card moved to `Complete`.
+
+## 14. OBJECTIVES
+
+| OBJ | verdict | evidence |
+|---|---|---|
+| **OBJ-1** stop the churn | **YES** | code path §2 and §2b (both branches mutation-proved on the deployed code); **schedule §12** (two unattended days). ⚠️ Deviation from the scope's first text, approved at Step 1: the key excludes exactly the two stamps, not every `_`-prefixed key (Langston BLOCKER-1, scope §5b) |
+| **OBJ-2** stamp true, label matches | **YES** | §3 — `Map Updated: 2026-05-24T00:30:18Z` rendered in Claude-in-Chrome with the derived value. Residual: no keeper (`P19-B12`) |
+| **OBJ-3** liveness has a home off the tracked tree | **YES** | `logEvent('Sync complete: …')` to the gitignored logs stream (`sync-canonical-bridge.ts:326`), plus the scheduler line that §12 read on both days |
+| **OBJ-4** producer-consumer invariant | **YES** | `sync-canonical-bridge.test.ts` green in CI `34270919543` (at `977e61d7d`) and `34322702494` (at `c52c577fd`). Stated limit stands: those tests are the invariant control, not evidence for OBJ-1 |
+| **OBJ-5** the sibling weekly writer | **PARTIAL** | §2c: `recalibrate-predictive-weights.ts:255-258` already skips on an unchanged checksum, and its weaker `_`-prefix exclusion is carried forward. `#686` (owner CC-C: relocate the runtime file out of the tracked corpus) is the named home; **no plan row names it** — so the scope's own VERIFY (*"owner and a named plan row"*) is only half met, stated rather than rounded up. |
+| **OBJ-6** which way RISK-017 moved | **YES — STRONGER** | `SYSTEM_MANUAL.md` RISK-017 downgraded MEDIUM→LOW (`bdde14e28`): a dirty JSON on staging now MEANS the committed file disagrees with the TS map, so `dt-deploy`'s refusal became its detector. The same-commit obligation is written where other batches meet it: `SYSTEM_IMPACT_MAP.md:872` and `server/config/canonical-regime-strategy-map.ts:13` |
+
+## 15. GOVERNANCE LEDGER — EVERY ROW, INCLUDING THE N/As
+
+CHANGE-CLASS: non_architecture
+
+| tier | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | entry `d82422c7b`; flipped to CLOSED in the close commit |
+| T1 | `PHASE_HISTORY.md` | ✅ | entry `07c1c7ccd`; flipped to CLOSED in the close commit |
+| T1 | `PHASE_19_PLAN.md` | ✅ | row 4.56a (`86f855c5b`) CLOSED in the close commit; row 4.58 added for `#1039` (`f13491fbd`) |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_A.md` | ✅ | shared: the dirty-tree paragraph now says fixed and what a dirty JSON means; own: position block |
+| T1 | the batch `SCOPE` | ✅ | `866c67878` → `b5dad2e67` |
+| T1 | the batch `PRE_AUDIT` | ✅ | `a1a9c3295` → `3c80ada73` |
+| T1 | `COMPLETION_REPORT` | ✅ | this file, converted from the Step-7 evidence |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | `CC_A_SESSION_TASK_LIST.md` updated in the close commit; the other three are not mine to touch |
+| T1 | Langston's `/home/langston/MEMORY.md` | ✅ | this batch's line flipped to CLOSED, backup taken first |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | RISK-017 downgraded MEDIUM→LOW (`bdde14e28`); left LOW, not closed — its residuals stand |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | the bridge-sync entry supersedes B59's fresh-date-every-sync and records the same-commit obligation (`bdde14e28`) |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#402` residuals (`0c3dc94fd`, `977e61d7d`), `#1020` (`8d3546e33`), `#1039` (`f13491fbd`); `#402` closed and the fifth residual added in the close commit |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | `FIX-2026-09-08-B` (`07c1c7ccd`); verified-on-the-schedule line added at close |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | no phase-level change |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | N/A | no parameter-adjustment governance touched |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | no constitutional change |
+| T2 | `STORAGE_POLICY.md` | N/A | no retention or tier change |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | no asset-class change; nothing on its xStock working list is touched by this batch |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | no onboarding learning surfaced |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | the method did not change |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | the reviewer's build did not change |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | no stable rule changed |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | no `CLAUDE.md` change |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | nothing removed |
+| T2 | `MISTAKE_PATTERNS.md` | ✅ | two `verification-weaker-than-claim` trailers from this batch (`0c3dc94fd`, `94808652d`) recorded as instances at close |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | the class-override row, Langston's ruling (`3ac3f1bf8`) |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | the ack/resolve process did not change |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | protocol unchanged; the card moved per it |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | no Claude Code feature assessed |
+
+## 16. CI, READERS, AND WHAT THIS DID NOT ESTABLISH
+
+**CI, per job:** `34270919543` at `977e61d7d` (the first deploy) — TypeScript Check · Test Suite · Build · Docker Build all `success`. `34322702494` at `c52c577fd` (the 2026-09-09 deploy both unattended runs ran on) — all four `success`.
+**Readers on the close claim:**
+`REVIEWER r1: claim-only · what other states fit "0 updated was mis-specified" · found the double run (#1039 lead) and that a "2 updated" day could still dirty the tree through markdown-only fields · re-derived y`
+`REVIEWER r2: object · could the corrected criterion pass while the fix is broken · no such state; a clean read after 11:19Z is not evidence; the deploy gate is · re-derived y (then superseded by Langston's mtime measurement, re-derived with a control)`
+**Not established:** mtimes are evidence only against tools that write through the normal path — a deliberate `touch` back-dating would evade them, and nothing suggests one. A genuine map change will dirty the tree again **by design**; that is RISK-017's alarm working, not this defect returning.
