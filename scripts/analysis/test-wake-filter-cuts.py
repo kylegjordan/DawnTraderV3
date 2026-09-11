@@ -5,7 +5,9 @@ nothing must never print PASS (the three hand-fed filter tests that read PASS wh
 processing nothing, recorded in MEMORY)."""
 import json, subprocess, sys, io
 
-FILTER = r'C:\Users\kyleg\.claude\cc-wake-filter.py'
+# argv[1] runs the suite against another copy - the repo file BEFORE it is installed, or the live
+# file to show which new cases the unfixed filter FAILS (B-WAKE-LEAD-NAME).
+FILTER = sys.argv[1] if len(sys.argv) > 1 else r'C:\Users\kyleg\.claude\cc-wake-filter.py'
 LOG = '/var/log/cc-discord-inbox.jsonl'
 
 def row(kind, sender, text):
@@ -46,6 +48,14 @@ LANG_NAME_LATE = ("Kyle — a long reply that does not name any session for a wh
                   + ("Filler that pushes the name past the 400-character truncation. " * 8)
                   + "OLD Claude, this part is for you.")
 LANG_OTHER = "NEW Claude — a plain reply addressed to someone else."
+# B-WAKE-LEAD-NAME (#1040) — scope OBJ-2 (a)(b)(c) and Langston's Step-2 conditions 3, 4, 5.
+MARK = lambda owner: "\n\n[[ALERT id=deadbeef-0000-0000-0000-000000000000 owner=" + owner + " action=\"look\"]]"
+LEAD_A = "OLD Claude — here is the answer to your dispatch; the r2 is fine." + MARK("CC-B")
+LEAD_B = "Kyle — a reply to you. OLD Claude, this bit is for you as well." + MARK("CC-B")
+LEAD_C = "NEW Claude — here is the answer to your question." + MARK("CC-A")
+LEAD_OUT_OF_SET = "NEW Claude — triage done." + MARK("OLD-Claude")
+LEAD_LOWER = "OLD Claude — yours, in prose." + MARK("cc-b")
+LEAD_MENTION = "OLD Claude's r2 is fine, but NEW Claude — this one is yours." + MARK("CC-B")
 
 CASES = [
     ("cc_outbound", "Heartbeat",   HB_OK,          False, "all-clear heartbeat is SUPPRESSED (the cut)"),
@@ -56,11 +66,17 @@ CASES = [
     ("cc_outbound", "Heartbeat",   HB_BORDERLINE,  False, "Q2: \"borderline stale\" is hedged, not a verdict -> SUPPRESSED"),
     ("cc_outbound", "Push notice", PUSH_ROUTINE,   False, "REGRESSION GUARD: routine push notice still suppressed"),
     ("langston_outbound", None,    LANG_MARKER_MINE,       False, "marker owns me but prose names someone else -> no wake (the duplicate, cut)"),
-    ("langston_outbound", None,    LANG_MARKER_MINE_NAMED, True,  "POSITIVE CONTROL: marker owns me AND he addresses me -> still wakes"),
+    ("langston_outbound", None,    LANG_MARKER_MINE_NAMED, True,  "POSITIVE CONTROL: marker owns me AND he addresses me -> still wakes, with NO routing tag", ""),
     ("langston_outbound", None,    LANG_MARKER_THEIRS,     False, "REGRESSION GUARD: marker owns another session -> still suppressed"),
     ("langston_outbound", None,    LANG_NAMED,             True,  "POSITIVE CONTROL: plain reply addressed to me -> still wakes"),
     ("langston_outbound", None,    LANG_NAME_LATE,         True,  "FINDING-5: my name appears only PAST byte 400 -> must WAKE (this is the ~118/2820 class the truncation used to swallow)"),
     ("langston_outbound", None,    LANG_OTHER,             False, "REGRESSION GUARD: plain reply to someone else -> silent"),
+    ("langston_outbound", None,    LEAD_A,           True,  "#1040 (a): reply OPENS with my name, another owner's marker -> WAKE, tagged CC-B (the defect)", "CC-B"),
+    ("langston_outbound", None,    LEAD_B,           False, "#1040 (b): my name only MID-body, another owner's marker -> silent (the #995 cut, untouched)"),
+    ("langston_outbound", None,    LEAD_C,           False, "#1040 (c): marker is mine, reply opens with someone else -> silent (unchanged)"),
+    ("langston_outbound", None,    LEAD_OUT_OF_SET,  False, "condition 3: an owner OUTSIDE the list is now stripped, so its `OLD-Claude` no longer wakes me"),
+    ("langston_outbound", None,    LEAD_LOWER,       True,  "condition 4: `owner=cc-b` prints the canonical CC-B, not the body's spelling", "CC-B"),
+    ("langston_outbound", None,    LEAD_MENTION,     True,  "condition 5 (ACCEPTED spurious wake): a MENTION-opening matches - no separator is required, by design", "CC-B"),
 ]
 
 # ONE SUBPROCESS PER CASE. Attribution is then unambiguous and nothing is appended to the
@@ -86,9 +102,19 @@ if not any(w for _, w in results):
     print("controls. No result below would be valid."); sys.exit(2)
 
 fails = 0
-for (kind, sender, text, expect, label), wakes in results:
+for case, wakes in results:
+    kind, sender, text, expect, label = case[:5]
+    tag = case[5] if len(case) > 5 else None   # None: unchecked · "": no tag allowed · "CC-B": exactly that tag
     got = bool(wakes)
     ok = (got == expect)
+    if ok and got and tag is not None:
+        heads = [w.split(": ", 1)[0] for w in wakes]
+        if tag:
+            ok = any(h == "WAKE[LANGSTON->CC-A] [alert routed to " + tag + "]" for h in heads)
+        else:
+            ok = all("[alert routed to" not in h for h in heads)
+        if not ok:
+            label += "  [TAG WRONG: " + " | ".join(heads) + "]"
     if not ok: fails += 1
     print(f"  {'PASS' if ok else '** FAIL **':10} expected {'WAKE   ' if expect else 'silent '} got {'WAKE   ' if got else 'silent '}  {label}")
 print()

@@ -146,6 +146,22 @@ ALERT_OWNER_RE = re.compile(
 # an alias in `owner=`, which is routing metadata and must not read as being addressed.
 ALERT_MARKER_STRIP = re.compile(r"\[\[ALERT\b[^\]]*\]\]", re.I)
 
+# B-WAKE-LEAD-NAME (#1040): does the reply OPEN with this session's name? His bridge prepends the
+# triggering author's display name to every NON-alert reply by construction
+# (discord-langston-bridge.py:530-535), so the opening name is the addressee. Built from NAMES - one
+# registry, never restated. Tested on the marker-STRIPPED full body.
+# ⚠️ NO SEPARATOR IS REQUIRED AFTER THE NAME, DELIBERATELY (Langston Step-2 condition 5). So a reply
+# that merely MENTIONS this session first - "OLD Claude's r2 is fine, but NEW Claude - ..." - also
+# matches. That direction is a spurious WAKE, never a missed one, and it was accepted as the trade.
+# Do NOT "fix" it by requiring a dash or comma: a separator rule turns any change in the bridge's
+# prefix punctuation into silently dropped wakes. A test case pins this.
+_OPEN_NAMES = NAMES.get(ALIAS, [])
+OPEN_RE = (re.compile(r"^[\s*_~`>#:\".\-]*(?:" + "|".join(_OPEN_NAMES) + r")\b", re.I)
+           if _OPEN_NAMES else re.compile(r"(?!)"))  # unregistered alias: an empty alternation would match every body
+# Condition 4: the owner printed in a routing tag comes from ALERT_OWNERS, never from the body's own
+# spelling (a body writing `owner=cc-b` must still print CC-B). The one list, looked up - not re-cased.
+OWNER_CANON = {o.upper(): o for o in ALERT_OWNERS}
+
 def addressed_to_me(text):
     """Return (deliver?, text)."""
     t = text or ""
@@ -347,7 +363,34 @@ for raw in sys.stdin:
                 mo = None
                 for mo in ALERT_OWNER_RE.finditer(body_raw):
                     pass
+                # ── B-WAKE-LEAD-NAME (#1040): THE ORDER IS THE FIX ───────────────────────────────
+                # The defect: the owner check ran BEFORE anything asked who the reply was addressed
+                # to, so "Infra Claude - ..." ending in another session's alert note was dropped as
+                # theirs. MEASURED: 104 of 104 such replies since 2026-09-03 joined MATCH to the
+                # author of the message they answered (pre-audit F-3, both controls run).
+                # (1) owner = the LAST marker in the raw body (above, unchanged).
+                # (2) STRIP EVERY MARKER, UNCONDITIONALLY, BEFORE ANY DECISION. The marker carries an
+                # alias in `owner=`, which is routing metadata and must never read as prose.
+                # ⚠️ THIS CHANGES THE `mo is None` PATH (Langston Step-2 condition 3). A marker whose
+                # owner is OUTSIDE ALERT_OWNERS - `owner=OLD-Claude`, a display name where an alias
+                # belongs - was never stripped, so it woke that session through MY_RE. It is now
+                # stripped. An improvement; a test case pins it.
+                # (Stripping only inside `if mo:` is what let the marker's own `owner=CC-A` satisfy
+                # MY_RE twice before - caught both times by the behavioural test. Unconditional
+                # stripping removes that trap rather than guarding it.)
+                text = ALERT_MARKER_STRIP.sub(" ", text)
+                full = ALERT_MARKER_STRIP.sub(" ", full)
+                routed = ""
                 if mo:
+                    owner = OWNER_CANON[mo.group(1).upper()]
+                    if owner.upper() != ALIAS:
+                        # (3)+(4) Another owner's marker still SUPPRESSES (the #995 cut, untouched) -
+                        # UNLESS the reply OPENS with my name: then it was addressed to me and the
+                        # marker is a note for someone else riding along. The wake line says so.
+                        if not OPEN_RE.match(full):
+                            continue
+                        routed = f" [alert routed to {owner}]"
+                    # The owner == ME case falls through; the #995 note below is about it.
                     # 2026-09-03 #995 (B-WAKE-QUIET OBJ-11, KYLE-DIRECTED) — THE MARKER IS NOW
                     # A SUPPRESSOR ONLY, NEVER A WAKER.
                     # WHY: the dedicated ALERT-OWNER wake is a DUPLICATE. `inject-due-alerts`
@@ -363,29 +406,17 @@ for raw in sys.stdin:
                     # HONEST LOSS, stated: a marker that names me inside a message that never
                     # names me in prose now waits for the next turn's alert list instead of
                     # waking me between turns.
-                    if mo.group(1).upper() != ALIAS:
-                        continue
-                    # ⛔ STRIP THE MARKERS BEFORE THE NAME CHECK BELOW. The marker CONTAINS my
-                    # alias (`owner=CC-A`), so falling through with it intact made MY_RE match
-                    # every time and the cut did nothing at all. Caught by the behavioural test.
-                    # The question here is whether he ADDRESSED me in prose, and the routing
-                    # marker is not prose.
-                    # ⛔ STRIP FROM BOTH. `full` is what the name check now reads (the
-                    # FINDING-1 fix above), so stripping only the printed copy left the
-                    # marker's own `owner=CC-A` satisfying MY_RE again — the SAME defect the
-                    # behavioural test caught the first time, re-created one layer along by
-                    # a later change. It caught it again.
-                    text = ALERT_MARKER_STRIP.sub(" ", text)
-                    full = ALERT_MARKER_STRIP.sub(" ", full)
-                # Wake when Langston (a) uses an explicit wake-tag (broadcast OK), or (b) names
-                # me specifically. NOT on his plain replies to Kyle (no name/tag) — too noisy.
+                # (5) Wake when Langston (a) uses an explicit wake-tag (broadcast OK), or (b) names
+                # me specifically. NOT on his plain replies to Kyle (no name/tag) - too noisy.
+                # The routing tag sits right after the label (Langston's Step-2 recommendation): the
+                # line still starts `WAKE[LANGSTON`, which is all wake_narration.py keys on (F-6).
                 if re.search(r"@?CC[- ]?WAKE|wake\s+(up\s+)?(cc|claude\s*code)", full, re.I):
                     deliver, _ = addressed_to_me(full)
                     body = text
                     if deliver:
-                        print(f"WAKE[LANGSTON->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
+                        print(f"WAKE[LANGSTON->{ALIAS}]{routed}: {body}{media_suffix(d)}", flush=True)
                 elif MY_RE.search(full):
-                    print(f"WAKE[LANGSTON->{ALIAS}]: {text}{media_suffix(d)}", flush=True)
+                    print(f"WAKE[LANGSTON->{ALIAS}]{routed}: {text}{media_suffix(d)}", flush=True)
             elif kind == "langston_outbound_media":
                 # Langston uploaded a file with his reply. That upload is mirrored as its OWN
                 # entry whose text is "[uploaded <path>]" and which carries no addressee, so it
