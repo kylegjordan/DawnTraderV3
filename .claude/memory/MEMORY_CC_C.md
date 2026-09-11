@@ -85,7 +85,6 @@
 
 ✅ **THE xSTOCK PRICING PLAN IS THE LIVE ARTIFACT: `1-system-manual/XSTOCK_PRICING_PLAN.md`** — 6 problems, 6 solutions, the order; **P6 (which price per job) = KYLE'S.** Read it there; do not re-narrate here.
 
-⛔⛔ **`B-EXIT-BOOK-AGE-STAMP` — CRITERION FIRED + EVALUATED 2026-09-06. C1/C2/C3 ✅ (zero coarse producers; 27/27 taker closes carry the depth age; mix 69.2 vs 63.0 = 6pp on n=39, inside SE). V1 11 · V2 10 · V3 18 · V4 CITED (`withRestPrice=0` over 7,197 cycles, reach 3h).** ⛔ **C4 UNEVALUATED — NOT passed, NOT waived: I wrote a 7-day criterion whose proof lives in a ~3h SIZE-ROTATED log, so all 11 qualifying closes predate the retention.** ✅ **DEFERRED to alert `6cbef7d0-8067-4085-ab8c-8cc4c1fe19e5` (fires 2026-09-07T13:00Z), which carries C4 verbatim + the discharge steps.** ⛔⛔ **CLOSURE IS LANGSTON'S RULING, NOT MINE — put to him; card stays `Observation`.** ⚠️ **C1's own PASS wording was under-enumerated (a legitimate 7th producer `kraken_ws_book_mid`); the verdict rests on the FAIL clause.** Record: `B_EXIT_BOOK_AGE_STAMP_PROGRESS_REPORT.md` §9-§10.
 
 ✅ **F-G-2 SPLITS BY ASSET CLASS (Langston): crypto legs on the F-G-1 soak alone; xStock legs behind 3b.b + 3b.d (plan row 3c). CARVE-OUT: no `observedAt`/`cachedAt`/age-derived value as a sample filter or covariate (scope §0).** ✅ `B-EXIT-PROVENANCE` CLOSED (#954 for the two nulls). ★ **A batch held open by a close gate owes governance TWICE — body ship AND gate close; a PROGRESS REPORT holds the open state.**
 
