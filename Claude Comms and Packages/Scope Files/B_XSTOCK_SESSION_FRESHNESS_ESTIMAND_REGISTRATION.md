@@ -477,7 +477,7 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 
 ### ⭐ THE QUESTION LANGSTON SAID ONE EPISODE COULD NOT ANSWER — AND THE RAW QUOTES ANSWER IT
 **His framing:** *"either the last resting order in an empty overnight book or a quote that stopped updating — I can't separate those two from one episode."* **His description:** the bid *"held at exactly $124.00 to the penny for about seven minutes."*
-✅ **RE-DERIVED from `xstock_spot_ticker_snap_2026_09_11`: the bid did NOT simply sit. It SNAPPED to exactly `124.00` AND BACK four times before it pinned.**
+✅ **RE-DERIVED from `xstock_spot_ticker_snap_2026_09_11`: the bid did NOT simply sit. It DROPPED to exactly `124.00` FOUR times and RECOVERED from the first three — the fourth drop is the one that stuck.** *(Corrected 2026-09-11: first written as "snapped to 124.00 and back four times". The table below always showed three recoveries. The conclusion does not change: a quote that has stopped updating cannot recover even once.)*
 | moment | bid |
 |---|---|
 | `06:15:13` | **124.00** → `06:15:57` back to **125.37** |
