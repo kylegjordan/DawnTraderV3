@@ -382,7 +382,9 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 
 ---
 
-## §11 — ⭐⭐ THE CLASS-WIDE ARM `3b.f-c` OWED, MEASURED ON THE **ALERT POPULATION** *(2026-09-11, CC-C)*
+## §14 — ⭐⭐ THE CLASS-WIDE ARM `3b.f-c` OWED, MEASURED ON THE **ALERT POPULATION** *(2026-09-11, CC-C)*
+> ⚠️ **RENUMBERED 2026-09-11 from `§11`** — it collided with this document's ORIGINAL `## 11.` (*THE CLOSE OBLIGATION*, above). **Commits, Langston's rulings and notes dated before 2026-09-11 cite THIS section as `§11`.** *(Enumerator blind to the heading FORM: I searched `## §N` and never saw `## N.` — `enumerator-blind-spot` n=12, the day after filing n=11.)*
+
 
 > ⛔ **§10 named its own limit: *"ONE SYMBOL, ONE DAY … NOT a class rate. A class-wide version of this table is what `3b.f-c` owes."*** ✅ **This is that arm, on a different and complementary object: not the GAP population (how often the guard binds) but the ALERT population (how often it SPEAKS).**
 
@@ -409,9 +411,11 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 
 ---
 
-## §11-W — ⛔⛔ **§11 IS WITHDRAWN IN FULL. EVERY NUMBER IN IT IS RETRACTED.** *(Langston, 2026-09-11; each finding re-derived by me at the object before accepting)*
+## §14-W — ⛔⛔ **§14 IS WITHDRAWN IN FULL. EVERY NUMBER IN IT IS RETRACTED.** *(Langston, 2026-09-11; each finding re-derived by me at the object before accepting)*
+> ⚠️ **RENUMBERED 2026-09-11 from `§11-W`, WITH ITS PARENT** — `§11` became `§14`, so its withdrawal became `§14-W`. **It did not itself collide: there is no original `11-W`.** Commits and notes dated before 2026-09-11 cite it as `§11-W`.
 
-⛔ **DO NOT CITE §11. THE SCOPE MAY NOT CARRY ITS FIGURES.** ✅ **The DISPOSITION survives — discriminator, not a threshold, not a mute — because Kyle ruled that at `#994` and it never rested on this arm.** ★ **The arm does not survive. Langston opened Step 1 on `3b.f-c` and withdrew the evidence in the same ruling, which is the right shape: the decision was already made, and my table was not what made it.**
+
+⛔ **DO NOT CITE §14 *(formerly §11)*. THE SCOPE MAY NOT CARRY ITS FIGURES.** ✅ **The DISPOSITION survives — discriminator, not a threshold, not a mute — because Kyle ruled that at `#994` and it never rested on this arm.** ★ **The arm does not survive. Langston opened Step 1 on `3b.f-c` and withdrew the evidence in the same ruling, which is the right shape: the decision was already made, and my table was not what made it.**
 
 ### THE FOUR ERRORS, EACH RE-DERIVED
 | # | what I did | corrected |
@@ -435,7 +439,9 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 
 ---
 
-## §12 — ⭐⭐ STEP-1 EXISTENCE CHECK ON `3b.f-c`: **THE DISCRIMINATOR ALREADY EXISTS, IS ALREADY LANGSTON-RULED, AND IS DELIBERATELY SWITCHED OFF BEHIND A NAMED PREREQUISITE** *(2026-09-11, CC-C)*
+## §15 — ⭐⭐ STEP-1 EXISTENCE CHECK ON `3b.f-c`: **THE DISCRIMINATOR ALREADY EXISTS, IS ALREADY LANGSTON-RULED, AND IS DELIBERATELY SWITCHED OFF BEHIND A NAMED PREREQUISITE** *(2026-09-11, CC-C)*
+> ⚠️ **RENUMBERED 2026-09-11 from `§12`** — it collided with this document's ORIGINAL `# 12.` (*RESULT — run 2026-09-03*, above). **Commits and notes dated before 2026-09-11 cite THIS section as `§12`** — ⛔ **but a `§12` citation naming the 2026-09-03 result, or any `§12.x` subsection, means the ORIGINAL.**
+
 
 ⛔⛔ **I WAS ONE STEP FROM SCOPING A BATCH TO BUILD SOMETHING THAT IS ALREADY BUILT. THIS IS `#1025` EXACTLY, AND ONLY THE STEP-1 *"DOES IT ALREADY EXIST"* CHECK CAUGHT IT.**
 
@@ -457,3 +463,44 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 
 ### ★ THE STEP-1 LESSON, RECORDED BECAUSE IT IS THE SECOND TIME IN THREE DAYS
 ⛔ **`#1025`: I proposed building a push-guard exemption that already existed. Here I was about to propose building a discriminator that already exists.** ⇒ ★ **BOTH TIMES THE TRIGGER WAS A SYMPTOM I HAD MEASURED MYSELF, AND THE MEASUREMENT'S VIVIDNESS IS WHAT SUBSTITUTED FOR THE EXISTENCE CHECK.** ✅ **A big number feels like a mandate to build. It is not — it is a reason to go and look first.**
+
+---
+
+## §16 — ⭐ THE 2026-09-11 NEWMONT HOLLOW-BOOK FIRE, CLASSIFIED *(Langston routed alert `0c9687e2` here; re-derived by CC-C, NOT ruled on his triage)*
+> ⚠️ **NUMBERED `§13` FOR A FEW MINUTES WHILE UNCOMMITTED, THEN RENUMBERED 2026-09-11** — it collided with this document's ORIGINAL `## 13.` (*THE ENTRY-SIDE GUARD*, above). ⛔ **It was never committed or cited as `§13`: EVERY existing `§13` citation to this document — including Langston's *"§13 of your own document"* and `§14-W` row 1 — means the ORIGINAL `## 13.`, not this section.**
+
+
+**THE EVENT.** `0c9687e2`, `triggers_at 2026-09-11T06:21:02Z` — a **Friday**, inside the 24/5 window, **not** a weekend row. `bid_collapsed`: bid `124.00` / ask `125.97` / last `125.94`, `priorBid 125.80`, `spreadFrac` 1.58% against a trailing median of 0.135%. Guard withheld 60 ticks, then yielded at the cap.
+⛔ **LEFT ACTIVE AND UNACKED, per Langston:** it is `#943` window evidence.
+
+**EXPOSURE, re-derived at `active_open_positions`:** NEM/USD is **2.76% above its `122.1768` stop**, −0.70% unrealised, mark 1 s old. **The collapsed `124.00` bid was still 1.49% above the stop.** All three xStock positions are ≥2.5% clear (NEM 2.76 · CRWD 3.44 · MDB 5.83). ⇒ **nothing was at risk.**
+
+### ⭐ THE QUESTION LANGSTON SAID ONE EPISODE COULD NOT ANSWER — AND THE RAW QUOTES ANSWER IT
+**His framing:** *"either the last resting order in an empty overnight book or a quote that stopped updating — I can't separate those two from one episode."* **His description:** the bid *"held at exactly $124.00 to the penny for about seven minutes."*
+✅ **RE-DERIVED from `xstock_spot_ticker_snap_2026_09_11`: the bid did NOT simply sit. It SNAPPED to exactly `124.00` AND BACK four times before it pinned.**
+| moment | bid |
+|---|---|
+| `06:15:13` | **124.00** → `06:15:57` back to **125.37** |
+| `06:16:33` | **124.00** → `06:16:38` back to **125.48** |
+| `06:17:41` | **124.00** → `06:18:19` back to **125.42** |
+| `06:18:31` → `06:24:18` | **124.00 pinned** (~6 min); `124.04` at `06:25:00` |
+
+⇒ ⛔ **A QUOTE THAT HAS STOPPED UPDATING CANNOT RETURN TO 125.37, 125.48 AND 125.42 AND THEN DROP BACK.** The bid updated repeatedly. ⇒ ★ **Consistent with a REAL resting `$124.00` order becoming the best bid whenever the nearer bids cancel — GENUINE OVERNIGHT THINNESS, not a stuck feed.**
+✅ **PRECONDITION VERIFIED — EXACTLY ONE LIVE WRITER.** `bufferTickerSnap` callers: `crypto-spot-archiver.ts:124` (crypto_spot), **`equity-spot-archiver.ts:184` (xstock_spot)**, `kraken-futures-archiver.ts:127` (the perp legs). The ticker writer routes `xstock_spot → xstockSpotTickerSnap`. **No raw insert path found for the pattern searched.** ⇒ **the alternation is the book, not two sources interleaving** — which would have meant the opposite.
+⚠️ **NOT RULED OUT, AND STATED RATHER THAN CHASED:** different Kraken frame kinds landing in the same table through that ONE writer.
+
+### THE BOOK DID NOT RECOVER
+| phase | snapshots | median spread | distinct bids | distinct asks |
+|---|---|---|---|---|
+| before, `05:40`–`06:10` | 361 | **0.2476%** | 39 | 31 |
+| episode, `06:10`–`06:30` | 70 | 0.4615% | 22 | 14 |
+| after, `06:30`–`06:35` | 9 | **2.1217%** | **2** | **2** |
+
+⇒ **spread 8.6× wider, snapshot rate ~6× lower, two price levels each side.** A book thinning further as the night deepens (`06:30Z` = 02:30 ET).
+
+### ⭐ "4 OF THE LAST 6 FIRES ARE NEWMONT" — TRUE ON RAW IDS; **3 OF 6** AFTER THE FILTER I WAS CORRECTED FOR IN §14-W
+**The hollow-book family, all-time, ordered by `triggers_at` (not `fired_at`): 8 distinct ids.** On raw ids the last six hold **4** Newmont.
+⛔ **BUT `2026-09-05T00:16:31Z` IS A SATURDAY, AND IT CARRIES NEWMONT *AND* SILVER AT THE SAME INSTANT** — one event across two books, 16 minutes after the Friday close, **when the market is shut.** That is `#994`'s market-closed class, not a Newmont book problem.
+⇒ **Weekend excluded and collapsed to events: Newmont is 3 of the last 6 weekday events.**
+★ **STILL DISPROPORTIONATE — one symbol, half the events — so Langston's question stands.** ✅ **And Newmont's fires hit BOTH SIDES** (`bid_collapsed` and `ask_spiked`), which fits a book thin on both sides better than a one-sided stuck feed.
+⇒ **WORKING ANSWER, NOT A CAUSE:** Newmont may simply carry the thinnest overnight book among our holdings. **What would test it:** per-symbol overnight median spread and snapshot rate across every held xStock, same window. **Not run here.**

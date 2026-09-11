@@ -48,7 +48,7 @@
 
 ⛔⛔ **THREE THINGS IN FLIGHT — READ THE RECORDS, DO NOT RE-DERIVE:**
 1. **`B-OHLC-FRAME-GUARD` (`#1028`, plan `3b.h-6`) — STEP 1 DISPATCHED to Langston at `5bbec7290`.** Scope `Scope Files/B_OHLC_FRAME_GUARD_SCOPE.md`. ⛔ **Critical alert `b48a743f` deliberately NOT acked — its dedupe key would swallow the next real failure; resolve when the guard deploys.** A `null` fix FAILS: the price columns are NOT NULL.
-2. **`3b.f-c` — Step 1 open; §11's numbers WITHDRAWN; §12: the discriminator ALREADY EXISTS, switched off behind F4's re-measure.** Awaiting Langston: is F4 ripe (wants a week, ~4 days exist), and does it fold into `#943`?
+2. **`3b.f-c` — Step 1 open; §14's numbers WITHDRAWN; §15: the discriminator ALREADY EXISTS, switched off behind F4's re-measure.** Awaiting Langston: is F4 ripe (wants a week, ~4 days exist), and does it fold into `#943`?
 3. **`CODEX_FINDINGS_REGISTER.md` — r14, READY (Langston).** ⛔ **Do NOT dispatch to Coltrane until `#1027` clears** — his refresh fails git's OWNERSHIP guard (root vs a langston-owned mirror), NOT auth. CC-INFRA's.
 ⚠️ **`#1026`: a Langston dispatch >2000 chars splits and the orphan half can wake `coltrane-bot`. GATE EVERY SEND ON `wc -c` < 1990 — "keep it short" failed by 129 chars.**
 ⚠️ **OPEN WITH LANGSTON: he routed `price-skip-paper-*` alerts to me though my note reserves them to CC-B; I resolved them on his routing. Settle it.**
