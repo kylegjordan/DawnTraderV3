@@ -430,6 +430,8 @@ ok('#637 a plausible-but-invalid token is rejected to the sentinel (a lastTick i
   ok('S2: four ✅ verdicts PASS', ledgerRowInText('| **T1** | the four session task lists | ✅ | ✅ | ✅ | ✅ |', spec));
   ok('S3: task lists named in PROSE — even carrying a ✅ — FAIL (not a table row)',
     !ledgerRowInText("**Batch Catalog · Phase History · this batch's Scope · the session task lists (✅ mine) · this Completion Report**", spec));
+  ok('S3b: PROSE containing a pipe before a check mark FAILS (only a line that BEGINS with a pipe is a table row)',
+    !ledgerRowInText('The ledger for the session task lists | ✅ mine was filled in after review.', spec));
   const S4 = '| **T1** | ★ **THE FOUR SESSION TASK LISTS** — `CC_A` · `CC_B` · `CC_C` · `CC_INFRA` `_SESSION_TASK_LIST.md` | ⛔ **EVERY batch close, EVERY class (Kyle 2026-09-05).** |  |  |';
   ok('S4: the skill\'s own row pasted with its verdict cells EMPTY FAILS', !ledgerRowInText(S4, spec));
   ok('S4b: every verdict N/A (own list not updated) FAILS', !ledgerRowInText('| T1 | the four session task lists | N/A ×4 | not touched |', spec));
