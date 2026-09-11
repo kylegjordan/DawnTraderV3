@@ -63,7 +63,15 @@ ENUMERABLE_SOURCES = ("files", "systemd", "compat")
 # ⛔ EXACT MEMBERSHIP, NOT PREFIX MATCHING (Langston, 18:45Z): with startswith, a future kind whose name merely
 #    EXTENDS a drift name would grade as drift - the wrong direction. An unrecognised kind must fall through to
 #    EXPOSURE, which is the direction this tool is built to fail in.
-DRIFT_KINDS = frozenset(("directory-owned-by-root", "directory-group-drift"))
+# ⛔ ROOT-EXPECTED FENCES (#1046 amendment D, 2026-09-11): a fence may be DESIGNED root-owned - the langston-memory
+#    install root is, so only root may rename its entries. For those, root is the right owner and the OWNER account
+#    holding it is the regression (it could swap the code a root-run write executes): that is DRIFT (it opens no read).
+#    But root-ownership only buys the rename fence while the dir is NOT group/other-writable - a 770 root:langston dir
+#    is writable by langston again, BLOCKER-1 reopened, and the plain other-bits test misses group-write. So a
+#    root-expected fence that is group- or other-writable is an EXPOSURE (Langston condition 2, 2026-09-11).
+#    ⚠️ AUTHORITATIVE LAYOUT: the root_owned_fences list here is the source of truth for which dirs expect root;
+#    comms-infra/systemd/README.md's install map DESCRIBES it. A layout change edits this list, then the README.
+DRIFT_KINDS = frozenset(("directory-owned-by-root", "directory-group-drift", "root-expected-directory-owned-by-owner"))
 SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with the live file = a copy
 MIN_LINE = 40
 NL = chr(10)
@@ -119,6 +127,8 @@ def live_config():
         #    too, and a regression of exactly those two back to 0755 was otherwise invisible here - the
         #    store check watched only their WRITABLE bits. Other-bits AND an attempted listing, as for the rest.
         "closed_dirs": [LANGSTON_HOME, MEMDIR, SESSIONS, STORE],
+        # MEMDIR is 750 root:langston by design (#1046 amendment D); this list is authoritative, the README describes it.
+        "root_owned_fences": [MEMDIR],
         "private_files": [INDEX],
         "store_dir": STORE,
         "live_memory": LIVE_MEMORY,
@@ -301,7 +311,15 @@ def evaluate(cfg):
         #    total over accounts rather than sampled at one. (Measured empty on 2026-09-11: group 987 had
         #    zero secondary members - this is a reach limit being closed, not an exposure.)
         owner_uid = pwd.getpwnam(cfg["owner"]).pw_uid
-        if dst.st_uid != owner_uid:
+        root_expected = d in cfg.get("root_owned_fences", ())
+        if root_expected and dst.st_uid == 0:
+            # the designed owner - BUT root-ownership fences renames only while the dir is not group/other-writable.
+            # ⛔ condition 2: the other-bits test above catches other-write; group-write is the BLOCKER-1 reopening.
+            if mode & (stat.S_IWGRP | stat.S_IWOTH):
+                findings.append({"kind": "root-expected-directory-group-or-other-writable", "path": d, "mode": oct(mode)})
+        elif root_expected and dst.st_uid == owner_uid:
+            findings.append({"kind": "root-expected-directory-owned-by-owner", "path": d, "owner": cfg["owner"]})
+        elif dst.st_uid != owner_uid:
             if dst.st_uid == 0:
                 # DRIFT: root as owner is inside "root holds DAC_OVERRIDE regardless"
                 findings.append({"kind": "directory-owned-by-root", "path": d, "owner": "root"})
@@ -689,6 +707,40 @@ def self_test():
         check("OWNER SPLIT: a fence owned by an ORPHANED uid -> EXPOSED, not a crash", r4["verdict"], "EXPOSED")
         check("  ...naming the uid", any("no account" in str(f.get("owner", "")) for f in r4["findings"]), True)
 
+        # ROOT-EXPECTED FENCE (#1046 amendment D): the install root is designed root-owned
+        rfence = mkdir("root-expected-fence", 0o750)
+        os.chown(rfence, 0, owner_gid)
+        rx = evaluate(dict(closed, closed_dirs=closed["closed_dirs"] + [rfence], root_owned_fences=[rfence]))
+        check("ROOT-EXPECTED: a 750 root:owner fence that EXPECTS root -> PASS", rx["verdict"], "PASS")
+        check("  ...with no finding on it at all", [f["kind"] for f in rx["findings"] if f.get("path") == rfence], [])
+        check("  control: the SAME fence NOT listed root-expected reads directory-owned-by-root",
+              "directory-owned-by-root" in [f["kind"] for f in evaluate(dict(closed, closed_dirs=[rfence]))["findings"]], True)
+        ofence = owned(mkdir("root-expected-but-owner-owned", 0o750))
+        ro = evaluate(dict(closed, closed_dirs=[ofence], root_owned_fences=[ofence]))
+        check("ROOT-EXPECTED: the same fence owned by the OWNER -> DRIFT (the old, now-wrong state)", ro["verdict"], "DRIFT")
+        check("  ...as root-expected-directory-owned-by-owner",
+              "root-expected-directory-owned-by-owner" in [f["kind"] for f in ro["findings"]], True)
+        # ⛔ CONDITION 3 (Langston, 20:23Z): the mutant that matters. 770 root:owner reopens BLOCKER-1 and, without the
+        #    group-write predicate, reads PASS - the fix must FLAG it, or the suite certifies a guard that is not there.
+        gwfence = mkdir("root-expected-770", 0o770)
+        os.chown(gwfence, 0, owner_gid)
+        gw = evaluate(dict(closed, closed_dirs=[gwfence], root_owned_fences=[gwfence]))
+        check("CONDITION 3: a 770 root:owner root-expected fence -> EXPOSED (group-writable = BLOCKER-1 reopened)", gw["verdict"], "EXPOSED")
+        check("  ...as root-expected-directory-group-or-other-writable",
+              "root-expected-directory-group-or-other-writable" in [f["kind"] for f in gw["findings"]], True)
+        ctlfence = mkdir("root-expected-750-ctl", 0o750)
+        os.chown(ctlfence, 0, owner_gid)
+        check("  control: the SAME layout at 750 root:owner is PASS, so it is the group bit that flags",
+              evaluate(dict(closed, closed_dirs=[ctlfence], root_owned_fences=[ctlfence]))["verdict"], "PASS")
+        if third is not None:
+            tfence = mkdir("root-expected-third-owner", 0o750)
+            os.chown(tfence, third.pw_uid, owner_gid)
+            check("ROOT-EXPECTED: owned by a THIRD account -> EXPOSED, unchanged",
+                  evaluate(dict(closed, closed_dirs=[tfence], root_owned_fences=[tfence]))["verdict"], "EXPOSED")
+        gfence = mkdir("root-expected-shared-group", 0o750)
+        os.chown(gfence, 0, reader_gid)
+        check("ROOT-EXPECTED: root-owned but a group another account holds -> EXPOSED, the group rule unchanged",
+              evaluate(dict(closed, closed_dirs=[gfence], root_owned_fences=[gfence]))["verdict"], "EXPOSED")
         # CONDITION 2: a group with NO holders is drift, never "readable by another account"
         empty_gid = next((g.gr_gid for g in grp.getgrall() if not group_members(g.gr_gid)), None)
         check("CONDITION 2 fixture: a zero-holder group exists on this box", empty_gid is not None, True)
