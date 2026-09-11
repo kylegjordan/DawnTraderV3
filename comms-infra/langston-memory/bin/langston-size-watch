@@ -57,6 +57,16 @@ WATCHED = [
     (os.path.join(HOME, "MEMORY.md"), "@MEMORY.md import from CLAUDE.md"),
     (os.path.join(HOME, ".claude/projects/-home-langston/memory/MEMORY.md"), "harness auto-memory index"),
 ]
+# ⭐ THE WRITER'S ARCHIVE (B-LANGSTON-CONTEXT P-6b, Langston's answer 1). Every MEMORY.md version that
+#    langston-memory-write replaced lives here, and nothing prunes it: it is the only copy of removed content, and the
+#    one safe deletion predicate ("this content survives in a committed artifact") cannot be proved today.
+#    ⛔ IT IS NOT AUTO-LOADED, SO IT NEVER ENTERS THE RATCHET'S SUM. It is watched for DISK, against a named threshold.
+#    THRESHOLD: 500 MiB. Langston measured ~69 KB per overwrite and ~100 MB a year at four whole-file syncs a day,
+#    against 44 GB free - so crossing it means roughly five years of normal use, or something writing far too often.
+#    OWNER: CC-INFRA (Infra Claude). Crossing it is an alarm to LOOK, never an order to prune.
+ARCHIVE_DIR = os.path.join(HOME, ".memory-archive")
+ARCHIVE_THRESHOLD_BYTES = 500 * 1024 * 1024
+ARCHIVE_OWNER = "CC-INFRA"
 STATE = "/opt/langston-memory/usage/ratchet-state.json"
 RUNLOG = "/opt/langston-memory/usage/size-watch.jsonl"
 SENDER = "Infra Claude"
@@ -106,6 +116,23 @@ def measure():
             files.append({"path": path, "why": why, "bytes": None, "error": str(e)})
             missing.append(path)
     return files, total, missing
+
+
+def measure_archive():
+    """The writer's archive, measured. ABSENT is its own state (the writer has not overwritten anything yet), never
+    "0 B and fine" - and an unreadable file is counted and named rather than silently skipped."""
+    if not os.path.isdir(ARCHIVE_DIR):
+        return {"path": ARCHIVE_DIR, "present": False, "bytes": 0, "files": 0, "unreadable": []}
+    total, count, unreadable = 0, 0, []
+    for root, _dirs, names in os.walk(ARCHIVE_DIR):
+        for name in names:
+            p = os.path.join(root, name)
+            try:
+                total += os.lstat(p).st_size
+                count += 1
+            except OSError:
+                unreadable.append(p)
+    return {"path": ARCHIVE_DIR, "present": True, "bytes": total, "files": count, "unreadable": unreadable}
 
 
 def _own(path):
@@ -264,10 +291,15 @@ def heartbeat(st, status):
     return "; ".join(notes)
 
 
-def run(quiet=False, injected_total=None):
+def run(quiet=False, injected_total=None, injected_archive_bytes=None):
     files, total, missing = measure()
     if injected_total is not None:      # --self-test only; never reachable in a real run
         total = injected_total
+    archive = measure_archive()
+    if injected_archive_bytes is not None:   # --self-test only
+        archive = dict(archive, bytes=injected_archive_bytes, present=True, injected=True)
+    archive["threshold_bytes"] = ARCHIVE_THRESHOLD_BYTES
+    archive["over"] = archive["bytes"] > ARCHIVE_THRESHOLD_BYTES
     st = load_state()
 
     if st is None:
@@ -342,6 +374,16 @@ def run(quiet=False, injected_total=None):
                  "compliant, but anything that happened in that window went unwatched.")
 
     delivery = post(prefix + alarm, quiet) if alarm else "no alarm"
+    archive_delivery = "no alarm"
+    if archive["over"] or archive["unreadable"]:
+        archive_delivery = post(prefix + (
+            "⚠️ LANGSTON MEMORY ARCHIVE (" + ARCHIVE_DIR + ") - " +
+            ("OVER its watch threshold: " + str(archive["bytes"]) + " B across " + str(archive["files"]) +
+             " files, threshold " + str(ARCHIVE_THRESHOLD_BYTES) + " B. " if archive["over"] else "") +
+            (str(len(archive["unreadable"])) + " file(s) could not be measured. " if archive["unreadable"] else "") +
+            "It is unbounded BY DESIGN - the only copy of every MEMORY.md the writer replaced - so this is a disk "
+            "check, NOT an order to prune. Owner " + ARCHIVE_OWNER + ": read its index.jsonl for what is writing so "
+            "often before deciding anything."), quiet)
 
     # ⛔ A SYNTHETIC ROW MUST SAY SO, IN THE ROW. The first fire drill wrote a row that
     #    was indistinguishable from a real breach — same status, same shape, a plausible
@@ -369,8 +411,9 @@ def run(quiet=False, injected_total=None):
            "measures": ("SUM of the auto-loaded set vs the recorded ceiling. It observes and "
                         "alarms; it NEVER lowers the ceiling itself — that is a deliberate act "
                         "in the batch that lands the trim (#1007)."),
-           "heartbeat": hb,
-           "population": "the three files in WATCHED, all of them, every run"}
+           "heartbeat": hb, "archive": archive, "archive_delivery": archive_delivery,
+           "population": "the three files in WATCHED, all of them, every run; plus the writer's archive, "
+                         "measured separately and never added to the sum"}
     try:
         os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
         with open(RUNLOG, "a", encoding="utf-8") as fh:
@@ -387,8 +430,8 @@ def run(quiet=False, injected_total=None):
 
     print(json.dumps({k: row[k] for k in ("ts", "drill", "status", "total_bytes", "ceiling_bytes",
                                           "over_by", "hours_since_previous_run", "alarm", "heartbeat",
-                                          "delivery")}, indent=2, ensure_ascii=False))
-    return 1 if status in ("BREACH", "MISSING-FILE") else 0
+                                          "delivery", "archive")}, indent=2, ensure_ascii=False))
+    return 1 if (status in ("BREACH", "MISSING-FILE") or archive["over"] or archive["unreadable"]) else 0
 
 
 # ⛔ THE ACTOR IS AN ALLOWLIST, NOT FREE TEXT. The old `SUDO_USER or "unknown"` was the
@@ -471,6 +514,15 @@ def self_test():
     rc2 = run(quiet=True, injected_total=ceiling - 1)
     ok_under = rc2 == 0
     print("  %s  a value under the ceiling did NOT alarm" % ("PASS" if ok_under else "FAIL"))
+    # the archive watch: its own positive control and its own negative control, with the load set UNDER the ceiling
+    print("positive control: archive at threshold+1 B, load set under the ceiling")
+    rc3 = run(quiet=True, injected_total=ceiling - 1, injected_archive_bytes=ARCHIVE_THRESHOLD_BYTES + 1)
+    ok_arch = rc3 == 1
+    print("  %s  an archive over its threshold alarms on its own" % ("PASS" if ok_arch else "FAIL"))
+    rc4 = run(quiet=True, injected_total=ceiling - 1, injected_archive_bytes=ARCHIVE_THRESHOLD_BYTES)
+    ok_arch_under = rc4 == 0
+    print("  %s  an archive AT its threshold does not" % ("PASS" if ok_arch_under else "FAIL"))
+    ok_under = ok_under and ok_arch and ok_arch_under
     print("⚠️  both rows are written to the run log with a synthetic total — they are "
           "labelled by their impossible-in-practice shape, and neither touched the state file.")
     return 0 if (ok_breach and ok_under) else 1
@@ -505,7 +557,9 @@ def main():
         st = load_state()
         files, total, missing = measure()
         print(json.dumps({"state": st, "measured_total": total, "missing": missing,
-                          "files": files}, indent=2, ensure_ascii=False))
+                          "files": files, "archive": dict(measure_archive(), threshold_bytes=ARCHIVE_THRESHOLD_BYTES,
+                                                          owner=ARCHIVE_OWNER, counted_in_total=False)},
+                         indent=2, ensure_ascii=False))
         return 0
     if "--self-test" in sys.argv:
         return self_test()
