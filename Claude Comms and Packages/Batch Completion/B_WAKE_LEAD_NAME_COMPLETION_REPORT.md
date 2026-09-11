@@ -1,6 +1,6 @@
 # B-WAKE-LEAD-NAME — COMPLETION REPORT
 
-**⏳ CLOSING 2026-09-11 — Steps 1-10 done; this report is with Langston; the batch closes on Kyle's acknowledgement.**
+**⏳ CLOSING 2026-09-11 — Langston CONFIRMED this report at 17:38Z (read both pinned-raw and via `dt-review show`, identical). The batch closes on Kyle's acknowledgement.**
 change-class `non_architecture` · owner Infra Claude · `#1040` · plan row 4.51.
 
 ## ⛔ OPEN AT CLOSE — stated first
@@ -28,7 +28,7 @@ change-class `non_architecture` · owner Infra Claude · `#1040` · plan row 4.5
 | T1 | the batch `PRE_AUDIT` | ✅ | `B_WAKE_LEAD_NAME_PRE_AUDIT.md` §1-§8 |
 | T1 | the `COMPLETION_REPORT` | ✅ | this file |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | `CC_INFRA_SESSION_TASK_LIST.md` **created** — it did not exist (the same listing showed `CC_A_SESSION_TASK_LIST.md`); the other three are not mine |
-| T1 | Langston's `MEMORY.md` | ✅ drafted, lands on his pick | his loaded set is in BREACH of its only-decreasing ceiling (149,000 B against 143,856 B at 17:20Z), so a ~500 B entry cannot be appended alone. It is handed to him with the ask to name a closed block to trim by at least as much — reshaping his own file is his (r7 C-1(i)) |
+| T1 | Langston's `MEMORY.md` | ✅ | **landed by Langston himself, 2026-09-11 17:38Z.** He trimmed `B-ARM-REMOVAL` from 3,219 B to a 780 B pointer, after checking every reviewer-side line was already in his ledger, and appended the entry plus a `#1043` bullet. File 69,840 → 68,475 B; loaded set **147,635 against the 143,856 ceiling, still BREACH by 3,779 B** — pre-existing, his prune to schedule. The trim also corrected a stale citation: `#594` → `#648` |
 | T2 | `SYSTEM_MANUAL.md` | N/A | nothing under `server/`, `client/` or `shared/`; a laptop comms filter is outside the trading-system architecture the manual documents |
 | T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | content update beside `B-WAKE-QUIET`'s; the §10.5 owner-routing sentence corrected (superseded twice) |
 | T2 | `RUNNING_ISSUES.md` | ✅ | `#1040` FIXED · `#1004` amended (two-layer hand-install) · `#1043` opened and homed |
@@ -44,7 +44,7 @@ change-class `non_architecture` · owner Infra Claude · `#1040` · plan row 4.5
 | T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | no stable rule changed |
 | T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | no `CLAUDE.md` rule change |
 | T2 | `DELETED_COMPONENTS_LOG.md` | N/A | no component removed — the replaced tag code sat inside the edited branch |
-| T2 | `MISTAKE_PATTERNS.md` | N/A | no `MISTAKE:` trailer on this batch's commits |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | **the pattern this batch surfaced is `#1043`**: a 200 serving the wrong blob to a read model that validates nothing, one rung out from `B-CANONICAL-BRIDGE-CHURN`'s 404-read-as-zero. It is folded into `B-READ-MODEL-BLOB-VERIFY` (row 4.51a), where the mechanism gets proven (§9.4 disposition 1, Langston Step 11). ⚠️ *Corrected in place: this row first read "no `MISTAKE:` trailer on this batch's commits". That is the mechanism, not the criterion.* |
 | T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | no exception granted |
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | ✅ | step 3: an opening name wakes despite another owner's marker, and the tag; step 4 routing sentence; the stale "Infra onboarding deferred" line corrected |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | board columns and fields unchanged |

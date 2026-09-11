@@ -8520,5 +8520,7 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 > `HOME: B-READ-MODEL-BLOB-VERIFY, owner Infra Claude, placed in PHASE_19_PLAN.md at 4.51a, after 4.51 (B-WAKE-LEAD-NAME)` — blob-sha verification in `dt-review show`, plus the matching amendment to Langston's read-model text.
 
+**THE PATTERN (Langston, Step 11):** `B-CANONICAL-BRIDGE-CHURN`'s 404-read-as-zero, one rung out — an HTTP 200 serving the wrong blob to a read model that validates nothing. Its `MISTAKE_PATTERNS` entry lands with `B-READ-MODEL-BLOB-VERIFY`, where the mechanism gets proven (§9.4 disposition 1).
+
 ⇔ `#1040` (the batch under review when it was found) · `LANGSTON_ARCHITECTURE.md` §6 (the read model).
 
