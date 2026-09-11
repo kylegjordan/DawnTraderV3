@@ -91,5 +91,12 @@ Its fix sentence says *derive the set from **what the deploy executes***. Taken 
 ⛔⛔ **OPERATIONAL, AND TRUE RIGHT NOW: the staging tree is dirty, so `dt-deploy` refuses the next deploy (`dt-deploy.sh:194-196`, exit 3).** Crew warned on Discord with the clear command **and** an explicit instruction not to go hunting for what they broke. **That manual clear is the loop `#402` exists to end, not a fix.**
 
 ## 9. GOVERNANCE FILES CHANGED
+
+| tier | document | verdict | one line |
+|---|---|---|---|
+| T1 | the four session task lists | ✅ mine / N/A ×3 | `CC_A_SESSION_TASK_LIST.md` updated in `8885025ec`; the other three are not mine to touch |
+
+*Row added 2026-09-11 — the governance checker's new ledger-row check (`B-TASK-LIST-SLOT`) correctly found it missing: the list below named the task list in a sentence, which is exactly the shape the check exists to reject. The list itself was updated at close; only the ledger row was absent.*
+
 **Batch Catalog · Phase History · Phase 19 Plan · System Impact Map · Running Issues · Changes and Fixes · Mistake Patterns · this batch's Scope, Pre-Implementation Audit and Implementation Plan, and Change List · this Completion Report · the CC-A session task list · the shared memory file and my own.**
 **Judged not applicable, stated rather than skipped:** System Manual · Post-Audit Roadmap · Adjustment Framework · Authority Baseline · Storage Policy · Multi-Asset VTS Plan · Asset Class Onboarding · Build Method Playbook · Langston Architecture · CLAUDE.md / CONDUCT.md · the rule-history archive · Deleted Components Log · Governance Exceptions · Delivery Board Protocol.

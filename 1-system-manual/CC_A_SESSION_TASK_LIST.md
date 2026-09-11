@@ -1,5 +1,7 @@
 # CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-11
 
+> 📁 **Lives in `1-system-manual/` since 2026-09-11** (moved from `Scope Files/` — `B-TASK-LIST-SLOT` P3; the convention is written in `workflow-10-governance`'s Tier-1 task-list row).
+
 > ⛔⛔ **KYLE'S STANDING RULE, 2026-09-05: EVERY SESSION KEEPS ITS OWN TASK LIST, AND IT IS UPDATED IN THREE PLACES OR IT IS NOT UPDATED.**
 > **WHAT IT HOLDS:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — **in the order they will be worked.**
 > **WHEN IT IS UPDATED:** (1) **every time a batch closes**, and (2) **every time a new batch, sub-batch, hotfix or investigation is decided and slotted.**

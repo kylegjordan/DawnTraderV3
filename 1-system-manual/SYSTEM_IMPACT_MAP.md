@@ -1041,6 +1041,19 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 
 ---
 
+### Session Task Lists (`1-system-manual/CC_<X>_SESSION_TASK_LIST.md`) — added B-TASK-LIST-SLOT 2026-09-11
+
+> ⚠️ **NO SIM ENTRY EXISTED FOR THESE BEFORE — flagged as a gap (pre-audit §6), not merely added.** They are cross-session instruction artefacts in the same family as the per-session memory files above: Kyle reads them to see which session holds which work, and each session reads its own to find where it left off across compactions.
+
+| aspect | what is true |
+|---|---|
+| **what** | one plain-language list per session: **`OPEN AND STALLED` first** (batches opened and not closed, the step each stalled at, what it waits on), then the queue in working order. **The phase plan is the authority; a list that disagrees with it is stale.** |
+| **writers** | each session writes **only its own** list — at every batch close and whenever an item is slotted (`workflow-10-governance` Tier-1 row). Touching another session's list needs a reason. |
+| **readers** | Kyle; the owning session at start and after compaction. **No code reads them** (census 2026-09-11: zero code readers at the ref). |
+| **checked by** | the governance checker's `gov-ledgerrow` alert (`scripts/governance-checker/`, `LEDGER_ROWS.task_lists`) — it does NOT read the lists; it reads each **completion report** for the Tier-1 ledger row saying the list was updated. Graded behind the completion-report sentinel, every class, reports first added after `2026-09-05T05:45Z`. |
+| **location** | `1-system-manual/` (chosen 2026-09-11 over `Scope Files/`, which `CLAUDE.md` §4 scopes to scopes and pre-audits). State 2026-09-11: `CC_A` moved here; **`CC_C` was created by CC-C itself on 2026-09-11 (`ca842c27b`) in `Scope Files/`; `CC_B` still lives at `CLAUDE_NEW_PHASE_19_TASK_LIST.md`; `CC_INFRA` is in `Scope Files/` — each owner moves its own.** |
+| **known gaps** | **slot-time placement is NOT checked** — an item named in one destination and missing from the others raises nothing (plan row 4.8 `B-SLOT-PLACEMENT-CHECK`); the checker lags by up to 30 minutes; the row check matches free-form markdown and can misjudge a shape no seeded case anticipated. |
+
 ## Layer 10: Frontend & Communication
 
 ### 10.1 WebSocket Broadcast Layer
