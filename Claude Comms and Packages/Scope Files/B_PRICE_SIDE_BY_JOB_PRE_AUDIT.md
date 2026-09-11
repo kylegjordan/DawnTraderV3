@@ -624,7 +624,7 @@ He re-derived the code facts himself at `9ceaf73e1`; board card Review = Approve
 
 **The code, read at the ref:**
 - The 15 s gate is xStock-only. `asset_classes/xstock_spot/active-dispatch.ts:181-182` compares `active_fill_max_age_ms` with `getLatestTickAgeMs` (`:74`), which is `NOW() - MAX(captured_at)` on the `xstock_spot_ticker_snap` archive table. It never reads the live-pricing adapter, so an adapter re-serve cannot reach it.
-- The 14.3 / 29.3 / 44.3 / 59.3 s sawtooth is the crypto adapter's rate-limited re-serve (`B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md` §3, n=975).
+- The 14.3 / 29.3 / 44.3 / 59.3 s sawtooth is the crypto adapter's rate-limited re-serve (`B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md` §3, n=975).
 - Crypto entries gate freshness on the order book's age (`fill_depth_gate.warmth_max_age_ms`, 5,000 ms for crypto; `execution/depth-source.ts:154`), not on the adapter quote's age.
 
 **The query:** `scripts/analysis/b_price_side_p7f_entry_age_rung.sql`, run on staging 2026-09-11.

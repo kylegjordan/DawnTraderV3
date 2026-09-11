@@ -1528,7 +1528,7 @@ await storage.closeTrade(targetTrade.id, exitPrice, exitFee, exitSlippage);
 
 ---
 
-### #951 OPEN 2026-08-30 (CC-C, surfaced by an independent fresh reader on the machinery audit; code re-derived at the ref, rate NOT re-derived) — ⛔⛔ A RATE-LIMITER BRANCH RETURNS A **CACHED** PRICE AND THE CALLER STAMPS IT `observedAt: Date.now()` AS "A GENUINE VENUE READ" — AND IT PASSES THE ACTIONABILITY GATE
+### #951 CLOSED 2026-09-11 (`B-PRICE-AGE-TRUTH`; Langston CONFIRMED at Step 11, `b87fe468a`) — opened 2026-08-30 (CC-C, surfaced by an independent fresh reader on the machinery audit; code re-derived at the ref, rate NOT re-derived) — ⛔⛔ A RATE-LIMITER BRANCH RETURNS A **CACHED** PRICE AND THE CALLER STAMPS IT `observedAt: Date.now()` AS "A GENUINE VENUE READ" — AND IT PASSES THE ACTIONABILITY GATE
 
 **SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-PRICE-AGE-TRUTH`, placed in `PHASE_19_PLAN` at row **3b.f**, WITH the other price-provenance prerequisites and BEFORE `F-G-2`, because F-G-2's before/after arms both read a price whose age this branch can fabricate.**
 
@@ -6705,7 +6705,7 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ### #951 AMENDMENT — ✅ CLOSING 2026-09-11 (CC-C): THE WINDOW ENDED AT THE OBJ-7 DEPLOY WITH THE ARM EMPTY; CONVERTED ON LANGSTON'S APPROVAL
 
-The touched arm stayed empty through the terminal read (82 closes, exhaustive producer census). OBJ-7 (`b597f1bf2`, `2026-09-11T20:09:47Z`) changes the exit leg's REST budget, so the second window ended there rather than at its 2026-09-16 fire. PASS 2 is re-scoped onto the adapter's runtime re-serve (exercised; an honest carry measured against a control); PASS 1 and PASS 3 are discharged by construction; the `closed_trades` leg is retired with a stored-row tripwire homed at `3n` row `8g-bis`. Langston approved at 2026-09-11 20:33Z; gate `0db25f1d` resolved with `337e2f901`. **Record:** `Batch Completion/B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md` §0 and §9b. **The entry's heading flips to CLOSED at Langston's Step-11 confirmation.**
+The touched arm stayed empty through the terminal read (82 closes, exhaustive producer census). OBJ-7 (`b597f1bf2`, `2026-09-11T20:09:47Z`) changes the exit leg's REST budget, so the second window ended there rather than at its 2026-09-16 fire. PASS 2 is re-scoped onto the adapter's runtime re-serve (exercised; an honest carry measured against a control); PASS 1 and PASS 3 are discharged by construction; the `closed_trades` leg is retired with a stored-row tripwire homed at `3n` row `8g-bis`. Langston approved at 2026-09-11 20:33Z; gate `0db25f1d` resolved with `337e2f901`. **Record:** `Batch Completion/B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md` §0 and §9b. **Flipped to CLOSED 2026-09-11: Langston confirmed at Step 11, with one condition (the references to the report's former filename swept first).**
 
 ### #977 AMENDMENT 1 — ⛔ I TRACED MY OWN CLAIM AND THE SEVERITY ARGUMENT WAS TOO STRONG. THE STALENESS IS REAL; ITS CONSEQUENCE IS ON **SELECTION**, NOT ON CRYPTO **EXITS**.
 

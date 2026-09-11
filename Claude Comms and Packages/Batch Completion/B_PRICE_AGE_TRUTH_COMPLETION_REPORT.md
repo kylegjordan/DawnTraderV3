@@ -1,9 +1,9 @@
 # B-PRICE-AGE-TRUTH — COMPLETION REPORT (converted from the progress report, 2026-09-11)
 
-# ✅ CLOSING — THE WINDOW ENDED AT THE OBJ-7 DEPLOY WITH THE ARM EMPTY; CONVERTED ON LANGSTON'S APPROVAL; STEP 11 AWAITS HIS CONFIRMATION
+# ✅ CLOSED 2026-09-11 — THE WINDOW ENDED AT THE OBJ-7 DEPLOY WITH THE ARM EMPTY; CONVERTED ON LANGSTON'S APPROVAL; LANGSTON CONFIRMED AT STEP 11
 
 **Batch:** `B-PRICE-AGE-TRUTH` · **Issue:** `#951` · **Owner:** CC-C · **Phase 19, plan row 3b.f**
-**change-class:** architecture · **Card:** `Observation`, to `Complete` at Langston's Step-11 confirmation
+**change-class:** architecture · **Card:** `Complete` (Langston confirmed at Step 11, 2026-09-11, at `b87fe468a`, with one condition: the references to this report's former filename swept before the flip)
 **Deployed:** `2af2e0bacc1430a6452559b83ba7d3be15adc7be` @ **2026-08-31T11:30:47Z** (`dt-deploy --by CC-C`, engine resumed, identity asserted, migration 715 ms)
 
 > **Why a PROGRESS report and not a completion report:** the work shipped and is verified in the runtime, but **the confirming artifact — the new producer token on a closed trade — requires a close to occur, and there have been ZERO post-deploy closes against 3 open positions.** Per `workflow-10`, a batch whose evidence needs a window gets this document, and it is **CONVERTED** into the completion report when the data is in **AND a decision has been taken on it** — not when the window merely elapses.

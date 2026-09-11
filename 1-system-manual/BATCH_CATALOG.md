@@ -829,7 +829,7 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 **Governance:** `SYSTEM_IMPACT_MAP` §7.1 + §2.1.2 · `SYSTEM_MANUAL` §7 + P19-B7.2c · `PHASE_19_PLAN` row 3c · `PHASE_HISTORY` · `RUNNING_ISSUES` `#914` (PRICE half retired forward-only), `#943` (seam owed) · the scratch master order row 1 → observation · `MEMORY_CC_C.md` + Langston's `MEMORY.md`.
 
-## B-PRICE-AGE-TRUTH (CC-C, ✅ **CLOSING 2026-09-11 — completion report at Step 11**, deployed 2026-08-31) — Phase 19, plan row 3b.f · `#951`
+## B-PRICE-AGE-TRUTH (CC-C, ✅ **CLOSED 2026-09-11 — Langston confirmed at Step 11**, deployed 2026-08-31) — Phase 19, plan row 3b.f · `#951`
 
 **CLOSE (2026-09-11).** The window ended at the `3n` OBJ-7 deploy (`2026-09-11T20:09:47Z`) with the touched arm empty at 82 closes. PASS 2 was re-scoped onto the adapter's runtime re-serve (exercised, with an honest carry measured against a control), PASS 1 and PASS 3 were discharged by construction, and the `closed_trades` leg was retired with a stored-row tripwire at `3n` row `8g-bis`. Langston approved the conversion on 2026-09-11. OBJ-2 was carved out (now `3n` D7) and OBJ-3 withdrawn (`#976`). Record: `Batch Completion/B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md`.
 
@@ -843,7 +843,7 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 ⛔⛔ **THE BOUNDARY, VERBATIM (Langston), because this record will be read later: *“crypto exits are fed, xStock exits are unknown.”*** xStock takes `observedAt` from `aee:1244` (`_eqTick.tsMs`) — **untouched by this batch and unmeasured**; the window was a Sunday with xStocks closed. WS coverage of open positions is **conditional**: `i8cResubscribeAllOpenPositions()` is **un-awaited** with a swallowing `catch` (`:2743`) ⇒ **30 s worst-case repair window.**
 
-⛔ **WHY IT IS OPEN: 0 post-deploy closes against 3 open positions**, so the new token has not reached `closed_trades`. **Pre-registered criterion + self-firing alert in `B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md`.**
+⛔ **WHY IT IS OPEN: 0 post-deploy closes against 3 open positions**, so the new token has not reached `closed_trades`. **Pre-registered criterion + self-firing alert in `B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md`.**
 
 **THREE READER ROUNDS, EACH BROKE THE PREVIOUS ROUND'S FIX** — a regression I introduced (null test moved from the price to the row); a falsifier that sliced a type declaration and could not fail; four evasions of the replacement fence; and finally **fences that asserted ONE HOP SHORT of the engine** — `:538` (`observedAt: quote.observedAt ?? Date.now()`, the sole occurrence of `quote.observedAt` in the repo) was unfenced, and a one-token edit re-laundered everything with **2,851 tests green**. Fixed by a fence that spans the cache write.
 ⚠️ **PROCESS RECORD: FOUR `wrong-object` instances, ALL IN MY CORRECTIONS RATHER THAN THE ORIGINAL CODE** — a guard justified by naming a consumer that cannot receive the value (Langston); a test anchor chosen from the raw file while the test reads a comment-stripped copy; and TWICE explaining a correct measurement with an inferred mechanism that inverted which part of the system it implicated. **The number was never wrong; the story about the number was.**

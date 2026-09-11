@@ -3959,7 +3959,7 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 ⛔ **A single median across those two cohorts is a MIXTURE AVERAGE and was refuted as a headline.**
 
 **RISK REGISTERED, NOT CLOSED:** ⚠️ **xStock is UNMEASURED** — it takes `active-execution-engine.ts:1244`, a different arm this batch does not touch; the window was a Sunday with xStocks closed. **Langston's boundary, verbatim: *"crypto exits are fed, xStock exits are unknown."*** ⚠️ WS coverage of open positions is **conditional** — `i8cResubscribeAllOpenPositions()` is un-awaited with a swallowing `catch` (`kraken-websocket-adapter.ts:2743`) ⇒ **30 s worst-case repair window.**
-⛔ **STATUS: OPEN on a pre-registered observation window** (alert `cecd4a47`, fires 2026-09-07) — **0 post-deploy closes against 3 open positions**, so the token has not yet reached `closed_trades`. Record: `B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md`.
+⛔ **STATUS: OPEN on a pre-registered observation window** (alert `cecd4a47`, fires 2026-09-07) — **0 post-deploy closes against 3 open positions**, so the token has not yet reached `closed_trades`. Record: `B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md`.
 ★ **RELATED FINDING RAISED: `#977`** — the 2 s `openTrade` and 30 s `fx5Snapshot` refresh lanes are built, their loop runs, and **nothing subscribes** (`open=0 fx5=0 weight=0/10`); **we are nowhere near Kraken's limits** (1 token-exhaustion in 58,236 limiter decisions; **zero** venue-side rejections on a proven instrument).
 
 ## FIX-2026-09-02-A — B-ALERT-ACTOR-ALLOWLIST (`#987`): the alert owner record accepted any string, and the rules file taught the one that identified nobody

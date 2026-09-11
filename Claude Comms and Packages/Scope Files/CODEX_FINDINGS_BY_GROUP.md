@@ -115,7 +115,7 @@ Every item below was re-checked against its issue entry and plan row on 2026-09-
   - When the rate limiter blocks a fresh request, a cached price is returned and stamped as a fresh venue read.
   - The fix that makes the true age recoverable shipped on 31 August. It is in observation, waiting for a close that went through the changed path. On REST-only crypto symbols, the re-served prices were a median 29 seconds old, and up to 59.
   - The follow-up, which stops such a price triggering an action, is gated on the two-cache question: the original design specified one rate-governed price cache, we have two, and nothing records why.
-  - *(ours: plan rows 3b.f `#951`, 3b.f-b, 3b.l `#971`; `Batch Completion/B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md`)*
+  - *(ours: plan rows 3b.f `#951`, 3b.f-b, 3b.l `#971`; `Batch Completion/B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md`)*
 - **Refresh cadence.**
   - The price cache has a 2-second refresh lane for open positions. The design specified the line that enrols a position in it, but that line was never written, so the lane is empty. This is a defect; its cost is not measured.
   - Separately, for symbols only VTS subscribed to, the active lane reads prices refreshed on VTS's 60-second schedule. That is how it was built, but nobody decided it, so it is Kyle's decision.

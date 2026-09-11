@@ -74,7 +74,7 @@
 
 ★ **LI/USD `ab16f068` = the first live-exposure case of the OBJ-9 staleness class (not OBJ-6 hollow). Not a defect — `budget_k` sizes the blind window by design; the live form of `#563`. All five exit-freshness alerts stay ACTIVE under the `#951` rule — no ack, no resolve.**
 
-⏳ **`B-PRICE-AGE-TRUTH` (`#951`) EXTENDS — record `B_PRICE_AGE_TRUTH_PROGRESS_REPORT.md` §9. Traps: JOIN observedAtMs WITH producer; ENUMERATE producers, never `LIKE`.**
+⏳ **`B-PRICE-AGE-TRUTH` (`#951`) EXTENDS — record `B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md` §9. Traps: JOIN observedAtMs WITH producer; ENUMERATE producers, never `LIKE`.**
 
 ⛔⛔ **THE MACHINERY AUDIT IS THE LIVE WORK — `1-system-manual/EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md`, NOW §0-§10. READ IT; DO NOT RE-DERIVE FROM HERE.** §8 provenance · §9 the second independent audit · **§10 = THE CORRECT DESIGN, DRAFT 1.**
 
@@ -102,7 +102,7 @@
 I established a MECHANISM then hung THREE damage figures on it from instruments I never validated. **All three WITHDRAWN; Langston reproduced none.** ★ **The control sat one `GROUP BY` away: maker exits never read the book, so an honest instrument must be SILENT on them.** ⇒ **Applies to a POSITIVE result as hard as to a zero.**
 
 ## STANDING SESSION ITEMS (not dated state — the dated state is the block above)
-**⚠️ AFTER ANY DISPATCH, READ THE INBOX ON THE NEXT WAKE OF ANY KIND — the watcher missed two Langston replies on 2026-09-02 (12:20, 13:10).** MDT `b1f58a01` stays ACTIVE to 09-07 (Langston ratified 19:00Z; record in `B_PRICE_AGE_TRUTH_PROGRESS_REPORT` §4).
+**⚠️ AFTER ANY DISPATCH, READ THE INBOX ON THE NEXT WAKE OF ANY KIND — the watcher missed two Langston replies on 2026-09-02 (12:20, 13:10).** MDT `b1f58a01` stays ACTIVE to 09-07 (Langston ratified 19:00Z; record in `B_PRICE_AGE_TRUTH_COMPLETION_REPORT` §4).
 **⚠️ #1 ON WAKE/COMPACT: RE-ARM THE WAKE WATCHER** — ALIAS **CC-C**, display **“ANALYST Claude”**. **Compaction KILLS it.** Arm via Monitor per shared MEMORY 4.5 (`persistent: true`, NEVER Bash run_in_background). **Judge liveness by whether WAKE events arrive; doubled ⇒ TaskStop one.** Then sweep `/var/log/cc-discord-inbox.jsonl`.
 
 ## RECENT HISTORY — CLOSED (the repo completion reports are authoritative; do NOT re-narrate here)
