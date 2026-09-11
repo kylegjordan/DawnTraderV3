@@ -1,3 +1,16 @@
+-- ⛔⛔ SUPERSEDED FOR xSTOCK — READ BEFORE TRUSTING ANYTHING BELOW (B-XSTOCK-FEE-CONTRACT, #1010, 2026-09-11).
+-- The two xstock_spot rows this file seeds (0.008 / 0.004) are WRONG and are corrected by
+-- 2026-09-11-b-xstock-fee-contract.sql to taker 0.0010 / maker -0.0002 (a rebate) — Kraken's Pro xStocks
+-- schedule, account-confirmed 2026-09-06 (1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md §2).
+-- Three premises in the header below were measured false:
+--   1. "the cross-platform tier is ACCOUNT-WIDE, so crypto_spot == xstock_spot is structurally correct" —
+--      the rung is a property of (account, PRODUCT); xStocks has its own two-rung schedule.
+--   2. "over-estimating fees only rejects marginal trades" — 8x the taker fee and an inverted maker sign
+--      distorted admission, mode choice and RTB ranking, not just marginal trades.
+--   3. maker "has ZERO live consumers today" — false since P19-B7.2 (the maker/taker decision and maker-leg booking).
+-- This file is left as it ran (it is recorded in _migrations by name and never re-runs); the correction is
+-- the later migration, so a fresh database applies this seed and then the fix, and ends correct.
+--
 -- B-4.5 (2026-06-11) — DB-governed fee model, Kraken cross-platform Tier 1.
 -- Foundation: Cross-Session Briefs/KRAKEN_TIERED_FEE_CHANGE_ANALYSIS_2026-06-08.md
 -- (tier table verified from Kyle's PDF; account standing CONFIRMED Tier 1 —

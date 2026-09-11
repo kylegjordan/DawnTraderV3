@@ -8,10 +8,7 @@ export interface OrderBookSnapshot {
 }
 // B-4.5: fees are DB-governed per asset class (module_constants 'fee_model',
 // warmed at boot, fail-hard). Static DEFAULT_TAKER/MAKER_FEE retired.
-// B-XSTOCK-FEE-CONTRACT (#1010, Langston's binding condition OBJ-4): this file no longer
-// reads `fee_model` itself — the rates come through cost-model's single merge site, so a
-// per-product resolution change is a function body there, never a second call graph here.
-import { getFrictionForAssetClass } from '../core/math/cost-model.js';
+import { getCachedNumberRequired } from './module-constants-service.js';
 import type { AssetClass } from '../../shared/asset-classes.js';
 
 export interface SlippageModel {
@@ -30,16 +27,30 @@ export interface FeeModel {
   netAmount: number;
 }
 
-// B-XSTOCK-FEE-CONTRACT (rule 18): getConfig, modelTradeRealism, getAggregateStats,
-// updatePriceHistory, the priceHistory map, VOLATILITY_WINDOW and TradeRealism were deleted —
-// zero callers, and the only state they wrote (priceHistory) had no reader. Record:
-// DELETED_COMPONENTS_LOG.md. The two surviving methods serve the dormant pre-execution
-// validator, whose own removal is coordinated by #300(b) / #297.
+export interface TradeRealism {
+  slippage: SlippageModel;
+  fees: FeeModel;
+  netPnl: number;
+}
+
 class SlippageFeeModelingService {
+  // B-4.5: per-class DB-resolved fee (decimal). Throws on cold cache /
+  // missing row — boot warmup makes that a deploy-time failure.
+  private resolveFee(assetClass: AssetClass, constant: 'spot_taker_fee' | 'spot_maker_fee'): number {
+    return getCachedNumberRequired('fee_model', constant, {
+      exchange: '*', assetClass, strategy: '*', regime: '*',
+    });
+  }
+  
+  // Volatility estimation window
+  private priceHistory: Map<string, number[]> = new Map();
+  private readonly VOLATILITY_WINDOW = 20;
+
   /**
    * Model slippage based on order book depth and volatility
    */
   public modelSlippage(
+    symbol: string,
     side: 'buy' | 'sell',
     quantity: number,
     intendedPrice: number,
@@ -61,11 +72,11 @@ class SlippageFeeModelingService {
     }
 
     // 2. Micro-move component based on short-term volatility
-    const volatility = this.estimateVolatility(recentPrices);
+    const volatility = this.estimateVolatility(symbol, recentPrices);
     const microMoveComponent = this.generateMicroMove(volatility);
 
     // 3. Total slippage
-    const totalSlippage = side === 'buy'
+    const totalSlippage = side === 'buy' 
       ? priceImpact + microMoveComponent  // Buying costs more
       : -(priceImpact + microMoveComponent); // Selling gets less
 
@@ -91,7 +102,7 @@ class SlippageFeeModelingService {
     orderBook: OrderBookSnapshot
   ): number {
     const book = side === 'buy' ? orderBook.asks : orderBook.bids;
-
+    
     if (!book || book.length === 0) {
       return 0.0001; // Minimal impact if no book data
     }
@@ -116,7 +127,7 @@ class SlippageFeeModelingService {
 
     const avgFillPrice = totalCost / filledQty;
     const impact = (avgFillPrice - intendedPrice) / intendedPrice;
-
+    
     return Math.abs(impact);
   }
 
@@ -126,7 +137,7 @@ class SlippageFeeModelingService {
   private estimatePriceImpactWithoutBook(quantity: number, price: number): number {
     // Simple model: impact scales with order value
     const orderValue = quantity * price;
-
+    
     if (orderValue < 1000) return 0.0001; // $1K: 1 bp
     if (orderValue < 10000) return 0.0002; // $10K: 2 bps
     if (orderValue < 50000) return 0.0005; // $50K: 5 bps
@@ -136,7 +147,7 @@ class SlippageFeeModelingService {
   /**
    * Estimate short-term volatility
    */
-  private estimateVolatility(recentPrices?: number[]): number {
+  private estimateVolatility(symbol: string, recentPrices?: number[]): number {
     if (recentPrices && recentPrices.length >= 2) {
       // Calculate returns
       const returns = [];
@@ -144,7 +155,7 @@ class SlippageFeeModelingService {
         const ret = (recentPrices[i] - recentPrices[i - 1]) / recentPrices[i - 1];
         returns.push(ret);
       }
-
+      
       // Standard deviation of returns
       const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
       const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
@@ -163,24 +174,27 @@ class SlippageFeeModelingService {
     const u1 = Math.random();
     const u2 = Math.random();
     const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-
+    
     // Scale by volatility and limit to reasonable range
     const move = z * volatility;
     return Math.max(-0.002, Math.min(0.002, move)); // Cap at ±20 bps
   }
 
   /**
-   * Calculate fees for a trade. A maker fee may be NEGATIVE (a venue rebate), in which case
-   * totalFees is negative and netAmount exceeds grossAmount.
+   * Calculate fees for a trade
    */
   public calculateFees(
     grossAmount: number,
     isMaker: boolean,
     // B-4.5: REQUIRED — fees resolve per asset class (DB-governed, fail-hard).
-    assetClass: AssetClass
+    assetClass: AssetClass,
+    makerFeeRate?: number,
+    takerFeeRate?: number
   ): FeeModel {
-    const friction = getFrictionForAssetClass(assetClass);
-    const feeRate = isMaker ? friction.feeRateMaker : friction.feeRateTaker;
+    const makerFee = makerFeeRate ?? this.resolveFee(assetClass, 'spot_maker_fee');
+    const takerFee = takerFeeRate ?? this.resolveFee(assetClass, 'spot_taker_fee');
+    
+    const feeRate = isMaker ? makerFee : takerFee;
     const totalFees = grossAmount * feeRate;
     const netAmount = grossAmount - totalFees;
 
@@ -190,6 +204,123 @@ class SlippageFeeModelingService {
       takerFee: isMaker ? 0 : totalFees,
       totalFees,
       netAmount,
+    };
+  }
+
+  /**
+   * Model complete trade realism (slippage + fees)
+   */
+  public modelTradeRealism(
+    symbol: string,
+    side: 'buy' | 'sell',
+    quantity: number,
+    intendedPrice: number,
+    // B-4.5: REQUIRED — threaded by callers (resolveAssetClass on the symbol).
+    assetClass: AssetClass,
+    orderBook?: OrderBookSnapshot,
+    recentPrices?: number[],
+    isMaker: boolean = false
+  ): TradeRealism {
+    // Model slippage
+    const slippage = this.modelSlippage(
+      symbol,
+      side,
+      quantity,
+      intendedPrice,
+      orderBook,
+      recentPrices
+    );
+
+    // Calculate gross trade amount
+    const grossAmount = quantity * slippage.modeledFillPrice;
+
+    // Calculate fees
+    const fees = this.calculateFees(grossAmount, isMaker, assetClass);
+
+    // Calculate net P&L impact
+    const costBasis = quantity * intendedPrice;
+    const actualCost = side === 'buy' 
+      ? grossAmount + fees.totalFees
+      : grossAmount - fees.totalFees;
+    
+    const netPnl = side === 'buy'
+      ? costBasis - actualCost  // Buying: intended cost - actual cost
+      : actualCost - costBasis;  // Selling: actual proceeds - intended proceeds
+
+    return {
+      slippage,
+      fees,
+      netPnl,
+    };
+  }
+
+  /**
+   * Get aggregate statistics
+   */
+  public getAggregateStats(trades: TradeRealism[]): {
+    avgSlippageBps: number;
+    avgFeesPerTrade: number;
+    totalSlippageCost: number;
+    totalFees: number;
+    totalNetPnl: number;
+  } {
+    if (trades.length === 0) {
+      return {
+        avgSlippageBps: 0,
+        avgFeesPerTrade: 0,
+        totalSlippageCost: 0,
+        totalFees: 0,
+        totalNetPnl: 0,
+      };
+    }
+
+    const totalSlippageBps = trades.reduce((sum, t) => sum + Math.abs(t.slippage.slippageBps), 0);
+    const totalFees = trades.reduce((sum, t) => sum + t.fees.totalFees, 0);
+    const totalNetPnl = trades.reduce((sum, t) => sum + t.netPnl, 0);
+    
+    // Estimate slippage cost in dollars
+    const totalSlippageCost = trades.reduce((sum, t) => {
+      const slippageDollars = Math.abs(
+        t.slippage.modeledFillPrice - t.slippage.intendedPrice
+      ) * (t.fees.grossAmount / t.slippage.modeledFillPrice);
+      return sum + slippageDollars;
+    }, 0);
+
+    return {
+      avgSlippageBps: totalSlippageBps / trades.length,
+      avgFeesPerTrade: totalFees / trades.length,
+      totalSlippageCost,
+      totalFees,
+      totalNetPnl,
+    };
+  }
+
+  /**
+   * Update price history for volatility estimation
+   */
+  public updatePriceHistory(symbol: string, price: number): void {
+    if (!this.priceHistory.has(symbol)) {
+      this.priceHistory.set(symbol, []);
+    }
+
+    const history = this.priceHistory.get(symbol)!;
+    history.push(price);
+
+    // Keep only recent window
+    if (history.length > this.VOLATILITY_WINDOW) {
+      history.shift();
+    }
+  }
+
+  /**
+   * Get configuration
+   */
+  // B-4.5: config surface is per-class now (fees are DB-governed).
+  public getConfig(assetClass: AssetClass) {
+    return {
+      makerFee: this.resolveFee(assetClass, 'spot_maker_fee'),
+      takerFee: this.resolveFee(assetClass, 'spot_taker_fee'),
+      volatilityWindow: this.VOLATILITY_WINDOW,
     };
   }
 }

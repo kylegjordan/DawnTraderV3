@@ -23,25 +23,12 @@ import { describe, it, expect, beforeAll } from 'vitest';
 // B-4.5: getFrictionForAssetClass merges DB-governed fees (fail-hard on cold
 // cache). Seed the sync cache in-memory — same shape server boot's
 // prefetchModule('fee_model') produces — so this suite stays database-free.
-import { _seedModuleCacheForTests } from '../../services/module-constants-service.js';
-import type { ModuleConstant } from '../../../shared/schema.js';
-
-const _b45FeeRow = (assetClass: string, constantName: string, value: number) => ({
-  moduleName: 'fee_model', exchange: '*', assetClass, strategy: '*', regime: '*',
-  constantName, value,
-} as unknown as ModuleConstant);
-
-function seedFeeModel(): void {
-  _seedModuleCacheForTests('fee_model', [
-    _b45FeeRow('crypto_spot', 'spot_taker_fee', 0.008),
-    _b45FeeRow('crypto_spot', 'spot_maker_fee', 0.004),
-    _b45FeeRow('xstock_spot', 'spot_taker_fee', 0.008),
-    _b45FeeRow('xstock_spot', 'spot_maker_fee', 0.004),
-  ]);
-}
+// B-XSTOCK-FEE-CONTRACT (#1010): the fee values are a PROBE here (this suite locks the
+// required-assetClass signatures), so they come from the one fixture rather than a per-suite copy.
+import { seedFeeModelForTests } from '../helpers/fee-model-fixture.js';
 
 beforeAll(() => {
-  seedFeeModel();
+  seedFeeModelForTests();
 });
 import { calculatePairRegime, DEFAULT_REGIME_CONFIG } from '../../core/metrics/market-regime';
 import { getFrictionForAssetClass } from '../../core/math/cost-model';

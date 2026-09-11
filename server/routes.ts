@@ -66,7 +66,6 @@ import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter, isRestFallbackSource, isPriceVenueQuiet } from './services/live-pricing-adapter.js';
 import { krakenWebSocketAdapter } from './exchanges/kraken/kraken-websocket-adapter.js';
-import { slippageFeeModel } from './services/slippage-fee-model.js';
 import { c5FinancialDiagnostics } from './services/c5-financial-diagnostics.js';
 import { clearReadyToBuy } from './utils/clear-routines.js';
 import { verificationTestProtocol } from './services/verification-test-protocol.js';

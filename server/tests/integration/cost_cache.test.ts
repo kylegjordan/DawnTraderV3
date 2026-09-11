@@ -15,21 +15,13 @@ import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 // cache in-memory — same shape server boot's prefetchModule produces — so
 // this suite stays database-free (the DB-backed path is covered by CI
 // db:migrate + the staging boot assertion).
-import { _seedModuleCacheForTests } from '../../services/module-constants-service.js';
-import type { ModuleConstant } from '../../../shared/schema.js';
-const B45_TIER1_TAKER = 0.008; // Kraken cross-platform Tier 1 (decimal)
+// B-XSTOCK-FEE-CONTRACT (#1010): seeded from the one fixture, so the xStock rows carry the
+// xStock schedule rather than a copy of crypto's. Every fee this suite asserts is crypto.
+import { CRYPTO_SPOT_TAKER_FEE, seedFeeModelForTests } from '../helpers/fee-model-fixture.js';
+const B45_TIER1_TAKER = CRYPTO_SPOT_TAKER_FEE; // Kraken spot rung 1 (decimal) — crypto only
 
 beforeAll(() => {
-  const row = (assetClass: string, constantName: string, value: number) => ({
-    moduleName: 'fee_model', exchange: '*', assetClass, strategy: '*', regime: '*',
-    constantName, value,
-  } as unknown as ModuleConstant);
-  _seedModuleCacheForTests('fee_model', [
-    row('crypto_spot', 'spot_taker_fee', B45_TIER1_TAKER),
-    row('crypto_spot', 'spot_maker_fee', 0.004),
-    row('xstock_spot', 'spot_taker_fee', B45_TIER1_TAKER),
-    row('xstock_spot', 'spot_maker_fee', 0.004),
-  ]);
+  seedFeeModelForTests();
 });
 
 describe('Directive 11.3B: Cost Engine Consolidation', () => {

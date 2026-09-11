@@ -107,9 +107,11 @@ export function getFrictionForAssetClass(assetClass: AssetClass): AssetClassFric
  * B-4.5: resolve the DB-governed fee pair for an asset class from the warmed
  * module_constants cache. Throws on cold cache or missing row (the b72-warmup
  * boot assertion makes that a deploy-time failure, not a mid-scan one).
- * Maker is resolved + carried so the future Phase-19 maker-entry flip is a
- * value change, not a redesign — it has zero live consumers today (the
- * engine takes liquidity; the model prices taker both legs — pre-audit §0).
+ * B-XSTOCK-FEE-CONTRACT (#1010): THE ONLY reader of `fee_model` rows — every fee
+ * consumer, slippage-fee-model.calculateFees included, reaches the rates through
+ * getFrictionForAssetClass. BOTH rates are live: maker has fed the maker/taker
+ * decision and maker-leg booking since P19-B7.2, and it may be NEGATIVE — a venue
+ * rebate (xStock maker −0.02 %). Every consumer treats a fee as signed.
  */
 function resolveFeeRates(assetClass: AssetClass): { feeRateTaker: number; feeRateMaker: number } {
   const key = { exchange: '*', assetClass, strategy: '*', regime: '*' };

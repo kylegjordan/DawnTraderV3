@@ -70,7 +70,7 @@
 export interface RealizedPnl {
   /** (exit − entry) × qty, measured on ACTUAL fills. Fees NOT deducted. */
   grossPnl: number;
-  /** EXPLICIT costs only (fees). Structurally cannot be negative. */
+  /** EXPLICIT costs only (fees). SIGNED: a maker rebate books a negative fee, so this is negative when both legs are maker fills (B-XSTOCK-FEE-CONTRACT, #1010). */
   totalCost: number;
   /** grossPnl − totalCost. */
   netPnl: number;

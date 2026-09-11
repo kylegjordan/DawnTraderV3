@@ -198,3 +198,4 @@
 2026-09-02-fg2-obj5c-vts-epoch-bump.sql
 2026-09-03-b-xstock-feed-sanity.sql
 2026-09-11-b-ohlc-frame-guard.sql
+2026-09-11-b-xstock-fee-contract.sql

@@ -68,6 +68,8 @@ import { evaluateAmrGates } from '../../core/governance/amr-gates.js';
 import { setCostMetrics, getCostMetrics } from '../../core/cache/cost-cache.js';
 import { _resetAmrInputHealthForTests } from '../../services/amr-input-health.js';
 import { getCachedCostMetrics } from '../../core/math/cost-model.js';
+// B-XSTOCK-FEE-CONTRACT (#1010): fee_model rows are a PROBE here — seeded from the one fixture.
+import { XSTOCK_SPOT_TAKER_FEE, seedFeeModelForTests } from '../helpers/fee-model-fixture.js';
 
 // ── Seeds (mirror migration 2026-06-11c-b5-amr-body.sql) ────────────────────
 const row = (moduleName: string, assetClass: string, constantName: string, value: unknown) => ({
@@ -147,10 +149,7 @@ function seedAll(flags: { crypto?: string; xstock?: string } = {}): void {
     row('amr_input_health', k, 'friction_score_max', 100),
     row('amr_input_health', k, 'dbs_abs_max', 1),
   ]));
-  _seedModuleCacheForTests('fee_model', ['crypto_spot', 'xstock_spot'].flatMap(k => [
-    row('fee_model', k, 'spot_taker_fee', 0.008),
-    row('fee_model', k, 'spot_maker_fee', 0.004),
-  ]));
+  seedFeeModelForTests();
 }
 
 const LIVE_CALM = {
@@ -236,7 +235,7 @@ describe('B-5 Obj-12 — cost-model measured-spread read (spreadSource stamp)', 
     const c = getCachedCostMetrics('NVDAx/USD', 'xstock_spot');
     expect(c.spreadSource).toBe('measured');
     expect(c.spread).toBeCloseTo(0.0020, 6);
-    expect(c.fee).toBe(0.008);
+    expect(c.fee).toBe(XSTOCK_SPOT_TAKER_FEE); // B-XSTOCK-FEE-CONTRACT: the xStock taker, not a copy of crypto's
   });
   it('absent symbol → static module spread + spreadSource=static_fallback', () => {
     const c = getCachedCostMetrics('GOOGLx/USD', 'xstock_spot');

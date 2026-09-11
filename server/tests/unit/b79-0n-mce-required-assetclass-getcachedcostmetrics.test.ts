@@ -20,20 +20,11 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { getCachedCostMetrics } from '../../core/math/cost-model';
 // B-4.5: the crypto cache seed resolves the DB-governed fee (fail-hard on
 // cold cache) — seed the sync cache in-memory like the sibling MCE suites.
-import { _seedModuleCacheForTests } from '../../services/module-constants-service.js';
-import type { ModuleConstant } from '../../../shared/schema.js';
+// B-XSTOCK-FEE-CONTRACT (#1010): a PROBE fixture, from the one shared source.
+import { seedFeeModelForTests } from '../helpers/fee-model-fixture.js';
 
 beforeAll(() => {
-  const row = (assetClass: string, constantName: string, value: number) => ({
-    moduleName: 'fee_model', exchange: '*', assetClass, strategy: '*', regime: '*',
-    constantName, value,
-  } as unknown as ModuleConstant);
-  _seedModuleCacheForTests('fee_model', [
-    row('crypto_spot', 'spot_taker_fee', 0.008),
-    row('crypto_spot', 'spot_maker_fee', 0.004),
-    row('xstock_spot', 'spot_taker_fee', 0.008),
-    row('xstock_spot', 'spot_maker_fee', 0.004),
-  ]);
+  seedFeeModelForTests();
 });
 
 describe('[B79.0n.MCE] getCachedCostMetrics requires assetClass', () => {

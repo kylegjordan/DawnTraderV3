@@ -134,7 +134,6 @@ export class PreExecutionValidator {
       const quantity = riskAmount / stopDistance;
 
       const slippageModel = slippageFeeModel.modelSlippage(
-        request.signal.symbol,
         'buy',
         quantity,
         request.signal.entryPrice

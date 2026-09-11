@@ -6,6 +6,14 @@
 
 ---
 
+## `slippage-fee-model.ts` — four dead methods, their state, and the second `fee_model` resolver — DELETED 2026-09-11 (B-XSTOCK-FEE-CONTRACT, `#1010`; Langston Step-2 ruling 1)
+
+**What:** from `server/services/slippage-fee-model.ts` — `resolveFee` (the file's own `fee_model` reader), `getConfig`, `modelTradeRealism`, `getAggregateStats`, `updatePriceHistory`, the `priceHistory` map, `VOLATILITY_WINDOW`, the `TradeRealism` interface, `calculateFees`' never-passed `makerFeeRate`/`takerFeeRate` parameters, and the unused `symbol` parameter of `estimateVolatility` and `modelSlippage`. Also `server/routes.ts:69`, an import of the singleton that nothing in that file used. **Kept:** `modelSlippage` and `calculateFees`, which the dormant pre-execution validator still calls; `calculateFees` now reads rates through `cost-model.getFrictionForAssetClass`.
+**Why:** `getConfig` was one of the two `resolveFee` sites, so keeping it kept a second `fee_model` reader alive — against Langston's binding condition that fee resolution sits behind ONE resolver. The other three methods and the map had no caller at all.
+**Blast radius — verified at `18a8b29b6`, re-derived by Langston at `8ae6e98b0`:** every external consumer of the singleton, repo-wide including scripts, client and tests, is `pre-execution-validator.ts:136` (`modelSlippage`) and `:174` (`calculateFees`). `getConfig`, `modelTradeRealism`, `getAggregateStats`, `updatePriceHistory`: zero callers. **State-write census (§9.5(a-ii)):** the only state written was `priceHistory`, written only by `updatePriceHistory` and read nowhere (`estimateVolatility` read its argument, never the map). `VOLATILITY_WINDOW` was read only by the two deleted methods. `TradeRealism` had no importer outside the file. The one caller of `modelSlippage` drops its first argument.
+**Archive:** `1-system-manual/_archive/deleted-code/slippage-fee-model.pre-b-xstock-fee-contract.ts.removed` — the whole pre-batch file, written from the ref (blob `b60c3a02e`), so the deleted methods can be read in context.
+**Left intentionally:** the file itself and the validator. Their removal is coordinated by `#300`(b) / `#297` / `#578`, not this batch.
+
 ## OBJ-6d agent-hook probe — REGISTERED AND REMOVED INSIDE ONE BATCH, NEVER AT A GRADED REF (2026-09-02, B-MEASURE-GATE leg 2; logged on Langston's Step-4 ruling "log it anyway")
 
 **What:** a `type: "agent"` hook on `PostToolUse` (matcher `Bash`, `if: "Bash(echo AGENT-HOOK-PROBE*)"`, timeout 45 s) in `.claude/settings.local.json`, live for ~25 minutes on CC-A's clone only. **Never committed, never pushed** — so it is not reviewable as a diff, and this entry exists precisely because its absence from every ref would otherwise read as "never happened" (#453).

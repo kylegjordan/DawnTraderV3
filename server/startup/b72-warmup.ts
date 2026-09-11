@@ -18,6 +18,8 @@ import { prefetchModule } from '../services/module-constants-service.js';
 // reorg-B2: iterate the canonical regime SSOT (no hardcoded regime strings — regime_mapping_integrity;
 // the boot assertion auto-extends if a regime is ever added — Langston Step-4 note 1).
 import { CANONICAL_REGIMES } from '../config/canonical-regime-strategy-map.js';
+// B-XSTOCK-FEE-CONTRACT (#1010): the signed fee rail, as pure functions (unit-tested).
+import { feeRailViolation, makerAboveTakerViolation } from './fee-model-rail.js';
 
 /**
  * Modules whose constants are read from synchronous code paths (strategy
@@ -43,7 +45,8 @@ const PREFETCH_MODULES = [
   'dbs_calculation',      // directional-bias-store.ts global DBS sample floor
   'active_sizing',         // active-position-sizing.ts max position buffer factor
   'vts_service',          // vts-service.ts calibration trigger interval
-  'cost_model',           // cost-metrics.ts default avg return
+  // 'cost_model' REMOVED (B-XSTOCK-FEE-CONTRACT, #133/#134): all five rows had zero code readers and the
+  // module is deleted by 2026-09-11-b-xstock-fee-contract.sql — listing it here would refuse boot on 0 rows.
   'learning_governance',  // learning-cooldown.ts min batch size (regime=TRANSITION)
   // Slice 2c — pattern pool, drift, paper exec, orchestrator timing:
   'pattern_pool_gates',   // pattern-filter-profile.ts RSI bounds + guardrails
@@ -233,14 +236,17 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
             `has not been (fully) applied. Apply migration before starting server. (${(err as Error).message})`,
           );
         }
-        // Sanity rails: a fee outside (0, 5%] is a fat-fingered DB value, not a tier.
-        if (!(v > 0 && v <= 0.05)) {
-          throw new Error(
-            `[B45][warmup] fee_model.${constant} for '${assetClass}' = ${v} is outside the sane (0, 0.05] decimal range — refusing to start.`,
-          );
-        }
+        // B-XSTOCK-FEE-CONTRACT (#1010): the rail is PER CONSTANT — taker is a cost in (0, 5%];
+        // maker may be a venue REBATE, down to MAKER_REBATE_FLOOR (fee-model-rail.ts).
+        const railViolation = feeRailViolation(assetClass, constant, v);
+        if (railViolation) throw new Error(railViolation);
         fees[`${assetClass}.${constant}`] = v;
       }
+      // …and PER CLASS once both are read: a maker fee above the taker fee is not a schedule.
+      const makerAboveTaker = makerAboveTakerViolation(
+        assetClass, fees[`${assetClass}.spot_maker_fee`], fees[`${assetClass}.spot_taker_fee`],
+      );
+      if (makerAboveTaker) throw new Error(makerAboveTaker);
     }
     console.log(
       `[B45][warmup] fee_model verified: crypto taker=${fees['crypto_spot.spot_taker_fee']} maker=${fees['crypto_spot.spot_maker_fee']} | ` +
