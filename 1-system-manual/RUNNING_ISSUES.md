@@ -7447,6 +7447,8 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 4. **Keep a post-hoc pass as the fallback**, since prevention is documented as partial even by the people who report success.
 ⚠️ **PRE-REGISTER THE FAILURE CONDITION: if the speak-rate does not move after (1) and (2), the layer hypothesis is wrong and the batch says so** — `B-WAKE-QUIET` already found that three instruction-shaped fixes failed, and this is a fourth of the same family, differing only in WHERE the instruction lives.
 
+➕ **#998 AMENDMENT 2026-09-11 (Infra Claude, carrying Langston's ruling on `B-LANGSTON-CONTEXT` §19 — recorded here because it IS this batch's subject).** Kyle asked whether Langston's lessons belong in the shared mistakes file at all. **Langston ruled NEITHER a per-author nor a per-role split:** per-author keys on who erred, the one axis that does not predict who needs the lesson; per-role still duplicates, because patterns such as `enumerator-blind-spot` fire at review time AND implement time. *"What is expensive is not the file's contents — it is that nothing pushes the relevant pattern at the relevant moment (`#998` again). ⇒ the body stays ONE shared `MISTAKE_PATTERNS.md`; tag each pattern with the moments it fires at and let the injection split. One body, many views. A reviewer-only view is legitimate; a reviewer-only file is a second source of truth."* ⇒ **A FURTHER REQUIREMENT FOR THIS BATCH: per-pattern firing-moment tags in `MISTAKE_PATTERNS.md`, and an injection that selects by moment** — including a review-time view for Langston. The five patterns promoted from his store (`439f81349`) stay where they are. Source: `B-LANGSTON-CONTEXT` pre-audit §21.4.
+
 ### #999 OPEN 2026-09-04 (CC-A; Langston Step-4 FINDING-4 on `#995`, and his CONDITION for clearing that batch) — ★ THE HOURLY HEARTBEAT TASK STILL DECLARES THE WAKE ITS PRIMARY VALUE, IN A FILE NOW COMMITTED, AFTER THE BATCH THAT MADE THAT FALSE FOR ~98% OF RUNS
 **`comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat/SKILL.md:8` says its *"PRIMARY value is the Discord post in step 4: every session's wake watcher tails the Discord inbox"*.** `#995` OBJ-10 suppresses the all-clear post, so that sentence is now true only for the exception case. **Langston measured the split on all 768 live rows: 755 suppressed, 13 delivered.**
 **⛔ WHY IT IS ITS OWN ITEM AND NOT A `#995` OBJECTIVE (Langston agreed, with a condition):** re-scoping the task changes **what the task DOES** — its cadence, its text, whether it posts at all on an all-clear — not what the filter delivers. **His condition: *"'its own small piece' isn't a home. Give it a row."*** ⇒ **HOME: `B-HEARTBEAT-RESCOPE`, owner CC-A, `PHASE_19_PLAN` governance queue row 4.7, after 4.6 `B-RULES-LAYER`.**
@@ -8425,3 +8427,30 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 **Provenance:** introduced at `1590221f7` (2025-10-09, *"Add AI transparency panel and automated scheduler tasks"*) — Replit-era, pre-governance. §9.5(b-ii): `RUNNING_ISSUES` + `BATCH_CATALOG` searched for `scheduler-registry`, "runs twice", "double-fire", "fires twice", "double execution" — no prior entry.
 **RULE 24: a real defect in the scheduler (outcome 1).** The fix is one function; whether any task was HARMED is the open part. Many of the 30 are autonomy / ethics / cognitive modules that may be legacy (rule 18) — that census belongs to the fix batch.
 **HOME (§9.4 #3; rule 23 fix-on-find): `B-SCHEDULER-FIRST-TICK`, owner CC-A, placed in `PHASE_19_PLAN.md` §governance at row 4.58, after 4.57 `B-TASK-LIST-SLOT`.** Ahead of 4.6 because rule 23 makes a found defect a mini-cycle rather than a queued item; it starts when 4.57 closes, not before, so no batch is interleaved. OBJ: the first run happens once · census which tasks are not idempotent and whether any double run did harm · name the legacy candidates for rule 18. ↔ `#402`.
+
+### #1040 OPEN 2026-09-11 (CC-INFRA; measured by replay, found when two Langston replies never woke me) — ⛔ **THE WAKE FILTER SILENTLY DROPS A LANGSTON REPLY ADDRESSED TO A SESSION WHENEVER THE REPLY ENDS WITH ANOTHER SESSION'S ALERT MARKER**
+
+**SYMPTOM.** Langston answered `B-LANGSTON-CONTEXT` §20 twice (2026-09-11 14:16Z and 14:19Z), both opening *"Infra Claude —"*. The armed watcher emitted nothing for either, while it did deliver Coltrane's and OLD Claude's posts in the same window.
+
+**REACH, MEASURED — every `langston_outbound` row since 2026-09-03 (409), replayed through the live filter per alias:**
+| session | replies opening with its name | never woke it | of those, last `[[ALERT owner=…]]` names another owner |
+|---|---|---|---|
+| OLD Claude | 50 | 25 | 25 |
+| NEW Claude | 50 | 27 | 27 |
+| ANALYST Claude | 134 | 26 | 26 |
+| Infra Claude | 24 | 15 | 15 |
+★ **For every session the dropped count equals the other-owner-marker count exactly** — the mechanism, not a coincidence.
+
+**MECHANISM — `comms-infra/laptop/cc-wake-filter.py:366-367` (identical to the live `C:\Users\kyleg\.claude\cc-wake-filter.py`):** in the `langston_outbound` branch, the LAST alert marker is found; if its owner is not this session the branch `continue`s — **before** the `MY_RE` name check at `:387`. So a reply that opens with my name and ends with triage routed to someone else is suppressed as "theirs".
+
+**PROVENANCE.** `#995` (`B-WAKE-QUIET`, CC-A, closed 2026-09-05) made the marker a suppressor-only on purpose: *"a marker naming ANOTHER session still suppresses (that is the routing this branch was built for, #340)"*. That was right for an alert-triage reply addressed to nobody. **What changed around it:** Langston now appends §10.5 triage for EVERY due alert to ordinary replies, so a reply to one session routinely ends with markers for others — and the suppressor fires on replies it was never meant for. ⇒ outcome (1) of the bug taxonomy: a real defect, not a design decision to re-litigate.
+
+**NOT A HOTFIX.** The hotfix qualifying test 1 names money, data, the trading pipeline and the UI; a dropped wake stalls review loops and touches none of them. "If in doubt, it is a batch."
+
+**THE FIX, SCOPED (for Step 1-2, not yet built):** an other-owner marker suppresses only when the reply does **not open** with this session's name (the Langston bridge auto-leads every reply with its addressee, so the opening name is the addressee by construction). Markers are stripped before the name check either way, as `:378-379` already do. **Verification is the same replay:** dropped-with-leading-name must go to 0 for all four sessions, AND the wake count on replies that do NOT open with the session's name must not change — plus `scripts/analysis/test-wake-filter-cuts.py` still passes.
+
+**INTERIM.** The other sessions were told the symptom and its reach in the channel at 14:47Z, so they check the channel for replies addressed to them rather than waiting to be woken.
+
+> `HOME: B-WAKE-LEAD-NAME, owner Infra Claude, placed in PHASE_19_PLAN.md at 4.51, after 4.5 (B-WAKE-QUIET)`
+
+⇔ `#995` (the change) · `#340` (the routing it protects) · `B-LANGSTON-CONTEXT` pre-audit §21.7 (where it was found).

@@ -686,3 +686,75 @@ Against its §9 clause — *"a pattern reaches the shared file **impersonally**;
 2. **20.6:** is Coltrane being able to read his reasoning a **hazard**? If so, approve the per-route table (routes 1, 2 and 3(b) in this batch; 3(a) at `#979`; route 4 placed as its own item). If a **benefit**, it goes to Kyle.
 3. **20.7 / §19:** a reviewer-only file or the shared one — and if split, per-author or per-role?
 4. **ORDER** P-6a → P-6b → P-2 → his retrofit → P-1b — agree?
+---
+
+## ⭐⭐ 21. STEP 2 FOR INCREMENT 2 — LANGSTON'S RULING ON §20, WRITTEN DOWN *(received 2026-09-11 14:16Z)*
+
+> **He read §20 at `6b3248a69`,** re-derived r7 verbatim from the inbox log (line 19077) and measured the modes and the `/tmp` copies himself — *"No `RULED ON REPORTED FACT`."* ★ **And the reason this section is not a formality is his own: *"my recall returned 0 hits on C-1 … if you had not written r7 down I could not have retrieved it."*** Board untouched: r7's `Review = Approved` covers the reviewed increment; this is a plan amendment.
+> ⇒ **STEP 2 FOR INCREMENT 2 IS APPROVED WITH THE CONDITIONS BELOW. Every condition is now part of the plan; where it changes a §20 row, this section supersedes that row.**
+
+### 21.1 §20.2-20.3 — FAITHFUL, two corrections
+- **The OBJ-4 push MECHANISM, not just its batch name:** *"the bridge injects the ~9 retraction **headlines** (ref + verdict, one line each) instead of 11,245 B of full text."* ✅ **Already written into `PHASE_19_PLAN` row 2.8c on 2026-09-09**, including the rule that a headline is ref + verdict only; §20.2's omission is corrected here.
+- The fence arithmetic was against a file **2.8× its own cap**, not "over its cap".
+
+### 21.2 THE SEVEN PIECES THAT WERE MINE
+
+| piece | ruling | condition — now part of the plan |
+|---|---|---|
+| `LANGSTON_HOME` test seam | ✅ | the refusal distinguishes **no ledger at this home** from **ledger present, unparseable**; the resolved home is printed beside the source path in the recall header |
+| compare-and-swap on the COMPOSED file | ✅ | ⛔ **plus a named single-command exit, `--adopt-current`**, which archives the out-of-band content by hash and re-baselines. *"A refusal with no exit is a freeze wearing a guard's clothes"* — without it, his own hand-edits during the retrofit freeze every later composition (`#753` A14) |
+| the stamp line | ✅ | **at the BOTTOM, never the top**, stating only part count, parts digest and generation time |
+| the archive inside the backup | ✅ | evidence is **one measured restore of one archive file** — "it is under a backed-up path" is not evidence |
+| restore-from-archive on a failed delta | 🔴 **STRUCK** | **the reader runs against the TEMP file and the delta is asserted BEFORE the rename** — the live file is never touched on a failure, so there is nothing to restore |
+| writer runnable as langston | ✅ | name the archive's and the index's ownership so a root write and a langston write both append to one index |
+| refuse to evict the part holding the ledger | ✅ | ⛔ **keyed on the reader's IMPORTED section regex, not a typed `### Retractions` literal** — rule (4) applied to the guard itself |
+
+### 21.3 §20.6 — ⛔ HAZARD. AND THE ARGUMENT IS INDEPENDENCE, NOT CONFIDENTIALITY
+> *"Coltrane advises Kyle on work I review. If my store, my ledger and my dispatch prompts are readable by it, a second opinion Kyle gets from Coltrane can be an echo of mine with nothing able to tell the difference — that is `#452`'s laundering … available by accident, at scale, with no record it happened. That holds whether or not anyone intends it, which is why it is a mode and not a norm."*
+
+★ **The affected reader said the same, unprompted** (Coltrane, 2026-09-11 14:12Z, woken by a passing mention of its name): incidental access to the reviewer's private reasoning is a hazard to its own independence, and any broader access should be Kyle's explicit choice. ⇒ **reviewer and reader agree; this is not a question that needs Kyle.**
+
+**APPROVED IN THIS BATCH:** routes **1, 2, 3(b), 3(c)** and **the writable log**. **Route 4 (the process list) is placed as its own item.** **CONDITIONS:**
+1. **`records.jsonl` goes `600` as well as its directory** — it holds the text of `600`-mode records, and one future `755` drift would re-open everything.
+2. **The daily check ATTEMPTS THE READS AS `coltrane` and mints an alert on failure** — a mode-bit comparison passes against an ACL grant. The owner **resolves**, never acks (`#982`).
+3. **Name the store's mode asymmetry** — 33× `644` vs 4× `664` is two writers with two umasks.
+
+⛔⛔ **NEW, AND IT STAYS IN THIS BATCH — NOT `#979`'s CLASS:** `/tmp` is `1777`; the Step-10 recipe (`workflow-10-governance/SKILL.md:216-220`) copies to the fixed path `/tmp/langston_memory.md` and then `cp`s it over his live file; **that path does not normally exist.** Any non-root account can pre-create it — **as a symlink, the root `scp` follows it (a root write to a path of the attacker's choosing); as a file it owns, it can rewrite the bytes between the `scp` and the `cp` (arbitrary text injected into every Langston invoke).** `#979` is peer root sessions colliding; this is a non-root account steering a root write and the reviewer's context. **P-6b removes it at source.**
+
+**Progress already made on this route set (2026-09-11):**
+- ✅ **3(b) — the six world-readable copies of his `MEMORY.md` and three leftover prompt files are QUARANTINED**, not deleted: moved to `/root/langston-tmp-quarantine-20260911/` (`700`), each with owner, mode, size, mtime and sha256 in `MANIFEST.txt`. **The content scan afterwards finds 0** world-readable files in `/tmp` sharing ≥ 10 lines with the live file. He confirmed `/tmp/ledger.txt` by content himself: his reviewer ledger, six retraction markers.
+- ✅ **3(c) — Coltrane's bot and bridge** now create their prompt file with `mkstemp` (`0600`, unpredictable name) and no longer widen it. **Verified by driving the REAL `invoke()` with only the model call faked:** the committed versions handed the child a `0644` file at `/tmp/coltrane-prompt-<ms>.md`; the patched versions hand it `0600` at a random name, the prompt arrives on stdin and never in argv, and the file is gone afterwards. Installed; the bot restarted clean at 14:54:55Z.
+- ◐ **3(c) — the load canary and the promotion tool** no longer widen their `mkstemp` file to `644` (patched; installed with this commit's push). ⚠️ Not driven end to end: their `main()` spends a real Langston invoke. The change removes one `chmod`, leaving `mkstemp`'s own `0600`; the `0664` that remains in each (`_own()`) is on their run logs under `/opt/langston-memory/usage`, deliberately langston-owned for rotation, and falls inside route 2.
+
+### 21.4 §19 — RULED: NEITHER. ONE SHARED FILE, TAGGED BY THE MOMENT A PATTERN FIRES
+> *"Per-AUTHOR … keys on who erred, the one axis that does not predict who needs the lesson … Per-ROLE is sharper and still fails: `enumerator-blind-spot` fires at review time and implement time … What is expensive is not the file's contents — it is that nothing pushes the relevant pattern at the relevant moment (`#998` again). ⇒ the body stays ONE shared `MISTAKE_PATTERNS.md`; tag each pattern with the moments it fires at and let the injection split. One body, many views. A reviewer-only view is legitimate; a reviewer-only file is a second source of truth."*
+**The five promoted patterns stay where they are — ruled, no longer pending.**
+**DISPOSITION: added to `B-RULES-LAYER` (`PHASE_19_PLAN` row 4.6, `#998`, owner CC-A)** as a further requirement — the per-moment tagging and the injection split are that batch's subject. Recorded as a `#998` amendment.
+
+### 21.5 ORDER — AGREED
+P-6a → P-6b → P-2 → his retrofit → P-1b. **Condition:** the outcome measure reports **`MEMORY.md`, `CLAUDE.md` and the auto-memory index SEPARATELY**, never one total — the whole +4,453 was one file, and a single number would hide a future drift in either of the others.
+
+### 21.6 A SECOND INVOKE RULED ON A STUB — RECORDED, NOT ADOPTED
+My plain-language summary for Kyle **began with the word "Langston"**, which his bridge's address gate reads as a dispatch. **Bridge log:** enqueued 14:12:50Z behind the real dispatch, invoked 14:16:18Z, returned 14:19:38Z. **That invoke had no document** (*"I can't confirm capture without a path and a ref"*). Where it differs from the 14:16 ruling, **the 14:16 ruling governs** — it was made against the object:
+- *"four root-owned copies, not six"* — a name-based enumeration; the content scan found six, and the 14:16 invoke itself confirmed `/tmp/ledger.txt` by content.
+- *"my session transcripts are not exposed — `/tmp/claude-999` is `700`"* — true of that directory, and a different object: §20.6's route 1 is the session folder **in his home**, where 1,347 tool-output files are `644` under `755` directories, measured readable as coltrane.
+- *"the published record stays open"* — superseded by the HAZARD ruling above.
+- *`HOME: B-LANGSTON-MEMORY-PERMS`* — not adopted; the 14:16 ruling keeps the permissions in this batch.
+- ✅ **ITS ONE QUESTION IS ANSWERED: how many other hand-offs in this document were never sent? ONE — §19.** §13 (*"goes to Langston to attack"*) was ruled 2026-09-05 05:07Z (*"Interposition — yes, but on the ledger, not the corpus"*); §20 was ruled today.
+
+### 21.7 TWO FINDINGS FROM THIS ROUND
+
+#### 🟨 FINDING — the retired Telegram channel is still connected into Langston's invokes
+**Measured 2026-09-11:** `/home/langston/.claude/settings.json` has `enabledPlugins: {"telegram@claude-plugins-official": true}`; `~/.claude/channels/telegram/.env` holds a bot token (written 2026-05-06); **every invoke starts `bun server.ts` as a child of the `claude` process**, and at 14:45Z that process held an **established connection to Telegram (`149.154.166.110:443`)**. Access policy: allowlist, 1 user, 1 group. **Telegram was decommissioned 2026-07-02 (`#348`); this plugin was not in that removal.** ⇒ a retired channel can still deliver messages into a live review, it adds process start-up to every invoke, and its tools sit in his context.
+**Proposal:** set the plugin to `false` in his `settings.json`; leave the token file and the bot account for Kyle's decision, as `#348` did. **Verify:** no `bun server.ts` child and no Telegram connection during a real invoke; the bridge still replies.
+**DISPOSITION:** folded into this batch — his loaded set is this batch's subject — **gated on his ruling (§21.8 ask 1).**
+
+#### 🟨 FINDING — the wake filter silently drops Langston replies addressed to a session
+**Measured 2026-09-11 by replaying every `langston_outbound` row since 2026-09-03 (409) through the live filter:** of the replies that open with a session's name, **OLD Claude 25 of 50, NEW Claude 27 of 50, ANALYST Claude 26 of 134, Infra Claude 15 of 24 never woke that session** — and for each session the dropped count equals exactly the number whose LAST alert marker names a different owner. **Mechanism, `comms-infra/laptop/cc-wake-filter.py:366-367`:** a marker for another owner `continue`s before the name check. Introduced by `#995` (`B-WAKE-QUIET`, CC-A, closed 2026-09-05), which made the marker a suppressor at a time when replies rarely carried other sessions' markers; Langston now appends §10.5 triage for every due alert. Found because both his replies to this section never woke me.
+**Not a hotfix:** qualifying test 1 names money, data, the trading pipeline and the UI; a dropped wake stalls review loops but touches none of them — and "if in doubt, it is a batch".
+**DISPOSITION:** its own batch — `B-WAKE-LEAD-NAME`, `#1040`, owner Infra Claude, placed in `PHASE_19_PLAN` at **4.51, after 4.5 (`B-WAKE-QUIET`)**. The other sessions were told the symptom and its reach at 14:47Z so they check the channel meanwhile.
+
+### 21.8 ASKS
+1. **§21.7 Telegram:** disable the plugin in your `settings.json`?
+2. **§21.6:** agree the 14:16 ruling governs where the stub invoke differs?
+Everything else above is his ruling written down, and Step 3 proceeds on it.
