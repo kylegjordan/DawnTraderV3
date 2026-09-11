@@ -965,3 +965,16 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 **RESIDUALS, homed to `P19-B12`:** ★ *(fifth, added at close)* the two markdowns are rewritten every run, so a no-change day logs `2 updated` · the force-sync UI discards the body it is now sent · a stranded `*.tmp.<epoch>` from `atomicWrite` is UNTRACKED and blocks `dt-deploy` with a signal that looks nothing like the one this batch taught people to read · `_metadata`'s other six keys sit inside the skip decision but are compared by no test · `Map Updated` has no keeper.
 **Spawned: `#1021`** — the drift monitor's clearing path reachable from only one of four exits, folded into `B-DEPLOY-DRIFT-LINE` (row 4.55) on Langston's ruling.
+
+## B-TASK-LIST-SLOT (CC-A, ⏳ **OPEN — OBSERVATION since 2026-09-11**, checker live 2026-09-11) — Phase 19, plan row 4.57 · `#1009`
+
+**THE GAP.** Kyle's rule (2026-09-05): every session updates its task list at every batch close. **Measured at Step 1: one of the three completion reports written since carried the task-list row, and that one only because Kyle asked.** A session writing a report copies the previous report rather than opening the skill, so a newly added ledger row never propagates by being written down.
+
+**THE FIX — A CHECK, NOT ANOTHER INSTRUCTION** (Langston's Step-2 ruling: the governance checker only, no Step-11 gate). The staging checker grades each completion report for the Tier-1 task-list row (`ledgerRowInText` / `checkLedgerRows`, `scripts/governance-checker/checker.mjs`) and raises `gov-ledgerrow:<batch>:task_lists` when it is missing. It resolves itself when the row lands; a confirmed `na-skip` `task_lists` row suppresses it. Enrolment is dated (`sinceMs` 2026-09-05T05:45Z). Task lists now live in `1-system-manual/` and lead with OPEN AND STALLED; the System Impact Map gains *Session Task Lists*.
+
+**MEASURED.** 165 checker tests, 15 mutants each caught. Three fresh-reader object rounds found 20 misjudged table shapes, each reproduced as a failing test before its fix; one draft broke a real row and was caught only by the real-population preview. Live: the 13:45Z tick opened exactly the two pre-registered alerts and one later self-resolved when its row landed. **The approved matcher (`ddadab429`) is proven offline in both directions on the same two real reports** — false before each row, true after.
+
+**Langston: Step-1 approved (4 conditions) · Step-2 approved (10 conditions) · Step-4 APPROVED at `9a1ab64fb` (4 conditions, applied at `ddadab429`) · Step-7 SENT BACK once — every positive live tick ran pre-approval code — then discharged offline · Step-8 CONFIRMED, re-derived.** CI `34617169179` 4/4 per job.
+
+⛔ **WHY IT IS OPEN — P5, pre-registered before data:** the next three completion reports first added after `2026-09-11T15:45:41Z` must carry the row at close, read directly on the blob and agreeing with the alert store, graded by a tick descending from the closing commit. **No PASS on fewer than three.** Record: `B_TASK_LIST_SLOT_PROGRESS_REPORT.md`.
+**Spawned:** `B-SLOT-PLACEMENT-CHECK` (row 4.8, the slot-time half) · `#1039` `B-SCHEDULER-FIRST-TICK` (row 4.58).

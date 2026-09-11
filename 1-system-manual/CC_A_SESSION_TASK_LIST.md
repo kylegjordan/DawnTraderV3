@@ -19,8 +19,8 @@
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
 | ⛔ **`B-GOV-REPORTING`** (row 8) | **pushed to the branch — the review gate NEVER RAN** | me | **Scope exists; no pre-audit, no completion report.** These reporting + ledger-matrix rules landed 2026-08-26 and **all four sessions are following them right now.** Highest-risk open item I own |
-| ⭐ **`B-TASK-LIST-SLOT`** (row 4.57) | **Step 3 — the checker half is built, pushed and live on staging (it auto-deploys from the branch); Step 4 with Langston next** | Langston | P3 (folder convention, move this file) and P4 (SIM entry, list shape) still to do; the slot-time half is split out to row 4.8 |
-| ⛔ **`B-SCHEDULER-FIRST-TICK`** (row 4.58, `#1039`) | **not started — found 2026-09-11** | 4.57 closing | every scheduler task runs twice at its first interval after a restart; impact per task unmeasured |
+| ⏳ **`B-TASK-LIST-SLOT`** (row 4.57) | **Observation — Steps 1-10 done; Langston confirmed Step 8 on 2026-09-11** | the next three completion reports (P5) | the check is live on staging; P5 terms in the progress report §3; if none arrive in a fortnight, back to Langston to re-rule the population; the slot-time half is row 4.8 |
+| ⛔ **`B-SCHEDULER-FIRST-TICK`** (row 4.58, `#1039`) | **not started — found 2026-09-11** | nothing — next up (4.57 is in Observation) | every scheduler task runs twice at its first interval after a restart; impact per task unmeasured |
 | ⏳ **`B-RULES-1e`** (row 1) | **Step 2**, with Langston | Langston / me | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
 | ⏳ **`B-MEASURE-GATE`** beyond leg 2 (row 6) | **Step 2** | me | Step 1 approved 2026-08-31. Leg 2 CLOSED 2026-09-02 — the rest is not |
 | ⛔ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | **OBJ-1 REOPENED 2026-09-11 (`#1038`); the tool LOADS since 14:12Z** | the in-session demo + a 14-day usage measure | it had never loaded (no plugin-cache copy); sessions get it on their next restart |
@@ -35,7 +35,7 @@
 | 3b.h-3 | **`B-TSC-GUARD-DETERMINISM`** (`#1019`) | batch | ⭐ **KYLE-ASSIGNED 2026-09-07**, on his rule *"whoever implemented the most recent push/deploy guard"*. The tsc-baseline guard refused a push containing ZERO TypeScript, citing 209 groups dropping below baseline; running the checker by hand seconds later returned OK on identical 377-vs-377 totals, and a retry passed with nothing changed. ⛔ **CC-C wrote it up as a HYPOTHESIS, not a finding, because it predicts a DETERMINISTIC refusal and the retry passed** — something is non-deterministic between invocations and they did not find it |
 | 4.56a | ✅ **CLOSED 2026-09-11** — `B-CANONICAL-BRIDGE-CHURN` (`#402`) | batch | U-1 met; five residuals at `P19-B12` |
 | 4.56 | ✅ **CLOSED 2026-09-08** — **`B-DRIFT-RUNTIME-PREDICATE`** (`#1016`) | batch | **Langston's Step-8 finding.** The drift gate calls `server/ client/ shared/` "runtime" — a directory convention — while `dt-deploy` also runs `npm ci`, the build configs and **`drizzle/migrations/**`**. Measured latent: 3 of the last 400 commits touch a deploy-executed path and all 3 carry `server/` too |
-| 4.57 | **`B-TASK-LIST-SLOT`** (`#1009`) | batch | ⭐ **IN FLIGHT — Step 3 (checker live), Step 4 next.** Kyle fixed this position 2026-09-05 |
+| 4.57 | **`B-TASK-LIST-SLOT`** (`#1009`) | batch | ⏳ **OBSERVATION — waiting on the next three completion reports (P5).** Kyle fixed this position 2026-09-05 |
 | 4.58 | `B-SCHEDULER-FIRST-TICK` (`#1039`) | batch | found 2026-09-11; starts when 4.57 closes (rule 23) |
 | 4.6 | **`B-RULES-LAYER`** (`#998`) | batch | ⚠️ **SUPERSEDED ORDER: Kyle directed this to follow `B-WAKE-QUIET`, then on 2026-09-05 put `B-TASK-LIST-SLOT` ahead of it.** Still his; just not next. Failure condition pre-registered |
 | 1 | `B-RULES-1e` | batch | **IN FLIGHT, parked at Step 2** with Langston |

@@ -1173,3 +1173,13 @@ The hourly check that warns us when the live server is behind decided whether wa
 **Proved on real history rather than invented examples.** A genuine commit from August adds a database migration and touches no server code; the old logic saw nothing to deploy, the new one sees it. Langston widened that from one example to **66 across nearly five thousand commits**, and separately overturned an empty result of mine — my search had covered three of eight cases, so its silence meant less than I said it did.
 
 **One thing it surfaced that is not its own:** a daily background job rewrites a stored file with the current time in it, which can make the deploy tool refuse to run. It has already done so once. That now has its own slot rather than a line on a list.
+
+### 2026-09-05 — B-TASK-LIST-SLOT (CC-A, `#1009`, plan row 4.57) — ⛔ OPEN, observation window
+
+Kyle asked every session to bring its task list up to date at every batch close. It mostly did not happen: of the first three finished batch reports after the rule, one carried the update, and only because he asked. The reason is mechanical — a session writing a report copies the last report, so a new requirement written into the rules never reaches it.
+
+**So this batch built a check instead of another instruction.** The governance checker on staging now reads each finished batch report and raises an alert when the task-list line is missing; when the line is added, the alert clears itself. It was seen doing both on real reports on its first afternoon.
+
+**The lesson worth keeping is about evidence, not code.** The first live proof was gathered on the version of the check from before Langston's review changes, so it did not prove the version he approved. He sent the step back. The approved version was then run on the same two real reports, both ways, and he confirmed it — adding that the wiring from a missing line to an alert was unchanged between the two versions, so the live proof and the offline proof fit together.
+
+⚠️ **NOT CLOSED.** Whether the check changes behaviour is measured on the next three finished batch reports: all three must carry the line at close. Fewer than three is not a pass.
