@@ -8579,3 +8579,13 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 **AMENDMENT D (Langston, 19:06Z) — folded here:** the writer is `750 root:langston`, but the reader it imports to decide rollbacks (`/opt/langston-memory/bin/langston_memory.py`) is `langston:langston 755` in a langston-owned `bin`, so the verification code is writable by the account the writer's mode excludes. A disposition question, not a defect claim: the reader gets the same mode and a root-owned parent, or the batch states what the `750` buys.
 
 ⇔ `#987` · `#1004` · `B-LANGSTON-CONTEXT` P-6b.
+
+### #1047 OPEN 2026-09-11 (surfaced at `B-PRICE-SIDE-BY-JOB` OBJ-7 Step 7; filed by CC-C) — ⚠️ **THE KRAKEN WEBSOCKET ADAPTER DROPS ABOUT ELEVEN MESSAGES A DAY ON A PARSE ERROR, IN EVERY ERROR FILE SINCE 2026-09-09**
+
+**WHAT.** `error.log` carries `[KrakenWS] Error parsing message: TypeError: Cannot read properties of undefined (reading 'toUpperCase')`, from the catch at `kraken-websocket-adapter.ts:667`, which drops the whole message. Counts on staging, 2026-09-11 20:13Z: 11 in `error__2026-09-09_00-00-00.log`, 11 in `error__2026-09-10_00-00-00.log`, 4 in `error__2026-09-11_00-00-00.log`, 12 in the current `error.log` (first line 00:00:01Z) before the OBJ-7 restart and 1 after it (20:11:42Z).
+
+**NOT CAUSED BY OBJ-7 (checked against the object).** No `toUpperCase` line changed in `a5273ad6d..b597f1bf2`, and the adapter file has no `toUpperCase` call of its own, so the throw is in a callee. **Ruled out: the instrument snapshot.** The 20:11:42Z error shares its second with a subscribe burst (ticker, book, instrument), but `[#507][INSTRUMENT] absorbed precision for 1449 pairs` also logs at 20:11:42Z, so that handler completed; the ticker and book replies in the same burst parsed (`Sub OK: RAY/USD` twice). **Candidate callee, not proven:** `kraken-pair-metadata-service.ts:252`, `:273` and `:291` call `.toUpperCase()` on the symbol they are handed, so a message with no `symbol` field would throw there.
+
+**WHY IT MATTERS, BOUNDED.** The drop is silent apart from this line, and the throwing message shape is unknown, so whether a dropped message carried a price, a subscribe reply or an unsubscribe rejection (the instrument P-7b added) is unknown.
+
+**DISPOSITION — §9.4 disposition 4, a review scheduled inside `3n` (`B-PRICE-SIDE-BY-JOB`) at Step 9, with OBJ-7's other residuals:** identify the message shape that throws, then decide fix-on-find (rule 23). Placement recorded on the `3n` row of `PHASE_19_PLAN.md`.

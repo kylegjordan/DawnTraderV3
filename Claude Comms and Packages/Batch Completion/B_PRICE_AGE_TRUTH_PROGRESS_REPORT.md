@@ -211,3 +211,46 @@ When our own REST rate limiter declines to ask Kraken for a price, the code re-s
 ⇒ ✅ **CORRECT LABEL: *criterion unchanged, stopping rule added.*** ⛔ **Why it matters more than the wording: a self-certification of sameness INVITES THE NEXT READER TO SKIP THE DIFF.** ★ **Three of the four differences are improvements — which is exactly what makes the false label dangerous, because nothing about the outcome would have prompted anyone to check.**
 ✅ **ACTED, NOT JUST RECORDED:** the mislabelled gate `2e496a98` is **RESOLVED as superseded**, and **`0db25f1d-3da5-46e2-9303-09290eb447b5`** is armed for the same instant carrying the corrected label and the explicit difference list. ⛔ **Verified exactly ONE `#951` gate is in `scheduled` state.**
 ⚠️ **The two producer literals are now written into the gate body with an instruction to COPY rather than retype — because the 09-09 read retyped them from memory and omitted both.**
+
+## 9b. ✅ CONVERTED 2026-09-11 — THE WINDOW ENDS AT THE OBJ-7 DEPLOY WITH THE ARM EMPTY; PASS 2 RE-SCOPED ONTO THE EXERCISED PATH; THE `closed_trades` LEG RETIRED WITH A TRIPWIRE *(Langston 20:17Z: approved in substance, one correction, four conditions)*
+
+**THE GROUND, CORRECTED.** My dispatch said the stopping rule binds because this was the third read with the arm empty (44, 66, 82). ⛔ **That is false on the pre-registration's own terms.** The rule is written on FIRES, §9a itself calls the 09-09 read the first fire discharged late, and gate `0db25f1d-3da5-46e2-9303-09290eb447b5` is still `scheduled` for 2026-09-16T12:00:00Z and has never fired (alert store, read 20:21Z). **Reads are not fires.** **The true ground, and it is stronger:** `B-PRICE-SIDE-BY-JOB` OBJ-7 deployed at `2026-09-11T20:09:47Z` (`b597f1bf2`) and changes the exit leg's REST budget (P-7h), the arm this criterion depends on. The second and final window therefore cannot reach 09-16 as one population. It ends at the deploy boundary with the touched arm empty at 82 rows, and the stopping rule's disposition is taken early on that ground.
+
+**THE TERMINAL READ** (pre-deploy build `a5273ad6d`, 19:52:14Z, `scripts/analysis/b_price_age_truth_terminal_read.sql`; Langston re-derived it exhaustively): population 82; `kraken_ws_book_mid` 53 (53 carry `exit_observed_at_ms`), `kraken_equities_ws_mid` 25 (25), no producer 4 (0); touched arm 0; reserve rows 0. **The no-producer residual DISSOLVES:** all four are `close_reason = never_filled` with a null `exit_price` and no exit read (CRV, APR, WLD, RAY; all `crypto_spot`, entry producer `crypto_ws_book_walk`; re-derived 20:21Z). They cannot be REST exits, so the arm is empty exhaustively, not by under-count.
+
+### RE-SCOPE — PASS 2 MOVES ONTO THE ADAPTER'S RUNTIME RE-SERVE, WHICH IS EXERCISED
+Evidence: the `[8.8.5][REST_BLOCKED] ... observedAt=` line the reserve branch emits (`live-pricing-adapter.ts:764`), read by `scripts/analysis/b_price_age_truth_reserve_age_split.py` and `.sh`, which now publish their parse census (condition 1) and the distinct-stamp measure (condition 2).
+
+| window | matched | carrying a stamp field | parsed | dropped |
+|---|---|---|---|---|
+| 13:11:00-19:43:00Z, before the deploy | 10,682 | 10,682 | 10,682 | 0 |
+| 20:09:37Z to the read at 20:21Z, after the deploy | 191 | 191 | 191 | 0 |
+
+**PREVIOUSLY STATED: 10,664 re-serves. NOW: 10,682. REASON:** the window now ends at 19:43:00 rather than at the last line read near 19:42Z, and the runner reads the three newest rotated files, so the time window defines the population instead of the file set. Nothing is dropped in either window.
+
+**The discriminating measure (condition 2): distinct `observedAt` values against re-serves, per symbol.** A re-stamp gives distinct equal to re-serves; an honest carry gives distinct near the number of successful upstream fetches.
+
+| symbol, 0 `kraken_ws` cache writes | re-serves | distinct stamps | under 1 s | median age |
+|---|---|---|---|---|
+| BTC/USD | 1,183 | 387 | 0.0% | 29.8 s |
+| ETH/USD | 1,184 | 385 | 0.0% | 29.8 s |
+| SOL/USD | 1,187 | 383 | 0.0% | 29.8 s |
+| XRP/USD | 1,189 | 380 | 0.0% | 29.8 s |
+| ADA/USD | 1,188 | 380 | 0.0% | 29.8 s |
+
+About 3.1 re-serves per stamp, and about 385 stamps over 23,520 s is one per ~61 s, the refresh rung. **Positive control:** RAY/USD, WebSocket-fed (448,267 cache writes in the window), shows 1,192 re-serves over 1,141 distinct stamps and 91.7% under 1 s, so the instrument does separate continuous rewrites from a carried stamp. **After the deploy** (small n): the same five symbols show 32-33 re-serves over 10 distinct stamps each, 0.0% under 1 s, median 29.6 s; RAY/USD 27 over 27. `live-pricing-adapter.ts` changed across `a5273ad6d..b597f1bf2`, so this is re-measured after the restart rather than asserted byte-inert.
+
+### PASS 1 AND PASS 3 — THEIR OWN DISPOSITIONS (condition 3)
+- **PASS 1 (a non-null stamp on the touched arm): discharged by construction, and at runtime.** `RestFetchResult.observedAt` is a non-nullable `number` (`live-pricing-adapter.ts:265`); the reserve arm returns a result only when `Number.isFinite(cached.observedAt)` and returns null otherwise (`:816-818`). At runtime, 0 of 10,873 re-serve lines carry `observedAt=none`.
+- **PASS 3 (the source unchanged on a re-serve): discharged by construction.** The quote built from either fetch arm carries `source: 'kraken_rest'` as a literal (`live-pricing-adapter.ts:668`), with `producer` and `observedAt` taken from the fetch (`:672-673`). The engine's own direct REST leg never produces the reserve producer: it sets `kraken_rest_engine_fallback_mid` or `_last` with a null stamp (`active-execution-engine.ts:1635-1642`). ⚠️ The ruling cites `aee:1289-1300` for the leak route; at `a5273ad6d` and at head those lines are xStock mark-staleness and sigma code, so the lines named here are `:668` and `:1635`, flagged for Langston to confirm.
+- **Both stored-row halves go to the tripwire below**, because a proof by construction covers the code path, not a row written by some other path.
+
+### RETIRE THE `closed_trades` LEG, WITH A TRIPWIRE (condition 4)
+It cannot fire while the WebSocket path is healthy (82 closes, 0 on the arm). The stored-row assertion becomes a standing invariant: **any `kraken_rest_rate_limited_reserve` row landing with a null `exit_observed_at_ms`, a stamp equal to its close instant, or an `exit_price_source` other than `kraken_rest` fires.** **HOME: `B-PRICE-AGE-REFUSAL` (plan row `3b.f-b`), §9.4 disposition 2, as ruled.** ⚠️ Row `3b.f-b` was absorbed into `3n` r5 on 2026-09-11 (D7), and the place its age becomes decision-bearing is `3n` OBJ-8 row 8g, the crypto exit age check (`Scope Files/B_PRICE_SIDE_BY_JOB_SCOPE.md:256`). **So the tripwire lands as an 8g fence**, recorded here so the absorption does not orphan it.
+
+### RESIDUALS, STATED NOT CLOSED
+1. The zero-WebSocket partition rests on `[I7-WS-D][CACHE_WRITE]` being the complete write census for those rows (§6 names `:538` as another write site). Not proven, and not load-bearing: a re-stamp reads age near 0 on any partition.
+2. The after-deploy re-measure is about 12 minutes and 191 lines: the same shape, on a small n.
+3. **§5 item 1 survives verbatim: that the honest stamp ever reaches `closed_trades` is still unproven, and this retirement records that this instrument cannot prove it.**
+
+**CLOSES:** gate `0db25f1d-3da5-46e2-9303-09290eb447b5` is resolved, not acked (`#982`), with this section as evidence. Langston sets `Review = Approved` on this section; the report then converts to the completion report at the batch close.
