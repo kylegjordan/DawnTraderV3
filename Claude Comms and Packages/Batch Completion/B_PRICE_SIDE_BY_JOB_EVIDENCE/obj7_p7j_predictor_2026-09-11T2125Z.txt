@@ -1,0 +1,14 @@
+# P-7j predictor read, run 2026-09-11T21:22:25Z on obj7_p7j_capture_2026-09-11T2009Z_to_2039Z.txt with scripts/analysis/b_price_side_p7j_rewarm_predictor.py
+POPULATION: REWARM within 600 s of 2026-09-11 20:09:37, at least 12 KALMAN lines: 84 symbols
+1. FIDELITY: |logged K - replay with own R,Q| over 1972 lines: max 0.000132; lines above 5e-4: 0
+2. INDEX PREDICTOR, OWN (each line's own R,Q): reached 73, within +-1 72, missed 1, censored 11; misses: RIVER/USD 11 vs 15
+2. INDEX PREDICTOR, FIX12 (observation 12's R,Q): reached 73, within +-1 64, missed 9, censored 11; misses: EUR/CHF 14 vs 16; HYPE/EUR 16 vs 18; HYPE/USD 17 vs 19; KTA/USD 18 vs 16; LINK/USDC 18 vs 20; RIVER/USD 11 vs 15; TRUMP/USD 16 vs 18; USDC/GBP 23 vs 21; USDT/GBP 24 vs 21
+3. r2 REPLAY, OWN: in scope 81 (excluded 3): met 70, missed 0, censored 11 => 86.4% met
+3. r2 REPLAY, FIX12: in scope 81 (excluded 3): met 62, missed 8, censored 11 => 76.5% met
+4. QUANTITY at observation nhat: n 73; relative |K_obs - K_model| min 0.0000 median 0.0072 p90 0.0262 p95 0.0390 max 0.0739; within 2%: 59, 3%: 68, 5%: 70, 10%: 73
+4. QUANTITY at observation 12: n 84; relative |K_obs - K_model| min 0.0000 median 0.0045 p90 0.0137 p95 0.0174 max 0.1074; within 2%: 80, 3%: 82, 5%: 83, 10%: 83
+   symbols whose capture ends before observation nhat: 11
+5. r3 CANDIDATE, path fidelity over observations 1-12: met 84 of 84 (100.0%); per-symbol worst error median 0.000057 max 0.000103
+6. CONTROL A no inflation, K1 = steady-state gain: per-symbol worst separation from the log over obs 1-12: min 0.7572 median 0.8160; symbols that would still pass 5e-4: 0 of 84
+6. CONTROL B half the constant, K1 = 0.5: per-symbol worst separation from the log over obs 1-12: min 0.4000 median 0.4000; symbols that would still pass 5e-4: 0 of 84
+6. CONTROL C a small change, K1 = 0.85: per-symbol worst separation from the log over obs 1-12: min 0.0500 median 0.0500; symbols that would still pass 5e-4: 0 of 84

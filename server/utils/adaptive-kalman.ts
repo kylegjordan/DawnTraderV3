@@ -62,8 +62,8 @@ export interface KalmanDiagnostics {
  *   fixture (R 26, Q 0.5, Q/R 0.0192) it is within 10% of the steady-state gain (0.129) first at the 12th live
  *   observation, and that number is the fixture's. Production Q/R runs 0.0021-0.0235, median 0.0077 (same capture): the
  *   first live observation within 10% was a median 18, about 22 minutes after the first live read (72 of 83 reached it
- *   inside a 30-minute capture and 11 did not, so the upper end is not measured). Each symbol's own R and Q predicted
- *   that observation to within one on all 72 that reached it.
+ *   inside a 30-minute capture and 11 did not, so the upper end is not measured). The observation number itself is
+ *   fragile: the gain curve is nearly flat where it crosses, so a small move in R shifts it by several observations.
  * - LAZY: the warm only FLAGS the inflation, and the next `applyObservation` applies it with ITS OWN R, so the first live
  *   gain is exactly this constant whatever ER the warm used (test 14).
  * - `updateCount` includes the warm's steps (up to 720). Diagnostics only; no production reader.
