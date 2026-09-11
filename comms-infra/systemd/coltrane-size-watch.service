@@ -1,0 +1,13 @@
+[Unit]
+Description=Measure Coltranes auto-loaded instructions against a ceiling that may only fall
+Documentation=file:///usr/local/bin/coltrane-size-watch
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/coltrane-size-watch
+# ⛔ The heartbeat runs AFTER the measurement, and only the heartbeat can distinguish
+#    "no breach" from "this watch stopped running a week ago" - they look identical
+#    from the channel. Langstons BLOCKER-3 was exactly this shape.
+ExecStartPost=-/usr/local/bin/coltrane-size-watch --heartbeat
+# ⚠️ A BREACH EXITS 1 BY DESIGN, so the unit must not treat that as a unit failure.
+SuccessExitStatus=0 1

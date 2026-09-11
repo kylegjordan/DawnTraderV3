@@ -1,0 +1,7 @@
+[Unit]
+Description=Refresh Coltranes own repo mirror (stamps only on a successful fetch)
+Documentation=repo comms-infra/codex/coltrane-repo-refresh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/coltrane-repo-refresh

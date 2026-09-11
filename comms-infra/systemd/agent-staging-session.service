@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh the staging browser session for BOTH headless agents (token lasts 7d; this runs daily)
+Documentation=file:///usr/local/bin/agent-staging-session
+
+# NOTE: /api/auth/login is rate-limited (loginLimiter). Repeated manual runs WILL return
+# HTTP 429 - that is the limiter, not a broken credential. The script refuses to overwrite a
+# working session on any failure, so a 429 costs nothing: the existing 7-day token stands.
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/agent-staging-session --user coltrane
+ExecStartPost=/usr/local/bin/agent-staging-session --user langston

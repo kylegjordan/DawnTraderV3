@@ -1,0 +1,17 @@
+[Unit]
+Description=Daily run of the Langston size ratchet watch
+# ⛔ DAILY, NOT HOURLY. The thing being watched changes at batch cadence, not by the
+# minute, and a noisy alarm is one that gets ignored — which is how the previous size
+# watch's absence went unnoticed for 28 days in the first place.
+
+[Timer]
+OnCalendar=*-*-* 05:40:00 UTC
+# 05:40Z sits AFTER the 04:10Z archive index rebuild so the two never contend, and well
+# before the working day so a breach is waiting rather than interrupting.
+Persistent=true
+# Persistent: if the box was down at 05:40 the run happens on boot. A watch that
+# silently skips the days it was asleep is the failure it exists to detect.
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

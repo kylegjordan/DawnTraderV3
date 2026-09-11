@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily backup of Coltranes decision store (05:30Z; Langstons runs 05:20Z, kept apart on purpose)
+
+[Timer]
+OnCalendar=*-*-* 05:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

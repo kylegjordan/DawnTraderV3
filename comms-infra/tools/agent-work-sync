@@ -1,0 +1,23 @@
+#!/bin/sh
+# Keep DawnTraderV3-agent-work:migration/aws-supabase EQUAL to DawnTraderV3:migration/aws-supabase.
+# FAST-FORWARD ONLY. If the work repo's branch has commits the real one lacks, REFUSE (exit 3) —
+# the agents are told never to push there, so divergence means something is wrong, not stale.
+# EXISTS BECAUSE (2026-09-11) Coltrane's clone was 3 days behind the real code and nothing kept
+# the two in step; Coltrane flagged it itself when asked to verify.
+set -e
+W="$HOME/.agent-work-sync.git"
+REAL=git@github-agentwork:kylegjordan/DawnTraderV3.git
+WORK=git@github-agentwork:kylegjordan/DawnTraderV3-agent-work.git
+B=migration/aws-supabase
+[ -d "$W" ] || git clone --bare --quiet "$WORK" "$W"
+git --git-dir="$W" fetch --quiet "$REAL" "+refs/heads/$B:refs/sync/real"
+git --git-dir="$W" fetch --quiet "$WORK" "+refs/heads/$B:refs/sync/work"
+R=$(git --git-dir="$W" rev-parse refs/sync/real)
+K=$(git --git-dir="$W" rev-parse refs/sync/work)
+if [ "$R" = "$K" ]; then echo "agent-work-sync: IN SYNC at $(echo $R | cut -c1-12)"; exit 0; fi
+if git --git-dir="$W" merge-base --is-ancestor "$K" "$R"; then
+  git --git-dir="$W" push --quiet "$WORK" "$R:refs/heads/$B"
+  echo "agent-work-sync: ADVANCED $(echo $K | cut -c1-12) -> $(echo $R | cut -c1-12)"
+else
+  echo "agent-work-sync: DIVERGED — work has commits the real branch lacks. REFUSING to overwrite."; exit 3
+fi

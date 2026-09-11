@@ -1,0 +1,7 @@
+[Unit]
+Description=Back up Coltranes decision store, verified by reproduction
+Documentation=repo comms-infra/codex/coltrane-selfmemory-backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/coltrane-selfmemory-backup

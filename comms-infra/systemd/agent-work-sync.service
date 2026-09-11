@@ -1,0 +1,9 @@
+[Unit]
+Description=Fast-forward the agent work repo's base branch to the real repo
+OnFailure=agent-unit-failure@%N.service
+[Service]
+Type=oneshot
+User=coltrane
+# HOME set explicitly: today's refresh failure was a scheduled job that did not get the HOME its hand-run had.
+Environment=HOME=/home/coltrane
+ExecStart=/usr/local/bin/agent-work-sync

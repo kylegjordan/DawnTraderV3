@@ -1,0 +1,5 @@
+[Unit]
+Description=Alert the crew channel that agent unit %i failed
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/agent-unit-failure-alert %i

@@ -1,0 +1,16 @@
+[Unit]
+Description=Coltrane Discord bot - its own identity on the channel, and its own DM inbox
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/discord-bridges/venv/bin/python3 /usr/local/bin/coltrane-bot.py
+Restart=always
+RestartSec=15
+# Runs as root ONLY to sudo -u coltrane for the invoke and to read the token file.
+# The AGENT itself never runs as root - that is what the coltrane user is for.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

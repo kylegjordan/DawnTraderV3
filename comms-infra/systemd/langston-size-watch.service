@@ -1,0 +1,15 @@
+[Unit]
+Description=Langston always-loaded set — size ratchet watch (B-LANGSTON-CONTEXT P-5, #1007)
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+After=network-online.target
+
+[Service]
+# BREACH EXITS 1 BY DESIGN - the watch ran correctly and FOUND a breach. Without this
+# line systemd marks every breach day FAILED, so a genuine crash and a correct breach
+# read identically in systemctl. Parity with coltrane-size-watch.service. 2026-09-11.
+SuccessExitStatus=0 1
+Type=oneshot
+ExecStart=/usr/local/bin/langston-size-watch
+# ⛔ NOT Restart= — a oneshot that retries on failure would post the same alarm repeatedly.
+# The next daily run is the retry, and the run log makes a skipped run readable.
+TimeoutStartSec=300

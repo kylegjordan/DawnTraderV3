@@ -1,0 +1,9 @@
+#!/bin/sh
+# Posts when a scheduled Langston/Coltrane job FAILS. It exists because coltrane-repo-refresh
+# failed on EVERY scheduled run from 2026-09-08 to 2026-09-11 while its hand-run passed, and
+# nothing told anyone. The staleness REFUSAL protected reads correctly - and was seen by no one.
+U="$1"
+RES=$(systemctl show "$U.service" -p Result --value 2>/dev/null)
+TAG=""
+case "$U" in *probe*) TAG="[DRILL - no action needed] " ;; esac
+/usr/local/bin/cc-send --sender "Infra Claude" --message "${TAG}Agent job FAILED on Helsinki: $U.service (result: $RES). A scheduled job for Langston or Coltrane did not complete. Look at: journalctl -u $U.service -n 20"

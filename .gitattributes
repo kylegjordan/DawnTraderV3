@@ -30,3 +30,7 @@ comms-infra/codex/** text eol=lf
 # pre-existing .removed files at once - rewriting OTHER batches' archives under my name,
 # which is rule 25.c exactly: the path is right and the content is not mine to change.
 1-system-manual/_archive/deleted-code/REPLIT_PUSH_SCRIPT*.removed -text
+
+# Host config and host tools run on Linux: a CRLF shebang breaks #!/bin/sh (2026-09-11)
+comms-infra/systemd/** text eol=lf
+comms-infra/tools/** text eol=lf

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily refresh of Coltrane and Langston staging sessions
+
+[Timer]
+OnCalendar=*-*-* 04:40:00 UTC
+OnBootSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
