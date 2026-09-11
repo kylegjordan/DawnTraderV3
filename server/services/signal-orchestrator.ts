@@ -2414,7 +2414,12 @@ export class SignalOrchestrator {
       const closePrices = ohlcData.map(c => parseFloat(c.close));
       const ER = calculateEfficiencyRatio(closePrices, 20);
       const VolNoise = calculateVolNoise(closePrices);
-      const smoothedPrice = getSmoothedPrice(symbol, rawPrice, ER, VolNoise);
+      // B-PRICE-SIDE-BY-JOB r5 P-7j (D7; SIM S26): key the smoother on the cache row's write time, so re-reading the
+      // same cached price on a later evaluation does not advance the filter as if it were new market information.
+      // Every writer of that row is a venue read (WS tick, REST poll, engine REST fetch); re-serves write only the
+      // live-pricing adapter's private cache, so they cannot advance it. The bar closes let a COLD filter (after a
+      // restart) re-warm explicitly instead of seeding from one raw observation.
+      const smoothedPrice = getSmoothedPrice(symbol, rawPrice, ER, VolNoise, cachedPrice?.lastUpdatedAt ?? undefined, closePrices);
       
       // Directive 10.1: Calculate trend slope for DSS regime detection
       const trendSlope = calculateTrendSlope(closePrices);
