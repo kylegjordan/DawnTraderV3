@@ -9,7 +9,7 @@
 
 | # | surface | size (2026-08-30) | right instrument | state |
 |---|---|---|---|---|
-| **1** | **TypeScript / JS code** | 1,160 files · 133,372 lines | ✅ **language server** — `typescript-lsp` | ⛔ **NOT LOADING — installed on record, absent from sessions (`#1038`)** |
+| **1** | **TypeScript / JS code** | 1,160 files · 133,372 lines | ✅ **language server** — `typescript-lsp` | ⚠️ **LOADS IN SESSIONS STARTED AFTER 2026-09-11 14:12Z** — before that it never reached one (`#1038`) |
 | **2** | **Governance prose** | **1,944 `.md` · 64.3 MB** | ⛔ **UNSOLVED — see §2** | ⛔ **THE REAL GAP** |
 | **3** | **Git history** | 9,774 commits · 11,366 files ever touched | `git log -S`, **never path-limited** | ✅ adequate, under-used |
 | **4** | **Skills + hooks** | 13 skills · 10 hooks | **read end to end** | ✅ small enough |
@@ -23,10 +23,10 @@
 
 ---
 
-## 1. CODE — ⛔ NOT SOLVED: THE TOOL NEVER REACHED A SESSION (`#1038`)
+## 1. CODE — ⚠️ AVAILABLE SINCE 2026-09-11; UNTIL THEN THE TOOL NEVER REACHED A SESSION (`#1038`)
 
 **Instrument:** `typescript-lsp@claude-plugins-official`, installed 2026-08-30. Drives `typescript-language-server` (5.3.0) over the compiler's own symbol graph.
-⛔ **CORRECTED 2026-09-11 (`#1038`): the result below came from a hand-written client talking to the language server directly, NOT from the Claude Code tool. It proves the SERVER answers. The installed plugin does not load — a fresh session has no `LSP` tool — so no session has ever been able to do this.**
+⛔ **CORRECTED 2026-09-11 (`#1038`): the result below came from a hand-written client talking to the language server directly, NOT from the Claude Code tool. It proves the SERVER answers. Until 2026-09-11 the installed plugin never loaded (no copy in the plugin cache), so no session could do this. A session started after 14:12Z that day has the `LSP` tool.**
 **MEASURED, the discriminating test** (object: `toCanonical`; population: the whole repo at `e16767ef7`):
 
 | method | files | what they were |

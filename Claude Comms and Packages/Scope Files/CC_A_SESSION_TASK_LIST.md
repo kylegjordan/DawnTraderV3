@@ -21,7 +21,7 @@
 | ⛔ **`B-SCHEDULER-FIRST-TICK`** (row 4.58, `#1039`) | **not started — found 2026-09-11** | 4.57 closing | every scheduler task runs twice at its first interval after a restart; impact per task unmeasured |
 | ⏳ **`B-RULES-1e`** (row 1) | **Step 2**, with Langston | Langston / me | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
 | ⏳ **`B-MEASURE-GATE`** beyond leg 2 (row 6) | **Step 2** | me | Step 1 approved 2026-08-31. Leg 2 CLOSED 2026-09-02 — the rest is not |
-| ⛔ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | **OBJ-1 REOPENED 2026-09-11 (`#1038`)** | **Kyle** — the reinstall is a download | the code search plugin never loaded in any session, and the plan had it marked done |
+| ⛔ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | **OBJ-1 REOPENED 2026-09-11 (`#1038`); the tool LOADS since 14:12Z** | the in-session demo + a 14-day usage measure | it had never loaded (no plugin-cache copy); sessions get it on their next restart |
 
 ---
 
