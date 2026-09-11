@@ -16,6 +16,15 @@
 
 \set f8870022f_at '2026-09-04T19:27:07Z'
 
+-- Langston's final deploy ruling (2026-09-11 19:48Z), condition 6: seventeen xStock symbols whose exact unified-cache key
+-- is also a Kraken crypto <BASE>/USD pair (the #1024 alias; his census: Kraken AssetPairs ∩ xstock_spot_universe on the
+-- exact key). They are published SEPARATELY and EXCLUDED from P8's and Arm B's verdict counts until #1024 lands, with
+-- their row count beside every verdict. Condition 7: if restoring them would flip an arm, that arm is INCONCLUSIVE-EXTEND.
+CREATE TEMP TABLE _bxfc_alias(symbol text PRIMARY KEY);
+INSERT INTO _bxfc_alias VALUES
+  ('A/USD'), ('ADI/USD'), ('CAT/USD'), ('CVX/USD'), ('DASH/USD'), ('EDU/USD'), ('ES/USD'), ('IR/USD'), ('MET/USD'),
+  ('OPEN/USD'), ('PEP/USD'), ('STRK/USD'), ('STX/USD'), ('SUI/USD'), ('T/USD'), ('WELL/USD'), ('WEN/USD');
+
 \echo === (1) P8 p0: xStock maker share among maker_taker decisions since f8870022f, up to the deploy instant ===
 SELECT count(*) AS n,
        count(*) FILTER (WHERE chosen_entry_mode = 'maker') AS maker,
@@ -35,6 +44,19 @@ FROM switch_on_shadow_evidence
 WHERE proof_type = 'maker_taker' AND asset_class = 'xstock_spot'
   AND captured_at >= :'f8870022f_at'::timestamptz AND captured_at < :'deploy_at'::timestamptz
 GROUP BY 1 ORDER BY 1 DESC;
+
+\echo === (1c) P8 p0 WITHOUT the 17 alias symbols (the verdict population), and the excluded rows beside it ===
+SELECT CASE WHEN a.symbol IS NULL THEN 'verdict population (17 excluded)' ELSE 'the 17 alias symbols' END AS part,
+       count(*) AS n,
+       count(*) FILTER (WHERE e.chosen_entry_mode = 'maker') AS maker,
+       round(100.0 * count(*) FILTER (WHERE e.chosen_entry_mode = 'maker') / NULLIF(count(*), 0), 1) AS maker_pct
+FROM switch_on_shadow_evidence e
+LEFT JOIN _bxfc_alias a ON a.symbol = e.symbol
+WHERE e.proof_type = 'maker_taker' AND e.asset_class = 'xstock_spot'
+  AND e.captured_at >= :'f8870022f_at'::timestamptz AND e.captured_at < :'deploy_at'::timestamptz
+GROUP BY 1 ORDER BY 1 DESC;
+\echo (CONTROL for the symbol format: count of any-mode xStock evidence rows ever carrying DASH/USD)
+SELECT count(*) AS dash_usd_rows_any_time FROM switch_on_shadow_evidence WHERE asset_class = 'xstock_spot' AND symbol = 'DASH/USD';
 
 \echo === (2) Arm B trading days: the 5 most recent complete UTC days before the deploy day with xStock EV-gate rows ===
 CREATE TEMP TABLE _bxfc_armb_days AS
@@ -70,6 +92,20 @@ WHERE a.captured_at >= :'armb_from'::timestamptz AND a.captured_at < :'armb_to':
   AND date_trunc('day', a.captured_at) IN (SELECT d FROM _bxfc_armb_days)
 GROUP BY ROLLUP (1) ORDER BY 1 NULLS LAST;
 \echo (a trading day missing from (4) had zero xStock paper rows; (2) lists all five days)
+
+\echo === (4b) Arm B pooled over the same days, split into the verdict population and the 17 alias symbols ===
+SELECT CASE WHEN al.symbol IS NULL THEN 'verdict population (17 excluded)' ELSE 'the 17 alias symbols' END AS part,
+       count(*) FILTER (WHERE a.mode = 'vts' AND a.gate_decision->>'gate' = 'net_ev_floor' AND a.reject_stage = 'admitted') AS b1_admitted,
+       count(*) FILTER (WHERE a.mode = 'vts' AND a.gate_decision->>'gate' = 'net_ev_floor') AS b1_at_gate,
+       round(100.0 * count(*) FILTER (WHERE a.mode = 'vts' AND a.gate_decision->>'gate' = 'net_ev_floor' AND a.reject_stage = 'admitted')
+             / NULLIF(count(*) FILTER (WHERE a.mode = 'vts' AND a.gate_decision->>'gate' = 'net_ev_floor'), 0), 3) AS b1_admit_pct,
+       count(*) FILTER (WHERE a.mode = 'paper_sim' AND a.reject_stage = 'admitted') AS b2_paper_admitted
+FROM signal_eval_archive a
+LEFT JOIN _bxfc_alias al ON al.symbol = a.symbol
+WHERE a.captured_at >= :'armb_from'::timestamptz AND a.captured_at < :'armb_to'::timestamptz
+  AND a.asset_class = 'xstock_spot'
+  AND date_trunc('day', a.captured_at) IN (SELECT d FROM _bxfc_armb_days)
+GROUP BY 1 ORDER BY 1 DESC;
 
 \echo === (5) state at the deploy instant: xStock fee rows, xStock epochs, and the last maker_taker write (P8 VOID watch) ===
 SELECT module_name, asset_class, constant_name, value, updated_by, updated_at

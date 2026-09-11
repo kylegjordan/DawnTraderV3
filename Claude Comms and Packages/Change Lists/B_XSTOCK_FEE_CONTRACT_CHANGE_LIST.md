@@ -223,45 +223,164 @@ Every other Tier-1/Tier-2 edit named in the plan's P10 lands at Step 10.
 
 ### 8a. Step-6 sequencing — Langston's ruling
 
+> ⚠️ **SUPERSEDED — read §9.** This records the 18:17Z SEQUENCE ruling, which Langston DISCHARGED at 19:48Z: its premise, the unmeasured shared REST budget, is now measured. Commit `31bb708ca`'s subject calls it "(a)". **Cite these rulings in words, not letters.**
+
 `LANGSTON deploy sequencing 2026-09-11 18:17Z: (a) SEQUENCE — CC-C's B-PRICE-SIDE-BY-JOB OBJ-7 (P-7a..P-7j, interleaved on the branch, at its own Step 4) deploys first at its own Step 6; this batch follows as a separate boundary. Do not combine; do not amend the P8 VOID clause. · re-derived by him: the compare census a5273ad6d...3127b5cd8 (62 commits, 105 files, a complete census below the API truncation points) — ready_to_buy_service.ts and eval-cycle.ts absent, signal-orchestrator.ts one hunk at :2414 (P-7j), so both P8 decision sites stay levelGeometry 'mid' · P-7h: not a confound AT THE SITE (the token gate is on the crypto direct-REST branch; xStock exits mark off getLatestEquityTick), but UNMEASURED as a shared resource (the exit engine becomes a new consumer of the REST bucket, and takeToken() has no refund on throw) — a site census cannot clear a shared-resource coupling, so (b) is refused; narrowing a pre-registered clause after seeing which commits landed is a specification change made with the answer in view · CC-C agreed (a) at 18:06Z and posts the OBJ-7 deploy sha · his P-7h / F-G-2 A4 finding is a condition on OBJ-7, not on this batch.`
 
 **Consequence for this batch:** Step 6 waits for OBJ-7's Step 6. The deploy-note baselines (`scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql`, committed `4c082a831`, trial-run twice on staging) run immediately before this batch's `dt-deploy`, with `obj7_at` = OBJ-7's recorded deploy time, so section (1b) shows whether OBJ-7 moved the baseline.
 
-## 9. STEP 6 DEPLOY NOTE — the `B-XSTOCK-FEE-CONTRACT` half (written BEFORE the restart)
+## 9. STEP 6 DEPLOY NOTE — ONE RESTART, TWO NAMED BOUNDARIES (Langston's final ruling, 2026-09-11 19:48Z)
 
-> ⛔ **One restart, two named boundaries** (Langston, 2026-09-11 19:20Z). The fee commits are ancestors of `B-PRICE-SIDE-BY-JOB` OBJ-7, so no sha deploys them apart.
-> ⚠️ **VALID ONLY IF THAT RULING STANDS** after the two quote-backs of his 18:17Z sequencing ruling (sent 19:24Z by CC-B and CC-C). If he re-rules, this section is replaced, not amended.
-> **OBJ-7's half:** `Claude Comms and Packages/Change Lists/B_PRICE_SIDE_BY_JOB_OBJ7_CHANGE_LIST.md`, section "STEP 6 — DEPLOY NOTE (one restart, two batches)" (CC-C). Each half lives in its own record, and the two are linked, so neither session edits the other's file.
-> **Deploy sha:** `<40-char sha — filled at the notice>` · **run by:** `cc-c` (one `dt-deploy`, agreed 19:25Z) · **restart instant (from the deploy record):** `<deployed_at — filled after>`
-> **Sequence agreed with CC-C:** CC-C posts ten minutes' notice naming CC-B, but only once four things are true: Langston rules on the quote-backs, he confirms OBJ-7 chunk 4 r2, CI is 4/4 per job on the deploy sha, and CC-C's pre-restart records are committed. CC-B then runs §9.3 and commits its output. Only then does CC-C deploy.
+> **The rulings, in words** (the letters collided; these are his own statuses at 19:48Z):
+> - **18:17Z SEQUENCE — DISCHARGED.** Its premise, *"UNMEASURED as a shared resource"*, is now measured from both directions.
+> - **19:28Z migration HOLD, and its four conditions — VACATED.** The hold was prepared locally and never committed; it is stood down in these words (condition 5).
+> - **19:30Z — SATISFIED** by CC-C's runtime measurement, which returned a named exception rather than a null.
+> - **19:39Z ONE RESTART — STANDS**, with conditions 1-5 and now 6-7.
+>
+> **OBJ-7's half:** `Change Lists/B_PRICE_SIDE_BY_JOB_OBJ7_CHANGE_LIST.md`, section "STEP 6 — DEPLOY NOTE (one restart, two batches)" (CC-C). The two halves are linked, and CC-C posts the deploy sha into both.
+> **Deploy sha:** `<40-char sha — at CC-C's notice>` · **run by:** `cc-c` · **restart instant:** `<deployed_at — from the deploy record>`
 
-### 9.1 The boundary this batch puts at that sha
+### 9.1 Why one restart is admissible — the shared REST budget
+- **By structure** (Langston, re-derived at `b597f1bf2`):
+  - the xStock class gate at `live-pricing-adapter.ts:628` returns on both arms (`:632-643`, `:644-653`) above `:659`;
+  - `:659` is the only call to `fetchFromKrakenRest` (`:759`), which holds the only adapter `check()` (`:762`);
+  - the engine's `takeToken()` (`active-execution-engine.ts:1611`) sits on the crypto branch;
+  - both draw on one bucket (`rest-rate-limiter.ts:54` / `:92`).
+- **The census — THREE production sites** (condition 4):
+  - `check()`, crypto only by the gate above;
+  - `takeToken()`, crypto only;
+  - `routes.ts:10961` `getStats()` and `:10980-10982` `reset()` — an admin route, loosening-only, class-agnostic, not an xStock consumer.
+  - ⚠️ *This one symbol was counted three different ways in one hour — "exactly two", "one production caller", three. That is `enumerator-blind-spot`; three is correct.*
+- **By runtime** (CC-C, 19:35Z; all 15 staging `out` files, 2026-09-10 03:28Z → 09-11 19:32Z):
+  - the limiter symbols and the xStock gate symbols do not intersect, across 206,623 and 64,826 lines;
+  - the one exception is `DASH/USD`.
+- **The finding, widened by Langston's static census:** a runtime window bounds the sample, not the population. The whole alias set is 17 symbols (§9.3).
+
+### 9.2 The boundary this batch puts at that sha
 - **Class:** `xstock_spot` only.
-- **What changes:** `fee_model` taker 0.008 → 0.0010, maker 0.004 → −0.0002 (a rebate); the `cost_model` module is deleted (zero readers); calibration epochs `vts/xstock_spot`, `paper_sim/xstock_spot` +1 and `live/xstock_spot` created at `live/* + 1`.
-- **What does not change:** crypto fees, which the migration checks against its own pre-image; and every crypto and wildcard epoch row.
-- ⚠️ **The xStock epoch bump cuts xStock learning history.** Any xStock outcome aggregate that spans this sha is TWO populations, not one.
+- **Fees:** 0.008 → 0.0010 taker, and 0.004 → −0.0002 maker.
+- **`cost_model`:** deleted (zero readers).
+- **Epochs:** `vts/xstock_spot` and `paper_sim/xstock_spot` +1, and `live/xstock_spot` created at `live/* + 1`.
+- **Not touched:** crypto fees (checked against their pre-image) and every crypto and wildcard epoch row.
+- ⚠️ **The xStock epoch bump cuts xStock learning history:** any xStock aggregate spanning this sha is two populations.
 
-### 9.2 Windows that START or SPLIT at this sha (named before any post-deploy row is read)
+### 9.3 Windows that START or SPLIT at this sha, and the alias exclusion (conditions 2, 6, 7)
 | window | what happens at this sha |
 |---|---|
-| **P8** (pre-audit r7) — xStock maker share, per-pick classes | **starts** here. `p₀` is frozen below. The VOID clause stands as written: 3n lands at the window's START boundary, not inside it. |
-| **Arm B** (pre-audit r7) — admission at the xStock EV gate | **starts** here; baselines frozen below |
-| **`#951`'s xStock arm** | **splits** at the fee change (Langston condition 2) |
-| **every xStock learning aggregate** (Welford, `outcome-feedback-store.ts:358`) | **resets** — condition C, carried to the completion report |
+| **P8** (pre-audit r8) | **starts** here. The VOID clause applies as written: at one sha its left arm is empty, so this is an application, not an amendment. |
+| **Arm B** (pre-audit r8) | **starts** here |
+| **`#951`'s xStock arm** | **splits** here |
+| **F-G-2 A4's crypto window** | **splits** here — OBJ-7's half, named so this record is complete |
+| **every xStock learning aggregate** | **resets** (condition C → the completion report) |
 
-### 9.3 Frozen baselines — the output of `scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql`, run at `<run instant>` with `obj7_at` = `deploy_at` = that instant
+- ⛔ **Condition 6 — the 17 alias symbols** are excluded from P8's and Arm B's verdict counts until `#1024` lands, published separately, with their row count beside every verdict: `A` · `ADI` · `CAT` · `CVX` · `DASH` · `EDU` · `ES` · `IR` · `MET` · `OPEN` · `PEP` · `STRK` · `STX` · `SUI` · `T` · `WELL` · `WEN` (all `/USD`).
+  - **How the set was found:** Kraken `AssetPairs` ∩ `xstock_spot_universe`, on the exact cache key (Langston, 19:48Z).
+  - **Residual:** the venue's live catalog was read, the 23 delisted rows were not filtered, and over-inclusion is the safe direction. Re-run the census if `#1024` slips past the window.
+  - **Condition 6 (Langston 19:51Z, blocking) — re-run against the FULL xStock universe, not the 147 traded symbols: DONE twice, independently, before the window opened, and both runs found the same 17.** CC-C ran it at 19:54:58Z. CC-B ran it at ~19:57Z: Kraken public `AssetPairs` on staging (1,449 pairs, 666 distinct `<BASE>/USD` wsnames) ∩ `xstock_spot_universe` (498 rows, 498 distinct symbols; delisted rows included, which over-includes). The intersection is n = 17, identical to the list above. CONTROL: `DASH/USD` appears in both rosters.
+  - **The exclusion is keyed on the reader's identity (Langston 19:51Z):** rows keyed `(symbol, xstock_spot)` for the 17. Crypto-class rows for the same keys stay in. **The count convention is stated:** "3 of 274" counts xStock-class closes only; `PHASE_19_PLAN` 3b.h-4's "4 closes" for `DASH/USD` counts both classes.
+- ⛔ **Condition 7:** the excluded set's historical share is **3 of 274 xStock closes = 1.09 % — above P8's 1.0 % PASS line.** If restoring the excluded rows would change either arm's verdict, that arm is **INCONCLUSIVE-EXTEND, never PASS on the remainder.**
+- **The cost accepted, named:** one boundary buys no post-hoc attribution between the fee change and OBJ-7. The pre-registered criteria are insulated, but **anything UNEXPECTED in the window is unattributable** — neither "it was OBJ-7" nor "it was the fee" is available.
+
+### 9.4 Frozen baselines — output of `scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql`, run immediately before the restart with `deploy_at` = `obj7_at` = that instant
+Sections (1c) and (4b) carry the alias split.
+**Run at `2026-09-11T20:01:34Z` on staging** (`deploy_at` = `obj7_at` = that instant; staging then ran `a5273ad6d`; psql exit 0). Frozen before any post-deploy row exists:
 ```
-<paste the full psql output here, then commit BEFORE the restart>
+CREATE TABLE
+INSERT 0 17
+=== (1) P8 p0: xStock maker share among maker_taker decisions since f8870022f, up to the deploy instant ===
+  n  | maker | maker_pct | null_mode |         first_row          |          last_row          
+-----+-------+-----------+-----------+----------------------------+----------------------------
+ 114 |    25 |      21.9 |         0 | 2026-09-08 02:00:41.354+00 | 2026-09-11 19:57:53.951+00
+(1 row)
+
+=== (1b) the same p0, split at the OBJ-7 deploy (a shift here means OBJ-7 moved the baseline) ===
+     side     |  n  | maker | maker_pct 
+--------------+-----+-------+-----------
+ before OBJ-7 | 114 |    25 |      21.9
+(1 row)
+
+=== (1c) P8 p0 WITHOUT the 17 alias symbols (the verdict population), and the excluded rows beside it ===
+               part               |  n  | maker | maker_pct 
+----------------------------------+-----+-------+-----------
+ verdict population (17 excluded) | 112 |    23 |      20.5
+ the 17 alias symbols             |   2 |     2 |     100.0
+(2 rows)
+
+(CONTROL for the symbol format: count of any-mode xStock evidence rows ever carrying DASH/USD)
+ dash_usd_rows_any_time 
+------------------------
+                    619
+(1 row)
+
+=== (2) Arm B trading days: the 5 most recent complete UTC days before the deploy day with xStock EV-gate rows ===
+SELECT 5
+ trading_day 
+-------------
+ 2026-09-04
+ 2026-09-07
+ 2026-09-08
+ 2026-09-09
+ 2026-09-10
+(5 rows)
+
+=== (3) Arm B1, VTS: xStock EV-gate admission RATE per trading day, and pooled ===
+    day     | admitted | at_gate | admit_pct 
+------------+----------+---------+-----------
+ 2026-09-04 |       25 |   16731 |     0.149
+ 2026-09-07 |        0 |    1748 |     0.000
+ 2026-09-08 |       39 |   13797 |     0.283
+ 2026-09-09 |       21 |   10639 |     0.197
+ 2026-09-10 |       15 |   11221 |     0.134
+            |      100 |   54136 |     0.185
+(6 rows)
+
+=== (4) Arm B2, paper mode: xStock admitted COUNT per trading day (a volume; no paper denominator exists in this archive) ===
+    day     | paper_admitted | paper_non_admitted_rows 
+------------+----------------+-------------------------
+ 2026-09-04 |             23 |                       0
+ 2026-09-08 |             41 |                       0
+ 2026-09-09 |             24 |                       1
+ 2026-09-10 |             17 |                       0
+            |            105 |                       1
+(5 rows)
+
+(a trading day missing from (4) had zero xStock paper rows; (2) lists all five days)
+=== (4b) Arm B pooled over the same days, split into the verdict population and the 17 alias symbols ===
+               part               | b1_admitted | b1_at_gate | b1_admit_pct | b2_paper_admitted 
+----------------------------------+-------------+------------+--------------+-------------------
+ verdict population (17 excluded) |          98 |      50633 |        0.194 |               103
+ the 17 alias symbols             |           2 |       3503 |        0.057 |                 2
+(2 rows)
+
+=== (5) state at the deploy instant: xStock fee rows, xStock epochs, and the last maker_taker write (P8 VOID watch) ===
+    module_name    | asset_class | constant_name  | value |          updated_by          |          updated_at           
+-------------------+-------------+----------------+-------+------------------------------+-------------------------------
+ calibration_epoch | *           | live           | 2     | b45-fee-epoch-bump           | 2026-06-09 22:30:02.969554+00
+ calibration_epoch | *           | paper_sim      | 2     | b45-fee-epoch-bump           | 2026-06-09 22:30:02.969554+00
+ calibration_epoch | *           | vts            | 3     | b47-chunkA-regime-epoch-bump | 2026-06-09 22:30:02.969554+00
+ calibration_epoch | xstock_spot | paper_sim      | 3     | b-xstock-feed-sanity         | 2026-09-03 18:17:59.922739+00
+ calibration_epoch | xstock_spot | vts            | 6     | fg2-obj5c-vts-cost-truth     | 2026-06-11 14:16:02.229386+00
+ fee_model         | crypto_spot | spot_maker_fee | 0.004 | b45-tier1-seed               | 2026-06-10 21:50:44.215225+00
+ fee_model         | crypto_spot | spot_taker_fee | 0.008 | b45-tier1-seed               | 2026-06-10 21:50:44.215225+00
+ fee_model         | xstock_spot | spot_maker_fee | 0.004 | b45-tier1-seed               | 2026-06-10 21:50:44.215225+00
+ fee_model         | xstock_spot | spot_taker_fee | 0.008 | b45-tier1-seed               | 2026-06-10 21:50:44.215225+00
+(9 rows)
+
+ xstock_maker_taker_rows |          last_write           
+-------------------------+-------------------------------
+                      12 | 2026-07-15 21:39:56.502756+00
+(1 row)
+
+PSQL_EXIT=0
 ```
 
-### 9.4 Rollback cost — Langston's condition 3, verbatim in substance
-- **No sha rolls OBJ-7 back and keeps the fee contract in its reviewed state.** `aee2bc191` is an ancestor of all of OBJ-7. The only pre-OBJ-7 targets carry the fee runtime pre-review, and anything below that drops the fee code entirely.
-- **Dropping the fee code requires the hand-run rollback first:**
-  `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f drizzle/migrations/2026-09-11-b-xstock-fee-contract-rollback.sql`
-  (as deploy, env sourced), **then** `dt-deploy` of the older sha.
-- **That rollback is itself a fee change,** so it bumps the xStock epochs again. **An OBJ-7 rollback after this deploy therefore costs a manual DB step and two extra xStock epoch boundaries.**
-- The rollback refuses if xStock is no longer on this batch's pair or the restored pair. That guards against overwriting a later fee batch.
-- **Rollback-verb gap:** §13 disposition 5, no work — already stated in the rollback file's header, which is its correct home (Langston).
+### 9.5 Rollback cost (condition 3)
+- **No sha rolls OBJ-7 back and keeps the fee contract in its reviewed state:** `aee2bc191` is an ancestor of all of OBJ-7.
+- **Dropping the fee code needs the hand-run rollback first:** `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f drizzle/migrations/2026-09-11-b-xstock-fee-contract-rollback.sql` (as deploy, env sourced), and **then** `dt-deploy` of the older sha.
+- **That rollback is itself a fee change and bumps the xStock epochs again.** An OBJ-7 rollback after this deploy therefore costs a manual DB step and two extra xStock epoch boundaries.
+- **The rollback refuses** unless xStock is on this batch's pair or the restored pair.
 
-### 9.5 After the restart (Step 7)
-`scripts/analysis/b_xstock_fee_contract_verify.sql` with `deploy_at` = the recorded `deployed_at`. PASS needs an xStock maker fill booked with a negative entry fee, and xStock taker fills at 0.0010. **A window with zero xStock fills is not a pass.** Then the UI, in Claude-in-Chrome: the RTB table and the VTS and paper open/closed trades tabs, which show `Maker (-0.02%)` / `Taker (0.10%)`.
+### 9.6 After the restart (Step 7)
+- **The data check:** `scripts/analysis/b_xstock_fee_contract_verify.sql`, with `deploy_at` = the recorded restart.
+- **To PASS:** an xStock maker fill booked with a negative entry fee, and xStock taker fills at 0.0010. **A window with zero xStock fills is not a pass.**
+- **Then the UI in Claude-in-Chrome:** the RTB table and the VTS and paper open/closed trades tabs.
