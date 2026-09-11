@@ -1,4 +1,4 @@
-# B-XSTOCK-FEE-CONTRACT — SCOPE (r1)
+# B-XSTOCK-FEE-CONTRACT — SCOPE (r1.1)
 
 change-class: architecture
 
@@ -9,6 +9,7 @@ change-class: architecture
 | **Directive** | Kyle, 2026-09-11: *"pivot to fixing the fees for xStocks … what the fix is and what the fees should be … get a fix for."* Plan placement ruled by Langston 2026-09-06 (architecture; batch not hotfix; tier resolution OUT). |
 | **Read at** | `origin/migration/aws-supabase` @ `2fc13111d`+223 (fetched 2026-09-11); live DB read on staging the same session |
 | **Card** | `PVTI_lAHODmulEM4BfQP4zg6h554` — Scope |
+| **r1.1** | Same day, before Langston's reply: OBJ-4 provenance moved from inferred to established; OBJ-7's dead `cost_model` row cross-referenced to the existing `#133` / `#134` and a fold proposed, with the boot hazard it carries. No objective added or removed. |
 
 ---
 
@@ -68,9 +69,12 @@ Proposed: `xstock_spot/vts 6→7`, `xstock_spot/paper_sim 3→4`, **insert `xsto
 | copy | measured | disposition |
 |---|---|---|
 | `calibration_ledger` `xstock_spot` `feeRateTaker` / `feeRateMaker` | `current_value` **0.26 % / 0.16 %**, `status baseline`, **`decision_grade = true`**, 2026-06-02 — served by `/api/analytics/calibration-scoreboard` (`routes.ts:8382`) | (2) correct to 0.10 % / −0.02 %: a decision-grade row showing a wrong value |
-| `cost_model` / `kraken` / `default_taker_fee` | `0.0026` (pre-July rate), 2026-05-05 | (5) **delete** — zero code readers: `getCached*('cost_model'` returns nothing; the same grep form returns the 4 known `fee_model` reads. Module still in `b72-warmup.ts:46` PREFETCH — keep or drop at Step 2 after listing the module's remaining rows |
+| **the whole `cost_model` module** — 5 rows: `default_avg_return 0.005`, `default_slippage 0.0005`, `default_spread 0.0010`, `default_taker_fee 0.0026`, **`max_cost_bound 0.01`** | all written 2026-05-05 `b72-step3-commit-b`; **every one has zero production readers** (per-constant census at the ref; control: the same loop finds 7 reads of `spot_taker_fee`). The only hit is a comment, `cost-metrics.ts:94`. `max_cost_bound 0.01` **contradicts** the code's `MAX_COST_BOUND = 0.02`. Still in `b72-warmup.ts:46` PREFETCH. | ⭐ **ALREADY FILED — `#133` (orphan `default_avg_return`) and `#134` (stale prefetch entry), B79.0n.MCE, 2026-05-22 — and NEVER PLACED** (zero hits in `PHASE_19_PLAN` / `POST_AUDIT_ROADMAP`; control finds `#1010` twice). **`#133`'s own fix shape names this batch:** *"bundle into the next batch that touches `cost_model` rows."* `#134`'s verification step is the census above. ⇒ **Proposed: disposition (1), fold both — delete all five rows and remove the prefetch entry in the same deploy.** See the boot hazard below. |
 | `system_context.maker_fee_pct / taker_fee_pct` | NULL on both rows | (1) no change — stays operator-override-only |
 | prose: seed-file comment, `exchange-defaults.ts:16-19`, `xstock_spot/friction.ts:1-11`, SIM B-4.5 section (*"identical by construction: account-wide tier"*) | all assert xStock == crypto | (2) corrected in this batch |
+
+⛔⛔ **THE BOOT HAZARD THE `cost_model` FOLD CARRIES, and why the order is fixed.** `b72-warmup.ts` throws on any prefetched module with **zero rows** — *"server should not start."* So the row deletion and the prefetch-entry removal must ship together. **Forward deploy is safe:** `dt-deploy` migrates before it restarts; in that window the old process's background refresher (`module-constants-service.ts:513-527`) re-prefetches `cost_model`, gets zero rows, and swaps them in as a *success* (`prefetchModule` is swap-on-success) — harmless, because nothing reads the module. The new code no longer lists it. **Rollback is NOT safe by default:** restoring a pre-batch sha after the migration ran would re-list `cost_model` against an empty module and **refuse boot**. ⇒ **The rollback migration re-inserts the five rows, and the rollback procedure runs it BEFORE the code rollback.** Stated in the Step-2 plan and in the migration's own header.
+⚠️ **If Langston prefers the fold out of this batch**, the fee row alone can still be deleted safely (four rows remain, the prefetch count stays non-zero) — at the cost of leaving four dead siblings, which is the instance-not-the-class shape.
 
 ### OBJ-8 — Tests: subject vs probe, never blind-swapped
 **Population:** 15 test files carry a fee literal (`0.008`/`0.004`) **and** a fee identifier (census at the ref; control: `xstock_spot` found in 103 test files): `cost_cache`, `cost_telemetry`, `net_expectancy` (integration) · `b45-fee-model`, `b45-sysctx-fee-override`, `b5-amr-body`, `b79-0n-mce-costmodel-perp-failhard`, `b79-0n-mce-required-assetclass-getcachedcostmetrics`, `b79-0n-mce-required-assetclass`, `directive-11.4C-R2`, `fg2-obj5-vts-cost-truth`, `p19-b7-2-maker-taker`, `p19-b7-2a-fee-consolidation`, `p19-b7-2d-xstock-lane`, `p19-b8-5c-kernel-friction-units` (unit).
@@ -125,11 +129,11 @@ Kyle was told on 2026-09-06 this would be scoped inside the batch. **Measurement
 
 **`b72-warmup.ts:237` boot rail.** Same batch; completion report objective 1: *"(0,0.05] sanity rails"*. Intent: refuse a fat-fingered DB value. **Disposition (2):** the intent stands; the premise that every fee is a cost does not.
 
-**`slippage-fee-model.ts:39` `resolveFee`.** B-4.5 made its methods take a required `assetClass`. P19-B7.2a (`#330`) consolidated fee resolution onto one merge site and `SYSTEM_MANUAL` records that as *"literally true across the codebase"*. Whether `#330` left this reader deliberately is **`INFERRED-FROM-CODE` until the P19-B7.2a report is read at Step 2.** Proposed disposition (2).
+**`slippage-fee-model.ts:39` `resolveFee`.** B-4.5 made its methods take a required `assetClass`. P19-B7.2a (`#330`) consolidated fee resolution onto one merge site and `SYSTEM_MANUAL` records that as *"literally true across the codebase"*. ✅ **ESTABLISHED in r1.1, no longer inferred: it was outside `#330`'s population, not kept on purpose.** `#330` is framed, verbatim, as *"Two fee-source paths (EV gate `getCachedCostMetrics` vs fill `getFrictionForAssetClass`)"* — two paths through the cost cache. `resolveFee` reads `module_constants` directly and never touches the cache. The P19-B7.2a completion report names `slippage-fee-model` **zero times** (control: it names the cost cache twice), and its objective 2 lists the consolidated readers without it. ⇒ *"literally true across the codebase"* over-generalised a claim that was true of cache readers. **Disposition (2).**
 
 **`calibration_ledger` xStock fee rows.** `2026-06-02b-calscore-comprehensive.sql` (B-CALSCORE) — predates B-4.5, carries the old Tier-6 figures. **Disposition (2).**
 
-**`cost_model` / `default_taker_fee`.** `2026-05-05-b72-lever-sweep.sql` (`b72-step3-commit-b`). Intent **`INFERRED-FROM-CODE`**: a B72 lever for the pre-B-4.5 `DEFAULT_TAKER_FEE`, most likely orphaned when B-4.5 retired that constant. **Disposition (5)** on zero readers; introducing commit read at Step 2.
+**The `cost_model` module.** First named in `6196a512d` (2026-05-05), verbatim subject: *"B72 Step 2 — CLOSED. Full 6-tier sweep, ~180 unique PROMOTE, Langston signed off."* — B72 promoted hardcoded levers into `module_constants`. Its one sync reader, `getDefaultAvgReturn`, was deleted by B79.0n.MCE (commit `c69320545`, Langston Q-VI option a; `cost-metrics.ts:28-32`: *"all three were used only by the now-deleted dead-code chain … zero production callers (test-only)"*). That report records why the rows survived: *"the Langston C1 atomicity gate scoped that migration to `dbs_calculation.min_sample_count` exactly"* — a scoping limit on that batch, not a decision to keep the rows. The other four constants have no recorded reader at all. **Disposition (5)** for all five, via the existing `#133` / `#134`.
 
 ### TIER 2 — read or called
 - `maker-taker-decision.ts` — P19-B7.2 best-of-both entry decision; consumes the fee delta. (1)
