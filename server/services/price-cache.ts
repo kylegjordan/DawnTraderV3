@@ -98,6 +98,15 @@ class UnifiedPriceCache {
     { type: 'vtsSimulation', symbols: new Set(), refreshIntervalMs: 60000, lastRefresh: 0 }
   ];
 
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7g (decision D7; #977): a bucket's members are the UNION of independent REASONS.
+   * `legacyMembers` holds what the one-way `subscribe()` added (the RTB and VTS callers); `reasonOwners` holds
+   * owner-managed sets (e.g. `engine:paper` → the symbols it holds). A symbol leaves a bucket only when NO reason
+   * still holds it — so releasing one owner never drops a symbol another owner, or a legacy subscribe, still needs.
+   */
+  private legacyMembers = new Map<CacheBucketType, Set<string>>();
+  private reasonOwners = new Map<CacheBucketType, Map<string, Set<string>>>();
+
   private cache: Map<string, CachedPrice> = new Map();
   private currentWeight = 0;
   private refreshing = false;
@@ -271,21 +280,63 @@ class UnifiedPriceCache {
       console.warn(`[A4.R10R-1][PriceCache] Invalid bucket type: ${bucketType}`);
       return;
     }
+    this.legacyOf(bucketType).add(symbol);
     bucket.symbols.add(symbol);
     console.log(`[A4.R10R-1][PriceCache] Subscribed ${symbol} to ${bucketType} (total: ${bucket.symbols.size})`);
   }
 
   unsubscribe(symbol: string): void {
+    // P-7g: releases the LEGACY reason in every bucket. A symbol an owner still holds stays subscribed.
     for (const bucket of this.buckets) {
-      bucket.symbols.delete(symbol);
+      this.legacyOf(bucket.type).delete(symbol);
+      this.recomputeMembers(bucket.type);
     }
   }
 
   unsubscribeFrom(symbol: string, bucketType: CacheBucketType): void {
-    const bucket = this.buckets.find(b => b.type === bucketType);
-    if (bucket) {
-      bucket.symbols.delete(symbol);
+    this.legacyOf(bucketType).delete(symbol);
+    this.recomputeMembers(bucketType);
+  }
+
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7g: REPLACE one owner's reason for a bucket with exactly these symbols, then
+   * recompute the bucket as the union of every reason. Called on every tick by the owner with its current
+   * truth (e.g. the engine with the symbols it holds), so creates, closes by ANY path, and restarts are all
+   * reconciled without a per-call-site subscribe/unsubscribe pair to forget.
+   */
+  setReasonMembers(bucketType: CacheBucketType, owner: string, symbols: Iterable<string>): void {
+    if (!this.buckets.some(b => b.type === bucketType)) {
+      console.warn(`[P-7g][PriceCache] Invalid bucket type: ${bucketType}`);
+      return;
     }
+    let owners = this.reasonOwners.get(bucketType);
+    if (!owners) { owners = new Map(); this.reasonOwners.set(bucketType, owners); }
+    owners.set(owner, new Set(symbols));
+    this.recomputeMembers(bucketType);
+  }
+
+  /** The bucket's current members (a copy). */
+  getBucketMembers(bucketType: CacheBucketType): string[] {
+    const bucket = this.buckets.find(b => b.type === bucketType);
+    return bucket ? Array.from(bucket.symbols) : [];
+  }
+
+  private legacyOf(bucketType: CacheBucketType): Set<string> {
+    let s = this.legacyMembers.get(bucketType);
+    if (!s) { s = new Set(); this.legacyMembers.set(bucketType, s); }
+    return s;
+  }
+
+  /** Mutates the bucket's Set IN PLACE (a holder of the reference keeps seeing the live membership). */
+  private recomputeMembers(bucketType: CacheBucketType): void {
+    const bucket = this.buckets.find(b => b.type === bucketType);
+    if (!bucket) return;
+    const next = new Set<string>(this.legacyOf(bucketType));
+    for (const set of this.reasonOwners.get(bucketType)?.values() ?? []) {
+      for (const s of set) next.add(s);
+    }
+    bucket.symbols.clear();
+    for (const s of next) bucket.symbols.add(s);
   }
 
   getCachedPrice(symbol: string): CachedPrice | null {

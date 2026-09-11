@@ -84,6 +84,7 @@ import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { livePricingAdapter, isKrakenVenueSource, type PriceProducer } from './live-pricing-adapter';
+import { priceCache } from './price-cache';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
@@ -1192,6 +1193,30 @@ export class ActiveExecutionEngine {
     this.lastExitChecks = [];
     
     const openPositions = await storage.getActiveOpenPositions(this.mode);
+
+    // ── B-PRICE-SIDE-BY-JOB r5 P-7g (decision D7; #977 amendment 6) ────────────────────────
+    // The unified price cache's 2-second `openTrade` refresh lane was designed with the line
+    // `subscribe(trade.symbol, 'openTrade')` (acdf84934) and that line was never written, so the
+    // lane has had zero members. Reconciled HERE, every tick, from the engine's own truth: the
+    // symbols this mode holds — so an open by the promotion path, a close by ANY path (engine,
+    // portfolio manager, routes, orphan cleanup) and a restart all converge without a subscribe /
+    // unsubscribe pair at every site. Owner-keyed per mode, so paper releasing a symbol never drops
+    // one live still holds. CRYPTO ONLY: the unified cache refreshes via the crypto Kraken REST
+    // ticker, and the stored asset_class is the authority (#559's filter, same idiom).
+    // ⚠️ SCOPE, STATED: this refreshes the UNIFIED cache (signal-birth reads, state sync, display).
+    // The exit path reads the live-pricing adapter's own cache, so this does NOT change exit price
+    // freshness — exits are governed by D1/D3/D6 in OBJ-8, not by this lane.
+    try {
+      priceCache.setReasonMembers(
+        'openTrade',
+        `engine:${this.mode}`,
+        openPositions
+          .filter((p) => ((p as { assetClass?: string | null }).assetClass ?? 'crypto_spot') === 'crypto_spot')
+          .map((p) => p.symbol),
+      );
+    } catch (e) {
+      console.warn(`[P-7g][openTrade] reconcile failed (${this.mode}):`, e instanceof Error ? e.message : e);
+    }
 
     // ── P19-B8.5e (`#548`) — kick the σ refresh for xStock positions, NON-BLOCKING ──────
     // ★ DELIBERATELY NOT AWAITED. σ is a windowed DB aggregate; awaiting it here would put
