@@ -1,8 +1,12 @@
 // B-TASK-LIST-SLOT (#1009) P1 — OFFLINE PREVIEW of the Tier-1 ledger-row check. Performs NO alert IO.
 // Answers, BEFORE a deploy: "which batches would the checker alert on, at this ref?" — so the set can
 // be PRE-REGISTERED and the first live tick compared against it (pre-audit P1, Langston condition 7).
-// Replicates tick()'s enrolment exactly: the -n300 commit window → completion/scope first-add anchors →
-// anchorClosedBatches → applyCutoff(ENFORCEMENT_CUTOFF_MS). Grades only batches with a completion report.
+// Replicates tick()'s ENROLMENT steps: the -n300 commit window → completion/scope first-add anchors →
+// anchorClosedBatches → applyCutoff(ENFORCEMENT_CUTOFF_MS); grades only batches with a completion report.
+// It does NOT replicate (object-round reader r1): tick's fetch-abort on a failed fetch, the rulebook read and
+// its N/A suppressions, class reads and overrides, the drift guard, the dedupe cache (an already-open alert
+// is not re-added), or the orphan sweep. tick also reads its commit log at GOV_BRANCH before the checker's
+// own fetch, so file reads there can come from a newer ref than the window.
 // Use the BOX's cutoff, not the repo default:
 //   GOV_CUTOFF=2026-06-24T12:07:01Z node scripts/governance-checker/ledger-rows-preview.mjs
 // ⚠️ A SNAPSHOT: the window moves with every push, so the enrolled set is true at the printed ref only.

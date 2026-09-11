@@ -148,18 +148,28 @@ export function completionReportCommitTime(batchId) {
 // session writing a completion report COPIES THE PREVIOUS REPORT rather than opening
 // workflow-10-governance, so a row added to the skill reaches nobody who copies a predecessor — 1 of 3
 // reports since the task-list row landed carried it, and the one that did was written after Kyle asked.
-// PURE: does `text` carry a markdown TABLE ROW (first non-space char `|`) that names the row AND has a
-// cell whose text — stripped of emphasis/code marks — BEGINS with ✅?
-//   ⇒ `✅ mine / N/A ×3` PASSES — the skill makes "N/A — not mine" the correct answer on three of four;
-//   ⇒ a PROSE mention FAILS, even one with a ✅ in it;
-//   ⇒ the skill's own row pasted with its verdict cells left empty FAILS (that row carries no ✅).
+// PURE: does `text` carry a markdown TABLE ROW that names the row and whose VERDICT CELL contains ✅?
+//   • a TABLE ROW is a line beginning with `|` (at most 3 spaces of indent), OUTSIDE a code fence;
+//   • the VERDICT CELL is the FIRST cell (stripped of emphasis, code and link marks) that BEGINS with one of
+//     the ledger's verdict tokens — `✅`, `N/A`, or `❌`. workflow-10-governance defines exactly two tokens
+//     (✅ / N/A); ❌ is admitted as a lead only so an explicit failure is read as the verdict and a ✅ in a
+//     LATER note cell cannot rescue it.
+//   ⇒ `✅ mine / N/A ×3` and `N/A ×3 / ✅ mine` both PASS (N/A-not-mine is correct on three of four);
+//   ⇒ a PROSE mention FAILS, even one carrying a ✅ or a `|`;
+//   ⇒ the skill's own row pasted with empty verdict cells FAILS; the same row FILLED IN passes, because its
+//     "WHEN IT APPLIES" cell leads with ⛔, which is not a verdict token;
+//   ⇒ `❌ | ✅ (note)` FAILS; `⚠️ ✅ partial` FAILS — a non-conforming token, stated rather than guessed at.
+const VERDICT_LEAD = /^(✅|N\/A|❌)/i;
 export function ledgerRowInText(text, spec) {
   if (typeof text !== 'string') return false;
+  let fenced = false;
   for (const raw of text.split('\n')) {
     const line = raw.replace(/\r$/, '');
-    if (!/^\s*\|/.test(line) || !spec.names.test(line)) continue;
-    const cells = line.split('|').slice(1).map((c) => c.replace(/[*`_]/g, '').trim());
-    if (cells.some((c) => c.startsWith('✅'))) return true;
+    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue; }
+    if (fenced || !/^ {0,3}\|/.test(line) || !spec.names.test(line)) continue;
+    const cells = line.split('|').slice(1).map((c) => c.replace(/[*`_\[\]]/g, '').trim());
+    const verdict = cells.find((c) => VERDICT_LEAD.test(c));
+    if (verdict && verdict.includes('✅')) return true;
   }
   return false;
 }
@@ -170,13 +180,18 @@ export function ledgerRowInText(text, spec) {
 // the rename reads as an ADD to firstAddCommitMs's path-limited `--diff-filter=A` (verified 2026-09-11 on
 // B_DEPLOY_DRIFT_LINE_COMPLETION_REPORT.md → status A at 8e7e1ba9c). Progress reports themselves are
 // outside the population on purpose: the row's trigger is a batch CLOSE, and a progress report is open.
-export function checkLedgerRows(batchId) {
+// `io` is injectable so the date gate and the read-failure path are unit-testable without git; the live
+// callers pass nothing and get the real readers. KNOWN EDGES, stated: a batch's date is its EARLIEST report
+// (a re-opened batch whose first report predates `sinceMs` is not graded); a failed `git show` reads as a
+// missing row (⇒ alert, the same failure direction as docPresent), while a failed `git ls-tree` reads as
+// no report (⇒ not graded) — tick() aborts before grading when its own fetch fails.
+export function checkLedgerRows(batchId, io = { findGlobDoc, completionReportCommitTime, showFile }) {
   const out = {};
-  const reports = findGlobDoc(batchId, 'completion_report');
-  const addedMs = reports.length ? completionReportCommitTime(batchId) : null;
+  const reports = io.findGlobDoc(batchId, 'completion_report');
+  const addedMs = reports.length ? io.completionReportCommitTime(batchId) : null;
   for (const [row, spec] of Object.entries(LEDGER_ROWS)) {
     if (addedMs === null || addedMs < spec.sinceMs) { out[row] = null; continue; }
-    out[row] = reports.some((p) => ledgerRowInText(showFile(gitPath(p)), spec));
+    out[row] = reports.some((p) => ledgerRowInText(io.showFile(gitPath(p)), spec));
   }
   return out;
 }

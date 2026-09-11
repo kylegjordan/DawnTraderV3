@@ -1,8 +1,8 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops } from './poller.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow } from './poller.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS } from './config.mjs';
-import { ledgerRowInText } from './checker.mjs';
+import { ledgerRowInText, checkLedgerRows } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse('2026-06-17T12:00:00Z');
@@ -440,6 +440,48 @@ ok('#637 a plausible-but-invalid token is rejected to the sentinel (a lastTick i
   ok('S5b: CRLF report text still grades', ledgerRowInText(`| x |\r\n${S1}\r\n`, spec));
   ok('S5c: a row with no trailing pipe still grades', ledgerRowInText('| T1 | session task lists | ✅ mine', spec));
   ok('S5d: unreadable report (null) FAILS and never throws', !ledgerRowInText(null, spec));
+  // r2 — the object-round reader's six misjudgements, each reproduced on the r1 matcher before this fix
+  ok('R1: an OBJECTIVES row mentioning a task list with ✅ does NOT satisfy the ledger row',
+    !ledgerRowInText('| OBJ-3 | move CC_A task list | ✅ done |', spec));
+  ok('R2: an explicit ❌ verdict is not rescued by a ✅ in a later note cell',
+    !ledgerRowInText('| T1 | the four session task lists | ❌ | ✅ (Langston: must fix) |', spec));
+  ok('R3: a ledger row inside a code fence is not a ledger row',
+    !ledgerRowInText('```\n| T1 | the four session task lists | ✅ | x |\n```', spec));
+  ok('R4: "N/A ×3 / ✅ mine" PASSES — the verdict cell leads with N/A and carries the own-list ✅',
+    ledgerRowInText('| T1 | the four session task lists | N/A ×3 / ✅ mine | ok |', spec));
+  ok('R5: a linked check mark PASSES', ledgerRowInText('| T1 | the four session task lists | [✅](x.md) | ok |', spec));
+  ok('R6: "⚠️ ✅ partial" FAILS — a non-conforming verdict token (workflow-10 defines exactly ✅ and N/A)',
+    !ledgerRowInText('| T1 | the four session task lists | ⚠️ ✅ partial | ok |', spec));
+  ok('R7: the skill row FILLED IN passes — its ⛔ "when it applies" cell is not read as the verdict',
+    ledgerRowInText('| **T1** | ★ **THE FOUR SESSION TASK LISTS** | ⛔ **EVERY batch close, EVERY class** | ✅ mine / N/A ×3 | updated |', spec));
+  ok('R8: a filename-only ledger row passes', ledgerRowInText('| T1 | `CC_A_SESSION_TASK_LIST.md` | ✅ | updated |', spec));
+  ok('R9: ✅ with a variation selector passes', ledgerRowInText('| T1 | the four session task lists | ✅️ mine | ok |', spec));
+}
+// checkLedgerRows with injected readers — the date gate and the read-failure path (reader r1: both untested)
+{
+  const since = LEDGER_ROWS.task_lists.sinceMs;
+  const row = '| T1 | the four session task lists | ✅ mine / N/A ×3 | ok |';
+  const io = (reports, addedMs, text) => ({ findGlobDoc: () => reports, completionReportCommitTime: () => addedMs, showFile: () => text });
+  const R = ['Claude Comms and Packages/Batch Completion/X_COMPLETION_REPORT.md'];
+  ok('CLR1: no completion report → null (not graded)', checkLedgerRows('X', io([], null, row)).task_lists === null);
+  ok('CLR2: report first-added BEFORE the row existed → null', checkLedgerRows('X', io(R, since - 1, '')).task_lists === null);
+  ok('CLR3: report first-added exactly AT since → graded', checkLedgerRows('X', io(R, since, row)).task_lists === true);
+  ok('CLR4: after since, row present → true', checkLedgerRows('X', io(R, since + 1, row)).task_lists === true);
+  ok('CLR5: after since, row absent → false', checkLedgerRows('X', io(R, since + 1, '| T1 | `BATCH_CATALOG.md` | ✅ |')).task_lists === false);
+  ok('CLR6: after since, unreadable report (null) → false, never throws', checkLedgerRows('X', io(R, since + 1, null)).task_lists === false);
+  ok('CLR7: any one of two reports carrying the row satisfies it',
+    checkLedgerRows('X', { findGlobDoc: () => ['a_COMPLETION.md', 'b_COMPLETION.md'], completionReportCommitTime: () => since + 1,
+      showFile: (p) => (p === 'b_COMPLETION.md' ? row : '') }).task_lists === true);
+}
+// makeVerifyLedgerRow — the orphan verifier tick() now builds (reader r1: tick wiring untested)
+{
+  const na = new Set(['OLD-NA:task_lists']);
+  const v = (result) => makeVerifyLedgerRow(na, () => result);
+  ok('VLR1: row still missing, no N/A → NOT satisfied (alert kept)', v({ task_lists: false })('OLD', 'task_lists') === false);
+  ok('VLR2: row missing but a confirmed N/A → satisfied', v({ task_lists: false })('OLD-NA', 'task_lists') === true);
+  ok('VLR3: row now present → satisfied', v({ task_lists: true })('OLD', 'task_lists') === true);
+  ok('VLR4: report no longer grades (null) → satisfied', v({ task_lists: null })('OLD', 'task_lists') === true);
+  ok('VLR5: row name removed from LEDGER_ROWS (undefined) → satisfied, not stranded', v({})('OLD', 'task_lists') === true);
 }
 {
   const closed = [{ batchId: 'P19-BL', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];

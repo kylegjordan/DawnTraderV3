@@ -200,6 +200,13 @@ export function decideOrphanSweep(openAlertKeys, enforceableIds, verify, isClass
 // set of alert-ids that are still LIVE in the store (active/scheduled), return the cache keys whose id
 // is no longer live and must be dropped. `liveIds === null` (store unreadable) → drop NOTHING
 // (FAIL-OPEN: a store hiccup must never blind-prune a genuinely-open alert). PURE — the tick wraps it.
+// B-TASK-LIST-SLOT (#1009): the orphan-sweep verifier for ledger-row alerts, built here so it is unit-tested
+// rather than living only inside tick(). An aged-out alert is satisfied when the row is present, the report no
+// longer grades (null), the row name is no longer in LEDGER_ROWS (undefined), or a confirmed N/A exists.
+export function makeVerifyLedgerRow(naConfirmed, check = checkLedgerRows) {
+  return (bid, row) => check(bid)[row] !== false || naConfirmed.has(`${bid}:${row}`);
+}
+
 export function decideStaleOpenAlertDrops(openAlerts, liveIds) {
   if (!liveIds) return [];
   return Object.entries(openAlerts).filter(([, id]) => !liveIds.has(id)).map(([k]) => k);
@@ -693,8 +700,7 @@ export function tick(nowMs = Date.now()) {
   };
   // B-TASK-LIST-SLOT (#1009): an aged-out ledger-row alert resolves when the row is now present, the
   // report no longer grades (null), or a confirmed N/A exists — re-verified at GOV_REF, never blind.
-  const verifyLedgerRow = (bid, row) =>
-    checkLedgerRows(bid)[row] !== false || exceptions.naConfirmed.has(`${bid}:${row}`);
+  const verifyLedgerRow = makeVerifyLedgerRow(exceptions.naConfirmed);
   const { resolve: orphanResolve, keep: orphanKeep } =
     decideOrphanSweep(Object.keys(state.openAlerts), enforceableIds, verifyDoc, isClassDeclared, verifyLedgerRow);
   for (const key of orphanResolve) {

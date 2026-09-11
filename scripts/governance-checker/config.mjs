@@ -163,7 +163,9 @@ export const REQUIRED_IF = {
 // ledger shape was in common use; extending to them is homed at PHASE_19_PLAN row 4.8, OBJ-B.
 export const LEDGER_ROWS = {
   task_lists: {
-    names: /task[ _-]?lists?/i,
+    // "session task list(s)" or a CC_<X>_SESSION_TASK_LIST filename — NOT any "task list": an objectives
+    // row such as "move CC_A task list | ✅ done" must not satisfy the ledger row (object-round reader r1).
+    names: /session[ _-]task[ _-]lists?/i,
     sinceMs: Date.parse('2026-09-05T05:45:00Z'), // bfdd1197f — workflow-10-governance:132 lands
   },
 };
