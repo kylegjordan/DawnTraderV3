@@ -165,7 +165,7 @@ export const LEDGER_ROWS = {
   task_lists: {
     // "session task list(s)" or a CC_<X>_SESSION_TASK_LIST filename — NOT any "task list": an objectives
     // row such as "move CC_A task list | ✅ done" must not satisfy the ledger row (object-round reader r1).
-    names: /session[ _-]task[ _-]lists?/i,
+    names: /session[\s_-]*task[\s_-]*lists?/i, // matched on text with * and ` removed and NBSP as space
     sinceMs: Date.parse('2026-09-05T05:45:00Z'), // bfdd1197f — workflow-10-governance:132 lands
   },
 };

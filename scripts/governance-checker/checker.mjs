@@ -156,7 +156,9 @@ export function completionReportCommitTime(batchId) {
 //   VERDICT CELLS are the cells that BEGIN with a ledger token (`✅`, `N/A`, `❌`), other than the FIRST cell that names
 //   the row — so a name cell that starts with ✅ is never the verdict, while a verdict cell that mentions a list's
 //   FILENAME still counts (CC-C's real row, B_EXIT_BOOK_AGE_STAMP:90, does exactly that; r3 alerted on it).
-//   PASS iff no verdict cell begins with ❌ AND some verdict cell has a `/`-separated segment beginning with ✅.
+//   PASS iff the FIRST verdict cell does not begin with ❌ AND some verdict cell has a segment (split on / · , ;)
+//   beginning with ✅. r4: the T1 marker must be the FIRST cell; the excluded name cell must sit in the document
+//   position (cell 0 or 1); ★/⭐ are stripped; names match on text with * and ` removed.
 //   ⇒ `✅ mine / N/A ×3`, `N/A ×3 / ✅ mine`, and `N/A for CC-B | ✅ mine` PASS;
 //   ⇒ `❌ | ✅ (note)`, `❌ not done (should be ✅)`, `N/A — not ✅ yet`, `⚠️ ✅ partial` FAIL (⚠️ is not a token);
 //   ⇒ prose, an objectives row, the skill's template row left empty, and a row inside a fence FAIL.
@@ -165,6 +167,8 @@ export function completionReportCommitTime(batchId) {
 //   at least as long, with nothing after it; an UNCLOSED fence runs to the end of the file, as it renders.
 const LEDGER_TOKEN = /^(✅|N\/A|❌)/i;
 const TIER_CELL = /^T1\b/i;
+// r4 (reader r3): names are matched on DE-MARKED text so `**session** task lists` still names the row.
+const nameText = (s) => s.replace(/[*`]/g, '').replace(/\u00a0/g, ' ');
 export function ledgerRowInText(text, spec) {
   if (typeof text !== 'string') return false;
   let fence = null;
@@ -177,14 +181,18 @@ export function ledgerRowInText(text, spec) {
     }
     if (f && !(f[1][0] === '`' && f[2].includes('`'))) { fence = { ch: f[1][0], len: f[1].length }; continue; }
     const body = line.replace(/^ {0,3}(> ?)+/, '');
-    if (!/^ {0,3}\|/.test(body) || !spec.names.test(body)) continue;
+    if (!/^ {0,3}\|/.test(body) || !spec.names.test(nameText(body))) continue;
     const rawCells = body.split('|').slice(1);
-    const cells = rawCells.map((c) => c.replace(/[*`_\[\]]/g, '').trim());
-    if (!cells.some((c) => TIER_CELL.test(c))) continue;
-    const nameIdx = rawCells.findIndex((c) => spec.names.test(c));
-    const verdicts = cells.filter((c, i) => i !== nameIdx && LEDGER_TOKEN.test(c));
-    if (verdicts.some((c) => c.startsWith('❌'))) continue;
-    if (verdicts.some((c) => c.split('/').some((seg) => seg.trim().startsWith('✅')))) return true;
+    const cells = rawCells.map((c) => c.replace(/[*`_\[\]★⭐]/g, '').trim());
+    // r4: the tier marker must be the FIRST cell — `T1` at the start of a notes cell does not make a row a ledger row.
+    if (!TIER_CELL.test(cells[0] || '')) continue;
+    // r4: only a naming cell in the DOCUMENT position (cell 0 merged with the tier, or cell 1) is excluded from the
+    // verdicts; a verdict cell further right that mentions a list's filename still counts.
+    const nameIdx = rawCells.findIndex((c) => spec.names.test(nameText(c)));
+    const verdicts = cells.filter((c, i) => !(i === nameIdx && i <= 1) && LEDGER_TOKEN.test(c));
+    // r4: only the FIRST verdict cell can veto with ❌, so a later notes cell such as `❌ none outstanding` does not.
+    if (verdicts.length && verdicts[0].startsWith('❌')) continue;
+    if (verdicts.some((c) => c.split(/[\/·,;]/).some((seg) => seg.trim().startsWith('✅')))) return true;
   }
   return false;
 }

@@ -478,6 +478,18 @@ ok('#637 a plausible-but-invalid token is rejected to the sentinel (a lastTick i
     !ledgerRowInText('| T1 | ✅ session task lists | N/A ×4 |', spec));
   ok('Q14: REAL ROW, B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md:90 at 33b62ee16 — its verdict cell names CC_C_SESSION_TASK_LIST.md — PASSES',
     ledgerRowInText("| T1 · the four session task lists | ✅ **mine** / `N/A — not mine` ×3 — ⚠️ **added 2026-09-11, late:** `CC_C_SESSION_TASK_LIST.md` did not exist at this 09-07 close (Kyle's rule landed 09-05). It is created in the same commit as this row, on the governance checker's alert `2ec36624`, routed by Langston. The other three lists are not mine to touch. |", spec));
+  // r4 — final object-round reader r3
+  ok('Z1: T1 at the start of a NOTES cell does not make an objectives row a ledger row',
+    !ledgerRowInText('| OBJ-3 | session task lists moved | ✅ | T1 ledger row updated |', spec));
+  ok('Z2: a T2 row whose note begins T1 is not the Tier-1 row', !ledgerRowInText('| T2 | session task lists | ✅ | T1 row above covers it |', spec));
+  ok('Z3: document cell without "session", verdict cell naming the filename — PASSES',
+    ledgerRowInText('| T1 | the four task lists | ✅ `CC_A_SESSION_TASK_LIST.md` updated / N/A ×3 | ok |', spec));
+  ok('Z4: bold inside the name still names the row', ledgerRowInText('| T1 | **session** task lists | ✅ mine | ok |', spec));
+  ok('Z5: code-marked word inside the name still names the row', ledgerRowInText('| T1 | `session` task lists | ✅ mine | ok |', spec));
+  ok('Z6: a non-breaking space inside the name still names the row', ledgerRowInText('| T1 | session\u00a0task lists | ✅ mine | ok |', spec));
+  ok('Z7: "N/A ×3 · ✅ mine" — a middle-dot separator — PASSES', ledgerRowInText('| T1 | the four session task lists | N/A ×3 · ✅ mine | ok |', spec));
+  ok('Z8: "★ ✅ mine" — a star before the check — PASSES', ledgerRowInText('| T1 | the four session task lists | ★ ✅ mine | ok |', spec));
+  ok('Z9: a later NOTES cell beginning ❌ does not veto a ✅ verdict', ledgerRowInText('| T1 | the four session task lists | ✅ mine / N/A ×3 | ❌ none outstanding |', spec));
   ok('Q12: a 4-backtick fence is closed only by ≥4 backticks — a 3-backtick line inside does not close it',
     !ledgerRowInText('````\n' + F3 + '\n| T1 | the four session task lists | ✅ | example |\n````', spec));
 }
