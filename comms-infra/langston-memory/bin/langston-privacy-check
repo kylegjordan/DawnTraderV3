@@ -60,7 +60,10 @@ ENUMERABLE_SOURCES = ("files", "systemd", "compat")
 #    reader only, so it catches a reader-owned fence and nothing else; a 0700 fence owned by any other account passes
 #    other-bits and the group check while that account has owner-bit read AND chmod. Only ROOT as owner is drift
 #    (root holds DAC_OVERRIDE regardless).
-DRIFT_KIND_PREFIXES = ("directory-owned-by-root", "directory-group-drift")
+# ⛔ EXACT MEMBERSHIP, NOT PREFIX MATCHING (Langston, 18:45Z): with startswith, a future kind whose name merely
+#    EXTENDS a drift name would grade as drift - the wrong direction. An unrecognised kind must fall through to
+#    EXPOSURE, which is the direction this tool is built to fail in.
+DRIFT_KINDS = frozenset(("directory-owned-by-root", "directory-group-drift"))
 SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with the live file = a copy
 MIN_LINE = 40
 NL = chr(10)
@@ -154,7 +157,7 @@ def nsswitch_enumerable(path):
 
 
 def is_drift(finding):
-    return finding["kind"].startswith(DRIFT_KIND_PREFIXES)
+    return finding["kind"] in DRIFT_KINDS
 
 
 def reads_as(user, path):
@@ -661,6 +664,11 @@ def self_test():
         check("  ...and the shared-group fence is an EXPOSURE verdict", rs["verdict"], "EXPOSED")
         check("  ...and a root-owned fence alone is DRIFT, not an exposure",
               evaluate(dict(closed, closed_dirs=[rootown]))["verdict"], "DRIFT")
+        # EXACT MEMBERSHIP (Langston, 18:45Z): a kind that merely EXTENDS a drift name is NOT drift
+        check("an unrecognised kind that extends a drift name grades as exposure, not drift",
+              is_drift({"kind": "directory-owned-by-root-and-something-new"}), False)
+        check("  control: the exact drift kinds still grade as drift",
+              [is_drift({"kind": k}) for k in ("directory-owned-by-root", "directory-group-drift")], [True, True])
         # OWNER SPLIT (Langston, 18:27Z): a THIRD account as owner is an EXPOSURE, and so is an orphaned uid
         third = next((pw for pw in pwd.getpwall() if pw.pw_uid not in (0, owner_uid, reader_uid)), None)
         check("OWNER SPLIT fixture: a third account exists on this box", third is not None, True)
