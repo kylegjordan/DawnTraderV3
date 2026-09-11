@@ -68,8 +68,11 @@ interface Streak {
   lastField: OhlcFrameField;
   lastReason: OhlcFrameRejectReason;
 }
-/** Key `${assetClass}|${symbol}`; frames with no usable symbol share `${assetClass}|`. Bounded by the
- *  universe plus one entry per class, because an accepted bar deletes its entry. */
+/** Key `${assetClass}|${symbol}`; frames with no usable symbol share `${assetClass}|`, which ANY accepted
+ *  bar in the class resets. Bounded by the universe plus one entry per class (an accept deletes its entry).
+ *  Why that shared streak is NARROW, not blind (Langston, Step 4): a venue-wide `symbol` rename leaves no
+ *  accepted bar to reset it, so it DOES alert; the un-alerted case is symbol-less junk mixed with good
+ *  traffic, which still moves the skipped counter, the panel's amber cell and the throttled log line. */
 const _streaks = new Map<string, Streak>();
 const _alertLatch = new Map<ArchiveAssetClass, number>();
 let _noIdentitySeq = 0;

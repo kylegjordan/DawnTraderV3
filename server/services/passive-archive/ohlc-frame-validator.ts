@@ -3,10 +3,19 @@
  * B-OHLC-FRAME-GUARD (#1028) — the OHLC frame validator
  * ═══════════════════════════════════════════════════════════════════════
  *
- * THE INVARIANT: a bar is admitted to the archive iff it is STORABLE (the database accepts the
- * row, so the chunk it rides in is not dropped) AND AGGREGATABLE (no stored value poisons a
- * reader — `max(1, NaN, 5)` is NaN). One bad value used to either drop the whole 1,000-row chunk
- * or land a NaN. Reference: B_OHLC_FRAME_GUARD_PRE_AUDIT.md §2 (A1, A2, A16) and §P1.
+ * WHAT IT ENFORCES — VALUE-LEVEL STORABILITY AND AGGREGATABILITY: every value in an admitted bar is one
+ * its database column accepts (so no single VALUE makes PG reject the row and drop the 1,000-row chunk
+ * it rides in) and one a reader can aggregate (no stored NaN — `max(1, NaN, 5)` is NaN). Before this,
+ * one bad value either dropped the whole chunk or landed a NaN. Reference:
+ * B_OHLC_FRAME_GUARD_PRE_AUDIT.md §2 (A1, A2, A16) and §P1.
+ *
+ * ⛔ WHAT IT DOES *NOT* ENFORCE — ROW ROUTING. `intervalBegin` only has to be a finite time (scope option
+ * (c): no plausibility rule), and the four OHLC tables are RANGE-partitioned on it with NO DEFAULT
+ * partition. A finite time outside every partition — a seconds-for-milliseconds unit change, say —
+ * passes this validator, and PG still rejects the row ("no partition of relation … found for row") and
+ * the writer drops its whole chunk. Measured at the sink 2026-09-11 (Langston, Step 4: a `1970-01-21`
+ * bar into `crypto_spot_ohlc_1m`). Forward coverage is the partition creators' job and is monitored; a
+ * malformed stamp landing outside the range entirely is covered by neither. Homed as `#1036`.
  *
  * ⛔ THE STRING PATH IS GATED ON THE *UNTRIMMED* STRING, AND THE REASON IS MEASURED, NOT ASSUMED
  * (Step-2 condition C1: the validator's acceptor must be the sink's acceptor). Probed on PG 17.6,
