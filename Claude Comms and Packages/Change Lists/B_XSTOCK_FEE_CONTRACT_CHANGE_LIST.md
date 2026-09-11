@@ -226,3 +226,42 @@ Every other Tier-1/Tier-2 edit named in the plan's P10 lands at Step 10.
 `LANGSTON deploy sequencing 2026-09-11 18:17Z: (a) SEQUENCE — CC-C's B-PRICE-SIDE-BY-JOB OBJ-7 (P-7a..P-7j, interleaved on the branch, at its own Step 4) deploys first at its own Step 6; this batch follows as a separate boundary. Do not combine; do not amend the P8 VOID clause. · re-derived by him: the compare census a5273ad6d...3127b5cd8 (62 commits, 105 files, a complete census below the API truncation points) — ready_to_buy_service.ts and eval-cycle.ts absent, signal-orchestrator.ts one hunk at :2414 (P-7j), so both P8 decision sites stay levelGeometry 'mid' · P-7h: not a confound AT THE SITE (the token gate is on the crypto direct-REST branch; xStock exits mark off getLatestEquityTick), but UNMEASURED as a shared resource (the exit engine becomes a new consumer of the REST bucket, and takeToken() has no refund on throw) — a site census cannot clear a shared-resource coupling, so (b) is refused; narrowing a pre-registered clause after seeing which commits landed is a specification change made with the answer in view · CC-C agreed (a) at 18:06Z and posts the OBJ-7 deploy sha · his P-7h / F-G-2 A4 finding is a condition on OBJ-7, not on this batch.`
 
 **Consequence for this batch:** Step 6 waits for OBJ-7's Step 6. The deploy-note baselines (`scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql`, committed `4c082a831`, trial-run twice on staging) run immediately before this batch's `dt-deploy`, with `obj7_at` = OBJ-7's recorded deploy time, so section (1b) shows whether OBJ-7 moved the baseline.
+
+## 9. STEP 6 DEPLOY NOTE — the `B-XSTOCK-FEE-CONTRACT` half (written BEFORE the restart)
+
+> ⛔ **One restart, two named boundaries** (Langston, 2026-09-11 19:20Z). The fee commits are ancestors of `B-PRICE-SIDE-BY-JOB` OBJ-7, so no sha deploys them apart.
+> ⚠️ **VALID ONLY IF THAT RULING STANDS** after the two quote-backs of his 18:17Z sequencing ruling (sent 19:24Z by CC-B and CC-C). If he re-rules, this section is replaced, not amended.
+> **OBJ-7's half:** `Claude Comms and Packages/Change Lists/B_PRICE_SIDE_BY_JOB_OBJ7_CHANGE_LIST.md`, section "STEP 6 — DEPLOY NOTE (one restart, two batches)" (CC-C). Each half lives in its own record, and the two are linked, so neither session edits the other's file.
+> **Deploy sha:** `<40-char sha — filled at the notice>` · **run by:** `cc-c` (one `dt-deploy`, agreed 19:25Z) · **restart instant (from the deploy record):** `<deployed_at — filled after>`
+> **Sequence agreed with CC-C:** CC-C posts ten minutes' notice naming CC-B, but only once four things are true: Langston rules on the quote-backs, he confirms OBJ-7 chunk 4 r2, CI is 4/4 per job on the deploy sha, and CC-C's pre-restart records are committed. CC-B then runs §9.3 and commits its output. Only then does CC-C deploy.
+
+### 9.1 The boundary this batch puts at that sha
+- **Class:** `xstock_spot` only.
+- **What changes:** `fee_model` taker 0.008 → 0.0010, maker 0.004 → −0.0002 (a rebate); the `cost_model` module is deleted (zero readers); calibration epochs `vts/xstock_spot`, `paper_sim/xstock_spot` +1 and `live/xstock_spot` created at `live/* + 1`.
+- **What does not change:** crypto fees, which the migration checks against its own pre-image; and every crypto and wildcard epoch row.
+- ⚠️ **The xStock epoch bump cuts xStock learning history.** Any xStock outcome aggregate that spans this sha is TWO populations, not one.
+
+### 9.2 Windows that START or SPLIT at this sha (named before any post-deploy row is read)
+| window | what happens at this sha |
+|---|---|
+| **P8** (pre-audit r7) — xStock maker share, per-pick classes | **starts** here. `p₀` is frozen below. The VOID clause stands as written: 3n lands at the window's START boundary, not inside it. |
+| **Arm B** (pre-audit r7) — admission at the xStock EV gate | **starts** here; baselines frozen below |
+| **`#951`'s xStock arm** | **splits** at the fee change (Langston condition 2) |
+| **every xStock learning aggregate** (Welford, `outcome-feedback-store.ts:358`) | **resets** — condition C, carried to the completion report |
+
+### 9.3 Frozen baselines — the output of `scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql`, run at `<run instant>` with `obj7_at` = `deploy_at` = that instant
+```
+<paste the full psql output here, then commit BEFORE the restart>
+```
+
+### 9.4 Rollback cost — Langston's condition 3, verbatim in substance
+- **No sha rolls OBJ-7 back and keeps the fee contract in its reviewed state.** `aee2bc191` is an ancestor of all of OBJ-7. The only pre-OBJ-7 targets carry the fee runtime pre-review, and anything below that drops the fee code entirely.
+- **Dropping the fee code requires the hand-run rollback first:**
+  `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f drizzle/migrations/2026-09-11-b-xstock-fee-contract-rollback.sql`
+  (as deploy, env sourced), **then** `dt-deploy` of the older sha.
+- **That rollback is itself a fee change,** so it bumps the xStock epochs again. **An OBJ-7 rollback after this deploy therefore costs a manual DB step and two extra xStock epoch boundaries.**
+- The rollback refuses if xStock is no longer on this batch's pair or the restored pair. That guards against overwriting a later fee batch.
+- **Rollback-verb gap:** §13 disposition 5, no work — already stated in the rollback file's header, which is its correct home (Langston).
+
+### 9.5 After the restart (Step 7)
+`scripts/analysis/b_xstock_fee_contract_verify.sql` with `deploy_at` = the recorded `deployed_at`. PASS needs an xStock maker fill booked with a negative entry fee, and xStock taker fills at 0.0010. **A window with zero xStock fills is not a pass.** Then the UI, in Claude-in-Chrome: the RTB table and the VTS and paper open/closed trades tabs, which show `Maker (-0.02%)` / `Taker (0.10%)`.
