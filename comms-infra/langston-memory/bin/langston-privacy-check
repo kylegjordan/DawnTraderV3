@@ -180,6 +180,18 @@ def copies_in(roots, live_memory, reader):
     return found, pop, len(keys)
 
 
+def group_members(gid):
+    """Every account that holds this group: its listed secondary members AND every account whose
+    PRIMARY group it is. /etc/group lists only the first kind, so reading gr_mem alone would miss a
+    second account created with this as its primary group."""
+    try:
+        members = set(grp.getgrgid(gid).gr_mem)
+    except KeyError:
+        members = set()
+    members |= {pw.pw_name for pw in pwd.getpwall() if pw.pw_gid == gid}
+    return members
+
+
 def store_findings(store_dir, owner):
     """Condition 5: every store file owned by the owner and not group/other-writable. An unidentified
     past writer (a root-owned file) becomes a DETECTED future one instead of a shrug."""
@@ -219,9 +231,23 @@ def evaluate(cfg):
         if not os.path.exists(d):
             findings.append({"kind": "target-not-found", "path": d})
             continue
-        mode = stat.S_IMODE(os.stat(d).st_mode)
+        dst = os.stat(d)
+        mode = stat.S_IMODE(dst.st_mode)
         if mode & stat.S_IRWXO:
             findings.append({"kind": "directory-open-to-others", "path": d, "mode": oct(mode)})
+        # ⛔ P-6a.1 (Langston Step-6 FINDING-9): the reads below run as ONE named account, so a fence that
+        #    admits a SECOND account through its group is invisible to them. Assert the fence itself:
+        #    owned by the owner, and a group whose only holder is the owner. That makes the guarantee
+        #    total over accounts rather than sampled at one. (Measured empty on 2026-09-11: group 987 had
+        #    zero secondary members - this is a reach limit being closed, not an exposure.)
+        owner_uid = pwd.getpwnam(cfg["owner"]).pw_uid
+        if dst.st_uid != owner_uid:
+            findings.append({"kind": "directory-not-owned-by-" + cfg["owner"], "path": d,
+                             "owner": pwd.getpwuid(dst.st_uid).pw_name})
+        holders = group_members(dst.st_gid)
+        if holders != {cfg["owner"]}:
+            findings.append({"kind": "directory-group-not-" + cfg["owner"] + "-only", "path": d,
+                             "group_holders": sorted(holders)})
         # ⛔ FINDING-1: a mode comparison is the thing this tool's docstring forbids - adding the reader to
         #    the owner's group would open everything while the other-bits still read 0. Attempt it.
         if reads_as(cfg["reader"], d):
@@ -333,14 +359,17 @@ def reconcile_alerts(result, st):
     if wanted and not st.get(wanted):
         lines = ["%s %s%s" % (f["kind"], f["path"], (" " + f["mode"]) if f.get("mode") else "")
                  for f in result["findings"]][:12]
+        # ⛔ P-6a.2 (Langston Step-6 FINDING-10): the first live alert listed 12 of 23 findings and said
+        #    neither number, and the pointer to the full set existed only on the RESOLVE. Lead with both.
+        head = "%d finding(s); %d shown; full set at %s. " % (len(result["findings"]), len(lines), evidence)
         if result["verdict"] == "EXPOSED":
             title = "Langston private content is readable by another account"
-            body = ("The daily read-as-" + READER + " check found: " + "; ".join(lines) + ". "
+            body = (head + "The daily read-as-" + READER + " check found: " + "; ".join(lines) + ". "
                     "Langston ruled this a hazard to review independence (B-LANGSTON-CONTEXT pre-audit 21.3). "
                     "Owner CC-INFRA - re-close the path, then let the next run resolve this.")
         else:
             title = "Langston privacy check cannot measure the exposure"
-            body = ("Reason: " + result.get("reason", "") + ". Controls: " + json.dumps(result["controls"])
+            body = (head + "Reason: " + result.get("reason", "") + ". Controls: " + json.dumps(result["controls"])
                     + "; findings: " + "; ".join(lines) + ". Until this clears there is no instrument on "
                     "the exposure. Owner CC-INFRA.")
         rc, out, err = _alerts(["add", "--triggers-at", utc().strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -420,6 +449,7 @@ def self_test():
     top = tempfile.mkdtemp(prefix="langston-privacy-selftest-")
     reader_uid = pwd.getpwnam(READER).pw_uid
     owner_uid, owner_gid = pwd.getpwnam(OWNER).pw_uid, grp.getgrnam(OWNER).gr_gid
+    reader_gid = pwd.getpwnam(READER).pw_gid
     try:
         os.chmod(top, 0o755)
         RUNLOG, STATEFILE = os.path.join(top, "run.jsonl"), os.path.join(top, "state.json")
@@ -451,6 +481,10 @@ def self_test():
             os.makedirs(p, exist_ok=True)
             os.chmod(p, mode)
             return p
+
+        def owned(path):
+            os.chown(path, owner_uid, owner_gid)
+            return path
 
         base = {"reader": READER, "owner": OWNER, "control_readable": CONTROL_READABLE,
                 "control_refused": CONTROL_REFUSED, "live_memory": live, "missing_targets": []}
@@ -491,7 +525,7 @@ def self_test():
         check("  a binary file is skipped and counted", pop["skipped_binary"], 1)
 
         closed = dict(base, read_targets=[make("private.md", 0o600)],
-                      closed_dirs=[mkdir("closed-dir", 0o750)],
+                      closed_dirs=[owned(mkdir("closed-dir", 0o750))],
                       private_files=[make("index-closed.jsonl", 0o600)],
                       store_dir=mkdir("store-closed", 0o755),
                       scan_roots=[mkdir("scan-closed", 0o755)],
@@ -508,7 +542,6 @@ def self_test():
         check("BLOCKER-4: a missing target -> INSTRUMENT, not PASS", evaluate(gone)["verdict"], "INSTRUMENT")
 
         # FINDING-1: a directory whose other-bits are 0 but that the reader can list through its GROUP
-        reader_gid = pwd.getpwnam(READER).pw_gid
         group_dir = mkdir("group-open-dir", 0o750)
         os.chown(group_dir, 0, reader_gid)
         store_open = mkdir("store-open-dir", 0o775)
@@ -528,6 +561,35 @@ def self_test():
         rl = evaluate(dict(closed, scan_roots=[linkroot]))
         check("FINDING-2: a symlinked directory is counted", rl["scan"]["population"]["skipped_symlinked_dir"], 1)
         check("FINDING-3: the scan publishes its reach", "LINE-PRESERVING" in rl["scan"]["claim"], True)
+        # P-6a.1 (FINDING-9): a 750 fence owned by the owner, but whose group another account holds
+        shared = mkdir("shared-group-dir", 0o750)
+        os.chown(shared, owner_uid, reader_gid)
+        rs = evaluate(dict(closed, closed_dirs=[shared]))
+        sk = [f["kind"] for f in rs["findings"]]
+        check("P-6a.1: a fence whose group another account holds -> flagged", ("directory-group-not-" + OWNER + "-only") in sk, True)
+        check("  ...and other-bits alone would have passed it", "directory-open-to-others" in sk, False)
+        rootown = mkdir("root-owned-fence", 0o750)
+        os.chown(rootown, 0, owner_gid)
+        check("P-6a.1: a fence not owned by the owner -> flagged",
+              ("directory-not-owned-by-" + OWNER) in [f["kind"] for f in evaluate(dict(closed, closed_dirs=[rootown]))["findings"]], True)
+        check("  control: the owner-owned, owner-only fence raises neither",
+              [f["kind"] for f in r2["findings"] if f["kind"].startswith("directory-")], [])
+        # P-6a.2 (FINDING-10): the alert body leads with the count, the number shown, and the run-log line
+        sent = []
+
+        def capture(argv):
+            sent.append(argv)
+            if argv[0] == "add":
+                return 0, json.dumps({"id": "fixture-body"}), ""
+            return 0, "active        [warning ] health_check       triggers_at=x id=fixture-body  t", ""
+        _alerts = capture
+        n_all = len(evaluate(exposed)["findings"])
+        run_once(exposed, {})
+        adds = [a for a in sent if a[0] == "add"]
+        body = adds[0][adds[0].index("--body") + 1] if adds else ""
+        check("P-6a.2: body leads with the finding count and the shown count",
+              body.startswith("%d finding(s); %d shown; full set at %s:" % (n_all, min(n_all, 12), RUNLOG)), True)
+
         # BLOCKER-5: an add that returns an ACKNOWLEDGED row, and a tracked alert acked since the last run
         acked_row = json.dumps({"id": "fixture-acked", "acknowledged_at": "2026-09-11T00:00:00Z"})
         _alerts = lambda argv: (0, acked_row, "") if argv[0] == "add" else (0, "", "")
