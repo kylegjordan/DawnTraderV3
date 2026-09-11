@@ -105,9 +105,11 @@ D4 builds the level; D2 supplies the fill evidence. Neither claims the other's j
   - Receipt-clock age applies otherwise — today, every xStock price.
   - The two are never pooled, and receipt age is never a claim of known source freshness.
 - **A re-served cached price keeps its original age.**
-- ⚠️ **Knife-edge:** `active_fill_max_age_ms` is live at 15,000, and the re-serve sawtooth's densest rung is 14.3 s.
-  - Once D7 keeps the original age, that rung becomes visible in entry fill-age. That is intended, not a regression.
-  - It is checked inside the batch with one query, and a change in the refusal rate is not read as a market effect.
+- ⚠️ **Knife-edge — corrected at Step 4 (Langston, chunk 3, 2026-09-11).** This note first paired the crypto re-serve sawtooth with `active_fill_max_age_ms` (15,000). That named the wrong gate.
+  - That knob has exactly two consumers, both xStock (`active-dispatch.ts:182`, `:184`). It measures the xStock archive table's latest capture: a different class, a different table and a different clock.
+  - The 14.3 / 29.3 / 44.3 / 59.3 s sawtooth (`#951` progress report §3) measures against the crypto exit path's 2 s `cachedAt` window. It passes that window by construction, because a re-serve is written back with a fresh `cachedAt` while its `observedAt` stays honest.
+  - The refusal is OBJ-8's crypto age check (scope 8g). Once D7 keeps the original age, the rungs become visible to that check, and a change in its refusal rate is not read as a market effect.
+  - Checked with one query (P-7f): 0 of 109 closed trades since 2026-08-26 entered on the re-serve producer; positive control, one `kraken_rest_poller` entry.
 
 ## D7. Price caches and refresh timing
 

@@ -7,6 +7,8 @@
 //
 // POSITIVE CONTROL: against the translator, the tick event and the adapter before P-7i there is no `lastTrade` or
 // `lastTradePrice` at all, so every test below fails.
+// STEP 4 r2 (Langston chunk-3 C1, C2): tests 9-11 fail against r1 (`c501bded3`) — an `undefined` print was stamped with a
+// receipt time, and the entry seed erased the pair; test 12 guards the empty-row case and passes on r1 by design.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -135,5 +137,47 @@ describe('P-7i — the emitters state the print from the right object (source fe
     const book = src.indexOf("producer: 'kraken_ws_book_mid'");
     expect(book).toBeGreaterThan(-1);
     expect(src.slice(book, src.indexOf('});', book))).toContain('lastTradePrice: null');
+  });
+});
+
+describe('P-7i r2 — Langston chunk-3 C1 and C2: the pair never splits, and every writer carries it', () => {
+  it('9. ★ C1: an `undefined` print keeps the previous pair and never stamps a receipt time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    adapter.updateCache(SYM, 100, 'kraken_ws', 'kraken_ws_ticker_mid', 99, 101, Date.now(), null, 99.5);
+    vi.setSystemTime(1_700_000_005_000);
+    adapter.updateCache(SYM, 100.1, 'kraken_ws', 'kraken_ws_ticker_mid', 99, 101, Date.now(), null, undefined);
+    const row = adapter.priceCache.get(SYM);
+    expect(row.lastTradePrice).toBe(99.5);
+    expect(row.lastTradeReceivedAtMs).toBe(1_700_000_000_000);
+  });
+
+  it('10. ★ C1: on a fresh row, a three-argument write (the test-file shape) stores neither half', () => {
+    adapter.updateCache(SYM, 100, 'kraken_ws');
+    const row = adapter.priceCache.get(SYM);
+    expect(row.lastTradePrice).toBeNull();
+    expect(row.lastTradeReceivedAtMs).toBeNull();
+  });
+
+  it('11. ★ C2: the entry seed carries the row\'s print WITH its original receipt time', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    adapter.updateCache(SYM, 100, 'kraken_ws', 'kraken_ws_ticker_mid', 99, 101, Date.now(), null, 99.5);
+    vi.setSystemTime(1_700_000_120_000); // past the seed's 60 s keep-the-real-price window, so the seed writes
+    (livePricingAdapter as unknown as { seedLastKnownGoodPrice: (s: string, p: number) => void }).seedLastKnownGoodPrice(SYM, 98);
+    const row = adapter.priceCache.get(SYM);
+    expect(row.source).toBe('entry_seed'); // control: the seed really wrote the row
+    expect(row.lastTradePrice).toBe(99.5);
+    expect(row.lastTradeReceivedAtMs).toBe(1_700_000_000_000);
+  });
+
+  it('12. the seed on a row that never printed stores neither half', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    (livePricingAdapter as unknown as { seedLastKnownGoodPrice: (s: string, p: number) => void }).seedLastKnownGoodPrice(SYM, 98);
+    const row = adapter.priceCache.get(SYM);
+    expect(row.source).toBe('entry_seed');
+    expect(row.lastTradePrice).toBeNull();
+    expect(row.lastTradeReceivedAtMs).toBeNull();
   });
 });

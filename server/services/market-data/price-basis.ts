@@ -86,9 +86,7 @@ export function basisOfProducer(producer: PriceProducer): PriceBasisOrNone {
  * ⛔ Replaces `isLiveObservationBasis`, which returned true for `venue_close` against this module's own definition; it
  * had no caller but its test and never deployed. Total over `PriceBasisOrNone`, so a new basis must declare its answer.
  */
-export type LiveTouchBasis = 'book_top' | 'ticker_bbo' | 'ticker_default' | 'rest_ticker';
-
-export const LIVE_TOUCH_BY_BASIS: Readonly<Record<PriceBasisOrNone, boolean>> = Object.freeze({
+export const LIVE_TOUCH_BY_BASIS = Object.freeze({
   book_top: true,
   ticker_bbo: true,
   ticker_default: true,
@@ -97,9 +95,23 @@ export const LIVE_TOUCH_BY_BASIS: Readonly<Record<PriceBasisOrNone, boolean>> = 
   archive_ticker_snap: false,
   venue_close: false,
   not_an_observation: false,
-});
+} as const satisfies Record<PriceBasisOrNone, boolean>);
 
-/** True only for a live touch basis (see `LIVE_TOUCH_BY_BASIS`). */
+/**
+ * STEP 4 r2 (Langston chunk-1 r2 C1): DERIVED from the table, never hand-written beside it. The hand-written union was a
+ * second source of truth inside the fix that removed one: with the table annotated `Record<…, boolean>`, flipping a value
+ * left tsc accepting a type predicate that lied. `satisfies` keeps the table total over `PriceBasisOrNone` without
+ * widening its values, so this union is exactly the keys whose value is `true`.
+ */
+export type LiveTouchBasis = {
+  [K in keyof typeof LIVE_TOUCH_BY_BASIS]: (typeof LIVE_TOUCH_BY_BASIS)[K] extends true ? K : never;
+}[keyof typeof LIVE_TOUCH_BY_BASIS];
+
+/**
+ * True only for a live touch basis (see `LIVE_TOUCH_BY_BASIS`).
+ * ⚠️ PRE-PLACED for OBJ-8's decision-side basis stamp: it has NO non-test caller until then (Langston chunk-1 r2 C2), and
+ * an unstated caller-free export reads as an orphan at the next sweep.
+ */
 export function isLiveTouchBasis(basis: PriceBasisOrNone): basis is LiveTouchBasis {
   return LIVE_TOUCH_BY_BASIS[basis];
 }

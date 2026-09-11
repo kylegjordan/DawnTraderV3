@@ -96,3 +96,55 @@ describe('price-skip alert copy — P-7h: a SELF-IMPOSED REST refusal is a third
     expect(titles.size).toBe(3);
   });
 });
+
+describe('price-skip alert copy — P-7h r2 (Langston chunk-2 BLOCKER-2): the copy names the STREAK, not the last tick', () => {
+  it('★ 39 rest_no_data + 1 rest_token_exhausted, ending on the token refusal: the ABSENCE copy, with its share', () => {
+    const c = buildPriceSkipAlertCopy({
+      ...base, symbol: 'BTC/USD', reason: 'rest_token_exhausted',
+      reasonCounts: { rest_no_data: 39, rest_token_exhausted: 1 },
+    });
+    expect(c.isSelfThrottled).toBe(false);
+    expect(c.dominantReason).toBe('rest_no_data');
+    expect(c.body).toMatch(/returned a usable price/i);
+    // the operator must not be sent to the limiter when 39 of 40 ticks were a dead feed
+    expect(c.body).not.toMatch(/request budget was empty/i);
+    expect(c.body).not.toMatch(/limiter statistics/i);
+    expect(c.body).toContain('39 of them (98%)');
+    expect(c.body).toContain('rest_token_exhausted ×1');
+    expect(c.title).toContain('39 of 40 ticks');
+  });
+
+  it('★ the reverse: 39 token refusals + 1 no-data tick takes the SELF-THROTTLED copy', () => {
+    const c = buildPriceSkipAlertCopy({
+      ...base, symbol: 'BTC/USD', reason: 'rest_no_data',
+      reasonCounts: { rest_token_exhausted: 39, rest_no_data: 1 },
+    });
+    expect(c.isSelfThrottled).toBe(true);
+    expect(c.body).not.toMatch(/returned a usable price/i);
+    expect(c.body).toContain('rest_no_data ×1');
+  });
+
+  it('the LAST tick\'s detail is not printed under a different dominant reason', () => {
+    const c = buildPriceSkipAlertCopy({
+      ...base, reason: 'equity_tick_stale_risk_to_stop', detail: 'mark 148s old, ceiling 90s',
+      reasonCounts: { equity_tick_missing: 30, equity_tick_stale_risk_to_stop: 10 },
+    });
+    expect(c.isStaleReject).toBe(false);
+    expect(c.body).not.toContain('mark 148s old');
+  });
+
+  it('a single-reason streak reads as before: no share and no "other" clause', () => {
+    const c = buildPriceSkipAlertCopy({ ...base, reason: 'rest_no_data', reasonCounts: { rest_no_data: 40 } });
+    expect(c.body).not.toMatch(/of them \(/);
+    expect(c.body).not.toMatch(/The other/);
+    expect(c.title).not.toMatch(/ticks\)/);
+  });
+
+  it('a tie goes to the reason the streak ended on, and the printed share shows the tie', () => {
+    const c = buildPriceSkipAlertCopy({
+      ...base, reason: 'rest_token_exhausted', reasonCounts: { rest_no_data: 20, rest_token_exhausted: 20 },
+    });
+    expect(c.dominantReason).toBe('rest_token_exhausted');
+    expect(c.body).toContain('20 of them (50%)');
+  });
+});

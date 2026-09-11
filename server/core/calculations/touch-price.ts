@@ -45,7 +45,12 @@ export interface TouchLegInput {
 }
 
 export interface TouchPolicy {
-  /** D6's age for the job asking (entries: the flat limit; exits: the risk-derived ceiling). REQUIRED. */
+  /**
+   * D6's age for the job asking (entries: the flat limit; exits: the risk-derived ceiling). REQUIRED.
+   * ⚠️ ONE ceiling governs BOTH legs (Langston chunk-3 C3): the ticker fallback can be accepted at an age the book was
+   * refused for. The live crypto book ceiling is 5,000 ms; the ticker has no ceiling today. Record-only for now: P-8a,
+   * which wires this, either passes per-leg ages or states in its commit, with the number, that one ceiling governs both.
+   */
   maxAgeMs: number;
   /** The plausibility bound, as a fraction of the mid. REQUIRED, like in `buildLevelBasis`. */
   maxSpreadFraction: number;

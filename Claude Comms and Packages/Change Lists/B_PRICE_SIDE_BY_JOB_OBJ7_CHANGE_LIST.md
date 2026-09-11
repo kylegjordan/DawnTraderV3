@@ -119,7 +119,7 @@ const _lastTradeReceivedAtMs = lastTradePrice !== null ? now : (_prevRow?.lastTr
 **The rule:** a valid, fresh book top if the book is ELIGIBLE; else the ticker's sides if valid and within the age; else refuse with both legs' reasons. Each leg's rules are `buildLevelBasis`'s, not a copy. Every quote carries `clockBasis` beside `ageMs`, named by the caller. A venue stamp ahead of our clock refuses as `age_unknown` — no skew tolerance invented. No caller yet (OBJ-8 wires it).
 **P-7f's query:** no gate compares a re-served price's age to 15 s. The 15 s gate is xStock-only and reads the archive table's latest capture (`active-dispatch.ts:74`, `:181-182`); the 14.3 s rung is the crypto adapter's rate-limited re-serve; crypto entries gate on the book's age (5,000 ms). **Entries on `kraken_rest_rate_limited_reserve`: 0 of 109** closed trades since 2026-08-26; positive control: one `kraken_rest_poller` entry. The instrument that looks like an entry age (`opened_at − entry_observed_at_ms`) is not one — 22 of 24 crypto values negative — and was discarded.
 **Proof:** 10 tests; mutations (ticker before book; eligibility ignored; age dropped; clock hard-coded) each caught.
-⚠️ **For your ruling:** D6's knife-edge note pairs an xStock gate with the crypto re-serve sawtooth; the code has no such coupling. Raised here rather than edited in the consensus record.
+✅ **Ruled at Step 4 (chunk 3 (1)):** the absence claim is confirmed, and D6's knife-edge note is corrected in its body. It named the wrong gate: the sawtooth measures against the crypto exit path's 2 s `cachedAt` window, which it passes by construction, and the refusal is OBJ-8's crypto age check (scope 8g).
 
 ### P-7e `92a78b05e` — a record-only check that our order book matches Kraken's own top
 **Where:** NEW `server/services/market-data/book-ticker-disagreement.ts:69` `observeBookTickerPair`, `:35` `BOOK_TICKER_ALERT_ARMED = false`; hook `kraken-websocket-adapter.ts:861`; `routes.ts:8203`. D3; A-9.7 r6.
@@ -138,10 +138,10 @@ const _lastTradeReceivedAtMs = lastTradePrice !== null ? now : (_prevRow?.lastTr
 
 ## FOUND IN STEP 3, FOR PLACEMENT
 
-- **Known, not new: the unified cache's crypto `price` is a MIXTURE of last trade and midpoint** (`1-system-manual/PRICING_DATA_ARCHITECTURE.md` F1, the 09-08 Codex review): its REST poller stores REST `c[0]` as `price` beside midpoints from the other writers, with no kind recorded. Not referenced in 3n's scope, decisions or pre-audit. P-8c's move of levels to the sides removes its effect on LEVELS; the smoother (kept as a feature, D4) is still fed the mixture. **Proposed: the record-only half — kind and last trade on the unified row, with a capture stamp — lands with P-8c.**
+- **Known, not new: the unified cache's crypto `price` is a MIXTURE of last trade and midpoint** (`1-system-manual/PRICING_DATA_ARCHITECTURE.md` F1, the 09-08 Codex review): its REST poller stores REST `c[0]` as `price` beside midpoints from the other writers, with no kind recorded. Not referenced in 3n's scope, decisions or pre-audit. P-8c's move of levels to the sides removes its effect on LEVELS; the smoother (kept as a feature, D4) is still fed the mixture. ~~Proposed: lands with P-8c.~~ ✅ **Ruled at Step 4 (chunk 3 (2)): NOT with P-8c. It goes ahead of it as P-7k (scope 7k), record-only: the baseline must be measured while the mixture still feeds levels, and the mixture outlives P-8c (the smoother, MCE and the VTS anchor all keep reading it).**
 - **P-8b** must detect a new trade (above).
 - **The skew between Kraken's clock and ours** must be measured before a decision site uses the venue clock.
-- **D6's knife-edge note** (above).
+- **D6's knife-edge note** (above) — ✅ corrected in D6's body at Step 4.
 
 ## STEP 4 r2 — CHUNK 1: YOUR VERDICT AND WHERE EACH ITEM LANDED
 
@@ -159,6 +159,45 @@ const _lastTradeReceivedAtMs = lastTradePrice !== null ? now : (_prevRow?.lastTr
 | chunk-2 carry: two REST governors | stated in the chunk-2 dispatch | — |
 
 Also recorded from your F-G-2 closing read: §0b in `F_G_2_PROGRESS_REPORT.md`, and the window-sizing item placed on P-8a.
+
+## STEP 4 r2 — CHUNKS 2 AND 3, AND CHUNK 1 r2's CONDITIONS: WHERE EACH ITEM LANDED
+
+### Chunk 2 — your verdict 18:08Z, CHANGES-NEEDED
+
+| item | fix | where | proof |
+|---|---|---|---|
+| **BLOCKER-1** — the re-warm was stiff and lagged | Option (a). The warm's input is now stated: the orchestrator's **60-minute** bars, up to 720 (`signal-orchestrator.ts:2395`), fed through a per-step `Q`. At the end of the warm `P` is inflated so the first live observation receives `REWARM_FIRST_LIVE_GAIN = 0.9` (K = P/(P+R), so P = R·g/(1−g); it never lowers P), and the gain then decays on its own. `[9.3][REWARM]` prints `rawPrice` and `gapFrac = abs(x − raw)/raw`. `measurementNoise(ER)` is the one definition of R, shared by the update and the warm. ⚠️ **Attack the 0.9:** a model constant beside the R clip and the Q floor, chosen so the prior keeps 10% | `adaptive-kalman.ts` `REWARM_FIRST_LIVE_GAIN`, `measurementNoise`, `warmFromHistory(…, liveObservation)`; `getSmoothedPrice` passes `price` | p7j 11 (first live K = 0.9); 12 (720 hourly closes at 100, then a live 105, lands at or above 104.5 — r1 gave about 100.65); 13 (the REWARM line carries both numbers); 9 pins no closes, no inflation. Against r1: 11-13 fail, and 6-7 fail because their reference now carries the inflation |
+| **BLOCKER-2** — the copy attributed the streak to the last tick | The engine keeps the streak's reason histogram (`_priceSkipReasons`: same key and lifecycle as the streak, cleared only with it on a venue price, never on a change of reason). `buildPriceSkipAlertCopy` branches on the DOMINANT reason, prints its share (`39 of them (98%)`; title `(39 of 40 ticks)`) and lists the rest. A tie goes to the reason the streak ended on. The last tick's `detail` prints only under its own reason. `PRICE_SKIP_ESCALATION` keeps its prefix and appends `reasons=` and `dominant=` | `active-execution-engine.ts` `buildPriceSkipAlertCopy`, `_recordPriceSkip`, the reset beside `_priceSkipStreak.delete` | NEW `b-price-side-p7h-skip-streak-reasons.test.ts` drives `_recordPriceSkip` 39 times with `rest_no_data`, then once with `rest_token_exhausted`, and reads the raised alert (absence copy, `39 of 40 ticks`); a source fence pins the single clear site. 5 copy tests. Against r1: both engine tests and 4 of the 5 copy tests fail; the single-reason test passes on r1 by design |
+| **FINDING-1** — `restAgeExempt` is identically `withRestPrice` | Stated at the object: on that branch the counter cannot differ, and it does not count exits the exemption saved; its use is OBJ-8's age check | `aee` comment above `restAgeExempt++` | — |
+| **FINDING-2** — the dedupe key has no reason term | `HOME: B-PRICE-SIDE-BY-JOB OBJ-8 item 8h, owner CC-C, placed in PHASE_19_PLAN at row 3n (scope §7.3 row 8h; pre-audit P-8h), after 8g`. Proposed shape: the copy's fact class in the key, with the `price-skip-<mode>-<symbol>` prefix kept | scope; pre-audit | — |
+| **FINDING-3** — token exhaustion is plausible when WS is dark | Step 8: per cycle, `restTokenExhausted` against `tokenOnlyBlockedCount` and `blockedCount`, with `price-cache.ts`'s own governor beside them, read against Kraken's published public-REST limit | Steps 5-8 plan | — |
+| **FINDING-4** — residuals announced, not disposed | (a) The re-serve passes the 2 s window: `HOME: OBJ-8, owner CC-C, PHASE_19_PLAN 3n`. **No OBJ-8 row carried the refusal scope 7h promised**, so it is now **8g / P-8g, the crypto exit age check**. (b) No harness drives `checkOpenPositions`: folded into Step 7; the EVAL_EXIT counters and a real escalation's `reasons=` and `dominant=` are the live proof. (c) The two REST governors: a review scheduled at Step 8, with FINDING-3. (d) P-7j sets the quant lane's levels until P-8c: already homed at P-8c | scope 7h, 8g; pre-audit P-8g; Steps 7-8 plan | — |
+
+### Chunk 3 — your verdict 18:14Z, APPROVED with three conditions and a carry
+
+| item | fix | where | proof |
+|---|---|---|---|
+| **C1** — the pair split on `undefined` | One predicate, `lastTradePrice != null`, decides both halves in `updateCache`; the quote write uses the same predicate | `live-pricing-adapter.ts` `updateCache`; the quote write | p7i 9 (an `undefined` keeps the prior pair with its original stamp) and 10 (a three-argument write stores neither half); both fail on r1 |
+| **C2** — the seed erased the pair | `seedLastKnownGoodPrice` carries the row's pair with its original receipt time; the `CachedPrice` docblock names all three writers | the adapter's seed; `CachedPrice` docblock | p7i 11 fails on r1; 12 (a row that never printed) passes on r1 by design |
+| **C3** — one `maxAgeMs` for both legs | Stated at the object, and carried onto P-8a: per-leg ages, or the commit states, with the number, that one ceiling governs both | `touch-price.ts` `TouchPolicy.maxAgeMs`; pre-audit P-8a | — |
+| **(1)** D6's knife-edge | Corrected in D6's body with your wording and the P-7f query; this file's two notes marked ruled | `PRICING_DECISIONS_2026-09-11.md` D6 | — |
+| **(2)** F1's mixture instrument | Placed as **P-7k / scope 7k**: record-only, deploys ahead of OBJ-8, in P-7i's vocabulary and under its carry rule; not a gate on OBJ-7's deploy. Built next and reviewed as its own gate | scope 7k; pre-audit P-7k | — |
+| **(3)** the carry rule, unbounded in age | Kept, and the boundary is written into the docblock: no write-side age cut; the reader applies its own ceiling (`#546`) | adapter docblock | — |
+| `:572` raw `symbol` against `:1124` normalised key | Fails to absence, the safe direction; checked when P-7k gives the unified row these fields | P-7k | — |
+| P-7e Step-8 notes | `aligned` beside every fire count (the crypto book covers open positions only, F2); once armed, resolve, never ack | Steps 7-8 plan | — |
+
+### Chunk 1 r2 — your verdict 18:31Z, APPROVED with three conditions; BLOCKER-2 carries to Step 6
+
+| item | fix | where | proof |
+|---|---|---|---|
+| **C1** — `LiveTouchBasis` was hand-written | Derived: the table is `Object.freeze({…} as const satisfies Record<PriceBasisOrNone, boolean>)`, and `LiveTouchBasis` is a mapped type over its `true` keys | `price-basis.ts` | p7c 7/7; tsc unchanged |
+| **C2** — `isLiveTouchBasis` has no caller | **Pre-placed for OBJ-8's decision-side basis stamp; no non-test caller until then.** Stated here and at the object | `price-basis.ts` docblock | — |
+| **C3** — F-G-2 §0 contradicted §0b | §0's rate is marked SUPERSEDED in its body, with both populations. §0's is the 7 days before the window, when the arm existed for only about 2.3 days (deployed 2026-09-02T08:49:47Z), so about 3 stamped closes a day, not 1. §0b's is the armed arm since 09-02, about 5 a day | `F_G_2_PROGRESS_REPORT.md` §0 | — |
+| **BLOCKER-2** carry | Step 6 fills §4a's and D3's slots with the sha and UTC, and commits that, before the restart; Step 8 shows them filled | Steps 5-8 plan | — |
+| `bookDepth` is never deleted | **No work now (disposition 5), with the citation.** Every production book subscribe asks depth 10 (`kraken-websocket-adapter.ts:1516-1518`); the only other request is the depth-1 path below, which never reaches the ACK. So every recorded depth is 10, and a stale entry names the depth being unsubscribed. **Re-opened by the first change that requests a second depth**, which must clear the entry on unsubscribe in that same change | — | — |
+| the depth-1 path (`switchToBookChannel`, `:2730`): does it fire, and is it rejected? | **Measured: it does not fire, and it cannot.** (i) `[I7-WS-G][CHANNEL_SWITCH]` = 0 across all 15 `out` files on staging (`out.log` plus 14 rotated; the oldest closed 2026-09-10T05:25Z); positive control, `Sub OK:` = 129 in the same files. (ii) The sibling branch `[I7-WS-G][RESUBSCRIBE]` = 0 in 13 of those 15 files (the two oldest not read), and `[I7-WS-G][UNSTABLE]` = 0 in the error logs for 2026-09-09 onward, so `triggerCorrectiveAction` did not act in that reach. (iii) Every `Sub Error:` in the error logs rotated 2026-09-04 onward is `Already subscribed` (316 of 316); no depth rejection. (iv) The mechanism: the gate is `internalSymbol.includes(hint.replace('/', ''))` (`:2713-2719`), and `normalizeToInternalSymbol` returns `BASE/QUOTE` with the slash (`kraken-symbol-resolver.ts:90-116`), so for all four hints, e.g. `'TIA/USD'.includes('TIAUSD')`, it is false. Unreachable by construction. (v) Kraken's v2 book documentation: depth is *one of `10`, `25`, `100`, `500`, `1000`*, so a depth-1 request is invalid by specification. **Proposed rule-18 disposition (b), for your ruling:** delete `switchToBookChannel`, `scheduleBookChannelRevert` and the `prefer_book` hint, `HOME: OBJ-8 item 8i, owner CC-C, PHASE_19_PLAN 3n`, with the rule-18 census at the deletion | scope 8i; pre-audit P-8i | — |
+
+**Proof for all three:** 18 related test files, 263/263. tsc 377, identical file+code multiset to chunk 1 r2's.
 
 ## THE ASK — one gate per dispatch
 

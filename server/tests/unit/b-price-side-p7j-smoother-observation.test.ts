@@ -10,11 +10,15 @@
 // POSITIVE CONTROL: against the smoother before P-7j the fifth and sixth arguments do not exist, so test 1's second
 // read advances the state, test 6's cold filter returns the raw observation, and the orchestrator fence (test 5)
 // finds neither the observation key nor the history.
+// STEP 4 r2 (Langston chunk-2 BLOCKER-1): tests 11-13 fail against r1 (`f61dcbae2`), where the warm left P at the per-step
+// model's steady state, so the first live read moved the estimate only ~13% of the way and the REWARM line carried no
+// live price. Tests 6 and 7 now build their reference with the same P inflation.
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   AdaptiveKalmanFilter,
+  REWARM_FIRST_LIVE_GAIN,
   getSmoothedPrice,
   clearKalmanFilter,
   getAllKalmanDiagnostics,
@@ -25,6 +29,17 @@ const ER = 0.5;
 const VN = 1;
 const smooth: (...a: any[]) => number = getSmoothedPrice as any;
 const CLOSES = [100, 101, 102, 103, 104];
+
+// The r2 reference, written out independently of the module: absorb the closes, inflate P exactly as the re-warm states
+// it (R from ER; never lowering P), then absorb the live reads. Returns the warmed estimate and each live estimate.
+function reference(closes: readonly number[], ...live: number[]): { warmed: number; out: number[] } {
+  const ref = new AdaptiveKalmanFilter('REF');
+  for (const c of closes) ref.update(c, ER, VN);
+  const R = Math.max(1, Math.min(50, 1 + (1 - ER) * 50));
+  const st = ref.getInternalState();
+  ref.restoreState({ ...st, P: Math.max(st.P, (R * REWARM_FIRST_LIVE_GAIN) / (1 - REWARM_FIRST_LIVE_GAIN)) });
+  return { warmed: st.x as number, out: live.map((p) => ref.update(p, ER, VN)) };
+}
 
 afterEach(() => {
   clearKalmanFilter(SYM);
@@ -75,9 +90,7 @@ describe('P-7j — the single production caller passes an observation key and it
 describe('P-7j — a cold filter re-warms EXPLICITLY (the restart fixture)', () => {
   it('6. after a restart the first estimate is the re-warmed value, not the raw observation', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
-    const ref = new AdaptiveKalmanFilter('REF');
-    for (const c of CLOSES) ref.update(c, ER, VN);
-    const expected = ref.update(110, ER, VN);
+    const [expected] = reference(CLOSES, 110).out;
 
     clearKalmanFilter(SYM); // a restart: the registry holds nothing for this symbol
     const got = smooth(SYM, 110, ER, VN, 'obs-1', CLOSES);
@@ -92,10 +105,7 @@ describe('P-7j — a cold filter re-warms EXPLICITLY (the restart fixture)', () 
     const diag = getAllKalmanDiagnostics().find((d) => d.symbol === SYM);
     expect(diag?.warmedFromCloses).toBe(CLOSES.length);
 
-    const ref = new AdaptiveKalmanFilter('REF');
-    for (const c of CLOSES) ref.update(c, ER, VN);
-    ref.update(110, ER, VN);
-    const expectedNext = ref.update(111, ER, VN);
+    const [, expectedNext] = reference(CLOSES, 110, 111).out;
     expect(smooth(SYM, 111, ER, VN, 'obs-2', [5, 5, 5])).toBeCloseTo(expectedNext, 12);
   });
 
@@ -113,10 +123,44 @@ describe('P-7j — a cold filter re-warms EXPLICITLY (the restart fixture)', () 
     expect(smooth(SYM, 110, ER, VN, 'obs-1', [Number.NaN, -1, 0])).toBe(110);
     const diag = getAllKalmanDiagnostics().find((d) => d.symbol === SYM);
     expect(diag?.warmedFromCloses).toBe(0);
+    expect(diag?.P).toBe(1); // no closes absorbed, so no inflation: the legacy seed's covariance is untouched
   });
 
   it('10. without history the legacy cold start is unchanged (the raw first observation)', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     expect(smooth(SYM, 110, ER, VN, 'obs-1')).toBe(110);
+  });
+});
+
+describe('P-7j r2 — Langston chunk-2 BLOCKER-1: the re-warm is continuous AND current', () => {
+  const diagOf = () => getAllKalmanDiagnostics().find((d) => d.symbol === SYM);
+
+  it('11. ★ the first live observation after a re-warm receives REWARM_FIRST_LIVE_GAIN', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { warmed } = reference(CLOSES);
+    const got = smooth(SYM, 110, ER, VN, 'obs-1', CLOSES);
+    expect(diagOf()?.lastK).toBeCloseTo(REWARM_FIRST_LIVE_GAIN, 9);
+    expect(Math.abs(got - 110)).toBeLessThanOrEqual((1 - REWARM_FIRST_LIVE_GAIN) * Math.abs(110 - warmed) + 1e-9);
+  });
+
+  it('12. ★ STIFFNESS FIXTURE: 720 hourly closes at 100, then a live 105 — the estimate moves at least 90% of the way', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const hourly = Array.from({ length: 720 }, () => 100);
+    const got = smooth(SYM, 105, ER, VN, 'obs-1', hourly);
+    // r1 left P at the steady state of P^2 = Q(P + R) (R 26, Q 0.5: P about 3.86, K about 0.13), so this read was ~100.65.
+    expect(got).toBeGreaterThanOrEqual(100 + REWARM_FIRST_LIVE_GAIN * 5 - 1e-9);
+    // and the gain then decays on its own: the next NEW observation is weighted less than the first
+    smooth(SYM, 105, ER, VN, 'obs-2');
+    expect(diagOf()?.lastK).toBeLessThan(REWARM_FIRST_LIVE_GAIN);
+  });
+
+  it('13. ★ the REWARM line names the live price and |x - raw| / raw, so a deploy is a measurement', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { warmed } = reference(CLOSES);
+    smooth(SYM, 110, ER, VN, 'obs-1', CLOSES);
+    const line = spy.mock.calls.map((c) => String(c[0])).find((l) => l.includes('[9.3][REWARM]'));
+    expect(line).toBeDefined();
+    expect(line).toContain('rawPrice=110.0000');
+    expect(line).toContain(`gapFrac=${(Math.abs(warmed - 110) / 110).toFixed(6)}`);
   });
 });

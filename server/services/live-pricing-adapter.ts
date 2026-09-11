@@ -299,6 +299,10 @@ interface CachedPrice {
   /**
    * B-PRICE-SIDE-BY-JOB r5 P-7i: the venue's TRUE LAST TRADE and our receipt time for it. ⛔ The pair moves TOGETHER: a
    * write that carries no print keeps the row's existing pair, so a carried print never wears a new stamp.
+   * r2 (Langston chunk-3 C2 and (3)): ALL THREE writers of this row carry — `updateCache`, the quote write after a fetch,
+   * and `seedLastKnownGoodPrice`. ⛔ The pair is UNBOUNDED IN AGE BY DESIGN: no writer drops a print for being old. The
+   * age lives in `lastTradeReceivedAtMs`, and a reader applies its own ceiling and refuses, as `selectTouchPrice` does;
+   * a write-side age cut would make an old print indistinguishable from a symbol that never printed (#546).
    */
   lastTradePrice: number | null;
   lastTradeReceivedAtMs: number | null;
@@ -566,7 +570,8 @@ export class LivePricingAdapter {
           // B-PRICE-SIDE-BY-JOB r5 P-7i: a quote that carries no print keeps the one this row already holds, WITH its
           // own receipt time — the pair moves together.
           const _prevRow = this.priceCache.get(symbol);
-          const _lastTrade = quote.lastTradePrice !== null
+          // r2 (Langston chunk-3 C1): `!= null`, the one predicate every carry uses, so an `undefined` never splits the pair.
+          const _lastTrade = quote.lastTradePrice != null
             ? { price: quote.lastTradePrice, at: quote.lastTradeReceivedAtMs }
             : { price: _prevRow?.lastTradePrice ?? null, at: _prevRow?.lastTradeReceivedAtMs ?? null };
           this.priceCache.set(symbol, {
@@ -1116,9 +1121,13 @@ export class LivePricingAdapter {
     const now = Date.now();
     
     // B-PRICE-SIDE-BY-JOB r5 P-7i: keep the row's existing print, with its receipt time, when this write carries none.
+    // r2 (Langston chunk-3 C1): ONE predicate decides both halves. The value line used `??` (which catches `undefined`)
+    // and the stamp line `!== null` (which misses it), so an `undefined` argument wrote a receipt time for a print that
+    // did not exist. Production callers are type-guarded; test files sit outside tsc and call this with three arguments.
     const _prevRow = this.priceCache.get(normalized);
-    const _lastTradePrice = lastTradePrice ?? _prevRow?.lastTradePrice ?? null;
-    const _lastTradeReceivedAtMs = lastTradePrice !== null ? now : (_prevRow?.lastTradeReceivedAtMs ?? null);
+    const _hasPrint = lastTradePrice != null;
+    const _lastTradePrice = _hasPrint ? lastTradePrice : (_prevRow?.lastTradePrice ?? null);
+    const _lastTradeReceivedAtMs = _hasPrint ? now : (_prevRow?.lastTradeReceivedAtMs ?? null);
 
     // D2: Always update cache on EVERY WebSocket tick
     this.priceCache.set(normalized, {
@@ -1226,9 +1235,11 @@ export class LivePricingAdapter {
       producer: 'entry_seed',
       observedAt: Date.now(),
       cachedAt: Date.now(),
-      // P-7i: an entry price is not a trade print.
-      lastTradePrice: null,
-      lastTradeReceivedAtMs: null,
+      // P-7i: an entry price is not a trade print, so the seed writes none of its own. r2 (Langston chunk-3 C2): it CARRIES
+      // the print this row already holds, with its original receipt time, as the other two writers do. The stamp states
+      // the print's age, so carrying never lies; erasing would destroy a fact.
+      lastTradePrice: existing?.lastTradePrice ?? null,
+      lastTradeReceivedAtMs: existing?.lastTradePrice != null ? existing.lastTradeReceivedAtMs : null,
       // ⛔ NULL SIDES, STATED NOT OMITTED — this writer resolves a MARK only and never
       // observed a book side. Omitting them would let a level constructor read the mark's
       // freshness as the side's, which is the W-3 defect this field exists to end.

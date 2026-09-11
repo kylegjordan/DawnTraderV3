@@ -8558,4 +8558,4 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 - **(b)** The item4 header's rollback instruction should say the same.
 - **(c)** Wherever a rollback must still key on ownership, it should check its own row count rather than trust `updated_by`.
 
-**HOME:** routed to **CC-C**, owner of the artifact, on 2026-09-11, with the instance and the class. ⚠️ **This is a routing, not yet a placed home: CC-C places it in `PHASE_19_PLAN` and writes that placement here.**
+**HOME:** `B-ROLLBACK-EPOCH-FORWARD`, owner CC-C, placed in `PHASE_19_PLAN` at row `3b.b-c`, after `3b.b`; worked after OBJ-7's deploy and before OBJ-8's build. *(Routed to CC-C on 2026-09-11 with the instance and the class; placed by CC-C the same day.)*

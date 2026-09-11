@@ -37,6 +37,25 @@ export interface KalmanDiagnostics {
   warmedFromCloses: number;
 }
 
+/**
+ * B-PRICE-SIDE-BY-JOB r5 P-7j r2 (Langston chunk-2 BLOCKER-1): the gain the FIRST live observation receives after an
+ * explicit re-warm.
+ * The re-warm feeds the orchestrator's 60-MINUTE bar closes (up to Kraken's 720-candle batch,
+ * `ohlcCache.getOHLCData(symbol, 60)`) through a process model with NO elapsed-time term: `Q` is charged per step, so an
+ * hour between two closes is modelled as one live tick. After a few hundred closes `P` sits at that model's steady state
+ * (`P^2 = Q(P + R)`, K about 0.05-0.13), so the warmed estimate is an average of roughly the last 10-20 HOURLY closes
+ * that presents as confident, and it would shed its distance from the live price by only a few percent per advance.
+ * Inflating `P` at the end of the warm states the un-modelled gap honestly: the first live read carries this share of
+ * the weight, the prior keeps the rest, and the gain then decays on its own as live observations arrive.
+ * A model constant, like the R clip (1..50) and the Q floor (0.1) below; not a tuning knob.
+ */
+export const REWARM_FIRST_LIVE_GAIN = 0.9;
+
+/** 9.3.C measurement noise, `R_t = clip(1 + (1 - ER) x 50, 1, 50)`. ONE definition, shared by the update and the re-warm. */
+function measurementNoise(ER: number): number {
+  return Math.max(1, Math.min(50, 1 + (1 - ER) * 50));
+}
+
 export class AdaptiveKalmanFilter {
   private x: number | null = null;
   private P = 1;
@@ -100,8 +119,12 @@ export class AdaptiveKalmanFilter {
    * Runs only when the filter is cold; absorbs the valid closes in order, QUIETLY (no per-step [9.3][KALMAN] lines,
    * which would pollute the gain distribution those lines are read for), and emits ONE [9.3][REWARM] line.
    * Returns the number of closes absorbed; 0 leaves the filter cold, so the caller's observation seeds it as before.
+   * r2 (Langston chunk-2 BLOCKER-1): the closes are 60-minute bars fed through a per-step `Q`, so at the end of the warm
+   * `P` is inflated until the first live observation receives `REWARM_FIRST_LIVE_GAIN` (see its docblock). The
+   * `[9.3][REWARM]` line carries `rawPrice` (the live observation about to be absorbed) and
+   * `gapFrac = |x - rawPrice| / rawPrice`, so every deploy measures how far the warmed estimate sat from the live price.
    */
-  warmFromHistory(closes: readonly number[], ER: number, VolNoise: number): number {
+  warmFromHistory(closes: readonly number[], ER: number, VolNoise: number, liveObservation?: number): number {
     if (this.x !== null) return 0;
     let n = 0;
     for (const c of closes) {
@@ -113,7 +136,13 @@ export class AdaptiveKalmanFilter {
     const warmed = this.getState();
     if (n > 0 && warmed !== null) {
       this.warmedFromCloses = n;
-      console.log(`[9.3][REWARM] ${this.symbol} re-warmed from ${n} bar closes x=${warmed.toFixed(4)}`);
+      // K = P / (P + R) on the first live read, so P = R * g / (1 - g). Never LOWERS P.
+      const R = measurementNoise(ER);
+      this.P = Math.max(this.P, (R * REWARM_FIRST_LIVE_GAIN) / (1 - REWARM_FIRST_LIVE_GAIN));
+      const live = liveObservation !== undefined && Number.isFinite(liveObservation) && liveObservation > 0 ? liveObservation : null;
+      const rawText = live === null ? 'n/a' : live.toFixed(4);
+      const gapText = live === null ? 'n/a' : (Math.abs(warmed - live) / live).toFixed(6);
+      console.log(`[9.3][REWARM] ${this.symbol} re-warmed from ${n} bar closes x=${warmed.toFixed(4)} rawPrice=${rawText} gapFrac=${gapText} P=${this.P.toFixed(4)}`);
     }
     return n;
   }
@@ -129,7 +158,7 @@ export class AdaptiveKalmanFilter {
       return price;
     }
 
-    const R = Math.max(1, Math.min(50, 1 + (1 - ER) * 50));
+    const R = measurementNoise(ER);
 
     const Q = Math.max(0.1, VolNoise * 0.5);
 
@@ -271,7 +300,7 @@ export function getSmoothedPrice(
 ): number {
   const filter = getKalmanFilter(symbol);
   if (warmHistory !== undefined && !filter.isInitialized()) {
-    filter.warmFromHistory(warmHistory, ER, VolNoise);
+    filter.warmFromHistory(warmHistory, ER, VolNoise, price);
   }
   return observationKey === undefined
     ? filter.update(price, ER, VolNoise)

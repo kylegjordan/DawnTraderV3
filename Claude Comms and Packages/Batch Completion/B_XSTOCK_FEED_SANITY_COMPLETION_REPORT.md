@@ -337,6 +337,7 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
 | **T1** | the batch `PRE_AUDIT` | ✅ | Written at Step 2 (PART B is the implementation plan); unchanged this turn. |
 | **T1** | the `COMPLETION_REPORT` | ✅ | Stands as the **progress report** — correct for an open window; §4c/§4d added, and this ledger transcribed into §7. |
 | **T1** | Langston's `/home/langston/MEMORY.md` | ✅ | Compact entry: deploy sha, both defects, the stated residual, the window dates, and the delegated price decision. |
+| **T1** | `CC_C_SESSION_TASK_LIST.md` (the session task list) | ✅ | Updated at the close, 2026-09-11: 3b.b moved out of the open list, 3b.f-d added, 3n's row brought current. Added to this graded ledger on 2026-09-11 (checker alert `195d4f23`): the update was recorded only in the close-time table below, which carries no tier marker and is not graded. |
 | **T2** | `SYSTEM_MANUAL.md` | ✅ | §3.5.1's comparator rule corrected — it asserted the invariant that shipped the guard inert. |
 | **T2** | `SYSTEM_IMPACT_MAP.md` | ✅ | **S25** writer clause corrected, plus three line numbers re-derived at HEAD that had moved. |
 | **T2** | `RUNNING_ISSUES.md` | ✅ | `#943` annotated to its observation state; `#996`'s quoted invariant annotated in place, not rewritten. |

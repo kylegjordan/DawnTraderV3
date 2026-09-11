@@ -171,22 +171,51 @@ import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asse
  */
 export function buildPriceSkipAlertCopy(input: {
   symbol: string; mode: string; streak: number; reason: string; detail?: string;
-}): { title: string; body: string; isStaleReject: boolean; isSelfThrottled: boolean } {
-  const isStaleReject = input.reason.startsWith('equity_tick_stale');
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7h r2 (Langston chunk-2 BLOCKER-2): how many ticks of the STREAK each reason accounts for.
+   * The streak is per position and reason-blind, and one leg can interleave four reasons, so the tick that crosses the
+   * threshold is one object and the streak is another. `reason` stays the LAST tick's. Omitted = every tick carried it.
+   */
+  reasonCounts?: Readonly<Record<string, number>>;
+}): {
+  title: string; body: string; isStaleReject: boolean; isSelfThrottled: boolean;
+  dominantReason: string; dominantCount: number; totalCounted: number;
+} {
+  const counted: Array<[string, number]> = input.reasonCounts && Object.keys(input.reasonCounts).length > 0
+    ? Object.entries(input.reasonCounts)
+    : [[input.reason, input.streak]];
+  // The copy names the reason that accounts for the MOST ticks of the streak. A tie goes to the reason the streak ended
+  // on (the freshest fact), then to name order, so the choice is deterministic; the printed share shows the tie.
+  const ranked = [...counted].sort((a, b) =>
+    b[1] - a[1] || (a[0] === input.reason ? -1 : b[0] === input.reason ? 1 : a[0].localeCompare(b[0])));
+  const [dominantReason, dominantCount] = ranked[0];
+  const totalCounted = ranked.reduce((n, [, c]) => n + c, 0);
+  const mixed = ranked.length > 1;
+  const pct = Math.round((100 * dominantCount) / totalCounted);
+  // `detail` describes the LAST tick only (e.g. its mark age), so it is printed only under that tick's own reason.
+  const detail = input.reason === dominantReason ? input.detail : undefined;
+  const lead = `The exit monitor has skipped ${input.streak} consecutive ticks for the open ${input.mode} position on ${input.symbol}`;
+  const share = mixed ? `, ${dominantCount} of them (${pct}%)` : '';
+  const others = mixed
+    ? ` The other ${totalCounted - dominantCount}: ${ranked.slice(1).map(([r, c]) => `${r} ×${c}`).join(', ')}.`
+    : '';
+  const titleShare = mixed ? ` (${dominantCount} of ${totalCounted} ticks)` : '';
+  const isStaleReject = dominantReason.startsWith('equity_tick_stale');
   // B-PRICE-SIDE-BY-JOB r5 P-7h: a SELF-IMPOSED refusal is a third fact. The engine's shared REST budget was empty,
   // so the venue was NEVER ASKED — "neither … returned a usable price" would claim a query that did not happen, and
   // "until the venue quotes again" would blame a venue that may be quoting normally.
-  if (input.reason === 'rest_token_exhausted') {
+  if (dominantReason === 'rest_token_exhausted') {
     return {
       isStaleReject: false,
       isSelfThrottled: true,
-      title: `Exit checks skipped — our REST request budget was empty for ${input.symbol}`,
-      body: `The exit monitor has skipped ${input.streak} consecutive ticks for the open ${input.mode} position on ${input.symbol} because the Kraken live feed had no fresh price and the direct Kraken query was NOT attempted: this system's shared REST request budget was empty on those ticks. This is our own request throttle, not a venue outage. If it persists, the REST budget is saturated — check the limiter statistics before investigating the feed.`,
+      dominantReason, dominantCount, totalCounted,
+      title: `Exit checks skipped — our REST request budget was empty for ${input.symbol}${titleShare}`,
+      body: `${lead}${share} because the Kraken live feed had no fresh price and the direct Kraken query was NOT attempted: this system's shared REST request budget was empty on those ticks.${others} This is our own request throttle, not a venue outage. If it persists, the REST budget is saturated — check the limiter statistics before investigating the feed.`,
     };
   }
   const cause = isStaleReject
-    ? `the most recent mark was older than this symbol's freshness ceiling${input.detail ? ` (${input.detail})` : ''}, so it was not trusted for a stop/target decision`
-    : `neither the Kraken live feed nor the Kraken direct query returned a usable price (${input.reason})`;
+    ? `the most recent mark was older than this symbol's freshness ceiling${detail ? ` (${detail})` : ''}, so it was not trusted for a stop/target decision`
+    : `neither the Kraken live feed nor the Kraken direct query returned a usable price (${dominantReason})`;
   const consequence = isStaleReject
     // TRUE: we declined to act on THIS tick. NOT "cannot be exited" — the venue may well be
     // quoting, just not recently enough for the ceiling.
@@ -195,10 +224,11 @@ export function buildPriceSkipAlertCopy(input: {
   return {
     isStaleReject,
     isSelfThrottled: false,
-    title: isStaleReject
+    dominantReason, dominantCount, totalCounted,
+    title: (isStaleReject
       ? `Exit checks skipped — mark older than ceiling for ${input.symbol}`
-      : `Open position unmanageable — no Kraken price for ${input.symbol}`,
-    body: `The exit monitor has skipped ${input.streak} consecutive ticks for the open ${input.mode} position on ${input.symbol} because ${cause}. ${consequence}`,
+      : `Open position unmanageable — no Kraken price for ${input.symbol}`) + titleShare,
+    body: `${lead}${share} because ${cause}.${others} ${consequence}`,
   };
 }
 import { covarianceEngine } from '../utils/covariance-engine.js';
@@ -354,6 +384,10 @@ export class ActiveExecutionEngine {
   // crossing the DB-knobbed threshold raises a §10.5 system alert (deduped per
   // symbol), not a buried log line. Streak resets on the first venue price.
   private _priceSkipStreak: Map<string, number> = new Map();
+  // B-PRICE-SIDE-BY-JOB r5 P-7h r2 (Langston chunk-2 BLOCKER-2): how many ticks of the CURRENT streak each skip reason
+  // accounts for. Same key and lifecycle as `_priceSkipStreak`: cleared only with it, on the first venue price, and
+  // NEVER on a change of reason, or alternating causes would never escalate.
+  private _priceSkipReasons: Map<string, Map<string, number>> = new Map();
   // B-XSTOCK-FEED-SANITY: consecutive HOLLOW-book skips per position (the bounded withholding of
   // scope constraint 7). Reset on any non-hollow verdict; cleared at yield. Per engine instance.
   private _bookStateSkipStreak: Map<string, number> = new Map();
@@ -393,6 +427,9 @@ export class ActiveExecutionEngine {
   private async _recordPriceSkip(position: { id: string; symbol: string; assetClass?: unknown }, reason: string, detail?: string): Promise<void> {
     const streak = (this._priceSkipStreak.get(position.id) ?? 0) + 1;
     this._priceSkipStreak.set(position.id, streak);
+    const _reasons = this._priceSkipReasons.get(position.id) ?? new Map<string, number>();
+    _reasons.set(reason, (_reasons.get(reason) ?? 0) + 1);
+    this._priceSkipReasons.set(position.id, _reasons);
     let threshold = 40; // fail-safe default if the knob is cold — ~1 min at the monitor cadence
     try {
       const _cls = asValidAssetClass(position.assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
@@ -401,10 +438,11 @@ export class ActiveExecutionEngine {
     } catch { /* knob cold — the default above stands; the alert still fires */ }
     if (streak === threshold) {
       // A staleness REJECTION and a genuine ABSENCE are different facts and get different
-      // words. `reason` already discriminates them, so branch on it rather than asserting
-      // the worse of the two for both.
-      const _copy = buildPriceSkipAlertCopy({ symbol: position.symbol, mode: this.mode, streak, reason, detail });
-      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks not evaluated (${reason}${detail ? `; ${detail}` : ''}) — raising system alert`);
+      // words. The copy branches on the reason that accounts for most of the STREAK (P-7h r2),
+      // not on the one tick that crossed the threshold, and prints that reason's share.
+      const _reasonCounts = Object.fromEntries(_reasons);
+      const _copy = buildPriceSkipAlertCopy({ symbol: position.symbol, mode: this.mode, streak, reason, detail, reasonCounts: _reasonCounts });
+      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks not evaluated (${reason}${detail ? `; ${detail}` : ''}) reasons=${JSON.stringify(_reasonCounts)} dominant=${_copy.dominantReason}:${_copy.dominantCount}/${_copy.totalCounted} — raising system alert`);
       try {
         const { addAlert } = await import('./system-alerts.js');
         await addAlert({
@@ -1601,6 +1639,9 @@ export class ActiveExecutionEngine {
             withRestPrice++;
             // P-7h (Langston condition 2): the NAMED age exemption. `observedAt` is null by design on this branch, so
             // an age check keyed on it exempts the branch by declaration, and the use is counted, never inferred.
+            // ⚠️ On THIS branch the counter is identically `withRestPrice` (Langston chunk-2 FINDING-1): the block is
+            // straight-line and both producers it can set are exempt. It does NOT count exits the exemption saved; the
+            // use it names is OBJ-8's crypto age check, where the exemption first changes a decision.
             if (ageExemptionOfProducer(priceProducer) !== null) restAgeExempt++;
 
             console.log(`[8.9.2][REST_TICK] ${position.symbol} bid=${bid} ask=${ask} mid=${currentPrice.toFixed(8)}`);
@@ -1637,6 +1678,7 @@ export class ActiveExecutionEngine {
         } // ← closes the P19-B8.5 xstock/crypto pricing-leg split (else = the crypto chain)
         // A position that reaches here has a VENUE price — reset its skip streak.
         this._priceSkipStreak.delete(position.id);
+        this._priceSkipReasons.delete(position.id);
         
         // P19-B8.5 (venue-only): the same-day C prong-2 FALLBACK-PRICE SANITY GATE that
         // lived here was DELETED — it refereed heterogeneous price sources, and the

@@ -37,6 +37,7 @@ Derived 2026-09-11 from the plan's own rows. Rows marked ⚠️ carry a closed o
 
 | plan row | item |
 |---|---|
+| 3b.b-c | `B-ROLLBACK-EPOCH-FORWARD` (`#1045`) — placed 2026-09-11; after OBJ-7 deploys, before OBJ-8's build |
 | 3b.d | `B-XSTOCK-BOOK-LADDER` (`#949`) — prerequisite of F-G-2's xStock legs |
 | 3b.e | ⚠️ `B-XSTOCK-LIVE-FEED` (`#950`) |
 | 3b.f-a | `B-OPENTRADE-REFRESH-LANE` (`#977`) — placed before 3b.f-b by Kyle |
