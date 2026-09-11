@@ -520,3 +520,12 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 ⚠️ **Caveat, Langston's and kept:** this is the throttled ARCHIVE, not the in-memory mark (`aee:1164`). ⇒ **this is `3b.f-c`'s own question — how long a mark stays trusted on a quiet symbol — arriving as live data.**
 
 ⭐ **"THINNEST OVERNIGHT BOOK" ANSWERS HALF THE POPULATION (Langston).** In ET the six weekday events split **3 / 3**: 09-03 16:16 LI · 09-03 16:32 ARKK · 09-08 16:16 NEM — **just after the cash close** — and 09-08 04:59 NEM · 09-09 04:24 LMT · 09-11 02:21 NEM — **overnight.** ⇒ **the per-symbol spread and snapshot-rate test must run in BOTH bands, or it answers for one cluster.** The 16:16–16:32 ET alignment is flagged as a pattern, not a root: at n=8 it could be a market clock or a scheduler phase.
+
+## §17 — TWO LIVE INSTANCES OF THE NOTIFY-VS-EMIT CLASS, 2026-09-11 — EXPOSURE-CHECKED, LEFT ACTIVE *(CC-C; Langston routed both: keep the emit, cut the notify — Kyle's 2026-09-03 `#994` ruling stands)*
+
+| alert | position | mark age vs ceiling | exposure, read at the object |
+|---|---|---|---|
+| `c0cd7d0c` MDB/USD, fired `08:43:47Z` | opened 2026-09-10 at 374.50 · stop **354.79** · target 413.50 | 360 s vs 300 s | the archive's last quote before the US open — bid **371.05** / ask 377.77, unchanged `09:01`→`09:19Z` — sits **4.6% above the stop** ⇒ none |
+| `e3e00f35` NEM/USD, fired `09:43:53Z` | opened 2026-09-02 at 126.54 · stop **122.1768** · target 135.1069 | 360 s vs 300 s | bid **126.14** / ask 128.00, unchanged `09:45`→`09:49Z` — **3.2% above the stop** ⇒ none |
+
+⇒ **No trading-side change; the exit ceiling is not loosened.** Both are the class `#994` am. 3 ruled on — staleness while the US market is shut. **Both left ACTIVE**, per Langston's routing on `e3e00f35` (*"leave row active until then"*): an active row holds back a second page for that symbol, while the `[PRICE_SKIP_ESCALATION]` log line keeps being written. ⇒ **the work they ask for is this batch's notify-suppression half; they add no new fact to its design.**
