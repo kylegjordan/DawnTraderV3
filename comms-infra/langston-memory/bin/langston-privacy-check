@@ -181,13 +181,19 @@ def copies_in(roots, live_memory, reader):
 
 
 def group_members(gid):
-    """Every account that holds this group: its listed secondary members AND every account whose
-    PRIMARY group it is. /etc/group lists only the first kind, so reading gr_mem alone would miss a
-    second account created with this as its primary group."""
-    try:
-        members = set(grp.getgrgid(gid).gr_mem)
-    except KeyError:
-        members = set()
+    """Every ENUMERABLE account that holds this group: the listed secondary members of EVERY group entry
+    carrying this gid, AND every account whose PRIMARY group it is.
+    - /etc/group lists only the first kind, so reading gr_mem alone would miss a second account created
+      with this as its primary group.
+    - getgrgid() returns ONE entry, so two group names sharing a gid would hide the second entry's
+      members (a second reader's lead); every entry with the gid is read instead.
+    - REACH, stated: this sees what pwd/grp ENUMERATE. An account served by a non-enumerating NSS source,
+      a per-user ACL, or a process still holding a group it was removed from is outside it - which is why
+      the attempted reads as the reader account stay alongside this check rather than being replaced by it."""
+    members = set()
+    for g in grp.getgrall():
+        if g.gr_gid == gid:
+            members |= set(g.gr_mem)
     members |= {pw.pw_name for pw in pwd.getpwall() if pw.pw_gid == gid}
     return members
 
