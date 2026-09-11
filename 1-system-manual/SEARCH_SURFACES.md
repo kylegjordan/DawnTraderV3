@@ -26,7 +26,8 @@
 ## 1. CODE — ⚠️ AVAILABLE SINCE 2026-09-11; UNTIL THEN THE TOOL NEVER REACHED A SESSION (`#1038`)
 
 **Instrument:** `typescript-lsp@claude-plugins-official`, installed 2026-08-30. Drives `typescript-language-server` (5.3.0) over the compiler's own symbol graph.
-⛔ **CORRECTED 2026-09-11 (`#1038`): the result below came from a hand-written client talking to the language server directly, NOT from the Claude Code tool. It proves the SERVER answers. Until 2026-09-11 the installed plugin never loaded (no copy in the plugin cache), so no session could do this. A session started after 14:12Z that day has the `LSP` tool.**
+⛔ **CORRECTED 2026-09-11 (`#1038`): the result below came from a hand-written client talking to the language server directly, NOT from the Claude Code tool. It proves the SERVER answers. Until 2026-09-11 the installed plugin never loaded (no copy in the plugin cache), so no session could do this. Since 14:36Z that day the tool comes from a local plugin, `dt-typescript-lsp@skills-dir` (`~/.claude/skills/dt-typescript-lsp/`), which launches the server via `node` because the official plugin's `.cmd`-shim launch fails a plain spawn on Windows (`#1038`, config recorded there). The END-TO-END re-run through that launch returned the same 65 references in 10 files.**
+⛔⛔ **WARM-UP TRAP — READ BEFORE TRUSTING A COUNT:** for about the first 10 seconds after the server starts it answers from the ONE open file only (measured: `1s: 2 · 5s: 2 · 10s: 65`). **A first answer of "only references in this file" is NOT evidence of no callers — repeat the query after ~10 seconds.**
 **MEASURED, the discriminating test** (object: `toCanonical`; population: the whole repo at `e16767ef7`):
 
 | method | files | what they were |
