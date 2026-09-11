@@ -88,6 +88,11 @@ SANDBOX = ("--add-dir " + MEMDIR
 NL = chr(10)
 
 NAME_RE = re.compile(r"\b(coltrane|codex)\b", re.I)
+# ⛔ KYLE MAY NAME COLTRANE ANYWHERE; EVERYONE ELSE MUST LEAD WITH THE NAME (Kyle, 2026-09-11).
+#    NAME_RE alone woke it on ANY mention, so a session or Langston merely writing ABOUT
+#    Coltrane spent a paid invoke nobody asked for. Same address gate as the Langston bridge
+#    (ADDRESS_START_RE), same tolerated leading markup.
+NAME_START_RE = re.compile(r"^[\s*_~`>#:\".\-]*(coltrane|codex)\b", re.I)
 CREW_RE = re.compile(r"@crew\b|\bALL SESSIONS\b", re.I)
 # ⛔ By NAME, not by bot-ness — see the docstring. These are automated notices only.
 MUTE_SENDERS = {"push notice", "heartbeat"}
@@ -102,6 +107,23 @@ def env(path, key):
                     return line.split("=", 1)[1].strip()
     except Exception:
         pass
+    return None
+
+
+# ⚠️ Fails toward FEWER invokes: with no Kyle id on file, Kyle must lead with the name too.
+KYLE_ID = env(COMMS_FILE, "KYLE_DISCORD_ID") or ""
+
+
+def engage_reason(text, author_id, who, is_dm):
+    """Why Coltrane should answer this message, or None. on_message's ONLY gate after its
+    two brakes - a plain function so a replay drives the same decision the bot makes."""
+    if is_dm:
+        return "direct message from " + who
+    name_re = NAME_RE if (KYLE_ID and str(author_id) == KYLE_ID) else NAME_START_RE
+    if name_re.search(text):
+        return "named directly by " + who
+    if CREW_RE.search(text):
+        return "crew-wide call from " + who
     return None
 
 
@@ -225,13 +247,8 @@ class Coltrane(discord.Client):
             return
 
         is_dm = isinstance(m.channel, discord.DMChannel)
-        if is_dm:
-            why = "direct message from " + who
-        elif NAME_RE.search(text):
-            why = "named directly by " + who
-        elif CREW_RE.search(text):
-            why = "crew-wide call from " + who
-        else:
+        why = engage_reason(text, m.author.id, who, is_dm)
+        if why is None:
             return
 
         history = ""

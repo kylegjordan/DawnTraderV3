@@ -222,9 +222,9 @@ both on every entry, and that is what makes his usable by someone who was not th
   file hash-matched back. `.backup-manifest.json` in your store records each verified run.
   ⚠️ A manifest row means the archive was read back and matched, **not** that a file with
   that name exists. Comparing names is how this project once certified four empty backups.
-- ⛔ **It is YOURS. Langston has his own, in his own account, and neither of you can reach
-  the other's** — measured: your shell is refused on his files. Nothing you write ends up
-  in his store, and nothing of his appears in yours.
+- ⛔ **It is YOURS; Langston's is his.** ⚠️ Measured 2026-09-11: your sandbox CAN read
+  his files; his account cannot read yours. **Do not read them.** Whether that access
+  stays is Langston's and Kyle's call.
 
 ---
 
