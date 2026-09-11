@@ -829,7 +829,9 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 **Governance:** `SYSTEM_IMPACT_MAP` §7.1 + §2.1.2 · `SYSTEM_MANUAL` §7 + P19-B7.2c · `PHASE_19_PLAN` row 3c · `PHASE_HISTORY` · `RUNNING_ISSUES` `#914` (PRICE half retired forward-only), `#943` (seam owed) · the scratch master order row 1 → observation · `MEMORY_CC_C.md` + Langston's `MEMORY.md`.
 
-## B-PRICE-AGE-TRUTH (CC-C, ⛔ **OPEN — OBSERVATION WINDOW**, deployed 2026-08-31) — Phase 19, plan row 3b.f · `#951`
+## B-PRICE-AGE-TRUTH (CC-C, ✅ **CLOSING 2026-09-11 — completion report at Step 11**, deployed 2026-08-31) — Phase 19, plan row 3b.f · `#951`
+
+**CLOSE (2026-09-11).** The window ended at the `3n` OBJ-7 deploy (`2026-09-11T20:09:47Z`) with the touched arm empty at 82 closes. PASS 2 was re-scoped onto the adapter's runtime re-serve (exercised, with an honest carry measured against a control), PASS 1 and PASS 3 were discharged by construction, and the `closed_trades` leg was retired with a stored-row tripwire at `3n` row `8g-bis`. Langston approved the conversion on 2026-09-11. OBJ-2 was carved out (now `3n` D7) and OBJ-3 withdrawn (`#976`). Record: `Batch Completion/B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md`.
 
 **WHAT IT FIXES.** The REST rate-limiter branch returned a cached price as a **bare number**, so the caller could not distinguish a re-serve from a genuine venue read and stamped **`observedAt: Date.now()` + `producer: 'kraken_rest_poller'`** on both. A price of any age was recorded as *observed now*, under the same producer a real venue read gets. ⇒ the planned 15 s freshness guard would have read the fabricated stamp and **never fired**.
 

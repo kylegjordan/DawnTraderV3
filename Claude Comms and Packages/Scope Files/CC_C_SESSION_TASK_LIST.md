@@ -18,8 +18,8 @@
 | 3b.h-6 | `B-OHLC-FRAME-GUARD` (`#1028`) | deployed `29cce1076`; Step 4 approved; **paused at Step 7** — only the on-screen panel check is left | me (behind the Codex experiment) |
 | 3 | `F-G-1` `B-GRID-REPRESENTABILITY` | window closed 2026-09-04; **conversion to a completion report owed**; OBJ-9 re-opened, bounded to the ordering guarantee (`#1031`) | me |
 | 3c | `F-G-2` `B-EXIT-TRANSACTABLE-SIDE` | crypto half deployed 2026-09-02; **observation window VOID since 2026-09-05** | the level-basis and reachability work, then re-open |
-| 3b.f | `B-PRICE-AGE-TRUTH` (`#951`) | shipped 2026-08-31; in observation | a close that went through the changed path |
-| 3n | `B-PRICE-SIDE-BY-JOB` r5 | decisions D1-D10 reached 2026-09-11; **OBJ-7 (P-7a..P-7j) built and pushed; Step 4 with Langston** (`Change Lists/B_PRICE_SIDE_BY_JOB_OBJ7_CHANGE_LIST.md`) | Langston's review; the `#951` terminal read (gate `0db25f1d`) taken immediately before the OBJ-7 deploy, per pre-audit A-9.9 |
+| 3b.f | `B-PRICE-AGE-TRUTH` (`#951`) | completion report written 2026-09-11 (the window ended at the OBJ-7 deploy with the arm empty; converted on Langston's approval) | Langston's Step-11 confirmation |
+| 3n | `B-PRICE-SIDE-BY-JOB` r5 | decisions D1-D10 reached 2026-09-11; **OBJ-7 (P-7a..P-7j) deployed 2026-09-11T20:09:47Z; Step 7 done, and the pre-registered P-7j check FAILED; Step 8 with Langston** (`Change Lists/B_PRICE_SIDE_BY_JOB_OBJ7_CHANGE_LIST.md`) | Langston's review; the `#951` terminal read (gate `0db25f1d`) taken immediately before the OBJ-7 deploy, per pre-audit A-9.9 |
 | 3b.f-c | `B-XSTOCK-SESSION-FRESHNESS` | open; the entry-side flat 15 s ceiling is its subject | me |
 
 **Closed 2026-09-11:** 3b.b `B-XSTOCK-FEED-SANITY` (`#943`) — window INCONCLUSIVE, stopped; the acceptance re-arms on the post-OBJ-7 instrument.

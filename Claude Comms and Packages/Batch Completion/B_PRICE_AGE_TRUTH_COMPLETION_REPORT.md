@@ -1,12 +1,69 @@
-# B-PRICE-AGE-TRUTH — BATCH PROGRESS REPORT
+# B-PRICE-AGE-TRUTH — COMPLETION REPORT (converted from the progress report, 2026-09-11)
 
-# ⛔ OPEN — WAITING ON: a post-deploy CLOSE whose exit price came from the arm this batch changed
+# ✅ CLOSING — THE WINDOW ENDED AT THE OBJ-7 DEPLOY WITH THE ARM EMPTY; CONVERTED ON LANGSTON'S APPROVAL; STEP 11 AWAITS HIS CONFIRMATION
 
 **Batch:** `B-PRICE-AGE-TRUTH` · **Issue:** `#951` · **Owner:** CC-C · **Phase 19, plan row 3b.f**
-**change-class:** architecture · **Card:** `Observation`
+**change-class:** architecture · **Card:** `Observation`, to `Complete` at Langston's Step-11 confirmation
 **Deployed:** `2af2e0bacc1430a6452559b83ba7d3be15adc7be` @ **2026-08-31T11:30:47Z** (`dt-deploy --by CC-C`, engine resumed, identity asserted, migration 715 ms)
 
 > **Why a PROGRESS report and not a completion report:** the work shipped and is verified in the runtime, but **the confirming artifact — the new producer token on a closed trade — requires a close to occur, and there have been ZERO post-deploy closes against 3 open positions.** Per `workflow-10`, a batch whose evidence needs a window gets this document, and it is **CONVERTED** into the completion report when the data is in **AND a decision has been taken on it** — not when the window merely elapses.
+
+---
+
+## 0. ✅ THE CLOSE — THE DATA, THE DECISION, THE OBJECTIVES
+
+**OPEN ITEMS, STATED FIRST, EACH WITH ITS HOME:**
+1. **OBJ-2 (the `source` label and its actionability consequence): CARVED OUT at Step 2** to `B-PRICE-AGE-REFUSAL` (plan row `3b.f-b`), which was absorbed into `3n` `B-PRICE-SIDE-BY-JOB` r5 on 2026-09-11 as decision D7 (`Scope Files/PRICING_DECISIONS_2026-09-11.md`).
+2. **OBJ-3 (the census of price-substitution sites): WITHDRAWN, NOT DISCHARGED at Step 2.** The remainder is `#976` `B-PROVENANCE-LOSS-CENSUS`, plan row `3b.m` (`Scope Files/B_PRICE_AGE_TRUTH_PRE_AUDIT.md:515`, `:532`).
+3. **The stored-row tripwire** that replaces the retired `closed_trades` leg: `3n` scope row `8g-bis` (`Scope Files/B_PRICE_SIDE_BY_JOB_SCOPE.md`), written 2026-09-11 at `6f6b8be3d`.
+4. **§5 item 1 stays unproven:** that the honest stamp ever reaches `closed_trades`. This close records that the retired instrument cannot prove it.
+5. **§5 item 2 stays unmeasured:** xStock exits take a path this batch did not touch (`active-execution-engine.ts:1545` at head).
+
+### (a) WHAT DATA CAME IN — against the criterion as pre-registered (§4)
+**The criterion, quoted:** *"PASS — all three must hold over the window: 1. Every row whose `exit_price_producer` is `kraken_rest_poller` or `kraken_rest_rate_limited_reserve` carries a NON-NULL `exit_observed_at_ms`. 2. Every row stamped `kraken_rest_rate_limited_reserve` carries an `exit_observed_at_ms` strictly older than its own close instant by ≥ 1 s. 3. No row carries `kraken_rest_rate_limited_reserve` together with an `exit_price_source` other than `kraken_rest`."* *"NEITHER PASS NOR FAIL: the ABSENCE of any `kraken_rest_rate_limited_reserve` row ... In that case the window EXTENDS; it does not pass."* And the stopping rule added with the successor gate on 2026-09-10 (§9a): at the fire, an empty arm is the result, and the batch converts, recording a re-scope onto an exercised path or the assertion's retirement.
+**The outcome:** the touched arm was empty at every read: 44 closes (2026-09-07), 66 (2026-09-09) and 82 (2026-09-11 19:52Z, the terminal read at the pre-deploy build `a5273ad6d`), by an exhaustive producer census (`kraken_ws_book_mid` 53, `kraken_equities_ws_mid` 25, no producer 4, all four `never_filled` with no exit read). Zero reserve rows, so **neither PASS nor FAIL** on the pre-registered rule. The second window could not run to its 2026-09-16 fire as one population: `3n` OBJ-7 deployed at `2026-09-11T20:09:47Z` and changes the exit leg's REST budget (P-7h), the arm the criterion depends on. **Reads are not fires: the gate had never fired, and the disposition was taken early on the deploy boundary** (§9b).
+
+### (b) WHAT DECISION WAS TAKEN, AND BY WHOM
+**Decided by CC-C; approved by Langston** (2026-09-11 20:17Z in substance with one correction and four conditions; 20:33Z APPROVED, `Review = Approved` on the card):
+- **PASS 2 RE-SCOPED onto the adapter's runtime re-serve, which is exercised:** 10,682 re-serves (13:11-19:43Z) with 0 dropped in the parse census, and an honest carry in the distinct-stamp measure (about 385 stamps over about 1,185 re-serves on each of the five symbols with no WebSocket cache writes, against RAY/USD's 1,141 over 1,192); re-measured after the OBJ-7 restart (191 re-serves, the same shape).
+- **PASS 1 and PASS 3 discharged by construction:** `live-pricing-adapter.ts:265` (a non-nullable stamp), `:816-818` (a reserve result only on a finite stamp), `:668` (the `kraken_rest` source literal); the reserve producer is constructed at exactly one site, `:817` (Langston's whole-tree census).
+- **The `closed_trades` leg RETIRED with a stored-row tripwire**, homed at `3n` row `8g-bis`.
+- **Gate `0db25f1d-3da5-46e2-9303-09290eb447b5` resolved, not acked**, with `337e2f901`; Langston's two follow-up conditions (the tripwire written into the scope row; the `BATCH_CATALOG.md` cite corrected) landed at `6f6b8be3d`.
+
+### OBJECTIVES (scope §4)
+| # | objective | result | evidence |
+|---|---|---|---|
+| OBJ-1 | the rate-limited branch stops discarding age | **YES** | P1 shipped; the Step-7 runtime control in §3 (the WebSocket-fed `ZEC/USD` median −0.5 s against the REST-only median 29.3 s, n=975) and the distinct-stamp measure in §9b |
+| OBJ-2 | the labels tell the truth; actionability measured before it ships | **NO — carved out** | P2 and P8 to `B-PRICE-AGE-REFUSAL` (`B_PRICE_AGE_TRUTH_PRE_AUDIT.md:514`), now `3n` D7; the producer token (P3) shipped here |
+| OBJ-3 | a census of price-substitution sites | **NO — withdrawn** | the one-site claim withdrawn after a claim-only reader found six evading mechanisms (`B_PRICE_AGE_TRUTH_PRE_AUDIT.md:532`); the remainder is `#976`, row `3b.m` |
+| OBJ-4 | the persisted poison addressed | **YES** | P5, re-serve monotonicity, with the falsifier replaced (scope §7.3; pre-audit `:16`, `:141`); at runtime a re-serve does not advance the stamp (§9b distinct-stamp counts) |
+| OBJ-5 | `#743` not folded in, the boundary written down | **YES** | scope §5; `#743` stays at plan row 6 |
+
+**CI:** run `33385072558` on the deployed head `2af2e0bac`, per job: TypeScript Check (baseline gate) success, Test Suite success, Build success, Docker Build success.
+
+### GOVERNANCE FILES CHANGED
+**At deploy (2026-08-31):** the tier ledger in §7, transcribed at the time and unchanged here.
+**At close (2026-09-11):**
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | status to closing, with the outcome; the `aee:1289-1300` cite corrected to `:1635-1642` (`6f6b8be3d`) |
+| T1 | `PHASE_HISTORY.md` | ✅ | status to closing, with the outcome |
+| T1 | `PHASE_19_PLAN.md` | ✅ | row `3b.f` status to closing |
+| T1 | own `MEMORY_CC_C.md` and its mirror | ✅ | position updated |
+| T1 | `Scope Files/CC_C_SESSION_TASK_LIST.md` | ✅ | row `3b.f` to closing |
+| T1 | the batch `SCOPE` | N/A | unchanged; its objectives are graded above |
+| T1 | this `COMPLETION_REPORT` | ✅ | converted from the progress report, not rewritten |
+| T1 | Langston's `/home/langston/MEMORY.md` | handed to Langston | since `B-LANGSTON-CONTEXT` (2026-09-11) it is written through `langston-memory-write`; the Step-11 dispatch asks him to update his `#951` line |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#951` closing amendment |
+| T2 | `Scope Files/B_PRICE_SIDE_BY_JOB_SCOPE.md` | ✅ | row `8g-bis`, the stored-row tripwire (`6f6b8be3d`) |
+| T2 | `SYSTEM_IMPACT_MAP.md` | N/A | the producer vocabulary's second epoch (`:342`) still holds; the close changes a verification criterion, not a component |
+| T2 | `SYSTEM_MANUAL.md` | N/A | the producer stays provenance, not consulted by the actionable gate (`:4774`); no architecture or maths changed at close |
+| T2 | `CHANGES_AND_FIXES.md` | N/A | `FIX-2026-08-31-A` stands; nothing new was fixed at close |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | the one instance at close (reads counted as fires) carries a `MISTAKE:` trailer on the conversion commit, which the weekly pass reads |
+| T2 | `POST_AUDIT_ROADMAP.md`, `ADJUSTMENT_FRAMEWORK.md`, `AUTHORITY_BASELINE.md`, `STORAGE_POLICY.md`, `MULTI_ASSET_VTS_EXPANSION_PLAN.md`, `ASSET_CLASS_ONBOARDING_WORKFLOW.md`, `BUILD_METHOD_PLAYBOOK.md`, `LANGSTON_ARCHITECTURE.md`, `CLAUDE.md` / `CONDUCT.md`, `_archive/CLAUDE_MD_RULE_HISTORY.md`, `DELETED_COMPONENTS_LOG.md`, `GOVERNANCE_EXCEPTIONS.md`, `ALERT_HANDLING_PROTOCOL.md`, `DELIVERY_BOARD_PROTOCOL.md`, `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | the reasons in §7 still apply: the close adds no roadmap change, parameter, authority boundary, retention change, onboarding learning, method change, reviewer change, rule, code deletion, exception, alert-process change, board change or feature check |
+
+**HONEST RESIDUAL:** this batch proved that the adapter carries a re-serve's original age and labels it with its own producer. It did not prove that the honest stamp reaches a stored exit row, because no exit took that path in 82 closes. The stored-row tripwire at `8g-bis` is where that proof, or its failure, will first appear.
 
 ---
 

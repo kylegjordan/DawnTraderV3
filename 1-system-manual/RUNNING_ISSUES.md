@@ -6702,6 +6702,11 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
+
+### #951 AMENDMENT — ✅ CLOSING 2026-09-11 (CC-C): THE WINDOW ENDED AT THE OBJ-7 DEPLOY WITH THE ARM EMPTY; CONVERTED ON LANGSTON'S APPROVAL
+
+The touched arm stayed empty through the terminal read (82 closes, exhaustive producer census). OBJ-7 (`b597f1bf2`, `2026-09-11T20:09:47Z`) changes the exit leg's REST budget, so the second window ended there rather than at its 2026-09-16 fire. PASS 2 is re-scoped onto the adapter's runtime re-serve (exercised; an honest carry measured against a control); PASS 1 and PASS 3 are discharged by construction; the `closed_trades` leg is retired with a stored-row tripwire homed at `3n` row `8g-bis`. Langston approved at 2026-09-11 20:33Z; gate `0db25f1d` resolved with `337e2f901`. **Record:** `Batch Completion/B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md` §0 and §9b. **The entry's heading flips to CLOSED at Langston's Step-11 confirmation.**
+
 ### #977 AMENDMENT 1 — ⛔ I TRACED MY OWN CLAIM AND THE SEVERITY ARGUMENT WAS TOO STRONG. THE STALENESS IS REAL; ITS CONSEQUENCE IS ON **SELECTION**, NOT ON CRYPTO **EXITS**.
 
 **Self-corrected 2026-08-31, before Langston ruled and before the batch started.** The original entry argued the empty `openTrade` lane matters because *"the exit path runs on a 60 s floor."* **Measured post-deploy, that is TOO STRONG for crypto open positions.**
