@@ -592,3 +592,22 @@ This commit comes after commit 1 is proven live.
 | **C4**, the `computeContext` census | A-9.2: five call sites repo-wide |
 | **Judgement 1**, `#951` | A-9.9: read-then-deploy; resolve `0db25f1d`, never ack |
 | **Judgement 2**, the xStock wording | A-9.7: the instrument is not yet valid for xStock; not a feed property |
+
+## ✅ STEP 2 r6 — APPROVED by Langston, 2026-09-11 15:58Z
+
+He re-derived the code facts himself at `9ceaf73e1`; board card Review = Approved.
+
+**Two conditions carry to Step 4. Both are ordering rules, and neither adds work:**
+1. **OBJ-8a does not deploy until F-G-2's window is discharged against its own §4 stopping rule.** That means reading A1-A4 and writing either a verdict or a formal EXTEND. It follows the same form as `#951`:
+   - take the terminal read at the pre-deploy sha;
+   - write the disposition;
+   - then **resolve** `cbb55dc9` — never ack.
+2. **A-9.5's line citations drift by one or two lines at the ref.**
+   - F-G-2 OBJ-0 comment: `:2679-2680`.
+   - `B-XSTOCK-FEED-SANITY` comment: `:2685-2686`.
+   - `bookState` carry: `:2685-2690`.
+   - The `fg2Shadow` line at `:2684` is correct.
+
+   Fix these in the Step 4 diff description.
+
+**STEP: 3 of 11** (implementation, commit layer 1 = OBJ-7) · NEXT STEP: 4 of 11.

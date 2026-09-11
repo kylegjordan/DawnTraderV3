@@ -1510,6 +1510,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     
     try {
       this.ws?.send(JSON.stringify(unsubscribeMessage));
+      // B-PRICE-SIDE-BY-JOB r5 P-7b (pre-audit A-9.3): cancel the BOOK subscription too.
+      // subscribeToSymbols subscribes ticker AND book, but this path cancelled the ticker only — so
+      // clearAllSubscriptions and refreshChannel (both route through here) left book streams live at
+      // Kraken, and refreshChannel stacked a new book subscription on top of the old one. The raw book
+      // unsubscribe softResubscribe carried (8.9.5) now lives here, once, for every caller.
+      this.sendBookUnsubscribe(symbols);
       symbols.forEach(s => {
         this.subscribedSymbols.delete(s);
         this.pendingSubscriptions.delete(s);
@@ -1524,6 +1530,27 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     } catch (error) {
       console.error(`[8.8.3-I6-FIX][WS_UNSUB_ERROR]`, error);
       console.error(`[${this.MODULE_NAME}] Unsubscribe error:`, error);
+    }
+  }
+
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7b: send the `book` unsubscribe for these internal symbols. The depth sent is the
+   * depth Kraken GRANTED on subscribe (`bookDepth`, recorded from the ACK per #507), defaulting to the requested
+   * 10 when no ACK has been seen. Symbols are grouped by depth because one message carries one depth.
+   * Caller guarantees the socket is connected.
+   */
+  private sendBookUnsubscribe(internalSymbols: string[]): void {
+    const byDepth = new Map<number, string[]>();
+    for (const internal of internalSymbols) {
+      const kraken = this.normalToKrakenSymbol(internal);
+      if (!kraken) continue;
+      const depth = this.bookDepth.get(internal) ?? 10;
+      const group = byDepth.get(depth) ?? [];
+      group.push(kraken);
+      byDepth.set(depth, group);
+    }
+    for (const [depth, symbol] of byDepth) {
+      this.ws?.send(JSON.stringify({ method: 'unsubscribe', params: { channel: 'book', symbol, depth } }));
     }
   }
 
@@ -3539,20 +3566,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     // Use the existing unsubscribe helper for proper handling
     this.unsubscribeFromSymbols([symbol]);
     
-    // Also unsubscribe from book channel (unsubscribeFromSymbols only does ticker)
-    const krakenSymbol = this.normalToKrakenSymbol(symbol);
-    if (krakenSymbol && this.isConnected) {
-      const bookUnsub = {
-        method: 'unsubscribe',
-        params: { channel: 'book', symbol: [krakenSymbol], depth: 10 }
-      };
-      try {
-        this.ws?.send(JSON.stringify(bookUnsub));
-        console.log(`[8.9.5][SOFT_RESUB] Unsubscribed ${symbol} from book channel`);
-      } catch (err: any) {
-        console.error(`[8.9.5][SOFT_RESUB] Book unsubscribe error:`, err?.message);
-      }
-    }
+    // B-PRICE-SIDE-BY-JOB r5 P-7b: unsubscribeFromSymbols now cancels the book channel as well, so the raw
+    // book unsubscribe this block used to send here is gone — one home, and no duplicate cancel.
     
     // Wait before resubscribing to allow cleanup
     await new Promise(resolve => setTimeout(resolve, 500));
