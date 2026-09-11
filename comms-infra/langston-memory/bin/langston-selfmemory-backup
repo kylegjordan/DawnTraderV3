@@ -245,6 +245,15 @@ def main():
         print("REFUSED: two configured sources share the folder name %s - their members would merge and the run could "
               "verify a population it did not capture." % ", ".join(dup))
         return 2
+    reals = [os.path.realpath(src) for src in SOURCES]
+    nested = sorted("%s within %s" % (a, b) for i, a in enumerate(reals) for j, b in enumerate(reals)
+                    if i != j and (a == b or a.startswith(b.rstrip("/") + "/")))
+    if nested:
+        # ⛔ RESIDUAL (Langston, 19:43Z): distinct NAMES are not distinct TREES. A source inside another, or two names
+        #    resolving to one folder, keys the same files twice - an inflated census and a doubled tar. Refuse.
+        print("REFUSED: a configured source sits within another (%s) - its files would be counted and archived twice."
+              % "; ".join(nested))
+        return 2
     dry = "--dry-run" in sys.argv
     prove = "--prove" in sys.argv
     if not os.path.isdir(STORE):
