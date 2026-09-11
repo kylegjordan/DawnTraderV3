@@ -199,6 +199,29 @@ Also recorded from your F-G-2 closing read: §0b in `F_G_2_PROGRESS_REPORT.md`, 
 
 **Proof for all three:** 18 related test files, 263/263. tsc 377, identical file+code multiset to chunk 1 r2's.
 
+## CHUNK 4 — P-7k (record-only; placed at Step 4 by your chunk-3 ruling (2))
+
+### P-7k — the unified price cache says which quantity each price is
+**Where:** `server/services/price-cache.ts` — `CachedPrice.markKind` (`'mid' | 'last' | null`), `lastTradePrice`, `lastTradeReceivedAtMs`; `carryLastTrade` (P-7i's carry rule, one predicate for both halves); the three REST poller sites; `updateFromWebSocket(…, markKind, lastTradePrice)` and `updateFromRest(symbol, price, markKind, lastTradePrice)`, both new parameters REQUIRED; `logHealthLine` (extracted from the 60 s interval), `noteLevelRead`, `getMarkKindCensus`. `price-basis.ts` `MARK_KIND_BY_PRODUCER`, total over `PriceProducer`. Callers: `live-pricing-adapter.ts` REST leg (`markKindOf(bid, ask)` and REST `c[0]`) and `updateCache` (`markKindOfProducer(producer)` and this write's print); `kraken-websocket-adapter.ts` v1 writer (`'last'`); `signal-orchestrator.ts` counts its level-setting read.
+
+**The writer census — F1's three writers, at HEAD:**
+
+| writer | `price` it stores | `markKind` stated | print |
+|---|---|---|---|
+| the cache's own REST poller — `refreshBucket`, `getPrice`, `getBatch` (3 sites) | REST `c[0]` | `'last'` | `c[0]` |
+| `updateFromRest`, called by the `live-pricing-adapter.ts` REST leg | a REST midpoint, or `c[0]` on a one-sided book | `markKindOf(bid, ask)` | `c[0]` |
+| `updateFromWebSocket`, called by `updateCache` (WS ticker, book, xStock mark, engine REST fallback) | the producer's mark | `MARK_KIND_BY_PRODUCER[producer]` | the write's own print |
+| `updateFromWebSocket`, called by the v1 writer (unreachable, `#742`) | v1 `c[0]` | `'last'` | `c[0]` |
+
+Carry: a write with no print keeps the row's pair with its original stamp; the pair is unbounded in age by design (your (3)).
+
+**The instrument:** the existing HEALTH line (every 60 s) gains `rowKind=mid:N,last:N,unknown:N`, a snapshot of cache keys by kind (alias keys included, as in `cacheSize`), and `levelReadKind=mid:N,last:N,unknown:N`, the kind of each price signal generation read to set levels since the previous line, reset at every line so each line is one interval. Nothing parses the HEALTH line: a whole-tree grep finds no reader outside `price-cache.ts`.
+⚠️ **Stated limits:** `levelReadKind` counts the active crypto quant lane's read only (`signal-orchestrator.ts`); the VTS level lane reads the same rows, so its mixture shows in `rowKind`, not in a read count. The `:572` raw-symbol against `:1124` normalised-symbol difference you flagged is in the adapter's private cache, not this row; it is unchanged and still fails to absence.
+
+**Proof:** 11 tests (`b-price-side-p7k-cache-mark-kind.test.ts`): each writer's kind and print; the carry with its original stamp; an `undefined` print splits nothing; a source fence on the three poller sites with its control; the adapter hop for a `_mid` and a `_last` producer; the adapter REST leg; the table total over `BASIS_BY_PRODUCER`'s keys and agreeing with every suffix; the HEALTH line's interval reset; fences on the orchestrator's count and the v1 writer. **Against the pre-P-7k sources: 11 of 11 fail.** After: 20 related test files 289/289, and the one other test file that touches the cache 25/25. tsc 377, identical file+code multiset.
+⚠️ **Behaviour:** none; no decision reads the new fields. The HEALTH line grows two fields.
+**Attack:** (1) whether `MARK_KIND_BY_PRODUCER` belongs beside the producer union in `live-pricing-adapter.ts` instead; (2) whether the orchestrator's read is the right place to count what fed levels; (3) the REST poller's fixed `'last'`: it stores `c[0]` whatever the sides are, so its kind is fixed, not decided per read.
+
 ## THE ASK — one gate per dispatch
 
 Three dispatches, one per chunk. Each asks for a ruling on that chunk's commits only, at the ref, with this file as the context.

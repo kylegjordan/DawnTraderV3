@@ -2402,6 +2402,8 @@ export class SignalOrchestrator {
       // Batch 18: Use priceCache instead of per-symbol getTicker — these symbols are already
       // in the fx5Snapshot bucket (refreshed every 30s). Eliminates ~N redundant API calls/cycle.
       const cachedPrice = priceCache.getCachedPrice(symbol);
+      // B-PRICE-SIDE-BY-JOB r5 P-7k (record-only): count which quantity this level-setting read got, midpoint or last trade.
+      priceCache.noteLevelRead(cachedPrice);
       const rawPrice = cachedPrice?.price || 0;
       const currentVolume = cachedPrice?.volume24h || 0;
 

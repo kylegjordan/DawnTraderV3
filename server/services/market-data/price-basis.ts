@@ -79,6 +79,40 @@ export function basisOfProducer(producer: PriceProducer): PriceBasisOrNone {
 }
 
 /**
+ * B-PRICE-SIDE-BY-JOB r5 P-7k: WHICH QUANTITY each producer's price is — the kind its `_mid` / `_last` suffix states,
+ * written out, because two live producers carry no suffix. TOTAL over `PriceProducer`, like `BASIS_BY_PRODUCER`, so a
+ * new producer must declare its kind. `null` = not one observation of a stated kind: the unsplit REST poller (its
+ * caller decides the kind per read with `markKindOf` and passes it directly), every re-serve and seed, and the walks.
+ */
+export const MARK_KIND_BY_PRODUCER: Readonly<Record<PriceProducer, 'mid' | 'last' | null>> = Object.freeze({
+  kraken_ws_ticker_mid: 'mid',
+  kraken_ws_ticker_last: 'last',
+  kraken_ws_book_mid: 'mid',
+  kraken_ws_ticker_v1: 'last', // unreachable (#742); on the raw v1 path `c[0]` is the last trade
+  kraken_equities_ws_mid: 'mid',
+  kraken_equities_ws_last: 'last',
+  kraken_rest_engine_fallback_mid: 'mid',
+  kraken_rest_engine_fallback_last: 'last',
+  kraken_rest_poller: null,
+  kraken_rest_rate_limited_reserve: null,
+  xstock_rest_gate_reserve: null,
+  last_known_good_all_apis_failed: null,
+  last_known_good_fetch_exception: null,
+  last_known_good_reserve: null,
+  entry_seed: null,
+  mock: null,
+  crypto_ws_book_walk: null,
+  xstock_ticker_snap_walk: null,
+  position_entry_price_reused: null,
+  no_price_produced: null,
+});
+
+/** P-7k: the kind of a recorded producer's price, or `null`. */
+export function markKindOfProducer(producer: PriceProducer): 'mid' | 'last' | null {
+  return MARK_KIND_BY_PRODUCER[producer];
+}
+
+/**
  * B-PRICE-SIDE-BY-JOB r5 (Langston Step-4, chunk 1): the predicate is named for what it answers. A LIVE TOUCH basis is a
  * quote observed from the venue that a touch-price decision may act on at the moment of use: the book top, the two WS
  * tickers, and a REST ticker read. NOT a live touch: `venue_close` (a bar close is printed, not fresh), `book_depth` and

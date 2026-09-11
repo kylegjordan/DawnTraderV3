@@ -1306,7 +1306,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       this.priceTickCount++;
       
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
-      priceCache.updateFromWebSocket(internalSymbol, lastPrice);
+      // B-PRICE-SIDE-BY-JOB r5 P-7k: unreachable (#742), stated anyway: on this raw v1 path `c[0]` is the last trade.
+      priceCache.updateFromWebSocket(internalSymbol, lastPrice, null, null, null, null, 'last', Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : null);
       
       // Phase 8.8.3-I6: Diagnostic logging to confirm WS -> cache pipeline
       console.log(`[I6][WS_CACHE_UPDATE] symbol=${internalSymbol} price=${lastPrice} timestamp=${new Date().toISOString()}`);

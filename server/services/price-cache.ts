@@ -84,6 +84,42 @@ export interface CachedPrice {
    * (`lastUpdatedAt` genuinely dates the last cache write) used for another it cannot serve.
    */
   lastWsMessageAtMs: number | null;
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7k (Langston Step-4 chunk 3 (2); `PRICING_DATA_ARCHITECTURE.md` §3.2 F1): WHICH QUANTITY
+   * `price` holds — `'mid'`, a midpoint of the two sides, or `'last'`, the venue's last trade. This cache has three
+   * writers that do not agree (the REST poller stores `c[0]`; `updateFromRest` a REST midpoint; `updateFromWebSocket`
+   * the adapter's mark), and until P-7k the row did not say which, so signal generation read a mixture in an unknown
+   * ratio. Decided WHERE THE PRICE IS BUILT and passed in, never re-derived from this row (`mark-kind.ts`: a cold row's
+   * `bid === ask === price` would answer `'mid'` for a last trade). `null` = the writer could not state it.
+   * ⛔ RECORD-ONLY: no decision reads it. It exists so the mixture is measured while it still feeds levels (before P-8c).
+   */
+  markKind: CacheMarkKind | null;
+  /**
+   * P-7k: the venue's TRUE LAST TRADE and our receipt time for it, under P-7i's names and P-7i's carry rule. The pair
+   * moves together: a write carrying no print keeps the row's pair with its original stamp. ⛔ Unbounded in age by
+   * design: no writer drops a print for being old; a reader applies its own ceiling to `lastTradeReceivedAtMs` (#546).
+   */
+  lastTradePrice: number | null;
+  lastTradeReceivedAtMs: number | null;
+}
+
+/** P-7k: which quantity a cached `price` is. */
+export type CacheMarkKind = 'mid' | 'last';
+
+/**
+ * P-7k: P-7i's carry rule for this row, in ONE place, with one predicate deciding both halves (Langston chunk-3 C1).
+ * A real print (finite, positive) is stored with this write's receipt time; anything else keeps the held pair.
+ */
+function carryLastTrade(
+  existing: CachedPrice | undefined,
+  print: number | null | undefined,
+  now: number,
+): Pick<CachedPrice, 'lastTradePrice' | 'lastTradeReceivedAtMs'> {
+  if (print != null && Number.isFinite(print) && print > 0) {
+    return { lastTradePrice: print, lastTradeReceivedAtMs: now };
+  }
+  const held = existing?.lastTradePrice ?? null;
+  return { lastTradePrice: held, lastTradeReceivedAtMs: held !== null ? (existing?.lastTradeReceivedAtMs ?? null) : null };
 }
 
 class UnifiedPriceCache {
@@ -139,13 +175,7 @@ class UnifiedPriceCache {
       });
     }, 1000);
 
-    this.healthLogInterval = setInterval(() => {
-      const open = this.buckets[0].symbols.size;
-      const rtb = this.buckets[1].symbols.size;
-      const fx5 = this.buckets[2].symbols.size;
-      const vts = this.buckets[3].symbols.size;
-      console.log(`[A4.R10R-1][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} vts=${vts} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size}`);
-    }, 60000);
+    this.healthLogInterval = setInterval(() => this.logHealthLine(), 60000);
 
     this.isInitialized = true;
     console.log('[A4.R10R-1][PriceCache] Initialized with 4 buckets (openTrade=2s, readyToBuy=15s, fx5Snapshot=30s, vtsSimulation=60s)');
@@ -236,6 +266,10 @@ class UnifiedPriceCache {
               venueObservedAtMs: null,
               // ⛔ REST path — NOT a push. Carries forward, never advances.
               lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
+              // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
+              // TRADE, so the row states that kind, and the same number is this write's print.
+              markKind: 'last',
+              ...carryLastTrade(this.cache.get(normalizedSymbol), parseFloat(ticker.c?.[0] || '0'), now),
               lastUpdatedAt: now,
             };
             
@@ -386,6 +420,10 @@ class UnifiedPriceCache {
             venueObservedAtMs: null,
             // ⛔ REST path — NOT a push. Carries forward, never advances.
             lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
+            // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
+            // TRADE, so the row states that kind, and the same number is this write's print.
+            markKind: 'last',
+            ...carryLastTrade(this.cache.get(normalizedSymbol), parseFloat(ticker.c?.[0] || '0'), now),
             lastUpdatedAt: now,
           };
           
@@ -501,6 +539,10 @@ class UnifiedPriceCache {
                 venueObservedAtMs: null,
               // ⛔ REST path — NOT a push. Carries forward, never advances.
               lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
+              // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
+              // TRADE, so the row states that kind, and the same number is this write's print.
+              markKind: 'last',
+              ...carryLastTrade(this.cache.get(normalizedSymbol), parseFloat(ticker.c?.[0] || '0'), now),
                 lastUpdatedAt: now,
               };
               
@@ -522,6 +564,55 @@ class UnifiedPriceCache {
     }
 
     return result;
+  }
+
+  /**
+   * The periodic HEALTH line (every 60 s). P-7k: extracted from the interval so its mixture fields are testable; the
+   * text up to `cacheSize` is unchanged.
+   * `rowKind` is a SNAPSHOT of the cache's keys by kind (alias keys included, as in `cacheSize`). `levelReadKind` counts
+   * the kind of every price signal generation read to set levels SINCE THE PREVIOUS LINE, and is reset here, so each
+   * line reads one interval, never a running total.
+   */
+  private logHealthLine(): void {
+    const open = this.buckets[0].symbols.size;
+    const rtb = this.buckets[1].symbols.size;
+    const fx5 = this.buckets[2].symbols.size;
+    const vts = this.buckets[3].symbols.size;
+    const kinds = this.getMarkKindCensus();
+    this.levelReadKinds = { mid: 0, last: 0, unknown: 0 };
+    const r = kinds.rows;
+    const l = kinds.levelReads;
+    console.log(`[A4.R10R-1][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} vts=${vts} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size} rowKind=mid:${r.mid},last:${r.last},unknown:${r.unknown} levelReadKind=mid:${l.mid},last:${l.last},unknown:${l.unknown}`);
+  }
+
+  /** P-7k: kinds of the prices signal generation read to set levels, since the last HEALTH line. */
+  private levelReadKinds = { mid: 0, last: 0, unknown: 0 };
+
+  /**
+   * P-7k (record-only): called by signal generation with the row it is about to set levels from. A missing row is not
+   * counted: no price was read, and the caller returns without setting levels.
+   * ⚠️ Counts the active crypto quant lane's read (`signal-orchestrator.ts`) only. The VTS level lane reads the same rows,
+   * so its mixture is visible in `rowKind`, but its reads are not counted here.
+   */
+  noteLevelRead(row: CachedPrice | null | undefined): void {
+    if (!row) return;
+    if (row.markKind === 'mid') this.levelReadKinds.mid++;
+    else if (row.markKind === 'last') this.levelReadKinds.last++;
+    else this.levelReadKinds.unknown++;
+  }
+
+  /** P-7k: the mixture, as a snapshot of rows by kind and the level reads since the last HEALTH line. */
+  getMarkKindCensus(): {
+    rows: { mid: number; last: number; unknown: number };
+    levelReads: { mid: number; last: number; unknown: number };
+  } {
+    const rows = { mid: 0, last: 0, unknown: 0 };
+    for (const row of this.cache.values()) {
+      if (row.markKind === 'mid') rows.mid++;
+      else if (row.markKind === 'last') rows.last++;
+      else rows.unknown++;
+    }
+    return { rows, levelReads: { ...this.levelReadKinds } };
   }
 
   getHealthMetrics(): {
@@ -562,6 +653,10 @@ class UnifiedPriceCache {
     ask: number | null = null,
     sidesCapturedAtMs: number | null = null,
     venueObservedAtMs: number | null = null,
+    /** P-7k: which quantity `price` is, stated by the caller that built it. REQUIRED: a new caller must say. */
+    markKind: CacheMarkKind | null,
+    /** P-7k: this write's last trade, or `null`; a `null` keeps the row's pair (P-7i's carry rule). */
+    lastTradePrice: number | null,
   ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
@@ -591,11 +686,14 @@ class UnifiedPriceCache {
       // other writer carries the previous value forward untouched, which is what makes a silent
       // socket death visible instead of masked by the REST poller.
       lastWsMessageAtMs: now,
+      // P-7k: `?? null` because a caller outside tsc (a test file) can omit the argument.
+      markKind: markKind ?? null,
+      ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
     });
   }
 
-  updateFromRest(symbol: string, price: number): void {
+  updateFromRest(symbol: string, price: number, markKind: CacheMarkKind | null, lastTradePrice: number | null): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
     this.cache.set(symbol, {
@@ -614,6 +712,9 @@ class UnifiedPriceCache {
       sidesCapturedAtMs: existing?.sidesCapturedAtMs ?? null,
       venueObservedAtMs: existing?.venueObservedAtMs ?? null,
       lastWsMessageAtMs: existing?.lastWsMessageAtMs ?? null,
+      // P-7k: the caller decides the kind from the REST sides it read (`markKindOf`), and passes REST `c[0]` as the print.
+      markKind: markKind ?? null,
+      ...carryLastTrade(existing, lastTradePrice, now),
       lastUpdatedAt: now,
     });
   }

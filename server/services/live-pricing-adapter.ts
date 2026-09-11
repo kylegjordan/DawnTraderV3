@@ -2,6 +2,7 @@ import { contextBridge } from './context-bridge';
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service';
 import { priceCache } from './price-cache.js';
+import { markKindOfProducer } from './market-data/price-basis.js';
 import { restRateLimiter } from './market-data/rest-rate-limiter.js';
 import { markKindOf } from './market-data/mark-kind.js';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
@@ -887,7 +888,8 @@ export class LivePricingAdapter {
       
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache from REST
       const normalized = this.normalizeSymbol(symbol);
-      priceCache.updateFromRest(normalized, midpoint);
+      // B-PRICE-SIDE-BY-JOB r5 P-7k: the unified row learns which quantity this is, and REST `c[0]` as its print.
+      priceCache.updateFromRest(normalized, midpoint, markKindOf(bid, ask), Number.isFinite(lastTrade) && lastTrade > 0 ? lastTrade : null);
       // B-PRICE-SIDE-BY-JOB r5 P-7i (A-9.1 row 4): REST `c[0]` is the venue's last trade — kept beside the midpoint.
       const _lastTradeOrNull = Number.isFinite(lastTrade) && lastTrade > 0 ? lastTrade : null;
       
@@ -1161,7 +1163,9 @@ export class LivePricingAdapter {
     // 2026-09-06 — the same one-consumer-not-the-other shape as W-3, one field over: the exit
     // trigger could see the venue's stamp and signal generation could not, so a level built from
     // the shared cache had no route to the only clock that is not ours.
-    priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs);
+    // B-PRICE-SIDE-BY-JOB r5 P-7k: the producer states the kind; this write's own print goes through, and the unified row
+    // applies P-7i's carry rule itself.
+    priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs, markKindOfProducer(producer), lastTradePrice ?? null);
     
     // Phase 8.8.3-I7-WS-D (D6): Diagnostic log for cache write
     console.log(`[I7-WS-D][CACHE_WRITE] symbol=${normalized} price=${price} source=${source}`);
