@@ -17,6 +17,9 @@ export interface RateLimiterStats {
   blockedCount: number;
   perSymbolCooldowns: number;
   lastRefill: number;
+  /** B-PRICE-SIDE-BY-JOB r5 P-7h: `takeToken()` outcomes, counted apart from `check()` (the engine REST leg). */
+  tokenOnlyAllowedCount: number;
+  tokenOnlyBlockedCount: number;
 }
 
 export class RestRateLimiter {
@@ -31,6 +34,8 @@ export class RestRateLimiter {
   private allowedCount: number = 0;
   private blockedCount: number = 0;
   private blockedReasons: Map<string, 'no_tokens' | 'cooldown'> = new Map();
+  private tokenOnlyAllowedCount: number = 0;
+  private tokenOnlyBlockedCount: number = 0;
 
   constructor(options?: {
     maxTokens?: number;
@@ -73,6 +78,28 @@ export class RestRateLimiter {
     return true;
   }
 
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7h (decision D7; pre-audit A-9.4; Langston's P-7h ruling (a), 2026-09-11): take ONE
+   * token from the shared bucket and NOTHING ELSE — no per-symbol cooldown is read or armed.
+   *
+   * ⛔ WHY NOT `check()`: its 60 s per-symbol cooldown is armed on every allowed adapter fetch, and the adapter
+   * fetches by REST exactly when the WebSocket price is stale — the same condition that sends the exit engine to its
+   * direct REST fallback. Sharing `check()` would make that fallback structurally unreachable for any symbol under
+   * REST refresh. The bucket is what prevents a venue ban; the cooldown is the adapter's own polling pace.
+   * ⛔ THERE IS NO REFUND, BY DESIGN: a token taken is a token spent, including when the request then throws.
+   * Counted apart from `check()`, so the engine leg's refusals are their own number.
+   */
+  takeToken(): boolean {
+    this.refill(Date.now());
+    if (this.tokens < 1) {
+      this.tokenOnlyBlockedCount++;
+      return false;
+    }
+    this.tokens -= 1;
+    this.tokenOnlyAllowedCount++;
+    return true;
+  }
+
   private refill(now: number): void {
     const delta = now - this.lastRefill;
     const refillCount = Math.floor(delta / this.refillIntervalMs);
@@ -92,7 +119,9 @@ export class RestRateLimiter {
       allowedCount: this.allowedCount,
       blockedCount: this.blockedCount,
       perSymbolCooldowns: this.lastFetchTime.size,
-      lastRefill: this.lastRefill
+      lastRefill: this.lastRefill,
+      tokenOnlyAllowedCount: this.tokenOnlyAllowedCount,
+      tokenOnlyBlockedCount: this.tokenOnlyBlockedCount,
     };
   }
 
@@ -115,6 +144,8 @@ export class RestRateLimiter {
     this.allowedCount = 0;
     this.blockedCount = 0;
     this.blockedReasons.clear();
+    this.tokenOnlyAllowedCount = 0;
+    this.tokenOnlyBlockedCount = 0;
     console.log('[8.8.5][RestRateLimiter] Reset complete');
   }
 

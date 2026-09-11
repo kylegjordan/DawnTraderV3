@@ -144,6 +144,9 @@ import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
 import { getLatestEquityTick } from './passive-archive/equity-spot-archiver.js'; // P19-B8.5 xstock marks — the equities-feed venue leg
 import { markKindOf } from './market-data/mark-kind.js'; // B-EXIT-BOOK-AGE-STAMP P1 — the one mid-or-last predicate
+import { restRateLimiter } from './market-data/rest-rate-limiter.js'; // B-PRICE-SIDE-BY-JOB r5 P-7h — the shared REST token bucket
+import { resolveEngineRestFallback, classifyEngineRestFailure } from './market-data/engine-rest-fallback.js'; // P-7h — the limited REST leg
+import { ageExemptionOfProducer } from './market-data/price-basis.js'; // P-7h — the named age exemption (Langston condition 2)
 // P19-B8.5e (`#548`) — risk-derived per-symbol mark-staleness ceiling. The POLICY is pure
 // (`mark-staleness`); the σ MEASUREMENT is cached (`sigma-rate-cache`) so the exit path
 // never awaits a DB read to decide whether a mark is trustworthy.
@@ -168,8 +171,19 @@ import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asse
  */
 export function buildPriceSkipAlertCopy(input: {
   symbol: string; mode: string; streak: number; reason: string; detail?: string;
-}): { title: string; body: string; isStaleReject: boolean } {
+}): { title: string; body: string; isStaleReject: boolean; isSelfThrottled: boolean } {
   const isStaleReject = input.reason.startsWith('equity_tick_stale');
+  // B-PRICE-SIDE-BY-JOB r5 P-7h: a SELF-IMPOSED refusal is a third fact. The engine's shared REST budget was empty,
+  // so the venue was NEVER ASKED — "neither … returned a usable price" would claim a query that did not happen, and
+  // "until the venue quotes again" would blame a venue that may be quoting normally.
+  if (input.reason === 'rest_token_exhausted') {
+    return {
+      isStaleReject: false,
+      isSelfThrottled: true,
+      title: `Exit checks skipped — our REST request budget was empty for ${input.symbol}`,
+      body: `The exit monitor has skipped ${input.streak} consecutive ticks for the open ${input.mode} position on ${input.symbol} because the Kraken live feed had no fresh price and the direct Kraken query was NOT attempted: this system's shared REST request budget was empty on those ticks. This is our own request throttle, not a venue outage. If it persists, the REST budget is saturated — check the limiter statistics before investigating the feed.`,
+    };
+  }
   const cause = isStaleReject
     ? `the most recent mark was older than this symbol's freshness ceiling${input.detail ? ` (${input.detail})` : ''}, so it was not trusted for a stop/target decision`
     : `neither the Kraken live feed nor the Kraken direct query returned a usable price (${input.reason})`;
@@ -180,6 +194,7 @@ export function buildPriceSkipAlertCopy(input: {
     : `The position cannot be evaluated against a venue price until the venue quotes again. If this persists, investigate the feed/subscription for this pair.`;
   return {
     isStaleReject,
+    isSelfThrottled: false,
     title: isStaleReject
       ? `Exit checks skipped — mark older than ceiling for ${input.symbol}`
       : `Open position unmanageable — no Kraken price for ${input.symbol}`,
@@ -1246,6 +1261,11 @@ export class ActiveExecutionEngine {
     let withWsPrice = 0;
     let withRestPrice = 0;
     let withoutPrice = 0;
+    // B-PRICE-SIDE-BY-JOB r5 P-7h: the REST fallback's causes as their own numbers (Langston condition 1), and the
+    // named age exemption's use count (condition 2). Printed on the EVAL_EXIT line.
+    let restTokenExhausted = 0;
+    let restVenueRateLimited = 0;
+    let restAgeExempt = 0;
     let slHits = 0;
     let tpHits = 0;
     // B-XSTOCK-FEED-SANITY: OCCURRENCES this cycle (a skip is a tick withheld; a yield is a tick acted on
@@ -1538,23 +1558,37 @@ export class ActiveExecutionEngine {
             const restPair = getKrakenRestPair(position.symbol);
             console.log(`[I7][REST_FALLBACK] symbol=${position.symbol} -> restPair=${restPair}`);
 
-            const ticker = await this.krakenService.getTicker(restPair);
-            const tickerData = Object.values(ticker)[0];
-            if (!tickerData) {
-              console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: No Kraken REST data, skipping position check`);
+            // ── B-PRICE-SIDE-BY-JOB r5 P-7h (D7; A-9.4; Langston's P-7h ruling (a) + three conditions) ──
+            // This was the engine's UNLIMITED REST path: `restRateLimiter` had one production caller, the
+            // adapter. The leg now takes a token from the SHARED bucket first — a token only, never the adapter's
+            // per-symbol cooldown, which is armed by exactly the stale-WS condition that sends us here. A refusal
+            // skips the tick WITHOUT asking the venue, under its own reason; a venue rate-limit throw is split out
+            // of `rest_failed`; and a token taken is never refunded. See `market-data/engine-rest-fallback.ts`.
+            const _rest = await resolveEngineRestFallback(restPair, {
+              takeToken: () => restRateLimiter.takeToken(),
+              getTicker: (pair) => this.krakenService.getTicker(pair),
+            });
+            if (_rest.kind === 'skip') {
+              if (_rest.reason === 'rest_token_exhausted') {
+                restTokenExhausted++;
+                console.warn(`[P-7h][REST_TOKEN_EXHAUSTED] ${position.symbol}: shared REST budget empty — Kraken NOT queried, skipping position check`);
+              } else if (_rest.reason === 'rest_no_data') {
+                console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: No Kraken REST data, skipping position check`);
+              } else {
+                if (_rest.reason === 'rest_venue_rate_limited') restVenueRateLimited++;
+                console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed (${_rest.reason}), skipping position check`, _rest.error);
+              }
               withoutPrice++;
-              await this._recordPriceSkip(position, 'rest_no_data');
+              await this._recordPriceSkip(position, _rest.reason);
               continue;
             }
 
-            // 8.9.2: Calculate midpoint from bid/ask, fallback to last trade
-            const ask = parseFloat(tickerData.a[0]);
-            const bid = parseFloat(tickerData.b[0]);
-            const lastTrade = parseFloat(tickerData.c[0]);
-            // B-EXIT-BOOK-AGE-STAMP P1/P4: one predicate, one home — and the kind is decided right
-            // here, where `ask`/`bid` are in scope, so this leg needs no plumbing at all.
-            const _restKind = markKindOf(bid, ask);
-            currentPrice = _restKind === 'mid' ? (ask + bid) / 2 : lastTrade;
+            // 8.9.2: midpoint from bid/ask, fallback to last trade — the same arithmetic and the one mid-or-last
+            // predicate (B-EXIT-BOOK-AGE-STAMP P1/P4), now computed inside the limited helper.
+            const ask = _rest.ask;
+            const bid = _rest.bid;
+            const _restKind = _rest.markKind;
+            currentPrice = _rest.price;
             priceSource = 'kraken_rest';
             // B-EXIT-PROVENANCE P2 (R6-3, crypto direct-REST branch): LITERAL producer, honestly —
             // direct `krakenService.getTicker`, mid computed inline, so the line is the producer.
@@ -1564,6 +1598,9 @@ export class ActiveExecutionEngine {
             // observation time — precisely the #743 defect this column exists to make visible.
             priceObservedAtMs = null;
             withRestPrice++;
+            // P-7h (Langston condition 2): the NAMED age exemption. `observedAt` is null by design on this branch, so
+            // an age check keyed on it exempts the branch by declaration, and the use is counted, never inferred.
+            if (ageExemptionOfProducer(priceProducer) !== null) restAgeExempt++;
 
             console.log(`[8.9.2][REST_TICK] ${position.symbol} bid=${bid} ask=${ask} mid=${currentPrice.toFixed(8)}`);
 
@@ -1585,9 +1622,13 @@ export class ActiveExecutionEngine {
             livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest', priceProducer, null, null, null, null);
             console.log(`[I7][REST_BROADCAST] symbol=${internalSymbol} price=${currentPrice}`);
           } catch (krakenError) {
-            console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);
+            // Throws from outside the request itself (pair resolution, parsing, the cache broadcast), classified the
+            // same way so a venue rate-limit refusal can never hide in `rest_failed` (P-7h condition 1). No refund.
+            const _reason = classifyEngineRestFailure(krakenError);
+            if (_reason === 'rest_venue_rate_limited') restVenueRateLimited++;
+            console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed (${_reason}), skipping position check`, krakenError);
             withoutPrice++;
-            await this._recordPriceSkip(position, 'rest_failed');
+            await this._recordPriceSkip(position, _reason);
             continue;
           }
         }
@@ -1887,7 +1928,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     this.fg2ShadowEntered = 0;
     this.fg2ShadowSkippedNoBook = 0;

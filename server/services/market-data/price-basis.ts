@@ -79,3 +79,48 @@ export function basisOfProducer(producer: PriceProducer): PriceBasisOrNone {
 export function isLiveObservationBasis(basis: PriceBasisOrNone): basis is PriceBasis {
   return basis !== 'not_an_observation';
 }
+
+/**
+ * B-PRICE-SIDE-BY-JOB r5 — P-7h (Langston's P-7h ruling, condition 2, 2026-09-11): THE NAMED AGE EXEMPTION.
+ *
+ * The engine's direct REST fallback records `observedAt = null` BY DESIGN: the REST ticker carries no per-quote venue
+ * time, and stamping our fetch time as observation time would rebuild `#743`. So an age check keyed on `observedAt`
+ * (D7's "every action rechecks against D6", which lands for crypto exits in OBJ-8) cannot judge that branch on its
+ * own: failing it closed would disable the exit fallback, failing it open would exempt it silently, and
+ * `?? Date.now()` would launder. The honest form is a DECLARED exemption — that price was fetched inside the awaited
+ * round trip of the very tick that acts on it, so it is fresh BY CONSTRUCTION — declared here, per producer, and
+ * counted where it is used (`restAgeExempt` on the engine's EVAL_EXIT line), never inferred from a null.
+ *
+ * ⛔ `Record<PriceProducer, …>` keeps it TOTAL, like `BASIS_BY_PRODUCER`: a new producer must say whether it is exempt.
+ * ⛔ NOT exempt: the adapter's REST poller (it carries a real `observedAt`) and every re-serve (they carry an OLD one,
+ * which is exactly what the age check exists to catch).
+ */
+export type AgeExemption = 'fetch_fresh_by_construction';
+
+export const AGE_EXEMPTION_BY_PRODUCER: Readonly<Record<PriceProducer, AgeExemption | null>> = Object.freeze({
+  kraken_ws_ticker_mid: null,
+  kraken_ws_ticker_last: null,
+  kraken_ws_book_mid: null,
+  kraken_ws_ticker_v1: null,
+  kraken_equities_ws_mid: null,
+  kraken_equities_ws_last: null,
+  kraken_rest_engine_fallback_mid: 'fetch_fresh_by_construction',
+  kraken_rest_engine_fallback_last: 'fetch_fresh_by_construction',
+  kraken_rest_poller: null,
+  kraken_rest_rate_limited_reserve: null,
+  xstock_rest_gate_reserve: null,
+  last_known_good_all_apis_failed: null,
+  last_known_good_fetch_exception: null,
+  last_known_good_reserve: null,
+  entry_seed: null,
+  mock: null,
+  crypto_ws_book_walk: null,
+  xstock_ticker_snap_walk: null,
+  position_entry_price_reused: null,
+  no_price_produced: null,
+});
+
+/** The declared age exemption of a recorded producer, or null. */
+export function ageExemptionOfProducer(producer: PriceProducer): AgeExemption | null {
+  return AGE_EXEMPTION_BY_PRODUCER[producer];
+}

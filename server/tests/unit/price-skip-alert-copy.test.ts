@@ -68,3 +68,31 @@ describe('price-skip alert copy — the branch, not the wording', () => {
     expect(c.body).not.toMatch(/\(\)/);
   });
 });
+
+describe('price-skip alert copy — P-7h: a SELF-IMPOSED REST refusal is a third fact', () => {
+  it('★ a token refusal does not claim a query was made, and does not blame the venue', () => {
+    const c = buildPriceSkipAlertCopy({ ...base, symbol: 'BTC/USD', reason: 'rest_token_exhausted' });
+    expect(c.isSelfThrottled).toBe(true);
+    expect(c.isStaleReject).toBe(false);
+    // Kraken was never asked: no sentence may say it answered badly, or that we wait on it to quote again.
+    expect(c.body).not.toMatch(/returned a usable price/i);
+    expect(c.body).not.toMatch(/until the venue quotes again/i);
+    expect(c.body).not.toMatch(/cannot be exited/i);
+  });
+
+  it('a VENUE rate-limit refusal stays on the absence branch — the query WAS made, and refused', () => {
+    const c = buildPriceSkipAlertCopy({ ...base, symbol: 'BTC/USD', reason: 'rest_venue_rate_limited' });
+    expect(c.isSelfThrottled).toBe(false);
+    expect(c.body).toMatch(/returned a usable price/i);
+    expect(c.body).toContain('rest_venue_rate_limited');
+  });
+
+  it('the three branches produce three different titles', () => {
+    const titles = new Set(
+      ['equity_tick_stale_risk_to_stop', 'rest_no_data', 'rest_token_exhausted'].map(
+        (reason) => buildPriceSkipAlertCopy({ ...base, reason }).title,
+      ),
+    );
+    expect(titles.size).toBe(3);
+  });
+});
