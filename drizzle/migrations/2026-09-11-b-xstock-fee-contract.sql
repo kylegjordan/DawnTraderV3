@@ -8,28 +8,36 @@
 --       Kraken Pro xStocks schedule, account-confirmed 2026-09-06
 --       (1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md §2).
 --       UNCONDITIONAL SET (Langston ruling 2): no `WHERE value = ...`, so a row that had drifted still lands correct.
---       crypto_spot is NOT touched — 0.008 / 0.004 is exactly spot rung 1, account-confirmed.
+--       crypto_spot is NOT touched, and is asserted unchanged against its own pre-image — never against a literal, so a
+--       later crypto fee change cannot make a redeploy of this file fail.
 --   P4  module 'cost_model' deleted wholesale (5 rows, zero code readers — #133/#134). The same commit removes it from
 --       b72-warmup PREFETCH_MODULES, which otherwise refuses boot on a zero-row module.
 --       calibration_ledger xStock fee rows corrected (display-only table; decision_grade stays true — Langston ruling 2).
 --   P6  calibration epochs, xStock ONLY (a fee is shared substrate for vts, paper_sim and live — ADJUSTMENT_FRAMEWORK
---       rule 1): vts/xstock_spot +1, paper_sim/xstock_spot +1, INSERT live/xstock_spot = live/* + 1.
---       Crypto and wildcard epoch rows must not move. Asserted as a DELTA against a pre-image, because the absolute
---       values differ between staging and a fresh CI database.
+--       rule 1): vts/xstock_spot, paper_sim/xstock_spot and live/xstock_spot +1; live/xstock_spot is created at
+--       live/* + 1 when it does not exist yet. Crypto and wildcard epoch rows must not move. Asserted as a DELTA against
+--       a pre-image, because the absolute values differ between staging and a fresh CI database.
+--       EVERY RUN BUMPS. A fee change is an epoch boundary in BOTH directions (calibration-epoch.ts: aggregates reset on
+--       mismatch so pre- and post-change outcomes are never silently blended). Epochs only ever step forward.
 --
 -- ⛔ ROLLBACK: dt-deploy has NO rollback verb and migrates forward only. Run
---    2026-09-11-b-xstock-fee-contract-rollback.sql BY HAND *before* deploying any pre-batch sha. That file also deletes
---    this migration's `_migrations` row, so a later redeploy of the batch runs this file AGAIN — and this file is written
---    to be correct on that second run: the rollback deliberately keeps the epoch bump, so an epoch row already written
---    by this migration is recognised and not bumped twice (guard + post-condition below).
+--    2026-09-11-b-xstock-fee-contract-rollback.sql BY HAND *before* deploying any pre-batch sha. That file restores the
+--    old fees, BUMPS the xStock epochs again (the restore is itself a fee change), and deletes this migration's
+--    `_migrations` row — so a later redeploy of the batch runs this file again, and that run is a further boundary.
 
 BEGIN;
 
 DROP TABLE IF EXISTS _bxfc_epoch_before;
 CREATE TEMP TABLE _bxfc_epoch_before ON COMMIT DROP AS
-SELECT constant_name, asset_class, (value)::text::numeric AS v, updated_by AS pre_by
+SELECT constant_name, asset_class, (value)::text::numeric AS v
 FROM module_constants
 WHERE module_name = 'calibration_epoch' AND exchange = '*' AND strategy = '*' AND regime = '*';
+
+DROP TABLE IF EXISTS _bxfc_fee_before;
+CREATE TEMP TABLE _bxfc_fee_before ON COMMIT DROP AS
+SELECT asset_class, constant_name, (value)::text::numeric AS v
+FROM module_constants
+WHERE module_name = 'fee_model' AND exchange = '*' AND strategy = '*' AND regime = '*';
 
 -- ── P1 ─────────────────────────────────────────────────────────────────────────────────────────
 UPDATE module_constants
@@ -58,13 +66,14 @@ SET current_value = '-0.02%',
 WHERE sub_batch = 'B.0' AND asset_class = 'xstock_spot' AND setting_key = 'feeRateMaker' AND scope = 'friction';
 
 -- ── P6 ─────────────────────────────────────────────────────────────────────────────────────────
--- The updated_by guard makes this idempotent: a row an earlier run of this file already bumped is left alone.
+-- Unconditional: every run of this file is a fee change, so every run is an epoch boundary (header, P6).
 UPDATE module_constants mc
 SET value = to_jsonb((mc.value)::text::numeric + 1), updated_by = 'b-xstock-fee-contract', updated_at = NOW()
 WHERE mc.module_name = 'calibration_epoch' AND mc.exchange = '*' AND mc.strategy = '*' AND mc.regime = '*'
-  AND mc.asset_class = 'xstock_spot' AND mc.constant_name IN ('vts', 'paper_sim')
-  AND mc.updated_by IS DISTINCT FROM 'b-xstock-fee-contract';  -- null-safe: <> would skip a row whose updated_by is NULL
+  AND mc.asset_class = 'xstock_spot' AND mc.constant_name IN ('vts', 'paper_sim', 'live');
 
+-- live/xstock_spot does not exist before the first run: create it one past the wildcard. This runs AFTER the UPDATE
+-- above, so a row created here is never bumped twice; on a later run the row exists and the UPDATE bumped it.
 INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by)
 SELECT 'calibration_epoch', '*', 'xstock_spot', '*', '*', 'live', to_jsonb((mc.value)::text::numeric + 1), 'b-xstock-fee-contract'
 FROM module_constants mc
@@ -78,26 +87,40 @@ DECLARE
   n int;
   v numeric;
   base numeric;
-  live_pre int;
   r record;
 BEGIN
-  -- P1: the two spot classes carry exactly four fee rows, with exact values.
+  -- P1: the two spot classes carry exactly four fee rows; xStock carries the new pair; crypto is untouched.
   SELECT count(*) INTO n FROM module_constants
   WHERE module_name = 'fee_model' AND exchange = '*' AND strategy = '*' AND regime = '*'
     AND asset_class IN ('crypto_spot', 'xstock_spot');
   IF n <> 4 THEN RAISE EXCEPTION '[b-xstock-fee-contract] expected 4 spot fee_model rows, found %', n; END IF;
 
   FOR r IN SELECT * FROM (VALUES
-      ('xstock_spot', 'spot_taker_fee', 0.0010::numeric),
-      ('xstock_spot', 'spot_maker_fee', -0.0002::numeric),
-      ('crypto_spot', 'spot_taker_fee', 0.008::numeric),
-      ('crypto_spot', 'spot_maker_fee', 0.004::numeric)) AS t(asset_class, constant_name, expected)
+      ('spot_taker_fee', 0.0010::numeric),
+      ('spot_maker_fee', -0.0002::numeric)) AS t(constant_name, expected)
   LOOP
     SELECT (value)::text::numeric INTO v FROM module_constants
     WHERE module_name = 'fee_model' AND exchange = '*' AND strategy = '*' AND regime = '*'
-      AND asset_class = r.asset_class AND constant_name = r.constant_name;
+      AND asset_class = 'xstock_spot' AND constant_name = r.constant_name;
     IF v IS DISTINCT FROM r.expected THEN
-      RAISE EXCEPTION '[b-xstock-fee-contract] fee_model %.% = % (expected %)', r.asset_class, r.constant_name, v, r.expected;
+      RAISE EXCEPTION '[b-xstock-fee-contract] fee_model xstock_spot.% = % (expected %)', r.constant_name, v, r.expected;
+    END IF;
+  END LOOP;
+
+  SELECT count(*) INTO n FROM _bxfc_fee_before
+  WHERE asset_class = 'crypto_spot' AND constant_name IN ('spot_taker_fee', 'spot_maker_fee');
+  IF n <> 2 THEN RAISE EXCEPTION '[b-xstock-fee-contract] expected 2 crypto_spot fee rows before the change, found %', n; END IF;
+
+  FOR r IN
+    SELECT b.constant_name, b.v AS pre, (m.value)::text::numeric AS post
+    FROM _bxfc_fee_before b
+    LEFT JOIN module_constants m
+      ON m.module_name = 'fee_model' AND m.exchange = '*' AND m.strategy = '*' AND m.regime = '*'
+     AND m.asset_class = b.asset_class AND m.constant_name = b.constant_name
+    WHERE b.asset_class = 'crypto_spot'
+  LOOP
+    IF r.post IS DISTINCT FROM r.pre THEN
+      RAISE EXCEPTION '[b-xstock-fee-contract] crypto_spot.% moved % -> % (this migration must not touch crypto)', r.constant_name, r.pre, r.post;
     END IF;
   END LOOP;
 
@@ -110,41 +133,37 @@ BEGIN
     AND ((setting_key = 'feeRateTaker' AND current_value = '0.10%') OR (setting_key = 'feeRateMaker' AND current_value = '-0.02%'));
   IF n <> 2 THEN RAISE EXCEPTION '[b-xstock-fee-contract] expected 2 corrected calibration_ledger fee rows, found %', n; END IF;
 
-  -- P6: exactly the two xStock rows moved, by exactly +1 — unless an earlier run of this file already bumped them
-  -- (a re-run after the operator rollback, which keeps the bump), in which case they must not move again.
-  -- Nothing else moves.
+  -- P6: every pre-existing xStock vts / paper_sim / live row moved by exactly +1; nothing else moved.
   SELECT count(*) INTO n FROM _bxfc_epoch_before WHERE asset_class = 'xstock_spot' AND constant_name IN ('vts', 'paper_sim');
   IF n <> 2 THEN RAISE EXCEPTION '[b-xstock-fee-contract] expected xstock_spot vts + paper_sim epoch rows before the bump, found %', n; END IF;
 
   FOR r IN
-    SELECT b.asset_class, b.constant_name, b.v AS pre, b.pre_by, (m.value)::text::numeric AS post
+    SELECT b.asset_class, b.constant_name, b.v AS pre, (m.value)::text::numeric AS post
     FROM _bxfc_epoch_before b
-    JOIN module_constants m
+    LEFT JOIN module_constants m
       ON m.module_name = 'calibration_epoch' AND m.exchange = '*' AND m.strategy = '*' AND m.regime = '*'
      AND m.asset_class = b.asset_class AND m.constant_name = b.constant_name
   LOOP
-    IF r.asset_class = 'xstock_spot' AND r.constant_name IN ('vts', 'paper_sim') AND r.pre_by IS DISTINCT FROM 'b-xstock-fee-contract' THEN
-      IF r.post <> r.pre + 1 THEN
+    IF r.asset_class = 'xstock_spot' AND r.constant_name IN ('vts', 'paper_sim', 'live') THEN
+      IF r.post IS DISTINCT FROM r.pre + 1 THEN
         RAISE EXCEPTION '[b-xstock-fee-contract] epoch %/% moved % -> % (expected +1)', r.constant_name, r.asset_class, r.pre, r.post;
       END IF;
-    ELSIF r.post <> r.pre THEN
-      RAISE EXCEPTION '[b-xstock-fee-contract] epoch %/% moved % -> % (only a first bump of xStock vts and paper_sim may move)', r.constant_name, r.asset_class, r.pre, r.post;
+    ELSIF r.post IS DISTINCT FROM r.pre THEN
+      RAISE EXCEPTION '[b-xstock-fee-contract] epoch %/% moved % -> % (only xStock vts, paper_sim and live may move)', r.constant_name, r.asset_class, r.pre, r.post;
     END IF;
   END LOOP;
 
-  SELECT count(*) INTO live_pre FROM _bxfc_epoch_before WHERE asset_class = 'xstock_spot' AND constant_name = 'live';
-  SELECT (value)::text::numeric INTO v FROM module_constants
-  WHERE module_name = 'calibration_epoch' AND exchange = '*' AND asset_class = 'xstock_spot'
-    AND strategy = '*' AND regime = '*' AND constant_name = 'live' AND updated_by = 'b-xstock-fee-contract';
-  IF v IS NULL THEN
-    RAISE EXCEPTION '[b-xstock-fee-contract] live/xstock_spot epoch row missing or not written by this migration';
-  END IF;
-  IF live_pre = 0 THEN
+  -- live/xstock_spot: bumped by the loop above when it already existed; otherwise it must have been created at live/* + 1.
+  SELECT count(*) INTO n FROM _bxfc_epoch_before WHERE asset_class = 'xstock_spot' AND constant_name = 'live';
+  IF n = 0 THEN
+    SELECT (value)::text::numeric INTO v FROM module_constants
+    WHERE module_name = 'calibration_epoch' AND exchange = '*' AND asset_class = 'xstock_spot'
+      AND strategy = '*' AND regime = '*' AND constant_name = 'live';
     SELECT (value)::text::numeric INTO base FROM module_constants
     WHERE module_name = 'calibration_epoch' AND exchange = '*' AND asset_class = '*'
       AND strategy = '*' AND regime = '*' AND constant_name = 'live';
-    IF base IS NULL OR v <> base + 1 THEN
-      RAISE EXCEPTION '[b-xstock-fee-contract] live/xstock_spot epoch = % (expected live/* + 1 = %)', v, base + 1;
+    IF v IS NULL OR base IS NULL OR v <> base + 1 THEN
+      RAISE EXCEPTION '[b-xstock-fee-contract] live/xstock_spot epoch = % (expected a new row at live/* + 1 = %)', v, base + 1;
     END IF;
   END IF;
 END $$;

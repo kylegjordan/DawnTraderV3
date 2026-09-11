@@ -7,16 +7,22 @@
 -- WHAT IT RESTORES: the five cost_model rows (literal values as they stood on staging 2026-09-11),
 -- the xStock fee pair 0.008 / 0.004, and the two calibration_ledger fee rows.
 --
--- ⛔ IT ALSO DELETES THE FORWARD MIGRATION'S `_migrations` ROW (column `name`, scripts/db-migrate.ts:66).
+-- ⛔ IT DELETES THE FORWARD MIGRATION'S `_migrations` ROW (column `name`, scripts/db-migrate.ts:66).
 --    Without that, a later redeploy of the batch sha would SKIP the forward migration (db-migrate.ts:155) and
 --    xStock would boot on 0.008 / 0.004 — values the signed rail accepts, so nothing would refuse.
 --
--- ⚠️ WHAT IT DELIBERATELY LEAVES: the xStock calibration epoch bump and the live/xstock_spot epoch row.
--- A fresh epoch boundary is never harmful — learning aggregates simply restart. Stepping an epoch BACK
--- would silently re-join pre-change and post-change outcomes, the mixing the epoch exists to prevent.
--- The forward migration recognises rows it already bumped, so a redeploy does not bump them twice.
+-- ★ IT BUMPS THE xSTOCK EPOCHS AGAIN (vts, paper_sim, live +1). Restoring the old fees is itself a fee change, so it is
+--   an epoch boundary: outcomes booked under the new fees and outcomes booked under the restored ones must never share
+--   an epoch (calibration-epoch.ts: aggregates reset on mismatch). Epochs only ever step FORWARD — stepping one back
+--   would re-join pre-change and post-change outcomes. A later redeploy of the batch bumps once more.
 
 BEGIN;
+
+DROP TABLE IF EXISTS _bxfc_rb_epoch_before;
+CREATE TEMP TABLE _bxfc_rb_epoch_before ON COMMIT DROP AS
+SELECT constant_name, asset_class, (value)::text::numeric AS v
+FROM module_constants
+WHERE module_name = 'calibration_epoch' AND exchange = '*' AND strategy = '*' AND regime = '*';
 
 INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by) VALUES
   ('cost_model', '*',      '*', '*', '*', 'default_avg_return', '0.005'::jsonb,  'b72-step3-commit-b'),
@@ -40,10 +46,17 @@ WHERE sub_batch = 'B.0' AND asset_class = 'xstock_spot' AND setting_key = 'feeRa
 UPDATE calibration_ledger SET current_value = '0.16%', notes = 'Kraken spot maker.', updated_at = NOW()
 WHERE sub_batch = 'B.0' AND asset_class = 'xstock_spot' AND setting_key = 'feeRateMaker' AND scope = 'friction';
 
+UPDATE module_constants mc
+SET value = to_jsonb((mc.value)::text::numeric + 1), updated_by = 'b-xstock-fee-contract-rollback', updated_at = NOW()
+WHERE mc.module_name = 'calibration_epoch' AND mc.exchange = '*' AND mc.strategy = '*' AND mc.regime = '*'
+  AND mc.asset_class = 'xstock_spot' AND mc.constant_name IN ('vts', 'paper_sim', 'live');
+
 DELETE FROM _migrations WHERE name = '2026-09-11-b-xstock-fee-contract.sql';
 
 DO $$
-DECLARE n int;
+DECLARE
+  n int;
+  r record;
 BEGIN
   SELECT count(*) INTO n FROM module_constants WHERE module_name = 'cost_model';
   IF n <> 5 THEN RAISE EXCEPTION '[b-xstock-fee-contract rollback] expected 5 cost_model rows, found %', n; END IF;
@@ -54,6 +67,25 @@ BEGIN
   IF n <> 2 THEN RAISE EXCEPTION '[b-xstock-fee-contract rollback] xStock fee rows not restored (% of 2)', n; END IF;
   SELECT count(*) INTO n FROM _migrations WHERE name = '2026-09-11-b-xstock-fee-contract.sql';
   IF n <> 0 THEN RAISE EXCEPTION '[b-xstock-fee-contract rollback] the forward migration is still recorded in _migrations'; END IF;
+
+  -- Epochs: the three xStock rows (the forward migration created live) moved by exactly +1; nothing else moved.
+  SELECT count(*) INTO n FROM _bxfc_rb_epoch_before WHERE asset_class = 'xstock_spot' AND constant_name IN ('vts', 'paper_sim', 'live');
+  IF n <> 3 THEN RAISE EXCEPTION '[b-xstock-fee-contract rollback] expected xStock vts, paper_sim and live epoch rows, found %', n; END IF;
+  FOR r IN
+    SELECT b.asset_class, b.constant_name, b.v AS pre, (m.value)::text::numeric AS post
+    FROM _bxfc_rb_epoch_before b
+    LEFT JOIN module_constants m
+      ON m.module_name = 'calibration_epoch' AND m.exchange = '*' AND m.strategy = '*' AND m.regime = '*'
+     AND m.asset_class = b.asset_class AND m.constant_name = b.constant_name
+  LOOP
+    IF r.asset_class = 'xstock_spot' AND r.constant_name IN ('vts', 'paper_sim', 'live') THEN
+      IF r.post IS DISTINCT FROM r.pre + 1 THEN
+        RAISE EXCEPTION '[b-xstock-fee-contract rollback] epoch %/% moved % -> % (expected +1)', r.constant_name, r.asset_class, r.pre, r.post;
+      END IF;
+    ELSIF r.post IS DISTINCT FROM r.pre THEN
+      RAISE EXCEPTION '[b-xstock-fee-contract rollback] epoch %/% moved % -> % (only xStock vts, paper_sim and live may move)', r.constant_name, r.asset_class, r.pre, r.post;
+    END IF;
+  END LOOP;
 END $$;
 
 COMMIT;

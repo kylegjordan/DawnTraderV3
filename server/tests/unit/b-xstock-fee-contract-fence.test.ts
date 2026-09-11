@@ -3,10 +3,13 @@
  * Each prohibition sits beside a positive control that proves the scan can see what it is looking for.
  *
  *  F-1  the corrective fee UPDATEs carry NO value predicate (Langston ruling 2: unconditional SET), and the migration's
- *       in-transaction post-condition block checks every expected fee value, the cost_model delete, and the epoch delta.
+ *       in-transaction post-condition block checks the new xStock pair, crypto unchanged against its own pre-image (never
+ *       a literal), the cost_model delete, and the epoch delta. The epoch bump is unconditional: every fee change is a
+ *       boundary, so a redeploy after the operator rollback bumps again instead of blending two fee schedules.
  *  F-2  MANIFEST lists the migration exactly once and never the rollback; the rollback re-inserts all five cost_model
- *       rows AND deletes the forward migration's `_migrations` row by its real column, `name` — otherwise a redeploy
- *       after a rollback silently skips the fix. No rollback file anywhere uses the non-existent `filename` column.
+ *       rows, bumps the xStock epochs FORWARD (the restore is itself a fee change), AND deletes the forward migration's
+ *       `_migrations` row by its real column, `name` — otherwise a redeploy after a rollback silently skips the fix.
+ *       No rollback file anywhere uses the non-existent `filename` column.
  *  F-3  b72-warmup calls the signed rail and no longer prefetches 'cost_model' (a zero-row prefetch refuses boot).
  *  F-4  slippage-fee-model reads no `fee_model` rows itself — the merge site is the only reader (OBJ-4). The runtime
  *       proof is b-xstock-fee-contract-resolver.test.ts; this is the source-level fence.
@@ -61,24 +64,32 @@ describe('F-1 — the corrective fee UPDATE is unconditional and self-checking',
     expect(sqlCode(MIGRATION)).not.toMatch(/UPDATE\s+module_constants[^;]*'fee_model'[^;]*'crypto_spot'/);
   });
 
-  it('the post-condition block checks every expected fee value, the cost_model delete and the epoch delta', () => {
-    for (const lit of ["0.0010::numeric", "-0.0002::numeric", "0.008::numeric", "0.004::numeric"]) {
+  it('the post-condition block checks the new xStock pair, crypto against its pre-image, the cost_model delete and the epoch delta', () => {
+    for (const lit of ['0.0010::numeric', '-0.0002::numeric']) {
       expect(post).toContain(lit);
     }
     expect(post).toMatch(/IS DISTINCT FROM r\.expected/);
+    expect(post).toMatch(/FROM _bxfc_fee_before b/);
+    expect(post).toMatch(/r\.post IS DISTINCT FROM r\.pre THEN\s+RAISE EXCEPTION '[^']*must not touch crypto/);
     expect(post).toMatch(/module_name = 'cost_model'/);
-    expect(post).toMatch(/r\.post <> r\.pre \+ 1/);
-    expect(post).toMatch(/RAISE EXCEPTION/);
+    expect(post).toMatch(/r\.post IS DISTINCT FROM r\.pre \+ 1/);
   });
 
-  it('runs inside the transaction and tolerates a re-run after the operator rollback', () => {
+  it('asserts no crypto fee LITERAL, so a later crypto fee change cannot block a redeploy', () => {
+    expect(post).toContain('0.0010::numeric'); // CONTROL: the scan sees a fee literal
+    expect(post).not.toMatch(/0\.008::numeric|0\.004::numeric/);
+  });
+
+  it('runs inside the transaction and bumps the xStock epochs on EVERY run, with no "already bumped" guard', () => {
     const body = sqlCode(MIGRATION);
     expect(body).toMatch(/^\s*BEGIN;/m);
     expect(body.indexOf('DO $$')).toBeLessThan(body.lastIndexOf('COMMIT;'));
     expect(body).toMatch(/DROP TABLE IF EXISTS _bxfc_epoch_before;/);
-    expect(body).toMatch(/mc\.updated_by IS DISTINCT FROM 'b-xstock-fee-contract'/);
-    expect(body).not.toMatch(/updated_by\s*<>/); // a NULL updated_by would silently skip the bump
-    expect(post).toMatch(/pre_by IS DISTINCT FROM 'b-xstock-fee-contract'/);
+    const bump = statements(MIGRATION).filter((st) => /^UPDATE\s+module_constants/i.test(st) && /'calibration_epoch'/.test(st));
+    expect(bump).toHaveLength(1); // CONTROL: the scan finds the bump
+    expect(bump[0]).toMatch(/constant_name IN \('vts', 'paper_sim', 'live'\)/);
+    expect(bump[0].slice(bump[0].search(/\bWHERE\b/i))).not.toMatch(/updated_by/);
+    expect(body).not.toMatch(/pre_by/);
   });
 });
 
@@ -96,6 +107,15 @@ describe('F-2 — manifest and rollback', () => {
     }
     expect(ROLLBACK).toMatch(/value = '0\.008'::jsonb[^;]*spot_taker_fee/);
     expect(ROLLBACK).toMatch(/value = '0\.004'::jsonb[^;]*spot_maker_fee/);
+  });
+
+  it('the rollback bumps the xStock epochs FORWARD (the restore is a fee change) and asserts the +1 delta', () => {
+    const bump = statements(ROLLBACK).filter((st) => /^UPDATE\s+module_constants/i.test(st) && /'calibration_epoch'/.test(st));
+    expect(bump).toHaveLength(1); // CONTROL: the scan finds the bump
+    expect(bump[0]).toMatch(/SET value = to_jsonb\(\(mc\.value\)::text::numeric \+ 1\)/);
+    expect(bump[0]).toMatch(/constant_name IN \('vts', 'paper_sim', 'live'\)/);
+    expect(doBlock(ROLLBACK)).toMatch(/r\.post IS DISTINCT FROM r\.pre \+ 1/);
+    expect(sqlCode(ROLLBACK)).not.toMatch(/numeric\s*-\s*1\)/);
   });
 
   it('the rollback deletes the forward migration\'s ledger row by `name`, so a redeploy re-applies the fix', () => {
