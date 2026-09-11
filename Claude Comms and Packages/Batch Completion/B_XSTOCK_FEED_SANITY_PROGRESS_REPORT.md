@@ -373,7 +373,8 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
 
 ---
 
-## §4f — ⭐⭐ THE FIRST POST-FIX HOLLOW FIRE, CLASSIFIED AGAINST THE STATED RESIDUAL: **IT IS NOT THE RESIDUAL, AND THAT IS MEASURED RATHER THAN ASSERTED** *(2026-09-10, CC-C; Langston routed it "classify against the stated seed-time residual, do not add a threshold")*
+## 4i. ⭐⭐ THE FIRST POST-FIX HOLLOW FIRE, CLASSIFIED AGAINST THE STATED RESIDUAL: **IT IS NOT THE RESIDUAL, AND THAT IS MEASURED RATHER THAN ASSERTED** *(2026-09-10, CC-C; Langston routed it "classify against the stated seed-time residual, do not add a threshold")*
+> ⚠️ **RENUMBERED 2026-09-11 — appended on 2026-09-10 under the heading `§4f`, which collided with the ORIGINAL `## 4f.` above (the pending-control section). Every other "§4f" in this file means the original; nothing outside this file cited the appended one.**
 
 **THE EVENT.** Alert `c87b5db4`, fired **2026-09-08T20:24:59Z**: the book-state guard withheld **60 consecutive exit-monitor ticks** on the open NEM/USD position, reached `hollow_skip_cap=60`, and **YIELDED** — evaluator ran on the book as-is, row labelled hollow/yielded. Guard inputs: `askDepartureFrac 0.01597` against `departureThresholdFrac 0.01` (tripped), `bidDepartureFrac 0.00323` (did not), `spreadFrac 0.01915` against `trailingMedianSpreadFrac 0.000157`.
 
@@ -398,3 +399,30 @@ Kyle assigned `#994` directly to Infra, overriding the earlier homing to me. **T
 ⛔ **I COULD ONLY ANSWER THIS BY INFERENCE FROM SPREAD STATISTICS, BECAUSE THE DIRECT EVIDENCE IS NOT RECORDED.** §4e's census already says it: **`validated` is WRITTEN at `:119`, LOGGED at `:152`, and READ BY NOTHING.** ⇒ **there is no retained per-frame seed provenance, so "did a hollow frame re-seed the comparator" cannot be read off anything — it can only be circumstantially reconstructed from downstream spread behaviour, days later, with a confound to control for.**
 ★ **THAT IS THE ASK THIS FIRE EARNS: make the seed provenance READABLE — persist which frame seeded the comparator and whether it was `validated` — so the residual can be TESTED rather than argued.** ⇒ **Folded into `3b.f-c` as an objective; NOT a new batch and NOT a threshold.**
 ⚠️ **INSTRUMENT REACH, STATED: `/var/log/dawntrader/error.log` begins `2026-09-10T00:00:01Z` (rotated at midnight) and CANNOT see the 09-08 fire. `BOOK_STATE` appears 17 times in today's log and ZERO times for NEM — that silence is OVER-DETERMINED (a recovered book and an absorbed comparator both produce it) and is NOT the basis for anything above.** ✅ **The snapshot tables, which are partitioned by day and do reach 09-08, are.**
+
+## 4j. ✅ ALERT `0ff16030` — TWO NEWMONT YIELDS TODAY, NO EXPOSURE; THREE RECORDS FOR THE WINDOW *(2026-09-11, CC-C; Langston routed it: "record two findings … then resolve with evidence")*
+
+**THE EVENT, read at the object.** Two NEM/USD yields in today's `error.log`: `06:21:02Z` (`bid_collapsed`, bid **124.00** / ask 125.97) and `08:07:23Z` (`bid_collapsed`, bid **123.70** / ask 126.70). Both sit on the position row's `metadata.bookState.yields` with the same inputs. The open position (`active_open_positions`, opened 2026-09-02 at 126.54) carries stop **122.1768** and target **135.1069**. ⇒ **a long position exits at the bid, and both bids were above the stop and below the target: no exit would have fired either way.**
+
+### ① `COMPARATOR_CLEARED` ON YIELD — OBSERVED BOTH TIMES TODAY, AND NOT FOR THE FIRST TIME
+Both yields carry a `COMPARATOR_CLEARED reason=yield_after_60_hollow` line at the same second. ⚠️ **Langston's triage called this "never once observed". The record says otherwise:** §4f logged the first four on 2026-09-05 (ARKK, LI, NEM, SLV), and **every yield in the retained `error.log` files carries one** — 09-05 ×4, 09-08 ×2 (NEM), 09-09 ×1 (LMT), 09-11 ×2 (NEM): **9 yields, 9 clears**, equal per symbol per day, with the same-second pair read directly on 6 of them. *(Reach: `error__2026-09-06_00-00-00.log` through today's `error.log` — 2026-09-05 00:00Z → 2026-09-11 08:23Z.)* ⇒ **the clearing half is proven on the post-D3 build as well — from 09-08 every YIELD line carries D3's `validated=` field.** If a Step-8 control named a narrower condition than this, it is not recorded in this file.
+
+### ② THE EVIDENCE BASE IS CONCENTRATED — ONE NAME TODAY, THREE-QUARTERS ONE NAME SINCE 09-08
+Unit: `[BOOK_STATE]` SKIP, YIELD and COMPARATOR_CLEARED lines in `error.log`, by symbol.
+| population | NEM/USD | others | total |
+|---|---|---|---|
+| **today, 00:00 → 08:23Z** | **140** | MDB 3 · CRWD 1 *(the other two open xStock positions)* | 144 |
+| **2026-09-08 00:00Z → 2026-09-11 08:23Z** *(from the first day a YIELD line carries `validated=`)* | **315 (73.8%)** | LMT 87 · PPL 12 · SLV 5 · SYY 4 · MDB 3 · CRWD 1 | 427 |
+| **yields in that span** | **4** | LMT 1 | 5 |
+⇒ **Whatever this window concludes about the guard, it concludes mostly about Newmont.** Recorded now, before the window is graded, so it cannot surface afterwards as a caveat.
+
+### ③ ⭐ D2, LIVE — BOTH YIELDS RE-SEEDED THE COMPARATOR FROM THE FRAME THEY HAD JUST REJECTED
+| yield (`error.log`) | next `COMPARATOR_SEEDED` (`out.log`) |
+|---|---|
+| `06:21:02Z` · bid 124.00 / ask 125.97 · `spreadFrac 0.015762` | `06:21:04Z` · `mid=124.985 spread=0.01576 at=2026-09-11T06:19:38.655Z` |
+| `08:07:23Z` · bid 123.70 / ask 126.70 · `spreadFrac 0.023962` | `08:07:25Z` · `mid=125.2 spread=0.02396 at=2026-09-11T08:07:09.660Z` |
+**Each seed's mid and spread equal the rejected frame's.** Mechanism: the yield deletes the comparator (`book-state-tracker.ts:151`) and the next advance seeds from the frame in hand, stamping that frame's own receipt time (`:115-121`; `seededAtMs … ?? frame.atMs` at `:120`) — no seed-time refusal exists yet. ★ **The 06:21 seed frame was received at `06:19:38.655Z` — the last frame the feed delivered before NEM's 249-second drought** (`B_XSTOCK_SESSION_FRESHNESS_ESTIMAND_REGISTRATION.md` §16).
+⇒ **This is D2 as §4g described it, now measured twice. Its fix — refuse to seed on an implausibly wide book, off one DB-governed ceiling — is folded to `3b.f-c` (§4h).** No action in this batch.
+⚠️ **Not over-read:** the chain seeded at 06:21 reads `validated=true` by 08:07 — a later `two_sided` verdict validated it (`:119`) and each advance replaces the prior bid/ask/mid (`:116`). `validated` describes the chain's current reference, not its seed frame.
+
+**DISPOSITION:** ① and ② recorded here, before the window is graded · ③ → `3b.f-c` as live evidence for the folded D2 refusal · alert `0ff16030` resolved with this section as its evidence.
