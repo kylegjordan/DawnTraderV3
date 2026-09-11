@@ -1,8 +1,9 @@
 # B-XSTOCK-FEE-CONTRACT — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
 **Batch:** `B-XSTOCK-FEE-CONTRACT` (`#1010`, `PHASE_19_PLAN` row 2.4-FEE) · **change-class: architecture** (Langston, stands) · **Owner:** CC-B
-**Audited at:** `origin/migration/aws-supabase` `18a8b29b6` (every `path:line` below is at that ref) · staging DB + logs read 2026-09-11 15:00–15:25Z
+**Audited at:** `origin/migration/aws-supabase` `18a8b29b6`; reviewer re-derivations at `56599ad6d` (no code under audit changed between them) · staging DB + logs read 2026-09-11 15:00–15:45Z
 **Inputs:** scope r1.1 `c891de65a` · Langston Step-1 APPROVAL with five rulings, F-1..F-5 and two gaps (2026-09-11) · Langston addendum 15:03Z (`dt-deploy` has no rollback verb; the forward-deploy window)
+**Revision:** r2 — corrected after a fresh object-round reviewer showed r1's OBJ-9 runs did not bound xStock-led cycles (§D).
 
 ---
 
@@ -18,6 +19,7 @@
 | 6 | `resolveFee` "four call sites" | four sites in **two** methods; `getConfig` has **zero** consumers; four methods of that class are dead | §A3 |
 | 7 | cost-model fold rollback: "the rollback migration re-inserts the rows first" (scope r1.1) | **a committed operator runbook step with the literal re-insert SQL** — `dt-deploy` migrates forward only | Langston 15:03Z; `scripts/dt-deploy.sh:222-234` |
 | 8 | `SYSTEM_IMPACT_MAP.md:3504` lists `calculateFees`/`modelTradeRealism`/`getConfig` as consumers | only `calculateFees` and `modelSlippage` have a caller | §A3 |
+| 9 | **OBJ-9 (r1 of this document at `56599ad6d`, and my message to Kyle): rank 0 would have changed in "188–266 of 1,512 cycles (12.4–17.6 %)"** | **CERTAIN in 162, POSSIBLE in 339, of 1,513 cycles (10.7–22.4 %)** | r1's "low" and "high" runs shifted every xStock member by one bound together; that brackets crypto-led cycles but **not** cycles led by an xStock, where the leader and its challengers move by different, unknown amounts. Re-derived per cycle (§A9, §D) |
 
 ---
 
@@ -61,7 +63,7 @@
 
 ## A4. Sign census (OBJ-5)
 
-**Population:** every production line naming `feeRateMaker|spot_maker_fee|makerFeePct|makerFeeRate` at the ref — **46 `file:line`** hits, read with context.
+**Population:** every production line naming `feeRateMaker|spot_maker_fee|makerFeePct|makerFeeRate` at the ref — **46 `file:line`** hits, read with context — plus the booking functions those rates reach.
 
 | site | what it does with a negative maker rate | verdict |
 |---|---|---|
@@ -69,21 +71,25 @@
 | `net-expectancy-kernel.ts:114-117` | `netEV = rawEV − totalFriction`; no clamp | signed ✅ |
 | `cost-model.ts:176-178 composeBookedFriction` / `:212-214 composeSidedFriction` / `:163-165` | plain sums | signed ✅ |
 | `signal-orchestrator.ts:1058/1074`, `ready_to_buy_service.ts:826/844`, `vts-runner.ts:1933/1953/2205/2220/2386/4496`, `xstock_spot/eval-cycle.ts:819/1015/1026/1232`, `pending-maker-logic.ts:140` | pass-through into the decision or `composeBookedFriction`; `entryFeeRate` stored in signed `numeric(10,6)` | signed ✅ |
+| `vts-runner.ts:3371`, `:3870` VTS close | `netPnl = grossPnl − frictionCost` | signed ✅ |
 | `active-execution-engine.ts:2419-2421` maker exit fill | `exitFee = notional × feeRateMaker` → **negative** | signed ✅ |
 | `active-execution-engine.ts:3933-3936` pending-maker entry | `entryFee = limit × qty × feeRateMaker` → **negative** | signed ✅ |
 | `active-execution-engine.ts:4121` | records the rate | signed ✅ |
-| `active-execution-engine.ts:2480`, `routes.ts:12312` | `position.entryFee ? parseFloat(...) : estimate` — pg returns `numeric` as a string, so `"-0.00002000"` is truthy; only NULL falls back | ✅ |
-| `trade-pnl.ts:98-113 computeRealizedPnl` (engine close + manual close) | `totalCost = entryFee + exitFee`; `netPnl = gross − totalCost` — a rebate raises net | signed ✅ |
+| `active-execution-engine.ts:2480`, `routes.ts:12312` | `position.entryFee ? parseFloat(...) : estimate` — pg returns `numeric` as a string, so `"-0.00002000"` is truthy; only NULL/empty falls back | ✅ |
+| `trade-pnl.ts:98-113 computeRealizedPnl` (engine close `active-execution-engine.ts:2510`, manual close `routes.ts:12938`) | `totalCost = entryFee + exitFee`; `netPnl = gross − totalCost` — a rebate raises net. Persisted to signed `total_cost numeric(20,8)` (`shared/schema.ts:1729`); client `paper-trade-adapter.ts:326` displays it | signed ✅ |
+| **`trade-pnl.ts:73`** docstring *"EXPLICIT costs only (fees). Structurally cannot be negative."* | **becomes false** once a maker entry and a maker exit both book rebates; nothing enforces or branches on it | **comment** → P5 |
+| `cost-model.ts:222-225 computePairFrictionIndex` | reads the **taker** fee (`:134`), capped above at 100; display telemetry only (`signal-orchestrator.ts:1320`, `vts-runner.ts:2292`) | unaffected |
 | `routes.ts:12908`, `:12295/12316` | manual close / open display price the exit at **taker** | unaffected |
 | `routes.ts:22513-22598` CSV + tax exports | signed arithmetic; a rebate lowers cost basis — correct accounting | ✅ |
 | `c5-financial-diagnostics.ts:262` | `grossPnl − (entryFee + exitFee)` | signed ✅ |
 | `pre-execution-validator.ts:189/198/405` | dormant path; override NULL → per-class rate; `roundTripFeePct = feeRate × 2 × 100` additive | signed ✅ (scope §6 item: no change) |
+| `asset_classes/types.ts:25` `maxCostBound … (clamp on any single cost component)` | declared contract; enforced only on slippage and spread (`cost-cache.ts:112-113`) — already recorded as declared-not-enforced (`SYSTEM_IMPACT_MAP.md:3505`) | no change |
 | `b72-warmup.ts:223-247` | the rail | **refuses boot** → P2 |
 | `parity-gate.ts:117` `avgFeesPerTrade > 0` | the only positivity test | **inert** → §A7 |
 
-**Positivity-test census** (`(fee|cost)… > 0|>= 0`, production, unbounded): `parity-gate.ts:117` is the only fee hit (control: the same form matches `book-state-config.ts:70`). **Negativity-refusal census** (`(fee|cost)… < 0|<= 0`, "negative fee/cost"): **none** (control: the same form matches `chat-container.tsx:259`). Legacy `trading-engine.ts:385/641` hardcodes `0.0026` — the engine runs in neither mode and is scheduled for removal (`#578`, plan row 11.5): cross-reference, not this batch.
+**Positivity-test census** (`(fee|cost)… > 0|>= 0`, production, unbounded): `parity-gate.ts:117` is the only fee hit (control: the same form matches `book-state-config.ts:70`). **Negativity-refusal census** (`(fee|cost)… < 0|<= 0`, "negative fee/cost"): **none** (control: the same form matches `chat-container.tsx:259`). Legacy `trading-engine.ts:385/641` books fees from a hardcoded `0.0026`, never from a class rate — the engine runs in neither mode and is scheduled for removal (`#578`, plan row 11.5): cross-reference, not this batch.
 
-⇒ **No production site between rate resolution and net P&L assumes a fee is ≥ 0, except the boot rail and one inert gate.**
+⇒ **No production code between rate resolution and net P&L refuses, clamps or branches on a negative fee, except the boot rail and one inert gate. One docstring asserts non-negativity and is corrected in P5.**
 
 ## A5. Calibration epochs (OBJ-6)
 
@@ -92,40 +98,47 @@ Readers: `active-execution-engine.ts:2899 getCalibrationEpoch(_learnSource, _ass
 
 ## A6. Stored copies (OBJ-7) and Langston gap 2
 
-- **`calibration_ledger` read side:** `routes.ts:8388-8410` serves it (`WHERE asset_class`, `ORDER BY display_order`); `client/src/pages/analytics.tsx:2697` **declares** `decision_grade` on the row type and **never reads it** (control: the same file renders `isDecisionGrade` at `:2360` for a different panel). No server consumer. ⇒ **nothing treats `decision_grade` as authority; it is not even displayed.** Writers: four migrations only (`2026-06-02`, `-02b`, `-02c`, `-10b`). `SYSTEM_IMPACT_MAP.md:2039` already records "pure display".
+- **`calibration_ledger` read side:** `routes.ts:8388-8410` serves it (`WHERE asset_class`, `ORDER BY display_order`); `client/src/pages/analytics.tsx:2697` **declares** `decision_grade` on the row type and **never reads it** — the render at `:2706-2790` shows setting, scope, metric, current/planned value and result, and status (control: the same file renders the unrelated computed `isDecisionGrade` at `:2360`). No server consumer; `scripts/` has no hit. ⇒ **nothing treats `decision_grade` as authority; it is not even displayed.** Writers: four migrations only (`2026-06-02`, `-02b`, `-02c`, `-10b`). `SYSTEM_IMPACT_MAP.md:2039` already records "pure display". Residual: the endpoint returns whole rows, so a human reading the API sees the field.
 - **`cost_model`:** readers at the ref = the `PREFETCH_MODULES` entry only (control: `'fee_model'` 9 lines). `#133`/`#134` (B79.0n.MCE) own it; fold approved (F-3).
 - **`system_context`:** NULL both rows — no action.
 
 ## A7. The parity gate (Langston F-5) — and a finding it exposed
 
-**Read site:** `parity-gate.ts:50` `executionTiming.getMetrics(50)`; `execution-timing.ts:161-196` averages the in-memory `completedTimings` array — **class-blind, last 50**. That array is filled only by `markFill` (`:114-130`).
-**`markFill` has ZERO production callers** (call-form grep on `.markFill(|.markSubmit(|.markAck(|.markDecision(` across server/shared/scripts, any receiver; control: the same form finds `.recordMakerTakerDecision(` once). **Its last caller was `realtime-paper-executor.ts:134`**, the only caller at the parent of `977f3be08` (P19-B4b.2, 2026-06-16), which deleted that file. Its three readers survived: `parity-gate.ts:50`, `system-health-monitor.ts:303` (re-pointed at the buffer by the same batch — `DELETED_COMPONENTS_LOG.md:430`) and the CSV export `routes.ts:11347`.
-⇒ **Population is empty by construction.** `avgFeesPerTrade` is `0`, so check 5 always fails ("Fee modeling not active") and the gate can never pass; checks 1 and 2 pass vacuously on zeros. **No fee value can change its result ⇒ not a blocker for this batch.**
-**Ledger search (§9.5(b-ii))** for `execution-timing|executionTiming|markFill|completedTimings` across `1-system-manual/`, completion reports and scopes: no record names the orphaned buffer; `SYSTEM_MANUAL.md:5262` and `:5878` still describe the service as live instrumentation. ⇒ **a real finding** (a removed writer whose readers survive) → filed **`#1041`**, disposition in Part C.
+**Read site:** `parity-gate.ts:50` `executionTiming.getMetrics(50)`; `execution-timing.ts:161-196` averages the in-memory `completedTimings` array — **class-blind, last 50**. That array is written only at `:142` inside `markFill` (`:114-130`); `clear()` (`:268`) only empties it.
+**`markFill` has ZERO production callers** (call-form grep on `.markFill(|.markSubmit(|.markAck(|.markDecision(` across server/shared/scripts, any receiver; control: the same form finds `.recordMakerTakerDecision(` once; no test calls it). **Its last caller was `realtime-paper-executor.ts:134`**, the only caller at the parent of `977f3be08` (P19-B4b.2, 2026-06-16), which deleted that file. Its three readers survived: `parity-gate.ts:50`, `system-health-monitor.ts:303` (re-pointed at the buffer by the same batch — `DELETED_COMPONENTS_LOG.md:430`), and the CSV export `routes.ts:11345-11349`, which **refuses every call** because `execution-timing.ts:212-213` throws *"No execution timing data to export"* on an empty buffer.
+⇒ **Population is empty by construction** (per process; no string-keyed or out-of-tree caller was found). `avgFeesPerTrade` is `0`, so check 5 always fails ("Fee modeling not active") and the gate can never pass; checks 1 and 2 pass vacuously on zeros. **No fee value can change its result ⇒ not a blocker for this batch.**
+**Ledger search (§9.5(b-ii))** for `execution-timing|executionTiming|markFill|completedTimings` across `1-system-manual/`, completion reports and scopes: no record names the orphaned buffer; `SYSTEM_MANUAL.md:5262` and `:5878` still describe the service as live instrumentation. (`performance-monitor.ts:55` holds an unrelated buffer of the same name.) ⇒ **a real finding** (a removed writer whose readers survive) → filed **`#1041`**, disposition in Part C.
 
 ## A8. The instrument that will read Langston's F-4 prediction
 
 - **In-memory:** `rtb-metrics-service.ts:432-438 getMakerPickProof` — 500 samples, **class-blind**, resets on restart. **Cannot read xStock on its own.**
-- **Durable, and sufficient:** `switch_on_shadow_evidence` rows with `proof_type = 'maker_taker'`, one per orchestrator decision, carrying `asset_class` and `chosen_entry_mode` (`switch-on-evidence-sink.ts:96`, written at `signal-orchestrator.ts:1107`).
+- **Durable, and sufficient:** `switch_on_shadow_evidence` rows with `proof_type = 'maker_taker'`, one per orchestrator decision, carrying `asset_class` and `chosen_entry_mode` (`switch-on-evidence-sink.ts:96`, written at `signal-orchestrator.ts:1107` — before the SQE check at `:1126`, so the net-EV gate does not filter what it records).
 - **Baseline, whole retained window, paper:** **xStock maker 422 / taker 1,276 — 24.9 % maker of 1,698** (2026-07-15 → 2026-09-11). Crypto maker 876,075 / taker 30,728 (96.6 % maker). Control: 908,501 `maker_taker` rows in total.
-- **Why the direction is determined, not guessed:** after the fix the taker arm's net EV rises by `0.014 × entry` and the maker arm's by `pFill × 0.0112 × entry` = `0.0056 × entry` (xStock `maker_taker.maker_fill_probability = 0.50`). Taker gains 2.5× more, so every decision where maker won by less than `0.0084 × entry` flips to taker and none flips the other way.
-- **Reach limit:** the sink records orchestrator decisions only; RTB-refresh re-decisions and VTS decisions are not in it.
+- **Why the direction is determined, not guessed:** both decision sites run `levelGeometry: 'mid'` with the maker entry equal to the taker entry (`signal-orchestrator.ts:1069-1070`, `ready_to_buy_service.ts:823-824`). After the fix the taker arm's net EV rises by `0.014 × entry` and the maker arm's by `pFill × 0.0112 × entry` = `0.0056 × entry` (xStock `maker_taker.maker_fill_probability = 0.50`). The maker-minus-taker margin therefore falls by `0.0084 × entry` at every decision; ties go to taker (`maker-taker-decision.ts:343`, strict `>`), so every decision where maker led by **at most** `0.0084 × entry` flips to taker and none flips the other way. The hard floor (`:335-341`) only ever forces taker, and cannot fire at seeded values (xStock strength = `scoring_base.flat_pwin_base 0.317` against `hard_floor_continuation_strength 0.70`).
+- **Reach limit:** the sink records orchestrator decisions only; RTB-refresh re-decisions (`ready_to_buy_service.ts:817`) and VTS decisions are not in it. **Would stop holding** under a future `'sided'` switch, where the maker arm is priced off a different entry.
 
 ## A9. OBJ-9 — what the wrong fee did to xStock ranking (run at Step 2, read-only)
 
-**Ranker, verified two ways:** `ready_to_buy_service.ts:1806-1808` ranks on `chosenNetEv / |entry − stop|`, sorted descending at `:1883-1884`; in the 2,000 most recent multi-member cycles, rank 0 equals the maximum `predicted_r_multiple` in **2,000 / 2,000** (control: `final_score` 0 / 2,000, `ranking_score` 0 / 2,000).
-**Population:** every shadow-pool cycle holding ≥ 1 xStock member — **1,512 cycles**, paper, 2026-07-16 → 2026-09-11; **3,753** xStock member rows, **3,753** joinable to their pairing with entry and stop, **0** with a null R. **830** cycles have more than one member (**810** mixed-class); **702** are xStock-only with an average pool of 1.03, where no change is possible.
-**Method:** crypto R unchanged; each xStock member's R shifted by the correction — **low** `0.5 × 0.0112 × entry / risk` (maker arm), **high** `0.014 × entry / risk` (taker arm). Whichever arm was chosen, the new chosen EV is the max of the two shifted arms, so the true shift lies between them. **Control: a zero shift changes rank 0 in 0 of 1,512 cycles.**
+**Ranker, verified two ways:** `ready_to_buy_service.ts:1806-1808` ranks on `chosenNetEv / |entry − stop|` (null snapshot → the taker-only `netRewardToRisk`), sorted descending at `:1883-1884`; in the 2,000 most recent multi-member cycles, rank 0 equals the maximum `predicted_r_multiple` in **2,000 / 2,000** (control: `final_score` 0 / 2,000, `ranking_score` 0 / 2,000).
 
-| | low bound | high bound |
-|---|---|---|
-| rank 0 would have changed | **188 of 1,512 (12.4 %)** | **266 of 1,512 (17.6 %)** |
-| …of the 830 cycles where a change is possible | 22.7 % | 32.0 % |
-| a crypto pick displaced by an xStock | 149 | 164 |
-| an xStock pick displaced by a different xStock | 39 | 102 |
+**Population:** every shadow-pool cycle holding ≥ 1 xStock member — **1,513 cycles**, paper, 2026-07-16 → 2026-09-11 15:30Z; every xStock member joinable to its pairing with entry and stop; **0** null R. Completeness checks: **0** cycles missing their rank-0 row; **0** cycles with fewer member rows than their stamped `pool_size` (the skips at `ready_to_buy_service.ts:1948` and `:2018` did not fire on this population). **831** cycles have more than one member; **173** were led by a crypto pick as recorded, **1,340** by an xStock (658 of those with challengers).
 
-By month (cycles / changed low–high): July 548 / 95–150 · August 744 / 48–63 · September 220 / 45–53. **Size of the shift:** median **+0.23 R (low) to +0.57 R (high)** on xStock members whose median recorded R was **0.058** (51 of 3,753 recorded negative). Already xStock at rank 0 as recorded: 1,340 of 1,512.
-**Pre-registered limits (Langston ruling 4):** (i) **a LOWER BOUND on reach** — xStock candidates refused at the SQE net-EV gate, or evicted at refresh, under the wrong fee never entered the pool; (ii) rank 0 only — with more than one open slot a displaced crypto pick may still have been promoted, and `promoted` is the ranker's choice, not an executed trade; (iii) **no outcome claim**; (iv) R is stored to 4 dp.
+**Why the bound is per member, and per cycle.** Each xStock member's corrected R lies in `[R + lo, R + hi]`, with `lo = 0.5 × 0.0112 × entry / risk` and `hi = 0.014 × entry / risk`. A member whose recorded arm was taker moves by exactly `hi`; a maker-arm member by `max(lo, hi − margin)`. **Shadow pool rows do not record the arm** (`ready_to_buy_service.ts:2020-2044`), so only the interval is known. Crypto R is unchanged.
+- **Crypto-led cycle** (leader fixed): rank 0 changes **for certain** if some xStock has `R + lo > leader`, and **possibly** if some xStock has `R + hi > leader`.
+- **xStock-led cycle** (leader moves too): **certain** if some other xStock has `R + lo > leader + hi`; **possible** if some other xStock has `R + hi > leader + lo`. A crypto challenger cannot overtake an xStock leader, because the leader only rises. Strict `>` matches the ranker, where a tie keeps the earlier rank.
+- **Control:** at zero shift no member outranks the recorded leader in any of the 1,513 cycles.
+
+| rank 0 as recorded | cycles | change CERTAIN | change POSSIBLE |
+|---|---|---|---|
+| crypto | 173 | **150** | **165** |
+| xStock | 1,340 | **12** | **174** |
+| **all** | **1,513** | **162 (10.7 %)** | **339 (22.4 %)** |
+
+By month (cycles / certain–possible): July 548 / 69–203 · August 744 / 47–80 · September 221 / 46–56. **Size of the shift (r1 run, unchanged):** median **+0.23 R to +0.57 R** on xStock members whose median recorded R was **0.058** (51 of 3,753 recorded negative; cause not established here).
+
+**Reading it:** where a crypto pick held rank 0 beside an xStock candidate, the correct fee would have handed rank 0 to the xStock in **150 to 165 of 173 cycles**. Among xStock-led cycles the ordering between xStocks is mostly indeterminate from this data (12 certain, 174 possible).
+
+**Pre-registered limits (Langston ruling 4, plus the reviewer's):** (i) **a LOWER BOUND on reach** — xStock candidates refused at the SQE net-EV gate (`signal_quality_evaluator.ts:362`, `:571`) or evicted at refresh under the wrong fee never entered the pool; (ii) **membership itself is fee-dependent** — the duplicate tiebreak keeps the incumbent when `existingR >= newR` (`ready_to_buy_service.ts:2207`), so under the correct fee a different version of the same symbol and strategy could have held the slot; (iii) rank 0 only — with more than one open slot a displaced crypto pick may still have been promoted, and `promoted` is the ranker's choice, not an executed trade; (iv) the recorded R may come from an older decision snapshot — refresh re-decides only when geometry is recalculated (`:774`) and keeps the old snapshot on failure (`:847-848`) — the per-member interval still holds; (v) assumes `'mid'` geometry at both decision sites (A8); (vi) R is stored to 4 dp; (vii) **no outcome claim**.
 
 ## A10. Tests (OBJ-8)
 
@@ -172,7 +185,7 @@ New `drizzle/migrations/<date>-b-xstock-fee-contract.sql`, one `BEGIN … COMMIT
 - **Deploy-note line (Langston 15:03Z):** between `db:migrate` and `pm2 restart` the old process keeps running, already warmed; if anything restarts OLD code inside that window (crash-restart, a failed restart) it refuses boot on the empty module. Not a gate.
 
 **P5 — Negative fee through booking, locked** *(A4; OBJ-5)*
-No production change on the sign path (A4). New locks with xStock maker `-0.0002`: `computeRealizedPnl` (entry fee negative → net = gross − (entry + exit), higher than at zero fee); `composeBookedFriction` with a maker entry; `decideMakerTaker` (both arms priced, advantage `0.0012 + slippage [+ spread]`); `resolveValidatorFeeRates` passes a negative through. The two engine formulas (`:2419-2421`, `:3933-3936`) are verified at Step 7 on real rows: **`closed_trades.entry_fee < 0` or `exit_fee < 0` on an xStock maker fill after deploy.** ⚠️ **Verification dependency:** that needs paper xStock to open a maker trade after deploy; if none has by Step 7, the step says so rather than passing it.
+No production logic changes on the sign path (A4). **Correct the `trade-pnl.ts:73` docstring:** totalCost is signed and negative when both legs book maker rebates. New locks with xStock maker `-0.0002`: `computeRealizedPnl` (a negative entry fee → net = gross − (entry + exit), higher than at zero fee; both legs maker → negative `totalCost`); `composeBookedFriction` with a maker entry; `decideMakerTaker` (both arms priced, advantage `0.0012 + slippage [+ spread]`); `resolveValidatorFeeRates` passes a negative through. The two engine formulas (`:2419-2421`, `:3933-3936`) are verified at Step 7 on real rows: **`closed_trades.entry_fee < 0` or `exit_fee < 0` on an xStock maker fill after deploy.** ⚠️ **Verification dependency:** that needs paper xStock to open a maker trade after deploy; if none has by Step 7, the step says so rather than passing it.
 `parity-gate.ts:117` **untouched** — its population is empty (A7); the instruction *do not re-encode "fees are positive"* is carried on `#1041`.
 
 **P6 — Epoch boundary, xStock only** *(A5; OBJ-6; ruling 3)*
@@ -185,13 +198,13 @@ Correct the two SUBJECT files; re-point the five PROBE files to named per-class 
 Pre-registered in this document: **the xStock paper maker share of orchestrator decisions falls below the 24.9 % baseline (422 / 1,698) after deploy.** Read from `switch_on_shadow_evidence` (`proof_type = 'maker_taker'`, `asset_class = 'xstock_spot'`, `captured_at` after the deploy instant) once **≥ 300** decisions exist. **Falsified if the share is ≥ 24.9 % at ≥ 300.** Direction only — other inputs move over the same weeks.
 
 **P9 — OBJ-9 is delivered by this document** *(A9; ruling 4)*
-Numbers and limits are in A9; they go into the completion report and to Kyle in plain language. No deploy item.
+Numbers, method and limits are in A9; they go into the completion report and to Kyle in plain language, with the r1 → r2 correction stated (§0 row 9). No deploy item.
 
 **P10 — Governance** *(A12; Langston gaps 1 and 2)*
 Governance set = scope §7 **plus `DELETED_COMPONENTS_LOG.md` and its `_archive/deleted-code/` entry** (gap 1). Content edits: every A12 item — including **both** copies of the B-4.5 banner at `SYSTEM_MANUAL.md:504` and `:784`, the `#1010` banner folded into §5's body, `KRAKEN_FEE_SCHEDULE_REFERENCE.md:93` → implemented, `SYSTEM_IMPACT_MAP.md:3502-3504` rewritten from §A3, and a note at `SYSTEM_MANUAL.md:5262` pointing at `#1041`. Gap 2 is closed by A6.
 
 **P11 — Order of work + board**
-Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P7, with one change list. Card `Blocked on = Langston` at each dispatch.
+Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P5's docstring + P7, with one change list. Card `Blocked on = Langston` at each dispatch.
 
 ---
 
@@ -201,17 +214,25 @@ Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P7,
 |---|---|
 | **`#1041` — the parity gate and the health snapshot read a timing buffer nothing has written since 2026-06-16** (A7) | **2 — added as a named item to `P19-B12` (Diagnostics + internal-health monitoring), owner CC-B**, written into that plan row. Carries: do not re-encode "fees are positive" when the gate is rewired. |
 | **`T-W20C-SCALAR-LEG`** (alert `a3610acf`, routed to CC-B by Langston) | **3 — own item, placed in `PHASE_19_PLAN` as row 2.4-FEE-c**, after 2.4-FEE-b (which stays immediately after 2.4-FEE per the earlier ruling). Re-scope first: July aged out of rolling-30 retention. |
-| **`#682 B-FILTER-DIAG-XSTOCK` has no plan row** (0 hits in `PHASE_19_PLAN`; its entry still carries `DUE: 2026-08-12`) | **3 — placed as row 2.4-FEE-d**, after 2.4-FEE-c; `#682` entry amended to point at the row. |
+| **`#682 B-FILTER-DIAG-XSTOCK` had no plan row** (0 hits in `PHASE_19_PLAN`; its entry carried `DUE: 2026-08-12`) | **3 — placed as row 2.4-FEE-d**, after 2.4-FEE-c; `#682` entry amended to point at the row. |
 | Legacy `TradingEngine` hardcodes `0.0026` (`trading-engine.ts:385/641`) | **5 — no new work**: `#578`, plan row 11.5 removes the engine. |
 | Validator prices both legs at one mode (`pre-execution-validator.ts:198`) | **5 — no new work**: dormant path, `#300`(b) coordinates its removal. |
 | `scoreboard.epoch_started_at` not restarted for xStock | **5 — no work**: Kyle's deliberate act by his own ruling (`storage.ts:3397-3403`). |
 
 ---
 
+# PART D — REVIEWER RECORD
+
+`REVIEWER r1: claim-only · three absence claims (no fee-sign assumption on the booking path; the timing buffer has no writer; nothing uses decision_grade to decide) · no counter-state to the three claims as bounded; leads: trade-pnl.ts:73 docstring, CSV export throws rather than exporting empty, display index cost-model.ts:224, maxCostBound contract types.ts:25, VTS close lines · re-derived y (all at 56599ad6d) · changed: A4 rows added, A7 CSV wording, P5 docstring fix, #1041 wording`
+
+`REVIEWER r1: object · A8 direction + A9 bounds + the r1 SQL · HIT: shifting every xStock member by one bound does not bound xStock-led cycles (leader and challengers move by different unknown amounts); plus membership fee-dependence (:2207), R vintage (:774/:848), 'mid' assumption, ties to taker (:343), member completeness · re-derived y (per-cycle certain/possible re-run; zero-shift control 0; rank-0 row missing 0; short rows 0; all cited lines read at 56599ad6d) · changed: §0 row 9, A8 tie/floor/geometry wording, A9 rewritten, limits (ii)(iv)(v) added`
+
+---
+
 ## PLAIN-LANGUAGE SUMMARY
 
-**What the audit found.** The fix is as scoped, and smaller in one place: nothing between the fee and the final profit number treats a fee as "must be positive", so a rebate flows through correctly once the server's startup check stops refusing it. The second fee reader is on a path that isn't running, and most of that file is dead code, so it gets tidied rather than rebuilt. Langston's worry about the go-live readiness check turned out to be a different problem: that check has had nothing to measure since June, so it can never pass whatever the fee is — filed separately.
+**What the audit found.** The fix is as scoped, and smaller in one place: nothing between the fee and the final profit number refuses or trims a negative fee, so Kraken's rebate flows through once the server's startup check stops rejecting it (one code comment claiming costs can't go negative gets corrected). The second fee reader is on a path that isn't running, and most of that file is dead code, so it gets tidied rather than rebuilt. Langston's worry about the go-live readiness check turned out to be a different problem: that check has had nothing to measure since June, so it can never pass whatever the fee is — filed separately.
 
-**What the wrong fee did.** In the shadow pool, correcting xStock's fee would have changed the top pick in **12–18 % of the 1,512 cycles** where an xStock was a candidate — mostly by lifting an xStock above a crypto pick. That is the smallest the effect could be: xStock candidates the wrong fee filtered out before they reached the pool can't be counted.
+**What the wrong fee did.** Among the 1,513 ranking rounds where an xStock was a candidate, the correct fee would have changed the top pick in **at least 162 and at most 339 (11–22 %)**. The clearest part: in the 173 rounds a crypto pick led beside an xStock, the xStock would have taken the top spot in 150 to 165 of them. That is still the smallest the effect could be, because xStock candidates the wrong fee filtered out before they reached the pool can't be counted.
 
 **The plan.** Set the two xStock rates, let the startup check accept a small rebate, point everything at one fee reader, delete the dead cost settings, mark the change date for xStock learning only, and fix the tests. Afterwards we expect xStock to choose resting orders less often than today's 25 % — and we will measure it.
