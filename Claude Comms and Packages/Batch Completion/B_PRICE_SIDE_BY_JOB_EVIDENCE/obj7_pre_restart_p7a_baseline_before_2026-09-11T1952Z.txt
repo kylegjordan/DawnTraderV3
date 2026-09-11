@@ -1,0 +1,47 @@
+baseline_at 2026-09-11T19:52:20Z
+=== reach: out.log first and last line timestamps ===
+2026-09-11 14:29:50 +00:00: [I7-WS-RAW] {"channel":"book","type":"update","data":[{"symbol":"ZEC/EUR","bids":[],"asks":[
+2026-09-11 19:52:20 +00:00: [9.0][HEARTBEAT] WebSocket heartbeat received at 2026-09-11T19:52:20.007Z
+=== [B78.1][WS_TICK_RATE], last 30 lines (emitter kraken-websocket-adapter.ts:395) ===
+2026-09-11 19:22:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1246 (count=1246 over 60s)
+2026-09-11 19:23:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=984 (count=984 over 60s)
+2026-09-11 19:24:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1446 (count=1446 over 60s)
+2026-09-11 19:25:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1147 (count=1147 over 60s)
+2026-09-11 19:26:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1253 (count=1253 over 60s)
+2026-09-11 19:27:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=963 (count=963 over 60s)
+2026-09-11 19:28:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=747 (count=747 over 60s)
+2026-09-11 19:29:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=846 (count=846 over 60s)
+2026-09-11 19:30:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=963 (count=963 over 60s)
+2026-09-11 19:31:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=836 (count=836 over 60s)
+2026-09-11 19:32:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=819 (count=819 over 60s)
+2026-09-11 19:33:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=961 (count=961 over 60s)
+2026-09-11 19:34:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=612 (count=612 over 60s)
+2026-09-11 19:35:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1040 (count=1040 over 60s)
+2026-09-11 19:36:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=776 (count=776 over 60s)
+2026-09-11 19:37:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1169 (count=1169 over 60s)
+2026-09-11 19:38:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1311 (count=1311 over 60s)
+2026-09-11 19:39:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=854 (count=854 over 60s)
+2026-09-11 19:40:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=966 (count=966 over 60s)
+2026-09-11 19:41:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=812 (count=812 over 60s)
+2026-09-11 19:42:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=810 (count=810 over 60s)
+2026-09-11 19:43:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=786 (count=786 over 60s)
+2026-09-11 19:44:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1148 (count=1148 over 60s)
+2026-09-11 19:45:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1007 (count=1007 over 60s)
+2026-09-11 19:46:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=795 (count=795 over 60s)
+2026-09-11 19:47:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=827 (count=827 over 60s)
+2026-09-11 19:48:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=675 (count=675 over 60s)
+2026-09-11 19:49:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=804 (count=804 over 60s)
+2026-09-11 19:50:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=993 (count=993 over 60s)
+2026-09-11 19:51:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=932 (count=932 over 60s)
+=== live subscription audit: [I8C-AUDIT][SUMMARY], last 5 lines (kraken-websocket-adapter.ts:3095; absent = the audit is not emitting in out.log reach, state it) ===
+=== eventLoopLag from /api/metrics/snapshot, 5 samples 10 s apart ===
+eventLoopLag = 1
+--- sample 1 at 2026-09-11T19:52:20Z
+eventLoopLag = 1
+--- sample 2 at 2026-09-11T19:52:30Z
+eventLoopLag = 1
+--- sample 3 at 2026-09-11T19:52:40Z
+eventLoopLag = 1
+--- sample 4 at 2026-09-11T19:52:51Z
+eventLoopLag = 1
+--- sample 5 at 2026-09-11T19:53:01Z

@@ -1,0 +1,18 @@
+read_at 2026-09-11T19:52:14Z
+running_sha a5273ad6d387ef5a7cc453ca788c970818ba8c87
+  exit_price_producer   | n  | with_observed_at 
+------------------------+----+------------------
+ kraken_ws_book_mid     | 53 |               53
+ kraken_equities_ws_mid | 25 |               25
+ (null)                 |  4 |                0
+(3 rows)
+
+ id | symbol | closed_at | exit_price_producer | exit_price_source | exit_observed_at_ms | pass1_non_null | pass2_older_by_1s | pass3_source_unchanged 
+----+--------+-----------+---------------------+-------------------+---------------------+----------------+-------------------+------------------------
+(0 rows)
+
+ population | touched_arm | reserve_rows | fail1_null_observed_at | not_pass2_under_1s_old | fail3_source_changed 
+------------+-------------+--------------+------------------------+------------------------+----------------------
+         82 |           0 |            0 |                      0 |                      0 |                    0
+(1 row)
+

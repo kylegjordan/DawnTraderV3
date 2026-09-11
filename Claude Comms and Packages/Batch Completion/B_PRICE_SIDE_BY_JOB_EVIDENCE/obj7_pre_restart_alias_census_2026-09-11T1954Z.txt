@@ -1,0 +1,7 @@
+universe columns: symbol name sector crypto_adjacent adr source_chain is_delisted first_seen_at last_seen_at updated_at
+census_at 2026-09-11T19:54:58Z
+kraken AssetPairs 1449 | distinct wsnames ending /USD 666
+xstock_spot_universe rows 498 | distinct symbols 498 | sample ['A/USD', 'AAPL/USD', 'ABBV/USD', 'ABNB/USD']
+INTERSECTION on the exact wsname key: 17 ['A/USD', 'ADI/USD', 'CAT/USD', 'CVX/USD', 'DASH/USD', 'EDU/USD', 'ES/USD', 'IR/USD', 'MET/USD', 'OPEN/USD', 'PEP/USD', 'STRK/USD', 'STX/USD', 'SUI/USD', 'T/USD', 'WELL/USD', 'WEN/USD']
+INTERSECTION after the XBT/XDG internal translation: 17 extra: []
+CONTROL: DASH/USD in Kraken wsnames True | in the xStock universe True
