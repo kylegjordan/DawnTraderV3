@@ -1,0 +1,56 @@
+=== identity ===
+sha=b597f1bf210a954e1031e75eb939e5f75483237e
+restart_time=609
+deployed_at=2026-09-11T20:09:47Z
+deployed_by_claimed=cc-c
+deployed_via=deploy@dawntrader-staging via direct
+check_failure_window_s=10
+migrate_ran_at=2026-09-11T20:09:36Z
+migrate_ms=827
+BUILD_SHA=b597f1bf210a954e1031e75eb939e5f75483237e
+dawntrader online restarts 609 uptime_ms_since 1789157377581
+pm2-logrotate online restarts 5 uptime_ms_since 1783967599164
+=== reach: first line at or after R, and the last line ===
+2026-09-11 20:09:37 +00:00: [I7-WS-RAW] {"channel":"heartbeat"}
+2026-09-11 20:39:15 +00:00: [8.8.3-I6][ENGINE_PNL_CALC] symbol=CRM/USD entry=248.33 live=247.53 pnl=-0.5186 pnlPct=-0.32
+=== P-7k: [PriceCache][HEALTH], last 3 after R ===
+2026-09-11 20:36:41 +00:00: [A4.R10R-1][PriceCache][HEALTH] open=0 rtb=1 fx5=0 vts=110 weight=0/10 cacheSize=116 rowKind=mid:11,last:105,unknown:0 levelReadKind=mid:9,last:173,unknown:0
+2026-09-11 20:37:41 +00:00: [A4.R10R-1][PriceCache][HEALTH] open=0 rtb=1 fx5=0 vts=110 weight=0/10 cacheSize=116 rowKind=mid:11,last:105,unknown:0 levelReadKind=mid:8,last:151,unknown:0
+2026-09-11 20:38:41 +00:00: [A4.R10R-1][PriceCache][HEALTH] open=0 rtb=1 fx5=0 vts=110 weight=0/10 cacheSize=116 rowKind=mid:11,last:105,unknown:0 levelReadKind=mid:4,last:83,unknown:0
+=== P-7h: [EVAL_EXIT], count after R and last 3 ===
+1183
+2026-09-11 20:39:13 +00:00: [I7-PRICE-FIX][EVAL_EXIT] cycleId=1789159152706 positionsEvaluated=5 withWsPrice=5 withRestPrice=0 withoutPrice=0 slHits=0 tpHits=0 shadowEntered=0 shadowSkippedNoBook=0 hollowSkips=0 hollowYields=0 restTokenExhausted=0 restVenueRateLimited=0 restAgeExempt=0
+2026-09-11 20:39:14 +00:00: [I7-PRICE-FIX][EVAL_EXIT] cycleId=1789159154206 positionsEvaluated=5 withWsPrice=5 withRestPrice=0 withoutPrice=0 slHits=0 tpHits=0 shadowEntered=0 shadowSkippedNoBook=0 hollowSkips=0 hollowYields=0 restTokenExhausted=0 restVenueRateLimited=0 restAgeExempt=0
+2026-09-11 20:39:16 +00:00: [I7-PRICE-FIX][EVAL_EXIT] cycleId=1789159155707 positionsEvaluated=5 withWsPrice=5 withRestPrice=0 withoutPrice=0 slHits=0 tpHits=0 shadowEntered=0 shadowSkippedNoBook=0 hollowSkips=0 hollowYields=0 restTokenExhausted=0 restVenueRateLimited=0 restAgeExempt=0
+=== P-7a: [B78.1][WS_TICK_RATE] after R ===
+2026-09-11 20:34:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=716 (count=716 over 60s)
+2026-09-11 20:35:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=695 (count=695 over 60s)
+2026-09-11 20:36:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=1609 (count=1609 over 60s)
+2026-09-11 20:37:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=493 (count=493 over 60s)
+2026-09-11 20:38:38 +00:00: [B78.1][WS_TICK_RATE] priceTickEventsPerMinute=617 (count=617 over 60s)
+=== Sub OK after R: line count, then distinct internal symbols ===
+6
+      6 RAY/USD
+=== WebSocket write after-set: [I7-WS-A][CACHE_UPDATE] writes per internal symbol after R ===
+  23752 RAY/USD
+   1180 GEV/USD
+   1180 CRWD/USD
+   1180 CRM/USD
+   1141 NEM/USD
+   1139 MDB/USD
+=== P-7b: Unsub OK after R (out.log) and WS_UNSUB_REJECTED after R (error.log) ===
+0
+=== P-7h: PRICE_SKIP_ESCALATION after R (error.log) ===
+2026-09-11 20:38:41 +00:00: [P19-B8.5][PRICE_SKIP_ESCALATION] MDB/USD: 40 consecutive exit-monitor ticks not evaluated (equity_tick_stale_risk_to_stop; mark 201s old, ceiling 141s) reasons={"equity_tick_stale_risk_to_stop":40} dominant=equity_tick_stale_risk_to_stop:40/40 — raising system alert
+=== P-7j: REWARM and KALMAN line counts after R ===
+92
+2054
+=== P-7e: bookTickerDisagreement from /api/xstocks/filter-diagnostics (key path searched, absent is printed) ===
+key found 1
+vtsEvaluation.bookTickerDisagreement = {"rule": {"alignMs": 250, "fireConsecutive": 3, "fireTicks": 1, "armed": false, "subject": "local book maintenance", "scope": "crypto_spot trading ticker only"}, "counts": {"invalid": 0, "unaligned": 6, "crossedBook": 0, "noTick": 0, "aligned": 3872, "agree": 3872, "disagree": 0, "fires": 0}, "firesBySymbol": {}}
+=== errors after R (error.log): lines matching Error, count and last 5 ===
+4
+2026-09-11 20:09:45 +00:00: [MarketDataHealthCheck] Failed to write health log: Error: EACCES: permission denied, mkdir '/home/runner'
+2026-09-11 20:11:42 +00:00: [KrakenWS] Error parsing message: TypeError: Cannot read properties of undefined (reading 'toUpperCase')
+2026-09-11 20:15:13 +00:00: [KrakenWS] Error parsing message: TypeError: Cannot read properties of undefined (reading 'toUpperCase')
+2026-09-11 20:33:12 +00:00: [KrakenWS] Error parsing message: TypeError: Cannot read properties of undefined (reading 'toUpperCase')

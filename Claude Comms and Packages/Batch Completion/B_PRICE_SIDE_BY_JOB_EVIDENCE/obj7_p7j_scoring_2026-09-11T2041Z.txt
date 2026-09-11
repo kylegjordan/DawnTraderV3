@@ -1,0 +1,70 @@
+# P-7j Step-8 pre-registered scoring and diagnostic, regenerated 2026-09-11T20:47:37Z on obj7_p7j_capture_2026-09-11T2009Z_to_2039Z.txt
+# scorer: scripts/analysis/b_price_side_p7j_rewarm_score.py; diagnostic: scripts/analysis/b_price_side_p7j_rewarm_diag.py (pre-registration: OBJ-7 change list, STEP 8 PRE-REGISTRATION)
+## scorer
+restart 2026-09-11 20:09:37 UTC | REWARM symbols in the first 10 minutes (the population): 84 | REWARM symbols overall: 92
+gapFrac over the population: n 84 | median 0.00555 | max 0.22764 | median <= 0.01: True
+K at observation 1 not 0.9 (printed to 4 dp): 0 []
+fewer than 12 KALMAN lines yet (not scored): 0
+EXCLUDED AND COUNTED (R or Q moved more than 10% across observations 1-12): 1
+in scope: 83 | meet x1.1 at observation 12: 2
+VERDICT: FAIL | share meeting the tolerance 2.4 %
+## diagnostic (every captured line per symbol, not only the first 12)
+symbols with at least 12 KALMAN lines after REWARM: 84
+K at observation 12 / steady-state K: min 1.035 RIVER/USD | median 1.282 | p90 1.354 | max 1.996 USDT/JPY
+first observation within x1.1, over every captured line: reached 73 | never reached in capture 11 | median 17 | min 10 | max 22
+KALMAN lines per symbol after REWARM: min 6 median 21 max 46
+consecutive lines with identical K and x (non-advancing prints): 3 of 1962 consecutive pairs
+--- RIVER/USD REWARM at 2026-09-11 20:11:42
+1 20:11:42 R 25.31 Q 0.364 K 0.9 Kss 0.1129 x1.1 0.1242 1/n 1.0
+2 20:12:42 R 25.31 Q 0.364 K 0.4776 Kss 0.1129 x1.1 0.1242 1/n 0.5
+3 20:13:42 R 25.31 Q 0.364 K 0.3298 Kss 0.1129 x1.1 0.1242 1/n 0.3333
+4 20:14:42 R 25.31 Q 0.364 K 0.256 Kss 0.1129 x1.1 0.1242 1/n 0.25
+5 20:16:11 R 25.31 Q 0.364 K 0.2128 Kss 0.1129 x1.1 0.1242 1/n 0.2
+6 20:18:42 R 23.5 Q 0.364 K 0.1966 Kss 0.117 x1.1 0.1286 1/n 0.1667
+7 20:19:42 R 23.5 Q 0.364 K 0.1749 Kss 0.117 x1.1 0.1286 1/n 0.1429
+8 20:20:44 R 23.5 Q 0.364 K 0.1599 Kss 0.117 x1.1 0.1286 1/n 0.125
+9 20:22:12 R 23.5 Q 0.364 K 0.1492 Kss 0.117 x1.1 0.1286 1/n 0.1111
+10 20:23:11 R 23.5 Q 0.364 K 0.1414 Kss 0.117 x1.1 0.1286 1/n 0.1
+11 20:26:12 R 30.34 Q 0.365 K 0.1084 Kss 0.1038 x1.1 0.1142 1/n 0.0909
+12 20:26:42 R 30.34 Q 0.365 K 0.1075 Kss 0.1038 x1.1 0.1142 1/n 0.0833
+13 20:28:12 R 30.34 Q 0.365 K 0.1067 Kss 0.1038 x1.1 0.1142 1/n 0.0769
+14 20:29:12 R 30.34 Q 0.365 K 0.1061 Kss 0.1038 x1.1 0.1142 1/n 0.0714
+15 20:30:12 R 30.34 Q 0.365 K 0.1057 Kss 0.1038 x1.1 0.1142 1/n 0.0667
+16 20:33:12 R 29.68 Q 0.365 K 0.1074 Kss 0.1049 x1.1 0.1154 1/n 0.0625
+--- XRP/GBP REWARM at 2026-09-11 20:12:13
+1 20:12:13 R 44.09 Q 0.342 K 0.9 Kss 0.0843 x1.1 0.0927 1/n 1.0
+2 20:12:42 R 44.09 Q 0.342 K 0.4758 Kss 0.0843 x1.1 0.0927 1/n 0.5
+3 20:13:42 R 44.09 Q 0.342 K 0.326 Kss 0.0843 x1.1 0.0927 1/n 0.3333
+4 20:14:43 R 44.09 Q 0.342 K 0.2502 Kss 0.0843 x1.1 0.0927 1/n 0.25
+5 20:15:42 R 44.09 Q 0.342 K 0.2051 Kss 0.0843 x1.1 0.0927 1/n 0.2
+6 20:19:42 R 44.09 Q 0.342 K 0.1754 Kss 0.0843 x1.1 0.0927 1/n 0.1667
+7 20:20:44 R 44.09 Q 0.342 K 0.1548 Kss 0.0843 x1.1 0.0927 1/n 0.1429
+8 20:21:42 R 44.09 Q 0.342 K 0.1398 Kss 0.0843 x1.1 0.0927 1/n 0.125
+9 20:23:12 R 44.46 Q 0.341 K 0.1277 Kss 0.0838 x1.1 0.0922 1/n 0.1111
+10 20:24:12 R 44.46 Q 0.341 K 0.1192 Kss 0.0838 x1.1 0.0922 1/n 0.1
+11 20:26:42 R 44.46 Q 0.341 K 0.1126 Kss 0.0838 x1.1 0.0922 1/n 0.0909
+12 20:28:12 R 44.41 Q 0.341 K 0.1075 Kss 0.0839 x1.1 0.0923 1/n 0.0833
+13 20:29:12 R 44.41 Q 0.341 K 0.1033 Kss 0.0839 x1.1 0.0923 1/n 0.0769
+14 20:30:12 R 44.41 Q 0.341 K 0.0999 Kss 0.0839 x1.1 0.0923 1/n 0.0714
+15 20:31:12 R 44.41 Q 0.341 K 0.0971 Kss 0.0839 x1.1 0.0923 1/n 0.0667
+16 20:34:12 R 44.59 Q 0.341 K 0.0945 Kss 0.0837 x1.1 0.0921 1/n 0.0625
+--- USDT/JPY REWARM at 2026-09-11 20:10:42
+1 20:10:42 R 47.08 Q 0.1 K 0.9 Kss 0.045 x1.1 0.0495 1/n 1.0
+2 20:11:42 R 47.08 Q 0.1 K 0.4743 Kss 0.045 x1.1 0.0495 1/n 0.5
+3 20:12:41 R 47.08 Q 0.1 K 0.3227 Kss 0.045 x1.1 0.0495 1/n 0.3333
+4 20:13:41 R 47.08 Q 0.1 K 0.2452 Kss 0.045 x1.1 0.0495 1/n 0.25
+5 20:15:11 R 47.08 Q 0.1 K 0.1983 Kss 0.045 x1.1 0.0495 1/n 0.2
+6 20:16:12 R 47.08 Q 0.1 K 0.1669 Kss 0.045 x1.1 0.0495 1/n 0.1667
+7 20:16:42 R 47.08 Q 0.1 K 0.1446 Kss 0.045 x1.1 0.0495 1/n 0.1429
+8 20:18:11 R 47.08 Q 0.1 K 0.128 Kss 0.045 x1.1 0.0495 1/n 0.125
+9 20:19:11 R 47.08 Q 0.1 K 0.1151 Kss 0.045 x1.1 0.0495 1/n 0.1111
+10 20:20:11 R 47.08 Q 0.1 K 0.1049 Kss 0.045 x1.1 0.0495 1/n 0.1
+11 20:20:42 R 47.08 Q 0.1 K 0.0967 Kss 0.045 x1.1 0.0495 1/n 0.0909
+12 20:21:42 R 47.08 Q 0.1 K 0.0899 Kss 0.045 x1.1 0.0495 1/n 0.0833
+13 20:22:42 R 47.08 Q 0.1 K 0.0843 Kss 0.045 x1.1 0.0495 1/n 0.0769
+14 20:24:12 R 47.08 Q 0.1 K 0.0796 Kss 0.045 x1.1 0.0495 1/n 0.0714
+15 20:25:11 R 47.08 Q 0.1 K 0.0755 Kss 0.045 x1.1 0.0495 1/n 0.0667
+16 20:26:11 R 44.71 Q 0.1 K 0.0756 Kss 0.0462 x1.1 0.0508 1/n 0.0625
+minutes from observation 1 to the first within x1.1: n 73 min 10.0 median 21.5 max 26.5
+seconds between consecutive observations: n 1888 p10 30 median 60 p90 90
+Q/R at observation 12: n 84 min 0.0021 median 0.0077 max 0.0235 | test 12 fixture Q/R 0.0192
