@@ -66,7 +66,7 @@ The probe was `scripts/analysis/bbo_trigger_ack_probe.mjs`, run 2026-09-11 at 14
   - `archive_ticker_snap` — a walk over the throttled xStock ticker snapshot table: also a fill estimate;
   - `not_an_observation` — a re-serve, seed, mock, reused price or no price: never a live basis.
 
-  **Era boundary for `ticker_bbo`:** crypto ticker rows are best-bid/offer-triggered only from the OBJ-7 deploy; rows before it came from the default trade-triggered ticker. **Deploy sha and UTC: `b597f1bf210a954e1031e75eb939e5f75483237e`, `dt-deploy --by cc-c` invoked no earlier than 2026-09-11T20:05Z, recorded here before the restart; the deploy record's `deployed_at` is the exact boundary and is added here after the restart.**
+  **Era boundary for `ticker_bbo`:** crypto ticker rows are best-bid/offer-triggered only from the OBJ-7 deploy; rows before it came from the default trade-triggered ticker. **Deploy sha and UTC: `b597f1bf210a954e1031e75eb939e5f75483237e`, `dt-deploy --by cc-c` invoked no earlier than 2026-09-11T20:05Z, recorded here before the restart; the deploy record's `deployed_at`, the exact boundary, is `2026-09-11T20:09:47Z`.**
 - **Ticker trigger:** crypto moves its ticker to the best-bid/offer trigger. xStock keeps the default ticker.
 - **xStock 20-level book** for held and queued xStocks (`#949`).
   - ⛔ **Precondition in the landing.** Today `unsubscribeFromSymbols` sends `channel: 'ticker'` only, so cleared book streams stay live at Kraken and re-subscribes stack on top of them.
