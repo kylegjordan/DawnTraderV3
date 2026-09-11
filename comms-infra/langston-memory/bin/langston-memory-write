@@ -49,7 +49,7 @@ EXIT  0 written (or no change) · 2 refused input · 3 not root or langston · 4
       written; the message says whether the file changed OUTSIDE this tool) · 5 a declared count was wrong and the
       previous content was RESTORED · 6 a refusal about the environment, or an internal error (see stderr)
 """
-import datetime, fcntl, hashlib, importlib.util, json, os, pwd, re, subprocess, sys, tempfile, time, traceback
+import datetime, fcntl, hashlib, importlib.util, json, os, pwd, re, stat, subprocess, sys, tempfile, time, traceback
 
 sys.dont_write_bytecode = True   # a root run must not leave a root-owned __pycache__ beside a langston-owned reader
 
@@ -109,8 +109,64 @@ def parse_args(argv):
     return out
 
 
+def reader_trust_problems(path):
+    """⛔ GUARD (c) (Langston, 20:09Z, widened): a ROOT-run write EXECUTES the reader, so everything that decides what
+    runs must be root-controlled - root-owned and not group- or other-writable:
+      · EVERY directory on the path, not the leaf: renaming an entry needs write on the PARENT, so a langston-owned
+        parent swaps a root-owned bin wholesale (BLOCKER-1);
+      · the path ACTUALLY loaded - READER after the env var - both as given and with symlinks resolved;
+      · its bytecode cache: a header-matched .pyc runs IN PLACE OF clean source even with dont_write_bytecode, and no
+        source hash sees it (proven 2026-09-11 on scratch files, reproduced by Langston).
+    Returns a list of plain problems; empty means root may execute it. A missing file is not a problem here - the load
+    itself refuses it."""
+    problems, seen = [], set()
+
+    def chain(q):
+        q = os.path.abspath(q)
+        out = []
+        while True:
+            out.append(q)
+            parent = os.path.dirname(q)
+            if parent == q:
+                break
+            q = parent
+        return list(reversed(out))
+
+    given, real = os.path.abspath(path), os.path.realpath(path)
+    candidates = chain(given) + chain(real)
+    for src in (given, real):
+        cache = importlib.util.cache_from_source(src)
+        candidates += [os.path.dirname(cache), cache]
+    for c in candidates:
+        if c in seen:
+            continue
+        seen.add(c)
+        try:
+            st = os.lstat(c)
+        except FileNotFoundError:
+            continue
+        if st.st_uid != 0:
+            try:
+                who = pwd.getpwuid(st.st_uid).pw_name
+            except KeyError:
+                who = "uid %d (no account)" % st.st_uid
+            problems.append("%s is owned by %s" % (c, who))
+        elif not stat.S_ISLNK(st.st_mode) and stat.S_IMODE(st.st_mode) & 0o022:
+            problems.append("%s is group- or other-writable (mode %s)" % (c, oct(stat.S_IMODE(st.st_mode))))
+    return problems
+
+
 def load_reader():
     """Rule (4): the writer IMPORTS the reader's parser rather than re-implementing it."""
+    if os.geteuid() == 0:
+        problems = reader_trust_problems(READER)
+        if problems:
+            # Run as the OWNER, a reader the owner controls is not an escalation - so the guard is root-only.
+            raise Refused(6, "REFUSED: this write runs as root and would EXECUTE the reader at %s, but root does not "
+                             "control it: %s. Nothing was written. Every directory on its path, the file and its "
+                             "__pycache__ must be root-owned and not group- or other-writable (comms-infra/systemd/"
+                             "README.md, the langston-memory rows) - fix that and tell Infra Claude."
+                             % (READER, "; ".join(problems)))
     spec = importlib.util.spec_from_file_location("langston_memory_reader", READER)
     if spec is None or spec.loader is None:
         raise Refused(6, "REFUSED: cannot load the reader at %s" % READER)
@@ -625,6 +681,74 @@ def self_test():
         check("an unknown flag refuses -> exit", rc, 2)
 
         # BLOCKER-3: a root run must leave everything usable by the owner
+        # ⛔ GUARD (c) CASES. Fixtures live under ROOT'S OWN HOME, never /tmp: /tmp is 1777, so it would refuse every case
+        #    for the wrong reason and the control could not come out differently.
+        if os.geteuid() == 0:
+            try:
+                gown = pwd.getpwnam(OWNER)
+            except KeyError:
+                gown = None
+            check("GUARD (c) fixture: the owner account exists", gown is not None, True)
+            if gown is not None:
+                groot = tempfile.mkdtemp(prefix="lmw-guard-", dir=pwd.getpwuid(0).pw_dir)
+                try:
+                    os.chmod(groot, 0o755)
+                    gbin = os.path.join(groot, "bin")
+                    os.makedirs(gbin)
+                    os.chmod(gbin, 0o755)
+                    greader = os.path.join(gbin, "langston_memory.py")
+                    shutil.copy(reader, greader)
+                    os.chown(greader, 0, 0)
+                    os.chmod(greader, 0o644)
+
+                    def guard_case(reader_path):
+                        reset()
+                        g0, gs0 = current()
+                        rc_, out_ = call(appendargs(gs0), "- guard case" + NL, extra_env={"LANGSTON_MEMORY_READER": reader_path})
+                        return rc_, out_, current()[1] == gs0
+
+                    rc, out, same = guard_case(greader)
+                    check("GUARD (c) control: a root write with a ROOT-CONTROLLED reader proceeds -> exit", rc, 0)
+
+                    os.chown(greader, gown.pw_uid, gown.pw_gid)
+                    rc, out, same = guard_case(greader)
+                    check("GUARD (c): the reader FILE owned by the owner account -> exit", rc, 6)
+                    check("  ...names the file, and the target is byte-identical", ("%s is owned by %s" % (greader, OWNER)) in out and same, True)
+                    os.chown(greader, 0, 0)
+
+                    os.chmod(gbin, 0o775)
+                    rc, out, same = guard_case(greader)
+                    check("GUARD (c): a directory on its path is group-writable -> exit", rc, 6)
+                    check("  ...names that directory, and the target is byte-identical", ("%s is group- or other-writable" % gbin) in out and same, True)
+                    os.chmod(gbin, 0o755)
+
+                    os.chown(groot, gown.pw_uid, gown.pw_gid)
+                    rc, out, same = guard_case(greader)
+                    check("GUARD (c): the PARENT owned by the owner (swap bin wholesale) -> exit", rc, 6)
+                    check("  ...names the parent, and the target is byte-identical", ("%s is owned by %s" % (groot, OWNER)) in out and same, True)
+                    os.chown(groot, 0, 0)
+
+                    gcache = os.path.dirname(importlib.util.cache_from_source(greader))
+                    os.makedirs(gcache)
+                    os.chown(gcache, gown.pw_uid, gown.pw_gid)
+                    rc, out, same = guard_case(greader)
+                    check("GUARD (c): its __pycache__ owned by the owner (a .pyc runs in place of source) -> exit", rc, 6)
+                    check("  ...names the cache, and the target is byte-identical", ("%s is owned by %s" % (gcache, OWNER)) in out and same, True)
+                    shutil.rmtree(gcache)
+
+                    gevil = os.path.join(groot, "elsewhere")
+                    os.makedirs(gevil)
+                    shutil.copy(reader, os.path.join(gevil, "langston_memory.py"))
+                    os.chown(gevil, gown.pw_uid, gown.pw_gid)
+                    glink = os.path.join(gbin, "via-link.py")
+                    os.symlink(os.path.join(gevil, "langston_memory.py"), glink)
+                    rc, out, same = guard_case(glink)
+                    check("GUARD (c): a root-owned SYMLINK into an owner-owned folder -> exit", rc, 6)
+                    check("  ...names the folder the link resolves into, and the target is byte-identical", ("%s is owned by %s" % (gevil, OWNER)) in out and same, True)
+                finally:
+                    shutil.rmtree(groot, ignore_errors=True)
+        else:
+            print("  N/A  GUARD (c) cases need root; the guard itself only applies to a root run")
         if os.geteuid() == 0:
             try:
                 owner = pwd.getpwnam(OWNER)
@@ -647,7 +771,9 @@ def self_test():
                 os.chmod(home3, 0o700)
                 env3 = {"LANGSTON_HOME": home3, "LANGSTON_MEMORY_READER": os.path.join(bin3, "langston_memory.py")}
                 s_a = sha(open(t3, "rb").read())
-                rc, out = call(appendargs(s_a), "- written by root" + NL, extra_env=env3, script=os.path.join(bin3, "langston-memory-write"))
+                # GUARD (c): a ROOT run may not execute the owner-owned copies in bin3 - that is the escalation path.
+                #   The root leg runs this file with the root-controlled reader; the owner leg below keeps bin3.
+                rc, out = call(appendargs(s_a), "- written by root" + NL, extra_env=dict(env3, LANGSTON_MEMORY_READER=reader))
                 check("BLOCKER-3: a ROOT write -> exit", rc, 0)
                 owned = all(os.stat(p).st_uid == owner.pw_uid for p in (
                     os.path.join(home3, ".memory-write.lock"), os.path.join(home3, ".memory-archive"),
