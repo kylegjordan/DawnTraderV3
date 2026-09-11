@@ -1,9 +1,9 @@
 # B-XSTOCK-FEE-CONTRACT — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
 **Batch:** `B-XSTOCK-FEE-CONTRACT` (`#1010`, `PHASE_19_PLAN` row 2.4-FEE) · **change-class: architecture** (Langston, stands) · **Owner:** CC-B
-**Audited at:** `origin/migration/aws-supabase` `18a8b29b6`; reviewer re-derivations at `56599ad6d` (no code under audit changed between them) · staging DB + logs read 2026-09-11 15:00–15:45Z
+**Audited at:** `origin/migration/aws-supabase` `18a8b29b6`; reviewer re-derivations at `56599ad6d` and `4e7f584b5` (no code under audit changed between them) · staging DB + logs read 2026-09-11 15:00–15:55Z
 **Inputs:** scope r1.1 `c891de65a` · Langston Step-1 APPROVAL with five rulings, F-1..F-5 and two gaps (2026-09-11) · Langston addendum 15:03Z (`dt-deploy` has no rollback verb; the forward-deploy window)
-**Revision:** r2 — corrected after a fresh object-round reviewer showed r1's OBJ-9 runs did not bound xStock-led cycles (§D).
+**Revision:** r3 — two fresh object-round reviews folded (§D). The OBJ-9 query is committed at `scripts/analysis/b_xstock_fee_contract_obj9_rerank.sql`.
 
 ---
 
@@ -19,7 +19,7 @@
 | 6 | `resolveFee` "four call sites" | four sites in **two** methods; `getConfig` has **zero** consumers; four methods of that class are dead | §A3 |
 | 7 | cost-model fold rollback: "the rollback migration re-inserts the rows first" (scope r1.1) | **a committed operator runbook step with the literal re-insert SQL** — `dt-deploy` migrates forward only | Langston 15:03Z; `scripts/dt-deploy.sh:222-234` |
 | 8 | `SYSTEM_IMPACT_MAP.md:3504` lists `calculateFees`/`modelTradeRealism`/`getConfig` as consumers | only `calculateFees` and `modelSlippage` have a caller | §A3 |
-| 9 | **OBJ-9 (r1 of this document at `56599ad6d`, and my message to Kyle): rank 0 would have changed in "188–266 of 1,512 cycles (12.4–17.6 %)"** | **CERTAIN in 162, POSSIBLE in 339, of 1,513 cycles (10.7–22.4 %)** | r1's "low" and "high" runs shifted every xStock member by one bound together; that brackets crypto-led cycles but **not** cycles led by an xStock, where the leader and its challengers move by different, unknown amounts. Re-derived per cycle (§A9, §D) |
+| 9 | **OBJ-9 (r1 of this document at `56599ad6d`, and my message to Kyle): rank 0 would have changed in "188–266 of 1,512 cycles (12.4–17.6 %)"** | **CERTAIN in 162, POSSIBLE in 339, of 1,514 cycles (10.7–22.4 %)** | **Method:** r1 shifted every xStock member by one bound together, which brackets crypto-led cycles but **not** xStock-led ones, where leader and challengers move by different, unknown amounts — re-derived per cycle (§A9). **Population:** 1,512 → 1,514 as live cycles arrived between runs (15:04Z → 15:50Z); the two new cycles changed neither count |
 
 ---
 
@@ -40,9 +40,10 @@
 
 ## A1. What is stored today
 
-- **`fee_model`** (4 rows, all `updated_by b45-tier1-seed`, 2026-06-10): crypto + xStock `spot_taker_fee 0.008` / `spot_maker_fee 0.004`. **Boot log 2026-09-11 11:19:30:** `[B45][warmup] fee_model verified: crypto taker=0.008 maker=0.004 | xstock taker=0.008 maker=0.004` — the rail runs on every boot.
+- **`fee_model`** (4 rows, all `updated_by b45-tier1-seed`, `updated_at 2026-06-10 21:50:44`): crypto + xStock `spot_taker_fee 0.008` / `spot_maker_fee 0.004`. **Boot log 2026-09-11 11:19:30:** `[B45][warmup] fee_model verified: crypto taker=0.008 maker=0.004 | xstock taker=0.008 maker=0.004` — the rail runs on every boot.
 - **`cost_model`** (5 rows, `b72-step3-commit-b`, 2026-05-05): `exchange '*'` `default_avg_return 0.005`; `exchange 'kraken'` `default_taker_fee 0.0026`, `default_slippage 0.0005`, `default_spread 0.0010`, `max_cost_bound 0.01`; all `asset_class/strategy/regime '*'`.
 - **`calibration_epoch`** (6 rows): `live/* 2`, `paper_sim/* 2`, `paper_sim/xstock_spot 3`, `vts/* 3`, `vts/crypto_spot 5`, `vts/xstock_spot 6`. Boot log: `calibration_epoch verified: vts=3 paper_sim=2 live=2` (wildcard rows).
+- **`maker_taker` haircut** (12 rows, all `updated_by p19-b7-2`): xStock `maker_fill_probability 0.50`, `adverse_selection_base 0.0010`, `non_fill_cost_base 0.0008`; seeded `hard_floor_continuation_strength 0.70` (`2026-07-01-p19-b7-2-maker-taker.sql:78`).
 - **`system_context.maker_fee_pct` / `taker_fee_pct`:** NULL on both rows.
 - **`calibration_ledger`:** 64 rows, all `xstock_spot`; fee rows `B.0 feeRateTaker 0.26 %` / `feeRateMaker 0.16 %`, `status baseline`, **`decision_grade true`**, seeded `2026-06-02b-calscore-comprehensive.sql:85-86`.
 - **No database guard on sign.** `pg_constraint`: **0** CHECK constraints mention a fee (control: 76 CHECK constraints exist). Every fee column is signed `numeric` — `closed_trades.entry_fee/exit_fee/total_fee/fees (20,8)`, `entry_fee_rate (10,6)`, `active_open_positions.entry_fee (20,8)`, `vts_open_trades.entry_fee_rate (10,6)`, `system_context.maker_fee_pct (5,4)`.
@@ -119,26 +120,36 @@ Readers: `active-execution-engine.ts:2899 getCalibrationEpoch(_learnSource, _ass
 
 ## A9. OBJ-9 — what the wrong fee did to xStock ranking (run at Step 2, read-only)
 
+**Query:** `scripts/analysis/b_xstock_fee_contract_obj9_rerank.sql` (SELECTs only), run 2026-09-11 15:50Z. Every number below comes from that one file.
+
 **Ranker, verified two ways:** `ready_to_buy_service.ts:1806-1808` ranks on `chosenNetEv / |entry − stop|` (null snapshot → the taker-only `netRewardToRisk`), sorted descending at `:1883-1884`; in the 2,000 most recent multi-member cycles, rank 0 equals the maximum `predicted_r_multiple` in **2,000 / 2,000** (control: `final_score` 0 / 2,000, `ranking_score` 0 / 2,000).
 
-**Population:** every shadow-pool cycle holding ≥ 1 xStock member — **1,513 cycles**, paper, 2026-07-16 → 2026-09-11 15:30Z; every xStock member joinable to its pairing with entry and stop; **0** null R. Completeness checks: **0** cycles missing their rank-0 row; **0** cycles with fewer member rows than their stamped `pool_size` (the skips at `ready_to_buy_service.ts:1948` and `:2018` did not fire on this population). **831** cycles have more than one member; **173** were led by a crypto pick as recorded, **1,340** by an xStock (658 of those with challengers).
+**Population:** every shadow-pool cycle holding ≥ 1 xStock member — **1,514 cycles**, **all paper** (the pool tables hold no other mode), 2026-07-16 → 2026-09-11 15:50Z; every xStock member joinable to its pairing with entry and stop; **0** null R. **Completeness, all 0:** cycles missing their rank-0 row · fewer member rows than the stamped `pool_size` · more rows than `pool_size` · duplicate `promotion_rank` · more than one mode. **832** cycles have more than one member; **173** were led by a crypto pick as recorded, **1,341** by an xStock (659 of those with challengers).
 
-**Why the bound is per member, and per cycle.** Each xStock member's corrected R lies in `[R + lo, R + hi]`, with `lo = 0.5 × 0.0112 × entry / risk` and `hi = 0.014 × entry / risk`. A member whose recorded arm was taker moves by exactly `hi`; a maker-arm member by `max(lo, hi − margin)`. **Shadow pool rows do not record the arm** (`ready_to_buy_service.ts:2020-2044`), so only the interval is known. Crypto R is unchanged.
-- **Crypto-led cycle** (leader fixed): rank 0 changes **for certain** if some xStock has `R + lo > leader`, and **possibly** if some xStock has `R + hi > leader`.
-- **xStock-led cycle** (leader moves too): **certain** if some other xStock has `R + lo > leader + hi`; **possible** if some other xStock has `R + hi > leader + lo`. A crypto challenger cannot overtake an xStock leader, because the leader only rises. Strict `>` matches the ranker, where a tie keeps the earlier rank.
-- **Control:** at zero shift no member outranks the recorded leader in any of the 1,513 cycles.
+**Why the bound is per member, and per cycle.** Each xStock member's corrected R lies in `[R + lo, R + hi]`, with `lo = 0.5 × 0.0112 × entry / risk` and `hi = 0.014 × entry / risk`. A member whose recorded arm was taker — including a null-snapshot member on the taker-only fallback — moves by exactly `hi`; a maker-arm member by `max(lo, hi − margin)`. **Shadow pool rows do not record the arm** (`ready_to_buy_service.ts:2020-2044`), so only the interval is known. Crypto R is unchanged.
+- **Crypto-led cycle** (leader fixed): rank 0 changes **for certain** if some xStock has `R + lo` above the leader, and **possibly** if some xStock has `R + hi` reaching it.
+- **xStock-led cycle** (leader moves too): **certain** if some other xStock has `R + lo` above `leader + hi`; **possible** if some other xStock has `R + hi` reaching `leader + lo`. A crypto challenger cannot overtake an xStock leader: every xStock shift is positive, so the leader only rises.
+- **Ties and rounding.** An exact tie is settled by the order the queue was read in (`storage.ts:4401-4404`, then the stable sort at `:1884`), **not** by recorded rank — so POSSIBLE must accept equality. R is stored to 4 dp, so each recorded R is only good to ±0.00005: **CERTAIN requires a margin above +0.0001; POSSIBLE accepts a margin of −0.0001 or more.** Two cycles hold a challenger within 0.0001 of the leader; neither count moved when the tolerance was applied.
+- **CERTAIN is sufficient and POSSIBLE necessary however many xStocks share a cycle** — CERTAIN takes each member's worst case independently, and no challenger can reach the leader's floor unless its own ceiling does. Correlated arms can only make POSSIBLE loose, never too small.
+- **Control:** at zero shift no member outranks the recorded leader in any of the 1,514 cycles.
 
 | rank 0 as recorded | cycles | change CERTAIN | change POSSIBLE |
 |---|---|---|---|
 | crypto | 173 | **150** | **165** |
-| xStock | 1,340 | **12** | **174** |
-| **all** | **1,513** | **162 (10.7 %)** | **339 (22.4 %)** |
+| xStock | 1,341 | **12** | **174** |
+| **all** | **1,514** | **162 (10.7 %)** | **339 (22.4 %)** |
 
-By month (cycles / certain–possible): July 548 / 69–203 · August 744 / 47–80 · September 221 / 46–56. **Size of the shift (r1 run, unchanged):** median **+0.23 R to +0.57 R** on xStock members whose median recorded R was **0.058** (51 of 3,753 recorded negative; cause not established here).
+By month (cycles / certain–possible): July 548 / 69–203 · August 744 / 47–80 · September 222 / 46–56. **Size of the shift (r1 run):** median **+0.23 R to +0.57 R** on xStock members whose median recorded R was **0.058** (51 of 3,753 recorded negative; cause not established here).
 
 **Reading it:** where a crypto pick held rank 0 beside an xStock candidate, the correct fee would have handed rank 0 to the xStock in **150 to 165 of 173 cycles**. Among xStock-led cycles the ordering between xStocks is mostly indeterminate from this data (12 certain, 174 possible).
 
-**Pre-registered limits (Langston ruling 4, plus the reviewer's):** (i) **a LOWER BOUND on reach** — xStock candidates refused at the SQE net-EV gate (`signal_quality_evaluator.ts:362`, `:571`) or evicted at refresh under the wrong fee never entered the pool; (ii) **membership itself is fee-dependent** — the duplicate tiebreak keeps the incumbent when `existingR >= newR` (`ready_to_buy_service.ts:2207`), so under the correct fee a different version of the same symbol and strategy could have held the slot; (iii) rank 0 only — with more than one open slot a displaced crypto pick may still have been promoted, and `promoted` is the ranker's choice, not an executed trade; (iv) the recorded R may come from an older decision snapshot — refresh re-decides only when geometry is recalculated (`:774`) and keeps the old snapshot on failure (`:847-848`) — the per-member interval still holds; (v) assumes `'mid'` geometry at both decision sites (A8); (vi) R is stored to 4 dp; (vii) **no outcome claim**.
+**Pre-registered limits (Langston ruling 4, plus both reviewers'):**
+(i) **A LOWER BOUND on reach** — xStock candidates refused at the SQE net-EV gate (`signal_quality_evaluator.ts:362`, `:571`) or evicted at refresh under the wrong fee never entered the pool.
+(ii) **Pool membership is itself fee-dependent, through two channels** — the duplicate tiebreak keeps the incumbent when `existingR >= newR` (`ready_to_buy_service.ts:2207`), and the pair guard drops every symbol that already holds an active trade (`:1836-1840`), and which trades were open depended on earlier fee-priced promotions. So the counterfactual pool is not the recorded pool — for CERTAIN as well as POSSIBLE.
+(iii) Rank 0 only — with more than one open slot a displaced crypto pick may still have been promoted, and `promoted` is the ranker's choice, not an executed trade.
+(iv) The recorded R may come from an older decision snapshot: refresh re-decides only when geometry is recalculated (`:774`) and keeps the old snapshot on failure (`:847-848`). The interval still holds, because the fee rows have been unchanged since 2026-06-10 (A1) and pFill since `p19-b7-2`, both before the pool's first row (2026-07-14). How many xStock members sat on the null-snapshot fallback is not measurable from the shadow tables; their shift is exactly `hi`.
+(v) Assumes `'mid'` geometry at both decision sites (A8).
+(vi) **No outcome claim.**
 
 ## A10. Tests (OBJ-8)
 
@@ -198,7 +209,7 @@ Correct the two SUBJECT files; re-point the five PROBE files to named per-class 
 Pre-registered in this document: **the xStock paper maker share of orchestrator decisions falls below the 24.9 % baseline (422 / 1,698) after deploy.** Read from `switch_on_shadow_evidence` (`proof_type = 'maker_taker'`, `asset_class = 'xstock_spot'`, `captured_at` after the deploy instant) once **≥ 300** decisions exist. **Falsified if the share is ≥ 24.9 % at ≥ 300.** Direction only — other inputs move over the same weeks.
 
 **P9 — OBJ-9 is delivered by this document** *(A9; ruling 4)*
-Numbers, method and limits are in A9; they go into the completion report and to Kyle in plain language, with the r1 → r2 correction stated (§0 row 9). No deploy item.
+Numbers, method, query and limits are in A9; they go into the completion report and to Kyle in plain language, with the r1 → r3 correction stated (§0 row 9). No deploy item.
 
 **P10 — Governance** *(A12; Langston gaps 1 and 2)*
 Governance set = scope §7 **plus `DELETED_COMPONENTS_LOG.md` and its `_archive/deleted-code/` entry** (gap 1). Content edits: every A12 item — including **both** copies of the B-4.5 banner at `SYSTEM_MANUAL.md:504` and `:784`, the `#1010` banner folded into §5's body, `KRAKEN_FEE_SCHEDULE_REFERENCE.md:93` → implemented, `SYSTEM_IMPACT_MAP.md:3502-3504` rewritten from §A3, and a note at `SYSTEM_MANUAL.md:5262` pointing at `#1041`. Gap 2 is closed by A6.
@@ -223,9 +234,13 @@ Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P5'
 
 # PART D — REVIEWER RECORD
 
-`REVIEWER r1: claim-only · three absence claims (no fee-sign assumption on the booking path; the timing buffer has no writer; nothing uses decision_grade to decide) · no counter-state to the three claims as bounded; leads: trade-pnl.ts:73 docstring, CSV export throws rather than exporting empty, display index cost-model.ts:224, maxCostBound contract types.ts:25, VTS close lines · re-derived y (all at 56599ad6d) · changed: A4 rows added, A7 CSV wording, P5 docstring fix, #1041 wording`
+`REVIEWER r1a: claim-only · three absence claims (no fee-sign assumption on the booking path; the timing buffer has no writer; nothing uses decision_grade to decide) · no counter-state to the three claims as bounded; leads: trade-pnl.ts:73 docstring, CSV export throws rather than exporting empty, display index cost-model.ts:224, maxCostBound contract types.ts:25, VTS close lines · re-derived y (all at 56599ad6d) · changed: A4 rows added, A7 CSV wording, P5 docstring fix, #1041 wording`
 
-`REVIEWER r1: object · A8 direction + A9 bounds + the r1 SQL · HIT: shifting every xStock member by one bound does not bound xStock-led cycles (leader and challengers move by different unknown amounts); plus membership fee-dependence (:2207), R vintage (:774/:848), 'mid' assumption, ties to taker (:343), member completeness · re-derived y (per-cycle certain/possible re-run; zero-shift control 0; rank-0 row missing 0; short rows 0; all cited lines read at 56599ad6d) · changed: §0 row 9, A8 tie/floor/geometry wording, A9 rewritten, limits (ii)(iv)(v) added`
+`REVIEWER r1b: object · A8 direction + A9 bounds + the r1 SQL · HIT: shifting every xStock member by one bound does not bound xStock-led cycles; plus membership fee-dependence (:2207), R vintage (:774/:848), 'mid' assumption, ties to taker (:343), member completeness · re-derived y (per-cycle certain/possible re-run; zero-shift control 0; rank-0 row missing 0; short rows 0; cited lines read at 56599ad6d) · changed: §0 row 9, A8 wording, A9 rewritten, limits added`
+
+`REVIEWER r2: object · r1b's six called-out items at 4e7f584b5 · items 1, 3, 4, 5 satisfied; 2 recorded but a second membership channel unnamed (pair guard :1836-1840); 6 partly (no over-count / duplicate-rank / mode checks); NEW: exact ties settle by queue read order not rank ⇒ POSSIBLE must accept equality, and 4-dp storage needs a tolerance; null-snapshot members uncounted; the ranker-order check was not in the supplied query; §0 row 9 misattributed the population growth to the method · re-derived y (pair guard and queue order read at 4e7f584b5; r3 query with tolerance, >= and all completeness checks: counts unchanged at 162 / 339, all checks 0, two cycles with a 4-dp tie) · changed: §0 row 9 reason, A9 ties/rounding/completeness/query, limits (ii) and (iv), query committed`
+
+**Rounds: three reviews over two correction cycles.** The final round read the object at the ref. No finding in this document rests on a reviewer's clean.
 
 ---
 
@@ -233,6 +248,6 @@ Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P5'
 
 **What the audit found.** The fix is as scoped, and smaller in one place: nothing between the fee and the final profit number refuses or trims a negative fee, so Kraken's rebate flows through once the server's startup check stops rejecting it (one code comment claiming costs can't go negative gets corrected). The second fee reader is on a path that isn't running, and most of that file is dead code, so it gets tidied rather than rebuilt. Langston's worry about the go-live readiness check turned out to be a different problem: that check has had nothing to measure since June, so it can never pass whatever the fee is — filed separately.
 
-**What the wrong fee did.** Among the 1,513 ranking rounds where an xStock was a candidate, the correct fee would have changed the top pick in **at least 162 and at most 339 (11–22 %)**. The clearest part: in the 173 rounds a crypto pick led beside an xStock, the xStock would have taken the top spot in 150 to 165 of them. That is still the smallest the effect could be, because xStock candidates the wrong fee filtered out before they reached the pool can't be counted.
+**What the wrong fee did.** Among the 1,514 ranking rounds where an xStock was a candidate, the correct fee would have changed the top pick in **at least 162 and at most 339 (11–22 %)**. The clearest part: in the 173 rounds a crypto pick led beside an xStock, the xStock would have taken the top spot in 150 to 165 of them. That is still the smallest the effect could be, because xStock candidates the wrong fee filtered out before they reached the pool can't be counted.
 
 **The plan.** Set the two xStock rates, let the startup check accept a small rebate, point everything at one fee reader, delete the dead cost settings, mark the change date for xStock learning only, and fix the tests. Afterwards we expect xStock to choose resting orders less often than today's 25 % — and we will measure it.
