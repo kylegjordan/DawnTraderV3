@@ -307,4 +307,16 @@ CC-C owns the batches these windows judge, so CC-C does not self-certify them.
 
 ### 7.6 STATUS
 
-**Step 1 r5 — amendment for Langston's approval**, dispatched once the three-way consensus record closes. Board card: `Scope`, `Blocked on = Langston`.
+✅ **Step 1 r5 — APPROVED by Langston, 2026-09-11 15:02Z**, read at `078cb3c58`, with code facts re-derived at `6a866fb62`. He attached five conditions, all to be settled at Step 2:
+1. **D3 threshold.** It is derived from the measured distribution of aligned book-versus-ticker observations on healthy feeds. It **arms an alert only**; if it ever gates a refusal, it needs its own argument. 7e's controls stand, and its first fire is read before the number is trusted.
+2. **7b is a FIX, not a boundedness proof.** All three paths get fixed: `unsubscribeFromSymbols`, `clearAllSubscriptions` (its unconditional `.clear()`), and `refreshChannel`. The correct raw `book` unsubscribe already exists in the same file.
+3. **3b.l does not close as "answered by D7".** Run `git log -S` on the second cache's introducing commit. Then either quote the recorded decision, or mark the disposition `INFERRED-FROM-CODE`, with the reason recorded as Step 10 content.
+4. **Finding A — a THIRD midpoint producer.** The exit path's REST fallback computes `(ask+bid)/2` inline. It needs a census row, and 8a must name it.
+5. **Findings B, C and D.**
+   - **B, the limiter leg:** 7h's limiter must reach the **engine's** unlimited REST leg (the adapter's leg is the one already limited), before or in the same deploy as the `#951` label fix. Verification needs a positive control.
+   - **C, F-G-2's live shadow instrument (`fg2Shadow`):** it needs a §15 disposition, and so do the held commits `f36c8f496` and `f2cc6ee29`.
+   - **D, the smoother:** 8c states the smoother's disposition explicitly, and the MCE pass-through stays a required census row.
+
+**Housekeeping:** correct the drifted citations in `#971` in the same commit.
+
+**STEP: 2 of 11** (the pre-audit and plan addendum) · NEXT STEP: 3 of 11. Board card: `Pre-Audit`, `Blocked on = CC-C`.
