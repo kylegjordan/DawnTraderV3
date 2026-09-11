@@ -1424,12 +1424,20 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     // 8.9.4: Subscribe to BOTH ticker and book channels
     // - ticker: provides trade-based updates (fast for liquid pairs)
     // - book: provides BBO updates (continuous for illiquid pairs)
+    // B-PRICE-SIDE-BY-JOB r5 P-7a (decision D3; #1017): ask for the BEST-BID/OFFER trigger. Kraken's default
+    // ticker fires "on every trade", so on a quiet pair the price sat silent while the real quote moved; `bbo`
+    // fires "on a change in the best-bid-offer price levels". Measured, not assumed: production v2 ACCEPTED it on
+    // a live subscribe 2026-09-11 14:28Z (scripts/analysis/bbo_trigger_ack_probe.mjs). The xStock equities
+    // endpoint REJECTS the field, and that socket is a different adapter — this one is crypto v2 only.
+    // Step-8 condition (Langston): message rate + event-loop lag before/after at the live subscription count;
+    // revert = remove this one field.
     const tickerSubscribe = {
       method: 'subscribe',
       params: {
         channel: 'ticker',
         symbol: krakenSymbols,
-        snapshot: true
+        snapshot: true,
+        event_trigger: 'bbo'
       }
     };
     
