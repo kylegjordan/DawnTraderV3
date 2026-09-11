@@ -8570,6 +8570,8 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 **DISPOSITION — §9.4 disposition 2, added as an item** (Langston): refuse a `--by` outside the canonical actor set, derived rather than restated. The derivation must be stated in the tool, as `langston-size-watch` does for its own copy.
 
-> `HOME: B-WRITER-ACTOR-ALLOWLIST, owner Infra Claude, placed in PHASE_19_PLAN.md at 2.4c, after 2.4b (B-ALERT-QUEUE-INTEGRITY)` — that row already owns the integrity of append-only indexes.
+> `HOME: B-WRITER-ACTOR-ALLOWLIST, owner Infra Claude, placed in PHASE_19_PLAN.md at 2.4d, after 2.4b (B-ALERT-QUEUE-INTEGRITY)` — renumbered from 2.4c the same day, because Langston's `#1006` ruling already assigned 2.4c to `B-RTB-SIGNAL-IDENTITY` (CC-B) — that row already owns the integrity of append-only indexes.
+
+**AMENDMENT D (Langston, 19:06Z) — folded here:** the writer is `750 root:langston`, but the reader it imports to decide rollbacks (`/opt/langston-memory/bin/langston_memory.py`) is `langston:langston 755` in a langston-owned `bin`, so the verification code is writable by the account the writer's mode excludes. A disposition question, not a defect claim: the reader gets the same mode and a root-owned parent, or the batch states what the `750` buys.
 
 ⇔ `#987` · `#1004` · `B-LANGSTON-CONTEXT` P-6b.
