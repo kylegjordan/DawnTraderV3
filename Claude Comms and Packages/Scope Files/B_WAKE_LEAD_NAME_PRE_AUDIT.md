@@ -145,3 +145,25 @@ change-class: non_architecture
 A crew note asking for the re-arm went out at 16:50Z. A process watch reports each session as its watcher restarts. **The close will carry this table as measured then, not this snapshot.**
 
 **Step 7, still owed:** a REAL Langston reply to a session, ending in another owner's marker, producing a tagged `WAKE` line on a re-armed watcher.
+
+## 8. STEP 7 — FIRST-PASS VERIFICATION *(2026-09-11)*
+
+**THE LIVE WAKE, ON THE RUNNING PROCESS, NOT THE FILE.** My watcher, re-armed at 16:51:28Z on the installed filter, emitted this at Langston's 16:53:15Z reply (message `1548013557478854707`, replying to my Step 6 dispatch `1548011341514674197`):
+```
+WAKE[LANGSTON->CC-INFRA] [alert routed to CC-B]: Infra Claude — Verified. Ruling below. …
+```
+- **Why the object discriminates.** The reply opens *"Infra Claude —"* and ends with two markers: `owner=CC-C` (alert `5dc326dd`), then `owner=CC-B` (alert `a3610acf`). The last one names CC-B.
+- **Under the pre-install filter,** `:366-367` would have hit `continue` on that last marker, so this reply is exactly the class that was silently dropped.
+- **Under the installed filter** it woke me, and the tag names the LAST owner, as P-1 step (1) specifies.
+- **UI surface:** none. This is a laptop tool, so a Claude-in-Chrome staging check has no object here; the wake line is the surface, stated, not skipped.
+
+**CONDITION 1 — per session, from the watcher processes (`Win32_Process` start time vs the 16:49:09Z install):**
+
+| session | watcher start (UTC) | status |
+|---|---|---|
+| CC-INFRA | 16:51:28 | ✅ **VERIFIED** — a probe returned, and the live tagged wake above |
+| CC-C | 16:52:52 | ✅ **VERIFIED re-armed on the new file** (process evidence) — no live tagged wake observed for CC-C yet |
+| CC-B | 16:55:28 | ✅ **VERIFIED re-armed on the new file** (process evidence; the pre-install process was 14:53:48) — no live tagged wake observed for CC-B yet |
+| CC-A | — | ⚠️ **NO WATCHER PROCESS** — cannot be woken by anything until it re-arms |
+
+**No session's silence is read as the fix working for it.** A process watch keeps reporting re-arms; the close carries the table as measured then.
