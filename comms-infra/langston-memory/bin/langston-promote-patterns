@@ -321,7 +321,9 @@ def main():
     fd, ppath = tempfile.mkstemp(prefix="langston-promote-", suffix=".md", dir="/tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(PROMPT)
-    os.chmod(ppath, 0o644)
+    # ⛔ LEFT AT mkstemp's 0600 — NOT widened to 0644 (B-LANGSTON-CONTEXT §20.6 3(c), Langston-approved
+    #    2026-09-11). Root opens this path and passes the descriptor as stdin; langston never
+    #    opens it, so a wider mode only made the prompt readable by every account on the box.
 
     # ⛔ Token never in argv — /proc has no hidepid on this box.
     # ⚠️ Tools are ON here, unlike the load canary: he has to READ his own store.

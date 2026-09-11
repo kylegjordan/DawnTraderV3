@@ -26,6 +26,7 @@
    token count so the spend is readable; nothing is throttled.
 """
 
+import tempfile
 import asyncio, json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 
@@ -188,10 +189,11 @@ def invoke(message_text, why, history):
         + "--- recent context (oldest first) ---" + NL + history + NL + NL
         + "--- the message that woke you ---" + NL + message_text + NL
     )
-    p = "/tmp/coltrane-prompt-%d.md" % int(time.time() * 1000)
-    with open(p, "w", encoding="utf-8") as fh:
+    # ⛔ 0600 + unpredictable name, never a fixed-shape path chmod-ed 644: root opens it and
+    #    passes it as stdin, so no other account needs to read it (B-LANGSTON-CONTEXT §20.6, 3(c)).
+    fd, p = tempfile.mkstemp(prefix="coltrane-prompt-", suffix=".md")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(prompt)
-    os.chmod(p, 0o644)
     try:
         with open(p, encoding="utf-8") as fh:
             r = subprocess.run(

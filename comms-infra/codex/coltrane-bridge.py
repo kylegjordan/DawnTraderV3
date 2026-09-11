@@ -33,6 +33,7 @@ the crew channel, and post its reply back.
    expected, the answer must be readable rather than reconstructed from a bill.
 """
 
+import tempfile
 import json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 
@@ -140,10 +141,11 @@ def invoke(message, why):
         + recent_context() + NL + NL
         + "--- the message that woke you ---" + NL + message + NL
     )
-    ppath = "/tmp/coltrane-prompt-%d.md" % int(time.time() * 1000)
-    with open(ppath, "w", encoding="utf-8") as fh:
+    # ⛔ 0600 + unpredictable name, never a fixed-shape path chmod-ed 644: root opens it and
+    #    passes it as stdin, so no other account needs to read it (B-LANGSTON-CONTEXT §20.6, 3(c)).
+    fd, ppath = tempfile.mkstemp(prefix="coltrane-prompt-", suffix=".md")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(prompt)
-    os.chmod(ppath, 0o644)
     try:
         with open(ppath, encoding="utf-8") as stdin_fh:
             p = subprocess.run(
