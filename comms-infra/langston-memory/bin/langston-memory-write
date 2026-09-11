@@ -54,7 +54,8 @@ import datetime, fcntl, hashlib, importlib.util, json, os, pwd, re, subprocess, 
 sys.dont_write_bytecode = True   # a root run must not leave a root-owned __pycache__ beside a langston-owned reader
 
 OWNER = "langston"
-LANGSTON_HOME = os.environ.get("LANGSTON_HOME", "/home/langston")
+LIVE_HOME = "/home/langston"
+LANGSTON_HOME = os.environ.get("LANGSTON_HOME", LIVE_HOME)
 TARGET = os.path.join(LANGSTON_HOME, "MEMORY.md")
 ARCHIVE_DIR = os.path.join(LANGSTON_HOME, ".memory-archive")
 ARCHIVE_INDEX = os.path.join(ARCHIVE_DIR, "index.jsonl")
@@ -307,6 +308,13 @@ def size_line(n):
     return "size %d B - %s the %d B cap by %d B" % (n, "OVER" if over > 0 else "under", STATED_CAP, abs(over))
 
 
+def corrupt_switch_armed(home):
+    """⛔ CONDITION 1 (Langston, 19:23Z): LMW_TEST_CORRUPT_RESTORE writes deliberately WRONG bytes into the target. Unlike
+    LMW_TEST_HOLD_AFTER_LOCK, which only delays, it must be incapable of reaching the live file BY CONSTRUCTION - not
+    merely because nobody sets it. Honoured only when the home is not the live one (symlinks resolved)."""
+    return bool(os.environ.get("LMW_TEST_CORRUPT_RESTORE")) and os.path.realpath(home) != os.path.realpath(LIVE_HOME)
+
+
 def run(argv, stdin_bytes):
     opts = parse_args(argv)
     owner_uid = pwd.getpwnam(OWNER).pw_uid
@@ -383,7 +391,7 @@ def run(argv, stdin_bytes):
                 raise Refused(5, "REFUSED (rule 4): " + "; ".join(problems) + " - previous content restored")
         except BaseException as e:
             try:
-                corrupt = b"#corrupted-by-self-test" if os.environ.get("LMW_TEST_CORRUPT_RESTORE") else b""   # self-test only
+                corrupt = b"#corrupted-by-self-test" if corrupt_switch_armed(LANGSTON_HOME) else b""   # self-test only, never live
                 replace_target(old + corrupt, st)
                 with open(TARGET, "rb") as fh:
                     restored_ok = sha(fh.read()) == old_sha
@@ -521,6 +529,17 @@ def self_test():
                        extra_env={"LMW_TEST_CORRUPT_RESTORE": "1"})
         check("AMENDMENT E: the same refusal with an INEXACT rollback -> exit 6, not 5", rc, 6)
         check("  ...and it says the rollback was not byte-for-byte, with the archive path", "did NOT restore" in out and ".memory-archive" in out, True)
+        prev_switch = os.environ.get("LMW_TEST_CORRUPT_RESTORE")
+        os.environ["LMW_TEST_CORRUPT_RESTORE"] = "1"
+        try:
+            live_armed, temp_armed = corrupt_switch_armed(LIVE_HOME), corrupt_switch_armed(top)
+        finally:
+            if prev_switch is None:
+                os.environ.pop("LMW_TEST_CORRUPT_RESTORE", None)
+            else:
+                os.environ["LMW_TEST_CORRUPT_RESTORE"] = prev_switch
+        check("CONDITION 1: the corrupting switch is INERT under the live home, even with it set", live_armed, False)
+        check("  ...and armed under the self-test's own home, so the exit-6 case above really ran it", temp_armed, True)
         reset()
         b0, s0 = current()
         rc, out = call(appendargs(s0), "- one entry" + NL + "- a stray second column-0 bullet" + NL)
