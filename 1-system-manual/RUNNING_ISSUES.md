@@ -8538,3 +8538,24 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 > `HOME: B-OBS-WINDOW-EVIDENCE-CAPTURE, owner CC-C, placed in PHASE_19_PLAN.md at 3b.f-d, after 3b.f-c`
 
 ⇔ `#943` (the window it cost) · `B_XSTOCK_FEED_SANITY_COMPLETION_REPORT.md` §4d, §4k.
+
+### #1045 OPEN 2026-09-11 (CC-B; found by a fresh reviewer on `B-XSTOCK-FEE-CONTRACT`, routed to CC-C by Langston at Step 4) — ⛔ **`updated_by` IS A LAST-WRITER-WINS SINGLE SLOT, AND ROLLBACKS USE IT AS AN OWNERSHIP MARKER — SO ANY LATER WRITE TO THE ROW SILENTLY DISARMS THE ROLLBACK**
+
+**THE CLASS (Langston's framing at Step 4):** `module_constants.updated_by` holds one value, and every write replaces it. A rollback that deletes a row only `WHERE updated_by = '<my batch>'` assumes no later batch will ever write that row. When a later batch does, the rollback matches 0 rows. Nothing reports that, because no rollback checks its own row count.
+
+**THE INSTANCE — `2026-09-03-b-xstock-feed-sanity-rollback.sql:14-16`** (CC-C's file):
+- **What it does:** it deletes the xStock `paper_sim` calibration-epoch row only `WHERE updated_by = 'b-xstock-feed-sanity'`. Its forward migration inserted that row (`2026-09-03-b-xstock-feed-sanity.sql:58`).
+- **What changes it:** `B-XSTOCK-FEE-CONTRACT`'s migration bumps that same row and rewrites `updated_by`.
+- **The result:** once that batch deploys, this rollback deletes nothing, and it has no post-check to notice.
+- **Why the delete is a problem even when it works:** it would step xStock `paper_sim` BACK from its class-scoped epoch to the wildcard epoch. That re-joins pre-change and post-change learning, which is the blend the epoch exists to prevent (`calibration-epoch.ts` header). So the silent no-op is currently the *safer* failure — but it is still silent.
+
+**A SECOND WRITTEN INSTRUCTION OF THE SAME KIND — `2026-06-10-item4-step2-calibration-epoch.sql`:** its header documents the rollback as `DELETE … WHERE module_name = 'calibration_epoch'`. That would delete every epoch row. It is inert today, since it is a comment and not an executable file, but a future operator following it would wipe the epoch lineage. *(Re-derived at the ref — see the commit that files this entry.)*
+
+**CENSUS (Langston, re-derived by CC-B at the ref):** of the rollback files that touch `calibration_epoch`, feed-sanity's is the only one that DELETEs an epoch row. `B-XSTOCK-FEE-CONTRACT`'s own rollback bumps epochs forward and deletes none.
+
+**RECOMMENDATION (CC-B; the design call is CC-C's):**
+- **(a)** That rollback should not delete an epoch row at all, because epochs only step forward.
+- **(b)** The item4 header's rollback instruction should say the same.
+- **(c)** Wherever a rollback must still key on ownership, it should check its own row count rather than trust `updated_by`.
+
+**HOME:** routed to **CC-C**, owner of the artifact, on 2026-09-11, with the instance and the class. ⚠️ **This is a routing, not yet a placed home: CC-C places it in `PHASE_19_PLAN` and writes that placement here.**

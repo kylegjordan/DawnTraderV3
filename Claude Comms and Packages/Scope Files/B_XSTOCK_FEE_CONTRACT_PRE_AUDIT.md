@@ -3,7 +3,7 @@
 **Batch:** `B-XSTOCK-FEE-CONTRACT` (`#1010`, `PHASE_19_PLAN` row 2.4-FEE) · **change-class: architecture** (Langston, stands) · **Owner:** CC-B
 **Audited at:** `origin/migration/aws-supabase` `18a8b29b6`; reviewer re-derivations at `56599ad6d`, `4e7f584b5` and `9ceaf73e1` (no code under audit changed between them) · staging DB + logs read 2026-09-11 15:00–16:10Z
 **Inputs:** scope r1.1 `c891de65a` · Langston Step-1 APPROVAL with five rulings, F-1..F-5 and two gaps (2026-09-11) · Langston addendum 15:03Z (`dt-deploy` has no rollback verb; the forward-deploy window)
-**Revision:** r6 — Langston's P8 ruling (16:39Z) folded: per-pick classification is the gate, PASS line 1.0 %. r5 — Langston's Step-2 APPROVAL rulings folded (P3 rider, P4 + `#1042`, P8 three-arm pre-registration). r4 — three fresh object-round reviews folded (§D). The OBJ-9 query is committed at `scripts/analysis/b_xstock_fee_contract_obj9_rerank.sql`, **pinned to a cutoff of 2026-09-11 16:00Z** so a re-run reproduces every A9 number.
+**Revision:** r7 — Langston's Step-4 conditions folded (2026-09-11 17:50Z): A, the class-(iii) discharge rule with three buckets; B, an admission arm at the xStock EV gate; C and two notes carried to the completion report. r6 — Langston's P8 ruling (16:39Z) folded: per-pick classification is the gate, PASS line 1.0 %. r5 — Langston's Step-2 APPROVAL rulings folded (P3 rider, P4 + `#1042`, P8 three-arm pre-registration). r4 — three fresh object-round reviews folded (§D). The OBJ-9 query is committed at `scripts/analysis/b_xstock_fee_contract_obj9_rerank.sql`, **pinned to a cutoff of 2026-09-11 16:00Z** so a re-run reproduces every A9 number.
 
 ---
 
@@ -228,7 +228,13 @@ The unjoinable rows are not a hidden maker cluster: 72 / 285 = 25.3 % maker, aga
 - **(i) UNJOINABLE** — no pairing within ±600 s, **or `hard_floor_fired = true`** (a path with 0 observations in 1,704, outside the prediction). Published, and excluded from the numerator.
 - **(ii) JOINABLE, r > 1 at its own entry** — a legitimate deep-negative-taker survivor. The mechanism worked.
 - **(iii) JOINABLE, r ≤ 1** — **MECHANISM BYPASS: the corrected fee did not reach that decision. Any class-(iii) row is itself a finding, whatever the aggregate does.**
-- ⚠️ **Honest limit, for Step 4:** a genuine survivor whose post-fix margin is thin (≤ 0.0084 · E) also lands in (iii). Where that decision opened a position, its booked `entry_fee_rate` shows which rate reached it, and the row is published with that evidence either way.
+- ⚠️ **Honest limit, and Langston's Step-4 condition A on it:** a genuine survivor whose post-fix margin is thin (≤ 0.0084 · E) also lands in (iii).
+  - **Class (iii) still COUNTS and still fails PASS.**
+  - **A booked `entry_fee_rate` may DISCHARGE a (iii) row only when it reads the NEW xStock rate.** Every discharge is published as its **own labelled line, with its n** — never folded into the zero-class-(iii) count.
+  - **Every (iii) row is published in exactly ONE of three buckets:**
+    - **booked-new** — a position opened and booked 0.0010 / −0.0002: a discharge candidate.
+    - **booked-old** — a position opened and booked the old rate: a confirmed bypass.
+    - **no position, so no evidence** — the decision opened nothing. The row stays class (iii) with no discharge, because an absent value must not stand in for a measured one (`#546`).
 
 **Verdict at n ≥ 300 post-deploy decisions:**
 - **PASS** = **zero class-(iii) rows AND maker share ≤ 1.0 %** (≤ 3 of 300). Langston's derivation: unjoinable 1 % × 25.3 % ≈ 0.25 %, plus rule-of-three on 0 / 344 non-flippers ≈ 0.22 % ⇒ ≈ 0.5 %, doubled. Not F-G-1's absolute zero, because class (ii) is correct behaviour.
@@ -239,6 +245,39 @@ The unjoinable rows are not a hidden maker cluster: 72 / 285 = 25.3 % maker, aga
 **⏳ Time budget — stated so nobody reads the window as short:** post-`f8870022f` decisions arrive at **~14.5 / day** (100 in the 6.9 days since that deploy), so **n ≥ 300 is ~21 days after the fee deploy.**
 
 **Context only, never a comparator:** the whole-window 24.8 % and its 300-row blocks (25.7 → 31.3 → 27.3 → 22.3 → 22.3 → 17.2 %) — a drifting series (Langston's case (b)).
+
+**ARM B — ADMISSION AT THE xSTOCK EV GATE** *(Langston's Step-4 condition B, 2026-09-11 17:50Z; pre-registered before deploy; no code)*
+
+**Why it exists:**
+- **The fee change flows into friction in full.** `computeTotalRoundTripCost = 2·fee + 2·slip + spread`, and the fee sits under the 0.02 per-component `maxCostBound`, so nothing caps the change. xStock round-trip friction falls **160 bp → 20 bp**: a 140 bp loosening of the admission gate on every xStock signal.
+- **The maker/taker prediction above watches only the maker/taker split.** Without this arm, *the overcharge is fixed* and *the gate is now too loose* are indistinguishable at Step 8.
+
+**Object:** `signal_eval_archive`, `asset_class = 'xstock_spot'`, split at the deploy instant.
+- **B1, VTS — a RATE.**
+  - **Definition:** admitted = `gate_decision->>'gate' = 'net_ev_floor' AND reject_stage = 'admitted'`, over all rows with `gate_decision->>'gate' = 'net_ev_floor'`. Written at `eval-cycle.ts:874` (reject) and `:1107` (admit), and at `vts-runner.ts:5201`.
+  - **Measured 2026-09-11 ~18:15Z, trailing 7 days:** 112 admitted / 54,442 at the gate = **0.21 %**. Per trading day: 15–39 admitted against 5,370–13,758 rejected. 09-05 and 09-06 (the weekend) are absent; 09-07 is a partial Sunday.
+- **B2, paper mode — a COUNT, never a rate.** xStock `paper_sim` rows with `reject_stage = 'admitted'`: **121 in the same 7 days**.
+  - ⚠️ **Instrument limit, stated:** the same window holds **one** xStock paper `sqe` reject row (`pair_exclusivity`) and **zero** paper EV-gate reject rows.
+  - So this archive has no xStock paper denominator: B2 is a volume, and must never be reported as an admission rate.
+- **Frozen at the deploy instant, in the Step-6 deploy note, before any post row is read:**
+  - B1's numerator, denominator and rate over the 5 xStock trading days before the deploy;
+  - B2's count per trading day over the same days.
+- **Reported at the P8 read, beside the maker/taker verdict:**
+  - post / pre for B1 (the rate, with both n) and for B2 (per trading day);
+  - over xStock trading days only (24/5, with US market holidays excluded — `CLAUDE.md` rule 17).
+- **What it can and cannot decide:**
+  - It SIZES the loosening. It does not by itself say whether the looser gate is right.
+  - That judgement needs the post-deploy admitted population's realized net outcome, which starts from an empty corpus (condition C below).
+  - **No PASS/FAIL line is set for Arm B.** A rise is the expected direction, and its size is the finding.
+- **VOID / split:** as for the maker/taker prediction — `B-PRICE-SIDE-BY-JOB` (row 3n) deploying inside the window splits it at that sha.
+
+**CARRIED TO THE COMPLETION REPORT (Step 11), in plain language for Kyle:**
+- **Condition C (Langston):** the epoch bump resets every xStock learning aggregate (the Welford reset on mismatch, `outcome-feedback-store.ts:358`).
+  - xStock restarts from an empty outcome corpus **and** on a materially looser gate (Arm B), at the same moment.
+  - Both are correct. Together they compound `#648` / `#596`, and the ~21-day P8 window is also the corpus-rebuild window.
+- **Note (Langston):** the rollback's five `cost_model` literals are a **2026-09-11 staging snapshot**, restored with no pre-image assertion. Zero readers make a wrong restore inert.
+- **Note (Langston), done in code:** `server/startup/fee-model-rail.ts` now states why a taker fee must be strictly positive.
+- **A9 limits (i) and (ii), verbatim** (already required).
 
 **P9 — OBJ-9 is delivered by this document** *(A9; ruling 4)*
 Numbers, method, pinned query and limits are in A9; they go into the completion report and to Kyle in plain language, with the r1 → r4 correction stated (§0 row 9). No deploy item.
@@ -280,6 +319,8 @@ Step 3 lands P2, P3, then P1/P4/P6 (one migration + one rollback file), then P5'
 `LANGSTON Step 2: APPROVED 2026-09-11 16:14Z at 8ae6e98b0 · rulings: (1) delete the four methods now, and drop estimateVolatility's unused symbol · (2) keep decision_grade true, and file the label as a finding (→ #1042) · (3) replace P8 with a three-arm matched-baseline pre-registration with VOID conditions (→ P8, r5) · placements and #1041 accepted · limits (i) and (ii) go into the completion report verbatim, not paraphrased`
 
 `LANGSTON P8 ruling 2026-09-11 16:39Z (re-derived on staging by him ~17:0xZ, and the lag / margin / unjoinable / rate figures again by CC-B at 16:45Z): PASS = zero class-(iii) bypasses AND share ≤ 1.0 % at n ≥ 300 · the join is justified by lag direction, not uniqueness · 0.0084 named as the operative differential with its lines · the ~21-day budget stated · P3 census corrections: estimateVolatility name collision (quality_index.ts:207 is live), and modelSlippage had two callers before the deletion → folded as r6`
+
+`LANGSTON Step 4: APPROVED 2026-09-11 17:50Z at eb5b7831d, with three conditions and one instrument gap · re-derived by him: the staging pre-image (15 rows), D-6 at db-migrate.ts:65-66 and :187-194, cost_model's zero readers, the signed-fee consumer claim (142 Math.max(0, sites, none bearing on a fee), all six forward/rollback states · judgement 1: keep · judgement 2: refuse-only, no override · judgement 3: preserves the gate, given its wording → condition A · condition B: an admission arm at the xStock EV gate (the instrument gap) · condition C: tell Kyle the reset and the looser gate coincide · NF3: route to CC-C, fold nothing (filed #1045) · folded as r7.`
 
 ---
 

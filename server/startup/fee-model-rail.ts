@@ -19,6 +19,11 @@ export function feeRailViolation(assetClass: string, constant: FeeConstant, v: n
   if (!Number.isFinite(v)) {
     return `[B45][warmup] fee_model.${constant} for '${assetClass}' = ${v} is not a finite number — refusing to start.`;
   }
+  // A taker fee must be STRICTLY positive. The row being absent is already caught upstream —
+  // getCachedNumberRequired throws on a missing row — so `> 0` refuses only a deliberately written zero.
+  // That refusal is intended: a zero taker fee is not on any schedule we trade today. If a venue schedule ever
+  // puts a taker fee at exactly 0, the batch that writes that zero must widen this rail in the same change
+  // (Langston, B-XSTOCK-FEE-CONTRACT Step-4 note, 2026-09-11).
   if (constant === 'spot_taker_fee') {
     return v > 0 && v <= FEE_RAIL_MAX
       ? null

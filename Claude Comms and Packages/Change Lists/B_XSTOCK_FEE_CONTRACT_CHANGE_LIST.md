@@ -206,3 +206,17 @@ Every other Tier-1/Tier-2 edit named in the plan's P10 lands at Step 10.
 **⚠️ ROUND CAP REACHED.** Three fresh object-round reviewers read this diff. Round 3's corrections (the fee-changed flag, the rollback guard, the scoping, `ON_ERROR_STOP`) **have had no fresh reviewer**, by the workflow's three-round cap; Langston is their first reader. The full round record is above.
 
 **NF3 — FINDING IN ANOTHER BATCH'S FILE (not edited here).** `2026-09-03-b-xstock-feed-sanity-rollback.sql:14-16` deletes the xStock `paper_sim` epoch row only where `updated_by = 'b-xstock-feed-sanity'`. Its forward migration inserted that row (`:58`). Once this migration bumps the row and rewrites `updated_by`, that rollback silently deletes nothing, and it has no post-check. Deleting the row would in any case step xStock `paper_sim` BACK to the wildcard epoch, the blend the epoch exists to prevent. **Recommendation:** that rollback should not delete an epoch row at all. Owner: CC-C. **DISPOSITION: put to Langston at Step 4** — fold a one-line removal and comment into this batch, or route it to CC-C.
+
+## 8. STEP 4 — LANGSTON'S VERDICT AND WHERE EACH CONDITION WENT
+
+`LANGSTON Step 4: APPROVED 2026-09-11 17:50Z at eb5b7831d, with three conditions and one instrument gap · re-derived by him: the staging pre-image (15 rows; S1's 6/3/none real), D-6 at db-migrate.ts:65-66 and :187-194 (the file runs before the ledger INSERT, so a RAISE leaves no row), cost_model's zero readers, the signed-fee consumer claim (142 Math.max(0, sites in server/, none bearing on a fee), all six forward/rollback states (round 3's fee-changed flag also makes a crash-window re-run inert) · judgement 1: keep · judgement 2: refuse-only, no override · judgement 3: preserves the gate, given its wording → condition A · NF3: route to CC-C, fold nothing.`
+
+| item | disposition |
+|---|---|
+| **A** — a booked `entry_fee_rate` discharges a class-(iii) row only when it reads the new rate; the discharge is its own labelled line with its n; three buckets | **folded** — pre-audit r7, P8 |
+| **B** — an admission arm at the xStock EV gate, split at the deploy | **folded** — pre-audit r7, P8 Arm B: a VTS rate from `signal_eval_archive` (112 / 54,442 = 0.21 % over the trailing 7 days) and a paper count (121; no paper denominator exists in that archive, stated). Baselines frozen in the Step-6 deploy note |
+| **C** — the xStock learning reset and the looser gate coincide; say so plainly | **carried** to the completion report (pre-audit r7 carry block) |
+| note — the rollback's `cost_model` literals are a 2026-09-11 snapshot | **carried** to the completion report |
+| note — why the taker rail is `> 0` | **done** — comment in `server/startup/fee-model-rail.ts` |
+| **NF3** — the feed-sanity rollback, and the `updated_by`-as-owner class | **routed** to CC-C as `#1045`, with the instance, the class and the item4 header (`2026-06-10-item4-step2-calibration-epoch.sql:12`). Census re-derived at the ref: 2 of 89 rollback files touch `calibration_epoch`; only feed-sanity's deletes an epoch row. Not folded |
+| **`#1043`** — raw GitHub reads can serve the wrong file | **no raw read is cited on this batch**; every read here is `git show` / `git grep` at the ref, or staging `psql` |
