@@ -268,6 +268,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   // silently suppress opens for that symbol -- it fails CLOSED, so no bad fills, but it is the
   // kind of quiet suppression noticed weeks later.
   private bookDepth = new Map<string, number>();
+  /**
+   * B-PRICE-SIDE-BY-JOB r5 P-7b (Langston Step-4 BLOCKER-1): what each unsubscribe ASKED FOR, keyed by the `req_id`
+   * sent with it, so a rejection can be logged with the channel, symbols and depth WE named — whether or not Kraken's
+   * error reply echoes them. An entry leaves on its reply; entries older than 60 s are swept when a new one is added.
+   */
+  private pendingUnsubscribes = new Map<number, { channel: 'ticker' | 'book'; symbols: string[]; depth: number | null; sentAtMs: number }>();
+  private nextUnsubscribeReqId = 1;
   private bookChecksumMismatches = new Map<string, number>();
   private bookChecksumMatches = new Map<string, number>();
   // #507 remainder: per-symbol price/qty precision from the v2 `instrument` channel. Kraken's
@@ -744,8 +751,17 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         console.error(`[8.9.0-B][WS] Sub Error: ${error}`);
       }
     } else if (method === 'unsubscribe') {
+      // B-PRICE-SIDE-BY-JOB r5 P-7b (Langston Step-4 BLOCKER-1): find the REQUEST this reply answers, so what we asked
+      // for is logged whether or not Kraken echoes it.
+      const reqId = typeof message.req_id === 'number' ? message.req_id : null;
+      const asked = reqId !== null ? this.pendingUnsubscribes.get(reqId) : undefined;
+      if (reqId !== null) this.pendingUnsubscribes.delete(reqId);
       if (success && result) {
-        console.log(`[8.9.0-B][WS] Unsub OK: ${result.symbol}`);
+        console.log(`[8.9.0-B][WS] Unsub OK: ${result.symbol} channel=${result.channel ?? asked?.channel ?? '?'} depth=${result.depth ?? asked?.depth ?? '-'}`);
+      } else {
+        // A REJECTED unsubscribe used to be discarded here with no trace, so a wrong book depth left exactly the same
+        // log as a correct one. Logged loudly, with what we asked and what Kraken said, so Step 8 has an instrument.
+        console.error(`[P-7b][WS_UNSUB_REJECTED] req_id=${reqId ?? '-'} channel=${asked?.channel ?? result?.channel ?? '?'} symbols=${JSON.stringify(asked?.symbols ?? message.symbol ?? result?.symbol ?? null)} depth=${asked?.depth ?? result?.depth ?? '-'} error=${error ?? 'none'}`);
       }
     } else if (method === 'pong') {
       this.lastPongTime = Date.now();
@@ -1553,13 +1569,14 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       return;
     }
     
-    // 8.9.0-B: v2 unsubscribe format
+    // 8.9.0-B: v2 unsubscribe format. B-PRICE-SIDE-BY-JOB r5 P-7b: tagged with a req_id so a rejection is attributable.
     const unsubscribeMessage = {
       method: 'unsubscribe',
       params: {
         channel: 'ticker',
         symbol: krakenSymbols
-      }
+      },
+      req_id: this.trackUnsubscribe('ticker', krakenSymbols, null),
     };
     
     try {
@@ -1569,11 +1586,14 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // clearAllSubscriptions and refreshChannel (both route through here) left book streams live at
       // Kraken, and refreshChannel stacked a new book subscription on top of the old one. The raw book
       // unsubscribe softResubscribe carried (8.9.5) now lives here, once, for every caller.
-      this.sendBookUnsubscribe(symbols);
       symbols.forEach(s => {
         this.subscribedSymbols.delete(s);
         this.pendingSubscriptions.delete(s);
       });
+      // (Langston Step-4 finding, 2026-09-11) The book send runs AFTER the local cleanup: Kraken has already been told to
+      // drop the ticker, so a throw in the book send must not leave us believing we are still subscribed. The send reads
+      // only `bookDepth` and the symbol map, and the cleanup above touches neither.
+      this.sendBookUnsubscribe(symbols);
       // Phase 8.8.3-I6-FIX: Enhanced diagnostic log after unsubscription
       console.log('[8.8.3-I6-FIX][WS_UNSUB_SENT]', {
         unsubscribedSymbols: krakenSymbols,
@@ -1604,8 +1624,19 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       byDepth.set(depth, group);
     }
     for (const [depth, symbol] of byDepth) {
-      this.ws?.send(JSON.stringify({ method: 'unsubscribe', params: { channel: 'book', symbol, depth } }));
+      this.ws?.send(JSON.stringify({ method: 'unsubscribe', params: { channel: 'book', symbol, depth }, req_id: this.trackUnsubscribe('book', symbol, depth) }));
     }
+  }
+
+  /** B-PRICE-SIDE-BY-JOB r5 P-7b: register an outgoing unsubscribe and return its req_id; stale entries are swept first. */
+  private trackUnsubscribe(channel: 'ticker' | 'book', symbols: string[], depth: number | null): number {
+    const now = Date.now();
+    for (const [id, p] of this.pendingUnsubscribes) {
+      if (now - p.sentAtMs > 60_000) this.pendingUnsubscribes.delete(id);
+    }
+    const reqId = this.nextUnsubscribeReqId++;
+    this.pendingUnsubscribes.set(reqId, { channel, symbols: [...symbols], depth, sentAtMs: now });
+    return reqId;
   }
 
   private normalToKrakenSymbol(symbol: string): string | null {
@@ -3604,6 +3635,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   async softResubscribe(symbol: string): Promise<void> {
     console.log(`[8.9.5][SOFT_RESUB] Starting soft resubscribe for ${symbol}`);
     
+    // B-PRICE-SIDE-BY-JOB r5 P-7b (Langston Step-4): `bookDepth` is DELIBERATELY NOT cleared below. The unsubscribe this
+    // method sends reads the GRANTED depth from it, and the unsubscribe must name the depth the subscription holds —
+    // clearing it first would send the default 10 to a 25-deep stream. The ordering is load-bearing; test 8 in
+    // b-price-side-p7b-book-unsubscribe.test.ts pins it.
     // Clear ALL per-symbol state to ensure clean resync
     this.orderBooks.delete(symbol);
     this.bookRaw.delete(symbol); // #507: the raw mirror must go with it

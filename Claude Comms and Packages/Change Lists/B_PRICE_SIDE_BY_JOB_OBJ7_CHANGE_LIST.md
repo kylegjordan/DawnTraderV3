@@ -61,6 +61,7 @@ priceCache.setReasonMembers(
 Membership is the UNION of reasons; `subscribe()` keeps working as the legacy reason; releasing one owner never drops another's symbol.
 **Proof:** 6 tests (1-5 structural, 6 the engine fence), 6/6 failed pre-fix; related 85/85; the three baseline engine tsc errors shifted +25 lines.
 **Scope limit:** refreshes the UNIFIED cache (signal birth, state sync, display). **The exit path reads the live-pricing adapter's own cache, so exit freshness is unchanged.** The RTB `readyToBuy` reason is still one-way.
+**Residuals stated at your chunk-1 read:** (i) `unsubscribe()` no longer force-evicts, so no owner-independent eviction path exists; (ii) `asset_class` is `notNull().default('crypto_spot')` (`shared/schema.ts:1945`), so the `?? 'crypto_spot'` fires only for a storage projection that omits the column, which the cast would hide. **Step 8:** the health line's `open=` equals the CRYPTO open count, not the total.
 **Attack:** reconcile-by-owner per tick instead of a subscribe/unsubscribe pair at seven delete sites.
 
 ---
@@ -141,6 +142,23 @@ const _lastTradeReceivedAtMs = lastTradePrice !== null ? now : (_prevRow?.lastTr
 - **P-8b** must detect a new trade (above).
 - **The skew between Kraken's clock and ours** must be measured before a decision site uses the venue clock.
 - **D6's knife-edge note** (above).
+
+## STEP 4 r2 — CHUNK 1: YOUR VERDICT AND WHERE EACH ITEM LANDED
+
+| item | fix | where |
+|---|---|---|
+| **BLOCKER-1** — a rejected unsubscribe was silently discarded | every unsubscribe carries a `req_id`; the reply is matched to what we asked; a rejection logs `[P-7b][WS_UNSUB_REJECTED]` with channel, symbols, depth and error; `Unsub OK` now prints channel and depth | `kraken-websocket-adapter.ts` `handleV2SystemMessage`, `trackUnsubscribe`, both unsubscribe sends |
+| **BLOCKER-2** — OBJ-7's deploy splits F-G-2's crypto window under A4 | recorded in F-G-2 §4a as the fourth event; the split sha is written there at Step 6 before the restart | `F_G_2_PROGRESS_REPORT.md` §4a; Step 6 prep |
+| P-7b: pin the `softResubscribe` ordering | comment at the clear block, plus a test that the unsubscribe carries the granted depth | adapter; test 8 |
+| P-7b: a mixed-depth test | two symbols at 10 and 25 → two messages, partitioned by depth | test 7 |
+| P-7b finding: cleanup before the book send | the send moved below the local cleanup | adapter; test 10 |
+| P-7c (a): `venue_close` read as live | `isLiveObservationBasis` replaced by `isLiveTouchBasis` over a total `LIVE_TOUCH_BY_BASIS` | `price-basis.ts` |
+| P-7c (b): the header's false kind invariant | reworded: the suffix states the kind where present; `kraken_rest_poller` is not split | `price-basis.ts` header |
+| P-7c (c): D3 enumerates four bases | D3 amended with the four added values and the `ticker_bbo` era-boundary slot | `PRICING_DECISIONS_2026-09-11.md` D3 |
+| P-7g residuals and the Step-8 check | stated under P-7g above | this file |
+| chunk-2 carry: two REST governors | stated in the chunk-2 dispatch | — |
+
+Also recorded from your F-G-2 closing read: §0b in `F_G_2_PROGRESS_REPORT.md`, and the window-sizing item placed on P-8a.
 
 ## THE ASK — one gate per dispatch
 

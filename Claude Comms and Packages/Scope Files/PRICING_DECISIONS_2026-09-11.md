@@ -59,6 +59,14 @@ The probe was `scripts/analysis/bbo_trigger_ack_probe.mjs`, run 2026-09-11 at 14
   - `venue_close`, for D4's retained bar lanes.
 
   These populations are never pooled.
+
+  **AMENDED 2026-09-11 at Step 4 (Langston, chunk 1 of the OBJ-7 review), so the code and this record agree.** The implemented basis set (`server/services/market-data/price-basis.ts`) adds four values, each necessary and approved on its merits, and the never-pooled rule covers every one:
+  - `rest_ticker` — a REST ticker read (the adapter's poller, or the engine's direct fallback);
+  - `book_depth` — a walk over the maintained book's levels: a fill estimate for a size, never a touch price;
+  - `archive_ticker_snap` — a walk over the throttled xStock ticker snapshot table: also a fill estimate;
+  - `not_an_observation` — a re-serve, seed, mock, reused price or no price: never a live basis.
+
+  **Era boundary for `ticker_bbo`:** crypto ticker rows are best-bid/offer-triggered only from the OBJ-7 deploy; rows before it came from the default trade-triggered ticker. **Deploy sha and UTC: recorded here at Step 6, before the restart.**
 - **Ticker trigger:** crypto moves its ticker to the best-bid/offer trigger. xStock keeps the default ticker.
 - **xStock 20-level book** for held and queued xStocks (`#949`).
   - ⛔ **Precondition in the landing.** Today `unsubscribeFromSymbols` sends `channel: 'ticker'` only, so cleared book streams stay live at Kraken and re-subscribes stack on top of them.

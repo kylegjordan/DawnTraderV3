@@ -4,11 +4,14 @@
 // Totality is enforced by the COMPILER (`Record<PriceProducer, …>`): a new producer without a basis fails tsc.
 // These tests pin the CONTENT of the mapping — the part a compiler cannot check — and carry their own positive
 // control: the guard is run against a deliberately corrupted copy and must reject it.
+// STEP 4 r2 (Langston, chunk 1 (a)): `isLiveObservationBasis` returned true for `venue_close`, against the module's own
+// definition. It is replaced by `isLiveTouchBasis` over a total, explicit table; tests 5 and 7 fail against r1.
 import { describe, it, expect } from 'vitest';
 import {
   BASIS_BY_PRODUCER,
+  LIVE_TOUCH_BY_BASIS,
   basisOfProducer,
-  isLiveObservationBasis,
+  isLiveTouchBasis,
   type PriceBasisOrNone,
 } from '../../services/market-data/price-basis.js';
 
@@ -25,6 +28,18 @@ const NOT_OBSERVED = [
   'position_entry_price_reused',
   'no_price_produced',
 ];
+
+// The live-touch answer for every basis, written out independently of the module.
+const LIVE_TOUCH_EXPECTED: Record<string, boolean> = {
+  book_top: true,
+  ticker_bbo: true,
+  ticker_default: true,
+  rest_ticker: true,
+  book_depth: false,
+  archive_ticker_snap: false,
+  venue_close: false,
+  not_an_observation: false,
+};
 
 function assertReservesAreNotObservations(map: Record<string, PriceBasisOrNone>): void {
   for (const p of NOT_OBSERVED) {
@@ -57,15 +72,22 @@ describe('P-7c — price basis derived from the recorded producer', () => {
     expect(basisOfProducer('crypto_ws_book_walk')).not.toBe('book_top');
   });
 
-  it('5. every mapped value is a declared basis, and the live/not-live split is consistent', () => {
-    const declared = new Set(['book_top', 'book_depth', 'ticker_bbo', 'ticker_default', 'rest_ticker', 'archive_ticker_snap', 'venue_close', 'not_an_observation']);
+  it('5. every mapped value is a declared basis, and the live-touch answer is explicit for every basis', () => {
+    expect(Object.keys(LIVE_TOUCH_BY_BASIS).sort()).toEqual(Object.keys(LIVE_TOUCH_EXPECTED).sort());
+    for (const [basis, live] of Object.entries(LIVE_TOUCH_EXPECTED)) {
+      expect(isLiveTouchBasis(basis as PriceBasisOrNone), basis).toBe(live);
+    }
     for (const [p, b] of Object.entries(BASIS_BY_PRODUCER)) {
-      expect(declared.has(b), `${p} -> ${b}`).toBe(true);
-      expect(isLiveObservationBasis(b)).toBe(b !== 'not_an_observation');
+      expect(b in LIVE_TOUCH_EXPECTED, `${p} -> ${b}`).toBe(true);
     }
   });
 
-  it('6. the map is frozen — no caller can relabel a producer at runtime', () => {
+  it('6. the maps are frozen — no caller can relabel a producer or a basis at runtime', () => {
     expect(Object.isFrozen(BASIS_BY_PRODUCER)).toBe(true);
+    expect(Object.isFrozen(LIVE_TOUCH_BY_BASIS)).toBe(true);
+  });
+
+  it('7. ★ Langston chunk 1 (a): a bar close is printed, not fresh — venue_close is NOT a live touch basis', () => {
+    expect(isLiveTouchBasis('venue_close')).toBe(false);
   });
 });

@@ -10,12 +10,15 @@
  * ERROR, the same "required + closed" guarantee the producer union already gives (#546).
  *
  * ⛔ WHAT A BASIS DOES *NOT* SAY: which SIDE a decision read (bid, ask or mid) and whether a published price was
- * a midpoint or a last trade. The producer's `_mid` / `_last` suffix carries the kind; the SIDE a decision reads
- * is stamped at the decision site when the decision layer (OBJ-8) switches it on. A basis names the SOURCE.
+ * a midpoint or a last trade. Where a producer name carries a `_mid` / `_last` suffix, that suffix states the kind —
+ * but not every producer is split by kind: `kraken_rest_poller` is not (see the `PriceProducer` union's comment), so a
+ * poller price's kind cannot be read from its producer. The SIDE a decision reads is stamped at the decision site when
+ * the decision layer (OBJ-8) switches it on. A basis names the SOURCE.
  *
  * ⚠️ ERA, STATED: `kraken_ws_ticker_*` maps to `ticker_bbo` because P-7a subscribes the crypto trading ticker with
  * `event_trigger: 'bbo'`. Rows written BEFORE the P-7a deploy came from the default trade-triggered ticker; a
- * reader of old rows applies the deploy boundary, not this map.
+ * reader of old rows applies the deploy boundary, not this map. The boundary (the OBJ-7 deploy sha and UTC) is
+ * recorded in `Scope Files/PRICING_DECISIONS_2026-09-11.md` under D3.
  *
  * ⛔ TYPE-ONLY IMPORT: erased at runtime, so this stays a runtime leaf like `mark-kind.ts`.
  */
@@ -75,9 +78,30 @@ export function basisOfProducer(producer: PriceProducer): PriceBasisOrNone {
   return BASIS_BY_PRODUCER[producer];
 }
 
-/** True only for a price that was actually observed from the venue. */
-export function isLiveObservationBasis(basis: PriceBasisOrNone): basis is PriceBasis {
-  return basis !== 'not_an_observation';
+/**
+ * B-PRICE-SIDE-BY-JOB r5 (Langston Step-4, chunk 1): the predicate is named for what it answers. A LIVE TOUCH basis is a
+ * quote observed from the venue that a touch-price decision may act on at the moment of use: the book top, the two WS
+ * tickers, and a REST ticker read. NOT a live touch: `venue_close` (a bar close is printed, not fresh), `book_depth` and
+ * `archive_ticker_snap` (fill estimates for a size, not a touch price), and `not_an_observation`.
+ * ⛔ Replaces `isLiveObservationBasis`, which returned true for `venue_close` against this module's own definition; it
+ * had no caller but its test and never deployed. Total over `PriceBasisOrNone`, so a new basis must declare its answer.
+ */
+export type LiveTouchBasis = 'book_top' | 'ticker_bbo' | 'ticker_default' | 'rest_ticker';
+
+export const LIVE_TOUCH_BY_BASIS: Readonly<Record<PriceBasisOrNone, boolean>> = Object.freeze({
+  book_top: true,
+  ticker_bbo: true,
+  ticker_default: true,
+  rest_ticker: true,
+  book_depth: false,
+  archive_ticker_snap: false,
+  venue_close: false,
+  not_an_observation: false,
+});
+
+/** True only for a live touch basis (see `LIVE_TOUCH_BY_BASIS`). */
+export function isLiveTouchBasis(basis: PriceBasisOrNone): basis is LiveTouchBasis {
+  return LIVE_TOUCH_BY_BASIS[basis];
 }
 
 /**
