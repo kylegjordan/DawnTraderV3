@@ -87,6 +87,7 @@ The exit fill walks a depth ladder and **never recorded how old it was**, so `#9
 | `B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md` | **this file** — converted from the progress report, §11 (the C4 result + my reach error) and §12 (the conversion, both halves) |
 | `B_EXIT_BOOK_AGE_STAMP_SCOPE.md` · `B_EXIT_BOOK_AGE_STAMP_PRE_AUDIT.md` · `B_EXIT_BOOK_AGE_STAMP_CHANGE_LIST.md` | the batch's own step documents |
 | `.claude/memory/MEMORY_CC_C.md` | working-state block |
+| T1 · the four session task lists | ✅ **mine** / `N/A — not mine` ×3 — ⚠️ **added 2026-09-11, late:** `CC_C_SESSION_TASK_LIST.md` did not exist at this 09-07 close (Kyle's rule landed 09-05). It is created in the same commit as this row, on the governance checker's alert `2ec36624`, routed by Langston. The other three lists are not mine to touch. |
 
 **TIER 2 — judged applicable and updated:**
 | document | what changed |
