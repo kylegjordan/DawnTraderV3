@@ -421,3 +421,9 @@ PSQL_EXIT=0
   - **Screen agrees with database:** the rows match the database read one-for-one (VTS xStock `entry_fee_rate` 0.001000).
   - **Before-control:** VTS Closed Trades at 20:09Z showed xStock `Taker (0.80%)`.
 - **Step 7 remains OPEN only on the rebate leg** (§9.8 above): an xStock row booking a negative fee. The background watch is running.
+- **When the rebate leg can first be observed** (staging, read 21:02Z):
+  - **Open paper positions:** exactly 5, all xStock (NEM, CRWD, MDB, CRM, GEV). All opened as taker before the deploy, booking `entry_fee_rate` 0.008000, so none will show a rebate on ENTRY.
+  - **Where a rebate can show:** a maker EXIT on one of them. Exit fees are resolved at close from the live fee rows.
+  - **Recent cadence** (xStock paper closes over the last 14 days): **5 maker exits, all at 00:15Z** (the last on 2026-09-10 00:15Z), and 24 taker exits.
+  - ⇒ **The earliest plausible observation is the 00:15Z window on 2026-09-12**, unless the xStock weekend shutdown (Friday close to Sunday open, `CLAUDE.md` rule 17) intervenes, in which case it comes after Sunday's reopen.
+  - VTS xStock maker entries are predicted to be rare after the fix (P8), so VTS is not the expected first source.
