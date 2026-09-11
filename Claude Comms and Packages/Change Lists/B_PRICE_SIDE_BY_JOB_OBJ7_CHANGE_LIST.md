@@ -320,6 +320,36 @@ Your chunk-4 hold asked for the tolerance and the approximation's direction in t
 
 **The rollback cost, stated before the restart (Langston condition 3):** `aee2bc191` is an ancestor of all of OBJ-7, so no sha rolls OBJ-7 back and keeps the fee contract in its reviewed state. The only pre-OBJ-7 targets carry the fee runtime before its review; anything below that drops it and needs the hand-run `2026-09-11-b-xstock-fee-contract-rollback.sql` first, which is itself a fee change and bumps the xStock epochs again. So an OBJ-7 rollback after this deploy costs a manual database step and two extra xStock epoch boundaries.
 
+## STEP 7 — FIRST-PASS VERIFICATION (CC-C, 2026-09-11) — evidence in `Batch Completion/B_PRICE_SIDE_BY_JOB_EVIDENCE/`
+
+**Identity.** `dt-deploy` OK at `2026-09-11T20:09:47Z` (sha live, engine resumed, identity asserted); `dist/BUILD_SHA` equals `b597f1bf2`; pm2 online. Reads: `obj7_step7_first_pass_reads_2026-09-11T2040Z.txt` (script `scripts/analysis/b_price_side_obj7_step7_reads.sh`, every section filtered to lines at or after the 20:09:37Z pm2 restart).
+
+**The screen (Claude-in-Chrome, `/paper-trading`).** The header's "Open Positions (marked live)" moved across the restart ($774.46 before; $775.07, $775.22, $773.83 and $774.23 after). The Open Trades tab renders all 5 open positions (GEV, CRM, MDB, CRWD, NEM, all xStock) with entry, live current price, target, stop, costs and net P/L, no blank values, feed Connected. ⚠️ **Limit:** 0 crypto positions are open, so the crypto exit-mark surface this batch changes has no row to show.
+
+| piece | read after the restart | what it shows |
+|---|---|---|
+| P-7k cache mark kind | HEALTH 20:36:41Z: `rowKind=mid:11,last:105,unknown:0`; `levelReadKind=mid:9,last:173,unknown:0` | every cached row names its kind; in that minute 173 of 182 level reads were built from last-trade rows (an upper bound, quant lane only), which is the object OBJ-8 decides on |
+| P-7h REST budget and reasons | 1,183 `EVAL_EXIT` lines carry `restTokenExhausted`, `restVenueRateLimited`, `restAgeExempt` (all 0; 5 of 5 positions priced from the WebSocket). `PRICE_SKIP_ESCALATION` MDB/USD at 20:38:41Z prints `reasons={"equity_tick_stale_risk_to_stop":40} dominant=equity_tick_stale_risk_to_stop:40/40` | the reason histogram and dominant-reason copy fire live (positive control); the alert it raises is CC-B's lane |
+| P-7a ticker cadence | `WS_TICK_RATE` 0 for the first two minutes (no subscription yet: cold start), then 874, 1,220 and later 1,609, 493, 617 events a minute; before: 804, 993, 932 | the rate/lag comparison on the same instruments is Step 8's |
+| P-7e book vs ticker | aligned 3,872, agree 3,872, disagree 0, unaligned 6, fires 0; `armed:false` | the record-only instrument counts and never fires on agreement |
+| P-7b book unsubscribes | 0 `Unsub OK`, 0 `WS_UNSUB_REJECTED` | expected by construction (no position closed, no unsubscribe sent); not evidence either way |
+| WebSocket writes | after-set 6 symbols: RAY/USD 23,752; GEV, CRWD, CRM 1,180; NEM 1,141; MDB 1,139. `Sub OK` 6 lines, all RAY/USD | the open question from Step 6 is answered: the other cache-writing symbols are the open xStock positions, whose feed does not log `Sub OK` |
+| errors after the restart | 4, all pre-existing and homed: `#148` (EACCES, 1) and `#1047` (the `toUpperCase` parse error, 3) | nothing new from this deploy |
+
+### ⛔ P-7j — THE PRE-REGISTERED CHECK: **FAIL**
+**The criterion, as registered before the capture (section "STEP 8 PRE-REGISTRATION"):** K at observation 12 within x1.1 of the instantaneous steady state from that observation's R and Q; scope = R and Q each within 10% across observations 1-12; population = REWARM in the first 10 minutes, n-floor 20; **PASS at least 80% of in scope, FAIL below.**
+**The outcome** (capture `obj7_p7j_capture_2026-09-11T2009Z_to_2039Z.txt`, 92 REWARM and 2,054 KALMAN lines; scoring `obj7_p7j_scoring_2026-09-11T2041Z.txt`; `scripts/analysis/b_price_side_p7j_rewarm_score.py`): population 84; excluded and counted 1; in scope 83; **2 meet the tolerance, 2.4% — FAIL.** The two side expectations hold: K = 0.9000 at observation 1 on 84 of 84, and median `gapFrac` 0.00555 (at most 0.01).
+
+**The instrument, checked before the result was believed.** A repeated read returns before `update` and prints no line (`adaptive-kalman.ts` `updateIfNew`), so a line is an update (3 identical consecutive pairs in 1,962); the scorer's steady state is the same algebra as `applyObservation` (`K = P / (P + R)`, then `P = (1 - K) P + Q`); the gain sequences fall as the model says from 0.9 (`scripts/analysis/b_price_side_p7j_rewarm_diag.py`).
+
+**The mechanism — a fixture number carried to production, not a code defect (rule 24 outcome 2).** The "12th observation" is test 12's, pinned at R 26 and Q 0.5 (Q/R 0.0192), which the test itself calls a knife-edge. Production Q/R at observation 12 runs 0.0021 to 0.0235 (median 0.0077); the fixture sits near the top of that range, about 2.5 times the median, so for most symbols steady state is lower and the fall from 0.9 takes longer: K at observation 12 over steady state is median 1.282 (min 1.035 RIVER/USD, p90 1.354, max 1.996 USDT/JPY), and the first observation within x1.1 is median 17 (10 to 22; 11 symbols not within in the capture). In time, observations arrive a median 60 s apart, and the first within x1.1 comes a median 21.5 minutes after the first live observation (10.0 to 26.5). **The `REWARM_FIRST_LIVE_GAIN` docblock's "3-12 minutes of a lightly smoothed filter after every restart" is wrong for production:** it assumed the fixture's decay length and the re-serve cadence rather than the smoother's own observation cadence.
+
+**Not done, deliberately:** no threshold moved, no re-score at another observation number, no reading of this as a pass in spirit. The disposition is Step 9's, ruled with Langston.
+
+**Proposed Step 9 disposition, for Langston's ruling:** (A) keep the code, which does what its model says; correct the docblock's decay length and minutes to these measured numbers; mark test 12's pin as the fixture's, not production's; and pre-register a check for the next restart that uses each symbol's own R and Q (its model-predicted first observation within x1.1, from the observed R and Q) instead of a fixed 12. (B) redesign the inflation so the decay meets a fixed length: not proposed, because no harm from a longer lightly smoothed period is measured, and the first-live-gain goal would trade against it.
+
+**Also in Step 7, recorded elsewhere:** alert `4f974017` (an active BA/USD fill refused on a 23 s snapshot age after the US close) triaged and resolved (`RUNNING_ISSUES` `#994` Amendment 4); `#1047` filed for the pre-existing parse error.
+
 ## THE ASK — one gate per dispatch
 
 Three dispatches, one per chunk. Each asks for a ruling on that chunk's commits only, at the ref, with this file as the context.
