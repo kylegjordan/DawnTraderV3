@@ -383,7 +383,8 @@ def run(argv, stdin_bytes):
                 raise Refused(5, "REFUSED (rule 4): " + "; ".join(problems) + " - previous content restored")
         except BaseException as e:
             try:
-                replace_target(old, st)
+                corrupt = b"#corrupted-by-self-test" if os.environ.get("LMW_TEST_CORRUPT_RESTORE") else b""   # self-test only
+                replace_target(old + corrupt, st)
                 with open(TARGET, "rb") as fh:
                     restored_ok = sha(fh.read()) == old_sha
             except BaseException as re_err:
@@ -392,6 +393,12 @@ def run(argv, stdin_bytes):
                                  "content is at %s (sha %s) - restore it by hand and tell Infra Claude."
                               % (type(re_err).__name__, arch_path, old_sha))
             append_index(dict(row, ts=utc(), outcome="restored", restored_byte_identical=restored_ok, why=str(e)[:300]), st)
+            if not restored_ok:
+                # ⛔ AMENDMENT E (Langston, 19:06Z): an INEXACT rollback is not a clean one. The operator action differs -
+                #    restore by hand and tell Infra Claude - which is what exit 6 already means. It must not read as 5.
+                raise Refused(6, "REFUSED: the rollback did NOT restore the previous content byte-for-byte (cause: %s). The "
+                                 "target may hold neither version. The previous content is at %s (sha %s) - restore it by "
+                                 "hand and tell Infra Claude." % (str(e)[:200], arch_path, old_sha))
             if isinstance(e, Refused):
                 # ⛔ CONDITION 1 (Langston, 18:43Z): a refusal raised by the post-replace recount - e.g. new content
                 #    carrying a pasted-twice ledger heading, which ledger_block_count refuses as exit 2 - must NOT keep
@@ -510,6 +517,12 @@ def self_test():
         check("  ...and it is RULE 1 that refused (the counters would NOT catch this one)", "(rule 1)" in out, True)
         check("  ...target byte-identical", current()[0] == b0, True)
 
+        rc, out = call(appendargs(s0), "- one entry" + NL + "- a stray second column-0 bullet" + NL,
+                       extra_env={"LMW_TEST_CORRUPT_RESTORE": "1"})
+        check("AMENDMENT E: the same refusal with an INEXACT rollback -> exit 6, not 5", rc, 6)
+        check("  ...and it says the rollback was not byte-for-byte, with the archive path", "did NOT restore" in out and ".memory-archive" in out, True)
+        reset()
+        b0, s0 = current()
         rc, out = call(appendargs(s0), "- one entry" + NL + "- a stray second column-0 bullet" + NL)
         check("a stray second bullet (moves +2, declared +1) refuses -> exit", rc, 5)
         check("  ...target byte-identical after the restore", current()[0] == b0, True)
