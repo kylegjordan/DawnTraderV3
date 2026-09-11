@@ -1,7 +1,7 @@
 /**
  * P19-B4b.1 — depth-walk GOLDEN test (Langston C-Q2a: port-and-prove).
  *
- * `walkBook` is a port of `slippage-fee-model.ts:91-125 calculatePriceImpact`.
+ * `walkBook` is a port of `calculatePriceImpact` in `slippage-fee-model.ts`.
  * The reference algorithm is embedded below verbatim so the port is pinned to the
  * original's outputs across shared inputs — we prove the port, not re-derive it.
  * Also covers partial (open) + always-full penalized (close) + determinism.

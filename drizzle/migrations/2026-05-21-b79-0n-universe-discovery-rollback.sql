@@ -19,6 +19,6 @@ DROP TABLE IF EXISTS discovery_runs;
 DROP TABLE IF EXISTS xstock_spot_universe_overrides;
 DROP TABLE IF EXISTS xstock_spot_universe;
 
-DELETE FROM _migrations WHERE filename = '2026-05-21-b79-0n-universe-discovery.sql';
+DELETE FROM _migrations WHERE name = '2026-05-21-b79-0n-universe-discovery.sql';  -- column is `name` (scripts/db-migrate.ts:66); was `filename`, which does not exist — fixed on find by B-XSTOCK-FEE-CONTRACT
 
 COMMIT;

@@ -15,6 +15,8 @@
 | D-3 | P4: rollback "steps the two bumped xStock epochs back and deletes the `xstock_spot/live` row" | rollback **leaves the epoch bump in place** | stepping an epoch back silently re-joins pre-change and post-change learning — the mixing the epoch exists to prevent. A fresh boundary is never harmful. Stated in the rollback file's header |
 | D-4 | P7: "re-point the five PROBE files to named per-class constants" | the PROBE files seed from **one shared fixture**, `server/tests/helpers/fee-model-fixture.ts`, and SUBJECT assertions use its named constants | eight suites carried their own `0.008 / 0.004` copy for BOTH classes — the defect reproduced in tests. One fixture means the next schedule change edits one file |
 | D-5 | A10 classified `b5-amr-body.test.ts` as PROBE | **one of its assertions was SUBJECT**: `:238 expect(c.fee).toBe(0.008)` on an xStock symbol | caught by the test run, not the census (the census matched the seed literals, not the assertion). Corrected to `XSTOCK_SPOT_TAKER_FEE`. **PREVIOUSLY STATED (A10): five PROBE files. NOW: four pure PROBE files plus one mixed file with one corrected SUBJECT assertion.** |
+| D-6 | (not in plan) | **the forward migration is safe to run AGAIN after the operator rollback**, and the rollback deletes the forward migration's `_migrations` row | fresh reviewer, re-derived: `db-migrate.ts:155` skips any name already in `_migrations` (column `name`, `:66`). The r1 rollback left the row, so a redeploy after a rollback would have SKIPPED the fix, and xStock would have booted on 0.008 / 0.004 — values the signed rail accepts, so nothing would refuse. Forcing a re-run would then have failed on the epoch post-condition. Fixed on both sides: the rollback deletes the row; the migration captures who last wrote each epoch row and accepts a row an earlier run already bumped (never bumping twice). The guard is NULL-safe (`IS DISTINCT FROM`): `module_constants.updated_by` is nullable (staging `information_schema`), and `<>` would silently skip a row whose `updated_by` is NULL — staging holds 0 such epoch rows of 6, and the fence now forbids `updated_by <>`. **Simulated on staging** (§2.1); the final file was dry-run again with `ROLLBACK` and passed with the same eight results |
+| D-7 | (not in plan) | `2026-05-21-b79-0n-universe-discovery-rollback.sql:22` — `DELETE FROM _migrations WHERE filename = …` → `WHERE name = …` | found in passing by the same reviewer: the one older rollback that clears its ledger row names a column that does not exist, so it fails. One word, fixed on find (rule 23); the new fence F-2 now forbids `filename` in any rollback file |
 
 ---
 
@@ -99,16 +101,24 @@ One `BEGIN … COMMIT`:
 - **P4:** `DELETE FROM module_constants WHERE module_name = 'cost_model'`, plus two `calibration_ledger` corrections (`'0.10%'`, `'-0.02%'`).
 - **P6:** `vts` and `paper_sim` xStock epochs bumped `+1`, guarded by `updated_by`; `live/xstock_spot` inserted as `live/* + 1` (D-2).
 - **Post-condition `DO $$` block:**
-  - exactly 4 fee rows, with the four exact values;
+  - exactly 4 fee rows **for the two spot classes** (scoped so a future perp fee row cannot block it), with the four exact values;
   - 0 `cost_model` rows;
   - 2 corrected ledger rows;
   - every epoch row compared with a pre-image captured in a temp table — only the xStock `vts` and `paper_sim` rows may move, each by exactly `+1`;
   - the live xStock row equals `live/* + 1` and was created by this migration.
 
 **Staging DRY RUN, 2026-09-11 ~16:40Z** (the file verbatim, with its final `COMMIT` replaced by `ROLLBACK`, run with `ON_ERROR_STOP=1`):
-- Statement results: `UPDATE 1`, `UPDATE 1`, `DELETE 5`, `UPDATE 1`, `UPDATE 1`, `UPDATE 2`, `INSERT 0 1`.
+- Statement results, all eight: `SELECT 6` (the epoch pre-image temp table), `UPDATE 1`, `UPDATE 1`, `DELETE 5`, `UPDATE 1`, `UPDATE 1`, `UPDATE 2`, `INSERT 0 1`. *(r1 of this list omitted the `SELECT 6`.)*
 - `DO` completed — every post-condition held on the real rows — then `ROLLBACK`; psql exit 0.
 - After the rollback: fee rows `0.008 / 0.004` on both classes, 5 `cost_model` rows, epoch rows unchanged, ledger `0.26% / 0.16%`. Nothing was kept.
+
+**The production runner path, on a fresh database — CI run `34623482499` at `aee2bc191`, job "Test Suite", step "Apply database migrations":** `[db-migrate] Applying: 2026-09-11-b-xstock-fee-contract.sql` → `[db-migrate] ✓`. That is `db-migrate.ts:192`, the whole file as ONE query, against a database built from `MANIFEST.txt` order. The psql dry run above is statement-by-statement; this closes that gap.
+
+**Rollback-then-redeploy SIMULATION on staging** (post-fix files; forward body, rollback body, then forward body again, inside one outer transaction, then `ROLLBACK`; `ON_ERROR_STOP=1`, exit 0):
+- **Run 1:** `SELECT 6 · UPDATE 1 · UPDATE 1 · DELETE 5 · UPDATE 1 · UPDATE 1 · UPDATE 2 · INSERT 0 1`, then `DO` passed. xStock epochs: vts 7, paper_sim 4, live 3.
+- **Rollback file:** `INSERT 0 5 · UPDATE 1 ×4 · DELETE 0`, then `DO` passed. xStock fees are back to 0.008 / 0.004. (`DELETE 0` because inside the simulation the forward run was never recorded in `_migrations`.)
+- **Run 2** (the redeploy): `SELECT 7 · UPDATE 1 · UPDATE 1 · DELETE 5 · UPDATE 1 · UPDATE 1 · UPDATE 0 · INSERT 0 0`, then `DO` passed. The epochs were **not bumped twice** (still 7 / 4 / 3), and the fees are correct again at 0.0010 / −0.0002.
+- **After the outer ROLLBACK:** every row reads as before the simulation.
 
 ### 2.2 `drizzle/migrations/2026-09-11-b-xstock-fee-contract-rollback.sql` — NEW, NOT in the manifest (P4, D-3)
 Operator-only; runs before any pre-batch `dt-deploy`. Restores:
@@ -116,7 +126,7 @@ Operator-only; runs before any pre-batch `dt-deploy`. Restores:
 - the xStock fee pair `0.008 / 0.004`,
 - the two ledger rows.
 
-It carries its own post-condition check and deliberately leaves the epochs bumped.
+It **deletes the forward migration's `_migrations` row by `name`** (D-6), carries its own post-condition check (including that the ledger row is gone), and deliberately leaves the epochs bumped.
 
 ### 2.3 `drizzle/migrations/2026-06-11-b45-fee-model-tier1.sql` — comment banner only (P1)
 Names the three false premises and points at the correcting migration. The file never re-runs: `_migrations` is keyed by name, and its checksum column is never compared.
@@ -132,13 +142,16 @@ Names the three false premises and points at the correcting migration. The file 
 | `server/tests/helpers/fee-model-fixture.ts` | NEW fixture | named per-class constants and `seedFeeModelForTests(overrides?)` (D-4) |
 | `server/tests/unit/b-xstock-fee-contract-rail.test.ts` | NEW | accepts both production schedules; the retired rail refusing −0.0002 as CONTROL; maker floor/cap boundaries accepted with values just beyond refused; taker 0 and negative refused; NaN / ±Infinity refused on both constants; maker > taker refused, equal allowed |
 | `server/tests/unit/b-xstock-fee-contract-signed-fees.test.ts` | NEW | per-class merge-site values; `calculateFees` charges a **diverged** seeded xStock taker (proves it reads the merge site); a maker rebate gives negative fees and net > gross; a rebate raises realized net P&L; both legs maker gives **negative totalCost**; signed `composeBookedFriction`; the validator resolver passes a negative through; the maker/taker decision shifts **taker +0.014·E, maker-adjusted +0.0056·E, margin −0.0084·E** (the A8 arithmetic, executed) |
-| `server/tests/unit/b-xstock-fee-contract-fence.test.ts` | NEW | F-1: fee UPDATEs carry no value predicate, set the right values, touch no crypto fee row, and assert inside the transaction · F-2: manifest lists the migration once and never the rollback; the rollback restores all five `cost_model` rows · F-3: the warmup calls both rail functions, has no positive-only check and no `'cost_model'` prefetch · F-4: `slippage-fee-model.ts` reads no `fee_model` and no module constants. Every prohibition sits beside a positive CONTROL |
+| `server/tests/unit/b-xstock-fee-contract-resolver.test.ts` | NEW — **mutation-proven** | stubs `getFrictionForAssetClass` with sentinel rates and seeds NO `fee_model` cache, then asserts `calculateFees` charges exactly the sentinels. The pre-batch code read the cache directly and throws on a cold cache, so this test FAILS on the parent and passes only through the merge site. *(The signed-fees "diverged row" test passes on the parent too — both paths read the same cache entry — so it is a value lock, not proof of the resolver move. The r1 change list over-claimed it.)* |
+| `server/tests/unit/b-xstock-fee-contract-fence.test.ts` | NEW | F-1: fee UPDATEs carry no value predicate, set the right values and touch no crypto fee row; the post-condition block names all four expected fee literals, `IS DISTINCT FROM`, the `cost_model` check and the `pre + 1` epoch assertion; and the migration is re-runnable after the rollback · F-2: manifest lists the migration once and never the rollback; the rollback restores all five `cost_model` rows and deletes its ledger row by `name`; and no rollback file anywhere uses `_migrations.filename` · F-3: the warmup calls both rail functions, has no positive-only check and no `'cost_model'` prefetch · F-4: `slippage-fee-model.ts` reads no `fee_model` and no module constants. Every prohibition sits beside a positive CONTROL |
 | `b45-fee-model.test.ts` | SUBJECT, corrected | asserts each class's own schedule by name; a new lock that the two classes do NOT share a schedule; xStock round trip **0.42 %** (was 1.82 %) |
 | `cost_cache.test.ts` | SUBJECT seed → fixture | every fee it asserts is crypto, and those stay as they were |
 | `b79-0n-mce-costmodel-perp-failhard`, `b79-0n-mce-required-assetclass`, `…-getcachedcostmetrics`, `directive-11.4C-R2` | PROBE → fixture | seed only |
 | `b5-amr-body.test.ts` | PROBE seed + one SUBJECT assertion (D-5) | fixture; `:238` corrected |
 
-**Kept as-is, per A10:** `p19-b7-2a-fee-consolidation.test.ts` (its deliberately diverged probe), `fg2-obj5-vts-cost-truth.test.ts`, `b79-0n-execution-audit.test.ts`.
+**What these tests prove, stated plainly (fresh-reviewer point, accepted):** the rail, resolver and fence suites fail if the change is reverted. The signed-fees and `b45-fee-model` suites are LOCKS on arithmetic and fixture values — they pin behaviour this batch relies on, not the change itself. The production values are checked by the migration's own post-condition block, which CI's fresh-database `db:migrate` executes (§2.1).
+
+**Kept as-is, per A10:** `p19-b7-2a-fee-consolidation.test.ts` (its deliberately diverged probe — it keeps its OWN fee seed on purpose, so D-4's "one fixture" means one fixture for the suites that had copied the defect, not every fee literal in the test tree), `fg2-obj5-vts-cost-truth.test.ts`, `b79-0n-execution-audit.test.ts`.
 
 ---
 
@@ -146,7 +159,9 @@ Names the three false premises and points at the correcting migration. The file 
 
 - **tsc message-baseline gate** (`node scripts/check-tsc-baseline.mjs`): **377 errors, baseline 377 — no regression, no message text shifted**, so no `--sync` is needed.
 - **Touched and new suites** (11 files): 115 tests. First run, 113 pass and 2 fail — a missing import in the new suite, and D-5. Both fixed; the re-run of the two failing files gives **46 / 46**.
-- **Full vitest suite:** see the commit message for the run on this tree.
+- **Full vitest suite, local, at `aee2bc191`:** 3,141 tests — **2,998 pass, 0 fail**, 143 skipped. 10 files cannot load locally: 8 need Postgres (ECONNREFUSED :5432), and 2 (`b-staging-liveness-watch`, `b-tsc-baseline-fix`) hit a Windows-only syntax error at load in files this diff does not touch.
+- **CI at `aee2bc191`: 4 / 4 green** — Build, Test Suite (which runs `db:migrate` on a fresh Postgres, then the full suite), TypeScript Check (baseline gate), Docker Build.
+- **After the review fixes:** the fence, resolver, signed-fees and depth-walk suites pass 38 / 38; tsc baseline 377 / 377.
 - **Reference census on the working tree** (excluding the archive and the deletion log): no remaining code reference to `modelTradeRealism`, `getAggregateStats`, `updatePriceHistory`, `slippageFeeModel.getConfig`, `TradeRealism` or `resolveFee(`. Remaining hits are historical documents and the governance lines Step 10 rewrites (`SYSTEM_IMPACT_MAP.md:3504`).
 - **Migration dry run on staging:** §2.1.
 
@@ -158,3 +173,7 @@ Every other Tier-1/Tier-2 edit named in the plan's P10 lands at Step 10.
 
 ## 6. P8 — RULED (not code)
 **Langston ruled 16:39Z; folded into the plan as r6.** Per-pick classification is the gate: PASS = zero class-(iii) mechanism bypasses AND xStock maker share ≤ 1.0 % at n ≥ 300. `p₀` is frozen at the deploy instant. ~21 days to n = 300.
+
+## 7. REVIEWER RECORD
+
+`REVIEWER s3-r1: object · the pushed Step-3 diff aee2bc191 + this change list · 9 findings: (1) rollback leaves the _migrations row → a redeploy skips the fix, and a forced re-run fails on the epoch post-condition; (2) the signed-fees "diverged row" test passes on the parent — not proof of the resolver move; (3) the fence accepts any RAISE before COMMIT; (4) the change list cited a full-suite result that was not recorded; (5) the dry run used psql, not the single-query runner, and the tally omitted SELECT 6; (6) p19-b7-2a keeps its own xStock seed, against D-4's wording; (7) wildcard live bumps will no longer reach live/xstock_spot (already the P6 ADJUSTMENT_FRAMEWORK item); (8) fee-row count unscoped; (9) two stale line citations · re-derived y: db-migrate.ts:66/:155, the b79 rollback :22, ci.yml:98 + the CI log apply line, p19-b7-2a :23-42, depth-walk citations · changed: D-6 and D-7; rollback clears its ledger row; migration re-runnable and simulated on staging; resolver test added (mutation-proven); fence strengthened; fee-row count scoped; citations fixed; §2.1, §3 and §4 corrected. Point 7 is carried to Step 10 (ADJUSTMENT_FRAMEWORK) as planned.`

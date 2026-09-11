@@ -7,10 +7,14 @@
 -- WHAT IT RESTORES: the five cost_model rows (literal values as they stood on staging 2026-09-11),
 -- the xStock fee pair 0.008 / 0.004, and the two calibration_ledger fee rows.
 --
+-- ⛔ IT ALSO DELETES THE FORWARD MIGRATION'S `_migrations` ROW (column `name`, scripts/db-migrate.ts:66).
+--    Without that, a later redeploy of the batch sha would SKIP the forward migration (db-migrate.ts:155) and
+--    xStock would boot on 0.008 / 0.004 — values the signed rail accepts, so nothing would refuse.
+--
 -- ⚠️ WHAT IT DELIBERATELY LEAVES: the xStock calibration epoch bump and the live/xstock_spot epoch row.
 -- A fresh epoch boundary is never harmful — learning aggregates simply restart. Stepping an epoch BACK
 -- would silently re-join pre-change and post-change outcomes, the mixing the epoch exists to prevent.
--- If a rollback is ever run, the epoch rows mark it as a second boundary; bump again on the next change.
+-- The forward migration recognises rows it already bumped, so a redeploy does not bump them twice.
 
 BEGIN;
 
@@ -36,6 +40,8 @@ WHERE sub_batch = 'B.0' AND asset_class = 'xstock_spot' AND setting_key = 'feeRa
 UPDATE calibration_ledger SET current_value = '0.16%', notes = 'Kraken spot maker.', updated_at = NOW()
 WHERE sub_batch = 'B.0' AND asset_class = 'xstock_spot' AND setting_key = 'feeRateMaker' AND scope = 'friction';
 
+DELETE FROM _migrations WHERE name = '2026-09-11-b-xstock-fee-contract.sql';
+
 DO $$
 DECLARE n int;
 BEGIN
@@ -46,6 +52,8 @@ BEGIN
     AND ((constant_name = 'spot_taker_fee' AND (value)::text::numeric = 0.008)
       OR (constant_name = 'spot_maker_fee' AND (value)::text::numeric = 0.004));
   IF n <> 2 THEN RAISE EXCEPTION '[b-xstock-fee-contract rollback] xStock fee rows not restored (% of 2)', n; END IF;
+  SELECT count(*) INTO n FROM _migrations WHERE name = '2026-09-11-b-xstock-fee-contract.sql';
+  IF n <> 0 THEN RAISE EXCEPTION '[b-xstock-fee-contract rollback] the forward migration is still recorded in _migrations'; END IF;
 END $$;
 
 COMMIT;

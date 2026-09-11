@@ -8,7 +8,7 @@
  * could fully fill the order. Replaces the flat 0.05% slippage on the active seam.
  *
  * PORT-AND-PROVE (Langston Step-2 Q-A/C-Q2a): `walkBook` is a faithful port of the
- * proven book-walk in `slippage-fee-model.ts:91-125 calculatePriceImpact` (VWAP =
+ * proven book-walk in `calculatePriceImpact` in `slippage-fee-model.ts` (VWAP =
  * Σ(price·qty) / Σqty over consumed levels). The golden test `depth-walk.test.ts`
  * pins this port to that reference algorithm across shared inputs.
  *
