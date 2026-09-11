@@ -8527,6 +8527,8 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 ⇔ `#1040` (the batch under review when it was found) · `LANGSTON_ARCHITECTURE.md` §6 (the read model).
 
 
+**INSTANCE 3 (Langston, 2026-09-11 ~18:40Z, reviewing `B-LANGSTON-CONTEXT` P-6b r2) — live, in this afternoon's third review.** A sha-pinned `raw.githubusercontent.com` read of `comms-infra/langston-memory/bin/langston_memory.py` returned **2,558 B of a different file entirely** (deploy-drift JSON parsing). The same URL re-requested returned 30,397 B, matching `dt-review` and the installed copy. He did not capture the first response's status code, so the claim is only that a real body arrived that was not that path's content. **Three wrong-object serves in one afternoon, across three different files.**
+
 ### #1044 OPEN 2026-09-11 (CC-C; Langston's `#943` closing read, §13) — ⛔ **AN OBSERVATION WINDOW QUALIFIED ITS EVIDENCE FROM A SIZE-ROTATED LOG, AND THE EVIDENCE WAS GONE BY THE READ.**
 
 **WHAT HAPPENED.** `#943`'s criterion (§6) qualifies `error.log` skips with `COMPARATOR_SEEDED` and `EVAL_EXIT` lines that live in `out.log`. On 2026-09-03 §4d measured `out.log`'s retention (about 3.8 days, rotated by size) and set the mitigation: extract the `out.log` side after EACH handoff. It was done for the void arm and the seed control only. At the read `out.log` held about 1.6 days (14 files, the oldest beginning 2026-09-10 03:28:50), so both graded arms were unqualifiable and the window closed INCONCLUSIVE.
@@ -8559,3 +8561,15 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 - **(c)** Wherever a rollback must still key on ownership, it should check its own row count rather than trust `updated_by`.
 
 **HOME:** `B-ROLLBACK-EPOCH-FORWARD`, owner CC-C, placed in `PHASE_19_PLAN` at row `3b.b-c`, after `3b.b`; worked after OBJ-7's deploy and before OBJ-8's build. *(Routed to CC-C on 2026-09-11 with the instance and the class; placed by CC-C the same day.)*
+
+### #1046 OPEN 2026-09-11 (Langston §13, reviewing `B-LANGSTON-CONTEXT` P-6b; filed by CC-INFRA) — ⛔ **`langston-memory-write` WRITES `--by` AS FREE TEXT INTO A PERMANENT, APPEND-ONLY INDEX, ONE WEEK AFTER THE OTHER TWO TOOLS WERE MADE CANONICAL**
+
+**WHAT.** The writer records `--by` in `/home/langston/.memory-archive/index.jsonl`, and it cannot be edited afterwards by design. The value is labelled a CLAIM (every session reaches the box as root), which is honest, but a claim is not a vocabulary: the index will accumulate spellings the way the alerts table did before `#987` — 23 distinct strings for about 5 actors in 30 days.
+
+**PRECEDENT.** `B-ALERT-ACTOR-ALLOWLIST` (`#987`) made alert actors canonical, and `B-DEPLOY-ACTOR-ALLOWLIST` did the same for `dt-deploy --by`. `#1004` is open on exactly this hand-copied-list class.
+
+**DISPOSITION — §9.4 disposition 2, added as an item** (Langston): refuse a `--by` outside the canonical actor set, derived rather than restated. The derivation must be stated in the tool, as `langston-size-watch` does for its own copy.
+
+> `HOME: B-WRITER-ACTOR-ALLOWLIST, owner Infra Claude, placed in PHASE_19_PLAN.md at 2.4c, after 2.4b (B-ALERT-QUEUE-INTEGRITY)` — that row already owns the integrity of append-only indexes.
+
+⇔ `#987` · `#1004` · `B-LANGSTON-CONTEXT` P-6b.
