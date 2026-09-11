@@ -235,6 +235,16 @@ def main():
         print("  Refusing rather than ignoring them — an ignored flag returns a clean PASS")
         print("  for a run that did not do what was asked.")
         return 2
+    tops = [os.path.basename(s.rstrip("/")) for s in SOURCES]
+    dup = sorted(t for t in set(tops) if tops.count(t) > 1)
+    if dup:
+        # ⛔ CONDITION 2 (Langston, 19:23Z, measured): members are keyed on each source's FOLDER NAME. Two sources sharing
+        #    one name collapse into a single census row, and a relative file present under both lands in the tar TWICE
+        #    while the run reports 1/1 reproduced, verified - archived content outside the verified population with a
+        #    clean ratio. Unreachable at the live config; reachable through the SELFMEM_* overrides. Refuse before any read.
+        print("REFUSED: two configured sources share the folder name %s - their members would merge and the run could "
+              "verify a population it did not capture." % ", ".join(dup))
+        return 2
     dry = "--dry-run" in sys.argv
     prove = "--prove" in sys.argv
     if not os.path.isdir(STORE):
