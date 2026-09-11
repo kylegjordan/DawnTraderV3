@@ -18,7 +18,8 @@
       defeats this entirely - it matches whoever wrote in between (Langston Step-4 BLOCKER-1).
    4. the OLD content goes to the archive as <sha256>.md, created EXCLUSIVELY, plus an append-only index row
       for the ATTEMPT - BEFORE anything is replaced;
-   5. a temp file in the TARGET'S OWN DIRECTORY, fsynced, renamed into place, mode and owner preserved;
+   5. a temp file in the TARGET'S OWN DIRECTORY, fsynced, renamed into place - owner preserved, mode set OWNER-ONLY
+      (group/other cleared; the archive was 700/600 while the primary output kept 644 - Langston, 18:37Z);
    6. TWO counters must move by exactly what the call declared, or the old content is restored:
        · RETRACTIONS - entries parsed by the reader (langston_memory.py), IMPORTED, never re-implemented (rule 4);
        · THE WHOLE REVIEWER LEDGER - column-0 '- ' bullets between the '## … REVIEWER LEDGER' heading and the
@@ -268,14 +269,21 @@ def cas_mismatch_message(live_sha):
             "edited it by hand. Tell Infra Claude before redoing." % (last.get("ts"), str(prior)[:16]))
 
 
+def owner_only(mode):
+    """Group and other bits cleared, owner bits kept. The archive was already 700/600; the primary output was left at
+    whatever mode it had (644 on the live box), protected only by the 750 home around it (Langston, 18:37Z)."""
+    return (mode & 0o7777) & ~0o077
+
+
 def replace_target(new_bytes, st):
-    """Temp file in the target's own directory, fsync, preserve mode and owner, rename, fsync the directory."""
+    """Temp file in the target's own directory, fsync, OWNER-ONLY mode and the target's owner, rename, fsync the
+    directory."""
     d = os.path.dirname(TARGET)
     fd, tmp = tempfile.mkstemp(prefix=".MEMORY.md.write-", suffix=".tmp", dir=d)
     try:
         os.write(fd, new_bytes)
         os.fsync(fd)
-        os.fchmod(fd, st.st_mode & 0o7777)
+        os.fchmod(fd, owner_only(st.st_mode))
         hand_to_owner(fd, st)
     finally:
         os.close(fd)
@@ -353,7 +361,8 @@ def run(argv, stdin_bytes):
                "old_bytes": len(old), "new_bytes": len(new), "mode": "ledger-append" if append else "whole-file",
                "declared_ledger_delta": declared_ledger, "declared_retractions_delta": declared_retractions,
                "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"],
-               "archived": os.path.basename(arch_path), "archive_created": created}
+               "archived": os.path.basename(arch_path), "archive_created": created,
+               "mode_before": oct(st.st_mode & 0o7777), "mode_after": oct(owner_only(st.st_mode))}
         append_index(dict(row, outcome="attempted"), st)          # FINDING-2: the ATTEMPT is on record first
         try:
             replace_target(new, st)
@@ -384,7 +393,14 @@ def run(argv, stdin_bytes):
                               % (type(re_err).__name__, arch_path, old_sha))
             append_index(dict(row, ts=utc(), outcome="restored", restored_byte_identical=restored_ok, why=str(e)[:300]), st)
             if isinstance(e, Refused):
-                raise
+                # ⛔ CONDITION 1 (Langston, 18:43Z): a refusal raised by the post-replace recount - e.g. new content
+                #    carrying a pasted-twice ledger heading, which ledger_block_count refuses as exit 2 - must NOT keep
+                #    its own code. Exit 2 means "refused input, nothing touched"; here the content transited the live
+                #    file and was rolled back. So it is exit 5, with the cause kept and the restore stated.
+                text = str(e)
+                if "restored" not in text:
+                    text += " - the new content reached the live file and was rolled back"
+                raise Refused(5, text + "; previous content restored, byte-identical=%s; also at %s" % (restored_ok, arch_path))
             raise Refused(5, "REFUSED: the post-write check crashed (%s) - previous content restored, byte-identical=%s; "
                              "it is also at %s" % (type(e).__name__, restored_ok, arch_path))
         outcome = "no-change" if new_sha == old_sha else "written"
@@ -410,7 +426,11 @@ def self_test():
     ok = True
     top = tempfile.mkdtemp(prefix="lmw-selftest-")
     here = os.path.abspath(__file__)
-    reader = os.environ.get("LANGSTON_MEMORY_READER") or os.path.join(os.path.dirname(here), "langston_memory.py")
+    # ⛔ CONDITION 2 (Langston, 18:43Z): installed, this file is /usr/local/bin/langston-memory-write and the reader is
+    #    NOT beside it - it lives at READER (/opt/langston-memory/bin/). A reader beside the file (the repo layout) is
+    #    used when present; otherwise READER, the same path a real write uses. No env var the recipe never mentions.
+    beside = os.path.join(os.path.dirname(here), "langston_memory.py")
+    reader = os.environ.get("LANGSTON_MEMORY_READER") or (beside if os.path.exists(beside) else READER)
     env = dict(os.environ, LANGSTON_HOME=top, LANGSTON_MEMORY_READER=reader)
     target = os.path.join(top, "MEMORY.md")
     arch = os.path.join(top, ".memory-archive")
@@ -432,6 +452,7 @@ def self_test():
     def reset(text=base):
         with open(target, "w", encoding="utf-8", newline="") as fh:
             fh.write(text)
+        os.chmod(target, 0o644)        # start readable by others, as the live file is, so the narrowing is measured
         if os.path.isdir(arch):
             shutil.rmtree(arch)
 
@@ -492,6 +513,7 @@ def self_test():
         rc, out = call(appendargs(s0), "- one entry" + NL + "- a stray second column-0 bullet" + NL)
         check("a stray second bullet (moves +2, declared +1) refuses -> exit", rc, 5)
         check("  ...target byte-identical after the restore", current()[0] == b0, True)
+        check("  ...and the RESTORE is owner-only too", oct(os.stat(target).st_mode & 0o777), "0o600")
         check("  ...the reader still counts 2", retr(), 2)
 
         reset()
@@ -503,6 +525,8 @@ def self_test():
         check("  ...and the file size against the stated cap (rider)", "B cap by" in out, True)
         check("  ...the archive gained exactly one file, named by the OLD sha", archived(), [s0 + ".md"])
         check("  ...the index records the ATTEMPT first, then the outcome (FINDING-2)", index_outcomes(), ["attempted", "written"])
+        check("  ...and the target is written OWNER-ONLY, from a 644 start (the 18:37Z ruling)",
+              oct(os.stat(target).st_mode & 0o777), "0o600")
 
         b1, s1 = current()
         rc, out = call(whole(s1, 0, 0), b1.decode("utf-8").replace("- a note outside the ledger", "- a note outside the ledger, edited"))
@@ -520,6 +544,12 @@ def self_test():
         check("  control: the same deletion DECLARED as -2/0 lands -> exit", rc, 0)
 
         b3, s3 = current()
+        doubled = b3.decode("utf-8").replace("## ★ STANDING NOTES", "## ★★ REVIEWER LEDGER — pasted twice by accident" + NL + NL + "## ★ STANDING NOTES")
+        rc, out = call(whole(s3, 0, 0), doubled)
+        check("CONDITION 1: new content with a duplicate REVIEWER LEDGER heading -> exit 5, not 2", rc, 5)
+        check("  ...the cause is kept", "ambiguous" in out, True)
+        check("  ...and the rollback is stated, byte-identical", "byte-identical=True" in out, True)
+        check("  ...target byte-identical", current()[0] == b3, True)
         rc, out = call(whole(s3, 0, 0), b3.decode("utf-8").replace("### Retractions", "### Something else"))
         check("whole file that renames the Retractions section, declared 0/0 -> exit", rc, 5)
         check("  ...target byte-identical after the restore", current()[0] == b3, True)
