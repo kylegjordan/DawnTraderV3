@@ -46,6 +46,18 @@ STAGING_CMD = "cd /home/deploy/dawntrader && npm run --silent system-alerts --"
 ACTOR = "langston-privacy-check"      # a MACHINE actor (condition 3): a root timer must not claim a session
 KEY_EXPOSED = "langston-privacy-exposed"
 KEY_INSTRUMENT = "langston-privacy-instrument"
+KEY_DRIFT = "langston-privacy-drift"
+NSSWITCH = "/etc/nsswitch.conf"
+# ⛔ CONDITION 1 (Langston, 2026-09-11): the account databases must be ENUMERABLE, or the group assertion below
+#    certifies a fence it cannot see. Under sss/ldap, getpwall() returns local accounts only - no error, no marker -
+#    and a clean-looking holder set is a blind one. So this is an ALLOWLIST of known-enumerable sources; anything
+#    else refuses by name. A blocklist would validate against absence, and the next source nobody has heard of
+#    would pass silently.
+ENUMERABLE_SOURCES = ("files", "systemd", "compat")
+# ⛔ CONDITION 2: these kinds are DRIFT - the fence changed shape - and they do NOT claim anyone can read.
+#    An exposure is a group holder other than the owner or root; a directory owned by another non-root account is
+#    caught as an exposure by the read attempted as the reader, not by this label.
+DRIFT_KIND_PREFIXES = ("directory-not-owned-by-", "directory-group-drift")
 SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with the live file = a copy
 MIN_LINE = 40
 NL = chr(10)
@@ -93,7 +105,7 @@ def live_config():
     missing += [label for label, p in (("a tool-output file under " + SESSIONS, tool_output),
                                        ("a corpus file under " + MEMDIR + "/corpus", corpus)) if not p]
     return {
-        "reader": READER, "owner": OWNER,
+        "reader": READER, "owner": OWNER, "nsswitch": NSSWITCH,
         "control_readable": CONTROL_READABLE, "control_refused": CONTROL_REFUSED,
         "read_targets": [p for p in fixed if os.path.exists(p)] + [p for p in (tool_output, corpus) if p],
         "missing_targets": missing,
@@ -107,6 +119,37 @@ def live_config():
         "scan_roots": scan_roots(),
         "not_world_writable": [STALE_LOG],
     }
+
+
+def nsswitch_enumerable(path):
+    """(ok, detail). Every source named for `passwd` and `group` must be in ENUMERABLE_SOURCES. Bracketed actions
+    like [NOTFOUND=return] are not sources. A missing file, or a missing passwd/group line, is NOT assumed to mean
+    the default - it refuses, because an instrument that cannot read its own premise must not report all-clear."""
+    try:
+        text = open(path, encoding="utf-8", errors="replace").read()
+    except OSError as e:
+        return False, "cannot read %s (%s)" % (path, type(e).__name__)
+    found = {}
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        for db in ("passwd", "group"):
+            if line.startswith(db + ":"):
+                found[db] = [t for t in line[len(db) + 1:].split() if not t.startswith("[") and "=" not in t]
+    bad = []
+    for db in ("passwd", "group"):
+        if db not in found:
+            bad.append("%s: no line" % db)
+            continue
+        extra = [t for t in found[db] if t not in ENUMERABLE_SOURCES]
+        if extra or not found[db]:
+            bad.append("%s: %s" % (db, " ".join(extra) or "no source"))
+    if bad:
+        return False, "account database not known to enumerate (%s); allowed: %s" % ("; ".join(bad), ", ".join(ENUMERABLE_SOURCES))
+    return True, "passwd: %s; group: %s" % (" ".join(found["passwd"]), " ".join(found["group"]))
+
+
+def is_drift(finding):
+    return finding["kind"].startswith(DRIFT_KIND_PREFIXES)
 
 
 def reads_as(user, path):
@@ -224,12 +267,15 @@ def store_findings(store_dir, owner):
 
 def evaluate(cfg):
     """The whole decision, and nothing else. Returns a verdict and the findings behind it."""
+    enumerable, nss_detail = nsswitch_enumerable(cfg.get("nsswitch", NSSWITCH))
     controls = {
         "reader_reads_own_folder": reads_as(cfg["reader"], cfg["control_readable"]),
         "reader_refused_token_file": not reads_as(cfg["reader"], cfg["control_refused"]),
+        "account_database_enumerable": enumerable,
     }
     if not all(controls.values()):
-        return {"verdict": "INSTRUMENT", "reason": "a control failed", "controls": controls, "findings": []}
+        reason = "a control failed" + ("" if enumerable else ": " + nss_detail)
+        return {"verdict": "INSTRUMENT", "reason": reason, "controls": controls, "findings": []}
     findings = []
     for n in cfg.get("missing_targets", []):
         findings.append({"kind": "target-not-found", "path": n})
@@ -251,9 +297,15 @@ def evaluate(cfg):
             findings.append({"kind": "directory-not-owned-by-" + cfg["owner"], "path": d,
                              "owner": pwd.getpwuid(dst.st_uid).pw_name})
         holders = group_members(dst.st_gid)
-        if holders != {cfg["owner"]}:
+        others = holders - {cfg["owner"], "root"}
+        if others:
+            # an EXPOSURE: some account other than the owner or root holds the group
             findings.append({"kind": "directory-group-not-" + cfg["owner"] + "-only", "path": d,
                              "group_holders": sorted(holders)})
+        elif holders != {cfg["owner"]}:
+            # DRIFT, not an exposure (condition 2): a group with no holders, or only root (who holds DAC_OVERRIDE
+            # regardless), is strictly no more open than today - but the fence is no longer the one we set.
+            findings.append({"kind": "directory-group-drift", "path": d, "group_holders": sorted(holders)})
         # ⛔ FINDING-1: a mode comparison is the thing this tool's docstring forbids - adding the reader to
         #    the owner's group would open everything while the other-bits still read 0. Attempt it.
         if reads_as(cfg["reader"], d):
@@ -276,11 +328,15 @@ def evaluate(cfg):
     copies, pop, keys = copies_in(cfg["scan_roots"], cfg["live_memory"], cfg["reader"])
     for c in copies:
         findings.append({"kind": "readable-copy-of-memory", "path": c["path"], "shared_lines": c["shared_lines"]})
-    exposures = [f for f in findings if f["kind"] != "target-not-found"]
+    exposures = [f for f in findings if f["kind"] != "target-not-found" and not is_drift(f)]
+    missing = [f for f in findings if f["kind"] == "target-not-found"]
+    drift = [f for f in findings if is_drift(f)]
     if exposures:
         verdict, reason = "EXPOSED", ""
-    elif findings:
+    elif missing:
         verdict, reason = "INSTRUMENT", "a target is missing, so its exposure cannot be measured"
+    elif drift:
+        verdict, reason = "DRIFT", "the fence changed shape, but no account other than the owner or root holds it"
     else:
         verdict, reason = "PASS", ""
     return {"verdict": verdict, "reason": reason, "controls": controls, "findings": findings,
@@ -317,10 +373,14 @@ def save_state(st):
 
 
 def next_runlog_line():
+    """Absent run log -> 1 is right (the first row). ANY OTHER failure propagates: returning 1 for an unreadable
+    log was an absent input wearing a plausible value, and since P-6a.2 that value leads every alert body
+    (Langston, Step 4 on P-6a.1/.2). A propagated error reaches entry(), which exits 2, and the unit's own
+    OnFailure page carries it."""
     try:
         with open(RUNLOG, encoding="utf-8") as fh:
             return sum(1 for _ in fh) + 1
-    except OSError:
+    except FileNotFoundError:
         return 1
 
 
@@ -350,8 +410,8 @@ def reconcile_alerts(result, st):
        the unit's own OnFailure page carries what the alert could not."""
     notes, delivered = [], True
     evidence = "%s:%d" % (RUNLOG, next_runlog_line())
-    wanted = {"EXPOSED": KEY_EXPOSED, "INSTRUMENT": KEY_INSTRUMENT}.get(result["verdict"])
-    for key in (KEY_EXPOSED, KEY_INSTRUMENT):
+    wanted = {"EXPOSED": KEY_EXPOSED, "INSTRUMENT": KEY_INSTRUMENT, "DRIFT": KEY_DRIFT}.get(result["verdict"])
+    for key in (KEY_EXPOSED, KEY_INSTRUMENT, KEY_DRIFT):
         prev = st.get(key)
         if prev and key != wanted:
             rc, out, err = _alerts(["resolve", prev, "--by", ACTOR, "--evidence", evidence])
@@ -373,6 +433,11 @@ def reconcile_alerts(result, st):
             body = (head + "The daily read-as-" + READER + " check found: " + "; ".join(lines) + ". "
                     "Langston ruled this a hazard to review independence (B-LANGSTON-CONTEXT pre-audit 21.3). "
                     "Owner CC-INFRA - re-close the path, then let the next run resolve this.")
+        elif result["verdict"] == "DRIFT":
+            title = "Langston's privacy fence changed shape - not an exposure"
+            body = (head + "The daily check found the ownership or group of a fenced directory changed, but no account "
+                    "other than " + OWNER + " or root holds it: " + "; ".join(lines) + ". Nothing is readable that was "
+                    "not before. Owner CC-INFRA - restore " + OWNER + ":" + OWNER + ", then let the next run resolve this.")
         else:
             title = "Langston privacy check cannot measure the exposure"
             body = (head + "Reason: " + result.get("reason", "") + ". Controls: " + json.dumps(result["controls"])
@@ -413,7 +478,7 @@ def log_row(row):
         fh.write(json.dumps(row, ensure_ascii=False) + NL)
 
 
-CODES = {"PASS": 0, "EXPOSED": 1}
+CODES = {"PASS": 0, "EXPOSED": 1, "DRIFT": 1}
 
 
 def run_once(cfg, st, dry=False):
@@ -492,7 +557,8 @@ def self_test():
             os.chown(path, owner_uid, owner_gid)
             return path
 
-        base = {"reader": READER, "owner": OWNER, "control_readable": CONTROL_READABLE,
+        nss_ok = make("nsswitch-ok.conf", 0o644, "passwd: files systemd" + chr(10) + "group: files [NOTFOUND=return] systemd" + chr(10))
+        base = {"reader": READER, "owner": OWNER, "nsswitch": nss_ok, "control_readable": CONTROL_READABLE,
                 "control_refused": CONTROL_REFUSED, "live_memory": live, "missing_targets": []}
         # EXPOSED: every finding kind, including the three condition-1 narrowings the first version had
         make("store-exposed/root-owned.md", 0o644)
@@ -578,6 +644,39 @@ def self_test():
         os.chown(rootown, 0, owner_gid)
         check("P-6a.1: a fence not owned by the owner -> flagged",
               ("directory-not-owned-by-" + OWNER) in [f["kind"] for f in evaluate(dict(closed, closed_dirs=[rootown]))["findings"]], True)
+        check("  ...and the shared-group fence is an EXPOSURE verdict", rs["verdict"], "EXPOSED")
+        check("  ...and a root-owned fence alone is DRIFT, not an exposure",
+              evaluate(dict(closed, closed_dirs=[rootown]))["verdict"], "DRIFT")
+        # CONDITION 2: a group with NO holders is drift, never "readable by another account"
+        empty_gid = next((g.gr_gid for g in grp.getgrall() if not group_members(g.gr_gid)), None)
+        check("CONDITION 2 fixture: a zero-holder group exists on this box", empty_gid is not None, True)
+        if empty_gid is not None:
+            zero = mkdir("zero-holder-group-dir", 0o750)
+            os.chown(zero, owner_uid, empty_gid)
+            rz = evaluate(dict(closed, closed_dirs=[zero]))
+            zk = [f["kind"] for f in rz["findings"]]
+            check("CONDITION 2: a zero-holder group -> DRIFT", rz["verdict"], "DRIFT")
+            check("  ...flagged as directory-group-drift", "directory-group-drift" in zk, True)
+            check("  ...and NOT as the readable-by-another-account kind", ("directory-group-not-" + OWNER + "-only") in zk, False)
+        # CONDITION 2: a root-only group is drift too
+        check("CONDITION 2 fixture: group 0's holders are exactly root", group_members(0), {"root"})
+        rootgrp = mkdir("root-group-dir", 0o750)
+        os.chown(rootgrp, owner_uid, 0)
+        rr = evaluate(dict(closed, closed_dirs=[rootgrp]))
+        check("CONDITION 2: a root-only group -> DRIFT", rr["verdict"], "DRIFT")
+        check("  ...and NOT the readable-by-another-account kind",
+              ("directory-group-not-" + OWNER + "-only") in [f["kind"] for f in rr["findings"]], False)
+        # CONDITION 1: a non-enumerating account source -> INSTRUMENT, named
+        nss_sss = make("nsswitch-sss.conf", 0o644, "passwd: files sss" + chr(10) + "group: files sss" + chr(10))
+        rn = evaluate(dict(closed, nsswitch=nss_sss))
+        check("CONDITION 1: passwd/group served by sss -> INSTRUMENT, never PASS", rn["verdict"], "INSTRUMENT")
+        check("  ...and the reason names the source", "sss" in rn["reason"], True)
+        rm_ = evaluate(dict(closed, nsswitch=os.path.join(top, "no-such-nsswitch.conf")))
+        check("CONDITION 1: an unreadable nsswitch -> INSTRUMENT", rm_["verdict"], "INSTRUMENT")
+        unknown = make("nsswitch-unknown.conf", 0o644, "passwd: files mynewsource" + chr(10) + "group: files" + chr(10))
+        check("CONDITION 1: a source nobody listed -> INSTRUMENT (allowlist, not blocklist)",
+              evaluate(dict(closed, nsswitch=unknown))["verdict"], "INSTRUMENT")
+        check("  control: the bracketed action is not read as a source", evaluate(closed)["verdict"], "PASS")
         check("  control: the owner-owned, owner-only fence raises neither",
               [f["kind"] for f in r2["findings"] if f["kind"].startswith("directory-")], [])
         # P-6a.2 (FINDING-10): the alert body leads with the count, the number shown, and the run-log line
@@ -595,6 +694,29 @@ def self_test():
         body = adds[0][adds[0].index("--body") + 1] if adds else ""
         check("P-6a.2: body leads with the finding count and the shown count",
               body.startswith("%d finding(s); %d shown; full set at %s:" % (n_all, min(n_all, 12), RUNLOG)), True)
+
+        # CONDITION 2: a DRIFT run arms the DRIFT key with a title that does not claim readability, and exits 1
+        drifted = dict(closed, closed_dirs=[rootgrp])
+        sent.clear()
+        _alerts = capture
+        row, code = run_once(drifted, {})
+        adds = [a for a in sent if a[0] == "add"]
+        check("CONDITION 2: a DRIFT run -> exit", code, 1)
+        check("  ...arms the drift dedupe key", bool(adds) and adds[0][adds[0].index("--dedupe-key") + 1] == KEY_DRIFT, True)
+        check("  ...with a title that says it is not an exposure",
+              bool(adds) and "not an exposure" in adds[0][adds[0].index("--title") + 1], True)
+        # RESIDUAL: an absent run log counts from 1; an unreadable one must NOT be read as line 1
+        saved_runlog = RUNLOG
+        RUNLOG = os.path.join(top, "absent-run.jsonl")
+        check("RESIDUAL: an absent run log -> next line 1", next_runlog_line(), 1)
+        RUNLOG = mkdir("runlog-is-a-directory", 0o755)
+        try:
+            next_runlog_line()
+            raised = False
+        except OSError:
+            raised = True
+        check("RESIDUAL: an unreadable run log raises instead of answering 1", raised, True)
+        RUNLOG = saved_runlog
 
         # BLOCKER-5: an add that returns an ACKNOWLEDGED row, and a tracked alert acked since the last run
         acked_row = json.dumps({"id": "fixture-acked", "acknowledged_at": "2026-09-11T00:00:00Z"})
