@@ -148,28 +148,43 @@ export function completionReportCommitTime(batchId) {
 // session writing a completion report COPIES THE PREVIOUS REPORT rather than opening
 // workflow-10-governance, so a row added to the skill reaches nobody who copies a predecessor — 1 of 3
 // reports since the task-list row landed carried it, and the one that did was written after Kyle asked.
-// PURE: does `text` carry a markdown TABLE ROW that names the row and whose VERDICT CELL contains ✅?
-//   • a TABLE ROW is a line beginning with `|` (at most 3 spaces of indent), OUTSIDE a code fence;
-//   • the VERDICT CELL is the FIRST cell (stripped of emphasis, code and link marks) that BEGINS with one of
-//     the ledger's verdict tokens — `✅`, `N/A`, or `❌`. workflow-10-governance defines exactly two tokens
-//     (✅ / N/A); ❌ is admitted as a lead only so an explicit failure is read as the verdict and a ✅ in a
-//     LATER note cell cannot rescue it.
-//   ⇒ `✅ mine / N/A ×3` and `N/A ×3 / ✅ mine` both PASS (N/A-not-mine is correct on three of four);
-//   ⇒ a PROSE mention FAILS, even one carrying a ✅ or a `|`;
-//   ⇒ the skill's own row pasted with empty verdict cells FAILS; the same row FILLED IN passes, because its
-//     "WHEN IT APPLIES" cell leads with ⛔, which is not a verdict token;
-//   ⇒ `❌ | ✅ (note)` FAILS; `⚠️ ✅ partial` FAILS — a non-conforming token, stated rather than guessed at.
-const VERDICT_LEAD = /^(✅|N\/A|❌)/i;
+// PURE: does `text` carry the Tier-1 LEDGER ROW for `spec`, filled in with the owning session's ✅?
+//   A LEDGER ROW is a markdown table line (≤3 spaces indent, optionally inside `>` blockquote markers), OUTSIDE a
+//   CommonMark fenced code block, that NAMES the row (`spec.names`) AND carries its tier marker — a cell beginning
+//   `T1`, exactly as workflow-10-governance's ledger template does. The tier marker is what separates the ledger
+//   row from an objectives row that happens to mention the task lists (object-round reader r2, finding 5).
+//   VERDICT CELLS are the cells that BEGIN with a ledger token (`✅`, `N/A`, `❌`), other than the FIRST cell that names
+//   the row — so a name cell that starts with ✅ is never the verdict, while a verdict cell that mentions a list's
+//   FILENAME still counts (CC-C's real row, B_EXIT_BOOK_AGE_STAMP:90, does exactly that; r3 alerted on it).
+//   PASS iff no verdict cell begins with ❌ AND some verdict cell has a `/`-separated segment beginning with ✅.
+//   ⇒ `✅ mine / N/A ×3`, `N/A ×3 / ✅ mine`, and `N/A for CC-B | ✅ mine` PASS;
+//   ⇒ `❌ | ✅ (note)`, `❌ not done (should be ✅)`, `N/A — not ✅ yet`, `⚠️ ✅ partial` FAIL (⚠️ is not a token);
+//   ⇒ prose, an objectives row, the skill's template row left empty, and a row inside a fence FAIL.
+//   Fences follow CommonMark: an opener is ≥3 backticks or tildes with ≤3 spaces indent (a backtick info string
+//   may not contain a backtick, so ```x``` at a line start is inline code); it closes only on the same character,
+//   at least as long, with nothing after it; an UNCLOSED fence runs to the end of the file, as it renders.
+const LEDGER_TOKEN = /^(✅|N\/A|❌)/i;
+const TIER_CELL = /^T1\b/i;
 export function ledgerRowInText(text, spec) {
   if (typeof text !== 'string') return false;
-  let fenced = false;
+  let fence = null;
   for (const raw of text.split('\n')) {
     const line = raw.replace(/\r$/, '');
-    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue; }
-    if (fenced || !/^ {0,3}\|/.test(line) || !spec.names.test(line)) continue;
-    const cells = line.split('|').slice(1).map((c) => c.replace(/[*`_\[\]]/g, '').trim());
-    const verdict = cells.find((c) => VERDICT_LEAD.test(c));
-    if (verdict && verdict.includes('✅')) return true;
+    const f = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence) {
+      if (f && f[1][0] === fence.ch && f[1].length >= fence.len && f[2].trim() === '') fence = null;
+      continue;
+    }
+    if (f && !(f[1][0] === '`' && f[2].includes('`'))) { fence = { ch: f[1][0], len: f[1].length }; continue; }
+    const body = line.replace(/^ {0,3}(> ?)+/, '');
+    if (!/^ {0,3}\|/.test(body) || !spec.names.test(body)) continue;
+    const rawCells = body.split('|').slice(1);
+    const cells = rawCells.map((c) => c.replace(/[*`_\[\]]/g, '').trim());
+    if (!cells.some((c) => TIER_CELL.test(c))) continue;
+    const nameIdx = rawCells.findIndex((c) => spec.names.test(c));
+    const verdicts = cells.filter((c, i) => i !== nameIdx && LEDGER_TOKEN.test(c));
+    if (verdicts.some((c) => c.startsWith('❌'))) continue;
+    if (verdicts.some((c) => c.split('/').some((seg) => seg.trim().startsWith('✅')))) return true;
   }
   return false;
 }
@@ -184,7 +199,10 @@ export function ledgerRowInText(text, spec) {
 // callers pass nothing and get the real readers. KNOWN EDGES, stated: a batch's date is its EARLIEST report
 // (a re-opened batch whose first report predates `sinceMs` is not graded); a failed `git show` reads as a
 // missing row (⇒ alert, the same failure direction as docPresent), while a failed `git ls-tree` reads as
-// no report (⇒ not graded) — tick() aborts before grading when its own fetch fails.
+// no report (⇒ not graded) — tick() aborts before grading when its own fetch fails. INHERITED EDGE (reader r2): the
+// report list comes from findGlobDoc → batchIdToFileRegex (config.mjs), which accepts a separator-led suffix, so
+// a batch id can match a NEIGHBOUR's report (`B-DISCORD` ↔ `B_DISCORD_<X>_COMPLETION_REPORT.md`): the earliest
+// of them sets the date and any of them can carry the row. Every doc-set check shares this; not changed here.
 export function checkLedgerRows(batchId, io = { findGlobDoc, completionReportCommitTime, showFile }) {
   const out = {};
   const reports = io.findGlobDoc(batchId, 'completion_report');

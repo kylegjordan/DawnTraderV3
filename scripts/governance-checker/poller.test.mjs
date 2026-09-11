@@ -456,6 +456,30 @@ ok('#637 a plausible-but-invalid token is rejected to the sentinel (a lastTick i
     ledgerRowInText('| **T1** | ★ **THE FOUR SESSION TASK LISTS** | ⛔ **EVERY batch close, EVERY class** | ✅ mine / N/A ×3 | updated |', spec));
   ok('R8: a filename-only ledger row passes', ledgerRowInText('| T1 | `CC_A_SESSION_TASK_LIST.md` | ✅ | updated |', spec));
   ok('R9: ✅ with a variation selector passes', ledgerRowInText('| T1 | the four session task lists | ✅️ mine | ok |', spec));
+  // r3 — object-round reader r2's ten shapes, each reproduced on the r2 matcher (hitprobe2) before this fix
+  const F3 = '`'.repeat(3);
+  ok('Q1: a NAME cell leading with ✅ is not the verdict; the ❌ is', !ledgerRowInText('| T1 | ✅ session task lists | ❌ not updated |', spec));
+  ok('Q2: an N/A note column before the real ✅ verdict PASSES', ledgerRowInText('| T1 | session task lists | N/A for CC-B | ✅ mine |', spec));
+  ok('Q3: ❌ with a ✅ later in the SAME cell FAILS', !ledgerRowInText('| T1 | the four session task lists | ❌ not done (should be ✅) | x |', spec));
+  ok('Q4: "N/A — not ✅ yet" FAILS (no segment begins with ✅)', !ledgerRowInText('| T1 | the four session task lists | N/A — not ✅ yet | x |', spec));
+  ok('Q5: inline code at a line start is not a fence — the row after it PASSES',
+    ledgerRowInText(F3 + 'x' + F3 + ' is inline\n| T1 | the four session task lists | ✅ mine | ok |', spec));
+  ok('Q6: four-space-indented backticks are not a fence — the row after it PASSES',
+    ledgerRowInText('    ' + F3 + '\n| T1 | the four session task lists | ✅ mine | ok |', spec));
+  ok('Q7: a ~~~ block is not closed by a backtick line — the example row inside stays hidden',
+    !ledgerRowInText('~~~\n' + F3 + '\n| T1 | the four session task lists | ✅ | example |\n~~~', spec));
+  ok('Q8: an UNCLOSED fence runs to end of file, as it renders — a row after it FAILS (deliberate)',
+    !ledgerRowInText(F3 + 'js\nconst a = 1;\n\n| T1 | the four session task lists | ✅ mine / N/A ×3 | ok |', spec));
+  ok('Q9: an OBJECTIVES row using the words (no T1 tier cell) FAILS', !ledgerRowInText('| 3 | move the session task lists to 1-system-manual | ✅ done |', spec));
+  ok('Q10: a ledger table inside a blockquote PASSES', ledgerRowInText('> | T1 | session task lists | ✅ mine |', spec));
+  ok('Q11: CC-C real row shape — tier and name merged in the first cell — PASSES',
+    ledgerRowInText('| T1 · the four session task lists | ✅ **mine** / `N/A — not mine` ×3 — ⚠️ added late | note |', spec));
+  ok('Q13: a NAME cell leading with ✅ does not satisfy the row when the real verdict is N/A ×4',
+    !ledgerRowInText('| T1 | ✅ session task lists | N/A ×4 |', spec));
+  ok('Q14: REAL ROW, B_EXIT_BOOK_AGE_STAMP_COMPLETION_REPORT.md:90 at 33b62ee16 — its verdict cell names CC_C_SESSION_TASK_LIST.md — PASSES',
+    ledgerRowInText("| T1 · the four session task lists | ✅ **mine** / `N/A — not mine` ×3 — ⚠️ **added 2026-09-11, late:** `CC_C_SESSION_TASK_LIST.md` did not exist at this 09-07 close (Kyle's rule landed 09-05). It is created in the same commit as this row, on the governance checker's alert `2ec36624`, routed by Langston. The other three lists are not mine to touch. |", spec));
+  ok('Q12: a 4-backtick fence is closed only by ≥4 backticks — a 3-backtick line inside does not close it',
+    !ledgerRowInText('````\n' + F3 + '\n| T1 | the four session task lists | ✅ | example |\n````', spec));
 }
 // checkLedgerRows with injected readers — the date gate and the read-failure path (reader r1: both untested)
 {
