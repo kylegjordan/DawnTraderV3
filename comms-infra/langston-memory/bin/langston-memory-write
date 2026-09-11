@@ -52,6 +52,10 @@ EXIT  0 written (or no change) · 2 refused input · 3 not root or langston · 4
 import datetime, fcntl, hashlib, importlib.util, json, os, pwd, re, stat, subprocess, sys, tempfile, time, traceback
 
 sys.dont_write_bytecode = True   # a root run must not leave a root-owned __pycache__ beside a langston-owned reader
+# ⛔ GUARD (c) condition (Langston, 20:26Z): cache_from_source honours sys.pycache_prefix, so an env var
+#    (PYTHONPYCACHEPREFIX) could relocate the loaded .pyc to a langston-owned tree the trust check never walked.
+#    Pin it None so the checked cache path IS the loaded one by construction - the env var cannot move it.
+sys.pycache_prefix = None
 
 OWNER = "langston"
 LIVE_HOME = "/home/langston"
@@ -136,7 +140,9 @@ def reader_trust_problems(path):
     candidates = chain(given) + chain(real)
     for src in (given, real):
         cache = importlib.util.cache_from_source(src)
-        candidates += [os.path.dirname(cache), cache]
+        # walk the cache DIRECTORY's whole chain, not just its parent - belt and brace beside the pin above, so the
+        # guard's coverage does not silently depend on that pin surviving a later edit 350 lines away.
+        candidates += chain(os.path.dirname(cache)) + [cache]
     for c in candidates:
         if c in seen:
             continue
@@ -735,6 +741,19 @@ def self_test():
                     check("GUARD (c): its __pycache__ owned by the owner (a .pyc runs in place of source) -> exit", rc, 6)
                     check("  ...names the cache, and the target is byte-identical", ("%s is owned by %s" % (gcache, OWNER)) in out and same, True)
                     shutil.rmtree(gcache)
+
+                    # GUARD (c) condition: a hostile PYTHONPYCACHEPREFIX at a langston-owned tree does NOT refuse a
+                    #   legitimate root write - the pin neutralises it, so the loaded cache stays root-owned (N/A-by-pinning).
+                    gpref = os.path.join(groot, "langston-pycache")
+                    os.makedirs(gpref)
+                    os.chown(gpref, gown.pw_uid, gown.pw_gid)
+                    reset()
+                    gp0, gps0 = current()
+                    rcp, outp = call(appendargs(gps0), "- prefix case" + NL,
+                                     extra_env={"LANGSTON_MEMORY_READER": greader, "PYTHONPYCACHEPREFIX": gpref})
+                    check("GUARD (c) condition: a hostile PYTHONPYCACHEPREFIX is neutralised by the pin -> write PROCEEDS", rcp, 0)
+                    reader_pyc = [os.path.join(dp, f) for dp, _, fs in os.walk(gpref) for f in fs if "langston_memory" in f]
+                    check("  ...and the READER's bytecode did NOT land under that langston-owned prefix (the loaded cache stays default)", reader_pyc, [])
 
                     gevil = os.path.join(groot, "elsewhere")
                     os.makedirs(gevil)
