@@ -1,0 +1,180 @@
+{
+  "read_ref": "77fbc16c2b63ce71decd23f760d49292cfca125e",
+  "purpose": "Source-byte identity and citation-range validation, not whole-file read or runtime verification.",
+  "files": [
+    {
+      "path": "1-system-manual/BATCH_CATALOG.md",
+      "sha256": "a92910007433fc23b44abbed092a825cdab686783fa8fa05295933d0f1d87351",
+      "bytes": 787246,
+      "lines": 965
+    },
+    {
+      "path": "1-system-manual/CODEX_FINDINGS_REGISTER.md",
+      "sha256": "0dba8b2dac478fbd5d4ad8918b46c30d14a997100b1382d31e2ef3f379b43738",
+      "bytes": 50042,
+      "lines": 335
+    },
+    {
+      "path": "1-system-manual/PHASE_19_PLAN.md",
+      "sha256": "0e0db29b8db54beb8038591da172799ffdc84f769a7be0b87582664f3f14e92e",
+      "bytes": 512956,
+      "lines": 578
+    },
+    {
+      "path": "1-system-manual/RUNNING_ISSUES.md",
+      "sha256": "c28604187c132830ac481f60b725091b1da3c71aa1a6b9d892a548acd048eeef",
+      "bytes": 2737749,
+      "lines": 8414
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/B79_0n_RTB_COMPLETION_REPORT.md",
+      "sha256": "360fa3167ee7b6e7845f5b478c7c494874b4868061c1def730ac47b0ac0fe33e",
+      "bytes": 25484,
+      "lines": 173
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/BATCH_79_0m_a_COMPLETION_REPORT.md",
+      "sha256": "ebb4d7859c8e2ab7adf58586cbbe88760ae9052e7c8c353ab465698a10e952f9",
+      "bytes": 10424,
+      "lines": 100
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/B_4_5_COMPLETION_REPORT.md",
+      "sha256": "41f1cb05f452d836754f75f2006954d722dfa6400ac36fe9343a82121d13065b",
+      "bytes": 5772,
+      "lines": 25
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/B_4_7_COMPLETION_REPORT.md",
+      "sha256": "8305524ee80688c6a4df20294143748bc0d7c9070b30676d53ae81daba633985",
+      "bytes": 6926,
+      "lines": 39
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/F_G_2_PROGRESS_REPORT.md",
+      "sha256": "c502a9db0833c221fb538c8661815e3b84a83f01a794fe915f73010115c0b4a1",
+      "bytes": 46043,
+      "lines": 167
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/P19_B4b_1_COMPLETION_REPORT.md",
+      "sha256": "fdf1bda471885d0a2a9bf7700ab9abbb27152f4cb320fc1fd383736015d19e47",
+      "bytes": 7084,
+      "lines": 49
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/P19_B7_1_COMPLETION_REPORT.md",
+      "sha256": "c3cc8c8f9515b87a90fe96635d77a72c9cdf0494a979633c93df1f3cfb863bbb",
+      "bytes": 7986,
+      "lines": 54
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/P19_B7_2c_COMPLETION_REPORT.md",
+      "sha256": "4780a9a4c55e645a12e08bc3d27f3a7a2f64813d801e8da760eb6308ccc3c97c",
+      "bytes": 9937,
+      "lines": 77
+    },
+    {
+      "path": "Claude Comms and Packages/Batch Completion/P19_B8_5a_COMPLETION_REPORT.md",
+      "sha256": "efd2a6db9d1b0684c989569eee2196dfdfcd2ac2feddb7d1a7822d2b97911bfe",
+      "bytes": 9135,
+      "lines": 45
+    },
+    {
+      "path": "Claude Comms and Packages/Codex Audits/astra-independent/BLIND_SPOT_DELTA_astra.md",
+      "sha256": "8a57ed5ed37d88e001bfdfbca2c5e0b9690f0bf56044374d552f3adf62ea0ce9",
+      "bytes": 4102,
+      "lines": 21
+    },
+    {
+      "path": "Claude Comms and Packages/Codex Audits/astra-independent/REPORT.md",
+      "sha256": "ec3b6fc95b35415ddfbc13ae60f5f1a8d14db645c2a801bb3fbd6d171bc2b20b",
+      "bytes": 94658,
+      "lines": 472
+    },
+    {
+      "path": "Claude Comms and Packages/Codex Audits/audit1-full-system/BLIND_SPOT_DELTA_audit1.md",
+      "sha256": "f97275b4ae9b8708abf5e99081dd42e0724896a8e144847c9950e08c0b82df61",
+      "bytes": 6777,
+      "lines": 60
+    },
+    {
+      "path": "Claude Comms and Packages/Codex Audits/audit1-full-system/FULL_SYSTEM_AUDIT_2026-09-05.md",
+      "sha256": "cfaac48dc9dc4b459f97c1cfa51565fc69e6fb14b3f3d6d3daf7af66e826d1e0",
+      "bytes": 21436,
+      "lines": 231
+    },
+    {
+      "path": "Claude Comms and Packages/Codex Audits/audit2-fee-viability/CODEX_AUDIT_2_REPORT.md",
+      "sha256": "85718fe6629a8573f511fd96b4f8188c4961b298d5028fc8b91074fec382afbe",
+      "bytes": 18711,
+      "lines": 117
+    },
+    {
+      "path": "Claude Comms and Packages/Codex Audits/audit3/REPORT.md",
+      "sha256": "084ff2d1a3de3e251d909676f0c6d58c0f6099e2f138b62497048f46ba086ba8",
+      "bytes": 56746,
+      "lines": 291
+    },
+    {
+      "path": "Claude Comms and Packages/Codex Audits/pricing-architecture-review/REPORT.md",
+      "sha256": "ccb942206e84ec80e6de1f7a7cc5d1452e05438a64f7b64bdb14e1db6393e35d",
+      "bytes": 60847,
+      "lines": 272
+    },
+    {
+      "path": "Claude Comms and Packages/Scope Files/B_PRICE_SIDE_BY_JOB_LEVEL_CENSUS.md",
+      "sha256": "7551c79c863ef0da93a8c8757bf3d36dbf9094e4fc042ec12bcbd34ef1d328d6",
+      "bytes": 106508,
+      "lines": 794
+    },
+    {
+      "path": "Claude Comms and Packages/Scope Files/CODEX_FINDINGS_BY_GROUP.md",
+      "sha256": "7648da1e4102b71b13c6756703043629589f097e706d544d908ed5d81878ce3c",
+      "bytes": 39031,
+      "lines": 481
+    },
+    {
+      "path": "bridge/canonical/DawnTrader_Regime_Strategy_Mapping.md",
+      "sha256": "4a4d72ef98af16140eaadca2aae4cbe29bd02074837ce46ad2ae5aa3b360ff59",
+      "bytes": 10966,
+      "lines": 180
+    },
+    {
+      "path": "bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md",
+      "sha256": "bfe2b2d517c430f67f34cbc82f01bd8372282ff1b7ad6cbab0f95d1cc803c039",
+      "bytes": 47739,
+      "lines": 938
+    },
+    {
+      "path": "bridge/canonical/DawnTrader_System_Invariants_Design_Guarantees.md",
+      "sha256": "761641bf212700933bfa1881e8e6cf74bcac9753e8625db438c83957636f5918",
+      "bytes": 15433,
+      "lines": 483
+    },
+    {
+      "path": "server/services/active-position-sizing.ts",
+      "sha256": "62b4bf2ea2b01079cabe7e4a1136ccc40283c1fa125e74abaf6e7a70874a1665",
+      "bytes": 19204,
+      "lines": 396
+    },
+    {
+      "path": "server/services/execution/order-placer.ts",
+      "sha256": "2985a303d8f6e306463b37e5e4cfb93fc2ce25746147a411f0bcbf169ee2ffcb",
+      "bytes": 6730,
+      "lines": 123
+    },
+    {
+      "path": "server/startup/b72-warmup.ts",
+      "sha256": "5111a8bd5e60dd61b4131bbd4e4ed5d493ac1a0093ab1169d67890b91ed92dda",
+      "bytes": 23532,
+      "lines": 382
+    }
+  ],
+  "checks": {
+    "group_sections": 10,
+    "question_mapping": "Parsed from REPORT.md: 15 AU1 and 15 AS, each exactly once",
+    "group_omission_positive_control": "removing the Group 6 numbered heading fails coverage",
+    "citation_ranges_checked": 62
+  }
+}
