@@ -1305,6 +1305,44 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+➕➕ **AMENDMENT 2026-09-12 (CC-C) — ⛔⛔ THE BURST HAS A CONSEQUENCE, AND IT IS THAT WE ARE TAKING EXIT DECISIONS ON PRICES UP TO 92.7% AWAY FROM THE MARKET. KYLE NAMED THE MECHANISM BEFORE I MEASURED IT.**
+
+**HIS WORDS, 2026-09-12:** *"this is when we have session transitions … There are four x stocks periods … premarket hours, market hours, after hours, and then overnight. And it seems like at eight fifteen PM and maybe four fifteen PM eastern time … there's a transition between sessions."*
+✅ **HE IS RIGHT ON EVERY PART, AND THE MINUTES CONFIRM IT.** `closed_trades`, `closed_at IS NOT NULL`, `asset_class = 'xstock_spot'`, **unbounded, n = 271**, grouped by UTC minute-of-day: **`00:15` = 75 · `20:15` = 13 · `13:45` = 8 · `13:46` = 5 · `00:16` = 4.** ⇒ **`00:15` UTC = 20:15 ET · `20:15` UTC = 16:15 ET · `13:45` UTC = 09:45 ET.** ★ **Those are his 8:15pm and 4:15pm, plus the pre-market-to-regular handover — and this entry already records WHY they land at :15 and :45 rather than on the hour: the extended-hours flag flips ~15 minutes LATE (`B_XSTOCK_FEED_SANITY_SCOPE.md:430`).**
+
+⛔ **CONCENTRATION: 105 of 271 xStock closes — 38.7% — land on SEVEN minutes out of 1,440.** Uniform expectation is 271 × 7/1440 ≈ **1.3**. **Observed 105.**
+✅✅ **AND THE NEGATIVE CONTROL IS WHAT MAKES IT A MEASUREMENT RATHER THAN A NUMBER — same process, same engine, same seven minutes, an asset class with NO sessions:** `crypto_spot` closes, unbounded, **n = 479 → ONE close on those seven minutes** (uniform expectation ≈ 2.3). ⇒ **crypto is at chance; xStock is ~80× it.** ★ **The effect is the VENUE'S SESSION BOUNDARY, not our clock, not a cron, not the engine's cadence — a process-wide artefact would have moved both classes.**
+
+⛔⛔ **THE CONSEQUENCE, WHICH IS THE NEW PART — THE DECISION PRICE AND THE BOOKED PRICE DISAGREE, AND ONLY AT THE BOUNDARY.** Object: the same population, further restricted to `exit_decision_price IS NOT NULL AND exit_price > 0` — **n = 37 of 271, because the field is only populated on 37 rows, and that limit is stated rather than hidden.** Measure: `ABS(exit_decision_price − exit_price) / exit_price`.
+
+| bucket | n | median | p90 | max | >5% | >20% |
+|---|---|---|---|---|---|---|
+| every other minute | 15 | **0.060%** | 0.322% | 3.60% | **0** | **0** |
+| session-boundary minute | 22 | **3.935%** | **32.019%** | **92.70%** | **9** | **5** |
+
+⇒ **The median divergence is 66× higher at the boundary, and NINE of 22 boundary closes were decided on a price more than 5% from the price they were booked at — against ZERO of 15 elsewhere.**
+★★ **AND THE TOP TEN WORST DIVERGENCES IN THE ENTIRE xSTOCK POPULATION ARE ALL BOUNDARY CLOSES — every one at `00:15` or `00:16`. There is no non-boundary member in the top ten.**
+
+| symbol | closed_at | reason | booked exit | DECISION price | divergence | net |
+|---|---|---|---|---|---|---|
+| CRM/USD | 2026-09-12 00:16:31 | `target_hit` | 261.29 | **503.50** | **92.7%** | +7.15 |
+| WEN/USD | 2026-08-29 00:15:03 | `target_hit` | 8.562 | **13.31** | 55.5% | +5.88 |
+| TGT/USD | 2026-08-29 00:15:01 | `stop_hit` | 157.00 | 106.08 | 32.4% | −3.07 |
+| NEM/USD | 2026-09-12 00:16:30 | `stop_hit` | 121.20 | **86.945** | 28.3% | −8.06 |
+| MOH/USD | 2026-08-27 00:15:02 | `target_hit` | 219.84 | 281.03 | 27.8% | +9.06 |
+| NOW/USD | 2026-08-29 00:15:00 | `stop_hit` | 143.20 | 118.75 | 17.1% | **+6.53** |
+
+⛔ **TWO OF THOSE DECISION PRICES ARE ARITHMETICALLY IDENTIFIABLE AS MIDPOINTS OF A COLLAPSED BOOK:** **CRM 503.50 = (7 + 1000)/2** and **NEM 86.945 = (28.50 + 145.39)/2.** ⇒ **the engine took the midpoint of a two-sided-but-nonsense quote and fired a target and a stop against it.** **The real market at 00:15:00 that day was CRM 235.00 / 248.40 (last 247.25) and NEM 121.20 / 135.29 (last 126.54).**
+⛔⛔ **AND `NOW/USD` IS THE ONE THAT CANNOT BE EXPLAINED AWAY: a `stop_hit` BOOKED AS A +$6.53 PROFIT.** A stop that makes money is not a stop. ★ **That single row is the cheapest possible statement of the defect, and it needs no percentages to make it.**
+
+⚠️ **WHAT IS NOT ESTABLISHED, STATED RATHER THAN GLOSSED:**
+1. **The net effect on P&L is NOT adverse on its face and I am not claiming it is** — boundary closes net **−$31.14 over 105** against **−$339.33 over 166** elsewhere. ⇒ **they look BETTER.** ★ **That is the opposite of reassuring: an exit fired on a phantom price books a tidy outcome that no market produced, so the boundary population is FLATTERING THE RESULTS while corresponding to nothing.** **The harm is to truth and to calibration, not to the balance — which is exactly Kyle's own test: *"our goal is not to make our simulated numbers look beautiful, but not be based in reality."***
+2. **`exit_decision_price` is populated on only 37 of 271 rows**, so the divergence table speaks for 13.7% of the population. **The 105/271 concentration uses the full 271 and does not depend on it.**
+3. **Which of the four sessions each boundary belongs to is NOT resolved here** — `is_extended_hours` is a BOOLEAN against a FOUR-WAY distinction (recorded above in this entry), so the row cannot say whether it sat in pre-market, after-hours or overnight.
+
+⇒ **DISPOSITION — §9.4 (1), FOLD INTO THE WORK IN HAND.** This is not an adjacent finding: *"which price may fire an action"* is the question `3n` `B-PRICE-SIDE-BY-JOB` exists to answer, and **OBJ-8 IS the decision layer.** ⇒ **it becomes an OBJ-8 acceptance case: a decision price whose book is collapsed at a session boundary must REFUSE, not yield to the midpoint.** ⛔ **It must NOT be closed by the `#943` feed-sanity work, which closed INCONCLUSIVE on a different question (false-HOLLOW), nor by `#1044`.**
+➕ **AND A SEPARATE, SMALLER OBLIGATION THAT DOES NOT WAIT FOR THE FIX: the affected closes must be FLAGGED so they do not feed calibration.** The predicate is registered here, before any flagging runs, so it cannot be tuned afterwards: **`asset_class='xstock_spot'` AND the close minute is one of `00:15`, `00:16`, `00:17`, `00:18`, `20:15`, `13:45`, `13:46`.** **n = 105 today.** ⚠️ **A minute-of-day predicate is a PROXY for the session boundary and will over-capture — say so wherever the flag is read, and prefer the venue's own session state once the four-way distinction exists.**
+
 ### #958 OPEN 2026-08-30 (CC-C; Kyle-directed after he rejected `#955` as too tame for the phenomenon; parser/throttle half CONFIRMED by Langston at `ad7a3960c`) — ⭐ **THE 00:15 UTC EVENT, TRACED: A RECURRING DAILY VENUE-SIDE BURST ON THE xSTOCK FEED. NOT A RECONNECT, NOT A STALL, NOT A WIDE MARKET.**
 
 **SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (1) — FOLD INTO THE WORK IN HAND.**
