@@ -549,7 +549,10 @@ def main():
     write_body(html, start, end, p13, f13)
     code, out = run_extractor(f13)
     results.append(("pinned title resolves to ZERO", EXIT_MEASUREMENT_FAILED, code))
-    results.append(("  ^ names the missing ladder", 1, says(out, "census changed")))
+    # r10: the eight-title identity loop now fires FIRST here and is strictly MORE precise
+    # than the census message this used to assert. The GUARD improved, so the assertion
+    # follows the guard - the opposite direction from tuning a guard to match a test.
+    results.append(("  ^ names the identity failure", 1, says(out, "GOVERNING-TABLE-IN-DOUBT")))
     results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
 
     # CASE 14 - BLOCKER-6 on the SECOND PIN. A footnote marker on `$0 +` used to make
@@ -602,6 +605,35 @@ def main():
     write_body(html, start, end, p17, f17)
     code, out = run_extractor(f17)
     results.append(("BLOCKER-7b: short row", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
+
+    # CASE 18 - a duplicate NON-PINNED TIERED title. CASE 6's fixture is the PINNED case and does
+    # not reach the new loop, which is exactly why Langston asked for a non-pinned one: the pins
+    # already had a raw-count arm, the other six titles had none.
+    _, _, p18 = slice_payload(html)
+    if not inject_duplicate_accordion(p18, "Cross-platform Fee Tiers"):
+        print("HARNESS FAULT: case 18 injected no accordion - aborting")
+        return EXIT_HARNESS_FAULT
+    f18 = os.path.join(tmp, "mut_dup_tiered.html")
+    write_body(html, start, end, p18, f18)
+    code, out = run_extractor(f18)
+    results.append(("duplicate NON-PINNED tiered title", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ says GOVERNING-TABLE-IN-DOUBT", 1, says(out, "GOVERNING-TABLE-IN-DOUBT")))
+    results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
+
+    # CASE 19 - a duplicate NON-PINNED BANDED title. This one is the sharper half: the twin
+    # PARSES cleanly (no `Tier` header to blunt), so both land in `banded` and `seen_banded`
+    # silently keeps the last. Set-equality passes. Without the loop the run exits 0 having
+    # measured one of two tables and named neither.
+    _, _, p19 = slice_payload(html)
+    if not inject_duplicate_accordion(p19, "USDG Pairs"):
+        print("HARNESS FAULT: case 19 injected no accordion - aborting")
+        return EXIT_HARNESS_FAULT
+    f19 = os.path.join(tmp, "mut_dup_banded.html")
+    write_body(html, start, end, p19, f19)
+    code, out = run_extractor(f19)
+    results.append(("duplicate NON-PINNED banded title", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ says GOVERNING-TABLE-IN-DOUBT", 1, says(out, "GOVERNING-TABLE-IN-DOUBT")))
     results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
 
     print("")

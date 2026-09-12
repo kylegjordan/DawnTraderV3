@@ -398,6 +398,22 @@ def main():
                   "not the venue. Reporting nothing." % (CONTROL_RUNG1,))
             return 2
         print("control: rung 1 == %s satisfied by %s" % (CONTROL_RUNG1, control_ok))
+
+        # ⛔ LANGSTON'S STEP-1 CLEARING CONDITION (r9). Every reported table is keyed by TITLE in
+        # a dict - `match_vector` and `seen_banded` both - so a duplicate title collapsed with
+        # LAST WRITE WINS while set-equality still passed, and the report was confidently wrong
+        # about WHICH of the two it had measured. `titles_in` was wired to only the two pins.
+        # This loop subsumes both pins' raw-count arm and closes the CLASS: a clean run can now
+        # tell you a duplicate is ABSENT, which is what makes the scope's eight facts verifiable
+        # by the instrument that asserted them.
+        for t in sorted(set(EXPECTED_MATCH) | set(EXPECTED_BANDED)):
+            bearers = titles_in(raw, t)
+            if len(bearers) != 1:
+                print("   GOVERNING-TABLE-IN-DOUBT: %d tables bear %r in the payload, expected "
+                      "exactly 1 - STOPPING, no re-selection" % (len(bearers), t))
+                return 2
+        print("title identity: all %d expected titles resolve to exactly one table each"
+              % len(set(EXPECTED_MATCH) | set(EXPECTED_BANDED)))
         print("tiered ladders: %d | banded schedules: %d" % (len(ladders), len(banded)))
         print("   \u26a0 census caveat (Langston r4): this counts paragraphArticleBodyTable nodes ONLY.")
         print("   Stocks / xStocks / Perps / Pro Stocks carry none, so it is one node type, not")
