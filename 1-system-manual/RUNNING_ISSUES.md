@@ -8910,3 +8910,39 @@ const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
 **HOME FOR (iii): `B-PAPER-OPEN-ENTRYPOINT-CENSUS`, owner CC-B, `PHASE_19_PLAN` row `2.4g-2`, placed immediately BEFORE `2.4h`** (Langston's Ruling 2 — a system-integrity finding must not be buried inside a coefficient batch). ⛔ **The FIX is a design question — move the write after the gate, or make the gate's failure remove the row — and under rule 15 it is not a patch and not mine to choose unreviewed.**
 
 **DISPOSITION — §9.4 disposition 1, FOLDED into the work in hand:** this is the precondition on the geometry leg of `B-EXIT-POLICY-EVALUATOR` (`PHASE_19_PLAN` row 2.4h), agreed with Langston 2026-09-12 as folded rather than a separate batch. ⛔ **IT GATES THE BASELINE: no target coefficient may be re-based while the pool that produces 31 of 58 crypto trades sets its own geometry outside the strategy modules and clears the floor anyway.** The companion horizon-grid defect is placed separately at row `3n.i` (`B-HORIZON-GRID-COMPARABILITY`).
+
+---
+
+### #1052 OPEN 2026-09-12 (CC-B, Kyle-directed; problem and plan from Coltrane, arithmetic re-derived by CC-B) — ⭐⭐ **THE REACHABILITY CEILING IS A HOLDING-HORIZON STATEMENT, AND OURS DISAGREES WITH ITSELF THREE WAYS**
+
+**BATCH: `B-GEOMETRY-REACH-BASELINE`, change-class `architecture`, scope at `Claude Comms and Packages/Scope Files/B_GEOMETRY_REACH_BASELINE_SCOPE.md`. Plan row `2.4g-2`.** ⛔ **ONE batch: the reward-to-risk work and the reachability work are the same dial and are not separable. The reachability leg absorbs what had been scoped as a separate CC-C batch.**
+
+⛔ **PROBLEM 1 — AND THE CEILING IS NOT ARBITRARY, WHICH IS THE PART EVERY EARLIER ACCOUNT INCLUDING MINE GOT WRONG.** Read at the ref, `P19_REORG_B2_PRE_AUDIT.md:41-43`: *"ATR is per-bar volatility (14-period on 60-min candles) … For a driftless walk, expected favorable excursion over H bars scales with √H, not linearly"*, filter rule *"pass iff `floor / (ATR/price) ≤ c·√H`"*, and *"For a 3.5 % floor, H≈16 (√H=4), c≈1 … **Seed the per-class bound CONSERVATIVELY … and let the by-reason counts calibrate in Phase**"*.
+⇒ ⭐ **`reach_atr_max = 4.0` IS `√16` — IT ENCODES A SIXTEEN-HOUR HOLDING HORIZON.** Inverted:
+
+| ceiling | implied horizon |
+|---|---|
+| 3.12 ATR | **9.76 h — our MEASURED median hold** |
+| **4.00 ATR** | **16 h — what we actually seeded** |
+| 6.00 ATR | **36 h — what `strong_bull_trend` needs** |
+
+⛔ **SO WE RUN THREE HORIZONS AT ONCE: a ceiling asserting sixteen hours, trades resolving in ten, one strategy needing thirty-six — and Kyle has DECLINED a maximum hold, so we are not committing to sixteen hours at all.** ★ **The inconsistency is the finding; the number 4.0 is not.** ✅ **And the original author asked for exactly this work — the value was seeded as a placeholder pending calibration.**
+**MEASURED CONSEQUENCE:** `strong-bull-trend.ts:152-153` builds `entry + 6.0×ATR` against `entry − 3.0×ATR` — **R = 2.00, a good ratio** — and exceeds the 4.0 ceiling on every signal. **Every `unreachable` line in the live log is that one strategy**, tagged on the VTS lane and **DROPPED on the active lane.** Coltrane ran the function: 4 ATR passes, 6 fails. ⇒ **our best-ratio strategy cannot reach execution.** ⚠️ **And √H estimates TYPICAL excursion — it never established that a farther target is impossible. The gate enforces an estimate as a prohibition.**
+
+⛔ **PROBLEM 2 — FEES CONSUMED A REAL GROSS PROFIT.** Object: the **29 filled September crypto pattern-pool trades** (12 target hits, 17 stop hits), recovered independently by Coltrane from the paper-history API: **gross +$9.50, fees $18.35, net −$8.85 — fees were 1.93× the gross profit.** ✅ **All 29 accounting identities reconcile and the check is mutation-proved: adding $1 to any recorded net makes it fail.**
+
+⛔⛔ **WHAT NEITHER PROBLEM ESTABLISHES, AND IT BOUNDS THE WHOLE BATCH: that these strategies can never be profitable.** Zero-drift two-barrier benchmark on the same geometry: `P(target first) = stop/(target+stop) = 37.6 %`; **observed 41.4 % on n=29.** ⇒ **~4 pp over a coin flip on 29 trades — not distinguishable from noise. Fixing costs and unblocking a strategy makes the machine work as designed; it does not prove an edge.**
+
+⚠️ **FOUR OF MY OWN NUMBERS WITHDRAWN HERE, because they were quoted to Kyle and two changed a conclusion:**
+1. ⛔ **"cost 0.43 % vs 1.69 %, a 4× difference" — THOSE WERE DOLLARS.** As shares of notional: **taker/taker $1.6882 on $107.01 = 1.5729 %; maker/maker $0.4304 on $52.42 = 0.8210 %.** ~1.9×, not 4×. Caught by Coltrane, re-measured by me.
+2. ⛔ **The break-evens built on them (42.2 % / 54.7 %) are void.** Restated on the corrected shares: **taker entry 54.3 %, maker entry 50.2 %, observed 41.4 %.**
+3. ⛔ **"the maker/taker P&L comparison is PARTLY confounded" — it is COMPLETELY confounded, structurally.** Measured: **exit maker → 18 target hits / 0 stops; exit taker → 0 targets / 34 stops.** A winner fills its resting target limit (maker); a loser is stopped at market (taker). ⇒ ⭐ **EXIT FEE MODE IS AN OUTCOME, NOT A CHOICE.**
+4. ⛔ **"maker fees are the single biggest lever" — only the ENTRY leg is choosable, worth ~0.39 pp, and it is NOT SUFFICIENT.** It moves the required win rate 54.3 % → 50.2 % against an observed 41.4 %. **Cost reduction alone does not close the gap.**
+
+✅ **AND ONE CORRECTION THAT MADE THE PLAN BETTER: Langston proposed BUILDING a risk-distance-multiple target to make R a dial on all 19 strategies. It ALREADY EXISTS** — `sma_trend_ride` (`break_target_r_multiple`), `vwap_bounce` (`target_r_multiple`), `abcd_long` (a two-R target), each with the multiple in the DB. ⇒ **extend, do not build.**
+
+**THE PLAN, four objectives, order binding:** (1) **correct the fee basis** — reconcile booked fees against entry notional, then wire the model to the account's applicable pair rates instead of flat Tier-1 assumptions, modelling target/stop/unfilled exits separately; (2) **release the reachability rejection for `strong_bull_trend` on the PAPER path only**, native geometry kept, rejection label retained, every other check untouched; (3) **choose exits by net account growth over calendar time** on the existing record, selecting on a held-out period and shipping through the existing config; (4) **add only the excursion record**, which is what makes a DERIVED ceiling possible — hold duration and the signal target already exist.
+⛔ **TWO THINGS THE PLAN DELIBERATELY REFUSES:** do **not** simply set both class ceilings to 6 — the strategy builds from RAW ATR while the guard may use a smaller CLAMPED ATR, and Coltrane reproduced a nominal 6-ATR target still failing a ceiling of 6; and do **not** reuse the broad tag-don't-drop mode, which also relaxes the reward-to-risk rejection this batch is not touching.
+⛔ **AND IT IS NOT A MEASURE-ONLY BATCH — Kyle's binding objection.** Objective 2 changes live paper behaviour; objective 3 ships settings.
+
+**DISPOSITION — §9.4 disposition 3, its own batch, PLACED:** `HOME: B-GEOMETRY-REACH-BASELINE, owner CC-B, placed in PHASE_19_PLAN at row 2.4g-2, replacing that row's withdrawn content, before 2.4h`. ⛔ **`#1051`'s withdrawal banner STANDS and is not superseded by this entry** — it is the record of the claim that did not survive, and this batch does not rest on it.
