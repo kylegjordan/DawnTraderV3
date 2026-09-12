@@ -106,6 +106,16 @@ All restores verified byte-identical.
 
 ---
 
+## ⛔ DEPLOY STATUS — THE GAP IS THE 8a HOLD, STATED RATHER THAN DEPLOYED (drift alert `7a8995e5`, routed to CC-C)
+
+**Staging is at `2dbc512ee`; the undeployed range is SIX `8a` revisions plus one docblock correction — ALL MINE.** Enumerated at the ref, the undeployed RUNTIME files are exactly four and only TWO carry non-comment changes:
+- `book-state-tracker.ts` — 33 lines · `active-execution-engine.ts` — 17 lines — **both are the `8a` work itself.**
+- `signal_quality_evaluator.ts` — 0 · `active-filter-pool.ts` — 0 — **comment-only** (Kyle's governance-gate ruling recorded at the site; the one-door correction).
+✅ **NOTHING FROM ANY OTHER SESSION IS STUCK BEHIND THIS HOLD** — that was the thing worth checking, and it was checked rather than assumed.
+⛔ **IT DOES NOT DEPLOY BECAUSE `8a` HAS NOT PASSED STEP 4** — six review rounds, currently CHANGES-NEEDED→r6. Deploying an unapproved exit-path change onto the box where paper trading is live is the one thing the gate exists to prevent. **The rung will keep climbing until review clears, and that is the instrument working.**
+
+---
+
 ## ⭐ ROW `8a` — D3 AT THE xSTOCK EXIT TOUCH PRICE (added 2026-09-13, ref `77423bdc4`)
 
 **THE DEFECT.** After withholding `hollowSkipCap` consecutive ticks **because the book was unusable**, the yield **fell through and acted on the mark of that same unusable book** — and `_eqTick.price` is the **MIDPOINT** whenever both sides exist (`equity-spot-archiver.ts:210`), however absurd those sides are. The branch said so in its own comment: *"the engine is about to act on this mark."*
