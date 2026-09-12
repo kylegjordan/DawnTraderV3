@@ -149,6 +149,15 @@
 
 *Verification:* the disposition is read from `F_G_2_PROGRESS_REPORT.md` **at the ref, on the day of this batch's deploy**, and the branch taken is recorded in this scope's status section with the ref it was read at.
 
+✅✅ **BRANCH READ AND RECORDED 2026-09-12 (CC-C), AS THIS VERIFICATION LINE REQUIRES — read from `F_G_2_PROGRESS_REPORT.md` AT REF `90f22b990`, NOT from D10 and NOT from memory.**
+**THE BRANCH IS `window VOID / re-opened`.** §0 of that report: *"WINDOW DECLARED VOID 2026-09-05 ON KYLE'S DIRECTION — RE-OPENED AFTER THE LEVEL-BASIS AND REACHABILITY WORK LANDS"*; §D10: *"Retired as a deploy gate; the window stays VOID. It is not a pass and may not become one: criteria are not re-registered against data already seen."*
+
+⇒ **WHAT THAT MEANS FOR THIS ROW, IN THE REPORT'S OWN WORDS (§35 item 3):** *"THE SWITCH IS NOT MADE. Exits still trigger and book on the MID throughout the interim. ⇒ `B-PRICE-SIDE-BY-JOB` OBJ-3b (level-basis ↔ trigger-basis COHERENCE) has NO disposition to read at its deploy, so it does NOT ship with OBJ-3a — it waits for the re-opened window. OBJ-3a (per-leg level transactability) is unaffected and ships: the scope split them for exactly this reason."*
+✅ **SO ROW `8c` SHIPS AS OBJ-3a ONLY. OBJ-3b IS NOT DEFERRED BY MY CHOICE — it has no disposition to read, which is the condition the table's VOID branch describes, and the decision is RE-TAKEN at the re-opened window, never inherited.**
+★ **AND THE ORDERING IS NOT INCIDENTAL: the report makes the level-basis work the PRECONDITION for re-opening that window. Building `8c` is what lets `F-G-2` re-arm.**
+
+⚠⚠ **THE TRANSITION ARTEFACT, CARRIED FORWARD HERE SO IT IS NOT DISCOVERED INSIDE THE NEW WINDOW (§35, named 2026-09-05, before either batch deployed):** **positions OPEN at the level-basis deploy carry MID-derived levels while positions opened after carry TRANSACTABLE-SIDE levels. A mixed population, unavoidable.** ⇒ **IT MUST BE A STATED EXCLUSION IN THE RE-OPENED WINDOW.** The pre-deploy open set is the attributable list, the same instrument `8f` used at its own deploy boundary.
+
 ⛔⛔ **CONDITION ON THE COUNTER FORM, AND IT CORRECTS AN ASYMMETRY THAT WAS BACKWARDS (Langston r3):** OBJ-3a's fence carries a positive control and the counter carried none — **but the COUNTER is the one whose ZERO gets read at promotion time.** A zero with no control is indistinguishable from a counter that never fired (`#661` leg 3; the F-G-1 *"increments something nothing reads"* shape). ⇒ **the counter ships with (i) a NAMED READER, (ii) a stated READ CADENCE, and (iii) a POSITIVE CONTROL demonstrating it increments on a constructed mismatch — before any zero it reports is read as agreement.**
 
 ⛔⛔ **AND THE ORDER IS NOT MINE TO ARRANGE — IT IS SET BY A WINDOW (Langston BLOCKER-4, pre-registered in `F-G-2` §4a this turn).** A level-basis change **moves the thing both `F-G-2` arms are compared against**, which is more perturbing than the two cadence changes A4 already enumerates and is plausibly **VOID-grade** rather than split-grade. ⇒ **OBJ-1, OBJ-2, OBJ-5 and OBJ-6 are READ-ONLY and run NOW, in parallel. Only a crypto DEPLOY is gated.**
