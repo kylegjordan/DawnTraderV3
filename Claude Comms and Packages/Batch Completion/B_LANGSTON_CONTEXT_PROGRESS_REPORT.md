@@ -56,6 +56,10 @@ change-class `non_architecture` (`B_LANGSTON_CONTEXT_SCOPE.md:3`) · owner Infra
 **B. The batch — the increment's outcome measure, stated by the plan at §20.3 (P-1b):** `langston-size-watch --status` moves from BREACH to within ceiling **with the ceiling unchanged**, after eviction of the parts Langston marks. **If eviction of his marked parts does not cover the overage, that is reported as a result, not a delay.**
 - Measured for the record: loaded set 147,635 B against 143,856 B, BREACH by 3,779 B (Langston, 2026-09-11 17:38Z).
 
+## 3.A.CLOSE — CHUNK 1 CLOSED 2026-09-12 (Langston Step-8 CONFIRMED 06:15Z)
+
+Langston re-derived condition 3 himself — `ExecMainStartTimestamp` == the `.timer` `LastTriggerUSec` for all four units (04:10:01 / 05:40:05 / 05:51:32 / 06:00:35), the strongest available evidence and stronger than the static `TriggeredBy`; he read the privacy-check run log directly (644 root:root) and reproduced 6 of 17 comparator pairs by hand (6/6 MATCH, negative control DIFFERs). Two record corrections, folded above, neither moving the verdict: the 06:01 timer run has two controls not three (the third is the 06:05 dry-run on the newer copy — wrong-object on my part); the size watch is installed, not comparator-covered. The self-test 73/0 and dry-run PASS remain RULED ON REPORTED FACT (750 root:root, he cannot run it), disclosed in §4. **Next: P-2 composition.**
+
 ## 3.A — CRITERION A: MET 2026-09-12 (all four scheduled units, timer-triggered, none by hand)
 
 | unit | fired | result | at the object |
@@ -63,14 +67,14 @@ change-class `non_architecture` (`B_LANGSTON_CONTEXT_SCOPE.md:3`) · owner Infra
 | `langston-memory-index` | 04:10:18Z (timer) | success, exit 0 | `records.jsonl` 600 langston:langston, mtime 04:10:18Z |
 | `langston-size-watch` | 05:40:08Z (timer) | success, exit 1 | exit 1 = BREACH, a correct outcome (`SuccessExitStatus=0 1`); loaded set over ceiling, the known state |
 | `coltrane-size-watch` | 05:51:32Z (timer) | success, exit 0 | — |
-| `langston-privacy-check` | 06:01:06Z (timer) | success | verdict **PASS**, controls `reader_reads_own_folder`/`reader_refused_token_file`/`account_database_enumerable` all true, 0 findings |
+| `langston-privacy-check` | 06:01:06Z (timer) | success | verdict **PASS**, its **two** controls `reader_reads_own_folder`/`reader_refused_token_file` both true, 0 findings. ⚠️ CORRECTED (Langston Step-8): `a3eac7b81` has TWO controls; the third, `account_database_enumerable`, belongs to the 06:05 `--dry-run` on the newer `ac38b350d` below — I first mis-attributed it to this timer run (wrong-object). Pre-registration correctly said *both controls*, which this run satisfies |
 
 Every unit's `TriggeredBy` is its own `.timer` — none was started by hand (Langston's condition 3). The 06:00Z run executed on the INSTALLED `a3eac7b81`, which has no directory-owner test, so the 20:12Z owner change could not have moved its verdict — the PASS stands on the pre-registered instrument.
 
-**Post-06:00Z installs (chunk 2), done 06:05:54Z, GATE_FAIL=0:** the newer privacy check (`ac38b350d` — dec888f33 owner-split + the root-expected-fence fix) at 750 root:root and the size watch (`9ff25adc9`) at 755 root:root, both sha-gated; privacy-check self-test 73/0, `--dry-run` PASS with MEMDIR root-owned (no DRIFT), size-watch `--status` readable by langston. `verify-agent-artifacts.py`: **17 MATCH / 0 DIFFER / 0 missing**.
+**Post-06:00Z installs (chunk 2), done 06:05:54Z, GATE_FAIL=0:** the newer privacy check (`ac38b350d` — dec888f33 owner-split + the root-expected-fence fix) at 750 root:root and the size watch (`9ff25adc9`) at 755 root:root (installed and `--status`-exercised, but NOT comparator-covered — `verify-agent-artifacts.py` excludes it by its own comment), both sha-gated; privacy-check self-test 73/0, `--dry-run` PASS with MEMDIR root-owned (no DRIFT), size-watch `--status` readable by langston. `verify-agent-artifacts.py`: **17 MATCH / 0 DIFFER / 0 missing**.
 
 ## 4. WHAT IS UNPROVEN
-- **Chunk 1 on a schedule.** Every live run so far was started by me. Criterion A is the test.
+- **Chunk 1 on a schedule.** ✅ SETTLED 2026-09-12: criterion A met, all four units timer-triggered (`ExecMainStartTimestamp` == the timer's `LastTriggerUSec`, four for four — Langston re-derived). This line's old claim that every live run was hand-started is now stale; the scheduled runs are the proof.
 - **The self-test legs of the privacy check are RULED ON REPORTED FACT for Langston, permanently.** The tool is root-only, so he cannot re-run them.
 - **The writer, composition, retrofit and eviction do not exist yet,** so OBJ-2 and the outcome measure are entirely unproven.
 - **The group-ownership assertion (P-6a.1) reaches only ENUMERABLE accounts.** Non-enumerating NSS sources, per-user ACLs and live process credentials are outside it. The attempted reads as the reader account remain the check for access by that account.
