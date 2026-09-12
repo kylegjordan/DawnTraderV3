@@ -22,6 +22,8 @@
 
 import { storage } from '../storage.js';
 import type { SourcePool, AssetClass } from '../asset_classes/crypto_spot/pattern-pool-filters.js';
+import { parseSymbolLegs } from '../../shared/symbol-legs';
+import { ADMITTED_QUOTES, isAdmittedQuote } from '../../shared/admitted-quotes';
 
 // REB 2.2: TTL from truth state (Nov 20 chat archive)
 const SYMBOL_COOLDOWN_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -215,6 +217,45 @@ class ActiveFilterPoolService {
    *
    * @param skipPassiveCheck - Set to true to bypass passive mode check (for FX5 scanner integration)
    */
+  /**
+   * B-PRICE-SIDE-BY-JOB OBJ-8 row 8f — THE QUOTE-CURRENCY ADMISSION GATE (D9).
+   *
+   * ⛔ CALLED FROM ALL THREE POOL-ADMISSION FUNCTIONS — `addSurvivors`,
+   * `addPatternPoolSurvivors` and `addFamilyPoolSurvivors`. Gating one would have left the
+   * other two open, and every one of them feeds symbols the orchestrator can open on.
+   * ★ One implementation, three call sites — never three copies of the predicate.
+   *
+   * D9 (decided 2026-09-11): a new position is refused in any pair whose quote currency is
+   * outside `ADMITTED_QUOTES`, WITH A SPECIFIC REASON, **until a timestamped currency
+   * conversion exists** (`#966`). A trade settles in its quote currency while we record the
+   * number as dollars, so every figure on a floating-quote trade is wrong by the FX rate.
+   *
+   * ⛔ THE TEST IS SET MEMBERSHIP, NEVER "is it pegged". Peggedness is an assertion about an
+   *    asset with no instrument behind it: the day USDC prints 0.88 a peggedness predicate
+   *    still reads ADMIT. Membership is a decidable fact readable at any ref. The monitoring
+   *    gap that leaves is stated and homed — `PHASE_19_PLAN` row `3n.g`.
+   * ⛔ AN UNPARSEABLE SYMBOL IS REFUSED, NEVER ASSUMED USD. Assuming USD is the `#546`
+   *    absent-as-valid defect this batch exists to remove (`#1050`).
+   * ⚠️ ADMISSION ONLY. Open positions are untouched: their exits stay denominated in the
+   *    quote currency and need no conversion (D9).
+   *
+   * @returns a refusal reason, or `null` to admit.
+   */
+  private quoteRefusalReason(symbol: string): string | null {
+    const legs = parseSymbolLegs(symbol);
+    if (!legs) return 'symbol_unparseable';
+    if (!isAdmittedQuote(legs.quote)) return `quote_not_admitted:${legs.quote}`;
+    return null;
+  }
+
+  /** Emit the refusal once, in one shape, so the log is greppable across all three doors. */
+  private logQuoteRefusal(symbol: string, mode: string, door: string, reason: string): void {
+    console.warn(
+      `[8f][QUOTE_REFUSED] ${symbol} mode=${mode} door=${door} reason=${reason} ` +
+      `admitted=${ADMITTED_QUOTES.join(',')}`
+    );
+  }
+
   addSurvivors(
     mode: 'paper' | 'live',
     survivors: Array<{
@@ -240,6 +281,8 @@ class ActiveFilterPoolService {
     added: number;
     updated: number;
     skipped: number;
+    /** 8f: refused on quote currency. A SUBSET of `skipped`, not additional to it. */
+    refusedQuote: number;
   } {
     // REB 2.2: Passive mode enforcement will be handled by FX5 scanner
     // For now, we allow updates (passive check done at scanner level)
@@ -252,12 +295,22 @@ class ActiveFilterPoolService {
     let added = 0;
     let updated = 0;
     let skipped = 0;
+    let refusedQuote = 0;
 
     // STEP 1: Remove expired entries BEFORE processing new survivors
     this.removeExpiredEntries(mode);
 
     // STEP 2: Process each survivor
     for (const survivor of survivors) {
+      // 8f — door 1 of 3. See quoteRefusalReason().
+      const refusal = this.quoteRefusalReason(survivor.symbol);
+      if (refusal) {
+        this.logQuoteRefusal(survivor.symbol, mode, 'survivors', refusal);
+        refusedQuote++;
+        skipped++;
+        continue;
+      }
+
       const existing = pool.get(survivor.symbol);
 
       if (existing) {
@@ -335,7 +388,7 @@ class ActiveFilterPoolService {
 
     console.log(`[8.6.7][DEBUG] Active Pool update complete: added=${added}, updated=${updated}, skipped=${skipped}, total_size=${pool.size}`);
 
-    return { added, updated, skipped };
+    return { added, updated, skipped, refusedQuote };
   }
 
   /**
@@ -376,6 +429,15 @@ class ActiveFilterPoolService {
     this.removeExpiredPatternEntries(mode);
 
     for (const survivor of survivors) {
+      // 8f — door 2 of 3. The pattern pool is a SEPARATE admission path into the same
+      // orchestrator; gating only addSurvivors would have left this one open.
+      const patternRefusal = this.quoteRefusalReason(survivor.symbol);
+      if (patternRefusal) {
+        this.logQuoteRefusal(survivor.symbol, mode, 'pattern', patternRefusal);
+        skipped++;
+        continue;
+      }
+
       const existing = pool.get(survivor.symbol);
 
       if (existing && now < existing.expiresAt) {
@@ -486,6 +548,12 @@ class ActiveFilterPoolService {
 
     for (const s of survivors) {
       const symbol = s.symbol;
+      // 8f — door 3 of 3. Returns void, so the refusal is visible only in the log.
+      const familyRefusal = this.quoteRefusalReason(symbol);
+      if (familyRefusal) {
+        this.logQuoteRefusal(symbol, mode, `family:${family}`, familyRefusal);
+        continue;
+      }
       pool.set(symbol, {
         symbol,
         price: s.price ?? 0,
