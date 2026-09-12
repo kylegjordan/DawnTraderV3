@@ -1,7 +1,7 @@
-# B-GEOMETRY-REACH-BASELINE — SCOPE **r11**
+# B-GEOMETRY-REACH-BASELINE — SCOPE **r12**
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r11, 2026-09-12**
+**change-class: architecture** · **r12, 2026-09-13**
 
 > ⛔⛔ **KYLE RE-SCOPED THIS AND HE WAS RIGHT ON ALL SIX COUNTS. r1–r5 WERE BUILT ON 29 SEPTEMBER PAPER TRADES WHILE 78,304 VTS TRADES SAT UNUSED SINCE 10 MAY.** His words: *"Using paper mode data limits us tremendously."* **I used roughly 0.04 % of the available trade record.**
 > ⛔⛔ **r7 — THE REVERSAL IS RELABELLED A *HYPOTHESIS*, NOT A FINDING (Langston BLOCKER-2, and he is right).** r6 claimed the VTS data shows the ceiling is nearly right and the strategy's target wrong. **It does not show that, because I measured the wrong quantity: `closed_at − opened_at` is time-to-ANY-exit, and the ceiling encodes time-to-TARGET.** `strong_bull_trend`'s 1,652 trades were **all tagged `unreachable`**, so their 15.44 h is the median time to stop-out-or-timeout of trades that mostly never reached 6 ATR. ⇒ **“6 ATR implies 36 h; it resolves in 15.44 h” compares a MODELLED time-to-reach against an OBSERVED time-to-exit-by-other-means. Two different objects.**
@@ -26,7 +26,11 @@
 
 ### 1a. ⭐⭐ THE CEILING IS KEYED PER CLASS **BY DESIGN** — and this batch AMENDS that design rather than fixing a bug
 
-The ceiling is `c·√H`. **`H` is now MEASURED per strategy** — `closed_at − opened_at`, VTS crypto, closed, `opened_at ≥ 2026-08-01`, **n = 28,020**:
+⛔⛔ **r12 — THE POPULATION PREDICATE WAS MISSING FROM THIS TABLE AND `vts_open_trades` IS TWO POPULATIONS (Langston's BLOCKER, answered at the data in the pre-audit's §1b-bis).** The line below said *"VTS crypto"* and named **no lane**; the pooled n reproduces to the row, so **reorg-B4's shadow lane was IN.**
+✅ **THE FULL PREDICATE, now stated: `vts_open_trades`, `asset_class='crypto_spot'`, `closed_at IS NOT NULL`, `opened_at ≥ 2026-08-01`, BOTH LANES POOLED, n = 28,020, strategies with n ≥ 100 (the threshold was previously unwritten).**
+⚠️ **SEVEN OF THE TEN ROWS TURN OUT TO BE SINGLE-LANE, so the numbers below are mostly unchanged — BY LUCK, NOT METHOD.** ⛔ **THE LANE-SPLIT TABLE IN §1b-bis IS THE ONE TO READ, AND IT CARRIES THE THREE ROWS THAT MOVE PLUS THE 48 h / 168 h CENSORING WALLS.**
+
+The ceiling is `c·√H`. **`H` per strategy, POOLED ACROSS BOTH LANES, median (never mean — the mean is censored by the TTL walls):
 
 | strategy | n | median hold | **ceiling its own hold implies (√H)** | vs the live 4.0 |
 |---|---|---|---|---|
@@ -39,9 +43,11 @@ The ceiling is `c·√H`. **`H` is now MEASURED per strategy** — `closed_at �
 | `pivot_shift` | 436 | 7.40 h | **2.72** | 1.5× |
 | `support_bounce` | 142 | 13.27 h | **3.64** | ~right |
 | `strong_bull_trend` | 1,652 | 15.44 h | 3.93 | ~at the default |
-| ⚠️ `vwap_pullback` | 580 | 40.97 h | 6.40 | ⛔ **would LOOSEN — does not ship** |
+| ⚠️ `vwap_pullback` | 580 | 40.97 h | 6.40 | ⛔ **DOES NOT SHIP — and r12 REPLACES THE REASON: this pooled value is a BIMODAL ARTIFACT (shadow 328 rows at 14.10 h, VTS 252 rows at 46.36 h, 3.3x apart). On the shadow lane its implied ceiling is 3.75, which TIGHTENS. The disqualifier is now LANE DISAGREEMENT, not direction.** |
 
-⇒ ✅ **WHAT THIS SUPPORTS, AND IT IS THE SHIPPABLE FINDING: one ceiling is serving ten materially different DURATIONS, and for seven strategies it sits 1.5–3.0× looser than their own holding time.** ⚠️ **`vwap_pullback` is the only row that would LOOSEN the ceiling; it is disqualified by DIRECTION and does not ship (§3 OBJ-A).**
+⇒ ✅ **WHAT THIS STILL SUPPORTS, AND IT SURVIVES THE LANE SPLIT UNCHANGED: one ceiling is serving ten materially different DURATIONS, and for seven strategies it sits 1.5–3.0x looser than their own holding time.** ⭐ **The spread between 1.77 h and 15.44 h is present WITHIN either lane read alone, so the headline does not depend on the pooling.**
+⛔⛔ **WHAT IS STRUCK: *"`vwap_pullback` is the only row that would LOOSEN the ceiling, and it is disqualified by DIRECTION."* THAT WAS A POOLING ARTIFACT.** Split, its shadow lane TIGHTENS (3.75) and its VTS lane loosens (6.81). It still does not ship; the reason is lane disagreement.
+⛔⛔ **AND THE OPEN QUESTION THAT DECIDES WHETHER OBJ-A SHIPS AS SEVEN ROWS, AS FOUR, OR NOT AT ALL: WHICH LANE IS THE RIGHT ONE TO DERIVE `H` FROM.** **On the clean VTS lane, five of the seven tightening strategies have no usable sample** (`inside_bar_reversal` 0, `pivot_shift` 3, `support_bounce` 7, `sma_trend_ride` 8, `volatility_edge` 10). ⭐ **This is a DESIGN call, not a measurement — the shadow lane shadows real RTB promotions, the VTS lane owns the gate verdict field — and I am not making it unilaterally. Langston's, or Kyle's.**
 ⛔ **THE r6 SENTENCE THAT STOOD HERE IS DELETED, NOT ANNOTATED.** It read: *“strong_bull_trend's 6-ATR target is not justified by its own hold — the ceiling is correctly refusing a target the strategy's own horizon cannot reach.”* ⛔ **That compared a MODELLED time-to-reach against an OBSERVED time-to-exit-by-other-means.** The 15.44 h is the median time to stop-out or timeout of trades that were **all tagged `unreachable`** and mostly never approached 6 ATR. ⇒ **Settling it needs time-to-target, which §1d shows this corpus cannot yield, and §1e shows the excursion record does not exist. NEITHER r1–r5's framing NOR r6's reversal is asserted.**
 
 ### 1b. ⛔ DELETED — r6's *“the gate is doing its job”* claim
