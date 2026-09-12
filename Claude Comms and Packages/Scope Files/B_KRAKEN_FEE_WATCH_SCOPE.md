@@ -2,124 +2,165 @@
 
 **Batch:** `B-KRAKEN-FEE-WATCH` · **Issue:** `#1011` · **Plan row:** `PHASE_19_PLAN` 2.4-FEE-b · **Owner:** CC-B (Claude New)
 **change-class: architecture**
-**Revision:** r1 · **Drafted:** 2026-09-12 · **Card:** `PVTI_lAHODmulEM4BfQP4zg6mZFg` (Scope / Claude New / Batch / Phase 19)
-
-> **Declared `architecture` deliberately, and it is a judgement Langston should grade:** the batch adds a **new canonical actor to deployed runtime code** (`server/services/system-alerts.ts` `ALERT_ACTORS`) and a **new out-of-process writer to the alert store**. It is not merely a script. Fail-closed per `CLAUDE.md` §3.0 — if it is over-declared, say so and I will re-declare.
+**Revision:** **r2** — Langston's Step-1 BLOCKER-1 and five rulings folded (2026-09-12 01:15Z) · r1 sent back to owner · **Card:** `PVTI_lAHODmulEM4BfQP4zg6mZFg`
 
 ---
 
-## 0. THE DEFECT
+## 0. PREVIOUSLY STATED → NOW
 
-**Kraken revised its fee schedule on 2026-07-09. We found out on 2026-09-06, by hand, because Kyle happened to look at the page.** For 59 days the system priced against a model nothing had compared to its source. That gap produced `#1010` — xStocks charged the crypto schedule, taker 8× too high and maker with the sign inverted — which was a **selection** defect, not a bookkeeping one.
-
-⛔ **THE DESIGN CONSTRAINT, from `#1011` and unchanged by anything measured here: THERE ARE THREE OBJECTS, NOT TWO** — the live **PAGES**, our **TRANSCRIPTION** (`1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md`), and the **DATABASE** (`module_constants` / `fee_model`). **A watcher that only diffs the pages catches the NEXT venue change and is structurally blind to the drift we already had.** The page-versus-database leg is the one that earns its keep.
-
----
-
-## 1. WHAT I MEASURED BEFORE DRAFTING — every number here was taken tonight, with a control
-
-⭐ **These measurements changed the design. `#1011` was drafted on the assumption that the sources are unparseable; that is true of our PDF captures and NOT true of the live page.**
-
-| # | question | measured answer | control |
+| # | PREVIOUSLY STATED (r1) | NOW (r2) | REASON |
 |---|---|---|---|
-| **M1** | Is the public fee page fetchable from Helsinki? | **YES** — `https://www.kraken.com/features/fee-schedule` returns **HTTP 200, ~1.39 MB** | `api.kraken.com/0/public/Time` returned 200/87 B, so the host has egress |
-| **M2** | Does the body carry rates, or is it a JS shell? | **It carries a STRUCTURED JSON payload** — rows are objects of `field_cells`, each cell `{"cell_description":"Content of Column N","field_content":"<p>0.40 %</p>"}`, each row tagged `"row_description":"Row :: Tier 1"` | the literal `9.99%` returns **0 hits** — the instrument discriminates |
-| **M3** | Is the page stable enough to hash? | **BYTE-IDENTICAL across two consecutive fetches** — same sha256, same 1,398,949 bytes | the diff of the two bodies is empty |
-| **M4** | Is our crypto ladder extractable and correct? | **YES, and the transcription is FAITHFUL.** The spot table holds **17 rungs** (`Tier 1`-`Tier 12`, `Pro 1`-`Pro 5`). Rung 1 = `0.40 % / 0.80 %`, rung 12 = `0.00 % / 0.10 %`, rung 17 = `0.00 % / 0.05 %` — matching §1 of our transcription row for row | the table's own header row (`Row :: Tier`) names the columns, incl. `Spot Taker (%)` |
-| **M5** | Is the **xStock** ladder on the public page? | ⛔ **NO.** Our reference's fingerprint `$100,000,001` returns **0 hits**; only **1** xStock mention sits within 400 chars of any rate cell, and it belongs to another table's `$100,000,000 +` institutional row | the same proximity test finds **8** `Tier 1` mentions near rate cells — so the near-absence is measured, not an instrument failure |
-| **M6** | Is the in-app xStock dialog publicly reachable? | ⛔ **NO** — `pro.kraken.com/app/trade/xstocks-nvda-usd` unauthenticated returns a **13 KB JS shell, zero rate strings** | the same fetch of the public fee page returned 1.39 MB with rates |
-
-⚠️ **A CORRECTION I MADE TO MYSELF, RECORDED BECAUSE IT IS THE SCOPE'S OWN METHOD:** I first read the `-0.02%` rows on that page as the xStock ladder, then as the futures ladder. **Both were wrong.** They are the **CRYPTO SPOT** ladder's high Pro tiers — settled by reading *that table's own Tier 1 row* (`Spot Taker (%) | Tier 1 | $0+ | < $5M | N/A | 0.38% | 0.80%`) instead of inferring identity from a nearby string. I also suspected a 16-vs-17 rung drift; **that was my own miscount of the Pro rows.** No finding is claimed from any of the three.
+| 1 | M4: "the crypto spot table" — **one** table, rung 1 `0.40/0.80` | ⛔ **FOUR tables carry a `Spot Taker (%)` Tier1→Pro5 ladder, and they do not agree.** Two read `0.40/0.80`, one reads **`0.38/0.80`**, one is an 8-column margin table | **Langston BLOCKER-1**, re-derived by me at the object |
+| 2 | §1's correction quoted `Tier 1 \| $0+ \| < $5M \| N/A \| 0.38% \| 0.80%` as "the" spot table's Tier 1 | **That row is table 3 (`Spot Crypto`); M4's `0.40/0.80` is tables 1-2.** r1 treated two different tables as one object | my error, same adjacent-object class I had just recorded |
+| 3 | OBJ-1 anchor: table whose header contains `Spot Taker (%)` | **Anchor = enclosing accordion heading + column-name→index resolution, per table** | position is not portable — table 4 puts spot maker/taker at columns 7/8 |
+| 4 | OBJ-2 verify: "with the live values it reports **agreement**" | ⛔ **Struck.** The extractor NAMES the table it read; **agreement or disagreement both pass the batch** | a pre-registered PASS drives the instrument to pick tables 1/2 by construction |
+| 5 | M3 content hash as an operand | **DROPPED** | a 1.4 MB marketing surface changes for reasons unrelated to rates; an operand whose alerts we learn to ignore is worse than none |
+| 6 | §7: `SYSTEM_MANUAL` "expected N/A" | **NOT N/A — one real paragraph** | `config.mjs:127` makes it REQUIRED for `architecture`, and a required row cannot take N/A |
 
 ---
 
-## 2. OBJECTIVES AND VERIFICATION
+## 1. THE DEFECT
 
-### OBJ-1 — Extract the crypto spot ladder from the live page, ANCHORED ON STRUCTURE
-Parse the page's JSON payload and read the spot table by **table identity + row identity + column position** — locate the table whose header row (`"row_description":"Row :: Tier"`) contains the column name `Spot Taker (%)`, then read each `Row :: Tier N` / `Row :: Pro N` row's maker and taker cells.
-⛔ **NOT a percentage regex over the page.** A blind sweep returns dozens of rates from the stablecoin, futures and institutional tables; the page holds **8 tables / 202 row blocks**.
-**Verify:** the extractor returns exactly **17 rungs** with rung 1 = `0.40 / 0.80` and rung 17 = `0.00 / 0.05`; a **mutation test** — feed it a saved body with one cell altered and assert it reports that rung changed, and only that rung.
+**Kraken revised its fee schedule on 2026-07-09. We found out on 2026-09-06, because Kyle looked at the page.** For 59 days the system priced against a model nothing compared to its source. That gap produced `#1010`.
 
-### OBJ-2 — THE PAGE-VERSUS-DATABASE LEG (the one that earns its keep)
-Compare the extracted **rung-1** pair against `module_constants` `fee_model` `crypto_spot` (`spot_maker_fee` / `spot_taker_fee`) on staging.
-★ **This is the leg that would have caught `#1010`**, because it compares the venue to what we actually charge rather than the venue to itself.
-**Verify:** with the live values it reports **agreement** (0.004 / 0.008 ↔ 0.40 % / 0.80 %); pointed at a deliberately wrong DB value in a scratch fixture it reports **disagreement naming both sides**. ⛔ The comparison normalises units explicitly (`0.40 %` ↔ `0.004`) and **fails loudly on an unparseable cell rather than coercing it**.
+⛔ **THREE OBJECTS, NOT TWO** — the live **PAGES**, our **TRANSCRIPTION**, and the **DATABASE**. A page-only diff catches the next venue change and is blind to drift we already have. **The page-versus-database leg is the one that earns its keep.**
 
-### OBJ-3 — THE PAGE-VERSUS-TRANSCRIPTION LEG (catches the next venue change)
-Compare the extracted ladder against §1 of `KRAKEN_FEE_SCHEDULE_REFERENCE.md`.
-**Verify:** today it reports **no drift** (M4 — the transcription is faithful row for row); with one rung edited in a scratch copy of the reference it names the rung and both values.
+---
 
-### OBJ-4 — THE xSTOCK LEG IS A DATED RE-CAPTURE OBLIGATION, NOT A SCRAPER
-⛔ **Measured (M5, M6): the xStock schedule is NOT on any public page and its dialog is authenticated.** No session may log in (`CLAUDE.md` §7 — a session may not type a password into a form), so **there is no machine source for the xStock rates, and this batch will not pretend otherwise.**
-⇒ Ship a **dated re-capture obligation**: a scheduled alert that comes due on a stated cadence and asks Kyle for a fresh capture of the in-app xStocks dialog, naming the two values currently held (`0.0010` / `-0.0002`) so the check is a glance, not a project.
-**Verify:** the alert fires at its due date, names the held values, and **resolves only against a capture date** — never against "looks fine".
-⚠️ **Langston's condition, adopted verbatim: the transcription leg cannot be automated — it is a human read of an unparseable image — so it needs a dated re-capture obligation, never the pretence of a third machine source.**
+## 2. WHAT I MEASURED — every figure re-derived at the object, with its control
 
-### OBJ-5 — THREE OUTCOMES, NEVER TWO
-**measured · no-change · `MEASUREMENT FAILED`.** The third mints its own alert **naming the operand that failed**, and is read off the **exit status, never an HTTP code**.
-★ Mirrors `dt-deploy-drift.sh`, whose own header records why: a 404's JSON body carries a `status` field, so an `is None` guard never fired and **a 404 rendered as ZERO DRIFT — all-clear from an instrument that could not see the repository at all.**
-**Verify:** each of the three outcomes is produced deliberately and its artifact shown — including the failure path.
+| # | question | measured | control |
+|---|---|---|---|
+| **M1** | page fetchable from Helsinki? | **HTTP 200, 1,394,145 B** (Langston's independent fetch: 1,398,949 B — see the caveat below) | `api.kraken.com/0/public/Time` 200/87 B |
+| **M2** | structured or a JS shell? | **structured JSON** — rows are `field_cells` objects, cells `"cell_description":"Content of Column N"`, rows `"row_description":"Row :: Tier 1"` | literal `9.99%` → **0 hits** |
+| **M3** | ⛔ **how many ladders carry `Spot Taker (%)`?** | **FOUR**, enumerated below | 202 row blocks total, 4 `Row :: Tier` headers |
+| **M4** | which governs our account? | **tables 1-2**, on the §0.b evidence below | three independent rungs cross-checked |
+| **M5** | xStock ladder on the public page? | ⛔ **NO** — `$100,000,001` → 0 hits; 1 xStock mention near any rate cell, belonging to another table | same proximity test finds **8** `Tier 1` mentions near rate cells |
+| **M6** | in-app dialog reachable unauthenticated? | ⛔ **NO** — 13 KB JS shell, 0 rate strings | the public page returned 1.39 MB with rates |
+| **M7** | can the API bypass the page? | ⛔ **NO** (Langston, ⊕): `AssetPairs` 200 / 673 KB / 1,449 pairs, `fees`/`fees_maker` **empty on 0 of 1,449** — keys present, arrays empty | saturated population; the instrument reached the object |
 
-### OBJ-6 — A MACHINE ACTOR, AND THE INSTALL-ORDER PRECONDITION
-Add `kraken-fee-watch` (tag `machine`) to `ALERT_ACTORS` in `server/services/system-alerts.ts`. **An hourly robot must not claim a session identity** (`#987` / `#1004`).
-⛔ **INSTALL ORDER IS A PRECONDITION, NOT A NOTE** (learned from the drift line): the actor must be **present in the DEPLOYED source before the cron is installed**, because the CLI is source-run — otherwise every resolve is refused and the job re-mints against itself.
-**Verify:** the actor is in the deployed tree (a returning `grep -c` on the staging worktree) **before** the cron line exists; a refused `--by` names the canonical set.
+### 2.1 ⛔ THE FOUR LADDERS — enumerated, not counted
 
-### OBJ-7 — ONE LIVE COPY, INSTALLED THE WAY THE ESTATE ALREADY INSTALLS
-Repo home `comms-infra/discord/`, installed by the existing `comms-infra/discord/deploy.sh` (`install -m 0755` → `/usr/local/bin/`, log + state dirs, cron line) — the same path that installs `dt-deploy-drift.sh`.
-**Verify:** `/usr/local/bin/` holds the only invoked artifact; the repo copy has **zero invokers**, measured with a control, and the SIM entry says so.
+| # | enclosing heading | Tier 1 maker | Tier 1 taker | ladder shape | cell form |
+|---|---|---|---|---|---|
+| **1** | *(Kraken Pro · "How your tier is determined")* | **`0.40 %`** | `0.80 %` | T12 `0.0/0.10`, Pro 5 `0.0/0.05` | `<p>0.40 %</p>` |
+| **2** | **Cross-platform Fee Tiers** | **`0.40 %`** | `0.80 %` | identical to 1 | `<p>0.40 %</p>` |
+| **3** | **Spot Crypto** | ⭐ **`0.38%`** | `0.80%` | **T11 `0.00`, T12 `-0.02`, Pro 1-5 `-0.02`** | bare `0.38%` |
+| **4** | **Margin** | `0.4%` (col 7) | `0.8%` (col 8) | 8 cols incl. Futures Maker/Taker | bare `0.4%` |
 
-### OBJ-8 — THE FAILURE BRANCH IS EXERCISED AGAINST A REAL RESPONSE (`#744` rider)
-⛔ **Binding on this batch by construction: it is a guard written against an EXTERNAL contract.** Exercise it against a **real** broken response — a 404, a truncated body, a table whose columns moved — and **state the expected output BEFORE running**.
-**Verify:** the artifact of each failure run is attached to the change list. ⛔ A clean read of the happy path is **not** evidence.
+⛔ **TABLE 3 DIFFERS ALL THE WAY DOWN, so it is a DIFFERENT SCHEDULE and not a typo in one cell:** T2 `0.28` vs `0.30` · T3 `0.20` vs `0.22` · T5 `0.13` vs `0.15` · T11 `0.00` vs `0.02` · T12 `-0.02` vs `0.00`. **It is also the source of the `-0.02%` cells I twice misread in r1.**
+
+### 2.2 ⭐ WHICH TABLE GOVERNS OUR ACCOUNT — the evidence Langston asked for
+
+**`KRAKEN_FEE_SCHEDULE_REFERENCE.md` §0.b is the tiebreaker: Kyle's AUTHENTICATED in-app Fees dialog, opened on three live markets while signed in.** It reads **Tier 1 `0.40 / 0.80`**, tier 12 `0.00 / 0.10`, tier 17 `0.00 / 0.05`.
+
+| rung | account dialog (§0.b) | tables 1-2 | table 3 |
+|---|---|---|---|
+| 1 | **0.40 / 0.80** | ✅ `0.40 / 0.80` | ❌ `0.38 / 0.80` |
+| 12 | **0.00 / 0.10** | ✅ `0.0 / 0.10` | ❌ `-0.02 / 0.10` |
+| 17 (Pro 5) | **0.00 / 0.05** | ✅ `0.0 / 0.05` | ❌ `-0.02 / 0.05` |
+
+⇒ **Tables 1-2 match the account on all three cross-checked rungs; table 3 matches on none. The DATABASE (`0.004 / 0.008`) is correct for this account.**
+⛔ **WHAT THIS DOES *NOT* ESTABLISH, and the batch must not claim it: that table 3 is wrong, stale, or a defect.** It is a published Kraken table we do not yet know the product of — its negative maker ladder is a distinct commercial schedule. **The defensible claim is only that it does not govern us**, and the watcher must therefore *name* which table it read rather than assume one.
+
+---
+
+## 3. OBJECTIVES AND VERIFICATION
+
+### OBJ-1 — Extract the governing ladder, anchored on HEADING + COLUMN NAME
+- **Anchor = enclosing accordion heading**, then **column-name → index resolution within that table** (`Spot Maker (%)`, `Spot Taker (%)`). ⛔ **Never a fixed column index** — table 4 proves position is not portable.
+- **Parse the JSON table objects, not offset runs.** ⊕ Langston measured that walking table 3 to the next `Row :: Tier` header swallows **144** rows including the whole per-asset margin list.
+- **ENUMERATE EVERY table carrying a Tier1→Pro5 ladder and REPORT ALL OF THEM** with their headings and Tier-1 values.
+- **Normaliser handles every observed form:** `<p>0.40 %</p>` · `0.40%` · `0.4%` · `&lt;` · `&gt;` · NBSP. ⛔ **A string compare makes `0.4%` vs `0.40%` a drift alert on day one** — compare decimals, not text.
+**Verify:** returns **4 ladders**, each named by heading, table 2 (`Cross-platform Fee Tiers`) resolving 17 rungs with rung 1 `0.40/0.80`; a **mutation test** — one altered cell in a saved body is reported as that rung and only that rung.
+
+### OBJ-2 — THE PAGE-VERSUS-DATABASE LEG
+Compare the **governing** ladder's rung 1 against `module_constants` `fee_model` `crypto_spot`.
+⛔ **NO PASS IS PRE-REGISTERED.** The run reports **which table it read, by heading**, and **agreement OR disagreement is a successful run** — a disagreement is the finding, not a bug.
+**Verify:** it names the heading it read; pointed at a scratch fixture with a wrong DB value it reports disagreement naming both sides.
+
+### OBJ-3 — THE PAGE-VERSUS-TRANSCRIPTION LEG
+Compare the governing ladder against §1 of the reference (17 rungs).
+**Verify:** reports no drift today; one edited rung in a scratch copy is named with both values.
+
+### OBJ-4 — xSTOCK: A DATED RE-CAPTURE OBLIGATION, **90 days + an event trigger**
+⛔ **Measured (M5, M6, M7): there is no machine source for the xStock rates.** No session may log in (`CLAUDE.md` §7).
+- **Cadence 90 days, first due 2026-12-11** (Langston: monthly is a nag that gets ignored, which is worse than quarterly honoured; the contract landed 09-11 and a tokenised-equity schedule does not move monthly).
+- ⭐ **EVENT TRIGGER, the part that earns it: any crypto-leg disagreement makes the xStock re-capture due IMMEDIATELY** — a venue that revised one schedule likely revised both, which is exactly the 2026-07-09 case.
+- **Resolves only against a capture date**, never against "looks fine".
+**Verify:** fires at its due date naming the held values (`0.0010` / `-0.0002`); a forced crypto disagreement brings it due at once.
+
+### OBJ-5 — THREE OUTCOMES, NEVER TWO, AND FAIL LOUD ON FIVE INPUTS
+**measured · no-change · `MEASUREMENT FAILED`** — the third mints its own alert **naming the operand**, read off **exit status, never an HTTP code** (⊕ every probe returned 200 on a page whose content could have moved entirely).
+⛔ **Fail loud, never coerce, on:** an unparseable cell · **the anchor resolving to 0 or >1 table** · **rung count ≠ 17** · **a column name that does not resolve** · a normaliser input it has never seen.
+**Verify:** each outcome produced deliberately, artifact shown, **including every failure branch** (`#744` rider).
+
+### OBJ-6 — MACHINE ACTOR + INSTALL-ORDER NEGATIVE CONTROL
+Add `kraken-fee-watch` (tag `machine`) to `ALERT_ACTORS`. **A robot must not claim a session identity** (`#987`/`#1004`).
+⛔ **Install order is a precondition:** the actor must be in the **deployed** source before the cron exists.
+**Verify (Langston's rider):** one `--by kraken-fee-watch` resolve attempted **BEFORE** the deploy showing the **refusal**, and the same call **after** showing acceptance.
+
+### OBJ-7 — ONE LIVE COPY, INSTALLED AS THE ESTATE ALREADY INSTALLS
+Repo home `comms-infra/discord/`, installed by `comms-infra/discord/deploy.sh` (`install -m 0755` → `/usr/local/bin/`, log + state dirs, cron line) — the path that installs `dt-deploy-drift.sh`.
+**Verify:** `/usr/local/bin/` holds the only invoked artifact; the repo copy has zero invokers, measured with a control.
+
+### OBJ-8 — THE CENSUS ASSERTION (replaces the dropped hash)
+A **structural guard that fires only on change to the thing we actually read**: table count carrying a ladder · rung count per ladder · column-name resolution per table.
+**Verify:** today it asserts 4 ladders / 17 rungs / both column names resolving; a saved body with a renamed column fails it.
 
 ### OBJ-9 — GOVERNANCE
-SIM entry mirroring the `dt-deploy-drift.sh` table (HOST · TRIGGER + CADENCE · OPERANDS · `dedupe_key` · FAILURE MODE · ACTOR · INSTALLED PATH · CONTROLS), plus the writer-count line — **it becomes a further out-of-process writer to `system-alerts.jsonl`**, landing on `#647` / `B-ALERT-QUEUE-INTEGRITY`. §5 of the Kraken reference ("nothing currently watches it") is rewritten to name the watcher.
+SIM entry mirroring the `dt-deploy-drift.sh` table, **stating the cadence** — hourly makes this **writer #12** to `system-alerts.jsonl` on a lock-free append alongside the hourly drift monitor. **Name the collision risk against `#647` / `B-ALERT-QUEUE-INTEGRITY`; do not fix it here.**
+⛔ **`SYSTEM_MANUAL` §5 gets one real paragraph** (Langston ruling 1): after this batch the cost model has a **source-of-truth verification contract** it did not have — the watcher, its operands, and the explicit statement that **the DATABASE is authoritative for CHARGING and the PAGE is authoritative for DRIFT-DETECTION only.**
 
 ---
 
-## 3. ARCHITECTURAL READ (MANDATORY 1.a)
+## 4. ARCHITECTURAL READ (1.a)
 
-- **`SYSTEM_IMPACT_MAP.md` §`dt-deploy-drift.sh`** (added 2026-09-07, `#1002`) — the nearest neighbour and the template: host, cadence, operands, dedupe keys, three-outcome failure mode, machine actor, one-live-copy rule, controls. **It is the ELEVENTH writer to `system-alerts.jsonl` and the SECOND outside the app process**; this batch adds another, through the same supported CLI rather than a file append, so it is **a frequency increase on the existing lock-free append, not a new writer class.**
-- **`SYSTEM_IMPACT_MAP.md` §`fee_model`** — the single merge site (`cost-model.getFrictionForAssetClass`) and the per-class rows this batch READS but never writes. ⛔ **This batch writes no fee value. Ever.** It reports disagreement; a correction is a separate, reviewed change.
-- **`SYSTEM_MANUAL.md` §5** — the cost model, now carrying the landed `#1010` contract and the signed maker rail.
-- **`ALERT_ACTORS`** (`server/services/system-alerts.ts:205-220`) — 10 actors today; `machine` members are `governance-checker`, `governance-checker-heartbeat`, `b-new-40-soak-verify`, `deploy-drift-monitor`, `langston-privacy-check`.
+- **SIM §`dt-deploy-drift.sh`** — host, cadence, operands, dedupe keys, three-outcome failure mode, machine actor, one-live-copy rule, controls. It is the **eleventh** writer to the alert store and the second outside the app process; this batch is the twelfth, through the same supported CLI, so it is **a frequency increase on an existing lock-free append, not a new writer class.**
+- **SIM §`fee_model`** — the single merge site and the per-class rows this batch **READS and never writes.** ⛔ **This batch writes no fee value, ever.** It reports; a correction is a separate reviewed change.
+- **`SYSTEM_MANUAL` §5** — the cost model, now carrying the landed `#1010` contract and the signed maker rail.
+- **`ALERT_ACTORS`** (`system-alerts.ts:205-220`) — 10 actors; `machine` members are `governance-checker`, `governance-checker-heartbeat`, `b-new-40-soak-verify`, `deploy-drift-monitor`, `langston-privacy-check`.
 
-## 4. PROVENANCE READ (MANDATORY 1.b)
+## 5. PROVENANCE READ (1.b)
 
-**TIER 1 — the transcription this batch compares against.** Introduced at `8ecc671565f262a849f4f19406f600cf318fe70e` (2026-09-06). Quoted verbatim from that commit, not summarised:
+**TIER 1 — the transcription this batch compares against.** Introduced at `8ecc671565f262a849f4f19406f600cf318fe70e` (2026-09-06), quoted verbatim:
 
 > *"Kyle captured Kraken's public fee pages and asked for them to be stored, shared and monitored. All three, plus the finding that fell out of reading them."*
-> *"NEW: 1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md — the venue's published schedule transcribed with its provenance, plus the three unmodified PDFs under kraken-fees/2026-09-06/. The transcription exists because the captures are IMAGES: pdftotext returns zero lines from all three, so no future check can parse them."*
+> *"The transcription exists because the captures are IMAGES: pdftotext returns zero lines from all three, so no future check can parse them."*
 
-⭐ **DISPOSITION (2) — relevant, needs updating to today's intent.** The file is correct and faithful (M4), but its §5 states *"nothing currently watches it"* and its design note assumes no machine source is parseable. **M1-M4 establish that the LIVE PAGE is parseable even though our CAPTURES are not** — the commit's sentence is true of the PDFs and was carried forward as though it were true of the source. This batch updates that, and the distinction is the reason the page-versus-database leg is buildable at all.
+⭐ **DISPOSITION (2) — relevant, needs updating to today's intent.** That sentence is true of the **PDFs** and was carried forward as though true of the **source**. M2 establishes the live page is parseable. §5 of the reference ("nothing currently watches it") is rewritten by this batch.
 
-**TIER 2 — one-line intent notes.** `system-alerts.ts` — the alert store and its canonical-actor gate (`#987`, mine); read and extended, not changed in behaviour. `dt-deploy-drift.sh` — the external-contract watcher whose shape this batch copies; read only. `comms-infra/discord/deploy.sh` — the estate's installer; extended by one artifact.
+**TIER 2:** `system-alerts.ts` (the store and its actor gate, `#987` — read and extended) · `dt-deploy-drift.sh` (the shape copied; read only) · `comms-infra/discord/deploy.sh` (the installer; extended by one artifact).
 
-**Corpora searched:** `RUNNING_ISSUES.md` (`#1011`, `#1010`, `#133`/`#134`, `#744` rider, `#1002`, `#1016`), `BATCH_CATALOG.md` (B-DEPLOY-DRIFT-LINE, B-DRIFT-RUNTIME-PREDICATE), the completion reports for both drift batches, `SYSTEM_IMPACT_MAP.md`, `SYSTEM_MANUAL.md`, and `git log --reverse` on the reference file. **`bridge/canonical/` NOT consulted and it is not applicable** — every component here postdates the 2026-01/02 governance change by months.
+**Corpora searched:** `RUNNING_ISSUES` (`#1011`, `#1010`, `#133`/`#134`, `#744`, `#1002`, `#1016`, `#647`), `BATCH_CATALOG`, both drift completion reports, SIM, System Manual, `git log --reverse` on the reference. **`bridge/canonical/` not applicable** — every component postdates the 2026-01/02 governance change.
 
-## 5. ALREADY EXISTS / ALREADY DECIDED
+## 6. ALREADY EXISTS / ALREADY DECIDED
 
-- **Nothing fetches any Kraken page today.** Census at the ref across `scripts/`, `server/`, `comms-infra/`: zero fetchers of `kraken.com` public pages; every hit is an archived report or a completion report. **Control: the same census finds external URLs elsewhere in `comms-infra/`.**
-- **The alert store, its CLI, its dedupe keys and its actor gate all exist** — this batch uses them and adds one actor.
-- ⛔ **Tier RESOLUTION is deliberately OUT** — homed at `B-FEE-TIER-RESOLUTION`, Phase 21. This batch reports what the venue publishes; it does not decide which rung we are on.
+- **Nothing fetches any Kraken page today** — census at the ref across `scripts/`, `server/`, `comms-infra/`; every hit is an archived or completion report. **Control: the same census finds external URLs elsewhere in `comms-infra/`.**
+- The alert store, CLI, dedupe keys and actor gate all exist; this batch adds one actor.
+- ⛔ **Tier RESOLUTION is OUT** — `B-FEE-TIER-RESOLUTION`, Phase 21.
 
-## 6. NOT IN THIS BATCH
+## 7. NOT IN THIS BATCH
 
 - Changing any fee value automatically. **The watcher reports; a human decides.**
-- The AoP lever (§0.d of the reference) — unpriced, and a decision for Kyle.
-- The `$2,501` live-volume cliff (§4 item 3 of the reference — we have no tier tracking at all). **Named here because this batch will make it visible, and it is a scope call, not a defect.**
+- Establishing what product table 3 (`Spot Crypto`, `0.38%`) belongs to. **Named, not chased** — the watcher reports it as a non-governing ladder.
+- The AoP lever, and the `$2,501` first-rung cliff.
+⛔ **CONDITION (Langston ruling 5): the alert body must state that it compares RUNG 1 ONLY and that we have no tier tracking** — so a disagreement means *either* the venue changed the schedule *or* we crossed a rung. Otherwise the first tier crossing mints an alert wearing "venue changed" clothes and someone edits the database (`#546`, absent-as-valid).
 
-## 7. GOVERNANCE SET (architecture class)
+## 8. GOVERNANCE SET (architecture class)
 
-Completion report · `BATCH_CATALOG` · `PHASE_HISTORY` · `RUNNING_ISSUES` (`#1011` closed) · `PHASE_19_PLAN` row 2.4-FEE-b · `SYSTEM_IMPACT_MAP` (new watcher entry + writer count) · `KRAKEN_FEE_SCHEDULE_REFERENCE.md` §5 · `SYSTEM_MANUAL` §5 (only if the cost-model contract changes — expected **N/A**) · shared `MEMORY.md` + `MEMORY_CC_B.md` · `CLAUDE_NEW_PHASE_19_TASK_LIST.md` · Langston's `MEMORY.md`.
+Completion report · `BATCH_CATALOG` · `PHASE_HISTORY` · `RUNNING_ISSUES` (`#1011` closed) · `PHASE_19_PLAN` row 2.4-FEE-b · `SYSTEM_IMPACT_MAP` (new watcher entry + writer count) · **`SYSTEM_MANUAL` §5 (one real paragraph — NOT N/A)** · `KRAKEN_FEE_SCHEDULE_REFERENCE.md` §5 · shared `MEMORY.md` + `MEMORY_CC_B.md` · `CLAUDE_NEW_PHASE_19_TASK_LIST.md` · Langston's `MEMORY.md`.
 
----
+## 9. HONEST RESIDUALS
 
-## 8. PLAIN-LANGUAGE SUMMARY
+- ⚠️ **My fetch measured 1,394,145 bytes; Langston's measured 1,398,949.** Both 200, both carrying the same four ladders with the same values. **The page is stable within a session and NOT byte-stable across hours** — which is further reason the dropped hash was the right call, and it is why OBJ-8 asserts structure rather than bytes.
+- ⚠️ **Which product table 3 describes is unestablished.** Over-reporting is the safe direction: the watcher names every ladder it finds.
+- ⚠️ **The account view is a 2026-09-06 capture, not a live read.** If the account's tier moves, §0.b goes stale and the governing-table determination must be re-made — which is exactly what OBJ-4's event trigger and ruling 5's alert wording exist to surface.
 
-Kraken changed its fees in July and we did not notice until September, because nothing compares what the venue publishes to what we charge. This builds that comparison and runs it on a schedule.
+## 10. PLAIN-LANGUAGE SUMMARY
 
-The useful surprise is that Kraken's fee page turns out to be machine-readable — it serves its tables as structured data, and two fetches came back byte-identical, so a check can read the crypto ladder exactly rather than guessing at a screenshot. Our own written copy of that ladder matches the live page row for row today, which gives the check a verified starting point.
+Kraken changed its fees in July and we did not notice until September, because nothing compares what the venue publishes against what we actually charge. This builds that comparison and runs it on a schedule.
 
-The honest limit is the tokenized stocks: their fee table is not on any public page, and the only place it appears requires logging in, which no session may do. So that half is not automated — it becomes a dated reminder that asks Kyle for a fresh screenshot and shows the two numbers we currently hold, so checking it takes a glance.
+The complication Langston caught is that Kraken's page does not publish one fee table — it publishes four, and they disagree. Two of them match what Kyle's own signed-in account shows, one is a different schedule entirely, and one is for margin trading. So the check cannot just "read the table"; it has to say **which** table it read and prove that table is the one that applies to us. Our own records settle it: the account view matches the two that say 0.40%, which is what we charge, so the database is right.
+
+The tokenized stocks stay manual, because their table is not published anywhere public and the only place it appears requires logging in, which no session may do. That becomes a reminder every ninety days — and immediately, if the crypto side ever disagrees, on the reasoning that a venue changing one schedule has probably changed both.
