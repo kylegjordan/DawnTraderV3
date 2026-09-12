@@ -1,7 +1,7 @@
-# B-GEOMETRY-REACH-BASELINE — SCOPE **r6**, RE-SCOPED ON THE VTS CORPUS
+# B-GEOMETRY-REACH-BASELINE — SCOPE **r8**
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r7, 2026-09-13**
+**change-class: architecture** · **r8, 2026-09-12**
 
 > ⛔⛔ **KYLE RE-SCOPED THIS AND HE WAS RIGHT ON ALL SIX COUNTS. r1–r5 WERE BUILT ON 29 SEPTEMBER PAPER TRADES WHILE 78,304 VTS TRADES SAT UNUSED SINCE 10 MAY.** His words: *"Using paper mode data limits us tremendously."* **I used roughly 0.04 % of the available trade record.**
 > ⛔⛔ **r7 — THE REVERSAL IS RELABELLED A *HYPOTHESIS*, NOT A FINDING (Langston BLOCKER-2, and he is right).** r6 claimed the VTS data shows the ceiling is nearly right and the strategy's target wrong. **It does not show that, because I measured the wrong quantity: `closed_at − opened_at` is time-to-ANY-exit, and the ceiling encodes time-to-TARGET.** `strong_bull_trend`'s 1,652 trades were **all tagged `unreachable`**, so their 15.44 h is the median time to stop-out-or-timeout of trades that mostly never reached 6 ATR. ⇒ **“6 ATR implies 36 h; it resolves in 15.44 h” compares a MODELLED time-to-reach against an OBSERVED time-to-exit-by-other-means. Two different objects.**
@@ -24,7 +24,7 @@
 
 ## 1. THE PROBLEM, RESTATED ON FOUR MONTHS OF DATA
 
-### 1a. ⭐⭐ THE CEILING IS A PER-STRATEGY QUANTITY STORED PER CLASS — and that, not its value, is the defect
+### 1a. ⭐⭐ THE CEILING IS KEYED PER CLASS **BY DESIGN** — and this batch AMENDS that design rather than fixing a bug
 
 The ceiling is `c·√H`. **`H` is now MEASURED per strategy** — `closed_at − opened_at`, VTS crypto, closed, `opened_at ≥ 2026-08-01`, **n = 28,020**:
 
@@ -38,21 +38,19 @@ The ceiling is `c·√H`. **`H` is now MEASURED per strategy** — `closed_at �
 | `morning_star` | 3,390 | 6.02 h | **2.45** | 1.6× |
 | `pivot_shift` | 436 | 7.40 h | **2.72** | 1.5× |
 | `support_bounce` | 142 | 13.27 h | **3.64** | ~right |
-| ⭐ **`strong_bull_trend`** | **1,652** | **15.44 h** | **3.93** | ⭐ **~RIGHT, within 2 %** |
-| ⚠️ **`vwap_pullback`** | **580** | **40.97 h** | **6.40** | ⛔ **60 % TOO TIGHT** |
+| `strong_bull_trend` | 1,652 | 15.44 h | 3.93 | ~at the default |
+| ⚠️ `vwap_pullback` | 580 | 40.97 h | 6.40 | ⛔ **would LOOSEN — does not ship** |
 
-⇒ ⭐⭐ **ONE NUMBER IS SERVING TEN DIFFERENT HORIZONS.** It is **1.6–3.0× too generous** for seven strategies, **about right** for two, and **60 % too tight** for `vwap_pullback` — the only strategy with a genuine case for a wider ceiling, and **it is not the one r1–r5 spent the batch on.**
-⇒ ⛔ **AND `strong_bull_trend`'s 6-ATR TARGET IS NOT JUSTIFIED BY ITS OWN HOLD.** 6 ATR implies **36 h**; it resolves in **15.44 h**. **The ceiling is not blocking a good trade — it is correctly refusing a target the strategy's own horizon cannot reach.**
+⇒ ✅ **WHAT THIS SUPPORTS, AND IT IS THE SHIPPABLE FINDING: one ceiling is serving ten materially different DURATIONS, and for seven strategies it sits 1.5–3.0× looser than their own holding time.** ⚠️ **`vwap_pullback` is the only row that would LOOSEN the ceiling; it is disqualified by DIRECTION and does not ship (§3 OBJ-A).**
+⛔ **THE r6 SENTENCE THAT STOOD HERE IS DELETED, NOT ANNOTATED.** It read: *“strong_bull_trend's 6-ATR target is not justified by its own hold — the ceiling is correctly refusing a target the strategy's own horizon cannot reach.”* ⛔ **That compared a MODELLED time-to-reach against an OBSERVED time-to-exit-by-other-means.** The 15.44 h is the median time to stop-out or timeout of trades that were **all tagged `unreachable`** and mostly never approached 6 ATR. ⇒ **Settling it needs time-to-target, which §1d shows this corpus cannot yield, and §1e shows the excursion record does not exist. NEITHER r1–r5's framing NOR r6's reversal is asserted.**
 
-### 1b. ✅ THE GATE IS DOING ITS JOB — measured, not argued
+### 1b. ⛔ DELETED — r6's *“the gate is doing its job”* claim
 
-| verdict | n | median hold | p90 hold |
-|---|---|---|---|
-| `passed` | 438 | **4.42 h** | 25.30 h |
-| `unreachable` | 1,857 | **16.60 h** | 89.84 h |
-| `rr_below_min` | 133 | 22.44 h | 168.01 h |
+⛔ **The section that stood here is REMOVED, not struck.** It reported that refused trades take ~3.8× longer to resolve than passed ones and concluded the gate separates good from bad. **Two independent faults, either fatal:**
+1. **It was one strategy wearing a crowd's clothes** — `unreachable` n=1,857 of which `strong_bull_trend` is **1,652 = 88.9 %.**
+2. ⛔ **It was TAUTOLOGICAL before it was confounded** — the `passed` bucket passed **because its targets were nearer**, and nearer targets are reached sooner **by definition.** Controlled for `atrsToTarget` the effect has nowhere to come from.
 
-⇒ ⭐ **The trades the ceiling refuses take ~3.8× longer to resolve than the ones it passes.** **It is separating fast from slow, which is exactly what a horizon gate is for.** ⛔ **r1–r5's framing — a movement estimate enforced as a prohibition, refusing good trades — is not supported.**
+⇒ **It may be re-run stratified by strategy AND target distance. Until then it supports nothing, and nothing in §3 cites it.**
 
 ### 1c. ⛔ THE COST PROBLEM IS UNCHANGED AND STILL REAL
 
@@ -91,60 +89,68 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 
 ---
 
-### 1f. ⛔⛔ THE FOUR BLOCKERS, ANSWERED — ALL FOUR CONFIRMED AT THE OBJECT BY ME
+### 1e-bis. ⛔⛔ THE EXCURSION RECORD DOES NOT EXIST, AND IT MUST BE **DESIGNED** — NOT WIRED
 
-**BLOCKER-1 — OBJ-A AS r6 WROTE IT SHIPS A NO-OP, AND MY MECHANISM CLAIM WAS FALSE.** r6 said *"the resolver already supports the strategy dimension (`min_rr` uses it)."* **The generic resolver does; the `reach_atr_max` READ SITE does not.** Verified at the ref — `expectancy.ts:205` comment: *"reorg-B2.3: floorPct + reachAtrMax stay PER-CLASS (strategy:'\*'); only min_rr goes per-(strategy×class)"*, and `:206` hardcodes `_classKey = { exchange:'*', assetClass, strategy:'*', regime:'*' }`, which `:211` then uses. ⇒ ⛔ **Seed ten `(strategy, reach_atr_max)` rows today and NOTHING READS THEM.**
-✅ **SO OBJ-A IS A CODE CHANGE TO `expectancy.ts`, AND THE SCOPE NOW SAYS SO.** ⛔ **And it inherits `min_rr`'s fail-closed obligation, which r6 did not carry:** `_resolvePerStrategyMinRR` canonicalizes the token and fails **closed** to `min_rr_unknown_floor`. **Reach has no analogue** — an uncanonicalized token would fall to the permissive class `4.0`, which is the §8 #10 silent-fallback trap. ⇒ **OBJ-A must also add `reach_atr_max_unknown_floor` = the MINIMUM across strategies, as a seeded DB row, plus the `recordUnknownStrategyAtGate` tripwire.**
+**This is what moves the target re-derivation out of this batch, so it is in the body rather than an annex.**
 
-**BLOCKER-2 — THE ESTIMAND WAS WRONG, AND THE INSTRUMENT THAT WOULD SETTLE IT EXISTS BUT HAS NEVER BEEN WRITTEN.** See the banner. ✅ **MEASURED ABSENCE, WITH A POSITIVE CONTROL, because Langston asked for exactly that:** the excursion columns **DO exist** — `shared/schema.ts:734-735` and `:1237-1238`, `mfe` *"Maximum Favorable Excursion (max profit while open)"* and `mae` *"Maximum Adverse Excursion"* — on the tables **`paper_trades`** and **`trades`**. ⛔ **BOTH TABLES HOLD ZERO ROWS.** **CONTROL: the same query returns 0 for `symbol` on both tables, so the zero is an empty table and not a failed read** — and `paper_trades` is the table already recorded as RETIRED (`#573`).
-⇒ ⛔ **THE EXCURSION INSTRUMENT EXISTS IN SCHEMA AND HAS NEVER BEEN POPULATED.** ⚠️ **That corrects TWO earlier claims, one of them mine and one Langston's:** my r2 OBJ-4 said *"no MFE column exists"* — **it does**; and his OBJ-4 amendment proposed building one — **it needs WIRING, not designing.** ✅ **So the honest disposition is the one he pre-authorised: the reversal is a HYPOTHESIS, and OBJ-B becomes the wiring of an existing column rather than an analysis.**
+✅ **MEASURED, WITH A POSITIVE CONTROL.** The columns **DO** exist: `shared/schema.ts:734-735` on **`trades`** and `:1237-1238` on **`paper_trades`** — `mfe`, commented *"Maximum Favorable Excursion (max profit while open)"*, and `mae`. ⛔ **BOTH TABLES HOLD ZERO ROWS.** **CONTROL: the same query returns 0 for `symbol` on both, so the zero is an empty table and not a failed read** — and `paper_trades` is already recorded **RETIRED** at `#573`.
 
-**BLOCKER-3 — §1b IS STRUCK. It was one strategy, and circular before it was confounded.** My own numbers convict it: `unreachable` n=1,857, of which `strong_bull_trend` is **1,652 = 88.9 %**. So *"refused trades take 3.8× longer"* is *"`strong_bull_trend` takes longer"* with 205 others along for the ride. ⛔ **And it is tautological: the `passed` bucket passed BECAUSE its targets are nearer, and nearer targets are hit sooner by definition — controlled for `atrsToTarget` the effect has nowhere to come from.** ⇒ **“The gate is doing its job — measured, not argued” is WITHDRAWN.** It may be re-run stratified by strategy AND target distance; until then it supports nothing.
+⛔ **r7 CONCLUDED *“it needs WIRING, not designing”*. THAT WAS WRONG, AND WRONG IN THE DIRECTION THAT SHRANK THE WORK.** Whole-tree at the ref: `mfe`/`mae` are **exactly four lines in 308 KB of `shared/schema.ts`**; **`closed_trades`, `active_open_positions` and `active_trade_logs` carry no excursion field**; **`vts_open_trades` and `exit_strategy_alternates` — this batch's entire corpus — have NO `pgTable` at the ref at all**; and there are **ZERO code references to `mfe` tree-wide.** ⇒ **two comments on two dead tables, and no writer to re-point.**
 
-**BLOCKER-4 — `c` IS UNDEFINED, THE ATR BAR IS NOT THE SAME LENGTH IN BOTH CLASSES, AND §1a HAS NO xSTOCK ROWS.** `signal-target-normalizer.ts:26` documents the bound as *"the √H-scaled reachable bound, c·√H"*. §1a computed `√(hold in HOURS)` and compared it to 4.0 — i.e. **`c = 1` with a ONE-HOUR ATR bar.** ⛔ **Crypto is 60-minute bars; xStock is 15-minute** (`market-context-engine.ts:461-463` vs `:683-684`). **The same price move is ~2× more ATRs on a 15-minute bar, so `c` is CLASS-DEPENDENT and `√H_hours` is off by ~2× for xStock** — while OBJ-A ships per-(strategy × **class**) and §1a contains **zero xStock rows.** ⇒ **half the shipped keyspace was underived and dimensionally wrong.**
-⭐ **AND THE PART THAT CUTS AGAINST THE REVERSAL, flagged MECHANISM-HYPOTHESIS (29(c)) — the citation is the ABSENCE of a drift term in the documented form, not a measurement: `c·√H` is an ENDPOINT displacement bound with no drift term. A running maximum exceeds it, and a trend strategy has drift by construction.** ⇒ **the only strategy the gate blocks is the one whose premise is drift.**
+⛔⛔ **AND THE SAMPLING IS A REAL DESIGN CALL, NOT CLERICAL** — citing the existing ruling rather than re-deriving it. `RUNNING_ISSUES:1495`: `latestEquityTick` is a **last-write-wins map with no history**, which the exit monitor **polls on its own cycle**. **Three samplings of one stream — and a sub-4-second excursion that reverts is invisible to all of them.** ⇒ ⭐ **an MFE written off that instrument is the MFE of the SAMPLER, not of the price path.** The second design call is the **basis** — mid vs bid — which is F-G-2's live subject.
 
-### 1g. ⚠️ THE FINDINGS, TAKEN NOT DEFERRED
+⇒ ⛔ **THEREFORE THE TARGET RE-DERIVATION CANNOT SHIP IN THIS BATCH, and r6's OBJ-B is withdrawn.** `HOME: B-EXCURSION-RECORD, owner CC-B, PHASE_19_PLAN placed after 2.4g-2 and AHEAD of B-TRADE-RECORD-JOINABILITY` — same tables, and the joinability work must not land first and be re-opened.
+✅ **Kyle's binding objection survives this: OBJ-A still ships live configuration AND a code change. The batch is not measure-only.**
 
-- ⛔ **OBJ-C WAS READING THE WRONG ERA, and this is the reproduction I was trying to avoid.** The **0.92 %** xStock maker share was measured under the **crypto** fee schedule. `B-XSTOCK-FEE-CONTRACT` deployed **2026-09-11** and xStock maker is now **−0.0002 — a REBATE, the first negative fee in the system's history.** **A maker share observed when maker paid nothing extra cannot satisfy a criterion whose window OPENED at that deploy** (P8/Arm B are three-week windows; 17 alias symbols excluded until `#1024`). ⇒ **the era is now cited, and the 0.92 % is labelled pre-rebate.**
-- ⚠️ **POPULATION RECONCILIATION OWED: §1a's ten rows sum to 27,942 against a stated n = 28,020 — 78 trades unenumerated.** And §1b's verdict-bearing set is **2,428 = 8.7 %** of §1a. ⛔ **Why do 91 % carry no verdict, and is the 8.7 % representative? That is `#596` class and it sits under OBJ-A's entire basis.** **To be answered before any value ships.**
-- ⚠️ **TEN ROWS, NINETEEN STRATEGIES (`#648` — six have never traded).** Strategies absent from the table fall to **the class default this scope argues is wrong for everything.** OBJ-A must say what happens to them; silence is the permissive branch again.
-- ⚠️ **NO CONFIDENCE INTERVALS.** `range_trade` n=156 and `support_bounce` n=142, with p90s near 90 h, are **not point estimates to ship as config.** Bootstrap them.
-- ⚠️ **THE CORPUS STRADDLES DEPLOY BOUNDARIES.** F-G-2's crypto deploy `2cc4a03ec` (2026-09-02) **changed VTS exit booking** — the very quantity measured — with `f8870022f` (09-04) and the 3n OBJ-7 deploy (09-11) after it. **§1a's 08-01→09-12 window pools pre- and post-F-G-2 populations.** ⇒ **filter at the boundaries and show the split, or the pooled medians are two populations wearing one number.**
-- ✅ **OBJ-D RE-LABELLED:** the id-space split and the archive stage split are **joinability**; `realDiAtOpen` written-never-populated is a **WRITER** defect. Same batch, **two classes**, stated as two.
-- ⚠️ **AND THE SIGNED BIAS ON EVERY SHIPPED VALUE, not a genre caveat:** VTS books exits at the cache **mid**; a live sell fills on the **bid**, which reaches any level **later**. ⇒ **VTS holds are systematically SHORTER than live ⇒ every `√H` is biased LOW ⇒ OBJ-A would ship ceilings systematically TOO TIGHT**, over-correcting the seven generous rows and under-correcting `vwap_pullback`. ⭐ **And the magnitude is somebody's live deliverable: F-G-2's observation window is measuring exactly this mid-vs-bid gap now.**
+### 1f. ✅ WHERE THE CORRECTIONS LIVE NOW
 
-### 1h. ✅ THE THREE ANSWERS I ASKED FOR, TAKEN AS RULED
+⛔⛔ **r7 CARRIED THREE ANNEX SECTIONS (1f/1g/1h) HOLDING THE BLOCKER ANSWERS WHILE THE BODY STILL ASSERTED THE WITHDRAWN TEXT. THEY ARE REMOVED.** Langston's ruling, and it is the whole of r8: ***a correction stacked on wrong text is not a correction.*** ⇒ **every answer is now APPLIED where it belongs** — §1a carries the design amendment, §1b carries the deletion and the five binding limits, §1c the dimensional problem, §1d the corpus bound, §1e the excursion finding, §2 the provenance, and OBJ-A the code change with its fail-closed floor and its policy-tightening label.
+✅ **The error record lives in `RUNNING_ISSUES` `#1052` and the commit messages — not in this document's body, which is what gets built from.**
 
-1. **Median vs percentile — NEITHER, and the question is downstream of BLOCKER-2.** Once the estimand is right, the sample is **right-censored**: a trade closed by stop or timeout is *unobserved past that point*, not *"didn't reach"* — so **a raw quantile of closed holds is biased LOW whichever quantile is chosen.** Use a survival estimate. ⛔ **And the quantile is a LOSS-FUNCTION choice: refusing a reachable trade costs forgone EV, admitting an unreachable one costs friction, and §1d says VTS can price NEITHER side.** ⇒ **there is no data-derived quantile available today. Pick it as a STATED POLICY, publish the implied refusal rate per strategy beside every shipped value, and label it a policy choice — never a derivation.** ✅ **I will not quietly move to p75 and call it derived.**
-2. **`vwap_pullback` — DISQUALIFIED BY DIRECTION, NOT BY n.** Every other row moves the ceiling **DOWN**; this is the only row that moves it **UP** (4.0 → 6.40), and **a loosening admits trades the system refuses today.** ⇒ **tightening on a mis-derived number costs opportunity; loosening on one costs money.** **It does NOT ship in OBJ-A. It stays at the class default** until a realised-excursion measurement shows those trades actually traversing 5–6 ATRs. ⭐ **And its 41-hour median hold on a PULLBACK strategy is itself the anomaly — that reads as trades held to a timeout, which is evidence FOR the censoring problem, not for a wider ceiling. Explain it before building on it.**
-3. **Mark-booked exits — a signed bias ON THE SHIPPED VALUES.** See §1g's last bullet. **Signed, with its direction stated and its magnitude assigned to an existing observation window.**
+## 2. PROVENANCE OF `reach_atr_max` (mandatory 1.b) — FOUR ITEMS
+
+**Searched:** the reorg-B2 scope + pre-audit, the reorg-B2/B2.1/B2.3 completion reports, `P19_B_FEEVIABILITY` scope + pre-audit, `SYSTEM_MANUAL` §reorg-B2*, `POST_AUDIT_ROADMAP`, `RUNNING_ISSUES`, `git log -S`.
+
+1. **INTRODUCED.** `reorg-B2` Piece C states the form — *"path-INVARIANT reachability bound (c·√H), per class only (not per-filterPath)"* (`expectancy.ts:210`). ⛔ **But `reach_atr_max` does NOT appear in the reorg-B2 completion report; it arrives at `reorg-B2.1 OBJ-3`** (`P19_B_FEEVIABILITY_PRE_AUDIT.md:136`), with an acknowledged attribution discrepancy against `POST_AUDIT_ROADMAP:326`.
+2. ⭐ **INTENT, VERBATIM — AND THIS IS THE STATEMENT OBJ-A AMENDS.** `signal-target-normalizer.ts:24-29`: *"Reachability is PATH-INVARIANT by design — it is a FEASIBILITY check, not a quality bar, so it is per-CLASS (BTC vs xStock ATR scales genuinely differ) but NOT per-filterPath … (Langston)."*
+3. **DISPOSITION: (2) relevant but needs updating to today's intent.** ⛔ **Per-class keying is a STATED DESIGN, not a storage accident — r6 called it *"the defect"* and that was wrong.** The feasibility framing is sound; it is **silent on horizon being a strategy property**, and that silence is what OBJ-A fills. ⚠️ **So OBJ-A changes the gate's CHARACTER** — from a feasibility statement about pair + horizon into a **per-strategy declared-horizon knob** — which is arguable because a holding horizon genuinely is a strategy property, and which is **why the standing no-looser rule exists.**
+4. ⚠️ **THE VALUE `4.0` IS `INFERRED-FROM-CODE-AND-FORM`, NOT ESTABLISHED, AND MUST NOT QUIETLY FIRM UP.** `P19_REORG_B2_PRE_AUDIT.md:41`'s general rule governs a target distance (`K ≲ c·√H`, `H = 12–24`, `√H ≈ 3.5–4.9`, so 4.0 is in band) — **but its worked example specialises `K` to the FLOOR and outputs a volatility-admission bound, a different quantity. How 4.0 itself was chosen is recorded NOWHERE.**
+⛔ **AND THE WITHDRAWN CLAIM IS STILL LIVE IN A GOVERNED ARTIFACT: `PHASE_19_PLAN` row 2.4g-2 asserts in bold that `reach_atr_max = 4.0` ENCODES SIXTEEN HOURS. OBJ-D corrects it** — leaving it is how the next session re-inherits it.
 
 ---
 
-## 2. THE PLAN — FOUR OBJECTIVES, ORDER BINDING
+## 3. THE PLAN
 
-### OBJ-A — Derive the ceiling per strategy from realised hold, and ship it
-**From §1a.** Replace the single per-class `reach_atr_max = 4.0` with a **per-(strategy × class)** value derived as `c·√H` from each strategy's own measured median hold — the resolver **already supports the strategy dimension** (`min_rr` uses it; most-specific-wins, `b72-warmup` fail-closed).
-**This is the fix Kyle's first question asked for: not an exemption for one strategy, but a ceiling that is right for all of them.** ⛔ **No exemptions. No patches.**
-**VERIFICATION:** every seeded value re-derived from the query in §1a with n and denominator printed per strategy; a **negative control** — a strategy with n<50 gets **no row** and falls to the class default, asserted rather than assumed; and the by-reason drop counts move in the predicted direction per strategy after deploy.
+### OBJ-A — Make the ceiling per-(strategy × class), CRYPTO ONLY, as a POLICY TIGHTENING
+**From §1a, §1b, §1c.**
 
-### OBJ-B — Re-derive `strong_bull_trend`'s target against its own horizon
-**From §1a.** Its 6-ATR target implies 36 h; it resolves in 15.44 h. **Either the target comes down to what its horizon can reach (~3.9 ATR) or the strategy is explicitly declared a long-horizon exception with its own ceiling.** ⛔ **r1–r5 proposed exempting it from the gate; that was backwards — the gate was right.**
-**VERIFICATION:** the chosen target is justified from the strategy's own hold distribution, not from consensus; and its post-change reachability verdict is `passed` rather than exempted.
+⛔⛔ **THIS IS A CODE CHANGE, NOT A SEED — AND r6's MECHANISM CLAIM IS DELETED AS FALSE.** r6 said *"the resolver already supports the strategy dimension (`min_rr` uses it)."* **The GENERIC resolver does; the `reach_atr_max` READ SITE does not.** `expectancy.ts:205` states *"floorPct + reachAtrMax stay PER-CLASS (strategy:'\*'); only min_rr goes per-(strategy×class)"*; `:206` hardcodes `_classKey = { exchange:'*', assetClass, strategy:'*', regime:'*' }`; `:211` reads with it. **`reach_atr_max` has no other read site tree-wide.** ⇒ **seeding rows without the code change ships a NO-OP.**
+
+**CHANGE, four parts and the second is not optional:**
+1. `expectancy.ts` resolves `reach_atr_max` per-(strategy × class) through the same most-specific-wins path `min_rr` uses.
+2. ⛔⛔ **ADD `reach_atr_max_unknown_floor` = the MINIMUM across strategies, as a seeded DB row, PLUS the `recordUnknownStrategyAtGate` tripwire.** `min_rr` fails **closed** (`expectancy.ts:239-240`) and **reach has no analogue**, so an uncanonicalized token would land on the **permissive** class `4.0` — the §8 #10 silent-fallback-for-a-DB-governed-setting trap.
+3. Seed the **seven TIGHTENING crypto rows** only.
+4. ⛔ **Rewrite `signal-target-normalizer.ts:24-29` IN THE SAME COMMIT**, or we ship a docstring describing the opposite design. *(Langston's own `active-position-sizing.ts:123-131` retraction is the precedent — he quoted a stale header and ratified a retired algorithm.)*
+
+⛔ **SHIPS CRYPTO ONLY** (§1c: `c` is class-dependent — crypto 60-min bars vs xStock 15-min — and there are zero xStock rows). ⛔ **`vwap_pullback` DOES NOT SHIP:** it is the only row that would **LOOSEN**, and its 41-hour median on a *pullback* strategy reads as a timeout artefact — evidence **for** the censoring problem, not for a wider ceiling. It stays at the class default.
+✅ **STANDING RULE, generalised rather than applied case-by-case: NO per-strategy row may be LOOSER than the class default without realised-excursion evidence.** *(Tightening on a mis-derived number costs opportunity; loosening on one costs money.)*
+
+⚠️ **AND THE SHIPPED VALUES ARE LABELLED A POLICY TIGHTENING WITH A MEASURED LOWER BOUND — NOT A DERIVATION.** `H` is **endogenous to the gate being calibrated**: the ceiling blocks far targets → those trades exit sooner → `H` is short → the derived ceiling is tight. **The same circularity that convicted §1b, one level up.** Tightening is the safe direction and 1.5–3.0× is robust to a lot of feedback, **but the label is not optional.**
+
+**VERIFICATION:** (a) each value re-derived with n, denominator and a **bootstrapped CI**, carrying the **policy-tightening** label; (b) the **implied refusal rate per strategy** published beside each value; (c) medians **split at the F-G-2 deploy boundaries** (`2cc4a03ec` 09-02, `f8870022f` 09-04, 3n OBJ-7 09-11) with both halves shown; (d) the **78-row** and **8.7 %** reconciliations answered; (e) the **absent nine strategies'** disposition stated — silence there is the permissive branch; (f) **negative control** — an unknown strategy token resolves to the *unknown floor*, not to 4.0, asserted by test; (g) the `:24-29` docstring matches shipped behaviour.
 
 ### OBJ-C — Read the fee work we already have, and stop re-deriving it
 **From §0 rows 4–5.** The schedule is documented; the maker/taker split is observed (**crypto 18.2 %, xStock 0.92 %** on 3,938 / 2,072 stamped VTS rows). **Read the existing observation windows and the 2026-09-06 account capture BEFORE any new measurement.** ⛔ **Only if the account rung is genuinely absent from the record does the authenticated read happen — and then as a sourced rate with a refresh path, never a hardcoded number.**
 **VERIFICATION:** the batch cites the existing findings rather than reproducing them; any gap is named as a gap.
 
-### OBJ-D — Name the joinability defect; do not fix it here
+### OBJ-D — Correct the governed artifacts that still carry withdrawn claims, and name the record defects
 **From §1d and §1e(ii).** File `B-TRADE-RECORD-JOINABILITY` with **three** instances: the VTS id-space split, the archive's stage split, and **`realDiAtOpen` stamped on 3,685 rows and NULL on every one of them** — a field written and never populated, which is the same class one layer down. ⛔ **Out of scope to fix — it is a schema-and-writer change across four tables.** ✅ **In scope to NAME, because every measurement in this batch and the next hits it.**
 
 ⛔ **WITHDRAWN FROM r1–r5:** the paper-only reachability release (§0 row 3 — already run 4,675 times in VTS); the per-strategy exemption (OBJ-A supersedes it); and `B-EV-TARGET-PROBABILITY` **pending a duplication check against the ratified Phase-25 scoring blueprint** (§0 row 6).
 
 ---
 
-## 3. WHAT THIS BATCH NOW CHANGES, IN ORDER
+## 4. WHAT THIS BATCH NOW CHANGES, IN ORDER
 
 1. **Ten reachability ceilings replace one** — derived, per strategy, from four months of realised holds.
 2. **One strategy's target is re-based** to a distance its own horizon reaches.
