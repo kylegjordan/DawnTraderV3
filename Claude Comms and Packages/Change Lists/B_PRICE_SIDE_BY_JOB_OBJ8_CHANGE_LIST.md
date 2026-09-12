@@ -196,6 +196,23 @@ A COLD-START chain gets `seedImplausible = false` **VACUOUSLY** — `retainedMed
 
 ➕ **FINDING-1 TAKEN — `_retainedSpreads` IS REGISTERED IN THE SIM AS `S25b`** (§17; the census returned one file and zero doc hits). **Its bound is stated rather than implied: THERE IS NO EVICTION AND NO AGE TERM.** `_comparators` is bounded by held names and refreshed every frame; **this map is written at a clear and deleted only at a plausible seed, so a ring left behind when a position closes mid-implausible NEVER EXPIRES and can be the yardstick for a seed days later.** Conservative in the refusing direction, unbounded in time, nothing evicts it.
 
+⛔⛔ **r6 — BLOCKER-4, AND THE RULING THAT MATTERS MOST: STOP GATING. LANGSTON HAS RULED r5 THE LAST GATE (2026-09-13).**
+
+**THE HOLE:** `observedMovement` is EARNED on frame 2 of a COLD-SEEDED hollow chain, by that chain's own broken ring. Cold start 7.00/1000.00 seeds vacuously plausible; tick 2 with the live side ticking ONE CENT gives `bidDep = −0.0014` against `kRel × 1.986` = **5.96**, so **no arm is reachable** ⇒ `two_sided` ⇒ advance ⇒ **movement earned by a book that never recovered.** The ring then retains and the reseed passes.
+★★ **MOVEMENT IS A PROPERTY OF THE FEED, NOT OF THE CHAIN'S PLAUSIBILITY. A stub-ask book with a live bid is the CANONICAL half-hollow shape — FROZEN was the CRM instance, not the class.** My r5 generalised from one row.
+
+⛔ **AND IT IS NOT CLOSEABLE BY GATING, WHICH IS THE ACTUAL RULING:** retention happens AT A YIELD, and a yield is proof the reference was unusable; the only datum from outside is the previous ring; **so genesis must come from SOME yielding chain.** A `seedJudgedPlausible` gate makes the mechanism permanently **INERT** — the original deadlock shape this guard already died of once. **A SEVENTH positive property fails the same way.**
+✅ **r6 ADDS NO MECHANISM. It pins the hole as a test, corrects a sign error in two places, and fixes one comment.**
+
+⛔⛔ **THE SIGN ERROR, AND IT IS THE BOUNDED-SOUNDING-LABEL CRITICISM LANDING A THIRD TIME.** Residual 1 and SIM `S25b` both claimed the surviving door is *"conservative in the REFUSING direction"*. **WRONG IN SIGN for a CONTAMINATED ring:** the seed check is `seedSpread > kRel × retainedMedian`, so a **LARGER** median **RAISES** the bar and **FEWER** seeds are refused.
+**MEASURED, both directions: median 0.004 ⇒ threshold 0.012 ⇒ a 1.986 seed IS refused. Median 1.986 ⇒ threshold 5.958 ⇒ the SAME seed is ADMITTED.** ★ **A contaminated ring FAILS OPEN.** Corrected in both places.
+
+✅ **FINDING-1 — EVICTION: NO, and Langston reversed his own instinct to say so. STALENESS IS NOT THE HAZARD; PROVENANCE IS.** A stale HEALTHY ring is the only thing that makes a reseed judgeable at all and it fails REFUSING. **Evicting on age or at position close would delete the good rings with the bad and make every post-close reseed VACUOUSLY PLAUSIBLE — permissive.** The bound stays STATED, not fixed. **I did not invent a term.**
+
+✅ **FINDING-2 (non-blocking):** the r4 comment quoted the threshold as `max(kRel × median, 0.01)` — that is the **ARM** threshold (`book-state.ts:200`). The **SEED** check (`:180`) is a bare `kRel × median` with **no floor**. Two different expressions; the comment now says so.
+
+**63 green across both book-state files; tsc 377 at baseline.**
+
 ⛔ **WHAT I HAVE NOT DONE AND AM NOT CLAIMING: there is no unit test of the ENGINE-LOOP control flow itself.** The change is `continue` where a fall-through stood, inside a large monitor method with no existing harness. **The predicate half is covered on real rows; the control-flow half is readable but unproven, and Step 7 must verify it on staging — `hollowYields > 0` with ZERO new `kraken_equities_ws_mid` producers on boundary closes.**
 
 ---

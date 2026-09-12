@@ -238,12 +238,30 @@ export function clearBookStateComparator(symbol: string, reason: string): void {
   // ⛔⛔ r4 (Langston BLOCKER-2) — RETAIN ONLY A PLAUSIBLE CHAIN'S RING, AND THIS IS THE HALF
   // THAT MAKES r3 SURVIVE A SECOND CYCLE. `spreads` is computed BEFORE the implausibility
   // check, so an implausible chain's ring holds the BROKEN spread (CRM: [1.9722]). Retaining
-  // that raises the threshold to `max(kRel × 1.9722, 0.01)` = 5.917, which puts both side arms
+  // that raises the SEED threshold to `kRel × 1.9722` = 5.917 — ⚠️ NOTE, no floor term: the
+  // ARM threshold at `book-state.ts:200` is `max(kRel × median, floorPct/100)`, the SEED check
+  // at `:180` is a bare `kRel × median`. Quoting the arm's form here misled a reader once
+  // (Langston FINDING-2) — they are different expressions and only one has a floor.
+  // The same contaminated median also puts both side arms
   // out of reach — so the book can wander 7/1000 → 7/1200, yield again, and the reseed at
   // spread 1.977 now reads PLAUSIBLE against its own predecessor, validates on the next
   // self-comparison, and books 603.50. **Same terminal row, ~3 minutes later instead of 4.7 s.**
   // ★ MY OWN STATED PRINCIPLE NAMES THE DEFECT: *the circularity needs a datum from OUTSIDE
   //   the new chain.* After one cycle, an unconditionally-retained ring IS the broken chain.
+  // ⛔⛔ r6 — READ THIS BEFORE ADDING A SEVENTH CONDITION HERE. **LANGSTON HAS RULED r5 THE LAST
+  // GATE (2026-09-13), AND THE RULING IS THAT THE REMAINING HOLE IS NOT CLOSEABLE BY GATING.**
+  // Retention happens AT A YIELD, and a yield is proof the reference was unusable; the only
+  // datum from outside is the previous ring; **genesis must therefore come from SOME yielding
+  // chain.** A `seedJudgedPlausible` gate makes the whole mechanism permanently INERT — which
+  // is the original deadlock shape this guard already died of once.
+  // ⛔ THE SURVIVING HOLE, PINNED AS A TEST RATHER THAN GATED (BLOCKER-4): `observedMovement`
+  //   is satisfied on frame 2 of a COLD-SEEDED hollow chain, by that chain's own broken ring.
+  //   Cold start 7.00/1000.00 seeds vacuously plausible; tick 2 with the live side ticking one
+  //   cent gives `bidDep = -0.0014` against a threshold of `kRel × 1.986` = 5.96, so no arm is
+  //   reachable ⇒ `two_sided` ⇒ advance ⇒ **movement earned by a book that never recovered.**
+  // ★ MOVEMENT IS A PROPERTY OF THE FEED, NOT OF THE CHAIN'S PLAUSIBILITY. A stub-ask book with
+  //   a live bid is the CANONICAL half-hollow shape; FROZEN was the CRM instance, not the class.
+  //
   // ⛔⛔ r5 (Langston BLOCKER-3): RETAIN ONLY FROM A CHAIN THAT DEMONSTRATED IT IS A LIVE BOOK.
   // `!seedImplausible` alone is the ABSENCE OF A NEGATIVE, and a cold-start chain satisfies it
   // VACUOUSLY — which is the one chain class that can seed hollow. `observedMovement` is the
