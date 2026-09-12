@@ -80,12 +80,27 @@ REFERENCE_LADDER = {
 # said "asserted". MEASURED on a clean run 2026-09-12 -- this is the whole ladder census, so a
 # ladder appearing, vanishing or changing profile is caught, which is what makes a WRONG PIN
 # loud instead of silent forever.
+# (match, maker_deltas, taker_deltas). MEASURED 2026-09-12.
+# Langston r7 (a): deltas were maker-only, so a TAKER-only revision to a 0/17 ladder such as
+# `Spot Maker Rebate` was unasserted - it already matches 0/17 on makers, so nothing moved.
 EXPECTED_MATCH = {
-    "Cross-platform Fee Tiers": ("17/17", [0.0]),
-    "Spot Crypto":              ("17/17", [0.0]),
-    "Spot Maker Rebate":        ("0/17",  [-0.02]),
-    "Futures":                  ("17/17", [0.0]),
+    "Cross-platform Fee Tiers": ("17/17", [0.0], [0.0]),
+    "Spot Crypto":              ("17/17", [0.0], [0.0]),
+    "Spot Maker Rebate":        ("0/17",  [-0.02], [0.0]),
+    "Futures":                  ("17/17", [0.0], [0.0]),
 }
+
+# BLOCKER-5 (Langston r7): the banded half of the census was PRINTED and never asserted -
+# finding 2 was fixed on the tiered half only. This is the surface where the unknowns keep
+# turning up: the second `Pro xStocks` band found on 2026-09-12, and the FX schedule reading
+# 0.20/0.20 against the 0.80 we model. MEASURED 2026-09-12.
+EXPECTED_BANDED = {
+    "Stablecoin, Pegged Token & FX Pairs": (0.20, 0.20),
+    "USDG Pairs":                          (0.00, 0.01),
+    "USDe Pairs":                          (0.00, 0.00),
+    "Pro xStocks":                         (-0.02, 0.10),
+}
+XPIN_TITLE = "Pro xStocks"   # the second pin; hoisted so the banded assertion can defer to it
 
 TAG_RE = re.compile(r"<[^>]+>")
 WS_RE = re.compile(r"\s+")
@@ -93,6 +108,8 @@ NUM_RE = re.compile(r"-?\d+(?:\.\d+)?$")
 # BOUNDED (Langston r3 defect (a)): the page labels rungs Tier 1-12 then Pro 1-5. `Tier 99` is
 # not a rung, and leaning on a count of 17 cannot see a duplicate that keeps the count right.
 ROW_RE = re.compile(r"^(?:Tier ([1-9]|1[0-2])|Pro ([1-5]))$")
+# Discriminates a banded RATE schedule from any other `add here` table (see banded_from).
+VOLUME_AXIS_RE = re.compile(r"volume", re.I)
 
 
 class Fail(Exception):
@@ -208,8 +225,23 @@ def banded_from(title, rows):
             idx["maker"] = i
         elif n == "taker":
             idx["taker"] = i
+    # BLOCKER-5 (Langston r7): this returned None, so a RENAMED COLUMN deleted an entire
+    # schedule from the report with NO STATUS CHANGE.
+    # BUT THE FIRST VERSION OF THIS FIX BROKE THE CLEAN PAGE, and the harness caught it: `Margin`
+    # also carries an `add here` header (113 rows of Currency/Opening fee/Rollover fee), so
+    # raising on every unresolved maker/taker made the LIVE run exit 2. A guard that fires on a
+    # legitimate non-member is as wrong as one that cannot fire.
+    # MEASURED 2026-09-12 - what makes a table a banded RATE schedule is its VOLUME-BAND AXIS:
+    #   Stablecoin / USDG / USDe / Pro xStocks -> cell 0 == `30- Day Volume (USD)`
+    #   Margin                                 -> cell 0 == `Currency`
+    if not header or not VOLUME_AXIS_RE.search(text_of(header[0])):
+        return None          # not a rate schedule at all (Margin) - correctly skipped
+    # Past here the table IS a rate schedule, so an unresolvable leg column is a MEASUREMENT
+    # FAILURE. If the VOLUME column itself is renamed the table drops out of the parse instead -
+    # and the EXPECTED_BANDED census assertion catches that as a missing title (CASE 11).
     if "maker" not in idx or "taker" not in idx:
-        return None
+        raise Fail("banded rate schedule %r has a volume axis but no resolvable maker/taker "
+                   "column (header reads %r)" % (title, header))
     bands = {}
     for label, cells in rows:
         if label == "add here" or not label:
@@ -241,8 +273,12 @@ def ladder_from(title, rows):
     if header is None:
         return None
     # FIND-A (Langston r4): resolve_columns must be reachable. It is called here only for TIERED
-    # tables by construction; the banded reader above has its own strict resolution, so a leg
-    # column naming neither spot nor futures still cannot pass silently.
+    # tables by construction.
+    # CORRECTED (Langston r7 BLOCKER-5): this comment used to assert that "the banded reader
+    # above has its own strict resolution". IT DID NOT - it was exact-match-or-return-None, so a
+    # renamed column silently deleted a schedule. Third comment-certifying-an-absent-guard in
+    # this batch's lineage (#1000, and r6's own "(asserted for ALL ladders)" heading). The
+    # banded reader raises now, so the claim is true - but it was written before it was.
     cols = resolve_columns(header)
     if "maker_spot" not in cols or "taker_spot" not in cols:
         return None
@@ -251,6 +287,16 @@ def ladder_from(title, rows):
     for label, cells in rows:
         m = ROW_RE.match(label)
         if not m:
+            # BLOCKER-4 (Langston r7): this was a silent `continue`, and it is BLOCKER-2 one
+            # reader over. `ROW_RE` is bounded, so `Tier 13` was DROPPED rather than raised. On
+            # the pin that surfaces as `!= 17` - right status, wrong operand. On any NON-PINNED
+            # ladder there is no count invariant: the match falls to 16/17, the deltas skip the
+            # absent rung, and the profile assertion fires => exit 3. A parse omission reported
+            # as measured venue drift. MEASURED: every ladder table is 18 rows - the `Tier`
+            # header plus exactly 17 rungs - so `Tier` is the ONLY sentinel.
+            if label and label != "Tier":
+                raise Fail("unrecognised row label %r in %r - neither the `Tier` header nor a "
+                           "rung in Tier 1-12 / Pro 1-5" % (label, title))
             continue
         rung = int(m.group(1)) if m.group(1) else 12 + int(m.group(2))
         if rung in rungs:
@@ -274,8 +320,10 @@ def match_vector(ladders):
     for lad in ladders:
         r = lad["rungs"]
         hits = sum(1 for k in REFERENCE_LADDER if r.get(k) == REFERENCE_LADDER[k])
-        deltas = sorted({round(r[k][0] - REFERENCE_LADDER[k][0], 4) for k in REFERENCE_LADDER if k in r})
-        out[lad["title"]] = {"match": "%d/%d" % (hits, len(REFERENCE_LADDER)), "maker_deltas": deltas}
+        mk = sorted({round(r[k][0] - REFERENCE_LADDER[k][0], 4) for k in REFERENCE_LADDER if k in r})
+        tk = sorted({round(r[k][1] - REFERENCE_LADDER[k][1], 4) for k in REFERENCE_LADDER if k in r})
+        out[lad["title"]] = {"match": "%d/%d" % (hits, len(REFERENCE_LADDER)),
+                             "maker_deltas": mk, "taker_deltas": tk}
     return out
 
 
@@ -319,18 +367,46 @@ def main():
         print("   Stocks / xStocks / Perps / Pro Stocks carry none, so it is one node type, not")
         print("   the page's rate surfaces.")
         for b in banded:
-            print("   BANDED %-34s %s" % (b["title"][:34], b["bands"].get("$0 +")))
+            # (c) Langston r7: UNTRUNCATED. The %-34s/[:28] truncation is what produced the
+            # `FX Pair` misreading - the title is exactly 34 chars - and stdout is now
+            # load-bearing for the harness assertions, so a clipped field can hide a mismatch.
+            print("   BANDED %-38s %s" % (b["title"], b["bands"].get("$0 +")))
 
         for lad in ladders:
             r = lad["rungs"]
             hits = sum(1 for k in REFERENCE_LADDER if r.get(k) == REFERENCE_LADDER[k])
-            print("   %-28s rungs %2d  Tier1 %-14s %d/17" % (lad["title"][:28], len(r), r.get(1), hits))
+            print("   %-30s rungs %2d  Tier1 %-14s %d/17" % (lad["title"], len(r), r.get(1), hits))
+
+        # BLOCKER-5 (Langston r7): ASSERT the banded census too. Census change -> 2
+        # (structure); a moved $0 + band -> 3 (venue).
+        print("")
+        print("=== OBJ-8 banded census (ASSERTED, was print-only) ===")
+        seen_banded = {b["title"]: b["bands"].get("$0 +") for b in banded}
+        for t in sorted(seen_banded):
+            print("   %-38s $0 + = %s" % (t, seen_banded[t]))
+        if set(seen_banded) != set(EXPECTED_BANDED):
+            print("   MEASUREMENT FAILED: banded census changed -- missing %s | unexpected %s"
+                  % (sorted(set(EXPECTED_BANDED) - set(seen_banded)),
+                     sorted(set(seen_banded) - set(EXPECTED_BANDED))))
+            return 2
+        # XPIN_TITLE is excluded for the SAME reason the pinned ladder is excluded below: the
+        # second-pin block reports it with its operand and units. Asserting it here would preempt
+        # the more precise message - the regression the harness caught at r7.
+        bmoved = [t for t in EXPECTED_BANDED
+                  if t != XPIN_TITLE and seen_banded[t] != EXPECTED_BANDED[t]]
+        if bmoved:
+            for t in bmoved:
+                print("   DRIFT: banded %r expected %s, reads %s"
+                      % (t, EXPECTED_BANDED[t], seen_banded[t]))
+            return 3
+        print("   all %d banded schedules match their expected $0 + band" % len(seen_banded))
 
         print("")
         print("=== OBJ-8 match vector (ASSERTED for ALL ladders, not merely printed) ===")
         mv = match_vector(ladders)
         for title, v in mv.items():
-            print("   %-28s %s  maker deltas %s" % (title[:28], v["match"], v["maker_deltas"]))
+            print("   %-30s %s  maker %s  taker %s"
+                  % (title, v["match"], v["maker_deltas"], v["taker_deltas"]))
 
         # THE ASSERTION ITSELF. A title set that changed is STRUCTURE (2); a profile that moved
         # while the census is intact is the VENUE (3). Without this the vector was decoration.
@@ -343,11 +419,13 @@ def main():
         # measured, by the very harness case that asserts the output rather than the status.
         moved = [t for t in EXPECTED_MATCH
                  if t != args.pin
-                 and (mv[t]["match"], mv[t]["maker_deltas"]) != EXPECTED_MATCH[t]]
+                 and (mv[t]["match"], mv[t]["maker_deltas"], mv[t]["taker_deltas"])
+                 != EXPECTED_MATCH[t]]
         if moved:
             for t in moved:
-                print("   DRIFT: %r expected %s, reads %s/%s"
-                      % (t, EXPECTED_MATCH[t], mv[t]["match"], mv[t]["maker_deltas"]))
+                print("   DRIFT: %r expected %s, reads (%r, %s, %s)"
+                      % (t, EXPECTED_MATCH[t], mv[t]["match"],
+                         mv[t]["maker_deltas"], mv[t]["taker_deltas"]))
             return 3
         print("   all %d ladders match their expected profile" % len(mv))
 
@@ -390,7 +468,7 @@ def main():
         # {spot_maker_fee, spot_taker_fee}), and the DB stores FRACTIONS (-0.0002 / 0.0010) while
         # the page prints PERCENT (-0.02% / 0.10%). Factor 100, previously unstated. An absent or
         # unconvertible row must exit 2, never 3.
-        XPIN, XCONTRACT = "Pro xStocks", (-0.02, 0.10)   # percent, matching the page
+        XPIN, XCONTRACT = XPIN_TITLE, (-0.02, 0.10)   # percent, matching the page
         x_bearing = titles_in(raw, XPIN)            # BLOCKER-3, same shape on the second pin
         xs = [b for b in banded if b["title"] == XPIN]
         if len(x_bearing) != 1:
