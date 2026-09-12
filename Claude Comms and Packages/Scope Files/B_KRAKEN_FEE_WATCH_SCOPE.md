@@ -2,7 +2,7 @@
 
 **Batch:** `B-KRAKEN-FEE-WATCH` · **Issue:** `#1011` · **Plan row:** `PHASE_19_PLAN` 2.4-FEE-b · **Owner:** CC-B (Claude New)
 **change-class: architecture**
-**Revision:** **r4** — Langston's r3 BLOCKERS 1-3 re-derived at the object and folded, his FINDING-1 and four code defects fixed, the pin moved to `Spot Crypto` WITH A REASON (2026-09-12) · **Card:** `PVTI_lAHODmulEM4BfQP4zg6mZFg`
+**Revision:** **r5** — Langston's r4 BLOCKER re-derived and folded — **the xStock rates ARE machine-readable, in the payload we already parse** — plus FINDING-A..D, and a mutation harness that exercises the failure branches (2026-09-12) · **Card:** `PVTI_lAHODmulEM4BfQP4zg6mZFg`
 
 ---
 
@@ -18,6 +18,10 @@
 | 6 | r3 §2.2: ladder 3 is *"a different commercial schedule"*, and §7 left it *"named, not chased"* | ⛔ **FALSE. It is the page's own `Spot Maker Rebate` table — a PER-PAIR maker incentive on an eligible-pair list.** The name was on the page all along | **Langston BLOCKER-1**, re-derived by me: the accordion title and the body text |
 | 7 | r3: ladder 4 sits under `Margin` | ⛔ **FALSE. It is under `Futures`.** `Margin` holds a 113-row `Currency \| Opening fee \| Rollover fee` table with **no ladder at all** | **Langston BLOCKER-2**, re-derived |
 | 8 | r3 §2.2: the enclosing headings include `Kraken Pro` | ⛔ **FALSE. There is no `Kraken Pro` accordion on this page.** The ladder headings are `Cross-platform Fee Tiers`, `Spot Crypto`, `Spot Maker Rebate`, `Futures` | **Langston BLOCKER-3**, re-derived |
+| 10 | ⛔ **r1-r4 OBJ-4: "there is no machine source for the xStock rates", shipped as a 90-DAY RE-CAPTURE OBLIGATION ON KYLE** | ✅ **FALSE. `Pro xStocks` is in the SAME payload we already parse** — `$0 + → maker `-0.02%` / taker `0.10%``, byte-exact to the contract `#1010` deployed. **xStock becomes a SECOND PINNED TABLE, read on every run.** | **Langston r4 BLOCKER**, re-derived by me. **M5's needle was the literal `$100,000,001` (0 hits); the page's label is `$100,000,000 +` (6 hits)** — a false absence one dollar wide |
+| 11 | r4 OBJ-5: a strict column raise | **Kept, but it is UNREACHABLE on the live page** — the `Tier`-header gate returns first for 4 of 9 tables. **It is exercised by a FIXTURE, and the harness proves it (exit 2)** | Langston **FINDING-A** |
+| 12 | r4 OBJ-2: "disagreement is the finding" AND "a divergent pin STOPS" | ⛔ **The code took neither branch — a divergent pin printed and fell through to `return 0`, so measured drift and no-change shared an exit status OBJ-5 reads outcomes from.** **THREE outcomes now have THREE statuses: 0 no-change · 2 MEASUREMENT FAILED · 3 measured drift** | Langston **FINDING-B** |
+| 13 | r4 OBJ-10: one object (the rebate list) | **FIVE schedules `fee_model` cannot express — and FOUR are already in the payload.** Only the rebate's eligible-pair list needs the second fetch | Langston **FINDING-C** |
 | 9 | r3 OBJ-1: pin `Cross-platform Fee Tiers` | **PIN `Spot Crypto`, WITH A STATED REASON** — it is the product the ladder governs for us; the cross-platform table is the umbrella explaining how tiers combine, and is the likelier one to lag a spot-only revision | Langston BLOCKER-3: either is defensible, **an unreasoned pin is not** |
 
 ---
@@ -63,6 +67,23 @@
 ⛔⛔ **AND THE REAL FINDING FALLS OUT OF IT (Langston, and he is right that it must be homed rather than left "unestablished"): `fee_model` HAS NO PER-PAIR MAKER RATE.** Our maker leg is one value per asset class. **If any pair we trade is on that eligible list, the venue charges us `0.38 %` where we model `0.40 %`** — live drift of exactly the class this batch exists to catch, **already present, and invisible to both the transcription and the database.**
 ⚠️ **WHAT IS NOT YET MEASURED, and I am not asserting it: WHETHER ANY PAIR WE TRADE IS ON THAT LIST.** The eligible-pair list lives on a linked page this batch has not read. **OBJ-10 establishes it; until then the reach is unknown, not zero** (`#453` — an asserted absence needs presence-evidence).
 
+### 2.5 ⛔ THE PAGE PUBLISHES TWO TABLE SHAPES, AND READING ONLY ONE HID OUR OWN xSTOCK CONTRACT
+
+| shape | header row | rows labelled | found |
+|---|---|---|---|
+| **TIERED** | labelled `Tier`, columns name their leg (`Spot Maker (%)`) | `Tier 1..12`, `Pro 1..5` | the four ladders in §2.2 |
+| **BANDED** | labelled **`add here`**, columns `30- Day Volume (USD) \| Maker \| Taker` | by the band (`$0 +`, `$100,000,000 + **`) | **four schedules, below** |
+
+| banded schedule | `$0 +` band (maker/taker) |
+|---|---|
+| ⭐ **`Pro xStocks`** — **OUR xSTOCK CONTRACT** | **`-0.02% / 0.10%`** — byte-exact to what `#1010` deployed |
+| **`Stablecoin, Pegged Token & FX Pair`** | `0.20% / 0.20%` |
+| **`USDG Pairs`** | `0.00% / 0.01%` |
+| **`USDe Pairs`** | `0.00% / 0.00%` |
+
+⛔ **`fee_model` HOLDS ONE RATE PER ASSET CLASS AND CANNOT EXPRESS ANY OF THESE.**
+⭐ **THE COST OF THE FALSE ABSENCE, STATED PLAINLY: r1-r4 would have shipped a RECURRING MANUAL TASK ON KYLE, every 90 days, to re-read a number the machine reads on every run.** The extractor missed the table because `ladder_from()` early-returns unless a header row is labelled exactly `Tier`; M5 missed it because its needle was off by one dollar. **Two independent misses of the same object, and the batch's own control passed through both** (`#453`; recorded on `#1011` and in `MISTAKE_PATTERNS`).
+
 ### 2.3 Which ladder governs our account
 
 **`KRAKEN_FEE_SCHEDULE_REFERENCE.md` §1 is seventeen rungs transcribed from Kyle's AUTHENTICATED in-app Fees dialog** (`pro.kraken.com/app/trade/sui-usd#dialog/fee-level`, 2026-09-06), and §0.b records that **every figure in §1 was cross-checked against those dialogs**. The three rungs quoted in §0.b's prose are spot-checks it chose to print, **not the extent of the capture** — my r2 reading of that as the population was wrong, and Langston corrected it at the object.
@@ -77,7 +98,7 @@
 | # | question | measured | control |
 |---|---|---|---|
 | **M1** | page fetchable from Helsinki? | HTTP 200, ~1.39 MB | `api.kraken.com/0/public/Time` 200/87 B |
-| **M5** | xStock ladder on the public page? | ⛔ **NO** — `$100,000,001` → 0 hits; 1 xStock mention near any rate cell, belonging to another table | the same proximity test finds **8** `Tier 1` mentions near rate cells |
+| **M5** | xStock **LADDER** (a `Tier 1..Pro 5` table) on the public page? | **NO — and that literal wording is all that survives.** ⛔ **The CONCLUSION drawn from it ("no machine source exists") WAS FALSE:** the rates are published as a **BANDED** table, not a ladder — see §2.5 | ⛔ **The control was testing the wrong thing.** It proved the proximity instrument worked; it never proved `$100,000,001` was the page's own string. It is not (`$100,000,000 +`, 6 hits) |
 | **M6** | in-app dialog unauthenticated? | ⛔ **NO** — 13 KB JS shell, 0 rate strings | the public page returned 1.39 MB with rates |
 | **M7** | can the API bypass the page? | ⛔ **NO** (Langston, ⊕): `AssetPairs` 1,449 pairs, `fees`/`fees_maker` **empty on 0 of 1,449** | saturated population |
 
@@ -97,14 +118,17 @@
 Compare the pinned ladder's rung 1 against `module_constants` `fee_model` `crypto_spot`.
 ⛔ **NO PASS IS PRE-REGISTERED.** The run names the heading it read; **agreement OR disagreement is a successful run** — a disagreement is the finding.
 ⛔ **IDENTITY AND VALUES ARE TWO DIFFERENT CHECKS, AND SAYING SO IS THE POINT (Langston, r3):** the 17-rung match is **NECESSARY BUT NOT SUFFICIENT** for the pin — **three ladders satisfy it**. **IDENTITY is verified by the pinned title resolving to EXACTLY ONE table** (OBJ-5). ⛔ **If the title resolves to 0 or >1 tables, or the pinned ladder no longer matches at 17/17, the run mints `GOVERNING-TABLE-IN-DOUBT` and STOPS — it never falls back to another table.** Otherwise a later reader takes "pin verified" to mean "we are on the right table".
-**Verify:** names its heading; a scratch fixture with a wrong DB value reports disagreement naming both sides; a fixture with the pinned heading renamed mints `GOVERNING-TABLE-IN-DOUBT` and selects nothing.
+⭐ **THREE OUTCOMES, THREE EXIT STATUSES (Langston FINDING-B — r4's code took neither branch): `0` no-change · `2` MEASUREMENT FAILED · `3` measured drift.** OBJ-5 reads the outcome off the status, so drift and no-change may never share one.
+**Verify — EXERCISED, NOT ASSERTED (`#744` rider), by `scripts/analysis/kraken_fee_ladder_mutation_test.py`:** baseline → `0`; a tiered rung moved in the pinned ladder → `3`; the xStock band moved → `3`; a column naming a leg but neither spot nor futures → `2`. **All four cases PASS.** ⛔ **The harness ABORTS if a mutation changed no cell** — the first attempt at this test silently compared three identical bodies and read as three passes.
 
 ### OBJ-3 — THE PAGE-VERSUS-TRANSCRIPTION LEG
 Compare the pinned ladder against §1's seventeen rungs.
 **Verify:** reports no drift today (17/17); one edited rung in a scratch copy is named with both values.
 
-### OBJ-4 — xSTOCK: A DATED RE-CAPTURE OBLIGATION, **90 days + an event trigger**
-⛔ **Measured (M5, M6, M7): no machine source exists for the xStock rates**, and no session may log in (`CLAUDE.md` §7).
+### OBJ-4 — xSTOCK IS A **SECOND PINNED TABLE**, READ ON EVERY RUN
+✅ **A MACHINE SOURCE EXISTS AND WE ALREADY FETCH IT** (Langston r4 BLOCKER, re-derived): accordion **`Pro xStocks`**, same payload, `$0 + → maker `-0.02%` / taker `0.10%``. ⛔ **The r1-r4 premise that no machine source existed was FALSE, and the 90-day human obligation it justified is STRUCK** — folded here, not re-homed (§13 disposition 1).
+- **PIN `Pro xStocks`**, compare its `$0 +` band against `fee_model` `xstock_spot`, and mint `GOVERNING-TABLE-IN-DOUBT` if the title resolves to 0 or >1 tables.
+- ⚠️ **What STILL has no machine source is the account's TIER** — the in-app dialog is authenticated and no session may log in (`CLAUDE.md` §7). **That is a narrower obligation than the one r4 wrote, and it applies to BOTH classes, not just xStock.**
 - **90 days, first due 2026-12-11.** Monthly is a nag that gets ignored; the contract landed 09-11 and a tokenised-equity schedule does not move monthly.
 - ⭐ **EVENT TRIGGER: any crypto-leg disagreement makes the xStock re-capture due IMMEDIATELY** — a venue that revised one schedule likely revised both, which is the 2026-07-09 case.
 - **Resolves only against a capture date.**
@@ -112,7 +136,7 @@ Compare the pinned ladder against §1's seventeen rungs.
 
 ### OBJ-5 — THREE OUTCOMES, NEVER TWO, AND FAIL LOUD ON SIX INPUTS
 **measured · no-change · `MEASUREMENT FAILED`**, the third naming the operand, read off **exit status, never an HTTP code**.
-⛔ **Fail loud, never coerce — SEVEN inputs:** unparseable cell · **pinned title resolving to 0 or >1 table** · **rung count ≠ 17** · **a column name that does not resolve** (strict: a column naming a leg but neither spot nor futures RAISES — the default-to-spot arm is deleted, so this can actually fire) · **a row label outside `Tier 1-12`/`Pro 1-5`** (`ROW_RE` is bounded; it no longer accepts `Tier 99`) · ⭐ **a DUPLICATE RUNG KEY** (a repeated label, or `Tier 13` colliding with `Pro 1`→13 — **neither moves the rung count, so the ≠ 17 check is structurally blind to it**) · an unseen normaliser form.
+⛔ **Fail loud, never coerce — SEVEN inputs:** unparseable cell · **pinned title resolving to 0 or >1 table** · **rung count ≠ 17** · **a column name that does not resolve** (strict: a column naming a leg but neither spot nor futures RAISES — the default-to-spot arm is deleted, so this can actually fire) · **a row label outside `Tier 1-12`/`Pro 1-5`** (`ROW_RE` is bounded; it no longer accepts `Tier 99`) · ⭐ **a DUPLICATE RUNG KEY or a duplicate BAND label** (a repeated label, or `Tier 13` colliding with `Pro 1`→13 — **neither moves the rung count, so the ≠ 17 check is structurally blind to it**) · an unseen normaliser form.
 **Verify:** each outcome produced deliberately, artifact attached, **including every failure branch** (`#744` rider).
 
 ### OBJ-6 — MACHINE ACTOR + INSTALL-ORDER NEGATIVE CONTROL
@@ -126,14 +150,17 @@ Repo home `comms-infra/discord/`, installed by `comms-infra/discord/deploy.sh` �
 ### OBJ-8 — THE CENSUS ASSERTION (replaces the dropped content hash)
 A structural guard firing only on change to what we read: **ladder count · rungs per ladder · column-name resolution · the pinned title's presence.**
 ⭐ **PLUS FINDING-1 (Langston, r3) — ASSERT THE MATCH VECTOR FOR ALL FOUR LADDERS, NOT ONLY THE PINNED ONE.** The extractor already computes it; r3 threw it away. **With three tables indistinguishable by header and two indistinguishable by value, A WRONG PIN IS SILENT FOREVER unless the others are asserted too.** Today's vector, measured: `{Cross-platform Fee Tiers 17/17 Δ{0.00} · Spot Crypto 17/17 Δ{0.00} · Spot Maker Rebate 0/17 Δ{−0.02} · Futures 17/17 Δ{0.00}}`. **Any change to that vector is a finding, pinned or not.** Near-zero cost.
-**Verify:** today it asserts 4 ladders / 17 rungs each / both column names resolving; a saved body with a renamed column or heading fails it.
+⚠️ **CENSUS CAVEAT (Langston r4): "9 tables" is the census of `paragraphArticleBodyTable` NODES ONLY.** `Stocks`, `xStocks`, `Perps` and `Pro Stocks` carry none of that type, so the count asserts **one node type, not the page's rate surfaces.** The extractor prints this caveat on every run.
+**Verify:** today it asserts 4 tiered ladders + 4 banded schedules / 17 rungs each / both column names resolving; a saved body with a renamed column or heading fails it.
 
 ### OBJ-9 — GOVERNANCE
 SIM entry mirroring the `dt-deploy-drift.sh` table **and stating the cadence** — hourly makes this **writer #12** to `system-alerts.jsonl` alongside the hourly drift monitor. **Name the `#647` collision risk; do not fix it here.**
 ⛔ **`SYSTEM_MANUAL` §5 gets one real paragraph** (Langston r2 ruling 1): the cost model now has a **source-of-truth verification contract** — **the DATABASE is authoritative for CHARGING, the PAGE is authoritative for DRIFT-DETECTION only.**
 
 ### OBJ-10 — ESTABLISH WHETHER ANY PAIR WE TRADE IS ON THE SPOT-MAKER-REBATE ELIGIBLE LIST
-⛔ **This is the only leg that could be costing money today, and it is UNMEASURED (§2.2a).** `fee_model` holds one maker rate per asset class; the venue runs a **per-pair** maker incentive at `0.38 %` on selected lower-liquidity spot pairs. **If any pair in our universe is on that list, we model `0.40 %` and are charged `0.38 %`.**
+⛔ **FIVE schedules `fee_model` cannot express, not one (Langston FINDING-C) — and FOUR ARE ALREADY IN THE PAYLOAD.** Only the Spot Maker Rebate's eligible-pair list needs the second fetch I was worried about.
+⛔⛔ **AND THE EXPOSURE RUNS THE OTHER WAY, WHICH IS WORSE FOR US THAN THE REBATE:** the `Stablecoin, Pegged Token & FX Pair` schedule reads **`0.20 / 0.20`** where we model **`0.80`** taker. **On our own `closed_trades`, 142 of 481 crypto rows and 44 of 119 distinct symbols are NAME-SHAPED candidates** — `EUR/USD`, `USDC/GBP`, `SOL/USDC`, `XRP/USDT`, `USDT/AUD` — **control: 75 distinct symbols do NOT match, so the number is readable.** **4× PESSIMISTIC on the taker leg SUPPRESSES trades through the Net Expectancy gate** (hold against `#570`).
+⚠️ **THE 142/44 IS A SYMBOL-STRING HEURISTIC, NOT THE VENUE'S ELIGIBILITY LIST.** It **falsifies "empty"**; it does **not** size the true intersection.
 - **Read the eligible-pair list** from the page the `Spot Maker Rebate` body links to (not yet fetched by this batch), and intersect it with our traded universe.
 - **Report the intersection, INCLUDING WHEN IT IS EMPTY** — an empty intersection is a measured zero with a named population, not a silence (`#453`).
 - ⛔ **Do NOT add a per-pair rate to `fee_model` in this batch.** If the intersection is non-empty, that is a **scope decision for Kyle** and a separate batch — the bug taxonomy's outcome (2), working-as-designed-but-unaddressed.

@@ -17,8 +17,20 @@ THE FOUR LADDERS, measured 2026-09-12 (Langston re-derived all of it independent
   Cross-platform Fee Tiers  Tier 1 0.40/0.80   17/17 vs reference §1
   Spot Crypto               Tier 1 0.40/0.80   17/17   <-- PINNED: the product the ladder governs
   Spot Maker Rebate         Tier 1 0.38/0.80   0/17, maker delta {-0.02} on every rung
-  Futures                   Tier 1 0.02/0.05   (futures pair; spot pair also present)
+  Futures                   Tier 1 futures 0.02/0.05, SPOT 0.40/0.80 (8 cols; spot at 6/7)
 `Margin` holds a 113-row Currency/Opening fee/Rollover fee table and NO ladder.
+
+THE PAGE PUBLISHES TWO TABLE SHAPES, AND READING ONLY THE FIRST IS WHAT HID THE xSTOCK RATES:
+  TIERED  header row labelled `Tier`, rows `Tier 1..12` / `Pro 1..5`, columns name their leg
+          (`Spot Maker (%)`). The four ladders above.
+  BANDED  header row labelled `add here`, columns `30- Day Volume (USD) | Maker | Taker`, rows
+          labelled by the band itself (`$0 +`, `$100,000,000 + **`). Five of these:
+            Pro xStocks                     $0+  maker -0.02%  taker 0.10%   <-- OUR xSTOCK CONTRACT
+            Stablecoin, Pegged Token & FX   $0+  maker  0.20%  taker 0.20%
+            USDG Pairs                      $0+  maker  0.00%  taker 0.01%
+            USDe Pairs                      $0+  maker  0.00%  taker 0.00%
+            (Spot Maker Rebate's own eligible-pair list is NOT on this page)
+⛔ `fee_model` holds ONE rate per asset class and cannot express any of these.
 
 ⛔ THE ANCHOR: enclosing accordion title (pinned), then column NAME -> index within that table,
 then row LABEL -> rung. Never a percentage regex, never a fixed index, never proximity.
@@ -151,10 +163,46 @@ def resolve_columns(header):
     return cols
 
 
+def banded_from(title, rows):
+    """
+    BANDED tables (Langston r4 BLOCKER): header labelled `add here`, columns
+    `30- Day Volume (USD) | Maker | Taker`, rows labelled by the volume band. `Pro xStocks` is
+    one of these — which is why an extractor that only understood `Tier` headers reported that
+    no machine source for the xStock rates existed.
+    """
+    header = next((cells for label, cells in rows if label == "add here"), None)
+    if header is None:
+        return None
+    idx = {}
+    for i, name in enumerate(header):
+        n = name.lower()
+        if n == "maker":
+            idx["maker"] = i
+        elif n == "taker":
+            idx["taker"] = i
+    if "maker" not in idx or "taker" not in idx:
+        return None
+    bands = {}
+    for label, cells in rows:
+        if label == "add here" or not label:
+            continue
+        mi, ti = idx["maker"], idx["taker"]
+        if mi < len(cells) and ti < len(cells):
+            maker, taker = rate_of(cells[mi]), rate_of(cells[ti])
+            if maker is not None and taker is not None:
+                if label in bands:
+                    raise Fail("duplicate band %r in %r" % (label, title))
+                bands[label] = (maker, taker)
+    return {"title": title, "kind": "banded", "header": header, "bands": bands}
+
+
 def ladder_from(title, rows):
     header = next((cells for label, cells in rows if label == "Tier"), None)
     if header is None:
         return None
+    # FIND-A (Langston r4): resolve_columns must be reachable. It is called here only for TIERED
+    # tables by construction; the banded reader above has its own strict resolution, so a leg
+    # column naming neither spot nor futures still cannot pass silently.
     cols = resolve_columns(header)
     if "maker_spot" not in cols or "taker_spot" not in cols:
         return None
@@ -203,7 +251,13 @@ def main():
         print("tables: %d" % len(raw))
 
         ladders = [l for l in (ladder_from(t, r) for t, r in raw) if l and l["rungs"]]
-        print("ladders with a spot maker/taker pair: %d" % len(ladders))
+        banded = [b for b in (banded_from(t, r) for t, r in raw) if b and b["bands"]]
+        print("tiered ladders: %d | banded schedules: %d" % (len(ladders), len(banded)))
+        print("   \u26a0 census caveat (Langston r4): this counts paragraphArticleBodyTable nodes ONLY.")
+        print("   Stocks / xStocks / Perps / Pro Stocks carry none, so it is one node type, not")
+        print("   the page's rate surfaces.")
+        for b in banded:
+            print("   BANDED %-34s %s" % (b["title"][:34], b["bands"].get("$0 +")))
 
         for lad in ladders:
             r = lad["rungs"]
@@ -230,6 +284,27 @@ def main():
         bad = [k for k in REFERENCE_LADDER if r.get(k) != REFERENCE_LADDER[k]]
         print("   identity: resolved to exactly one table (necessary AND sufficient for identity)")
         print("   values  : %d/17 vs reference §1%s" % (17 - len(bad), "" if not bad else " — diverges at %s" % bad))
+        # FIND-B (Langston r4): a divergent pin used to print and fall through to `return 0`, so
+        # MEASURED DRIFT and NO-CHANGE shared an exit status that OBJ-5 reads outcomes from.
+        # Three outcomes, three statuses: 0 no-change · 2 MEASUREMENT FAILED · 3 measured drift.
+        if bad:
+            print("   DRIFT: the pinned ladder no longer matches reference §1 at %s" % bad)
+            return 3
+
+        # THE SECOND PIN (Langston r4 BLOCKER): xStock is a table on this same fetch, not a
+        # calendar reminder. Its contract is what #1010 deployed.
+        XPIN, XCONTRACT = "Pro xStocks", (-0.02, 0.10)
+        xs = [b for b in banded if b["title"] == XPIN]
+        print("")
+        print("=== SECOND PIN: %r ===" % XPIN)
+        if len(xs) != 1:
+            print("   GOVERNING-TABLE-IN-DOUBT: %r resolved to %d tables - STOPPING" % (XPIN, len(xs)))
+            return 2
+        base = xs[0]["bands"].get("$0 +")
+        print("   $0 + band: %s | deployed fee_model contract: %s" % (base, XCONTRACT))
+        if base != XCONTRACT:
+            print("   DRIFT: the xStock base band no longer matches the deployed contract")
+            return 3
 
         ok = [l["title"] for l in ladders if l["rungs"].get(1) == (0.40, 0.80)]
         print("")
