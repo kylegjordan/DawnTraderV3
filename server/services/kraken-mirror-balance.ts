@@ -7,7 +7,7 @@
 // "The balance" (pre-audit §5 pin, REVISED at Step-7 on LIVE evidence — see
 // RUNNING_ISSUES #435): the deployable figure = free USD (ZUSD/USD) PLUS the
 // USD-PEGGED stablecoins the trading universe itself admits as quote
-// currencies (USDT, USDC — exactly `crypto-universe-filter.json` allowedQuotes;
+// currencies (derived from ADMITTED_QUOTES via rawQuoteFormsOf since 2026-09-12;
 // counted 1:1, each labeled by kind in the display). The original ZUSD-only
 // pin assumed stablecoins were an edge case; the first live fetch showed the
 // REAL account's entire balance is USDC (824.11) with ZERO free ZUSD — the
@@ -21,16 +21,34 @@
 // The 'continue' path never calls this module (an outage never blocks resume).
 
 import { KrakenService } from '../exchanges/kraken/kraken';
+import { ADMITTED_QUOTES } from '../../shared/admitted-quotes';
+import { rawQuoteFormsOf } from './passive-archive/universe-loader';
 
 // One module-scoped instance (S3 discipline — do not add per-call instances;
 // the balance fetch is one call per start-new plus the service's own 60s cache).
 const kraken = new KrakenService();
 
 /**
- * Asset codes counted 1:1 into the mirror figure: free USD + the USD-pegged
- * stablecoins the universe admits as quote currencies (allowedQuotes parity).
+ * Asset codes counted 1:1 into the mirror figure: the RAW Kraken forms of every quote
+ * currency the system will settle a new position in.
+ *
+ * ⛔ DERIVED, NOT RESTATED (B-PRICE-SIDE-BY-JOB OBJ-8 row 8f, 2026-09-12). Until this commit
+ * the set was the literal `['ZUSD','USD','USDT','USDC']` beside a comment ASSERTING it was
+ * "exactly crypto-universe-filter.json allowedQuotes". ★ That assertion was WRONG ON ITS FACE
+ * — the set is the admitted quotes UNION `ZUSD` — and nothing in the system compared them.
+ * The comments that asserted the parity are deleted because the code now ENFORCES it.
+ *
+ * ⛔ THE DOMAIN IS RAW AND UNCHANGED: `:...` below matches Kraken `Balance` keys with NO
+ * normalisation, so this takes the PREIMAGE of the admitted set via `rawQuoteFormsOf` rather
+ * than the set itself. ★ `new Set([...ADMITTED_QUOTES, 'ZUSD'])` would be correct today ONLY
+ * BY COINCIDENCE: admit `EUR` and it yields no `ZEUR`, which is how Kraken keys a euro
+ * balance — `#734`'s named scenario, in the component that sizes real money.
+ *
+ * Pinned against its pre-conversion literal at ref `a9785babc` by
+ * `server/tests/unit/b-price-side-obj8-admitted-quotes.test.ts`, whose expected values are
+ * spelled inline rather than imported from here.
  */
-const DEPLOYABLE_USD_CODES = new Set(['ZUSD', 'USD', 'USDT', 'USDC']);
+export const DEPLOYABLE_USD_CODES = new Set(ADMITTED_QUOTES.flatMap(rawQuoteFormsOf));
 
 /** Other stablecoins shown distinctly in the breakdown (displayed, never summed —
  * either not USD-pegged (EURT) or not an admitted quote currency). */

@@ -5,9 +5,9 @@
   "_endpoint": "wss://ws.kraken.com/v2",
   "_protocol": "Kraken WebSocket v2",
   "filter": {
-    "allowedQuotes": ["USD", "USDT", "USDC"],
     "minVolume24hUsd": 10000,
-    "_minVolumeNote": "Override comes from module_constants.passive_archive.b74_crypto_min_volume_24h_usd at runtime. This file's value is the documented default; runtime tuning happens in DB."
+    "_minVolumeNote": "Override comes from module_constants.passive_archive.b74_crypto_min_volume_24h_usd at runtime. This file's value is the documented default; runtime tuning happens in DB.",
+    "_allowedQuotesNote": "MOVED 2026-09-12 (B-PRICE-SIDE-BY-JOB OBJ-8 row 8f): the admitted quote set is now shared/admitted-quotes.ts ADMITTED_QUOTES, consumed by this loader, kraken-mirror-balance and the 8f admission gate. The key was DELETED here rather than left in place, because an editable config field nobody reads looks tunable and is not."
   },
   "_expectedUniverseSize": "400-600 pairs",
   "_shardingThreshold": 300

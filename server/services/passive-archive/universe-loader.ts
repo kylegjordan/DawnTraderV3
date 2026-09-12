@@ -21,6 +21,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { ADMITTED_QUOTES } from '../../../shared/admitted-quotes';
 
 // B74: config files live under server/config/ in source. Esbuild bundles to a
 // single dist/index.js so import.meta.url-based path resolution doesn't survive
@@ -101,7 +102,11 @@ export const loadEquityPerpUniverse = loadXstockPerpUniverse;
 
 interface CryptoFilterConfig {
   filter: {
-    allowedQuotes: string[];
+    // B-PRICE-SIDE-BY-JOB OBJ-8 row 8f (2026-09-12): `allowedQuotes` was REMOVED from this
+    // interface AND from the JSON in the same commit. It now lives at
+    // `shared/admitted-quotes.ts` as ADMITTED_QUOTES, shared with the mirror-balance and the
+    // 8f admission gate. Leaving the key here would have left an editable config field nobody
+    // reads, which reads as tunable and is the same defect inverted (Langston condition (c)).
     minVolume24hUsd: number;
   };
 }
@@ -117,6 +122,27 @@ interface KrakenAssetPair {
 interface KrakenTickerResp {
   c: string[];   // last trade closed [price, lot volume]
   v: string[];   // volume [today, last 24h]
+}
+
+/**
+ * The RAW Kraken asset codes that normalise to a given PLAIN quote code — i.e. the preimage
+ * of `plain` under `ZQUOTE_TO_PLAIN`, including `plain` itself (unmapped codes pass through
+ * as identity at `normalizeKrakenAsset`).
+ *
+ * ⛔ THIS EXISTS SO CALLERS WORKING IN RAW SPACE DERIVE RATHER THAN RESTATE (Langston,
+ * 2026-09-12). `kraken-mirror-balance.ts` matches Kraken `Balance` keys with NO normalisation,
+ * so it needs the preimage of `ADMITTED_QUOTES`, not `ADMITTED_QUOTES` itself.
+ * ★ `new Set([...ADMITTED_QUOTES, 'ZUSD'])` is correct TODAY ONLY BY COINCIDENCE: admit `EUR`
+ *   and it yields no `ZEUR`, which is exactly how Kraken keys a euro balance — in the
+ *   component that sizes real money, on `#734`'s named scenario.
+ *
+ * ⛔ THE FUNCTION IS EXPORTED; `ZQUOTE_TO_PLAIN` STAYS MODULE-PRIVATE. The contract is the
+ *   mapping question, not the table — exporting the table would let a caller re-implement the
+ *   lookup and put the fourth shape back.
+ */
+export function rawQuoteFormsOf(plainQuote: string): string[] {
+  const raws = Object.keys(ZQUOTE_TO_PLAIN).filter(k => ZQUOTE_TO_PLAIN[k] === plainQuote);
+  return [plainQuote, ...raws];
 }
 
 const ZQUOTE_TO_PLAIN: Record<string, string> = {
@@ -160,7 +186,7 @@ export async function loadCryptoSpotUniverse(opts?: {
   const fetchImpl = opts?.fetchImpl ?? fetch;
   const cfgPath = path.join(CONFIG_DIR, 'crypto-universe-filter.json');
   const cfg = JSON.parse(await fs.readFile(cfgPath, 'utf-8')) as CryptoFilterConfig;
-  const allowedQuotes = new Set(cfg.filter.allowedQuotes);
+  const allowedQuotes = new Set(ADMITTED_QUOTES);
   const floorUsd = opts?.minVolumeFloorUsd ?? cfg.filter.minVolume24hUsd;
 
   // Fetch full pair list
