@@ -2,7 +2,7 @@
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 (replacing the withdrawn content) · **Owner:** CC-B (Claude New)
 **change-class: architecture**
-**Revision:** **r2** — Langston Step-1 **CHANGES-NEEDED**, both blockers confirmed by me at the ref, his reframing finding promoted to **PROBLEM 3**, and the direction his arithmetic points at now stated out loud in §1c.
+**Revision:** **r3** — Langston Step-1 **CHANGES-NEEDED**, both blockers confirmed by me at the ref, his reframing finding promoted to **PROBLEM 3**, and the direction his arithmetic points at now stated out loud in §1c. **r3 — the bias is confirmed an IDENTITY that survives risk-normalisation, his discharge condition SPLITS into a direction leg (discharged now) and a margin leg (needs an instrument, folded into OBJ-4), and the five fields that instrument must carry are specified.**
 
 > ⭐⭐ **KYLE-DIRECTED 2026-09-12, AND HE GAVE THE BALL ON THE *COMBINED* BATCH.** The reward-to-risk work and the reachability-ceiling work are **one batch**, because they are provably one dial. **CC-B owns it.** The reachability leg absorbs what was scoped for a separate CC-C batch.
 > ⛔ **AND HIS BINDING OBJECTION TO WHAT CAME BEFORE THIS: a plan that is only measurement and changes nothing is not acceptable.** OBJ-2 and OBJ-3 change live paper behaviour and ship settings. **This is not an instrumentation batch.**
@@ -77,6 +77,20 @@ const rawEV = (pWin * distTarget) - (pLoss * distStop);           // :114
 2. ⛔ **It makes OBJ-2 the RISKIEST change in the batch, not the safest.** r1 had it the other way round.
 3. ✅ **AND IT EXPLAINS OUR OWN DATA COHERENTLY — the thing r1 could only call noise.** Realised 41.4 % sits near the 37.6 % two-barrier null **because the `pWin` that drove selection was never about this target at all.** It is a trend-strength score multiplied by whatever distance the strategy happened to choose.
 
+✅✅ **r3 — AND IT SURVIVES RISK-NORMALISATION. THIS IS AN IDENTITY, NOT AN EXPECTATION.** I had deferred this as *"I expect the bias survives but I have not opened the function"*; Langston cited it and **I then read it myself at the ref:**
+- `ready_to_buy_service.ts:1805` `const distStop = Math.abs(p.entry - p.stop);`
+- `:1806` `let r = Number.isFinite(result.netRewardToRisk) ? result.netRewardToRisk : -Infinity;` — and `netRewardToRisk` is `netEV / distStop` (`net-expectancy-kernel.ts:117`)
+- `:1807-1808` `if (p.chosenNetEv … && distStop > 0) { r = p.chosenNetEv / distStop; }`
+
+⇒ ⛔ **BOTH BRANCHES DIVIDE BY `distStop` ONLY. THE DENOMINATOR CARRIES NO TARGET TERM.** With `netEV = pWin·distTarget − pLoss·distStop − friction`:
+> **`∂r/∂distTarget = pWin / distStop > 0`, strictly, with `distStop` fixed and no probability term responding.**
+
+⭐⭐ **SO WHAT IS UNCOMPUTABLE TODAY IS THE *MARGIN*, NEVER THE *SIGN* — and that splits the discharge condition cleanly:**
+- ✅ **THE DIRECTION LEG DISCHARGES NOW, on cited algebra rather than on a corpus** — which is stronger evidence than a corpus would have been, because an identity cannot be a sampling artefact.
+- ⚠️ **ONLY THE RANK-1-vs-RANK-2 MARGIN NEEDS AN INSTRUMENT**, and §3 OBJ-4 now carries it.
+
+⛔ **AND A SECOND SITE FOUND IN THE SAME READ, which is why OBJ-4 needs a FLAG and not just numbers: `ready_to_buy_service.ts:1794` `const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.entry * 1.02;`** — a candidate arriving without a target is **ranked on a fabricated 2 % constant** (the `#927` family, comment: *"mirror executePromotedSignal default"*). ⇒ **the live ranking already mixes two populations — candidates ordered on their own measured geometry, and candidates ordered on a constant — under one ordering.** ⛔ **A margin measured across that mixture measures neither.**
+
 ### 1d. ⭐⭐ THE DIRECTION EVERY NUMBER POINTS AT, WHICH r1 NEVER SAID OUT LOUD (Langston's answer to Kyle's question)
 
 **Friction is 1.5729 % round trip against a 3.54 % median stop — `44 %` OF THE RISK UNIT.** And **fees are proportional to notional, so SIZE CANNOT HELP.** Only three things can: **the rate**, **the number of round trips**, and **the reward per round trip.** The rate is worth ~0.39 pp and is capped (§0 row 4).
@@ -146,7 +160,18 @@ const rawEV = (pWin * distTarget) - (pLoss * distStop);           // :114
 - ⛔ **(a) NAME THE ATR BASIS, OR THE DERIVED CEILING APPLIES TO NEITHER GATE.** Gate A compares against the **clamped `effectiveATR`**; Gate B against the **raw MCE ATR**. An excursion distribution recorded in a *third* basis derives a ceiling that governs nothing. ⇒ **record at the guard's basis and SAY SO in the column's own documentation.** *(His standing `#3711` ruling already forbids quoting effectiveATR-basis figures against MCE-ATR ones.)*
 - ⛔⛔ **(b) MFE ALONE CANNOT ANSWER THE QUESTION THIS OBJECTIVE EXISTS FOR.** Favourable excursion is **censored by the stop and by the exit**, so what a stopped-out trade records is *MFE conditional on having been stopped out* — **a biased sub-population.** ⇒ **record MAE ALONGSIDE MFE, with time-to-each.** Same site, same cost. ✅ **And that joint distribution IS first-passage in substance without needing the full analytic treatment.**
 
-**VERIFICATION:** (a) the column documentation names its ATR basis and it matches a named gate; (b) the joint MFE/MAE record with time-to-each is present on new rows and a **negative control** shows a row missing either leg is refused; (c) the ceiling for at least one strategy is **derived from the recorded joint distribution** rather than chosen, and the derivation is shown.
+✅✅ **r3 — AND IT ALSO CARRIES THE DISCHARGE INSTRUMENT FOR OBJ-2 (Langston APPROVED the fold, with the field list as his condition).** §1c's direction leg is discharged on algebra; the **margin** leg has no corpus — measured, not assumed: `signal_eval_archive`, `crypto_spot`, `captured_at ≥ 2026-09-05`, **n = 13,058,183 rows; 567,681 carry the probability input; 153,590 carry the geometry; ZERO carry both.** ⛔ **And it is structural rather than sparse: a row is ONE `reject_stage` — the probability input is written at `pre_filter`, the geometry at `sqe`/`admitted`. The joint is empty BY CONSTRUCTION.** *(My first query returned "zero cycles" and I nearly reported it as a result; a zero from an instrument that cannot reach the joint is REACH, not a finding — `#661` leg 1.)* ⛔ **`final_score` is rejected as the salvage: it is RETIRED as the ranking key (`ready_to_buy_service.ts:1405`/`:1415`/`:1423`/`:1428`, `#558 A1`; the live key is the expected R-multiple, `SYSTEM_MANUAL:240`, computed at `:1780` and sorted at `:1884`). A gap in a key that no longer selects is not evidence.**
+
+⇒ **PERSIST, PER SELECTION CYCLE PER CANDIDATE, ALL FIVE — four numbers and two labels, and the labels are the part that makes it answerable:**
+| field | why it is not optional |
+|---|---|
+| `distTarget`, `distStop` | the geometry the margin is a function of |
+| `pWin` | `∂r/∂distTarget = pWin/distStop` — the coefficient itself |
+| the `r` **actually used** | the ranking value, not a reconstruction |
+| **which branch set `r`** — `chosenNetEv` override vs `netRewardToRisk` | ⛔ **otherwise the margin is measured on a MIXTURE of two different keys** |
+| **a fabricated-target FLAG** (`:1794` `entry × 1.02`) | ⛔ **otherwise a candidate ranked on measured geometry cannot be separated from one ranked on a CONSTANT — two sub-populations under one ordering** |
+
+**VERIFICATION:** (a) the column documentation names its ATR basis and it matches a named gate; (b) the joint MFE/MAE record with time-to-each is present on new rows, and a **negative control** shows a row missing either leg is refused; (c) the ceiling for at least one strategy is **derived from the recorded joint distribution** rather than chosen, and the derivation is shown; (d) **all five discharge fields present on every ranked candidate, with the two labels populated — and a negative control proving a row with an unlabelled branch or a missing fabrication flag is refused**; (e) **the OBJ-2 margin is then evaluated against §1c's coefficient and published either way**, which is also the sizing input `B-EV-TARGET-PROBABILITY` needs.
 
 ### OBJ-5 — Governance
 **Tier-1 unconditional:** completion report · `BATCH_CATALOG` · `PHASE_HISTORY` · `RUNNING_ISSUES` (`#1052`) · `MEMORY_CC_B` · `PHASE_19_PLAN` row 2.4g-2 · the task-list row.
