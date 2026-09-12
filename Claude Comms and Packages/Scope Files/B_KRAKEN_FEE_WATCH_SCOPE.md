@@ -2,7 +2,7 @@
 
 **Batch:** `B-KRAKEN-FEE-WATCH` · **Issue:** `#1011` · **Plan row:** `PHASE_19_PLAN` 2.4-FEE-b · **Owner:** CC-B (Claude New)
 **change-class: architecture**
-**Revision:** **r5** — Langston's r4 BLOCKER re-derived and folded — **the xStock rates ARE machine-readable, in the payload we already parse** — plus FINDING-A..D, and a mutation harness that exercises the failure branches (2026-09-12) · **Card:** `PVTI_lAHODmulEM4BfQP4zg6mZFg`
+**Revision:** **r6** — Langston's r4 BLOCKER re-derived and folded — **the xStock rates ARE machine-readable, in the payload we already parse** — plus FINDING-A..D, and a mutation harness that exercises the failure branches (2026-09-12) · **Card:** `PVTI_lAHODmulEM4BfQP4zg6mZFg`
 
 ---
 
@@ -117,9 +117,12 @@
 ### OBJ-2 — THE PAGE-VERSUS-DATABASE LEG, AND THE PIN IS VERIFIED, NEVER RE-SELECTED
 Compare the pinned ladder's rung 1 against `module_constants` `fee_model` `crypto_spot`.
 ⛔ **NO PASS IS PRE-REGISTERED.** The run names the heading it read; **agreement OR disagreement is a successful run** — a disagreement is the finding.
-⛔ **IDENTITY AND VALUES ARE TWO DIFFERENT CHECKS, AND SAYING SO IS THE POINT (Langston, r3):** the 17-rung match is **NECESSARY BUT NOT SUFFICIENT** for the pin — **three ladders satisfy it**. **IDENTITY is verified by the pinned title resolving to EXACTLY ONE table** (OBJ-5). ⛔ **If the title resolves to 0 or >1 tables, or the pinned ladder no longer matches at 17/17, the run mints `GOVERNING-TABLE-IN-DOUBT` and STOPS — it never falls back to another table.** Otherwise a later reader takes "pin verified" to mean "we are on the right table".
+⛔ **IDENTITY AND VALUES ARE TWO DIFFERENT CHECKS, AND SAYING SO IS THE POINT (Langston, r3):** the 17-rung match is **NECESSARY BUT NOT SUFFICIENT** for the pin — **three ladders satisfy it**. **IDENTITY is verified by the pinned title resolving to EXACTLY ONE table** (OBJ-5). ⛔ **IDENTITY IS THE TITLE RESOLVING TO EXACTLY ONE TABLE. FULL STOP.** If it resolves to 0 or >1 tables the run mints `GOVERNING-TABLE-IN-DOUBT` and STOPS, and never falls back to another table.
+⛔⛔ **A VALUE DIVERGENCE IS NOT AN IDENTITY FAILURE — IT IS THE FINDING, AND r5's DOC HAD IT BACKWARDS (Langston r5 BLOCKER-1).** The shipped code is the correct party: `:278-280` identity → `2`, `:282-284` rung count → `2`, `:292-293` **value divergence → `3` DRIFT**. r5's scope welded *"or no longer matches at 17/17"* into the stop rule, and **anyone implementing that sentence would make every genuine venue revision — the 2026-07-09 event this batch exists for — mint IN-DOUBT and STOP instead of reporting drift. The watcher would go silent on its own success case.** The clause is struck; harness case 1 already asserts `3` for exactly that mutation.
 ⭐ **THREE OUTCOMES, THREE EXIT STATUSES (Langston FINDING-B — r4's code took neither branch): `0` no-change · `2` MEASUREMENT FAILED · `3` measured drift.** OBJ-5 reads the outcome off the status, so drift and no-change may never share one.
-**Verify — EXERCISED, NOT ASSERTED (`#744` rider), by `scripts/analysis/kraken_fee_ladder_mutation_test.py`:** baseline → `0`; a tiered rung moved in the pinned ladder → `3`; the xStock band moved → `3`; a column naming a leg but neither spot nor futures → `2`. **All four cases PASS.** ⛔ **The harness ABORTS if a mutation changed no cell** — the first attempt at this test silently compared three identical bodies and read as three passes.
+**Verify — EXERCISED, NOT ASSERTED (`#744` rider), by `scripts/analysis/kraken_fee_ladder_mutation_test.py`:** baseline → `0`; a tiered rung moved in the pinned ladder → `3`; the xStock band moved → `3`; a column naming a leg but neither spot nor futures → `2`. **All four cases PASS.**
+⛔ **THE HARNESS ABORTS IF A MUTATION CHANGED NO CELL, AND THAT GUARD IS ITSELF PROVEN:** a deliberate no-op (writing the incumbent value back) prints the NO-OP line and exits **`4`** — a status distinct from the subject's `2`, so "the harness broke" never reads as "the extractor refused". **`mutate()` now compares old to new rather than counting an assignment** (Langston r5 condition 1: it could not fail in the way it claimed).
+⚠️ **COVERAGE IS 1 OF OBJ-5's 7 FAIL-LOUD INPUTS, AND THE `#744` RIDER IS THEREFORE NOT YET DISCHARGED** (Langston r5 condition 2). **The branch that matters most is DUPLICATE RUNG KEY / DUPLICATE BAND LABEL** — the scope itself says the `≠ 17` check is structurally blind to that class, so this harness is its **sole** detector, and an undetected detector defect is silent forever. Title-resolves-to-0 and to->1 are two more cases in the same frame.
 
 ### OBJ-3 — THE PAGE-VERSUS-TRANSCRIPTION LEG
 Compare the pinned ladder against §1's seventeen rungs.
@@ -129,12 +132,12 @@ Compare the pinned ladder against §1's seventeen rungs.
 ✅ **A MACHINE SOURCE EXISTS AND WE ALREADY FETCH IT** (Langston r4 BLOCKER, re-derived): accordion **`Pro xStocks`**, same payload, `$0 + → maker `-0.02%` / taker `0.10%``. ⛔ **The r1-r4 premise that no machine source existed was FALSE, and the 90-day human obligation it justified is STRUCK** — folded here, not re-homed (§13 disposition 1).
 - **PIN `Pro xStocks`**, compare its `$0 +` band against `fee_model` `xstock_spot`, and mint `GOVERNING-TABLE-IN-DOUBT` if the title resolves to 0 or >1 tables.
 - ⚠️ **What STILL has no machine source is the account's TIER** — the in-app dialog is authenticated and no session may log in (`CLAUDE.md` §7). **That is a narrower obligation than the one r4 wrote, and it applies to BOTH classes, not just xStock.**
-- **90 days, first due 2026-12-11.** Monthly is a nag that gets ignored; the contract landed 09-11 and a tokenised-equity schedule does not move monthly.
-- ⭐ **EVENT TRIGGER: any crypto-leg disagreement makes the xStock re-capture due IMMEDIATELY** — a venue that revised one schedule likely revised both, which is the 2026-07-09 case.
+- **90 days, first due 2026-12-11 — ON THE ACCOUNT TIER.** Monthly is a nag that gets ignored, and a tier moves only when 30-day volume or Assets on Platform crosses a rung. ⛔ **This cadence is NOT about the xStock rates** — those are read on every run (above); r5's bullet reasoned about the rate schedule and was a remnant of the struck premise.
+- ⭐ **EVENT TRIGGER: any published-vs-database disagreement, on EITHER class, makes the TIER check due IMMEDIATELY** — a rate we did not expect is the strongest available evidence that our assumed rung has moved, and a venue that revised one schedule likely revised both (the 2026-07-09 case). ⛔ **r5 worded this as an xStock "re-capture", which was the struck obligation surviving inside the trigger.**
 - **Resolves only against a capture date.**
-**Verify:** fires at its due date naming the held values (`0.0010` / `-0.0002`); a forced crypto disagreement brings it due at once.
+**Verify:** ⛔ **the 90-day item names the ACCOUNT TIER, never the xStock rates** — r5's acceptance criterion still read *"naming the held values (`0.0010` / `-0.0002`)"*, which **re-imports the struck obligation through the back door** (Langston r5 BLOCKER-3). It fires at its due date naming **the tier we believe we are on and the qualifying measures that would move it**, and resolves only against a dated capture of the authenticated dialog. **The rates are read by the machine on every run and are not part of this item.**
 
-### OBJ-5 — THREE OUTCOMES, NEVER TWO, AND FAIL LOUD ON SIX INPUTS
+### OBJ-5 — THREE OUTCOMES, NEVER TWO, AND FAIL LOUD ON SEVEN INPUTS
 **measured · no-change · `MEASUREMENT FAILED`**, the third naming the operand, read off **exit status, never an HTTP code**.
 ⛔ **Fail loud, never coerce — SEVEN inputs:** unparseable cell · **pinned title resolving to 0 or >1 table** · **rung count ≠ 17** · **a column name that does not resolve** (strict: a column naming a leg but neither spot nor futures RAISES — the default-to-spot arm is deleted, so this can actually fire) · **a row label outside `Tier 1-12`/`Pro 1-5`** (`ROW_RE` is bounded; it no longer accepts `Tier 99`) · ⭐ **a DUPLICATE RUNG KEY or a duplicate BAND label** (a repeated label, or `Tier 13` colliding with `Pro 1`→13 — **neither moves the rung count, so the ≠ 17 check is structurally blind to it**) · an unseen normaliser form.
 **Verify:** each outcome produced deliberately, artifact attached, **including every failure branch** (`#744` rider).
@@ -159,12 +162,19 @@ SIM entry mirroring the `dt-deploy-drift.sh` table **and stating the cadence** �
 
 ### OBJ-10 — ESTABLISH WHETHER ANY PAIR WE TRADE IS ON THE SPOT-MAKER-REBATE ELIGIBLE LIST
 ⛔ **FIVE schedules `fee_model` cannot express, not one (Langston FINDING-C) — and FOUR ARE ALREADY IN THE PAYLOAD.** Only the Spot Maker Rebate's eligible-pair list needs the second fetch I was worried about.
-⛔⛔ **AND THE EXPOSURE RUNS THE OTHER WAY, WHICH IS WORSE FOR US THAN THE REBATE:** the `Stablecoin, Pegged Token & FX Pair` schedule reads **`0.20 / 0.20`** where we model **`0.80`** taker. **On our own `closed_trades`, 142 of 481 crypto rows and 44 of 119 distinct symbols are NAME-SHAPED candidates** — `EUR/USD`, `USDC/GBP`, `SOL/USDC`, `XRP/USDT`, `USDT/AUD` — **control: 75 distinct symbols do NOT match, so the number is readable.** **4× PESSIMISTIC on the taker leg SUPPRESSES trades through the Net Expectancy gate** (hold against `#570`).
-⚠️ **THE 142/44 IS A SYMBOL-STRING HEURISTIC, NOT THE VENUE'S ELIGIBILITY LIST.** It **falsifies "empty"**; it does **not** size the true intersection.
+⛔⛔ **AND THE EXPOSURE RUNS THE OTHER WAY, WHICH IS WORSE FOR US THAN THE REBATE:** the `Stablecoin, Pegged Token & FX Pair` schedule reads **`0.20 / 0.20`** where we model **`0.80`** taker — **4× PESSIMISTIC, which SUPPRESSES trades through the Net Expectancy gate** (hold against `#570`).
+⭐ **STRATIFIED, because the heuristic OVER-INCLUDES and its error is not symmetric noise (Langston r5 condition 4):**
+| stratum | rows | symbols | may carry a number? |
+|---|---|---|---|
+| **A — BOTH legs stable/fiat** (`EUR/USD`, `USDC/GBP`, `USDT/AUD`, `AUD/USD`, `EUR/CHF`, `GBP/USD`, `USD/CAD`, `USD/CHF`, `USDC/AUD`, `USDC/CAD`, `USDC/CHF`, `USDT/GBP`) | **34** of 481 | **12** of 119 | ✅ **YES — this stratum alone falsifies "empty", and it is the honest claim** |
+| B — exactly ONE stable/fiat leg (`SOL/USDC`, `XRP/USDT`, `ETH/EUR`…) | 447 | 107 | ⛔ **NO** — name-shaped only; a crypto leg makes eligibility a venue question |
+- **CONTROL, and it corrected my own suspicion:** "neither leg stable/fiat" returns **0**, and that zero is **REAL, not an instrument fault** — the quote-leg census is exhaustive (`USD` 345 · `EUR` 54 · `USDT` 20 · `GBP` 20 · `USDC` 20 · `CHF` 9 · `AUD` 8 · `CAD` 5 = 481, every one fiat or stable) while **76 of 82 distinct BASE legs are non-fiat**, so the instrument does discriminate. We simply never quote against a crypto leg.
+⚠️ **NEITHER STRATUM IS THE VENUE'S ELIGIBILITY LIST.** Stratum A falsifies "empty"; it does **not** size the true intersection.
 - **Read the eligible-pair list** from the page the `Spot Maker Rebate` body links to (not yet fetched by this batch), and intersect it with our traded universe.
 - **Report the intersection, INCLUDING WHEN IT IS EMPTY** — an empty intersection is a measured zero with a named population, not a silence (`#453`).
 - ⛔ **Do NOT add a per-pair rate to `fee_model` in this batch.** If the intersection is non-empty, that is a **scope decision for Kyle** and a separate batch — the bug taxonomy's outcome (2), working-as-designed-but-unaddressed.
 **Verify:** the list is fetched with its own control (a known-present pair resolves), the intersection is printed with both denominators, and the finding is homed in `RUNNING_ISSUES` whichever way it comes out.
+⛔⛔ **OBJ-10 IS EXPLICITLY NON-GATING ON CLOSE (Langston r5 ruling — ONE BATCH, NOT TWO).** It is a **different object**: a second page, an eligibility list, and an intersection feeding a Kyle scope decision, with **no code deliverable in this batch**. ⚠️ **NAMED NOW RATHER THAN DISCOVERED AT STEP 7: if that page does not parse, or is not reachable unauthenticated, that is a HOMED FOLLOW-ON — not a hold on OBJ-1..9.**
 
 ---
 
@@ -210,7 +220,7 @@ Completion report · `BATCH_CATALOG` · `PHASE_HISTORY` · `RUNNING_ISSUES` (`#1
 - ✅ **~~The extractor does not capture the enclosing heading~~ — CLOSED.** It threads an ancestor trail and reads `paragraphAccordionItem.field_title`; **that fix is what falsified three of r3's stated facts**, so the residual was load-bearing and is now this batch's best evidence that a named anchor beats a positional one.
 - ⚠️ **`REFERENCE_LADDER` in the extractor is a SECOND COPY of reference §1** (Langston, r3 defect (c)). Verified equal on all 17 rungs today, **but OBJ-3 then grades the page against the copy — a corrected §1 with a stale dict would report no drift.** Parsing §1 directly is the standing fix; until then OBJ-3's verify carries a fixture that edits §1 and must fail.
 - ⚠️ **My fetch measured 1,394,111-1,394,145 bytes across runs; Langston's measured 1,398,949** — same four ladders, same values. **The page is stable within a session and NOT across hours**, which is the stronger reason the content hash was dropped.
-- ⚠️ **What ladder 3 describes is unestablished.** Over-reporting is the safe direction: the watcher names every ladder it finds.
+- ✅ **~~What ladder 3 describes is unestablished~~ — STRUCK (Langston r5 BLOCKER-2).** §2.2a establishes it from the page's own body text: it is the **Spot Maker Rebate**, a per-pair incentive. Over-reporting remains the safe direction — the watcher names every ladder it finds — but the question is answered, not open.
 - ⚠️ **The account view is a 2026-09-06 capture, not a live read.** Seventeen rungs does not make it live; it uses all of what was captured. If the account's tier moves, the governing-table determination must be re-made — which is what OBJ-4's event trigger and ruling 5's alert wording exist to surface.
 
 ## 10. PLAIN-LANGUAGE SUMMARY
@@ -221,4 +231,8 @@ The complication is that Kraken's page does not publish one fee table — it pub
 
 **One thing worth your attention, because it may be costing us now rather than later.** Our system stores one maker fee for all crypto. Kraken's rebate applies per pair. If any pair we actually trade is on that eligible list, the venue is charging us less than we think — our numbers would be pessimistic rather than dangerous, but they would be wrong. **Whether that is happening is not yet measured**: the eligible list sits on a page we have not read. This scope adds a step to go and find out, and deliberately does not change any fee until you have seen the answer.
 
-The tokenized stocks stay manual, because their table is not published anywhere public and the only place it appears requires logging in, which no session may do. That becomes a reminder every ninety days — and immediately, if the crypto side ever disagrees.
+**The tokenized stocks are NOT manual — and this paragraph said they were until now.** Their rates are published in the same page data we already read: maker −0.02%, taker 0.10%, exactly what we charge since yesterday's fix. The check reads them on every run like everything else.
+
+What still needs a human is narrower and applies to **both** crypto and tokenized stocks: **which fee tier the account sits on.** That is only visible behind a login, which no session may use, so once a quarter it asks you to glance at it — and immediately if the published rates ever disagree with what we charge.
+
+⚠️ **Recorded because it was nearly the opposite:** four revisions of this scope stated that no machine could read the tokenized-stock rates, and proposed a standing ninety-day task for you on that basis. The table was in the data the whole time; the search string was one dollar off. Langston caught it.

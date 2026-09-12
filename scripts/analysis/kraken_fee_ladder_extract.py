@@ -293,6 +293,11 @@ def main():
 
         # THE SECOND PIN (Langston r4 BLOCKER): xStock is a table on this same fetch, not a
         # calendar reminder. Its contract is what #1010 deployed.
+        # ⚠️ THIRD HARDCODED COPY OF A GOVERNED VALUE (Langston r5 condition 3). §9 confesses
+        # REFERENCE_LADDER as the second and never listed this one. §1 says the page-versus-
+        # DATABASE leg is the one that earns its keep, and at this ref NEITHER pin reads
+        # module_constants. ⛔ STEP-4 OBLIGATION: the shipped watcher reads the DB row as its
+        # operand and no literal fee value survives in it.
         XPIN, XCONTRACT = "Pro xStocks", (-0.02, 0.10)
         xs = [b for b in banded if b["title"] == XPIN]
         print("")

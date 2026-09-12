@@ -20,7 +20,14 @@ cell, change the number, re-serialise, and write a body the extractor will parse
 Usage:
     python3 kraken_fee_ladder_mutation_test.py              # fetch, then run all cases
     python3 kraken_fee_ladder_mutation_test.py --file p.html
-Exit 0 = every case produced its expected status. Exit 1 = a case did not. Exit 2 = harness fault.
+Exit 0 = every case produced its expected status. Exit 1 = a case did not.
+Exit 4 = HARNESS FAULT (a mutation changed nothing) — deliberately NOT 2, which is the subject's
+own MEASUREMENT FAILED, so "the harness broke" never reads as "the extractor refused".
+
+⚠️ COVERAGE, STATED (Langston r5 condition 2): these four cases exercise ONE of OBJ-5's seven
+fail-loud inputs. The `#744` rider is NOT discharged by "all cases pass" — the uncovered branch
+that matters most is DUPLICATE RUNG KEY / DUPLICATE BAND LABEL, because the scope itself says the
+rung-count check is structurally blind to that class, making this harness its sole detector.
 """
 
 import argparse
@@ -38,6 +45,9 @@ ASSIGN = "window.__INITIAL_PROPS__="
 EXIT_NO_CHANGE = 0
 EXIT_MEASUREMENT_FAILED = 2
 EXIT_DRIFT = 3
+# Langston r5 condition 1: a harness fault must NOT reuse the subject's MEASUREMENT FAILED code,
+# or "the harness broke" and "the extractor correctly refused" read identically to a caller.
+EXIT_HARNESS_FAULT = 4
 
 
 def slice_payload(html):
@@ -88,8 +98,15 @@ def walk_rows(node, fn):
 
 
 def mutate(payload, accordion, row_label, cell_index, new_text):
-    """Change one cell. Returns True if a cell actually changed."""
-    changed = {"n": 0}
+    """
+    Change one cell. Returns True only if a cell's VALUE actually changed.
+
+    ⛔ Langston r5 condition 1: this used to count an ASSIGNMENT, not a CHANGE — if `new_text`
+    ever equalled the incumbent, it returned True and the harness proceeded against an unmutated
+    body. That is the very failure this harness exists to prevent, one level down: a control that
+    cannot fail in the way it claims. It now compares old to new and counts only real changes.
+    """
+    changed = {"n": 0, "noop": 0}
 
     def fn(title, row):
         if title != accordion:
@@ -99,10 +116,16 @@ def mutate(payload, accordion, row_label, cell_index, new_text):
             return
         cells = row.get("field_cells") or []
         if cell_index < len(cells) and isinstance(cells[cell_index], dict):
+            old = cells[cell_index].get("field_content")
+            if old == new_text:
+                changed["noop"] += 1      # found the cell, but the edit would be a no-op
+                return
             cells[cell_index]["field_content"] = new_text
             changed["n"] += 1
 
     walk_rows(payload, fn)
+    if changed["noop"] and not changed["n"]:
+        print("   (cell found, but new_text equals the incumbent — that is a NO-OP, not a mutation)")
     return changed["n"] > 0
 
 
@@ -112,9 +135,10 @@ def write_body(html, start, end, payload, path):
 
 
 def run_extractor(path):
+    """Langston r5 condition 1: keep stderr — a FAIL used to print no diagnostic at all."""
     proc = subprocess.run([sys.executable, EXTRACTOR, "--file", path],
                           capture_output=True, text=True)
-    return proc.returncode, proc.stdout
+    return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
 
 def main():
@@ -148,7 +172,7 @@ def main():
     if not applied:
         print("HARNESS FAULT: case 1 mutation did not change any cell — aborting, "
               "because an unmutated body exiting 0 would read as a pass")
-        return 2
+        return EXIT_HARNESS_FAULT
     f1 = os.path.join(tmp, "mut_tier.html")
     write_body(html, start, end, p1, f1)
     code, _ = run_extractor(f1)
@@ -159,7 +183,7 @@ def main():
     applied = mutate(p2, "Pro xStocks", "$0 +", 1, "-0.03%")
     if not applied:
         print("HARNESS FAULT: case 2 mutation did not change any cell — aborting")
-        return 2
+        return EXIT_HARNESS_FAULT
     f2 = os.path.join(tmp, "mut_band.html")
     write_body(html, start, end, p2, f2)
     code, _ = run_extractor(f2)
@@ -171,7 +195,7 @@ def main():
     applied = mutate(p3, "Spot Crypto", "Tier", 4, "<p>Maker (%)</p>")
     if not applied:
         print("HARNESS FAULT: case 3 mutation did not change any cell — aborting")
-        return 2
+        return EXIT_HARNESS_FAULT
     f3 = os.path.join(tmp, "mut_col.html")
     write_body(html, start, end, p3, f3)
     code, _ = run_extractor(f3)
