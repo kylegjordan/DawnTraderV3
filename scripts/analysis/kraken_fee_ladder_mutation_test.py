@@ -24,10 +24,21 @@ Exit 0 = every case produced its expected status. Exit 1 = a case did not.
 Exit 4 = HARNESS FAULT (a mutation changed nothing) — deliberately NOT 2, which is the subject's
 own MEASUREMENT FAILED, so "the harness broke" never reads as "the extractor refused".
 
-⚠️ COVERAGE, STATED (Langston r5 condition 2): these four cases exercise ONE of OBJ-5's seven
-fail-loud inputs. The `#744` rider is NOT discharged by "all cases pass" — the uncovered branch
-that matters most is DUPLICATE RUNG KEY / DUPLICATE BAND LABEL, because the scope itself says the
-rung-count check is structurally blind to that class, making this harness its sole detector.
+⚠️ COVERAGE, RE-STATED AT r9. This header carried r5's claim ("these four cases exercise ONE of
+OBJ-5's seven fail-loud inputs") until r9 — at the top of a file that by then held thirteen cases.
+A STALE HEADER COMMENT IS A FIRST-CLASS FALSE SOURCE, and this one UNDERSTATED the coverage, which
+is very likely why it survived four rounds of being read (Langston r9, rider 1).
+
+CURRENT: the case count and every verdict are PRINTED BY THE RUN - read them there. This line
+deliberately states NO count, because rider 1 was a stale count in this very docstring and I put a
+wrong one (17, against a measured 19) in its replacement before catching it. A number written into
+a header is a number that goes stale; the table below the run cannot.
+All 7 of OBJ-5's fail-loud inputs are exercised on the TIERED side. ⛔ BUT OBJ-5's seven are THEMSELVES TIERED-SHAPED — "a row label
+outside Tier 1-12 / Pro 1-5" has no banded analogue in that list, and the banded side has NO count
+invariant to fall back on. That asymmetry is what let a renamed band label exit 3 as false DRIFT
+through six rounds. The banded analogues now have their own cases (14, 15) and their own
+assertion (EXPECTED_BAND_LABELS), and the honest statement is that the SEVEN were never the whole
+population — not that the count is now complete.
 """
 
 import argparse
@@ -253,6 +264,44 @@ def rename_accordion(payload, from_title, to_title):
 
     rec(payload)
     return done["n"] > 0
+
+
+def truncate_row_cells(payload, accordion, row_label, keep):
+    """Shorten one row's cell list, so the column indices no longer exist in it."""
+    changed = {"n": 0}
+
+    def fn(title, row):
+        if title != accordion:
+            return
+        label = re.sub(r"<[^>]+>", "", str(row.get("row_description", ""))).replace("Row :: ", "").strip()
+        if label != row_label:
+            return
+        cells = row.get("field_cells") or []
+        if len(cells) <= keep:
+            return
+        row["field_cells"] = cells[:keep]
+        changed["n"] += 1
+
+    walk_rows(payload, fn)
+    return changed["n"] > 0
+
+
+def blank_row_label(payload, accordion, row_label):
+    """Blank one row's label. BLOCKER-7a: an EMPTY label used to be treated as a sentinel."""
+    changed = {"n": 0}
+
+    def fn(title, row):
+        if title != accordion:
+            return
+        rd = str(row.get("row_description", ""))
+        label = re.sub(r"<[^>]+>", "", rd).replace("Row :: ", "").strip()
+        if label != row_label:
+            return
+        row["row_description"] = "Row :: "
+        changed["n"] += 1
+
+    walk_rows(payload, fn)
+    return changed["n"] > 0
 
 
 def relabel_row(payload, accordion, from_label, to_label):
@@ -501,6 +550,58 @@ def main():
     code, out = run_extractor(f13)
     results.append(("pinned title resolves to ZERO", EXIT_MEASUREMENT_FAILED, code))
     results.append(("  ^ names the missing ladder", 1, says(out, "census changed")))
+    results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
+
+    # CASE 14 - BLOCKER-6 on the SECOND PIN. A footnote marker on `$0 +` used to make
+    # `.get()` return None, which compared unequal to the contract and printed
+    # "DRIFT: the xStock base band no longer matches the deployed contract" - with the words
+    # MEASUREMENT FAILED nowhere in the output. This is not a hypothetical: the page already
+    # labels the same logical band `$100,000,000 +` and `$100,000,000 + **` on one fetch.
+    _, _, p14 = slice_payload(html)
+    if not relabel_row(p14, "Pro xStocks", "$0 +", "$0 + *"):
+        print("HARNESS FAULT: case 14 relabel changed nothing - aborting")
+        return EXIT_HARNESS_FAULT
+    f14 = os.path.join(tmp, "mut_baseband_x.html")
+    write_body(html, start, end, p14, f14)
+    code, out = run_extractor(f14)
+    results.append(("BLOCKER-6: base band renamed (second pin)", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ says MEASUREMENT FAILED", 1, says(out, "MEASUREMENT FAILED")))
+    results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
+
+    # CASE 15 - the same guard on a NON-PINNED schedule, which took the other of the two routes
+    # Langston measured ("reads None" in the banded profile comparison).
+    _, _, p15 = slice_payload(html)
+    if not relabel_row(p15, "USDG Pairs", "$0 +", "$0 + *"):
+        print("HARNESS FAULT: case 15 relabel changed nothing - aborting")
+        return EXIT_HARNESS_FAULT
+    f15 = os.path.join(tmp, "mut_baseband_g.html")
+    write_body(html, start, end, p15, f15)
+    code, out = run_extractor(f15)
+    results.append(("BLOCKER-6: base band renamed (non-pinned)", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ names the label change", 1, says(out, "band labels changed")))
+    results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
+
+    # CASE 16 - BLOCKER-7a. My own measurement said `Tier` is the ONLY sentinel; the code I wrote
+    # from it treated EMPTY as one too. Blanking a label used to exit 3 reading 16/17.
+    _, _, p16 = slice_payload(html)
+    if not blank_row_label(p16, "Cross-platform Fee Tiers", "Tier 12"):
+        print("HARNESS FAULT: case 16 blanked no label - aborting")
+        return EXIT_HARNESS_FAULT
+    f16 = os.path.join(tmp, "mut_blanklabel.html")
+    write_body(html, start, end, p16, f16)
+    code, out = run_extractor(f16)
+    results.append(("BLOCKER-7a: row label blanked", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
+
+    # CASE 17 - BLOCKER-7b. A short row was skipped, landing on the same false DRIFT.
+    _, _, p17 = slice_payload(html)
+    if not truncate_row_cells(p17, "Cross-platform Fee Tiers", "Tier 9", 2):
+        print("HARNESS FAULT: case 17 truncated no row - aborting")
+        return EXIT_HARNESS_FAULT
+    f17 = os.path.join(tmp, "mut_shortrow.html")
+    write_body(html, start, end, p17, f17)
+    code, out = run_extractor(f17)
+    results.append(("BLOCKER-7b: short row", EXIT_MEASUREMENT_FAILED, code))
     results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
 
     print("")

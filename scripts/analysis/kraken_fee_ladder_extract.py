@@ -101,6 +101,25 @@ EXPECTED_BANDED = {
     "Pro xStocks":                         (-0.02, 0.10),
 }
 XPIN_TITLE = "Pro xStocks"   # the second pin; hoisted so the banded assertion can defer to it
+BASE_BAND = "$0 +"
+
+# BLOCKER-6 (Langston r9): the band-LABEL SET per schedule. The tiered side has a count invariant
+# (18 rows = header + 17 rungs); the banded side has NONE - which is how a 6-of-7 coverage count
+# could be honest and still miss a renamed label entirely.
+# ASSERTED AS SETS, NOT COUNTS, deliberately: a count reproduces exactly the blindness the `!= 17`
+# check has to a duplicate, which is the defect two rounds of this batch were spent removing.
+# MEASURED at the ref 2026-09-12 - and note `Stablecoin` carries `$100,000,000 +` while `USDG
+# Pairs` and `Pro xStocks` carry `$100,000,000 + **`: the same logical band, labelled two ways, on
+# one page, today. That is the live evidence that a footnote marker on `$0 +` is a when, not an if.
+EXPECTED_BAND_LABELS = {
+    "Stablecoin, Pegged Token & FX Pairs": {
+        "$0 +", "$50,000 +", "$100,000 +", "$250,000 +", "$500,000 +",
+        "$1,000,000 +", "$10,000,000 +", "$100,000,000 +",
+    },
+    "USDG Pairs":  {"$0 +", "$100,000,000 + **"},
+    "USDe Pairs":  {"$0 +"},
+    "Pro xStocks": {"$0 +", "$100,000,000 + **"},
+}
 
 TAG_RE = re.compile(r"<[^>]+>")
 WS_RE = re.compile(r"\s+")
@@ -244,17 +263,25 @@ def banded_from(title, rows):
                    "column (header reads %r)" % (title, header))
     bands = {}
     for label, cells in rows:
-        if label == "add here" or not label:
+        if label == "add here":
             continue
+        # BLOCKER-7 (Langston r9), banded side. MEASURED at the ref: Stablecoin 9 rows / 8 bands,
+        # USDG 3/2, USDe 2/1, Pro xStocks 3/2 - EVERY non-header row IS a band, so an empty label
+        # is a parse failure, never a spacer.
+        if not label:
+            raise Fail("empty band label in %r - every non-header row on this page is a band"
+                       % title)
         mi, ti = idx["maker"], idx["taker"]
-        if mi < len(cells) and ti < len(cells):
-            maker, taker = rate_of(cells[mi]), rate_of(cells[ti])
-            if maker is None or taker is None:
-                raise Fail("unparseable rate in banded %r row %r: maker=%r taker=%r"
-                           % (title, label, cells[mi], cells[ti]))
-            if label in bands:
-                raise Fail("duplicate band %r in %r" % (label, title))
-            bands[label] = (maker, taker)
+        if mi >= len(cells) or ti >= len(cells):
+            raise Fail("short row %r in banded %r: %d cells, need indices %d and %d"
+                       % (label, title, len(cells), mi, ti))
+        maker, taker = rate_of(cells[mi]), rate_of(cells[ti])
+        if maker is None or taker is None:
+            raise Fail("unparseable rate in banded %r row %r: maker=%r taker=%r"
+                       % (title, label, cells[mi], cells[ti]))
+        if label in bands:
+            raise Fail("duplicate band %r in %r" % (label, title))
+        bands[label] = (maker, taker)
     return {"title": title, "kind": "banded", "header": header, "bands": bands}
 
 
@@ -294,22 +321,31 @@ def ladder_from(title, rows):
             # absent rung, and the profile assertion fires => exit 3. A parse omission reported
             # as measured venue drift. MEASURED: every ladder table is 18 rows - the `Tier`
             # header plus exactly 17 rungs - so `Tier` is the ONLY sentinel.
-            if label and label != "Tier":
+            # BLOCKER-7 (Langston r9): this read `if label and label != "Tier"`, i.e. "`Tier`
+            # OR EMPTY is a sentinel" - while MY OWN MEASUREMENT, written three lines up, says
+            # `Tier` is the ONLY sentinel (0 empty-labelled rows across all 9 tables). The code
+            # contradicted the measurement it was written from. Blanking a label exited 3 with
+            # 16/17; it now raises. `enumerator-blind-spot`, my own filed pattern.
+            if label != "Tier":
                 raise Fail("unrecognised row label %r in %r - neither the `Tier` header nor a "
                            "rung in Tier 1-12 / Pro 1-5" % (label, title))
             continue
         rung = int(m.group(1)) if m.group(1) else 12 + int(m.group(2))
         if rung in rungs:
             raise Fail("duplicate rung key %d in %r" % (rung, title))   # defect (a)
-        if mi < len(cells) and ti < len(cells):
-            maker, taker = rate_of(cells[mi]), rate_of(cells[ti])
-            # ⛔ BLOCKER-2 (Langston r6): an unparseable cell used to be SKIPPED. OBJ-5 names it a
-            # fail-loud input; skipping routed it to the wrong outcome — on the banded side, which
-            # has no count invariant, a dropped row surfaced as measured DRIFT.
-            if maker is None or taker is None:
-                raise Fail("unparseable rate in %r rung %d: maker=%r taker=%r"
-                           % (title, rung, cells[mi], cells[ti]))
-            rungs[rung] = (maker, taker)
+        # BLOCKER-7 (Langston r9): a SHORT ROW was silently skipped here, landing on the same
+        # false DRIFT as every other silent drop. Measured by him: truncate a row's cells -> 3.
+        if mi >= len(cells) or ti >= len(cells):
+            raise Fail("short row in %r rung %d: %d cells, need indices %d and %d"
+                       % (title, rung, len(cells), mi, ti))
+        maker, taker = rate_of(cells[mi]), rate_of(cells[ti])
+        # ⛔ BLOCKER-2 (Langston r6): an unparseable cell used to be SKIPPED. OBJ-5 names it a
+        # fail-loud input; skipping routed it to the wrong outcome — on the banded side, which
+        # has no count invariant, a dropped row surfaced as measured DRIFT.
+        if maker is None or taker is None:
+            raise Fail("unparseable rate in %r rung %d: maker=%r taker=%r"
+                       % (title, rung, cells[mi], cells[ti]))
+        rungs[rung] = (maker, taker)
     return {"title": title, "header": header, "columns": cols, "rungs": rungs}
 
 
@@ -381,7 +417,27 @@ def main():
         # (structure); a moved $0 + band -> 3 (venue).
         print("")
         print("=== OBJ-8 banded census (ASSERTED, was print-only) ===")
-        seen_banded = {b["title"]: b["bands"].get("$0 +") for b in banded}
+        # BLOCKER-6 (Langston r9): assert the band-LABEL SET before reading any band. A
+        # renamed `$0 +` used to fall through `.get()` as None and exit 3 - a missing label
+        # reported as measured venue drift, which is BLOCKER-2's shape a third time.
+        for b in banded:
+            want = EXPECTED_BAND_LABELS.get(b["title"])
+            if want is None:
+                continue
+            got = set(b["bands"])
+            if got != want:
+                print("   MEASUREMENT FAILED: band labels changed in %r -- missing %s | "
+                      "unexpected %s" % (b["title"], sorted(want - got), sorted(got - want)))
+                return 2
+
+        seen_banded = {}
+        for b in banded:
+            # Belt and braces for any schedule NOT in EXPECTED_BAND_LABELS: an absent base band
+            # must never reach a comparison as None.
+            if BASE_BAND not in b["bands"]:
+                raise Fail("banded %r has no %r row (labels read %s)"
+                           % (b["title"], BASE_BAND, sorted(b["bands"])))
+            seen_banded[b["title"]] = b["bands"][BASE_BAND]
         for t in sorted(seen_banded):
             print("   %-38s $0 + = %s" % (t, seen_banded[t]))
         if set(seen_banded) != set(EXPECTED_BANDED):
@@ -392,14 +448,19 @@ def main():
         # XPIN_TITLE is excluded for the SAME reason the pinned ladder is excluded below: the
         # second-pin block reports it with its operand and units. Asserting it here would preempt
         # the more precise message - the regression the harness caught at r7.
-        bmoved = [t for t in EXPECTED_BANDED
-                  if t != XPIN_TITLE and seen_banded[t] != EXPECTED_BANDED[t]]
+        compared = [t for t in EXPECTED_BANDED if t != XPIN_TITLE]
+        bmoved = [t for t in compared if seen_banded[t] != EXPECTED_BANDED[t]]
         if bmoved:
             for t in bmoved:
                 print("   DRIFT: banded %r expected %s, reads %s"
                       % (t, EXPECTED_BANDED[t], seen_banded[t]))
             return 3
-        print("   all %d banded schedules match their expected $0 + band" % len(seen_banded))
+        # Rider 2 (Langston r9): count the reassurance over the COMPARED set. The old line
+        # said "all 4 ... match" on a run where Pro xStocks' band read None - excluded from the
+        # comparison and still counted in the total. A reassurance wider than what was checked.
+        print("   all %d COMPARED banded schedules match their expected $0 + band "
+              "(%r is asserted by the second pin below, not here)"
+              % (len(compared), XPIN_TITLE))
 
         print("")
         print("=== OBJ-8 match vector (ASSERTED for ALL ladders, not merely printed) ===")
@@ -480,7 +541,13 @@ def main():
         if len(xs) != 1:
             print("   GOVERNING-TABLE-IN-DOUBT: %r resolved to %d tables - STOPPING" % (XPIN, len(xs)))
             return 2
-        base = xs[0]["bands"].get("$0 +")
+        # BLOCKER-6, third site (:483 at the reviewed ref). A renamed label here produced
+        # `$0 + band: None` and the words `DRIFT: the xStock base band no longer matches the
+        # deployed contract` - with `MEASUREMENT FAILED` nowhere in the output.
+        if BASE_BAND not in xs[0]["bands"]:
+            raise Fail("second pin %r has no %r row (labels read %s)"
+                       % (XPIN, BASE_BAND, sorted(xs[0]["bands"])))
+        base = xs[0]["bands"][BASE_BAND]
         print("   $0 + band: %s | deployed fee_model contract: %s" % (base, XCONTRACT))
         if base != XCONTRACT:
             print("   DRIFT: the xStock base band no longer matches the deployed contract")
