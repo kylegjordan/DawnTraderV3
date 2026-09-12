@@ -1575,6 +1575,7 @@ export class ActiveExecutionEngine {
                     { bid: _raw.bid, ask: _raw.ask, last: _raw.last, atMs: _raw.atMs },
                     _c.trailingSpreadWindowSnaps,
                     _r.state === 'two_sided', // the one fact the writer cannot derive: the verdict
+                    _c.kRel, // 8a r3: judges a NEW chain's seed against the retained spread ring
                   );
                 }
                 // ⛔⛔ D3 r2 — THE REFUSAL MUST SURVIVE THE RESEED, NOT JUST THE YIELD

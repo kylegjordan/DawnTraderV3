@@ -138,20 +138,25 @@ rc, out = run(h, whole(ps, 0, 0), newmem)
 v("U4", rc == 0 and b"an extra standing note" in rd(h) and rd(h, "memory-parts/00-legacy.md") == newmem,
   "exit %d, new-in-mem %s: %s" % (rc, b"an extra standing note" in rd(h), out.strip()[:70]))
 
-# U5a two ledger parts: migrate one, add a second ledger part, recompose, then append
+# U5a >=2 parts, ZERO declaring ledger:true -> refuse naming EVERY part (declaration-based resolver, Langston 22:19Z)
+FM = "<!-- part" + NL + "ledger: true" + NL + "-->" + NL
 h = home(BASE_B, {"00-legacy.md": BASE_B})
 migrate(h)
-with open(h + "/memory-parts/50-second-ledger.md", "wb") as fh:
-    fh.write((NL.join(["## " + chr(0x2605) + " SECOND LEDGER", "### Retractions", "- another", ""])).encode("utf-8"))
-migrate(h)   # recompose with two ledger parts (state advances; body == both)
+with open(h + "/memory-parts/50-second.md", "wb") as fh:
+    fh.write((NL.join(["## " + chr(0x2605) + " SECOND", "- a note", ""])).encode("utf-8"))
+migrate(h)   # recompose with two parts, neither declaring ledger:true
 rc, out = run(h, app(sha(rd(h, "memory-parts/00-legacy.md"))), b"- x\n")
-v("U5a", rc == 2 and "2 parts carrying the ledger" in out, "exit %d: %s" % (rc, out.strip()[:100]))
+v("U5a", rc == 2 and "needs exactly ONE part declaring" in out and "00-legacy.md" in out and "50-second.md" in out,
+  "exit %d, names both parts %s: %s" % (rc, "00-legacy.md" in out and "50-second.md" in out, out.strip()[:90]))
 
-# U5b zero ledger parts
-h = home(NO_LEDGER_B, {"00-legacy.md": NO_LEDGER_B})
+# U5b >=2 parts, TWO declaring ledger:true -> refuse
+h = home(BASE_B, {"00-legacy.md": FM.encode("utf-8") + BASE_B})   # 00-legacy declares ledger (body still == live)
+migrate(h)
+with open(h + "/memory-parts/50-also-ledger.md", "wb") as fh:
+    fh.write((FM + "## " + chr(0x2605) + " ALSO" + NL + "### Retractions" + NL + "- x" + NL).encode("utf-8"))
 migrate(h)
 rc, out = run(h, app(sha(rd(h, "memory-parts/00-legacy.md"))), b"- x\n")
-v("U5b", rc == 2 and "NO part carrying" in out, "exit %d: %s" % (rc, out.strip()[:100]))
+v("U5b", rc == 2 and "found 2" in out, "exit %d: %s" % (rc, out.strip()[:90]))
 
 # U6 three-way rollback on a bad delta
 h = home(BASE_B, {"00-legacy.md": BASE_B})
