@@ -1,7 +1,7 @@
 # B-GEOMETRY-REACH-BASELINE — STEP 2: PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r6, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
+**change-class: architecture** · **r7, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
 
 > ⛔ **THE AUDIT COMES FIRST AND THE PLAN FALLS OUT OF IT.** Every plan item back-references the finding it derives from; anything with no audit treatment is flagged `UNAUDITED`.
 
@@ -224,14 +224,20 @@ Gate **C** is the **VTS crypto lane**. ⛔ **That is the lane the seven ceiling 
 **Established three ways, each enumerated rather than sampled:**
 1. ✅ **NO COLUMN.** Every column on `vts_open_trades`: `id, symbol, asset_class, entry_price, stop_loss, take_profit, position_size, dollar_value, quantity, regime, signal_type, strategy, pool, opened_at, context, inserted_at, updated_at, closed, closed_at, state, calibration_state, chosen_entry_mode, entry_fee_rate, maker_limit_price, maker_deadline`. **There is no `close_reason` and no fill flag.**
 2. ✅ **NO CONTEXT KEY.** All **51** distinct `context` keys on crypto since 2026-08-01 enumerated — **none is fill-related.**
-3. ✅ **NO STATE.** `state` takes exactly two values, `open` and `closed`. **There is no abandoned/expired/unfilled state to exclude.**
+3. ⛔⛔ **r7 — THIS LEG WAS *FALSE AS WRITTEN* AND IS REPLACED (Langston; re-derived by me on the WHOLE table).** It read *"`state` takes exactly two values, `open` and `closed`"*. ⛔ **IT TAKES THREE.** Enumerated with no class filter: `closed` crypto **68,057** · `closed` xStock **8,282** · `open` crypto **1,853** · ⛔ **`weekend_suspended` xStock 113, 2026-09-08 → 09-11.**
+⭐ **THAT IS EXACTLY THE THIRD ROW CLASS THE LEG ASSERTED DOES NOT EXIST** — and I produced the false claim by **enumerating the convenient population (crypto, since 08-01) and stating the result globally.** ✅ **`enumerator-blind-spot`: enumerate the TABLE, not the population you happen to be working in.**
+✅ **SCOPED CORRECTLY: on CRYPTO the state set really is `{closed, open}`, so the conclusion survives — and this batch ships crypto only.**
+⚠️ **FLAGGED FORWARD, because it is a real finding rather than a scoping nicety: `weekend_suspended` is a NON-TERMINAL row class on the xStock arm** — those rows have no close, so any xStock hold or excursion analysis must decide how to treat them. **Carried to `B-EXCURSION-RECORD` (plan row 2.4g-3) and named in `B-TRADE-RECORD-JOINABILITY` (2.4g-4).**
+⭐ **AND LEG 3'S FAILURE COSTS THE ARGUMENT NOTHING, WHICH IS WORTH SAYING PLAINLY RATHER THAN LEANING ON: the load-bearing claim is *attempts vs opens* — a difference of OBJECTS, not of filters — and it stands without leg 3 entirely.**
 
-⛔⛔ **AND THE ONE FILL-ADJACENT MECHANISM DOES NOT TOUCH THE BASIS LANE.** `maker_limit_price` + `maker_deadline` are populated on **527 rows, ALL of them VTS-lane maker entries — and ZERO shadow rows** (every one of the 27,370 shadow rows has `chosen_entry_mode` NULL, no maker price, no deadline). ✅ **The shadow lane, which the arbiter made the basis, has no maker leg and therefore no unfilled-maker state.** ✅ **And the 527 maker rows are all present as OPENED trades — an unfilled maker does not appear here as a row, so there is no such row class to filter.**
+⛔⛔ **AND THE ONE FILL-ADJACENT MECHANISM DOES NOT TOUCH THE BASIS LANE.** `maker_limit_price` + `maker_deadline` are populated on **527 rows — IN THE 2026-08-01+ WINDOW, and r7 STAMPS THAT WINDOW because the number is window-dependent (Langston): ALL-TIME crypto is 683 with a maker price and 716 at `chosen_entry_mode='maker'`, and ⚠️ 33 maker-mode rows carry NO maker price, ALL of them pre-08-01 — zero in the window used here (527/527/0). All of the 527 are VTS-lane maker entries and ZERO are shadow rows** (every one of the 27,370 shadow rows has `chosen_entry_mode` NULL, no maker price, no deadline). ✅ **The shadow lane, which the arbiter made the basis, has no maker leg and therefore no unfilled-maker state.** ✅ **And the 527 maker rows are all present as OPENED trades — an unfilled maker does not appear here as a row, so there is no such row class to filter.**
 
 ⇒ ✅ **SO IT IS NOT A FILTERED NUMERATOR OVER AN UNFILTERED DENOMINATOR. IT IS THE REMOVAL OF A ROW CLASS THAT EXISTS ON ONE SIDE ONLY.**
 ⇒ ⭐⭐ **AND THE HONEST VERSION IS STRONGER THAN "SYMMETRIC": THE TWO SIDES RECORD DIFFERENT OBJECTS. `closed_trades` records ATTEMPTS, including abandoned ones; `vts_open_trades` records OPENS ONLY.** ⛔ **Therefore filled-only is not merely the defensible reading — IT IS THE ONLY ONE THAT COMPARES LIKE WITH LIKE, and the inclusive arm was never a rival estimate of the same quantity.**
 
 ### ⛔⛔ ANSWER 2 — THE `never_filled` DURATION IS A **ONE-HOUR CONSTANT**, AND THAT EXPLAINS EVERY FLIP HE NAMED
+
+✅ **AND THE ACTIVE SIDE'S ROW CLASSES ARE ENUMERATED, NOT SAMPLED — there is a FOURTH (Langston).** `closed_trades` crypto holds **481 rows: 479 with `closed_at`, and 2 with a NULL `close_reason`** — ✅ **and those 2 are exactly the 2 with `closed_at IS NULL`, i.e. STILL OPEN.** ⭐ **So the fourth class is "not yet closed", which is not a close-reason class at all and is excluded for a different and correct reason — but "enumerated not sampled" has to name it, and r6 did not.**
 
 **MEASURED, crypto, all 85 `never_filled` rows, unbounded:**
 
@@ -251,7 +257,7 @@ Gate **C** is the **VTS crypto lane**. ⛔ **That is the lane the seven ceiling 
 
 | strategy | share `never_filled` | median ALL | median FILLED | ratio inclusive → filled-only |
 |---|---|---|---|---|
-| `morning_star` | **9.9 %** | 4.83 h | 5.76 h | 1.146 → 1.049 — *least moved, clears BOTH ways* |
+| `morning_star` | **9.9 %** ⚠️ *(14/142 CLOSED rows — 9.7 % on all 144 rows; both are right and r6 failed to state which, which is the whole of rule 29)* | 4.83 h | 5.76 h | 1.146 → 1.049 — *least moved, clears BOTH ways* |
 | `sma_trend_ride` | **10.9 %** | 2.25 h | 3.46 h | 1.314 → **1.060** — flip |
 | `inside_bar_reversal` | **16.4 %** | 3.69 h | 5.66 h | 1.226 → 0.990 — clears both |
 | `pivot_shift` | **24.6 %** | 4.31 h | 6.33 h | 1.311 → **1.082** — flip |
@@ -267,7 +273,9 @@ Gate **C** is the **VTS crypto lane**. ⛔ **That is the lane the seven ceiling 
 ⛔ **He is right that this decision sets `reach_atr_max_unknown_floor`: with `sma_trend_ride` in, the floor is **1.97**; without it, **2.36** — looser for every unknown strategy.**
 ✅ **The exclusion is justified ON THE CONSTANT, independently of which floor it yields — 84 of 85 rows at 1.0000–1.0004 h is a timer whichever way the floor lands.** ⭐ **And naming the direction both ways: my exclusion produces the TIGHTER floor, so it is not convenient in the safety direction — but it does ship MORE rows, which is convenient in the other. The justification has to stand on the constant alone, and it does.**
 
-✅ **CARVE-OUT CONDITIONS MET ⇒ filled-only is primary, the inclusive arm is published as contaminated-not-rival, and ALL FOUR ROWS SHIP AT FLOOR 1.97.**
+✅ **CARVE-OUT CONDITIONS MET ⇒ filled-only is primary, the inclusive arm is published as contaminated-not-rival, and ALL FOUR ROWS SHIP AT FLOOR 1.97. ✅ STEP 3 APPROVED TO PROCEED (Langston, 2026-09-13).**
+
+⚠️ **ONE ASSUMPTION CARRIED FORWARD *UNRULED*, AND IT IS RECORDED HERE SO IT CANNOT FIRM UP BY REPETITION (Langston, explicitly):** every ratio in §1b-quater uses **√H SCALING** — he verified it reproduces internally on all three checkable rows (√1.469 = 1.212 `pivot_shift`, √1.192 = 1.092 `morning_star`, √3.93 = 1.985 `reverse_impulse`) **and he checked its CONSISTENCY, not its MERIT.** ⛔ **The √H form itself is inherited from earlier revisions and remains `INFERRED-FROM-CODE-AND-FORM`, exactly as `4.0` does — so the arbiter's verdict is conditional on a form neither of us has ruled on.** ✅ **It does not block Step 3: the four rows tighten under any monotone scaling, and the DIRECTION is what ships.**
 
 ---
 
