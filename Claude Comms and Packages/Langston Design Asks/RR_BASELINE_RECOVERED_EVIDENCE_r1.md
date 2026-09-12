@@ -60,15 +60,28 @@ Solving the break-even identity for T at the observed p gives **T > 618 bps ⇒ 
 - ✅ **The 1.11 REPRODUCES: median crypto R = 1.111** across 479 closed crypto trades; xStock **1.469**. Median crypto hold **3.78 h** (mean 8.14); xStock **8.92 h** (mean 22.07).
 - ⛔ **AND I MUST CORRECT MYSELF: I TOLD KYLE AND LANGSTON THE DATABASE HOLDS NO PROFIT FIGURES. THAT IS FALSE.** `closed_trades` carries `net_pnl`, `gross_pnl`, `net_pnl_percent`, `pnl_percent`, `entry_fee`, `exit_fee`, `total_cost`, `exit_price`, `target_exit_price` — **755 rows, every one with net AND gross P&L**, 2026-07-15 → today. I read a true claim about `vts_open_trades` and reported it as a claim about the database.
 - ⭐ **AND THE COUNTERFACTUAL CORPUS I SAID DID NOT EXIST DOES: `exit_strategy_alternates`, 173,952 rows** since 2026-05-01, carrying `variant_name`, `virtual_pnl_pct`, `virtual_duration_min`, `virtual_exit_reason` against `baseline_pnl_pct`.
-- ⭐ **IT ALREADY ANSWERS AN ADJACENT QUESTION, WITH ITS OWN POSITIVE CONTROL.** `current_BE_stop_baseline` reproduces the actual outcome to **0.0000** in both periods, so the simulator is calibrated. Split at the 2026-07-23 trailing switch-off, crypto:
+- ⛔⛔ **AND THE EXIT-TABLE CLAIM I PUT HERE IN r1 IS WITHDRAWN. IT REVERSED IN DIRECTION.** Langston ran it before Coltrane could lean on it; **all three of his measurements reproduce exactly on my own query.**
 
-| period | actual baseline | re-enabling trailing | control |
+**THE POPULATION, WHICH MY r1 HEADING FAILED TO NAME: `trade_source = 'vts'` ON 100 % OF 173,952 ROWS — ZERO ACTIVE-PATH TRADES, BOTH CLASSES.** ⇒ every figure below describes **the VTS lane**, which books exits at the cache mid behind the clamp. **It is NOT the lane the R distribution and the 43 % came from** (§2), which makes any cross-reading of the two an `#596` problem, sharper.
+
+**THE WRITER IS UNBOUNDED ON BOTH CLASSES, not two rows on one class as r1 said.** MEASURED: `crypto_spot` n=100,212 — **21 rows above |100 %| and 1,887 above |20 %|** (1.9 % of rows), max |220.98|; `xstock_spot` n=70,524 — 2 and 8, max **448,211.38**.
+
+**AND THE HEADLINE FLIPS UNDER ANY TRIM** (post-2026-07-23, crypto):
+
+| variant | mean (r1 used this) | mean, trimmed ≤ 20 % | median |
 |---|---|---|---|
-| before 07-23 (trailing ON) | **−0.3988 %** | −0.3713 % | 0.0000 ✅ |
-| from 07-23 (trailing OFF) | **+0.3522 %** | −0.3478 % (**−0.70 pp**) | 0.0000 ✅ |
+| `current_BE_stop_baseline` | **+0.3522** | **−0.3265** | **−2.3784** |
+| `current_trailing_baseline` | −0.3478 | **−0.2085** | **+0.2783** |
 
-⚠️ **CORRELATION, NOT ESTABLISHED CAUSE** — other things changed across that date, and I have not isolated it.
-⛔ **AND ONE NUMBER FROM THAT TABLE IS AN ARTEFACT, STATED SO NOBODY REPEATS IT:** xStock `no_BE_stop` shows a mean of **+131 %**, which is **two corrupt rows** (max **448,211 %**, only 2 above 100 %, **median −1.12 %**). ⇒ **the mean of `virtual_pnl_pct` is unusable without trimming, and the writer needs a bound.**
+⇒ **untrimmed, re-enabling trailing COSTS 0.70 pp; trimmed it GAINS 0.12 pp; on medians it GAINS 2.66 pp.** ⛔ **r1's number was the UNTRIMMED MEAN of a corpus r1 ITSELF had just shown has no writer bound, in the same section.** That is the error, and it is mine.
+
+⛔ **AND THE `0.0000` CONTROL I CITED DOES NOT REACH THE CLAIM (`#661` leg 1).** It proves the replay's **identity arm** reproduces the actual outcome. It says nothing about the **counterfactual arms**, and nothing about whether the right tail is real or garbage. **A control with zero opportunity to fail on the proposition it is offered for is not a control.**
+
+⚠️ **THE 07-23 SPLIT IS UNRESOLVED AND MUST NOT BE READ AS A RESULT.** `trailing_enabled_active` is an **ACTIVE-lane** knob and this corpus is VTS-only, so splitting here is the adjacent-object shape. **Langston's ledger prior: `#677` measured 0 ratchets across 11,760 VTS closes since 2026-05-05 — two months before my boundary.** ⇒ **whether the 07-23 flip reaches VTS at all is a HYPOTHESIS until someone cites the line.** Until then the pre/post difference may be measuring something else entirely.
+
+✅ **WHAT SURVIVES, AND IT IS WORTH KEEPING:** the corpus is real, large and lane-labelled, it carries `virtual_duration_min` and `virtual_exit_reason` per counterfactual, and the identity arm does reproduce the actual. **It is a usable instrument for the VTS lane once bounded and read on medians. It is not evidence about the active lane, and it was never evidence for the sentence r1 built on it.**
+
+⛔ **GATE: `B-VPNL-WRITER-BOUND` (PHASE_19_PLAN row 2.4i) must land before any row cites this corpus** — and its first item is the **taxonomy read** on the extreme rows (a real defect versus a legitimate simulator output on a degenerate price is NOT settled), **not a trim patch.**
 
 ---
 
