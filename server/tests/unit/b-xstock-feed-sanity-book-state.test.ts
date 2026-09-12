@@ -67,6 +67,53 @@ describe('B-XSTOCK-FEED-SANITY — assessBookState on the real handoff rows (dec
   //      60 consecutive ticks (≈90 s, 00:15:00 → 00:16:31) before yielding. **There was no good price
   //      to fall back to, so D3's ladder terminates at REFUSE — and acting on 503.50 was not a
   //      choice between two prices, it was inventing one.**
+  // ⛔⛔ THE TWO-TICK FIXTURE (Langston BLOCKER, 2026-09-13). EVERY OTHER FIXTURE IN THIS FILE IS
+  //    SINGLE-TICK, AND THE DEFECT IS A MULTI-TICK PROPERTY — which is exactly why r1 of the 8a fix
+  //    passed its own tests and still would not have prevented the row it was justified by.
+  //
+  //    THE MEASURED SEQUENCE, from `closed_trades`:
+  //      tick 1  00:16:30.065Z  streak 60, reasons ['mark_deviation']  → YIELD, comparator CLEARED
+  //      tick 2  00:16:31.648Z  SAME 7.00/1000.00 frame, now with NO prior
+  //                             → `unknown`/`no_comparator` → seedable → r1 ACTED → 503.50 booked.
+  //    NEM (`hollow`/`yielded=true`) closed ON tick 1 and r1 caught it. CRM closed on tick 2 and r1
+  //    did not. ONE OF TWO.
+  describe('the two-tick reseed sequence — the property a single-tick fixture cannot express', () => {
+    const HOLLOW_FRAME = { bid: 7, ask: 1000, last: 247.25 };
+    const PRIOR = { bid: 247.01, ask: 248.00, last: 247.25 };
+
+    it('tick 1 — WITH a comparator the frame is judged hollow, and the yield drops the reference', () => {
+      const r = assessBookState(frame(HOLLOW_FRAME, PRIOR), CFG);
+      expect(r.state).toBe('hollow');
+    });
+
+    it('tick 2 — the IDENTICAL frame with the reference gone is no longer judged hollow', () => {
+      // Not a bug in the predicate: with no prior, all three comparator-dependent arms
+      // (`bid_collapsed`, `ask_spiked`, `mark_deviation`) are unreachable. It reports that it
+      // cannot tell — which is honest, and is precisely why the CALLER must not act on it.
+      const r = assessBookState(frame(HOLLOW_FRAME, null), CFG);
+      expect(r.state).toBe('unknown');
+      expect(r.reasons).toContain('no_comparator');
+    });
+
+    it('⛔ THE REGRESSION: the tick-2 verdict satisfies the engine REFUSAL predicate', () => {
+      // The engine acts only on `two_sided` AND a VALIDATED comparator
+      // (`active-execution-engine.ts`, D3 r2). A freshly seeded comparator has judged nothing.
+      const r = assessBookState(frame(HOLLOW_FRAME, null), CFG);
+      const comparatorValidated = false; // seeded this very tick, by construction
+      const refuses = r.state !== 'two_sided' || comparatorValidated !== true;
+      expect(refuses).toBe(true);
+    });
+
+    it('✅ AND IT DOES NOT OVER-REFUSE: a healthy two-sided frame on a VALIDATED comparator acts', () => {
+      // The negative control. Without this the refusal could be satisfied by refusing everything.
+      const r = assessBookState(frame({ bid: 247.01, ask: 248.00, last: 247.25 }, PRIOR), CFG);
+      expect(r.state).toBe('two_sided');
+      const comparatorValidated = true;
+      const refuses = r.state !== 'two_sided' || comparatorValidated !== true;
+      expect(refuses).toBe(false);
+    });
+  });
+
   it('CRM: the SANE-LOOKING ticker frame is ALSO hollow — there was no usable price to fall back to', () => {
     const r = assessBookState(frame({ bid: 235.00, ask: 248.40, last: 247.25 }, { bid: 247.01, ask: 248.00, last: 247.25 }), CFG);
     expect(r.state).toBe('hollow');

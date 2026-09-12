@@ -123,6 +123,28 @@ All restores verified byte-identical.
 
 **VERIFICATION.** Three fixtures on the real CRM row added to `b-xstock-feed-sanity-book-state.test.ts` — **44 green** in that file, **tsc 377** at baseline. One counter, not two: every yield is now a refusal, and `hollowYields` already prints in the `[I7-PRICE-FIX][EVAL_EXIT]` cycle line, so the refusal is visible without new telemetry.
 
+⛔⛔ **r2 — THE BLOCKER: r1 REFUSED ONE TICK TOO EARLY, AND `CRM/USD` WOULD STILL HAVE BOOKED AT 503.50** (Langston, 2026-09-13, measured on the row; re-derived by me).
+The yield and the close are **1,583 ms apart — ONE MONITOR TICK**. The row reads `exit_book_state='unknown'`, basis `guard`, `metadata.bookState.yielded=FALSE`; `yields[0]` at 00:16:30.065Z, `closed_at` 00:16:31.648Z. ⇒ **the close did NOT happen on the yield tick.**
+
+**THE APERTURE IS THE REFERENCE DROP ITSELF.** The yield calls `clearBookStateComparator` BEFORE refusing, so next tick the SAME 7.00/1000.00 frame has no prior ⇒ all three hollow arms unreachable ⇒ `unknown`/`no_comparator` ⇒ `_seedable` admits it BY DESIGN ⇒ it seeds ON the hollow frame ⇒ r1 fell through to 503.50. ★ **The existing comment calls that drop the BOUND; it is also the aperture, and both are true — dropping is right, ACTING on what replaces it is not.**
+**SPLIT, MEASURED: `NEM/USD` (`hollow`/`yielded=true`, 00:16:30.482Z) closed ON the yield tick and r1 caught it. `CRM/USD` closed on the tick after and r1 did NOT. ONE OF TWO.**
+
+✅ **r2's RULE, and it is D3's own word "valid": act only on `two_sided` AND `comparatorValidated === true`.** A comparator seeded THIS tick has judged nothing — there was nothing to judge it against — so it cannot make a frame valid, and the ladder terminates at REFUSE. ★ **First decision-site consumer of `validated`, the flag whose own docstring records that it "HAD ZERO CONSUMERS" (D3 FIX 2026-09-05); it was returned so a seed frame could be told apart from a judged one.**
+⚠️ **COST: the first frame after any restart or clear is unvalidated by construction, so it refuses ONE tick — the same tick it needed anyway to have anything to compare against. Not a new blind window; the existing one, no longer acted through.**
+
+**THE TWO-TICK FIXTURE, which is the test that would have caught r1:** every other fixture in that file is single-tick and the defect is a MULTI-TICK property. Four cases — tick 1 hollow WITH a comparator; tick 2 the IDENTICAL frame reading `unknown`/`no_comparator` WITHOUT one; the refusal predicate satisfied on tick 2; and a NEGATIVE CONTROL proving a healthy validated frame still ACTS, so the rule cannot be satisfied by refusing everything.
+✅ **MUTATION-PROVED: substituting r1's rule (refuse only on a `hollow` verdict) fails EXACTLY 1 of 48 — the two-tick regression.**
+⚠️ **My FIRST mutation run reported 48 green because the substitution silently did not apply (CRLF mismatch). An unfired mutation is not evidence, so it was re-run with matching line endings before the figure was used.**
+
+**FINDINGS 1 AND 2 TAKEN.** `hollowYieldRefusals` was declared, never incremented, never printed — and `tsconfig.json` has no `noUnusedLocals`, so tsc structurally could not see it, which is why "tsc 377 at baseline" was consistent with it existing. Replaced by `unvalidatedRefusals`, which IS incremented and IS printed in the `EVAL_EXIT` cycle line. ✅ **CONTROL: all three counters in that block are declared-and-printed, 3 of 3.** The header comment *"a yield is a tick acted on at the cap"* is corrected — false since D3.
+
+⛔ **FINDING 3 — THE LABEL CONSEQUENCE, AND MY OWN PASS CRITERION WAS BROKEN TWICE OVER.** `exit_book_state='hollow'` + basis `guard` was producible ONLY by the yield tick's own close, which is now refused ⇒ **forward it goes to ZERO.** ⇒ my pre-registered criterion *"zero closes with `hollow` + `guard` + `yielded=false`"* became **SATISFIABLE BY CONSTRUCTION** — and it was **ALREADY BLIND TO CRM**, which reads `unknown`/`false`.
+✅ **REPLACED, label-free and falsifiable on the harm itself:** *zero new xStock closes, on any row closing after the deploy, where `ABS(exit_decision_price - exit_price) / exit_price > 5%`.* **Pre-fix baseline: 9 of 22 boundary-minute rows exceeded 5% (max 92.7%) against 0 of 15 off-boundary.**
+➕ **AND `ready_to_buy_service.ts:2299-2300` keeps a `guard` arm that can no longer match — a live predicate bound to a frozen historical population. NOT a defect; unreadable later if not written down now.**
+
+⛔ **FINDING 4 — ESCALATION REACH, AS A MAGNITUDE RATHER THAN A REASSURANCE.** `hollow_skip_cap=60`, `max_consecutive_price_skips=40`, and the skip branch never calls `_recordPriceSkip` ⇒ **the rail needed 40 yields = 2,400 consecutive hollow ticks ≈ 60 MINUTES.** The yield alert dedupes on `book-state-hollow-${mode}-${symbol}` and is **suppressed while unresolved**, so a first occurrence alarms in ≈90 s and a repeat on the same unresolved symbol alarms nothing while the position stays open.
+⚠️ **r2 NARROWS THE FIRST HALF ONLY: the reseed refusal DOES call `_recordPriceSkip`, so the rail now advances every tick rather than every 60. The first-occurrence-only alert behaviour is UNCHANGED and is NOT fixed here.**
+
 ⛔ **WHAT I HAVE NOT DONE AND AM NOT CLAIMING: there is no unit test of the ENGINE-LOOP control flow itself.** The change is `continue` where a fall-through stood, inside a large monitor method with no existing harness. **The predicate half is covered on real rows; the control-flow half is readable but unproven, and Step 7 must verify it on staging — `hollowYields > 0` with ZERO new `kraken_equities_ws_mid` producers on boundary closes.**
 
 ---

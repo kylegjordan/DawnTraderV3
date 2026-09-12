@@ -1310,11 +1310,15 @@ export class ActiveExecutionEngine {
     let restAgeExempt = 0;
     let slHits = 0;
     let tpHits = 0;
-    // B-XSTOCK-FEED-SANITY: OCCURRENCES this cycle (a skip is a tick withheld; a yield is a tick acted on
-    // at the cap) — printed in EVAL_EXIT. Not a row census: count events on the rows' metadata.bookState.
+    // B-XSTOCK-FEED-SANITY: OCCURRENCES this cycle — printed in EVAL_EXIT. Not a row census: count
+    // events on the rows' metadata.bookState.
+    // ⛔ CORRECTED 2026-09-13 (Langston finding 2): this read "a yield is a tick acted on at the cap".
+    //    FALSE since D3 landed — a yield is now a tick REFUSED at the cap. `unvalidatedRefusals`
+    //    counts the SECOND half of that refusal: the reseed tick, which is the one that actually
+    //    booked `CRM/USD` at 503.50 while the yield tick booked nothing.
     let hollowSkips = 0;
     let hollowYields = 0;
-    let hollowYieldRefusals = 0;
+    let unvalidatedRefusals = 0;
 
     for (const position of openPositions) {
       try {
@@ -1572,6 +1576,45 @@ export class ActiveExecutionEngine {
                     _c.trailingSpreadWindowSnaps,
                     _r.state === 'two_sided', // the one fact the writer cannot derive: the verdict
                   );
+                }
+                // ⛔⛔ D3 r2 — THE REFUSAL MUST SURVIVE THE RESEED, NOT JUST THE YIELD
+                // (Langston BLOCKER, 2026-09-13; measured on the row, not argued).
+                //
+                // r1 refused at the YIELD tick and stopped there. It catches `NEM/USD`
+                // (`hollow`/`guard`/`yielded=true`, 00:16:30.482Z) and MISSES `CRM/USD`, which
+                // closed 1,583 ms later — ONE MONITOR TICK — and reads `unknown`/`yielded=FALSE`.
+                // ⇒ ONE OF TWO. The row 8a is justified by was still bookable after 8a r1.
+                //
+                // THE APERTURE IS THE REFERENCE DROP ITSELF. The yield calls
+                // `clearBookStateComparator` BEFORE refusing, so on the next tick the SAME
+                // 7.00/1000.00 frame has no prior ⇒ all three hollow arms are unreachable ⇒
+                // `assessBookState` returns `unknown`/`no_comparator` ⇒ `_seedable` admits it by
+                // design ⇒ it SEEDS ON THE HOLLOW FRAME ⇒ and the mark below was 503.50.
+                // ★ The comment above calls the drop the BOUND. It is also the aperture, and both
+                //   are true: dropping is right, ACTING on what replaces it is not.
+                //
+                // ✅ THE RULE, AND IT IS D3's OWN WORD "VALID": a comparator that has just been
+                //    SEEDED has judged nothing — there was nothing to judge it against. An
+                //    unvalidated reference cannot make a frame valid, so the frame is not a
+                //    qualifying touch price and the ladder terminates at REFUSE.
+                // ★ THIS IS THE FIRST DECISION-SITE CONSUMER OF `validated` — the flag whose own
+                //   docstring records that it "HAD ZERO CONSUMERS" (D3 FIX 2026-09-05). It was
+                //   returned so a seed frame could be TOLD APART from a judged one. Here is where
+                //   that distinction was always for.
+                //
+                // ⚠️ COST, STATED: the FIRST frame for any symbol after a restart or a clear is
+                //    unvalidated by construction, so it refuses ONE tick and acts on the next —
+                //    the same tick it would have needed anyway to have anything to compare with.
+                //    It is not a new blind window; it is the existing one, no longer acted through.
+                if (_r.state !== 'two_sided' || _bs.comparatorValidated !== true) {
+                  unvalidatedRefusals++;
+                  withoutPrice++;
+                  console.warn(
+                    `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} REFUSE unvalidated ` +
+                    `state=${_r.state} ${_cmpV} reasons=${_r.reasons.join(',')}`,
+                  );
+                  await this._recordPriceSkip(position, 'book_state_unvalidated');
+                  continue;
                 }
               }
             }
@@ -2023,7 +2066,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     this.fg2ShadowEntered = 0;
     this.fg2ShadowSkippedNoBook = 0;
