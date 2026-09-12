@@ -1,7 +1,7 @@
 # B-GEOMETRY-REACH-BASELINE — STEP 2: PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r1, 2026-09-12** · **Step 1 APPROVED at `d174ed7a9`**
+**change-class: architecture** · **r2, 2026-09-12** · **Step 1 APPROVED at `d174ed7a9`**
 
 > ⛔ **THE AUDIT COMES FIRST AND THE PLAN FALLS OUT OF IT.** Every plan item back-references the finding it derives from; anything with no audit treatment is flagged `UNAUDITED`.
 
@@ -45,9 +45,11 @@
 
 Gate **C** is the **VTS crypto lane**. ⛔ **That is the lane the seven ceiling values were derived from** — all of §1b's hold figures are `vts_open_trades`.
 
-⇒ ⛔⛔ **SO THE ENDOGENEITY LANGSTON FLAGGED IS NOT ONLY HISTORICAL — IT BECOMES ONGOING AT DEPLOY.** The scope already labels the values *a policy tightening with a measured lower bound* because `H` is shaped by the gate being calibrated. **The census shows the same loop closing FORWARD: after OBJ-A, the corpus that would re-derive these values is generated under the new ceilings.**
-✅ **It does NOT invalidate OBJ-A** — tightening remains the safe direction, and VTS **tags rather than drops** (reorg-B3.3), so no VTS trade is lost and the counterfactual survives.
-⛔ **But it means the pre-deploy corpus is the ONLY clean measurement of the old regime that will ever exist**, and any later re-derivation straddles the boundary unless it is stamped.
+⛔⛔ **r1 SAID THE FORWARD CORPUS IS CONTAMINATED AT GENERATION. THAT IS WRONG FOR LANES C AND D, AND THE SENTENCE IS STRUCK.** Verified at the ref: `vts-runner.ts:1745-1768` sets `vtsGateVerdict` and **simulates on the NATIVE target**, and `strategy-helpers.ts:427-440` makes Gate A non-dropping on the VTS path. ⇒ ✅ **post-deploy VTS still generates uncensored geometry AND realised outcome for exactly the trades the new ceilings refuse. The forward corpus is NOT contaminated at generation.**
+
+⭐⭐ **BUT THE SENTENCE IS TRUE OF *GATE B*, AND THAT IS A REAL FINDING THAT WAS SITTING ON THE WRONG ROW.** The **active crypto** path **enforces and DROPS** (`signal-orchestrator.ts:1925`). ⇒ ⛔ **`closed_trades` is HARD-CENSORED at deploy, permanently: after OBJ-A, no active-path trade will exist for geometry the tightened ceilings refuse, and no tag survives it.** **The pre-deploy `closed_trades` corpus is the only clean active-path measurement of the old regime that will ever exist.**
+
+⇒ ⭐ **AND THE FORWARD RISK ON THE VTS LANES IS *ANALYSIS-TIME POPULATION SELECTION*, NOT DATA GENERATION — which our own code advertises.** `vts-runner.ts:1743`: *"verdict rides onto the trade record (`vtsGateVerdict`) so analysis can always filter back to"* the gate-passing view. **Filter to `vtsGateVerdict='passed'` and re-derive reach off it, and that IS the circularity.** ⛔ **This is not a new problem — it is the one reorg-B3.2 was built for, in its own words at `:1736`: *"you cannot calibrate the RR floor from a population the floor already filtered."*** ★ **r1 treated the purpose-built answer as a mitigating detail; it is the disposition.**
 
 ⇒ ⭐ **AND IT ANSWERS KYLE'S ORIGINAL QUESTION AT THE CODE, which no earlier revision did: *"why are we only making this change for paper mode and not in the VTS also?"* — WE ARE NOT. The change reaches VTS automatically, through the shared resolver, on both crypto and xStock lanes.** What differs is only which rows are seeded.
 
@@ -60,18 +62,27 @@ Gates **C** and **D** write `vtsGateVerdict ∈ {passed, rr_below_min, unreachab
 
 ## 2. THE PLAN — each item back-references its finding
 
-### P-1 — Stamp the boundary on all THREE recorded fields *(from §1a riders, §1b, §1c)*
+### P-1 — A STANDING POPULATION RULE, and the boundary stamp beneath it *(from §1b, §1c)*
+⭐⭐ **CONDITION 1. Any re-derivation of `reach_atr_max` — and of `min_rr`, which is the same shape — runs on the UNFILTERED VTS population, INCLUDING `unreachable` and `rr_below_min` rows, and STATES that it did.** ⛔ **A stamp alone is necessary and NOT sufficient: it marks where the regime changed and does nothing about selecting on the gate's own verdict.**
+✅ **Executable today, verified at the ref:** the verdict persists (`vts-runner.ts:2306`, `eval-cycle.ts:1071`) and `atrAtOpen` is stamped (`:2312`, `:1072`), so any row's `atrsToTarget` reconstructs against any candidate ceiling.
+
+⛔⛔ **AND CONDITION 1 IS EXACTLY WHAT ACTIVATES CONDITION 4'S TRAP — measured, and this interaction is not in Langston's note.** `vts-runner.ts:949` persists `atrAtOpen: input.atrAtOpen ?? 0`, so a missing ATR is stored as **0**, which reconstructs as `atrsToTarget = ∞` and reads as a **REFUSAL**. **MEASURED, `vts_open_trades`, `opened_at ≥ 2026-08-01`, n=32,085 carrying the key: 1,029 rows (3.21 %) hold `atrAtOpen = 0` — and ALL 1,029 carry NO gate verdict** (zero in `unreachable`, zero in `passed`, zero in `rr_below_min`).
+⇒ ⭐ **So today's habit of filtering to verdict-bearing rows excludes them, and CONDITION 1's unfiltered rule is what lets them in.** ⛔ **THE MITIGATION CREATES THE EXPOSURE.** ⇒ **`atrAtOpen = 0` is excluded as UNKNOWN and NEVER counted as unreachable, and the count of excluded rows is published beside every re-derivation.** *(`#546` absent-as-valid, one line above the `diAtOpen ?? 50` sentinel already measured at 14.8 %.)*
+
+**AND THE BOUNDARY STAMP, beneath the rule:**
 ⛔ **BEFORE the resolver change lands**, not after. Three fields change basis or distribution at the same instant: `decision-provenance.resolvedSet.reach_atr_max` (per-class → per-strategy), `guard-eval-tracker`'s reach buckets, and `vtsGateVerdict` on both VTS lanes.
 **VERIFICATION:** the deploy sha is recorded against each of the three, and a query grouping any of them across the boundary **refuses or splits** rather than pooling.
 
 ### P-2 — The resolver change *(from §1a; scope OBJ-A parts 1–2)*
 `expectancy.ts:206/211` per-(strategy × class), **plus the fail-closed `reach_atr_max_unknown_floor` on the FULL key set — crypto, xStock, and global `*` — mirroring `min_rr_unknown_floor`'s three rows and its migration-level `RAISE EXCEPTION`, NOT `b72-warmup`'s boot list.**
 ✅ **No call-site edits: all four gates inherit it.**
-**VERIFICATION:** a negative control per gate site — an unknown token resolves to the unknown floor, **not** 4.0, asserted at each of the four; plus the migration's own seed-completeness exception.
+⛔⛔ **CONDITION 2 — THE WIDENED RADIUS IS TOKEN-CORRECTNESS, AND r1'S FOUR-SITE FRAMING HID IT.** `getPerClassTargetGate` has **~22 non-test callers** — ten strategy files, eight in-class detects (`strategy-engine.ts:299/434/568/680/781/890/993/1615`), `decision-provenance.ts:111`, and the four gates. ⭐ **TODAY reach is token-INDEPENDENT, so a drifted token can only mis-resolve `min_rr`. AFTER OBJ-A every one of those tokens ALSO PICKS A REACH CEILING.** ⛔ **And `canonical===null` is the wrong control: the canonicalizer ALIASES (`range_trading`→`range_trade`), so a WRONG-BUT-VALID token silently inherits ANOTHER STRATEGY'S CEILING with no tripwire — the unknown floor never fires.**
+**VERIFICATION:** (a) ⛔ **assert the FULL ~22-row token table**, not a spot check — every caller's token resolves to its own strategy's ceiling; (b) a negative control per gate site: an unknown token resolves to the unknown floor, **not** 4.0, asserted at each of the four; (c) the migration's own seed-completeness `RAISE EXCEPTION`.
 
 ### P-3 — Seed the seven crypto rows *(from scope §1b)*
 ⛔ **Crypto calibration rows only. `vwap_pullback` excluded (it would loosen). xStock excluded (`c` is class-dependent, zero rows).** ⚠️ **"Crypto only" governs THESE rows and NOT P-2's safety row.**
-**VERIFICATION:** each value with n, denominator, bootstrapped CI, the **policy-tightening** label, and its implied refusal rate.
+⚠️ **CONDITION 3 — THE IMPLIED REFUSAL RATE IS TWO NUMBERS, NOT ONE.** Gate A runs on the **CLAMPED `effectiveATR`** (floored by `getEffectiveATR`) ⇒ **larger ATR ⇒ smaller `atrsToTarget` ⇒ Gate A is SYSTEMATICALLY MORE PERMISSIVE than B/C/D on identical geometry.** ⛔ **One pooled rate is a mixture of two gates that do not agree.**
+**VERIFICATION:** each value with n, denominator, bootstrapped CI, the **policy-tightening** label, and its implied refusal rate **published PER ATR BASIS — clamped (Gate A) and raw (Gates B/C/D) separately.**
 
 ### P-4 — Correct every stale consumer IN THE SAME COMMIT *(from §1a)*
 The docstring (`signal-target-normalizer.ts:24-29`), the type comment (`strategy-helpers.ts:365`), the tracker comment (`guard-eval-tracker.ts:55`), the reason label, **and the client UI label (`vts-shared.tsx:244`) — which this census found and nobody had named.**
