@@ -377,6 +377,18 @@ Your chunk-4 hold asked for the tolerance and the approximation's direction in t
 ⇒ **There is nothing to deploy now, and deploying to silence a rung would restart live trading for a comment change.**
 
 ⚠️ **WHAT WOULD CHANGE THIS, so the disposition is falsifiable rather than a promise: any commit touching a runtime file with a non-comment changed line before OBJ-8 ships. The predicate above IS the test and is cheap to re-run.**
+
+✅✅ **THE FALSIFIER FIRED, 2026-09-12, AND IT FIRED ON MY OWN COMMIT — alert `005e730a`, rung 2, 15h.** I re-ran the registered predicate rather than re-asserting the old reading: **FIVE runtime files undeployed, FOUR carrying non-comment changed lines** — `kraken-mirror-balance.ts` 4, `universe-loader.ts` 9, `shared/admitted-quotes.ts` 6, `shared/symbol-legs.ts` 18; `adaptive-kalman.ts` still 0. ⇒ ⛔ **THE COMMENT-ONLY DISPOSITION ABOVE IS DEAD AND MUST NOT BE CITED FOR THIS OR ANY LATER RUNG.**
+
+★★ **THE REPLACEMENT DISPOSITION IS STRONGER THAN THE ONE IT REPLACES, AND IT IS THE REASON CONDITIONS (a) AND (b) EXIST: RUNTIME CODE CHANGED AND BEHAVIOUR PROVABLY DID NOT.**
+- `universe-loader.ts` now reads `ADMITTED_QUOTES` instead of parsing `allowedQuotes` from the JSON. **Same values, pinned inline against the pre-conversion literal frozen at `a9785babc`** ⇒ same admitted set, same normalisation, same membership test.
+- `kraken-mirror-balance.ts` now derives the raw-space preimage instead of carrying a literal. **Same four codes today, pinned against its own frozen literal** ⇒ same deployable figure.
+- `shared/admitted-quotes.ts` and `shared/symbol-legs.ts` are NEW. **`symbol-legs` has ZERO consumers** (8f creates, migrates nothing); `admitted-quotes` has exactly the two above.
+⇒ **Set-identity is not an argument that the deploy is harmless — it is the evidence that it is, and it is checkable at the ref by anyone.**
+
+⛔⛔ **IT STILL DOES NOT DEPLOY, AND THE REASON IS NOW A DIFFERENT ONE: OBJ-8 HAS NOT PASSED STEP 4.** The staging deploy is Step 6; deploying now would put UNREVIEWED code onto the box where paper trading is live, skipping the review gate. **That is the workflow working, not a gap in it** — and it is a materially different statement from *"there is nothing to deploy"*, which is what the struck disposition said.
+⚠️ **SO THE RUNG WILL KEEP CLIMBING UNTIL OBJ-8 CLEARS REVIEW, AND THAT IS EXPECTED. The honest reading of these fires is `code`, NOT `comment-only`** — which matters because Langston pre-registered that the comment-only SHARE at window close decides whether `#1016`'s cut OBJ-4 returns to named work. **Tagging these as comment-only would corrupt that denominator in my own favour.**
+
 ## STEP 9 — P-7j (A): LANGSTON'S FOUR CONDITIONS (20:55Z) AND WHERE EACH LANDS
 
 | # | condition | landing |
