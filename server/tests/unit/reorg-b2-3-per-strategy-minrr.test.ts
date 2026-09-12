@@ -40,6 +40,12 @@ function seedGate() {
     // fail-closed floors (max-per-class + global fallback)
     K('crypto_spot', '*', 'min_rr_unknown_floor', 2.88),
     { moduleName: 'expectancy_gates', exchange: '*', assetClass: '*', strategy: '*', regime: '*', constantName: 'min_rr_unknown_floor', value: 2.88 },
+    // B-GEOMETRY-REACH-BASELINE (OBJ-A): the gate now fails closed on BOTH gates from ONE
+    // canonicalization, so the unknown-token path reads a reach floor too. Without these rows the
+    // unknown-token cases below throw "required row missing" instead of exercising the fail-closed
+    // path — the same new-requireKey-breaks-every-DB-mocking-fixture trap as the TEC keys.
+    K('crypto_spot', '*', 'reach_atr_max_unknown_floor', 1.97),
+    { moduleName: 'expectancy_gates', exchange: '*', assetClass: '*', strategy: '*', regime: '*', constantName: 'reach_atr_max_unknown_floor', value: 1.97 },
   ] as any);
 }
 

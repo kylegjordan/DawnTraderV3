@@ -198,49 +198,56 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  */
 /**
  * reorg-B2 (Piece A): per-class target floor + min-RR for the central normalizer.
- * Reads `module_constants` `expectancy_gates` per class — fail-closed (throws on a missing
- * per-class row; the b72-warmup boot assertion guarantees the active classes are seeded).
+ * Reads `module_constants` `expectancy_gates` — fail-closed (throws on a missing row; the
+ * b72-warmup boot assertion guarantees the active classes are seeded).
+ *
+ * B-GEOMETRY-REACH-BASELINE (OBJ-A): `reach_atr_max` is now per-(strategy × class) too, resolved
+ * from the SAME canonical token as `min_rr`. Before this batch the read site hardcoded
+ * `strategy: '*'`, so seeding per-strategy reach rows was a NO-OP — the rows existed and nothing
+ * could reach them. One ceiling was therefore serving ten materially different holding horizons.
+ *
+ * THE TOKEN IS CANONICALIZED EXACTLY ONCE, AND THAT IS LOAD-BEARING, NOT TIDINESS:
+ * `recordUnknownStrategyAtGate` increments a per-asset-class counter on EVERY call
+ * (`unknown-strategy-counter.ts`), so resolving min_rr and reach through two separate
+ * canonicalizations would fire the tripwire TWICE per gate call and the drift counter would read
+ * 2x the true rate — a measurement defect introduced by the fix. One resolution, one tripwire.
+ *
+ * `floorPct` stays per-CLASS: it is an ROI floor, not a horizon statement, and nothing in this
+ * batch measured it per strategy.
  */
 export function getPerClassTargetGate(assetClass: string, strategy: string): { floorPct: number; minRR: number; reachAtrMax: number } {
-  // reorg-B2.3: floorPct + reachAtrMax stay PER-CLASS (strategy:'*'); only min_rr goes per-(strategy×class).
   const _classKey = { exchange: '*', assetClass, strategy: '*', regime: '*' };
-  return {
-    floorPct:    getCachedNumberRequired('expectancy_gates', 'target_floor_pct', _classKey),
-    minRR:       _resolvePerStrategyMinRR(assetClass, strategy),
-    // reorg-B2 (Piece C): path-INVARIANT reachability bound (c·√H), per class only (not per-filterPath).
-    reachAtrMax: getCachedNumberRequired('expectancy_gates', 'reach_atr_max',    _classKey),
-  };
-}
+  const floorPct = getCachedNumberRequired('expectancy_gates', 'target_floor_pct', _classKey);
 
-/**
- * reorg-B2.3 — resolve the per-(strategy×class) minRR floor at the SINGLE CHOKEPOINT.
- *
- * The strategy token is canonicalized HERE (one normalization, not threaded to all ~22 gate callers),
- * so every caller may pass its raw token (literal / constant / variable) and they cannot disagree by
- * construction. Most-specific-wins: a seeded (assetClass, canonicalStrategy) row is used when present,
- * else the per-class '*' default.
- *
- * UNKNOWN token (canonicalizer returns null) → fail CLOSED: substitute the conservative
- * `min_rr_unknown_floor` (the max-per-class RR — a seeded DB constant, NOT a TS literal) so a drifted
- * token gets the STRICTEST gate in its class, never the permissive '*' default. The substitution is the
- * safety guarantee; the tripwire counter is observability only (a missed count can't open the gate).
- * `getCachedNumberRequired` resolves the asset-class row, or falls back to the global '*' row when the
- * asset_class itself is unresolved (the global-max fail-closed).
- */
-function _resolvePerStrategyMinRR(assetClass: string, strategy: string): number {
-  // `strategy` is REQUIRED (Langston Step-4): every gate caller passes a strategy token, tsc-enforced — a
-  // future/unedited caller that omits it fails the COMPILE, not silently drops to the permissive '*' default
-  // (the §8#10 silent-fallback-for-a-DB-governed-setting trap). There is NO silent permissive branch: an
-  // empty / unknown / drifted token canonicalizes to null below and fails CLOSED (strict floor + tripwire),
-  // never the lenient default — an empty strategy is at least as suspect as a typo, so it gets the same
-  // strict treatment, not a looser one.
+  // UNKNOWN token → fail CLOSED on BOTH gates. `strategy` is REQUIRED (tsc-enforced), so a caller
+  // that omits it fails the COMPILE rather than silently taking the permissive '*' default; an
+  // empty / drifted / unrecognized token canonicalizes to null here and takes the strict floors.
   const canonical = resolveCanonicalStrategy(strategy);
   if (canonical === null) {
     recordUnknownStrategyAtGate(assetClass, strategy);
-    return getCachedNumberRequired('expectancy_gates', 'min_rr_unknown_floor', { exchange: '*', assetClass, strategy: '*', regime: '*' });
+    return {
+      floorPct,
+      // The strictest floor in the class. min_rr is a MINIMUM so its strict value is the class MAX;
+      // reach_atr_max is a MAXIMUM so its strict value is the class MIN. Opposite directions, same
+      // intent — a drifted token can never be treated more permissively than a known one.
+      minRR:       getCachedNumberRequired('expectancy_gates', 'min_rr_unknown_floor',        _classKey),
+      reachAtrMax: getCachedNumberRequired('expectancy_gates', 'reach_atr_max_unknown_floor', _classKey),
+    };
   }
-  return getCachedNumberRequired('expectancy_gates', 'min_rr', { exchange: '*', assetClass, strategy: canonical, regime: '*' });
+
+  // Most-specific-wins (`scoreRowForKey`): a seeded (assetClass, canonicalStrategy) row outranks the
+  // per-class '*' row, and a strategy with no seeded row inherits the class default. That inheritance
+  // is why seeding four reach rows does not throw for the other fifteen strategies.
+  const _strategyKey = { exchange: '*', assetClass, strategy: canonical, regime: '*' };
+  return {
+    floorPct,
+    minRR:       getCachedNumberRequired('expectancy_gates', 'min_rr',        _strategyKey),
+    // reorg-B2 (Piece C): the reachability bound (c·√H). Still PATH-invariant — what changed is that
+    // `H` is now the STRATEGY's horizon rather than one horizon assumed for the whole asset class.
+    reachAtrMax: getCachedNumberRequired('expectancy_gates', 'reach_atr_max', _strategyKey),
+  };
 }
+
 
 export function getMinROIForRegime(regime: string, assetClass: string): number {
   // B72: read regime-specific ROI threshold from module_constants under

@@ -23,10 +23,19 @@
  *    to manufacture RR (Langston Step-2): the stop sits at structure; squeezing it plants it in noise.
  *  - REACHABILITY GATE (Piece C): `atrsToTarget = (target' − entry) / ATR ≤ reachAtrMax` (the √H-scaled
  *    reachable bound, c·√H). A pair whose volatility can't physically traverse the (possibly lifted)
- *    target within the ATR horizon is dropped (`unreachable`). **Reachability is PATH-INVARIANT by
- *    design** — it is a FEASIBILITY check, not a quality bar, so it is per-CLASS (BTC vs xStock ATR
- *    scales genuinely differ) but NOT per-filterPath: a VTS-relaxed path lowers QUALITY floors to widen
- *    learning data, but an unreachable target is garbage data for VTS too, not a softer pass (Langston).
+ *    target within the ATR horizon is dropped (`unreachable`). **Reachability stays PATH-INVARIANT**
+ *    — a VTS-relaxed path lowers QUALITY floors to widen learning data, but an unreachable target is
+ *    garbage data for VTS too, not a softer pass (Langston).
+ *    ** B-GEOMETRY-REACH-BASELINE (OBJ-A) CHANGED THE KEYING, AND THIS PARAGRAPH USED TO SAY THE
+ *    OPPOSITE.** It read: *"it is a FEASIBILITY check, not a quality bar, so it is per-CLASS (BTC vs
+ *    xStock ATR scales genuinely differ)."* The premise still holds — ATR scales do differ by class,
+ *    and `c` is class-dependent because the two classes measure ATR on different bar lengths (crypto
+ *    60-min, xStock 15-min). What that argument does NOT establish is the part the code relied on:
+ *    that `H` is a property of the CLASS. It is not. Measured per strategy on crypto, median holds
+ *    run from 1.8 h to 15.4 h, so ONE ceiling was 1.5-2.0x looser than four strategies' own horizons.
+ *    `reach_atr_max` is therefore now resolved per-(strategy × class), most-specific-wins, with an
+ *    unseeded strategy inheriting the class default. It remains a FEASIBILITY check and remains
+ *    path-invariant; only the horizon it assumes became a per-strategy fact instead of a per-class one.
  */
 
 export type TargetNormalizeInput = {

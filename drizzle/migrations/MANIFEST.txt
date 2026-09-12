@@ -199,3 +199,4 @@
 2026-09-03-b-xstock-feed-sanity.sql
 2026-09-11-b-ohlc-frame-guard.sql
 2026-09-11-b-xstock-fee-contract.sql
+2026-09-13-b-geometry-reach-baseline-per-strategy-reach.sql
