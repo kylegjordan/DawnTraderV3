@@ -12,6 +12,7 @@ EXPECTED (stated before the run):
   C5 zero parts                                            -> exit 2 'holds no parts'
   C6 a part not ending in exactly one newline             -> exit 2 naming the file, 'exactly one newline'
   C7 a part with an obligations frontmatter block         -> exit 0; the frontmatter is NOT in composed body
+  C8 --compose must not BLOCK on an open stdin (the live ssh hang) -> exits promptly, composes
   M1 mutant: pending_sha dropped from the admissible set  -> C4's recompose then FALSE-ALARMS (exit 4)
 """
 import hashlib, json, os, shutil, subprocess, sys
@@ -161,6 +162,22 @@ rc, out = compose(h)
 mem = read(h)
 v("C7", rc == 0 and b"obligations:" not in mem and b"first retraction" in mem and strip_last_stamp(mem) == BASE_B,
   "exit %d, frontmatter-hidden %s, body==orig %s: %s" % (rc, b"obligations:" not in mem, strip_last_stamp(mem) == BASE_B, out.strip()[:60]))
+
+# C8 --compose must NOT block on an open stdin. THE LIVE HANG: invoked over ssh with no redirection, the channel
+# never sends EOF, so a stdin-reading compose blocks forever. Leave stdin an open pipe (never closed/written) and
+# require the process to exit promptly on its own.
+h = fresh_home()
+_env = dict(os.environ, LANGSTON_HOME=h, LANGSTON_MEMORY_READER=READER)
+_env.pop("LMW_TEST_CRASH_BEFORE_STATE", None)
+_proc = subprocess.Popen(interp(W) + [W, "--compose", "--by", "t", "--reason", "t"],
+                         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_env)
+try:
+    _proc.wait(timeout=20)
+    _hung = False
+except subprocess.TimeoutExpired:
+    _proc.kill(); _proc.wait(); _hung = True
+v("C8", (not _hung) and _proc.returncode == 0 and strip_last_stamp(read(h)) == BASE_B,
+  "hung %s, exit %s, composed %s" % (_hung, _proc.returncode, strip_last_stamp(read(h)) == BASE_B))
 
 # M1 mutant: drop pending_sha from do_compose's admissible set -> C4 recompose false-alarms.
 # The `admissible = ...` line appears in both do_compose and do_direct_write, so anchor the mutation on the line

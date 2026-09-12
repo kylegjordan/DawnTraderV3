@@ -626,8 +626,12 @@ def run(argv, stdin_bytes):
     #    file with parts in place REFUSES rather than falling open onto MEMORY.md and stranding the parts. Before the
     #    migration (no parts dir) the legacy MEMORY.md path is unchanged, so the tool behaves exactly as today and the
     #    self-test (no parts) exercises the legacy path.
-    parts_present = os.path.isdir(PARTS_DIR) and any(
-        not n.startswith(".") and os.path.isfile(os.path.join(PARTS_DIR, n)) for n in os.listdir(PARTS_DIR))
+    try:
+        parts_present = os.path.isdir(PARTS_DIR) and any(
+            not n.startswith(".") and os.path.isfile(os.path.join(PARTS_DIR, n)) for n in os.listdir(PARTS_DIR))
+    except OSError as e:
+        raise Refused(6, "REFUSED: cannot read the parts directory %s (%s) - fix its permissions; nothing was "
+                         "written." % (PARTS_DIR, type(e).__name__))
     state_live = bool(read_compose_state().get("last_written_sha"))
     if parts_present or state_live:
         if not state_live:
@@ -1175,8 +1179,12 @@ def self_test():
 def main():
     if sys.argv[1:] == ["--self-test"]:          # FINDING-1: only as the sole argument, never a value elsewhere
         return self_test()
+    argv = sys.argv[1:]
+    # ⛔ --compose reads NO stdin: it composes from the parts. Reading stdin here blocked a `--compose` invoked over
+    #    ssh with no redirection (the channel never sends EOF) - a live hang the fixture-always-passes-stdin tests missed.
+    stdin_bytes = b"" if "--compose" in argv else sys.stdin.buffer.read()
     try:
-        print(run(sys.argv[1:], sys.stdin.buffer.read()))
+        print(run(argv, stdin_bytes))
         return 0
     except Refused as r:
         print(str(r), file=sys.stderr)
