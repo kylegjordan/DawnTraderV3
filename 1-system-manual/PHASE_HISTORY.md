@@ -1191,3 +1191,16 @@ Kyle asked every session to bring its task list up to date at every batch close.
 **The fix reorders one decision:** if a reply starts with your name, it is yours, whatever notes ride on the end — and the wake line now says who the alert notes are for. It was proved by replaying a week of real replies before and after, and by checking every newly woken reply against the message it answered. Then it worked for real: Langston's next reply of exactly that kind woke the right session.
 
 **The lesson worth keeping is about installing laptop tools.** Copying the fixed file changes nothing for a session until its watcher restarts, so each session's restart was checked from the process itself rather than assumed — which is how we found that Old Claude had no watcher running at all.
+
+
+### 2026-09-11 — B-XSTOCK-FEE-CONTRACT (CC-B, `#1010`, plan row 2.4-FEE) — ⏳ OBSERVATION
+
+**We were charging tokenized stocks the crypto fee schedule.** Taking liquidity was modelled at 0.80% when Kraken charges 0.10%, and providing it was modelled as a 0.40% cost when the venue actually PAYS 0.02%. Because the fee feeds the gate that decides what is worth trading, this was not just wrong bookkeeping — **every xStock candidate for three months was judged against a cost eight times too high**, and the cheapest way to trade one was priced as the most expensive.
+
+**The fix went live on 2026-09-11 at 20:09:47Z** in one restart shared with the price-side batch, each change recorded at its own named boundary. Correcting the rates also meant widening a startup safety check that refused to start the server on a negative fee — a rebate is a real thing on two Kraken products, so the rail now accepts a signed maker fee while still refusing nonsense.
+
+**Both halves were then observed in booked money.** New xStock trades charge 0.10%, and at 00:16 the next morning a Salesforce position closed as a liquidity provider and was PAID 3.4 cents — the first negative fee the system has ever booked, at exactly the -0.02% the venue quotes. The control is eight weeks of the same column holding the old 0.40% for all 92 earlier provider-side closes.
+
+**The lesson worth keeping is about the check, not the fix.** The batch's own verification query filtered on when a trade OPENED, so it reported nothing while the database held the proof — a closing fee is decided at close, so the first row to carry a new closing rate always opened under the old one. Langston then ruled that documenting a weak counter is not a fix: a verdict counter that increments identically on a real failure and a benign row has no discriminating power and teaches the next reader to ignore it. It was split into two populations, each printing its denominator.
+
+**xStock learning restarts from this instant** — the fees it had learned under were wrong, so no xStock aggregate may span the boundary. The prediction that xStocks will now almost never choose to post a passive order is under a three-week observation window.

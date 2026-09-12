@@ -90,7 +90,9 @@ Kyle opened Kraken Pro's own **Fees** dialog on three live markets while signed 
 
 ---
 
-## 2. ⛔⛔⛔ PRO xSTOCKS — A COMPLETELY DIFFERENT SCHEDULE, AND WE DO NOT IMPLEMENT IT
+## 2. ✅ PRO xSTOCKS — A COMPLETELY DIFFERENT SCHEDULE, AND **AS OF 2026-09-11 WE IMPLEMENT IT**
+
+> ✅✅ **IMPLEMENTED 2026-09-11 20:09:47Z — `B-XSTOCK-FEE-CONTRACT` (`#1010`), deployed `b597f1bf2`.** The heading read *"AND WE DO NOT IMPLEMENT IT"* until that deploy. `fee_model|*|xstock_spot` now holds **taker `0.0010` / maker `-0.0002`**, matching the rung-1 row below; `crypto_spot` is untouched at `0.008 / 0.004`. **Confirmed in booked money 2026-09-12 00:16:31Z:** an xStock maker exit paid **`-0.000200`** (`CRM/USD`, `exit_fee -0.03387422`), against a control of 92 pre-deploy maker exits all at `+0.004000`. ⚠️ **The table immediately below this point is the DEFECT RECORD, not the current state.**
 
 > ✅ **AUTHENTICATED**, from `pro.kraken.com/app/trade/xstocks-nvda-usd#dialog/fee-level`, 2026-09-06. Account is on **rung 1**.
 
@@ -104,7 +106,7 @@ Kyle opened Kraken Pro's own **Fees** dialog on three live markets while signed 
 ⭐ **THE ORDER FORM QUOTES IT PER ORDER, NOT JUST THE SCHEDULE PAGE:** the NVDAx market header reads `FEES  Maker rebate  −0.02% / 0.10%` and a live limit order's own estimate reads `Est. trading fee   Maker rebate   −0.0001 USD`.
 *(The public page footnotes the rung-2 row as institutional: 30-day spot-crypto **and** xStocks volume over $100M plus activity on Kraken Futures, Custody or Staked. **The in-app dialog states the volume threshold only.**)*
 
-⇒ ⛔⛔ **WE CHARGE xSTOCK THE CRYPTO SCHEDULE. MEASURED in `module_constants`, unbounded across every scope, 2026-09-06:**
+⇒ ✅ **FIXED 2026-09-11. WHAT FOLLOWS IS WHAT WE CHARGED BEFORE THAT DATE — measured in `module_constants`, unbounded across every scope, 2026-09-06:**
 
 | | our `fee_model` value | Kraken's rate, **account-confirmed** | error |
 |---|---|---|---|

@@ -915,3 +915,16 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS — VERIFIED, NOT ASSUMED:** `grep -rnF 'langston-memory/systemd'` across the tree (excluding `node_modules`, `.git`) returned **zero** references. **Positive control:** the same search for `comms-infra/systemd` finds it named in 2 files. No install script, no verifier pair and no unit points at the twin directory. Langston's own `dt-review grep` returned zero hits for it as well.
 
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/langston-memory-systemd.<file>.20260911.removed` (four files, byte-for-byte from the ref). Git history is authoritative.
+
+
+## 2026-09-11 — the whole `cost_model` module (5 `module_constants` rows) + its `b72-warmup` prefetch entry — B-XSTOCK-FEE-CONTRACT (`#1010`, CC-B)
+
+**WHAT WAS REMOVED.** The `module_constants` module `cost_model`, **all five rows** — `default_avg_return 0.005`, `default_slippage 0.0005`, `default_spread 0.0010`, `default_taker_fee 0.0026`, `max_cost_bound 0.01` — all written 2026-05-05 by `b72-step3-commit-b`. And the `'cost_model'` entry in `server/startup/b72-warmup.ts`'s `PREFETCH_MODULES`.
+
+**WHY REMOVED.** Every one of the five had **zero production readers** (per-constant census at the ref; the only hit was a comment at `cost-metrics.ts:94`). Two were already filed as cleanup — `#133` (orphan `default_avg_return`) and `#134` (stale prefetch entry), open since 2026-05-22 — and `#133`'s own recorded fix shape named this batch: *"bundle into the next batch that touches `cost_model` rows."* Left in place, `max_cost_bound 0.01` also **contradicted** the code's live `MAX_COST_BOUND = 0.02`, so the module was a stale second opinion about cost that nothing read and anyone could have mistaken for the source.
+
+**BLAST RADIUS — VERIFIED, NOT ASSUMED.** Per-constant reader census at the ref found zero production consumers; **positive control: the same census loop found 7 reads of `spot_taker_fee`**, so the instrument was shown returning a known positive before its silence was trusted. Rule 18 / §9.5(a-ii) deletion test applied: zero callers **and** no surviving reader of any state the rows fed.
+
+**⛔ THE ORDERING CONSTRAINT, recorded because it is a boot hazard, not a preference.** `b72-warmup` **throws on any prefetched module with zero rows** — *"server should not start."* So the row deletion and the prefetch-entry removal **had to ship in the same deploy**, and they did (`b597f1bf2`, 2026-09-11 20:09:47Z). Forward deploy is safe because `dt-deploy` migrates before it restarts. **ROLLBACK IS NOT SAFE BY DEFAULT: restoring a pre-batch sha after this migration ran would re-list `cost_model` against an empty module and REFUSE BOOT.** The rollback migration therefore re-inserts the five rows, and **the rollback procedure runs it BEFORE the code rollback** — stated in the migration's own header and in `B_XSTOCK_FEE_CONTRACT_CHANGE_LIST.md` section 9.5.
+
+**ARCHIVE.** These were database rows, not files: the authoritative restore is `drizzle/migrations/2026-09-11-b-xstock-fee-contract-rollback.sql`, which re-inserts all five with their original values and `updated_by`. The deleting statement is `2026-09-11-b-xstock-fee-contract.sql` P4. Git history is authoritative for the `b72-warmup.ts` line.

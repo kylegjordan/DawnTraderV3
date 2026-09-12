@@ -4065,3 +4065,20 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 - OLD Claude had no watcher at all; a system alert with `owner=CC-A` was raised.
 - "Opens with the name" is reliable only on non-alert replies, where the bridge prefixes the addressee.
 **STATUS: FIXED, installed 2026-09-11.**
+
+
+## 2026-09-11 — xStock was charged the crypto fee schedule (B-XSTOCK-FEE-CONTRACT, `#1010`, CC-B)
+
+**DEFECT.** `fee_model|*|xstock_spot` held `spot_taker_fee 0.008` and `spot_maker_fee 0.004` — byte-identical to the crypto rows, written 2026-06-10 by `b45-tier1-seed` and never touched. Kraken Pro's xStocks schedule is a **separate two-rung ladder**: taker **0.10%**, maker **-0.02%, a REBATE**. So taker was **8x too high** and maker carried the **wrong SIGN**.
+
+**REACH — A SELECTION DEFECT, NOT ONLY A BOOKING ONE.** The taker rate feeds `computeNetExpectancyKernel`, which feeds the SQE's `netEV <= 0` admission gate, the VTS net-EV floor and the RTB rank. Every xStock candidate for three months was graded against a cost eight times the real one. **Signal GENERATION is fee-free** (entry/stop/target come from price, ATR and structure), so the candidate set was unaffected — only the filtering and ranking. **Decisions are not recomputable** (a refused candidate was never simulated); stored outcomes are.
+
+**FIX.** Rates corrected through the `module_constants` write path · boot rail generalised to **taker `(0, 0.05]`, maker `[-0.001, 0.05]`, maker <= taker, finite** (the old rail refused to boot on a rebate; futures maker also turns negative from rung 11) · the 2026-06-11 seed migration superseded in place so a fresh database cannot re-create it · second `fee_model` reader routed through the single resolver · `cost_model` module deleted (`#133`/`#134`) · `calibration_ledger` xStock fee rows corrected · calibration epochs stamped **xStock only** (`vts 6->7`, `paper_sim 3->4`, class-scoped `live` created at `3`).
+
+**VERIFIED IN BOOKED MONEY.** Taker: VTS xStock `0.001000` x14 post-deploy, zero rows at any other stamped rate, against a 7-day control of `0.008000` x117. Rebate: `CRM/USD` closed maker 2026-09-12 00:16:31.648Z at `exit_fee -0.03387422`, implied **-0.000200** — the first negative fee in the system's history — beside `NEM/USD` closing taker at implied **0.001000**. Control: 92 pre-deploy xStock maker exits spanning eight weeks, every one `+0.004000`.
+
+**RESIDUALS, STATED.**
+- **P8 and Arm B are three-week observation windows** opened at the deploy; **17 alias symbols excluded** from both verdicts until `#1024` (their historical share, 1.09%, exceeds the 1.0% PASS line, so a flip on restoring them makes the arm INCONCLUSIVE-EXTEND, never PASS on the remainder).
+- **xStock learning resets at this instant** — no xStock aggregate may span it — and that coincides with a looser EV gate, so the two effects cannot be separated in the window.
+- **The corrected verification SQL is at `11e39e5b6` and later, NOT in the deployed `b597f1bf2`** — analysis script, not runtime.
+**STATUS: FIXED, deployed 2026-09-11 20:09:47Z; observation open.**

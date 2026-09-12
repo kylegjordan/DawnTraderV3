@@ -996,3 +996,21 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 **Langston:** Step 1 approved with revisions · Step 2 approved (5 conditions) · Step 4 APPROVED at `c05e9d1fa` · Step 8 CONFIRMED, re-derived · FINDING-A folded at `32780211d`, FINDING-D at `0df01c687`. CI green 4/4 per job on the covering run `34623482499`.
 **Spawned:** `#1043` `B-READ-MODEL-BLOB-VERIFY` (row 4.51a). **Record:** `B_WAKE_LEAD_NAME_COMPLETION_REPORT.md`.
+
+
+### 2026-09-11 — B-XSTOCK-FEE-CONTRACT (CC-B, `#1010`, plan row 2.4-FEE) — ⏳ OBSERVATION (deployed, both legs verified)
+
+**WHAT.** xStocks were charged the CRYPTO fee schedule: taker `0.008` (8x the venue's `0.0010`) and maker `0.004` where Kraken Pro pays a **rebate** of `-0.0002`. Since the fee feeds `computeNetExpectancyKernel`, this was a **selection** defect, not only a booking one — every xStock candidate for three months was graded against a cost that was eight times too high, and the maker leg carried the wrong SIGN.
+**CHANGE-CLASS** `architecture` (Langston, 2026-09-06). **Deployed `b597f1bf2` 2026-09-11 20:09:47Z**, one restart shared with `B-PRICE-SIDE-BY-JOB` OBJ-7, two named boundaries.
+
+**WHAT CHANGED.** `xstock_spot` fees corrected through the `module_constants` write path · the `b72-warmup` boot rail generalised to **taker `(0, 0.05]`, maker `[-0.001, 0.05]`, maker <= taker, finite** (the old `(0, 0.05]` refused to boot on a rebate, and futures maker also turns negative from rung 11) · the 2026-06-11 seed migration superseded in place so a fresh database cannot re-create the defect · the second `fee_model` reader (`slippage-fee-model.resolveFee`) routed through the single resolver · **the whole `cost_model` module deleted** (5 rows, zero production readers — `#133`/`#134`) with its `b72-warmup` prefetch entry removed in the same deploy · `calibration_ledger` xStock fee rows corrected to `0.10%` / `-0.02%` · calibration epochs stamped **xStock only**.
+
+**MEASURED.**
+- **Taker leg:** post-deploy VTS xStock `entry_fee_rate 0.001000` x14 with **zero rows at any other stamped rate**; 7-day pre-deploy control `0.008000` x117. UI: `Taker (0.10%)`, $0.15 on $150; a pre-deploy row on the same screen still reads `Taker (0.80%)`, $1.20.
+- **Rebate leg:** the first negative fee in the system's history — `CRM/USD` closed maker 2026-09-12 00:16:31.648Z, `exit_fee -0.03387422`, implied **`-0.000200`**; `NEM/USD` closed taker one second earlier at implied **`0.001000`**. Both ENTERED pre-deploy at `0.008000`, so each row carries the old fee in and the new fee out.
+- **Control (positive-control grade, Langston's enumeration):** xStock maker exits fall into exactly two values — `+0.004000` x92 spanning 2026-07-17 -> 2026-09-10, and `-0.000200` x1.
+- **Crypto unchanged, with its denominator:** rows still on their original `b45-tier1-seed` timestamps; the post-deploy claim rests on **19 stamped VTS rows of 533** (514 carry a NULL rate — twins/shadow rows), not on 533.
+- **Epochs:** `xstock_spot` `vts 6->7`, `paper_sim 3->4`, class-scoped `live` CREATED at `3`; crypto and wildcard unmoved.
+
+**Langston:** Step 1 approved · Step 2 approved 16:14Z with conditions A/B/C · Step 4 APPROVED 17:50Z at `eb5b7831d` · deploy ruling 19:48Z (one restart, two boundaries, 17-symbol alias exclusion, flip rule) · **Step 8 CONFIRMED 2026-09-12 00:32Z, re-derived on staging**, with one condition folded before close: the verdict counter split into entry-side and close-side populations, each printing its denominator.
+**⏳ OPEN BY DESIGN:** P8 (maker-share prediction) and Arm B (EV-gate admission) are three-week observation windows opened at the deploy; 17 alias symbols excluded from both verdicts until `#1024`. **Record:** `B_XSTOCK_FEE_CONTRACT_CHANGE_LIST.md` sections 9-10.

@@ -18,6 +18,7 @@
 
 ## A. In flight
 
+- **`B-XSTOCK-FEE-CONTRACT` (`#1010`, plan row 2.4-FEE, change-class `architecture`) — ⏳ OBSERVATION.** Deployed `b597f1bf2` 2026-09-11 20:09:47Z; Step 8 CONFIRMED by Langston 2026-09-12 00:32Z. Both legs verified in booked money (taker `0.001000` ×14; first-ever negative fee `CRM/USD` `-0.000200` at 00:16:31Z, 92-row control at `+0.004000`). **What remains:** the Step-11 completion report, then the two three-week observation windows — P8 (maker share ≤ 1.0% at n≥300, zero class-(iii)) and Arm B (EV-gate admission), both with the 17 alias symbols excluded until `#1024`. **Record:** `Change Lists/B_XSTOCK_FEE_CONTRACT_CHANGE_LIST.md` §9-§10.
 | item | state | record |
 |---|---|---|
 | **`B-XSTOCK-FEE-CONTRACT`** (`#1010`) | **STEP: 3 of 11 · NEXT STEP: 4 of 11.** Step 1 approved with five rulings; Step 2 (audit and plan, `B_XSTOCK_FEE_CONTRACT_PRE_AUDIT.md` r5) approved by Langston 2026-09-11 16:14Z with three rulings — implementation under way. Scope r1 written 2026-09-11 on Kyle's pivot directive. xStock is charged the crypto schedule (taker `0.008` vs account-confirmed `0.0010`; maker `0.004` vs `−0.0002`). Nine objectives: rates, a boot rail that accepts a rebate, the seed, one fee resolver, a per-site sign census, xStock-only epoch bump, the stale stored copies, subject-vs-probe tests, and a read-only shadow-pool re-rank. Card `PVTI_lAHODmulEM4BfQP4zg6h554`. | `B_XSTOCK_FEE_CONTRACT_SCOPE.md` · plan row `2.4-FEE` |
