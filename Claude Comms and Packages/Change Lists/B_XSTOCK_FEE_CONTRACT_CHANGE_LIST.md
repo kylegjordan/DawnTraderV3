@@ -427,3 +427,28 @@ PSQL_EXIT=0
   - **Recent cadence** (xStock paper closes over the last 14 days): **5 maker exits, all at 00:15Z** (the last on 2026-09-10 00:15Z), and 24 taker exits.
   - ⇒ **The earliest plausible observation is the 00:15Z window on 2026-09-12**, unless the xStock weekend shutdown (Friday close to Sunday open, `CLAUDE.md` rule 17) intervenes, in which case it comes after Sunday's reopen.
   - VTS xStock maker entries are predicted to be rare after the fix (P8), so VTS is not the expected first source.
+
+### 9.9 STEP 7 — the REBATE leg, observed 2026-09-12 00:16Z (both legs now verified)
+
+**The first xStock negative fee in the system's history was booked at 00:16:31Z**, on a maker EXIT, exactly where §9.8 predicted it (a pre-deploy taker entry closing after the deploy; exit fees are resolved at close from the live fee rows).
+
+| row | entry mode / rate | exit mode | exit fee | implied exit rate | closed |
+|---|---|---|---|---|---|
+| **CRM/USD** | taker 0.008000 (pre-deploy) | **maker** | **-0.03387422** | **-0.000200** | 2026-09-12 00:16:31.648+00 |
+| NEM/USD | taker 0.008000 (pre-deploy) | taker | +0.15095990 | **0.001000** | 2026-09-12 00:16:30.482+00 |
+
+- **Both legs of the new contract are now observed in booked money**, one second apart, on the same close cycle: the taker leg at 0.0010 and the maker leg at -0.0002.
+- **CONTROL (the instrument can hold the other value):** 92 pre-deploy xStock maker exits, min rate **+0.004000**, max **+0.004000**, last 2026-09-10 00:15:12.837+00. The column carried the OLD maker rate for every one of them, so the negative value is the fee change and not a column that was always signed.
+- **Crypto control:** zero crypto closes in the window, so crypto is unchanged by absence of opportunity rather than by measurement — the crypto evidence is section (1)'s VTS entries (maker 0.004000 x 4, taker 0.008000 x 15), not this table.
+- **Entry-side rebate:** still unobserved and expected to stay so. P8 predicts xStock maker ENTRIES fall to about zero now that taking costs 0.10%, so the entry leg of the rebate is predicted-absent, not missing.
+
+#### ⚠️ CORRECTION — this batch's own verification query could not see the evidence it was written to find
+`scripts/analysis/b_xstock_fee_contract_verify.sql` sections (2) and (3) filtered on `opened_at >= :deploy_at` only. **Both rows above OPENED before the deploy**, so the committed query returned `0 rows` and all-zero verdict counts against a database that held the pass. The finding came from a separate ad-hoc query, then was reproduced by fixing the committed one.
+
+- **What was wrong:** an exit fee is resolved at CLOSE, so the row that first carries a new exit rate is by construction one that opened under the old one. Filtering on the OPEN time excludes exactly the population the rebate check needs.
+- **The fix (same file):** sections (2) and (3) now admit a row when `opened_at >= deploy_at OR closed_at >= deploy_at`; section (2) prints the implied rate of each leg; section (3) splits the maker verdict into `xstock_maker_entry_*` and new `xstock_maker_exit_rebate` / `xstock_maker_exit_no_rebate` counters.
+- **Re-run of the fixed file** (staging, `deploy_at` = 2026-09-11T20:09:47Z): section (2) returns the two rows above and section (3) reads `xstock_maker_exit_rebate = 1`, `xstock_maker_exit_no_rebate = 0`, `crypto_unexpected_rate = 0`.
+- **`xstock_taker_wrong_rate = 2` is the two rows themselves and is NOT a failure:** that counter tests `entry_fee_rate`, and both entries are pre-deploy taker fills correctly stamped 0.008000. **The counter is scoped to the wrong population for a close-side read** — it is left as-is and read with this note, because narrowing it to post-deploy ENTRIES only would silently drop the pre-deploy-entry rows that section (2) exists to show. Read `xstock_taker_wrong_rate` against section (2)'s `opened_at` column, never alone.
+- `MISTAKE: wrong-object [B-XSTOCK-FEE-CONTRACT] - the verify query filtered on open time for a fee that is resolved at close, so it returned zero against a database holding the pass.`
+
+**Step 7 verdict: PASS on both legs**, with the query correction above stated rather than quietly patched.

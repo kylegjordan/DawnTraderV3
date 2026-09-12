@@ -44,27 +44,35 @@ WHERE opened_at >= :'deploy_at'::timestamptz
 GROUP BY 1, 2, 3, 4
 ORDER BY 1, 2, 3, 4;
 
-\echo === (2) AFTER the deploy: xStock paper fills with the booked FEE AMOUNTS (a maker entry must be negative) ===
-SELECT 'open' AS state, symbol, chosen_entry_mode, entry_fee_rate, entry_fee, NULL::numeric AS exit_fee, NULL::text AS exit_fee_mode, opened_at
+\echo === (2) AFTER the deploy: xStock paper fills with the booked FEE AMOUNTS, and the implied rate of each leg ===
+-- ⛔ A CLOSE counts even when the position OPENED before the deploy: the exit fee is resolved at close from the live
+-- fee rows, so a pre-deploy entry with a post-deploy maker exit is exactly where the rebate first appears. An
+-- opened_at-only filter misses those rows — it did on the first Step-7 read.
+SELECT 'open' AS state, symbol, chosen_entry_mode, entry_fee_rate, entry_fee, NULL::numeric AS exit_fee, NULL::text AS exit_fee_mode,
+       NULL::numeric AS implied_exit_rate, opened_at, NULL::timestamptz AS closed_at
 FROM active_open_positions
 WHERE asset_class = 'xstock_spot' AND opened_at >= :'deploy_at'::timestamptz
 UNION ALL
-SELECT 'closed', symbol, chosen_entry_mode, entry_fee_rate, entry_fee, exit_fee, exit_fee_mode, opened_at
+SELECT 'closed', symbol, chosen_entry_mode, entry_fee_rate, entry_fee, exit_fee, exit_fee_mode,
+       round((exit_fee / NULLIF(quantity * exit_price, 0))::numeric, 6), opened_at, closed_at
 FROM closed_trades
-WHERE asset_class = 'xstock_spot' AND opened_at >= :'deploy_at'::timestamptz
-ORDER BY opened_at
+WHERE asset_class = 'xstock_spot' AND (opened_at >= :'deploy_at'::timestamptz OR closed_at >= :'deploy_at'::timestamptz)
+ORDER BY 9
 LIMIT 50;
 
 \echo === (3) AFTER the deploy: the verdict counts ===
 SELECT
   count(*) FILTER (WHERE asset_class = 'xstock_spot') AS xstock_paper_fills,
-  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode = 'maker' AND entry_fee < 0) AS xstock_maker_negative_fee,
-  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode = 'maker' AND entry_fee >= 0) AS xstock_maker_nonnegative_fee,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode = 'maker' AND entry_fee < 0) AS xstock_maker_entry_negative_fee,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode = 'maker' AND entry_fee >= 0) AS xstock_maker_entry_nonnegative_fee,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND exit_fee_mode = 'maker' AND closed_at >= :'deploy_at'::timestamptz AND exit_fee < 0) AS xstock_maker_exit_rebate,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND exit_fee_mode = 'maker' AND closed_at >= :'deploy_at'::timestamptz AND exit_fee >= 0) AS xstock_maker_exit_no_rebate,
   count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode IS DISTINCT FROM 'maker' AND entry_fee_rate IS DISTINCT FROM 0.0010) AS xstock_taker_wrong_rate,
   count(*) FILTER (WHERE asset_class = 'crypto_spot' AND entry_fee_rate NOT IN (0.008, 0.004)) AS crypto_unexpected_rate
 FROM (
-  SELECT asset_class, chosen_entry_mode, entry_fee_rate, entry_fee, opened_at FROM active_open_positions
+  SELECT asset_class, chosen_entry_mode, entry_fee_rate, entry_fee, NULL::numeric AS exit_fee, NULL::text AS exit_fee_mode,
+         NULL::numeric AS quantity, NULL::numeric AS exit_price, opened_at, NULL::timestamptz AS closed_at FROM active_open_positions
   UNION ALL
-  SELECT asset_class, chosen_entry_mode, entry_fee_rate, entry_fee, opened_at FROM closed_trades
+  SELECT asset_class, chosen_entry_mode, entry_fee_rate, entry_fee, exit_fee, exit_fee_mode, quantity, exit_price, opened_at, closed_at FROM closed_trades
 ) p
-WHERE opened_at >= :'deploy_at'::timestamptz;
+WHERE opened_at >= :'deploy_at'::timestamptz OR closed_at >= :'deploy_at'::timestamptz;
