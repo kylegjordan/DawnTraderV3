@@ -2,26 +2,27 @@
 """
 B-KRAKEN-FEE-WATCH (#1011) — extract Kraken's published fee ladders from the live page.
 
-WHY THIS IS A FILE AND NOT AN INLINE PROBE. Six inline attempts at this extraction each failed a
-different way: forward-window scans that crossed table boundaries, a backward scan that returned
-zero, an attachment rule that collapsed four ladders into two, a backslash mangled by the shell
-on its way into a heredoc, and a payload finder that looked for <script type="application/json">
-when the data is not there. Every one of those is a property of scanning a 1.4 MB string with
-offsets and quoting, not of the data. This locates the payload and parses it as JSON.
+WHY THIS IS A FILE. Six inline attempts failed four different ways (forward windows crossing
+table boundaries, a backward scan returning zero, an attachment rule that collapsed four ladders
+into two, a shell-mangled backslash, a payload finder looking at the wrong script type). All were
+properties of scanning a 1.4 MB string with offsets and quoting. This parses JSON as JSON.
 
-WHERE THE DATA ACTUALLY IS (measured 2026-09-12): a plain <script> assigns
-`window.__INITIAL_PROPS__={...}` — a Sanity-style document tree. Fee tables are objects with
-`_type: "paragraphArticleBodyTable"` carrying `field_rows`; each row has `field_cells` and a
-`row_description` such as "Row :: Tier 1" or "Row :: Tier" for the header.
+WHERE THE DATA IS (measured): a plain <script> assigns `window.__INITIAL_PROPS__={...}`, a
+Sanity-style tree. Fee tables are `_type: "paragraphArticleBodyTable"` with `field_rows`; each row
+carries `field_cells` and a `row_description` ("Row :: Tier 1", or "Row :: Tier" for the header).
+Each table sits under a `paragraphAccordionItem` whose `field_title` NAMES it — and that title is
+the ONLY thing distinguishing three ladders with byte-identical header rows.
 
-THE ANCHOR (Langston, Step-1 BLOCKER-1): a ladder is identified by its ENCLOSING TABLE OBJECT and
-its COLUMN NAMES — never by a percentage regex, a fixed column index, or proximity to a string.
-The page carries several Tier-1..Pro-5 ladders that DISAGREE, so "the spot table" cannot be found
-by searching for a rate.
+THE FOUR LADDERS, measured 2026-09-12 (Langston re-derived all of it independently):
+  Cross-platform Fee Tiers  Tier 1 0.40/0.80   17/17 vs reference §1
+  Spot Crypto               Tier 1 0.40/0.80   17/17   <-- PINNED: the product the ladder governs
+  Spot Maker Rebate         Tier 1 0.38/0.80   0/17, maker delta {-0.02} on every rung
+  Futures                   Tier 1 0.02/0.05   (futures pair; spot pair also present)
+`Margin` holds a 113-row Currency/Opening fee/Rollover fee table and NO ladder.
 
-THE CONTROL: at least one ladder must read Tier 1 == (0.40, 0.80) — obtained independently from a
-direct read of the page and from Kyle's authenticated in-account dialog. If none does, the
-extractor is wrong and this REPORTS NOTHING rather than a number.
+⛔ THE ANCHOR: enclosing accordion title (pinned), then column NAME -> index within that table,
+then row LABEL -> rung. Never a percentage regex, never a fixed index, never proximity.
+⛔ THE CONTROL: a ladder must read Tier 1 == (0.40, 0.80). On failure this reports NOTHING.
 """
 
 import argparse
@@ -33,9 +34,12 @@ import urllib.request
 URL = "https://www.kraken.com/features/fee-schedule"
 UA = "Mozilla/5.0 (compatible; DawnTrader-fee-watch/0.1)"
 ASSIGN = "window.__INITIAL_PROPS__="
+PINNED_HEADING = "Spot Crypto"
 
-# 1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md section 1 — transcribed
-# from Kyle's signed-in Kraken Pro Fees dialog, 2026-09-06, 17 rungs.
+# ⚠️ A SECOND COPY of KRAKEN_FEE_SCHEDULE_REFERENCE.md §1 (Langston, r3 defect (c)). Verified
+# equal to §1 on all 17 rungs at 2026-09-12. OBJ-3 grades the PAGE against this dict, so a
+# corrected §1 with a stale dict would report no drift — OBJ-3's verify carries a fixture that
+# edits §1 and must fail. Parsing §1 directly is the standing fix.
 REFERENCE_LADDER = {
     1: (0.40, 0.80), 2: (0.30, 0.60), 3: (0.22, 0.38), 4: (0.20, 0.35), 5: (0.15, 0.30),
     6: (0.12, 0.25), 7: (0.10, 0.22), 8: (0.08, 0.20), 9: (0.06, 0.18), 10: (0.04, 0.15),
@@ -46,7 +50,13 @@ REFERENCE_LADDER = {
 TAG_RE = re.compile(r"<[^>]+>")
 WS_RE = re.compile(r"\s+")
 NUM_RE = re.compile(r"-?\d+(?:\.\d+)?$")
-ROW_RE = re.compile(r"^(Tier|Pro) (\d+)$")
+# BOUNDED (Langston r3 defect (a)): the page labels rungs Tier 1-12 then Pro 1-5. `Tier 99` is
+# not a rung, and leaning on a count of 17 cannot see a duplicate that keeps the count right.
+ROW_RE = re.compile(r"^(?:Tier ([1-9]|1[0-2])|Pro ([1-5]))$")
+
+
+class Fail(Exception):
+    """MEASUREMENT FAILED — raised, never swallowed, never coerced to a number."""
 
 
 def fetch(url):
@@ -56,27 +66,24 @@ def fetch(url):
 
 
 def text_of(value):
-    """Cell text with markup and entities removed. Returns a string; never coerces to a number."""
     s = TAG_RE.sub("", str(value if value is not None else ""))
-    s = (s.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">")
-          .replace("&amp;", "&").replace(" ", " "))
+    for a, b in (("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&"), (" ", " ")):
+        s = s.replace(a, b)
     return WS_RE.sub(" ", s).strip()
 
 
 def rate_of(value):
-    """A percentage cell as a float, or None. Fails to None rather than guessing."""
     s = text_of(value).replace("%", "").replace(" ", "")
     return float(s) if NUM_RE.match(s) else None
 
 
 def extract_payload(html):
-    """Slice window.__INITIAL_PROPS__={...} by balanced scan, honouring strings and escapes."""
     a = html.find(ASSIGN)
     if a == -1:
-        return None, "assignment %r not found" % ASSIGN
+        raise Fail("assignment %r not found" % ASSIGN)
     start = html.find("{", a)
     if start == -1:
-        return None, "no opening brace after the assignment"
+        raise Fail("no opening brace after the assignment")
     depth, in_str, esc = 0, False, False
     for i in range(start, len(html)):
         ch = html[i]
@@ -95,17 +102,18 @@ def extract_payload(html):
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                blob = html[start:i + 1]
                 try:
-                    return json.loads(blob), "parsed %d bytes" % len(blob)
+                    return json.loads(html[start:i + 1])
                 except Exception as exc:
-                    return None, "balanced slice of %d bytes failed to parse: %s" % (len(blob), exc)
-    return None, "unbalanced object from offset %d" % start
+                    raise Fail("balanced slice failed to parse: %s" % exc)
+    raise Fail("unbalanced object from offset %d" % start)
 
 
-def collect_tables(node, out):
-    """Every paragraphArticleBodyTable in the tree, as a list of (row_label, [cell text])."""
+def collect_tables(node, out, title="(none)"):
+    """Walk with an ANCESTOR TRAIL so each table carries its accordion title."""
     if isinstance(node, dict):
+        if node.get("_type") == "paragraphAccordionItem":
+            title = text_of(node.get("field_title")) or title
         if node.get("_type") == "paragraphArticleBodyTable" and isinstance(node.get("field_rows"), list):
             rows = []
             for r in node["field_rows"]:
@@ -115,30 +123,39 @@ def collect_tables(node, out):
                 cells = [text_of(c.get("field_content")) for c in r.get("field_cells", []) if isinstance(c, dict)]
                 rows.append((label, cells))
             if rows:
-                out.append(rows)
+                out.append((title, rows))
         for v in node.values():
-            collect_tables(v, out)
+            collect_tables(v, out, title)
     elif isinstance(node, list):
         for v in node:
-            collect_tables(v, out)
+            collect_tables(v, out, title)
 
 
-def ladder_from(rows):
+def resolve_columns(header):
     """
-    One table -> {header, columns, rungs}. The header row is labelled exactly 'Tier'; column
-    indices come from the header's OWN cell names, so a table that moves its columns still reads
-    correctly (the margin table carries the spot pair at columns 7/8).
+    STRICT (Langston r3 defect (b)): a column is spot or futures because it SAYS so. There is no
+    default-to-spot arm, so OBJ-5's "a column name that does not resolve" can actually fire.
     """
-    header = next((cells for label, cells in rows if label == "Tier"), None)
-    if header is None:
-        return None
     cols = {}
     for idx, name in enumerate(header):
         n = name.lower()
-        if "maker" in n:
-            cols.setdefault("maker_futures" if "futures" in n else "maker_spot", idx)
-        if "taker" in n:
-            cols.setdefault("taker_futures" if "futures" in n else "taker_spot", idx)
+        if "maker" not in n and "taker" not in n:
+            continue
+        leg = "maker" if "maker" in n else "taker"
+        if "futures" in n:
+            cols.setdefault("%s_futures" % leg, idx)
+        elif "spot" in n:
+            cols.setdefault("%s_spot" % leg, idx)
+        else:
+            raise Fail("column %r names a %s leg but neither spot nor futures" % (name, leg))
+    return cols
+
+
+def ladder_from(title, rows):
+    header = next((cells for label, cells in rows if label == "Tier"), None)
+    if header is None:
+        return None
+    cols = resolve_columns(header)
     if "maker_spot" not in cols or "taker_spot" not in cols:
         return None
     mi, ti = cols["maker_spot"], cols["taker_spot"]
@@ -147,59 +164,85 @@ def ladder_from(rows):
         m = ROW_RE.match(label)
         if not m:
             continue
-        n = int(m.group(2))
-        rung = n if m.group(1) == "Tier" else 12 + n
+        rung = int(m.group(1)) if m.group(1) else 12 + int(m.group(2))
+        if rung in rungs:
+            raise Fail("duplicate rung key %d in %r" % (rung, title))   # defect (a)
         if mi < len(cells) and ti < len(cells):
             maker, taker = rate_of(cells[mi]), rate_of(cells[ti])
             if maker is not None and taker is not None:
-                rungs.setdefault(rung, (maker, taker))
-    return {"header": header, "columns": cols, "rungs": rungs}
+                rungs[rung] = (maker, taker)
+    return {"title": title, "header": header, "columns": cols, "rungs": rungs}
+
+
+def match_vector(ladders):
+    """FINDING-1 (Langston): assert ALL FOUR ladders, not only the pinned one. With three tables
+    indistinguishable by header and two by value, a wrong pin is otherwise silent forever."""
+    out = {}
+    for lad in ladders:
+        r = lad["rungs"]
+        hits = sum(1 for k in REFERENCE_LADDER if r.get(k) == REFERENCE_LADDER[k])
+        deltas = sorted({round(r[k][0] - REFERENCE_LADDER[k][0], 4) for k in REFERENCE_LADDER if k in r})
+        out[lad["title"]] = {"match": "%d/%d" % (hits, len(REFERENCE_LADDER)), "maker_deltas": deltas}
+    return out
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default=URL)
     ap.add_argument("--file", help="parse a saved body instead of fetching (mutation tests)")
+    ap.add_argument("--pin", default=PINNED_HEADING)
     args = ap.parse_args()
 
-    html = open(args.file, encoding="utf-8", errors="replace").read() if args.file else fetch(args.url)
-    print("source bytes: %d" % len(html))
+    try:
+        html = open(args.file, encoding="utf-8", errors="replace").read() if args.file else fetch(args.url)
+        print("source bytes: %d" % len(html))
+        payload = extract_payload(html)
 
-    payload, note = extract_payload(html)
-    print("payload: %s" % note)
-    if payload is None:
-        print("MEASUREMENT FAILED: no payload")
-        return 2
+        raw = []
+        collect_tables(payload, raw)
+        print("tables: %d" % len(raw))
 
-    raw = []
-    collect_tables(payload, raw)
-    print("paragraphArticleBodyTable objects: %d" % len(raw))
+        ladders = [l for l in (ladder_from(t, r) for t, r in raw) if l and l["rungs"]]
+        print("ladders with a spot maker/taker pair: %d" % len(ladders))
 
-    ladders = []
-    for rows in raw:
-        lad = ladder_from(rows)
-        if lad and lad["rungs"]:
-            ladders.append(lad)
-    print("ladders with a spot maker/taker column pair: %d" % len(ladders))
+        for lad in ladders:
+            r = lad["rungs"]
+            hits = sum(1 for k in REFERENCE_LADDER if r.get(k) == REFERENCE_LADDER[k])
+            print("   %-28s rungs %2d  Tier1 %-14s %d/17" % (lad["title"][:28], len(r), r.get(1), hits))
 
-    for i, lad in enumerate(ladders, 1):
-        r = lad["rungs"]
-        match = [k for k in REFERENCE_LADDER if r.get(k) == REFERENCE_LADDER[k]]
-        diff = [k for k in REFERENCE_LADDER if k in r and r[k] != REFERENCE_LADDER[k]]
         print("")
-        print("LADDER %d | rungs %d | Tier 1 = %s" % (i, len(r), r.get(1)))
-        print("   header : %s" % lad["header"][:8])
-        print("   columns: %s" % lad["columns"])
-        print("   vs reference section 1: MATCH %d/17 | diverges at %s" % (len(match), sorted(diff)))
+        print("=== OBJ-8 match vector (asserted for ALL ladders) ===")
+        for title, v in match_vector(ladders).items():
+            print("   %-28s %s  maker deltas %s" % (title[:28], v["match"], v["maker_deltas"]))
 
-    ok = [i for i, lad in enumerate(ladders, 1) if lad["rungs"].get(1) == (0.40, 0.80)]
-    print("")
-    print("=== CONTROL: a ladder must read Tier 1 == (0.40, 0.80) ===")
-    if not ok:
-        print("   CONTROL FAILED — the extractor is wrong. Reporting nothing.")
+        # THE PIN: identity is verified by the heading resolving to EXACTLY ONE table.
+        # The 17-rung check is NECESSARY, NOT SUFFICIENT — three ladders satisfy it.
+        pinned = [l for l in ladders if l["title"] == args.pin]
+        print("")
+        print("=== PIN: %r ===" % args.pin)
+        if len(pinned) != 1:
+            print("   GOVERNING-TABLE-IN-DOUBT: heading resolved to %d tables — STOPPING, no re-selection" % len(pinned))
+            return 2
+        r = pinned[0]["rungs"]
+        if len(r) != 17:
+            print("   MEASUREMENT FAILED: pinned ladder has %d rungs, expected 17" % len(r))
+            return 2
+        bad = [k for k in REFERENCE_LADDER if r.get(k) != REFERENCE_LADDER[k]]
+        print("   identity: resolved to exactly one table (necessary AND sufficient for identity)")
+        print("   values  : %d/17 vs reference §1%s" % (17 - len(bad), "" if not bad else " — diverges at %s" % bad))
+
+        ok = [l["title"] for l in ladders if l["rungs"].get(1) == (0.40, 0.80)]
+        print("")
+        print("=== CONTROL: a ladder must read Tier 1 == (0.40, 0.80) ===")
+        if not ok:
+            print("   CONTROL FAILED — reporting nothing.")
+            return 2
+        print("   satisfied by: %s" % ok)
+        return 0
+
+    except Fail as exc:
+        print("MEASUREMENT FAILED: %s" % exc)
         return 2
-    print("   ladders satisfying the control: %s" % ok)
-    return 0
 
 
 if __name__ == "__main__":
