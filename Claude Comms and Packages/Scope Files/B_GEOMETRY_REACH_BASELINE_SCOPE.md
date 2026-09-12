@@ -1,7 +1,7 @@
-# B-GEOMETRY-REACH-BASELINE — SCOPE **r8**
+# B-GEOMETRY-REACH-BASELINE — SCOPE **r10**
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r9, 2026-09-12**
+**change-class: architecture** · **r10, 2026-09-12**
 
 > ⛔⛔ **KYLE RE-SCOPED THIS AND HE WAS RIGHT ON ALL SIX COUNTS. r1–r5 WERE BUILT ON 29 SEPTEMBER PAPER TRADES WHILE 78,304 VTS TRADES SAT UNUSED SINCE 10 MAY.** His words: *"Using paper mode data limits us tremendously."* **I used roughly 0.04 % of the available trade record.**
 > ⛔⛔ **r7 — THE REVERSAL IS RELABELLED A *HYPOTHESIS*, NOT A FINDING (Langston BLOCKER-2, and he is right).** r6 claimed the VTS data shows the ceiling is nearly right and the strategy's target wrong. **It does not show that, because I measured the wrong quantity: `closed_at − opened_at` is time-to-ANY-exit, and the ceiling encodes time-to-TARGET.** `strong_bull_trend`'s 1,652 trades were **all tagged `unreachable`**, so their 15.44 h is the median time to stop-out-or-timeout of trades that mostly never reached 6 ATR. ⇒ **“6 ATR implies 36 h; it resolves in 15.44 h” compares a MODELLED time-to-reach against an OBSERVED time-to-exit-by-other-means. Two different objects.**
@@ -18,7 +18,7 @@
 | 3 | OBJ-2: change live paper behaviour to observe the blocked strategy. | ⛔⛔ **WITHDRAWN AS A DATA-GATHERING STEP — THE EXPERIMENT HAS ALREADY RUN 4,675 TIMES.** | `strong_bull_trend`: **4,717 VTS trades, 4,675 closed, 2026-05-10 → 09-12, at avg target 6.000 / stop 3.000 ATR.** 1,652 closed since 01-08, **every one tagged `unreachable`.** |
 | 4 | Maker share 50 %, from 58 paper trades. | **VTS crypto 18.2 %** (716 maker / 3,938 stamped); **xStock 0.92 %** (19 / 2,072). | `vts_open_trades.chosen_entry_mode` |
 | 5 | OBJ-1: establish the fee basis and read the account rung. | ⚠️ **SHRUNK. The schedule is already documented and the split was already observed.** The xStock 0.92 % appears to satisfy an existing ≤1.0 % observation criterion at n≥300 — **an observation window CC-B already owns and had not read.** | `KRAKEN_FEE_SCHEDULE_REFERENCE` §1–§6; the P8 criterion |
-| 6 | `B-EV-TARGET-PROBABILITY` as a new batch. | ⚠️ **LIKELY DUPLICATES PLANNED WORK — verify before adding.** The scoring rebuild is already the ratified Phase-25 blueprint (`P25_SCORING_STACK_PRESTUDY` PART II: `finalScore` RETIRE, `hybridScore` two-layer model + Platt). | Kyle: *"we have plans to change it in an upcoming batch"* |
+| 6 | `B-EV-TARGET-PROBABILITY` as a new batch. | ✅ **CONFIRMED DUPLICATE — WITHDRAWN, not deferred (§1e(i)).** The scoring rebuild is already the ratified Phase-25 blueprint (`P25_SCORING_STACK_PRESTUDY` PART II: `finalScore` RETIRE, `hybridScore` two-layer model + Platt). | Kyle: *"we have plans to change it in an upcoming batch"* |
 
 ---
 
@@ -115,7 +115,7 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 2. ⭐ **INTENT, VERBATIM — AND THIS IS THE STATEMENT OBJ-A AMENDS.** `signal-target-normalizer.ts:24-29`: *"Reachability is PATH-INVARIANT by design — it is a FEASIBILITY check, not a quality bar, so it is per-CLASS (BTC vs xStock ATR scales genuinely differ) but NOT per-filterPath … (Langston)."*
 3. **DISPOSITION: (2) relevant but needs updating to today's intent.** ⛔ **Per-class keying is a STATED DESIGN, not a storage accident — r6 called it *"the defect"* and that was wrong.** The feasibility framing is sound; it is **silent on horizon being a strategy property**, and that silence is what OBJ-A fills. ⚠️ **So OBJ-A changes the gate's CHARACTER** — from a feasibility statement about pair + horizon into a **per-strategy declared-horizon knob** — which is arguable because a holding horizon genuinely is a strategy property, and which is **why the standing no-looser rule exists.**
 4. ⚠️ **THE VALUE `4.0` IS `INFERRED-FROM-CODE-AND-FORM`, NOT ESTABLISHED, AND MUST NOT QUIETLY FIRM UP.** `P19_REORG_B2_PRE_AUDIT.md:41`'s general rule governs a target distance (`K ≲ c·√H`, `H = 12–24`, `√H ≈ 3.5–4.9`, so 4.0 is in band) — **but its worked example specialises `K` to the FLOOR and outputs a volatility-admission bound, a different quantity. How 4.0 itself was chosen is recorded NOWHERE.**
-✅ **AND THE WITHDRAWN CLAIM WAS LIVE IN A GOVERNED ARTIFACT UNTIL r8 — `PHASE_19_PLAN` row 2.4g-2 asserted in bold that `reach_atr_max = 4.0` ENCODES SIXTEEN HOURS. **CORRECTED in the r8 commit; OBJ-D's first item is DISCHARGED.**** — leaving it is how the next session re-inherits it.
+⛔⛔ **THE WITHDRAWN CLAIM WAS LIVE IN **TWO** GOVERNED ARTIFACTS, AND r9 CLAIMED “DISCHARGED” ON THE STRENGTH OF FIXING ONE.** ⛔ **A false DISCHARGED removes the work from the plan, which is why this blocked rather than annotated.** **NAMED, not counted:** **(1) `PHASE_19_PLAN` row 2.4g-2** — corrected in the r8 commit; **(2) `RUNNING_ISSUES` `#1052`** — which asserted it flatly with no banner **and was frozen at the r1–r5 plan entirely**, including the withdrawn paper-only release and the record of how Kyle's binding objection is met. **Both corrected in the r10 commit; OBJ-D item 1 is discharged ONLY as of r10.**** — leaving it is how the next session re-inherits it.
 
 ---
 
@@ -139,16 +139,20 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 
 **VERIFICATION:** (a) each value re-derived with n, denominator and a **bootstrapped CI**, carrying the **policy-tightening** label; (b) the **implied refusal rate per strategy** published beside each value; (c) medians **split at the F-G-2 deploy boundaries** (`2cc4a03ec` 09-02, `f8870022f` 09-04, 3n OBJ-7 09-11) with both halves shown; (d) the **78-row** and **8.7 %** reconciliations answered; (e) the **absent nine strategies'** disposition stated — silence there is the permissive branch; (f) **negative control** — an unknown strategy token resolves to the *unknown floor*, not to 4.0, asserted by test; (g) the `:24-29` docstring matches shipped behaviour.
 
-### OBJ-C — Read the fee work we already have, and stop re-deriving it
+### OBJ-B — Read the fee work we already have, and stop re-deriving it
 **From §0 rows 4–5.** The schedule is documented; the maker/taker split is observed (**crypto 18.2 %, xStock 0.92 %** on 3,938 / 2,072 stamped VTS rows). **Read the existing observation windows and the 2026-09-06 account capture BEFORE any new measurement.** ⛔ **Only if the account rung is genuinely absent from the record does the authenticated read happen — and then as a sourced rate with a refresh path, never a hardcoded number.**
 **VERIFICATION:** the batch cites the existing findings rather than reproducing them; any gap is named as a gap.
 
-### OBJ-D — Correct the governed artifacts that still carry withdrawn claims, and name the record defects
+### OBJ-C — Name the record defects; fix none of them here
 **From §1d and §1e(ii).** File `B-TRADE-RECORD-JOINABILITY` with **three** instances: the VTS id-space split, the archive's stage split, and **`realDiAtOpen` stamped on 3,685 rows and NULL on every one of them** — a field written and never populated, which is the same class one layer down. ⛔ **Out of scope to fix — it is a schema-and-writer change across four tables.** ✅ **In scope to NAME, because every measurement in this batch and the next hits it.**
 
-⛔ **WITHDRAWN FROM r1–r5:** the paper-only reachability release (§0 row 3 — already run 4,675 times in VTS); the per-strategy exemption (OBJ-A supersedes it); and `B-EV-TARGET-PROBABILITY` **pending a duplication check against the ratified Phase-25 scoring blueprint** (§0 row 6).
+⛔ **WITHDRAWN FROM r1–r5:** the paper-only reachability release (§0 row 3 — already run 4,675 times in VTS); the per-strategy exemption (OBJ-A supersedes it); and `B-EV-TARGET-PROBABILITY` — ✅ **CONFIRMED duplicate of `P25_SCORING_STACK_PRESTUDY` FIX-3 (2026-07-13), verified at §1e(i); the check is DONE, not pending** — against the ratified Phase-25 scoring blueprint** (§0 row 6).
 
 ---
+
+### OBJ-D — Correct the governed artifacts that still carry withdrawn claims
+**From §2 item 4.** ⛔ **NAMED, not counted — a count is not a set.** **(1) `PHASE_19_PLAN` row 2.4g-2** (done, r8); **(2) `RUNNING_ISSUES` `#1052`** (done, r10 — the sixteen-hour assertion, the superseded four-objective plan, and the binding-objection record that rested on the withdrawn release). ✅ **GREP THE CLASS BEFORE FIXING THE INSTANCE** — that is what found the second one, and it is the cure filed as `stacked-correction`.
+**VERIFICATION:** a class grep over `1-system-manual/`, `Claude Comms and Packages/` and `.claude/` for each withdrawn claim returns **zero standing assertions**, run and pasted at close.
 
 ### OBJ-E — Governance
 **Tier-1, unconditional:** completion report · `BATCH_CATALOG` · `PHASE_HISTORY` · `RUNNING_ISSUES` `#1052` · `MEMORY_CC_B` · `PHASE_19_PLAN` row 2.4g-2 · the task-list row (`gov-ledgerrow`).
