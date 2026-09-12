@@ -106,6 +106,18 @@ All restores verified byte-identical.
 
 ---
 
+## ⛔ DEPLOY STATUS — THE GAP IS THE 8a HOLD, STATED RATHER THAN DEPLOYED (drift alert `7a8995e5`, routed to CC-C)
+
+**Staging is at `2dbc512ee`. ⛔⛔ TWO POPULATIONS, NAMED, because my first statement gave one and meant the other (Langston, 2026-09-13 — the same discipline as the two `closed_trades` denominators):**
+- **ALL COMMITS in `2dbc512ee..52d7c2a15`: 57, from at least THREE sessions.** My *"six `8a` revisions plus one docblock correction"* was **NOT this population** and reads as if it were.
+- **THE RUNTIME SUBSET — the population the drift rung is actually about: FOUR files, and on that reading the claim holds.** Enumerated at the ref, the undeployed RUNTIME files are exactly four and only TWO carry non-comment changes:
+- `book-state-tracker.ts` — 33 lines · `active-execution-engine.ts` — 17 lines — **both are the `8a` work itself.**
+- `signal_quality_evaluator.ts` — 0 · `active-filter-pool.ts` — 0 — **comment-only** (Kyle's governance-gate ruling recorded at the site; the one-door correction).
+✅ **NOTHING FROM ANY OTHER SESSION IS STUCK BEHIND THIS HOLD — ON THE RUNTIME READING, and the qualifier is load-bearing.** CC-INFRA's `langston-memory-write` and three analysis scripts ARE in the 57-commit range, but they **install outside the deploy tree**, so the deploy does not gate them. ★ **On the all-commits population the sentence would be false; on the runtime population it is true. Which is why the population is named.**
+⛔ **IT DOES NOT DEPLOY BECAUSE `8a` HAS NOT PASSED STEP 4** — six review rounds, currently CHANGES-NEEDED→r6. Deploying an unapproved exit-path change onto the box where paper trading is live is the one thing the gate exists to prevent. **The rung will keep climbing until review clears, and that is the instrument working.**
+
+---
+
 ## ⭐ ROW `8a` — D3 AT THE xSTOCK EXIT TOUCH PRICE (added 2026-09-13, ref `77423bdc4`)
 
 **THE DEFECT.** After withholding `hollowSkipCap` consecutive ticks **because the book was unusable**, the yield **fell through and acted on the mark of that same unusable book** — and `_eqTick.price` is the **MIDPOINT** whenever both sides exist (`equity-spot-archiver.ts:210`), however absurd those sides are. The branch said so in its own comment: *"the engine is about to act on this mark."*
@@ -194,7 +206,24 @@ A COLD-START chain gets `seedImplausible = false` **VACUOUSLY** — `retainedMed
 
 ➕ **RESIDUAL 1's PIN UPGRADED, because his objection was that it under-stated:** the restart chain **still self-validates** (open, asserted) — but it can **no longer contaminate the retained ring**, and the pin now says both halves. *"A bounded-sounding label on an unbounded exposure"* was the right criticism of the r4 wording.
 
-➕ **FINDING-1 TAKEN — `_retainedSpreads` IS REGISTERED IN THE SIM AS `S25b`** (§17; the census returned one file and zero doc hits). **Its bound is stated rather than implied: THERE IS NO EVICTION AND NO AGE TERM.** `_comparators` is bounded by held names and refreshed every frame; **this map is written at a clear and deleted only at a plausible seed, so a ring left behind when a position closes mid-implausible NEVER EXPIRES and can be the yardstick for a seed days later.** Conservative in the refusing direction, unbounded in time, nothing evicts it.
+➕ **FINDING-1 TAKEN — `_retainedSpreads` IS REGISTERED IN THE SIM AS `S25b`** (§17; the census returned one file and zero doc hits). **Its bound is stated rather than implied: THERE IS NO EVICTION AND NO AGE TERM.** `_comparators` is bounded by held names and refreshed every frame; **this map is written at a clear and deleted only at a plausible seed, so a ring left behind when a position closes mid-implausible NEVER EXPIRES and can be the yardstick for a seed days later.** ⛔⛔ **CORRECTED IN PLACE 2026-09-13 — THIS SENTENCE READ "conservative in the refusing direction" AND IT WAS WRONG IN SIGN.** A CONTAMINATED ring **FAILS OPEN**: the seed check is `seedSpread > kRel × retainedMedian`, so a **LARGER** median **RAISES** the bar and **FEWER** seeds are refused (median 0.004 ⇒ threshold 0.012 ⇒ a 1.986 seed IS refused; median 1.986 ⇒ 5.958 ⇒ the SAME seed is ADMITTED). ★ **Corrected HERE, in the body, not only in the r6 paragraph below — a stacked correction leaves the wrong sentence intact, and COMPLETION REPORTS ARE WRITTEN FROM THE BODY.** Unbounded in time, and nothing evicts it — deliberately, per FINDING-1.
+
+⛔⛔ **r6 — BLOCKER-4, AND THE RULING THAT MATTERS MOST: STOP GATING. LANGSTON HAS RULED r5 THE LAST GATE (2026-09-13).**
+
+**THE HOLE:** `observedMovement` is EARNED on frame 2 of a COLD-SEEDED hollow chain, by that chain's own broken ring. Cold start 7.00/1000.00 seeds vacuously plausible; tick 2 with the live side ticking ONE CENT gives `bidDep = −0.0014` against `kRel × 1.986` = **5.96**, so **no arm is reachable** ⇒ `two_sided` ⇒ advance ⇒ **movement earned by a book that never recovered.** The ring then retains and the reseed passes.
+★★ **MOVEMENT IS A PROPERTY OF THE FEED, NOT OF THE CHAIN'S PLAUSIBILITY. A stub-ask book with a live bid is the CANONICAL half-hollow shape — FROZEN was the CRM instance, not the class.** My r5 generalised from one row.
+
+⛔ **AND IT IS NOT CLOSEABLE BY GATING, WHICH IS THE ACTUAL RULING:** retention happens AT A YIELD, and a yield is proof the reference was unusable; the only datum from outside is the previous ring; **so genesis must come from SOME yielding chain.** A `seedJudgedPlausible` gate makes the mechanism permanently **INERT** — the original deadlock shape this guard already died of once. **A SEVENTH positive property fails the same way.**
+✅ **r6 ADDS NO MECHANISM. It pins the hole as a test, corrects a sign error in two places, and fixes one comment.**
+
+⛔⛔ **THE SIGN ERROR, AND IT IS THE BOUNDED-SOUNDING-LABEL CRITICISM LANDING A THIRD TIME.** The claim *"conservative in the REFUSING direction"* appeared in **SIM `S25b` and in this document's own r5 FINDING-1 paragraph** — ⚠️ **NOT in "Residual 1 and S25b", which is what this line first said: the pointer named a home the text was not in.** Found by a **CLASS GREP over the whole tree** rather than by re-reading the enumeration, which is the only reason the third instance surfaced at all: exactly three hits, two of them the corrections quoting the wrong claim, **one live survivor.** **WRONG IN SIGN for a CONTAMINATED ring:** the seed check is `seedSpread > kRel × retainedMedian`, so a **LARGER** median **RAISES** the bar and **FEWER** seeds are refused.
+**MEASURED, both directions: median 0.004 ⇒ threshold 0.012 ⇒ a 1.986 seed IS refused. Median 1.986 ⇒ threshold 5.958 ⇒ the SAME seed is ADMITTED.** ★ **A contaminated ring FAILS OPEN.** Corrected in both places.
+
+✅ **FINDING-1 — EVICTION: NO, and Langston reversed his own instinct to say so. STALENESS IS NOT THE HAZARD; PROVENANCE IS.** A stale HEALTHY ring is the only thing that makes a reseed judgeable at all and it fails REFUSING. **Evicting on age or at position close would delete the good rings with the bad and make every post-close reseed VACUOUSLY PLAUSIBLE — permissive.** The bound stays STATED, not fixed. **I did not invent a term.**
+
+✅ **FINDING-2 (non-blocking):** the r4 comment quoted the threshold as `max(kRel × median, 0.01)` — that is the **ARM** threshold (`book-state.ts:200`). The **SEED** check (`:180`) is a bare `kRel × median` with **no floor**. Two different expressions; the comment now says so.
+
+**63 green across both book-state files; tsc 377 at baseline.**
 
 ⛔ **WHAT I HAVE NOT DONE AND AM NOT CLAIMING: there is no unit test of the ENGINE-LOOP control flow itself.** The change is `continue` where a fall-through stood, inside a large monitor method with no existing harness. **The predicate half is covered on real rows; the control-flow half is readable but unproven, and Step 7 must verify it on staging — `hollowYields > 0` with ZERO new `kraken_equities_ws_mid` producers on boundary closes.**
 

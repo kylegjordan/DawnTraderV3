@@ -238,6 +238,32 @@ describe('8a r3 — the four-tick reseed, driving the real tracker', () => {
     expect(readBookStateComparator(SYM)!.seedImplausible).toBe(false); // ⛔ vacuous, asserted as-is
   });
 
+  // ⛔⛔ BLOCKER-4, PINNED AS A TEST RATHER THAN GATED — LANGSTON HAS RULED r5 THE LAST GATE.
+  //    Retention happens AT A YIELD, and a yield is proof the reference was unusable; the only
+  //    datum from outside is the previous ring; so GENESIS MUST COME FROM SOME YIELDING CHAIN.
+  //    A seedJudgedPlausible gate would make the mechanism permanently INERT — the original
+  //    deadlock shape this guard already died of once. A SEVENTH positive property fails the same way.
+  //
+  //    THE HOLE: observedMovement is EARNED on frame 2 of a COLD-SEEDED hollow chain, by that
+  //    chain own broken ring — the contaminated median puts both side arms out of reach, so the
+  //    book keeps advancing and earns the flag it should not have.
+  // ★ MOVEMENT IS A PROPERTY OF THE FEED, NOT OF PLAUSIBILITY. A stub-ask book with a live bid
+  //   is the CANONICAL half-hollow shape; FROZEN was the CRM instance, not the class.
+  it('⛔ RESIDUAL (BLOCKER-4): a cold hollow seed earns movement from one jiggle, and the ring contaminates', () => {
+    // cold start mid-hollow — vacuously plausible, nothing to judge it against
+    advanceBookStateComparator(SYM, { bid: 7.00, ask: 1000, last: 247.25, atMs: 1_000 }, WINDOW, false, K_REL);
+    expect(readBookStateComparator(SYM)!.seedImplausible).toBe(false);
+
+    // ONE CENT on the live side, stub ask unchanged — the canonical half-hollow shape
+    advanceBookStateComparator(SYM, { bid: 7.01, ask: 1000, last: 247.25, atMs: 2_583 }, WINDOW, true, K_REL);
+    expect(readBookStateComparator(SYM)!.observedMovement).toBe(true);   // ⛔ earned by a broken book
+
+    // it yields; r5 gate lets that ring through because BOTH its conditions are satisfied
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');
+    advanceBookStateComparator(SYM, { bid: 7.00, ask: 1000, last: 247.25, atMs: 200_000 }, WINDOW, false, K_REL);
+    expect(readBookStateComparator(SYM)!.seedImplausible).toBe(false);   // ⛔ THE HOLE, asserted as-is
+  });
+
   it('✅ a cold start with NO retained ring still seeds — the ring is evidence, not a precondition', () => {
     // First frame ever for a symbol: nothing retained, so nothing to judge against. It seeds
     // unvalidated (which the engine refuses for one tick) rather than being marked implausible.
