@@ -69,6 +69,27 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 
 ---
 
+### 1e. ⭐⭐ THE TWO ITEMS r6 LEFT OPEN, NOW CLOSED — AND ONE OF THEM BOUNDS THIS RE-SCOPE
+
+**(i) `B-EV-TARGET-PROBABILITY` IS A CONFIRMED DUPLICATE. WITHDRAWN, NOT DEFERRED.** Kyle said the probability-score rebuild is already planned; it is, and it has been since **2026-07-13**. `P25_SCORING_STACK_PRESTUDY.md` **FIX-3**, verbatim: *"pWin is a placeholder AND its calibration data is thinner than assumed (verified). `pWin = clamp(0.40 + DI/200, 0.40..0.60)` (strong-trend `0.40+|dbs|/2`) — **never validated.**"* ⇒ ⛔ **the batch I proposed re-derives a finding that has been on the books for two months, inside a document I have in my own memory as the ratified Phase-25 blueprint.** ✅ **The §1c EV-bias identity still stands and is still worth carrying — it is the MECHANISM behind FIX-3's "never validated", stated as an identity rather than an observation. It belongs as evidence ON FIX-3, not as a new batch.**
+
+**(ii) ⚠️ AND THE SAME DOCUMENT'S FIX-2 BOUNDS WHAT VTS MAY BE USED FOR — I MEASURED IT RATHER THAN INHERITING IT.** FIX-2 (2026-07-13, marked verified) says the VTS kernel is fed a **fake DI** — `predictiveConfidence × 100` at `vts-runner.ts:1657`, with `diAtOpen` **hardcoded 50** at `:2043` — concluding *"VTS calibration data ≠ active behavior."*
+**MEASURED TODAY, `vts_open_trades`, `opened_at ≥ 2026-08-01`, n = 32,084 rows carrying `diAtOpen`:**
+
+| finding | value |
+|---|---|
+| `diAtOpen` **exactly 50** | **4,733 (14.8 %)** |
+| distinct values | **3,095** |
+| median | **28.32** |
+| `realDiAtOpen` — key present | 3,685 |
+| ⛔ **`realDiAtOpen` — value NON-NULL** | ⛔ **0 of 3,685** |
+
+⇒ ⚠️ **FIX-2's "hardcoded 50 on EVERY VTS trade" no longer holds universally — it holds on 14.8 %.** Either it was partly repaired since July or the 50 is a fallback that fires one row in seven. **Whichever it is, VTS's directional input is real on ~85 % of rows and a SENTINEL on ~15 %.**
+⇒ ⛔⛔ **SO VTS MAY NOT CARRY ANY DI-, PROBABILITY- OR SELECTION-BASED CLAIM WITHOUT EXCLUDING THE SENTINEL ROWS — and the field built to hold the real value, `realDiAtOpen`, IS STAMPED ON 3,685 ROWS AND NULL ON ALL 3,685.** ⇒ **there is no clean alternative column. That is a writer defect.** `HOME: folded into B-TRADE-RECORD-JOINABILITY (OBJ-D) as its second item — same class, same tables, a field written but never populated.`
+✅ **WHAT THIS DOES *NOT* TOUCH, AND IT IS WHY §1a AND §1b SURVIVE INTACT: the hold measurements do not read DI at all.** `closed_at − opened_at` has **3,933 distinct values across 28,020 trades** — measured, as a control against the reading being degenerate. ⇒ ⛔ **VTS is a HORIZON instrument. It is not a probability instrument, and after (ii) it is not a selection instrument either.** **Every number in §1a/§1b is a duration; none is a DI, a pWin or a P&L.**
+
+---
+
 ## 2. THE PLAN — FOUR OBJECTIVES, ORDER BINDING
 
 ### OBJ-A — Derive the ceiling per strategy from realised hold, and ship it
@@ -85,7 +106,7 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 **VERIFICATION:** the batch cites the existing findings rather than reproducing them; any gap is named as a gap.
 
 ### OBJ-D — Name the joinability defect; do not fix it here
-**From §1d.** File `B-TRADE-RECORD-JOINABILITY` with both instances (the VTS id-space split and the archive's stage split). ⛔ **Out of scope to fix — it is a schema-and-writer change across four tables.** ✅ **In scope to NAME, because every measurement in this batch and the next hits it.**
+**From §1d and §1e(ii).** File `B-TRADE-RECORD-JOINABILITY` with **three** instances: the VTS id-space split, the archive's stage split, and **`realDiAtOpen` stamped on 3,685 rows and NULL on every one of them** — a field written and never populated, which is the same class one layer down. ⛔ **Out of scope to fix — it is a schema-and-writer change across four tables.** ✅ **In scope to NAME, because every measurement in this batch and the next hits it.**
 
 ⛔ **WITHDRAWN FROM r1–r5:** the paper-only reachability release (§0 row 3 — already run 4,675 times in VTS); the per-strategy exemption (OBJ-A supersedes it); and `B-EV-TARGET-PROBABILITY` **pending a duplication check against the ratified Phase-25 scoring blueprint** (§0 row 6).
 
