@@ -451,4 +451,14 @@ PSQL_EXIT=0
 - **`xstock_taker_wrong_rate = 2` is the two rows themselves and is NOT a failure:** that counter tests `entry_fee_rate`, and both entries are pre-deploy taker fills correctly stamped 0.008000. **The counter is scoped to the wrong population for a close-side read** — it is left as-is and read with this note, because narrowing it to post-deploy ENTRIES only would silently drop the pre-deploy-entry rows that section (2) exists to show. Read `xstock_taker_wrong_rate` against section (2)'s `opened_at` column, never alone.
 - `MISTAKE: wrong-object [B-XSTOCK-FEE-CONTRACT] - the verify query filtered on open time for a fee that is resolved at close, so it returned zero against a database holding the pass.`
 
+#### UI corroboration of the rebate, read on the paper-trading screen 2026-09-12 00:29Z (Claude-in-Chrome, no login)
+The maker exit is visible on the screen inside a rendered money figure, not only in the database.
+
+- **Paper Trading -> Day -> By Asset Class** reads `xstock_spot | 2 trades | 50.0% (1 of 2) | -$0.92 | fees **$2.67**`.
+- **That $2.67 is the four fee legs of exactly the two rows in the table above, the rebate included** (re-derived at the database, same UTC day): NEM 1.26088879 + 0.15095990 = 1.41184869, CRM 1.28776677 + (-0.03387422) = 1.25389255, **sum 2.66574124 -> $2.67**; entry legs 2.5487, exit legs 0.1171, and **1 negative exit leg inside that total**.
+  - the rendered figure is smaller than it would have been under the old contract precisely because one leg is negative. The screen and the database are the same two trades.
+- **The crypto row on the same screen (`7 trades | $6.54`) is a DIFFERENT window and is NOT claimed as reconciled:** the screen's "Day" is a rolling 24h ("Today (24h)"), while my reconciliation used the UTC calendar day, which holds zero crypto closes. The xStock figure reconciles because both windows contain the same two rows.
+- **Instrument limits, stated:** the browser window reported zero width for this session, so `screenshot` and tab navigation to Closed Trades could not be driven; the page's rendered TEXT was read directly and is what is quoted above. The per-row fee display was verified on the Virtual Simulations screen at 20:58Z (section 9.8) for the taker leg.
+- **Not this batch, flagged so it is not read as a fee regression:** the paper-mode DASHBOARD cards read 0 active and 0 closed trades while the database holds 3 open positions and today's closes. That is `#573` (the paper cards read the retired `paper_trades` table), already filed, owner CC-B. The paper-trading PAGE above reads the live tables and is correct.
+
 **Step 7 verdict: PASS on both legs**, with the query correction above stated rather than quietly patched.
