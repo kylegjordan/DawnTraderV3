@@ -24,7 +24,7 @@
 
 ★ **The ratio-of-medians (204/166 = 1.23) HID a spike at 1.11 carrying 272 trades.** That is why Langston's correction mattered: *"compute R per trade, then summarise — the median-of-ratios and the ratio-of-medians are not the same number and only one of them is a trade."*
 
-**The arithmetic:** target **+204 bps**, stop **−184 bps**, round trip **161 bps** ⇒ net win **+43** against a **−184** loss ⇒ **break-even needs an 81 % win rate** (60 % at maker/maker, 80 bps). **Observed 43 %** (254 `target_hit` vs 339 `stop_hit`).
+**The arithmetic:** target **+204 bps**, stop **−184 bps**, round trip **161 bps** ⇒ net win **+43** against a **−184** loss ⇒ **break-even needs an 88.9 % win rate** (68.0 % at maker/maker, 80 bps) ⛔ **CORRECTED 2026-09-12 by Coltrane, re-derived by CC-B: the earlier 81 % / 60 % were UNDERSTATED because they charged the round-trip cost to the WINNER ONLY. The loser pays it too: net win +43, net loss −345, so pBE = (184+161)/(204+184) = 88.92 %; at 80 bps, +124 / −264 = 68.04 %.** ⭐ **This makes the 1.11 ratio WORSE than first reported, not better — the correction strengthens the finding.**. **Observed 43 %** (254 `target_hit` vs 339 `stop_hit`).
 
 ⚠️ **Langston's population correction, which binds any restatement:** the 43 % must be computed on the SAME population as the R distribution, **named**. 254/593 barrier-terminal = 43 %; 254/706 = 36 %.
 
