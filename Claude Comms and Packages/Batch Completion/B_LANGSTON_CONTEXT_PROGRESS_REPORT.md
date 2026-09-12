@@ -56,6 +56,19 @@ change-class `non_architecture` (`B_LANGSTON_CONTEXT_SCOPE.md:3`) · owner Infra
 **B. The batch — the increment's outcome measure, stated by the plan at §20.3 (P-1b):** `langston-size-watch --status` moves from BREACH to within ceiling **with the ceiling unchanged**, after eviction of the parts Langston marks. **If eviction of his marked parts does not cover the overage, that is reported as a result, not a delay.**
 - Measured for the record: loaded set 147,635 B against 143,856 B, BREACH by 3,779 B (Langston, 2026-09-11 17:38Z).
 
+## 3.A — CRITERION A: MET 2026-09-12 (all four scheduled units, timer-triggered, none by hand)
+
+| unit | fired | result | at the object |
+|---|---|---|---|
+| `langston-memory-index` | 04:10:18Z (timer) | success, exit 0 | `records.jsonl` 600 langston:langston, mtime 04:10:18Z |
+| `langston-size-watch` | 05:40:08Z (timer) | success, exit 1 | exit 1 = BREACH, a correct outcome (`SuccessExitStatus=0 1`); loaded set over ceiling, the known state |
+| `coltrane-size-watch` | 05:51:32Z (timer) | success, exit 0 | — |
+| `langston-privacy-check` | 06:01:06Z (timer) | success | verdict **PASS**, controls `reader_reads_own_folder`/`reader_refused_token_file`/`account_database_enumerable` all true, 0 findings |
+
+Every unit's `TriggeredBy` is its own `.timer` — none was started by hand (Langston's condition 3). The 06:00Z run executed on the INSTALLED `a3eac7b81`, which has no directory-owner test, so the 20:12Z owner change could not have moved its verdict — the PASS stands on the pre-registered instrument.
+
+**Post-06:00Z installs (chunk 2), done 06:05:54Z, GATE_FAIL=0:** the newer privacy check (`ac38b350d` — dec888f33 owner-split + the root-expected-fence fix) at 750 root:root and the size watch (`9ff25adc9`) at 755 root:root, both sha-gated; privacy-check self-test 73/0, `--dry-run` PASS with MEMDIR root-owned (no DRIFT), size-watch `--status` readable by langston. `verify-agent-artifacts.py`: **17 MATCH / 0 DIFFER / 0 missing**.
+
 ## 4. WHAT IS UNPROVEN
 - **Chunk 1 on a schedule.** Every live run so far was started by me. Criterion A is the test.
 - **The self-test legs of the privacy check are RULED ON REPORTED FACT for Langston, permanently.** The tool is root-only, so he cannot re-run them.
