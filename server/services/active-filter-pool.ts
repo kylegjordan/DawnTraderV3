@@ -220,9 +220,17 @@ class ActiveFilterPoolService {
   /**
    * B-PRICE-SIDE-BY-JOB OBJ-8 row 8f — THE QUOTE-CURRENCY ADMISSION GATE (D9).
    *
-   * ⛔ CALLED FROM ALL THREE POOL-ADMISSION FUNCTIONS — but only TWO are live doors.
-   * `addSurvivors` and `addPatternPoolSurvivors` are separate live paths into pools the
-   * orchestrator reads; gating one would have left the other open.
+   * ⛔⛔ CALLED FROM ALL THREE POOL WRITERS — BUT ONLY **ONE** IS A DOOR INTO EVALUATION,
+   * and my earlier "three separate admission paths" was wrong twice (Kyle, 2026-09-13;
+   * re-derived at the ref). **`signal-orchestrator.ts:2057` builds `eligibleSymbols` from
+   * `getActivePool` ALONE**, and the evaluation loop at `:2109` iterates only that.
+   * ⇒ `addSurvivors` decides WHICH SYMBOLS ARE EVALUATED. That is the door.
+   * ⇒ the PATTERN and FAMILY pools do NOT add symbols — they only TAG symbols with strategy
+   *   families for selection (`symbolFamilies`, `:2043-2054`). A symbol in the pattern pool
+   *   but absent from the active pool is tagged and never evaluated.
+   * ✅ Gating them anyway is cheap and harmless, and it means a future change that DOES make
+   *   those pools evaluable arrives already gated — but it is NOT defence of a live hole,
+   *   and must not be described as one.
    * ⚠️ `addFamilyPoolSurvivors` HAS ZERO CALLERS at this ref outside its own definition and
    *    the 8f test (Langston BLOCKER-2, 2026-09-12). It is hardened anyway because
    *    `getFamilyPool` IS read live at `signal-orchestrator.ts:2039` — a dead writer beside a
