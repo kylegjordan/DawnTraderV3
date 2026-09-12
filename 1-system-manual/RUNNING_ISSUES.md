@@ -8789,7 +8789,7 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ⇔ `B-LANGSTON-CONTEXT` P-6b guard (c) · `#1046`.
 
-### #1049 OPEN 2026-09-12 (Langston handed it as a HYPOTHESIS in-channel; investigated + cause established at the object by CC-INFRA) — ⛔ **A DEAD WAKE-SOURCE LEG IS STILL DOCUMENTED AS LIVE: `/var/log/langston-alert-invokes.log`**
+### #1054 OPEN 2026-09-12 (Langston handed it as a HYPOTHESIS in-channel; investigated + cause established at the object by CC-INFRA) — ⛔ **A DEAD WAKE-SOURCE LEG IS STILL DOCUMENTED AS LIVE: `/var/log/langston-alert-invokes.log`** *(renumbered from #1049 2026-09-13: collided with CC-C's #1049 at 7892; mine was the newer commit, so per the numbering rule the newer renumbers)*
 
 **MEASURED STATE (Langston):** `/var/log/langston-alert-invokes.log` is 0 bytes, mtime 2026-06-28 — zero lines in ~2.5 months. His `CLAUDE.md` §5.3 item 2 and our `CLAUDE.md` §6.9 wake-source #2 both say his alert completions wake CC through that file's `invoke DONE` lines.
 
