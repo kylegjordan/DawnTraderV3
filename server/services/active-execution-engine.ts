@@ -1312,7 +1312,7 @@ export class ActiveExecutionEngine {
     let tpHits = 0;
     // B-XSTOCK-FEED-SANITY: OCCURRENCES this cycle — printed in EVAL_EXIT. Not a row census: count
     // events on the rows' metadata.bookState.
-    // ⛔ CORRECTED 2026-09-13 (Langston finding 2): this read "a yield is a tick acted on at the cap".
+    // ⛔ CORRECTED 2026-09-12 (Langston finding 2): this read "a yield is a tick acted on at the cap".
     //    FALSE since D3 landed — a yield is now a tick REFUSED at the cap. `unvalidatedRefusals`
     //    counts the SECOND half of that refusal: the reseed tick, which is the one that actually
     //    booked `CRM/USD` at 503.50 while the yield tick booked nothing.
@@ -1579,7 +1579,7 @@ export class ActiveExecutionEngine {
                   );
                 }
                 // ⛔⛔ D3 r2 — THE REFUSAL MUST SURVIVE THE RESEED, NOT JUST THE YIELD
-                // (Langston BLOCKER, 2026-09-13; measured on the row, not argued).
+                // (Langston BLOCKER, 2026-09-12; measured on the row, not argued).
                 //
                 // r1 refused at the YIELD tick and stopped there. It catches `NEM/USD`
                 // (`hollow`/`guard`/`yielded=true`, 00:16:30.482Z) and MISSES `CRM/USD`, which

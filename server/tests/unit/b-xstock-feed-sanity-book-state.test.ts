@@ -40,7 +40,7 @@ describe('B-XSTOCK-FEED-SANITY — assessBookState on the real handoff rows (dec
   });
   // ⭐ CRM/USD target_hit 2026-09-12T00:16:31Z — decision 503.50, booked +$7.15. THE ROW THAT
   // PROVOKED D3's REFUSAL AT THE YIELD (`#958`, and the change at `active-execution-engine.ts`
-  // yield branch, 2026-09-13). Book 7.00 / 1000.00 against a prior ticker of 247.01 / 248.00.
+  // yield branch, 2026-09-12). Book 7.00 / 1000.00 against a prior ticker of 247.01 / 248.00.
   // ⚠️ MEASURED, AND NOT WHAT I FIRST WROTE: with BOTH sides deranged at once the MARK moves so far
   //    that `mark_deviation` fires and short-circuits before either side arm is reached. I expected
   //    `bid_collapsed` + `ask_spiked` and the run said `mark_deviation`. The verdict is the same
@@ -67,7 +67,7 @@ describe('B-XSTOCK-FEED-SANITY — assessBookState on the real handoff rows (dec
   //      60 consecutive ticks (≈90 s, 00:15:00 → 00:16:31) before yielding. **There was no good price
   //      to fall back to, so D3's ladder terminates at REFUSE — and acting on 503.50 was not a
   //      choice between two prices, it was inventing one.**
-  // ⛔⛔ THE TWO-TICK FIXTURE (Langston BLOCKER, 2026-09-13). EVERY OTHER FIXTURE IN THIS FILE IS
+  // ⛔⛔ THE TWO-TICK FIXTURE (Langston BLOCKER, 2026-09-12). EVERY OTHER FIXTURE IN THIS FILE IS
   //    SINGLE-TICK, AND THE DEFECT IS A MULTI-TICK PROPERTY — which is exactly why r1 of the 8a fix
   //    passed its own tests and still would not have prevented the row it was justified by.
   //
