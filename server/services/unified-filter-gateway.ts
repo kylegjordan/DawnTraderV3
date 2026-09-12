@@ -177,7 +177,7 @@ class UnifiedFilterGateway {
       }));
 
       const result = activeFilterPool.addSurvivors(mode, survivors, true);
-      console.log(`[9.8.C][UnifiedFilter] Pool hydrated: added=${result.added}, updated=${result.updated}, skipped=${result.skipped}`);
+      console.log(`[9.8.C][UnifiedFilter] Pool hydrated: added=${result.added}, updated=${result.updated}, skipped=${result.skipped} (refusedQuote=${result.refusedQuote})`);
       
       this.fallbackCache.set(cacheKey, { data: [], timestamp: now });
     } catch (error) {

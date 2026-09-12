@@ -13,9 +13,16 @@
  *   4. a FLOATING quote         — `SOL/EUR`   → refused (the denomination defect itself)
  *   5. an UNPARSEABLE symbol    — `BTCUSD`    → refused, NEVER assumed USD (#546/#1050)
  *
- * ⛔ ALL THREE DOORS ARE EXERCISED. `addSurvivors`, `addPatternPoolSurvivors` and
- * `addFamilyPoolSurvivors` are three separate admission paths into pools the orchestrator
- * reads. A suite covering one would have let the other two through while reading as green.
+ * ⛔ THREE ADMISSION FUNCTIONS ARE EXERCISED — AND ONLY TWO OF THEM ARE LIVE DOORS.
+ * `addSurvivors` and `addPatternPoolSurvivors` are separate live paths into pools the
+ * orchestrator reads; a suite covering one would have let the other through while green.
+ * ⚠️ `addFamilyPoolSurvivors` HAS ZERO CALLERS at the ref outside its own definition and the
+ *    test below (Langston BLOCKER-2, re-derived: whole-tree grep). ⇒ THE TEST BELOW PROVES
+ *    THE GATE, NOT ITS REACHABILITY — the existence of a symbol is not the reachability of
+ *    it. It is hardened anyway because `getFamilyPool` IS read live
+ *    (`signal-orchestrator.ts:2039`), so the writer is dead beside a live reader. That
+ *    asymmetry is NOT 8f's to fix and is homed separately; this suite must not be read as
+ *    evidence the path is exercised in production.
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
@@ -93,15 +100,21 @@ describe('8f gate — door 2: addPatternPoolSurvivors (a SEPARATE path into the 
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('refuses a floating quote at the pattern door too', () => {
-    activeFilterPool.addPatternPoolSurvivors('paper', [survivor('SOL/EUR'), survivor('BTC/USD')] as never);
+  it('refuses a floating quote at the pattern door too, AND counts it', () => {
+    // ⛔ door 2 returns `{ added, skipped, refusedQuote }` — my change list claimed it
+    // returned void, which was false and was the premise of a judgement call Langston
+    // overturned. Without the counter a refusal vanishes into `skipped`: live cycles print
+    // `added=6, skipped=28`, so 8f's refusals would have been invisible inside that 28.
+    const r = activeFilterPool.addPatternPoolSurvivors('paper', [survivor('SOL/EUR'), survivor('BTC/USD')] as never);
+    expect(r.refusedQuote).toBe(1);
+    expect(r.skipped).toBeGreaterThanOrEqual(r.refusedQuote);
     const symbols = activeFilterPool.getPatternPool('paper').map((p: { symbol: string }) => p.symbol);
     expect(symbols).toContain('BTC/USD');
     expect(symbols).not.toContain('SOL/EUR');
   });
 });
 
-describe('8f gate — door 3: addFamilyPoolSurvivors', () => {
+describe('8f gate — addFamilyPoolSurvivors (⚠️ NOT a live door — zero callers at the ref)', () => {
   beforeEach(() => {
     activeFilterPool.initialize();
     vi.spyOn(console, 'warn').mockImplementation(() => {});

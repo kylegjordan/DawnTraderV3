@@ -7841,6 +7841,18 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 
 ---
 
+### ⭐ #1052 OPEN 2026-09-12 (CC-C, surfaced by Langston BLOCKER-2 at `3n` OBJ-8 Step 4; re-derived by me at the ref) — `addFamilyPoolSurvivors` HAS ZERO CALLERS, AND `getFamilyPool` IS READ LIVE BY THE ORCHESTRATOR. A DEAD WRITER BESIDE A LIVE READER.
+
+**MEASURED, whole-tree grep over `server/`, `client/` and `shared/` at `origin/migration/aws-supabase`:** `addFamilyPoolSurvivors` appears at **its own definition (`active-filter-pool.ts:528`), in an 8f docblock, and in the 8f test — and NOWHERE ELSE.** **No production caller.**
+✅ **CONTROL, and it is the half that makes this matter: `getFamilyPool` IS read live** — `signal-orchestrator.ts:2039`, `const familyPairs = activeFilterPool.getFamilyPool(this.mode, family);`, feeding `symbolFamilies` for family-aware strategy selection. ⇒ **the orchestrator reads a set nothing writes.**
+
+⛔⛔ **AND IT CORRECTS A CLAIM I MADE IN THE 8f CHANGE LIST AND COMMIT MESSAGE: I described THREE separate admission paths *"into pools the orchestrator reads"*. Only TWO are live.** ★ **Langston's own ledger line, verbatim: *the existence of a symbol is not the reachability of it*.** **My mutation control for that door fires only against the test's own direct call — it demonstrates the gate, never its reachability.** Corrected in the change list, the commit record, the test docblock and the in-code docblock.
+
+⚠️ **WHAT IS NOT ESTABLISHED:** whether the family pools were ever written, or whether the writer predates a refactor that moved family routing elsewhere. **The provenance read is owed before any disposition** — this is exactly the rule-24 outcome-(3) shape (legacy that no longer fits) but I have not proven it, and a deletion without the provenance read is the failure rule 18 warns about.
+✅ **8f HARDENS IT ANYWAY AND THAT IS DELIBERATE:** if the writer is ever reconnected it arrives already gated, rather than reopening a quote hole nobody remembers.
+
+⇒ **DISPOSITION — §9.4 (4), A SCHEDULED REVIEW, because the deliverable is a provenance answer and I do not have one.** `HOME: B-FAMILY-POOL-REACHABILITY, owner CC-C, PHASE_19_PLAN row 3n.k, after 3n.j.` ⛔ **NOT a gate on 8f.**
+
 ### ⭐ #1050 OPEN 2026-09-12 (CC-C, surfaced answering Langston's blocking question on `3n` row `8f`) — THE QUOTE AND BASE LEGS ARE DERIVED THREE DIFFERENT WAYS AND THEY DISAGREE. ONE OF THEM REPORTS EVERY NON-`USDT` PAIR AS USD-QUOTED, INCLUDING THE EUR/GBP/CHF/AUD/CAD PAIRS ROW `8f` EXISTS TO REFUSE
 
 **WHY IT WAS FOUND, because the provenance matters: Langston asked whether the quote leg is stored or derived, since `#966`'s retroactive USD correction is only computable if it is recoverable on rows not yet written.** Answering that required a census of the derivation sites. **There is no single derivation.**

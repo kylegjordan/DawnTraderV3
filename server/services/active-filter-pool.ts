@@ -220,9 +220,15 @@ class ActiveFilterPoolService {
   /**
    * B-PRICE-SIDE-BY-JOB OBJ-8 row 8f — THE QUOTE-CURRENCY ADMISSION GATE (D9).
    *
-   * ⛔ CALLED FROM ALL THREE POOL-ADMISSION FUNCTIONS — `addSurvivors`,
-   * `addPatternPoolSurvivors` and `addFamilyPoolSurvivors`. Gating one would have left the
-   * other two open, and every one of them feeds symbols the orchestrator can open on.
+   * ⛔ CALLED FROM ALL THREE POOL-ADMISSION FUNCTIONS — but only TWO are live doors.
+   * `addSurvivors` and `addPatternPoolSurvivors` are separate live paths into pools the
+   * orchestrator reads; gating one would have left the other open.
+   * ⚠️ `addFamilyPoolSurvivors` HAS ZERO CALLERS at this ref outside its own definition and
+   *    the 8f test (Langston BLOCKER-2, 2026-09-12). It is hardened anyway because
+   *    `getFamilyPool` IS read live at `signal-orchestrator.ts:2039` — a dead writer beside a
+   *    live reader, feeding family-aware strategy selection from a set nothing writes. That
+   *    asymmetry is NOT 8f's to fix and is homed at `#1052`; do not read this call as evidence
+   *    the path is exercised in production.
    * ★ One implementation, three call sites — never three copies of the predicate.
    *
    * D9 (decided 2026-09-11): a new position is refused in any pair whose quote currency is
@@ -417,6 +423,8 @@ class ActiveFilterPoolService {
   ): {
     added: number;
     skipped: number;
+    /** 8f: refused on quote currency. A SUBSET of `skipped`, not additional to it. */
+    refusedQuote: number;
   } {
     const pool = this.getPatternPoolMap(mode);
     const now = Date.now();
@@ -425,6 +433,7 @@ class ActiveFilterPoolService {
 
     let added = 0;
     let skipped = 0;
+    let refusedQuote = 0;
 
     this.removeExpiredPatternEntries(mode);
 
@@ -434,6 +443,7 @@ class ActiveFilterPoolService {
       const patternRefusal = this.quoteRefusalReason(survivor.symbol);
       if (patternRefusal) {
         this.logQuoteRefusal(survivor.symbol, mode, 'pattern', patternRefusal);
+        refusedQuote++;
         skipped++;
         continue;
       }
@@ -482,7 +492,7 @@ class ActiveFilterPoolService {
 
     console.log(`[14.5][PATTERN_POOL] Pattern pool update: added=${added}, skipped=${skipped}, total_size=${pool.size}`);
 
-    return { added, skipped };
+    return { added, skipped, refusedQuote };
   }
 
   /**

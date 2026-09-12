@@ -1415,7 +1415,7 @@ export class Fx5ScannerService {
       if (cryptoActivePoolEligible) {
         // Batch 43: Active pool built from family-qualified union (not global quant IMF)
         const poolStats = activeFilterPool.addSurvivors(mode, familyQualifiedUnion);
-        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped}, survivors=${familyQualifiedUnion.length} (family-qualified)`);
+        console.log(`[REB 2.8.7][ActivePool] Pool populated: added=${poolStats.added}, updated=${poolStats.updated}, skipped=${poolStats.skipped} (refusedQuote=${poolStats.refusedQuote}), survivors=${familyQualifiedUnion.length} (family-qualified)`);
         // Phase 14.5: Add pattern pool survivors
         if (patternPoolSurvivors.length > 0) {
           const patternStats = activeFilterPool.addPatternPoolSurvivors(mode, patternPoolSurvivors.map(s => ({
@@ -1433,7 +1433,7 @@ export class Fx5ScannerService {
             DI: (s as any).DI,
             poolType: (s as any).poolType,  // P19-B8.12: ideal/rotational carry (same rider shape)
           })));
-          console.log(`[14.5][PATTERN_POOL] Pattern pool populated: added=${patternStats.added}, skipped=${patternStats.skipped}`);
+          console.log(`[14.5][PATTERN_POOL] Pattern pool populated: added=${patternStats.added}, skipped=${patternStats.skipped} (refusedQuote=${patternStats.refusedQuote})`);
         }
       } else {
         // Engine STOPPED: Pool cleared by enforcePassiveModeIfStopped (passive learning)
