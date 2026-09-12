@@ -198,6 +198,43 @@ run(h, whole("new", 0, 0, part="90-plain.md"), (b"## " + chr(0x2605).encode() + 
 rc, out = run(h, app(sha(rd(h, "memory-parts/00-legacy.md")), 1), b"- silent landing\n", script=MW6)
 v("M6", rc == 0, "mutant exit %d (expect silent landing when nothing declares ledger:true - the shape Langston forbade)" % rc)
 
+# P11 name predicate: the four illegal name classes each refuse (exit 2) and create NOTHING (Langston BLOCKER 22:38Z)
+illegal = {".hidden.md": None, "sub/x.md": D + "/home/memory-parts/sub/x.md",
+           "../ESCAPED.md": D + "/home/ESCAPED.md", "/tmp/lmwrig-ABS.md": "/tmp/lmwrig-ABS.md"}
+p11_ok = True; p11_obs = []
+for nm, escaped in illegal.items():
+    h = home(BASE_B, {"00-legacy.md": BASE_B}); migrate(h)
+    try:
+        os.remove(escaped)
+    except (FileNotFoundError, TypeError):
+        pass
+    rc, out = run(h, whole("new", 0, 0, part=nm), (b"## " + chr(0x2605).encode() + b" X\n- n\n"))
+    made = os.path.exists(h + "/memory-parts/" + os.path.basename(nm)) or (escaped and os.path.exists(escaped))
+    ok = rc == 2 and "not a bare part filename" in out and not made
+    p11_ok = p11_ok and ok; p11_obs.append("%s->exit%d,made=%s" % (nm, rc, bool(made)))
+    try:
+        os.remove(escaped)
+    except (FileNotFoundError, TypeError):
+        pass
+v("P11", p11_ok, "; ".join(p11_obs))
+
+# M7 mutant: remove the name predicate -> `../ESCAPED.md` gets past it, but the ROUND-TRIP backstop catches it (rollback)
+with open(W, encoding="utf-8") as fh: src = fh.read()
+needle = "        if explicit_part is not None and not valid_part_name(explicit_part):"
+assert src.count(needle) == 1, ("M7 anchor", src.count(needle))
+mut = src.replace(needle, "        if False and explicit_part is not None and not valid_part_name(explicit_part):  # mutant")
+MW7 = D + "/mutant-name"; open(MW7, "w", encoding="utf-8").write(mut); os.chmod(MW7, 0o755)
+h = home(BASE_B, {"00-legacy.md": BASE_B}); migrate(h, script=MW7)
+escaped = D + "/home/ESCAPED.md"
+try: os.remove(escaped)
+except FileNotFoundError: pass
+rc, out = run(h, whole("new", 0, 0, part="../ESCAPED.md"), (b"## " + chr(0x2605).encode() + b" X\n- n\n"), script=MW7)
+gone = not os.path.exists(escaped)   # the round-trip rollback removed the escaped create
+v("M7", rc == 5 and "not enumerated by read_parts()" in out and gone,
+  "mutant exit %d (round-trip caught it in-band -> rolled back to exit 5), escaped-removed %s" % (rc, gone))
+try: os.remove(escaped)
+except FileNotFoundError: pass
+
 bad = [n for n, ok in results if not ok]
 print("RESULT: %d of %d matched%s" % (len(results) - len(bad), len(results), "" if not bad else "; DIFFER: " + ", ".join(bad)))
 sys.exit(1 if bad else 0)

@@ -417,16 +417,14 @@ def resolve_target_part(parts, append, explicit_part=None):
       (the full enumeration, count asserted - never a windowed read). An --part assertion must equal the resolved part.
     whole-file: --part names the target ('explicit'); else exactly one part ('single-part'); >=2 without --part
       refuses, naming EVERY part and the verb to use."""
-    allnames = ", ".join(n for n, _, _ in parts)
+    allnames = ", ".join(n for n, _, _, _ in parts)
     if append:
         if len(parts) == 1:
             name, rule = parts[0][0], "single-part-fallback"
         else:
-            decl = []
-            for n, _, _ in parts:
-                with open(os.path.join(PARTS_DIR, n), "rb") as fh:
-                    if part_declares_ledger(fh.read()):
-                        decl.append(n)
+            # FINDING (Langston 22:38Z): resolve the declaration on the SAME bytes parts_digest hashed (carried in the
+            #   tuple), not a re-read off disk - the declaration must not be decided on bytes that were never hashed.
+            decl = [n for n, _, _, rawb in parts if part_declares_ledger(rawb)]
             if len(decl) != 1:
                 raise Refused(2, "REFUSED: --ledger-append needs exactly ONE part declaring `ledger: true` when %d parts "
                                  "exist; found %d (%s). All %d parts: %s. Mark the ledger part's frontmatter."
@@ -465,8 +463,8 @@ def part_body(raw_bytes):
 
 
 def read_parts():
-    """Every file in PARTS_DIR in filename order, as (name, raw_sha, body). Refuses, NAMING THE FILE, on non-UTF-8 or a
-    body that does not end in exactly one newline - never normalizes (Langston, 20:48Z)."""
+    """Every file in PARTS_DIR in filename order, as (name, raw_sha, body, raw). Refuses, NAMING THE FILE, on non-UTF-8
+    or a body that does not end in exactly one newline - never normalizes (Langston, 20:48Z)."""
     if not os.path.isdir(PARTS_DIR):
         raise Refused(2, "REFUSED: no parts directory at %s - nothing to compose" % PARTS_DIR)
     names = sorted(n for n in os.listdir(PARTS_DIR)
@@ -485,19 +483,26 @@ def read_parts():
         if not b.endswith(b"\n") or b.endswith(b"\n\n"):
             raise Refused(2, "REFUSED: part %s must end in exactly one newline (it does not); fix the part, "
                              "the composer never normalizes bytes in a governance file" % fp)
-        parts.append((n, sha(b), part_body(b)))
+        parts.append((n, sha(b), part_body(b), b))
     return parts
+
+
+def valid_part_name(name):
+    """A part name must be a MEMBER of the set read_parts() enumerates (Langston 22:38Z, a predicate not a blacklist):
+    equal to its own basename (no `/`, no `..`, no absolute path) and not a dotfile - or --expect-sha new could mint a
+    part the enumerator never sees again (a root-run write to an arbitrary path)."""
+    return bool(name) and name == os.path.basename(name) and not name.startswith(".")
 
 
 def parts_digest(parts):
     """sha256 over the ordered (name, raw_sha) list - the identity of the parts set as read."""
-    return sha(("\n".join("%s %s" % (n, h) for n, h, _ in parts)).encode("utf-8"))
+    return sha(("\n".join("%s %s" % (n, h) for n, h, _, _ in parts)).encode("utf-8"))
 
 
 def compose_body(parts):
     """The composed BODY (pre-stamp) is the parts' bodies concatenated in order. parts_sha is over the ordered
     (name, raw_sha) list; body_sha is over the body."""
-    body = b"".join(pb for _, _, pb in parts)
+    body = b"".join(pb for _, _, pb, _ in parts)
     return body, parts_digest(parts), sha(body)
 
 
@@ -783,6 +788,12 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                              "direct write would fold that unreviewed change into %s. Run --compose to reconcile first."
                           % (PARTS_DIR, cur_parts_sha, state["parts_sha"], TARGET))
         explicit_part = opts.get("--part")
+        # ⛔ BLOCKER (Langston 22:38Z): a --part name must be a MEMBER of the set read_parts() enumerates, or a create
+        #    could mint a part the enumerator never sees again (a dotfile, a subdir, `..`, or an absolute path - a
+        #    root-run write to an arbitrary location). Predicate, not a blacklist.
+        if explicit_part is not None and not valid_part_name(explicit_part):
+            raise Refused(2, "REFUSED: --part %r is not a bare part filename (no directories, no '..', no leading '.'). "
+                             "A part lives directly in %s and read_parts() would never see this name." % (explicit_part, PARTS_DIR))
         target_name, resolve_rule = resolve_target_part(parts, append, explicit_part)
         part_path = os.path.join(PARTS_DIR, target_name)
         expect = opts["--expect-sha"].strip().lower()
@@ -819,9 +830,9 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
             raise Refused(2, "REFUSED: the new content for part %s must end in exactly one newline; the composer never "
                              "normalizes" % part_path)
         if is_new:
-            new_parts = sorted(parts + [(target_name, sha(part_new), part_body(part_new))], key=lambda t: t[0])
+            new_parts = sorted(parts + [(target_name, sha(part_new), part_body(part_new), part_new)], key=lambda t: t[0])
         else:
-            new_parts = [(n, sha(part_new), part_body(part_new)) if n == target_name else (n, h, b) for (n, h, b) in parts]
+            new_parts = [(n, sha(part_new), part_body(part_new), part_new) if n == target_name else (n, h, b, rb) for (n, h, b, rb) in parts]
         body, parts_sha, body_sha = compose_body(new_parts)
         mem_new = body + stamp_line(len(new_parts), parts_sha, body_sha).encode("utf-8") + b"\n"
         mem_new_sha = sha(mem_new)
@@ -843,6 +854,11 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
             with open(part_path, "rb") as fh:
                 if sha(fh.read()) != sha(part_new):
                     raise Refused(6, "REFUSED: part read-back mismatch after write")
+            # ⛔ ROUND-TRIP (Langston 22:38Z): the part just written MUST be a member of what read_parts() enumerates -
+            #    proves the name is not one the enumerator drops (the create-that-vanishes). Rolls back if not.
+            if target_name not in [n for n, _, _, _ in read_parts()]:
+                raise Refused(6, "REFUSED: part %s is not enumerated by read_parts() after the write - the name is not "
+                                 "one the composer can see; rolling back." % target_name)
             with open(TARGET, "rb") as fh:
                 mem_back = fh.read()
             if sha(mem_back) != mem_new_sha or strip_stamp(mem_back) != body:
