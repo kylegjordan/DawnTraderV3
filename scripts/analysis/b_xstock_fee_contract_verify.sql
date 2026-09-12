@@ -44,6 +44,23 @@ WHERE opened_at >= :'deploy_at'::timestamptz
 GROUP BY 1, 2, 3, 4
 ORDER BY 1, 2, 3, 4;
 
+\echo === (1b) DENOMINATORS for section (1): a rate claim rests on the STAMPED rows only ===
+-- ⛔ Langston, Step 8: "crypto unchanged" rests on the rows that actually carry a rate. Post-deploy VTS crypto was
+-- 514 of 533 rows NULL (twins/shadow rows carry no fee stamp). A share quoted over the whole population is wrong by
+-- ~28x. Print the denominator beside every rate claim, and never let a NULL-blind predicate stand in for a zero.
+SELECT surface, asset_class,
+       count(*) AS rows_in_window,
+       count(entry_fee_rate) AS stamped,
+       count(*) - count(entry_fee_rate) AS unstamped_null_rate
+FROM (
+  SELECT 'vts' AS surface, asset_class, entry_fee_rate FROM vts_open_trades WHERE opened_at >= :'deploy_at'::timestamptz
+  UNION ALL
+  SELECT 'paper open', asset_class, entry_fee_rate FROM active_open_positions WHERE opened_at >= :'deploy_at'::timestamptz
+  UNION ALL
+  SELECT 'paper closed', asset_class, entry_fee_rate FROM closed_trades WHERE opened_at >= :'deploy_at'::timestamptz
+) q
+GROUP BY 1, 2 ORDER BY 1, 2;
+
 \echo === (2) AFTER the deploy: xStock paper fills with the booked FEE AMOUNTS, and the implied rate of each leg ===
 -- ⛔ A CLOSE counts even when the position OPENED before the deploy: the exit fee is resolved at close from the live
 -- fee rows, so a pre-deploy entry with a post-deploy maker exit is exactly where the rebate first appears. An
@@ -60,19 +77,42 @@ WHERE asset_class = 'xstock_spot' AND (opened_at >= :'deploy_at'::timestamptz OR
 ORDER BY 9
 LIMIT 50;
 
-\echo === (3) AFTER the deploy: the verdict counts ===
+\echo === (3a) VERDICT, ENTRY-SIDE population: rows OPENED after the deploy, with its denominator ===
+-- ⛔ Langston, Step 8: an entry-side counter and a close-side counter may not share one population. Mixed, the
+-- counter loses all discriminating power - a real failure (a post-deploy xStock taker entry stamped 0.008) and a
+-- benign pre-deploy-entry close both add 1, so it can never alarm again. Two populations, two denominators, and a
+-- zero that is readable rather than ambiguous with an empty population.
 SELECT
-  count(*) FILTER (WHERE asset_class = 'xstock_spot') AS xstock_paper_fills,
-  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode = 'maker' AND entry_fee < 0) AS xstock_maker_entry_negative_fee,
-  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode = 'maker' AND entry_fee >= 0) AS xstock_maker_entry_nonnegative_fee,
-  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND exit_fee_mode = 'maker' AND closed_at >= :'deploy_at'::timestamptz AND exit_fee < 0) AS xstock_maker_exit_rebate,
-  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND exit_fee_mode = 'maker' AND closed_at >= :'deploy_at'::timestamptz AND exit_fee >= 0) AS xstock_maker_exit_no_rebate,
-  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode IS DISTINCT FROM 'maker' AND entry_fee_rate IS DISTINCT FROM 0.0010) AS xstock_taker_wrong_rate,
-  count(*) FILTER (WHERE asset_class = 'crypto_spot' AND entry_fee_rate NOT IN (0.008, 0.004)) AS crypto_unexpected_rate
+  count(*) FILTER (WHERE asset_class = 'xstock_spot') AS xstock_entries_in_window,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND entry_fee_rate IS NULL) AS xstock_entries_unstamped,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode = 'maker' AND entry_fee < 0) AS xstock_maker_entry_rebate,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode = 'maker' AND entry_fee >= 0) AS xstock_maker_entry_no_rebate,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND chosen_entry_mode IS DISTINCT FROM 'maker'
+                     AND entry_fee_rate IS NOT NULL AND entry_fee_rate <> 0.0010) AS xstock_taker_entry_wrong_rate,
+  count(*) FILTER (WHERE asset_class = 'crypto_spot') AS crypto_entries_in_window,
+  count(*) FILTER (WHERE asset_class = 'crypto_spot' AND entry_fee_rate IS NULL) AS crypto_entries_unstamped,
+  count(*) FILTER (WHERE asset_class = 'crypto_spot' AND entry_fee_rate IS NOT NULL
+                     AND entry_fee_rate NOT IN (0.008, 0.004)) AS crypto_unexpected_rate
 FROM (
-  SELECT asset_class, chosen_entry_mode, entry_fee_rate, entry_fee, NULL::numeric AS exit_fee, NULL::text AS exit_fee_mode,
-         NULL::numeric AS quantity, NULL::numeric AS exit_price, opened_at, NULL::timestamptz AS closed_at FROM active_open_positions
+  SELECT asset_class, chosen_entry_mode, entry_fee_rate, entry_fee, opened_at FROM active_open_positions
   UNION ALL
-  SELECT asset_class, chosen_entry_mode, entry_fee_rate, entry_fee, exit_fee, exit_fee_mode, quantity, exit_price, opened_at, closed_at FROM closed_trades
+  SELECT asset_class, chosen_entry_mode, entry_fee_rate, entry_fee, opened_at FROM closed_trades
+  UNION ALL
+  SELECT asset_class, chosen_entry_mode, entry_fee_rate, NULL::numeric, opened_at FROM vts_open_trades
 ) p
-WHERE opened_at >= :'deploy_at'::timestamptz OR closed_at >= :'deploy_at'::timestamptz;
+WHERE opened_at >= :'deploy_at'::timestamptz;
+
+\echo === (3b) VERDICT, CLOSE-SIDE population: rows CLOSED after the deploy, with its denominator ===
+-- The exit fee is resolved at close, so this population legitimately contains pre-deploy entries. Read it alone.
+SELECT
+  count(*) FILTER (WHERE asset_class = 'xstock_spot') AS xstock_closes_in_window,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND exit_fee_mode IS NULL) AS xstock_closes_unstamped_mode,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND exit_fee_mode = 'maker' AND exit_fee < 0) AS xstock_maker_exit_rebate,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND exit_fee_mode = 'maker' AND exit_fee >= 0) AS xstock_maker_exit_no_rebate,
+  count(*) FILTER (WHERE asset_class = 'xstock_spot' AND exit_fee_mode = 'taker'
+                     AND round((exit_fee / NULLIF(quantity * exit_price, 0))::numeric, 6) IS DISTINCT FROM 0.001000) AS xstock_taker_exit_wrong_rate,
+  count(*) FILTER (WHERE asset_class = 'crypto_spot') AS crypto_closes_in_window,
+  count(*) FILTER (WHERE asset_class = 'crypto_spot' AND exit_fee_mode = 'maker'
+                     AND round((exit_fee / NULLIF(quantity * exit_price, 0))::numeric, 6) IS DISTINCT FROM 0.004000) AS crypto_maker_exit_wrong_rate
+FROM closed_trades
+WHERE closed_at >= :'deploy_at'::timestamptz;

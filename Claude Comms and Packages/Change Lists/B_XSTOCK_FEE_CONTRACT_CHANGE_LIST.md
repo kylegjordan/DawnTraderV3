@@ -462,3 +462,52 @@ The maker exit is visible on the screen inside a rendered money figure, not only
 - **Not this batch, flagged so it is not read as a fee regression:** the paper-mode DASHBOARD cards read 0 active and 0 closed trades while the database holds 3 open positions and today's closes. That is `#573` (the paper cards read the retired `paper_trades` table), already filed, owner CC-B. The paper-trading PAGE above reads the live tables and is correct.
 
 **Step 7 verdict: PASS on both legs**, with the query correction above stated rather than quietly patched.
+
+## 10. STEP 8 — LANGSTON'S SECOND-PASS VERIFICATION, 2026-09-12 00:32Z: CONFIRMED, both legs, with one condition
+
+**His verdict, verbatim in substance:** *"STEP 8 — CONFIRMED, both legs, with one condition on the close"*, re-derived on staging from his own queries — explicitly **not** `RULED ON REPORTED FACT`.
+
+### 10.1 What he re-derived independently
+- **Contract live at the right ref:** `dist/BUILD_SHA` and staging `git log -1` both `b597f1bf2`; `fee_model` xStock `0.0010` / `-0.0002`, `updated_by b-xstock-fee-contract` @ 20:09:37.088Z.
+- **Crypto untouched proven on `updated_at`, not only on value:** crypto still carries its original `b45-tier1-seed` 2026-06-10 21:50:44 timestamps. **This is a stronger form of the crypto claim than mine** — mine compared values; his shows the rows were never written.
+- **Taker leg two-sided:** post-deploy VTS xStock `taker 0.001000 x 14` with **zero rows at any other stamped rate**; pre-deploy control `0.008000 x 117` with zero at 0.001.
+- **Rebate leg:** `exit_fee < 0` across `closed_trades` (both legs) and `active_open_positions` returns **exactly one row in all history** — CRM/USD `-0.03387422` @ 00:16:31.648Z. He recomputed both implied rates himself: **-0.00020000** and **+0.00100000**, exact to 8 dp.
+- **He graded my control higher than I did:** enumerated (not counted) xStock maker exits fall into exactly two rate values — `+0.004000 x 92` spanning **2026-07-17 -> 2026-09-10** and `-0.000200 x 1`. Eight weeks of the column holding the other value is positive-control grade.
+
+### 10.2 His population correction — it binds the crypto claim, and it is now folded
+⛔ **"Crypto unchanged" may NOT be quoted over 533 rows.** Of 533 post-deploy crypto VTS rows, **514 carry `entry_fee_rate` NULL** (the twins/shadow rows carry no fee stamp), so the claim rests on **19 stamped rows**. Same shape on xStock: 11 of 25 unstamped. And `crypto_unexpected_rate` used `NOT IN (0.008, 0.004)`, which is **NULL-blind** — an unstamped crypto row could never increment it.
+⇒ **Every rate claim in this batch now carries its stamped denominator**, and new section (1b) prints `rows_in_window / stamped / unstamped_null_rate` per surface and class.
+
+### 10.3 His ruling on my residual — SPLIT IT, and split the CLASS. I withdraw my reason.
+1. **My stated reason was a non-sequitur.** Narrowing the counter's predicate in section (3) never touched section (2) — a separate query with its own filter. Nothing section (2) exists to show could have been dropped, so the trade-off I described did not exist.
+2. **The real defect is worse than "reads 2 on a PASS": the counter had no discriminating power.** A genuine failure (a post-deploy xStock taker ENTRY stamped 0.008) increments it by 1; a benign pre-deploy-entry close increments it by 1. It can never alarm again, and it trains the next reader to discount it. **A verdict counter that must be hand-adjudicated against another section's `opened_at` is a to-do list, not a verdict.**
+3. ⛔ **`xstock_maker_entry_nonnegative_fee` carried the identical defect and I did not name it** — it reads 0 today only because both closes were taker entries. Fixing only the counter he pointed at would have been `fix-follows-pointer` landing on this batch. **Both are fixed.**
+
+**Folded per his §9.4 disposition 1 — into the work in hand, before the Step-11 close. Not a deploy blocker: the production code is correct; this is the analysis script.**
+
+### 10.4 The fold, and the re-run verdict (staging, `deploy_at` = 2026-09-11T20:09:47Z)
+Section (2) is untouched. Section (3) is replaced by **two populations, each printing its own denominator** so a zero is readable rather than ambiguous with an empty population (`#661` legs 1-2).
+
+```
+=== (1b) DENOMINATORS: a rate claim rests on the STAMPED rows only ===
+ surface | asset_class | rows_in_window | stamped | unstamped_null_rate
+ vts     | crypto_spot |            542 |      19 |                 523
+ vts     | xstock_spot |             25 |      14 |                  11
+
+=== (3a) VERDICT, ENTRY-SIDE: rows OPENED after the deploy ===
+ xstock_entries_in_window 25 | xstock_entries_unstamped 11 | xstock_maker_entry_rebate 0 | xstock_maker_entry_no_rebate 0
+ xstock_taker_entry_wrong_rate 0 | crypto_entries_in_window 542 | crypto_entries_unstamped 523 | crypto_unexpected_rate 0
+
+=== (3b) VERDICT, CLOSE-SIDE: rows CLOSED after the deploy ===
+ xstock_closes_in_window 2 | xstock_closes_unstamped_mode 0 | xstock_maker_exit_rebate 1 | xstock_maker_exit_no_rebate 0
+ xstock_taker_exit_wrong_rate 0 | crypto_closes_in_window 0 | crypto_maker_exit_wrong_rate 0
+```
+- **`xstock_taker_wrong_rate` is gone as a mixed counter.** The entry-side version excludes NULL-stamped rows explicitly and reads **0**; the two pre-deploy-entry closes now sit only in the close-side population, where they belong.
+- **The former ambiguity is now readable:** `xstock_maker_entry_rebate 0` sits beside `xstock_entries_in_window 25`, so the zero is a real zero over a real population — and it is the P8-predicted absence, not a missing measurement.
+- **`crypto_closes_in_window 0` states plainly that the crypto close-side claim has an empty population**, instead of a silent zero.
+
+### 10.5 Two items he accepted, and one he asked be said in the completion report
+- **Accepted:** the entry-side rebate is predicted-absent with a named mechanism (P8), not a gap; and the three open xStock positions (CRWD, MDB, GEV — he verified) are all pre-deploy taker at 0.008, so the next rebate evidence must again come from an exit.
+- **`#573` flag accepted, not ratified:** he did not verify it and it is not his to grade, but the retired-`paper_trades` reader is recorded as legacy OPEN-2 in his own always-loaded file, so the pre-existing attribution is consistent.
+- ⛔ **For the completion report, at his request: the corrected analysis SQL is at `11e39e5b6` and later, NOT in the deployed `b597f1bf2`.** Correct and harmless — an analysis script, not runtime — but it must be said so nobody reads the fix as deployed.
+
