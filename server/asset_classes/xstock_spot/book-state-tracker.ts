@@ -57,6 +57,25 @@ export interface BookStateComparator {
    *   label is carried into the row rather than inferred.
    */
   validated: boolean;
+  /**
+   * ⛔⛔ TRUE WHEN THIS CHAIN WAS SEEDED ON A FRAME THE RETAINED SPREAD RING SAYS IS IMPLAUSIBLE,
+   * AND IT PERMANENTLY BLOCKS `validated` FOR THE CHAIN'S LIFE (8a r3, Langston BLOCKER-1,
+   * 2026-09-13).
+   *
+   * ★ WHY IT EXISTS — `validated` ALONE CANNOT WORK, AND THIS FILE SAID SO 50 LINES BELOW:
+   *   *"a comparator seeded from a hollow frame makes the next hollow frame read `two_sided`,
+   *   and that verdict is what would validate it… This fix stops the field lying; it does not
+   *   close the hole."* MEASURED on `CRM/USD`: after the yield-clear, tick 3's 7.00/1000.00
+   *   frame compares to ITSELF — `bidDep = askDep = midDep = 0` against a threshold ≥ 0.01 —
+   *   so no arm is reachable, it reads `two_sided`, and THAT promotes `validated`. Tick 4 acts.
+   *   ⇒ **A REFERENCE CANNOT JUDGE ITS OWN SEED. The circularity needs a datum from OUTSIDE
+   *   the new chain, and the retained ring is the only one available that costs no new knob.**
+   *
+   * ⚠️ COST, WRITTEN DOWN RATHER THAN DISCOVERED: a book that never recovers HOLDS INDEFINITELY.
+   *   That is the stated policy (D3: refuse ⇒ hold) and the yield alert already fires — but the
+   *   position stays open the whole time, so this is a real exposure, not a free win.
+   */
+  seedImplausible: boolean;
   /** When this reference CHAIN began (the seed frame's own time). Survives validation. */
   seededAtMs: number;
   /** Advances against this chain since the seed, so a fresh seed is distinguishable from a settled one. */
@@ -64,6 +83,15 @@ export interface BookStateComparator {
 }
 
 const _comparators = new Map<string, BookStateComparator>();
+
+/**
+ * ⛔ THE SPREAD RING SURVIVES A CLEAR, AND THAT IS THE WHOLE MECHANISM (8a r3).
+ * The yield-clear drops the POINT reference — which is right, and is the latch fix — but the
+ * chain's trailing spreads are evidence about the INSTRUMENT, not about the dropped frame, so
+ * discarding them is what leaves the next seed unjudgeable. Retained here, keyed by symbol,
+ * and consumed exactly once: at the next seed.
+ */
+const _retainedSpreads = new Map<string, number[]>();
 
 export function readBookStateComparator(symbol: string): BookStateComparator | null {
   return _comparators.get(symbol.toUpperCase()) ?? null;
@@ -95,6 +123,14 @@ export function advanceBookStateComparator(
    * to `false` is the fail-safe direction — an unstated advance is treated as unvalidated.
    */
   validatedByTwoSided: boolean = false,
+  /**
+   * ⛔ 8a r3 — PASSED IN, NOT RESOLVED HERE, AND THE REASON IS TESTABILITY RATHER THAN STYLE.
+   * Resolving the knob inside would make a test that cannot reach the config take the
+   * fail-safe branch and PASS FOR THE WRONG REASON — a control that cannot distinguish the
+   * mechanism from its own fallback. The caller holds `cfg` at every site already.
+   * `null` ⇒ unreadable ⇒ fail-safe: the seed is treated as implausible.
+   */
+  kRel: number | null = null,
 ): void {
   const key = symbol.toUpperCase();
   const mid = (frame.bid + frame.ask) / 2;
@@ -112,11 +148,36 @@ export function advanceBookStateComparator(
   if (!prev) {
     console.log(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_SEEDED mid=${mid} spread=${((frame.ask - frame.bid) / mid).toFixed(5)} at=${new Date(frame.atMs).toISOString()}`);
   }
+  // ⛔ 8a r3 — JUDGE THE SEED AGAINST THE RETAINED RING (Langston BLOCKER-1, his direction).
+  // Only on a NEW chain: an advance within a chain inherits the flag unchanged.
+  let seedImplausible = prev?.seedImplausible ?? false;
+  if (!prev) {
+    const retained = _retainedSpreads.get(key);
+    const retainedMedian = retained ? medianOf(retained) : null;
+    if (retainedMedian !== null && retainedMedian > 0) {
+      const seedSpread = (frame.ask - frame.bid) / mid;
+      // ⛔ FAIL-SAFE ON AN UNREADABLE KNOB: treat the seed as implausible. The alternative
+      // validates an unjudged seed, which is the defect this closes.
+      if (kRel === null || seedSpread > kRel * retainedMedian) {
+        seedImplausible = true;
+        console.warn(
+          `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} SEED_IMPLAUSIBLE ` +
+          `seedSpread=${seedSpread.toFixed(5)} retainedMedian=${retainedMedian.toFixed(5)} ` +
+          `kRel=${kRel ?? 'unreadable'} — chain can never validate`,
+        );
+      }
+    }
+    _retainedSpreads.delete(key); // consumed at the seed, exactly once
+  }
   _comparators.set(key, {
     priorMid: mid, priorBid: frame.bid, priorAsk: frame.ask,
     priorLast: frame.last, priorAtMs: frame.atMs, spreads,
     // once validated, STAYS validated for the life of the chain — a later seed starts a new chain
-    validated: (prev?.validated ?? false) || validatedByTwoSided,
+    // ⛔ 8a r3: …UNLESS the chain's own seed was implausible, in which case NOTHING promotes it.
+    // A `two_sided` verdict produced by the seed frame comparing to ITSELF is exactly the
+    // circularity this blocks, so that verdict must not be able to clear the gate it caused.
+    validated: !seedImplausible && ((prev?.validated ?? false) || validatedByTwoSided),
+    seedImplausible,
     seededAtMs: prev?.seededAtMs ?? frame.atMs,
     framesSinceSeed: prev ? prev.framesSinceSeed + 1 : 0,
   });
@@ -148,6 +209,8 @@ export function clearBookStateComparator(symbol: string, reason: string): void {
   const key = symbol.toUpperCase();
   const prev = _comparators.get(key);
   if (!prev) return;
+  // 8a r3: drop the POINT reference, RETAIN the ring. See `_retainedSpreads`.
+  if (prev.spreads.length > 0) _retainedSpreads.set(key, [...prev.spreads]);
   _comparators.delete(key);
   console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_CLEARED reason=${reason} validated=${prev.validated} framesSinceSeed=${prev.framesSinceSeed} seededAt=${new Date(prev.seededAtMs).toISOString()}`);
 }
@@ -221,4 +284,4 @@ export function assessBookStateNow(symbol: string): BookStateNow {
 }
 
 /** Test-only: reset every comparator. */
-export function _resetBookStateComparatorsForTest(): void { _comparators.clear(); }
+export function _resetBookStateComparatorsForTest(): void { _retainedSpreads.clear(); _comparators.clear(); }
