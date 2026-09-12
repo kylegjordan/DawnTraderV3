@@ -1,7 +1,7 @@
-# B-GEOMETRY-REACH-BASELINE — SCOPE **r10**
+# B-GEOMETRY-REACH-BASELINE — SCOPE **r11**
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r10, 2026-09-12**
+**change-class: architecture** · **r11, 2026-09-12**
 
 > ⛔⛔ **KYLE RE-SCOPED THIS AND HE WAS RIGHT ON ALL SIX COUNTS. r1–r5 WERE BUILT ON 29 SEPTEMBER PAPER TRADES WHILE 78,304 VTS TRADES SAT UNUSED SINCE 10 MAY.** His words: *"Using paper mode data limits us tremendously."* **I used roughly 0.04 % of the available trade record.**
 > ⛔⛔ **r7 — THE REVERSAL IS RELABELLED A *HYPOTHESIS*, NOT A FINDING (Langston BLOCKER-2, and he is right).** r6 claimed the VTS data shows the ceiling is nearly right and the strategy's target wrong. **It does not show that, because I measured the wrong quantity: `closed_at − opened_at` is time-to-ANY-exit, and the ceiling encodes time-to-TARGET.** `strong_bull_trend`'s 1,652 trades were **all tagged `unreachable`**, so their 15.44 h is the median time to stop-out-or-timeout of trades that mostly never reached 6 ATR. ⇒ **“6 ATR implies 36 h; it resolves in 15.44 h” compares a MODELLED time-to-reach against an OBSERVED time-to-exit-by-other-means. Two different objects.**
@@ -115,7 +115,7 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 2. ⭐ **INTENT, VERBATIM — AND THIS IS THE STATEMENT OBJ-A AMENDS.** `signal-target-normalizer.ts:24-29`: *"Reachability is PATH-INVARIANT by design — it is a FEASIBILITY check, not a quality bar, so it is per-CLASS (BTC vs xStock ATR scales genuinely differ) but NOT per-filterPath … (Langston)."*
 3. **DISPOSITION: (2) relevant but needs updating to today's intent.** ⛔ **Per-class keying is a STATED DESIGN, not a storage accident — r6 called it *"the defect"* and that was wrong.** The feasibility framing is sound; it is **silent on horizon being a strategy property**, and that silence is what OBJ-A fills. ⚠️ **So OBJ-A changes the gate's CHARACTER** — from a feasibility statement about pair + horizon into a **per-strategy declared-horizon knob** — which is arguable because a holding horizon genuinely is a strategy property, and which is **why the standing no-looser rule exists.**
 4. ⚠️ **THE VALUE `4.0` IS `INFERRED-FROM-CODE-AND-FORM`, NOT ESTABLISHED, AND MUST NOT QUIETLY FIRM UP.** `P19_REORG_B2_PRE_AUDIT.md:41`'s general rule governs a target distance (`K ≲ c·√H`, `H = 12–24`, `√H ≈ 3.5–4.9`, so 4.0 is in band) — **but its worked example specialises `K` to the FLOOR and outputs a volatility-admission bound, a different quantity. How 4.0 itself was chosen is recorded NOWHERE.**
-⛔⛔ **THE WITHDRAWN CLAIM WAS LIVE IN **TWO** GOVERNED ARTIFACTS, AND r9 CLAIMED “DISCHARGED” ON THE STRENGTH OF FIXING ONE.** ⛔ **A false DISCHARGED removes the work from the plan, which is why this blocked rather than annotated.** **NAMED, not counted:** **(1) `PHASE_19_PLAN` row 2.4g-2** — corrected in the r8 commit; **(2) `RUNNING_ISSUES` `#1052`** — which asserted it flatly with no banner **and was frozen at the r1–r5 plan entirely**, including the withdrawn paper-only release and the record of how Kyle's binding objection is met. **Both corrected in the r10 commit; OBJ-D item 1 is discharged ONLY as of r10.**** — leaving it is how the next session re-inherits it.
+⛔⛔ **THE WITHDRAWN CLAIM WAS LIVE IN **TWO** GOVERNED ARTIFACTS, AND r9 CLAIMED “DISCHARGED” ON THE STRENGTH OF FIXING ONE.** ⛔ **A false DISCHARGED removes the work from the plan, which is why this blocked rather than annotated.** **NAMED, not counted:** **(1) `PHASE_19_PLAN` row 2.4g-2** — corrected in the r8 commit; **(2) `RUNNING_ISSUES` `#1052`** — which asserted it flatly with no banner **and was frozen at the r1–r5 plan entirely**, including the withdrawn paper-only release and the record of how Kyle's binding objection is met. **Both corrected in the r10 commit; OBJ-D item 1 is discharged ONLY as of r11, when the last surviving instance (`RUNNING_ISSUES:8941`, operative prose eight lines below its own banner) was corrected.**.
 
 ---
 
@@ -128,7 +128,7 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 
 **CHANGE, four parts and the second is not optional:**
 1. `expectancy.ts` resolves `reach_atr_max` per-(strategy × class) through the same most-specific-wins path `min_rr` uses.
-2. ⛔⛔ **ADD `reach_atr_max_unknown_floor` = the MINIMUM across strategies, as a seeded DB row, PLUS the `recordUnknownStrategyAtGate` tripwire.** `min_rr` fails **closed** (`expectancy.ts:239-240`) and **reach has no analogue**, so an uncanonicalized token would land on the **permissive** class `4.0` — the §8 #10 silent-fallback-for-a-DB-governed-setting trap.
+2. ⛔⛔ **ADD `reach_atr_max_unknown_floor` = the MINIMUM across strategies, PLUS the `recordUnknownStrategyAtGate` tripwire — AND SHIP IT ON THE FULL KEY SET, WHICH IS *NOT* CRYPTO-ONLY.** ⭐ **The precedent is measured, not assumed: `min_rr_unknown_floor` ships THREE rows — `crypto_spot` 2.88, `xstock_spot` 2.16, and a GLOBAL `*` 2.88** — because `getCachedNumberRequired` falls back to the global row when the **asset class itself** is unresolved. ⛔ **A crypto-only unknown floor therefore either THROWS IN FLIGHT on an unresolved class, or leaves xStock's unknown-token path on the permissive 4.0 — the exact trap part 2 exists to close.** ⚠️ **“CRYPTO ONLY” GOVERNS THE CALIBRATION ROWS AND MUST NOT BE READ ONTO THE SAFETY ROW.** ✅ **And the seed-completeness precedent lives at the MIGRATION, not at boot: `min_rr_unknown_floor` is NOT in `b72-warmup.ts:362`'s list; its migration carries its own `RAISE EXCEPTION` check. Mirror that.** `min_rr` fails **closed** (`expectancy.ts:239-240`) and **reach has no analogue**, so an uncanonicalized token would land on the **permissive** class `4.0` — the §8 #10 silent-fallback-for-a-DB-governed-setting trap.
 3. Seed the **seven TIGHTENING crypto rows** only.
 4. ⛔ **Rewrite `signal-target-normalizer.ts:24-29` IN THE SAME COMMIT**, or we ship a docstring describing the opposite design. *(Langston's own `active-position-sizing.ts:123-131` retraction is the precedent — he quoted a stale header and ratified a retired algorithm.)*
 
@@ -152,7 +152,7 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 
 ### OBJ-D — Correct the governed artifacts that still carry withdrawn claims
 **From §2 item 4.** ⛔ **NAMED, not counted — a count is not a set.** **(1) `PHASE_19_PLAN` row 2.4g-2** (done, r8); **(2) `RUNNING_ISSUES` `#1052`** (done, r10 — the sixteen-hour assertion, the superseded four-objective plan, and the binding-objection record that rested on the withdrawn release). ✅ **GREP THE CLASS BEFORE FIXING THE INSTANCE** — that is what found the second one, and it is the cure filed as `stacked-correction`.
-**VERIFICATION:** a class grep over `1-system-manual/`, `Claude Comms and Packages/` and `.claude/` for each withdrawn claim returns **zero standing assertions**, run and pasted at close.
+**VERIFICATION — the grep is SPECIFIED here, not described elsewhere, because an unspecified grep is what failed three times:** over `1-system-manual/`, `Claude Comms and Packages/` and `.claude/`, for **all six patterns** — `ENCODES A SIXTEEN-HOUR`, `IT ENCODES SIXTEEN HOURS`, `ceiling asserting sixteen`, `PAPER path only`, `Objective 2 changes live paper`, `pending a duplication check` — **excluding lines containing a withdrawal marker** (`WITHDRAWN`, `stood here`, `SUPERSEDED`, `NOT established`). ⛔⛔ **AND A POSITIVE CONTROL IS MANDATORY: the same grep WITHOUT the exclusion must return the banners.** Without it a zero is unreadable (`#661` leg 1). **Both runs pasted at close.**
 
 ### OBJ-E — Governance
 **Tier-1, unconditional:** completion report · `BATCH_CATALOG` · `PHASE_HISTORY` · `RUNNING_ISSUES` `#1052` · `MEMORY_CC_B` · `PHASE_19_PLAN` row 2.4g-2 · the task-list row (`gov-ledgerrow`).
@@ -165,7 +165,7 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 | item | home |
 |---|---|
 | **The target re-derivation** (needs realised excursion) | `B-EXCURSION-RECORD`, owner CC-B, after 2.4g-2 and **ahead of** `B-TRADE-RECORD-JOINABILITY` |
-| **The id-space split + the archive stage split** (joinability) and **`realDiAtOpen` NULL on all 3,685** (a WRITER defect) | `B-TRADE-RECORD-JOINABILITY` — **two classes, stated as two** |
+| **THREE members, TWO classes, all named:** *joinability* — **(i)** the `vts_open_trades` ↔ `exit_strategy_alternates` id-space split and **(ii)** the archive stage split; *writer* — **(iii)** `realDiAtOpen` NULL on all 3,685 | `B-TRADE-RECORD-JOINABILITY` |
 | **The EV gate's target-distance bias** | ⛔ **NOT a new batch — duplicate of `P25_SCORING_STACK_PRESTUDY` FIX-3 (2026-07-13).** The §1c identity stands as **evidence ON FIX-3**. |
 | **The model's entry-notional fee convention** (≤6 bps) | rule-24 outcome (2); a scope call about which basis the model carries |
 | **Any `min_rr` change** | reorg-B2.3's floors are calibrated per strategy; nothing here justifies moving one |
@@ -178,7 +178,7 @@ Friction is **44 % of the risk unit**; fees are proportional so size cannot help
 
 1. ✅ **SEVEN crypto reachability ceilings replace one** — as a **policy tightening with a measured lower bound**, plus the `expectancy.ts` change that makes them readable at all and the fail-closed unknown-token floor. ⛔ **`vwap_pullback` and all xStock rows do NOT ship.**
 2. ✅ **Two existing findings get USED instead of re-measured**, each carrying its fee era.
-3. ✅ **Three record defects get NAMED** — the excursion record, the id-space split, and the never-populated field — so the next measurement does not rediscover them.
+3. ✅ **THREE record defects get NAMED, and the MEMBERS are listed because a count is not a set:** **(i)** the **id-space split** between `vts_open_trades` and `exit_strategy_alternates`; **(ii)** the **archive stage split** (probability at `pre_filter`, geometry at `sqe`/`admitted`); **(iii)** **`realDiAtOpen` NULL on all 3,685 rows.** ⚠️ **The excursion record is NOT one of these three** — it is `B-EXCURSION-RECORD` (§4), a separate batch, and r10 wrongly imported it into this set while dropping the archive split.
 4. ✅ **Two governed artifacts carrying withdrawn claims get CORRECTED.**
 ⛔ **WHAT IS NO LONGER HERE:** the target re-derivation (→ `B-EXCURSION-RECORD`), the paper-only reachability release (already simulated 4,675×), and `B-EV-TARGET-PROBABILITY` (duplicate of P25 FIX-3).
 
