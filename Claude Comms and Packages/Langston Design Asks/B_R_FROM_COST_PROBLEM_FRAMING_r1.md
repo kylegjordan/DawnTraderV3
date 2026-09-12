@@ -10,7 +10,11 @@
 
 **Kyle's account of the origin, recorded as HIS account:** the analysis compared target-hits against stop-hits over 1h/4h/8h/12h/24h/48h/72h; Langston reduced it to the reward-to-risk ratio, said volatility **cancels out**, that the ratio is **fixed by construction**, and that **there is no cost term anywhere in the expression**.
 
-⛔ **I SEARCHED AND COULD NOT FIND THAT FORMULATION** — not in the governance corpus, and a targeted Discord search returned nothing. **If Langston holds the derivation, his statement supersedes this section.**
+⛔ **I SEARCHED AND COULD NOT FIND THAT FORMULATION** — not in the governance corpus, and not in the Discord history.
+
+⭐ **THE ABSENCE IS EVIDENCED RATHER THAN ASSERTED, AND THE INSTRUMENT HAS A POSITIVE CONTROL (rule 29(b)).** A full-inbox search (19,986 lines) for `fixed by construction` · `cancels` · `cost term` · `volatility drops out` **returned matches — every one of them MY OWN messages quoting those phrases over the last hour.** ⇒ **the search demonstrably finds those strings when present, so its silence on Langston's side carries information.** ⚠️ **Reach of the instrument, stated: it covers the Discord inbox log and the repo. It does NOT cover the Desktop conversation, which is where a Kyle-facing exchange would most plausibly live** — so this bounds where the derivation is not, it does not prove it was never made.
+
+⇒ **If Langston holds the derivation, his statement supersedes this section. If he does not, the honest conclusion is that a load-bearing reduction was made in conversation and never written down — which is the practice worth changing, independently of this batch.**
 
 ✅ **COLTRANE PARTIALLY RECONSTRUCTED IT WITHOUT CLAIMING RECOVERY, and the reconstruction is instructive.** `strong-bull-trend.ts:151` sets stop distance `a × ATR` and target distance `b × ATR`, so gross reward-to-risk is `r = b/a` — **fixed for those coefficients, and volatility cannot change it.** ⛔ **BUT VOLATILITY CANCELS FROM THE GROSS RATIO, NOT FROM THE ECONOMICS.** In a target-or-stop model with stop `S`, target `T`, round-trip cost `C` and target-first probability `p`:
 > `EV / S = p × (T/S) − (1 − p) − C/S`
