@@ -198,3 +198,61 @@ Kyle opened Kraken Pro's own **Fees** dialog on three live markets while signed 
 ---
 
 *Public-page captures: `1-system-manual/external-references/kraken-fees/2026-09-06/`. The authenticated in-account dialogs of §0.b were screenshotted by Kyle and transcribed here; **the images themselves are NOT committed — they show live balances.** Our implementation: `module_constants` module `fee_model`, and `server/services/cost-model.ts`.*
+
+
+---
+
+## 6. ⭐⭐ HOW **WE** SIMULATE THESE FEES — PER LANE, PER CLASS (Kyle-requested 2026-09-12)
+
+> **Sections 0-5 are the VENUE's contract. This section is OURS.** It did not exist anywhere before 2026-09-12: the venue side was transcribed and the simulation side was spread across five files and no document. **Every statement here is read at the code or measured at the database, and names its site.**
+
+### 6.1 THE RATES COME FROM THE DATABASE, THROUGH ONE DOOR, AND A MISSING ROW IS FATAL
+
+**`cost-model.getFrictionForAssetClass(assetClass)` is THE single fee merge site.** Fee rates resolve from `module_constants` `fee_model` per `asset_class`, warmed at boot; **spread, slippage and the sanity bound stay static per class** in `server/asset_classes/<class>/friction.ts`.
+
+⭐ **THE DESIGN IS FAIL-HARD AND DELIBERATELY SO.** The static modules carry **`NaN` tombstones** in their fee fields, so a consumer that somehow bypasses the merge poisons its own arithmetic immediately and loudly rather than silently pricing at roughly Tier 6. The merge **constructs a new object** and never mutates the static one. **A missing DB row is a BOOT failure, not a mid-scan surprise** (`b72-warmup`).
+⛔ **Only `crypto_spot` and `xstock_spot` are wired. Every other asset class THROWS** with an onboarding message naming what must be built — there is no default and no silent fallback.
+
+**LIVE ROWS, measured 2026-09-12** (all four are wildcard strategy/regime — fees are per CLASS, not per strategy):
+
+| class | maker | taker | written | by |
+|---|---|---|---|---|
+| `crypto_spot` | **0.004** (0.40 %) | **0.008** (0.80 %) | 2026-06-10 | `b45-tier1-seed` — **untouched since**, and correct for Tier 1 (§1) |
+| `xstock_spot` | **−0.0002** (−0.02 %, a REBATE) | **0.0010** (0.10 %) | 2026-09-11 | `b-xstock-fee-contract` (`#1010`) |
+
+⚠️ **THE TIER IS NOT RESOLVED ANYWHERE.** These are flat per-class values. **Nothing in the system reads the account's rung**, so the 17-rung ladder in §1 is documentation, not behaviour — if 30-day volume or AoP moves us off Tier 1, these rows do not follow. That is `B-FEE-TIER-RESOLUTION` (Phase 21, ahead of live-mode enablement), and it is the single largest gap between §1 and our simulation.
+
+### 6.2 STATIC, NOT DB-GOVERNED — spread, slippage, bound
+
+| | `crypto_spot` | `xstock_spot` |
+|---|---|---|
+| default spread | **0.0010** (10 bps) | **0.0012** (12 bps) — mid of 5-15 bps observed on top names |
+| default slippage | **0.0005** (5 bps) | **0.0005** (5 bps) — the same canonical value |
+| per-component sanity bound | 0.02 | 0.02 |
+
+### 6.3 ⛔ THE TWO LANES BOOK FEES DIFFERENTLY, AND THIS IS THE ASYMMETRY TO KNOW
+
+Both lanes resolve rates through the same merge site, so **the RATES never differ between lanes** — what differs is **which leg pays which rate.**
+
+| | **VTS lane** (`vts-runner.ts`) | **PAPER / active lane** (`active-execution-engine.ts`) |
+|---|---|---|
+| **ENTRY leg** | maker rate if the maker/taker decision chose maker, else taker | same — effective mode decides; a pending-maker fill books entry at the **maker** rate on the resting limit |
+| **EXIT leg** | ⛔ **ALWAYS the TAKER rate** | **maker OR taker** — a resting exit that fills books the **maker** rate with **zero slippage by construction**; otherwise the fill's own taker fee |
+| **recorded** | `entryFeeRate`, `costEntryFeeFraction`, `costExitFeeFraction` | `entryFeeRate`, `entry_fee`, `exit_fee`, **`exit_fee_mode`** ('maker' / 'taker') |
+
+⭐ **SO VTS IS STRUCTURALLY PESSIMISTIC ON THE EXIT** and paper is not. Any cross-lane comparison of net outcomes inherits that, and **it is a real reason VTS and paper P&L are not interchangeable** — independently of the separate fact that VTS books the observed mark at exit rather than a transactable price.
+
+### 6.4 HOW THE ROUND TRIP IS PRICED IN THE DECISION PATH — AND THREE KNOWN SIMPLIFICATIONS
+
+**The round-trip friction used for admission and ranking is `fee × 2 + slippage × 2 + spread`** (spread charged once, at entry).
+
+⚠️ **(i) BOTH LEGS ARE BILLED AT ENTRY NOTIONAL.** `expectancy.ts` computes `friction = frictionPct × entryPrice`, and the maker/taker twin does the same on its own entry price. The real exit fee is charged on **exit** notional. **Magnitude: roughly 3 bps at a 4 % target on a 0.80 % taker leg — correct sign, and two orders of magnitude too small to move a ranking.**
+⚠️ **(ii) `fee × 2` IS THE ADDITIVE SHORTHAND, NOT THE EXACT HURDLE.** Break-even for unchanged base quantity is `P1/P0 = (1 + entryFee) / (1 − exitFee)`, so the additive form understates by about `2f²` — **~1.3 bps at the crypto 0.80 % taker rate, ~0.02 bps at the xStock rate, always optimistic.** Homed at `PHASE_19_PLAN` row 2.4h.
+⚠️ **(iii) CLASS IS NOT A COMPLETE VENUE FEE-GROUP KEY** (Codex audit3, and it is the sharpest of the three). `fee_model` keys by **asset class**; the venue keys by **instrument** — stablecoins by base currency, FX pairs on a separate schedule, plus a selected-pair maker-rebate list. So a `USDC/USD` or `EUR/USD` row priced as `crypto_spot` is priced off the wrong schedule. That audit declared the instrument-to-fee-group map **INSUFFICIENT** and requested it; it is still unbuilt.
+
+### 6.5 WHAT IS **NOT** SIMULATED AT ALL — stated so nobody assumes it is
+
+- ⛔ **The account's fee TIER** (§6.1) — flat per-class rates, no rung resolution.
+- ⛔ **The four other published schedules** (§2.5 of the fee-watch scope): the stablecoin / pegged / FX schedule at 0.20/0.20, USDG, USDe, and the Spot Maker Rebate's eligible-pair list. **We price every crypto pair off the one crypto ladder.**
+- ⛔ **Maker FILL PROBABILITY.** A maker rate is booked when the model or the fill says maker; **whether a resting order would actually have filled is not modelled** in the VTS lane.
+- ⚠️ **Whether the published rate matches our account's product** — the pages are public and the account view is a 2026-09-06 capture, not a live read.
