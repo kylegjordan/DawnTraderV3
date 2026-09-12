@@ -7841,6 +7841,29 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 
 ---
 
+### ⭐ #1050 OPEN 2026-09-12 (CC-C, surfaced answering Langston's blocking question on `3n` row `8f`) — THE QUOTE AND BASE LEGS ARE DERIVED THREE DIFFERENT WAYS AND THEY DISAGREE. ONE OF THEM REPORTS EVERY NON-`USDT` PAIR AS USD-QUOTED, INCLUDING THE EUR/GBP/CHF/AUD/CAD PAIRS ROW `8f` EXISTS TO REFUSE
+
+**WHY IT WAS FOUND, because the provenance matters: Langston asked whether the quote leg is stored or derived, since `#966`'s retroactive USD correction is only computable if it is recoverable on rows not yet written.** Answering that required a census of the derivation sites. **There is no single derivation.**
+
+**THE THREE SHAPES, at `origin/migration/aws-supabase`, whole-tree grep over `server/` excluding tests:**
+
+| # | site | shape | what it yields on `BTC/USD` | on `SOL/EUR` |
+|---|---|---|---|---|
+| 1 | `active-execution-engine.ts:4172` | `signal.symbol.split('/')[0]` with an OR-fallback to `signal.symbol` | base `BTC` ✅ | base `SOL` ✅ |
+| 2 | `routes.ts:12958` | `position.symbol.split('/')[0]` with an OR-fallback to `position.symbol` | base `BTC` ✅ | base `SOL` ✅ |
+| 3 | `routes.ts:5082-5083` | a suffix-strip of `USD` or `USDT`, and `symbol.endsWith('USDT') ? 'USDT' : 'USD'` | base **`BTC/`** ⛔ quote `USD` | base **`SOL/EUR`** ⛔ quote **`USD`** ⛔ |
+
+**MEASURED, not reasoned — run against the actual expressions:** `'BTC/USD'` → base `"BTC/"`; `'ETH/USDT'` → base `"ETH/"`; `'SOL/EUR'` → base `"SOL/EUR"` unchanged; `'BTCUSD'` → base `"BTC"`. ⇒ **shape 3 is correct ONLY on the unslashed form and wrong on the canonical slashed form every time.**
+
+⛔⛔ **THE LOAD-BEARING HALF, AND IT IS THE QUOTE NOT THE BASE: `routes.ts:5083` is `quoteCurrency: p.symbol.endsWith('USDT') ? 'USDT' : 'USD'` — a TWO-WAY ternary against a population carrying EIGHT distinct quote legs** (`USD` 614 · `EUR` 54 · `GBP` 20 · `USDC` 20 · `USDT` 20 · `CHF` 9 · `AUD` 8 · `CAD` 5; `closed_trades` where `closed_at IS NOT NULL`, unbounded, n = 750). ⇒ **every `EUR`-, `GBP`-, `CHF`-, `AUD`-, `CAD`- and `USDC`-quoted pair is REPORTED AS USD-QUOTED.** ★ **Those are exactly the pairs row `8f` exists to refuse, so the one surface a reader would check to see which pairs are affected is the surface that cannot show it.**
+
+✅ **SCOPE, STATED SO IT IS NOT OVER-READ: site 3 is a READ/DISPLAY route** (`GET /api/watchlist`, mapping the active filter pool into a `WatchlistPair`-compatible shape *"for backward compatibility"*). **It writes no row and corrupts no stored data.** ⇒ **rule 24 outcome (1), a real defect, but a DISPLAY-honesty one** — same family as `#938` and `#921`: a field that reads as measured and is actually a constant. ⚠️ **NOT ESTABLISHED: which consumers read that route's `quoteCurrency`. Until that census is run the blast radius is unknown, and I am not asserting it is only cosmetic.**
+
+⛔ **AND THE OR-FALLBACK IN SHAPES 1 AND 2 IS ITS OWN DEFECT, which is Langston's point and I am recording it here rather than re-deriving it later: on a no-slash symbol that fallback silently stores THE WHOLE SYMBOL as the base leg, and the column still reads populated.** **`#546` absent-as-valid.** The migration that created the column does the same (`2026-04-23-b65…sql:39`, `COALESCE(NULLIF(SPLIT_PART(symbol,'/',1),''), symbol)`). **`base_currency` is `.notNull()` at four schema sites (`shared/schema.ts:652`, `:677`, `:711`, `:1685`), so a nullable symmetric column for the quote leg is not available.**
+
+⇒ **DISPOSITION — §9.4 (2), added to an existing placed item.** `HOME: folded into B-QUOTE-LEG-INTEGRITY, PHASE_19_PLAN row 3n.h, owner CC-C` — the row placed in this same commit as the sibling Langston directed, beside `3n.g`'s peg watch. ⛔ **It is NOT an `8f` implementation detail and that framing was BOUNCED (Langston, 2026-09-12): a stored quote column is two write sites on `closed_trades` alone plus whatever writes `active_open_positions` and `vts_open_trades`, plus a migration and a backfill on the trading record — that reads `architecture` and needs its own row.**
+✅ **WHAT GOES INTO `8f` NOW IS THE CHEAP HALF THAT ACTUALLY BINDS — the writer-side assertion at the split sites: the symbol must carry exactly ONE slash with BOTH legs non-empty, refuse or flag otherwise. No migration, no backfill, and it fires on the future rows the question was about.** ★ **A stored copy of a derivation is not a constraint; it is a second place the same fact lives.**
+
 ### ⭐ #1049 OPEN 2026-09-12 (CC-C, answering Kyle's own question of 2026-09-11) — THE SCANNER IS NOT THE BOTTLENECK AND NEVER WAS. IT ROTATES ~340 OF 1,449 PAIRS EVERY CYCLE. ONLY 134 DISTINCT CRYPTO PAIRS A DAY GET PAST THE FILTERS — AND THAT NUMBER HAS FALLEN 38% IN SIX DAYS
 
 **KYLE'S QUESTION, VERBATIM (2026-09-11):** *"why is the scanner only looking at one hundred nineteen pairs throughout the course of the day when we should be scanning three hundred different pairs every thirty seconds up to the full one thousand five hundred pairs that are available through crypto plus the four hundred plus that are available in ex stocks."*
