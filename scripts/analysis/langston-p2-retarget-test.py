@@ -12,6 +12,12 @@ EXPECTED (stated before the run):
   U8 out-of-band edit of MEMORY.md then a part write           -> exit 4 'out-of-band'
   U9 pre-migration legacy path (no compose-state)              -> a whole-file write to MEMORY.md still works, exit 0
   M2 mutant: the rollback does NOT restore the part            -> U6 becomes exit 6 (part_ok False), not 5
+  B1 out-of-band PART edit (count-neutral) then a direct write -> exit 4 'changed since the last compose', MEMORY.md
+                                                                  unchanged; --compose then ACCEPTS and reports it
+  B2 parts present but compose-state lost, then a direct write -> exit 2 'half-installed', MEMORY.md untouched
+  F1 whole-file content carrying a stamp line                  -> exit 2 'pass the part'
+  M3 mutant: BLOCKER-1 parts guard removed                     -> B1 launders the smuggled edit (exit 0)
+  M4 mutant: BLOCKER-2 predicate reverted to state-only        -> B2 falls open onto MEMORY.md, stamp gone (exit 0)
 """
 import hashlib, json, os, shutil, subprocess, sys
 
@@ -197,6 +203,70 @@ rc, out = run(h, app(sha(rd(h, "memory-parts/00-legacy.md")), 1),
               (b"- one entry\n- a stray second column-0 bullet\n"), script=MW)
 v("M2", rc == 6 and "NOT byte-identical" in out and "part_ok=False" in out,
   "mutant exit %d (expect 6, part not restored): %s" % (rc, out.strip()[:90]))
+
+# B1 out-of-band PART edit (count-neutral, ends in one newline): a direct write must REFUSE, --compose must ACCEPT+report
+h = home(BASE_B, {"00-legacy.md": BASE_B})
+migrate(h)
+with open(h + "/memory-parts/00-legacy.md", "wb") as fh:
+    fh.write(BASE_B + b"- smuggled standing note\n")     # count-neutral, one trailing newline
+rc, out = run(h, app(sha(rd(h, "memory-parts/00-legacy.md")), 1), b"- a real entry\n")
+mem_unchanged = strip_last_stamp(rd(h)) == BASE_B
+rc_c, out_c = migrate(h)      # compose is the reconciliation verb
+v("B1", rc == 4 and "changed since the last compose" in out and mem_unchanged
+  and rc_c == 0 and "parts changed since last compose" in out_c,
+  "direct exit %d (mem unchanged %s), compose exit %d reports %s" %
+  (rc, mem_unchanged, rc_c, "parts changed since last compose" in out_c))
+
+# B2 dispatch: parts present but compose-state lost -> REFUSE, never fall open onto MEMORY.md
+h = home(BASE_B, {"00-legacy.md": BASE_B})
+migrate(h)
+os.remove(h + "/.memory-archive/compose-state.json")
+mem_before = rd(h)
+rc, out = run(h, whole(sha(rd(h, "memory-parts/00-legacy.md")), 0, 0), BASE_B + b"- x\n")
+v("B2", rc == 2 and "half-installed" in out and rd(h) == mem_before,
+  "exit %d, MEMORY.md untouched %s: %s" % (rc, rd(h) == mem_before, out.strip()[:90]))
+
+# F1 whole-file write carrying a stamp line (the composed file pasted where the part belongs) -> refuse
+h = home(BASE_B, {"00-legacy.md": BASE_B})
+migrate(h)
+rc, out = run(h, whole(sha(rd(h, "memory-parts/00-legacy.md")), 0, 0), rd(h))   # rd(h) has a stamp line
+v("F1", rc == 2 and "pass the part" in out, "exit %d: %s" % (rc, out.strip()[:90]))
+
+# M3 mutant: remove the BLOCKER-1 parts guard in do_direct_write -> B1 launders (exit 0)
+with open(W, encoding="utf-8") as fh:
+    lines = fh.read().split("\n")
+idx = [i for i, l in enumerate(lines) if l.strip() == 'if state.get("parts_sha") and state["parts_sha"] != cur_parts_sha:']
+assert len(idx) == 1, ("blocker-1 anchor", len(idx))
+lines[idx[0]] = lines[idx[0]].replace('if state.get("parts_sha") and state["parts_sha"] != cur_parts_sha:', "if False:  # mutant")
+MW3 = D + "/mutant-b1"
+with open(MW3, "w", encoding="utf-8") as fh:
+    fh.write("\n".join(lines))
+os.chmod(MW3, 0o755)
+h = home(BASE_B, {"00-legacy.md": BASE_B})
+migrate(h, script=MW3)
+with open(h + "/memory-parts/00-legacy.md", "wb") as fh:
+    fh.write(BASE_B + b"- smuggled standing note\n")
+rc, out = run(h, app(sha(rd(h, "memory-parts/00-legacy.md")), 1), b"- a real entry\n", script=MW3)
+v("M3", rc == 0 and b"smuggled standing note" in rd(h),
+  "mutant exit %d, smuggled-laundered %s (expect leak)" % (rc, b"smuggled standing note" in rd(h)))
+
+# M4 mutant: revert BLOCKER-2 predicate to state-only -> B2 falls open (exit 0 onto MEMORY.md)
+with open(W, encoding="utf-8") as fh:
+    lines = fh.read().split("\n")
+idx = [i for i, l in enumerate(lines) if l.strip() == "if parts_present or state_live:"]
+assert len(idx) == 1, ("blocker-2 anchor", len(idx))
+lines[idx[0]] = lines[idx[0]].replace("if parts_present or state_live:", "if state_live:  # mutant")
+MW4 = D + "/mutant-b2"
+with open(MW4, "w", encoding="utf-8") as fh:
+    fh.write("\n".join(lines))
+os.chmod(MW4, 0o755)
+h = home(BASE_B, {"00-legacy.md": BASE_B})
+migrate(h, script=MW4)
+os.remove(h + "/.memory-archive/compose-state.json")
+rc, out = run(h, whole(sha(rd(h)), 0, 0), BASE_B + b"- fell open\n", script=MW4)
+v("M4", rc == 0 and b"fell open" in rd(h) and b"<!-- composed" not in rd(h),
+  "mutant exit %d, fell-open-onto-MEMORY %s, stamp-gone %s (expect silent un-install)"
+  % (rc, b"fell open" in rd(h), b"<!-- composed" not in rd(h)))
 
 bad = [n for n, ok in results if not ok]
 print("RESULT: %d of %d matched%s" % (len(results) - len(bad), len(results), "" if not bad else "; DIFFER: " + ", ".join(bad)))

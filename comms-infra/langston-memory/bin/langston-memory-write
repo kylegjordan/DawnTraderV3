@@ -465,12 +465,16 @@ def read_parts():
     return parts
 
 
+def parts_digest(parts):
+    """sha256 over the ordered (name, raw_sha) list - the identity of the parts set as read."""
+    return sha(("\n".join("%s %s" % (n, h) for n, h, _ in parts)).encode("utf-8"))
+
+
 def compose_body(parts):
     """The composed BODY (pre-stamp) is the parts' bodies concatenated in order. parts_sha is over the ordered
     (name, raw_sha) list; body_sha is over the body."""
     body = b"".join(pb for _, _, pb in parts)
-    parts_sha = sha(("\n".join("%s %s" % (n, h) for n, h, _ in parts)).encode("utf-8"))
-    return body, parts_sha, sha(body)
+    return body, parts_digest(parts), sha(body)
 
 
 def stamp_line(n_parts, parts_sha, body_sha):
@@ -526,6 +530,9 @@ def do_compose(opts):
         r_before = retraction_count(reader, TARGET)
         parts = read_parts()
         body, parts_sha, body_sha = compose_body(parts)
+        # BLOCKER-1 (Langston 21:22Z): compose is the reconciliation verb - it ACCEPTS a parts change, but the
+        #   transition is made visible rather than silent (a direct write, by contrast, refuses it below).
+        parts_reconciled = bool(state.get("parts_sha")) and state["parts_sha"] != parts_sha
         # ⛔ first-compose predicate (Langston point-3): composed-MINUS-STAMP == current MEMORY.md bytes, so the
         #    migration cannot silently clobber a hand-edited live file.
         if "last_written_sha" not in state:
@@ -547,6 +554,7 @@ def do_compose(opts):
         arch_path, created = archive_old(cur, cur_sha, st)
         row = {"ts": utc(), "target": TARGET, "old_sha": cur_sha, "new_sha": new_sha, "old_bytes": len(cur),
                "new_bytes": len(composed), "mode": "compose", "part_count": len(parts), "parts_sha": parts_sha,
+               "prev_parts_sha": state.get("parts_sha"), "parts_reconciled": parts_reconciled,
                "body_sha": body_sha, "stamp_bytes": len(composed) - len(body), "by_claimed": opts["--by"],
                "via_uid": os.getuid(), "reason": opts["--reason"], "archived": os.path.basename(arch_path)}
         append_index(dict(row, outcome="attempted"), st)
@@ -567,8 +575,10 @@ def do_compose(opts):
         write_compose_state({"last_written_sha": new_sha, "pending_sha": None, "ts": utc(),
                              "parts_sha": parts_sha, "part_count": len(parts)}, st)
         append_index(dict(row, ts=utc(), outcome="composed", retractions=[r_before, r_after]), st)
-        return "COMPOSED %s -> %s from %d part(s) (%d -> %d B; stamp %d B; retractions %d -> %d); %s" % (
-            cur_sha[:16], new_sha[:16], len(parts), len(cur), len(composed), len(composed) - len(body),
+        recon = "" if not parts_reconciled else " [parts changed since last compose: %s -> %s]" % (
+            (state.get("parts_sha") or "none")[:12], parts_sha[:12])
+        return "COMPOSED %s -> %s from %d part(s)%s (%d -> %d B; stamp %d B; retractions %d -> %d); %s" % (
+            cur_sha[:16], new_sha[:16], len(parts), recon, len(cur), len(composed), len(composed) - len(body),
             r_before, r_after, size_line(len(composed)))
     finally:
         os.close(lfd)
@@ -612,10 +622,18 @@ def run(argv, stdin_bytes):
         check_entry_text(content, declared_ledger)
     elif not content.strip():
         raise Refused(2, "REFUSED: empty stdin would blank the memory file")
-    # ⛔ P-2 unit 2: once composition is live (compose-state seeded by the migration), a direct write TARGETS THE PART
-    #    and MEMORY.md is recomposed. Before the migration, the legacy MEMORY.md path is unchanged - so this tool behaves
-    #    exactly as today until the box is migrated, and the self-test (no compose-state) exercises the legacy path.
-    if read_compose_state().get("last_written_sha"):
+    # ⛔ P-2 unit 2 dispatch (Langston BLOCKER-2, 21:22Z): predicate on the PARTS, not the state - so losing the state
+    #    file with parts in place REFUSES rather than falling open onto MEMORY.md and stranding the parts. Before the
+    #    migration (no parts dir) the legacy MEMORY.md path is unchanged, so the tool behaves exactly as today and the
+    #    self-test (no parts) exercises the legacy path.
+    parts_present = os.path.isdir(PARTS_DIR) and any(
+        not n.startswith(".") and os.path.isfile(os.path.join(PARTS_DIR, n)) for n in os.listdir(PARTS_DIR))
+    state_live = bool(read_compose_state().get("last_written_sha"))
+    if parts_present or state_live:
+        if not state_live:
+            raise Refused(2, "REFUSED: %s holds parts but %s has no compose-state - the composed model is half-installed "
+                             "or the state file was lost. Run --compose to reconcile before any direct write; refusing to "
+                             "write MEMORY.md directly and strand the parts." % (PARTS_DIR, TARGET))
         return do_direct_write(opts, content, append, declared_ledger, declared_retractions)
     return do_direct_write_legacy(opts, content, append, declared_ledger, declared_retractions)
 
@@ -729,6 +747,13 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                              "composer last wrote %s (pending %s). Reconcile the parts and recompose before writing."
                           % (TARGET, mem_old_sha, state.get("last_written_sha"), state.get("pending_sha")))
         parts = read_parts()
+        # BLOCKER-1 (Langston 21:22Z): the parts are the file of record. If a part changed out of band since the last
+        #   compose, a direct write would launder it into MEMORY.md. Refuse - --compose is the reconciliation verb, not this.
+        cur_parts_sha = parts_digest(parts)
+        if state.get("parts_sha") and state["parts_sha"] != cur_parts_sha:
+            raise Refused(4, "REFUSED: a part in %s changed since the last compose (parts-sha %s, last composed %s). A "
+                             "direct write would fold that unreviewed change into %s. Run --compose to reconcile first."
+                          % (PARTS_DIR, cur_parts_sha, state["parts_sha"], TARGET))
         target_name = resolve_target_part(parts, append)
         part_path = os.path.join(PARTS_DIR, target_name)
         pst = os.stat(part_path)
@@ -743,6 +768,11 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                           % (part_path, part_old_sha, opts["--expect-sha"].strip().lower()))
         r_before = retraction_count(reader, TARGET)
         l_before = ledger_block_count(mem_old.decode("utf-8"))
+        # FINDING-1 (Langston 21:22Z): a whole-file write that carries a stamp line is the composed file pasted where
+        #   the PART belongs - it would bake the stamp into the part body and grow MEMORY.md by a stale stamp per write.
+        if not append and any(STAMP_RE.match(l) for l in content.split(NL)):
+            raise Refused(2, "REFUSED: the content carries a `<!-- composed ... -->` stamp line - you passed the composed "
+                             "%s, not the part. Fetch and pass the part's own bytes." % os.path.basename(TARGET))
         part_new_text = compose_append(part_old.decode("utf-8"), content) if append else content
         part_new = part_new_text.encode("utf-8")
         if not part_new.endswith(b"\n") or part_new.endswith(b"\n\n"):
