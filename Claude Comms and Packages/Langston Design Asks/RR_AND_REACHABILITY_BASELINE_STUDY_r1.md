@@ -1,5 +1,43 @@
 # REWARD-TO-RISK **AND** REACHABILITY — ONE BASELINE, NOT TWO
 
+> ⛔⛔ **r1 CARRIES THREE FACTUAL ERRORS, CORRECTED HERE 2026-09-12 AFTER KYLE CHALLENGED THEM. READ THIS BEFORE §2.**
+>
+> **(1) “The multipliers are DB-resolved, so changing R is changing rows” IS MISLEADING AS WRITTEN.** Every strategy computes its own stop and target **INSIDE its own module, with its own formula**. The database holds the multiplier **NUMBERS** those formulas read — **the formulas themselves differ per strategy, and geometry is NOT assigned uniformly after a signal is born.** *(Kyle's instinct was right and my sentence was wrong in a way that mattered.)* Read one at a time at the ref:
+>
+> | strategy | stop | target |
+> |---|---|---|
+> | `strong_bull_trend` | `entry − 3.0×ATR` | `entry + 6.0×ATR` |
+> | `adaptive_flow` | `MIN(pattern low, entry − 1.5×ATR)` — the TIGHTER | `entry + 3.0×ATR` |
+> | `pivot_shift` | `MAX(morningStar low, entry − 1.5×ATR)` — the WIDER | `entry + 3.0×ATR` |
+> | `inside_bar_reversal` | `parentLow × (1 − 0.003)` | `entry + 2.0×ATR` |
+> | `reverse_impulse` | `pinbarLow × (1 − 0.005)` | `entry + 2.0×ATR` |
+> | `morning_star` | `MIN(c2Low, c1Low) × (1 − 0.003)` | `entry + 2.5×ATR` |
+> | `defensive_hedge` | `engulfingLow × (1 − buffer)` | `entry + 1.8×ATR` |
+> | `support_bounce` | `supportLevel × (1 − buffer)` | `entry + 2.0×ATR` |
+> | `volatility_edge` | `cPointLow × (1 − buffer)` | `MIN(measured move, ATR target)` |
+> | `orb` | `rangeLow` | `entry + mult × RANGE HEIGHT` — **no ATR at all** |
+> | `vwap_pullback` | `MIN(vwap − atr×m, low24h + atr×m)` | `high24h − atr×offset` — **a LEVEL minus an offset** |
+> | `abcd_long` | `cLow − atr×buffer` | `MIN(measured move, TWO-R TARGET)` |
+> | `sma_trend_ride` | `MIN(swingLow×m, sma×m)` | `entry + riskDistance × break_target_r_multiple` |
+> | `vwap_bounce` | `vwap × m` | `entry + riskDistance × target_r_multiple` |
+> | `range_trade` | `rangeLow × m` | `entry + RANGE HEIGHT` |
+> | `mean_reversion` | `price × (1 − buffer)` | `meanValue × m` — **a LEVEL** |
+> | `liquidity_trap` | `breakoutHigh × m` | `rangeLow × m` — **both LEVELS** |
+>
+> ⇒ ⛔ **THERE IS NO SINGLE CALCULATION.** Targets come from ATR multiples, measured moves, range heights, 24-hour highs, mean-reversion levels, risk-distance multiples and realised volatility.
+>
+> ✅ **AND THAT EXPOSES A BETTER ANSWER THAN §5 Q3 PROPOSED: the risk-distance-multiple target ALREADY EXISTS IN OUR CODE.** `sma_trend_ride` uses `break_target_r_multiple`, `vwap_bounce` uses `target_r_multiple`, `abcd_long` carries a two-R target — **three strategies already set target as a multiple of their own risk distance, with the multiple in the DB.** ⇒ **Langston's proposal does not need BUILDING, it needs EXTENDING** (`CONDUCT.md`: use what already exists before proposing new code).
+>
+> **(2) “3 OF 19 STRATEGIES” READ AS 3 QUANT / 16 PATTERN, AND THAT IS WRONG.** Canonical regime-strategy map, **19 distinct keys, none classified twice**: **QUANT 11** — `abcd_long`, `breakout`, `dhma`, `liquidity_trap`, `mean_reversion`, `orb`, `range_trade`, `sma_trend_ride`, `strong_bull_trend`, `vwap_bounce`, `vwap_pullback`; **PATTERN 3** — `inside_bar_reversal`, `morning_star`, `support_bounce`; **HYBRID 5** — `adaptive_flow`, `defensive_hedge`, `pivot_shift`, `reverse_impulse`, `volatility_edge`. ⭐ **We have far MORE quant than pattern strategies, 11 against 3, exactly as Kyle said.** What “3 of 19” actually meant is that **only 3 strategies carry an ATR term anywhere in their STOP** — unrelated to the quant/pattern axis, and it should never have been written beside it.
+>
+> ⚠️ **AND THE PATTERN *POOL* IS NOT THE PATTERN *STRATEGIES* — conflating them caused real confusion.** The pool is a separate TRIGGER path: the detector spots a shape, `patternToTradeSignal` assigns a **hardcoded** 1.5×ATR stop / 2.5×ATR target, and **only then** is a canonical strategy NAME attached. ⇒ **a pool trade can wear the name of a strategy whose own formula never ran.**
+>
+> **(3) ON FOLDING THE REACHABILITY WORK IN:** r1 said “merged” and then described it as a separate leg someone else owns, which reads as the opposite. ✅ **Unambiguously: ONE batch, CC-B owns it, the reachability work sits INSIDE it.**
+>
+> ⚠️ **PLUS AN EXTERNAL-NUMBER CORRECTION (Coltrane's, re-derived by me):** *“our fees are 13× the example's”* does **NOT** measure the damage. The damage measure is cost **relative to stop distance**: the example is `0.12 / 0.247 = 0.485`; ours is `1.61 / 3.54 = 0.455`. ⇒ **ours is slightly LIGHTER.** Our net ratio is worse **only because our gross ratio is 1.66 against their 2.0** — we are not being crushed by unusual fees, we are aiming too close for the fees we pay.
+>
+> ⛔ **READ §2, §4 and §5 ONLY THROUGH THESE CORRECTIONS. The measured numbers in §6 stand.**
+
 **Owner:** CC-B · **For:** Langston + Coltrane · **Kyle-directed 2026-09-12 · r1**
 
 > ⭐⭐ **THE ASK, IN KYLE'S FRAMING, AND IT IS DELIBERATELY NOT *"FIND MY ERROR"*.**
