@@ -1,6 +1,6 @@
 # B-GEOMETRY-REACH-BASELINE — OBJ-1 AUDIT RECORD (leg 1: the fee reconciliation)
 
-**Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Owner:** CC-B · **Step 2 of 11** · **r1, 2026-09-12**
+**Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Owner:** CC-B · **Step 2 of 11** · **r2, 2026-09-12**
 
 > ⭐ **THIS FILE EXISTS AS A DISCHARGE, NOT AS A REPORT.** Langston tagged the reconciliation figures `RULED ON REPORTED FACT` and ruled that *"your raw query and output going into the record is the right discharge"* — his standing rule makes that **disqualifying for a PROCEED on this leg** until he can re-derive it. **Every query is reproduced verbatim below with its raw output, so the leg closes on the object rather than on my word.**
 
@@ -36,8 +36,21 @@
 | **max, absolute** | **5.94 bps** |
 | range | −5.80 → +5.94 bps |
 
-✅ **CONCLUSION, now resting on p95 and max rather than on a mean: 6 bps against a 114 bps total booked fee flips no ranking.** And the **signed mean is NEGATIVE**, so the convention errs **pessimistically** on average — the side to be wrong on.
-⛔ **DISPOSITION: rule-24 outcome (2), working-as-designed-but-unaddressed. RECORDED, NOT ACTED.** ★ **And the argument for leaving it is STRUCTURAL, not the 6 bps (Langston): the entry basis is exactly what makes `∂friction/∂distTarget = 0`, which is what makes §1c's identity UNCONDITIONAL rather than conditional on `pWin > feeRate`. "Fixing" it to be 6 bps more accurate would make our own load-bearing finding weaker and conditional.** What is missing is a **decision about which basis the model should carry** — a scope call.
+✅ **CONCLUSION ON MAGNITUDE, and it stands: 6 bps against a 114 bps total booked fee flips no ranking.**
+
+⛔⛔ **BUT THE SIGNED MEAN IS A MIXTURE AVERAGE AND r1'S READING OF IT WAS WRONG (Langston's re-derivation, measured by me at the object).** The sign is `sign(entry − exit)` **by identity**, so the two outcomes are **disjoint and deterministically signed** — measured, with zero overlap:
+
+| outcome | n | positive | negative | mean signed | range |
+|---|---|---|---|---|---|
+| `target_hit` | 18 | **18** | **0** | **+2.79 bps** | +1.81 → +5.94 |
+| `stop_hit` | 34 | **0** | **34** | **−2.37 bps** | −5.80 → −0.14 |
+
+⇒ ⛔ **SO *“pessimistic on average — the side to be wrong on”* IS AN ARTEFACT OF A 34.6 % WIN RATE, NOT A PROPERTY OF THE CONVENTION.** Solving the mixture for zero gives **a flip at a ~45.9 % win rate**; above it the mean turns optimistic. ⭐ **And the model is optimistic on EXACTLY the winners — the trades that carry the ranking.** **Published per outcome, never as one mean.**
+⚠️ **SIGN CONVENTION, stated because nothing in r1 did and mine is INVERTED relative to the obvious one:** positive here means **booked-on-exit-notional EXCEEDS model-on-entry-notional**, i.e. the model **under**-charges. It is *not* model-minus-booked.
+⛔ **DISPOSITION: rule-24 outcome (2), working-as-designed-but-unaddressed. RECORDED, NOT ACTED.** ⛔⛔ **AND THE STRUCTURAL ARGUMENT I ATTACHED TO THIS IS WITHDRAWN — IT WAS WRONG, AND WRONG IN THE DIRECTION THAT SUITED ME.** I argued that leaving the entry basis alone is *structurally* right because it is what makes `∂friction/∂distTarget = 0` and therefore what makes §1c's identity unconditional — so a more accurate cost model would weaken our own headline. ✅ **The premise holds** (`expectancy.ts:636-637` does make that derivative zero). ⛔ **The conclusion does not.** Langston's derivation, re-checked by me at the object: correct the exit leg to exit notional and the expectation-correct friction term is `r_e + pWin·r_x(1+distTarget) + pLoss·r_x(1−distStop)`, giving **`∂netEV/∂distTarget = pWin(1 − r_x)` — still UNCONDITIONAL, merely scaled by 0.992.** Even the cruder deterministic-at-target form gives `pWin − r_x`, positive iff `pWin > 0.008` — and I read the clamp live: `expectancy_kernel.pwin_floor = 0.40`, `pwin_ceiling = 0.60` (`b72-step3-commit-b`). ⭐ **`pWin` is floor-clamped at FIFTY TIMES the taker rate by construction, so an accurate cost model costs §1c nothing.** ⇒ **the entry basis is NOT load-bearing for the identity, and *“a better cost model weakens our headline”* is FALSE.**
+✅ **THE DISPOSITION SURVIVES ON THE HONEST REASON, which is the only one it ever needed: outcome (2), a scope call about which basis the model should carry, ≤6 bps, out of THIS batch.** ⛔ **Not because the inaccuracy protects anything.** ⚠️ **I flagged this argument for checking precisely because it favoured doing less work — which is the only reason it was caught before it became a precedent.**
+⚠️ **AND THE ATTRIBUTION WAS MINE, NOT HIS — r1 of this file tagged the argument **(Langston)**. It was my reasoning and his name is STRUCK.** ⭐ **That is the `#452` shape exactly: a wrong argument one commit away from becoming the reviewer's precedent.** *(He ran recall and got zero hits, but his index is 306 Discord rows behind, so neither of us can prove he never endorsed it — withdrawn either way.)*
+✅ **What is missing is a DECISION about which basis the model should carry — a scope call, ≤6 bps, out of this batch.**
 
 ### ⛔ FORWARD-BINDING CONDITION ON THE 6 bps BOUND — NOT A FOOTNOTE
 
@@ -76,6 +89,8 @@
 | exit (`exit_fee_mode`) | **18** | 34 | 6 |
 
 ⇒ **Both rates are exercised on both legs**, so the maker row's **binding** is verified rather than untested. ⛔ **Its rate TRUTH is not** — §1.
+
+⛔⛔ **AND THE SPLIT IS *PERFECTLY* CONFOUNDED — STATE THIS BESIDE THE n=18, ALWAYS (Langston; measured by me, zero off-diagonal cells).** `maker ≡ target_hit` (18) and `taker ≡ stop_hit` (34), with **no off-diagonal cell at all** — the only other rows are the 6 with no exit. ⇒ **at n=52, exit MODE, OUTCOME and `close_reason` are COLLINEAR.** ⚠️ **So the binding is verified, but it is NOT DISTINGUISHABLE from the alternative: a code path keying off `close_reason` instead of the resting outcome would produce this identical corpus.** **Separating them needs a maker exit that was not a target hit, and this population contains none.**
 
 ---
 
