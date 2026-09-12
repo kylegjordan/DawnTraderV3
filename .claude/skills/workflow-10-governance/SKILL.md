@@ -198,19 +198,26 @@ Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch clos
   - a lock, and a refusal unless the file still has the sha you read;
   - every replaced version archived by hash, inside the daily reproduction-verified backup;
   - the reader's ledger count must move by exactly what you declare, or the old content is restored.
-⛔⛔ **SINCE P-2 (2026-09-12) YOU EDIT A *PART*, NOT `MEMORY.md` — `MEMORY.md` IS GENERATED.** Langston's memory is now composed from `/home/langston/memory-parts/`; the tool recomposes `MEMORY.md` after every write. **Today there is exactly ONE part, `00-legacy.md` (the whole memory), so fetch and sha THAT.** After Langston's retrofit splits it, fetch the specific part you are editing. `--expect-sha` is the sha of the PART, and a mismatch names the part it compared against.
+⛔⛔ **SINCE P-2 (2026-09-12) YOU EDIT A *PART*, NOT `MEMORY.md` — `MEMORY.md` IS GENERATED.** Langston's memory is composed from `/home/langston/memory-parts/`; the tool recomposes `MEMORY.md` after every write. `--expect-sha` is the sha of the PART, and a mismatch names the part it compared against. **DISCOVER the part; never hard-code one** — this degrades correctly whether there is one part (today, `00-legacy.md`) or many (after Langston's retrofit).
 ```bash
-# 1. FETCH THE PART you will edit, and take the sha OF THOSE BYTES, now - before you edit anything
-ssh root@204.168.141.77 'cat /home/langston/memory-parts/00-legacy.md' > langston_part.md
+# 1. LIST the parts and pick the one you are editing:
+ssh root@204.168.141.77 'ls /home/langston/memory-parts/'
+#    - ONE part (today, 00-legacy.md) -> that is your target.
+#    - AFTER the retrofit: for a ledger append, the ledger part DECLARES `ledger: true` in its `<!-- part ... -->`
+#      frontmatter (grep it); for other content, the specific part. Pass --part <name> so a wrong guess is REFUSED.
+PART=00-legacy.md            # replace with the part you are editing once there is more than one
+# 2. FETCH THAT PART and sha it NOW - before editing:
+ssh root@204.168.141.77 "cat /home/langston/memory-parts/$PART" > langston_part.md
 SHA=$(sha256sum langston_part.md | cut -d' ' -f1)
-# 2. edit langston_part.md (keep LF line endings; end in exactly ONE newline), then declare the change YOU INTEND:
-#    L = change in '- ' bullets across the whole REVIEWER LEDGER block, R = change in retraction entries
-ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-delta L --retractions-delta R --by '<session>' --reason '<batch-id>'" < langston_part.md
-# or append ONE new retraction entry (both counters move by 1), still with the sha from step 1:
-ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-append --entries 1 --by '<session>' --reason '<batch-id>'" < entry.md
+# 3. edit langston_part.md (keep LF; end in exactly ONE newline), then declare the change YOU INTEND
+#    (L = change in '- ' bullets across the whole REVIEWER LEDGER block, R = change in retraction entries):
+ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --part $PART --ledger-delta L --retractions-delta R --by '<session>' --reason '<batch-id>'" < langston_part.md
+# or append ONE new retraction entry (both counters move by 1), --part asserts you targeted the ledger part:
+ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-append --entries 1 --part $PART --by '<session>' --reason '<batch-id>'" < entry.md
 # to REBUILD MEMORY.md from the parts by hand (rare - writes recompose automatically): reads NO stdin, redirect it:
 ssh root@204.168.141.77 "langston-memory-write --compose --by '<session>' --reason '<why>'" < /dev/null
 ```
+⚠️ **`--part` on a whole-file write to an EXISTING part is a target; `--part <new> --expect-sha new` CREATES one (bare filename only). That is the retrofit's verb, not a routine sync** — a routine sync edits the part it fetched.
 ⚠️ **`MEMORY.md`'s sha CHANGES ON EVERY COMPOSE even when the content does not** — the stamp line is timestamped. So `last_written_sha` churn is NOT evidence of a content change; the **`body-sha`** in the stamp line is the content discriminator. ⚠️ **A part write archives TWO objects** (the old part and the old `MEMORY.md`), both carried by the daily reproduction-verified backup — expect the archive to grow ~2 objects per write.
 - ⛔⛔ **NEVER take the sha at write time (Langston Step-4 BLOCKER-1).** A fresh sha matches whoever wrote while you were editing, so the compare-and-swap passes and their write is silently lost — the exact defect this tool exists to stop. **The sha must be of the bytes you started from.**
 - **Exit 4 means the file changed since you fetched it.** The message says whether that was another session writing through the tool (re-fetch, redo) or a hand edit outside the tool (tell Infra Claude first). Never force.
@@ -244,11 +251,13 @@ Move the card to **`Governance`**.
     ⛔ **THE `/tmp` + `cp` RECIPE THAT STOOD HERE IS REPLACED (B-LANGSTON-CONTEXT P-6b, 2026-09-11)** — corrected in THIS block too, because it declares itself authoritative on divergence and a session reading bottom-up would otherwise follow the hazard. It wrote through the fixed, pre-creatable path `/tmp/langston_memory.md` (a symlink there steers a root write; an owned file there injects text into every Langston invoke), with no compare-and-swap and no copy of what it overwrote. Use `langston-memory-write` as shown in §10.b above:
 
     ```bash
-    # SINCE P-2 (2026-09-12): edit the PART, not MEMORY.md (which is generated). Today one part, 00-legacy.md.
-    ssh root@204.168.141.77 'cat /home/langston/memory-parts/00-legacy.md' > langston_part.md   # the bytes you will edit
+    # SINCE P-2 (2026-09-12): edit the PART, not MEMORY.md (generated). DISCOVER the part; do not hard-code it.
+    ssh root@204.168.141.77 'ls /home/langston/memory-parts/'          # ONE part today (00-legacy.md); many after the retrofit
+    PART=00-legacy.md                                                 # the part you are editing (the ledger part declares ledger:true)
+    ssh root@204.168.141.77 "cat /home/langston/memory-parts/$PART" > langston_part.md   # the bytes you will edit
     SHA=$(sha256sum langston_part.md | cut -d' ' -f1)                              # the sha OF THOSE BYTES - never a fresh one at write time
-    # edit, then declare the change you intend (L ledger bullets, R retraction entries):
-    ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --ledger-delta L --retractions-delta R --by '<session>' --reason '<batch-id>'" < langston_part.md
+    # edit, then declare the change you intend (L ledger bullets, R retraction entries); --part asserts the target:
+    ssh root@204.168.141.77 "cd /home/langston && langston-memory-write --expect-sha $SHA --part $PART --ledger-delta L --retractions-delta R --by '<session>' --reason '<batch-id>'" < langston_part.md
     ```
 
     Update `/home/langston/CLAUDE.md` only when comms protocol or his persona changes (rare). **Repo-side docs reach Langston off the REVIEW BRANCH — so a doc he needs must be pushed, not merely saved** (`LANGSTON_ARCHITECTURE.md` §6).
