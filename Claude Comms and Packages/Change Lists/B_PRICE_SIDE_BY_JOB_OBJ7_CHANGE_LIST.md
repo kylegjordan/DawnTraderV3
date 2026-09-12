@@ -366,6 +366,17 @@ Your chunk-4 hold asked for the tolerance and the approximation's direction in t
 2. **The live subscription count is n = 1** (`RAY/USD`), so the row is met on the count that exists — **and the evidence bounds nothing above n = 1.** The set is position-driven (`WS_SUB_AUDIT openPositionCount`), so it grows with open positions. "At the live subscription count" must not be read as "at scale".
 3. **Efficacy is unmeasured, and it is not row 7a, so it does not block:** nothing here shows `bbo` delivered the continuity it was bought for. **HOME: scope row `8k` with plan item `P-8k`**, beside P-7e — ticker frames a minute against trade prints a minute for the subscribed symbol inside one post-deploy window, self-controlled, needing no baseline and no matched window. ⚠️ One construction note: **no trade channel is subscribed** (pre-audit A-9.11), so the print rate is inferred from changes in the ticker's own `last` field, and the row says so.
 
+## DEPLOY POINT AND THE DRIFT RUNGS (2026-09-12, CC-C — Langston routed alerts `763ea6b5` and `bca8e0d4` to me)
+
+**THE CONDITION IS IN-REVIEW-NOT-YET-DEPLOYED, AND THE BEHAVIOURAL GAP IS ZERO. MEASURED UNBOUNDED, deployed `b597f1bf2` → `origin/migration/aws-supabase`:**
+- **Exactly ONE undeployed runtime file** — `server/utils/adaptive-kalman.ts` — by the predicate `^(server|client|shared)/.*\.(ts|tsx)$` excluding `tests?/`, applied to the FULL changed-file list, not a sample.
+- ✅ **It carries ZERO non-comment changed lines.** Every changed line in that file is a docblock line — the P-7j cadence and decay-length corrections from Step 9. **No statement, no constant, no signature.**
+- ⇒ **Staging's RUNNING BEHAVIOUR is identical to the review branch's.** The rungs count commits, which is what they are built to do; they cannot read intent, and that is correct design rather than a defect. ★ **This is the drift line's first firing on a real gap carrying a runtime file, and the honest reading of that true positive is that the file changed and the behaviour did not.**
+
+⛔ **THE DEPLOY POINT, STATED SO IT IS NOT RE-ASKED EVERY FOUR HOURS: OBJ-7 IS ALREADY DEPLOYED (`b597f1bf2`, 2026-09-11T20:09:47Z). The undeployed remainder is OBJ-7's POST-DEPLOY RECORD** — docblock, the pinned test, evidence scripts and governance — **plus other sessions' non-runtime work. The next deploy of this batch is OBJ-8's, and OBJ-8 is Step 2 approved / Step 3 not started.**
+⇒ **There is nothing to deploy now, and deploying to silence a rung would restart live trading for a comment change.**
+
+⚠️ **WHAT WOULD CHANGE THIS, so the disposition is falsifiable rather than a promise: any commit touching a runtime file with a non-comment changed line before OBJ-8 ships. The predicate above IS the test and is cheap to re-run.**
 ## STEP 9 — P-7j (A): LANGSTON'S FOUR CONDITIONS (20:55Z) AND WHERE EACH LANDS
 
 | # | condition | landing |
