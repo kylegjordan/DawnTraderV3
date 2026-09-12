@@ -76,6 +76,22 @@ export interface BookStateComparator {
    *   position stays open the whole time, so this is a real exposure, not a free win.
    */
   seedImplausible: boolean;
+  /**
+   * ⛔⛔ TRUE ONCE THIS CHAIN HAS SEEN THE BOOK ACTUALLY MOVE (8a r5, Langston BLOCKER-3).
+   *
+   * ★ WHY A POSITIVE PROPERTY AND NOT `!seedImplausible`: **NOT JUDGED IMPLAUSIBLE IS NOT
+   *   JUDGED PLAUSIBLE.** A COLD-START chain gets `seedImplausible = false` VACUOUSLY — there
+   *   was no retained ring, so the check never ran — and that is exactly the chain that can
+   *   seed on a hollow frame. r4 retained on the absence of a negative, so a restart mid-hollow
+   *   wrote its BROKEN ring into the slot the whole mechanism defines as OUTSIDE, permanently
+   *   and in the PERMISSIVE direction — strictly worse than the hold-forever cost.
+   *
+   * ★ THE DISCRIMINATOR (his): **a real book MOVES; a frozen artefact does not.** A degenerate
+   *   chain is precisely the one whose every advance has `bidDep = askDep = midDep = 0` — and
+   *   FRAME COUNT alone cannot separate them, because an unchanging broken book reads
+   *   `two_sided` forever. That is the circularity one more level up.
+   */
+  observedMovement: boolean;
   /** When this reference CHAIN began (the seed frame's own time). Survives validation. */
   seededAtMs: number;
   /** Advances against this chain since the seed, so a fresh seed is distinguishable from a settled one. */
@@ -150,6 +166,9 @@ export function advanceBookStateComparator(
   }
   // ⛔ 8a r3 — JUDGE THE SEED AGAINST THE RETAINED RING (Langston BLOCKER-1, his direction).
   // Only on a NEW chain: an advance within a chain inherits the flag unchanged.
+  // ⛔ r5: has this chain ever seen the book MOVE? A repeated frozen frame never sets it.
+  const movedThisFrame = prev ? (frame.bid !== prev.priorBid || frame.ask !== prev.priorAsk) : false;
+  const observedMovement = (prev?.observedMovement ?? false) || movedThisFrame;
   let seedImplausible = prev?.seedImplausible ?? false;
   if (!prev) {
     const retained = _retainedSpreads.get(key);
@@ -183,6 +202,7 @@ export function advanceBookStateComparator(
     // circularity this blocks, so that verdict must not be able to clear the gate it caused.
     validated: !seedImplausible && ((prev?.validated ?? false) || validatedByTwoSided),
     seedImplausible,
+    observedMovement,
     seededAtMs: prev?.seededAtMs ?? frame.atMs,
     framesSinceSeed: prev ? prev.framesSinceSeed + 1 : 0,
   });
@@ -224,7 +244,14 @@ export function clearBookStateComparator(symbol: string, reason: string): void {
   // self-comparison, and books 603.50. **Same terminal row, ~3 minutes later instead of 4.7 s.**
   // ★ MY OWN STATED PRINCIPLE NAMES THE DEFECT: *the circularity needs a datum from OUTSIDE
   //   the new chain.* After one cycle, an unconditionally-retained ring IS the broken chain.
-  if (!prev.seedImplausible && prev.spreads.length > 0) _retainedSpreads.set(key, [...prev.spreads]);
+  // ⛔⛔ r5 (Langston BLOCKER-3): RETAIN ONLY FROM A CHAIN THAT DEMONSTRATED IT IS A LIVE BOOK.
+  // `!seedImplausible` alone is the ABSENCE OF A NEGATIVE, and a cold-start chain satisfies it
+  // VACUOUSLY — which is the one chain class that can seed hollow. `observedMovement` is the
+  // POSITIVE property: a frozen 7.00/1000.00 artefact never sets it, so its ring can never
+  // become the yardstick that the whole mechanism defines as coming from OUTSIDE.
+  if (!prev.seedImplausible && prev.observedMovement && prev.spreads.length > 0) {
+    _retainedSpreads.set(key, [...prev.spreads]);
+  }
   _comparators.delete(key);
   console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_CLEARED reason=${reason} validated=${prev.validated} framesSinceSeed=${prev.framesSinceSeed} seededAt=${new Date(prev.seededAtMs).toISOString()}`);
 }

@@ -44,10 +44,28 @@ const CFG: BookStateConfig = {
 const HEALTHY = { bid: 247.01, ask: 248.00, last: 247.25 };
 const HOLLOW = { bid: 7, ask: 1000, last: 247.25 };
 
-/** Build the healthy chain that precedes the collapse, as the live path would. */
+/**
+ * Build the healthy chain that precedes the collapse, as the live path would.
+ *
+ * ⛔ r5 — THE FRAMES MOVE, AND THEY MUST. My r4 version advanced FIVE IDENTICAL FRAMES, which
+ * is not what a live book does, and under r5's movement gate it would not have qualified as one.
+ * Four tests failed the moment the gate landed — the FIXTURE was wrong, not the gate.
+ * ⚠️ THE CONSEQUENCE, STATED RATHER THAN HIDDEN BY THE NEW FIXTURE: a genuinely healthy but
+ *    PERFECTLY FROZEN book never sets `observedMovement`, so its ring is never retained and the
+ *    next seed after a yield has no yardstick — the vacuous `seedImplausible = false` case. That
+ *    is the SAME residual as the restart path, reached a different way, and it is pinned below
+ *    rather than papered over. It fails SAFE only in the sense that nothing is contaminated; it
+ *    does NOT refuse.
+ */
 function seedHealthyChain(atMs = 1_000): void {
   for (let i = 0; i < 5; i++) {
-    advanceBookStateComparator(SYM, { ...HEALTHY, atMs: atMs + i * 1_583 }, WINDOW, true, K_REL);
+    // a live book ticks: a cent either way, spread held at ~0.40%
+    const drift = i * 0.01;
+    advanceBookStateComparator(
+      SYM,
+      { bid: HEALTHY.bid + drift, ask: HEALTHY.ask + drift, last: HEALTHY.last + drift, atMs: atMs + i * 1_583 },
+      WINDOW, true, K_REL,
+    );
   }
 }
 
@@ -176,6 +194,48 @@ describe('8a r3 — the four-tick reseed, driving the real tracker', () => {
     expect(readBookStateComparator(SYM)!.validated).toBe(false);   // tick 1 refused — correct
     advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 2_583 }, WINDOW, true, K_REL);
     expect(readBookStateComparator(SYM)!.validated).toBe(true);    // ⛔ THE GAP, asserted as-is
+  });
+
+  // ✅ r5 — THE CONTAMINATION HALF OF THAT RESIDUAL IS NOW CLOSED, and the pin has to say so or
+  //    it under-states in one direction having over-stated in the other (Langston BLOCKER-3:
+  //    *the pin as written under-states the residual, so it cannot stand as the statement of it*).
+  //    The restart chain still SELF-VALIDATES — that half is open, above. What it can no longer
+  //    do is write its broken ring into the slot the mechanism defines as OUTSIDE, because a
+  //    frozen artefact never sets `observedMovement`.
+  it('✅ r5: a FROZEN restart chain can never contaminate the retained ring', () => {
+    // restart mid-hollow, book frozen, then it yields
+    advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 1_000 }, WINDOW, false, K_REL);
+    advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 2_583 }, WINDOW, true, K_REL);
+    expect(readBookStateComparator(SYM)!.observedMovement).toBe(false);
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');
+
+    // the next seed has NO retained ring to be judged against — the broken one was not kept
+    advanceBookStateComparator(SYM, { bid: 7, ask: 1200, last: 247.25, atMs: 200_000 }, WINDOW, false, K_REL);
+    expect(readBookStateComparator(SYM)!.seedImplausible).toBe(false); // vacuous, no ring — stated, not hidden
+    expect(readBookStateComparator(SYM)!.observedMovement).toBe(false);
+  });
+
+  it('✅ r5: a chain that DID move still retains — the gate is movement, not paranoia', () => {
+    seedHealthyChain();                                    // a live book: five frames that MOVE
+    expect(readBookStateComparator(SYM)!.observedMovement).toBe(true);
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');
+    advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 20_000 }, WINDOW, false, K_REL);
+    expect(readBookStateComparator(SYM)!.seedImplausible).toBe(true); // judged against the kept ring
+  });
+
+  it('⚠️ RESIDUAL, SAME CLASS, REACHED A DIFFERENT WAY: a perfectly FROZEN healthy book never retains', () => {
+    // Not a defect of the gate — a consequence of it, and the honest statement of its reach.
+    // A book quoting the identical two sides for the whole chain is indistinguishable, BY THIS
+    // DISCRIMINATOR, from a frozen artefact. Its ring is not kept, so a later seed is judged
+    // against nothing and gets the vacuous `seedImplausible = false`.
+    // ✅ It cannot CONTAMINATE (nothing broken is retained either) — but it does NOT REFUSE.
+    for (let i = 0; i < 5; i++) {
+      advanceBookStateComparator(SYM, { ...HEALTHY, atMs: 1_000 + i * 1_583 }, WINDOW, true, K_REL);
+    }
+    expect(readBookStateComparator(SYM)!.observedMovement).toBe(false);
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');
+    advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 20_000 }, WINDOW, false, K_REL);
+    expect(readBookStateComparator(SYM)!.seedImplausible).toBe(false); // ⛔ vacuous, asserted as-is
   });
 
   it('✅ a cold start with NO retained ring still seeds — the ring is evidence, not a precondition', () => {
