@@ -60,7 +60,7 @@ export interface BookStateComparator {
   /**
    * ⛔⛔ TRUE WHEN THIS CHAIN WAS SEEDED ON A FRAME THE RETAINED SPREAD RING SAYS IS IMPLAUSIBLE,
    * AND IT PERMANENTLY BLOCKS `validated` FOR THE CHAIN'S LIFE (8a r3, Langston BLOCKER-1,
-   * 2026-09-13).
+   * 2026-09-12).
    *
    * ★ WHY IT EXISTS — `validated` ALONE CANNOT WORK, AND THIS FILE SAID SO 50 LINES BELOW:
    *   *"a comparator seeded from a hollow frame makes the next hollow frame read `two_sided`,
@@ -249,7 +249,7 @@ export function clearBookStateComparator(symbol: string, reason: string): void {
   // ★ MY OWN STATED PRINCIPLE NAMES THE DEFECT: *the circularity needs a datum from OUTSIDE
   //   the new chain.* After one cycle, an unconditionally-retained ring IS the broken chain.
   // ⛔⛔ r6 — READ THIS BEFORE ADDING A SEVENTH CONDITION HERE. **LANGSTON HAS RULED r5 THE LAST
-  // GATE (2026-09-13), AND THE RULING IS THAT THE REMAINING HOLE IS NOT CLOSEABLE BY GATING.**
+  // GATE (2026-09-12), AND THE RULING IS THAT THE REMAINING HOLE IS NOT CLOSEABLE BY GATING.**
   // Retention happens AT A YIELD, and a yield is proof the reference was unusable; the only
   // datum from outside is the previous ring; **genesis must therefore come from SOME yielding
   // chain.** A `seedJudgedPlausible` gate makes the whole mechanism permanently INERT — which

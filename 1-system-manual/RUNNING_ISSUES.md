@@ -7841,6 +7841,19 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 
 ---
 
+### ⭐ #1053 OPEN 2026-09-12 (Langston, off-scope at 8a Step 7; RE-DERIVED AT THE OBJECT BY CC-C before filing) — ON EVERY RESTART THE CRYPTO EXIT LOOP THROWS ON OPEN POSITIONS FOR A TICK, BECAUSE `primeTECConfig()` IS NOT WARM YET
+
+**MEASURED, UNBOUNDED, today's `/var/log/dawntrader/error.log`:** `[TEC_CACHE_MISS_FATAL] resolveTECConfig … assetClass=crypto_spot but cache has no entry` → `[PaperExecution:paper] Error checking position … ActiveExecutionEngine.checkExitConditions`.
+**8 lines = 4 pairs at EXACTLY TWO timestamps — `13:32:19` and `23:30:41` — and BOTH ARE BOOTS. Two of two.** Symbols `AERO/USD` and `SUI/USD`; `assetClass=crypto_spot` on all 8.
+★ **The instrument is the same one this batch has been reading all session, so its reach is known: `error.log` is today only (`console.error` → `error.log`, the PM2 split), and both of today's restarts are in it.**
+
+⛔ **WHY IT MATTERS AND WHY IT IS THIS BATCH'S OWN SUBJECT ONE LANE OVER: an exit tick that does not happen.** `8a` exists because the xStock exit path ACTED on a price it should have refused; this is the crypto exit path FAILING TO ACT AT ALL for a tick, on open positions, deterministically, at every boot. **Same family — the exit loop not doing its job — different cause and different lane.**
+⚠️ **NOT ESTABLISHED, and I am not asserting it:** how many ticks the window spans (I have the two boot timestamps, not the recovery time), and whether any exit CONDITION was actually live in that window. **A deterministic per-boot throw on the exit path is worth filing on its own; the consequence is unmeasured.**
+
+⇒ **DISPOSITION — §9.4 (3), its own batch, and DELIBERATELY NOT FOLDED INTO `8a`: folding it would contaminate `8a`'s pre-registered observation window** (Langston's reason, and it is the right one — the window measures boundary-minute exit behaviour and this would add restart-time noise to the same sink).
+`HOME: B-TEC-PRIME-BOOT-RACE, owner CC-B, PHASE_19_PLAN row 2.4h, after 2.4g, beside the engine-resume work (`#520`/`#585`).`
+✅ **Placement accepted rather than pushed back on: the fault is in engine RESUME/PRIME ordering, not in price-side semantics, so it sits with the engine-resume family and not with `3n`.**
+
 ### ⭐ #1052 OPEN 2026-09-12 (CC-C, surfaced by Langston BLOCKER-2 at `3n` OBJ-8 Step 4; re-derived by me at the ref) — `addFamilyPoolSurvivors` HAS ZERO CALLERS, AND `getFamilyPool` IS READ LIVE BY THE ORCHESTRATOR. A DEAD WRITER BESIDE A LIVE READER.
 
 **MEASURED, whole-tree grep over `server/`, `client/` and `shared/` at `origin/migration/aws-supabase`:** `addFamilyPoolSurvivors` appears at **its own definition (`active-filter-pool.ts:528`), in an 8f docblock, and in the 8f test — and NOWHERE ELSE.** **No production caller.**
@@ -8776,7 +8789,7 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ⇔ `B-LANGSTON-CONTEXT` P-6b guard (c) · `#1046`.
 
-### #1049 OPEN 2026-09-12 (Langston handed it as a HYPOTHESIS in-channel; investigated + cause established at the object by CC-INFRA) — ⛔ **A DEAD WAKE-SOURCE LEG IS STILL DOCUMENTED AS LIVE: `/var/log/langston-alert-invokes.log`**
+### #1054 OPEN 2026-09-12 (Langston handed it as a HYPOTHESIS in-channel; investigated + cause established at the object by CC-INFRA) — ⛔ **A DEAD WAKE-SOURCE LEG IS STILL DOCUMENTED AS LIVE: `/var/log/langston-alert-invokes.log`** *(renumbered from #1049 2026-09-13: collided with CC-C's #1049 at 7892; mine was the newer commit, so per the numbering rule the newer renumbers)*
 
 **MEASURED STATE (Langston):** `/var/log/langston-alert-invokes.log` is 0 bytes, mtime 2026-06-28 — zero lines in ~2.5 months. His `CLAUDE.md` §5.3 item 2 and our `CLAUDE.md` §6.9 wake-source #2 both say his alert completions wake CC through that file's `invoke DONE` lines.
 

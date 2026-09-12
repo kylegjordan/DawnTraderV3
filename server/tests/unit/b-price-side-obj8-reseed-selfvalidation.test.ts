@@ -1,7 +1,7 @@
 /**
  * B-PRICE-SIDE-BY-JOB r5 OBJ-8 row 8a r3 — THE FOUR-TICK RESEED SEQUENCE, AT THE TRACKER.
  *
- * ⛔⛔ WHY THIS FILE EXISTS, AND IT IS A CORRECTION TO MY OWN EARLIER TEST (Langston C1, 2026-09-13).
+ * ⛔⛔ WHY THIS FILE EXISTS, AND IT IS A CORRECTION TO MY OWN EARLIER TEST (Langston C1, 2026-09-12).
  * My r2 fixture restated the engine's rule as a LOCAL BOOLEAN inside the test:
  *     const refuses = r.state !== 'two_sided' || comparatorValidated !== true;
  * ⇒ **delete the engine line it was meant to verify and all 48 tests stay green.** It certified the
@@ -184,7 +184,7 @@ describe('8a r3 — the four-tick reseed, driving the real tracker', () => {
     expect(readBookStateComparator(SYM)!.validated).toBe(true);
   });
 
-  // ⚠⚠ RESIDUAL, PINNED NOT FIXED (Langston, 2026-09-13). r3/r4 close the YIELD-CLEAR path.
+  // ⚠⚠ RESIDUAL, PINNED NOT FIXED (Langston, 2026-09-12). r3/r4 close the YIELD-CLEAR path.
   //    They do NOT close the RESTART path: with no retained ring at all, a process that comes
   //    up mid-hollow seeds unvalidated (refused, correct), and then tick 2 SELF-COMPARES to
   //    zero departures, reads `two_sided`, and VALIDATES. The criterion must not be read as
@@ -273,7 +273,7 @@ describe('8a r3 — the four-tick reseed, driving the real tracker', () => {
     expect(cmp.validated).toBe(false);
   });
 
-  // ⚠️ RESIDUAL, PINNED NOT CLAIMED (Langston, 2026-09-13): this arm is UNREACHABLE IN
+  // ⚠️ RESIDUAL, PINNED NOT CLAIMED (Langston, 2026-09-12): this arm is UNREACHABLE IN
   //    PRODUCTION — `resolveBookStateConfigSync` throwing exits at `aee` `knobs_missing` BEFORE
   //    the advance is reached. It is DEFENSIVE ONLY and nobody may cite it as a live control.
   it('⚠️ defensive only — an UNREADABLE kRel fails safe (unreachable in production)', () => {
