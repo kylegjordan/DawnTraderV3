@@ -24,7 +24,7 @@ THE PAGE PUBLISHES TWO TABLE SHAPES, AND READING ONLY THE FIRST IS WHAT HID THE 
   TIERED  header row labelled `Tier`, rows `Tier 1..12` / `Pro 1..5`, columns name their leg
           (`Spot Maker (%)`). The four ladders above.
   BANDED  header row labelled `add here`, columns `30- Day Volume (USD) | Maker | Taker`, rows
-          labelled by the band itself (`$0 +`, `$100,000,000 + **`). Five of these:
+          labelled by the band itself (`$0 +`, `$100,000,000 + **`). FOUR of these:
             Pro xStocks                     $0+  maker -0.02%  taker 0.10%   <-- OUR xSTOCK CONTRACT
             Stablecoin, Pegged Token & FX   $0+  maker  0.20%  taker 0.20%
             USDG Pairs                      $0+  maker  0.00%  taker 0.01%
@@ -43,10 +43,27 @@ import re
 import sys
 import urllib.request
 
+# Finding 7 (r7): a cp1252 console raised UnicodeEncodeError mid-report and killed the run with a
+# traceback AFTER the control had passed -- exit 1, which is in none of the three declared
+# statuses. Force the stream instead of policing glyphs: a sweep misses the next one added.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
 URL = "https://www.kraken.com/features/fee-schedule"
 UA = "Mozilla/5.0 (compatible; DawnTrader-fee-watch/0.1)"
 ASSIGN = "window.__INITIAL_PROPS__="
 PINNED_HEADING = "Spot Crypto"
+
+# ⛔ BLOCKER-1 (Langston r6): the control must NOT re-read the thing it is meant to be
+# independent of. REFERENCE_LADDER[1] is what the drift check compares against, so using it as
+# the control made `CONTROL FAILED` unreachable: any body that got past `if bad: return 3` had
+# already proved rung 1 matched. This constant is written out separately and deliberately.
+CONTROL_RUNG1 = (0.40, 0.80)   # the account's rung-1 pair, independently transcribed (§0.b)
+CONTROL_MIN_LADDERS = 1
 
 # ⚠️ A SECOND COPY of KRAKEN_FEE_SCHEDULE_REFERENCE.md §1 (Langston, r3 defect (c)). Verified
 # equal to §1 on all 17 rungs at 2026-09-12. OBJ-3 grades the PAGE against this dict, so a
@@ -57,6 +74,17 @@ REFERENCE_LADDER = {
     6: (0.12, 0.25), 7: (0.10, 0.22), 8: (0.08, 0.20), 9: (0.06, 0.18), 10: (0.04, 0.15),
     11: (0.02, 0.12), 12: (0.00, 0.10), 13: (0.00, 0.09), 14: (0.00, 0.08), 15: (0.00, 0.07),
     16: (0.00, 0.06), 17: (0.00, 0.05),
+}
+
+# Finding 2 (Langston r6): OBJ-8's vector was printed and never asserted, under a heading that
+# said "asserted". MEASURED on a clean run 2026-09-12 -- this is the whole ladder census, so a
+# ladder appearing, vanishing or changing profile is caught, which is what makes a WRONG PIN
+# loud instead of silent forever.
+EXPECTED_MATCH = {
+    "Cross-platform Fee Tiers": ("17/17", [0.0]),
+    "Spot Crypto":              ("17/17", [0.0]),
+    "Spot Maker Rebate":        ("0/17",  [-0.02]),
+    "Futures":                  ("17/17", [0.0]),
 }
 
 TAG_RE = re.compile(r"<[^>]+>")
@@ -189,11 +217,23 @@ def banded_from(title, rows):
         mi, ti = idx["maker"], idx["taker"]
         if mi < len(cells) and ti < len(cells):
             maker, taker = rate_of(cells[mi]), rate_of(cells[ti])
-            if maker is not None and taker is not None:
-                if label in bands:
-                    raise Fail("duplicate band %r in %r" % (label, title))
-                bands[label] = (maker, taker)
+            if maker is None or taker is None:
+                raise Fail("unparseable rate in banded %r row %r: maker=%r taker=%r"
+                           % (title, label, cells[mi], cells[ti]))
+            if label in bands:
+                raise Fail("duplicate band %r in %r" % (label, title))
+            bands[label] = (maker, taker)
     return {"title": title, "kind": "banded", "header": header, "bands": bands}
+
+
+def titles_in(raw, wanted):
+    """
+    ⛔ BLOCKER-3 (Langston r6): identity must count tables BEARING THE TITLE in the raw payload,
+    never rows that survived parsing. He injected a second `Spot Crypto` whose cells do not parse
+    and the run still said "resolved to exactly one table" and exited 0 — the enumerator was blind
+    to a member class (#753). Counting `raw` makes an unparseable twin visible.
+    """
+    return [t for t, _rows in raw if t == wanted]
 
 
 def ladder_from(title, rows):
@@ -217,8 +257,13 @@ def ladder_from(title, rows):
             raise Fail("duplicate rung key %d in %r" % (rung, title))   # defect (a)
         if mi < len(cells) and ti < len(cells):
             maker, taker = rate_of(cells[mi]), rate_of(cells[ti])
-            if maker is not None and taker is not None:
-                rungs[rung] = (maker, taker)
+            # ⛔ BLOCKER-2 (Langston r6): an unparseable cell used to be SKIPPED. OBJ-5 names it a
+            # fail-loud input; skipping routed it to the wrong outcome — on the banded side, which
+            # has no count invariant, a dropped row surfaced as measured DRIFT.
+            if maker is None or taker is None:
+                raise Fail("unparseable rate in %r rung %d: maker=%r taker=%r"
+                           % (title, rung, cells[mi], cells[ti]))
+            rungs[rung] = (maker, taker)
     return {"title": title, "header": header, "columns": cols, "rungs": rungs}
 
 
@@ -238,10 +283,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default=URL)
     ap.add_argument("--file", help="parse a saved body instead of fetching (mutation tests)")
-    ap.add_argument("--pin", default=PINNED_HEADING)
+    # ⛔ finding 5 (Langston r6): the pin is the value three revisions established must never be
+    # a runtime selection. It is settable ONLY in --file fixture mode, never against the live page.
+    ap.add_argument("--pin", default=PINNED_HEADING,
+                    help="fixture mode only; refused without --file")
     args = ap.parse_args()
 
     try:
+        if args.pin != PINNED_HEADING and not args.file:
+            raise Fail("--pin is fixture-only; it may not override the pin against the live page")
         html = open(args.file, encoding="utf-8", errors="replace").read() if args.file else fetch(args.url)
         print("source bytes: %d" % len(html))
         payload = extract_payload(html)
@@ -252,6 +302,18 @@ def main():
 
         ladders = [l for l in (ladder_from(t, r) for t, r in raw) if l and l["rungs"]]
         banded = [b for b in (banded_from(t, r) for t, r in raw) if b and b["bands"]]
+
+        # ⛔⛔ THE CONTROL RUNS FIRST, BEFORE ANY REPORTING (Langston r6 BLOCKER-1).
+        # Previously it ran last and re-read REFERENCE_LADDER[1], so it could not fail: any body
+        # reaching it had already passed the drift check. Moving Tier 1 in ALL FOUR ladders used to
+        # print `DRIFT ... at [1]` and exit 3 — a TOTAL EXTRACTION FAILURE reported as a venue
+        # finding. It now gates the run, against an independent constant.
+        control_ok = [l["title"] for l in ladders if l["rungs"].get(1) == CONTROL_RUNG1]
+        if len(control_ok) < CONTROL_MIN_LADDERS:
+            print("CONTROL FAILED: no ladder reads rung 1 == %s — the extraction is wrong, "
+                  "not the venue. Reporting nothing." % (CONTROL_RUNG1,))
+            return 2
+        print("control: rung 1 == %s satisfied by %s" % (CONTROL_RUNG1, control_ok))
         print("tiered ladders: %d | banded schedules: %d" % (len(ladders), len(banded)))
         print("   \u26a0 census caveat (Langston r4): this counts paragraphArticleBodyTable nodes ONLY.")
         print("   Stocks / xStocks / Perps / Pro Stocks carry none, so it is one node type, not")
@@ -265,15 +327,40 @@ def main():
             print("   %-28s rungs %2d  Tier1 %-14s %d/17" % (lad["title"][:28], len(r), r.get(1), hits))
 
         print("")
-        print("=== OBJ-8 match vector (asserted for ALL ladders) ===")
-        for title, v in match_vector(ladders).items():
+        print("=== OBJ-8 match vector (ASSERTED for ALL ladders, not merely printed) ===")
+        mv = match_vector(ladders)
+        for title, v in mv.items():
             print("   %-28s %s  maker deltas %s" % (title[:28], v["match"], v["maker_deltas"]))
+
+        # THE ASSERTION ITSELF. A title set that changed is STRUCTURE (2); a profile that moved
+        # while the census is intact is the VENUE (3). Without this the vector was decoration.
+        if set(mv) != set(EXPECTED_MATCH):
+            print("   MEASUREMENT FAILED: ladder census changed -- missing %s | unexpected %s"
+                  % (sorted(set(EXPECTED_MATCH) - set(mv)), sorted(set(mv) - set(EXPECTED_MATCH))))
+            return 2
+        # The PINNED ladder is deliberately excluded: its rung-level check below names the
+        # altered rung and only that rung (OBJ-1), and this coarser message preempted it --
+        # measured, by the very harness case that asserts the output rather than the status.
+        moved = [t for t in EXPECTED_MATCH
+                 if t != args.pin
+                 and (mv[t]["match"], mv[t]["maker_deltas"]) != EXPECTED_MATCH[t]]
+        if moved:
+            for t in moved:
+                print("   DRIFT: %r expected %s, reads %s/%s"
+                      % (t, EXPECTED_MATCH[t], mv[t]["match"], mv[t]["maker_deltas"]))
+            return 3
+        print("   all %d ladders match their expected profile" % len(mv))
 
         # THE PIN: identity is verified by the heading resolving to EXACTLY ONE table.
         # The 17-rung check is NECESSARY, NOT SUFFICIENT — three ladders satisfy it.
+        bearing = titles_in(raw, args.pin)          # BLOCKER-3: count RAW tables, not survivors
         pinned = [l for l in ladders if l["title"] == args.pin]
         print("")
         print("=== PIN: %r ===" % args.pin)
+        if len(bearing) != 1:
+            print("   GOVERNING-TABLE-IN-DOUBT: %d tables bear the pinned title in the payload "
+                  "(%d parsed) — STOPPING, no re-selection" % (len(bearing), len(pinned)))
+            return 2
         if len(pinned) != 1:
             print("   GOVERNING-TABLE-IN-DOUBT: heading resolved to %d tables — STOPPING, no re-selection" % len(pinned))
             return 2
@@ -298,8 +385,18 @@ def main():
         # DATABASE leg is the one that earns its keep, and at this ref NEITHER pin reads
         # module_constants. ⛔ STEP-4 OBLIGATION: the shipped watcher reads the DB row as its
         # operand and no literal fee value survives in it.
-        XPIN, XCONTRACT = "Pro xStocks", (-0.02, 0.10)
+        # ⚠️ finding 4 (Langston r6): there is no constant named `fee_model` — the DB row is the
+        # PK triple (module_name='fee_model', asset_class='xstock_spot', constant_name in
+        # {spot_maker_fee, spot_taker_fee}), and the DB stores FRACTIONS (-0.0002 / 0.0010) while
+        # the page prints PERCENT (-0.02% / 0.10%). Factor 100, previously unstated. An absent or
+        # unconvertible row must exit 2, never 3.
+        XPIN, XCONTRACT = "Pro xStocks", (-0.02, 0.10)   # percent, matching the page
+        x_bearing = titles_in(raw, XPIN)            # BLOCKER-3, same shape on the second pin
         xs = [b for b in banded if b["title"] == XPIN]
+        if len(x_bearing) != 1:
+            print("   GOVERNING-TABLE-IN-DOUBT: %d tables bear %r in the payload (%d parsed) "
+                  "- STOPPING" % (len(x_bearing), XPIN, len(xs)))
+            return 2
         print("")
         print("=== SECOND PIN: %r ===" % XPIN)
         if len(xs) != 1:
@@ -311,13 +408,6 @@ def main():
             print("   DRIFT: the xStock base band no longer matches the deployed contract")
             return 3
 
-        ok = [l["title"] for l in ladders if l["rungs"].get(1) == (0.40, 0.80)]
-        print("")
-        print("=== CONTROL: a ladder must read Tier 1 == (0.40, 0.80) ===")
-        if not ok:
-            print("   CONTROL FAILED — reporting nothing.")
-            return 2
-        print("   satisfied by: %s" % ok)
         return 0
 
     except Fail as exc:

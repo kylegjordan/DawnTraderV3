@@ -31,12 +31,23 @@ rung-count check is structurally blind to that class, making this harness its so
 """
 
 import argparse
+import copy
 import json
 import re
 import subprocess
 import sys
 import tempfile
 import os
+
+# Finding 7 (r7): a cp1252 console raised UnicodeEncodeError mid-report and killed the run with a
+# traceback AFTER the control had passed -- exit 1, which is in none of the three declared
+# statuses. Force the stream instead of policing glyphs: a sweep misses the next one added.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EXTRACTOR = os.path.join(HERE, "kraken_fee_ladder_extract.py")
@@ -129,6 +140,51 @@ def mutate(payload, accordion, row_label, cell_index, new_text):
     return changed["n"] > 0
 
 
+def inject_duplicate_accordion(payload, title):
+    """
+    BLOCKER-3 (Langston r6): append a SECOND accordion bearing `title` whose data rows do not
+    parse as rungs. It survives into `raw` (so identity must see two) but is filtered out of
+    `ladders` (so the old post-filter check still sees one). Returns True if one was injected.
+    """
+    done = {"n": 0}
+
+    def rec(node):
+        if isinstance(node, list):
+            dup = None
+            for item in node:
+                if (isinstance(item, dict) and item.get("_type") == "paragraphAccordionItem"
+                        and re.sub(r"<[^>]+>", "", str(item.get("field_title") or "")).strip() == title):
+                    dup = copy.deepcopy(item)
+            if dup is not None and not done["n"]:
+                def blunt(n):
+                    if isinstance(n, dict):
+                        rd = n.get("row_description")
+                        if isinstance(rd, str) and re.search(r"Row :: (Tier|Pro) \d+", rd):
+                            n["row_description"] = rd.replace("Tier ", "Bonus ").replace("Pro ", "Bonus ")
+                        for v in n.values():
+                            blunt(v)
+                    elif isinstance(n, list):
+                        for v in n:
+                            blunt(v)
+                blunt(dup)
+                node.append(dup)
+                done["n"] += 1
+                return
+            for item in node:
+                rec(item)
+        elif isinstance(node, dict):
+            for v in node.values():
+                rec(v)
+
+    rec(payload)
+    return done["n"] > 0
+
+
+def says(out, needle):
+    """A text assertion recorded as its own row: 1 = the output said it, 0 = it did not."""
+    return 1 if needle in out else 0
+
+
 def write_body(html, start, end, payload, path):
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(html[:start] + json.dumps(payload) + html[end:])
@@ -175,8 +231,11 @@ def main():
         return EXIT_HARNESS_FAULT
     f1 = os.path.join(tmp, "mut_tier.html")
     write_body(html, start, end, p1, f1)
-    code, _ = run_extractor(f1)
+    code, out = run_extractor(f1)
+    # finding 1 (Langston r6): assert the OUTPUT, not just the status — OBJ-1's verify says
+    # "the altered rung and only that rung", which exit-status-only never exercised.
     results.append(("tiered rung moved (Spot Crypto Tier 3)", EXIT_DRIFT, code))
+    results.append(("  ^ output names rung 3", 1, says(out, "at [3]")))
 
     # CASE 2 — the xStock BANDED base rate moves.
     _, _, p2 = slice_payload(html)
@@ -200,6 +259,55 @@ def main():
     write_body(html, start, end, p3, f3)
     code, _ = run_extractor(f3)
     results.append(("column names a leg but neither spot nor futures", EXIT_MEASUREMENT_FAILED, code))
+
+    # CASE 4 — EVERY control-satisfying ladder moves at Tier 1. Langston ran exactly this at r6
+    # and got exit 3 with "DRIFT ... at [1]": a TOTAL EXTRACTION FAILURE reported as a venue
+    # finding, because the control re-read REFERENCE_LADDER[1] and ran after the reporting.
+    # It must now stop at the control, print CONTROL FAILED, and say nothing about drift.
+    _, _, p4 = slice_payload(html)
+    hit = 0
+    for acc, idx in (("Cross-platform Fee Tiers", 4), ("Spot Crypto", 4), ("Futures", 6)):
+        if mutate(p4, acc, "Tier 1", idx, "<p>0.41 %</p>"):
+            hit += 1
+    if hit != 3:
+        print("HARNESS FAULT: case 4 moved %d of 3 control ladders — aborting" % hit)
+        return EXIT_HARNESS_FAULT
+    f4 = os.path.join(tmp, "mut_control.html")
+    write_body(html, start, end, p4, f4)
+    code, out = run_extractor(f4)
+    results.append(("BLOCKER-1: all control ladders moved", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ says CONTROL FAILED", 1, says(out, "CONTROL FAILED")))
+    results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
+
+    # CASE 5 — an unparseable rate in the xStock band. A U+2212 minus is the honest trigger, but
+    # the likelier one is mundane: band keys already carry footnote markers ('$100,000,000 + **'),
+    # so the day '$0 +' gains one, the exact-string lookup returns None. Either way it must FAIL
+    # LOUD, never be skipped into a false DRIFT.
+    _, _, p5 = slice_payload(html)
+    if not mutate(p5, "Pro xStocks", "$0 +", 1, "−0.02%"):
+        print("HARNESS FAULT: case 5 mutation did not change any cell — aborting")
+        return EXIT_HARNESS_FAULT
+    f5 = os.path.join(tmp, "mut_unparseable.html")
+    write_body(html, start, end, p5, f5)
+    code, out = run_extractor(f5)
+    results.append(("BLOCKER-2: unparseable band rate", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ says MEASUREMENT FAILED", 1, says(out, "MEASUREMENT FAILED")))
+    results.append(("  ^ and does NOT report drift", 1, 0 if "DRIFT" in out else 1))
+
+    # CASE 6 — a SECOND table bearing the pinned title, whose rows do not parse as rungs. Langston
+    # injected this at r6 and the run still printed "identity: resolved to exactly one table" and
+    # exited 0, because identity counted SURVIVING ladders rather than titles in the payload.
+    _, _, p6 = slice_payload(html)
+    if not inject_duplicate_accordion(p6, "Spot Crypto"):
+        print("HARNESS FAULT: case 6 injected no accordion — aborting")
+        return EXIT_HARNESS_FAULT
+    f6 = os.path.join(tmp, "mut_twin.html")
+    write_body(html, start, end, p6, f6)
+    code, out = run_extractor(f6)
+    results.append(("BLOCKER-3: twin table bears the pin title", EXIT_MEASUREMENT_FAILED, code))
+    results.append(("  ^ says GOVERNING-TABLE-IN-DOUBT", 1, says(out, "GOVERNING-TABLE-IN-DOUBT")))
+    results.append(("  ^ does NOT claim exactly one table", 1,
+                    0 if "resolved to exactly one table" in out else 1))
 
     print("")
     print("%-52s %-10s %-8s %s" % ("case", "expected", "actual", "verdict"))
