@@ -1,7 +1,7 @@
 # B-GEOMETRY-REACH-BASELINE — STEP 2: PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r5, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
+**change-class: architecture** · **r6, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
 
 > ⛔ **THE AUDIT COMES FIRST AND THE PLAN FALLS OUT OF IT.** Every plan item back-references the finding it derives from; anything with no audit treatment is flagged `UNAUDITED`.
 
@@ -210,6 +210,64 @@ Gate **C** is the **VTS crypto lane**. ⛔ **That is the lane the seven ceiling 
 - **The ACTIVE lane has no TTL — and it is CENSORED BY THE GATE ITSELF: every trade in it exists because its target passed `reach ≤ 4.0`, and nearer targets are hit sooner, so active `H` is biased SHORT by the very ceiling being calibrated.**
 ⇒ ⛔⛔ **THEREFORE THE ACTIVE LANE MUST NOT BECOME THE BASIS EITHER, however uncensored it looks — it is the endogeneity trap in its purest form, and `vts-runner.ts:1736` names it: *"you cannot calibrate the RR floor from a population the floor already filtered."*** ✅ **Its correct role is exactly the one it was given: an ARBITER between two proxies, never a source. That is why the ratio test compares lanes to it rather than reading values off it.**
 ✅ **AND IT EXPLAINS THE PATTERN IN THE TABLE: the four clearing rows are ones where the gate is NOT binding, so active and proxy agree. `reverse_impulse` is where they diverge most — which is information about that strategy, not noise.**
+
+---
+
+---
+
+## §1b-quinquies — ⭐⭐ THE SYMMETRY QUESTION, ANSWERED AT THE SCHEMA — AND THE `never_filled` POPULATION IS A **CONSTANT**, NOT A RIVAL READING
+
+⛔ **LANGSTON'S QUESTION WAS THE ONE THAT COULD HAVE VOIDED THE WHOLE RATIO: was the `never_filled` exclusion applied to BOTH SIDES?** *"A ratio filtered on one side is not a ratio."* ✅ **He was right that r5 did not say. Here is what it is.**
+
+### ✅ ANSWER 1 — THE LANE SIDE HAS **NO NON-FILL ROW CLASS AT ALL**, SO THE EXCLUSION IS SYMMETRIC BY CONSTRUCTION
+
+**Established three ways, each enumerated rather than sampled:**
+1. ✅ **NO COLUMN.** Every column on `vts_open_trades`: `id, symbol, asset_class, entry_price, stop_loss, take_profit, position_size, dollar_value, quantity, regime, signal_type, strategy, pool, opened_at, context, inserted_at, updated_at, closed, closed_at, state, calibration_state, chosen_entry_mode, entry_fee_rate, maker_limit_price, maker_deadline`. **There is no `close_reason` and no fill flag.**
+2. ✅ **NO CONTEXT KEY.** All **51** distinct `context` keys on crypto since 2026-08-01 enumerated — **none is fill-related.**
+3. ✅ **NO STATE.** `state` takes exactly two values, `open` and `closed`. **There is no abandoned/expired/unfilled state to exclude.**
+
+⛔⛔ **AND THE ONE FILL-ADJACENT MECHANISM DOES NOT TOUCH THE BASIS LANE.** `maker_limit_price` + `maker_deadline` are populated on **527 rows, ALL of them VTS-lane maker entries — and ZERO shadow rows** (every one of the 27,370 shadow rows has `chosen_entry_mode` NULL, no maker price, no deadline). ✅ **The shadow lane, which the arbiter made the basis, has no maker leg and therefore no unfilled-maker state.** ✅ **And the 527 maker rows are all present as OPENED trades — an unfilled maker does not appear here as a row, so there is no such row class to filter.**
+
+⇒ ✅ **SO IT IS NOT A FILTERED NUMERATOR OVER AN UNFILTERED DENOMINATOR. IT IS THE REMOVAL OF A ROW CLASS THAT EXISTS ON ONE SIDE ONLY.**
+⇒ ⭐⭐ **AND THE HONEST VERSION IS STRONGER THAN "SYMMETRIC": THE TWO SIDES RECORD DIFFERENT OBJECTS. `closed_trades` records ATTEMPTS, including abandoned ones; `vts_open_trades` records OPENS ONLY.** ⛔ **Therefore filled-only is not merely the defensible reading — IT IS THE ONLY ONE THAT COMPARES LIKE WITH LIKE, and the inclusive arm was never a rival estimate of the same quantity.**
+
+### ⛔⛔ ANSWER 2 — THE `never_filled` DURATION IS A **ONE-HOUR CONSTANT**, AND THAT EXPLAINS EVERY FLIP HE NAMED
+
+**MEASURED, crypto, all 85 `never_filled` rows, unbounded:**
+
+| duration | n |
+|---|---|
+| 1.0003 h | 24 |
+| 1.0001 h | 23 |
+| 1.0002 h | 16 |
+| 1.0004 h | 13 |
+| 1.0000 h | 8 |
+| 4.6746 h | 1 |
+
+⇒ ⛔ **84 OF 85 SIT INSIDE 1.0000–1.0004 h. p25 = 1.0001, p75 = 1.0003.** That is a **one-hour expiry timer plus scheduler jitter**, not a holding time. *(The filled population for contrast: p25 1.48 h, p75 11.38 h, max 184.93 h.)*
+⭐ **THIS IS MY OWN STANDING RULE FIRING, AND I NEARLY MISSED IT AGAIN: a value sitting on a round figure is usually THE CODE PUTTING IT THERE — check the constant before narrating the world.** ✅ **Here checking it settles the dispute instead of merely avoiding an error.**
+
+**PER-STRATEGY `never_filled` SHARE ON THE ACTIVE SIDE, which is what Langston asked for — and the flips fall straight out of it:**
+
+| strategy | share `never_filled` | median ALL | median FILLED | ratio inclusive → filled-only |
+|---|---|---|---|---|
+| `morning_star` | **9.9 %** | 4.83 h | 5.76 h | 1.146 → 1.049 — *least moved, clears BOTH ways* |
+| `sma_trend_ride` | **10.9 %** | 2.25 h | 3.46 h | 1.314 → **1.060** — flip |
+| `inside_bar_reversal` | **16.4 %** | 3.69 h | 5.66 h | 1.226 → 0.990 — clears both |
+| `pivot_shift` | **24.6 %** | 4.31 h | 6.33 h | 1.311 → **1.082** — flip |
+| `reverse_impulse` | **29.4 %** | 1.81 h | 7.12 h | 0.955 → **0.481** — reverse flip |
+| `support_bounce` | **29.8 %** | 3.14 h | 5.80 h | 2.060 → 1.514 — fails both |
+
+✅ **BOTH FLIPS ARE FULLY ACCOUNTED FOR, WHICH IS THE CONDITION HE SET.** Injecting a 1.00 h constant at 10–25 % always SHORTENS the active median, and active is the DENOMINATOR, so it always INFLATES the ratio. `pivot_shift` and `sma_trend_ride` do not "clear only on the unregistered reading" — **they fail on the reading that dilutes their denominator with a timer.**
+⇒ ⭐⭐ **AND IT STRENGTHENS THE `reverse_impulse` DISQUALIFICATION RATHER THAN SOFTENING IT: that row has the LARGEST contamination share at 29.4 %, so its inclusive 0.955 — the number that made it look like a clean ship — WAS THE ARTIFACT.** Its real active median is 7.12 h.
+⛔ **THE INCLUSIVE ARM IS THEREFORE NOT A CONSERVATIVE CHECK. It is biased toward failing rows, so it ships FEWER rows for a reason that has nothing to do with the ceiling.**
+
+### ✅ AND THE FLOOR DEPENDENCY HE NAMED, STATED WITH BOTH VALUES SO IT CANNOT BE READ AS CONVENIENCE
+
+⛔ **He is right that this decision sets `reach_atr_max_unknown_floor`: with `sma_trend_ride` in, the floor is **1.97**; without it, **2.36** — looser for every unknown strategy.**
+✅ **The exclusion is justified ON THE CONSTANT, independently of which floor it yields — 84 of 85 rows at 1.0000–1.0004 h is a timer whichever way the floor lands.** ⭐ **And naming the direction both ways: my exclusion produces the TIGHTER floor, so it is not convenient in the safety direction — but it does ship MORE rows, which is convenient in the other. The justification has to stand on the constant alone, and it does.**
+
+✅ **CARVE-OUT CONDITIONS MET ⇒ filled-only is primary, the inclusive arm is published as contaminated-not-rival, and ALL FOUR ROWS SHIP AT FLOOR 1.97.**
 
 ---
 
