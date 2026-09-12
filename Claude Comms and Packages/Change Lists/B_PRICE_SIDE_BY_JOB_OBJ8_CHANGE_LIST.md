@@ -106,6 +106,27 @@ All restores verified byte-identical.
 
 ---
 
+## ⭐ ROW `8a` — D3 AT THE xSTOCK EXIT TOUCH PRICE (added 2026-09-13, ref `77423bdc4`)
+
+**THE DEFECT.** After withholding `hollowSkipCap` consecutive ticks **because the book was unusable**, the yield **fell through and acted on the mark of that same unusable book** — and `_eqTick.price` is the **MIDPOINT** whenever both sides exist (`equity-spot-archiver.ts:210`), however absurd those sides are. The branch said so in its own comment: *"the engine is about to act on this mark."*
+
+**MEASURED, `CRM/USD` 2026-09-12T00:16:31Z (`#958`):** book **7.00 / 1000.00** ⇒ midpoint **503.50**, booked `target_hit` at **+$7.15**.
+
+**THE FIX — D3, decided 2026-09-11, supersedes the fall-through.** Ladder: book top where valid and fresh → else the ticker sides where valid and inside D6's age → **else REFUSE the price-dependent action, which for an exit is a HOLD.** ★ **On this leg the ticker snap IS the sides** — xStock has no separate depth feed — **so a `hollow` verdict has already failed BOTH rungs on the same object and the ladder terminates at REFUSE.** The yield now records the skip, engages the escalation rail, and `continue`s. **No `updateCache`**, for the same reason as the skip branch (Langston C1): the engine did not act, so the cache must not say it did.
+
+⛔⛔ **A CORRECTION TO MY OWN JUSTIFICATION — MEASURED, AND IT STRENGTHENS THE FIX.** I claimed a usable price existed and was ignored: the ticker 91 s earlier at **bid 235.00 / ask 248.40**. **The predicate disagrees and it is right** — that bid is a **4.86% drop against a 0.400% trailing spread**, so it reads `hollow:bid_collapsed` **on our own measure**. A 12-point bid move on a name quoting a 1-point spread seconds earlier is a handover artefact, not a price.
+⇒ **EVERY frame from the boundary on was unusable, which is exactly why the guard withheld 60 ticks (≈90 s, 00:15:00 → 00:16:31) before yielding. Acting on 503.50 was not a choice between two prices — it was inventing one.**
+
+⚠️ **AND A SECOND MEASURED SURPRISE, pinned rather than glossed: I expected the 7/1000 frame to read `bid_collapsed` + `ask_spiked`. It reads `mark_deviation`** — with both sides deranged the mark moves far enough to short-circuit before either side arm is reached. Same verdict, different reason. The fixture pins the arm that FIRES, not the one that sounds right.
+
+⚠️ **WHAT IT COSTS, STATED:** the position stays open while the book is unusable, so a genuine adverse move in that window is **not acted on**. The alert above the branch fires and the skip rail escalates. **The alternative is a fabricated fill that also corrupts every P&L-derived consumer of `closed_trades`.**
+
+**VERIFICATION.** Three fixtures on the real CRM row added to `b-xstock-feed-sanity-book-state.test.ts` — **44 green** in that file, **tsc 377** at baseline. One counter, not two: every yield is now a refusal, and `hollowYields` already prints in the `[I7-PRICE-FIX][EVAL_EXIT]` cycle line, so the refusal is visible without new telemetry.
+
+⛔ **WHAT I HAVE NOT DONE AND AM NOT CLAIMING: there is no unit test of the ENGINE-LOOP control flow itself.** The change is `continue` where a fall-through stood, inside a large monitor method with no existing harness. **The predicate half is covered on real rows; the control-flow half is readable but unproven, and Step 7 must verify it on staging — `hollowYields > 0` with ZERO new `kraken_equities_ws_mid` producers on boundary closes.**
+
+---
+
 ## ⭐ THE MAGNITUDE, AND IT IS PRE-REGISTERED AS A STEP-8 PREDICTION RATHER THAN READ AFTERWARDS
 
 ⛔ **8f REMOVES ROUGHLY A THIRD OF THE LIVE CRYPTO EVALUATION UNIVERSE. That is the number this change list omitted in r1** (Langston BLOCKER-3, measured on staging `out.log`, 486,199-line slice ending 2026-09-12T13:07:41Z):
