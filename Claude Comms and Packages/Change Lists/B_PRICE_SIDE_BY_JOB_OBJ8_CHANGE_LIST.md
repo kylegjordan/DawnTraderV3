@@ -84,7 +84,17 @@ All restores verified byte-identical.
 ★ **WHY IT HAD TO BE TAKEN NOW: the Step-8 criterion keys on the ENTRY postdating the deploy.** The gate is not live yet, so a non-admitted entry can still open before it lands — and a post-deploy CLOSE of a pre-deploy entry would then be adjudicated after the fact. ⛔ **Without the captured `(id, symbol, opened_at)` list the FAIL condition is unfalsifiable in exactly the direction that looks like a PASS.**
 
 **Contents: 5 open, all USD** — `CRWD/USD`, `MDB/USD`, `GEV/USD` (xstock), `SUI/USD`, `AERO/USD` (crypto), earliest `opened_at` 2026-09-10T14:06Z. **None would be refused by 8f.**
-✅ **POSITIVE CONTROL, so the snapshot's clean reading is not mistaken for a predicate that always says yes: the same test over `closed_trades` returns 654 admitted / 96 NON-ADMITTED.** The predicate discriminates; the open set simply happens to be clean.
+✅ **POSITIVE CONTROL, so the snapshot's clean reading is not mistaken for a predicate that always says yes: the same test over `closed_trades` discriminates.**
+⛔ **CORRECTED (Langston, 2026-09-12): my `654 admitted / 96` MIXED THE CLASSES and the correct figure is `crypto_spot` 385 admitted / 96 non-admitted.** `xstock_spot` contributes 274 of 274 admitted **BY CONSTRUCTION** — every xStock pair is USD-quoted, so those rows CANNOT be non-admitted and can only DILUTE the share. ★ **Always quote 385 / 96 with the class named.** The open set is simply clean; the predicate is not trivially true.
+
+---
+
+## ⛔⛔ 8f IS LOG-ONLY. KYLE CANNOT SEE IT ON ANY SCREEN.
+
+**Whole-tree census at the deployed ref `2dbc512ee` (Langston, re-derived): `refusedQuote` appears in `active-filter-pool.ts`, the FIVE log printers, and the unit test. ZERO routes. ZERO client files.**
+⛔ **AND MY OWN "the gate's visible surface is the filter-diagnostics counts" WAS WRONG AT THE OBJECT.** That panel's `skipped*` columns are a DIFFERENT POPULATION — `pairsSkippedNoPrice`, `pairsSkippedInsufficientOHLC`, `nullReasons.*` (`vts-filter-diagnostics-panel.tsx:911-917`) are PER-EVALUATION skips, not POOL ADMISSION. **8f's only surface is `error.log`.**
+
+⇒ **RULE 24 OUTCOME (2) — a scope decision, not a defect: either plumb `refusedQuote` into the diagnostics payload as its own row, or say plainly that it is invisible. SAID PLAINLY HERE.** ★ **Chosen: do NOT grow a deployed batch.** `HOME: §9.4 (2), folded into PHASE_19_PLAN row 3n.i (B-QUOTE-ADMISSION-LEGACY-SWEEP)` — which already carries the reconnect of `active-scan-diagnostic`'s quote counter for the same reason: **otherwise the gate and the screen disagree, which is the `#938`/`#921` family one layer up.**
 
 ---
 
@@ -106,7 +116,10 @@ All restores verified byte-identical.
 ⚠️ **TWO DENOMINATORS, BOTH CORRECT, STATED SO THEY DO NOT READ AS A CONTRADICTION: 96 of 755 over ALL rows (Langston's, and `closed_trades` writes a row AT OPEN) versus 96 of 750 filtered to `closed_at IS NOT NULL` (mine, the standing filter for that table). The numerator is identical either way and the share moves by 0.05 points.**
 ⛔⛔ **AND 2026-07-15 IS `closed_trades`' OWN RETENTION FLOOR, NOT THE DEFECT'S ORIGIN (Langston CONDITION 3).** Every quote leg's `min(opened_at)` is 07-15 — **including USD**, which is the tell. **Retention is not history.** ⇒ **the span is a FLOOR: the defect is at least this old and its true start is unmeasured by this table.** Nobody may later read 07-15 as when D9 started.
 
-**PRE-REGISTERED STEP-8 PREDICTION, written before the deploy so it cannot be fitted afterwards:** after 8f lands, **eval-lane refusals appear at roughly the rates above and the admitted set stops acquiring new non-admitted quotes entirely** — zero new `closed_trades` rows in a non-admitted quote, on any row whose entry postdates the deploy. **A single such row is a FAIL, not noise.**
+**PRE-REGISTERED STEP-8 PREDICTION, written before the deploy so it cannot be fitted afterwards** — **AMENDED 2026-09-12 BEFORE THE WINDOW IS READ (Langston, two `#661` reach legs, both sized rather than asserted):**
+- **THE SIGNAL:** eval-lane refusals appear at roughly the rates above, and the system stops acquiring NEW non-admitted positions. **A single leaked row is a FAIL, not noise.**
+- ⛔ **AMENDMENT 1 — THE WINDOW HAS A FLOOR, because as first written the criterion carried NO DURATION AT ALL and a zero would have been unreadable.** Base rate measured: **22 non-admitted crypto entries in the last 30 days**, 2026-08-19T21:28Z → 2026-09-11T03:16Z, the last **34 hours before the deploy** — ≈**0.73/day**. ⇒ **a zero under ~2 days means nothing. THE WINDOW IS FLOORED AT 7 DAYS (≈5 expected absent the gate).**
+- ⛔ **AMENDMENT 2 — THE INSTRUMENT'S REACH: `closed_trades` ALONE CANNOT SEE A LEAK THAT HAS NOT CLOSED YET, and crypto holds run days.** ⇒ **the predicate is ZERO non-admitted rows in BOTH SINKS** — `closed_trades` by `opened_at`, AND `active_open_positions` — **each printed with its own denominator.**
 
 ⚠️ **AND A CONSEQUENCE THAT IS NOT `#966` AND NEEDS ITS OWN HOME:** those 96 rows contaminate **every P&L-derived consumer of that sink** — F-G-2's window, the `#596` outcome corpus, learning, dashboard earnings. **Blocking new ones does not clean the existing ones.** `HOME: folded into row 12.7 B-QUOTE-CURRENCY-DENOMINATION as an added objective` — the back-correction rides the conversion that makes it computable.
 
