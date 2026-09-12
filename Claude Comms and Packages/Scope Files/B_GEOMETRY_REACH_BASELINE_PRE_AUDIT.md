@@ -1,7 +1,7 @@
 # B-GEOMETRY-REACH-BASELINE — STEP 2: PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r3, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
+**change-class: architecture** · **r4, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
 
 > ⛔ **THE AUDIT COMES FIRST AND THE PLAN FALLS OUT OF IT.** Every plan item back-references the finding it derives from; anything with no audit treatment is flagged `UNAUDITED`.
 
@@ -97,6 +97,46 @@ Gate **C** is the **VTS crypto lane**. ⛔ **That is the lane the seven ceiling 
 ⛔ **WHAT DOES NOT SURVIVE IS THE MEAN AND EVERY UPPER QUANTILE: a shadow mean of 11.55 h against a median of 6.01 h is a statistic the TTL chose.** => **STANDING RULE ADDED: `H` is taken as a MEDIAN, never a mean, and the censored share is published per cell.**
 
 ✅ **AND THE FOUR STRATEGIES MY TABLE SILENTLY DROPPED ARE NAMED, because an unstated n-threshold is the same defect as an unstated lane predicate:** `mean_reversion` (30), `vwap_bounce` (35), `defensive_hedge` (12), `dhma` (1). **The threshold was never written down; it is now n >= 100, stated.**
+
+---
+
+---
+
+## §1b-ter — ⭐⭐ THE ARBITER, **PRE-REGISTERED BEFORE IT RUNS** — AND MY SET ARITHMETIC CORRECTED FIRST
+
+### ⛔⛔ THE CORRECTION, BECAUSE IT INVERTS WHICH ROWS ARE CANDIDATES
+
+**r3's dispatch said *"five of the seven tightening strategies have no usable clean-lane sample"* and *"only `reverse_impulse` is among the seven."* BOTH ARE WRONG (Langston), and I re-derived the set from §1a rather than from memory:**
+- ⛔ **`support_bounce` IS NOT ONE OF THE SEVEN.** §1a grades it **3.64 vs 4.0, *"~right"***, and OBJ-A part 3 seeds the seven. ⇒ **FOUR of the seven lack a usable clean-lane sample, not five:** `inside_bar_reversal` **0**, `pivot_shift` **3**, `sma_trend_ride` **8**, `volatility_edge` **10**.
+- ⛔ **AND THE SEVEN CONTAIN THREE ROWS WITH A CLEAN-LANE SAMPLE, NOT ONE:** `morning_star` (VTS **253**), `range_trade` (VTS **156**), `reverse_impulse` (VTS **84**).
+- ⭐ **THE PART THAT MAKES IT A REAL ERROR RATHER THAN A MISCOUNT: I NAMED THE ONE ROW THAT FAILS MY OWN NEW n ≥ 100 THRESHOLD AND DROPPED THE TWO THAT PASS IT** — in the same document where I had just written the threshold down.
+
+### ✅ WHAT SHIPS UNDER THE RULING, AND WHY EACH ROW IS AT ITS **LOOSER** LANE
+
+✅ **OBJ-A parts 1, 2 and 4 ship on the finding the split leaves untouched.** ⭐ **Part 2 stands on its own legs as a §8 #10 defect regardless of the calibration: `reach_atr_max` has no fail-closed analogue to `min_rr`'s, so an uncanonicalized token lands on the permissive 4.0 TODAY.**
+⛔ **Part 3 seeds only rows ROBUST TO THE LANE QUESTION BY CONSTRUCTION — both lanes usable, and the LOOSER lane still tightening materially:**
+
+| row | lane taken | value | vs live 4.0 | n at that lane |
+|---|---|---|---|---|
+| `morning_star` | **shadow** (the looser) | **2.52** | 1.59x tighter | 3,137 |
+| `reverse_impulse` | **VTS** (the looser) | **1.86** | 2.15x tighter | **84** |
+
+⚠️ **`reverse_impulse`'s n = 84 FAILS THE n ≥ 100 THRESHOLD THIS DOCUMENT SET.** ✅ **It ships with n printed beside the value (Langston's own preference) — and the justification is stated rather than assumed: the threshold governs a value we DERIVE FROM, and this row is taken at its looser lane precisely so that being wrong about the sample moves the ceiling toward the status quo, not past it.** ⛔ **If the arbiter does not clear it, it drops.**
+⛔ **THE OTHER FIVE DO NOT SHIP ON THIS CORPUS — INCLUDING `range_trade`, WHICH IS MY CLEANEST PURE-VTS ROW.** ⭐ **Shipping it would assert the VTS lane by preference, which is exactly the thing neither of us is willing to assert.**
+
+### ⛔⛔ THE PRE-REGISTRATION — WRITTEN AND **COMMITTED BEFORE THE QUERY RUNS**
+
+⭐ **This section exists in the commit that PRECEDES the result commit. That ordering is the whole evidentiary value; a pre-registration written afterwards is a description of what I did.**
+
+**OBJECT.** `closed_trades`, `asset_class = 'crypto_spot'`, the ACTIVE path, closed rows only. **The active lane is what the ceiling actually governs; both VTS lanes are PROXIES for it, which is why neither can arbitrate the other.**
+**ESTIMAND.** Per strategy: median `closed_at − opened_at`, compared against that strategy's shadow-lane and VTS-lane medians from §1b-bis, **as a ratio of DERIVED CEILINGS (√H_lane / √H_active), not of hours** — because the ceiling is what the batch ships and a ratio of hours understates the effect by its own square root.
+**INCLUSION N.** ⛔ **n ≥ 30 closed active rows per strategy.** ⚠️ **STATED AS A COMPROMISE FORCED BY CORPUS SIZE, NOT AS A PRINCIPLED BAR: `closed_trades` holds ~755 rows from 2026-07-15, so n ≥ 100 would very likely admit nothing and the arbiter would return an uninformative silence I could then misread as a verdict.** 30 is the conventional floor at which a median is worth comparing.
+**AGREEMENT TOLERANCE.** ⛔ **A lane TRACKS active on a strategy if the derived-ceiling ratio is within 1.25x in either direction.** ⭐ **Rationale, bound to a measured quantity rather than chosen: the observed between-lane disagreement is 1.10x / 1.45x / ≤1.81x, and the looseness this batch claims to correct is 1.5-3.0x. A tolerance LOOSER than the effect being corrected would certify a lane that cannot resolve the thing it is arbitrating.**
+**DECISION RULE, fixed now.**
+- **EXACTLY ONE lane within tolerance on ≥ 3 strategies** ⇒ that lane becomes the basis; the single-lane rows ship on it, `range_trade` first.
+- **BOTH lanes clear, or NEITHER does** ⇒ **the batch is the two rows above.** ✅ **Both-clear resolves to two rows deliberately: if the proxies are interchangeable at this tolerance they cannot select between themselves, and the honest read is that the corpus does not answer it.**
+**PRE-DECLARED THREAT TO THE ARBITER, checked in the same query rather than assumed.** Langston notes `max_hold` enforcement has been OFF on both active lanes since 2026-07-24, which is what makes the active lane uncensored and therefore the right arbiter. ⛔ **The CODE COMMENT asserts the seed (`active-execution-engine.ts:2075-2084`, *"Seeded FALSE (paper+live), so the max_holding_period branch never fires today"*) — AND A COMMENT IS NOT A LIVE VALUE.** ✅ **`module_constants.max_hold_switch` is read from the DATABASE in the same run, and the active lane's own max hold is checked for a wall the way both proxies were.** ⚠️ **AND THE CAUTION CUTS BOTH WAYS: both proxies carry a TTL wall the governed population does not, so a proxy will read SHORTER than active for structural reasons before any market fact enters.**
+**WHAT A NULL RESULT MEANS, declared now so it cannot be re-read later.** ⛔ **If fewer than three strategies clear n ≥ 30, the arbiter DID NOT RUN — it did not return "no lane tracks."** ✅ **That is a silence with no reach, and it resolves to the two rows, not to a finding about the lanes.**
 
 ---
 
