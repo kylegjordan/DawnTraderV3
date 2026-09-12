@@ -8792,6 +8792,25 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ---
 
+### #1051 ⛔⛔ **CLAIM (iii) WITHDRAWN 2026-09-12 — THE RUNTIME TEST CAME BACK AGAINST ME** · OPEN 2026-09-12
+
+> ⛔⛔ **READ THIS BANNER BEFORE ANY LINE BELOW IT. THE HEADLINE CLAIM OF THIS ENTRY — *“a signal the reward-to-risk gate refuses can still reach the pool and be opened as a paper trade”* — IS WITHDRAWN. I DID NOT PROVE IT AND THE DIRECT TEST CONTRADICTS IT.**
+>
+> **Kyle disputed it, named the reason (all signals pass the SQE; only approved signals enter the RTB), and told me I had not run the `bug-investigation` skill. He was right on both counts.** I ran it. Rule 24.a's own requirement — read the RUNTIME, not only the code — is what killed the claim, and I had reached a conclusion without it.
+>
+> **THE TEST THAT SETTLES IT.** Object: staging `/var/log/dawntrader/error.log` (window 2026-09-12 00:00:01Z → 12:05Z, 177,160 lines) and `out.log` (463,482 lines), plus the live database.
+> - ✅ **The gate DOES fire:** **20** `[reorg-B2][TARGET_GATE][active] drop … rr_below_min rr=1.66` lines — 10 `RAY/USD/reverse_impulse`, 9 `RAY/USD/inside_bar_reversal`, 1 `LIGHTER/USD/inside_bar_reversal`. **All at rr=1.66, i.e. the pattern pool's 2.5/1.5 constant.** *(I first grepped `out.log` and got ZERO — `console.warn` goes to stderr under PM2. That zero was an instrument-reach failure, not a result.)*
+> - ✅ **The queue function IS entered for a refused pair:** **12** `[A3.R8.5][SQE][GATE] pair=RAY/USD TRUSTED` lines, its own entry log.
+> - ⛔⛔ **AND NOTHING REACHED THE POOL OR BECAME A TRADE.** `rtb_signals` holds **ONE row in total**, queued today 01:10:43Z, `r ≥ 2.0`, not promoted. **ZERO rows for `RAY/USD` or `LIGHTER/USD`, ever-promoted = 0 across the whole table, and zero pool rows with `r < 2.0`.** `active_open_positions` has **ZERO** rows opened today; `closed_trades` has **2** (SUI/USD, AERO/USD, both `morning_star`, both HYBRID) — **neither of them a refused pair.**
+>
+> ⇒ ⛔ **THE CONSEQUENCE I ASSERTED DID NOT HAPPEN.** Nineteen refusals of `RAY/USD` pattern geometry in twelve hours produced **no pool row and no trade.** Whatever blocks them, the system refused them. **The loud half of my finding is false and I am not going to dress it up as narrower — it is withdrawn.**
+>
+> ⚠️ **WHAT STILL STANDS, and it is NOT a defect claim — it is four structural facts and one unexplained measurement:** (1) the queue write at `signal-orchestrator.ts:1483` is inside `buildSizedSignalForStrategy` (body `:553`–`:1988`, brace-measured) and the target gate at `:1906` is later in the same body; (2) the SQE's failure set is **five gates — NetEV, RegimeWeight, ROI, AMR, Governance** (`signal_quality_evaluator.ts`) — and **none of them is a reward-to-risk floor**; (3) the pattern branch does not call `applyGlobalGuards`; (4) the gate at `:1906` really does refuse pattern geometry at rr=1.66. **AND: eight September crypto closes opened below their resolved floor.** ⛔ **I attributed (5) to (1)-(4) by inference and the runtime test does not support it. The eight remain UNEXPLAINED, which is where this entry now sits.**
+>
+> ⛔ **NO FIX IS PROPOSED AND NONE MAY BE BUILT OFF THIS ENTRY.** `PHASE_19_PLAN` row `2.4g-2` is marked WITHDRAWN-PENDING-INVESTIGATION in the same commit, and the scope file drafted against fix (A) is marked SUPERSEDED, not deleted. ⭐ **Kyle's standing point, which this entry is now the evidence for: I read structure and called it behaviour. The structure was right and the behaviour was not there.**
+
+#### ORIGINAL ENTRY, PRESERVED BELOW — ITS CLAIM (iii) IS WITHDRAWN PER THE BANNER
+
 ### #1051 OPEN 2026-09-12 (CC-B, surfaced settling Langston's blocker on the `B-EXIT-POLICY-EVALUATOR` geometry leg) — ⛔⛔ **THE PATTERN POOL SHIPS ITS OWN HARDCODED TRADE GEOMETRY, AND THAT GEOMETRY CLEARS A GOVERNED FLOOR IT ARITHMETICALLY FAILS**
 
 **THE MECHANISM, READ AT THE REF (`pattern-recognizer.ts:585-586`, unchanged since before 2026-09-01 — `git log --since=2026-09-01` on the file is EMPTY, so the code below was in force for every trade cited):**
