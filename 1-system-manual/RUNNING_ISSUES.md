@@ -8789,3 +8789,49 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 **WHY IT MATTERS, BOUNDED.** The drop is silent apart from this line, and the throwing message shape is unknown, so whether a dropped message carried a price, a subscribe reply or an unsubscribe rejection (the instrument P-7b added) is unknown.
 
 **DISPOSITION — §9.4 disposition 4, a review scheduled inside `3n` (`B-PRICE-SIDE-BY-JOB`) at Step 9, with OBJ-7's other residuals:** identify the message shape that throws, then decide fix-on-find (rule 23). Placement recorded on the `3n` row of `PHASE_19_PLAN.md`.
+
+---
+
+### #1051 OPEN 2026-09-12 (CC-B, surfaced settling Langston's blocker on the `B-EXIT-POLICY-EVALUATOR` geometry leg) — ⛔⛔ **THE PATTERN POOL SHIPS ITS OWN HARDCODED TRADE GEOMETRY, AND THAT GEOMETRY CLEARS A GOVERNED FLOOR IT ARITHMETICALLY FAILS**
+
+**THE MECHANISM, READ AT THE REF (`pattern-recognizer.ts:585-586`, unchanged since before 2026-09-01 — `git log --since=2026-09-01` on the file is EMPTY, so the code below was in force for every trade cited):**
+
+```
+const stopDistance   = atr > 0 ? atr * 1.5 : currentPrice * 0.01;
+const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
+```
+
+⭐ **`patternToTradeSignal` IS A SECOND GEOMETRY PRODUCER, PARALLEL TO ALL 19 STRATEGY MODULES**, and its own docstring declares the constants: *"ATR multipliers (1.5x stop / 2.5x target) stay hardcoded; per-class tuning deferred to Layer-3 (SIM §11263)"* (B79.0n.PATTERN-DETECT, 2026-05-24). ⇒ **R = 2.5 / 1.5 = 1.6667 BY CONSTRUCTION, on every pattern-pool signal, regardless of which strategy label it is later given.** Patterns are TRIGGERS: `resolvePatternConsumingStrategy` attaches the canonical strategy AFTER the geometry exists (`signal-orchestrator.ts:2281`, geometry at `:2286`), so the strategy's own stop/target formula never runs on these rows.
+
+**MEASURED AT THE DATABASE (CC-B, 2026-09-12). Object: `closed_trades`. Population: `asset_class='crypto_spot' AND opened_at >= '2026-09-01'`, n=58, of which 52 carry `intended_entry_price`.**
+
+| pool | `signal_type` | stop at exactly 1.50 x ATR | n |
+|---|---|---|---|
+| `pattern` | `PATTERN` | **28** | 31 |
+| (absent) | `QUANT` | 1 | 15 |
+| (absent) | `HYBRID` | 0 | 12 |
+
+✅ **POSITIVE CONTROL SATISFIED, and it is the reason the 28/31 is evidence rather than an artefact of my expression: the SAME expression returns non-1.50 on 14 of 15 QUANT and 12 of 12 HYBRID rows.** The measure can fail, and on the comparison pools it does.
+
+⛔⛔ **THE FLOOR IT SHOULD FAIL, AND THE ARITHMETIC IS NOT CLOSE.** The universal RR gate runs on this path — `buildSizedSignalForStrategy` (`signal-orchestrator.ts:548`) calls `normalizeAndGateTarget` at `:1906`, and the pattern branch calls that same function at `:2327`, so the gate IS invoked. Its floor resolves per (class, strategy) at `expectancy.ts:242`, `regime` pinned to `'*'`:
+
+| strategy | resolved `min_rr` (live row, `reorg-b2-3` 2026-06-27) | R persisted | verdict |
+|---|---|---|---|
+| `inside_bar_reversal` | **2.00** (no own row ⇒ the crypto `*` default) | **1.6661 – 1.6687** on 4 of 4 | below |
+| `reverse_impulse` | **2.40** (own row) | **1.6660 – 1.6666** on 4 of 4 | below |
+
+⭐ **AND THE NORMALIZER CANNOT RESCUE THEM — the floor-LIFT WAS REMOVED at reorg-B2.1 OBJ-1** (`signal-target-normalizer.ts:93-94`, `const lifted = false; const targetPrice = nativeTarget;`), and `rr < minRR` at `:101` DROPS before the ATR and reachability branches are reached. **The persisted targets are 2.500 x ATR to three decimal places on all eight**, so no lift occurred and the gate saw 1.6667.
+
+⚠️ **THE BENIGN EXPLANATION IS RULED OUT, CHECKED BEFORE REPORTING RATHER THAN AFTER.** reorg-B3.3 gives the VTS telemetry path a `'tag'` disposition where `rr_below_min` does NOT drop, which would have made all of this by design. **It does not apply: all 58 September crypto closes are `mode='paper'`, zero VTS**, and the active/live disposition is `'enforce'`.
+
+⇒ ⛔ **SO THE GATE IS INVOKED ON THE PATH, THE PATH ENFORCES, THE FLOOR IS 2.00/2.40, THE RATIO IS 1.6667, AND THE TRADES OPENED.** Of the three candidate mechanisms I put to Langston, **two are now dead by measurement rather than by argument** — candidate 1 (wrong floor row) is dead because the live rows are read above and `regime` is not a dimension of the lookup; candidate 2 (stop differs between guard time and persist time) is dead because the ratio is fixed by construction at 2.5/1.5 and so is independent of the price the gate saw. **Candidate 3 — a route that reaches the paper open without this gate — is the only survivor.**
+
+⛔ **NOT YET ESTABLISHED, AND I AM NOT CALLING IT A DEFECT UNTIL IT IS: WHICH route.** The eight rows all carry `rtbQueueId`, `rankAtPromote`, `admissionBasis='organic'` and a `netEvAtAdmit`, so they passed an RTB admission and the EV gate — they are not unadmitted strays. **The outstanding work is the §9.5(a-ii) REPO-WIDE ENTRY-POINT ENUMERATION of what opens a paper position**, which has NOT been run. ⛔ **Tracing forward from the orchestrator structurally cannot find a second entry point, which is exactly why the enumeration comes first.**
+
+⭐ **SEPARATE AND SMALLER, BUT IT BEARS ON EVERY NUMBER ABOVE (`#546` absent-as-valid): 6 of 58 September crypto closes carry a NULL `intended_entry_price`** while all 58 carry `entry_price`. **Every intent-side ratio in this entry is therefore computed on 52, not 58, and the denominator is stated wherever it is used.** The `atr` metadata key is **absent on all 22 September xStock closes**, so this measure has NO REACH into xStock — that is an instrument limit, NOT a finding that xStock is clean.
+
+⚠️ **ONE THING THE MEASURE FOUND THAT I HAVE NOT EXPLAINED AND AM NOT ASSERTING: the dominant crypto geometry pair MOVED.** July shows **2.000 target / 1.800 stop on 24 rows** (R = 1.111 — the spike the R-distribution finding was built on); August shows **2.500 / 1.500 on 53 rows** (R = 1.667). **Whether 2.0/1.8 had its own producer or an earlier constant pair is UNREAD.** July is also mostly unmeasurable here — 259 of its rows have no `atr` metadata key at all — so the 24 is a floor, not a share.
+
+**RELATED, NOT DUPLICATE:** `#927` (the promotion path fabricates a target in four places) is the same FAMILY — geometry invented away from the strategy — but a different site and a different shape: `#927`'s sites fabricate from a PRICE COEFFICIENT (`entry*1.02`); this one fabricates from an **ATR multiple**, which is why the price-fraction distances vary (4.5 % to 15.3 %) and a coefficient-shaped search would not have found it. ⭐ **Langston predicted the `#927` shape from the near-constant R and it was the right instinct on the wrong axis — the constancy is in ATR space, not price space.**
+
+**DISPOSITION — §9.4 disposition 1, FOLDED into the work in hand:** this is the precondition on the geometry leg of `B-EXIT-POLICY-EVALUATOR` (`PHASE_19_PLAN` row 2.4h), agreed with Langston 2026-09-12 as folded rather than a separate batch. ⛔ **IT GATES THE BASELINE: no target coefficient may be re-based while the pool that produces 31 of 58 crypto trades sets its own geometry outside the strategy modules and clears the floor anyway.** The companion horizon-grid defect is placed separately at row `3n.i` (`B-HORIZON-GRID-COMPARABILITY`).
