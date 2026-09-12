@@ -1,7 +1,7 @@
 # B-GEOMETRY-REACH-BASELINE — STEP 2: PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r4, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
+**change-class: architecture** · **r5, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
 
 > ⛔ **THE AUDIT COMES FIRST AND THE PLAN FALLS OUT OF IT.** Every plan item back-references the finding it derives from; anything with no audit treatment is flagged `UNAUDITED`.
 
@@ -137,6 +137,79 @@ Gate **C** is the **VTS crypto lane**. ⛔ **That is the lane the seven ceiling 
 - **BOTH lanes clear, or NEITHER does** ⇒ **the batch is the two rows above.** ✅ **Both-clear resolves to two rows deliberately: if the proxies are interchangeable at this tolerance they cannot select between themselves, and the honest read is that the corpus does not answer it.**
 **PRE-DECLARED THREAT TO THE ARBITER, checked in the same query rather than assumed.** Langston notes `max_hold` enforcement has been OFF on both active lanes since 2026-07-24, which is what makes the active lane uncensored and therefore the right arbiter. ⛔ **The CODE COMMENT asserts the seed (`active-execution-engine.ts:2075-2084`, *"Seeded FALSE (paper+live), so the max_holding_period branch never fires today"*) — AND A COMMENT IS NOT A LIVE VALUE.** ✅ **`module_constants.max_hold_switch` is read from the DATABASE in the same run, and the active lane's own max hold is checked for a wall the way both proxies were.** ⚠️ **AND THE CAUTION CUTS BOTH WAYS: both proxies carry a TTL wall the governed population does not, so a proxy will read SHORTER than active for structural reasons before any market fact enters.**
 **WHAT A NULL RESULT MEANS, declared now so it cannot be re-read later.** ⛔ **If fewer than three strategies clear n ≥ 30, the arbiter DID NOT RUN — it did not return "no lane tracks."** ✅ **That is a silence with no reach, and it resolves to the two rows, not to a finding about the lanes.**
+
+---
+
+---
+
+## §1b-quater — ⭐⭐ THE ARBITER RESULT, GRADED AGAINST THE PRE-REGISTRATION COMMITTED AT `d2c0fd65e`
+
+✅ **THE PRE-REGISTRATION IS IN THE PARENT COMMIT AND THIS SECTION IS THE FIRST TIME THE QUERY HAS RUN.** Every threshold below was fixed before any of these numbers existed.
+
+### ✅ THREAT CHECK 1 — PASSED, AND THE LIVE VALUE IS STRONGER THAN THE CLAIM IT CHECKED
+
+⛔ **I read the DATABASE, not the code comment.** `module_constants`, `module_name='max_hold_switch'`, all three rows stamped **2026-07-24**:
+
+| constant | value |
+|---|---|
+| `enabled_live` | **false** |
+| `enabled_paper` | **false** |
+| ⭐ `enabled_vts` | ⛔ **TRUE** |
+
+⇒ ⭐⭐ **THIS IS THE MECHANISM BEHIND THE 48 h / 168 h WALLS, FOUND AT THE SWITCH RATHER THAN INFERRED FROM THE SHAPE.** Max-hold enforcement is **ON for VTS and OFF for the active lane**, by one setting, on one date. **So the two proxies are censored BY CONFIGURATION and the arbiter is not — which is exactly what makes it the arbiter.**
+✅ **CONFIRMED IN THE DATA: the active lane shows no wall** — p50 3.78 h, p90 20.24 h, p99 58.98 h, **max 184.93 h**, with no pile-up at any value.
+
+### ⚠️ ONE POPULATION QUESTION THE PRE-REGISTRATION DID NOT NAME, AND I AM REPORTING BOTH READINGS RATHER THAN PICKING
+
+**`close_reason='never_filled'` accounts for 85 of 479 crypto rows.** ⛔ **A trade that never filled has no HOLD — its `closed_at − opened_at` is time-to-abandonment — so excluding it is clearly right, AND I DID NOT PRE-REGISTER IT.** ⭐ **So it is graded both ways, and the exclusion is declared as an un-pre-registered choice rather than folded in silently.**
+
+### ✅ THE RESULT — FILLED ONLY (the defensible population). Tolerance: derived-ceiling ratio in [0.80, 1.25]
+
+| strategy | n active | active median | **active-derived ceiling** | shadow ratio | verdict | VTS ratio | verdict |
+|---|---|---|---|---|---|---|---|
+| `morning_star` | 128 | 5.76 h | **2.40** | 1.049 | ✅ **CLEARS** | 0.955 | ✅ **CLEARS** |
+| `inside_bar_reversal` | 61 | 5.66 h | **2.38** | 0.990 | ✅ **CLEARS** | — | n<30 |
+| `pivot_shift` | 52 | 6.33 h | **2.52** | 1.082 | ✅ **CLEARS** | 0.995 | n<30 |
+| `sma_trend_ride` | 41 | 3.46 h | **1.86** | 1.060 | ✅ **CLEARS** | 1.947 | n<30 |
+| `reverse_impulse` | 48 | 7.12 h | **2.67** | **0.481** | ⛔ **FAILS** | **0.697** | ⛔ **FAILS** |
+| `support_bounce` | 33 | 5.80 h | **2.41** | **1.514** | ⛔ **FAILS** | 0.419 | n<30 |
+
+### ✅ AND THE VERDICT IS ROBUST TO THE ONE THING I FAILED TO PRE-REGISTER — WHICH IS THE ONLY REASON I AM WILLING TO ACT ON IT
+
+**Including `never_filled`, shadow clears 3 (`morning_star` 1.146, `inside_bar_reversal` 1.226, `reverse_impulse` 0.955) and VTS clears 1.** **Excluding it, shadow clears 4 and VTS clears 1.**
+⇒ ✅ **SHADOW REACHES ≥3 ON BOTH READINGS; VTS REACHES 1 ON BOTH AND STRUCTURALLY CANNOT REACH 3 — it has only TWO cells with n≥30 in the whole comparison.** ⛔ **THE DECISION RULE FIRES CLEANLY: exactly one lane clears on ≥3 ⇒ THE SHADOW LANE IS THE BASIS.**
+⚠️ **WHAT IS NOT ROBUST IS THE MEMBERSHIP — `reverse_impulse` clears on the inclusive reading and fails hard on the filled-only one — and that row is exactly where it matters, so it is treated below on the filled-only reading, which is the one with a defensible population.**
+
+### ⛔⛔ THE ARBITER DISQUALIFIES `reverse_impulse`, WHICH THE RULING PROVISIONALLY SHIPPED — AND THE DIRECTION IS THE ALARMING ONE
+
+**Its active median is 7.12 h, implying a ceiling of 2.67 — HIGHER THAN BOTH PROXIES (shadow 1.29, VTS 1.86).** ⇒ ⛔⛔ **SEEDING 1.86 WOULD HAVE TIGHTENED IT TO WELL BELOW WHAT THE ACTIVE LANE ACTUALLY HOLDS. That is a LIVE THROTTLE, and it is precisely the failure the ruling's fix 3 moved the refusal rate forward to catch.** ⭐ **The arbiter caught it one step earlier, before a value was chosen — which is what an arbiter is for.**
+⭐ **AND IT IS THE ROW I ARGUED FOR: r4 shipped it at n=84 against my own n≥100 bar, with the justification that taking the looser lane makes being wrong move the ceiling toward the status quo. THE ARBITER SHOWS THE "LOOSER LANE" WAS STILL 1.4x TIGHTER THAN REALITY — so the safety argument was itself derived from a proxy, and it did not hold.**
+
+### ✅ WHAT SHIPS: **FOUR ROWS**, EACH TAKEN AT ITS SHADOW VALUE AND EACH ARBITRATED AGAINST THE UNCENSORED ACTIVE LANE
+
+| row | shadow median | **seeded ceiling** | vs live 4.0 | arbiter |
+|---|---|---|---|---|
+| `pivot_shift` | 7.41 h | **2.72** | 1.47x tighter | 1.082 ✅ |
+| `morning_star` | 6.34 h | **2.52** | 1.59x tighter | 1.049 ✅ **(both lanes)** |
+| `inside_bar_reversal` | 5.55 h | **2.36** | 1.70x tighter | 0.990 ✅ |
+| `sma_trend_ride` | 3.89 h | **1.97** | 2.03x tighter | 1.060 ✅ |
+
+✅ **`reach_atr_max_unknown_floor` = 1.97** — the minimum over the rows ACTUALLY SEEDED, per the r13 binding, written as a literal at the migration.
+
+### ⛔ WHAT DOES NOT SHIP, EACH WITH ITS OWN REASON RATHER THAN A SHARED ONE
+
+- ⛔ **`reverse_impulse`** — **BOTH proxies fail the arbiter and both are tighter than active.** Not a data gap: a measured disagreement, in the dangerous direction.
+- ⛔ **`range_trade`** — **cannot ship, and I want to be explicit because the ruling expected it first.** It has **ZERO shadow rows**, and the arbiter made shadow the basis. **It also has zero active rows, so the arbiter could not grade it at all.** ⭐ **My cleanest pure-VTS row is the one the arbiter is least able to speak to.**
+- ⛔ **`volatility_edge`** — **active n = 11, below the pre-registered 30.** ✅ **Per the pre-declared null rule this is a SILENCE WITH NO REACH: the arbiter did not grade it, it did not clear it and it did not fail it.** Does not ship.
+- ⛔ **`support_bounce`** — fails at 1.514, and was never one of the seven (§1a grades it *"~right"*).
+- ⛔ **`vwap_pullback`** — unchanged: lanes disagree 3.3x, shadow cell 48.17 % censored.
+
+### ⭐⭐ AND THE ARBITER SURFACED THE THING THAT ACTUALLY EXPLAINS THE WHOLE PROBLEM: **THE THREE POPULATIONS ARE CENSORED IN OPPOSITE DIRECTIONS**
+
+- **The two PROXIES tag rather than drop, so they are UNCENSORED BY THE GATE — and both are TTL-censored by `enabled_vts = true`.**
+- **The ACTIVE lane has no TTL — and it is CENSORED BY THE GATE ITSELF: every trade in it exists because its target passed `reach ≤ 4.0`, and nearer targets are hit sooner, so active `H` is biased SHORT by the very ceiling being calibrated.**
+⇒ ⛔⛔ **THEREFORE THE ACTIVE LANE MUST NOT BECOME THE BASIS EITHER, however uncensored it looks — it is the endogeneity trap in its purest form, and `vts-runner.ts:1736` names it: *"you cannot calibrate the RR floor from a population the floor already filtered."*** ✅ **Its correct role is exactly the one it was given: an ARBITER between two proxies, never a source. That is why the ratio test compares lanes to it rather than reading values off it.**
+✅ **AND IT EXPLAINS THE PATTERN IN THE TABLE: the four clearing rows are ones where the gate is NOT binding, so active and proxy agree. `reverse_impulse` is where they diverge most — which is information about that strategy, not noise.**
 
 ---
 
