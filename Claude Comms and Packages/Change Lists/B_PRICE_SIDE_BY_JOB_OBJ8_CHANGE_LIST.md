@@ -166,6 +166,22 @@ The yield and the close are **1,583 ms apart — ONE MONITOR TICK**. The row rea
 **THE TEST HE ASKED FOR, AT THE TRACKER — `b-price-side-obj8-reseed-selfvalidation.test.ts`, 8 cases.** It drives the REAL state machine (`advanceBookStateComparator` / `clearBookStateComparator` / `readBookStateComparator`) and asserts the FIELDS the engine branches on. **No rule is restated in it.** Ticks 1→4 including **tick 3's self-validation pinned as measured**, plus THREE controls: a healthy re-seed validates immediately; a cold start with no retained ring still seeds; an unreadable `kRel` fails safe.
 ✅ **MUTATION-PROVED AT THE DECISION SURFACE, both firing:** removing `seedImplausible` from `validated` (i.e. reverting to r2) fails **2 of 8**; making the clear stop retaining the ring fails **3 of 8**. **56 green across both book-state files; tsc 377 at baseline.**
 
+⛔⛔ **r4 — BLOCKER-2: THE IMPLAUSIBLE CHAIN OWN RING BECAME THE NEXT SEED PLAUSIBILITY DATUM, AND THE GATE SELF-CLEARED AFTER THE SECOND YIELD CYCLE** (Langston, 2026-09-13; traced by him, re-derived by me).
+`spreads` is computed BEFORE the implausibility check, so chain B ring is `[1.9722]`; the clear retained it **unconditionally**, and the seed had already deleted the healthy `[0.004…]`. Traced:
+- Chain B seeds 7.00/1000.00 ⇒ `seedImplausible=true` ⇒ HOLDS. ✅ r3 works on cycle one.
+- That ring median 1.9722 ⇒ threshold `max(3 × 1.9722, 0.01)` = **5.917** ⇒ **both side arms unreachable**, leaving only the absolute 5% `mark_deviation`. The book wanders 7/1000 → 7/1200 ⇒ hollow ⇒ 60 ticks ⇒ yield ⇒ clear retains `[1.9722,…]`.
+- Reseed 7/1200: seed spread `(1200−7)/603.5` = **1.977** vs `3 × 1.9722` = **5.917** ⇒ **PLAUSIBLE** ⇒ next tick self-compares to zero departures ⇒ `two_sided` ⇒ `validated=true` ⇒ **603.50 booked. Same terminal row, ~3 minutes later instead of 4.7 s.**
+★★ **MY OWN STATED PRINCIPLE NAMED THE DEFECT AND I DID NOT APPLY IT TO MY OWN MECHANISM:** *the circularity needs a datum from OUTSIDE the new chain.* **After one cycle, an unconditionally-retained ring IS the broken chain.**
+
+✅ **r4 — TWO LINES, STILL NO NEW KNOB:** the clear **retains only when `!prev.seedImplausible`**, and the seed **consumes the ring only when the seed was judged plausible**. ⇒ **the ring stays the last PLAUSIBLE instrument evidence and is consumed by the first plausible seed.**
+⚠️ **COST, WRITTEN DOWN NOT INHERITED: a GENUINE permanent re-rating of the instrument spread now holds until a restart clears the module singleton.** That is the fail direction already accepted — but it is now stated rather than assumed.
+
+✅ **MUTATION-PROVED, BOTH HALVES, EACH HITTING A DIFFERENT TEST:** retaining unconditionally (the r3 state) fails **1 of 11**; consuming unconditionally at the seed fails **1 of 11**. **59 green across both book-state files; tsc 377 at baseline.**
+
+⚠⚠ **TWO RESIDUALS — PINNED AS TESTS, NOT FIXED, so the criterion is not read as covering them (Langston):**
+1. **THE RESTART PATH IS NOT CLOSED.** r3/r4 close the YIELD-CLEAR path. With **no retained ring at all**, a process coming up mid-hollow seeds unvalidated (refused — correct), and then **tick 2 self-compares to zero departures, reads `two_sided`, and VALIDATES.** ★ **Asserted as-is in the suite so the gap is visible rather than assumed absent.**
+2. **The `kRel === null` arm is UNREACHABLE IN PRODUCTION** — `resolveBookStateConfigSync` throwing exits at `aee` `knobs_missing` BEFORE the advance. **Defensive only; nobody may cite it as a live control.** Relabelled in the test.
+
 ⛔ **WHAT I HAVE NOT DONE AND AM NOT CLAIMING: there is no unit test of the ENGINE-LOOP control flow itself.** The change is `continue` where a fall-through stood, inside a large monitor method with no existing harness. **The predicate half is covered on real rows; the control-flow half is readable but unproven, and Step 7 must verify it on staging — `hollowYields > 0` with ZERO new `kraken_equities_ws_mid` producers on boundary closes.**
 
 ---

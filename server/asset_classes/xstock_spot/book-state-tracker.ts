@@ -167,7 +167,12 @@ export function advanceBookStateComparator(
         );
       }
     }
-    _retainedSpreads.delete(key); // consumed at the seed, exactly once
+    // ⛔⛔ r4 (Langston BLOCKER-2): CONSUME THE RING ONLY ON A PLAUSIBLE SEED.
+    // Deleting it unconditionally throws away the last PLAUSIBLE instrument evidence the
+    // moment an implausible chain starts — and then that broken chain's own ring becomes the
+    // next seed's yardstick. Keeping it means the datum stays OUTSIDE every broken chain,
+    // which is the principle this whole mechanism rests on.
+    if (!seedImplausible) _retainedSpreads.delete(key);
   }
   _comparators.set(key, {
     priorMid: mid, priorBid: frame.bid, priorAsk: frame.ask,
@@ -210,7 +215,16 @@ export function clearBookStateComparator(symbol: string, reason: string): void {
   const prev = _comparators.get(key);
   if (!prev) return;
   // 8a r3: drop the POINT reference, RETAIN the ring. See `_retainedSpreads`.
-  if (prev.spreads.length > 0) _retainedSpreads.set(key, [...prev.spreads]);
+  // ⛔⛔ r4 (Langston BLOCKER-2) — RETAIN ONLY A PLAUSIBLE CHAIN'S RING, AND THIS IS THE HALF
+  // THAT MAKES r3 SURVIVE A SECOND CYCLE. `spreads` is computed BEFORE the implausibility
+  // check, so an implausible chain's ring holds the BROKEN spread (CRM: [1.9722]). Retaining
+  // that raises the threshold to `max(kRel × 1.9722, 0.01)` = 5.917, which puts both side arms
+  // out of reach — so the book can wander 7/1000 → 7/1200, yield again, and the reseed at
+  // spread 1.977 now reads PLAUSIBLE against its own predecessor, validates on the next
+  // self-comparison, and books 603.50. **Same terminal row, ~3 minutes later instead of 4.7 s.**
+  // ★ MY OWN STATED PRINCIPLE NAMES THE DEFECT: *the circularity needs a datum from OUTSIDE
+  //   the new chain.* After one cycle, an unconditionally-retained ring IS the broken chain.
+  if (!prev.seedImplausible && prev.spreads.length > 0) _retainedSpreads.set(key, [...prev.spreads]);
   _comparators.delete(key);
   console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_CLEARED reason=${reason} validated=${prev.validated} framesSinceSeed=${prev.framesSinceSeed} seededAt=${new Date(prev.seededAtMs).toISOString()}`);
 }

@@ -131,6 +131,53 @@ describe('8a r3 — the four-tick reseed, driving the real tracker', () => {
     expect(engineWouldAct('two_sided')).toBe(true);
   });
 
+  it('⛔ SECOND CYCLE: a broken chain OWN ring must never become the next seed yardstick', () => {
+    // Langston BLOCKER-2. r3 retained the ring UNCONDITIONALLY, so after one yield cycle the
+    // retained ring WAS the broken chain: median 1.9722 ⇒ threshold max(3x1.9722, 0.01) = 5.917
+    // ⇒ both side arms unreachable ⇒ the book wanders 7/1000 → 7/1200, yields again, and the
+    // reseed at spread 1.977 reads PLAUSIBLE against its own predecessor ⇒ validates ⇒ 603.50.
+    // Same terminal row, ~3 minutes later instead of 4.7 s.
+    seedHealthyChain();
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');       // cycle 1: healthy ring retained
+    advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 20_000 }, WINDOW, false, K_REL);
+    expect(readBookStateComparator(SYM)!.seedImplausible).toBe(true);
+
+    // the book wanders and yields AGAIN; an implausible chain's ring must NOT be retained
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');
+    advanceBookStateComparator(SYM, { bid: 7, ask: 1200, last: 247.25, atMs: 200_000 }, WINDOW, false, K_REL);
+    const cmp = readBookStateComparator(SYM)!;
+    // judged against the surviving HEALTHY ring (~0.40%), NOT against 7/1000's 197%
+    expect(cmp.seedImplausible).toBe(true);
+    expect(cmp.validated).toBe(false);
+
+    // and it still cannot validate itself on the following tick
+    advanceBookStateComparator(SYM, { bid: 7, ask: 1200, last: 247.25, atMs: 201_583 }, WINDOW, true, K_REL);
+    expect(readBookStateComparator(SYM)!.validated).toBe(false);
+    expect(engineWouldAct('two_sided')).toBe(false);
+  });
+
+  it('✅ and the healthy ring SURVIVES an implausible seed — it is consumed only by a plausible one', () => {
+    seedHealthyChain();
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');
+    advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 20_000 }, WINDOW, false, K_REL);  // implausible: ring NOT consumed
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');
+    advanceBookStateComparator(SYM, { ...HEALTHY, atMs: 300_000 }, WINDOW, true, K_REL); // plausible: validates
+    expect(readBookStateComparator(SYM)!.seedImplausible).toBe(false);
+    expect(readBookStateComparator(SYM)!.validated).toBe(true);
+  });
+
+  // ⚠⚠ RESIDUAL, PINNED NOT FIXED (Langston, 2026-09-13). r3/r4 close the YIELD-CLEAR path.
+  //    They do NOT close the RESTART path: with no retained ring at all, a process that comes
+  //    up mid-hollow seeds unvalidated (refused, correct), and then tick 2 SELF-COMPARES to
+  //    zero departures, reads `two_sided`, and VALIDATES. The criterion must not be read as
+  //    covering that case.
+  it('⚠️ RESIDUAL: a restart mid-hollow still self-validates on tick 2 — pinned, not fixed', () => {
+    advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 1_000 }, WINDOW, false, K_REL);
+    expect(readBookStateComparator(SYM)!.validated).toBe(false);   // tick 1 refused — correct
+    advanceBookStateComparator(SYM, { ...HOLLOW, atMs: 2_583 }, WINDOW, true, K_REL);
+    expect(readBookStateComparator(SYM)!.validated).toBe(true);    // ⛔ THE GAP, asserted as-is
+  });
+
   it('✅ a cold start with NO retained ring still seeds — the ring is evidence, not a precondition', () => {
     // First frame ever for a symbol: nothing retained, so nothing to judge against. It seeds
     // unvalidated (which the engine refuses for one tick) rather than being marked implausible.
@@ -140,7 +187,10 @@ describe('8a r3 — the four-tick reseed, driving the real tracker', () => {
     expect(cmp.validated).toBe(false);
   });
 
-  it('⛔ an UNREADABLE kRel fails safe — the seed is implausible, never validated', () => {
+  // ⚠️ RESIDUAL, PINNED NOT CLAIMED (Langston, 2026-09-13): this arm is UNREACHABLE IN
+  //    PRODUCTION — `resolveBookStateConfigSync` throwing exits at `aee` `knobs_missing` BEFORE
+  //    the advance is reached. It is DEFENSIVE ONLY and nobody may cite it as a live control.
+  it('⚠️ defensive only — an UNREADABLE kRel fails safe (unreachable in production)', () => {
     seedHealthyChain();
     clearBookStateComparator(SYM, 'yield_after_60_hollow');
     advanceBookStateComparator(SYM, { ...HEALTHY, atMs: 20_000 }, WINDOW, true, null);
