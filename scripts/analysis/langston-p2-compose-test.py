@@ -162,14 +162,19 @@ mem = read(h)
 v("C7", rc == 0 and b"obligations:" not in mem and b"first retraction" in mem and strip_last_stamp(mem) == BASE_B,
   "exit %d, frontmatter-hidden %s, body==orig %s: %s" % (rc, b"obligations:" not in mem, strip_last_stamp(mem) == BASE_B, out.strip()[:60]))
 
-# M1 mutant: drop pending_sha from the admissible set -> C4 recompose false-alarms
+# M1 mutant: drop pending_sha from do_compose's admissible set -> C4 recompose false-alarms.
+# The `admissible = ...` line appears in both do_compose and do_direct_write, so anchor the mutation on the line
+# UNIQUE to do_compose (`if cur_sha not in admissible:`) and mutate the admissible line immediately above it.
 with open(W, encoding="utf-8") as fh:
-    src = fh.read()
-needle = 'admissible = {state.get("last_written_sha"), state.get("pending_sha")} - {None}'
-assert src.count(needle) == 1, src.count(needle)
+    lines = fh.read().split("\n")
+idx = [i for i, l in enumerate(lines) if l.strip() == "if cur_sha not in admissible:"]
+assert len(idx) == 1, ("anchor count", len(idx))
+adm = idx[0] - 1
+assert 'admissible = {state.get("last_written_sha"), state.get("pending_sha")}' in lines[adm], lines[adm]
+lines[adm] = lines[adm].replace('{state.get("last_written_sha"), state.get("pending_sha")}', '{state.get("last_written_sha")}')
 MW = D + "/mutant-write"
 with open(MW, "w", encoding="utf-8") as fh:
-    fh.write(src.replace(needle, 'admissible = {state.get("last_written_sha")} - {None}'))
+    fh.write("\n".join(lines))
 os.chmod(MW, 0o755)
 h = fresh_home()
 compose(h, script=MW)
