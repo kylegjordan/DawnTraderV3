@@ -1314,6 +1314,7 @@ export class ActiveExecutionEngine {
     // at the cap) — printed in EVAL_EXIT. Not a row census: count events on the rows' metadata.bookState.
     let hollowSkips = 0;
     let hollowYields = 0;
+    let hollowYieldRefusals = 0;
 
     for (const position of openPositions) {
       try {
@@ -1480,8 +1481,54 @@ export class ActiveExecutionEngine {
                     console.error(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] alert raise failed (the log line above stands):`, alertErr instanceof Error ? alertErr.message : alertErr);
                   }
                   await this._recordBookStateEvent(position, { kind: 'yield', streak: _next, reasons: _r.reasons, inputs: _r.inputs });
-                  // falls through: the mark hands off below and the cache IS updated — the engine is
-                  // about to act on this mark, and the cache must show what it acted on.
+                  // ⛔⛔ D3 (decided 2026-09-11) SUPERSEDES THE FALL-THROUGH THAT STOOD HERE.
+                  //
+                  // WHAT IT USED TO DO, verbatim: *"falls through: the mark hands off below and the
+                  // cache IS updated — the engine is about to act on this mark."* ⇒ after withholding
+                  // `hollowSkipCap` consecutive ticks BECAUSE THE BOOK WAS UNUSABLE, it then ACTED ON
+                  // THE MARK OF THAT SAME UNUSABLE BOOK — and `_eqTick.price` is the MIDPOINT whenever
+                  // both sides exist (`equity-spot-archiver.ts:210`), however absurd those sides are.
+                  //
+                  // ⛔ MEASURED, NOT ARGUED — `CRM/USD`, 2026-09-12T00:16:31Z, the row is in `#958`:
+                  //   book 7.00 / 1000.00 ⇒ midpoint 503.50, booked `target_hit` at +$7.15.
+                  //   THE TICKER 91 s EARLIER: bid 235.00 / ask 248.40, last 247.25 — and ⛔ THAT FRAME
+                  //   IS **ALSO** `hollow:bid_collapsed` ON OUR OWN MEASURE (a 4.86% bid drop against a
+                  //   0.400% trailing spread). I first read it as a usable price the engine ignored; the
+                  //   predicate says otherwise and the predicate is right — a 12-point bid move on a name
+                  //   quoting a 1-point spread seconds earlier is a handover artefact, not a price.
+                  //   ⇒ EVERY frame from the boundary on was unusable, which is why the guard withheld 60
+                  //   consecutive ticks before yielding. **THERE WAS NOTHING TO FALL BACK TO, so acting on
+                  //   503.50 was not a choice between two prices — it was inventing one.** That makes the
+                  //   refusal MORE clearly right, not less. Pinned in
+                  //   `b-xstock-feed-sanity-book-state.test.ts` as measured, both arms.
+                  //   105 of 271 xStock closes sit on seven session-boundary minutes; crypto, same
+                  //   process and no sessions, puts 1 of 479 there. The effect is the venue boundary.
+                  //
+                  // ✅ D3'S LADDER FOR A TOUCH PRICE: book top where valid and fresh → else the ticker
+                  //    sides where valid and inside D6's age policy → **else REFUSE the price-dependent
+                  //    action, which for an exit is a HOLD.** On this leg the ticker snap IS the sides
+                  //    (xStock has no separate depth feed), so a `hollow` verdict has already failed
+                  //    both rungs on the same object. ⇒ THE LADDER TERMINATES AT REFUSE.
+                  //
+                  // ⛔ AND REFUSING IS THE HONEST SIMULATION, WHICH IS THE ONLY TEST THAT MATTERS HERE
+                  //    (Kyle: *"I only want that if that is how live trading with real money will
+                  //    actually work… I want the truth"*). A live market sell into a 7/1000 book fills
+                  //    at **7**, not at 503.50. So the old fall-through was not even conservative — it
+                  //    booked a price no market could have given us, and the resulting rows flatter the
+                  //    record: boundary closes net −$31 over 105 against −$339 over 166 elsewhere.
+                  //
+                  // ⚠️ WHAT THIS COSTS, STATED: the position stays open while the book is unusable, so
+                  //    a genuine adverse move during that window is not acted on. That risk is REAL and
+                  //    is why the alert above fires and the skip rail below escalates. The alternative
+                  //    is acting on a number the venue never quoted, which is not risk management — it
+                  //    is a fabricated fill that also corrupts every P&L-derived consumer downstream.
+                  //
+                  // ⛔ NO `updateCache` ON THIS BRANCH, for the same reason as the skip branch below
+                  //    (Langston C1): the engine did NOT act on this mark, so the cache must not show
+                  //    that it did.
+                  withoutPrice++;
+                  await this._recordPriceSkip(position, 'book_state_yield_refused');
+                  continue;
                 } else {
                   this._bookStateSkipStreak.set(position.id, _next);
                   hollowSkips++;

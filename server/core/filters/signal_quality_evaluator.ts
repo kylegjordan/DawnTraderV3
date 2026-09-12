@@ -445,6 +445,13 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     if (!isStrategyEligible(input.strategy, input.regimeStability, dependency)) {
       if (options.gateShadowMode) {
         // P19-B8.5 OBJ-6: shadow, never block (see SQEOptions.gateShadowMode).
+        // ⛔⛔ KYLE RULED 2026-09-13, ASKED DIRECTLY AND ANSWERED DIRECTLY: **LEAVE IT OFF.**
+        // Surfaced to him because it is the ONLY sub-gate `gateShadowMode` disables — the AMR
+        // admission gates are unconditional with no skip option, and every other check pushes
+        // to `failures`. So "everything passes the SQE" is true today WITH this one exception,
+        // and he was told so before ruling. **Do not turn this live without asking him again:**
+        // it changes which trades open, and it is now a standing decision rather than an
+        // un-revisited default from `#514`.
         // Decision-reconstructable: strategy + dependency + the stability that would block.
         console.log(`[P19-B8.5][GOV_GATE_SHADOW] ${canonicalSymbol}/${input.strategy}: would-BLOCK — ${dependency} dep in stability=${input.regimeStability} (class=${input.assetClass})`);
       } else {

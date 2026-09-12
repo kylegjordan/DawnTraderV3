@@ -38,6 +38,40 @@ describe('B-XSTOCK-FEED-SANITY — assessBookState on the real handoff rows (dec
     const r = assessBookState(frame({ bid: 45.15, ask: 167, last: 160 }, { bid: 157, ask: 167, last: 160 }), CFG);
     expect(r.state).toBe('hollow'); expect(r.reasons).toContain('bid_collapsed');
   });
+  // ⭐ CRM/USD target_hit 2026-09-12T00:16:31Z — decision 503.50, booked +$7.15. THE ROW THAT
+  // PROVOKED D3's REFUSAL AT THE YIELD (`#958`, and the change at `active-execution-engine.ts`
+  // yield branch, 2026-09-13). Book 7.00 / 1000.00 against a prior ticker of 247.01 / 248.00.
+  // ⚠️ MEASURED, AND NOT WHAT I FIRST WROTE: with BOTH sides deranged at once the MARK moves so far
+  //    that `mark_deviation` fires and short-circuits before either side arm is reached. I expected
+  //    `bid_collapsed` + `ask_spiked` and the run said `mark_deviation`. The verdict is the same
+  //    (`hollow`) and the REASON is not — pinned here as measured so the next reader inherits the
+  //    arm that actually fires rather than the one that sounds right.
+  it('CRM: both sides deranged at once reads hollow via mark_deviation, not the side arms', () => {
+    const r = assessBookState(frame({ bid: 7, ask: 1000, last: 247.25 }, { bid: 247.01, ask: 248.00, last: 247.25 }), CFG);
+    expect(r.state).toBe('hollow');
+    expect(r.reasons).toContain('mark_deviation');
+  });
+  it('CRM: the midpoint of that book IS the 503.50 the engine booked — the arithmetic tie to the row', () => {
+    // Not a behaviour assertion: it pins WHICH number the old fall-through produced, so a reader
+    // can connect the verdict above to `closed_trades.exit_decision_price` without re-deriving it.
+    expect((7 + 1000) / 2).toBe(503.5);
+  });
+  // ⛔⛔ THE ONE THAT CORRECTED ME, AND IT STRENGTHENS THE REFUSAL RATHER THAN WEAKENING IT.
+  //    I claimed a usable price existed at that moment — the ticker snap 91 s earlier, bid 235.00 /
+  //    ask 248.40 (`xstock_spot_ticker_snap`, 2026-09-12T00:15:00Z) — and that a sell should have
+  //    transacted its 235.00 bid. **THE GUARD DISAGREES, AND THE GUARD IS RIGHT.** That bid is a
+  //    4.86% drop against a 0.400% trailing spread, so it reads `hollow:bid_collapsed` on our own
+  //    measure. A 12-point bid move on a name quoting a 1-point spread seconds earlier is a
+  //    handover artefact, not a price.
+  //    ⇒ EVERY frame from the boundary onward was unusable, which is exactly why the guard withheld
+  //      60 consecutive ticks (≈90 s, 00:15:00 → 00:16:31) before yielding. **There was no good price
+  //      to fall back to, so D3's ladder terminates at REFUSE — and acting on 503.50 was not a
+  //      choice between two prices, it was inventing one.**
+  it('CRM: the SANE-LOOKING ticker frame is ALSO hollow — there was no usable price to fall back to', () => {
+    const r = assessBookState(frame({ bid: 235.00, ask: 248.40, last: 247.25 }, { bid: 247.01, ask: 248.00, last: 247.25 }), CFG);
+    expect(r.state).toBe('hollow');
+    expect(r.reasons).toContain('bid_collapsed');
+  });
   // WEN/USD target_hit 2026-08-29 00:15:03 — decision 13.31; witness 7.7 / 8.36. The ASK arm.
   it('WEN: a spiked ask under a held bid and last reads hollow:ask_spiked (a target hit on a hollow ask)', () => {
     const r = assessBookState(frame({ bid: 7.7, ask: 18.92, last: 8.0 }, { bid: 7.7, ask: 8.36, last: 8.0 }), CFG);
