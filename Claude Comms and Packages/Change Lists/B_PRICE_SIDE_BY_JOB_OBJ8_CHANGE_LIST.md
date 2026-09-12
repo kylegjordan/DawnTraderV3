@@ -182,6 +182,20 @@ The yield and the close are **1,583 ms apart — ONE MONITOR TICK**. The row rea
 1. **THE RESTART PATH IS NOT CLOSED.** r3/r4 close the YIELD-CLEAR path. With **no retained ring at all**, a process coming up mid-hollow seeds unvalidated (refused — correct), and then **tick 2 self-compares to zero departures, reads `two_sided`, and VALIDATES.** ★ **Asserted as-is in the suite so the gap is visible rather than assumed absent.**
 2. **The `kRel === null` arm is UNREACHABLE IN PRODUCTION** — `resolveBookStateConfigSync` throwing exits at `aee` `knobs_missing` BEFORE the advance. **Defensive only; nobody may cite it as a live control.** Relabelled in the test.
 
+⛔⛔ **r5 — BLOCKER-3: `!seedImplausible` IS THE ABSENCE OF A NEGATIVE, NOT A POSITIVE, AND THE ONE CHAIN CLASS IT LETS THROUGH IS THE ONE THAT CAN SEED HOLLOW** (Langston, 2026-09-13).
+A COLD-START chain gets `seedImplausible = false` **VACUOUSLY** — `retainedMedian === null`, so the check never runs. ⇒ restart mid-hollow on 7.00/1000.00 → tick 1 refused → tick 2 self-validates (the pinned residual) → the book wanders to 7.00/1200.00 → `mark_deviation` → 60 skips → yield → **the clear retains `[1.9722,…]` AS THE INSTRUMENT DATUM.** Every later seed is then judged against median 1.9722, threshold 5.917, and reads PLAUSIBLE.
+★★ **That is r3's defect restored through the COLD-START DOOR, permanent until restart, and in the PERMISSIVE direction — strictly worse than the hold-forever cost I had written down for the other direction.**
+
+✅ **r5 — THE DISCRIMINATOR IS HIS AND IT COSTS NO KNOB: a real book MOVES; a frozen artefact does not.** New field `observedMovement`, set the first time an advance sees `bid` or `ask` differ from the prior. **The retain gate is now a POSITIVE property** — `!seedImplausible && observedMovement` — so a frozen 7.00/1000.00 chain can never write its ring into the slot the mechanism defines as OUTSIDE. ⚠️ **Frame count alone would not do it: an unchanging broken book reads `two_sided` forever, which is the circularity one level up again.**
+
+✅ **MUTATION-PROVED: reverting the gate to `!seedImplausible` alone (the r4 state) fails 1 of 14.** **62 green across both book-state files; tsc 377 at baseline.**
+
+⛔⛔ **AND THE GATE BROKE FOUR OF MY OWN TESTS ON LANDING, WHICH WAS THE FIXTURE AND NOT THE GATE:** `seedHealthyChain` advanced **five IDENTICAL frames**, which is not what a live book does. Corrected to a moving chain. ➕ **The consequence is pinned rather than hidden by the new fixture: a genuinely healthy but PERFECTLY FROZEN book never sets `observedMovement` either, so its ring is not retained and a later seed gets the same vacuous `seedImplausible = false`. It cannot CONTAMINATE — nothing broken is kept — but it does NOT REFUSE.** Same residual class, reached a different way, asserted as-is.
+
+➕ **RESIDUAL 1's PIN UPGRADED, because his objection was that it under-stated:** the restart chain **still self-validates** (open, asserted) — but it can **no longer contaminate the retained ring**, and the pin now says both halves. *"A bounded-sounding label on an unbounded exposure"* was the right criticism of the r4 wording.
+
+➕ **FINDING-1 TAKEN — `_retainedSpreads` IS REGISTERED IN THE SIM AS `S25b`** (§17; the census returned one file and zero doc hits). **Its bound is stated rather than implied: THERE IS NO EVICTION AND NO AGE TERM.** `_comparators` is bounded by held names and refreshed every frame; **this map is written at a clear and deleted only at a plausible seed, so a ring left behind when a position closes mid-implausible NEVER EXPIRES and can be the yardstick for a seed days later.** Conservative in the refusing direction, unbounded in time, nothing evicts it.
+
 ⛔ **WHAT I HAVE NOT DONE AND AM NOT CLAIMING: there is no unit test of the ENGINE-LOOP control flow itself.** The change is `continue` where a fall-through stood, inside a large monitor method with no existing harness. **The predicate half is covered on real rows; the control-flow half is readable but unproven, and Step 7 must verify it on staging — `hollowYields > 0` with ZERO new `kraken_equities_ws_mid` producers on boundary closes.**
 
 ---
