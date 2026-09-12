@@ -7795,6 +7795,44 @@ MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langst
 
 ---
 
+### ⭐ #1049 OPEN 2026-09-12 (CC-C, answering Kyle's own question of 2026-09-11) — THE SCANNER IS NOT THE BOTTLENECK AND NEVER WAS. IT ROTATES ~340 OF 1,449 PAIRS EVERY CYCLE. ONLY 134 DISTINCT CRYPTO PAIRS A DAY GET PAST THE FILTERS — AND THAT NUMBER HAS FALLEN 38% IN SIX DAYS
+
+**KYLE'S QUESTION, VERBATIM (2026-09-11):** *"why is the scanner only looking at one hundred nineteen pairs throughout the course of the day when we should be scanning three hundred different pairs every thirty seconds up to the full one thousand five hundred pairs that are available through crypto plus the four hundred plus that are available in ex stocks."*
+
+⛔ **HIS NUMBER IS REAL AND HIS DIAGNOSIS IS NOT — AND THE DIFFERENCE IS WHERE THE WORK GOES.** The breadth he expects EXISTS at the scanner. It collapses one stage later.
+
+**OBJECT AND POPULATION FOR EVERY NUMBER BELOW.** Log window stated because `out.log` rotates at midnight: `/var/log/dawntrader/out.log`, **2026-09-12 06:33:21Z → 09:53:57Z (3 h 20 m, 6,348,038 lines)**; `error.log` **00:00:01Z → 09:53:56Z**. Database reads are unbounded over the stated range.
+
+**1. ✅ THE SCANNER IS DOING EXACTLY WHAT KYLE DESCRIBES.**
+- `SCANNER_PARAMS.BATCH_SIZE = 300` (`server/config/system-guards.ts:179`, *"Total pairs per scan batch (Batch 18: increased from 100)"*) — **his "300 every 30 seconds" is the registered design, not an aspiration.**
+- **Kraken universe read: `1,449` pairs on ALL 401 cycles in the window** — one distinct value, no variance (`[AdaptiveScan][11.4C.1] Kraken universe: N pairs`).
+- **Evaluated per cycle: 319-356** (`Cycle complete in Nms: evaluated=N, survivors=N`), i.e. **at or slightly above the 300 target**, never below it.
+- ✅ **AND IT GENUINELY ROTATES — this is the leg that kills the "capped scanner" hypothesis.** `Batch selected: Ideal=N, Rotational=M, Excluded=K` over **408 lines**: **Ideal 42-46, Rotational 244-254, Excluded 0 on every single cycle.** ⇒ **about 250 of each ~340-pair batch are ROTATIONAL, so the scanner is sweeping the universe rather than re-reading a fixed list.**
+- ✅ **`[#396] SHORT UNIVERSE` has fired ZERO times.** ⚠️ **A zero needs its instrument proven: `EQUITY_MARK` returns 69,145 lines from the same `error.log` over the same window, so the file is readable and greppable.** ★ **And it is confirmed structurally, not only by silence: the branch is `if (krakenUniverseSize < SCANNER_PARAMS.BATCH_SIZE)` (`market-scanner.ts:578`) and the universe read 1,449 ≥ 300 on every cycle — so it COULD NOT have fired.**
+- ⛔ **AND THE `universeSize` KNOB EVERYONE WOULD REACH FOR IS A RED HERRING: it is parsed at `market-scanner.ts:549` (`filters.universeSize ?? 100`) and NEVER READ in that file** — the only other occurrences are the type at `:61` and a stress-test override at `:341`/`:351` gated on `process.env.REB_2_11_STRESS === '1'`, **which is NOT set on staging (`grep -c` on the deployed `.env` returns 0).** ⇒ **the live DB value of `universe_size` = 100 on all 58 `screener_filters` rows constrains nothing on this path.** Same declared-but-never-read class as `allowedQuotes` in `#937`.
+
+**2. ✅ xSTOCK COVERAGE IS COMPLETE — his "400 plus" is being met.** `pair_scan_archive`, distinct symbols per UTC day: **2026-09-11: 457 · 09-10: 455 · 09-09: 457 · 09-08: 456**, against a universe of **475 live symbols** (`xstock_spot_universe`: 498 total, 475 not delisted, 473 seen in the last 2 days). **09-05, 09-06 and 09-12 read 1, 1 and 0 — those are weekends, and xStock is 24/5 (rule 17), so that is the shutdown working, not a gap.**
+
+**3. ⛔⛔ THE ACTUAL FINDING — THE COLLAPSE IS AT THE FILTER STACK, AND IT IS SHRINKING.** `pair_scan_archive` is written once per (symbol, cycle) by `market-context-engine.ts:1544` → `archivePairScan`, and the crypto caller is `signal-orchestrator.ts:2250`, **inside the loop at `:2109` over `eligibleSymbols`, which is the FX5 SURVIVOR pool read at `:2057`.** ⇒ ★ **the archive's distinct count is the SURVIVOR population, not the evaluated one — naming that is the whole difference between blaming the scanner and blaming the filters.**
+
+| UTC day | distinct crypto symbols | rows |
+|---|---|---|
+| 2026-09-06 | **216** | 152,423 |
+| 2026-09-07 | 192 | 130,197 |
+| 2026-09-08 | 166 | 119,825 |
+| 2026-09-09 | 150 | 111,761 |
+| 2026-09-10 | 124 | 97,228 |
+| 2026-09-11 | 125 | 105,743 |
+| 2026-09-12 (to 09:55Z) | **134** | 49,441 |
+
+⇒ **From ~340 pairs evaluated per cycle out of 1,449 available, only 134 DISTINCT names reach regime evaluation across an ENTIRE DAY — about 9% of the venue.** **Per-cycle survivors are 39-92.** ⇒ **Kyle's "119" is this number; he read it correctly and attributed it one stage too early.**
+⛔ **AND THE TREND IS THE PART THAT NEEDS A DISPOSITION, NOT THE LEVEL: 216 → 134 is a 38% fall in six days, monotone except for the 09-10/09-11 flat.** ⚠️ **NOT ESTABLISHED, STATED RATHER THAN GLOSSED: whether that decline is the market (fewer pairs genuinely qualifying), a filter threshold that moved, or an instrument change. I have not traced it, and the three have different remedies.**
+⚠️ **AND ONE FURTHER LIMIT: 09-12 is a PARTIAL day (to 09:55Z), so its 134 is not comparable to the six complete days above it — it is shown to give the current reading, not to extend the trend.**
+
+⇒ **DISPOSITION — §9.4 (4), A SCHEDULED REVIEW, because the deliverable is a cause and I do not have one yet.** A remedy chosen now would be chosen against an unattributed decline.
+`HOME: B-SCAN-BREADTH-DECLINE, owner CC-C, placed in PHASE_19_PLAN at row 12.8, after 12.7 B-QUOTE-CURRENCY-DENOMINATION.`
+**WHAT THE REVIEW MUST DELIVER:** which filter stage the 1,449 → ~340 → 39-92 → 134 narrowing happens at, stage by stage with a count at each hop; and which of the three causes above owns the 38% decline. ⛔ **It must NOT open by proposing a threshold change** — that is the shape that "fixes" a filter which was working.
+
 ### ⭐⭐ #1010 OPEN 2026-09-06 (CC-B; Kyle supplied the venue captures, every figure re-derived at the ref and in the live database) — ⛔⛔ WE CHARGE xSTOCK THE CRYPTO FEE SCHEDULE. THE VENUE'S PUBLISHED xSTOCK TAKER IS **8× LOWER** AND ITS MAKER IS A **REBATE**, SO OUR MAKER FEE HAS THE WRONG SIGN
 
 ✅✅ **CLOSED 2026-09-11 — `B-XSTOCK-FEE-CONTRACT` deployed `b597f1bf2` at 20:09:47Z; Langston CONFIRMED Step 8 on 2026-09-12 00:32Z, re-derived on staging.** **State now:** `xstock_spot` `spot_taker_fee 0.0010` / `spot_maker_fee -0.0002`; crypto untouched on its original `b45-tier1-seed` 2026-06-10 timestamps (proven on `updated_at`, not only on value); `cost_model` deleted (`#133`/`#134` closed with it); `calibration_ledger` xStock fee rows corrected to `0.10%` / `-0.02%`; epochs stamped xStock-only (`vts 6→7`, `paper_sim 3→4`, class-scoped `live` CREATED at wildcard+1 = `3`). **Verified in booked money:** taker `0.001000` ×14 with zero rows at any other stamped rate (7-day control `0.008000` ×117); and the first negative fee in the system's history — `CRM/USD` maker exit `-0.03387422` = **`-0.000200`** at 00:16:31.648Z, against 92 pre-deploy maker exits spanning eight weeks, every one `+0.004000`. ⚠️ **The two evidence rows closed on a fabricated after-hours price (CC-C's defect at plan row 3b.f-c) — the FEE claim is independent of it:** the fee applies to the BOOKED exit price, and the division recovers `0.00100000` / `-0.00020000` exactly, while the same division against `exit_decision_price` recovers neither. Control: 262 pre-deploy closes recover their stamped rate to 6 dp. ⏳ **NOT a close of the QUESTION: P8 (maker share ≤ 1.0% at n≥300, zero class-(iii)) and Arm B (EV-gate admission) are three-week observation windows opened at the deploy**, with the 17 `#1024` alias symbols excluded and a flip on restoring them ruling the arm INCONCLUSIVE-EXTEND. Record: `Batch Completion/B_XSTOCK_FEE_CONTRACT_COMPLETION_REPORT.md`; change list §9-§10.
