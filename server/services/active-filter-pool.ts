@@ -392,7 +392,7 @@ class ActiveFilterPoolService {
       }
     }
 
-    console.log(`[8.6.7][DEBUG] Active Pool update complete: added=${added}, updated=${updated}, skipped=${skipped}, total_size=${pool.size}`);
+    console.log(`[8.6.7][DEBUG] Active Pool update complete: added=${added}, updated=${updated}, skipped=${skipped} (refusedQuote=${refusedQuote}), total_size=${pool.size}`);
 
     return { added, updated, skipped, refusedQuote };
   }
@@ -490,7 +490,7 @@ class ActiveFilterPoolService {
       added++;
     }
 
-    console.log(`[14.5][PATTERN_POOL] Pattern pool update: added=${added}, skipped=${skipped}, total_size=${pool.size}`);
+    console.log(`[14.5][PATTERN_POOL] Pattern pool update: added=${added}, skipped=${skipped} (refusedQuote=${refusedQuote}), total_size=${pool.size}`);
 
     return { added, skipped, refusedQuote };
   }

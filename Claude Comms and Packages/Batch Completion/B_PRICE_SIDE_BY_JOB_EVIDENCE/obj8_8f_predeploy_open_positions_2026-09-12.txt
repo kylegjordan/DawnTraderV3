@@ -1,0 +1,31 @@
+Pager usage is off.
+== PRE-DEPLOY OPEN-POSITION SNAPSHOT - 3n OBJ-8 row 8f, Langston CONDITION 2 ==
+== Captured BEFORE the 8f gate is live. The Step-8 criterion keys on ENTRY postdating
+== the deploy, so a post-deploy CLOSE of a pre-deploy entry must be attributable to THIS
+== list rather than adjudicated after the fact. Without it the FAIL condition is
+== unfalsifiable in exactly the direction that looks like a pass.
+                  id                  |  symbol  | asset_class | quote |           opened_at           |  avg_price   
+--------------------------------------+----------+-------------+-------+-------------------------------+--------------
+ 9931616c-a35f-49a2-9593-ea14a1cc2448 | CRWD/USD | xstock_spot | USD   | 2026-09-10 14:06:49.860849+00 | 212.06000000
+ 63261d69-d1fb-4993-8bac-25c08687510b | MDB/USD  | xstock_spot | USD   | 2026-09-10 14:40:49.14734+00  | 374.50000000
+ e5deb9b6-7881-4ca1-b3ed-b4649984db07 | GEV/USD  | xstock_spot | USD   | 2026-09-11 13:59:03.074464+00 | 959.07000000
+ 9d3f53cd-2b4e-47e8-817b-4ca8dd0402b9 | SUI/USD  | crypto_spot | USD   | 2026-09-12 01:07:43.87945+00  |   0.72830000
+ 916511be-140f-471b-94bb-a3570d8dde23 | AERO/USD | crypto_spot | USD   | 2026-09-12 01:10:43.857892+00 |   0.57207940
+(5 rows)
+
+
+== by quote, and whether 8f would have refused it ==
+ quote | n | under_8f 
+-------+---+----------
+ USD   | 5 | admitted
+(1 row)
+
+
+== POSITIVE CONTROL that the predicate discriminates: the same test over closed_trades ==
+   under_8f   |  n  
+--------------+-----
+ admitted     | 654
+ NON-ADMITTED |  96
+(2 rows)
+
+captured_at=2026-09-12T13:26:40Z by=cc-c ref=4920a19a8

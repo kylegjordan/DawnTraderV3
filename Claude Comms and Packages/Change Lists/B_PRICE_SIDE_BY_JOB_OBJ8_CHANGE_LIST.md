@@ -39,7 +39,9 @@ Called from **`addSurvivors`, `addPatternPoolSurvivors` AND `addFamilyPoolSurviv
 1. **"Doors 2 and 3 return void" is FALSE for door 2.** `addPatternPoolSurvivors` returns `{ added, skipped }` and its caller already destructures both (`fx5-scanner.ts:1436`). **Adding `refusedQuote` is additive and touches NO caller** — so judgement call (b) rested on a false premise and is **overturned for door 2**. Worse, door 2 was doing a bare `skipped++`: live cycles print `added=6, skipped=28`, so 8f's refusals would have vanished into that 28. **Door 2 now returns `refusedQuote`, same subset semantics as door 1.**
 2. **"Three separate admission paths into pools the orchestrator reads" is FALSE — only TWO are live.** `addFamilyPoolSurvivors` has **ZERO production callers** at the ref. ★ **My mutation control for that door fires only against the test's own direct call: it demonstrates the gate, never its reachability** — *the existence of a symbol is not the reachability of it.* It is hardened anyway, because `getFamilyPool` **is** read live (`signal-orchestrator.ts:2039`), so a dead writer sits beside a live reader. **That asymmetry is homed at `#1052` / row `3n.k`, not silently hardened.**
 
-✅ **(c) upheld but INCOMPLETE in r1, and this is the half that mattered:** `refusedQuote` was returned and **printed nowhere**, so at every site a human reads, `skipped` would jump with nothing saying why. **All three printers now carry it** — `fx5-scanner.ts` pool + pattern lines and `unified-filter-gateway.ts`.
+✅ **(c) upheld but INCOMPLETE in r1:** `refusedQuote` was returned and **printed nowhere**, so at every site a human reads, `skipped` would jump with nothing saying why.
+⛔⛔ **AND r2 FIXED THREE OF FIVE — `fix-follows-pointer` LANDING ON ME INSIDE THE FIX FOR IT (Langston CONDITION 1).** He named three call sites; I fixed the three sites and **not the class**. `active-filter-pool.ts:493` still printed the **same `[14.5][PATTERN_POOL]` tag** as the fixed `fx5-scanner.ts:1436`, so one grep on that tag would return a line carrying the count beside a line carrying the bare `skipped=28` **that this blocker was about**. `:395` had the same shape for door 1.
+✅ **r3 FIXES THE CLASS, and the control is stated: a whole-tree grep for `skipped=${` across the three pool modules returns FIVE printers, FIVE carrying `refusedQuote`, ZERO without** — and both `[14.5][PATTERN_POOL]` lines carry it, so the tag can no longer return a mixed pair.
 
 ### `universe-loader.ts` + `kraken-mirror-balance.ts` + `crypto-universe-filter.json` — the conversion
 Both prior consumers moved onto the SSOT under the **(a)(b)(c) predicate**:
@@ -75,6 +77,17 @@ All restores verified byte-identical.
 
 ---
 
+## ⭐ CONDITION 2 — THE PRE-DEPLOY OPEN-POSITION SNAPSHOT (captured BEFORE the gate is live)
+
+**`Batch Completion/B_PRICE_SIDE_BY_JOB_EVIDENCE/obj8_8f_predeploy_open_positions_2026-09-12.txt`**, captured 2026-09-12T13:26Z at ref `4920a19a8`.
+
+★ **WHY IT HAD TO BE TAKEN NOW: the Step-8 criterion keys on the ENTRY postdating the deploy.** The gate is not live yet, so a non-admitted entry can still open before it lands — and a post-deploy CLOSE of a pre-deploy entry would then be adjudicated after the fact. ⛔ **Without the captured `(id, symbol, opened_at)` list the FAIL condition is unfalsifiable in exactly the direction that looks like a PASS.**
+
+**Contents: 5 open, all USD** — `CRWD/USD`, `MDB/USD`, `GEV/USD` (xstock), `SUI/USD`, `AERO/USD` (crypto), earliest `opened_at` 2026-09-10T14:06Z. **None would be refused by 8f.**
+✅ **POSITIVE CONTROL, so the snapshot's clean reading is not mistaken for a predicate that always says yes: the same test over `closed_trades` returns 654 admitted / 96 NON-ADMITTED.** The predicate discriminates; the open set simply happens to be clean.
+
+---
+
 ## ⛔ STATED LIMITS — THINGS THE SUITE DOES **NOT** PROVE
 
 1. **No test can separate the preimage from the union shorthand at today's admitted set, because they produce the IDENTICAL set.** That is what "correct by coincidence" means. Mutation-tested twice: swapping the mirror to the shorthand leaves the suite **green**. ⇒ **recorded in the test file rather than implied away.** What it buys: it fires **the day the admitted set changes**, the only day the difference can hurt. What guards it meanwhile is `rawQuoteFormsOf`'s own EUR/GBP/CHF contract tests.
@@ -89,7 +102,9 @@ All restores verified byte-identical.
 - **Distinct orchestrator eval-lane symbols:** admitted **70 USD + 9 USDC + 6 USDT = 85** · refused **20 EUR + 6 GBP + 6 CAD + 5 CHF + 5 AUD + 3 JPY + 2 SOFID = 47**.
 - **By occurrence:** 3,081 admitted vs **1,758 refused**.
 
-✅ **AND AT THE OBJECT THAT DECIDES WHETHER TO SHIP IT — `closed_trades`, all slashed symbols, positive control the USD row returning: 96 of 755 closed active-path trades (12.7%) are in non-admitted quotes** — EUR 54, GBP 20, CHF 9, AUD 8, CAD 5 — spanning 2026-07-15 to **2026-09-11, i.e. yesterday. D9's defect is realised in the live record and still producing rows.** That is the case for shipping, not an argument against it.
+✅ **AND AT THE OBJECT THAT DECIDES WHETHER TO SHIP IT — `closed_trades`, positive control the USD row returning: 96 non-admitted, 12.7%** — EUR 54, GBP 20, CHF 9, AUD 8, CAD 5 — **latest EUR entry 2026-09-11, i.e. yesterday. D9's defect is realised in the live record and still producing rows.** That is the case for shipping, not an argument against it.
+⚠️ **TWO DENOMINATORS, BOTH CORRECT, STATED SO THEY DO NOT READ AS A CONTRADICTION: 96 of 755 over ALL rows (Langston's, and `closed_trades` writes a row AT OPEN) versus 96 of 750 filtered to `closed_at IS NOT NULL` (mine, the standing filter for that table). The numerator is identical either way and the share moves by 0.05 points.**
+⛔⛔ **AND 2026-07-15 IS `closed_trades`' OWN RETENTION FLOOR, NOT THE DEFECT'S ORIGIN (Langston CONDITION 3).** Every quote leg's `min(opened_at)` is 07-15 — **including USD**, which is the tell. **Retention is not history.** ⇒ **the span is a FLOOR: the defect is at least this old and its true start is unmeasured by this table.** Nobody may later read 07-15 as when D9 started.
 
 **PRE-REGISTERED STEP-8 PREDICTION, written before the deploy so it cannot be fitted afterwards:** after 8f lands, **eval-lane refusals appear at roughly the rates above and the admitted set stops acquiring new non-admitted quotes entirely** — zero new `closed_trades` rows in a non-admitted quote, on any row whose entry postdates the deploy. **A single such row is a FAIL, not noise.**
 
