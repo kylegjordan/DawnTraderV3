@@ -48,7 +48,7 @@ the manual at `:929`, `:684`, `:1096`, `:1485`.)*
 | **crypto PATTERN** | `signal-orchestrator.ts:2224` → `patternToTradeSignal:2269` | ⭐ **a 60-minute BAR CLOSE** | **never smoothed, never a midpoint** | **up to 60 min old** |
 | **xStock / VTS** | `eval-cycle.ts:346/:349/:381`, param at `:304` | ⭐ **a 60-min BAR CLOSE** (`xstock_spot/scanner.ts:909-910`, `latestBar.close`) | **not a print** | up to 60 min |
 
-⚠️ **THE `85–90 % last` FIGURE IS AN UPPER BOUND AND MUST NEVER BE QUOTED BARE.** `price-cache.ts:575-578`
+⚠️ **MEASURED 2026-09-13 FROM THE LIVE COUNTER, AND IT IS AN UPPER BOUND THAT MUST NEVER BE QUOTED BARE.** 400 consecutive HEALTH lines (≈400 min): **level reads `mid` 1,996 · `last` 28,772 · `unknown` 0 — 93.5 % `last`**; whole-cache rows **`mid` 3,301 · `last` 50,154 — 93.8 % `last`**. *(r2 said “85–90 %” with no population; this replaces it.)* ⛔ **The two fields are DIFFERENT POPULATIONS and are never read as numerator and denominator** (`price-cache.ts:569-572`). `price-cache.ts:575-578`
 — Langston's own ruling, in the code — says `levelReadKind` is *"an UPPER BOUND on level-setting reads …
 the true level-setting mixture is likely MORE midpoint-heavy."* **Population is the crypto QUANT lane
 only, not "level reads".** CC-C to re-derive with the bound stated.
@@ -87,7 +87,7 @@ Langston's test, run by CC-B 2026-09-13, needing no new instrumentation — spli
 ✅ **AND IT WAS STRUCTURALLY UNDECIDABLE FROM THE ROW ALL ALONG:** `exit_ticker_bid/ask` is written by the ARCHIVER off a **separate socket** — `depth-source.ts:80-97` calls it *“a lagged witness”*, cadence 5.0–9.0 s; F-G-2 measured this arm at p50 **12.33 s** (n=3, a lead not a rate). `capturedAtMs` exists at `active-execution-engine.ts:2338` but the persist payload (`:2974-2977`, `shared/schema.ts:1854-1855`) writes **only the bid/ask pair** — no capture-time column exists anywhere. ⛔ **`B_EXIT_PROVENANCE_COMPLETION_REPORT.md:101` PRE-REGISTERED THE OBLIGATION I MISSED: *“Any analysis using it must read that column.”***
 ⛔ **AND A MID SITS AT `pos = 0.5` OF ITS OWN BOOK BY CONSTRUCTION** (`kraken-websocket-adapter.ts:1165-1166`, `:1172-1173`) ⇒ **the side defect's null is 0.5, never 0 and never 1. Any departure is the two CHANNELS disagreeing, not a side.**
 
-✅ **WHAT SURVIVES, AND IT IS NOT NOTHING:** the exit trigger DOES read a book midpoint (census `kraken_ws_book_mid` **61** · ticker **0**, all-time, our own column — independent of any of this), and **a resting SELL is filled by a BUYER, so a midpoint is the wrong KIND of price for a transaction.** That is an argument FROM CONSTRUCTION and it stands.
+✅ **WHAT SURVIVES, AND IT IS NOT NOTHING:** the exit trigger DOES read a book midpoint (census `kraken_ws_book_mid` **73** · `kraken_ws_ticker_mid` **1**, of the **111 STAMPED rows out of 755** — our own column, independent of any of this. ⚠️ **r2 carried `61 · 0` HERE while the header said `73 · 1` — the same document disagreeing with itself, which is exactly what Kyle caught.**), and **a resting SELL is filled by a BUYER, so a midpoint is the wrong KIND of price for a transaction.** That is an argument FROM CONSTRUCTION and it stands.
 ⛔⛔ **WHAT FALLS: the claim that we have MEASURED the harm.** “We book sales with no buyer” and “recent paper results are flattered” are **UNEVIDENCED** — withdrawn, not restated. The urgency ordering that rested on them reverts to open.
 ➕ **HOME for the missing instrument:** persist `exit_ticker_captured_at_ms` beside the pair — item on `B-PRICE-SIDE-BY-JOB` (row `3n`), owner CC-C.
 
@@ -96,6 +96,13 @@ Langston's test, run by CC-B 2026-09-13, needing no new instrumentation — spli
 > `price <= limit`. **The comparator is that test plus the price fed into it.** Today: a **midpoint**.
 > It must be the **side that would transact** — **bid** for a resting sell, **ask** for a resting buy.
 > ⭐ **A change of INPUT, not of machinery.**
+
+### C-ii. ⛔⛔ THE **xSTOCK** EXIT TRIGGER — **A WHOLE LANE r2 OMITTED**, FOUND BY COMPARING AGAINST `XSTOCK_PRICING_PLAN`
+
+⚠️ **r2's §C described the CRYPTO exit only and never said so.** The xStock exit is a separate path with its own basis, and leaving it out made the map read as complete when it covered one of two classes.
+**It also reads a MIDPOINT** — `equity-spot-archiver.ts:208-209` → `markKindOf(bid, ask)` (`market-data/mark-kind.ts:33`: `'mid'` when both sides are present, `'last'` otherwise).
+⭐ **SAME VERDICT, DIFFERENT MECHANISM, AND THE DIFFERENCE MATTERS:** crypto gets a midpoint because the **book leg carries no trade print at all**; xStock gets one because **a two-sided ticker quote exists and we average it.** ⇒ **the crypto fix needs a different channel; the xStock fix is choosing the other side of a quote we already hold.**
+✅ **AND THIS LANE ALREADY HAS A SHIPPED GUARD THE MAP DID NOT KNOW ABOUT:** `B-XSTOCK-FEED-SANITY` (`#943`) added `asset_classes/xstock_spot/book-state.ts` — a pure predicate that calls a quote `two_sided`, `hollow` or `unknown`, because at Kraken's session handoffs the bid collapses, the mid follows it down, and the stop fires on a price nobody traded at. ⛔ **It withholds a decision; it never changes the SIDE.** **The side is still the midpoint, and that is still `P2`, still open.**
 
 ### D. ENTRY MARKETABILITY — ⛔ THE ASYMMETRY IS **STALENESS**, NOT SIDE
 
@@ -167,3 +174,42 @@ SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **
 > `HOME: B-PRICE-DOC-CONSOLIDATE, owner CC-B, PHASE_19_PLAN after 3n` — this map either **supersedes** the
 > SysManual provenance table with the manual pointing at it, or **folds into** it. **It does not ship as a
 > fifth source.** The `:655`/`:668` correction rides the same batch and is **not deferrable**.
+
+---
+
+# 5. ⭐⭐ THE THREE-WAY COMPARISON — KYLE-DIRECTED, 2026-09-13
+
+> **His instruction:** *“compare this map to the pricing data architecture… the x stock pricing plan, the pricing decision path… see where there are differences, and then those differences need to be reverified. So once we have all those comparisons done, and verified what is correct, then we can pick which document we use as our canonical governance document.”*
+
+**Every row below was re-derived at `origin/migration/aws-supabase` in the same turn it was written.**
+
+## 5.1 THE DIFFERENCES, AND WHO WAS RIGHT
+
+| # | the difference | who was right | how it was re-verified |
+|---|---|---|---|
+| **1** | **Bar interval for the xStock lane.** This map said **60-minute**; `XSTOCK_PRICING_PLAN` §P6 said **15-minute**. | ⛔ **THE PLAN. THIS MAP WAS WRONG BY 4×.** | `scanner.ts:597` passes **15** to `getOHLCDataBatch`; the header comment 30 lines above it still says *“60-min bar parity with crypto”* and is **stale** — the flip landed 2026-06-04 (`B.4 FOUNDATION ACTIVATION`). ⭐ **I read the comment, not the call.** The eval lane has **ONE** call site (`scanner.ts:934`), so nothing else supplies bars. |
+| **2** | **Crypto pattern lane interval.** | ✅ **THIS MAP.** | `signal-orchestrator.ts:2224` passes **60**. **The two lanes genuinely differ — 60 for crypto, 15 for xStock — and r2 collapsed them into one number.** |
+| **3** | **Which price the crypto quant lane is built on.** `PRICING_DATA_ARCHITECTURE` §3.1 says **“SMOOTHED MID”**; this map said **“~85–90 % `last`”**. | ⛔ **NEITHER. BOTH OVERSTATE.** | The only instrument that exists reads **93.5 % `last`** over 400 health lines — but `price-cache.ts:569-572` rules it an **UPPER BOUND** with **no stated tightness**, so it cannot name the mixture either. ⭐ **The architecture doc's flat “MID” is REFUTED; this map's “85–90 %” had no population and is REPLACED.** ✅ **The JUDGEMENT survives unchanged: the defect is that the basis is UNSTATED per symbol.** |
+| **4** | **VTS vs active split.** `PRICING_DATA_ARCHITECTURE` has one; this map had none. | ✅ **THE ARCHITECTURE DOC.** | Positive control: `vts-runner.ts` has **ZERO** `getSmoothedPrice` references; `signal-orchestrator.ts` has **2**. **Crypto VTS reads the raw cache price; crypto active reads the smoothed one.** |
+| **5** | **Line numbers.** | ✅ **THIS MAP.** | Theirs have drifted — their `:2404` is blank, `:2417` is a comment, `:2442` parses volume. Mine resolve exactly at the ref. |
+| **6** | **The xStock EXIT trigger.** `XSTOCK_PRICING_PLAN` §P1/§P2 and `..._DECISION_PATH` §4 both cover it; **this map had no row for it at all.** | ⛔ **THE xSTOCK DOCUMENTS. A WHOLE LANE WAS MISSING.** | Now §C-ii above, re-derived at `equity-spot-archiver.ts:208-209` → `mark-kind.ts:33`. |
+| **7** | **xStock has no order-book ladder.** `..._DECISION_PATH` §Q1 states it; this map's feed table listed *“order book”* and *“depth snapshot”* **without saying they are crypto-only**. | ✅ **THE DECISION PATH.** | The `book` channel subscription lives only in `kraken-websocket-adapter.ts`; the xStock modules carry a `book-state` **predicate over the ticker's top-of-book**, not a ladder. ⇒ ⛔ **this map's “the right kind is the ASK” for xStock must mean the TICKER'S ask — there is no other.** |
+| **8** | **The 4-second archive sample — 43.6 % of marks never stored** (`XSTOCK_PRICING_PLAN` §P5). Absent from this map. | ✅ **THE PLAN, AND IT IS THE SAME CLASS AS THE DEFECT THAT REFUTED MY OWN 14-of-24.** | Not re-measured here. ⚠️ **Recorded as the reason a stored row is a LAGGED WITNESS, not the decision.** |
+
+## 5.2 ⛔ THE ONE DIFFERENCE I DID **NOT** SETTLE, STATED AS UNSETTLED
+`XSTOCK_PRICING_PLAN` §P2: **“59 % of xStock resting exits booked at a price no bid ever reached.”**
+⚠️ **THAT IS THE SAME CLAIM-SHAPE AS MY OWN `14-of-24`, WHICH WAS REFUTED THIS WEEK** — a stored bid/ask pair compared against a decision price, where the pair is written by a **separate, slower** path. **The refutation test is the `target_hit` / `stop_hit` split: if the sign flips with the direction of travel it is lag, not side.** ⛔ **I have NOT run that split on the xStock population, so I am neither citing the 59 % nor withdrawing it.**
+➕ **HOME: an item on `B-PRICE-SIDE-BY-JOB` (row `3n`), owner CC-C + Langston** — run the same discriminating split on xStock before the 59 % is used to order any work.
+
+## 5.3 ⭐⭐ WHICH DOCUMENT IS CANONICAL — THE RECOMMENDATION
+
+| document | verdict |
+|---|---|
+| **`PRICING_DATA_ARCHITECTURE.md`** (108 KB) | ⛔ **NOT CANONICAL, AND ITS OWN BANNER SAYS SO** — *“UNDER CORRECTION”*, 14 returned corrections, one overturning its central structural claim, Parts 3–6 *“framed and not yet filled”*. **Its §3.1 master table is the same work as this map and its line numbers have drifted.** |
+| **`XSTOCK_PRICING_PLAN.md`** + **`XSTOCK_PRICING_DECISION_PATH.md`** | ✅ **KEEP BOTH, UNCHANGED, AS WHAT THEY ARE: a problems→solutions→order PLAN and a decision ROUTE for one asset class.** ⛔ **Neither is a map of where prices come from, and neither claims to be.** |
+| **`SYSTEM_MANUAL.md` provenance table** | ⛔ **THREE CELLS ALREADY MARKED SUPERSEDED** (2026-09-13). It must end up POINTING at the canonical map, not holding a second copy. |
+| ⭐ **`PRICE_FEED_MAP.md` — THIS FILE** | ✅ **RECOMMENDED CANONICAL, ON ONE CONDITION: it absorbs differences 1, 4, 6 and 7 above — which it now has — and the architecture doc's §3.1 is retired INTO it rather than left standing beside it.** |
+
+⛔⛔ **THE CONDITION IS NOT A FORMALITY. THE REASON TO PICK THIS FILE IS NOT THAT IT WAS RIGHT — IT WAS WRONG ON A 4× INTERVAL AND MISSING AN ENTIRE ASSET CLASS'S EXIT PATH.** It is that it is **small enough to hold one statement per job**, and that **every line in it now resolves at the ref**. ⭐ **A 108 KB document that cannot be re-verified in an afternoon cannot be the thing four sessions check themselves against.**
+
+✅ **KYLE DECIDES.** The work to execute it is already placed: `B-PRICE-DOC-CONSOLIDATE`, owner CC-B, `PHASE_19_PLAN` after `3n`.
