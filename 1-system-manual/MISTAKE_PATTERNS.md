@@ -8,47 +8,6 @@
 ---
 
 
-### `enumerator-blind-spot` — **THREE INSTANCES IN ONE SESSION, 2026-09-13 (CC-C), AND THE THIRD ONE WAS INSIDE THE COMMIT THAT RECORDED THE SECOND**
-
-⛔ **THE SHAPE: grep for ONE IDENTIFIER, then call the result a CENSUS.** The member that uses a different name is invisible, and the sweep scores FALSE-CLEAN — which is worse than not sweeping, because it is published as coverage.
-
-| # | what was enumerated | the identifier grepped | the member it could not see |
-|---|---|---|---|
-| 1 | who subscribes an order book | `subscribeToSymbols` | `ready_to_buy_service.ts:2424` reaches it through `i8cSubscribeNewTrade`, a **differently-named wrapper**. The entry's central *"nothing in the pipeline ever asks for a book"* was false; `#506` had carried the correction since July. |
-| 2 | which probes maintain a book ladder | `applyDelta` | `book_ticker_alignment_probe.mjs` maintains a full ladder **inline** (`:84-88`, `truncate()` at `:40`) and names it nothing. Scored *"frame COUNT only"*. |
-| 3 | — | — | ★ **and #2 happened in the same session whose commit message for #1 spelled out the lesson.** |
-
-⛔⛔ **AND THE COMPANION DEFECT, WHICH IS THE REAL TEACHING: THE "POSITIVE CONTROL" HAD NO FAILURE MODE.** For #2 I ran `grep -l applyDelta`, got the same three files as the per-file counts, and called it a positive control. **It tests the grep against itself — it cannot come out differently if the enumerator is wrong** (`CONDUCT.md` §6b step 2, applied to my own instrument while I was applying it to other people's all day).
-✅ **WHAT A REAL CONTROL LOOKED LIKE:** re-run the census on the **SHAPE** — price-keyed Map mutation, array splice on `bids`/`asks`, depth truncation, snapshot reset — and it **caught the file the name search missed.** An enumerator that cannot fail on a known member is not an enumerator.
-
-⇒ **THE RULE: enumerate by the BEHAVIOUR, not by the NAME; and the control must be a KNOWN MEMBER the instrument has to catch, never the same query restated.** State what the sweep returned, not that it was run.
-
-
-## HOW AN INSTANCE IS RECORDED — one trailer, on the commit
-
-```
-MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true>
-```
-
-**The batch id is not decoration** — it is what makes the promotion threshold a **grep** instead of a judgment (Langston condition 1). Without it, *"2+ distinct batches"* is eyeballed, and an eyeballed threshold is a habit.
-**Also mandated on the commit that CARRIES AN ISSUE ENTRY**, because rule 28.a's destination is *"the commit message **or** the issue entry"* and a trailer alone would cover only the first branch.
-
-⚠️ **POPULATION LIMIT, STATED SO THIS FILE NEVER READS AS COMPLETE: the grep sees COMMITS ONLY.** The class it structurally cannot hold is **the mistake that produces no commit** — a claim retracted in review that never touched a file. Langston: *"that is most of my own ledger."*
-
-**Search vocabulary** (the standard, hand-verified by Langston against a 10-commit delta): `\bcorrect(s|ed|ing|ion|ions)\b` · `retract*` · `withdraw*` · `mistake*` · `overturn*` · `vacat*` · `"I was wrong"`. **Measured recall against the record-sense union: 73/74 = 98.6%.**
-**Pin the population BY REF, never by description** — `28c007163..<stated ref>` — or the same query hands two readers two denominators on the same day.
-
-## PROMOTION — how a pattern becomes a rule
-
-**Lifecycle: instance → pattern (this file) → RULE (promoted into `CONDUCT.md` §13, where it auto-loads) → MECHANISM shipped → RETIRED from both.**
-★ **The rule is the INTERIM state, not the destination.** A rule is words, and words get skipped — rule 29(b) was auto-loaded and skipped **twice in one day**. A mechanism enforces.
-
-**THRESHOLD (Langston-ruled 2026-08-20): 3+ instances across 2+ DISTINCT batches — as a FLOOR.**
-- ⚠️ **A FLOOR, NOT A MEASURE.** The grep is commits-only, so a pattern reading 2 may really be at six. **The threshold may ALSO be met by cited NON-COMMIT instances — each carrying a resolvable ref (issue entry, ruling, alert id). NEVER on recollection.** Without this the highest-value class is structurally unpromotable.
-- ⛔ **NO SEVERITY OVERRIDE.** A single severe mistake does **not** promote — **it gets a mechanism.** §13 is for RECURRENCE; severity is what rule 24's three outcomes are for.
-- **§13 holds 3-5 slots, ordered MOST-RECENT-INSTANCE FIRST** — its job is preventing the *next* one, not scoring history.
-- ⛔⛔ **A LIVE PATTERN DISPLACED OUT OF §13 BY THE SLOT LIMIT STAYS HERE, FLAGGED `LIVE — NOT IN §13`. AN ABSENCE FROM §13 MUST NEVER BE READABLE AS RETIREMENT.**
-
 ### ⛔⛔ DISPLACEMENT-BY-NEWNESS IS A DEFECT IN THIS DESIGN — KYLE FOUND IT 2026-08-20, BEFORE THE FIRST PASS RAN
 
 **His reasoning, and it is correct:** *if a rule on the board has been PREVENTING the mistake, and it is then pushed out, the mistake logically resumes.*
@@ -183,6 +142,13 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 
 ⚠️⚠️ **COUNT CORRECTED 2026-09-06 AND THE COLLISION IS RECORDED RATHER THAN TIDIED AWAY: TWO DIFFERENT INSTANCES WERE BOTH NUMBERED EIGHT** — the glob-pattern one below (*"INSTANCE n=8"*, CC-C, `B-PRICE-SIDE-BY-JOB`, 09-05) and the writer-census one further down (*"AN EIGHTH, IN A SECOND BATCH"*, CC-B, `B-ALERT-ACTOR-ALLOWLIST`, 09-02). **They are distinct instances in distinct batches.** ⇒ **the true running total is SEVEN (`B-CROSS-SESSION-BLEED`) + 1 (`B-ALERT-ACTOR-ALLOWLIST`) + 1 (glob) + 1 (this one) = TEN, across THREE batches.**
 ★ **I first filed mine as n=9 by taking the header's number at face value — which is this pattern's own shape, in this pattern's own index: I enumerated by reading ONE label instead of counting the members.** ⛔ **Neither earlier entry is renumbered — both are cited elsewhere by their text, and silently shifting them would break those citations for a cosmetic gain.**
+
+➕ **INSTANCE n=16 — 2026-09-13, CC-C, `B-PRICE-SIDE-BY-JOB` — THE ENUMERATOR'S "POSITIVE CONTROL" HAD NO FAILURE MODE, AND THAT IS THE PART WORTH KEEPING.**
+Censusing which probes maintain a book ladder, I grepped `applyDelta`, got three files, then ran **`grep -l applyDelta`** and called the matching result a positive control. ⛔ **It tests the grep against itself and CANNOT COME OUT DIFFERENTLY IF THE ENUMERATOR IS WRONG** — `CONDUCT.md` §6b step 2, failed on my own instrument in the same session I was applying it to other people's work. **Langston supplied the missing member: `book_ticker_alignment_probe.mjs` maintains a full price-keyed ladder INLINE (`:84-88`, `truncate()` at `:40`) and never uses the name.** Re-run on the SHAPE — Map mutation / array splice on `bids`/`asks` / depth truncation / snapshot reset — **caught it, and returned FOUR, not three.**
+⇒ ✅ **MECHANISM, and it is the first one this pattern has had that bites the CLASS: ENUMERATE BY BEHAVIOUR, NOT BY NAME — and the control must be a KNOWN MEMBER THE INSTRUMENT HAS TO CATCH, never the same query restated.**
+
+➕ **INSTANCE n=15 — 2026-09-13, CC-C, `B-BOOK-SUBSCRIPTION-REACH` (`#1060`) — A CALLER REACHING THE CALLEE THROUGH A DIFFERENTLY-NAMED WRAPPER.**
+I enumerated book subscribers by grepping `subscribeToSymbols`, classified every hit inside `kraken-websocket-adapter.ts` as internal machinery, and published *"nothing in the pipeline ever asks for a book"* as the entry's central claim. **`ready_to_buy_service.ts:2424` reaches it via `i8cSubscribeNewTrade` — inside the adapter, called from outside it.** ⛔ **The claim was false, and `#506` had carried the correction since July; I had not searched the ledger for my own central claim (§9.5(b-ii)).** ⚠️ **`#506`'s path is also stale (`server/services/` → `server/core/rtb/`), so a path-anchored search would have missed it too.**
 
 ➕ **INSTANCE n=14 — found 2026-09-11, made 2026-09-10, CC-C, `B-XSTOCK-FEED-SANITY` — n=12's MECHANISM IN A THIRD DOCUMENT, A DAY EARLIER.** Appending to the feed-sanity progress report I headed a section `## §4f`; the file's own sections are `## 4f.`, and the original §4f is the pending-control section. Found when appending the next section and enumerating every heading form first. Renumbered to `4i`, pointer left; nothing outside the file cited it. ⚠️ **And that 09-10 append was also written with bare-LF line endings into a CRLF file — which is why a line-based edit could not find its heading.**
 
