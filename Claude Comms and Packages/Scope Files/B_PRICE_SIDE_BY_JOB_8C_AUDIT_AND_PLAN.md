@@ -165,8 +165,14 @@ My reading is **NO — they should land together**, because A6 + A7 + A8 compose
 
 1. ⛔ **THE BLOCKING REASON, which I had buried in my closing paragraph: 530 of 546 refused.** At switch-on the basis is uncomputable for **97%** of level builds ⇒ we ship a **MIXED POPULATION** — bid-anchored for a handful of symbols, mid-anchored for the rest — and **every resulting exit is unattributable in analysis. That blocks `8c` on its own, independently of `8a`.**
 2. ⛔ **THE FIDELITY CASE FOR SWITCHING EARLY IS EMPTY, and this is the objection to pre-empt in the scope.** Fire on `mid >= bidTarget` ⇒ the real bid is still half a spread *below* the level booked at `:284`. Fire on `mid <= bidStop` ⇒ the real bid is *below* the level booked at `:275`. **Both remain optimistic, with the SAME SIGN as today** ⇒ **the switch-on buys zero honesty in what gets recorded, and pays for it in the timing skew.** ★ *"It is the transactable side, so it must be more honest"* is the objection this answers.
-3. ⛔ **A FOURTH REASON I MISSED ENTIRELY: `F-G-2`'s crypto observation window is OPEN**, and its pre-registered A4 splits the window on anything changing the crypto exit mark. **A level-basis change is larger than a cadence change ⇒ switching on mid-window costs that window outright.**
-4. ✅ **The timing asymmetry (A6) stands, but as a supporting reason rather than the lead.**
+3. ⛔⛔ **HIS FOURTH REASON IS STRUCK — IT IS WRONG AT THE REF, AND THE DIRECTION IS THE OPPOSITE OF WHAT IT CLAIMS (CC-C, re-derived 2026-09-13).** He gave: *"`F-G-2`'s crypto observation window is OPEN … switching on mid-window costs that window outright."*
+   **`F_G_2_PROGRESS_REPORT.md` at `origin/migration/aws-supabase`, title line 1: *"WINDOW VOID 2026-09-05, AWAITING RE-OPEN"*; §0: *"THE OBJ-0 OBSERVATION WINDOW … IS VOID. IT IS NOT RUNNING. NOTHING BELOW THIS SECTION IS A LIVE MEASUREMENT UNTIL A NEW ANCHOR IS RECORDED HERE."*** **No re-open anchor is recorded** — grepped, with a control: the same grep finds `VOID` **17 times**, so it is not a silent instrument.
+   ⇒ ★ **There is no open window to cost, and §32 sets the order as *"`B-PRICE-SIDE-BY-JOB` finishes and deploys → the reachability work → THEN this window re-opens against the changed system."* THIS BATCH FINISHING IS THE WINDOW'S PRECONDITION, NOT A THREAT TO IT.**
+4. ✅ **The timing asymmetry (A6) stands, as a supporting reason rather than the lead.**
+
+✅ **SO THE HOLD RESTS ON THREE REASONS, NOT FOUR — AND IT IS UNAFFECTED.** The blocker (1) is independent and untouched; (2) and (4) stand. ⛔ **The correction is recorded rather than quietly dropped, because a ruling carried into the scope with a false reason attached is how a later reader re-opens a settled decision on the wrong grounds.**
+
+★ **AND IT SETTLES A STEP-6 QUESTION RATHER THAN RAISING ONE: the SHADOW half's deploy perturbs no window either.** The `F-G-2` shadow arm does keep recording (§0 item 2) and a restart wipes its per-position trailing state (`${position.id}:fg2bid`) — **but with the window void nothing is measuring, so that costs nothing.** Stated in the deploy record rather than left to be discovered (`workflow-06`: *ask what warm state this restart destroys*).
 
 ---
 
