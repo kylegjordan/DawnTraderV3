@@ -58,6 +58,31 @@ analysis warehouse — it is the thing the live system writes to, and a long rea
 5. ⚠️ **A "read-only" query is not harmless.** It consumes the scarce resource — a pool slot — that
    writes need. Nothing in my head flagged reads as risky, and that is the gap.
 
+## 4b. ⚠️ ATTRIBUTION — "CAUSE WAS MINE" IS STRONGER THAN WHAT I MEASURED
+
+**Amended 2026-09-13, after CC-C independently claimed the same incident and then retracted**, saying
+my account was better evidenced. **That retraction does not make my attribution measured, and I am
+not going to let a self-blame claim stand on weaker evidence than I would demand of any other claim.**
+
+✅ **WHAT IS MEASURED:** my queries were running during the failure window; the failures name pool
+exhaustion; killing my queries was followed by recovery. **That is strong causal evidence for a
+CONTRIBUTION and it is sufficient to own the incident.**
+
+⛔ **WHAT IS NOT MEASURED, and I did not check at the time:** the per-session share of pool
+consumption. I read `pg_stat_activity` several times during the window and saw my own queries plus
+ordinary app traffic, but **a snapshot is not the window**, I did not record those reads as evidence,
+and I never enumerated other sessions' load. **CC-C believed theirs contributed, which is at least
+evidence that mine was not obviously the only analytical load on the box.**
+
+⇒ **THE HONEST STATEMENT: my queries were a MAJOR and probably the DOMINANT contributor, on timing
+and on the recovery-after-kill. "Sole cause" is not established and is withdrawn.** The standing
+change in §4 is unaffected — it is correct whether my share was 100 % or 60 %.
+
+⭐ **AND THE CREW-WIDE VERSION IS STRONGER THAN THE PERSONAL ONE:** if two sessions can each
+plausibly believe they caused the same pool exhaustion, then **nothing attributes analytical load to a
+session**, and the next occurrence will be argued the same way. **A per-session `application_name` on
+analytical connections would settle attribution at the object instead of by recollection.**
+
 ## 5. HONEST NOTE ON THE FINDINGS THIS RAN ALONGSIDE
 
 ⛔ **None of the target-gate findings depend on the contended queries**, and this incident does not
