@@ -196,10 +196,34 @@ SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **
 | **7** | **xStock has no order-book ladder.** `..._DECISION_PATH` §Q1 states it; this map's feed table listed *“order book”* and *“depth snapshot”* **without saying they are crypto-only**. | ✅ **THE DECISION PATH.** | The `book` channel subscription lives only in `kraken-websocket-adapter.ts`; the xStock modules carry a `book-state` **predicate over the ticker's top-of-book**, not a ladder. ⇒ ⛔ **this map's “the right kind is the ASK” for xStock must mean the TICKER'S ask — there is no other.** |
 | **8** | **The 4-second archive sample — 43.6 % of marks never stored** (`XSTOCK_PRICING_PLAN` §P5). Absent from this map. | ✅ **THE PLAN, AND IT IS THE SAME CLASS AS THE DEFECT THAT REFUTED MY OWN 14-of-24.** | Not re-measured here. ⚠️ **Recorded as the reason a stored row is a LAGGED WITNESS, not the decision.** |
 
-## 5.2 ⛔ THE ONE DIFFERENCE I DID **NOT** SETTLE, STATED AS UNSETTLED
-`XSTOCK_PRICING_PLAN` §P2: **“59 % of xStock resting exits booked at a price no bid ever reached.”**
-⚠️ **THAT IS THE SAME CLAIM-SHAPE AS MY OWN `14-of-24`, WHICH WAS REFUTED THIS WEEK** — a stored bid/ask pair compared against a decision price, where the pair is written by a **separate, slower** path. **The refutation test is the `target_hit` / `stop_hit` split: if the sign flips with the direction of travel it is lag, not side.** ⛔ **I have NOT run that split on the xStock population, so I am neither citing the 59 % nor withdrawing it.**
-➕ **HOME: an item on `B-PRICE-SIDE-BY-JOB` (row `3n`), owner CC-C + Langston** — run the same discriminating split on xStock before the 59 % is used to order any work.
+## 5.2 ⭐⭐ THE 59 % — **SETTLED THE SAME EVENING, AND NOT BY THE ARGUMENT I EXPECTED**
+
+`XSTOCK_PRICING_PLAN` §P2: **“59 % of xStock resting exits booked at a price no bid ever reached.”** I wrote this section as UNSETTLED because I had not run the discriminating split on xStock. ✅ **I then ran it — it needed no new capture and no new column, because the test keys on `close_reason`, which is on every row.**
+
+**POPULATION, STATED FIRST: 34 xStock closes carrying BOTH `exit_ticker_bid/ask` AND `exit_decision_price`, `closed_at` 2026-08-27 → 2026-09-12** — out of **274 all-time xStock closes since 2026-07-16**. ⚠️ **12.4 % coverage, because the witness column only began writing 2026-08-27 (`#911`).** `pos = (decision − bid)/(ask − bid)`:
+
+| `close_reason` | `exit_fee_mode` | n | median pos | above ask | below bid | inside |
+|---|---|---|---|---|---|---|
+| `target_hit` | **maker** | **7** | **+5.500** | **7** | 0 | 0 |
+| `stop_hit` | **taker** | **27** | **−0.550** | 0 | **19** | 8 |
+
+### ⛔ THE CONFOUND, NAMED BEFORE THE CONCLUSION — AND IT KILLS THE ARGUMENT I WOULD HAVE LED WITH
+**Direction of travel and fill mode are PERFECTLY COLLINEAR in this population: every target is a `maker` exit, every stop is a `taker` exit — 34 of 34, no crossover.** ⇒ ⛔ **the sign-flip argument that carried the crypto refutation CANNOT be run on xStock.** I cannot tell “rising vs falling” apart from “resting vs crossing” here, and I am not going to pretend the flip means on xStock what it meant on crypto.
+
+### ✅ BUT THE MAGNITUDE BOUND SURVIVES THE CONFOUND, AND IT IS THE STRONGER LEG ANYWAY (CC-C's, on crypto)
+**The claim is about RESTING SELLS — so the 7 `maker` `target_hit` rows ARE its population, not a proxy.** Under the side-defect hypothesis the decision price IS the midpoint, so it must sit at **`pos ≈ 0.5`** — **a midpoint cannot exceed `pos = 0.5` BY CONSTRUCTION.**
+⭐⭐ **OBSERVED: median `pos` = +5.500, and ALL SEVEN sit ABOVE THE ASK.** That is **eleven times the largest side error that can arithmetically exist.** ⇒ **whatever those rows are showing, it is not a mid-versus-bid gap.** The only quantity that can put a price 5.5 spread-widths outside a book is **TIME**.
+
+### ⚠️ WHAT I AM AND AM NOT SAYING
+✅ **SAYING: on the rows we can check, the departures are far too large to be a wrong-side error, so the 59 % cannot be cited as evidence of one.**
+⛔ **NOT SAYING the plan's measurement was wrong about what IT measured** — it was written 2026-08-30 against a different and earlier instrument (the ~21 rows carrying `exit_decision_price`, per `book-state.ts:16`). **I did not reproduce its population and I am not claiming to have.**
+⛔ **AND `n=7` IS SMALL. The magnitude argument does not need n — a midpoint is bounded at 0.5 whatever the sample size — but any RATE claim built on these rows would.**
+
+### ⭐ CC-C's STRUCTURAL POINT, RE-DERIVED AT THE REF AND IT STANDS
+`depth-source.ts:89-93` + `shared/schema.ts:1846-1848`: **on xStock the witness is NOT independent** — the fill's own depth-walk reads `xstock_spot_ticker_snap`, **the same table** `getTickerWitness` reads. ⇒ **it is a CONSISTENCY record, not corroboration against a second feed**, and *“do NOT treat agreement here as confirmation”*. ⭐ **AND THAT CUTS BOTH WAYS, WHICH IS THE USEFUL HALF: with only ONE channel, an xStock departure CANNOT be ‘two feeds disagreeing’ — it can only be the archiver's own ~4 s write cadence and the price moving inside it.** The lag reading is therefore BETTER supported on xStock than on crypto, not worse.
+
+⛔ **THE COLUMN CC-C HOPED FOR IS THE WRONG INSTANT.** `exit_fill_depth_age_ms` **is** populated on xStock, but `schema.ts:1817` says plainly these are **THREE DIFFERENT INSTANTS**: it is the age of the depth the **FILL** walked, not the age of the **WITNESS** row. **No witness-age column exists on either class.** ➕ **That gap is unchanged and still homed: persist the witness capture time — item on `B-PRICE-SIDE-BY-JOB` (row `3n`), owner CC-C.**
+➕ **NEW ITEM, from the confound above: the xStock arm needs a population where direction and fee mode are NOT collinear before any direction-based test can run there.** Same home, same owner.
 
 ## 5.3 ⭐⭐ WHICH DOCUMENT IS CANONICAL — THE RECOMMENDATION
 
