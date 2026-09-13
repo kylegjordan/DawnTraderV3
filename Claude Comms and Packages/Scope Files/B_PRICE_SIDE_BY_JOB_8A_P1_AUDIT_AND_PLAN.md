@@ -61,16 +61,33 @@ The side-age probe measures **the TICKER leg's cache age** — *not the age of t
 ⇒ **P1 additionally records the ACCEPTED quote's own `ageMs`**, which `recordTouchSelection` already holds as `sel.quote.ageMs`. **Extend `FunnelCell` with `acceptedAgeBuckets` + `acceptedAgeMaxMs`** on the existing edges, in the same cell, under the same key.
 ★★ **CONSEQUENCE, AND IT IS THE POINT: with the accepted-age histogram on the record, the refusal rate at ANY candidate ceiling is derivable post-hoc from ONE window.** So P1 does not need `exit_ladder_max_age_ms` to exist yet; the risk-derived value can be chosen afterwards and **evaluated without a second window** — and **a value that fails the gate cannot be quietly re-picked until it passes, because every candidate's rate is already recorded.**
 
-### A-6 — ⛔⛔ THE EXIT MARK AND THE LADDER'S TICKER SIDES COME FROM **TWO DIFFERENT CACHES**
+### A-6 — ⛔⛔ **CORRECTED AT THE OBJECT: IT IS ONE WRITER FANNING INTO TWO STORES, AND THE REAL BOUNDARY IS A *PROJECTION*, NOT A CACHE**
+r1 of this document said *"two stores, two WRITER SETS, two cadences."* **THE MIDDLE CLAUSE IS FALSE.** A fresh reader raised it; I re-derived it at the ref before accepting.
+`live-pricing-adapter.ts` `updateCache` writes **BOTH in one method** — `:1138` its own private map, `:1171` `priceCache.updateFromWebSocket(...)` — and says so in its own comment: *"one write reaching BOTH the exit trigger (the map above) and SIGNAL GENERATION (the shared cache…)"*. `:897` does the same on the REST path. ⇒ **one principal writer, two stores — which also means the two can hold the same numbers.**
 
-| object | what it is | who reads it |
-|---|---|---|
-| `LivePricingAdapter.priceCache` | a **private** `Map<string, CachedPrice>`, `live-pricing-adapter.ts:351` | `getPriceWithFallback` ⇒ **the exit MARK** |
-| `priceCache` (`UnifiedPriceCache`) | the module singleton, `price-cache.ts:743` | `getCachedPrice` ⇒ **the level lane's ticker leg** (`signal-orchestrator.ts:2622`) |
+⭐⭐ **AND THE CORRECTION EXPOSES SOMETHING BETTER THAN WHAT IT REPLACES: THE ADAPTER'S ROW ALREADY HOLDS THE SIDES, AND THE EXIT LOOP STILL CANNOT SEE THEM — BECAUSE THE RETURN TYPE DROPS THEM.**
+- The adapter's `CachedPrice` carries `bid`, `ask`, `sidesCapturedAtMs`, `venueObservedAtMs` (`lpa:290-297`), and its **own docblock claims**: *"This entry is what `getPriceWithFallback` returns and therefore what the EXIT TRIGGER reads — so until this commit the exit path held a midpoint with no route back to the two prices it was built from."*
+- ⛔ **`PriceQuote` (`lpa:232-253`) HAS NO `bid`, `ask`, `sidesCapturedAtMs` OR `venueObservedAtMs`, and none of `getPriceWithFallback`'s four return sites (`:1333`, `:1350`, `:1383`, `:1400`) projects them.**
+⇒ ⛔⛔ **THE DOCBLOCK IS WRONG ABOUT ITS OWN FIELD — the route it says it built does not reach the consumer it names.** **The same shape this batch keeps finding: a field added, a docblock naming a consumer, and no projection to that consumer.**
 
-**Two stores, two writer sets, two cadences.** ✅ `aee:87` **already imports the singleton**, so P1 adds no new dependency.
-For P1 this costs nothing — it records and decides nothing. ⚠️ **BUT IT IS LOAD-BEARING FOR P2 AND MUST BE STATED BEFORE P2 IS WRITTEN: the adapter's 2,000 ms venue gate does NOT apply to the singleton read, so P2's trigger source steps OUTSIDE the one age bound the mark has today.**
-★ **That is not an argument against P2 — it is the reason scope §4's `exit_ladder_max_age_ms` is STRUCTURAL rather than decorative**, and §4 must carry that sentence.
+✅ **THIS GIVES P1 A CHOICE THAT IS NOT A MATTER OF TASTE — AND IT IS THE SECOND THING I WANT ATTACKED:**
+| ticker-leg source | what it inherits |
+|---|---|
+| ✅ **(a) widen `PriceQuote` to project the sides the adapter row ALREADY HOLDS** | **ONE read, ONE row, ONE instant — and the sides arrive INSIDE the same 2,000 ms venue gate as the mark.** |
+| ⛔ (b) `priceCache.getCachedPrice(...)` — the singleton, as the level lane does | a **second row, a second instant, and NO venue gate.** |
+★ **(a) is strictly better for P2 and is smaller than it looks: the fields exist on the row; it is a PROJECTION, not a capture change.**
+⚠️ **ADJACENT TO BUT NOT A DUPLICATE OF `3n.l` (`#1056`)** — that row is about what the REST **WRITE** path stores into the singleton; this is about what the **READ** path projects out of the adapter.
+⚠️ **P1 SHOULD TAKE (a), AND THAT IS A CHANGE FROM THIS DOCUMENT'S r1**, which inherited (b) from the level lane without asking.
+⚠️ **AND (a) DOES NOT DISSOLVE A-11 BELOW** — the same writer feeds both rows, so the rung-conflation survives it. (a) fixes the instant and the gate, nothing more.
+
+### A-11 — ⛔⛔ RUNG 1 AND RUNG 2 CAN BE **THE SAME OBJECT** ON EXACTLY THE SYMBOLS THAT CARRY A BOOK
+Already documented in this repo as `level-basis.ts`'s **F2**, re-derived at the ref: `kraken-websocket-adapter.ts:1151-1153` emits a price tick with `producer: 'kraken_ws_book_mid'` carrying `bid: bestBid, ask: bestAsk` — **the top of the very book `getBookForFill` returns as rung 1** — and it flows to `lpa:1171` → the shared cache's `bid`/`ask`, which is rung 2. In F2's own words: *"on a book-carrying symbol the cached sides are whichever of the two channels ticked last, and the payload cannot say which."*
+⚠️ **AND IT BITES HARDEST EXACTLY HERE: the socket carries a book for ~1 symbol, and with ~1 crypto position open (A-10), THAT SYMBOL IS LIKELY TO BE THE OPEN POSITION.** ⇒ **a *"rung 2 recovered it"* reading is NOT safe on a book-carrying symbol.**
+✅ **BUT IT IS DETECTABLE IN THE RECORDED DATA RATHER THAN ONLY IN PROSE: `byAcceptedSource` already carries `<basis>:<producer>`** ⇒ **P1 reports the rung-2 accept split BY PRODUCER, and a book-mid producer on rung 2 is EXCLUDED from any "the ticker recovered it" statement.**
+
+### A-12 — TWO SMALLER OBJECT-LEVEL CORRECTIONS, RECORDED SO NOTHING RESTS ON THEM SILENTLY
+1. **`aee` imports NEITHER `core/calculations/level-basis` NOR `core/calculations/touch-price` at the ref.** ⇒ A-3's "zero writers" has a stronger form — **the exit loop cannot reach the recorder at all** — and P1 adds two new imports to that file.
+2. ⚠️ **The docblock A-4 quotes is itself inaccurate in its example.** It says `LevelBasisFunnelKey` is *"shared by three recorders: this funnel, the side-age probe and the feed-agreement probe"* — but `recordFeedAgreement` (`level-basis.ts:1087`) takes a `FeedAgreementSample` and keys on `s.assetClass` alone, **with no `lane` at all.** ⇒ **A-4's PRINCIPLE stands (do not widen the shared key for a dimension a recorder lacks); its SUPPORTING EXAMPLE is one recorder short, and I am not citing the count.**
 
 ### A-7 — THE `fg2Shadow` BID ARM IS A DIFFERENT INSTRUMENT AND IS NOT A BASELINE FOR P1
 `aee:2248` enters only when `fg2BookBid` is finite and positive ⇒ **it is SILENT exactly on the population P1 most needs to measure** (no book). It is the RAW book top: no validity checks, no age gate, no ticker rung, no refusal path. *(Scope r3 B4 established this for the flip; it binds the measurement for the same reason.)*
@@ -107,12 +124,13 @@ SIM **S27**: the funnel is a module singleton, not persisted, not evicted — *"
 
 | # | item | from |
 |---|---|---|
-| **P1-1** | In `aee`, at `_exitProvenanceBase`'s site, **crypto only**: build the two legs and call `selectTouchPrice`. Book leg from `_bookX` — `stampMs = _now - ageMs`, `clockBasis: 'receipt'`, `producer: 'kraken_ws_book'`, `bookEligible: true`. Ticker leg via `tickerLegFromCachedQuote(priceCache.getCachedPrice(normalizeToInternalSymbol(position.symbol)))`, `tickerBasis: 'ticker_bbo'`. Policy **STATED WITH ITS NUMBERS**: `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000) and `…MAX_SPREAD_FRACTION` (0.50), one ceiling governing both legs. | **A-1, A-2, A-6, A-9** |
+| **P1-1** | In `aee`, at `_exitProvenanceBase`'s site, **crypto only**: build the two legs and call `selectTouchPrice`. Book leg from `_bookX` — `stampMs = _now - ageMs`, `clockBasis: 'receipt'`, `producer: 'kraken_ws_book'`, `bookEligible: true`. ⛔ **Ticker leg via OPTION (a) of A-6 — widen `PriceQuote` to project `bid`/`ask`/`sidesCapturedAtMs`/`venueObservedAtMs`, which the adapter row ALREADY HOLDS, and build the leg from the SAME `priceResult` the mark came from.** ✅ **One read, one row, one instant, and the sides inherit the 2,000 ms venue gate.** ⛔ **NOT `priceCache.getCachedPrice(...)`** — that is a second row at a second instant with no gate, and this document's r1 inherited it from the level lane without asking. `tickerBasis: 'ticker_bbo'`. Policy **STATED WITH ITS NUMBERS**: `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000) and `…MAX_SPREAD_FRACTION` (0.50), one ceiling governing both legs. | **A-1, A-2, A-6, A-9** |
 | **P1-2** | Add **REQUIRED** `stage: LevelBasisStage` to `LevelBasisRungKey`; update `signal-orchestrator.ts:2692` → `active_signal_birth` and `vts-runner.ts:1613` → `vts_signal_birth`; the read surface gains a `stage` field. ⛔ **Shared `LevelBasisFunnelKey` UNCHANGED.** | **A-4** |
 | **P1-3** | Write **BOTH** recorders on the one walk: `recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'exit_trigger' }, sel)` and `recordSideAgeAttempt({ lane: 'active', assetClass: 'crypto_spot' }, { stage: 'exit_trigger', … })`. | **A-3, A-5** |
 | **P1-4** | Extend `FunnelCell` with `acceptedAgeBuckets` + `acceptedAgeMaxMs` on `SIDE_AGE_BUCKET_EDGES_MS`, fed from `sel.quote.ageMs` inside `recordTouchSelection`; surfaced on the funnel row. | **A-5b** |
 | **P1-5** | Flip `side-age.test.ts:142` from `toBeUndefined()` to a positive assertion on the `exit_trigger` row. | **A-3** |
 | **P1-6** | Counters on the existing `EVAL_EXIT` line (`aee:2070`): `ladderAccepted`, `ladderRefused`, `ladderViaBook`. | **A-1** |
+| **P1-10** | ⛔ **Report the rung-2 accept split BY PRODUCER, and EXCLUDE a book-mid producer from any "the ticker recovered it" statement** — `byAcceptedSource` already carries it. | **A-11** |
 | **P1-7** | ⛔ **THE MUTATION PROOF (P1-OBJ-1): a mutation that makes the ladder ACT must go RED** — substitute the ladder quote's bid for `currentPrice` at the `evaluateTECExit` call and assert a test fails. **The test asserts the substitution actually MATCHED before reading the result** — a non-applying substitution reports as passing, measured on the `8c` instrument tests. | the row's **OBJ-1** |
 | **P1-8** | Carry A-6's sentence into scope **§4** and A-9's into **§7**, before the window opens. | **A-6, A-9** |
 | **P1-9** | ⛔ **THE DURABLE PER-POSITION STAMP** — accumulate the per-position ladder summary and write it under `metadata.ladderShadow`, **throttled**, on the `_recordBookStateEvent` precedent re-read at `aee:474-492`: it mutates `position.metadata` in memory on **every** call (`:485`) and throttles only the DB write (`:486-488`), swallowing errors so the log line stands (`:489-491`). ⚠️ **TWO TRAPS CARRIED FROM THAT PRECEDENT, NOT REDISCOVERED: (i) THE IN-MEMORY COPY DOES NOT SURVIVE A RESTART EITHER — only the throttled DB writes do, so the throttle interval BOUNDS THE LOSS and must be stated as a number, not inherited; (ii) `closePosition` RE-FETCHES THE ROW, so the closing write must take the IN-MEMORY copy or the closed row lags by up to a full throttle interval** — Langston's Step-4 point 3 on the same field, already in scope §6. **This is what carries the window across restarts.** | **A-10** |
@@ -140,3 +158,7 @@ No `triggerPrice`. **No consumer of the ladder result — all 24 `currentPrice` 
 2. **`3n.l` (`#1056`) puts a FLOOR under rung 2 that is an artefact of OUR OWN WRITE PATH** — the REST adapter parses the sides and discards them one line before the write. ⇒ **a low rung-2 recovery may NOT be read as "the ticker sides are not there."** `3n.l` is ordered before `8a` for exactly this reason.
 3. **Venue-stamp skew is zero-tolerance** — `buildLevelBasis` refuses a venue stamp even 1 ms ahead as `age_unknown`, and only WS-sourced sides carry one. Small exposure, and it biases **against** the pushed transport.
 4. **P1 measures AVAILABILITY, not CORRECTNESS.** That the ladder *could* have named a price says nothing about whether that price was the right one — that is `3n.n`'s decomposition, and it is not claimed here.
+
+---
+
+**REVIEWER:** `claim-only` (mode B) · three claims — the `exit_trigger` absence, the two-counter pooling mechanism, the two-cache mechanism · **HIT on all three, and one of them refuted a clause of mine** ("two writer sets" — false; one writer fans into both) · **re-derived at the ref: YES**, every hit checked at `origin/migration/aws-supabase` before it changed a line. ⛔ Its clean findings are cited nowhere.
