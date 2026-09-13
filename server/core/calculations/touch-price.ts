@@ -136,6 +136,50 @@ export function selectTouchPrice(
 }
 
 /**
+ * ⛔⛔ THE CACHED QUOTE'S SIDES, AS A TOUCH LEG — ONE HOME, BECAUSE THE TWIN-SITE VERSION WAS
+ * UNTESTABLE AND ONE `??` AWAY FROM SILENTLY LYING (Langston BLOCKER-1, row `8c` P1, 2026-09-13).
+ *
+ * r1 built this leg inline, VERBATIM, in `signal-orchestrator.ts` and `vts-runner.ts`, with zero
+ * test coverage. The line that matters chooses `sidesCapturedAtMs` over `lastUpdatedAt` — the W-3
+ * defect itself: `lastUpdatedAt` dates the MARK and refreshes on every tick, so using it would
+ * report a FRESH age for sides that have not moved in minutes, and the staleness rung would pass
+ * everything. **Both fields are `number | null`, so the swap compiles, passes `tsc`, and passed
+ * 8 of 8 tests.** The one line deciding whether the recovery number is honest was protected by a
+ * comment. It is now protected by a fixture.
+ *
+ * ⛔ STRUCTURAL INPUT, NOT `CachedPrice`. This module is PURE and imports no feed code — the same
+ * discipline `BookTopInput` follows in `level-basis.ts`. Importing the price cache here to borrow
+ * a type would put a feed dependency inside the one module that must stay testable without one.
+ *
+ * ⚠️ `venueObservedAtMs` is preferred where present because it is the venue's own clock; the REST
+ * poller states it as `null` rather than inventing one, so REST legs fall to `receipt`.
+ * ⛔ AND THE SKEW IS ZERO-TOLERANCE, STATED RATHER THAN DISCOVERED (Langston, same review):
+ * `buildLevelBasis` subtracts a VENUE stamp from OUR clock with no allowance, so a Kraken clock
+ * even 1 ms ahead refuses as `age_unknown`. Only WS-sourced sides carry that stamp today, so the
+ * exposure is ~2 symbols — small, but it biases the very number this row measures, and it biases
+ * it AGAINST the pushed transport, which is the one the switch-on argument most wants to see.
+ */
+export interface CachedQuoteSides {
+  bid: number | null | undefined;
+  ask: number | null | undefined;
+  venueObservedAtMs: number | null | undefined;
+  sidesCapturedAtMs: number | null | undefined;
+  lastSource: string | null | undefined;
+}
+
+export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined): TouchLegInput | null {
+  if (!q) return null;
+  return {
+    bid: q.bid ?? null,
+    ask: q.ask ?? null,
+    // ⛔ NEVER `lastUpdatedAt`. See the docblock — it dates the mark, not the sides.
+    stampMs: q.venueObservedAtMs ?? q.sidesCapturedAtMs ?? null,
+    clockBasis: q.venueObservedAtMs ? 'venue' : 'receipt',
+    producer: q.lastSource ?? 'unknown',
+  };
+}
+
+/**
  * B-PRICE-SIDE-BY-JOB row `8c` (P1) — record ONE ladder walk as TWO funnel cells.
  *
  * ⛔ WHY IT LIVES HERE AND NOT IN `level-basis.ts`: that module is imported BY this one, so a
@@ -158,12 +202,20 @@ export function recordTouchSelection(
   // The book rung: `bookRefusal === null` means the book itself carried the selection.
   recordLevelBasisOutcome(
     { ...base, rung: 'book' },
-    sel.ok && sel.bookRefusal === null ? { ok: true } : { ok: false, reason: sel.bookRefusal ?? 'no_book' },
+    sel.ok && sel.bookRefusal === null
+      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}` }
+      : { ok: false, reason: sel.bookRefusal ?? 'no_book' },
   );
   // The ladder: accepted if ANY rung carried it; the refusal recorded is the LAST rung's, because
   // that is the one that had the final say. The book's reason is already in its own cell.
+  // ⛔ `acceptedSource` carries the TRANSPORT (Langston condition 1). `ticker_bbo` names the
+  // QUANTITY and is correct for a REST quote — Kraken's REST `a[0]`/`b[0]` ARE a best bid/offer —
+  // but that naming is only safe while the producer survives, because REST sides carry a poll
+  // cadence and pushed sides do not, and that distinction IS the switch-on argument.
   recordLevelBasisOutcome(
     { ...base, rung: 'ladder' },
-    sel.ok ? { ok: true } : { ok: false, reason: sel.tickerRefusal },
+    sel.ok
+      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}` }
+      : { ok: false, reason: sel.tickerRefusal },
   );
 }

@@ -357,16 +357,26 @@ export type FunnelRefusal = LevelBasisRefusal | 'book_not_eligible';
 export interface FunnelOutcome {
   ok: boolean;
   reason?: FunnelRefusal;
+  /**
+   * `<basis>:<producer>` for an ACCEPTED walk — the transport split (Langston condition 1).
+   * Optional because `LevelBasisResult` has no such notion; a walk that omits it is simply not
+   * counted here, and the map's sum is deliberately allowed to fall short of `accepted` rather
+   * than invent an `unknown` bucket that a reader could not tell from a real one.
+   */
+  acceptedSource?: string;
 }
 
 interface FunnelCell {
   accepted: number;
   byReason: Record<FunnelRefusal, number>;
+  /** `<basis>:<producer>` -> count, for ACCEPTED walks only. Never part of `attempted`. */
+  byAcceptedSource: Record<string, number>;
 }
 
 function emptyCell(): FunnelCell {
   return {
     accepted: 0,
+    byAcceptedSource: {},
     byReason: {
       no_book: 0,
       one_sided_book: 0,
@@ -396,17 +406,84 @@ export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOu
   }
   if (result.ok) {
     cell.accepted++;
+    // Condition 1: the transport, recorded at ACCEPT time. Absent source is left uncounted
+    // rather than bucketed as 'unknown' - an invented bucket would be indistinguishable from
+    // a real one, and the sum of this map is deliberately allowed to be < accepted.
+    if (result.acceptedSource) {
+      cell.byAcceptedSource[result.acceptedSource] = (cell.byAcceptedSource[result.acceptedSource] ?? 0) + 1;
+    }
     return;
   }
   if (result.reason) cell.byReason[result.reason]++;
 }
 
+/**
+ * ⛔⛔ THE LADDER RUNG'S REFUSALS ARE ABOUT THE **TICKER**, AND NAMING THEM AFTER THE BOOK WOULD
+ * TEACH A READER THE EXACT FALSEHOOD ROW `8c` EXISTS TO DEMOLISH (Langston condition 2, 2026-09-13).
+ *
+ * Internally both rungs store one vocabulary — one `FunnelCell` shape, no branching. But a reader
+ * who opens the endpoint and sees `rung: 'ladder', no_book: 272` will conclude *"there is no book"*,
+ * which is TRUE and IRRELEVANT: on that rung the number means *"there was no TICKER either"*. The
+ * whole finding of this row is that the book's absence was never the binding constraint.
+ *
+ * ⇒ The names are rung-scoped AT THE READ SURFACE, where the misreading happens. Storage is
+ * unchanged, so the `book` series stays byte-comparable across this change.
+ */
+export type LadderRefusal =
+  | 'no_ticker'
+  | 'one_sided_ticker'
+  | 'crossed_ticker'
+  | 'locked_or_synthetic_ticker'
+  | 'non_finite_ticker_side'
+  | 'ticker_age_unknown'
+  | 'stale_ticker'
+  | 'implausible_ticker_spread';
+
+const LADDER_REASON_NAME: Record<FunnelRefusal, LadderRefusal> = {
+  no_book: 'no_ticker',
+  one_sided_book: 'one_sided_ticker',
+  crossed_book: 'crossed_ticker',
+  locked_or_synthetic_book: 'locked_or_synthetic_ticker',
+  non_finite_side: 'non_finite_ticker_side',
+  age_unknown: 'ticker_age_unknown',
+  stale_book: 'stale_ticker',
+  implausible_spread: 'implausible_ticker_spread',
+  // Unreachable on the ladder rung — eligibility is judged on the book only — but the map is
+  // TOTAL so that adding a funnel reason later cannot silently drop it from the ladder's view.
+  book_not_eligible: 'no_ticker',
+};
+
 export interface LevelBasisFunnelRow {
   key: string;
+  /**
+   * ⛔ EXPLICIT, NEVER PARSED BACK OUT OF `key`. A consumer splitting the key string on ':' would
+   * break the moment a lane or class contains one, and would read as working until it did.
+   */
+  rung: LevelBasisRung;
+  /** What `byReason` is ABOUT. Names the object, so the vocabulary cannot be misattributed. */
+  reasonsAbout: 'book_top' | 'ticker_sides';
   attempted: number;
   accepted: number;
   refused: number;
-  byReason: Record<LevelBasisRefusal, number>;
+  /**
+   * ⚠️ THE KEY SET DEPENDS ON THE RUNG — see `reasonsAbout`. `book` rows carry `FunnelRefusal`
+   * (⛔ including `book_not_eligible`, which the type used to omit while the runtime object carried
+   * it — a type understating its own payload, and test 4 read a property `tsc` would have rejected
+   * had test files not been excluded from it. Langston condition 3.) `ladder` rows carry
+   * `LadderRefusal`.
+   */
+  byReason: Record<FunnelRefusal, number> | Record<LadderRefusal, number>;
+  /**
+   * ⛔⛔ WHICH FEED CARRIED THE ACCEPTED WALKS — REQUIRED BEFORE THE ACCEPTANCE NUMBER IS CITED
+   * (Langston condition 1, 2026-09-13). `ticker_bbo` names the QUANTITY and is correct for both
+   * transports, but that naming is only SAFE because the producer carries the transport — and the
+   * recorder used to throw the producer away, so the ladder's accepted count could not be split
+   * WS-pushed vs REST-polled. **That split is the entire switch-on argument: REST sides carry a
+   * poll cadence and pushed sides do not.**
+   * ★ Keyed `<basis>:<producer>`, and it does NOT touch `attempted`, so the `book`/`ladder`
+   * denominator equality survives — his constraint.
+   */
+  byAcceptedSource: Record<string, number>;
 }
 
 /**
@@ -419,9 +496,28 @@ export interface LevelBasisFunnelRow {
  */
 export function getLevelBasisFunnel(): LevelBasisFunnelRow[] {
   return [...(_funnel.entries())].map(([key, cell]) => {
-    const byReason = { ...cell.byReason };
-    const refused = Object.values(byReason).reduce((a, b) => a + b, 0);
-    return { key, attempted: cell.accepted + refused, accepted: cell.accepted, refused, byReason };
+    const refused = Object.values(cell.byReason).reduce((a, b) => a + b, 0);
+    // The rung is carried on the ROW, never parsed back out of the key string.
+    const rung: LevelBasisRung = key.endsWith(':ladder') ? 'ladder' : 'book';
+    // Condition 2: rung-scoped reason names, applied HERE because the misreading happens at
+    // the read surface. Storage is one vocabulary, so the `book` series stays comparable.
+    const byReason = rung === 'ladder'
+      ? (Object.entries(cell.byReason) as Array<[FunnelRefusal, number]>).reduce((acc, [k, v]) => {
+          const name = LADDER_REASON_NAME[k];
+          acc[name] = (acc[name] ?? 0) + v;
+          return acc;
+        }, {} as Record<LadderRefusal, number>)
+      : { ...cell.byReason };
+    return {
+      key,
+      rung,
+      reasonsAbout: rung === 'ladder' ? 'ticker_sides' as const : 'book_top' as const,
+      attempted: cell.accepted + refused,
+      accepted: cell.accepted,
+      refused,
+      byReason,
+      byAcceptedSource: { ...cell.byAcceptedSource },
+    };
   });
 }
 

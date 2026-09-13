@@ -138,7 +138,7 @@ import {
 } from '../core/calculations/level-basis.js';
 // Row `8c` P1: D3's ladder replaces the direct book-only assessment. `buildLevelBasis` is no
 // longer imported here — `selectTouchPrice` calls it internally, once per rung.
-import { selectTouchPrice, recordTouchSelection, type ClockBasis } from '../core/calculations/touch-price.js';
+import { selectTouchPrice, recordTouchSelection, tickerLegFromCachedQuote } from '../core/calculations/touch-price.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 // Batch 19G VN HF: SYSTEM_GUARDS import removed — deprecated filter constants deleted.
@@ -2612,8 +2612,13 @@ export class SignalOrchestrator {
         // INCONCLUSIVE, because both feeds coexist only on the hot set — the names we already hold
         // or promote — which is exactly where they would agree anyway.
         // ⛔ HOISTED OUT OF THE AGREEMENT BLOCK 2026-09-13 (row `8c` P1): the ladder's rung 2 needs
-        // this same entry, and reading the cache TWICE in one pass would let the two reads
-        // disagree — the exact split-read hazard this batch keeps finding one layer down.
+        // this same entry, and the agreement probe and the ladder must compare the SAME quote —
+        // two reads in one pass could disagree, which would make the agreement number describe a
+        // quote the ladder never saw.
+        // ⚠️ THIS IS NOT A LICENCE TO COLLAPSE THE OTHER PROBES ONTO IT (Langston, 2026-09-13):
+        // the side-age probe keeps its OWN read deliberately, so the two shadows stay independent
+        // and a defect in one cannot silently move the other. Three reads became two, on purpose,
+        // and the remaining pair is not a leftover to be tidied away.
         const _lbCache = priceCache.getCachedPrice(symbol);
         {
           const _agBook = _lbBook;
@@ -2626,21 +2631,11 @@ export class SignalOrchestrator {
           });
         }
 
-        // ⛔⛔ THE SIDES ARE DATED BY `sidesCapturedAtMs`, NEVER BY `lastUpdatedAt`. That field
-        // dates the MARK and is refreshed on every tick, so using it here would report a fresh age
-        // for sides that have not moved in minutes — the W-3 defect, and the whole reason the
-        // sides carry their own stamp. Absent stamp ⇒ `age_unknown` ⇒ refuse. Fail-closed.
-        // ⚠️ `venueObservedAtMs` is preferred where present because it is the venue's own clock;
-        // the REST poller states it as null rather than inventing one, so REST falls to `receipt`.
-        const _lbTicker = _lbCache
-          ? {
-              bid: _lbCache.bid ?? null,
-              ask: _lbCache.ask ?? null,
-              stampMs: _lbCache.venueObservedAtMs ?? _lbCache.sidesCapturedAtMs ?? null,
-              clockBasis: (_lbCache.venueObservedAtMs ? 'venue' : 'receipt') as ClockBasis,
-              producer: _lbCache.lastSource ?? 'unknown',
-            }
-          : null;
+        // ⛔ ONE HOME FOR THE TICKER LEG (Langston BLOCKER-1, 2026-09-13). r1 built this inline
+        // here AND in `vts-runner.ts`, verbatim and untested, turning on the choice of
+        // `sidesCapturedAtMs` over `lastUpdatedAt` — both `number | null`, so a swap compiles and
+        // passes every test. The helper is fixtured; a twin site could not be.
+        const _lbTicker = tickerLegFromCachedQuote(_lbCache);
 
         // ⛔⛔ ROW `8c` (P1): THE LADDER, NOT THE BOOK ALONE. Until 2026-09-13 this assessed the
         // BOOK and nothing else — rung 1 of a three-rung rule — and it was built on 2026-09-05,

@@ -8,7 +8,7 @@ import {
 } from '../core/calculations/level-basis.js';
 // Row `8c` P1: D3's ladder replaces the direct book-only assessment. `buildLevelBasis` is no
 // longer imported here — `selectTouchPrice` calls it internally, once per rung.
-import { selectTouchPrice, recordTouchSelection, type ClockBasis } from '../core/calculations/touch-price.js';
+import { selectTouchPrice, recordTouchSelection, tickerLegFromCachedQuote } from '../core/calculations/touch-price.js';
 /**
  * ══════════════════════════════════════════════════════════════════════════════
  * 🔒 LOCKED MODULE — Directive 11.0E.1 (Upgraded from 8.8.4-M5C)
@@ -1597,17 +1597,9 @@ async function generatePhase10Signal(
             }
           : null,
         bookEligible: true,
-        // Sides dated by `sidesCapturedAtMs`, never `lastUpdatedAt` — that dates the MARK and
-        // refreshes every tick, so it would report a fresh age for stale sides (the W-3 defect).
-        ticker: _lbCache
-          ? {
-              bid: _lbCache.bid ?? null,
-              ask: _lbCache.ask ?? null,
-              stampMs: _lbCache.venueObservedAtMs ?? _lbCache.sidesCapturedAtMs ?? null,
-              clockBasis: (_lbCache.venueObservedAtMs ? 'venue' : 'receipt') as ClockBasis,
-              producer: _lbCache.lastSource ?? 'unknown',
-            }
-          : null,
+        // ⛔ ONE HOME, shared with the orchestrator (Langston BLOCKER-1) — the stamp choice is
+        // fixtured in `touch-price.ts` rather than repeated as a comment in two files.
+        ticker: tickerLegFromCachedQuote(_lbCache),
         tickerBasis: 'ticker_bbo',
       },
       _lbNow,

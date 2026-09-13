@@ -21,6 +21,14 @@
 //   2. record the book rung's reason into the ladder cell    → 1 of 8 fails (test 3)
 //   3. drop `rung` from `keyOf`, collapsing both cells       → 6 of 8 fail
 //   4. accept the ladder only when the BOOK carried it       → 5 of 8 fail
+// r2 (Langston BLOCKER-1 + condition 1), against the 12-test file:
+//   5. the helper freshens the sides stamp (+19 s)           → 2 of 12 fail (tests 9, 10)
+//   6. invert the venue/receipt clock label                  → 1 of 12 fails (test 10)
+//   7. drop the producer from `acceptedSource`               → 1 of 12 fails (test 11)
+//
+// ⚠️ MUTATION 7 DID NOT APPLY ON ITS FIRST RUN — a CRLF mismatch — and the suite reported 12 of 12
+// green. The assertion that the substitution actually matched is what caught it. **A passing run
+// under an unfired mutation is not evidence of anything, and it looks exactly like success.**
 //
 // ⛔⛔ MUTATION 2 PASSED 8 OF 8 ON THE FIRST ATTEMPT, AND THAT IS THE MOST USEFUL THING IN THIS
 // FILE. Test 3 originally used `book: null, ticker: null`, so BOTH rungs returned the same string
@@ -30,11 +38,18 @@
 // before I ran them (I guessed 2 for mutation 1; it is 7), which is exactly why they are measured
 // and why a predicted mutation result may never be cited.**
 import { describe, it, expect, beforeEach } from 'vitest';
-import { selectTouchPrice, recordTouchSelection, type TouchLegInput } from '../../core/calculations/touch-price.js';
+import {
+  selectTouchPrice,
+  recordTouchSelection,
+  tickerLegFromCachedQuote,
+  type TouchLegInput,
+} from '../../core/calculations/touch-price.js';
 import {
   getLevelBasisFunnel,
   getLevelBasisFunnelRow,
   __resetLevelBasisFunnelForTest,
+  type FunnelRefusal,
+  type LadderRefusal,
 } from '../../core/calculations/level-basis.js';
 
 const NOW = 1_700_000_000_000;
@@ -55,6 +70,11 @@ function walk(input: Parameters<typeof selectTouchPrice>[0]): void {
   recordTouchSelection(LANE, selectTouchPrice(input, NOW, POLICY));
 }
 
+/** The ladder row's reason map, under its rung-scoped names. */
+const ladderReasons = (r: { byReason: Record<string, number> }) => r.byReason as Record<LadderRefusal, number>;
+/** The book row's reason map, under the storage vocabulary. */
+const bookReasons = (r: { byReason: Record<string, number> }) => r.byReason as Record<FunnelRefusal, number>;
+
 describe('row 8c P1 — the ladder funnel', () => {
   beforeEach(() => __resetLevelBasisFunnelForTest());
 
@@ -71,7 +91,7 @@ describe('row 8c P1 — the ladder funnel', () => {
 
     const b = getLevelBasisFunnelRow(BOOK_CELL)!;
     expect(b).toMatchObject({ attempted: 1, accepted: 0, refused: 1 });
-    expect(b.byReason.no_book).toBe(1);
+    expect(bookReasons(b).no_book).toBe(1);
 
     // The recovery. Before this row there was no cell that could show it.
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ attempted: 1, accepted: 1, refused: 0 });
@@ -90,14 +110,17 @@ describe('row 8c P1 — the ladder funnel', () => {
     walk({ book: book({ stampMs: NOW - 20_000 }), bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' });
 
     const b = getLevelBasisFunnelRow(BOOK_CELL)!;
-    expect(b.byReason.stale_book).toBe(1);
-    expect(b.byReason.no_book).toBe(0);
+    expect(bookReasons(b).stale_book).toBe(1);
+    expect(bookReasons(b).no_book).toBe(0);
 
     const l = getLevelBasisFunnelRow(LADDER_CELL)!;
     expect(l).toMatchObject({ attempted: 1, accepted: 0, refused: 1 });
-    expect(l.byReason.no_book).toBe(1);
+    // ⛔ RUNG-SCOPED NAMES (Langston condition 2): on the ladder rung `no_book` would be true and
+    // irrelevant — the number means there was no TICKER. A reader seeing `ladder / no_book = 272`
+    // would conclude exactly what this row exists to demolish.
+    expect(ladderReasons(l).no_ticker).toBe(1);
     // The discriminating assertion: the book's reason must NOT appear in the ladder cell.
-    expect(l.byReason.stale_book).toBe(0);
+    expect(ladderReasons(l).stale_ticker).toBe(0);
   });
 
   it('4. an INELIGIBLE book records `book_not_eligible`, which is a funnel reason and not a basis refusal', () => {
@@ -106,14 +129,14 @@ describe('row 8c P1 — the ladder funnel', () => {
     walk({ book: book(), bookEligible: false, ticker: ticker(), tickerBasis: 'ticker_bbo' });
 
     const b = getLevelBasisFunnelRow(BOOK_CELL)!;
-    expect(b.byReason.book_not_eligible).toBe(1);
-    expect(b.byReason.no_book).toBe(0);
+    expect(bookReasons(b).book_not_eligible).toBe(1);
+    expect(bookReasons(b).no_book).toBe(0);
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ accepted: 1 });
   });
 
   it('5. a STALE book with a fresh ticker: book refuses `stale_book`, ladder still accepts', () => {
     walk({ book: book({ stampMs: NOW - 20_000 }), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
-    expect(getLevelBasisFunnelRow(BOOK_CELL)!.byReason.stale_book).toBe(1);
+    expect(bookReasons(getLevelBasisFunnelRow(BOOK_CELL)!).stale_book).toBe(1);
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ accepted: 1, refused: 0 });
   });
 
@@ -152,6 +175,78 @@ describe('row 8c P1 — the ladder funnel', () => {
     expect(getLevelBasisFunnelRow({ lane: 'vts', assetClass: 'crypto_spot', rung: 'ladder' }))
       .toMatchObject({ accepted: 0, refused: 1 });
     expect(getLevelBasisFunnel()).toHaveLength(4);
+  });
+
+  // ══ Langston BLOCKER-1, 2026-09-13: the ticker leg was built inline in TWO files, verbatim and
+  // untested, and the line that matters chooses `sidesCapturedAtMs` over `lastUpdatedAt`. Both are
+  // `number | null`, so the swap compiles, passes tsc, and passed 8 of 8. It is one helper now, and
+  // these are the fixtures that make the swap fail. ════════════════════════════════════════════
+
+  it('9. ⛔ THE STAMP THAT DECIDES — a FRESH mark against STALE sides must refuse `stale_ticker`', () => {
+    // The W-3 defect, made a test. `lastUpdatedAt` dates the MARK and refreshes on every tick;
+    // `sidesCapturedAtMs` dates the SIDES. A quote whose mark ticked one second ago but whose
+    // sides have not moved in twenty must refuse. If the helper ever reads the mark instead, the
+    // staleness rung passes everything and the recovery number this row exists to produce becomes
+    // a fiction. `lastUpdatedAt` is deliberately absent from `CachedQuoteSides` so it CANNOT be
+    // read — but the fixture asserts the behaviour rather than trusting the type.
+    const leg = tickerLegFromCachedQuote({
+      bid: 99.9, ask: 100.3,
+      venueObservedAtMs: null,
+      sidesCapturedAtMs: NOW - 20_000, // stale sides
+      lastSource: 'kraken_rest',
+    });
+    expect(leg!.stampMs).toBe(NOW - 20_000);
+
+    walk({ book: null, bookEligible: true, ticker: leg, tickerBasis: 'ticker_bbo' });
+    const l = getLevelBasisFunnelRow(LADDER_CELL)!;
+    expect(l).toMatchObject({ accepted: 0, refused: 1 });
+    expect(ladderReasons(l).stale_ticker).toBe(1);
+  });
+
+  it('10. the helper names the CLOCK from which stamp it used, and prefers the venue clock', () => {
+    const venueLeg = tickerLegFromCachedQuote({
+      bid: 1, ask: 2, venueObservedAtMs: NOW - 500, sidesCapturedAtMs: NOW - 9_000, lastSource: 'kraken_ws_ticker',
+    })!;
+    expect(venueLeg).toMatchObject({ stampMs: NOW - 500, clockBasis: 'venue', producer: 'kraken_ws_ticker' });
+
+    const receiptLeg = tickerLegFromCachedQuote({
+      bid: 1, ask: 2, venueObservedAtMs: null, sidesCapturedAtMs: NOW - 9_000, lastSource: 'kraken_rest',
+    })!;
+    expect(receiptLeg).toMatchObject({ stampMs: NOW - 9_000, clockBasis: 'receipt', producer: 'kraken_rest' });
+
+    // An absent quote is a null leg, not a leg with null fields — `no_ticker`, never `age_unknown`.
+    expect(tickerLegFromCachedQuote(null)).toBeNull();
+  });
+
+  it('11. ⛔ THE TRANSPORT SPLIT — accepted walks are separable WS-pushed vs REST-polled', () => {
+    // Langston condition 1. `ticker_bbo` names the QUANTITY and is right for both transports, but
+    // that naming is only safe because the producer survives: REST sides carry a poll cadence and
+    // pushed sides do not, and that distinction IS the switch-on argument. The recorder used to
+    // throw the producer away, so the accepted count could not be split at all.
+    walk({ book: null, bookEligible: true, ticker: ticker({ producer: 'kraken_rest' }), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, ticker: ticker({ producer: 'kraken_rest' }), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, ticker: ticker({ producer: 'kraken_ws_ticker' }), tickerBasis: 'ticker_bbo' });
+    walk({ book: book(), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+
+    const l = getLevelBasisFunnelRow(LADDER_CELL)!;
+    expect(l.byAcceptedSource).toEqual({
+      'ticker_bbo:kraken_rest': 2,
+      'ticker_bbo:kraken_ws_ticker': 1,
+      'book_top:kraken_ws_book': 1,
+    });
+    // ⛔ AND THE DENOMINATOR EQUALITY SURVIVES IT — his explicit constraint. The split lives
+    // beside `accepted`, never inside `attempted`.
+    const b = getLevelBasisFunnelRow(BOOK_CELL)!;
+    expect(b.attempted).toBe(l.attempted);
+    expect(Object.values(l.byAcceptedSource).reduce((a, x) => a + x, 0)).toBe(l.accepted);
+  });
+
+  it('12. the row carries its rung and what its reasons are ABOUT, without parsing the key', () => {
+    // A consumer splitting the key string on ':' breaks the moment a lane or class contains one,
+    // and reads as working until it does.
+    walk({ book: null, bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' });
+    expect(getLevelBasisFunnelRow(BOOK_CELL)).toMatchObject({ rung: 'book', reasonsAbout: 'book_top' });
+    expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ rung: 'ladder', reasonsAbout: 'ticker_sides' });
   });
 
   it('8. ⭐ POSITIVE CONTROL — a never-walked cell is `undefined`, not a zero row', () => {
