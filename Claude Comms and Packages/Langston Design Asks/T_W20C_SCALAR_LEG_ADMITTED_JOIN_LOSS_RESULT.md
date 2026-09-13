@@ -118,6 +118,21 @@ The sequenced second half is placed: `HOME: B-PAPER-LANE-PROVENANCE, owner CC-B,
 `provenanceCaptureEnabled(assetClass)` gates the write too, so supplying the object without the class
 flag reproduces the SAME ZERO on a NEW mechanism, and that failure is SILENT.**
 
+### ⛔ SCOPE OF THE `vts`-ONLY LABEL — ADMITTED STRATUM ONLY (Langston, binding)
+
+⚠️ **THE LANE CENSUS WAS RUN ON THE `admitted` STRATUM ALONE** — 566 + 541 + 66 = 1,173. The
+whole-slice figure (2,129,591 rows = 2,129,591 distinct keys = the four-stage join total) establishes
+**uniqueness and one-directionality. It does NOT establish LANE COMPOSITION.**
+
+⇒ **The lane mix of `strategy_internal`, `sqe` and `tcl` is UNMEASURED — not known-`vts`, not
+known-mixed.** A later session may neither
+- generalise upward — *"the whole slice is `vts`"* — nor
+- invert it — *"the other stages are mixed, therefore representative."*
+
+⛔ **Either reading would be a FRESH by-construction narrowing wearing today's correction as cover**,
+which is precisely the pattern filed as `population-narrowed-by-construction`. **Measure the lane mix
+per stratum before any claim that rests on it.**
+
 ## 5. DISPOSITION
 
 Bug-taxonomy **outcome (2) — working as designed, and UNADDRESSED.** The archiver's own comment
