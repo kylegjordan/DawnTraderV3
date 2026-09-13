@@ -204,6 +204,29 @@ My reading is **NO — they should land together**, because A6 + A7 + A8 compose
 
 ⛔ **AND THE TRANSPORT SPLIT IS READ BESIDE IT, NOT AFTER IT** (Langston condition 1): `byAcceptedSource` is reported with every outcome above. **A recovery carried overwhelmingly by `ticker_bbo:kraken_rest` is a recovery on a POLL CADENCE**, which is a materially weaker claim than one carried by pushed sides — and the switch-on argument turns on exactly that distinction. **The headline percentage may not be cited without its split.**
 
+### ⛔⛔ AMENDED AGAIN 2026-09-13, STEP 8 — TWO AMENDMENTS WRITTEN **BEFORE** THE WINDOW ACCUMULATES, NOT AFTER
+
+**F2 — `byAcceptedSource` IS NOT REPORTABLE FOR THIS WINDOW, AND *"ZERO PUSHED"* MAY NOT SURVIVE TO THE CLOSE AS A FINDING** (Langston, blocker). Two independent reasons, and **neither shrinks with n**:
+1. **The bias is structural.** `producer` comes from `lastSource`, which dates the **mark's** writer; `updateFromRest` stamps `kraken_rest` unconditionally while the sides carry forward ⇒ **WS-pushed sides under a later REST mark record as REST.** More samples do not dilute a systematic mislabel.
+2. **The first reading sits inside the boot-subscribe lag** (`#571` obl. 46) — taken 3.4 min after a cold start — **and the counter is cumulative with no timestamps, so those frames stay in the denominator permanently.**
+⇒ ⛔ **THE TRANSPORT SPLIT IS UNINTERPRETABLE FOR THIS WINDOW unless `producer` is sourced from the SIDES' writer.** ★ **It is still RECORDED — the field stays — but it may not be cited as a measurement of the pushed share, at Step 7, at the close, or anywhere between.** *(This supersedes the weaker "lower bound" phrasing above: a lower bound is still a number someone will quote.)*
+
+**F3 — THE n-FLOOR MAY BE UNREACHABLE IN ONE LIFETIME, AND THE FLOOR DOES NOT MOVE.** Langston measured the steady rate from my own two readings, same book-cell population: **pre-change 546 active attempts over the 23:30:48Z→05:40Z lifetime = 1.48/min; 273 vts = 0.74/min.** My 07:12 reading is **7.3 and 13.6/min — 5× and 18×** — because **the first three minutes is a cold-start burst, not the rate.** ⇒ at the steady rate, 2,000 is **≈22.5 h uninterrupted on active and ≈45 h on vts**, against `restart_time=613` and a queued `3n` deploy.
+⛔ **THE FLOOR IS NOT LOWERED. A criterion moved after seeing the window measures nothing.** Instead, pre-registered now:
+- **A RESTART VOIDS THE WINDOW — it does not yield a partial reading**, per S27's own rule. A voided window re-anchors at the new `pm_uptime`; readings are never summed across lifetimes.
+- **A DEPLOY HOLD WITH A NAMED OWNER (CC-C) is required for the window to have a chance** — and every `3n` row still to ship is a restart. ⇒ **the window runs in the gaps between rows, and I state which lifetime a reading belongs to or the reading is void.**
+- **IF CONSECUTIVE LIFETIMES FAIL TO REACH n, THE FLOOR IS RE-RULED ON THE *MEASURED* RATE, IN WRITING, BEFORE THE NEXT WINDOW OPENS** — never mid-window, and never against data already seen.
+
+**F1 — THE ACTIVE LANE IS *NOT* STRUCTURALLY SATURATED, so the floor does buy something there. Answered before the close, as asked.**
+Both lanes' level-basis calls sit behind `activeFilterPool.getActivePool(…)` machinery, but over **different sets**: the active lane iterates the **FX5-survivor pool**; the VTS call at `vts-runner.ts:1613` sits inside the loop over the **wider `cryptoSymbolList`**. **They share ONE cache**, and `live-pricing-adapter`'s `updateFromRest` — the path that writes the synthetic `bid = ask = price` on a first write — is reached for **open positions**, which are FX5 survivors by construction.
+⇒ ✅ **An active-lane symbol CAN carry a locked/synthetic ticker. There is no structural exclusion, so that cell is not saturated at 100% by construction and the n-floor is doing real work on it.**
+⚠️ **What differs is RATE, not possibility:** FX5 survivors are scanned repeatedly and accumulate real sides, so the synthetic shape is **rarer** there — and **most likely right after a restart, before the side-storing poller has covered a symbol, which is exactly when the 07:12 reading was taken.**
+⛔ **NOT ESTABLISHED: whether the FX5 pool is a strict subset of `cryptoSymbolList`.** I did not trace it and am not asserting it; the conclusion above does not rest on it.
+
+⚠️ **AND A LIMIT ON MY OWN REPORTING THAT LANGSTON NAMED: he is `RULED ON REPORTED FACT` on the funnel counts, because the diagnostics endpoint returns 401 to him and he holds no session.** ⛔ **That is tolerable only while no PASS rests on them; at the close it is DISQUALIFYING.** ⇒ **a second-party read path is owed before the close — a token, a logged line, or a sink.**
+⛔⛔ **BUT IT MAY NOT BE BUILT NOW, AND THE REASON IS THE RULE I JUST WROTE THREE PARAGRAPHS UP: a logged line or a sink is RUNTIME CODE, and shipping it RESTARTS THE ENGINE, which VOIDS THIS WINDOW.** ★ **Building the observer would destroy the observation.**
+⇒ ✅ **DISPOSITION: the read path lands at the NEXT NATURAL RESTART — the next `3n` row's deploy — never as a restart of its own.** In the meantime the counts carry `RULED ON REPORTED FACT` **and nothing may rest on them**, which is exactly the standing they have today.
+
 ⛔ **WHAT THIS CRITERION DOES NOT DECIDE, stated so it is not over-read: it says nothing about whether the switch-on should happen.** That is held on four separate grounds (§3), and a PASS here removes none of them. **It measures one thing: whether a transactable basis exists for the level-building population.**
 
 ---
