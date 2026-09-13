@@ -8834,6 +8834,34 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ⇔ `#333` (Discord cutover) · `#348` (Telegram decommission) · `B-LANGSTON-CONTEXT` §6.9.
 
+### ⭐⭐ #1060 OPEN 2026-09-13 (KYLE DIRECTIVE, given to CC-C after he challenged the premise of `3n` row `8c`) — ⛔⛔ **THE ORDER BOOK IS THE PREFERRED PRICE SOURCE AND WE SUBSCRIBE IT FOR THREE COINS A DAY. WE ALREADY OWN THE MACHINERY TO DO BETTER AND NEVER POINTED IT AT THIS.**
+
+⛔ **KYLE'S CHALLENGE, AND IT IS THE RIGHT ONE:** *“it doesn't make sense for us to use the fallback nearly one hundred percent of the time. And I can't believe that you started a batch with that being acceptable instead of proposing, well, what's the fix?”* ★ **ACCEPTED WITHOUT QUALIFICATION. Row `8c` measured how well we COPE without the preferred source; it never asked why the preferred source is absent. The 99.83% fallback rate is not a result, it is the size of the hole.**
+
+**MEASURED 2026-09-13:**
+- **THREE distinct symbols have had an order book subscribed all day** — whole-day log, distinct-symbol count, not a sample.
+- The scanner reads **337 pairs/cycle** of a **1,449-pair** universe; the **FX5 survivor pool is 35-41 symbols** at any moment (`[8.8.7][Orchestrator]`, three consecutive cycles).
+- ⇒ on the active lane the book named a basis for **18 of 12,821** level builds — **0.15%**.
+★★ **SO `0.15%` IS NOT A PROPERTY OF THE ORDER BOOK. IT IS A PROPERTY OF OUR SUBSCRIPTION SET.** ⚠️ **My own Step-7 phrasing — *“the book could name a usable price for 0.15% of coins”* — reads as a QUALITY failure and is corrected: it is an AVAILABILITY failure, and ours.**
+
+⛔ **WHY SO FEW: NOTHING IN THE PIPELINE EVER ASKS FOR A BOOK.** The only caller of `subscribeToSymbols` outside the adapter is `routes.ts:10134`, **a health-check route**, whose comment reads *“Subscribe to all symbols (this is what the audit does)”* and whose set is `paperPositions + liveTrades` — **OPEN POSITIONS ONLY.** ⇒ **we begin collecting the good data at or after the moment we open a trade, which is the last instant it can inform choosing that trade.** *(The adapter has 13 further INTERNAL subscribe sites — repair and resubscribe machinery — so this is not a single-path claim; the measured outcome is 3 symbols regardless.)*
+
+✅✅ **AND THE CAPABILITY ALREADY EXISTS, WHICH IS THE REAL FINDING.** `passive-archive/crypto-spot-archiver.ts` runs a **HASH-MOD SHARDED, MULTI-CONNECTION** design — `SHARD_SIZE = 300` (`b74_crypto_ws_shard_size`, per Langston Q3). **LIVE NOW: two connections, 201 + 205 = 406 crypto symbols, both `connected=true`, `last_msg_age_ms` sub-second.** ⛔ **It subscribes `ohlc(1)` + `ticker` and NEVER `book`.** ⇒ **we built the wide-subscription machinery and did not point it at the channel we actually needed.**
+
+**THE FEASIBILITY NUMBERS FOR KYLE'S TWO CASES:** **40 symbols** fits the existing trading connection with no new connection. **200 symbols** is ONE additional connection at a shard size we already run. ⚠️ **Kraken's primary docs state NO per-connection symbol cap on the pages I reached** (`spot-ws-intro`); their support FAQ states 200 and says to open more connections — **second-hand, and our own shards run 201/205 successfully, so the figure is soft.** Documented and relevant: **~150 connection ATTEMPTS per 10 min per IP (Cloudflare)** and a **~60 s inactivity timeout**.
+★ **WEBSOCKET SUBSCRIPTIONS ARE NOT REST CALLS AND DO NOT TOUCH THE REST BUDGET — the cost is MESSAGE VOLUME and event-loop time, not call count.** Current: **~2,441-2,564 msg/min** (`[B78.1][WS_TICK_RATE]`, 4 consecutive minutes).
+
+✅ **STORAGE IS LIKELY A NON-ISSUE FOR THIS FIX: the book is consumed IN MEMORY at decision time and need never be persisted.** Kyle's hot/warm/cold question applies only if we CHOOSE to ARCHIVE it, which is a separate decision. **For scale if we did: one month of ticker snaps for 406 symbols = 2,118 MB / 7.19M rows.**
+⛔ **AND THE DISK PRESSURE BEHIND ALERT `74424570` IS NOT MARKET DATA: the largest object is `signal_eval_archive_2026_08` at 38 GB / 67.1M rows for ONE month** — our own evaluation archive. *(Surfaced here because it was measured in passing; the alert stays CC-B's at row `2.4f`.)*
+
+⭐ **A BONUS THAT IS NOT INCIDENTAL: the trading socket subscribes `ticker` AND `book` on ONE symbol list** (`kraken-websocket-adapter.ts:1499`/`:1514`). ⇒ **pointing it at the survivor pool fixes BOTH — those symbols would receive PUSHED ticker data instead of being REST-polled, which is a separate freshness problem this batch has been working around.**
+
+⚠⚠ **THREE THINGS NOT ESTABLISHED, stated so this is not read as a plan: (1) the MESSAGE VOLUME of 40 or 200 books — books are chattier than tickers and I have NO measured factor; (2) the WARM-UP time from subscribe to a usable book, so “warm by signal time” is an expectation, not a measurement; (3) the UNSUBSCRIBE path as symbols leave the pool — row `7b` already records the unsubscribe machinery as needing a conservation test.**
+
+⇒ **DISPOSITION — §9.4 (3), its own batch.**
+> `HOME: B-BOOK-SUBSCRIPTION-REACH, owner CC-C, placed in PHASE_19_PLAN at row 3n.m, AFTER 3n.l and BEFORE row 8a.`
+⚠️ **THE ORDERING IS PROPOSED, NOT SETTLED — Langston has ruled this batch's ordering twice and it is a real question: if the book becomes available for the survivor pool, `3n.l`'s ticker-sides work matters LESS for those 40 and still matters for the wider scan. I am not re-sorting his sequence unilaterally.**
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
