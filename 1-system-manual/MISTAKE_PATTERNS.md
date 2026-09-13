@@ -7,6 +7,23 @@
 
 ---
 
+
+### `enumerator-blind-spot` — **THREE INSTANCES IN ONE SESSION, 2026-09-13 (CC-C), AND THE THIRD ONE WAS INSIDE THE COMMIT THAT RECORDED THE SECOND**
+
+⛔ **THE SHAPE: grep for ONE IDENTIFIER, then call the result a CENSUS.** The member that uses a different name is invisible, and the sweep scores FALSE-CLEAN — which is worse than not sweeping, because it is published as coverage.
+
+| # | what was enumerated | the identifier grepped | the member it could not see |
+|---|---|---|---|
+| 1 | who subscribes an order book | `subscribeToSymbols` | `ready_to_buy_service.ts:2424` reaches it through `i8cSubscribeNewTrade`, a **differently-named wrapper**. The entry's central *"nothing in the pipeline ever asks for a book"* was false; `#506` had carried the correction since July. |
+| 2 | which probes maintain a book ladder | `applyDelta` | `book_ticker_alignment_probe.mjs` maintains a full ladder **inline** (`:84-88`, `truncate()` at `:40`) and names it nothing. Scored *"frame COUNT only"*. |
+| 3 | — | — | ★ **and #2 happened in the same session whose commit message for #1 spelled out the lesson.** |
+
+⛔⛔ **AND THE COMPANION DEFECT, WHICH IS THE REAL TEACHING: THE "POSITIVE CONTROL" HAD NO FAILURE MODE.** For #2 I ran `grep -l applyDelta`, got the same three files as the per-file counts, and called it a positive control. **It tests the grep against itself — it cannot come out differently if the enumerator is wrong** (`CONDUCT.md` §6b step 2, applied to my own instrument while I was applying it to other people's all day).
+✅ **WHAT A REAL CONTROL LOOKED LIKE:** re-run the census on the **SHAPE** — price-keyed Map mutation, array splice on `bids`/`asks`, depth truncation, snapshot reset — and it **caught the file the name search missed.** An enumerator that cannot fail on a known member is not an enumerator.
+
+⇒ **THE RULE: enumerate by the BEHAVIOUR, not by the NAME; and the control must be a KNOWN MEMBER the instrument has to catch, never the same query restated.** State what the sweep returned, not that it was run.
+
+
 ## HOW AN INSTANCE IS RECORDED — one trailer, on the commit
 
 ```
