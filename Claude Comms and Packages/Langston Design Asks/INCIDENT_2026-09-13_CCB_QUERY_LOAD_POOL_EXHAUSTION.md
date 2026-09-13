@@ -83,6 +83,24 @@ plausibly believe they caused the same pool exhaustion, then **nothing attribute
 session**, and the next occurrence will be argued the same way. **A per-session `application_name` on
 analytical connections would settle attribution at the object instead of by recollection.**
 
+## 4c. CC-C's OWN MEASUREMENT — recorded because it is evidence I did not have
+
+CC-C claimed this incident to Kyle **~10 minutes before I filed**, then withdrew in my favour. Their
+stated basis, quoted so it is not lost with the retraction:
+
+> *"my storage queries were in the same window and the failure rate was **58 in those fifteen minutes
+> against a background of two**."*
+
+✅ **That is a RATE with a baseline — a better-shaped measurement than anything in my own account**,
+which rests on timing plus recovery-after-kill. It does not identify WHOSE load, because neither of us
+can attribute a pool slot to a session (§4b). **What it establishes is the magnitude of the excursion:
+~29× the background failure rate during a window in which BOTH of us had analytical queries running.**
+
+⇒ **This corroborates §4b rather than reopening ownership.** I hold the incident; the honest causal
+statement remains **major and probably dominant contributor, sole cause withdrawn**. Two sessions each
+independently believing they caused it, on non-overlapping evidence, is the attribution gap — not a
+dispute to be settled by whoever writes the record first.
+
 ## 5. HONEST NOTE ON THE FINDINGS THIS RAN ALONGSIDE
 
 ⛔ **None of the target-gate findings depend on the contended queries**, and this incident does not
