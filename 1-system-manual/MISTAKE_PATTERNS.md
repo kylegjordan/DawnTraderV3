@@ -351,6 +351,16 @@ I enumerated book subscribers by grepping `subscribeToSymbols`, classified every
 ⚠️ **HONEST LIMIT:** it fires only once a defect has been NAMED. It does nothing for a class nobody has pointed at yet — that is what the fresh-reader loop is for, and the two mechanisms are complements rather than substitutes.
 
 ### `fix-relocates` — **THE CORRECTION REINTRODUCED THE SAME DEFECT CLASS IN A NEW PLACE** — **LIVE — NOT IN §13** · mechanism: **the fresh-reader LOOP, already mandated in `workflow-02/-04/-07/-11` and unblocked by Kyle's standing authorisation 2026-08-28** (opened 2026-08-28, CC-INFRA)
+
+➕ **2026-09-13/14 — FIVE INSTANCES IN ONE DOCUMENT, ONE SITTING, CC-B, `B-PRICE-DOC-CONSOLIDATE` (`PRICE_FEED_MAP.md` r4→r7). Added here rather than filed as a new pattern: this IS the entry.**
+⭐⭐ **AND IT SHARPENS THE LOCUS, WHICH IS THE REASON THEY ARE WORTH RECORDING: THE CORRECTION DID NOT RELOCATE TO “A NEW PLACE” — IT RELOCATED INTO *THE EXPLANATION OF THE FIX*, FOUR TIMES OUT OF FIVE.** That is narrower than the entry's current framing and it is PREDICTABLE, which makes it checkable.
+1. A HAND-NAMED list of files-to-watch was blind to six verdict-bearing members (Langston caught it).
+2. The RULE that replaced the hand list was blind to the **partially-unmapped** class — it subtracted by FILE where the unit is a CITATION (Langston caught it).
+3. The rule's own table **cited its own members**, so the mechanical extraction found them THERE and kept two files nothing else in the document referenced. **Self-justifying by construction.**
+4. The NOTE recording that removal **re-cited the two removed files**, so the extractor re-added them. ⇒ the exclusion had to widen from the table to the whole block.
+5. ⛔ **THE SENTENCE BANNING SHORTHAND CITATIONS WROTE THE BANNED FORM OUT TWICE.**
+⛔⛔ **AND THE ENTRY'S LISTED MECHANISM — THE FRESH-READER LOOP — DID NOT CATCH ANY OF 3, 4 OR 5. RUNNING THE CHECK DID.** ⭐ **A reader (fresh or not) reads the rule and the table as PROSE and they agree; only EXECUTING the rule against the document exposes that they do not.** ⇒ **AMENDMENT: where a document states a derivable rule, the rule must be RUN against the document and shown to reproduce its own output — and a disagreement is INVESTIGATED, never settled by assuming the rule or the table wins.**
+⚠️ **THE TIE-BREAKER IS THE TRAP: instance 3 was found only because the first version of the check said *“if they disagree the RULE is wrong”* and that was FALSIFIED ON THE NEXT RUN — the table was wrong. A self-check with a tie-breaker is not a check, it is a preference** (Langston's phrasing).
 - **2026-09-02 · B-MEASURE-GATE leg 2:** r3 of the completion-report guard moved the defect from "warns on every real close" to "decided by whatever last sat at the reused `/tmp` name" — the same class one level down, found by the next fresh reader (`12aa27eed` → `ff0fbe9e2`).
 
 ⛔ **FAILS THE §13 BATCH-DIVERSITY LEG AND IS RECORDED ANYWAY.** Five instances, **all inside `B-TOKEN-WATCH`** — one context, not two batches, so it does **not** promote under the 3+/2-batches floor. **It is here because the instance COUNT is unusually high for a single batch and because a mechanism already exists**, which is the state this file says a pattern should reach.
