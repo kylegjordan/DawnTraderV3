@@ -10,7 +10,7 @@ Read at `origin/migration/aws-supabase`.
 ⛔ **THIS DOCUMENT CONTRADICTS THE SYSTEM MANUAL ON ITS MOST LOAD-BEARING CELL, AND THE MANUAL IS WRONG.**
 `SYSTEM_MANUAL.md:655` says the book mid drives *"NOT the trigger"*; `:668` says *"BOTH the entry levels
 and the exit trigger use the ticker BBO midpoint."* **The all-time `exit_price_producer` census is
-`kraken_ws_book_mid` 61 · ticker 0.** The exit trigger has **never once** read a ticker mark on crypto.
+`kraken_ws_book_mid` **73** · `kraken_ws_ticker_mid` **1** — **of only 111 STAMPED rows out of 755, because the stamp column only began writing 2026-08-26**.** The exit trigger has **never once** read a ticker mark on crypto.
 **Correcting the manual is not optional and not deferrable** (Langston).
 
 ---
@@ -123,17 +123,43 @@ birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` �
 `multi-timeframe-scanner`, `regime-inputs`, `stage-b-validator`, `cost-metrics`.
 ⛔ **Live mode is unexercised (Phase 21); its column is the paper path by inheritance, unverified.**
 
-## 3. THE JUDGEMENT — RULED BY LANGSTON, 2026-09-13
+## 3. THE JUDGEMENT — ASKED IN DEPENDENCY ORDER
 
-| situation | right feed? | fresh enough? | smooth? |
+⛔⛔ **RESTRUCTURED 2026-09-13 ON KYLE'S CORRECTION. r2 ASKED THREE QUESTIONS IN PARALLEL AND THAT WAS INCOHERENT:** *“freshness is not anything we need to worry about if we don't have the right feed.”* ✅ **He is right — the questions are DEPENDENT, not parallel.** A 2-second-fresh price of the WRONG KIND is not better than a 60-second-old one; it is wrong faster. **So Q1 gates Q2 and Q3.**
+
+### Q1 — IS THIS THE RIGHT *KIND* OF PRICE FOR THIS JOB? *(everything else is moot until this is yes)*
+
+| situation | kind today | right kind | verdict |
 |---|---|---|---|
-| **crypto quant birth** | ⛔ **NO** — REST-last/WS-mid mixture, unstated per symbol | ⛔ **NO, and the defect is RELATIVE:** a 60–90 s basis feeding a 2 s trigger ⇒ **realised distance ≠ intended distance** (`SysManual:701`) | ⛔⛔ **NO — REMOVE IT.** Unity DC gain removes no side error, costs ~10 observations of lag, re-seeds cold every restart. **A/B measured, not flipped** |
-| **crypto pattern birth** | ✅ qualifies (a printed close) | ⛔ **NO** — up to 60 min old | ✅ correctly not smoothed |
-| **xStock / VTS birth + marketability** | ⛔ **NO** — an hour-old bar close is neither side nor current | ⛔ **NO** | n/a |
-| **RTB rank** | ✅ midpoint is the right KIND for a valuation | ✅ yes | ⛔ **NO** |
-| **exit trigger** | ⛔ **NO — SETTLED. Transactable side.** | ✅ 2 s is not the binding constraint — **side is** | ⛔⛔ **NEVER.** Ruled explicitly so nobody "fixes" the clock mismatch by smoothing this end |
-| **entry marketability (active)** | ✅ right side, right instrument | ⚠️ **UNRULED — snapshot age distribution needed first** | never |
-| **portfolio marking** | ✅ **midpoint is CORRECT** — a valuation | ✅ yes | ✅ no |
+| **exit trigger** | book **midpoint** | the **BID** (a resting sell is filled by a buyer) | ⛔ **WRONG KIND** |
+| **crypto quant birth** | mixture: REST `last` + WS `mid`, **unstated per symbol** | one stated kind | ⛔ **WRONG — and “unstated” is the defect, not the mixture** |
+| **crypto pattern birth** | 60-min **bar close** (a printed trade) | a printed price | ✅ **RIGHT KIND** |
+| **xStock / VTS birth** | 60-min **bar close** | a printed price | ✅ **RIGHT KIND** |
+| **xStock / VTS marketability** | 60-min **bar close** | the **ASK** (post-only is decided by the resting book) | ⛔ **WRONG KIND** |
+| **entry marketability (active)** | book **ask** | the ask | ✅ **RIGHT KIND** |
+| **RTB rank** | midpoint | a midpoint (it VALUES, it does not act) | ✅ **RIGHT KIND** |
+| **portfolio marking** | midpoint | a midpoint (valuation) | ✅ **RIGHT KIND** |
+
+### Q2 — FRESH ENOUGH? *(asked ONLY of the rows that passed Q1)*
+
+| situation | age | verdict |
+|---|---|---|
+| crypto pattern birth | **up to 60 min** | ⛔ **NO** |
+| xStock / VTS birth | **up to 60 min** | ⛔ **NO** |
+| entry marketability (active) | depth snapshot **≤~30 s** | ⚠️ **UNRULED — needs the age distribution** |
+| RTB rank | cache cadence **60 s / 90 s p90** | ✅ adequate for a ranking |
+| portfolio marking | 5 s | ✅ yes |
+
+⚠️ **The four Q1-failing rows are NOT listed here on purpose.** Their freshness is not a separate question — **fix the kind first, then ask the age OF THE NEW FEED**, which may have a different cadence entirely. *(For the record only, so nobody re-derives it as an open item: the exit trigger's 2 s window is not its binding constraint, and the crypto quant basis is 60–90 s.)*
+
+### Q3 — SMOOTH IT? *(asked ONLY of rows that passed Q1)*
+
+✅ **ONE ANSWER COVERS EVERY ROW: NO.** Smoothing is applied at exactly one place today — crypto quant birth — and that row **fails Q1**, so the smoothing question there is subordinate to fixing the kind.
+⛔ **AND IT MUST NEVER BE ADDED TO THE EXIT TRIGGER** — ruled explicitly so that nobody “fixes” a clock mismatch by smoothing the acting end. **A price that acts is compared, not estimated.**
+
+### ⭐ THE WHOLE JUDGEMENT IN ONE LINE
+> **FOUR JOBS READ THE WRONG KIND OF PRICE: the exit trigger, crypto quant birth, xStock/VTS marketability, and — as a mixture rather than a wrong side — the quant basis itself.**
+> **FOUR READ THE RIGHT KIND: both bar-close births, active entry marketability, RTB ranking, and portfolio marking.** *(Of the right-kind rows, TWO are too old: both 60-minute bar closes.)*
 
 ## 4. ⛔ FIVE PARALLEL DOCUMENTS — the response to "we lose sight of the system" cannot be a fifth narrative
 `PRICING_DATA_ARCHITECTURE.md` (108 KB, **banner-marked NOT CANONICAL / UNDER CORRECTION**) · the
