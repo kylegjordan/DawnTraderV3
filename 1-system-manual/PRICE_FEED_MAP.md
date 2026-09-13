@@ -1,34 +1,43 @@
 # PRICE FEED MAP — WHERE EVERY PRICE IN THE SYSTEM COMES FROM
 
-**Kyle-directed (CC-B) · r4 · closed out 2026-09-14 after three Langston review rounds and a CC-C leg.**
+**Kyle-directed · CC-B · r5.**
 
 > ## ⛔⛔ DERIVED-AT STAMP — **READ THIS BEFORE CITING ANY LINE BELOW**
 > **EVERY `path:line`, COUNT AND VERDICT IN THIS DOCUMENT WAS DERIVED AT:**
-> ### `7f645a6f9c677d75523a1fc7dfba0aa30ef10eed` · branch `migration/aws-supabase` · **2026-09-14**
+> ### `7f645a6f9c677d75523a1fc7dfba0aa30ef10eed`
+> **THE SHA IS AUTHORITATIVE; NO DATE IS GIVEN, DELIBERATELY.** ⚠️ *r4 carried a date beside this sha that was one day AHEAD of the commit it names (`2026-09-13T19:57:38Z`) — **a wrong value on the one line the whole recommendation rests on, wrong within hours of being typed.** A sha cannot drift; a date can, and did. The wrong value is deliberately not restated here.*
 > ⭐⭐ **THIS STAMP IS THE DOCUMENT'S WHOLE CLAIM TO BEING CANONICAL, AND IT DECAYS ON THE NEXT COMMIT (Langston's condition, r3).** The map is nominated canonical for ONE reason — *every line resolves at the ref* — and **that is a property of a MOMENT, not of the file.**
 > ⚠️ **THE FAILURE THIS GUARDS IS ALREADY ON THE RECORD IN §5.1 DIFFERENCE #1: a 4× wrong interval, read off a STALE COMMENT sitting thirty lines above the live call.** That comment was true when written. **Without a stamp and a trigger this file becomes the sixth stale pricing document inside a month.**
 >
-> ### ⛔ THE RE-DERIVATION TRIGGER — NAMED, NOT “PERIODICALLY”
-> **RE-DERIVE THIS DOCUMENT WHEN ANY OF THESE FIRE. Each is a git-visible event, so none depends on anybody remembering:**
-> | # | trigger | why it invalidates the map |
-> |---|---|---|
-> | **1** | a commit touches **`price-cache.ts`**, **`kraken-websocket-adapter.ts`**, **`kraken-v2-translator.ts`**, **`market-data/mark-kind.ts`** or **`price-basis.ts`** | the FEED layer — changes what a price IS |
-> | **2** | a commit touches **`signal-orchestrator.ts`**, **`active-execution-engine.ts`**, **`asset_classes/xstock_spot/scanner.ts`** or **`eval-cycle.ts`** | the READ sites — changes which price a job takes |
-> | **3** | an **OHLC interval argument** changes anywhere | ⭐ **difference #1 was exactly this, and it went unnoticed for three months** |
-> | **4** | **`shared/schema.ts`** gains or loses an `exit_*` / `entry_*` provenance column | changes what can be measured about a price after the fact |
-> | **5** | **`B-PRICE-SIDE-BY-JOB` (`3n`) lands any side change** | the judgement in §3 is written against today's sides |
-> ✅ **ON A TRIGGER: re-derive, re-stamp, and record what MOVED. ⛔ A re-stamp with no diff is only valid if the lines were actually re-read — re-stamping on faith is the defect this table exists to prevent.**
-> ➕ **HOME: `B-PRICE-DOC-CONSOLIDATE`, owner CC-B — the trigger is a written rule here, and NOTHING AUTOMATES IT. Stated plainly rather than implied.**
-
-> ## ⭐⭐ THE ONE RULE THIS WHOLE MAP PRODUCES (Langston, 2026-09-13)
-> ### **A PRICE THAT *VALUES* MAY BE A MIDPOINT. A PRICE THAT *ACTS* MUST BE THE SIDE THAT TRANSACTS.**
-> **Portfolio marking is the ONLY job on this map whose answer is already right.**
-
-⛔ **THIS DOCUMENT CONTRADICTS THE SYSTEM MANUAL ON ITS MOST LOAD-BEARING CELL, AND THE MANUAL IS WRONG.**
-`SYSTEM_MANUAL.md:655` says the book mid drives *"NOT the trigger"*; `:668` says *"BOTH the entry levels
-and the exit trigger use the ticker BBO midpoint."* **The all-time `exit_price_producer` census is
-`kraken_ws_book_mid` **73** · `kraken_ws_ticker_mid` **1** — **of only 111 STAMPED rows out of 755, because the stamp column only began writing 2026-08-26**.** The exit trigger has **never once** read a ticker mark on crypto.
-**Correcting the manual is not optional and not deferrable** (Langston).
+> ### ⛔ THE RE-DERIVATION TRIGGER — **DERIVED MECHANICALLY FROM THIS DOCUMENT'S OWN CITATIONS**
+> ⛔⛔ **r4's TRIGGER LIST WAS HAND-NAMED AND SCORED FALSE-CLEAN. LANGSTON ENUMERATED IT: 21 distinct `.ts` files cited, **11 outside every trigger row**, and **SIX of those carry LIVE VERDICTS** — including `equity-spot-archiver.ts`, which holds §C-ii's ENTIRE xStock exit verdict AND §5.2's deterministic `½·S` argument.** ⭐ **Trigger 1 named `mark-kind.ts` and MISSED the archiver's own `_kind === 'mid' ? (_bid+_ask)/2 : _last` one frame up.**
+> ⭐⭐ **THAT IS `enumerator-blind-spot` FROM `MISTAKE_PATTERNS` — A HAND-NAMED LIST IS BLIND TO A MEMBER CLASS AND REPORTS CLEAN. SO THE LIST IS NO LONGER HAND-NAMED.**
+>
+> ✅ **THE RULE, WHICH IS THE FIX: THE TRIGGER SET *IS* THE SET OF FILES THIS DOCUMENT CITES.** Adding a citation adds a trigger, automatically and by construction. **Re-derive it by extracting every `*.ts` reference from this file and subtracting only the §2 STILL-UNMAPPED set** (those carry no verdict, so they gate nothing).
+>
+> **DERIVED 16 2026-09-13 — A COMMIT TOUCHING ANY OF THESE INVALIDATES THE STAMP:**
+> | file (verdict-bearing citations only) |
+> |---|
+> | `active-execution-engine.ts` |
+> | `active-portfolio-manager.ts` |
+> | `book-state.ts` |
+> | `depth-source.ts` |
+> | `equity-spot-archiver.ts` |
+> | `eval-cycle.ts` |
+> | `kraken-v2-translator.ts` |
+> | `kraken-websocket-adapter.ts` |
+> | `mark-kind.ts` |
+> | `price-basis.ts` |
+> | `price-cache.ts` |
+> | `rtb-refresh-service.ts` |
+> | `scanner.ts` |
+> | `schema.ts` |
+> | `signal-orchestrator.ts` |
+> | `vts-runner.ts` |
+>
+> ➕ **PLUS THREE NON-FILE TRIGGERS:** an **OHLC interval argument** changing anywhere *(difference #1 was exactly that and went unnoticed three months)* · **`shared/schema.ts`** gaining or losing an `exit_*`/`entry_*` provenance column · **`B-PRICE-SIDE-BY-JOB` (`3n`) landing any side change.**
+> ✅ **ON A TRIGGER: re-derive, re-stamp, and record what MOVED. ⛔ A re-stamp with no diff is valid ONLY if the lines were actually re-read — re-stamping on faith is the defect this table exists to prevent.**
+> ➕ **HOME: `B-PRICE-DOC-CONSOLIDATE`, owner CC-B — the rule is written here and NOTHING AUTOMATES IT.**
 
 ---
 
@@ -250,7 +259,7 @@ SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **
 | **4** | **VTS vs active split.** `PRICING_DATA_ARCHITECTURE` has one; this map had none. | ✅ **THE ARCHITECTURE DOC.** | Positive control: `vts-runner.ts` has **ZERO** `getSmoothedPrice` references; `signal-orchestrator.ts` has **2**. **Crypto VTS reads the raw cache price; crypto active reads the smoothed one.** |
 | **5** | **Line numbers.** | ✅ **THIS MAP.** | Theirs have drifted — their `:2404` is blank, `:2417` is a comment, `:2442` parses volume. Mine resolve exactly at the ref. |
 | **6** | **The xStock EXIT trigger.** `XSTOCK_PRICING_PLAN` §P1/§P2 and `..._DECISION_PATH` §4 both cover it; **this map had no row for it at all.** | ⛔ **THE xSTOCK DOCUMENTS. A WHOLE LANE WAS MISSING.** | Now §C-ii above, re-derived at `server/services/passive-archive/equity-spot-archiver.ts:208-209` → `mark-kind.ts:33`. |
-| **7** | **xStock has no order-book ladder.** `..._DECISION_PATH` §Q1 states it; this map's feed table listed *“order book”* and *“depth snapshot”* **without saying they are crypto-only**. | ✅ **THE DECISION PATH.** | The `book` channel subscription lives only in `kraken-websocket-adapter.ts`; the xStock modules carry a `book-state` **predicate over the ticker's top-of-book**, not a ladder. ⇒ ⛔ **this map's “the right kind is the ASK” for xStock must mean the TICKER'S ask — there is no other.** |
+| **7** | **xStock has no order-book LADDER** — and this map's feed table listed *“order book”* / *“depth snapshot”* without saying they are crypto-only. | ⚠️ **BOTH DOCUMENTS RIGHT ON THE LADDER; MY *CONSEQUENCE* WAS WRONG AND LANGSTON STRUCK IT (r4 confirm).** | The `book` channel lives only in `kraken-websocket-adapter.ts`; the xStock `book-state` modules are a predicate over the ticker's top-of-book. ⛔⛔ **BUT r4 CONCLUDED “the ASK must mean the ticker's ask — there is no other” AS THOUGH THAT WERE A LIMITATION. IT IS NOT.** ✅ **VERIFIED AT THE OBJECT: the xStock feed carries `bid`, `ask` AND BOTH TOUCH SIZES, and the scanner ALREADY READS ALL FOUR** — `scanner.ts:657` `row.ask`; `:686-691` `ask * ask_qty` / `bid * bid_qty` gated on `bid_qty > 0 AND ask_qty > 0`; threaded as `bidAskSpreadPct` (`eval-cycle.ts:312`) and `askDepthUsd`/`bidDepthUsd` (`:325-326`) **into the very function whose `:956` marketability check is handed the 15-minute bar close instead.** ⭐⭐ **THE ASK IS ONE FRAME UP, IN THE CALLER — NOT BEHIND A PURCHASE. So this row is the SAME CLASS as every other: a side-and-source change, no feed decision.** ⛔ **THE REAL LIMIT, STATED AS ITSELF: what xStock lacks is DEPTH BEYOND THE TOUCH — so marketability there can be tested AT THE TOUCH but never FOR OUR FULL QUANTITY.** |
 | **8** | **The 4-second archive sample — 43.6 % of marks never stored** (`XSTOCK_PRICING_PLAN` §P5). Absent from this map. | ⚠️ **`RULED ON REPORTED FACT` — I DID NOT RE-DERIVE IT** (Langston r3: mark it or re-derive it; do not import it bare). | ⛔ **NOT re-measured. It is imported from §P5 and carries §P5's population, not one of mine.** ✅ **What it is used for here is QUALITATIVE and survives either way: it is the reason a stored row is a LAGGED WITNESS rather than the decision.** ⛔ **Do not cite 43.6 % as a measured figure of this document.** |
 
 ## 5.2 ⭐⭐ THE 59 % — **CORROBORATED ON THE HANDOFF COHORT. I HAD IT BACKWARDS TWICE.**
