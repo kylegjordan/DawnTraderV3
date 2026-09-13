@@ -8929,6 +8929,51 @@ Window **10.0 min each**. ⭐ **`XDG/USD` was REFUSED by Kraken on both channels
 `MISTAKE: wrong-object [B-BOOK-SUBSCRIPTION-REACH] — extrapolated a 40-symbol liquid-skewed case from a hand-picked MID-tier rate and reported it as feasibility; the right population is 3.3× larger.`
 
 
+
+---
+
+#### ⛔⛔ AMENDMENT 2 — **THIS ENTRY'S CENTRAL "WHY" CLAIM IS WRONG. THERE IS A SECOND EXTERNAL SUBSCRIBER AND IT IS THE RTB QUEUE** (CC-C, 2026-09-13)
+
+**WHAT THE ENTRY SAYS ABOVE, AND IT IS THE LOAD-BEARING SENTENCE:** *"NOTHING IN THE PIPELINE EVER ASKS FOR A BOOK. The only caller of `subscribeToSymbols` outside the adapter is `routes.ts:10134`, a health-check route … whose set is `paperPositions + liveTrades` — OPEN POSITIONS ONLY. ⇒ we begin collecting the good data at or after the moment we open a trade."*
+
+⛔ **THAT IS FALSE AT THE OBJECT.** `server/core/rtb/ready_to_buy_service.ts:2424-2426`, at RTB **QUEUE** time:
+```ts
+const { krakenWebSocketAdapter } = await import('../../exchanges/kraken/kraken-websocket-adapter.js');
+if (!krakenWebSocketAdapter.getSubscribedSymbols().includes(normalizedSymbol)) {
+  krakenWebSocketAdapter.i8cSubscribeNewTrade(normalizedSymbol, 'rtb_queued');
+```
+and `i8cSubscribeNewTrade` is `kraken-websocket-adapter.ts:3717` → `this.subscribeToSymbols([symbol])`. Its own failure log names the consequence exactly: *"queue-time book subscribe failed … (open will depth-gate on `no_book` until subscribed)"*.
+⇒ ⭐ **THE SYSTEM ALREADY SUBSCRIBES A BOOK FOR EVERY CRYPTO SYMBOL THAT REACHES THE READY-TO-BUY QUEUE — not at open, but at QUEUE time, deliberately, so the depth gate has a warm book at promotion.**
+
+★ **AND THE LEDGER ALREADY SAID SO. `#506` (2026-07-15, Langston's condition on the B8.5 mini-cycle-3 approve) states it in its first sentence** — *"subscribes the Kraken WS book+ticker at RTB QUEUE time … the fix for the DEPTH_GATE `no_book` ordering inversion"* — and goes on to warn that the candidate set *"churns far wider than open positions (up to the full scanned crypto universe)"*. **I did not search the ledger for this entry's central claim before filing it.** That is §9.5(b-ii), skipped.
+
+⛔⛔ **HOW I GOT IT WRONG, BECAUSE THE MECHANISM IS THE REUSABLE PART: I ENUMERATED BY ONE IDENTIFIER.** I grepped `subscribeToSymbols`, found fifteen hits, and classified every one inside `kraken-websocket-adapter.ts` as "INTERNAL — repair and resubscribe machinery". **`:3717` is inside the adapter and is reached from outside it, through a differently-named public method.** ⇒ **an entry-point census keyed on the CALLEE's name cannot see a caller that goes through a wrapper.** ★ Same family as `#560`'s own lesson, which is in this file: *"one identifier spelling is a sample, not a census."* ⚠️ **`#506`'s path is also stale — it says `server/services/ready_to_buy_service.ts`; the file now lives at `server/core/rtb/`** — so a path-anchored search for it would also have missed.
+
+### ⇒ WHAT THIS CHANGES, AND IT IS MOST OF THE SCOPE
+
+- ⛔ **THE 3-SYMBOL FIGURE IS NOT EVIDENCE THAT "NOTHING ASKS". It is evidence that ALMOST NOTHING REACHES THE RTB QUEUE.** Those are different problems with different fixes, and only one of them is a subscription change. **The measured 3 is now a symptom, not a cause.**
+- ⛔ **THE 40 / 200 / 406 FRAMING MAY BE THE WRONG QUESTION ENTIRELY.** The existing design — subscribe on entry to the queue, which is a small, churning, already-filtered set — is *exactly* the shape Kyle asked for (*"once it survives the filters, we subscribe"*). **It is already built.** ⇒ **`3n.m` must first ask why the queue is thin, not how to subscribe hundreds of symbols.**
+- ✅ **AND THE VOLUME MEASUREMENT (amendment 1) STILL STANDS AND IS STILL DECISIVE** — it is what rules out the 406-wide version that this correction now also shows we do not need.
+
+### ⭐ THE LIVE READING THAT MAKES THIS URGENT — measured 2026-09-13, whole-day `error.log` (00:00:00Z → 15:14:43Z)
+
+| | |
+|---|---|
+| opens today (`closed_trades.opened_at` ≥ today + `active_open_positions`) | **0** |
+| positions currently open | **3 — CRWD/USD, MDB/USD, GEV/USD, ALL xStock**, opened 09-10/09-11 |
+| `DEPTH_GATE_BLOCK` events today | **9** |
+| distinct symbols in them | **1 — UAI/USD, crypto** |
+| reason, all nine | **`stale_book`, ages 5,029 / 5,175 / 5,401 / 5,691 / 5,791 / 7,003 / 8,707 / 10,136 / 11,039 ms against a 5,000 ms limit** |
+
+⇒ **ZERO `no_book`.** The book WAS subscribed and present for the one crypto symbol that reached the final gate — which is amendment 2's claim confirmed on a second instrument — **and it was rejected every time for being 5-11 seconds stale.**
+⚠️ **AND UAI/USD IS NOT A QUIET NAME: my own out-of-band probe measured it at 8,600 book frames in 10 minutes ≈ 860/min, one every ~70 ms.** ⇒ **a book that Kraken is updating fourteen times a second was read by us as 5-11 seconds old, nine times.** That is not market quiet; it points at our own book maintenance or the age computation.
+⛔ **STATED AS A LEAD, NOT A VERDICT (rule 24): n = 9, one symbol, one day. I have NOT established the mechanism** — `getBookForFill`'s `ageMs` basis, the `#507` CRC/desync history, and `#506`'s unbounded-subscription churn are all live candidates and I have ruled none in or out.
+
+**DISPOSITION (§9.4): FOLD INTO `3n.m`, which is re-scoped by this amendment anyway.** Its first question is no longer *"how many books can we afford"* but **"why does the queue-time subscribe yield 3 symbols, and why was the one book that mattered 5-11 seconds stale?"** Related: `#506` (subscription lifecycle), `#507` (book integrity), `#570` (the crypto drought).
+
+`MISTAKE: wrong-object [B-BOOK-SUBSCRIPTION-REACH] — I enumerated book subscribers by the CALLEE's name, so a caller reaching it through a differently-named wrapper read as "internal machinery". The entry's central "nothing asks for a book" claim was false, and the ledger (#506) already carried the correction.`
+
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
