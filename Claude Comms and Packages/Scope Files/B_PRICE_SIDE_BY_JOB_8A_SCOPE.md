@@ -1,7 +1,7 @@
 # `B-PRICE-SIDE-BY-JOB` ROW `8a` — MOVE THE EXIT TRIGGER OFF THE MIDPOINT
 
 **Batch:** `B-PRICE-SIDE-BY-JOB` (`3n`) · **Row:** `8a` · **Owner:** CC-C · **change-class: architecture**
-**r2, 2026-09-14 — all five Step-1 blockers accepted, every one re-derived at the object before accepting.**
+**r3, 2026-09-14 — all five Step-1 blockers accepted, every one re-derived at the object before accepting.**
 **KYLE-AUTHORISED: *"Make the change — move the trigger to the bid."***
 
 > ⛔ **THE DECISION IS NOT RE-LITIGATED AND LANGSTON DID NOT ASK FOR IT TO BE.** *"A stop that holds only when the midpoint agrees is not a stop."* **Every change below is to the INSTRUMENT.**
@@ -54,15 +54,32 @@ Ships only after P1's window, and **only if P1's measured refusal rate clears th
 
 **Source: the D3 ladder `selectTouchPrice` — valid fresh book top → valid ticker sides → REFUSE.** Not the raw book bid: the trading socket carries a book for **ONE** symbol (`venueTimestampPresence.book.distinctSymbols = 1`, and the adapter's `- Subscribed Symbols: 1` — two independent instruments), so gating the live trigger on it would **stop exits for everything else**, a fail-closed on the risk-control path.
 
-⛔⛔ **THE EXIT PATH GETS ITS OWN CEILING, AND THE RULE IS A CLAMP, NOT A NUMBER I LIKE:**
-> **the ladder's `maxAgeMs` on the exit path MUST BE ≤ the mark-staleness ceiling already governing that path.**
+⛔⛔ **r2's CLAMP IS WITHDRAWN — IT HAD NO REFERENT ON THE LANE IT MUST BIND (Langston BLOCKER-1, r3).** It read *"≤ the mark-staleness ceiling already governing that path."* **THERE IS NO SUCH CEILING ON THE CRYPTO EXIT PATH.** Re-derived at the object: `mark-staleness.ts` lives at `server/asset_classes/xstock_spot/`, the engine reaches it only inside `aee:1356` `if (_posClass === 'xstock_spot')`, and `:1354` says it outright — *"The crypto venue chain below is untouched (additive, class-keyed)."* **Row `8a` is the crypto lane by its own P2-OBJ-3.**
+⇒ ⚠️ **AND THE TWO NUMBERS I JUSTIFIED IT WITH WERE A THIRD AND FOURTH OBJECT: `active_fill_max_age_ms` is `xstock_fill_safety`, the xStock ENTRY-FILL gate (`active-dispatch.ts:180-186`) — my own plan row `3b.f-c` says so. So the "4× inversion" compared an xStock ENTRY constant against a crypto/VTS LEVEL-SHADOW constant, and the clamp bound to neither.** ★ **Where the clamp DOES resolve (xStock) the band is `floor_ms 15000 → cap_ms 300000`, which admits 60,000 comfortably — vacuous at the cap end on the only lane that can evaluate it.**
+⛔ **THIRD INSTANCE OF §0'S OWN CLASS, INSIDE THE FIX MEANT TO CLOSE IT.**
 
-★ **WHY A CLAMP: any looser value lets the ladder RESURRECT A QUOTE THE STALENESS GATE ALREADY REFUSED** — two freshness gates stacking, with the newer and looser one winning. **`LEVEL_BASIS_OBSERVATION_MAX_AGE_MS = 60_000` against `active_fill_max_age_ms = 15_000` is exactly that inversion, 4×.**
-⇒ **P1 records the ladder age distribution on the exit population so the ceiling is CHOSEN FROM DATA, not carried over from an observation shadow.** ⛔ **`LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` IS NOT REUSED HERE.**
+✅ **r3 — AN ABSOLUTE, CLASS-KEYED, DB-GOVERNED CONSTANT WITH ITS OWN NAME. No relational form, because no live referent exists on this lane.**
 
-## 5. ⛔ ON REFUSAL: SKIP, NEVER FABRICATE *(unchanged)*
+| | |
+|---|---|
+| **name** | `exit_ladder_max_age_ms`, module `crypto_spot` — **its own constant, not a reuse** |
+| **value** | ⛔ **PRE-REGISTERED FROM P1's MEASURED EXIT-POPULATION AGE DISTRIBUTION, before P2 is written.** Not carried over, not chosen by preference. |
+| **⛔ NOT** | `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000 — an OBSERVATION-shadow constant) · `active_fill_max_age_ms` (xStock ENTRY) · the xStock risk-derived exit ceiling (different lane, different derivation) |
+| **fail direction** | config missing or unresolvable ⇒ **REFUSE the trigger**, never widen. Consistent with every other gate in this batch. |
 
-No fallback to the midpoint — that would reinstate the defect precisely where it matters most. The refusal carries its reason and its own counter.
+## 5. ⛔⛔ ON REFUSAL: SKIP, NEVER FABRICATE — AND P2 INTRODUCES THE **FIRST** AGE-BASED REFUSAL ON CRYPTO
+
+No fallback to the midpoint: that would reinstate the defect precisely where it matters most. The refusal carries its reason and its own counter.
+
+⛔⛔ **r2's *"already true today when the mark is stale"* IS FALSE ON CRYPTO — WITHDRAWN (Langston rider, r3), and re-derived at the object.** The crypto chain's ONLY skip is `_recordPriceSkip` on a **REST FAILURE** (`aee:1765-1770`, `classifyEngineRestFailure`) — **AVAILABILITY, not age.** Its one stale-feed check is *"logged, never gated"* (`:1745-1752`, observe-only).
+⇒ ★★ **SO P2 DOES NOT CHANGE THE RATE OF AN EXISTING REFUSAL. IT CREATES THE FIRST AGE-BASED ONE ON THIS LANE.** ⇒ **the P2 gate is a NEW-EXPOSURE decision, not a delta**, and §7 is written that way. ✅ **This strengthens the P1/P2 split rather than weakening it: there is no baseline to compare against because the predicate has never existed here.**
+
+### 🟨 AND THE FINDING THIS EXPOSED, WHICH IS BIGGER THAN THE ROW
+⛔ **THE CRYPTO EXIT PATH HAS NO MARK-AGE GATE AT ALL TODAY.** xStock has one, and `aee:1351-1353` records WHY in Langston's own words — *"STALENESS IS BLOCKING (Langston condition 1): a tick older than the class-explicit max-age yields NO price — **never evaluate a stop/target against a stale mark**."*
+⇒ ⚠️ **CRYPTO IS DOING EXACTLY WHAT THAT CONDITION FORBIDS ON xSTOCK: a crypto stop/target can today be evaluated against an arbitrarily old mark, and nothing refuses it.** ★ **That is a standing risk gap, independent of this row** — `8a` happens to close it for the TRIGGER as a side effect, but it is not this row's claim and the gap is wider than the trigger.
+**DISPOSITION (§9.4 — 3, its own placed item):**
+> `HOME: B-CRYPTO-MARK-AGE-GATE, owner CC-C, placed in PHASE_19_PLAN at row 3n.o, after 3n.n`
+
 ⚠️ **RESIDUAL NAMED: a refused check is an UNGUARDED position for that cycle.** Already true today when the mark is stale; this row may change the RATE, which is why P1 measures it first.
 
 ---
