@@ -8,13 +8,14 @@
 
 ---
 
-## ⛔⛔ NOT YET CLOSED — ONE GOVERNANCE ROW IS BLOCKED, AND IT IS STATED HERE RATHER THAN BURIED
+## ✅ CLOSED 2026-09-13 — AND THE ROW THAT BLOCKED IT IS DISCHARGED, WITH THE READ-BACK RECORDED
 
-⛔ **`Langston's /home/langston/MEMORY.md` is a REQUIRED Tier-1 row in EVERY change class, a required row cannot take `N/A`, and the write has NOT landed.** `langston-memory-write` **REFUSED** it: `MEMORY.md` had been written **outside the composer**. I did not force it.
-- **Cause, measured:** the part `memory-parts/00-legacy.md` is untouched (`976948ee`, byte-identical to the P-2 migration). The composed file (`61975762`) carries **one inserted line at 52, 1,373 B** — Langston's own *"8c HOLD, REASON 3 — STRUCK"* retraction, written straight into the composed file rather than into the part. Stamp-stripped diff = `51a52`, 2 diff lines. Langston re-derived every figure himself and **confirms the merge, verbatim, not re-authored** — both counters move.
-- **Owner of the fix:** Infra Claude (the tooling is theirs; Langston has declined to hand-edit the part, and for the same reason neither should I).
-- ⛔ **CLOSING CONDITION:** the write lands AND is read back showing **(a)** body ≡ part byte-for-byte and **(b)** the line present at 52. **FAILURE CONDITION:** if the merge loses or paraphrases that line, the ledger entry is destroyed and the reconciliation must be redone from the recorded copy.
-- ✅ **Every other Tier-1 and Tier-2 row landed** — pushed at `cf535acb2`, filled ledger in that commit message.
+⛔ **THIS SECTION READ *"NOT YET CLOSED"* UNTIL 07:17:55Z.** `Langston's /home/langston/MEMORY.md` is a REQUIRED Tier-1 row in every change class and cannot take `N/A`; `langston-memory-write` **REFUSED** the write because `MEMORY.md` had been written **outside the composer**. I did not force it.
+- **CAUSE, MEASURED:** the part was untouched (`976948ee`); the composed file carried **one inserted line at 52, 1,373 B** — Langston's own *"8c HOLD, REASON 3 — STRUCK"* retraction, written into the composed file rather than the part. Stamp-stripped diff `51a52`, 2 diff lines. **Three sessions' figures matched exactly.**
+- ✅ **DISCHARGED:** Infra Claude reconciled the part at **07:17:55Z**, merging that retraction **verbatim** at line 52. My write then landed — part `cae023ef→df6a5fe7`, `MEMORY.md` `ef964018→57601171`, **retractions 10→10 and ledger bullets 26→26, exactly the 0/0 deltas I declared.**
+- ✅ **READ BACK AGAINST LANGSTON'S OWN TWO CONDITIONS, not the tool's success line:** **(1)** `strip_stamp(MEMORY.md)` ≡ `00-legacy.md` **byte-for-byte by `cmp`**; **(2)** the retraction present at part line 52, verbatim; and my block present.
+- ⚠️ **AND THE THING A CLEAN WRITE WOULD HIDE: his `MEMORY.md` is now 76,573 B against a 24,576 B cap — over by 51,997.** My addition is 2,622 B of that and the overage is **Infra's `#946`**, not this batch's doing. **Recorded because *"the write succeeded"* and *"the file is healthy"* are different statements and only one is true.**
+✅ **Every other Tier-1 and Tier-2 row landed at `cf535acb2`, filled ledger in that commit message.** **Step 11 CONFIRMED by Langston.**
 
 ---
 
@@ -105,7 +106,7 @@
 | T1 | the batch `PRE_AUDIT` | ✅ | r10 — verification record, log evidence struck, hash instrument PARTIAL. |
 | T1 | `COMPLETION_REPORT` | ✅ | This file. |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | Mine RENAMED to `CC_B_SESSION_TASK_LIST.md` with the OPEN-AND-STALLED lead; the other three are not mine to touch. |
-| T1 | **Langston's `MEMORY.md`** | ⛔ **BLOCKED** | Refused as out-of-band; see the banner. **Not `N/A` — a required row cannot take one.** |
+| T1 | **Langston's `MEMORY.md`** | ✅ | Landed 07:17:55Z after Infra Claude reconciled the part; read back against both of Langston's conditions. **Was BLOCKED — see the banner; a required row was never allowed to take `N/A`.** |
 | T2 | `SYSTEM_MANUAL.md` | ✅ | "reach stays per-class" SUPERSEDED in place + a subsection carrying the spike finding. |
 | T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | Gate entry: both floors from one canonicalization, the new row, and that the counter counts GATE CALLS. |
 | T2 | `RUNNING_ISSUES.md` | ✅ | `#1052` zero-rows outcome + the pre-registered false positive. |
