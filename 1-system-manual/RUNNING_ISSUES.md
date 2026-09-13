@@ -8880,6 +8880,55 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 > `HOME: B-BOOK-SUBSCRIPTION-REACH, owner CC-C, placed in PHASE_19_PLAN at row 3n.m, AFTER 3n.l and BEFORE row 8a.`
 ⚠️ **THE ORDERING IS PROPOSED, NOT SETTLED — Langston has ruled this batch's ordering twice and it is a real question: if the book becomes available for the survivor pool, `3n.l`'s ticker-sides work matters LESS for those 40 and still matters for the wider scan. I am not re-sorting his sequence unilaterally.**
 
+
+---
+
+#### ⭐⭐ AMENDMENT 1 — THE VOLUME MEASUREMENT IS IN, AND IT MOVES THE SCOPE (CC-C, 2026-09-13)
+
+✅ **THIS DISCHARGES LANGSTON'S PRECONDITION VERBATIM** — *"subscribe 3 symbols to `book`, count frames/min against the `ohlc`+`ticker` rate on the SAME shard. Precondition of the scope, not a finding inside it."* **Run OUT-OF-BAND deliberately** (own websocket, public Kraken REST + WS only; no app code, no app database, no app connection pool, no deploy, no restart) because the morning's pool-exhaustion incident makes an in-process probe the wrong instrument for a capacity question.
+
+⛔ **INSTRUMENT COMMITTED SO THIS IS SECOND-PARTY CHECKABLE, NOT REPORTED FACT: `scripts/analysis/book-volume-probe.mjs`.** It reproduces the archiver universe from the same public inputs `universe-loader.ts` uses, samples it, and prints its own population before any rate.
+
+**POPULATION, AND THE CROSS-CHECK ON IT.** Reproduced universe **416 symbols**; the LIVE archiver carries **201 + 205 = 406** (`[B74][crypto-spot][shard*]`, 14:35Z). **2.4% apart** — the runtime DB floor override and the 03:00 UTC cron reload both differ from a 14:30Z reproduction. ⇒ **a cross-check, NOT an exact reproduction, and it is stated as one.**
+
+⛔⛔ **TWO ARMS, BECAUSE ONE RATE CANNOT SERVE BOTH CASES — and this is the correction that matters most.** The universe is steeply right-skewed: BTC/USD is **$64.9M** 24h notional against a **$10,013** floor. ⇒ a stratified random sample estimates the UNIVERSE MEAN correctly and **structurally under-covers the liquid tail**, which is exactly where the FX5 survivor pool lives.
+
+| arm | population | n | ticker frames/sym/min | **book frames/sym/min** | book bytes/sym/min |
+|---|---|---|---|---|---|
+| **A — stratified random** (8 per third by notional) | the 406-symbol archiver case | 24 of 24 acked | 1.0 | **290.9** (min 4.5 · med 251.5 · max 832.4) | 61,818 |
+| **B — top-40 by notional** | the 40-symbol survivor-pool case | 23 of 24 acked | 8.4 | **1,321.5** (min 74.1 · med 951.7 · max 5,467.2) | 265,710 |
+
+Window **10.0 min each**. ⭐ **`XDG/USD` was REFUSED by Kraken on both channels and is EXCLUDED from arm B's means rather than counted as a quiet zero** — the probe gates on the subscribe ACK precisely so an absent leg cannot sit in the denominator looking like silence.
+
+★★ **THE STRUCTURAL FINDING, AND IT IS THE ONE THAT CONSTRAINS THE DESIGN: BOOK CHATTER IS NOT PROPORTIONAL TO TRADING ACTIVITY.** The LEAST-traded third still runs **197.1** book frames/sym/min against **0.3** ticker frames — a **584×** ratio. A depth-10 book update fires on any change at any of twenty price levels, including small orders placed and cancelled, and quiet names have plenty of those. ⇒ **you cannot buy meaningful relief by subscribing only the quiet names, and a "just the cheap ones" variant of this scope is not available.**
+
+**WHAT THE TWO CASES COST — ABSOLUTE, NEVER A MULTIPLIER (see the delta below for why):**
+
+| case | rate used | book frames/min added | on ONE connection | raw book bytes/day |
+|---|---|---|---|---|
+| **40** — FX5 survivor pool | arm B, 1,321.5 | **52,860** | 881/s | **15.3 GB** |
+| **200** | bracketed, 290.9 … 1,321.5 | 58,180 … 264,300 | — | 17.8 … 76.5 GB |
+| **406** — whole archiver universe | arm A, 290.9 | **118,105** | **984/s** (2 shards) | **36.1 GB** |
+
+**CURRENT LOAD ON THE SAME INSTRUMENT, so the comparison is frames-to-frames:** the archiver's 406 symbols generate **~406 ticker frames/min**. ✅ **POSITIVE CONTROL, second instrument, same window:** its own `rows_persisted_60s` reads 190 + 184 = **374 rows/min** — within 8% of 406, so the probe's ticker rate is not an artefact of my sampling. ⇒ **adding `book` to the archiver is ~290× the frames those two connections carry today.**
+
+⛔⛔ **THE BINDING CONSTRAINT IS NOT THE ONE THIS ENTRY ORIGINALLY REASONED ABOUT, AND THAT IS A CORRECTION TO MY OWN TEXT ABOVE.** The entry weighed Kraken's per-connection symbol cap, the Cloudflare ~150-attempts/10-min limit and the REST budget. **None of those binds.** At the 406 case ONE connection carries **~984 frames/second**, each needing a JSON parse and a book-state update **in the main trading process** — the same event loop that runs the FX5 scanner, the MCE and the SQE. ⇒ ★ **THE CONSTRAINT IS EVENT-LOOP TIME IN OUR OWN PROCESS, AND OPENING MORE CONNECTIONS DOES NOT RELIEVE IT, BECAUSE THEY ALL LAND IN THE SAME LOOP.** A sharding design answers the wrong question.
+
+⚠️ **FOUR THINGS STILL NOT ESTABLISHED, stated so this is not read as a plan:** (1) **ONE 10-minute window, on a Sunday** — book traffic is a function of market activity and this is a single draw from it; (2) **depth 10 was ASSUMED, not chosen** — a shallower book cuts both frames and bytes and has not been measured, and it is the most obvious lever; (3) the **warm-up** from subscribe to a usable book is still unmeasured; (4) the **unsubscribe/churn** path is still a NEW BUILD (`unsubscribe` occurs 0 times in the archiver against a control of 5 for `subscribe`).
+
+⭐⭐ **AND KYLE'S RECORDING REQUIREMENT RESOLVES WITHOUT ANY OF THIS — it is a SEPARATE decision and it is the cheap one.** His words: *"If the order book is gonna be used in how we enter and exit, then it needs to be recorded. So we could look back on it… to make sure that we're grabbing the correct number and not grabbing something incorrectly such as, say, the midpoint."* **At 36.1 GB/day of raw book traffic, archiving every frame fills the whole 200 GB plan in FOUR DAYS.** ⇒ ✅ **the requirement is satisfied by storing THE BOOK AS IT STOOD AT THE MOMENT OF DECISION — one small record per decision, a few thousand a day, kilobytes — which audits precisely what he asked (did we take the transactable side, or quietly average it) and is UNCOUPLED FROM THE FRAME RATE ENTIRELY.** **DISPOSITION: folded into `3n.m`'s scope as its own objective, ahead of any subscription change** — it is worth doing even if the subscription reach is cut back, and it does not depend on which case wins.
+
+⛔ **§9.2 DELTA — THREE NUMBERS I GAVE KYLE EARLIER TODAY ARE SUPERSEDED, AND THE ONE THAT MATTERS WENT THE WRONG WAY.**
+> **PREVIOUSLY STATED:** 40 → 6.4× current / **4.6 GB/day** · 200 → 31.8× / 23.0 GB/day · 406 → 64.6× / 46.6 GB/day.
+> **NOW:** 40 → **15.3 GB/day** · 200 → 17.8-76.5 GB/day · 406 → **36.1 GB/day**.
+> **REASON — three distinct errors:**
+> **(a) POPULATION, and it is the `wrong-object` pattern again.** The first probe was **six HAND-PICKED symbols in two tiers — not a sample of anything.** I then extrapolated the 40-symbol survivor-pool case from the **MID** tier, when the survivor pool is the **LIQUID** tier. Measured against the right population it is **15.3 GB/day, not 4.6 — a 3.3× UNDER-statement on the exact case Kyle asked about first.**
+> **(b) DENOMINATOR.** The "× current" multipliers divided by *"~2,500 msg/min"*, read once. **Re-read on the same instrument now: 730-1,305/min over six consecutive minutes.** A denominator that moves by 2× makes every multiplier built on it unreadable ⇒ **this amendment reports ABSOLUTE frames and bytes, and the `~2,441-2,564 msg/min` figure in the body above should be read as one draw, not a constant.**
+> **(c)** The 406 figure came **DOWN** (46.6 → 36.1) because the universe mean (290.9) sits below the mid-tier rate (397.7) I had extrapolated from.
+
+`MISTAKE: wrong-object [B-BOOK-SUBSCRIPTION-REACH] — extrapolated a 40-symbol liquid-skewed case from a hand-picked MID-tier rate and reported it as feasibility; the right population is 3.3× larger.`
+
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**

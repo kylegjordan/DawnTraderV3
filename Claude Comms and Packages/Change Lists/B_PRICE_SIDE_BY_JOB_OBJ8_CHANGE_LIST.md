@@ -418,3 +418,43 @@ Each mutation was applied with an assertion that it actually matched (**an unfir
 
 ### ⇒ WHAT F2, F4 AND F5 OBLIGE
 All three are **labelling and publication defects in the instrument**, not in the result. They fold into `8c` — **no new batch** — and they are the first work after the write-up, because each one is a number a later reader would otherwise take at face value.
+
+---
+
+## ✅ F2 / F4 / F5 — SHIPPED 2026-09-13 (CC-C). Three publication defects, one cause.
+
+**All three were the same thing wearing three faces: A NUMBER PUBLISHED WITHOUT THE POPULATION IT WAS COUNTED OVER.** Each was found by asking, of a shadow counter already deployed, *"what would a reader have to already know for this figure to mean what it looks like it means?"* — and in all three cases the answer was something the payload did not carry. **No behaviour changes; nothing consumes any of these. The `8c` switch-on stays HELD.**
+
+### F5 — `venueTimestampPresence` · `kraken-websocket-adapter.ts`
+Each channel cell now carries **`distinctSymbols`** and **`framesWithNoSymbol`** alongside `present`/`absent`. The `ticker` cell is counted over hundreds of subscribed symbols; the `book` cell over **three** (`#1060`, whole-day distinct count) — two orders of magnitude apart, printed under one key, with nothing previously saying so.
+★ **IT PAYS FOR ITSELF TWICE: `book.distinctSymbols` is the first LIVE reading of how many symbols actually carry an order book.** That figure previously needed a whole-day log grep — which is precisely why the 0.15% book-basis rate was first read as a property of *the book* rather than of *our subscription set*.
+⛔ **The deeper population limit is now written INTO the docblock rather than left here:** this counter lives in the websocket adapter and counts **WS frames only**, so a REST-sourced level build never reaches it. `ticker present 36,472 / absent 0` is about frames on the socket, **not** about level builds — and `sideAgeAtLevelBuild.venueStampAbsent` at **12,792/12,810 (99.86%)** is the one that is. Both are correct; they are about different populations.
+
+### F2 — `tickerVsBookAgreement` · `level-basis.ts` + `signal-orchestrator.ts`
+`bothPresent` is now SPLIT into **`bothPresentTickerRest` / `bothPresentTickerWs` / `bothPresentTickerUnknown`**, and the three sum to `bothPresent` by construction so a reclassification cannot hide in the arithmetic.
+⛔⛔ **THE MECHANISM IS WORSE THAN THE PRE-REGISTERED SELECTION CAVEAT, AND IT IS NEW.** The existing docblock blamed the POPULATION (*both feeds coexist only on the hot set*). True, but not binding. **The binding problem is that the two legs can be THE SAME OBJECT.** `kraken-websocket-adapter.ts:1151-1153` emits a tick with `producer: 'kraken_ws_book_mid'` carrying `bid: bestBid, ask: bestAsk` — **the top of the very book `getBookForFill` returns as this instrument's `book` leg** — and that flows via `live-pricing-adapter.ts:1171` → `updateFromWebSocket` into the cache's `bid`/`ask`, which is the `ticker` leg. The v2 ticker channel (`:852`) writes the same two fields for the same symbol.
+⇒ **on a book-carrying symbol the cached sides are whichever channel ticked last, and the payload could not say which.** A `bothPresent` sample was therefore either (a) a genuine cross-channel comparison or (b) the book against a slightly older copy of itself — which MUST agree, and whose agreement is a statement about cache latency.
+⛔ **THE CACHE CANNOT TODAY TELL THEM APART:** `CachedPrice` carries `lastSource` (`kraken_ws` | `kraken_rest` | `kraken_equities_ws`) and **no fine-grained producer**, so (a) and (b) both read `kraken_ws`.
+✅ **WHAT IS FIXED:** a `kraken_rest` leg provably never carries the book channel's top ⇒ that subset **is** interpretable and is the only cell a feeds-agree claim may rest on. ⛔ **WHAT IS NOT, AND IS STATED RATHER THAN IMPLIED:** a per-side producer on the cache entry would make the `Ws` subset interpretable too. That is a write to `price-cache.ts`, a **🔒 LOCKED MODULE**, and it is **FOLDED INTO `3n.l` (`#1056`)** — the batch already opening that file. Not scoped here.
+
+### F4 — `sideAgeAtLevelBuild` · `level-basis.ts`
+Adds **`byAgeMode.venueStamped` / `byAgeMode.venueUnstamped`**, each with its own **`n`**, histogram, p50, p95 and max. **The pooled `buckets`/`p50Bucket` are KEPT, not replaced** — the pre-registered `8c` criterion was written against them, and silently changing the quantity a criterion reads is the failure this batch keeps finding.
+The distribution is bimodal **by construction**: pushed sides (venue-stamped, sub-second) and polled sides (unstamped, at the bucket cadence of 2 s / 15 s / 30 s / 60 s). ⇒ a single p50 lands wherever the **writer mix** sits — **and that mix is exactly what `3n.l` is about to change**, so a pooled quantile would move for a reason unrelated to feed health and would read as one.
+★ **SPLIT ON THE VENUE STAMP, NOT ON `lastSource`, AND THE DIFFERENCE IS LOAD-BEARING:** `lastSource` dates the **mark's** writer, so WS-written sides sitting under a later REST mark are misfiled as REST — a bias that does **not** shrink with n (the same trap that made `byAcceptedSource` uncitable at Step 7). The venue stamp is written by the same call that set the sides, so it cannot drift from them.
+
+### TESTS — `server/tests/unit/b-price-side-obj8c-instrument-populations.test.ts`, 10 tests
+⭐ **THE MUTATIONS THAT PROVE THE SUITE CAN FAIL — MEASURED, NOT PREDICTED**, each applied with an assertion that the substitution actually matched (an unfired mutation reports green and looks exactly like success), run, then reverted:
+
+| # | mutation | result |
+|---|---|---|
+| 1 | F5: never add the symbol to the distinct set | **3 of 10 fail** |
+| 2 | F5: count every frame as having no symbol | 1 of 10 |
+| 3 | F2: file a WS-written ticker leg as the interpretable REST subset | 2 of 10 |
+| 4 | F2: fold an unstated source into the clean REST cell | 2 of 10 |
+| 5 | F4: send every sample to the venue-stamped histogram | 2 of 10 |
+| 6 | F4: give both modes the POOLED n instead of their own | 2 of 10 |
+| 7 | F4: let a refused sample still reach a mode histogram | 1 of 10 |
+
+⛔⛔ **MUTATION 5 SURVIVED THE FIRST RUN, AND IT IS THE MOST USEFUL LINE IN THIS SECTION.** My F4 test asserted each mode's `n` and `maxMs` — both written on a **different branch** from the bucket write — plus a *relationship* between the two p50 labels. Under "send every sample to the stamped histogram" the unstamped histogram is all zeros, and `quantileBucket` over all-zero buckets still returns a **non-null, different-looking** label. **The assertion could not come out differently if the code were wrong.** Fixed by asserting the histogram CONTENTS: a published histogram whose buckets do not sum to its own stated `n` is publishing a quantile over samples it does not hold. ★ **This is `CONDUCT.md` §6b step 2 catching a live instance in my own new test — a bucket label computed from nothing is the most convincing way to be wrong.**
+
+**tsc: 377 errors with AND without these changes — baseline established by stashing the three files and re-running; `signal-orchestrator.ts:1829` is pre-existing.** Zero new errors in the three touched files.
