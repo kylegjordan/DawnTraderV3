@@ -9068,6 +9068,40 @@ const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
 
 ---
 
+### #1063 OPEN 2026-09-13 (CC-B traced it; symptom logged by CC-C 2026-08-01 on `#648`; Langston re-derived the drift and ruled the routing) — ⭐⭐ **THE CODE DECLARES ENUM VALUES THE DATABASE CANNOT STORE — THREE ENUMS — AND THE LIVE ONE SELECTIVELY DISCARDS OUR BETTER-EVIDENCED TRADES.**
+
+**ESTABLISHED, positive-controlled.** `shared/schema.ts:111` declares `pattern_type` with SIX values incl. `ABCD`; `migrations/0001_familiar_pete_wisdom.sql:1`, `drizzle/migrations/2026-04-22-initial-schema.sql:707` and live `pg_enum` all carry FIVE. ✅ **The absence is real, not an instrument gap: `ALTER TYPE … ADD VALUE` DOES appear in the corpus (`strategy_type` 'orb', `pair_regime`, `walter_memory_type`) and returns nothing for `pattern_type`.**
+
+⛔⛔ **SEVERITY IS SELECTIVE, WHICH IS WORSE THAN A BLOCK (Langston's correction to CC-B).** `active-execution-engine.ts:4257` writes `sigMeta.patternType || null`. So `volatility_edge` signals arriving WITHOUT pattern confirmation open normally — **11 rows in `closed_trades`, all `pattern_type` NULL** — while the **pattern-CONFIRMED** subset from `STRATEGY_PATTERN_MAP` (`signal-orchestrator.ts:2952-2960`, `volatility_edge` the SOLE ABCD consumer) can never open: both live sinks reject it (`closed_trades` `:4368`, `active_open_positions` `:4479`). ⇒ **we discard the confirmed half and keep the unconfirmed half, and it reads as NORMAL in every count.** That is why it survived six weeks after being logged.
+
+✅ **SCOPE REQUIREMENT (ii) — ALREADY RUN. THE DRIFT IS THREE-WIDE, NOT ONE** (every `pgEnum` in `schema.ts` vs `pg_enum`, 2026-09-13):
+| enum | declared-in-code, MISSING from DB |
+|---|---|
+| **`market_regime`** | **ALL SIX**: `TREND_FRIENDLY_STABLE` `HIGH_VOLATILITY_UNSTABLE` `RANGE_BOUND_STABLE` `IMPULSE_EXPANSION` `STRUCTURAL_TRANSITION` `HIGH_VOL_IMPULSE` |
+| `pattern_type` | `ABCD` |
+| `tuning_status` | `reverted` |
+
+⚠️ **AND IT DRIFTS THE OTHER WAY TOO — that direction NEVER THROWS, so it is invisible:** `execution_block_reason` (+`MAX_TOTAL_EXPOSURE`), `trading_mode` (+`passive`,`learning`), `strategy_type` (+8), `tuning_status` (+`pending`) hold DB values the code does not declare.
+
+⛔⛔ **`market_regime` IS NOT "LATENT" — CC-B's ROW-COUNT REASONING WAS WRONG AND LANGSTON CALLED IT (his item 3, `#661` leg 3: silence with ZERO OPPORTUNITY reads identical to silence with no code).** Zero rows in `adaptive_learning` / `telemetry_history` / `tuning_event` is a fact about the TABLES. **The WRITER CENSUS says otherwise:**
+- `server/services/telemetry-repository.ts:38-50` declares **`MarketRegimeDB` with TWELVE values** — the six old AND the six new — under the comment *"Database-compatible regime types (stored in PostgreSQL enum)"* and *"Old canonical names also pass through (still in DB enum for backward compat)."* ⭐ **A type whose ENTIRE PURPOSE is to name what the database can store is WRONG about what the database can store, and says so confidently in a comment.**
+- `toDBRegime()` (`:63-65`) maps `'TRANSITION'` → `'STRUCTURAL_TRANSITION'` — **one of the six the DB lacks.** The mapping layer targets an unstorable value.
+- **Live callers exist:** `core/risk/dynamic-sizing-engine.ts`, `services/adaptive-learning-repository.ts`, `services/telemetry-aggregator.ts` (plus `tests/unit/regime_mapping_integrity.test.ts`).
+⇒ **`market_regime` is UNREACHED-OR-GATED, not structurally absent** — it can go hot WITHOUT a deploy, which is a different severity and a different sequencing argument. **`tuning_event` has ZERO server-file references — that one is genuinely writer-less.**
+
+**⛔ THE FIX IS A SCOPE DECISION, NOT A REFLEX MIGRATION (Langston).** `ABCD` is a **harmonic price structure, not a candlestick** ⇒ rule-24 outcome **(1) add the value** vs **(3) it should never have entered the type union** must be RULED in the scope. If it stays: `ALTER TYPE … ADD VALUE` **cannot run in-transaction** — precedent `drizzle/migrations/2026-05-24a` (B79.0n).
+
+**SCOPE REQUIREMENTS, binding (Langston):** **(i)** enumerate the FULL output set of `normalizePatternToCanonical` against the DB enum — **fix the CLASS, not the instance** — NOT DONE, carried as scope work. **(ii)** the `pgEnum` census — ✅ DONE, above. **(iii)** ⚠️ **NAME THE OBSERVATION WINDOWS THIS DEPLOY SPLITS — fixing the enum ADMITS A CLASS OF OPENS THAT CANNOT OPEN TODAY**, so the deploy is a population boundary for every open window counting opens: **`B-GEOMETRY-REACH-BASELINE`** (CC-B, window opened 2026-09-13T05:33:17.640Z), **`B-XSTOCK-FEE-CONTRACT` P8 / Arm B** (CC-B, 3-week window from 09-11), **F-G-2's re-open anchor** (CC-C). **Each owner rules split / void / unaffected BEFORE the scope is final** — Langston is stateless across the window and will not reconstruct it at Step 4.
+
+⚠️ **CITE THE WARN AT `active-execution-engine.ts:3495`.** `#648` says `:2513-2516` (a `closePosition` docblock at head) and `ACTIVE_PATH_FLOW.md:249` says `:2228` — **THREE numbers for ONE line across governed docs, the `fix-follows-pointer` shape.**
+
+✅ **NOT FILED, deliberately:** the *removed-from-RTB-not-restored* line is **already dispositioned** at `ACTIVE_PATH_FLOW.md:249` — *"deliberately not restored … fail-loud and working-as-designed … Recorded as edge semantics, NOT filed as a defect"* (rule-24 outcome (2)). **What is NEW is only that `ABCD` makes it DETERMINISTIC rather than transient, converting "lose one signal" into an unbounded re-promote loop** — that is an **amendment to `#1860`'s churn record**, sequenced AFTER the enum fix (which removes the driver), not a new issue.
+⛔ **`#648` item 4 — whether the RTB removal OCCURS AT ALL (Kyle observed EVAA steady at rank 1 while the log claimed removal every 30s) — BLOCKS THE SEVERITY CLAIM, NOT THE MIGRATION. It stays CC-C's.**
+
+⚠️ **MAGNITUDES DELIBERATELY NOT QUOTED AS OPPORTUNITIES.** Line counts on a 30s retry are not distinct lost trades; `#648`'s own counts were withdrawn for a related reason.
+
+> `HOME: B-PATTERN-ENUM-DRIFT, owner CC-B, PHASE_19_PLAN row 3m-ENUM, ahead of 3n B-PRICE-SIDE-BY-JOB` — **slot RATIFIED by Langston** (the live half is bleeding now; `3n` is a design decision with no live loss). Root cause **annotates `#648`** (§9.5(b-ii)) — no duplicate minted. **OPEN (homed, slot ratified).**
+
 ### #1052 OPEN 2026-09-12 (CC-B, Kyle-directed; problem and plan from Coltrane, arithmetic re-derived by CC-B) — ⭐⭐ **THE REACHABILITY CEILING IS A HOLDING-HORIZON STATEMENT, AND OURS DISAGREES WITH ITSELF THREE WAYS**
 
 **BATCH: `B-GEOMETRY-REACH-BASELINE`, change-class `architecture`, scope at `Claude Comms and Packages/Scope Files/B_GEOMETRY_REACH_BASELINE_SCOPE.md`. Plan row `2.4g-2`.** ⛔ **ONE batch: the reward-to-risk work and the reachability work are the same dial and are not separable. The reachability leg absorbs what had been scoped as a separate CC-C batch.**
