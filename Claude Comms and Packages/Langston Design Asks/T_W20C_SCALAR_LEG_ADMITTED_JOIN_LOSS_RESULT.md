@@ -82,6 +82,42 @@ since `active-execution-engine` moves from "supplies provenance yet unmatched" (
 extra mechanism) to "supplies none, unmatched" (the same mechanism as the other two). **Being lucky in
 the direction of the error is not a defence of the method.**
 
+## 4b. ✅ THE BINDING RECOUNT — DISCHARGED, AND 566 IS A DISTINCT COUNT
+
+Langston, binding: *"566 does not appear in any published artifact until the recount lands, or it
+appears as the DISTINCT-derived figure with that provenance stated."* Measured:
+
+| | |
+|---|---|
+| join OUTPUT rows | **566** |
+| distinct `archive_id` matched | **566** |
+| distinct `(archive_id, captured_at)` keys matched | **566** |
+
+All three agree, so the matched side was never inflated. And on the whole provenance slice for this
+pin: **2,129,591 rows, 2,129,591 distinct `(archive_id, captured_at)` keys, duplicate excess 0** — the
+sibling really is 1:1, tree-wide for this population, not merely on the admitted subset.
+
+✅ **⇒ the 51.748 % loss stands exactly as stated, and 566 may now be published as a distinct count.**
+⭐ **Internal consistency worth stating: 2,129,591 provenance rows equals the join total across all
+four stages (2,014,902 + 90,226 + 23,897 + 566), so every provenance row in the slice joins to an
+archive row. The loss is entirely one-directional — archive rows without a sibling, never the reverse.**
+
+## 4c. ⛔ THE LEG'S CLAIM IS NARROWED TO THE `vts` LANE, IN THE RECORD, NOW
+
+Langston's ruling: the fork is **not** either/or, it is **both, sequenced** — narrowing alone leaves a
+≥99 % parity gate reading as a pipeline claim while measuring the learning lane; supplying provenance
+alone leaves today's artifacts overstated.
+
+> ⛔⛔ **ANY PARITY FIGURE THIS LEG PRODUCES ON THE `admitted` STRATUM DESCRIBES THE `vts` LANE ONLY.
+> IT SAYS NOTHING ABOUT PAPER-MODE SIGNAL QUALITY.** The stratum label travels **with the figure**, in
+> the sentence that states it — **never in a footnote.**
+
+The sequenced second half is placed: `HOME: B-PAPER-LANE-PROVENANCE, owner CC-B, PHASE_19_PLAN row
+2.4-FEE-c-ii, immediately after 2.4-FEE-c`.
+⛔ **Its rider, binding and easy to lose: the three sites are NECESSARY, NOT SUFFICIENT —
+`provenanceCaptureEnabled(assetClass)` gates the write too, so supplying the object without the class
+flag reproduces the SAME ZERO on a NEW mechanism, and that failure is SILENT.**
+
 ## 5. DISPOSITION
 
 Bug-taxonomy **outcome (2) — working as designed, and UNADDRESSED.** The archiver's own comment
