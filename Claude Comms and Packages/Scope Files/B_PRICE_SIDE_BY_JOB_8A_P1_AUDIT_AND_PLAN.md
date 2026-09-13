@@ -83,6 +83,24 @@ SIM **S27**: the funnel is a module singleton, not persisted, not evicted — *"
 `LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION = 0.50`, against a measured crypto median spread of **0.199%**.
 ⇒ `implausible_spread` will be ~0 on the crypto exit lane **by construction, not by health** — so that zero carries no information and must not be reported as though it did. Whether the exit lane wants a tighter bound is **P2's question**, not P1's.
 
+
+### A-10 — ⛔⛔ THE POPULATION IS TINY AT ANY INSTANT AND THE COUNTER CANNOT HOLD THE WINDOW IT NEEDS. **MEASURED, NOT ASSUMED.**
+| measurement (live, 2026-09-14, bounded queries) | value |
+|---|---|
+| open positions **right now**, by class | **crypto 1**, xStock 3 |
+| crypto closes per day, 2026-09-04 → 09-13 | **1, 2, 8, 8, 9, 3, 5, 7, 2** — ~4.5/day |
+| **distinct crypto symbols** closing per day | **1, 2, 7, 8, 7, 3, 4, 7, 2** — close-to-one per close |
+| pm2 `dawntrader` **current uptime** | **5.3 hours** · all-time `restart_time` = **614** |
+
+⇒ **TWO CONSEQUENCES, AND THEY PULL AGAINST EACH OTHER:**
+1. ⛔ **A WALK COUNT IS NOT A POPULATION.** With ~1 crypto position open, a per-tick ladder walk accrues thousands of rows **from one symbol's feed**. A refusal rate over that n describes **that symbol**, not "the exit population" — the `#1052` shape, where a large n hides a degenerate support. ⇒ **the n-floor must be stated in POSITION-LIFETIMES and DISTINCT SYMBOLS, with the walk count reported beside it as the explicitly non-independent denominator.**
+2. ⛔⛔ **AND AT ~4.5 CLOSES/DAY A 30-LIFETIME FLOOR IS ~7 DAYS — WHICH AN IN-MEMORY COUNTER CANNOT HOLD.** A-8 says a restart VOIDS the window; the live process has been up **5.3 hours** against **614** restarts, and three sessions deploy to this box. **A process-lifetime counter and a seven-day floor are not compatible, and shipping both would produce a window that silently never completes.**
+
+✅ **RECOMMENDATION — BOTH, because they measure two different things, and the precedent for the second is IN THIS LOOP ALREADY:**
+- **the FUNNEL** keeps the high-frequency **walk-level** rate within one lifetime, with its structural-equality control. Read as *"the rate while the process was up"*, never as the window.
+- **a DURABLE PER-POSITION STAMP** carries the window: accumulate `{walks, accepted, refused, byReason, maxAcceptedAgeMs}` per position and write it under `metadata.ladderShadow`, **throttled**, exactly as `_recordBookStateEvent` already mutates `position.metadata` every tick and throttles only the row write, and as `fg2Shadow` already stamps this same loop. ⇒ **the window then lives in `closed_trades.metadata`, one row per position-lifetime — which is the unit the n-floor is stated in anyway, and it survives every deploy.**
+⚠️ **THIS IS A REAL ADDITION TO P1's SURFACE (a metadata write) AND I AM FLAGGING IT AS THE ONE THING IN THIS PLAN I MOST WANT ATTACKED.** The alternative — accept a process-lifetime window and a much lower floor — is cheaper and measures a narrower thing, and it is a defensible call I am not making unilaterally.
+
 ---
 
 ## 2. THE IMPLEMENTATION PLAN — every item names the finding it falls out of
@@ -97,6 +115,7 @@ SIM **S27**: the funnel is a module singleton, not persisted, not evicted — *"
 | **P1-6** | Counters on the existing `EVAL_EXIT` line (`aee:2070`): `ladderAccepted`, `ladderRefused`, `ladderViaBook`. | **A-1** |
 | **P1-7** | ⛔ **THE MUTATION PROOF (P1-OBJ-1): a mutation that makes the ladder ACT must go RED** — substitute the ladder quote's bid for `currentPrice` at the `evaluateTECExit` call and assert a test fails. **The test asserts the substitution actually MATCHED before reading the result** — a non-applying substitution reports as passing, measured on the `8c` instrument tests. | the row's **OBJ-1** |
 | **P1-8** | Carry A-6's sentence into scope **§4** and A-9's into **§7**, before the window opens. | **A-6, A-9** |
+| **P1-9** | ⛔ **THE DURABLE PER-POSITION STAMP** — accumulate the per-position ladder summary and write it under `metadata.ladderShadow`, throttled, on the `_recordBookStateEvent` precedent; it lands in `closed_trades.metadata` at the close. **This is what carries the window across restarts.** | **A-10** |
 
 ### ⛔ NOT IN P1 — STATED, SO THE BOUNDARY IS NOT INFERRED
 No `triggerPrice`. **No consumer of the ladder result — all 24 `currentPrice` consumers byte-unchanged.** No `fg2Shadow` removal (P2's, per scope §8). No xStock. **No `exit_ladder_max_age_ms` yet** — A-5b is why P1 does not need it.
@@ -107,8 +126,8 @@ No `triggerPrice`. **No consumer of the ladder result — all 24 `currentPrice` 
 
 | | |
 |---|---|
-| **window** | ONE uninterrupted pm2 lifetime, anchored on **`pm_uptime`**. A restart **VOIDS** it. **(A-8)** |
-| **n-floor** | ⛔ **SET IN THE STEP-3 COMMIT, BEFORE DEPLOY** — from the live crypto open-position count × the exit-cycle cadence, **with both numbers shown**. Below the floor the window is **UNDERPOWERED, not negative.** |
+| **window** | ⛔ **TWO WINDOWS, DELIBERATELY, BECAUSE THEY MEASURE DIFFERENT THINGS (A-10).** **(i) the FUNNEL rate** — ONE uninterrupted pm2 lifetime, anchored on **`pm_uptime`**, never on `deployed_at`; a restart **VOIDS** it **(A-8)**. **(ii) THE WINDOW PROPER** — the durable per-position stamp in `closed_trades.metadata`, which **survives restarts** and is the one the n-floor and the P2 gate read. ⚠️ **Live uptime when this plan was written: 5.3 hours, against 614 all-time restarts.** |
+| **n-floor** | ⛔ **STATED IN POSITION-LIFETIMES AND DISTINCT SYMBOLS, NEVER IN WALKS (A-10).** **PRE-REGISTERED: 30 closed crypto position-lifetimes across ≥ 15 distinct symbols.** Derived from the measured rate — **~4.5 crypto closes/day over 2026-09-04 → 09-13, close-to-one distinct symbol per close** ⇒ ~7 days. The walk count is reported **beside** it and labelled **NON-INDEPENDENT**. Below the floor the window is **UNDERPOWERED, not negative.** |
 | **positive control** | the funnel's own structural equality — every walk increments the `book` and `ladder` cells **exactly once**, so their `attempted` are equal **by construction**. Unequal ⇒ the recorder is broken and the window is void. |
 | **what P1 reports** | the ladder's **accept / refuse** split on the exit population; `byReason`; `byAcceptedSource`; the **ticker-side** age histogram **and** the **accepted-quote** age histogram. |
 | ⛔ **what P1 does NOT report** | any comparison against `fg2Shadow` **(A-7)**, and any reading of `implausible_spread ≈ 0` as health **(A-9)**. |
