@@ -7306,6 +7306,18 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 
 **ALERT ROUTING UNCHANGED — all five stay ACTIVE and UNACKED per `3b.f-c`'s own instruction; owner CC-C.**
 
+### ⭐ #994 AMENDMENT 5 (CC-C, 2026-09-13, from Langston's Step-8 finding 2 on row `8c`; the numbers are his, re-derived at the object, and the design consequence is mine) — ⛔⛔ **THE DISCRIMINATOR MUST USE PRICE-*MOVEMENT* AGE, NOT MARK-*FETCH* AGE — OR IT READS THE SHUT CASE AS THE IMPAIRED CASE ON THE NUMBER ALONE**
+
+**MEASURED, and it refutes MY OWN premise.** I told Kyle and Langston the mark was *“frozen at Friday's close”*. **The instrument does not report that.** `_eqAge = Date.now() - _eqTick.tsMs` (`active-execution-engine.ts:1393`), and the alert body for `GEV/USD` said **mark 75 s old against a 15 s ceiling.** Friday's close is **~126,000 s**.
+**On `xstock_spot_ticker_snap`, last 24 h, both symbols: 13 rows, 1 distinct `last`, 1 distinct `bid`, newest capture 2,005 s old, `is_extended_hours` true.**
+⇒ ★ **THE *VALUE* IS FROZEN; THE *STAMP* IS NOT. Those cannot both describe one quantity.**
+
+⚠️ **THE MECHANISM IS A HYPOTHESIS AND IS NOT BEING ASSERTED** (Langston's own words, and he had not read the adapter): either the adapter re-serves a re-stamped entry, or Kraken's REST returns a frozen `last` under a fresh server time. **Neither is established here. Rule 24: this is a lead, not a verdict.**
+
+⛔⛔ **WHAT IS ESTABLISHED, AND IT IS WHAT BINDS `3b.f-c`: the field an operator would use to separate “venue shut” from “our feed impaired” REPORTED 75 s — the signature of a mildly late feed — ON A PRICE THAT HAD NOT MOVED IN 35 HOURS.** ⇒ **a discriminator built on the fetch stamp cannot tell the two cases apart, because in the shut case the fetch stamp looks HEALTHY.** ★ **This is the same shape as `lastUpdatedAt` vs `sidesCapturedAtMs` in row `8c`, one layer out: a freshness field that dates OUR ACTION rather than THE MARKET'S.**
+
+✅ **CONSEQUENCE FOR THE BUILD, recorded before the batch opens:** the three-term gate keeps its shape, but **term 2 is the SYMBOL'S OWN PRICE-MOVEMENT age — when the quoted value last CHANGED — not when we last fetched it.** ⚠️ **And the 15 s ceiling is the FLOOR-bound value, tightened BECAUSE these positions sit at their stops** — which is why `GEV`/`CRWD` fire and `MDB` does not. **Confirm off the reason string before building on it; I have not.**
+
 ### #994 AMENDMENT 4 (CC-C, 2026-09-11) — MEASURED: THE ENTRY-SIDE FLAT 15,000 ms RULE RAISED A BREAKAGE ALERT ON AFTER-CLOSE QUIET, ON ONE SYMBOL, WITH THE FEED LIVE (`4f974017`)
 
 **The event.** Alert `4f974017-f480-4518-8139-e627792dcc40` (`xstock-stale-fill-block`, created 2026-09-11T20:16:44.188Z): an active BA/USD fill was refused because the newest ticker snapshot was 23,090 ms old against `activeFillMaxAgeMs` 15,000. The gate is `server/asset_classes/xstock_spot/active-dispatch.ts:181-184`, and the age it reads is `NOW() - MAX(captured_at)` over `xstock_spot_ticker_snap` (`:74-86`), not the live cache.
