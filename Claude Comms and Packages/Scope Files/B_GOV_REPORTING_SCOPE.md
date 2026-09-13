@@ -194,7 +194,9 @@ change-class: non_architecture
 
 ★ **THE SHAPE, and it is this batch's own subject one level up: the enforcement sits where the AUTHOR looks (the diff, the report) and the requirement is about where the READER looks (the message).** `B-TASK-LIST-SLOT`'s checker grades the ledger row INSIDE a completion report at the ref; **it is structurally blind to what was typed into a chat window.** So a session can be fully green on every automated check and still never put the table in front of Kyle.
 
-**WHAT THIS ITEM MUST ANSWER (not decided here — this is a scope item, and the fourth-rule warning of `#998` applies):**
+✅ **CLOSED SAME DAY BY KYLE, 2026-09-13 — NO BATCH WORK, AND HE SAID SO DIRECTLY: *"We don't need another batch for this. This is us just getting off track for things that matter."*** **The fix is the WORDING, landed in `workflow-10-governance` in this same commit: the ledger goes in TWO places — posted in the SESSION WINDOW, and written into the progress or completion report.** ★ **His diagnosis, and it is better than mine: *"report" reads as the batch report**, so a session that writes it there has satisfied the rule as written and still never put it in front of him.* **No new rule, no enforcement mechanism, no population measure ordered.**
+
+*(The questions below are recorded as the analysis that produced the wording fix; they are NOT open work.)*
 1. **Is anything checkable at all?** The chat message is not in the repo. Candidates: a `PostToolUse`-style session-side hook; the completion report carrying the table VERBATIM as posted (checkable) plus Langston ruling at Step 11 that it WAS posted; or accepting that this one is unenforceable and saying so plainly rather than leaving a rule that reads as covered.
 2. **Whatever lands must NOT be another instruction** — `#995` measured three instruction-shaped fixes and all three failed.
 3. **Population:** how many Step-10 reports since 2026-08-28 posted the table? **Not measured yet, and the measurement is part of the item** — Kyle's report is a symptom, not a count.
