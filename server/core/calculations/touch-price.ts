@@ -181,9 +181,16 @@ export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined)
     // the positive-finite check either way — but the two must not read the field differently.
     clockBasis: q.venueObservedAtMs != null ? 'venue' : 'receipt',
     // ⚠️ RIDER 1 (Langston, 2026-09-13): `lastSource` dates the MARK's writer, NOT the SIDES' writer.
-    // `price-cache.ts` `updateFromRest` carries `bid`/`ask`/`sidesCapturedAtMs` forward untouched
-    // while setting `lastSource: 'kraken_rest'` unconditionally ⇒ **WS-pushed sides sitting under a
-    // later REST mark are recorded here as `kraken_rest`.** That is W-3's shape one field over, in
+    // `price-cache.ts` `updateFromRest` sets `lastSource: 'kraken_rest'` unconditionally while the
+    // sides come from `existing?.x ?? …` ⇒ **WS-pushed sides sitting under a later REST mark are
+    // recorded here as `kraken_rest`.**
+    // ⛔ AND THAT `??` HAS TWO ARMS — do NOT read this as "the REST writer never touches sides"
+    // (Langston's rider on my own wording, same review). On the UPDATE arm the previous sides carry
+    // forward untouched. With NO `existing`, `price-cache.ts:710-711` writes `bid = ask = price`
+    // and `sidesCapturedAtMs: null` — the synthetic zero-spread book this batch already names.
+    // That arm refuses at `age_unknown` on the null stamp rather than mislabelling, so the bias
+    // DIRECTION is unchanged; the arm simply is not a carry-forward.
+    // That is W-3's shape one field over, in
     // the very split that exists to make the transport truthful. **The bias UNDERSTATES the pushed
     // transport**, so it is conservative in the same direction as the skew note above — which is
     // why it is a stated limit on how the split may be read, not a blocker on recording it.
