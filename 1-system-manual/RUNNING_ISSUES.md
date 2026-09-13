@@ -7306,6 +7306,18 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 
 **ALERT ROUTING UNCHANGED — all five stay ACTIVE and UNACKED per `3b.f-c`'s own instruction; owner CC-C.**
 
+### ⭐ #994 AMENDMENT 5 (CC-C, 2026-09-13, from Langston's Step-8 finding 2 on row `8c`; the numbers are his, re-derived at the object, and the design consequence is mine) — ⛔⛔ **THE DISCRIMINATOR MUST USE PRICE-*MOVEMENT* AGE, NOT MARK-*FETCH* AGE — OR IT READS THE SHUT CASE AS THE IMPAIRED CASE ON THE NUMBER ALONE**
+
+**MEASURED, and it refutes MY OWN premise.** I told Kyle and Langston the mark was *“frozen at Friday's close”*. **The instrument does not report that.** `_eqAge = Date.now() - _eqTick.tsMs` (`active-execution-engine.ts:1393`), and the alert body for `GEV/USD` said **mark 75 s old against a 15 s ceiling.** Friday's close is **~126,000 s**.
+**On `xstock_spot_ticker_snap`, last 24 h, both symbols: 13 rows, 1 distinct `last`, 1 distinct `bid`, newest capture 2,005 s old, `is_extended_hours` true.**
+⇒ ★ **THE *VALUE* IS FROZEN; THE *STAMP* IS NOT. Those cannot both describe one quantity.**
+
+⚠️ **THE MECHANISM IS A HYPOTHESIS AND IS NOT BEING ASSERTED** (Langston's own words, and he had not read the adapter): either the adapter re-serves a re-stamped entry, or Kraken's REST returns a frozen `last` under a fresh server time. **Neither is established here. Rule 24: this is a lead, not a verdict.**
+
+⛔⛔ **WHAT IS ESTABLISHED, AND IT IS WHAT BINDS `3b.f-c`: the field an operator would use to separate “venue shut” from “our feed impaired” REPORTED 75 s — the signature of a mildly late feed — ON A PRICE THAT HAD NOT MOVED IN 35 HOURS.** ⇒ **a discriminator built on the fetch stamp cannot tell the two cases apart, because in the shut case the fetch stamp looks HEALTHY.** ★ **This is the same shape as `lastUpdatedAt` vs `sidesCapturedAtMs` in row `8c`, one layer out: a freshness field that dates OUR ACTION rather than THE MARKET'S.**
+
+✅ **CONSEQUENCE FOR THE BUILD, recorded before the batch opens:** the three-term gate keeps its shape, but **term 2 is the SYMBOL'S OWN PRICE-MOVEMENT age — when the quoted value last CHANGED — not when we last fetched it.** ⚠️ **And the 15 s ceiling is the FLOOR-bound value, tightened BECAUSE these positions sit at their stops** — which is why `GEV`/`CRWD` fire and `MDB` does not. **Confirm off the reason string before building on it; I have not.**
+
 ### #994 AMENDMENT 4 (CC-C, 2026-09-11) — MEASURED: THE ENTRY-SIDE FLAT 15,000 ms RULE RAISED A BREAKAGE ALERT ON AFTER-CLOSE QUIET, ON ONE SYMBOL, WITH THE FEED LIVE (`4f974017`)
 
 **The event.** Alert `4f974017-f480-4518-8139-e627792dcc40` (`xstock-stale-fill-block`, created 2026-09-11T20:16:44.188Z): an active BA/USD fill was refused because the newest ticker snapshot was 23,090 ms old against `activeFillMaxAgeMs` 15,000. The gate is `server/asset_classes/xstock_spot/active-dispatch.ts:181-184`, and the age it reads is `NOW() - MAX(captured_at)` over `xstock_spot_ticker_snap` (`:74-86`), not the live cache.
@@ -7803,6 +7815,9 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
 MISTAKE: wrong-object [B-LANGSTON-CONTEXT] — quoted the 24,576 B cap at Langston's files for months; the rule scopes itself, in its own text, to the CC session memory files and has never covered him.
 **2026-09-11 (CC-A) — STEP 2 APPROVED WITH CONDITIONS** (Langston, 2026-09-09T19:37Z); all ten applied in the pre-audit r3. **Mechanism ruled: the governance checker ONLY — no Langston Step-11 gate.** The close-time half is built in this batch (a ledger-row check on completion reports); **the slot-time half is split out → HOME: `B-SLOT-PLACEMENT-CHECK`, owner CC-A, placed in `PHASE_19_PLAN.md` §governance at row 4.8, after 4.7 `B-HEARTBEAT-RESCOPE`.**
 **2026-09-11 (CC-A) — STEPS 4-10 DONE, CARD IN OBSERVATION.** Langston APPROVED Step 4 at `9a1ab64fb` (four conditions, applied at `ddadab429`), sent Step 7 back once because every positive live tick ran pre-approval code, and CONFIRMED Step 8 at 16:01Z after the offline discharge on the approved blob. **STILL OPEN on P5:** the next three completion reports first added after `2026-09-11T15:45:41Z` must carry the task-list row at close — terms and Langston's four tightenings in `B_TASK_LIST_SLOT_PROGRESS_REPORT.md` §3. Stall case stated: n at zero past a fortnight ⇒ back to Langston to re-rule the population.
+**2026-09-13 (CC-A, Kyle-raised) — TWO FINDINGS ON THIS BATCH'S OWN RULE, both measured at `6e97a8f1c`.**
+**(a) THE POSTED TIER LEDGER IS UNENFORCED AND IS NOT BEING POSTED.** Kyle: he is not seeing the table from any session at Step 10. The skill mandates it whole, every row, in the report he receives; the checker built here grades the ledger ROW inside a completion report and is structurally blind to a chat message. **My own `B-TASK-LIST-SLOT` Step 10 is a named instance — ledger in the commit message and the report, a COUNT to Kyle.** ⇒ **HOME: added as item §6 to `B_GOV_REPORTING_SCOPE.md` (queue 8), which already owns the tier-ledger rule as EDIT 11.** Population not yet measured — measuring it is part of the item.
+**(b) THE `1-system-manual/` FOLDER CONVENTION HAS NOT LANDED CLEANLY.** `CC_A` and `CC_B` are in place. **`CC_C` exists and is current (created 2026-09-11 by this batch's own alert `2ec36624`, updated 09-12) but still sits in `Scope Files/`.** ⛔ **`CC_INFRA` has TWO lists** — a 3,527 B one created 2026-09-11 whose header states no list existed, and the 48,082 B original from 2026-09-04 still in `Scope Files/`; the new one was created because the listing covered only `1-system-manual/`. ⇒ **each owner moves or reconciles their own file; asked on Discord 2026-09-13. Tracked here until both are done.**
 
 
 ### #1008 OPEN 2026-09-05 (CC-A, found at `B-DEPLOY-DRIFT-LINE` Step 2 by an object-round reader) — ⚠️ **RENUMBERED FROM `#1007` THE SAME DAY: collided with CC-INFRA's Langston-cap entry. Measured rather than argued — theirs committed `c09109025` 11:18:56, mine `6a33848dd` 12:35:05, so by the standing rule the NEWER entry renumbers and that is mine. Commit `6a33848dd` and the messages around it say `#1007`; they mean THIS entry.** — ⛔ THE ESCALATED RULES-CHANGED ALARM CAN MISS A `CLAUDE.md` CHANGE, BECAUSE ITS FILE LIST IS SILENTLY CAPPED AT 300
@@ -8818,6 +8833,34 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 > `HOME: B-WAKE-SOURCE-TRUTH, owner Infra Claude, placed in PHASE_19_PLAN.md at 2.4g, after 2.4e (B-PYCACHE-PREFIX-INVOCATION); a documentation + wake-config correction, no runtime code`
 
 ⇔ `#333` (Discord cutover) · `#348` (Telegram decommission) · `B-LANGSTON-CONTEXT` §6.9.
+
+### ⭐⭐ #1060 OPEN 2026-09-13 (KYLE DIRECTIVE, given to CC-C after he challenged the premise of `3n` row `8c`) — ⛔⛔ **THE ORDER BOOK IS THE PREFERRED PRICE SOURCE AND WE SUBSCRIBE IT FOR THREE COINS A DAY. WE ALREADY OWN THE MACHINERY TO DO BETTER AND NEVER POINTED IT AT THIS.**
+
+⛔ **KYLE'S CHALLENGE, AND IT IS THE RIGHT ONE:** *“it doesn't make sense for us to use the fallback nearly one hundred percent of the time. And I can't believe that you started a batch with that being acceptable instead of proposing, well, what's the fix?”* ★ **ACCEPTED WITHOUT QUALIFICATION. Row `8c` measured how well we COPE without the preferred source; it never asked why the preferred source is absent. The 99.83% fallback rate is not a result, it is the size of the hole.**
+
+**MEASURED 2026-09-13:**
+- **THREE distinct symbols have had an order book subscribed all day** — whole-day log, distinct-symbol count, not a sample.
+- The scanner reads **337 pairs/cycle** of a **1,449-pair** universe; the **FX5 survivor pool is 35-41 symbols** at any moment (`[8.8.7][Orchestrator]`, three consecutive cycles).
+- ⇒ on the active lane the book named a basis for **18 of 12,821** level builds — **0.15%**.
+★★ **SO `0.15%` IS NOT A PROPERTY OF THE ORDER BOOK. IT IS A PROPERTY OF OUR SUBSCRIPTION SET.** ⚠️ **My own Step-7 phrasing — *“the book could name a usable price for 0.15% of coins”* — reads as a QUALITY failure and is corrected: it is an AVAILABILITY failure, and ours.**
+
+⛔ **WHY SO FEW: NOTHING IN THE PIPELINE EVER ASKS FOR A BOOK.** The only caller of `subscribeToSymbols` outside the adapter is `routes.ts:10134`, **a health-check route**, whose comment reads *“Subscribe to all symbols (this is what the audit does)”* and whose set is `paperPositions + liveTrades` — **OPEN POSITIONS ONLY.** ⇒ **we begin collecting the good data at or after the moment we open a trade, which is the last instant it can inform choosing that trade.** *(The adapter has 13 further INTERNAL subscribe sites — repair and resubscribe machinery — so this is not a single-path claim; the measured outcome is 3 symbols regardless.)*
+
+✅✅ **AND THE CAPABILITY ALREADY EXISTS, WHICH IS THE REAL FINDING.** `passive-archive/crypto-spot-archiver.ts` runs a **HASH-MOD SHARDED, MULTI-CONNECTION** design — `SHARD_SIZE = 300` (`b74_crypto_ws_shard_size`, per Langston Q3). **LIVE NOW: two connections, 201 + 205 = 406 crypto symbols, both `connected=true`, `last_msg_age_ms` sub-second.** ⛔ **It subscribes `ohlc(1)` + `ticker` and NEVER `book`.** ⇒ **we built the wide-subscription machinery and did not point it at the channel we actually needed.**
+
+**THE FEASIBILITY NUMBERS FOR KYLE'S TWO CASES:** **40 symbols** fits the existing trading connection with no new connection. **200 symbols** is ONE additional connection at a shard size we already run. ⚠️ **Kraken's primary docs state NO per-connection symbol cap on the pages I reached** (`spot-ws-intro`); their support FAQ states 200 and says to open more connections — **second-hand, and our own shards run 201/205 successfully, so the figure is soft.** Documented and relevant: **~150 connection ATTEMPTS per 10 min per IP (Cloudflare)** and a **~60 s inactivity timeout**.
+★ **WEBSOCKET SUBSCRIPTIONS ARE NOT REST CALLS AND DO NOT TOUCH THE REST BUDGET — the cost is MESSAGE VOLUME and event-loop time, not call count.** Current: **~2,441-2,564 msg/min** (`[B78.1][WS_TICK_RATE]`, 4 consecutive minutes).
+
+✅ **STORAGE IS LIKELY A NON-ISSUE FOR THIS FIX: the book is consumed IN MEMORY at decision time and need never be persisted.** Kyle's hot/warm/cold question applies only if we CHOOSE to ARCHIVE it, which is a separate decision. **For scale if we did: one month of ticker snaps for 406 symbols = 2,118 MB / 7.19M rows.**
+⛔ **AND THE DISK PRESSURE BEHIND ALERT `74424570` IS NOT MARKET DATA: the largest object is `signal_eval_archive_2026_08` at 38 GB / 67.1M rows for ONE month** — our own evaluation archive. *(Surfaced here because it was measured in passing; the alert stays CC-B's at row `2.4f`.)*
+
+⭐ **A BONUS THAT IS NOT INCIDENTAL: the trading socket subscribes `ticker` AND `book` on ONE symbol list** (`kraken-websocket-adapter.ts:1499`/`:1514`). ⇒ **pointing it at the survivor pool fixes BOTH — those symbols would receive PUSHED ticker data instead of being REST-polled, which is a separate freshness problem this batch has been working around.**
+
+⚠⚠ **THREE THINGS NOT ESTABLISHED, stated so this is not read as a plan: (1) the MESSAGE VOLUME of 40 or 200 books — books are chattier than tickers and I have NO measured factor; (2) the WARM-UP time from subscribe to a usable book, so “warm by signal time” is an expectation, not a measurement; (3) the UNSUBSCRIBE path as symbols leave the pool — row `7b` already records the unsubscribe machinery as needing a conservation test.**
+
+⇒ **DISPOSITION — §9.4 (3), its own batch.**
+> `HOME: B-BOOK-SUBSCRIPTION-REACH, owner CC-C, placed in PHASE_19_PLAN at row 3n.m, AFTER 3n.l and BEFORE row 8a.`
+⚠️ **THE ORDERING IS PROPOSED, NOT SETTLED — Langston has ruled this batch's ordering twice and it is a real question: if the book becomes available for the survivor pool, `3n.l`'s ticker-sides work matters LESS for those 40 and still matters for the wider scan. I am not re-sorting his sequence unilaterally.**
 
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 

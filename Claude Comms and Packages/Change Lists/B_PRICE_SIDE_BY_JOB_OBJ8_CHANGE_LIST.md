@@ -350,3 +350,71 @@ Each mutation was applied with an assertion that it actually matched (**an unfir
 ⛔ **AND THE HEADLINE MAY NOT BE CITED WITHOUT ITS SPLIT (rider 1's clause, honoured on its first reading): 100% of the recovery is `ticker_bbo:kraken_rest`. ZERO pushed.** ⇒ **this is a POLL-CADENCE recovery**, which is the materially weaker claim — and rider 1 says `lastSource` *understates* the pushed share, so the true pushed count is **≥ 0 and unmeasured**, not *"zero pushed sides exist."*
 
 **NO UI SURFACE, stated with its reason** (`workflow-07` requires the judgement out loud): `levelBasisFunnel` has **no client consumer** — measured, with a control: the grep finds it **0 times** under `client/`, while the same grep finds `gridTags` in `vts-filter-diagnostics-panel.tsx`. It is emitted verbatim on the diagnostics endpoint and rendered by nothing. **A screen check would have verified an absence.**
+
+### ⛔ ROW `8c` P1 — THE WINDOW READING AT `2026-09-13T09:38:06Z`. **I AM NOT DECLARING A VERDICT: D10 GIVES THE CLOSING READ TO LANGSTON.**
+
+★ **D10, verbatim: *"Closing a window never closes its defect. Langston runs the closing reads, not CC-C, which owns the batches those windows judge."*** ⇒ **what follows is the READING and the criterion check. The VERDICT is his.**
+
+**LIFETIME VERIFIED, not inferred:** `pm_uptime` = `2026-09-13T07:08:52.378Z`, **unchanged from the anchor** ⇒ one uninterrupted lifetime, 2 h 29 m elapsed. **One atomic read** — the earlier two-call read was a minute apart and its counters had moved; those numbers are discarded rather than combined.
+
+| lane | gate `book.att == ladder.att` | book accepted | **ladder accepted** | ladder refused |
+|---|---|---|---|---|
+| `active:crypto_spot` | ✅ **12,140 == 12,140** | 18 — **0.15%** | **12,119 — 99.83%** | 21 (`locked_or_synthetic_ticker` 11, `stale_ticker` 10) |
+| `vts:crypto_spot` | ✅ **5,531 == 5,531** | 214 — **3.87%** | **5,525 — 99.89%** | 6 (`locked_or_synthetic_ticker` 6) |
+
+**EVERY PRE-REGISTERED CONTROL PASSES:** n-floor ≥ 2,000/lane ⇒ **12,140 and 5,531**, met ~6× and ~2.8× · `ladder.refused` non-zero on both · `book.refused` non-zero on both · **the arithmetic gate holds on both** · and `byAcceptedSource` **sums EXACTLY to `accepted`, delta 0**, on both lanes.
+
+**THE SPLIT, reported beside the headline as §3b requires — and ⛔ NOT as a measurement of the pushed share (F2):**
+`active`: `ticker_bbo:kraken_rest` **12,101 (99.85%)** · `book_top:kraken_ws_book` 18 (0.15%).
+`vts`: `kraken_rest` **5,310 (96.11%)** · `book_top:kraken_ws_book` 214 (3.87%) · **`ticker_bbo:kraken_ws` 1 (0.02%)**.
+★ **THAT SINGLE `kraken_ws` HIT IS A CONTROL ON THE FIELD ITSELF: it CAN record a pushed source, so REST dominance is not an artefact of a field that never records anything else.** ⛔ **It does NOT rescue the share — F2's bias is structural and unchanged.**
+
+⛔⛔ **THE RATE PREDICTION WAS WRONG BY ~55×, AND THE FAULT IS IN *MY* INPUT, NOT HIS ARITHMETIC.** Langston derived 1.48/min on the active lane from **my** pre-change figure (546 attempts over what I called the `23:30:48Z→05:40Z` lifetime) and correctly concluded ~22.5 h to reach 2,000. **Measured now: 12,140 in 149 min = 81.5/min ⇒ the floor was passed in about 25 minutes.**
+★ **THE DEFECT IS MINE AND IT IS THE ONE §3b NOW GUARDS AGAINST: I INFERRED THAT LIFETIME FROM THE DEPLOY TIME AND NEVER READ `pm_uptime` AT THAT READING.** If the process restarted inside that span, 546 covers an unknown shorter interval and the per-minute figure is meaningless. ⇒ **the 1.48/min figure is WITHDRAWN as unfounded, not refuted** — and this is precisely why the anchor is now written into §3b (`B-REST-SIDES-TO-CACHE` r4, CONDITION 1).
+
+⚠️ **A LEAD, EXPLICITLY NOT A FINDING: a 99.83% ladder acceptance suggests the side-STORING REST poller dominates the write path, not the side-DISCARDING adapter** — which would make `#1056`'s floor much smaller than feared. ⛔ **That is an inference from an OUTCOME back to a WRITER MIX, which is exactly the census `#1056` says is owed. It may not be cited as the census's answer.**
+
+---
+
+## ✅ ROW `8c` P1 — **THE WINDOW RESULT. RECOVERY CONFIRMED, ON THE POWERED CELL ONLY.**
+
+⛔⛔ **THIS RECORD CITES A CAPTURED FILE, NEVER A LIVE RE-READ — Langston's binding, and the reason is not ceremony: the counters are in-memory and cumulative, so after the next restart a live read describes a DIFFERENT POPULATION with a different cold-start mix.** Anything below that cannot be re-derived from the file is not a finding.
+
+| | |
+|---|---|
+| **OBJECT** | `/var/log/dawntrader/8c-levelbasis-funnel-20260913T094558Z.json` |
+| **sha256** | `126000aed2bd0e7d3d517213f65e4353994e5ef7f48b967187f7b0dc8aac0629` · 50,814 B |
+| **LIFETIME** | `2026-09-13T07:08:52.378Z` → `09:45:59.198Z` — **2 h 37 m 06.8 s**, `pm_uptime` `1789283332378` |
+| **ANCHOR HELD, THREE INDEPENDENT READS** | mine before AND after the curl; **his at 09:51:59Z** ⇒ unbroken through *his* read too, not merely around mine |
+| **THE INSTRUMENT IS THE CODE THAT RAN** | `cf535acb2..bb552f09e` = 36 commits, **zero under `server/`, `client/`, `shared/`** (his derivation) |
+| **CONSERVATION, all four rows** | `attempted = accepted + refused`; `byReason` sums to `refused`; `byAcceptedSource` sums to `accepted`. **4/4.** |
+
+### ✅ THE RESULT — and it is the ONE claim the sample powers
+
+| lane | attempted | **ladder accepted** | book accepted |
+|---|---|---|---|
+| `active:crypto_spot` | **12,821** | **99.83%** | 0.15% (18) |
+| `vts:crypto_spot` | **5,806** | **99.89%** | 3.87% |
+
+⇒ ✅ **`RECOVERY CONFIRMED` against the pre-registered ≥50% threshold — registered before any data, met at ~6× and ~2.9× the n-floor.** ★ **And the cold-start bias runs the CONSERVATIVE way** (F1 established that synthetic/locked tickers are likeliest right after a restart, so a cumulative counter that swallows the burst frames **understates** the rate).
+⇒ ★ **THE 97% REFUSAL WAS RUNG 1's COVERAGE, NOT AN ABSENCE OF TRANSACTABLE PRICE.**
+
+### ⛔ THE FLOOR IS PER CELL, AND ONLY ONE CELL CLEARS IT
+**Attempts clear 2,000 (12,821 / 5,806) ⇒ the recovery-rate claim is POWERED.** ⛔ **Refusals (21 / 6) and `rtb_refresh` (100) DO NOT ⇒ nothing about REASONS, RATES or REFRESH carries.** *(`rtb_refresh: 100` is a true lifetime count, not a cap — Langston's own hypothesis, refuted at `level-basis.ts:822-825`, recorded so it is not re-derived.)*
+
+### ⛔ FIVE STATED LIMITS — every one of them narrows what may be said
+
+**F1 — THE TRANSPORT SHARE REMAINS UNCITABLE AND `n` DOES NOT LIFT IT.** 12,782 `ticker_bbo:kraken_rest` is the same biased field at n=12,821: `lastSource` dates the MARK's writer, and **the bias does not shrink with n.** ✅ **What DID change: the book rung has 18 accepts where Step 7 had 0 — an ACCEPT-ARM positive control, citable as CAPABILITY, never as share.**
+
+**F2 — ⛔⛔ `tickerVsBookAgreement` HAS MADE ZERO INDEPENDENT COMPARISONS, AND MY PUBLISHED REASON WAS THE WEAKER ONE.** From the file: `attempted 12,821`, `bothPresent` **18**, `tickerOnly` 12,803. On those 18: **bid exact 18/18, ask exact 18/18, `maxBidBps` 0, `maxAskBps` 0.** **That is not two feeds agreeing.** The only writer of cache `bid`/`ask` is `live-pricing-adapter.ts:1171 updateFromWebSocket(…, bid, ask, …)` — the REST path parses both sides at `:876-877` and **discards them one line before `:897`**. ⇒ **on exactly the symbols carrying a book, the "ticker" sides came from the SAME SOCKET the book is built from.**
+★ **MY COMMENT PRE-REGISTERED AGREEMENT AS INCONCLUSIVE BY *HOT-SET SELECTION*. THE BINDING REASON IS *SHARED PRODUCER*, AND IT IS STRICTLY STRONGER:** under selection, divergence would still be dispositive; under shared producer, divergence could only ever indicate **local book-maintenance fault inside one feed**. ⇒ **NO CROSS-FEED COMPARISON EXISTS YET, and that is a SECOND, UNSCOPED reason `#1056` must exist — further argument against shrinking it.**
+
+**F3 — 13 OF 17 REFUSAL REASONS HAVE NEVER FIRED.** Book rung: 9 reasons, 2 exercised. Ladder rung: 8, 2 exercised. ⛔ **Per `#661` leg 3, NONE of those 13 silences may be read as *"that condition does not occur."*** ★ The sharp form of the 21-row binding.
+
+**F4 — THE ACTIVE LANE'S `p50Bucket` NAMES A BUCKET ALMOST NOTHING IS IN.** Re-derived: `30000-45000` holds **318 of 12,810 = 2.5%**, while the distribution is **BIMODAL — 6,066 at `15000-30000` (47.4%) and 6,152 at `45000-60000` (48.0%), 95.4% between them.** **The "median" sits in the 2.5% trough BETWEEN two cadence populations.**
+★ **THIS IS `#951`'s SAWTOOTH LESSON — *a single median is a mixture average* — RE-INSTANTIATED ONE FIELD OVER: `fix-follows-pointer`, the correction went to the instance pointed at and not to the class.** ⇒ **publish the two modes with their n for this row.** ✅ **PER-ROW, NOT BLANKET: the VTS row IS unimodal (5,441/5,800 = 93.8%) and its p50 is honest.**
+
+**F5 — TWO ADJACENT CELLS, DISJOINT POPULATIONS, AND THE PAYLOAD INVITES THE WRONG READ.** `venueStampAbsent` **12,792 of 12,810 = 99.86%** ⇒ almost every active age is a **LOCAL CAPTURE age, a FLOOR on true age**. Three fields away sits `venueTimestampPresence.ticker present 36,472 / absent 0` — but `getVenueTimestampPresence` is defined in `kraken-websocket-adapter.ts:200`, so **it counts WS frames only and REST-sourced builds never reach it.** ⚠️ **Langston held stamp-loss-in-transit as the hypothesis; the adapter refuted it.** ⇒ **label BOTH cells with their population IN THE PAYLOAD, not in prose around it.**
+
+### ⇒ WHAT F2, F4 AND F5 OBLIGE
+All three are **labelling and publication defects in the instrument**, not in the result. They fold into `8c` — **no new batch** — and they are the first work after the write-up, because each one is a number a later reader would otherwise take at face value.
