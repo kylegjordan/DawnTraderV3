@@ -81,7 +81,13 @@ Langston's test, run by CC-B 2026-09-13, needing no new instrumentation — spli
 | `stop_hit` | 38 | **−1.300** | 1 | **31** |
 
 ⭐⭐ **THE SIGN FLIPS WITH THE DIRECTION OF TRAVEL — THAT IS THE LAG SIGNATURE, NOT A SIDE DEFECT.** Rising into a target leaves the older witness LOW (`pos > 1`); falling into a stop leaves it HIGH (`pos < 0`). **A genuine side error would push the SAME way in both** — a midpoint is above the bid whether price rises or falls. ⇒ **we measured the ARCHIVER'S LAG.**
-⭐⭐ **AND THE MAGNITUDE BOUND IS STRONGER THAN THE SIGN ARGUMENT — IT MAKES A SIDE ERROR ARITHMETICALLY IMPOSSIBLE (CC-C).** **The LARGEST side error that can exist is 0.5** — the whole distance from the mid to the bid. Observed departures are **1.3–1.8 spread-widths beyond the book, 3–4× the largest possible side error.** Of the 24 target rows only **FOUR** sit inside `[0,1]` at all (CHIP 0.421 · ACU 0.667 · DASH 0.888 · RAY 1.000); **twenty are outside**, and the stops are outside on the opposite side at median −1.300.
+⛔⛔ **WITHDRAWN 2026-09-13, SAME DAY, BY ITS OWN AUTHOR: THIS PARAGRAPH CLAIMED THE MAGNITUDE MADE A SIDE ERROR “ARITHMETICALLY IMPOSSIBLE”. THAT IS A DECOMPOSITION ERROR AND THE CLAIM IS DEAD.** CC-C pulled their own bound and flagged it before this document went to Langston as final.
+⭐⭐ **THE DECOMPOSITION, WHICH IS WHAT THE NUMBER ACTUALLY SAYS — CC-C, re-derived independently by Langston, and it REPLACES the “bound” wording that stood here until 2026-09-13:**
+> `pos = [(bid_d + ask_d)/2 − bid_w] / S_w` = **`0.5 + Δ/S_w`**, where `Δ` is the drift between the DECISION book and the WITNESS book.
+⛔⛔ **SO THE SIDE TERM IS *CONTAINED* IN THE NUMBER, AT 0.5, ADDITIVELY — IT IS NOT EXCLUDED BY IT.** A departure of `+1.8` is `0.5 + 1.3`, not “3× an impossible side error”. ✅ **The midpoint sits at exactly 0.5 ONLY IF THE TWO READS ARE CONTEMPORANEOUS — and they are not, which is the whole finding.**
+⇒ ✅ **WHAT THE MAGNITUDE LICENSES: it SIZES THE DRIFT. It does not bound the side defect away.**
+✅ **THE CRYPTO REFUTATION DOES NOT DEPEND ON IT — IT RESTS ON THE SIGN FLIP, WHICH THE DECOMPOSITION STRENGTHENS RATHER THAN WEAKENS.** A PURE side defect puts **BOTH** arms at **exactly 0.5** (`Δ = 0`). Observed: `target_hit` **+1.791**, `stop_hit` **−1.300** — **opposite sides of 0.5, moving WITH the direction of travel.** That is `Δ` changing sign, and `Δ` is drift by definition.
+*(Descriptive, no longer load-bearing: of the 24 target rows FOUR sit inside `[0,1]` — CHIP 0.421 · ACU 0.667 · DASH 0.888 · RAY 1.000 — and twenty are outside.)*
 ⇒ **NEITHER TAIL CAN BE A WRONG-SIDE ERROR. A reader can check this in one line without re-running anything: no side error exceeds half a spread, and these are three to four spreads.**
 
 ✅ **AND IT WAS STRUCTURALLY UNDECIDABLE FROM THE ROW ALL ALONG:** `exit_ticker_bid/ask` is written by the ARCHIVER off a **separate socket** — `depth-source.ts:80-97` calls it *“a lagged witness”*, cadence 5.0–9.0 s; F-G-2 measured this arm at p50 **12.33 s** (n=3, a lead not a rate). `capturedAtMs` exists at `active-execution-engine.ts:2338` but the persist payload (`:2974-2977`, `shared/schema.ts:1854-1855`) writes **only the bid/ask pair** — no capture-time column exists anywhere. ⛔ **`B_EXIT_PROVENANCE_COMPLETION_REPORT.md:101` PRE-REGISTERED THE OBLIGATION I MISSED: *“Any analysis using it must read that column.”***
@@ -196,7 +202,7 @@ SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **
 | **7** | **xStock has no order-book ladder.** `..._DECISION_PATH` §Q1 states it; this map's feed table listed *“order book”* and *“depth snapshot”* **without saying they are crypto-only**. | ✅ **THE DECISION PATH.** | The `book` channel subscription lives only in `kraken-websocket-adapter.ts`; the xStock modules carry a `book-state` **predicate over the ticker's top-of-book**, not a ladder. ⇒ ⛔ **this map's “the right kind is the ASK” for xStock must mean the TICKER'S ask — there is no other.** |
 | **8** | **The 4-second archive sample — 43.6 % of marks never stored** (`XSTOCK_PRICING_PLAN` §P5). Absent from this map. | ✅ **THE PLAN, AND IT IS THE SAME CLASS AS THE DEFECT THAT REFUTED MY OWN 14-of-24.** | Not re-measured here. ⚠️ **Recorded as the reason a stored row is a LAGGED WITNESS, not the decision.** |
 
-## 5.2 ⭐⭐ THE 59 % — **SETTLED THE SAME EVENING, AND NOT BY THE ARGUMENT I EXPECTED**
+## 5.2 ⛔⛔ THE 59 % — **UNSETTLED, AND NOW FOR A PRECISE REASON**
 
 `XSTOCK_PRICING_PLAN` §P2: **“59 % of xStock resting exits booked at a price no bid ever reached.”** I wrote this section as UNSETTLED because I had not run the discriminating split on xStock. ✅ **I then ran it — it needed no new capture and no new column, because the test keys on `close_reason`, which is on every row.**
 
@@ -210,14 +216,23 @@ SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **
 ### ⛔ THE CONFOUND, NAMED BEFORE THE CONCLUSION — AND IT KILLS THE ARGUMENT I WOULD HAVE LED WITH
 **Direction of travel and fill mode are PERFECTLY COLLINEAR in this population: every target is a `maker` exit, every stop is a `taker` exit — 34 of 34, no crossover.** ⇒ ⛔ **the sign-flip argument that carried the crypto refutation CANNOT be run on xStock.** I cannot tell “rising vs falling” apart from “resting vs crossing” here, and I am not going to pretend the flip means on xStock what it meant on crypto.
 
-### ✅ BUT THE MAGNITUDE BOUND SURVIVES THE CONFOUND, AND IT IS THE STRONGER LEG ANYWAY (CC-C's, on crypto)
-**The claim is about RESTING SELLS — so the 7 `maker` `target_hit` rows ARE its population, not a proxy.** Under the side-defect hypothesis the decision price IS the midpoint, so it must sit at **`pos ≈ 0.5`** — **a midpoint cannot exceed `pos = 0.5` BY CONSTRUCTION.**
-⭐⭐ **OBSERVED: median `pos` = +5.500, and ALL SEVEN sit ABOVE THE ASK.** That is **eleven times the largest side error that can arithmetically exist.** ⇒ **whatever those rows are showing, it is not a mid-versus-bid gap.** The only quantity that can put a price 5.5 spread-widths outside a book is **TIME**.
+### ⛔⛔ AND THE LEG I RESTED IT ON IS **DEAD** — SO §5.2 GOES BACK TO **UNSETTLED**
+⚠️ **I published this section resting on “a midpoint cannot exceed `pos = 0.5` by construction”. CC-C had WITHDRAWN that bound hours earlier as a decomposition error and told me before Langston ruled.** ⛔ **On xStock the sign-flip leg is confounded away (above), so the bound was carrying the WHOLE section — and it carries nothing.**
+⭐⭐ **THE DECOMPOSITION, WHICH IS WHAT THE NUMBER ACTUALLY SAYS — CC-C, re-derived independently by Langston, and it REPLACES the “bound” wording that stood here until 2026-09-13:**
+> `pos = [(bid_d + ask_d)/2 − bid_w] / S_w` = **`0.5 + Δ/S_w`**, where `Δ` is the drift between the DECISION book and the WITNESS book.
+⛔⛔ **SO THE SIDE TERM IS *CONTAINED* IN THE NUMBER, AT 0.5, ADDITIVELY — IT IS NOT EXCLUDED BY IT.** A departure of `+1.8` is `0.5 + 1.3`, not “3× an impossible side error”. ✅ **The midpoint sits at exactly 0.5 ONLY IF THE TWO READS ARE CONTEMPORANEOUS — and they are not, which is the whole finding.**
+⇒ ✅ **WHAT THE MAGNITUDE LICENSES: it SIZES THE DRIFT. It does not bound the side defect away.**
+⇒ ⛔ **`+5.500` IS `0.5 + 5.0`. It does not exclude a side defect; it says the DRIFT is ten times the side term.** ✅ **CC-C's own ruling, quoted so it is not softened: *“the magnitude bound cannot carry §5.2 alone — and NOT because n=7 is small. n is not what sinks it. The bound itself is void, so it would not carry at n=700.”***
 
+### ✅ WHAT I CAN STILL SAY, AND IT IS LESS THAN I SAID AN HOUR AGO
+**On xStock the decision price and the witness come from the SAME table** (§below), so a departure **cannot** be two feeds disagreeing — it can only be **one feed read at two times**. ⇒ **`Δ` is a time drift, and drift is what the number is dominated by.**
+⛔⛔ **BUT THAT MAKES THE 59 % UNDECIDABLE ON THESE ROWS, NOT REFUTED.** The side term is **present at 0.5 in every row and is not separable from `Δ` without knowing the witness's capture time** — which **no column on either class records.**
+⚠️ **AND `Δ = 5.0` SPREAD-WIDTHS IN A ~4 s ARCHIVER GAP IS ITSELF LARGE ENOUGH TO QUESTION** — it is consistent with the session-handoff re-quote `XSTOCK_PRICING_PLAN` §P4 measures (27 % of xStock stop-outs in one minute) and with the `hollow` books `B-XSTOCK-FEED-SANITY` ships a guard for. **I am not attributing it; I am recording that the drift is not ordinary.**
+✅ **NET: I neither cite the 59 % nor strike it — the position I started at.** ⭐ **WHAT IS GAINED IS THE REASON: it is not “a test I have not run”, it is that THIS INSTRUMENT CANNOT SEPARATE THE TWO TERMS.**
 ### ⚠️ WHAT I AM AND AM NOT SAYING
-✅ **SAYING: on the rows we can check, the departures are far too large to be a wrong-side error, so the 59 % cannot be cited as evidence of one.**
-⛔ **NOT SAYING the plan's measurement was wrong about what IT measured** — it was written 2026-08-30 against a different and earlier instrument (the ~21 rows carrying `exit_decision_price`, per `book-state.ts:16`). **I did not reproduce its population and I am not claiming to have.**
-⛔ **AND `n=7` IS SMALL. The magnitude argument does not need n — a midpoint is bounded at 0.5 whatever the sample size — but any RATE claim built on these rows would.**
+⛔ **NOT SAYING the plan's measurement was wrong about what IT measured** — it was written 2026-08-30 against a different, earlier instrument (the ~21 rows carrying `exit_decision_price`, per `book-state.ts:16`). **I did not reproduce its population and I am not claiming to have.**
+⛔ **AND `n=7` IS SMALL — but per CC-C, `n` is NOT what sinks this leg; the bound is void at any `n`. Stated so nobody “rescues” §5.2 by collecting more rows on the same instrument.**
+➕ **AND THAT PROMOTES THE `3n` ITEM FROM NICE-TO-HAVE TO PREREQUISITE: persisting the witness capture time is the ONLY thing that makes `Δ` estimable and the side term readable — on EITHER class.**
 
 ### ⭐ CC-C's STRUCTURAL POINT, RE-DERIVED AT THE REF AND IT STANDS
 `depth-source.ts:89-93` + `shared/schema.ts:1846-1848`: **on xStock the witness is NOT independent** — the fill's own depth-walk reads `xstock_spot_ticker_snap`, **the same table** `getTickerWitness` reads. ⇒ **it is a CONSISTENCY record, not corroboration against a second feed**, and *“do NOT treat agreement here as confirmation”*. ⭐ **AND THAT CUTS BOTH WAYS, WHICH IS THE USEFUL HALF: with only ONE channel, an xStock departure CANNOT be ‘two feeds disagreeing’ — it can only be the archiver's own ~4 s write cadence and the price moving inside it.** The lag reading is therefore BETTER supported on xStock than on crypto, not worse.
