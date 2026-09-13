@@ -1,0 +1,97 @@
+# T-W20C-SCALAR-LEG — `admitted` JOIN-LOSS: RESULT (CC-B, 2026-09-13)
+
+Reads against `T_W20C_SCALAR_LEG_ADMITTED_JOIN_LOSS_PREREGISTRATION.md`, committed at **`63dc5927c`**
+before the output file was opened. ⛔ **The pre-registration is NOT edited** — its one factual error is
+corrected here, in §4, rather than tidied away in place.
+
+---
+
+## 1. THE COMPOSITE KEY IS EXONERATED
+
+| | |
+|---|---|
+| admitted rows (pin window) | **1,173** |
+| matched on `(archive_id, captured_at)` | **566** |
+| matched on `archive_id` **regardless of timestamp** | **566** |
+| **id matches but timestamp differs** | **0** |
+| **no provenance row at all** | **607** |
+
+⇒ **Not a key-format or clock-skew defect.** The provenance rows do not exist. One of the two
+hypotheses I set out is dead on the first line, which is what the two-column split was for.
+
+## 2. THE HISTOGRAM CAME BACK **FLAT** — the pre-registered reading is *two-writer mixture*
+
+29 days present. Unmatched share: **min 43.5 % · max 58.1 % · mean 51.7 % · spread 14.6 pp.** No step
+edge, no plateau pair, no ramp, and no all-or-nothing day. Per the pre-registered table, **FLAT ⇒
+two-writer mixture**, and explicitly **not** "systematic key mismatch".
+
+⚠️ **AND A READING I FORMED AFTER SEEING IT, WHICH THE NEXT TEST KILLED — recorded because it was
+wrong.** The per-day matched/unmatched difference sits in −3..+7 around zero, and I read that as
+*one decision producing two archive rows*. **The pairing test refutes it outright:** every
+`(symbol, captured_at)` key holds **exactly one** row — 607 keys with one unmatched row, 566 with one
+matched row, and **no key holding both.** There is no double-write. The near-1:1 ratio is a volume
+coincidence between two lanes, nothing more.
+
+## 3. THE PRE-REGISTERED DISCRIMINATOR — `source` — AND IT IS CLEAN
+
+| `source` | `mode` | matched | n |
+|---|---|---|---|
+| `vts-runner` | **`vts`** | ✅ **t** | **566** |
+| `signal-orchestrator` | **`paper_sim`** | ⛔ f | **541** |
+| `active-execution-engine` | **`paper_sim`** | ⛔ f | **66** |
+
+**The falsifier did not trigger.** Sources do not overlap at all: every matched row is
+`vts-runner`/`vts`, every unmatched row is `paper_sim`. The two-writer hypothesis stands.
+
+⛔⛔ **AND THE SPLIT IS NOT A COVERAGE ACCIDENT — IT IS THE LANE.**
+
+> **The harness's `admitted` stratum is 100 % VTS and 0 % paper trading, by construction.**
+
+`CONDUCT.md` §4 is explicit that **VTS is not the trading pipeline and did not replace paper
+trading** — it is a separate system that deliberately generates many virtual trades for learning.
+⇒ a replay leg reasoning about admitted signals is, on that stratum, reasoning about the **learning
+lane only**, and cannot see a single paper-mode admission.
+
+**The mechanism, at the code** (`archiveSignalEval` writes a provenance sibling only when the CALLER
+supplies one — `signal-eval-archiver.ts:~324`):
+
+| call site | stage | `source` | supplies `provenance:` |
+|---|---|---|---|
+| `xstock_spot/eval-cycle.ts:605/:749/:869/:925/:976/:1102` | `strategy_internal`·`sqe`·`tcl`·**`admitted`** | `vts-runner` | ✅ **YES** (6 of 6) |
+| `vts-runner.ts:2821/:5123/:5214` | **`admitted`**·`sqe` | `vts-runner` | ✅ **YES** (3 of 3) |
+| ⛔ `signal-orchestrator.ts:1209/:1858` | `sqe`·**`admitted`** | `signal-orchestrator` | **no** |
+| ⛔ `active-execution-engine.ts:4223/:4604` | `tcl`·**`admitted`** | `active-execution-engine` | **no** |
+| ⛔ `ready_to_buy_service.ts:1657/:2143` | `rtb`·`sqe` | `ready-to-buy` / `signal-orchestrator` | **no** |
+
+**Every provenance-supplying site is on the VTS lane. Every paper-mode site supplies none.** That is
+why three stages lose 0.004 % and `admitted` loses 51.7 %: the other stages are dominated by the
+VTS-lane writer, and `admitted` is the stage where the paper lane writes in volume.
+
+## 4. ⛔ CORRECTION TO THE PRE-REGISTRATION — `substring-not-thing`, mine
+
+The pre-registration's table records `active-execution-engine.ts` as supplying provenance (2 of 2).
+**That is false.** Its two `provenance:` lines are at `:973` and `:1161` and are **price-producer
+parameters** (`{ producer: PriceProducer; source: string; observedAtMs }`) — nothing to do with
+`archiveSignalEval`. I counted a matching STRING file-wide and called it a matching THING.
+
+Re-censused properly by walking each `archiveSignalEval(` call body to its matching paren and testing
+for a `provenance:` key **inside that body** — the table in §3 is that census.
+
+⚠️ **The error ran AGAINST the conclusion, not for it** — correcting it makes the lane split cleaner,
+since `active-execution-engine` moves from "supplies provenance yet unmatched" (an anomaly needing an
+extra mechanism) to "supplies none, unmatched" (the same mechanism as the other two). **Being lucky in
+the direction of the error is not a defence of the method.**
+
+## 5. DISPOSITION
+
+Bug-taxonomy **outcome (2) — working as designed, and UNADDRESSED.** The archiver's own comment
+concedes `coverage < 100%, allowed by C1`; nothing here is broken code. What is unaddressed is that
+**the design makes the paper lane unreplayable**, and no artifact said so.
+
+⛔ **This is a SCOPE CALL, not a code fix, and it is not mine to make unilaterally.** The question for
+the leg: a replay that can only see VTS admissions cannot speak about paper-mode signal quality —
+so either the leg's claim is narrowed to the VTS lane explicitly, or provenance has to be supplied at
+the three paper-lane sites before the leg can mean what it was scoped to mean.
+
+**Third "by construction" defect found on this leg today**, after the closure census and the
+August-only sampler. All three narrowed what the replay can see; none was recorded anywhere.
