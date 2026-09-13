@@ -53,11 +53,25 @@ the book leg gets a midpoint BY CONSTRUCTION; there is no other value it can pro
 with an ER-driven, scale-free gain and **no measured noise model**. Its sensitivity comes from
 **60-minute OHLC closes** (`signal-orchestrator.ts:2417-2419`), **not from the price stream**, so it
 cannot down-weight a dirty input or reward a clean one.
-✅ **MEASURED (CC-C, 6 symbols, 10 min, 67,038 rows, n=676): 87.3 % of a freshness advantage SURVIVES the
-smoother.** The earlier claim that smoothing makes fresher data pointless is **DEAD**.
-✅ **MEASURED: a CONSTANT side offset passes through at p50 = 1.000 — undiminished.** `x ← x + K(z−x)` has
-a fixed point at `x = z`, unity DC gain, for any gain setting.
-⇒ **side error ≈ 7–10 bps vs freshness ≈ 3.5 bps — 2–3×, not 7×.**
+⛔⛔ **THREE FIGURES THAT STOOD HERE ARE WITHDRAWN — CC-C RETRACTED THEM, LANGSTON BLOCKED THEM, AND THEY
+WERE IN THIS DOCUMENT FOR ONE COMMIT (`71336a584`). DO NOT CITE THEM FROM ANY COPY.**
+1. ⛔ *“87.3 % of a freshness advantage survives the smoother”* — **WITHDRAWN.** The arms started one
+   input-gap apart on freshly-seeded filters over ~9.4 instants each, so it measured **how long two
+   differently-seeded filters retain their seed difference**, not attenuation. Phase set the seed gap;
+   the replicates averaged over a nuisance parameter. ✅ **The claim is UNMEASURED — AND SO IS ITS
+   NEGATION.** Re-run under way.
+2. ⚠️ *“constant side offset passes at p50 = 1.000”* — **the NUMBER is withdrawn as degenerate**: the
+   “constant offset” arm was `mid + (ask−bid)/2` off the same row, which **is exactly `ask`** — there was
+   never a constant-offset arm. ✅ **THE CONCLUSION STANDS ON THE ANALYTIC ARGUMENT ALONE and needs no
+   experiment:** `x ← x + K(z−x)` has a fixed point at `x = z` — unity DC gain for any gain ⇒ **a
+   constant offset is tracked, never removed.**
+3. ⛔ *“side error ≈ 7–10 bps vs freshness ≈ 3.5 bps — 2–3×”* — **BOTH SIDES UNEVIDENCED.** The 3.5
+   derives from the withdrawn 87.3 %; the 7–10 travels with **no object and no population at the point
+   of use** (rule 29a), its provenance a 0.199 % median crypto spread carried from memory and halved.
+⛔⛔ **THEREFORE THE RANKING OF SIDE-ERROR AGAINST FRESHNESS-ERROR IS UNEVIDENCED AND MUST NOT BE STATED
+AS SETTLED** — pending both figures being restated with their populations.
+✅ **WHAT SURVIVES AND IS SAFE TO ACT ON:** the smoother does not remove a constant offset (analytic),
+and the SIDE defect in §1C is measured independently of any of this.
 
 ### B. RTB POOL REFRESH
 
@@ -115,7 +129,7 @@ cross-lane maker-rate comparison is confounded by the comparator, not by behavio
 
 | job | what we use today | what it should be | status |
 |---|---|---|---|
-| **set a level** | smoothed cache mark, mostly `last` | UNJUDGED — but the 60 s cadence is the live question, not the precision | open, `3n` |
+| **set a level** | smoothed cache mark, mostly `last` | UNJUDGED. ⚠️ **Do NOT rank this against the trigger fix — that ranking is withdrawn (see §1A).** The 60 s cadence and the smoothing question are both OPEN and both UNMEASURED. | open, `3n` |
 | **rank** | cache mark | UNJUDGED | open |
 | **trigger** (maker fill) | ⛔ **MIDPOINT** | ⭐ **the transactable side — bid for a resting sell, ask for a resting buy** | **THE FIX, owner CC-C + Langston, `3n` job 5** |
 | **book** | fill at the limit | limit is correct once the trigger is | follows the trigger |
