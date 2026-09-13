@@ -13,7 +13,11 @@
 > ⛔⛔ **r4's TRIGGER LIST WAS HAND-NAMED AND SCORED FALSE-CLEAN. LANGSTON ENUMERATED IT: 21 distinct `.ts` files cited, **11 outside every trigger row**, and **SIX of those carry LIVE VERDICTS** — including `equity-spot-archiver.ts`, which holds §C-ii's ENTIRE xStock exit verdict AND §5.2's deterministic `½·S` argument.** ⭐ **Trigger 1 named `mark-kind.ts` and MISSED the archiver's own `_kind === 'mid' ? (_bid+_ask)/2 : _last` one frame up.**
 > ⭐⭐ **THAT IS `enumerator-blind-spot` FROM `MISTAKE_PATTERNS` — A HAND-NAMED LIST IS BLIND TO A MEMBER CLASS AND REPORTS CLEAN. SO THE LIST IS NO LONGER HAND-NAMED.**
 >
-> ✅ **THE RULE, WHICH IS THE FIX: THE TRIGGER SET *IS* THE SET OF FILES THIS DOCUMENT CITES.** Adding a citation adds a trigger, automatically and by construction. **Re-derive it by extracting every `*.ts` reference from this file and subtracting only the §2 STILL-UNMAPPED set** (those carry no verdict, so they gate nothing).
+> ✅ **THE RULE, WHICH IS THE FIX: THE TRIGGER SET *IS* THE SET OF FILES THIS DOCUMENT CITES.** Adding a citation adds a trigger, automatically and by construction.
+> ⛔⛔ **AND THE SUBTRACTION UNIT IS A *CITATION*, NOT A *FILE* — THIS SENTENCE IS THE RULE, AND r5 GOT IT WRONG (Langston, confirm round).** ⭐⭐ **A FILE IS A TRIGGER IF *ANY* OF ITS CITATIONS BEARS A VERDICT, EVEN WHEN ITS OTHER CITATIONS ARE §2-UNMAPPED.**
+> ⚠️ **MEASURED: applied to FILES the rule yields 14 and SILENTLY DROPS TWO VERDICT-BEARING MEMBERS** — `depth-source.ts` (§2 lists it, **and `:80-97` carries the *“lagged witness”* construction argument that is §1C's ONLY surviving leg**) and `vts-runner.ts` (§2 lists its LIFECYCLE reads, **and difference #4's zero-`getSmoothedPrice` POSITIVE CONTROL is a different citation of the same file** — §2 says so itself: *“distinct from the `:1553/:1587` birth reads”*).
+> ⭐⭐ **THAT IS `enumerator-blind-spot` AGAIN, ONE LEVEL UP: the RULE was blind to the PARTIALLY-UNMAPPED member class and reported clean — exactly why the hand-named list had to go, reproduced in its replacement.** ⛔ **A future session applying the file-level reading gets 14, drops both, and sees no error.**
+> ✅ **SO: extract every `*.ts` reference; subtract a file ONLY IF *EVERY* CITATION OF IT IS §2-UNMAPPED. THE RULE MUST REPRODUCE THE TABLE BELOW — IF IT DOES NOT, THE RULE IS WRONG, NOT THE TABLE.**
 >
 > **DERIVED 16 2026-09-13 — A COMMIT TOUCHING ANY OF THESE INVALIDATES THE STAMP:**
 > | file (verdict-bearing citations only) |
