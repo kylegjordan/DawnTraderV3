@@ -9112,6 +9112,37 @@ A resting MAKER order fills when the market **trades through** its price. **The 
 **DISPOSITION (§9.4 — 1, FOLD INTO THE WORK IN HAND):** the cost table and the `trade`-channel finding go into `3n.m`'s scope, which amendments 2-4 have already reduced from *"subscribe hundreds of books"* to *"which feed does each read path use, and what does each channel cost"*. ⚠️ **The maker-fill mechanism itself is CC-B's — he identified it — and this amendment is the costing, not a claim on the build.**
 
 
+
+---
+
+#### ⭐⭐ AMENDMENT 6 — **CC-B CORRECTED ME, AND THE CORRECTION DISSOLVES MY OWN COST OBJECTION** (CC-C, 2026-09-13)
+
+⛔ **WHAT I GOT WRONG: I LET ONE MEASUREMENT ANSWER TWO QUESTIONS.** Amendment 5 priced the book as a **continuous subscription** (2,404 msgs/sec at a 150-symbol pool, 98× the `trade` channel) and concluded *skip it*. ✅ **That holds for choosing a fill PRICE.** ⛔ **It does not touch QUEUE POSITION, and the book is the only source of that.** CC-B: *"When we post a resting buy at P, what decides whether we fill is how much was ALREADY resting at P when we arrived… That number exists only in the book, and only at the instant of placement."*
+
+★★ **AND THE HALF THAT DISSOLVES THE COST OBJECTION: HIS RULE (b) NEEDS ONE BOOK READ AT PLACEMENT, NOT A SUBSCRIPTION.** A few thousand one-shot reads a day is not 2,404 msgs/sec, and Kraken's REST `Depth` endpoint serves a top-10 snapshot with **no subscription at all** — verified in use this afternoon, when it caught my own probe reading the wrong object. ⇒ **rule (b) is INDEPENDENT of `3n.m`'s subscription question.**
+⇒ ✅ **AMENDED RECOMMENDATION: SKIP THE CONTINUOUS BOOK SUBSCRIPTION; KEEP A BOOK READ AT PLACEMENT. Not in tension.**
+
+### THE DISCRIMINATOR, MEASURED — `scripts/analysis/maker-queue-clearance-probe.mjs`
+Out-of-band, own socket, **23 of 24 top-40 symbols seeded, 5.0 min, $150 order** (the measured median of 45 closes in 7 days). For a resting BUY at the best bid: queue ahead = resting USD at the bid; advancement = **SELL-aggressor** USD printing at or below it. **Per symbol, never pooled** — a liquid name and a thin one have opposite answers.
+
+**CLEARANCE** = sell volume at ≤ bid ÷ (resting line + our $150): **p10 0.19 · p50 3.91 · p90 19.12**
+
+| rule | fires on |
+|---|---|
+| (a) prints only | **19 of 23** |
+| (b) prints + book-at-arrival | **16 of 23** |
+
+⛔⛔ **AND A CORRECTION TO MY OWN PROBE'S SUMMARY LINE, WHICH MATTERS MORE THAN THE HEADLINE.** It printed *"(a) over-reports on 3 of 23"*. **THAT IS THE NET, AND THE NET HIDES THE ERROR RATE.** The per-symbol table shows **SEVEN disagreements**: five where (a) fills and (b) does not, and **two the other way** (`XRP/USDT`, `AAVE/USD` — volume cleared the line at the bid with no print strictly through, so (a) MISSES a fill that (b) catches).
+⇒ ★ **THE HONEST NUMBER IS 7 OF 23 — 30% DISAGREEMENT — netting to 13% because the two directions partially cancel. For a simulation the DISAGREEMENT rate is the one that counts: two wrong answers that cancel in aggregate are still two wrong trades.** *(Same shape as `#507`'s own lesson that a net is not an error rate.)*
+⇒ ✅ **(b) EARNS ITS BOOK READ.** At **p10 CLEARANCE 0.19** the thin names are where (a) is worst — the line ahead clears a fifth of the way in five minutes while (a) reports a fill.
+
+### ⇒ ON THE PRICE SERIES THE FILL CHECK CONSULTS (CC-B's Q1)
+**It must consult TRADE PRINTS.** A trade-through test against a **midpoint** is not a trade-through test — it asks whether an AVERAGE crossed our price, which is not an event that occurred. ✅ **And the cost objection does not survive contact: `trade` is the CHEAPEST of the four channels (9.8 msgs/sym/min · 25/sec at a 150 pool · 0.4 GB/day) against the book's 2,404/sec.**
+
+⚠️ **LIMITS, STATED: one 5-minute window, one time of day, 23 symbols drawn from the TOP 40 — i.e. the LIQUID end, which is where rule (a) should look BEST. A thinner population would disagree MORE, not less.** And CLEARANCE is a window aggregate, **not a fill simulation**: it says whether enough volume printed, not whether it printed before the signal went stale.
+
+**DISPOSITION (§9.4 — 2, added to an existing batch): the discriminator and the costs go to the three-way maker-fill debate Kyle commissioned; the MECHANISM and the BUILD are CC-B's — he identified the queue-position point that corrected me. My lane here is costing and discriminators, and it ends at handing them over.**
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
