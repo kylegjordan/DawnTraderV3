@@ -118,7 +118,9 @@ All restores verified byte-identical.
 
 ---
 
-## ⭐ ROW `8a` — D3 AT THE xSTOCK EXIT TOUCH PRICE (added 2026-09-12, ref `77423bdc4`)
+## ⭐ ROW `8l` — D3 AT THE xSTOCK EXIT TOUCH PRICE (added 2026-09-12, ref `77423bdc4`; RENUMBERED FROM `8a` 2026-09-13)
+
+⛔⛔ **THIS SHIPPED UNDER THE WRONG ROW ID AND THE SCOPE NOW SAYS SO.** Row `8a` is the **D1 side switch** — *exits on the bid* — and it is **NOT BUILT**; this is D3's ladder at the xStock exit, a rule about WHETHER TO ACT when the book is unusable, not about WHICH SIDE. **The work below is unchanged, reviewed and correct; only the id was wrong.** ⚠️ **Do not read “8a deployed” anywhere as “the exit trigger moved to the bid” — it still fires on the midpoint (`active-execution-engine.ts:2221`).**
 
 **THE DEFECT.** After withholding `hollowSkipCap` consecutive ticks **because the book was unusable**, the yield **fell through and acted on the mark of that same unusable book** — and `_eqTick.price` is the **MIDPOINT** whenever both sides exist (`equity-spot-archiver.ts:210`), however absurd those sides are. The branch said so in its own comment: *"the engine is about to act on this mark."*
 
