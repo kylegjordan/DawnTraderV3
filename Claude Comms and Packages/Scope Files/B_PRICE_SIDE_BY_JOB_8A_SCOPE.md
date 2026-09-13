@@ -1,95 +1,103 @@
 # `B-PRICE-SIDE-BY-JOB` ROW `8a` — MOVE THE EXIT TRIGGER OFF THE MIDPOINT
 
 **Batch:** `B-PRICE-SIDE-BY-JOB` (`3n`) · **Row:** `8a` · **Owner:** CC-C · **change-class: architecture**
-**r1, 2026-09-13. KYLE-AUTHORISED: *"Make the change — move the trigger to the bid."***
+**r2, 2026-09-14 — all five Step-1 blockers accepted, every one re-derived at the object before accepting.**
+**KYLE-AUTHORISED: *"Make the change — move the trigger to the bid."***
 
-> ⛔ **THIS IS D1, THE ROW THE WHOLE BATCH WAS FOR.** Everything shipped so far (`8f`, `8l`, `8c`) is admission, the xStock exit ladder, and a shadow. **The live crypto exit trigger has read the midpoint throughout** — `active-execution-engine.ts:2219`'s own comment: *"The live decision above read the book MID."*
-
----
-
-## 1. THE RULE
-
-**A long position is closed by SELLING. A sell transacts on the BID.** So the question *"has this position reached its stop / its target?"* must be asked of the price we could actually sell at, not of a midpoint that is the average of a price we could sell at and one we could buy at.
-
-⛔ **THE ERROR IS A FULL SPREAD, NOT HALF** (Langston BLOCKER-2, 2026-09-03): entry is a BUY on the ask, stop and target are SELLS on the bid. They are opposite by construction.
+> ⛔ **THE DECISION IS NOT RE-LITIGATED AND LANGSTON DID NOT ASK FOR IT TO BE.** *"A stop that holds only when the midpoint agrees is not a stop."* **Every change below is to the INSTRUMENT.**
 
 ---
 
-## 2. THE EVIDENCE THAT THIS IS THE RIGHT CHANGE — the shadow, read 2026-09-13
+## 0. r1 → r2 — WHAT WAS WRONG, AND IT WAS ALL ONE CLASS
 
-`F-G-2` OBJ-0 has run the bid arm as a shadow since 2026-09-02. **41 closed crypto trades carry it.** The pre-registered 2×2:
+⛔⛔ **EVERY BLOCKER IS THE SAME FAILURE: I ARGUED FROM A POPULATION OR A CENSUS I HAD NOT MEASURED ON THE EXIT PATH** — inside a scope that cites §9.5(a) and whose own case rests on those numbers.
 
-| bid arm would exit | mid arm did | actual close | n |
-|---|---|---|---|
-| stop | stop | stop | **34** |
-| target | target | target | **5** |
-| ⭐ **stop** | **target** | target | **2** |
-
-✅ **39 of 41 IDENTICAL — the switch is behaviour-neutral on 95% of this population.**
-⭐⭐ **AND THE TWO DISCORDANT ROWS ARE ONE CASE TWICE, MEASURED:**
-
-| | stop | bid at that instant | mid at that instant | outcome |
-|---|---|---|---|---|
-| `TRIA/USD` 09-05 | 0.004930 | **0.004920 — BELOW** | 0.004935 — above | ran to target, +$7.04 |
-| `UNI/EUR` 09-11 | 5.021600 | **5.012100 — BELOW** | 5.025000 — above | ran to target, +$2.02 |
-
-⇒ ⛔ **ON BOTH, THE PRICE WE COULD ACTUALLY HAVE SOLD AT WAS ALREADY THROUGH THE STOP AND THE MIDPOINT SAID IT WAS NOT.** The position ran on below its own stop and the market came back. **That is not the midpoint being right — it is the stop not being enforced.**
-★ **KYLE'S RULING, and it is the one that governs:** risk limits are HARD BOUNDARIES, never dials (`CLAUDE.md` §0). **A stop that holds only when the midpoint agrees is not a stop.**
-⚠️ **STATED HONESTLY: the switch would have given up ~$9.06 of realised profit across these 41** (total net −$108.95, 7 targets / 34 stops). **Two of seven winners were rescues.** The cost is real and small; the risk-control argument is what carries it, not the P&L.
-⚠️ **`UNI/EUR` is a non-USD quote (`#966`/D9) so its dollar figure carries a conversion error. Direction unaffected — the bid was below the stop either way.**
-
----
-
-## 3. ⛔⛔ THE SOURCE IS THE D3 LADDER, **NOT** THE RAW BOOK BID — AND THIS IS THE LOAD-BEARING DESIGN CALL
-
-**The shadow used `fg2BookBid`, the raw maintained-book top. THE LIVE TRIGGER MUST NOT.**
-⛔ **MEASURED TODAY: the trading socket carries a book for ONE symbol** (`venueTimestampPresence.book.distinctSymbols = 1`, and the adapter's own health line `- Subscribed Symbols: 1`, two independent instruments). **Gating the live exit trigger on the book bid would stop exits for every other symbol** — a fail-closed on the risk-control path, which is the worst possible direction.
-
-✅ **`8c` ALREADY BUILT THE RIGHT SOURCE AND MEASURED IT: `selectTouchPrice` (`touch-price.ts:96`), D3's order — valid fresh book top → valid ticker sides within the age → REFUSE.** Its live reading on the active crypto lane: **37,199 of 37,220 = 99.94% can name a transactable basis**, against 0.089% for the book alone.
-⇒ ★ **THIS ROW IS WHAT `8c` WAS BUILT FOR, AND SWITCHING IT ON IS WHAT LANGSTON'S HOLD WAS WAITING FOR** — his condition was *trigger first, then the level basis*, not *don't do it*.
-
-⇒ **`currentPrice` for `evaluateTECExit` becomes `selection.quote.bid`.**
-
----
-
-## 4. ⛔ ON REFUSAL: SKIP THE EXIT CHECK, NEVER FABRICATE
-
-When the ladder refuses (no valid book AND no valid ticker sides within the age), **the exit check does not run for that position on that cycle.** It does **not** fall back to the midpoint — a fallback would reinstate exactly the defect this row removes, silently, on the rows where it matters most.
-✅ **THIS PATH ALREADY EXISTS AND IS ALREADY GOVERNED:** it is the exit-freshness class (`#994`, plan row `3b.f-c`) under **Kyle's 2026-09-03 ruling — the exit standard does not loosen; keep the emit, cut the notify.** The refusal must carry its reason and increment the existing counter, so a rise in refusals is visible rather than silent.
-⚠️ **AND THE RESIDUAL IS NAMED: a refused check is an UNGUARDED position for that cycle.** That is already true today whenever the mark is stale; this row does not create it, but it may change its RATE, and the rate must be measured (§7).
-
----
-
-## 5. ⛔⛔ SCOPE BOUNDARY — THIS ROW MOVES THE **TRIGGER** ONLY
-
-`currentPrice` on this path feeds **four** consumers, and they are four different jobs:
-
-| consumer | job | in this row? |
+| # | r1 said | AT THE OBJECT |
 |---|---|---|
-| `evaluateTECExit({ currentPrice })` `:2174` | **TRIGGER** — has it reached stop/target | ✅ **YES** |
-| `closePosition(id, currentPrice, …)` `:2056` and `exitProvenance.decisionPrice` | **BOOKING** — the price recorded | ⛔ **NO** |
-| the P&L log `:1901` and `:1905`/`:1915` | reporting | ⛔ **NO** |
-| the maker-rest trade-through test `:1966`-`:2028` | fill adjudication | ⛔ **NO** |
-
-⛔ **BOOKING IS JOB 4 AND IS A SEPARATE ROW.** Changing what we RECORD alters historical P&L comparability and needs its own blast-radius measurement and its own `calibration_epoch` decision. **Moving both at once would make every resulting exit unattributable — the exact mixed-population failure Langston's hold was about, one layer down.**
-⚠️ **CONSEQUENCE, STATED RATHER THAN DISCOVERED: after this row, the trigger fires on the bid and the exit books at the mid.** That is a KNOWN, DELIBERATE, TEMPORARY inconsistency, it is the conservative direction (we exit when genuinely through the stop, and record the same number we record today), and it is closed by the booking row.
+| **B1** | the ladder recovers **99.94%**, so refusing is rare | ⛔ **that is LEVEL BUILDS across the scanner universe.** `selectTouchPrice` has **exactly two production callers — `signal-orchestrator.ts:2657`, `vts-runner.ts:1588` — and ZERO in the engine.** **The ladder's refusal rate on the EXIT population is UNMEASURED**, and it is the number my fail-closed argument rests on. |
+| **B2** | OBJ-4 compares refusal rate "against the pre-deploy rate on the same counter" | ⛔ **WRONG-OBJECT.** The existing skip is `_priceSkipStreak`/`_priceSkipReasons` (`aee:1774`), keyed on **venue mark availability**. Ladder refusal is a different predicate **nothing has ever evaluated there.** There is no pre-deploy value. |
+| **B3** | *(silent on the age ceiling)* | ⛔ **`selectTouchPrice` applies ONE `maxAgeMs` to both rungs, wired to `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS = 60_000` — sized for an OBSERVATION shadow, and this row makes it LOAD-BEARING ON A STOP.** ★ **And it is FOUR TIMES LOOSER than the existing `active_fill_max_age_ms = 15_000`** ⇒ **a quote the staleness gate REFUSED would be resurrected by the ladder and yield a trigger price.** |
+| **B4** | after the switch "the ARMS SWAP" | ⛔ **FALSE.** The shadow's bid arm is `fg2BookBid`, the **RAW BOOK TOP** (`aee:2268`, 0.089% coverage); the live arm becomes the **LADDER**. **Different instruments — they DIVERGE, they do not swap.** And `B_PRICE_SIDE_BY_JOB_PRE_AUDIT.md:558` P-8a says the shadow is **REMOVED**. |
+| **B5** | `currentPrice` has **4** consumers | ⛔ **IT HAS 24 IN THE LOOP** (`:1880`-`:2330`, counted). r1 missed `:1892` the trace stage, `:1897-1905` the unrealized-P&L **and its DB write to `active_open_positions.currentPrice`/`unrealizedPnl` — the UI-VISIBLE MARK**, `:1927` `lastExitChecks`, `:2111-2124` the distance math + `EXIT_EVAL`, and `:2308`/`:2319` the shadow's own `mid:` field. |
 
 ---
 
-## 6. POPULATION: **crypto_spot ONLY**
+## 1. THE RULE *(unchanged from r1)*
 
-Matches the shadow's population exactly. xStock has no maintained book (`fg2BookBid` is `null` by construction) and its exit ladder is `8l`, already shipped. **xStock behaviour is byte-unchanged by this row.**
+A long is closed by **SELLING**, and a sell transacts on the **BID**. *"Has this reached its stop?"* must be asked of the price we could actually sell at.
+⛔ **The error is a FULL SPREAD, not half** — entry buys the ask, stop and target sell the bid, opposite by construction.
+
+## 2. THE EVIDENCE *(unchanged from r1, and it is exit-lane data)*
+
+41 closed crypto trades carrying the `F-G-2` shadow since 2026-09-02: **34 stop/stop/stop · 5 target/target/target · 2 bid-STOP vs mid-TARGET.** **39 of 41 identical.**
+The 2 discordant, measured: `TRIA/USD` stop 0.004930 — **bid 0.004920 BELOW**, mid 0.004935 above. `UNI/EUR` stop 5.021600 — **bid 5.012100 BELOW**, mid 5.025000 above. **Both ran on to target.** ⇒ **the mid did not enforce the stop and was rescued.**
+⚠️ **COST, STATED: ~$9.06 of realised profit given up across the 41** (total net −$108.95; 7 targets, 34 stops). ⛔ **THIS ROW DOES NOT CLAIM A P&L IMPROVEMENT. It is a risk-control correction and must be judged as one.**
+⚠️ `UNI/EUR` is non-USD-quoted (`#966`/D9); its dollar figure carries a conversion error. Direction unaffected.
 
 ---
+
+## 3. ⭐⭐ SHADOW FIRST, FLIP SECOND — **B1 + B2's DISCHARGE, AND IT IS NOW THE SHAPE OF THE ROW**
+
+**`8a` SPLITS INTO TWO SHIPS.**
+
+### `8a-P1` — THE EXIT-LANE LADDER SHADOW *(no behaviour change)*
+Call `selectTouchPrice` **in the exit loop**, record **per rung** (`book` / `ladder`, accepted vs each refusal reason, keyed by lane × class exactly as `8c`'s funnel is), and **act on nothing.** `currentPrice` continues to drive every consumer.
+⇒ **This produces the ONE number the whole fail-closed argument needs and does not have: the ladder's refusal rate ON THE EXIT POPULATION.**
+★ **It is the discipline `F-G-2` OBJ-0 itself used, and Langston's own words: it costs a day against an exposure that is otherwise unbounded until OBJ-4 reads.**
+
+### `8a-P2` — THE FLIP
+Ships only after P1's window, and **only if P1's measured refusal rate clears the threshold pre-registered in §7 BEFORE the window opens.**
+
+---
+
+## 4. THE SOURCE, AND ⛔ THE AGE CEILING THAT GOVERNS IT **(B3)**
+
+**Source: the D3 ladder `selectTouchPrice` — valid fresh book top → valid ticker sides → REFUSE.** Not the raw book bid: the trading socket carries a book for **ONE** symbol (`venueTimestampPresence.book.distinctSymbols = 1`, and the adapter's `- Subscribed Symbols: 1` — two independent instruments), so gating the live trigger on it would **stop exits for everything else**, a fail-closed on the risk-control path.
+
+⛔⛔ **THE EXIT PATH GETS ITS OWN CEILING, AND THE RULE IS A CLAMP, NOT A NUMBER I LIKE:**
+> **the ladder's `maxAgeMs` on the exit path MUST BE ≤ the mark-staleness ceiling already governing that path.**
+
+★ **WHY A CLAMP: any looser value lets the ladder RESURRECT A QUOTE THE STALENESS GATE ALREADY REFUSED** — two freshness gates stacking, with the newer and looser one winning. **`LEVEL_BASIS_OBSERVATION_MAX_AGE_MS = 60_000` against `active_fill_max_age_ms = 15_000` is exactly that inversion, 4×.**
+⇒ **P1 records the ladder age distribution on the exit population so the ceiling is CHOSEN FROM DATA, not carried over from an observation shadow.** ⛔ **`LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` IS NOT REUSED HERE.**
+
+## 5. ⛔ ON REFUSAL: SKIP, NEVER FABRICATE *(unchanged)*
+
+No fallback to the midpoint — that would reinstate the defect precisely where it matters most. The refusal carries its reason and its own counter.
+⚠️ **RESIDUAL NAMED: a refused check is an UNGUARDED position for that cycle.** Already true today when the mark is stale; this row may change the RATE, which is why P1 measures it first.
+
+---
+
+## 6. ⛔⛔ THE CONSUMER BOUNDARY — **B5**, AND A SEPARATE LOCAL
+
+**`currentPrice` is NOT reassigned. A new local `triggerPrice` is introduced and passed to `evaluateTECExit` ALONE.**
+
+| consumer | job | changes? |
+|---|---|---|
+| `evaluateTECExit({ currentPrice })` `:2174` | **TRIGGER** | ✅ **→ `triggerPrice`** |
+| `closePosition(…)` `:2056`, `exitProvenance.decisionPrice` `:1983`/`:2061` | **BOOKING** | ⛔ no — job 4, separate row |
+| `:1897-1905` unrealized P&L **+ the DB write to `active_open_positions`** | **the UI-visible mark** | ⛔ no — moving it silently changes what Kyle sees |
+| `:1892` trace · `:1927` `lastExitChecks` · `:2111-2124` distance + `EXIT_EVAL` | reporting | ⛔ no |
+| `:1966`-`:2028` maker-rest trade-through | fill adjudication | ⛔ no |
+| `:2308`/`:2319` shadow `mid:` | the counterfactual's own field | ⛔ no — see §8 |
+
+⚠️ **CONSEQUENCE, STATED NOT DISCOVERED: the trigger fires on the bid while the exit books at the mid.** Deliberate, temporary, conservative, and closed by the booking row.
+
+### ⛔ AND LANGSTON'S CONDITION — THE TWO ARTEFACTS THAT GO FALSE, CLOSED HERE
+1. **`checkExitConditions` returns `price: currentPrice`** and a reason reading *"Price 5.0250 hit stop 5.0216"* — **a mid ABOVE the stop it claims was hit, on every bid-triggered stop.** ⇒ **the reason string and the returned `price` carry the TRIGGER price; the booked price is stamped separately and both appear, so a reader can never mistake one for the other.**
+2. **`aee:2058-2060`** — *"the decision price IS the exit price, so these two agree by construction here — and that agreement is itself the evidence that separates a taker close from the maker case."* ⛔ **That discriminator BREAKS under the boundary.** ⇒ **it is replaced by an EXPLICIT fee-mode stamp rather than an inferred one, in the same commit.** ★ **A discriminator that works by coincidence of two values is exactly what this batch exists to remove.**
 
 ## 7. VERIFICATION — PRE-REGISTERED BEFORE ANY CODE
 
 | | |
 |---|---|
-| **OBJ-1** | `evaluateTECExit` receives `selection.quote.bid` on crypto, and the value is the LADDER's, not the raw book's. Unit-tested with mutations. |
-| **OBJ-2** | On ladder refusal the exit check is SKIPPED with a reason, and the midpoint is never substituted. **Mutation: make the refusal fall back to the mid — the test must go red.** |
-| **OBJ-3** | xStock path byte-unchanged. |
-| **OBJ-4** | **LIVE, POST-DEPLOY:** the refusal RATE on the crypto exit path, against the pre-deploy rate on the same counter. ⛔ **A material rise means positions are going unguarded more often and is a REVERT trigger, not a tuning input.** |
-| **OBJ-5** | **LIVE:** the shadow keeps running. Post-switch the ARMS SWAP — the bid arm is live and the mid becomes the counterfactual — so the 2×2 stays readable across the boundary. **The boundary must be stamped; do not pool across it.** |
+| **P1-OBJ-1** | the exit-lane ladder shadow records per rung, keyed lane × class, and **acts on nothing** — proved by a mutation that makes it act, which must go red. |
+| **P1-OBJ-2** | **the ladder's refusal rate and age distribution ON THE EXIT POPULATION.** n-floor pre-registered before the window opens. |
+| ⛔ **P2 GATE** | **an ABSOLUTE refusal-rate threshold, pre-registered before P1's window opens — NOT a delta against `_priceSkipStreak`, which measures a different predicate (B2).** Above it, `8a-P2` does not ship. |
+| **P2-OBJ-1** | `evaluateTECExit` receives `triggerPrice` = the ladder bid; `currentPrice` is unreassigned and the other 23 consumers are byte-unchanged. |
+| **P2-OBJ-2** | on refusal the check is SKIPPED. **Mutation: fall back to the mid — must go red.** |
+| **P2-OBJ-3** | xStock byte-unchanged. |
 
-⛔ **WHAT THIS ROW DOES NOT CLAIM:** that it improves P&L. On the measured 41 it costs ~$9.06. **It is a risk-control correction, and it should be argued and judged as one.**
+## 8. THE SHADOW'S DISPOSITION **(B4)**
+
+⛔ **r1's "the arms swap" is WITHDRAWN — FALSE at the object.** The shadow's arm is the raw book top (0.089%); the live arm becomes the ladder. **They diverge; a counterfactual that is not the live arm's complement measures nothing.**
+✅ **ADOPTED — LANGSTON'S PREFERENCE AND THE PRE-AUDIT'S OWN INSTRUCTION (`PRE_AUDIT:558` P-8a): the `fg2Shadow` instrument is REMOVED at `8a-P2`,** its 41-row result already read and recorded in §2. **P1's exit-lane funnel replaces it and measures the thing that is actually going live.**
