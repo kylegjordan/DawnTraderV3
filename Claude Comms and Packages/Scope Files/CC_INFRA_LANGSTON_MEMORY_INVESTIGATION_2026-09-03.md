@@ -1,3 +1,9 @@
+# CC-INFRA — LANGSTON MEMORY-SYSTEM INVESTIGATION + 2026-09-03 task snapshot (RENAMED 2026-09-13)
+
+> ⛔ **THIS IS NO LONGER A TASK LIST.** It began as `CC_INFRA_SESSION_TASK_LIST.md` but is really the 2026-09-03 investigation answering Kyle's questions about Langston's memory (why it grows, the three-layer design, recall usage, what is searchable). The **single, canonical session task list is `1-system-manual/CC_INFRA_SESSION_TASK_LIST.md`** — this file's live batches and its unique owned rows were reconciled into it on 2026-09-13 (`#1009` / `B-TASK-LIST-SLOT`). Kept for the investigation narrative (§2, §3b, §9-§10); treat its task tables as a dated snapshot, superseded by the plan and the canonical list.
+
+---
+
 # CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-09-03
 
 > **Kyle asked for my running list in one place, in words he can read (2026-09-03):** *"I want to create a task list for each of you sessions. I already have it for analyst and Old Claude."* Same shape as `CC_A_SESSION_TASK_LIST.md`.
