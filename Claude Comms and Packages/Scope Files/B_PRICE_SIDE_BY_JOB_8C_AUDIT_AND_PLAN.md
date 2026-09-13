@@ -208,6 +208,16 @@ My reading is **NO — they should land together**, because A6 + A7 + A8 compose
 
 ---
 
+## 3c. ⛔ WHERE THIS CRITERION LIVES, AND WHY THERE IS NO BATCH PROGRESS REPORT YET — the judgement stated out loud
+
+**MEASURED:** no `B_PRICE_SIDE_BY_JOB_*_PROGRESS_REPORT.md` exists (control: five other batches have one, so the check is not a silent instrument).
+
+★ **THAT IS CORRECT TODAY, AND IT IS A JUDGEMENT, NOT AN OMISSION.** `workflow-10`'s trigger is *"the work has been done, the code deployed, and now we're at an observational period"* — **a batch that cannot close because it is WAITING.** `3n` cannot close for a different reason: **rows `8a`, `8b`, `8d`, `8e`, `8g`-`8k` are not built.** It is mid-IMPLEMENTATION, not mid-OBSERVATION, and a progress report written now would describe a batch state that does not exist.
+
+⇒ ⛔ **THE OBLIGATION THIS CREATES INSTEAD, recorded here so it cannot be lost between the two documents: `3n`'s progress report becomes due when the LAST row ships and only windows remain — and when it is written, §3b's criterion above MUST be carried into it VERBATIM, with its pre-registration date, not re-derived.** ★ **A criterion re-stated from memory at conversion time is a criterion chosen after seeing the data, which is the one thing its pre-registration exists to prevent.**
+
+---
+
 ## 4. SECOND-READER RECORD
 
 `REVIEWER r1: claim-only (mode B) · what other states of the world are consistent with the objects that settle "re-basing levels onto the bid makes both legs fire earlier" · HIT · re-derived y`
