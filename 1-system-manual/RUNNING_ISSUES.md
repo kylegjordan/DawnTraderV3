@@ -9070,6 +9070,48 @@ From the divergence probe's age buckets (n=225,104, top-40): a quote **<250 ms**
 **DISPOSITION (§9.4 — 2, added to an existing batch): the signal-birth quote age becomes an objective of `3n.l` (`#1056`), which already owns what the price cache stores.** It is the same seam — `3n.l` is about the SIDES being discarded on the REST write; this is about the AGE of the row that write lands in — and splitting them across two batches would have two sessions editing one 🔒 LOCKED module. ⛔ **NOT folded into `3n.m`**, which this amendment has just shrunk to a coverage question.
 
 
+
+---
+
+#### ⭐⭐ AMENDMENT 5 — **THE FOUR-CHANNEL COST TABLE, AND IT REFRAMES THE BUILD: THE CHANNEL WE NEED IS THE CHEAPEST ONE** (CC-C, 2026-09-13)
+
+⛔ **KYLE'S TWO QUESTIONS:** *"Is there a world where we can create machinery to refresh our RTB pool pricing and our open trades pricing fast enough that we are making use of all of the order book pricing we're receiving? … 150 signals in the RTB pool … and probably ten to twenty open trades. Question one, is that possible? Question two, is the amount of work worth what our system would learn?"*
+⚠️ **AND A PREMISE TO CORRECT BEFORE ANSWERING, because it would send the build in the wrong direction: Kyle restated the diagnosis as *"our system can't refresh fast enough."* THAT IS NOT WHAT AMENDMENT 4 MEASURED.** We apply **634.5 book updates/min with 26,396/26,396 checksum matches**. **Throughput is not the constraint.** The signal-birth path reads a **60 s REST cache** while pushed data for the same symbol is already arriving. ⇒ **the gap is WHICH FEED THE READ PATH USES, not how fast we can go.** A capacity build would be the wrong object.
+
+### ✅ CC-B IS RIGHT ABOUT THE TRADE FEED, AND IT IS THE KEY TO THE WHOLE ANSWER
+A resting MAKER order fills when the market **trades through** its price. **The book shows what is RESTING; only a trade print shows what actually EXECUTED, and at what size.** ⇒ a volume-aware maker fill cannot be simulated from the book at all — it needs the `trade` channel. **That is a change of instrument, not a complication, and it turns out to be the cheap one.**
+
+### THE MEASUREMENT — all four on one instrument, SAME 24 symbols, SAME 5-minute window
+`scripts/analysis/channel-cost-probe.mjs`, top-40 population, out-of-band. ⛔ **TWO TICKER VARIANTS, because measuring one would have priced the wrong thing:** production sets `event_trigger: 'bbo'` (`kraken-websocket-adapter.ts:1548`, P-7a/`#1017`), which fires on every best-bid-offer change, not on trades. The same channel cannot carry two triggers on one socket, so the bbo arm ran on its own connection in the same window.
+
+| channel | msgs/sym/min | bytes/sym/min | **pool of 150: msgs/sec** | MB/day |
+|---|---|---|---|---|
+| `trade` — executions with size | **9.8** | 1,774 | **24.6** | **383** |
+| `ticker` (Kraken default, trade-triggered) | 7.3 | 2,286 | 18.2 | 494 |
+| **`ticker` + `bbo` — what we actually subscribe** | **279.1** | 87,502 | **697.7** | 18,900 |
+| `book` depth 10 | **961.5** | 196,312 | **2,403.7** | 42,403 |
+
+★★ **THE SHAPE OF THIS TABLE IS THE ANSWER: `trade` IS THE CHEAPEST CHANNEL OF THE FOUR — 24.6 msgs/sec for the whole 150-symbol pool — AND IT IS THE ONLY ONE THAT CAN DECIDE A MAKER FILL.** The `book`, which buys the least (0.00 bps p50 / 5.52 p99 on a $150 order, amendment 1's companion probe), costs **98× more than `trade`.**
+⚠️ **AND OUR OWN `bbo` TICKER IS 38× THE DEFAULT TICKER** — so "just subscribe the ticker" is not free either: 150 symbols on the variant we currently use is **698 msgs/sec**, against the trading adapter's present **12-22 msgs/sec** (`[B78.1][WS_TICK_RATE]`, 730-1,305/min).
+
+### ⇒ QUESTION 1 — POSSIBLE? **YES, AND THE USEFUL VERSION IS FAR CHEAPER THAN THE ONE BEING IMAGINED.**
+| what you actually want | channel | cost at Kyle's sizing |
+|---|---|---|
+| honest maker-fill simulation, 150 pool | `trade` | **28 msgs/sec** (170 syms) — trivial |
+| fresh quotes on the 10-20 OPEN trades | `ticker`+`bbo` | 20 × 279 = **93 msgs/sec** — easy |
+| fresh quotes across the whole 150 pool | `ticker`+`bbo` | **791 msgs/sec** — real but tractable |
+| depth-walked fills across the 150 pool | `book` | **2,724 msgs/sec, 42 GB/day** — the expensive one, buying the least |
+
+### ⇒ QUESTION 2 — WORTH IT? **SPLIT THE ANSWER; IT IS NOT ONE DECISION.**
+- ✅ **`trade` channel — YES, BUILD IT.** Cheapest of the four and the only honest way to simulate a maker fill. Without it a "maker fill" is an assumption, not a simulation.
+- ✅ **Fresh quotes at signal birth — YES, AND IT IS PLUMBING, NOT CAPACITY.** The pushed feed already arrives for subscribed symbols; `rtb_refresh` already reads sub-second (14/15 pushed). The birth path does not. ⚠️ **Priced honestly it is ~4 bps** (5.69 at 30 s+ vs 2.02 at <250 ms) — **but its real value is DECISION quality, not booking accuracy: a 30-45 s old price chooses which signal we take and when we exit, and those are three of the four jobs and they are LIVE.** That is not expressible in bps and should not be argued as though it were.
+- ⛔ **`book` for depth across the pool — NO.** 98× the cost of `trade` for a measured 0.00 bps at the median.
+
+⛔ **THE ORDER MATTERS AND IT IS THE OPPOSITE OF THE OBVIOUS ONE:** subscribe `trade` (cheap, enables the fill) → fix the birth read (plumbing, no new subscription) → **only then** ask whether `bbo` across 150 is worth 698 msgs/sec. **Starting with the book would spend the most on the least.**
+
+**DISPOSITION (§9.4 — 1, FOLD INTO THE WORK IN HAND):** the cost table and the `trade`-channel finding go into `3n.m`'s scope, which amendments 2-4 have already reduced from *"subscribe hundreds of books"* to *"which feed does each read path use, and what does each channel cost"*. ⚠️ **The maker-fill mechanism itself is CC-B's — he identified it — and this amendment is the costing, not a claim on the build.**
+
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
