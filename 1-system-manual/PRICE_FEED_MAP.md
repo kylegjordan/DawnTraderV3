@@ -17,9 +17,13 @@
 > ⛔⛔ **AND THE SUBTRACTION UNIT IS A *CITATION*, NOT A *FILE* — THIS SENTENCE IS THE RULE, AND r5 GOT IT WRONG (Langston, confirm round).** ⭐⭐ **A FILE IS A TRIGGER IF *ANY* OF ITS CITATIONS BEARS A VERDICT, EVEN WHEN ITS OTHER CITATIONS ARE §2-UNMAPPED.**
 > ⚠️ **MEASURED: applied to FILES the rule yields 14 and SILENTLY DROPS TWO VERDICT-BEARING MEMBERS** — `depth-source.ts` (§2 lists it, **and `:80-97` carries the *“lagged witness”* construction argument that is §1C's ONLY surviving leg**) and `vts-runner.ts` (§2 lists its LIFECYCLE reads, **and difference #4's zero-`getSmoothedPrice` POSITIVE CONTROL is a different citation of the same file** — §2 says so itself: *“distinct from the `:1553/:1587` birth reads”*).
 > ⭐⭐ **THAT IS `enumerator-blind-spot` AGAIN, ONE LEVEL UP: the RULE was blind to the PARTIALLY-UNMAPPED member class and reported clean — exactly why the hand-named list had to go, reproduced in its replacement.** ⛔ **A future session applying the file-level reading gets 14, drops both, and sees no error.**
-> ✅ **SO: extract every `*.ts` reference; subtract a file ONLY IF *EVERY* CITATION OF IT IS §2-UNMAPPED. THE RULE MUST REPRODUCE THE TABLE BELOW — IF IT DOES NOT, THE RULE IS WRONG, NOT THE TABLE.**
+> ✅ **SO, PRECISELY — AND THE EXCLUSION IS THE WHOLE OF THIS STAMP BLOCK, NOT JUST THE TABLE ROWS:**
+> **(1) extract every `*.ts` reference in the document, EXCLUDING everything inside this derived-at stamp block** *(nothing in here is a verdict about pricing — it is all machinery, and a mechanism that cites its own members re-adds them for ever)*; **(2) subtract a file only if EVERY remaining citation of it is §2-unmapped.**
+> ⚠️ **THE NARROWER “exclude the TABLE ROWS” VERSION WAS TRIED AND FAILED ON THE NEXT RUN: the note explaining WHY two files had been removed cited them, so the extractor re-added them. ⭐ THE CIRCULARITY MOVES OUT ONE LEVEL UNLESS THE WHOLE BLOCK IS EXCLUDED.**
+> ⛔⛔ **THE RULE AND THE TABLE MUST AGREE, AND A DISAGREEMENT IS *INVESTIGATED*, NOT RESOLVED BY ASSUMING EITHER ONE WINS.** ⚠️ **r6 FIRST WROTE *“if they disagree the RULE is wrong, not the TABLE”* — AND THAT WAS FALSIFIED BY RUNNING IT, MINUTES LATER.** The corrected rule yielded **14** against a 16-row table, and **the two extra rows were the TABLE's fault, not the rule's**: `kraken-v2-translator.ts` and `price-basis.ts` were **survivors of the r4 HAND-NAMED list, cited NOWHERE ELSE in this document** — so the mechanical extraction found them **in the table itself** and kept them. ⭐⭐ **A TABLE THAT CITES ITS OWN MEMBERS JUSTIFIES THEM CIRCULARLY.** Both removed: **no line of this document rests on either, so a change to them cannot invalidate one.** ✅ **If a future revision cites them, the rule re-adds them automatically — which is the whole point.**
+> ⭐ **RUN THE CHECK; DO NOT ASSERT IT. It has now caught a defect on BOTH sides in two consecutive passes** — Langston caught the rule under-including two files, and running the corrected rule caught the table over-including two others.
 >
-> **DERIVED 16 2026-09-13 — A COMMIT TOUCHING ANY OF THESE INVALIDATES THE STAMP:**
+> **DERIVED 14 2026-09-13 — A COMMIT TOUCHING ANY OF THESE INVALIDATES THE STAMP:**
 > | file (verdict-bearing citations only) |
 > |---|
 > | `active-execution-engine.ts` |
@@ -28,10 +32,8 @@
 > | `depth-source.ts` |
 > | `equity-spot-archiver.ts` |
 > | `eval-cycle.ts` |
-> | `kraken-v2-translator.ts` |
 > | `kraken-websocket-adapter.ts` |
 > | `mark-kind.ts` |
-> | `price-basis.ts` |
 > | `price-cache.ts` |
 > | `rtb-refresh-service.ts` |
 > | `scanner.ts` |
