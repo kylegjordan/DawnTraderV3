@@ -9413,6 +9413,22 @@ const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
 
 ---
 
+### ⭐⭐ #1061 OPEN 2026-09-13 (CC-B; Langston re-derived) — ⛔⛔ **THE TARGET GATE'S FLOOR AND CEILING ARE IN DIFFERENT UNITS, SO THE ADMISSIBLE WINDOW CAN BE EMPTY — AND FOR TWO STRATEGIES IT IS**
+⛔⛔ **FILED LATE, 2026-09-13, AND THE LATENESS IS PART OF THE ENTRY.** This number was minted, cited to Kyle, cited in `PRICE_FEED_MAP.md`, in `MISTAKE_PATTERNS.md` and in the design ask — **and never written here.** ⭐ **§9.4 in its own words: *naming is not placing.* A reader grepping the ledger for `#1061` found one cross-reference and no entry.** *(Found while assembling the `B-GEOMETRY-REACH-BASELINE` handover for CC-C, after Kyle said he did not think it was all in the report — he was right.)*
+**THE FINDING.** `min_rr` is a **FLOOR on `reward / risk`**, denominated in **RISK**. `reach_atr_max` is a **CEILING on `reward / ATR`**, denominated in **ATR**. ⇒ **both can hold only if `risk/ATR ≤ reachAtrMax / minRR`** — **a property of the STOP that neither constant mentions.**
+**WORKED CASE — `strong_bull_trend`:** `target_exit_atr_multiplier = 6.0`, stop near 3 ATR, `min_rr = 1.95`. The floor demands `reward ≥ 1.95 × 3 = 5.85 ATR`; the ceiling refuses `reward > 4.0 ATR`. ⇒ ⛔⛔ **`5.85 > 4.0` — THE WINDOW IS EMPTY, which is why `0 of 298,731` evaluations passed.**
+⭐⭐ **THE COUNTER-INTUITIVE COROLLARY, AND IT IS THE POINT: A *HIGHER* QUALITY DEMAND (a larger `min_rr`) MAKES A STRATEGY *MORE* LIKELY TO BE REFUSED AS UNREACHABLE.** The two most demanding strategies on quality have the NARROWEST feasible stops: `strong_bull_trend` 1.95 ⇒ 2.05 ATR, `vwap_pullback` 2.44 ⇒ 1.64 ATR.
+⛔ **WHAT THIS IS NOT:** not a claim that the gates are wrong to exist, and not a claim that `min_rr` should be lowered. **A strategy refused here may be correctly refused.**
+⚠️ **AND THE UNKNOWN-TOKEN FLOORS COMPOUND IT:** `reach_atr_max_unknown_floor = 4.0` beside `min_rr_unknown_floor = 2.88` ⇒ an unrecognised strategy token gets `4.0 / 2.88 = 1.39 ATR`.
+**AUTHORITATIVE DETAIL:** `Claude Comms and Packages/Langston Design Asks/TARGET_GATE_UNIT_MISMATCH_FINDING_r1.md` (artifact `9ec641072`).
+**HOME:** the `(target, ceiling, min_rr)` triple for the two blocked strategies — `PHASE_19_PLAN` `2.4g-3` `B-EXCURSION-RECORD`, **and it is GATED BY THAT ROW'S RATCHET** (no re-derivation from post-deploy holds until realised-excursion data exists).
+
+### ⛔⛔ #1062 OPEN 2026-09-13 (CC-B — MINE, AND THE CAUSE IS MY OWN QUERIES) — **ANALYTICAL QUERIES EXHAUSTED THE LIVE CONNECTION POOL AND ROWS WERE DROPPED**
+⛔ **FILED LATE ALONGSIDE `#1061`, SAME REASON, SAME §9.4 FAILURE.**
+**WHAT HAPPENED.** Long analytical queries (8–15 min, concurrent, parallel workers) against the LIVE database exhausted its connection pool. **202 ticker rows + 28 archive rows were DROPPED.** Alert `fbebd936` resolved with evidence `012cedc0`.
+✅ **SOLE-CAUSE ATTRIBUTION WITHDRAWN:** CC-C measured **58 failures / 15 min against a background of 2**, and **nothing in the system attributes pool load to a session.** ⇒ **my queries are a cause, not provably THE cause.**
+⭐⭐ **THE STANDING RULE THIS PRODUCED, AND IT BINDS EVERY SESSION: NO UNBOUNDED SCANS ON THE LIVE DB. Run them SERIALLY. Timeouts in MINUTES. Full-history work goes to EXPORTED DATA.** ⛔ **A READ-ONLY QUERY IS NOT HARMLESS — IT EATS THE POOL SLOT WRITES NEED.**
+
 ### #1063 OPEN 2026-09-13 (CC-B traced it; symptom logged by CC-C 2026-08-01 on `#648`; Langston re-derived the drift and ruled the routing) — ⭐⭐ **THE CODE DECLARES ENUM VALUES THE DATABASE CANNOT STORE — THREE ENUMS — AND THE LIVE ONE SELECTIVELY DISCARDS OUR BETTER-EVIDENCED TRADES.**
 
 **ESTABLISHED, positive-controlled.** `shared/schema.ts:111` declares `pattern_type` with SIX values incl. `ABCD`; `migrations/0001_familiar_pete_wisdom.sql:1`, `drizzle/migrations/2026-04-22-initial-schema.sql:707` and live `pg_enum` all carry FIVE. ✅ **The absence is real, not an instrument gap: `ALTER TYPE … ADD VALUE` DOES appear in the corpus (`strategy_type` 'orb', `pair_regime`, `walter_memory_type`) and returns nothing for `pattern_type`.**

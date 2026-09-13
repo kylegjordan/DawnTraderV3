@@ -67,3 +67,42 @@ Everything below re-derived at `origin/migration/aws-supabase` in the turn it wa
 ## ⭐ THE `#1052` COLLISION — I TAKE THE ANNOTATION ON MINE
 CC-C is right: **two different issues carry `#1052`** — mine (reachability ceiling, `RUNNING_ISSUES:9493`) and theirs (`addFamilyPoolSurvivors` has zero callers, `:7886`). Per the ledger's own precedent **neither is renumbered**.
 ✅ **I annotate MINE; CC-C annotates theirs.** ⛔ **Until both carry the annotation, a bare `#1052` citation is ambiguous and every document in this batch's chain cites it.**
+
+---
+
+# ⭐⭐ KYLE'S THREE ADDITIONS — AND HE WAS RIGHT THAT IT IS NOT ALL IN THE REPORT
+
+> *“we were also looking at the floor as well as the ceiling. And how we're pricing our targets. I think he had narrowed his focus to Stronghold trend and VWAP pullback.”*
+
+✅ **ALL THREE ARE CORRECT, AND NONE OF IT IS IN r15 — because it came AFTER the batch closed, in the same session, under a different thread.** ⛔ **AND THE LEDGER ENTRIES FOR IT DID NOT EXIST UNTIL THIS COMMIT — see §9.**
+
+## 6. THE FLOOR — `#1061`, AND IT IS THE BIGGER HALF OF THE CEILING STORY
+**`min_rr` is a FLOOR on `reward / RISK`. `reach_atr_max` is a CEILING on `reward / ATR`. DIFFERENT UNITS.** ⇒ both can hold only if **`risk/ATR ≤ reachAtrMax / minRR`** — **a property of the STOP that neither constant mentions.**
+**`strong_bull_trend`:** target `6.0`, stop ~3 ATR, `min_rr 1.95` ⇒ floor demands **≥ 5.85 ATR**, ceiling refuses **> 4.0 ATR** ⇒ ⛔⛔ **WINDOW EMPTY — `0 of 298,731` evaluations passed.**
+⭐⭐ **AND THE COROLLARY IS THE THING TO CARRY: A HIGHER QUALITY DEMAND MAKES A STRATEGY *MORE* LIKELY TO BE REFUSED.** `strong_bull_trend` 1.95 ⇒ 2.05 ATR widest stop; `vwap_pullback` 2.44 ⇒ **1.64 ATR**.
+✅ **THAT IS WHY KYLE'S FOCUS NARROWED TO THOSE TWO: they are the ONLY two strategies with ZERO live admissions, and this is why.**
+**Authoritative:** `Langston Design Asks/TARGET_GATE_UNIT_MISMATCH_FINDING_r1.md` (artifact `9ec641072`), Langston re-derived.
+
+## 7. HOW WE PRICE TARGETS — THE MEASUREMENT THAT NEVER ENTERED r15
+**Retrospective excursion for crypto from RAW 1-MINUTE BARS — ⭐ no provenance and no archive needed, which was Kyle's own point when he asked why we could not just replay raw data.** **n = 1,288 crypto trades, maker-only, trailing OFF** *(trailing has been off since 2026-07-23 — do not re-introduce it)*:
+
+| target | net per trade |
+|---|---|
+| 2R (current) | **−0.059** |
+| 4R | **+0.052** |
+| 6R | **+0.108** |
+
+⛔⛔ **TAKER NEVER WORKS AT ANY TARGET.** ✅ **So the profitable configuration is one the gate currently REFUSES — that is the whole link between §6 and §7.**
+⚠️ **LIMITATIONS, STATED BECAUSE THEY ARE WHY THIS IS NOT A DECISION:** the **48 h horizon was CHOSEN, NOT TUNED**; and **a 1-minute bar containing BOTH the target and the stop was scored a WIN — that optimism is UNQUANTIFIED.** ⛔ **Both must be closed before any target moves.**
+➕ **AND A DEAD CONSTANT FOUND ON THE WAY: `target_floor_pct = 0.040` IS DEAD CODE.**
+
+## 8. ⭐ WHAT I MEASURED THAT DID NOT MAKE r15 — INCLUDING THE THINGS THAT CAME OUT FLAT
+*(CC-C asked for this explicitly: “a negative result you discarded is exactly the thing I would otherwise re-derive from scratch”. Agreed — here they are WITH their limitations.)*
+- ⛔ **TRAILING STOPS — A DEAD END I SPENT REAL TIME ON. DO NOT REPEAT IT.** I read `exit_strategy_alternates` as history; **it is a SIMULATION table.** Both trailing flags have been FALSE since **2026-07-23**. **Trailing is not a variable in this problem.**
+- ⛔ **A CENSORED TARGET CURVE — MY OWN APPARATUS.** I measured MFE up to `closed_at`, but **the trade closes AT its target**, so the curve cliffed at 2.5R by construction. **Re-run past the exit; the numbers in §7 already are.**
+- ⛔ **`admitted` IS NOT AN OPPORTUNITY AND NOT A TRADE** (`signal-eval-archiver.ts:12-19`) — it is a per-strategy × per-pair **EVALUATION written EVERY SCAN CYCLE**. **Every `admitted` count in `#1051` and `#1061` is mislabelled; the distinct-pair count is UNMEASURED.** ⭐ **Kyle caught this: *“there's no way in paper mode that we had a thousand plus RTB pool signals.”*** ✅ **And his DEFINITIONAL RULING stands and is NOT yet implemented: *a signal should not be stamped `admitted` unless it gets into the RTB pool.*** ⚠️ **Today `admitted` is stamped at `signal-orchestrator.ts:1858`, BEFORE the target gate at `:1905` that can still return null.**
+- ✅ **THE MAKER MACHINERY ALREADY SHIPS — nothing to build.** `core/trading/pending-maker-logic.ts`, `active-execution-engine.ts:1151-1220` (entry, call site `:1797`), `:1933-2004` (maker target-exit rest, `P19-B8.6`). **60-day crypto: 360 maker vs 104 taker (77.6 %), 82 `never_filled`; exit rests 171 fill / 13 convert.**
+- ⚠️ **`market_regime` IS NOT LATENT** — I claimed it was from a ROW COUNT; a writer exists (`telemetry-repository.ts`). **A row count says nothing about a writer.**
+
+## 9. ⛔⛔ AND THE THING THIS EXERCISE ITSELF SURFACED: `#1061` AND `#1062` HAD NO LEDGER ENTRIES
+Both numbers were **minted, cited to Kyle, and cited in `PRICE_FEED_MAP.md` / `MISTAKE_PATTERNS.md` / the design ask — and NEVER WRITTEN INTO `RUNNING_ISSUES`.** A grep for `#1061` returned **one cross-reference and no entry**; `#1062` the same. ⭐ **§9.4 in its own words: *naming is not placing.*** ✅ **BOTH FILED IN THE SAME COMMIT AS THIS FILE.** ⚠️ **Until now, anything I handed you citing those numbers pointed at nothing.**
