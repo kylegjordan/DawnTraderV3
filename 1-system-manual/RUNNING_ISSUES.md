@@ -9491,6 +9491,7 @@ const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
 > `HOME: B-PATTERN-ENUM-DRIFT, owner CC-B, PHASE_19_PLAN row 3m-ENUM, ahead of 3n B-PRICE-SIDE-BY-JOB` — **slot RATIFIED by Langston** (the live half is bleeding now; `3n` is a design decision with no live loss). Root cause **annotates `#648`** (§9.5(b-ii)) — no duplicate minted. **OPEN (homed, slot ratified).**
 
 ### #1052 OPEN 2026-09-12 (CC-B, Kyle-directed; problem and plan from Coltrane, arithmetic re-derived by CC-B) — ⭐⭐ **THE REACHABILITY CEILING IS A HOLDING-HORIZON STATEMENT, AND OURS DISAGREES WITH ITSELF THREE WAYS**
+> ⛔⛔ **NUMBER COLLISION — ANNOTATED 2026-09-13 (CC-B). TWO DIFFERENT ISSUES CARRY `#1052` IN THIS FILE: THIS ONE (the reachability ceiling / `B-GEOMETRY-REACH-BASELINE`) AND CC-C's `addFamilyPoolSurvivors` has-zero-callers entry.** Per this ledger's own precedent **neither is renumbered**. ⇒ ✅ **A BARE `#1052` CITATION IS AMBIGUOUS FROM HERE ON — qualify it as `#1052 (reachability)` or `#1052 (addFamilyPoolSurvivors)`.** ⚠️ **Every document in the `B-GEOMETRY-REACH-BASELINE` chain cites the bare form.** *(Found by CC-C; each of us annotates our own.)*
 
 **BATCH: `B-GEOMETRY-REACH-BASELINE`, change-class `architecture`, scope at `Claude Comms and Packages/Scope Files/B_GEOMETRY_REACH_BASELINE_SCOPE.md`. Plan row `2.4g-2`.** ⛔ **ONE batch: the reward-to-risk work and the reachability work are the same dial and are not separable. The reachability leg absorbs what had been scoped as a separate CC-C batch.**
 
