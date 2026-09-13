@@ -319,3 +319,34 @@ Each mutation was applied with an assertion that it actually matched (**an unfir
 1. **`tickerBasis: 'ticker_bbo'` for a REST-sourced quote.** I hold that the basis names the quantity and `producer` carries the transport. The alternative — calling it `ticker_default` — would misname a genuine best-bid/offer.
 2. **Two cells rather than one cell with a widened `attempted`.** The two are equal by construction, which is redundant; I took redundancy over a boundary that depends on a reader remembering a date.
 3. **The book leg passes `clockBasis: 'receipt'`** because `getBookForFill` returns an AGE, not a venue stamp. A venue clock for the book is P-8a's, not this row's.
+
+### ✅ ROW `8c` P1 — STEP 7 VERIFICATION (deployed `cf535acb2deb474ef28b81faa7e040c900152c0d`, 2026-09-13)
+
+**DEPLOY.** `dt-deploy` recorded `deployed_by_claimed=cc-c`, *"live, engine resumed, identity asserted"*, `restart_time=613`, `migrate_ms=730`.
+⛔ **WINDOW ANCHOR = `2026-09-13T07:08:52.378Z`, from pm2 `pm_uptime` — NOT dt-deploy's `deployed_at` (`07:09:02Z`), which is its post-check stamp 10 s later.** *(Langston's F1 to CC-B, same distinction, applied here rather than re-learned.)*
+⚠️ **WHAT THE RESTART DESTROYED, asked BEFORE deploying rather than discovered after** (`workflow-06`): the funnel itself (process-lifetime, zeroed by construction — the window starts here); the `F-G-2` OBJ-0 shadow's per-position trailing state — **costs nothing, the window is VOID**; and the adaptive-EMA registry (S26), which cold-seeds every symbol as it does on any restart.
+
+**THE MECHANISM IS LIVE AND READABLE — all five structural checks, on screen:**
+
+| check | result |
+|---|---|
+| the rung key is live | ✅ **FOUR rows**, `book`/`ladder` × `active`/`vts` |
+| `rung` + `reasonsAbout` on the row, not parsed from the key | ✅ `rung: book` / `reasonsAbout: book_top`; `rung: ladder` / `reasonsAbout: ticker_sides` |
+| rung-scoped reason names at the read surface | ✅ the ladder row reports **`locked_or_synthetic_ticker`**, never `…_book` |
+| the transport split records | ✅ `byAcceptedSource` populated on both ladder rows |
+| ⛔ **THE ARITHMETIC GATE** — `book.attempted === ladder.attempted` | ✅ **45 = 45** (vts) and **24 = 24** (active) |
+
+**THE READING — `2026-09-13T07:12Z`, ~3 minutes into the lifetime:**
+
+| lane | book accepted | ladder accepted | ladder refused | `byAcceptedSource` |
+|---|---|---|---|---|
+| `active:crypto_spot` | **0 / 24** (all `no_book`) | **24 / 24** | 0 | `ticker_bbo:kraken_rest` **24** |
+| `vts:crypto_spot` | **0 / 45** (all `no_book`) | **41 / 45** | 4 × `locked_or_synthetic_ticker` | `ticker_bbo:kraken_rest` **41** |
+
+⛔⛔ **THIS IS NOT A PASS AND MY OWN PRE-REGISTRATION FORBIDS CALLING IT ONE.** The n-floor is **2,000 ladder attempts per lane**; this is **24 and 45** — roughly **1-2%** of it. ⇒ **`INCONCLUSIVE-EXTEND`, exactly as §3b pre-registered, and the direction of the early number changes nothing about that.** ★ **A criterion that bends the first time the data looks good was never a criterion.**
+
+✅ **WHAT IT *DOES* ESTABLISH, which is narrower and is the point of Step 7: the instrument works.** The funnel fills, both cells key correctly, the refusal arm demonstrably fires (4 × `locked_or_synthetic_ticker` on the VTS lane), and the recorder demonstrably ran on the active lane too — its zero refusals sit beside **24 accepts**, so that zero is *"ran and found nothing to refuse"*, never *"never ran"*. **That distinction is the whole reason the control was specified.**
+
+⛔ **AND THE HEADLINE MAY NOT BE CITED WITHOUT ITS SPLIT (rider 1's clause, honoured on its first reading): 100% of the recovery is `ticker_bbo:kraken_rest`. ZERO pushed.** ⇒ **this is a POLL-CADENCE recovery**, which is the materially weaker claim — and rider 1 says `lastSource` *understates* the pushed share, so the true pushed count is **≥ 0 and unmeasured**, not *"zero pushed sides exist."*
+
+**NO UI SURFACE, stated with its reason** (`workflow-07` requires the judgement out loud): `levelBasisFunnel` has **no client consumer** — measured, with a control: the grep finds it **0 times** under `client/`, while the same grep finds `gridTags` in `vts-filter-diagnostics-panel.tsx`. It is emitted verbatim on the diagnostics endpoint and rendered by nothing. **A screen check would have verified an absence.**
