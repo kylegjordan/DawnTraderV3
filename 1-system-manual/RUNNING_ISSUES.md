@@ -9017,6 +9017,59 @@ and `i8cSubscribeNewTrade` is `kraken-websocket-adapter.ts:3717` → `this.subsc
 **DISPOSITION (§9.4 — 4, A SCHEDULED REVIEW):** re-read the inter-open gap at the next session start. **If the gap exceeds 48 h it has left the observed envelope and becomes its own investigation**; below that it is inside measured behaviour and nothing is owed. Not minted as an issue: an in-envelope reading with a control that explains it is not a finding (§9.4 disposition 5 reasoning, applied to a watch rather than a withdrawal).
 
 
+
+---
+
+#### ⭐⭐ AMENDMENT 4 — **KYLE'S "MACHINERY OR KRAKEN?" QUESTION: NEITHER. THE BOOK PIPELINE IS HEALTHY AND VERIFIED; THE STALENESS IS AT A DIFFERENT STAGE ENTIRELY** (CC-C, 2026-09-13)
+
+⛔ **THE QUESTION, and it offered two options:** *"Is that an issue with our machinery, or is it that Kraken just doesn't have a frequent enough order book feed? … Is our machinery set up in a way that it cannot process all of those messages that are coming through for each signal?"*
+✅ **THE ANSWER IS A THIRD THING, and both of his options measure NO.**
+
+### (1) KRAKEN'S FEED IS FREQUENT — measured OUT-OF-BAND, independent of our code
+`scripts/analysis/book-volume-probe.mjs`, top-40 population, 10 min: **1,321.5 book frames/symbol/min**; UAI/USD specifically **8,600 frames in 10 min ≈ 860/min, one every ~70 ms.** ⇒ **not a feed-frequency problem.**
+
+### (2) OUR MACHINERY KEEPS UP, AND THE BOOK IS CRYPTOGRAPHICALLY VERIFIED INTACT
+`/api/active-engine/book-integrity`, lifetime `0ea7ead5b` since 15:18:16Z, read at 41.6 min uptime:
+
+| | |
+|---|---|
+| `updatesApplied` (UAI/USD, the one subscribed symbol) | **26,396 = 634.5/min**, one every ~95 ms |
+| `checksumAttempts` / `matches` / `mismatches` | **26,396 / 26,396 / 0 — 100% match** |
+| `crossedDetections` | **0** |
+
+⇒ **we apply ~74% of what an independent socket sees on the same name, and every single applied update reconstructs Kraken's own CRC.** ⛔ **NOT a throughput problem and NOT an integrity problem.**
+★ **AND THIS IS A `#507` UPDATE WORTH RECORDING ON ITS OWN: that item's pre-registered expectation was that mismatch WOULD be the normal reading** (*"Kraken sends price/qty as JSON numbers, so `String(qty)` cannot reconstruct the CRC input — measured 0/40 match live"*). **It is now 26,396/26,396. The precision-formatting fix landed and the checksum is a working integrity signal.** `crossedDetections: 0` against the pre-fix comparator's **32.03%** is the same story on the other counter.
+
+### (3) ⭐⭐ WHERE THE STALENESS ACTUALLY IS — AND IT IS NOT THE BOOK
+The F4 age-mode split shipped this morning (`0285c4fb6`) reads, same window, `active:crypto_spot`:
+
+| stage | n | venue-STAMPED (pushed) | venue-UNSTAMPED (polled) | age p50 | age p95 | max |
+|---|---|---|---|---|---|---|
+| `rtb_refresh` | 15 | **14** | 1 | **0-1,000 ms** | 0-1,000 ms | 906 ms |
+| **`active_signal_birth`** | **2,726** | **0** | **2,726** | **30,000-45,000 ms** | 45,000-60,000 ms | 60,167 ms |
+
+⇒ ⛔⛔ **THE QUOTE THAT SETS OUR ENTRY, STOP AND TARGET IS 30-45 SECONDS OLD AT THE MEDIAN, AND *NONE* OF IT IS PUSHED — 0 of 2,726 carry a venue stamp.** It is the REST bucket cadence (`#977` am. 3+4: the active lane reads the shared cache by symbol with no bucket argument and inherits VTS's 60 s refresh). **A p50 of 30-45 s against a 60 s poll is exactly uniform sampling of that cycle.**
+★ **AND THE SYSTEM DEMONSTRABLY *CAN* DO BETTER AT ANOTHER STAGE: `rtb_refresh` reads sub-second, 14 of 15 pushed.** ⇒ **this is not a capability gap, it is which cache the birth path reads.**
+✅ **F4 IS WHAT MADE THIS VISIBLE. The pooled p50 alone would have shown "30-45 s" with no way to tell a slow feed from a polled one; the `venueStamped n = 0` cell is the half that names the mechanism.** It was built this morning to stop a bimodal average being misread, and its first live reading found a mode nobody had looked for.
+
+### ⇒ WHAT IT IS WORTH, PRICED ON THE SAME INSTRUMENT SO THE COMPARISON IS REAL
+From the divergence probe's age buckets (n=225,104, top-40): a quote **<250 ms** old sits **2.02 bps** from the live book top; one **30 s+** old sits **5.69 bps** (p90 13.52).
+⇒ **the 30-45 s age costs ~4 bps beyond a fresh quote** — against a **~20 bps** typical crypto spread and an **80 bps** taker fee.
+
+### ⇒ THE ORDERING THIS SETTLES, smallest to largest, all measured on our own populations
+| the error | worth |
+|---|---|
+| order book vs ticker, at age 0 | **~2 bps** |
+| depth-walk vs best price, $150 order | **0.00 bps p50 · 1.09 p90 · 5.52 p99** |
+| quote AGE at signal birth (30-45 s vs sub-second) | **~4 bps** |
+| **midpoint vs the transactable side** (`3n`) | **~half a spread ≈ 10 bps** |
+| crypto taker fee | **80 bps** |
+
+⛔ **SO THE RECOMMENDATION IS UNCHANGED AND NOW BETTER EVIDENCED: use the TICKER, and spend the effort on `3n` (the side), which is the largest of the four and already in flight.** ⚠️ **AND THE BOOK'S REPUTATION IS CLEARED: it is not unreliable, it is not slow, and it is not mis-handled — it is simply subscribed for almost nothing, because almost nothing reaches the queue (amendments 2 and 3).**
+
+**DISPOSITION (§9.4 — 2, added to an existing batch): the signal-birth quote age becomes an objective of `3n.l` (`#1056`), which already owns what the price cache stores.** It is the same seam — `3n.l` is about the SIDES being discarded on the REST write; this is about the AGE of the row that write lands in — and splitting them across two batches would have two sessions editing one 🔒 LOCKED module. ⛔ **NOT folded into `3n.m`**, which this amendment has just shrunk to a coverage question.
+
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
