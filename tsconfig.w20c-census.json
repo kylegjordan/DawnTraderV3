@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [],
+  "files": ["scripts/b5-w20c-provenance-replay.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "tsBuildInfoFile": null
+  }
+}

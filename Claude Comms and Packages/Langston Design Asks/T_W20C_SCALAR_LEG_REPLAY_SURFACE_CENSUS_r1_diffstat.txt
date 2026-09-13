@@ -1,0 +1,484 @@
+=== b597f1bf2  2026-09-11
+    +6      -4      server/services/price-cache.ts
+=== 14442f622  2026-09-11
+    +7      -4      server/services/live-pricing-adapter.ts
+    +14     -8      server/services/price-cache.ts
+    +4      -2      server/services/signal-orchestrator.ts
+    +16     -2      server/utils/adaptive-kalman.ts
+=== e14053773  2026-09-11
+    +4      -0      server/services/active-execution-engine.ts
+    +26     -4      server/utils/adaptive-kalman.ts
+=== cc88748f7  2026-09-11
+    +2      -1      server/exchanges/kraken/kraken-websocket-adapter.ts
+    +6      -2      server/services/live-pricing-adapter.ts
+    +34     -0      server/services/market-data/price-basis.ts
+    +109    -8      server/services/price-cache.ts
+    +2      -0      server/services/signal-orchestrator.ts
+=== ba36cc5ad  2026-09-11
+    +6      -1      server/core/calculations/touch-price.ts
+    +56     -14     server/services/active-execution-engine.ts
+    +17     -6      server/services/live-pricing-adapter.ts
+    +17     -5      server/services/market-data/price-basis.ts
+    +33     -4      server/utils/adaptive-kalman.ts
+=== 3127b5cd8  2026-09-11
+    +40     -5      server/exchanges/kraken/kraken-websocket-adapter.ts
+    +30     -6      server/services/market-data/price-basis.ts
+=== 264fd15e0  2026-09-11
+    +5      -0      server/startup/fee-model-rail.ts
+=== 92a78b05e  2026-09-11
+    +35     -0      server/exchanges/kraken/kraken-websocket-adapter.ts
+    +140    -0      server/services/market-data/book-ticker-disagreement.ts
+=== cf7394996  2026-09-11
+    +126    -0      server/core/calculations/touch-price.ts
+=== c501bded3  2026-09-11
+    +11     -0      server/exchanges/kraken/kraken-websocket-adapter.ts
+    +4      -2      server/services/active-execution-engine.ts
+    +74     -3      server/services/live-pricing-adapter.ts
+    +11     -0      server/services/market-data/kraken-v2-translator.ts
+=== 64f5e3517  2026-09-11
+    +1      -1      server/services/execution/depth-walk.ts
+=== cdb953290  2026-09-11
+    +58     -17     server/services/active-execution-engine.ts
+    +72     -0      server/services/market-data/engine-rest-fallback.ts
+    +45     -0      server/services/market-data/price-basis.ts
+    +32     -1      server/services/market-data/rest-rate-limiter.ts
+=== f61dcbae2  2026-09-11
+    +6      -1      server/services/signal-orchestrator.ts
+    +89     -5      server/utils/adaptive-kalman.ts
+=== aee2bc191  2026-09-11
+    +5      -3      server/core/math/cost-model.ts
+    +1      -1      server/core/math/trade-pnl.ts
+    +13     -7      server/startup/b72-warmup.ts
+    +37     -0      server/startup/fee-model-rail.ts
+=== 0314c00e4  2026-09-11
+    +25     -0      server/services/active-execution-engine.ts
+    +54     -3      server/services/price-cache.ts
+=== 2027f22b7  2026-09-11
+    +81     -0      server/services/market-data/price-basis.ts
+=== 7e21b196c  2026-09-11
+    +9      -1      server/exchanges/kraken/kraken-websocket-adapter.ts
+=== ad83d3406  2026-09-11
+    +29     -14     server/exchanges/kraken/kraken-websocket-adapter.ts
+=== a5273ad6d  2026-09-11
+    +1      -0      server/services/system-alerts.ts
+=== 29cce1076  2026-09-11
+    +7      -5      server/services/passive-archive/ohlc-batch-writer.ts
+    +5      -2      server/services/passive-archive/ohlc-frame-skip-tracker.ts
+    +13     -4      server/services/passive-archive/ohlc-frame-validator.ts
+=== 12d1bd1cd  2026-09-11
+    +58     -13     server/services/passive-archive/equity-spot-archiver.ts
+    +11     -4      server/services/passive-archive/ohlc-batch-writer.ts
+    +243    -0      server/services/passive-archive/ohlc-frame-skip-tracker.ts
+    +171    -0      server/services/passive-archive/ohlc-frame-validator.ts
+    +5      -2      server/services/passive-archive/ticker-batch-writer.ts
+=== 5cf688ee4  2026-09-09
+    +1      -1      server/services/system-alerts.ts
+=== b6a5bc3a7  2026-09-08
+    +2      -2      bridge/canonical/mapping-regime-strategy.json
+    +17     -0      server/config/canonical-regime-strategy-map.ts
+=== 06e59701e  2026-09-07
+    +2      -2      server/services/market-scanner.ts
+=== 17a102477  2026-09-07
+    +178    -0      server/core/calculations/level-basis.ts
+    +20     -1      server/services/signal-orchestrator.ts
+=== fcc124fb4  2026-09-06
+    +17     -2      server/core/calculations/level-basis.ts
+=== 5838d64b2  2026-09-06
+    +24     -1      server/core/calculations/level-basis.ts
+    +38     -0      server/services/price-cache.ts
+    +3      -0      server/services/signal-orchestrator.ts
+    +3      -0      server/services/vts-runner.ts
+=== 96ffa82fe  2026-09-06
+    +198    -82     server/core/calculations/level-basis.ts
+    +5      -1      server/services/live-pricing-adapter.ts
+    +43     -0      server/services/price-cache.ts
+    +37     -24     server/services/signal-orchestrator.ts
+    +37     -16     server/services/vts-runner.ts
+=== d0eda8ae4  2026-09-06
+    +149    -0      server/core/calculations/level-basis.ts
+    +29     -1      server/services/signal-orchestrator.ts
+    +20     -1      server/services/vts-runner.ts
+=== 3f88e2e4a  2026-09-06
+    +76     -1      server/exchanges/kraken/kraken-websocket-adapter.ts
+    +2      -2      server/services/active-execution-engine.ts
+    +21     -3      server/services/live-pricing-adapter.ts
+=== d434cd376  2026-09-06
+    +1      -0      server/services/system-alerts.ts
+=== 9217e0faa  2026-09-06
+    +5      -2      server/services/active-execution-engine.ts
+    +54     -5      server/services/live-pricing-adapter.ts
+    +58     -3      server/services/price-cache.ts
+=== 4ca371a42  2026-09-05
+    +80     -4      server/exchanges/kraken/kraken-websocket-adapter.ts
+=== 4dc231e57  2026-09-05
+    +31     -2      server/asset_classes/xstock_spot/book-state-tracker.ts
+    +23     -2      server/asset_classes/xstock_spot/book-state.ts
+    +7      -2      server/services/active-execution-engine.ts
+=== 8f18763ec  2026-09-05
+    +23     -0      server/core/calculations/level-basis.ts
+    +48     -0      server/services/signal-orchestrator.ts
+    +32     -0      server/services/vts-runner.ts
+=== 29d2ad6a2  2026-09-05
+    +43     -2      server/core/calculations/level-basis.ts
+=== af7f31d83  2026-09-05
+    +36     -0      server/core/math/cost-model.ts
+    +84     -15     server/core/math/maker-taker-decision.ts
+    +6      -0      server/core/rtb/ready_to_buy_service.ts
+    +8      -0      server/services/signal-orchestrator.ts
+    +7      -0      server/services/vts-runner.ts
+=== a076a53d3  2026-09-05
+    +111    -28     server/core/calculations/level-basis.ts
+=== 91cfea003  2026-09-05
+    +14     -2      server/core/calculations/level-basis.ts
+=== 884b9289e  2026-09-05
+    +258    -0      server/core/calculations/level-basis.ts
+=== b054b8e62  2026-09-04
+    +24     -2      server/services/system-alerts.ts
+=== f8870022f  2026-09-04
+    +5      -5      server/services/signal-orchestrator.ts
+=== 3ad89b699  2026-09-03
+    +58     -0      server/asset_classes/xstock_spot/book-state-tracker.ts
+    +28     -6      server/services/active-execution-engine.ts
+=== d755af4e2  2026-09-03
+    +17     -7      server/asset_classes/xstock_spot/book-state-tracker.ts
+=== 1a71c553b  2026-09-03
+    +21     -4      server/asset_classes/xstock_spot/book-state-tracker.ts
+    +3      -1      server/asset_classes/xstock_spot/book-state.ts
+=== 2779992d6  2026-09-03
+    +16     -3      server/services/active-execution-engine.ts
+=== 1a39d7cb3  2026-09-03
+    +19     -10     server/services/active-execution-engine.ts
+=== c5bd9de32  2026-09-03
+    +7      -1      server/core/rtb/ready_to_buy_service.ts
+    +26     -9      server/services/active-execution-engine.ts
+=== e1ae134a8  2026-09-03
+    +22     -0      server/core/rtb/ready_to_buy_service.ts
+    +32     -0      server/services/active-execution-engine.ts
+=== 13e2e2245  2026-09-03
+    +7      -0      server/asset_classes/xstock_spot/book-state-tracker.ts
+=== 87f0d39bd  2026-09-03
+    +7      -1      server/services/active-execution-engine.ts
+    +4      -1      shared/schema.ts
+=== 2ee14d690  2026-09-03
+    +11     -5      server/asset_classes/xstock_spot/book-state-config.ts
+    +22     -12     server/services/active-execution-engine.ts
+    +9      -10     server/services/active-portfolio-manager.ts
+    +8      -5      shared/schema.ts
+=== 3b2c4966c  2026-09-03
+    +70     -0      server/asset_classes/xstock_spot/book-state-config.ts
+    +103    -0      server/asset_classes/xstock_spot/book-state-tracker.ts
+    +255    -0      server/asset_classes/xstock_spot/book-state.ts
+    +162    -6      server/services/active-execution-engine.ts
+    +15     -0      server/services/active-portfolio-manager.ts
+    +39     -3      server/services/passive-archive/equity-spot-archiver.ts
+    +17     -0      server/startup/b72-warmup.ts
+    +18     -0      shared/schema.ts
+=== 448084d13  2026-09-03
+    +3      -1      server/services/system-alerts.ts
+=== dbcca4a9f  2026-09-03
+    +117    -12     server/services/system-alerts.ts
+=== f2cc6ee29  2026-09-02
+    +45     -9      server/services/active-execution-engine.ts
+=== f36c8f496  2026-09-02
+    +9      -3      server/services/active-execution-engine.ts
+=== 76c65266e  2026-09-02
+    +12     -1      server/services/active-execution-engine.ts
+=== d3e643032  2026-09-02
+    +3      -1      server/asset_classes/xstock_spot/friction.ts
+    +17     -2      server/core/math/cost-model.ts
+    +30     -1      server/core/trading/pending-maker-logic.ts
+    +30     -0      server/core/trading/vts-exit-booking.ts
+    +106    -2      server/services/active-execution-engine.ts
+    +69     -9      server/services/vts-runner.ts
+    +16     -0      server/services/vts-service.ts
+=== 0d2e22b47  2026-08-31
+    +17     -5      server/services/live-pricing-adapter.ts
+=== 4e8dbf288  2026-08-31
+    +16     -3      server/services/live-pricing-adapter.ts
+=== 9a541b0eb  2026-08-31
+    +9      -1      server/services/live-pricing-adapter.ts
+=== ed215098c  2026-08-31
+    +33     -6      server/services/live-pricing-adapter.ts
+=== 3ab7bd89f  2026-08-31
+    +78     -23     server/services/live-pricing-adapter.ts
+=== fd81ce18c  2026-08-30
+    +40     -6      server/services/market-scanner.ts
+=== ffee91aec  2026-08-30
+    +33     -10     server/services/market-scanner.ts
+=== 54b3e4005  2026-08-30
+    +24     -5      server/services/market-scanner.ts
+=== 0b18ee530  2026-08-30
+    +18     -1      server/services/market-scanner.ts
+=== 827ecb359  2026-08-30
+    +32     -0      server/services/market-scanner.ts
+=== 104fa755b  2026-08-30
+    +8      -2      server/services/active-execution-engine.ts
+    +5      -2      shared/schema.ts
+=== 1770137e0  2026-08-30
+    +18     -6      server/services/active-execution-engine.ts
+    +7      -2      shared/schema.ts
+=== 279f4c2c6  2026-08-30
+    +12     -1      server/exchanges/kraken/kraken-websocket-adapter.ts
+    +74     -14     server/services/active-execution-engine.ts
+    +70     -23     server/services/live-pricing-adapter.ts
+    +20     -5      server/services/market-data/kraken-v2-translator.ts
+    +35     -0      server/services/market-data/mark-kind.ts
+    +12     -4      server/services/passive-archive/equity-spot-archiver.ts
+    +32     -6      shared/schema.ts
+=== 56ac8067a  2026-08-28
+    +11     -0      server/services/signal-orchestrator.ts
+=== bf1ac9620  2026-08-28
+    +21     -0      server/services/signal-orchestrator.ts
+=== 9150e2174  2026-08-28
+    +14     -0      server/markets/venue-grid-resolver.ts
+=== f280e9c6b  2026-08-28
+    +5      -2      server/services/vts-runner.ts
+    +10     -1      shared/venue-grid-verdicts.ts
+=== db4f07857  2026-08-28
+    +11     -4      server/core/calculations/venue-price-grid.ts
+    +55     -0      shared/venue-grid-verdicts.ts
+=== 6250a3419  2026-08-28
+    +41     -1      server/markets/venue-grid-resolver.ts
+    +46     -1      server/services/signal-orchestrator.ts
+=== 2245ab15e  2026-08-28
+    +12     -3      server/core/calculations/venue-price-grid.ts
+    +43     -6      server/services/passive-archive/ohlc-batch-writer.ts
+    +7      -1      server/services/passive-archive/ticker-batch-writer.ts
+=== e02f6d356  2026-08-28
+    +45     -2      server/core/calculations/venue-price-grid.ts
+    +20     -3      server/markets/venue-grid-resolver.ts
+    +17     -7      server/services/signal-orchestrator.ts
+=== 01b54cf03  2026-08-28
+    +11     -5      server/core/calculations/venue-price-grid.ts
+    +37     -4      server/core/observability/active-funnel-tracker.ts
+    +46     -1      server/markets/venue-grid-resolver.ts
+    +27     -45     server/services/signal-orchestrator.ts
+=== 773e1a21f  2026-08-28
+    +72     -8      server/core/calculations/venue-price-grid.ts
+    +46     -1      server/core/observability/active-funnel-tracker.ts
+    +22     -2      server/markets/venue-grid-resolver.ts
+    +16     -3      server/services/passive-archive/ohlc-batch-writer.ts
+    +5      -4      server/services/passive-archive/ticker-batch-writer.ts
+    +77     -29     server/services/signal-orchestrator.ts
+    +1      -1      server/services/vts-runner.ts
+=== 0df3aa9fb  2026-08-28
+    +9      -1      server/services/signal-orchestrator.ts
+=== 901190ab4  2026-08-28
+    +26     -11     server/core/calculations/venue-price-grid.ts
+    +16     -1      server/services/passive-archive/ohlc-batch-writer.ts
+    +24     -2      server/services/signal-orchestrator.ts
+=== dc73ca104  2026-08-28
+    +9      -2      server/services/passive-archive/ohlc-batch-writer.ts
+=== 68c7a72db  2026-08-28
+    +1      -1      server/core/calculations/venue-price-grid.ts
+    +8      -7      server/services/execution/venue-validate.ts
+    +29     -22     server/services/passive-archive/ohlc-batch-writer.ts
+    +34     -2      server/services/passive-archive/ticker-batch-writer.ts
+    +5      -1      server/services/signal-orchestrator.ts
+=== 98640f00a  2026-08-28
+    +124    -2      server/services/passive-archive/ohlc-batch-writer.ts
+=== 87f321ff9  2026-08-28
+    +17     -6      server/services/active-execution-engine.ts
+    +31     -0      server/services/execution/venue-validate.ts
+=== 0a176ad2a  2026-08-28
+    +27     -0      server/services/vts-runner.ts
+    +8      -0      server/types/virtual-trade.interface.ts
+=== 3ce77a91d  2026-08-28
+    +39     -1      server/services/active-execution-engine.ts
+=== eaec4095e  2026-08-28
+    +24     -1      server/core/calculations/venue-price-grid.ts
+=== 783ecf08a  2026-08-28
+    +19     -1      server/services/execution/venue-validate.ts
+=== 6c6a009ee  2026-08-28
+    +71     -0      server/core/calculations/venue-price-grid.ts
+    +27     -0      server/services/vts-runner.ts
+=== d8c349b66  2026-08-28
+    +28     -11     server/services/signal-orchestrator.ts
+=== dbeaa5049  2026-08-28
+    +59     -0      server/services/signal-orchestrator.ts
+=== f5a328dff  2026-08-28
+    +130    -0      server/markets/venue-grid-resolver.ts
+=== aaf9db5a0  2026-08-28
+    +207    -0      server/core/calculations/venue-price-grid.ts
+    +14     -0      server/markets/kraken-asset-pairs-service.ts
+=== ed86a758e  2026-08-27
+    +19     -2      server/services/active-execution-engine.ts
+    +63     -0      server/services/execution/depth-source.ts
+    +15     -13     shared/schema.ts
+=== d080e1339  2026-08-26
+    +21     -0      server/services/active-execution-engine.ts
+    +13     -0      server/services/live-pricing-adapter.ts
+=== f086fae15  2026-08-26
+    +25     -4      server/services/active-execution-engine.ts
+    +13     -2      shared/schema.ts
+=== fe08774f6  2026-08-26
+    +11     -2      server/exchanges/kraken/kraken-websocket-adapter.ts
+=== 68930cd35  2026-08-26
+    +206    -9      server/services/active-execution-engine.ts
+    +50     -5      server/services/active-portfolio-manager.ts
+    +17     -1      server/services/live-pricing-adapter.ts
+    +64     -0      shared/schema.ts
+=== 7a4d19df2  2026-08-26
+    +2      -2      server/services/live-pricing-adapter.ts
+=== 6f09f2945  2026-08-26
+    +9      -1      server/storage.ts
+=== 60e53fe36  2026-08-24
+    +1      -1      server/exchanges/kraken/kraken-websocket-adapter.ts
+    +13     -1      server/storage.ts
+=== afb7d326c  2026-08-24
+    +12     -3      server/exchanges/kraken/kraken-websocket-adapter.ts
+=== b95d8e708  2026-08-23
+    +17     -3      server/exchanges/kraken/kraken-websocket-adapter.ts
+    +2      -2      server/services/active-execution-engine.ts
+    +171    -23     server/services/live-pricing-adapter.ts
+=== 9813fdb41  2026-08-23
+    +16     -4      server/storage.ts
+    +12     -0      shared/schema.ts
+=== 3bd9f4022  2026-08-23
+    +85     -9      server/exchanges/kraken/kraken-websocket-adapter.ts
+=== e6f7c70b3  2026-08-22
+    +20     -10     server/exchanges/kraken/kraken-websocket-adapter.ts
+=== 592a555e2  2026-08-22
+    +70     -6      server/exchanges/kraken/kraken-websocket-adapter.ts
+=== c37e51a40  2026-08-22
+    +30     -12     server/exchanges/kraken/kraken-websocket-adapter.ts
+=== b95407a81  2026-08-22
+    +97     -25     server/exchanges/kraken/kraken-websocket-adapter.ts
+=== 567385eae  2026-08-21
+    +82     -0      server/storage.ts
+=== 35b38066d  2026-08-21
+    +11     -2      server/storage.ts
+=== 6cea95a0c  2026-08-21
+    +2      -2      server/storage.ts
+=== ea36f7726  2026-08-21
+    +25     -4      server/storage.ts
+    +9      -0      shared/schema.ts
+=== 229058da8  2026-08-21
+    +42     -3      server/storage.ts
+=== bf287a6a9  2026-08-21
+    +27     -8      server/storage.ts
+=== 49135e0ca  2026-08-21
+    +30     -51     server/services/active-portfolio-manager.ts
+    +63     -0      server/storage.ts
+=== 2441821d8  2026-08-21
+    +6      -1      server/services/active-portfolio-manager.ts
+    +31     -0      server/storage.ts
+=== ea9f49709  2026-08-21
+    +15     -4      server/storage.ts
+=== e67deebef  2026-08-20
+    +84     -1      server/storage.ts
+=== 5759d27b7  2026-08-20
+    +14     -7      server/services/guardrail-settings.ts
+=== e14f8870a  2026-08-20
+    +51     -17     server/services/guardrail-settings.ts
+=== b066e806d  2026-08-20
+    +5      -0      server/storage.ts
+=== 5c9cc389d  2026-08-20
+    +2      -2      server/services/c5-financial-diagnostics.ts
+    +4      -1      server/services/guardrail-settings.ts
+    +11     -5      server/storage.ts
+=== 2f05a09b9  2026-08-20
+    +16     -20     server/services/passive-archive/ohlc-batch-writer.ts
+=== 0ba32a9ae  2026-08-20
+    +8      -3      server/services/passive-archive/ohlc-batch-writer.ts
+=== d23282b34  2026-08-20
+    +6      -0      shared/schema.ts
+=== 94f3869f6  2026-08-20
+    +0      -45     server/storage.ts
+    +281    -269    server/strategies/guard-eval-tracker.ts
+    +0      -25     shared/schema.ts
+=== 37a294867  2026-08-18
+    +2      -0      server/storage.ts
+=== 185992a1c  2026-08-17
+    +21     -10     server/services/passive-archive/universe-loader.ts
+=== 5c2abfaeb  2026-08-17
+    +19     -4      server/services/passive-archive/universe-loader.ts
+=== 8e6262fcc  2026-08-17
+    +1      -1      server/services/passive-archive/universe-loader.ts
+=== 67839d8fa  2026-08-17
+    +7      -4      server/services/passive-archive/universe-loader.ts
+=== 7fb58f03a  2026-08-17
+    +44     -1      server/services/passive-archive/universe-loader.ts
+=== b4e8c0d60  2026-08-17
+    +32     -3      server/services/passive-archive/universe-loader.ts
+=== 278b1e0e7  2026-08-17
+    +33     -10     server/services/passive-archive/universe-loader.ts
+=== 6496e4b72  2026-08-17
+    +75     -17     server/services/passive-archive/universe-loader.ts
+    +17     -10     server/services/utils/symbol-canonicalizer.ts
+    +54     -10     shared/asset-classes.ts
+=== 35be745ac  2026-08-17
+    +8      -2      server/services/passive-archive/ohlc-batch-writer.ts
+    +18     -1      server/services/passive-archive/ticker-batch-writer.ts
+    +191    -0      server/services/passive-archive/universe-loader.ts
+    +25     -1      server/services/utils/symbol-canonicalizer.ts
+    +46     -5      shared/asset-classes.ts
+    +13     -0      shared/schema.ts
+=== 1e3b3d568  2026-08-17
+    +11     -1      server/services/active-execution-engine.ts
+    +7      -1      server/services/vts-runner.ts
+=== d79b07218  2026-08-17
+    +3      -1      server/services/active-execution-engine.ts
+    +16     -0      server/services/data-archive/decision-provenance.ts
+    +6      -13     server/services/signal-orchestrator.ts
+=== de127160e  2026-08-17
+    +5      -1      server/services/strategy-engine.ts
+=== 152367088  2026-08-17
+    +4      -0      server/services/signal-orchestrator.ts
+    +8      -8      server/services/strategy-engine.ts
+    +3      -0      server/services/vts-runner.ts
+    +1      -1      server/strategies/adaptive-flow.ts
+    +1      -1      server/strategies/defensive-hedge.ts
+    +47     -4      server/strategies/guard-eval-tracker.ts
+    +1      -1      server/strategies/inside-bar-reversal.ts
+    +1      -1      server/strategies/morning-star.ts
+    +1      -1      server/strategies/orb.ts
+    +1      -1      server/strategies/pivot-shift.ts
+    +1      -1      server/strategies/reverse-impulse.ts
+    +1      -1      server/strategies/strong-bull-trend.ts
+    +1      -1      server/strategies/support-bounce.ts
+    +1      -1      server/strategies/volatility-edge.ts
+=== 9a9c7a4e5  2026-08-16
+    +3      -2      server/core/rtb/ready_to_buy_service.ts
+    +7      -2      server/services/signal-orchestrator.ts
+=== f038bf841  2026-08-16
+    +8      -0      server/core/rtb/ready_to_buy_service.ts
+    +22     -4      server/services/signal-orchestrator.ts
+=== 4c7dacb6c  2026-08-16
+    +39     -0      server/core/rtb/ready_to_buy_service.ts
+    +27     -1      server/services/signal-orchestrator.ts
+=== dea07eba6  2026-08-11
+    +13     -5      server/services/vts-runner.ts
+=== a66eab10c  2026-08-07
+    +19     -1      server/services/active-execution-engine.ts
+=== b1cccd215  2026-08-07
+    +52     -5      server/core/observability/active-funnel-tracker.ts
+=== 69846ad6e  2026-08-07
+    +98     -2      server/services/signal-orchestrator.ts
+=== 3636a498f  2026-08-07
+    +43     -0      server/core/observability/active-funnel-tracker.ts
+    +119    -18     server/services/signal-orchestrator.ts
+=== 78b666bb0  2026-08-07
+    +12     -1      server/services/signal-orchestrator.ts
+=== 213e162dc  2026-08-07
+    +74     -45     server/services/active-position-sizing.ts
+    +4      -1      server/services/rtb-metrics-service.ts
+=== 22e133a5c  2026-08-07
+    +27     -140    server/core/governance/strategy-modes.ts
+=== 59939a0bd  2026-08-07
+    +13     -14     server/core/filters/signal_quality_evaluator.ts
+=== c2fc0cb28  2026-08-07
+    +28     -16     server/services/active-execution-engine.ts
+=== 95e9050f3  2026-08-07
+    +16     -0      server/core/governance/strategy-modes.ts
+    +32     -23     server/services/vts-runner.ts
+=== 8372e35e7  2026-08-07
+    +21     -0      server/core/observability/active-funnel-tracker.ts
+=== f3d5fa54a  2026-08-06
+    +25     -1      server/services/execution/exploration-lane.ts
+    +3      -56     server/services/vts-trade-persistence.ts
+    +1      -16     server/storage.ts
+=== a37bcc587  2026-08-06
+    +17     -6      server/services/active-execution-engine.ts
+=== 8b9c7c802  2026-08-06
+    +25     -1      server/services/active-execution-engine.ts
