@@ -260,3 +260,62 @@ A COLD-START chain gets `seedImplausible = false` **VACUOUSLY** — `retainedMed
 1. **Siting the gate at `active-filter-pool` rather than at each producer.** It is the one choke point all three writers pass through — but it is *downstream* of the scanners, so a refused pair still costs a full scan before being dropped. Cheaper to gate earlier; harder to prove complete. I chose provable completeness.
 2. **Door 2 and door 3 return no refusal count.** Changing their signatures touches callers outside this row. The log carries the door name instead. If you want the counts, say so and it lands here rather than later.
 3. **`refusedQuote` as a subset of `skipped` rather than a sibling.** A caller summing `added + updated + skipped` stays correct; one summing all four double-counts. The field is documented as a subset — I think that is the right trade and it is the reverse of the usual instinct.
+
+---
+
+## ⭐ ROW `8c` — P1 ONLY: THE LEVEL SHADOW WALKS D3's FULL LADDER (added 2026-09-13, ref `4f2027ceb`)
+
+⛔⛔ **STILL A SHADOW. NOTHING CONSUMES THE RESULT, AND THE SWITCH-ON IS HELD.** Langston ruled HOLD on 2026-09-13: levels on the transactable side against a trigger that still reads the mid would ship a **MIXED POPULATION** — bid-anchored for the handful of symbols that have a book, mid-anchored for the rest — and every resulting exit would be **unattributable in analysis**. That blocks the switch-on independently of row `8a`. Three further reasons are recorded in `B_PRICE_SIDE_BY_JOB_8C_AUDIT_AND_PLAN.md` §3.
+
+**THE DEFECT.** The level shadow assessed the **BOOK and nothing else** — rung 1 of a three-rung rule — and was written **2026-09-05, six days BEFORE D3 was decided**. It was therefore being read against a decision that did not exist when it was built.
+
+**MEASURED LIVE, 2026-09-13T05:40Z** (`/api/xstocks/filter-diagnostics` → `vtsEvaluation.levelBasisFunnel`; ⚠️ in-memory, process-lifetime — a rate within one lifetime, never a series):
+
+| lane | attempted | accepted | refused | `no_book` |
+|---|---|---|---|---|
+| `active:crypto_spot` | 546 | 16 (2.9%) | 530 | **526** |
+| `vts:crypto_spot` | 273 | 1 (0.4%) | 272 | **272** |
+
+**Every other refusal reason is ZERO**, so the refusal has one cause and it is the ABSENCE of a book.
+
+**THE CAUSE, AT THE OBJECT — and it is not a defect.** The adapter subscribes ticker and book on **one symbol list** (`kraken-websocket-adapter.ts:1499`/`:1514`), and the largest subscribe is **TWO symbols**, in today's log (376 lines, 373 of them `AERO/USD` alone) **and** in the boot file `out__2026-09-12_21-23-19.log` (233 lines). ⚠️ **Both files were read because `out.log` rotates by SIZE (~1 GB), not only at midnight — today's file starts at 00:03Z and does not contain the 23:30:48Z boot.** ⇒ the socket carries a book for the names we hold; the wide universe is REST-polled. **A 500-symbol depth-10 book is exactly the flood row `8j` exists to trip on, so this is deliberate.**
+
+⇒ ★ **THE 97% WAS MEASURING THE ABSENCE OF RUNG 2, NOT THE ABSENCE OF A TRANSACTABLE PRICE.**
+
+**RUNG 2 IS REAL, AND I CHECKED BECAUSE THE OPPOSITE WAS PLAUSIBLE.** The known hazard is `price-cache.ts` writing `bid: existing?.bid ?? price`, which fabricates a zero-spread book on a first write. **It does not apply to the REST ticker poller**, which genuinely observes `ticker.a` / `ticker.b` (`price-cache.ts:409-410`), dates them with `sidesCapturedAtMs`, and states `venueObservedAtMs: null` rather than inventing one.
+
+### THE CHANGE — A CALL, NOT A BUILD
+`selectTouchPrice` (`touch-price.ts:91`) **already implemented D3's order** and had **ZERO production callers**. Both lanes now walk it instead of calling `buildLevelBasis` on the book alone.
+- The sides are dated by **`sidesCapturedAtMs`, never `lastUpdatedAt`** — that field dates the MARK and refreshes every tick, so it would report a fresh age for stale sides (the W-3 defect).
+- **One ceiling governs both rungs**, at `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` — stated with its name, as `touch-price.ts:50` requires of whoever wires this.
+- `tickerBasis: 'ticker_bbo'` **names the QUANTITY**; `TouchQuote.producer` **carries the TRANSPORT**. Kraken's REST ticker `a`/`b` are best ask and best bid, exactly as the WS bbo ticker is.
+
+### ⛔ THE POPULATION BOUNDARY IS A KEY, NOT A SENTENCE (Langston condition 1)
+Before this row, one `attempted` was one **book assessment**; after it, one `attempted` is one **ladder walk**. Two instruments. So the funnel key gains a **required `rung`**, and one walk records **TWO cells**: `book` keeps counting exactly what it counted before — a **continuous** series across the change — and `ladder` counts the walk. **The gap between their accepted counts IS the measurement.** ★ **A boundary that is a key cannot be forgotten; a boundary that is a date in a document can.**
+
+⚠️ **`tsc` caught me making `rung` a field on the SHARED `LevelBasisFunnelKey`** — the side-age and feed-agreement probes use that type too and have **no rung to name**, so a required field there would have forced a meaningless value at two call sites. It is a separate type extending it.
+
+### VERIFICATION — MUTATION-PROVED, **MEASURED NOT PREDICTED**
+Each mutation was applied with an assertion that it actually matched (**an unfired mutation is not evidence** — the CRLF non-application cost this batch a round already), run, then reverted:
+
+| mutation | result |
+|---|---|
+| drop the book-cell recording, keep only the ladder | **7 of 8 fail** |
+| record the book rung's reason into the ladder cell | **1 of 8 fails** (test 3) |
+| drop `rung` from `keyOf`, collapsing both cells | **6 of 8 fail** |
+| accept the ladder only when the BOOK carried it | **5 of 8 fail** |
+
+⛔⛔ **MUTATION 2 PASSED 8 OF 8 ON THE FIRST ATTEMPT, AND THAT IS THE MOST USEFUL LINE IN THIS SECTION.** Test 3 used `book: null, ticker: null`, so **both rungs returned the same string `no_book`** — and a fixture whose two arms are identical cannot discriminate between them, however many assertions it carries. It now uses a **STALE book against an ABSENT ticker** so the reasons differ, and the mutation fails. ⚠️ **My predicted failure counts were also wrong before I ran them (I guessed 2 for mutation 1; it is 7), which is why the file records measured results and forbids citing a predicted one.**
+
+⚠️ **AND THE EXISTING FUNNEL TESTS HAD SILENTLY KEPT THE OLD KEY SHAPE.** `tsconfig.json` excludes `**/*.test.ts`, so **the suite cannot catch a type-level break**: the old-shape calls keyed on the literal string `"undefined"` and **every assertion still passed, symmetrically, because the reader and the writer agreed on the same wrong key.** Re-keyed.
+
+**81 green across the five affected files; `tsc` 377 at baseline.**
+
+### ⛔ WHAT I AM NOT CLAIMING
+- **No production behaviour changes.** The result is recorded and discarded; no level, trigger, fill or booked value moves.
+- **The post-ladder acceptance rate is NOT YET KNOWN.** It is measured after this deploys, against a floor pre-registered before the reading — and **beside a positive control**, since a low `no_book` count would otherwise be indistinguishable from a recorder that never ran.
+
+### THE JUDGEMENT CALLS I WANT ATTACKED
+1. **`tickerBasis: 'ticker_bbo'` for a REST-sourced quote.** I hold that the basis names the quantity and `producer` carries the transport. The alternative — calling it `ticker_default` — would misname a genuine best-bid/offer.
+2. **Two cells rather than one cell with a widened `attempted`.** The two are equal by construction, which is redundant; I took redundancy over a boundary that depends on a reader remembering a date.
+3. **The book leg passes `clockBasis: 'receipt'`** because `getBookForFill` returns an AGE, not a venue stamp. A venue clock for the book is P-8a's, not this row's.
