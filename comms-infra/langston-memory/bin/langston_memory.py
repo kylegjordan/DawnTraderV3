@@ -311,9 +311,20 @@ def _parse_ledger(src):
     if not m:
         return "no-section", None
     entries = []
-    for para in re.split(r"\n- ", m.group(0))[1:]:
-        body = "- " + para.strip()
+    # finditer over the `\n- ` bullet starts so each entry carries its OFFSET in `text` (byte-equivalent char index).
+    # Same text/ids/shas/terms as the prior `re.split(r"\n- ")[1:]`; `offset` is the added field (B-LANGSTON-CONTEXT
+    # P-2 containment assert, Langston 2026-09-12) - the position of the entry's `- ` at column 0.
+    block, base = m.group(0), m.start()
+    starts = list(re.finditer(r"\n- ", block))
+    for i, sm in enumerate(starts):
+        end = starts[i + 1].start() if i + 1 < len(starts) else len(block)
+        body = "- " + block[sm.end():end].strip()
+        char_at = base + sm.start() + 1          # the entry's '- ' at column 0, as a CHAR index into text
         entries.append({"src": src, "text": body,
+                        # BYTE offset (Langston C-3, 2026-09-12): the containment guard's span and part ranges are
+                        # byte-based, and the file carries multi-byte chars - a char index would be a second coordinate
+                        # system. len(prefix.encode) converts char index -> byte offset so all three agree.
+                        "offset": len(text[:char_at].encode("utf-8")),
                         "ids": set(ID_RE.findall(body)), "shas": set(SHA_RE.findall(body)),
                         "terms": set(w.lower() for w in re.findall(r"[A-Za-z][\w\-/]{5,}", body))})
     return ("ok", entries) if entries else ("no-entries", None)

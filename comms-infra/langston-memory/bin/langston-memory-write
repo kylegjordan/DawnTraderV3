@@ -77,8 +77,8 @@ READER = os.environ.get("LANGSTON_MEMORY_READER", "/opt/langston-memory/bin/lang
 ANCHOR = "### Rulings of mine that GENERALISE"
 LEDGER_HEADING = re.compile(r"^## .*REVIEWER LEDGER")
 STATED_CAP = 24576      # the byte cap Langston quotes for this file; the loaded-set ceiling is `langston-size-watch --status`
-KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part")
-VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part")
+KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to")
+VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part", "--rename-part", "--to")
 NL = chr(10)
 
 
@@ -119,6 +119,13 @@ def parse_args(argv):
     elif "--entries" in out:
         raise Refused(2, "REFUSED: --entries applies only to --ledger-append; a whole-file write declares "
                          "--ledger-delta and --retractions-delta")
+    if "--rename-part" in out or "--to" in out:
+        if ("--rename-part" in out) != ("--to" in out):
+            raise Refused(2, "REFUSED: --rename-part and --to must be given together (rename OLD --to NEW)")
+        for bad in ("--compose", "--ledger-append", "--ledger-delta", "--retractions-delta", "--entries", "--part"):
+            if bad in out:
+                raise Refused(2, "REFUSED: %s does not apply to a rename (a rename moves a part's name, it writes no "
+                                 "content and declares no ledger delta)" % bad)
     return out
 
 
@@ -188,6 +195,35 @@ def load_reader():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def reader_requires_offsets(reader):
+    """⛔ P-2 FAIL-FAST (B-LANGSTON-CONTEXT, after a fresh-reviewer catch 2026-09-13): the ledger guards' containment
+    check needs a BYTE OFFSET per ledger entry. A reader that PREDATES the offset field returns entries without it, and
+    the guard would then read a missing offset as -1 and refuse EVERY write as 'ledger corruption' (reproduced on the
+    box with the installed reader: exit 5 '... at byte None'). Probe the reader on a synthetic 1-entry ledger and
+    REFUSE UP FRONT, before any write, with a clear reader-version message - so no path writes bad-then-refuses and the
+    failure never masquerades as corruption. Also guards against a future reader edit that drops the field."""
+    probe = b"### Retractions\n- a probe entry, long enough to parse.\n"
+    fd, p = tempfile.mkstemp(prefix=".reader-offset-probe-", suffix=".md")
+    try:
+        os.write(fd, probe)
+        os.close(fd)
+        status, entries = reader._parse_ledger(p)
+        # ANY misbehaviour (non-ok status, no entries, non-dict entries, a crash) => not offset-capable. Catch it here
+        # so a broken reader yields the clean version-mismatch refusal below, never a bare traceback (fresh-reviewer r2).
+        ok = status == "ok" and bool(entries) and all(isinstance(e.get("offset"), int) for e in entries)
+    except Exception:
+        ok = False
+    finally:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+    if not ok:
+        raise Refused(6, "REFUSED: the reader at %s does not emit a byte offset per ledger entry - it predates the "
+                         "B-LANGSTON-CONTEXT P-2 offset field, which the ledger guards require. Install the matching "
+                         "reader. This is a reader-version MISMATCH, not ledger corruption; nothing was written." % READER)
 
 
 def retraction_count(reader, path):
@@ -520,6 +556,87 @@ def strip_stamp(composed_bytes):
     return composed_bytes
 
 
+# ⛔ LEDGER GUARDS (B-LANGSTON-CONTEXT P-2, Langston C-1..C-3 2026-09-12). ALL BYTE-BASED so the span, the part
+#    ranges and the reader's entry offsets are ONE coordinate system (validated against the live 72,578 B file:
+#    span (12394,24943) matches Langston's own measurement). Run on every recompose (compose / direct write / rename).
+LEDGER_HEADING_BYTES = re.compile(rb"(?m)^## .*REVIEWER LEDGER.*$")     # C-1: anchored ^## , not a substring
+LEDGER_SUBSECTIONS = (b"### Retractions", b"### Rulings of mine that GENERALISE", b"### CC-A errors I logged")
+
+
+def ledger_span(data):
+    """[start,end) BYTE offsets of the ## …REVIEWER LEDGER block (anchored heading -> next column-0 '## ' or EOF).
+    ('multi', n) if >1 anchored heading; None if none."""
+    heads = [m.start() for m in LEDGER_HEADING_BYTES.finditer(data)]
+    if len(heads) > 1:
+        return ("multi", len(heads))
+    if not heads:
+        return None
+    s = heads[0]
+    nl = data.find(b"\n", s)
+    after = (nl + 1) if nl != -1 else len(data)
+    nxt = re.search(rb"(?m)^## ", data[after:])
+    return (s, after + nxt.start() if nxt else len(data))
+
+
+def ledger_guard_problems(body, part_bodies, reader_entries, reader_status):
+    """Every ledger guard over the PRE-STAMP composed body (bytes). Returns a list of problems (empty = clean).
+    reader_entries/status from _parse_ledger on the written MEMORY.md; offsets are byte offsets valid in the body
+    region (the stamp is appended after it)."""
+    problems = []
+    span = ledger_span(body)
+    if isinstance(span, tuple) and span and span[0] == "multi":                     # C-1
+        return ["%d '## …REVIEWER LEDGER' headings (anchored) - the ledger block is ambiguous" % span[1]]
+    if reader_status != "ok":                                                       # condition-2, never vacuous
+        problems.append("the reader could not parse the composed ledger: status=%s" % reader_status)
+    if span is None:
+        problems.append("no '## …REVIEWER LEDGER' block in the composed file")
+        return problems
+    s, e = span
+    for sub in LEDGER_SUBSECTIONS:                                                  # C-2 span-extent canary
+        i = body.find(sub)
+        if i == -1:
+            problems.append("ledger subsection %r absent from the composed file" % sub.decode())
+        elif not (s <= i < e):
+            problems.append("ledger subsection %r at byte %d is OUTSIDE the block span [%d,%d)" % (sub.decode(), i, s, e))
+    off = 0                                                                          # C-3 coordinate-system control
+    ranges = []
+    for b in part_bodies:
+        ranges.append((off, off + len(b)))
+        off += len(b)
+    if off != len(body):
+        problems.append("part ranges sum %d != composed body %d bytes - coordinate systems disagree" % (off, len(body)))
+    for i in range(1, len(ranges)):
+        if ranges[i][0] != ranges[i - 1][1]:
+            problems.append("part ranges not contiguous at index %d" % i)
+    holder = [i for i, (a, b) in enumerate(ranges) if a <= s and e <= b]
+    if len(holder) != 1:                                                            # block-single-part
+        problems.append("the ledger block [%d,%d) is not wholly within ONE part (matched %d ranges) - split across parts" % (s, e, len(holder)))
+    entries = reader_entries or []                                                   # containment
+    no_offset = [en for en in entries if not isinstance(en.get("offset"), int)]
+    if no_offset:
+        # a reader without the P-2 offset field - report the MISMATCH, never a false 'corruption' (the fail-fast probe
+        # in load_reader should have caught this already; this is the belt-and-braces path).
+        problems.append("the reader emitted %d of %d ledger entries WITHOUT a byte offset - reader-version mismatch "
+                        "(install the P-2 reader), NOT ledger corruption" % (len(no_offset), len(entries)))
+    else:
+        outside = [en for en in entries if not (s <= en["offset"] < e)]
+        if outside:
+            problems.append("%d retraction entr%s OUTSIDE the block span [%d,%d): first %r at byte %d" % (
+                len(outside), "y" if len(outside) == 1 else "ies", s, e, outside[0]["text"][:40], outside[0]["offset"]))
+    return problems
+
+
+def ledger_guard_after_recompose(reader, body, parts):
+    """Run every ledger guard against the JUST-WRITTEN TARGET. Returns the problems list (empty = clean) so each
+    recompose path raises with its OWN restore/rollback wording (compose has none, direct write and rename each roll
+    back), never a generic raise here. `body` is the pre-stamp composed body; `parts` is the read_parts() tuple list
+    in composed order. The reader parses the full file incl. the trailing stamp, but every ledger byte precedes the
+    stamp, so its entry offsets coincide with body-offsets over the block - the one coordinate system C-3 demands."""
+    part_bodies = [pb for _, _, pb, _ in parts]
+    status, entries = reader._parse_ledger(TARGET)
+    return ledger_guard_problems(body, part_bodies, entries, status)
+
+
 def read_compose_state():
     try:
         with open(COMPOSE_STATE, "rb") as fh:
@@ -545,6 +662,7 @@ def write_compose_state(d, st):
 def do_compose(opts):
     """P-2: regenerate MEMORY.md from the parts, under the lock. Never on a timer."""
     reader = load_reader()
+    reader_requires_offsets(reader)   # fail-fast before any write if the reader predates the P-2 offset field
     try:
         st = os.stat(TARGET)
     except OSError as e:
@@ -600,6 +718,13 @@ def do_compose(opts):
         if r_after != r_before:
             raise Refused(5, "REFUSED: composing changed the ledger entry count %d -> %d - a part reshaped the ledger; "
                              "%s is at %s" % (r_before, r_after, TARGET, arch_path))
+        # ⛔ LEDGER GUARDS (Langston C-1..C-3): the count check above catches ADD/DROP; these catch a block that moved,
+        #    split across parts, lost a subsection, or holds an entry outside its own span. compose has no auto-restore
+        #    (it is the reconciliation verb - pending stays set for next-time), so it refuses naming the archive.
+        lg = ledger_guard_after_recompose(reader, body, parts)
+        if lg:
+            raise Refused(5, "REFUSED (ledger integrity): " + "; ".join(lg) + " - a part reshaped the ledger block; "
+                             "%s is at %s (pending_sha stays set; reconcile the parts and recompose)" % (TARGET, arch_path))
         # collapse: the write is durable, pending clears, last_written advances.
         write_compose_state({"last_written_sha": new_sha, "pending_sha": None, "ts": utc(),
                              "parts_sha": parts_sha, "part_count": len(parts)}, st)
@@ -626,6 +751,14 @@ def run(argv, stdin_bytes):
         if os.geteuid() not in (0, owner_uid):
             raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
         return do_compose(opts)
+    if opts.get("--rename-part"):
+        for req in ("--expect-sha", "--by", "--reason"):
+            if req not in opts or not str(opts[req]).strip():
+                raise Refused(2, "REFUSED: %s is required" % req)
+        owner_uid = pwd.getpwnam(OWNER).pw_uid
+        if os.geteuid() not in (0, owner_uid):
+            raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
+        return do_rename(opts)
     owner_uid = pwd.getpwnam(OWNER).pw_uid
     if os.geteuid() not in (0, owner_uid):
         raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
@@ -762,6 +895,7 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
     caller read. A failed post-write delta rolls back all THREE of part, MEMORY.md and compose-state to their exact
     prior bytes (recompose re-stamps, so it cannot restore byte-identically - hence three-way, not a recompose)."""
     reader = load_reader()
+    reader_requires_offsets(reader)   # fail-fast before any write if the reader predates the P-2 offset field
     try:
         st = os.stat(TARGET)
     except OSError as e:
@@ -872,6 +1006,12 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                 problems.append("REVIEWER LEDGER bullets moved %+d, declared %+d" % (l_after - l_before, declared_ledger))
             if problems:
                 raise Refused(5, "REFUSED (rule 4): " + "; ".join(problems))
+            # ⛔ LEDGER GUARDS (Langston C-1..C-3): rule 4 above governs the DECLARED count deltas; these govern the
+            #    block's STRUCTURE - moved, split across parts, a lost subsection, an entry outside its own span. Same
+            #    try-block, so a problem hits the three-way rollback below (part + MEMORY.md + compose-state).
+            lg = ledger_guard_after_recompose(reader, body, new_parts)
+            if lg:
+                raise Refused(5, "REFUSED (ledger integrity): " + "; ".join(lg))
         except BaseException as e:
             # THREE-WAY ROLLBACK (Langston 20:48Z): restore the exact prior bytes of part, MEMORY.md AND compose-state.
             corrupt = b"#corrupted-by-self-test" if corrupt_switch_armed(LANGSTON_HOME) else b""   # self-test only, never live
@@ -915,6 +1055,161 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
             outcome.upper(), target_name, ("CREATED " if is_new else ""), (part_old_sha[:12] if part_old_sha else "new"),
             sha(part_new)[:12], resolve_rule, mem_old_sha[:12], mem_new_sha[:12],
             len(mem_old), len(mem_new), r_before, r_after, l_before, l_after, size_line(len(mem_new)))
+    finally:
+        os.close(lfd)
+
+
+def fsync_dir(path):
+    """fsync a directory so a rename/create/unlink within it is durable (the replace_* helpers do this inline; a bare
+    os.rename needs it done by hand)."""
+    dfd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+
+def do_rename(opts):
+    """P-2 rename: rename a PART (--rename-part OLD --to NEW), then recompose MEMORY.md. Reads NO stdin. --expect-sha
+    is the sha of the OLD part the caller read (CAS). The part's BYTES do not change - only its filename, and so its
+    place in the composition order (parts compose in filename order), which can RELOCATE the ledger block. Hence:
+      - delta-0: a rename must not change the retraction or REVIEWER LEDGER counts (bytes are identical);
+      - the C-1..C-3 ledger guards: the block must stay whole, single-part, sub-sections present, entries in span.
+    The rename is a single atomic os.rename (no both-exist / neither-exists window). A failed post-write check rolls
+    back all THREE of the part (rename back), MEMORY.md and compose-state to their exact prior bytes."""
+    reader = load_reader()
+    reader_requires_offsets(reader)   # fail-fast before any write if the reader predates the P-2 offset field
+    old_name, new_name = opts["--rename-part"], opts["--to"]
+    for label, nm in (("--rename-part", old_name), ("--to", new_name)):
+        if not valid_part_name(nm):
+            raise Refused(2, "REFUSED: %s %r is not a bare part filename (no directories, no '..', no leading '.'); a "
+                             "part lives directly in %s and read_parts() would never see this name." % (label, nm, PARTS_DIR))
+    if old_name == new_name:
+        raise Refused(2, "REFUSED: --rename-part and --to are the same name %r - nothing to rename." % old_name)
+    try:
+        st = os.stat(TARGET)
+    except OSError as e:
+        raise Refused(2, "REFUSED: cannot stat the target %s (%s)" % (TARGET, type(e).__name__))
+    lfd = open_lock(st)
+    try:
+        fcntl.flock(lfd, fcntl.LOCK_EX)
+        hold = float(os.environ.get("LMW_TEST_HOLD_AFTER_LOCK", "0") or 0)   # self-test only: widen the race window
+        with open(TARGET, "rb") as fh:
+            mem_old = fh.read()
+        mem_old_sha = sha(mem_old)
+        state = read_compose_state()
+        admissible = {state.get("last_written_sha"), state.get("pending_sha")} - {None}
+        if mem_old_sha not in admissible:
+            raise Refused(4, "REFUSED: %s was written OUTSIDE the composer (out-of-band). Its current sha is %s; the "
+                             "composer last wrote %s (pending %s). Reconcile the parts and recompose before renaming."
+                          % (TARGET, mem_old_sha, state.get("last_written_sha"), state.get("pending_sha")))
+        parts = read_parts()
+        # BLOCKER-1 (Langston 21:22Z): the parts are the file of record. A part changed out of band since the last
+        #   compose would be laundered into MEMORY.md by the recompose a rename performs. --compose reconciles, not this.
+        cur_parts_sha = parts_digest(parts)
+        if state.get("parts_sha") and state["parts_sha"] != cur_parts_sha:
+            raise Refused(4, "REFUSED: a part in %s changed since the last compose (parts-sha %s, last composed %s). A "
+                             "rename recomposes and would fold that unreviewed change into %s. Run --compose first."
+                          % (PARTS_DIR, cur_parts_sha, state["parts_sha"], TARGET))
+        names = [n for n, _, _, _ in parts]
+        if old_name not in names:
+            raise Refused(4, "REFUSED: no part named %s to rename. Parts: %s." % (old_name, ", ".join(names)))
+        new_path = os.path.join(PARTS_DIR, new_name)
+        if new_name in names or os.path.exists(new_path):
+            raise Refused(4, "REFUSED: --to %s already exists - a rename never overwrites a part." % new_name)
+        old_path = os.path.join(PARTS_DIR, old_name)
+        pst = os.stat(old_path)
+        with open(old_path, "rb") as fh:
+            part_bytes = fh.read()
+        part_sha = sha(part_bytes)
+        expect = opts["--expect-sha"].strip().lower()
+        if hold:
+            time.sleep(hold)
+        if part_sha != expect:
+            raise Refused(4, "REFUSED: --expect-sha does not match the part %s it names. Its current sha256 is %s, you "
+                             "passed %s. (--expect-sha is the OLD part's sha.)" % (old_name, part_sha, expect))
+        r_before = retraction_count(reader, TARGET)
+        l_before = ledger_block_count(mem_old.decode("utf-8"))
+        # the renamed part carries the SAME bytes; only its filename (and thus composition order) changes.
+        new_parts = sorted([(new_name, part_sha, part_body(part_bytes), part_bytes) if n == old_name else (n, h, b, rb)
+                            for (n, h, b, rb) in parts], key=lambda t: t[0])
+        body, parts_sha, body_sha = compose_body(new_parts)
+        mem_new = body + stamp_line(len(new_parts), parts_sha, body_sha).encode("utf-8") + b"\n"
+        mem_new_sha = sha(mem_new)
+        part_arch, _ = archive_old(part_bytes, part_sha, st)   # the renamed part's bytes, keyed by sha
+        mem_arch, _ = archive_old(mem_old, mem_old_sha, st)
+        row = {"ts": utc(), "target": TARGET, "mode": "rename-part", "old_name": old_name, "new_name": new_name,
+               "part_sha": part_sha, "mem_old_sha": mem_old_sha, "mem_new_sha": mem_new_sha,
+               "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"],
+               "part_archived": os.path.basename(part_arch), "mem_archived": os.path.basename(mem_arch)}
+        append_index(dict(row, outcome="attempted"), st)
+        old_state = dict(state)
+        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()), st)
+        os.rename(old_path, new_path)          # atomic; preserves inode, owner and mode - no both/neither window
+        fsync_dir(PARTS_DIR)
+        replace_target(mem_new, st)
+        try:
+            with open(new_path, "rb") as fh:
+                if sha(fh.read()) != part_sha:
+                    raise Refused(6, "REFUSED: renamed part read-back mismatch")
+            enum = [n for n, _, _, _ in read_parts()]
+            if new_name not in enum:
+                raise Refused(6, "REFUSED: renamed part %s is not enumerated by read_parts() after the rename" % new_name)
+            if old_name in enum:
+                raise Refused(6, "REFUSED: the old part name %s is still enumerated after the rename" % old_name)
+            with open(TARGET, "rb") as fh:
+                mem_back = fh.read()
+            if sha(mem_back) != mem_new_sha or strip_stamp(mem_back) != body:
+                raise Refused(6, "REFUSED: MEMORY.md read-back mismatch after recompose")
+            r_after = retraction_count(reader, TARGET)
+            l_after = ledger_block_count(mem_back.decode("utf-8"))
+            problems = []
+            if r_after != r_before:
+                problems.append("a rename changed retraction entries %+d (must be 0 - the bytes are identical)" % (r_after - r_before))
+            if l_after != l_before:
+                problems.append("a rename changed REVIEWER LEDGER bullets %+d (must be 0)" % (l_after - l_before))
+            if problems:
+                raise Refused(5, "REFUSED (delta-0): " + "; ".join(problems))
+            # ⛔ LEDGER GUARDS (Langston C-1..C-3): a rename reorders the composition, so the block can relocate. These
+            #    confirm it stayed whole, single-part, sub-sections present, and every entry inside its own span.
+            lg = ledger_guard_after_recompose(reader, body, new_parts)
+            if lg:
+                raise Refused(5, "REFUSED (ledger integrity): " + "; ".join(lg))
+        except BaseException as e:
+            # THREE-WAY ROLLBACK: rename the part back, restore MEMORY.md and compose-state to their exact prior bytes.
+            corrupt = b"#corrupted-by-self-test" if corrupt_switch_armed(LANGSTON_HOME) else b""   # self-test only, never live
+            try:
+                if os.path.exists(new_path) and not corrupt:
+                    os.rename(new_path, old_path)
+                    fsync_dir(PARTS_DIR)
+                with open(old_path, "rb") as fh:
+                    part_ok = sha(fh.read()) == part_sha
+                new_gone = (not os.path.exists(new_path)) or bool(corrupt)
+                replace_target(mem_old + corrupt, st)
+                write_compose_state(old_state, st)
+                with open(TARGET, "rb") as fh:
+                    mem_ok = sha(fh.read()) == mem_old_sha
+                state_ok = read_compose_state() == old_state
+            except BaseException as re_err:
+                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__), st)
+                raise Refused(6, "REFUSED: THREE-WAY RESTORE FAILED (%s). the part may be at %s or %s, MEMORY.md at %s "
+                                 "- restore by hand and tell Infra Claude." % (type(re_err).__name__, old_path, new_path, mem_arch))
+            restored_ok = part_ok and new_gone and mem_ok and state_ok
+            append_index(dict(row, ts=utc(), outcome="restored", part_ok=part_ok, new_gone=new_gone, mem_ok=mem_ok,
+                              state_ok=state_ok, why=str(e)[:300]), st)
+            if not restored_ok:
+                raise Refused(6, "REFUSED: the rename rollback was NOT byte-identical (part_ok=%s new_gone=%s mem_ok=%s "
+                                 "state_ok=%s; cause: %s). old part at %s, MEMORY.md at %s - restore by hand and tell "
+                                 "Infra Claude." % (part_ok, new_gone, mem_ok, state_ok, str(e)[:160], part_arch, mem_arch))
+            base = str(e) if isinstance(e, Refused) else "the post-rename check crashed (%s)" % type(e).__name__
+            raise Refused(5, "REFUSED: " + base + " - part, MEMORY.md and compose-state all restored byte-identical "
+                             "(old part at %s, MEMORY.md at %s)" % (part_arch, mem_arch))
+        write_compose_state({"last_written_sha": mem_new_sha, "pending_sha": None, "ts": utc(),
+                             "parts_sha": parts_sha, "part_count": len(new_parts)}, st)
+        append_index(dict(row, ts=utc(), outcome="renamed", retractions=[r_before, r_after], ledger_bullets=[l_before, l_after]), st)
+        return "RENAMED part %s -> %s (part sha %s); MEMORY.md %s -> %s (%d -> %d B; retractions %d; ledger bullets %d); %s" % (
+            old_name, new_name, part_sha[:12], mem_old_sha[:12], mem_new_sha[:12], len(mem_old), len(mem_new),
+            r_after, l_after, size_line(len(mem_new)))
     finally:
         os.close(lfd)
 
@@ -1246,9 +1541,10 @@ def main():
     if sys.argv[1:] == ["--self-test"]:          # FINDING-1: only as the sole argument, never a value elsewhere
         return self_test()
     argv = sys.argv[1:]
-    # ⛔ --compose reads NO stdin: it composes from the parts. Reading stdin here blocked a `--compose` invoked over
-    #    ssh with no redirection (the channel never sends EOF) - a live hang the fixture-always-passes-stdin tests missed.
-    stdin_bytes = b"" if "--compose" in argv else sys.stdin.buffer.read()
+    # ⛔ --compose and --rename-part read NO stdin: they act on the parts, not on new content. Reading stdin here
+    #    blocked a `--compose` invoked over ssh with no redirection (the channel never sends EOF) - a live hang the
+    #    fixture-always-passes-stdin tests missed. A rename carries no content, so the same EOF hang would bite it.
+    stdin_bytes = b"" if ("--compose" in argv or "--rename-part" in argv) else sys.stdin.buffer.read()
     try:
         print(run(argv, stdin_bytes))
         return 0
