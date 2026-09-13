@@ -1,7 +1,7 @@
 # `B-PRICE-SIDE-BY-JOB` ROW `8a` — MOVE THE EXIT TRIGGER OFF THE MIDPOINT
 
 **Batch:** `B-PRICE-SIDE-BY-JOB` (`3n`) · **Row:** `8a` · **Owner:** CC-C · **change-class: architecture**
-**r3, 2026-09-14 — all five Step-1 blockers accepted, every one re-derived at the object before accepting.**
+**r4, 2026-09-14 — r3's five blockers stand; r4 carries Langston's two §4 corrections and his §5 BLOCKER, re-derived at the object before accepting.**
 **KYLE-AUTHORISED: *"Make the change — move the trigger to the bid."***
 
 > ⛔ **THE DECISION IS NOT RE-LITIGATED AND LANGSTON DID NOT ASK FOR IT TO BE.** *"A stop that holds only when the midpoint agrees is not a stop."* **Every change below is to the INSTRUMENT.**
@@ -63,24 +63,37 @@ Ships only after P1's window, and **only if P1's measured refusal rate clears th
 | | |
 |---|---|
 | **name** | `exit_ladder_max_age_ms`, module `crypto_spot` — **its own constant, not a reuse** |
-| **value** | ⛔ **PRE-REGISTERED FROM P1's MEASURED EXIT-POPULATION AGE DISTRIBUTION, before P2 is written.** Not carried over, not chosen by preference. |
+| **value** | ⛔⛔ **DERIVED FROM A RISK STATEMENT INDEPENDENT OF THE OBSERVED AGES — tolerable adverse movement over the interval, against stop distance. NOT a quantile of P1's own age distribution (Langston r4 correction 1).** ★ **A ceiling set from the distribution it filters IS the refusal rate: whoever picks it picks the number, so §7's P2 gate would be satisfied BY CONSTRUCTION and would test nothing — the `B-GEOMETRY-REACH-BASELINE` shape, where `atrsToTarget` **is** `target_exit_atr_multiplier`, one knob wearing two names.** ⇒ P1's distribution then **MEASURES** the refusal rate at that value, so the gate can fail. |
 | **⛔ NOT** | `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000 — an OBSERVATION-shadow constant) · `active_fill_max_age_ms` (xStock ENTRY) · the xStock risk-derived exit ceiling (different lane, different derivation) |
-| **fail direction** | config missing or unresolvable ⇒ **REFUSE the trigger**, never widen. Consistent with every other gate in this batch. |
+| **fail direction** | ⛔ **SPLIT, because one rule was the wrong shape for two objects (Langston r4 correction 2).** A **PRICE** that does not qualify ⇒ refuse that trigger, **this tick**. A **CONFIG READ** that does not resolve ⇒ **NOT a silent per-tick refusal** — that refuses every exit check on the lane indefinitely, leaving every open crypto position unguarded rather than one tick unpriced. It takes its **own reason code** and raises a **breakage alert on first occurrence**. ★ **The precedent is already ours: `aee:1385` `equity_age_knob_missing`.** Never widen, in either arm. |
 
-## 5. ⛔⛔ ON REFUSAL: SKIP, NEVER FABRICATE — AND P2 INTRODUCES THE **FIRST** AGE-BASED REFUSAL ON CRYPTO
+## 5. ⛔⛔ ON REFUSAL: SKIP, NEVER FABRICATE — AND WHAT P2 IS THE **FIRST** OF
 
 No fallback to the midpoint: that would reinstate the defect precisely where it matters most. The refusal carries its reason and its own counter.
 
-⛔⛔ **r2's *"already true today when the mark is stale"* IS FALSE ON CRYPTO — WITHDRAWN (Langston rider, r3), and re-derived at the object.** The crypto chain's ONLY skip is `_recordPriceSkip` on a **REST FAILURE** (`aee:1765-1770`, `classifyEngineRestFailure`) — **AVAILABILITY, not age.** Its one stale-feed check is *"logged, never gated"* (`:1745-1752`, observe-only).
-⇒ ★★ **SO P2 DOES NOT CHANGE THE RATE OF AN EXISTING REFUSAL. IT CREATES THE FIRST AGE-BASED ONE ON THIS LANE.** ⇒ **the P2 gate is a NEW-EXPOSURE decision, not a delta**, and §7 is written that way. ✅ **This strengthens the P1/P2 split rather than weakening it: there is no baseline to compare against because the predicate has never existed here.**
+⛔⛔ **r3's ★★ AND ITS 🟨 FINDING ARE WITHDRAWN — FALSE AT THE OBJECT, AND MY OWN LEDGER ALREADY SAID SO (Langston BLOCKER, r4).** r3 claimed *"a crypto stop/target can today be evaluated against an arbitrarily old mark, and nothing refuses it."* **THE CRYPTO MARK IS AGE-BOUNDED TODAY, STRUCTURALLY, AT 2,000 ms** — and `RUNNING_ISSUES.md:7278` records that mechanism verbatim: *"flat 2,000 ms, hardcoded … + the `isKrakenVenueSource` actionability gate."*
+⛔ **I FILED A FINDING MY OWN LEDGER REFUTES.** The §9.5(b-ii) search is the check that runs **before** something becomes a finding, and it returns this on the first grep. *(That row cites `aee.ts:1431`; the call is now `:1652` — mechanism right, line stale.)*
 
-### 🟨 AND THE FINDING THIS EXPOSED, WHICH IS BIGGER THAN THE ROW
-⛔ **THE CRYPTO EXIT PATH HAS NO MARK-AGE GATE AT ALL TODAY.** xStock has one, and `aee:1351-1353` records WHY in Langston's own words — *"STALENESS IS BLOCKING (Langston condition 1): a tick older than the class-explicit max-age yields NO price — **never evaluate a stop/target against a stale mark**."*
-⇒ ⚠️ **CRYPTO IS DOING EXACTLY WHAT THAT CONDITION FORBIDS ON xSTOCK: a crypto stop/target can today be evaluated against an arbitrarily old mark, and nothing refuses it.** ★ **That is a standing risk gap, independent of this row** — `8a` happens to close it for the TRIGGER as a side effect, but it is not this row's claim and the gap is wider than the trigger.
+**THE MECHANISM, RE-DERIVED AT `6b9155e9e`:** `aee:1652` `getPriceWithFallback(symbol, 2000)` → `live-pricing-adapter.ts:1332` serves a cached entry only when `age <= WS_CACHE_FRESH_MS` **AND** `isKrakenVenueSource` → else it REST-fetches → else it re-serves under `source: 'last_known_good'` (`:1404`), which **fails** the venue predicate at `aee:1672` and routes to the direct REST leg, which **skips the tick** on failure. ⇒ **No route puts an arbitrarily old mark into `evaluateTECExit` on crypto.**
+
+⇒ ★★ **THE TRUE STATEMENT IS ABOUT A DIFFERENT OBJECT: the MARK is bounded; the LADDER SOURCE has no age gate on this lane — because it has no consumer on this lane at all.** ⇒ **P2 is the first age-based refusal ON THE LADDER SOURCE, not on the lane.** §4 stands unchanged: there is still no live referent for a relational clamp.
+⚠️ **WHAT DOES NOT SURVIVE IS READING AN AVAILABILITY-LABELLED SKIP AS PROOF OF NO AGE TEST.** The age test lives in the **adapter**; the engine's reason code names only the **last step** — so an age-conditioned refusal wears an availability label. **That is this batch's own adjacent-object class, one layer down.**
+
+### 🟨 THE FINDING, REWRITTEN ON ITS TRUE PREMISE
+⛔⛔ **THE 2,000 ms BOUND IS AN EQUALITY BETWEEN TWO INDEPENDENT LITERALS, AND THE ONE THAT READS LIKE THE KNOB IS INERT WHERE IT BINDS.**
+- `lpa:1332` — the **venue** branch — tests `this.WS_CACHE_FRESH_MS` (`:368`, `2000`, private). **The engine's `2000` argument is NOT read there.**
+- The argument governs only `lpa:1346` `if (age <= staleThresholdMs)`, which returns the cached entry **UNDER ITS ORIGINAL SOURCE**.
+
+⇒ both literals are `2000` today, so branch 2 is **unreachable for a venue source** and the bound holds. ⚠️ **RAISE THE CALL-SITE LITERAL — the one an implementer reaches for — and you do not widen the venue window: you OPEN branch 2, which re-serves a STALE entry still tagged `kraken_ws`, and it passes `isKrakenVenueSource` at `aee:1672` straight into `evaluateTECExit`.**
+
+⛔ **AND THE CENSUS SAYS THAT IS NOT HYPOTHETICAL ELSEWHERE — EVERY `getPriceWithFallback` CALL SITE AT THE REF, production and test, enumerated:** the exit trigger is the **ONLY production caller at 2000**. `routes.ts` ×5 (`:10728`, `:12264`, `:12799`, `:12888`, `:13088`), `aee:917`, `active-portfolio-manager.ts:308` and `:631` pass **5000**; `verification-test-protocol.ts:331` passes **30000**. **They sit on the far side of that equality today.** ⚠️ **Whether any of them DECIDES anything is UNTRACED and is NOT claimed here** — it is the census `3n.o` runs, not a finding this scope makes.
+
 **DISPOSITION (§9.4 — 3, its own placed item):**
 > `HOME: B-CRYPTO-MARK-AGE-GATE, owner CC-C, placed in PHASE_19_PLAN at row 3n.o, after 3n.n`
 
-⚠️ **RESIDUAL NAMED: a refused check is an UNGUARDED position for that cycle.** Already true today when the mark is stale; this row may change the RATE, which is why P1 measures it first.
+**ITS PREMISE, REWRITTEN:** the crypto mark's 2,000 ms bound is a **per-call-site literal that only coincidentally equals the adapter's private constant at the one site where it binds** — not class-keyed, not DB-governed, not risk-derived, and never counted as an age refusal. ⛔ **NOT the old premise ("nothing refuses it"), which is false.** **Folded in on Langston's surfacing:** `aee:917` computes `slTriggered`/`tpTriggered` for the diagnostics endpoint off a **5,000 ms** window with **no venue predicate** — display only, and the same "which crypto reads are age-bounded" question.
+
+⚠️ **RESIDUAL NAMED: a refused check is an UNGUARDED position for that cycle.** True today whenever the venue chain yields nothing; this row may change the RATE, which is why P1 measures it first.
 
 ---
 
@@ -109,7 +122,7 @@ No fallback to the midpoint: that would reinstate the defect precisely where it 
 |---|---|
 | **P1-OBJ-1** | the exit-lane ladder shadow records per rung, keyed lane × class, and **acts on nothing** — proved by a mutation that makes it act, which must go red. |
 | **P1-OBJ-2** | **the ladder's refusal rate and age distribution ON THE EXIT POPULATION.** n-floor pre-registered before the window opens. |
-| ⛔ **P2 GATE** | **an ABSOLUTE refusal-rate threshold, pre-registered before P1's window opens — NOT a delta against `_priceSkipStreak`, which measures a different predicate (B2).** Above it, `8a-P2` does not ship. |
+| ⛔ **P2 GATE** | **an ABSOLUTE threshold on the TOTAL refusal rate — ladder-availability AND age TOGETHER (Langston r4) — pre-registered before P1's window opens, and NOT a delta against `_priceSkipStreak`, which measures a different predicate (B2).** ⚠️ **Binding the ladder's rate alone would ship a second refusal source unbounded.** Above the threshold, `8a-P2` does not ship. |
 | **P2-OBJ-1** | `evaluateTECExit` receives `triggerPrice` = the ladder bid; `currentPrice` is unreassigned and the other 23 consumers are byte-unchanged. |
 | **P2-OBJ-2** | on refusal the check is SKIPPED. **Mutation: fall back to the mid — must go red.** |
 | **P2-OBJ-3** | xStock byte-unchanged. |
