@@ -367,14 +367,23 @@ export interface FunnelOutcome {
 }
 
 interface FunnelCell {
+  /**
+   * ⛔ THE RUNG IS STORED, NOT DERIVED FROM THE KEY STRING (Langston, Step-4 minor, 2026-09-13).
+   * `getLevelBasisFunnel` used to recover it with `key.endsWith(':ladder')` — **the exact
+   * key-string parse that `LevelBasisFunnelRow.rung`'s own comment forbids a CONSUMER to do.**
+   * Correct today because no lane or class contains ':', which is precisely the kind of
+   * "correct until it isn't" the field was added to remove. Structural now.
+   */
+  rung: LevelBasisRung;
   accepted: number;
   byReason: Record<FunnelRefusal, number>;
   /** `<basis>:<producer>` -> count, for ACCEPTED walks only. Never part of `attempted`. */
   byAcceptedSource: Record<string, number>;
 }
 
-function emptyCell(): FunnelCell {
+function emptyCell(rung: LevelBasisRung): FunnelCell {
   return {
+    rung,
     accepted: 0,
     byAcceptedSource: {},
     byReason: {
@@ -401,7 +410,7 @@ export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOu
   const id = keyOf(key);
   let cell = _funnel.get(id);
   if (!cell) {
-    cell = emptyCell();
+    cell = emptyCell(key.rung);
     _funnel.set(id, cell);
   }
   if (result.ok) {
@@ -497,8 +506,8 @@ export interface LevelBasisFunnelRow {
 export function getLevelBasisFunnel(): LevelBasisFunnelRow[] {
   return [...(_funnel.entries())].map(([key, cell]) => {
     const refused = Object.values(cell.byReason).reduce((a, b) => a + b, 0);
-    // The rung is carried on the ROW, never parsed back out of the key string.
-    const rung: LevelBasisRung = key.endsWith(':ladder') ? 'ladder' : 'book';
+    // The rung is carried on the CELL, never parsed back out of the key string.
+    const rung: LevelBasisRung = cell.rung;
     // Condition 2: rung-scoped reason names, applied HERE because the misreading happens at
     // the read surface. Storage is one vocabulary, so the `book` series stays comparable.
     const byReason = rung === 'ladder'

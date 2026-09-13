@@ -1345,7 +1345,12 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ⛔⛔ **2026-09-13 — THE FLAGGING HAS NOT RUN, AND THE OBVIOUS MECHANISM WOULD HAVE MADE THINGS WORSE. ESTABLISHED AT THE OBJECT BEFORE WRITING ANYTHING.**
 **`closed_trades.calibration_state` already exists and looked like the home for this flag. It is not.** MEASURED live 2026-09-13: **every one of the 750 closed rows already carries the single value `pre_calibration_xstock_2026_05`** (479 crypto + 271 xStock; no row is null). And the reader at `exit-strategy-ablation-aggregator.ts:93` is `AND calibration_state IS DISTINCT FROM <that tag>` — **it EXCLUDES rows carrying it.**
-⇒ ★ **THE 105 BOUNDARY CLOSES ARE ALREADY EXCLUDED FROM THAT CONSUMER. Overwriting the column with a new tag would have made `IS DISTINCT FROM` TRUE and pulled them straight BACK IN — the flag would have achieved the exact opposite of its purpose, silently, and the row would have read as flagged.**
+⛔⛔ **THE TWO SENTENCES THAT STOOD HERE WERE WRONG IN BOTH DIRECTIONS AND ARE STRUCK — CAUGHT BY LANGSTON THE SAME HOUR, RE-DERIVED BY ME (2026-09-13).** They claimed the 105 were ALREADY EXCLUDED by that reader, and that overwriting the column would pull them BACK IN.
+**`exit-strategy-ablation-aggregator.ts` does not read `closed_trades` AT ALL.** Its three `FROM` clauses (`:130`, `:143`, `:161`) are all `exit_strategy_alternates`, and `closed_trades` appears **0 times** in that file (control: `exit_strategy_alternates` appears 4). **That table has its OWN `calibration_state`.** ★ **I found the column on one table, found a reader of the COLUMN NAME, and assumed it read the same table. `MISTAKE: wrong-object` — a matching COLUMN name is not a matching TABLE, which is my own standing lesson one level over.**
+
+✅ **WHAT IS ACTUALLY TRUE, censused with a working control, and it is simpler and worse:** the four production files that mention `calibration_state` read `exit_strategy_alternates` or `vts_open_trades` — **never `closed_trades`** (`vts-runner`'s two hits are both COMMENTS). And `calibration_state`/`calibrationState` appears **0 times in `shared/schema.ts`**, against a control column found **12** times — so **the field is not in the ORM schema and cannot be selected by name at all.**
+⇒ ⛔ **`closed_trades.calibration_state` IS WRITTEN AND READ BY NOTHING. So the 105 are excluded from NOTHING by it, AND writing a tag there would be INERT — a flag that reads as done and does nothing.** That is a DIFFERENT failure from the one I first described, and it is the same written-but-never-read family this batch keeps turning up.
+★ **THE DISPOSITION IS UNCHANGED AND IS THE ONE THING I HAD RIGHT: census the consumers BEFORE writing.** Both wrong versions would have been avoided by doing the census first instead of reasoning from a column name.
 ⚠️ **SO THE OBLIGATION IS NOT “write a flag”. IT IS “NAME THE CONSUMERS THAT STILL EAT THESE ROWS, THEN DECIDE”** — `closed_trades` has 20+ production readers, and the aggregator is ONE. **A flag written before that census is a flag whose effect nobody can state.**
 ⚠️ **AND THE AGGREGATOR'S OWN DOCBLOCK CARRIES THE TRAP FOR ANYONE WHO TRIES: *“every `calibration_state` read MUST be asset-class-scoped … a future UNSCOPED `IS DISTINCT FROM` would silently fail-CLOSED and drop crypto.”*** The crypto rows carry the same literal tag and are meaningless noise on it.
 ✅ **THE PRE-REGISTERED PREDICATE STANDS UNCHANGED** — it was registered before any flagging ran and is not being tuned. What changes is the mechanism and the order: **census first, mechanism second, write third.**
@@ -8813,6 +8818,19 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 > `HOME: B-WAKE-SOURCE-TRUTH, owner Infra Claude, placed in PHASE_19_PLAN.md at 2.4g, after 2.4e (B-PYCACHE-PREFIX-INVOCATION); a documentation + wake-config correction, no runtime code`
 
 ⇔ `#333` (Discord cutover) · `#348` (Telegram decommission) · `B-LANGSTON-CONTEXT` §6.9.
+
+### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
+
+**AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
+★ **AND THERE ARE TWO REST WRITERS THAT DISAGREE:** `price-cache.ts:409-410` (its own poller) genuinely stores `ticker.a`/`ticker.b` and dates them with `sidesCapturedAtMs`; this adapter path does not. ⇒ **whether a symbol has real sides in the cache depends on which writer last touched it.**
+
+⛔⛔ **WHY IT IS URGENT RATHER THAN TIDY: it puts a FLOOR under row `8c`'s rung-2 recovery number that is an artefact of OUR OWN WRITE PATH.** Row `8c` measures how often a transactable basis can be named for a level; if the sides were never stored, the ladder refuses for a reason that has nothing to do with the venue. ⚠️ **SO THE `8c` CRITERION'S `REFUTED` BRANCH IS NOT SELF-INTERPRETING — below its floor the FIRST question is the writer mix, not the feed.** *(Amendment recorded in `B_PRICE_SIDE_BY_JOB_8C_AUDIT_AND_PLAN.md` §3b, before any data.)*
+
+⚠️ **NOT ESTABLISHED, and I am not asserting it:** the SHARE of symbols whose cached sides come from each writer. That is the census this batch owes, and it is the first thing the work does.
+
+⇒ **DISPOSITION — §9.4 (3), its own batch.**
+> `HOME: B-REST-SIDES-TO-CACHE, owner CC-C, placed in PHASE_19_PLAN at row 3n.l, AFTER row 8c and BEFORE row 8a.`
+✅ **THE ORDERING IS LANGSTON'S AND HIS REASON IS THE BINDING ONE: `8a` wires the exit trigger and would INHERIT THE FLOOR SILENTLY.**
 
 ### #1055 OPEN 2026-09-13 (Langston Step-4 Q2 on `B-LANGSTON-CONTEXT` P-2 rename; §15 + §9.4 disposition 3) — ⛔ **`do_direct_write_legacy` IS DEAD ON A MIGRATED BOX AND MUST BE DELETED, NOT HARDENED**
 
