@@ -241,8 +241,13 @@ export function getPerClassTargetGate(assetClass: string, strategy: string): { f
   }
 
   // Most-specific-wins (`scoreRowForKey`): a seeded (assetClass, canonicalStrategy) row outranks the
-  // per-class '*' row, and a strategy with no seeded row inherits the class default. That inheritance
-  // is why seeding four reach rows does not throw for the other fifteen strategies.
+  // per-class '*' row, and a strategy with no seeded row inherits the class default.
+  // ⚠️ THIS COMMENT PREVIOUSLY ENDED *"which is why seeding four reach rows does not throw for the
+  // other fifteen strategies"* — describing the WITHDRAWN plan. **ZERO reach ceilings were seeded**
+  // (the four derived values were refused on a measured blast radius; see the migration header).
+  // So TODAY every strategy inherits the class default through this path, and the inheritance is what
+  // makes that safe rather than a throw. Same class as the sizing docblock that cost a ratification:
+  // the migration header was scrupulous and this comment forty lines away still told the old story.
   const _strategyKey = { exchange: '*', assetClass, strategy: canonical, regime: '*' };
   return {
     floorPct,
