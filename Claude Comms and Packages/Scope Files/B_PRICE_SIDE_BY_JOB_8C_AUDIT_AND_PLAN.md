@@ -253,3 +253,59 @@ Both lanes' level-basis calls sit behind `activeFilterPool.getActivePool(…)` m
 It named the opposite operators at `tec-evaluator.ts:270/:279`, the level-clamped `exitPrice`, the ratchet question, and the `spread/2` double-count. **Every one was re-derived at the ref before use** (A6, A7, A8, A10).
 
 It also read staging as `2dbc512ee` — from a **stale section of my own change list**, which is a record defect I own and have now dated rather than deleted.
+
+---
+
+## 3c-READ. ⭐⭐ THE WINDOW READING — 2026-09-13T15:04Z, **475.4 min into the lifetime anchored at `07:08:52.378Z`**
+
+⛔ **ANCHOR RE-READ BEFORE COMPARING ANYTHING, as §3b obliges: pm2 `pm_uptime` = `2026-09-13T07:08:52.378Z`, UNCHANGED, `restart_time` 613.** ⇒ **same lifetime as the Step-7 reading; this is an EXTENSION of that window, not a second one.** Instrument as pre-registered: `/api/xstocks/filter-diagnostics` → `vtsEvaluation.levelBasisFunnel`.
+
+### THE GATES, CHECKED FIRST AND IN THE PRE-REGISTERED ORDER
+
+| gate | requirement | active:crypto_spot | vts:crypto_spot | |
+|---|---|---|---|---|
+| **ARITHMETIC** | `book.attempted === ladder.attempted` | 37,220 = 37,220 | 26,478 = 26,478 | ✅ not VOID |
+| **POSITIVE CONTROL** | `ladder.refused` AND `book.refused` both non-zero | 21 · 37,187 | 6 · 25,679 | ✅ not VOID |
+| **n-FLOOR** | ≥ 2,000 `ladder.attempted` | **37,220 = 18.6×** | **26,478 = 13.2×** | ✅ PASS |
+
+### THE OUTCOME, AGAINST THE THREE NAMES WRITTEN BEFORE THE DATA
+
+**`ladder.accepted / ladder.attempted` — reported separately per lane, never pooled:**
+
+| lane | book rung | **ladder rung** | recovery |
+|---|---|---|---|
+| **active:crypto_spot** | 33 / 37,220 = **0.089%** | **37,199 / 37,220 = 99.944%** | **+37,166 level builds** |
+| **vts:crypto_spot** | 799 / 26,478 = **3.018%** | **26,472 / 26,478 = 99.977%** | +25,673 |
+
+⇒ ✅✅ **RECOVERY CONFIRMED** on the active lane (**99.944% ≥ 50%**), and the criterion's own consequence follows as written: *"the book's absence was **not** the binding constraint, the 97% was rung 1's coverage, and `8c`'s switch-on becomes a question about the *trigger* rather than about price availability."*
+
+★ **AND IT CORROBORATES `#1060` FROM THE OPPOSITE DIRECTION.** The book rung refuses **37,187 of 37,187 for `no_book`** — not one `stale_book`, not one `crossed_book`, not one `one_sided_book` on the active lane. **The book is not failing quality checks; it is ABSENT.** That is `#1060`'s finding measured on a second instrument, over 8 hours and 37,220 attempts.
+
+### THE REFUSAL ARMS THAT FIRED — which is what makes the zeros beside them readable
+
+| arm | active | vts | |
+|---|---|---|---|
+| `locked_or_synthetic_ticker` | 11 | 6 | ✅ the fabrication guard is LIVE |
+| `stale_ticker` | 10 | 0 | ✅ fires |
+| `stale_book` | 0 | 16 | ✅ fires (on the lane that has books) |
+| `no_book` | 37,187 | 25,663 | the whole book-rung refusal |
+
+⛔ **STATED RATHER THAN CLAIMED AS CLEAN: `crossed_book`, `one_sided_book`, `non_finite_side`, `age_unknown`, `implausible_spread`, `book_not_eligible`, `no_ticker`, `one_sided_ticker`, `crossed_ticker`, `non_finite_ticker_side`, `ticker_age_unknown` and `implausible_ticker_spread` all read ZERO and NONE of them has been shown able to fire in this window.** Those zeros are **uncontrolled** and carry no information. Only the four arms above are positively controlled.
+
+### ⛔⛔ THE TRANSPORT SPLIT — REPORTED BESIDE THE HEADLINE, AND **NOT** CITED AS A MEASUREMENT
+
+Per the Step-8 F2 amendment, which is binding and was written before this window accumulated:
+
+| lane | `byAcceptedSource` as recorded |
+|---|---|
+| active ladder | `ticker_bbo:kraken_rest` 37,166 · `book_top:kraken_ws_book` 33 |
+| vts ladder | `ticker_bbo:kraken_rest` 25,667 · `book_top:kraken_ws_book` 799 · **`ticker_bbo:kraken_ws` 6** |
+
+⛔ **THIS IS RECORDED AND UNINTERPRETABLE, EXACTLY AS PRE-REGISTERED. `producer` comes from `lastSource`, which dates the MARK's writer, so WS-pushed sides under a later REST mark record as REST — a systematic mislabel that DOES NOT SHRINK WITH n.** ⇒ **the pushed share is NOT measured here, at this reading or at the close, and "overwhelmingly REST" may not be written down as a finding.** `B-REST-SIDES-TO-CACHE` (`#1056`, row `3n.l`) is what removes the floor.
+★ **ONE THING THE EXTENDED WINDOW *DOES* ADD, and it is a control rather than a measurement: `ticker_bbo:kraken_ws` is NON-ZERO on the vts lane (6).** ⇒ **the field is capable of recording a WS source; the near-total REST reading is not a structurally stuck value.** That removes one alternative explanation. **It does not make the share interpretable** — a systematic bias and a reachable code path are different things.
+
+### WHAT THIS READING DOES **NOT** SETTLE
+- ⛔ **The switch-on stays HELD.** Langston's hold rests on three reasons, none of which is price availability; this reading answers only the availability one. Levels on the transactable side against a mid-reading trigger still ship a MIXED POPULATION until row `8a` moves the trigger.
+- ⛔ **The 99.944% is a recovery of *a basis being nameable*, not of *the basis being right*.** Whether the named side is the correct side for the job is `3n`'s question, not this one.
+- ⚠️ **One lifetime, one instrument, in-memory.** A restart ends it.
+
