@@ -9179,6 +9179,43 @@ Out-of-band, own socket, **23 of 24 top-40 symbols seeded, 5.0 min, $150 order**
 
 `MISTAKE: symptom-read-as-statistic [B-PRICE-SIDE-BY-JOB] — a 64.3% crossed-book rate was the instrument announcing its own defect; I filed it as a number too odd to publish rather than a defect to chase. The second chance arrived as a silent zero-eval on two symbols and I nearly misread that too — the guard that dropped them WAS the finding.`
 
+
+---
+
+#### ⛔⛔ AMENDMENT 8 — **THE SIDE-VS-FRESHNESS RANKING IS NOT *HELD*, IT IS *UNMEASURABLE FROM THE EXIT-PROVENANCE COLUMNS*. STOP MINING THAT TABLE** (CC-C, 2026-09-13)
+
+**THE POPULATION, NAMED — this was the open question and it resolves cleanly.** `closed_trades`, `closed_at IS NOT NULL`, all three exit-provenance columns non-null, by class × fee mode:
+
+| | closed | checkable |
+|---|---|---|
+| **crypto_spot maker** | 171 | **24** |
+| crypto_spot taker | 206 | 38 |
+| xstock_spot maker | 93 | **7** |
+| xstock_spot taker | 171 | 27 |
+
+⇒ ✅ **THE 24 IS CRYPTO MAKER EXACTLY, AND NO xSTOCK ROW CAN BE IN IT** (xStock maker checkable is 7, separately). Langston's `depth-source.ts:89-93` contamination worry is discharged **by the class counts, not by recollection.**
+
+**WHAT I MEASURED ON IT, definition stated:** `pos_in_spread = (exit_decision_price − exit_ticker_bid) / (exit_ticker_ask − exit_ticker_bid)`; 0 = at the bid, 1.0 = at the ask.
+**n=24 · only THREE sit strictly inside the spread** (CHIP 0.421, ACU 0.667, DASH 0.888; RAY exactly 1.000) · **TWENTY OF TWENTY-FOUR BOOK ABOVE THE ASK**, median ≈1.5, max **7.000** (TRUMP/USD) · `exit_price_producer` is `kraken_ws_book_mid` on **all 24**.
+
+⛔⛔ **AND I AM WITHDRAWING IT AS BEARING ON THE RANKING, BECAUSE THE TWO COLUMNS ARE NOT CONTEMPORANEOUS AND OUR OWN CODE SAYS SO.** At `active-execution-engine.ts:1829-1850`:
+- `exit_decision_price` is **DECISION-TIME** — the payload is *"built ONCE PER POSITION, above the exit-condition evaluation, for every position on every tick — not at the close."*
+- the payload's own `tickerBid`/`tickerAsk` are **`null` on every branch, deliberately**.
+- **the COLUMN `exit_ticker_bid`/`ask` is the ARCHIVER'S WITNESS**, filled *"from `_witness` at the persist site"* (`#911`) — **at the CLOSE.**
+
+⇒ ★ **`pos_in_spread` COMPARES A DECISION-INSTANT PRICE AGAINST A PERSIST-INSTANT WITNESS FROM A DIFFERENT FEED.** 20-of-24 is equally consistent with a transactability defect (the SIDE argument) and with the gap between two capture instants (the FRESHNESS argument) — **and the statistic cannot separate them BY CONSTRUCTION, not for want of a better threshold.**
+⚠️ **THE SAME LIMIT BINDS LANGSTON'S `14 of 24`, whatever its threshold — it rests on the identical two columns. He has since WITHDRAWN it rather than restate it.** ⛔ **And he flags that the corpus carries TWO DISTINCT `14`s — do not reconcile anything to either.**
+
+⇒ ⛔⛔ **SO THE RANKING IS NOT "HELD PENDING A BETTER READ". IT IS UNMEASURABLE FROM THIS TABLE AT ANY THRESHOLD.** Stated here so nobody mines it again.
+
+**WHAT WOULD SETTLE IT, and why it does not exist yet:** a decision-instant quote captured on the SAME read as `exit_decision_price`. The docblock says why there isn't one — the ticker handler computes both sides at `kraken-websocket-adapter.ts:682-683` and **DISCARDS them to a debug ring buffer**, with no per-symbol retention the engine can read at close — and it explicitly **refuses to fill those fields from the book**, because that would *"store one feed under the other feed's name."* ✅ **That refusal is correct and is not to be undone.**
+⇒ **The fix is a CAPTURE CHANGE ON THE WRITE PATH, not a query.**
+
+**DISPOSITION (§9.4 — 3, its own placed item):**
+> `HOME: B-DECISION-INSTANT-QUOTE, owner CC-C, placed in PHASE_19_PLAN at row 3n.n, after 3n.l and before 3n.m`
+
+**WHAT SURVIVES THE WHOLE EVENING, for the record:** the per-feed COSTS (frame counting, no ladder built — unaffected by the `#507` reintroduction), the live-system facts (signal-birth age p50 30-45 s with 0 of 2,726 pushed · `levelReadKind` ~85-90% `last` · one subscribed symbol on two independent instruments · production book integrity 26,396/26,396), and **both candidate fixes UNRANKED with the discriminator identified.**
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
