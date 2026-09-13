@@ -1,7 +1,24 @@
 # PRICE FEED MAP — WHERE EVERY PRICE IN THE SYSTEM COMES FROM
 
-**Kyle-directed, 2026-09-13 (CC-B), r2 after joint review by Langston + CC-C.**
-Read at `origin/migration/aws-supabase`.
+**Kyle-directed (CC-B) · r4 · closed out 2026-09-14 after three Langston review rounds and a CC-C leg.**
+
+> ## ⛔⛔ DERIVED-AT STAMP — **READ THIS BEFORE CITING ANY LINE BELOW**
+> **EVERY `path:line`, COUNT AND VERDICT IN THIS DOCUMENT WAS DERIVED AT:**
+> ### `7f645a6f9c677d75523a1fc7dfba0aa30ef10eed` · branch `migration/aws-supabase` · **2026-09-14**
+> ⭐⭐ **THIS STAMP IS THE DOCUMENT'S WHOLE CLAIM TO BEING CANONICAL, AND IT DECAYS ON THE NEXT COMMIT (Langston's condition, r3).** The map is nominated canonical for ONE reason — *every line resolves at the ref* — and **that is a property of a MOMENT, not of the file.**
+> ⚠️ **THE FAILURE THIS GUARDS IS ALREADY ON THE RECORD IN §5.1 DIFFERENCE #1: a 4× wrong interval, read off a STALE COMMENT sitting thirty lines above the live call.** That comment was true when written. **Without a stamp and a trigger this file becomes the sixth stale pricing document inside a month.**
+>
+> ### ⛔ THE RE-DERIVATION TRIGGER — NAMED, NOT “PERIODICALLY”
+> **RE-DERIVE THIS DOCUMENT WHEN ANY OF THESE FIRE. Each is a git-visible event, so none depends on anybody remembering:**
+> | # | trigger | why it invalidates the map |
+> |---|---|---|
+> | **1** | a commit touches **`price-cache.ts`**, **`kraken-websocket-adapter.ts`**, **`kraken-v2-translator.ts`**, **`market-data/mark-kind.ts`** or **`price-basis.ts`** | the FEED layer — changes what a price IS |
+> | **2** | a commit touches **`signal-orchestrator.ts`**, **`active-execution-engine.ts`**, **`asset_classes/xstock_spot/scanner.ts`** or **`eval-cycle.ts`** | the READ sites — changes which price a job takes |
+> | **3** | an **OHLC interval argument** changes anywhere | ⭐ **difference #1 was exactly this, and it went unnoticed for three months** |
+> | **4** | **`shared/schema.ts`** gains or loses an `exit_*` / `entry_*` provenance column | changes what can be measured about a price after the fact |
+> | **5** | **`B-PRICE-SIDE-BY-JOB` (`3n`) lands any side change** | the judgement in §3 is written against today's sides |
+> ✅ **ON A TRIGGER: re-derive, re-stamp, and record what MOVED. ⛔ A re-stamp with no diff is only valid if the lines were actually re-read — re-stamping on faith is the defect this table exists to prevent.**
+> ➕ **HOME: `B-PRICE-DOC-CONSOLIDATE`, owner CC-B — the trigger is a written rule here, and NOTHING AUTOMATES IT. Stated plainly rather than implied.**
 
 > ## ⭐⭐ THE ONE RULE THIS WHOLE MAP PRODUCES (Langston, 2026-09-13)
 > ### **A PRICE THAT *VALUES* MAY BE A MIDPOINT. A PRICE THAT *ACTS* MUST BE THE SIDE THAT TRANSACTS.**
@@ -180,6 +197,30 @@ birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` �
 ✅ **ONE ANSWER COVERS EVERY ROW: NO.** Smoothing is applied at exactly one place today — crypto quant birth — and that row **fails Q1**, so the smoothing question there is subordinate to fixing the kind.
 ⛔ **AND IT MUST NEVER BE ADDED TO THE EXIT TRIGGER** — ruled explicitly so that nobody “fixes” a clock mismatch by smoothing the acting end. **A price that acts is compared, not estimated.**
 
+### Q4 — ⭐⭐ **WHAT IS RECORDED, AND WHAT HAPPENS WHEN THERE IS NO PRICE** *(NEW IN r4 — the two columns this map did not have)*
+
+⛔⛔ **LANGSTON'S SHARPEST POINT IN THREE ROUNDS, AND IT IS DIAGNOSTIC RATHER THAN TIDYING: “RECORD is the column you have nothing for — which is precisely how §5.2 went wrong.”** Had every row carried **what is persisted, sampled how, at which instant**, the 4-second-throttled witness sitting against an unthrottled decision would have been **on the face of the table** instead of taking three rounds to find.
+⛔⛔ **AND THE SECOND COLUMN IS A WHOLE MISSING AXIS, NOT A MISSING ROW: EVERY ROW ABOVE SILENTLY ASSUMES A PRICE EXISTS.** A gate that PASSES on a placeholder (`XSTOCK_PRICING_PLAN` §P3: **171 of 486 symbols overnight**) is the **`#546` absent-as-valid shape — an absent value wearing a plausible number's clothes.**
+
+| situation | **RECORDED?** (what, sampled how, which instant) | **NO PRICE → what happens** |
+|---|---|---|
+| **crypto exit trigger** | `exit_decision_price` + `exit_price_producer`; witness pair `exit_ticker_bid/ask` from a **separate socket**; capture time **in `metadata.fg2Shadow`, NOT a column** | ⚠️ **UNTRACED** |
+| **xStock exit trigger** | same columns; witness and fill read the **SAME table**, decision **unthrottled** vs witness **4,000 ms-throttled**; decision-instant sides in `metadata.bookState.yields[]` | ✅ **`hollow` / `unknown` verdict WITHHOLDS the decision** (`#943`), bounded by `hollow_skip_cap`, then YIELDS |
+| **crypto quant birth** | no per-read record; kind only in a 60 s HEALTH counter that is an **UPPER BOUND** | ⚠️ **UNTRACED** |
+| **crypto pattern birth** | ⛔ **appears in NEITHER census field** (`price-cache.ts:599-601`) | ⚠️ **UNTRACED** |
+| **xStock / VTS birth** | bar close; **no freshness GATE at all** — gated only by `min_ohlc_history_bars` | ✅ **insufficient history ⇒ SKIP the pair** (`scanner.ts:900-902`) |
+| **entry marketability (active)** | depth snapshot age persisted as `entry_book_age_ms` | ⚠️ **UNTRACED** |
+| **xStock entry spread gate** | — | ⛔⛔ **THE GATE *PASSES*. A placeholder clears it — 171 of 486 symbols overnight, 10 of 486 in daytime.** ✅ **Kyle's rule applies and is not implemented: *we do not use some backup price that may or may not be applicable; we hold until we get the pricing we need.*** |
+| **RTB rank** | not persisted per read | ⚠️ **UNTRACED** |
+| **portfolio marking** | not persisted per read | ⚠️ **UNTRACED** |
+
+⚠️ **SIX OF NINE “NO PRICE” CELLS READ `UNTRACED`, AND THAT IS THE HONEST STATE — NOT A FORMATTING PLACEHOLDER.** ⛔ **An `UNTRACED` cell may NOT be read as “it fails safe”.** ➕ **Tracing them is an item on `B-PRICE-DOC-CONSOLIDATE`, owner CC-B.**
+
+### ✅ AND THE FRESHNESS NUMBER THE MAP OWED — IMPORTED *WITH* ITS DERIVATION, NOT JUST ITS CONCLUSION
+§Q2 rules entry marketability **UNRULED — needs the age distribution**. `XSTOCK_PRICING_PLAN` §2 **HAS the distribution**, and its number beats my refusal:
+> **15 SECONDS — the same figure the entry already uses.** ⭐ **PHYSICS FIRST, and this is the part that makes it not arbitrary: the feed only WRITES a price every 4 s, so a 2 s guard would block 134 of 236 closes (57 %) — NOT for being stale, but because the data CANNOT BE FRESHER.** A 5 s guard blocks 27 (11.4 %). Distribution p50 **2.33 s** · p90 **8.40 s** · p95 **65.20 s** ⇒ between 5 s and 60 s the blocked count moves only 27→14, so there is a **hard core of ~15-20 genuinely stale closes** and everything else is under 5 s. **15 s blocks 20 of 236 (8.5 %), and those are the pathological ones.**
+⭐ **THE TRANSFERABLE RULE, WHICH IS WHAT TO KEEP: *reject beyond a few ticks of your OWN feed's cadence.* 15 ÷ 4 ≈ 3.75 ticks.** ⚠️ **`RULED ON REPORTED FACT` — xStock population, `XSTOCK_PRICING_PLAN` §2; I have NOT re-derived it and the crypto cadence differs, so the NUMBER does not transfer to crypto even though the RULE does.**
+
 ### ⭐ THE WHOLE JUDGEMENT IN ONE LINE
 > **FOUR JOBS READ THE WRONG KIND OF PRICE: the exit trigger, crypto quant birth, xStock/VTS marketability, and — as a mixture rather than a wrong side — the quant basis itself.**
 > **FOUR READ THE RIGHT KIND: both bar-close births, active entry marketability, RTB ranking, and portfolio marking.** *(Of the right-kind rows, TWO are too old: the crypto pattern lane's **60-minute** bar close and the xStock/VTS **15-minute** one — **different intervals; r2 called both 60.**)*
@@ -187,9 +228,9 @@ birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` �
 ## 4. ⛔ FIVE PARALLEL DOCUMENTS — the response to "we lose sight of the system" cannot be a fifth narrative
 `PRICING_DATA_ARCHITECTURE.md` (108 KB, **banner-marked NOT CANONICAL / UNDER CORRECTION**) · the
 SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **this**.
-> `HOME: B-PRICE-DOC-CONSOLIDATE, owner CC-B, PHASE_19_PLAN after 3n` — this map either **supersedes** the
-> SysManual provenance table with the manual pointing at it, or **folds into** it. **It does not ship as a
-> fifth source.** The `:655`/`:668` correction rides the same batch and is **not deferrable**.
+⛔⛔ **THE RULING ON ALL FIVE IS §5.3 — IT IS NOT REPEATED HERE, AND THAT IS DELIBERATE.** ⭐ **A section that both ENUMERATES the parallel documents and RULES on them is itself the two-copies shape this section exists to name.** ⇒ **this section KEEPS THE CENSUS; §5.3 HOLDS THE VERDICT.**
+✅ **KEPT HERE BECAUSE §5.3 DOES NOT NAME THEM: `ACTIVE_PATH_FLOW.md` and the exit-path audit are the FOURTH and FIFTH parallel sources, and neither was part of Kyle's three-way comparison** — so **neither has been compared, and neither is ruled on.** ⚠️ **That is an OPEN GAP, not an omission.**
+➕ **HOME: `B-PRICE-DOC-CONSOLIDATE`, owner CC-B, `PHASE_19_PLAN` after `3n`** — which also carries the `SYSTEM_MANUAL` `:655`/`:668` correction. **That correction is already MARKED in place and is not deferrable; what the batch owes is the structural decision.**
 
 ---
 
@@ -210,7 +251,7 @@ SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **
 | **5** | **Line numbers.** | ✅ **THIS MAP.** | Theirs have drifted — their `:2404` is blank, `:2417` is a comment, `:2442` parses volume. Mine resolve exactly at the ref. |
 | **6** | **The xStock EXIT trigger.** `XSTOCK_PRICING_PLAN` §P1/§P2 and `..._DECISION_PATH` §4 both cover it; **this map had no row for it at all.** | ⛔ **THE xSTOCK DOCUMENTS. A WHOLE LANE WAS MISSING.** | Now §C-ii above, re-derived at `server/services/passive-archive/equity-spot-archiver.ts:208-209` → `mark-kind.ts:33`. |
 | **7** | **xStock has no order-book ladder.** `..._DECISION_PATH` §Q1 states it; this map's feed table listed *“order book”* and *“depth snapshot”* **without saying they are crypto-only**. | ✅ **THE DECISION PATH.** | The `book` channel subscription lives only in `kraken-websocket-adapter.ts`; the xStock modules carry a `book-state` **predicate over the ticker's top-of-book**, not a ladder. ⇒ ⛔ **this map's “the right kind is the ASK” for xStock must mean the TICKER'S ask — there is no other.** |
-| **8** | **The 4-second archive sample — 43.6 % of marks never stored** (`XSTOCK_PRICING_PLAN` §P5). Absent from this map. | ✅ **THE PLAN, AND IT IS THE SAME CLASS AS THE DEFECT THAT REFUTED MY OWN 14-of-24.** | Not re-measured here. ⚠️ **Recorded as the reason a stored row is a LAGGED WITNESS, not the decision.** |
+| **8** | **The 4-second archive sample — 43.6 % of marks never stored** (`XSTOCK_PRICING_PLAN` §P5). Absent from this map. | ⚠️ **`RULED ON REPORTED FACT` — I DID NOT RE-DERIVE IT** (Langston r3: mark it or re-derive it; do not import it bare). | ⛔ **NOT re-measured. It is imported from §P5 and carries §P5's population, not one of mine.** ✅ **What it is used for here is QUALITATIVE and survives either way: it is the reason a stored row is a LAGGED WITNESS rather than the decision.** ⛔ **Do not cite 43.6 % as a measured figure of this document.** |
 
 ## 5.2 ⭐⭐ THE 59 % — **CORROBORATED ON THE HANDOFF COHORT. I HAD IT BACKWARDS TWICE.**
 
@@ -290,15 +331,41 @@ Witness spreads on the 62 stamped crypto rows: **median 0.14 % (`stop_hit`, n=38
 
 ➕ **DISPOSITIONS (Langston):** the 6-of-7 handoff rate → **item on `3b.f-c`** (CC-C) — it upgrades CRM/NEM from two specimens to a RATE. The `0.5·(S_d/S_w)` correction → **item on `3n.n`** (CC-C) — it **sharpens** why that row is the precondition rather than weakening it.
 
-## 5.3 ⭐⭐ WHICH DOCUMENT IS CANONICAL — THE RECOMMENDATION
+## 5.3 ⭐⭐ THE CANONICAL DOCUMENT — **LANGSTON'S RULING, r3**
 
-| document | verdict |
+> **Kyle's question:** *“is there other information in those documents that can be PAIRED with the map to become our canonical governance document?”*
+⛔⛔ **LANGSTON'S ANSWER: PAIR IT WITH *NOTHING NARRATIVE*.** *“The failure you're exiting is five documents each holding a partial copy of one table; a prose companion rebuilds it.”*
+⚠️ **MY FIRST ANSWER WAS TOO QUICK AND MY SECOND WAS TOO BROAD.** I first dismissed the architecture document on its banner alone; then, having read its structure, I proposed importing six of its sections wholesale. **Neither was right.**
+
+### ✅ (a) THE MAP STAYS THE SPINE — THE FOUR LAYERS BECOME **COLUMNS**
+**A reader arrives holding a JOB, not a layer.** A layer-first spine makes you visit four sections to answer one question — **which is how we got five narratives.** ✅ **But FEED / NUMBER / RECORD / TIMING maps cleanly onto the Q1/Q2/Q3 chain already here: FEED→NUMBER *is* Q1; TIMING *is* Q2.** ⭐⭐ **AND `RECORD` WAS THE COLUMN WITH NOTHING IN IT — now §Q4, and it is precisely how §5.2 went wrong.**
+
+### ✅ (b) THE BANNER EXCLUDES ITS **VERDICTS**, NOT ITS **EVIDENCE**
+| from `PRICING_DATA_ARCHITECTURE` | ruling |
 |---|---|
-| **`PRICING_DATA_ARCHITECTURE.md`** (108 KB) | ⛔ **NOT CANONICAL, AND ITS OWN BANNER SAYS SO** — *“UNDER CORRECTION”*, 14 returned corrections, one overturning its central structural claim, Parts 3–6 *“framed and not yet filled”*. **Its §3.1 master table is the same work as this map and its line numbers have drifted.** |
-| **`XSTOCK_PRICING_PLAN.md`** + **`XSTOCK_PRICING_DECISION_PATH.md`** | ✅ **KEEP BOTH, UNCHANGED, AS WHAT THEY ARE: a problems→solutions→order PLAN and a decision ROUTE for one asset class.** ⛔ **Neither is a map of where prices come from, and neither claims to be.** |
-| **`SYSTEM_MANUAL.md` provenance table** | ⛔ **THREE CELLS ALREADY MARKED SUPERSEDED** (2026-09-13). It must end up POINTING at the canonical map, not holding a second copy. |
-| ⭐ **`PRICE_FEED_MAP.md` — THIS FILE** | ✅ **RECOMMENDED CANONICAL, ON ONE CONDITION: it absorbs differences 1, 4, 6 and 7 above — which it now has — and the architecture doc's §3.1 is retired INTO it rather than left standing beside it.** |
+| **§2 provenance** · **§5 cost** · **§5b operational reach** | ✅ **TAKE THEM.** Commits, Kraken's published docs, measured stalls and retention — **facts about the world, whose truth does not depend on the structural claim that was overturned.** |
+| **§3.1 master table** | ⛔ **RETIRE IT INTO THE MAP, DO NOT MERGE IT** — same work as §Q1, and already measured wrong (*“SMOOTHED MID”*). |
+| **§6 target state** | ✅ **TAKE THE *SHAPE*, RE-DERIVE THE CELLS.** |
+| **§3.0 axes** (*the `live` lane is a mode label with no separate code*) | ⭐ **STRONGER THAN MY LINE AND I WOULD RATHER HAVE IT** — ⛔ **but it does not cross on the document's word. KEEP MY WEAKER LIVE-LANE LINE UNTIL SOMEONE OPENS THE CODE.** |
 
-⛔⛔ **THE CONDITION IS NOT A FORMALITY. THE REASON TO PICK THIS FILE IS NOT THAT IT WAS RIGHT — IT WAS WRONG ON A 4× INTERVAL AND MISSING AN ENTIRE ASSET CLASS'S EXIT PATH.** It is that it is **small enough to hold one statement per job**, and that **every line in it now resolves at the ref**. ⭐ **A 108 KB document that cannot be re-verified in an afternoon cannot be the thing four sessions check themselves against.**
+⛔⛔ **THE IMPORT RULE, BINDING: EVERY IMPORTED LINE IS RE-DERIVED AT THE REF AND CARRIES ITS OWN CITATION. ANYTHING NOT RE-DERIVABLE COMES ACROSS MARKED `INFERRED-FROM-DOC`, NEVER STATED FLAT.** ⭐ **Because I do not know which of its 14 corrections landed where — and neither does it.**
 
-✅ **KYLE DECIDES.** The work to execute it is already placed: `B-PRICE-DOC-CONSOLIDATE`, owner CC-B, `PHASE_19_PLAN` after `3n`.
+### ✅ (c) THE NO-PRICE AXIS IS REAL, AND I UNDERSTATED IT
+Langston: it is **a THIRD COLUMN ON EVERY ROW** — what this job does when the price is **absent, stale, or hollow** — now §Q4. ⭐ **And CRM is the same class in BOOKED MONEY: a “price” of 503.50 that no market ever offered.**
+✅ **SPLIT FROM THE POLICY: the PER-ROW BEHAVIOUR belongs in this map; Kyle's HOLD-DON'T-SUBSTITUTE rule and the F4 no-positive-slippage invariant belong in the target-state / settled section.**
+
+### ⛔ (d) WHAT MUST **NOT** COME ACROSS
+1. ⛔ **The 59 % in EITHER direction** — §5.2 is `UNREPRODUCED`; importing it now would import a refutation that is itself wrong.
+2. ⛔ **The 14-correction history** — that lives in `RUNNING_ISSUES`. **A canonical document carrying its own retraction log becomes the 108 KB problem.**
+3. ⛔⛔ **ANY CAUSAL SENTENCE FROM ANY OF THE FOUR DOCUMENTS. IMPORT MEASUREMENTS AND CITATIONS; RE-DERIVE MECHANISMS** (rule 29(c)).
+
+### ⭐ (e) THE SETTLED REGISTER — *“the most valuable single section”*
+Adopt `XSTOCK_PRICING_DECISION_PATH` §4's shape, with three conditions: **every entry carries WHO settled it and the CITATION that settles it** · **it is the ONLY place a “settled” claim lives** · ⛔ **nothing enters on a reviewer's say-so — Langston's included.**
+
+### ✅ THE PAIRING, IN ONE LINE
+> **THE MAP HOLDS *WHAT IS TRUE*. `PHASE_19_PLAN` `3n` + `RUNNING_ISSUES` HOLD *WHAT WE ARE DOING*. THE TWO xSTOCK DOCUMENTS STAY UNCHANGED AS A CLASS-SCOPED PLAN AND ROUTE, AND STOP CARRYING THEIR OWN COPY OF THE TABLE.**
+⭐⭐ **FACTS AND DECISIONS ROT ON DIFFERENT CLOCKS, AND SHARING A FILE IS HOW THE ARCHITECTURE DOCUMENT REACHED 108 KB.**
+
+⛔ **AND THE CONDITION THE WHOLE RECOMMENDATION RESTS ON IS THE DERIVED-AT STAMP AT THE HEAD OF THIS FILE.** ⭐ **The reason to pick this file is NOT that it was right — it was wrong on a 4× interval, missing an entire asset class's exit path, and carried a withdrawn claim through three sites. It is that it is small enough that every line can be re-checked in an afternoon — and the stamp is what keeps that true.**
+
+✅ **KYLE DECIDES.** Execution is placed: `B-PRICE-DOC-CONSOLIDATE`, owner CC-B, `PHASE_19_PLAN` after `3n`.
