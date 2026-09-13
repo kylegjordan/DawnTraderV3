@@ -344,6 +344,22 @@ export interface LevelBasisFunnelKey {
  */
 export interface LevelBasisRungKey extends LevelBasisFunnelKey {
   rung: LevelBasisRung;
+  /**
+   * ⛔⛔ REQUIRED, AND IT IS A KEY DIMENSION — NOT A LABEL (row `8a-P1`, 2026-09-13).
+   *
+   * The side-age probe has separated its populations by `stage` since it was built (`sideAgeKey`
+   * below). The funnel did not, so `8a-P1`'s EXIT walks would have landed in the same cells as
+   * signal birth — the pooling `LevelBasisLane`'s own docblock exists to make impossible, in the
+   * instrument built to prevent it.
+   *
+   * ⛔ AND THE FIRST FIX PROPOSED FOR IT WAS THIS FIELD ALONE, WHICH FIXED NOTHING: `keyOf` builds
+   * the map key and would have gone on ignoring it, so the TYPE would have advertised a separation
+   * the KEY did not implement. `keyOf` carries it now. A type is not a key.
+   *
+   * REQUIRED rather than optional so every call site must name its stage; a default would let a new
+   * caller inherit whichever population happened to be first.
+   */
+  stage: LevelBasisStage;
 }
 
 /**
@@ -364,6 +380,14 @@ export interface FunnelOutcome {
    * than invent an `unknown` bucket that a reader could not tell from a real one.
    */
   acceptedSource?: string;
+  /**
+   * The ACCEPTED quote's own age and which leg carried it (row `8a-P1`, P1-4). Both optional and
+   * both required TOGETHER — an age with no leg cannot be bucketed, and a leg with no age has
+   * nothing to bucket. A walk supplying neither is simply not counted in the age histogram, the
+   * same discipline `acceptedSource` already follows.
+   */
+  acceptedAgeMs?: number;
+  acceptedLeg?: 'book' | 'ticker';
 }
 
 interface FunnelCell {
@@ -375,17 +399,41 @@ interface FunnelCell {
    * "correct until it isn't" the field was added to remove. Structural now.
    */
   rung: LevelBasisRung;
+  /** Stored for the same reason `rung` is: a consumer must never parse it back out of the key. */
+  stage: LevelBasisStage;
   accepted: number;
   byReason: Record<FunnelRefusal, number>;
   /** `<basis>:<producer>` -> count, for ACCEPTED walks only. Never part of `attempted`. */
   byAcceptedSource: Record<string, number>;
+  /**
+   * ⛔⛔ THE ACCEPTED QUOTE'S OWN AGE, SPLIT PER LEG — NEVER POOLED (row `8a-P1`, P1-4).
+   *
+   * The side-age probe measures the TICKER leg's CACHE age, which is not the age of the quote the
+   * ladder ACCEPTED — on a book-carrying symbol those are different objects. This is the accepted
+   * quote's own `ageMs`.
+   *
+   * ⛔ SPLIT `book` / `ticker` BECAUSE POOLING THEM REBUILDS F4 ONE FIELD OVER: book ages are
+   * sub-second and ticker ages carry a 2/15/30/60 s poll cadence, so one histogram over both is
+   * bimodal by construction and its quantiles describe neither.
+   *
+   * ⚠️ DERIVABLE RANGE, STATED SO IT IS NOT OVER-READ: the first edge is 1,000 ms and the ladder
+   * refuses above `maxAgeMs`, so a refusal rate is derivable ONLY for candidate ceilings inside
+   * [1,000 ms, that ceiling], and BUCKET-BOUNDED — never as an interpolated point.
+   */
+  acceptedAge: { book: number[]; ticker: number[] };
+  acceptedAgeMaxMs: { book: number; ticker: number };
 }
 
-function emptyCell(rung: LevelBasisRung): FunnelCell {
+function emptyCell(rung: LevelBasisRung, stage: LevelBasisStage): FunnelCell {
   return {
     rung,
+    stage,
     accepted: 0,
     byAcceptedSource: {},
+    // ⛔ `newBuckets()` is declared below and is the SAME edge set the side-age probe uses, so a
+    // reader comparing the two histograms is comparing like with like.
+    acceptedAge: { book: newBuckets(), ticker: newBuckets() },
+    acceptedAgeMaxMs: { book: 0, ticker: 0 },
     byReason: {
       no_book: 0,
       one_sided_book: 0,
@@ -403,14 +451,32 @@ function emptyCell(rung: LevelBasisRung): FunnelCell {
 const _funnel = new Map<string, FunnelCell>();
 
 function keyOf(k: LevelBasisRungKey): string {
-  return `${k.lane}:${k.assetClass}:${k.rung}`;
+  // ⛔ `stage` IS IN THE KEY, not merely on the type — see `LevelBasisRungKey.stage`. Ordered
+  // lane:class:stage:rung so it reads the same way round as `sideAgeKey`'s lane:class:stage.
+  //
+  // ⛔⛔ AND IT REFUSES RATHER THAN MINTING `…:undefined:…`, WHICH IS NOT DEFENSIVE PADDING —
+  // IT IS THE ONE POPULATION THAT CAN REACH HERE WITHOUT A STAGE. `tsconfig` EXCLUDES TEST FILES,
+  // so a required field is NOT enforced on them: the first test run after `stage` was added minted
+  // `active:crypto_spot:undefined:book` and would have gone on doing so. **This file already
+  // records being bitten by exactly that** — `LevelBasisFunnelRow.byReason`'s docblock, on a test
+  // reading a property tsc would have rejected.
+  // ⇒ every PRODUCTION caller is type-checked and structurally cannot trip this; an un-checked
+  //   test can, and should be told rather than silently keyed into a bucket named after a bug.
+  if (!k.stage) {
+    throw new Error(
+      `[level-basis] recordLevelBasisOutcome requires a stage — got ${String(k.stage)} for ` +
+      `${k.lane}:${k.assetClass}:${k.rung}. A missing stage would pool this walk into a key ` +
+      `named 'undefined' and the pooling is what the dimension exists to prevent.`,
+    );
+  }
+  return `${k.lane}:${k.assetClass}:${k.stage}:${k.rung}`;
 }
 
 export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOutcome): void {
   const id = keyOf(key);
   let cell = _funnel.get(id);
   if (!cell) {
-    cell = emptyCell(key.rung);
+    cell = emptyCell(key.rung, key.stage);
     _funnel.set(id, cell);
   }
   if (result.ok) {
@@ -420,6 +486,14 @@ export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOu
     // a real one, and the sum of this map is deliberately allowed to be < accepted.
     if (result.acceptedSource) {
       cell.byAcceptedSource[result.acceptedSource] = (cell.byAcceptedSource[result.acceptedSource] ?? 0) + 1;
+    }
+    // P1-4: the accepted quote's own age, into its OWN LEG's histogram. `!= null` so a legitimate
+    // 0 ms is recorded rather than dropped by truthiness - the same predicate the stamp selection
+    // in `touch-price.ts` uses, and for the same reason.
+    if (result.acceptedAgeMs != null && result.acceptedLeg) {
+      const leg = result.acceptedLeg;
+      cell.acceptedAge[leg][bucketIndex(result.acceptedAgeMs)]++;
+      if (result.acceptedAgeMs > cell.acceptedAgeMaxMs[leg]) cell.acceptedAgeMaxMs[leg] = result.acceptedAgeMs;
     }
     return;
   }
@@ -469,11 +543,29 @@ export interface LevelBasisFunnelRow {
    * break the moment a lane or class contains one, and would read as working until it did.
    */
   rung: LevelBasisRung;
+  /** ⛔ EXPLICIT, NEVER PARSED OUT OF `key` — same rule as `rung`. */
+  stage: LevelBasisStage;
   /** What `byReason` is ABOUT. Names the object, so the vocabulary cannot be misattributed. */
   reasonsAbout: 'book_top' | 'ticker_sides';
   attempted: number;
   accepted: number;
   refused: number;
+  /**
+   * ⛔⛔ THE SELF-SYNTHETIC REFUSALS, ON THEIR OWN LINE — AND THEY COUNT US, NOT THE VENUE
+   * (row `8a-P1`, P1-13; Langston's condition).
+   *
+   * `price-cache.ts`'s side carry has a `?? price` arm: with neither a supplied nor an existing
+   * side it writes `bid === ask === price`, a synthetic zero-spread book of OUR OWN making, which
+   * `buildLevelBasis` refuses as `locked_or_synthetic_book` BEFORE it ever reaches the age check.
+   * ⇒ **a refusal rate that includes this is part venue and part us, and the two do not belong in
+   * one number.** `RUNNING_ISSUES:9239` already names it the fingerprint of an entry whose sides
+   * were never observed.
+   * ★ It is published as a COUNT beside `refusedExcludingSelfSynthetic` rather than merely
+   * documented as un-poolable, so the correct rate is the one that is easy to compute.
+   */
+  selfSyntheticRefusals: number;
+  /** `refused` minus `selfSyntheticRefusals`. ⛔ THE FEED-FACING REFUSAL RATE USES THIS NUMERATOR. */
+  refusedExcludingSelfSynthetic: number;
   /**
    * ⚠️ THE KEY SET DEPENDS ON THE RUNG — see `reasonsAbout`. `book` rows carry `FunnelRefusal`
    * (⛔ including `book_not_eligible`, which the type used to omit while the runtime object carried
@@ -493,6 +585,11 @@ export interface LevelBasisFunnelRow {
    * denominator equality survives — his constraint.
    */
   byAcceptedSource: Record<string, number>;
+  /** P1-4 — the ACCEPTED quote's own age per leg, on `SIDE_AGE_BUCKET_EDGES_MS`. Never pooled. */
+  acceptedAge: { book: number[]; ticker: number[] };
+  acceptedAgeMaxMs: { book: number; ticker: number };
+  /** The edge set the two histograms are on, carried so a reader never has to look it up. */
+  acceptedAgeEdgesMs: readonly number[];
 }
 
 /**
@@ -517,15 +614,24 @@ export function getLevelBasisFunnel(): LevelBasisFunnelRow[] {
           return acc;
         }, {} as Record<LadderRefusal, number>)
       : { ...cell.byReason };
+    // P1-13: the self-synthetic arm, read off the STORAGE vocabulary (one name, both rungs) and
+    // published separately. It is OUR fabrication, so it may not sit inside a feed-facing rate.
+    const selfSyntheticRefusals = cell.byReason.locked_or_synthetic_book;
     return {
       key,
       rung,
+      stage: cell.stage,
       reasonsAbout: rung === 'ladder' ? 'ticker_sides' as const : 'book_top' as const,
       attempted: cell.accepted + refused,
       accepted: cell.accepted,
       refused,
+      selfSyntheticRefusals,
+      refusedExcludingSelfSynthetic: refused - selfSyntheticRefusals,
       byReason,
       byAcceptedSource: { ...cell.byAcceptedSource },
+      acceptedAge: { book: [...cell.acceptedAge.book], ticker: [...cell.acceptedAge.ticker] },
+      acceptedAgeMaxMs: { ...cell.acceptedAgeMaxMs },
+      acceptedAgeEdgesMs: SIDE_AGE_BUCKET_EDGES_MS,
     };
   });
 }

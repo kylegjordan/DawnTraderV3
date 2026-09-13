@@ -1610,7 +1610,7 @@ async function generatePhase10Signal(
     );
     // One ceiling governs both rungs, at LEVEL_BASIS_OBSERVATION_MAX_AGE_MS — stated with its
     // name as `touch-price.ts:50` requires of whoever wires this.
-    recordTouchSelection({ lane: 'vts', assetClass: _assetClass }, _lbSel);
+    recordTouchSelection({ lane: 'vts', assetClass: _assetClass, stage: 'vts_signal_birth' }, _lbSel);
   }
 
   const stratDetectIndicators = {

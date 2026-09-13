@@ -2689,7 +2689,7 @@ export class SignalOrchestrator {
         // ⚠️ ONE CEILING GOVERNS BOTH LEGS, stated with its number as `touch-price.ts:50` requires
         // of whoever wires this: both rungs are judged at LEVEL_BASIS_OBSERVATION_MAX_AGE_MS.
         // A per-leg ceiling is P-8a's, not this row's.
-        recordTouchSelection({ lane: 'active', assetClass: _lbClass }, _lbSel);
+        recordTouchSelection({ lane: 'active', assetClass: _lbClass, stage: 'active_signal_birth' }, _lbSel);
       }
 
       const indicators = {
