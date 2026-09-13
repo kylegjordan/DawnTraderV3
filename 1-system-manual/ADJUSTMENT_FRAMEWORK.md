@@ -8,6 +8,16 @@
 
 ---
 
+## ⭐ STANDING RULE — A GEOMETRY GATE MUST NOT BE TUNED WITHOUT MEASURING ITS BLAST RADIUS FIRST (`B-GEOMETRY-REACH-BASELINE`, `#1052`, 2026-09-13)
+
+⛔⛔ **BEFORE SEEDING ANY PER-STRATEGY GEOMETRY THRESHOLD, MEASURE THE SHARE OF LIVE SIGNALS THE NEW VALUE WOULD NEWLY REFUSE — PER STRATEGY, ON THE REAL CORPUS.** This batch derived four reachability ceilings that passed a pre-registered arbiter and would have refused **95.32 %**, **57.49 %** and **55.43 %** of three strategies' signals. **The derivation was sound; the consequence was not measured until a reviewer asked for it.**
+
+⭐ **AND THE REASON GENERALISES BEYOND REACHABILITY: A THRESHOLD IS ONLY A DIAL IF THE QUANTITY IT GATES IS DISTRIBUTED.** `atrsToTarget` is not — it IS `target_exit_atr_multiplier` × (effectiveATR / rawATR), so for multiplier-derived strategies it is a **SPIKE ON A DB-GOVERNED CONSTANT** (p90−p10 = 0.001 for `morning_star`). Against a spike a threshold is a **knife edge**: above it nothing changes, below it the strategy stops trading. ⇒ ⛔ **CHECK THE SPREAD OF THE GATED QUANTITY BEFORE TREATING ITS THRESHOLD AS A TUNING PARAMETER. If p90−p10 is near zero, the threshold is an ON/OFF SWITCH and the real lever is whatever sets the constant.**
+⚠️ **AND DO NOT APPLY THAT CONCLUSION UNIFORMLY — IT IS PER STRATEGY.** `sma_trend_ride` has no ATR term (`strategy-engine.ts:520-533`) and its `atrsToTarget` is genuinely continuous (p90−p10 = 2.991), so there the threshold IS a distributional selector and the levers are `break_target_r_multiple` / `trailing_strength_factor`.
+
+✅ **AND THE EXISTING NO-LOOSENING RULE IS RESTATED HERE BECAUSE IT BOUND THIS BATCH:** no per-strategy row may be LOOSER than its class default without realised-excursion evidence. **Tightening on a mis-derived number costs opportunity; loosening on one costs money.**
+⛔ **RATCHET WARNING, live at `PHASE_19_PLAN` 2.4g-3:** where a gate's own threshold shapes the corpus a later re-derivation would read (`H` is endogenous to the reachability gate, and the gate applies to the VTS learning lane too), **the values may not be re-derived from post-gate data.** Such a gate can be tightened and then cannot be honestly loosened until an independent measurement exists.
+
 ## 0. module_constants Operator Tuning Surface (B72 — 2026-05-05)
 
 **As of B72, ~163 active levers across 34 modules are DB-tunable without code redeploy.** The operator workflow is: SQL UPDATE → wait 60s background refresh → behavior change.

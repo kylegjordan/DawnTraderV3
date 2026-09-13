@@ -1193,6 +1193,12 @@ Kyle asked every session to bring its task list up to date at every batch close.
 **The lesson worth keeping is about installing laptop tools.** Copying the fixed file changes nothing for a session until its watcher restarts, so each session's restart was checked from the process itself rather than assumed — which is how we found that Old Claude had no watcher running at all.
 
 
+### 2026-09-13 — B-GEOMETRY-REACH-BASELINE (CC-B, `#1052`, plan row 2.4g-2) — ✅ CLOSED
+
+**What Phase 19 gained:** the reachability ceiling can now be set per strategy — it could not be before, because the only read site hardcoded `strategy:'*'`, so the per-strategy rows the design implied were unreachable. And the gate now fails CLOSED on an unrecognised strategy token, which `min_rr` already did and reach did not.
+**What Phase 19 learned, and it outlives the batch:** `atrsToTarget` is a **spike on a DB-governed constant** for every multiplier-derived strategy, so the reachability ceiling is not a feasibility dial for them — it is the same knob as `target_exit_atr_multiplier`, with no intermediate regime. **Four derived ceilings were refused on that evidence rather than shipped.** `strong_bull_trend` is shown to be **categorically off** (0 of 298,731), which reframes it from a calibration question into a decision for Kyle at 2.4g-5.
+**Sequencing consequence:** 2.4g-3 `B-EXCURSION-RECORD` and 2.4g-4 `B-TRADE-RECORD-JOINABILITY` were **placed** — both had carried a `HOME:` line since r7 and had never been written into the plan. 2.4g-3 carries the standing ratchet: the refused ceilings may not be re-derived from post-deploy holds until realised-excursion data exists.
+
 ### 2026-09-11 — B-XSTOCK-FEE-CONTRACT (CC-B, `#1010`, plan row 2.4-FEE) — ⏳ OBSERVATION
 
 **We were charging tokenized stocks the crypto fee schedule.** Taking liquidity was modelled at 0.80% when Kraken charges 0.10%, and providing it was modelled as a 0.40% cost when the venue actually PAYS 0.02%. Because the fee feeds the gate that decides what is worth trading, this was not just wrong bookkeeping — **every xStock candidate for three months was judged against a cost eight times too high**, and the cheapest way to trade one was priced as the most expensive.

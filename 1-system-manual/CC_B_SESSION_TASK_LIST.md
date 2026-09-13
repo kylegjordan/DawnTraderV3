@@ -1,4 +1,29 @@
-# Claude New's Phase 19 Task List
+# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-09-13
+
+> 📁 **RENAMED AND RE-HOMED 2026-09-13 (`B-GEOMETRY-REACH-BASELINE` Step 10).** It was `CLAUDE_NEW_PHASE_19_TASK_LIST.md`; the Tier-1 ledger row mandates `1-system-manual/CC_B_SESSION_TASK_LIST.md`, matching `CC_A` and `CC_INFRA`. **CC-A moved theirs on 2026-09-11 under `B-TASK-LIST-SLOT` P3 and mine was never moved with it.**
+
+## ⛔ OPEN AND STALLED — every batch I have opened and not closed, the step it stalled at, and what it waits on
+
+| batch | step | waiting on |
+|---|---|---|
+| **`B-GEOMETRY-REACH-BASELINE`** (`#1052`, row 2.4g-2) | **10 of 11 — governance** | nothing; Step 11 completion report next |
+| **`B-XSTOCK-FEE-CONTRACT`** (`#1010`, row 2.4-FEE) | **OBSERVATION** | P8 window (PASS = zero class-(iii) AND xStock maker share ≤1.0 % at n≥300, ~21 days from 2026-09-11T20:09Z) and Arm B (EV-gate admission) |
+| **`T-W20C-SCALAR-LEG`** (alert `a3610acf`, row 2.4-FEE-c) | **not started — OVERDUE since 09-07** | me: the two harness legs, then the ≥99 % gate test. July aged out; re-scope first |
+| **`B-ARCHIVE-RETENTION-SIZING`** (`#592`, alert `74424570`, row 2.4f) | **blocked on Kyle** | his retention decision. Slope now recorded: +1.07 GB / ~2 days |
+
+## THE QUEUE, in working order
+
+1. **`B-GEOMETRY-REACH-BASELINE` Step 11** — completion report, then close.
+2. **`T-W20C-SCALAR-LEG`** — re-scope the window, build the two harness legs, run the gate test.
+3. **`B-EXCURSION-RECORD`** (row 2.4g-3) — carries the five non-shipping ceilings, `vwap_pullback`, the ratchet constraint, and the `weekend_suspended` non-terminal xStock row class.
+4. **`B-TRADE-RECORD-JOINABILITY`** (row 2.4g-4) — id-space split, archive stage split, `realDiAtOpen` NULL on 3,685, and the xStock-shadow `atrAtOpen = 0` on 1,029 of 1,029.
+5. **`B-KRAKEN-FEE-WATCH`** (row 2.4-FEE-b) · **`B-ALERT-QUEUE-INTEGRITY`** (2.4b) · **`B-RTB-SIGNAL-IDENTITY`** (2.4c, `#1006`) · **`B-VENUE-QUIET-ALERTING`** (`#526`) · **`B-CREW-SENDER-IDENTITY`** · **`B-VOLATILITY-CACHE-RETIRE`**.
+6. **Not mine but placed by me:** `B-TARGET-MULTIPLE-VS-HORIZON` (row 2.4g-5) — **Kyle decides**, gated on 2.4g-3.
+
+---
+
+## THE ORIGINAL CENSUS, preserved below
+
 
 > **Owner:** Claude New (CC-B). **Created 2026-09-01 at Kyle's direction.** This is the one place my open work is enumerated — batches, hotfixes, investigations, alerts and small owed items — so it can be reviewed and pruned. ⚠️ **Kyle's expectation, stated when he asked for it: many of these will be REMOVED, because Claude Old is reworking the governance system and Analyst Claude is working the pricing issues, and several of my items will dissolve under that work. Nothing here is being re-prioritised yet; this is the census.**
 >

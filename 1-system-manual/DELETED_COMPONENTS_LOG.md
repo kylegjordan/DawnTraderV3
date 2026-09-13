@@ -917,6 +917,16 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/langston-memory-systemd.<file>.20260911.removed` (four files, byte-for-byte from the ref). Git history is authoritative.
 
 
+## 2026-09-13 — `_resolvePerStrategyMinRR()` in `server/core/calculations/expectancy.ts` — B-GEOMETRY-REACH-BASELINE (`#1052`, CC-B)
+
+**WHAT:** the private helper `_resolvePerStrategyMinRR(assetClass, strategy)` (reorg-B2.3, 2026-06-27), ~2,087 characters including its docblock. It canonicalized the strategy token, fired `recordUnknownStrategyAtGate` on a miss, and returned either `min_rr_unknown_floor` or the per-(strategy×class) `min_rr`.
+
+**WHY REMOVED, and it is rule 18 rather than tidiness:** this batch made `reach_atr_max` per-(strategy×class) too, resolved from the SAME canonical token. Keeping a second resolver would have meant **canonicalizing twice per gate call** — and `recordUnknownStrategyAtGate` increments its per-class counter on EVERY call, so the drift counter would have read double. Its logic is absorbed into `getPerClassTargetGate` unchanged: one canonicalization, one tripwire, both floors resolved from it.
+
+**BLAST-RADIUS VERIFICATION:** `git grep` at the ref returned the symbol at exactly two live sites — its own definition and its single caller inside `getPerClassTargetGate` — plus three historical mentions in completion reports and a design ask, which are frozen records. **`min_rr` behaviour is UNCHANGED, and that was verified at the KEYS rather than from the tests:** the new unknown branch builds a `_classKey` identical in shape to the deleted helper's inline literal, the known branch builds a `_strategyKey` identical to its canonical key, and property evaluation order is unchanged (`floorPct` first on both paths). The untouched `reorg-b2-3-per-strategy-minrr.test.ts` passes (6 cases; its fixture gained the two new floor rows a required-row addition forces).
+
+**ARCHIVE:** git history at `1b361c35f^` is the authoritative copy. **COMMIT:** `1b361c35f` (deleted), deployed `022fd27ad`.
+
 ## 2026-09-11 — the whole `cost_model` module (5 `module_constants` rows) + its `b72-warmup` prefetch entry — B-XSTOCK-FEE-CONTRACT (`#1010`, CC-B)
 
 **WHAT WAS REMOVED.** The `module_constants` module `cost_model`, **all five rows** — `default_avg_return 0.005`, `default_slippage 0.0005`, `default_spread 0.0010`, `default_taker_fee 0.0026`, `max_cost_bound 0.01` — all written 2026-05-05 by `b72-step3-commit-b`. And the `'cost_model'` entry in `server/startup/b72-warmup.ts`'s `PREFETCH_MODULES`.
