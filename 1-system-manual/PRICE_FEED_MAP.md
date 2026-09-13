@@ -74,6 +74,20 @@ MIDPOINT, structurally.**
 the **BID** arrives. We compare the **MIDPOINT**, which can cross while the bid never does.
 ✅ **MEASURED (Langston): 14 of 24 checkable booked maker target-exit fills did not cross by half the
 spread** — median 6.0 bps through against a 20.7 bps median spread. **58 %–100 % unsupported; lead with 58 %.**
+⭐ **POPULATION, NAMED 2026-09-13 (CC-B, and it is now load-bearing):** `closed_trades` rows carrying BOTH
+`exit_decision_price` AND `exit_ticker_bid`, **`asset_class='crypto_spot'`, `close_reason='target_hit'` —
+n = 24 EXACTLY.** ✅ **NO xStock row is in it** (xStock `target_hit` with both stamps is a separate 7), so
+Langston's contamination concern does NOT apply — an xStock `exit_ticker_bid` would have been a
+*consistency* record rather than corroboration (`depth-source.ts:89-93`, the fill's own depth-walk reads
+the same table). Read 2026-09-13. Disjoint from F-G-2's stop-outs: crypto `stop_hit` with both stamps is 38.
+⛔⛔ **AND THIS IS NOW THE *ONLY* SUPPORT FOR FIX-THE-SIDE-FIRST.** The clearance probe that was its second
+support is ladder-derived and **UNEVIDENCED** (CC-C's `applyDelta` never evicts out-of-window levels ⇒
+inverted books on 4 of 7 symbols, two above 90 %). **Not refuted — unevidenced.** ⚠️ **Kyle should hear
+“fix-the-side now rests on a single measurement whose population we have just named”, NOT “untouched”.**
+✅ **NOT A PRODUCTION DEFECT:** production maintains its own eviction (`kraken-websocket-adapter.ts:3639-3654
+`truncateBook`), fixed under `#507` (pre-fix: 32.03 % of book states crossed) and instrumented via
+`getBookIntegrityCounters()`. ⚠️ **A zero `crossedDetections` is not unconditionally clean — read
+`mismatches`/`attempts` beside it, or the zero is unreadable.**
 
 > ### THE COMPARATOR, PLAINLY
 > `evaluatePendingMaker` asks each tick **"is the price at my limit yet?"** — for a resting buy,
