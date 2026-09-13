@@ -1,7 +1,7 @@
 # B-GEOMETRY-REACH-BASELINE — STEP 2: PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r7, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
+**change-class: architecture** · **r9, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
 
 > ⛔ **THE AUDIT COMES FIRST AND THE PLAN FALLS OUT OF IT.** Every plan item back-references the finding it derives from; anything with no audit treatment is flagged `UNAUDITED`.
 
@@ -361,3 +361,36 @@ The docstring (`signal-target-normalizer.ts:24-29`), the type comment (`strategy
 ## 3. WHAT IS NOT AUDITED HERE
 
 `UNAUDITED` — **the magnitude of the forward feedback in §1b.** How much the post-deploy VTS corpus shifts is not estimated, because it needs the excursion record (`B-EXCURSION-RECORD`) to measure properly. **Named rather than silently assumed small.**
+
+---
+
+## §5 — STEP 7 / 8 VERIFICATION RECORD, AND THE ONE INSTRUMENT THAT IS ONLY A **PARTIAL**
+
+**DEPLOY:** `022fd27ada7fc149ec910adeb5d9ea92a971a29f`, `deployed_by_claimed=cc-b`, dt-deploy asserted *live, engine resumed, identity asserted*.
+✅ **WINDOW OPENS `2026-09-13T05:33:17.640Z`** — pm2 `pm_uptime`, **not** dt-deploy's `deployed_at` 05:33:27Z, which is its post-check stamp 10 s later (Langston Step-8 F1: naming a tool clock as a restart is wrong even when the ordering conclusion survives). Migration rows written 05:33:17.297Z ⇒ **migrate-then-restart with a 0.34 s gap, measured.**
+✅ **WHAT LANDED, read at the DB not from the deploy tool:** exactly three `reach_atr_max_unknown_floor` rows (crypto / xStock / global) at **4.0**, `updated_by='b-geometry-reach-baseline'`; the two class defaults untouched (`reorg-b2`, 2026-06-20); **per-strategy `reach_atr_max` count = 0**, which is what this batch ships.
+✅ **UI NAVIGATED** (Claude-in-Chrome, no login; landing dashboard ignored as stale furniture): Paper Trading → Crypto Filter Diagnostics → **Reward-vs-Risk / Reachability Gate** panel renders per strategy with a `Target Unreachable` column. ⚠️ **Stamped *since 8/23/2026* and cumulative — it SPANS the deploy and is NOT a post-deploy measurement.** It corroborates the spike mechanism; it says nothing about this change.
+
+### ⛔⛔ THE LOG EVIDENCE IS WITHDRAWN — MY CONTROL DID NOT REACH MY CLAIM
+
+r-earlier reported *"zero hits for `TARGET_GATE` etc., control: `EQUITY_MARK` 801"*. ⛔ **That control proves the FILE is alive, not that a reach refusal would ever land in that stream.** **RE-DERIVED: `TARGET_GATE` returns ZERO across every file in `/var/log/dawntrader/`, including `out.log` at 3,935,667 lines and today's rotated copy — while the gate is demonstrably executing.** ⇒ **those greps were UNREADABLE, not clean (`#661` leg 1), and they are withdrawn as evidence.**
+
+### ✅ THE INSTRUMENT THAT WORKS: `gate_decision->>'gateConstantsVersion'` — AND IT IS A **PARTIAL**
+
+`gateConstantsVersionFor` (`decision-provenance.ts:111`) is **one of the four DYNAMIC call sites**, the class where a drifted token can actually enter, and its hash is computed from the **RESOLVED VALUES**. So an unchanged hash across the boundary is the expected signature of this batch: **the resolution PATH changed and no resolved VALUE did.**
+✅ **Pairwise, not merely as a set** (so the set-collision mode is not in play): `morning_star` `3cb8074d` both sides, `pivot_shift` `826db698` both sides, `support_bounce` `a901b411` both sides; **each of the nine hash-bearing strategies carries exactly ONE distinct hash.**
+
+⛔⛔ **BUT IT DOES NOT DISCHARGE THE CEILING CLAIM, AND THE REASON IS SHARPER THAN A COVERAGE GAP (Langston Step-8, and it runs against me).**
+- **REACH: 94 of 34,498 post-restart rows carry the hash — 0.27 %.** ⛔ **An instrument reaching under a third of a percent of its population cannot discharge a ceiling claim at ANY intersection** (`#661` leg 2).
+- **INTERSECTION with the four would-be ceiling strategies: 2 of 4.** `morning_star` and `pivot_shift` observed; `inside_bar_reversal` and `sma_trend_ride` **UNOBSERVED post-restart**.
+- ⛔⛔ **AND IT IS NOT "HALF TESTABLE, HALF NOT" — THE WHOLE INFORMATIVE HALF IS THE MISSING ONE.** Both unobserved strategies hold **`826db698`, the shared default across FIVE strategies** (`pivot_shift`, `inside_bar_reversal`, `vwap_bounce`, `sma_trend_ride`, `defensive_hedge`). **Even had they been observed, a match would be a match on a value five strategies independently compute to — weak evidence, not a discharge.** ⭐ **The DISCRIMINATING observations are the two non-default hashes, `mean_reversion` `4fc83291` and `reverse_impulse` `99a40535` — and those have ZERO post-restart coverage.** ⇒ **the 2-of-4 sits over the cluster least able to distinguish anything.**
+✅ **WHAT WOULD DISCHARGE IT, stated so a later session does not re-litigate it:** a post-restart observation of **either non-default-hash strategy**, or a ceiling ship that moves a strategy's resolved value **off `826db698`**.
+⛔ **LABEL: PARTIAL. Nobody may read the 2-of-4 as half a discharge.**
+
+### ✅ AND THE POPULATION RULE THAT CAME OUT OF IT, narrower than the flag that produced it
+A two-populations defect was flagged (82 hash rows vs 56 geometry rows) and **WITHDRAWN**: measured in ONE query at ONE moment over ONE population, post-restart rows carrying the hash = **94**, carrying the geometry = **94**, carrying the hash but NOT the geometry = **0** ⇒ the sets coincide. The 82-vs-56 was **one population read twice**, minutes apart off an accumulating window, with different `reject_stage` scoping.
+⭐ **THE GENERALISABLE RULE: naming a population means naming the FILTER AND THE READ TIME, not the table.**
+
+⚠️ **UNEXERCISED LIVE, AND NO SILENCE MAY LATER BE CITED FOR IT:** the unknown-token fail-closed path has not fired in production and should not — it requires a drifted token. **The unit tests cover it; this window does not.**
+
+---
