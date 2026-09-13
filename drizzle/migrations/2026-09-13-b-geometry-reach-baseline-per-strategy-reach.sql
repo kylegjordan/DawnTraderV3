@@ -125,7 +125,17 @@ BEGIN
   -- row, which is perfectly safe. Every SELECT pins the FULL key (exchange + regime as well), because a
   -- partially-keyed `SELECT INTO` over a second legitimately key-scoped row resolves by silently taking
   -- one and raising nothing.
-  FOR r IN SELECT unnest(ARRAY['crypto_spot','xstock_spot']) AS ac LOOP
+  -- ⛔ THE LOOP LIST IS DERIVED FROM THE DATA, NOT HARDCODED (Langston non-blocker, taken). A literal
+  -- ARRAY['crypto_spot','xstock_spot'] is `enumerator-blind-spot`: a third asset class seeded later
+  -- would get no per-class check at all. Taking the union of both constants' classes ALSO closes the
+  -- worse case a hardcoded list cannot see — a class that has CEILINGS but no floor row — because
+  -- such a class still appears here and then trips the `v_floor IS NULL` raise below.
+  FOR r IN
+    SELECT DISTINCT asset_class AS ac FROM module_constants
+    WHERE module_name = 'expectancy_gates'
+      AND constant_name IN ('reach_atr_max', 'reach_atr_max_unknown_floor')
+      AND asset_class <> '*'
+  LOOP
     SELECT (value #>> '{}')::numeric INTO v_floor FROM module_constants
       WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
         AND asset_class = r.ac AND exchange = '*' AND strategy = '*' AND regime = '*';
@@ -162,6 +172,25 @@ BEGIN
   SELECT min((value #>> '{}')::numeric) INTO v_min_class_floor FROM module_constants
     WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
       AND asset_class <> '*' AND exchange = '*' AND strategy = '*' AND regime = '*';
+  -- ⛔ THE NULL ARM IS EXPLICIT, BECAUSE `v_global > NULL` IS **NULL** AND AN `IF NULL` PASSES
+  -- SILENTLY (Langston). With no per-class floor rows at all, the comparison below would say nothing
+  -- while reading as a check that ran. Unreachable today only because the loop raises first — i.e.
+  -- only while the loop's list covers every class that has a floor — which is exactly the coupling
+  -- that made it worth removing rather than reasoning about.
+  -- ⚠️ LABELLED HONESTLY: THIS ARM IS **UNPROVED BY MUTATION**, and the reason is that it cannot be
+  -- reached on today's data. I tried. Deleting the per-class floor rows is caught by the `n_unk >= 3`
+  -- count above; leaving three rows with no per-class one requires all three to be `asset_class = '*'`
+  -- differing only by exchange/regime, and even then the loop's own `v_floor IS NULL` raise fires first
+  -- because `reach_atr_max` has per-class rows. So it is DEFENCE IN DEPTH behind two stronger checks,
+  -- not a verified path. Recorded as unproved rather than counted among the proved arms — the two
+  -- mutants that looked like they proved it were actually caught by the count check, which is a check
+  -- that could not come out differently for the reason I was claiming.
+  IF v_min_class_floor IS NULL THEN
+    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: no PER-CLASS reach_atr_max_unknown_floor row exists, so the global floor (%) is unguarded — refusing rather than passing a comparison against NULL', v_global;
+  END IF;
+  IF v_global IS NULL THEN
+    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: the GLOBAL reach_atr_max_unknown_floor row has no value';
+  END IF;
   IF v_global > v_min_class_floor THEN
     RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: the GLOBAL floor (%) is LOOSER than the tightest per-class floor (%) — an unresolved asset class would be treated more permissively than any class it could resolve to', v_global, v_min_class_floor;
   END IF;

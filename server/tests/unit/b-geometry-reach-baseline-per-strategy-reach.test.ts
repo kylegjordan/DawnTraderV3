@@ -77,8 +77,13 @@ function seedGate() {
 }
 
 /**
- * Every token passed to getPerClassTargetGate by a non-test caller, enumerated at the ref rather than
- * sampled — exactly 22 call sites (a 23rd grep hit is the strategy-helpers.ts:358 docstring).
+ * ⛔ THIS ARRAY HOLDS **18** TOKENS, COVERING **18 OF THE 22** NON-TEST CALL SITES. The other FOUR
+ * pass a VARIABLE and cannot be enumerated here — `signal-orchestrator.ts:1903` (`strategyId`),
+ * `vts-runner.ts:1719`, `xstock_spot/eval-cycle.ts:722` (`strategyKey`), `decision-provenance.ts:111`.
+ * ⭐ AND THOSE FOUR ARE PRECISELY WHERE A DRIFTED TOKEN ACTUALLY ENTERS, so they are held by the
+ * fail-closed FLOOR, not by this enumeration. Do not read a full pass here as full coverage.
+ * ⚠️ An earlier version of this comment said "exactly 22 call sites" against an 18-element array
+ * — the hoist was meant to stop two copies drifting and one of them arrived with the wrong count.
  * `orb.ts:298` and `strong-bull-trend.ts:176` pass a module constant STRATEGY_KEY, not a literal, so
  * they are listed by their RESOLVED value — a literal-matching assertion would skip them silently.
  */
