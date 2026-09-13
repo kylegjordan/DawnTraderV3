@@ -19,7 +19,7 @@ and the exit trigger use the ticker BBO midpoint."* **The all-time `exit_price_p
 
 | feed | what it is | what it carries | freshness |
 |---|---|---|---|
-| **OHLC cache** | 60-minute candles | OHLCV — **history** | **5-min TTL** |
+| **OHLC cache** | ⚠️ **TWO BRANCHES: 60-minute for crypto, 15-minute for xStock** (`scanner.ts:592-597`) | OHLCV — **history** | **5-min TTL** |
 | **price cache** | a per-symbol mark | one number + **`markKind`** `'mid'`\|`'last'` (`:107`) **+ `lastTradePrice`** (`:102-103`) | WS + REST poller |
 | **order book** | the resting ladder | bid/ask **and sizes** | live stream |
 | **depth snapshot** | book side for marketability | `asks[0].price` | ⚠️ **≤~30 s stale — its own comment calls it a "documented approximation"** (`aee:4030`) |
@@ -46,7 +46,7 @@ the manual at `:929`, `:684`, `:1096`, `:1485`.)*
 |---|---|---|---|---|
 | **crypto QUANT** | `signal-orchestrator.ts:2407` → `:2429` → `:2454` | price cache → **smoother** | ⚠️ **`last` share is an UPPER BOUND** (below) | cache cadence **60 s median / 90 s p90** |
 | **crypto PATTERN** | `signal-orchestrator.ts:2224` → `patternToTradeSignal:2269` | ⭐ **a 60-minute BAR CLOSE** | **never smoothed, never a midpoint** | **up to 60 min old** |
-| **xStock / VTS** | `eval-cycle.ts:346/:349/:381`, param at `:304` | ⭐ **a 60-min BAR CLOSE** (`xstock_spot/scanner.ts:909-910`, `latestBar.close`) | **not a print** | up to 60 min |
+| **xStock / VTS** | `scanner.ts:934` → `eval-cycle.ts:304` (ONE call site, import `:740`) | ⭐ **a 15-MINUTE BAR CLOSE** — `scanner.ts:597 getOHLCDataBatch(symbolList, 15)`, read at `:909-910 latestBar.close` | **not a print** | **up to 15 min** |
 
 ⚠️ **MEASURED 2026-09-13 FROM THE LIVE COUNTER, AND IT IS AN UPPER BOUND THAT MUST NEVER BE QUOTED BARE.** 400 consecutive HEALTH lines (≈400 min): **level reads `mid` 1,996 · `last` 28,772 · `unknown` 0 — 93.5 % `last`**; whole-cache rows **`mid` 3,301 · `last` 50,154 — 93.8 % `last`**. *(r2 said “85–90 %” with no population; this replaces it.)* ⛔ **The two fields are DIFFERENT POPULATIONS and are never read as numerator and denominator** (`price-cache.ts:569-572`). `price-cache.ts:575-578`
 — Langston's own ruling, in the code — says `levelReadKind` is *"an UPPER BOUND on level-setting reads …
@@ -115,10 +115,10 @@ Langston's test, run by CC-B 2026-09-13, needing no new instrumentation — spli
 | lane | reads | what it actually is |
 |---|---|---|
 | active | `aee:4038` `_gate.snapshot.asks[0].price` | **depth snapshot, ≤~30 s stale** |
-| VTS / xStock | `eval-cycle.ts:956` | ⭐ **a 60-MINUTE BAR CLOSE** — not a print |
+| VTS / xStock | `eval-cycle.ts:956` `isMarketableAtPlacement('buy', lastPrice, …)` | ⭐ **a 15-MINUTE BAR CLOSE** — the same `latestBar.close` the levels came from |
 
 ⛔ **r1 SAID "ask vs print, biased in opposite directions". THAT IS WITHDRAWN.** It is **a ~30 s book side
-against an hour-old bar**, and **a stale bar's error is RANDOM IN SIGN** — so opposite-direction bias is
+against a bar up to 15 minutes old**, and **a stale bar's error is RANDOM IN SIGN** — so opposite-direction bias is
 **not established**. ⇒ **the cross-lane confound is STALENESS, and it is far larger than a side offset.**
 
 ### E. PORTFOLIO MARKING — a whole SITUATION missing from r1
@@ -147,8 +147,8 @@ birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` �
 | **exit trigger** | book **midpoint** | the **BID** (a resting sell is filled by a buyer) | ⛔ **WRONG KIND** |
 | **crypto quant birth** | mixture: REST `last` + WS `mid`, **unstated per symbol** | one stated kind | ⛔ **WRONG — and “unstated” is the defect, not the mixture** |
 | **crypto pattern birth** | 60-min **bar close** (a printed trade) | a printed price | ✅ **RIGHT KIND** |
-| **xStock / VTS birth** | 60-min **bar close** | a printed price | ✅ **RIGHT KIND** |
-| **xStock / VTS marketability** | 60-min **bar close** | the **ASK** (post-only is decided by the resting book) | ⛔ **WRONG KIND** |
+| **xStock / VTS birth** | **15-min bar close** | a printed price | ✅ **RIGHT KIND** |
+| **xStock / VTS marketability** | **15-min bar close** | the **ASK** — ⚠️ **and xStock has NO ladder: the only ask that exists is the TICKER's top-of-book** | ⛔ **WRONG KIND** |
 | **entry marketability (active)** | book **ask** | the ask | ✅ **RIGHT KIND** |
 | **RTB rank** | midpoint | a midpoint (it VALUES, it does not act) | ✅ **RIGHT KIND** |
 | **portfolio marking** | midpoint | a midpoint (valuation) | ✅ **RIGHT KIND** |
@@ -158,7 +158,7 @@ birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` �
 | situation | age | verdict |
 |---|---|---|
 | crypto pattern birth | **up to 60 min** | ⛔ **NO** |
-| xStock / VTS birth | **up to 60 min** | ⛔ **NO** |
+| xStock / VTS birth | **up to 15 min** | ⛔ **NO** — *verdict unchanged; r2's number was 4× wrong* |
 | entry marketability (active) | depth snapshot **≤~30 s** | ⚠️ **UNRULED — needs the age distribution** |
 | RTB rank | cache cadence **60 s / 90 s p90** | ✅ adequate for a ranking |
 | portfolio marking | 5 s | ✅ yes |
@@ -172,7 +172,7 @@ birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` �
 
 ### ⭐ THE WHOLE JUDGEMENT IN ONE LINE
 > **FOUR JOBS READ THE WRONG KIND OF PRICE: the exit trigger, crypto quant birth, xStock/VTS marketability, and — as a mixture rather than a wrong side — the quant basis itself.**
-> **FOUR READ THE RIGHT KIND: both bar-close births, active entry marketability, RTB ranking, and portfolio marking.** *(Of the right-kind rows, TWO are too old: both 60-minute bar closes.)*
+> **FOUR READ THE RIGHT KIND: both bar-close births, active entry marketability, RTB ranking, and portfolio marking.** *(Of the right-kind rows, TWO are too old: the crypto pattern lane's **60-minute** bar close and the xStock/VTS **15-minute** one — **different intervals; r2 called both 60.**)*
 
 ## 4. ⛔ FIVE PARALLEL DOCUMENTS — the response to "we lose sight of the system" cannot be a fifth narrative
 `PRICING_DATA_ARCHITECTURE.md` (108 KB, **banner-marked NOT CANONICAL / UNDER CORRECTION**) · the
@@ -202,43 +202,65 @@ SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **
 | **7** | **xStock has no order-book ladder.** `..._DECISION_PATH` §Q1 states it; this map's feed table listed *“order book”* and *“depth snapshot”* **without saying they are crypto-only**. | ✅ **THE DECISION PATH.** | The `book` channel subscription lives only in `kraken-websocket-adapter.ts`; the xStock modules carry a `book-state` **predicate over the ticker's top-of-book**, not a ladder. ⇒ ⛔ **this map's “the right kind is the ASK” for xStock must mean the TICKER'S ask — there is no other.** |
 | **8** | **The 4-second archive sample — 43.6 % of marks never stored** (`XSTOCK_PRICING_PLAN` §P5). Absent from this map. | ✅ **THE PLAN, AND IT IS THE SAME CLASS AS THE DEFECT THAT REFUTED MY OWN 14-of-24.** | Not re-measured here. ⚠️ **Recorded as the reason a stored row is a LAGGED WITNESS, not the decision.** |
 
-## 5.2 ⛔⛔ THE 59 % — **UNSETTLED, AND NOW FOR A PRECISE REASON**
+## 5.2 ⭐⭐ THE 59 % — **CORROBORATED ON THE HANDOFF COHORT. I HAD IT BACKWARDS TWICE.**
 
-`XSTOCK_PRICING_PLAN` §P2: **“59 % of xStock resting exits booked at a price no bid ever reached.”** I wrote this section as UNSETTLED because I had not run the discriminating split on xStock. ✅ **I then ran it — it needed no new capture and no new column, because the test keys on `close_reason`, which is on every row.**
+⛔⛔ **LANGSTON'S BLOCKER 2, 2026-09-13, AND IT IS A REVERSAL RATHER THAN A CORRECTION.** I first wrote this section as SETTLED-refuted, then as UNSETTLED after CC-C withdrew the bound under it. **Both were wrong in the same direction**, and **the map's own §C-ii contained the refutation of my refutation two sections earlier.**
 
-**POPULATION, STATED FIRST: 34 xStock closes carrying BOTH `exit_ticker_bid/ask` AND `exit_decision_price`, `closed_at` 2026-08-27 → 2026-09-12** — out of **274 all-time xStock closes since 2026-07-16**. ⚠️ **12.4 % coverage, because the witness column only began writing 2026-08-27 (`#911`).** `pos = (decision − bid)/(ask − bid)`:
+### ⛔ THE PREMISE BOTH OF MY VERSIONS HID
+*“A midpoint cannot exceed `pos = 0.5` by construction”* is true **only of a midpoint measured in ITS OWN book's spread units.** `pos` normalises by the **WITNESS** spread `S_w` — a different book at a different instant. The honest decomposition is
+> **`pos = 0.5·(S_d/S_w) + δ/S_w`**  — `δ` = bid drift, `S_d` = the DECISION book's spread.
+⛔ **NOT `0.5 + δ/S_w`** — CC-C's replacement algebra, and the version I published at `c9ed8917d`, **carries the same hidden `S_d = S_w` assumption as the bound it replaced.** ⭐⭐ **THE SIDE TERM IS BOUNDED AT HALF THE SPREAD *RATIO*, NOT AT 0.5.** ⇒ *“the only quantity that can put a price 5.5 spread-widths outside a book is TIME”* is **FALSE** — a spread ratio does it with **zero drift**.
 
-| `close_reason` | `exit_fee_mode` | n | median pos | above ask | below bid | inside |
-|---|---|---|---|---|---|---|
-| `target_hit` | **maker** | **7** | **+5.500** | **7** | 0 | 0 |
-| `stop_hit` | **taker** | **27** | **−0.550** | 0 | **19** | 8 |
+### ✅ LANGSTON RE-DERIVED MY POPULATION AND ADDED THE COLUMN NOBODY HAD
+`n=7` reproduces exactly, median `pos` +5.500. **With the witness spread beside it:**
 
-### ⛔ THE CONFOUND, NAMED BEFORE THE CONCLUSION — AND IT KILLS THE ARGUMENT I WOULD HAVE LED WITH
-**Direction of travel and fill mode are PERFECTLY COLLINEAR in this population: every target is a `maker` exit, every stop is a `taker` exit — 34 of 34, no crossover.** ⇒ ⛔ **the sign-flip argument that carried the crypto refutation CANNOT be run on xStock.** I cannot tell “rising vs falling” apart from “resting vs crossing” here, and I am not going to pretend the flip means on xStock what it meant on crypto.
+| symbol | closed_at (UTC) | decision px | witness bid/ask | `pos` | **witness spread %** |
+|---|---|---|---|---|---|
+| BMNR | 08-27 **15:57:33** | 26.515 | 26.46 / 26.47 | 5.500 | **0.038** |
+| WEN | 08-29 **00:15:03** | 13.310 | 7.70 / 8.36 | 8.500 | **8.571** |
+| DE | 09-02 **00:15:03** | 689.435 | 676.00 / 677.50 | 8.957 | 0.222 |
+| ARKK | 09-05 **00:16:31** | 92.505 | 81.04 / 86.31 | 2.176 | **6.503** |
+| LI | 09-08 **00:15:04** | 12.805 | 11.70 / 12.60 | 1.228 | **7.692** |
+| LMT | 09-10 **00:15:12** | 571.680 | 506.08 / 545.78 | 1.652 | **7.845** |
+| CRM | 09-12 **00:16:31** | 503.500 | 235.00 / 248.40 | 20.037 | **5.702** |
 
-### ⛔⛔ AND THE LEG I RESTED IT ON IS **DEAD** — SO §5.2 GOES BACK TO **UNSETTLED**
-⚠️ **I published this section resting on “a midpoint cannot exceed `pos = 0.5` by construction”. CC-C had WITHDRAWN that bound hours earlier as a decomposition error and told me before Langston ruled.** ⛔ **On xStock the sign-flip leg is confounded away (above), so the bound was carrying the WHOLE section — and it carries nothing.**
-⭐⭐ **THE DECOMPOSITION, WHICH IS WHAT THE NUMBER ACTUALLY SAYS — CC-C, re-derived independently by Langston, and it REPLACES the “bound” wording that stood here until 2026-09-13:**
-> `pos = [(bid_d + ask_d)/2 − bid_w] / S_w` = **`0.5 + Δ/S_w`**, where `Δ` is the drift between the DECISION book and the WITNESS book.
-⛔⛔ **SO THE SIDE TERM IS *CONTAINED* IN THE NUMBER, AT 0.5, ADDITIVELY — IT IS NOT EXCLUDED BY IT.** A departure of `+1.8` is `0.5 + 1.3`, not “3× an impossible side error”. ✅ **The midpoint sits at exactly 0.5 ONLY IF THE TWO READS ARE CONTEMPORANEOUS — and they are not, which is the whole finding.**
-⇒ ✅ **WHAT THE MAGNITUDE LICENSES: it SIZES THE DRIFT. It does not bound the side defect away.**
-⇒ ⛔ **`+5.500` IS `0.5 + 5.0`. It does not exclude a side defect; it says the DRIFT is ten times the side term.** ✅ **CC-C's own ruling, quoted so it is not softened: *“the magnitude bound cannot carry §5.2 alone — and NOT because n=7 is small. n is not what sinks it. The bound itself is void, so it would not carry at n=700.”***
+⭐⭐ **SIX OF THE SEVEN CLOSED IN THE 00:15–00:16Z SESSION-HANDOFF MINUTE**, and on **five of seven the DENOMINATOR ITSELF is a 5.7–8.6 % book** — so `pos` is not a spread-width in any ordinary sense.
+⛔ **CRM IS DECISIVE: its decision price is the midpoint of a ~\$7 bid against a ~\$1,000 ask.** `S_d/S_w ≈ 74` ⇒ **the side term ALONE ≈ 37**, which **OVER-EXPLAINS the observed 20.0 with no drift at all.**
 
-### ✅ WHAT I CAN STILL SAY, AND IT IS LESS THAN I SAID AN HOUR AGO
-**On xStock the decision price and the witness come from the SAME table** (§below), so a departure **cannot** be two feeds disagreeing — it can only be **one feed read at two times**. ⇒ **`Δ` is a time drift, and drift is what the number is dominated by.**
-⛔⛔ **BUT THAT MAKES THE 59 % UNDECIDABLE ON THESE ROWS, NOT REFUTED.** The side term is **present at 0.5 in every row and is not separable from `Δ` without knowing the witness's capture time** — which **no column on either class records.**
-⚠️ **AND `Δ = 5.0` SPREAD-WIDTHS IN A ~4 s ARCHIVER GAP IS ITSELF LARGE ENOUGH TO QUESTION** — it is consistent with the session-handoff re-quote `XSTOCK_PRICING_PLAN` §P4 measures (27 % of xStock stop-outs in one minute) and with the `hollow` books `B-XSTOCK-FEED-SANITY` ships a guard for. **I am not attributing it; I am recording that the drift is not ordinary.**
-✅ **NET: I neither cite the 59 % nor strike it — the position I started at.** ⭐ **WHAT IS GAINED IS THE REASON: it is not “a test I have not run”, it is that THIS INSTRUMENT CANNOT SEPARATE THE TWO TERMS.**
-### ⚠️ WHAT I AM AND AM NOT SAYING
-⛔ **NOT SAYING the plan's measurement was wrong about what IT measured** — it was written 2026-08-30 against a different, earlier instrument (the ~21 rows carrying `exit_decision_price`, per `book-state.ts:16`). **I did not reproduce its population and I am not claiming to have.**
-⛔ **AND `n=7` IS SMALL — but per CC-C, `n` is NOT what sinks this leg; the bound is void at any `n`. Stated so nobody “rescues” §5.2 by collecting more rows on the same instrument.**
-➕ **AND THAT PROMOTES THE `3n` ITEM FROM NICE-TO-HAVE TO PREREQUISITE: persisting the witness capture time is the ONLY thing that makes `Δ` estimable and the side term readable — on EITHER class.**
+### ⭐ THE VERDICT, AND IT IS THE OPPOSITE OF WHAT I PUBLISHED TWICE
+✅ **ON THE HANDOFF COHORT THE DEPARTURE *IS* A SIDE ERROR — the midpoint of a COLLAPSED book — which is exactly what `XSTOCK_PRICING_PLAN` §P2 claims, and exactly what THIS MAP'S OWN §C-ii cites `#943` for:** *“the bid collapses, the mid follows it down, and the stop fires on a price nobody traded at.”* ⛔⛔ **I REFUTED IN §5.2 THE THING I DOCUMENTED IN §C-ii.**
+✅ **THE HONEST SPLIT, and time-of-day is the discriminator — available NOW, no new column: 2 rows LAG** (BMNR, session body, 0.038 % witness book; plausibly DE) **· 5 rows BOOK-SHAPE.**
+⇒ ✅ **DIAGNOSIS UNCHANGED FROM `3b.f-c`. The plan's §P2 stands.**
 
-### ⭐ CC-C's STRUCTURAL POINT, RE-DERIVED AT THE REF AND IT STANDS
-`depth-source.ts:89-93` + `shared/schema.ts:1846-1848`: **on xStock the witness is NOT independent** — the fill's own depth-walk reads `xstock_spot_ticker_snap`, **the same table** `getTickerWitness` reads. ⇒ **it is a CONSISTENCY record, not corroboration against a second feed**, and *“do NOT treat agreement here as confirmation”*. ⭐ **AND THAT CUTS BOTH WAYS, WHICH IS THE USEFUL HALF: with only ONE channel, an xStock departure CANNOT be ‘two feeds disagreeing’ — it can only be the archiver's own ~4 s write cadence and the price moving inside it.** The lag reading is therefore BETTER supported on xStock than on crypto, not worse.
+### ⭐⭐ `S_d` IS **PERSISTED** — SO THE RATIO IS MEASURABLE, NOT INFERRED (CC-C found it; CC-B ran it, 2026-09-13)
+⛔ **“No column carries the decision-instant book” was WRONG, and CC-C checked precisely because they had told me they had not.** `metadata.bookState.yields[].inputs` carries **decision-instant `bid`/`ask`/`last` with their own `atMs`** — written by the `#943` guard. ⇒ **`S_d/S_w` can be COMPUTED per row.**
 
-⛔ **THE COLUMN CC-C HOPED FOR IS THE WRONG INSTANT.** `exit_fill_depth_age_ms` **is** populated on xStock, but `schema.ts:1817` says plainly these are **THREE DIFFERENT INSTANTS**: it is the age of the depth the **FILL** walked, not the age of the **WITNESS** row. **No witness-age column exists on either class.** ➕ **That gap is unchanged and still homed: persist the witness capture time — item on `B-PRICE-SIDE-BY-JOB` (row `3n`), owner CC-C.**
-➕ **NEW ITEM, from the confound above: the xStock arm needs a population where direction and fee mode are NOT collinear before any direction-based test can run there.** Same home, same owner.
+**Last yield per trade, of the 4 rows that carry `bookState` (the guard postdates WEN/DE/BMNR):**
+
+| symbol | closed (UTC) | `pos` | **`S_d/S_w`** | side term alone `0.5·(S_d/S_w)` | verdict |
+|---|---|---|---|---|---|
+| ARKK | 09-05 00:16 | 2.176 | **4.74** | **2.37** | ✅ **BOOK-SHAPE explains it** |
+| LI | 09-08 00:15 | 1.228 | 1.00 | 0.50 | ⚠️ side term too small — **drift contributes** |
+| LMT | 09-10 00:15 | 1.652 | **0.26** | 0.13 | ⚠️ side term too small — **drift contributes** |
+| CRM | 09-12 00:16 | 20.037 | **74.10** | **37.05** | ✅ **BOOK-SHAPE, and it OVER-explains** |
+
+✅ **CRM REPRODUCES LANGSTON EXACTLY: decision book `bid 7.00 / ask 1000.00`, and `503.500` is PRECISELY its midpoint.** A 14,186 % spread. **The mechanism is real and it is enormous.**
+⭐⭐ **BUT THE COHORT SPLIT IS NOT THE ONE INFERRED, AND THE REASON IS THE SAME ERROR ONE LEVEL DOWN: `S_d` WAS READ OFF `S_w`.** A wide WITNESS book does **not** imply a wide DECISION book — **LI and LMT have decision books NARROWER than their witness books** (`ratio` 1.00 and **0.26**), so their departures are **drift**, not side.
+⇒ ✅ **MEASURED SPLIT ON WHAT CAN BE MEASURED: 2 of 4 BOOK-SHAPE (ARKK, CRM) · 2 of 4 DRIFT (LI, LMT).** **3 rows (WEN, DE, BMNR) predate the guard and carry no `bookState` — undecidable, stated as such.**
+⛔ **THIS DOES NOT WEAKEN THE BLOCKER-2 VERDICT — IT CONFIRMS ITS MECHANISM AND CORRECTS ITS ARITHMETIC.** §P2 is corroborated: **a booked sale at the midpoint of a 7-against-1000 book is exactly “a price no bid ever reached”.** What changes is that **the two causes COEXIST row by row**, and only the persisted `S_d` tells them apart.
+➕ **AND THAT RETARGETS `3n.n`: the witness capture time is NOT the only missing instrument — `S_d` already exists in metadata and is not promoted to a column. Promoting it is cheaper and decides more.**
+
+### ⚠️ AND ON CRYPTO THE SAME TEST COMES BACK CLEAN — MEASURED, NOT ASSUMED
+Witness spreads on the 62 stamped crypto rows: **median 0.14 % (`stop_hit`, n=38) / 0.21 % (`target_hit`, n=24); only 3 rows exceed 1 %.** ⇒ **no collapsed-book cohort exists there**, which is what the handoff produces on xStock and which crypto — trading 24/7 — has no session boundary to produce.
+✅ **SO §1C's SIGN-FLIP LEG STANDS.** ⚠️ **RESIDUAL, STATED: `S_d` is NOT persisted on the crypto side either (`exit_book_mid` is a MID, not a pair), so the ratio term is UNBOUNDED there too — nothing merely suggests it is large.** CC-C reports `metadata.fg2Shadow` may carry crypto-side stamps; **unopened, and not claimed.**
+
+### ⛔ AND MY ONE-CHANNEL INFERENCE WAS RIGHT IN ITS PREMISE, WRONG IN ITS CONCLUSION
+`getTickerWitness` and the fill's depth-walk **do** both read `xstock_spot_ticker_snap` — ONE socket. ⛔ **But it is ONE SOCKET AT *TWO SAMPLING RATES*: the decision reads the UNTHROTTLED `latestEquityTick` (`equity-spot-archiver.ts:212`); the witness reads the **4,000 ms-THROTTLED** `bufferTickerSnap`.** ⭐ **AND THE DROPPED FRAMES ARE NON-RANDOMLY THE HOLLOW ONES** (CC-C: 10/10 session bodies vs 2/11 handoffs). ⇒ **the residual is NOT “time”; it is “time **OR** a different BOOK SHAPE at the decision instant” — and the table above shows which.**
+
+### ⚠️ AND THE “DIFFERENT POPULATION” WAVE-OFF IS STRUCK (Langston)
+§P2's ~21 rows and my 34 are **both post-2026-08-26 and they OVERLAP.** ⛔ **“A different instrument” was a reason not to look. Enumerate the overlap** — item on `3b.f-c`.
+
+➕ **DISPOSITIONS (Langston):** the 6-of-7 handoff rate → **item on `3b.f-c`** (CC-C) — it upgrades CRM/NEM from two specimens to a RATE. The `0.5·(S_d/S_w)` correction → **item on `3n.n`** (CC-C) — it **sharpens** why that row is the precondition rather than weakening it.
 
 ## 5.3 ⭐⭐ WHICH DOCUMENT IS CANONICAL — THE RECOMMENDATION
 
