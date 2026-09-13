@@ -1,139 +1,198 @@
--- B-GEOMETRY-REACH-BASELINE (OBJ-A) — per-(strategy × asset_class) reachability ceilings.
+-- B-GEOMETRY-REACH-BASELINE (OBJ-A) — the reachability ceiling becomes per-(strategy x class),
+-- and the unknown-token path fails CLOSED for the first time.
 --
--- WHAT WAS WRONG: `expectancy_gates.reach_atr_max` had exactly TWO rows (crypto 4.0 / xStock 4.0) and
--- the read site hardcoded `strategy: '*'`, so ONE ceiling served every strategy in a class. The bound
--- is c·√H — a HOLDING-HORIZON statement — and crypto median holds run from 1.8 h to 15.4 h per
--- strategy, so the single ceiling sat 1.5–2.0× looser than four strategies' own horizons. (Seeding
--- per-strategy rows BEFORE this batch would have been a NO-OP: nothing could read them.)
+-- ⛔⛔ THIS MIGRATION SEEDS **ZERO** PER-STRATEGY CEILINGS. That is the finding, not a shortfall.
+-- Four rows (pivot_shift 2.72 / morning_star 2.52 / inside_bar_reversal 2.36 / sma_trend_ride 1.97)
+-- were derived, reviewed, and then REFUSED on a measured blast radius (Langston CONDITION-1). What
+-- ships is the STRUCTURE: the resolver can now carry a per-strategy ceiling, and an unrecognised
+-- token can no longer land on the permissive class default.
 --
--- HOW THESE FOUR VALUES WERE CHOSEN, and the label matters more than the numbers:
--- they are a POLICY TIGHTENING WITH A MEASURED LOWER BOUND, **not a derivation**. `H` is endogenous to
--- the gate being calibrated (the ceiling blocks far targets → those trades exit sooner → H is short),
--- so no value here may be presented as derived. Every row TIGHTENS; none loosens.
+-- WHAT WAS STRUCTURALLY WRONG, and this part still holds: `expectancy.ts` hardcoded `strategy:'*'`
+-- in the key it read `reach_atr_max` with, and that was the only read site tree-wide — so a
+-- per-strategy row was unreachable by construction. `min_rr` failed CLOSED on a drifted token and
+-- reach did NOT, so an uncanonicalized token took the permissive class 4.0. That is the §8 #10
+-- silent-fallback-for-a-DB-governed-setting trap, and it is what this migration closes.
 --
--- POPULATION, stated because it was the blocker on this batch (`vts_open_trades` is TWO populations):
--- reorg-B4's shadow lane (`context->>'shadow'='true'`, 27,370 crypto rows since 2026-08-01) and the VTS
--- learning lane (2,503). Values below are the SHADOW lane's per-strategy median hold, √-scaled.
--- The shadow lane was selected by a PRE-REGISTERED arbiter (pre-audit §1b-quater, registered at
--- d2c0fd65e and resolved after it): each lane's median was compared against the ACTIVE lane's
--- (`closed_trades`, crypto, filled only) — the population the ceiling actually governs and the only
--- one NOT TTL-censored (`max_hold_switch`: enabled_vts TRUE, enabled_paper/live FALSE, all 2026-07-24).
--- Shadow cleared ≥3 strategies within a 1.25× derived-ceiling tolerance on both population readings;
--- the VTS lane cleared 1 and has only two comparable cells.
+-- ⛔⛔ WHY NO CEILING IS SEEDED — TWO SEPARATE REASONS, RECORDED SEPARATELY ON PURPOSE.
+-- A later reader citing the first reason against a strategy it does not apply to would be citing
+-- something false, so they are not merged (Langston).
 --
--- WHY ONLY FOUR ROWS, and each exclusion has its own reason rather than a shared one:
---   • reverse_impulse  — BOTH proxies FAIL the arbiter (0.481 / 0.697) and both are TIGHTER than the
---                        active lane, whose 7.12 h median implies 2.67. Seeding the proxy value would
---                        have been a LIVE THROTTLE. Excluded on evidence, not for want of data.
---   • range_trade      — zero shadow rows AND zero active rows: cannot ship on the basis, and the
---                        arbiter could not grade it at all.
---   • volatility_edge  — active n=11 against the pre-registered n≥30. Per the pre-declared null rule
---                        that is a SILENCE WITH NO REACH: not graded, not failed. Does not ship.
---   • vwap_pullback    — lanes disagree 3.3× and its shadow cell is 48.17 % TTL-censored (a floor, not
---                        an estimate). It is also the only row that could LOOSEN on one lane, and the
---                        standing rule is that no per-strategy row may be looser than the class
---                        default without realised-excursion evidence, which does not exist yet.
--- All four carry forward to B-EXCURSION-RECORD (PHASE_19_PLAN row 2.4g-3).
+-- REASON A — REDUNDANT RE-ENCODING (morning_star, inside_bar_reversal, pivot_shift).
+--   These strategies compute `targetPrice = entryPrice + target_exit_atr_multiplier * effectiveATR`
+--   (morning-star.ts:175, inside-bar-reversal.ts:190, volatility-edge.ts:186, support-bounce.ts:264),
+--   so `atrsToTarget` IS that multiplier times the effectiveATR/rawATR ratio. MEASURED on 27,370
+--   crypto shadow rows since 2026-08-01, p90 minus p10 of `atrsToTarget`:
+--       morning_star 0.001 · support_bounce 0.002 · inside_bar_reversal 0.008 · volatility_edge 0.008
+--   Those are SPIKES, not distributions (morning_star: 84.62 % of 3,258 rows on exactly 2.500).
+--   ⇒ the ceiling is a KNIFE EDGE: above the spike it refuses ~nothing, below it refuses ~everything.
+--   Measured newly-refused share at the derived ceilings: inside_bar_reversal 95.32 %, pivot_shift
+--   55.43 %. morning_star's 0.64 % is NOT safety — 2.52 sits 0.02 ATR above a spike holding 84.62 %
+--   of its signals, so any drift in the effectiveATR clamp flips it to ~85 %. A hair-trigger.
+--   ⇒ FOR THESE, the reachability ceiling and `target_exit_atr_multiplier` are the SAME KNOB, and
+--   tuning the ceiling is a strategy kill-switch wearing a feasibility gate's clothes.
+--   (Two producers feed these: several strategies also show a 2.500 spike that is NOT their own
+--   multiplier — `pattern-recognizer.ts:585-586` hardcodes `atr * 2.5` with the strategy label
+--   attached downstream — so a per-strategy ceiling would select between PRODUCERS, not strategies.
+--   The third producer, that file's `atr > 0` FALSE arm (`currentPrice * 0.02`, no ATR term), is
+--   ABSENT from this population: 0 of 27,370 rows sit at exactly 2 % of entry and 0 rows carry
+--   `atrAtOpen = 0`, so it never fires on the crypto shadow lane.)
 --
--- CRYPTO ONLY for the calibration rows: `c` is class-dependent because the two classes measure ATR on
--- different bar lengths (crypto 60-min, xStock 15-min), so a crypto √H does not transfer. This mirrors
--- the reorg-B2.3 rule that xStock floors derive from xStock's OWN data, never a crypto borrow.
+-- REASON B — A LIVE THROTTLE ON A GENUINELY CONTINUOUS DISTRIBUTION (sma_trend_ride). ⚠️ REASON A
+--   DOES NOT APPLY TO IT AND MUST NOT BE CITED AGAINST IT (Langston). `sma_trend_ride` has NO ATR
+--   TERM ANYWHERE: `strategy-engine.ts:520-533` has two arms — trailing,
+--   `entryPrice * (1 + trendStrength * trailing_strength_factor)`, and break,
+--   `entryPrice + riskDistance * break_target_r_multiple`. Its `atrsToTarget` is a real continuous
+--   ratio: 560 distinct values over 1,362 rows, modal share 3.16 %, p90 minus p10 = 2.991 ATR —
+--   375x the spread of morning_star. So the ceiling there IS a genuine distributional selector, and
+--   1.97 would have refused a MEASURED 57.49 % of its signals. It is refused as a strategy-behaviour
+--   decision, not as redundancy. Its levers are `break_target_r_multiple` and
+--   `trailing_strength_factor`, NOT `target_exit_atr_multiplier`.
+--   (`vwap_pullback` p90-p10 0.773 and `mean_reversion` 0.151 sit between the two regimes; neither
+--   was a candidate, and neither is characterised here beyond the measurement.)
 --
--- reach_atr_max_unknown_floor = the FAIL-CLOSED substitution for an unrecognized strategy token.
--- ⛔ NOTE THE DIRECTION IS THE OPPOSITE OF min_rr's: min_rr is a MINIMUM so its strict value is the
--- class MAX; reach_atr_max is a MAXIMUM so its strict value is the class MIN. Same intent — a drifted
--- token can never be treated more permissively than a known one.
---   crypto_spot 1.97 = the MINIMUM OVER THE ROWS ACTUALLY SEEDED HERE (sma_trend_ride). Bound to the
---                      shipped set deliberately: "the minimum across strategies" would have made the
---                      SAFETY row a function of the calibration decision it exists to outlast.
---   xstock_spot 4.00 = xStock's own class default. No xStock reach row ships, so 4.00 is the strictest
---                      value we have ASSERTED for that class; borrowing crypto's 1.97 would be exactly
---                      the cross-class borrow the bar-length argument forbids. The fail-closed
---                      STRUCTURE ships for xStock now; it becomes load-bearing when xStock rows exist.
---   '*'         1.97 = the global fallback for an unresolved asset_class — the strictest thing we have
---                      asserted anywhere. Same shape as min_rr_unknown_floor's global row.
---                      ⚠️ MEASURED WHILE WRITING THE TEST, AND IT CORRECTS WHAT THIS COMMENT FIRST
---                      CLAIMED: this row cannot actually fire through getPerClassTargetGate today.
---                      `target_floor_pct` also has only two rows (crypto / xStock) and no global '*',
---                      and it is read FIRST, so an unresolved asset class throws there before reach is
---                      ever consulted. The throw is correct (a DB-governed setting fails hard when
---                      absent) — but this row is a FAIL-SAFE FOR A FUTURE in which a global
---                      target_floor_pct exists, NOT a live protection. It ships because the alternative
---                      is a fail-closed row that is silently absent when it is finally needed; it must
---                      NOT be cited as coverage it does not currently provide. Pinned by an assertion
---                      in b-geometry-reach-baseline-per-strategy-reach.test.ts so the real behaviour is
---                      recorded rather than assumed.
--- ⭐ THE SAFETY ROW SHIPS ON THE FULL KEY SET AND IS **NOT** CRYPTO-ONLY. "Crypto only" governs the
--- CALIBRATION rows and must not be read onto the safety row. ⚠️ THE LIVE JUSTIFICATION IS THE xSTOCK
--- HALF, and it is stated alone because the other half does not survive the correction above: a
--- crypto-only floor would leave xStock's unknown-token path on the permissive 4.0, which is exactly
--- the trap the floor exists to close. (The unresolved-ASSET-CLASS argument is NOT part of the live
--- justification — floorPct throws first, per the note on the '*' row.) It is a §8 #10 defect fix and
--- stands independently of the calibration: before this batch `min_rr` failed closed on an unknown
--- token and reach did not.
+-- reach_atr_max_unknown_floor = the FAIL-CLOSED substitution for an unrecognised strategy token.
+-- ⛔ THE DIRECTION IS THE OPPOSITE OF min_rr's: min_rr is a MINIMUM so its strict value is the class
+-- MAX; reach_atr_max is a MAXIMUM so its strict value is the class MIN. Same intent — a drifted token
+-- can never be treated more permissively than a known one.
+-- ⭐ WITH ZERO PER-STRATEGY ROWS SEEDED, THE STRICTEST VALUE WE HAVE ASSERTED IN EACH CLASS IS THAT
+-- CLASS'S OWN DEFAULT, so every floor row ships at 4.0. The floor therefore changes NO behaviour today
+-- and that is correct: it makes the fallback EXPLICIT AND ASSERTED instead of implicit, and it becomes
+-- load-bearing the moment a per-strategy row is genuinely justified. The invariant below is what keeps
+-- it honest as rows are added later — and it LOOPS OVER EVERY CLASS plus the global row, because a
+-- single-class guard behind a three-row seed is exactly the gap it exists to close.
+-- ⭐ IT SHIPS ON THE FULL KEY SET AND IS **NOT** CRYPTO-ONLY. The live justification is the xStock half:
+-- a crypto-only floor would leave xStock's unknown-token path with no fail-closed row at all.
+--   ⚠️ The GLOBAL '*' row cannot actually fire through `getPerClassTargetGate` today — `target_floor_pct`
+--   also has only two rows and no global '*', and it is read FIRST, so an unresolved asset class throws
+--   there before reach is consulted. The throw is correct (a DB-governed setting fails hard when
+--   absent). The row is a FAIL-SAFE FOR A FUTURE in which a global `target_floor_pct` exists, NOT live
+--   coverage, and it must not be cited as coverage it does not provide. Pinned by an assertion in
+--   b-geometry-reach-baseline-per-strategy-reach.test.ts.
 --
--- Per-(strategy×class) (§11). exchange/regime = wildcard. Idempotent UPSERT so re-apply corrects values.
+-- ⛔ DEPLOY ORDER: **MIGRATION FIRST, THEN RESTART.** Code-before-SQL leaves
+-- `reach_atr_max_unknown_floor` absent, and an unknown token then throws UNCAUGHT at
+-- `signal-orchestrator.ts:1903` — `gateConstantsVersionFor` swallows its throw, the gate does not.
+-- Low probability and loud + fail-closed when it fires, but it is an ordering constraint, not a
+-- preference. (The reverse order is inert: with the old code the rows are simply unreachable.)
+--
+-- Per-(strategy x class) (§11). exchange/regime = wildcard. Idempotent UPSERT so re-apply corrects values.
 
 BEGIN;
 
 INSERT INTO module_constants
   (module_name, constant_name, value, asset_class, exchange, regime, strategy, updated_at, updated_by)
 VALUES
-  -- crypto_spot per-strategy reachability ceilings — shadow-lane median hold, √-scaled, all TIGHTENING
-  -- strategy            value   median hold   vs the 4.0 class default   arbiter ratio vs active
-  ('expectancy_gates', 'reach_atr_max', '2.72'::jsonb, 'crypto_spot', '*', '*', 'pivot_shift',         NOW(), 'b-geometry-reach-baseline'), -- 7.41 h  1.47× tighter  1.082
-  ('expectancy_gates', 'reach_atr_max', '2.52'::jsonb, 'crypto_spot', '*', '*', 'morning_star',        NOW(), 'b-geometry-reach-baseline'), -- 6.34 h  1.59× tighter  1.049 (both lanes clear)
-  ('expectancy_gates', 'reach_atr_max', '2.36'::jsonb, 'crypto_spot', '*', '*', 'inside_bar_reversal', NOW(), 'b-geometry-reach-baseline'), -- 5.55 h  1.70× tighter  0.990
-  ('expectancy_gates', 'reach_atr_max', '1.97'::jsonb, 'crypto_spot', '*', '*', 'sma_trend_ride',      NOW(), 'b-geometry-reach-baseline'), -- 3.89 h  2.03× tighter  1.060
-  -- unknown-token fail-closed floor — FULL KEY SET, not crypto-only (see the header note)
-  ('expectancy_gates', 'reach_atr_max_unknown_floor', '1.97'::jsonb, 'crypto_spot', '*', '*', '*',     NOW(), 'b-geometry-reach-baseline'),
-  ('expectancy_gates', 'reach_atr_max_unknown_floor', '4.0'::jsonb,  'xstock_spot', '*', '*', '*',     NOW(), 'b-geometry-reach-baseline'),
-  ('expectancy_gates', 'reach_atr_max_unknown_floor', '1.97'::jsonb, '*',           '*', '*', '*',     NOW(), 'b-geometry-reach-baseline')
+  -- unknown-token fail-closed floor — FULL KEY SET. No per-strategy ceilings are seeded (see above).
+  ('expectancy_gates', 'reach_atr_max_unknown_floor', '4.0'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'b-geometry-reach-baseline'),
+  ('expectancy_gates', 'reach_atr_max_unknown_floor', '4.0'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'b-geometry-reach-baseline'),
+  ('expectancy_gates', 'reach_atr_max_unknown_floor', '4.0'::jsonb, '*',           '*', '*', '*', NOW(), 'b-geometry-reach-baseline')
 ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO UPDATE
   SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by;
 
 -- Verify the seed is complete, and fail the migration LOUDLY if it is not. This lives at the MIGRATION
 -- rather than in b72-warmup's boot list, mirroring min_rr_unknown_floor (which is NOT in that list and
--- carries its own RAISE EXCEPTION): the boot assertion cannot distinguish "not seeded yet" from
--- "seeded wrong", and a fail-closed row that is silently absent fails OPEN.
+-- carries its own RAISE EXCEPTION): a boot assertion cannot distinguish "not seeded yet" from "seeded
+-- wrong", and a fail-closed row that is silently absent fails OPEN.
 DO $$
-DECLARE n_reach int; n_unk int; n_global int; v_floor numeric; v_min_seeded numeric;
+DECLARE
+  n_unk int; n_global int;
+  v_floor numeric; v_min_seeded numeric; v_class_default numeric; v_global numeric; v_min_class_floor numeric;
+  r record;
 BEGIN
-  SELECT count(*) INTO n_reach FROM module_constants
-    WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max';
-  IF n_reach < 6 THEN
-    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE seed incomplete: expected >=6 expectancy_gates.reach_atr_max rows (2 class-default + 4 per-strategy), found %', n_reach;
-  END IF;
-
   SELECT count(*) INTO n_unk FROM module_constants
     WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor';
   IF n_unk < 3 THEN
     RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE seed incomplete: expected 3 reach_atr_max_unknown_floor rows (crypto/xstock/global), found %', n_unk;
   END IF;
 
-  -- The global '*' row is the one that fires when the asset_class itself is unresolved. Assert it by
-  -- NAME, not by count: three rows could all be per-class and the global fallback still missing, which
-  -- is the absent-as-valid shape (#546) this whole batch kept tripping over.
+  -- Assert the GLOBAL row BY NAME, not by count: three rows could all be per-class and the global
+  -- fallback still missing, which is the absent-as-valid shape (#546) this batch kept tripping over.
   SELECT count(*) INTO n_global FROM module_constants
     WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
       AND asset_class = '*' AND exchange = '*' AND strategy = '*' AND regime = '*';
   IF n_global <> 1 THEN
-    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE seed incomplete: the GLOBAL reach_atr_max_unknown_floor row is missing (found %) — an unresolved asset_class would throw in flight', n_global;
+    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: the GLOBAL reach_atr_max_unknown_floor row is missing (found %)', n_global;
   END IF;
 
-  -- The crypto floor must equal the MINIMUM of the crypto rows actually seeded. If a later migration
-  -- adds a tighter per-strategy row and forgets the floor, the floor becomes looser than a real row and
-  -- a drifted token gets a MORE permissive gate than a known one — the exact inversion it exists to
-  -- prevent. Checked here so that failure is impossible to ship silently.
-  SELECT (value #>> '{}')::numeric INTO v_floor FROM module_constants
+  -- ⛔⛔ THE SAFETY INVARIANT, LOOPED OVER EVERY CLASS (Langston Step-4 CONDITION). It first
+  -- guarded `crypto_spot` ALONE while the seed shipped THREE rows, so the xStock row had nothing past
+  -- the count above and the first xStock ceiling would have landed under a floor nothing checked.
+  -- ⭐ The asymmetry is MEASURED, not hypothetical: `min_rr_unknown_floor` already differs by class
+  -- (crypto 2.88 / xStock 2.16), and the UPSERT is idempotent precisely so re-application re-checks.
+  --
+  -- The property: `floor <= every per-strategy ceiling in that class`. An INEQUALITY, not an equality
+  -- — equality would additionally fail a later migration that merely REMOVES or LOOSENS the tightest
+  -- row, which is perfectly safe. Every SELECT pins the FULL key (exchange + regime as well), because a
+  -- partially-keyed `SELECT INTO` over a second legitimately key-scoped row resolves by silently taking
+  -- one and raising nothing.
+  -- ⛔ THE LOOP LIST IS DERIVED FROM THE DATA, NOT HARDCODED (Langston non-blocker, taken). A literal
+  -- ARRAY['crypto_spot','xstock_spot'] is `enumerator-blind-spot`: a third asset class seeded later
+  -- would get no per-class check at all. Taking the union of both constants' classes ALSO closes the
+  -- worse case a hardcoded list cannot see — a class that has CEILINGS but no floor row — because
+  -- such a class still appears here and then trips the `v_floor IS NULL` raise below.
+  FOR r IN
+    SELECT DISTINCT asset_class AS ac FROM module_constants
+    WHERE module_name = 'expectancy_gates'
+      AND constant_name IN ('reach_atr_max', 'reach_atr_max_unknown_floor')
+      AND asset_class <> '*'
+  LOOP
+    SELECT (value #>> '{}')::numeric INTO v_floor FROM module_constants
+      WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
+        AND asset_class = r.ac AND exchange = '*' AND strategy = '*' AND regime = '*';
+    IF v_floor IS NULL THEN
+      RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: no reach_atr_max_unknown_floor row for class %', r.ac;
+    END IF;
+
+    SELECT min((value #>> '{}')::numeric) INTO v_min_seeded FROM module_constants
+      WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max'
+        AND asset_class = r.ac AND exchange = '*' AND regime = '*' AND strategy <> '*';
+    SELECT (value #>> '{}')::numeric INTO v_class_default FROM module_constants
+      WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max'
+        AND asset_class = r.ac AND exchange = '*' AND strategy = '*' AND regime = '*';
+
+    IF v_min_seeded IS NULL THEN
+      -- The state THIS migration ships for BOTH classes: no per-strategy ceilings exist, so the
+      -- strictest asserted value in the class is its own default and the floor must equal it.
+      -- Asserted rather than assumed, so "the floor happens to match" is a checked fact.
+      IF v_floor IS DISTINCT FROM v_class_default THEN
+        RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: class % has no per-strategy ceilings, so its floor (%) must equal its class default (%)', r.ac, v_floor, v_class_default;
+      END IF;
+    ELSIF v_floor > v_min_seeded THEN
+      RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: class % floor (%) is LOOSER than its tightest seeded ceiling (%) — a drifted token would get a more permissive gate than a known one', r.ac, v_floor, v_min_seeded;
+    END IF;
+  END LOOP;
+
+  -- And the GLOBAL row gets a VALUE relationship, not just presence-by-name: it is the fallback when the
+  -- asset class itself is unresolved, so it must be at least as strict as every per-class floor. Without
+  -- this, tightening one class's floor would silently leave the unresolved-class path more permissive
+  -- than any class it could have resolved to.
+  SELECT (value #>> '{}')::numeric INTO v_global FROM module_constants
     WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
-      AND asset_class = 'crypto_spot' AND strategy = '*';
-  SELECT min((value #>> '{}')::numeric) INTO v_min_seeded FROM module_constants
-    WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max'
-      AND asset_class = 'crypto_spot' AND strategy <> '*';
-  IF v_floor IS DISTINCT FROM v_min_seeded THEN
-    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: crypto reach_atr_max_unknown_floor (%) must equal the MINIMUM seeded crypto reach_atr_max (%)', v_floor, v_min_seeded;
+      AND asset_class = '*' AND exchange = '*' AND strategy = '*' AND regime = '*';
+  SELECT min((value #>> '{}')::numeric) INTO v_min_class_floor FROM module_constants
+    WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
+      AND asset_class <> '*' AND exchange = '*' AND strategy = '*' AND regime = '*';
+  -- ⛔ THE NULL ARM IS EXPLICIT, BECAUSE `v_global > NULL` IS **NULL** AND AN `IF NULL` PASSES
+  -- SILENTLY (Langston). With no per-class floor rows at all, the comparison below would say nothing
+  -- while reading as a check that ran. Unreachable today only because the loop raises first — i.e.
+  -- only while the loop's list covers every class that has a floor — which is exactly the coupling
+  -- that made it worth removing rather than reasoning about.
+  -- ⚠️ LABELLED HONESTLY: THIS ARM IS **UNPROVED BY MUTATION**, and the reason is that it cannot be
+  -- reached on today's data. I tried. Deleting the per-class floor rows is caught by the `n_unk >= 3`
+  -- count above; leaving three rows with no per-class one requires all three to be `asset_class = '*'`
+  -- differing only by exchange/regime, and even then the loop's own `v_floor IS NULL` raise fires first
+  -- because `reach_atr_max` has per-class rows. So it is DEFENCE IN DEPTH behind two stronger checks,
+  -- not a verified path. Recorded as unproved rather than counted among the proved arms — the two
+  -- mutants that looked like they proved it were actually caught by the count check, which is a check
+  -- that could not come out differently for the reason I was claiming.
+  IF v_min_class_floor IS NULL THEN
+    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: no PER-CLASS reach_atr_max_unknown_floor row exists, so the global floor (%) is unguarded — refusing rather than passing a comparison against NULL', v_global;
+  END IF;
+  IF v_global IS NULL THEN
+    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: the GLOBAL reach_atr_max_unknown_floor row has no value';
+  END IF;
+  IF v_global > v_min_class_floor THEN
+    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: the GLOBAL floor (%) is LOOSER than the tightest per-class floor (%) — an unresolved asset class would be treated more permissively than any class it could resolve to', v_global, v_min_class_floor;
   END IF;
 END $$;
-
 COMMIT;

@@ -28,22 +28,31 @@ import {
   getUnknownStrategyCounts,
   __resetUnknownStrategyCountsForTest,
 } from '../../core/observability/unknown-strategy-counter.js';
-import { _seedModuleCacheForTests } from '../../services/module-constants-service.js';
+import { _seedModuleCacheForTests, getCachedNumberRequired } from '../../services/module-constants-service.js';
 
 const K = (assetClass: string, strategy: string, constantName: string, value: number) => ({
   moduleName: 'expectancy_gates', exchange: '*', assetClass, strategy, regime: '*', constantName, value,
 });
 
-/** The four rows the migration actually seeds, plus the floors, plus what the gate needs to return. */
-const SEEDED_REACH: Record<string, number> = {
+/**
+ * ⛔ THE MIGRATION SEEDS **ZERO** PER-STRATEGY CEILINGS — the four derived values were refused on a
+ * measured blast radius (see the migration header for the two separate reasons). These values are
+ * FIXTURE-ONLY: they exercise the resolver's per-strategy path, which is what this batch ships.
+ * They are deliberately NOT the migration's values, and the names say so, because a future reader
+ * finding 2.72 here and assuming it is live would be reading a test fixture as production config.
+ */
+const FIXTURE_REACH: Record<string, number> = {
   pivot_shift: 2.72,
   morning_star: 2.52,
   inside_bar_reversal: 2.36,
   sma_trend_ride: 1.97,
 };
 const CLASS_DEFAULT_REACH = 4.0;
-const CRYPTO_REACH_FLOOR = 1.97;   // the MINIMUM over the seeded rows
-const XSTOCK_REACH_FLOOR = 4.0;    // xStock's own class default — no xStock reach row ships
+/** What the migration ACTUALLY ships: with no per-strategy row seeded, the strictest asserted value
+ *  in each class is that class's own default, so every floor row is 4.0. */
+const SHIPPED_FLOOR = 4.0;
+const CRYPTO_REACH_FLOOR = 1.97;   // fixture: the minimum over FIXTURE_REACH
+const XSTOCK_REACH_FLOOR = 4.0;
 const GLOBAL_REACH_FLOOR = 1.97;
 
 function seedGate() {
@@ -55,7 +64,7 @@ function seedGate() {
     K('xstock_spot', '*', 'min_rr', 2.0),
     K('xstock_spot', '*', 'reach_atr_max', CLASS_DEFAULT_REACH),
     // the four seeded crypto ceilings
-    ...Object.entries(SEEDED_REACH).map(([s, v]) => K('crypto_spot', s, 'reach_atr_max', v)),
+    ...Object.entries(FIXTURE_REACH).map(([s, v]) => K('crypto_spot', s, 'reach_atr_max', v)),
     // a seeded min_rr row, so the single-canonicalization test can assert BOTH gates at once
     K('crypto_spot', 'morning_star', 'min_rr', 1.39),
     // fail-closed floors — both gates, full key set
@@ -67,13 +76,32 @@ function seedGate() {
   ] as any);
 }
 
+/**
+ * ⛔ THIS ARRAY HOLDS **18** TOKENS, COVERING **18 OF THE 22** NON-TEST CALL SITES. The other FOUR
+ * pass a VARIABLE and cannot be enumerated here — `signal-orchestrator.ts:1903` (`strategyId`),
+ * `vts-runner.ts:1719`, `xstock_spot/eval-cycle.ts:722` (`strategyKey`), `decision-provenance.ts:111`.
+ * ⭐ AND THOSE FOUR ARE PRECISELY WHERE A DRIFTED TOKEN ACTUALLY ENTERS, so they are held by the
+ * fail-closed FLOOR, not by this enumeration. Do not read a full pass here as full coverage.
+ * ⚠️ An earlier version of this comment said "exactly 22 call sites" against an 18-element array
+ * — the hoist was meant to stop two copies drifting and one of them arrived with the wrong count.
+ * `orb.ts:298` and `strong-bull-trend.ts:176` pass a module constant STRATEGY_KEY, not a literal, so
+ * they are listed by their RESOLVED value — a literal-matching assertion would skip them silently.
+ */
+const CALLER_TOKENS = [
+  'vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout', 'mean_reversion', 'range_trade',
+  'vwap_bounce', 'dhma',                       // strategy-engine.ts x8 in-class detects
+  'adaptive_flow', 'defensive_hedge', 'inside_bar_reversal', 'morning_star', 'pivot_shift',
+  'reverse_impulse', 'support_bounce', 'volatility_edge',  // the strategy files
+  'orb', 'strong_bull_trend',                  // the two STRATEGY_KEY module constants
+];
+
 beforeEach(() => {
   seedGate();
   __resetUnknownStrategyCountsForTest();
 });
 
 describe('OBJ-A live path — a seeded per-strategy ceiling actually reaches the gate', () => {
-  it.each(Object.entries(SEEDED_REACH))(
+  it.each(Object.entries(FIXTURE_REACH))(
     'resolves the seeded ceiling for %s (not the permissive class default)',
     (strategy, expected) => {
       expect(getPerClassTargetGate('crypto_spot', strategy).reachAtrMax).toBe(expected);
@@ -81,7 +109,7 @@ describe('OBJ-A live path — a seeded per-strategy ceiling actually reaches the
   );
 
   it('every seeded ceiling is TIGHTER than the class default — no row may loosen', () => {
-    for (const [strategy, v] of Object.entries(SEEDED_REACH)) {
+    for (const [strategy, v] of Object.entries(FIXTURE_REACH)) {
       expect(v, `${strategy} must not loosen the ceiling`).toBeLessThan(CLASS_DEFAULT_REACH);
     }
   });
@@ -115,9 +143,9 @@ describe('OBJ-A part 2 — fail-closed on an unknown token (the defect min_rr ha
   });
 
   it('the crypto floor equals the MINIMUM seeded ceiling — a drifted token can never beat a known one', () => {
-    const minSeeded = Math.min(...Object.values(SEEDED_REACH));
+    const minSeeded = Math.min(...Object.values(FIXTURE_REACH));
     expect(CRYPTO_REACH_FLOOR).toBe(minSeeded);
-    for (const v of Object.values(SEEDED_REACH)) {
+    for (const v of Object.values(FIXTURE_REACH)) {
       expect(getPerClassTargetGate('crypto_spot', 'garbage_token').reachAtrMax).toBeLessThanOrEqual(v);
     }
   });
@@ -139,11 +167,18 @@ describe('OBJ-A part 2 — fail-closed on an unknown token (the defect min_rr ha
     expect(() => getPerClassTargetGate('some_future_class', 'garbage_token')).toThrow(/target_floor_pct/);
   });
 
-  it('the global reach floor row still resolves when asked for directly', () => {
-    // The row is not dead — it is simply behind an earlier fail-hard. Proven by resolving a class that
-    // IS seeded for floorPct while having no per-class reach floor of its own would be circular, so
-    // this asserts the row's presence in the cache rather than a path that cannot reach it.
-    expect(GLOBAL_REACH_FLOOR).toBe(CRYPTO_REACH_FLOOR);
+  it('the global reach floor row DOES resolve when read on the global key directly', () => {
+    // ⛔ THIS CASE PREVIOUSLY READ `expect(GLOBAL_REACH_FLOOR).toBe(CRYPTO_REACH_FLOOR)` — two
+    // constants declared 90 lines above, both 1.97. It read no cache and touched no production code:
+    // the name claimed a row resolved and the body proved a literal equals itself. A test that cannot
+    // fail (Langston BLOCKER-1), and the absent-as-valid shape this batch spent its header warning
+    // about, landing inside the batch. The premise of the old comment was also wrong: a direct read is
+    // NOT circular — the global key has no path dependency at all.
+    expect(
+      getCachedNumberRequired('expectancy_gates', 'reach_atr_max_unknown_floor', {
+        exchange: '*', assetClass: '*', strategy: '*', regime: '*',
+      }),
+    ).toBe(GLOBAL_REACH_FLOOR);
   });
 
   it('never throws on the unknown path — the substitution is the guarantee, not the counter', () => {
@@ -151,6 +186,15 @@ describe('OBJ-A part 2 — fail-closed on an unknown token (the defect min_rr ha
   });
 });
 
+/**
+ * ⚠️ THE COUNTER'S POPULATION, NAMED (rule 29(a), Langston FINDING-3). `_counts` is a **GATE-CALL**
+ * counter, not a drift-EVENT rate. `gateConstantsVersionFor` (`decision-provenance.ts:108-111`) calls
+ * `getPerClassTargetGate` again, and by its own docblock stamps the reject row, the orchestrator admit
+ * row AND the engine open row — so ONE drifted token already increments `_counts` 2-4x per signal.
+ * ⇒ the refactor's guarantee is exactly "one increment per GATE CALL", which is what these cases
+ * assert. It is NOT "one per drifted signal", and no rate may be published off this counter without
+ * saying it counts gate calls.
+ */
 describe('⛔ the tripwire fires EXACTLY ONCE per gate call — not once per gate resolved', () => {
   it('one unknown-token call increments the drift counter by exactly 1', () => {
     getPerClassTargetGate('crypto_spot', 'unknown_token_a');
@@ -158,8 +202,9 @@ describe('⛔ the tripwire fires EXACTLY ONCE per gate call — not once per gat
   });
 
   it('three calls give three, not six — a second canonicalization would double every drift count', () => {
-    // This is the regression that would be invisible everywhere else: min_rr and reach would both be
-    // correct, and the observability number would silently read 2x the true rate.
+    // The regression this catches would be invisible everywhere else: min_rr and reach would both be
+    // correct, and the counter would read 2x its own true value — i.e. twice the number of GATE CALLS
+    // that saw a drifted token, which is the quantity it measures (see the note above).
     getPerClassTargetGate('crypto_spot', 'unknown_a');
     getPerClassTargetGate('crypto_spot', 'unknown_b');
     getPerClassTargetGate('crypto_spot', 'unknown_c');
@@ -169,6 +214,57 @@ describe('⛔ the tripwire fires EXACTLY ONCE per gate call — not once per gat
   it('a KNOWN token never touches the counter', () => {
     getPerClassTargetGate('crypto_spot', 'morning_star');
     expect(getUnknownStrategyCounts()['crypto_spot'] ?? 0).toBe(0);
+  });
+});
+
+describe('⭐ THE SHIPPED CONFIGURATION — what the migration actually seeds, not the fixture', () => {
+  // NIT from Step 4, and it was BLOCKER-1's shape at a tenth the weight: `SHIPPED_FLOOR` was declared
+  // with a docblock stating what ships and NOTHING asserting it — a whole-tree census returned one
+  // hit, its own declaration. Rather than delete it, this block seeds EXACTLY what the migration seeds
+  // (zero per-strategy ceilings, every floor at the class default) and asserts the resulting behaviour.
+  // It is the only case in this file that exercises the production configuration; every other case
+  // seeds FIXTURE_REACH to drive the resolver's per-strategy path.
+  const seedShipped = () => _seedModuleCacheForTests('expectancy_gates', [
+    K('crypto_spot', '*', 'target_floor_pct', 1.0),
+    K('crypto_spot', '*', 'min_rr', 2.0),
+    K('crypto_spot', '*', 'reach_atr_max', CLASS_DEFAULT_REACH),
+    K('xstock_spot', '*', 'target_floor_pct', 1.0),
+    K('xstock_spot', '*', 'min_rr', 2.0),
+    K('xstock_spot', '*', 'reach_atr_max', CLASS_DEFAULT_REACH),
+    K('crypto_spot', '*', 'min_rr_unknown_floor', 2.88),
+    K('xstock_spot', '*', 'min_rr_unknown_floor', 2.16),
+    // the three rows the migration ships, all at the class default
+    K('crypto_spot', '*', 'reach_atr_max_unknown_floor', SHIPPED_FLOOR),
+    K('xstock_spot', '*', 'reach_atr_max_unknown_floor', SHIPPED_FLOOR),
+    { moduleName: 'expectancy_gates', exchange: '*', assetClass: '*', strategy: '*', regime: '*', constantName: 'reach_atr_max_unknown_floor', value: SHIPPED_FLOOR },
+  ] as any);
+
+  it('changes NO ceiling for any real strategy — every caller token still gets the class default', () => {
+    seedShipped();
+    for (const token of CALLER_TOKENS) {
+      expect(getPerClassTargetGate('crypto_spot', token).reachAtrMax, `token ${token}`).toBe(CLASS_DEFAULT_REACH);
+    }
+  });
+
+  it('an unknown token gets SHIPPED_FLOOR on both classes — explicit and asserted, not implicit', () => {
+    seedShipped();
+    // The behavioural change this batch actually ships: before it, an unrecognised token READ the
+    // permissive class row by default. It now reads a row that exists for that purpose. The VALUE is
+    // identical today; what changed is that the fallback is declared and the migration checks it.
+    expect(getPerClassTargetGate('crypto_spot', 'garbage_token').reachAtrMax).toBe(SHIPPED_FLOOR);
+    expect(getPerClassTargetGate('xstock_spot', 'garbage_token').reachAtrMax).toBe(SHIPPED_FLOOR);
+  });
+
+  it('the shipped floor is no LOOSER than the class default — the migration invariant, in code', () => {
+    expect(SHIPPED_FLOOR).toBeLessThanOrEqual(CLASS_DEFAULT_REACH);
+  });
+
+  it('min_rr still fails closed per class, and it differs BY class — so the reach floor may too', () => {
+    seedShipped();
+    // Langston's point: class asymmetry in this family is measured, not hypothetical. Pinning it here
+    // is why the migration's invariant loops over classes rather than guarding crypto alone.
+    expect(getPerClassTargetGate('crypto_spot', 'garbage_token').minRR).toBe(2.88);
+    expect(getPerClassTargetGate('xstock_spot', 'garbage_token').minRR).toBe(2.16);
   });
 });
 
@@ -184,7 +280,7 @@ describe('alias safety — canonical===null is NOT the only harm surface', () =>
     // The harm surface after OBJ-A: a wrong-but-valid token silently picks up another strategy's
     // ceiling with no tripwire. Assert the mapping rather than assume it is benign.
     for (const [alias, target] of Object.entries(LEGACY_TO_CANONICAL)) {
-      const expected = SEEDED_REACH[target as string] ?? CLASS_DEFAULT_REACH;
+      const expected = FIXTURE_REACH[target as string] ?? CLASS_DEFAULT_REACH;
       expect(
         getPerClassTargetGate('crypto_spot', alias).reachAtrMax,
         `alias ${alias} → ${target}`,
@@ -202,13 +298,6 @@ describe('the full caller token table — 18 static sites, and two of them are C
   // Every token passed to getPerClassTargetGate by a non-test caller, enumerated at the ref rather
   // than sampled. `orb.ts:298` and `strong-bull-trend.ts:176` pass a module constant STRATEGY_KEY, so
   // they are listed by their RESOLVED value — a literal-matching assertion would skip them silently.
-  const CALLER_TOKENS = [
-    'vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout', 'mean_reversion', 'range_trade',
-    'vwap_bounce', 'dhma',                       // strategy-engine.ts ×8 in-class detects
-    'adaptive_flow', 'defensive_hedge', 'inside_bar_reversal', 'morning_star', 'pivot_shift',
-    'reverse_impulse', 'support_bounce', 'volatility_edge',  // the strategy files
-    'orb', 'strong_bull_trend',                  // the two STRATEGY_KEY module constants
-  ];
 
   it('every caller token is CANONICAL — none silently takes the unknown floor', () => {
     for (const token of CALLER_TOKENS) {
@@ -222,14 +311,14 @@ describe('the full caller token table — 18 static sites, and two of them are C
   it('every caller token resolves to its OWN ceiling — seeded rows to their value, the rest to the default', () => {
     for (const token of CALLER_TOKENS) {
       const canonical = resolveCanonicalStrategy(token) as string;
-      const expected = SEEDED_REACH[canonical] ?? CLASS_DEFAULT_REACH;
+      const expected = FIXTURE_REACH[canonical] ?? CLASS_DEFAULT_REACH;
       expect(getPerClassTargetGate('crypto_spot', token).reachAtrMax, `caller token ${token}`).toBe(expected);
     }
   });
 
   it('the four seeded strategies are all present in the caller table', () => {
     // Guards the inverse mistake: seeding a ceiling for a strategy nothing ever asks about.
-    for (const s of Object.keys(SEEDED_REACH)) {
+    for (const s of Object.keys(FIXTURE_REACH)) {
       expect(CALLER_TOKENS.map((t) => resolveCanonicalStrategy(t))).toContain(s);
     }
   });

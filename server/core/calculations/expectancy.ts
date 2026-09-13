@@ -208,9 +208,14 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  *
  * THE TOKEN IS CANONICALIZED EXACTLY ONCE, AND THAT IS LOAD-BEARING, NOT TIDINESS:
  * `recordUnknownStrategyAtGate` increments a per-asset-class counter on EVERY call
- * (`unknown-strategy-counter.ts`), so resolving min_rr and reach through two separate
- * canonicalizations would fire the tripwire TWICE per gate call and the drift counter would read
- * 2x the true rate — a measurement defect introduced by the fix. One resolution, one tripwire.
+ * (`unknown-strategy-counter.ts:30`), so resolving min_rr and reach through two separate
+ * canonicalizations would fire the tripwire TWICE per gate call — a measurement defect introduced
+ * by the fix. One resolution, one tripwire.
+ * ⚠️ AND NAME WHAT THE COUNTER COUNTS, because the obvious phrasing overstates it: it is a
+ * GATE-CALL counter, not a drift-EVENT rate. `gateConstantsVersionFor` (`decision-provenance.ts:108-111`)
+ * calls this function again and stamps the reject row, the orchestrator admit row and the engine open
+ * row, so one drifted token already increments it 2-4x per signal. The guarantee here is one increment
+ * per GATE CALL; no rate may be published off it without saying so.
  *
  * `floorPct` stays per-CLASS: it is an ROI floor, not a horizon statement, and nothing in this
  * batch measured it per strategy.
