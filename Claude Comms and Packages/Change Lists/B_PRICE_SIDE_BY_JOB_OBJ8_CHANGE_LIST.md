@@ -106,7 +106,12 @@ All restores verified byte-identical.
 
 ---
 
-## ⛔ DEPLOY STATUS — THE GAP IS THE 8a HOLD, STATED RATHER THAN DEPLOYED (drift alert `7a8995e5`, routed to CC-C)
+## ✅ DEPLOY STATUS — **RESOLVED 2026-09-12T23:30:48Z. THE SECTION BELOW IS THE HISTORICAL RECORD OF THE HOLD AND IS NO LONGER THE STATE.**
+
+⛔⛔ **READ THIS FIRST. Staging is at `2ce34ce33`, NOT `2dbc512ee`.** The hold described below ENDED when `8l` (the row formerly labelled `8a`) passed Step 4 at r6 and deployed. **A fresh reader taking the paragraphs below as current will conclude the exit-path work is unshipped and that staging is two shas back — both false.** ★ **Measured cost of leaving it stale: a fresh reviewer did exactly that on 2026-09-13 and opened its report with the wrong deployed sha.**
+⚠️ **The paragraphs are KEPT, not deleted — the two-populations discipline in them is the reusable part. They are dated, not live.**
+
+### ⭐ HISTORICAL — the hold as it stood 2026-09-12 (drift alert `7a8995e5`)
 
 **Staging is at `2dbc512ee`. ⛔⛔ TWO POPULATIONS, NAMED, because my first statement gave one and meant the other (Langston, 2026-09-12 — the same discipline as the two `closed_trades` denominators):**
 - **ALL COMMITS in `2dbc512ee..52d7c2a15`: 57, from at least THREE sessions.** My *"six `8a` revisions plus one docblock correction"* was **NOT this population** and reads as if it were.
