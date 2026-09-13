@@ -350,3 +350,26 @@ Each mutation was applied with an assertion that it actually matched (**an unfir
 ⛔ **AND THE HEADLINE MAY NOT BE CITED WITHOUT ITS SPLIT (rider 1's clause, honoured on its first reading): 100% of the recovery is `ticker_bbo:kraken_rest`. ZERO pushed.** ⇒ **this is a POLL-CADENCE recovery**, which is the materially weaker claim — and rider 1 says `lastSource` *understates* the pushed share, so the true pushed count is **≥ 0 and unmeasured**, not *"zero pushed sides exist."*
 
 **NO UI SURFACE, stated with its reason** (`workflow-07` requires the judgement out loud): `levelBasisFunnel` has **no client consumer** — measured, with a control: the grep finds it **0 times** under `client/`, while the same grep finds `gridTags` in `vts-filter-diagnostics-panel.tsx`. It is emitted verbatim on the diagnostics endpoint and rendered by nothing. **A screen check would have verified an absence.**
+
+### ⛔ ROW `8c` P1 — THE WINDOW READING AT `2026-09-13T09:38:06Z`. **I AM NOT DECLARING A VERDICT: D10 GIVES THE CLOSING READ TO LANGSTON.**
+
+★ **D10, verbatim: *"Closing a window never closes its defect. Langston runs the closing reads, not CC-C, which owns the batches those windows judge."*** ⇒ **what follows is the READING and the criterion check. The VERDICT is his.**
+
+**LIFETIME VERIFIED, not inferred:** `pm_uptime` = `2026-09-13T07:08:52.378Z`, **unchanged from the anchor** ⇒ one uninterrupted lifetime, 2 h 29 m elapsed. **One atomic read** — the earlier two-call read was a minute apart and its counters had moved; those numbers are discarded rather than combined.
+
+| lane | gate `book.att == ladder.att` | book accepted | **ladder accepted** | ladder refused |
+|---|---|---|---|---|
+| `active:crypto_spot` | ✅ **12,140 == 12,140** | 18 — **0.15%** | **12,119 — 99.83%** | 21 (`locked_or_synthetic_ticker` 11, `stale_ticker` 10) |
+| `vts:crypto_spot` | ✅ **5,531 == 5,531** | 214 — **3.87%** | **5,525 — 99.89%** | 6 (`locked_or_synthetic_ticker` 6) |
+
+**EVERY PRE-REGISTERED CONTROL PASSES:** n-floor ≥ 2,000/lane ⇒ **12,140 and 5,531**, met ~6× and ~2.8× · `ladder.refused` non-zero on both · `book.refused` non-zero on both · **the arithmetic gate holds on both** · and `byAcceptedSource` **sums EXACTLY to `accepted`, delta 0**, on both lanes.
+
+**THE SPLIT, reported beside the headline as §3b requires — and ⛔ NOT as a measurement of the pushed share (F2):**
+`active`: `ticker_bbo:kraken_rest` **12,101 (99.85%)** · `book_top:kraken_ws_book` 18 (0.15%).
+`vts`: `kraken_rest` **5,310 (96.11%)** · `book_top:kraken_ws_book` 214 (3.87%) · **`ticker_bbo:kraken_ws` 1 (0.02%)**.
+★ **THAT SINGLE `kraken_ws` HIT IS A CONTROL ON THE FIELD ITSELF: it CAN record a pushed source, so REST dominance is not an artefact of a field that never records anything else.** ⛔ **It does NOT rescue the share — F2's bias is structural and unchanged.**
+
+⛔⛔ **THE RATE PREDICTION WAS WRONG BY ~55×, AND THE FAULT IS IN *MY* INPUT, NOT HIS ARITHMETIC.** Langston derived 1.48/min on the active lane from **my** pre-change figure (546 attempts over what I called the `23:30:48Z→05:40Z` lifetime) and correctly concluded ~22.5 h to reach 2,000. **Measured now: 12,140 in 149 min = 81.5/min ⇒ the floor was passed in about 25 minutes.**
+★ **THE DEFECT IS MINE AND IT IS THE ONE §3b NOW GUARDS AGAINST: I INFERRED THAT LIFETIME FROM THE DEPLOY TIME AND NEVER READ `pm_uptime` AT THAT READING.** If the process restarted inside that span, 546 covers an unknown shorter interval and the per-minute figure is meaningless. ⇒ **the 1.48/min figure is WITHDRAWN as unfounded, not refuted** — and this is precisely why the anchor is now written into §3b (`B-REST-SIDES-TO-CACHE` r4, CONDITION 1).
+
+⚠️ **A LEAD, EXPLICITLY NOT A FINDING: a 99.83% ladder acceptance suggests the side-STORING REST poller dominates the write path, not the side-DISCARDING adapter** — which would make `#1056`'s floor much smaller than feared. ⛔ **That is an inference from an OUTCOME back to a WRITER MIX, which is exactly the census `#1056` says is owed. It may not be cited as the census's answer.**
