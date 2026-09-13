@@ -133,9 +133,12 @@ import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 // COUNTED, consumed by nothing. See the observation block at the hand-off below.
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import {
-  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeAttempt, recordFeedAgreement,
+  recordSideAgeAttempt, recordFeedAgreement,
   LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
 } from '../core/calculations/level-basis.js';
+// Row `8c` P1: D3's ladder replaces the direct book-only assessment. `buildLevelBasis` is no
+// longer imported here — `selectTouchPrice` calls it internally, once per rung.
+import { selectTouchPrice, recordTouchSelection, type ClockBasis } from '../core/calculations/touch-price.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 // Batch 19G VN HF: SYSTEM_GUARDS import removed — deprecated filter constants deleted.
@@ -2608,33 +2611,85 @@ export class SignalOrchestrator {
         // ⛔ ONE-DIRECTIONAL BY PRE-REGISTRATION: divergence is dispositive; agreement is
         // INCONCLUSIVE, because both feeds coexist only on the hot set — the names we already hold
         // or promote — which is exactly where they would agree anyway.
+        // ⛔ HOISTED OUT OF THE AGREEMENT BLOCK 2026-09-13 (row `8c` P1): the ladder's rung 2 needs
+        // this same entry, and reading the cache TWICE in one pass would let the two reads
+        // disagree — the exact split-read hazard this batch keeps finding one layer down.
+        const _lbCache = priceCache.getCachedPrice(symbol);
         {
           const _agBook = _lbBook;
-          const _agCache = priceCache.getCachedPrice(symbol);
           recordFeedAgreement({
             assetClass: _lbClass,
             bookBid: _agBook && _agBook.bids.length > 0 ? _agBook.bids[0].price : null,
             bookAsk: _agBook && _agBook.asks.length > 0 ? _agBook.asks[0].price : null,
-            tickerBid: _agCache?.bid ?? null,
-            tickerAsk: _agCache?.ask ?? null,
+            tickerBid: _lbCache?.bid ?? null,
+            tickerAsk: _lbCache?.ask ?? null,
           });
         }
 
-        const _lbResult = buildLevelBasis(
+        // ⛔⛔ THE SIDES ARE DATED BY `sidesCapturedAtMs`, NEVER BY `lastUpdatedAt`. That field
+        // dates the MARK and is refreshed on every tick, so using it here would report a fresh age
+        // for sides that have not moved in minutes — the W-3 defect, and the whole reason the
+        // sides carry their own stamp. Absent stamp ⇒ `age_unknown` ⇒ refuse. Fail-closed.
+        // ⚠️ `venueObservedAtMs` is preferred where present because it is the venue's own clock;
+        // the REST poller states it as null rather than inventing one, so REST falls to `receipt`.
+        const _lbTicker = _lbCache
+          ? {
+              bid: _lbCache.bid ?? null,
+              ask: _lbCache.ask ?? null,
+              stampMs: _lbCache.venueObservedAtMs ?? _lbCache.sidesCapturedAtMs ?? null,
+              clockBasis: (_lbCache.venueObservedAtMs ? 'venue' : 'receipt') as ClockBasis,
+              producer: _lbCache.lastSource ?? 'unknown',
+            }
+          : null;
+
+        // ⛔⛔ ROW `8c` (P1): THE LADDER, NOT THE BOOK ALONE. Until 2026-09-13 this assessed the
+        // BOOK and nothing else — rung 1 of a three-rung rule — and it was built on 2026-09-05,
+        // SIX DAYS BEFORE D3 was decided. Measured consequence, live at 05:40Z on 2026-09-13:
+        // 530 of 546 active crypto level builds refused, 526 of them `no_book`, because the socket
+        // carries a book for the TWO symbols we hold and the other ~500 are REST-priced.
+        // ⇒ The refusal was measuring the ABSENCE OF RUNG 2, not the absence of a transactable
+        // price. `selectTouchPrice` is D3's order and has existed, unwired, since P-7d.
+        // ⛔ STILL A SHADOW. Nothing consumes the result; `8c`'s switch-on is HELD (Langston,
+        // 2026-09-13) until row `8a` moves the trigger, because levels on the transactable side
+        // against a mid-reading trigger ship a MIXED POPULATION — bid-anchored for the handful of
+        // symbols with a book, mid for the rest — and every resulting exit is unattributable.
+        const _lbNow = Date.now();
+        const _lbSel = selectTouchPrice(
           {
-            bid: _lbBook && _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
-            ask: _lbBook && _lbBook.asks.length > 0 ? _lbBook.asks[0].price : null,
-            // ⛔ `getBookForFill` hands back an AGE, not a capture time, so the capture instant is
-            // reconstructed rather than invented. This is the ONE place the two representations
-            // meet and it is written out so nobody later "simplifies" it into `Date.now()`.
-            capturedAtMs: _lbBook ? Date.now() - _lbBook.ageMs : null,
-            producer: 'kraken_ws_book',
+            book: _lbBook
+              ? {
+                  bid: _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
+                  ask: _lbBook.asks.length > 0 ? _lbBook.asks[0].price : null,
+                  // ⛔ `getBookForFill` hands back an AGE, not a capture time, so the capture
+                  // instant is reconstructed rather than invented. This is the ONE place the two
+                  // representations meet and it is written out so nobody later "simplifies" it
+                  // into `Date.now()`.
+                  stampMs: _lbNow - _lbBook.ageMs,
+                  clockBasis: 'receipt',
+                  producer: 'kraken_ws_book',
+                }
+              : null,
+            // Crypto's book is eligible by construction — `book_not_eligible` is the xStock
+            // maintained-book gate (`touch-price.ts:24`) and never fires on this leg.
+            bookEligible: true,
+            ticker: _lbTicker,
+            // ⚠️ `ticker_bbo` NAMES THE QUANTITY, AND `producer` CARRIES THE TRANSPORT. Kraken's
+            // REST ticker `a`/`b` ARE best ask and best bid, exactly as the WS bbo ticker is, so
+            // both are a best-bid/offer quote; what differs is how it reached us, which
+            // `TouchQuote.producer` records. Collapsing them would lose the transport; calling the
+            // REST one `ticker_default` would misname the quantity.
+            tickerBasis: 'ticker_bbo',
           },
-          Date.now(),
-          LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
-          LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+          _lbNow,
+          {
+            maxAgeMs: LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
+            maxSpreadFraction: LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+          },
         );
-        recordLevelBasisOutcome({ lane: 'active', assetClass: _lbClass }, _lbResult);
+        // ⚠️ ONE CEILING GOVERNS BOTH LEGS, stated with its number as `touch-price.ts:50` requires
+        // of whoever wires this: both rungs are judged at LEVEL_BASIS_OBSERVATION_MAX_AGE_MS.
+        // A per-leg ceiling is P-8a's, not this row's.
+        recordTouchSelection({ lane: 'active', assetClass: _lbClass }, _lbSel);
       }
 
       const indicators = {

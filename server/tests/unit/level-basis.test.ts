@@ -155,7 +155,11 @@ describe('priceForLevelRole — per leg AND per execution intent (BLOCKER-1)', (
   });
 });
 
-const KEY = { lane: 'active' as const, assetClass: 'crypto_spot' };
+// Row `8c` (2026-09-13): the funnel key gained a REQUIRED `rung`. These fixtures name it
+// explicitly rather than relying on a default — an omitted rung keyed on the string
+// "undefined" and every assertion below still PASSED, symmetrically, because the reader and
+// the writer agreed on the same wrong key. That is a suite that cannot fail.
+const KEY = { lane: 'active' as const, assetClass: 'crypto_spot', rung: 'book' as const };
 
 describe('the refusal funnel — and its POSITIVE CONTROL', () => {
   beforeEach(() => __resetLevelBasisFunnelForTest());
@@ -245,8 +249,8 @@ describe('the funnel is KEYED by lane and class (Langston catch 1)', () => {
   it('⛔ an active-crypto refusal and a vts-xstock refusal do NOT share a bucket', () => {
     // W-1 wires BOTH lanes. r1's flat counters would have merged these and answered
     // questions about neither population.
-    const active = { lane: 'active' as const, assetClass: 'crypto_spot' };
-    const vts = { lane: 'vts' as const, assetClass: 'xstock_spot' };
+    const active = { lane: 'active' as const, assetClass: 'crypto_spot', rung: 'book' as const };
+    const vts = { lane: 'vts' as const, assetClass: 'xstock_spot', rung: 'book' as const };
     recordLevelBasisOutcome(active, buildLevelBasis({ ...OK_BOOK, ask: null }, NOW, MAX_AGE, MAX_SPREAD));
     recordLevelBasisOutcome(vts, buildLevelBasis({ ...OK_BOOK, bid: null }, NOW, MAX_AGE, MAX_SPREAD));
     recordLevelBasisOutcome(vts, buildLevelBasis(OK_BOOK, NOW, MAX_AGE, MAX_SPREAD));
@@ -258,7 +262,7 @@ describe('the funnel is KEYED by lane and class (Langston catch 1)', () => {
 
   it('a lane/class never attempted returns undefined rather than a zero row', () => {
     // A zero row would read as "measured, and nothing happened". Nothing was measured.
-    expect(getLevelBasisFunnelRow({ lane: 'vts', assetClass: 'crypto_spot' })).toBeUndefined();
+    expect(getLevelBasisFunnelRow({ lane: 'vts', assetClass: 'crypto_spot', rung: 'book' })).toBeUndefined();
   });
 });
 

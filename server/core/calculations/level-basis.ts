@@ -313,14 +313,55 @@ export function priceForLevelRole(basis: LevelBasis, role: LevelRole): number {
  */
 export type LevelBasisLane = 'active' | 'vts';
 
+/**
+ * ⛔⛔ THE RUNG IS A REQUIRED KEY DIMENSION, AND IT IS REQUIRED FOR THE SAME REASON `lane` AND
+ * `assetClass` ARE — Langston's condition 1 on `8c` Step 2, 2026-09-13.
+ *
+ * `8c` makes the level shadow call D3's full ladder (`selectTouchPrice`) instead of assessing the
+ * book alone. That changes what `attempted` COUNTS: before, one attempt was one book assessment;
+ * after, one attempt is one ladder walk that may fall through to the ticker. **Those are two
+ * different populations and a reader comparing them would be comparing two instruments.**
+ *
+ * ⇒ Rather than forbid the pooling in prose, the key makes it IMPOSSIBLE: `book` counts the book
+ * rung's own verdict and `ladder` counts the ladder's overall verdict, in separate cells, so the
+ * book rung's series continues uninterrupted across the change and the new number arrives beside
+ * it instead of on top of it. **A boundary that is a key cannot be forgotten; a boundary that is a
+ * date in a document can.**
+ */
+export type LevelBasisRung = 'book' | 'ladder';
+
 export interface LevelBasisFunnelKey {
   lane: LevelBasisLane;
   assetClass: string;
 }
 
+/**
+ * ⛔ THE RUNG IS A SEPARATE KEY TYPE, NOT A FIELD ON THE SHARED ONE — and tsc caught me trying it
+ * the other way. `LevelBasisFunnelKey` is shared by three recorders: this funnel, the side-age
+ * probe and the feed-agreement probe. The latter two are not rung-scoped and never will be, so a
+ * required `rung` on the shared type would have forced a meaningless value at two call sites that
+ * have no rung to name — which is how a key dimension stops meaning anything.
+ */
+export interface LevelBasisRungKey extends LevelBasisFunnelKey {
+  rung: LevelBasisRung;
+}
+
+/**
+ * ⛔ `book_not_eligible` is a FUNNEL reason and deliberately NOT a `LevelBasisRefusal`: this module
+ * never judges eligibility — the caller does, and `touch-price.ts` owns that policy. Widening
+ * `LevelBasisRefusal` would let a pure basis assessment return a verdict it has no standing to make.
+ */
+export type FunnelRefusal = LevelBasisRefusal | 'book_not_eligible';
+
+/** Structural, so a `LevelBasisResult` satisfies it without the recorder depending on that shape. */
+export interface FunnelOutcome {
+  ok: boolean;
+  reason?: FunnelRefusal;
+}
+
 interface FunnelCell {
   accepted: number;
-  byReason: Record<LevelBasisRefusal, number>;
+  byReason: Record<FunnelRefusal, number>;
 }
 
 function emptyCell(): FunnelCell {
@@ -335,17 +376,18 @@ function emptyCell(): FunnelCell {
       age_unknown: 0,
       stale_book: 0,
       implausible_spread: 0,
+      book_not_eligible: 0,
     },
   };
 }
 
 const _funnel = new Map<string, FunnelCell>();
 
-function keyOf(k: LevelBasisFunnelKey): string {
-  return `${k.lane}:${k.assetClass}`;
+function keyOf(k: LevelBasisRungKey): string {
+  return `${k.lane}:${k.assetClass}:${k.rung}`;
 }
 
-export function recordLevelBasisOutcome(key: LevelBasisFunnelKey, result: LevelBasisResult): void {
+export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOutcome): void {
   const id = keyOf(key);
   let cell = _funnel.get(id);
   if (!cell) {
@@ -383,8 +425,8 @@ export function getLevelBasisFunnel(): LevelBasisFunnelRow[] {
   });
 }
 
-/** One row, or `undefined` when that lane/class has never been attempted. */
-export function getLevelBasisFunnelRow(key: LevelBasisFunnelKey): LevelBasisFunnelRow | undefined {
+/** One row, or `undefined` when that lane/class/rung has never been attempted. */
+export function getLevelBasisFunnelRow(key: LevelBasisRungKey): LevelBasisFunnelRow | undefined {
   return getLevelBasisFunnel().find((r) => r.key === keyOf(key));
 }
 

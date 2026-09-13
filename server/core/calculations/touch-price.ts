@@ -27,7 +27,12 @@
  * PURE: no clock read, no feed import. `nowMs` and the policy are injected, like `buildLevelBasis`.
  * RECORD-ONLY IN COMMIT LAYER 1: no decision reads this yet; OBJ-8 wires it (P-8a exits, P-8c levels).
  */
-import { buildLevelBasis, type LevelBasisRefusal } from './level-basis.js';
+import {
+  buildLevelBasis,
+  recordLevelBasisOutcome,
+  type LevelBasisRefusal,
+  type LevelBasisLane,
+} from './level-basis.js';
 
 /** Which clock an age was measured on. Never pooled. */
 export type ClockBasis = 'venue' | 'receipt';
@@ -128,4 +133,37 @@ export function selectTouchPrice(
     };
   }
   return { ok: false, bookRefusal, tickerRefusal: t.ok ? 'no_book' : t.reason };
+}
+
+/**
+ * B-PRICE-SIDE-BY-JOB row `8c` (P1) — record ONE ladder walk as TWO funnel cells.
+ *
+ * ⛔ WHY IT LIVES HERE AND NOT IN `level-basis.ts`: that module is imported BY this one, so a
+ * recorder there taking a `TouchSelection` would be a cycle. The funnel's primitives are exported;
+ * this composes them.
+ *
+ * ⛔ TWO CELLS FROM ONE WALK, NEVER ONE. The `book` cell keeps counting exactly what the pre-`8c`
+ * funnel counted — the book rung's own verdict — so that series is CONTINUOUS across this change
+ * and the pre-change reading stays comparable. The `ladder` cell counts the walk's overall verdict,
+ * which is a NEW population. Langston's condition 1, made structural rather than documentary.
+ *
+ * ⚠️ THE TWO CELLS ARE NOT INDEPENDENT AND MUST NOT BE SUMMED: every walk increments both exactly
+ * once, so `attempted` is equal across them by construction and their ACCEPTED counts are what
+ * differ. The gap between them IS the measurement — it is how much rung 2 recovers.
+ */
+export function recordTouchSelection(
+  base: { lane: LevelBasisLane; assetClass: string },
+  sel: TouchSelection,
+): void {
+  // The book rung: `bookRefusal === null` means the book itself carried the selection.
+  recordLevelBasisOutcome(
+    { ...base, rung: 'book' },
+    sel.ok && sel.bookRefusal === null ? { ok: true } : { ok: false, reason: sel.bookRefusal ?? 'no_book' },
+  );
+  // The ladder: accepted if ANY rung carried it; the refusal recorded is the LAST rung's, because
+  // that is the one that had the final say. The book's reason is already in its own cell.
+  recordLevelBasisOutcome(
+    { ...base, rung: 'ladder' },
+    sel.ok ? { ok: true } : { ok: false, reason: sel.tickerRefusal },
+  );
 }

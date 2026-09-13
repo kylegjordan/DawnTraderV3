@@ -3,9 +3,12 @@ import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-ada
 // level-setting hand-off (census §9 W-1); wiring only the orchestrator would leave the
 // LEARNING population on the smoothed mid while every active-path check read as fixed.
 import {
-  buildLevelBasis, recordLevelBasisOutcome, recordSideAgeAttempt,
+  recordSideAgeAttempt,
   LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
 } from '../core/calculations/level-basis.js';
+// Row `8c` P1: D3's ladder replaces the direct book-only assessment. `buildLevelBasis` is no
+// longer imported here — `selectTouchPrice` calls it internally, once per rung.
+import { selectTouchPrice, recordTouchSelection, type ClockBasis } from '../core/calculations/touch-price.js';
 /**
  * ══════════════════════════════════════════════════════════════════════════════
  * 🔒 LOCKED MODULE — Directive 11.0E.1 (Upgraded from 8.8.4-M5C)
@@ -1572,21 +1575,50 @@ async function generatePhase10Signal(
     }
 
   if (_assetClass === 'crypto_spot') {
+    // ⛔⛔ ROW `8c` (P1): D3's LADDER, NOT THE BOOK ALONE — the same change as the active lane at
+    // `signal-orchestrator.ts`, for the same measured reason. The VTS reading was even starker:
+    // 272 of 273 refused, ALL `no_book`, live at 2026-09-13T05:40Z. The socket carries a book for
+    // the two symbols we hold; the rest of the universe is REST-priced and DOES carry real,
+    // dated sides. ⛔ STILL A SHADOW — nothing consumes the result.
     const _lbBook = krakenWebSocketAdapter.getBookForFill(symbol);
-    recordLevelBasisOutcome(
-      { lane: 'vts', assetClass: _assetClass },
-      buildLevelBasis(
-        {
-          bid: _lbBook && _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
-          ask: _lbBook && _lbBook.asks.length > 0 ? _lbBook.asks[0].price : null,
-          capturedAtMs: _lbBook ? Date.now() - _lbBook.ageMs : null,
-          producer: 'kraken_ws_book',
-        },
-        Date.now(),
-        LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
-        LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
-      ),
+    const _lbNow = Date.now();
+    // Own read: the probe block above scopes its `_c` to itself, and reaching into another
+    // block's variable would couple two shadows that are deliberately independent.
+    const _lbCache = priceCache.getCachedPrice(symbol);
+    const _lbSel = selectTouchPrice(
+      {
+        book: _lbBook
+          ? {
+              bid: _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
+              ask: _lbBook.asks.length > 0 ? _lbBook.asks[0].price : null,
+              stampMs: _lbNow - _lbBook.ageMs,
+              clockBasis: 'receipt',
+              producer: 'kraken_ws_book',
+            }
+          : null,
+        bookEligible: true,
+        // Sides dated by `sidesCapturedAtMs`, never `lastUpdatedAt` — that dates the MARK and
+        // refreshes every tick, so it would report a fresh age for stale sides (the W-3 defect).
+        ticker: _lbCache
+          ? {
+              bid: _lbCache.bid ?? null,
+              ask: _lbCache.ask ?? null,
+              stampMs: _lbCache.venueObservedAtMs ?? _lbCache.sidesCapturedAtMs ?? null,
+              clockBasis: (_lbCache.venueObservedAtMs ? 'venue' : 'receipt') as ClockBasis,
+              producer: _lbCache.lastSource ?? 'unknown',
+            }
+          : null,
+        tickerBasis: 'ticker_bbo',
+      },
+      _lbNow,
+      {
+        maxAgeMs: LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
+        maxSpreadFraction: LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+      },
     );
+    // One ceiling governs both rungs, at LEVEL_BASIS_OBSERVATION_MAX_AGE_MS — stated with its
+    // name as `touch-price.ts:50` requires of whoever wires this.
+    recordTouchSelection({ lane: 'vts', assetClass: _assetClass }, _lbSel);
   }
 
   const stratDetectIndicators = {
