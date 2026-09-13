@@ -40,7 +40,7 @@
 | **OBJ-B** | read the existing fee findings rather than re-deriving them | ✅ **YES** | Discharged at Step 2 (`..._OBJ1_AUDIT.md`), Kyle's own objection. |
 | **OBJ-C** | name the record defects, fix none here | ✅ **YES** | Three named, members listed, all carried to 2.4g-4. |
 | **OBJ-D** | correct the governed artifacts carrying withdrawn claims | ✅ **YES** | Class greps with positive controls; the surviving hits are inside their own withdrawal banners. |
-| **OBJ-E** | governance | ⚠️ **PARTIAL** | All rows but Langston's memory — see the blocked row above. |
+| **OBJ-E** | governance | ✅ **YES** | Every Tier-1 and Tier-2 row landed. ⚠️ **Read “PARTIAL — all rows but Langston's memory” until 07:17:55Z; that row is now discharged and read back (see the banner). Left stale for one commit after the banner flipped — `stacked-correction`, caught on re-read.** |
 
 ---
 
