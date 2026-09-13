@@ -1,6 +1,6 @@
 # PRICE FEED MAP — WHERE EVERY PRICE IN THE SYSTEM COMES FROM
 
-**Kyle-directed · CC-B · r5.**
+**Kyle-directed · CC-B · r7 — FINAL (Langston approved at `7984c4e4b`).**
 
 > ## ⛔⛔ DERIVED-AT STAMP — **READ THIS BEFORE CITING ANY LINE BELOW**
 > **EVERY `path:line`, COUNT AND VERDICT IN THIS DOCUMENT WAS DERIVED AT:**
@@ -18,6 +18,7 @@
 > ⚠️ **MEASURED: applied to FILES the rule yields 14 and SILENTLY DROPS TWO VERDICT-BEARING MEMBERS** — `depth-source.ts` (§2 lists it, **and `:80-97` carries the *“lagged witness”* construction argument that is §1C's ONLY surviving leg**) and `vts-runner.ts` (§2 lists its LIFECYCLE reads, **and difference #4's zero-`getSmoothedPrice` POSITIVE CONTROL is a different citation of the same file** — §2 says so itself: *“distinct from the `:1553/:1587` birth reads”*).
 > ⭐⭐ **THAT IS `enumerator-blind-spot` AGAIN, ONE LEVEL UP: the RULE was blind to the PARTIALLY-UNMAPPED member class and reported clean — exactly why the hand-named list had to go, reproduced in its replacement.** ⛔ **A future session applying the file-level reading gets 14, drops both, and sees no error.**
 > ✅ **SO, PRECISELY — AND THE EXCLUSION IS THE WHOLE OF THIS STAMP BLOCK, NOT JUST THE TABLE ROWS:**
+> ⛔⛔ **(0) NO SHORTHAND IN CITATIONS — EVER. A CITATION NAMES ITS FILE IN FULL.** ⚠️ **r6 CARRIED TWO CITATIONS OF THE EXECUTION ENGINE UNDER A THREE-LETTER ABBREVIATION, WHICH THE EXTRACTOR CANNOT SEE.** ⛔ **THE OFFENDING FORM IS DELIBERATELY NOT REPRODUCED IN THIS SENTENCE — my first attempt at this very note wrote it out twice in the banned syntax, which re-created the class INSIDE THE RULE THAT BANS IT.** It was harmless ONLY because that file happened to be cited longhand elsewhere — **the count was right BY LUCK, NOT BY CONSTRUCTION, and a future revision citing a file only in shorthand would be dropped with the rule reporting clean** (Langston, fourth level of the same blind spot). ⭐⭐ **BOTH EXPANDED RATHER THAN CATALOGUED: an expansion table would be a second hand-maintained list, which is the defect, not the cure. MAKE THE WRONG FORM ABSENT, NOT DOCUMENTED.**
 > **(1) extract every `*.ts` reference in the document, EXCLUDING everything inside this derived-at stamp block** *(nothing in here is a verdict about pricing — it is all machinery, and a mechanism that cites its own members re-adds them for ever)*; **(2) subtract a file only if EVERY remaining citation of it is §2-unmapped.**
 > ⚠️ **THE NARROWER “exclude the TABLE ROWS” VERSION WAS TRIED AND FAILED ON THE NEXT RUN: the note explaining WHY two files had been removed cited them, so the extractor re-added them. ⭐ THE CIRCULARITY MOVES OUT ONE LEVEL UNLESS THE WHOLE BLOCK IS EXCLUDED.**
 > ⛔⛔ **THE RULE AND THE TABLE MUST AGREE, AND A DISAGREEMENT IS *INVESTIGATED*, NOT RESOLVED BY ASSUMING EITHER ONE WINS.** ⚠️ **r6 FIRST WROTE *“if they disagree the RULE is wrong, not the TABLE”* — AND THAT WAS FALSIFIED BY RUNNING IT, MINUTES LATER.** The corrected rule yielded **14** against a 16-row table, and **the two extra rows were the TABLE's fault, not the rule's**: `kraken-v2-translator.ts` and `price-basis.ts` were **survivors of the r4 HAND-NAMED list, cited NOWHERE ELSE in this document** — so the mechanical extraction found them **in the table itself** and kept them. ⭐⭐ **A TABLE THAT CITES ITS OWN MEMBERS JUSTIFIES THEM CIRCULARLY.** Both removed: **no line of this document rests on either, so a change to them cannot invalidate one.** ✅ **If a future revision cites them, the rule re-adds them automatically — which is the whole point.**
@@ -54,7 +55,7 @@
 | **OHLC cache** | ⚠️ **TWO BRANCHES: 60-minute for crypto, 15-minute for xStock** (`scanner.ts:592-597`) | OHLCV — **history** | **5-min TTL** |
 | **price cache** | a per-symbol mark | one number + **`markKind`** `'mid'`\|`'last'` (`:107`) **+ `lastTradePrice`** (`:102-103`) | WS + REST poller |
 | **order book** | the resting ladder | bid/ask **and sizes** | live stream |
-| **depth snapshot** | book side for marketability | `asks[0].price` | ⚠️ **≤~30 s stale — its own comment calls it a "documented approximation"** (`aee:4030`) |
+| **depth snapshot** | book side for marketability | `asks[0].price` | ⚠️ **≤~30 s stale — its own comment calls it a "documented approximation"** (`active-execution-engine.ts:4030`) |
 
 ⭐ **WE DO RECEIVE A TRADE PRINT, AND THIS REMOVES A COST.** *(Langston correction — my r1 said "no site
 can see the trade tape", which was TOO STRONG.)* The ticker frame carries the venue's own last trade and
@@ -156,7 +157,7 @@ the **BID** arrives. We compare the **MIDPOINT**, which can cross while the bid 
 
 | lane | reads | what it actually is |
 |---|---|---|
-| active | `aee:4038` `_gate.snapshot.asks[0].price` | **depth snapshot, ≤~30 s stale** |
+| active | `active-execution-engine.ts:4038` `_gate.snapshot.asks[0].price` | **depth snapshot, ≤~30 s stale** |
 | VTS / xStock | `eval-cycle.ts:956` `isMarketableAtPlacement('buy', lastPrice, …)` | ⭐ **a 15-MINUTE BAR CLOSE** — the same `latestBar.close` the levels came from |
 
 ⛔ **r1 SAID "ask vs print, biased in opposite directions". THAT IS WITHDRAWN.** It is **a ~30 s book side
