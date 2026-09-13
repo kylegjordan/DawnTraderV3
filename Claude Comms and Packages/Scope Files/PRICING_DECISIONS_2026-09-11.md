@@ -133,7 +133,8 @@ D4 builds the level; D2 supplies the fill evidence. Neither claims the other's j
 
 ## D9. Pairs not quoted in US dollars
 
-- **New admission is refused**, with a specific reason, for any pair not quoted in USD, until a timestamped currency conversion exists (`#966`).
+- **New admission is refused**, with a specific reason, for any pair **whose quote currency is not in the admitted set** — `ADMITTED_QUOTES = ['USD','USDT','USDC']` — until a timestamped currency conversion exists (`#966`).
+  ⚠️ **WORDING CORRECTED 2026-09-13 TO MATCH WHAT SHIPPED AND WAS REVIEWED.** This read *“any pair not quoted in USD”*, and the gate that shipped as row `8f` admits **USDT and USDC as well** — the deploy admitted **9 USDC + 6 USDT** distinct symbols. **A USDT-quoted pair is not quoted in US dollars, so the decision text described a narrower rule than the one we built.** ★ **The CODE is the reviewed artefact and does not move:** the three-quote set is deliberate, documented at its definition site, and carries the explicit rule that **the test is SET MEMBERSHIP, never “is it pegged”** — a peggedness predicate still reads ADMIT on the day `USDC` prints 0.88. The residual monitoring gap that leaves is homed at plan row `3n.g`. ⛔ **Found by the row-id sweep Langston ordered after the `8a`/`8l` mislabel (row `8c` Step 2) — the SECOND instance of the same shape, which is what made it a class rather than a slip: a record describing something other than the thing that shipped.**
 - **Open positions keep their exits.** Their triggers are denominated in the quote currency and need no conversion.
 - **Their USD P&L is marked unavailable, not estimated**, until the conversion exists.
 
