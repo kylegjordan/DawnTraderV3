@@ -72,22 +72,21 @@ gain ⇒ **a constant offset is tracked, never removed.**
 MIDPOINT, structurally.**
 ⛔⛔ **THIS BOOKS SALES WITH NO BUYER.** A resting **sell** fills when a **BUYER** pays our price — when
 the **BID** arrives. We compare the **MIDPOINT**, which can cross while the bid never does.
-✅ **MEASURED (Langston): 14 of 24 checkable booked maker target-exit fills did not cross by half the
-spread** — median 6.0 bps through against a 20.7 bps median spread. **58 %–100 % unsupported; lead with 58 %.**
-⭐ **POPULATION, NAMED 2026-09-13 (CC-B, and it is now load-bearing):** `closed_trades` rows carrying BOTH
-`exit_decision_price` AND `exit_ticker_bid`, **`asset_class='crypto_spot'`, `close_reason='target_hit'` —
-n = 24 EXACTLY.** ✅ **NO xStock row is in it** (xStock `target_hit` with both stamps is a separate 7), so
-Langston's contamination concern does NOT apply — an xStock `exit_ticker_bid` would have been a
-*consistency* record rather than corroboration (`depth-source.ts:89-93`, the fill's own depth-walk reads
-the same table). Read 2026-09-13. Disjoint from F-G-2's stop-outs: crypto `stop_hit` with both stamps is 38.
-⛔⛔ **AND THIS IS NOW THE *ONLY* SUPPORT FOR FIX-THE-SIDE-FIRST.** The clearance probe that was its second
-support is ladder-derived and **UNEVIDENCED** (CC-C's `applyDelta` never evicts out-of-window levels ⇒
-inverted books on 4 of 7 symbols, two above 90 %). **Not refuted — unevidenced.** ⚠️ **Kyle should hear
-“fix-the-side now rests on a single measurement whose population we have just named”, NOT “untouched”.**
-✅ **NOT A PRODUCTION DEFECT:** production maintains its own eviction (`kraken-websocket-adapter.ts:3639-3654
-`truncateBook`), fixed under `#507` (pre-fix: 32.03 % of book states crossed) and instrumented via
-`getBookIntegrityCounters()`. ⚠️ **A zero `crossedDetections` is not unconditionally clean — read
-`mismatches`/`attempts` beside it, or the zero is unreadable.**
+⛔⛔ **THE 14-of-24 READING IS REFUTED BY THE DISCRIMINATING TEST, AND IT WAS MINE TO AMPLIFY. DO NOT CITE IT.**
+Langston's test, run by CC-B 2026-09-13, needing no new instrumentation — split the population by `close_reason` and read `pos_in_spread = (decision − bid)/(ask − bid)`:
+
+| `close_reason` | n | median pos | above ask | below bid |
+|---|---|---|---|---|
+| `target_hit` | 24 | **+1.791** | **20** | 0 |
+| `stop_hit` | 38 | **−1.300** | 1 | **31** |
+
+⭐⭐ **THE SIGN FLIPS WITH THE DIRECTION OF TRAVEL — THAT IS THE LAG SIGNATURE, NOT A SIDE DEFECT.** Rising into a target leaves the older witness LOW (`pos > 1`); falling into a stop leaves it HIGH (`pos < 0`). **A genuine side error would push the SAME way in both** — a midpoint is above the bid whether price rises or falls. ⇒ **we measured the ARCHIVER'S LAG.**
+✅ **AND IT WAS STRUCTURALLY UNDECIDABLE FROM THE ROW ALL ALONG:** `exit_ticker_bid/ask` is written by the ARCHIVER off a **separate socket** — `depth-source.ts:80-97` calls it *“a lagged witness”*, cadence 5.0–9.0 s; F-G-2 measured this arm at p50 **12.33 s** (n=3, a lead not a rate). `capturedAtMs` exists at `active-execution-engine.ts:2338` but the persist payload (`:2974-2977`, `shared/schema.ts:1854-1855`) writes **only the bid/ask pair** — no capture-time column exists anywhere. ⛔ **`B_EXIT_PROVENANCE_COMPLETION_REPORT.md:101` PRE-REGISTERED THE OBLIGATION I MISSED: *“Any analysis using it must read that column.”***
+⛔ **AND A MID SITS AT `pos = 0.5` OF ITS OWN BOOK BY CONSTRUCTION** (`kraken-websocket-adapter.ts:1165-1166`, `:1172-1173`) ⇒ **the side defect's null is 0.5, never 0 and never 1. Any departure is the two CHANNELS disagreeing, not a side.**
+
+✅ **WHAT SURVIVES, AND IT IS NOT NOTHING:** the exit trigger DOES read a book midpoint (census `kraken_ws_book_mid` **61** · ticker **0**, all-time, our own column — independent of any of this), and **a resting SELL is filled by a BUYER, so a midpoint is the wrong KIND of price for a transaction.** That is an argument FROM CONSTRUCTION and it stands.
+⛔⛔ **WHAT FALLS: the claim that we have MEASURED the harm.** “We book sales with no buyer” and “recent paper results are flattered” are **UNEVIDENCED** — withdrawn, not restated. The urgency ordering that rested on them reverts to open.
+➕ **HOME for the missing instrument:** persist `exit_ticker_captured_at_ms` beside the pair — item on `B-PRICE-SIDE-BY-JOB` (row `3n`), owner CC-C.
 
 > ### THE COMPARATOR, PLAINLY
 > `evaluatePendingMaker` asks each tick **"is the price at my limit yet?"** — for a resting buy,
