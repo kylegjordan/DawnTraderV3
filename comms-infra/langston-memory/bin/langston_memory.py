@@ -517,6 +517,13 @@ def query(terms):
     # ⛔ EVERY source named on EVERY output (Langston Step-4 ruling): silence about a source that was looked
     #    at and could not be read is the thing this batch is against.
     print("LEDGER SOURCES (home " + LANGSTON_HOME + "): " + lsources)
+    # ★ PARITY (Langston 2026-09-13, #1057 enumerator-blind-spot): print the census by BULLET alongside the 🔴-marker
+    #   count, so a marker-grep's undercount is visible for free. The count is by column-0 '- ' bullet, NEVER by 🔴 —
+    #   the marker is decorative; backfilling it would make a partial census look complete (Langston's own reasoning).
+    _marked = sum(1 for x in (retr or []) if "🔴" in x.get("text", ""))
+    print(f"LEDGER CENSUS: {len(retr or [])} retraction entries on file — counted as column-0 '- ' bullets in the "
+          f"Retractions block, NOT by the 🔴 marker; {_marked} carry 🔴 (a 🔴-grep undercounts by "
+          f"{len(retr or []) - _marked} — the marker is decorative, the bullet is the count).")
     if entries:
         print(f"★ LEDGER CHECK ({lsrc}, home {LANGSTON_HOME}): {len(entries)} retraction entr{'y' if len(entries)==1 else 'ies'} relevant — READ BEFORE USING ANY HIT:")
         for item in entries:
