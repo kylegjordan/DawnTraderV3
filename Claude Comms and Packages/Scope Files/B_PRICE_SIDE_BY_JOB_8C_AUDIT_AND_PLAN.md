@@ -80,15 +80,21 @@ The known hazard is `price-cache.ts` writing `ask: existing?.ask ?? price, bid: 
 
 ### A7 — THE BOOKED EXIT IS CLAMPED TO THE LEVEL, SO THIS CHANGES P&L, NOT ONLY TIMING
 
-`tec-evaluator.ts:273` returns `exitPrice: input.stopPrice` and `:282` `exitPrice: input.targetPrice` — the **level itself**, not the price that triggered it. ⇒ **re-basing a level re-bases what gets BOOKED on every stop and every target.** Any observation window on this row must read the booked price, not only exit timing.
+`tec-evaluator.ts:275` returns `exitPrice: input.stopPrice` and `:284` `exitPrice: input.targetPrice` — the **level itself** ⚠️ *(corrected from `:273`/`:282`, which are the `shouldExit` lines — Langston, 2026-09-13. Immaterial to the conclusion, wrong as a citation.)*, not the price that triggered it. ⇒ **re-basing a level re-bases what gets BOOKED on every stop and every target.** Any observation window on this row must read the booked price, not only exit timing.
 
 ### A8 — THE TRAILING RATCHET IS OFF, SO THE CONSTRUCTED LEVEL IS THE OPERATIVE ONE
 
 **MEASURED live**, `module_constants` where `module_name = 'trailing_exit'`: `trailing_enabled_active = false` and `trailing_enabled_vts = false` on **all four** asset classes since 2026-07-23; `break_even_enabled = false` on all four.
 
-`trailing-exit-controller.ts:516-517` gates `isMoonbagQualifier` on that flag, and its own comment states a false flag makes the TRAILING_TAKE ladder unreachable.
+⛔⛔ **THE CONCLUSION HOLDS, BUT MY MECHANISM WAS WRONG — AND SO WAS THE ONE OFFERED BACK TO ME. ESTABLISHED AT THE OBJECT, 2026-09-13.**
 
-⇒ **The `Math.max(...)` ratchet arms that would otherwise dominate a re-based stop are not in play. The level `8c` constructs is the level that decides.** **This makes the change MORE consequential, not less** — nothing absorbs it.
+**Langston ruled that with `trailing_enabled_active` false, `useTrailing` is false, so `tec-evaluator.ts:268`'s hard block IS the live exit path. That is not what the code does.** `useTrailing: true` is a **LITERAL** at all five call sites (`active-execution-engine.ts:2209`/`:2277`, `vts-runner.ts:3232`/`:4029`) and is never read from config. The flag gates `isMoonbagQualifier` (`trailing-exit-controller.ts:516-517`) — a different thing. ⇒ with `atr > 0` the `:268` block is **SKIPPED**, and `:294` `if (input.useTrailing && input.atr > 0)` routes every live decision into the trailing controller. **The hard block fires only when ATR is unavailable.**
+
+★ **THE ACTUAL REASON THE CONSTRUCTED LEVEL DECIDES — CENSUS OF EVERY WRITE:** `state.currentStopPrice` has exactly **one** mutation site, `trailing-exit-controller.ts:1292`, writing `newStopPrice`, which is reassigned in only **two** branches — `targetLatched` (`:1261`) and `breakEvenLatched` (`:1277`). **Break-even is off on all four classes, with 0 latches in 705 states.**
+
+⇒ **Before a position latches its target, `newStopPrice` is the constructed stop written back unchanged, and `tecShouldClose` (`:1581`) compares against it.** The target side is equally direct: `isTargetLockTriggered` is `currentPrice >= targetPrice` against the **constructed** target.
+
+⇒ **The level `8c` constructs is the level that decides, for every position before target-latch. This makes the change MORE consequential, not less** — nothing absorbs it. ★ **The ratchet is not absent because a master switch is off; it is absent because nothing has latched yet.**
 
 ### A9 — OBJ-3b IS NOT ASSERTABLE, AND THE REASON HAS CHANGED
 
@@ -100,14 +106,40 @@ The scope's §7.1 says OBJ-3b *"BECOMES ASSERTABLE in OBJ-8c, because the trigge
 
 `SYSTEM_MANUAL.md:699-701`: `executionEntry = baseEntry × (1 + slippage + spread/2)`. ⇒ **moving the entry onto the ask without reconciling that term counts the spread twice.** The scope row names *"spread is counted once"* as a requirement; this is the object it refers to.
 
+### A11 — THE SWEEP LANGSTON ORDERED (condition 2): the row-id mismatch IS a class, and it returned a second instance
+
+He ruled that matching `8a` by table position is `fix-follows-pointer` and told me to re-read every other `3n` row id I had cross-referenced positionally. **Done — by ROW TEXT, not position. What it returned:**
+
+| row | the claim I made | what the row text says | verdict |
+|---|---|---|---|
+| `8a` | the D3 xStock exit refusal shipped here | *exits on the bid* | ⛔ **MISMATCH** — corrected, renumbered `8l` |
+| `8f` | non-USD quote admission gate, deployed | *Non-USD pairs are refused new admission* | ⚠️ **TEXT DRIFT — second instance, below** |
+| `7c` | the basis vocabulary | *records its basis: `book_top` / `ticker_bbo` / `ticker_default` / `venue_close`* | ✅ matches |
+| `7d` | D3's three-rung ladder | *a valid, fresh book top; otherwise a valid ticker within D6's age; otherwise refuse* | ✅ matches — **but see A12** |
+| `7b` | the xStock book plus the unsubscribe precondition | same | ✅ matches |
+
+⚠️ **THE SECOND INSTANCE, `8f`: D9 AND THE SHIPPED GATE DISAGREE — AND THE SHIPPED ONE IS THE REVIEWED ONE.** D9 reads *"new admission is refused … for any pair **not quoted in USD**"*. The gate admits `ADMITTED_QUOTES = ['USD','USDT','USDC']`, and the deploy admitted **9 USDC + 6 USDT** distinct symbols. **A USDT-quoted pair is not quoted in US dollars.**
+
+★ **This is NOT a defect and I am not re-litigating it.** The three-quote set was deliberate, documented at its definition site, reviewed across six rounds, and its monitoring gap is already homed at row `3n.g` — *"the test is SET MEMBERSHIP, never is-it-pegged."* **What is wrong is the DECISION TEXT, which still describes a narrower rule than the one we shipped.** ⇒ **D9's wording is corrected to name the admitted set, at Step 10. The code does not move.**
+
+★ **THE SWEEP EARNED ITS KEEP: one instance is a slip, two is the class Langston named.** Both are the same shape — **a record describing something narrower than, or other than, the thing that shipped.**
+
+### A12 — D3's LADDER IS ALREADY BUILT, AND IT TOO IS UNWIRED — SO P1 IS A CALL, NOT A BUILD
+
+`server/core/calculations/touch-price.ts` exports **`selectTouchPrice`** (`:91`), whose own docstring reads *"Choose the touch price by D3's order: a valid fresh book top, then valid ticker sides within the age, else refuse"*, returning `TouchBasis = 'book_top' | 'ticker_bbo' | 'ticker_default'` — **row `7c`'s vocabulary exactly.**
+
+★ **CENSUS: `selectTouchPrice` has ZERO production callers** — one unit test, and one comment mention in `price-basis.ts`. **The same shadow state as `level-basis.ts`.**
+
+⇒ **P1 collapses from "implement the ladder" to "call the ladder that already exists".** The level-construction shadow calls `buildLevelBasis` with `producer: 'kraken_ws_book'` — rung 1 only; it should call `selectTouchPrice` with both legs. ⚠️ **The xStock exit refusal (`8l`) implements D3's rule INLINE in the engine rather than through this module — which is why the rule is live in one place while the shared module has no callers at all.**
+
 ---
 
 ## 2. THE PLAN — every item back-references its finding
 
 | # | item | from |
 |---|---|---|
-| **P1** | **Feed `buildLevelBasis` from D3's full ladder, not the book alone** — book top → ticker sides inside D6's age → refuse. The rung actually taken is recorded in row `7c`'s vocabulary (`book_top` / `ticker_bbo` / `ticker_default`). **STILL SHADOW.** | A3, A4, A5 |
-| **P2** | **Re-measure the funnel on the ladder before anything switches on, with the acceptance floor PRE-REGISTERED** — and a **positive control**: the refusal arm must be shown firing on a constructed absent-sides fixture, or a low `no_book` count is unreadable. | A2 |
+| **P1** | **Call `selectTouchPrice` from the level-construction shadow instead of `buildLevelBasis` directly**, so rung 2 of the ladder becomes reachable. The rung taken is recorded in row `7c`'s vocabulary. **STILL SHADOW — nothing consumes the result.** | A3, A4, A5, **A12** |
+| **P2** | **Re-measure the funnel on the ladder before anything switches on, with the acceptance floor PRE-REGISTERED** — and a **positive control**: the refusal arm must be shown firing on a constructed absent-sides fixture, or a low `no_book` count is unreadable. ⛔ **LANGSTON CONDITION 1: shadow rows collected BEFORE the ladder re-base are a DIFFERENT POPULATION. Label the boundary at the re-base commit and never pool across it.** | A2 |
 | **P3** | **Wire `priceForLevelRole` into the crypto quant lane**, per leg, with a fixture per role and a mutation that reverts one leg to the mid. | A1, A6 |
 | **P4** | **Reconcile the `spread/2` entry term** so the spread is counted exactly once across level construction and the cost model, with the arithmetic written down. | A10 |
 | **P5** | **OBJ-3b does NOT ship with this row**, and the recorded reason is replaced: not *"F-G-2 has no disposition"* but *"row `8a` is unbuilt and the trigger still reads the mid."* | A9 |
@@ -126,6 +158,15 @@ My reading is **NO — they should land together**, because A6 + A7 + A8 compose
 **The alternative reading is that P1+P2 — the ladder plus its measurement, still shadow — are worth landing alone**, which is cheap, reversible, and tells us the acceptance rate we need before committing to either order.
 
 ⇒ **I recommend exactly that: land the shadow half now, hold the switch-on until `8a` is built.**
+
+### ✅ RULED 2026-09-13 — **HOLD THE SWITCH-ON. SHADOW HALF APPROVED.** (Langston, re-derived at `b0c8e2dbc`, not reported fact)
+
+⭐ **AND HE RE-ORDERED MY REASONS, CORRECTLY: THE ONE I LED WITH IS NOT THE ONE THAT BLOCKS IT.**
+
+1. ⛔ **THE BLOCKING REASON, which I had buried in my closing paragraph: 530 of 546 refused.** At switch-on the basis is uncomputable for **97%** of level builds ⇒ we ship a **MIXED POPULATION** — bid-anchored for a handful of symbols, mid-anchored for the rest — and **every resulting exit is unattributable in analysis. That blocks `8c` on its own, independently of `8a`.**
+2. ⛔ **THE FIDELITY CASE FOR SWITCHING EARLY IS EMPTY, and this is the objection to pre-empt in the scope.** Fire on `mid >= bidTarget` ⇒ the real bid is still half a spread *below* the level booked at `:284`. Fire on `mid <= bidStop` ⇒ the real bid is *below* the level booked at `:275`. **Both remain optimistic, with the SAME SIGN as today** ⇒ **the switch-on buys zero honesty in what gets recorded, and pays for it in the timing skew.** ★ *"It is the transactable side, so it must be more honest"* is the objection this answers.
+3. ⛔ **A FOURTH REASON I MISSED ENTIRELY: `F-G-2`'s crypto observation window is OPEN**, and its pre-registered A4 splits the window on anything changing the crypto exit mark. **A level-basis change is larger than a cadence change ⇒ switching on mid-window costs that window outright.**
+4. ✅ **The timing asymmetry (A6) stands, but as a supporting reason rather than the lead.**
 
 ---
 
