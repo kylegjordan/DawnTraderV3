@@ -193,4 +193,26 @@ Fixing the enum **ADMITS A CLASS OF OPENS THAT CANNOT OPEN TODAY** — the patte
 | **4** | **Make `admitted` mean RTB-pool entry** — Kyle's definitional ruling, *“that should be the definitive definition.”* | **Not implemented. Not scoped.** Today it is stamped at `signal-orchestrator.ts:1858`, **BEFORE** the target gate at `:1905` that can still return `null`. |
 | **5** | **Delete `target_floor_pct = 0.040`** — dead code found in passing. | Nothing. Rule 18 says fix at the find; it has not been done. |
 
+## 12.1 ⭐⭐ **RESUMPTION ANSWER — CAN CHANGE 1 MOVE? NO, AND I HAD THE BLOCKER WRONG.**
+
+⚠️ **I TOLD KYLE CHANGE 1 WAITS BEHIND THE FILL-SIDE FIX (change 2). THAT IS NOT THE BINDING CONSTRAINT.** Worked at the ref 2026-09-14.
+
+**THE BINDING RULE, VERBATIM** — `ADJUSTMENT_FRAMEWORK.md:18`:
+> *“no per-strategy row may be LOOSER than its class default without realised-excursion evidence. **Tightening on a mis-derived number costs opportunity; loosening on one costs money.**”*
+
+✅ **AND “LOOSER” IS UNAMBIGUOUS FOR THIS CONSTANT, IN THE CODE'S OWN WORDS:** `expectancy.ts:236` — *“`reach_atr_max` is a MAXIMUM so its strict value is the class MIN”* ⇒ **a per-strategy ceiling ABOVE the class default 4.0 is LOOSER.** It IS per-(strategy × class), most-specific-wins (`:204`, `:257`), so the row is technically available — **the rule, not the plumbing, is what stops it.**
+
+### THE WINDOW OPENS THREE WAYS AND TWO OF THEM ARE BLOCKED
+`strong_bull_trend`: floor demands `≥ 1.95 × 3 = 5.85 ATR`, ceiling refuses `> 4.0 ATR`.
+| # | lever | direction | verdict |
+|---|---|---|---|
+| **a** | RAISE `reach_atr_max` above 5.85 for this strategy | **LOOSER** | ⛔ **BLOCKED** — needs realised-excursion evidence |
+| **b** | LOWER `min_rr` below the level that demands 5.85 | **LOOSER** | ⛔ **BLOCKED** — same rule |
+| **c** | NARROW THE STOP so `risk/ATR ≤ reachAtrMax/minRR` holds with BOTH constants unchanged | **TIGHTER** | ✅ **NOT blocked by this rule** — ⛔ **but it is a RISK-ENVELOPE change, and Kyle owns that** |
+
+⛔⛔ **AND THE EVIDENCE I HAVE POINTS AT (a) — THE BLOCKED ONE.** The 6R maker result argues for a **LARGER** target, i.e. a **HIGHER** ceiling. ⭐ **So the profitable configuration requires exactly the change the standing rule forbids without evidence we do not have.**
+
+✅ **THEREFORE THE REAL DEPENDENCY, CORRECTED: CHANGE 1 WAITS ON `B-EXCURSION-RECORD` (`2.4g-3`), NOT ON THE FILL-SIDE FIX.** ⚠️ **Change 2 still matters — it governs whether the 6R number is TRUSTWORTHY — but it is not what BLOCKS change 1.** ⇒ **two different constraints, and I had collapsed them into one.**
+⭐ **THE ONE UNBLOCKED LEVER IS (c), AND IT IS A DECISION RATHER THAN A CALIBRATION: narrowing the stop opens the window with no constant moved — but it changes risk per trade, which is Kyle's call, not a number to derive.**
+
 ⭐⭐ **THE ONE-LINE STATE: THE ARITHMETIC IS SETTLED AND THE EVIDENCE IS NOT.** We know *why* the two strategies are refused (§6) and we have a *direction* for the fix (§7). **What we do not have is a fill model we trust enough to set the numbers against** — and that is change 2, which is not mine.
