@@ -1,7 +1,7 @@
 # B-GEOMETRY-REACH-BASELINE — STEP 2: PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **Batch:** `B-GEOMETRY-REACH-BASELINE` · **Issue:** `#1052` · **Plan row:** `PHASE_19_PLAN` 2.4g-2 · **Owner:** CC-B
-**change-class: architecture** · **r9, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
+**change-class: architecture** · **r10, 2026-09-13** · **Step 1 APPROVED at `d174ed7a9`**
 
 > ⛔ **THE AUDIT COMES FIRST AND THE PLAN FALLS OUT OF IT.** Every plan item back-references the finding it derives from; anything with no audit treatment is flagged `UNAUDITED`.
 
@@ -380,12 +380,24 @@ r-earlier reported *"zero hits for `TARGET_GATE` etc., control: `EQUITY_MARK` 80
 `gateConstantsVersionFor` (`decision-provenance.ts:111`) is **one of the four DYNAMIC call sites**, the class where a drifted token can actually enter, and its hash is computed from the **RESOLVED VALUES**. So an unchanged hash across the boundary is the expected signature of this batch: **the resolution PATH changed and no resolved VALUE did.**
 ✅ **Pairwise, not merely as a set** (so the set-collision mode is not in play): `morning_star` `3cb8074d` both sides, `pivot_shift` `826db698` both sides, `support_bounce` `a901b411` both sides; **each of the nine hash-bearing strategies carries exactly ONE distinct hash.**
 
-⛔⛔ **BUT IT DOES NOT DISCHARGE THE CEILING CLAIM, AND THE REASON IS SHARPER THAN A COVERAGE GAP (Langston Step-8, and it runs against me).**
-- **REACH: 94 of 34,498 post-restart rows carry the hash — 0.27 %.** ⛔ **An instrument reaching under a third of a percent of its population cannot discharge a ceiling claim at ANY intersection** (`#661` leg 2).
-- **INTERSECTION with the four would-be ceiling strategies: 2 of 4.** `morning_star` and `pivot_shift` observed; `inside_bar_reversal` and `sma_trend_ride` **UNOBSERVED post-restart**.
-- ⛔⛔ **AND IT IS NOT "HALF TESTABLE, HALF NOT" — THE WHOLE INFORMATIVE HALF IS THE MISSING ONE.** Both unobserved strategies hold **`826db698`, the shared default across FIVE strategies** (`pivot_shift`, `inside_bar_reversal`, `vwap_bounce`, `sma_trend_ride`, `defensive_hedge`). **Even had they been observed, a match would be a match on a value five strategies independently compute to — weak evidence, not a discharge.** ⭐ **The DISCRIMINATING observations are the two non-default hashes, `mean_reversion` `4fc83291` and `reverse_impulse` `99a40535` — and those have ZERO post-restart coverage.** ⇒ **the 2-of-4 sits over the cluster least able to distinguish anything.**
-✅ **WHAT WOULD DISCHARGE IT, stated so a later session does not re-litigate it:** a post-restart observation of **either non-default-hash strategy**, or a ceiling ship that moves a strategy's resolved value **off `826db698`**.
-⛔ **LABEL: PARTIAL. Nobody may read the 2-of-4 as half a discharge.**
+⛔⛔ **IT DOES NOT DISCHARGE THE CEILING CLAIM — AND r9'S REASON FOR THAT WAS WRONG IN THREE PLACES, ALL RE-DERIVED BY ME AT THE DATA (Langston Step-8; every correction runs against what I published).**
+
+⛔ **STRUCK: r9 said *"the whole informative half is the missing one."* THAT IS FALSE FOR THIS SET.** Hash → holders, enumerated over the partition: **`826db698` is held by FIVE** (`defensive_hedge`, `inside_bar_reversal`, `pivot_shift`, `sma_trend_ride`, `vwap_bounce`), `a901b411` by two (`support_bounce`, `volatility_edge`), **`3cb8074d` by `morning_star` ALONE**, `99a40535` by `reverse_impulse` alone.
+⇒ ✅ **`morning_star` IS DISCRIMINATING *AND* IS OBSERVED post-restart (51 rows).** Within the four-strategy ceiling set, **exactly one member is discriminating and it is the observed one**; the two unobserved members (`inside_bar_reversal`, `sma_trend_ride`) are both default-valued, **so their absence costs nothing.** ⭐ **That makes the 2-of-4 worth MORE than r9 credited, not less — I over-corrected against myself and the record has to say so.**
+
+⛔⛔ **STRUCK AND REMOVED: r9 cited `mean_reversion 4fc83291` as a discriminating absentee. THAT HASH DOES NOT EXIST IN THIS POPULATION — 0 rows at any asset class, against a control where the identical probe returns 368 for `3cb8074d`.** `mean_reversion` has **190 rows in the partition and ZERO hash-bearing**, so it is not an absentee of that kind at all.
+⭐ **HOW IT GOT IN, because the mechanism matters more than the fact: I took the hash from a review message and published it in a governed artifact WITHOUT DERIVING IT — and my own query, which had returned nine hash-bearing strategies with `mean_reversion` absent, HAD ALREADY CONTRADICTED IT.** ⛔ **That is the rule agreed one message earlier, firing on the sentence that introduced it: name the filter and the read time, and derive what you publish.**
+
+✅ **WHAT ACTUALLY REMAINS TRUE, and it is the reach argument — which got STRONGER, not weaker:**
+- **Coverage 114 of 45,879 = 0.248 % at 06:07Z**, against **94 of 34,498 = 0.272 % at ~05:58Z**. Denominator +33 %, numerator +21 %. ⛔⛔ **REACH IS FALLING WITH TIME, NOT CONVERGING.** ⭐ **So "the window is still accumulating" must NOT be read as though patience fixes this — waiting makes the coverage worse. Only a ceiling ship or a targeted observation discharges it.**
+- **The one genuinely discriminating absentee is `reverse_impulse`** (`99a40535`, unique to it, **165 pre / 0 post**).
+
+⛔⛔ **AND r9'S DISCHARGE CRITERION WAS ALREADY SATISFIED WHEN I WROTE IT, WHICH MEANS IT MEASURED NOTHING.** It read *"a post-restart observation of either non-default-hash strategy"* — and `morning_star` had 51 such rows at that moment. **A pre-registered criterion that is true at pre-registration is not a criterion.**
+✅ **REWRITTEN SO IT CAN FAIL — either leg discharges, both are false today:**
+1. **A post-restart observation of `reverse_impulse` carrying `gateConstantsVersion`** (0 today), with its hash compared across the boundary; **or**
+2. **A ceiling ship that moves some strategy's resolved value OFF `826db698`**, demonstrating the hash responds to a seeded per-strategy row rather than only to a class default.
+
+⛔ **LABEL: PARTIAL — and the reason is now the REACH (0.248 % and falling), not a missing informative half.** Nobody may read the 2-of-4 as half a discharge, and nobody may cite r9's version of why.
 
 ### ✅ AND THE POPULATION RULE THAT CAME OUT OF IT, narrower than the flag that produced it
 A two-populations defect was flagged (82 hash rows vs 56 geometry rows) and **WITHDRAWN**: measured in ONE query at ONE moment over ONE population, post-restart rows carrying the hash = **94**, carrying the geometry = **94**, carrying the hash but NOT the geometry = **0** ⇒ the sets coincide. The 82-vs-56 was **one population read twice**, minutes apart off an accumulating window, with different `reject_stage` scoping.
