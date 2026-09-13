@@ -181,3 +181,20 @@ change-class: non_architecture
 ## 5. WHAT THIS SCOPE DOES NOT CLAIM
 
 **Nothing here is verified.** Four files were edited and pushed; twelve skills parse and the conduct file chunks correctly. **That is the extent of it.** No session has been observed behaving differently, and **the only rule of this family we have tried to measure — the self-review rule — shows no behavioural change yet.**
+
+---
+
+## 6. ADDED 2026-09-13 (Kyle, directly) — ⛔ EDIT 11 IS UNENFORCED, AND NO SESSION IS POSTING THE LEDGER
+
+**Kyle, 2026-09-13:** *"even you are not displaying the full governance tier ledger in the session… none of the other sessions are doing it either. When they get to the governance batch, I'm not seeing the tiered ledger table, and that needs to happen."*
+
+**The rule exists and is unambiguous** — `workflow-10-governance`: *"POST IT WHOLE. EVERY ROW, EVERY BATCH — including the `N/A`s"*, and *"IT GOES IN THE REPORT KYLE RECEIVES."* It is EDIT 11 of this batch. **What does not exist is anything that checks it.**
+
+⛔ **NAMED INSTANCE, MINE: `B-TASK-LIST-SLOT` Step 10 (2026-09-11).** I wrote the full ledger into the commit message and into the progress report §5 — both durable homes the skill requires — **and posted Kyle a COUNT (*"14 ✅ and 15 N/A"*) instead of the table.** Every durable obligation was met and the one Kyle actually reads was not.
+
+★ **THE SHAPE, and it is this batch's own subject one level up: the enforcement sits where the AUTHOR looks (the diff, the report) and the requirement is about where the READER looks (the message).** `B-TASK-LIST-SLOT`'s checker grades the ledger row INSIDE a completion report at the ref; **it is structurally blind to what was typed into a chat window.** So a session can be fully green on every automated check and still never put the table in front of Kyle.
+
+**WHAT THIS ITEM MUST ANSWER (not decided here — this is a scope item, and the fourth-rule warning of `#998` applies):**
+1. **Is anything checkable at all?** The chat message is not in the repo. Candidates: a `PostToolUse`-style session-side hook; the completion report carrying the table VERBATIM as posted (checkable) plus Langston ruling at Step 11 that it WAS posted; or accepting that this one is unenforceable and saying so plainly rather than leaving a rule that reads as covered.
+2. **Whatever lands must NOT be another instruction** — `#995` measured three instruction-shaped fixes and all three failed.
+3. **Population:** how many Step-10 reports since 2026-08-28 posted the table? **Not measured yet, and the measurement is part of the item** — Kyle's report is a symptom, not a count.

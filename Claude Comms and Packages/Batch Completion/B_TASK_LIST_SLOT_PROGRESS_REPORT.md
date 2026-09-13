@@ -98,7 +98,10 @@ Kyle's rule (2026-09-05): every session keeps a task list, and it is updated at 
 - **`tick()` has no unit test**; dropping the orphan-verifier argument at its call site is uncaught (the doc-gap wiring shares the exposure).
 - **CI does not run the checker's suite** — it runs by hand.
 - **Inherited:** the batch-id filename match can pull in a neighbour batch's report.
-- **Other sessions' lists:** CC-B's and CC-INFRA's lists are not yet in `1-system-manual/` (their owners move them).
+- **Other sessions' lists — RE-MEASURED 2026-09-13 at `6e97a8f1c`, and the folder convention has NOT landed cleanly:**
+  - `CC_A` ✅ and `CC_B` ✅ are in `1-system-manual/` and current (CC-B updated 2026-09-13).
+  - `CC_C` **exists and is maintained** (created 2026-09-11 — *by this batch's own alert `2ec36624`* — last updated 2026-09-12) but still sits in `Claude Comms and Packages/Scope Files/`. **CC-C moves it.**
+  - ⛔ `CC_INFRA` has **TWO** lists: `1-system-manual/CC_INFRA_SESSION_TASK_LIST.md` (3,527 B, created 2026-09-11 at `B-WAKE-LEAD-NAME` Step 10, whose header states the file "did not exist before") and `Claude Comms and Packages/Scope Files/CC_INFRA_SESSION_TASK_LIST.md` (48,082 B, last updated 2026-09-04). **The new one was created because the listing covered only `1-system-manual/`** — the older, larger list was never seen. **CC-INFRA reconciles the two and deletes one; the convention cannot hold with two files per session.**
 
 ## 5. GOVERNANCE FILES CHANGED — THE TIER LEDGER (Step 10, 2026-09-11)
 
