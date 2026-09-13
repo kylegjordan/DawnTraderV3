@@ -9143,6 +9143,42 @@ Out-of-band, own socket, **23 of 24 top-40 symbols seeded, 5.0 min, $150 order**
 
 **DISPOSITION (§9.4 — 2, added to an existing batch): the discriminator and the costs go to the three-way maker-fill debate Kyle commissioned; the MECHANISM and the BUILD are CC-B's — he identified the queue-position point that corrected me. My lane here is costing and discriminators, and it ends at handing them over.**
 
+
+---
+
+#### ⛔⛔ AMENDMENT 7 — **EVERY LADDER-DERIVED NUMBER IN AMENDMENTS 1, 5 AND 6 IS WITHDRAWN. `#507` REINTRODUCED IN MY OWN PROBES** (CC-C, 2026-09-13)
+
+**THE DEFECT.** All four of my probes maintained a book with `if (side.length > 50) side.length = 50` while subscribing `depth: 10`. Kraken's contract, quoted in production at `kraken-websocket-adapter.ts:1055-1058`: *"After each update, truncate your book to the subscribed depth — you will not receive `qty: 0` for levels that fall out of scope."* ⇒ **up to 40 orphan levels per side, by construction, from the first delta.**
+⚠️ **Langston's correction, taken: "never evicts" was one word off — it DID evict, at 5× the subscribed depth. Name it right or the fix lands at 50 again.**
+
+★ **THIS IS `#507`, THE DEFECT PRODUCTION DIAGNOSED AND FIXED ON 2026-08-22** (`truncateBook`, `:3641`; its docblock records ONDO/USD at bid 0.40349 against ask 0.36411). **I read that docblock, copied the maintain-don't-read-the-frame shape from it, and left out the one line it exists to add.**
+
+**MEASURED IN MY OWN CAPTURE — bid ABOVE ask, an impossible state:** TAO/USD 81,694 of 82,937 rows (98.5%) · VVV 41,415/43,993 (94%) · CRV 18,152/21,883 (83%) · UAI 4,840/20,160 (24%) · USDT, SUI, HYPE zero.
+
+⛔⛔ **AND THE ZERO IS NOT A CLEAN BILL (Langston, and this is the part that widens the withdrawal): an orphan bid parked BETWEEN the true best bid and the live ask sits at `side[0]`, reports as the best bid, and NEVER CROSSES.** `bid > ask` is a detector of limited reach. ⇒ **"zero inversions" means "no DETECTED inversion".**
+⇒ ⛔ **SO THE WITHDRAWAL IS BY STATISTIC, NOT BY SYMBOL — no symbol survives:**
+
+| withdrawn | where it was published | why |
+|---|---|---|
+| top-of-book divergence **2.02 bps @ age 0 · 5.69 @ 30 s+**, n=225,104 | amendment 1's companion / the debate | ★ **the age curve IS the orphan-accumulation curve, not a property of the book** |
+| depth: walk cost **0.00/1.09/5.52 bps**, `topNotional` p50 $203, "fits level 1 52.5%" | amendment 5, and quoted to Kyle | the walk reads levels 2..N — exactly where the orphans live |
+| **CLEARANCE p10 0.19 / p50 3.91 / p90 19.12**, and the **7-of-23 (30%)** (a)-vs-(b) disagreement | amendment 6, ruled on by Langston | resting size is ladder-derived |
+| Kalman r1 **87.3%** and r2's freshness arms | the withdrawn record + `PRICE_FEED_MAP` §A | already withdrawn on other grounds; this is a second, independent reason |
+
+⛔⛔ **AND THE CONSTANT-OFFSET ARM IS A POSITIVE CONTROL, NOT A RESULT (Langston, and he is right — I had it filed as the one surviving finding).** **A criterion ENTAILED BY CONSTRUCTION cannot be evidence for the thing it is entailed by.** `x ← x + K(z−x)` has a fixed point at `x = z` for ANY gain, so the arm could only ever return ≈1.0 — it tests that the harness is wired correctly, and it passed. ⇒ **it belongs in the METHOD, not in the findings.**
+
+✅ **SO WHAT SURVIVES THE RUN IS ONE THING AND IT IS NOT A NUMBER: the REFUSAL WAS THE MEASUREMENT.** The `FIXED_OFFSET > 0` guard dropped TAO and VVV rather than computing on an inverted book, and that drop is what exposed `#507` in my own probes. *(The control's reading, for the record and not as a finding: p50 0.990, IQR 0.978-0.995 — insensitive to the ladder defect because the same corrupted book feeds both arms.)* A frozen scalar is added to **both** arms, so the *same* corrupted ladder feeds both filters and the offset is the only difference between them — **insensitive to the defect by construction.** ★ And it agrees with Langston's analytic argument (`x ← x + K(z−x)` has a fixed point at `x = z`, unity DC gain), **which never needed an experiment.**
+
+⛔ **`PRICE_FEED_MAP` §A: mark UNSAFE-TO-CITE with the reason IN PLACE — never delete.** A deletion loses the record that the figure existed and was relied on.
+⚠️ **AND A FALSE ALARM OF MINE, CORRECTED: I told CC-B the divergence figures were "cited in `PRICE_FEED_MAP` §A". They were not** — I read the map at `71336a584` and raised the alarm against a document already revised to r2, which had marked my three withdrawn numbers as withdrawn. **Grep at the CURRENT ref before raising an alarm about a document.**
+
+**THE FIX, LANDED IN ALL THREE SURVIVING PROBES:** `DEPTH_CAP = 10`, truncate to the subscribed depth, with the contract quoted at the line.
+⛔ **THE RE-RUN IS A NEW MEASUREMENT, NOT A VALIDATION** — pre-registered, with **a live REST `Depth` cross-check on top-of-book as the positive control** (the same instrument that caught the $7-median error) and **a crossed-count of 0 as a necessary-but-not-sufficient gate.**
+
+**DISPOSITION (§9.4 — 2, added to an existing batch): `B-PRICE-SIDE-BY-JOB` P4, owner CC-C, before any of these figures is restated.** Cross-references `#507`.
+
+`MISTAKE: symptom-read-as-statistic [B-PRICE-SIDE-BY-JOB] — a 64.3% crossed-book rate was the instrument announcing its own defect; I filed it as a number too odd to publish rather than a defect to chase. The second chance arrived as a silent zero-eval on two symbols and I nearly misread that too — the guard that dropped them WAS the finding.`
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**

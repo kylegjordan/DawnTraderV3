@@ -104,6 +104,7 @@ console.log('order_notional_usd=' + ORDER_USD + '  depth=' + DEPTH + '  window_s
  *   produced a plausible-looking distribution. **The number was never about the thing claimed.**
  * ⇒ SO: apply snapshot + deltas into a real ladder and read the true top from it.
  */
+const DEPTH_CAP = 10;   // MUST equal the subscribed `depth:` below.
 function applyDelta(side, levels, isBid) {
   for (const l of levels ?? []) {
     const i = side.findIndex(x => x.price === l.price);
@@ -111,7 +112,21 @@ function applyDelta(side, levels, isBid) {
     if (i >= 0) side[i].qty = l.qty; else side.push({ price: l.price, qty: l.qty });
   }
   side.sort((a, b) => isBid ? b.price - a.price : a.price - b.price);
-  if (side.length > 50) side.length = 50;
+  // ⛔⛔ TRUNCATE TO THE **SUBSCRIBED** DEPTH. This line read `> 50` and that was `#507` REINTRODUCED.
+  // Kraken's contract (quoted in `kraken-websocket-adapter.ts:1055-1058`): *"After each update,
+  // truncate your book to the subscribed depth — you will not receive `qty: 0` for levels that fall
+  // out of scope."* At depth 10 a cap of 50 leaves **up to 40 orphan levels per side, by
+  // construction, from the first delta** — dead levels that drift ever further from the live book.
+  // ⚠️ MEASURED IN MY OWN CAPTURE: bid ABOVE ask on 98.5% of TAO/USD rows, 94% VVV, 83% CRV.
+  // ⛔ AND THE INVERSION COUNT IS A DETECTOR OF LIMITED REACH (Langston): an orphan bid parked
+  //    BETWEEN the true best bid and the live ask sits at `side[0]`, reports as the best bid, and
+  //    NEVER CROSSES. So "zero inversions" is "no DETECTED inversion", not a clean ladder — which is
+  //    why every ladder-derived figure from the pre-fix probes is WITHDRAWN on every symbol, not
+  //    merely on the ones that visibly crossed.
+  // ★ Production diagnosed and fixed this on 2026-08-22 (`truncateBook`, `:3641`); its docblock
+  //   records ONDO/USD at bid 0.40349 vs ask 0.36411. I read that docblock, copied the shape, and
+  //   left out the one line it exists to add.
+  if (side.length > DEPTH_CAP) side.length = DEPTH_CAP;
 }
 
 const st = {};
