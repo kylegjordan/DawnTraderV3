@@ -8974,6 +8974,49 @@ and `i8cSubscribeNewTrade` is `kraken-websocket-adapter.ts:3717` → `this.subsc
 `MISTAKE: wrong-object [B-BOOK-SUBSCRIPTION-REACH] — I enumerated book subscribers by the CALLEE's name, so a caller reaching it through a differently-named wrapper read as "internal machinery". The entry's central "nothing asks for a book" claim was false, and the ledger (#506) already carried the correction.`
 
 
+
+---
+
+#### ⭐⭐ AMENDMENT 3 — **KYLE'S DECISION TEST, ANSWERED: THE BOOK IS *NOT* WORKING WHERE IT IS SUPPOSED TO** (CC-C, 2026-09-13)
+
+⛔ **KYLE SET THE TEST HIMSELF, AND IT IS A COVERAGE TEST ON THE RIGHT POPULATION — not the 0.15% figure, whose denominator is every scanned symbol:**
+> *"When we do start capturing the order book for those that reach the RTB pool and subscribe, are we getting a CONSISTENT order book data feed for those signals? And the same question goes for the trades that are opened. … If the order book is working where it is supposed to, then we just leave it as is. [If not] then I say we use the ticker price for everything."*
+
+**MEASURED, 2026-09-13, window = the `0ea7ead5b` process lifetime (restart 15:18:25Z), read at ~15:55Z:**
+
+| the population that is SUPPOSED to carry a book | reading |
+|---|---|
+| symbols subscribed on the TRADING websocket | **1** |
+| — **independent second instrument**, the adapter's own health line | `- Subscribed Symbols: 1` |
+| book frames received, and from how many distinct symbols | **18,895 frames · `distinctSymbols` = 1** |
+| ticker frames on that socket, distinct symbols | 6,544 · **`distinctSymbols` = 1** |
+| `rtb_signals` rows (the live ready-to-buy queue) | **0** |
+| active crypto level builds in the window | **1,900 attempted · 0 accepted from the book · 1,900 `no_book`** |
+| crypto opens today | **0** |
+| open positions | **3 — all xStock**, which never read the Kraken book at all (`depth-source.ts:48-60` reads `xstock_spot_ticker_snap`) |
+| the one crypto symbol that reached the final open gate today | **UAI/USD, blocked 9 of 9, all `stale_book`, 5,029-11,039 ms against a 5,000 ms limit** |
+
+✅ **`distinctSymbols` IS THE F5 FIELD SHIPPED THIS MORNING (`0285c4fb6`).** Before it, this question could only be answered by a whole-day log grep. **It paid for itself inside an hour, on the decision it was built too late to have informed.**
+
+⇒ ⛔⛔ **THE ANSWER TO KYLE'S TEST IS NO.** Coverage of the book over the population that is supposed to have one is **1 symbol**, the queue that drives the subscription is **empty**, the only open positions are a class that does not use the book, and on the single occasion today that a crypto book was actually consulted at an open it was **rejected every time for staleness.**
+⇒ ✅ **HIS RULE THEREFORE SELECTS: USE THE TICKER FOR EVERYTHING.**
+
+⚠️ **AND THE FAIR STATEMENT OF *WHY*, BECAUSE "THE BOOK IS BROKEN" WOULD BE THE WRONG LESSON.** The subscribe-on-queue mechanism (amendment 2) is built and reads correct at the object. **It is not delivering coverage because there is nothing in the queue for it to act on.** ⇒ **the mechanism is not refuted; it is UNEXERCISED.** Kyle's test is on the OUTCOME, and the outcome is unambiguous — but a later reader must not cite this as evidence that queue-time subscription does not work.
+
+★ **WHAT THIS DECISION DOES NOT TOUCH:** the paper FILL still depth-walks the book where one exists (`depth-walk.ts:44`, `depth-source.ts:38-47`) and the open gate still fails closed without one. **This amendment settles which source names a PRICE, not whether the fill simulator uses depth.** Those are separate and the second is measured separately in amendment 1's companion probe: at a $150 order the depth walk is worth **0.00 bps at p50, 1.09 at p90, 5.52 at p99** against an 80 bps taker fee.
+
+---
+
+#### ⚠️ WATCH ITEM SURFACED WHILE MEASURING — NOT A DEFECT CLAIM, AND THE CONTROL IS WHY
+
+**No crypto position has OPENED since 2026-09-12 01:10:43Z — ~39 h at the time of reading**, against a baseline of 1-10 opens/day for the preceding fortnight (including the previous Sunday, which had 10).
+
+⛔ **I ALMOST REPORTED THIS AS A BREAK. THE CONTROL SAYS OTHERWISE.** Inter-open gaps over the last 21 days, n=89: **p50 2.9 h · p90 12.2 h · MAX 38.5 h.** ⇒ **the current gap sits AT the three-week maximum and a gap that long has already happened once.** Beyond p90, and not unprecedented.
+★ **AND THE BOOK IS NOT THE CAUSE:** `rtb_shadow_pool_members` recorded **1,977 rows today**, so candidates are still flowing into the ready-to-buy pool; only **9** of them reached the depth gate. **The stall, if it is one, is upstream of the book** — which is also why fixing book coverage would not address it.
+
+**DISPOSITION (§9.4 — 4, A SCHEDULED REVIEW):** re-read the inter-open gap at the next session start. **If the gap exceeds 48 h it has left the observed envelope and becomes its own investigation**; below that it is inside measured behaviour and nothing is owed. Not minted as an issue: an in-envelope reading with a control that explains it is not a finding (§9.4 disposition 5 reasoning, applied to a watch rather than a withdrawal).
+
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
