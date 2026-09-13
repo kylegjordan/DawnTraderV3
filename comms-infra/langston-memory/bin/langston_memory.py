@@ -36,6 +36,10 @@ ID_RE = re.compile(r"#\d{2,4}\b|\b(?:P\d+-B[\dA-Za-z.\-]+|B-[A-Z][A-Z0-9\-]{2,}|
 # a sha must contain at least one hex letter — bare digit runs are message/run ids
 SHA_RE = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{8,40}\b")
 ISO_RE = re.compile(r"20\d\d-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?")
+# ★ ONE definition of the Retractions heading (B-LANGSTON-CONTEXT P-2, Langston Step-4 Q3, 2026-09-13): _parse_ledger
+#   binds it here, and the ledger guard in langston-memory-write reuses THIS string (compiled to bytes) rather than a
+#   second literal - so the reader's flexible-whitespace binding and the guard's heading check can never disagree.
+RETRACTIONS_HEADING_PATTERN = r"###\s*Retractions"
 FOOTER = "Lead, not evidence. Verify against the graded ref before citing."
 SELF_MARKERS = ("=== langston-recall:", FOOTER)   # exact self-generated output markers
 
@@ -307,7 +311,7 @@ def _parse_ledger(src):
     if not os.access(src, os.R_OK):
         return "unreadable", None
     text = open(src, encoding="utf-8", errors="replace").read()
-    m = re.search(r"###\s*Retractions.*?(?=\n##|\Z)", text, re.S)
+    m = re.search(RETRACTIONS_HEADING_PATTERN + r".*?(?=\n##|\Z)", text, re.S)
     if not m:
         return "no-section", None
     entries = []

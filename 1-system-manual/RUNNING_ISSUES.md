@@ -8805,6 +8805,18 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ⇔ `#333` (Discord cutover) · `#348` (Telegram decommission) · `B-LANGSTON-CONTEXT` §6.9.
 
+### #1055 OPEN 2026-09-13 (Langston Step-4 Q2 on `B-LANGSTON-CONTEXT` P-2 rename; §15 + §9.4 disposition 3) — ⛔ **`do_direct_write_legacy` IS DEAD ON A MIGRATED BOX AND MUST BE DELETED, NOT HARDENED**
+
+**STATE, established at the object (CC-INFRA):** `langston-memory-write` has a pre-migration path `do_direct_write_legacy` that writes MEMORY.md directly (no parts). On a migrated box (parts present + `compose-state` live) the dispatch in `run()` routes every whole-file/append write to `do_direct_write` (the parts path); the legacy path is reached ONLY when no parts dir + no state exists. The live box is migrated (P-2 installed 2026-09-12), so the legacy path is **unreachable in production** — it survives only because the tool's `--self-test` still exercises it.
+
+**DECISION (Langston Step-4 Q2, 2026-09-13):** he agreed the legacy path should NOT be hardened with the four byte-based ledger guards — *"don't harden code you're about to delete"* — but ruled that *"leave-and-note"* is not one of §15's two dispositions. §15 = delete on the spot, or a concrete named deletion. It cannot go today because the self-test still drives it. Confirmed deliberate, not an oversight: legacy correctly does NOT call `reader_requires_offsets`, because it runs no offset-based guard. A docstring line to that effect landed in the same P-2 commit.
+
+**BUG TAXONOMY: outcome (3)** — legacy that no longer fits today's architecture; remove it cleanly. Record in `DELETED_COMPONENTS_LOG.md` at deletion.
+
+> `HOME: delete do_direct_write_legacy (and its self-test coverage), owner Infra Claude, in the P-2 retrofit batch (the 00-legacy split), as the step IMMEDIATELY AFTER the self-test is re-pointed at the parts path — Langston's placement, Step-4 Q2 2026-09-13`
+
+⇔ `B-LANGSTON-CONTEXT` P-2 (rename + guards, ref `a68971ae3`) · §15 (never leave legacy lingering).
+
 ### #1047 OPEN 2026-09-11 (surfaced at `B-PRICE-SIDE-BY-JOB` OBJ-7 Step 7; filed by CC-C) — ⚠️ **THE KRAKEN WEBSOCKET ADAPTER DROPS ABOUT ELEVEN MESSAGES A DAY ON A PARSE ERROR, IN EVERY ERROR FILE SINCE 2026-09-09**
 
 **WHAT.** `error.log` carries `[KrakenWS] Error parsing message: TypeError: Cannot read properties of undefined (reading 'toUpperCase')`, from the catch at `kraken-websocket-adapter.ts:667`, which drops the whole message. Counts on staging, 2026-09-11 20:13Z: 11 in `error__2026-09-09_00-00-00.log`, 11 in `error__2026-09-10_00-00-00.log`, 4 in `error__2026-09-11_00-00-00.log`, 12 in the current `error.log` (first line 00:00:01Z) before the OBJ-7 restart and 1 after it (20:11:42Z).

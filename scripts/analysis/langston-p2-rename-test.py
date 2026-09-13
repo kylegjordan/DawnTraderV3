@@ -12,19 +12,28 @@ Run as root on Helsinki from /root/lc3-test/p2rn. Scratch LANGSTON_HOME; reader 
     R7  --rename-part == --to                                   -> exit 2 'same name'
     R8  MEMORY.md written OUT OF BAND                            -> exit 4 'out-of-band', nothing changed
     R9  a part changed since last compose (parts-sha drift)     -> exit 4 'changed since the last compose'
-  PART B - the LEDGER GUARDS. Firing via a rename REORDER (integration) proves they are wired into do_rename and
-           that the three-way rollback is byte-identical; unit calls + code mutants prove EACH guard discriminates
-           and the coordinate math is right (Langston: measure WHICH guard fires; delete each guard separately).
-    C2  reorder puts an EXACT '### CC-A errors I logged' before the span  -> rename exit 5, three-way rollback byte-identical
-    C5  reorder puts '###   Retractions'(flex ws) before the span         -> reader binds it, C-2's exact find skips it,
-                                                                             so CONTAINMENT fires ALONE -> exit 5, rollback
-    C1u multi anchored heading (unit)                            -> guard returns the 'ambiguous' problem
-    C3u coord positive control against the LIVE composed file    -> span matches, Sum(part ranges)==len(body) in BYTES
-    C6u three degraded reader statuses (unit)                    -> condition-2 problem for each of no-section/no-entries/unreadable
-    M-C2   delete the span-canary loop      -> the C2 reorder now RENAMES (exit 0): the break lands
-    M-CONT delete the containment check     -> the C5 reorder now RENAMES (exit 0): the break lands
-    M-SP   delete block-single-part (unit)  -> a split-ledger body returns [] instead of the split problem
-    M-C3   char offsets instead of byte     -> Sum != len(body) on the multi-byte live body is no longer detected
+  PART B - the LEDGER GUARDS (all byte-based). Each guard fires on a real path AND is disabled by an independent
+           mutant; the coordinate control is the LIVE file. Revised 2026-09-13 for Langston's Step-4 (FINDING-1
+           self-location, FINDING-2 retrofit layout, Q3 single heading definition).
+    C2      reorder puts an EXACT '### CC-A errors I logged' before the span -> rename exit 5, 3-leg rollback byte-identical
+    C5      Q3 catches a '###   Retractions' (flex ws) duplicate AT COMPOSE  -> the reader's own pattern, so the 3-space
+                                                                                variant the old exact literal missed is caught
+    CC/DW   do_compose / do_direct_write guard-fires (C-2 CC-A subsection)   -> exit 5 (DW: + 3-leg rollback)
+    Q3AFTER a DUPLICATE '### Retractions' AFTER the block                    -> Q3 count catches what the old first-find missed
+    DELTA0  do_rename delta-0 as the SECOND layer behind Q3 (Q3 disabled)    -> count 2->1 on reorder -> delta-0 exit 5, rollback
+    F2ok/F2bad post-retrofit layout: ledger as its own part                 -> ok if next part opens '## '; else the split
+                                                                                message NAMES both parts (FINDING-2)
+    C1u     multi anchored '## …REVIEWER LEDGER' heading (unit)              -> 'ambiguous' problem
+    C3u     LIVE-file positive control (FULL guard incl Q3 + self-location)  -> span matches, Sum==len(body) BYTES, 9/9 land
+    C6u     three degraded reader statuses (unit)                           -> condition-2 for no-section/no-entries/unreadable
+    RDR     the INSTALLED (offset-less) reader                              -> fail-fast exit 6, NO write, clear version message
+    M-C2    delete the span-canary loop      -> the C2 reorder RENAMES (exit 0)
+    M-C3    WRITER-side range char-vs-byte   -> Sum != len(body) on the live body (a writer-side coordinate control)
+    M-C3b   READER-side offset char-vs-byte  -> offsets STILL in span (range blind) but off-bullet -> self-location fires
+    M-CONT  delete the self-location check   -> the char-offset entries pass (proves self-location is load-bearing)
+    M-SP    delete block-single-part (unit)  -> a split-ledger body no longer reports the overrun
+    M-C1    delete multi-heading detection (unit)  -> a two-heading body is silently accepted
+    M-COND2 delete condition-2 (unit)        -> a no-entries ledger passes silently
 """
 import hashlib, importlib.util, json, os, shutil, subprocess, sys
 
@@ -104,12 +113,31 @@ def strip_last_stamp(b):
 def psha(h): return sha(rd(h, "memory-parts/00-legacy.md"))
 
 
-def reader_parse(body_bytes):
-    spec = importlib.util.spec_from_file_location("r", READER); m = importlib.util.module_from_spec(spec)
+def reader_parse(body_bytes, reader=READER):
+    spec = importlib.util.spec_from_file_location("r" + str(abs(id(reader))), reader); m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     p = D + "/unit.md"
     with open(p, "wb") as fh: fh.write(body_bytes)
     return m._parse_ledger(p)
+
+
+def reader_pattern():
+    """The reader's OWN Retractions heading pattern, as bytes - the Q3 single definition the guard reuses."""
+    spec = importlib.util.spec_from_file_location("rp", READER); m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.RETRACTIONS_HEADING_PATTERN.encode("utf-8")
+
+
+def reader_mutant(anchor, replacement, out_name):
+    """A mutated copy of the READER (offset math), root-owned scratch so reader_trust passes."""
+    with open(READER, encoding="utf-8") as fh:
+        src = fh.read()
+    assert src.count(anchor) == 1, (out_name + " reader anchor", src.count(anchor))
+    path = D + "/" + out_name + ".py"
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(src.replace(anchor, replacement, 1))
+    os.chmod(path, 0o644)
+    return path
 
 
 def load_writer(home_for_consts=None, script=W):
@@ -233,13 +261,14 @@ v("R9", rc == 4 and "changed since the last compose" in out and not exists(h, "m
 # ─────────────────────────── PART B — the ledger guards ───────────────────────────
 
 # A two-part home whose GOOD order composes clean, but a rename that moves a decoy part BEFORE the ledger breaks it.
-def decoy_home(decoy_body):
+def decoy_home(decoy_body, script=W):
     """10-ledger.md holds the ledger; 90-decoy.md holds `decoy_body`. Good order (10 before 90) composes clean because
-    the ledger's own exact sub-sections come first. Renaming 90-decoy -> 05-decoy sorts it FIRST and induces the break."""
+    the ledger's own exact sub-sections come first. Renaming 90-decoy -> 05-decoy sorts it FIRST and induces the break.
+    `script` lets a test compose under a mutant (e.g. Q3 disabled) so a decoy the real guard would refuse can be set up."""
     ledger_part = HEADER + LEDGER
     composed = ledger_part + decoy_body
     h = home(composed.encode("utf-8"), {"10-ledger.md": ledger_part.encode("utf-8"), "90-decoy.md": decoy_body.encode("utf-8")})
-    code, o = migrate(h)
+    code, o = migrate(h, script=script)
     return h, code, o
 
 # C2 — decoy carries the EXACT '### CC-A errors I logged' string in its own '## ' section. Good order: the ledger's
@@ -262,15 +291,15 @@ v("C2", mc == 0 and rc == 5 and "ledger integrity" in out and "ledger subsection
 # TWO bullets, so the reader's count is UNCHANGED (2->2) and delta-0 passes - leaving CONTAINMENT the only tripwire.
 DECOY_C5 = ("## " + chr(0x2605) + " DECOY" + NL + "###   Retractions" + NL
             + "- a decoy bullet the reader will bind" + NL + "- a second decoy bullet, matching the real count" + NL)
-h, mc, mo = decoy_home(DECOY_C5)
-part_before = rd(h, "memory-parts/90-decoy.md"); mem_before = rd(h); state_before = state_bytes(h)
-rc, out = rn(h, "90-decoy.md", "05-decoy.md", sha(part_before))
-rolled = (exists(h, "memory-parts/90-decoy.md") and rd(h, "memory-parts/90-decoy.md") == part_before
-          and not exists(h, "memory-parts/05-decoy.md") and rd(h) == mem_before and state_bytes(h) == state_before)
-# containment is the ONLY tripwire: its message ('retraction entries OUTSIDE') fires, the C-2 subsection message does NOT.
-cont_only = "retraction entr" in out and "OUTSIDE the block span" in out and "ledger subsection" not in out
-v("C5", mc == 0 and rc == 5 and "ledger integrity" in out and cont_only and rolled,
-  "compose %d, rename exit %d, containment-ALONE %s, 3-leg rollback %s: %s" % (mc, rc, cont_only, rolled, out.strip()[:90]))
+# C5 — Q3 CLOSES the whitespace divergence: the OLD guard used an exact literal b"### Retractions" and MISSED a
+#   3-space '###   Retractions' the reader binds (only containment could catch it). Q3 uses the reader's OWN pattern,
+#   so the 3-space decoy is now caught AT COMPOSE as a duplicate heading - it can't even be composed in.
+LP_C5 = HEADER + LEDGER
+DEC5 = "## " + chr(0x2605) + " DECOY" + NL + "###   Retractions" + NL + "- a 3-space decoy the exact literal missed" + NL
+h = home((LP_C5 + DEC5).encode("utf-8"), {"10-ledger.md": LP_C5.encode("utf-8"), "90-decoy.md": DEC5.encode("utf-8")})
+rc, out = migrate(h)
+v("C5", rc == 5 and "ledger integrity" in out and "'### Retractions' headings" in out,
+  "do_compose exit %d, Q3 caught the 3-space divergence at compose: %s" % (rc, out.strip()[:100]))
 
 # C1u — multi anchored heading, unit call on the guard
 mod = load_writer(home_for_consts=D + "/home")
@@ -285,12 +314,16 @@ parts = modL.read_parts()
 body, parts_sha, body_sha = modL.compose_body(parts)
 span = modL.ledger_span(body)
 part_bodies = [pb for _, _, pb, _ in parts]
+part_names = [n for n, _, _, _ in parts]
 total = sum(len(pb) for pb in part_bodies)
 st, e = reader_parse(body)
-probs = modL.ledger_guard_problems(body, part_bodies, e, st)
+# FULL guard incl. Q3 (retractions pattern) and self-location - the live file must pass the whole thing, and every
+#   entry must land on a '- ' bullet (the FINDING-1 positive control).
+probs = modL.ledger_guard_problems(body, part_bodies, e, st, part_names, reader_pattern())
+lands = all(modL.lands_on_bullet(body, en["offset"]) for en in e)
 in_span = isinstance(span, tuple) and span[0] != "multi" and span[0] < span[1] <= len(body)
-v("C3u", in_span and total == len(body) and probs == [] and st == "ok",
-  "live span %r, Sum(ranges)=%d, len(body)=%d, entries=%d, status=%s, problems=%r" % (span, total, len(body), len(e), st, probs))
+v("C3u", in_span and total == len(body) and probs == [] and st == "ok" and lands,
+  "live span %r, Sum=%d==len %s, entries=%d all-land-on-bullet %s, problems=%r" % (span, total, total == len(body), len(e), lands, probs))
 
 # C6u — three degraded reader statuses each raise the condition-2 problem (never a vacuous pass).
 cases = {
@@ -320,13 +353,8 @@ rc, out = rn(h, "90-decoy.md", "05-decoy.md", sha(rd(h, "memory-parts/90-decoy.m
 v("M-C2", mc == 0 and rc == 0 and exists(h, "memory-parts/05-decoy.md"),
   "mutant rename exit %d (guarded=5), break landed %s" % (rc, exists(h, "memory-parts/05-decoy.md")))
 
-# M-CONT delete the containment check -> the C5 reorder now RENAMES (exit 0).
-MCONT = mutant('outside = [en for en in entries if not (s <= en["offset"] < e)]',
-               'outside = []  # mutant: containment deleted', "mutant-cont")
-h, mc, mo = decoy_home(DECOY_C5)
-rc, out = rn(h, "90-decoy.md", "05-decoy.md", sha(rd(h, "memory-parts/90-decoy.md")), script=MCONT)
-v("M-CONT", mc == 0 and rc == 0 and exists(h, "memory-parts/05-decoy.md"),
-  "mutant rename exit %d (guarded=5), break landed %s" % (rc, exists(h, "memory-parts/05-decoy.md")))
+# M-CONT (the self-location/containment mutant) is now a UNIT test paired with the char-offset reader, next to M-C3b -
+#   Q3 closed the old reorder-based containment path, so containment's reachable firing is the reader-coordinate one.
 
 # M-SP delete block-single-part (unit): a body whose ledger is split across two part ranges returns [] under the mutant.
 MSP = mutant("if len(holder) != 1:", "if False and len(holder) != 1:  # mutant: block-single-part deleted", "mutant-sp")
@@ -340,8 +368,8 @@ body = pb1 + pb2
 st, e = reader_parse(body)
 real = mod0.ledger_guard_problems(body, [pb1, pb2], e, st)
 mut = modSP.ledger_guard_problems(body, [pb1, pb2], e, st)
-v("M-SP", any("not wholly within ONE part" in p for p in real) and not any("not wholly within ONE part" in p for p in mut),
-  "real caught split %s, mutant silent %s" % (any("not wholly within ONE part" in p for p in real), not any("not wholly within ONE part" in p for p in mut)))
+v("M-SP", any("runs past the end of part" in p for p in real) and not any("runs past the end of part" in p for p in mut),
+  "real caught split %s, mutant silent %s" % (any("runs past the end of part" in p for p in real), not any("runs past the end of part" in p for p in mut)))
 
 # M-C3 char offsets instead of byte -> on the multi-byte live body the coordinate mismatch is no longer detected.
 #   The real C-3 uses len(b) (bytes); the mutant measures character length. On a body with multi-byte chars the sum
@@ -396,16 +424,20 @@ rolled = (rd(h, "memory-parts/10-notes.md") == part_before and rd(h) == mem_befo
 v("DW", mc == 0 and rc == 5 and "ledger integrity" in out and "ledger subsection '### CC-A errors I logged'" in out and rolled,
   "do_direct_write guard exit %d, 3-leg rollback %s: %s" % (rc, rolled, out.strip()[:90]))
 
-# DELTA0 (fresh-reviewer #9) — make the do_rename delta-0 branch fire on its own: a ONE-bullet decoy the reorder
-#   binds, dropping the reader's count 2->1, which delta-0 catches BEFORE the ledger guards.
+# DELTA0 — do_rename's delta-0 branch is now a SECOND layer behind Q3: Q3 refuses a duplicate Retractions at compose,
+#   so to even reach a count-changing reorder the decoy must compose under Q3-DISABLED. With Q3 off, a 1-bullet
+#   '###   Retractions' decoy composes; renaming it before the ledger makes the reader bind it (count 2->1), and
+#   delta-0 (checked BEFORE the guards in do_rename) catches it. Proves Q3 is the first layer, delta-0 the second.
+MQ3 = mutant('rm = [m.start() for m in re.finditer(retractions_pattern, body)]',
+             'rm = [s]  # mutant: Q3 disabled (one heading, in span)', "mutant-q3")
 DECOY_1 = ("## " + chr(0x2605) + " DECOY" + NL + "###   Retractions" + NL + "- one decoy bullet only" + NL)
-h, mc, mo = decoy_home(DECOY_1)
+h, mc, mo = decoy_home(DECOY_1, script=MQ3)     # compose under Q3-disabled so the decoy lands
 part_before = rd(h, "memory-parts/90-decoy.md"); mem_before = rd(h); state_before = state_bytes(h)
-rc, out = rn(h, "90-decoy.md", "05-decoy.md", sha(part_before))
+rc, out = rn(h, "90-decoy.md", "05-decoy.md", sha(part_before))   # real tool: delta-0 fires before the guard
 rolled = (exists(h, "memory-parts/90-decoy.md") and rd(h, "memory-parts/90-decoy.md") == part_before
           and not exists(h, "memory-parts/05-decoy.md") and rd(h) == mem_before and state_bytes(h) == state_before)
 v("DELTA0", mc == 0 and rc == 5 and "delta-0" in out and "retraction entries" in out and rolled,
-  "do_rename delta-0 exit %d, 3-leg rollback %s: %s" % (rc, rolled, out.strip()[:90]))
+  "Q3-disabled compose %d, real rename delta-0 exit %d, 3-leg rollback %s: %s" % (mc, rc, rolled, out.strip()[:90]))
 
 # M-C1 (fresh-reviewer #5) — no mutant existed for C-1. Disable ledger_span's multi-heading detection: a two-heading
 #   body then composes a span over only the FIRST block, so the ambiguity slips through (no 'ambiguous' problem).
@@ -435,6 +467,57 @@ real = mod.ledger_guard_problems(NOENT, [NOENT], en, stn)
 mut = modCOND.ledger_guard_problems(NOENT, [NOENT], en, stn)
 v("M-COND2", stn == "no-entries" and any("could not parse" in p for p in real) and not any("could not parse" in p for p in mut),
   "status=%s, real-caught %s, mutant-silent %s" % (stn, any("could not parse" in p for p in real), not any("could not parse" in p for p in mut)))
+
+# ── ADDED after Langston's Step-4 (2026-09-13): FINDING-1 reader-side coordinate mutant, FINDING-2 layout, Q3 after ──
+
+# Q3AFTER (Langston Q3) - a DUPLICATE '### Retractions' AFTER the canonical block was invisible to the old literal
+#   first-find; the shared reader-pattern count catches it. Broken composed body as cur on first-compose.
+LP2 = HEADER + LEDGER
+DUP = "## " + chr(0x2605) + " EXTRA" + NL + "### Retractions (a second, spurious copy)" + NL + "- not the real ledger" + NL
+h = home((LP2 + DUP).encode("utf-8"), {"10-ledger.md": LP2.encode("utf-8"), "50-extra.md": DUP.encode("utf-8")})
+rc, out = migrate(h)
+v("Q3AFTER", rc == 5 and "ledger integrity" in out and "'### Retractions' headings" in out,
+  "do_compose exit %d (duplicate-after now caught): %s" % (rc, out.strip()[:100]))
+
+# M-C3b (Langston FINDING-1) - the READER-side coordinate mutant M-C3 (writer-side) could NOT catch. Char index instead
+#   of byte offset: on the live multi-byte body the offsets STILL fall inside the span (the range check is blind, as
+#   Langston measured), but no longer point at a '- ' bullet -> self-location fires. Real reader: 9/9 land, guard clean.
+RMUT = reader_mutant('"offset": len(text[:char_at].encode("utf-8")),',
+                     '"offset": char_at,  # mutant: CHAR index, not byte offset', "reader-charoffset")
+pat = reader_pattern()
+st_r, e_r = reader_parse(body)                        # body/part_bodies/part_names/modL/span from C3u (live)
+real = modL.ledger_guard_problems(body, part_bodies, e_r, st_r, part_names, pat)
+lands_real = all(modL.lands_on_bullet(body, en["offset"]) for en in e_r)
+st_m, e_m = reader_parse(body, reader=RMUT)           # char offsets
+in_span_still = all(span[0] <= en["offset"] < span[1] for en in e_m)   # the range check STILL passes (Langston's point)
+mut = modL.ledger_guard_problems(body, part_bodies, e_m, st_m, part_names, pat)
+v("M-C3b", real == [] and lands_real and in_span_still and any("point at a column-0" in p for p in mut),
+  "real-clean+9/9-land %s, char-offsets-still-in-span %s (range blind), self-location-fires %s" % (
+      real == [] and lands_real, in_span_still, any("point at a column-0" in p for p in mut)))
+
+# M-CONT — disable the self-location check; the char-offset reader entries (off-bullet, but still in span) now pass.
+#   Proves the self-location line is what catches the reader-coordinate error M-C3b exposes.
+MCONT = mutant('        miscoord = [en for en in entries if not lands_on_bullet(body, en["offset"])]',
+               '        miscoord = []  # mutant: self-location disabled', "mutant-cont")
+modCONT = load_writer(home_for_consts=LIVE_HOME, script=MCONT)
+mut_off = modCONT.ledger_guard_problems(body, part_bodies, e_m, st_m, part_names, pat)   # char offsets + self-loc off
+v("M-CONT", any("point at a column-0" in p for p in mut) and not any("point at a column-0" in p for p in mut_off),
+  "self-location fires on char offsets %s, silent when disabled %s" % (
+      any("point at a column-0" in p for p in mut), not any("point at a column-0" in p for p in mut_off)))
+
+# FINDING-2 - post-retrofit layout: the ledger is its OWN part; block-single-part passes only if the NEXT part opens
+#   with a column-0 '## '. F2ok: it does -> composes. F2bad: it opens with PROSE -> the span overruns and the NEW
+#   split message names BOTH parts (not the old misleading 'split across parts').
+def retrofit_home(next_part_body):
+    led = HEADER + LEDGER
+    h = home((led + next_part_body).encode("utf-8"),
+             {"20-ledger.md": led.encode("utf-8"), "40-next.md": next_part_body.encode("utf-8")})
+    return h, migrate(h)
+h, (rc_ok, o_ok) = retrofit_home("## " + chr(0x2605) + " NEXT SECTION" + NL + "- a note" + NL)
+v("F2ok", rc_ok == 0, "retrofit layout, next part opens '## ' -> composes: exit %d" % rc_ok)
+h, (rc_bad, o_bad) = retrofit_home("a prose line, no heading" + NL + "- and a bullet" + NL)
+v("F2bad", rc_bad == 5 and "runs past the end of part" in o_bad and "20-ledger.md" in o_bad and "40-next.md" in o_bad,
+  "prose next part exit %d, split-message-names-both-parts %s: %s" % (rc_bad, "20-ledger.md" in o_bad and "40-next.md" in o_bad, o_bad.strip()[:110]))
 
 bad = [n for n, ok in results if not ok]
 print("RESULT: %d of %d matched%s" % (len(results) - len(bad), len(results), "" if not bad else "; DIFFER: " + ", ".join(bad)))

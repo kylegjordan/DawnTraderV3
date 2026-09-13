@@ -209,6 +209,7 @@ def reader_requires_offsets(reader):
     try:
         os.write(fd, probe)
         os.close(fd)
+        fd = -1                                   # closed cleanly; the finally must not double-close
         status, entries = reader._parse_ledger(p)
         # ANY misbehaviour (non-ok status, no entries, non-dict entries, a crash) => not offset-capable. Catch it here
         # so a broken reader yields the clean version-mismatch refusal below, never a bare traceback (fresh-reviewer r2).
@@ -216,6 +217,11 @@ def reader_requires_offsets(reader):
     except Exception:
         ok = False
     finally:
+        if fd != -1:                              # os.write raised before the close - don't leak the descriptor (Langston nit)
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         try:
             os.unlink(p)
         except OSError:
@@ -560,7 +566,20 @@ def strip_stamp(composed_bytes):
 #    ranges and the reader's entry offsets are ONE coordinate system (validated against the live 72,578 B file:
 #    span (12394,24943) matches Langston's own measurement). Run on every recompose (compose / direct write / rename).
 LEDGER_HEADING_BYTES = re.compile(rb"(?m)^## .*REVIEWER LEDGER.*$")     # C-1: anchored ^## , not a substring
-LEDGER_SUBSECTIONS = (b"### Retractions", b"### Rulings of mine that GENERALISE", b"### CC-A errors I logged")
+# NOTE (Langston Step-4 Q3): '### Retractions' is NOT in this literal list - it is checked via the reader's OWN
+#   exported pattern (RETRACTIONS_HEADING_PATTERN, compiled to bytes) so the guard and the reader share ONE definition.
+#   These two have no competing reader definition, so a literal present-and-in-span check is the single source for them.
+LEDGER_SUBSECTIONS = (b"### Rulings of mine that GENERALISE", b"### CC-A errors I logged")
+
+
+def lands_on_bullet(body, off):
+    """SELF-LOCATION (Langston FINDING-1, 2026-09-13): a reader entry's byte offset must point AT that entry's '- ' at
+    column 0 - body[off:off+2] == '- ' and it starts a line. A range check alone (s <= off < e) passes a WRONG-
+    coordinate offset that happens to land inside the span (proven on the live file: a char-vs-byte reader offset
+    diverges 203-315 B but still falls inside a 12,549 B span). This does not: it fails at the first entry under any
+    coordinate error, and is its own positive control (9/9 on the live file)."""
+    return (isinstance(off, int) and 0 <= off <= len(body) - 2
+            and body[off:off + 2] == b"- " and (off == 0 or body[off - 1:off] == b"\n"))
 
 
 def ledger_span(data):
@@ -578,11 +597,14 @@ def ledger_span(data):
     return (s, after + nxt.start() if nxt else len(data))
 
 
-def ledger_guard_problems(body, part_bodies, reader_entries, reader_status):
+def ledger_guard_problems(body, part_bodies, reader_entries, reader_status, part_names=None, retractions_pattern=None):
     """Every ledger guard over the PRE-STAMP composed body (bytes). Returns a list of problems (empty = clean).
     reader_entries/status from _parse_ledger on the written MEMORY.md; offsets are byte offsets valid in the body
-    region (the stamp is appended after it)."""
+    region (the stamp is appended after it). part_names (optional, composed order) names parts in the split-block
+    message. retractions_pattern (optional, bytes) is the reader's OWN heading pattern - passed by the tool so the Q3
+    single-definition heading check runs; direct unit callers may omit it to exercise the other guards alone."""
     problems = []
+    names = part_names or [str(i) for i in range(len(part_bodies))]
     span = ledger_span(body)
     if isinstance(span, tuple) and span and span[0] == "multi":                     # C-1
         return ["%d '## …REVIEWER LEDGER' headings (anchored) - the ledger block is ambiguous" % span[1]]
@@ -592,13 +614,21 @@ def ledger_guard_problems(body, part_bodies, reader_entries, reader_status):
         problems.append("no '## …REVIEWER LEDGER' block in the composed file")
         return problems
     s, e = span
-    for sub in LEDGER_SUBSECTIONS:                                                  # C-2 span-extent canary
+    if retractions_pattern is not None:                                             # Q3: ONE heading definition
+        rm = [m.start() for m in re.finditer(retractions_pattern, body)]
+        if len(rm) != 1:
+            problems.append("%d '### Retractions' headings (reader pattern %r) - exactly one is required; a second "
+                            "copy (before OR after the block) splits what the reader binds from what the guard checks"
+                            % (len(rm), retractions_pattern.decode("utf-8", "replace")))
+        elif not (s <= rm[0] < e):
+            problems.append("the '### Retractions' heading at byte %d is OUTSIDE the block span [%d,%d)" % (rm[0], s, e))
+    for sub in LEDGER_SUBSECTIONS:                                                  # C-2 span-extent canary (other subs)
         i = body.find(sub)
         if i == -1:
             problems.append("ledger subsection %r absent from the composed file" % sub.decode())
         elif not (s <= i < e):
             problems.append("ledger subsection %r at byte %d is OUTSIDE the block span [%d,%d)" % (sub.decode(), i, s, e))
-    off = 0                                                                          # C-3 coordinate-system control
+    off = 0                                                                          # C-3 WRITER-SIDE range-arithmetic control
     ranges = []
     for b in part_bodies:
         ranges.append((off, off + len(b)))
@@ -609,9 +639,14 @@ def ledger_guard_problems(body, part_bodies, reader_entries, reader_status):
         if ranges[i][0] != ranges[i - 1][1]:
             problems.append("part ranges not contiguous at index %d" % i)
     holder = [i for i, (a, b) in enumerate(ranges) if a <= s and e <= b]
-    if len(holder) != 1:                                                            # block-single-part
-        problems.append("the ledger block [%d,%d) is not wholly within ONE part (matched %d ranges) - split across parts" % (s, e, len(holder)))
-    entries = reader_entries or []                                                   # containment
+    if len(holder) != 1:                                                            # block-single-part (FINDING-2 wording)
+        sp = next((i for i, (a, b) in enumerate(ranges) if a <= s < b), None)
+        ep = next((i for i, (a, b) in enumerate(ranges) if a < e <= b), None)
+        problems.append("the ledger block [%d,%d) runs past the end of part '%s' into part '%s' (matched %d whole-part "
+                        "ranges) - the block must lie within ONE part; the part after the ledger must begin its body "
+                        "with a column-0 '## ' (or the ledger part must be last)"
+                        % (s, e, names[sp] if sp is not None else "?", names[ep] if ep is not None else "?", len(holder)))
+    entries = reader_entries or []                                                   # containment (SELF-LOCATING, FINDING-1)
     no_offset = [en for en in entries if not isinstance(en.get("offset"), int)]
     if no_offset:
         # a reader without the P-2 offset field - report the MISMATCH, never a false 'corruption' (the fail-fast probe
@@ -619,7 +654,14 @@ def ledger_guard_problems(body, part_bodies, reader_entries, reader_status):
         problems.append("the reader emitted %d of %d ledger entries WITHOUT a byte offset - reader-version mismatch "
                         "(install the P-2 reader), NOT ledger corruption" % (len(no_offset), len(entries)))
     else:
-        outside = [en for en in entries if not (s <= en["offset"] < e)]
+        miscoord = [en for en in entries if not lands_on_bullet(body, en["offset"])]
+        if miscoord:
+            problems.append("%d ledger entr%s offset does NOT point at a column-0 '- ' bullet (first %r at byte %d) - "
+                            "the reader's offsets are on a DIFFERENT coordinate system from the body (byte/char "
+                            "mismatch); containment cannot be trusted" % (
+                                len(miscoord), "y" if len(miscoord) == 1 else "ies",
+                                miscoord[0]["text"][:40], miscoord[0]["offset"]))
+        outside = [en for en in entries if lands_on_bullet(body, en["offset"]) and not (s <= en["offset"] < e)]
         if outside:
             problems.append("%d retraction entr%s OUTSIDE the block span [%d,%d): first %r at byte %d" % (
                 len(outside), "y" if len(outside) == 1 else "ies", s, e, outside[0]["text"][:40], outside[0]["offset"]))
@@ -633,8 +675,14 @@ def ledger_guard_after_recompose(reader, body, parts):
     in composed order. The reader parses the full file incl. the trailing stamp, but every ledger byte precedes the
     stamp, so its entry offsets coincide with body-offsets over the block - the one coordinate system C-3 demands."""
     part_bodies = [pb for _, _, pb, _ in parts]
+    part_names = [n for n, _, _, _ in parts]
     status, entries = reader._parse_ledger(TARGET)
-    return ledger_guard_problems(body, part_bodies, entries, status)
+    # Q3: hand the guard the reader's OWN heading pattern (bytes), so both share one definition. reader_requires_offsets
+    #   has already version-gated the reader, so RETRACTIONS_HEADING_PATTERN is present; default to the reader's literal
+    #   only if a very old reader somehow lacks the export (then the Q3 heading check is skipped, not wrong).
+    pat = getattr(reader, "RETRACTIONS_HEADING_PATTERN", None)
+    pat = pat.encode("utf-8") if isinstance(pat, str) else None
+    return ledger_guard_problems(body, part_bodies, entries, status, part_names, pat)
 
 
 def read_compose_state():
@@ -805,7 +853,12 @@ def run(argv, stdin_bytes):
 
 
 def do_direct_write_legacy(opts, content, append, declared_ledger, declared_retractions):
-    """Pre-migration path: the write targets MEMORY.md directly, as before P-2. Unchanged from P-6b."""
+    """Pre-migration path: the write targets MEMORY.md directly, as before P-2. Unchanged from P-6b.
+    ⛔ UNREACHABLE on a migrated box (parts present + state_live route to do_direct_write); it survives only because the
+    self-test still exercises it. SCHEDULED FOR DELETION in the retrofit batch (P-3, RUNNING_ISSUES #1055), right after
+    the self-test is re-pointed at the parts path - do not harden code we are about to delete (Langston Step-4 Q2, §15).
+    It deliberately does NOT call reader_requires_offsets and carries none of the four byte-based ledger guards: it runs
+    no offset-based guard, so the offset field it would probe for is never read on this path."""
     reader = load_reader()
     try:
         st = os.stat(TARGET)
@@ -1076,7 +1129,12 @@ def do_rename(opts):
       - delta-0: a rename must not change the retraction or REVIEWER LEDGER counts (bytes are identical);
       - the C-1..C-3 ledger guards: the block must stay whole, single-part, sub-sections present, entries in span.
     The rename is a single atomic os.rename (no both-exist / neither-exists window). A failed post-write check rolls
-    back all THREE of the part (rename back), MEMORY.md and compose-state to their exact prior bytes."""
+    back all THREE of the part (rename back), MEMORY.md and compose-state to their exact prior bytes.
+    CRASH WINDOW (Langston Step-4 note 1): the writes (os.rename -> fsync_dir -> replace_target) sit OUTSIDE the try,
+    as in do_direct_write. A crash there is recoverable by exactly one verb: the parts changed, so a second
+    --rename-part refuses on parts-drift, and --compose reconciles (MEMORY.md still carries last_written_sha and the
+    pending_sha is admissible). Such a crash leaves an index.jsonl row with outcome='attempted' and NO terminal row -
+    a reader of index.jsonl must read that shape as 'crashed mid-write', not 'still running'."""
     reader = load_reader()
     reader_requires_offsets(reader)   # fail-fast before any write if the reader predates the P-2 offset field
     old_name, new_name = opts["--rename-part"], opts["--to"]
@@ -1107,7 +1165,13 @@ def do_rename(opts):
         # BLOCKER-1 (Langston 21:22Z): the parts are the file of record. A part changed out of band since the last
         #   compose would be laundered into MEMORY.md by the recompose a rename performs. --compose reconciles, not this.
         cur_parts_sha = parts_digest(parts)
-        if state.get("parts_sha") and state["parts_sha"] != cur_parts_sha:
+        # Langston Step-4 note 2: a rename recomposes, so a missing parts_sha must REFUSE, not fall open. do_direct_write
+        #   tolerates a missing field for back-compat; the rename is the retrofit's verb and cannot skip the check.
+        if not state.get("parts_sha"):
+            raise Refused(4, "REFUSED: compose-state has no parts_sha, so a rename cannot verify the parts are unchanged "
+                             "since the last compose (it recomposes). Run --compose to reconcile and stamp parts_sha "
+                             "first.")
+        if state["parts_sha"] != cur_parts_sha:
             raise Refused(4, "REFUSED: a part in %s changed since the last compose (parts-sha %s, last composed %s). A "
                              "rename recomposes and would fold that unreviewed change into %s. Run --compose first."
                           % (PARTS_DIR, cur_parts_sha, state["parts_sha"], TARGET))
