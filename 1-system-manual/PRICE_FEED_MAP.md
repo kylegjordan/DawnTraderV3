@@ -1,135 +1,127 @@
 # PRICE FEED MAP — WHERE EVERY PRICE IN THE SYSTEM COMES FROM
 
-**Kyle-directed, 2026-09-13 (CC-B). THE THING HE HAS ASKED FOR REPEATEDLY AND NOT RECEIVED.**
-Read at `origin/migration/aws-supabase`. **This is a CURRENT-STATE map, not a recommendation** — the
-"is this the right feed" judgement is a separate column and is deliberately left `UNJUDGED` wherever
-nobody has ruled.
+**Kyle-directed, 2026-09-13 (CC-B), r2 after joint review by Langston + CC-C.**
+Read at `origin/migration/aws-supabase`.
 
-> ⛔ **THE RULE THIS MAP EXISTS TO SERVE:** a price does four jobs — **setting a level**, **ranking**,
-> **triggering an action**, and **booking a record**. `#952`/`#941`: we use the midpoint for all four,
-> and it is built at the FEED layer so every lane inherits it.
+> ## ⭐⭐ THE ONE RULE THIS WHOLE MAP PRODUCES (Langston, 2026-09-13)
+> ### **A PRICE THAT *VALUES* MAY BE A MIDPOINT. A PRICE THAT *ACTS* MUST BE THE SIDE THAT TRANSACTS.**
+> **Portfolio marking is the ONLY job on this map whose answer is already right.**
+
+⛔ **THIS DOCUMENT CONTRADICTS THE SYSTEM MANUAL ON ITS MOST LOAD-BEARING CELL, AND THE MANUAL IS WRONG.**
+`SYSTEM_MANUAL.md:655` says the book mid drives *"NOT the trigger"*; `:668` says *"BOTH the entry levels
+and the exit trigger use the ticker BBO midpoint."* **The all-time `exit_price_producer` census is
+`kraken_ws_book_mid` 61 · ticker 0.** The exit trigger has **never once** read a ticker mark on crypto.
+**Correcting the manual is not optional and not deferrable** (Langston).
 
 ---
 
-## 0. THE THREE FEEDS, AND WHAT EACH ACTUALLY CARRIES
+## 0. THE FEEDS, AND WHAT EACH ACTUALLY CARRIES
 
 | feed | what it is | what it carries | freshness |
 |---|---|---|---|
-| **OHLC cache** (`ohlc-cache.ts`) | 60-minute candles | open/high/low/close/volume — **history, not a live price** | **5-minute TTL** |
-| **price cache** (`price-cache.ts`) | a per-symbol mark | ONE number + a **`markKind`** of `'mid'` or `'last'` (`:107`) | written by WS + a REST poller |
-| **order book** (Kraken `book` channel) | the resting ladder | bid/ask prices **and sizes**, both sides | live stream |
+| **OHLC cache** | 60-minute candles | OHLCV — **history** | **5-min TTL** |
+| **price cache** | a per-symbol mark | one number + **`markKind`** `'mid'`\|`'last'` (`:107`) **+ `lastTradePrice`** (`:102-103`) | WS + REST poller |
+| **order book** | the resting ladder | bid/ask **and sizes** | live stream |
+| **depth snapshot** | book side for marketability | `asks[0].price` | ⚠️ **≤~30 s stale — its own comment calls it a "documented approximation"** (`aee:4030`) |
 
-⭐ **`markKind` IS THE CENTRAL FACT OF THIS WHOLE MAP.** The price cache **self-describes** whether its
-mark is a midpoint or a last trade (`:89-93`, `:107`). Three writers stamp `'last'` (`:271`, `:425`,
-`:544`). A counter at `:605-608` records what LEVEL READS actually got.
+⭐ **WE DO RECEIVE A TRADE PRINT, AND THIS REMOVES A COST.** *(Langston correction — my r1 said "no site
+can see the trade tape", which was TOO STRONG.)* The ticker frame carries the venue's own last trade and
+we already propagate it: `kraken-websocket-adapter.ts:912 lastTradePrice: safeData.lastTrade`, stored at
+`price-cache.ts:102-103`. **We cannot see EVERY print; we do receive A print.**
+⇒ ⛔ **NO FEED PURCHASE IS REQUIRED TO COMPARE AGAINST A TRADE.**
 
-⚠️ **`null` means the writer could not state the kind — NOT that it is a midpoint.** The docblock at
-`:93` is explicit that `bid === ask === price` would wrongly answer `'mid'` for a last trade, which is
-why the field is stamped by the writer rather than inferred.
-
-⛔ **AND THE ORDER BOOK HAS NO LAST-TRADE ARM AT ALL.** `kraken-websocket-adapter.ts:908-918` —
-`if (bestBid <= 0 || bestAsk <= 0) continue` → `:945 producer:'kraken_ws_book_mid'`. **Anything reading
-the book leg gets a midpoint BY CONSTRUCTION; there is no other value it can produce.**
-
-⛔ **WE DO NOT SUBSCRIBE TO A TRADE FEED.** Channels are `['ticker','book']` only
-(`kraken-websocket-adapter.ts:1591`; the channel type at `:322`/`:1684` is literally `'ticker' | 'book'`).
-**So no site below can see the actual trade tape.**
+⛔ **THE BOOK LEG HAS NO LAST-TRADE ARM.** `kraken-websocket-adapter.ts:1202-1210` —
+`producer:'kraken_ws_book_mid'`, `lastTradePrice: null, // a book update carries no trade print`.
+⇒ **anything reading the book leg gets a midpoint BY CONSTRUCTION.**
+*(r1 cited `:908-918`/`:945` — a prior ref; that now lands on the ticker emit. The same drift exists in
+the manual at `:929`, `:684`, `:1096`, `:1485`.)*
 
 ---
 
-## 1. THE MAP — EVERY DECISION SITE
+## 1. THE MAP
 
-### A. SIGNAL BIRTH — setting entry, stop and target
+### A. SIGNAL BIRTH — ⛔ THERE ARE **THREE** LEVEL BASES, NOT ONE
 
-| lane / class | site | feed | kind | freshness | judged? |
-|---|---|---|---|---|---|
-| **crypto, active** | `signal-orchestrator.ts:2407` → `:2429` → `:2454` | **price cache**, then the **smoother** | **~85–90 % `last`, 10–15 % `mid`** (measured, `:605` counter) | cache row cadence — **median 60 s, p90 90 s** (measured, 83 symbols) | ⛔ **NO** |
-| crypto, active | `signal-orchestrator.ts:2224`, `:2398` | OHLC cache | candles | **5-min TTL** | supplies **indicators/ATR**, not the price |
-| **xStock** | `eval-cycle.ts:346`, `:349`, `:381` | `lastPrice` passed in | `last` | per eval cycle | ⛔ **NO** |
-| **VTS** | `vts-runner.ts:1553`, `:1587` | price cache | per `markKind` | cache cadence | ⛔ **NO** |
+| lane / class | site | basis | kind | freshness |
+|---|---|---|---|---|
+| **crypto QUANT** | `signal-orchestrator.ts:2407` → `:2429` → `:2454` | price cache → **smoother** | ⚠️ **`last` share is an UPPER BOUND** (below) | cache cadence **60 s median / 90 s p90** |
+| **crypto PATTERN** | `signal-orchestrator.ts:2224` → `patternToTradeSignal:2269` | ⭐ **a 60-minute BAR CLOSE** | **never smoothed, never a midpoint** | **up to 60 min old** |
+| **xStock / VTS** | `eval-cycle.ts:346/:349/:381`, param at `:304` | ⭐ **a 60-min BAR CLOSE** (`xstock_spot/scanner.ts:909-910`, `latestBar.close`) | **not a print** | up to 60 min |
 
-⛔ **THE LEVEL PRICE IS THEN SMOOTHED** (`adaptive-kalman.ts`, via `getSmoothedPrice` at `:2429`).
-⚠️ **It is NOT a Kalman filter and the System Manual (`:699`) forbids calling it one** — an adaptive EMA
-with an ER-driven, scale-free gain and **no measured noise model**. Its sensitivity comes from
-**60-minute OHLC closes** (`signal-orchestrator.ts:2417-2419`), **not from the price stream**, so it
-cannot down-weight a dirty input or reward a clean one.
-⛔⛔ **THREE FIGURES THAT STOOD HERE ARE WITHDRAWN — CC-C RETRACTED THEM, LANGSTON BLOCKED THEM, AND THEY
-WERE IN THIS DOCUMENT FOR ONE COMMIT (`71336a584`). DO NOT CITE THEM FROM ANY COPY.**
-1. ⛔ *“87.3 % of a freshness advantage survives the smoother”* — **WITHDRAWN.** The arms started one
-   input-gap apart on freshly-seeded filters over ~9.4 instants each, so it measured **how long two
-   differently-seeded filters retain their seed difference**, not attenuation. Phase set the seed gap;
-   the replicates averaged over a nuisance parameter. ✅ **The claim is UNMEASURED — AND SO IS ITS
-   NEGATION.** Re-run under way.
-2. ⚠️ *“constant side offset passes at p50 = 1.000”* — **the NUMBER is withdrawn as degenerate**: the
-   “constant offset” arm was `mid + (ask−bid)/2` off the same row, which **is exactly `ask`** — there was
-   never a constant-offset arm. ✅ **THE CONCLUSION STANDS ON THE ANALYTIC ARGUMENT ALONE and needs no
-   experiment:** `x ← x + K(z−x)` has a fixed point at `x = z` — unity DC gain for any gain ⇒ **a
-   constant offset is tracked, never removed.**
-3. ⛔ *“side error ≈ 7–10 bps vs freshness ≈ 3.5 bps — 2–3×”* — **BOTH SIDES UNEVIDENCED.** The 3.5
-   derives from the withdrawn 87.3 %; the 7–10 travels with **no object and no population at the point
-   of use** (rule 29a), its provenance a 0.199 % median crypto spread carried from memory and halved.
-⛔⛔ **THEREFORE THE RANKING OF SIDE-ERROR AGAINST FRESHNESS-ERROR IS UNEVIDENCED AND MUST NOT BE STATED
-AS SETTLED** — pending both figures being restated with their populations.
-✅ **WHAT SURVIVES AND IS SAFE TO ACT ON:** the smoother does not remove a constant offset (analytic),
-and the SIDE defect in §1C is measured independently of any of this.
+⚠️ **THE `85–90 % last` FIGURE IS AN UPPER BOUND AND MUST NEVER BE QUOTED BARE.** `price-cache.ts:575-578`
+— Langston's own ruling, in the code — says `levelReadKind` is *"an UPPER BOUND on level-setting reads …
+the true level-setting mixture is likely MORE midpoint-heavy."* **Population is the crypto QUANT lane
+only, not "level reads".** CC-C to re-derive with the bound stated.
+⛔ **The PATTERN lane reads no cache row at all and appears in NEITHER census field** (`price-cache.ts:599-601`).
+
+**THE SMOOTHER** (`getSmoothedPrice`, `:2429`): ⚠️ **not a Kalman filter** (`SysManual:699`) — an adaptive
+EMA, ER-driven scale-free gain, **no measured noise model**, sensitivity from 60-min OHLC closes
+(`:2417-2419`) not from the price stream.
+⛔ **THREE FIGURES WITHDRAWN, IN THIS DOC FOR ONE COMMIT (`71336a584`) — DO NOT CITE FROM ANY COPY:**
+"87.3 % of freshness survives" (**UNMEASURED — and so is its negation**; arms differed by seed, not
+attenuation) · "constant offset p50 = 1.000" (**degenerate** — the arm was `mid+(ask−bid)/2` ≡ `ask`) ·
+"7–10 bps vs 3.5 bps" (**both unevidenced**).
+✅ **SURVIVES ON THE ANALYTIC ARGUMENT ALONE:** `x ← x + K(z−x)` has a fixed point at `x = z` — unity DC
+gain ⇒ **a constant offset is tracked, never removed.**
 
 ### B. RTB POOL REFRESH
+`rtb-refresh-service.ts:433 getBatch` — **price cache only** (`:12`). Side-age probe at `:435` is shadow-only.
 
-| lane | site | feed | kind | freshness |
-|---|---|---|---|---|
-| all | `rtb-refresh-service.ts:433` `priceCache.getBatch` | **price cache only** (`:12` — *"All pricing sourced exclusively from unified price-cache.ts"*) | per `markKind` | cache cadence |
-
-### C. OPEN-TRADE MONITOR — exits, and maker-fill adjudication
-
-| lane | site | feed | kind | freshness | judged? |
-|---|---|---|---|---|---|
-| **crypto, paper active** | `active-execution-engine.ts:1652` `getPriceWithFallback(symbol, 2000)` | WS → REST → **skip tick** | ⛔ **`kraken_ws_book_mid` — MIDPOINT, structurally** | **2,000 ms window** | ⛔ **NO — this is the defect** |
-| portfolio sweep | `active-execution-engine.ts:917` | same, **5,000 ms** | midpoint | 5 s | ⛔ NO |
-
-⛔⛔ **THIS IS THE SITE THAT BOOKS SALES WITH NO BUYER.** A resting maker **sell** is filled when a **BUYER**
-pays our price — i.e. when the **BID** reaches it. We instead compare the **MIDPOINT** to the limit.
-**The midpoint can cross while the bid never arrives.**
+### C. OPEN-TRADE MONITOR — the exit trigger
+`active-execution-engine.ts:1652 getPriceWithFallback(symbol, 2000)` → ⛔ **`kraken_ws_book_mid`, a
+MIDPOINT, structurally.**
+⛔⛔ **THIS BOOKS SALES WITH NO BUYER.** A resting **sell** fills when a **BUYER** pays our price — when
+the **BID** arrives. We compare the **MIDPOINT**, which can cross while the bid never does.
 ✅ **MEASURED (Langston): 14 of 24 checkable booked maker target-exit fills did not cross by half the
-spread** — median through 6.0 bps against a median book spread of 20.7 bps. **58 %–100 % unsupported;
-lead with 58 %.** All-time `exit_price_producer` census: the crypto arm has **exactly one value ever**,
-`kraken_ws_book_mid`.
+spread** — median 6.0 bps through against a 20.7 bps median spread. **58 %–100 % unsupported; lead with 58 %.**
 
-> ### ⛔ THE COMPARATOR, NAMED PLAINLY
-> `evaluatePendingMaker` asks, each tick: **is the price at my limit yet?** — for a resting buy,
-> `price <= limit`. **The comparator is that test plus the price fed into it.**
-> **TODAY it is fed a MIDPOINT. It should be fed the SIDE THAT WOULD TRANSACT** — the **bid** for a
-> resting sell, the **ask** for a resting buy. ⭐ **That is the fix. It is a change of INPUT, not of
-> machinery, and the book we already subscribe to carries both sides.**
+> ### THE COMPARATOR, PLAINLY
+> `evaluatePendingMaker` asks each tick **"is the price at my limit yet?"** — for a resting buy,
+> `price <= limit`. **The comparator is that test plus the price fed into it.** Today: a **midpoint**.
+> It must be the **side that would transact** — **bid** for a resting sell, **ask** for a resting buy.
+> ⭐ **A change of INPUT, not of machinery.**
 
-### D. ENTRY PLACEMENT — the maker/taker decision
+### D. ENTRY MARKETABILITY — ⛔ THE ASYMMETRY IS **STALENESS**, NOT SIDE
 
-| site | feed | note |
+| lane | reads | what it actually is |
 |---|---|---|
-| `active-execution-engine.ts:4043/:4045` | **`bestAsk`** — the book, correct side for a buy | ✅ **the ONE site already using a transactable side** |
-| `eval-cycle.ts:956` (VTS/xStock) | **`lastPrice`** — a print, not the resting book | ⛔ **WRONG INSTRUMENT for a post-only decision, which is decided by the RESTING book** |
+| active | `aee:4038` `_gate.snapshot.asks[0].price` | **depth snapshot, ≤~30 s stale** |
+| VTS / xStock | `eval-cycle.ts:956` | ⭐ **a 60-MINUTE BAR CLOSE** — not a print |
 
-⛔ **THE TWO LANES ARE BIASED IN OPPOSITE DIRECTIONS UNDER ONE LABEL:** `lastPrice <= limit` fires more
-often than `bestAsk <= limit`, so **VTS under-rests makers and the active lane over-rests them.** Any
-cross-lane maker-rate comparison is confounded by the comparator, not by behaviour.
+⛔ **r1 SAID "ask vs print, biased in opposite directions". THAT IS WITHDRAWN.** It is **a ~30 s book side
+against an hour-old bar**, and **a stale bar's error is RANDOM IN SIGN** — so opposite-direction bias is
+**not established**. ⇒ **the cross-lane confound is STALENESS, and it is far larger than a side offset.**
+
+### E. PORTFOLIO MARKING — a whole SITUATION missing from r1
+`active-portfolio-manager.ts:308`, `:631` — `getPriceWithFallback(symbol, 5000)`, a midpoint.
+✅ **CORRECT AS-IS** — marking is a **valuation**, not a transaction.
+⛔ **BUT: if any risk gate — daily-loss, exposure, kill-switch — fires off marked equity, a MIDPOINT IS
+MAKING A LIQUIDATION DECISION.** Untraced; needs tracing before it gets a verdict.
 
 ---
 
-## 2. ⛔ WHAT IS NOT MAPPED, STATED AS A GAP RATHER THAN OMITTED
+## 2. STILL UNMAPPED — stated as gaps, not omissions
+`routes.ts` (7) · `vts-runner.ts:3061/:3993/:4719` (**lifecycle** reads, distinct from the `:1553/:1587`
+birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` · `metrics-core.ts:103` ·
+`active-engine-service.ts:337` · `routes/vts-audit.ts` · and r1's six: `market-scanner`, `fx5-scanner`,
+`multi-timeframe-scanner`, `regime-inputs`, `stage-b-validator`, `cost-metrics`.
+⛔ **Live mode is unexercised (Phase 21); its column is the paper path by inheritance, unverified.**
 
-- **The ENTRY side has no book column at all** — `entryBookAgeMs: null` *"BY CONSTRUCTION"*
-  (`active-execution-engine.ts:1207`), and **no `entry_ticker_bid`/`ask` exists**. ⇒ the entry-side
-  fill decision **cannot be audited after the fact**, and it carries **82 `never_filled`** rows with
-  **zero corroboration**.
-- **Live mode** is not exercised (Phase 21), so its column is the paper path by inheritance, unverified.
-- Sites in `market-scanner`, `fx5-scanner`, `multi-timeframe-scanner`, `regime-inputs`,
-  `stage-b-validator`, `cost-metrics` are **NOT traced here** — they read prices but no ruling has been
-  made on them. **Their absence from §1 is a gap in this map, not evidence they are correct.**
+## 3. THE JUDGEMENT — RULED BY LANGSTON, 2026-09-13
 
-## 3. THE ONE-LINE ANSWER PER JOB (the `#952` framing)
-
-| job | what we use today | what it should be | status |
+| situation | right feed? | fresh enough? | smooth? |
 |---|---|---|---|
-| **set a level** | smoothed cache mark, mostly `last` | UNJUDGED. ⚠️ **Do NOT rank this against the trigger fix — that ranking is withdrawn (see §1A).** The 60 s cadence and the smoothing question are both OPEN and both UNMEASURED. | open, `3n` |
-| **rank** | cache mark | UNJUDGED | open |
-| **trigger** (maker fill) | ⛔ **MIDPOINT** | ⭐ **the transactable side — bid for a resting sell, ask for a resting buy** | **THE FIX, owner CC-C + Langston, `3n` job 5** |
-| **book** | fill at the limit | limit is correct once the trigger is | follows the trigger |
+| **crypto quant birth** | ⛔ **NO** — REST-last/WS-mid mixture, unstated per symbol | ⛔ **NO, and the defect is RELATIVE:** a 60–90 s basis feeding a 2 s trigger ⇒ **realised distance ≠ intended distance** (`SysManual:701`) | ⛔⛔ **NO — REMOVE IT.** Unity DC gain removes no side error, costs ~10 observations of lag, re-seeds cold every restart. **A/B measured, not flipped** |
+| **crypto pattern birth** | ✅ qualifies (a printed close) | ⛔ **NO** — up to 60 min old | ✅ correctly not smoothed |
+| **xStock / VTS birth + marketability** | ⛔ **NO** — an hour-old bar close is neither side nor current | ⛔ **NO** | n/a |
+| **RTB rank** | ✅ midpoint is the right KIND for a valuation | ✅ yes | ⛔ **NO** |
+| **exit trigger** | ⛔ **NO — SETTLED. Transactable side.** | ✅ 2 s is not the binding constraint — **side is** | ⛔⛔ **NEVER.** Ruled explicitly so nobody "fixes" the clock mismatch by smoothing this end |
+| **entry marketability (active)** | ✅ right side, right instrument | ⚠️ **UNRULED — snapshot age distribution needed first** | never |
+| **portfolio marking** | ✅ **midpoint is CORRECT** — a valuation | ✅ yes | ✅ no |
+
+## 4. ⛔ FIVE PARALLEL DOCUMENTS — the response to "we lose sight of the system" cannot be a fifth narrative
+`PRICING_DATA_ARCHITECTURE.md` (108 KB, **banner-marked NOT CANONICAL / UNDER CORRECTION**) · the
+SysManual provenance table · `ACTIVE_PATH_FLOW.md` · the exit-path audit · **this**.
+> `HOME: B-PRICE-DOC-CONSOLIDATE, owner CC-B, PHASE_19_PLAN after 3n` — this map either **supersedes** the
+> SysManual provenance table with the manual pointing at it, or **folds into** it. **It does not ship as a
+> fifth source.** The `:655`/`:668` correction rides the same batch and is **not deferrable**.
