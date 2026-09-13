@@ -777,6 +777,23 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 
 ---
 
+### `correction-inherits-the-parent` — **A CORRECTION INHERITS THE PARENT'S FAILURE MODE UNLESS THE CONTEXT CHANGES**
+
+⛔ **THE SHAPE, AND IT IS NOT "THREE ERRORS" — IT IS ONE ERROR RE-EXPRESSED THREE TIMES.** A session that has just been shown wrong writes the fix **immediately, itself, in the same frame of mind, against the same object**. `CONDUCT.md` §6b already names why that fails: **the correction is unreviewed work produced by the very context that produced the error.** What it does not say, and what this adds, is that the inherited fault reappears **ONE RANGE OVER** — plausible, differently worded, and therefore not recognised as the same mistake.
+
+⚠️ **MEASURED, CC-C, 2026-09-13, one session, one dataset:**
+| # | the claim | how it died |
+|---|---|---|
+| 1 | *the smoother discards the freshness advantage* | refuted by the author's own re-run |
+| 2 | *a value outside [0,1] cannot be a side error* | decomposition error — the side term is CONTAINED in the statistic, not excluded by it |
+| 3 | *drift is 2.6-3.6× the side error* | wrong denominator — the side term was measured at the WITNESS instant, not the DECISION instant |
+
+★★ **THE DIAGNOSIS IS NOT CARELESSNESS. IT IS A HEADLINE NUMBER BEING DEMANDED FROM COLUMNS ALREADY RULED UNABLE TO CARRY ONE** — each attempt was a fresh route to the same forbidden destination.
+
+⇒ ⛔⛔ **THE ONLY RELIABLE CONTEXT CHANGE AVAILABLE MID-SESSION IS TO STOP.** Not to try harder inside the next claim — **the next claim is the failure mode.** Hand the object to a fresh reader, or leave the question open and say so.
+⛔ **NAME THIS AGAINST THE CLASS, NEVER AGAINST THE TABLE THAT EXPOSED IT (Langston's condition)** — filed as *"this exit-provenance dataset"* it re-fires the next time a ranking looks one arithmetic step away.
+✅ **THE TELL, usable in the moment: you are about to publish a number the previous paragraph just said the data cannot support.**
+
 ## 2026-09-04 — `B-DEPLOY-ACTOR-ALLOWLIST`: two trailers, and the duplicate row-6 collision fixed
 
 ⭐ **THE DUPLICATE ROW `6` IN THE `wrong-object` TABLE IS RENUMBERED (6, 6, 7 → 6, 7, 8).** Two sessions added an instance and numbered it `6` on the same day; both merged cleanly and nothing noticed. **It was surfaced by the Codex advisor's feasibility test** — asked to count the rows, it answered *"8, labelled 1,2,3,4,5,6,6,7"*, and **my own first check of its answer returned nothing because I matched the wrong section three hundred lines earlier.** The outsider was right and my verification was wrong. *(This is the residual `CLAUDE.md` §5 25.a names: four sessions editing the same prose, blocks cannot apply, and a semantic collision merges cleanly.)*
