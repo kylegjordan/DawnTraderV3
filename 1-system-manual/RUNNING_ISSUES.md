@@ -8828,6 +8828,13 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ⚠️ **NOT ESTABLISHED, and I am not asserting it:** the SHARE of symbols whose cached sides come from each writer. That is the census this batch owes, and it is the first thing the work does.
 
+⭐ **WHERE THAT CENSUS STARTS, AND THE TRAP IN IT — worked 2026-09-13 before the batch opens, so the work does not begin by reaching for the obvious instrument.**
+**THE OBVIOUS INSTRUMENT DOES NOT EXIST:** `price-cache.ts`'s own REST poller writes NO per-symbol log line, and `getAllCachedPrices()` has **ZERO production callers** — no endpoint exposes the cache. ⇒ **counting the two writers from the logs would measure ONE arm (`[8.9.2][REST_TICK]`, the DISCARDING path) with no control for the other. That is a wrong-population read waiting to happen.**
+★ **THE FUNNEL ALREADY CARRIES A CANDIDATE SIGNATURE:** `updateFromRest` with no `existing` writes `bid = ask = price`, and `buildLevelBasis` refuses exactly that shape — so `ladder / locked_or_synthetic_ticker` is the fingerprint of a cache entry whose sides were never really observed.
+⛔⛔ **BUT IT IS AN UPPER BOUND, NEVER A MEASUREMENT, AND THE REFUSAL'S OWN DOCBLOCK SAYS WHY: *“a genuinely locked market and a fabricated one are indistinguishable here.”*** ⇒ **the count conflates our own write artefact with a real market state.**
+⇒ ⭐ **SO THE DESIGN CONCLUSION, BEFORE ANY CODE: THE DISTINCTION MUST BE MADE AT THE WRITE, NOT INFERRED AT THE READ.** The writer knows whether it observed sides; the reader can only see that they are equal. **Any attempt to separate the two downstream is re-deriving information the write path threw away** — which is the same shape as the defect this issue is about, one layer up.
+**FIRST READING, for scale only, `2026-09-13T07:12Z`, n far below any floor: `locked_or_synthetic_ticker` = 4 of 45 on the VTS lane, 0 of 24 on the active lane.**
+
 ⇒ **DISPOSITION — §9.4 (3), its own batch.**
 > `HOME: B-REST-SIDES-TO-CACHE, owner CC-C, placed in PHASE_19_PLAN at row 3n.l, AFTER row 8c and BEFORE row 8a.`
 ✅ **THE ORDERING IS LANGSTON'S AND HIS REASON IS THE BINDING ONE: `8a` wires the exit trigger and would INHERIT THE FLOOR SILENTLY.**
