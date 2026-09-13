@@ -58,7 +58,8 @@
 -- CLASS'S OWN DEFAULT, so every floor row ships at 4.0. The floor therefore changes NO behaviour today
 -- and that is correct: it makes the fallback EXPLICIT AND ASSERTED instead of implicit, and it becomes
 -- load-bearing the moment a per-strategy row is genuinely justified. The invariant below is what keeps
--- it honest as rows are added later.
+-- it honest as rows are added later — and it LOOPS OVER EVERY CLASS plus the global row, because a
+-- single-class guard behind a three-row seed is exactly the gap it exists to close.
 -- ⭐ IT SHIPS ON THE FULL KEY SET AND IS **NOT** CRYPTO-ONLY. The live justification is the xStock half:
 -- a crypto-only floor would leave xStock's unknown-token path with no fail-closed row at all.
 --   ⚠️ The GLOBAL '*' row cannot actually fire through `getPerClassTargetGate` today — `target_floor_pct`
@@ -93,7 +94,10 @@ ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name
 -- carries its own RAISE EXCEPTION): a boot assertion cannot distinguish "not seeded yet" from "seeded
 -- wrong", and a fail-closed row that is silently absent fails OPEN.
 DO $$
-DECLARE n_unk int; n_global int; v_floor numeric; v_min_seeded numeric; v_class_default numeric;
+DECLARE
+  n_unk int; n_global int;
+  v_floor numeric; v_min_seeded numeric; v_class_default numeric; v_global numeric; v_min_class_floor numeric;
+  r record;
 BEGIN
   SELECT count(*) INTO n_unk FROM module_constants
     WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor';
@@ -110,34 +114,56 @@ BEGIN
     RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: the GLOBAL reach_atr_max_unknown_floor row is missing (found %)', n_global;
   END IF;
 
-  -- ⛔ THE SAFETY INVARIANT, and it is an INEQUALITY rather than an equality (Langston BLOCKER-2).
-  -- The property actually argued for is `floor <= every per-strategy ceiling in the class`: a drifted
-  -- token must never get a MORE permissive gate than a known one. Equality would additionally fail a
-  -- later migration that merely REMOVES or LOOSENS the tightest row, which is perfectly safe.
-  -- ⛔ BOTH SELECTS PIN THE FULL KEY (exchange + regime as well as asset_class + strategy). Without
-  -- that a second legitimately key-scoped row makes this a multi-row SELECT INTO, which plpgsql
-  -- resolves by silently taking one and raising nothing — the n_global check above pins the full key
-  -- deliberately, and these must not disagree with it about rigour.
-  SELECT (value #>> '{}')::numeric INTO v_floor FROM module_constants
-    WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
-      AND asset_class = 'crypto_spot' AND exchange = '*' AND strategy = '*' AND regime = '*';
-  SELECT min((value #>> '{}')::numeric) INTO v_min_seeded FROM module_constants
-    WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max'
-      AND asset_class = 'crypto_spot' AND exchange = '*' AND regime = '*' AND strategy <> '*';
-  SELECT (value #>> '{}')::numeric INTO v_class_default FROM module_constants
-    WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max'
-      AND asset_class = 'crypto_spot' AND exchange = '*' AND strategy = '*' AND regime = '*';
-
-  IF v_min_seeded IS NULL THEN
-    -- The state THIS migration ships: no per-strategy ceilings exist, so the strictest asserted value
-    -- in the class is its own default and the floor must equal it. Asserted rather than assumed, so
-    -- that "the floor happens to match" is a checked fact and not a coincidence nobody looked at.
-    IF v_floor IS DISTINCT FROM v_class_default THEN
-      RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: with no per-strategy crypto ceilings seeded, the floor (%) must equal the class default (%)', v_floor, v_class_default;
+  -- ⛔⛔ THE SAFETY INVARIANT, LOOPED OVER EVERY CLASS (Langston Step-4 CONDITION). It first
+  -- guarded `crypto_spot` ALONE while the seed shipped THREE rows, so the xStock row had nothing past
+  -- the count above and the first xStock ceiling would have landed under a floor nothing checked.
+  -- ⭐ The asymmetry is MEASURED, not hypothetical: `min_rr_unknown_floor` already differs by class
+  -- (crypto 2.88 / xStock 2.16), and the UPSERT is idempotent precisely so re-application re-checks.
+  --
+  -- The property: `floor <= every per-strategy ceiling in that class`. An INEQUALITY, not an equality
+  -- — equality would additionally fail a later migration that merely REMOVES or LOOSENS the tightest
+  -- row, which is perfectly safe. Every SELECT pins the FULL key (exchange + regime as well), because a
+  -- partially-keyed `SELECT INTO` over a second legitimately key-scoped row resolves by silently taking
+  -- one and raising nothing.
+  FOR r IN SELECT unnest(ARRAY['crypto_spot','xstock_spot']) AS ac LOOP
+    SELECT (value #>> '{}')::numeric INTO v_floor FROM module_constants
+      WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
+        AND asset_class = r.ac AND exchange = '*' AND strategy = '*' AND regime = '*';
+    IF v_floor IS NULL THEN
+      RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: no reach_atr_max_unknown_floor row for class %', r.ac;
     END IF;
-  ELSIF v_floor > v_min_seeded THEN
-    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: crypto reach_atr_max_unknown_floor (%) is LOOSER than the tightest seeded crypto ceiling (%) — a drifted token would get a more permissive gate than a known one', v_floor, v_min_seeded;
+
+    SELECT min((value #>> '{}')::numeric) INTO v_min_seeded FROM module_constants
+      WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max'
+        AND asset_class = r.ac AND exchange = '*' AND regime = '*' AND strategy <> '*';
+    SELECT (value #>> '{}')::numeric INTO v_class_default FROM module_constants
+      WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max'
+        AND asset_class = r.ac AND exchange = '*' AND strategy = '*' AND regime = '*';
+
+    IF v_min_seeded IS NULL THEN
+      -- The state THIS migration ships for BOTH classes: no per-strategy ceilings exist, so the
+      -- strictest asserted value in the class is its own default and the floor must equal it.
+      -- Asserted rather than assumed, so "the floor happens to match" is a checked fact.
+      IF v_floor IS DISTINCT FROM v_class_default THEN
+        RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: class % has no per-strategy ceilings, so its floor (%) must equal its class default (%)', r.ac, v_floor, v_class_default;
+      END IF;
+    ELSIF v_floor > v_min_seeded THEN
+      RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: class % floor (%) is LOOSER than its tightest seeded ceiling (%) — a drifted token would get a more permissive gate than a known one', r.ac, v_floor, v_min_seeded;
+    END IF;
+  END LOOP;
+
+  -- And the GLOBAL row gets a VALUE relationship, not just presence-by-name: it is the fallback when the
+  -- asset class itself is unresolved, so it must be at least as strict as every per-class floor. Without
+  -- this, tightening one class's floor would silently leave the unresolved-class path more permissive
+  -- than any class it could have resolved to.
+  SELECT (value #>> '{}')::numeric INTO v_global FROM module_constants
+    WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
+      AND asset_class = '*' AND exchange = '*' AND strategy = '*' AND regime = '*';
+  SELECT min((value #>> '{}')::numeric) INTO v_min_class_floor FROM module_constants
+    WHERE module_name = 'expectancy_gates' AND constant_name = 'reach_atr_max_unknown_floor'
+      AND asset_class <> '*' AND exchange = '*' AND strategy = '*' AND regime = '*';
+  IF v_global > v_min_class_floor THEN
+    RAISE EXCEPTION 'B-GEOMETRY-REACH-BASELINE: the GLOBAL floor (%) is LOOSER than the tightest per-class floor (%) — an unresolved asset class would be treated more permissively than any class it could resolve to', v_global, v_min_class_floor;
   END IF;
 END $$;
-
 COMMIT;
