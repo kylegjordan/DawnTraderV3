@@ -170,6 +170,31 @@ My reading is **NO — they should land together**, because A6 + A7 + A8 compose
 
 ---
 
+## 3b. ⛔⛔ P2's CRITERION — **PRE-REGISTERED 2026-09-13, BEFORE THE DEPLOY AND BEFORE ANY READING**
+
+★ **Written now because a criterion chosen after seeing the window can always be made to pass.** The instrument is the `ladder` funnel cell against the `book` cell, read from `/api/xstocks/filter-diagnostics` → `vtsEvaluation.levelBasisFunnel`.
+
+**THE QUESTION THIS ANSWERS, and it is narrow: how much of the 97% refusal was rung 2 being absent rather than no transactable price existing?**
+
+| | |
+|---|---|
+| **POPULATION** | `active:crypto_spot` and `vts:crypto_spot`, **reported separately, never pooled** — they have different cadences and different symbol sets. |
+| **WINDOW** | ⚠️ **The funnel is in-memory and process-lifetime.** The window is **ONE uninterrupted process lifetime** beginning at the deploy's restart. A restart ends the window; it does not extend it. |
+| **n-FLOOR** | **≥ 2,000 `ladder.attempted`** in the lane being read. Below it ⇒ `INCONCLUSIVE-EXTEND`, **never a PASS**. *(The pre-deploy reading took 546 in ~6 h on the active lane, so this is roughly a day — deliberately not a date.)* |
+| **MANDATORY POSITIVE CONTROL** | **`ladder.refused` must be NON-ZERO**, and `book.refused` must be non-zero. **A zero numerator beside a zero control means the recorder never ran** — the `#661` leg-3 shape this batch has now hit three times. A reading with a zero control is **VOID, not a pass.** |
+| **ARITHMETIC GATE, checked first** | **`book.attempted === ladder.attempted`.** Unequal ⇒ the recorder is broken ⇒ the reading is **VOID** and nothing else in it may be cited. *(Langston's suggestion, adopted: the redundancy becomes a live control at no cost.)* |
+
+**THE PRE-REGISTERED OUTCOMES — all three named before the data, so none can be chosen afterwards:**
+- ✅ **RECOVERY CONFIRMED** — `ladder.accepted / ladder.attempted` **≥ 50%** on the active lane. ⇒ the book's absence was **not** the binding constraint, the 97% was rung 1's coverage, and `8c`'s switch-on becomes a question about the *trigger* rather than about price availability.
+- ⚠️ **PARTIAL** — between **10%** and **50%**. ⇒ rung 2 helps materially but a large residue is genuinely unpriceable; **the switch-on then needs a refusal policy** (what a level does when no basis exists) before it can be argued at all.
+- ⛔ **REFUTED** — **< 10%**. ⇒ my A4/A5 reading is wrong: the ticker sides are not usable at level-build time for most symbols, and the reason must be read off `ladder.byReason` (`stale_ticker` vs `locked_or_synthetic_ticker` vs `ticker_age_unknown`) **before** anything else is proposed.
+
+⛔ **AND THE TRANSPORT SPLIT IS READ BESIDE IT, NOT AFTER IT** (Langston condition 1): `byAcceptedSource` is reported with every outcome above. **A recovery carried overwhelmingly by `ticker_bbo:kraken_rest` is a recovery on a POLL CADENCE**, which is a materially weaker claim than one carried by pushed sides — and the switch-on argument turns on exactly that distinction. **The headline percentage may not be cited without its split.**
+
+⛔ **WHAT THIS CRITERION DOES NOT DECIDE, stated so it is not over-read: it says nothing about whether the switch-on should happen.** That is held on four separate grounds (§3), and a PASS here removes none of them. **It measures one thing: whether a transactable basis exists for the level-building population.**
+
+---
+
 ## 4. SECOND-READER RECORD
 
 `REVIEWER r1: claim-only (mode B) · what other states of the world are consistent with the objects that settle "re-basing levels onto the bid makes both legs fire earlier" · HIT · re-derived y`
