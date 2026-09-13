@@ -230,6 +230,13 @@ def reader_requires_offsets(reader):
         raise Refused(6, "REFUSED: the reader at %s does not emit a byte offset per ledger entry - it predates the "
                          "B-LANGSTON-CONTEXT P-2 offset field, which the ledger guards require. Install the matching "
                          "reader. This is a reader-version MISMATCH, not ledger corruption; nothing was written." % READER)
+    # FINDING-3 (Langston Step-4, 2026-09-13): the guard's Q3 heading check reuses the reader's RETRACTIONS_HEADING_PATTERN.
+    #   Gate it HERE too - a reader with offsets but no export (a hand edit, a partial install) would otherwise turn Q3
+    #   off with NO signal (the guard defaults the pattern to None and skips). Never skip: refuse at the version gate.
+    if not isinstance(getattr(reader, "RETRACTIONS_HEADING_PATTERN", None), str):
+        raise Refused(6, "REFUSED: the reader at %s does not export RETRACTIONS_HEADING_PATTERN - the ledger guard's Q3 "
+                         "single-heading check would silently skip. Install the matching P-2 reader. Reader-version "
+                         "MISMATCH; nothing was written." % READER)
 
 
 def retraction_count(reader, path):

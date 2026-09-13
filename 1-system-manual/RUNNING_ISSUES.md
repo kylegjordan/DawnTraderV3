@@ -8813,6 +8813,8 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 **BUG TAXONOMY: outcome (3)** — legacy that no longer fits today's architecture; remove it cleanly. Record in `DELETED_COMPONENTS_LOG.md` at deletion.
 
+**⛔ RETROFIT LAYOUT INVARIANT — carried here from a refusal string on Langston's Step-4 condition (2026-09-13), because a layout rule that lives only in an error message "gets found by breaking the thing":** once the ledger becomes its own part, the ledger guard's `block-single-part` check passes ONLY IF **the part immediately following the ledger part begins its body with a column-0 `## ` (or the ledger part is last)**. Parts concatenate with no separator and each ends in exactly one `\n`, so the boundary is exact — but if the next part opens with prose, `---`, or a `### `, the ledger span overruns into it and EVERY compose and rename refuses (now with the split message naming both parts). **The P-2 retrofit that splits `00-legacy.md` and moves the ledger to its own part MUST honour this ordering.**
+
 > `HOME: delete do_direct_write_legacy (and its self-test coverage), owner Infra Claude, in the P-2 retrofit batch (the 00-legacy split), as the step IMMEDIATELY AFTER the self-test is re-pointed at the parts path — Langston's placement, Step-4 Q2 2026-09-13`
 
 ⇔ `B-LANGSTON-CONTEXT` P-2 (rename + guards, ref `a68971ae3`) · §15 (never leave legacy lingering).

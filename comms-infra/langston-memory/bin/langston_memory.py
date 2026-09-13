@@ -39,7 +39,10 @@ ISO_RE = re.compile(r"20\d\d-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d)?")
 # ★ ONE definition of the Retractions heading (B-LANGSTON-CONTEXT P-2, Langston Step-4 Q3, 2026-09-13): _parse_ledger
 #   binds it here, and the ledger guard in langston-memory-write reuses THIS string (compiled to bytes) rather than a
 #   second literal - so the reader's flexible-whitespace binding and the guard's heading check can never disagree.
-RETRACTIONS_HEADING_PATTERN = r"###\s*Retractions"
+# ANCHORED to column 0 (Langston Step-4 nit, 2026-09-13): unanchored, a '#### Retractions' or a prose/code-fence
+#   mention would count, and the reader binds the FIRST match wherever it sits. '^' (with (?m)) keeps ONE definition
+#   and removes both. The reader applies it with re.S; the guard compiles it to bytes and finditers - (?m) travels.
+RETRACTIONS_HEADING_PATTERN = r"(?m)^###\s*Retractions"
 FOOTER = "Lead, not evidence. Verify against the graded ref before citing."
 SELF_MARKERS = ("=== langston-recall:", FOOTER)   # exact self-generated output markers
 

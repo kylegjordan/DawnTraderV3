@@ -1,6 +1,9 @@
 """B-LANGSTON-CONTEXT P-2 --rename-part proof + the ledger guards (Langston C-1..C-6, 2026-09-12).
-Run as root on Helsinki from /root/lc3-test/p2rn. Scratch LANGSTON_HOME; reader is the real root-owned
-/opt/langston-memory/bin/langston_memory.py. Two levels of proof:
+Run as root on Helsinki from /root/lc3-test/p2rn. Scratch LANGSTON_HOME. ⛔ THE WRITER AND READER UNDER TEST ARE THE
+SCRATCH COPIES AT D (NOT the installed /opt reader, which has no offset field - the RDR case proves it). The run is
+BOUND to the committed bytes by SHA-BIND below: it prints the sha256 of the writer, reader and this test file, and
+asserts writer/reader against LMW_EXPECT_WRITER_SHA / LMW_EXPECT_READER_SHA (the committed-blob sha256 at the ref).
+Verify independently:  git show <ref>:<path> | sha256sum  (blobs are LF, so this equals the LF scratch copies). Two levels of proof:
   PART A - rename MECHANICS, driving the installed tool (a rename moves a part's NAME; its bytes never change,
            but its place in the composition ORDER does, so the ledger block can RELOCATE):
     R1  rename the sole part (no reorder)                        -> exit 0, old gone, new present, MEMORY.md recomposed
@@ -167,6 +170,18 @@ def mutant(anchor, replacement, out_name, expect_one=True):
 
 
 print(__doc__)
+
+# ── SHA-BIND (Langston Step-4 evidence leg, 2026-09-13): bind this run to the committed bytes. Print the sha256 of the
+#    writer, reader and this test file, and assert writer/reader against the committed-blob sha256s passed in the env
+#    (derived by the runner via `git show <ref>:<path> | sha256sum`). A drifted scratch copy fails here, first.
+def fsha(p):
+    with open(p, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+w_sha, r_sha, t_sha = fsha(W), fsha(READER), fsha(os.path.abspath(__file__))
+exp_w, exp_r = os.environ.get("LMW_EXPECT_WRITER_SHA"), os.environ.get("LMW_EXPECT_READER_SHA")
+bind_ok = (exp_w is None or exp_w == w_sha) and (exp_r is None or exp_r == r_sha)
+v("SHA-BIND", bind_ok, "writer %s (expect %s) reader %s (expect %s) test %s" % (
+    w_sha, (exp_w or "UNSET"), r_sha, (exp_r or "UNSET"), t_sha))
 
 # ─────────────────────────── PART A — rename mechanics ───────────────────────────
 
