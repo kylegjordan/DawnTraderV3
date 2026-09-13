@@ -1,122 +1,150 @@
 # `B-PRICE-SIDE-BY-JOB` ROW `8a-P1` — PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **Batch:** `B-PRICE-SIDE-BY-JOB` (`3n`) · **Row:** `8a`, phase **P1 (shadow only)** · **Owner:** CC-C · **change-class: architecture**
-**r1, 2026-09-14. Everything below re-derived at `origin/migration/aws-supabase` = `e20d1ee72`.**
+**r5, 2026-09-14. Re-derived at `origin/migration/aws-supabase` = `feb820e2a`.** *(No code file changed between `e20d1ee72` and `feb820e2a`, so every citation is checkable at either.)*
 **Scope: `B_PRICE_SIDE_BY_JOB_8A_SCOPE.md` r4. Langston: *"P1's code may proceed — shadow-only, unaffected."***
 
-> ⛔ **P1 CHANGES NO BEHAVIOUR.** It wires D3's ladder into the crypto exit loop as a recorder, measures what it would have produced, and **acts on nothing.** The flip is `8a-P2` and is gated on what P1 measures.
+> ⛔ **P1 CHANGES NO BEHAVIOUR.** It wires D3's ladder into the crypto exit loop as a recorder, measures what it would have produced, and **acts on nothing.** The flip is `8a-P2`, gated on what P1 measures.
 
-**SOURCES READ (§9.5, six sources, named):** (1) the **CODE** at the ref — `active-execution-engine.ts`, `live-pricing-adapter.ts`, `price-cache.ts`, `kraken-websocket-adapter.ts`, `core/calculations/{touch-price,level-basis}.ts`, `signal-orchestrator.ts`, `vts-runner.ts`, `rtb-refresh-service.ts`; (2) **runtime logs + DB — NOT consulted this round, and that is a judgement, not an omission:** P1 adds no behaviour to observe, and the population it will read *does not exist until it deploys*; (3) **SIM S26 + S27**; (4) **System Manual** — silent on an exit-lane ladder, which is this row and not a gap; (5) **`RUNNING_ISSUES`** — searched, and **it refuted a finding of mine**, see §0; (6) **`bridge/canonical/`** — not consulted: `selectTouchPrice` was authored 2026-09-05 under this batch, long after the 2026-01/02 governance change, and its provenance is in this batch's own record.
+**SOURCES READ (§9.5, six sources, named):** (1) the **CODE** at the ref — `active-execution-engine.ts`, `live-pricing-adapter.ts`, `price-cache.ts`, `kraken-websocket-adapter.ts`, `core/calculations/{touch-price,level-basis}.ts`, `signal-orchestrator.ts`, `vts-runner.ts`, `rtb-refresh-service.ts`, `server/tests/unit/side-age.test.ts`; (2) **runtime + DB — consulted for A-10 only** (open positions by class, crypto close counts, pm2 uptime); not consulted elsewhere because P1 adds no behaviour to observe and the population it will read does not exist until it deploys; (3) **SIM S27** — ⚠️ **r1-r4 also cited S26, which is the adaptive-EMA `filterRegistry` and is NOT a recorder P1 writes. STRUCK.**; (4) **System Manual** — silent on an exit-lane ladder, which is this row and not a gap; (5) **`RUNNING_ISSUES`** — searched, and **it refuted a finding of mine**, see §0; (6) **`bridge/canonical/`** — not consulted: `selectTouchPrice` was authored 2026-09-05 under this batch, long after the 2026-01/02 governance change.
 
 ---
 
-## 0. PREVIOUSLY STATED / NOW *(§9.2 — at the top, because a number that moved between the scope and the audit is what the reader is approving)*
+## 0. PREVIOUSLY STATED / NOW *(§9.2 — at the top, because a claim or a number that moved is what the reader is approving)*
 
 > **PREVIOUSLY STATED (scope r3 §5 and `3n.o`):** the crypto exit path has no mark-age gate; a stop can be evaluated against an arbitrarily old mark and nothing refuses it.
-> **NOW:** **FALSE.** The crypto mark is age-bounded structurally at **2,000 ms** — `aee:1652` → `live-pricing-adapter.ts:1332` (`age <= WS_CACHE_FRESH_MS` **AND** `isKrakenVenueSource`) → else REST-fetch → else `last_known_good` (`:1404`), which fails the venue predicate at `aee:1672` and skips the tick.
-> **REASON:** Langston's BLOCKER, re-derived by me at the object. ⛔ **And `RUNNING_ISSUES.md:7278` already recorded that mechanism verbatim — I filed a finding my own ledger refutes.** Corrected in scope r4 (`e20d1ee72`); `3n.o` survives on a rewritten premise.
+> **NOW:** **FALSE.** The crypto mark is bounded at **2,000 ms** — `aee:1652` → `lpa:1332` (`age <= WS_CACHE_FRESH_MS` **AND** `isKrakenVenueSource`).
+> **REASON:** Langston's BLOCKER, re-derived by me. ⛔ **`RUNNING_ISSUES.md:7278` already recorded that mechanism — I filed a finding my own ledger refutes.**
+> ⚠️ **AND r1-r4 OF THIS DOCUMENT STATED THAT CHAIN WRONG TWICE, CORRECTED HERE:** (i) a `last_known_good` re-serve does **not** "skip the tick" at `aee:1672` — it falls to the **direct Kraken REST leg** (`:1691-1761`), and the tick is skipped only if *that* also fails (`:1717`, `:1770`); (ii) **the bound is on `cachedAt` — OUR RECEIPT CLOCK.** `observedAt` is carried through unrefreshed by design (`lpa:242-245`, `#743`), so a venue-old observation can sit under a fresh `cachedAt`. ⇒ **"age-bounded at 2,000 ms" is a RECEIPT-clock statement**, a distinction this document is otherwise careful about (A-2).
 
-> **PREVIOUSLY STATED (scope r3 §4):** `exit_ladder_max_age_ms` is pre-registered **from P1's measured age distribution**.
-> **NOW:** derived from a **risk statement independent of the observed ages**; P1's distribution then *measures* the refusal rate at that value.
-> **REASON:** Langston r4 correction 1 — a ceiling set from the distribution it filters IS the refusal rate, so §7's gate would pass by construction. ✅ **AUDIT FINDING A-5b below makes that structural rather than promised.**
+> **PREVIOUSLY STATED (scope r3 §4):** `exit_ladder_max_age_ms` pre-registered **from P1's measured age distribution**.
+> **NOW:** derived from a **risk statement independent of the observed ages**; P1's distribution then *measures* the refusal rate at that value. **REASON:** Langston r4 correction 1.
+
+---
+
+## 0b. ⛔⛔ WHAT r1-r4 OF **THIS** DOCUMENT GOT WRONG — RECORDED, NOT QUIETLY REPAIRED
+
+Two fresh readers ran against it. **Round 1 refuted one clause; round 2 refuted nine, six of which kill or reshape a plan item — including the central fix and the mutation proof.** Every hit was re-derived by me at the ref before it changed a line.
+
+| # | r1-r4 said | AT THE OBJECT |
+|---|---|---|
+| **W1** | adding `stage` to `LevelBasisRungKey` makes the pooling impossible | ⛔⛔ **THE INTERFACE IS NOT THE KEY.** `keyOf` (`level-basis.ts:405-407`) builds `` `${k.lane}:${k.assetClass}:${k.rung}` `` and **never reads `stage`.** Adding it to the type alone leaves the exit walks in `active:crypto_spot:book`/`:ladder` **while the type advertises a separation the key does not implement.** ★ **I named a TYPE and called it a KEY — this batch's own class, inside the fix meant to close it.** |
+| **W2** | `side-age.test.ts:142` "PINS THE ABSENCE", so the flip is evidence the writer landed | ⛔ **FALSE.** `:60` is `beforeEach(() => __resetSideAgeForTest())`; `:142` sits inside test 8 (*"STAGE is part of the key — two stages never pool"*), which records two stages into a **freshly reset singleton** — and its own comment says what it is: *"A stage never recorded is ABSENT from the rows, which is not the same as zero."* **It is a third-stage NEGATIVE CONTROL in a fixture. A production writer cannot change it.** |
+| **W3** | option (a) — projecting the adapter row's sides — is **strictly better** | ⛔ **NOT STRICTLY. WORSE ON AVAILABILITY.** `fetchPrice:592-597` and `seedLastKnownGoodPrice:1253-1256` write `bid/ask/sidesCapturedAtMs/venueObservedAtMs = null` **with no carry-forward**, and ⭐ **`aee:1760` — inside the very loop P1 instruments — calls `updateCache(…, null, null, null, null, …)` on the direct-REST leg, nulling the sides for its own position's symbol.** The singleton **carries sides forward** (`price-cache.ts:674-675`, `:710-711`, `:720-721`). |
+| **W4** | `lpa:897` "does the same on the REST path" (writes both stores) | ⛔ `:897` calls `priceCache.updateFromRest(...)` — **the singleton only.** The private-map write for that path is a different method, `fetchPrice:578`, **conditional** on `_cachedProducer !== null` (`:570`). ⇒ **the two stores CAN diverge**, and "one principal writer" is too strong: the private map has **three** writers (`updateCache:1138`, `fetchPrice:578`, `seedLastKnownGoodPrice:1237`); only the first fans out. |
+| **W5** | P1-10: exclude a **book-mid producer** from rung-2 "recovery" | ⛔ **NO SUCH VALUE EXISTS TO EXCLUDE.** F2 says so at `level-basis.ts:980-982`: *"`CachedPrice` carries `lastSource` … and NO fine-grained producer, so both (a) and (b) read as `kraken_ws`. The field that would settle it does not exist."* |
+| **W6** | the accepted-age histogram makes any candidate ceiling derivable, so a failing value **cannot be re-picked** | ⛔ **OVERSTATED FOUR WAYS (A-5b).** It makes a re-pick **VISIBLE**, not impossible. |
+| **W7** | ⭐ cited `kraken-websocket-adapter.ts:1151-1153` as the book-mid price tick | ⛔⛔ **`:1151-1153` IS THE CROSSED-BOOK DETECTOR COMMENT.** The `emitPriceTick` is at **`:1202-1204`**. **AND I HAD READ `:1148-1156` IN THIS SESSION AND SEEN THE CROSSED-BOOK DETECTOR ON SCREEN. I transcribed F2's range from `level-basis.ts:967` anyway, under the words "re-derived at the ref."** `MISTAKE: docblock-cited-as-code` — **second instance this batch, and this one survived a disconfirming read I had already taken.** |
+| **W8** | crypto closes "~4.5/day" over 2026-09-04 → 09-13 | ⛔ **ARITHMETIC.** Nine values (`1,2,8,8,9,3,5,7,2`), sum **45**, over a span stated as ten days. **45/9 = 5.0/day**; 4.5 divides by a denominator the list does not show. |
+| **W9** | `_recordBookStateEvent` "mutates `position.metadata` on EVERY tick" | ⛔ **Exactly TWO call sites (`aee:1487`, `:1541`), both inside the xStock book-state guard, both EVENT-gated.** *(The in-code comment at `aee:1857-1858` says "every tick" and is wrong; I repeated it.)* **And its throttle is an event-streak modulus (`streak % 10`), NOT a time interval** — so "the throttle interval bounds the loss" describes a mechanism the precedent does not have. |
 
 ---
 
 ## 1. THE AUDIT
 
-### A-1 — THE DECISION INSTANT ALREADY EXISTS IN THE EXIT LOOP, AND IT IS `_exitProvenanceBase`'s SITE
-`aee:1814-1860` builds `_bookX` and `_exitProvenanceBase` **once per position per tick, above the exit-condition evaluation, for every position on every tick** — its own docblock says exactly that (`:1830-1832`).
-⇒ **The ladder walk belongs there**, on the same read, so the recorded quote and `exit_decision_price` share one instant. Any site below it would sample a *second* instant and reproduce `3n.n`'s defect one layer over.
+### A-1 — THE DECISION INSTANT IS `_exitProvenanceBase`'s SITE — ⛔ **AND THE POPULATION REACHING IT IS ALREADY CONDITIONED**
+`aee:1814` builds `_bookX`, `:1817` `_exitProvenanceBase`, closing at `:1861`. Its docblock (`:1829-1830`) says it is built *"once per position … above the exit-condition evaluation, for every position on every tick."*
+⛔⛔ **THAT DOCBLOCK IS FALSE ABOUT THE CODE AROUND IT, AND r1-r4 REPEATED IT AS ESTABLISHED. FOUR `continue`s PRECEDE `:1814` IN THE SAME LOOP ITERATION:** `:1618` (book-state unvalidated), `:1717` and `:1770` (REST skip), `:1803` (pending-maker pre-pass).
+⇒ ★★ **THE SITE IS REACHED ONLY BY POSITIONS THAT ALREADY OBTAINED A VENUE-FRESH MARK.** ⇒ **P1 measures the ladder's refusal rate on *exit ticks that already had a usable mark*, NOT on all exit ticks — and the ticks most likely to have no usable quote are precisely the ones already excluded.** **That conditioning is now the pre-registered population (§3), stated rather than discovered at read time.**
 
-### A-2 — `getBookForFill` HANDS BACK AN AGE, NOT A STAMP — AND THE RECONSTRUCTION IS ALREADY PRECEDENT
-`kraken-websocket-adapter.ts:3560-3580` returns `{ asks, bids, ageMs }`, where `ageMs = Date.now() - updatedAt` and `bookUpdatedAt.set(internalSymbol, Date.now())` at `:1162` ⇒ **OUR RECEIPT CLOCK, never the venue's** ⇒ `clockBasis: 'receipt'`.
-✅ **`signal-orchestrator.ts:2668` ALREADY reconstructs `stampMs: _lbNow - _lbBook.ageMs`, with a comment written specifically so nobody later "simplifies" it into `Date.now()`.**
-⇒ **REUSE the precedent. Do NOT widen the adapter's return type.** *(I considered adding `capturedAtMs` to `getBookForFill` and rejected it: a documented precedent already exists, and two representations of one instant is how the two drift.)*
+### A-2 — `getBookForFill` HANDS BACK AN AGE, NOT A STAMP — AND THE RECONSTRUCTION IS PRECEDENT
+`kraken-websocket-adapter.ts:3560-3580` returns `{ asks, bids, ageMs }`, `ageMs = Date.now() - updatedAt` (`:3579`); `bookUpdatedAt.set(internalSymbol, Date.now())` at `:1162` ⇒ **receipt clock** ⇒ `clockBasis: 'receipt'`.
+✅ **`signal-orchestrator.ts:2667` already reconstructs `stampMs: _lbNow - _lbBook.ageMs`**, with a comment written so nobody later "simplifies" it into `Date.now()`. ⇒ **REUSE it; do NOT widen the adapter's return type.**
+⚠️ **BOUNDED, because r1-r4 over-claimed:** *"never the venue's"* is true of **`getBookForFill`**, not of the book update — the book channel **does** carry a venue stamp, emitted as `venueObservedAtMs` at `kraken-websocket-adapter.ts:1208`. **A venue clock for the same object exists on a different path**, and P2 may want it.
 
-### A-3 — ⭐ `'exit_trigger'` IS A DECLARED STAGE WITH **ZERO** PRODUCTION WRITERS
-Whole-repo at the ref, `exit_trigger` occurs **twice**: `level-basis.ts:623` (the declaration) and `server/tests/unit/side-age.test.ts:142`, which asserts `row('active:crypto_spot:exit_trigger')` **is `undefined`** — a test that PINS THE ABSENCE. The other three stages all have writers: `rtb-refresh-service.ts:455`, `signal-orchestrator.ts:2582`, `vts-runner.ts:1554`.
-⇒ **The stage was declared in advance for this row. P1 is its first writer, and `:142` must flip from a pinned absence to a positive assertion — that flip is itself evidence the writer landed**, rather than a test edited to accommodate one.
+### A-3 — `'exit_trigger'` IS A DECLARED STAGE WITH **ZERO** PRODUCTION WRITERS — ⛔ AND THE "EVIDENCE" r1-r4 ATTACHED IS WITHDRAWN
+Whole-repo at the ref, `exit_trigger` occurs **twice**: `level-basis.ts:623` and `side-age.test.ts:142`. The other three stages have writers at `rtb-refresh-service.ts:455`, `signal-orchestrator.ts:2582`, `vts-runner.ts:1554`.
+✅ **A STRONGER FORM OF THE SAME ABSENCE:** `aee` imports **neither** `core/calculations/level-basis` **nor** `core/calculations/touch-price` ⇒ **the exit loop cannot reach the recorder at all**; P1 adds two imports.
+⛔ **WITHDRAWN (W2): `side-age.test.ts:142` is a fixture negative control, not a production absence pin. Flipping it proves the recorder accepts a stage value and NOTHING about a production writer.** Liveness is P1-7's job (A-13).
+⚠️ **REACH: "zero writers" is a STRING-LITERAL result.** All three existing call sites pass inline literals — evidence about those three, not proof that no variable-fed path could exist. ⚠️ And the union is **not a runtime gate**: `b-price-side-obj8c-instrument-populations.test.ts:163` already passes `stage: 'level_build' as const`, outside the union, because `tsconfig` excludes test files.
 
-### A-4 — ⛔⛔ THE TWO RECORDERS DISAGREE ABOUT WHICH DIMENSION SEPARATES THE EXIT POPULATION
+### A-4 — ⛔⛔ THE TWO RECORDERS DISAGREE ABOUT WHICH DIMENSION SEPARATES THE EXIT POPULATION — **AND THE FIX IS IN `keyOf`, NOT IN THE TYPE**
 
-| recorder | key | separates the exit population? |
+| recorder | **the key its map actually uses** | separates the exit population? |
 |---|---|---|
-| side-age probe — `level-basis.ts:750` `sideAgeKey` | `<lane>:<assetClass>:<stage>` | ✅ **YES** — via `stage: 'exit_trigger'` |
-| the funnel — `LevelBasisRungKey`, SIM **S27** | `<lane>:<assetClass>:<rung>` | ⛔ **NO — there is no stage dimension** |
+| side-age probe | `level-basis.ts:750` `sideAgeKey` — `lane + ':' + assetClass + ':' + stage` | ✅ **YES** |
+| the funnel | `level-basis.ts:405-407` **`keyOf`** — `` `${lane}:${assetClass}:${rung}` `` | ⛔ **NO** |
 
-⇒ **Recording the exit walk under `lane: 'active'` would POOL the exit population with the level build, in the funnel.** That is precisely the failure the lane key's own docblock (`level-basis.ts:302-313`) exists to make impossible — *"a counter that aggregates two populations answers questions about neither"* — **committed inside the instrument built to prevent it. It would be the fourth instance of this batch's own class.**
+⇒ Recording the exit walk under `lane: 'active'` pools it with the level build — the failure the lane docblock (`:302-313`; quote at `:308-309`, *"A counter that aggregates two populations answers questions about neither"*) exists to make impossible.
+⛔⛔ **AND r1-r4's FIX DID NOT FIX IT (W1). `keyOf` is the object; the interface is not.** ⇒ **P1-2 now changes `keyOf` AND `LevelBasisRungKey` AND stores `stage` on `FunnelCell`**, on the precedent of how `rung` was made structural (`:369-382` stores `rung` on the cell precisely so a consumer never parses the key string).
+⛔ **REJECTED ALTERNATIVE — adding `'exit'` to `LevelBasisLane`:** `lane` means WHICH RUNNER (`:306` names *"the active orchestrator and the VTS runner"*), and the exit loop **is** the active runner.
+⚠️ **The docblock arguing against widening the shared key (`:340-341`) is one recorder short in its own example** — `recordFeedAgreement` (`:1087`) keys on `assetClass` alone, no `lane`. **The principle stands; I am not citing its count.**
 
-✅ **RECOMMENDATION: add `stage` to `LevelBasisRungKey` — REQUIRED, and NOT to the shared `LevelBasisFunnelKey`.**
-- **The precedent is in the same file and was created for this exact reason.** `LevelBasisRungKey extends LevelBasisFunnelKey` exists because `rung` is meaningless to the other two recorders, and its docblock refuses to widen the shared type. **`stage` is the mirror case — the funnel is the one recorder that lacks it.**
-- **REQUIRED, not optional:** the two existing call sites become compile-forced to name `active_signal_birth` / `vts_signal_birth`. A default would let the exit silently inherit a level-lane label.
+### A-5 — THE FUNNEL CARRIES NO AGES — ⛔ BUT IT **DOES** CARRY THE AGE *REFUSALS*, AND r1-r4 SAID OTHERWISE
+`FunnelCell` (`level-basis.ts:369-382`) is `{ rung, accepted, byReason, byAcceptedSource }` — no age term. **HOLDS.**
+⛔ **BUT "availability from `byReason`, age from the histogram — neither alone does" IS WRONG.** `assess` returns `age_unknown` (`:222`, `:230`) and `stale_book` (`:231`) **at `maxAgeMs`**, and `LADDER_REASON_NAME` maps them to `ticker_age_unknown` / `stale_ticker` (`:457-458`).
+⇒ ✅ **THE TOTAL REFUSAL RATE *AT THE 60,000 ms CEILING* COMES FROM THE FUNNEL ALONE.** The histogram's job is narrower and is now stated as such: **evaluating a DIFFERENT ceiling.**
 
-⛔ **REJECTED ALTERNATIVE — adding `'exit'` to `LevelBasisLane`.** `lane` means **WHICH RUNNER** (`:302-313` names *"the active orchestrator and the VTS runner"*), and **the exit loop IS the active runner.** A lane value of `'exit'` would make `lane` mean two different things depending on which value it holds, and it would leave `side-age.test.ts:142`'s pinned absence true-but-misleading — it would read as *"the exit stage never fires"* while the exit fires under another lane.
+### A-5b — THE ACCEPTED-AGE RECORD, WITH ITS DERIVABLE RANGE STATED — ⛔ NARROWED FOUR WAYS (W6)
+`sel.quote.ageMs` exists (`touch-price.ts:115` book arm, `:129` ticker arm); the side-age probe measures the **cache-side** age, not the accepted quote's. Both **HOLD**.
+⛔ **"the refusal rate at ANY candidate ceiling is derivable" DOES NOT HOLD:**
+1. **The first bucket edge is 1,000 ms** — every accepted **book** leg lands in bucket 0 ⇒ **no ceiling below 1 s is derivable at all.**
+2. **No ceiling above 60,000 ms is derivable** — those walks refuse as `stale_*` and never enter an accepted-age histogram.
+3. **A histogram yields BUCKET-BOUNDED rates, never point rates** — the module says so itself (`:578-579`): *"Quantiles are reported as bucket RANGES, never interpolated points."*
+4. ⛔ **`sel.quote.ageMs` is whichever leg was accepted**, so book ages (sub-second) pool with ticker ages (2/15/30/60 s cadences) in one cell — **structurally the F4 defect this same module already fixed by SPLITTING (`:700-716`), rebuilt one field over.**
+✅ **THE ITEM SURVIVES, NARROWED AND SPLIT: record the accepted-quote age PER LEG (`book` / `ticker`), and publish the derivable window as `[1,000 ms, 60,000 ms]`, bucket-bounded.** ⚠️ **The honest claim is what round 2 left standing: this makes a re-pick of a failing ceiling VISIBLE, not impossible.**
 
-### A-5 — THE FUNNEL CARRIES NO AGES, SO P1-OBJ-2 IS NOT SERVED BY IT
-`FunnelCell` (`level-basis.ts:382-393`) is `{ rung, accepted, byReason, byAcceptedSource }` — **no age term anywhere.** The age distribution lives in the side-age probe (`SIDE_AGE_BUCKET_EDGES_MS`, `buckets`, `maxMs`, `negative`).
-⇒ **P1 writes BOTH recorders on ONE walk.** Together they give the **TOTAL** refusal rate Langston's r4 correction demands: **availability** from the funnel's `byReason`, **age** from the histogram. Neither alone does.
+### A-6 — **ONE FAN-OUT WRITER AMONG THREE; THE BOUNDARY IS A PROJECTION — AND THE OPTION CHOICE IS A REAL TRADE-OFF, NOT A WIN**
+✅ **HOLDS:** `updateCache` writes **both** stores — `lpa:1138` its private map, `:1171` `priceCache.updateFromWebSocket(...)` — and the comment at `:1163-1164` states the fan-out as the design.
+⛔ **CORRECTED (W4):** that is **one of three** writers of the private map; only `updateCache` fans out, and `lpa:897` writes the **singleton only**. ⇒ **the two stores can diverge.**
 
-### A-5b — ⭐⭐ AND THIS IS WHAT DISSOLVES THE CIRCULARITY **STRUCTURALLY**, RATHER THAN PROMISING IT
-The side-age probe measures **the TICKER leg's cache age** — *not the age of the quote the ladder ACCEPTED*, which may be the book's. On this lane the two nearly coincide (the socket carries a book for ~1 symbol), but **"nearly" is not "is", and a ceiling sweep has to be exact.**
-⇒ **P1 additionally records the ACCEPTED quote's own `ageMs`**, which `recordTouchSelection` already holds as `sel.quote.ageMs`. **Extend `FunnelCell` with `acceptedAgeBuckets` + `acceptedAgeMaxMs`** on the existing edges, in the same cell, under the same key.
-★★ **CONSEQUENCE, AND IT IS THE POINT: with the accepted-age histogram on the record, the refusal rate at ANY candidate ceiling is derivable post-hoc from ONE window.** So P1 does not need `exit_ladder_max_age_ms` to exist yet; the risk-derived value can be chosen afterwards and **evaluated without a second window** — and **a value that fails the gate cannot be quietly re-picked until it passes, because every candidate's rate is already recorded.**
+✅ **THE PROJECTION FINDING HOLDS AND IS REAL:** the adapter's `CachedPrice` carries `bid` (`:290`), `ask` (`:291`), `sidesCapturedAtMs` (`:293`), `venueObservedAtMs` (`:299`) — **but `PriceQuote` (`:232-255`) carries none of them, and none of `getPriceWithFallback`'s four return sites (`:1333`, `:1351`, `:1379`, `:1400`) projects them.**
+⛔ **ATTRIBUTION CORRECTED:** the sentence r1-r4 quoted as *"`CachedPrice`'s own docblock"* is at **`lpa:1151-1153`, inside `updateCache`'s BODY.** ⭐ **And `CachedPrice`'s ACTUAL docblock (`:283-289`) says something r1-r4 never reported and that is independently falsifiable: *"`getPriceWithFallback` returns this object, and `active-execution-engine.ts:1485` consumes it."* **`aee:1485` at the ref is a `console.error` in the xStock hollow-yield catch — nothing to do with price.** ⇒ **the docblock names a consumer that is not there, and r1-r4's paraphrase deleted the one clause that could be checked.**
 
-### A-6 — ⛔⛔ **CORRECTED AT THE OBJECT: IT IS ONE WRITER FANNING INTO TWO STORES, AND THE REAL BOUNDARY IS A *PROJECTION*, NOT A CACHE**
-r1 of this document said *"two stores, two WRITER SETS, two cadences."* **THE MIDDLE CLAUSE IS FALSE.** A fresh reader raised it; I re-derived it at the ref before accepting.
-`live-pricing-adapter.ts` `updateCache` writes **BOTH in one method** — `:1138` its own private map, `:1171` `priceCache.updateFromWebSocket(...)` — and says so in its own comment: *"one write reaching BOTH the exit trigger (the map above) and SIGNAL GENERATION (the shared cache…)"*. `:897` does the same on the REST path. ⇒ **one principal writer, two stores — which also means the two can hold the same numbers.**
+⛔⛔ **THE OPTION RECOMMENDATION IS WITHDRAWN AND HANDED UP (W3). THE TWO OPTIONS MEASURE DIFFERENT THINGS AND PRODUCE DIFFERENT REFUSAL REASONS — AND THE REFUSAL SPLIT IS P1's ENTIRE OUTPUT.**
+| | instant + gate | side availability |
+|---|---|---|
+| **(a) project the adapter row's sides** | ✅ one read, one row, **inside the 2,000 ms gate** | ⛔ **WORSE** — `fetchPrice:592` and `seedLastKnownGoodPrice:1253` write null sides with **no carry-forward**, and **`aee:1760`, inside this very loop, nulls them for its own symbol on the direct-REST leg** ⇒ refusals read `no_ticker` |
+| **(b) `priceCache.getCachedPrice(...)` — the level lane's source** | ⛔ second row, second instant, **no gate** | ✅ the singleton **carries sides forward** (`price-cache.ts:674-675`, `:710-711`, `:720-721`) ⇒ refusals read `stale_ticker` |
+★ **Identical market conditions, two different measured rates and two different reason vocabularies.** ⚠️ **AND THE `3n.l` (`#1056`) FLOOR ONLY COVERS (b)** — under (a) the floor comes from `fetchPrice:592` and `aee:1760`, **which are scoped nowhere.**
+⇒ ⛔ **THIS IS THE ONE THING I AM PUTTING TO LANGSTON RATHER THAN DECIDING.** My lean is **(b) for P1** — it is what the other three stages already read, so the `exit_trigger` cell stays comparable with them and the probe's docblock invites exactly that per-stage comparison — **with (a) as a P2 question once the gate matters.** ⚠️ **But (a) has an argument r1-r4 missed while asserting the opposite: see A-11.**
 
-⭐⭐ **AND THE CORRECTION EXPOSES SOMETHING BETTER THAN WHAT IT REPLACES: THE ADAPTER'S ROW ALREADY HOLDS THE SIDES, AND THE EXIT LOOP STILL CANNOT SEE THEM — BECAUSE THE RETURN TYPE DROPS THEM.**
-- The adapter's `CachedPrice` carries `bid`, `ask`, `sidesCapturedAtMs`, `venueObservedAtMs` (`lpa:290-297`), and its **own docblock claims**: *"This entry is what `getPriceWithFallback` returns and therefore what the EXIT TRIGGER reads — so until this commit the exit path held a midpoint with no route back to the two prices it was built from."*
-- ⛔ **`PriceQuote` (`lpa:232-253`) HAS NO `bid`, `ask`, `sidesCapturedAtMs` OR `venueObservedAtMs`, and none of `getPriceWithFallback`'s four return sites (`:1333`, `:1350`, `:1383`, `:1400`) projects them.**
-⇒ ⛔⛔ **THE DOCBLOCK IS WRONG ABOUT ITS OWN FIELD — the route it says it built does not reach the consumer it names.** **The same shape this batch keeps finding: a field added, a docblock naming a consumer, and no projection to that consumer.**
-
-✅ **THIS GIVES P1 A CHOICE THAT IS NOT A MATTER OF TASTE — AND IT IS THE SECOND THING I WANT ATTACKED:**
-| ticker-leg source | what it inherits |
-|---|---|
-| ✅ **(a) widen `PriceQuote` to project the sides the adapter row ALREADY HOLDS** | **ONE read, ONE row, ONE instant — and the sides arrive INSIDE the same 2,000 ms venue gate as the mark.** |
-| ⛔ (b) `priceCache.getCachedPrice(...)` — the singleton, as the level lane does | a **second row, a second instant, and NO venue gate.** |
-★ **(a) is strictly better for P2 and is smaller than it looks: the fields exist on the row; it is a PROJECTION, not a capture change.**
-⚠️ **ADJACENT TO BUT NOT A DUPLICATE OF `3n.l` (`#1056`)** — that row is about what the REST **WRITE** path stores into the singleton; this is about what the **READ** path projects out of the adapter.
-⚠️ **P1 SHOULD TAKE (a), AND THAT IS A CHANGE FROM THIS DOCUMENT'S r1**, which inherited (b) from the level lane without asking.
-⚠️ **AND (a) DOES NOT DISSOLVE A-11 BELOW** — the same writer feeds both rows, so the rung-conflation survives it. (a) fixes the instant and the gate, nothing more.
-
-### A-11 — ⛔⛔ RUNG 1 AND RUNG 2 CAN BE **THE SAME OBJECT** ON EXACTLY THE SYMBOLS THAT CARRY A BOOK
-Already documented in this repo as `level-basis.ts`'s **F2**, re-derived at the ref: `kraken-websocket-adapter.ts:1151-1153` emits a price tick with `producer: 'kraken_ws_book_mid'` carrying `bid: bestBid, ask: bestAsk` — **the top of the very book `getBookForFill` returns as rung 1** — and it flows to `lpa:1171` → the shared cache's `bid`/`ask`, which is rung 2. In F2's own words: *"on a book-carrying symbol the cached sides are whichever of the two channels ticked last, and the payload cannot say which."*
-⚠️ **AND IT BITES HARDEST EXACTLY HERE: the socket carries a book for ~1 symbol, and with ~1 crypto position open (A-10), THAT SYMBOL IS LIKELY TO BE THE OPEN POSITION.** ⇒ **a *"rung 2 recovered it"* reading is NOT safe on a book-carrying symbol.**
-✅ **BUT IT IS DETECTABLE IN THE RECORDED DATA RATHER THAN ONLY IN PROSE: `byAcceptedSource` already carries `<basis>:<producer>`** ⇒ **P1 reports the rung-2 accept split BY PRODUCER, and a book-mid producer on rung 2 is EXCLUDED from any "the ticker recovered it" statement.**
-
-### A-12 — TWO SMALLER OBJECT-LEVEL CORRECTIONS, RECORDED SO NOTHING RESTS ON THEM SILENTLY
-1. **`aee` imports NEITHER `core/calculations/level-basis` NOR `core/calculations/touch-price` at the ref.** ⇒ A-3's "zero writers" has a stronger form — **the exit loop cannot reach the recorder at all** — and P1 adds two new imports to that file.
-2. ⚠️ **The docblock A-4 quotes is itself inaccurate in its example.** It says `LevelBasisFunnelKey` is *"shared by three recorders: this funnel, the side-age probe and the feed-agreement probe"* — but `recordFeedAgreement` (`level-basis.ts:1087`) takes a `FeedAgreementSample` and keys on `s.assetClass` alone, **with no `lane` at all.** ⇒ **A-4's PRINCIPLE stands (do not widen the shared key for a dimension a recorder lacks); its SUPPORTING EXAMPLE is one recorder short, and I am not citing the count.**
-
-### A-7 — THE `fg2Shadow` BID ARM IS A DIFFERENT INSTRUMENT AND IS NOT A BASELINE FOR P1
-`aee:2248` enters only when `fg2BookBid` is finite and positive ⇒ **it is SILENT exactly on the population P1 most needs to measure** (no book). It is the RAW book top: no validity checks, no age gate, no ticker rung, no refusal path. *(Scope r3 B4 established this for the flip; it binds the measurement for the same reason.)*
+### A-7 — THE `fg2Shadow` BID ARM IS A DIFFERENT INSTRUMENT — ⛔ BUT A NO-BOOK BASELINE **DOES** ALREADY EXIST
+`aee:2248` enters only on finite-positive `fg2BookBid` **and** `crypto_spot`. **HOLDS.**
+⛔ **CORRECTED:** r1-r4 said it is *"SILENT exactly on the population P1 most needs."* **It is not.** `aee:2229-2247` counts that population explicitly — `fg2ShadowSkippedNoBook++` plus a once-per-position `metadata.fg2ShadowSkip = { reason: 'no_book_bid' }`, added on Langston's FINDING-2 **precisely so the denominator exists**, and surfaced on the `EVAL_EXIT` line.
+⇒ **A no-book COUNT baseline exists and is directly comparable to P1's `no_book` refusals.** §3's flat *"P1 reports no comparison against `fg2Shadow`"* is therefore **too broad and is narrowed**: the **first-exit 2×2** stays out (different instrument, different guard); **the no-book count is a legitimate cross-check and is reported as one.**
 
 ### A-8 — PROCESS-LIFETIME WINDOW, AND A RESTART **ENDS** IT
-SIM **S27**: the funnel is a module singleton, not persisted, not evicted — *"a restart ZEROES it, so it is a RATE WITHIN ONE LIFETIME and never a historical series."* `_sideAge` is the same shape.
-⇒ **P1's window is ONE UNINTERRUPTED pm2 lifetime, anchored on `pm_uptime`** — **never** on `dt-deploy`'s `deployed_at`. A restart mid-window **VOIDS** it; it does not extend it.
+SIM **S27**, verbatim: *"a restart ZEROES it, so it is a RATE WITHIN ONE LIFETIME and never a historical series."* **HOLDS** for the funnel.
+⚠️ **`_sideAge` is the same shape AT THE CODE (`level-basis.ts:747`) and has NO SIM ENTRY AT ALL** — zero matches for `_sideAge` / `side-age` in `SYSTEM_IMPACT_MAP.md`. ⇒ **a §9 rule-1 governance gap, flagged here rather than passed over.**
+**DISPOSITION (§9.4 — 1, fold into the work in hand):** P1's Step 10 registers `_sideAge` in the System Impact Map beside S27 (P1-11).
 
-### A-9 — THE SPREAD BOUND WILL NOT BIND ON THIS LANE, AND THAT IS STATED IN ADVANCE
-`LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION = 0.50`, against a measured crypto median spread of **0.199%**.
-⇒ `implausible_spread` will be ~0 on the crypto exit lane **by construction, not by health** — so that zero carries no information and must not be reported as though it did. Whether the exit lane wants a tighter bound is **P2's question**, not P1's.
+### A-9 — THE SPREAD BOUND — ⛔ "BY CONSTRUCTION" WITHDRAWN
+`LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION = 0.50` (`:564`); predicate `(ask-bid)/mid > maxSpreadFraction` (`:237`). **HOLD.**
+⛔ **But r1-r4 argued a TAIL from a MEDIAN.** The 0.199% figure is a **median crypto spread**, its population is unstated everywhere it appears in the corpus, and it is not the exit lane's population. **A median cannot bound a tail.**
+⇒ ✅ **RESTATED: `implausible_spread` is EXPECTED near zero on this lane, and P1 CHECKS it rather than predicting it.** If it is not near zero, that is a finding, not a malfunction.
 
-
-### A-10 — ⛔⛔ THE POPULATION IS TINY AT ANY INSTANT AND THE COUNTER CANNOT HOLD THE WINDOW IT NEEDS. **MEASURED, NOT ASSUMED.**
+### A-10 — THE POPULATION IS TINY AT ANY INSTANT AND THE COUNTER CANNOT HOLD THE WINDOW — **MEASURED, ARITHMETIC CORRECTED**
 | measurement (live, 2026-09-14, bounded queries) | value |
 |---|---|
-| open positions **right now**, by class | **crypto 1**, xStock 3 |
-| crypto closes per day, 2026-09-04 → 09-13 | **1, 2, 8, 8, 9, 3, 5, 7, 2** — ~4.5/day |
-| **distinct crypto symbols** closing per day | **1, 2, 7, 8, 7, 3, 4, 7, 2** — close-to-one per close |
-| pm2 `dawntrader` **current uptime** | **5.3 hours** · all-time `restart_time` = **614** |
+| open positions now, by class | **crypto 1**, xStock 3 |
+| crypto closes/day, the **nine** days with any close in 2026-09-04 → 09-13 | `1, 2, 8, 8, 9, 3, 5, 7, 2` — **sum 45, mean 5.0/day over days-with-closes** *(r1-r4 said 4.5, dividing by ten — W8)* |
+| distinct crypto symbols closing per day | `1, 2, 7, 8, 7, 3, 4, 7, 2` — **41 symbol-days** |
+| pm2 `dawntrader` uptime when written | **5.3 h**; `restart_time` **614** |
 
-⇒ **TWO CONSEQUENCES, AND THEY PULL AGAINST EACH OTHER:**
-1. ⛔ **A WALK COUNT IS NOT A POPULATION.** With ~1 crypto position open, a per-tick ladder walk accrues thousands of rows **from one symbol's feed**. A refusal rate over that n describes **that symbol**, not "the exit population" — the `#1052` shape, where a large n hides a degenerate support. ⇒ **the n-floor must be stated in POSITION-LIFETIMES and DISTINCT SYMBOLS, with the walk count reported beside it as the explicitly non-independent denominator.**
-2. ⛔⛔ **AND AT ~4.5 CLOSES/DAY A 30-LIFETIME FLOOR IS ~7 DAYS — WHICH AN IN-MEMORY COUNTER CANNOT HOLD.** A-8 says a restart VOIDS the window; the live process has been up **5.3 hours** against **614** restarts, and three sessions deploy to this box. **A process-lifetime counter and a seven-day floor are not compatible, and shipping both would produce a window that silently never completes.**
+⛔ **AND TWO INFERENCES r1-r4 DREW FROM THOSE NUMBERS DO NOT FOLLOW:**
+- **`restart_time = 614` HAS NO TIME BASE**, and the conclusion drawn from it is a *rate*. ✅ **The corpus supplies the base: SIM S26 records `restart_time = 596` on 2026-09-03 ⇒ ~18 restarts in 11 days ≈ 1.6/day.** The conclusion survives that derivation — **but r1-r4 did not make it, and a cumulative count plus one uptime sample does not establish a rate.**
+- ⛔ **41 SYMBOL-DAYS DOES NOT GIVE A UNION.** It is consistent with anywhere from ~8 to ~41 distinct symbols over the window. ⇒ **the ≥15-distinct-symbol floor is NOT derivable from what I measured, and §3 fixes it from a union query before deploy.**
 
-✅ **RECOMMENDATION — BOTH, because they measure two different things, and the precedent for the second is IN THIS LOOP ALREADY:**
-- **the FUNNEL** keeps the high-frequency **walk-level** rate within one lifetime, with its structural-equality control. Read as *"the rate while the process was up"*, never as the window.
-- **a DURABLE PER-POSITION STAMP** carries the window: accumulate `{walks, accepted, refused, byReason, maxAcceptedAgeMs}` per position and write it under `metadata.ladderShadow`, **throttled**, exactly as `_recordBookStateEvent` already mutates `position.metadata` every tick and throttles only the row write, and as `fg2Shadow` already stamps this same loop. ⇒ **the window then lives in `closed_trades.metadata`, one row per position-lifetime — which is the unit the n-floor is stated in anyway, and it survives every deploy.**
-⚠️ **THIS IS A REAL ADDITION TO P1's SURFACE (a metadata write) AND I AM FLAGGING IT AS THE ONE THING IN THIS PLAN I MOST WANT ATTACKED.** The alternative — accept a process-lifetime window and a much lower floor — is cheaper and measures a narrower thing, and it is a defensible call I am not making unilaterally.
+⇒ **THE TWO CONSEQUENCES STAND:**
+1. ⛔ **A WALK COUNT IS NOT A POPULATION.** With ~1 crypto position open, per-tick walks accrue thousands of rows **from one symbol's feed** — the `#1052` shape, a large n over a degenerate support.
+2. ⛔ **A ~7-DAY FLOOR CANNOT LIVE IN A PROCESS-LIFETIME COUNTER** at ~1.6 restarts/day.
+✅ **RECOMMENDATION: two windows** — the funnel for the walk-level rate within one lifetime, and a **durable per-position stamp** for the window proper (P1-9).
+
+### A-11 — RUNG 1 AND RUNG 2 CAN BE **THE SAME OBJECT** — ⛔ CITATION FIXED, EXPOSURE UNMEASURED, RECOMMENDATION RESHAPED
+✅ **THE MECHANISM HOLDS:** `kraken-websocket-adapter.ts` **`:1202-1204`** *(NOT `:1151-1153`, the crossed-book detector — W7)* emits a price tick with `producer: 'kraken_ws_book_mid'` carrying `bid: bestBid, ask: bestAsk` — **the top of the very book `getBookForFill` returns as rung 1** — flowing to `lpa:1171` → the shared cache's `bid`/`ask`, which is rung 2. F2's words (`level-basis.ts:973-974`): *"on a book-carrying symbol the cached sides are whichever of the two channels ticked last, and the payload cannot say which."*
+⛔ **"~1 BOOK-CARRYING SYMBOL" IS WITHDRAWN — IT WAS NEVER MEASURED.** A-10 measured **open positions**, a different object. The repo's own measured statement at the ref (`signal-orchestrator.ts:2648-2649`, dated 2026-09-13) says **TWO**; and the book is subscribed for the **whole symbol list** (`kraken-websocket-adapter.ts:1565-1573`, one `bookSubscribe` carrying the same list as ticker), **not for holdings** ⇒ **the holdings↔book-coverage identity r1-r4 assumed is unsourced. P1 MEASURES the coverage rather than asserting it (P1-12).**
+⛔ **AND "exclude a book-mid producer" IS REFUTED BY F2 ITSELF (W5):** `byAcceptedSource` carries `` `${basis}:${producer}` `` where the ticker leg's producer is `lastSource` (`touch-price.ts:197`) ∈ `kraken_ws | kraken_rest | kraken_equities_ws`. **There is no book-mid value on rung 2.**
+✅ **RESHAPED ONTO F2's OWN SPLIT, WHICH ALREADY SOLVED THIS FOR THE SIBLING PROBE:** a **`kraken_rest`** rung-2 acceptance is **provably not the book's top** (REST never writes the book channel) ⇒ interpretable. A **`kraken_ws`** one is **AMBIGUOUS** ⇒ counted separately and **never reported as "the ticker recovered it."**
+★★ **AND THIS IS A GENUINE ARGUMENT FOR A-6's OPTION (a) THAT r1-r4 MISSED WHILE ASSERTING THE OPPOSITE:** the adapter row carries a **fine-grained `producer`**, and `PriceProducer` includes `'kraken_ws_book_mid'` (`lpa:72`) ⇒ **(a) would make the ambiguous `kraken_ws` subset interpretable.** It goes to Langston with the rest of A-6. ⚠️ **If (a) is ruled, P1-1 must project `producer` too and must NOT route through `tickerLegFromCachedQuote`, which would discard it.**
+
+### A-12 — **`aee` IMPORTS NEITHER MODULE** — verified by independent grep; P1 adds two imports. *(r1-r4's second half is folded into A-4's rider.)*
+
+### A-13 — ⛔⛔ **THE MUTATION PROOF HAS NO HOST TEST, AND P1 MUST BUILD ONE**
+`evaluateTECExit` is called in `aee` at `:2173` (live) and `:2262` (shadow), inside the **private** `checkExitConditions` (`:2099`).
+**ENUMERATED at the ref:** 23 test files mention `active-execution-engine`; **exactly two import from it** (`b-price-side-p7h-skip-streak-reasons.test.ts`, reaching in via `prototype._recordPriceSkip`, and `price-skip-alert-copy.test.ts`, a pure helper). The **five** tests that call `evaluateTECExit` call it **directly on `tec-evaluator`** ⇒ **a mutation at `aee:2173` is invisible to every existing test.**
+⛔ **P1-7 as r1-r4 wrote it ("assert a test fails") NAMED NO TEST AND COULD NOT RUN.**
+✅ **THE HOST IS THE PATTERN THIS REPO ALREADY USES FOR EXACTLY THIS: A SOURCE FENCE** — `b-exit-provenance-fence.test.ts` reads the file as text and asserts on its content. ⇒ **P1-7 becomes a fence asserting the ladder result appears in NO argument of either `evaluateTECExit` call, mutation-proved by source substitution — and the mutation asserts the substitution MATCHED before reading the result** (a non-applying substitution reports as passing; measured on the `8c` instrument tests).
 
 ---
 
@@ -124,41 +152,48 @@ SIM **S27**: the funnel is a module singleton, not persisted, not evicted — *"
 
 | # | item | from |
 |---|---|---|
-| **P1-1** | In `aee`, at `_exitProvenanceBase`'s site, **crypto only**: build the two legs and call `selectTouchPrice`. Book leg from `_bookX` — `stampMs = _now - ageMs`, `clockBasis: 'receipt'`, `producer: 'kraken_ws_book'`, `bookEligible: true`. ⛔ **Ticker leg via OPTION (a) of A-6 — widen `PriceQuote` to project `bid`/`ask`/`sidesCapturedAtMs`/`venueObservedAtMs`, which the adapter row ALREADY HOLDS, and build the leg from the SAME `priceResult` the mark came from.** ✅ **One read, one row, one instant, and the sides inherit the 2,000 ms venue gate.** ⛔ **NOT `priceCache.getCachedPrice(...)`** — that is a second row at a second instant with no gate, and this document's r1 inherited it from the level lane without asking. `tickerBasis: 'ticker_bbo'`. Policy **STATED WITH ITS NUMBERS**: `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000) and `…MAX_SPREAD_FRACTION` (0.50), one ceiling governing both legs. | **A-1, A-2, A-6, A-9** |
-| **P1-2** | Add **REQUIRED** `stage: LevelBasisStage` to `LevelBasisRungKey`; update `signal-orchestrator.ts:2692` → `active_signal_birth` and `vts-runner.ts:1613` → `vts_signal_birth`; the read surface gains a `stage` field. ⛔ **Shared `LevelBasisFunnelKey` UNCHANGED.** | **A-4** |
-| **P1-3** | Write **BOTH** recorders on the one walk: `recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'exit_trigger' }, sel)` and `recordSideAgeAttempt({ lane: 'active', assetClass: 'crypto_spot' }, { stage: 'exit_trigger', … })`. | **A-3, A-5** |
-| **P1-4** | Extend `FunnelCell` with `acceptedAgeBuckets` + `acceptedAgeMaxMs` on `SIDE_AGE_BUCKET_EDGES_MS`, fed from `sel.quote.ageMs` inside `recordTouchSelection`; surfaced on the funnel row. | **A-5b** |
-| **P1-5** | Flip `side-age.test.ts:142` from `toBeUndefined()` to a positive assertion on the `exit_trigger` row. | **A-3** |
-| **P1-6** | Counters on the existing `EVAL_EXIT` line (`aee:2070`): `ladderAccepted`, `ladderRefused`, `ladderViaBook`. | **A-1** |
-| **P1-10** | ⛔ **Report the rung-2 accept split BY PRODUCER, and EXCLUDE a book-mid producer from any "the ticker recovered it" statement** — `byAcceptedSource` already carries it. | **A-11** |
-| **P1-7** | ⛔ **THE MUTATION PROOF (P1-OBJ-1): a mutation that makes the ladder ACT must go RED** — substitute the ladder quote's bid for `currentPrice` at the `evaluateTECExit` call and assert a test fails. **The test asserts the substitution actually MATCHED before reading the result** — a non-applying substitution reports as passing, measured on the `8c` instrument tests. | the row's **OBJ-1** |
-| **P1-8** | Carry A-6's sentence into scope **§4** and A-9's into **§7**, before the window opens. | **A-6, A-9** |
-| **P1-9** | ⛔ **THE DURABLE PER-POSITION STAMP** — accumulate the per-position ladder summary and write it under `metadata.ladderShadow`, **throttled**, on the `_recordBookStateEvent` precedent re-read at `aee:474-492`: it mutates `position.metadata` in memory on **every** call (`:485`) and throttles only the DB write (`:486-488`), swallowing errors so the log line stands (`:489-491`). ⚠️ **TWO TRAPS CARRIED FROM THAT PRECEDENT, NOT REDISCOVERED: (i) THE IN-MEMORY COPY DOES NOT SURVIVE A RESTART EITHER — only the throttled DB writes do, so the throttle interval BOUNDS THE LOSS and must be stated as a number, not inherited; (ii) `closePosition` RE-FETCHES THE ROW, so the closing write must take the IN-MEMORY copy or the closed row lags by up to a full throttle interval** — Langston's Step-4 point 3 on the same field, already in scope §6. **This is what carries the window across restarts.** | **A-10** |
+| **P1-1** | In `aee`, at `_exitProvenanceBase`'s site (`:1817`), **crypto only**: build the two legs and call `selectTouchPrice`. Book leg from `_bookX` — `stampMs = _now - ageMs`, `clockBasis:'receipt'`, `producer:'kraken_ws_book'`, `bookEligible: true`. ⛔ **Ticker-leg source is A-6's open question — LEAN (b) `priceCache.getCachedPrice(normalizeToInternalSymbol(position.symbol))`, pending Langston.** ⚠️ **If (a) is ruled: `priceResult` is NOT in scope at `:1817` (its block closes at `:1773`) and the direct-REST leg has no `priceResult` at all — a hoist is a real change, not a field addition; and the leg must carry `producer` and must NOT route through `tickerLegFromCachedQuote` (A-11).** Policy stated with its numbers: `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000), `…MAX_SPREAD_FRACTION` (0.50), one ceiling governing both legs. | **A-1, A-2, A-6, A-9, A-11** |
+| **P1-2** | ⛔ **CHANGE `keyOf` (`level-basis.ts:405-407`), NOT ONLY THE TYPE (W1).** Add `stage` to the funnel key expression, to `LevelBasisRungKey`, and **store it on `FunnelCell`**, on the precedent of how `rung` was made structural. **REQUIRED**, so `signal-orchestrator.ts:2692` and `vts-runner.ts:1613` are compile-forced to name theirs; `recordTouchSelection`'s inline `base` parameter (`touch-price.ts:218`) widens with them. ⛔ Shared `LevelBasisFunnelKey` UNCHANGED. | **A-4** |
+| **P1-3** | Write **both** recorders on the one walk, at stage `exit_trigger`. ⚠️ **State which store feeds the side-age attempt** — the other three stages all read the singleton and the probe's docblock invites per-stage comparison, so a different store here makes the `exit_trigger` cell non-comparable with them. | **A-3, A-5** |
+| **P1-4** | Record the accepted-quote age **PER LEG** (`book` / `ticker`) on `SIDE_AGE_BUCKET_EDGES_MS`, from `sel.quote.ageMs`. ⛔ **Publish the derivable window as `[1,000 ms, 60,000 ms]`, bucket-bounded, beside the numbers.** | **A-5b** |
+| **P1-5** | ⛔ **WITHDRAWN (W2).** `side-age.test.ts:142` is a fixture negative control; flipping it proves nothing about a production writer. **Liveness is P1-7's job.** | **A-3** |
+| **P1-6** | Counters on `aee:2070`'s `EVAL_EXIT` line: `ladderAccepted`, `ladderRefused`, `ladderViaBook`. ⚠️ **Cycle-level, outside the position loop — per-cycle totals, not per-position.** | **A-1** |
+| **P1-7** | ⛔ **A SOURCE FENCE on `b-exit-provenance-fence.test.ts`'s pattern** — assert the ladder result appears in **no argument of either `evaluateTECExit` call** (`aee:2173`, `:2262`), mutation-proved by source substitution, **the mutation asserting it MATCHED before reading the result.** ✅ **Plus the liveness assertion, because no existing test can reach the engine (A-13).** | **A-13** |
+| **P1-8** | Carry A-6's trade-off into scope **§4** and A-9's restatement into **§7** before the window opens. ⚠️ **§4's limits 1 and 2 were written for option (b) and must be re-checked against whichever option is ruled.** | **A-6, A-9** |
+| **P1-9** | The durable per-position stamp under `metadata.ladderShadow`, landing in `closed_trades.metadata` at the close. ⛔ **NO PRECEDENT IS INHERITED (W9): `_recordBookStateEvent` is EVENT-gated with a streak modulus, and `fg2Shadow` writes at most ~3 times per lifetime. A per-tick accumulator with a throttled write is NEW, and its flush rule is stated as a number here rather than copied.** ✅ **Trap that IS carried: `closePosition` re-fetches the row, so the closing write must take the in-memory copy** (`aee:2887-2894`). | **A-10** |
+| **P1-10** | ⛔ **RESHAPED (W5).** Split rung-2 accepts by `lastSource`: `kraken_rest` is **provably not the book's top** ⇒ interpretable; `kraken_ws` is **AMBIGUOUS** ⇒ counted separately, never reported as ticker recovery. **F2 already did this for the sibling probe; this reuses it.** | **A-11** |
+| **P1-11** | Register `_sideAge` in the **System Impact Map** at Step 10 — it has no entry at all. | **A-8** |
+| **P1-12** | **MEASURE the book-carrying symbol set** rather than asserting it; report it beside the rung split. | **A-11** |
 
 ### ⛔ NOT IN P1 — STATED, SO THE BOUNDARY IS NOT INFERRED
-No `triggerPrice`. **No consumer of the ladder result — all 24 `currentPrice` consumers byte-unchanged.** No `fg2Shadow` removal (P2's, per scope §8). No xStock. **No `exit_ladder_max_age_ms` yet** — A-5b is why P1 does not need it.
+No `triggerPrice`. **No consumer of the ladder result.** No `fg2Shadow` removal. No xStock. No `exit_ladder_max_age_ms` yet.
+⚠️ **"all 24 `currentPrice` consumers byte-unchanged" — CARRY THE POPULATION OR DROP THE NUMBER.** The 24 is scope B5's count of the token over `aee:1880-2330`. **That window omits 15 in-loop lines below 1880 (including `:1797` `_processPendingMaker` and the write-backs at `:1647`/`:1760`), imports 8 from `checkExitConditions`' scope, and one of the 24 (`:2268`) is the token as a KEY receiving a different value.** ⇒ **as a byte-unchanged assertion it is fine; as a consumer census it is not, and P1 states it as the former.**
 
 ---
 
-## 3. PRE-REGISTRATION — WRITTEN BEFORE THE CODE, NOT AFTER THE READ
+## 3. PRE-REGISTRATION — WRITTEN BEFORE THE CODE
 
 | | |
 |---|---|
-| **window** | ⛔ **TWO WINDOWS, DELIBERATELY, BECAUSE THEY MEASURE DIFFERENT THINGS (A-10).** **(i) the FUNNEL rate** — ONE uninterrupted pm2 lifetime, anchored on **`pm_uptime`**, never on `deployed_at`; a restart **VOIDS** it **(A-8)**. **(ii) THE WINDOW PROPER** — the durable per-position stamp in `closed_trades.metadata`, which **survives restarts** and is the one the n-floor and the P2 gate read. ⚠️ **Live uptime when this plan was written: 5.3 hours, against 614 all-time restarts.** |
-| **n-floor** | ⛔ **STATED IN POSITION-LIFETIMES AND DISTINCT SYMBOLS, NEVER IN WALKS (A-10).** **PRE-REGISTERED: 30 closed crypto position-lifetimes across ≥ 15 distinct symbols.** Derived from the measured rate — **~4.5 crypto closes/day over 2026-09-04 → 09-13, close-to-one distinct symbol per close** ⇒ ~7 days. The walk count is reported **beside** it and labelled **NON-INDEPENDENT**. Below the floor the window is **UNDERPOWERED, not negative.** |
-| **positive control** | the funnel's own structural equality — every walk increments the `book` and `ladder` cells **exactly once**, so their `attempted` are equal **by construction**. Unequal ⇒ the recorder is broken and the window is void. |
-| **what P1 reports** | the ladder's **accept / refuse** split on the exit population; `byReason`; `byAcceptedSource`; the **ticker-side** age histogram **and** the **accepted-quote** age histogram. |
-| ⛔ **what P1 does NOT report** | any comparison against `fg2Shadow` **(A-7)**, and any reading of `implausible_spread ≈ 0` as health **(A-9)**. |
+| ⛔ **POPULATION** | **exit ticks that ALREADY OBTAINED A VENUE-FRESH MARK** — the site sits below four `continue`s (`:1618`, `:1717`, `:1770`, `:1803`), so ticks whose price leg failed are **absent from the denominator by construction (A-1)**. **Every rate P1 reports carries this clause.** |
+| **window** | **TWO, deliberately (A-10).** **(i) the FUNNEL rate** — one uninterrupted pm2 lifetime on `pm_uptime`, never `deployed_at`; a restart VOIDS it. **(ii) THE WINDOW PROPER** — the durable per-position stamp in `closed_trades.metadata`, which survives restarts and is what the n-floor and the P2 gate read. |
+| **n-floor** | **30 closed crypto position-lifetimes**, from the measured **5.0 closes/day on days with closes** ⇒ ~7 days. ⛔ **THE DISTINCT-SYMBOL HALF IS NOT YET SET — 41 symbol-days does not give a union (A-10) — so it is fixed from a UNION query BEFORE deploy, in the Step-3 commit, with the query shown.** |
+| ⛔ **LIVENESS CONTROL** | **P1-7's fence plus a non-zero `attempted` on the `exit_trigger` cell.** ⚠️ **The `attempted`-equality check is a CONSISTENCY control and NOT a liveness one — a recorder that never fires satisfies it at 0 = 0**, exactly what `level-basis.ts:296-299` warns of (*"a zero here is indistinguishable from a counter that never fires until the counter has been SHOWN incrementing"*). **r1-r4 listed equality as the positive control; that was the wrong instrument for the failure that matters here.** |
+| **what P1 reports** | accept/refuse on the conditioned exit population; `byReason` (**which already includes the age refusals at 60,000 ms — A-5**); the rung-2 split by `lastSource` (**P1-10**); the ticker-side and **per-leg** accepted-quote age histograms with `[1,000, 60,000]` stated; and the **measured** book-carrying symbol count. |
+| ⛔ **what P1 does NOT report** | the `fg2Shadow` **first-exit 2×2** (different instrument, different guard). ✅ **The no-book COUNT comparison IS reported — that baseline already exists at `aee:2229-2247` (A-7), and r1-r4's blanket exclusion was too broad.** |
 
 ---
 
 ## 4. KNOWN LIMITS, STATED AS LIMITS
 
-1. **The ticker leg's `producer` names the MARK's writer, not the SIDES' writer** — `touch-price.ts`'s own RIDER 1. WS-pushed sides sitting under a later REST mark record as `kraken_rest`. ⇒ **`byAcceptedSource`'s transport split UNDERSTATES the pushed transport** — conservative, in the same direction as the venue-skew note.
-2. **`3n.l` (`#1056`) puts a FLOOR under rung 2 that is an artefact of OUR OWN WRITE PATH** — the REST adapter parses the sides and discards them one line before the write. ⇒ **a low rung-2 recovery may NOT be read as "the ticker sides are not there."** `3n.l` is ordered before `8a` for exactly this reason.
-3. **Venue-stamp skew is zero-tolerance** — `buildLevelBasis` refuses a venue stamp even 1 ms ahead as `age_unknown`, and only WS-sourced sides carry one. Small exposure, and it biases **against** the pushed transport.
-4. **P1 measures AVAILABILITY, not CORRECTNESS.** That the ladder *could* have named a price says nothing about whether that price was the right one — that is `3n.n`'s decomposition, and it is not claimed here.
+1. ⚠️ **r1-r4's limit 1 (RIDER 1 — `producer` names the MARK's writer, not the SIDES') is a property of `price-cache.ts`'s carry-forward, i.e. of OPTION (b).** On the adapter row, sides and producer are written by one call. ⇒ **it applies or not depending on A-6's ruling, and is re-stated once that lands.**
+2. **`3n.l` (`#1056`) puts a floor under rung 2 — ONLY UNDER OPTION (b).** Under (a) the floor comes from `fetchPrice:592` and `aee:1760`, **which are scoped nowhere and would need a home.**
+3. **Venue-stamp skew is zero-tolerance** — a stamp even 1 ms ahead refuses as `age_unknown`; it biases **against** the pushed transport.
+4. **P1 measures AVAILABILITY, not CORRECTNESS.** That the ladder *could* have named a price says nothing about whether it was the right one — that is `3n.n`'s decomposition, not claimed here.
+5. ⚠️ **`exit_trigger`'s absence is a string-literal result**, and the stage union is not a runtime gate (A-3).
 
 ---
 
-**REVIEWER:** `claim-only` (mode B) · three claims — the `exit_trigger` absence, the two-counter pooling mechanism, the two-cache mechanism · **HIT on all three, and one of them refuted a clause of mine** ("two writer sets" — false; one writer fans into both) · **re-derived at the ref: YES**, every hit checked at `origin/migration/aws-supabase` before it changed a line. ⛔ Its clean findings are cited nowhere.
+**REVIEWER r1:** `claim-only` (mode B) · the `exit_trigger` absence, the pooling mechanism, the two-cache mechanism · **HIT ×3; refuted "two writer sets"** · re-derived: **YES**.
+**REVIEWER r2:** `object` (this document at the ref) · do its citations say what it claims · **HIT ×9 — W1-W9, six killing or reshaping a plan item, including the central fix and the mutation proof** · re-derived: **YES**, each at the object before it changed a line.
+⛔ **Neither reviewer's CLEAN findings are cited anywhere as support.** ⛔ **Strike every mention of these rounds and the document still stands on its own citations — that is the test, not the round count.**
