@@ -2075,6 +2075,21 @@ export class ActiveExecutionEngine {
           withWsPrice++;
           console.log(`[I7-WS-D][ENGINE_WS_PRICE] symbol=${position.symbol} price=${currentPrice}`);
         } else {
+          // ⛔⛔ `8a-P2` — THE NON-FINITE VENUE MARK GETS ITS OWN VOICE, BECAUSE MY OWN FIX MUTED IT.
+          // Adding the `Number.isFinite && > 0` predicate above was right — and it dropped a
+          // KRAKEN-SOURCED `NaN`/`0`/negative into this `else`, where the warn below is gated on
+          // `!isKrakenVenueSource(...)` ⇒ it would route to REST with **NO log line and NO counter**.
+          // ★ I CLOSED A HOLE AND MADE ITS OCCURRENCE UNOBSERVABLE — the fix would have been
+          //   UNMEASURABLE, and its silence indistinguishable from never happening. (Langston.)
+          // ⚠️ This is NOT the same as the non-venue case below: that is a SOURCE we do not trust;
+          //   this is a source we DO trust handing us a number that is not a number.
+          if (priceResult !== null && isKrakenVenueSource(priceResult.source)
+              && (priceResult.price === null || !Number.isFinite(priceResult.price) || priceResult.price <= 0)) {
+            this._venueMarkNonFinite++;
+            console.warn(`[8a-P2][VENUE_MARK_NON_FINITE] ${position.symbol}: venue source `
+              + `'${priceResult.source}' offered a non-actionable price (${String(priceResult.price)}) — `
+              + `going to REST. THIS IS THE PATH THAT USED TO REACH THE EXIT EVALUATOR AS A LIVE MARK.`);
+          }
           if (priceResult?.price != null && priceResult.source !== 'no_reliable_price' && !isKrakenVenueSource(priceResult.source)) {
             console.warn(`[P19-B8.5][VENUE_ONLY] ${position.symbol}: adapter offered non-venue source '${priceResult.source}' (${priceResult.price}) — not actionable, going to Kraken REST directly`);
           }
@@ -2585,7 +2600,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,
@@ -2604,6 +2619,7 @@ export class ActiveExecutionEngine {
     this._exitEvalNoHit = 0;
     this._exitEvalHit = 0;
     this._exitEvalNoMark = 0;
+    this._venueMarkNonFinite = 0;
   }
 
   /**
@@ -2648,6 +2664,9 @@ export class ActiveExecutionEngine {
   private _exitEvalNoHit = 0;
   private _exitEvalHit = 0;
   private _exitEvalNoMark = 0;
+  // ⭐ `8a-P2` — how often a VENUE-TRUSTED source handed us a non-finite/non-positive mark. This is
+  // the counter for the hole closed at the `isFinite` predicate; without it that fix is unmeasurable.
+  private _venueMarkNonFinite = 0;
 
   private isMaxHoldEnabled(): boolean {
     const key = this.mode === 'live' ? 'enabled_live' : 'enabled_paper';
