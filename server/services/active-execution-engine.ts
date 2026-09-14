@@ -3195,6 +3195,13 @@ export class ActiveExecutionEngine {
     // that never accumulated, which is `#546` inside the batch whose only product is the census.
     const _lsAcc = _ladderShadow.get(position.id);
 
+    // ⛔⛔ `try/finally` AROUND THE WHOLE BLOCK, NOT `try/catch` — THE THROW STILL PROPAGATES.
+    // Langston §13, Step-4 r2: `storage.updateClosedTrade` below sits in NO try (the nearest closes
+    // above it, and `closePosition` has no method-level one), so a persist throw would skip the
+    // eviction entirely — the IMMORTAL-ENTRY case the comment below says cannot happen. That was
+    // unchanged exposure rather than a regression, but the comment said "WHETHER OR NOT" and the
+    // throw path falsified it. ⇒ MADE TRUE STRUCTURALLY rather than narrowed in prose.
+    try {
     if (trade) {
       // B65.2: read the final trailing-engine state for this symbol so the
       // closed-trade row preserves whether the trade ended in moonbag mode.
@@ -3401,7 +3408,7 @@ export class ActiveExecutionEngine {
         console.warn(`[M5C.1][ACTIVE_RECORD_FAILED] ${position.symbol}:`, recordErr);
       }
     }
-
+    } finally {
     // ── row `8a-P1`: EVICT THE ACCUMULATOR — AFTER the write above has resolved, and WHETHER OR
     // NOT a trade row was found (BLOCKER-2). A surviving entry is a SOURCE, which this row's rule
     // forbids; and the no-trade-row case is LOGGED rather than silent, because a closed row with
@@ -3414,6 +3421,7 @@ export class ActiveExecutionEngine {
         );
       }
       _ladderShadow.delete(position.id);
+    }
     }
 
     // B67.4 (2026-05-01): per-(regime, strategy) outcome feedback EMA update.

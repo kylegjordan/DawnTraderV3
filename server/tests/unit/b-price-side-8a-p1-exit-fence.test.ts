@@ -106,6 +106,26 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
  * a file-wide search for an identifier that legitimately appears in more than one function cannot
  * tell WHERE it appears, and that is how test 6 first shipped unable to fail.
  */
+/**
+ * The `if (trade) { … }` block by BRACE BALANCE. ⛔ THIS EXISTS BECAUSE THE BLOCKER'S CONTENT IS
+ * "OUTSIDE `if (trade)`" AND NOTHING MEASURED THAT. `if (trade)` is BROADER than the carry block,
+ * so moving the whole eviction back inside it — above the closing brace, outside the carry IIFE —
+ * left all eight assertions in tests 5/6/7/7b green. Langston ran that mutation himself.
+ * ⇒ FOURTH instance of presence-is-not-position in this file, one level up: position relative to a
+ *   BLOCK, not to a string.
+ */
+function ifTradeBlock(src: string): string {
+  const at = src.indexOf('    if (trade) {');
+  if (at === -1) throw new Error('if (trade) block not found');
+  const braceStart = src.indexOf('{', at);
+  let depth = 0;
+  for (let j = braceStart; j < src.length; j++) {
+    if (src[j] === '{') depth++;
+    else if (src[j] === '}') { depth--; if (depth === 0) return src.slice(braceStart, j + 1); }
+  }
+  throw new Error('unterminated if (trade) block');
+}
+
 function carryBlock(src: string): string {
   const start = src.indexOf('if (_pm.fg2Shadow)');
   if (start === -1) throw new Error('carry block not found');
@@ -115,13 +135,15 @@ function carryBlock(src: string): string {
 }
 
 describe('row 8a-P1 — the record actually rides onto the closed row', () => {
-  const closeBody = code(AEE);
+  // ⚠️ RENAMED FROM `closeBody`, which was the WHOLE FILE — a name that made every `toContain`
+  // on it read as scoped when it was not (Langston, Step-4 r2).
+  const wholeFile = code(AEE);
 
   it('5. ⛔ `ladderShadow` IS ON THE CLOSE-TIME ALLOWLIST', () => {
     // The carry is an ALLOWLIST that takes keys BY NAME, so an accumulator field that is written
     // every 30 s but never listed here is silently dropped at the close — the window would hold
     // ZERO rows while every counter looked healthy. That is what this pins.
-    expect(closeBody).toContain('_carry.ladderShadow');
+    expect(wholeFile).toContain('_carry.ladderShadow');
   });
 
   it('6. ⛔ THE CARRY READS THE MAP, NOT THE ROW — SCOPED TO THE CARRY BLOCK', () => {
@@ -135,22 +157,39 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     // that cannot come out differently is not a check. It is scoped to the carry block now.
     // ⚠️ THE READ IS NOW HOISTED ABOVE `if (trade)` (Step-4 BLOCKER-2), so the carry block uses
     // the hoisted `_lsAcc`; the assertion moves with it rather than being deleted.
-    const carry = carryBlock(closeBody);
+    const carry = carryBlock(wholeFile);
     expect(carry).toContain('_carry.ladderShadow = _ladderSnapshot(_lsAcc)');
     expect(carry).not.toContain('_pm.ladderShadow');
-    expect(closeBody).toContain('const _lsAcc = _ladderShadow.get(position.id);');
+    expect(wholeFile).toContain('const _lsAcc = _ladderShadow.get(position.id);');
   });
 
-  it('7. ⛔ THE ENTRY IS EVICTED, AND **OUTSIDE** `if (trade)` — BLOCKER-2', () => {
+  it('7. ⛔ THE ENTRY IS EVICTED, AND **OUTSIDE THE `if (trade)` BLOCK** — BLOCKER-2', () => {
     // `trade` is `trades.find(t => t.openedAt && !t.closedAt)`, so two concurrent positions on one
     // symbol leave the second close with NO open trade row. Inside the block the accumulator would
     // be neither carried nor evicted: census dropped AND the entry immortal.
-    expect(closeBody).toContain('_ladderShadow.delete(position.id)');
-    // The eviction must NOT sit in the carry block any more.
-    expect(carryBlock(closeBody)).not.toContain('_ladderShadow.delete');
-    // And the no-trade-row case is SAID, not silent — a closed row with no ladderShadow must be
-    // tellable from one that never accumulated.
-    expect(closeBody).toContain('LADDER_NO_TRADE_ROW');
+    const src = code(AEE);
+    const block = ifTradeBlock(src);
+    expect(src).toContain('_ladderShadow.delete(position.id)');
+    // ⛔ THE ASSERTION THAT CARRIES THE BLOCKER: not in the block at all.
+    expect(block).not.toContain('_ladderShadow.delete');
+    // And the no-trade-row case is SAID, not silent — asserted in the eviction's own scope rather
+    // than anywhere in 5,500 lines, which is what `closeBody`-as-whole-file used to mean.
+    expect(src).toContain('LADDER_NO_TRADE_ROW');
+    // ⛔ AND IT RUNS EVEN IF THE PERSIST THROWS (Langston §13): the block sits in a `try` whose
+    // `finally` holds the eviction, so "WHETHER OR NOT a trade row was found" is now structurally
+    // true rather than a claim the throw path falsified.
+    expect(src).toMatch(/\}\s*finally\s*\{[\s\S]{0,800}?_ladderShadow\.delete\(position\.id\)/);
+  });
+
+  it('7c. ⭐ CONTROL — `ifTradeBlock` really isolates the block, and catches a delete moved INTO it', () => {
+    // Without this, test 7's `not.toContain` over an extraction that silently returned something
+    // tiny or empty would pass for ever — which is exactly how its predecessor shipped.
+    const block = ifTradeBlock(code(AEE));
+    expect(block.length).toBeGreaterThan(2000);            // it really is the big block
+    expect(block.length).toBeLessThan(code(AEE).length);    // and not the whole file
+    expect(block).toContain('_carry.ladderShadow');         // the CARRY is inside it
+    const seeded = ifTradeBlock(['    if (trade) {', '  _ladderShadow.delete(position.id);', '    }'].join(String.fromCharCode(10)));
+    expect(seeded).toContain('_ladderShadow.delete');       // the matcher WOULD catch it
   });
 
   it('7b. ⛔⛔ AND THE EVICTION COMES **AFTER** THE MERGE — PRESENCE IS NOT ORDER', () => {
@@ -158,8 +197,8 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     // satisfies it exactly — while `_lsAcc` would be `undefined` and the record would never ride.
     // Both strings present, correct order destroyed, every assertion green. A fence that checks
     // PRESENCE cannot see ORDER, so the order is asserted here as a position comparison.
-    const read = closeBody.indexOf('const _lsAcc = _ladderShadow.get(position.id);');
-    const evict = closeBody.indexOf('_ladderShadow.delete(position.id)');
+    const read = wholeFile.indexOf('const _lsAcc = _ladderShadow.get(position.id);');
+    const evict = wholeFile.indexOf('_ladderShadow.delete(position.id)');
     expect(read).toBeGreaterThanOrEqual(0);
     expect(evict).toBeGreaterThanOrEqual(0);
     expect(evict).toBeGreaterThan(read);
