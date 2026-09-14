@@ -657,3 +657,72 @@ describe('P19-B8.5i — trailing master switch (isMoonbagQualifier flag gating)'
     expect(qualifies('vts')).toBe(true);
   });
 });
+
+/**
+ * ⛔⛔ `8a-P2` — THE DIVERGENT CASE. THE 38 FIXTURES ABOVE DO NOT TEST IT, AND THAT WAS THE GAP.
+ *
+ * Every scenario above pairs `triggerPrice === currentPrice`, which is exactly right for a PARITY
+ * contract — it holds the pre-split baseline fixed. ⚠️ BUT LANGSTON'S CATCH IS THAT IT LEAVES THE
+ * FILE A COMPLETE TEST OF THE *OLD* CONTRACT AND A ZERO-COVERAGE TEST OF THE *NEW* ONE: not one of
+ * the 38 can distinguish "the trigger decides" from "the mark decides", because in all 38 they are
+ * the same number. **A header note claiming the split is fenced, with no fixture where the two
+ * differ, DOCUMENTS a gap rather than closing one.**
+ *
+ * ⇒ These four force `triggerPrice ≠ currentPrice` and assert BOTH directions on BOTH legs. The
+ *   second of each pair is the load-bearing one: it fires on the mark and MUST NOT exit.
+ */
+describe('8a-P2 — the trigger decides and the mark does not', () => {
+  const base = {
+    tradeId: 'DIVERGENT/USD',
+    symbol: 'DIVERGENT/USD',
+    entryPrice: 100, stopPrice: 95, targetPrice: 110,
+    atr: 0, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+    context, useTrailing: false,
+  };
+
+  it('D1: bid BELOW the stop while the MID is above it → stop fires (pre-split it would NOT have)', async () => {
+    const d = await evaluateTECExit({ ...base, currentPrice: 100, triggerPrice: 94 });
+    expect(d.shouldExit).toBe(true);
+    expect(d.exitReason).toBe('stop_hit');
+    // ⭐ AND THE BOOKING IS UNTOUCHED: the clamp, not the trigger and not the mark.
+    expect(d.exitPrice).toBe(95);
+  });
+
+  it('D2: ⛔ MID below the stop while the BID is above it → NO exit (pre-split it WOULD have fired)', async () => {
+    // The discriminating direction. If the mark were still deciding, this exits — so this single
+    // assertion is what proves the switch actually happened at the decision, not just in a name.
+    const d = await evaluateTECExit({ ...base, currentPrice: 94, triggerPrice: 96 });
+    expect(d.shouldExit).toBe(false);
+    expect(d.exitReason).toBeNull();
+  });
+
+  it('D3: bid ABOVE the target while the MID is below it → target fires', async () => {
+    const d = await evaluateTECExit({ ...base, currentPrice: 108, triggerPrice: 111 });
+    expect(d.shouldExit).toBe(true);
+    expect(d.exitReason).toBe('target_hit');
+    expect(d.exitPrice).toBe(110);
+  });
+
+  it('D4: ⛔⛔ MID above the target while the BID is below it → NO exit — THE OPTIMISTIC LEG', async () => {
+    // This is the one the whole row exists for. A mid firing against a TARGET books a WIN at a
+    // price no seller could get, and it is the leg that survived the first implementation because
+    // `tecUpdatePosition` was still reading the mark (Step-4 BLOCKER-1).
+    const d = await evaluateTECExit({ ...base, currentPrice: 112, triggerPrice: 109 });
+    expect(d.shouldExit).toBe(false);
+    expect(d.exitReason).toBeNull();
+  });
+
+  it('D5: a null trigger makes NO DECISION and says so — it does not fall back to the mark', async () => {
+    // `currentPrice` is deliberately a price that WOULD fire the stop. If the refusal degraded to
+    // the mark, this exits.
+    const d = await evaluateTECExit({ ...base, currentPrice: 94, triggerPrice: null });
+    expect(d.shouldExit).toBe(false);
+    expect(d.noDecisionReason).toBe('no_transactable_side');
+  });
+
+  it('D6: ⭐ and a NaN trigger is refused the same way — `NaN <= 0` is false, so `<= 0` alone missed it', async () => {
+    const d = await evaluateTECExit({ ...base, currentPrice: 94, triggerPrice: Number.NaN });
+    expect(d.shouldExit).toBe(false);
+    expect(d.noDecisionReason).toBe('no_transactable_side');
+  });
+});

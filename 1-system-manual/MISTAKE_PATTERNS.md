@@ -924,6 +924,16 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 ⇒ ⛔ **A CLAIM ABOUT YOUR OWN INSTRUMENT GETS THE SAME RULE-29(a) TREATMENT AS A CLAIM ABOUT THE SYSTEM** (Langston's formulation). **Naming a property of your own tooling is a measurement, and it needs the object.**
 ⚠️ **Threshold: five instances, ONE batch — the 2+-distinct-batches leg is NOT met, so this does not move §13 on its own.** Recorded because the within-batch recurrence is itself the signal: **the same shape survived four consecutive corrections by the same author.**
 
+### `chosen-subset-as-suite` — **I RAN THE TESTS I PICKED AND REPORTED IT AS "GREEN"** — **NEW 2026-09-14**, `B-PRICE-SIDE-BY-JOB` `8a-P2` · mechanism: ✅ **RUN THE SUITE, OR STATE THE DENOMINATOR BESIDE THE NUMBER**
+
+**WHAT HAPPENED.** I ran two test files, saw **40 passed**, and reported *"40 tests green"* to the reviewer as the verification. The suite is **3,382**. CI then went RED on `b65-tec-parity.test.ts` — **the file the changed module's OWN DOCBLOCK names as the contract that must stay green**, and the one file I most obviously should have run.
+
+⛔⛔ **A CHOSEN SUBSET IS STRICTLY WORSE THAN AN UNSCOPED PREFIX, AND THAT IS THE WHOLE ENTRY (Langston).** A truncated census is biased by ALPHABETICAL ORDER — arbitrary, and uncorrelated with the answer. **A subset I select is correlated with WHAT I ALREADY BELIEVE**: I ran the files I had just written, which are the files most likely to pass. ⇒ **the selection is the hypothesis, and the result ratifies it.** Same family as `aggregate-ratifies-the-hypothesis`, turned on the verification instead of the finding.
+
+⚠️ **IT IS THE `#3n.o` CENSUS FENCE TURNED INWARD.** That fence says an unscoped census is a PREFIX, not a population. **This is the same error committed against my own evidence**, one round after adopting the fence.
+
+⛔ **THE RULE:** a test result reported to anyone is **the full suite**, or it **names the denominator in the same sentence** — *"40 of 3,382, chosen as the files I edited"* is honest and instantly reveals its own weakness. ★ **The fix is not discipline, it is the denominator: stated, the claim refutes itself; omitted, it reads as coverage.**
+
 ### `reason-laundered-through-the-loop` — **A REASON THAT TRAVELS A → B → A ACQUIRES THE LOOK OF CORROBORATION WITHOUT EVER BEING DERIVED** — **NEW 2026-09-14**, `B-PRICE-SIDE-BY-JOB` `8a-P2` r7/r8 · mechanism: ✅ **CITE-WITH-AUTHOR-AND-MARK-UNDERIVED, or re-derive before use**
 
 **WHAT HAPPENED.** Langston remarked that `f`=0.05 would give the same ceiling as `f`=0.10. I adopted it without deriving it and handed it back to him as my own conclusion retiring an escalation. **On the return trip it read as independent agreement rather than as his own unchecked remark coming home.** He caught it, re-derived it, and withdrew it himself: the ceiling is **quadratic** in `f`, so halving `f` QUARTERS every bound (`2.50 s → 625 ms`), and the claim was true only of the single cell where ship value and derivation coincide by construction.
