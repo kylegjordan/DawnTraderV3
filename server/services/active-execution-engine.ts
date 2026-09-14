@@ -109,8 +109,14 @@ interface LadderShadowAcc {
   maxAcceptedAgeMs: { book: number; ticker: number };
   /** P1-12: was a maintained two-sided book present at all on this symbol, ever, in this position. */
   walksWithBook: number;
-  /** The loop clock minus the cache-read instant, so a divergence is attributable (Langston cond. 3). */
-  maxCacheReadDeltaMs: number;
+  /**
+   * ⛔ THE MARK'S AGE AT THE LADDER'S OWN INSTANT — the two-reader gap (Langston condition 3).
+   * `markAgeUnknown` counts the walks where the mark's branch carries no venue observation time
+   * (the direct-REST leg, null BY DESIGN), so an absent age is COUNTED rather than silently
+   * collapsing into the max.
+   */
+  maxMarkAgeMs: number;
+  markAgeUnknown: number;
   /**
    * ⛔⛔ THE FLUSH CLOCK LIVES ON THE ENTRY, NOT AT MODULE SCOPE — AND THIS IS A DELIBERATE
    * DEVIATION FROM THE APPROVED PLAN, FLAGGED RATHER THAN SLIPPED IN.
@@ -139,14 +145,14 @@ function _ladderAccumulate(
   positionId: string,
   sel: ReturnType<typeof selectTouchPrice>,
   bookPresent: boolean,
-  cacheReadDeltaMs: number,
+  markAgeMs: number | null,
 ): void {
   let acc = _ladderShadow.get(positionId);
   if (!acc) {
     acc = {
       walks: 0, accepted: 0, refused: 0, byReason: {}, byAcceptedSource: {},
       selfSynthetic: 0, maxAcceptedAgeMs: { book: 0, ticker: 0 },
-      walksWithBook: 0, maxCacheReadDeltaMs: 0,
+      walksWithBook: 0, maxMarkAgeMs: 0, markAgeUnknown: 0,
       // ⛔ SEEDED TO NOW, NEVER 0 — a zero epoch makes the very first walk look 57 years overdue
       // and fires a trivially-EMPTY flush, which would then read as the bound being satisfied.
       lastFlushAtMs: Date.now(), walksSinceFlush: 0,
@@ -156,7 +162,8 @@ function _ladderAccumulate(
   acc.walks++;
   acc.walksSinceFlush++;
   if (bookPresent) acc.walksWithBook++;
-  if (cacheReadDeltaMs > acc.maxCacheReadDeltaMs) acc.maxCacheReadDeltaMs = cacheReadDeltaMs;
+  if (markAgeMs === null) acc.markAgeUnknown++;
+  else if (markAgeMs > acc.maxMarkAgeMs) acc.maxMarkAgeMs = markAgeMs;
   if (sel.ok) {
     acc.accepted++;
     const src = `${sel.quote.basis}:${sel.quote.producer}`;
@@ -195,7 +202,8 @@ function _ladderSnapshot(acc: LadderShadowAcc): Record<string, unknown> {
     selfSynthetic: acc.selfSynthetic,
     maxAcceptedAgeMs: { ...acc.maxAcceptedAgeMs },
     walksWithBook: acc.walksWithBook,
-    maxCacheReadDeltaMs: acc.maxCacheReadDeltaMs,
+    maxMarkAgeMs: acc.maxMarkAgeMs,
+    markAgeUnknown: acc.markAgeUnknown,
     // ⛔ THE BOUND TRAVELS WITH THE NUMBERS, AND IT IS THE HONEST FORM. The wall-clock leg is only
     // evaluated INSIDE a walk, so a wedged cycle leaves this unflushed indefinitely; "30 s" alone
     // would be a claim the code cannot keep.
@@ -2090,11 +2098,17 @@ export class ActiveExecutionEngine {
           try {
             const _lsNow = Date.now();
             const _lsSym = normalizeToInternalSymbol(position.symbol);
-            // ⛔ THE CACHE READ IS TIMED. Without this delta every ladder-vs-mark divergence is
-            // timing-vs-source UNATTRIBUTABLE (Langston condition 3).
-            const _lsCacheReadAt = Date.now();
             const _lsCache = priceCache.getCachedPrice(_lsSym);
-            const _lsCacheDelta = _lsCacheReadAt - _lsNow;
+            // ⛔⛔ THE TWO-READER GAP (Langston condition 3) — AND THE FIRST VERSION OF THIS FIELD
+            // COULD ONLY EVER BE ZERO. It read `Date.now() - _lsNow` across one line, i.e. it timed
+            // itself. Caught while writing the Step-4 change list, not by a test.
+            // ⇒ THE QUANTITY THAT MAKES A DIVERGENCE ATTRIBUTABLE IS THE AGE OF **THE MARK THE
+            //   EXIT LOOP IS ACTUALLY USING**, AT THE LADDER'S OWN INSTANT: if the ladder and the
+            //   mark disagree, this says whether they were looking at different TIMES or at
+            //   different SOURCES. `null` where the branch carries no venue observation time —
+            //   the direct-REST leg states it null BY DESIGN (`:1952`), and inventing one here
+            //   would be the #743 defect this column exists to make visible.
+            const _lsMarkAgeMs = priceObservedAtMs !== null ? _lsNow - priceObservedAtMs : null;
 
             const _lsSel = selectTouchPrice(
               {
@@ -2149,7 +2163,7 @@ export class ActiveExecutionEngine {
               },
             );
 
-            _ladderAccumulate(position.id, _lsSel, _bookX !== null, _lsCacheDelta);
+            _ladderAccumulate(position.id, _lsSel, _bookX !== null, _lsMarkAgeMs);
             if (_lsSel.ok) { ladderAccepted++; if (_lsSel.quote.basis === 'book_top') ladderViaBook++; }
             else ladderRefused++;
             await this._ladderFlushIfDue(position, _lsNow);
