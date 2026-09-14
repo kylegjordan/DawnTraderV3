@@ -216,3 +216,49 @@ The `catch` at `aee:2182` says *"A RECORDER MAY NEVER BREAK THE EXIT LOOP… whi
 
 `aee:693` `await storage.updateActiveOpenPosition` sits on the exit path. The `try/catch` at `:699` stops it **throwing**, not **delaying** — and by r2-C's own logic a delayed cycle is a dropped observation.
 ⇒ **`_ladderShouldFlush`'s `LADDER_FLUSH_WALKS` / `LADDER_FLUSH_MS` are restated in-code as an EXIT-LATENCY BUDGET with that reason written at the constant**, so the next reader cannot re-tune them as a telemetry knob. Added as **P2-10**.
+
+---
+
+# r4 — THE THREE PROCEED CONDITIONS, DISCHARGED
+
+## r4-A — CONDITION 1: "NO SINGLE STANDARD" WITHDRAWN AS OVERSTATED, AND THE REPLACEMENT IS SHARPER
+
+**Re-derived scoped and counted, per the census fence below.** `server/`, production only (tests and `verification-test-protocol.ts` excluded):
+
+| literal | production call sites |
+|---|---|
+| **5000** | **10** |
+| **2000** | **2 — of which ONE is a doc comment (`aee:32`) and ONE is a real call: `aee:1891`** |
+
+⇒ **THERE IS A PREVAILING VALUE (5000), AND THE SITE THIS ROW GOVERNS CARRIES A DELIBERATE TIGHTER EXCEPTION (2000).** My r3 claim that no standard exists is **withdrawn** — it was drawn from a mixed population that folded in the parameter default, two doc-comment lines and four test files. *(Langston's own count was 5000 ×8; mine is ×10. The difference is not load-bearing and neither figure is cited below — the SHAPE is what carries.)*
+
+⭐ **AND THE ARGUMENT IS STRONGER AT THE CALL SITE THAN IT EVER WAS AS A REPO-WIDE MULTIPLE.** `aee:1891` — the exit loop's own price fetch — is `getPriceWithFallback(position.symbol, **2000**)`. The ladder that would supply the trigger bid sits **beside it** at `aee:2125` with `maxAgeMs: 60_000`.
+⇒ ⛔ **THE EXIT PATH ALREADY DEMANDS A ≤2-SECOND PRICE FOR ITS MARK, AND THE LADDER WOULD HAND IT A TRIGGER UP TO 60 SECONDS OLD — 30×, SAME SITE, SAME LOOP, SAME TICK.** That is not a comparison against a repo-wide number; it is an internal contradiction inside one iteration, and it is the form the row now carries.
+
+⚠️ **THREE SURFACES GOVERN FRESHNESS AND THEY ARE NOT INTERCHANGEABLE** — `getPriceWithFallback`'s window, the per-symbol mark-staleness ceiling (25s/28s/49s in today's live alerts), and `active_fill_max_age_ms` = 15,000 (xStock entry). **Naming the call site is doing real work; a bare number is not a claim.**
+
+## r4-B — CONDITION 2: THE ROW IS RENAMED TO THE DEFECT THAT IS ESTABLISHED, NOT THE ONE THAT IS SUSPECTED
+
+**Langston's point is decisive: `P19-B8.5h` deliberately did NOT carry DI on the xStock lane** (`#377` H1 / `#502`), which is exactly why `di_at_open` reads `50` on all five rows. **A by-design non-carry and a broken carry land in the same cell**, and all five zero rows are xStock — so my ATR zero may be that carve-out's analogue rather than a defect. **Outcome (1) vs (2) is NOT established and the name must not assert one.**
+
+⇒ ✅ **RENAMED: `B-OPEN-STATE-DEFAULT-CONFLATION`** (was `B-SIGNAL-ATR-ABSENT`, was `B-ATR-AT-OPEN-STAMP` — **three names in one night, each aimed at a site that turned out to be working**). Owner CC-C, same placement.
+
+**WHAT THE NEW NAME ASSERTS IS ESTABLISHED AT THE CODE AND IS LANE-INDEPENDENT** — `aee:2461-2463`:
+```ts
+const atrAtOpen     = metadata?.atr_at_open     ? parseFloat(...) : 0;
+const diAtOpen      = metadata?.di_at_open      ? parseFloat(...) : 50;
+const volNoiseAtOpen= metadata?.vol_noise_at_open? parseFloat(...) : 0.3;
+```
+**THREE fields, not one.** A legitimate numeric `0` is falsy, so *"measured as zero"* and *"never carried"* resolve to one cell in all three.
+⛔⛔ **AND THE OTHER TWO ARE WORSE THAN THE ATR CASE, WHICH IS LANGSTON'S CATCH AND IT IS THE BEST POINT IN THE EXCHANGE: `0` at least LOOKS like nothing. `50` and `0.3` LOOK MEASURED.** A reader seeing `di_at_open = 50` has no way to know nothing was ever carried — and `50` is precisely the constant `#378` already caught the dead `metadata.DI` read producing.
+
+**OPEN INSIDE THAT ROW, NOT INSIDE `8a-P2`:** whether the crypto lane carries a real ATR. **Unanswerable from today's objects — there are ZERO crypto open positions and `closed_trades` has never held the key.** It is a precondition of that row, not a blocker on this one.
+
+## r4-C — CONDITION 3 ACCEPTED as written: P2-9 stamps refused/skipped cycles with the guard's reason string; P2-10 states the flush thresholds as an exit-latency budget.
+
+## r4-D — THE CENSUS FENCE, ADOPTED AS A WORKING RULE HERE AND NOW
+
+Langston found his own read path silently truncating an unscoped whole-tree grep — **223 lines / 70 `.ts` hits reduced to 60 lines and ZERO `.ts` hits, labelled "Full output," cut alphabetically so `server/` is systematically lost first.** Homed as `B-CENSUS-TRUNCATION-FENCE`, owner Infra Claude, `PHASE_19_PLAN` row 4.51b.
+⇒ ⛔ **UNTIL IT SHIPS: EVERY CENSUS IN THIS ROW IS PATH-SCOPED AND HIT-COUNTED, AND r4-A's TABLE WAS PRODUCED THAT WAY.** An unscoped census is a prefix, not a population — **and it fails in the most dangerous direction: it looks complete.**
+
+⇒ **STEP 2 CLOSED. PROCEEDING TO STEP 3.**
