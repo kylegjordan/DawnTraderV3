@@ -167,3 +167,52 @@ The `catch` at `aee:2182` says *"A RECORDER MAY NEVER BREAK THE EXIT LOOP… whi
 - ⚠️ **STILL OPEN, NOT DISMISSED: the engine's shadow carries its own `try/catch` and the other two lanes do not.** That asymmetry is not a defect today; it becomes one if any future throw path is added. Folded into **P2-8**'s split rather than homed separately.
 
 **REVIEWER: claim-only (mode B) · "what other states of the world are consistent?" · 3 claims · HITS on the awaited-DB-write and the control-flow coupling · re-derived y**
+
+---
+
+# r3 — BLOCKER-5 ACCEPTED IN FULL. MY ATR EVIDENCE WAS THE WRONG OBJECT TWICE OVER
+
+## r3-A — THE MEASUREMENT WAS A FALSE ABSENCE FROM THE WRONG TABLE
+
+**r2-A's 91/91 figure is WITHDRAWN.** Re-derived at the object, 2026-09-14:
+
+| object | result |
+|---|---|
+| `closed_trades`, all-time | **758 rows · `atr_at_open` present on 0 · `regime` present on 621** |
+| `active_open_positions` | **5 of 5 rows: key PRESENT, value `0`, `jsonb_typeof` = `number`** |
+
+⇒ `closed_trades` carries rich admission metadata and simply **does not have this key in its shape**. My "absent on 91 of 91" measured a key that was never in that table — **a false absence, not a measurement.** The live read is `aee:2461`, off `active_open_positions`.
+
+⇒ ⛔ **AND THE CORRECTED FACT IS A DIFFERENT FACT: PRESENT-AND-ZERO, NOT UN-STAMPED.** `aee:4888` writes `atr_at_open: (signal as any)?.metadata?.atr ?? 0` — **the stamp fires on every open. The site works. The SIGNAL's ATR is zero.**
+⇒ **`3b.m` IS RE-SUBJECTED AND RENAMED: `B-SIGNAL-ATR-ABSENT`, owner CC-C, same placement.** The old name pointed at a functioning site — `fix-follows-pointer` on a row created to chase the pointer.
+
+⭐ **AND ONE THING NEITHER OF US NAMED, WHICH I FOUND WHILE RE-DERIVING:** `aee:2461` is `metadata?.atr_at_open ? parseFloat(...) : 0`. **A legitimate numeric `0` is FALSY, so "ATR is genuinely zero" and "the key is absent" resolve to the same cell.** Same outcome today, but the read cannot distinguish them — **a `#546` read inside the very gate this whole argument is about.** Third `#546`-shaped read this batch has surfaced. Folded into `B-SIGNAL-ATR-ABSENT`, not into `8a-P2`.
+
+## r3-B — AND THE LANE WAS WRONG TOO, WHICH IS THE HALF THAT BITES THIS ROW
+
+**All 5 open positions are `xstock_spot`. There are ZERO crypto open positions.** Row `8a` is **crypto-only** by its own P2-OBJ-3.
+⇒ **r2-A's "the floor is the live trigger" is EVIDENCED FOR xSTOCK AND UNEVIDENCED FOR THE LANE THIS ROW GOVERNS.** Same lane error as BLOCKER-2, one level down, and I made it twice in one document.
+
+⇒ **THE `ATR_FLOOR` CONTROL IS WITHDRAWN AS SUPPORT FOR DURATION.** `error.log` begins `2026-09-14 00:00:00`; the single hit is 02:42, `BMNR/USD`, a **shadow xStock** id. **n=1 over ~4.5 hours cannot carry "inert on every trade for 14 days"** — `#661` leg 2, instrument reach. **The duration claim is struck, not softened.** What survives: the floor path executes and self-reports `ATR<=0`.
+
+✅ **"P2 MOVES BOTH SURFACES" STANDS** — it never rested on which one is live, only on the fact that which one is live is a one-line change away.
+
+## r3-C — BLOCKER-2's CORRECTION ACCEPTED, AND I VERIFIED IT RATHER THAN TAKING IT
+
+**"30×" is WITHDRAWN.** Re-derived:
+- **`WS_CACHE_FRESH_MS` is `private readonly` with exactly TWO appearances** — the declaration `lpa:368` and one use, `lpa:1332`, inside a single venue branch. **It is not a lane-wide standard and may not be cited as one.**
+- **`getPriceWithFallback` is called with THREE different literals repo-wide** (tests excluded): **5000 ×9 · 30000 ×1 · 2000 ×2**.
+
+⇒ **THERE IS NO SINGLE "CRYPTO FRESHNESS STANDARD" TO MULTIPLY.** My "30×" was the same class of error as the 4× it corrected — an xStock constant swapped for a private field governing one branch.
+⛔ **r3 THEREFORE NAMES NO MULTIPLE AT ALL.** The ceiling is **risk-derived** — the age at which price can move a material fraction of the **stop distance** — and the row states the exit path's own literal at its own call site as context, never as the derivation. **The row does not ship without that derivation.**
+
+★ **PINNED, BECAUSE THIS CONSTANT HAS NOW BITTEN FOUR TIMES:** `active_fill_max_age_ms` = **xStock only**, one site. `WS_CACHE_FRESH_MS` = **private, one branch**. The fallback literals = **three values, per call site**. **Any freshness claim on this project names its CALL SITE, or it is not a claim.**
+
+## r3-D — P2-9's CONDITION ACCEPTED, AND IT IS THE WHOLE POINT OF THE ITEM
+
+**Stamp the REFUSED and SKIPPED cycles too, paired with the new guard and carrying the same reason string.** Stamping only cycles that decided conditions the distribution on exactly the population r2-C established we are dropping — **it would answer the question using only the rows that are not the question.** Added to **P2-9**.
+
+## r3-E — THE FLUSH THRESHOLDS ARE AN EXIT-LATENCY BUDGET, NOT A TELEMETRY CADENCE
+
+`aee:693` `await storage.updateActiveOpenPosition` sits on the exit path. The `try/catch` at `:699` stops it **throwing**, not **delaying** — and by r2-C's own logic a delayed cycle is a dropped observation.
+⇒ **`_ladderShouldFlush`'s `LADDER_FLUSH_WALKS` / `LADDER_FLUSH_MS` are restated in-code as an EXIT-LATENCY BUDGET with that reason written at the constant**, so the next reader cannot re-tune them as a telemetry knob. Added as **P2-10**.
