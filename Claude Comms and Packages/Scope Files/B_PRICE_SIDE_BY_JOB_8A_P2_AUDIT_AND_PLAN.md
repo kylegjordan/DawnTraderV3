@@ -338,3 +338,59 @@ Langston found his own read path silently truncating an unscoped whole-tree grep
 4. **60-second bars are the shortest history available**; the 2–60 s region is extrapolated into, not observed directly.
 
 ⇒ **`P2-4′` IS NOW COMPLETE: `_lsSel` is built with `maxAgeMs: 2_000`, matching `aee:1891`, with this derivation written at the constant.**
+
+---
+
+# r7 — THE THREE RECORD CONDITIONS. **THE NUMBER SURVIVES; THE DERIVATION THAT PRODUCED IT DOES NOT.**
+
+⛔⛔ **LANGSTON'S CENTRAL OBJECTION IS ACCEPTED AND IT IS THE BEST CATCH OF THE ROW: `trade_count > 1` WAS A FREE PARAMETER I CHOSE, AND THE p90 IS NOT STABLE AGAINST IT.** The contamination `r6-A` found is **continuous**, and `> 1` strips only its degenerate end. So `p90 = 0.4363 %` was a value at a threshold, not a property of crypto — **and 2,000 ms converged with the LOOSEST member of that family.** Fourth cell-conflation on this row, and this one is mine.
+
+## r7-A — CONDITION 1: PRIMARY = HELD-NAME, SENSITIVITY = POOL, PUBLISHED WITH THE Δ
+
+**Re-derived by me, not taken on report.** Held names = symbols with a `crypto_spot` close in the last 30 days, joined to `crypto_spot_ohlc_1m_2026_09`, 24 h:
+
+| `trade_count >` | bars | **held p90** | pool p90 | Δ | ⇒ ceiling (held) |
+|---|---|---|---|---|---|
+| **1** | 27,439 | **0.2567 %** | 0.4359 % | **−41 %** | **7.81 s** |
+| 2 | 21,562 | 0.2907 % | 0.5871 % | −50 % | 6.09 s |
+| 5 | 13,053 | 0.3737 % | 0.9435 % | −60 % | 3.68 s |
+| 10 | 7,435 | 0.4534 % | 1.3485 % | −66 % | 2.50 s |
+
+⇒ **THE POOL WAS NOT CONSERVATIVE, IT WAS WRONG-POPULATION.** ~400 thin names we never trade were driving the p90 up. **Held-name sensitivity across the sweep is 1.77×, against the pool's 4.8×** — the free parameter stops mattering once the population is right, which is the tell that the population was the error.
+
+⇒ ⭐ **THE DERIVATION DOES NOT PRODUCE 2,000 ms. IT PRODUCES A BOUND: ≥ 2.50 s at the most conservative threshold, 7.81 s at the least.** **2,000 ms sits below EVERY cell in that column.**
+
+⛔⛔ **SO THE CEILING SHIPS AS TWO NUMBERS, NEVER ONE, EXACTLY AS REQUIRED:**
+> **DERIVED BOUND: ≥ 2.50 s** (held-name, `f = 0.10`, worst threshold in the sweep).
+> **SHIP VALUE: 2,000 ms** — a **TIGHTENING below that bound**, chosen to equal `aee:1891`'s mark-loop constant so the trigger and the mark are held to one standard.
+⚠️ **STATED SO A FUTURE READER CANNOT MISS IT: if `aee:1891` is ever changed, THE TRIGGER CEILING DOES NOT AUTOMATICALLY FOLLOW.** The bound is the derivation's; the 2,000 is a deliberate match. **Re-derive before dragging one with the other.**
+
+*(Langston's own figures: 55 held symbols, p90 0.2613 %; mine: 68 symbols, 0.2567 %. The gap is a held-set definition difference and is NOT load-bearing — both give a −40 %-class Δ and a bound far above 2,000 ms. **Mine are the ones used above and the query is the one in this commit.**)*
+
+## r7-B — CONDITION 2: THE RESIDUAL, RECORDED — NOT DISSOLVED WITH A PERCENTILE
+
+At 2,000 ms the budget consumed is `move60 × √(2/60)` = `move60 × 0.1826`:
+
+| case | move60 | consumed | **effective `f`** | verdict |
+|---|---|---|---|---|
+| held p90 | 0.2567 % | 0.0469 % | **0.051** | comfortably inside |
+| **held p99** | **0.8385 %** | **0.1531 %** | **0.165** | ⚠️ **exceeds `f = 0.10`** |
+| pool p99 | 3.4091 % | 0.6225 % | **0.672** | wrong population, shown for sensitivity only |
+
+⛔ **THE EXPOSURE IS NOT FIXABLE BY A CEILING, AND THAT IS THE POINT OF RECORDING IT.** Holding `f = 0.10` at the held p99 requires **730 ms**, which no feed delivers reliably. **A tighter ceiling does not buy this back — it only converts a mispriced trigger into a refused one.**
+⇒ **STATED PLAINLY: in the worst ~1 % of traded minutes on names we actually hold, a 2-second-old trigger can misjudge the stop by ~16 % of the stop distance rather than 10 %.** That is a property of triggering on a quote at all, not of this ceiling.
+⇒ **WHERE IT LIVES: `3n.o` (below), whose scope question is exactly the form of the bound.** It is NOT carried as a limitation of `8a-P2`, because `8a-P2` cannot fix it.
+
+## r7-C — CONDITION 3: THE PER-SYMBOL CEILING IS **PLACED**, AND IT DOES NOT NEED A NEW ROW
+
+⛔ **"Named as follow-on" was a non-disposition and Langston was right to refuse it — queued is not placed.** But the correct home **already exists and is already placed**, so minting `3n.q` would duplicate it:
+
+> **HOME: `3n.o` `B-CRYPTO-MARK-AGE-GATE`, owner CC-C, PLACED 2026-09-14 after `3n.n`.**
+
+**Its own scope question, in its own words, is this question:** *"NOT a reflex port of the xStock ceiling: that one is RISK-DERIVED PER SYMBOL from a σ cache, and whether crypto wants that form or a flat one is the scope question, not a formality."*
+⇒ **r6/r7 is the risk derivation that row was waiting for, and it now carries two inputs it did not have:** the **bound** (≥ 2.50 s held-name) and the **residual** (`r7-B`'s held-p99 `f ≈ 0.165`, unreachable by any flat value). ⭐ **The residual is itself the argument FOR the per-symbol form** — a flat ceiling cannot be simultaneously right for a 0.26 % name and a 0.84 % name.
+
+## r7-D — `f` AND THE `√t` CAVEAT, BOTH SETTLED ON LANGSTON'S BETTER REASONS
+
+- ✅ **`f = 0.10` HELD — and the `r5-D` escalation is retired for the RIGHT reason, which was not mine.** I said *"it costs nothing."* The real reason: **the effective `f` at the ship value is 0.051, so `f = 0.05` yields the same ceiling. `f` is not load-bearing here at all**, so there is no risk-tolerance choice for Kyle to make.
+- ✅ **THE `√t` CAVEAT IS WITHDRAWN AS A WEAKNESS.** `r6-D(1)` called range-over-`t` an approximation. **Langston's reframe is correct: for a MISSED STOP TRIGGER the estimand is an EXCURSION, not a displacement — the stop is hit by the path touching it, not by where the price ends up.** Range-over-`t` is therefore the *right* estimand, not a proxy for one. **Kept, and no longer listed as a limit.**
