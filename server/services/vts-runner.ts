@@ -3244,6 +3244,14 @@ async function resolveOpenVirtualTrades(): Promise<{
         stopPrice: trade.stopLoss,
         targetPrice: trade.takeProfit,
         currentPrice,
+        // ⛔⛔ `8a-P2` — VTS IS OUT OF SCOPE FOR THE TRANSACTABLE-SIDE SWITCH, AND THIS LINE SAYS SO
+        // RATHER THAN LEAVING IT TO AN OMISSION. Row `8a` is the ACTIVE CRYPTO exit lane; VTS has
+        // its own booking rule (`vts-exit-booking.ts`) and its own calibration epoch, and moving
+        // its trigger silently would re-base a learning population mid-window.
+        // ⚠️ PASSING `currentPrice` HERE IS A DELIBERATE NO-OP THAT PRESERVES TODAY'S BEHAVIOUR
+        // EXACTLY. It is NOT an endorsement of the midpoint for this lane — that question is real
+        // and is homed, not answered here.
+        triggerPrice: currentPrice,
         atr: trade.atrAtOpen ?? 0,
         holdDurationMs,
         maxHoldMs: isVtsMaxHoldEnabled() ? MAX_HOLD_MS : Infinity, // P19-B8.5j: OFF → Infinity disables the valve
@@ -4041,6 +4049,14 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
         stopPrice: trade.stopLoss,
         targetPrice: trade.takeProfit,
         currentPrice,
+        // ⛔⛔ `8a-P2` — VTS IS OUT OF SCOPE FOR THE TRANSACTABLE-SIDE SWITCH, AND THIS LINE SAYS SO
+        // RATHER THAN LEAVING IT TO AN OMISSION. Row `8a` is the ACTIVE CRYPTO exit lane; VTS has
+        // its own booking rule (`vts-exit-booking.ts`) and its own calibration epoch, and moving
+        // its trigger silently would re-base a learning population mid-window.
+        // ⚠️ PASSING `currentPrice` HERE IS A DELIBERATE NO-OP THAT PRESERVES TODAY'S BEHAVIOUR
+        // EXACTLY. It is NOT an endorsement of the midpoint for this lane — that question is real
+        // and is homed, not answered here.
+        triggerPrice: currentPrice,
         atr: trade.atrAtOpen ?? 0,
         holdDurationMs,
         maxHoldMs: isVtsMaxHoldEnabled() ? SHADOW_MAX_HOLD_MS : Infinity, // P19-B8.5j: OFF → Infinity (still the only exit-math param differing from the real pass)

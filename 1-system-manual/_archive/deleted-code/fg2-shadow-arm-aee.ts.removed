@@ -1,0 +1,144 @@
+// ARCHIVED 2026-09-14 by B-PRICE-SIDE-BY-JOB 8a-P2 (P2-7). NON-COMPILABLE COPY FOR BROWSING.
+// Git history is the authoritative archive. Removed because 8a-P2 makes the LIVE arm read the
+// ladder bid, which would have made this bid-vs-mid comparison bid-vs-bid: the discordant cell
+// collapses BY CONSTRUCTION and F-G-2 pre-registers discordant n=0 as INCONCLUSIVE-EXTEND,
+// never PASS. It could never have resolved after that deploy. (Langston BLOCKER-4.)
+
+      // ── F-G-2 OBJ-0: THE SHADOW ARM — shadow first, switch second (crypto only) ──────────
+      // The live decision above read the book MID. This asks the SAME evaluator what it would
+      // have decided on the book BID — the side a long actually sells on — and records the
+      // FIRST exit each arm would take, so OBJ-0's pre-registered 2×2 (bid-arm first exit ×
+      // live close reason; the DISCORDANT cell is the kill criterion) can be read off
+      // closed_trades.metadata.fg2Shadow at Step 7/8. It NEVER closes a position. Trailing
+      // state is keyed `${position.id}:fg2bid` so the bid-arm's ratchets evolve on their own
+      // and cannot touch the live key — ONE evaluator, two keys (OBJ-4), not two evaluators.
+      // The bid comes from the SAME mini-book snapshot the live provenance stamps (`_bookX`),
+      // so both arms see one book state. xStock: fg2BookBid is null by construction.
+      if (positionAssetClass === 'crypto_spot' && !(fg2BookBid !== null && Number.isFinite(fg2BookBid) && fg2BookBid > 0)) {
+        // Langston FINDING-2 (2026-09-02): OBJ-0's denominator is *crypto positions that ENTERED the
+        // shadow arm*, measured — not *open crypto positions*. A crypto row that did not enter says
+        // why, ONCE, on the row (`fg2ShadowSkip`), and the cycle counter carries it (`shadowSkippedNoBook`
+        // in the EVAL_EXIT line). The other absence causes — pending-maker `continue`, price-skip
+        // `continue` — leave the loop before this line and already log their own reason.
+        this.fg2ShadowSkippedNoBook++;
+        const _metaS = ((position.metadata as Record<string, any> | null) ?? {});
+        if (!_metaS.fg2ShadowSkip && !_metaS.fg2Shadow) {
+          try {
+            const _mergedS = { ..._metaS, fg2ShadowSkip: { reason: 'no_book_bid', atMs: Date.now() } };
+            await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _mergedS } as any);
+            position.metadata = _mergedS;
+            console.log(`[F-G-2][OBJ-0][SHADOW_SKIP] ${position.symbol} reason=no_book_bid`);
+          } catch (err) {
+            console.error(`[F-G-2][OBJ-0][SHADOW_SKIP_STAMP_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
+          }
+        }
+      }
+      if (fg2BookBid !== null && Number.isFinite(fg2BookBid) && fg2BookBid > 0 && positionAssetClass === 'crypto_spot') {
+        this.fg2ShadowEntered++;
+        try {
+          const _shadowId = `${position.id}:fg2bid`;
+          const _shadowSeed = _getTSForSeed(_shadowId)
+            ? undefined
+            : {
+                tradeMode: ((position as any).tradeMode === 'TRAILING_TAKE'
+                  ? 'TRAILING_TAKE'
+                  : 'TARGET') as 'TARGET' | 'TRAILING_TAKE',
+                ladderRung: (position as any).ladderRungsHit ?? 0,
+                originalStopPrice:
+                  (position as any).originalStopPrice ?? (stopLoss ?? undefined),
+              };
+          const shadowDecision = await evaluateTECExit({
+            tradeId: _shadowId,
+            symbol: position.symbol,
+            entryPrice: avgPrice,
+            stopPrice: stopLoss ?? -Infinity,
+            targetPrice: takeProfit ?? Infinity,
+            currentPrice: fg2BookBid,
+            atr: atrAtOpen,
+            holdDurationMs: 0,
+            maxHoldMs: Infinity,
+            context: {
+              exchange: 'kraken',
+              assetClass: positionAssetClass,
+              strategy: position.strategyName,
+            },
+            useTrailing: true,
+            DI: diAtOpen,
+            volNoise: volNoiseAtOpen,
+            callerMode: this.mode === 'live' ? 'live' : 'paper',
+            sourcePool: (position as any).sourcePool ?? null,
+            currentSlotTotal,
+            seed: _shadowSeed,
+          });
+          const _meta = ((position.metadata as Record<string, any> | null) ?? {});
+          const _prior = ((_meta.fg2Shadow as Record<string, any> | undefined) ?? {});
+          let _next: Record<string, any> | null = null;
+          // Langston Step-4 FINDING-2 (2026-09-02): stamp HOW the shadow arm was seeded, ON THE CYCLE
+          // THE SHADOW KEY IS CREATED (not at the first fire — by then the live state always exists).
+          // 'cold' = both arms started from the same cold seed (clean counterfactual). 'midlife' = the
+          // LIVE trailing state already existed, so the shadow inherited the live arm's ladder/mode and
+          // receives its ratcheted stop every cycle — the arms entangle if trailing is ever enabled
+          // (inert today by CONFIG, not by design: trailing_enabled_active=false on all four classes).
+          // Pre-registered: 'midlife' rows are EXCLUDED from OBJ-0's 2×2; the run ABORTS if trailing is
+          // enabled mid-window. Written once; never overwritten.
+          if (_shadowSeed !== undefined && !_prior.seededFrom) {
+            _next = { ..._prior, seededFrom: existingTecStatePE ? 'midlife' : 'cold' };
+          }
+          // Which arm(s) land a FIRST exit on THIS cycle — the only cycles that fetch a witness.
+          const _bidLands = Boolean(shadowDecision.shouldExit && !_prior.bidFirstExit);
+          const _midLands = Boolean(decision.shouldExit && !_prior.midFirstExit);
+          if (_bidLands) {
+            _next = {
+              ...(_next ?? _prior),
+              bidFirstExit: {
+                reason: shadowDecision.exitReason,
+                bid: fg2BookBid,
+                mid: currentPrice,
+                clamp: shadowDecision.exitPrice,
+                atMs: Date.now(),
+              },
+            };
+          }
+          if (_midLands) {
+            _next = {
+              ...(_next ?? _prior),
+              midFirstExit: {
+                reason: decision.exitReason,
+                mid: currentPrice,
+                bid: fg2BookBid,
+                atMs: Date.now(),
+              },
+            };
+          }
+          const _isExitEvent = _bidLands || _midLands;
+          if (_next !== null) {
+            // P5 — the third read-out: the contemporaneous venue BBO from the INDEPENDENT ticker
+            // witness (#911, separate socket, raw sides — never the `c` field, #952), PER ARM.
+            // Langston riders (2026-09-02): fetched ONLY on a cycle where a first exit lands (the
+            // seed-only cycle stamps seededFrom alone), and written ONLY beside the field landing
+            // this cycle — `witnessAtBidExit` / `witnessAtMidExit` — NEVER overwritten. A bid-then-
+            // mid ordering is the batch thesis, not an edge case; a single `witnessAtEvent` would
+            // have kept the LAST one under a name that reads as THE event (#546, moved downstream).
+            if (_isExitEvent) try {
+              const { getTickerWitness } = await import('./execution/depth-source.js');
+              const _w = await getTickerWitness(normalizeToInternalSymbol(position.symbol), 'crypto_spot');
+              if (_w) {
+                const _stamp = { bid: _w.bid, ask: _w.ask, capturedAtMs: _w.capturedAtMs };
+                if (_bidLands && !_next.witnessAtBidExit) _next.witnessAtBidExit = _stamp;
+                if (_midLands && !_next.witnessAtMidExit) _next.witnessAtMidExit = _stamp;
+              }
+            } catch { /* fail-open: telemetry only */ }
+            const _merged = { ..._meta, fg2Shadow: _next };
+            await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _merged } as any);
+            position.metadata = _merged;
+            // The log line is NOT the event population (Langston rider): it also prints on the
+            // seed cycle. Count events by fg2Shadow.bidFirstExit / midFirstExit on the rows.
+            console.log(
+              `[F-G-2][OBJ-0][SHADOW_ARM] ${position.symbol} ${_isExitEvent ? 'EVENT' : 'SEED'} seededFrom=${_next.seededFrom ?? '-'} ` +
+              `bidFirst=${_next.bidFirstExit?.reason ?? '-'} midFirst=${_next.midFirstExit?.reason ?? '-'} bid=${fg2BookBid} mid=${currentPrice}`,
+            );
+          }
+        } catch (err) {
+          console.error(`[F-G-2][OBJ-0][SHADOW_ARM_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
+        }
+      }

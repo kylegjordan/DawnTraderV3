@@ -237,8 +237,60 @@ function _ladderSnapshot(acc: LadderShadowAcc): Record<string, unknown> {
  * unflushed indefinitely and that residual is real, named, and NOT papered over. The graceful case
  * is closed by the unconditional flush on the stop path; only hard-kill loss remains.
  */
+// ⛔⛔ `8a-P2` — THESE TWO ARE AN EXIT-LATENCY BUDGET, NOT A TELEMETRY CADENCE. DO NOT RE-TUNE
+// THEM AS A LOGGING KNOB. `_ladderFlushIfDue` `await`s `storage.updateActiveOpenPosition`, and it
+// sits ON THE EXIT PATH. Its `try/catch` stops that write THROWING; nothing stops it DELAYING —
+// and a delayed exit cycle is a DROPPED OBSERVATION, not a slow one: the high-water mark, the
+// break-even latch, the rung ladder and the discontinuity detector's 2-tick deferral are all
+// tick-driven, so a cycle that arrives late never ratchets against the excursion it missed.
+// ⇒ Lowering these raises write frequency on the one path that must never be late. Raising them
+//   widens the unflushed-loss window. Both directions cost something REAL; neither is free.
 const LADDER_FLUSH_WALKS = 20;
 const LADDER_FLUSH_MS = 30_000;
+
+/**
+ * ⭐⭐ `8a-P2` — THE EXIT TRIGGER'S FRESHNESS CEILING. RISK-DERIVED, NOT INHERITED.
+ *
+ * A stale quote costs nothing while price is far from the stop; it costs exactly the error in
+ * the exit decision when price is NEAR it. So the ceiling answers: **how long until this quote
+ * could be wrong by enough to matter against the level it is compared to?**
+ *
+ *   t = 60 · ( f · stop / move60 )²          [range-over-t: a missed stop is an EXCURSION,
+ *                                             not a displacement, so RANGE is the right estimand]
+ *
+ *   f      = 0.10 — the share of the stop distance we accept as decision error.
+ *            ⛔ LOAD-BEARING, AND THE DEPENDENCE IS QUADRATIC: halving f QUARTERS the bound
+ *            (2.50 s → 625 ms), which would put THIS 2,000 ms value 3.2× ABOVE it. f is not a
+ *            formality and may not be lowered without re-deriving. A tightening of f is Kyle's.
+ *   stop   = 0.926 % — p10 of |entry − stop| / entry, crypto, 30 d, n=147. The TIGHT stop, not
+ *            the median: the tight trade is where a stale trigger does its damage.
+ *   move60 = the WORST CELL of a `trade_count` sweep over held-name 1-minute bars.
+ *
+ * ⛔⛔ THE BOUND IS NOT A PROPERTY OF `f` ALONE — IT IS A PROPERTY OF `f` **AND WHICH CELL IS
+ * WORST**, AND THE WORST CELL BELONGS TO THE DATA, NOT TO THIS FILE (Langston, 2026-09-14).
+ * So the cell is NAMED here, with its n and its date, and a reader can see what falsifies it:
+ *
+ *   WORST CELL, as measured 2026-09-14: held-name crypto (68 symbols with a close in 30 d),
+ *   `crypto_spot_ohlc_1m`, 24 h, `trade_count > 10`, n = 7,435 bars, p90 move60 = 0.4534 %
+ *   ⇒ bound = 60 · (0.10 · 0.926 / 0.4534)² = **2.50 s at f = 0.10**.
+ *   (Least-worst cell for contrast: `trade_count > 1`, n = 27,439, p90 0.2567 % ⇒ 7.81 s.)
+ *
+ * ⚠️ **THE HALVER IS NOT THE ONLY WAY THIS GOES FALSE — SO IS THE NEXT PERSON WHO SIMPLY ADDS
+ * DATA.** A new symbol with a higher stop/move60 ratio moves the worst cell and lowers the bound
+ * with `f` untouched. **Re-derive when the traded universe changes materially.**
+ * ⛔ THE POOL IS THE WRONG POPULATION: all-455-symbol p90 runs ~41 % HIGHER because ~400 thin
+ *   names we never trade drag it up. Held-name only. (Pool sensitivity 4.8× vs held-name 1.77×.)
+ *
+ * ⇒ SHIP VALUE 2,000 ms is a **TIGHTENING BELOW** that 2.50 s bound, chosen to equal the exit
+ *   loop's own mark fetch (`getPriceWithFallback(symbol, 2000)`) so trigger and mark are held to
+ *   ONE standard. ⛔ THEY ARE NOT COUPLED IN CODE: changing that call does NOT move this, and
+ *   moving this does not move that. Re-derive before dragging one with the other.
+ * ⚠️ RESIDUAL, RECORDED RATHER THAN DISSOLVED: at 2,000 ms the effective f is 0.051 at the
+ *   held p90 but **0.165 at the held p99** — holding 0.10 there needs 730 ms, which no feed
+ *   delivers. A tighter ceiling does not buy that back; it only converts a mispriced trigger
+ *   into a refused one. The per-symbol form is the real answer and is homed at plan row `3n.o`.
+ */
+const EXIT_TRIGGER_MAX_AGE_MS = 2_000;
 // P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
 // attempt). Single home for `promoted` (the refresh reconfirmed/rejected live in ready_to_buy_service).
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
@@ -2099,18 +2151,32 @@ export class ActiveExecutionEngine {
           bookStateRecord: ((position.metadata as Record<string, any> | null)?.bookState as Record<string, unknown> | undefined) ?? null,
         };
 
-        // ── row `8a-P1` — THE EXIT-LANE LADDER SHADOW. RECORDS. DECIDES NOTHING. ────────────────
+        // ── row `8a-P2` — THE EXIT-LANE TRIGGER SELECTION. THIS ONE DECIDES. ───────────────────
+        // ⛔⛔ IT WAS A SHADOW UNTIL 2026-09-14 AND THE LINE ABOVE SAID SO. `8a-P2` WIRED IT:
+        // `_lsSel.quote.bid` now reaches `evaluateTECExit` as `triggerPrice`. The row exists
+        // because the exit was triggering on the MIDPOINT — a price no seller can transact at —
+        // and an exit is a SELL, so it belongs on the BID. Entry is a BUY and belongs on the ASK;
+        // they are OPPOSITE BY CONSTRUCTION, so the error was a FULL SPREAD, never half of one.
         // Built HERE because this is the decision instant: `_exitProvenanceBase` above is
         // constructed once per position per tick, on the same read, so the recorded quote and
         // `exit_decision_price` share one instant. Any site below would sample a SECOND instant and
         // rebuild `3n.n`'s defect one layer over.
         // ⛔ CRYPTO ONLY — `_bookX` is null by construction on xStock and the ticker leg's store is
         //    a different object there; xStock is out of scope for this row and stays byte-unchanged.
+        // ⛔⛔ DECLARED AT ITERATION SCOPE, AND THE SELECTION SITS *OUTSIDE* THE RECORDER'S `try` —
+        // BOTH DELIBERATE.
+        // (1) SCOPE: the trigger must still be in hand at `evaluateTECExit` far below.
+        // (2) ⭐ THE `catch` BELOW SWALLOWS, AND ITS OWN COMMENT SAYS WHY THAT IS RIGHT FOR A
+        //     RECORDER — a recorder may never break the exit loop, because that would turn a
+        //     telemetry fault into a skipped stop check. THAT COMMENT BECOMES SELF-REFUTING THE
+        //     MOMENT THE VALUE DECIDES: a swallowed selection fault would yield a null trigger and
+        //     silently skip the stop check, which is the exact outcome it forbids. So the SELECTION
+        //     is out here where a fault surfaces, and only the RECORDING stays inside. (Langston.)
+        let _lsSel: ReturnType<typeof selectTouchPrice> | null = null;
         if (_posClass === 'crypto_spot') {
-          try {
-            const _lsNow = Date.now();
-            const _lsSym = normalizeToInternalSymbol(position.symbol);
-            const _lsCache = priceCache.getCachedPrice(_lsSym);
+          const _lsNow = Date.now();
+          const _lsSym = normalizeToInternalSymbol(position.symbol);
+          const _lsCache = priceCache.getCachedPrice(_lsSym);
             // ⛔⛔ THE TWO-READER GAP (Langston condition 3) — AND THE FIRST VERSION OF THIS FIELD
             // COULD ONLY EVER BE ZERO. It read `Date.now() - _lsNow` across one line, i.e. it timed
             // itself. Caught while writing the Step-4 change list, not by a test.
@@ -2122,7 +2188,7 @@ export class ActiveExecutionEngine {
             //   would be the #743 defect this column exists to make visible.
             const _lsMarkAgeMs = priceObservedAtMs !== null ? _lsNow - priceObservedAtMs : null;
 
-            const _lsSel = selectTouchPrice(
+            _lsSel = selectTouchPrice(
               {
                 book: _bookX
                   ? {
@@ -2147,15 +2213,21 @@ export class ActiveExecutionEngine {
               },
               _lsNow,
               {
-                // ONE ceiling governs both legs, stated with its number as `touch-price.ts` requires
-                // of whoever wires this. The exit lane's own constant is `8a-P2`'s, not this row's.
-                maxAgeMs: LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
+                // ⛔⛔ `8a-P2` — THE EXIT LANE'S OWN CEILING, AND IT IS NOT THE LEVEL LANE'S.
+                // This read `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000 ms) while it was a shadow,
+                // which was harmless for a recorder and is NOT harmless for a decider: it would
+                // have handed a 60-second-old quote to a live stop check, in the same loop pass
+                // whose own mark fetch demands ≤2,000 ms. Derivation at `EXIT_TRIGGER_MAX_AGE_MS`.
+                maxAgeMs: EXIT_TRIGGER_MAX_AGE_MS,
                 maxSpreadFraction: LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
               },
             );
 
-            // ⛔ THE CELL IS THE SHARED-STORE BASIS AT THE EXIT INSTANT — NOT "the exit trigger's
-            //    basis" (Langston condition 4). Nothing consumes it; `currentPrice` still drives.
+            // ── RECORDING ONLY FROM HERE. THE SELECTION ABOVE IS DELIBERATELY OUTSIDE THIS `try`.
+            try {
+            // ⛔ THE CELL IS THE SHARED-STORE BASIS AT THE EXIT INSTANT. ⚠️ SINCE `8a-P2` IT IS ALSO
+            //    WHAT DRIVES THE TRIGGER — so this is no longer a pure observation of an unused
+            //    quantity, and a reader must not cite it as one.
             recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'exit_trigger' }, _lsSel);
             recordSideAgeAttempt(
               { lane: 'active', assetClass: 'crypto_spot' },
@@ -2245,7 +2317,17 @@ export class ActiveExecutionEngine {
           stopLoss,
           takeProfit,
           engineTraceId,
-          _bookX && _bookX.bids.length > 0 ? _bookX.bids[0].price : null,
+          // ⭐⭐ `8a-P2` — THE TRANSACTABLE TRIGGER SIDE. This argument slot USED to carry
+          // `fg2BookBid`, a book-only bid fed to the F-G-2 SHADOW arm while the live decision ran
+          // on the midpoint. `P2-7` removed that arm and `P2-4` put the real thing in its place:
+          // the LADDER's bid — book top when we have one, ticker bid otherwise — under the
+          // exit lane's own 2,000 ms ceiling.
+          // ⛔ `null` on crypto means NO FRESH TRANSACTABLE SIDE ⇒ the evaluator makes NO DECISION
+          //   this cycle. It must never degrade to the midpoint.
+          // ⚠️ xStock reaches here with `_lsSel === null` BY CONSTRUCTION (the block above is
+          //   crypto-gated), and `checkExitConditions` turns that into an explicit `currentPrice`
+          //   pass-through rather than a refusal — see `P2-5` at the evaluator call.
+          _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null,
         );
 
         // I7-ROOT-FIX: Track exit evaluation for diagnostics
@@ -2431,9 +2513,14 @@ export class ActiveExecutionEngine {
     stopLoss: number | null,
     takeProfit: number | null,
     traceId?: string,
-    // F-G-2 OBJ-0: the decision-time BOOK BID for the crypto shadow arm (null on xStock — held,
-    // §7.4 row 1 — and when no book is held). Never used by the LIVE decision.
-    fg2BookBid: number | null = null,
+    // ⭐⭐ `8a-P2` — THE DECISION-TIME TRANSACTABLE BID, AND IT IS NOW LOAD-BEARING.
+    // ⚠️ THIS PARAMETER CHANGED MEANING ON 2026-09-14 AND THE OLD NAME WOULD HAVE HIDDEN IT. It
+    // was `fg2BookBid`: a book-only bid fed to the F-G-2 SHADOW arm, explicitly *"never used by
+    // the LIVE decision."* It is now the LADDER's bid and it IS the live decision's trigger.
+    // ⛔ `null` = no fresh transactable side. On crypto that means NO DECISION this cycle. On
+    //    xStock it is the normal state (crypto-gated selection) and the call site substitutes
+    //    `currentPrice` explicitly, so that class's behaviour is unchanged BY STATEMENT.
+    triggerBid: number | null = null,
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
     const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;
@@ -2507,6 +2594,18 @@ export class ActiveExecutionEngine {
         stopPrice: stopLoss ?? -Infinity,
         targetPrice: takeProfit ?? Infinity,
         currentPrice,
+        // ⭐⭐ `8a-P2` — THE TRIGGER, AND THIS LINE IS THE WHOLE ROW.
+        // CRYPTO: the ladder's BID, refused into `null` when no side is fresh enough. An exit is a
+        //   SELL, so the BID is the only price a seller can actually get; the midpoint is a price
+        //   nobody can transact at, and using it on BOTH legs made the error a FULL SPREAD.
+        // ⛔ `null` ⇒ NO DECISION THIS CYCLE (evaluator branch 2b). It must NEVER fall back to
+        //   `currentPrice` — that re-introduces the exact defect this row removes, and it is pinned
+        //   as a mutation that must go RED in `b-price-side-8a-p2-trigger.test.ts`.
+        // xSTOCK: passes `currentPrice` EXPLICITLY — see `P2-5`. That class has no book on this leg
+        //   and its ticker store is a different object, so it is out of scope for this row. Writing
+        //   it out loud makes "xStock behaviour is unchanged" a STATEMENT that a reader can check,
+        //   rather than an omission that looks identical to an oversight.
+        triggerPrice: positionAssetClass === 'crypto_spot' ? triggerBid : currentPrice,
         atr: atrAtOpen,
         holdDurationMs: 0,   // paper handles metadata.maxHoldingMs inline below (W2.1)
         maxHoldMs: Infinity, // disable global timeout branch here
@@ -2544,144 +2643,18 @@ export class ActiveExecutionEngine {
         seed: tecSeedPE,
       });
 
-      // ── F-G-2 OBJ-0: THE SHADOW ARM — shadow first, switch second (crypto only) ──────────
-      // The live decision above read the book MID. This asks the SAME evaluator what it would
-      // have decided on the book BID — the side a long actually sells on — and records the
-      // FIRST exit each arm would take, so OBJ-0's pre-registered 2×2 (bid-arm first exit ×
-      // live close reason; the DISCORDANT cell is the kill criterion) can be read off
-      // closed_trades.metadata.fg2Shadow at Step 7/8. It NEVER closes a position. Trailing
-      // state is keyed `${position.id}:fg2bid` so the bid-arm's ratchets evolve on their own
-      // and cannot touch the live key — ONE evaluator, two keys (OBJ-4), not two evaluators.
-      // The bid comes from the SAME mini-book snapshot the live provenance stamps (`_bookX`),
-      // so both arms see one book state. xStock: fg2BookBid is null by construction.
-      if (positionAssetClass === 'crypto_spot' && !(fg2BookBid !== null && Number.isFinite(fg2BookBid) && fg2BookBid > 0)) {
-        // Langston FINDING-2 (2026-09-02): OBJ-0's denominator is *crypto positions that ENTERED the
-        // shadow arm*, measured — not *open crypto positions*. A crypto row that did not enter says
-        // why, ONCE, on the row (`fg2ShadowSkip`), and the cycle counter carries it (`shadowSkippedNoBook`
-        // in the EVAL_EXIT line). The other absence causes — pending-maker `continue`, price-skip
-        // `continue` — leave the loop before this line and already log their own reason.
-        this.fg2ShadowSkippedNoBook++;
-        const _metaS = ((position.metadata as Record<string, any> | null) ?? {});
-        if (!_metaS.fg2ShadowSkip && !_metaS.fg2Shadow) {
-          try {
-            const _mergedS = { ..._metaS, fg2ShadowSkip: { reason: 'no_book_bid', atMs: Date.now() } };
-            await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _mergedS } as any);
-            position.metadata = _mergedS;
-            console.log(`[F-G-2][OBJ-0][SHADOW_SKIP] ${position.symbol} reason=no_book_bid`);
-          } catch (err) {
-            console.error(`[F-G-2][OBJ-0][SHADOW_SKIP_STAMP_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
-          }
-        }
-      }
-      if (fg2BookBid !== null && Number.isFinite(fg2BookBid) && fg2BookBid > 0 && positionAssetClass === 'crypto_spot') {
-        this.fg2ShadowEntered++;
-        try {
-          const _shadowId = `${position.id}:fg2bid`;
-          const _shadowSeed = _getTSForSeed(_shadowId)
-            ? undefined
-            : {
-                tradeMode: ((position as any).tradeMode === 'TRAILING_TAKE'
-                  ? 'TRAILING_TAKE'
-                  : 'TARGET') as 'TARGET' | 'TRAILING_TAKE',
-                ladderRung: (position as any).ladderRungsHit ?? 0,
-                originalStopPrice:
-                  (position as any).originalStopPrice ?? (stopLoss ?? undefined),
-              };
-          const shadowDecision = await evaluateTECExit({
-            tradeId: _shadowId,
-            symbol: position.symbol,
-            entryPrice: avgPrice,
-            stopPrice: stopLoss ?? -Infinity,
-            targetPrice: takeProfit ?? Infinity,
-            currentPrice: fg2BookBid,
-            atr: atrAtOpen,
-            holdDurationMs: 0,
-            maxHoldMs: Infinity,
-            context: {
-              exchange: 'kraken',
-              assetClass: positionAssetClass,
-              strategy: position.strategyName,
-            },
-            useTrailing: true,
-            DI: diAtOpen,
-            volNoise: volNoiseAtOpen,
-            callerMode: this.mode === 'live' ? 'live' : 'paper',
-            sourcePool: (position as any).sourcePool ?? null,
-            currentSlotTotal,
-            seed: _shadowSeed,
-          });
-          const _meta = ((position.metadata as Record<string, any> | null) ?? {});
-          const _prior = ((_meta.fg2Shadow as Record<string, any> | undefined) ?? {});
-          let _next: Record<string, any> | null = null;
-          // Langston Step-4 FINDING-2 (2026-09-02): stamp HOW the shadow arm was seeded, ON THE CYCLE
-          // THE SHADOW KEY IS CREATED (not at the first fire — by then the live state always exists).
-          // 'cold' = both arms started from the same cold seed (clean counterfactual). 'midlife' = the
-          // LIVE trailing state already existed, so the shadow inherited the live arm's ladder/mode and
-          // receives its ratcheted stop every cycle — the arms entangle if trailing is ever enabled
-          // (inert today by CONFIG, not by design: trailing_enabled_active=false on all four classes).
-          // Pre-registered: 'midlife' rows are EXCLUDED from OBJ-0's 2×2; the run ABORTS if trailing is
-          // enabled mid-window. Written once; never overwritten.
-          if (_shadowSeed !== undefined && !_prior.seededFrom) {
-            _next = { ..._prior, seededFrom: existingTecStatePE ? 'midlife' : 'cold' };
-          }
-          // Which arm(s) land a FIRST exit on THIS cycle — the only cycles that fetch a witness.
-          const _bidLands = Boolean(shadowDecision.shouldExit && !_prior.bidFirstExit);
-          const _midLands = Boolean(decision.shouldExit && !_prior.midFirstExit);
-          if (_bidLands) {
-            _next = {
-              ...(_next ?? _prior),
-              bidFirstExit: {
-                reason: shadowDecision.exitReason,
-                bid: fg2BookBid,
-                mid: currentPrice,
-                clamp: shadowDecision.exitPrice,
-                atMs: Date.now(),
-              },
-            };
-          }
-          if (_midLands) {
-            _next = {
-              ...(_next ?? _prior),
-              midFirstExit: {
-                reason: decision.exitReason,
-                mid: currentPrice,
-                bid: fg2BookBid,
-                atMs: Date.now(),
-              },
-            };
-          }
-          const _isExitEvent = _bidLands || _midLands;
-          if (_next !== null) {
-            // P5 — the third read-out: the contemporaneous venue BBO from the INDEPENDENT ticker
-            // witness (#911, separate socket, raw sides — never the `c` field, #952), PER ARM.
-            // Langston riders (2026-09-02): fetched ONLY on a cycle where a first exit lands (the
-            // seed-only cycle stamps seededFrom alone), and written ONLY beside the field landing
-            // this cycle — `witnessAtBidExit` / `witnessAtMidExit` — NEVER overwritten. A bid-then-
-            // mid ordering is the batch thesis, not an edge case; a single `witnessAtEvent` would
-            // have kept the LAST one under a name that reads as THE event (#546, moved downstream).
-            if (_isExitEvent) try {
-              const { getTickerWitness } = await import('./execution/depth-source.js');
-              const _w = await getTickerWitness(normalizeToInternalSymbol(position.symbol), 'crypto_spot');
-              if (_w) {
-                const _stamp = { bid: _w.bid, ask: _w.ask, capturedAtMs: _w.capturedAtMs };
-                if (_bidLands && !_next.witnessAtBidExit) _next.witnessAtBidExit = _stamp;
-                if (_midLands && !_next.witnessAtMidExit) _next.witnessAtMidExit = _stamp;
-              }
-            } catch { /* fail-open: telemetry only */ }
-            const _merged = { ..._meta, fg2Shadow: _next };
-            await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _merged } as any);
-            position.metadata = _merged;
-            // The log line is NOT the event population (Langston rider): it also prints on the
-            // seed cycle. Count events by fg2Shadow.bidFirstExit / midFirstExit on the rows.
-            console.log(
-              `[F-G-2][OBJ-0][SHADOW_ARM] ${position.symbol} ${_isExitEvent ? 'EVENT' : 'SEED'} seededFrom=${_next.seededFrom ?? '-'} ` +
-              `bidFirst=${_next.bidFirstExit?.reason ?? '-'} midFirst=${_next.midFirstExit?.reason ?? '-'} bid=${fg2BookBid} mid=${currentPrice}`,
-            );
-          }
-        } catch (err) {
-          console.error(`[F-G-2][OBJ-0][SHADOW_ARM_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
-        }
-      }
+      // ── F-G-2 OBJ-0 SHADOW ARM — REMOVED 2026-09-14 BY `8a-P2` (P2-7) ─────────────────────
+      // It asked the same evaluator what it would have decided on the book BID while the live
+      // decision ran on the MID, and recorded the first exit each arm would take.
+      // ⛔⛔ `8a-P2` MAKES THE LIVE ARM READ THE LADDER BID, SO THE COMPARISON WOULD HAVE BECOME
+      // BID-AGAINST-BID: the discordant cell collapses BY CONSTRUCTION, and F-G-2 pre-registers
+      // discordant n=0 as INCONCLUSIVE-EXTEND and never PASS ⇒ IT COULD NEVER RESOLVE AGAIN.
+      // ⚠️ AND THE TWO BIDS WERE NOT THE SAME OBJECT: the live trigger walks the full ladder
+      // (book top OR ticker sides), this arm was book-only — so it would have been a
+      // ladder-vs-book comparison wearing a bid-vs-mid label. (Langston BLOCKER-4.)
+      // ✅ THE `bookState` CARRY IS DELIBERATELY KEPT — it is not part of this arm and the
+      //    `P-8a` pre-audit row already specified keeping it.
+      // 🗄 Archived copy: `1-system-manual/_archive/deleted-code/fg2-shadow-arm-aee.ts.removed`.
 
       // B65.2: if the engine ratcheted the stop (break-even lock, target
       // lock, or trailing), write the new stop back to the open-position

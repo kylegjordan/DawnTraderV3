@@ -15,11 +15,17 @@
  *      this branch because its loop only runs when prices are available.
  *   2. timeout       — current price available but holdDuration > maxHold →
  *      close at currentPrice. Safety valve, not a normal exit.
- *   3. stop_hit      — currentPrice <= stopPrice → close at stopPrice (clamped).
- *   4. target_hit    — currentPrice >= targetPrice → close at targetPrice (clamped).
+ *   3. stop_hit      — triggerPrice <= stopPrice → close at stopPrice (clamped).
+ *   4. target_hit    — triggerPrice >= targetPrice → close at targetPrice (clamped).
  *   5. trailing_stop_hit — optional ATR-based TEC state machine. Delegates to
  *      trailing-exit-controller.ts (Directive 9.2.A). Engaged only when
  *      `useTrailing:true` is passed by the caller.
+ *
+ * ⭐ `8a-P2` (2026-09-14): the TRIGGER and the BOOKING price are two DIFFERENT fields.
+ * `triggerPrice` is the TRANSACTABLE side (an exit is a SELL ⇒ the BID) and decides
+ * WHETHER a level was touched; `currentPrice` decides WHAT the exit is recorded at.
+ * They were ONE field only because the midpoint was used for both jobs. A `null`
+ * `triggerPrice` means NO DECISION THIS CYCLE (branch 2b) — never a midpoint fallback.
  *
  * ## Module constants wiring
  *
@@ -111,8 +117,27 @@ export interface TECExitInput {
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
-  /** Current mid/last price. Pass null or <=0 to signal stale/unavailable price. */
+  /**
+   * The BOOKING price — what an exit is RECORDED at. Pass null or <=0 to signal
+   * stale/unavailable price.
+   * ⚠️ THIS IS NO LONGER THE TRIGGER. `8a-P2` split the two jobs apart: this field
+   * still answers "what price do we write down", and `triggerPrice` below answers
+   * "has the level been touched". They were one field because the midpoint was used
+   * for both, which is the defect row `8a` exists to remove.
+   */
   currentPrice: number | null;
+  /**
+   * ⭐ `8a-P2` — THE TRIGGER PRICE: the TRANSACTABLE side, used ONLY to decide whether
+   * a level has been touched. An exit is a SELL, so this is the BID.
+   * ⛔ `null` means the caller could not obtain a transactable side within its freshness
+   * ceiling, and the correct response is TO MAKE NO DECISION THIS CYCLE — never to fall
+   * back to the midpoint. Falling back re-introduces exactly the full-spread error the
+   * split removes, and it is pinned as a mutation that must go RED.
+   * ⚠️ A caller that has no side to offer passes `currentPrice` here EXPLICITLY (that is
+   * what xStock does today) so that "unchanged behaviour" is a STATEMENT rather than an
+   * omission nobody can see.
+   */
+  triggerPrice: number | null;
   /** Average true range. Required for trailing path; ignored if useTrailing=false. */
   atr: number;
   holdDurationMs: number;
@@ -171,6 +196,16 @@ export interface TECExitDecision {
   newStopPrice?: number;
   /** Present only when useTrailing=true and TEC flipped mode (TARGET → TRAILING_TAKE). */
   modeChanged?: boolean;
+  /**
+   * ⭐ `8a-P2` — set when this cycle made NO decision because no transactable side was
+   * available. `shouldExit` is false, but that false means "could not look", NOT "looked
+   * and found nothing".
+   * ⛔ THOSE TWO ARE THE SAME `false` TO ANY CALLER THAT ONLY READS `shouldExit`, which is
+   * exactly the absent-vs-legitimate conflation this row keeps finding. A caller counting
+   * skips, alerting on them, or reading the distribution back MUST branch on this field —
+   * the return shape alone cannot tell an evaluated cycle from a refused one.
+   */
+  noDecisionReason?: 'no_transactable_side';
   /** Resolved constants snapshot — useful for diagnostics and parity tests. */
   resolvedConstants?: {
     breakEvenTriggerR: number;
@@ -248,6 +283,38 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
     };
   }
 
+  // ── 2b. `8a-P2` — NO TRANSACTABLE SIDE ⇒ NO DECISION THIS CYCLE ────────────────────
+  // ⛔⛔ THIS IS A NEW GUARD AND IT IS DELIBERATELY *NOT* A REUSE OF THE NULL-PRICE BRANCH
+  // AT STEP 1 (Langston, and he is right — I proposed the reuse and it was wrong THREE ways):
+  //   (a) step 1 can return `shouldExit: true` / `stale_timeout` / at ENTRY price when
+  //       `holdDurationMs > maxHoldMs`. A TRIGGER refusal on a perfectly live booking price
+  //       would then close a trade at entry under a PRICE-STALENESS reason. That it is inert
+  //       on the active lane today is a CALLER-SUPPLIED `maxHoldMs: Infinity`, not a property
+  //       of this function — and the two VTS callers pass real values.
+  //   (b) folding it into step 1 would place it ABOVE step 2's timeout valve, which books at
+  //       `currentPrice`, giving the same accidental reprieve.
+  //   (c) ⭐ THE ONE NOBODY NAMED UNTIL IT WAS LOOKED FOR: the step-1 early return exits
+  //       BEFORE the discontinuity detector, `tecUpdatePosition` and `tecShouldClose`, so a
+  //       refused cycle DOES NOT ADVANCE THE TICK-DRIVEN STATE MACHINES — high-water mark,
+  //       break-even latch, rung ladder, and the detector's 2-tick deferral.
+  // ⇒ A SKIP IS A DROPPED OBSERVATION, NOT A NO-OP. An excursion landing entirely inside
+  //   refused cycles is never ratcheted against. Sitting here — after the valve, before any
+  //   level comparison — is the narrowest placement that makes no decision on an untradeable
+  //   side while leaving every other branch's semantics byte-unchanged.
+  // ⚠️ ITS REASON IS DISTINCT FROM `stale_timeout` ON PURPOSE: "we had no side to act on" and
+  //   "the price was stale" are different facts and a shared reason string would pool them —
+  //   which is the cell-conflation this row has now found five times.
+  if (input.triggerPrice === null || input.triggerPrice <= 0) {
+    return {
+      shouldExit: false,
+      exitReason: null,
+      exitPrice: 0,
+      noDecisionReason: 'no_transactable_side',
+      resolvedConstants,
+    };
+  }
+  const triggerPrice = input.triggerPrice;
+
   // 3/4. When trailing is OFF, short-circuit on hard stop/target (legacy
   //      B65.2-plumbing path). When trailing is ON, the trailing engine
   //      owns the target-hit decision (qualifier gate + moonbag flip vs.
@@ -267,7 +334,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
   const atrUnavailableForTrailing = !(input.atr > 0);
   if (!input.useTrailing || atrUnavailableForTrailing) {
     const viaAtrFloor = input.useTrailing && atrUnavailableForTrailing;
-    if (currentPrice <= input.stopPrice) {
+    if (triggerPrice <= input.stopPrice) {
       if (viaAtrFloor) console.warn(`[TEC][P19-B6.5b][F5][ATR_FLOOR] ${input.symbol} stop_hit via hard floor (useTrailing but ATR<=0=${input.atr}); trailing engine could not engage. tradeId=${input.tradeId}`);
       return {
         shouldExit: true,
@@ -276,7 +343,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
         resolvedConstants,
       };
     }
-    if (currentPrice >= input.targetPrice) {
+    if (triggerPrice >= input.targetPrice) {
       if (viaAtrFloor) console.warn(`[TEC][P19-B6.5b][F5][ATR_FLOOR] ${input.symbol} target_hit via hard floor (useTrailing but ATR<=0=${input.atr}). tradeId=${input.tradeId}`);
       return {
         shouldExit: true,
@@ -302,7 +369,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
     // (DISCONTINUITY_ACTIVE → confirming tick → CLEARING → IDLE) collapsed to
     // 1-tick, exactly the unfillable-fill failure this batch closes.
     const tickTs = input.currentTs ?? Date.now();
-    const discontinuity = isDiscontinuityActive(input.symbol, currentPrice, tickTs);
+    const discontinuity = isDiscontinuityActive(input.symbol, triggerPrice, tickTs);
 
     // B79.TEC: moonbag gates are now SYNC (cache pre-warmed by primeTECConfig).
     // Both calls take an explicit `assetClass` from the context.
@@ -387,7 +454,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
 
     // B-NEW-42b (Step 4 fix BLOCKER 2): pass the SAME discontinuity result we
     // resolved at the top of this trailing branch. No second detector call.
-    if (tecShouldClose(input.tradeId, currentPrice, tickTs, discontinuity)) {
+    if (tecShouldClose(input.tradeId, triggerPrice, tickTs, discontinuity)) {
       // B65.2-HF3: three distinct close semantics when the engine reports
       // "close now":
       //   1. targetLatched = trade entered TRAILING_TAKE (moonbag), now

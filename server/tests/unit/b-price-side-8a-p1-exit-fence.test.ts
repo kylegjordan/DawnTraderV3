@@ -76,15 +76,50 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
   it('1. ⭐ INSTRUMENT CONTROL — both `evaluateTECExit` call sites are found, and they are not empty', () => {
     // Without this, every prohibition below could pass by extracting nothing at all — which is the
     // failure mode a source fence is most prone to and least likely to announce.
-    expect(args).toHaveLength(2);
+    // ⚠️ WAS 2 UNTIL 2026-09-14. `8a-P2` (P2-7) REMOVED THE F-G-2 SHADOW ARM — once the LIVE arm
+    // reads the ladder bid, that arm compared bid against bid, its discordant cell collapsed by
+    // construction, and it could never resolve again. ONE call site is now the correct count.
+    expect(args).toHaveLength(1);
     for (const a of args) expect(a).toContain('currentPrice');
   });
 
-  it('2. ⛔ NO LADDER IDENTIFIER APPEARS IN EITHER ARGUMENT OBJECT', () => {
-    // The ladder's locals and its accumulator. If any of these reached the evaluator, P1 would be
-    // deciding rather than recording, which is the one thing this phase must not do.
-    const FORBIDDEN = ['_lsSel', '_lsCache', 'ladderShadow', '_ladderShadow', 'selectTouchPrice', 'tickerLegFromCachedQuote'];
-    for (const a of args) for (const f of FORBIDDEN) expect(a).not.toContain(f);
+  it('2. ⛔⛔ RETIRED-AND-INVERTED — THE LADDER NOW *DOES* DECIDE, AND THIS ASSERTS THE OPPOSITE', () => {
+    // ⛔⛔ THIS TEST'S ORIGINAL SUBJECT IS DEAD, AND LEAVING IT GREEN WOULD HAVE BEEN THE WORST
+    // OUTCOME OF THE WHOLE ROW. It forbade the strings `_lsSel`/`selectTouchPrice` inside the
+    // evaluator's argument object, to prove P1 recorded without deciding.
+    // ⚠️ MEASURED WHEN P2 LANDED: it still PASSED — because the trigger arrives through a
+    // parameter named `triggerBid`, so not one forbidden STRING appears, while the behaviour the
+    // test existed to forbid is now exactly what happens. A prohibition on identifiers is routed
+    // around by a rename. ⇒ IT WAS GREEN AND MEANINGLESS, WHICH IS WORSE THAN RED.
+    // ⇒ INVERTED TO THE POST-P2 TRUTH: the live call MUST carry a trigger distinct from the mark.
+    expect(args[0]).toMatch(/triggerPrice\s*:/);
+  });
+
+  it('2b. ⛔⛔ THE MUTATION THAT MUST GO RED — triggerPrice MAY NEVER FALL BACK TO THE MIDPOINT', () => {
+    // The single highest-value assertion in this row. A refusal must make NO DECISION; degrading
+    // to `currentPrice` re-introduces the full-spread error the row removes, and it would look
+    // entirely reasonable to a future reader trying to 'fix' skipped exit checks.
+    const trigger = /triggerPrice\s*:\s*([^,}]+)/.exec(args[0]);
+    expect(trigger).not.toBeNull();
+    // ⭐ STRUCTURAL PRECONDITION ASSERTED BEFORE THE RESULT IS READ — a mutation that did not
+    //   apply once reported as a SURVIVOR on this very batch. A false PASS hides a gap; a PHANTOM
+    //   SURVIVOR invents one.
+    const expr = trigger![1];
+    expect(expr.length).toBeGreaterThan(0);
+    // The crypto branch must resolve to the bid or to null — never to the mark.
+    expect(expr).toMatch(/triggerBid/);
+    expect(expr).not.toMatch(/\?\s*currentPrice/);
+  });
+
+  it('2c. ⭐ CONTROL — the SAME matcher CATCHES a fixture that DOES degrade to the mid', () => {
+    // Without this, 2b's `not.toMatch` over a failed extraction reads as a pass for ever.
+    const bad = evaluateTECExitArgs(
+      'await evaluateTECExit({ tradeId: x, currentPrice, triggerPrice: triggerBid ?? currentPrice });',
+    );
+    expect(bad).toHaveLength(1);
+    const t = /triggerPrice\s*:\s*([^,}]+)/.exec(bad[0]);
+    expect(t).not.toBeNull();
+    expect(t![1]).toMatch(/\?\?\s*currentPrice/);   // the control DOES trip
   });
 
   it('3. ⭐ CONTROL — the SAME matcher catches a fixture that DOES leak the ladder', () => {
@@ -97,6 +132,9 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
 
   it('4. the live trigger still reads `currentPrice` — the shadow has not quietly replaced it', () => {
     // The complement of test 2: proving the ladder is absent is only half. This proves what IS there.
+    // ⭐ MEANING CHANGED WITH `8a-P2` AND IS NOW STRONGER: this no longer says 'the trigger is
+    // still the mark' — it says the BOOKING price was NOT switched along with the trigger. The
+    // two jobs were split deliberately and only ONE of them moved.
     expect(args[0]).toMatch(/currentPrice\s*,/);
   });
 });
