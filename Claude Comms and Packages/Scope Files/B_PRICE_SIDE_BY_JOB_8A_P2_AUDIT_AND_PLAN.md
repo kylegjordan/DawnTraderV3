@@ -145,3 +145,25 @@ The `catch` at `aee:2182` says *"A RECORDER MAY NEVER BREAK THE EXIT LOOP… whi
 ⚠️ **HYPOTHESIS, NOT A VERDICT (rule 24).** Three outcomes are open: a real defect (the stamp was lost), working-as-designed-but-undecided (trailing deliberately parked — note that `break_even_enabled=false` on all four classes since May is a **separate**, known, Kyle-owned switch and must not be conflated with this), or legacy that no longer fits. **The provenance read has NOT been done.**
 
 **HOME: its own row `3b.m` `B-ATR-AT-OPEN-STAMP`, owner CC-C, placed in `PHASE_19_PLAN` immediately after `3n` `B-PRICE-SIDE-BY-JOB`** — it must not precede the price work, and it must not be folded into it.
+
+## r2-I — KYLE, 2026-09-14: *"Should we record the answer instead of dropping it? Is this something we may want to analyze at some point?"* — YES, AND IT REPLACES THE SHADOW RATHER THAN EXTENDING IT
+
+**What is already recorded, corrected against my own chat wording.** I told Kyle the answer "goes into a counter and is thrown away." The PRICE is dropped — that part is right. But the derived COUNTS are not: `_ladderFlushIfDue` (`aee:692-693`) mutates `position.metadata` and **`await`s `storage.updateActiveOpenPosition`**, and the close-time carry writes `metadata.ladderShadow` onto the closed-trade row (`aee:3245`). ⚠️ **So the shadow is not pure telemetry — it is an awaited DB write on the exit path.** *(Surfaced by a fresh claim-only reader; re-derived at the ref before being written here.)*
+
+**What is NOT recorded: the two sides themselves at the decision instant.** `exitProvenance` already stamps `decisionPrice` (`aee:2311`, `:2389`) — **a single number with no side.**
+
+⇒ **P2-9 — STAMP THE DECISION-TIME SIDES ON THE ROW WE ALREADY WRITE.** Add the selected `bid`, `ask`, `basis` (book-top vs ticker) and quote age to the EXISTING `exitProvenance` object, beside `decisionPrice`.
+
+★ **WHY THIS IS THE RIGHT SHAPE, AND WHY IT IS NOT MORE SHADOW WORK:** it makes the change **auditable after the fact instead of gated before it.** With both numbers on the row, *"did moving to the bid help?"* is answerable at any time from records we already write — no observation window, no second instrument, no blocked row. **The shadow measured BEFORE the change and blocked it; this records DURING the change and never blocks.** That is the distinction Kyle's objection was actually pointing at.
+
+⛔ **COST CONTROL, STATED BECAUSE THE CONSTRAINT IS LIVE:** stamp at the DECISION/EXIT instant only — **never per-tick per-position.** Alert `74424570` has the database at **65.3% of the 200 GB cap** and `signal_eval_archive` already grows ~1.5 GB/day. Per-tick sides across every open position is a new high-rate sink; two fields on an existing per-close row is not.
+
+⇒ **AND IT SUBSUMES `P1-OBJ-2`.** The exit-lane age distribution that `r2-B` needs to derive the ceiling becomes a query over stamped rows rather than a pre-registered observation window. **The ceiling still derives from RISK; this only supplies the skip-rate prediction — and it does so from history instead of from waiting.**
+
+## r2-J — READER HITS, RE-DERIVED, THAT DID **NOT** SURVIVE AS FINDINGS
+
+⛔ **Recorded because a clean is not evidence and a hit is only a lead (§8 asymmetry) — both directions belong in the record.**
+- **"A throw in the shadow block suppresses signal generation."** Control-flow coupling is REAL — `signal-orchestrator.ts:3335` catches and returns `signals` (possibly zero for that symbol), and `vts-runner:1588`'s nearest enclosing `try` is at `:1239`, far above. **But the only throw path is `keyOf`'s missing-`stage` guard (`level-basis.ts:479-485`), which every production caller passes a literal for and tsc enforces.** ⇒ **structurally unreachable in production; NOT a live risk.** Logged, not escalated.
+- ⚠️ **STILL OPEN, NOT DISMISSED: the engine's shadow carries its own `try/catch` and the other two lanes do not.** That asymmetry is not a defect today; it becomes one if any future throw path is added. Folded into **P2-8**'s split rather than homed separately.
+
+**REVIEWER: claim-only (mode B) · "what other states of the world are consistent?" · 3 claims · HITS on the awaited-DB-write and the control-flow coupling · re-derived y**
