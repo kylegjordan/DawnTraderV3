@@ -2578,11 +2578,24 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalNoHit=${this._exitEvalNoHit} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
+    // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
+    // `invoked === refused + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops holding,
+    // an arm has been added, moved, or lost — and the failure mode of a broken partition is that
+    // **every arm still looks plausible** while the total silently stops meaning anything.
+    // ★ A PARTITION IN A COMMENT IS A CLAIM; A PARTITION IN CODE IS A FENCE. This is the fence.
+    const _evalResidual = this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit;
+    if (_evalResidual !== 0) {
+      console.error(`[8a-P2][EVAL_PARTITION_BROKEN] residual=${_evalResidual} invoked=${this._exitEvalInvoked} `
+        + `refused=${this._noTriggerRefusals} noHit=${this._exitEvalNoHit} hit=${this._exitEvalHit} — the`
+        + ` evaluator-scoped partition no longer closes. An arm has been added, moved or lost; until it`
+        + ` is fixed, a ZERO in any arm is NOT evidence of absence and #661 leg 3 is NOT discharged.`);
+    }
     this._noTriggerRefusals = 0;
     this._exitEvalInvoked = 0;
     this._exitEvalNoHit = 0;
+    this._exitEvalHit = 0;
   }
 
   /**
@@ -2617,9 +2630,14 @@ export class ActiveExecutionEngine {
   //   so it counts positions CONSIDERED, not evaluator INVOCATIONS.
   // ⇒ THE PARTITION, EXHAUSTIVE BY CONSTRUCTION: `_exitEvalInvoked` = every call. Of those,
   //   `_noTriggerRefusals` (refused, no transactable side) + `_exitEvalNoHit` (evaluated, nothing in
-  //   range) + the hit counters. A zero in ANY arm is now readable against a non-zero in the others.
+  //   range) + `_exitEvalHit` (evaluated, exited). A zero in ANY arm is readable against a non-zero
+  //   in the others. ⛔ THE HIT ARM IS `_exitEvalHit`, **NOT** `slHits`/`tpHits` — those two are a
+  //   DIFFERENT POPULATION (they miss three of the five exit reasons and also count a
+  //   resting-maker fill that never reached the evaluator). ⚠️ AND THE IDENTITY IS FENCED IN CODE,
+  //   NOT ASSERTED IN PROSE: **a partition in a comment is a claim; a partition in code is a fence.**
   private _exitEvalInvoked = 0;
   private _exitEvalNoHit = 0;
+  private _exitEvalHit = 0;
 
   private isMaxHoldEnabled(): boolean {
     const key = this.mode === 'live' ? 'enabled_live' : 'enabled_paper';
@@ -2769,6 +2787,15 @@ export class ActiveExecutionEngine {
         // B80: Option C+ seed (only on first cycle post-restart).
         seed: tecSeedPE,
       });
+      // ⭐⭐ `8a-P2` — COUNTED THE INSTANT THE EVALUATOR RETURNS, AND THAT PLACEMENT IS THE WHOLE
+      // POINT OF THE COUNTER. ⚠️ IT WAS FIRST WRITTEN 110 LINES BELOW THIS, AFTER TWO AWAITED
+      // `updateActiveOpenPosition` WRITES — while its own comment claimed *"before any branch"*.
+      // ⛔ AN INVOCATION COUNTER THAT CAN BE LOST TO AN EARLY RETURN UNDERCOUNTS EXACTLY THE
+      //   CYCLES IT EXISTS TO SEE, AND UNDERCOUNTS THEM TOWARD ZERO — i.e. it would have
+      //   reproduced the very `never-evaluated`-looks-like-`nothing-in-range` conflation this
+      //   counter was built to END. (Langston, F1.)
+      this._exitEvalInvoked++;
+
 
       // ── F-G-2 OBJ-0 SHADOW ARM — REMOVED 2026-09-14 BY `8a-P2` (P2-7) ─────────────────────
       // It asked the same evaluator what it would have decided on the book BID while the live
@@ -2817,10 +2844,6 @@ export class ActiveExecutionEngine {
       }
 
       // B65.2: write trade_mode on mode change (TARGET → TRAILING_TAKE).
-      // ⭐ `8a-P2` — COUNTED THE INSTANT THE EVALUATOR RETURNS, BEFORE ANY BRANCH, so the
-      // invocation count cannot be lost to an early return below it.
-      this._exitEvalInvoked++;
-
       // ── `8a-P2` BLOCKER-2 — THE REFUSAL IS READ, COUNTED AND ESCALATED ───────────────────
       // A refused cycle is NOT an evaluated cycle that found nothing. `shouldExit:false` means
       // both things and only this field separates them, so this is the ONLY place the difference
@@ -2902,6 +2925,22 @@ export class ActiveExecutionEngine {
       if (!decision.shouldExit) this._exitEvalNoHit++;
 
       if (decision.shouldExit) {
+        // ⭐⭐ `8a-P2` F2 — THE EVALUATOR-SCOPED HIT ARM, AND IT IS *NOT* `slHits`/`tpHits`.
+        // ⛔ THOSE TWO ARE A DIFFERENT POPULATION IN BOTH DIRECTIONS, MEASURED (Langston):
+        //   LEAK — they key on `'stop_hit'`/`'target_hit'` only, but the switch returns FIVE
+        //     reasons: `trailing_stop_hit` AND `moonbag_timeout` both surface as
+        //     `type:'trailing_stop_hit'`, and `max_holding_period` is a fifth. An
+        //     evaluator-driven trailing exit increments `invoked` and NEITHER hit counter.
+        //   OVER-COUNT — `tpHits++` also fires on the resting-maker fill path, which `continue`s
+        //     BEFORE the evaluator is called. That hit has NO invocation behind it.
+        // ⚠️ THE OLD COMMENT CALLED THE PARTITION "EXHAUSTIVE BY CONSTRUCTION". IT IS NOT — it
+        //   balances today ONLY because `trailing_enabled_active=false`, `moonbag_qualifying_
+        //   strategies=[]` and the max-hold switch is seeded FALSE. **THREE CONFIG LOCKS, NOT A
+        //   CONSTRUCTION** (`#677`), and I asserted it as certainty in this file.
+        // ⇒ this arm is evaluator-scoped, so `invoked === refused + noHit + hit` is EXACT and
+        //   survives any of those three switches flipping. `slHits`/`tpHits` stay what they
+        //   honestly are: CLOSE-SIDE counters over a WIDER population.
+        this._exitEvalHit++;
         switch (decision.exitReason) {
           case 'target_hit':
             console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}`);
