@@ -422,6 +422,19 @@ interface FunnelCell {
    */
   acceptedAge: { book: number[]; ticker: number[] };
   acceptedAgeMaxMs: { book: number; ticker: number };
+  /**
+   * ⛔⛔ THE MAX'S OWN DENOMINATOR, PER LEG — ADDED 2026-09-14 BECAUSE THE MAX ALONE IS `#546`
+   * INSIDE THE INSTRUMENT THIS BATCH BUILT TO PREVENT `#546` (Langston, Step-7 read).
+   *
+   * `acceptedAgeMaxMs` is seeded `{ book: 0, ticker: 0 }` and raised ONLY on an accepted
+   * observation. So **`book: 0` and "no accepted book sample" ARE THE SAME CELL** — and the first
+   * live read published `ageMax book 0` beside `accepted: 0`, where the zero was the INITIALISER
+   * and read as a measurement.
+   * ⇒ with `n`, an empty leg is `n: 0` and the max is unreadable-by-construction rather than
+   *   plausible-and-wrong. A reader that ignores `n` and quotes the max is making a claim the row
+   *   visibly refuses to support.
+   */
+  acceptedAgeN: { book: number; ticker: number };
 }
 
 function emptyCell(rung: LevelBasisRung, stage: LevelBasisStage): FunnelCell {
@@ -434,6 +447,7 @@ function emptyCell(rung: LevelBasisRung, stage: LevelBasisStage): FunnelCell {
     // reader comparing the two histograms is comparing like with like.
     acceptedAge: { book: newBuckets(), ticker: newBuckets() },
     acceptedAgeMaxMs: { book: 0, ticker: 0 },
+    acceptedAgeN: { book: 0, ticker: 0 },
     byReason: {
       no_book: 0,
       one_sided_book: 0,
@@ -492,6 +506,7 @@ export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOu
     // in `touch-price.ts` uses, and for the same reason.
     if (result.acceptedAgeMs != null && result.acceptedLeg) {
       const leg = result.acceptedLeg;
+      cell.acceptedAgeN[leg]++;
       cell.acceptedAge[leg][bucketIndex(result.acceptedAgeMs)]++;
       if (result.acceptedAgeMs > cell.acceptedAgeMaxMs[leg]) cell.acceptedAgeMaxMs[leg] = result.acceptedAgeMs;
     }
@@ -587,7 +602,9 @@ export interface LevelBasisFunnelRow {
   byAcceptedSource: Record<string, number>;
   /** P1-4 — the ACCEPTED quote's own age per leg, on `SIDE_AGE_BUCKET_EDGES_MS`. Never pooled. */
   acceptedAge: { book: number[]; ticker: number[] };
+  /** ⛔ READ `acceptedAgeN` FIRST — at `n = 0` the max is the INITIALISER, not a measurement. */
   acceptedAgeMaxMs: { book: number; ticker: number };
+  acceptedAgeN: { book: number; ticker: number };
   /** The edge set the two histograms are on, carried so a reader never has to look it up. */
   acceptedAgeEdgesMs: readonly number[];
 }
@@ -631,6 +648,7 @@ export function getLevelBasisFunnel(): LevelBasisFunnelRow[] {
       byAcceptedSource: { ...cell.byAcceptedSource },
       acceptedAge: { book: [...cell.acceptedAge.book], ticker: [...cell.acceptedAge.ticker] },
       acceptedAgeMaxMs: { ...cell.acceptedAgeMaxMs },
+      acceptedAgeN: { ...cell.acceptedAgeN },
       acceptedAgeEdgesMs: SIDE_AGE_BUCKET_EDGES_MS,
     };
   });

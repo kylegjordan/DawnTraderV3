@@ -122,6 +122,22 @@ describe('row 8a-P1 — the accepted quote age, per leg, never pooled', () => {
     expect(r.acceptedAge.ticker.reduce((a, b) => a + b, 0)).toBe(0);
   });
 
+  it('8b. ⛔⛔ AN EMPTY LEG REPORTS `n: 0` — SO THE MAX CANNOT BE READ AS A MEASUREMENT', () => {
+    // The first LIVE read published `ageMax book 0` beside `accepted: 0`, where the zero was the
+    // INITIALISER. "0 ms" and "no accepted book sample" were the same cell — #546 inside the
+    // instrument this batch built to prevent #546. `n` is what separates them.
+    recordLevelBasisOutcome({ ...EXIT, rung: 'ladder' },
+      { ok: true, acceptedSource: 'ticker_bbo:kraken_rest', acceptedAgeMs: 31_000, acceptedLeg: 'ticker' });
+    const r = getLevelBasisFunnelRow({ ...EXIT, rung: 'ladder' })!;
+    expect(r.acceptedAgeN).toEqual({ book: 0, ticker: 1 });
+    // ⛔ THE DISCRIMINATOR: the book max is STILL 0, and now it is visibly unsupported.
+    expect(r.acceptedAgeMaxMs.book).toBe(0);
+    expect(r.acceptedAgeN.book).toBe(0);
+    // …while the ticker leg's max IS supported.
+    expect(r.acceptedAgeMaxMs.ticker).toBe(31_000);
+    expect(r.acceptedAgeN.ticker).toBe(1);
+  });
+
   it('9. the row carries the edge set, so a reader never has to go and find it', () => {
     recordLevelBasisOutcome({ ...EXIT, rung: 'ladder' }, { ok: false, reason: 'no_book' });
     expect(getLevelBasisFunnelRow({ ...EXIT, rung: 'ladder' })!.acceptedAgeEdgesMs).toEqual(SIDE_AGE_BUCKET_EDGES_MS);
