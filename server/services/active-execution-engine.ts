@@ -316,12 +316,25 @@ const NO_TRIGGER_STREAK_ALERT_AT = 20;
  * constant is untouched at its other three sites (`signal-orchestrator.ts`, `vts-runner.ts`) —
  * that number stays `3b.f-c`'s open question and is deliberately NOT answered here.
  *
- * ⚠️ THE DERIVATION IS NOT THE ONE I REACHED FOR FIRST, AND THE FIRST ONE WAS WRONG IN AN
- * INSTRUCTIVE WAY. I began with "the bid sits spread/2 below the mid, so bound that as decision
- * error" ⇒ `spread ≤ 2·f·stop` = 0.185 %. **That treats using the bid as an ERROR. It is not —
- * the bid is the CORRECT price and we know it exactly.** Nothing is estimated, so there is no
- * error term to bound. Bounding a known quantity as if it were noise would have refused ~10 % of
- * held-name quotes to fix a problem that does not exist.
+ * ⛔⛔ `D` IS DOING DOUBLE DUTY, AND THAT IS THIS CONSTANT'S LOAD-BEARING ASSUMPTION (Langston).
+ * `stop − bid = spread/2 − D` is right, but the `D` in it is the **LIVE mid-to-stop distance AT
+ * THE TRIGGER INSTANT**, not the entry-time stop distance. This is calibrated at `D_live` = the
+ * full entry distance — the **LOOSEST** member of that family. As the mid legitimately walks down
+ * toward the stop, `D_live → 0` and the residual overbooking → `spread/2`, i.e. **up to 1.0 % at
+ * this ceiling**. ⚠️ THAT RESIDUAL IS REAL AND IS NOT BOUNDED HERE.
+ *
+ * ⚠️ I FIRST WROTE THAT MY EARLIER `spread ≤ 2·f·stop` = 0.185 % CUT WAS "NONSENSE — IT TREATED A
+ * KNOWN PRICE AS AN ERROR TERM." **THAT RETRACTION WAS ITSELF HALF WRONG AND IS WITHDRAWN.**
+ * 0.185 % and 2.037 % are THE SAME FORMULA AT THE TWO ENDS OF `D_live` — the first is the
+ * `D_live → 0` corner, not a different and mistaken idea. ⛔ AND LEAVING THE GENERAL CLAIM
+ * STANDING WOULD TELL A FUTURE READER THE BID-SIDE HARM IS IMAGINARY. IT IS NOT — `F-G-2` EXISTS
+ * BECAUSE IT IS NOT.
+ *
+ * ⇒ SO WHY NOT TAKE THE WORST CASE? **BECAUSE THE HARM IS TWO-SIDED, AND THAT — NOT A WRONG
+ * FORMULA — IS THE REASON.** A refused trigger is a SKIPPED STOP CHECK (`NO_TRIGGER_STREAK_ALERT_AT`
+ * exists for precisely that). 0.185 % sits at roughly the held-name p90, so the tight bound would
+ * refuse ~10 % of exit checks and ride positions through their stops. **This constant is a
+ * TRADEOFF BETWEEN OVERBOOKING A STOP AND NOT CHECKING ONE**, resolved toward checking.
  *
  * ⇒ THE REAL HARM IS IN THE BOOKING, NOT THE TRIGGER. On a stop hit the exit is booked at the
  * CLAMPED STOP, not at the bid. So the quantity to bound is `stop − bid` at the instant the
@@ -342,12 +355,24 @@ const NO_TRIGGER_STREAK_ALERT_AT = 20;
  * ⛔ THE CELL, NAMED WITH ITS n AND DATE SO A READER CAN SEE WHAT FALSIFIES IT (the r8 rule):
  *   held-name crypto (crypto closes in 30 d), `crypto_spot_ticker_snap`, 24 h to 2026-09-14,
  *   n = 90,833 quotes: p50 0.0473 % · p90 0.1839 % · p99 0.5961 % · p99.9 1.6012 % · max 4.407 %.
- *   ⇒ 2.0 % refuses BETWEEN p99.9 AND THE MAX — the pathological book, not the ordinary wide one.
- * ⚠️ AND IT MOVES WHEN DATA IS ADDED, NOT ONLY WHEN `f` CHANGES: a newly-traded name with wider
- *   books raises the tail. Re-derive when the traded universe changes materially.
+ *   ⛔⛔ AND THE TAIL MOVED WITHIN ONE DAY — THE CAVEAT FIRED BEFORE THE INK DRIED:
+ *     2026-09-14 (mine, n=90,833):     p99.9 1.6012 % · max 4.407 %
+ *     2026-09-15 (Langston, n=91,226): p99.9 **2.0095 %** · max **5.5319 %**
+ *   ⇒ "2.0 % refuses between p99.9 and the max" WAS TRUE FOR ONE DAY AND IS NOW FALSE: the ceiling
+ *     sits just BELOW p99.9 — **ON THE TAIL KNEE, NOT ABOVE IT.** Both dated pairs are kept rather
+ *     than collapsed into one number that will drift again.
+ * ⚠️ THIS IS NOT A WARNING TO REMEMBER, IT IS A SCHEDULED RE-DERIVATION: the tail moves with the
+ *   traded universe, so the number has an owner and a home — plan row `3n.o`, with the per-symbol
+ *   ceiling, where a per-name bound DISSOLVES the drift instead of chasing it.
  *
- * ★ FOR SCALE: the shared constant this replaces on THIS lane is 0.50 — **25× looser**, and
- *   11× looser than the widest spread observed in 24 hours. It admitted a bid at 0.75 × mid.
+ * ★ FOR SCALE: the shared constant this replaces on THIS lane is 0.50 — **25× looser**, and ~9×
+ *   looser than the widest spread observed in a 24 h window. It admitted a bid at 0.75 × mid.
+ *
+ * ⛔⛔ AND THE HONEST LIMIT OF THIS WHOLE CONSTANT: **IT TREATS A *BOOKING* DEFECT AT THE *TRIGGER*.**
+ * The trigger knows the bid EXACTLY; the booking then throws it away and clamps to the stop.
+ * **Clamp to `min(stop, touch)` instead and the quantity bounded above goes to ZERO with no ceiling
+ * at all.** ⇒ THIS CEILING IS A MITIGATION, NOT THE ANSWER, and it must not be left standing as
+ * one. HOME: `F-G-2`'s transactable-booking leg. (Langston, §9.4 disposition 3.)
  */
 const EXIT_TRIGGER_MAX_SPREAD_FRACTION = 0.02;
 // P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
