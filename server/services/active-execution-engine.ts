@@ -2578,17 +2578,17 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops holding,
     // an arm has been added, moved, or lost — and the failure mode of a broken partition is that
     // **every arm still looks plausible** while the total silently stops meaning anything.
     // ★ A PARTITION IN A COMMENT IS A CLAIM; A PARTITION IN CODE IS A FENCE. This is the fence.
-    const _evalResidual = this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit;
+    const _evalResidual = this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark;
     if (_evalResidual !== 0) {
       console.error(`[8a-P2][EVAL_PARTITION_BROKEN] residual=${_evalResidual} invoked=${this._exitEvalInvoked} `
-        + `refused=${this._noTriggerRefusals} noHit=${this._exitEvalNoHit} hit=${this._exitEvalHit} — the`
+        + `refused=${this._noTriggerRefusals} noHit=${this._exitEvalNoHit} hit=${this._exitEvalHit} noMark=${this._exitEvalNoMark} — the`
         + ` evaluator-scoped partition no longer closes. An arm has been added, moved or lost; until it`
         + ` is fixed, a ZERO in any arm is NOT evidence of absence and #661 leg 3 is NOT discharged.`);
     }
@@ -2596,6 +2596,7 @@ export class ActiveExecutionEngine {
     this._exitEvalInvoked = 0;
     this._exitEvalNoHit = 0;
     this._exitEvalHit = 0;
+    this._exitEvalNoMark = 0;
   }
 
   /**
@@ -2638,6 +2639,7 @@ export class ActiveExecutionEngine {
   private _exitEvalInvoked = 0;
   private _exitEvalNoHit = 0;
   private _exitEvalHit = 0;
+  private _exitEvalNoMark = 0;
 
   private isMaxHoldEnabled(): boolean {
     const key = this.mode === 'live' ? 'enabled_live' : 'enabled_paper';
@@ -2920,9 +2922,13 @@ export class ActiveExecutionEngine {
         });
       }
 
-      // ⭐ `8a-P2` — THE NO-HIT ARM, MADE VISIBLE. An evaluated cycle that found nothing in range
-      // is a REAL measurement and must not share a cell with 'never evaluated'.
-      if (!decision.shouldExit) this._exitEvalNoHit++;
+      // ⭐ `8a-P2` — THE NO-HIT ARM. ⛔ IT NOW BRANCHES ON THE *REASON*, NOT ON `shouldExit` ALONE.
+      // The first version read only `shouldExit`, which meant the evaluator's stale-mark branch —
+      // which returns a BARE false — landed in `noHit` and was reported as *"evaluated and found
+      // nothing in range"*. It is the opposite: **the mark was unusable, so nothing was looked at.**
+      // ⇒ `noHit` is now ONLY a genuine evaluation that reached the levels and found none touched.
+      if (!decision.shouldExit && decision.noDecisionReason === undefined) this._exitEvalNoHit++;
+      else if (decision.noDecisionReason === 'no_usable_mark') this._exitEvalNoMark++;
 
       if (decision.shouldExit) {
         // ⭐⭐ `8a-P2` F2 — THE EVALUATOR-SCOPED HIT ARM, AND IT IS *NOT* `slHits`/`tpHits`.

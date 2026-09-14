@@ -205,7 +205,7 @@ export interface TECExitDecision {
    * skips, alerting on them, or reading the distribution back MUST branch on this field —
    * the return shape alone cannot tell an evaluated cycle from a refused one.
    */
-  noDecisionReason?: 'no_transactable_side';
+  noDecisionReason?: 'no_transactable_side' | 'no_usable_mark';
   /** Resolved constants snapshot — useful for diagnostics and parity tests. */
   resolvedConstants?: {
     breakEvenTriggerR: number;
@@ -268,7 +268,16 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
         resolvedConstants,
       };
     }
-    return { shouldExit: false, exitReason: null, exitPrice: 0, resolvedConstants };
+    // ⛔⛔ `8a-P2` — THIS BRANCH GETS ITS OWN REASON, AND THE OMISSION WAS MINE TWICE OVER.
+    // It returned a BARE `shouldExit: false`, which is the SAME VALUE a genuine 'evaluated and
+    // found nothing in range' returns. ⇒ any caller reading only `shouldExit` pools *the mark was
+    // unusable* with *the levels were not touched* — and `aee`'s `_exitEvalNoHit` did exactly that.
+    // ★ THE DOCBLOCK ON `noDecisionReason` ABOVE NAMES THIS EXACT CALLER SHAPE IN MY OWN WORDS:
+    //   *"that false means 'could not look', NOT 'looked and found nothing'."* **I wrote the
+    //   warning and then shipped its instance one file over.** (Langston, 2026-09-14.)
+    // ⚠️ AND IT IS NOT THEORETICAL HERE: the force-close arm above is UNREACHABLE on the active
+    //   lane (`maxHoldMs: Infinity`), so this branch ALWAYS returns the bare false for a bad mark.
+    return { shouldExit: false, exitReason: null, exitPrice: 0, noDecisionReason: 'no_usable_mark', resolvedConstants };
   }
 
   const currentPrice = input.currentPrice;
