@@ -420,6 +420,33 @@ describe('row 8a-P2 — every trigger surface reads the trigger, not the mark', 
     expect(bad).not.toMatch(/tecShouldClose\(\s*input\.tradeId,\s*triggerPrice\s*,/);
   });
 
+  it('8d. ⛔⛔ THE HARD FLOOR PAIR — AND IT IS THE SURFACE THAT IS LIVE TODAY', () => {
+    // ⚠️ FINDING-10, WHICH IS FINDING-9 A THIRD TIME IN THIS SAME BLOCK. The describe says
+    // "every trigger surface"; after two widenings it still pinned TWO OF FIVE. Worse, the two
+    // it pinned are the controller hand-offs — which only run when `atr_at_open > 0`, and that
+    // field is 0 on every position we can read. ⇒ THE UNPINNED PAIR IS THE ONE ACTUALLY
+    // DECIDING EXITS TODAY, and a fence that covers only the dormant surfaces is the emptiest
+    // kind of green. (Langston CONDITION 1.)
+    expect(body).toMatch(/triggerPrice\s*<=\s*input\.stopPrice/);
+    expect(body).toMatch(/triggerPrice\s*>=\s*input\.targetPrice/);
+  });
+
+  it('8e. ⛔ THE DISCONTINUITY DETECTOR READS THE TRIGGER — the fifth surface', () => {
+    // A per-symbol state machine fed by whichever price we hand it. Crypto is a documented
+    // no-op inside it today, so this is inert — but inert-by-a-callee's-early-return is not the
+    // same as correct, and the next class to enter that detector would inherit the mark.
+    expect(body).toMatch(/isDiscontinuityActive\(\s*input\.symbol,\s*triggerPrice\s*,/);
+  });
+
+  it('8f. ⭐ CONTROL — all three matchers REJECT the pre-P2 forms', () => {
+    // Without this, 8d/8e over a renamed or moved expression read as a pass for ever.
+    const pre = 'if (currentPrice <= input.stopPrice) {} if (currentPrice >= input.targetPrice) {}'
+      + ' const d = isDiscontinuityActive(input.symbol, currentPrice, tickTs);';
+    expect(pre).not.toMatch(/triggerPrice\s*<=\s*input\.stopPrice/);
+    expect(pre).not.toMatch(/triggerPrice\s*>=\s*input\.targetPrice/);
+    expect(pre).not.toMatch(/isDiscontinuityActive\(\s*input\.symbol,\s*triggerPrice\s*,/);
+  });
+
   it('10. ⛔ THE BOOKING SITES ARE UNTOUCHED — only the trigger moved', () => {
     // The complement. If `exitPrice:` had followed the trigger onto the bid, the row would have
     // silently changed what we RECORD as well as what we DECIDE — two of the four jobs, when

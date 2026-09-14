@@ -2772,7 +2772,10 @@ export class ActiveExecutionEngine {
                 + `The position's exposure is UNCHANGED and its stop is UNEVALUATED for that window. `
                 + `Evaluation resumes automatically on the first cycle that obtains a fresh side. `
                 + `If this persists, the ceiling and the feed's side-freshness are the two things to read `
-                + `— not the mark, which is fine by construction here.`,
+                + `— not the mark, which is fine by construction here. `
+                + `DISPOSITION: RESOLVE this row, do not ACK it. An ack is non-terminal, so it silences `
+                + `the dedupe key permanently — and this rail is the only observability on a selector `
+                + `that has never once executed on crypto. Resolving is what re-arms it for the next run.`,
               dedupe_key: `no-trigger-${this.mode}-${position.symbol}`,
             });
           } catch (alertErr) {
