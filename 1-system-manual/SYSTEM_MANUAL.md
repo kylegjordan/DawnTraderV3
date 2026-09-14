@@ -5598,6 +5598,28 @@ Manages paper simulation sessions with:
 
 ## 18. Exit Condition Architecture
 
+### 18.0 ⭐⭐ THE TRIGGER AND THE BOOKING PRICE ARE TWO DIFFERENT PRICES (`8a-P2`, 2026-09-14)
+
+**An exit decision asks two questions and they take DIFFERENT prices:**
+
+| question | price | why |
+|---|---|---|
+| **has the level been touched?** (job 3, TRIGGERING) | **the TRANSACTABLE side — an exit is a SELL, so the BID** | it is the only price a seller can actually get |
+| **what is the exit RECORDED at?** (job 4, BOOKING) | `currentPrice`, the mark (or the clamped level on a stop/target hit) | unchanged by `8a-P2`; a separate job with its own row |
+
+⛔⛔ **BEFORE 2026-09-14 BOTH JOBS USED THE MIDPOINT — A PRICE NOBODY CAN TRANSACT AT.** Entry is a BUY on the ASK and stop/target are SELLS on the BID: **OPPOSITE BY CONSTRUCTION**, so using the mid on both legs made the error **A FULL SPREAD, NOT HALF OF ONE.**
+
+**MECHANICS.** `TECExitInput` carries `triggerPrice` alongside `currentPrice`. Every TRIGGER surface reads `triggerPrice` — the hard stop/target floor pair, the discontinuity detector, `tecUpdatePosition` (and through it the high-water mark, break-even latch, target lock and rung ladder) and `tecShouldClose`. Every `exitPrice:` keeps `currentPrice`.
+
+⛔ **A `null` `triggerPrice` MEANS NO DECISION THIS CYCLE — NEVER A MIDPOINT FALLBACK.** It takes its own guard with its own reason (`no_transactable_side`), placed AFTER the max-hold valve, and the decision carries `noDecisionReason` so a caller can tell *"could not look"* from *"looked and found nothing"*. ⚠️ **A SKIP IS A DROPPED OBSERVATION, NOT A NO-OP**: the high-water mark, the latches, the rung ladder and the discontinuity detector's 2-tick deferral are all tick-driven, so a refused cycle never ratchets against the excursion it missed. Consecutive refusals raise a §10.5 alert.
+
+**THE TWO CEILINGS ARE EXIT-LANE-SPECIFIC AND RISK-DERIVED, NOT INHERITED** (the level and VTS lanes keep the shared `LEVEL_BASIS_OBSERVATION_*` constants, which answer a different question — a worse ESTIMATE there, an unfillable BOOKING here):
+- **`EXIT_TRIGGER_MAX_AGE_MS` = 2,000** — `t = 60·(f·stop/move60)²`, `f` = 0.10 of the tight (p10) stop distance. ⛔ **QUADRATIC in `f`.**
+- **`EXIT_TRIGGER_MAX_SPREAD_FRACTION` = 0.02** — `spread ≤ 2·D·(1+f)`, bounding `stop − bid` at the trigger instant so a wide book cannot fire a stop that books at a price nobody could fill.
+⚠️ **BOTH ARE CALIBRATED AGAINST A MEASURED TAIL THAT MOVES WITH THE TRADED UNIVERSE** (the spread tail shifted ~25% in ONE DAY), and both are POOLED bounds. **Re-derive when the universe changes materially; the per-symbol form is the real answer and is homed at plan row `3n.o`.** Full derivations, cells, `n` and dates live at the constants in `active-execution-engine.ts`.
+
+⚠️ **CLASS SCOPE: crypto only.** xStock passes `triggerPrice: currentPrice` EXPLICITLY — unchanged behaviour by STATEMENT, not by omission — and that class predicate is fenced, because the discontinuity detector's xStock-only exemption depends on it.
+
 DawnTrader's exit management operates through multiple layers:
 
 ### 18.1 Exit Hierarchy

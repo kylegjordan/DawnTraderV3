@@ -38,7 +38,9 @@ I published four headline readings from the live deploy. **Langston re-derived t
 **WHAT I SAID:** 20 consecutive cycles, all `ladderViaBook=1`.
 **MEASURED on the NEW-schema partition, unbounded — READ AT 2026-09-14T08:48:51Z:** **568 cycles — 566 `ladderViaBook=1`, 2 `ladderViaBook=0`.**
 
-⛔ **EVERY COUNT HERE IS A READING OF A GROWING FILE AND CARRIES ITS READ TIME.** Langston caught this at 110/1, then 469/2; mine is 568/2. **The `2` HAS NOT MOVED across ~450 further cycles, so the exercised RATE is ~0.35% and FALLING — a bare `is live-exercised` is the same denominator-less shape as `tail -20`.**
+⛔ **EVERY COUNT HERE IS A READING OF A GROWING FILE AND CARRIES ITS READ TIME.** Langston caught this at 110/1, then 469/2, then 708/2; mine is 568/2 at 08:48:51Z.
+⛔⛔ **AND "~0.35% AND FALLING" IS STRUCK — IT WAS A RATE BUILT FROM n=1.** (Langston, RIDER-2.) `08:34:39` is BOOT; **only `08:40:24` is steady state, and nothing in ~460 cycles since.** ⇒ **THE HONEST STATEMENT IS: the ticker leg HAS BEEN INVOKED OUTSIDE BOOT, ONCE. That discharges `#661` leg 3 (INVOCATION) and IS NOT A RATE** — publishing a percentage off a single observation is the denominator error wearing a decimal point.
+✅ **MECHANISM NOW CITABLE rather than inferred:** `touch-price.ts:112-121` is the book arm, `:126-135` the ticker arm (`basis: input.tickerBasis`), `:236` sets the binary `acceptedLeg`, counted at `aee:2352` ⇒ **`ladderAccepted=1 ∧ ladderViaBook=0` IS the ticker leg, by construction and not by inference.**
 ⇒ **THE TICKER-FALLBACK ARM IS LIVE-EXERCISED.** ★ **BETTER news than I reported — an exercised arm beats an unexercised one, and rung 2 is no longer `#661` leg 3 — but the sentence as written was false at the population.**
 ⚠️ **`tail -20` is `chosen-subset-as-suite` again, four hours after I filed that pattern.** The fix is the same and it is not discipline: **state the denominator, or take the whole window.**
 
@@ -79,6 +81,14 @@ I published four headline readings from the live deploy. **Langston re-derived t
 ⇒ ⛔ **MY "both sit in the cold-boot window" WAS FALSE AT THE OBJECT, AND IT WAS FALSE WHEN I WROTE IT** — that frame was already inside my own n=246 read.
 ⇒ ★★ **AND IT MAKES `F2` STRONGER, NOT WEAKER: THE TICKER-FALLBACK ARM FIRES IN STEADY STATE, NOT ONLY AT BOOT.** Rung 2's `#661`-leg-3 discharge is therefore real rather than a boot artefact. **I wrote a paragraph that dismissed my own best evidence.**
 
-**`unvalidatedRefusals=3` at 08:34:44 and 08:34:46 — HYPOTHESIS, NOT A FINDING, and now with the over-claim stripped:**
-⛔ **I WROTE "fires on the three xStock rows." THAT IS A GLOSS ON AN ADJACENT FIELD AND IS WITHDRAWN.** Both lines read `positionsEvaluated=1 withWsPrice=1 withRestPrice=0 withoutPrice=3 … unvalidatedRefusals=3`. ⇒ **ONE position was evaluated; THREE had no price at all.** `withoutPrice=3` and `unvalidatedRefusals=3` are **two different fields that happen to read `3` in the same frame — a matching literal is not a shared root** (`a matching name is not a matching thing`, one level down: a matching VALUE).
-⇒ **The attribution may well be right. It is NOT MEASURED**, and it sat as a stated fact inside a paragraph I had correctly labelled a hypothesis. **Neither is dispositioned until the implementing line is cited.**
+**`unvalidatedRefusals=3` at 08:34:44 and 08:34:46 — RESTORED AS MEASURED. MY WITHDRAWAL WAS THE ERROR.**
+
+⛔⛔ **I WITHDREW A TRUE CLAIM AND INVENTED A FALSE MECHANISM TO JUSTIFY DOING SO.** I called `withoutPrice=3` / `unvalidatedRefusals=3` *"two fields that happen to read 3 — a matching literal, not a shared root."* **That reasoning is wrong at the code.** (Langston, RIDER-1.)
+
+✅ **MEASURED, at the implementing line:** `active-execution-engine.ts:1998-1999` increments **`unvalidatedRefusals++` AND `withoutPrice++` IN THE SAME BRANCH** ⇒ `withoutPrice >= unvalidatedRefusals` **structurally**, and **equality at 3 means every without-price row that cycle came from that refusal.** That is a **SHARED ROOT**, not a coincidence of literals.
+✅ **AND THE SYMBOLS ARE NAMED — I was reading the wrong stream.** `:2000` prints them to **`error.log`** (a `console.warn`), which I never checked; I searched `out.log`. Both frames, verbatim:
+  · `08:34:44` — **MSFT/USD · MDB/USD · CRWD/USD**, `state=unknown reasons=no_comparator`
+  · `08:34:46` — **MSFT/USD · MDB/USD · CRWD/USD**, `state=two_sided validated=false framesSinceSeed=0`
+⇒ **THE THREE xSTOCK ROWS, EXACTLY AS ORIGINALLY WRITTEN**, and `framesSinceSeed=0` is the ONE-TICK SEED COST the comment at `:1994` already declares — so it is **working as designed**, not warm-up guesswork.
+
+⛔⛔ **AND THE META-LESSON IS THE REASON THIS PARAGRAPH IS LONG: I DID NOT FILE `matching-literal-not-shared-root` AS A PATTERN, AND MUST NOT.** ★ **A FALSE INSTANCE IN THE PATTERN INDEX IS WORSE THAN A MISSING ONE** — withdrawing a true claim for an invented mechanism does not leave a gap, it leaves **a wrong generalisation with a name**, which the next session will apply to a case where it is also false. **My own `#507` discipline, firing in the mirror direction: over-retraction is a claim too.**

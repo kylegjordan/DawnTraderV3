@@ -938,3 +938,25 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **⛔ THE ORDERING CONSTRAINT, recorded because it is a boot hazard, not a preference.** `b72-warmup` **throws on any prefetched module with zero rows** — *"server should not start."* So the row deletion and the prefetch-entry removal **had to ship in the same deploy**, and they did (`b597f1bf2`, 2026-09-11 20:09:47Z). Forward deploy is safe because `dt-deploy` migrates before it restarts. **ROLLBACK IS NOT SAFE BY DEFAULT: restoring a pre-batch sha after this migration ran would re-list `cost_model` against an empty module and REFUSE BOOT.** The rollback migration therefore re-inserts the five rows, and **the rollback procedure runs it BEFORE the code rollback** — stated in the migration's own header and in `B_XSTOCK_FEE_CONTRACT_CHANGE_LIST.md` section 9.5.
 
 **ARCHIVE.** These were database rows, not files: the authoritative restore is `drizzle/migrations/2026-09-11-b-xstock-fee-contract-rollback.sql`, which re-inserts all five with their original values and `updated_by`. The deleting statement is `2026-09-11-b-xstock-fee-contract.sql` P4. Git history is authoritative for the `b72-warmup.ts` line.
+
+## F-G-2 OBJ-0 SHADOW ARM — removed 2026-09-14 by `B-PRICE-SIDE-BY-JOB` row `8a-P2` (P2-7)
+
+**WHAT:** the second `evaluateTECExit` call in `active-execution-engine.checkExitConditions`, run under the namespaced trailing key `${position.id}:fg2bid` on `crypto_spot` only, plus its `metadata.fg2Shadow` / `fg2ShadowSkip` record and the `fg2ShadowEntered` / `fg2ShadowSkippedNoBook` cycle counters. **138 lines.**
+
+**WHY — AND IT IS A CORRECTNESS REASON, NOT A TIDY-UP.** The arm compared the book **BID** against the live arm's **MID**. `8a-P2` makes the LIVE arm read the ladder bid ⇒ **the comparison becomes BID-AGAINST-BID, its DISCORDANT CELL COLLAPSES BY CONSTRUCTION, and F-G-2 pre-registers discordant `n=0` as INCONCLUSIVE-EXTEND and never PASS.** ⇒ **it could never resolve again.** Leaving it would have shipped an instrument that reads as running and can only ever return one verdict. *(Langston, Step-4 BLOCKER-4.)*
+⚠️ **And the two bids were never the same object:** the live trigger walks the full ladder (book top **or** ticker sides); this arm was **book-only**. Post-`8a-P2` it would have been a **ladder-vs-book** comparison wearing a **bid-vs-mid** label.
+
+**§9.5(a-ii) DELETION-TIME STATE-WRITE CENSUS — what it WROTE, and who READS each:**
+| state written | surviving reader? |
+|---|---|
+| `active_open_positions.metadata.fg2Shadow` | **none in `server/`** — the close-time carry is KEPT for in-flight rows so a row opened pre-removal still closes cleanly |
+| `metadata.fg2ShadowSkip` | none |
+| `fg2ShadowEntered` / `fg2ShadowSkippedNoBook` | **the `EVAL_EXIT` log line only** — and they were left wired at first, printing permanent zeros on every cycle so a reader could not tell *no crypto position entered the arm* from *the arm does not exist* (`#546`). **Removed in the same batch; the slots now carry `noTriggerRefusals`.** |
+| trailing state under `${id}:fg2bid` | `clearTrailingState` at close — now a no-op for a key nothing writes, left in place as harmless for in-flight rows |
+
+✅ **KEPT DELIBERATELY: the `bookState` carry** — not part of this arm; the `P-8a` pre-audit row already specified keeping it.
+
+**BLAST RADIUS:** `tsc` baseline 377/377 unchanged; full suite green (296/296 files, CI run `34823167983`). **Verified at the ref, not inferred:** `shadowEntered` survives at exactly ONE site under `server/` and it is a **comment**; on the live box the counter-schema partition reads **OLD-only 547 · NEW-only 0-overlap · BOTH 0**, last OLD emission `08:34:34Z`, **zero after**.
+
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/fg2-shadow-arm-aee.ts.removed` (non-compilable browse copy; git history is authoritative). **COMMIT:** the `8a-P2` Step-3 commit, deployed `7d4cdf5a8985facb06189216c2375f0e79f5bf64`.
+⚠️ **F-G-2's OBJ-0 question is NOT answered by this removal — it is unanswerable by this instrument.** The transactable-booking leg is where it goes; see `3n.o` and the `F-G-2` record.
