@@ -126,6 +126,35 @@ function ifTradeBlock(src: string): string {
   throw new Error('unterminated if (trade) block');
 }
 
+/**
+ * The `} finally { … }` block by BRACE BALANCE. ⛔ THIS REPLACES A PROXIMITY REGEX THAT WAS THE
+ * FIFTH INSTANCE OF PRESENCE-IS-NOT-POSITION IN THIS FILE — INSIDE THE FIX FOR THE FOURTH.
+ * The old assertion was `/\}\s*finally\s*\{[\s\S]{0,800}?_ladderShadow\.delete\(/`, and `[\s\S]`
+ * CROSSES THE FINALLY'S OWN CLOSING BRACE: move the delete just BELOW the block, back into normal
+ * flow, and it still matched while the eviction no longer ran on a throw — precisely the mutation
+ * the assertion existed to prevent. It was also the only assertion in this file with no paired
+ * control, against the standard this file's own docblock sets.
+ * ★ And a character budget is a hidden coupling: benign growth inside the block turns it red.
+ */
+function finallyBlock(src: string, anchor?: string): string {
+  // ⛔⛔ ANCHORED, BECAUSE THE FIRST VERSION TOOK `indexOf('} finally {')` AND GRABBED THE WRONG
+  // ONE — `monitoringCycle`'s `this.isCycleRunning = false` finally, hundreds of lines earlier.
+  // The helper written to fix a wrong-object class picked the wrong object on its first run.
+  // ⇒ the caller names what the block must FOLLOW, and the control below asserts the extraction
+  //   contains this row's own marker so a future drift cannot silently re-point it.
+  const from = anchor ? src.indexOf(anchor) : 0;
+  if (anchor && from === -1) throw new Error(`finally anchor not found: ${anchor}`);
+  const at = src.indexOf('} finally {', from);
+  if (at === -1) throw new Error('finally block not found');
+  const braceStart = src.indexOf('{', at);
+  let depth = 0;
+  for (let j = braceStart; j < src.length; j++) {
+    if (src[j] === '{') depth++;
+    else if (src[j] === '}') { depth--; if (depth === 0) return src.slice(braceStart, j + 1); }
+  }
+  throw new Error('unterminated finally block');
+}
+
 function carryBlock(src: string): string {
   const start = src.indexOf('if (_pm.fg2Shadow)');
   if (start === -1) throw new Error('carry block not found');
@@ -178,7 +207,20 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     // ⛔ AND IT RUNS EVEN IF THE PERSIST THROWS (Langston §13): the block sits in a `try` whose
     // `finally` holds the eviction, so "WHETHER OR NOT a trade row was found" is now structurally
     // true rather than a claim the throw path falsified.
-    expect(src).toMatch(/\}\s*finally\s*\{[\s\S]{0,800}?_ladderShadow\.delete\(position\.id\)/);
+    const fin = finallyBlock(src, 'const _lsAcc = _ladderShadow.get(position.id);');
+    expect(fin).toContain('_ladderShadow.delete(position.id)');
+    // ⭐ AND THAT IT IS **THIS** FINALLY — the unanchored version grabbed `monitoringCycle`'s.
+    expect(fin).toContain('LADDER_NO_TRADE_ROW');
+  });
+
+  it('7d. ⭐ CONTROL — the containment check REJECTS a delete moved just BELOW the finally', () => {
+    // This is the mutation the proximity regex could not see: still "near" the `finally`, no longer
+    // INSIDE it, and therefore no longer running on a throw.
+    const seeded = ['  } finally {', '    doSomething();', '  }', '  _ladderShadow.delete(position.id);'].join(String.fromCharCode(10));
+    expect(finallyBlock(seeded)).not.toContain('_ladderShadow.delete');
+    // …and it DOES see one that is genuinely inside, so the matcher is not simply always-false.
+    const inside = ['  } finally {', '    _ladderShadow.delete(position.id);', '  }'].join(String.fromCharCode(10));
+    expect(finallyBlock(inside)).toContain('_ladderShadow.delete');
   });
 
   it('7c. ⭐ CONTROL — `ifTradeBlock` really isolates the block, and catches a delete moved INTO it', () => {
