@@ -259,7 +259,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
   // 1. Stale-price branch (no usable price).
   //    If held beyond max, force-close at entry (zombie cleanup).
   //    Otherwise, no decision this cycle — caller should skip and try again.
-  if (input.currentPrice === null || input.currentPrice <= 0) {
+  if (input.currentPrice === null || !Number.isFinite(input.currentPrice) || input.currentPrice <= 0) {
     if (input.holdDurationMs > input.maxHoldMs) {
       return {
         shouldExit: true,
@@ -304,7 +304,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
   // ⚠️ ITS REASON IS DISTINCT FROM `stale_timeout` ON PURPOSE: "we had no side to act on" and
   //   "the price was stale" are different facts and a shared reason string would pool them —
   //   which is the cell-conflation this row has now found five times.
-  if (input.triggerPrice === null || input.triggerPrice <= 0) {
+  if (input.triggerPrice === null || !Number.isFinite(input.triggerPrice) || input.triggerPrice <= 0) {
     return {
       shouldExit: false,
       exitReason: null,
@@ -394,7 +394,15 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
       symbol: input.symbol,
       entryPrice: input.entryPrice,
       targetPrice: input.targetPrice,
-      currentPrice,
+      // ⛔⛔ `8a-P2` — THE TRIGGER, NOT THE MARK. THIS LINE WAS MISSED IN THE FIRST PASS AND THE
+      // MISS WAS THE WORST KIND: the stop half moved to the bid and the TARGET half stayed on the
+      // mid, INSIDE ONE STATE MACHINE ON ONE TICK. With `useTrailing: true` and a live ATR the
+      // hard floor pair above is unreachable, so EVERYTHING here is the live decision —
+      // `isTargetLockTriggered` (→ `target_hit`), the high-water mark, the break-even latch, the
+      // rung ladder and `latchTriggerPrice`. A mid firing against a target is OPTIMISTIC by
+      // construction, so the defect this row removes would have survived on exactly the leg that
+      // books a WIN. (Langston Step-4 BLOCKER-1.)
+      currentPrice: triggerPrice,
       DI: input.DI ?? 50,
       VolNoise: input.volNoise ?? 0.3,
       ATR: input.atr,
