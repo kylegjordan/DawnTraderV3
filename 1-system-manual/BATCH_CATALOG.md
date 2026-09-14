@@ -1026,3 +1026,25 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 **Langston:** Step 1 approved · Step 2 approved 16:14Z with conditions A/B/C · Step 4 APPROVED 17:50Z at `eb5b7831d` · deploy ruling 19:48Z (one restart, two boundaries, 17-symbol alias exclusion, flip rule) · **Step 8 CONFIRMED 2026-09-12 00:32Z, re-derived on staging**, with one condition folded before close: the verdict counter split into entry-side and close-side populations, each printing its denominator.
 **⏳ OPEN BY DESIGN:** P8 (maker-share prediction) and Arm B (EV-gate admission) are three-week observation windows opened at the deploy; 17 alias symbols excluded from both verdicts until `#1024`. **Record:** `B_XSTOCK_FEE_CONTRACT_CHANGE_LIST.md` sections 9-10.
+
+---
+
+## `B-PRICE-SIDE-BY-JOB` row `8a-P2` — THE EXIT TRIGGER MOVES OFF THE MIDPOINT (2026-09-14, CC-C) — ⏳ **OPEN**
+
+**CHANGE-CLASS** `architecture` (re-declared from `non_architecture` at Langston's FINDING-2: it adds a field to a shared evaluator with three callers and changes the decision basis of the risk-control path). **Deployed `7d4cdf5a8985facb06189216c2375f0e79f5bf64`**, CI run `34823167983` **4/4 per-job on that exact head**, 296/296 files, 3,396 tests, **zero skipped**.
+
+**WHY IT EXISTS — KYLE, 2026-09-14:** *"I thought we were dictating to the system that it was going to take the ticker best... Now it seems like we're observing... It's a waste of time. We know we don't want the midpoint anymore so change it. That's all this batch should be about."*
+⛔⛔ **HE WAS RIGHT AT THE CODE.** `selectTouchPrice` had **three** production call sites and **every one passed its answer to a counter**. It returns a freshness- and spread-checked **bid AND ask**; the levels were still built from one side-less number, and the correct sides were computed **361 lines later and discarded.** **`8a-P1` shipped an instrument; the change had not been made.**
+
+**WHAT SHIPPED.** `TECExitInput` gains `triggerPrice` (the transactable side — an exit is a SELL ⇒ the BID) beside `currentPrice` (the booking price). **Every trigger surface** reads it: the hard stop/target floor pair, `isDiscontinuityActive`, `tecUpdatePosition` (⇒ high-water mark, break-even latch, target lock, rung ladder) and `tecShouldClose`. **Every `exitPrice:` keeps `currentPrice`.** A `null` trigger takes a NEW no-decision guard (`no_transactable_side`) placed after the max-hold valve, surfaced as `noDecisionReason`, with a per-position refusal streak raising a §10.5 alert — **never a midpoint fallback**, pinned as a mutation that must go RED. Two exit-lane-only risk-derived ceilings (`EXIT_TRIGGER_MAX_AGE_MS` 2,000 · `EXIT_TRIGGER_MAX_SPREAD_FRACTION` 0.02). xStock passes `currentPrice` **explicitly**. The F-G-2 shadow arm was **removed** (138 lines, archived).
+
+**LANGSTON:** Step 2 sent back 3× (BLOCKER-1..5), Step 4 sent back 3×, **APPROVED at `4474e4572`, extended to `7d4cdf5a8`**; Step 8 sent back twice more on the RECORD rather than the code.
+
+⛔⛔ **THE MISTAKES ARE THE VALUABLE PART OF THIS ROW AND ARE RECORDED, NOT SUMMARISED AWAY:**
+- **I told Langston all four trigger sites were converted while the file showed one was not** — and the one I missed was the live one, leaving the STOP half on the bid and the TARGET half on the mid **inside one state machine on one tick**. A mid firing against a target is optimistic ⇒ **the defect would have survived on the leg that books a WIN.**
+- **I ran two test files, reported "40 green", and CI went red on the parity contract the changed module's own docblock names as mandatory.** A REQUIRED field does **not** compile-force a fixture — `tsconfig` excludes tests. ⇒ `chosen-subset-as-suite`, and row `3n.r` `B-TSC-COVERS-TESTS` exists because the same trap fired **twice in one batch**.
+- **I attributed a pre-existing measurement to my own deploy**, having stated the refuting timestamp in the same message. **547 frames were already accepting under the old build.**
+- **I withdrew a TRUE claim and invented a mechanism to justify it** ⇒ `over-retraction-is-a-claim`.
+- **I deleted a component and left three governed documents describing it as live** — `fix-follows-pointer`, in the record of the removal itself.
+
+⏳ **WHY IT IS OPEN.** **`slHits=0 tpHits=0`: no crypto exit has fired under the new trigger, so the decision path is EXERCISED but its OUTPUT is UNTESTED.** The ticker leg has been invoked outside boot **once** (`#661` leg 3 discharged for its reachability ONLY, not for the trigger's output). The trailing-path surfaces have **no behavioural divergent coverage** and are dormant only because `atr_at_open` is 0. Record: `B_PRICE_SIDE_BY_JOB_8A_P2_PROGRESS_REPORT.md`.
