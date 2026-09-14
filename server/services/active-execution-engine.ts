@@ -396,6 +396,7 @@ import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { livePricingAdapter, isKrakenVenueSource, type PriceProducer } from './live-pricing-adapter';
+import { isNonActionableVenueMark } from '../core/trading/venue-mark-actionable.js';
 import { priceCache } from './price-cache';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
@@ -2083,8 +2084,7 @@ export class ActiveExecutionEngine {
           //   UNMEASURABLE, and its silence indistinguishable from never happening. (Langston.)
           // ⚠️ This is NOT the same as the non-venue case below: that is a SOURCE we do not trust;
           //   this is a source we DO trust handing us a number that is not a number.
-          if (priceResult !== null && isKrakenVenueSource(priceResult.source)
-              && (priceResult.price === null || !Number.isFinite(priceResult.price) || priceResult.price <= 0)) {
+          if (isNonActionableVenueMark(priceResult, isKrakenVenueSource)) {
             this._venueMarkNonFinite++;
             console.warn(`[8a-P2][VENUE_MARK_NON_FINITE] ${position.symbol}: venue source `
               + `'${priceResult.source}' offered a non-actionable price (${String(priceResult.price)}) — `
