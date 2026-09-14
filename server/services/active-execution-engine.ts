@@ -2630,7 +2630,10 @@ export class ActiveExecutionEngine {
         //   nobody can transact at, and using it on BOTH legs made the error a FULL SPREAD.
         // ⛔ `null` ⇒ NO DECISION THIS CYCLE (evaluator branch 2b). It must NEVER fall back to
         //   `currentPrice` — that re-introduces the exact defect this row removes, and it is pinned
-        //   as a mutation that must go RED in `b-price-side-8a-p2-trigger.test.ts`.
+        //   as a mutation that must go RED in `b-price-side-8a-p1-exit-fence.test.ts` (tests 2b, 8).
+        // ⚠️ THAT FILENAME WAS WRONG UNTIL 2026-09-14 — it cited a file that 404s at the ref.
+        //   Citation drift, the same class this row has now filed five times, in the comment
+        //   telling the next reader where the guard is.
         // xSTOCK: passes `currentPrice` EXPLICITLY — see `P2-5`. That class has no book on this leg
         //   and its ticker store is a different object, so it is out of scope for this row. Writing
         //   it out loud makes "xStock behaviour is unchanged" a STATEMENT that a reader can check,
@@ -2730,22 +2733,62 @@ export class ActiveExecutionEngine {
       //    from a cycle total that pools every position together.
       if (decision.noDecisionReason === 'no_transactable_side') {
         this._noTriggerRefusals++;
-        const _ntKey = `${this.mode}:${position.symbol}`;
+        // ⛔⛔ KEYED ON `position.id`, NOT `mode:symbol` (Langston BLOCKER-6) — AND THE FAILURE
+        //    NEEDS NO CONCURRENCY AT ALL: a position refuses 19 times, CLOSES with the key still
+        //    at 19, and the NEXT position on that symbol fires `streak=20` on its FIRST refusal.
+        //    With an id key a stale entry is merely unreachable; with a symbol key it is a FALSE
+        //    FIRE. `_priceSkipStreak` already keys `position.id` — this now matches its sibling.
+        const _ntKey = position.id as string;
         const _ntStreak = (this._noTriggerStreak.get(_ntKey) ?? 0) + 1;
         this._noTriggerStreak.set(_ntKey, _ntStreak);
-        // ⛔ STRICT EQUALITY, DELIBERATELY — the same idiom as `_recordPriceSkip`. It fires ONCE
-        //    per streak; `>=` would re-raise on every subsequent tick and the dedupe key would
-        //    swallow it anyway, leaving a rail that looks armed and is inert.
+        // ⛔ STRICT EQUALITY — fires ONCE per streak, the `_recordPriceSkip` idiom. `>=` would
+        //    re-raise every tick and the dedupe key would swallow it, leaving a rail that LOOKS
+        //    armed and is inert.
         if (_ntStreak === NO_TRIGGER_STREAK_ALERT_AT) {
-          console.warn(`[8a-P2][NO_TRIGGER_STREAK] symbol=${position.symbol} streak=${_ntStreak} ` +
-            `mark=${currentPrice} markAgeCeilingMs=${EXIT_TRIGGER_MAX_AGE_MS} — the exit check has` +
-            ` made NO DECISION for ${_ntStreak} consecutive cycles: a mark exists but no transactable` +
-            ` side was fresh enough to act on. Exposure is UNCHANGED and the stop is UNEVALUATED.`);
+          // ⛔⛔ A §10.5 ALERT ROW, NOT A LOG LINE (Langston BLOCKER-5, and he is right twice).
+          // (1) The SIBLING rail 50 lines up raises `addAlert` for a LESS severe predicate — the
+          //     venue quoting nothing. It would have been absurd for the narrower and more
+          //     surprising condition, a mark that EXISTS with no actionable side, to be the
+          //     quieter alarm.
+          // (2) ⭐ THE REACH ARGUMENT IS THE DECISIVE ONE: this rail is the ONLY observability on
+          //     a selector that has never once executed on crypto, and `out.log` rotates 6-8x a
+          //     day with ~2 days of retention while the first crypto position may be DAYS out.
+          //     An instrument whose output expires before the event it exists to catch is not an
+          //     instrument. A hold justified by a signal nobody receives is not a hold.
+          console.error(`[8a-P2][NO_TRIGGER_ESCALATION] ${position.symbol}: ${_ntStreak} consecutive `
+            + `exit-monitor cycles made NO DECISION — a mark exists but no transactable side was `
+            + `fresh enough to act on — raising system alert`);
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              category: 'breakage',
+              severity: 'warning',
+              title: `Exit trigger unavailable — ${_ntStreak} cycles with no transactable side for ${position.symbol}`,
+              body: `The exit monitor has made NO DECISION for ${_ntStreak} consecutive cycles on the open `
+                + `${this.mode} position in ${position.symbol}. A price mark IS available, so this is NOT the `
+                + `venue going dark: what is missing is a TRANSACTABLE side (the bid) fresh enough to judge `
+                + `the stop against, within the ${EXIT_TRIGGER_MAX_AGE_MS} ms exit-trigger ceiling. `
+                + `The position's exposure is UNCHANGED and its stop is UNEVALUATED for that window. `
+                + `Evaluation resumes automatically on the first cycle that obtains a fresh side. `
+                + `If this persists, the ceiling and the feed's side-freshness are the two things to read `
+                + `— not the mark, which is fine by construction here.`,
+              dedupe_key: `no-trigger-${this.mode}-${position.symbol}`,
+            });
+          } catch (alertErr) {
+            console.error(`[8a-P2][NO_TRIGGER_ESCALATION] addAlert failed for ${position.symbol}:`, alertErr);
+          }
         }
+        // ⚠️ FINDING-8, STATED RATHER THAN LEFT FOR A READER TO FIND: this `return null` sits ABOVE
+        //    the per-position max-hold valve below, so a refused cycle also defers that valve.
+        //    The evaluator reasons out loud about NOT placing its own refusal above the timeout
+        //    valve, and this is that same placement one layer up. ⛔ INERT TODAY ONLY BECAUSE the
+        //    max-hold switch is seeded FALSE on both lanes — A SWITCH, NOT A CONSTRUCTION. If it
+        //    is ever enabled, this return must move below the valve.
         return null;
       }
       // Any cycle that actually decided clears the streak — including one that decides NOT to exit.
-      this._noTriggerStreak.delete(`${this.mode}:${position.symbol}`);
+      this._noTriggerStreak.delete(position.id as string);
 
       if (decision.modeChanged) {
         await storage.updateActiveOpenPosition(this.mode, position.id, {
@@ -2760,7 +2803,7 @@ export class ActiveExecutionEngine {
             return {
               type: 'target_hit',
               price: currentPrice,
-              reason: `Price ${currentPrice.toFixed(2)} reached target ${(takeProfit ?? 0).toFixed(2)}`,
+              reason: `Price ${(triggerBid ?? currentPrice).toFixed(2)} reached target ${(takeProfit ?? 0).toFixed(2)}`,
             };
           case 'stop_hit':
             console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}`);

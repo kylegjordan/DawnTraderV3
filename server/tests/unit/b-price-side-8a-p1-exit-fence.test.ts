@@ -408,6 +408,18 @@ describe('row 8a-P2 — every trigger surface reads the trigger, not the mark', 
     expect(call![1]).not.toMatch(/currentPrice:\s*triggerPrice/);
   });
 
+  it('8b. ⛔ `tecShouldClose` RECEIVES THE TRIGGER TOO — the describe says EVERY surface', () => {
+    // FINDING-9: test 8 pinned ONE of the two controller hand-offs while the block claimed to
+    // cover both. A fence whose name is broader than its assertions is the same defect as a
+    // prohibition on strings — it reads as coverage it does not have.
+    expect(body).toMatch(/tecShouldClose\(\s*input\.tradeId,\s*triggerPrice\s*,/);
+  });
+
+  it('8c. ⭐ CONTROL — the SAME matcher catches a `tecShouldClose` still on the mark', () => {
+    const bad = 'if (tecShouldClose(input.tradeId, currentPrice, tickTs, discontinuity)) {';
+    expect(bad).not.toMatch(/tecShouldClose\(\s*input\.tradeId,\s*triggerPrice\s*,/);
+  });
+
   it('10. ⛔ THE BOOKING SITES ARE UNTOUCHED — only the trigger moved', () => {
     // The complement. If `exitPrice:` had followed the trigger onto the bid, the row would have
     // silently changed what we RECORD as well as what we DECIDE — two of the four jobs, when
