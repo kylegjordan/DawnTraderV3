@@ -133,13 +133,24 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     // `_ladderShadow.get(position.id)` also appears in `_ladderFlushIfDue`, so replacing the CARRY's
     // read with `_pm.ladderShadow` left the string present elsewhere and the test passed. A check
     // that cannot come out differently is not a check. It is scoped to the carry block now.
+    // ⚠️ THE READ IS NOW HOISTED ABOVE `if (trade)` (Step-4 BLOCKER-2), so the carry block uses
+    // the hoisted `_lsAcc`; the assertion moves with it rather than being deleted.
     const carry = carryBlock(closeBody);
-    expect(carry).toContain('_ladderShadow.get(position.id)');
+    expect(carry).toContain('_carry.ladderShadow = _ladderSnapshot(_lsAcc)');
     expect(carry).not.toContain('_pm.ladderShadow');
+    expect(closeBody).toContain('const _lsAcc = _ladderShadow.get(position.id);');
   });
 
-  it('7. ⛔ THE ENTRY IS EVICTED — a surviving entry would be a SOURCE', () => {
+  it('7. ⛔ THE ENTRY IS EVICTED, AND **OUTSIDE** `if (trade)` — BLOCKER-2', () => {
+    // `trade` is `trades.find(t => t.openedAt && !t.closedAt)`, so two concurrent positions on one
+    // symbol leave the second close with NO open trade row. Inside the block the accumulator would
+    // be neither carried nor evicted: census dropped AND the entry immortal.
     expect(closeBody).toContain('_ladderShadow.delete(position.id)');
+    // The eviction must NOT sit in the carry block any more.
+    expect(carryBlock(closeBody)).not.toContain('_ladderShadow.delete');
+    // And the no-trade-row case is SAID, not silent — a closed row with no ladderShadow must be
+    // tellable from one that never accumulated.
+    expect(closeBody).toContain('LADDER_NO_TRADE_ROW');
   });
 
   it('7b. ⛔⛔ AND THE EVICTION COMES **AFTER** THE MERGE — PRESENCE IS NOT ORDER', () => {
@@ -147,18 +158,28 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     // satisfies it exactly — while `_lsAcc` would be `undefined` and the record would never ride.
     // Both strings present, correct order destroyed, every assertion green. A fence that checks
     // PRESENCE cannot see ORDER, so the order is asserted here as a position comparison.
-    const carry = carryBlock(closeBody);
-    const read = carry.indexOf('_ladderShadow.get(position.id)');
-    const evict = carry.indexOf('_ladderShadow.delete(position.id)');
+    const read = closeBody.indexOf('const _lsAcc = _ladderShadow.get(position.id);');
+    const evict = closeBody.indexOf('_ladderShadow.delete(position.id)');
     expect(read).toBeGreaterThanOrEqual(0);
     expect(evict).toBeGreaterThanOrEqual(0);
     expect(evict).toBeGreaterThan(read);
   });
 
-  it('8. ⛔ THE STOP PATH FLUSHES UNCONDITIONALLY — the `force` argument is what makes the bound real', () => {
+  it('8. ⛔ THE STOP PATH FLUSHES WITH `force` — ASSERTED ON THE CALL, NOT ON THE WORD', () => {
+    // ⛔⛔ THIS ASSERTION WAS `toContain('true')` AND COULD NOT FAIL ON THE THING IT NAMES.
+    // `stop()` carries a SECOND `true` — `sessionCleared=true` in the `[AJ8][SESSION_STOP]`
+    // template literal — which the comment-stripper does not touch. Flip the `force` argument to
+    // `false` and the old assertion stayed green. The mutation table killed "stop-flush REMOVED"
+    // and never ran "force FLIPPED", so the gap was in the mutation set as much as the matcher.
+    // ⇒ assert the CALL WITH ITS THIRD ARGUMENT. Third instance of presence-is-not-discrimination
+    //   in this file; each one was found by a mutation, none by reading.
     const stopBody = extractFunctionBody(code(AEE), 'async stop()');
-    expect(stopBody).toContain('_ladderFlushIfDue');
-    expect(stopBody).toContain('true');
+    expect(stopBody).toMatch(/_ladderFlushIfDue\([^)]*,\s*true\s*\)/);
+  });
+
+  it('8b. ⭐ CONTROL — the same matcher REJECTS the flipped call', () => {
+    const flipped = 'await this._ladderFlushIfDue(_p as any, _lsNow, false);';
+    expect(flipped).not.toMatch(/_ladderFlushIfDue\([^)]*,\s*true\s*\)/);
   });
 
   it('9. ⭐ CONTROL — `extractFunctionBody` really isolated `stop()` and did not return the file', () => {
@@ -168,6 +189,27 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     expect(stopBody.length).toBeLessThan(AEE.length / 4);
     expect(stopBody).toContain('this.isRunning = false');
     expect(stopBody).not.toContain('_carry.ladderShadow');
+  });
+});
+
+describe('row 8a-P1 — a contained recorder fault is COUNTED, not silent', () => {
+  it('13. ⛔ `ladderErrors` IS ON THE `EVAL_EXIT` LINE', () => {
+    // Containment is right — an unguarded throw in a RECORDER would end the loop iteration and
+    // become a skipped stop check. But a recorder throwing on EVERY walk yields
+    // accepted=0 refused=0 viaBook=0, which is byte-identical to "no crypto positions open", and
+    // no accumulator is created so nothing reaches the row either. Contained AND unreadable is not
+    // a bound. (Langston, Step-4 ask 2.)
+    const src = code(AEE);
+    expect(src).toContain('ladderErrors++');
+    expect(src).toMatch(/EVAL_EXIT[^`]*ladderErrors=\$\{ladderErrors\}/);
+  });
+
+  it('14. ⛔ THE PERSISTED BOUND IS INTERPOLATED FROM THE CONSTANT, NOT A LITERAL', () => {
+    // A hard-coded '30s' restating LADDER_FLUSH_MS means changing the constant mints every later
+    // row with a false bound, tsc green throughout. (Langston C1.)
+    const body = extractFunctionBody(code(AEE), 'function _ladderSnapshot');
+    expect(body).toContain('LADDER_FLUSH_MS');
+    expect(body).not.toMatch(/<=30s/);
   });
 });
 

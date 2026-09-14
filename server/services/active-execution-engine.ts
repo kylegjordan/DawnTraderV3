@@ -90,12 +90,12 @@ import {
  * homed at plan row `3b.f-c`; this map is how this row avoids rebuilding it.**
  * ⇒ **THE MAP IS THE ONLY SOURCE. THE ROW IS A SINK.**
  *
- * ⛔ AND `_ladderLastFlushAtMs`/`_ladderWalksSinceFlush` ARE MODULE-SCOPED, NOT INSTANCE FIELDS.
- * `active-portfolio-manager.ts` constructs `new ActiveExecutionEngine(mode)` per manager and the
- * manager has several construction sites, so two live engines is reachable. An instance clock over
- * a shared module map is an aliasing hazard a second construction switches on SILENTLY: engine A's
- * flush empties the map and leaves B's clock armed against nothing, whose next walk fires a
- * trivially-empty flush. **The state sits where the thing it describes sits.**
+ * ⛔⛔ AND THE FLUSH CLOCK IS **PER ENTRY**, NOT MODULE-SCOPED — see `LadderShadowAcc` below,
+ * where the rationale lives beside the fields it governs.
+ * ⚠️ THIS DOCBLOCK DESCRIBED THE RETIRED DESIGN UNTIL 2026-09-14 and named
+ * `_ladderLastFlushAtMs`/`_ladderWalksSinceFlush`, WHICH DO NOT EXIST — a header comment
+ * describing a design the code below contradicts, which is a false source for the next reader.
+ * Caught by Langston at Step 4 with a whole-tree grep: one hit, the comment itself.
  */
 interface LadderShadowAcc {
   walks: number;
@@ -207,7 +207,14 @@ function _ladderSnapshot(acc: LadderShadowAcc): Record<string, unknown> {
     // ⛔ THE BOUND TRAVELS WITH THE NUMBERS, AND IT IS THE HONEST FORM. The wall-clock leg is only
     // evaluated INSIDE a walk, so a wedged cycle leaves this unflushed indefinitely; "30 s" alone
     // would be a claim the code cannot keep.
-    flushBound: '<=30s of unflushed age as observed at the next walk',
+    // ⛔ INTERPOLATED, NOT A LITERAL (Langston C1): a hard-coded '30s' restating `LADDER_FLUSH_MS`
+    // means changing the constant mints every later row with a FALSE bound, tsc green throughout.
+    flushBound: `<=${Math.round(LADDER_FLUSH_MS / 1000)}s of unflushed age as observed at the next walk`,
+    // ⚠️ LIMIT, STATED RATHER THAN FIXED (Langston, condition-3 rider): `maxMarkAgeMs` and
+    // `maxAcceptedAgeMs` are INDEPENDENT MAXIMA OVER THE FLUSH WINDOW. They BOUND the window; they
+    // do NOT attribute an individual divergence, and the pair must never be read as a per-event
+    // attribution. `markAgeUnknown` keeps `maxMarkAgeMs`'s denominator recoverable.
+    maximaAreWindowBounds: true,
   };
 }
 
@@ -1546,6 +1553,11 @@ export class ActiveExecutionEngine {
     let ladderAccepted = 0;
     let ladderRefused = 0;
     let ladderViaBook = 0;
+    // ⛔ THE CATCH IS COUNTED (Langston, Step-4 ask 2). Containment was the right trade; SILENCE was
+    // not: a recorder throwing on every walk yields accepted=0 refused=0 viaBook=0, which is
+    // BYTE-IDENTICAL to "no crypto positions open", and no accumulator is created so nothing reaches
+    // the row either. Contained AND unreadable is not a bound.
+    let ladderErrors = 0;
 
     for (const position of openPositions) {
       try {
@@ -2171,6 +2183,7 @@ export class ActiveExecutionEngine {
             // ⛔ A RECORDER MAY NEVER BREAK THE EXIT LOOP. This sits inside the per-position `try`
             // already, and its `catch` ends the ITERATION — which would turn a telemetry fault into
             // a skipped stop check. Contained here, loudly, so the exit evaluation below still runs.
+            ladderErrors++;
             console.error(`[8a-P1][LADDER_SHADOW_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
           }
         }
@@ -2382,7 +2395,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     this.fg2ShadowEntered = 0;
     this.fg2ShadowSkippedNoBook = 0;
@@ -3172,6 +3185,16 @@ export class ActiveExecutionEngine {
     // no trade row was found, which the diagnostic reports as "not checked" rather than as a pass.
     let _persistedNetPnl: number | undefined;
 
+    // ⛔⛔ row `8a-P1` BLOCKER-2 (Langston, Step 4): HOISTED ABOVE `if (trade)` FOR THE SAME REASON
+    // `_persistedNetPnl` IS. `trade` is `trades.find(t => t.openedAt && !t.closedAt)` — with TWO
+    // concurrent positions on one symbol the second close finds NO open trade row, and inside the
+    // block the accumulator would be neither carried nor evicted: the census silently dropped AND
+    // the entry surviving for ever, which the eviction comment three lines down says can never
+    // happen. ⇒ **read here, evict AFTER the write resolves, and SAY SO when there was no row** —
+    // because a closed crypto row with no `ladderShadow` is otherwise indistinguishable from one
+    // that never accumulated, which is `#546` inside the batch whose only product is the census.
+    const _lsAcc = _ladderShadow.get(position.id);
+
     if (trade) {
       // B65.2: read the final trailing-engine state for this symbol so the
       // closed-trade row preserves whether the trade ended in moonbag mode.
@@ -3210,11 +3233,9 @@ export class ActiveExecutionEngine {
           // is present for exactly that reason.
           // ⛔ READ FROM THE MAP, NOT FROM `_pm`: the row is a SINK. `_pm` holds the LAST FLUSH,
           //    which is up to a full flush interval stale; the map is exact at this instant.
-          const _lsAcc = _ladderShadow.get(position.id);
+          // ⛔ `_lsAcc` IS HOISTED ABOVE `if (trade)` — see BLOCKER-2 there. The EVICTION is not
+          //    here either: it must run whether or not a trade row was found.
           if (_lsAcc) _carry.ladderShadow = _ladderSnapshot(_lsAcc);
-          // ⛔ AND THE ENTRY IS EVICTED HERE. Unbounded growth is the small half; the real half is
-          //    that a SURVIVING entry is a SOURCE, which this row's own rule says it can never be.
-          _ladderShadow.delete(position.id);
           // B-XSTOCK-FEED-SANITY: the guard's skip/yield record rides onto the closed row beside the
           // label (with `yielded` explicit), the same mechanism as fg2Shadow. Only when present — never a wipe.
           const _bsRec = options?.exitProvenance?.bookStateRecord ?? _pm.bookState; // the in-memory copy is exact
@@ -3379,6 +3400,20 @@ export class ActiveExecutionEngine {
       } catch (recordErr) {
         console.warn(`[M5C.1][ACTIVE_RECORD_FAILED] ${position.symbol}:`, recordErr);
       }
+    }
+
+    // ── row `8a-P1`: EVICT THE ACCUMULATOR — AFTER the write above has resolved, and WHETHER OR
+    // NOT a trade row was found (BLOCKER-2). A surviving entry is a SOURCE, which this row's rule
+    // forbids; and the no-trade-row case is LOGGED rather than silent, because a closed row with
+    // no `ladderShadow` must be tellable from one that never accumulated.
+    if (_lsAcc) {
+      if (!trade) {
+        console.warn(
+          `[8a-P1][LADDER_NO_TRADE_ROW] ${position.symbol}: accumulator present (walks=${_lsAcc.walks}) ` +
+          `but no open trade row to carry it onto — census DROPPED for this close, entry evicted.`,
+        );
+      }
+      _ladderShadow.delete(position.id);
     }
 
     // B67.4 (2026-05-01): per-(regime, strategy) outcome feedback EMA update.

@@ -3,7 +3,8 @@
 **READY AT:** `origin/migration/aws-supabase`. Code in three commits: **`b5e6e36ef`** (the recorder), **`d023c3ff6`** (the engine) and the condition-3 fix in §8.3. Plan at **`a7f326213`** r9, approved; `71edfe741` is the current head and carries only plan/governance edits from the feed incident.
 **Change-class: architecture · Owner: CC-C**
 
-> ⛔ **P1 CHANGES NO BEHAVIOUR.** The ladder records and decides nothing. `currentPrice` still drives every trigger; all 24 of its in-loop consumers are byte-unchanged.
+> ⛔ **P1 CHANGES NO DECISION.** The ladder records and decides nothing. `currentPrice` still drives every trigger; all 24 of its in-loop consumers are byte-unchanged.
+> ⚠️ **AND "NO BEHAVIOUR" WAS NARROWLY FALSE — NARROWED ON LANGSTON'S C2, NOT DEFENDED.** `_ladderFlushIfDue` writes the WHOLE metadata blob, and `_recordBookStateEvent` deliberately THROTTLES its own row write (first-of-streak / every 10th / every yield) while mutating in memory every tick. ⇒ **the ladder flush pushes `bookState` to the row on ITS cadence too.** No value is corrupted — it is the in-memory value, which LEADS the row — but **the PERSISTED CADENCE of `hollowSkips` changes**, and that is live subject matter at plan row `3b.f-c`. **Stated here so nobody later reads the new cadence as a fix or as a regression.**
 
 ---
 
