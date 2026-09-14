@@ -291,6 +291,18 @@ const LADDER_FLUSH_MS = 30_000;
  *   into a refused one. The per-symbol form is the real answer and is homed at plan row `3n.o`.
  */
 const EXIT_TRIGGER_MAX_AGE_MS = 2_000;
+
+/**
+ * `8a-P2` BLOCKER-2 — consecutive no-transactable-side refusals on ONE position before the rail
+ * speaks. ⚠️ NOT DB-GOVERNED YET, AND THAT IS STATED RATHER THAN HIDDEN: the sibling
+ * `max_consecutive_price_skips` IS DB-knobbed (default 40) and this should join it. It is a
+ * literal here because the row that introduces the refusal is the wrong place to add a governed
+ * knob nobody has calibrated — homed with the rest of the ceiling work at plan row `3n.o`.
+ * ⛔ Chosen BELOW the price-skip threshold on purpose: this fires while a mark EXISTS, so it is a
+ * narrower and more surprising condition than the venue going dark, and it should not be the
+ * quieter of the two alarms.
+ */
+const NO_TRIGGER_STREAK_ALERT_AT = 20;
 // P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
 // attempt). Single home for `promoted` (the refresh reconfirmed/rejected live in ready_to_buy_service).
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
@@ -623,6 +635,18 @@ export class ActiveExecutionEngine {
   // B-XSTOCK-FEED-SANITY: consecutive HOLLOW-book skips per position (the bounded withholding of
   // scope constraint 7). Reset on any non-hollow verdict; cleared at yield. Per engine instance.
   private _bookStateSkipStreak: Map<string, number> = new Map();
+  // ── `8a-P2` BLOCKER-2 — CONSECUTIVE NO-TRANSACTABLE-SIDE REFUSALS, PER POSITION ────────────
+  // ⛔⛔ WITHOUT THIS THE ROW SHIPS A GATE ON A LIVE STOP CHECK THAT NOBODY CAN SEE. The
+  // evaluator returns `noDecisionReason: 'no_transactable_side'` and, as first written, NOTHING
+  // read it: zero readers in this file, no counter, no log, no escalation — so a refused cycle
+  // was indistinguishable from an evaluated one, which is the exact conflation the field was
+  // added to END. (Langston Step-4 BLOCKER-2. It is `F-G-1` BLOCKER-10 one layer on: it no
+  // longer conflates NOTHING, it conflates something nobody reads.)
+  // ⚠️ THIS IS A DIFFERENT PREDICATE FROM `_priceSkipStreak`, AND POOLING THEM WOULD HIDE IT:
+  //   that one fires when the VENUE quotes nothing at all; this one fires when we HAVE a mark
+  //   and cannot get a TRANSACTABLE SIDE fresh enough to act on. Same rail, separate key.
+  // Streak resets on the first cycle that actually decides.
+  private _noTriggerStreak: Map<string, number> = new Map();
 
   /**
    * P19-B8.5e — σ-cache tuning, DB-governed like the policy knobs it serves.
@@ -2477,10 +2501,9 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
-    this.fg2ShadowEntered = 0;
-    this.fg2ShadowSkippedNoBook = 0;
+    this._noTriggerRefusals = 0;
   }
 
   /**
@@ -2494,8 +2517,15 @@ export class ActiveExecutionEngine {
    * max_holding_period branch never fires today.
    */
   // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle shadow-arm denominator counters.
-  private fg2ShadowEntered = 0;
-  private fg2ShadowSkippedNoBook = 0;
+  // ⛔⛔ `8a-P2` BLOCKER-2 — CYCLE COUNT OF NO-TRANSACTABLE-SIDE REFUSALS.
+  // ⚠️ THIS SLOT USED TO HOLD `fg2ShadowEntered`/`fg2ShadowSkippedNoBook`. `P2-7` deleted the
+  // arm they counted and LEFT THEM WIRED, so `EVAL_EXIT` printed `shadowEntered=0
+  // shadowSkippedNoBook=0` on every cycle — 14,404 of them in one morning — and a reader could
+  // not tell *"no crypto position entered the arm"* from *"the arm does not exist."* That is
+  // `#546` printed 14,404 times in the same file whose headline change is a field that exists
+  // to STOP that conflation. (Langston Step-4 FINDING-5.) Removed, and the slot now carries a
+  // counter whose zero is READABLE: zero refusals against a non-zero `ladderAccepted`.
+  private _noTriggerRefusals = 0;
 
   private isMaxHoldEnabled(): boolean {
     const key = this.mode === 'live' ? 'enabled_live' : 'enabled_paper';
@@ -2690,6 +2720,33 @@ export class ActiveExecutionEngine {
       }
 
       // B65.2: write trade_mode on mode change (TARGET → TRAILING_TAKE).
+      // ── `8a-P2` BLOCKER-2 — THE REFUSAL IS READ, COUNTED AND ESCALATED ───────────────────
+      // A refused cycle is NOT an evaluated cycle that found nothing. `shouldExit:false` means
+      // both things and only this field separates them, so this is the ONLY place the difference
+      // can be recorded. Without it the row ships an unobservable gate on a LIVE stop check.
+      // ⚠️ THE STREAK IS THE POINT, NOT THE COUNT. One refusal is ordinary — a quote aged out and
+      //    the next tick will carry one. A RUN of them means this position has been un-evaluated
+      //    for a sustained window while still holding exposure, which is the state nobody can see
+      //    from a cycle total that pools every position together.
+      if (decision.noDecisionReason === 'no_transactable_side') {
+        this._noTriggerRefusals++;
+        const _ntKey = `${this.mode}:${position.symbol}`;
+        const _ntStreak = (this._noTriggerStreak.get(_ntKey) ?? 0) + 1;
+        this._noTriggerStreak.set(_ntKey, _ntStreak);
+        // ⛔ STRICT EQUALITY, DELIBERATELY — the same idiom as `_recordPriceSkip`. It fires ONCE
+        //    per streak; `>=` would re-raise on every subsequent tick and the dedupe key would
+        //    swallow it anyway, leaving a rail that looks armed and is inert.
+        if (_ntStreak === NO_TRIGGER_STREAK_ALERT_AT) {
+          console.warn(`[8a-P2][NO_TRIGGER_STREAK] symbol=${position.symbol} streak=${_ntStreak} ` +
+            `mark=${currentPrice} markAgeCeilingMs=${EXIT_TRIGGER_MAX_AGE_MS} — the exit check has` +
+            ` made NO DECISION for ${_ntStreak} consecutive cycles: a mark exists but no transactable` +
+            ` side was fresh enough to act on. Exposure is UNCHANGED and the stop is UNEVALUATED.`);
+        }
+        return null;
+      }
+      // Any cycle that actually decided clears the streak — including one that decides NOT to exit.
+      this._noTriggerStreak.delete(`${this.mode}:${position.symbol}`);
+
       if (decision.modeChanged) {
         await storage.updateActiveOpenPosition(this.mode, position.id, {
           tradeMode: 'TRAILING_TAKE',
@@ -2699,18 +2756,18 @@ export class ActiveExecutionEngine {
       if (decision.shouldExit) {
         switch (decision.exitReason) {
           case 'target_hit':
-            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit price=${currentPrice}`);
+            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}`);
             return {
               type: 'target_hit',
               price: currentPrice,
               reason: `Price ${currentPrice.toFixed(2)} reached target ${(takeProfit ?? 0).toFixed(2)}`,
             };
           case 'stop_hit':
-            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit price=${currentPrice}`);
+            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}`);
             return {
               type: 'stop_hit',
               price: currentPrice,
-              reason: `Price ${currentPrice.toFixed(2)} hit stop ${(stopLoss ?? 0).toFixed(2)}`,
+              reason: `Price ${(triggerBid ?? currentPrice).toFixed(2)} hit stop ${(stopLoss ?? 0).toFixed(2)}`,
             };
           case 'break_even_stop':
             // B65.2-HF3: BE-lock-ratcheted stop was hit before trade reached
@@ -2725,14 +2782,14 @@ export class ActiveExecutionEngine {
             // close_reason, and trips the #509 post-stop re-entry cooldown too —
             // conservative-safe, accepted; distinguishing them = a closeReason
             // taxonomy question for the Phase-25 learning reads.
-            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=break_even_stop price=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=break_even_stop trigger=${triggerBid ?? currentPrice} mark=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
             return {
               type: 'stop_hit',
               price: currentPrice,
               reason: `Break-even protection: ratcheted stop at ${decision.newStopPrice?.toFixed(2)} hit before target`,
             };
           case 'trailing_stop_hit':
-            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=trailing_stop_hit price=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=trailing_stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
             return {
               type: 'trailing_stop_hit',
               price: currentPrice,

@@ -108,7 +108,14 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     expect(expr.length).toBeGreaterThan(0);
     // The crypto branch must resolve to the bid or to null — never to the mark.
     expect(expr).toMatch(/triggerBid/);
-    expect(expr).not.toMatch(/\?\s*currentPrice/);
+    // ⛔⛔ ASSERT THE *DEGRADATION*, NOT A BRANCH POSITION. The first version tested
+    // `/\?\s*currentPrice/` — which passed only because the live ternary happens to read
+    // `: currentPrice`. Flip it to `=== 'xstock_spot' ? currentPrice : triggerBid` and CORRECT
+    // code goes red: a fence one character from a FALSE RED is as broken as one that cannot fail.
+    // (Langston Step-4.) What actually matters is that the bid is never COALESCED into the mark,
+    // in either branch order — so match the coalescing operators themselves.
+    expect(expr).not.toMatch(/triggerBid\s*(\?\?|\|\|)/);
+    expect(expr).not.toMatch(/(\?\?|\|\|)\s*currentPrice/);
   });
 
   it('2c. ⭐ CONTROL — the SAME matcher CATCHES a fixture that DOES degrade to the mid', () => {
@@ -361,5 +368,51 @@ describe('row 8a-P1 — the flush trigger is wall-clock, not a walk count alone'
     // promise, beside the numbers it qualifies.
     const body = extractFunctionBody(code(AEE), 'function _ladderSnapshot');
     expect(body).toContain('as observed at the next walk');
+  });
+});
+
+/**
+ * ⛔⛔ `8a-P2` BLOCKER-1 — THE SITE I CLAIMED WAS CONVERTED AND WAS NOT.
+ *
+ * The Step-4 dispatch said "all FOUR trigger sites read it" and NAMED `tecUpdatePosition`. The
+ * file passed `currentPrice` there. Langston read the ref and caught it.
+ *
+ * ⚠️ IT IS THE WORST OF THE FIVE TO MISS, AND NOT BECAUSE IT IS ONE MORE LINE. With
+ * `useTrailing: true` and a live ATR the hard stop/target pair is UNREACHABLE, so the trailing
+ * controller is where the live decision happens — `isTargetLockTriggered`, the high-water mark,
+ * the break-even latch and the rung ladder all read this one argument. Leaving it on the mid
+ * moved the STOP half to the bid and left the TARGET half on the mid, INSIDE ONE STATE MACHINE
+ * ON ONE TICK — and a mid firing against a target is OPTIMISTIC, so the defect would have
+ * survived on exactly the leg that books a WIN, while the losing leg got the fix.
+ *
+ * ⇒ A CLAIM I MADE ABOUT MY OWN DIFF, CONTRADICTED BY THE DIFF. This fence exists so the next
+ *   reader does not have to take my word for it either.
+ */
+describe('row 8a-P2 — every trigger surface reads the trigger, not the mark', () => {
+  const TEC = readFileSync(join(process.cwd(), 'server/services/tec-evaluator.ts'), 'utf-8');
+  const body = code(TEC);
+
+  it('8. ⛔ `tecUpdatePosition` RECEIVES THE TRIGGER — BLOCKER-1, and it was wrong once', () => {
+    const call = /tecUpdatePosition\(\{([\s\S]*?)\n    \}\)/.exec(body);
+    expect(call).not.toBeNull();                       // instrument control: the call was found
+    expect(call![1].length).toBeGreaterThan(0);        // …and is not empty
+    expect(call![1]).toMatch(/currentPrice:\s*triggerPrice/);
+  });
+
+  it('9. ⭐ CONTROL — the SAME matcher catches a fixture that passes the MARK', () => {
+    // Without this, test 8 over a failed extraction reads as a pass for ever — which is exactly
+    // how the original fence went green while the behaviour it forbade became true.
+    const bad = 'const u = tecUpdatePosition({\n      tradeId: x,\n      currentPrice,\n      DI: 50,\n    })';
+    const call = /tecUpdatePosition\(\{([\s\S]*?)\n    \}\)/.exec(bad);
+    expect(call).not.toBeNull();
+    expect(call![1]).not.toMatch(/currentPrice:\s*triggerPrice/);
+  });
+
+  it('10. ⛔ THE BOOKING SITES ARE UNTOUCHED — only the trigger moved', () => {
+    // The complement. If `exitPrice:` had followed the trigger onto the bid, the row would have
+    // silently changed what we RECORD as well as what we DECIDE — two of the four jobs, when
+    // only one was scoped.
+    expect(body).toMatch(/exitPrice:\s*currentPrice/);
+    expect(body).not.toMatch(/exitPrice:\s*triggerPrice/);
   });
 });
