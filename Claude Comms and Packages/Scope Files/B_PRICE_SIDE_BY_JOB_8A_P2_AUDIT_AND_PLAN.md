@@ -292,3 +292,49 @@ Langston found his own read path silently truncating an unscoped whole-tree grep
 
 ## r5-D — WHAT `f` IS, AND WHY IT IS A DECISION NOT A MEASUREMENT
 `f` is the share of the stop distance we accept as decision error. **It is a risk-tolerance parameter, so it is Kyle's if it is ever set loosely — but the direction is fixed by his 2026-09-03 ruling that the exit standard does not loosen**, so r5 proposes `f = 0.10` (a stale trigger may not misjudge the stop by more than a tenth of the stop distance) and escalates ONLY if the resulting ceiling is so tight that it refuses a materially large share of exit cycles. **That trade-off, if it appears, is a Kyle decision and will be put to him as one — not absorbed silently.**
+
+---
+
+# r6 — THE CEILING, DERIVED. **2,000 ms.**
+
+## r6-A — HALF TWO, MEASURED — AND THE FIRST READ WAS CONTAMINATED BY THE SAME `#546` SHAPE
+
+`crypto_spot_ohlc_1m_2026_09`, `interval_begin` within 24 h, `close > 0`. Movement over a known 60-second interval = `(high − low) / close`.
+
+⛔ **FIRST READ, ALL BARS — DO NOT USE:** 147,317 bars / 455 symbols, median **0.0083 %**, p90 0.2786 %, p99 2.5798 %.
+⚠️ **50,593 of those 147,317 bars (34.3 %) have `trade_count <= 1`.** A bar with one trade has `high = low = close` and a range of exactly zero. **That is NOT a calm minute — it is an untraded minute**, and pooling the two says "crypto barely moves" when a third of the sample never had the chance to. **Same cell-conflation this row has now found three times** (`r4-B`'s falsy defaults, `r3-A`'s absent key, and here).
+
+✅ **CORRECTED READ — `trade_count > 1`:**
+
+| bars | median | p90 | p99 |
+|---|---|---|---|
+| **96,724** | **0.0524 %** | **0.4363 %** | **3.4064 %** |
+
+⇒ **the median moves 6.3× once untraded bars are removed.** The contaminated figure would have flowed straight into the ceiling and made it ~6× too loose.
+
+## r6-B — THE DERIVATION
+**Budget** = `f` × the tight stop = `0.10 × 0.926 %` = **0.0926 %** of price (`r5-B`, `r5-D`).
+**Scaling**: `move(t) = move(60s) × √(t/60)` ⇒ `t = 60 × (budget / move(60s))²`.
+
+| movement percentile | move(60s) | ⇒ ceiling |
+|---|---|---|
+| median | 0.0524 % | 187 s |
+| **p90** | **0.4363 %** | **2.70 s** |
+| p99 | 3.4064 % | 0.04 s |
+
+⛔ **THE MEDIAN IS THE WRONG PERCENTILE AND IT IS WRONG IN THE DANGEROUS DIRECTION.** A stop is hit *during movement*, so setting the ceiling from a typical minute sets it for precisely the conditions in which the stop is least likely to fire. **p99 (0.04 s) is below what any feed can deliver** and would refuse everything. **p90 is the defensible choice**: the bound holds in nine minutes out of ten, including the volatile ones where the decision actually matters.
+
+## r6-C — THE ANSWER, AND IT CONVERGES ON A NUMBER ALREADY IN THE CODE
+⇒ **CEILING = 2,000 ms** (p90 derivation gives 2.70 s; 2,000 ms is the achievable value below it).
+
+⭐ **AND IT LANDS ON `aee:1891`'s EXISTING 2,000 ms — THE EXIT LOOP'S OWN PRICE FETCH.** An independent risk derivation and the constant already governing the mark agree to within a rounding step.
+⇒ **THE TRIGGER AND THE MARK COME UNDER ONE STANDARD, AND `r4-A`'s CONTRADICTION DISSOLVES**: the 60,000 ms ladder ceiling was the outlier all along — not 2,000, and never `active_fill_max_age_ms`.
+⛔ **STATED PLAINLY SO IT IS NOT OVERSOLD: this does NOT prove 2,000 was originally chosen for this reason.** It is convergence, not provenance. **The number is now DERIVED rather than INHERITED, which is the property the row needed** — `r4-A` corrected a borrowed constant, and a borrowed constant that happens to be right is still borrowed.
+
+## r6-D — LIMITS, STATED
+1. **√t assumes a random walk.** Reasonable over 2–60 s, not exact; it understates jump risk, which argues for the tighter side of the estimate — the direction we took.
+2. **The p90 is across all 455 crypto symbols, not weighted to the ones we hold.** Held names may be more or less volatile than the pool. **The ceiling is therefore a pool-level bound, not a per-symbol one** — a per-symbol ceiling is the better instrument and is named as follow-on work, not smuggled in here.
+3. **`f = 0.10` remains a risk-tolerance choice, not a measurement** (`r5-D`). At 2,000 ms it costs nothing to hold the line, so **no Kyle escalation is required** — the trade-off `r5-D` reserved for him does not arise.
+4. **60-second bars are the shortest history available**; the 2–60 s region is extrapolated into, not observed directly.
+
+⇒ **`P2-4′` IS NOW COMPLETE: `_lsSel` is built with `maxAgeMs: 2_000`, matching `aee:1891`, with this derivation written at the constant.**
