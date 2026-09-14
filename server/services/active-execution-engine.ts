@@ -2578,9 +2578,11 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalNoHit=${this._exitEvalNoHit} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     this._noTriggerRefusals = 0;
+    this._exitEvalInvoked = 0;
+    this._exitEvalNoHit = 0;
   }
 
   /**
@@ -2603,6 +2605,21 @@ export class ActiveExecutionEngine {
   // to STOP that conflation. (Langston Step-4 FINDING-5.) Removed, and the slot now carries a
   // counter whose zero is READABLE: zero refusals against a non-zero `ladderAccepted`.
   private _noTriggerRefusals = 0;
+  // ⭐⭐ `8a-P2` — THE INVOCATION COUNT AT THE EVALUATOR'S CALL SITE, AND THE NO-HIT ARM BESIDE IT.
+  // ⛔⛔ WHY: `slHits=0 tpHits=0` IS A CONJUNCTION THAT RENDERS TWO STRUCTURALLY DIFFERENT STATES
+  // AS ONE CELL — *the engine never called the evaluator* and *it called and nothing was in range*.
+  // Only the FIRST is `#661` leg 3 (reach). ⇒ **a hit can never discharge leg 3, because waiting for
+  // one discharges BOTH AT ONCE, which is exactly why 'wait for a natural exit' feels like an answer
+  // and cannot be stated as a close condition.** (Langston, 2026-09-14.)
+  // ★ SAME SHAPE AS THE DEFECT THIS BATCH FILED: a 404 rendering as ZERO DRIFT — an instrument that
+  //   could not see the object, reporting all-clear.
+  // ⚠️ `positionsEvaluated` CANNOT serve: it increments in the LOOP, upstream of ten `continue`s,
+  //   so it counts positions CONSIDERED, not evaluator INVOCATIONS.
+  // ⇒ THE PARTITION, EXHAUSTIVE BY CONSTRUCTION: `_exitEvalInvoked` = every call. Of those,
+  //   `_noTriggerRefusals` (refused, no transactable side) + `_exitEvalNoHit` (evaluated, nothing in
+  //   range) + the hit counters. A zero in ANY arm is now readable against a non-zero in the others.
+  private _exitEvalInvoked = 0;
+  private _exitEvalNoHit = 0;
 
   private isMaxHoldEnabled(): boolean {
     const key = this.mode === 'live' ? 'enabled_live' : 'enabled_paper';
@@ -2800,6 +2817,10 @@ export class ActiveExecutionEngine {
       }
 
       // B65.2: write trade_mode on mode change (TARGET → TRAILING_TAKE).
+      // ⭐ `8a-P2` — COUNTED THE INSTANT THE EVALUATOR RETURNS, BEFORE ANY BRANCH, so the
+      // invocation count cannot be lost to an early return below it.
+      this._exitEvalInvoked++;
+
       // ── `8a-P2` BLOCKER-2 — THE REFUSAL IS READ, COUNTED AND ESCALATED ───────────────────
       // A refused cycle is NOT an evaluated cycle that found nothing. `shouldExit:false` means
       // both things and only this field separates them, so this is the ONLY place the difference
@@ -2875,6 +2896,10 @@ export class ActiveExecutionEngine {
           tradeMode: 'TRAILING_TAKE',
         });
       }
+
+      // ⭐ `8a-P2` — THE NO-HIT ARM, MADE VISIBLE. An evaluated cycle that found nothing in range
+      // is a REAL measurement and must not share a cell with 'never evaluated'.
+      if (!decision.shouldExit) this._exitEvalNoHit++;
 
       if (decision.shouldExit) {
         switch (decision.exitReason) {
