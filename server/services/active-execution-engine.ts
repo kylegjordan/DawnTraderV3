@@ -2056,7 +2056,14 @@ export class ActiveExecutionEngine {
         // entry is actionable without wearing a false WS badge. Provenance ruled here; freshness
         // is getPriceWithFallback's 2000ms window (stale re-serves now arrive as
         // last_known_good and are rejected → the skip-rail engages as designed).
-        if (priceResult !== null && priceResult.price !== null && isKrakenVenueSource(priceResult.source)) {
+        // ⛔⛔ `8a-P2` — `!== null` IS NOT A NUMBER CHECK, AND THIS CLAUSE IS THE ONLY ROUTE BY
+        // WHICH A BAD MARK CAN REACH THE EVALUATOR. Every other no-price path `continue`s ABOVE
+        // the call, so `currentPrice` arriving there is already a venue price — EXCEPT through
+        // here, where `NaN` and `0` and a negative all pass `!== null` and become `currentPrice`.
+        // ⇒ the evaluator's stale-mark branch would then fire on a mark this engine had already
+        //   accepted. Closing it at the SOURCE is worth more than counting it at the sink.
+        // (Langston, 2026-09-14 — folded in under §9.4 disposition 1.)
+        if (priceResult !== null && priceResult.price !== null && Number.isFinite(priceResult.price) && priceResult.price > 0 && isKrakenVenueSource(priceResult.source)) {
           currentPrice = priceResult.price;
           priceSource = priceResult.source;
           // B-EXIT-PROVENANCE P2 (R6-3, crypto adapter branch): ★ THE ONLY GENUINE CARRY OF THE
@@ -2581,7 +2588,7 @@ export class ActiveExecutionEngine {
     console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
-    // `invoked === refused + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops holding,
+    // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,
     // an arm has been added, moved, or lost — and the failure mode of a broken partition is that
     // **every arm still looks plausible** while the total silently stops meaning anything.
     // ★ A PARTITION IN A COMMENT IS A CLAIM; A PARTITION IN CODE IS A FENCE. This is the fence.
@@ -2630,8 +2637,9 @@ export class ActiveExecutionEngine {
   // ⚠️ `positionsEvaluated` CANNOT serve: it increments in the LOOP, upstream of ten `continue`s,
   //   so it counts positions CONSIDERED, not evaluator INVOCATIONS.
   // ⇒ THE PARTITION, EXHAUSTIVE BY CONSTRUCTION: `_exitEvalInvoked` = every call. Of those,
-  //   `_noTriggerRefusals` (refused, no transactable side) + `_exitEvalNoHit` (evaluated, nothing in
-  //   range) + `_exitEvalHit` (evaluated, exited). A zero in ANY arm is readable against a non-zero
+  //   `_noTriggerRefusals` (refused, no transactable side) + `_exitEvalNoMark` (the mark itself was
+  //   unusable) + `_exitEvalNoHit` (evaluated, nothing in range) + `_exitEvalHit` (evaluated,
+  //   exited). A zero in ANY arm is readable against a non-zero
   //   in the others. ⛔ THE HIT ARM IS `_exitEvalHit`, **NOT** `slHits`/`tpHits` — those two are a
   //   DIFFERENT POPULATION (they miss three of the five exit reasons and also count a
   //   resting-maker fill that never reached the evaluator). ⚠️ AND THE IDENTITY IS FENCED IN CODE,
