@@ -92,3 +92,27 @@ I published four headline readings from the live deploy. **Langston re-derived t
 ⇒ **THE THREE xSTOCK ROWS, EXACTLY AS ORIGINALLY WRITTEN**, and `framesSinceSeed=0` is the ONE-TICK SEED COST the comment at `:1994` already declares — so it is **working as designed**, not warm-up guesswork.
 
 ⛔⛔ **AND THE META-LESSON IS THE REASON THIS PARAGRAPH IS LONG: I DID NOT FILE `matching-literal-not-shared-root` AS A PATTERN, AND MUST NOT.** ★ **A FALSE INSTANCE IN THE PATTERN INDEX IS WORSE THAN A MISSING ONE** — withdrawing a true claim for an invented mechanism does not leave a gap, it leaves **a wrong generalisation with a name**, which the next session will apply to a case where it is also false. **My own `#507` discipline, firing in the mirror direction: over-retraction is a claim too.**
+
+---
+
+## §4 — THE OBSERVABILITY ROUND (2026-09-14, after Step 8)
+
+⛔⛔ **THE OPEN ITEM WAS NOT WAITING FOR AN EXIT — IT WAS A CONJUNCTION THAT COULD NOT BE READ.** `slHits=0 tpHits=0` renders *the engine never called the evaluator* and *it called and nothing was in range* as **the same cell**, and only the first is `#661` leg 3. ★ **A natural exit discharges BOTH AT ONCE, which is exactly why waiting for one FELT like the answer and could never be stated as a close condition.** (Langston.) **It is the same shape this batch already filed: a 404 rendering as ZERO DRIFT.**
+
+**WHAT WAS BUILT (measured first — no invocation counter existed; `positionsEvaluated` sits upstream of ten `continue`s and counts positions CONSIDERED, not evaluator INVOCATIONS):**
+a **four-arm partition at the evaluator's call site** — `invoked = refused + noMark + noHit + hit` — **fenced in code**, with the residual emitted every cycle and a non-zero raising a loud error stating that **until it is fixed a zero in ANY arm is not evidence of absence.** ★ *A partition in a comment is a claim; a partition in code is a fence.*
+
+**LIVE READ (deployed `2fbdef295`, read 2026-09-14T09:51:42Z, unbounded, 11 frames, streams named — `EVAL_EXIT` is `console.log`⇒`out.log`, `VENUE_MARK_NON_FINITE` is `console.warn`⇒`error.log`):** residual **0 on every frame**, fence never fired, `invoked == positionsEvaluated` on 10 of 11 (the exception is that deploy's own boot frame). ⚠️ **That equality is CONDITIONAL, not an identity — a pending-maker or REST-maker-exit frame breaks it benignly.**
+
+### §4a — THE FIVE THINGS I GOT WRONG IN THIS ROUND, BECAUSE THEY ARE THE ROUND'S VALUE
+1. **`_exitEvalInvoked` sat 110 lines and two awaited DB writes from the call it counted**, inside the loop's `catch`, while its comment claimed *"before any branch"*. ⛔ **And the loss direction was the bad one: a DB blip under-counts invocations, which reads as "never evaluated" — reproducing the exact conflation the counter exists to end.**
+2. **I wrote "THE PARTITION, EXHAUSTIVE BY CONSTRUCTION" over a partition that leaks AND over-counts**, and which balances only because THREE config switches are off. **`#677` — three config locks are not a construction — and I typed the word "construction".**
+3. ⛔⛔ **`_exitEvalNoHit` read `shouldExit` ALONE, so the evaluator's stale-mark branch (a BARE false) landed in it. MY OWN DOCBLOCK ON `noDecisionReason` NAMES THAT EXACT CALLER SHAPE IN MY OWN WORDS.** I added the field to end the conflation, wrote the warning, and built its instance one file over.
+4. **I withdrew that figure claiming contamination — without measuring whether the contaminating path was REACHABLE.** It was not, except through one missing finite/positive predicate. ⇒ **`over-retraction-is-a-claim`, firing two hours after I filed it.**
+5. **Closing that predicate MUTED ITS OWN TRIGGER** — a venue-sourced bad mark routed to REST with no log and no counter. ★ **A correction that removes a defect AND the evidence of the defect leaves you unable to tell FIXED from NEVER HAPPENED — and I would have read the resulting zero as proof.**
+
+### §4b — AND THE INSTRUMENT'S OWN ZERO IS NOW READABLE
+I reported `venueMarkNonFinite=0` and refused to interpret it for want of a positive control. ★ **Langston: *"'I have no positive control' is a claim about what you RAN, not about what EXISTS."*** The branch is a pure function of one object ⇒ **driven offline, 10 tests, mutation-proved both ways.** ⇒ **`#661` LEG 1 DISCHARGED; a live zero now reads as legs 2/3 only.**
+⚠️ **AND THE COUNTER IS BROADER THAN THE HOLE AS A MATTER OF CODE** — it also counts a venue-sourced `null`, which the accept branch already excluded ⇒ **a future non-zero is an UPPER BOUND; partition by emitted value before quoting a rate.**
+
+⇒ **NONE OF THIS MOVED `slHits=0 tpHits=0`. THE INSTRUMENT WORK IS COMPLETE; THE OUTPUT IS STILL UNTESTED, AND NO FURTHER BUILDING WILL PRODUCE A LIVE CRYPTO EXIT.**
