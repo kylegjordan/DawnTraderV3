@@ -116,3 +116,28 @@ I reported `venueMarkNonFinite=0` and refused to interpret it for want of a posi
 ⚠️ **AND THE COUNTER IS BROADER THAN THE HOLE AS A MATTER OF CODE** — it also counts a venue-sourced `null`, which the accept branch already excluded ⇒ **a future non-zero is an UPPER BOUND; partition by emitted value before quoting a rate.**
 
 ⇒ **NONE OF THIS MOVED `slHits=0 tpHits=0`. THE INSTRUMENT WORK IS COMPLETE; THE OUTPUT IS STILL UNTESTED, AND NO FURTHER BUILDING WILL PRODUCE A LIVE CRYPTO EXIT.**
+
+---
+
+## §5 — THE STANDING CAVEATS ON EVERY FIGURE THIS ROW PRODUCED
+
+⛔⛔ **THESE BIND ANY DOWNSTREAM USE. THEY ARE NOT COLOUR.**
+
+**1. THE REFUSAL RATE IS `n=1` AND UNMEASURED.** The 12 refusal frames (09:39:40→09:40:02, `exitEvalRefused=1`, `invoked=5` unchanging, ~1.5 s apart) are **ONE EPISODE OBSERVED TWELVE TIMES**, not twelve trials.
+✅ **Reach is BINARY, so the cluster DOES discharge `#661` leg 3 for the refusal arm.** ⛔ **NOTHING DOWNSTREAM MAY QUOTE A PER-TICK OR PER-POSITION REFUSAL RATE.** There is one observation.
+⚠️ *And I committed this in the numerator one message after accepting it in the denominator.*
+
+**2. INVOCATIONS ARE POLLS, NOT TRIALS.** `invoked = 10,557` over 2,198 frames is **~1,000 repeated looks at five positions**, two open since 09-10. ★ **500× THE POLLS OF AN UNMOVED POSITION IS 1× THE INFORMATION.** `hit = 0 / 10,557` is honest as a counter read-out and **MISLEADING AS EVIDENCE OF POWER** — power for *"does a level ever get touched"* is **POSITION-HOURS × REALISED EXCURSION.**
+
+**3. `noHit == invoked` IS NOT AN INVARIANT.** It held only on a window that excluded the refusal burst. ⚠️ **My window was defined BY THE FRAME COUNT rather than the count by the window — the population got chosen by the sample size**, and it hid my own best result (the refusal arm being exercised at all).
+
+**4. THE `[VENUE_MARK_NON_FINITE]` COUNTER IS BROADER THAN THE HOLE IT WATCHES, BY CONSTRUCTION.** It also counts a venue-sourced `null`, which the accept branch already excluded ⇒ **a future non-zero is an UPPER BOUND. Partition by emitted value before quoting any rate.** Its zero IS readable (leg 1 discharged offline by driven control) but says only *the inputs did not occur*.
+
+**5. THE xSTOCK EXIT-SKIP ALERTS ARE AN ADJACENT OBJECT AND MAY NOT CORROBORATE THIS ROW.** `Exit checks skipped — mark older than ceiling` is `buildPriceSkipAlertCopy` via `_recordPriceSkip` — **the MARK-AGE rail**. `exitEvalRefused` is `no_transactable_side` — **the LADDER failing to get a fresh BID**. ⛔ **AND DECISIVELY: `aee:2782` passes `triggerPrice: currentPrice` for xStock ⇒ AN xSTOCK POSITION CAN NEVER REACH THAT BRANCH.** Different predicate, different call site, different class.
+
+## §6 — THE HORIZON, PRE-REGISTERED (Langston's design, adopted)
+⛔ **DO NOT PRE-REGISTER A WAIT FOR A HIT — IT IS UNBOUNDED BY CONSTRUCTION.** Pre-register the **APPROACH**: per position per cycle, the minimum `|mark − nearest level|`.
+- **PRIMARY SCALE: R** (`|entry − stop|`) — **non-zero by construction**, so it does NOT block on `3b.m`. **SENSITIVITY: ATR**, once `atr_at_open` is real. **PASS requires the SAME SIGN; disagreement ⇒ INCONCLUSIVE-EXTEND.**
+- ⛔⛔ **THE NULL IS STATED AS *"NO SAMPLED MARK CAME WITHIN X"*, NEVER *"nothing came within X"*.** A per-cycle minimum is a minimum **OVER SAMPLES** ⇒ **≥ the true minimum**, so it can be true of the samples and FALSE of the market. ★ **`MFE-of-the-sampler` — a shape I named on `latestEquityTick` and was about to rebuild here.**
+- ⛔ **THE n-FLOOR PUBLISHES POSITION-HOURS *AND* THE SAMPLING CADENCE** — or the metric measures the poller again.
+⇒ **That makes the null FALSIFIABLE, which *"no hit yet"* never was.**
