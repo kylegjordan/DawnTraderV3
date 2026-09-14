@@ -1,6 +1,6 @@
 # `B-PRICE-SIDE-BY-JOB` row `8a-P2` — MOVE THE EXIT TRIGGER OFF THE MIDPOINT
 
-change-class: non_architecture
+change-class: architecture
 owner: CC-C · reviewer: Langston · ref: `origin/migration/aws-supabase`
 
 > ⛔⛔ **WHY THIS DOCUMENT IS SHORT, AND WHY IT EXISTS AT ALL.** Kyle, 2026-09-14:
@@ -67,3 +67,81 @@ A stop that should have fired on the bid and did not, or an exit skipped at a ra
 ## §4 DELIBERATELY NOT IN THIS ROW — NAMED, NOT DROPPED (§9.4)
 - **BOOKING the exit price on the transactable side** (A-1's second job). **HOME: `B-PRICE-SIDE-BY-JOB` row `8a-P3`, placed immediately after `8a-P2`.**
 - **BIRTH-SIDE levels** (`signal-orchestrator.ts:2296-2298` — entry off the ASK, stop/target off the BID). **HOME: row `8b`, already in the plan.**
+
+---
+
+# r2 — LANGSTON SENT IT BACK, ALL FOUR BLOCKERS ACCEPTED, AND ONE OF THEM INVERTS AT THE OBJECT
+
+⚠️ **CHANGE-CLASS RE-DECLARED AT THE HEADER (line 3) FROM `non_architecture` TO `architecture`, per FINDING-2** — this adds a field to a shared evaluator with three callers and changes the decision basis of the risk-control path, so it is signal-pipeline/exit-math content: the System Manual row is REQUIRED and may not take N/A. ⛔ **Deliberately NOT written here as a second `change-class` line — the checker parses that marker at line start and two of them is the `#641` two-homes shape, which would leave the file graded on whichever it read first.**
+
+## r2-A — BLOCKER-1 ACCEPTED, AND THE LIVE CONSEQUENCE IS THE OPPOSITE OF THE ONE STATED
+
+**His catch is correct and my A-1 was incomplete:** `tec-evaluator.ts:330` passes `currentPrice` into `tecUpdatePosition`, which drives four further trigger decisions in `trailing-exit-controller.ts` (`:1095` high-water, `:1127` break-even, `:1197` target-lock, `:1235` rung ladder). It was in neither of my lists.
+
+**But the gate runs the other way today, and I measured it rather than reasoned it.** `tec-evaluator.ts:267` is `if (!input.useTrailing || atrUnavailableForTrailing)` with `atrUnavailableForTrailing = !(input.atr > 0)`. `atr` is `atrAtOpen`, and `aee:2461` reads it as `metadata?.atr_at_open ? parseFloat(...) : 0`.
+
+> **MEASURED — `closed_trades`, `opened_at` within 14 days, read 2026-09-14:**
+> **`atr_at_open` is ABSENT on 91 of 91 trades — crypto 60/60, xStock 31/31 — and on all 5 currently-open positions.**
+
+⇒ `atrAtOpen` is **0 for every live position**, so `atrUnavailableForTrailing` is **true**, the floor block RUNS, and **`:330`'s four decisions cannot engage at all.** Today `:270`/`:279` ARE the live trigger — the reverse of BLOCKER-1's stated consequence.
+
+**POSITIVE CONTROL, because this is an absence claim (rule 29):** the floor path emits `[TEC][P19-B6.5b][F5][ATR_FLOOR]` when it fires. Found in `error.log`: *"BMNR/USD target_hit via hard floor (useTrailing but ATR<=0=0)"*. **Stream control: the same grep on `out.log` returns 0** — PM2 splits `console.warn` to `error.log`, so out.log would have been the wrong instrument.
+⚠️ **STATED LIMIT: that line carries a SHADOW trade id.** It proves the floor path EXECUTES and self-reports `ATR<=0`; what establishes it for live positions is the 91/91 absence above, not this line.
+
+⇒ **PLAN CHANGE (supersedes P2-2): P2 MOVES BOTH `:270`/`:279` AND `:330`.** Not because both are live, but because **only one is live and which one is live is a one-line fix away.** Moving only the currently-live pair ships a row that is correct today and silently half-unmet the moment `atr_at_open` starts being stamped — the same "reads shipped, is half-unmet" failure BLOCKER-1 names, arriving by the other door.
+
+## r2-B — BLOCKER-2 ACCEPTED, AND THE GAP IS 30x, NOT 4x — THE APPROVED SCOPE'S B3 IS WRONG ON THIS LANE
+
+`aee:2152` builds `_lsSel` with `maxAgeMs: LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` = **60,000**. Confirmed, and BLOCKER-2 stands.
+
+⛔⛔ **BUT ITS COMPARATOR IS AN xSTOCK CONSTANT ON A CRYPTO-ONLY ROW.** Re-derived at the ref: **`active_fill_max_age_ms` exists ONLY under `server/asset_classes/xstock_spot/`** (`fill-safety-config.ts:45`, `:85`) — there is no crypto row for it. The crypto lane's own freshness bound is **`WS_CACHE_FRESH_MS = 2000`** (`live-pricing-adapter.ts:368`).
+⇒ **the ladder ceiling is 30x the crypto standard, not 4x.** `8a` scope B3 and BLOCKER-2 both carry the 4x/15,000 figure; **both are corrected here.** *(This is the third time this project has applied that xStock-only constant to the crypto lane. It is now pinned in the row rather than in a session's memory.)*
+
+**WHY I AM NOT NAMING THE CEILING IN THIS REVISION — stated rather than deferred silently.** It can be set three ways and only one is defensible:
+- **2,000 ms** (match the crypto standard) — refuses on an unknown but likely large share of exit cycles;
+- **60,000 ms** (status quo) — a loosening Kyle ruled against on 2026-09-03, so it is excluded;
+- ⭐ **RISK-DERIVED** — the age at which price can move a material fraction of the **stop distance**. The only one that is a number rather than a preference, and the NO-PATCHES answer.
+
+⛔ **The skip-rate consequence of any of them is UNKNOWN, because the exit-lane age distribution is `P1-OBJ-2` and is still unread.** A-4's 0.64% is the BIRTH lane and remains a prior only.
+⇒ ★ **THIS IS THE ONE PIECE OF THE MEASUREMENT WORK THAT IS LOAD-BEARING FOR THE CHANGE — and it is the piece we do not have.** It does **not** justify another observation window: the ceiling is derived from RISK, and the distribution only predicts the skip rate. **r3 names the number with its derivation; the row does not ship before it.**
+
+## r2-C — A-2 WITHDRAWN IN FULL. LANGSTON IS RIGHT, AND MY "CHECK ME" WAS THE RIGHT ASK
+
+Reusing `:227` is **not** a skip. His three side effects are accepted; the third is the one I would never have found: the early return exits before `:305`, `:330` and `:390`, so **a refused cycle does not advance the tick-driven state machines** — high-water, break-even, the rung ladder, and the discontinuity detector's 2-tick deferral. **A skip is a dropped observation, not a no-op.** An excursion landing entirely inside refused cycles is never ratcheted against.
+⇒ **P2-3 REPLACED: a NEW no-decision guard placed AFTER step 2's timeout valve, with its own refusal reason distinct from `stale_timeout`.** Not a reuse of `:227`.
+
+## r2-D — BLOCKER-3 ACCEPTED: MY OWN FENCE GOES RED BY CONSTRUCTION
+
+`b-price-side-8a-p1-exit-fence.test.ts:86` forbids `_lsSel` in **either** evaluator argument object; `:99` pins `args[0]` to `/currentPrice\s*,/`. Writing the bid into `args[0]` fails test 2.
+⇒ **test 2's subject is retired FOR THE LIVE ARM ONLY and re-pointed at `args[1]` (the shadow); tests 1 and 3 are instrument controls and stay untouched.** Folded into P2-6'.
+
+## r2-E — BLOCKER-4 ACCEPTED: THE F-G-2 SHADOW ARM WOULD BECOME DEGENERATE
+
+`aee:2590` calls the same evaluator with `currentPrice: fg2BookBid`. Once the live arm reads a bid it is bid-against-bid: the discordant cell collapses **by construction**, and F-G-2 pre-registers discordant n=0 ⇒ INCONCLUSIVE-EXTEND, never PASS — **it could never resolve after this deploy.** And the two bids are different objects: mine walks the full ladder (book top **or** ticker sides), the shadow is book-only, so it would be a ladder-vs-book comparison wearing a bid-vs-mid label.
+**DISPOSITION (§9.4 #1 — FOLD INTO THE WORK IN HAND):** P2 removes the `aee:2590` shadow arm, **keeping the `bookState` carry**, exactly as the `P-8a` pre-audit row already specifies. Recorded as **P2-7**.
+
+## r2-F — FINDING-1 ACCEPTED, AND THE COMMENT REFUTES ITSELF
+
+The `catch` at `aee:2182` says *"A RECORDER MAY NEVER BREAK THE EXIT LOOP… which would turn a telemetry fault into a skipped stop check."* **Correct for a recorder, self-refuting for a decider:** once `_lsSel` is load-bearing, that same swallow converts a telemetry fault into `triggerPrice = null` into a silently skipped stop check — the precise outcome the comment exists to forbid.
+⇒ **P2-8: the SELECTION moves OUT of the swallowed region; only the RECORDING stays inside it.** A selection fault must surface, not be absorbed.
+
+## r2-G — REVISED PLAN TABLE (supersedes §2 where they conflict)
+
+| # | item | from |
+|---|---|---|
+| **P2-1** | `triggerPrice: number \| null` added to `TECExitInput`; `currentPrice` neither reassigned nor removed. | A-1 |
+| **P2-2'** | **BOTH** trigger surfaces read `triggerPrice`: the floor pair `:270`/`:279`, `:330`'s hand-off to `tecUpdatePosition`, and `:390`. Every `exitPrice:` keeps `currentPrice`. | r2-A |
+| **P2-3'** | **NEW** no-decision guard after step 2's valve, own refusal reason, NOT a reuse of `:227`. | r2-C |
+| **P2-4'** | `aee:2501` passes the ladder bid; `_lsSel` hoisted, **and built with the r3 exit ceiling, not 60,000**. | r2-B |
+| **P2-5** | xStock passes `triggerPrice: currentPrice` explicitly — today's behaviour by statement, not by omission. | A-5 |
+| **P2-6'** | Tests + the fence re-pointed at `args[1]`; mutation "fall back to the mid" must go RED. | r2-D, A-3 |
+| **P2-7** | Remove the `aee:2590` F-G-2 shadow arm, keep the `bookState` carry. | r2-E |
+| **P2-8** | Selection out of the swallowed `catch`; recording stays in. | r2-F |
+
+## r2-H — NEW ITEM SURFACED BY r2-A, NOT PART OF THIS ROW (§9.4)
+
+⭐ **THE TRAILING EXIT CONTROLLER IS INERT ON EVERY TRADE WE HAVE OPENED IN 14 DAYS.** Break-even, target-lock, the high-water ratchet and the rung ladder are all gated on `atr > 0`, and `atr_at_open` is absent on 91/91. The hard floor is carrying every exit.
+
+⚠️ **HYPOTHESIS, NOT A VERDICT (rule 24).** Three outcomes are open: a real defect (the stamp was lost), working-as-designed-but-undecided (trailing deliberately parked — note that `break_even_enabled=false` on all four classes since May is a **separate**, known, Kyle-owned switch and must not be conflated with this), or legacy that no longer fits. **The provenance read has NOT been done.**
+
+**HOME: its own row `3b.m` `B-ATR-AT-OPEN-STAMP`, owner CC-C, placed in `PHASE_19_PLAN` immediately after `3n` `B-PRICE-SIDE-BY-JOB`** — it must not precede the price work, and it must not be folded into it.
