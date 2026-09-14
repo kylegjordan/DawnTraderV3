@@ -394,3 +394,38 @@ At 2,000 ms the budget consumed is `move60 × √(2/60)` = `move60 × 0.1826`:
 
 - ✅ **`f = 0.10` HELD — and the `r5-D` escalation is retired for the RIGHT reason, which was not mine.** I said *"it costs nothing."* The real reason: **the effective `f` at the ship value is 0.051, so `f = 0.05` yields the same ceiling. `f` is not load-bearing here at all**, so there is no risk-tolerance choice for Kyle to make.
 - ✅ **THE `√t` CAVEAT IS WITHDRAWN AS A WEAKNESS.** `r6-D(1)` called range-over-`t` an approximation. **Langston's reframe is correct: for a MISSED STOP TRIGGER the estimand is an EXCURSION, not a displacement — the stop is hit by the path touching it, not by where the price ends up.** Range-over-`t` is therefore the *right* estimand, not a proxy for one. **Kept, and no longer listed as a limit.**
+
+---
+
+# r8 — `f` IS LOAD-BEARING. THE RETIREMENT IN `r7-D` IS WITHDRAWN.
+
+## r8-A — THE ERROR, AND IT IS THE FIFTH CELL-SUBSTITUTION ON THIS ROW
+
+**The ceiling is QUADRATIC in `f`:** `t = 60·(f·stop / move60)²`.
+**Confirmed off my own published table, no new query needed:** `0.4534 / 0.2567 = 1.766`, and `7.81 / 1.766² = 2.50` ✓ — the scaling is internally consistent with `r7-A`.
+
+⇒ **HALVE `f` AND EVERY CEILING DIVIDES BY FOUR:** `7.81 → 1.95 s` · **`2.50 → 0.625 s`**.
+⛔⛔ **AT `f = 0.05` THE WORST CELL'S BOUND IS 625 ms AND THE 2,000 ms SHIP VALUE SITS 3.2× ABOVE IT.** That destroys the exact property `r7-A` was built to establish — *"2,000 ms sits below EVERY cell."*
+
+**WHERE MY REASONING BROKE:** *"`f = 0.05` gives the same ceiling"* is true **only of the held-p90 cell**, where the effective `f = 0.051` makes ship value and derivation coincide **by construction**. **The BOUND is set by the WORST cell, not that one.** ⇒ **I applied a single-cell fact to a quantity defined by a different cell — the identical substitution as `trade_count > 1`, one turn after being corrected for it.** Fifth on this row.
+
+## r8-B — AND THE PROCESS FAILURE IS WORTH MORE THAN THE ARITHMETIC (`#452`)
+
+**That reason was LANGSTON'S, I adopted it without re-deriving it, and I handed it back to him as my conclusion — where it read as independent agreement rather than as his own unchecked remark returning.** He has withdrawn it as a basis for the bound and named the mechanism himself.
+
+⭐ **NEW PATTERN — `reason-laundered-through-the-loop`.** In a two-party review, a reason travelling **A → B → A** acquires the appearance of corroboration while never once being derived. **Each party believes the other checked it.** ⚠️ **It is invisible to every existing guard, because at each hop the reason is correctly attributed and honestly repeated** — nothing is misquoted and nothing is fabricated. **The defect is that a second mention is not a second derivation.**
+⇒ **THE RULE: a reason you did not derive yourself is CITED WITH ITS AUTHOR AND MARKED UNDERIVED, or it is re-derived before use — even when its author is the reviewer.** Filed to `MISTAKE_PATTERNS.md`.
+
+## r8-C — WHAT SHIPS, AND WHAT `r5-D` NOW OWES
+
+✅ **NOTHING SHIPPED CHANGES: `f = 0.10` is held, so the 2,000 ms value and the `≥ 2.50 s` bound are both unaffected.** What changes is what they are ALLOWED TO CLAIM:
+- ⛔ **`f = 0.10` SHIPS AS A STATED LOAD-BEARING PARAMETER**, written at the constant, never as a formality.
+- ⛔ **THE BOUND IS ALWAYS QUOTED AS "≥ 2.50 s AT `f` = 0.10", NEVER UNQUALIFIED.** An unqualified bound invites exactly the halving that breaks it.
+
+**THE `r5-D` ESCALATION — RETIRED ON ITS OWN MERITS, NOT ON "`f` DOESN'T MATTER":**
+`f` is a risk-tolerance parameter and Kyle owns those. **But the status quo it replaces is an effectively unbounded 60,000 ms trigger window, so `f = 0.10` at 2,000 ms is a TIGHTENING in the direction Kyle already fixed on 2026-09-03** (*the exit standard does not loosen*). **A tightening inside a stated direction does not need a fresh decision.**
+⇒ ✅ **NOT A BLOCKING ESCALATION — but `f` is NAMED TO KYLE as a load-bearing parameter in the step report rather than retired silently.** If it is ever proposed to move DOWNWARD (a looser ceiling follows from a smaller `f` only via the worst cell — the counter-intuitive direction that just caught me), **that IS his call.**
+
+## r8-D — LANGSTON'S CONDITION ON THE `3n.o` PLACEMENT, ANSWERED PLAINLY
+
+**Step 3 is `8a-P2`. It is NOT `3n.o`.** `3n.o` `B-CRYPTO-MARK-AGE-GATE` is a **future row, placed after `3n.n`**, and its scope question stays open — `r7-C` deposits two inputs onto it and implements none of it. **No premature implementation and no conflict.**

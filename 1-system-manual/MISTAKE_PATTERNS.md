@@ -924,6 +924,14 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 ⇒ ⛔ **A CLAIM ABOUT YOUR OWN INSTRUMENT GETS THE SAME RULE-29(a) TREATMENT AS A CLAIM ABOUT THE SYSTEM** (Langston's formulation). **Naming a property of your own tooling is a measurement, and it needs the object.**
 ⚠️ **Threshold: five instances, ONE batch — the 2+-distinct-batches leg is NOT met, so this does not move §13 on its own.** Recorded because the within-batch recurrence is itself the signal: **the same shape survived four consecutive corrections by the same author.**
 
+### `reason-laundered-through-the-loop` — **A REASON THAT TRAVELS A → B → A ACQUIRES THE LOOK OF CORROBORATION WITHOUT EVER BEING DERIVED** — **NEW 2026-09-14**, `B-PRICE-SIDE-BY-JOB` `8a-P2` r7/r8 · mechanism: ✅ **CITE-WITH-AUTHOR-AND-MARK-UNDERIVED, or re-derive before use**
+
+**WHAT HAPPENED.** Langston remarked that `f`=0.05 would give the same ceiling as `f`=0.10. I adopted it without deriving it and handed it back to him as my own conclusion retiring an escalation. **On the return trip it read as independent agreement rather than as his own unchecked remark coming home.** He caught it, re-derived it, and withdrew it himself: the ceiling is **quadratic** in `f`, so halving `f` QUARTERS every bound (`2.50 s → 625 ms`), and the claim was true only of the single cell where ship value and derivation coincide by construction.
+
+⚠️ **WHY NO EXISTING GUARD SEES IT, AND THIS IS THE WHOLE POINT: NOTHING IS MISQUOTED AND NOTHING IS FABRICATED.** At each hop the reason is correctly attributed and honestly repeated. **The defect is that A SECOND MENTION IS NOT A SECOND DERIVATION** — and both parties end up believing the other one checked it. `#452` is the same family (a reviewer ruling on a gloss), but `#452` is about DISTORTION in transit; this one survives transit perfectly intact and is still unevidenced.
+
+⛔ **THE RULE:** a reason you did not derive yourself is **cited with its author AND marked underived**, or it is **re-derived before use** — **and the reviewer is not an exemption.** ★ **The reviewer is in fact the DANGEROUS case**, because a reason bearing his name is the one least likely to be checked by either party.
+
 ### `feedback_narrow_predicate_false_absence` — **NEW INSTANCE 2026-09-08** · `B-DRIFT-RUNTIME-PREDICATE`
 I reported a null in the correct FORM — *"searched N commits, found nothing, window stated"* — and it was still wrong, **because I stated the WINDOW and not the PREDICATE.** The search covered **three of the eight** sink-4 entries. Langston's counterexample `8ef70628d` (2026-06-11) changes `bridge/canonical/mapping-regime-strategy.json`, read from disk at `routes.ts:2083-2085`, with nothing under `server/` — OLD=0, NEW=1.
 ★ **A NULL IS ONLY AS WIDE AS THE PREDICATE THAT PRODUCED IT. State the predicate beside the window, or the reader cannot tell a measured absence from an unasked question.**
