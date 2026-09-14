@@ -262,3 +262,33 @@ Langston found his own read path silently truncating an unscoped whole-tree grep
 ⇒ ⛔ **UNTIL IT SHIPS: EVERY CENSUS IN THIS ROW IS PATH-SCOPED AND HIT-COUNTED, AND r4-A's TABLE WAS PRODUCED THAT WAY.** An unscoped census is a prefix, not a population — **and it fails in the most dangerous direction: it looks complete.**
 
 ⇒ **STEP 2 CLOSED. PROCEEDING TO STEP 3.**
+
+---
+
+# r5 — THE CEILING DERIVATION, HALF MEASURED AND THE OTHER HALF NAMED
+
+⛔ **THE ROW DOES NOT SHIP WITHOUT THIS NUMBER, AND I AM NOT INVENTING IT UNDER TIME PRESSURE.** A rushed ceiling on a live stop path is a patch, which rule 15 forbids outright.
+
+## r5-A — THE PRINCIPLE
+**The trigger quote may be stale by at most the time in which price can move a MATERIAL FRACTION OF THE STOP DISTANCE.** Rationale: a stale bid costs nothing while price is far from the stop; it costs exactly the error in the exit decision when price is near it. So the ceiling is not a freshness preference — it is *"how long until this quote could be wrong enough to matter against the level it is being compared to."*
+
+## r5-B — HALF ONE, MEASURED
+**`closed_trades`, `opened_at` within 30 days, `entry_price > 0` and `stop_loss` non-null — stop distance as a fraction of entry:**
+
+| class | n | p10 | median | p90 |
+|---|---|---|---|---|
+| **crypto_spot** | **147** | **0.926 %** | **2.909 %** | **5.149 %** |
+| xstock_spot | 69 | 2.168 % | 2.604 % | 4.474 % |
+
+⇒ **THE BINDING CASE IS THE TIGHT STOP, NOT THE MEDIAN.** A ceiling safe for a 2.9 % stop is wrong for the p10 trade at 0.926 %, and the p10 trade is where a stale trigger does its damage. **The ceiling derives from p10 (crypto 0.926 %), not from the median.**
+
+## r5-C — HALF TWO, NAMED NOT GUESSED
+**Required: the crypto per-second price-movement scale**, so the ceiling solves `move(t) ≤ f × 0.926 %` for a material fraction `f`.
+⛔ **WHAT MAY NOT BE SUBSTITUTED FOR IT:**
+- **the SPREAD** (crypto median 0.199 %) — a spread is a cost, not a movement rate;
+- **`atr_at_open`** — it is `0` on every row we can read (`r3-A`), and `r4-B` has not established whether that is by design;
+- **any of the freshness literals** — that is precisely the borrowed-constant error `r4-A` just corrected, arriving a third time.
+⇒ **It must be measured from observed price movement over known intervals, on the crypto lane, and it is the FIRST act of Step 3.**
+
+## r5-D — WHAT `f` IS, AND WHY IT IS A DECISION NOT A MEASUREMENT
+`f` is the share of the stop distance we accept as decision error. **It is a risk-tolerance parameter, so it is Kyle's if it is ever set loosely — but the direction is fixed by his 2026-09-03 ruling that the exit standard does not loosen**, so r5 proposes `f = 0.10` (a stale trigger may not misjudge the stop by more than a tenth of the stop distance) and escalates ONLY if the resulting ceiling is so tight that it refuses a materially large share of exit cycles. **That trade-off, if it appears, is a Kyle decision and will be put to him as one — not absorbed silently.**
