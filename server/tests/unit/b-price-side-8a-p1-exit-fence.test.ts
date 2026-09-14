@@ -211,6 +211,12 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     expect(fin).toContain('_ladderShadow.delete(position.id)');
     // ⭐ AND THAT IT IS **THIS** FINALLY — the unanchored version grabbed `monitoringCycle`'s.
     expect(fin).toContain('LADDER_NO_TRADE_ROW');
+    // ⛔ AND AN **UPPER** BOUND, because the identity assertion alone cannot see an OVER-RUN
+    // (Langston, at approval). `finallyBlock`'s brace counter is naive about braces inside string
+    // and template literals — correct for THIS block today, but a swallowed extension would still
+    // contain `LADDER_NO_TRADE_ROW`, and a delete moved BELOW the block would then read as inside.
+    // `regimeAtOpen` (`:3438`) is the first declaration past the block: directional, no budget.
+    expect(fin).not.toContain('regimeAtOpen');
   });
 
   it('7d. ⭐ CONTROL — the containment check REJECTS a delete moved just BELOW the finally', () => {
