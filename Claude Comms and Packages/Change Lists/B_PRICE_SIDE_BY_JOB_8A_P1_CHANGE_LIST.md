@@ -83,16 +83,17 @@ function keyOf(k: LevelBasisRungKey): string {
 if (_posClass === 'crypto_spot') {
   try {
     const _lsNow = Date.now();
-    const _lsCacheReadAt = Date.now();
     const _lsCache = priceCache.getCachedPrice(_lsSym);
-    const _lsCacheDelta = _lsCacheReadAt - _lsNow;      // your condition 3
+    // your condition 3 — the MARK's age at the ladder's instant. `null` on the direct-REST
+    // leg, which states `priceObservedAtMs = null` by design. See §8.3.
+    const _lsMarkAgeMs = priceObservedAtMs !== null ? _lsNow - priceObservedAtMs : null;
     const _lsSel = selectTouchPrice({ book: …, bookEligible: true,
       ticker: tickerLegFromCachedQuote(_lsCache),        // ⛔ THROUGH the helper — your ruling
       tickerBasis: 'ticker_bbo' }, _lsNow,
       { maxAgeMs: LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, maxSpreadFraction: … });
     recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'exit_trigger' }, _lsSel);
     recordSideAgeAttempt({ lane: 'active', assetClass: 'crypto_spot' }, { stage: 'exit_trigger', … });
-    _ladderAccumulate(position.id, _lsSel, _bookX !== null, _lsCacheDelta);
+    _ladderAccumulate(position.id, _lsSel, _bookX !== null, _lsMarkAgeMs);
     await this._ladderFlushIfDue(position, _lsNow);
   } catch (err) { /* a recorder may never break the exit loop */ }
 }
