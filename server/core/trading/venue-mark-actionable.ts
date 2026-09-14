@@ -33,15 +33,21 @@ export interface VenueMarkCandidate {
  *
  * @param isVenueSource injected so this module stays pure and the control can drive both arms.
  *
- * ⚠️ DECLARED AS A TYPE GUARD (`result is VenueMarkCandidate`), NOT a bare `boolean`, so the caller
- * can read `result.source` / `result.price` inside the branch without a redundant null test. A
- * second null check at the call site would be a SECOND PLACE the predicate lives — the `#641`
- * two-homes shape, in the guard built to stop a conflation.
+ * ⛔⛔ DECLARED `boolean`, **NOT** `result is VenueMarkCandidate`, AND THE TYPE-GUARD VERSION WAS
+ * UNSOUND. A `x is T` predicate licenses TS to narrow the **FALSE** branch to `null` — but this
+ * returns false for objects that unambiguously ARE `VenueMarkCandidate`: **a perfectly good venue
+ * price.** Today's single call site has no `else` and no early `continue`, so nothing breaks; the
+ * moment someone writes one, **a healthy venue quote is typed `null` and a `.price` read past it
+ * COMPILES.** (Langston, FINDING-1.)
+ * ★ AND MY JUSTIFICATION FOR THE GUARD DID NOT SURVIVE CONTACT: I called a `!== null` test at the
+ *   call site a SECOND HOME for the predicate. It is not — **the MEMBERSHIP lives here; a null
+ *   test at the caller is a null test.** This predicate's subject is a VALUE, not a SHAPE, and the
+ *   signature must say so.
  */
 export function isNonActionableVenueMark(
   result: VenueMarkCandidate | null,
   isVenueSource: (source: string) => boolean,
-): result is VenueMarkCandidate {
+): boolean {
   if (result === null) return false;
   if (!isVenueSource(result.source)) return false;
   return result.price === null || !Number.isFinite(result.price) || result.price <= 0;

@@ -2084,7 +2084,7 @@ export class ActiveExecutionEngine {
           //   UNMEASURABLE, and its silence indistinguishable from never happening. (Langston.)
           // ⚠️ This is NOT the same as the non-venue case below: that is a SOURCE we do not trust;
           //   this is a source we DO trust handing us a number that is not a number.
-          if (isNonActionableVenueMark(priceResult, isKrakenVenueSource)) {
+          if (priceResult !== null && isNonActionableVenueMark(priceResult, isKrakenVenueSource)) {
             this._venueMarkNonFinite++;
             console.warn(`[8a-P2][VENUE_MARK_NON_FINITE] ${position.symbol}: venue source `
               + `'${priceResult.source}' offered a non-actionable price (${String(priceResult.price)}) — `
