@@ -25,10 +25,20 @@ import {
   getVenueTimestampPresence,
 } from '../../exchanges/kraken/kraken-websocket-adapter.js';
 
-/** The counter is module-global with no reset hook, so every assertion is on a DELTA. */
-function presenceOf(channel: string): { present: number; absent: number } {
+/**
+ * The counter is module-global with no reset hook, so every assertion is on a DELTA.
+ *
+ * ⭐ F5 (2026-09-13) WIDENED THE ROW and test 6 CAUGHT IT, which is the row working as designed.
+ * `venueTimestampPresence` now also carries `distinctSymbols` and `framesWithNoSymbol` — the
+ * POPULATION each cell's counts are over — because the `ticker` cell is counted across hundreds
+ * of subscribed symbols and the `book` cell across three (`#1060`), and the payload said nothing.
+ * ⛔ THE FIX HERE IS TO WIDEN THE EXPECTATION, NEVER TO NARROW THE HELPER. A `toEqual` on the
+ * whole row is what makes a silently-added field red, and that strictness is the point — the same
+ * shadow-instrument discipline this file's docblock is about, one level up.
+ */
+function presenceOf(channel: string): { present: number; absent: number; distinctSymbols: number; framesWithNoSymbol: number } {
   const row = getVenueTimestampPresence()[channel];
-  return row ? { ...row } : { present: 0, absent: 0 };
+  return row ? { ...row } : { present: 0, absent: 0, distinctSymbols: 0, framesWithNoSymbol: 0 };
 }
 
 describe('parseVenueTimestampMs — the venue clock, or nothing', () => {
@@ -85,8 +95,27 @@ describe('recordVenueTimestampPresence — BOTH arms, because the live zero rest
     recordVenueTimestampPresence(a, true);
     recordVenueTimestampPresence(a, false);
     recordVenueTimestampPresence(b, false);
-    expect(presenceOf(a)).toEqual({ present: 2, absent: 1 });
-    expect(presenceOf(b)).toEqual({ present: 0, absent: 1 });
+    // ⭐ These three calls pass NO symbol, so the F5 population fields record exactly that: nothing
+    // distinct was seen, and all three frames are counted as symbol-less rather than dropped. An
+    // unstated omission and an absent one are different things, and only one is safe to divide by.
+    expect(presenceOf(a)).toEqual({ present: 2, absent: 1, distinctSymbols: 0, framesWithNoSymbol: 3 });
+    expect(presenceOf(b)).toEqual({ present: 0, absent: 1, distinctSymbols: 0, framesWithNoSymbol: 1 });
+  });
+
+  it('8. ⭐ F5 — the distinct-symbol population is per channel and counts SYMBOLS, not frames', () => {
+    // The live shape in miniature and the reason the field exists: two channels can carry the same
+    // number of frames over populations two orders of magnitude apart (`#1060` — ticker spans
+    // hundreds of symbols, book spanned three all day). Frames alone cannot tell them apart.
+    const wide = `__test_wide_${Math.random().toString(36).slice(2)}`;
+    const narrow = `__test_narrow_${Math.random().toString(36).slice(2)}`;
+    for (const s of ['BTC/USD', 'ETH/USD', 'SOL/USD']) recordVenueTimestampPresence(wide, true, s);
+    for (let i = 0; i < 3; i++) recordVenueTimestampPresence(narrow, true, 'BTC/USD');
+
+    // ⛔ IDENTICAL frame counts — which is exactly the reading the old payload invited.
+    expect(presenceOf(wide).present).toBe(presenceOf(narrow).present);
+    // ...and the populations behind them are not the same thing at all.
+    expect(presenceOf(wide).distinctSymbols).toBe(3);
+    expect(presenceOf(narrow).distinctSymbols).toBe(1);
   });
 
   it('7. the getter returns a COPY — a caller cannot mutate the counter through it', () => {

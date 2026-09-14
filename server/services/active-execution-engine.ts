@@ -63,6 +63,182 @@ import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../..
 // B-WS-SUBSCRIBE-CLASS-FILTER OBJ-2 (#559): per-process dedup for the class-less-row WARN in the
 // I8C open-positions provider, so a persistently class-less row surfaces once, not every 5s audit.
 const wsSubClasslessWarned = new Set<string>();
+
+// ── B-PRICE-SIDE-BY-JOB row `8a-P1` — THE EXIT-LANE LADDER SHADOW ────────────────────────────
+// D3's ladder, wired into the crypto exit loop as a RECORDER. It decides nothing: `currentPrice`
+// still drives every trigger, and `P1-7`'s fence asserts the ladder identifier appears in no
+// argument of either `evaluateTECExit` call.
+import {
+  selectTouchPrice,
+  recordTouchSelection,
+  tickerLegFromCachedQuote,
+} from '../core/calculations/touch-price.js';
+import {
+  recordSideAgeAttempt,
+  LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
+  LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+} from '../core/calculations/level-basis.js';
+
+/**
+ * ⛔⛔ THE PER-POSITION ACCUMULATOR, AT **MODULE** SCOPE — AND THE THREE FIELDS BELOW SIT WITH IT
+ * FOR THE SAME REASON (row `8a-P1`, Langston BLOCKER-1 + his scope pin).
+ *
+ * **IT MAY NEVER BE READ BACK OFF THE POSITION ROW.** `checkOpenPositions` re-fetches every cycle
+ * (`storage.getActiveOpenPositions`, a bare `db.select()` with no cache), so `position.metadata` is
+ * the PERSISTED value, not a running total. A read-modify-write of `row + 1` flushed on a throttle
+ * increments once per FLUSH, not once per tick. **That defect is live today in `hollowSkips` and is
+ * homed at plan row `3b.f-c`; this map is how this row avoids rebuilding it.**
+ * ⇒ **THE MAP IS THE ONLY SOURCE. THE ROW IS A SINK.**
+ *
+ * ⛔⛔ AND THE FLUSH CLOCK IS **PER ENTRY**, NOT MODULE-SCOPED — see `LadderShadowAcc` below,
+ * where the rationale lives beside the fields it governs.
+ * ⚠️ THIS DOCBLOCK DESCRIBED THE RETIRED DESIGN UNTIL 2026-09-14 and named
+ * `_ladderLastFlushAtMs`/`_ladderWalksSinceFlush`, WHICH DO NOT EXIST — a header comment
+ * describing a design the code below contradicts, which is a false source for the next reader.
+ * Caught by Langston at Step 4 with a whole-tree grep: one hit, the comment itself.
+ */
+interface LadderShadowAcc {
+  walks: number;
+  accepted: number;
+  refused: number;
+  byReason: Record<string, number>;
+  /** `<basis>:<producer>` for accepted walks — the transport split, per P1-10's three buckets. */
+  byAcceptedSource: Record<string, number>;
+  /** ⛔ OURS, NOT THE VENUE'S — never pooled into a refusal rate (P1-13). */
+  selfSynthetic: number;
+  maxAcceptedAgeMs: { book: number; ticker: number };
+  /** P1-12: was a maintained two-sided book present at all on this symbol, ever, in this position. */
+  walksWithBook: number;
+  /**
+   * ⛔ THE MARK'S AGE AT THE LADDER'S OWN INSTANT — the two-reader gap (Langston condition 3).
+   * `markAgeUnknown` counts the walks where the mark's branch carries no venue observation time
+   * (the direct-REST leg, null BY DESIGN), so an absent age is COUNTED rather than silently
+   * collapsing into the max.
+   */
+  maxMarkAgeMs: number;
+  markAgeUnknown: number;
+  /**
+   * ⛔⛔ THE FLUSH CLOCK LIVES ON THE ENTRY, NOT AT MODULE SCOPE — AND THIS IS A DELIBERATE
+   * DEVIATION FROM THE APPROVED PLAN, FLAGGED RATHER THAN SLIPPED IN.
+   *
+   * The plan said module scope, to stop an INSTANCE clock aliasing over a SHARED map — and that
+   * reasoning is right. But a single clock over a map of MANY positions has its own starvation:
+   * position A's walk resets the shared clock, so position B — walked in the same cycle or a later
+   * one — can go indefinitely without its 30 s ever elapsing *as observed at its own walk*. The
+   * bound would then hold for whichever position happened to walk last and for no other.
+   * ⇒ **Per-entry is the STRICTER form of the rule the plan was applying: the state sits where the
+   *   thing it describes sits. The thing described is THIS position's unflushed accumulation.**
+   * ★ It also removes the instance-vs-module hazard entirely rather than managing it: there is no
+   *   engine-scoped clock left to alias.
+   * ⚠️ RAISED AT STEP 4 AS A NAMED DEVIATION, not buried in the diff.
+   */
+  lastFlushAtMs: number;
+  walksSinceFlush: number;
+}
+const _ladderShadow = new Map<string, LadderShadowAcc>();
+
+/**
+ * Fold ONE ladder walk into the position's accumulator. ⛔ Reads and writes the MAP ONLY — the
+ * position row is never a source here, which is the whole point of B1.
+ */
+function _ladderAccumulate(
+  positionId: string,
+  sel: ReturnType<typeof selectTouchPrice>,
+  bookPresent: boolean,
+  markAgeMs: number | null,
+): void {
+  let acc = _ladderShadow.get(positionId);
+  if (!acc) {
+    acc = {
+      walks: 0, accepted: 0, refused: 0, byReason: {}, byAcceptedSource: {},
+      selfSynthetic: 0, maxAcceptedAgeMs: { book: 0, ticker: 0 },
+      walksWithBook: 0, maxMarkAgeMs: 0, markAgeUnknown: 0,
+      // ⛔ SEEDED TO NOW, NEVER 0 — a zero epoch makes the very first walk look 57 years overdue
+      // and fires a trivially-EMPTY flush, which would then read as the bound being satisfied.
+      lastFlushAtMs: Date.now(), walksSinceFlush: 0,
+    };
+    _ladderShadow.set(positionId, acc);
+  }
+  acc.walks++;
+  acc.walksSinceFlush++;
+  if (bookPresent) acc.walksWithBook++;
+  if (markAgeMs === null) acc.markAgeUnknown++;
+  else if (markAgeMs > acc.maxMarkAgeMs) acc.maxMarkAgeMs = markAgeMs;
+  if (sel.ok) {
+    acc.accepted++;
+    const src = `${sel.quote.basis}:${sel.quote.producer}`;
+    acc.byAcceptedSource[src] = (acc.byAcceptedSource[src] ?? 0) + 1;
+    const leg = sel.quote.basis === 'book_top' ? 'book' : 'ticker';
+    if (sel.quote.ageMs > acc.maxAcceptedAgeMs[leg]) acc.maxAcceptedAgeMs[leg] = sel.quote.ageMs;
+    return;
+  }
+  acc.refused++;
+  const reason = sel.tickerRefusal;
+  acc.byReason[reason] = (acc.byReason[reason] ?? 0) + 1;
+  // ⛔ COUNTED SEPARATELY BECAUSE IT COUNTS US, NOT KRAKEN (P1-13). `price-cache`'s `?? price` arm
+  // fabricates `bid === ask === price` when it has neither a supplied nor an existing side, and
+  // `buildLevelBasis` refuses that as `locked_or_synthetic_book` BEFORE the age check. A refusal
+  // rate that pools it is part venue and part us.
+  if (reason === 'locked_or_synthetic_book') acc.selfSynthetic++;
+}
+
+/** ⛔ 20 walks OR 30 s — whichever fires first. See `LADDER_FLUSH_MS` for why seconds bind. */
+function _ladderShouldFlush(acc: LadderShadowAcc, nowMs: number): boolean {
+  return acc.walksSinceFlush >= LADDER_FLUSH_WALKS || (nowMs - acc.lastFlushAtMs) >= LADDER_FLUSH_MS;
+}
+
+/**
+ * What actually rides onto the row. ⛔ THE CLOCK FIELDS DO NOT: `lastFlushAtMs`/`walksSinceFlush`
+ * are the flusher's own bookkeeping and would read, on a closed trade, as if they described the
+ * measurement. The snapshot carries the MEASUREMENT and states the bound it was taken under.
+ */
+function _ladderSnapshot(acc: LadderShadowAcc): Record<string, unknown> {
+  return {
+    walks: acc.walks,
+    accepted: acc.accepted,
+    refused: acc.refused,
+    byReason: { ...acc.byReason },
+    byAcceptedSource: { ...acc.byAcceptedSource },
+    selfSynthetic: acc.selfSynthetic,
+    maxAcceptedAgeMs: { ...acc.maxAcceptedAgeMs },
+    walksWithBook: acc.walksWithBook,
+    maxMarkAgeMs: acc.maxMarkAgeMs,
+    markAgeUnknown: acc.markAgeUnknown,
+    // ⛔ THE BOUND TRAVELS WITH THE NUMBERS, AND IT IS THE HONEST FORM. The wall-clock leg is only
+    // evaluated INSIDE a walk, so a wedged cycle leaves this unflushed indefinitely; "30 s" alone
+    // would be a claim the code cannot keep.
+    // ⛔ INTERPOLATED, NOT A LITERAL (Langston C1): a hard-coded '30s' restating `LADDER_FLUSH_MS`
+    // means changing the constant mints every later row with a FALSE bound, tsc green throughout.
+    flushBound: `<=${Math.round(LADDER_FLUSH_MS / 1000)}s of unflushed age as observed at the next walk`,
+    // ⚠️ LIMIT, STATED RATHER THAN FIXED (Langston, condition-3 rider): `maxMarkAgeMs` and
+    // `maxAcceptedAgeMs` are INDEPENDENT MAXIMA OVER THE FLUSH WINDOW. They BOUND the window; they
+    // do NOT attribute an individual divergence, and the pair must never be read as a per-event
+    // attribution. `markAgeUnknown` keeps `maxMarkAgeMs`'s denominator recoverable.
+    maximaAreWindowBounds: true,
+  };
+}
+
+/**
+ * ⛔⛔ 20 WALKS **OR** 30 s, WHICHEVER FIRES FIRST — AND THE SECOND LEG IS THE BINDING ONE.
+ *
+ * The claim being defended is a DATA-LOSS BOUND IN SECONDS, so the trigger is in seconds. A count
+ * alone cannot deliver it: `monitoringCycle` DROPS cycles — `:1087-1090` returns on the re-entrancy
+ * guard and `:1093-1096` on `!isRunning` — and a dropped cycle is not a walk. At
+ * `monitoring_interval_ms = 1500` the 2,400 walks/hour that implies is a CEILING, never a rate, so
+ * "20 walks" is `>= 30 s` with nothing bounding it above — and it fails hardest on the LOADED
+ * engine, which is exactly where the bound is the point.
+ * ★ It also removes a read-site dependency: `monitoring_interval_ms` is a live tunable row with no
+ *   fence, so under a count trigger raising it would silently move the guarantee while the code
+ *   stayed byte-identical. Under a wall-clock trigger the guarantee does not depend on it at all.
+ *
+ * ⛔ AND THE HONEST STATEMENT OF THE BOUND IS `<= 30 s OF UNFLUSHED AGE AS OBSERVED AT THE NEXT
+ * WALK`, NOT "bounded at 30 s". The wall-clock leg is only EVALUATED inside a walk, and the two
+ * guards above are the paths that skip the walk — so a wedged `isCycleRunning` leaves entries
+ * unflushed indefinitely and that residual is real, named, and NOT papered over. The graceful case
+ * is closed by the unconditional flush on the stop path; only hard-kill loss remains.
+ */
+const LADDER_FLUSH_WALKS = 20;
+const LADDER_FLUSH_MS = 30_000;
 // P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
 // attempt). Single home for `promoted` (the refresh reconfirmed/rejected live in ready_to_buy_service).
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
@@ -491,6 +667,40 @@ export class ActiveExecutionEngine {
     }
   }
 
+  /**
+   * row `8a-P1` — persist the position's ladder accumulator, on the OR trigger.
+   *
+   * ⛔ THE MAP IS THE SOURCE. The row's own `ladderShadow` is never read back and never added to:
+   * `checkOpenPositions` re-fetches every cycle, so a read-modify-write of the row would count
+   * FLUSHES, not walks — the live `hollowSkips` defect, which this row exists not to rebuild.
+   * ⚠️ Everything OTHER than `ladderShadow` is carried from the row untouched, so this composes
+   * with `_recordBookStateEvent`'s `bookState` rather than racing it.
+   * ⛔ `force` is the STOP PATH: it flushes regardless of the trigger, which is what turns the
+   * graceful shutdown from a loss window into a real bound.
+   */
+  private async _ladderFlushIfDue(
+    position: { id: string; symbol: string; metadata?: unknown },
+    nowMs: number,
+    force = false,
+  ): Promise<void> {
+    const acc = _ladderShadow.get(position.id);
+    if (!acc) return;
+    if (!force && !_ladderShouldFlush(acc, nowMs)) return;
+    try {
+      const _meta = ((position.metadata as Record<string, any> | null) ?? {});
+      const _merged = { ..._meta, ladderShadow: _ladderSnapshot(acc) };
+      (position as any).metadata = _merged;
+      await storage.updateActiveOpenPosition(this.mode, position.id, { metadata: _merged } as any);
+      // ⛔ RESET ON **EVERY** FLUSH, INCLUDING A COUNT-TRIGGERED ONE. If only the timer leg reset
+      // it, a busy engine flushing on count would leave the clock leg permanently armed and it
+      // would fire on every subsequent walk.
+      acc.lastFlushAtMs = nowMs;
+      acc.walksSinceFlush = 0;
+    } catch (err) {
+      console.error(`[8a-P1][LADDER_FLUSH_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
   // I7-ROOT-FIX: minimal engine status diagnostics
   private lastEvaluateAt: number | null = null;
   private lastCycleAt: number | null = null; // Phase 8.8.3-I7-PM-FOCUS: Track monitoring cycle tick
@@ -818,6 +1028,25 @@ export class ActiveExecutionEngine {
     });
     
     this.isRunning = false;
+
+    // ── row `8a-P1`: FLUSH EVERY LADDER ACCUMULATOR UNCONDITIONALLY, BEFORE ANYTHING ELSE. ──────
+    // ⛔ THIS IS WHAT MAKES THE STATED BOUND REAL RATHER THAN ASPIRATIONAL. The wall-clock leg is
+    // only evaluated INSIDE a walk, and `monitoringCycle`'s `!isRunning` guard — which the line
+    // above has just armed — is one of the two paths that skip the walk entirely. Without this,
+    // a graceful stop would strand up to a full interval of accumulation while the snapshot's own
+    // `flushBound` claimed 30 s. ⇒ graceful shutdown becomes a real bound; only HARD-KILL loss
+    // remains, which is unavoidable and is stated as such.
+    // ⚠️ Best-effort by construction: a failed write must not prevent the engine stopping.
+    try {
+      const _lsNow = Date.now();
+      const _lsOpen = await storage.getActiveOpenPositions(this.mode);
+      for (const _p of _lsOpen) {
+        if (_ladderShadow.has(_p.id)) await this._ladderFlushIfDue(_p as any, _lsNow, true);
+      }
+      console.log(`[8a-P1][LADDER_STOP_FLUSH] mode=${this.mode} entries=${_ladderShadow.size}`);
+    } catch (err) {
+      console.error('[8a-P1][LADDER_STOP_FLUSH_ERROR]', err instanceof Error ? err.message : err);
+    }
 
     // B-PROMOTION-RACE-FIX (#508, Langston N1): clear the single-flight latch fields on stop.
     // The isRunning guard already DECLINES a re-run on a stopped engine, but leaving
@@ -1319,6 +1548,16 @@ export class ActiveExecutionEngine {
     let hollowSkips = 0;
     let hollowYields = 0;
     let unvalidatedRefusals = 0;
+    // row `8a-P1`: the ladder shadow's per-CYCLE totals. ⚠️ CYCLE-LEVEL, not per-position — the
+    // EVAL_EXIT line they print on sits outside the position loop.
+    let ladderAccepted = 0;
+    let ladderRefused = 0;
+    let ladderViaBook = 0;
+    // ⛔ THE CATCH IS COUNTED (Langston, Step-4 ask 2). Containment was the right trade; SILENCE was
+    // not: a recorder throwing on every walk yields accepted=0 refused=0 viaBook=0, which is
+    // BYTE-IDENTICAL to "no crypto positions open", and no accumulator is created so nothing reaches
+    // the row either. Contained AND unreadable is not a bound.
+    let ladderErrors = 0;
 
     for (const position of openPositions) {
       try {
@@ -1860,6 +2099,95 @@ export class ActiveExecutionEngine {
           bookStateRecord: ((position.metadata as Record<string, any> | null)?.bookState as Record<string, unknown> | undefined) ?? null,
         };
 
+        // ── row `8a-P1` — THE EXIT-LANE LADDER SHADOW. RECORDS. DECIDES NOTHING. ────────────────
+        // Built HERE because this is the decision instant: `_exitProvenanceBase` above is
+        // constructed once per position per tick, on the same read, so the recorded quote and
+        // `exit_decision_price` share one instant. Any site below would sample a SECOND instant and
+        // rebuild `3n.n`'s defect one layer over.
+        // ⛔ CRYPTO ONLY — `_bookX` is null by construction on xStock and the ticker leg's store is
+        //    a different object there; xStock is out of scope for this row and stays byte-unchanged.
+        if (_posClass === 'crypto_spot') {
+          try {
+            const _lsNow = Date.now();
+            const _lsSym = normalizeToInternalSymbol(position.symbol);
+            const _lsCache = priceCache.getCachedPrice(_lsSym);
+            // ⛔⛔ THE TWO-READER GAP (Langston condition 3) — AND THE FIRST VERSION OF THIS FIELD
+            // COULD ONLY EVER BE ZERO. It read `Date.now() - _lsNow` across one line, i.e. it timed
+            // itself. Caught while writing the Step-4 change list, not by a test.
+            // ⇒ THE QUANTITY THAT MAKES A DIVERGENCE ATTRIBUTABLE IS THE AGE OF **THE MARK THE
+            //   EXIT LOOP IS ACTUALLY USING**, AT THE LADDER'S OWN INSTANT: if the ladder and the
+            //   mark disagree, this says whether they were looking at different TIMES or at
+            //   different SOURCES. `null` where the branch carries no venue observation time —
+            //   the direct-REST leg states it null BY DESIGN (`:1952`), and inventing one here
+            //   would be the #743 defect this column exists to make visible.
+            const _lsMarkAgeMs = priceObservedAtMs !== null ? _lsNow - priceObservedAtMs : null;
+
+            const _lsSel = selectTouchPrice(
+              {
+                book: _bookX
+                  ? {
+                      bid: _bookX.bids.length > 0 ? _bookX.bids[0].price : null,
+                      ask: _bookX.asks.length > 0 ? _bookX.asks[0].price : null,
+                      // `getBookForFill` hands back an AGE, not a capture time, so the instant is
+                      // reconstructed rather than invented — the same line, for the same reason, as
+                      // the level lane's. Do NOT "simplify" it into `Date.now()`.
+                      stampMs: _lsNow - _bookX.ageMs,
+                      // `bookUpdatedAt` is stamped when WE processed the frame. Receipt, not venue.
+                      clockBasis: 'receipt' as const,
+                      producer: 'kraken_ws_book',
+                    }
+                  : null,
+                // Crypto's book is eligible by construction — `book_not_eligible` is the xStock
+                // maintained-book gate and never fires on this leg.
+                bookEligible: true,
+                // ⛔ THROUGH THE HELPER, NOT INLINE (Langston's ruling on the leg source). A fourth
+                //    verbatim leg construction is the defect that helper exists to prevent.
+                ticker: tickerLegFromCachedQuote(_lsCache),
+                tickerBasis: 'ticker_bbo' as const,
+              },
+              _lsNow,
+              {
+                // ONE ceiling governs both legs, stated with its number as `touch-price.ts` requires
+                // of whoever wires this. The exit lane's own constant is `8a-P2`'s, not this row's.
+                maxAgeMs: LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
+                maxSpreadFraction: LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+              },
+            );
+
+            // ⛔ THE CELL IS THE SHARED-STORE BASIS AT THE EXIT INSTANT — NOT "the exit trigger's
+            //    basis" (Langston condition 4). Nothing consumes it; `currentPrice` still drives.
+            recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'exit_trigger' }, _lsSel);
+            recordSideAgeAttempt(
+              { lane: 'active', assetClass: 'crypto_spot' },
+              {
+                stage: 'exit_trigger',
+                symbol: _lsSym,
+                nowMs: _lsNow,
+                cacheEntryPresent: _lsCache !== null,
+                sidesCapturedAtMs: _lsCache?.sidesCapturedAtMs ?? null,
+                venueObservedAtMs: _lsCache?.venueObservedAtMs ?? null,
+                symbolLastMessageAtMs: _lsCache?.lastWsMessageAtMs ?? null,
+                // The feed-liveness terms belong to the probes that own that window; this stage
+                // states them ABSENT rather than inventing a number it did not measure.
+                feedDistinctSymbolsInWindow: null,
+                feedDistinctWsSymbolsInWindow: null,
+                feedWindowMs: null,
+              },
+            );
+
+            _ladderAccumulate(position.id, _lsSel, _bookX !== null, _lsMarkAgeMs);
+            if (_lsSel.ok) { ladderAccepted++; if (_lsSel.quote.basis === 'book_top') ladderViaBook++; }
+            else ladderRefused++;
+            await this._ladderFlushIfDue(position, _lsNow);
+          } catch (err) {
+            // ⛔ A RECORDER MAY NEVER BREAK THE EXIT LOOP. This sits inside the per-position `try`
+            // already, and its `catch` ends the ITERATION — which would turn a telemetry fault into
+            // a skipped stop check. Contained here, loudly, so the exit evaluation below still runs.
+            ladderErrors++;
+            console.error(`[8a-P1][LADDER_SHADOW_ERROR] ${position.symbol}:`, err instanceof Error ? err.message : err);
+          }
+        }
+
         const tickEntry = {
           symbol: position.symbol,
           refreshedAt: new Date().toISOString(),
@@ -2067,7 +2395,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} shadowEntered=${this.fg2ShadowEntered} shadowSkippedNoBook=${this.fg2ShadowSkippedNoBook} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     this.fg2ShadowEntered = 0;
     this.fg2ShadowSkippedNoBook = 0;
@@ -2857,6 +3185,23 @@ export class ActiveExecutionEngine {
     // no trade row was found, which the diagnostic reports as "not checked" rather than as a pass.
     let _persistedNetPnl: number | undefined;
 
+    // ⛔⛔ row `8a-P1` BLOCKER-2 (Langston, Step 4): HOISTED ABOVE `if (trade)` FOR THE SAME REASON
+    // `_persistedNetPnl` IS. `trade` is `trades.find(t => t.openedAt && !t.closedAt)` — with TWO
+    // concurrent positions on one symbol the second close finds NO open trade row, and inside the
+    // block the accumulator would be neither carried nor evicted: the census silently dropped AND
+    // the entry surviving for ever, which the eviction comment three lines down says can never
+    // happen. ⇒ **read here, evict AFTER the write resolves, and SAY SO when there was no row** —
+    // because a closed crypto row with no `ladderShadow` is otherwise indistinguishable from one
+    // that never accumulated, which is `#546` inside the batch whose only product is the census.
+    const _lsAcc = _ladderShadow.get(position.id);
+
+    // ⛔⛔ `try/finally` AROUND THE WHOLE BLOCK, NOT `try/catch` — THE THROW STILL PROPAGATES.
+    // Langston §13, Step-4 r2: `storage.updateClosedTrade` below sits in NO try (the nearest closes
+    // above it, and `closePosition` has no method-level one), so a persist throw would skip the
+    // eviction entirely — the IMMORTAL-ENTRY case the comment below says cannot happen. That was
+    // unchanged exposure rather than a regression, but the comment said "WHETHER OR NOT" and the
+    // throw path falsified it. ⇒ MADE TRUE STRUCTURALLY rather than narrowed in prose.
+    try {
     if (trade) {
       // B65.2: read the final trailing-engine state for this symbol so the
       // closed-trade row preserves whether the trade ended in moonbag mode.
@@ -2887,6 +3232,17 @@ export class ActiveExecutionEngine {
           const _pm = (position.metadata as Record<string, any> | null) ?? {};
           const _carry: Record<string, unknown> = {};
           if (_pm.fg2Shadow) _carry.fg2Shadow = _pm.fg2Shadow;
+          // ── row `8a-P1` (P1-15): the ladder accumulator rides onto the closed row. ───────────
+          // ⛔⛔ THIS BLOCK IS AN **ALLOWLIST**, NOT A SPREAD — `_carry` takes keys BY NAME. A field
+          // added to the accumulator and not added here would be written every 30 s and then
+          // silently dropped at the close, so the window would hold ZERO rows while every counter
+          // looked healthy. The fence in `b-price-side-8a-p1-exit-fence.test.ts` asserts this key
+          // is present for exactly that reason.
+          // ⛔ READ FROM THE MAP, NOT FROM `_pm`: the row is a SINK. `_pm` holds the LAST FLUSH,
+          //    which is up to a full flush interval stale; the map is exact at this instant.
+          // ⛔ `_lsAcc` IS HOISTED ABOVE `if (trade)` — see BLOCKER-2 there. The EVICTION is not
+          //    here either: it must run whether or not a trade row was found.
+          if (_lsAcc) _carry.ladderShadow = _ladderSnapshot(_lsAcc);
           // B-XSTOCK-FEED-SANITY: the guard's skip/yield record rides onto the closed row beside the
           // label (with `yielded` explicit), the same mechanism as fg2Shadow. Only when present — never a wipe.
           const _bsRec = options?.exitProvenance?.bookStateRecord ?? _pm.bookState; // the in-memory copy is exact
@@ -3051,6 +3407,21 @@ export class ActiveExecutionEngine {
       } catch (recordErr) {
         console.warn(`[M5C.1][ACTIVE_RECORD_FAILED] ${position.symbol}:`, recordErr);
       }
+    }
+    } finally {
+    // ── row `8a-P1`: EVICT THE ACCUMULATOR — AFTER the write above has resolved, and WHETHER OR
+    // NOT a trade row was found (BLOCKER-2). A surviving entry is a SOURCE, which this row's rule
+    // forbids; and the no-trade-row case is LOGGED rather than silent, because a closed row with
+    // no `ladderShadow` must be tellable from one that never accumulated.
+    if (_lsAcc) {
+      if (!trade) {
+        console.warn(
+          `[8a-P1][LADDER_NO_TRADE_ROW] ${position.symbol}: accumulator present (walks=${_lsAcc.walks}) ` +
+          `but no open trade row to carry it onto — census DROPPED for this close, entry evicted.`,
+        );
+      }
+      _ladderShadow.delete(position.id);
+    }
     }
 
     // B67.4 (2026-05-01): per-(regime, strategy) outcome feedback EMA update.

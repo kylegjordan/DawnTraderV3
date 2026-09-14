@@ -54,7 +54,10 @@ import {
 
 const NOW = 1_700_000_000_000;
 const POLICY = { maxAgeMs: 15_000, maxSpreadFraction: 0.5 };
-const LANE = { lane: 'active' as const, assetClass: 'crypto_spot' };
+// `stage` is a REQUIRED key dimension since row `8a-P1`. Named explicitly here rather than
+// defaulted, because tsconfig excludes test files: an omission compiles and the first run after
+// the field landed minted `active:crypto_spot:undefined:book`. `keyOf` now refuses that.
+const LANE = { lane: 'active' as const, assetClass: 'crypto_spot', stage: 'active_signal_birth' as const };
 const BOOK_CELL = { ...LANE, rung: 'book' as const };
 const LADDER_CELL = { ...LANE, rung: 'ladder' as const };
 
@@ -151,8 +154,8 @@ describe('row 8c P1 — the ladder funnel', () => {
     const rows = getLevelBasisFunnel();
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.key).sort()).toEqual([
-      'active:crypto_spot:book',
-      'active:crypto_spot:ladder',
+      'active:crypto_spot:active_signal_birth:book',
+      'active:crypto_spot:active_signal_birth:ladder',
     ]);
 
     const b = getLevelBasisFunnelRow(BOOK_CELL)!;
@@ -167,12 +170,12 @@ describe('row 8c P1 — the ladder funnel', () => {
   it('7. the VTS lane does not pool with the active lane, rung for rung', () => {
     walk({ book: null, bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
     recordTouchSelection(
-      { lane: 'vts', assetClass: 'crypto_spot' },
+      { lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_signal_birth' },
       selectTouchPrice({ book: null, bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY),
     );
 
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ accepted: 1, refused: 0 });
-    expect(getLevelBasisFunnelRow({ lane: 'vts', assetClass: 'crypto_spot', rung: 'ladder' }))
+    expect(getLevelBasisFunnelRow({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_signal_birth', rung: 'ladder' }))
       .toMatchObject({ accepted: 0, refused: 1 });
     expect(getLevelBasisFunnel()).toHaveLength(4);
   });

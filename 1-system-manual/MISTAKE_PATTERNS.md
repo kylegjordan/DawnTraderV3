@@ -7,30 +7,6 @@
 
 ---
 
-## HOW AN INSTANCE IS RECORDED — one trailer, on the commit
-
-```
-MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true>
-```
-
-**The batch id is not decoration** — it is what makes the promotion threshold a **grep** instead of a judgment (Langston condition 1). Without it, *"2+ distinct batches"* is eyeballed, and an eyeballed threshold is a habit.
-**Also mandated on the commit that CARRIES AN ISSUE ENTRY**, because rule 28.a's destination is *"the commit message **or** the issue entry"* and a trailer alone would cover only the first branch.
-
-⚠️ **POPULATION LIMIT, STATED SO THIS FILE NEVER READS AS COMPLETE: the grep sees COMMITS ONLY.** The class it structurally cannot hold is **the mistake that produces no commit** — a claim retracted in review that never touched a file. Langston: *"that is most of my own ledger."*
-
-**Search vocabulary** (the standard, hand-verified by Langston against a 10-commit delta): `\bcorrect(s|ed|ing|ion|ions)\b` · `retract*` · `withdraw*` · `mistake*` · `overturn*` · `vacat*` · `"I was wrong"`. **Measured recall against the record-sense union: 73/74 = 98.6%.**
-**Pin the population BY REF, never by description** — `28c007163..<stated ref>` — or the same query hands two readers two denominators on the same day.
-
-## PROMOTION — how a pattern becomes a rule
-
-**Lifecycle: instance → pattern (this file) → RULE (promoted into `CONDUCT.md` §13, where it auto-loads) → MECHANISM shipped → RETIRED from both.**
-★ **The rule is the INTERIM state, not the destination.** A rule is words, and words get skipped — rule 29(b) was auto-loaded and skipped **twice in one day**. A mechanism enforces.
-
-**THRESHOLD (Langston-ruled 2026-08-20): 3+ instances across 2+ DISTINCT batches — as a FLOOR.**
-- ⚠️ **A FLOOR, NOT A MEASURE.** The grep is commits-only, so a pattern reading 2 may really be at six. **The threshold may ALSO be met by cited NON-COMMIT instances — each carrying a resolvable ref (issue entry, ruling, alert id). NEVER on recollection.** Without this the highest-value class is structurally unpromotable.
-- ⛔ **NO SEVERITY OVERRIDE.** A single severe mistake does **not** promote — **it gets a mechanism.** §13 is for RECURRENCE; severity is what rule 24's three outcomes are for.
-- **§13 holds 3-5 slots, ordered MOST-RECENT-INSTANCE FIRST** — its job is preventing the *next* one, not scoring history.
-- ⛔⛔ **A LIVE PATTERN DISPLACED OUT OF §13 BY THE SLOT LIMIT STAYS HERE, FLAGGED `LIVE — NOT IN §13`. AN ABSENCE FROM §13 MUST NEVER BE READABLE AS RETIREMENT.**
 
 ### ⛔⛔ DISPLACEMENT-BY-NEWNESS IS A DEFECT IN THIS DESIGN — KYLE FOUND IT 2026-08-20, BEFORE THE FIRST PASS RAN
 
@@ -167,6 +143,13 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ⚠️⚠️ **COUNT CORRECTED 2026-09-06 AND THE COLLISION IS RECORDED RATHER THAN TIDIED AWAY: TWO DIFFERENT INSTANCES WERE BOTH NUMBERED EIGHT** — the glob-pattern one below (*"INSTANCE n=8"*, CC-C, `B-PRICE-SIDE-BY-JOB`, 09-05) and the writer-census one further down (*"AN EIGHTH, IN A SECOND BATCH"*, CC-B, `B-ALERT-ACTOR-ALLOWLIST`, 09-02). **They are distinct instances in distinct batches.** ⇒ **the true running total is SEVEN (`B-CROSS-SESSION-BLEED`) + 1 (`B-ALERT-ACTOR-ALLOWLIST`) + 1 (glob) + 1 (this one) = TEN, across THREE batches.**
 ★ **I first filed mine as n=9 by taking the header's number at face value — which is this pattern's own shape, in this pattern's own index: I enumerated by reading ONE label instead of counting the members.** ⛔ **Neither earlier entry is renumbered — both are cited elsewhere by their text, and silently shifting them would break those citations for a cosmetic gain.**
 
+➕ **INSTANCE n=16 — 2026-09-13, CC-C, `B-PRICE-SIDE-BY-JOB` — THE ENUMERATOR'S "POSITIVE CONTROL" HAD NO FAILURE MODE, AND THAT IS THE PART WORTH KEEPING.**
+Censusing which probes maintain a book ladder, I grepped `applyDelta`, got three files, then ran **`grep -l applyDelta`** and called the matching result a positive control. ⛔ **It tests the grep against itself and CANNOT COME OUT DIFFERENTLY IF THE ENUMERATOR IS WRONG** — `CONDUCT.md` §6b step 2, failed on my own instrument in the same session I was applying it to other people's work. **Langston supplied the missing member: `book_ticker_alignment_probe.mjs` maintains a full price-keyed ladder INLINE (`:84-88`, `truncate()` at `:40`) and never uses the name.** Re-run on the SHAPE — Map mutation / array splice on `bids`/`asks` / depth truncation / snapshot reset — **caught it, and returned FOUR, not three.**
+⇒ ✅ **MECHANISM, and it is the first one this pattern has had that bites the CLASS: ENUMERATE BY BEHAVIOUR, NOT BY NAME — and the control must be a KNOWN MEMBER THE INSTRUMENT HAS TO CATCH, never the same query restated.**
+
+➕ **INSTANCE n=15 — 2026-09-13, CC-C, `B-BOOK-SUBSCRIPTION-REACH` (`#1060`) — A CALLER REACHING THE CALLEE THROUGH A DIFFERENTLY-NAMED WRAPPER.**
+I enumerated book subscribers by grepping `subscribeToSymbols`, classified every hit inside `kraken-websocket-adapter.ts` as internal machinery, and published *"nothing in the pipeline ever asks for a book"* as the entry's central claim. **`ready_to_buy_service.ts:2424` reaches it via `i8cSubscribeNewTrade` — inside the adapter, called from outside it.** ⛔ **The claim was false, and `#506` had carried the correction since July; I had not searched the ledger for my own central claim (§9.5(b-ii)).** ⚠️ **`#506`'s path is also stale (`server/services/` → `server/core/rtb/`), so a path-anchored search would have missed it too.**
+
 ➕ **INSTANCE n=14 — found 2026-09-11, made 2026-09-10, CC-C, `B-XSTOCK-FEED-SANITY` — n=12's MECHANISM IN A THIRD DOCUMENT, A DAY EARLIER.** Appending to the feed-sanity progress report I headed a section `## §4f`; the file's own sections are `## 4f.`, and the original §4f is the pending-control section. Found when appending the next section and enumerating every heading form first. Renumbered to `4i`, pointer left; nothing outside the file cited it. ⚠️ **And that 09-10 append was also written with bare-LF line endings into a CRLF file — which is why a line-based edit could not find its heading.**
 
 ➕ **INSTANCE n=13 — 2026-09-11, CC-C, `B-OHLC-FRAME-GUARD` (`#1028`) — THE CENSUS OF A COUNTER STOPPED AT THE BRANCH I WAS LOOKING AT.**
@@ -289,6 +272,14 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ✅ **OPENED AT n=1 ON THE `#507` PRECEDENT** (*"if it is not named, later instances will not be recognised as instances"*), and because **this project's whole current arc is investigating a third-party venue's price feed** — the base rate for recurrence is high and the cost per instance is hours.
 ⚠️ **NOT A LICENCE TO TRUST DOCS OVER MEASUREMENT.** The docs said *"spreads are wider outside market hours"*; **only the measurement showed 27.1% of our stop-outs landing in one minute of it.** ⇒ **Docs tell you WHAT the system does; measurement tells you WHAT IT DOES TO US. The order is docs-then-measure, never docs-instead-of-measure.**
 
+
+### `aggregate-ratifies-the-hypothesis` — **THE TOTALS AGREED WITH ME; THE DISTRIBUTION REFUTED ME** — **NEW 2026-09-14, n=1 · mechanism: `B-PRICE-SIDE-BY-JOB` `8a-P1` Step-7, Langston's catch**
+⛔⛔ **AN AGGREGATE THAT AGREES WITH YOUR HYPOTHESIS IS THE CONDITION UNDER WHICH YOU MOST NEED THE DISTRIBUTION — NOT LESS.**
+**MEASURED.** I proposed that accepted price ages showed our own poll cadence (2 / 15 / 30 / 60 s). The supporting number: **425 of 1,745 = 24.4% at or below 15 s — against the 25% a uniform-phase sample of ONE 60 s interval predicts.** A near-perfect fit. ⇒ **anyone reaching for that mechanism would have found the totals nodding along.**
+⛔ **THE SHAPE INSIDE THE BUCKET REFUTES IT: all 425 are SUB-SECOND and 1,000-15,000 ms is EMPTY across four consecutive buckets.** A cadence would put mass AT the rungs; this puts none. The corpus's only measured cadence (`#951`'s 14.3 / 29.3 / 44.3 / 59.3 s sawtooth) requires mass at 14.3 s — **zero**.
+★ **AND THE SELECTION ERROR THAT MADE IT INVISIBLE: I evaluated the CDF at exactly the four edges my hypothesis names.** Four points chosen to match the cadence being inferred cannot distinguish rungs from a smooth tail. **Re-read on edges I had NOT chosen — 5,000 / 10,000 / 45,000 — and the void appears immediately.**
+✅ **THE RULE: when a total matches a predicted mechanism, that is the moment to histogram it on edges the hypothesis did NOT supply.** An aggregate cannot falsify a shape claim, and a fit is not evidence — it is the warning.
+⚠️ **RELATED BUT DISTINCT from `control-enumerates-the-observed`**: there the control was built from what was already seen; here the control was the right instrument READ AT THE WRONG POINTS.
 ### `verification-weaker-than-claim` — **THE GATE RAN, PASSED, AND COULD NOT HAVE FAILED FOR THE REASON THAT MATTERED** — **LIVE — NOT IN §13** · mechanism: ✅ **NAME THE AXIS THE CONFOUND RUNS ALONG, AND CHECK THE CONTROL SPLITS THE POPULATION ON *THAT* AXIS** (Langston, 2026-08-29, from instance 3) (opened 2026-08-29, CC-C; **Langston directed it out of `#938`'s body — *"that belongs in `MISTAKE_PATTERNS.md` as its own named pattern, not buried"***)
 
 ★★ **THE DISTINCTION FROM EVERY NEIGHBOUR HERE, AND IT IS WHY IT GETS ITS OWN SLUG: THE CHECK WAS RUN.** It is not `skipped-the-gate` — nothing was skipped. It is not `silence-not-evidence` — the instrument spoke. It is not `wrong-object` — the right artifact was examined. **A real check was performed on the real thing and PASSED, while being incapable of failing for the reason the claim rested on.**
@@ -336,6 +327,12 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ✅ **THE COUNTER-QUESTION, and it is one line at verification time — the same shape as `CONDUCT.md` §6b step 2:** ⛔ **"WOULD THIS CHECK HAVE COME OUT DIFFERENTLY IF THE CLAIM WERE FALSE?"** If the answer is no, **you have evidence that the page loaded, not evidence that the thing works.** ⚠️ **State the property the check actually discriminates**, not the property you were hoping to establish — *"panels load"* and *"the N/A renders"* are different sentences, and only one of them was ever tested.
 ⚠️ **NOT A NEW RULE:** §6b step 2 already asks exactly this and is auto-loaded. **It fired at the wrong moment** — the batch asked it of its own reasoning and not of its own gate. **Same shape as rule 29's origin: the rule exists, and the failure happens one step before it reads.**
 
+
+⭐⭐ **FOLDED 2026-09-14 (Langston, §13 disposition 1 — INTO this entry rather than filed as a second, because it is the same root in the other direction): THE MUTATION HARNESS REPORTED ON THE *SUBSTITUTION*, NOT ON THE *STRUCTURE*, AND A MUTATION THAT NEVER APPLIED CAME BACK AS A **SURVIVOR**.**
+⛔ The known half is already written everywhere in this corpus: *a non-applying substitution reports as PASSING*, so a mutation must assert it MATCHED before the result is read. **MEASURED THE OTHER WAY ROUND, `B-PRICE-SIDE-BY-JOB` `8a-P1`:** a script printed *"substitution applied"*, the test came back GREEN, and I read that as **the mutation surviving my fix**. It had replaced text without producing the intended structure — the eviction never moved inside the block it was supposed to move into.
+⇒ ★ **NON-APPLICATION AND MIS-APPLICATION ARE TWO DIRECTIONS OF ONE ROOT, AND THE SECOND IS WORSE: a false PASS hides a gap, a PHANTOM SURVIVOR INVENTS ONE** — I was one message away from telling the reviewer his mutation defeated my fix, which was false.
+✅ **THE RULE, STATED AS IT WAS ACTUALLY RUN: ASSERT THE STRUCTURAL PRECONDITION *BEFORE* READING THE RESULT — not that a string replacement occurred, but that the code now has the shape the mutation claims.** Re-run with a brace-balance check that the moved statement really was inside the target block: KILLED.
+⚠️ **AND THE SAME DAY, THE HELPER WRITTEN TO FIX A WRONG-OBJECT CLASS PICKED THE WRONG OBJECT ON ITS FIRST RUN** — a `finally`-block extractor took `indexOf('} finally {')` and grabbed an unrelated one hundreds of lines earlier. **An extractor must be ANCHORED and its identity ASSERTED**, or it is a confident reader of the wrong thing.
 ### `fixture-not-process` — **THE HARNESS SUPPLIED A CONDITION THE LIVE CALLER NEVER DOES, SO IT COULD NOT REVEAL THE BUG — THE FIXTURE WAS THE THING UNDER TEST** — **NEW 2026-09-12, n=1, CC-INFRA, `B-LANGSTON-CONTEXT` P-2** · mechanism: ✅ **DRIVE THE PROCESS THE WAY THE LIVE CALLER DOES — do not let the fixture provide an input the caller withholds** (Langston's framing, 2026-09-12)
 
 **THE INSTANCE.** `langston-memory-write --compose` reads no stdin, but `main()` read stdin unconditionally. The mutation-proved compose harness always launched the tool with `subprocess.run(..., input=b"")`, which **closes stdin and sends EOF** — so `read()` returned instantly and every case passed. The live caller invokes `--compose` over ssh with **no stdin redirection**; that channel never sends EOF, so `read()` blocked. **The migration hung for ten minutes on the first live run.** MEMORY.md was untouched (compose never ran).
@@ -368,6 +365,16 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ⚠️ **HONEST LIMIT:** it fires only once a defect has been NAMED. It does nothing for a class nobody has pointed at yet — that is what the fresh-reader loop is for, and the two mechanisms are complements rather than substitutes.
 
 ### `fix-relocates` — **THE CORRECTION REINTRODUCED THE SAME DEFECT CLASS IN A NEW PLACE** — **LIVE — NOT IN §13** · mechanism: **the fresh-reader LOOP, already mandated in `workflow-02/-04/-07/-11` and unblocked by Kyle's standing authorisation 2026-08-28** (opened 2026-08-28, CC-INFRA)
+
+➕ **2026-09-13/14 — FIVE INSTANCES IN ONE DOCUMENT, ONE SITTING, CC-B, `B-PRICE-DOC-CONSOLIDATE` (`PRICE_FEED_MAP.md` r4→r7). Added here rather than filed as a new pattern: this IS the entry.**
+⭐⭐ **AND IT SHARPENS THE LOCUS, WHICH IS THE REASON THEY ARE WORTH RECORDING: THE CORRECTION DID NOT RELOCATE TO “A NEW PLACE” — IT RELOCATED INTO *THE EXPLANATION OF THE FIX*, FOUR TIMES OUT OF FIVE.** That is narrower than the entry's current framing and it is PREDICTABLE, which makes it checkable.
+1. A HAND-NAMED list of files-to-watch was blind to six verdict-bearing members (Langston caught it).
+2. The RULE that replaced the hand list was blind to the **partially-unmapped** class — it subtracted by FILE where the unit is a CITATION (Langston caught it).
+3. The rule's own table **cited its own members**, so the mechanical extraction found them THERE and kept two files nothing else in the document referenced. **Self-justifying by construction.**
+4. The NOTE recording that removal **re-cited the two removed files**, so the extractor re-added them. ⇒ the exclusion had to widen from the table to the whole block.
+5. ⛔ **THE SENTENCE BANNING SHORTHAND CITATIONS WROTE THE BANNED FORM OUT TWICE.**
+⛔⛔ **AND THE ENTRY'S LISTED MECHANISM — THE FRESH-READER LOOP — DID NOT CATCH ANY OF 3, 4 OR 5. RUNNING THE CHECK DID.** ⭐ **A reader (fresh or not) reads the rule and the table as PROSE and they agree; only EXECUTING the rule against the document exposes that they do not.** ⇒ **AMENDMENT: where a document states a derivable rule, the rule must be RUN against the document and shown to reproduce its own output — and a disagreement is INVESTIGATED, never settled by assuming the rule or the table wins.**
+⚠️ **THE TIE-BREAKER IS THE TRAP: instance 3 was found only because the first version of the check said *“if they disagree the RULE is wrong”* and that was FALSIFIED ON THE NEXT RUN — the table was wrong. A self-check with a tie-breaker is not a check, it is a preference** (Langston's phrasing).
 - **2026-09-02 · B-MEASURE-GATE leg 2:** r3 of the completion-report guard moved the defect from "warns on every real close" to "decided by whatever last sat at the reused `/tmp` name" — the same class one level down, found by the next fresh reader (`12aa27eed` → `ff0fbe9e2`).
 
 ⛔ **FAILS THE §13 BATCH-DIVERSITY LEG AND IS RECORDED ANYWAY.** Five instances, **all inside `B-TOKEN-WATCH`** — one context, not two batches, so it does **not** promote under the 3+/2-batches floor. **It is here because the instance COUNT is unusually high for a single batch and because a mechanism already exists**, which is the state this file says a pattern should reach.
@@ -385,6 +392,26 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ★★ **THE SHARPEST EVIDENCE IS NOT IN THE TABLE.** A fresh reader took **four defects this package's comments describe as FIXED**, reverted each, and **every one of the then-116 checks still passed.** ⇒ **the fixes were real and nothing tested them.** A comment saying *"fixed"*, with no test that dies when the fix is removed, is documentation wearing coverage's clothes. *(Answered with `token-watch/tests/test_mutations.py`, which asks a different question from the other suites: not "does it work" but **"would we notice".**)*
 
 ⛔ **WHY THE COUNTER-HABIT IS NOT "BE MORE CAREFUL":** four of the five were caught by a reader that was handed **only the claim** and had to find the objects itself. **None was caught by re-reading my own work**, and three of them I had re-read while writing the comment that described the fix. ⇒ **the counter-habit is procedural: a correction is UNREVIEWED WORK, and goes back to a fresh reader before it is dispatched.** Kyle's standing authorisation removed the per-case permission that had left this mechanism written into four skills and fired **zero times in two days**.
+
+### `refusal-read-as-noise` — **A GUARD REFUSED, AND WE WENT LOOKING FOR A BUG IN THE GUARD** — **NEW 2026-09-13 · n=3 IN ONE DAY ACROSS TWO SESSIONS (CC-B ×2, CC-C ×1)** · Langston-dispositioned, framing CC-B's · tripwire: ✅ **A REFUSAL IS AN ANSWER. READ IT BEFORE DEBUGGING IT.**
+
+⭐⭐ **WHY THIS IS NOT `#453`, AND THE DISTINCTION IS THE WHOLE VALUE.** `#453` says *a silence is not an absence* — it warns that **nothing** was said. This is the opposite failure: **SOMETHING WAS SAID.** ⇒ **AN ABSENCE IS SILENT; A REFUSAL IS A POSITIVE STATEMENT WE READ AS SILENCE.** A guard that declines, a filter that drops a row, a docblock that pre-registers an obligation — each is the system TELLING you something, and each of the three below was treated as noise on the path to the answer we wanted.
+
+➕ **INSTANCE 1 — CC-C, the Kalman re-run.** `r2` required `FIXED_OFFSET = (ask0−bid0)/2 > 0`, so TAO and VVV were **silently dropped for having an INVERTED BOOK** — bid above ask, impossible. Their own words: *“the zero WAS the finding. I went looking for a bug in my grid instead of reading the refusal.”* The refusal was the ladder defect announcing itself.
+➕ **INSTANCE 2 — CC-B, the partition zero.** `signal_eval_archive_2026_09_12` returned **zero** `volatility_edge` xStock rows and I nearly ruled an observation window UNAFFECTED on it. The positive control showed **the partition held no `xstock_spot` rows AT ALL.** The zero was the apparatus refusing, not the world answering.
+➕ **INSTANCE 3, AND THE WORST BECAUSE THE REFUSAL WAS PRE-REGISTERED AS BINDING — CC-B, the 14-of-24.** `B_EXIT_PROVENANCE_COMPLETION_REPORT.md:101`, written by the batch that BUILT the witness: *“Any analysis using it must read that column.”* I carried the number into **two governance documents and four messages to Kyle** without reading it. ⛔ **And `PRICE_FEED_MAP.md` §0 — MY OWN DOCUMENT, SAME COMMIT — names the archiver-witness lag EIGHT LINES ABOVE the number it invalidates.** I wrote the fact down and did not apply it. The finding was refuted the same evening.
+
+⚠️ **THE SHAPE THAT MAKES IT HARD TO SELF-CATCH: a refusal arrives as an ABSENCE OF OUTPUT** — fewer rows, a missing symbol, a caveat in prose — **and absence of output is what “nothing interesting here” also looks like.** In all three the refusal ran in the direction of the answer we already wanted, which is when a missing row is least likely to be questioned.
+✅ **THE TRIPWIRE, AS A QUESTION RATHER THAN A DISCIPLINE: when a count comes back smaller than expected — or zero — ask FIRST “did something REFUSE?” and only then “is my query wrong?”.** Name the guard, the filter or the caveat that could have produced it, and read that before debugging anything.
+⭐ **AND THE PART LANGSTON KEPT: naming it against the CLASS is what stops the next instance being read as a fresh mistake.**
+
+### `grain-not-gloss` — **I QUOTED A COUNT WITHOUT NAMING ITS GRAIN, AND THE DOCBLOCK WOULD NOT HAVE SAVED ME** — **NEW 2026-09-13, CC-B, `#1063`/`#1061`** · **Kyle caught it; Langston corrected the lesson I first drew** · tripwire: ✅ **NAME THE GRAIN AND THE WRITE CADENCE BEFORE QUOTING A COUNT**
+
+➕ **WHAT HAPPENED.** I reported `reject_stage='admitted'` counts as opportunities and as trades — *“mean_reversion 159 trades”*, *“volatility_edge 508 admitted”*. Kyle: *“there's no way in paper mode that we had a thousand plus RTB pool signals.”* **He was right.** `admitted` is written **one row per strategy × pair × SCAN CYCLE** by two hook sites — re-evaluations of a small pair set, not distinct opportunities and not opens.
+
+⛔⛔ **MY FIRST LESSON WAS “READ THE DOCBLOCK” AND LANGSTON KILLED IT, CORRECTLY.** `signal-eval-archiver.ts:13` reads *“'admitted' — passed all gates; **this is a real opportunity**.”* ⇒ **THE DOCBLOCK ITSELF ASSERTS THE THING THAT WAS FALSE. Reading it produces the same error.**
+⭐⭐ **WHAT ACTUALLY DISCRIMINATES IS THE ROW'S *GRAIN* AND *WRITE CADENCE*, AND THAT LIVES AT THE HOOK SITES — NOT IN THE DEFINITION, NOT IN THE COLUMN NAME.** ⇒ **the column name and its docblock gloss are BOTH NARRATIVE.**
+⚠️ **Distinct from `summary-not-object`: there the authoritative object was open and I read a summary. Here I read the AUTHORITATIVE DEFINITION and it was the wrong KIND of fact — a gloss where I needed a cardinality.**
 
 ### `population-narrowed-by-construction` — **THE HARNESS DEFINED ITS POPULATION SMALLER THAN ITS CLAIM, AND EVERY NUMBER MEASURED ON IT WAS CORRECT** — **NEW 2026-09-13, n=3 in one day, CC-B, `T-W20C-SCALAR-LEG`** · **Langston-ruled as the finding, above any one instance** · tripwire: ✅ **A HARNESS LEG STATES ITS STRATUM'S DENOMINATOR *AND WHAT IT EXCLUDES*, BEFORE IT RUNS**
 
@@ -752,6 +779,23 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 
 ---
 
+### `correction-inherits-the-parent` — **A CORRECTION INHERITS THE PARENT'S FAILURE MODE UNLESS THE CONTEXT CHANGES**
+
+⛔ **THE SHAPE, AND IT IS NOT "THREE ERRORS" — IT IS ONE ERROR RE-EXPRESSED THREE TIMES.** A session that has just been shown wrong writes the fix **immediately, itself, in the same frame of mind, against the same object**. `CONDUCT.md` §6b already names why that fails: **the correction is unreviewed work produced by the very context that produced the error.** What it does not say, and what this adds, is that the inherited fault reappears **ONE RANGE OVER** — plausible, differently worded, and therefore not recognised as the same mistake.
+
+⚠️ **MEASURED, CC-C, 2026-09-13, one session, one dataset:**
+| # | the claim | how it died |
+|---|---|---|
+| 1 | *the smoother discards the freshness advantage* | refuted by the author's own re-run |
+| 2 | *a value outside [0,1] cannot be a side error* | decomposition error — the side term is CONTAINED in the statistic, not excluded by it |
+| 3 | *drift is 2.6-3.6× the side error* | wrong denominator — the side term was measured at the WITNESS instant, not the DECISION instant |
+
+★★ **THE DIAGNOSIS IS NOT CARELESSNESS. IT IS A HEADLINE NUMBER BEING DEMANDED FROM COLUMNS ALREADY RULED UNABLE TO CARRY ONE** — each attempt was a fresh route to the same forbidden destination.
+
+⇒ ⛔⛔ **THE ONLY RELIABLE CONTEXT CHANGE AVAILABLE MID-SESSION IS TO STOP.** Not to try harder inside the next claim — **the next claim is the failure mode.** Hand the object to a fresh reader, or leave the question open and say so.
+⛔ **NAME THIS AGAINST THE CLASS, NEVER AGAINST THE TABLE THAT EXPOSED IT (Langston's condition)** — filed as *"this exit-provenance dataset"* it re-fires the next time a ranking looks one arithmetic step away.
+✅ **THE TELL, usable in the moment: you are about to publish a number the previous paragraph just said the data cannot support.**
+
 ## 2026-09-04 — `B-DEPLOY-ACTOR-ALLOWLIST`: two trailers, and the duplicate row-6 collision fixed
 
 ⭐ **THE DUPLICATE ROW `6` IN THE `wrong-object` TABLE IS RENUMBERED (6, 6, 7 → 6, 7, 8).** Two sessions added an instance and numbered it `6` on the same day; both merged cleanly and nothing noticed. **It was surfaced by the Codex advisor's feasibility test** — asked to count the rows, it answered *"8, labelled 1,2,3,4,5,6,6,7"*, and **my own first check of its answer returned nothing because I matched the wrong section three hundred lines earlier.** The outsider was right and my verification was wrong. *(This is the residual `CLAUDE.md` §5 25.a names: four sessions editing the same prose, blocks cannot apply, and a semantic collision merges cleanly.)*
@@ -819,6 +863,16 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 **HOW TO SEE IT:** ⭐ **MUTATE AND WATCH IT GO RED.** Break the property deliberately — delete the guard, hardcode the wrong action, feed the input the guard exists to reject — and confirm the check **fails**. ★ **If you find yourself predicting *"that mutation would pass,"* you have already found the defect**; the repair is to make the correct path **CARRY** the value so the shortcut no longer compiles. **Ask of every green check: what exact change would turn this red, and can that change actually occur here?**
 **HIS COUNT (unverified):** five times over about six weeks, across four distinct pieces of work; **in two of them the guard's own comment certified behaviour none of its probes could reach.**
 
+### `set-of-one` — **MEASURED ONE MEMBER, CONCLUDED ABOUT THE SET, WITHOUT EVER ENUMERATING THE SET** — **LIVE — NOT IN §13** · mechanism: **ENUMERATE BEFORE CONCLUDING**
+**THE SHAPE:** You examine ONE member of a population — one guard in a ladder, one corpus, one actor in a time window — find what you expected, and state a conclusion about the WHOLE population. **The examination was real and the finding about that member was true.** What was never done is the enumeration that would say whether the member is representative, or even whether it is the relevant one.
+⚠️ **IT IS NOT LAZINESS AND IT DOES NOT FEEL LIKE GUESSING — that is why it survives review.** Each instance below came with a genuine measurement and, twice, with a CONTROL that passed. **The control proved the instrument worked ON THE MEMBER; it could say nothing about the members never looked at.**
+**HOW TO SEE IT:** ⭐ **BEFORE ANY CLAIM OF THE FORM “X DOES NOT HAPPEN” / “NOTHING GUARDS THIS” / “I CAUSED THIS” — WRITE THE POPULATION DOWN AND COUNT IT.** If the population is “every refusal in this function”, read the function. If it is “every corpus that could define this term”, list them. **If it is “every actor who could have caused this”, list the other sessions.**
+**THREE INSTANCES, ALL 2026-09-13, ALL CC-C, INSIDE ONE DAY:**
+1. **`B-REST-SIDES-TO-CACHE` r2** — claimed a zero side EVADES the fabrication guard. Measured the `bid === ask` check; **never read the seven lines above it**, where `non_finite_side` catches it. *Population: the refusal ladder in a function I had already cited twice.*
+2. **Same batch, A3** — called `🔒 LOCKED` undefined after searching `SYSTEM_MANUAL.md` (56 usages, 0 definitions, control passed). **It is defined in the first five lines of the file I was modifying.** *Population: the corpora that could define it.*
+3. ⭐ **The `#1062` pool-exhaustion incident** — told Kyle *“it was almost certainly me”* from a timing correlation: my queries, that window, 58 failures against a background of 2. **CC-B was running 8-15 MINUTE queries with parallel workers in the same window; mine were seconds-long metadata reads.** *Population: **THE OTHER AGENTS SHARING THE DATABASE** — and this is the first instance where the un-enumerated set was PEOPLE, not code.*
+★★ **INSTANCE 3 IS THE ONE TO REMEMBER, because the error ran in the SELF-BLAMING direction and therefore drew no challenge.** ⇒ **an over-attribution is as inaccurate as an under-attribution, and it is more expensive: it aims the fix at the wrong cause while looking like accountability.** ⛔ **Taking blame on a correlation is not humility; it is an unenumerated claim wearing humility's clothes.**
+
 ### `mutation-did-not-apply` — **THE FALSIFICATION STEP SILENTLY DID NOT RUN, AND THE GREEN SUITE WAS READ AS PROOF IT DISCRIMINATES** — **LIVE — NOT IN §13** · mechanism: **ASSERT THE SUBSTITUTION MATCHED**
 **THE SHAPE:** You mutation-test a suite — break the property deliberately and expect red. **The substitution does not match** (CRLF vs LF, a reflowed line, a renamed symbol), so the file is UNCHANGED, the suite runs against the ORIGINAL code, and it reports **all green**. ⛔ **That green is indistinguishable from the green of a suite that genuinely cannot fail — and it is read as the opposite: as proof the fence is real.** ★ **It is `a-guard-that-cannot-go-red` one level up: there the CHECK cannot fail; here the CHECK OF THE CHECK cannot fail.**
 **HOW TO SEE IT:** ⭐ **ASSERT THAT THE SUBSTITUTION ACTUALLY MATCHED, BEFORE RUNNING ANYTHING** — `assert s.count(old) == 1` and fail loud. **A mutation script that edits nothing must ERROR, never proceed.** ⇒ the mechanism is free, it is two tokens, and it is the only thing that has ever caught this.
@@ -869,6 +923,14 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 ★★ **AND THE SHARPEST INSTANCE IS NOT IN THE CODE AT ALL: I ASSERTED A PROPERTY OF MY OWN TEST WITHOUT READING IT.** I told Langston the control had *"two extractions with two markers, so more surface to go stale"* and offered to trade that cost away. **There was ONE marker pair used twice, and the real defect sat underneath the cost I was offering to fix.**
 ⇒ ⛔ **A CLAIM ABOUT YOUR OWN INSTRUMENT GETS THE SAME RULE-29(a) TREATMENT AS A CLAIM ABOUT THE SYSTEM** (Langston's formulation). **Naming a property of your own tooling is a measurement, and it needs the object.**
 ⚠️ **Threshold: five instances, ONE batch — the 2+-distinct-batches leg is NOT met, so this does not move §13 on its own.** Recorded because the within-batch recurrence is itself the signal: **the same shape survived four consecutive corrections by the same author.**
+
+### `reason-laundered-through-the-loop` — **A REASON THAT TRAVELS A → B → A ACQUIRES THE LOOK OF CORROBORATION WITHOUT EVER BEING DERIVED** — **NEW 2026-09-14**, `B-PRICE-SIDE-BY-JOB` `8a-P2` r7/r8 · mechanism: ✅ **CITE-WITH-AUTHOR-AND-MARK-UNDERIVED, or re-derive before use**
+
+**WHAT HAPPENED.** Langston remarked that `f`=0.05 would give the same ceiling as `f`=0.10. I adopted it without deriving it and handed it back to him as my own conclusion retiring an escalation. **On the return trip it read as independent agreement rather than as his own unchecked remark coming home.** He caught it, re-derived it, and withdrew it himself: the ceiling is **quadratic** in `f`, so halving `f` QUARTERS every bound (`2.50 s → 625 ms`), and the claim was true only of the single cell where ship value and derivation coincide by construction.
+
+⚠️ **WHY NO EXISTING GUARD SEES IT, AND THIS IS THE WHOLE POINT: NOTHING IS MISQUOTED AND NOTHING IS FABRICATED.** At each hop the reason is correctly attributed and honestly repeated. **The defect is that A SECOND MENTION IS NOT A SECOND DERIVATION** — and both parties end up believing the other one checked it. `#452` is the same family (a reviewer ruling on a gloss), but `#452` is about DISTORTION in transit; this one survives transit perfectly intact and is still unevidenced.
+
+⛔ **THE RULE:** a reason you did not derive yourself is **cited with its author AND marked underived**, or it is **re-derived before use** — **and the reviewer is not an exemption.** ★ **The reviewer is in fact the DANGEROUS case**, because a reason bearing his name is the one least likely to be checked by either party.
 
 ### `feedback_narrow_predicate_false_absence` — **NEW INSTANCE 2026-09-08** · `B-DRIFT-RUNTIME-PREDICATE`
 I reported a null in the correct FORM — *"searched N commits, found nothing, window stated"* — and it was still wrong, **because I stated the WINDOW and not the PREDICATE.** The search covered **three of the eight** sink-4 entries. Langston's counterexample `8ef70628d` (2026-06-11) changes `bridge/canonical/mapping-regime-strategy.json`, read from disk at `routes.ts:2083-2085`, with nothing under `server/` — OLD=0, NEW=1.

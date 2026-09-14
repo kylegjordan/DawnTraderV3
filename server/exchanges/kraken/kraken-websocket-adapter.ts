@@ -191,14 +191,60 @@ export function parseVenueTimestampMs(raw: unknown): number | null {
  * Shadow-first, exactly as the level-basis funnel: MEASURE that the venue actually sends it before
  * any gate reads it. A zero here would mean the parse is wrong, not that the venue is silent — and
  * those are indistinguishable without the denominator.
+ *
+ * ⛔⛔ F5 (`8c` instrument defect, fixed 2026-09-13) — THE TWO CELLS DO NOT SHARE A POPULATION, AND
+ * UNTIL NOW THE PAYLOAD DID NOT SAY SO. `ticker` is recorded on every v2 ticker frame, i.e. across
+ * the WHOLE subscribed set (hundreds of symbols). `book` is recorded on every book frame, i.e.
+ * across ONLY the symbols that have a book subscribed — measured 2026-09-13 as THREE distinct
+ * symbols in a whole day (`#1060`). Two counters printed side by side under one key invite exactly
+ * the comparison that cannot be made: a rate over hundreds of symbols against a rate over three.
+ * ⇒ EACH CELL NOW CARRIES ITS OWN POPULATION — the distinct symbols behind it — so the denominator
+ * travels WITH the number instead of having to be remembered by the reader.
+ *
+ * ★ AND IT PAYS FOR ITSELF TWICE: `book.distinctSymbols` is the first LIVE reading of how many
+ * symbols actually carry an order book. That figure previously required a whole-day log grep, which
+ * is why the 0.15% book-basis rate read as a property of the book rather than of our subscription
+ * set. An instrument nobody can read is the defect this batch keeps finding.
+ *
+ * ⚠️ `framesWithNoSymbol` is counted rather than dropped: a frame whose symbol we could not read
+ * must not silently shrink the denominator. An unstated omission and an absent one are different
+ * things, and only one of them is safe to divide by.
+ *
+ * ⛔⛔ AND THE POPULATION LIMIT THAT NO PER-CELL FIGURE CAN FIX, STATED HERE SO IT TRAVELS WITH THE
+ * CODE RATHER THAN LIVING IN THE CHANGE LIST: THIS COUNTER IS DEFINED IN THE WEBSOCKET ADAPTER AND
+ * THEREFORE COUNTS WEBSOCKET FRAMES ONLY. A level built from a REST-sourced cache entry never
+ * reaches it at all. ⇒ `ticker present 36,472 / absent 0` (measured 2026-09-13) says the venue
+ * stamps every frame IT SENDS US ON THE SOCKET; it says NOTHING about the REST-priced majority.
+ * ⚠️ Reading it as "we almost always have a venue stamp" is the error it is easiest to make here,
+ * and it is contradicted three fields away by `sideAgeAtLevelBuild.venueStampAbsent` at
+ * 12,792 of 12,810 (99.86%) on the active lane. **Both numbers are correct; they are about
+ * different populations, and only one of them is about level builds.**
  */
-const _venueTsSeen: Record<string, { present: number; absent: number }> = {};
-export function recordVenueTimestampPresence(channel: string, present: boolean): void {
-  const c = _venueTsSeen[channel] ?? (_venueTsSeen[channel] = { present: 0, absent: 0 });
-  if (present) c.present++; else c.absent++;
+interface VenueTsCell { present: number; absent: number; symbols: Set<string>; framesWithNoSymbol: number }
+export interface VenueTsPresenceRow {
+  present: number;
+  absent: number;
+  /** ⛔ THE POPULATION THIS CELL'S COUNTS ARE OVER. Never compare two cells without reading it. */
+  distinctSymbols: number;
+  framesWithNoSymbol: number;
 }
-export function getVenueTimestampPresence(): Record<string, { present: number; absent: number }> {
-  return JSON.parse(JSON.stringify(_venueTsSeen));
+const _venueTsSeen: Record<string, VenueTsCell> = {};
+export function recordVenueTimestampPresence(channel: string, present: boolean, symbol?: unknown): void {
+  const c = _venueTsSeen[channel] ?? (_venueTsSeen[channel] = { present: 0, absent: 0, symbols: new Set(), framesWithNoSymbol: 0 });
+  if (present) c.present++; else c.absent++;
+  if (typeof symbol === 'string' && symbol.length > 0) c.symbols.add(symbol); else c.framesWithNoSymbol++;
+}
+export function getVenueTimestampPresence(): Record<string, VenueTsPresenceRow> {
+  const out: Record<string, VenueTsPresenceRow> = {};
+  for (const [channel, c] of Object.entries(_venueTsSeen)) {
+    out[channel] = { present: c.present, absent: c.absent, distinctSymbols: c.symbols.size, framesWithNoSymbol: c.framesWithNoSymbol };
+  }
+  return out;
+}
+
+/** Test-only reset. Never called from the running system. */
+export function __resetVenueTimestampPresenceForTest(): void {
+  for (const k of Object.keys(_venueTsSeen)) delete _venueTsSeen[k];
 }
 
 export class KrakenWebSocketAdapter extends EventEmitter {
@@ -841,7 +887,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // re-derived here — see `mark-kind.ts` for why re-derivation downstream is unsafe.
       // ⭐ Parse the venue stamp BEFORE the emit so the counter sees every frame, present or not.
       const _venueTs = parseVenueTimestampMs((update as any)?.timestamp);
-      recordVenueTimestampPresence('ticker', _venueTs !== null);
+      // F5: the venue's OWN pair id, so this cell's population is the ticker-subscribed set —
+      // which is hundreds of symbols, and NOT the same population as the `book` cell below.
+      recordVenueTimestampPresence('ticker', _venueTs !== null, (update as any)?.symbol);
       // ⭐⭐ THE SIDES TRAVEL — AND THIS IS THE ONE THAT MATTERS. `bid` and `ask` are parsed ~50
       // lines above from the SAME frame, and the midpoint in `lastPrice` was computed FROM them
       // (`kraken-v2-translator.ts:73`). Until 2026-09-05 they were discarded here, so every
@@ -976,7 +1024,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // venue did not send one" rather than "our parse is wrong" — those are indistinguishable
       // without the denominator.
       const _bookVenueTs = parseVenueTimestampMs((update as any)?.timestamp);
-      recordVenueTimestampPresence('book', _bookVenueTs !== null);
+      // F5: same raw venue pair id as the ticker cell, so the two `distinctSymbols` figures are
+      // counted in ONE space and are genuinely comparable as populations — which is the whole
+      // point, because they are expected to differ by two orders of magnitude (`#1060`).
+      recordVenueTimestampPresence('book', _bookVenueTs !== null, (update as any)?.symbol);
       const krakenPair = update.symbol;
       const internalSymbol = this.mapKrakenPairToInternalSymbol(krakenPair);
       

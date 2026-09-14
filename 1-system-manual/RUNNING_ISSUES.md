@@ -121,6 +121,7 @@
   **NOT CAUSED BY #558 A2** (the obvious suspect, since A2 zeroed the `finalScore` term that is 40% of `getCompositeScore`, which gates ideal-pool membership): the pre-A2 archive tail already shows Available 0-8, matching today. Hypothesis raised and **withdrawn on evidence**.
   ⚠️ **CAUSE OF THE STARVATION ITSELF: NOT ESTABLISHED (rule 24.a).** Membership comes from `getTopPairsWithPool` (`telemetry-aggregator.ts`), which admits only pairs whose composite score is **non-default AND > tolerance** — so the pool is populated by a filter, and how few pairs clear it has not been traced. Candidates not discriminated: the filter is too strict; `pairTelemetry`'s `historyWindowMs` (24h) evicts most pairs; the composite (all four terms pre-trade, computed off a SINGLE `latest` entry — see #591/B-ARM-REMOVAL §2) rarely produces a non-default value. **Do not claim a cause without tracing it.**
   **WHY IT MATTERS:** the dual-pool design's entire premise is that better pairs get looked at more often. **It has never been delivering that** — the scanner has effectively been running one pool with a 4% garnish. Any reasoning that assumed a 70/30 split (including governance docs and dashboards) has been describing an intent, not a behaviour. **HOME: its own investigation batch `B-IDEAL-POOL-STARVATION`, sequenced AFTER B-ARM-REMOVAL** (which is behaviour-neutral and does not touch membership). Owner CC-A. Related: B-ARM-REMOVAL, #591, #594, `adaptive-scan-manager.ts:211-214`, `getTopPairsWithPool`. **OPEN (symptom measured, cause open).**
+  ⭐⭐ **AMENDMENT 2026-09-14 (CC-C measured, Langston re-derived on staging and ruled the placement here rather than a new issue) — THE PROMOTION INSTRUMENT IS NOW POINTED AT THIS, AND IT SAYS THE POOL HAS NOT EXCEEDED CAPACITY IN 23 DAYS.** `rtb_shadow_pool_members` (231,283 rows, 2026-07-14 → live) retains the per-cycle ranked pool with `promoted`, `promotion_rank`, `pool_size`, `sqe_verdict`, `di_at_queue`, `dbs_score_at_queue`, `cross_class_promotion`. ⛔⛔ **BUT `promoted` IS A CAPACITY-TRUNCATION FLAG, NOT A QUALITY VERDICT — `ready_to_buy_service.ts:1950`, `const promoted = i < limit`, where `limit` is the caller's slot count (`:1900`, `return validSignals.slice(0, limit)`).** A reject therefore exists ONLY when the ranked pool EXCEEDS available slots. **MEASURED: last `promoted=false` row 2026-08-22T17:00:46.654Z — ZERO rejects in 23 days across ~44k member rows; the only 37 rejects since 08-15 sit at `pool_size` 6 and 7; weekly `max(pool_size)` since: 3, 3, 4, 6, 2.** ⇒ **THE REJECT SIDE DID NOT STOP BEING WRITTEN — IT STOPPED HAVING ANYTHING TO WRITE. Promotion is not SELECTING; it is admitting everything that shows up**, which is this issue's starvation restated at the promotion hop. ⚠️ **CONSEQUENCE FOR ANY ANALYSIS: `promoted` has ZERO VARIANCE on this window, so it cannot serve as a dependent variable — including the `cross_class_promotion` (crypto-vs-xStock) leg, which needs a rank split a 2-symbol pool rarely produces.** ⚠️ **AND READ ROW COUNTS WITH `count(DISTINCT symbol)`: 24h crypto shows 2,649 promoted rows on SIX distinct symbols across 2,451 cycles — correlated re-promotions, not 2,649 opportunities.** ✅ **`rtb_signals` IS NOT THE FORENSICS TABLE AND ITS `count(*)`=0 MEANS SERVED, NOT UNWRITTEN** — `n_tup_ins` 49,307 = `n_tup_del` 49,307, `n_tup_upd` 1,164,522, live 0: a transient working queue. **The discriminator is the INSERT COUNTER, never the row count**; both CC-C and Langston first read that zero as an absent record. **DISPOSITION: folded into #597 as new evidence — no new batch, no new issue.** `#596` already blocks outcome-sourced ranking on this. Related: #596, #1052.
 - **#596 OPEN 2026-07-28 (CC-A; Langston-reframed — I had this question BACKWARDS) — ★ WHICH VTS OUTCOME SINK IS AUTHORITATIVE AFTER 2026-05-11, AND IS THE JSONL CORPUS *REPRESENTATIVE*? REPRESENTATIVENESS IS THE BLOCKER, NOT VOLUME.**
   **I ASKED THE WRONG QUESTION.** I framed it as *"where did 63% of closed trades go"* — a data-loss hunt. ★ **Langston's reframe: `B-NEW-33_PRE_AUDIT.md:192` documents the JSONL as the FALLBACK — *"Fallback: JSONL files for trades opened < 2026-05-11"* — with the DB PRIMARY from 2026-05-11, which is exactly the date I measured as the DB's first close.** The arithmetic settles it: logs run ≈146/day (Jan–Jun 5) and ≈123/day (Mar 31–Jul 28) — **roughly FLAT** — while the DB runs ≈500/day since 05-11. **That is not a writer that started dropping 63%; it is a LEGACY PARTIAL SINK left running at its old rate beside a primary one. §15 territory, not a recovery job.**
   ★★ **THE REAL RISK, AND IT OUTRANKS SAMPLE SIZE: if the JSONL writer covers only a SUBSET selected by lane or exit path, then 14,521 is a BIASED sample — selection correlated with the outcome variable — and EVERY posterior built on it is wrong REGARDLESS OF SIZE.** Volume can be fixed by waiting; bias cannot be fixed at all. ⇒ **Determine (a) which sink is authoritative post-05-11, (b) whether the JSONL writer still covers every lane/exit path, BEFORE any ranking method consumes it.**
@@ -8662,6 +8663,13 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 **VERIFIED, three ways:** (1) a fresh session reports plugin `dt-typescript-lsp@skills-dir` and the `LSP` tool; debug log *"Loaded 1 LSP server(s) from plugin: dt-typescript-lsp"*. (2) a plain spawn of that exact command answers `initialize`. (3) **END TO END, the question the tool exists for:** find-references on `toCanonical` (`server/services/utils/symbol-canonicalizer.ts:94`) through that exact launch returned **65 references in 10 files** — the same 10 code files `git grep -w` finds, without the 19 non-code files the text search also returns (29 total). ⚠️ **Not yet verified: a call made by a model inside an authenticated session** — the headless CLI's login has expired, and logging in is Kyle's action, not a session's.
 **⛔⛔ THE TRAP THE TEST FOUND, AND IT IS THIS PROJECT'S ERROR CLASS EXACTLY: THE FIRST ANSWER IS INCOMPLETE.** Reference count over time after the server starts: `1s: 2 · 5s: 2 · 10s: 65 · 14s: 65`. Until the server has loaded the project it answers from the ONE open file — **"2 references, both in this file"** — which reads as *"safe to change"* when 10 files use it. ⇒ **a session must repeat the query after ~10 seconds, and treat a same-file-only answer on a first call as unloaded, not as evidence of no callers.** Written into `SEARCH_SURFACES.md` §1 and the CC-B wake prompt.
 
+**⭐ 2026-09-13 (CC-A, Kyle asked directly: *"is it possible for them to load the tool themselves without restarting?"*) — NO, AND THE MEASURE OF ADOPTION CANNOT START UNTIL SESSIONS RESTART.**
+- **No reload verb exists.** `claude plugin --help` (desktop-era binary on this machine) lists `install · enable · disable · update · uninstall · validate · marketplace` and nothing else; **`update`'s own help text reads *"restart required to apply"***. Enabling changes config, not a running session's registered tools.
+- ⛔ **COMPACTION DOES NOT LOAD PLUGINS — measured on this session:** it compacted on 2026-09-13 and still reports no `LSP` tool, having started before the 09-11 14:36Z fix. *(This matters because "restarted or compacted" reads as equivalent and is not.)*
+- ✅ **A NEW SESSION DOES GET IT — measured, two instances:** the scheduled `daily-claude-model-check` sessions that started 2026-09-12 05:18Z and 2026-09-13 05:18Z both carry `"LSP"` in their registered tool list. **These are automated one-shots, NOT the four working sessions**, which have all run since before the fix.
+- **Usage, re-measured 2026-09-13 across every retained transcript (all project folders):** `LSP` tool calls **0**, all history. **Control in the 128 transcripts written since the fix: `Grep` 270.** ⇒ **zero is fully explained by nobody having the tool; it is not evidence about willingness to use it.**
+- **Announced to all four sessions on Discord 2026-09-13** with what it is for, when to use it, the warm-up trap, and the restart requirement. **Remaining: Kyle restarts the working sessions, then (c) the discriminating demo through the tool and (d) the pre-registered 14-day usage measure can begin.**
+
 ### #1039 OPEN 2026-09-11 (CC-A; found verifying `B-CANONICAL-BRIDGE-CHURN` U-1) — ⚠️ **EVERY SCHEDULER-REGISTRY TASK RUNS TWICE AT ITS FIRST INTERVAL AFTER A RESTART: `startTask` ARMS A `setTimeout` AND A `setInterval` FOR THE SAME INTERVAL**
 
 **Mechanism, at the line:** `server/services/scheduler-registry.ts` `startTask` — `initialDelay = runImmediately ? 0 : (task.getInitialDelay?.() ?? task.intervalMs)`, then `setTimeout(… executeTask …, initialDelay)` AND `setInterval(… executeTask …, task.intervalMs)`. With no `getInitialDelay`, both first fire `intervalMs` after process start ⇒ two executions in the same second, then one per interval. `executeTask` has no overlap guard.
@@ -8873,6 +8881,351 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 > `HOME: B-BOOK-SUBSCRIPTION-REACH, owner CC-C, placed in PHASE_19_PLAN at row 3n.m, AFTER 3n.l and BEFORE row 8a.`
 ⚠️ **THE ORDERING IS PROPOSED, NOT SETTLED — Langston has ruled this batch's ordering twice and it is a real question: if the book becomes available for the survivor pool, `3n.l`'s ticker-sides work matters LESS for those 40 and still matters for the wider scan. I am not re-sorting his sequence unilaterally.**
 
+
+---
+
+#### ⭐⭐ AMENDMENT 1 — THE VOLUME MEASUREMENT IS IN, AND IT MOVES THE SCOPE (CC-C, 2026-09-13)
+
+✅ **THIS DISCHARGES LANGSTON'S PRECONDITION VERBATIM** — *"subscribe 3 symbols to `book`, count frames/min against the `ohlc`+`ticker` rate on the SAME shard. Precondition of the scope, not a finding inside it."* **Run OUT-OF-BAND deliberately** (own websocket, public Kraken REST + WS only; no app code, no app database, no app connection pool, no deploy, no restart) because the morning's pool-exhaustion incident makes an in-process probe the wrong instrument for a capacity question.
+
+⛔ **INSTRUMENT COMMITTED SO THIS IS SECOND-PARTY CHECKABLE, NOT REPORTED FACT: `scripts/analysis/book-volume-probe.mjs`.** It reproduces the archiver universe from the same public inputs `universe-loader.ts` uses, samples it, and prints its own population before any rate.
+
+**POPULATION, AND THE CROSS-CHECK ON IT.** Reproduced universe **416 symbols**; the LIVE archiver carries **201 + 205 = 406** (`[B74][crypto-spot][shard*]`, 14:35Z). **2.4% apart** — the runtime DB floor override and the 03:00 UTC cron reload both differ from a 14:30Z reproduction. ⇒ **a cross-check, NOT an exact reproduction, and it is stated as one.**
+
+⛔⛔ **TWO ARMS, BECAUSE ONE RATE CANNOT SERVE BOTH CASES — and this is the correction that matters most.** The universe is steeply right-skewed: BTC/USD is **$64.9M** 24h notional against a **$10,013** floor. ⇒ a stratified random sample estimates the UNIVERSE MEAN correctly and **structurally under-covers the liquid tail**, which is exactly where the FX5 survivor pool lives.
+
+| arm | population | n | ticker frames/sym/min | **book frames/sym/min** | book bytes/sym/min |
+|---|---|---|---|---|---|
+| **A — stratified random** (8 per third by notional) | the 406-symbol archiver case | 24 of 24 acked | 1.0 | **290.9** (min 4.5 · med 251.5 · max 832.4) | 61,818 |
+| **B — top-40 by notional** | the 40-symbol survivor-pool case | 23 of 24 acked | 8.4 | **1,321.5** (min 74.1 · med 951.7 · max 5,467.2) | 265,710 |
+
+Window **10.0 min each**. ⭐ **`XDG/USD` was REFUSED by Kraken on both channels and is EXCLUDED from arm B's means rather than counted as a quiet zero** — the probe gates on the subscribe ACK precisely so an absent leg cannot sit in the denominator looking like silence.
+
+★★ **THE STRUCTURAL FINDING, AND IT IS THE ONE THAT CONSTRAINS THE DESIGN: BOOK CHATTER IS NOT PROPORTIONAL TO TRADING ACTIVITY.** The LEAST-traded third still runs **197.1** book frames/sym/min against **0.3** ticker frames — a **584×** ratio. A depth-10 book update fires on any change at any of twenty price levels, including small orders placed and cancelled, and quiet names have plenty of those. ⇒ **you cannot buy meaningful relief by subscribing only the quiet names, and a "just the cheap ones" variant of this scope is not available.**
+
+**WHAT THE TWO CASES COST — ABSOLUTE, NEVER A MULTIPLIER (see the delta below for why):**
+
+| case | rate used | book frames/min added | on ONE connection | raw book bytes/day |
+|---|---|---|---|---|
+| **40** — FX5 survivor pool | arm B, 1,321.5 | **52,860** | 881/s | **15.3 GB** |
+| **200** | bracketed, 290.9 … 1,321.5 | 58,180 … 264,300 | — | 17.8 … 76.5 GB |
+| **406** — whole archiver universe | arm A, 290.9 | **118,105** | **984/s** (2 shards) | **36.1 GB** |
+
+**CURRENT LOAD ON THE SAME INSTRUMENT, so the comparison is frames-to-frames:** the archiver's 406 symbols generate **~406 ticker frames/min**. ✅ **POSITIVE CONTROL, second instrument, same window:** its own `rows_persisted_60s` reads 190 + 184 = **374 rows/min** — within 8% of 406, so the probe's ticker rate is not an artefact of my sampling. ⇒ **adding `book` to the archiver is ~290× the frames those two connections carry today.**
+
+⛔⛔ **THE BINDING CONSTRAINT IS NOT THE ONE THIS ENTRY ORIGINALLY REASONED ABOUT, AND THAT IS A CORRECTION TO MY OWN TEXT ABOVE.** The entry weighed Kraken's per-connection symbol cap, the Cloudflare ~150-attempts/10-min limit and the REST budget. **None of those binds.** At the 406 case ONE connection carries **~984 frames/second**, each needing a JSON parse and a book-state update **in the main trading process** — the same event loop that runs the FX5 scanner, the MCE and the SQE. ⇒ ★ **THE CONSTRAINT IS EVENT-LOOP TIME IN OUR OWN PROCESS, AND OPENING MORE CONNECTIONS DOES NOT RELIEVE IT, BECAUSE THEY ALL LAND IN THE SAME LOOP.** A sharding design answers the wrong question.
+
+⚠️ **FOUR THINGS STILL NOT ESTABLISHED, stated so this is not read as a plan:** (1) **ONE 10-minute window, on a Sunday** — book traffic is a function of market activity and this is a single draw from it; (2) **depth 10 was ASSUMED, not chosen** — a shallower book cuts both frames and bytes and has not been measured, and it is the most obvious lever; (3) the **warm-up** from subscribe to a usable book is still unmeasured; (4) the **unsubscribe/churn** path is still a NEW BUILD (`unsubscribe` occurs 0 times in the archiver against a control of 5 for `subscribe`).
+
+⭐⭐ **AND KYLE'S RECORDING REQUIREMENT RESOLVES WITHOUT ANY OF THIS — it is a SEPARATE decision and it is the cheap one.** His words: *"If the order book is gonna be used in how we enter and exit, then it needs to be recorded. So we could look back on it… to make sure that we're grabbing the correct number and not grabbing something incorrectly such as, say, the midpoint."* **At 36.1 GB/day of raw book traffic, archiving every frame fills the whole 200 GB plan in FOUR DAYS.** ⇒ ✅ **the requirement is satisfied by storing THE BOOK AS IT STOOD AT THE MOMENT OF DECISION — one small record per decision, a few thousand a day, kilobytes — which audits precisely what he asked (did we take the transactable side, or quietly average it) and is UNCOUPLED FROM THE FRAME RATE ENTIRELY.** **DISPOSITION: folded into `3n.m`'s scope as its own objective, ahead of any subscription change** — it is worth doing even if the subscription reach is cut back, and it does not depend on which case wins.
+
+⛔ **§9.2 DELTA — THREE NUMBERS I GAVE KYLE EARLIER TODAY ARE SUPERSEDED, AND THE ONE THAT MATTERS WENT THE WRONG WAY.**
+> **PREVIOUSLY STATED:** 40 → 6.4× current / **4.6 GB/day** · 200 → 31.8× / 23.0 GB/day · 406 → 64.6× / 46.6 GB/day.
+> **NOW:** 40 → **15.3 GB/day** · 200 → 17.8-76.5 GB/day · 406 → **36.1 GB/day**.
+> **REASON — three distinct errors:**
+> **(a) POPULATION, and it is the `wrong-object` pattern again.** The first probe was **six HAND-PICKED symbols in two tiers — not a sample of anything.** I then extrapolated the 40-symbol survivor-pool case from the **MID** tier, when the survivor pool is the **LIQUID** tier. Measured against the right population it is **15.3 GB/day, not 4.6 — a 3.3× UNDER-statement on the exact case Kyle asked about first.**
+> **(b) DENOMINATOR.** The "× current" multipliers divided by *"~2,500 msg/min"*, read once. **Re-read on the same instrument now: 730-1,305/min over six consecutive minutes.** A denominator that moves by 2× makes every multiplier built on it unreadable ⇒ **this amendment reports ABSOLUTE frames and bytes, and the `~2,441-2,564 msg/min` figure in the body above should be read as one draw, not a constant.**
+> **(c)** The 406 figure came **DOWN** (46.6 → 36.1) because the universe mean (290.9) sits below the mid-tier rate (397.7) I had extrapolated from.
+
+`MISTAKE: wrong-object [B-BOOK-SUBSCRIPTION-REACH] — extrapolated a 40-symbol liquid-skewed case from a hand-picked MID-tier rate and reported it as feasibility; the right population is 3.3× larger.`
+
+
+
+---
+
+#### ⛔⛔ AMENDMENT 2 — **THIS ENTRY'S CENTRAL "WHY" CLAIM IS WRONG. THERE IS A SECOND EXTERNAL SUBSCRIBER AND IT IS THE RTB QUEUE** (CC-C, 2026-09-13)
+
+**WHAT THE ENTRY SAYS ABOVE, AND IT IS THE LOAD-BEARING SENTENCE:** *"NOTHING IN THE PIPELINE EVER ASKS FOR A BOOK. The only caller of `subscribeToSymbols` outside the adapter is `routes.ts:10134`, a health-check route … whose set is `paperPositions + liveTrades` — OPEN POSITIONS ONLY. ⇒ we begin collecting the good data at or after the moment we open a trade."*
+
+⛔ **THAT IS FALSE AT THE OBJECT.** `server/core/rtb/ready_to_buy_service.ts:2424-2426`, at RTB **QUEUE** time:
+```ts
+const { krakenWebSocketAdapter } = await import('../../exchanges/kraken/kraken-websocket-adapter.js');
+if (!krakenWebSocketAdapter.getSubscribedSymbols().includes(normalizedSymbol)) {
+  krakenWebSocketAdapter.i8cSubscribeNewTrade(normalizedSymbol, 'rtb_queued');
+```
+and `i8cSubscribeNewTrade` is `kraken-websocket-adapter.ts:3717` → `this.subscribeToSymbols([symbol])`. Its own failure log names the consequence exactly: *"queue-time book subscribe failed … (open will depth-gate on `no_book` until subscribed)"*.
+⇒ ⭐ **THE SYSTEM ALREADY SUBSCRIBES A BOOK FOR EVERY CRYPTO SYMBOL THAT REACHES THE READY-TO-BUY QUEUE — not at open, but at QUEUE time, deliberately, so the depth gate has a warm book at promotion.**
+
+★ **AND THE LEDGER ALREADY SAID SO. `#506` (2026-07-15, Langston's condition on the B8.5 mini-cycle-3 approve) states it in its first sentence** — *"subscribes the Kraken WS book+ticker at RTB QUEUE time … the fix for the DEPTH_GATE `no_book` ordering inversion"* — and goes on to warn that the candidate set *"churns far wider than open positions (up to the full scanned crypto universe)"*. **I did not search the ledger for this entry's central claim before filing it.** That is §9.5(b-ii), skipped.
+
+⛔⛔ **HOW I GOT IT WRONG, BECAUSE THE MECHANISM IS THE REUSABLE PART: I ENUMERATED BY ONE IDENTIFIER.** I grepped `subscribeToSymbols`, found fifteen hits, and classified every one inside `kraken-websocket-adapter.ts` as "INTERNAL — repair and resubscribe machinery". **`:3717` is inside the adapter and is reached from outside it, through a differently-named public method.** ⇒ **an entry-point census keyed on the CALLEE's name cannot see a caller that goes through a wrapper.** ★ Same family as `#560`'s own lesson, which is in this file: *"one identifier spelling is a sample, not a census."* ⚠️ **`#506`'s path is also stale — it says `server/services/ready_to_buy_service.ts`; the file now lives at `server/core/rtb/`** — so a path-anchored search for it would also have missed.
+
+### ⇒ WHAT THIS CHANGES, AND IT IS MOST OF THE SCOPE
+
+- ⛔ **THE 3-SYMBOL FIGURE IS NOT EVIDENCE THAT "NOTHING ASKS". It is evidence that ALMOST NOTHING REACHES THE RTB QUEUE.** Those are different problems with different fixes, and only one of them is a subscription change. **The measured 3 is now a symptom, not a cause.**
+- ⛔ **THE 40 / 200 / 406 FRAMING MAY BE THE WRONG QUESTION ENTIRELY.** The existing design — subscribe on entry to the queue, which is a small, churning, already-filtered set — is *exactly* the shape Kyle asked for (*"once it survives the filters, we subscribe"*). **It is already built.** ⇒ **`3n.m` must first ask why the queue is thin, not how to subscribe hundreds of symbols.**
+- ✅ **AND THE VOLUME MEASUREMENT (amendment 1) STILL STANDS AND IS STILL DECISIVE** — it is what rules out the 406-wide version that this correction now also shows we do not need.
+
+### ⭐ THE LIVE READING THAT MAKES THIS URGENT — measured 2026-09-13, whole-day `error.log` (00:00:00Z → 15:14:43Z)
+
+| | |
+|---|---|
+| opens today (`closed_trades.opened_at` ≥ today + `active_open_positions`) | **0** |
+| positions currently open | **3 — CRWD/USD, MDB/USD, GEV/USD, ALL xStock**, opened 09-10/09-11 |
+| `DEPTH_GATE_BLOCK` events today | **9** |
+| distinct symbols in them | **1 — UAI/USD, crypto** |
+| reason, all nine | **`stale_book`, ages 5,029 / 5,175 / 5,401 / 5,691 / 5,791 / 7,003 / 8,707 / 10,136 / 11,039 ms against a 5,000 ms limit** |
+
+⇒ **ZERO `no_book`.** The book WAS subscribed and present for the one crypto symbol that reached the final gate — which is amendment 2's claim confirmed on a second instrument — **and it was rejected every time for being 5-11 seconds stale.**
+⚠️ **AND UAI/USD IS NOT A QUIET NAME: my own out-of-band probe measured it at 8,600 book frames in 10 minutes ≈ 860/min, one every ~70 ms.** ⇒ **a book that Kraken is updating fourteen times a second was read by us as 5-11 seconds old, nine times.** That is not market quiet; it points at our own book maintenance or the age computation.
+⛔ **STATED AS A LEAD, NOT A VERDICT (rule 24): n = 9, one symbol, one day. I have NOT established the mechanism** — `getBookForFill`'s `ageMs` basis, the `#507` CRC/desync history, and `#506`'s unbounded-subscription churn are all live candidates and I have ruled none in or out.
+
+**DISPOSITION (§9.4): FOLD INTO `3n.m`, which is re-scoped by this amendment anyway.** Its first question is no longer *"how many books can we afford"* but **"why does the queue-time subscribe yield 3 symbols, and why was the one book that mattered 5-11 seconds stale?"** Related: `#506` (subscription lifecycle), `#507` (book integrity), `#570` (the crypto drought).
+
+`MISTAKE: wrong-object [B-BOOK-SUBSCRIPTION-REACH] — I enumerated book subscribers by the CALLEE's name, so a caller reaching it through a differently-named wrapper read as "internal machinery". The entry's central "nothing asks for a book" claim was false, and the ledger (#506) already carried the correction.`
+
+
+
+---
+
+#### ⭐⭐ AMENDMENT 3 — **KYLE'S DECISION TEST, ANSWERED: THE BOOK IS *NOT* WORKING WHERE IT IS SUPPOSED TO** (CC-C, 2026-09-13)
+
+⛔ **KYLE SET THE TEST HIMSELF, AND IT IS A COVERAGE TEST ON THE RIGHT POPULATION — not the 0.15% figure, whose denominator is every scanned symbol:**
+> *"When we do start capturing the order book for those that reach the RTB pool and subscribe, are we getting a CONSISTENT order book data feed for those signals? And the same question goes for the trades that are opened. … If the order book is working where it is supposed to, then we just leave it as is. [If not] then I say we use the ticker price for everything."*
+
+**MEASURED, 2026-09-13, window = the `0ea7ead5b` process lifetime (restart 15:18:25Z), read at ~15:55Z:**
+
+| the population that is SUPPOSED to carry a book | reading |
+|---|---|
+| symbols subscribed on the TRADING websocket | **1** |
+| — **independent second instrument**, the adapter's own health line | `- Subscribed Symbols: 1` |
+| book frames received, and from how many distinct symbols | **18,895 frames · `distinctSymbols` = 1** |
+| ticker frames on that socket, distinct symbols | 6,544 · **`distinctSymbols` = 1** |
+| `rtb_signals` rows (the live ready-to-buy queue) | **0** |
+| active crypto level builds in the window | **1,900 attempted · 0 accepted from the book · 1,900 `no_book`** |
+| crypto opens today | **0** |
+| open positions | **3 — all xStock**, which never read the Kraken book at all (`depth-source.ts:48-60` reads `xstock_spot_ticker_snap`) |
+| the one crypto symbol that reached the final open gate today | **UAI/USD, blocked 9 of 9, all `stale_book`, 5,029-11,039 ms against a 5,000 ms limit** |
+
+✅ **`distinctSymbols` IS THE F5 FIELD SHIPPED THIS MORNING (`0285c4fb6`).** Before it, this question could only be answered by a whole-day log grep. **It paid for itself inside an hour, on the decision it was built too late to have informed.**
+
+⇒ ⛔⛔ **THE ANSWER TO KYLE'S TEST IS NO.** Coverage of the book over the population that is supposed to have one is **1 symbol**, the queue that drives the subscription is **empty**, the only open positions are a class that does not use the book, and on the single occasion today that a crypto book was actually consulted at an open it was **rejected every time for staleness.**
+⇒ ✅ **HIS RULE THEREFORE SELECTS: USE THE TICKER FOR EVERYTHING.**
+
+⚠️ **AND THE FAIR STATEMENT OF *WHY*, BECAUSE "THE BOOK IS BROKEN" WOULD BE THE WRONG LESSON.** The subscribe-on-queue mechanism (amendment 2) is built and reads correct at the object. **It is not delivering coverage because there is nothing in the queue for it to act on.** ⇒ **the mechanism is not refuted; it is UNEXERCISED.** Kyle's test is on the OUTCOME, and the outcome is unambiguous — but a later reader must not cite this as evidence that queue-time subscription does not work.
+
+★ **WHAT THIS DECISION DOES NOT TOUCH:** the paper FILL still depth-walks the book where one exists (`depth-walk.ts:44`, `depth-source.ts:38-47`) and the open gate still fails closed without one. **This amendment settles which source names a PRICE, not whether the fill simulator uses depth.** Those are separate and the second is measured separately in amendment 1's companion probe: at a $150 order the depth walk is worth **0.00 bps at p50, 1.09 at p90, 5.52 at p99** against an 80 bps taker fee.
+
+---
+
+#### ⚠️ WATCH ITEM SURFACED WHILE MEASURING — NOT A DEFECT CLAIM, AND THE CONTROL IS WHY
+
+**No crypto position has OPENED since 2026-09-12 01:10:43Z — ~39 h at the time of reading**, against a baseline of 1-10 opens/day for the preceding fortnight (including the previous Sunday, which had 10).
+
+⛔ **I ALMOST REPORTED THIS AS A BREAK. THE CONTROL SAYS OTHERWISE.** Inter-open gaps over the last 21 days, n=89: **p50 2.9 h · p90 12.2 h · MAX 38.5 h.** ⇒ **the current gap sits AT the three-week maximum and a gap that long has already happened once.** Beyond p90, and not unprecedented.
+★ **AND THE BOOK IS NOT THE CAUSE:** `rtb_shadow_pool_members` recorded **1,977 rows today**, so candidates are still flowing into the ready-to-buy pool; only **9** of them reached the depth gate. **The stall, if it is one, is upstream of the book** — which is also why fixing book coverage would not address it.
+
+**DISPOSITION (§9.4 — 4, A SCHEDULED REVIEW):** re-read the inter-open gap at the next session start. **If the gap exceeds 48 h it has left the observed envelope and becomes its own investigation**; below that it is inside measured behaviour and nothing is owed. Not minted as an issue: an in-envelope reading with a control that explains it is not a finding (§9.4 disposition 5 reasoning, applied to a watch rather than a withdrawal).
+
+
+
+---
+
+#### ⭐⭐ AMENDMENT 4 — **KYLE'S "MACHINERY OR KRAKEN?" QUESTION: NEITHER. THE BOOK PIPELINE IS HEALTHY AND VERIFIED; THE STALENESS IS AT A DIFFERENT STAGE ENTIRELY** (CC-C, 2026-09-13)
+
+⛔ **THE QUESTION, and it offered two options:** *"Is that an issue with our machinery, or is it that Kraken just doesn't have a frequent enough order book feed? … Is our machinery set up in a way that it cannot process all of those messages that are coming through for each signal?"*
+✅ **THE ANSWER IS A THIRD THING, and both of his options measure NO.**
+
+### (1) KRAKEN'S FEED IS FREQUENT — measured OUT-OF-BAND, independent of our code
+`scripts/analysis/book-volume-probe.mjs`, top-40 population, 10 min: **1,321.5 book frames/symbol/min**; UAI/USD specifically **8,600 frames in 10 min ≈ 860/min, one every ~70 ms.** ⇒ **not a feed-frequency problem.**
+
+### (2) OUR MACHINERY KEEPS UP, AND THE BOOK IS CRYPTOGRAPHICALLY VERIFIED INTACT
+`/api/active-engine/book-integrity`, lifetime `0ea7ead5b` since 15:18:16Z, read at 41.6 min uptime:
+
+| | |
+|---|---|
+| `updatesApplied` (UAI/USD, the one subscribed symbol) | **26,396 = 634.5/min**, one every ~95 ms |
+| `checksumAttempts` / `matches` / `mismatches` | **26,396 / 26,396 / 0 — 100% match** |
+| `crossedDetections` | **0** |
+
+⇒ **we apply ~74% of what an independent socket sees on the same name, and every single applied update reconstructs Kraken's own CRC.** ⛔ **NOT a throughput problem and NOT an integrity problem.**
+★ **AND THIS IS A `#507` UPDATE WORTH RECORDING ON ITS OWN: that item's pre-registered expectation was that mismatch WOULD be the normal reading** (*"Kraken sends price/qty as JSON numbers, so `String(qty)` cannot reconstruct the CRC input — measured 0/40 match live"*). **It is now 26,396/26,396. The precision-formatting fix landed and the checksum is a working integrity signal.** `crossedDetections: 0` against the pre-fix comparator's **32.03%** is the same story on the other counter.
+
+### (3) ⭐⭐ WHERE THE STALENESS ACTUALLY IS — AND IT IS NOT THE BOOK
+The F4 age-mode split shipped this morning (`0285c4fb6`) reads, same window, `active:crypto_spot`:
+
+| stage | n | venue-STAMPED (pushed) | venue-UNSTAMPED (polled) | age p50 | age p95 | max |
+|---|---|---|---|---|---|---|
+| `rtb_refresh` | 15 | **14** | 1 | **0-1,000 ms** | 0-1,000 ms | 906 ms |
+| **`active_signal_birth`** | **2,726** | **0** | **2,726** | **30,000-45,000 ms** | 45,000-60,000 ms | 60,167 ms |
+
+⇒ ⛔⛔ **THE QUOTE THAT SETS OUR ENTRY, STOP AND TARGET IS 30-45 SECONDS OLD AT THE MEDIAN, AND *NONE* OF IT IS PUSHED — 0 of 2,726 carry a venue stamp.** It is the REST bucket cadence (`#977` am. 3+4: the active lane reads the shared cache by symbol with no bucket argument and inherits VTS's 60 s refresh). **A p50 of 30-45 s against a 60 s poll is exactly uniform sampling of that cycle.**
+★ **AND THE SYSTEM DEMONSTRABLY *CAN* DO BETTER AT ANOTHER STAGE: `rtb_refresh` reads sub-second, 14 of 15 pushed.** ⇒ **this is not a capability gap, it is which cache the birth path reads.**
+✅ **F4 IS WHAT MADE THIS VISIBLE. The pooled p50 alone would have shown "30-45 s" with no way to tell a slow feed from a polled one; the `venueStamped n = 0` cell is the half that names the mechanism.** It was built this morning to stop a bimodal average being misread, and its first live reading found a mode nobody had looked for.
+
+### ⇒ WHAT IT IS WORTH, PRICED ON THE SAME INSTRUMENT SO THE COMPARISON IS REAL
+From the divergence probe's age buckets (n=225,104, top-40): a quote **<250 ms** old sits **2.02 bps** from the live book top; one **30 s+** old sits **5.69 bps** (p90 13.52).
+⇒ **the 30-45 s age costs ~4 bps beyond a fresh quote** — against a **~20 bps** typical crypto spread and an **80 bps** taker fee.
+
+### ⇒ THE ORDERING THIS SETTLES, smallest to largest, all measured on our own populations
+| the error | worth |
+|---|---|
+| order book vs ticker, at age 0 | **~2 bps** |
+| depth-walk vs best price, $150 order | **0.00 bps p50 · 1.09 p90 · 5.52 p99** |
+| quote AGE at signal birth (30-45 s vs sub-second) | **~4 bps** |
+| **midpoint vs the transactable side** (`3n`) | **~half a spread ≈ 10 bps** |
+| crypto taker fee | **80 bps** |
+
+⛔ **SO THE RECOMMENDATION IS UNCHANGED AND NOW BETTER EVIDENCED: use the TICKER, and spend the effort on `3n` (the side), which is the largest of the four and already in flight.** ⚠️ **AND THE BOOK'S REPUTATION IS CLEARED: it is not unreliable, it is not slow, and it is not mis-handled — it is simply subscribed for almost nothing, because almost nothing reaches the queue (amendments 2 and 3).**
+
+**DISPOSITION (§9.4 — 2, added to an existing batch): the signal-birth quote age becomes an objective of `3n.l` (`#1056`), which already owns what the price cache stores.** It is the same seam — `3n.l` is about the SIDES being discarded on the REST write; this is about the AGE of the row that write lands in — and splitting them across two batches would have two sessions editing one 🔒 LOCKED module. ⛔ **NOT folded into `3n.m`**, which this amendment has just shrunk to a coverage question.
+
+
+
+---
+
+#### ⭐⭐ AMENDMENT 5 — **THE FOUR-CHANNEL COST TABLE, AND IT REFRAMES THE BUILD: THE CHANNEL WE NEED IS THE CHEAPEST ONE** (CC-C, 2026-09-13)
+
+⛔ **KYLE'S TWO QUESTIONS:** *"Is there a world where we can create machinery to refresh our RTB pool pricing and our open trades pricing fast enough that we are making use of all of the order book pricing we're receiving? … 150 signals in the RTB pool … and probably ten to twenty open trades. Question one, is that possible? Question two, is the amount of work worth what our system would learn?"*
+⚠️ **AND A PREMISE TO CORRECT BEFORE ANSWERING, because it would send the build in the wrong direction: Kyle restated the diagnosis as *"our system can't refresh fast enough."* THAT IS NOT WHAT AMENDMENT 4 MEASURED.** We apply **634.5 book updates/min with 26,396/26,396 checksum matches**. **Throughput is not the constraint.** The signal-birth path reads a **60 s REST cache** while pushed data for the same symbol is already arriving. ⇒ **the gap is WHICH FEED THE READ PATH USES, not how fast we can go.** A capacity build would be the wrong object.
+
+### ✅ CC-B IS RIGHT ABOUT THE TRADE FEED, AND IT IS THE KEY TO THE WHOLE ANSWER
+A resting MAKER order fills when the market **trades through** its price. **The book shows what is RESTING; only a trade print shows what actually EXECUTED, and at what size.** ⇒ a volume-aware maker fill cannot be simulated from the book at all — it needs the `trade` channel. **That is a change of instrument, not a complication, and it turns out to be the cheap one.**
+
+### THE MEASUREMENT — all four on one instrument, SAME 24 symbols, SAME 5-minute window
+`scripts/analysis/channel-cost-probe.mjs`, top-40 population, out-of-band. ⛔ **TWO TICKER VARIANTS, because measuring one would have priced the wrong thing:** production sets `event_trigger: 'bbo'` (`kraken-websocket-adapter.ts:1548`, P-7a/`#1017`), which fires on every best-bid-offer change, not on trades. The same channel cannot carry two triggers on one socket, so the bbo arm ran on its own connection in the same window.
+
+| channel | msgs/sym/min | bytes/sym/min | **pool of 150: msgs/sec** | MB/day |
+|---|---|---|---|---|
+| `trade` — executions with size | **9.8** | 1,774 | **24.6** | **383** |
+| `ticker` (Kraken default, trade-triggered) | 7.3 | 2,286 | 18.2 | 494 |
+| **`ticker` + `bbo` — what we actually subscribe** | **279.1** | 87,502 | **697.7** | 18,900 |
+| `book` depth 10 | **961.5** | 196,312 | **2,403.7** | 42,403 |
+
+★★ **THE SHAPE OF THIS TABLE IS THE ANSWER: `trade` IS THE CHEAPEST CHANNEL OF THE FOUR — 24.6 msgs/sec for the whole 150-symbol pool — AND IT IS THE ONLY ONE THAT CAN DECIDE A MAKER FILL.** The `book`, which buys the least (0.00 bps p50 / 5.52 p99 on a $150 order, amendment 1's companion probe), costs **98× more than `trade`.**
+⚠️ **AND OUR OWN `bbo` TICKER IS 38× THE DEFAULT TICKER** — so "just subscribe the ticker" is not free either: 150 symbols on the variant we currently use is **698 msgs/sec**, against the trading adapter's present **12-22 msgs/sec** (`[B78.1][WS_TICK_RATE]`, 730-1,305/min).
+
+### ⇒ QUESTION 1 — POSSIBLE? **YES, AND THE USEFUL VERSION IS FAR CHEAPER THAN THE ONE BEING IMAGINED.**
+| what you actually want | channel | cost at Kyle's sizing |
+|---|---|---|
+| honest maker-fill simulation, 150 pool | `trade` | **28 msgs/sec** (170 syms) — trivial |
+| fresh quotes on the 10-20 OPEN trades | `ticker`+`bbo` | 20 × 279 = **93 msgs/sec** — easy |
+| fresh quotes across the whole 150 pool | `ticker`+`bbo` | **791 msgs/sec** — real but tractable |
+| depth-walked fills across the 150 pool | `book` | **2,724 msgs/sec, 42 GB/day** — the expensive one, buying the least |
+
+### ⇒ QUESTION 2 — WORTH IT? **SPLIT THE ANSWER; IT IS NOT ONE DECISION.**
+- ✅ **`trade` channel — YES, BUILD IT.** Cheapest of the four and the only honest way to simulate a maker fill. Without it a "maker fill" is an assumption, not a simulation.
+- ✅ **Fresh quotes at signal birth — YES, AND IT IS PLUMBING, NOT CAPACITY.** The pushed feed already arrives for subscribed symbols; `rtb_refresh` already reads sub-second (14/15 pushed). The birth path does not. ⚠️ **Priced honestly it is ~4 bps** (5.69 at 30 s+ vs 2.02 at <250 ms) — **but its real value is DECISION quality, not booking accuracy: a 30-45 s old price chooses which signal we take and when we exit, and those are three of the four jobs and they are LIVE.** That is not expressible in bps and should not be argued as though it were.
+- ⛔ **`book` for depth across the pool — NO.** 98× the cost of `trade` for a measured 0.00 bps at the median.
+
+⛔ **THE ORDER MATTERS AND IT IS THE OPPOSITE OF THE OBVIOUS ONE:** subscribe `trade` (cheap, enables the fill) → fix the birth read (plumbing, no new subscription) → **only then** ask whether `bbo` across 150 is worth 698 msgs/sec. **Starting with the book would spend the most on the least.**
+
+**DISPOSITION (§9.4 — 1, FOLD INTO THE WORK IN HAND):** the cost table and the `trade`-channel finding go into `3n.m`'s scope, which amendments 2-4 have already reduced from *"subscribe hundreds of books"* to *"which feed does each read path use, and what does each channel cost"*. ⚠️ **The maker-fill mechanism itself is CC-B's — he identified it — and this amendment is the costing, not a claim on the build.**
+
+
+
+---
+
+#### ⭐⭐ AMENDMENT 6 — **CC-B CORRECTED ME, AND THE CORRECTION DISSOLVES MY OWN COST OBJECTION** (CC-C, 2026-09-13)
+
+⛔ **WHAT I GOT WRONG: I LET ONE MEASUREMENT ANSWER TWO QUESTIONS.** Amendment 5 priced the book as a **continuous subscription** (2,404 msgs/sec at a 150-symbol pool, 98× the `trade` channel) and concluded *skip it*. ✅ **That holds for choosing a fill PRICE.** ⛔ **It does not touch QUEUE POSITION, and the book is the only source of that.** CC-B: *"When we post a resting buy at P, what decides whether we fill is how much was ALREADY resting at P when we arrived… That number exists only in the book, and only at the instant of placement."*
+
+★★ **AND THE HALF THAT DISSOLVES THE COST OBJECTION: HIS RULE (b) NEEDS ONE BOOK READ AT PLACEMENT, NOT A SUBSCRIPTION.** A few thousand one-shot reads a day is not 2,404 msgs/sec, and Kraken's REST `Depth` endpoint serves a top-10 snapshot with **no subscription at all** — verified in use this afternoon, when it caught my own probe reading the wrong object. ⇒ **rule (b) is INDEPENDENT of `3n.m`'s subscription question.**
+⇒ ✅ **AMENDED RECOMMENDATION: SKIP THE CONTINUOUS BOOK SUBSCRIPTION; KEEP A BOOK READ AT PLACEMENT. Not in tension.**
+
+### THE DISCRIMINATOR, MEASURED — `scripts/analysis/maker-queue-clearance-probe.mjs`
+Out-of-band, own socket, **23 of 24 top-40 symbols seeded, 5.0 min, $150 order** (the measured median of 45 closes in 7 days). For a resting BUY at the best bid: queue ahead = resting USD at the bid; advancement = **SELL-aggressor** USD printing at or below it. **Per symbol, never pooled** — a liquid name and a thin one have opposite answers.
+
+**CLEARANCE** = sell volume at ≤ bid ÷ (resting line + our $150): **p10 0.19 · p50 3.91 · p90 19.12**
+
+| rule | fires on |
+|---|---|
+| (a) prints only | **19 of 23** |
+| (b) prints + book-at-arrival | **16 of 23** |
+
+⛔⛔ **AND A CORRECTION TO MY OWN PROBE'S SUMMARY LINE, WHICH MATTERS MORE THAN THE HEADLINE.** It printed *"(a) over-reports on 3 of 23"*. **THAT IS THE NET, AND THE NET HIDES THE ERROR RATE.** The per-symbol table shows **SEVEN disagreements**: five where (a) fills and (b) does not, and **two the other way** (`XRP/USDT`, `AAVE/USD` — volume cleared the line at the bid with no print strictly through, so (a) MISSES a fill that (b) catches).
+⇒ ★ **THE HONEST NUMBER IS 7 OF 23 — 30% DISAGREEMENT — netting to 13% because the two directions partially cancel. For a simulation the DISAGREEMENT rate is the one that counts: two wrong answers that cancel in aggregate are still two wrong trades.** *(Same shape as `#507`'s own lesson that a net is not an error rate.)*
+⇒ ✅ **(b) EARNS ITS BOOK READ.** At **p10 CLEARANCE 0.19** the thin names are where (a) is worst — the line ahead clears a fifth of the way in five minutes while (a) reports a fill.
+
+### ⇒ ON THE PRICE SERIES THE FILL CHECK CONSULTS (CC-B's Q1)
+**It must consult TRADE PRINTS.** A trade-through test against a **midpoint** is not a trade-through test — it asks whether an AVERAGE crossed our price, which is not an event that occurred. ✅ **And the cost objection does not survive contact: `trade` is the CHEAPEST of the four channels (9.8 msgs/sym/min · 25/sec at a 150 pool · 0.4 GB/day) against the book's 2,404/sec.**
+
+⚠️ **LIMITS, STATED: one 5-minute window, one time of day, 23 symbols drawn from the TOP 40 — i.e. the LIQUID end, which is where rule (a) should look BEST. A thinner population would disagree MORE, not less.** And CLEARANCE is a window aggregate, **not a fill simulation**: it says whether enough volume printed, not whether it printed before the signal went stale.
+
+**DISPOSITION (§9.4 — 2, added to an existing batch): the discriminator and the costs go to the three-way maker-fill debate Kyle commissioned; the MECHANISM and the BUILD are CC-B's — he identified the queue-position point that corrected me. My lane here is costing and discriminators, and it ends at handing them over.**
+
+
+---
+
+#### ⛔⛔ AMENDMENT 7 — **EVERY LADDER-DERIVED NUMBER IN AMENDMENTS 1, 5 AND 6 IS WITHDRAWN. `#507` REINTRODUCED IN MY OWN PROBES** (CC-C, 2026-09-13)
+
+**THE DEFECT.** All four of my probes maintained a book with `if (side.length > 50) side.length = 50` while subscribing `depth: 10`. Kraken's contract, quoted in production at `kraken-websocket-adapter.ts:1055-1058`: *"After each update, truncate your book to the subscribed depth — you will not receive `qty: 0` for levels that fall out of scope."* ⇒ **up to 40 orphan levels per side, by construction, from the first delta.**
+⚠️ **Langston's correction, taken: "never evicts" was one word off — it DID evict, at 5× the subscribed depth. Name it right or the fix lands at 50 again.**
+
+★ **THIS IS `#507`, THE DEFECT PRODUCTION DIAGNOSED AND FIXED ON 2026-08-22** (`truncateBook`, `:3641`; its docblock records ONDO/USD at bid 0.40349 against ask 0.36411). **I read that docblock, copied the maintain-don't-read-the-frame shape from it, and left out the one line it exists to add.**
+
+**MEASURED IN MY OWN CAPTURE — bid ABOVE ask, an impossible state:** TAO/USD 81,694 of 82,937 rows (98.5%) · VVV 41,415/43,993 (94%) · CRV 18,152/21,883 (83%) · UAI 4,840/20,160 (24%) · USDT, SUI, HYPE zero.
+
+⛔⛔ **AND THE ZERO IS NOT A CLEAN BILL (Langston, and this is the part that widens the withdrawal): an orphan bid parked BETWEEN the true best bid and the live ask sits at `side[0]`, reports as the best bid, and NEVER CROSSES.** `bid > ask` is a detector of limited reach. ⇒ **"zero inversions" means "no DETECTED inversion".**
+⇒ ⛔ **SO THE WITHDRAWAL IS BY STATISTIC, NOT BY SYMBOL — no symbol survives:**
+
+| withdrawn | where it was published | why |
+|---|---|---|
+| top-of-book divergence **2.02 bps @ age 0 · 5.69 @ 30 s+**, n=225,104 | amendment 1's companion / the debate | ★ **the age curve IS the orphan-accumulation curve, not a property of the book** |
+| depth: walk cost **0.00/1.09/5.52 bps**, `topNotional` p50 $203, "fits level 1 52.5%" | amendment 5, and quoted to Kyle | the walk reads levels 2..N — exactly where the orphans live |
+| **CLEARANCE p10 0.19 / p50 3.91 / p90 19.12**, and the **7-of-23 (30%)** (a)-vs-(b) disagreement | amendment 6, ruled on by Langston | resting size is ladder-derived |
+| Kalman r1 **87.3%** and r2's freshness arms | the withdrawn record + `PRICE_FEED_MAP` §A | already withdrawn on other grounds; this is a second, independent reason |
+
+⛔⛔ **AND THE CONSTANT-OFFSET ARM IS A POSITIVE CONTROL, NOT A RESULT (Langston, and he is right — I had it filed as the one surviving finding).** **A criterion ENTAILED BY CONSTRUCTION cannot be evidence for the thing it is entailed by.** `x ← x + K(z−x)` has a fixed point at `x = z` for ANY gain, so the arm could only ever return ≈1.0 — it tests that the harness is wired correctly, and it passed. ⇒ **it belongs in the METHOD, not in the findings.**
+
+✅ **SO WHAT SURVIVES THE RUN IS ONE THING AND IT IS NOT A NUMBER: the REFUSAL WAS THE MEASUREMENT.** The `FIXED_OFFSET > 0` guard dropped TAO and VVV rather than computing on an inverted book, and that drop is what exposed `#507` in my own probes. *(The control's reading, for the record and not as a finding: p50 0.990, IQR 0.978-0.995 — insensitive to the ladder defect because the same corrupted book feeds both arms.)* A frozen scalar is added to **both** arms, so the *same* corrupted ladder feeds both filters and the offset is the only difference between them — **insensitive to the defect by construction.** ★ And it agrees with Langston's analytic argument (`x ← x + K(z−x)` has a fixed point at `x = z`, unity DC gain), **which never needed an experiment.**
+
+⛔ **`PRICE_FEED_MAP` §A: mark UNSAFE-TO-CITE with the reason IN PLACE — never delete.** A deletion loses the record that the figure existed and was relied on.
+⚠️ **AND A FALSE ALARM OF MINE, CORRECTED: I told CC-B the divergence figures were "cited in `PRICE_FEED_MAP` §A". They were not** — I read the map at `71336a584` and raised the alarm against a document already revised to r2, which had marked my three withdrawn numbers as withdrawn. **Grep at the CURRENT ref before raising an alarm about a document.**
+
+**THE FIX, LANDED IN ALL THREE SURVIVING PROBES:** `DEPTH_CAP = 10`, truncate to the subscribed depth, with the contract quoted at the line.
+⛔ **THE RE-RUN IS A NEW MEASUREMENT, NOT A VALIDATION** — pre-registered, with **a live REST `Depth` cross-check on top-of-book as the positive control** (the same instrument that caught the $7-median error) and **a crossed-count of 0 as a necessary-but-not-sufficient gate.**
+
+**DISPOSITION (§9.4 — 2, added to an existing batch): `B-PRICE-SIDE-BY-JOB` P4, owner CC-C, before any of these figures is restated.** Cross-references `#507`.
+
+`MISTAKE: symptom-read-as-statistic [B-PRICE-SIDE-BY-JOB] — a 64.3% crossed-book rate was the instrument announcing its own defect; I filed it as a number too odd to publish rather than a defect to chase. The second chance arrived as a silent zero-eval on two symbols and I nearly misread that too — the guard that dropped them WAS the finding.`
+
+
+---
+
+#### ⛔⛔ AMENDMENT 8 — **THE SIDE-VS-FRESHNESS RANKING IS NOT *HELD*, IT IS *UNMEASURABLE FROM THE EXIT-PROVENANCE COLUMNS*. STOP MINING THAT TABLE** (CC-C, 2026-09-13)
+
+**THE POPULATION, NAMED — this was the open question and it resolves cleanly.** `closed_trades`, `closed_at IS NOT NULL`, all three exit-provenance columns non-null, by class × fee mode:
+
+| | closed | checkable |
+|---|---|---|
+| **crypto_spot maker** | 171 | **24** |
+| crypto_spot taker | 206 | 38 |
+| xstock_spot maker | 93 | **7** |
+| xstock_spot taker | 171 | 27 |
+
+⇒ ✅ **THE 24 IS CRYPTO MAKER EXACTLY, AND NO xSTOCK ROW CAN BE IN IT** (xStock maker checkable is 7, separately). Langston's `depth-source.ts:89-93` contamination worry is discharged **by the class counts, not by recollection.**
+
+**WHAT I MEASURED ON IT, definition stated:** `pos_in_spread = (exit_decision_price − exit_ticker_bid) / (exit_ticker_ask − exit_ticker_bid)`; 0 = at the bid, 1.0 = at the ask.
+**n=24 · only THREE sit strictly inside the spread** (CHIP 0.421, ACU 0.667, DASH 0.888; RAY exactly 1.000) · **TWENTY OF TWENTY-FOUR BOOK ABOVE THE ASK**, median ≈1.5, max **7.000** (TRUMP/USD) · `exit_price_producer` is `kraken_ws_book_mid` on **all 24**.
+
+⛔⛔ **AND I AM WITHDRAWING IT AS BEARING ON THE RANKING, BECAUSE THE TWO COLUMNS ARE NOT CONTEMPORANEOUS AND OUR OWN CODE SAYS SO.** At `active-execution-engine.ts:1829-1850`:
+- `exit_decision_price` is **DECISION-TIME** — the payload is *"built ONCE PER POSITION, above the exit-condition evaluation, for every position on every tick — not at the close."*
+- the payload's own `tickerBid`/`tickerAsk` are **`null` on every branch, deliberately**.
+- **the COLUMN `exit_ticker_bid`/`ask` is the ARCHIVER'S WITNESS**, filled *"from `_witness` at the persist site"* (`#911`) — **at the CLOSE.**
+
+⇒ ★ **`pos_in_spread` COMPARES A DECISION-INSTANT PRICE AGAINST A PERSIST-INSTANT WITNESS FROM A DIFFERENT FEED.** 20-of-24 is equally consistent with a transactability defect (the SIDE argument) and with the gap between two capture instants (the FRESHNESS argument) — **and the statistic cannot separate them BY CONSTRUCTION, not for want of a better threshold.**
+⚠️ **THE SAME LIMIT BINDS LANGSTON'S `14 of 24`, whatever its threshold — it rests on the identical two columns. He has since WITHDRAWN it rather than restate it.** ⛔ **And he flags that the corpus carries TWO DISTINCT `14`s — do not reconcile anything to either.**
+
+⇒ ⛔⛔ **SO THE RANKING IS NOT "HELD PENDING A BETTER READ". IT IS UNMEASURABLE FROM THIS TABLE AT ANY THRESHOLD.** Stated here so nobody mines it again.
+
+**WHAT WOULD SETTLE IT, and why it does not exist yet:** a decision-instant quote captured on the SAME read as `exit_decision_price`. ⛔⛔ **AND THE MECHANISM CLAUSE I FIRST WROTE HERE WAS FALSE AT THE REF — CORRECTED 2026-09-13, re-derived at `91e7f4e9f`.** It read *"the ticker handler computes both sides at `kraken-websocket-adapter.ts:682-683` and DISCARDS them to a debug ring buffer."* **`:675-700` IS THE MESSAGE ROUTER** — book routing, `method` handling, heartbeat latency. **There is no ticker-side computation there at all.** ★ **I lifted a line reference out of a docblock (`aee:1837-1840`) and republished it as a code citation without opening the lines** — the one clause in this amendment I did not check at the object, and the one carrying the scope.
+⇒ ⭐ **WHAT IS TRUE, AND IT SHRINKS THE WORK: the sides ARE parsed and DO travel.** `kraken-websocket-adapter.ts:845-865` emits `bid`/`ask`/`sidesCapturedAtMs`; `live-pricing-adapter.ts:1171` writes them; `CachedPrice` carries all three as first-class fields (`price-cache.ts:44-45`, `:63`). **A decision-instant quote is NOT absent — it is in the cache, already dated, and the exit path already reads that cache.**
+⇒ **`3n.n` IS THEREFORE NOT "BUILD A RETENTION PATH" BUT "STAMP THE SIDES THE EXIT PATH ALREADY HAS, ON THE SAME READ THAT PRODUCES `exit_decision_price`."** No new feed, no new subscription. ✅ **The refusal to fill `exit_ticker_bid/ask` FROM THE BOOK still stands and is not what changes.**
+
+⛔⛔ **A BOUND I PUBLISHED HERE IS WITHDRAWN — IT WAS A DECOMPOSITION ERROR (Langston, 2026-09-13).** It read: *"`pos_in_spread` is bounded [0,1] for any side within the quoted book ⇒ a value outside that range CANNOT be a side error at all."* ★ **FALSE — and it was an over-strong claim made while correcting an over-strong claim.** The statistic is not a side term OR a drift term, **it is their SUM.** With `decision = mid`: `bid_d = bid_w + δ_bid`, `ask_d = ask_w + δ_ask` ⇒ `(bid_d+ask_d)/2 = bid_w + S_w/2 + δ̄` ⇒ **`pos = 0.5 + δ̄/S_w`** (identity re-derived independently by Langston). ⇒ **THE SIDE TERM IS CONTAINED IN THE STATISTIC AT 0.5, ADDITIVELY — NOT EXCLUDED BY IT.** What lies outside [0,1] is the SUM; the excess is drift. My inference ran backwards.
+
+⛔⛔ **AND I AM NOT PUBLISHING A REPLACEMENT RATIO EITHER.** I drew a *"drift is 2.6-3.6× the side error"* figure from that identity and **withdrew it before it travelled.** Langston refuses it on four grounds, **one being that my side term is measured AT THE WRONG INSTANT**: `S_w` is the WITNESS spread, while the side error a decision actually incurs is half the spread **AT THE DECISION**, `S_d` — which this table does not carry. **Dividing by the wrong denominator is the same wrong-object class as everything else withdrawn tonight, committed inside the correction of a correction.**
+
+✅ **SO THE RECORD CARRIES THE IDENTITY AND NO RATIO, and the disposition above is unchanged and is the ONLY claim standing on this dataset: the ranking is not settleable from these columns.** ⭐ **`3n.n` would supply `S_d` and make the decomposition computable — a further reason for the row, not a result from it.**
+
+⚠️⚠️ **PATTERN, RECORDED AGAINST MYSELF: THREE SUCCESSIVE OVER-STRONG CLAIMS IN ONE SESSION, EACH MADE WHILE CORRECTING THE PREVIOUS ONE** — the freshness-attenuation mechanism, the [0,1] bound, this ratio. ★ **`CONDUCT.md` §6b already warns why: the correction is UNREVIEWED WORK written by the same session, in the same context, that produced the error.** Each of mine inherited the failure mode one range over. ⇒ **The fix is not more care inside the claim — it is to STOP PRODUCING A HEADLINE NUMBER on a dataset already ruled unable to carry one.**
+
+**DISPOSITION (§9.4 — 3, its own placed item):**
+> `HOME: B-DECISION-INSTANT-QUOTE, owner CC-C, placed in PHASE_19_PLAN at row 3n.n, after 3n.l and before 3n.m`
+
+**WHAT SURVIVES THE WHOLE EVENING, for the record:** the per-feed COSTS (frame counting, no ladder built — unaffected by the `#507` reintroduction), the live-system facts (signal-birth age p50 30-45 s with 0 of 2,726 pushed · `levelReadKind` ~85-90% `last` · one subscribed symbol on two independent instruments · production book integrity 26,396/26,396), and **both candidate fixes UNRANKED with the discriminator identified.**
+
 ### ⭐ #1056 OPEN 2026-09-13 (Langston, Step-4 rider 2 on `3n` row `8c` P1; re-derived at the object by CC-C before filing) — ⛔ **THE REST ADAPTER PARSES THE BID AND ASK, LOGS THEM, AND THEN STORES ONLY THE MIDPOINT**
 
 **AT THE OBJECT, `live-pricing-adapter.ts`:** `:876-877` parse `a[0]` and `b[0]`; `:890` logs `bid=… ask=… mid=…`; `:896` calls `priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull)`. **The sides are discarded one line before the store.**
@@ -9063,7 +9416,106 @@ const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
 
 ---
 
+### ⭐⭐ #1061 OPEN 2026-09-13 (CC-B; Langston re-derived) — ⛔⛔ **THE TARGET GATE'S FLOOR AND CEILING ARE IN DIFFERENT UNITS, SO THE ADMISSIBLE WINDOW CAN BE EMPTY — AND FOR TWO STRATEGIES IT IS**
+⛔⛔ **FILED LATE, 2026-09-13, AND THE LATENESS IS PART OF THE ENTRY.** This number was minted, cited to Kyle, cited in `PRICE_FEED_MAP.md`, in `MISTAKE_PATTERNS.md` and in the design ask — **and never written here.** ⭐ **§9.4 in its own words: *naming is not placing.* A reader grepping the ledger for `#1061` found one cross-reference and no entry.** *(Found while assembling the `B-GEOMETRY-REACH-BASELINE` handover for CC-C, after Kyle said he did not think it was all in the report — he was right.)*
+**THE FINDING.** `min_rr` is a **FLOOR on `reward / risk`**, denominated in **RISK**. `reach_atr_max` is a **CEILING on `reward / ATR`**, denominated in **ATR**. ⇒ **both can hold only if `risk/ATR ≤ reachAtrMax / minRR`** — **a property of the STOP that neither constant mentions.**
+**WORKED CASE — `strong_bull_trend`:** `target_exit_atr_multiplier = 6.0`, stop near 3 ATR, `min_rr = 1.95`. The floor demands `reward ≥ 1.95 × 3 = 5.85 ATR`; the ceiling refuses `reward > 4.0 ATR`. ⇒ ⛔⛔ **`5.85 > 4.0` — THE WINDOW IS EMPTY, which is why `0 of 298,731` evaluations passed.**
+⭐⭐ **THE COUNTER-INTUITIVE COROLLARY, AND IT IS THE POINT: A *HIGHER* QUALITY DEMAND (a larger `min_rr`) MAKES A STRATEGY *MORE* LIKELY TO BE REFUSED AS UNREACHABLE.** The two most demanding strategies on quality have the NARROWEST feasible stops: `strong_bull_trend` 1.95 ⇒ 2.05 ATR, `vwap_pullback` 2.44 ⇒ 1.64 ATR.
+⛔ **WHAT THIS IS NOT:** not a claim that the gates are wrong to exist, and not a claim that `min_rr` should be lowered. **A strategy refused here may be correctly refused.**
+⚠️ **AND THE UNKNOWN-TOKEN FLOORS COMPOUND IT:** `reach_atr_max_unknown_floor = 4.0` beside `min_rr_unknown_floor = 2.88` ⇒ an unrecognised strategy token gets `4.0 / 2.88 = 1.39 ATR`.
+**AUTHORITATIVE DETAIL:** `Claude Comms and Packages/Langston Design Asks/TARGET_GATE_UNIT_MISMATCH_FINDING_r1.md` (artifact `9ec641072`).
+**HOME:** the `(target, ceiling, min_rr)` triple for the two blocked strategies — `PHASE_19_PLAN` `2.4g-3` `B-EXCURSION-RECORD`, **and it is GATED BY THAT ROW'S RATCHET** (no re-derivation from post-deploy holds until realised-excursion data exists).
+
+### ⛔⛔ #1062 OPEN 2026-09-13 (CC-B — MINE, AND THE CAUSE IS MY OWN QUERIES) — **ANALYTICAL QUERIES EXHAUSTED THE LIVE CONNECTION POOL AND ROWS WERE DROPPED**
+⛔ **FILED LATE ALONGSIDE `#1061`, SAME REASON, SAME §9.4 FAILURE.**
+**WHAT HAPPENED.** Long analytical queries (8–15 min, concurrent, parallel workers) against the LIVE database exhausted its connection pool. **202 ticker rows + 28 archive rows were DROPPED.** Alert `fbebd936` resolved with evidence `012cedc0`.
+✅ **SOLE-CAUSE ATTRIBUTION WITHDRAWN:** CC-C measured **58 failures / 15 min against a background of 2**, and **nothing in the system attributes pool load to a session.** ⇒ **my queries are a cause, not provably THE cause.**
+⭐⭐ **THE STANDING RULE THIS PRODUCED, AND IT BINDS EVERY SESSION: NO UNBOUNDED SCANS ON THE LIVE DB. Run them SERIALLY. Timeouts in MINUTES. Full-history work goes to EXPORTED DATA.** ⛔ **A READ-ONLY QUERY IS NOT HARMLESS — IT EATS THE POOL SLOT WRITES NEED.**
+
+### #1063 OPEN 2026-09-13 (CC-B traced it; symptom logged by CC-C 2026-08-01 on `#648`; Langston re-derived the drift and ruled the routing) — ⭐⭐ **THE CODE DECLARES ENUM VALUES THE DATABASE CANNOT STORE — THREE ENUMS — AND THE LIVE ONE SELECTIVELY DISCARDS OUR BETTER-EVIDENCED TRADES.**
+
+**ESTABLISHED, positive-controlled.** `shared/schema.ts:111` declares `pattern_type` with SIX values incl. `ABCD`; `migrations/0001_familiar_pete_wisdom.sql:1`, `drizzle/migrations/2026-04-22-initial-schema.sql:707` and live `pg_enum` all carry FIVE. ✅ **The absence is real, not an instrument gap: `ALTER TYPE … ADD VALUE` DOES appear in the corpus (`strategy_type` 'orb', `pair_regime`, `walter_memory_type`) and returns nothing for `pattern_type`.**
+
+⛔⛔ **SEVERITY IS SELECTIVE, WHICH IS WORSE THAN A BLOCK (Langston's correction to CC-B).** `active-execution-engine.ts:4257` writes `sigMeta.patternType || null`. So `volatility_edge` signals arriving WITHOUT pattern confirmation open normally — **11 rows in `closed_trades`, all `pattern_type` NULL** — while the **pattern-CONFIRMED** subset from `STRATEGY_PATTERN_MAP` (`signal-orchestrator.ts:2952-2960`, `volatility_edge` the SOLE ABCD consumer) can never open: both live sinks reject it (`closed_trades` `:4368`, `active_open_positions` `:4479`). ⇒ **we discard the confirmed half and keep the unconfirmed half, and it reads as NORMAL in every count.** That is why it survived six weeks after being logged.
+
+✅ **SCOPE REQUIREMENT (ii) — ALREADY RUN. THE DRIFT IS THREE-WIDE, NOT ONE** (every `pgEnum` in `schema.ts` vs `pg_enum`, 2026-09-13):
+| enum | declared-in-code, MISSING from DB |
+|---|---|
+| **`market_regime`** | **ALL SIX**: `TREND_FRIENDLY_STABLE` `HIGH_VOLATILITY_UNSTABLE` `RANGE_BOUND_STABLE` `IMPULSE_EXPANSION` `STRUCTURAL_TRANSITION` `HIGH_VOL_IMPULSE` |
+| `pattern_type` | `ABCD` |
+| `tuning_status` | `reverted` |
+
+⚠️ **AND IT DRIFTS THE OTHER WAY TOO — that direction NEVER THROWS, so it is invisible:** `execution_block_reason` (+`MAX_TOTAL_EXPOSURE`), `trading_mode` (+`passive`,`learning`), `strategy_type` (+8), `tuning_status` (+`pending`) hold DB values the code does not declare.
+
+⛔⛔ **`market_regime` IS NOT "LATENT" — CC-B's ROW-COUNT REASONING WAS WRONG AND LANGSTON CALLED IT (his item 3, `#661` leg 3: silence with ZERO OPPORTUNITY reads identical to silence with no code).** Zero rows in `adaptive_learning` / `telemetry_history` / `tuning_event` is a fact about the TABLES. **The WRITER CENSUS says otherwise:**
+- `server/services/telemetry-repository.ts:38-50` declares **`MarketRegimeDB` with TWELVE values** — the six old AND the six new — under the comment *"Database-compatible regime types (stored in PostgreSQL enum)"* and *"Old canonical names also pass through (still in DB enum for backward compat)."* ⭐ **A type whose ENTIRE PURPOSE is to name what the database can store is WRONG about what the database can store, and says so confidently in a comment.**
+- `toDBRegime()` (`:63-65`) maps `'TRANSITION'` → `'STRUCTURAL_TRANSITION'` — **one of the six the DB lacks.** The mapping layer targets an unstorable value.
+- **Live callers exist:** `core/risk/dynamic-sizing-engine.ts`, `services/adaptive-learning-repository.ts`, `services/telemetry-aggregator.ts` (plus `tests/unit/regime_mapping_integrity.test.ts`).
+⇒ **`market_regime` is UNREACHED-OR-GATED, not structurally absent** — it can go hot WITHOUT a deploy, which is a different severity and a different sequencing argument. **`tuning_event` has ZERO server-file references — that one is genuinely writer-less.**
+
+**⛔ THE FIX IS A SCOPE DECISION, NOT A REFLEX MIGRATION (Langston).** `ABCD` is a **harmonic price structure, not a candlestick** ⇒ rule-24 outcome **(1) add the value** vs **(3) it should never have entered the type union** must be RULED in the scope. If it stays: `ALTER TYPE … ADD VALUE` **cannot run in-transaction** — precedent `drizzle/migrations/2026-05-24a` (B79.0n).
+
+**SCOPE REQUIREMENTS, binding (Langston):** **(i)** enumerate the FULL output set of `normalizePatternToCanonical` against the DB enum — **fix the CLASS, not the instance** — ✅✅ **DONE 2026-09-13 (CC-B), AND IT FOUND A SECOND MEMBER THIS ENTRY DID NOT NAME.**
+`PATTERN_TO_CANONICAL` (`canonical-regime-strategy-map.ts:769-781`): **11 input keys → 6 distinct outputs** (five collapse — `THREE_SOLDIERS`/`EVENING_STAR`→`MORNING_STAR`, `DOJI`→`TRI_STAR`, `HAMMER`/`SHOOTING_STAR`→`PINBAR`). The detector emits exactly six names (`pattern-recognizer.ts` `:133`,`:152`,`:194`,`:216`,`:258`,`:301`,`:356`,`:461`) — **no `DOJI`, no `TRI_STAR`.**
+✅ **ON THE REACHABLE POPULATION THE INSTANCE *IS* THE CLASS: exactly ONE reachable output value is unstorable — `ABCD`. This entry's claim holds.**
+⛔⛔ **BUT `TRI_STAR` IS A LATENT SECOND MEMBER: DECLARED in `CanonicalPatternType`, ROUTED TO A LIVE STRATEGY (`hybrid-integration.ts:225` → `adaptive_flow`), AND ABSENT FROM THE DATABASE** — zero hits across `drizzle/` + `migrations/` against a positive control where `THREE_SOLDIERS` returns three. ⇒ **the day anyone adds a DOJI or TRI_STAR detector arm it becomes the SAME defect, silently.**
+⭐ **AND THE OTHER DIRECTION IN ONE LINE: `THREE_SOLDIERS` IS IN THE DB AND CAN NEVER BE WRITTEN** — the canonicaliser turns it into `MORNING_STAR` before any write. A dead DB value.
+⇒ **THREE per-value rulings are now owed, not one: `ABCD` (add or remove) · `TRI_STAR` (add, or delete from the union AND the router) · `THREE_SOLDIERS` (dead DB value — a data question).** *(Full working: `Scope Files/B_GEOMETRY_REACH_BASELINE_WORKING_RECORD.md` §10.2.)* **(ii)** the `pgEnum` census — ✅ DONE, above. **(iii)** ⚠️ **NAME THE OBSERVATION WINDOWS THIS DEPLOY SPLITS — fixing the enum ADMITS A CLASS OF OPENS THAT CANNOT OPEN TODAY**, so the deploy is a population boundary for every open window counting opens: **`B-GEOMETRY-REACH-BASELINE`** (CC-B, window opened 2026-09-13T05:33:17.640Z), **`B-XSTOCK-FEE-CONTRACT` P8 / Arm B** (CC-B, 3-week window from 09-11), **F-G-2's re-open anchor** (CC-C). **Each owner rules split / void / unaffected BEFORE the scope is final** — Langston is stateless across the window and will not reconstruct it at Step 4.
+
+⚠️ **CITE THE WARN AT `active-execution-engine.ts:3495`.** `#648` says `:2513-2516` (a `closePosition` docblock at head) and `ACTIVE_PATH_FLOW.md:249` says `:2228` — **THREE numbers for ONE line across governed docs, the `fix-follows-pointer` shape.**
+
+✅ **NOT FILED, deliberately:** the *removed-from-RTB-not-restored* line is **already dispositioned** at `ACTIVE_PATH_FLOW.md:249` — *"deliberately not restored … fail-loud and working-as-designed … Recorded as edge semantics, NOT filed as a defect"* (rule-24 outcome (2)). **What is NEW is only that `ABCD` makes it DETERMINISTIC rather than transient, converting "lose one signal" into an unbounded re-promote loop** — that is an **amendment to `#1860`'s churn record**, sequenced AFTER the enum fix (which removes the driver), not a new issue.
+⛔ **`#648` item 4 — whether the RTB removal OCCURS AT ALL (Kyle observed EVAA steady at rank 1 while the log claimed removal every 30s) — BLOCKS THE SEVERITY CLAIM, NOT THE MIGRATION. It stays CC-C's.**
+
+⚠️ **MAGNITUDES DELIBERATELY NOT QUOTED AS OPPORTUNITIES.** Line counts on a 30s retry are not distinct lost trades; `#648`'s own counts were withdrawn for a related reason.
+
+➕ **2026-09-13 — LANGSTON'S TWO SHARPENINGS, re-derived by him at `f134dbce7`, FOLDED (nothing new homed):**
+
+✅ **THE GATE IS NAMED, NOT UNKNOWN — so the trigger is FALSIFIABLE.** `telemetry-repository.ts:128-135` `shouldPersist()` = `(mode === 'live') || force`, with a `PERSIST_TELEMETRY=false` kill. ⇒ **`market_regime` goes hot on Phase 21 OR on anyone setting `FORCE_PERSIST=true` — a TEST FLAG. No deploy, no code change.** Record the trigger, not an open question.
+
+⛔⛔ **DIRECTION 2 IS THE HIGHER-SEVERITY DIRECTION, NOT THE DEFERRABLE ONE — CC-B had this backwards.** Code-declares-what-DB-lacks is a **WRITE-path** fault: it THROWS, it is loud, outcome (1). DB-has-what-code-does-not-declare is a **READ-path** fault, and nothing surfaces it because **`as` ERASES AT RUNTIME.** ⭐ **`fromDBRegime` returns ZERO hits whole-tree — there is no reverse mapping layer to fix, there is only an ABSENT one.** Three bare casts carry it: `:117` `record.regime as MarketRegime`, `:340` the same inside the stats loop, `:348` `stats.set(regime as MarketRegime, …)` ⇒ **an undeclared DB value becomes a Map key and its own SILENT STATS BUCKET.** **That is the `#546` shape: it does not go ABSENT, it goes PLAUSIBLE.**
+
+⛔ **DO NOT BUILD A BIDIRECTIONAL RECONCILER, AND DO NOT DECIDE YET (Langston).** *"A reconciler is a mechanism guarding a population nobody has measured — that is the order we keep getting wrong."* ⇒ **the batch's DELIVERABLE is the CENSUS, BOTH DIRECTIONS, PER ENUM, WITH A READ-SITE COLUMN**; the fix is a **per-enum disposition**. Discriminator is cheap and is DATA: `SELECT DISTINCT <col>` on each of the four tables against the declared union. Extra DB value WITH a live reader that narrows it ⇒ real defect, fix is a **total `fromDB*` that REFUSES and NAMES the value** (fail-closed, per-enum, small). Extra values as legacy rows with NO reader ⇒ outcome (3), a data question, not code.
+
+⚠️ **THE FILE'S OWN HEADER IS A DELIVERABLE, NOT A LEFTOVER:** `telemetry-repository.ts:21-24` asserts *"all names now in DB enum"*. **Anyone reading the top of that file gets the false answer with confidence** — same stale-header class as the `active-position-sizing.ts` docblock retracted in September.
+
+➕ **2026-09-13 — CC-B's RULING ON HIS OWN TWO OBSERVATION WINDOWS (scope requirement (iii)), made BEFORE the scope closes because Langston is stateless across the window:**
+- ✅ **`B-GEOMETRY-REACH-BASELINE` (window opened 2026-09-13T05:33:17.640Z) — UNAFFECTED.** Its window watches the unknown-token fail-closed path and the **gate-call** tripwire counter. **The enum failure is at TRADE INSERT, DOWNSTREAM of the gate** — the gate sees the identical signal population either way, so the gate-call denominator does not move.
+- ⛔ **`B-XSTOCK-FEE-CONTRACT` P8 / Arm B (3-week window from 2026-09-11) — SPLIT AT THE DEPLOY.** ⚠️ **CC-B nearly ruled this UNAFFECTED on a failed instrument:** `signal_eval_archive_2026_09_12` returned zero `volatility_edge` xStock rows, **but the positive control showed that partition holds NO `xstock_spot` rows at all** — the zero was the apparatus. **Re-measured on the August partition (proven to hold xStock): `volatility_edge` runs on xStock, 194 rows vs 94,501 crypto.** ⇒ the newly-admitted pattern-confirmed opens land in P8's population. ⛔ **MAGNITUDE CORRECTED (Langston rider, and my figure measured the WRONG QUANTITY): 194 is `volatility_edge` xStock **EVALUATIONS** on one month's partition. The class the fix newly admits is the **pattern-confirmed subset THAT OPENS** — strictly smaller, and UNMEASURED.** ⇒ **cite 194 as an UPPER BOUND on the affected class, never as “~0.2 %”.** ⭐ **The SPLIT does not depend on the number, which is exactly why it must stay conservative: you cannot defend a magnitude you have not measured, and you do not need one to justify not pooling.** P8's criterion is a SHARE against a 1.0 % threshold at n≥300, so any numerator change is material. Report pre- and post-deploy populations separately; do NOT pool.
+- ⛔ **F-G-2's re-open anchor is CC-C's and CC-B does NOT rule on it.**
+
+⛔⛔ **2026-09-13 — SCOPE SUBSTANTIALLY NARROWED BY KYLE, AND HE IS RIGHT ON EVERY COUNT. THE ENTRY ABOVE OVERSTATES THIS. READ THIS BLOCK FIRST.**
+
+⛔ **(a) THE REGIME ALARM IS WITHDRAWN ENTIRELY.** I reported `market_regime` as undeclared drift with "ZERO overlap". **The old names are a DOCUMENTED LEGACY→CANONICAL CONVERSION LAYER, not unknown drift:** `canonical-regime-strategy-map.ts:621-634` `GHOST_REGIME_NORMALIZATION` maps `BULL_STABLE→TREND_FRIENDLY_STABLE`, `BEAR_VOLATILE→HIGH_VOLATILITY_UNSTABLE`, `LOW_VOL_CHOP→RANGE_BOUND_STABLE`, `EXTREME_NOISE→RANGE_BOUND_STABLE`, `TRANSITION→STRUCTURAL_TRANSITION`. Every other live hit is a **docstring or a comment** (`expectancy.ts:196/:399`, `market-regime.ts:10`, `score-calculator.ts:180-187`, `cost-telemetry.ts:100`). **The DB enum holding the old taxonomy is BACKWARD COMPATIBILITY FOR HISTORICAL ROWS, which the code knows about and converts. Kyle: *"we went through many batches where we chopped this out … if there's anything left it's because it's marked for removal or commented out."* Confirmed at the object.** ⇒ **NOT in the active trading path. NOT a defect. NO work.**
+
+⛔ **(b) "THREE-WIDE ENUM DRIFT" IS WITHDRAWN. THE REAL DEFECT IS ONE ENTRY IN ONE MAP.** `signal-orchestrator.ts:2952-2960` `STRATEGY_PATTERN_MAP` has **EIGHT** entries; **SEVEN name values the DB enum can store**. One does not — `'volatility_edge': 'ABCD'`. ⭐ **And the line IMMEDIATELY ABOVE it reasons explicitly about storability** (`'adaptive_flow': 'MORNING_STAR', // THREE_SOLDIERS canonicalizes to MORNING_STAR`). **That is the entire defect: one map entry that skipped the canonicalization its neighbour applied.** Not systemic.
+
+⛔ **(c) `ABCD` IS A STRATEGY *AND* A PATTERN LABEL, AND I LED WITH THE WRONG ONE.** `bridge/canonical/DawnTrader_Regime_Strategy_Signal_Pattern_Mapping.md:20` — **`abcd_long | ABCD Long | QUANT | — |`: a QUANT strategy with NO pattern**, exactly as Kyle said. `:25` — `volatility_edge | HYBRID | ABCD |`. The app's canonical pattern set (`PATTERN_TO_CANONICAL`, `canonical-regime-strategy-map.ts:769-781`) is SIX (adds `ABCD`, `TRI_STAR`); the DB enum is a different five. **The scope must still rule (1)-vs-(3) on whether a harmonic structure belongs in `pattern_type`, but the blast radius is ONE map entry, not a taxonomy.**
+
+⚠️ **(d) MY `admitted` COUNTS WERE MISLABELLED WHEREVER THEY APPEAR IN THIS ENTRY AND IN `#1061`.** `signal-eval-archiver.ts:12-19` defines it: **`'admitted' — passed all gates; this is a real opportunity`** — a per-strategy × per-pair **EVALUATION**, written EVERY SCAN CYCLE by two hook sites. **It is NOT an RTB entry and NOT a trade.** I wrote "mean_reversion 159 trades" and "508 admitted" as if they were opportunities or opens. **Kyle: *"there's no way in paper mode that we had a thousand plus RTB pool signals."* He is right — they are re-evaluations of a small pair set across cycles. The distinct-pair count is UNMEASURED and no count in this entry may be read as trades.**
+
+⭐⭐ **THE METHOD FAILURE, since it is the reusable part and it is the SAME ROOT as every other withdrawal today: I read a column value's NAME (`admitted`) and assumed its semantics instead of reading the docblock ten lines from the top of the file that DEFINES it — then built counts, a severity and a batch on the assumption.** Kyle's instruction stands: **investigate before filing, because a wrong finding costs more than the investigation it skipped.**
+
+➕ **2026-09-13 — LANGSTON'S CORRECTIONS TO THE NARROWING ITSELF (re-read at `0ea7ead5b`). THREE LAND; MY (a) SENTENCE WAS WRONG TWICE AND MY (b) NARROWING WAS TOO NARROW.**
+
+✅ **(a) THE WITHDRAWAL STANDS — AND BOTH FIXES STRENGTHEN IT.** `GHOST_REGIME_NORMALIZATION` has **TEN** entries, not the five I quoted: I dropped `BULL_VOLATILE` `BEAR_STABLE` `HIGH_VOL_CHOP` `MIXED_TRANSITION` `HIGH_VOL_IMPULSE` (re-counted: 10). And **“every other live hit is a docstring” is FALSE** — `:655-660` **`normalizeRegime` READS the map at runtime**, is called at `:1005`, re-exported by `core/schema/trade-model.ts:23` and imported by `middleware/canonical-validation.ts:17`. ⇒ **it is a LIVE CONVERTER, not a comment — a stronger reason to withdraw the alarm than the one I gave.**
+⚠️ **RESIDUAL FOR THE RECORD, NOT FOR WORK (Langston): the converter is legacy→canonical ONLY — there is NO INVERSE ⇒ the enum is READ-compatible and WRITE-incompatible.** ⛔ **“No writer” is an ASSERTED ABSENCE. Record it as *LATENT, WRITER CENSUS UNRUN* — NOT as “no defect”.**
+
+⛔ **(b) REQUIREMENT (i) IS DISCHARGED AND AGREES WITH ME — BUT “ONE ENTRY IN ONE MAP” IS NOT THE FIX SIZE, AND THAT NARROWING WAS ITSELF `fix-follows-pointer`.** `normalizePatternToCanonical` output set (`:769-790`) = `PINBAR|ENGULFING|MORNING_STAR|ABCD|TRI_STAR|INSIDE_BAR|null`; DB holds five; missing is exactly `ABCD` — **one instance, not a class.** ⭐ **But the unstorable value has FOUR DECLARATION SITES:** `canonical-regime-strategy-map.ts:310` (the tree), `hybrid-compatibility-registry.ts:18`, `signal-orchestrator.ts:2965`, `volatility-edge.ts:264` (the strategy emits `pattern:'ABCD'` itself). ⛔ **AND `selectContextAwareStrategy:860`'s `hybrid_fallback` returns the strategy's DECLARED pattern — a SECOND LIVE PRODUCER independent of `STRATEGY_PATTERN_MAP`.** ⇒ **canonicalize-away is a FOUR-SITE change AND would relabel a harmonic measured-move as a candlestick.**
+
+✅ **(c) ACCEPTED.** `:20` `abcd_long` QUANT/no-pattern, `:25` `volatility_edge` HYBRID/`ABCD`, verified. *(The same doc has `adaptive_flow → TRI_STAR` where code says `MORNING_STAR`; doc is v3.0.0 dated 04-12 — stale, deliberately NOT a line item.)*
+
+⛔⛔ **(d) ACCEPTED — BUT THE LESSON I DREW DOES NOT HOLD, AND THE REAL ONE IS BETTER.** I said “read the docblock”. ⚠️ **`signal-eval-archiver.ts:13` SAYS *“'admitted' — passed all gates; this is a real opportunity.”* THE DOCBLOCK ITSELF SAYS “OPPORTUNITY” ⇒ reading it would have produced THE SAME ERROR.** ⭐⭐ **What distinguishes an evaluation from an opportunity is the row's GRAIN and WRITE CADENCE — one row per strategy × pair × SCAN CYCLE — and that lives AT THE HOOK SITES, not in the definition.**
+✅ **THE RULE: NAME THE GRAIN AND THE CADENCE BEFORE QUOTING A COUNT. THE COLUMN NAME *AND* ITS DOCBLOCK GLOSS ARE BOTH NARRATIVE.**
+
+⭐ **RULING — THE ROW SURVIVES, THE BATCH DOES NOT.** Reachable, so not latent like the other two: `pattern-recognizer.ts:461` emits `ABCD`, `volatility_edge` consumes it, both sinks reject it. **Disposition (2): an ITEM, not a batch.** `HOME: item on 3m-ENUM, owner CC-B, stays where it sits ahead of 3n.` **FIRST OBJECTIVE IS THE SIZING MEASUREMENT, NOT A MIGRATION: has the pattern-confirmed path ever fired, and when the insert is rejected does anything SURFACE or is it swallowed?** If it has fired ⇒ a one-objective `ALTER TYPE … ADD VALUE` rider on the next CC-B migration. **Keep `(1)`-vs-`(3)` live: `ABCD` is harmonic, not a candlestick.**
+
+⛔ **MAKER-FILL IS NOT MINE AND IS NOT HERE.** Folded into **`B-PRICE-SIDE-BY-JOB` row `3n`, owner CC-C, as job 3 (triggering), second lane** — the fee-rebate channel is why it outranks this item. *(Langston's unverified probe-first hypothesis, recorded so it is not lost: the `validate=true` leg already at `active-execution-engine.ts:4066` contacts Kraken on every paper open — if Kraken evaluates `oflags=post` under validate, that returns the venue's OWN would-you-reject verdict and the counterfactual stops being an inference.)*
+
+> `HOME: B-PATTERN-ENUM-DRIFT, owner CC-B, PHASE_19_PLAN row 3m-ENUM, ahead of 3n B-PRICE-SIDE-BY-JOB` — **slot RATIFIED by Langston** (the live half is bleeding now; `3n` is a design decision with no live loss). Root cause **annotates `#648`** (§9.5(b-ii)) — no duplicate minted. **OPEN (homed, slot ratified).**
+
 ### #1052 OPEN 2026-09-12 (CC-B, Kyle-directed; problem and plan from Coltrane, arithmetic re-derived by CC-B) — ⭐⭐ **THE REACHABILITY CEILING IS A HOLDING-HORIZON STATEMENT, AND OURS DISAGREES WITH ITSELF THREE WAYS**
+> ⛔⛔ **NUMBER COLLISION — ANNOTATED 2026-09-13 (CC-B). TWO DIFFERENT ISSUES CARRY `#1052` IN THIS FILE: THIS ONE (the reachability ceiling / `B-GEOMETRY-REACH-BASELINE`) AND CC-C's `addFamilyPoolSurvivors` has-zero-callers entry.** Per this ledger's own precedent **neither is renumbered**. ⇒ ✅ **A BARE `#1052` CITATION IS AMBIGUOUS FROM HERE ON — qualify it as `#1052 (reachability)` or `#1052 (addFamilyPoolSurvivors)`.** ⚠️ **Every document in the `B-GEOMETRY-REACH-BASELINE` chain cites the bare form.** *(Found by CC-C; each of us annotates our own.)*
 
 **BATCH: `B-GEOMETRY-REACH-BASELINE`, change-class `architecture`, scope at `Claude Comms and Packages/Scope Files/B_GEOMETRY_REACH_BASELINE_SCOPE.md`. Plan row `2.4g-2`.** ⛔ **ONE batch: the reward-to-risk work and the reachability work are the same dial and are not separable. The reachability leg absorbs what had been scoped as a separate CC-C batch.**
 

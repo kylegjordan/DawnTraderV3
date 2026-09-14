@@ -2628,6 +2628,11 @@ export class SignalOrchestrator {
             bookAsk: _agBook && _agBook.asks.length > 0 ? _agBook.asks[0].price : null,
             tickerBid: _lbCache?.bid ?? null,
             tickerAsk: _lbCache?.ask ?? null,
+            // ⛔ F2 (2026-09-13): without this the `bothPresent` count pools two structurally
+            // different comparisons — ticker-channel sides vs the book, and the book's own top vs
+            // an older copy of itself (`kraken_ws_book_mid` writes the book's top into these very
+            // fields). The full mechanism is in the `level-basis.ts` section docblock.
+            tickerSidesSource: _lbCache?.lastSource ?? null,
           });
         }
 
@@ -2684,7 +2689,7 @@ export class SignalOrchestrator {
         // ⚠️ ONE CEILING GOVERNS BOTH LEGS, stated with its number as `touch-price.ts:50` requires
         // of whoever wires this: both rungs are judged at LEVEL_BASIS_OBSERVATION_MAX_AGE_MS.
         // A per-leg ceiling is P-8a's, not this row's.
-        recordTouchSelection({ lane: 'active', assetClass: _lbClass }, _lbSel);
+        recordTouchSelection({ lane: 'active', assetClass: _lbClass, stage: 'active_signal_birth' }, _lbSel);
       }
 
       const indicators = {

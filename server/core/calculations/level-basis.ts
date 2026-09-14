@@ -344,6 +344,22 @@ export interface LevelBasisFunnelKey {
  */
 export interface LevelBasisRungKey extends LevelBasisFunnelKey {
   rung: LevelBasisRung;
+  /**
+   * ⛔⛔ REQUIRED, AND IT IS A KEY DIMENSION — NOT A LABEL (row `8a-P1`, 2026-09-13).
+   *
+   * The side-age probe has separated its populations by `stage` since it was built (`sideAgeKey`
+   * below). The funnel did not, so `8a-P1`'s EXIT walks would have landed in the same cells as
+   * signal birth — the pooling `LevelBasisLane`'s own docblock exists to make impossible, in the
+   * instrument built to prevent it.
+   *
+   * ⛔ AND THE FIRST FIX PROPOSED FOR IT WAS THIS FIELD ALONE, WHICH FIXED NOTHING: `keyOf` builds
+   * the map key and would have gone on ignoring it, so the TYPE would have advertised a separation
+   * the KEY did not implement. `keyOf` carries it now. A type is not a key.
+   *
+   * REQUIRED rather than optional so every call site must name its stage; a default would let a new
+   * caller inherit whichever population happened to be first.
+   */
+  stage: LevelBasisStage;
 }
 
 /**
@@ -364,6 +380,14 @@ export interface FunnelOutcome {
    * than invent an `unknown` bucket that a reader could not tell from a real one.
    */
   acceptedSource?: string;
+  /**
+   * The ACCEPTED quote's own age and which leg carried it (row `8a-P1`, P1-4). Both optional and
+   * both required TOGETHER — an age with no leg cannot be bucketed, and a leg with no age has
+   * nothing to bucket. A walk supplying neither is simply not counted in the age histogram, the
+   * same discipline `acceptedSource` already follows.
+   */
+  acceptedAgeMs?: number;
+  acceptedLeg?: 'book' | 'ticker';
 }
 
 interface FunnelCell {
@@ -375,17 +399,55 @@ interface FunnelCell {
    * "correct until it isn't" the field was added to remove. Structural now.
    */
   rung: LevelBasisRung;
+  /** Stored for the same reason `rung` is: a consumer must never parse it back out of the key. */
+  stage: LevelBasisStage;
   accepted: number;
   byReason: Record<FunnelRefusal, number>;
   /** `<basis>:<producer>` -> count, for ACCEPTED walks only. Never part of `attempted`. */
   byAcceptedSource: Record<string, number>;
+  /**
+   * ⛔⛔ THE ACCEPTED QUOTE'S OWN AGE, SPLIT PER LEG — NEVER POOLED (row `8a-P1`, P1-4).
+   *
+   * The side-age probe measures the TICKER leg's CACHE age, which is not the age of the quote the
+   * ladder ACCEPTED — on a book-carrying symbol those are different objects. This is the accepted
+   * quote's own `ageMs`.
+   *
+   * ⛔ SPLIT `book` / `ticker` BECAUSE POOLING THEM REBUILDS F4 ONE FIELD OVER: book ages are
+   * sub-second and ticker ages carry a 2/15/30/60 s poll cadence, so one histogram over both is
+   * bimodal by construction and its quantiles describe neither.
+   *
+   * ⚠️ DERIVABLE RANGE, STATED SO IT IS NOT OVER-READ: the first edge is 1,000 ms and the ladder
+   * refuses above `maxAgeMs`, so a refusal rate is derivable ONLY for candidate ceilings inside
+   * [1,000 ms, that ceiling], and BUCKET-BOUNDED — never as an interpolated point.
+   */
+  acceptedAge: { book: number[]; ticker: number[] };
+  acceptedAgeMaxMs: { book: number; ticker: number };
+  /**
+   * ⛔⛔ THE MAX'S OWN DENOMINATOR, PER LEG — ADDED 2026-09-14 BECAUSE THE MAX ALONE IS `#546`
+   * INSIDE THE INSTRUMENT THIS BATCH BUILT TO PREVENT `#546` (Langston, Step-7 read).
+   *
+   * `acceptedAgeMaxMs` is seeded `{ book: 0, ticker: 0 }` and raised ONLY on an accepted
+   * observation. So **`book: 0` and "no accepted book sample" ARE THE SAME CELL** — and the first
+   * live read published `ageMax book 0` beside `accepted: 0`, where the zero was the INITIALISER
+   * and read as a measurement.
+   * ⇒ with `n`, an empty leg is `n: 0` and the max is unreadable-by-construction rather than
+   *   plausible-and-wrong. A reader that ignores `n` and quotes the max is making a claim the row
+   *   visibly refuses to support.
+   */
+  acceptedAgeN: { book: number; ticker: number };
 }
 
-function emptyCell(rung: LevelBasisRung): FunnelCell {
+function emptyCell(rung: LevelBasisRung, stage: LevelBasisStage): FunnelCell {
   return {
     rung,
+    stage,
     accepted: 0,
     byAcceptedSource: {},
+    // ⛔ `newBuckets()` is declared below and is the SAME edge set the side-age probe uses, so a
+    // reader comparing the two histograms is comparing like with like.
+    acceptedAge: { book: newBuckets(), ticker: newBuckets() },
+    acceptedAgeMaxMs: { book: 0, ticker: 0 },
+    acceptedAgeN: { book: 0, ticker: 0 },
     byReason: {
       no_book: 0,
       one_sided_book: 0,
@@ -403,14 +465,32 @@ function emptyCell(rung: LevelBasisRung): FunnelCell {
 const _funnel = new Map<string, FunnelCell>();
 
 function keyOf(k: LevelBasisRungKey): string {
-  return `${k.lane}:${k.assetClass}:${k.rung}`;
+  // ⛔ `stage` IS IN THE KEY, not merely on the type — see `LevelBasisRungKey.stage`. Ordered
+  // lane:class:stage:rung so it reads the same way round as `sideAgeKey`'s lane:class:stage.
+  //
+  // ⛔⛔ AND IT REFUSES RATHER THAN MINTING `…:undefined:…`, WHICH IS NOT DEFENSIVE PADDING —
+  // IT IS THE ONE POPULATION THAT CAN REACH HERE WITHOUT A STAGE. `tsconfig` EXCLUDES TEST FILES,
+  // so a required field is NOT enforced on them: the first test run after `stage` was added minted
+  // `active:crypto_spot:undefined:book` and would have gone on doing so. **This file already
+  // records being bitten by exactly that** — `LevelBasisFunnelRow.byReason`'s docblock, on a test
+  // reading a property tsc would have rejected.
+  // ⇒ every PRODUCTION caller is type-checked and structurally cannot trip this; an un-checked
+  //   test can, and should be told rather than silently keyed into a bucket named after a bug.
+  if (!k.stage) {
+    throw new Error(
+      `[level-basis] recordLevelBasisOutcome requires a stage — got ${String(k.stage)} for ` +
+      `${k.lane}:${k.assetClass}:${k.rung}. A missing stage would pool this walk into a key ` +
+      `named 'undefined' and the pooling is what the dimension exists to prevent.`,
+    );
+  }
+  return `${k.lane}:${k.assetClass}:${k.stage}:${k.rung}`;
 }
 
 export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOutcome): void {
   const id = keyOf(key);
   let cell = _funnel.get(id);
   if (!cell) {
-    cell = emptyCell(key.rung);
+    cell = emptyCell(key.rung, key.stage);
     _funnel.set(id, cell);
   }
   if (result.ok) {
@@ -420,6 +500,15 @@ export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOu
     // a real one, and the sum of this map is deliberately allowed to be < accepted.
     if (result.acceptedSource) {
       cell.byAcceptedSource[result.acceptedSource] = (cell.byAcceptedSource[result.acceptedSource] ?? 0) + 1;
+    }
+    // P1-4: the accepted quote's own age, into its OWN LEG's histogram. `!= null` so a legitimate
+    // 0 ms is recorded rather than dropped by truthiness - the same predicate the stamp selection
+    // in `touch-price.ts` uses, and for the same reason.
+    if (result.acceptedAgeMs != null && result.acceptedLeg) {
+      const leg = result.acceptedLeg;
+      cell.acceptedAgeN[leg]++;
+      cell.acceptedAge[leg][bucketIndex(result.acceptedAgeMs)]++;
+      if (result.acceptedAgeMs > cell.acceptedAgeMaxMs[leg]) cell.acceptedAgeMaxMs[leg] = result.acceptedAgeMs;
     }
     return;
   }
@@ -469,11 +558,29 @@ export interface LevelBasisFunnelRow {
    * break the moment a lane or class contains one, and would read as working until it did.
    */
   rung: LevelBasisRung;
+  /** ⛔ EXPLICIT, NEVER PARSED OUT OF `key` — same rule as `rung`. */
+  stage: LevelBasisStage;
   /** What `byReason` is ABOUT. Names the object, so the vocabulary cannot be misattributed. */
   reasonsAbout: 'book_top' | 'ticker_sides';
   attempted: number;
   accepted: number;
   refused: number;
+  /**
+   * ⛔⛔ THE SELF-SYNTHETIC REFUSALS, ON THEIR OWN LINE — AND THEY COUNT US, NOT THE VENUE
+   * (row `8a-P1`, P1-13; Langston's condition).
+   *
+   * `price-cache.ts`'s side carry has a `?? price` arm: with neither a supplied nor an existing
+   * side it writes `bid === ask === price`, a synthetic zero-spread book of OUR OWN making, which
+   * `buildLevelBasis` refuses as `locked_or_synthetic_book` BEFORE it ever reaches the age check.
+   * ⇒ **a refusal rate that includes this is part venue and part us, and the two do not belong in
+   * one number.** `RUNNING_ISSUES:9239` already names it the fingerprint of an entry whose sides
+   * were never observed.
+   * ★ It is published as a COUNT beside `refusedExcludingSelfSynthetic` rather than merely
+   * documented as un-poolable, so the correct rate is the one that is easy to compute.
+   */
+  selfSyntheticRefusals: number;
+  /** `refused` minus `selfSyntheticRefusals`. ⛔ THE FEED-FACING REFUSAL RATE USES THIS NUMERATOR. */
+  refusedExcludingSelfSynthetic: number;
   /**
    * ⚠️ THE KEY SET DEPENDS ON THE RUNG — see `reasonsAbout`. `book` rows carry `FunnelRefusal`
    * (⛔ including `book_not_eligible`, which the type used to omit while the runtime object carried
@@ -493,6 +600,13 @@ export interface LevelBasisFunnelRow {
    * denominator equality survives — his constraint.
    */
   byAcceptedSource: Record<string, number>;
+  /** P1-4 — the ACCEPTED quote's own age per leg, on `SIDE_AGE_BUCKET_EDGES_MS`. Never pooled. */
+  acceptedAge: { book: number[]; ticker: number[] };
+  /** ⛔ READ `acceptedAgeN` FIRST — at `n = 0` the max is the INITIALISER, not a measurement. */
+  acceptedAgeMaxMs: { book: number; ticker: number };
+  acceptedAgeN: { book: number; ticker: number };
+  /** The edge set the two histograms are on, carried so a reader never has to look it up. */
+  acceptedAgeEdgesMs: readonly number[];
 }
 
 /**
@@ -517,15 +631,25 @@ export function getLevelBasisFunnel(): LevelBasisFunnelRow[] {
           return acc;
         }, {} as Record<LadderRefusal, number>)
       : { ...cell.byReason };
+    // P1-13: the self-synthetic arm, read off the STORAGE vocabulary (one name, both rungs) and
+    // published separately. It is OUR fabrication, so it may not sit inside a feed-facing rate.
+    const selfSyntheticRefusals = cell.byReason.locked_or_synthetic_book;
     return {
       key,
       rung,
+      stage: cell.stage,
       reasonsAbout: rung === 'ladder' ? 'ticker_sides' as const : 'book_top' as const,
       attempted: cell.accepted + refused,
       accepted: cell.accepted,
       refused,
+      selfSyntheticRefusals,
+      refusedExcludingSelfSynthetic: refused - selfSyntheticRefusals,
       byReason,
       byAcceptedSource: { ...cell.byAcceptedSource },
+      acceptedAge: { book: [...cell.acceptedAge.book], ticker: [...cell.acceptedAge.ticker] },
+      acceptedAgeMaxMs: { ...cell.acceptedAgeMaxMs },
+      acceptedAgeN: { ...cell.acceptedAgeN },
+      acceptedAgeEdgesMs: SIDE_AGE_BUCKET_EDGES_MS,
     };
   });
 }
@@ -696,6 +820,28 @@ interface SideAgeCell {
   buckets: number[];
   venueStampPresent: number;
   venueStampAbsent: number;
+  /**
+   * ⛔⛔ F4 (`8c` instrument defect, fixed 2026-09-13) — THE POOLED AGE HISTOGRAM IS BIMODAL BY
+   * CONSTRUCTION AND ITS p50 DESCRIBES NEITHER MODE.
+   * The cached sides are written by two kinds of writer with fundamentally different latency:
+   *   - PUSHED — a `kraken_ws_*` producer, sides arriving on the socket as the venue sends them.
+   *     These carry a venue stamp (`kraken-websocket-adapter.ts:855`, `:1155`).
+   *   - POLLED — the REST bucket poller, sides refreshed at the bucket's own cadence (2s / 15s /
+   *     30s / 60s). These carry NO venue stamp — `price-cache.ts` states it as null rather than
+   *     inventing one.
+   * ⇒ the age distribution is two humps, and a single p50 lands wherever the MIX happens to sit.
+   * ⛔ THE MIX IS NOT A CONSTANT: it is exactly what `3n.l` (`#1056`) is about to change, so a
+   *    pooled quantile would move for a reason that has nothing to do with feed health, and would
+   *    read as one.
+   * ⇒ SPLIT, EACH WITH ITS OWN n. ★ Split on the VENUE STAMP rather than on `lastSource`, and the
+   *   difference is load-bearing: `lastSource` dates the MARK's writer, so WS-written sides sitting
+   *   under a later REST mark are misfiled as REST — a bias that does NOT shrink with n. The venue
+   *   stamp is recorded by the same write that set the sides, so it cannot drift from them.
+   */
+  bucketsVenueStamped: number[];
+  bucketsVenueUnstamped: number[];
+  maxMsVenueStamped: number;
+  maxMsVenueUnstamped: number;
   symbolGapBuckets: number[];
   symbolGapObserved: number;
   symbolGapUnknown: number;
@@ -711,6 +857,8 @@ function emptySideAgeCell(): SideAgeCell {
   return {
     observed: 0, absent: 0, unstamped: 0, negative: 0, maxMs: 0, buckets: newBuckets(),
     venueStampPresent: 0, venueStampAbsent: 0,
+    bucketsVenueStamped: newBuckets(), bucketsVenueUnstamped: newBuckets(),
+    maxMsVenueStamped: 0, maxMsVenueUnstamped: 0,
     symbolGapBuckets: newBuckets(), symbolGapObserved: 0, symbolGapUnknown: 0,
     feedCountN: 0, feedCountMin: null, feedCountMax: null,
     wsCountMin: null, wsCountMax: null, feedWindowMs: null,
@@ -766,13 +914,23 @@ export function recordSideAgeAttempt(key: LevelBasisFunnelKey, a: SideAgeAttempt
   if (!a.cacheEntryPresent) { cell.absent++; return; }
   if (a.sidesCapturedAtMs === null) { cell.unstamped++; return; }
 
-  if (a.venueObservedAtMs === null) cell.venueStampAbsent++; else cell.venueStampPresent++;
+  const _stamped = a.venueObservedAtMs !== null;
+  if (!_stamped) cell.venueStampAbsent++; else cell.venueStampPresent++;
 
   const ageMs = a.nowMs - a.sidesCapturedAtMs;
   cell.observed++;
   if (ageMs < 0) cell.negative++;
   if (ageMs > cell.maxMs) cell.maxMs = ageMs;
   cell.buckets[bucketIndex(ageMs)]++;
+
+  // ⛔ F4 — the SAME sample also lands in its own mode's histogram. The pooled `buckets` above is
+  // kept rather than replaced: it is what the pre-registered `8c` criterion was written against,
+  // and silently changing the quantity a criterion reads is the failure this batch keeps finding.
+  // The two modes are ADDITIONAL, and they sum to the pooled count by construction.
+  const _b = _stamped ? cell.bucketsVenueStamped : cell.bucketsVenueUnstamped;
+  _b[bucketIndex(ageMs)]++;
+  if (_stamped) { if (ageMs > cell.maxMsVenueStamped) cell.maxMsVenueStamped = ageMs; }
+  else { if (ageMs > cell.maxMsVenueUnstamped) cell.maxMsVenueUnstamped = ageMs; }
 }
 
 export interface SideAgeRow {
@@ -788,6 +946,17 @@ export interface SideAgeRow {
   p95Bucket: string | null;
   venueStampPresent: number;
   venueStampAbsent: number;
+  /**
+   * ⛔ F4 — THE TWO AGE MODES, EACH WITH ITS OWN n. `venueStamped` is the pushed-sides mode;
+   * `venueUnstamped` is the polled-sides mode. ⛔ Read these, not the pooled `p50Bucket` above,
+   * for any statement about how fresh a side actually is — the pooled quantile moves with the
+   * WRITER MIX and `3n.l` is about to change that mix. `n` is stated on each so a quantile over
+   * three samples cannot be mistaken for one over three thousand.
+   */
+  byAgeMode: {
+    venueStamped: { n: number; histogram: Record<string, number>; p50Bucket: string | null; p95Bucket: string | null; maxMs: number };
+    venueUnstamped: { n: number; histogram: Record<string, number>; p50Bucket: string | null; p95Bucket: string | null; maxMs: number };
+  };
   symbolGapObserved: number;
   symbolGapUnknown: number;
   symbolGapHistogram: Record<string, number>;
@@ -833,6 +1002,25 @@ export function getSideAgeRows(): SideAgeRow[] {
     p95Bucket: quantileBucket(c.buckets, c.observed, 0.95),
     venueStampPresent: c.venueStampPresent,
     venueStampAbsent: c.venueStampAbsent,
+    // ⛔ F4 — the n on each mode is that mode's OWN observed count, which is `venueStampPresent` /
+    // `venueStampAbsent` by construction: both counters are incremented on the same branch as the
+    // histogram write. Quantiles are taken against that n, never against the pooled total.
+    byAgeMode: {
+      venueStamped: {
+        n: c.venueStampPresent,
+        histogram: histogramOf(c.bucketsVenueStamped),
+        p50Bucket: quantileBucket(c.bucketsVenueStamped, c.venueStampPresent, 0.5),
+        p95Bucket: quantileBucket(c.bucketsVenueStamped, c.venueStampPresent, 0.95),
+        maxMs: c.maxMsVenueStamped,
+      },
+      venueUnstamped: {
+        n: c.venueStampAbsent,
+        histogram: histogramOf(c.bucketsVenueUnstamped),
+        p50Bucket: quantileBucket(c.bucketsVenueUnstamped, c.venueStampAbsent, 0.5),
+        p95Bucket: quantileBucket(c.bucketsVenueUnstamped, c.venueStampAbsent, 0.95),
+        maxMs: c.maxMsVenueUnstamped,
+      },
+    },
     symbolGapObserved: c.symbolGapObserved,
     symbolGapUnknown: c.symbolGapUnknown,
     symbolGapHistogram: histogramOf(c.symbolGapBuckets),
@@ -894,6 +1082,40 @@ export function __resetSideAgeForTest(): void {
  * ⛔ COVERAGE IS COUNTED SEPARATELY FROM AGREEMENT, because "we could not compare" and "they
  * matched" are different states and collapsing them reports the healthiest possible reading for
  * the least informative one. Four outcomes: both present · book only · ticker only · neither.
+ *
+ * ⛔⛔ F2 (`8c` instrument defect, fixed 2026-09-13) — THE NAME OVERSTATES WHAT THIS CAN COMPARE,
+ * AND THE MECHANISM IS WORSE THAN THE SELECTION ARGUMENT ABOVE. The pre-registered "agreement is
+ * inconclusive" clause blames the POPULATION: both feeds coexist only on the hot set. True, but
+ * it is not the binding problem. THE BINDING PROBLEM IS THAT THE TWO LEGS CAN BE THE SAME OBJECT.
+ *
+ * Trace it at the ref: `kraken-websocket-adapter.ts:1151-1153` emits a price tick with
+ * `producer: 'kraken_ws_book_mid'` carrying `bid: bestBid, ask: bestAsk` — and those are the TOP
+ * OF THE VERY BOOK that `getBookForFill` hands back as this instrument's `book` leg. That tick
+ * flows to `live-pricing-adapter.ts:1171` → `priceCache.updateFromWebSocket` → the cache's
+ * `bid`/`ask`, which is this instrument's `ticker` leg. The v2 ticker channel
+ * (`kraken-websocket-adapter.ts:852`, producers `kraken_ws_ticker_mid`/`_last`) writes the SAME
+ * two fields for the SAME symbol. ⇒ **on a book-carrying symbol the cached sides are whichever of
+ * the two channels ticked last, and the payload cannot say which.**
+ * ⇒ **A `bothPresent` sample is therefore one of two structurally different things, pooled:**
+ *     (a) ticker-channel sides vs book top — a genuine cross-channel comparison, or
+ *     (b) the book's own top vs a slightly older copy of itself — which MUST agree, and whose
+ *         agreement is a statement about cache latency, not about the feeds.
+ *
+ * ⛔ AND THE CACHE CANNOT TODAY TELL THEM APART. `CachedPrice` carries `lastSource`
+ * (`kraken_ws` | `kraken_rest` | `kraken_equities_ws`) and NO fine-grained producer, so both (a)
+ * and (b) read as `kraken_ws`. The field that would settle it does not exist.
+ *
+ * ✅ WHAT IS DONE ABOUT IT HERE, AND WHAT IS NOT:
+ *   - **DONE:** `bothPresent` is SPLIT by the ticker leg's `lastSource`. A `kraken_rest` leg is
+ *     provably NOT the book's own top — REST never writes the book channel — so that subset is a
+ *     genuine independent comparison and IS interpretable. A `kraken_ws` leg is AMBIGUOUS between
+ *     (a) and (b) and is counted separately, never pooled with it.
+ *   - ⛔ **NOT DONE, AND STATED RATHER THAN IMPLIED:** carrying a per-side producer on the cache
+ *     entry would make the `kraken_ws` subset interpretable too. That is a write to `price-cache.ts`,
+ *     which is a 🔒 LOCKED MODULE, and it is FOLDED INTO `3n.l` (`#1056`) — the batch already
+ *     opening that file to stop `updateFromRest` discarding the sides. It is not scoped here.
+ * ⇒ **UNTIL THEN: read `bothPresentTickerRest` and ignore `bothPresentTickerWs` for any claim
+ *     about whether the two FEEDS agree. The `Ws` cell is not evidence in either direction.**
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /** Absolute difference buckets in BASIS POINTS (1 bp = 0.01%). */
@@ -909,10 +1131,30 @@ export interface FeedAgreementSample {
   /** The two sides carried on the ticker-fed shared cache. `null` when no entry/sides exist. */
   tickerBid: number | null;
   tickerAsk: number | null;
+  /**
+   * ⛔ F2 — THE CACHE ENTRY'S `lastSource`, WHICH IS THE ONLY THING DISTINGUISHING A GENUINE
+   * CROSS-FEED COMPARISON FROM THE BOOK COMPARED WITH A COPY OF ITSELF. See the section docblock.
+   * `null`/absent when there was no cache entry at all. It is COARSE on purpose — it is the only
+   * provenance the cache actually carries, and inventing a finer one here would be a fabrication.
+   */
+  tickerSidesSource?: string | null;
 }
 
 interface AgreementCell {
   bothPresent: number;
+  /**
+   * ⛔ F2 — THE SPLIT THAT DECIDES WHETHER A `bothPresent` SAMPLE MEANS ANYTHING.
+   * `TickerRest`: the cached sides were last written by a REST writer, which provably never
+   * carries the book channel's top ⇒ a genuine independent comparison, and the ONLY cell any
+   * feeds-agree claim may rest on.
+   * `TickerWs`: last written by some `kraken_ws` producer — either the ticker channel or
+   * `kraken_ws_book_mid`, i.e. possibly the book's own top. AMBIGUOUS, not evidence.
+   * `TickerUnknown`: no source stated. Counted rather than dropped, so the three always sum to
+   * `bothPresent` and a silent reclassification cannot hide in the arithmetic.
+   */
+  bothPresentTickerRest: number;
+  bothPresentTickerWs: number;
+  bothPresentTickerUnknown: number;
   bookOnly: number;
   tickerOnly: number;
   neither: number;
@@ -943,7 +1185,8 @@ function newAgreementBuckets(): number[] {
 
 function emptyAgreementCell(): AgreementCell {
   return {
-    bothPresent: 0, bookOnly: 0, tickerOnly: 0, neither: 0,
+    bothPresent: 0, bothPresentTickerRest: 0, bothPresentTickerWs: 0, bothPresentTickerUnknown: 0,
+    bookOnly: 0, tickerOnly: 0, neither: 0,
     bidBuckets: newAgreementBuckets(), askBuckets: newAgreementBuckets(),
     bidTickerHigher: 0, bidTickerLower: 0, bidExact: 0,
     askTickerHigher: 0, askTickerLower: 0, askExact: 0,
@@ -981,6 +1224,13 @@ export function recordFeedAgreement(s: FeedAgreementSample): void {
   if (!haveTicker) { cell.bookOnly++; return; }
 
   cell.bothPresent++;
+  // ⛔ F2 — classify BEFORE any bps arithmetic, so the interpretable subset is countable even if
+  // a later edit changes how the differences are bucketed.
+  const _src = s.tickerSidesSource;
+  if (typeof _src !== 'string' || _src.length === 0) cell.bothPresentTickerUnknown++;
+  else if (_src === 'kraken_rest') cell.bothPresentTickerRest++;
+  else cell.bothPresentTickerWs++;
+
   const bb = s.bookBid as number, ba = s.bookAsk as number;
   const tb = s.tickerBid as number, ta = s.tickerAsk as number;
 
@@ -1002,6 +1252,11 @@ export interface FeedAgreementRow {
   assetClass: string;
   attempted: number;
   bothPresent: number;
+  /** ⛔ F2 — the ONLY cell a feeds-agree claim may rest on. See the section docblock. */
+  bothPresentTickerRest: number;
+  /** ⛔ F2 — AMBIGUOUS: the ticker leg may BE the book's own top. Not evidence in either direction. */
+  bothPresentTickerWs: number;
+  bothPresentTickerUnknown: number;
   bookOnly: number;
   tickerOnly: number;
   neither: number;
@@ -1025,6 +1280,9 @@ export function getFeedAgreementRows(): FeedAgreementRow[] {
       assetClass,
       attempted: c.bothPresent + c.bookOnly + c.tickerOnly + c.neither,
       bothPresent: c.bothPresent,
+      bothPresentTickerRest: c.bothPresentTickerRest,
+      bothPresentTickerWs: c.bothPresentTickerWs,
+      bothPresentTickerUnknown: c.bothPresentTickerUnknown,
       bookOnly: c.bookOnly,
       tickerOnly: c.tickerOnly,
       neither: c.neither,

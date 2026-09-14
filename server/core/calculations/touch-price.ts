@@ -32,6 +32,7 @@ import {
   recordLevelBasisOutcome,
   type LevelBasisRefusal,
   type LevelBasisLane,
+  type LevelBasisStage,
 } from './level-basis.js';
 
 /** Which clock an age was measured on. Never pooled. */
@@ -188,8 +189,16 @@ export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined)
     // (Langston's rider on my own wording, same review). On the UPDATE arm the previous sides carry
     // forward untouched. With NO `existing`, `price-cache.ts:710-711` writes `bid = ask = price`
     // and `sidesCapturedAtMs: null` — the synthetic zero-spread book this batch already names.
-    // That arm refuses at `age_unknown` on the null stamp rather than mislabelling, so the bias
-    // DIRECTION is unchanged; the arm simply is not a carry-forward.
+    // ⛔⛔ CORRECTED 2026-09-13 (row `8a-P1`, Langston's condition): THIS SENTENCE STATED A
+    // MECHANISM THE CODE DOES NOT HAVE. It read "that arm refuses at `age_unknown` on the null
+    // stamp rather than mislabelling" — and the null stamp is never reached, because
+    // `buildLevelBasis` tests `bid === ask` FIRST: `locked_or_synthetic_book` at `level-basis.ts:221`
+    // precedes `age_unknown` at `:222`, by that function's own stated design ("checked LAST, after
+    // every structural fault, so a malformed book is never reported as merely old").
+    // ⇒ the synthetic zero-spread arm refuses as `locked_or_synthetic_book`, NOT `age_unknown`.
+    // ★ THE CONCLUSION SURVIVES — the bias DIRECTION is unchanged and the arm is still not a
+    //   carry-forward — but a wrong mechanism in a docblock is a stale citation in the present
+    //   tense, and it is read as current by everyone who comes after.
     // That is W-3's shape one field over, in
     // the very split that exists to make the transport truthful. **The bias UNDERSTATES the pushed
     // transport**, so it is conservative in the same direction as the skew note above — which is
@@ -215,14 +224,22 @@ export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined)
  * differ. The gap between them IS the measurement — it is how much rung 2 recovers.
  */
 export function recordTouchSelection(
-  base: { lane: LevelBasisLane; assetClass: string },
+  base: { lane: LevelBasisLane; assetClass: string; stage: LevelBasisStage },
   sel: TouchSelection,
 ): void {
+  // ⛔ THE ACCEPTED QUOTE'S OWN AGE, AND WHICH LEG CARRIED IT (row `8a-P1`, P1-4). Derived HERE,
+  // once, from the selection the caller already holds - a call site computing it would be a second
+  // derivation of one fact, which is how the two drift.
+  // ⛔ THE LEG IS READ OFF `basis`, NOT GUESSED FROM `bookRefusal`: `basis` is what the selection
+  // ACTUALLY returned, and it is the only field that cannot disagree with the quote beside it.
+  const _age = sel.ok
+    ? { acceptedAgeMs: sel.quote.ageMs, acceptedLeg: (sel.quote.basis === 'book_top' ? 'book' : 'ticker') as 'book' | 'ticker' }
+    : {};
   // The book rung: `bookRefusal === null` means the book itself carried the selection.
   recordLevelBasisOutcome(
     { ...base, rung: 'book' },
     sel.ok && sel.bookRefusal === null
-      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}` }
+      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}`, ..._age }
       : { ok: false, reason: sel.bookRefusal ?? 'no_book' },
   );
   // The ladder: accepted if ANY rung carried it; the refusal recorded is the LAST rung's, because
@@ -234,7 +251,7 @@ export function recordTouchSelection(
   recordLevelBasisOutcome(
     { ...base, rung: 'ladder' },
     sel.ok
-      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}` }
+      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}`, ..._age }
       : { ok: false, reason: sel.tickerRefusal },
   );
 }
