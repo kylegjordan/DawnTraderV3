@@ -303,6 +303,53 @@ const EXIT_TRIGGER_MAX_AGE_MS = 2_000;
  * quieter of the two alarms.
  */
 const NO_TRIGGER_STREAK_ALERT_AT = 20;
+
+/**
+ * ⭐⭐ `8a-P2` B-4 — THE EXIT TRIGGER'S SPREAD CEILING. RISK-DERIVED, EXIT-LANE ONLY.
+ *
+ * ⛔⛔ WHY THIS EXISTS RATHER THAN REUSING `LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION`:
+ * P2-4 gave the exit lane its own AGE ceiling because the level lane's 60,000 ms was harmless
+ * for a recorder and wrong for a decider. Re-using the shared SPREAD constant after splitting
+ * the age one would be the same inconsistency, one field over. **And the lanes fail differently:
+ * on the level/VTS lanes a too-wide spread produces a worse ESTIMATE; on THIS lane it produces a
+ * trigger far below the mark and BOOKS A CLAMPED STOP NOBODY COULD HAVE FILLED.** The shared
+ * constant is untouched at its other three sites (`signal-orchestrator.ts`, `vts-runner.ts`) —
+ * that number stays `3b.f-c`'s open question and is deliberately NOT answered here.
+ *
+ * ⚠️ THE DERIVATION IS NOT THE ONE I REACHED FOR FIRST, AND THE FIRST ONE WAS WRONG IN AN
+ * INSTRUCTIVE WAY. I began with "the bid sits spread/2 below the mid, so bound that as decision
+ * error" ⇒ `spread ≤ 2·f·stop` = 0.185 %. **That treats using the bid as an ERROR. It is not —
+ * the bid is the CORRECT price and we know it exactly.** Nothing is estimated, so there is no
+ * error term to bound. Bounding a known quantity as if it were noise would have refused ~10 % of
+ * held-name quotes to fix a problem that does not exist.
+ *
+ * ⇒ THE REAL HARM IS IN THE BOOKING, NOT THE TRIGGER. On a stop hit the exit is booked at the
+ * CLAMPED STOP, not at the bid. So the quantity to bound is `stop − bid` at the instant the
+ * trigger fires:
+ *     bid = mid − spread/2 ·  stop = mid − D  (D = stop distance)
+ *     stop − bid = spread/2 − D  ≤  f · D     ⇒  spread ≤ 2·D·(1 + f)
+ * At the limit the mid sits `1.1·D` above the stop when the bid crosses it — i.e. the stop fires
+ * while the trade is still in profit ON THE MID. That is exactly the pathology, and it is what
+ * the ceiling is for.
+ *
+ *   f = 0.10 (the `EXIT_TRIGGER_MAX_AGE_MS` parameter — ⛔ SAME `f`, so a change to it moves BOTH
+ *             ceilings; it is load-bearing in both and quadratically so in the age one)
+ *   D = 0.926 % — p10 of |entry − stop| / entry, crypto, 30 d, n = 147. The TIGHT stop again:
+ *       a ceiling safe for the median stop is wrong for the tight trade, and the tight trade is
+ *       where a spread-driven stop does its damage.
+ *   ⇒ spread ≤ 2 × 0.926 % × 1.10 = 2.037 %  ⇒ SHIPPED AT 2.0 %.
+ *
+ * ⛔ THE CELL, NAMED WITH ITS n AND DATE SO A READER CAN SEE WHAT FALSIFIES IT (the r8 rule):
+ *   held-name crypto (crypto closes in 30 d), `crypto_spot_ticker_snap`, 24 h to 2026-09-14,
+ *   n = 90,833 quotes: p50 0.0473 % · p90 0.1839 % · p99 0.5961 % · p99.9 1.6012 % · max 4.407 %.
+ *   ⇒ 2.0 % refuses BETWEEN p99.9 AND THE MAX — the pathological book, not the ordinary wide one.
+ * ⚠️ AND IT MOVES WHEN DATA IS ADDED, NOT ONLY WHEN `f` CHANGES: a newly-traded name with wider
+ *   books raises the tail. Re-derive when the traded universe changes materially.
+ *
+ * ★ FOR SCALE: the shared constant this replaces on THIS lane is 0.50 — **25× looser**, and
+ *   11× looser than the widest spread observed in 24 hours. It admitted a bid at 0.75 × mid.
+ */
+const EXIT_TRIGGER_MAX_SPREAD_FRACTION = 0.02;
 // P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
 // attempt). Single home for `promoted` (the refresh reconfirmed/rejected live in ready_to_buy_service).
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
@@ -2243,7 +2290,12 @@ export class ActiveExecutionEngine {
                 // have handed a 60-second-old quote to a live stop check, in the same loop pass
                 // whose own mark fetch demands ≤2,000 ms. Derivation at `EXIT_TRIGGER_MAX_AGE_MS`.
                 maxAgeMs: EXIT_TRIGGER_MAX_AGE_MS,
-                maxSpreadFraction: LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
+                // ⛔⛔ `8a-P2` B-4 — THE EXIT LANE'S OWN SPREAD CEILING, NOT THE SHARED ONE.
+                // The shared constant is 0.50, which admits a bid at 0.75x mid: a wide book
+                // would hand the stop check a trigger 25% below the mark, fire `stop_hit`, and
+                // book the CLAMPED STOP — a fill nobody could have got. Harmless while this was
+                // a recorder; not harmless now. Derivation at `EXIT_TRIGGER_MAX_SPREAD_FRACTION`.
+                maxSpreadFraction: EXIT_TRIGGER_MAX_SPREAD_FRACTION,
               },
             );
 

@@ -447,6 +447,33 @@ describe('row 8a-P2 — every trigger surface reads the trigger, not the mark', 
     expect(pre).not.toMatch(/isDiscontinuityActive\(\s*input\.symbol,\s*triggerPrice\s*,/);
   });
 
+  it('8g. ⛔⛔ THE EXIT LANE USES ITS OWN *BOTH* CEILINGS — age AND spread', () => {
+    // B-4: P2-4 split the AGE ceiling off the shared constant and then re-used the shared SPREAD
+    // one — the same inconsistency, one field over. The shared spread value is 0.50, which admits
+    // a bid at 0.75x mid: a wide book hands the stop check a trigger 25% below the mark, fires
+    // stop_hit, and books the CLAMPED STOP, a fill nobody could have got.
+    const sel = /selectTouchPrice\(([\s\S]*?)\n            \);/.exec(code(AEE));
+    expect(sel).not.toBeNull();                     // instrument control
+    expect(sel![1].length).toBeGreaterThan(0);
+    expect(sel![1]).toMatch(/maxAgeMs:\s*EXIT_TRIGGER_MAX_AGE_MS/);
+    expect(sel![1]).toMatch(/maxSpreadFraction:\s*EXIT_TRIGGER_MAX_SPREAD_FRACTION/);
+    // ⛔ AND NEITHER SHARED CONSTANT MAY REAPPEAR IN THIS CALL.
+    expect(sel![1]).not.toMatch(/LEVEL_BASIS_OBSERVATION_MAX_AGE_MS/);
+    expect(sel![1]).not.toMatch(/LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION/);
+  });
+
+  it('8h. ⭐ CONTROL — the OTHER two lanes still hold the SHARED constants, untouched', () => {
+    // The complement, and it is the half that proves I did not quietly re-base three lanes. The
+    // level and VTS lanes fail DIFFERENTLY (a worse estimate, not an unfillable booking), so their
+    // number stays 3b.f-c's open question and must NOT have moved with this row.
+    const ORCH = readFileSync(join(process.cwd(), 'server/services/signal-orchestrator.ts'), 'utf-8');
+    const VTS = readFileSync(join(process.cwd(), 'server/services/vts-runner.ts'), 'utf-8');
+    for (const src of [ORCH, VTS]) {
+      expect(src).toMatch(/maxSpreadFraction:\s*LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION/);
+      expect(src).not.toMatch(/EXIT_TRIGGER_MAX_SPREAD_FRACTION/);
+    }
+  });
+
   it('10. ⛔ THE BOOKING SITES ARE UNTOUCHED — only the trigger moved', () => {
     // The complement. If `exitPrice:` had followed the trigger onto the bid, the row would have
     // silently changed what we RECORD as well as what we DECIDE — two of the four jobs, when
