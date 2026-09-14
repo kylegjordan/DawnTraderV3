@@ -11,6 +11,18 @@
  *   1. Non-trailing stop hit (useTrailing:false)
  *   2. Non-trailing target hit (useTrailing:false)
  *   3. Stale-price force-close (currentPrice=null, hold > maxHold)
+ *
+ * ⛔⛔ `8a-P2` (2026-09-14) — WHY EVERY FIXTURE BELOW PASSES `triggerPrice === currentPrice`.
+ * The evaluator now takes TWO prices: `triggerPrice` (the transactable side — an exit is a SELL,
+ * so the BID) decides WHETHER a level was touched, and `currentPrice` decides WHAT the exit is
+ * BOOKED at. These scenarios were written when ONE field did both jobs, so pairing them is what
+ * keeps this a PARITY contract: every assertion below is unchanged, and any drift in them is a
+ * real regression rather than a consequence of the split.
+ * ⚠️ IT IS NOT AN ENDORSEMENT OF MID-ON-MID. It is the pre-split baseline, held fixed on purpose.
+ * ⛔ AND THESE FIXTURES ARE WHY CI WENT RED WHEN LOCAL WAS GREEN: `triggerPrice` is REQUIRED, but
+ * `tsconfig` EXCLUDES TEST FILES, so the compiler could not force the census here the way it
+ * forced it on the three production callers. A required field does NOT compile-force a fixture —
+ * the same trap this batch already hit on `LevelBasisRungKey.stage`.
  *   4. MAX_HOLD_MS timeout with live price
  *   5. Qualifier accept: strong_bull_trend hits target → enters moonbag (modeChanged)
  *   6. Qualifier reject: unknown_strategy hits target → closes at target, no mode flip
@@ -160,7 +172,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 94, atr: 0,
+      currentPrice: 94, triggerPrice: 94, atr: 0,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: false,
     });
@@ -174,7 +186,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 112, atr: 0,
+      currentPrice: 112, triggerPrice: 112, atr: 0,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: false,
     });
@@ -188,7 +200,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'ILLIQUID/USD',
       symbol: 'ILLIQUID/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: null, atr: 0,
+      currentPrice: null, triggerPrice: null, atr: 0,
       holdDurationMs: 8 * 86400_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: false,
     });
@@ -202,7 +214,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 103, atr: 0,
+      currentPrice: 103, triggerPrice: 103, atr: 0,
       holdDurationMs: 8 * 86400_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: false,
     });
@@ -216,7 +228,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 111, atr: 2,
+      currentPrice: 111, triggerPrice: 111, atr: 2,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper',
       currentSlotTotal: 10,
@@ -232,7 +244,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'ETH/USD',
       symbol: 'ETH/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 111, atr: 2,
+      currentPrice: 111, triggerPrice: 111, atr: 2,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context: { ...context, strategy: 'mean_reversion' },
       useTrailing: true, callerMode: 'paper',
@@ -249,7 +261,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 111, atr: 2,
+      currentPrice: 111, triggerPrice: 111, atr: 2,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context: { ...context, strategy: 'vwap_pullback' },
       sourcePool: 'quant-mean_reversion', // NOT quant-strong_trend
@@ -267,7 +279,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'BTC/USD',
       symbol: 'BTC/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 111, atr: 2,
+      currentPrice: 111, triggerPrice: 111, atr: 2,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper',
       currentSlotTotal: 2, // cap = 2 - 1 = 1 moonbag allowed
@@ -279,7 +291,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'ETH/USD',
       symbol: 'ETH/USD',
       entryPrice: 200, stopPrice: 190, targetPrice: 220,
-      currentPrice: 221, atr: 4,
+      currentPrice: 221, triggerPrice: 221, atr: 4,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper',
       currentSlotTotal: 2,
@@ -297,7 +309,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
         tradeId: `PAIR${i}/USD`,
         symbol: `PAIR${i}/USD`,
         entryPrice: 100, stopPrice: 95, targetPrice: 110,
-        currentPrice: 111, atr: 2,
+        currentPrice: 111, triggerPrice: 111, atr: 2,
         holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
         context, useTrailing: true, callerMode: 'vts',
         currentSlotTotal: 3, // would cap paper at 2; VTS ignores it
@@ -309,7 +321,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'NEWPAIR/USD',
       symbol: 'NEWPAIR/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 111, atr: 2,
+      currentPrice: 111, triggerPrice: 111, atr: 2,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'vts',
       currentSlotTotal: 3,
@@ -337,7 +349,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'SOL/USD',
       symbol: 'SOL/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 110,
-      currentPrice: 94, atr: 2, // price below stop, ATR present
+      currentPrice: 94, triggerPrice: 94, atr: 2, // price below stop, ATR present
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper',
       currentSlotTotal: 10,
@@ -361,7 +373,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     // Step 1: hit rung 1 (price slightly above target so trade doesn't immediately close at boundary)
     let d = await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, triggerPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.modeChanged).toBe(true);
@@ -370,7 +382,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     // Step 2: price reverses below rung floor
     d = await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 107.30, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 107.30, triggerPrice: 107.30, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.shouldExit).toBe(true);
@@ -385,13 +397,13 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     // rung 1
     await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, triggerPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     // rung 2 (price slightly above $115 target)
     let d = await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 115.5, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 115.5, triggerPrice: 115.5, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.ladderRungsHit).toBe(2);
@@ -399,7 +411,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     // reverse below rung-2 floor (115)
     d = await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 114.40, atr: 2, holdDurationMs: 180_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 114.40, triggerPrice: 114.40, atr: 2, holdDurationMs: 180_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.shouldExit).toBe(true);
@@ -413,7 +425,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     const sym = 'LADDER3/USD';
     const d = await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 123, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 123, triggerPrice: 123, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     // Single cycle should ratchet: rung 1 ($107.5), rung 2 ($115), rung 3 ($122.5).
@@ -426,7 +438,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'LADDER4/USD',
       symbol: 'LADDER4/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, triggerPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context: { ...context, strategy: 'mean_reversion' }, // not in qualifier list
       useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
@@ -441,7 +453,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'LADDER5A/USD',
       symbol: 'LADDER5A/USD',
       entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, triggerPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 2, // cap = 1
     });
     // Second trade — cap blocks moonbag entry
@@ -449,7 +461,7 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
       tradeId: 'LADDER5B/USD',
       symbol: 'LADDER5B/USD',
       entryPrice: 200, stopPrice: 190, targetPrice: 215,
-      currentPrice: 216, atr: 4, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 216, triggerPrice: 216, atr: 4, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 2,
     });
     expect(d.shouldExit).toBe(true);
@@ -466,19 +478,19 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     // rung 1 (price slightly above target)
     await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, triggerPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     // climb between rungs
     await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 113, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 113, triggerPrice: 113, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     // reverse — should hit dynamic floor, not rung floor
     const d = await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 109.50, atr: 2, holdDurationMs: 180_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 109.50, triggerPrice: 109.50, atr: 2, holdDurationMs: 180_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.shouldExit).toBe(true);
@@ -505,20 +517,20 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     // rung 1 (price slightly above target so trade stays alive)
     await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, triggerPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     // rung 2 (slightly above $115 target)
     await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 115.5, atr: 2, holdDurationMs: 90_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 115.5, triggerPrice: 115.5, atr: 2, holdDurationMs: 90_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     // wait past the cap (50ms cap, wait 150ms)
     await new Promise(resolve => setTimeout(resolve, 150));
     const d = await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 116, atr: 2, holdDurationMs: 95_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 116, triggerPrice: 116, atr: 2, holdDurationMs: 95_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.shouldExit).toBe(true);
@@ -581,13 +593,13 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     // rung 1 (slightly above target so trade stays alive)
     await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 108, triggerPrice: 108, atr: 2, holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     // currentPrice slightly past rung-2 target
     const d = await evaluateTECExit({
       tradeId: sym, symbol: sym, entryPrice: 100, stopPrice: 95, targetPrice: 107.5,
-      currentPrice: 115.5, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
+      currentPrice: 115.5, triggerPrice: 115.5, atr: 2, holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
       context, useTrailing: true, callerMode: 'paper', currentSlotTotal: 10,
     });
     expect(d.ladderRungsHit).toBe(2);

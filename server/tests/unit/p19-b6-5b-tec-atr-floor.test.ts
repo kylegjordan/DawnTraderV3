@@ -42,27 +42,27 @@ const baseInput = {
 
 describe('P19-B6.5b F5 — ATR-zero exit floor (audit H14)', () => {
   it('useTrailing=true + atr=0 + price<=stop → stop_hit via the floor (THE FIX)', async () => {
-    const d = await evaluateTECExit({ ...baseInput, currentPrice: 90, atr: 0, useTrailing: true });
+    const d = await evaluateTECExit({ ...baseInput, currentPrice: 90, triggerPrice: 90, atr: 0, useTrailing: true });
     expect(d.shouldExit).toBe(true);
     expect(d.exitReason).toBe('stop_hit');
     expect(d.exitPrice).toBe(95);
   });
 
   it('useTrailing=true + atr=0 + price>=target → target_hit via the floor (THE FIX)', async () => {
-    const d = await evaluateTECExit({ ...baseInput, currentPrice: 112, atr: 0, useTrailing: true });
+    const d = await evaluateTECExit({ ...baseInput, currentPrice: 112, triggerPrice: 112, atr: 0, useTrailing: true });
     expect(d.shouldExit).toBe(true);
     expect(d.exitReason).toBe('target_hit');
     expect(d.exitPrice).toBe(110);
   });
 
   it('useTrailing=true + atr=0 + stop<price<target → no exit (floor does NOT over-fire)', async () => {
-    const d = await evaluateTECExit({ ...baseInput, currentPrice: 102, atr: 0, useTrailing: true });
+    const d = await evaluateTECExit({ ...baseInput, currentPrice: 102, triggerPrice: 102, atr: 0, useTrailing: true });
     expect(d.shouldExit).toBe(false);
     expect(d.exitReason).toBeNull();
   });
 
   it('useTrailing=false + atr>0 + price<=stop → stop_hit (legacy non-trailing path unchanged)', async () => {
-    const d = await evaluateTECExit({ ...baseInput, currentPrice: 90, atr: 5, useTrailing: false });
+    const d = await evaluateTECExit({ ...baseInput, currentPrice: 90, triggerPrice: 90, atr: 5, useTrailing: false });
     expect(d.shouldExit).toBe(true);
     expect(d.exitReason).toBe('stop_hit');
   });
