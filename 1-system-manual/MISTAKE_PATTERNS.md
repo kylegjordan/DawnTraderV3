@@ -924,6 +924,18 @@ cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
 ⇒ ⛔ **A CLAIM ABOUT YOUR OWN INSTRUMENT GETS THE SAME RULE-29(a) TREATMENT AS A CLAIM ABOUT THE SYSTEM** (Langston's formulation). **Naming a property of your own tooling is a measurement, and it needs the object.**
 ⚠️ **Threshold: five instances, ONE batch — the 2+-distinct-batches leg is NOT met, so this does not move §13 on its own.** Recorded because the within-batch recurrence is itself the signal: **the same shape survived four consecutive corrections by the same author.**
 
+### `over-retraction-is-a-claim` — **I WITHDREW A TRUE STATEMENT AND INVENTED A MECHANISM TO JUSTIFY WITHDRAWING IT** — **NEW 2026-09-14**, `B-PRICE-SIDE-BY-JOB` `8a-P2` · mechanism: ✅ **A RETRACTION CARRIES THE SAME EVIDENCE BAR AS THE CLAIM IT REPLACES**
+
+**WHAT HAPPENED.** I reported that a counter fired on three named positions. Under review pressure I withdrew it, reasoning that two log fields *"happen to read 3 — a matching literal is not a shared root."* **That reasoning was false at the code:** the two counters are incremented on **consecutive lines of the same branch**, so equality is structural, not coincidental — and the three symbols are printed outright, in a stream I had not checked. **The original claim was right; the retraction was the error.**
+
+⛔⛔ **WHY IT IS ITS OWN PATTERN AND NOT A SUB-CASE OF `wrong-object`: A RETRACTION FEELS LIKE THE SAFE DIRECTION.** Claiming too much is visibly risky, so it gets checked. **Claiming too little reads as humility and gets waved through — by the author AND by the reviewer.** ⇒ **an unevidenced withdrawal passes gates that an unevidenced assertion would not.**
+
+★★ **AND THE REAL DAMAGE IS DOWNSTREAM, NOT LOCAL.** I was about to file the invented mechanism as a NAMED PATTERN. ⇒ **A FALSE INSTANCE IN THIS INDEX IS WORSE THAN A MISSING ONE: a gap is mere absence, but a wrong generalisation WITH A NAME gets APPLIED — confidently — to the next case where it is also false.** *(Langston stopped it; the entry you are reading is the SHAPE, filed deliberately, while the false instance was not.)*
+
+⚠️ **AND NOT-FILING DOES NOT STRIKE TEXT ALREADY WRITTEN.** A retraction that reached a document must be corrected **at the instance, in the body** — a note stacked on top leaves the wrong sentence readable. **Check every artifact the retraction touched**, not only the one you are editing.
+
+⛔ **THE RULE:** before withdrawing a claim, **name the object that refutes it** — the line, the row, the stream. *"I am no longer confident"* is a reason to GO AND LOOK, **never a reason to publish a withdrawal.**
+
 ### `chosen-subset-as-suite` — **I RAN THE TESTS I PICKED AND REPORTED IT AS "GREEN"** — **NEW 2026-09-14**, `B-PRICE-SIDE-BY-JOB` `8a-P2` · mechanism: ✅ **RUN THE SUITE, OR STATE THE DENOMINATOR BESIDE THE NUMBER**
 
 **WHAT HAPPENED.** I ran two test files, saw **40 passed**, and reported *"40 tests green"* to the reviewer as the verification. The suite is **3,382**. CI then went RED on `b65-tec-parity.test.ts` — **the file the changed module's OWN DOCBLOCK names as the contract that must stay green**, and the one file I most obviously should have run.

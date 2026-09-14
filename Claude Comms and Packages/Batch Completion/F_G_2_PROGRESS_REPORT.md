@@ -1,4 +1,11 @@
-# OPEN — F-G-2 / `B-EXIT-TRANSACTABLE-SIDE` — PROGRESS REPORT ⛔ **WINDOW VOID 2026-09-05, AWAITING RE-OPEN — SEE §0**
+# OPEN — F-G-2 / `B-EXIT-TRANSACTABLE-SIDE` — PROGRESS REPORT
+
+⛔⛔ **OBJ-0 IS NOT "AWAITING RE-OPEN". IT IS UNANSWERABLE BY THAT INSTRUMENT, AND THE INSTRUMENT IS GONE (Langston ruling, 2026-09-14).**
+**THE SHADOW ARM WAS REMOVED** by `B-PRICE-SIDE-BY-JOB` row `8a-P2` (P2-7), deployed `7d4cdf5a8985facb06189216c2375f0e79f5bf64`.
+**WHY IT CANNOT SIMPLY BE RE-ARMED:** the arm compared the book **BID** against the live arm's **MID**. `8a-P2` makes the LIVE arm read the ladder bid ⇒ **the comparison becomes BID-AGAINST-BID, the DISCORDANT CELL COLLAPSES BY CONSTRUCTION, and A1 pre-registers discordant `n=0` as INCONCLUSIVE-EXTEND and never PASS.** ⇒ **re-opening the window would restart a clock on a question the instrument can no longer answer in either direction.**
+⇒ ✅ **A1-A4 SURVIVE AS CRITERIA FOR WHATEVER INSTRUMENT REPLACES IT. THEY DO NOT SURVIVE AS A PENDING WINDOW.**
+⇒ **SUPERSEDED ONTO the transactable-booking leg and plan row `3n.o`.** *(Removal record: `DELETED_COMPONENTS_LOG.md`; archive `_archive/deleted-code/fg2-shadow-arm-aee.ts.removed`.)*
+⚠️ **EVERYTHING BELOW THAT PRE-REGISTERS AGAINST `fg2Shadow` / `bidFirstExit` / `midFirstExit` DESCRIBES A COMPONENT THAT NO LONGER EXISTS.** It is kept as the pre-registration record — **it is NOT a live plan and no window is running.**
 
 > **Status: DEPLOYED, IN OBSERVATION. Not closed.** Converts to `F_G_2_COMPLETION_REPORT.md` only when the pre-registered data is in AND a decision has been taken on it (workflow-10 rule, 2026-08-26). Card: `Verification` → `Observation` once Step 8 clears.
 > **Written 2026-09-02 by CC-C; r2 after Langston's Step-8 verdict 09:21Z (CONFIRMED on the deployed state, SENT BACK on the record and on §4a); r3 after his 09:33 confirmation — A2 re-pre-registered as UNPRICED (his own correction) and A3's witness-absent rows as a primary/sensitivity pair. Step 8 CLOSED on his "take it as read" once these landed. Every correction is IN THE BODY, not stacked. Every number names its object and population; every criterion is pre-registered BEFORE the data it judges exists.**
@@ -34,7 +41,10 @@
 
 ### ⚠️ WHAT IS **NOT** VOID — THREE THINGS, SO NOTHING IS OVER-READ
 1. ✅ **OBJ-5a / 5b / 5c ARE SHIPPED AND STAY SHIPPED.** VTS mark-booked exits, the maker-fee leg and the `calibration_epoch` cut are **deployed behaviour, not window-gated.** The `vts` epoch boundary (crypto 5 / xStock 6) stands and rows must still never be pooled across it.
-2. ✅ **THE SHADOW ARM ITSELF KEEPS RUNNING — the INSTRUMENT is not being withdrawn, only the WINDOW.** ⛔ **This is a RECOMMENDATION pending Langston, not a decision taken:** leaving it armed costs nothing, keeps the seeding path exercised, and means the re-open needs only a new anchor rather than a redeploy. **If he rules it should be stood down, that is his call and it is recorded here either way.**
+2. ⛔⛔ **SUPERSEDED 2026-09-14 — LANGSTON RULED, AND THE RULING WENT THE OTHER WAY: THE ARM IS STOOD DOWN AND REMOVED.**
+   ~~*Original recommendation: the shadow arm keeps running; only the window is withdrawn; leaving it armed costs nothing.*~~
+   ⇒ **THE PREMISE OF THAT RECOMMENDATION EXPIRED: "leaving it armed costs nothing" WAS TRUE ONLY WHILE THE LIVE ARM READ THE MID.** Once `8a-P2` put the live arm on the ladder bid, an armed arm costs something worse than nothing — **it produces a comparison that can only ever return one verdict while reading as though it were still measuring.**
+   ⇒ **REMOVED by `8a-P2` (P2-7). The question moves to the transactable-booking leg / `3n.o`; the `bookState` carry was kept.**
 3. ⛔ **THE SWITCH IS NOT MADE.** Exits still trigger and book on the MID throughout the interim. ⇒ **`B-PRICE-SIDE-BY-JOB` OBJ-3b (level-basis ↔ trigger-basis COHERENCE) has NO disposition to read at its deploy, so it does NOT ship with OBJ-3a — it waits for the re-opened window.** ★ **OBJ-3a (per-leg level transactability) is unaffected and ships: the scope split them for exactly this reason.**
 ⚠️ **AND A TRANSITION ARTEFACT THAT APPLIES UNDER EITHER ORDERING, NAMED NOW: positions OPEN at the level-basis deploy carry mid-derived levels while positions opened after carry transactable-side levels.** **A mixed population, unavoidable, and it must be a stated exclusion in the re-opened window rather than discovered inside it.**
 
