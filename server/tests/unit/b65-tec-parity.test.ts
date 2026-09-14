@@ -670,6 +670,18 @@ describe('P19-B8.5i — trailing master switch (isMoonbagQualifier flag gating)'
  *
  * ⇒ These four force `triggerPrice ≠ currentPrice` and assert BOTH directions on BOTH legs. The
  *   second of each pair is the load-bearing one: it fires on the mark and MUST NOT exit.
+ *
+ * ⛔⛔ AND THE HONEST LIMIT OF THESE SIX, STATED SO THEY ARE NOT READ AS "THE SPLIT IS COVERED":
+ * ALL SIX RUN `useTrailing: false, atr: 0`, SO THEY EXERCISE ONLY THE HARD FLOOR PAIR. The
+ * TRAILING-PATH trigger surfaces have **ZERO behavioural divergent coverage** — `tecUpdatePosition`
+ * (the one that was missed in the first implementation and is the leg that books a WIN),
+ * `isDiscontinuityActive`, and `tecShouldClose` are held ONLY by source-text regex in
+ * `b-price-side-8a-p1-exit-fence.test.ts` (tests 8, 8b, 8d, 8e). A regex proves the ARGUMENT is
+ * spelled right; it cannot prove the DECISION changed.
+ * ⚠️ IT IS A FINDING RATHER THAN A BLOCKER ONLY BECAUSE TRAILING IS OFF ON THE ACTIVE PATH TODAY
+ * (`atr_at_open` is 0 on every readable position), so the floor pair IS the live decision. ⛔ THE
+ * DAY THAT STAMP IS FIXED, THESE SIX STOP COVERING THE LIVE SURFACE — and the fixtures that would
+ * cover it do not exist. (Langston, 2026-09-14.)
  */
 describe('8a-P2 — the trigger decides and the mark does not', () => {
   const base = {
