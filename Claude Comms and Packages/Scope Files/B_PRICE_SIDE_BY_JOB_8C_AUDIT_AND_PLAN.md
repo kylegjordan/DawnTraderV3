@@ -33,7 +33,7 @@
 
 **MEASURED live 2026-09-13T05:40Z**, `/api/xstocks/filter-diagnostics` → `vtsEvaluation.levelBasisFunnel`. ⚠️ **In-memory and process-lifetime** (the module's own caveat): read as a RATE within one lifetime, never as a series. Process up since the `2ce34ce33` deploy at 2026-09-12T23:30:48Z.
 
-| lane | attempted | accepted | refused | `no_book` | `stale_book` |
+| lane | attempted | accepted | refused | `no_book` | `stale_book` | ⛔⛔ **STRUCK 2026-09-14 (Langston, at the `8a-P1` Step-7 read) — THE ZEROS ARE UNEXERCISED ARMS, NOT MEASURED-CLEAN ONES.** `buildLevelBasis` tests both-sides-absent FIRST (`level-basis.ts:212`) and RETURNS IMMEDIATELY; `one_sided_book`, `non_finite_side`, `crossed_book`, `locked_or_synthetic_book`, `age_unknown`, `stale_book` and `implausible_spread` ALL sit below it (`:213-238`). ⇒ **on a population that is 100% `no_book`, those seven arms had ZERO OPPORTUNITY — `#661` leg 3.** ⛔ **SO NO SENTENCE OF THE FORM "the books we DO have are fine" or "not one stale_book" IS SUPPORTED BY THIS DATA — WE HAVE NONE, so their quality is UNMEASURED, not good.** ✅ **WHAT SURVIVES: `no_book` = BOTH SIDES ABSENT.** ⚠️ **And even that is undifferentiated — it pools "the venue gave us nothing" with "our own code path dropped it" (this batch's own `8A_P1_AUDIT` §A-6).** ★ **THREE INSTANCES OF THIS SENTENCE EXISTED ACROSS THE CORPUS AND ALL THREE ARE STRUCK IN ONE PASS — grep the class, never the instance.**
 |---|---|---|---|---|---|
 | `active:crypto_spot` | 546 | **16 (2.9%)** | 530 | **526** | 4 |
 | `vts:crypto_spot` | 273 | **1 (0.4%)** | 272 | **272** | 0 |
