@@ -11,7 +11,19 @@
 | **`T-W20C-SCALAR-LEG`** (alert `a3610acf`, row 2.4-FEE-c) | **not started — OVERDUE since 09-07** | me: the two harness legs, then the ≥99 % gate test. July aged out; re-scope first |
 | **`B-ARCHIVE-RETENTION-SIZING`** (`#592`, alert `74424570`, row 2.4f) | **blocked on Kyle** | his retention decision. Slope now recorded: +1.07 GB / ~2 days |
 
-## THE QUEUE, in working order
+## ⭐ KYLE 2026-09-15 — BATCH WORK HELD (weekly budget); INVESTIGATIONS ONLY
+
+**RUNNING NOW (read-only investigations, Kyle-directed):**
+- **`3n.t` `B-FEED-BY-SITUATION-AUDIT`** — every path (paper · VTS · live) × class (crypto · xStock) × price job: feed wired today vs correct feed, and fresh enough. ⚠️ `PRICE_FEED_MAP.md` §3 already judges right-kind (Q1) and freshness (Q2) for **8 situations only**; VTS exits/fills/booking, xStock active rows and every live-mode cell are NOT judged (§2 says live mode is "unverified").
+- **`3n.w` `B-EXIT-MAKER-VS-TAKER-REVIEW`** — paper exit outcomes by fill type (stops excluded); the "no taker fallback on target exits" option.
+
+**HELD, IN THIS ORDER (plan rows in the `3n` table):**
+1. `3n.s` `B-PRICE-DOC-CONSOLIDATE` — combine the feed map with `PRICING_DATA_ARCHITECTURE.md`.
+2. `3n.u` `B-FEED-MISMATCH-FIX` — fixes from `3n.t`; ownership with CC-C + Langston.
+3. `3n.v` `B-REACH-BASELINE-ADJUST` — Kyle ruled the one-way rule goes; after CC-C's exit fix (`8a-P2`).
+4. `3n.x` review — necessary vs nice-to-have before live mode (CC-B drafts, Kyle decides).
+
+## THE QUEUE, in working order (as of 2026-09-13; the held list above now comes first)
 
 1. **`B-GEOMETRY-REACH-BASELINE` Step 11** — completion report, then close.
 2. **`T-W20C-SCALAR-LEG`** — re-scope the window, build the two harness legs, run the gate test.
