@@ -199,6 +199,11 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     expect(VTS).toMatch(/\[VTS\]\[MAKER_MARKETABLE_DROPPED\] \$\{symbol\}\/\$\{strategy\} \(\$\{_assetClass\}\)/);
     expect(XS).toMatch(/\[VTS\]\[MARKETABLE_TAKER_FALLBACK\] \$\{symbol\}\/\$\{strategyKey\} \(xstock_spot\)/);
     expect(XS).toMatch(/\[VTS\]\[MAKER_MARKETABLE_DROPPED\] \$\{symbol\}\/\$\{strategyKey\} \(xstock_spot\)/);
+    // r3 BLOCKER-1/1b: the shared twin seam serves both lanes, so every twin line carries the class, and the
+    // denominator's discriminator is a literal token in the line rather than a code-only reason string.
+    expect(VTS).toMatch(/\[VTS\]\[TWIN_SKIPPED\] \$\{symbol\}\/\$\{strategy\} \(\$\{tradeAssetClass\}\) reason=marketable_maker/);
+    expect(VTS).toMatch(/\[VTS\]\[TWIN_SKIPPED\] \$\{symbol\}\/\$\{strategy\} \(\$\{tradeAssetClass\}\) reason=degenerate_fallback/);
+    expect(VTS).toMatch(/\[VTS\]\[TWIN_OPENED\] \$\{symbol\}\/\$\{strategy\} \(\$\{tradeAssetClass\}\)/);
   });
 
   it('nit: the resting-sale fill narrows the side instead of casting it', () => {

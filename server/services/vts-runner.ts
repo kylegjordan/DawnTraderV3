@@ -4697,9 +4697,9 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
     });
     if (plan.kind === 'skip') {
       if (plan.reason === 'marketable_maker') {
-        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} ask=${input.placementTransactablePrice})`);
+        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=marketable_maker: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} ask=${input.placementTransactablePrice})`);
       } else if (plan.reason === 'degenerate_fallback') {
-        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: chosen leg was the marketable taker-fallback — comparison degenerate`);
+        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=degenerate_fallback: chosen leg was the marketable taker-fallback — comparison degenerate`);
       }
       // twin_disabled: silent, exactly as the inline `if (resolveTwinEnabled(...))` wrapper was.
       return;
@@ -4724,7 +4724,7 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
     const _twinGapNote = plan.twinMode === 'maker'
       ? ` limit=${entryPrice} ask=${_twinAsk ?? 'none'} gap=${_twinAsk !== null ? (_twinAsk - entryPrice).toExponential(4) : 'n/a'} gapBps=${_twinAsk !== null && entryPrice > 0 ? (((_twinAsk - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'}`
       : '';
-    console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy}: ${plan.twinMode} twin ${twinId} paired to chosen ${input.effectiveMode} (open twins now: ${_twinCount})${_twinGapNote}`);
+    console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy} (${tradeAssetClass}): ${plan.twinMode} twin ${twinId} paired to chosen ${input.effectiveMode} (open twins now: ${_twinCount})${_twinGapNote}`);
   } catch (twinErr) {
     const t = openVirtualTrades.get(input.chosenTradeId);
     console.error(`[P19-B7.2c][VTS][TWIN_FAIL] ${t?.symbol ?? input.chosenTradeId}/${t?.strategy ?? '?'}: twin open failed (real trade unaffected):`, twinErr instanceof Error ? twinErr.message : twinErr);
