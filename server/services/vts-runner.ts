@@ -3361,7 +3361,11 @@ async function resolveOpenVirtualTrades(): Promise<{
         seed: tecSeed,
       });
       if (decision.noDecisionReason === 'no_transactable_side') _vtsTouch.exitNoTransactableSide++;
-      if (decision.noDecisionReason !== undefined) {
+      // ⛔ CRYPTO ONLY (found live at Step 7, 2026-09-15 12:05Z): the rail opened 53 streaks in one pass while crypto had
+      // ZERO no-transactable-side refusals — the other 14+ were xStock trades with no usable mark, which this lane passes
+      // through the same evaluator. An xStock no-decision rail is `8a-P4`'s, under Kyle's #994 notify rules (off-hours
+      // staleness must not page); alerting on it here would page on exactly the case he ruled out.
+      if (decision.noDecisionReason !== undefined && trade.assetClass === 'crypto_spot') {
         const _ntNow = Date.now();
         const _nt = _vtsNoTriggerStreak.get(tradeId) ?? { sinceMs: _ntNow, alerted: false, lastReason: decision.noDecisionReason };
         _nt.lastReason = decision.noDecisionReason;

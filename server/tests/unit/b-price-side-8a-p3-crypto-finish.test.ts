@@ -168,7 +168,7 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     expect(VTS).toMatch(/if \(!_nt\.alerted && _ntNow - _nt\.sinceMs >= VTS_NO_TRIGGER_ALERT_AFTER_MS\)/);
     expect(VTS).toMatch(/dedupe_key: `no-trigger-vts-\$\{trade\.symbol\}`/);
     // r3: the streak runs over EVERY no-decision reason and clears ONLY on a real decision.
-    expect(VTS).toMatch(/if \(decision\.noDecisionReason !== undefined\) \{/);
+    expect(VTS).toMatch(/if \(decision\.noDecisionReason !== undefined && trade\.assetClass === 'crypto_spot'\) \{/);
     expect(VTS).toMatch(/\} else \{\s*_vtsNoTriggerStreak\.delete\(tradeId\);/);
     expect(VTS).not.toMatch(/if \(decision\.noDecisionReason === 'no_transactable_side'\) \{\s*_vtsTouch\.exitNoTransactableSide\+\+;\s*const _ntNow/);
     expect(VTS).not.toMatch(/_vtsNoTriggerStreak\.get\(trade\.symbol\)/);
