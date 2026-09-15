@@ -35,7 +35,7 @@ function base(over: Partial<Parameters<typeof planTwin>[0]> = {}) {
     pendingMaker: false,
     decisionChosenMode: 'taker' as const,
     limitPrice: 100,
-    currentMarketPrice: 101, // above the buy limit → NOT marketable
+    placementTransactablePrice: 101, // above the buy limit → NOT marketable
     ...FEES,
     makerMaxPendingMs: () => MAX_PENDING,
     nowMs: NOW,
@@ -82,9 +82,9 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
 
   it('maker twin would be MARKETABLE at placement (market ≤ buy limit) → skip, no honest rest', () => {
     // market AT the limit — tradedThrough is <= for a buy, exactly the inline comparator.
-    expect(planTwin(base({ currentMarketPrice: 100 }))).toEqual({ kind: 'skip', reason: 'marketable_maker' });
+    expect(planTwin(base({ placementTransactablePrice: 100 }))).toEqual({ kind: 'skip', reason: 'marketable_maker' });
     // market BELOW the limit.
-    expect(planTwin(base({ currentMarketPrice: 99.5 }))).toEqual({ kind: 'skip', reason: 'marketable_maker' });
+    expect(planTwin(base({ placementTransactablePrice: 99.5 }))).toEqual({ kind: 'skip', reason: 'marketable_maker' });
   });
 
   it('chosen leg was the marketable taker-FALLBACK (decision=maker, not pending) → degenerate, skip', () => {
@@ -98,11 +98,11 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
 
   it('skip precedence matches inline order: marketable check fires on the maker twin, disabled beats everything', () => {
     // Disabled wins even in an otherwise-marketable configuration (inline: outer wrapper).
-    expect(planTwin(base({ twinEnabled: false, currentMarketPrice: 99 }))).toEqual({
+    expect(planTwin(base({ twinEnabled: false, placementTransactablePrice: 99 }))).toEqual({
       kind: 'skip', reason: 'twin_disabled',
     });
     // A TAKER twin (pending-maker chosen leg) is never blocked by marketability — it opens filled.
-    const plan = planTwin(base({ pendingMaker: true, decisionChosenMode: 'maker', currentMarketPrice: 99 }));
+    const plan = planTwin(base({ pendingMaker: true, decisionChosenMode: 'maker', placementTransactablePrice: 99 }));
     expect(plan.kind).toBe('open');
     if (plan.kind === 'open') expect(plan.twinMode).toBe('taker');
   });

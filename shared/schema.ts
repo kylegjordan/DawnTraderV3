@@ -1884,8 +1884,15 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  non-null fence green (#546 in the other direction). */
   entryPriceProducer: varchar("entry_price_producer", { length: 40 }),
   entryPriceSource: varchar("entry_price_source", { length: 40 }),
+  /** ⛔ `8a-P3` CUTOVER — ON A MAKER-FILL ROW THIS COLUMN HOLDS TWO QUANTITIES, TOLD APART BY `entry_price_source`:
+   *  source `book_top:*` / `ticker_bbo:*` ⇒ the ASK that drove a crypto fill; any other source ⇒ the LIMIT (every
+   *  pre-cutover maker row, and xStock). A taker row holds the signal's entry level. */
   entryDecisionPrice: decimal("entry_decision_price", { precision: 20, scale: 10 }),
-  /** ⛔ NULL BY CONSTRUCTION ON A MAKER-FILL ROW, and this comment is that record: a maker
+  /** ⛔ `8a-P3` CUTOVER — READ `entry_price_source` FIRST ON A MAKER ROW. A crypto maker fill is now decided on a touch
+   *  quote: its source reads `book_top:<producer>` or `ticker_bbo:<producer>`, and this column holds the BOOK quote's
+   *  age on the book rung and NULL on the ticker rung. Rows whose source is not of that form are pre-cutover (or
+   *  xStock), where NULL meant no book was consulted — two meanings of NULL, told apart by the source.
+   *  PRE-CUTOVER TEXT: ⛔ NULL BY CONSTRUCTION ON A MAKER-FILL ROW, and this comment is that record: a maker
    *  fill consults NO depth — its decision instrument is the price tick. A taker row carries
    *  a real age. One column, one vocabulary, one fence: `entry_price_producer` absorbs
    *  the cohort rather than a second column family disagreeing with the first.

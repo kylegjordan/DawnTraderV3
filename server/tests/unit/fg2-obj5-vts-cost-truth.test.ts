@@ -36,19 +36,19 @@ describe('OBJ-5a — resolveVtsBookedExitPrice (the class seam + the null arm)',
     const clamp = 100;      // TEC's stop
     const mark = 99.85;     // where the bid actually was
     expect(mark).not.toBe(clamp);
-    expect(resolveVtsBookedExitPrice('crypto_spot', mark, clamp)).toBe(mark);
+    expect(resolveVtsBookedExitPrice('crypto_spot', mark, mark, clamp).price).toBe(mark);
   });
 
   it('xStock: keeps the CLAMP even when a differing mark exists (§7.4 row 2 seam)', () => {
-    expect(resolveVtsBookedExitPrice('xstock_spot', 118.75, 122.0)).toBe(122.0);
+    expect(resolveVtsBookedExitPrice('xstock_spot', 118.75, 118.75, 122.0).price).toBe(122.0);
   });
 
   it('null arm: no live mark ⇒ the evaluator\'s own price, never NaN/0', () => {
-    expect(resolveVtsBookedExitPrice('crypto_spot', null, 100)).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', undefined, 100)).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', NaN, 100)).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', 0, 100)).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', -1, 100)).toBe(100);
+    expect(resolveVtsBookedExitPrice('crypto_spot', null, null, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice('crypto_spot', undefined, undefined, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice('crypto_spot', NaN, NaN, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice('crypto_spot', 0, 0, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice('crypto_spot', -1, -1, 100).price).toBe(100);
   });
 });
 
@@ -76,7 +76,7 @@ describe('OBJ-5b — planTwin re-prices the twin\'s OWN entry fee (the majority 
   const base = {
     twinEnabled: true,
     limitPrice: 100,
-    currentMarketPrice: 101,   // above the limit ⇒ a maker twin is NOT marketable at placement
+    placementTransactablePrice: 101,   // above the limit ⇒ a maker twin is NOT marketable at placement
     feeRateMaker: FEE_MAKER,
     feeRateTaker: FEE_TAKER,
     makerMaxPendingMs: () => 60_000,
@@ -131,7 +131,7 @@ describe('OBJ-5b — planTwin re-prices the twin\'s OWN entry fee (the majority 
   it('the skip paths are untouched by the re-price inputs', () => {
     const plan = planTwin({
       ...base,
-      currentMarketPrice: 99,  // marketable at placement ⇒ maker twin skipped
+      placementTransactablePrice: 99,  // marketable at placement ⇒ maker twin skipped
       pendingMaker: false,
       decisionChosenMode: 'taker',
       chosenFrictionCost: 0.02,

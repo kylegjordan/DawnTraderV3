@@ -85,7 +85,10 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
   it('OBJ-9: the maker FILL branch writes the durable entry stamp AND logs an absent tradeId', () => {
     const src = code(AEE);
     expect(src).toMatch(/entryPriceProducer:\s*provenance\.producer/);
-    expect(src).toMatch(/entryPriceSource:\s*provenance\.source/);
+    // `8a-P3`: the source is the deciding touch quote's rung on crypto and `provenance.source` otherwise — still
+    // PASSED from the object that decided, never derived from `priceSource`.
+    expect(src).toMatch(/entryPriceSource:\s*_fillSource/);
+    expect(src).toMatch(/_fillSource = _fillQuote !== null \?[\s\S]{0,80}: provenance\.source;/);
     // CONDITION-2: a silent skip makes the fill-rate instrument show a gap indistinguishable from
     // a non-fill. The absence must be recorded, exactly as the drop branch records its own.
     expect(src).toMatch(/MAKER_FILL_UNSTAMPED/);

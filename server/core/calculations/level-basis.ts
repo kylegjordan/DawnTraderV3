@@ -744,7 +744,12 @@ export type LevelBasisStage =
   | 'active_signal_birth'
   | 'vts_signal_birth'
   | 'rtb_refresh'
-  | 'exit_trigger';
+  | 'exit_trigger'
+  // `8a-P3`: OWN stages, so an entry-leg or VTS selection never pools into the paper exit trigger's cells
+  // (Langston r1 F1).
+  | 'active_entry_fill'
+  | 'vts_exit_trigger'
+  | 'vts_entry_fill';
 
 /** ⛔ RAW FIELDS ONLY. The recorder derives; the call site never hands over a difference. */
 export interface SideAgeAttempt {

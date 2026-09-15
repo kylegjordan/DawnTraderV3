@@ -43,32 +43,32 @@ describe('P19-B7.2c — pending-maker pure logic (shared paper+VTS)', () => {
   });
 
   it('no-fill-without-trade-through: a null/NaN price can NEVER fill', () => {
-    expect(evaluatePendingMaker({ side: 'buy', currentPrice: null, limit: 100, nowMs: 0, deadlineMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 0, deadlineMs: null })).toBe('rest');
     expect(tradedThrough('buy', NaN, 100)).toBe(false);
   });
 
   it('R2 precedence: trade-through AND past-deadline in the SAME tick → FILL WINS', () => {
     expect(evaluatePendingMaker({
-      side: 'buy', currentPrice: 99, limit: 100, nowMs: 2_000, deadlineMs: 1_000,
+      side: 'buy', transactablePrice: 99, limit: 100, nowMs: 2_000, deadlineMs: 1_000,
     })).toBe('fill');
   });
 
   it('hard-drop: past the deadline with no trade-through → DROP, period (no convert outcome exists)', () => {
-    const out = evaluatePendingMaker({ side: 'buy', currentPrice: 101, limit: 100, nowMs: 2_000, deadlineMs: 1_000 });
+    const out = evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 2_000, deadlineMs: 1_000 });
     expect(out).toBe('drop');
     // the outcome union has NO 'convert' member — the convert valve was cut by design
     expect(['fill', 'drop', 'rest']).toContain(out);
   });
 
   it('rest: before the deadline with no trade-through → keep resting (slot stays held)', () => {
-    expect(evaluatePendingMaker({ side: 'buy', currentPrice: 101, limit: 100, nowMs: 500, deadlineMs: 1_000 })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 500, deadlineMs: 1_000 })).toBe('rest');
     // a pending with no deadline recorded rests indefinitely rather than guessing
-    expect(evaluatePendingMaker({ side: 'buy', currentPrice: 101, limit: 100, nowMs: 500, deadlineMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 500, deadlineMs: null })).toBe('rest');
   });
 
   it('marketable-at-placement: market already at/through the limit (a real post-only would reject)', () => {
-    expect(isMarketableAtPlacement('buy', 99.5, 100)).toBe(true);   // best ask below our buy limit
-    expect(isMarketableAtPlacement('buy', 100.5, 100)).toBe(false); // limit rests below market — honest rest
+    expect(isMarketableAtPlacement({ side: 'buy', transactablePrice: 99.5, limit: 100 })).toBe(true);   // best ask below our buy limit
+    expect(isMarketableAtPlacement({ side: 'buy', transactablePrice: 100.5, limit: 100 })).toBe(false); // limit rests below market — honest rest
   });
 
   it('inert-tier guard (Langston Q4): the maker fill price is the limit EXACTLY — no tier haircut', () => {

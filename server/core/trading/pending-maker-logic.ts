@@ -6,6 +6,11 @@
  * Model (Kyle, LOCKED + SIMPLIFIED 2026-07-02):
  *  - FILL: honest side-aware trade-through of the REAL price — a resting BUY fills iff
  *    price ≤ limit; a resting SELL iff price ≥ limit. Never optimistic.
+ *  - ⛔⛔ `8a-P3`: "the REAL price" IS THE TRANSACTABLE SIDE, AND THE CALLER SUPPLIES IT. A resting BUY is
+ *    filled by a SELLER, so the caller passes the ASK; a resting SELL is filled by a BUYER, so the BID.
+ *    The mark this module was fed until `8a-P3` is the feed midpoint — a price nobody transacts at — and
+ *    it booked fills no counterparty reached (`#741` bucket 2, Langston ruling 2026-09-14). The input is
+ *    named `transactablePrice` at every entry point so a caller cannot pass a price without re-reading this.
  *  - DROP: past the hard-drop deadline (`maker_max_pending_ms`) → dropped, period
  *    (no convert re-evaluation).
  *  - PRECEDENCE (R2): if a pending both trades through AND is past its deadline in the
@@ -17,10 +22,10 @@
 export type PendingSide = 'buy' | 'sell';
 export type PendingOutcome = 'fill' | 'drop' | 'rest';
 
-/** Side-aware honest trade-through: did the real price trade through the resting limit? */
-export function tradedThrough(side: PendingSide, currentPrice: number, limit: number): boolean {
-  if (!Number.isFinite(currentPrice) || !Number.isFinite(limit)) return false;
-  return side === 'buy' ? currentPrice <= limit : currentPrice >= limit;
+/** Side-aware honest trade-through: did the TRANSACTABLE side (ask for a buy, bid for a sell) reach the limit? */
+export function tradedThrough(side: PendingSide, transactablePrice: number, limit: number): boolean {
+  if (!Number.isFinite(transactablePrice) || !Number.isFinite(limit)) return false;
+  return side === 'buy' ? transactablePrice <= limit : transactablePrice >= limit;
 }
 
 /**
@@ -29,8 +34,9 @@ export function tradedThrough(side: PendingSide, currentPrice: number, limit: nu
  * fill; named separately because the CONSEQUENCE differs: at placement it routes to the
  * stored-taker check, at monitor time it is a fill.)
  */
-export function isMarketableAtPlacement(side: PendingSide, currentPrice: number, limit: number): boolean {
-  return tradedThrough(side, currentPrice, limit);
+export function isMarketableAtPlacement(args: { side: PendingSide; transactablePrice: number; limit: number }): boolean {
+  // `8a-P3` (Langston r1 B2): an OBJECT argument, so a positional caller passing the midpoint cannot compile.
+  return tradedThrough(args.side, args.transactablePrice, args.limit);
 }
 
 /**
@@ -39,13 +45,14 @@ export function isMarketableAtPlacement(side: PendingSide, currentPrice: number,
  */
 export function evaluatePendingMaker(args: {
   side: PendingSide;
-  currentPrice: number | null;
+  /** `8a-P3`: the ASK for a buy, the BID for a sell. `null` ⇒ no fill this tick (the deadline still applies). */
+  transactablePrice: number | null;
   limit: number;
   nowMs: number;
   deadlineMs: number | null;
 }): PendingOutcome {
-  const { side, currentPrice, limit, nowMs, deadlineMs } = args;
-  if (currentPrice != null && tradedThrough(side, currentPrice, limit)) return 'fill'; // FILL WINS (R2)
+  const { side, transactablePrice, limit, nowMs, deadlineMs } = args;
+  if (transactablePrice != null && tradedThrough(side, transactablePrice, limit)) return 'fill'; // FILL WINS (R2)
   if (deadlineMs != null && nowMs >= deadlineMs) return 'drop';
   return 'rest';
 }
@@ -115,8 +122,12 @@ export function planTwin(params: {
   decisionChosenMode: 'taker' | 'maker';
   /** The chosen leg's entry price — the maker twin's resting limit. */
   limitPrice: number;
-  /** Market price at placement (marketable check). */
-  currentMarketPrice: number;
+  /**
+   * `8a-P3`: the price the twin's placement check reads — the ASK on crypto, the mark on xStock (explicit, `8a-P4`).
+   * `null` = no usable ask ⇒ NOT marketable, so a maker twin rests: the permissive arm, matching paper's placement
+   * (`_b72cBestAsk != null &&`). Named, not fixed; the policy for both lanes is homed at `8a-P4`.
+   */
+  placementTransactablePrice: number | null;
   feeRateMaker: number;
   feeRateTaker: number;
   /** Per-class hard-drop budget (`maker_max_pending_ms`) as a LAZY provider —
@@ -133,7 +144,11 @@ export function planTwin(params: {
   const twinMode: 'taker' | 'maker' | null =
     params.pendingMaker ? 'taker'
     : (params.decisionChosenMode === 'taker' ? 'maker' : null); // null = marketable-fallback chosen leg → degenerate
-  if (twinMode === 'maker' && isMarketableAtPlacement('buy', params.currentMarketPrice, params.limitPrice)) {
+  if (
+    twinMode === 'maker'
+    && params.placementTransactablePrice !== null
+    && isMarketableAtPlacement({ side: 'buy', transactablePrice: params.placementTransactablePrice, limit: params.limitPrice })
+  ) {
     return { kind: 'skip', reason: 'marketable_maker' };
   }
   if (twinMode == null) return { kind: 'skip', reason: 'degenerate_fallback' };

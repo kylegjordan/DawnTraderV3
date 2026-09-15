@@ -953,7 +953,8 @@ export async function evaluateXstockPairForVTS(
         let _xEffectiveMode: 'taker' | 'maker' = _xMtDecision.chosenMode;
         let _xPendingMaker = false;
         if (_xMtDecision.chosenMode === 'maker') {
-          if (isMarketableAtPlacement('buy', lastPrice, entryPrice)) {
+          // `8a-P3`: xStock passes its mark EXPLICITLY — unchanged by statement; it moves in `8a-P4`.
+          if (isMarketableAtPlacement({ side: 'buy', transactablePrice: lastPrice, limit: entryPrice })) {
             if (_xMtDecision.takerNetEV > 0) {
               _xEffectiveMode = 'taker';
               console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategyKey}: maker limit ${entryPrice} already marketable (price=${lastPrice}) — takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
@@ -1231,7 +1232,7 @@ export async function evaluateXstockPairForVTS(
             pendingMaker: _xPendingMaker,
             feeRateMaker: _xFriction.feeRateMaker,
             feeRateTaker: _xFriction.feeRateTaker,
-            currentMarketPrice: lastPrice,
+            placementTransactablePrice: lastPrice, // `8a-P3`: xStock mark, explicit (`8a-P4`)
           });
         }
       }

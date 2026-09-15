@@ -89,6 +89,14 @@ import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled 
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
 import { resolveVtsBookedExitPrice } from '../core/trading/vts-exit-booking.js';
+import {
+  selectCryptoTouch,
+  transactableSide,
+  VTS_EXIT_TOUCH_MAX_AGE_MS,
+  VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION,
+  ENTRY_LEG_NO_SPREAD_CEILING,
+  type CryptoTouchReaders,
+} from '../core/trading/crypto-touch.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
@@ -124,6 +132,25 @@ import type { VTSCycleMetrics } from '../types/virtual-trade.interface';
 import { scanPatterns } from './pattern-recognizer.js';
 import type { PatternType } from '../types';
 import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/kraken-symbol-resolver.js';
+
+// ⛔ `8a-P3` — VTS crypto touch readers (read FRESH from the cache, never from `priceDataMap`, which drops every stamp
+// and would refuse `age_unknown` on every look — Langston r3 FINDING-2) and per-pass counters, emitted once per
+// resolve pass as `[8a-P3][VTS_TOUCH]` with denominators beside numerators, then reset.
+const VTS_CRYPTO_TOUCH_READERS: CryptoTouchReaders = {
+  normalize: normalizeToInternalSymbol,
+  getBook: (s) => krakenWebSocketAdapter.getBookForFill(s),
+  getCached: (s) => priceCache.getCachedPrice(s),
+};
+const _vtsTouch = {
+  exitLooks: 0,
+  exitNoTransactableSide: 0,
+  entryFillLooks: 0,
+  entryFillRefusedFirstLook: 0,
+  entryFillRefusedSteady: 0,
+  bookedNoBidClamp: 0,
+  makerPlacedNoAsk: 0,
+};
+const _vtsEntryFillLooked = new Set<string>();
 // HF9: applyGovernance removed (dead import — governance gate moved to SQE)
 import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
@@ -2207,17 +2234,33 @@ async function generatePhase10Signal(
   // (effective-mode flip, accounting-only), else skip the trade entirely (non-trade).
   let _vtsEffectiveMode: 'taker' | 'maker' = _vtsMtDecision.chosenMode;
   let _vtsPendingMaker = false;
+  // ⛔⛔ `8a-P3` P5 — THE PLACEMENT CHECK READS THE ASK: a post-only BUY is rejected iff the ASK is at or through its
+  // limit. A SEPARATE variable, used ONLY here and at the twin — `currentMarketPrice` above stays the midpoint because
+  // it also feeds the B53 admission guard, an estimate, where the rule keeps the mid (Langston r1 F2).
+  // Crypto only; any other class passes its mark explicitly (`8a-P4`).
+  const placementAsk: number | null = _assetClass === 'crypto_spot'
+    ? transactableSide(
+        selectCryptoTouch(symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
+          maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: ENTRY_LEG_NO_SPREAD_CEILING,
+        }).selection,
+        'buy',
+      )
+    : currentMarketPrice;
   if (_vtsMtDecision.chosenMode === 'maker') {
-    if (isMarketableAtPlacement('buy', currentMarketPrice, entryPrice)) {
+    if (placementAsk !== null && isMarketableAtPlacement({ side: 'buy', transactablePrice: placementAsk, limit: entryPrice })) {
       if (_vtsMtDecision.takerNetEV > 0) {
         _vtsEffectiveMode = 'taker';
-        console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategy}: maker limit ${entryPrice} already marketable (price=${currentMarketPrice}) — takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
+        console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategy}: maker limit ${entryPrice} already marketable (ask=${placementAsk}) — takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
       } else {
-        console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategy}: maker limit ${entryPrice} marketable (price=${currentMarketPrice}) and takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
+        console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategy}: maker limit ${entryPrice} marketable (ask=${placementAsk}) and takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
         setNullReason('maker_marketable_dropped');
         return null;
       }
     } else {
+      // ⛔ `8a-P3` P5 — NO USABLE ASK RESTS THE ORDER, EXACTLY AS PAPER DOES (`aee` placement). Do NOT "fix" this
+      // into a refusal on this lane only — opposite policies on one seam would break the comparison VTS exists for.
+      // The optimistic direction, so it is COUNTED; the policy for both lanes is homed at `8a-P4`.
+      if (placementAsk === null) _vtsTouch.makerPlacedNoAsk++;
       _vtsPendingMaker = true;
     }
   }
@@ -2409,7 +2452,7 @@ async function generatePhase10Signal(
     pendingMaker: _vtsPendingMaker,
     feeRateMaker: _vtsFriction.feeRateMaker,
     feeRateTaker: _vtsFriction.feeRateTaker,
-    currentMarketPrice,
+    placementTransactablePrice: placementAsk,
   });
 
   // Batch 47f15: Record setup hash to prevent identical re-entry
@@ -3150,15 +3193,33 @@ async function resolveOpenVirtualTrades(): Promise<{
         continue;
       }
       // ONE outcome per tick via the shared PURE logic (same module as paper — R2 parity).
+      // ⛔⛔ `8a-P3` C3 — A RESTING BUY FILLS ON THE ASK, NEVER THE MIDPOINT (paper's C1, same rule). Crypto reads the
+      // touch fresh; `null` ⇒ no fill this tick. xStock passes its mark explicitly — unchanged by statement (`8a-P4`).
+      let _pFillPrice: number | null = currentPrice;
+      if (trade.assetClass === 'crypto_spot') {
+        const _pt = selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, now, {
+          maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: ENTRY_LEG_NO_SPREAD_CEILING,
+        });
+        _pFillPrice = transactableSide(_pt.selection, 'buy');
+        const _pFirstLook = !_vtsEntryFillLooked.has(tradeId);
+        _vtsEntryFillLooked.add(tradeId);
+        _vtsTouch.entryFillLooks++;
+        if (!_pt.selection.ok) {
+          if (_pFirstLook) _vtsTouch.entryFillRefusedFirstLook++;
+          else _vtsTouch.entryFillRefusedSteady++;
+        }
+        try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_entry_fill' }, _pt.selection); } catch { /* a recorder never breaks the resolve loop */ }
+      }
       const _pOutcome = evaluatePendingMaker({
         side: 'buy', // VTS trades are long-only by construction
-        currentPrice, limit: _pLimit, nowMs: now, deadlineMs: trade.makerDeadline ?? null,
+        transactablePrice: _pFillPrice, limit: _pLimit, nowMs: now, deadlineMs: trade.makerDeadline ?? null,
       });
+      if (_pOutcome !== 'rest') _vtsEntryFillLooked.delete(tradeId);
       if (_pOutcome === 'fill') {
         trade.state = 'open';
         const { markPendingMakerFilled } = await import('./vts-trade-persistence.js');
         await markPendingMakerFilled(tradeId);
-        console.log(`[P19-B7.2c][VTS][MAKER_FILLED] ${trade.symbol}: price ${currentPrice} traded through limit ${_pLimit} — pending→open at ${makerFillPrice(_pLimit)} + maker fee`);
+        console.log(`[P19-B7.2c][VTS][MAKER_FILLED] ${trade.symbol}: ${trade.assetClass === 'crypto_spot' ? 'ask' : 'mark'} ${_pFillPrice} (mark ${currentPrice}) traded through limit ${_pLimit} — pending→open at ${makerFillPrice(_pLimit)} + maker fee`);
         continue; // fills this tick; exit-eval starts next cycle
       }
       if (_pOutcome === 'drop') {
@@ -3234,6 +3295,21 @@ async function resolveOpenVirtualTrades(): Promise<{
     // cycle; the refresh OBJ-1 scheduled in resolveTECConfig reheats the class so
     // the next cycle succeeds. `decision` is declared before the try so the
     // unchanged post-processing below still sees it on the success path.
+    // ⛔⛔ `8a-P3` C5/C6 — VTS CRYPTO STOPS/TARGETS ARE DECIDED, AND ITS EXITS BOOKED, ON THE BID.
+    // One touch read per crypto trade per resolve tick with the VTS exit lane's OWN ceilings (derivations at
+    // `VTS_EXIT_TOUCH_MAX_AGE_MS` / `_SPREAD_FRACTION`). `null` ⇒ the evaluator makes NO DECISION this cycle
+    // (`no_transactable_side`), never a midpoint fallback. xStock: the mark, explicitly (`8a-P4`).
+    let _vtsExitBid: number | null = null;
+    let _vtsTriggerPrice: number | null = currentPrice;
+    if (trade.assetClass === 'crypto_spot') {
+      const _et = selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
+        maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION,
+      });
+      _vtsExitBid = transactableSide(_et.selection, 'sell');
+      _vtsTriggerPrice = _vtsExitBid;
+      _vtsTouch.exitLooks++;
+      try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_exit_trigger' }, _et.selection); } catch { /* a recorder never breaks the resolve loop */ }
+    }
     let decision: Awaited<ReturnType<typeof evaluateTECExit>>;
     try {
       decision = await evaluateTECExit({
@@ -3244,14 +3320,9 @@ async function resolveOpenVirtualTrades(): Promise<{
         stopPrice: trade.stopLoss,
         targetPrice: trade.takeProfit,
         currentPrice,
-        // ⛔⛔ `8a-P2` — VTS IS OUT OF SCOPE FOR THE TRANSACTABLE-SIDE SWITCH, AND THIS LINE SAYS SO
-        // RATHER THAN LEAVING IT TO AN OMISSION. Row `8a` is the ACTIVE CRYPTO exit lane; VTS has
-        // its own booking rule (`vts-exit-booking.ts`) and its own calibration epoch, and moving
-        // its trigger silently would re-base a learning population mid-window.
-        // ⚠️ PASSING `currentPrice` HERE IS A DELIBERATE NO-OP THAT PRESERVES TODAY'S BEHAVIOUR
-        // EXACTLY. It is NOT an endorsement of the midpoint for this lane — that question is real
-        // and is homed, not answered here.
-        triggerPrice: currentPrice,
+        // ⛔⛔ `8a-P3` — the VTS trigger is the BID on crypto (`_vtsTriggerPrice`, set above) and the mark on xStock,
+        // explicitly. The `8a-P2` out-of-scope note that stood here is closed by this row; the VTS epoch moved with it.
+        triggerPrice: _vtsTriggerPrice,
         atr: trade.atrAtOpen ?? 0,
         holdDurationMs,
         maxHoldMs: isVtsMaxHoldEnabled() ? MAX_HOLD_MS : Infinity, // P19-B8.5j: OFF → Infinity disables the valve
@@ -3270,6 +3341,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         // B80: Option C+ seed (only on first cycle post-restart).
         seed: tecSeed,
       });
+      if (decision.noDecisionReason === 'no_transactable_side') _vtsTouch.exitNoTransactableSide++;
     } catch (tecExitErr) {
       console.error(
         `[TEC_VTS_EXIT_EVAL_ISOLATED] tradeId=${tradeId} symbol=${trade.symbol} ` +
@@ -3378,17 +3450,26 @@ async function resolveOpenVirtualTrades(): Promise<{
       );
     }
 
+    // F-G-2 OBJ-5a + `8a-P3` C6: crypto books the BID — the price a seller receives — not TEC's clamp and no
+    // longer the mark. A live mark with no usable bid falls to the clamp arm and is COUNTED: that arm is the
+    // free-exit fiction, and without the counter its growth past today's "no live mark" set is invisible
+    // (Langston r1 F3). xStock keeps the clamp behind the §7.4 seam. Shared resolver with the shadow lane.
+    const _vtsBooked = resolveVtsBookedExitPrice(trade.assetClass, _vtsExitBid, currentPrice, decision.exitPrice);
+    if (_vtsBooked.arm === 'clamp_no_bid') _vtsTouch.bookedNoBidClamp++;
     tradesToClose.push({
       id: tradeId,
       trade,
-      // F-G-2 OBJ-5a: book the OBSERVED mark, not TEC's clamp (crypto rows; xStock keeps the
-      // clamp behind the §7.4 seam; null mark keeps the evaluator's own price). Shared resolver
-      // with the shadow lane below — zero drift.
-      exitPrice: resolveVtsBookedExitPrice(trade.assetClass, currentPrice, decision.exitPrice),
+      exitPrice: _vtsBooked.price,
       exitReason: normalizedReason,
     });
   }
   
+  // `8a-P3` — one line per resolve pass when there was anything to look at, denominators beside numerators, then reset.
+  if (_vtsTouch.exitLooks + _vtsTouch.entryFillLooks + _vtsTouch.makerPlacedNoAsk > 0) {
+    console.log(`[8a-P3][VTS_TOUCH] exitLooks=${_vtsTouch.exitLooks} exitNoTransactableSide=${_vtsTouch.exitNoTransactableSide} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} bookedNoBidClamp=${_vtsTouch.bookedNoBidClamp} makerPlacedNoAsk=${_vtsTouch.makerPlacedNoAsk}`);
+  }
+  for (const k of Object.keys(_vtsTouch) as Array<keyof typeof _vtsTouch>) _vtsTouch[k] = 0;
+
   // Directive 11.6C: Track persistence and ML queue counts
   let persisted = 0;
   let mlQueued = 0;
@@ -4034,6 +4115,16 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     if (!trade.assetClass) { openShadowTrades.delete(tradeId); continue; }
     const holdDurationMs = now - trade.openedAt;
     const currentPrice = getShadowPrice(trade.symbol, trade.assetClass);
+    // `8a-P3`: the shadow lane reads the same touch as the real lane — without counters or funnel records, so the
+    // shadow never pools into the real lane's cells.
+    const _sExitBid: number | null = trade.assetClass === 'crypto_spot'
+      ? transactableSide(
+          selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
+            maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION,
+          }).selection,
+          'sell',
+        )
+      : null;
     const existingTecState = getTrailingState(tradeId);
     const tecSeed = existingTecState ? undefined : {
       tradeMode: 'TARGET' as const,
@@ -4049,14 +4140,8 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
         stopPrice: trade.stopLoss,
         targetPrice: trade.takeProfit,
         currentPrice,
-        // ⛔⛔ `8a-P2` — VTS IS OUT OF SCOPE FOR THE TRANSACTABLE-SIDE SWITCH, AND THIS LINE SAYS SO
-        // RATHER THAN LEAVING IT TO AN OMISSION. Row `8a` is the ACTIVE CRYPTO exit lane; VTS has
-        // its own booking rule (`vts-exit-booking.ts`) and its own calibration epoch, and moving
-        // its trigger silently would re-base a learning population mid-window.
-        // ⚠️ PASSING `currentPrice` HERE IS A DELIBERATE NO-OP THAT PRESERVES TODAY'S BEHAVIOUR
-        // EXACTLY. It is NOT an endorsement of the midpoint for this lane — that question is real
-        // and is homed, not answered here.
-        triggerPrice: currentPrice,
+        // `8a-P3`: the shadow lane decides on the same side as the real lane (bid on crypto, mark on xStock).
+        triggerPrice: trade.assetClass === 'crypto_spot' ? _sExitBid : currentPrice,
         atr: trade.atrAtOpen ?? 0,
         holdDurationMs,
         maxHoldMs: isVtsMaxHoldEnabled() ? SHADOW_MAX_HOLD_MS : Infinity, // P19-B8.5j: OFF → Infinity (still the only exit-math param differing from the real pass)
@@ -4084,7 +4169,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     if (!decision.shouldExit) continue;
     const reason = decision.exitReason === 'stale_timeout' ? 'shadow_max_hold' : (decision.exitReason ?? 'timeout');
     // F-G-2 OBJ-5a: same resolver as the real lane (:3238) — the shadow lane books the same way.
-    toClose.push({ id: tradeId, trade, exitPrice: resolveVtsBookedExitPrice(trade.assetClass, currentPrice, decision.exitPrice), exitReason: reason });
+    toClose.push({ id: tradeId, trade, exitPrice: resolveVtsBookedExitPrice(trade.assetClass, _sExitBid, currentPrice, decision.exitPrice).price, exitReason: reason });
   }
 
   for (const { id, trade, exitPrice, exitReason } of toClose) {
@@ -4512,8 +4597,8 @@ export interface MaybeOpenTwinInput {
   /** Per-class DB-governed fee rates (getFrictionForAssetClass at the caller). */
   feeRateMaker: number;
   feeRateTaker: number;
-  /** Market price AT PLACEMENT (marketable check + honest-rest gap log). */
-  currentMarketPrice: number;
+  /** `8a-P3`: the price the twin's placement check reads — the ASK on crypto, the mark on xStock (explicit, `8a-P4`); `null` = no usable ask ⇒ not marketable (the permissive arm, as paper). */
+  placementTransactablePrice: number | null;
 }
 
 export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
@@ -4532,7 +4617,7 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       pendingMaker: input.pendingMaker,
       decisionChosenMode: input.decisionChosenMode,
       limitPrice: entryPrice,
-      currentMarketPrice: input.currentMarketPrice,
+      placementTransactablePrice: input.placementTransactablePrice,
       feeRateMaker: input.feeRateMaker,
       feeRateTaker: input.feeRateTaker,
       // Lazy — resolved only in the maker-twin open branch, exactly where the
@@ -4545,9 +4630,10 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       chosenEntryFeeRate: chosenTrade.entryFeeRate,
       nowMs: Date.now(),
     });
+    if (plan.kind === 'open' && plan.twinMode === 'maker' && input.placementTransactablePrice === null) _vtsTouch.makerPlacedNoAsk++;
     if (plan.kind === 'skip') {
       if (plan.reason === 'marketable_maker') {
-        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} market=${input.currentMarketPrice} gap=${(input.currentMarketPrice - entryPrice).toExponential(4)} gapBps=${entryPrice > 0 ? (((input.currentMarketPrice - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'})`);
+        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} ask=${input.placementTransactablePrice})`);
       } else if (plan.reason === 'degenerate_fallback') {
         console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: chosen leg was the marketable taker-fallback — comparison degenerate`);
       }
@@ -4570,7 +4656,7 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
     // log the SIGN + SIZE of the limit-vs-market gap AT PLACEMENT so a rested limit
     // sitting a rounding-hair off the market is visible in the log, not inferred.
     const _twinGapNote = plan.twinMode === 'maker'
-      ? ` limit=${entryPrice} market=${input.currentMarketPrice} gap=${(input.currentMarketPrice - entryPrice).toExponential(4)} gapBps=${entryPrice > 0 ? (((input.currentMarketPrice - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'}`
+      ? ` limit=${entryPrice} ask=${input.placementTransactablePrice}`
       : '';
     console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy}: ${plan.twinMode} twin ${twinId} paired to chosen ${input.effectiveMode} (open twins now: ${_twinCount})${_twinGapNote}`);
   } catch (twinErr) {

@@ -455,6 +455,20 @@ import { resolveMakerMaxPendingMs } from './maker-taker-config.js';
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
+import {
+  selectCryptoTouch,
+  transactableSide,
+  ENTRY_FILL_TOUCH_MAX_AGE_MS,
+  ENTRY_LEG_NO_SPREAD_CEILING,
+  type CryptoTouchReaders,
+} from '../core/trading/crypto-touch.js';
+// `8a-P3` — the paper engine's crypto touch readers. The book read is IN-MEMORY (`getBookForFill` reads the WS
+// mini-book map), not a venue call; `selectCryptoTouch` normalises the symbol before it (Langston r4 CONDITION-1).
+const CRYPTO_TOUCH_READERS: CryptoTouchReaders = {
+  normalize: normalizeToInternalSymbol,
+  getBook: (s) => krakenWebSocketAdapter.getBookForFill(s),
+  getCached: (s) => priceCache.getCachedPrice(s),
+};
 import { getLatestEquityTick } from './passive-archive/equity-spot-archiver.js'; // P19-B8.5 xstock marks — the equities-feed venue leg
 import { markKindOf } from './market-data/mark-kind.js'; // B-EXIT-BOOK-AGE-STAMP P1 — the one mid-or-last predicate
 import { restRateLimiter } from './market-data/rest-rate-limiter.js'; // B-PRICE-SIDE-BY-JOB r5 P-7h — the shared REST token bucket
@@ -1551,8 +1565,44 @@ export class ActiveExecutionEngine {
     const safePrice = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : null;
     const side = (position.side ?? 'buy') as 'buy' | 'sell';
     const deadlineMs = position.makerDeadline ? new Date(position.makerDeadline).getTime() : null;
-    const outcome = evaluatePendingMaker({ side, currentPrice: safePrice, limit, nowMs: Date.now(), deadlineMs });
+    // ⛔⛔ `8a-P3` C1 — A RESTING ORDER FILLS AGAINST THE SIDE THAT CAN TAKE IT, NEVER THE MIDPOINT.
+    // A resting BUY is filled by a SELLER, so it fills iff the ASK reaches the limit (a SELL, the BID).
+    // `safePrice` is the mark — the feed midpoint — and filling on it booked maker fills no seller reached.
+    // CRYPTO: a dedicated touch read (the WS mini-book, in memory, then the cache sides), under its own stage
+    // and its own measured ceiling (`ENTRY_FILL_TOUCH_MAX_AGE_MS`), no spread ceiling on an entry leg.
+    // `null` ⇒ NO FILL THIS TICK (the order keeps resting; the hard-drop deadline still applies).
+    // xSTOCK: the mark, EXPLICITLY — unchanged by statement; it moves in `8a-P4`.
+    const _isCryptoPending = (position.assetClass ?? 'crypto_spot') === 'crypto_spot';
+    let _fillTouch: ReturnType<typeof selectCryptoTouch>['selection'] | null = null;
+    let fillPrice: number | null = safePrice;
+    if (_isCryptoPending) {
+      const _ft = selectCryptoTouch(position.symbol, CRYPTO_TOUCH_READERS, Date.now(), {
+        maxAgeMs: ENTRY_FILL_TOUCH_MAX_AGE_MS, maxSpreadFraction: ENTRY_LEG_NO_SPREAD_CEILING,
+      });
+      _fillTouch = _ft.selection;
+      fillPrice = transactableSide(_ft.selection, side);
+      const _firstLook = !this._entryFillLooked.has(position.id);
+      this._entryFillLooked.add(position.id);
+      this._entryFillLooks++;
+      if (!_ft.selection.ok) {
+        if (_firstLook) this._entryFillRefusedFirstLook++;
+        else this._entryFillRefusedSteady++;
+      }
+      try {
+        recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'active_entry_fill' }, _ft.selection);
+      } catch (err) {
+        // A recorder may never break the fill path.
+        console.error(`[8a-P3][ENTRY_FILL_RECORD_FAILED:${this.mode}] ${position.symbol}:`, err instanceof Error ? err.message : err);
+      }
+    }
+    const outcome = evaluatePendingMaker({ side, transactablePrice: fillPrice, limit, nowMs: Date.now(), deadlineMs });
+    if (outcome !== 'rest') this._entryFillLooked.delete(position.id);
     if (outcome === 'fill') {
+      // `8a-P3` — what DROVE the fill, for the durable stamp below.
+      const _fillQuote = _fillTouch !== null && _fillTouch.ok ? _fillTouch.quote : null;
+      const _fillSource = _fillQuote !== null ? `${_fillQuote.basis}:${_fillQuote.producer}` : provenance.source;
+      const _fillDecisionPrice = _isCryptoPending && fillPrice !== null ? fillPrice : makerFillPrice(limit);
+      const _fillBookAgeMs = _fillQuote !== null && _fillQuote.basis === 'book_top' ? Math.round(_fillQuote.ageMs) : null;
       // NOTE: openedAt stays stamped at PLACEMENT, not at this fill — resting time is
       // included in any holding-duration analytic (cosmetic; EV/expectancy unaffected
       // since entry price is the limit either way). A true in-market duration needs a
@@ -1577,12 +1627,19 @@ export class ActiveExecutionEngine {
         // log line says it was written. Same class as #704.
         const _fillStamped = await storage.updateClosedTrade(this.mode, _fillTradeId, {
           entryPriceProducer: provenance.producer,
-          entryPriceSource: provenance.source,
+          // ⛔⛔ `8a-P3` (Langston r4 CONDITION-1) — THE STAMP NAMES THE RUNG. A crypto fill is DECIDED on a touch
+          // quote, so its source is that quote's `basis:producer` (`book_top:…` / `ticker_bbo:…`) — which also makes a
+          // post-cutover row self-identifying against pre-cutover rows carrying the mark's source. Still PASSED from
+          // the object that decided, never re-derived from `priceSource`. xStock: `provenance.source`, unchanged.
+          entryPriceSource: _fillSource,
           entryObservedAtMs: provenance.observedAtMs,
-          entryDecisionPrice: makerFillPrice(limit).toString(),
-          // ⛔ NULL BY CONSTRUCTION, not by omission: a maker fill consults NO book — its decision
-          // instrument is the price tick. The column comment carries the same statement.
-          entryBookAgeMs: null,
+          // `8a-P3` — THE PRICE THAT DROVE THE FILL: the ASK on crypto; the LIMIT on xStock, as before.
+          entryDecisionPrice: _fillDecisionPrice.toString(),
+          // ⛔ `8a-P3` — REWRITTEN. This read "NULL BY CONSTRUCTION… a maker fill consults NO book", which a crypto
+          // fill now falsifies whenever the WS book carried the touch. It is the book quote's age on the BOOK rung and
+          // `null` otherwise: after the cutover a `null` means the TICKER rung carried the fill (read
+          // `entry_price_source`); before it, that no book was read. The column comment says the same.
+          entryBookAgeMs: _fillBookAgeMs,
         } as any);
         if (!_fillStamped) {
           console.warn(`[P19-B7.2c][MAKER_FILL_STAMP_NOROW:${this.mode}] ${position.symbol}: tradeId ${_fillTradeId} matched no closed_trades row — entry provenance NOT written (silent no-op made visible)`);
@@ -1594,7 +1651,7 @@ export class ActiveExecutionEngine {
         // own no-tradeId case for exactly this reason; the fill branch now matches it.
         console.warn(`[P19-B7.2c][MAKER_FILL_UNSTAMPED:${this.mode}] ${position.symbol}: filled at ${makerFillPrice(limit)} but metadata carries no tradeId — entry provenance left NULL rather than fabricated (position opened normally)`);
       }
-      console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: price ${currentPrice} traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
+      console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: ${_isCryptoPending ? (side === 'buy' ? 'ask' : 'bid') : 'mark'} ${fillPrice} (mark ${currentPrice}) traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
       return;
     }
     if (outcome === 'drop') {
@@ -1638,9 +1695,13 @@ export class ActiveExecutionEngine {
     // unsubscribe pair at every site. Owner-keyed per mode, so paper releasing a symbol never drops
     // one live still holds. CRYPTO ONLY: the unified cache refreshes via the crypto Kraken REST
     // ticker, and the stored asset_class is the authority (#559's filter, same idiom).
-    // ⚠️ SCOPE, STATED: this refreshes the UNIFIED cache (signal-birth reads, state sync, display).
-    // The exit path reads the live-pricing adapter's own cache, so this does NOT change exit price
-    // freshness — exits are governed by D1/D3/D6 in OBJ-8, not by this lane.
+    // ⚠️ SCOPE — CORRECTED by `8a-P3` (Langston r4 CONDITION-2). This refreshes the UNIFIED cache. The exit
+    // path's MARK comes from the live-pricing adapter's own cache, so the mark's freshness is not this lane's —
+    // but the exit TRIGGER's ticker rung (`_lsSel`) and the pending-entry fill's ticker rung read
+    // `priceCache.getCachedPrice`, i.e. THIS store's SIDES (`sidesCapturedAtMs`), which this lane refreshes.
+    // ⇒ It DOES govern the age those two ceilings gate: the 8,000 ms entry ceiling was measured on this lane's
+    // ~2 s cadence, and the 2,000 ms exit ceiling meets the same cadence whenever the WS book is absent — that
+    // exposure is homed at `3n.o`. (The earlier text said this lane does NOT change exit freshness; false of the sides.)
     try {
       priceCache.setReasonMembers(
         'openTrade',
@@ -2495,12 +2556,18 @@ export class ActiveExecutionEngine {
           // same-tick place-and-fill is prohibited as an optimistic touch-fill. Do not
           // "fix" this into entry-parity.
           const _restDeadline = (position as any).exitDeadline ? new Date((position as any).exitDeadline).getTime() : null;
+          // ⛔⛔ `8a-P3` C2 — THE RESTING TARGET SALE FILLS ON THE BID. A buyer fills a resting sell, so it trades
+          // through iff the BID reaches the limit; on the mark, `mid >= limit` booked a maker target fill while the bid
+          // sat below it — on the very tick `8a-P2` already refuses a STOP on an untradeable side. Crypto reads the SAME
+          // `_lsSel` the exit trigger used this tick; `null` ⇒ no fill (the rest persists; its deadline still converts).
+          // xStock: the mark, EXPLICITLY — unchanged by statement; it moves in `8a-P4`.
+          const _restFillPrice: number | null = _posClass === 'crypto_spot' ? (_lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null) : currentPrice;
           const _restOutcome = evaluatePendingMaker({
-            side: 'sell', currentPrice, limit: _exitRestLimit, nowMs: Date.now(), deadlineMs: _restDeadline,
+            side: 'sell', transactablePrice: _restFillPrice, limit: _exitRestLimit, nowMs: Date.now(), deadlineMs: _restDeadline,
           });
           if (_restOutcome === 'fill') {
             tpHits++;
-            console.log(`[P19-B8.6][EXIT_REST_FILLED] ${position.symbol}: venue price ${currentPrice} traded through the resting exit ${_exitRestLimit} — closing at the limit + MAKER fee`);
+            console.log(`[P19-B8.6][EXIT_REST_FILLED] ${position.symbol}: ${_posClass === 'crypto_spot' ? 'bid' : 'mark'} ${_restFillPrice} (mark ${currentPrice}) traded through the resting exit ${_exitRestLimit} — closing at the limit + MAKER fee`);
             await this.closePosition(position.id, _exitRestLimit, {
               type: 'target_hit',
               price: _exitRestLimit,
@@ -2510,10 +2577,11 @@ export class ActiveExecutionEngine {
               exitRest: { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'fill' },
               // ★ THIS IS THE OBJ-2 CASE, AND IT IS THE WHOLE REASON THE COLUMN EXISTS.
               // The trade CLOSES at `_exitRestLimit` (the resting limit), but what DROVE the close
-              // is `currentPrice` — the venue tick that traded through it. Recording only the exit
+              // is the tick that traded through it (since `8a-P3`, the BID on crypto). Recording only the exit
               // price leaves the number that actually caused the exit with no trace at all, which
               // is exactly what made #741 hard to measure after the fact.
-              exitProvenance: { ..._exitProvenanceBase, decisionPrice: currentPrice },
+              // `8a-P3`: non-null here — a fill requires a transactable side.
+              exitProvenance: { ..._exitProvenanceBase, decisionPrice: _restFillPrice as number },
             });
             continue;
           }
@@ -2600,7 +2668,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} makerPlacedNoAsk=${this._makerPlacedNoAsk}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,
@@ -2620,6 +2688,10 @@ export class ActiveExecutionEngine {
     this._exitEvalHit = 0;
     this._exitEvalNoMark = 0;
     this._venueMarkNonFinite = 0;
+    this._entryFillLooks = 0;
+    this._entryFillRefusedFirstLook = 0;
+    this._entryFillRefusedSteady = 0;
+    this._makerPlacedNoAsk = 0;
   }
 
   /**
@@ -2641,6 +2713,16 @@ export class ActiveExecutionEngine {
   // `#546` printed 14,404 times in the same file whose headline change is a field that exists
   // to STOP that conflation. (Langston Step-4 FINDING-5.) Removed, and the slot now carries a
   // counter whose zero is READABLE: zero refusals against a non-zero `ladderAccepted`.
+  // ⛔ `8a-P3` — the pending-ENTRY fill's touch counters (crypto), printed on EVAL_EXIT and reset with the others.
+  // FIRST-LOOK and STEADY-STATE refusals are SEPARATE (Langston r4 FINDING-1): the first look after placement can
+  // read sides left by whichever bucket last held the symbol (readyToBuy 15 s / fx5Snapshot 30 s), so a first-look
+  // refusal is expected and benign — pooled with steady-state refusals it would push the wrong repair, a looser ceiling.
+  private _entryFillLooks = 0;
+  private _entryFillRefusedFirstLook = 0;
+  private _entryFillRefusedSteady = 0;
+  private readonly _entryFillLooked = new Set<string>();
+  // ⛔ `8a-P3` P5 — maker placements that RESTED with no usable ask (the permissive arm). Counted, not fixed (`8a-P4`).
+  private _makerPlacedNoAsk = 0;
   private _noTriggerRefusals = 0;
   // ⭐⭐ `8a-P2` — THE INVOCATION COUNT AT THE EVALUATOR'S CALL SITE, AND THE NO-HIT ARM BESIDE IT.
   // ⛔⛔ WHY: `slHits=0 tpHits=0` IS A CONJUNCTION THAT RENDERS TWO STRUCTURALLY DIFFERENT STATES
@@ -4657,7 +4739,7 @@ export class ActiveExecutionEngine {
     const _b72cLimit = signal.entryPrice;
     if (_b72ChosenMode === 'maker') {
       const _b72cBestAsk = _gate.snapshot.asks[0]?.price;
-      if (_b72cBestAsk != null && isMarketableAtPlacement('buy', _b72cBestAsk, _b72cLimit)) {
+      if (_b72cBestAsk != null && isMarketableAtPlacement({ side: 'buy', transactablePrice: _b72cBestAsk, limit: _b72cLimit })) {
         const _b72cStoredTakerEv = signal.takerNetEv;
         if (_b72cStoredTakerEv != null && _b72cStoredTakerEv > 0) {
           _b72cEffectiveMode = 'taker';
@@ -4668,6 +4750,11 @@ export class ActiveExecutionEngine {
           return { opened: false, stage: 'MAKER_MARKETABLE_DROPPED', reason: 'maker marketable at placement; taker EV not positive' };
         }
       } else {
+        // ⛔ `8a-P3` P5 — NO USABLE ASK RESTS THE ORDER (the permissive arm), AND VTS NOW DOES THE SAME. Do NOT
+        // "fix" this into a refusal on ONE lane only: VTS models this lane, and opposite policies on one seam would
+        // make the comparison meaningless. It is the optimistic direction, so it is COUNTED; the policy for both
+        // lanes is homed at `8a-P4`.
+        if (_b72cBestAsk == null) this._makerPlacedNoAsk++;
         _b72cPendingMaker = true;
       }
     }

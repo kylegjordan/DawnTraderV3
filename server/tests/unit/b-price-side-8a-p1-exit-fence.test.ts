@@ -506,6 +506,9 @@ describe('row 8a-P2 — every trigger surface reads the trigger, not the mark', 
       expect(src).toMatch(/maxSpreadFraction:\s*LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION/);
       expect(src).not.toMatch(/EXIT_TRIGGER_MAX_SPREAD_FRACTION/);
     }
+    // ⛔ `8a-P3` — AMENDED DELIBERATELY AND VISIBLY. VTS's LEVEL lane still holds the shared constants (asserted
+    // above); its EXIT lane now has its OWN, derived in `crypto-touch.ts` — never the paper exit lane's.
+    expect(VTS).toMatch(/maxSpreadFraction:\s*VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION/);
   });
 
   it('10. ⛔ THE BOOKING SITES ARE UNTOUCHED — only the trigger moved', () => {
