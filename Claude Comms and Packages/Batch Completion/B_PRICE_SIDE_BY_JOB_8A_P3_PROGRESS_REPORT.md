@@ -17,6 +17,13 @@
 
 ⛔ **EVERY `8a-P3` MEASUREMENT WINDOW ANCHORS ON `pm_uptime` OF DEPLOY 2 — 2026-09-15T12:15:04.144Z** — not on `deployed_at` (a post-check stamp that runs late), and not on deploy 1: between the two, the twin lines were class-blind.
 
+**`pm_uptime` IS THE CODE-LIVENESS BOUNDARY, NOT THE DATA-VALIDITY BOUNDARY (Langston).** State that cold-starts after boot gets its own, separately named instant, and a row is cited only from it:
+| state | data-validity instant | read |
+|---|---|---|
+| VTS crypto touch sides (the `vtsSimulation` bucket) | first `[PriceCache][vtsSimulation] refreshed` after boot: **2026-09-15 12:16:07Z** | out.log; the first `[8a-P3][VTS_TOUCH]` after boot is the same second (`exitLooks=39`, `exitNoTransactableSide=0`) |
+| paper crypto entry-fill sides (the `openTrade` lane) | first `[PriceCache][openTrade] refreshed` after boot: **none yet** — no crypto position is held, so the lane has no members | read per window at Step 7 |
+| book state, per xStock symbol | the first frame with `validated=true` after that symbol's seed. MDB/USD seeded 12:15:12.373Z and read `validated=false framesSinceSeed=0` at 12:15:13Z | read per symbol at Step 7. ⚠️ No `8a-P3` crypto figure reads book state; this row exists so a book-state window never cites seeded frames |
+
 ## 2. THE DEPLOY-TIME RECORD (Langston's carries, written at the deploy, not afterwards)
 
 **Carry 1 — the stale alert.** `651193b5-ca7d-4782-b2b8-3199615f8125` (`book-state-hollow-paper-MDB/USD`) resolved 2026-09-15T12:00:05.932Z by `cc-c` with the deployed sha as evidence, freeing the dedupe key so MDB/USD can mint the corrected body (`68b270867`).
@@ -24,6 +31,7 @@
 **Carry 2 — a population boundary.** Deploy 2's `pm_uptime` (12:15:04.144Z) splits every window whose instrument reads book-state. Deploy 1 (11:59:22.448Z) is a second boundary inside a 16-minute pre-window that nothing in this batch is measured across.
 
 **Carry 3 — what the cold seed is NOT.** MDB/USD re-seeded at 12:15:12.373Z (`mid=377.25 spread=0.00663`) on an empty retained-spread ring, i.e. **vacuously plausible**. That clears the absorbing state without exercising any clear path. ⛔ **Post-deploy quiet on MDB/USD is not evidence that `B-BOOK-STATE-RESEED-ESCAPE` (`3b.f-e`) is unneeded, and may not be cited for it.** The same held at deploy 1: 0 `REFUSE unvalidated` lines on MDB/USD in the five minutes after 11:59:22Z, against 1,481 frames before it.
+⚠️ **MDB/USD is simultaneously in the exit freshness-skip class** (alert `02944001`, mark 360 s against a 300 s ceiling, still active). No MDB cold-seed observation is read without saying so.
 
 ## 3. WINDOW-OPEN STATE (Langston's `af86443ad` conditions)
 
@@ -32,12 +40,16 @@
 | line | count in the excluded window |
 |---|---|
 | `[VTS][TWIN_OPENED]` | 0 |
-| `[VTS][TWIN_SKIPPED]` | **2** (class-blind; Langston read them as MARA/USD and OKLO/USD, both xStock) |
+| `[VTS][TWIN_SKIPPED]` | **2 — per class: xStock 2, crypto 0.** 12:07:57Z `MARA/USD/sma_trend_ride` and 12:08:27Z `OKLO/USD/sma_trend_ride`. ⚠️ The class is read from the SYMBOL against the xStock universe, not from the line (the line carried none) — an out-of-band reading, stated as such |
 | `[VTS][TWIN_FAIL]` | 0 |
 | `[VTS][TWIN] … not in openVirtualTrades` | 0 |
-| `MAKER_RESTED` (paper + VTS) | 0 |
+| `MAKER_RESTED` (paper + VTS) | 0 (crypto 0, xStock 0) |
+| `[8a-P3][VTS_TOUCH]` passes (deploy-1 code) | 6 in 12:03:25-12:08:25Z, crypto `exitLooks=39` each — excluded from every window, cited only in §4 as path evidence |
 
-**Twin switch at window open** (`module_constants` `maker_taker.twin_enabled`): `crypto_spot` = 1, `xstock_spot` = 1, both `updated_by p19-b7-2c` 2026-07-02. **Re-read at window close;** a mid-window flip shrinks the denominator with no log line.
+All other excluded counts are 0 in both classes. ⚠️ With every excluded class count at 0 or 2, exclusion cannot correlate with anything `8a-P3` measures at a size that matters.
+
+**Twin switch at window open** — read site `module_constants` (`module_name='maker_taker'`, `constant_name='twin_enabled'`), by psql on staging at **2026-09-15 12:15:55Z**: `crypto_spot` = 1, `xstock_spot` = 1, both `updated_by p19-b7-2c` 2026-07-02. **Re-read at the same site at window close.**
+⛔ **FLIP RULE, pre-registered before any data:** a flip on either class mid-window **splits** the window at the flip instant; if either side of the split is below its n-floor, the twin arm is **void** for that window (the F-G-2 A4 precedent). Neither side alone may claim a result below its n-floor.
 
 **n-floors, named before the window collects anything:**
 
@@ -65,7 +77,7 @@
 
 After deploy 1 the rail's open-streak map grew 0 → 53 → 55 → 60 between 12:04:25Z and 12:08:25Z while crypto `exitLooks` held at 39 and `exitNoTransactableSide` at 0. The rail keyed on every trade the evaluator could not decide, whatever its class, so it was heading for pages at ~12:15Z on a population this crypto batch never scoped — including, possibly, the off-hours xStock staleness case Kyle's `#994` ruling says must not page.
 ⛔ **THE CLASS MIX OF THOSE STREAKS IS UNMEASURED, AND NOW UNRECOVERABLE (Langston Step-4 C1).** `no_usable_mark` fires before `no_transactable_side` in the evaluator, so BOTH classes can produce it; `exitNoTransactableSide = 0` bounds crypto's no-side count and says nothing about the mix. Langston asked for the streaks to be enumerated by class before deploy 2; his condition arrived at 12:16:51Z, after deploy 2 had reset the map at 12:15:04Z. ⇒ **If any were crypto `no_usable_mark`, a crypto page after deploy 2 is the rail working, not the fence failing** — pre-registered here. The `vts-runner` code comment beside the fence still says the extra streaks "were xStock"; it is corrected with the `8a-P4` twin-line edits (a comment-only change is not worth a runtime file sitting undeployed and re-arming the drift rung). **Fix (`91647c9b9`):** the streak opens only for `crypto_spot` trades; crypto `no_usable_mark` still counts, as Langston's r2 ruling requires. An xStock no-decision rail belongs to `8a-P4` under the `#994` notify rules.
-*Correction, one line:* I first wrote that at least 21 of the 60 streaks were xStock; that was an inference, not a measurement, because the map size prints before the pass-end prune.
+*Correction, one line:* I first wrote that at least 21 of the 60 streaks were xStock; that was an inference, not a measurement. The map size prints before the pass-end prune, so it gives no floor at all; only a post-prune count is citable.
 ⚠️ **FROM DEPLOY 2, `openNoTriggerStreaks` IS A CRYPTO-ONLY GAUGE (Langston C2).** It is never set beside the pre-fence 53-60: two populations across a deploy boundary.
 
 ## 6. WHAT REMAINS
