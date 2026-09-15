@@ -46,7 +46,8 @@
 | `MAKER_RESTED` (paper + VTS) | 0 (crypto 0, xStock 0) |
 | `[8a-P3][VTS_TOUCH]` passes (deploy-1 code) | 6 in 12:03:25-12:08:25Z, crypto `exitLooks=39` each — excluded from every window, cited only in §4 as path evidence |
 
-All other excluded counts are 0 in both classes. ⚠️ With every excluded class count at 0 or 2, exclusion cannot correlate with anything `8a-P3` measures at a size that matters.
+For the OBJ-5 and OBJ-6 lines, every other excluded count is 0 in both classes, so their exclusion cannot correlate with what they measure at a size that matters.
+⚠️ **OBJ-2 IS DIFFERENT: its own population WAS excluded** — about **234 VTS crypto exit looks** (6 passes × `exitLooks=39`) ran on deploy-1 code in the span. They are OBJ-2's measured population, not an adjacent one, and they are excluded from both of OBJ-2's windows.
 
 **Twin switch at window open** — read site `module_constants` (`module_name='maker_taker'`, `constant_name='twin_enabled'`), by psql on staging at **2026-09-15 12:15:55Z**: `crypto_spot` = 1, `xstock_spot` = 1, both `updated_by p19-b7-2c` 2026-07-02. **Re-read at the same site at window close.**
 ⛔ **FLIP RULE, pre-registered before any data:** a flip on either class mid-window **splits** the window at the flip instant; if either side of the split is below its n-floor, the twin arm is **void** for that window (the F-G-2 A4 precedent). Neither side alone may claim a result below its n-floor.
@@ -58,6 +59,7 @@ All other excluded counts are 0 in both classes. ⚠️ With every excluded clas
 | OBJ-6 primary rests, per lane — numerator `MAKER_RESTED … ask=none` | denominator A (all `MAKER_RESTED`) ≥ **30**; denominator B (+ `MARKETABLE_TAKER_FALLBACK` + `MAKER_MARKETABLE_DROPPED`) ≥ **30** |
 | OBJ-6 twins — numerator `TWIN_OPENED` maker `ask=none` | denominator (`TWIN_OPENED` maker + `TWIN_SKIPPED … reason=marketable_maker`) ≥ **30** ⚠️ at the ~5-hour base rate of 3 opens / ~26 skips across BOTH classes, this may take days |
 | OBJ-5 honest crypto maker fill rate | ≥ **30** post-epoch crypto maker placements |
+| OBJ-2 VTS crypto exit rate per open position-hour — two equal windows: BEFORE ends at deploy 1's `pm_uptime` (11:59:22.448Z), AFTER starts at the VTS sides validity instant (12:16:07Z); the span between is excluded | **each** window ≥ **30** VTS crypto closes **and** ≥ **1,000** exit looks (AFTER, from `VTS_TOUCH`) — below either, both windows publish counts only and no rate comparison is made |
 
 **Reading rules carried from review:** `TWIN_FAIL` and the not-in-openVirtualTrades warn are published beside every twin figure, even at zero; the twin numerator is read as a ratio only once at least one crypto `ask=none` line exists in the window, otherwise it is "0 of N with no observed positive"; and every figure here is `console.log` in `out.log` (rotates several times a day, ~2-day floor), so lines are **extracted inside the window as it runs**, not looked back at.
 
