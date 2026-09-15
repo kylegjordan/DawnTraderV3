@@ -167,7 +167,10 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     expect(VTS).toMatch(/_vtsNoTriggerStreak\.get\(tradeId\)/);
     expect(VTS).toMatch(/if \(!_nt\.alerted && _ntNow - _nt\.sinceMs >= VTS_NO_TRIGGER_ALERT_AFTER_MS\)/);
     expect(VTS).toMatch(/dedupe_key: `no-trigger-vts-\$\{trade\.symbol\}`/);
+    // r3: the streak runs over EVERY no-decision reason and clears ONLY on a real decision.
+    expect(VTS).toMatch(/if \(decision\.noDecisionReason !== undefined\) \{/);
     expect(VTS).toMatch(/\} else \{\s*_vtsNoTriggerStreak\.delete\(tradeId\);/);
+    expect(VTS).not.toMatch(/if \(decision\.noDecisionReason === 'no_transactable_side'\) \{\s*_vtsTouch\.exitNoTransactableSide\+\+;\s*const _ntNow/);
     expect(VTS).not.toMatch(/_vtsNoTriggerStreak\.get\(trade\.symbol\)/);
   });
 
@@ -177,10 +180,15 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
   });
 
   it('C2: the no-ask rest is a per-event record in the placement path on both lanes, not a pass counter', () => {
-    expect(AEE).toMatch(/\[8a-P3\]\[MAKER_RESTED:\$\{this\.mode\}\][^`]*ask=\$\{_b72cBestAsk \?\? 'none'\}/);
+    expect(AEE).toMatch(/\[8a-P3\]\[MAKER_RESTED:\$\{this\.mode\}\] \$\{signal\.symbol\} \(\$\{_openClass\}\)[^`]*ask=\$\{_b72cBestAsk \?\? 'none'\}/);
     expect(VTS).toMatch(/\[8a-P3\]\[VTS\]\[MAKER_RESTED\][^`]*ask=\$\{placementAsk \?\? 'none'\}/);
     expect(AEE).not.toMatch(/makerPlacedNoAsk/);
     expect(VTS).not.toMatch(/makerPlacedNoAsk/);
+  });
+
+  it('r3 BLOCKER-2: the paper first-look record is pruned against the CYCLE\'S POSITIONS, not the looked-set', () => {
+    expect(AEE).toMatch(/const _cyclePositionIds = new Set\(openPositions\.map/);
+    expect(AEE).not.toMatch(/_entryFillLookedThisCycle/);
   });
 
   it('nit: the resting-sale fill narrows the side instead of casting it', () => {

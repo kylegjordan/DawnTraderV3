@@ -161,7 +161,11 @@ const _vtsEntryFillLooked = new Set<string>();
 // means the sides are older than 90 s (a `vtsSimulation` pass overrun), and 10 min means about six consecutive passes
 // delivered nothing usable — or the symbol never received real sides (a bid equal to the ask refuses as a synthetic book).
 const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
-const _vtsNoTriggerStreak = new Map<string, { sinceMs: number; alerted: boolean }>();
+// ⛔ r3 (Langston Step-4 r2 BLOCKER-1): ONE streak over EVERY no-decision reason — `no_transactable_side` AND
+// `no_usable_mark` (the evaluator's could-not-look arms). The harm is identical for both (no HWM, no latch, no rung, then a
+// timeout at the mark), and clearing on the other reason let a feed that flaps between them reset the clock forever.
+// It clears ONLY on a real decision (`noDecisionReason === undefined`). The last reason rides into the alert body.
+const _vtsNoTriggerStreak = new Map<string, { sinceMs: number; alerted: boolean; lastReason: string }>();
 // The shadow lane's floor (BLOCKER-1): one count, not a streak, so its starvation is visible without pooling into the real lane.
 const _vtsShadowTouch = { looks: 0, noTransactableSide: 0 };
 // HF9: applyGovernance removed (dead import — governance gate moved to SQE)
@@ -3356,25 +3360,27 @@ async function resolveOpenVirtualTrades(): Promise<{
         // B80: Option C+ seed (only on first cycle post-restart).
         seed: tecSeed,
       });
-      if (decision.noDecisionReason === 'no_transactable_side') {
-        _vtsTouch.exitNoTransactableSide++;
+      if (decision.noDecisionReason === 'no_transactable_side') _vtsTouch.exitNoTransactableSide++;
+      if (decision.noDecisionReason !== undefined) {
         const _ntNow = Date.now();
-        const _nt = _vtsNoTriggerStreak.get(tradeId) ?? { sinceMs: _ntNow, alerted: false };
+        const _nt = _vtsNoTriggerStreak.get(tradeId) ?? { sinceMs: _ntNow, alerted: false, lastReason: decision.noDecisionReason };
+        _nt.lastReason = decision.noDecisionReason;
         _vtsNoTriggerStreak.set(tradeId, _nt);
         if (!_nt.alerted && _ntNow - _nt.sinceMs >= VTS_NO_TRIGGER_ALERT_AFTER_MS) {
           _nt.alerted = true; // ONCE per streak — the `_recordPriceSkip` idiom; the dedupe key alone would leave an inert rail
           const _ntMins = Math.round((_ntNow - _nt.sinceMs) / 60_000);
-          console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] ${trade.symbol} trade ${tradeId}: no exit decision for ${_ntMins} min — a mark exists but no usable bid — raising system alert`);
+          console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] ${trade.symbol} trade ${tradeId}: no exit decision for ${_ntMins} min (last reason ${_nt.lastReason}) — raising system alert`);
           try {
             const { addAlert } = await import('./system-alerts.js');
             await addAlert({
               triggers_at: new Date(),
               category: 'breakage',
               severity: 'warning',
-              title: `VTS exit trigger unavailable — ${_ntMins} min with no usable bid for ${trade.symbol}`,
-              body: `VTS has made NO exit decision for ${_ntMins} minutes on open virtual trade ${tradeId} in ${trade.symbol}. `
-                + `A price mark exists; what is missing is a usable BID within the VTS exit ceilings (${VTS_EXIT_TOUCH_MAX_AGE_MS} ms, `
-                + `${VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION * 100}% spread). While this lasts the trade's stop and target are NOT evaluated, `
+              title: `VTS exit decisions unavailable — ${_ntMins} min with no decision for ${trade.symbol}`,
+              body: `VTS has made NO exit decision for ${_ntMins} minutes on open virtual trade ${tradeId} in ${trade.symbol} `
+                + `(most recent reason: ${_nt.lastReason}). \`no_transactable_side\` means a mark exists but no usable BID within the VTS `
+                + `exit ceilings (${VTS_EXIT_TOUCH_MAX_AGE_MS} ms, ${VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION * 100}% spread); \`no_usable_mark\` means `
+                + `no live price at all. While this lasts the trade's stop and target are NOT evaluated, `
                 + `its high-water mark and latches do not advance, and if it reaches the max-hold valve it books a timeout at the `
                 + `mark — a wrong outcome in the post-epoch VTS corpus. Read the symbol's cached sides first (a bid equal to the ask `
                 + `means the cache never received real sides) before touching either ceiling. `

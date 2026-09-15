@@ -13,7 +13,7 @@
 | C1 paper resting entry | `aee` `_processPendingMaker` | `selectCryptoTouch(…, { ENTRY_FILL_TOUCH_MAX_AGE_MS, ENTRY_LEG_NO_SPREAD_CEILING })` → `transactablePrice: fillPrice` (the ASK); stage `active_entry_fill`; xStock `fillPrice = safePrice` |
 | C2 paper resting target sale | `aee` exit-rest seam | `_restFillPrice = _posClass === 'crypto_spot' ? (_lsSel ok ? bid : null) : currentPrice`; `decisionPrice: _restFillPrice` |
 | C3 VTS resting entry | `vts-runner` pending pre-pass | `_pFillPrice` = ASK via `selectCryptoTouch` (90,000 ms, no spread ceiling); stage `vts_entry_fill` |
-| C4 VTS placement | `generatePhase10Signal` | NEW `placementAsk`; `currentMarketPrice` untouched (B53 guard); no ask ⇒ rests + `makerPlacedNoAsk` |
+| C4 VTS placement | `generatePhase10Signal` | NEW `placementAsk`; `currentMarketPrice` untouched (B53 guard); no ask ⇒ rests, logged per event as `MAKER_RESTED ask=none` (r2) |
 | C5 VTS trigger | real + shadow lane | `triggerPrice: _vtsTriggerPrice` (BID) / shadow `_sExitBid`; stage `vts_exit_trigger` (real lane only) |
 | C6 VTS booking | real + shadow lane | `resolveVtsBookedExitPrice(assetClass, bid, mark, clamp)` → `{ price, arm }`; `clamp_no_bid` counted |
 | C7 VTS twin placement | `planTwin` / `maybeOpenTwin` | `placementTransactablePrice: number \| null`; null ⇒ not marketable (as paper) |
@@ -62,9 +62,9 @@ Readers in both engines: `normalize: normalizeToInternalSymbol`, `getBook: getBo
     : currentMarketPrice;
   if (_vtsMtDecision.chosenMode === 'maker') {
     if (placementAsk !== null && isMarketableAtPlacement({ side: 'buy', transactablePrice: placementAsk, limit: entryPrice })) { … }
-    else { if (placementAsk === null) _vtsTouch.makerPlacedNoAsk++; _vtsPendingMaker = true; }
+    else { console.log(`[8a-P3][VTS][MAKER_RESTED] ${symbol}/${strategy} (${_assetClass}): limit=${entryPrice} ask=${placementAsk ?? 'none'}`); _vtsPendingMaker = true; }
 ```
-Paper's matching arm gains the same counter: `if (_b72cBestAsk == null) this._makerPlacedNoAsk++;`.
+Paper's matching arm logs the same per-event line: `[8a-P3][MAKER_RESTED:<mode>] <symbol> (<class>): limit=… ask=…|none`. *(r1 shipped a pass counter, `makerPlacedNoAsk`, here; r2 replaced it — §6 C2.)*
 
 **C5 / C6 — real lane:**
 ```ts
@@ -116,3 +116,11 @@ Paper's matching arm gains the same counter: `if (_b72cBestAsk == null) this._ma
 | **nit** — "the ASK" in the column comment | **Folded:** the transactable side, ask for a buy, bid for a sell. |
 | **nit** — `_restFillPrice as number` | **Folded:** narrowed in the `if`, cast removed, fenced. |
 | **nit** — looked-sets not pruned on other removal paths | **Folded:** paper prunes per cycle to ids looked at that cycle; VTS prunes to `openVirtualTrades` each pass. |
+
+## 7. STEP-4 r3 — Langston's review of `57d89095e`, each finding dispositioned
+| finding | disposition |
+|---|---|
+| **BLOCKER-1** — the rail cleared on `no_usable_mark`, a no-decision | **Folded.** One streak over EVERY no-decision reason; it clears only on `noDecisionReason === undefined`; the last reason is carried into the log line, title and body. `exitNoTransactableSide` still counts its own reason. Fenced. |
+| **BLOCKER-2** — paper prune manufactured false first-looks | **Folded.** `_entryFillLookedThisCycle` deleted; `_entryFillLooked` is pruned against the cycle's `openPositions` id set, so a pending position that missed one look keeps its first-look record. Fenced. |
+| **FINDING-1** — C2's fix left the body and criterion 6 wrong | **Folded.** §1 row C4 and the §2 hunk now show the per-event line; the scope's OBJ-6 is restated on it with BOTH denominators. |
+| **NIT** — paper `MAKER_RESTED` carried the mode, not the class | **Folded:** `(${_openClass})` added. |
