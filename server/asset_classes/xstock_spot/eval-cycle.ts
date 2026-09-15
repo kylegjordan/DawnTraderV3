@@ -957,9 +957,9 @@ export async function evaluateXstockPairForVTS(
           if (isMarketableAtPlacement({ side: 'buy', transactablePrice: lastPrice, limit: entryPrice })) {
             if (_xMtDecision.takerNetEV > 0) {
               _xEffectiveMode = 'taker';
-              console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategyKey}: maker limit ${entryPrice} already marketable (price=${lastPrice}) — takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
+              console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} already marketable (price=${lastPrice}) — takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
             } else {
-              console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategyKey}: maker limit ${entryPrice} marketable (price=${lastPrice}) and takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
+              console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} marketable (price=${lastPrice}) and takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
               counters.signalsRejectedBySQE++;
               if (lane.kind === 'pattern') counters.patternSignalsRejected++;
               else counters.quantSignalsRejected++;

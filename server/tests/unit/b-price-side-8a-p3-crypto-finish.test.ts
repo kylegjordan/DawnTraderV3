@@ -191,6 +191,16 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     expect(AEE).not.toMatch(/_entryFillLookedThisCycle/);
   });
 
+  it('r3 CONDITION-1: the fallback and dropped placement lines carry the asset class on every lane', () => {
+    const XS = read('server/asset_classes/xstock_spot/eval-cycle.ts');
+    expect(AEE).toMatch(/MARKETABLE_TAKER_FALLBACK:\$\{this\.mode\}\] \$\{signal\.symbol\} \(\$\{_openClass\}\)/);
+    expect(AEE).toMatch(/MAKER_MARKETABLE_DROPPED:\$\{this\.mode\}\] \$\{signal\.symbol\} \(\$\{_openClass\}\)/);
+    expect(VTS).toMatch(/\[VTS\]\[MARKETABLE_TAKER_FALLBACK\] \$\{symbol\}\/\$\{strategy\} \(\$\{_assetClass\}\)/);
+    expect(VTS).toMatch(/\[VTS\]\[MAKER_MARKETABLE_DROPPED\] \$\{symbol\}\/\$\{strategy\} \(\$\{_assetClass\}\)/);
+    expect(XS).toMatch(/\[VTS\]\[MARKETABLE_TAKER_FALLBACK\] \$\{symbol\}\/\$\{strategyKey\} \(xstock_spot\)/);
+    expect(XS).toMatch(/\[VTS\]\[MAKER_MARKETABLE_DROPPED\] \$\{symbol\}\/\$\{strategyKey\} \(xstock_spot\)/);
+  });
+
   it('nit: the resting-sale fill narrows the side instead of casting it', () => {
     expect(AEE).toMatch(/if \(_restOutcome === 'fill' && _restFillPrice !== null\)/);
     expect(AEE).not.toMatch(/_restFillPrice as number/);

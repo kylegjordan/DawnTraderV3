@@ -2267,9 +2267,9 @@ async function generatePhase10Signal(
     if (placementAsk !== null && isMarketableAtPlacement({ side: 'buy', transactablePrice: placementAsk, limit: entryPrice })) {
       if (_vtsMtDecision.takerNetEV > 0) {
         _vtsEffectiveMode = 'taker';
-        console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategy}: maker limit ${entryPrice} already marketable (ask=${placementAsk}) — takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
+        console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategy} (${_assetClass}): maker limit ${entryPrice} already marketable (ask=${placementAsk}) — takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
       } else {
-        console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategy}: maker limit ${entryPrice} marketable (ask=${placementAsk}) and takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
+        console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategy} (${_assetClass}): maker limit ${entryPrice} marketable (ask=${placementAsk}) and takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
         setNullReason('maker_marketable_dropped');
         return null;
       }
