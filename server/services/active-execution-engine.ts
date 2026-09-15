@@ -1927,7 +1927,7 @@ export class ActiveExecutionEngine {
                       category: 'breakage',
                       severity: 'warning',
                       title: `Hollow book held ${position.symbol} for ${_next} ticks — exit evaluation YIELDED`,
-                      body: `The book-state guard withheld ${_next} consecutive exit-monitor ticks for the open ${this.mode} position on ${position.symbol} because the quote read HOLLOW (${_r.reasons.join(', ')}), reached hollow_skip_cap=${_c.hollowSkipCap} and YIELDED: the evaluator ran on the book as it is and the row is labelled hollow/yielded. Inputs: ${_inputs}. B-XSTOCK-FEED-SANITY (#943).`,
+                      body: `The book-state guard withheld ${_next} consecutive exit-monitor ticks for the open ${this.mode} position on ${position.symbol} because the quote read HOLLOW (${_r.reasons.join(', ')}), reached hollow_skip_cap=${_c.hollowSkipCap} and YIELDED: it dropped its reference and REFUSED the exit decision for this tick (book_state_yield_refused), so the position HOLDS. Since D3 (2026-09-12) the evaluator does NOT run on a hollow book, because the midpoint of an unusable book is a price no market quoted. Inputs: ${_inputs}. B-XSTOCK-FEED-SANITY (#943).`,
                       dedupe_key: `book-state-hollow-${this.mode}-${position.symbol}`,
                     });
                   } catch (alertErr) {
