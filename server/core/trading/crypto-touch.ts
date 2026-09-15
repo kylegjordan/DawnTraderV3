@@ -47,8 +47,10 @@ export interface CryptoTouchPolicy {
  * `openTrade` price-cache lane (`getActiveOpenPositions` has no state filter).
  * MEASURED, staging `out` logs 2026-09-12 06:33 → 2026-09-15 04:37 Z, 1-s granularity, per file:
  * pass interval p50 2 s · p90 3 s · p99 3 s · p99.9 3-4 s · max 3-7 s; ≈ 10-12 % of intervals above 2 s
- * (outliers: one 22 s; one 16,607 s gap that is the lane holding no members — 549 `vtsSimulation`
- * passes fall inside it, so the loop was alive).
+ * (outliers: one 22 s; one 16,607 s gap that is the lane holding no members — 09-14 18:52:38 → 23:29:25 Z
+ * holds 549 `[PriceCache][vtsSimulation] refreshed` lines and 0 `openTrade` lines, so the loop was alive).
+ * RE-DERIVE: the `[PriceCache][openTrade] refreshed` lines across staging `/var/log/dawntrader/out__*.log`; a pass is
+ * the first line after a gap of more than 1 s; the statistic is the interval between consecutive passes.
  * ⇒ The r3 figure of 2,000 ms sat at the nominal period with zero headroom. 8,000 ms is above every
  * normal-operation maximum and 2× the p99.9. PRE-REGISTERED: steady-state refusal ≈ 0 while the lane
  * is healthy. ⚠️ FIRST-LOOK refusals are expected and benign (the first look after placement can read
@@ -69,7 +71,9 @@ export const ENTRY_FILL_TOUCH_MAX_AGE_MS = 8_000;
  * two only make sides FRESHER, and `getBatch` judges freshness by the mark, so the pass interval sets
  * the worst case.
  * MEASURED, staging `out.log` 2026-09-15 06:55:48 → 10:22:59 Z: 207 pass intervals, min 60 · p50 60 ·
- * p99 61 · max 61 s; none above 61 s (Langston re-measured to 10:29:59 Z: 214 intervals, same shape).
+ * p99 61 · max 61 s; none above 61 s.
+ * RE-DERIVE: the `[PriceCache][vtsSimulation] refreshed` lines in staging `/var/log/dawntrader/out.log`; a pass is the
+ * first line after a gap of more than 5 s; the statistic is the interval between consecutive passes.
  * ⇒ 60,000 ms would be the production period with zero headroom — every overrun refuses, correlated
  * across a whole pass. 90,000 ms = 29 s above the measured maximum.
  * PRE-REGISTERED AS A PAIR: refusal rate ≈ 0 AND bucket size 157-159 symbols per pass (the interval is a

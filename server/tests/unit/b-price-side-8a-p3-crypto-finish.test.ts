@@ -157,3 +157,34 @@ describe('8a-P3 — the call sites read the transactable side, and xStock is exp
     expect(XS).toMatch(/placementTransactablePrice:\s*lastPrice/);
   });
 });
+
+describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf-8');
+  const AEE = read('server/services/active-execution-engine.ts');
+  const VTS = read('server/services/vts-runner.ts');
+
+  it('BLOCKER-1: a VTS exit refusal is tracked PER TRADE ID with a once-per-streak alert, and cleared on a decision', () => {
+    expect(VTS).toMatch(/_vtsNoTriggerStreak\.get\(tradeId\)/);
+    expect(VTS).toMatch(/if \(!_nt\.alerted && _ntNow - _nt\.sinceMs >= VTS_NO_TRIGGER_ALERT_AFTER_MS\)/);
+    expect(VTS).toMatch(/dedupe_key: `no-trigger-vts-\$\{trade\.symbol\}`/);
+    expect(VTS).toMatch(/\} else \{\s*_vtsNoTriggerStreak\.delete\(tradeId\);/);
+    expect(VTS).not.toMatch(/_vtsNoTriggerStreak\.get\(trade\.symbol\)/);
+  });
+
+  it('BLOCKER-1 floor: the shadow lane counts its refusals', () => {
+    expect(VTS).toMatch(/_vtsShadowTouch\.noTransactableSide\+\+/);
+    expect(VTS).toMatch(/\[8a-P3\]\[VTS_SHADOW_TOUCH\]/);
+  });
+
+  it('C2: the no-ask rest is a per-event record in the placement path on both lanes, not a pass counter', () => {
+    expect(AEE).toMatch(/\[8a-P3\]\[MAKER_RESTED:\$\{this\.mode\}\][^`]*ask=\$\{_b72cBestAsk \?\? 'none'\}/);
+    expect(VTS).toMatch(/\[8a-P3\]\[VTS\]\[MAKER_RESTED\][^`]*ask=\$\{placementAsk \?\? 'none'\}/);
+    expect(AEE).not.toMatch(/makerPlacedNoAsk/);
+    expect(VTS).not.toMatch(/makerPlacedNoAsk/);
+  });
+
+  it('nit: the resting-sale fill narrows the side instead of casting it', () => {
+    expect(AEE).toMatch(/if \(_restOutcome === 'fill' && _restFillPrice !== null\)/);
+    expect(AEE).not.toMatch(/_restFillPrice as number/);
+  });
+});

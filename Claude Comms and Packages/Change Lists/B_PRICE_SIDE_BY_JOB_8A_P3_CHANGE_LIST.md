@@ -100,3 +100,19 @@ Paper's matching arm gains the same counter: `if (_b72cBestAsk == null) this._ma
 
 ## 5. Verified locally
 `scripts/check-tsc-baseline.mjs`: 377 = baseline 377. The 10 affected test files: 158/158. Full unit run: 270 files pass; 4 files fail to load on this Windows clone and touch nothing in this change set (two `SyntaxError` on `.mjs` parsing, two need a local Postgres on 5432). CI is the authoritative run.
+
+---
+
+## 6. STEP-4 r2 — Langston's review of `16ab0293b`, each finding dispositioned
+| finding | disposition |
+|---|---|
+| **BLOCKER-1** — VTS exit refusal has no per-trade instrument | **Folded.** `_vtsNoTriggerStreak: Map<tradeId, { sinceMs, alerted }>`; alert ONCE per streak after `VTS_NO_TRIGGER_ALERT_AFTER_MS` = 10 min (a TIME threshold: VTS passes are not a fixed tick, so a count would mean a different window per deploy; 10 min > 6x the 90 s sides ceiling, unreachable on a healthy feed); dedupe `no-trigger-vts-<symbol>`, body says RESOLVE not ACK; cleared on any decision; pruned for trades that left by any path. Shadow lane: one count, `[8a-P3][VTS_SHADOW_TOUCH] looks= noTransactableSide=`. |
+| **C1** — 0.02 spread tighter than its derivation | **Kept at 0.02, per your conditional acceptance** now that BLOCKER-1's rail exists: the rail makes the extra pessimism's cost visible per trade, and the data decides. |
+| **C2** — `makerPlacedNoAsk` pooled with the wrong pass, no denominator, xStock mutating a crypto counter | **Folded.** The counter is deleted on both lanes. Every maker rest now logs one line in the placement path: paper `[8a-P3][MAKER_RESTED:<mode>]`, VTS `[8a-P3][VTS][MAKER_RESTED] … (<class>)`, twins via `TWIN_OPENED` — `ask=none` lines are the numerator, all lines the denominator. |
+| **C3** — twin gap log lost `gap`/`gapBps` | **Folded.** Recomputed off the ask with an `n/a` arm on null; comment updated. |
+| **C4** — `entryObservedAtMs` | **Folded as you ruled:** left on the mark; the schema comment states it and that nothing reads the column. |
+| **C5** — paper_sim epoch | **Bumped.** The migration now moves `vts/crypto_spot` +1 and CREATES `paper_sim/crypto_spot` at `paper_sim/*` + 1, with the argument in its header (no paper price changes, but the selection does, and the paper learning stream is epoch-scoped per class). Asserts: exactly one vts/crypto row before; every other row unchanged; paper_sim/crypto = its pre-image or the wildcard, + 1. Rollback bumps both again. |
+| **C6** — the 90 s docblock cited you | **Folded.** Attribution dropped; the re-derivation rule is carried for both measurements. The 549-line liveness control was re-derived by me before keeping it (09-14 18:52:38 → 23:29:25 Z: 549 `vtsSimulation` lines, 0 `openTrade` lines). |
+| **nit** — "the ASK" in the column comment | **Folded:** the transactable side, ask for a buy, bid for a sell. |
+| **nit** — `_restFillPrice as number` | **Folded:** narrowed in the `if`, cast removed, fenced. |
+| **nit** — looked-sets not pruned on other removal paths | **Folded:** paper prunes per cycle to ids looked at that cycle; VTS prunes to `openVirtualTrades` each pass. |

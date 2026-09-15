@@ -1583,6 +1583,7 @@ export class ActiveExecutionEngine {
       fillPrice = transactableSide(_ft.selection, side);
       const _firstLook = !this._entryFillLooked.has(position.id);
       this._entryFillLooked.add(position.id);
+      this._entryFillLookedThisCycle.add(position.id);
       this._entryFillLooks++;
       if (!_ft.selection.ok) {
         if (_firstLook) this._entryFillRefusedFirstLook++;
@@ -2565,7 +2566,7 @@ export class ActiveExecutionEngine {
           const _restOutcome = evaluatePendingMaker({
             side: 'sell', transactablePrice: _restFillPrice, limit: _exitRestLimit, nowMs: Date.now(), deadlineMs: _restDeadline,
           });
-          if (_restOutcome === 'fill') {
+          if (_restOutcome === 'fill' && _restFillPrice !== null) { // a fill requires a side — NARROWED here, never cast
             tpHits++;
             console.log(`[P19-B8.6][EXIT_REST_FILLED] ${position.symbol}: ${_posClass === 'crypto_spot' ? 'bid' : 'mark'} ${_restFillPrice} (mark ${currentPrice}) traded through the resting exit ${_exitRestLimit} — closing at the limit + MAKER fee`);
             await this.closePosition(position.id, _exitRestLimit, {
@@ -2580,8 +2581,7 @@ export class ActiveExecutionEngine {
               // is the tick that traded through it (since `8a-P3`, the BID on crypto). Recording only the exit
               // price leaves the number that actually caused the exit with no trace at all, which
               // is exactly what made #741 hard to measure after the fact.
-              // `8a-P3`: non-null here — a fill requires a transactable side.
-              exitProvenance: { ..._exitProvenanceBase, decisionPrice: _restFillPrice as number },
+              exitProvenance: { ..._exitProvenanceBase, decisionPrice: _restFillPrice },
             });
             continue;
           }
@@ -2668,7 +2668,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} makerPlacedNoAsk=${this._makerPlacedNoAsk}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,
@@ -2691,7 +2691,8 @@ export class ActiveExecutionEngine {
     this._entryFillLooks = 0;
     this._entryFillRefusedFirstLook = 0;
     this._entryFillRefusedSteady = 0;
-    this._makerPlacedNoAsk = 0;
+    for (const id of Array.from(this._entryFillLooked)) if (!this._entryFillLookedThisCycle.has(id)) this._entryFillLooked.delete(id);
+    this._entryFillLookedThisCycle.clear();
   }
 
   /**
@@ -2721,8 +2722,8 @@ export class ActiveExecutionEngine {
   private _entryFillRefusedFirstLook = 0;
   private _entryFillRefusedSteady = 0;
   private readonly _entryFillLooked = new Set<string>();
-  // ⛔ `8a-P3` P5 — maker placements that RESTED with no usable ask (the permissive arm). Counted, not fixed (`8a-P4`).
-  private _makerPlacedNoAsk = 0;
+  // Ids looked at THIS cycle — prunes `_entryFillLooked` of positions removed by any path (Langston Step-4 nit).
+  private readonly _entryFillLookedThisCycle = new Set<string>();
   private _noTriggerRefusals = 0;
   // ⭐⭐ `8a-P2` — THE INVOCATION COUNT AT THE EVALUATOR'S CALL SITE, AND THE NO-HIT ARM BESIDE IT.
   // ⛔⛔ WHY: `slHits=0 tpHits=0` IS A CONJUNCTION THAT RENDERS TWO STRUCTURALLY DIFFERENT STATES
@@ -4752,9 +4753,10 @@ export class ActiveExecutionEngine {
       } else {
         // ⛔ `8a-P3` P5 — NO USABLE ASK RESTS THE ORDER (the permissive arm), AND VTS NOW DOES THE SAME. Do NOT
         // "fix" this into a refusal on ONE lane only: VTS models this lane, and opposite policies on one seam would
-        // make the comparison meaningless. It is the optimistic direction, so it is COUNTED; the policy for both
-        // lanes is homed at `8a-P4`.
-        if (_b72cBestAsk == null) this._makerPlacedNoAsk++;
+        // make the comparison meaningless. It is the optimistic direction, so every rest is LOGGED with its ask, here in
+        // the placement path: `ask=none` lines are the numerator, all `MAKER_RESTED` lines the denominator (Langston
+        // Step-4 C2). The policy for both lanes is homed at `8a-P4`.
+        console.log(`[8a-P3][MAKER_RESTED:${this.mode}] ${signal.symbol}: limit=${_b72cLimit} ask=${_b72cBestAsk ?? 'none'}`);
         _b72cPendingMaker = true;
       }
     }

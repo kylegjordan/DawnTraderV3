@@ -148,9 +148,22 @@ const _vtsTouch = {
   entryFillRefusedFirstLook: 0,
   entryFillRefusedSteady: 0,
   bookedNoBidClamp: 0,
-  makerPlacedNoAsk: 0,
 };
 const _vtsEntryFillLooked = new Set<string>();
+// ⛔⛔ `8a-P3` (Langston Step-4 BLOCKER-1) — THE PER-TRADE REFUSAL RAIL. A pooled per-pass total cannot tell one trade
+// starved for hours from many trades refusing once, and on VTS a refusal is NOT conservative: a skip advances no
+// high-water mark, latch or rung, so a starving trade gets no decision until the max-hold valve and then books a timeout
+// AT THE MARK when it may have hit its stop long before — a wrong outcome inside the post-epoch corpus.
+// KEYED ON THE TRADE ID (a symbol key false-fires on the next trade in that symbol). The streak's START is recorded and
+// the alert fires ONCE per streak — a TIME threshold, not a count, because VTS passes are not a fixed tick and a count
+// would mean a different window on every deploy.
+// THRESHOLD: 10 min is more than 6x the 90,000 ms sides ceiling. A healthy feed cannot produce it: any refusal already
+// means the sides are older than 90 s (a `vtsSimulation` pass overrun), and 10 min means about six consecutive passes
+// delivered nothing usable — or the symbol never received real sides (a bid equal to the ask refuses as a synthetic book).
+const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
+const _vtsNoTriggerStreak = new Map<string, { sinceMs: number; alerted: boolean }>();
+// The shadow lane's floor (BLOCKER-1): one count, not a streak, so its starvation is visible without pooling into the real lane.
+const _vtsShadowTouch = { looks: 0, noTransactableSide: 0 };
 // HF9: applyGovernance removed (dead import — governance gate moved to SQE)
 import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
@@ -2259,8 +2272,10 @@ async function generatePhase10Signal(
     } else {
       // ⛔ `8a-P3` P5 — NO USABLE ASK RESTS THE ORDER, EXACTLY AS PAPER DOES (`aee` placement). Do NOT "fix" this
       // into a refusal on this lane only — opposite policies on one seam would break the comparison VTS exists for.
-      // The optimistic direction, so it is COUNTED; the policy for both lanes is homed at `8a-P4`.
-      if (placementAsk === null) _vtsTouch.makerPlacedNoAsk++;
+      // The optimistic direction, so every rest is LOGGED with its ask, in the placement path itself: `ask=none` lines are
+      // the numerator and all `MAKER_RESTED` lines the denominator (Langston Step-4 C2 — a counter printed by the next
+      // resolve pass pooled this with the wrong cycle and had no denominator). Policy for both lanes: `8a-P4`.
+      console.log(`[8a-P3][VTS][MAKER_RESTED] ${symbol}/${strategy} (${_assetClass}): limit=${entryPrice} ask=${placementAsk ?? 'none'}`);
       _vtsPendingMaker = true;
     }
   }
@@ -3341,7 +3356,38 @@ async function resolveOpenVirtualTrades(): Promise<{
         // B80: Option C+ seed (only on first cycle post-restart).
         seed: tecSeed,
       });
-      if (decision.noDecisionReason === 'no_transactable_side') _vtsTouch.exitNoTransactableSide++;
+      if (decision.noDecisionReason === 'no_transactable_side') {
+        _vtsTouch.exitNoTransactableSide++;
+        const _ntNow = Date.now();
+        const _nt = _vtsNoTriggerStreak.get(tradeId) ?? { sinceMs: _ntNow, alerted: false };
+        _vtsNoTriggerStreak.set(tradeId, _nt);
+        if (!_nt.alerted && _ntNow - _nt.sinceMs >= VTS_NO_TRIGGER_ALERT_AFTER_MS) {
+          _nt.alerted = true; // ONCE per streak — the `_recordPriceSkip` idiom; the dedupe key alone would leave an inert rail
+          const _ntMins = Math.round((_ntNow - _nt.sinceMs) / 60_000);
+          console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] ${trade.symbol} trade ${tradeId}: no exit decision for ${_ntMins} min — a mark exists but no usable bid — raising system alert`);
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              category: 'breakage',
+              severity: 'warning',
+              title: `VTS exit trigger unavailable — ${_ntMins} min with no usable bid for ${trade.symbol}`,
+              body: `VTS has made NO exit decision for ${_ntMins} minutes on open virtual trade ${tradeId} in ${trade.symbol}. `
+                + `A price mark exists; what is missing is a usable BID within the VTS exit ceilings (${VTS_EXIT_TOUCH_MAX_AGE_MS} ms, `
+                + `${VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION * 100}% spread). While this lasts the trade's stop and target are NOT evaluated, `
+                + `its high-water mark and latches do not advance, and if it reaches the max-hold valve it books a timeout at the `
+                + `mark — a wrong outcome in the post-epoch VTS corpus. Read the symbol's cached sides first (a bid equal to the ask `
+                + `means the cache never received real sides) before touching either ceiling. `
+                + `DISPOSITION: RESOLVE this row, do not ACK it — an ack silences the dedupe key permanently; resolving re-arms it.`,
+              dedupe_key: `no-trigger-vts-${trade.symbol}`,
+            });
+          } catch (alertErr) {
+            console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] addAlert failed for ${trade.symbol}:`, alertErr);
+          }
+        }
+      } else {
+        _vtsNoTriggerStreak.delete(tradeId);
+      }
     } catch (tecExitErr) {
       console.error(
         `[TEC_VTS_EXIT_EVAL_ISOLATED] tradeId=${tradeId} symbol=${trade.symbol} ` +
@@ -3465,10 +3511,13 @@ async function resolveOpenVirtualTrades(): Promise<{
   }
   
   // `8a-P3` — one line per resolve pass when there was anything to look at, denominators beside numerators, then reset.
-  if (_vtsTouch.exitLooks + _vtsTouch.entryFillLooks + _vtsTouch.makerPlacedNoAsk > 0) {
-    console.log(`[8a-P3][VTS_TOUCH] exitLooks=${_vtsTouch.exitLooks} exitNoTransactableSide=${_vtsTouch.exitNoTransactableSide} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} bookedNoBidClamp=${_vtsTouch.bookedNoBidClamp} makerPlacedNoAsk=${_vtsTouch.makerPlacedNoAsk}`);
+  if (_vtsTouch.exitLooks + _vtsTouch.entryFillLooks > 0) {
+    console.log(`[8a-P3][VTS_TOUCH] exitLooks=${_vtsTouch.exitLooks} exitNoTransactableSide=${_vtsTouch.exitNoTransactableSide} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} bookedNoBidClamp=${_vtsTouch.bookedNoBidClamp} openNoTriggerStreaks=${_vtsNoTriggerStreak.size}`);
   }
   for (const k of Object.keys(_vtsTouch) as Array<keyof typeof _vtsTouch>) _vtsTouch[k] = 0;
+  // Prune per-trade state for trades that left by ANY path, not only the fill/decision paths (Langston Step-4 nit).
+  for (const id of Array.from(_vtsNoTriggerStreak.keys())) if (!openVirtualTrades.has(id)) _vtsNoTriggerStreak.delete(id);
+  for (const id of Array.from(_vtsEntryFillLooked)) if (!openVirtualTrades.has(id)) _vtsEntryFillLooked.delete(id);
 
   // Directive 11.6C: Track persistence and ML queue counts
   let persisted = 0;
@@ -4166,11 +4215,21 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     if (decision.newStopPrice !== undefined && decision.newStopPrice > trade.stopLoss) {
       trade.stopLoss = decision.newStopPrice;
     }
+    if (trade.assetClass === 'crypto_spot') {
+      _vtsShadowTouch.looks++;
+      if (decision.noDecisionReason === 'no_transactable_side') _vtsShadowTouch.noTransactableSide++;
+    }
     if (!decision.shouldExit) continue;
     const reason = decision.exitReason === 'stale_timeout' ? 'shadow_max_hold' : (decision.exitReason ?? 'timeout');
     // F-G-2 OBJ-5a: same resolver as the real lane (:3238) — the shadow lane books the same way.
     toClose.push({ id: tradeId, trade, exitPrice: resolveVtsBookedExitPrice(trade.assetClass, _sExitBid, currentPrice, decision.exitPrice).price, exitReason: reason });
   }
+
+  if (_vtsShadowTouch.looks > 0) {
+    console.log(`[8a-P3][VTS_SHADOW_TOUCH] looks=${_vtsShadowTouch.looks} noTransactableSide=${_vtsShadowTouch.noTransactableSide}`);
+  }
+  _vtsShadowTouch.looks = 0;
+  _vtsShadowTouch.noTransactableSide = 0;
 
   for (const { id, trade, exitPrice, exitReason } of toClose) {
     await shadowClose(id, trade, exitPrice, exitReason, now);
@@ -4630,7 +4689,6 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       chosenEntryFeeRate: chosenTrade.entryFeeRate,
       nowMs: Date.now(),
     });
-    if (plan.kind === 'open' && plan.twinMode === 'maker' && input.placementTransactablePrice === null) _vtsTouch.makerPlacedNoAsk++;
     if (plan.kind === 'skip') {
       if (plan.reason === 'marketable_maker') {
         console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} ask=${input.placementTransactablePrice})`);
@@ -4653,10 +4711,12 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
     openVirtualTrades.set(twinId, twinTrade);
     const _twinCount = Array.from(openVirtualTrades.values()).filter((t) => t.mtTwin === true).length;
     // Placement-time honest-rest evidence (Langston #433 rider): for a maker twin,
-    // log the SIGN + SIZE of the limit-vs-market gap AT PLACEMENT so a rested limit
-    // sitting a rounding-hair off the market is visible in the log, not inferred.
+    // log the SIGN + SIZE of the limit-vs-ASK gap AT PLACEMENT (`8a-P3`: the transactable side, not the mark;
+    // `ask=none` / `n/a` is the permissive no-ask arm) so a rested limit sitting a rounding-hair off the market is
+    // visible in the log, not inferred. This line is also the twin's per-event rest record (Langston Step-4 C2).
+    const _twinAsk = input.placementTransactablePrice;
     const _twinGapNote = plan.twinMode === 'maker'
-      ? ` limit=${entryPrice} ask=${input.placementTransactablePrice}`
+      ? ` limit=${entryPrice} ask=${_twinAsk ?? 'none'} gap=${_twinAsk !== null ? (_twinAsk - entryPrice).toExponential(4) : 'n/a'} gapBps=${_twinAsk !== null && entryPrice > 0 ? (((_twinAsk - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'}`
       : '';
     console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy}: ${plan.twinMode} twin ${twinId} paired to chosen ${input.effectiveMode} (open twins now: ${_twinCount})${_twinGapNote}`);
   } catch (twinErr) {
