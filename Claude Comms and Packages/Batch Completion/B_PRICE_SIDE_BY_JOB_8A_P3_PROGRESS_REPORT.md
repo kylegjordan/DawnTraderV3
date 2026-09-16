@@ -94,6 +94,46 @@ After deploy 1 the rail's open-streak map grew 0 → 53 → 55 → 60 between 12
 *Correction, one line:* I first wrote that at least 21 of the 60 streaks were xStock; that was an inference, not a measurement. The map size prints before the pass-end prune, so it gives no floor at all; only a post-prune count is citable.
 ⚠️ **FROM DEPLOY 2, `openNoTriggerStreaks` IS A CRYPTO-ONLY GAUGE (Langston C2).** It is never set beside the pre-fence 53-60: two populations across a deploy boundary.
 
+## 5b. THE EXTRACT — 2026-09-16 00:16:07Z, run to the pre-registration
+
+**Window integrity:** pm2 `restart_time` 623 and `pm_uptime` 2026-09-15T12:15:04.144Z at the extract — unchanged, so **no restart split either window**. `twin_enabled` re-read at close: `crypto_spot` 1, `xstock_spot` 1, `updated_by p19-b7-2c` — **unflipped, so the flip rule has nothing to split.** Epochs at close: `vts/crypto_spot` 6, `paper_sim/crypto_spot` 3.
+
+### OBJ-2 — real-lane VTS crypto exits (DESCRIPTIVE, not the verdict; the stop-leg pair rides the same join and may not be quoted as a partial verdict)
+
+| | BEFORE (12h to 11:59:22.448Z) | AFTER (12h from 12:16:07Z) |
+|---|---|---|
+| real-lane crypto closes | **51** | **63** |
+| open position-hours (real lane) | 655.2 | 302.8 |
+| closes per open position-hour | **0.078** | **0.208** |
+| matched / ambiguous groups (rows) / unmatched | 37 / 6 (13) / 1 | 34 / 14 (28) / 1 |
+| **unmatched fraction** | **0.020** | **0.016** |
+| PRIMARY (matched only) | stop 36 · target 1 | stop 32 · target 2 |
+| SENSITIVITY (+ambiguous-assigned) | stop 49 · target 1 | stop 56 · target 4 · timeout 2 |
+| exit looks (floor binds AFTER only) | n/a by construction | **18,032** ≥ 1,000 ✔ |
+
+⛔ **The target leg is below floor on both sides (1 and 2 against 30), so OBJ-2 is published as NOT COMPARABLE and superseded onto `B-EXIT-LINE-IDENTITY`.** The stop leg is above floor on both PRIMARY and SENSITIVITY and both move the same direction with the rate, but per the pre-registration that is a descriptive read only. The unmatched fractions are close (2.0% vs 1.6%), so the denominator bias does not differ materially between windows.
+**Shadow lane, counts only:** BEFORE 1,056 closes, AFTER 433.
+
+### OBJ-3 — VTS crypto booked exits (`exit_decision_archive`, `mode='vts'`)
+AFTER: 45 `SL_hit`, 3 `TP_target_hit`, 2 `time_stop`, **all 50 with a booked exit price**; BEFORE: 44 `SL_hit`, 1 `TP_target_hit`. Stop-leg average R: **−1.0762 AFTER vs −1.0777 BEFORE**. ⚠️ **LIMIT, STATED: the archive does not record the bid**, so "booked at the bid" is not directly readable from it. What is readable: **`bookedNoBidClamp = 0` over 720 passes** — no crypto close fell to the clamp arm — plus the resolver's own fence. OBJ-3 is therefore **partially verified**: the arm that would show a failure is silent and proven live by its unit fence, but no row-level bid comparison exists in the DB.
+
+### OBJ-5 and OBJ-1's paper legs — NO POPULATION, and the instrument is proven live
+The paper crypto lane **opened nothing in the window**. Controls: `closed_trades` opened since the cutover = **10 rows, all xStock**; closed inside AFTER = **11, all xStock**; the newest crypto paper row opened **2026-09-14 23:29:25Z**, ~13 h before the cutover; open positions at the extract = **4, all xStock**. The same queries return xStock rows, so this is a real **0 of 0**, not a dead instrument. ⇒ **OBJ-5 (honest crypto maker fill rate) and OBJ-1's paper entry/exit legs are UNMEASURED for this window and carry forward.**
+
+### OBJ-6 — the permissive no-ask arm, crypto only
+| arm | window count |
+|---|---|
+| numerator `ask=none` (rests and twins, all lanes) | **0** |
+| denominator A — crypto `MAKER_RESTED` | 16 (paper 9, VTS 7) |
+| denominator B — A + crypto `MARKETABLE_TAKER_FALLBACK` 4 + `MAKER_MARKETABLE_DROPPED` 34 | 54 |
+| twins — `TWIN_OPENED` 16 + `TWIN_SKIPPED reason=marketable_maker` 9 | 25 |
+| `TWIN_FAIL` · not-in-`openVirtualTrades` | 0 · 0 |
+⛔ Every denominator is **below its 30-floor except B (54)**, and the numerator is 0 with **no observed positive anywhere in the window** — so this is "**0 of N with no observed positive**", never a rate. xStock twins in the same window: 139 `marketable_maker`, 9 `degenerate_fallback` — the class tags work, and pooling them would have been the contamination Step 4 r3 CONDITION-1 caught.
+
+### The rails, over 720 VTS passes and 28,783 paper frames
+`exitLooks` 18,032 · `exitNoTransactableSide` **72 (0.40% of looks)** · `entryFillLooks` 156 with **0** first-look and **0** steady-state refusals · `bookedNoBidClamp` 0 · **0** escalations · **0** `ENTRY_FILL_RECORD_FAILED` · paper `noTriggerRefusals` 0 · **`exitEvalHit` 15 — the first non-zero hit count on this path, which `8a-P2` closed without.**
+⚠️ The 72 no-transactable-side refusals sit **above** the pre-registered "≈ 0" for the VTS exit ceiling. They are 0.40% of looks and produced no escalation (no single trade reached 10 minutes), but the pre-registration said ≈ 0 and this is not 0: **carried to Step 8 as an open question for Langston, not explained away here.**
+
 ## 6. WHAT REMAINS
 
 - **Step 7, inside the window:** OBJ-1 staging legs (crypto maker fills with the ask/bid stamped), OBJ-2 two-window VTS exit rate, OBJ-3 booking spot-check, OBJ-5 fill rate, OBJ-6 rests and twins, OBJ-7 UI on the first crypto close — each at its n-floor.
