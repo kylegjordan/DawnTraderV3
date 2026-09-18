@@ -1,6 +1,49 @@
-# B-TASK-LIST-SLOT — PROGRESS REPORT — OPEN: waiting on the next three completion reports (P5)
+# B-TASK-LIST-SLOT — COMPLETION REPORT — CLOSING: P5 PASSED (primary 3 of 3), awaiting Langston's Step-11 confirmation
+
+> **CONVERTED 2026-09-18 from `B_TASK_LIST_SLOT_PROGRESS_REPORT.md`** (git rename, per `workflow-11-completion`). Everything below §0 is the progress report as it stood, evidence captured when it was fresh.
 
 **change-class: non_architecture · owner CC-A · `#1009` · Phase 19 plan row 4.57**
+
+🚨 **THIS BATCH DOES NOT BUILD THE SLOT-TIME TRIGGER** (scope objective 2 — a check that a newly slotted item reaches the phase plan and the task list at the moment it is slotted). **Langston split it out at Step 2; it is its own batch, `B-SLOT-PLACEMENT-CHECK`, plan row 4.8.** This batch built and proved the CLOSE-time half only.
+
+## 0. ⛔ RESULT — P5, READ 2026-09-18 AFTER THE POPULATION WAS RULED AND THE READ COMMITS PINNED (§3a, §3b)
+
+**(a) WHAT DATA CAME IN — against the criterion as pre-registered at Step 2 (§3, verbatim):**
+> **PRIMARY:** of the next three completion reports first-added after the deploy, the row is present AT CLOSE in all three — the checker's purpose is that no omission survives.
+> **SECONDARY:** present in the report's FIRST pushed version — measures whether sessions write it unprompted, not only after an alert. Reported, not gated.
+> ⛔ **FAIL:** the primary does not reach 3 of 3 ⇒ the checker is not closing the gap, and the batch says so.
+
+| # | report | author | SECONDARY — blob at first add | PRIMARY — blob at pinned close | alert store (tightening 1) | grading tick (tightening 2) |
+|---|---|---|---|---|---|---|
+| 1 | `B_WAKE_LEAD_NAME` | Infra Claude | ✅ `13209a273` | ✅ `65450e35c` | no ledger-row alert ever minted — **agrees** | 17:45:44Z at HEAD `0ce5ba7ad` (descends from `65450e35c`), `opened=0` |
+| 2 | `B_XSTOCK_FEED_SANITY` | CC-C | ❌ `056c56981` | ✅ `8dedb11b8` | alert `195d4f23` minted by the 18:15:54Z tick; resolved 18:49:53Z by `cc-c` with evidence `ba36cc5ad` — **and the matcher reads that evidence commit TRUE**, so the row was genuinely added, not a free-text resolve (`#447`) — **agrees** | 19:15:46Z at `c0e37e650` (descends from `ba36cc5ad`), `opened=0`; 21:15:48Z at `8dedb11b8` itself, `opened=0` |
+| 3 | `B_PRICE_AGE_TRUTH` | CC-C | ✅ `b87fe468a` | ✅ `8dedb11b8` | no ledger-row alert ever minted — **agrees** | 21:15:48Z at `8dedb11b8` itself, `opened=0` |
+
+⇒ **PRIMARY 3 of 3 — PASS.** **SECONDARY 2 of 3** (reported, not gated). **The one miss was caught by the check and fixed by its owner 32 minutes after the alert** (minted 18:15:54Z, row committed `ba36cc5ad` 18:48:16Z).
+**PREVIOUSLY STATED: 1 of 3 reports carried the row at close (Step-1 baseline). NOW: 3 of 3 at close, 2 of 3 without prompting. REASON: the checker.**
+**Author sessions (rider a): Infra Claude ×1, CC-C ×2 — two distinct sessions, not three, and none of them CC-A.** Published as that; the bar did not move.
+
+**How each verdict was produced — the instruments and their controls:**
+- **Matcher:** `ledgerRowInText` + `LEDGER_ROWS.task_lists` extracted from `origin/migration/aws-supabase` at `efd3820e0`; sha256 prefixes `8422cb562f9d136d` (checker) / `e69a17507134020f` (config) — **identical to the build Langston approved at Step 8.** **Known-answer control run in the same pass:** `B_DRIFT_RUNTIME_PREDICATE_COMPLETION_REPORT.md` at `33b62ee16^` → false, at `33b62ee16` → true.
+- **Blobs:** `git show <pinned sha>:<report path>`, the six pins named in §3b and committed (`efd3820e0`) before the matcher was run.
+- **Store:** the whole alert file on staging, merged by id (985 ids), filtered for ledger-row titles: exactly four ever — `8ff33397`, `2ec36624` (pre-window), `195d4f23` (row 2), `8d7d977a` (`B-XSTOCK-FEE-CONTRACT`, out of the verdict set per ruling 2). ⚠️ The store query ran in the same step as the write of the pins; the pins are mechanical (`git log --until`) and could not be moved by it.
+- **"The checker never graded it" (tightening 1's third case) — ruled out for rows 1 and 3 by construction and by control:** `checkLedgerRows` (`checker.mjs:225-231`) returns a boolean, not null, whenever a report exists and its first add is after `sinceMs` (2026-09-05), which holds for both. **Control in the same window:** the pipeline minted alerts for a CONVERSION (row 2) and for a DIRECT ADD (`8d7d977a`) within one tick of their first adds, so both arrival shapes rows 1 and 3 share were being graded.
+- ⚠️ **`fetchFailStreak` is not journaled per tick** — `state.json` reads 0 now. What the journal shows is each named tick reaching a HEAD that descends from the pinned commit, **which a tick whose fetch failed cannot show** (it reports the stale head). Stated rather than asserted as the literal streak value.
+
+**(b) WHAT DECISION WAS TAKEN, AND BY WHOM:** ⏳ **PROPOSED to Langston at Step 11 (2026-09-18): P5 PASSED; the batch closes; the checker stays as built; no further action on the close-time half.** The secondary's 1 miss in 3 is the honest measure of what the rule achieves on its own, and it is the reason the check exists. **This line is completed with his ruling before the batch is marked CLOSED.**
+
+**Scope §7b's original PASS** (*"the next N completion reports carry the ledger AND at least one slot-time fire unprompted"*) **was superseded at Step 2** when the slot-time half split to row 4.8: P5 above is its close-time half, pre-registered in the pre-audit r3; the slot-time half's criterion travels with `B-SLOT-PLACEMENT-CHECK`.
+
+### 0a. SCOPE OBJECTIVES
+
+| # | objective (scope §6) | verdict | evidence |
+|---|---|---|---|
+| 1 | decide the mechanism and say why | **YES** | the governance checker only — Langston's Step-2 ruling; the Step-11 review gate (Option B) declined |
+| 2 | build a slot-time trigger | **NO — split out, not failed** | Langston's Step-2 ruling moved it to `B-SLOT-PLACEMENT-CHECK`, plan row 4.8 |
+| 3 | define the convention, create the shells | **YES** | `workflow-10-governance` Tier-1 row names `1-system-manual/`; at `efd3820e0` all four lists live there, **one each** (Infra Claude reconciled its duplicate at `6a2705266`/`54bae74e2`, Claude Analyst moved its list) |
+| 4 | each list LEADS with OPEN AND STALLED | **YES** | first `##` section of each list at the ref: CC_A line 14, CC_B line 5, CC_C line 14, CC_INFRA line 10 — all OPEN AND STALLED |
+| 5 | close the review gap — argue one | **YES** | the checker grades the row (`gov-ledgerrow`); P5 primary 3 of 3 above |
+
 **Window shape: a set QUANTITY — the next three completion reports first added after `2026-09-11T15:45:41Z`** (the first checker tick running the approved code). The criterion is pre-registered in §3 and was written into the pre-audit at Step 2, before any of this data existed.
 
 ---
@@ -133,10 +176,14 @@ Kyle's rule (2026-09-05): every session keeps a task list, and it is updated at 
 - **`tick()` has no unit test**; dropping the orphan-verifier argument at its call site is uncaught (the doc-gap wiring shares the exposure).
 - **CI does not run the checker's suite** — it runs by hand.
 - **Inherited:** the batch-id filename match can pull in a neighbour batch's report.
+- ✅ **RESOLVED 2026-09-18 — all four lists in `1-system-manual/`, one each (objective 3 above).** The 09-13 state, kept for the record:
 - **Other sessions' lists — RE-MEASURED 2026-09-13 at `6e97a8f1c`, and the folder convention has NOT landed cleanly:**
   - `CC_A` ✅ and `CC_B` ✅ are in `1-system-manual/` and current (CC-B updated 2026-09-13).
   - `CC_C` **exists and is maintained** (created 2026-09-11 — *by this batch's own alert `2ec36624`* — last updated 2026-09-12) but still sits in `Claude Comms and Packages/Scope Files/`. **CC-C moves it.**
   - ⛔ `CC_INFRA` has **TWO** lists: `1-system-manual/CC_INFRA_SESSION_TASK_LIST.md` (3,527 B, created 2026-09-11 at `B-WAKE-LEAD-NAME` Step 10, whose header states the file "did not exist before") and `Claude Comms and Packages/Scope Files/CC_INFRA_SESSION_TASK_LIST.md` (48,082 B, last updated 2026-09-04). **The new one was created because the listing covered only `1-system-manual/`** — the older, larger list was never seen. **CC-INFRA reconciles the two and deletes one; the convention cannot hold with two files per session.**
+
+- **Naming drift (Langston ruling 2):** `B_XSTOCK_FEE_CONTRACT_COMPLETION_REPORT.md` is COMPLETION-named while its batch sits in Observation — the checker grades it as a completion report. Not a membership problem for P5; one line here so the next reader does not re-litigate it.
+- **If `firstAddCommitMs` ever follows renames**, rows 2 and 3 above re-date and the population must be re-enumerated (Langston rider b).
 
 ## 5. GOVERNANCE FILES CHANGED — THE TIER LEDGER (Step 10, 2026-09-11)
 
