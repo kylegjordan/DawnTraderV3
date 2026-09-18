@@ -61,14 +61,22 @@ It describes the predicate and the yield. **It is silent on the seed judgement a
 Consulted by path: the guard was created in September 2026 (`B-XSTOCK-FEED-SANITY`), long after the pre-governance corpus closed. **No coverage, and none is possible** — that is recorded as the finding, not assumed.
 
 ### A7. THE §4a MEASUREMENT — run to the pre-registered rule
-**Run 2026-09-18 ~21:30Z, inside the database (one session; 14 daily partitions `xstock_spot_ticker_snap_2026_09_04` → `_17`; tumbling 20-snapshot blocks, i.e. rolling medians at `trailingSpreadWindowSnaps` = 20 sampled every 20 frames; ring proxies drawn from blocks where the book MOVED; regular hours = weekdays 13:30-20:00 UTC).** Population: **1,319,489 blocks, 468 of 473 listed symbols measured, 0 excluded as thin**; the 5 unmeasured have no ticker rows in the span. Held set = 70 symbols paper opened in the last 30 days, **68** of them measured.
+**Run 2026-09-18 ~21:30Z, inside the database (one session; 14 daily partitions `xstock_spot_ticker_snap_2026_09_04` → `_17`; tumbling 20-snapshot blocks, i.e. rolling medians at `trailingSpreadWindowSnaps` = 20 sampled every 20 frames; ring proxies drawn from blocks where the book MOVED; regular hours = weekdays 13:30-20:00 UTC).** Population: **1,319,489 blocks** (the 14 insert counts sum to it exactly), **468 of 473 listed symbols measured** — that is the coverage statement. ⚠️ *"0 excluded as thin"* is uninformative, not reassuring: at ~300 blocks per symbol per weekday nothing could fall under 20. **Held set: 70 xStock symbols paper-opened in `(2026-08-19 21:35Z, 2026-09-18 21:35Z]`** — pinned to the run's instant, because an unpinned `now() − 30 days` read 69 at 22:45Z. **68 measured; the 2 unmeasured are TEM/USD and WEN/USD, both `is_delisted = t` with no ticker rows** (the universe join drops them), so neither can strand. That disposition is written, not inferred.
+**Artifacts:** the executed file is `/tmp/ccc_flip3.sql`; `/home/deploy/8ap4a_flip.sql` is a copy made at 22:02Z for Langston's reading, with sha256 identical (`d9ad7fd6ffcacfbd…`). The copy's later mtime is the copy, not a rewrite.
+**What ran, stated exactly:**
+- "moved" = `max(bid) > min(bid) OR max(ask) > min(ask)` — **EITHER side**, which is looser than the both-sides property C would use.
+- AMC is the least comparable pair: on 09-16, 199 of its 271 regular-hours blocks had neither side move (Langston). ⇒ **When the named arm's real ratios arrive, AMC's is the one not to trust.**
+- Tumbling blocks stand in for sliding windows. `row_number()` runs over rows already filtered to valid sides, so 20 "consecutive" frames can span dropped invalid frames, and `t0` files a block under its first frame's session (~4.6 min per block). That bites hardest on the hollow names.
+- **2026-09-07 was Labor Day:** 7,939 blocks (0.6%), with 13:30-20:00 counted as regular hours while the market was shut. Frozen, wider quotes inflate the numerator, so this errs toward C.
+- 13:30-20:00 UTC is correct for EDT through 09-17 and **breaks at the November DST shift** if re-run.
 
 | proxy | stranded (ratio > `kRel` 3) | share | paper-held stranded | this proxy says |
 |---|---|---|---|---|
 | **PRIMARY — p5 of block medians** (signed: inflates ratios, toward C) | **4 of 468** | **0.9%** | **0 of 68** | A + named arm |
 | **SENSITIVITY — median of block medians** | **0 of 468** | **0.0%** | **0 of 68** | A + named arm |
 
-⇒ **THE PRE-REGISTERED RULE RETURNS A + THE NAMED ARM; C IS HOMED.** Both proxies agree, so the disagreement branch is not reached. This matches the substitution written before the data.
+⇒ **THE PRE-REGISTERED RULE RETURNS A + THE NAMED ARM; C IS HOMED — CARRIED BY THE PRIMARY LEG ALONE** *(Langston, gate 1, 22:18Z)*.
+⛔ **The SENSITIVITY leg was DEGENERATE and could not have voted for C:** regular hours are ~79% of each symbol's blocks, so `median(regular-hours blocks) / median(all moved blocks)` is ≈ 1 by construction. Langston measured it on one weekday (`_2026_09_16`, 464 symbols): SENSITIVITY max 1.09, p99 1.02, against a bar of 3, while PRIMARY on the same day reached 3.37 with 2 stranded. A leg that cannot reach the bar can only vote against C. He added that leg at r3 and recorded the error as his. **The outcome does not move:** PRIMARY had genuine reach (14-day max 6.59, 4 stranded) and alone returns A + the named arm on both of its own tests (0.9% < 5%; 0 of 68 held). The sentence *"Both proxies agree"* is struck. This result matches the substitution written before the data.
 **The four locked symbols under both proxies:** AMC 1.13 / 1.00 · ANET 2.02 / 0.84 · LOW 2.34 / 0.99 · MDB 2.06 / 0.85 — all under 3.
 **Distribution of the PRIMARY ratio:** median 2.02, p90 2.40, max 6.59.
 ⚠️ **The margin is real but not wide:** under the conservative proxy, one symbol in ten sits above 2.4 against a bar of 3. That tail is what the named arm is for.
