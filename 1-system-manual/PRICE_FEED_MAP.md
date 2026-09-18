@@ -1,6 +1,17 @@
 # PRICE FEED MAP — WHERE EVERY PRICE IN THE SYSTEM COMES FROM
 
-**Kyle-directed · CC-B · r7 — FINAL (Langston approved at `7984c4e4b`).**
+**Kyle-directed · CC-B · r7 — FINAL (Langston approved at `7984c4e4b`) · r8 partial re-stamp 2026-09-18 (crypto exit and maker-fill cells only).**
+
+> ## ⭐⭐ r8 — THE TRIGGER FIRED: CRYPTO EXITS AND MAKER FILLS MOVED OFF THE MIDPOINT (re-derived at `b5036e606ce70a4e27541a0ab8266d65a28adb5a`)
+> Kyle 2026-09-18: *"Fix the map to reflect Analyst's change for crypto exits."* Two CC-C commits on trigger file `active-execution-engine.ts`, both **deployed** (staging `91647c9b9` has both as ancestors):
+> | cell | was (r7) | now | commit |
+> |---|---|---|---|
+> | paper crypto exit TRIGGER (stop + target) | book midpoint | **the BID** — ladder bid (book top, else ticker bid), ≤ 2,000 ms, spread ceiling; no fresh bid ⇒ **no decision** that cycle, never the mid (`active-execution-engine.ts:2333-2345`, `:2504-2515`) | `8a-P2` `b434511cf` |
+> | paper crypto resting TARGET-EXIT fill | midpoint `>= limit` | **the BID `>= limit`**, the same bid the trigger used that tick; no bid ⇒ no fill, rest persists (`:2557-2567`) | `8a-P3` C2 `16ab0293b` |
+> | paper crypto resting ENTRY fill | midpoint | **the ASK**, dedicated touch read, 8,000 ms (`:1598`, `server/core/trading/crypto-touch.ts`) | `8a-P3` C1 |
+> | VTS crypto resting entry fill · placement check · twin placement | cache price | **the ASK** | `8a-P3` C3/C4/C7 |
+> | VTS crypto stop/target trigger · exit booking | cache price | **the BID** (no bid ⇒ clamp, counted `clamp_no_bid`) | `8a-P3` C5/C6 |
+> ⛔ **xSTOCK IS UNCHANGED BY STATEMENT** — every shared site passes the xStock mark explicitly; it moves in **`8a-P4`** (CC-C). ⇒ **§1C, the comparator box and §3 Q1 below are SUPERSEDED FOR CRYPTO ONLY; every xStock cell there still stands.** ⚠️ **The rest of this document is still at the r7 stamp** — the full re-derivation is `B-PRICE-DOC-CONSOLIDATE` (`3n.s`). The per-situation grid is `Scope Files/B_FEED_BY_SITUATION_AUDIT_FIRST_PASS.md` (`3n.t`).
 
 > ## ⛔⛔ DERIVED-AT STAMP — **READ THIS BEFORE CITING ANY LINE BELOW**
 > **EVERY `path:line`, COUNT AND VERDICT IN THIS DOCUMENT WAS DERIVED AT:**
@@ -101,6 +112,7 @@ gain ⇒ **a constant offset is tracked, never removed.**
 `rtb-refresh-service.ts:433 getBatch` — **price cache only** (`:12`). Side-age probe at `:435` is shadow-only.
 
 ### C. OPEN-TRADE MONITOR — the exit trigger
+> ⭐ **r8: FOR CRYPTO THIS SECTION DESCRIBES THE PRE-`8a-P2` STATE.** The crypto trigger now reads the BID and the crypto resting fills read the transactable side (r8 table at the top). The analysis below stays as the record of why it moved; **its "midpoint" verdict now binds xStock only.**
 `active-execution-engine.ts:1652 getPriceWithFallback(symbol, 2000)` → ⛔ **`kraken_ws_book_mid`, a
 MIDPOINT, structurally.**
 ⛔⛔ **THIS BOOKS SALES WITH NO BUYER.** A resting **sell** fills when a **BUYER** pays our price — when
@@ -187,7 +199,10 @@ birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` �
 
 | situation | kind today | right kind | verdict |
 |---|---|---|---|
-| **exit trigger** | book **midpoint** | the **BID** (a resting sell is filled by a buyer) | ⛔ **WRONG KIND** |
+| **exit trigger — crypto** | ~~book midpoint~~ ⇒ **the BID since `8a-P2`** (r8) | the **BID** | ✅ **RIGHT KIND (r8)** |
+| **exit trigger — xStock** | equities **midpoint** | the **BID** | ⛔ **WRONG KIND** — moves in `8a-P4` |
+| **resting maker fills — crypto** (entry ASK, target-exit BID, paper + VTS) | **transactable side since `8a-P3`** (r8) | ask / bid | ✅ **RIGHT KIND (r8)** |
+| **resting maker fills — xStock** | the mark | ask / bid | ⛔ **WRONG KIND** — moves in `8a-P4` |
 | **crypto quant birth** | mixture: REST `last` + WS `mid`, **unstated per symbol** | one stated kind | ⛔ **WRONG — and “unstated” is the defect, not the mixture** |
 | **crypto pattern birth** | 60-min **bar close** (a printed trade) | a printed price | ✅ **RIGHT KIND** |
 | **xStock / VTS birth** | **15-min bar close** | a printed price | ✅ **RIGHT KIND** |
@@ -238,6 +253,7 @@ birth reads) · `execution/depth-source.ts` (4) · `trading-state-sync.ts:296` �
 ⭐ **THE TRANSFERABLE RULE, WHICH IS WHAT TO KEEP: *reject beyond a few ticks of your OWN feed's cadence.* 15 ÷ 4 ≈ 3.75 ticks.** ⚠️ **`RULED ON REPORTED FACT` — xStock population, `XSTOCK_PRICING_PLAN` §2; I have NOT re-derived it and the crypto cadence differs, so the NUMBER does not transfer to crypto even though the RULE does.**
 
 ### ⭐ THE WHOLE JUDGEMENT IN ONE LINE
+> ⭐ *r8: the exit trigger and the resting fills are now RIGHT on crypto (`8a-P2`/`8a-P3`); the line below holds for xStock.*
 > **FOUR JOBS READ THE WRONG KIND OF PRICE: the exit trigger, crypto quant birth, xStock/VTS marketability, and — as a mixture rather than a wrong side — the quant basis itself.**
 > **FOUR READ THE RIGHT KIND: both bar-close births, active entry marketability, RTB ranking, and portfolio marking.** *(Of the right-kind rows, TWO are too old: the crypto pattern lane's **60-minute** bar close and the xStock/VTS **15-minute** one — **different intervals; r2 called both 60.**)*
 
