@@ -19,7 +19,8 @@
 
 **HELD, IN THIS ORDER (plan rows in the `3n` table):**
 1. `3n.s` `B-PRICE-DOC-CONSOLIDATE` — combine the feed map with `PRICING_DATA_ARCHITECTURE.md`.
-2. `3n.u` `B-FEED-MISMATCH-FIX` — fixes from `3n.t`; ownership with CC-C + Langston.
+2. **`3n.u` `B-FEED-MISMATCH-FIX` — IN FLIGHT (Kyle 2026-09-19: "fix the incorrect feeds"), Step 2 r2 with Langston.** Close-fill freshness contract + the stop-flow flatten/reconciler + close-all.
+2b. `3n.u2` `B-ENTRY-LEVEL-RECHECK` — split out by Langston; re-check levels against the current price before the fill, both classes.
 3. `3n.v` `B-REACH-BASELINE-ADJUST` — Kyle ruled the one-way rule goes; after CC-C's exit fix (`8a-P2`).
 4. `3n.x` review — necessary vs nice-to-have before live mode (CC-B drafts, Kyle decides).
 
