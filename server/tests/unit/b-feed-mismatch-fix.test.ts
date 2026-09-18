@@ -138,7 +138,10 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     expect(h.getClosedTradesBySymbol).not.toHaveBeenCalled();
     expect(h.addAlert).not.toHaveBeenCalled();
     await proto.closePosition.call(eng, 'pos-CTVA/USD', 90, STOP, 'test', {}).catch(() => {});
-    expect(h.addAlert).toHaveBeenCalledTimes(1);
+    // Exactly ONE refusal alert. (The mock returns no trade row, so the accepted close ALSO raises the separate
+    // CLOSE_NO_TRADE_ROW alert — correct behaviour, a different alert; count only the refusal one.)
+    const refusalAlerts = h.addAlert.mock.calls.filter((c) => String((c[0] as { title?: string }).title).includes('Close refused'));
+    expect(refusalAlerts).toHaveLength(1);
     expect(h.getClosedTradesBySymbol).toHaveBeenCalled();                  // it yielded and proceeded to persist
     expect(eng._closeRefusalStreak.has('pos-CTVA/USD')).toBe(false);       // cleared once the gate passed
   });
