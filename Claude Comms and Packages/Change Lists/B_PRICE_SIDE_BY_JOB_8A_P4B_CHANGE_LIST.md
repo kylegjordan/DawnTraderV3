@@ -85,3 +85,10 @@ const discontinuity = isDiscontinuityActive(input.symbol, triggerPrice, tickTs, 
 **Mutation checks (each turns exactly one test red, restored after):** dropping `ask >= bid` from the predicate; J1 bypassing the predicate; hoisting `let xsBid` above the loop.
 **Local:** tsc 377 = baseline; the five `8a` fence/test files 116/116.
 **CI:** the branch head carries CC-B's `B-FEED-MISMATCH-FIX` commits under this one; the graded ref's own CI is run on a temporary branch (`migration/ci-cc-c-*`) so a later push cannot cancel it.
+
+## 7. Step 4 r2 — APPROVED at `00ba34873` (23:46Z), condition met, residuals folded
+
+- **Condition — CI on the graded head:** run `35406705232` on `00ba34873` (temporary branch `migration/ci-cc-c-e413c0983`, so a later push cannot cancel it): **4/4 per-job green.**
+- **Residual 1 — one fact per log line.** The guarded arm now prints `CROSSED_NOT_CAPTURED` only on a genuine cross and `SIDES_NOT_CAPTURED reason=non_finite` otherwise; the unguarded arm already printed only on a genuine cross. (Below the refusal both sides are finite-positive, so today only a cross reaches the guarded arm.)
+- **Residual 2 — the limit of the three-mention fence, stated:** `toBe(3)` counts mentions of `xstockTransactableSides(` **in `active-execution-engine.ts` only**. The predicate is exported, so a fourth caller elsewhere in the tree is unfenced. It is not a tree-wide census.
+- **Step 8, stated before the data (#661 leg 3):** **zero `CROSSED_NOT_CAPTURED` lines is a PENDING control, not a pass.** The refusal arm is live-unexercised at both sites, as is the predicate's NaN path; silence means no crossed frame reached a decision, never that the guard fired correctly.

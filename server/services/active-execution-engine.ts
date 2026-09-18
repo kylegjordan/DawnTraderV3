@@ -2187,7 +2187,11 @@ export class ActiveExecutionEngine {
                   xsAsk = _gSides.ask;
                   xsSideBasis = 'raw_guarded';
                 } else {
-                  console.warn(`[8a-P4b][BOOK_STATE] ${position.symbol} CROSSED_NOT_CAPTURED basis=guarded bid=${_raw.bid} ask=${_raw.ask} — no decision this tick`);
+                  // Step 4 r2 residual (Langston): name WHICH fact refused, so this line carries one fact at both sites.
+                  // Below the refusal both sides are finite-positive (`book-state.ts` `pos`), so today only a cross
+                  // reaches here; the non-finite text exists so a future change to that predicate cannot be logged as one.
+                  const _crossed = Number.isFinite(_raw.bid) && Number.isFinite(_raw.ask) && (_raw.ask as number) < (_raw.bid as number);
+                  console.warn(`[8a-P4b][BOOK_STATE] ${position.symbol} ${_crossed ? 'CROSSED_NOT_CAPTURED' : 'SIDES_NOT_CAPTURED reason=non_finite'} basis=guarded bid=${_raw.bid} ask=${_raw.ask} — no decision this tick`);
                 }
               }
             }
