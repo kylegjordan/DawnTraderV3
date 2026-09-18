@@ -30,7 +30,6 @@ import { getModuleConstants, hasExplicitAssetClassRow } from './module-constants
 // + target-lock gate sites to short-circuit naive logic during halt-resume
 // gaps, corp-action discontinuities, and known ex-dividend windows. Detector
 // owns its own per-symbol state cache (lazy 24h eviction); TEC just calls.
-import { isDiscontinuityActive } from './price-discontinuity-detector.js';
 // B79: market-hours is a leaf module (no imports) — safe static import.
 // Used by the TEC stop-freeze guard at top of updatePosition() for xstock_spot.
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
@@ -815,7 +814,10 @@ export interface PositionUpdate {
    * detector gate runs, pre-B-NEW-42b behavior preserved (crypto-path
    * back-compat).
    */
-  discontinuity?: { active: boolean; kind?: string };
+  // ⛔ `8a-P4b` J5 condition 3 — REQUIRED. The one production caller (`tec-evaluator`) resolves it once per tick on the
+  // caller's own lane; the old fallback that consulted the detector here is DELETED, so a caller that omits it can
+  // never create an unwatched detector machine.
+  discontinuity: { active: boolean; kind?: string };
   // B65.2: extra inputs for moonbag gating + concurrency tracking.
   strategy?: string;
   sourcePool?: string | null;
@@ -1184,7 +1186,9 @@ export function updatePosition(update: PositionUpdate): TrailingUpdateResult {
   // latched yet (matches pre-Step-4-review behavior for direct callers).
   const targetLockDiscontinuity = state.targetLatched
     ? { active: false }
-    : (update.discontinuity ?? isDiscontinuityActive(update.symbol, update.currentPrice, update.currentTs ?? Date.now()));
+    // `8a-P4b` J5 condition 3: no detector fallback. Untyped callers (tests are outside tsc) get the same no-verdict
+    // default `shouldClosePosition` has always used — never a detector machine of their own.
+    : (update.discontinuity ?? { active: false });
   if (targetLockDiscontinuity.active) {
     console.log(
       `[B-NEW-42b][TEC_DISCONTINUITY_SKIP_TARGETLOCK] ${update.symbol} ` +

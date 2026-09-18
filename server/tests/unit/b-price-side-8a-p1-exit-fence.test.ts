@@ -118,28 +118,45 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     expect(expr).not.toMatch(/(\?\?|\|\|)\s*currentPrice/);
   });
 
-  it('2d. ⛔⛔ ONLY `crypto_spot` REACHES THE TRIGGER — the by-construction exemption has a tripwire', () => {
-    // ⛔ WHAT THIS GUARDS IS AN ARGUMENT MADE IN ANOTHER FILE. The discontinuity sentinel has no
-    // divergent fixture because it is xStock-only (`price-discontinuity-detector.ts:248-250`
-    // returns `{active:false}` for every non-xStock symbol) while divergence is crypto-only — so
-    // the two sets do not intersect and a test there would exercise an impossible path.
-    // ⚠️ BUT THAT EXEMPTION LIVES ENTIRELY IN THE TERNARY BELOW, IN A DIFFERENT FILE, AND NOTHING
-    // WATCHED IT. Add `'xstock_spot'` to it and test 2b stays GREEN — it asserts `triggerBid` is
-    // present and never coalesced, and says nothing about the branch — while the sentinel starts
-    // receiving a divergent price for the first time, SILENTLY. (Langston.)
+  it('2d. ⛔⛔ EXACTLY `crypto_spot` AND `xstock_spot` REACH THE TRIGGER — the sentinel question was RE-OPENED and answered at `8a-P4b` J5', () => {
+    // ⛔ HISTORY, KEPT BECAUSE IT IS THE REASON THIS TEST EXISTS. This read "ONLY `crypto_spot` REACHES THE TRIGGER": the
+    // xStock-only discontinuity sentinel (`price-discontinuity-detector.ts:248-250`) reads the SAME `triggerPrice`
+    // (`tec-evaluator.ts:381`), and while divergence was crypto-only it could only ever see the mark. The test was written
+    // to go RED the day a second class reached the transactable trigger, with the instruction "re-open the sentinel
+    // question — do NOT relax this test". `8a-P4b` X3 was that day (2026-09-18): it went red, the question was re-opened
+    // as J5 (`Scope Files/B_PRICE_SIDE_BY_JOB_8A_P4B_AUDIT_AND_PLAN.md`), and the ruling is that the sentinel judges the
+    // BID — the series the stop fires on. This is the deliberate, visible amendment; the tripwire survives one class up.
     const expr = /triggerPrice\s*:\s*([^,}]+)/.exec(args[0])![1];
-    // ⭐ THE CHECK IS THE *COUNT OF CLASSES*, NOT THE BRANCH ORDER — which is what makes it immune
-    //   to the inverted-but-equivalent ternary that 2b had to step out of once.
-    const classes = expr.match(/'(crypto_spot|xstock_spot)'/g) ?? [];
-    expect(classes).toHaveLength(1);
-    // …and the crypto side is the one that gets the bid, whichever way the ternary is written.
-    const [whenTrue, whenFalse] = expr.split('?')[1].split(':');
-    const cryptoIsTrueBranch = (classes[0] === "'crypto_spot'") !== /!==/.test(expr);
-    expect(cryptoIsTrueBranch ? whenTrue : whenFalse).toMatch(/triggerBid/);
-    // ⛔ IF THIS GOES RED: the sentinel's by-construction exemption HAS EXPIRED. A second asset
-    //    class now reaches the transactable trigger, so `isDiscontinuityActive` can receive a
-    //    price that differs from the mark. Re-open the sentinel question — do NOT relax this test.
+    const classes = (expr.match(/'(crypto_spot|xstock_spot|crypto_perp|xstock_perp)'/g) ?? []).sort();
+    expect(classes).toEqual(["'crypto_spot'", "'xstock_spot'"]);
+    // each named class takes the transactable slot, and every OTHER class falls to the mark (the named default arm)
+    expect(expr).toMatch(/'crypto_spot'\s*\?\s*triggerBid/);
+    expect(expr).toMatch(/'xstock_spot'\s*\?\s*triggerBid/);
+    expect(expr.trim()).toMatch(/:\s*currentPrice$/);
+    // ⛔ IF THIS GOES RED AGAIN: a THIRD class reaches the transactable trigger. Every class that does changes what the
+    //    stateful sentinel sees (it is xStock-only today, but a perp class may join it). Re-open the question for THAT
+    //    class — do NOT relax this test.
   });
+
+  it('2e. ⛔⛔ EACH LANE FEEDS ITS OWN SENTINEL MACHINE, AND EACH MACHINE SEES ONE QUANTITY (`8a-P4b` J5, Langston BLOCKER-J5)', () => {
+    // The discontinuity detector is keyed lane|symbol (`price-discontinuity-detector.ts`, `laneKey`). This pins, per
+    // lane, WHICH lane name and WHICH price each production caller hands it — so the next lane wired with the wrong
+    // side, or the wrong lane name, goes red here instead of mixing quantities in one machine.
+    const VTS = readFileSync(join(process.cwd(), 'server/services/vts-runner.ts'), 'utf-8');
+    const vts = evaluateTECExitArgs(code(VTS));
+    expect(vts).toHaveLength(2); // instrument control: the real lane and the shadow lane
+    const real = vts.filter((a) => /sentinelLane:\s*'vts',/.test(a));
+    const shadow = vts.filter((a) => /sentinelLane:\s*'vts_shadow',/.test(a));
+    expect(real).toHaveLength(1);
+    expect(shadow).toHaveLength(1);
+    // VTS real: its own trigger variable — the BID on crypto, the MARK on xStock until `8a-P4c` moves it
+    expect(real[0]).toMatch(/triggerPrice:\s*_vtsTriggerPrice,/);
+    // VTS shadow: the bid on crypto, the mark otherwise
+    expect(shadow[0]).toMatch(/triggerPrice:\s*trade\.assetClass === 'crypto_spot' \? _sExitBid : currentPrice,/);
+    // paper / live: the engine's own mode names the machine, and the trigger is the class three-way (2d)
+    expect(args[0]).toMatch(/sentinelLane:\s*this\.mode,/);
+  });
+
 
   it('2e. ⭐ CONTROL — a WIDENED predicate goes red, an INVERTED one does not', () => {
     const widened = "positionAssetClass === 'crypto_spot' || positionAssetClass === 'xstock_spot' ? triggerBid : null";

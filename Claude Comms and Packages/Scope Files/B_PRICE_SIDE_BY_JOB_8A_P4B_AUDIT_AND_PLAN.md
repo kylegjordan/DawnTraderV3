@@ -94,6 +94,36 @@ Consulted by path: the equity feed and the guard both postdate the corpus. There
   - **If ruled the other way:** `TECExitInput` gains a `sentinelPrice` (the mark on xStock) and `tec-evaluator.ts:381` reads it. That is a signature change to a shared evaluator, which is why it is not the default.
   - **Fence consequence either way:** 2d is amended DELIBERATELY and VISIBLY — two classes now reach the trigger, and the sentinel question is answered here, at J5 — never relaxed quietly.
 
+- ⛔⛔ **J5 r2 *(Langston's ruling, 22:45Z)*: the BID is the right series — but the sentinel was NOT lane-exclusive, so feeding it changes nothing in isolation.**
+  - **BLOCKER-J5:** `symbolCache` was keyed by symbol alone, and three production lanes advance it for the same xStock: paper (`aee`), VTS real (`vts-runner` `evaluateTECExit`, `triggerPrice: _vtsTriggerPrice`) and VTS shadow. After X3, one machine would take bids from paper and marks from both VTS lanes. A half-spread step can then satisfy the CLEARING test (`|pctFromResume| < 0.5%`) on a still-moving price — **an EARLY stop**, so my "delays, never fires early" was false for the mixed series.
+  - **J5b (pre-existing):** the 2-tick deferral was counted in CALLS across lanes.
+  - **Built — (b'), lane-exclusive by KEYING:**
+    - The detector state is keyed `lane|symbol` (`SentinelLane` = `paper` | `live` | `vts` | `vts_shadow` | `direct_caller`). `isDiscontinuityActive(symbol, price, ts, lane)` takes the lane as a **required** argument, and `ts` became required to allow it. `TECExitInput.sentinelLane` is **required**.
+    - Callers: paper passes `this.mode`, VTS real `'vts'`, VTS shadow `'vts_shadow'`. The trailing-controller fallback (direct callers only) uses `direct_caller`.
+    - Each lane has one quantity and its own deferral in its own ticks, which discharges J5b.
+    - **Not observe-only:** VTS holds xStock symbols paper does not. With paper as the only advancer, those symbols would sit in cold start forever, or read another lane's stale entry.
+  - **Consequence, stated: VTS xStock deferral timing changes where paper and VTS held a symbol at once. That is a composition change, so the vts/xstock epoch bump moves into this piece (J4 extended); `8a-P4c` bumps it again.**
+  - Fixtures, mutation-checked:
+    - separate machines keep separate `lastPrice` series;
+    - VTS calls cannot clear paper's post-gap deferral;
+    - the lane is a required argument, and each production caller names its own;
+    - **re-keying by symbol alone turns both behavioural tests red.**
+  - **Fence 2e** pins, per lane, the lane name AND the trigger quantity each caller feeds; 2d keeps the class three-way.
+  - Rider (2): *"a hollow bid is refused before it reaches here"* cites `aee` REFUSE unvalidated (`:2059-2069` at the stamped ref) and the hollow-skip branch above it. Hollow and unvalidated frames `continue` before the trigger is built.
+- ✅ **J5 r3 — Langston ACCEPTED (b'), lane-keyed (23:00Z), adding the stronger argument:** observe-only would also have gated VTS's xStock decisions (made on the MARK) on a machine built from paper's BID series — a cross-side leak in the other direction. His five conditions, each folded:
+  1. **Non-advance, mutation-grade.** With paper `DISCONTINUITY_ACTIVE` on a symbol, the first `vts` call gets its OWN `cold_start`: not paper's halt, and not inactive. Re-keying by symbol alone turns it red, along with the two lane tests. ✅
+  2. **No contradiction between `sentinelLane` and `callerMode`:** `resolveSentinelLane(callerMode, lane)` accepts paper→paper, live→live and vts→vts|vts_shadow, and THROWS on any other pair. An absent lane (untyped callers only — tsc requires it in production) is derived from `callerMode`, which can name only paper, live or the real VTS lane. Fixture-tested. ✅
+  3. **`direct_caller` DELETED:** `PositionUpdate.discontinuity` is REQUIRED, the trailing controller's detector fallback is removed (the controller no longer imports the detector), and the lane union has four members. Untyped callers get the no-verdict `{active:false}` that `shouldClosePosition` has always used — never a detector machine. The one production caller, `tec-evaluator`, always passes the pre-resolved result. ✅
+  4. **Each lane's call cadence, stated before the deploy** (the gap term uses CALL timestamps):
+     - **paper** — the exit loop, ~1.5 s per held xStock position on every admitted tick. Refused ticks (stale, hollow, unvalidated) make no call, so the first admitted call after a refusal run longer than 300 s with a move of 0.5% or more reads `halt_resume_gap` and defers one confirming tick. That is the detector's designed behaviour, and it now also fires after a lock release.
+     - **vts** — one resolve pass a minute (the `8a-P3` extract measured 720 passes in 12 h), under 300 s. Weekend-suspended trades are skipped, so the Sunday-evening reopen reads as a gap, correctly.
+     - **vts_shadow** — the same pass, and a no-op while `openShadowTrades` is empty (`vts-runner.ts:4117`).
+     - ⇒ **No lane's natural cadence exceeds 300 s while it is evaluating.** A false `halt_resume_gap` needs a lane to fall silent past 300 s mid-session, which is a refusal run or an outage — the fail-safe direction.
+  5. **Per-lane divergence is EXPECTED BY DESIGN** (two series, same thresholds) and is stated in the detector's own header. `clearSymbolState` clears the symbol on EVERY lane. ✅
+  - **Rider (2), corrected cite:** the REFUSE predicate is `aee:2072` at the stamped ref (`if (_r.state !== 'two_sided' || _bs.comparatorValidated !== true)`, `unvalidatedRefusals++` at `:2073`). ⚠️ **It is CONDITIONAL:** with the guard on, a hollow or unvalidated frame never reaches the trigger. **With the guard OFF (the J2 `raw_unguarded` arm) nothing refuses**, so *"a hollow bid is refused first"* is true guard-on and false guard-off. With the guard off, the unjudged raw bid reaches the sentinel.
+
+- **J4 extended:** the migration bumps `calibration_epoch` `xstock_spot` **`paper_sim` AND `vts`** by +1 (both rows asserted present, every other row asserted unchanged). The rollback bumps both again.
+
 **Existing fences this piece amends deliberately (each pinned the old xStock = mark statement):** `b-price-side-8a-p1-exit-fence` 2d (J5); `b-price-side-8a-p3-crypto-finish` "paper C2" (the three-way `_restFillPrice`); `b-exit-provenance-fence` OBJ-9 (`_fillSource` gains the xStock rung before the `provenance.source` fallback).
 
 - **J2c — guard-off frame source (Langston, NIT-5 rider).** On the guard-off arm `_bs` is the `ok:false` union and carries **no** `raw`, so the only frame in scope is `_eqTick.raw` — the frame the mark came from. It is used there and nowhere else, which keeps J2 from turning into the unjudged re-read that J1 forbids.

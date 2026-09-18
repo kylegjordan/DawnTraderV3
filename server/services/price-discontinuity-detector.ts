@@ -127,6 +127,24 @@ interface SymbolEntry {
   corpActionExpiresAt?: number;
 }
 
+/**
+ * ⛔⛔ `8a-P4b` J5 (Langston BLOCKER-J5, 2026-09-18) — THE STATE IS KEYED BY LANE AND SYMBOL, NEVER BY SYMBOL ALONE.
+ * Three production lanes consult this detector for the SAME xStock symbol — paper (`aee`), the VTS real lane and the
+ * VTS shadow lane — and every call mutates `lastPrice`/`lastTs`. Keyed by symbol alone they shared one machine:
+ * (1) once `8a-P4b` fed paper the BID while VTS still fed the MARK, one `lastPrice` series alternated quantities, and a
+ *     half-spread step could satisfy the CLEARING test (`|pctFromResume| < 0.5%`) on a still-moving price ⇒ an EARLY
+ *     stop; and (2) (pre-existing, J5b) the 2-tick deferral was counted in CALLS across lanes, so VTS calls could consume
+ *     paper's confirming ticks. The B-NEW-42b single-consultation invariant held per caller and failed per symbol.
+ * ⇒ Each lane advances ONLY its own machine, on its own single quantity, and gets its own deferral in its own ticks.
+ *   NOT observe-only for the non-transacting lanes: VTS holds xStock symbols paper does not, and an observe-only lane
+ *   on a symbol nobody else advances would sit in cold start (fail-safe-skip) forever or read another lane's stale entry.
+ * ⛔ There is NO fifth lane for callers that skip the pre-resolved result (Langston J5 condition 3): the trailing
+ * controller's fallback was DELETED, so no unwatched machine can exist. Per-lane DIVERGENCE IS EXPECTED BY DESIGN —
+ * two lanes on two series may return different `active` for one symbol at one instant (condition 5).
+ */
+export type SentinelLane = 'paper' | 'live' | 'vts' | 'vts_shadow';
+const laneKey = (lane: SentinelLane, symbol: string): string => `${lane}|${symbol}`;
+
 const symbolCache = new Map<string, SymbolEntry>();
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -241,8 +259,12 @@ function isWithinExDividendBlock(symbol: string, nowMs: number): { active: boole
 export function isDiscontinuityActive(
   symbol: string,
   currentPrice: number,
-  currentTs: number = Date.now(),
+  currentTs: number,
+  // ⛔ `8a-P4b` J5 — REQUIRED, and `currentTs` is required with it: a caller must name the lane whose machine it
+  // advances. A default would let a forgotten call land on another lane's history — the defect this closes.
+  lane: SentinelLane,
 ): DiscontinuityResult {
+  const key = laneKey(lane, symbol);
   // 1. Crypto-path no-op: detector only applies to xStock spot symbols.
   if (!XSTOCK_SPOT_SYMBOLS.has(symbol)) {
     return { active: false };
@@ -259,7 +281,7 @@ export function isDiscontinuityActive(
   }
 
   // 3. Look up per-symbol state from cache.
-  let entry = symbolCache.get(symbol);
+  let entry = symbolCache.get(key);
 
   // 3a. Lazy eviction (Langston pre-audit rev1 #1) — if last observed call was
   // more than SYMBOL_CACHE_STALE_SECONDS ago AND we're in IDLE state, drop
@@ -268,7 +290,7 @@ export function isDiscontinuityActive(
   // their state-machine resolution (TTL/hard-ceiling/clearing tick) regardless
   // of wall-clock staleness — they represent live operational state.
   if (entry && entry.state === 'IDLE' && (currentTs - entry.lastTs) / 1000 > SYMBOL_CACHE_STALE_SECONDS) {
-    symbolCache.delete(symbol);
+    symbolCache.delete(key);
     entry = undefined;
   }
 
@@ -286,7 +308,7 @@ export function isDiscontinuityActive(
   //
   // The cache populates from this call. Second call onward evaluates normally.
   if (!entry) {
-    symbolCache.set(symbol, {
+    symbolCache.set(key, {
       state: 'IDLE',
       lastPrice: currentPrice,
       lastTs: currentTs,
@@ -458,7 +480,8 @@ export function isDiscontinuityActive(
  * (active set + 24h tail) acceptable.
  */
 export function clearSymbolState(symbol: string): void {
-  symbolCache.delete(symbol);
+  // `8a-P4b` J5: an operator reset clears the symbol on EVERY lane.
+  for (const k of [...symbolCache.keys()]) if (k.endsWith(`|${symbol}`)) symbolCache.delete(k);
 }
 
 /**
@@ -470,8 +493,8 @@ export function _testClearAllState(): void {
   dividendCalendar = null;
 }
 
-export function _testGetSymbolEntry(symbol: string): SymbolEntry | undefined {
-  return symbolCache.get(symbol);
+export function _testGetSymbolEntry(symbol: string, lane: SentinelLane = 'paper'): SymbolEntry | undefined {
+  return symbolCache.get(laneKey(lane, symbol));
 }
 
 export function _testInjectDividendCalendar(entries: DividendCalendarEntry[]): void {

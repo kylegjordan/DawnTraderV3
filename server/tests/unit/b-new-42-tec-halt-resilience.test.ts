@@ -188,7 +188,7 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (VERIFIES B-NEW-42b FIX)', ()
         entryPrice: 200, stopPrice: 190, targetPrice: 230,
         currentPrice: 205, triggerPrice: 205, atr: 3,
         holdDurationMs: 60_000 + i * 60_000, maxHoldMs: 7 * 86400_000,
-        context: xstockContext, useTrailing: true, callerMode: 'paper',
+        context: xstockContext, useTrailing: true, callerMode: 'paper', sentinelLane: 'paper',
         currentSlotTotal: 10,
       });
     }
@@ -214,7 +214,7 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (VERIFIES B-NEW-42b FIX)', ()
         entryPrice: 200, stopPrice: 190, targetPrice: 230,
         currentPrice: 205, triggerPrice: 205, atr: 3,
         holdDurationMs: 60_000 + i * 60_000, maxHoldMs: 7 * 86400_000,
-        context: xstockContext, useTrailing: true, callerMode: 'paper',
+        context: xstockContext, useTrailing: true, callerMode: 'paper', sentinelLane: 'paper',
         currentSlotTotal: 10,
       });
     }
@@ -264,7 +264,7 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (VERIFIES B-NEW-42b FIX)', ()
       entryPrice: 200, stopPrice: 190, targetPrice: 230,
       currentPrice: 205, triggerPrice: 205, atr: 3,
       holdDurationMs: 60_000, maxHoldMs: 7 * 86400_000,
-      context: xstockContext, useTrailing: true, callerMode: 'paper',
+      context: xstockContext, useTrailing: true, callerMode: 'paper', sentinelLane: 'paper',
       currentSlotTotal: 10,
       currentTs: t0,
     });
@@ -280,7 +280,7 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (VERIFIES B-NEW-42b FIX)', ()
       entryPrice: 200, stopPrice: 190, targetPrice: 230,
       currentPrice: 205, triggerPrice: 205, atr: 3,
       holdDurationMs: 120_000, maxHoldMs: 7 * 86400_000,
-      context: xstockContext, useTrailing: true, callerMode: 'paper',
+      context: xstockContext, useTrailing: true, callerMode: 'paper', sentinelLane: 'paper',
       currentSlotTotal: 10,
       currentTs: t0 + 60_000,
     });
@@ -297,7 +297,7 @@ describe('B-NEW-42 §2.3.3 — TEC halt-resilience (VERIFIES B-NEW-42b FIX)', ()
       entryPrice: 200, stopPrice: 190, targetPrice: 230,
       currentPrice: 185, triggerPrice: 185, atr: 3,
       holdDurationMs: 11 * 60_000, maxHoldMs: 7 * 86400_000,
-      context: xstockContext, useTrailing: true, callerMode: 'paper',
+      context: xstockContext, useTrailing: true, callerMode: 'paper', sentinelLane: 'paper',
       currentSlotTotal: 10,
       currentTs: t0 + 60_000 + 10 * 60_000,
     });

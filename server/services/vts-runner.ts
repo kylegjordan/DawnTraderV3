@@ -3334,6 +3334,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       decision = await evaluateTECExit({
         // B80: per-trade keying. tradeId from the for-of iteration variable.
         tradeId,
+        sentinelLane: 'vts', // `8a-P4b` J5: the VTS real lane's own discontinuity machine (never shared with paper)
         symbol: trade.symbol,
         entryPrice: trade.entryPrice,
         stopPrice: trade.stopLoss,
@@ -4194,6 +4195,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     try {
       decision = await evaluateTECExit({
         tradeId,
+        sentinelLane: 'vts_shadow', // `8a-P4b` J5: the shadow lane's own machine — it no longer shares the real lane's
         symbol: trade.symbol,
         entryPrice: trade.entryPrice,
         stopPrice: trade.stopLoss,

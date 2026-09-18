@@ -87,7 +87,7 @@ import {
 // hoisted from TEC to here so we have ONE state-machine advance per logical tick.
 // Result is threaded down to both `tecUpdatePosition` (target-lock decision) and
 // `tecShouldClose` (stop-check decision) as a pre-resolved parameter.
-import { isDiscontinuityActive } from './price-discontinuity-detector.js';
+import { isDiscontinuityActive, type SentinelLane } from './price-discontinuity-detector.js';
 import type { AssetClass } from '../../shared/asset-classes.js';
 
 export interface TECExitContext {
@@ -157,6 +157,12 @@ export interface TECExitInput {
   // B65.2: caller mode + moonbag inputs
   /** Which runtime path is calling: 'vts' | 'paper' | 'live'. Default 'paper'. */
   callerMode?: CallerMode;
+  /**
+   * ⛔ `8a-P4b` J5 — WHICH DISCONTINUITY MACHINE THIS CALL ADVANCES. REQUIRED (compile-forced at every production
+   * call site): the detector is keyed lane|symbol, so paper, the VTS real lane and the VTS shadow lane each advance
+   * their own machine on their own single price series. `callerMode` cannot serve: both VTS lanes pass `'vts'`.
+   */
+  sentinelLane: SentinelLane;
   /** Source pool key for strategies that qualify only in specific pools (e.g. vwap_pullback). */
   sourcePool?: string | null;
   /** Current total slot count in the caller's pool — used for the concurrency cap. Ignored for VTS. */
@@ -252,6 +258,20 @@ function resolveTECConstants(
  * Core exit-decision primitive. Order of evaluation is load-bearing and must
  * match the order documented in the file header for parity tests to pass.
  */
+/**
+ * ⛔ `8a-P4b` J5 condition 2 (Langston) — `sentinelLane` and `callerMode` are two lane-ish fields on one input, so they
+ * may never CONTRADICT. `callerMode` collapses the VTS shadow lane into `'vts'`; the sentinel must not. Consistent pairs:
+ * paper→paper, live→live, vts→vts | vts_shadow. A contradiction THROWS (it is a wiring error, pinned by fence 2e for
+ * every production caller). An absent lane (untyped callers only — tsc requires it in production) is DERIVED from
+ * `callerMode`, which can only ever name paper, live or the real VTS lane.
+ */
+export function resolveSentinelLane(callerMode: CallerMode, lane: SentinelLane | undefined): SentinelLane {
+  if (lane === undefined) return callerMode;
+  const ok = callerMode === 'vts' ? (lane === 'vts' || lane === 'vts_shadow') : lane === callerMode;
+  if (!ok) throw new Error(`[8a-P4b][SENTINEL_LANE] sentinelLane '${lane}' contradicts callerMode '${callerMode}'`);
+  return lane;
+}
+
 export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecision> {
   // B79.0n.TEC (2026-05-26): resolveTECConstants is now sync (per-class cache lookup).
   const resolvedConstants = resolveTECConstants(input.context);
@@ -378,7 +398,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
     // (DISCONTINUITY_ACTIVE → confirming tick → CLEARING → IDLE) collapsed to
     // 1-tick, exactly the unfillable-fill failure this batch closes.
     const tickTs = input.currentTs ?? Date.now();
-    const discontinuity = isDiscontinuityActive(input.symbol, triggerPrice, tickTs);
+    const discontinuity = isDiscontinuityActive(input.symbol, triggerPrice, tickTs, resolveSentinelLane(callerMode, input.sentinelLane));
 
     // B79.TEC: moonbag gates are now SYNC (cache pre-warmed by primeTECConfig).
     // Both calls take an explicit `assetClass` from the context.

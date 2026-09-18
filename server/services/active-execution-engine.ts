@@ -1564,6 +1564,9 @@ export class ActiveExecutionEngine {
     // a book midpoint from a ticker print. A producer derived from it would be a tick producer BY
     // NAME and would pass the fence GREEN, so the fence would RATIFY the defect rather than catch it.
     provenance: { producer: PriceProducer; source: string; observedAtMs: number | null },
+    // ⛔ `8a-P4b` X1 — the xStock sides the book-state guard judged THIS tick (J1), or the unjudged raw sides with
+    // the guard off (J2). REQUIRED, never re-read here: a later frame would be unjudged. Ignored on other classes.
+    xstockSides: { bid: number | null; ask: number | null; basis: 'raw_guarded' | 'raw_unguarded' | null },
   ): Promise<void> {
     const limit = position.makerLimitPrice != null ? parseFloat(position.makerLimitPrice) : NaN;
     if (!Number.isFinite(limit)) {
@@ -1584,10 +1587,15 @@ export class ActiveExecutionEngine {
     // CRYPTO: a dedicated touch read (the WS mini-book, in memory, then the cache sides), under its own stage
     // and its own measured ceiling (`ENTRY_FILL_TOUCH_MAX_AGE_MS`), no spread ceiling on an entry leg.
     // `null` ⇒ NO FILL THIS TICK (the order keeps resting; the hard-drop deadline still applies).
-    // xSTOCK: the mark, EXPLICITLY — unchanged by statement; it moves in `8a-P4`.
+    // xSTOCK (`8a-P4b` X1): the guard-judged side — the ASK for a resting buy, the BID for a sell; `null` ⇒ no fill.
+    // ⛔ ANY OTHER CLASS (`crypto_perp`, `xstock_perp`): `safePrice`, the mark, EXACTLY as before — outside `3n`.
     const _isCryptoPending = (position.assetClass ?? 'crypto_spot') === 'crypto_spot';
+    const _isXstockPending = position.assetClass === 'xstock_spot';
     let _fillTouch: ReturnType<typeof selectCryptoTouch>['selection'] | null = null;
     let fillPrice: number | null = safePrice;
+    if (_isXstockPending) {
+      fillPrice = side === 'buy' ? xstockSides.ask : xstockSides.bid;
+    }
     if (_isCryptoPending) {
       const _ft = selectCryptoTouch(position.symbol, CRYPTO_TOUCH_READERS, Date.now(), {
         maxAgeMs: ENTRY_FILL_TOUCH_MAX_AGE_MS, maxSpreadFraction: ENTRY_LEG_NO_SPREAD_CEILING,
@@ -1613,8 +1621,13 @@ export class ActiveExecutionEngine {
     if (outcome === 'fill') {
       // `8a-P3` — what DROVE the fill, for the durable stamp below.
       const _fillQuote = _fillTouch !== null && _fillTouch.ok ? _fillTouch.quote : null;
-      const _fillSource = _fillQuote !== null ? `${_fillQuote.basis}:${_fillQuote.producer}` : provenance.source;
-      const _fillDecisionPrice = _isCryptoPending && fillPrice !== null ? fillPrice : makerFillPrice(limit);
+      // `8a-P4b`: an xStock fill names its rung too (`kraken_equities_ws:raw_ask` / `…:raw_ask_unguarded`), which makes
+      // a post-cutover xStock row self-identifying against pre-cutover rows carrying the mark's source.
+      const _xsRung = _isXstockPending && xstockSides.basis !== null
+        ? `kraken_equities_ws:raw_${side === 'buy' ? 'ask' : 'bid'}${xstockSides.basis === 'raw_guarded' ? '' : '_unguarded'}`
+        : null;
+      const _fillSource = _fillQuote !== null ? `${_fillQuote.basis}:${_fillQuote.producer}` : (_xsRung ?? provenance.source);
+      const _fillDecisionPrice = (_isCryptoPending || _isXstockPending) && fillPrice !== null ? fillPrice : makerFillPrice(limit);
       const _fillBookAgeMs = _fillQuote !== null && _fillQuote.basis === 'book_top' ? Math.round(_fillQuote.ageMs) : null;
       // NOTE: openedAt stays stamped at PLACEMENT, not at this fill — resting time is
       // included in any holding-duration analytic (cosmetic; EV/expectancy unaffected
@@ -1646,7 +1659,8 @@ export class ActiveExecutionEngine {
           // the object that decided, never re-derived from `priceSource`. xStock: `provenance.source`, unchanged.
           entryPriceSource: _fillSource,
           entryObservedAtMs: provenance.observedAtMs,
-          // `8a-P3` — THE PRICE THAT DROVE THE FILL: the ASK on crypto; the LIMIT on xStock, as before.
+          // `8a-P3`/`8a-P4b` — THE PRICE THAT DROVE THE FILL: the ASK on crypto AND xStock (one quantity in the column for
+          // both classes since `8a-P4b`); the LIMIT on any other class, as before.
           entryDecisionPrice: _fillDecisionPrice.toString(),
           // ⛔ `8a-P3` — REWRITTEN. This read "NULL BY CONSTRUCTION… a maker fill consults NO book", which a crypto
           // fill now falsifies whenever the WS book carried the touch. It is the book quote's age on the BOOK rung and
@@ -1802,6 +1816,14 @@ export class ActiveExecutionEngine {
         // and whether the guard YIELDED on this tick. Carried on the exit stamp, never re-derived.
         let bookStateAtDecision: BookState | null = null;
         let bookStateYielded = false;
+        // ⛔⛔ `8a-P4b` (J1) — THE xSTOCK TRANSACTABLE SIDES, CARRIED OUT OF THE GUARD BLOCK, NEVER RE-READ.
+        // Set ONLY on the two arms that reach the decision: the VALIDATED arm (the raw frame the guard just judged
+        // two-sided AND validated) and the guard-OFF arm (J2: that same tick's raw frame, unjudged, if two-sided).
+        // A re-read of `getLatestEquityTick` at X1/X2/X3 is forbidden: a later frame may have landed, unjudged.
+        // `null` on every other path, and on every non-xStock row — each cell branches on the class explicitly.
+        let xsBid: number | null = null;
+        let xsAsk: number | null = null;
+        let xsSideBasis: 'raw_guarded' | 'raw_unguarded' | null = null;
 
         // ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
         // Kraken spot REST carries NO tokenized equities (empirically proven: Ticker
@@ -1907,6 +1929,16 @@ export class ActiveExecutionEngine {
               // kept for the union): the guard did NOT assess a frame, so the label stays NULL —
               // basis `guard` asserts a look that happened, and a guard-off era must stay re-cuttable
               // (the re-cut selects `exit_book_state IS NULL`; Langston Step-4 BLOCKER-2).
+              // ⛔ `8a-P4b` J2 — GUARD OFF ⇒ THE RAW SIDES UNJUDGED, IF TWO-SIDED; ELSE NULL. "Guard off" is an operator
+              // choice not to judge the book, and refusing every xStock exit because of it would turn a diagnostics knob
+              // into a trading halt; falling back to the mark is the midpoint `3n` forbids. `_bs` carries no `raw` on this
+              // arm (the `ok:false` union), so the frame is `_eqTick.raw` — the one the mark came from (J2c, Langston).
+              const _offRaw = _eqTick?.raw;
+              if (_offRaw && _offRaw.bid !== null && _offRaw.ask !== null && _offRaw.bid > 0 && _offRaw.ask >= _offRaw.bid) {
+                xsBid = _offRaw.bid;
+                xsAsk = _offRaw.ask;
+                xsSideBasis = 'raw_unguarded';
+              }
             } else {
               const { result: _r, cfg: _c, raw: _raw } = _bs;
               // ⛔ D3 (2026-09-05) — THE CONSUMER `validated` NEVER HAD. Carried onto every
@@ -2106,6 +2138,11 @@ export class ActiveExecutionEngine {
                   );
                   continue;
                 }
+                // ⛔ `8a-P4b` J1 — THE ONE VALIDATED LINE: below the refusal, this frame is present, positive (`!pos` ⇒
+                // hollow, `book-state.ts:181-188`), two-sided and validated. Its sides are the decision inputs.
+                xsBid = _raw.bid;
+                xsAsk = _raw.ask;
+                xsSideBasis = 'raw_guarded';
               }
             }
           }
@@ -2308,7 +2345,7 @@ export class ActiveExecutionEngine {
             producer: priceProducer,
             source: priceSource,
             observedAtMs: priceObservedAtMs,
-          });
+          }, { bid: xsBid, ask: xsAsk, basis: xsSideBasis }); // `8a-P4b` X1: the sides the guard judged THIS tick
           positionsEvaluated++;
           continue;
         }
@@ -2548,10 +2585,11 @@ export class ActiveExecutionEngine {
           // exit lane's own 2,000 ms ceiling.
           // ⛔ `null` on crypto means NO FRESH TRANSACTABLE SIDE ⇒ the evaluator makes NO DECISION
           //   this cycle. It must never degrade to the midpoint.
-          // ⚠️ xStock reaches here with `_lsSel === null` BY CONSTRUCTION (the block above is
-          //   crypto-gated), and `checkExitConditions` turns that into an explicit `currentPrice`
-          //   pass-through rather than a refusal — see `P2-5` at the evaluator call.
-          _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null,
+          // ⛔ `8a-P4b` X3 — xStock now passes ITS transactable bid through the same slot: `xsBid`, the bid of the
+          //   raw frame the book-state guard judged THIS tick (J1), or the unjudged raw bid with the guard off (J2).
+          //   `_lsSel` is `null` on xStock by construction (the block above is crypto-gated), so the two arms can
+          //   never both be live. Any other class reaches `checkExitConditions`, which passes it the mark.
+          _posClass === 'xstock_spot' ? xsBid : (_lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null),
         );
 
         // I7-ROOT-FIX: Track exit evaluation for diagnostics
@@ -2600,8 +2638,11 @@ export class ActiveExecutionEngine {
           // through iff the BID reaches the limit; on the mark, `mid >= limit` booked a maker target fill while the bid
           // sat below it — on the very tick `8a-P2` already refuses a STOP on an untradeable side. Crypto reads the SAME
           // `_lsSel` the exit trigger used this tick; `null` ⇒ no fill (the rest persists; its deadline still converts).
-          // xStock: the mark, EXPLICITLY — unchanged by statement; it moves in `8a-P4`.
-          const _restFillPrice: number | null = _posClass === 'crypto_spot' ? (_lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null) : currentPrice;
+          // xStock (`8a-P4b` X2): the guard-validated BID (`xsBid`, J1/J2); `null` ⇒ no fill this tick. Any other class
+          // (`crypto_perp`, `xstock_perp`): the mark, EXACTLY as before — outside `3n` (r1 BLOCKER-1).
+          const _restFillPrice: number | null = _posClass === 'crypto_spot' ? (_lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null)
+            : _posClass === 'xstock_spot' ? xsBid
+            : currentPrice;
           const _restOutcome = evaluatePendingMaker({
             side: 'sell', transactablePrice: _restFillPrice, limit: _exitRestLimit, nowMs: Date.now(), deadlineMs: _restDeadline,
           });
@@ -2695,9 +2736,13 @@ export class ActiveExecutionEngine {
 
           await this.closePosition(position.id, currentPrice, exitCondition, priceSource, {
             ...(_exitRestStamp ? { exitRest: _exitRestStamp } : {}),
-            // Taker close: the decision price IS the exit price, so these two agree by
-            // construction here — and that agreement is itself the evidence that separates a
-            // taker close from the maker case above, where they must differ.
+            // ⛔ `8a-P4b` P6 — CORRECTED. This read "the decision price IS the exit price … by construction", and it
+            // is false on both classes: `currentPrice` here is the MARK, passed as the REQUESTED price, while the
+            // booked `actual_exit_price` comes from the taker fill, which WALKS THE BIDS (`closePosition` → the depth
+            // walk; `xstock_spot_ticker_snap` via `depth-source.ts` for xStock). ⇒ A taker exit is already BOOKED
+            // bid-derived; there is no missing booking cell. `exit_decision_price` on a taker close stays the mark —
+            // a LABEL, left in place rather than moving a column mid-series (`8a-P4b` J3). The TRIGGER is the
+            // transactable bid (`8a-P2` crypto, `8a-P4b` xStock), which is not this stamp.
             exitProvenance: { ..._exitProvenanceBase, decisionPrice: currentPrice },
           });
         }
@@ -2707,7 +2752,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,
@@ -2723,6 +2768,7 @@ export class ActiveExecutionEngine {
     }
     this._noTriggerRefusals = 0;
     this._exitEvalInvoked = 0;
+    this._exitEvalByClass = { crypto: { invoked: 0, refused: 0 }, xstock: { invoked: 0, refused: 0 }, other: { invoked: 0, refused: 0 } };
     this._exitEvalNoHit = 0;
     this._exitEvalHit = 0;
     this._exitEvalNoMark = 0;
@@ -2785,6 +2831,12 @@ export class ActiveExecutionEngine {
   //   resting-maker fill that never reached the evaluator). ⚠️ AND THE IDENTITY IS FENCED IN CODE,
   //   NOT ASSERTED IN PROSE: **a partition in a comment is a claim; a partition in code is a fence.**
   private _exitEvalInvoked = 0;
+  // ⛔ `8a-P4b` (Langston r1 CONDITION-4) — the SAME two facts split by class, ADDITIVELY: `_exitEvalInvoked` and
+  // `_noTriggerRefusals` stay the totals the residual identity is fenced on; this is their breakdown, printed per
+  // leg with its own denominator, never a second counter for the same fact (#641).
+  private _exitEvalByClass: Record<'crypto' | 'xstock' | 'other', { invoked: number; refused: number }> = {
+    crypto: { invoked: 0, refused: 0 }, xstock: { invoked: 0, refused: 0 }, other: { invoked: 0, refused: 0 },
+  };
   private _exitEvalNoHit = 0;
   private _exitEvalHit = 0;
   private _exitEvalNoMark = 0;
@@ -2812,9 +2864,9 @@ export class ActiveExecutionEngine {
     // ⚠️ THIS PARAMETER CHANGED MEANING ON 2026-09-14 AND THE OLD NAME WOULD HAVE HIDDEN IT. It
     // was `fg2BookBid`: a book-only bid fed to the F-G-2 SHADOW arm, explicitly *"never used by
     // the LIVE decision."* It is now the LADDER's bid and it IS the live decision's trigger.
-    // ⛔ `null` = no fresh transactable side. On crypto that means NO DECISION this cycle. On
-    //    xStock it is the normal state (crypto-gated selection) and the call site substitutes
-    //    `currentPrice` explicitly, so that class's behaviour is unchanged BY STATEMENT.
+    // ⛔ `null` = no fresh transactable side ⇒ NO DECISION this cycle, on crypto AND (since `8a-P4b`) on xStock,
+    //    whose caller passes the guard-validated `xsBid` here. Any other class ignores this slot and triggers
+    //    on the mark, unchanged (the explicit third arm at the evaluator call).
     triggerBid: number | null = null,
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
@@ -2884,6 +2936,7 @@ export class ActiveExecutionEngine {
         // B80 (2026-05-13): per-trade keying. paper/live positions key by
         // the DB row id (active_open_positions.id).
         tradeId: position.id,
+        sentinelLane: this.mode, // `8a-P4b` J5: this engine's own discontinuity machine ('paper' | 'live')
         symbol: position.symbol,
         entryPrice: avgPrice,
         stopPrice: stopLoss ?? -Infinity,
@@ -2899,11 +2952,14 @@ export class ActiveExecutionEngine {
         // ⚠️ THAT FILENAME WAS WRONG UNTIL 2026-09-14 — it cited a file that 404s at the ref.
         //   Citation drift, the same class this row has now filed five times, in the comment
         //   telling the next reader where the guard is.
-        // xSTOCK: passes `currentPrice` EXPLICITLY — see `P2-5`. That class has no book on this leg
-        //   and its ticker store is a different object, so it is out of scope for this row. Writing
-        //   it out loud makes "xStock behaviour is unchanged" a STATEMENT that a reader can check,
-        //   rather than an omission that looks identical to an oversight.
-        triggerPrice: positionAssetClass === 'crypto_spot' ? triggerBid : currentPrice,
+        // xSTOCK (`8a-P4b` X3): the BID of the raw frame the book-state guard just validated (`xsBid`, J1), or the
+        //   unjudged raw bid when the guard is off (J2). `null` ⇒ no decision, as crypto — never the mark.
+        // ⛔ ANY OTHER CLASS (`crypto_perp`, `xstock_perp` — both `active: true` in `ASSET_CLASS_REGISTRY`, and the exit
+        //   loop is class-total): the mark, EXACTLY as before. They are outside `3n`; a new class must be added HERE
+        //   deliberately. An else-arm of `xsBid` would hand such a row `null` forever (Langston, 8a-P4b r1 BLOCKER-1).
+        triggerPrice: positionAssetClass === 'crypto_spot' ? triggerBid
+          : positionAssetClass === 'xstock_spot' ? triggerBid // `8a-P4b`: the caller passes `xsBid` in this slot for xStock
+          : currentPrice,
         atr: atrAtOpen,
         holdDurationMs: 0,   // paper handles metadata.maxHoldingMs inline below (W2.1)
         maxHoldMs: Infinity, // disable global timeout branch here
@@ -2948,6 +3004,8 @@ export class ActiveExecutionEngine {
       //   reproduced the very `never-evaluated`-looks-like-`nothing-in-range` conflation this
       //   counter was built to END. (Langston, F1.)
       this._exitEvalInvoked++;
+      const _evalCls = positionAssetClass === 'crypto_spot' ? 'crypto' : positionAssetClass === 'xstock_spot' ? 'xstock' : 'other';
+      this._exitEvalByClass[_evalCls].invoked++;
 
 
       // ── F-G-2 OBJ-0 SHADOW ARM — REMOVED 2026-09-14 BY `8a-P2` (P2-7) ─────────────────────
@@ -3007,6 +3065,7 @@ export class ActiveExecutionEngine {
       //    from a cycle total that pools every position together.
       if (decision.noDecisionReason === 'no_transactable_side') {
         this._noTriggerRefusals++;
+        this._exitEvalByClass[_evalCls].refused++;
         // ⛔⛔ KEYED ON `position.id`, NOT `mode:symbol` (Langston BLOCKER-6) — AND THE FAILURE
         //    NEEDS NO CONCURRENCY AT ALL: a position refuses 19 times, CLOSES with the key still
         //    at 19, and the NEXT position on that symbol fires `streak=20` on its FIRST refusal.
@@ -4778,6 +4837,7 @@ export class ActiveExecutionEngine {
     // (maker_marketable_dropped — a non-trade, never a closed-trade P&L).
     let _b72cEffectiveMode: 'taker' | 'maker' = _b72ChosenMode;
     let _b72cPendingMaker = false;
+    let _b72cRestAsk: number | null = null; // `8a-P4b` P5: the ask the rest was placed against, for MAKER_PLACED
     const _b72cLimit = signal.entryPrice;
     if (_b72ChosenMode === 'maker') {
       const _b72cBestAsk = _gate.snapshot.asks[0]?.price;
@@ -4799,6 +4859,7 @@ export class ActiveExecutionEngine {
         // Step-4 C2). The policy for both lanes is homed at `8a-P4`.
         console.log(`[8a-P3][MAKER_RESTED:${this.mode}] ${signal.symbol} (${_openClass}): limit=${_b72cLimit} ask=${_b72cBestAsk ?? 'none'}`);
         _b72cPendingMaker = true;
+        _b72cRestAsk = _b72cBestAsk ?? null;
       }
     }
 
@@ -5499,6 +5560,14 @@ export class ActiveExecutionEngine {
 
       // P19-B6.5e: the position opened — return the typed success outcome (recordOpen
       // already fired at :2574). This replaces executePromotedSignal's trade-count-delta inference.
+      // ⛔ `8a-P4b` P5 (Langston r1 BLOCKER-2) — A REST THAT WAS PLACED, as opposed to one that was ATTEMPTED.
+      // `[8a-P3][MAKER_RESTED]` above is printed BEFORE the inserts, and it stays exactly where it is: it is the live
+      // denominator of `8a-P3` OBJ-6 (rests attempted), and moving it would split that series mid-window. This line
+      // is a NEW series from the `8a-P4b` deploy, printed only once both inserts have succeeded; the gap between the two
+      // is the failed-insert class (`#1063` measured 75 of 77 on 2026-09-18).
+      if (_b72cPendingMaker) {
+        console.log(`[8a-P4b][MAKER_PLACED:${this.mode}] ${signal.symbol} (${_openClass}): limit=${_b72cLimit} ask=${_b72cRestAsk ?? 'none'} tradeId=${trade.id}`);
+      }
       return { opened: true, tradeId: trade.id };
     } catch (err: any) {
       // [27.F.14.DIAG] DIAGNOSTIC: Trade insert failed
