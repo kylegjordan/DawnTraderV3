@@ -83,6 +83,19 @@ Consulted by path: the equity feed and the guard both postdate the corpus. There
   - **any other class → the mark, EXACTLY as today**, under a comment that names it out of `3n`'s scope and says a new class must be added here deliberately.
   - A fixture drives a `crypto_perp` row through each cell and asserts the mark.
   - Rejected: evidencing that no perp row can exist. An absence needs presence-grade proof, and the registry says they are active.
+- ⛔⛔ **J5 *(r2 addendum, found while writing the fixtures — it was NOT in r1 or r2)* — THE xSTOCK DISCONTINUITY SENTINEL NOW RECEIVES THE BID.**
+  - `evaluateTECExit` passes the SAME `triggerPrice` to `isDiscontinuityActive(symbol, triggerPrice, tickTs)` (`tec-evaluator.ts:381`, trailing path). That detector is xStock-only (`price-discontinuity-detector.ts:248-250`) and stateful: it compares each call's price with the previous one. `halt_resume_gap` = a gap over 300 s AND a move of 0.5% or more ⇒ DEFER the stop and the target-lock for a confirming tick; `corp_action` = a single-bar move of 40% or more.
+  - **Until now its input was the MARK by construction.** Divergence was crypto-only, and the `8a-P1` fence test 2d exists to catch the day that ends: *"IF THIS GOES RED … Re-open the sentinel question — do NOT relax this test."* **X3 ends it, and 2d goes red, as designed.**
+  - **The question, re-opened:** feed the sentinel the BID (the series the stop now fires on), or keep feeding it the MARK (the series its 0.5% / 40% thresholds were set on).
+  - ⭐ **Recommendation: the BID, i.e. change nothing in `tec-evaluator`.**
+    - The sentinel exists to stop a stop firing on a price discovered across a gap. It must judge **the price the stop compares**; a guard that watches the mark while the stop fires on the bid can pass the jump it exists to catch.
+    - **Direction of the change:** a bid series moves by more than the mark when the spread widens, so after a >300 s gap more resumes cross 0.5% and are deferred for one confirming tick. That is the detector's own designed fail-safe-skip direction (`:36-39`, cold start). It delays a stop by one tick; it never fires one early.
+    - The 40% corp-action arm is unaffected in practice: a hollow bid that could move 40% is refused by the book-state guard before it reaches here.
+  - **If ruled the other way:** `TECExitInput` gains a `sentinelPrice` (the mark on xStock) and `tec-evaluator.ts:381` reads it. That is a signature change to a shared evaluator, which is why it is not the default.
+  - **Fence consequence either way:** 2d is amended DELIBERATELY and VISIBLY — two classes now reach the trigger, and the sentinel question is answered here, at J5 — never relaxed quietly.
+
+**Existing fences this piece amends deliberately (each pinned the old xStock = mark statement):** `b-price-side-8a-p1-exit-fence` 2d (J5); `b-price-side-8a-p3-crypto-finish` "paper C2" (the three-way `_restFillPrice`); `b-exit-provenance-fence` OBJ-9 (`_fillSource` gains the xStock rung before the `provenance.source` fallback).
+
 - **J2c — guard-off frame source (Langston, NIT-5 rider).** On the guard-off arm `_bs` is the `ok:false` union and carries **no** `raw`, so the only frame in scope is `_eqTick.raw` — the frame the mark came from. It is used there and nowhere else, which keeps J2 from turning into the unjudged re-read that J1 forbids.
 
 - **J1 — carry the validated sides out of the guard block, not re-read them.** Two `let` variables are declared before the block (`xsBid`, `xsAsk`) and set on the ONE line that has passed validation (just above `aee:2072`). **A re-read of `getLatestEquityTick` at X1/X2/X3 is refused:** a later frame may have arrived and would be unjudged — the guard would then have validated one frame while the decision reads another.
