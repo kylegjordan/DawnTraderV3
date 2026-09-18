@@ -111,6 +111,21 @@ Kyle's rule (2026-09-05): every session keeps a task list, and it is updated at 
 2. **Row 4 is a COMPLETION-named report for a batch whose own catalog entry says OBSERVATION.** In or out? (Moot if ruling 1 is yes.)
 3. ⛔ **Tightening 3's pin — "the closing commit is the one that adds the batch's `BATCH_CATALOG` row" — fails on 4 of 5:** rows 2 and 3 added their entry at batch OPEN, weeks before close; row 5 added it 8 minutes BEFORE the report. **Proposed replacement, mechanical and author-independent: the closing commit is the commit that first adds the COMPLETION-named file — the checker's own `addedMs`.**
 
+### 3b. LANGSTON'S RULINGS (2026-09-18, re-derived by him at `838af7f83`) AND THE PINNED READ COMMITS — WRITTEN BEFORE ANY VERDICT
+
+1. **Conversions count — YES, and it was never open:** §3's own clause, written at Step 2, reads *"a converted progress report counts from its conversion"*. **Verdict set = rows 1, 2, 3** of §3a.
+2. **Row 4 (`B_XSTOCK_FEE_CONTRACT`) is out of P5's verdict set** — its batch has not closed (its windows opened at the 09-12 deploy); it enters only if it closes, dated by the first-add already fixed. A COMPLETION-named file on an open batch is naming drift, noted in §4.
+3. **Tightening 3's pin is STRUCK, and my replacement (`addedMs`) was REJECTED** — it would read "at close" on the same blob as "first pushed version", collapsing primary into secondary, and on this batch's own two real cases (rows added in a LATER commit, `ca842c27b`, `33b62ee16`) it would publish a false FAIL. **His replacement: the PRIMARY read is the report blob at the last commit touching that report path at or before `firstAddCommitMs + 72h`**, named before the read. **SECONDARY unchanged: the blob at `firstAddCommitMs`.** Tightenings 1 (blob and store must agree) and 2 (a grading tick descending from the primary commit, `fetchFailStreak=0`) apply to the primary read. *(72h ≈ 48× the slower of this batch's two real alert-to-row latencies, 23 and 90 min.)*
+**Riders:** (a) the author sessions are **Infra Claude ×1, CC-C ×2 — two distinct sessions, not three**, and are published as that; (b) if `firstAddCommitMs` semantics change before publication, the dating voids and the population is re-enumerated; (c) n is exactly 3 — no PASS below it.
+
+**THE PINS** — `git log origin/migration/aws-supabase --format='%H %cI' --until=<first-add + 72h> -- <report path> | head -1` (committer time, path-limited):
+
+| # | report | author | SECONDARY blob (first add) | 72h limit (UTC) | PRIMARY blob |
+|---|---|---|---|---|---|
+| 1 | `B_WAKE_LEAD_NAME` | Infra Claude | `13209a273` 2026-09-11 17:34:43Z | 2026-09-14 17:34:43Z | `65450e35c` 2026-09-11 17:39:58Z |
+| 2 | `B_XSTOCK_FEED_SANITY` | CC-C | `056c56981` 2026-09-11 17:49:12Z | 2026-09-14 17:49:12Z | `8dedb11b8` 2026-09-11 21:14:10Z |
+| 3 | `B_PRICE_AGE_TRUTH` | CC-C | `b87fe468a` 2026-09-11 21:02:23Z | 2026-09-14 21:02:23Z | `8dedb11b8` 2026-09-11 21:14:10Z |
+
 ## 4. WHAT IS UNPROVEN
 
 - **Whether the rate moves.** Everything above shows the check works; P5 is the test of whether it closes the gap.
