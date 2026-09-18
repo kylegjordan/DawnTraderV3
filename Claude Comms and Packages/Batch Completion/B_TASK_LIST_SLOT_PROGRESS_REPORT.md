@@ -91,6 +91,26 @@ Kyle's rule (2026-09-05): every session keeps a task list, and it is updated at 
 - **The stall case, stated honestly:** the population is `/COMPLETION|COMPLETE/i`, so a run of observation-window batches that ship PROGRESS reports — this batch included — keeps n at zero indefinitely. That is a real reason the window can sit, not a defect.
 - **Secondary (first pushed version) is the measure of whether the rule propagated;** primary only measures whether the net catches.
 
+### 3a. P5 POPULATION — ENUMERATED 2026-09-18, BEFORE ANY VERDICT WAS READ
+
+⛔ **No ledger row in any of these reports has been read. This section exists so the membership is fixed first, as §3 requires.** Enumerated at `origin/migration/aws-supabase` `0e958dfd2`, over `Claude Comms and Packages/Batch Completion/`, every file whose name matches `/COMPLETION|COMPLETE/i` (evidence files excluded), **with renames counted as adds** (`git log --no-renames --diff-filter=A`), and each dated **the way the checker dates it** — `firstAddCommitMs`, `checker.mjs:130`: `git log --diff-filter=A --reverse --format=%cI -- <path>`, no `--follow`, committer time.
+
+| # | report | first add (checker's dating, UTC) | how it arrived | owner (report header) | commit adding its `BATCH_CATALOG` entry |
+|---|---|---|---|---|---|
+| — | `B_CANONICAL_BRIDGE_CHURN` | `024d04175` 2026-09-11 14:15:56Z | rename from its Step-7 evidence file | CC-A | — **OUT: before the 15:45:41Z start** |
+| 1 | `B_WAKE_LEAD_NAME` | `13209a273` 17:34:43Z | direct add | Infra Claude | `13209a273` — same commit |
+| 2 | `B_XSTOCK_FEED_SANITY` | `056c56981` 17:49:12Z | **rename from its PROGRESS report** | CC-C | `4e94204de` 2026-09-03 — at batch OPEN |
+| 3 | `B_PRICE_AGE_TRUTH` | `b87fe468a` 21:02:23Z | **rename from its PROGRESS report** | CC-C | `3e6383d84` 2026-08-31 — at batch OPEN |
+| 4 | `B_XSTOCK_FEE_CONTRACT` | `b6ade3d40` 2026-09-12 00:59:24Z | direct add | CC-B | `b6ade3d40` — same commit; **its catalog entry reads ⏳ OBSERVATION** |
+| 5 | `B_GEOMETRY_REACH_BASELINE` | `661129b6b` 2026-09-13 07:14:12Z | direct add | CC-B | `5b4f95c83` 07:06:16Z — **8 minutes BEFORE the report existed** |
+
+**Positive control on the dating:** row 0 was also created by a rename, and the checker's command dates it at the rename commit (14:15:56Z), not at its source file's creation — so the checker treats a rename as a first add, and rows 2 and 3 ARE graded by the live check.
+
+**THREE PRE-VERDICT RULINGS ASKED OF LANGSTON (2026-09-18):**
+1. **Do reports that arrived by CONVERSION (progress → completion, the path `workflow-10-governance` prescribes) count?** If yes, the next three are rows 1-3 (Infra Claude, CC-C, CC-C). If no, rows 1, 4, 5 (Infra Claude, CC-B, CC-B). **The two sets share one member**, so the ruling decides the verdict set.
+2. **Row 4 is a COMPLETION-named report for a batch whose own catalog entry says OBSERVATION.** In or out? (Moot if ruling 1 is yes.)
+3. ⛔ **Tightening 3's pin — "the closing commit is the one that adds the batch's `BATCH_CATALOG` row" — fails on 4 of 5:** rows 2 and 3 added their entry at batch OPEN, weeks before close; row 5 added it 8 minutes BEFORE the report. **Proposed replacement, mechanical and author-independent: the closing commit is the commit that first adds the COMPLETION-named file — the checker's own `addedMs`.**
+
 ## 4. WHAT IS UNPROVEN
 
 - **Whether the rate moves.** Everything above shows the check works; P5 is the test of whether it closes the gap.
