@@ -1836,6 +1836,18 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  `hard_reset`, the two manual routes) or predates the column — use `close_reason` and
    *  `closed_at` for those, never the fee mode. */
   exitFillDepthAgeMs: doublePrecision("exit_fill_depth_age_ms"),
+  /** B-FEED-MISMATCH-FIX P1 — WARMTH of the book the taker close walked (`assessWarmth` at the fill
+   *  instant): `warm | stale_book | thin_book | no_book`. NULL on a maker fill (no book consulted) and on
+   *  rows not written by `closePosition`.
+   *  ⛔ ORTHOGONAL TO `exitBookStateAtFill`, which answers HOLLOWNESS (`two_sided|hollow|unknown`) — a
+   *  book can be warm-and-hollow or stale-and-two-sided. Two axes, both kept; the age stays in
+   *  `exitFillDepthAgeMs`. */
+  exitFillBookWarmth: text("exit_fill_book_warmth"),
+  /** B-FEED-MISMATCH-FIX P1/P2 — which arm of the close-fill contract booked this close:
+   *  `walk | walk_stale | walk_no_reference | walk_yield | flatten_walk | flatten_walk_diverged | synthetic_reference`.
+   *  `synthetic_reference` (flatten, no book, booked at an OBSERVED price carrying its age) and
+   *  `flatten_walk_diverged` rows are EXCLUDED from learning capture. NULL on maker fills and non-`closePosition` rows. */
+  exitFillArm: text("exit_fill_arm"),
   /** ★ THE INDEPENDENT WITNESS AT CLOSE (OBJ-3, wired by `#911` 2026-08-27).
    *  Read from the ARCHIVER's ticker snapshot (`getTickerWitness`), NOT from the depth snapshot
    *  the fill itself walks.

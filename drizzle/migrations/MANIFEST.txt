@@ -202,3 +202,4 @@
 2026-09-13-b-geometry-reach-baseline-per-strategy-reach.sql
 2026-09-15-b-price-side-8a-p3-vts-crypto-epoch.sql
 2026-09-18-b-price-side-8a-p4b-paper-xstock-epoch.sql
+2026-09-19-b-feed-mismatch-fix-close-fill-contract.sql

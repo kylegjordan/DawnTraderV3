@@ -6,7 +6,7 @@ import { registerEngine, registerMicroService } from './mode-registry';
 import { SignalOrchestrator } from './signal-orchestrator';
 import type { StrategySignal } from './strategy-engine';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
-import { livePricingAdapter, isRestFallbackSource, type PriceProducer } from './live-pricing-adapter.js';
+import { livePricingAdapter, type PriceProducer } from './live-pricing-adapter.js';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -262,18 +262,95 @@ export class ActivePortfolioManager {
    * 
    * @returns Summary of closure results for diagnostics
    */
+  /**
+   * ⛔⛔ B-FEED-MISMATCH-FIX P2 — THE ONE FLATTEN PATH. Every operator/stop flatten (engine stop, kill switch,
+   * close-all, stranded clear) closes ONE position through here, so all of them get the order placer's walk,
+   * the fee, the provenance stamps and the C3 non-filled rule — none books its own price any more.
+   *
+   * The price it REQUESTS, in order — and never the entry price:
+   *   1. a quote from `getPriceWithFallback` (any source but `no_reliable_price`, INCLUDING a `last_known_good`
+   *      re-serve — its `observedAt` travels into the row, so its age is on the record, not assumed);
+   *   2. else the best bid of the depth snapshot the fill will walk (producer = the class's walk producer);
+   *   3. else NOTHING — the position is LEFT OPEN, reported `left_open`, and an alert names it. The stop flow
+   *      must then exempt it from the orphan delete (active-engine-service), or it would be deleted and booked
+   *      at entry by the reconciler two lines later (Langston Step-1 BLOCKER-1).
+   * The request price matters only for a COLD book (booked minus the penalty, stamped `synthetic_reference`,
+   * fenced out of learning) and as the slippage reference; a book with bids is WALKED whatever was requested.
+   * A close that returns without closing (C3) leaves the position in place — detected here by re-reading it,
+   * because `closePosition` returns void.
+   */
+  private async _flattenOne(
+    position: { id: string; symbol: string; assetClass?: string | null },
+    tag: string,
+  ): Promise<{ status: 'closed' | 'left_open' | 'failed'; reason?: string }> {
+    const { getDepthSnapshot } = await import('./execution/depth-source.js');
+    const { asValidAssetClass, safeResolveAssetClass } = await import('../../shared/asset-classes.js');
+    const cls = asValidAssetClass(position.assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
+
+    let price: number | null = null;
+    let provenance: { producer: PriceProducer; source: string; observedAtMs: number | null } | null = null;
+    let label = '';
+    const quote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
+    if (quote && quote.price && quote.source !== 'no_reliable_price') {
+      price = quote.price;
+      provenance = { producer: quote.producer, source: quote.source, observedAtMs: quote.observedAt };
+      label = `${tag}_${quote.source}`;
+    } else if (cls) {
+      const snap = await getDepthSnapshot(position.symbol, cls);
+      const bestBid = snap?.bids?.[0]?.price;
+      if (snap && typeof bestBid === 'number' && bestBid > 0) {
+        price = bestBid;
+        provenance = {
+          producer: cls === 'xstock_spot' ? 'xstock_ticker_snap_walk' : 'crypto_ws_book_walk',
+          source: cls === 'xstock_spot' ? 'kraken_equities_ws' : 'kraken_ws',
+          observedAtMs: Date.now() - snap.ageMs,
+        };
+        label = `${tag}_book_best_bid`;
+      }
+    }
+
+    if (price === null || provenance === null) {
+      console.error(`[B-FEED-MISMATCH-FIX][FLATTEN_LEFT_OPEN] ${position.symbol} pos=${position.id} (${tag}): no quote and no book — NOT closed, NOT deleted`);
+      try {
+        const { addAlert } = await import('./system-alerts.js');
+        await addAlert({
+          triggers_at: new Date(),
+          category: 'breakage',
+          severity: 'warning',
+          title: `Flatten left ${position.symbol} OPEN — no observed price at all`,
+          body: `A ${this.mode} flatten (${tag}) could not close ${position.symbol}: no quote of any age and no order-book `
+            + `bid exist, so there is no observed price to book. The position was deliberately LEFT OPEN rather than booked `
+            + `at its entry price (B-FEED-MISMATCH-FIX P2) and is exempt from the stop-time orphan delete. It must be `
+            + `closed once a price exists. DISPOSITION: RESOLVE, do not ACK.`,
+          dedupe_key: `flatten-left-open-${this.mode}-${position.symbol}`,
+        });
+      } catch (alertErr) {
+        console.error(`[B-FEED-MISMATCH-FIX][FLATTEN_LEFT_OPEN] addAlert failed for ${position.symbol}:`, alertErr);
+      }
+      return { status: 'left_open', reason: 'no observed price (no quote, no book)' };
+    }
+
+    const result = await this.executionEngine.forceClosePosition(position.id, price, label, provenance);
+    if (!result.success) return { status: 'failed', reason: result.error };
+    const stillOpen = await storage.getActiveOpenPosition(this.mode, position.id);
+    if (stillOpen) {
+      // The close seam refused (C3) — e.g. a cold book with no reference. Report it honestly.
+      return { status: 'left_open', reason: 'close refused by the fill contract (position still open)' };
+    }
+    return { status: 'closed' };
+  }
+
   async forceCloseAllOpenPositionsOnStop(): Promise<{
     closedCount: number;
     failedCount: number;
     skippedCount: number;
-    details: Array<{ positionId: string; symbol: string; status: 'closed' | 'failed' | 'skipped'; reason?: string }>;
+    details: Array<{ positionId: string; symbol: string; status: 'closed' | 'failed' | 'skipped' | 'left_open'; reason?: string }>;
   }> {
     console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][START]', {
       mode: this.mode,
       userId: this.userId,
     });
 
-    const { livePricingAdapter } = await import('./live-pricing-adapter.js');
     const openPositions = await storage.getActiveOpenPositions(this.mode);
 
     if (!openPositions || openPositions.length === 0) {
@@ -291,7 +368,7 @@ export class ActivePortfolioManager {
       symbols: openPositions.map(p => p.symbol),
     });
 
-    const details: Array<{ positionId: string; symbol: string; status: 'closed' | 'failed' | 'skipped'; reason?: string }> = [];
+    const details: Array<{ positionId: string; symbol: string; status: 'closed' | 'failed' | 'skipped' | 'left_open'; reason?: string }> = [];
     let closedCount = 0;
     let failedCount = 0;
     let skippedCount = 0;
@@ -304,67 +381,19 @@ export class ActivePortfolioManager {
           entryPrice: position.avgPrice,
         });
 
-        // Phase 8.8.3-I6: Get exit price using getPriceWithFallback for proper staleness handling
-        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
-        console.log(`[8.8.3-I6][FORCE_CLOSE_LIVE_PRICE] symbol=${position.symbol} price=${priceResult?.price || 'null'} source=${priceResult?.source || 'none'}`);
-        
-        if (!priceResult || !priceResult.price || priceResult.source === 'no_reliable_price') {
-          // Use entry price as fallback if no reliable price available
-          const entryPrice = parseFloat(String(position.avgPrice));
-          console.warn('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][NO_PRICE]', {
-            positionId: position.id,
-            symbol: position.symbol,
-            fallbackPrice: entryPrice,
-          });
-          
-          const result = await this.executionEngine.forceClosePosition(
-            position.id,
-            entryPrice,
-            'entry_price_fallback',
-            {
-              // ⛔ B-EXIT-PROVENANCE P6: `position_entry_price_reused`, and NOT `entry_seed`.
-              // No handler produced this number — it came off the stored position row because no
-              // feed would serve one. Naming a real handler that never ran is precisely the
-              // wrong-object stamp this vocabulary exists to make impossible.
-              producer: 'position_entry_price_reused',
-              source: 'entry_price_fallback',
-              // No venue observed it, so there is no observation time. NULL is the honest value.
-              observedAtMs: null,
-            },
-          );
-
-          if (result.success) {
-            closedCount++;
-            details.push({ positionId: position.id, symbol: position.symbol, status: 'closed', reason: 'Used entry price as exit (no market price)' });
-          } else {
-            failedCount++;
-            details.push({ positionId: position.id, symbol: position.symbol, status: 'failed', reason: result.error });
-          }
+        // ⛔ B-FEED-MISMATCH-FIX P2 — ONE FLATTEN PATH, NO ENTRY-PRICE REQUEST. This loop used to request the
+        // close at `position.avgPrice` when no quote existed, which made the recorded slippage equal the trade's
+        // gross P&L with its sign inverted. `_flattenOne` resolves an OBSERVED price or leaves the position open.
+        const outcome = await this._flattenOne(position, 'manual_stop');
+        if (outcome.status === 'closed') {
+          closedCount++;
+          details.push({ positionId: position.id, symbol: position.symbol, status: 'closed', reason: outcome.reason });
+        } else if (outcome.status === 'left_open') {
+          skippedCount++;
+          details.push({ positionId: position.id, symbol: position.symbol, status: 'left_open', reason: outcome.reason });
         } else {
-          // Use live market price
-          const result = await this.executionEngine.forceClosePosition(
-            position.id,
-            priceResult.price,
-            `manual_stop_${priceResult.source}`,
-            {
-              // ⛔ B-EXIT-PROVENANCE P6 (CONDITION-1) — THE SPLIT. The third argument above stays a
-              // composed string ONLY because it feeds the human-facing log; the PROVENANCE now
-              // travels in its own parts, so the enumerated-vocabulary fence has real values to
-              // grade. The close CONDITION reaches the row through `closeReason` (`manual_stop`),
-              // which is where it always belonged.
-              producer: priceResult.producer,
-              source: priceResult.source,
-              observedAtMs: priceResult.observedAt,
-            },
-          );
-
-          if (result.success) {
-            closedCount++;
-            details.push({ positionId: position.id, symbol: position.symbol, status: 'closed' });
-          } else {
-            failedCount++;
-            details.push({ positionId: position.id, symbol: position.symbol, status: 'failed', reason: result.error });
-          }
+          failedCount++;
+          details.push({ positionId: position.id, symbol: position.symbol, status: 'failed', reason: outcome.reason });
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -604,131 +633,35 @@ export class ActivePortfolioManager {
     };
   }
 
-  async closeAllPositions(reason: string = 'manual_close'): Promise<void> {
+  /**
+   * ⛔ B-FEED-MISMATCH-FIX P3 — ROUTED THROUGH THE CANONICAL CLOSE. This used to write the mark straight into
+   * `exit_price` (no book walk, no fee, gross P&L, accepting a stale `last_known_good`), and when no matching
+   * trade row was found it DELETED the position anyway — a position vanished with no close row, no P&L and no
+   * log (Langston, Step 2). Now each position goes through `_flattenOne` → `forceClosePosition` → `closePosition`,
+   * whose delete runs only after the close row is written. The operator button (`POST /active-engine/close-all`)
+   * is KEPT — rule 18 applies to the implementation, not the affordance. `reason` is logged; the row's
+   * `close_reason` is `manual_stop`, as every flatten's is.
+   */
+  async closeAllPositions(reason: string = 'manual_close'): Promise<{ closed: number; leftOpen: number; failed: number }> {
     const openPositions = await storage.getActiveOpenPositions(this.mode);
-    
     console.log(`[PaperPortfolio:${this.userId}] Closing all ${openPositions.length} positions - ${reason}`);
-
+    let closed = 0, leftOpen = 0, failed = 0;
     for (const position of openPositions) {
       try {
-        // Find the corresponding trade
-        const trades = await storage.getClosedTradesBySymbol(this.mode, position.symbol);
-        const trade = trades.find(t => t.openedAt && !t.closedAt);
-        
-        if (trade) {
-          const avgPrice = parseFloat(position.avgPrice);
-          const quantity = parseFloat(position.quantity);
-          
-          // Phase 8.8.3-I6: Use getPriceWithFallback (includes 5s staleness guard + REST fallback)
-          let currentPrice = avgPrice;
-          let priceSource = 'entry_fallback';
-          // B-EXIT-PROVENANCE P9: the PRODUCER, resolved beside the source that was already here.
-          // Defaults match the fallback arm below — no feed served a price, so the number is the
-          // stored entry price and no handler produced it.
-          let priceProducer: PriceProducer = 'position_entry_price_reused';
-          let observedAtMs: number | null = null;
-          let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
-          const liveQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
-          if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
-            currentPrice = liveQuote.price;
-            priceSource = liveQuote.source;
-            // A real quote object with a real provenance field — CARRIED, never re-derived.
-            priceProducer = liveQuote.producer;
-            observedAtMs = liveQuote.observedAt;
-            // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
-            fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
-          } else {
-            fallbackType = 'entry_fallback';
-            console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);
-          }
-          console.log(`[8.8.3-I6][CLOSE_ALL_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
-          
-          const pnl = (currentPrice - avgPrice) * quantity;
-          const pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;
-
-          // Update trade record
-          // P19-B3b: updateClosedTrade signature is (mode, id, updates) — thread this.mode.
-          await storage.updateClosedTrade(this.mode, trade.id, {
-            exitPrice: currentPrice.toString(),
-            pnl: pnl.toString(),
-            pnlPercent: pnlPercent.toString(),
-            closeReason: reason,
-            closedAt: new Date(),
-            // ── B-EXIT-PROVENANCE P9 — THE FIFTH CLOSE PATH, AND IT USED TO DROP THIS.
-            // `closeAllPositions` never calls `closePosition`, so it inherits none of the engine's
-            // stamping. It ALREADY resolves the producer and source a few lines above and only
-            // logged them — meaning a close that ran through here wrote a NULL provenance and the
-            // fence, scoped to the force-close entrypoints, could not see it. That is #546 landing
-            // inside the instrument built to prevent #546.
-            exitDecisionPrice: currentPrice.toString(),
-            exitPriceProducer: priceProducer,
-            exitPriceSource: priceSource,
-            exitObservedAtMs: observedAtMs,
-            // Outside the evaluation loop: no inter-tick cadence, no book read, no ticker
-            // retention. NULL on each rather than a fabricated zero.
-            exitTickCadenceMs: null,
-            exitBookMid: null,
-            exitBookAgeMs: null,
-            exitTickerBid: null,
-            exitTickerAsk: null,
-            // ── B-XSTOCK-FEED-SANITY P4 — THE BOOK-STATE LABEL AT A NON-`closePosition` WRITER.
-            // Label only — a close-all must never be withheld. Basis `guard` means THE LIVE FRAME WAS
-            // ASSESSED AT THIS INSTANT, so the label is written ONLY when that is true: xStock class
-            // (crypto has no guard — NULL, matching the column comment), a live price (the entry-price
-            // fallback had no frame behind it — NULL, re-cuttable), and a guard that actually ran
-            // (disabled / no tick / knobs cold — NULL, never `unknown`+`guard`; Langston Step-4 B2).
-            // `at_fill` stays NULL: no fill walk happened here.
-            ...(await (async () => {
-              if ((position as any).assetClass !== 'xstock_spot') return {};
-              if (fallbackType === 'entry_fallback') return {};
-              const { assessBookStateNow } = await import('../asset_classes/xstock_spot/book-state-tracker.js');
-              const _bs = assessBookStateNow(position.symbol);
-              return _bs.ok ? { exitBookState: _bs.result.state, exitBookStateBasis: 'guard' } : {};
-            })()),
-          } as any);
-
-          // Log the close event
-          // P19-B3b: createActiveTradeLog is (mode, log); thread this.mode. The
-          // legacy userId field was dropped from active_trade_logs (single-tenant,
-          // mode-based) so it is removed from the log object.
-          await storage.createActiveTradeLog(this.mode, {
-            tradeId: trade.id,
-            positionId: position.id,
-            eventType: 'position_closed',
-            message: `Position closed: ${position.symbol} - ${reason}`,
-            metadata: {
-              closeReason: reason,
-              exitPrice: currentPrice,
-              pnl,
-              pnlPercent
-            }
-          });
-        }
-
-        // Delete open position
-        // P19-B3b: deleteActiveOpenPosition signature is (mode, id) — thread this.mode.
-        await storage.deleteActiveOpenPosition(this.mode, position.id);
+        const outcome = await this._flattenOne(position, 'manual_close_all');
+        if (outcome.status === 'closed') closed++;
+        else if (outcome.status === 'left_open') leftOpen++;
+        else failed++;
+        console.log(`[B-FEED-MISMATCH-FIX][CLOSE_ALL] ${position.symbol}: ${outcome.status}${outcome.reason ? ` - ${outcome.reason}` : ''}`);
       } catch (error) {
+        failed++;
         console.error(`[PaperPortfolio:${this.userId}] Error closing position ${position.symbol}:`, error);
       }
     }
-
-    console.log(`[PaperPortfolio:${this.userId}] All positions closed`);
+    return { closed, leftOpen, failed };
   }
 
-  async resetPortfolio(): Promise<void> {
-    console.log(`[PaperPortfolio:${this.userId}] Resetting paper portfolio`);
 
-    // Stop engine if running
-    if (this.isRunning) {
-      await this.stop();
-    }
-
-    // Close all open positions
-    await this.closeAllPositions('portfolio_reset');
-
-    console.log(`[PaperPortfolio:${this.userId}] Portfolio reset complete`);
-  }
 
   // P19-B8.2 (OBJ-2, resume-hardening seam 2 of 2): the manager's own balance
   // read refuses — throws, zero writes — when no trustworthy persisted balance

@@ -102,22 +102,26 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
 
   it('CONDITION-1: the portfolio manager splits the composed string instead of stamping it', () => {
     const src = code(APM);
-    expect(src).toMatch(/producer:\s*priceResult\.producer/);
-    expect(src).toMatch(/producer:\s*["']position_entry_price_reused["']/);
+    // B-FEED-MISMATCH-FIX P2 (deliberately amended): the flatten now resolves ONE observed price in
+    // `_flattenOne`, and its provenance travels in parts from the quote it came from.
+    expect(src).toMatch(/producer:\s*quote\.producer/);
     expect(src).not.toMatch(/producer:\s*`manual_stop_/);
-    // and NOT entry_seed: that names a real handler that never ran on this path. Naming a handler
-    // that did not run is the wrong-object stamp itself.
+    // and NOT entry_seed: that names a real handler that never ran on this path.
     expect(src).not.toMatch(/producer:\s*["']entry_seed["']/);
+    // ⛔ and never the entry price again — the no-quote arm resolves a book bid or LEAVES THE POSITION OPEN.
+    expect(src).not.toMatch(/producer:\s*["']position_entry_price_reused["']/);
   });
 
-  it('P9: the fifth close path persists the source it already computes', () => {
+  it('P9 (superseded by B-FEED-MISMATCH-FIX P3): close-all routes through the canonical close, writing no row itself', () => {
     const src = code(APM);
-    // closeAllPositions never calls closePosition, so it inherits no stamping. It already resolved
-    // the source and only logged it — a close through here wrote NULL provenance, and a fence
-    // scoped to the force-close entrypoints could not see it.
-    expect(src).toMatch(/exitPriceProducer:\s*priceProducer/);
-    expect(src).toMatch(/exitPriceSource:\s*priceSource/);
-    expect(src).toMatch(/priceProducer\s*=\s*liveQuote\.producer/);
+    // closeAllPositions used to write `closed_trades` directly (the fifth close path, stamped by P9). It now
+    // closes each position through `_flattenOne` → `forceClosePosition` → `closePosition`, which stamps the
+    // full provenance — so the portfolio manager must write NO close row of its own anywhere.
+    const start = src.indexOf('async closeAllPositions(');
+    expect(start).toBeGreaterThan(-1);
+    expect(src.slice(start, start + 1500)).toMatch(/this\._flattenOne\(position/);
+    expect(src).not.toMatch(/storage\.updateClosedTrade\(/);
+    expect(src).not.toMatch(/storage\.deleteActiveOpenPosition\(/);
   });
 
   it('BLOCKER-2: forceClosePosition takes provenance as REQUIRED, not optional', () => {

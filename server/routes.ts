@@ -13076,6 +13076,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Close each position and move to trade history
       let clearedCount = 0;
+      const skippedNoPrice: string[] = []; // B-FEED-MISMATCH-FIX P3
       for (const position of positions) {
         try {
           const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
@@ -13092,8 +13093,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
             fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
           } else {
-            fallbackType = 'entry_fallback';
-            console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);
+            // ⛔ B-FEED-MISMATCH-FIX P3 — NEVER THE ENTRY PRICE. With no observed price this route used to book the
+            // stranded position at its own entry (P&L 0 by construction, fees 0). It now SKIPS the position and says
+            // so; it is cleared on a later call once a price exists. (It keeps its own row-writer rather than routing
+            // through `closePosition`: a STRANDED position is one whose open trade row may be missing, and
+            // `closePosition` books P&L only onto an existing row.)
+            console.error(`[B-FEED-MISMATCH-FIX][STRANDED_CLEAR_SKIPPED] ${position.symbol} (${position.id}): no observed price — NOT cleared, not booked at entry`);
+            skippedNoPrice.push(position.symbol);
+            continue;
           }
           console.log(`[8.8.3-I6][STRANDED_CLEAR_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
           
@@ -13123,7 +13130,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             // number), or a guard that did not run ⇒ NULL, re-cuttable (Langston Step-4 B2).
             ...(await (async () => {
               if ((position as any).assetClass !== 'xstock_spot') return {};
-              if (fallbackType === 'entry_fallback') return {};
+              // (the entry-price fallback arm is gone — B-FEED-MISMATCH-FIX P3 skips a no-price position above)
               const { assessBookStateNow } = await import('./asset_classes/xstock_spot/book-state-tracker.js');
               const _bs = assessBookStateNow(position.symbol);
               return _bs.ok ? { exitBookState: _bs.result.state, exitBookStateBasis: 'guard' } : {};
@@ -13153,7 +13160,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       });
       
       // Phase 8.8.3-A3: Standardized success response (includes clearedCount for backward compatibility)
-      res.json({ success: true, strandedClosed: clearedCount, clearedCount, message: `Cleared ${clearedCount} stranded trades` });
+      res.json({
+        success: true, strandedClosed: clearedCount, clearedCount, skippedNoPrice,
+        message: `Cleared ${clearedCount} stranded trades${skippedNoPrice.length ? `; ${skippedNoPrice.length} left open (no observed price): ${skippedNoPrice.join(', ')}` : ''}`,
+      });
     } catch (error) {
       console.error('[B2-ClearStranded] Error clearing stranded trades:', error);
       res.status(500).json({ success: false, error: 'Failed to clear stranded trades' });
@@ -13623,9 +13633,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       const { reason } = req.body;
-      await manager.closeAllPositions(reason || 'Manual close requested');
-      
-      res.json({ success: true, message: 'All positions closed' });
+      // B-FEED-MISMATCH-FIX P3: close-all now reports what it actually did — a position with no observed price
+      // is LEFT OPEN (and alerted), so "all positions closed" is no longer assumed.
+      const result = await manager.closeAllPositions(reason || 'Manual close requested');
+      res.json({
+        success: result.failed === 0,
+        ...result,
+        message: result.leftOpen || result.failed
+          ? `Closed ${result.closed}; ${result.leftOpen} left open (no observed price), ${result.failed} failed`
+          : 'All positions closed',
+      });
     } catch (error) {
       console.error('Error closing all positions:', error);
       res.status(500).json({ error: 'Failed to close positions' });

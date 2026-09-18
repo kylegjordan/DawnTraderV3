@@ -429,6 +429,11 @@ import { dataAggregator } from './data-aggregator.js';
 // P19-B4b.1: the flat-slippage constant is retired from the fill seam — the active
 // paper fill now depth-walks the real book (Langston C-Q5: RNG-free, no magic %).
 import { resolveFillDepthGateConfig } from './execution/depth-gate-config.js';
+import {
+  resolveCloseFillContractConfig,
+  walkAboveReference,
+  type CloseFillContractConfig,
+} from './execution/close-fill-contract-config.js';
 // P19-B8.5 (OBJ-8): real-venue well-formedness vetting for paper opens (paper-only leg).
 import { roundQuantityForVenue } from '../core/calculations/venue-price-grid.js';
 import { resolveVenueSizeLimits } from '../markets/venue-grid-resolver.js';
@@ -748,6 +753,14 @@ export class ActiveExecutionEngine {
   //   and cannot get a TRANSACTABLE SIDE fresh enough to act on. Same rail, separate key.
   // Streak resets on the first cycle that actually decides.
   private _noTriggerStreak: Map<string, number> = new Map();
+  // ── B-FEED-MISMATCH-FIX P1 — CONSECUTIVE REFUSED CLOSES, PER POSITION ─────────────────────
+  // A refused close (cold book, or a not-warm walk above the witness bid) leaves the position OPEN
+  // under the C3 rule and the next exit cycle retries. Unbounded, that is a position that can NEVER
+  // exit on a book that stays bad (a 48 h stale snapshot has been walked). So the run is counted and
+  // bounded at `close_fill_contract.cold_refusal_cap` — the `hollow_skip_cap` pattern: at the cap the
+  // close YIELDS (walks, stamps `walk_yield`) and an alert is raised. Keyed on `position.id` for the
+  // same reason `_noTriggerStreak` is (a symbol key false-fires on the next position).
+  private _closeRefusalStreak: Map<string, number> = new Map();
 
   /**
    * P19-B8.5e — σ-cache tuning, DB-governed like the policy knobs it serves.
@@ -1393,6 +1406,9 @@ export class ActiveExecutionEngine {
       };
 
       await this.closePosition(positionId, exitPrice, exitCondition, priceSource, {
+        // B-FEED-MISMATCH-FIX P2: every caller of this method is a stopped-engine / operator flatten with no
+        // next exit cycle, so it closes under the flatten arms (see `closePosition` options).
+        flatten: true,
         exitProvenance: {
           // A force-close IS the decision — there is no separate driving price to record.
           decisionPrice: exitPrice,
@@ -3256,6 +3272,56 @@ export class ActiveExecutionEngine {
     return null;
   }
 
+  /**
+   * B-FEED-MISMATCH-FIX P1 — count a REFUSED close on one position and decide whether it now YIELDS.
+   * Returns `true` ⇒ the caller may walk anyway (`walk_yield`). `canYield=false` is the no-book / no-config
+   * refusal: there is nothing to walk, so the cap raises the alert but the position keeps holding.
+   * The alert fires ONCE per streak (strict equality — the `_noTriggerStreak` idiom; `>=` would re-raise
+   * every tick into a swallowing dedupe key). A missing contract (unseeded rows) cannot be capped, so it
+   * alerts on the FIRST refusal and never yields — fail-closed, loudly.
+   */
+  private async _countCloseRefusal(
+    position: { id: string; symbol: string },
+    contract: CloseFillContractConfig | null,
+    reason: string,
+    canYield: boolean,
+  ): Promise<boolean> {
+    const key = position.id;
+    const streak = (this._closeRefusalStreak.get(key) ?? 0) + 1;
+    this._closeRefusalStreak.set(key, streak);
+    const cap = contract?.coldRefusalCap ?? null;
+    const atCap = cap !== null && streak >= cap;
+    if ((cap === null && streak === 1) || (cap !== null && streak === cap)) {
+      try {
+        const { addAlert } = await import('./system-alerts.js');
+        await addAlert({
+          triggers_at: new Date(),
+          category: 'breakage',
+          severity: 'warning',
+          title: cap === null
+            ? `Close refused — close-fill contract unseeded for ${position.symbol}`
+            : `Close refused ${streak} times in a row for ${position.symbol} (${reason})`,
+          body: `The ${this.mode} close of ${position.symbol} has been refused ${streak} consecutive time(s): ${reason}. `
+            + (cap === null
+              ? `The close_fill_contract module_constants rows are missing, so a not-warm walk cannot be graded and is refused (fail-closed). Seed close_fill_contract for this asset class. `
+              : canYield
+                ? `At the cap (${cap}) the close now YIELDS: it walks the book it has and stamps exit_fill_arm = 'walk_yield'. `
+                : `There is no book to walk and no observed reference, so the position keeps holding; the exit monitor retries every cycle. `)
+            + `The position's exposure is UNCHANGED while it holds. B-FEED-MISMATCH-FIX P1. `
+            + `DISPOSITION: RESOLVE, do not ACK — an ack silences the dedupe key permanently.`,
+          dedupe_key: `close-refused-${this.mode}-${position.symbol}`,
+        });
+      } catch (alertErr) {
+        console.error(`[B-FEED-MISMATCH-FIX][CLOSE_REFUSAL_ALERT] addAlert failed for ${position.symbol}:`, alertErr);
+      }
+    }
+    if (atCap && canYield) {
+      console.warn(`[B-FEED-MISMATCH-FIX][CLOSE_YIELD] ${position.symbol} pos=${key}: ${streak} consecutive refusals (${reason}) >= cap ${cap} — walking the book anyway`);
+      return true;
+    }
+    return false;
+  }
+
   private async closePosition(
     positionId: string,
     exitPrice: number,
@@ -3270,6 +3336,12 @@ export class ActiveExecutionEngine {
     // be reconstructed from whichever rest fields survive in the DB at close time.
     options?: {
       makerExitFill?: { limit: number };
+      /** B-FEED-MISMATCH-FIX P2 — set ONLY by `forceClosePosition` (a stopped-engine flatten: engine stop,
+       *  kill switch, close-all, stranded clear). There is no next exit cycle to retry on, so a cold book
+       *  books against `exitPrice` — the OBSERVED price the caller resolved — instead of being refused,
+       *  and a not-warm walk above the witness is booked rather than refused. Both are stamped and the
+       *  diverged/synthetic ones are EXCLUDED from learning capture. */
+      flatten?: boolean;
       exitRest?: { restedAtPrice: number; placedAtMs: number | null; outcome: 'fill' | 'convert' };
       // ── B-EXIT-PROVENANCE P5 — the EXIT stamp, carried on the SAME explicit-payload
       // mechanism Langston authored for `exitRest`, not a parallel one. Same constraint,
@@ -3379,6 +3451,14 @@ export class ActiveExecutionEngine {
     // B-XSTOCK-FEED-SANITY P4 — the FILL-instant book state (xStock only; label only — a close is NEVER
     // withheld here, this method is also every flatten's path). Hoisted like `_fillDepthAgeMs`.
     let _bsAtFill: BookState | null = null;
+    // ── B-FEED-MISMATCH-FIX P1/P2 — THE CLOSE-FILL CONTRACT, hoisted like the two above (the persist is
+    // far below). Set ONLY on the taker leg; NULL on the maker leg, where no book was consulted.
+    const _isFlatten = options?.flatten === true;
+    let _closeContract: CloseFillContractConfig | null = null;
+    let _fillBookWarmth: string | null = null;      // warm | stale_book | thin_book | no_book
+    let _fillWarm = true;                           // taker leg overwrites from assessWarmth
+    let _fillWalkedBook = false;                    // true iff the fill walked real bids
+    let _fillArm: string | null = null;             // see the exit_fill_arm column comment
     if (options?.makerExitFill) {
       // P19-B8.6 MAKER fill leg: the resting exit filled at its limit — price = the
       // limit exactly (makerFillPrice semantics, same CI-guarded fill=limit rule as
@@ -3395,6 +3475,9 @@ export class ActiveExecutionEngine {
       console.log(`[P19-B8.6][MAKER_EXIT_FILL:${this.mode}] ${position.symbol}: filled the resting exit at ${_mLimit} (maker rate ${(100 * _mRate).toFixed(2)}%, fee ${exitFee.toFixed(4)}, slippage 0 by construction)`);
     } else {
       const _closeCfg = _closeClass ? await resolveFillDepthGateConfig(_closeClass) : null;
+      // B-FEED-MISMATCH-FIX P1: resolved HERE, above the depth read, so no await lands between the
+      // snapshot and the walk that consumes it (the `_fillDepthAgeMs` property below).
+      _closeContract = _closeClass ? await resolveCloseFillContractConfig(_closeClass) : null;
       // B-XSTOCK-FEED-SANITY P4: read the book state at THIS instant, before the depth read below — the
       // taker walk proceeds on the ladder as it is (a flatten must close); the row records the verdict.
       if (_closeClass === 'xstock_spot') {
@@ -3413,25 +3496,30 @@ export class ActiveExecutionEngine {
         assetClass: _closeClass ?? undefined,
         bookBids: _closeSnap?.bids,
         beyondDepthPenaltyBps: _closeCfg?.beyondDepthPenaltyBps,
+        // B-FEED-MISMATCH-FIX P2: ONLY a stopped-engine flatten may book a cold book, and only against the
+        // OBSERVED price its caller resolved (never an entry price). Everyone else gets `rejected` + C3.
+        coldBookReferencePrice: _isFlatten ? exitPrice : undefined,
       });
+      // B-FEED-MISMATCH-FIX P1 — the warmth of the book just walked (pure, no await).
+      if (_closeCfg) {
+        const _w = assessWarmth(_closeSnap, 'bids', _closeCfg);
+        _fillWarm = _w.warm;
+        _fillBookWarmth = _w.kind; // the discriminated verdict — never a split of the display `reason` (C1)
+      }
+      _fillWalkedBook = !!(_closeSnap?.bids && _closeSnap.bids.length > 0);
       if (_closeFill.status !== 'filled') {
         // C3 CLOSE-SEAM STATE RULE: a non-filled close leaves the position OPEN (close NOT
         // recorded), retried next exit-monitor cycle — never half-closed. Nothing above this
-        // point has mutated the position. Paper always fills; this guards live.
-        console.error(`[PaperExecution:${this.mode}][CLOSE_FILL_NONFILLED] ${position.symbol} pos=${positionId} status=${_closeFill.status} — position left OPEN, retry next cycle (paper fills must be atomic)`);
+        // point has mutated the position.
+        // ⛔ B-FEED-MISMATCH-FIX P1: paper now DOES return non-filled — a cold book with no observed
+        // reference, or no depth config. The refusal is counted and bounded (`_countCloseRefusal`).
+        console.error(`[PaperExecution:${this.mode}][CLOSE_FILL_NONFILLED] ${position.symbol} pos=${positionId} status=${_closeFill.status}${_closeFill.status === 'rejected' ? ` code=${_closeFill.code ?? 'none'}` : ''} — position left OPEN, retry next cycle`);
+        await this._countCloseRefusal(position, _closeContract, _closeFill.status === 'rejected' ? (_closeFill.code ?? 'rejected') : _closeFill.status, false);
         return;
       }
       actualExitPrice = _closeFill.fillPrice;
       exitFee = _closeFill.feeQuote;
       _takerCloseSlippage = _closeFill.slippageQuote;
-      // OBJ-1 verification leg (paired log): crypto cannot be reconstructed after the fact — nothing
-      // persists the WS mini-book, and the nearby ticker archive is a DIFFERENT feed off a separate
-      // socket. This is the contemporaneous record the column is checked against.
-      // ⛔ PLACED HERE, BELOW THE FILL, DELIBERATELY. It was first written between the depth read and
-      // the walk that consumes it — i.e. INSIDE the very interval this column exists to measure. A
-      // console.log to a PM2-piped stdout can block under backpressure, so the instrument would have
-      // perturbed its own measurement. The value is captured above; the reporting waits.
-      console.log(`[B-EXIT-BOOK-AGE-STAMP][FILL_DEPTH_AGE] symbol=${position.symbol} class=${_closeClass ?? 'none'} depthSource=${_closeSnap?.source ?? 'none'} ageMs=${_fillDepthAgeMs ?? 'null'}`);
     }
     
     // ── B-EXIT-PROVENANCE OBJ-3 / #911 — THE INDEPENDENT WITNESS, STAMPED ON BOTH LEGS.
@@ -3445,6 +3533,59 @@ export class ActiveExecutionEngine {
     // ⚠️ On xStock it is NOT independent (same table the fill reads) — a CONSISTENCY record only.
     // Fail-OPEN: a null witness stamps NULL and never blocks the close.
     const _witness = _closeClass ? await getTickerWitness(position.symbol, _closeClass) : null;
+
+    // ── B-FEED-MISMATCH-FIX P1 — THE CLOSE-FILL CONTRACT, GRADED AFTER THE EXISTING WITNESS READ ──────
+    // ⛔ WHY HERE AND NOT ABOVE THE FILL (Langston r4 BLOCKER-4/5): hoisting the witness into the taker
+    // branch would blank the MAKER leg's witness, and would put an awaited DB read between the depth
+    // snapshot and the walk. Instead the paper `closeOrder` above has ALREADY computed the walk into
+    // locals, and it is SIDE-EFFECT-FREE (no await, no write, nothing mutated — the property the C3 rule
+    // rests on), so a refused fill is simply DISCARDED here, before any persistence.
+    // ⛔⛔ LIVE-SWAP OBLIGATION: this ordering is valid ONLY while `closeOrder` is side-effect-free. A live
+    // placer places a real order — at the live cut-over the gate must move AHEAD of `closeOrder`, grading
+    // a pure `closeFillFull` pre-walk (SIM "OrderPlacer").
+    // THE PREDICATE IS SIGNED (Langston r2): a close is a SELL and walks the BID, so a legitimate fill sits
+    // AT OR BELOW the best bid — it can never fill ABOVE it. Refuse iff the walk lands above the witness
+    // bid by more than `up_tol`. The downward side is the depth walk itself and is NOT bounded here.
+    // ⚠️ The reference is the TICKER WITNESS: independent and lagged (5-9 s) on crypto; on xStock the SAME
+    //    TABLE the walk read, so there a positive divergence means the walk used an OLDER row than the
+    //    newest priced one — a consistency check, not corroboration. It does NOT catch a book and witness
+    //    that went stale TOGETHER (both read 0.00 %) — that class is decision-side, `3b.f-c` / `#943`.
+    let _learnExcluded = false;
+    if (!options?.makerExitFill) {
+      if (!_fillWalkedBook) {
+        _fillArm = 'synthetic_reference'; // only reachable on a flatten — everyone else was rejected above
+        _learnExcluded = true;
+      } else if (_fillWarm) {
+        _fillArm = _isFlatten ? 'flatten_walk' : 'walk';
+      } else {
+        const _refBid = _witness ? _witness.bid : null;
+        if (_refBid === null) {
+          _fillArm = 'walk_no_reference'; // e.g. EUR-quoted pairs (#966): nothing to grade against
+        } else if (_closeContract && !walkAboveReference(actualExitPrice!, _refBid, _closeContract.upTol)) {
+          _fillArm = _isFlatten ? 'flatten_walk' : 'walk_stale';
+        } else if (_isFlatten) {
+          // A flatten must go flat — there is no next cycle — so it books, but the diverged walk is
+          // stamped and kept out of learning. (Also the fail-closed arm when the contract is unseeded.)
+          _fillArm = 'flatten_walk_diverged';
+          _learnExcluded = true;
+        } else {
+          const _yield = await this._countCloseRefusal(
+            position, _closeContract,
+            _closeContract ? 'walk_above_reference' : 'close_fill_contract_unavailable', true,
+          );
+          if (!_yield) {
+            console.warn(`[B-FEED-MISMATCH-FIX][CLOSE_REFUSED] ${position.symbol} pos=${positionId} warmth=${_fillBookWarmth} `
+              + `walked=${actualExitPrice!} witnessBid=${_refBid} upTol=${_closeContract?.upTol ?? 'unseeded'} ageMs=${_fillDepthAgeMs} — position left OPEN, retry next cycle`);
+            return;
+          }
+          _fillArm = 'walk_yield';
+        }
+      }
+      // OBJ-1 verification leg (paired log) — moved BELOW the decision (B-FEED-MISMATCH-FIX r5), still
+      // after the walk it reports on, so the instrument never sits inside the interval it measures.
+      console.log(`[B-EXIT-BOOK-AGE-STAMP][FILL_DEPTH_AGE] symbol=${position.symbol} class=${_closeClass ?? 'none'} ageMs=${_fillDepthAgeMs ?? 'null'} warmth=${_fillBookWarmth ?? 'null'} arm=${_fillArm}`);
+    }
+    this._closeRefusalStreak.delete(positionId);
 
     // Get entry costs from position (persisted at entry time)
     const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (_b45FeePct / 100));
@@ -3531,7 +3672,14 @@ export class ActiveExecutionEngine {
     
     // Directive 8.8.4-L1: Capture trade outcome data for learning aggregation
     const holdDurationMs = position.openedAt ? Date.now() - new Date(position.openedAt).getTime() : 0;
-    dataAggregator.capture('TRADE_OUTCOME', {
+    // ⛔ B-FEED-MISMATCH-FIX P2 — THE LEARNING FENCE. A `synthetic_reference` or `flatten_walk_diverged`
+    // close is booked at a price NO BUYER was shown to pay (a stopped-engine flatten with no usable book).
+    // The row is kept — the position really was closed — but it feeds NONE of the three learning captures
+    // below (this aggregate, the exit-decision archive, the outcome-feedback EMA).
+    if (_learnExcluded) {
+      console.warn(`[B-FEED-MISMATCH-FIX][LEARNING_FENCE] ${position.symbol} pos=${positionId}: arm=${_fillArm} — excluded from learning capture`);
+    }
+    if (!_learnExcluded) dataAggregator.capture('TRADE_OUTCOME', {
       symbol: position.symbol,
       strategy: position.strategyName || 'unknown',
       profit: netPnl,
@@ -3547,7 +3695,8 @@ export class ActiveExecutionEngine {
 
     // B70 Step 3.5: exit-decision archive — actual active-engine exit. Fire-and-
     // forget, try/catch wrapped — must never block closePosition.
-    try {
+    // B-FEED-MISMATCH-FIX P2: skipped for a learning-fenced close (see above).
+    if (!_learnExcluded) try {
       const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
       const { asValidAssetClass, safeResolveAssetClass } = await import('../../shared/asset-classes.js');
       const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'manual' | 'other'> = {
@@ -3760,6 +3909,9 @@ export class ActiveExecutionEngine {
         // ROW. `DepthSnapshot.source` is the IN-PROCESS form and is NEVER PERSISTED — naming it
         // alone pointed a reader at an object they cannot reach from the table (Langston, Step 4).
         exitFillDepthAgeMs: _fillDepthAgeMs,
+        // B-FEED-MISMATCH-FIX P1/P2 — how the close fill was graded (NULL on the maker leg).
+        exitFillBookWarmth: _fillBookWarmth,
+        exitFillArm: _fillArm,
         // OBJ-3 (#911): the caller's payload wins if it ever carries one; otherwise the witness
         // read above. Both may legitimately be absent — a NULL here now means "no witness row",
         // which is a DIFFERENT fact from the pre-#911 "not instrumented" and the column comment
@@ -3874,7 +4026,7 @@ export class ActiveExecutionEngine {
       // outcome-learning store (store measured 13/13 entries vts_, zero paper_sim).
       const regimeAtOpen = (position.metadata as Record<string, unknown> | null)?.['regimeAtOpen'] as string | undefined;
       const strategyName = position.strategyName;
-      if (regimeAtOpen && strategyName && Number.isFinite(netPnlPercent)) {
+      if (!_learnExcluded && regimeAtOpen && strategyName && Number.isFinite(netPnlPercent)) { // B-FEED-MISMATCH-FIX P2 fence
         const { outcomeFeedbackStore } = await import('../core/metrics/outcome-feedback-store.js');
         const { getMarketContextEngine } = await import('./market-context-engine.js');
         const cfg = getMarketContextEngine().getCurrentOutcomeFeedbackConfig();
@@ -3951,6 +4103,29 @@ export class ActiveExecutionEngine {
       clearTrailingState(`${position.id}:fg2bid`);
     } catch (err) {
       console.error(`[B65.2][TEC] Failed to clear trailing state for positionId=${position.id} symbol=${position.symbol}:`, err);
+    }
+
+    // ⛔ B-FEED-MISMATCH-FIX P3 (Langston Step-2 finding on close-all): a position whose open trade row
+    // cannot be found is still closed and deleted here — but NOT SILENTLY. With close-all now routed through
+    // this method, this is the only place such a deletion can happen, so it is made loud: a log line AND an
+    // alert naming the position, since no `closed_trades` row will carry its P&L.
+    if (!trade) {
+      console.error(`[B-FEED-MISMATCH-FIX][CLOSE_NO_TRADE_ROW] ${position.symbol} pos=${positionId}: no open trade row — position deleted with NO closed_trades row (exit ${actualExitPrice})`);
+      try {
+        const { addAlert } = await import('./system-alerts.js');
+        await addAlert({
+          triggers_at: new Date(),
+          category: 'breakage',
+          severity: 'warning',
+          title: `Position ${position.symbol} closed with no trade row — no P&L recorded`,
+          body: `The ${this.mode} position ${positionId} in ${position.symbol} was closed at ${actualExitPrice}, but no open `
+            + `closed_trades row matched it, so its P&L is recorded nowhere. Investigate how the position and its trade row `
+            + `diverged. B-FEED-MISMATCH-FIX P3. DISPOSITION: RESOLVE, do not ACK.`,
+          dedupe_key: `close-no-trade-row-${this.mode}-${position.symbol}`,
+        });
+      } catch (alertErr) {
+        console.error(`[B-FEED-MISMATCH-FIX][CLOSE_NO_TRADE_ROW] addAlert failed:`, alertErr);
+      }
     }
 
     // Delete open position with error handling for AJ19-B

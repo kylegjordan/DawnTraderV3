@@ -1,0 +1,19 @@
+// ARCHIVED 2026-09-19 — B-FEED-MISMATCH-FIX (PHASE_19_PLAN 3n.u) P3. Non-compilable browse copy; git history is
+// authoritative. Removed from server/services/active-portfolio-manager.ts (ActivePortfolioManager).
+// Census (tests excluded): ZERO callers in server/, client/, shared/. One further occurrence exists at WHOLE-TREE:
+// docs/current_state/screeners_export/backend/routes.ts:5941 — a docs export, not a live caller.
+// It was the only other caller of closeAllPositions, whose direct-write implementation this batch replaced.
+
+  async resetPortfolio(): Promise<void> {
+    console.log(`[PaperPortfolio:${this.userId}] Resetting paper portfolio`);
+
+    // Stop engine if running
+    if (this.isRunning) {
+      await this.stop();
+    }
+
+    // Close all open positions
+    await this.closeAllPositions('portfolio_reset');
+
+    console.log(`[PaperPortfolio:${this.userId}] Portfolio reset complete`);
+  }

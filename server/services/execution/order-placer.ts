@@ -91,28 +91,41 @@ export class PaperOrderPlacer implements OrderPlacer {
   }
 
   /**
-   * Paper close fill: depth-walk the bid side, ALWAYS full-fill (R2). Beyond-book
-   * remainder priced with the DB-resolved penalty. Cold book → requestedPrice
-   * worsened by the penalty (loud); no config → requestedPrice (loud, must exit).
+   * Paper close fill: depth-walk the bid side and full-fill (R2); a beyond-book remainder is priced
+   * with the DB-resolved penalty.
+   * ⛔ B-FEED-MISMATCH-FIX P1/P2 — A COLD BOOK NO LONGER BOOKS `requestedPrice`. `requestedPrice` is
+   * whatever the caller had (a mark on the exit monitor, and until this batch an ENTRY price on a
+   * no-price flatten), so the old arm booked a price nobody bid. Now:
+   *   - cold + `coldBookReferencePrice` (a stopped-engine flatten ONLY) → that OBSERVED price worsened by
+   *     the penalty — the engine stamps it `synthetic_reference` and keeps it out of learning capture;
+   *   - cold otherwise → `rejected` (`cold_book`) ⇒ the C3 rule leaves the position OPEN and the next exit
+   *     cycle retries (bounded by the engine's `cold_refusal_cap`);
+   *   - config missing → `rejected` (`no_depth_config`), never a zero-slippage exit.
+   * Still side-effect-free: no await, no write, nothing mutated. The engine's divergence gate RELIES on
+   * that to discard a computed fill (B-FEED-MISMATCH-FIX r5) — a LIVE placer is not, see SIM OrderPlacer.
    */
   async closeOrder(req: CloseOrderRequest): Promise<FillResult> {
     const bids = req.bookBids;
     const penaltyBps = req.beyondDepthPenaltyBps;
     let fillPrice: number;
-    if (bids && bids.length > 0 && typeof penaltyBps === 'number') {
+    if (typeof penaltyBps !== 'number') {
+      console.error(
+        `[PaperOrderPlacer][CLOSE_NO_DEPTH_CONFIG] ${req.symbol} pos=${req.positionId} — fill_depth_gate config unavailable; close REJECTED, position stays open (seed fill_depth_gate)`,
+      );
+      return { status: 'rejected', reason: 'fill_depth_gate config unavailable', code: 'no_depth_config' };
+    }
+    if (bids && bids.length > 0) {
       fillPrice = closeFillFull(req.quantity, bids, penaltyBps).avgFillPrice;
-    } else if (typeof penaltyBps === 'number') {
-      // Cold book, config present: exit at requestedPrice worsened by the DB penalty.
-      fillPrice = req.requestedPrice * (1 - penaltyBps / 10_000);
+    } else if (typeof req.coldBookReferencePrice === 'number' && req.coldBookReferencePrice > 0) {
+      fillPrice = req.coldBookReferencePrice * (1 - penaltyBps / 10_000);
       console.warn(
-        `[PaperOrderPlacer][CLOSE_COLD_BOOK] ${req.symbol} pos=${req.positionId} — no live bids; exit at requestedPrice*(1-${penaltyBps}bps)`,
+        `[PaperOrderPlacer][CLOSE_COLD_BOOK_REFERENCE] ${req.symbol} pos=${req.positionId} — no live bids; flatten booked at observed reference ${req.coldBookReferencePrice}*(1-${penaltyBps}bps)`,
       );
     } else {
-      // Config missing (fail-closed) — a close MUST still exit (never a stuck position).
-      fillPrice = req.requestedPrice;
-      console.error(
-        `[PaperOrderPlacer][CLOSE_NO_DEPTH_CONFIG] ${req.symbol} pos=${req.positionId} — fill_depth_gate config unavailable; exiting at requestedPrice with ZERO modeled close slippage (LOUD — seed fill_depth_gate)`,
+      console.warn(
+        `[PaperOrderPlacer][CLOSE_COLD_BOOK] ${req.symbol} pos=${req.positionId} — no live bids and no observed reference; close REJECTED, position stays open`,
       );
+      return { status: 'rejected', reason: 'no live bids and no observed reference', code: 'cold_book' };
     }
     const notional = fillPrice * req.quantity;
     const feeQuote = notional * (this.feePercentFor(req.symbol, req.assetClass) / 100); // P19-B6.5d (OBJ-4): use the carried stamp

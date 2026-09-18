@@ -287,7 +287,16 @@ export function getOrchestratorByMode(mode: 'paper' | 'live'): any | null {
  * @param mode Trading mode ('paper' or 'live')
  * @param sessionId Current session ID for logging
  */
-async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: string): Promise<{
+async function reconcileIncompleteTrades(
+  mode: 'paper' | 'live',
+  sessionId: string,
+  // ⛔ B-FEED-MISMATCH-FIX P4 / FINDING-4 — the positions the flatten DELIBERATELY left open (no observed price
+  // at all), CARRIED EXPLICITLY rather than inherited from whatever happens to survive the orphan delete.
+  // Keyed by SYMBOL because that is the only join that exists: `active_open_positions` has no trade-id column
+  // (census 2026-09-19), and a trade row reaches its position only through the symbol, which is unique among
+  // open positions. Stated so a later reader does not mistake the symbol key for a coincidence.
+  deliberatelyOpenSymbols: ReadonlySet<string> = new Set(),
+): Promise<{
   reconciled: number;
   stillOpen: number;
   errors: number;
@@ -300,7 +309,11 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
   
   try {
     // Get all trades for this mode (including unclosed ones)
-    const allTrades = await storage.getClosedTrades(mode, { limit: 1000 });
+    // ⛔ B-FEED-MISMATCH-FIX P4 / FINDING-3: was `{ limit: 1000 }` ordered `desc(openedAt)`, so once the table
+    // passed 1,000 rows an older incomplete trade fell out of view SILENTLY and was never reconciled (816 rows on
+    // 2026-09-19). `'all'` is the typed option on this signature for exactly this class; this runs only inside
+    // an engine stop, and `logUnboundedRead` records the size. Revisit only if the stop-time read is MEASURED slow.
+    const allTrades = await storage.getClosedTrades(mode, { limit: 'all' });
     
     // Filter to only trades where closed_at is NULL
     const incompleteTrades = allTrades.filter(t => t.closedAt === null);
@@ -319,7 +332,7 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
     for (const trade of incompleteTrades) {
       try {
         // Check if a matching open position still exists
-        const hasOpenPosition = openPositionSymbols.has(trade.symbol);
+        const hasOpenPosition = openPositionSymbols.has(trade.symbol) || deliberatelyOpenSymbols.has(trade.symbol);
         
         if (hasOpenPosition) {
           // Trade has a matching open position - it's legitimately open
@@ -331,32 +344,60 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
         // No matching open position - this trade should be closed
         console.log(`[8.8.3-I3][STOP_FLOW] Closing stale trade ${trade.id} for ${trade.symbol} (no matching open position)`);
         
-        // Try to get exit price from live pricing, fallback to entry price
-        let exitPrice = parseFloat(trade.entryPrice);
+        // ⛔ B-FEED-MISMATCH-FIX P4 — NEVER THE ENTRY PRICE. This used to fall back to `trade.entryPrice` when no
+        // quote existed and book the row with no fee, no walk and no provenance — the sixth close path the
+        // Step-2 audit found. There is no position left to walk here (that is why the row is stale), so the
+        // row is booked at an OBSERVED quote of any age WITH its provenance and age, stamped
+        // `synthetic_reference` (and so outside every learning capture, which never reads this path). With no
+        // observed price at all the row is LEFT OPEN and an alert names it — never booked at its own entry.
+        let quote: Awaited<ReturnType<typeof livePricingAdapter.getPriceWithFallback>> = null;
         try {
-          const priceResult = await livePricingAdapter.getPrice(trade.symbol);
-          if (priceResult && priceResult.price && priceResult.source !== 'no_reliable_price') {
-            exitPrice = priceResult.price;
-          }
+          quote = await livePricingAdapter.getPriceWithFallback(trade.symbol, 5000);
         } catch (priceErr) {
-          // Use entry price as fallback
+          console.error(`[B-FEED-MISMATCH-FIX][RECONCILE] price lookup threw for ${trade.symbol}:`, priceErr);
         }
-        
+        if (!quote || !quote.price || quote.source === 'no_reliable_price') {
+          console.error(`[B-FEED-MISMATCH-FIX][RECONCILE_LEFT_OPEN] trade ${trade.id} ${trade.symbol}: no observed price — row LEFT OPEN, not booked at entry`);
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              category: 'breakage',
+              severity: 'warning',
+              title: `Stop-time cleanup left trade ${trade.symbol} unclosed — no observed price`,
+              body: `During an engine stop, the ${mode} trade ${trade.id} in ${trade.symbol} had no open position and no `
+                + `observed price of any age, so it was LEFT OPEN rather than booked at its entry price `
+                + `(B-FEED-MISMATCH-FIX P4). Close it once a price exists. DISPOSITION: RESOLVE, do not ACK.`,
+              dedupe_key: `reconcile-left-open-${mode}-${trade.symbol}`,
+            });
+          } catch (alertErr) {
+            console.error(`[B-FEED-MISMATCH-FIX][RECONCILE_LEFT_OPEN] addAlert failed:`, alertErr);
+          }
+          stillOpen++;
+          continue;
+        }
+        const exitPrice = quote.price;
+
         // Calculate P&L
         const entryPrice = parseFloat(trade.entryPrice);
         const quantity = parseFloat(trade.quantity);
         const pnl = (exitPrice - entryPrice) * quantity;
         const pnlPercent = entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
-        
-        // Update trade with close info
+
+        // Update trade with close info — now WITH provenance, so the row says what the number is and how old.
         await storage.updateClosedTrade(mode, trade.id, {
           closedAt: new Date(),
           exitPrice: exitPrice.toString(),
           pnl: pnl.toString(),
           pnlPercent: pnlPercent.toString(),
-          closeReason: 'engine_stop_cleanup'
-        });
-        
+          closeReason: 'engine_stop_cleanup',
+          exitDecisionPrice: exitPrice.toString(),
+          exitPriceProducer: quote.producer,
+          exitPriceSource: quote.source,
+          exitObservedAtMs: quote.observedAt,
+          exitFillArm: 'synthetic_reference',
+        } as any);
+
         // Emit trade lifecycle event for diagnostics
         const strategy = trade.strategyName || 'unknown';
         i1TradeLifecycleDiagnostics.logClose(
@@ -808,7 +849,10 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
           try {
             // 2. Stop execution engine FIRST (stops signals and execution loop)
             // This prevents any new trades from being processed while we close positions
-            console.log('[8.8.3-I2][STOP_FLOW][3_STOPPING_EXECUTION_ENGINE]');
+            // B-FEED-MISMATCH-FIX P2: positions the flatten deliberately LEFT OPEN (no observed price at all).
+          // Carried explicitly into the orphan cleanup and the reconciler below — neither may delete or book them.
+          const _deliberatelyOpen = new Map<string, string>(); // positionId -> symbol
+          console.log('[8.8.3-I2][STOP_FLOW][3_STOPPING_EXECUTION_ENGINE]');
             await currentManager.stop();
             console.log('[8.8.3-I2][STOP_FLOW][4_EXECUTION_ENGINE_STOPPED]');
             
@@ -817,6 +861,9 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
             console.log('[8.8.3-I2][STOP_FLOW][5_FORCE_CLOSE_START] Closing all open positions...');
             try {
               const closeResult = await currentManager.forceCloseAllOpenPositionsOnStop();
+              for (const d of closeResult.details) {
+                if (d.status === 'left_open') _deliberatelyOpen.set(d.positionId, d.symbol);
+              }
               console.log('[8.8.3-I2][STOP_FLOW][6_FORCE_CLOSE_RESULT]', {
                 closedCount: closeResult.closedCount,
                 failedCount: closeResult.failedCount,
@@ -846,6 +893,13 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
                 
                 // Attempt cleanup: mark remaining positions as closed in DB
                 for (const orphan of remainingOpen) {
+                  // ⛔ B-FEED-MISMATCH-FIX P2 (Langston Step-1 BLOCKER-1): a position the flatten LEFT OPEN for want of
+                  // any observed price is NOT an orphan. Deleting it here is what used to hand it to the reconciler,
+                  // which then booked it at its ENTRY price — the harm this batch removes, by a second route.
+                  if (_deliberatelyOpen.has(orphan.id)) {
+                    console.error(`[B-FEED-MISMATCH-FIX][STOP_FLOW] ${orphan.symbol} (${orphan.id}) left OPEN deliberately (no observed price) — NOT deleted; alert raised by the flatten`);
+                    continue;
+                  }
                   console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP] Force-removing orphan position: ${orphan.symbol} (${orphan.id})`);
                   try {
                     await storage.deleteActiveOpenPosition('paper', orphan.id);
@@ -864,7 +918,7 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
             // Phase 8.8.3-I3: Reconcile incomplete trades (close stale trades without open positions)
             console.log('[8.8.3-I3][STOP_FLOW][RECONCILE_START] Checking for stale trades...');
             try {
-              const reconcileResult = await reconcileIncompleteTrades('paper', existingSession.sessionId);
+              const reconcileResult = await reconcileIncompleteTrades('paper', existingSession.sessionId, new Set(_deliberatelyOpen.values()));
               console.log('[8.8.3-I3][STOP_FLOW][RECONCILE_RESULT]', reconcileResult);
             } catch (reconcileErr) {
               console.error('[8.8.3-I3][STOP_FLOW][RECONCILE_ERROR]', reconcileErr);

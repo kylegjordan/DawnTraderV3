@@ -141,10 +141,17 @@ export interface CloseOrderRequest {
   bookBids?: BookLevel[];
   /**
    * P19-B4b.1: DB-resolved per-class beyond-captured-depth close penalty (bps).
-   * NOT a hardcoded constant (Langston Q-A condition). When absent (config missing
-   * → fail-closed), the close exits at `requestedPrice` with a loud unavailable log.
+   * NOT a hardcoded constant (Langston Q-A condition).
+   * ⛔ B-FEED-MISMATCH-FIX P1: when absent (config missing → fail-closed) the close is now
+   * `rejected` (code `no_depth_config`) — it no longer exits at `requestedPrice` with zero modeled
+   * slippage. LATENT at the change: the penalty is seeded for both classes (2026-06-16).
    */
   beyondDepthPenaltyBps?: number;
+  /** B-FEED-MISMATCH-FIX P2 — ONLY a stopped-engine flatten sets this: an OBSERVED price (resolved by
+   *  `resolveFlattenReference`, carrying its own age) that a COLD book may be booked against, worsened by
+   *  the penalty. Absent ⇒ a cold book is `rejected` (code `cold_book`) and the C3 rule leaves the
+   *  position open. ⛔ NEVER an entry price, and never a mark substituted for a missing one. */
+  coldBookReferencePrice?: number;
 }
 
 /**

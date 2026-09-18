@@ -960,3 +960,13 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/fg2-shadow-arm-aee.ts.removed` (non-compilable browse copy; git history is authoritative). **COMMIT:** the `8a-P2` Step-3 commit, deployed `7d4cdf5a8985facb06189216c2375f0e79f5bf64`.
 ⚠️ **F-G-2's OBJ-0 question is NOT answered by this removal — it is unanswerable by this instrument.** The transactable-booking leg is where it goes; see `3n.o` and the `F-G-2` record.
+
+---
+
+## 2026-09-19 — `ActivePortfolioManager.resetPortfolio()` — B-FEED-MISMATCH-FIX (`3n.u`) P3, CC-B
+
+**WHAT:** the `resetPortfolio()` method on `server/services/active-portfolio-manager.ts` (stop the engine, then `closeAllPositions('portfolio_reset')`).
+**WHY:** rule-18 disposition (5) — disconnected and stays disconnected. It was found while replacing `closeAllPositions`' direct-write implementation (the fifth close path) with a route through the canonical close; it was that method's only other caller and had none of its own.
+**BLAST RADIUS, CENSUSED (tests excluded):** zero callers in `server/`, `client/`, `shared/` at the ref. ⚠️ **One more occurrence at whole-tree, named so a later grep is not read as a missed sweep:** `docs/current_state/screeners_export/backend/routes.ts:5941` — a docs export, not a live caller (Langston FINDING-5). State written: none of its own (it only called `stop()` and `closeAllPositions`, both kept). `tsc` baseline 377/377 unchanged after removal.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/active-portfolio-manager.resetPortfolio.20260919-B-FEED-MISMATCH-FIX.removed`. **COMMIT:** the `B-FEED-MISMATCH-FIX` Step-3 commit.
+✅ **KEPT DELIBERATELY:** the operator `POST /active-engine/close-all` route and `closeAllPositions` itself — rule 18 applies to the implementation, not the affordance (Langston, Step 2).

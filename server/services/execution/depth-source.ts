@@ -139,7 +139,11 @@ export async function getTickerWitness(
   }
 }
 
-export interface WarmthResult { warm: boolean; reason: string; }
+/** `kind` is the DISCRIMINATED verdict (B-FEED-MISMATCH-FIX C1, Langston): `reason` is a DISPLAY string that
+ *  carries measurements inline (`stale_book age=7231ms>5000ms`), so a consumer that persists or branches on the
+ *  verdict must read `kind`, never split `reason`. */
+export type WarmthKind = 'warm' | 'no_book' | 'stale_book' | 'thin_book';
+export interface WarmthResult { warm: boolean; kind: WarmthKind; reason: string; }
 
 /**
  * Warmth = the book exists, is fresh (age ≤ warmthMaxAgeMs), and has enough valid
@@ -150,16 +154,16 @@ export function assessWarmth(
   side: 'asks' | 'bids',
   config: FillDepthGateConfig,
 ): WarmthResult {
-  if (!snap) return { warm: false, reason: 'no_book' };
+  if (!snap) return { warm: false, kind: 'no_book', reason: 'no_book' };
   if (snap.ageMs > config.warmthMaxAgeMs) {
-    return { warm: false, reason: `stale_book age=${Math.round(snap.ageMs)}ms>${config.warmthMaxAgeMs}ms` };
+    return { warm: false, kind: 'stale_book', reason: `stale_book age=${Math.round(snap.ageMs)}ms>${config.warmthMaxAgeMs}ms` };
   }
   const levels = side === 'asks' ? snap.asks : snap.bids;
   const valid = validLevelCount(levels);
   if (valid < config.minLevels) {
-    return { warm: false, reason: `thin_book levels=${valid}<${config.minLevels}` };
+    return { warm: false, kind: 'thin_book', reason: `thin_book levels=${valid}<${config.minLevels}` };
   }
-  return { warm: true, reason: 'warm' };
+  return { warm: true, kind: 'warm', reason: 'warm' };
 }
 
 // ── Observable depth-gate block counter (rules 10/11 — a blocked open is never a

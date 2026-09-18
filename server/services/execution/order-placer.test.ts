@@ -94,21 +94,22 @@ describe('PaperOrderPlacer.closeOrder (depth-walked, always full-fill)', () => {
     expect(r.fillPrice).toBeCloseTo((2 * 99.5 + 2 * 98.505) / 4, 8);
   });
 
-  it('cold book (no bids) + penalty → exits at requestedPrice worsened by the penalty', async () => {
+  // ⛔ B-FEED-MISMATCH-FIX P1/P2 — DELIBERATELY AMENDED. These two cases asserted the OLD contract (a cold book
+  // exits at `requestedPrice` worsened by the penalty; no config exits at `requestedPrice` flat). Both booked a
+  // price nobody bid. The new contract is pinned in `server/tests/unit/b-feed-mismatch-fix.test.ts`.
+  it('cold book (no bids), no observed reference → REJECTED (C3 leaves the position open)', async () => {
     const r = await placer().closeOrder({
       symbol: 'BTC/USD', side: 'sell', quantity: 1, requestedPrice: 100, mode: 'paper', positionId: 'p3',
       beyondDepthPenaltyBps: 50,
     });
-    expectFilled(r);
-    expect(r.fillPrice).toBeCloseTo(100 * (1 - 50 / 10000), 10); // 99.5
+    expect(r.status).toBe('rejected');
   });
 
-  it('no config at all → still exits (never a stuck position) at requestedPrice', async () => {
+  it('no config at all → REJECTED, never a zero-slippage exit at requestedPrice', async () => {
     const r = await placer().closeOrder({
       symbol: 'BTC/USD', side: 'sell', quantity: 1, requestedPrice: 100, mode: 'paper', positionId: 'p4',
     });
-    expectFilled(r);
-    expect(r.fillPrice).toBeCloseTo(100, 10);
+    expect(r.status).toBe('rejected');
   });
 });
 

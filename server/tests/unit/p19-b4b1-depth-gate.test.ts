@@ -64,7 +64,7 @@ describe('P19-B4b.1 depth-gate config — fail-closed (rule-11/15)', () => {
 
 describe('P19-B4b.1 assessWarmth', () => {
   it('null snapshot → not warm (no_book)', () => {
-    expect(assessWarmth(null, 'asks', CONFIG)).toEqual({ warm: false, reason: 'no_book' });
+    expect(assessWarmth(null, 'asks', CONFIG)).toEqual({ warm: false, kind: 'no_book', reason: 'no_book' });
   });
   it('stale book (age > max) → not warm', () => {
     const r = assessWarmth(snap({ ageMs: 9000 }), 'asks', CONFIG);
