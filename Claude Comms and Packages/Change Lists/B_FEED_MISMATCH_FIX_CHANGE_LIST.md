@@ -44,3 +44,16 @@ Plan: `Scope Files/B_FEED_MISMATCH_FIX_PRE_AUDIT.md` r5, **cleared by Langston 2
 
 ## Files
 `server/services/active-execution-engine.ts` · `server/services/active-portfolio-manager.ts` · `server/services/active-engine-service.ts` · `server/routes.ts` · `server/services/execution/order-placer.ts` · `server/services/execution/types.ts` · `server/services/execution/depth-source.ts` · **NEW** `server/services/execution/close-fill-contract-config.ts` · `shared/schema.ts` · **NEW** `drizzle/migrations/2026-09-19-b-feed-mismatch-fix-close-fill-contract.sql` (+ rollback, not in MANIFEST) · `drizzle/migrations/MANIFEST.txt` · tests: **NEW** `server/tests/unit/b-feed-mismatch-fix.test.ts`, `server/services/execution/order-placer.test.ts`, `server/tests/unit/p19-b4b1-depth-gate.test.ts`, `server/tests/unit/b-exit-provenance-fence.test.ts` · governance: `DELETED_COMPONENTS_LOG.md`, `_archive/deleted-code/…resetPortfolio….removed`.
+
+---
+
+## Step 4 r2 — Langston CHANGES-NEEDED (23:41Z, graded `4d86141b6`): both blockers + four conditions, one commit
+- **BLOCKER-1** — `routes.ts` stranded-clear now stamps `exitDecisionPrice`, `exitPriceProducer`, `exitPriceSource`, `exitObservedAtMs` from the `liveQuote` it booked. New fence in `b-feed-mismatch-fix.test.ts` reads `routes.ts` (no other fence did) and also asserts the `FALLBACK_TO_ENTRY` arm is gone from that route.
+- **BLOCKER-2** — `_countCloseRefusal(…, isFlatten)`: a refused FLATTEN alerts on its FIRST refusal (title *"FLATTEN left <symbol> OPEN"*); runtime test added (fill_depth_gate unseeded ⇒ `no_depth_config` ⇒ one alert, nothing persisted).
+- **C1** — the contract statement is corrected rather than the behaviour changed: `order-placer.ts` docblock now says a flatten IS refused when `fill_depth_gate` is unseeded (latent — both classes seeded at 50), and that refusal is now loud (BLOCKER-2). The change list's "a flatten never refuses" is superseded by: *a flatten never refuses on divergence or a cold book; it can be refused only by missing depth config, and alerts at once.*
+- **C2** — `exit_fill_arm` comment (schema + migration `COMMENT ON`) now names the reconciler's `synthetic_reference` rows and the discriminator `close_reason = 'engine_stop_cleanup'` (no fee, no penalty on those rows).
+- **C3** — **PLAN DEVIATION, recorded for the completion report:** plan row `3n.u` said flatten paths "stop accepting an unbounded-age `last_known_good_reserve`". `_flattenOne` ACCEPTS it and carries `observedAt` onto the row. Re-decided because holding a position through an engine stop / kill switch is worse than booking a labelled, aged, learning-fenced observed price; Langston concurs.
+- **C4 nit** — `_deliberatelyOpen` block re-indented.
+- **Finding, corrected in place:** the `canYield=false` rail's alert body no longer promises that resolving re-arms it (it fires once per streak; the streak clears only when the position closes).
+- **Findings homed (§9.4 disposition 3):** `CLOSE_NO_TRADE_ROW` still deletes (should write the row from the position) and stranded-clear's `fees:'0', slippage:'0'` → **`HOME: B-CLOSE-WRITER-COSTS, owner CC-B, placed in PHASE_19_PLAN at row 3n.u3, after 3n.u2`**.
+tsc 377 = 377; the batch's three test files 47/47.

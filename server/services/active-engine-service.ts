@@ -850,9 +850,9 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
             // 2. Stop execution engine FIRST (stops signals and execution loop)
             // This prevents any new trades from being processed while we close positions
             // B-FEED-MISMATCH-FIX P2: positions the flatten deliberately LEFT OPEN (no observed price at all).
-          // Carried explicitly into the orphan cleanup and the reconciler below — neither may delete or book them.
-          const _deliberatelyOpen = new Map<string, string>(); // positionId -> symbol
-          console.log('[8.8.3-I2][STOP_FLOW][3_STOPPING_EXECUTION_ENGINE]');
+            // Carried explicitly into the orphan cleanup and the reconciler below — neither may delete or book them.
+            const _deliberatelyOpen = new Map<string, string>(); // positionId -> symbol
+            console.log('[8.8.3-I2][STOP_FLOW][3_STOPPING_EXECUTION_ENGINE]');
             await currentManager.stop();
             console.log('[8.8.3-I2][STOP_FLOW][4_EXECUTION_ENGINE_STOPPED]');
             

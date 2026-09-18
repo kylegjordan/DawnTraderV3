@@ -3311,30 +3311,43 @@ export class ActiveExecutionEngine {
     contract: CloseFillContractConfig | null,
     reason: string,
     canYield: boolean,
+    isFlatten = false,
   ): Promise<boolean> {
     const key = position.id;
     const streak = (this._closeRefusalStreak.get(key) ?? 0) + 1;
     this._closeRefusalStreak.set(key, streak);
     const cap = contract?.coldRefusalCap ?? null;
     const atCap = cap !== null && streak >= cap;
-    if ((cap === null && streak === 1) || (cap !== null && streak === cap)) {
+    // ⛔ B-FEED-MISMATCH-FIX Step-4 BLOCKER-2 (Langston): the cap assumes a RETRYING caller. A flatten gets exactly ONE
+    // attempt (engine stop / kill switch / close-all), so its cap is unreachable and — without this — its alarm too. A
+    // refused flatten therefore alerts on its FIRST refusal. (Reachable only if fill_depth_gate is unseeded: a flatten
+    // otherwise always walks a book or books against its observed reference.)
+    if (isFlatten || (cap === null && streak === 1) || (cap !== null && streak === cap)) {
       try {
         const { addAlert } = await import('./system-alerts.js');
         await addAlert({
           triggers_at: new Date(),
           category: 'breakage',
           severity: 'warning',
-          title: cap === null
-            ? `Close refused — close-fill contract unseeded for ${position.symbol}`
-            : `Close refused ${streak} times in a row for ${position.symbol} (${reason})`,
+          title: isFlatten
+            ? `Close refused — FLATTEN left ${position.symbol} OPEN (${reason})`
+            : cap === null
+              ? `Close refused — close-fill contract unseeded for ${position.symbol}`
+              : `Close refused ${streak} times in a row for ${position.symbol} (${reason})`,
           body: `The ${this.mode} close of ${position.symbol} has been refused ${streak} consecutive time(s): ${reason}. `
             + (cap === null
               ? `The close_fill_contract module_constants rows are missing, so a not-warm walk cannot be graded and is refused (fail-closed). Seed close_fill_contract for this asset class. `
               : canYield
                 ? `At the cap (${cap}) the close now YIELDS: it walks the book it has and stamps exit_fill_arm = 'walk_yield'. `
                 : `There is no book to walk and no observed reference, so the position keeps holding; the exit monitor retries every cycle. `)
+            + (isFlatten ? `This was a stopped-engine FLATTEN with no retrying caller: the position is still open and nothing will retry it. ` : '')
             + `The position's exposure is UNCHANGED while it holds. B-FEED-MISMATCH-FIX P1. `
-            + `DISPOSITION: RESOLVE, do not ACK — an ack silences the dedupe key permanently.`,
+            // ⚠️ Step-4 finding (Langston): for the no-book / no-config rail (canYield=false) the streak does NOT reset
+            // while the condition holds and the fire is strict-equality, so resolving does NOT re-arm it until the
+            // position closes and its streak is cleared. Stated rather than promised.
+            + (canYield
+              ? `DISPOSITION: RESOLVE, do not ACK — an ack silences the dedupe key permanently.`
+              : `DISPOSITION: RESOLVE once the position closes. This rail fires ONCE per streak and does NOT re-fire while the same condition persists, so resolving it early does not re-arm it.`),
           dedupe_key: `close-refused-${this.mode}-${position.symbol}`,
         });
       } catch (alertErr) {
@@ -3540,7 +3553,7 @@ export class ActiveExecutionEngine {
         // ⛔ B-FEED-MISMATCH-FIX P1: paper now DOES return non-filled — a cold book with no observed
         // reference, or no depth config. The refusal is counted and bounded (`_countCloseRefusal`).
         console.error(`[PaperExecution:${this.mode}][CLOSE_FILL_NONFILLED] ${position.symbol} pos=${positionId} status=${_closeFill.status}${_closeFill.status === 'rejected' ? ` code=${_closeFill.code ?? 'none'}` : ''} — position left OPEN, retry next cycle`);
-        await this._countCloseRefusal(position, _closeContract, _closeFill.status === 'rejected' ? (_closeFill.code ?? 'rejected') : _closeFill.status, false);
+        await this._countCloseRefusal(position, _closeContract, _closeFill.status === 'rejected' ? (_closeFill.code ?? 'rejected') : _closeFill.status, false, _isFlatten);
         return;
       }
       actualExitPrice = _closeFill.fillPrice;

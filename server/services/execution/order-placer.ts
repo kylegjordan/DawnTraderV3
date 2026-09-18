@@ -100,7 +100,9 @@ export class PaperOrderPlacer implements OrderPlacer {
    *     the penalty — the engine stamps it `synthetic_reference` and keeps it out of learning capture;
    *   - cold otherwise → `rejected` (`cold_book`) ⇒ the C3 rule leaves the position OPEN and the next exit
    *     cycle retries (bounded by the engine's `cold_refusal_cap`);
-   *   - config missing → `rejected` (`no_depth_config`), never a zero-slippage exit.
+   *   - config missing → `rejected` (`no_depth_config`), never a zero-slippage exit — ⚠️ THIS INCLUDES A FLATTEN: with
+   *     `fill_depth_gate` unseeded even a flatten carrying a good reference is refused (latent — both classes are seeded).
+   *     The engine alerts on a refused flatten's FIRST refusal (Step-4 BLOCKER-2), so it is loud, not silent.
    * Still side-effect-free: no await, no write, nothing mutated. The engine's divergence gate RELIES on
    * that to discard a computed fill (B-FEED-MISMATCH-FIX r5) — a LIVE placer is not, see SIM OrderPlacer.
    */

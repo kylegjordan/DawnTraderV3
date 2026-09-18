@@ -17,6 +17,8 @@
 //   - removing the refusal's `return` (so a refused close falls through to persistence) fails tests 1 and 2;
 //   - making the predicate unsigned (Math.abs) fails test 3 (the −3.79 % crypto walk is refused).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const h = vi.hoisted(() => ({
   addAlert: vi.fn(async (_a: unknown) => undefined),
@@ -185,6 +187,32 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     await proto.closePosition.call(eng, 'pos-BTC/USD', 95, { type: 'manual_stop', price: 95, reason: 't' }, 'test', { flatten: true }).catch(() => {});
     expect(eng._closeRefusalStreak.has('pos-BTC/USD')).toBe(false);
     expect(h.getClosedTradesBySymbol).toHaveBeenCalled();
+  });
+});
+
+describe('B-FEED-MISMATCH-FIX Step-4 blockers', () => {
+  it('BLOCKER-2: a refused FLATTEN alerts on its FIRST refusal (no retrying caller)', async () => {
+    const eng = fakeEngine();
+    h.resolveFillDepthGateConfig.mockResolvedValue(null);                 // fill_depth_gate unseeded -> no_depth_config
+    h.getActiveOpenPosition.mockResolvedValue(position('BTC/USD', 'crypto_spot'));
+    h.getDepthSnapshot.mockResolvedValue(snap(95, 100));
+    h.getTickerWitness.mockResolvedValue(null);
+    await proto.closePosition.call(eng, 'pos-BTC/USD', 95, { type: 'manual_stop', price: 95, reason: 't' }, 'test', { flatten: true });
+    expect(h.getClosedTradesBySymbol).not.toHaveBeenCalled();             // refused, nothing persisted
+    expect(h.addAlert).toHaveBeenCalledTimes(1);                           // ...and NOT silent at streak 1
+    expect(String((h.addAlert.mock.calls[0][0] as { title: string }).title)).toMatch(/FLATTEN left BTC\/USD OPEN/);
+  });
+
+  it('BLOCKER-1: the stranded-clear writer stamps the provenance of the quote it booked (routes.ts is in no other fence)', () => {
+    const src = readFileSync(resolve(__dirname, '../../routes.ts'), 'utf-8');
+    const at = src.indexOf("closeReason: 'stranded_clear',");
+    expect(at).toBeGreaterThan(-1);
+    const block = src.slice(at, at + 900);
+    expect(block).toMatch(/exitPriceProducer:\s*liveQuote!?\.producer/);
+    expect(block).toMatch(/exitPriceSource:\s*liveQuote!?\.source/);
+    expect(block).toMatch(/exitObservedAtMs:\s*liveQuote!?\.observedAt/);
+    // and the entry-price arm is gone from this route
+    expect(src.slice(src.indexOf("'/active-engine/force-clear-stranded'"), at)).not.toMatch(/FALLBACK_TO_ENTRY/);
   });
 });
 

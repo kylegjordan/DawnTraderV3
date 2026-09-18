@@ -13125,6 +13125,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             openedAt: position.openedAt,
             closedAt: new Date(),
             closeReason: 'stranded_clear',
+            // ⛔ B-FEED-MISMATCH-FIX Step-4 BLOCKER-1 (Langston): this writer KEEPS its own row (a stranded position
+            // may have no open trade row to book onto), so it must stamp the provenance `closePosition` would have —
+            // every row it writes now has a real observed quote behind it (the entry-price arm is gone). #546 / P9.
+            exitDecisionPrice: currentPrice.toString(),
+            exitPriceProducer: liveQuote!.producer,
+            exitPriceSource: liveQuote!.source,
+            exitObservedAtMs: liveQuote!.observedAt,
             // B-XSTOCK-FEED-SANITY P4: the book-state LABEL at the stranded clear (label only). Written
             // ONLY when a live frame was assessed: crypto, the entry-price fallback (no frame behind the
             // number), or a guard that did not run ⇒ NULL, re-cuttable (Langston Step-4 B2).
