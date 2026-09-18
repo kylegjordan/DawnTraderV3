@@ -108,13 +108,17 @@ export interface BookStateComparator {
   /** `8a-P4a` — true once this chain's first-refusal basis line has been printed (one per chain). */
   refusalBasisLogged: boolean;
   /**
-   * `8a-P4a` — for each entry of `spreads`, whether the book MOVED on that advance (same length, same order).
-   * The escape needs AT LEAST TWO frames in the trailing window that are BOTH plausible AND moved: the jump
-   * from a wide quote into a tight one is one such frame, so a book that then FROZE at that tight price has
-   * exactly one and does not escape; a live book keeps moving. Movement counted anywhere else in the window
-   * (e.g. while still wide) proves nothing about the tight book, and `observedMovement` (ever moved) less.
+   * `8a-P4a` — on a seed-implausible chain, how many times the book has MOVED during its CURRENT PLAUSIBLE RUN:
+   * consecutive advances whose spread is within `kRel ×` the retained median. A wider frame resets it to 0.
+   * The escape needs AT LEAST TWO: the jump from a wide quote into a tight one is ONE, so a book that then FROZE
+   * at that tight price has exactly one and does not escape; a live book moves again. Movement made while still
+   * wide proves nothing about the tight book, so it is never counted.
+   * ⛔ Deliberately NOT a count inside the 20-frame ring (r2 of the build): a quiet but healthy book (AMC moves
+   * on 2.33% of consecutive captured frames — Langston, 09-17) rarely shows two moves inside any 20-frame window
+   * of 1.5 s exit ticks, so a windowed count would strand exactly the case the escape exists for. The run count
+   * is cadence-free: it waits for two real moves however many ticks that takes, and a frozen book never gets them.
    */
-  movedRing: boolean[];
+  plausibleRunMoves: number;
   /** When this reference CHAIN began (the seed frame's own time). Survives validation. */
   seededAtMs: number;
   /** Advances against this chain since the seed, so a fresh seed is distinguishable from a settled one. */
@@ -222,33 +226,37 @@ export function advanceBookStateComparator(
   //       retained median — so one lucky tight print inside a bad book cannot escape (Langston, Step 1);
   //   (b) THIS frame is itself within `kRel ×` — so the new chain's seed passes the ordinary seed test below
   //       by construction and consumes the ring under r4, instead of re-locking on the next line.
-  //   Plus (c) AT LEAST TWO frames of that trailing window are both plausible AND moved (r5's positive
-  //   property, applied to the recovered book itself): the jump into a tight quote is one, so a book that
-  //   froze there does not escape; moves made while still wide do not count.
+  //   Plus (c) the book has MOVED AT LEAST TWICE during its current plausible run (r5's positive property,
+  //   applied to the recovered book itself — `plausibleRunMoves`): the jump into a tight quote is one, so a
+  //   book that froze there does not escape; moves made while still wide do not count; no window, so a quiet
+  //   healthy book is not stranded by its own cadence.
   // ⛔ ROUTED THROUGH `clearBookStateComparator`, NEVER AN IN-PLACE `seedImplausible = false` (Langston,
   //   Step 1): the clear is where r4's ring rule and r5's movement rule live, and the new chain starts with
   //   no inherited movement because it is created with no `prev`.
   // ⛔ No clock term and no new knob: `kRel` and the window are the guard's existing knobs.
   let escapedThisFrame = false;
   const movedNow = prev ? (frame.bid !== prev.priorBid || frame.ask !== prev.priorAsk) : false;
-  if (prev && prev.seedImplausible && prev.observedMovement && kRel !== null) {
-    const retained = _retainedSpreads.get(key);
-    const retainedMedian = retained ? medianOf(retained) : null;
+  // The run count this frame would produce on the CURRENT chain (used by the escape test and carried below).
+  const escRetained = _retainedSpreads.get(key);
+  const escRetainedMedian = escRetained ? medianOf(escRetained) : null;
+  const escThreshold = kRel !== null && escRetainedMedian !== null && escRetainedMedian > 0 ? kRel * escRetainedMedian : null;
+  const runMovesNow = prev && prev.seedImplausible && escThreshold !== null
+    ? (spreadNow <= escThreshold ? prev.plausibleRunMoves + (movedNow ? 1 : 0) : 0)
+    : 0;
+  if (prev && prev.seedImplausible && prev.observedMovement && escThreshold !== null) {
+    const retainedMedian = escRetainedMedian;
     const trailing = prev.spreads.concat(spreadNow);
-    const trailingMoved = prev.movedRing.concat(movedNow);
-    while (trailing.length > ringCap) { trailing.shift(); trailingMoved.shift(); }
+    while (trailing.length > ringCap) trailing.shift();
     const trailingMedian = trailing.length >= ringCap ? medianOf(trailing) : null;
-    const threshold = retainedMedian !== null ? kRel * retainedMedian : null;
-    const liveTightFrames = threshold === null ? 0
-      : trailing.filter((sp, i) => sp <= threshold && trailingMoved[i] === true).length;
+    const threshold = escThreshold;
     if (
-      retainedMedian !== null && retainedMedian > 0 && threshold !== null &&
+      retainedMedian !== null &&
       trailingMedian !== null && trailingMedian <= threshold &&
       spreadNow <= threshold &&
-      liveTightFrames >= 2
+      runMovesNow >= 2
     ) {
       console.warn(
-        `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} SEED_ESCAPED framesHeld=${prev.framesSinceSeed} ` +
+        `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} SEED_ESCAPED framesHeld=${prev.framesSinceSeed} runMoves=${runMovesNow} ` +
         `seedSpread=${prev.seedSpread.toFixed(5)} escapeMedian=${trailingMedian.toFixed(5)} ` +
         `spreadNow=${spreadNow.toFixed(5)} retainedMedian=${retainedMedian.toFixed(5)} kRel=${kRel} ` +
         `seededAt=${new Date(prev.seededAtMs).toISOString()}`,
@@ -259,8 +267,7 @@ export function advanceBookStateComparator(
     }
   }
   const spreads = (prev?.spreads ?? []).concat(spreadNow);
-  const movedRing = (prev?.movedRing ?? []).concat(prev ? movedNow : false);
-  while (spreads.length > ringCap) { spreads.shift(); movedRing.shift(); }
+  while (spreads.length > ringCap) spreads.shift();
   // THE EMITTER'S POSITIVE CONTROL (Langston, 2026-09-03 01:26Z): the guard's skip/yield lines fire only
   // on hollow ticks, so a night with no hollow tick on a held name is indistinguishable from an unarmed
   // guard. This line fires ONCE per symbol, on the FIRST FRAME that seeds its comparator (a
@@ -315,7 +322,7 @@ export function advanceBookStateComparator(
     seedSpread: prev ? prev.seedSpread : spreadNow,
     seedRetainedMedian,
     refusalBasisLogged: prev ? prev.refusalBasisLogged : false,
-    movedRing,
+    plausibleRunMoves: prev ? runMovesNow : 0,
     observedMovement,
     seededAtMs: prev?.seededAtMs ?? frame.atMs,
     framesSinceSeed: prev ? prev.framesSinceSeed + 1 : 0,

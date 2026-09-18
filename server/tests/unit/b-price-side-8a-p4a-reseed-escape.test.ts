@@ -110,6 +110,23 @@ describe('8a-P4a — a recovered book escapes; nothing else does', () => {
     expect(escapedLines()).toHaveLength(0);
   });
 
+  it('4b: a QUIET but healthy book (moves once every 25 frames, AMC-like) still escapes — the move count is not windowed', () => {
+    // Langston, Step 2 gate 2 BLOCKER-2: AMC moved on 2.33% of consecutive captured frames on 09-17. A count of moves
+    // INSIDE the 20-frame ring would never see two here and would strand it; the plausible-run count waits for two real
+    // moves however many frames that takes. (A windowed count fails this test: at most one move in any 20 frames.)
+    retainHealthyRing();
+    frameAt(0.02, 0, false);
+    let escapedAt = -1;
+    let mid = 100;
+    for (let i = 0; i < 200 && escapedAt < 0; i++) {
+      if (i % 25 === 0) mid += 0.01; // the only moves
+      advanceBookStateComparator(SYM, { bid: mid - 0.055, ask: mid + 0.055, last: mid, atMs: tick() }, WINDOW, true, K_REL);
+      if (escapedLines().length > 0) escapedAt = i;
+    }
+    expect(escapedAt).toBeGreaterThanOrEqual(25); // not before its second real move
+    expect(escapedAt).toBeLessThan(80);
+  });
+
   it('5: an unreadable kRel never escapes (fail-safe, as the seed judgement is)', () => {
     retainHealthyRing();
     frameAt(0.02, 0, false);
