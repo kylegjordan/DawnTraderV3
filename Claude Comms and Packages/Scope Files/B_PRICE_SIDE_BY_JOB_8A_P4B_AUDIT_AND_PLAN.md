@@ -4,6 +4,8 @@ change-class: architecture
 
 **Scope:** `Scope Files/B_PRICE_SIDE_BY_JOB_8A_P4_SCOPE.md`, approved r2 by Langston at 22:01Z (`e9a6b7f68`). This document covers the paper piece, **`8a-P4b` = X1-X3 plus two label fixes**. `8a-P4c` (VTS) gets its own Step 2. **Status:** `STEP: 2 of 11` · `NEXT STEP: 3 of 11`. **Depends on `8a-P4a` being deployed first** (the guard this piece relies on must be able to release a recovered book).
 
+**r2 — Langston r1 (22:23Z) NOT CLEARED: BLOCKER-1 (the ternaries are not class-exhaustive), BLOCKER-2 (P5 splits a live 8a-P3 series), CONDITION-3 (the in-flight xStock windows), CONDITION-4 (P2's counter), NIT-5 (stale line numbers). Each is folded in §J2b, §K and the plan table, marked *(r2)*.** ⚠️ **Line numbers below are at `055078c02`; head moved by 40 lines at `420c5ba44` (the `8a-P4a` code). They are re-anchored at implementation** (Langston NIT-5: 1543→1556 · 1898→1911 · 2072→2112 · 2267→2307 · 2564→2604 · 2866→2906 · 4760→4800).
+
 ## PREVIOUSLY STATED → NOW
 - **PREVIOUSLY:** the X0 defaulting at `vts-runner:3150`. **NOW:** `:3152-3153` (Langston). **REASON:** `:3150` is `symbol:`. (VTS; carried to `8a-P4c`.)
 - **PREVIOUSLY:** "`:3139` is the only side-bearing read". **NOW:** the sides are selected at `:3137-3138`; `:3139` is the `FROM`. (`8a-P4c`.)
@@ -74,6 +76,15 @@ Consulted by path: the equity feed and the guard both postdate the corpus. There
 
 ## J. JUDGEMENT CALLS — attack these
 
+- ⛔ **J2b *(r2, BLOCKER-1)* — EVERY CELL IS AN EXPLICIT THREE-WAY, WITH A NAMED DEFAULT ARM.** `ASSET_CLASS_REGISTRY` has four active classes (`crypto_spot`, `crypto_perp`, `xstock_spot`, `xstock_perp`; `shared/asset-classes.ts:67-105`), and `getActiveOpenPositions` is an unfiltered select (`storage.ts:3772-3777`), so the exit loop is class-total. r1's `crypto ? … : xsBid` would have handed a perp row `null`, which means `no_transactable_side` forever, with the TEC ratchet frozen too, since the early return sits above `tecUpdatePosition` (`tec-evaluator.ts:317`).
+  ⇒ **At X1, X2 and X3:**
+  - `crypto_spot` → the touch side (unchanged, `8a-P2`/`8a-P3`);
+  - `xstock_spot` → `xsBid` / `xsAsk`;
+  - **any other class → the mark, EXACTLY as today**, under a comment that names it out of `3n`'s scope and says a new class must be added here deliberately.
+  - A fixture drives a `crypto_perp` row through each cell and asserts the mark.
+  - Rejected: evidencing that no perp row can exist. An absence needs presence-grade proof, and the registry says they are active.
+- **J2c — guard-off frame source (Langston, NIT-5 rider).** On the guard-off arm `_bs` is the `ok:false` union and carries **no** `raw`, so the only frame in scope is `_eqTick.raw` — the frame the mark came from. It is used there and nowhere else, which keeps J2 from turning into the unjudged re-read that J1 forbids.
+
 - **J1 — carry the validated sides out of the guard block, not re-read them.** Two `let` variables are declared before the block (`xsBid`, `xsAsk`) and set on the ONE line that has passed validation (just above `aee:2072`). **A re-read of `getLatestEquityTick` at X1/X2/X3 is refused:** a later frame may have arrived and would be unjudged — the guard would then have validated one frame while the decision reads another.
 - **J2 — guard OFF (`enabled = 0`) ⇒ the raw sides UNJUDGED, if two-sided; else null.**
   - "Guard off" is an operator choice not to judge the book. Refusing every xStock exit because of it would turn a diagnostics knob into a trading halt.
@@ -91,13 +102,22 @@ Consulted by path: the equity feed and the guard both postdate the corpus. There
 | # | from | item |
 |---|---|---|
 | **P1** | A1, J1 | `let xsBid, xsAsk: number \| null = null` before the guard block. Set them from `_raw` on the validated arm, and on the guard-off arm per J2. |
-| **P2** | A1 X3 | `aee:2866` → `triggerPrice: crypto ? triggerBid : xsBid`. `null` ⇒ `no_transactable_side`, which the evaluator already handles. The EXIT_EVAL counters gain an xStock `noTransactableSide`. |
-| **P3** | A1 X2 | `aee:2564` xStock arm → `xsBid`; `exitProvenance.decisionPrice` carries it. |
-| **P4** | A1 X1 | The pre-pass call (`aee:2267`) passes `xsAsk`, and `_processPendingMaker`'s xStock arm fills on it. `entryDecisionPrice` = the ask; `entryPriceSource` names the rung (`kraken_equities_ws:raw_ask` or `…:raw_ask_unguarded`). |
-| **P5** | `8a-P3` §5d | Move the `[8a-P3][MAKER_RESTED:${mode}]` line (`aee:4760`) to after the position insert succeeds (both classes), so a line means a placement. |
+| **P2** | A1 X3, J2b, *(r2 CONDITION-4)* | Three-way per J2b: `crypto_spot ? triggerBid : xstock_spot ? xsBid : currentPrice`. `null` ⇒ `no_transactable_side`, which the evaluator already handles. **The counter is `_noTriggerRefusals`, kept as the TOTAL** (the EVAL_EXIT residual arithmetic depends on it) and **split ADDITIVELY by class, printed per leg with its own denominator**: `exitEvalInvoked` and `noTriggerRefusals` each as crypto / xstock / other. It is a breakdown of the same fact, not a second counter (`#641`). |
+| **P3** | A1 X2, J2b | `_restFillPrice` three-way: crypto → the touch bid (unchanged); xStock → `xsBid`; other → `currentPrice`. `exitProvenance.decisionPrice` carries it. |
+| **P4** | A1 X1, J2b | The pre-pass call passes `xsAsk`. `_processPendingMaker` fills three-way: crypto → the touch ask (unchanged); xStock → `xsAsk`; other → `safePrice` (the mark, unchanged). For xStock, `entryDecisionPrice` is the ask and `entryPriceSource` names the rung (`kraken_equities_ws:raw_ask` or `…:raw_ask_unguarded`). |
+| **P5** *(r2, BLOCKER-2)* | `8a-P3` §5d | **Do NOT move the `[8a-P3][MAKER_RESTED:${mode}]` line** — it is the live denominator of `8a-P3` OBJ-6 (*rests attempted*), and moving it below the insert would change it to *rests placed* mid-series, the same move J3 refuses for `exit_decision_price`. **ADD** `[8a-P4b][MAKER_PLACED:${mode}] <symbol> (<class>): limit=… ask=…` after the insert commits (both classes). ⇒ The `8a-P3` series does not split; placements become a NEW series from the `8a-P4b` deploy; the difference between the two is the `#1063`-class failures, readable per window. |
 | **P6** | A1 | Correct the `aee:2656-2658` comment: the taker decision stamp is the mark, and the booked price is the bid walk (`aee:3308-3321`). |
 | **P7** | J4 | Epoch migration + rollback + MANIFEST line. |
 | **P8** | scope OBJ-1/2/3/4 | Fixtures, each red on today's code: the mark above a stop with the validated bid below it ⇒ fires (X3); the mark ≥ a rested limit with the bid below ⇒ no fill (X2); the mark ≤ an entry limit with the ask above ⇒ no fill (X1); a hollow frame never reaches a decision; guard off ⇒ unguarded sides; crypto fixtures from `8a-P3` unmodified; no clock term. |
 | **P9** | A4 | SIM, SYSTEM_MANUAL §3.5.1 and §18.0, and `XSTOCK_PRICING_PLAN` P6 (stating what P6 still governs) — at Step 10. |
+
+## K. *(r2, CONDITION-3)* THE IN-FLIGHT WINDOWS THIS PIECE TOUCHES — stated before the deploy
+
+| window | owner | what it reads | does `8a-P4b` move it? | disposition |
+|---|---|---|---|---|
+| **`B-XSTOCK-FEE-CONTRACT` P8** (`#1010`), opened `b597f1bf2` 2026-09-11 20:09:47Z — xStock maker share ≤ 1.0% at n ≥ 300, zero class-(iii) | CC-B | paper xStock fills by liquidity side | **YES.** X1 makes an xStock maker ENTRY fill require the ask ≤ the limit (today: the mark), so there are fewer maker fills and a lower maker share. That **biases P8 toward PASS.** | **The `8a-P4b` deploy instant SPLITS P8.** A P8 verdict may use only one side of it. Which side, and whether to restart, is CC-B's call; one post to CC-B at the deploy names the instant. |
+| **`#1010` Arm B** — EV-gate admission | CC-B | the admission decision at the EV gate | **No.** Admission is decided before any fill or exit; X1 changes how a rest fills, and X2/X3 change exits. None of them touches the gate's inputs. | Insensitive, argued here. ⚠️ Indirect path, stated: a changed exit changes which positions are held, and so the concurrency slots free at the next admission. That changes WHICH signals reach the gate, not how the gate judges them. |
+| **F-G-2 xStock decision legs** | CC-C | — | — | **HELD** — `F_G_2_PROGRESS_REPORT.md:135` (§4e, *"The HELD xStock decision-side leg"*) and `:162` (*"xStock legs still held"*), so nothing is running to split. Stated rather than omitted. *(Langston cited `:62`; that line does not carry it.)* |
+| **`8a-P3` OBJ-6** (`MAKER_RESTED`) | CC-C | rest lines, crypto only | no — P5 no longer moves the line | none |
 
 **UNAUDITED:** none.
