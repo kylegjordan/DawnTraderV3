@@ -279,7 +279,10 @@ export function advanceBookStateComparator(
   // ⛔ 8a r3 — JUDGE THE SEED AGAINST THE RETAINED RING (Langston BLOCKER-1, his direction).
   // Only on a NEW chain: an advance within a chain inherits the flag unchanged.
   // ⛔ r5: has this chain ever seen the book MOVE? A repeated frozen frame never sets it.
-  const movedThisFrame = prev ? (frame.bid !== prev.priorBid || frame.ask !== prev.priorAsk) : false;
+  // `8a-P4a` (Langston Step-2 nit): ONE movement fact per frame. `movedNow` (above) was computed against the chain as it
+  // stood BEFORE any escape; after an escape `prev` is gone and a new chain has no prior, so it cannot have moved.
+  // Deriving it here keeps the run count and `observedMovement` on one definition — they cannot silently desync.
+  const movedThisFrame = prev ? movedNow : false;
   const observedMovement = (prev?.observedMovement ?? false) || movedThisFrame;
   let seedImplausible = prev?.seedImplausible ?? false;
   let seedRetainedMedian: number | null = prev ? prev.seedRetainedMedian : null;
