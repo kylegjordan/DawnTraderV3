@@ -65,7 +65,7 @@ The active engine constructs `PaperOrderPlacer` unconditionally ✔ (AEE:884) �
 3. Paper xStock (e): exit trigger is the equities midpoint. (= `3n` P2, CC-C)
 4. Paper crypto quant birth: unlabelled mix, smoothed.
 5. Bar-close births too old: crypto pattern 60 min; xStock paper + VTS 15 min.
-6. Crypto close with no bids: books midpoint minus a penalty (`CLOSE_COLD_BOOK`), or midpoint with zero slippage if depth config missing.
+6. Crypto close with no two-sided book: books the REQUESTED price minus a penalty (`CLOSE_COLD_BOOK`) — requested = `exitPrice`, the exit-DECISION price (AEE:3309), which on crypto is the BID since `8a-P2`, not a midpoint *(corrected 2026-09-18, Langston)*; with depth config missing, the requested price with zero slippage — LATENT: `beyond_depth_penalty_bps` = 50 is seeded both classes.
 7. Portfolio-manager force-close with no price books the ENTRY price ✔ (APM:310-330).
 8. Portfolio-manager close-all writes the midpoint as exit, accepts stale re-serves, and books entry price with no quote (APM:622-663).
 9. Paper xStock close reads the snapshot with no age limit (AEE:3217).
@@ -122,3 +122,18 @@ Each carries its intent above; each goes to Langston + Coltrane for a determinat
 - **D3 (cell 8) — manual close-all.** Legacy (C). Route through `forceClosePosition` or delete under rule 18.
 - **D4 (cell 5) — bar-close LEVELS.** 15/60-min-old closes fail the few-ticks test, and the xStock age gate measures the ticker, not the bar. **Conflicts with CC-C's `8c` "keep venue_close"** — a four-party call (CC-C, Langston, Coltrane, Kyle), not mine to decide.
 - **D5 (cell 13) — the VTS xStock clamp's exit condition is dead** (`#943` inconclusive). Flag to CC-C; not my fix.
+
+---
+
+# DETERMINATIONS — Langston (read at `e752dba24`, every load-bearing citation re-derived by him) + Coltrane (read at `b5036e606`, design view), 2026-09-18
+
+| item | Langston | Coltrane | RESULT |
+|---|---|---|---|
+| **D1** close fill book age (cells 6, 9) | AGREE, amended: the age bound ALREADY EXISTS — `warmth_max_age_ms` 5,000 crypto / 15,000 xStock, `assessWarmth` (depth-source:148-163) — the close is the ONLY fill site that skips it. **Three arms:** warm → walk; stale-but-present → walk AND stamp over-ceiling; cold → last observed bid with its age + penalty, never `requestedPrice`. Zero-slippage arm LATENT. | Keep walking valid age-bounded bids; with insufficient evidence **keep the close pending** rather than invent a fill; label any synthetic liquidation and exclude it from learning. | ✅ **CONFIRMED DEFECT, mine.** ⚠️ Open design point for scope: cold arm — Langston "last bid + penalty" vs Coltrane "stay pending". |
+| **D2** flatten with no price (cell 7) | AGREE. Lead with TELEMETRY: slippage = (entry − fill) ⇒ **slippage column equals gross P&L on every kill-switch flatten.** **PLUS:** `getPriceWithFallback` serves `last_known_good_reserve` with NO age bound (live-pricing-adapter:1394-1413); `APM:311`/`:632` test provenance, not age ⇒ a flatten can book an arbitrarily old price as live. | Keep the liquidation request, drop entry substitution; paper leaves the close unresolved when no fill can be substantiated. | ✅ **CONFIRMED DEFECT, mine** — D1+D2+D3 scoped as ONE item (Langston): *the close fill inherits no freshness contract, and the paths that bypass the decision gate inherit nothing.* |
+| **D3** manual close-all (cell 8) | AMEND: **route through `forceClosePosition`, do NOT delete the button.** Understated: `:616` no matching trade ⇒ `:710` still deletes the position — **silent position deletion, no close row, no P&L.** Rule-24 outcome (3) legacy. | Keep the button; route through the canonical close; atomic + retry-safe; disable until repaired if it can't be. | ✅ **CONFIRMED, mine** — route, keep the button. |
+| **D4** bar-close levels (cell 5) | AMEND — two questions welded. (i) a venue bar close IS a printed price; `venue_close` stays (CC-C `8c`; Kyle's B-NEW-34) — **not a defect.** (ii) **the validity gate measures the wrong object:** `active-dispatch:181-186` checks TICK age ≤ 15,000 ms while the levels come from a 15-MINUTE bar. Real, independent, mine; default = hold (matches D6). Measure first whether the entry is re-validated against the fill ask downstream. | Age alone doesn't make a level wrong; check the bar's actual close timestamp; keep the strategy's levels, validate current ask/setup/sizing/RR before entry; never treat the close as a fill. | ✅ (i) **NOT A DEFECT — withdrawn.** ✅ (ii) **CONFIRMED, mine** — alert `404e978a` folds in. Pre-scope measurement owed. |
+| **D5** VTS xStock clamp (cell 13) | **NOT A DEFECT as stated — my "no release path" was a false absence:** `B_XSTOCK_FEED_SANITY_COMPLETION_REPORT.md:489` "the acceptance re-arms on the post-OBJ-7 instrument". Missing = a ROW owning the re-run → add to `3n` OBJ-7, owner CC-C. | Exact-level booking is unsuitable as execution-realistic learning data; label exact-level outcomes hypothetical; version the population on change. | ⛔ **WITHDRAWN as a defect** (§9.4 disposition 5, citation above). Coltrane's labelling point → CC-C with the re-arm row. |
+
+MISTAKE: wrong-object [3n.t] — "no release path" for the VTS xStock clamp; the release is named at `B_XSTOCK_FEED_SANITY_COMPLETION_REPORT.md:489`.
+**Coltrane's acceptance fixture for D1/D2 (adopt at scope):** a stop at 100 whose first usable bid is 95 must never book an execution-realistic fill at 100; paired with a fresh, adequately sized book that closes successfully — proves both refusal and recovery.
