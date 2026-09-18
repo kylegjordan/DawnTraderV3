@@ -1,6 +1,6 @@
 # B-PRICE-SIDE-BY-JOB row `8a-P3` — PROGRESS REPORT (crypto half; the batch is OPEN)
 
-**Status:** `STEP: 7 of 11` · `NEXT STEP: 8 of 11`. **This is not a completion report.** Kyle, 2026-09-15: the exit/fill-side work is one batch in two halves and is not presented as complete until both land. The xStock half (`8a-P4`) has not started.
+**Status:** `STEP: 8 of 11` · `NEXT STEP: 9 of 11`. **This is not a completion report.** Kyle, 2026-09-15: the exit/fill-side work is one batch in two halves and is not presented as complete until both land. The xStock half (`8a-P4`) has not started.
 **Scope / audit / plan:** `Scope Files/B_PRICE_SIDE_BY_JOB_8A_P3_SCOPE_AUDIT_AND_PLAN.md` (r4 approved `0b6c93d20`, OBJ-6 restated at Step 4 r3). **Change list:** `Change Lists/B_PRICE_SIDE_BY_JOB_8A_P3_CHANGE_LIST.md` (§6-§7 carry every review round).
 
 ---
@@ -134,10 +134,61 @@ The paper crypto lane **opened nothing in the window**. Controls: `closed_trades
 `exitLooks` 18,032 · `exitNoTransactableSide` **72 (0.40% of looks)** · `entryFillLooks` 156 with **0** first-look and **0** steady-state refusals · `bookedNoBidClamp` 0 · **0** escalations · **0** `ENTRY_FILL_RECORD_FAILED` · paper `noTriggerRefusals` 0 · **`exitEvalHit` 15 — the first non-zero hit count on this path, which `8a-P2` closed without.**
 ⚠️ The 72 no-transactable-side refusals sit **above** the pre-registered "≈ 0" for the VTS exit ceiling. They are 0.40% of looks and produced no escalation (no single trade reached 10 minutes), but the pre-registration said ≈ 0 and this is not 0: **carried to Step 8 as an open question for Langston, not explained away here.**
 
+## 5c. STEP 8 — LANGSTON CONFIRMED THE EXTRACT (2026-09-16 00:33:51Z) ON TWO CONDITIONS, DISCHARGED 2026-09-18
+
+**Read state:** pm2 `restart_time` **623**, `pm_uptime` **2026-09-15T12:15:04.144Z** — unchanged, so every in-memory counter below is deploy 2's LIFETIME, not the §3 window. Funnel snapshots on staging: `/home/deploy/8ap3_funnel_20260918T190235Z.json`, `…_20260918T190309Z.json` (T2), `…_T3.json` (T3, 19:04:46Z) — `/api/xstocks/filter-diagnostics` → `vtsEvaluation.levelBasisFunnel`.
+
+### C1 — the 72 by reason
+| cell (crypto, lifetime to T3) | attempted | accepted | refused | refusals by reason |
+|---|---|---|---|---|
+| `vts_exit_trigger` **ladder** (the decision) | 463,596 | 462,259 | **1,337** | **`implausible_ticker_spread` 1,337** · `stale_ticker` **0** · every other reason 0 |
+| `vts_exit_trigger` book rung (NOT summed with the ladder) | 463,062 at T2 | 21,870 | 441,192 | `no_book` 396,691 · `stale_book` 44,493 · `implausible_spread` 8 — each falls through to the ticker rung |
+
+⇒ **The 90,000 ms age ceiling refused nothing in ~79 hours: its pre-registered ≈ 0 holds.** **Every refusal is the 0.02 spread ceiling — 0.29% of looks.** The pre-registration and the measurement are now in contact on both ceilings.
+**Control.** The lifetime check (`ladder.attempted` = lifetime Σ `exitLooks`) is **NOT REACHABLE**: `out.log` now rotates roughly hourly at ~1 GB and keeps 14 files, so its reach on 2026-09-18 starts 06:43:11Z. **Substituted a delta control:** T2 → T3, Δ`attempted` = **534** = Σ `exitLooks` of the 2 passes printed between them (267 + 267); Δ`refused` 0 = Σ `exitNoTransactableSide` 0. Equal ⇒ one cell per look. Weaker than the lifetime check — one 97-second interval — and stated as that.
+**The entry-fill pointer:** `vts_entry_fill` ladder 4,839 / **9** refused, all `ticker_age_unknown` (not `stale_ticker`); `active_entry_fill` 542 / 0.
+
+### C2 — the rail sits under its threshold, and it has now fired once
+- Langston's measurement, 12-hour extract window: longest unbroken run **9 passes, 22:17:07Z → 22:25:07Z, 8 minutes**, against `VTS_NO_TRIGGER_ALERT_AFTER_MS` = 10 minutes.
+- ⛔ **The escalation branch is no longer unexercised: it FIRED LIVE ONCE** — alert `21c7e12e-280c-460d-85c4-e3e245d957b6`, dedupe `no-trigger-vts-FOLD/USD`, **2026-09-17 07:07:26.966Z**, trade `vts_FOLD_USD_strong_bull_trend_1789598409624`, reason `no_transactable_side` — by C1's split, the 0.02 spread ceiling. The row then sat active for 36 hours, **which blocks every later FOLD/USD streak from minting**; resolved by `cc-c` citing this section, to re-arm the key.
+- Retained reach, 2026-09-18 06:43:11Z → 19:06:13Z, **744 passes**: `exitNoTransactableSide` **103 / 185,720 looks (0.055%)** · longest run **8 passes, 15:36:13Z → 15:43:13Z, 7 minutes** · max `openNoTriggerStreaks` 4 · `bookedNoBidClamp` 0.
+- `openNoTriggerStreaks = 1` is the simplest reading of a line that carries no trade id, **not a measurement** — it cannot tell one 8-minute trade from eight 1-minute ones. **§9.4 disposition 2: the trade id on the streak line is ADDED to `B-EXIT-LINE-IDENTITY`.**
+- ✅ **`openNoTriggerStreaks` = `exitNoTransactableSide` in all 720 extract passes and all 744 retained passes ⇒ ZERO crypto `no_usable_mark` in both.** Every crypto no-decision was a no-side. This discharges the §5 carry in the negative.
+- **The SENSITIVITY `timeout 0 → 2` row is fenced:** both are `VVV/EUR` and `VVV/USD`, `duration_min` 10,080.52 — seven days to the second — both booked 23:40:07Z. A max-hold cohort clock landing inside AFTER, **not an exit mode the bid switch created.**
+
+## 5d. THE PAPER CRYPTO POPULATION ARRIVED — read 2026-09-18 ~19:00Z
+
+Since deploy 2: **15 paper crypto opens, 12 closes** (8 `target_hit`, 4 `stop_hit`), 3 still open.
+
+### OBJ-1, paper legs — PASS on the legs the DB can read
+| leg | post-deploy | pre-deploy control (crypto, 2026-09-01 → deploy 2) |
+|---|---|---|
+| **C2** rested target exits: `exit_decision_price` **strictly below** `exit_book_mid` | **8 / 8**, and ≥ the rested limit 8 / 8 | **0 / 18** below; **18 / 18 equal the mid** ⇒ the criterion fails on old rows, as required |
+| **C1** maker entry fills: `entry_decision_price` **below the limit** (the ask) | **4 / 4** | **29 / 29 equal the limit** |
+
+⚠️ **C1's "strictly above the mid" leg is NOT READABLE** — no entry-side mid is persisted (metadata keys checked on `05b66d74…`). Stated as unmeasured.
+**VTS C3:** `[P19-B7.2c][VTS][MAKER_FILLED]` over the retained reach — **52 crypto fill lines, ask ≤ limit in 52 / 52.** *(The line was missing from the collector's patterns until this read; backfilled from all 14 retained files.)*
+
+### The taker stops — `8a-P2`'s trigger, not an `8a-P3` cell, reported because the question was whether the closes were right
+4 `stop_hit`. `exit_decision_price` is the **mark** (`aee` `:2661` `decisionPrice: currentPrice`) and equals `exit_book_mid` on 4 / 4. **In 3 / 4 (CRV, INJ, FOLD) that mark was still ABOVE the stop when the stop fired ⇒ the trigger was not the mid.** Fills walk the book: CRV 0.007%, INJ 0.08%, FOLD 0.13% below the stop; **WLD 0.90% below** — its mark was already below the stop at the decision (gapped between ticks), book 13 ms old, depth 4 ms.
+⚠️ The comment at `aee` `:2656-2658` says the decision price *"IS the exit price … by construction"*; on crypto the fill walks the book (CRV 0.30636 vs 0.306605). A label, not behaviour. **Disposition: added to `8a-P4`**, which reworks this path for xStock.
+
+### OBJ-5 — counts only
+- **Exit rests:** **8 fill / 0 convert** post-epoch (n = 8, below the 30-floor).
+- **Entry rests:** 4 fills over the whole window (DB). Placements are readable only in the retained reach: **77 paper crypto `MAKER_RESTED` lines = 2 real placements (USELESS, AERO — both filled) + 75 PHANTOM rests** (RAY 61, UAI 11, VVV 3) whose position insert then failed on **`#1063`** (`pattern_type` `"ABCD"`), joined by symbol within 3 s in `error.log`. ⛔ **A `MAKER_RESTED` line is printed BEFORE the insert commits, so a line is not a placement.** **Disposition: the rest line moves after the insert — added to `8a-P4`** (it already owns the no-ask placement policy on both lanes). The `ABCD` failure itself is `#1063`, placed at `3m-ENUM`; still firing 2,424-4,972 times a day on 09-15 → 09-18.
+- **Age refusals beside the rate:** `active_entry_fill` 542 / 0 · `vts_entry_fill` 4,839 / 9 (`ticker_age_unknown`) · VTS pass counters in reach `entryFillLooks` 1,399, refused first-look 2, steady 2.
+
+### OBJ-6 — retained reach 2026-09-18 06:43:11Z → 19:06:13Z
+Numerator `ask=none` **0 on every lane.** Paper A = **2** real rests (77 lines − 75 phantom) · B ≤ **66** (2 + fallback 53 + dropped 11; the fallback lines were not joined to `#1063` failures, so B is an upper bound) · VTS A 5, B 8 · **twins, crypto: `TWIN_OPENED` maker 63 + `TWIN_SKIPPED reason=marketable_maker` 46 = 109 ⇒ 0 / 109**, above its floor. The paper dropped-arm count excludes 11 untagged `[OPEN_FAILED] stage=MAKER_MARKETABLE_DROPPED` companion lines, one per drop.
+⛔ **EXCLUDED SPAN, counted as UNKNOWN, not assumed empty: 2026-09-16 00:16:07Z → 2026-09-18 06:43:11Z** — the lines were not extracted while retained. `MISTAKE: skipped-the-gate [B-PRICE-SIDE-BY-JOB 8a-P3] — §3 pre-registered extraction inside the window; I did not keep it running and the rotation (now ~hourly) took the span.` The collector `/home/deploy/8ap3_collect.sh` now greps each rotated file once into `/home/deploy/8ap3_lines/`.
+
+### OBJ-7 — UI PASS
+Claude-in-Chrome, staging → Paper Trading → **Closed Trades**, 2026-09-18 ~19:07Z: all 12 post-deploy crypto closes render with entry, exit, target and stop equal to the DB rows (e.g. AERO 0.6299 → 0.6589 TAKE PROFIT; WLD 0.4352 → 0.4186 STOP LOSS), and the 8 rests show "MAKER — rested, filled".
+
 ## 6. WHAT REMAINS
 
-- **Step 7, inside the window:** OBJ-1 staging legs (crypto maker fills with the ask/bid stamped), OBJ-2 two-window VTS exit rate, OBJ-3 booking spot-check, OBJ-5 fill rate, OBJ-6 rests and twins, OBJ-7 UI on the first crypto close — each at its n-floor.
-- **Step 8** Langston's second pass · **Step 10** governance · **Step 11** held for the xStock half.
-- **`8a-P4` (xStock half), not started — ITS FIRST ITEM IS AN INSTRUMENT (Langston C2):** since deploy 2, xStock no-decision volume on VTS has **no instrument at all** (the fence excludes it, and so every non-crypto class), and that count is the evidence `8a-P4` needs to size its `#994` notify rules. Then: paper xStock trigger on the bid; VTS xStock trigger and booking; xStock resting fills; the hollow-book guard for VTS; C8 VTS taker entry booking; the no-ask placement policy on both lanes; the VTS xStock no-decision rail under `#994`; the twin `ask=` formatting nit at `vts-runner` `:4700`.
-- **`HOME: B-EXIT-LINE-IDENTITY, owner CC-C, placed in PHASE_19_PLAN at 3n, after 8a-P3`** — put the trade id (and asset class) on the `[11.6][Exit]` line, the only close-reason carrier, so OBJ-2-style reads stop needing a symbol-and-second join. Not done in this batch because changing the emitter mid-window splits the window. The plan rows for this, `8a-P4` and `3b.f-e` are written at Step 10.
+- **Step 8:** Langston rules on the §5c discharge and the §5d legs. **Step 9:** OBJ-5 and OBJ-6 keep collecting to **2026-09-22 12:16:07Z** — OBJ-5's entry leg needs real placements, not rest lines.
+- **Step 10** governance · **Step 11** held for the xStock half.
+- **`8a-P4` (xStock half), not started — ITS FIRST ITEM IS AN INSTRUMENT (Langston C2):** since deploy 2, xStock no-decision volume on VTS has **no instrument at all** (the fence excludes it, and so every non-crypto class), and that count is the evidence `8a-P4` needs to size its `#994` notify rules. Then: paper xStock trigger on the bid; VTS xStock trigger and booking; xStock resting fills; the hollow-book guard for VTS; C8 VTS taker entry booking; the no-ask placement policy on both lanes; the VTS xStock no-decision rail under `#994`; the twin `ask=` formatting nit at `vts-runner` `:4700`; **added 2026-09-18 (§5d):** the `MAKER_RESTED` line moved after the insert commits, and the `aee` `:2656-2658` decision-price comment corrected.
+- **`HOME: B-EXIT-LINE-IDENTITY, owner CC-C, placed in PHASE_19_PLAN at 3n, after 8a-P3`** — put the trade id (and asset class) on the `[11.6][Exit]` line **and on the VTS no-decision streak line (added 2026-09-18, Langston Step 8 C2)**, the only close-reason carrier, so OBJ-2-style reads stop needing a symbol-and-second join. Not done in this batch because changing the emitter mid-window splits the window. The plan rows for this, `8a-P4` and `3b.f-e` are written at Step 10.
 - **Placed elsewhere:** `B-BOOK-STATE-RESEED-ESCAPE` (`3b.f-e`, owner CC-C) — the `seedImplausible`-terminal absorbing state, plus the D3 date consistency in that region.
