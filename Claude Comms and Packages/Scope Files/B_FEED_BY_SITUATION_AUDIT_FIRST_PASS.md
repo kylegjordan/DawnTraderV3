@@ -85,3 +85,40 @@ Whether `getPortfolioBalanceV2` (sizing/exposure) includes unrealized P&L · any
 | rested then converted to taker | 13 (+121.85, last 2026-08-22) | 3 stops (−18.06, July) |
 
 Maker fills with a recorded witness bid: crypto 24 of 171, bid below fill on 24/24 (median 31.3 bps); xStock 11 of 97, 11/11 (median 985.2 bps). Witness lags (separate socket on crypto) and n is small ⇒ a LEAD that maker wins are overstated, consistent with cell 2.
+
+---
+
+# SECOND PASS — 2026-09-18, every cell re-checked at `b5036e606` WITH PROVENANCE (Kyle: "continue checking until all have been checked and confirmed"; "run provenance checks … determination with Langston and Coltrane")
+
+> Three fresh readers, one cell group each, told to confirm/refute at the ref, quote the introducing commit, state the intent, and say whether CC-C already owns it. CC-B re-derived the load-bearing ones (marked ✔). REVIEWER r2: claim-only per group · confirm + provenance + coverage · 13 cells + 3 untraced · re-derived y (the ✔ cells).
+> ⛔ **THE FIRST PASS WAS STALE FOR CRYPTO WITHIN HOURS OF BEING WRITTEN.** It read `99c2c2728`; CC-C's `8a-P3` (`16ab0293b`, deployed 2026-09-15, staging `91647c9b9`) moved seven crypto cells to the transactable side the same afternoon ✔. The map is updated (r8, `0b68d906c`).
+
+## STATE OF EACH CELL NOW
+| # | cell | now | intent (introducing commit) | owner |
+|---|---|---|---|---|
+| 1 | maker ENTRY fill | crypto **ASK** ✔ (AEE:1577-1598); xStock still the mark (AEE:1574-1576) | `b48aef51f` B7.2c "fills ONLY on honest side-aware trade-through" — the mid was never argued for | CC-C `8a-P4` (xStock) |
+| 2 | maker EXIT fill | crypto **BID** ✔ (AEE:2564); xStock the mark | `06560c299` B8.6 "fill requires a LATER venue tick at/through the limit" | CC-C `8a-P4` |
+| 3 | xStock exit trigger | equities midpoint (AEE:2866) | `184c41881` B8.5 — give xStock ANY mark (spot REST carries no equities); side never chosen | CC-C `8a-P4` |
+| 4 | crypto quant birth | cache (now LABELLED mid/last) → smoother → level | `36c9d47bc` 2026-01-01 Kalman — built to "suppress false signals during chop", i.e. DETECTION not levels | CC-C row `8c` ("convert at the level site; smoothed series stays a detection feature") |
+| 5 | bar-close births | crypto pattern 60-min close; xStock 15-min close; xStock age gate checks TICKER age, not bar age (active-dispatch:181) | `756b64e49` B-NEW-34 (Kyle) 60-min parity, "avoids ticker-vs-bar drift"; `ae2ddc845` B.4 15-min for REGIME calibration; crypto pattern INFERRED-FROM-CODE | ⚠️ CC-C `8c` DELIBERATELY keeps `venue_close` — **conflicts with the few-ticks freshness test → determination** |
+| 6 | crypto cold-book close | requested price × (1 − penalty); config missing ⇒ requested price, zero slippage (order-placer:104-115) | `b74526dc3` "a market exit always gets out, never a phantom stuck position" | partial: CC-C `8e` labels it; `8a` (walk bids) NOT BUILT → **CC-B `3n.u`** |
+| 7 | engine-stop / kill-switch flatten with no price | requested price = ENTRY (APM:311-331); bids still walked, booked only on a cold book; slippage measured vs entry | `306b5d69c` 2025-12-06 Replit "hard stop … live or fallback pricing" | **CC-B `3n.u`** |
+| 8 | manual close-all | writes the mark as exit, accepts `last_known_good`, no walk, no fee, gross P&L; can delete a position with no close row (APM:620-703) | `306b5d69c` + `6ee84af0a` — operator panic button predating the order placer | **CC-B `3n.u`** (legacy — route or delete) |
+| 9 | taker close book age | NO age bound on the book a close walks — xStock (depth-source:49-69) AND crypto | `b74526dc3` — closes ungated by design, "you must always be able to exit" | **CC-B `3n.u`** |
+| 10 | VTS crypto | birth still cache; placement/fill/trigger/booking now ask/bid ✔ | `16ab0293b` | CC-C `8c` (birth) |
+| 11 | VTS crypto booking | exit BID ✔; clamp when no mark OR no bid (counted); entry at signal level | `d3e643032` F-G-2 "learning system learns off REALISTIC exits" | CC-C `8a-P4` (entry, cell C8) |
+| 12 | VTS xStock | bar close for placement; ticker LAST ≤5 min for fill + trigger (VR:3139-3160) | `B79.0m.b2` "else xstock trades never receive a non-null currentPrice" | CC-C `8a-P4` |
+| 13 | VTS xStock booking | exit = exactly the stop/target (`clamp_class_seam`) | `PRICING_DECISIONS_2026-09-11.md` D5 — deliberate until `#943` passes; ⚠️ `#943` closed INCONCLUSIVE ⇒ no release | CC-C `8a-P4` |
+| U1 | sizing balance | anchor + REALIZED P&L only — no marks | deliberate | — (open-mark risk homed `3z`, CC-C) |
+| U2 | legacy `TradingEngine` | books last trade minus `Math.random()`; reachable via `POST /trades/:id/close` | Replit era | CC-A row 11.5 `B-TRADING-ENGINE-REMOVAL` (#578) |
+| U3 | VTS ranking / risk | no RTB stage by design; xStock marked for UI only; no risk gate on marks | by design (learning system) | — |
+
+⚠️ **PROCESS GAP (§9.4): `8a-P4` carries every xStock half above but has NO row in `PHASE_19_PLAN.md`** (0 hits vs 6 for `8a-P2`; it exists only in the `8a-P3` scope). CC-C's to place.
+
+## MY FIX LIST (`3n.u`) — ONLY what CC-C is not set to fix, and NOT YET DECLARED WRONG
+Each carries its intent above; each goes to Langston + Coltrane for a determination before it is called a defect:
+- **D1 (cells 6, 9) — taker CLOSE pricing.** Keep "always exit". Question: should the requested/booked price anchor to the last OBSERVED BID under an age bound (both classes), instead of a mark or an unbounded-age book?
+- **D2 (cell 7) — flatten with no price.** Keep "always exit" (kill switch). Question: bid instead of entry price as the request; slippage measured against a real reference.
+- **D3 (cell 8) — manual close-all.** Legacy (C). Route through `forceClosePosition` or delete under rule 18.
+- **D4 (cell 5) — bar-close LEVELS.** 15/60-min-old closes fail the few-ticks test, and the xStock age gate measures the ticker, not the bar. **Conflicts with CC-C's `8c` "keep venue_close"** — a four-party call (CC-C, Langston, Coltrane, Kyle), not mine to decide.
+- **D5 (cell 13) — the VTS xStock clamp's exit condition is dead** (`#943` inconclusive). Flag to CC-C; not my fix.
