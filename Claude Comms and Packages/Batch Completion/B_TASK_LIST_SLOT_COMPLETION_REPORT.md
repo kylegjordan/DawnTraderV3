@@ -20,6 +20,8 @@
 | 3 | `B_PRICE_AGE_TRUTH` | CC-C | ✅ `b87fe468a` | ✅ `8dedb11b8` | no ledger-row alert ever minted — **agrees** | 21:15:48Z at `8dedb11b8` itself, `opened=0` |
 
 ⇒ **PRIMARY 3 of 3 — PASS.** **SECONDARY 2 of 3** (reported, not gated). **The one miss was caught by the check and fixed by its owner 32 minutes after the alert** (minted 18:15:54Z, row committed `ba36cc5ad` 18:48:16Z).
+⚠️ **Precisely (fresh reader, re-derived):** CC-C added that row inside `ba36cc5ad`, a commit carried under its **other** batch `B-PRICE-SIDE-BY-JOB`, and the row says so in its own text (*"Added to this graded ledger on 2026-09-11 (checker alert `195d4f23`)"*). **So row 2's close-time PASS is a fix PROMPTED BY THE CHECK — which is exactly what PRIMARY measures — and not the batch recording the row unprompted, which is SECONDARY's ❌.** The pinned primary commit `8dedb11b8` is a later sweep by `B-PRICE-AGE-TRUTH`; the 72h rule picks the last commit in the window by design, not the batch's own close.
+**REVIEWER r1 (object, at `dfadad5d9`):** re-computed all six pins (also with `--full-history`: unchanged), ran the shipped matcher from the ref on all six blobs with the `33b62ee16^`/`33b62ee16` control — **same six results**; quoted the matched line in each TRUE blob (all genuine `T1` task-list rows); raised the row-2 provenance point above · re-derived y.
 **PREVIOUSLY STATED: 1 of 3 reports carried the row at close (Step-1 baseline). NOW: 3 of 3 at close, 2 of 3 without prompting. REASON: the checker.**
 **Author sessions (rider a): Infra Claude ×1, CC-C ×2 — two distinct sessions, not three, and none of them CC-A.** Published as that; the bar did not move.
 
