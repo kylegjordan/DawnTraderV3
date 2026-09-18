@@ -480,7 +480,7 @@ import { ageExemptionOfProducer } from './market-data/price-basis.js'; // P-7h �
 import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_classes/xstock_spot/mark-staleness.js';
 // B-XSTOCK-FEED-SANITY (#943, closes #567) — the book-state guard: the tracker is the one reader every
 // label site calls; the comparator advances ONLY here, after a two_sided verdict at the decision site.
-import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator } from '../asset_classes/xstock_spot/book-state-tracker.js';
+import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis } from '../asset_classes/xstock_spot/book-state-tracker.js';
 import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 
@@ -542,6 +542,19 @@ export function buildPriceSkipAlertCopy(input: {
       dominantReason, dominantCount, totalCounted,
       title: `Exit checks skipped — our REST request budget was empty for ${input.symbol}${titleShare}`,
       body: `${lead}${share} because the Kraken live feed had no fresh price and the direct Kraken query was NOT attempted: this system's shared REST request budget was empty on those ticks.${others} This is our own request throttle, not a venue outage. If it persists, the REST budget is saturated — check the limiter statistics before investigating the feed.`,
+    };
+  }
+  // ⛔ `8a-P4a` — THE BOOK-STATE LOCK IS OUR OWN GUARD REFUSING A PRICE THAT ARRIVED. It used to fall to the
+  // absence branch below and read "no Kraken price", which sent readers to a feed that was quoting normally
+  // (Langston, 2026-09-18: "the prices are arriving fine, our own safety check is refusing them").
+  // This is the named arm of `8a-P4a` §4a: it names the lock, the REAL ratio and the exposure.
+  if (dominantReason === 'book_state_unvalidated') {
+    return {
+      isStaleReject: false,
+      isSelfThrottled: false,
+      dominantReason, dominantCount, totalCounted,
+      title: `Exit checks refused — book-state guard has not validated ${input.symbol}${titleShare}`,
+      body: `${lead}${share} because the book-state guard has not validated this symbol's book: prices are arriving, and our own guard is refusing them${detail ? ` (${detail})` : ''}.${others} The chain releases on its own when the book's median spread comes back within kRel of its retained ring (SEED_ESCAPED); a ratio persistently above kRel on a normal-looking book is the case plan row 3n.q5 exists for. Check the position's exposure against its stop before dispositioning.`,
     };
   }
   const cause = isStaleReject
@@ -2059,11 +2072,38 @@ export class ActiveExecutionEngine {
                 if (_r.state !== 'two_sided' || _bs.comparatorValidated !== true) {
                   unvalidatedRefusals++;
                   withoutPrice++;
+                  // ⛔ `8a-P4a` — EVERY REFUSAL EPISODE CARRIES ITS OWN BASIS (Langston, Step 1 BLOCKER-1 condition).
+                  // The chain's seed spread and retained median live on the chain, so an INHERITED chain — one
+                  // seeded before this position opened, which never printed `SEED_IMPLAUSIBLE` — is still judgeable.
+                  // `ratio` is the REAL one (current median ÷ the ring it is judged against): the evidence that
+                  // settles whether the ring-independent bound (`3n.q5`) is ever needed.
+                  const _basis = takeChainRefusalBasis(position.symbol);
+                  const _openedAtMs = (position as any).openedAt ? new Date((position as any).openedAt).getTime() : null;
+                  const _inherited = _basis !== null && _openedAtMs !== null && _basis.seededAtMs < _openedAtMs;
+                  const _fx = (v: number | null | undefined) => (v === null || v === undefined || !Number.isFinite(v) ? 'none' : v.toFixed(5));
+                  const _ratioTxt = _basis?.ratio != null ? _basis.ratio.toFixed(2) : 'none';
+                  if (_basis?.first) {
+                    console.warn(
+                      `[8a-P4a][BOOK_STATE] ${position.symbol} REFUSAL_BASIS seedImplausible=${_basis.seedImplausible} ` +
+                      `seedSpread=${_fx(_basis.seedSpread)} seedRetainedMedian=${_fx(_basis.seedRetainedMedian)} ` +
+                      `retainedMedianNow=${_fx(_basis.retainedMedianNow)} currentMedian=${_fx(_basis.currentMedian)} ` +
+                      `ratio=${_ratioTxt} kRel=${_c.kRel} inherited=${_inherited} ` +
+                      `seededAt=${new Date(_basis.seededAtMs).toISOString()} framesSinceSeed=${_basis.framesSinceSeed}`,
+                    );
+                  }
                   console.warn(
                     `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} REFUSE unvalidated ` +
-                    `state=${_r.state} ${_cmpV} reasons=${_r.reasons.join(',')}`,
+                    `state=${_r.state} ${_cmpV} ratio=${_ratioTxt} reasons=${_r.reasons.join(',')}`,
                   );
-                  await this._recordPriceSkip(position, 'book_state_unvalidated');
+                  const _stop = Number((position as any).stopLoss);
+                  const _target = Number((position as any).takeProfit);
+                  await this._recordPriceSkip(
+                    position,
+                    'book_state_unvalidated',
+                    `ratio=${_ratioTxt} vs kRel=${_c.kRel}, current median spread ${_fx(_basis?.currentMedian)} vs retained ${_fx(_basis?.retainedMedianNow)}, ` +
+                    `bid ${_raw.bid ?? 'none'} vs stop ${Number.isFinite(_stop) ? _stop : 'none'} / target ${Number.isFinite(_target) ? _target : 'none'}` +
+                    `${_inherited ? ', chain inherited from an earlier position' : ''}`,
+                  );
                   continue;
                 }
               }

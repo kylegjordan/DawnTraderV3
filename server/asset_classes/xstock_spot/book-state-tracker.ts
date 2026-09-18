@@ -74,6 +74,10 @@ export interface BookStateComparator {
    * ⚠️ COST, WRITTEN DOWN RATHER THAN DISCOVERED: a book that never recovers HOLDS INDEFINITELY.
    *   That is the stated policy (D3: refuse ⇒ hold) and the yield alert already fires — but the
    *   position stays open the whole time, so this is a real exposure, not a free win.
+   * ⛔ `8a-P4a` (2026-09-18): the chain — not the flag — now has TWO ends: the hollow-skip yield, and
+   *   `SEED_ESCAPED` when a book that RECOVERED passes the same retained-ring test (`advance…`). Before
+   *   that, a book that recovered while staying two-sided never yielded, so it was held too — outside
+   *   the cost above, which covers only a book that never recovers.
    */
   seedImplausible: boolean;
   /**
@@ -92,6 +96,25 @@ export interface BookStateComparator {
    *   `two_sided` forever. That is the circularity one more level up.
    */
   observedMovement: boolean;
+  /**
+   * `8a-P4a` — the chain's own SEED spread, and the retained median it was judged against at the seed
+   * (`null` when no ring existed, i.e. the vacuous cold-start case). Carried for the life of the chain
+   * so that EVERY refusal episode carries its own basis — including an INHERITED chain (one that
+   * outlived the position it was seeded for), which never prints `SEED_IMPLAUSIBLE` (Langston, 8a-P4a
+   * Step 1 BLOCKER-1 condition).
+   */
+  seedSpread: number;
+  seedRetainedMedian: number | null;
+  /** `8a-P4a` — true once this chain's first-refusal basis line has been printed (one per chain). */
+  refusalBasisLogged: boolean;
+  /**
+   * `8a-P4a` — for each entry of `spreads`, whether the book MOVED on that advance (same length, same order).
+   * The escape needs AT LEAST TWO frames in the trailing window that are BOTH plausible AND moved: the jump
+   * from a wide quote into a tight one is one such frame, so a book that then FROZE at that tight price has
+   * exactly one and does not escape; a live book keeps moving. Movement counted anywhere else in the window
+   * (e.g. while still wide) proves nothing about the tight book, and `observedMovement` (ever moved) less.
+   */
+  movedRing: boolean[];
   /** When this reference CHAIN began (the seed frame's own time). Survives validation. */
   seededAtMs: number;
   /** Advances against this chain since the seed, so a fresh seed is distinguishable from a settled one. */
@@ -111,6 +134,36 @@ const _retainedSpreads = new Map<string, number[]>();
 
 export function readBookStateComparator(symbol: string): BookStateComparator | null {
   return _comparators.get(symbol.toUpperCase()) ?? null;
+}
+
+/**
+ * `8a-P4a` — THE BASIS OF A REFUSAL, read by the exit path at `REFUSE unvalidated`.
+ * `first` is true exactly once per chain (the flag lives on the chain, so a new chain — by yield, escape or
+ * restart — logs again). `ratio` is the REAL ratio: the chain's current median spread over the retained
+ * median the chain is judged against now (the live ring if one exists, else the one it was seeded against).
+ * It is the production evidence `8a-P4a` §4a relies on to say whether a ring-independent bound (`3n.q5`) is
+ * ever needed.
+ */
+export function takeChainRefusalBasis(symbol: string): {
+  first: boolean; seedSpread: number; seedRetainedMedian: number | null; currentMedian: number | null;
+  retainedMedianNow: number | null; ratio: number | null; seedImplausible: boolean; seededAtMs: number;
+  framesSinceSeed: number;
+} | null {
+  const key = symbol.toUpperCase();
+  const cmp = _comparators.get(key);
+  if (!cmp) return null;
+  const first = !cmp.refusalBasisLogged;
+  cmp.refusalBasisLogged = true;
+  const currentMedian = medianOf(cmp.spreads);
+  const live = _retainedSpreads.get(key);
+  const retainedMedianNow = live ? medianOf(live) : cmp.seedRetainedMedian;
+  const ratio = currentMedian !== null && retainedMedianNow !== null && retainedMedianNow > 0
+    ? currentMedian / retainedMedianNow : null;
+  return {
+    first, seedSpread: cmp.seedSpread, seedRetainedMedian: cmp.seedRetainedMedian, currentMedian,
+    retainedMedianNow, ratio, seedImplausible: cmp.seedImplausible, seededAtMs: cmp.seededAtMs,
+    framesSinceSeed: cmp.framesSinceSeed,
+  };
 }
 
 /**
@@ -153,9 +206,61 @@ export function advanceBookStateComparator(
   if (!(mid > 0)) return;
   // ⛔ CROSSED BOOK — never becomes the reference, whoever asks.
   if (!(frame.ask >= frame.bid)) return;
-  const prev = _comparators.get(key);
-  const spreads = (prev?.spreads ?? []).concat((frame.ask - frame.bid) / mid);
-  while (spreads.length > Math.max(5, windowSnaps)) spreads.shift();
+  const spreadNow = (frame.ask - frame.bid) / mid;
+  const ringCap = Math.max(5, windowSnaps);
+  let prev = _comparators.get(key);
+  // ⛔⛔ `8a-P4a` — THE RESEED ESCAPE. A seed-implausible chain on a book that has RECOVERED ends here.
+  // WHY: the only thing that ended a chain was `clearBookStateComparator` at the hollow-skip yield — and a
+  //   book that recovers while staying two-sided never yields, so its chain lived forever and the exit path
+  //   refused every tick (`aee` REFUSE unvalidated). `f73fbfd0d` wrote the hold-forever cost down for a book
+  //   that NEVER recovers, relying on "a healthy re-seed qualifies immediately" — which could not happen.
+  //   MEASURED 2026-09-18: ANET 106,623 / AMC 88,588 / LOW 25,471 refused frames on books back at normal
+  //   spreads; LOW held below its stop.
+  // THE TEST IS THE SAME ONE THAT SET THE FLAG, against the SAME outside datum (the retained ring) — never
+  //   the chain against itself — and it needs BOTH:
+  //   (a) the chain's own trailing ring, FULL (`ringCap` frames), has its MEDIAN within `kRel ×` the
+  //       retained median — so one lucky tight print inside a bad book cannot escape (Langston, Step 1);
+  //   (b) THIS frame is itself within `kRel ×` — so the new chain's seed passes the ordinary seed test below
+  //       by construction and consumes the ring under r4, instead of re-locking on the next line.
+  //   Plus (c) AT LEAST TWO frames of that trailing window are both plausible AND moved (r5's positive
+  //   property, applied to the recovered book itself): the jump into a tight quote is one, so a book that
+  //   froze there does not escape; moves made while still wide do not count.
+  // ⛔ ROUTED THROUGH `clearBookStateComparator`, NEVER AN IN-PLACE `seedImplausible = false` (Langston,
+  //   Step 1): the clear is where r4's ring rule and r5's movement rule live, and the new chain starts with
+  //   no inherited movement because it is created with no `prev`.
+  // ⛔ No clock term and no new knob: `kRel` and the window are the guard's existing knobs.
+  let escapedThisFrame = false;
+  const movedNow = prev ? (frame.bid !== prev.priorBid || frame.ask !== prev.priorAsk) : false;
+  if (prev && prev.seedImplausible && prev.observedMovement && kRel !== null) {
+    const retained = _retainedSpreads.get(key);
+    const retainedMedian = retained ? medianOf(retained) : null;
+    const trailing = prev.spreads.concat(spreadNow);
+    const trailingMoved = prev.movedRing.concat(movedNow);
+    while (trailing.length > ringCap) { trailing.shift(); trailingMoved.shift(); }
+    const trailingMedian = trailing.length >= ringCap ? medianOf(trailing) : null;
+    const threshold = retainedMedian !== null ? kRel * retainedMedian : null;
+    const liveTightFrames = threshold === null ? 0
+      : trailing.filter((sp, i) => sp <= threshold && trailingMoved[i] === true).length;
+    if (
+      retainedMedian !== null && retainedMedian > 0 && threshold !== null &&
+      trailingMedian !== null && trailingMedian <= threshold &&
+      spreadNow <= threshold &&
+      liveTightFrames >= 2
+    ) {
+      console.warn(
+        `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} SEED_ESCAPED framesHeld=${prev.framesSinceSeed} ` +
+        `seedSpread=${prev.seedSpread.toFixed(5)} escapeMedian=${trailingMedian.toFixed(5)} ` +
+        `spreadNow=${spreadNow.toFixed(5)} retainedMedian=${retainedMedian.toFixed(5)} kRel=${kRel} ` +
+        `seededAt=${new Date(prev.seededAtMs).toISOString()}`,
+      );
+      clearBookStateComparator(key, 'seed_escape_recovered');
+      prev = undefined;
+      escapedThisFrame = true;
+    }
+  }
+  const spreads = (prev?.spreads ?? []).concat(spreadNow);
+  const movedRing = (prev?.movedRing ?? []).concat(prev ? movedNow : false);
+  while (spreads.length > ringCap) { spreads.shift(); movedRing.shift(); }
   // THE EMITTER'S POSITIVE CONTROL (Langston, 2026-09-03 01:26Z): the guard's skip/yield lines fire only
   // on hollow ticks, so a night with no hollow tick on a held name is indistinguishable from an unarmed
   // guard. This line fires ONCE per symbol, on the FIRST FRAME that seeds its comparator (a
@@ -170,11 +275,13 @@ export function advanceBookStateComparator(
   const movedThisFrame = prev ? (frame.bid !== prev.priorBid || frame.ask !== prev.priorAsk) : false;
   const observedMovement = (prev?.observedMovement ?? false) || movedThisFrame;
   let seedImplausible = prev?.seedImplausible ?? false;
+  let seedRetainedMedian: number | null = prev ? prev.seedRetainedMedian : null;
   if (!prev) {
     const retained = _retainedSpreads.get(key);
     const retainedMedian = retained ? medianOf(retained) : null;
+    seedRetainedMedian = retainedMedian;
     if (retainedMedian !== null && retainedMedian > 0) {
-      const seedSpread = (frame.ask - frame.bid) / mid;
+      const seedSpread = spreadNow;
       // ⛔ FAIL-SAFE ON AN UNREADABLE KNOB: treat the seed as implausible. The alternative
       // validates an unjudged seed, which is the defect this closes.
       if (kRel === null || seedSpread > kRel * retainedMedian) {
@@ -182,7 +289,7 @@ export function advanceBookStateComparator(
         console.warn(
           `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} SEED_IMPLAUSIBLE ` +
           `seedSpread=${seedSpread.toFixed(5)} retainedMedian=${retainedMedian.toFixed(5)} ` +
-          `kRel=${kRel ?? 'unreadable'} — chain can never validate`,
+          `kRel=${kRel ?? 'unreadable'} — chain cannot validate; it ends at a yield, or by the seed escape when the book recovers`,
         );
       }
     }
@@ -200,8 +307,15 @@ export function advanceBookStateComparator(
     // ⛔ 8a r3: …UNLESS the chain's own seed was implausible, in which case NOTHING promotes it.
     // A `two_sided` verdict produced by the seed frame comparing to ITSELF is exactly the
     // circularity this blocks, so that verdict must not be able to clear the gate it caused.
-    validated: !seedImplausible && ((prev?.validated ?? false) || validatedByTwoSided),
+    // ⛔ `8a-P4a`: a chain seeded BY AN ESCAPE does not validate on its seed frame. This frame's verdict was
+    // taken against the ESCAPED chain's reference, not the new one's, so it may not promote the new chain —
+    // the escape seed validates on the NEXT `two_sided` frame, exactly like any other seed (one tick).
+    validated: !seedImplausible && ((prev?.validated ?? false) || (validatedByTwoSided && !escapedThisFrame)),
     seedImplausible,
+    seedSpread: prev ? prev.seedSpread : spreadNow,
+    seedRetainedMedian,
+    refusalBasisLogged: prev ? prev.refusalBasisLogged : false,
+    movedRing,
     observedMovement,
     seededAtMs: prev?.seededAtMs ?? frame.atMs,
     framesSinceSeed: prev ? prev.framesSinceSeed + 1 : 0,
@@ -230,6 +344,9 @@ export function advanceBookStateComparator(
  * run it exists to refuse. That arm cannot be judged relatively (there is no prior), so it is
  * LABELLED via `validated` and measured, not guessed at with a fresh threshold.
  */
+// ⛔ `8a-P4a`: called from TWO places now — the engine's hollow-skip yield (`reason = yield_after_N_hollow`)
+// and the reseed escape inside `advanceBookStateComparator` (`reason = seed_escape_recovered`). Both end the
+// chain through this ONE path, so r4's ring rule and r5's movement rule apply to both.
 export function clearBookStateComparator(symbol: string, reason: string): void {
   const key = symbol.toUpperCase();
   const prev = _comparators.get(key);
