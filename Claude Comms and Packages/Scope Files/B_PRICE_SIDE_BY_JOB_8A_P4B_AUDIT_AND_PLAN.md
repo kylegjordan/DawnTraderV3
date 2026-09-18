@@ -54,7 +54,7 @@ A missing side lands `null`, and a sent `0` stays `0`. ⇒ **`raw.atMs ≥ tsMs`
 ### A3. Runtime
 - **Paper xStock activity, 09-15 → 09-18:** 10 opens and 11 closes in the `8a-P3` extract window; 4 xStock positions held at 19:00Z today (ANET, AMC, LOW locked; MDB 8% above its stop). xStocks are shut for the weekend and reopen Sunday 20:00 ET.
 - **The refusal rate this piece inherits** is the guard's (Langston's counts, `8a-P4a` §A2). Outside the four locked names it runs ≤ 22 frames per symbol in reach, the one-tick post-clear cost. ⇒ **X1-X3 add no new refusal**: they decide only on frames the guard already admitted.
-- **Size of the effect.** A stop now fires when the **bid** reaches it, which is **half a spread earlier** than on the mid. Measured half-spreads at today's regular-hours medians (captured ticker, 09-15 → 09-18, the `8a-P4a` query): ANET 0.06% · LOW 0.04% · MDB 0.10% · AMC 0.19%. The paper xStock stop distances this week run **0.35% to 1.7% from entry** (the 11 closes above). ⇒ **Material on the tightest stops, and that is the point:** the live fill would have happened there.
+- **Size of the effect.** A stop now fires when the **bid** reaches it, which is **half a spread earlier** than on the mid. Measured half-spreads at today's regular-hours medians (captured ticker, 09-15 → 09-18, the `8a-P4a` query): ANET 0.06% · LOW 0.04% · MDB 0.10% · AMC 0.19%. The paper xStock stop distances this week run **0.35% to 1.7% from entry** (the xStock stop-loss closes on the staging Closed Trades page, 09-15 → 09-18: SMCI 0.35% … IFF 1.7%). ⇒ **Material on the tightest stops, and that is the point:** the live fill would have happened there.
 
 ### A4. SIM / SYSTEM_MANUAL
 - **SIM:** the `book-state*` entry and the xStock exit path gain *"the guard's validated sides are the decision inputs"*.
@@ -77,7 +77,7 @@ Consulted by path: the equity feed and the guard both postdate the corpus. There
 - **J1 — carry the validated sides out of the guard block, not re-read them.** Two `let` variables are declared before the block (`xsBid`, `xsAsk`) and set on the ONE line that has passed validation (just above `aee:2072`). **A re-read of `getLatestEquityTick` at X1/X2/X3 is refused:** a later frame may have arrived and would be unjudged — the guard would then have validated one frame while the decision reads another.
 - **J2 — guard OFF (`enabled = 0`) ⇒ the raw sides UNJUDGED, if two-sided; else null.**
   - "Guard off" is an operator choice not to judge the book. Refusing every xStock exit because of it would turn a diagnostics knob into a trading halt.
-  - The row is stamped `exit_book_state` NULL (already the guard-off label) and a new `decision_side_basis=raw_unguarded`.
+  - The row is stamped `exit_book_state` NULL (already the guard-off label), and the **price-source stamp names the rung `raw_unguarded`**. That is a new value in an existing column, not a new column.
   - **Rejected alternative:** fall back to the mark. That is the midpoint the rule forbids.
 - **J3 — the X2/X3 decision stamps.**
   - `exit_decision_price` on an X2 rest fill = the validated bid.
