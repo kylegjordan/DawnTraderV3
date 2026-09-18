@@ -1174,7 +1174,7 @@ The hourly check that warns us when the live server is behind decided whether wa
 
 **One thing it surfaced that is not its own:** a daily background job rewrites a stored file with the current time in it, which can make the deploy tool refuse to run. It has already done so once. That now has its own slot rather than a line on a list.
 
-### 2026-09-05 — B-TASK-LIST-SLOT (CC-A, `#1009`, plan row 4.57) — ⛔ OPEN, observation window
+### 2026-09-05 — B-TASK-LIST-SLOT (CC-A, `#1009`, plan row 4.57) — ✅ CLOSED 2026-09-18
 
 Kyle asked every session to bring its task list up to date at every batch close. It mostly did not happen: of the first three finished batch reports after the rule, one carried the update, and only because he asked. The reason is mechanical — a session writing a report copies the last report, so a new requirement written into the rules never reaches it.
 
@@ -1182,7 +1182,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **The lesson worth keeping is about evidence, not code.** The first live proof was gathered on the version of the check from before Langston's review changes, so it did not prove the version he approved. He sent the step back. The approved version was then run on the same two real reports, both ways, and he confirmed it — adding that the wiring from a missing line to an alert was unchanged between the two versions, so the live proof and the offline proof fit together.
 
-⚠️ **NOT CLOSED.** Whether the check changes behaviour is measured on the next three finished batch reports: all three must carry the line at close. Fewer than three is not a pass.
+✅ **CLOSED 2026-09-18 — IT PASSED.** The next three finished batch reports, from two different sessions, all carried the task-list line at close. Two had it from the start; one was missing it, the check flagged it within half an hour, and its owner added it 32 minutes later — and even that one had done the work, it had just written the line in a slightly different shape than the check reads. Langston re-checked every number himself before confirming. **The test as it was set up:** whether the check changes behaviour is measured on the next three finished batch reports: all three must carry the line at close. Fewer than three is not a pass.
 
 ### 2026-09-11 — B-WAKE-LEAD-NAME (Infra Claude, `#1040`, plan row 4.51) — ⏳ CLOSING (on Kyle's acknowledgement)
 
