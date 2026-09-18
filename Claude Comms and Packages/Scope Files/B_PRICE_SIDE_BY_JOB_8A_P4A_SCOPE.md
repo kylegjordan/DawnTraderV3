@@ -3,7 +3,7 @@
 change-class: sub_batch
 
 **Owner:** CC-C. **Parent:** `3n` `B-PRICE-SIDE-BY-JOB`, the xStock half (`8a-P4`, plan row `3n.q2`). **This is its first item.** Previously homed as `B-BOOK-STATE-RESEED-ESCAPE` in the `8a-P3` record (§6), with no plan row written yet.
-**Status:** `STEP: 1 of 11` · `NEXT STEP: 2 of 11`. **r2** — Langston approved r1 at 19:55Z with BLOCKER-1 (OBJ-1's staging test), BLOCKER-2 (a bound independent of the retained ring), one finding and two conditions; each is folded below and marked *(r2)*.
+**Status:** `STEP: 1 of 11` · `NEXT STEP: 2 of 11`. **r3** — Langston: BLOCKER-1 discharged, §4a flip rule signed and given a sensitivity leg, measurement GO (20:03Z). **r2** — Langston approved r1 at 19:55Z with BLOCKER-1 (OBJ-1's staging test), BLOCKER-2 (a bound independent of the retained ring), one finding and two conditions; each is folded below and marked *(r2)*.
 
 ---
 
@@ -52,7 +52,7 @@ Followed by `293fd3d6b` (r4: retain only a plausible ring) and `8872b2435` (r5: 
 | **1** | A seed-implausible chain whose book **recovers** ends and re-seeds without a human, a restart or a clock, and then validates by the normal rule. *(r2: "recovers" is defined by the arm §4 selects — within `kRel ×` the ring under A; the §4 bound otherwise.)* | **Unit, the REAL tracker state machine** (not a restated boolean — the r2 C1 lesson): an implausible seed, then two-sided frames that recover ⇒ a new chain ⇒ `validated` within a stated number of frames. **Red on today's code.** The new chain does **NOT** inherit `observedMovement` (r5 — a chain earns it); pinned in the fixture. **Staging — the discriminating rule, fixed now (r2 BLOCKER-1):** the population is every held xStock symbol with `REFUSE unvalidated … validated=false` after deploy — **keyed on the REFUSE line, not the seed event**, so an inherited locked chain is inside it. For each such episode, read the concurrently captured ticker spread (`xstock_spot_ticker_snap`). ⛔ **A frame that passes the escape test with no escape line within the stated frame bound is a FAIL.** ⛔ **A `yield_after_N_hollow` clear is NOT an escape** — only the new escape reason counts. Frames-to-escape reported, window and n stated. |
 | **2** | The hollow protections are unchanged. | The r3-r5 fixtures (`b-price-side-obj8-reseed-selfvalidation.test.ts` and siblings) stay green **unmodified**. Plus a new fixture: a book that stays hollow (7.00/1000.00) never escapes. |
 | **3** | No clock term, and crypto untouched. | Source fence on the three `book-state*` modules; class tripwire. |
-| **4** | The escape is observable. | One log line per escape — symbol, frames held, seed spread, escape spread, retained median — on the stream the extract reads (it is `warn`, so `error.log`). |
+| **4** | The escape is observable, and every refusal episode carries its own basis. | One log line per escape — symbol, frames held, seed spread, escape spread, retained median — on `warn` ⇒ `error.log`. *(r3, Langston's BLOCKER-1 condition, binding before deploy)* **Plus one line per chain on its FIRST refusal**, carrying `seedSpread`, `retainedMedian`, `kRel` and `inherited=true|false`, so an inherited chain (which never prints `SEED_IMPLAUSIBLE`) still carries the basis OBJ-1's FAIL arm needs. ⚠️ `framesSinceSeed` on an inherited chain counts from the ORIGINAL seed (`seededAtMs` survives advances), and is stated beside any frames-to-escape figure. **And the refusal's alert stops saying *"no Kraken price"*:** the prices arrive; our own guard refuses them, and the alert must say so. |
 
 ## 4. THE DESIGN QUESTION FOR STEP 2 — two candidates; the audit decides
 
@@ -63,7 +63,7 @@ Followed by `293fd3d6b` (r4: retain only a plausible ring) and `8872b2435` (r5: 
   - Reuses the existing *"can never strand a position indefinitely"* invariant.
   - But the yield's alert says *hollow*, which is the wrong label for this state, and escape waits up to the cap.
 
-**Lean: A.** It reuses the exact test that set the flag, so it is the smallest change that makes the stated intent reachable.
+**Lean: A.** It reuses the exact test that set the flag, so it is the smallest change that makes the stated intent reachable. *(r3, Langston — binding on the build)* **The escape routes through `clearBookStateComparator` with a new reason string, never an in-place `seedImplausible = false`**: an in-place flip would skip the r4 ring consumption and the r5 `observedMovement` reset. **Step 2 decides K** (how many consecutive plausible frames end the chain), with the single-lucky-tight-print case fixtured: K = 1 lets one atypical print inside a bad book seed a chain that validates by construction.
 **One risk the audit must MEASURE, not assume:** the retained ring has **no age term** (SIM S25b). If a symbol's retained median is tighter than its normal regular-hours spread by more than `kRel`, then A never fires for it. LOW today is 2.4×, under 3, and that margin is thin. Step 2 reads the `SEED_IMPLAUSIBLE` history (14-day `error.log` reach) against the captured-ticker spreads to size this.
 
 ### 4a. *(r2 BLOCKER-2)* NEITHER A NOR B RESTORES A BOUND — the ring risk is decided HERE, not at Step 2
@@ -71,9 +71,13 @@ A and B share one yardstick, the retained ring (B's re-seed is judged against th
 - **C — a ring-independent bound.** An implausible chain may end and re-seed on evidence that does not come from the ring. The candidate: K consecutive two-sided frames in which **both** sides move and the spread stays under a class-wide absolute ceiling (a DB-governed knob, no default). ⚠️ **This is the PERMISSIVE direction r5's BLOCKER-3/4 fought** — a half-hollow stub-ask book fails "both sides move", and a collapsed 7.00/503 book fails the absolute ceiling, but C is new surface and gets its own fixtures for every r3-r5 case.
 - **A + a NAMED ARM for the rest.** A for books within `kRel ×` the ring. For the residual, a dedicated alert that names the symbol, the ring, the current spread and the exposure against stop and target, **owned by CC-C**, and the position held under that alert — the written-down cost, made visible and owned instead of silent.
 ⛔ **PRE-REGISTERED FLIP RULE — fixed before the Step 2 measurement:**
-- **Measure:** over the xStock universe and the captured-ticker archive (14 days), for each symbol, the ratio of its regular-hours median spread to the tightest plausible ring it could plausibly hold. Proxy for the ring: the 5th percentile of its rolling medians at the ring's own window length, `trailingSpreadWindowSnaps`.
-- **Stranded set:** the symbols whose ratio exceeds `kRel`.
-- **The rule:** if the stranded set holds **≥ 5% of universe symbols, OR any symbol held by paper in the last 30 days**, then **C is built in this batch**. Otherwise it is **A + the named arm**, with C homed.
+- **Measure:** over the xStock universe and the captured-ticker archive (14 days), for each symbol, the ratio of its regular-hours median spread to the ring it could plausibly hold, at the ring's own window length `trailingSpreadWindowSnaps`. **Two proxies for the ring, both pre-registered, both published with n** *(r3, Langston)*:
+  - **PRIMARY — the 5th percentile of the symbol's rolling medians.** ⚠️ **SIGNED:** this is the TIGHTEST plausible ring, so it inflates every ratio. Its error runs **toward building C**, i.e. toward the permissive surface.
+  - **SENSITIVITY — the median of the rolling medians.** The typical ring.
+- **Stranded set, per proxy:** the symbols whose ratio exceeds `kRel`.
+- **The rule:** C is built in this batch **only if BOTH proxies say so**, each by the same test: the stranded set holds **≥ 5% of universe symbols, OR any symbol held by paper in the last 30 days**. Otherwise it is **A + the named arm**, with C homed.
+- ⛔ **ON DISAGREEMENT — A + the named arm, C homed, and the question settles itself:** the named arm's alert logs the symbol's **real** ratio (current spread ÷ its actual `retainedMedian`) at each refusal. So production evidence decides whether C is ever needed, not a percentile choice.
+- ⭐ **SUBSTITUTED THROUGH BEFORE THE DATA, so no one reads the result as discovered:** on the three symbols in hand, using their real rings (ANET 0.34, AMC 1.02, LOW 2.4 — all under `kRel` 3), the rule returns **A + the named arm**. The universe measurement can only change that if both proxies strand a paper-held symbol, or ≥ 5% of the universe.
 - ⚠️ The proxy is not the in-memory ring (unreadable), and the captured ticker is a different producer from the guard's frames. Both limits are stated beside the result, and the rule is not re-cut after the data.
 
 ## 5. NOT IN THIS BATCH
