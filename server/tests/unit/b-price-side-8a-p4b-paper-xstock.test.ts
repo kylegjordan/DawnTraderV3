@@ -14,16 +14,17 @@ import { evaluatePendingMaker } from '../../core/trading/pending-maker-logic.js'
 import { isDiscontinuityActive, _testClearAllState, _testGetSymbolEntry, _testInjectDividendCalendar } from '../../services/price-discontinuity-detector.js';
 import { seedXstockUniverse } from '../helpers/seed-xstock-universe.js';
 import { resolveSentinelLane } from '../../services/tec-evaluator.js';
+import { xstockTransactableSides } from '../../services/active-execution-engine.js';
 
 const AEE = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf-8').replace(/\r\n/g, '\n');
 const count = (re: RegExp) => (AEE.match(re) ?? []).length;
 
 describe('8a-P4b — J1: the sides are captured once, from the frame the guard judged', () => {
   it('xsBid/xsAsk are assigned on exactly two arms: the validated line and the guard-off arm', () => {
-    expect(count(/\bxsBid = _raw\.bid;/g)).toBe(1);
-    expect(count(/\bxsAsk = _raw\.ask;/g)).toBe(1);
-    expect(count(/\bxsBid = _offRaw\.bid;/g)).toBe(1);
-    expect(count(/\bxsAsk = _offRaw\.ask;/g)).toBe(1);
+    expect(count(/\bxsBid = _gSides\.bid;/g)).toBe(1);
+    expect(count(/\bxsAsk = _gSides\.ask;/g)).toBe(1);
+    expect(count(/\bxsBid = _offSides\.bid;/g)).toBe(1);
+    expect(count(/\bxsAsk = _offSides\.ask;/g)).toBe(1);
     expect(count(/\bxsBid = /g)).toBe(2);
     expect(count(/\bxsAsk = /g)).toBe(2);
   });
@@ -35,13 +36,48 @@ describe('8a-P4b — J1: the sides are captured once, from the frame the guard j
 
   it('the validated capture sits AFTER the unvalidated refusal, so only an admitted frame is captured', () => {
     const refuse = AEE.indexOf("'book_state_unvalidated',");
-    const capture = AEE.indexOf('xsBid = _raw.bid;');
+    const capture = AEE.indexOf('xsBid = _gSides.bid;');
     expect(refuse).toBeGreaterThan(0);
     expect(capture).toBeGreaterThan(refuse);
   });
 
-  it('the guard-off arm requires a two-sided, positive frame (J2), never the mark', () => {
-    expect(AEE).toMatch(/_offRaw\.bid !== null && _offRaw\.ask !== null && _offRaw\.bid > 0 && _offRaw\.ask >= _offRaw\.bid/);
+  it('Step 4 BLOCKER-1: BOTH capture sites take their sides through the ONE uncrossed predicate', () => {
+    expect(count(/const _gSides = xstockTransactableSides\(_raw\);/g)).toBe(1);
+    expect(count(/const _offSides = xstockTransactableSides\(_offRaw\);/g)).toBe(1);
+    expect(count(/xstockTransactableSides\(/g)).toBe(3); // the definition + the two sites, nothing else
+    expect(AEE.indexOf('const _gSides = xstockTransactableSides(_raw);')).toBeLessThan(AEE.indexOf('xsBid = _gSides.bid;'));
+    expect(AEE.indexOf('const _offSides = xstockTransactableSides(_offRaw);')).toBeLessThan(AEE.indexOf('xsBid = _offSides.bid;'));
+  });
+
+  it('Step 4 BLOCKER-1: the predicate refuses a CROSSED book, a non-positive bid, a missing side and NaN; admits a locked book', () => {
+    expect(xstockTransactableSides({ bid: 101, ask: 100 })).toBeNull(); // crossed: the case `two_sided` admits
+    expect(xstockTransactableSides({ bid: 0, ask: 100 })).toBeNull();
+    expect(xstockTransactableSides({ bid: -1, ask: 100 })).toBeNull();
+    expect(xstockTransactableSides({ bid: null, ask: 100 })).toBeNull();
+    expect(xstockTransactableSides({ bid: 100, ask: null })).toBeNull();
+    expect(xstockTransactableSides({ bid: Number.NaN, ask: 100 })).toBeNull();
+    expect(xstockTransactableSides({ bid: 100, ask: Number.NaN })).toBeNull();
+    expect(xstockTransactableSides(null)).toBeNull();
+    expect(xstockTransactableSides(undefined)).toBeNull();
+    expect(xstockTransactableSides({ bid: 100, ask: 100 })).toEqual({ bid: 100, ask: 100 }); // locked, not crossed
+    expect(xstockTransactableSides({ bid: 99.5, ask: 100.5 })).toEqual({ bid: 99.5, ask: 100.5 });
+  });
+
+  it('Step 4 CONDITION-2: the sides are declared INSIDE the per-position body (hoisted, a stale previous-symbol bid would leak)', () => {
+    expect(count(/let xsBid: number \| null = null;/g)).toBe(1);
+    const decl = AEE.indexOf('let xsBid: number | null = null;');
+    const loop = AEE.lastIndexOf('for (const position of openPositions) {', decl);
+    expect(loop).toBeGreaterThan(0);
+    const body = AEE.slice(loop, decl);
+    expect(body).toMatch(/^for \(const position of openPositions\) \{\s*\n\s*try \{/); // the per-position try
+    expect(body).toContain('let currentPrice: number;'); // declared beside per-position state, not cycle state
+    expect(decl).toBeLessThan(AEE.indexOf('xsBid = _offSides.bid;'));
+    expect(decl).toBeLessThan(AEE.indexOf('xsBid = _gSides.bid;'));
+  });
+
+  it('Step 4 CONDITION-1: the fill log lines name the side they print (xStock is no longer the mark)', () => {
+    expect(AEE).toMatch(/MAKER_FILLED:\$\{this\.mode\}\] \$\{position\.symbol\}: \$\{_isCryptoPending \|\| _isXstockPending \? \(side === 'buy' \? 'ask' : 'bid'\) : 'mark'\}/);
+    expect(AEE).toMatch(/EXIT_REST_FILLED\] \$\{position\.symbol\}: \$\{_posClass === 'crypto_spot' \|\| _posClass === 'xstock_spot' \? 'bid' : 'mark'\}/);
   });
 });
 

@@ -108,7 +108,7 @@ Consulted by path: the equity feed and the guard both postdate the corpus. There
     - VTS calls cannot clear paper's post-gap deferral;
     - the lane is a required argument, and each production caller names its own;
     - **re-keying by symbol alone turns both behavioural tests red.**
-  - **Fence 2e** pins, per lane, the lane name AND the trigger quantity each caller feeds; 2d keeps the class three-way.
+  - **Fence 2f** (numbered 2e until Step 4 r2) pins, per lane, the lane name AND the trigger quantity each caller feeds; 2d keeps the class three-way.
   - Rider (2): *"a hollow bid is refused before it reaches here"* cites `aee` REFUSE unvalidated (`:2059-2069` at the stamped ref) and the hollow-skip branch above it. Hollow and unvalidated frames `continue` before the trigger is built.
 - ✅ **J5 r3 — Langston ACCEPTED (b'), lane-keyed (23:00Z), adding the stronger argument:** observe-only would also have gated VTS's xStock decisions (made on the MARK) on a machine built from paper's BID series — a cross-side leak in the other direction. His five conditions, each folded:
   1. **Non-advance, mutation-grade.** With paper `DISCONTINUITY_ACTIVE` on a symbol, the first `vts` call gets its OWN `cold_start`: not paper's halt, and not inactive. Re-keying by symbol alone turns it red, along with the two lane tests. ✅

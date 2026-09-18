@@ -138,7 +138,7 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     //    class — do NOT relax this test.
   });
 
-  it('2e. ⛔⛔ EACH LANE FEEDS ITS OWN SENTINEL MACHINE, AND EACH MACHINE SEES ONE QUANTITY (`8a-P4b` J5, Langston BLOCKER-J5)', () => {
+  it('2f. ⛔⛔ EACH LANE FEEDS ITS OWN SENTINEL MACHINE, AND EACH MACHINE SEES ONE QUANTITY (`8a-P4b` J5, Langston BLOCKER-J5)', () => {
     // The discontinuity detector is keyed lane|symbol (`price-discontinuity-detector.ts`, `laneKey`). This pins, per
     // lane, WHICH lane name and WHICH price each production caller hands it — so the next lane wired with the wrong
     // side, or the wrong lane name, goes red here instead of mixing quantities in one machine.

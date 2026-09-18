@@ -7,7 +7,7 @@
 **Change set:**
 - **Engine and services:** `active-execution-engine.ts` (X1-X3, the per-class counter split, `MAKER_PLACED`, the corrected taker-stamp comment, `sentinelLane: this.mode`) · `price-discontinuity-detector.ts` (lane-keyed state) · `tec-evaluator.ts` (`sentinelLane` required, `resolveSentinelLane`) · `trailing-exit-controller.ts` (`discontinuity` required, detector fallback deleted) · `vts-runner.ts` (`sentinelLane: 'vts'` / `'vts_shadow'` only; **no VTS price change**).
 - **Migration:** NEW `drizzle/migrations/2026-09-18-b-price-side-8a-p4b-paper-xstock-epoch.sql` + `-rollback.sql` + a MANIFEST line.
-- **Tests:** NEW `b-price-side-8a-p4b-paper-xstock.test.ts`. Deliberately amended fences: `b-price-side-8a-p1-exit-fence` 2d (+ new 2e), `b-price-side-8a-p3-crypto-finish` "paper C2", `b-exit-provenance-fence` OBJ-9. Lane argument added: `b-new-42b-price-discontinuity-detector`, `b-new-42-tec-halt-resilience`.
+- **Tests:** NEW `b-price-side-8a-p4b-paper-xstock.test.ts`. Deliberately amended fences: `b-price-side-8a-p1-exit-fence` 2d (+ new 2f, renumbered from 2e at r2), `b-price-side-8a-p3-crypto-finish` "paper C2", `b-exit-provenance-fence` OBJ-9. Lane argument added: `b-new-42b-price-discontinuity-detector`, `b-new-42-tec-halt-resilience`.
 
 ---
 
@@ -60,10 +60,28 @@ const discontinuity = isDiscontinuityActive(input.symbol, triggerPrice, tickTs, 
   - **J5:** separate `lastPrice` series; VTS calls cannot clear paper's deferral; **non-advance** (VTS cold-starts while paper is ACTIVE); the lane is required; `resolveSentinelLane` pairs and throws; no controller fallback and no fifth lane.
 - **Red on the pre-change engine:** 10 of the 14 wiring tests (the 4 that stay green test the shared pure logic and the single equity-tick read).
 - **Re-keying the detector by symbol alone turns all three lane tests red.**
-- **Fence 2d** is amended deliberately (two classes reach the trigger; the sentinel question is answered at J5), and **2e** pins each lane's name AND its trigger quantity.
+- **Fence 2d** is amended deliberately (two classes reach the trigger; the sentinel question is answered at J5), and **2f** pins each lane's name AND its trigger quantity.
 - **Local:** tsc 377 = baseline; **673/673 across the 50 test files that touch this code** (excluding `b-tsc-baseline-fix`, which fails to load its `.mjs` on this Windows clone before and after the change).
 
 ## 5. Calls worth attacking
 1. **The guard-off arm (J2)** trades refusal for unjudged raw sides. With the guard off, nothing refuses a hollow frame (rider 2, stated in the plan).
-2. **`resolveSentinelLane` THROWS on a contradiction** inside the exit path. It is a wiring error that fence 2e rules out for every production caller, and both lanes have per-trade isolation. Say if you would rather it logged and fell back to `callerMode`.
+2. **`resolveSentinelLane` THROWS on a contradiction** inside the exit path. It is a wiring error that fence 2f rules out for every production caller, and both lanes have per-trade isolation. Say if you would rather it logged and fell back to `callerMode`.
 3. **The vts/xstock epoch moves in a paper piece.** It moves because the lane keying changes VTS deferral timing where paper and VTS share a symbol. `8a-P4c` moves it again.
+
+---
+
+## 6. Step 4 r2 — Langston CHANGES-NEEDED at `e413c0983` (23:33Z), folded
+
+| item | fold |
+|---|---|
+| **BLOCKER-1** — the guard-ON capture admitted a CROSSED frame (`two_sided` does not carry `ask >= bid`: `book-state.ts` computes `twoSidedNow` and the exit path never uses it; a crossed mid is null, so the departure arms compare NaN and pass). | NEW exported `xstockTransactableSides(raw)` in `aee`: both sides present, bid > 0, `ask >= bid` (NaN refused). **Both capture sites go through it** (`_gSides` at J1, `_offSides` at J2), so the two arms judge identically. A crossed frame at either site captures nothing (⇒ no decision, no fill this tick, as a missing side) and prints `[8a-P4b][BOOK_STATE] <sym> CROSSED_NOT_CAPTURED basis=guarded|unguarded bid= ask=` (warn ⇒ `error.log`). |
+| **Fence for BLOCKER-1** | the two sites each call the predicate exactly once and before their capture; the predicate has exactly three mentions (definition + two sites); a behavioural test on the real function (crossed, zero, negative, null, NaN refused; locked and normal admitted). |
+| **CONDITION-1** — two labels lied | `MAKER_FILLED` prints `ask`/`bid` for crypto AND xStock (was `mark` on xStock, which fills on the ask); `EXIT_REST_FILLED` prints `bid` for crypto AND xStock. Fenced. |
+| **CONDITION-2** — fence the declaration site | the one `let xsBid` sits after `for (const position of openPositions) {` + `try {`, beside `let currentPrice: number;`, and before both captures. |
+| **CONDITION-3** — the exit seam carries no decision basis | **Homed, not fixed here:** `#1064`, `HOME: B-EXIT-DECISION-RUNG-STAMP, owner CC-C, placed in PHASE_19_PLAN at row 3n.q6, after 8a-P4c`. The standing window statement (guard `enabled = 1`; a mid-window flip splits the exit population silently) is on the issue and the row. |
+| **Nit** — two tests labelled `2e.` | the new lane test is `2f.`; references here updated. |
+| **Your note on call 2** | kept the throw; a contradiction is visible only on the per-position catch line (`_exitEvalInvoked` never increments), so the Step-8 read greps the catch line, not the partition counter. |
+
+**Mutation checks (each turns exactly one test red, restored after):** dropping `ask >= bid` from the predicate; J1 bypassing the predicate; hoisting `let xsBid` above the loop.
+**Local:** tsc 377 = baseline; the five `8a` fence/test files 116/116.
+**CI:** the branch head carries CC-B's `B-FEED-MISMATCH-FIX` commits under this one; the graded ref's own CI is run on a temporary branch (`migration/ci-cc-c-*`) so a later push cannot cancel it.

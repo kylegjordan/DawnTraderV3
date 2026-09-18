@@ -9569,3 +9569,10 @@ const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
 ✅ **KYLE'S BINDING OBJECTION IS MET BY OBJ-A, WHICH SHIPS LIVE CONFIGURATION *AND* A CODE CHANGE.** *(The earlier record rested it on the withdrawn release.)*
 
 **DISPOSITION — §9.4 disposition 3, its own batch, PLACED:** `HOME: B-GEOMETRY-REACH-BASELINE, owner CC-B, placed in PHASE_19_PLAN at row 2.4g-2, replacing that row's withdrawn content, before 2.4h`. ⛔ **`#1051`'s withdrawal banner STANDS and is not superseded by this entry** — it is the record of the claim that did not survive, and this batch does not rest on it.
+
+### #1064 OPEN 2026-09-18 (CC-C; Langston `8a-P4b` Step 4 CONDITION-3) — ⭐ **THE EXIT ROW DOES NOT SAY WHICH PRICE ITS DECISION WAS TAKEN ON; THE ENTRY ROW DOES.**
+
+**ESTABLISHED at `e413c0983`.** The xStock ENTRY fill stamps its basis (`entryPriceSource` = `kraken_equities_ws:raw_ask`, or `raw_ask_unguarded` with the book-state guard off). The EXIT seam has no equivalent: `_exitProvenanceBase` keeps `kraken_equities_ws_mid` / `kraken_equities_ws`, while after `8a-P4b` the xStock rest fill and trigger decide on the guard-validated raw BID. Crypto has had the same asymmetry since `8a-P3` (its exit decides on a ladder rung the row does not name). **Consequence:** a post-deploy exit row cannot be cut by whether its trigger was judged by the guard. **Not a defect in the prices** — a missing label on the record.
+**Standing statement for the `8a-P4b` window:** `book_state/xstock_spot/enabled = 1` on staging (read 2026-09-18), so the unguarded arm is dormant. **If anyone flips it mid-window, the exit population splits at that flip and nothing on the row will say so.**
+
+**DISPOSITION — §9.4 disposition 3, its own batch, PLACED:** `HOME: B-EXIT-DECISION-RUNG-STAMP, owner CC-C, placed in PHASE_19_PLAN at row 3n.q6, after 8a-P4c (inside 3n.q2)`. One fix serves both classes.

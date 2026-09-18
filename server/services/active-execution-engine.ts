@@ -490,6 +490,23 @@ import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 
 /**
+ * ⛔⛔ `8a-P4b` Step 4 BLOCKER-1 (Langston) — THE ONE PREDICATE BOTH xSTOCK CAPTURE SITES USE (J1 guarded, J2 unguarded).
+ * A frame's sides become DECISION inputs (X1 fill on the ask, X2 rest fill and X3 trigger on the bid) only if both are
+ * present, the bid is positive, and the book is NOT CROSSED (`ask >= bid`). The book-state guard's `two_sided` verdict
+ * does NOT carry the uncrossed test (`book-state.ts` computes `twoSidedNow` and the exit path never uses it; a crossed
+ * frame has a null mid, so the departure arms compare NaN and pass), and the archiver stores whatever the venue sent.
+ * A crossed frame would hand X3 a bid above the ask and X2/X1 inflated/depressed fills — all optimistic, the one
+ * direction row `8a` exists to close. `null` ⇒ no decision and no fill this tick, exactly as a missing side.
+ */
+export function xstockTransactableSides(
+  raw: { bid: number | null; ask: number | null } | null | undefined,
+): { bid: number; ask: number } | null {
+  if (!raw || raw.bid === null || raw.ask === null) return null;
+  if (!(raw.bid > 0) || !(raw.ask >= raw.bid)) return null; // also rejects NaN
+  return { bid: raw.bid, ask: raw.ask };
+}
+
+/**
  * PURE — chooses the price-skip alert copy. Extracted so the BRANCH is testable without a
  * database or an engine instance (Analyst's ruling 2026-07-22: *"don't pin the wording, DO
  * pin the branch"* — a test asserting exact message text fights the next person who
@@ -1695,7 +1712,7 @@ export class ActiveExecutionEngine {
         // own no-tradeId case for exactly this reason; the fill branch now matches it.
         console.warn(`[P19-B7.2c][MAKER_FILL_UNSTAMPED:${this.mode}] ${position.symbol}: filled at ${makerFillPrice(limit)} but metadata carries no tradeId — entry provenance left NULL rather than fabricated (position opened normally)`);
       }
-      console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: ${_isCryptoPending ? (side === 'buy' ? 'ask' : 'bid') : 'mark'} ${fillPrice} (mark ${currentPrice}) traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
+      console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: ${_isCryptoPending || _isXstockPending ? (side === 'buy' ? 'ask' : 'bid') : 'mark'} ${fillPrice} (mark ${currentPrice}) traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
       return;
     }
     if (outcome === 'drop') {
@@ -1951,10 +1968,13 @@ export class ActiveExecutionEngine {
               // into a trading halt; falling back to the mark is the midpoint `3n` forbids. `_bs` carries no `raw` on this
               // arm (the `ok:false` union), so the frame is `_eqTick.raw` — the one the mark came from (J2c, Langston).
               const _offRaw = _eqTick?.raw;
-              if (_offRaw && _offRaw.bid !== null && _offRaw.ask !== null && _offRaw.bid > 0 && _offRaw.ask >= _offRaw.bid) {
-                xsBid = _offRaw.bid;
-                xsAsk = _offRaw.ask;
+              const _offSides = xstockTransactableSides(_offRaw); // the SAME predicate as J1 (Step 4 BLOCKER-1)
+              if (_offSides) {
+                xsBid = _offSides.bid;
+                xsAsk = _offSides.ask;
                 xsSideBasis = 'raw_unguarded';
+              } else if (_offRaw && _offRaw.bid !== null && _offRaw.ask !== null && _offRaw.bid > 0 && _offRaw.ask > 0) {
+                console.warn(`[8a-P4b][BOOK_STATE] ${position.symbol} CROSSED_NOT_CAPTURED basis=unguarded bid=${_offRaw.bid} ask=${_offRaw.ask} — no decision this tick`);
               }
             } else {
               const { result: _r, cfg: _c, raw: _raw } = _bs;
@@ -2160,9 +2180,15 @@ export class ActiveExecutionEngine {
                 }
                 // ⛔ `8a-P4b` J1 — THE ONE VALIDATED LINE: below the refusal, this frame is present, positive (`!pos` ⇒
                 // hollow, `book-state.ts:181-188`), two-sided and validated. Its sides are the decision inputs.
-                xsBid = _raw.bid;
-                xsAsk = _raw.ask;
-                xsSideBasis = 'raw_guarded';
+                // ⛔ Step 4 BLOCKER-1: `two_sided` does not carry the uncrossed test, so the capture applies it.
+                const _gSides = xstockTransactableSides(_raw); // the SAME predicate as J2
+                if (_gSides) {
+                  xsBid = _gSides.bid;
+                  xsAsk = _gSides.ask;
+                  xsSideBasis = 'raw_guarded';
+                } else {
+                  console.warn(`[8a-P4b][BOOK_STATE] ${position.symbol} CROSSED_NOT_CAPTURED basis=guarded bid=${_raw.bid} ask=${_raw.ask} — no decision this tick`);
+                }
               }
             }
           }
@@ -2668,7 +2694,7 @@ export class ActiveExecutionEngine {
           });
           if (_restOutcome === 'fill' && _restFillPrice !== null) { // a fill requires a side — NARROWED here, never cast
             tpHits++;
-            console.log(`[P19-B8.6][EXIT_REST_FILLED] ${position.symbol}: ${_posClass === 'crypto_spot' ? 'bid' : 'mark'} ${_restFillPrice} (mark ${currentPrice}) traded through the resting exit ${_exitRestLimit} — closing at the limit + MAKER fee`);
+            console.log(`[P19-B8.6][EXIT_REST_FILLED] ${position.symbol}: ${_posClass === 'crypto_spot' || _posClass === 'xstock_spot' ? 'bid' : 'mark'} ${_restFillPrice} (mark ${currentPrice}) traded through the resting exit ${_exitRestLimit} — closing at the limit + MAKER fee`);
             await this.closePosition(position.id, _exitRestLimit, {
               type: 'target_hit',
               price: _exitRestLimit,
