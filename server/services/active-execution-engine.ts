@@ -554,7 +554,8 @@ export function buildPriceSkipAlertCopy(input: {
       isSelfThrottled: false,
       dominantReason, dominantCount, totalCounted,
       title: `Exit checks refused — book-state guard has not validated ${input.symbol}${titleShare}`,
-      body: `${lead}${share} because the book-state guard has not validated this symbol's book: prices are arriving, and our own guard is refusing them${detail ? ` (${detail})` : ''}.${others} The chain releases on its own when the book's median spread comes back within kRel of its retained ring (SEED_ESCAPED); a ratio persistently above kRel on a normal-looking book is the case plan row 3n.q5 exists for. Check the position's exposure against its stop before dispositioning.`,
+      // Plain words in the body; the tokens (kRel, SEED_ESCAPED, 3n.q5) live in the log lines (Langston nit c).
+      body: `${lead}${share} because this system's own safety check on the order book has not yet confirmed this symbol's book is trustworthy: prices are arriving, and our own check is refusing them${detail ? ` (${detail})` : ''}.${others} It releases on its own once the book's spreads come back to their normal width. If the book looks normal and this persists, the safety check's reference may itself be stale. Check the position's exposure against its stop before dispositioning.`,
     };
   }
   const cause = isStaleReject
@@ -2098,9 +2099,11 @@ export class ActiveExecutionEngine {
                 //   that distinction was always for.
                 //
                 // ⚠️ COST, STATED: the FIRST frame for any symbol after a restart or a clear is
-                //    unvalidated by construction, so it refuses ONE tick and acts on the next —
-                //    the same tick it would have needed anyway to have anything to compare with.
-                //    It is not a new blind window; it is the existing one, no longer acted through.
+                //    unvalidated by construction. It refuses TWO ticks, not one (Langston, 8a-P4a Step 4
+                //    FINDING-3): `_bs` is read ABOVE the advance, so the frame that sets `validated=true`
+                //    still refuses on the pre-advance snapshot and the frame after it acts. The same holds
+                //    after a `SEED_ESCAPED` — a `REFUSE unvalidated` right after an escape is NOT a failed
+                //    escape. It is not a new blind window; it is the existing one, no longer acted through.
                 if (_r.state !== 'two_sided' || _bs.comparatorValidated !== true) {
                   unvalidatedRefusals++;
                   withoutPrice++;
@@ -2110,7 +2113,7 @@ export class ActiveExecutionEngine {
                   // `ratio` is the REAL one (current median ÷ the ring it is judged against): the evidence that
                   // settles whether the ring-independent bound (`3n.q5`) is ever needed.
                   const _basis = takeChainRefusalBasis(position.symbol);
-                  const _openedAtMs = (position as any).openedAt ? new Date((position as any).openedAt).getTime() : null;
+                  const _openedAtMs = position.openedAt ? new Date(position.openedAt).getTime() : null;
                   const _inherited = _basis !== null && _openedAtMs !== null && _basis.seededAtMs < _openedAtMs;
                   const _fx = (v: number | null | undefined) => (v === null || v === undefined || !Number.isFinite(v) ? 'none' : v.toFixed(5));
                   const _ratioTxt = _basis?.ratio != null ? _basis.ratio.toFixed(2) : 'none';
@@ -2127,8 +2130,9 @@ export class ActiveExecutionEngine {
                     `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} REFUSE unvalidated ` +
                     `state=${_r.state} ${_cmpV} ratio=${_ratioTxt} reasons=${_r.reasons.join(',')}`,
                   );
-                  const _stop = Number((position as any).stopLoss);
-                  const _target = Number((position as any).takeProfit);
+                  // Typed, uncast (Langston nit a): a rename must fail the build, not print `stop none`.
+                  const _stop = position.stopLoss ? parseFloat(position.stopLoss) : NaN;
+                  const _target = position.takeProfit ? parseFloat(position.takeProfit) : NaN;
                   await this._recordPriceSkip(
                     position,
                     'book_state_unvalidated',

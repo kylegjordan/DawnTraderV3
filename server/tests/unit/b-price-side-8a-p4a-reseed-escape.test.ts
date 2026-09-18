@@ -183,6 +183,24 @@ describe('8a-P4a — the named arm: the lock is not reported as a missing price'
   });
 });
 
+describe('8a-P4a Step 4 FINDING-1 — the r6 hole the escape opens is COUNTABLE (measured at Step 8, not gated)', () => {
+  const clearLines = () => warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('COMPARATOR_CLEARED'));
+  it('11: an escape seed consumes the ring; a yield before it ever advances prints ringAfter=false (no outside datum)', () => {
+    retainHealthyRing();
+    expect(clearLines().at(-1)).toMatch(/observedMovement=true ringAfter=true/); // control: a live chain retains
+    frameAt(0.02, 0, false);
+    for (let i = 1; i <= 10; i++) frameAt(0.02, i);
+    for (let i = 0; i < 40 && escapedLines().length === 0; i++) frameAt(0.0011, i);
+    expect(escapedLines()).toHaveLength(1);
+    expect(escapedLines()[0]).toMatch(/^\[8a-P4a\]\[BOOK_STATE\] /); // nit b: one batch, one grep
+    // the new chain seeded plausible at the escape frame and has not advanced; the book collapses now
+    clearBookStateComparator(SYM, 'yield_after_60_hollow');
+    const last = clearLines().at(-1)!;
+    expect(last).toMatch(/reason=yield_after_60_hollow/);
+    expect(last).toMatch(/framesSinceSeed=0 observedMovement=false ringAfter=false/);
+  });
+});
+
 describe('8a-P4a — no clock term (Kyle, 2026-09-03)', () => {
   it('10: the tracker reads no clock', () => {
     const src = readFileSync(join(__dirname, '../../asset_classes/xstock_spot/book-state-tracker.ts'), 'utf8');

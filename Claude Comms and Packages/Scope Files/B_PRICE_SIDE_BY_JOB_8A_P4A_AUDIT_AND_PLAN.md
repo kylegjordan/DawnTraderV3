@@ -100,6 +100,13 @@ Consulted by path: the guard was created in September 2026 (`B-XSTOCK-FEED-SANIT
 - ⛔ **IF AMC (or any held symbol) DOES NOT ESCAPE at Step 8**, while its captured spread sits within the bound: that is **not** tuning. It is the ring-independent case, and `3n.q5` reopens on the named arm's real ratios. Named now, not discovered then.
 - ⚠️ **The three live locks themselves are NOT this evidence:** the deploy's restart cold-seeds them (scope §6).
 
+### A9. *(Step 4, APPROVED at `82a55bd00`, 23:14Z)* THE STEP-8 BINDINGS — pre-registered before the deploy
+Langston approved with three findings, none blocking; each binds the Step-8 read. The nits are folded in the follow-up commit (below).
+- **FINDING-1 — the escape opens a new entry point into the r6 hole.** An escape seed is plausible, so it consumes the retained ring; if that chain goes hollow before it ever advances, the yield retains nothing and the symbol has no outside datum. **Instrument (added):** `COMPARATOR_CLEARED` now prints `observedMovement=` and `ringAfter=`. **Step-8 count, per symbol, in `error.log`:** a `COMPARATOR_CLEARED reason=seed_escape_recovered` followed by the symbol's NEXT `COMPARATOR_CLEARED` with `ringAfter=false`. **n = 0 ⇒ no change.** **n > 0 ⇒ the one-condition fix (do not consume the ring on an escape seed; (b) proved it valid that frame) becomes its own placed row.** Test 11 pins the signature on the real tracker (mutation-checked: forcing `ringAfter=true` turns it red).
+- **FINDING-2 — `REFUSAL_BASIS` is not a count of stranded chains.** It fires once per chain, after the advance, so an escape frame and every ordinary fresh seed print one with `seedImplausible=false`. **Every Step-8 read of it filters on `seedImplausible=true`.**
+- **FINDING-3 — an escape costs TWO refused ticks, not one.** The engine reads the chain's state above the advance, so the frame that validates still refuses on the old snapshot. **A `REFUSE unvalidated` immediately after a `SEED_ESCAPED` is NOT a failed escape.** The engine comment is corrected; no behaviour change.
+- **Nits folded:** (a) the three `as any` casts on stop, target and open time are gone (a rename now fails the build); (b) `SEED_ESCAPED` carries `[8a-P4a]`, the same tag as `REFUSAL_BASIS` — **the Step-8 grep for escapes is `[8a-P4a][BOOK_STATE]`**; (c) the alert body Kyle reads is in plain words, and the tokens stay in the log lines. The dead `prev.observedMovement` conjunct is kept as documentation and commented as not the gate.
+
 ## B. PLAN — every item names the finding it falls out of
 
 | # | from | item |

@@ -243,6 +243,8 @@ export function advanceBookStateComparator(
   const runMovesNow = prev && prev.seedImplausible && escThreshold !== null
     ? (spreadNow <= escThreshold ? prev.plausibleRunMoves + (movedNow ? 1 : 0) : 0)
     : 0;
+  // `prev.observedMovement` is IMPLIED by `runMovesNow >= 2` (a prior move on this chain set both); it is kept as
+  // documentation of condition (c), NOT as the gate (Langston, 8a-P4a Step 4).
   if (prev && prev.seedImplausible && prev.observedMovement && escThreshold !== null) {
     const retainedMedian = escRetainedMedian;
     const trailing = prev.spreads.concat(spreadNow);
@@ -256,7 +258,7 @@ export function advanceBookStateComparator(
       runMovesNow >= 2
     ) {
       console.warn(
-        `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} SEED_ESCAPED framesHeld=${prev.framesSinceSeed} runMoves=${runMovesNow} ` +
+        `[8a-P4a][BOOK_STATE] ${key} SEED_ESCAPED framesHeld=${prev.framesSinceSeed} runMoves=${runMovesNow} ` +
         `seedSpread=${prev.seedSpread.toFixed(5)} escapeMedian=${trailingMedian.toFixed(5)} ` +
         `spreadNow=${spreadNow.toFixed(5)} retainedMedian=${retainedMedian.toFixed(5)} kRel=${kRel} ` +
         `seededAt=${new Date(prev.seededAtMs).toISOString()}`,
@@ -398,7 +400,10 @@ export function clearBookStateComparator(symbol: string, reason: string): void {
     _retainedSpreads.set(key, [...prev.spreads]);
   }
   _comparators.delete(key);
-  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_CLEARED reason=${reason} validated=${prev.validated} framesSinceSeed=${prev.framesSinceSeed} seededAt=${new Date(prev.seededAtMs).toISOString()}`);
+  // `8a-P4a` Step 4 FINDING-1 (Langston): `observedMovement` and `ringAfter` make the r6 hole COUNTABLE. A yield with
+  // `ringAfter=false` leaves the symbol with no outside datum; one that follows a `seed_escape_recovered` clear is the
+  // new entry point the escape opened (the escape seed consumed the ring). Measured at Step 8 before any change.
+  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${key} COMPARATOR_CLEARED reason=${reason} validated=${prev.validated} framesSinceSeed=${prev.framesSinceSeed} observedMovement=${prev.observedMovement} ringAfter=${_retainedSpreads.has(key)} seededAt=${new Date(prev.seededAtMs).toISOString()}`);
 }
 
 export type BookStateNow =
