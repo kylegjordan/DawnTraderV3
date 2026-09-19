@@ -82,12 +82,32 @@ describe('8a-P4b — J1: the sides are captured once, from the frame the guard j
 });
 
 describe('8a-P4b — every cell is a three-way with a named default arm (Langston r1 BLOCKER-1)', () => {
-  it('X3: the exit check receives xsBid for xStock, the ladder bid for crypto', () => {
-    expect(AEE).toMatch(/_posClass === 'xstock_spot' \? xsBid : \(_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : null\)/);
+  it('X3 (Step 9 C1): the trigger slot carries ONLY the crypto ladder bid; xStock passes its frame to the LOG argument', () => {
+    // C1 (Langston, 2026-09-19): the xStock trigger is the mark again. `xsBid` must NOT reach the trigger slot.
+    expect(AEE).not.toMatch(/_posClass === 'xstock_spot' \? xsBid : \(_lsSel/);
+    expect(AEE).toMatch(/_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : null,\s*\n(\s*\/\/[^\n]*\n)*\s*_posClass === 'xstock_spot' \? \{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr \} : null,\s*\n\s*\);/);
   });
 
-  it('X3: the evaluator trigger is three-way — crypto and xStock take the slot, any other class the mark', () => {
-    expect(AEE).toMatch(/triggerPrice: positionAssetClass === 'crypto_spot' \? triggerBid\s*\n\s*: positionAssetClass === 'xstock_spot' \? triggerBid[^\n]*\n\s*: currentPrice,/);
+  it('X3 (Step 9 C1): the evaluator trigger is three-way — crypto the ladder bid, xStock and any other class the mark', () => {
+    expect(AEE).toMatch(/triggerPrice: positionAssetClass === 'crypto_spot' \? triggerBid\s*\n\s*: positionAssetClass === 'xstock_spot' \? currentPrice[^\n]*\n\s*: currentPrice,/);
+  });
+
+  it('X3 (Step 9 C1): the xStock frame is LOG ONLY — it never enters the evaluator input', () => {
+    const start = AEE.indexOf('const decision = await evaluateTECExit({');
+    const end = AEE.indexOf('});', start);
+    expect(start).toBeGreaterThan(0);
+    const codeOnly = AEE.slice(start, end).replace(/\/\/[^\n]*/g, ''); // comments may NAME the variables; code may not USE them
+    expect(codeOnly).toMatch(/triggerPrice:/); // instrument control: the slice is the evaluator input
+    expect(codeOnly).not.toMatch(/xsFrame|xsBid|xsAsk|xsSpread|xsThr/);
+  });
+
+  it('X3 (Step 9 C1, Langston condition 4): every EXIT_TRIGGER line carries the frame tag, and bid/mark divergence runs are logged', () => {
+    expect(count(/EXIT_TRIGGER\] symbol=\$\{position\.symbol\} type=\w+ trigger=\$\{triggerBid \?\? currentPrice\} mark=\$\{currentPrice\}\$\{_xsTag\}/g)).toBe(4);
+    expect(AEE).toMatch(/bidWouldFire=\$\{_xsBidStop \? 'stop' : _xsBidTarget \? 'target' : 'no'\}/);
+    expect(AEE).toMatch(/\[8a-P4b\]\[X3_BID_DIVERGENCE_START\]/);
+    expect(AEE).toMatch(/\[8a-P4b\]\[X3_BID_DIVERGENCE_END\]/);
+    // the guarded arm carries the guard's OWN computed spread and arm-(i) threshold for this frame
+    expect(AEE).toMatch(/xsSpread = _r\.inputs\.spreadFrac \?\? null;\s*\n\s*xsThr = _r\.inputs\.departureThresholdFrac \?\? null;/);
   });
 
   it('X2: the resting target fill is three-way — xStock on xsBid, any other class the mark', () => {

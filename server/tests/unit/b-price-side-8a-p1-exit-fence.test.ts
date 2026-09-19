@@ -118,7 +118,12 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     expect(expr).not.toMatch(/(\?\?|\|\|)\s*currentPrice/);
   });
 
-  it('2d. ⛔⛔ EXACTLY `crypto_spot` AND `xstock_spot` REACH THE TRIGGER — the sentinel question was RE-OPENED and answered at `8a-P4b` J5', () => {
+  it('2d. ⛔⛔ ONLY `crypto_spot` REACHES THE TRANSACTABLE TRIGGER; `xstock_spot` IS NAMED AND TAKES THE MARK (`8a-P4b` Step 9 C1)', () => {
+    // ⛔ AMENDED TWICE, BOTH DELIBERATELY. (1) `8a-P4b` X3 (2026-09-18) put xStock on the bid and the question was
+    //   re-opened as J5. (2) Step 9 C1 (Langston, 2026-09-19) took it back to the mark after a symmetric-blowout stub bid
+    //   fired a false stop (MDB/USD): the book-state arms cannot see a symmetric widening. The xStock arm stays EXPLICIT so
+    //   the re-land (`PHASE_19_PLAN` row `3n.q7`, `B-XSTOCK-BID-TRIGGER-RELAND`) is a one-token change this test will see.
+    //   J5's invariant holds either way: the sentinel is fed the series the stop compares (the mark, again).
     // ⛔ HISTORY, KEPT BECAUSE IT IS THE REASON THIS TEST EXISTS. This read "ONLY `crypto_spot` REACHES THE TRIGGER": the
     // xStock-only discontinuity sentinel (`price-discontinuity-detector.ts:248-250`) reads the SAME `triggerPrice`
     // (`tec-evaluator.ts:381`), and while divergence was crypto-only it could only ever see the mark. The test was written
@@ -131,7 +136,7 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     expect(classes).toEqual(["'crypto_spot'", "'xstock_spot'"]);
     // each named class takes the transactable slot, and every OTHER class falls to the mark (the named default arm)
     expect(expr).toMatch(/'crypto_spot'\s*\?\s*triggerBid/);
-    expect(expr).toMatch(/'xstock_spot'\s*\?\s*triggerBid/);
+    expect(expr).toMatch(/'xstock_spot'\s*\?\s*currentPrice/);   // C1: the mark, until row 3n.q7
     expect(expr.trim()).toMatch(/:\s*currentPrice$/);
     // ⛔ IF THIS GOES RED AGAIN: a THIRD class reaches the transactable trigger. Every class that does changes what the
     //    stateful sentinel sees (it is xStock-only today, but a perp class may join it). Re-open the question for THAT

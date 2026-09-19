@@ -92,3 +92,17 @@ const discontinuity = isDiscontinuityActive(input.symbol, triggerPrice, tickTs, 
 - **Residual 1 — one fact per log line.** The guarded arm now prints `CROSSED_NOT_CAPTURED` only on a genuine cross and `SIDES_NOT_CAPTURED reason=non_finite` otherwise; the unguarded arm already printed only on a genuine cross. (Below the refusal both sides are finite-positive, so today only a cross reaches the guarded arm.)
 - **Residual 2 — the limit of the three-mention fence, stated:** `toBe(3)` counts mentions of `xstockTransactableSides(` **in `active-execution-engine.ts` only**. The predicate is exported, so a fourth caller elsewhere in the tree is unfenced. It is not a tree-wide census.
 - **Step 8, stated before the data (#661 leg 3):** **zero `CROSSED_NOT_CAPTURED` lines is a PENDING control, not a pass.** The refusal arm is live-unexercised at both sites, as is the predicate's NaN path; silence means no crossed frame reached a decision, never that the guard fired correctly.
+
+## 8. Step 9 C1 — the xStock trigger returns to the mark (Langston ruling 00:40Z, six conditions)
+
+| cell | change |
+|---|---|
+| **X3 call site** | the trigger slot carries `_lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null` only (`null` on xStock by construction); a NEW trailing argument passes `{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr }` for xStock, **log only**. |
+| **X3 evaluator** | `triggerPrice: crypto_spot ? triggerBid : xstock_spot ? currentPrice : currentPrice` — the xStock arm stays explicit so the re-land is one token. |
+| **capture** | `xsSpread`/`xsThr` beside the sides: J1 takes the guard's own `inputs.spreadFrac` / `inputs.departureThresholdFrac`; J2 computes the spread, threshold `null`. |
+| **instrument** | the four `EXIT_TRIGGER` lines append `bid= ask= spread= thr= bidWouldFire=stop|target|no` on xStock; `[8a-P4b][X3_BID_DIVERGENCE_START]` / `_END` (warn) per position per run where the bid would fire and the mark does not (`ticks`, `durMs`, `endedBy=mark_exit|converged`). A `Map` keyed on position id, bounded by held xStock positions. |
+| **migration** | `2026-09-19-b-price-side-8a-p4b-c1-paper-xstock-epoch.sql` (+ rollback, MANIFEST): `xstock_spot`/`paper_sim` +1 with `updated_at = now()`; every other row asserted unchanged, **`vts` included**. |
+| **fences** | 2d back to xStock = mark (history kept, re-land pointer); the p4b file's X3 pair rewritten; NEW: the frame is never an evaluator input (comments stripped, with an instrument control), and the tag/divergence lines exist. |
+| **records** | `#1065` (MDB's row, the full two-close population), plan row `3n.q7` (the re-land, Langston's three conditions, the overnight-hold cost as Kyle's call), plan §L ruling. |
+
+**Mutation check:** the xStock arm back to `triggerBid` turns 2 tests red (2d and the X3 evaluator test). **Local:** tsc 377 = baseline; 148/148 across the eight neighbouring files.

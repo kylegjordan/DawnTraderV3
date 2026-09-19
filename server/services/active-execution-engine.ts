@@ -1858,6 +1858,10 @@ export class ActiveExecutionEngine {
         let xsBid: number | null = null;
         let xsAsk: number | null = null;
         let xsSideBasis: 'raw_guarded' | 'raw_unguarded' | null = null;
+        // `8a-P4b` Step 9 C1 (Langston condition 4) — the judged frame's spread and the guard's arm-(i) threshold,
+        // carried to the exit check for the LOG ONLY: the bid-trigger measurement window the re-land row needs.
+        let xsSpread: number | null = null;
+        let xsThr: number | null = null;
 
         // ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
         // Kraken spot REST carries NO tokenized equities (empirically proven: Ticker
@@ -1973,6 +1977,7 @@ export class ActiveExecutionEngine {
                 xsBid = _offSides.bid;
                 xsAsk = _offSides.ask;
                 xsSideBasis = 'raw_unguarded';
+                xsSpread = (_offSides.ask - _offSides.bid) / ((_offSides.ask + _offSides.bid) / 2);
               } else if (_offRaw && _offRaw.bid !== null && _offRaw.ask !== null && _offRaw.bid > 0 && _offRaw.ask > 0) {
                 console.warn(`[8a-P4b][BOOK_STATE] ${position.symbol} CROSSED_NOT_CAPTURED basis=unguarded bid=${_offRaw.bid} ask=${_offRaw.ask} — no decision this tick`);
               }
@@ -2186,6 +2191,8 @@ export class ActiveExecutionEngine {
                   xsBid = _gSides.bid;
                   xsAsk = _gSides.ask;
                   xsSideBasis = 'raw_guarded';
+                  xsSpread = _r.inputs.spreadFrac ?? null;
+                  xsThr = _r.inputs.departureThresholdFrac ?? null;
                 } else {
                   // Step 4 r2 residual (Langston): name WHICH fact refused, so this line carries one fact at both sites.
                   // Below the refusal both sides are finite-positive (`book-state.ts` `pos`), so today only a cross
@@ -2635,11 +2642,15 @@ export class ActiveExecutionEngine {
           // exit lane's own 2,000 ms ceiling.
           // ⛔ `null` on crypto means NO FRESH TRANSACTABLE SIDE ⇒ the evaluator makes NO DECISION
           //   this cycle. It must never degrade to the midpoint.
-          // ⛔ `8a-P4b` X3 — xStock now passes ITS transactable bid through the same slot: `xsBid`, the bid of the
-          //   raw frame the book-state guard judged THIS tick (J1), or the unjudged raw bid with the guard off (J2).
-          //   `_lsSel` is `null` on xStock by construction (the block above is crypto-gated), so the two arms can
-          //   never both be live. Any other class reaches `checkExitConditions`, which passes it the mark.
-          _posClass === 'xstock_spot' ? xsBid : (_lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null),
+          // ⛔⛔ `8a-P4b` Step 9 C1 (Langston, 2026-09-19) — THE xSTOCK TRIGGER IS THE MARK AGAIN. X3 passed `xsBid` here
+          //   from 00:02:33Z to the C1 deploy; on 00:15:00Z MDB/USD stopped out on a 335.12 STUB bid while the mark sat
+          //   11.3% clear of its stop, because a SYMMETRIC outward widening passes every book-state arm (`book-state.ts`
+          //   (i) needs the other side to HOLD; (iii) keeps the mid near fair). `_lsSel` is `null` on xStock by
+          //   construction, so this slot is `null` for xStock and the evaluator's xStock arm takes the mark.
+          //   The bid trigger re-lands under row `3n.q7` (`B-XSTOCK-BID-TRIGGER-RELAND`), on Langston's three conditions.
+          _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null,
+          // Log only: the frame X3 WOULD have read, so the containment interval is the re-land's measurement window.
+          _posClass === 'xstock_spot' ? { bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr } : null,
         );
 
         // I7-ROOT-FIX: Track exit evaluation for diagnostics
@@ -2887,6 +2898,9 @@ export class ActiveExecutionEngine {
   private _exitEvalByClass: Record<'crypto' | 'xstock' | 'other', { invoked: number; refused: number }> = {
     crypto: { invoked: 0, refused: 0 }, xstock: { invoked: 0, refused: 0 }, other: { invoked: 0, refused: 0 },
   };
+  // `8a-P4b` Step 9 C1 — per-position open bid-vs-mark divergence runs (log only). Bounded by held xStock positions; an
+  // entry is left behind only when a position closes by a path that skips the exit check (a rest fill, a flatten).
+  private _xsBidDivergence = new Map<string, { startMs: number; ticks: number; leg: 'stop' | 'target' }>();
   private _exitEvalNoHit = 0;
   private _exitEvalHit = 0;
   private _exitEvalNoMark = 0;
@@ -2918,6 +2932,8 @@ export class ActiveExecutionEngine {
     //    whose caller passes the guard-validated `xsBid` here. Any other class ignores this slot and triggers
     //    on the mark, unchanged (the explicit third arm at the evaluator call).
     triggerBid: number | null = null,
+    // `8a-P4b` Step 9 C1 — LOG ONLY, never a decision input: the xStock frame the bid trigger would have read.
+    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null } | null = null,
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
     const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;
@@ -3002,13 +3018,14 @@ export class ActiveExecutionEngine {
         // ⚠️ THAT FILENAME WAS WRONG UNTIL 2026-09-14 — it cited a file that 404s at the ref.
         //   Citation drift, the same class this row has now filed five times, in the comment
         //   telling the next reader where the guard is.
-        // xSTOCK (`8a-P4b` X3): the BID of the raw frame the book-state guard just validated (`xsBid`, J1), or the
-        //   unjudged raw bid when the guard is off (J2). `null` ⇒ no decision, as crypto — never the mark.
+        // xSTOCK: THE MARK — `8a-P4b` X3 put the bid here (2026-09-19 00:02:33Z) and Step 9 C1 took it back out the same
+        //   day: a symmetric blowout's stub bid fired a false stop (MDB/USD). The explicit arm stays so the re-land
+        //   (row `3n.q7`) is a one-token change that fence 2d will see.
         // ⛔ ANY OTHER CLASS (`crypto_perp`, `xstock_perp` — both `active: true` in `ASSET_CLASS_REGISTRY`, and the exit
         //   loop is class-total): the mark, EXACTLY as before. They are outside `3n`; a new class must be added HERE
         //   deliberately. An else-arm of `xsBid` would hand such a row `null` forever (Langston, 8a-P4b r1 BLOCKER-1).
         triggerPrice: positionAssetClass === 'crypto_spot' ? triggerBid
-          : positionAssetClass === 'xstock_spot' ? triggerBid // `8a-P4b`: the caller passes `xsBid` in this slot for xStock
+          : positionAssetClass === 'xstock_spot' ? currentPrice // `8a-P4b` Step 9 C1: the mark until row `3n.q7` re-lands the bid
           : currentPrice,
         atr: atrAtOpen,
         holdDurationMs: 0,   // paper handles metadata.maxHoldingMs inline below (W2.1)
@@ -3046,6 +3063,29 @@ export class ActiveExecutionEngine {
         // B80: Option C+ seed (only on first cycle post-restart).
         seed: tecSeedPE,
       });
+      // `8a-P4b` Step 9 C1 (Langston condition 4) — LOG ONLY. What the bid trigger WOULD have done on this frame, against
+      // the static stop/target levels (a trailing/BE ratchet is not modelled here — stated). Two records: a suffix on
+      // every xStock EXIT_TRIGGER line, and a START/END pair for each run where the bid would fire and the mark did not —
+      // the population the re-land must price (a real early stop, or an MDB-shaped stub). Rates are published only with
+      // their per-leg denominator (`noTriggerByClass=xstock:r/n` on EVAL_EXIT) and an RTH/off-hours split.
+      const _xsBidStop = xsFrame !== null && xsFrame.bid !== null && stopLoss !== null && xsFrame.bid <= stopLoss;
+      const _xsBidTarget = xsFrame !== null && xsFrame.bid !== null && takeProfit !== null && xsFrame.bid >= takeProfit;
+      const _xs5 = (v: number | null) => (v === null || !Number.isFinite(v) ? 'none' : v.toFixed(5));
+      const _xsTag = xsFrame === null ? '' :
+        ` bid=${xsFrame.bid ?? 'none'} ask=${xsFrame.ask ?? 'none'} spread=${_xs5(xsFrame.spread)} thr=${_xs5(xsFrame.thr)} bidWouldFire=${_xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no'}`;
+      if (xsFrame !== null) {
+        const _div = !decision.shouldExit && (_xsBidStop || _xsBidTarget);
+        const _open = this._xsBidDivergence.get(position.id);
+        if (_div && !_open) {
+          this._xsBidDivergence.set(position.id, { startMs: Date.now(), ticks: 1, leg: _xsBidStop ? 'stop' : 'target' });
+          console.warn(`[8a-P4b][X3_BID_DIVERGENCE_START] ${position.symbol} leg=${_xsBidStop ? 'stop' : 'target'} mark=${currentPrice} sl=${stopLoss} tp=${takeProfit}${_xsTag}`);
+        } else if (_div && _open) {
+          _open.ticks++;
+        } else if (_open) {
+          console.warn(`[8a-P4b][X3_BID_DIVERGENCE_END] ${position.symbol} leg=${_open.leg} ticks=${_open.ticks} durMs=${Date.now() - _open.startMs} endedBy=${decision.shouldExit ? 'mark_exit' : 'converged'} mark=${currentPrice}${_xsTag}`);
+          this._xsBidDivergence.delete(position.id);
+        }
+      }
       // ⭐⭐ `8a-P2` — COUNTED THE INSTANT THE EVALUATOR RETURNS, AND THAT PLACEMENT IS THE WHOLE
       // POINT OF THE COUNTER. ⚠️ IT WAS FIRST WRITTEN 110 LINES BELOW THIS, AFTER TWO AWAITED
       // `updateActiveOpenPosition` WRITES — while its own comment claimed *"before any branch"*.
@@ -3209,14 +3249,14 @@ export class ActiveExecutionEngine {
         this._exitEvalHit++;
         switch (decision.exitReason) {
           case 'target_hit':
-            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}`);
+            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}${_xsTag}`);
             return {
               type: 'target_hit',
               price: currentPrice,
               reason: `Price ${(triggerBid ?? currentPrice).toFixed(2)} reached target ${(takeProfit ?? 0).toFixed(2)}`,
             };
           case 'stop_hit':
-            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}`);
+            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}${_xsTag}`);
             return {
               type: 'stop_hit',
               price: currentPrice,
@@ -3235,14 +3275,14 @@ export class ActiveExecutionEngine {
             // close_reason, and trips the #509 post-stop re-entry cooldown too —
             // conservative-safe, accepted; distinguishing them = a closeReason
             // taxonomy question for the Phase-25 learning reads.
-            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=break_even_stop trigger=${triggerBid ?? currentPrice} mark=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=break_even_stop trigger=${triggerBid ?? currentPrice} mark=${currentPrice}${_xsTag} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
             return {
               type: 'stop_hit',
               price: currentPrice,
               reason: `Break-even protection: ratcheted stop at ${decision.newStopPrice?.toFixed(2)} hit before target`,
             };
           case 'trailing_stop_hit':
-            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=trailing_stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=trailing_stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}${_xsTag} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
             return {
               type: 'trailing_stop_hit',
               price: currentPrice,
