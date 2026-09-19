@@ -57,3 +57,17 @@ Plan: `Scope Files/B_FEED_MISMATCH_FIX_PRE_AUDIT.md` r5, **cleared by Langston 2
 - **Finding, corrected in place:** the `canYield=false` rail's alert body no longer promises that resolving re-arms it (it fires once per streak; the streak clears only when the position closes).
 - **Findings homed (§9.4 disposition 3):** `CLOSE_NO_TRADE_ROW` still deletes (should write the row from the position) and stranded-clear's `fees:'0', slippage:'0'` → **`HOME: B-CLOSE-WRITER-COSTS, owner CC-B, placed in PHASE_19_PLAN at row 3n.u3, after 3n.u2`**.
 tsc 377 = 377; the batch's three test files 47/47.
+
+---
+
+## Step 6 — DEPLOYED `323ae277641368acb057e8ffa7643894aa1c2799` (joint with CC-C `8a-P4a`/`8a-P4b`)
+`dt-deploy … --by cc-b`: *"OK — live, engine resumed, identity asserted"*; `deployed_at 2026-09-19T00:02:43Z`, `migrate_ran_at 00:02:31Z` (1,043 ms) — BEFORE the restart. Previous good sha (rollback): `91647c9b99e2c0c1c548bab6127134301fd5f6a0` + the two `-rollback.sql` files in reverse date order.
+
+## Step 7 — FIRST-PASS VERIFICATION (CC-B)
+- **Migration at the object:** `closed_trades.exit_fill_book_warmth` and `exit_fill_arm` exist; `close_fill_contract` rows `up_tol 0.01`, `cold_refusal_cap 60` for `crypto_spot` and `xstock_spot`.
+- **P1 LIVE, first post-deploy close (00:02:47Z, 4 s after deploy):** `LOW/USD` xStock `stop_hit` taker — book age **51.8 s** ⇒ `exit_fill_book_warmth = stale_book`; walked fill **192.50** = witness bid **192.50** ⇒ within `up_tol` ⇒ `exit_fill_arm = walk_stale`; `exit_book_state_at_fill = two_sided`. Log line agrees: `[FILL_DEPTH_AGE] symbol=LOW/USD … ageMs=51784.908 warmth=stale_book arm=walk_stale`. ⭐ This is the position behind CC-C's hollow-book / unmanageable alerts (`748f2ba6`, `ef81571d`) — it closed at the real bid.
+- **Exit monitor healthy after restart:** first `[EVAL_EXIT]` cycle at 00:03:02Z evaluated 8/8 with WS prices, `exitEvalRefused=0`, `noTriggerRefusals=0`.
+- **UI (Claude-in-Chrome, `/paper-trading` → Closed Trades):** `LOW/USD` is the top row — `STOP LOSS`, `$198.8800 / $192.5000`, exit mode `TAKER`, 808 total trades; the dashboard's KPIs render. ⚠️ **The two new columns have NO UI surface** — they are forensic columns for the close audit, read by SQL; no panel was built for them in scope.
+- **Known, not new:** 18 `[TEC_CACHE_MISS_FATAL]` lines in the first ~2 s after restart (00:02:37-39Z), then clean — the boot race already filed as **`#1053` `B-TEC-PRIME-BOOT-RACE`** (plan row 2.4j, owner CC-B); the same line appears after the 09-13 and 09-14 restarts.
+- ⛔ **UNEXERCISED, DECLARED (Langston Step-4 obligation):** P2 (`_flattenOne` / engine-stop flatten), P3 (close-all, stranded-clear) and P4 (reconciler) have **zero live population ever** (0 rows of `manual_stop`, `stranded_clear`, `engine_stop_cleanup`, 07-15 → 09-18). Exercising them on staging means stopping the engine (flattens every open paper position) or pressing Close All — **not done without Kyle's go-ahead**. Their coverage is the unit/runtime tests (flatten cold → reference arm; refused flatten alerts at once; stranded-clear provenance fence). **Post-deploy silence on those arms proves nothing (#661 leg 3).**
+- **Not yet observed:** a REFUSED close (`CLOSE_REFUSED`), a `walk_yield`, a `synthetic_reference`. Watch: `select exit_fill_arm, count(*) from closed_trades where closed_at > '2026-09-19 00:02:43+00' group by 1`.
