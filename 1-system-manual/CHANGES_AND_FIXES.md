@@ -4105,3 +4105,19 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 - **Plan deviation, deliberate:** row `3n.u` said the flatten would stop accepting an unbounded-age `last_known_good`; it ACCEPTS it and stamps its age instead — holding a position through a kill switch is worse. The one live flatten (AMC/USD) took exactly that arm.
 - **`#1067` found by exercising the stop:** the stop's last write overflows `run_for_ms` after 24.85 days of session; the flatten completes but the session row still reads `running`.
 **STATUS: FIXED, deployed 2026-09-19 00:02:43Z; observation open.**
+
+---
+
+### `B-REACH-BASELINE-ADJUST` (`3n.v`) — the geometry baseline. Deployed `40f22a1bb`, 2026-09-20T21:19:40Z. CC-B.
+**FIXED**
+1. **`strong_bull_trend` was categorically OFF on both asset classes and nobody had decided it.** Its target is `entry + atr×6.0`, the guard divides by the CLAMPED ATR ⇒ `atrsToTarget ≥ 6.0` identically, against a 4.0 ceiling. **0 passes of 367,009 (crypto), 0 of 406 (xStock).** Per-strategy `reach_atr_max` 6.5, both classes — strictly above the spike, because 6.0 exactly is an undefined comparison.
+2. **Two `min_rr` floors sat EXACTLY on their strategy's own constant RR** — xStock `strong_bull_trend` and crypto `vwap_bounce`, both inheriting a class default of 2.00 against RR measured `1.9999999999999463 … 2.0000000000000484`. The gate was decided at the fourteenth decimal. Both seeded at 1.95.
+3. **crypto `vwap_pullback`'s floor refused 100 % of what the strategy now produces.** Its 2.44 came from a self-referential June derivation (*a notch below that strategy's own mean*) and had since drifted ABOVE that mean. The refused population realises **+3.771 %** (n=61) and **+3.601 %** (n=15) either side of the 09-11 epoch bump. Now 1.95.
+4. **xStock `vwap_pullback`'s ceiling was refusing trades better than the ones it admits** — measured against its OWN admitted cohort rather than a pooled one. `reach_atr_max` 6.0.
+5. **`target_floor_pct` deleted** — inert as geometry since reorg-B2.1 (2026-06-21), **but NOT inert as a throw**: read first and unconditionally, it was what made an unresolved asset class fail hard. **The assertion moved to the per-class `min_rr` row and the deletion shipped with it.**
+**RESIDUALS, STATED.**
+- ⛔ **THE GATES ARE UNEXERCISED AS OF THE DEPLOY.** The first post-deploy `strong_bull_trend` evaluations dropped on `invalid_atr` before reaching either threshold. **Silence proves nothing** (`#661` leg 3).
+- **The replacement assertion rests on a property of the DATA** — one wildcard-`asset_class` `min_rr` row would match any key and defeat it. A migration invariant refuses to apply while one exists and a test PINS the gap; the durable fix is `3n.v3`.
+- **The crypto leg's cohort is a mixture and its segments are small** — recut at every epoch bump the control runs n=12 / 14 / 33 and swings +2.556 % → −1.840 %. **What carries that leg is Kyle's replay evidence plus the pre-registered rollback trigger, not the cohort.**
+- **Per-class VTS statistics over this window are contaminated** — see `3n.v2`.
+**STATUS: FIXED, deployed 2026-09-20T21:19:40Z; 7-day observation open with its trigger and baselines pre-registered.**
