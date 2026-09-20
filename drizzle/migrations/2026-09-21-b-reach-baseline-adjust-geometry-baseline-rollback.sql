@@ -64,8 +64,13 @@ DECLARE n_tfp int; n_sbt int; n_vp int;
 BEGIN
   SELECT count(*) INTO n_tfp FROM module_constants
     WHERE module_name='expectancy_gates' AND constant_name='target_floor_pct';
+  -- SCOPED TO THIS BATCH'S THREE CELLS, not to every per-strategy ceiling (Langston's nit, Step 4):
+  -- counting all `strategy <> '*'` rows is right TODAY (there are none) and fails closed, but it would
+  -- make this rollback RAISE on somebody else's ceiling the moment one is seeded.
   SELECT count(*) INTO n_sbt FROM module_constants
-    WHERE module_name='expectancy_gates' AND constant_name='reach_atr_max' AND strategy <> '*';
+    WHERE module_name='expectancy_gates' AND constant_name='reach_atr_max'
+      AND (   (strategy='strong_bull_trend' AND asset_class IN ('crypto_spot','xstock_spot'))
+           OR (strategy='vwap_pullback'     AND asset_class='xstock_spot'));
   SELECT count(*) INTO n_vp FROM module_constants
     WHERE module_name='expectancy_gates' AND constant_name='min_rr'
       AND asset_class='crypto_spot' AND strategy='vwap_pullback' AND (value#>>'{}')::numeric = 2.44;
