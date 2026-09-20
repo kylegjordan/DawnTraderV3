@@ -23,7 +23,8 @@
 2b. `3n.u2` `B-ENTRY-LEVEL-RECHECK` — split out by Langston; re-check levels against the current price before the fill, both classes.
 2c. `3n.u3` `B-CLOSE-WRITER-COSTS` — Langston's Step-4 findings: write the close row instead of deleting when no trade row exists; no invented `fees 0 / slippage 0` on stranded-clear.
 2d. `3n.u4` `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`) — an engine stop overflows `run_for_ms` once the session is older than 24.85 days; the flatten completes but the session row stays `running`. Found by exercising the stop path.
-3. `3n.v` `B-REACH-BASELINE-ADJUST` — Kyle ruled the one-way rule goes; after CC-C's exit fix (`8a-P2`).
+3. **`3n.v` `B-REACH-BASELINE-ADJUST` — DEPLOYED `40f22a1bb` 2026-09-20T21:19:40Z, Step 10 done, OBSERVATION OPEN (7-day rollback window; the gates are still UNEXERCISED).** Record = `Batch Completion/B_REACH_BASELINE_ADJUST_PROGRESS_REPORT.md`. Split out and placed: `3n.v2` `B-VTS-CLASS-LABEL-INTEGRITY` (`#1068`) · `3n.v3` `B-GATE-WILDCARD-REFUSE` (`#1069`) · `3n.v4` `B-SILENT-STRATEGY-CENSUS` (`#1070`) · `3n.v5` `B-OPEN-OBLIGATION-SWEEP` (`#1071`).
+3a. ~~`3n.v` `B-REACH-BASELINE-ADJUST`~~ — Kyle ruled the one-way rule goes; after CC-C's exit fix (`8a-P2`).
 4. `3n.x` review — necessary vs nice-to-have before live mode (CC-B drafts, Kyle decides).
 
 ## THE QUEUE, in working order (as of 2026-09-13; the held list above now comes first)
