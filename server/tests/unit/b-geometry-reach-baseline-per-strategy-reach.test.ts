@@ -166,6 +166,26 @@ describe('OBJ-A part 2 — fail-closed on an unknown token (the defect min_rr ha
     expect(() => getPerClassTargetGate('some_future_class', 'garbage_token')).toThrow(/min_rr/);
   });
 
+  it('\u26a0\ufe0f THE LIMIT OF THAT ASSERTION, PINNED RATHER THAN CLAIMED: ONE wildcard-asset_class min_rr row silently defeats it', () => {
+    // Langston, B-REACH-BASELINE-ADJUST Step 4. The test above guards "the per-class rows exist", and
+    // that is NOT what the fail-hard rests on. It rests on the ABSENCE of an asset_class='*' min_rr
+    // row: the resolver scores a wildcard asset_class 0 and MATCHES ANY KEY, so one global row
+    // satisfies an unresolved class and the throw vanishes.
+    // THIS IS A LIVE SHAPE, NOT A HYPOTHETICAL: `min_rr_unknown_floor` and `reach_atr_max_unknown_floor`
+    // EACH already carry a global row beside their per-class rows - the precedent is in the same
+    // constant family, twice.
+    // THIS TEST ASSERTS THE GAP, NOT A PROTECTION. It does NOT throw, and that is the point. The
+    // migration's invariant (4b) refuses to apply while such a row exists, and the durable code-side
+    // fix - a resolver read that refuses a wildcard-asset_class match - is homed at B-GATE-WILDCARD-REFUSE.
+    _seedModuleCacheForTests('expectancy_gates', [
+      { moduleName: 'expectancy_gates', exchange: '*', assetClass: '*', strategy: '*', regime: '*', constantName: 'min_rr', value: 9.99 },
+      { moduleName: 'expectancy_gates', exchange: '*', assetClass: '*', strategy: '*', regime: '*', constantName: 'min_rr_unknown_floor', value: 2.88 },
+      { moduleName: 'expectancy_gates', exchange: '*', assetClass: '*', strategy: '*', regime: '*', constantName: 'reach_atr_max_unknown_floor', value: 4.0 },
+    ] as any);
+    expect(() => getPerClassTargetGate('some_future_class', 'garbage_token')).not.toThrow();
+    seedGate(); // restore the suite's fixture for the tests that follow
+  });
+
   it('the global reach floor row DOES resolve when read on the global key directly', () => {
     // ⛔ THIS CASE PREVIOUSLY READ `expect(GLOBAL_REACH_FLOOR).toBe(CRYPTO_REACH_FLOOR)` — two
     // constants declared 90 lines above, both 1.97. It read no cache and touched no production code:
