@@ -1,7 +1,8 @@
 # B-REACH-BASELINE-ADJUST — CHANGE LIST (Step 4 of 11)
 
-**change-class: architecture** · row `3n.v` · owner **CC-B** · **implementation at `cb763da5ae3bd03c273e7e712ff01f92d01e7868`**
-**Step 1 scope** `c156ac72f` (APPROVED with six conditions) · **Step 2 audit + plan** `99feb3d4a` · **STEP: 4 of 11 · NEXT STEP: 5 of 11**
+**change-class: architecture** · row `3n.v` · owner **CC-B** · **implementation `cb763da5a`, Step-4 revisions `27fba4d56` and `4f5f54188`**
+**Step 1 scope** `c156ac72f` (APPROVED, six conditions) · **Step 2 audit + plan** `99feb3d4a`, addendum `03b9a5197` · **STEP: 4 of 11 · NEXT STEP: 5 of 11**
+⭐ **Langston Step-4: CHANGES-NEEDED → two blockers + four conditions, then a RULING that the xStock ceiling ships. All discharged; see §7.**
 
 ---
 
@@ -15,9 +16,10 @@
 ('expectancy_gates', 'reach_atr_max', '6.5'::jsonb,  'xstock_spot', '*', '*', 'strong_bull_trend', …),
 ('expectancy_gates', 'min_rr',        '1.95'::jsonb, 'xstock_spot', '*', '*', 'strong_bull_trend', …),
 ('expectancy_gates', 'min_rr',        '1.95'::jsonb, 'crypto_spot', '*', '*', 'vwap_bounce',       …),
-('expectancy_gates', 'min_rr',        '1.95'::jsonb, 'crypto_spot', '*', '*', 'vwap_pullback',     …)
+('expectancy_gates', 'min_rr',        '1.95'::jsonb, 'crypto_spot', '*', '*', 'vwap_pullback',     …),
+('expectancy_gates', 'reach_atr_max', '6.0'::jsonb,  'xstock_spot', '*', '*', 'vwap_pullback',     …)
 ```
-*(five VALUES lines, four distinct changes — `vwap_pullback` is an UPDATE from 2.44, the other three are new rows.)*
+*(six VALUES lines across five cells — `crypto/vwap_pullback` is an UPDATE from 2.44; the other five are new rows.)*
 ```sql
 DELETE FROM module_constants
  WHERE module_name = 'expectancy_gates' AND constant_name = 'target_floor_pct';
@@ -66,7 +68,21 @@ export function getPerClassTargetGate(assetClass: string, strategy: string): { m
 `tsc` baseline **377 = 377**. **54 passed** across the six affected files; the reach suite **27/27**.
 ⚠️ **`b63-item12-geometry-override.test.ts` fails on a DB connection inside `prefetchModule`. VERIFIED PRE-EXISTING with a control:** stashing my one-line change to that file reproduces the identical failure (4 skipped, 1 file failed) without it.
 
-## 6. WHAT I WANT YOU TO LOOK AT HARDEST
+## 7. WHAT THE STEP-4 ROUNDS CHANGED — so §6 below is read as the question it WAS, not as open
+| his item | outcome |
+|---|---|
+| **BLOCKER-1** — the header still told the withdrawn story | ✅ **Already fixed one commit earlier** (`27fba4d56`, he read `03b9a519`). All three strings he cited are gone from the body; verified by grep at the ref. |
+| **BLOCKER-2** — xStock `vwap_pullback`'s withdrawal is wrong | ✅ **REVERSED — it ships at 6.0.** The pooled control was 63 % one strategy; against its OWN admitted cohort the cell is better on both axes. |
+| **BLOCKER-2b** — `range_trade`'s stated reason is false | ✅ Corrected in the header: 20 rows, not "fewer than 10"; withdrawn **on merits**. |
+| **C-1** — pin the multipliers | ✅ **Invariant (5), mutation-proved.** |
+| **C-2** — pre-deploy baselines, both classes | ✅ crypto −0.8981 % (n=50) · xStock −0.6664 % (n=41), recorded BEFORE the deploy; the admissions arm flagged as possibly unreadable on xStock. |
+| **C-3** — the xStock pair ships together | ✅ Stated in the migration: under a 4.0 ceiling that floor is unexercisable by construction. |
+| **C-4** — strike the stale lines inline | ✅ Struck in the audit BODY, not only in the addendum. |
+| **rider (i)** — my epoch cut straddled two later bumps | ✅ Recut at every bump and **stated as the weaker reading**: control segments are n=12/14/33 and swing +2.556 % → −1.840 %. |
+| **rider (ii)** — publish the control's n | ✅ **n=59**, beside the −0.171 %. |
+| **`RULED ON REPORTED FACT`** on the counts | ⚠️ Noted: those legs are his-unverified and are labelled as such wherever they appear. |
+
+## 6. WHAT I WANTED HIM TO LOOK AT HARDEST — and what he found
 1. **The replacement assertion.** It rests on a property of the DATA (the per-class `min_rr` default row has no global `'*'` fallback) rather than of the code. Migration invariant (4) pins it at apply time. **Is that enough, or does it want a code-side guard that cannot be un-seeded?**
 2. **6.5 specifically.** The moment bound says ≤1.93 % of crypto's tail sits above it and 0.00 % of xStock's. **It is chosen to clear an undefined comparison, not to be tight — argue me up or down.**
 3. **The withdrawals.** Six cells the scope proposed are not shipping, on a control (what the gates admit realises −1.61 % / −0.70 %) rather than on absolute P&L. **If you disagree with the control, four of the six change.**
