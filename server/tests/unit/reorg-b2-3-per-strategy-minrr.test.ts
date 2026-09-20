@@ -30,8 +30,7 @@ const K = (assetClass: string, strategy: string, constantName: string, value: nu
 
 function seedGate() {
   _seedModuleCacheForTests('expectancy_gates', [
-    // per-class defaults (needed by floorPct / reachAtrMax / min_rr '*')
-    K('crypto_spot', '*', 'target_floor_pct', 1.0),
+    // per-class defaults (needed by reachAtrMax / min_rr '*'; target_floor_pct deleted at P-6)
     K('crypto_spot', '*', 'reach_atr_max', 3.0),
     K('crypto_spot', '*', 'min_rr', 2.0),
     // a seeded per-strategy floor (range_trade) — the live-path subject

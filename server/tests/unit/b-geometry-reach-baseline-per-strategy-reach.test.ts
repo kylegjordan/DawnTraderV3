@@ -57,10 +57,8 @@ const GLOBAL_REACH_FLOOR = 1.97;
 
 function seedGate() {
   _seedModuleCacheForTests('expectancy_gates', [
-    K('crypto_spot', '*', 'target_floor_pct', 1.0),
     K('crypto_spot', '*', 'min_rr', 2.0),
     K('crypto_spot', '*', 'reach_atr_max', CLASS_DEFAULT_REACH),
-    K('xstock_spot', '*', 'target_floor_pct', 1.0),
     K('xstock_spot', '*', 'min_rr', 2.0),
     K('xstock_spot', '*', 'reach_atr_max', CLASS_DEFAULT_REACH),
     // the four seeded crypto ceilings
@@ -156,15 +154,16 @@ describe('OBJ-A part 2 — fail-closed on an unknown token (the defect min_rr ha
     expect(getPerClassTargetGate('xstock_spot', 'garbage_token').reachAtrMax).toBe(XSTOCK_REACH_FLOOR);
   });
 
-  it('⛔ AN UNRESOLVED ASSET CLASS THROWS AT target_floor_pct BEFORE REACH IS EVER CONSULTED', () => {
-    // MEASURED while writing this test, and it corrects a claim I had made about the global '*' row.
-    // `target_floor_pct` has exactly TWO rows in production (crypto / xStock) and no global '*', so an
-    // unresolved asset class fails hard on the FIRST read — the global reach floor is unreachable via
-    // this call path today. That is the CORRECT behaviour (a DB-governed setting fails hard when
-    // absent, never silently defaults), and it means the global row is a fail-safe for a future in
-    // which a global target_floor_pct exists, NOT a live protection. Asserting the throw pins the
-    // real behaviour so nobody later reads the global row as coverage it does not provide.
-    expect(() => getPerClassTargetGate('some_future_class', 'garbage_token')).toThrow(/target_floor_pct/);
+  it('⛔ AN UNRESOLVED ASSET CLASS THROWS AT min_rr BEFORE REACH IS EVER CONSULTED', () => {
+    // ⛔⛔ THIS TEST IS THE REASON B-REACH-BASELINE-ADJUST (P-6) COULD NOT JUST DELETE THE CONSTANT.
+    // It used to assert the throw came from `target_floor_pct`, which was read FIRST and had exactly
+    // two rows and no global '*'. Deleting it alone would have let the (unresolved class x drifted
+    // token) pair resolve SILENTLY against the global '*' unknown-floor rows — a DB-governed setting
+    // silently defaulting, which is the §11 trap this assertion exists to close.
+    // The per-class `min_rr` DEFAULT row has the same shape (two rows, no global '*'), so the
+    // assertion MOVED to it rather than being removed. ⚠️ THE FIXTURE DELIBERATELY NO LONGER SEEDS
+    // `target_floor_pct` AT ALL — if the resolver still read it, every test in this file would fail.
+    expect(() => getPerClassTargetGate('some_future_class', 'garbage_token')).toThrow(/min_rr/);
   });
 
   it('the global reach floor row DOES resolve when read on the global key directly', () => {
@@ -225,10 +224,8 @@ describe('⭐ THE SHIPPED CONFIGURATION — what the migration actually seeds, n
   // It is the only case in this file that exercises the production configuration; every other case
   // seeds FIXTURE_REACH to drive the resolver's per-strategy path.
   const seedShipped = () => _seedModuleCacheForTests('expectancy_gates', [
-    K('crypto_spot', '*', 'target_floor_pct', 1.0),
     K('crypto_spot', '*', 'min_rr', 2.0),
     K('crypto_spot', '*', 'reach_atr_max', CLASS_DEFAULT_REACH),
-    K('xstock_spot', '*', 'target_floor_pct', 1.0),
     K('xstock_spot', '*', 'min_rr', 2.0),
     K('xstock_spot', '*', 'reach_atr_max', CLASS_DEFAULT_REACH),
     K('crypto_spot', '*', 'min_rr_unknown_floor', 2.88),

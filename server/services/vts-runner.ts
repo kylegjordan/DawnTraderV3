@@ -1787,7 +1787,7 @@ async function generatePhase10Signal(
   const _b2Gate = getPerClassTargetGate(_assetClass, strategy);
   const _b2 = normalizeAndGateTarget({
     entryPrice, stopPrice: stopLoss, targetPrice: strategySignal.targetPrice,
-    floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
+    minRR: _b2Gate.minRR,
     atr: mceContext.indicators.atr, reachAtrMax: _b2Gate.reachAtrMax,
   });
   // ★ #371 normalizer-side ATR capture (VTS path — same bucket key as the guard side).

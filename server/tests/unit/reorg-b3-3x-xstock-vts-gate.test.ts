@@ -22,7 +22,7 @@ function disposition(reason: TargetNormalizeReason | undefined): 'pass' | 'tag' 
 function xstockGate(entry: number, stop: number, target: number, atr: number) {
   return normalizeAndGateTarget({
     entryPrice: entry, stopPrice: stop, targetPrice: target,
-    floorPct: 0, minRR: 2.5, atr, reachAtrMax: 4.0,
+    minRR: 2.5, atr, reachAtrMax: 4.0,
   });
 }
 

@@ -1908,7 +1908,7 @@ export class SignalOrchestrator {
     const _b2Atr = marketContext?.atr ?? sizingContext.atr;
     const _b2 = normalizeAndGateTarget({
       entryPrice: rawSignal.entryPrice, stopPrice: rawSignal.stopPrice, targetPrice: rawSignal.targetPrice ?? NaN,
-      floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
+      minRR: _b2Gate.minRR,
       atr: _b2Atr ?? NaN, reachAtrMax: _b2Gate.reachAtrMax,
     });
     // ★ #371 normalizer-side ATR capture (active path): the RAW atr this gate read, same

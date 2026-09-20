@@ -14,7 +14,7 @@ import { normalizeAndGateTarget } from '../../core/calculations/signal-target-no
 function gate(entryPrice: number, stopPrice: number, targetPrice: number) {
   return normalizeAndGateTarget({
     entryPrice, stopPrice, targetPrice,
-    floorPct: 0, minRR: 2.5, atr: Math.max(1e-9, Math.abs(targetPrice - entryPrice)) / 2, reachAtrMax: 100,
+    minRR: 2.5, atr: Math.max(1e-9, Math.abs(targetPrice - entryPrice)) / 2, reachAtrMax: 100,
   });
 }
 

@@ -722,7 +722,7 @@ export async function evaluateXstockPairForVTS(
         const _b3xGate = getPerClassTargetGate(ASSET_CLASS, strategyKey);
         const _b3x = normalizeAndGateTarget({
           entryPrice, stopPrice: stopLoss, targetPrice: takeProfit,
-          floorPct: _b3xGate.floorPct, minRR: _b3xGate.minRR,
+          minRR: _b3xGate.minRR,
           atr: mceContext.indicators.atr, reachAtrMax: _b3xGate.reachAtrMax,
         });
         // ★ #371 normalizer-side ATR capture (xStock VTS lane).

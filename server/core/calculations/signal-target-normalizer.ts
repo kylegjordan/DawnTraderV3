@@ -10,12 +10,14 @@
  * R-multiple/measured-move/percent) all set a final entry/stop/target; this helper sees only those
  * + the injected per-class knobs, so a per-strategy gate (19 drifting edits) is avoided.
  *
- * PURE FUNCTION — the caller injects the resolved per-class `floorPct` / `minRR` / `reachAtrMax`
+ * PURE FUNCTION — the caller injects the resolved per-class `minRR` / `reachAtrMax`
  * (from `module_constants` `expectancy_gates`, via `getPerClassTargetGate`) + the pair ATR. No DB
  * dependency → unit-testable in isolation and off the hot-path resolver.
  *
  * Order: LIFT → universal RR gate → reachability gate.
- *  - LIFT: `target' = max(nativeTarget, entry × (1 + floorPct))` (long-only). Weak targets lift to
+ *  - (was) LIFT: `target' = max(nativeTarget, entry × (1 + floorPct))` (long-only) — REMOVED at reorg-B2.1
+ *    (113e658c6); `floorPct` itself was DELETED at B-REACH-BASELINE-ADJUST P-6. The line is kept because
+ *    the drop REASONS still carry the names this ordering gave them. Weak targets lifted to
  *    the floor; STRONGER signals ride to their native target ABOVE the floor (dispersion is preserved —
  *    nothing clamps the top).
  *  - UNIVERSAL RR GATE: `rr = (target' − entry) / (entry − stop)`, applied to ALL signals (native OR
@@ -45,8 +47,6 @@ export type TargetNormalizeInput = {
   stopPrice: number;
   /** Native target from the strategy. */
   targetPrice: number;
-  /** Per-class target floor as a decimal ROI (e.g. 0.040 = 4%). Injected (Piece B). */
-  floorPct: number;
   /** Per-class minimum reward-to-risk ratio (e.g. 2.5). Injected (Piece B). */
   minRR: number;
   /** Pair ATR in price units (e.g. `mceContext.indicators.atr`). Reorg-B2 Piece C. */
@@ -97,8 +97,9 @@ export function normalizeAndGateTarget(input: TargetNormalizeInput): TargetNorma
   // The strategy's NATIVE target is used as-is; cost-coverage is enforced by the Net-Expectancy gate
   // (11.8B — strict netEV>0 on active, −1% on VTS by design), reward/risk by the RR gate below.
   // Lifting a sub-floor target to clear the RR gate was fabricating reward on the reward leg
-  // (the Net-Expectancy anti-pattern) and produced a target the strategy never chose. `floorPct` is
-  // now unused — retained on the input type only until OBJ-5 retires this helper into the shared guard.
+  // (the Net-Expectancy anti-pattern) and produced a target the strategy never chose.
+  // B-REACH-BASELINE-ADJUST (P-6, 2026-09-21): `floorPct` is GONE FROM THE INPUT TYPE TOO. Four call
+  // sites passed it and this function had read none of them since 2026-06-21.
   const lifted = false;
   const targetPrice = nativeTarget;
 

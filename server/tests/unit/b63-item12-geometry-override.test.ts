@@ -21,7 +21,7 @@ import { StrategyEngine, type TechnicalIndicators } from '../../services/strateg
 // strategy-helpers tests; this file isolates the B63 Item-12 geometry-override contract.
 vi.mock('../../core/calculations/expectancy.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../core/calculations/expectancy.js')>();
-  return { ...actual, getPerClassTargetGate: () => ({ floorPct: 0, minRR: 0, reachAtrMax: 1e9 }) };
+  return { ...actual, getPerClassTargetGate: () => ({ minRR: 0, reachAtrMax: 1e9 }) };
 });
 import type { PriceData } from '@shared/schema';
 import type { TradingSettings } from '@shared/schema';

@@ -359,7 +359,10 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     const { getCachedNumberRequired } = await import('../services/module-constants-service.js');
     for (const assetClass of ['crypto_spot', 'xstock_spot'] as const) {
       const k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
-      for (const c of ['roi_flex_multiplier', 'roi_absolute_min', 'roi_absolute_max', 'target_floor_pct', 'min_rr', 'reach_atr_max'] as const) {
+      // B-REACH-BASELINE-ADJUST (P-6): `target_floor_pct` removed from this list with the constant.
+      // `min_rr` stays FIRST-CLASS here for the same reason it replaced it in the gate resolver — it is
+      // the per-class row with no global '*' fallback, so its absence is what refuses an unknown class.
+      for (const c of ['roi_flex_multiplier', 'roi_absolute_min', 'roi_absolute_max', 'min_rr', 'reach_atr_max'] as const) {
         try {
           getCachedNumberRequired('expectancy_gates', c, k);
         } catch (err) {

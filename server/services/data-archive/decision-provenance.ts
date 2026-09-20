@@ -109,7 +109,11 @@ import { getPerClassTargetGate } from '../../core/calculations/expectancy.js';
 export function gateConstantsVersionFor(assetClass: string, strategy: string): string | null {
   try {
     const g = getPerClassTargetGate(assetClass, strategy);
-    const resolvedSet = { target_floor_pct: g.floorPct, min_rr: g.minRR, reach_atr_max: g.reachAtrMax };
+    // B-REACH-BASELINE-ADJUST (P-6): `target_floor_pct` left the resolved set with the constant.
+    // ⚠️ The hash therefore CHANGES at that deploy — but so does every cell P-1/P-2/P-3 re-seeds,
+    // which are two members of this same triple, so the cohort split happens at this deploy either
+    // way and is NOT attributable to the deletion.
+    const resolvedSet = { min_rr: g.minRR, reach_atr_max: g.reachAtrMax };
     const hash = hashResolvedSet('expectancy_gates', resolvedSet);
     recordConstantsVersion({ hash, moduleName: 'expectancy_gates', resolvedSet }, assetClass, strategy);
     return hash;

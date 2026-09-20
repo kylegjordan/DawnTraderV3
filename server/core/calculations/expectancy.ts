@@ -217,12 +217,24 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  * row, so one drifted token already increments it 2-4x per signal. The guarantee here is one increment
  * per GATE CALL; no rate may be published off it without saying so.
  *
- * `floorPct` stays per-CLASS: it is an ROI floor, not a horizon statement, and nothing in this
- * batch measured it per strategy.
+ * ⛔⛔ `target_floor_pct` WAS RETURNED HERE AS `floorPct` AND IS DELETED BY B-REACH-BASELINE-ADJUST
+ * (P-6, 2026-09-21). It had been inert since reorg-B2.1 removed the floor-LIFT (113e658c6, 06-21):
+ * every consumer passed it into `normalizeAndGateTarget`, which had stopped reading it. It changed
+ * no price for three months.
+ * ⚠️ IT WAS NOT INERT AS A THROW, AND THAT IS WHY THE DELETION SHIPS WITH A REPLACEMENT: it was
+ * read FIRST and unconditionally, BEFORE the strategy token is canonicalized, so it — not `min_rr` —
+ * is what made an UNRESOLVED ASSET CLASS fail hard. On the (unknown class x unrecognized token)
+ * path the unknown-floor rows DO have a global '*' fallback, so removing the throw would have
+ * converted a hard failure into a silent permissive resolve (the §11 no-silent-fallback shape).
  */
-export function getPerClassTargetGate(assetClass: string, strategy: string): { floorPct: number; minRR: number; reachAtrMax: number } {
+export function getPerClassTargetGate(assetClass: string, strategy: string): { minRR: number; reachAtrMax: number } {
   const _classKey = { exchange: '*', assetClass, strategy: '*', regime: '*' };
-  const floorPct = getCachedNumberRequired('expectancy_gates', 'target_floor_pct', _classKey);
+  // B-REACH-BASELINE-ADJUST (P-6) — THE REPLACEMENT ASSERTION. Keep this FIRST and keep it
+  // unconditional: the per-class `min_rr` DEFAULT row exists for every active class and has NO
+  // global '*' fallback, so requiring it here refuses an unresolved asset class exactly as the
+  // deleted `target_floor_pct` read did. It is a PRESENCE assertion — the value is deliberately
+  // discarded, because the strategy-scoped read below is the one that decides the gate.
+  getCachedNumberRequired('expectancy_gates', 'min_rr', _classKey);
 
   // UNKNOWN token → fail CLOSED on BOTH gates. `strategy` is REQUIRED (tsc-enforced), so a caller
   // that omits it fails the COMPILE rather than silently taking the permissive '*' default; an
@@ -231,7 +243,6 @@ export function getPerClassTargetGate(assetClass: string, strategy: string): { f
   if (canonical === null) {
     recordUnknownStrategyAtGate(assetClass, strategy);
     return {
-      floorPct,
       // The strictest floor in the class. min_rr is a MINIMUM so its strict value is the class MAX;
       // reach_atr_max is a MAXIMUM so its strict value is the class MIN. Opposite directions, same
       // intent — a drifted token can never be treated more permissively than a known one.
@@ -250,7 +261,6 @@ export function getPerClassTargetGate(assetClass: string, strategy: string): { f
   // the migration header was scrupulous and this comment forty lines away still told the old story.
   const _strategyKey = { exchange: '*', assetClass, strategy: canonical, regime: '*' };
   return {
-    floorPct,
     minRR:       getCachedNumberRequired('expectancy_gates', 'min_rr',        _strategyKey),
     // reorg-B2 (Piece C): the reachability bound (c·√H). Still PATH-invariant — what changed is that
     // `H` is now the STRATEGY's horizon rather than one horizon assumed for the whole asset class.
