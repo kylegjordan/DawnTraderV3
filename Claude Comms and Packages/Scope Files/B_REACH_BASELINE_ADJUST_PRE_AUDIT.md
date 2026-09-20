@@ -90,3 +90,53 @@ Crypto `strong_bull_trend` evaluates at **≈4,120/day** (367,009 over 89 days) 
 
 ## §4 RISK, AND THE ONE I AM LEAST COMFORTABLE WITH
 **P-1's crypto leg admits a cohort whose realised average is negative (−1.0 %) — better than the control (−1.6 %), but negative.** The honest summary: **on xStock the evidence is overwhelming; on crypto it is "less bad than what we trade today", and it is Kyle's ruling plus his replay evidence that carries it, not this cohort.** That is why A-7's rollback trigger is pre-registered here rather than described later, and why this paragraph exists instead of an average of the two classes.
+
+---
+
+# ⛔⛔ ADDENDUM r2 — A FRESH-READER ROUND OVERTURNED THREE OF THIS AUDIT'S OWN CLAIMS. ALL RE-DERIVED AT THE OBJECT BEFORE ANYTHING MOVED.
+**Raised claim-only — the reviewer was handed the CLAIMS and never my objects. Every number below is my own re-derivation on staging, not the reviewer's.**
+
+## AD-1 ⛔⛔ — THE CONTROL WAS THE WRONG OBJECT, AND IT INVERTS THE CRYPTO READING
+**A-2 used the VTS `passed` cohort as "what the gates admit today". That is what the gates admit IN THE VTS LANE.** The same archive distinguishes the lanes, and the live one is a different number:
+
+| control | crypto | xStock |
+|---|---|---|
+| `source = 'active-execution-engine'` — **what we actually trade** | **+0.340 %, 45.3 % win (n=223)** | −0.712 %, 36.9 % (n=176) |
+| `source = 'vts-runner'` — the whole simulated lane | −0.881 %, 39.0 % (n=2,565) | −0.794 %, 33.9 % (n=2,212) |
+| VTS `passed` only — **what A-2 used** | −1.606 %, 26.6 % (n=398) | −0.700 %, 31.1 % (n=630) |
+
+⇒ **A-2's sentence — "the admitted cohort also loses money" — is TRUE of the simulated lane and FALSE of the live one on crypto.** Against the lane that actually trades, crypto `strong_bull_trend`'s pooled refused cohort (−1.0 %) is **worse, not better.**
+
+## AD-2 ✅ — AND THEN THE EPOCH SPLIT REVERSES IT BACK, WHICH IS WHY AD-1 ALONE IS NOT THE ANSWER
+**A-1 claimed one epoch because all 8,669 rows carry one `calibration_state`. THAT COLUMN IS A `NOT NULL DEFAULT` THAT NO WRITER SETS** — one value is what a constant looks like, not evidence of a single regime. **The real stamp (`module_constants.calibration_epoch`) moved INSIDE the outcome window: 2026-09-11, 2026-09-15 and 2026-09-19.** Split at the 09-11 bump:
+
+| cell | PRE-epoch | POST-epoch | live-lane control (post) |
+|---|---|---|---|
+| crypto `strong_bull_trend` unreachable | −1.485 %, 38.0 % (n=1,309) | ✅ **+0.422 %, 51.4 % (n=459)** | −0.171 %, 42.4 % (n=59) |
+| crypto `vwap_pullback` rr_below_min | +3.771 %, 52.5 % (n=61) | ✅ **+3.601 %, 73.3 % (n=15)** | −0.171 %, 42.4 % |
+
+⇒ **Post-epoch, crypto `strong_bull_trend`'s refused cohort is POSITIVE and beats the live lane on both axes. The pooled −1.0 % in A-4 was two regimes averaged.** The bump is the price-side correction, so **post-epoch is the regime we are in, and the one the decision rests on.**
+
+## AD-3 ⛔⛔ — THE xSTOCK EVIDENCE IS AN ARTIFACT. I AM WITHDRAWING IT ENTIRELY.
+A-3 and A-4 called xStock `strong_bull_trend` **"the strongest single result in the audit"** (+8.84 %, 100 % win). Checked properly it is not a result at all:
+- **89 of 89 rows exit `TP_target_hit`. Zero stops. Zero time-stops. Median hold 1.0 MINUTE** — against a target sitting ≥ 6 ATRs away.
+- **The symbols are `STX/USD` and `STRK/USD` — CRYPTO pairs, on rows labelled `asset_class = 'xstock_spot'`.**
+- **CONTROL, the same query on crypto `strong_bull_trend`: `SL_hit` 1,002 / `TP_target_hit` 715 / `time_stop` 51, median holds 855–1,022 min — a plausible distribution.** The xStock shape is unique to that cell.
+
+⇒ ⛔ **A 100 %-win, one-minute, target-only cohort is the measuring apparatus, not the market.** **Every xStock `strong_bull_trend` outcome figure in this document is WITHDRAWN.**
+
+**🟨 FINDING, larger than this batch: rows labelled `xstock_spot` are carrying crypto symbols and booking instant target hits.** It contaminates any per-class VTS statistic drawn over this window — including ones other batches may already have drawn.
+**DISPOSITION: its own item, placed in `PHASE_19_PLAN` after `3n.v` — `B-VTS-CLASS-LABEL-INTEGRITY`, owner CC-B**, cross-referenced to CC-C because the price-side lane owns the writer. **Not folded in: a data-integrity defect is not a geometry threshold.**
+
+## AD-4 — TWO MORE CONFOUNDS, STATED RATHER THAN CLOSED
+- **DURATION IS NOT CONTROLLED AND THE COHORTS DIFFER ~3.5×** — crypto median holds: `passed` 295 min · `rr_below_min` 1,739 · `unreachable` 1,045. Under a concurrency cap, a percentage earned over triple the capital-time is a different economic object. **Nothing below rests on a percentage alone where that gap is large.**
+- **COVERAGE IS NOT PURELY RETENTION.** Of the in-window rows that do not join, **849 are maker TWINS excluded from the archive BY DESIGN** — a structured, entry-mode-correlated subpopulation, not random loss. A-1's *"the 55.1 % is retention, not the join"* is corrected to *"retention plus a by-design twin exclusion."*
+
+## AD-5 — WHAT THE PLAN BECOMES
+| # | was | now |
+|---|---|---|
+| **P-1 crypto ceiling 6.5** | shipped on a pooled cohort beating a VTS control | ✅ **SHIPS — on the POST-EPOCH cohort (+0.422 %, 51.4 %, n=459) against the live-lane control (−0.171 %, 42.4 %).** The pre-epoch half is stated beside it, not hidden. |
+| **P-1 xStock ceiling 6.5** | shipped on "the strongest result" | ⚠️ **NO EVIDENCE EITHER WAY — its cohort is withdrawn as an artifact.** What survives is that it is CATEGORICALLY off (0 of 406) and nobody decided that. **Langston rules: ship on Kyle's placed ruling, or hold for evidence.** |
+| **P-2 xStock `strong_bull_trend` floor 1.95** | shipped on the same cohort | ✅ **SHIPS ON THE CORRECTNESS ARGUMENT ALONE, which never needed the cohort:** its floor EQUALS its own constant RR, so the comparison is decided by float noise. Identical footing to crypto `vwap_bounce`. |
+| **P-3 crypto `vwap_pullback` 2.44 → 1.95** | *"admits the good half, refuses the bad half"* | ✅ **SHIPS, JUSTIFICATION CORRECTED.** The two RR points are **perfectly separated in TIME** — RR 0.80 ran 2026-06-25 → 08-05 (n=63), RR 2.00 ran 08-07 → 09-18 (n=82), **no overlap.** There is no bad half left to refuse: **the floor currently refuses 100 % of what the strategy now produces, and that population realises +3.6 to +3.8 % on BOTH sides of the epoch bump.** |
+| **P-4 withdrawals** | six cells | **unchanged** — none of this touches them. |
