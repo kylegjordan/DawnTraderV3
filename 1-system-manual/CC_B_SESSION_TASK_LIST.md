@@ -19,9 +19,10 @@
 
 **HELD, IN THIS ORDER (plan rows in the `3n` table):**
 1. `3n.s` `B-PRICE-DOC-CONSOLIDATE` — combine the feed map with `PRICING_DATA_ARCHITECTURE.md`.
-2. **`3n.u` `B-FEED-MISMATCH-FIX` — IN FLIGHT (Kyle 2026-09-19: "fix the incorrect feeds"), Step 2 r2 with Langston.** Close-fill freshness contract + the stop-flow flatten/reconciler + close-all.
+2. **`3n.u` `B-FEED-MISMATCH-FIX` — DEPLOYED `323ae2776` 2026-09-19, Langston Step-8 CONFIRMED; Step 10 governance done, Step 11 = a PROGRESS report (observation window on the unobserved arms).** Close-fill freshness contract + the stop-flow flatten/reconciler + close-all.
 2b. `3n.u2` `B-ENTRY-LEVEL-RECHECK` — split out by Langston; re-check levels against the current price before the fill, both classes.
 2c. `3n.u3` `B-CLOSE-WRITER-COSTS` — Langston's Step-4 findings: write the close row instead of deleting when no trade row exists; no invented `fees 0 / slippage 0` on stranded-clear.
+2d. `3n.u4` `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`) — an engine stop overflows `run_for_ms` once the session is older than 24.85 days; the flatten completes but the session row stays `running`. Found by exercising the stop path.
 3. `3n.v` `B-REACH-BASELINE-ADJUST` — Kyle ruled the one-way rule goes; after CC-C's exit fix (`8a-P2`).
 4. `3n.x` review — necessary vs nice-to-have before live mode (CC-B drafts, Kyle decides).
 

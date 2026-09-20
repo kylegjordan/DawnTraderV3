@@ -4088,3 +4088,20 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 - **xStock learning resets at this instant** — no xStock aggregate may span it — and that coincides with a looser EV gate, so the two effects cannot be separated in the window.
 - **The corrected verification SQL is at `11e39e5b6` and later, NOT in the deployed `b597f1bf2`** — analysis script, not runtime.
 **STATUS: FIXED, deployed 2026-09-11 20:09:47Z; observation open.**
+
+---
+
+### `B-FEED-MISMATCH-FIX` (`3n.u`) — the close-fill contract, the flatten path, and the close-all route. Deployed `323ae2776`, 2026-09-19 00:02:43Z. CC-B.
+**FIXED**
+1. **A forced close walked an order book of any age.** The close was the only fill site in the system that skipped the warmth gate it already owned (`warmth_max_age_ms`, 5 s crypto / 15 s xStock). Measured before the fix: **8 of 49 xStock taker closes walked an over-age book; 3 of those booked a sale 5.15-10.25% ABOVE the price buyers were showing** (SPGI, BABA, CTVA — all before the 09-04 book-state fix). Now every taker close is graded, records its verdict (`exit_fill_book_warmth`) and its arm (`exit_fill_arm`), and a not-warm walk landing above the witness bid by more than `close_fill_contract.up_tol` is refused (position stays open, retried; capped, then it yields and alerts).
+2. **A cold book booked `requestedPrice`** — a mark, or (on a flatten) the ENTRY price — with the penalty applied to it. Now `rejected`, unless a stopped-engine flatten passes an observed reference in.
+3. **Engine stop / kill-switch flatten recorded the entry price when no quote existed**, which made `slippage` equal gross P&L, sign-inverted. Now one flatten path: an observed quote of any age (its age recorded), else the book's best bid, else the position is LEFT OPEN and alerted — never the entry price.
+4. **Close All wrote its own row** (mark as exit, no walk, no fee, gross P&L) and **deleted the position even when no trade row matched, recording nothing.** Now routed through the canonical close; the no-trade-row deletion is loud (log + alert).
+5. **A sixth close path nobody had mapped** — the stop-time reconciler — booked at `getPrice` or the entry price with no fee and no provenance, over a population silently capped at the 1,000 most recent trades. Now: observed quote with full provenance, `limit:'all'`, left open + alerted if no price exists. **The SIM's close-path census went five → seven** (stranded-clear was the other; `hard_reset` is named and deliberately out of scope).
+6. **`resetPortfolio()` removed** (zero callers; `DELETED_COMPONENTS_LOG` + archive).
+**RESIDUALS, STATED.**
+- **Four of six arms are UNOBSERVED live**: the refusal, `walk_yield`, `walk_no_reference`, `synthetic_reference`. Observation window open; silence on them proves nothing.
+- **`up_tol = 0.01` is a choice inside an empty interval** (+0.47% healthy max, +5.15% lowest harm) and **crypto's row has n=0 not-warm closes behind it** — re-derive from post-deploy rows before calling either calibrated.
+- **Plan deviation, deliberate:** row `3n.u` said the flatten would stop accepting an unbounded-age `last_known_good`; it ACCEPTS it and stamps its age instead — holding a position through a kill switch is worse. The one live flatten (AMC/USD) took exactly that arm.
+- **`#1067` found by exercising the stop:** the stop's last write overflows `run_for_ms` after 24.85 days of session; the flatten completes but the session row still reads `running`.
+**STATUS: FIXED, deployed 2026-09-19 00:02:43Z; observation open.**
