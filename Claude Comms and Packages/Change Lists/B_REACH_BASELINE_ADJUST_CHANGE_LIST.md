@@ -9,7 +9,8 @@
 ## 0. WHAT CHANGED SINCE THE PLAN YOU CLEARED — NOTHING SILENTLY
 **The audit overturned the scope's own OBJ-3 and part of OBJ-2 before any code was written.** Five proposed ceilings became one; three proposed floors became one, plus two correctness seeds. **Every withdrawal carries its reason inside the migration header**, because a later reader will otherwise re-propose exactly those six.
 
-## 1. NEW — `drizzle/migrations/2026-09-21-b-reach-baseline-adjust-geometry-baseline.sql` (+ rollback, out of git per §7.1)
+## 1. NEW — `drizzle/migrations/2026-09-21-b-reach-baseline-adjust-geometry-baseline.sql` **and its rollback, BOTH IN GIT**
+⛔ **CORRECTED AT STEP 4 (Langston BLOCKER-1): r1 said the rollback was "out of git per §7.1" and BOTH halves of that were wrong.** There is no §7.1 in this document, and **94 rollback files are tracked in `drizzle/migrations` — including my own from the previous batch.** I acted on a line in my session-start notes that says rollback files stay out; **the repo says otherwise and the repo is the object.** The note is corrected in the same commit.
 **SIX rows ship across five cells** — r2: Langston reversed the xStock `vwap_pullback` withdrawal at Step 4 and it ships at 6.0:
 ```sql
 ('expectancy_gates', 'reach_atr_max', '6.5'::jsonb,  'crypto_spot', '*', '*', 'strong_bull_trend', …),

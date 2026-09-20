@@ -159,7 +159,18 @@
 -- than every seeded known-token floor. A drifted token can never be treated more permissively.
 --
 -- Per-(strategy x class), exchange/regime wildcard. Idempotent UPSERT so a re-apply corrects values.
--- Rollback: 2026-09-21-b-reach-baseline-adjust-geometry-baseline-rollback.sql (restores all six).
+-- ⛔⛔⛔ ROLLBACK ORDER — SQL FIRST, THEN THE CODE, AND THE OBVIOUS ORDER BREAKS THE SIGNAL PATH.
+-- (Langston BLOCKER-2, Step 4.) The standard revert is "deploy the previous sha". PREVIOUS-SHA CODE
+-- READS `target_floor_pct` FIRST AND UNCONDITIONALLY, and this migration deletes both rows ⇒ deploying
+-- the old code before running the rollback SQL makes the gate resolver THROW ON EVERY CALL, both
+-- classes, both lanes, plus the boot assertion. That is this migration's own deletion argument pointed
+-- backwards, and it is the code↔DB pairing to match the DB-side pairing stated at (2).
+-- ✅ REVERT AS: (1) run 2026-09-21-b-reach-baseline-adjust-geometry-baseline-rollback.sql; (2) THEN
+-- deploy the previous sha. Step (1) while the new code is live is harmless — the rows are unread.
+-- ⚠️ DEPLOY ORDER, the other direction: `dt-deploy` runs build → db:migrate → pm2 restart, so this
+-- DELETE lands while the OLD resolver is still serving, bounded by the 60 s constants-cache refresher.
+-- Seconds against a 60 s period, and fail-CLOSED if it is ever reached — but not structurally
+-- prevented, and stated here rather than discovered.
 
 BEGIN;
 
