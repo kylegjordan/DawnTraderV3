@@ -6,7 +6,7 @@
 -- from which we can still calibrate later." 2026-09-20, widening it: "strong bull trend and VWAP
 -- pullback settings aren't the only settings that should be adjusted."
 --
--- ⛔⛔ THIS MIGRATION SHIPS FIVE ROWS AND WITHDRAWS FIVE. The withdrawals are the finding, and each one
+-- ⛔⛔ THIS MIGRATION SHIPS SIX ROWS ACROSS FIVE CELLS AND WITHDRAWS FIVE. The withdrawals are the finding, and each one
 -- carries its reason below, because a later reader will otherwise re-propose exactly those five.
 --
 -- THE EVIDENCE, AND THE CONTROL THAT MAKES IT READABLE. The VTS lane TAGS a signal the RR/reachability
@@ -73,10 +73,25 @@
 --     time_stop 51 at 855–1,022 minute medians. ⇒ THE xSTOCK CEILING SHIPS WITH NO OUTCOME EVIDENCE
 --     EITHER WAY, on the finding that it is CATEGORICALLY off (0 passes of 406), that nobody decided
 --     that, and Kyle's placed ruling. The mislabelling is filed as B-VTS-CLASS-LABEL-INTEGRITY.
+--     ⭐ LANGSTON RULED IT SHIPS (Step 4, 2026-09-20), and the argument is ARITHMETIC, not the cohort:
+--     both multipliers are single asset_class='*' rows, so the geometry is CLASS-INVARIANT and xStock
+--     is categorically off BY CONSTRUCTION exactly as crypto is. Evidence AGAINST overrides a
+--     placeholder; ABSENCE of evidence does not — and holding this one cell for evidence would be
+--     re-imposing by hand the very rule Kyle struck on 09-15.
+--     ⛔ AND THE CORPUS A HOLD WOULD WAIT FOR DOES NOT EXIST: all 256 xstock_spot/strong_bull_trend
+--     rows ever written are 3 symbols (STX/USD 138, STRK/USD 114, ADI/USD 4), every one priced at or
+--     below $7.43. B-VTS-CLASS-LABEL-INTEGRITY relabels this cell to n=0, not to a readable number.
+--     ⚠️ BINDING FORWARD: the label contamination is decision-INERT here ONLY because this migration
+--     ships 6.5 to BOTH classes, so a crypto row wearing an xStock label is treated identically either
+--     way. That does NOT extend to any later per-class reading of this table.
 --     ⛔ STATED AGAINST INTEREST: Kyle's replay evidence (1,288 crypto maker trades on raw 1-minute
 --     bars: 2R −0.059, 4R +0.052, 6R +0.108 per trade) is doing real work here, and the batch
 --     pre-registered a rollback trigger BEFORE the deploy; see the pre-audit A-7.
 -- (2) min_rr = 1.95 for xstock_spot/strong_bull_trend (NEW ROW).
+--     ⛔ C-3 (Langston): THIS ROW AND THE xSTOCK CEILING SHIP TOGETHER OR NOT AT ALL. Under a 4.0
+--     ceiling this floor is UNEXERCISABLE by construction — the reach gate refuses the signal before
+--     the float-noise question can arise — so shipping the floor alone would be a no-op wearing a
+--     fix's clothes. Both are in this migration; a partial revert must take both.
 --     It had no row, so it inherited the class default 2.00 — against a structural RR that IS 2.0, and
 --     measured across 406 evaluations as rrMin 1.9999999999999791 .. rrMax 2.0000000000000155. The gate
 --     was being decided at the fourteenth decimal place, firing on ~11.9-15.1% of evaluations (bounded
@@ -172,7 +187,7 @@ DELETE FROM module_constants
 -- ── INVARIANTS — fail the migration loudly rather than ship a half-applied geometry baseline ──
 DO $$
 DECLARE
-  n_reach int; n_floor int; n_tfp int; n_classdefault int; n_global int; bad text;
+  n_reach int; n_floor int; n_tfp int; n_classdefault int; n_global int; n_mult int; bad text;
 BEGIN
   -- (1) both reach ceilings landed, and NEITHER is below its class default (Langston's binding-forward
   --     condition on the 2.4g-3 ratchet: a loosening batch may not ship a TIGHTENING under cover).
@@ -237,6 +252,18 @@ BEGIN
     WHERE module_name='expectancy_gates' AND constant_name='min_rr' AND asset_class='*';
   IF n_global <> 0 THEN
     RAISE EXCEPTION 'B-REACH-BASELINE-ADJUST: a wildcard asset_class min_rr row exists (% found) — it matches any key and would silently defeat the unresolved-asset-class fail-hard this batch moved onto min_rr. DO NOT DEPLOY', n_global;
+  END IF;
+
+  -- (5) ⛔⛔ PIN THE TWO MULTIPLIERS EVERY VALUE HERE IS A FUNCTION OF (Langston C-1, Step 4).
+  -- 6.5 is chosen because strong_bull_trend's target is atr*6.0 and its stop atr*3.0, and 1.95 because
+  -- that ratio makes its RR identically 2.0. NOTHING ELSE PINS THOSE TWO ROWS — and `2.4g-5` is still
+  -- OPEN on exactly the lever that moves them. If either moves, these ceilings and floors stop meaning
+  -- what this header says they mean, and a re-apply of this migration is the cheapest place to find out.
+  SELECT count(*) INTO n_mult FROM module_constants
+   WHERE (module_name='strategy.strong_bull_trend' AND constant_name='stop_loss_atr_multiplier'   AND (value#>>'{}')::numeric = 3.0)
+      OR (module_name='strategy.strong_bull_trend' AND constant_name='target_exit_atr_multiplier' AND (value#>>'{}')::numeric = 6.0);
+  IF n_mult <> 2 THEN
+    RAISE EXCEPTION 'B-REACH-BASELINE-ADJUST: strong_bull_trend geometry has MOVED (expected stop 3.0 + target 6.0, matched % rows). The 6.5 ceiling and the 1.95 floor are derived from those two values and no longer mean what the migration header says — re-derive before applying', n_mult;
   END IF;
 END $$;
 

@@ -26,18 +26,19 @@
 **OBJECT:** `vts_open_trades` (the tagged signal, carrying `context.vtsGateVerdict`, and its own entry/stop/target) **JOINED BY `trade_id` TO `exit_decision_archive`** (the realised close: `pnl_pct`, `r_multiple`, `exit_reason`, `duration_min`).
 **POPULATION:** **8,669** closed VTS rows carrying a verdict; **4,776 (55.1 %)** have a joined outcome. **Coverage is bounded by the archive's own retention window — 2026-08-01 → 2026-09-20, 5,175 rows total** — not by the join.
 ⛔ **THE JOIN THAT DOES NOT WORK, MEASURED WITH A POSITIVE CONTROL, BECAUSE THE SCOPE PROPOSED IT:** `exit_strategy_alternates` matches **0 of 8,669**, and **0 of ALL `vts_open_trades` rows** — the id spaces are disjoint (`vts_SYM_USD_ts` there against `vts_SYM_USD_STRATEGY_ts` here). **That is `2.4g-4` (i) reproduced on this batch's own cohort.** The archive is a different table and it joins.
-✅ **EPOCH (C-6 / Langston condition iii): every one of the 8,669 rows carries `calibration_state = pre_calibration_xstock_2026_05`. ONE epoch — no split is needed, and this is recorded so the absence of a split is not read as an omission.**
+⛔⛔ ~~**EPOCH: every one of the 8,669 rows carries one `calibration_state`. ONE epoch — no split is needed.**~~ **STRUCK — SEE AD-2. The claim is TRUE and MEANS NOTHING:** that column is a `NOT NULL DEFAULT` and **a repo-wide grep finds no writer that sets it on `vts_open_trades`** — the only writes are to `exit_strategy_alternates`, and every `vts_open_trades` reference is a READ. *(Grep reach stated: `server/**/*.ts`, tests excluded; a raw-SQL write from outside `server/` would not appear.)* **The real stamp moved three times inside the window — 2026-09-11, 09-15 and 09-19 — so every pooled figure here spans at least one boundary.**
 
 ### A-2 ⛔⛔ — THE CONTROL, AND IT CHANGES EVERY READING BELOW
 **What the two gates ADMIT today, realised:** crypto **−1.606 % avg, 26.6 % win (n = 398)** · xStock **−0.700 % avg, 31.1 % win (n = 630)**.
-★ **SO "THE REFUSED COHORT LOST MONEY" IS NOT A JUSTIFICATION FOR A GATE.** The admitted cohort also loses money. **Every judgement in A-3 and A-4 is made against this control, never against zero.**
+★ **SO "THE REFUSED COHORT LOST MONEY" IS NOT A JUSTIFICATION FOR A GATE.** The admitted cohort also loses money. **Every judgement in A-3 and A-4 is made against a control, never against zero.**
+⛔⛔ **BUT NOT AGAINST *THIS* CONTROL WHERE A BETTER ONE EXISTS — CORRECTED AT STEP 4.** ~~Pooled is the control.~~ **The pooled xStock figure is 63 % ONE STRATEGY (`morning_star`, 398 of 630), and judging cells against it REVERSED one withdrawal its own admitted cohort does not support (A-4, xStock `vwap_pullback`). PER-CELL IS THE DEFAULT; the pooled control is used only where a cell's admitted set is EMPTY, and that is said where it happens.**
 ⚠️ **BIAS, KNOWN SIGN, NOT DISCLOSED AS A CAVEAT (Langston condition ii):** crypto VTS books the observed MARK at exit, which is favourable by roughly half a spread. **It applies to the cohort and the control identically, so the RELATIVE comparison is robust and the ABSOLUTE levels are optimistic.** No absolute level is load-bearing below.
 
 ### A-3 — THE `min_rr` REFUSALS, AGAINST THE CONTROL
 | class · strategy | floor | refused cohort | vs control | verdict |
 |---|---|---|---|---|
 | crypto `vwap_pullback` | 2.44 | **RR 2.00: +4.85 %, 63.6 % win (n=66)** · RR 0.80: −3.63 %, 10 % win (n=10) | control −1.61 % / 26.6 % | ⛔ **THE FLOOR IS COSTING MONEY.** Two-point distribution ⇒ **any floor in (0.80, 2.00] admits the good cohort and keeps refusing the bad one.** |
-| xStock `strong_bull_trend` | 2.00 (class default) | **+8.84 %, 100 % win (n=22)** | control −0.70 % / 31.1 % | ⛔ **THE STRONGEST SINGLE RESULT IN THE AUDIT** — and it is refused by an undefined comparison (F-1). |
+| xStock `strong_bull_trend` | 2.00 (class default) | ~~+8.84 %, 100 % win (n=22)~~ ⛔ **WITHDRAWN AS AN ARTIFACT — AD-3** | — | ⛔ **STILL SHIPS, ON THE CORRECTNESS ARGUMENT ALONE:** its floor EQUALS its own constant RR, so the comparison is decided by float noise whatever the outcomes are. ~~"the strongest single result in the audit"~~ was mine and it was wrong. |
 | crypto `reverse_impulse` | 2.40 | **−4.06 %, 0 % win (n=14)** | control −1.61 % / 26.6 % | ✅ **CORRECTLY REFUSED — the scope proposed lowering this and the evidence says do not.** |
 | crypto `morning_star` | 1.39 | −1.98 %, 50.0 % win (n=24) | control −1.61 % / 26.6 % | ⚠️ **Ambiguous** — worse on P&L, better on win rate. **No change; it is a 25-20 question.** |
 | xStock `pivot_shift` | 2.16 | −0.53 %, 30.4 % win (n=69) | control −0.70 % / 31.1 % | ✅ **Indistinguishable from the control. No case either way; no change.** |
@@ -46,9 +47,9 @@
 ### A-4 ⛔⛔ — THE REACHABILITY REFUSALS, AND THIS IS WHERE THE SCOPE WAS WRONG
 | class · strategy | band | refused cohort | vs control | verdict |
 |---|---|---|---|---|
-| xStock `strong_bull_trend` | att 5–6 / 6–7 | **+8.86 % (n=36) / +8.09 % (n=31), 100 % win both** | −0.70 % / 31.1 % | ⛔ **ADMIT. Two independent cohorts, same answer as A-3.** |
+| xStock `strong_bull_trend` | att 5–6 / 6–7 | ~~+8.86 % (n=36) / +8.09 % (n=31), 100 % win~~ ⛔ **WITHDRAWN AS AN ARTIFACT — AD-3** | — | ⛔ **SHIPS ON THE ARITHMETIC, RULED BY LANGSTON:** both multipliers are single `'*'` rows ⇒ the geometry is CLASS-INVARIANT ⇒ xStock is categorically off **by construction**, exactly as crypto. Evidence *against* overrides a placeholder; *absence* of evidence does not. |
 | crypto `strong_bull_trend` | att 5–6 / 6–7 | **−1.10 % (n=885) / −0.89 % (n=883), ~41 % win** | −1.61 % / 26.6 % | ⚠️ **BETTER than the control on BOTH axes, and still NEGATIVE.** See P-1's honest statement and its rollback trigger. |
-| xStock `vwap_pullback` | 4–5 · 5–6 · 6–7 · 7+ | −1.42 / −1.59 / −1.64 / −1.27 %, **23–31 % win (n=860)** | −0.70 % / 31.1 % | ✅ **WORSE than what the gates admit, at every band. THE CEILING IS DOING ITS JOB — WITHDRAWN from the plan.** |
+| xStock `vwap_pullback` | 4–5 · 5–6 · 6–7 · 7+ | −1.42 / −1.59 / −1.64 / −1.27 %, 23–31 % win (n=860) | ⛔ **ITS OWN: −1.605 % / 20.0 % (n=35)** | ⛔⛔ **WITHDRAWAL REVERSED AT STEP 4 — IT SHIPS at 6.0.** Against the POOLED control it looked worse; against **its own admitted cohort** it is better on **both** axes. ~~"the ceiling is doing its job"~~ was an artifact of a mixed control. |
 | xStock `sma_trend_ride` | 4–5 · 5–6 · 6–7 · 7+ | −1.38 / −1.31 / −2.13 / −1.78 %, **25–38 % win (n=547)** | −0.70 % / 31.1 % | ✅ **WORSE at every band, and it gets worse as the target gets further. WITHDRAWN.** |
 | crypto `vwap_pullback` | 7+ | −0.02 %, 40.1 % win (n=232) | −1.61 % / 26.6 % | ⚠️ **Better than control — but the band is `att ≈ 12`, far outside any ceiling this batch would set. Recorded, not acted on.** |
 | crypto `range_trade` | 4–5 | −2.48 %, **4.3 % win (n=23)** | −1.61 % / 26.6 % | ✅ **Correctly refused.** |
@@ -132,11 +133,28 @@ A-3 and A-4 called xStock `strong_bull_trend` **"the strongest single result in 
 - **DURATION IS NOT CONTROLLED AND THE COHORTS DIFFER ~3.5×** — crypto median holds: `passed` 295 min · `rr_below_min` 1,739 · `unreachable` 1,045. Under a concurrency cap, a percentage earned over triple the capital-time is a different economic object. **Nothing below rests on a percentage alone where that gap is large.**
 - **COVERAGE IS NOT PURELY RETENTION.** Of the in-window rows that do not join, **849 are maker TWINS excluded from the archive BY DESIGN** — a structured, entry-mode-correlated subpopulation, not random loss. A-1's *"the 55.1 % is retention, not the join"* is corrected to *"retention plus a by-design twin exclusion."*
 
+## AD-4b — THE TWO RIDERS LANGSTON PUT ON THE LEGS HE WAS NOT ASKED ABOUT, BOTH MEASURED
+**(i) MY "POST-EPOCH" CUT STRADDLED TWO LATER BOUNDARIES.** I split at 09-11 and called the remainder one regime, while stating myself that the stamp moved three times. Recut at every bump, crypto `strong_bull_trend` unreachable against the live-lane control:
+
+| segment | cohort | live-lane control |
+|---|---|---|
+| before 09-11 | −1.485 % (n=1,309) | +0.523 % (n=164) |
+| 09-11 → 09-15 | −3.994 %, 21.1 % (n=90) | +1.237 % (n=12) |
+| 09-15 → 09-19 | +2.090 %, 69.7 % (n=211) | +2.556 % (n=14) |
+| after 09-19 | **+0.710 %, 44.3 % (n=158)** | **−1.840 % (n=33)** |
+
+⇒ ⛔ **THE HONEST READING IS WEAKER THAN "POST-EPOCH IS POSITIVE", AND I AM STATING IT AS THE WEAKER ONE.** The cohort is positive in the two most recent segments and beats the control in the last; **but the control segments are n=12 / n=14 / n=33 and swing from +2.556 % to −1.840 %.** At this resolution **neither side supports a strong claim**, which is exactly why §4 says Kyle's replay evidence plus the pre-registered rollback trigger carry the crypto leg — not this cohort.
+**(ii) THE POST-EPOCH CONTROL'S n IS PUBLISHED BESIDE IT, as asked: −0.171 % on n=59.** A 59-row comparator was being asked to reverse a pooled reading, and that is too much weight for it.
+
+## AD-4c — C-2: THE PRE-DEPLOY BASELINE, RECORDED BEFORE THE DEPLOY RATHER THAN RECONSTRUCTED AFTER
+**Live-lane realised P&L, trailing 7 days, read 2026-09-21 before any deploy: crypto −0.8981 % over n=50 (38.0 % win) · xStock −0.6664 % over n=41 (31.7 % win).** These are A-7's rollback-trigger baselines and both classes are recorded, not just the one the change is expected to move.
+⚠️ **AND THE ADMISSIONS ARM MAY BE UNREADABLE ON xSTOCK: a 25 %-of-admissions threshold needs enough admissions to have a share at all.** If that class's volume stays where it is, **a zero there means "not measured", never "passed"** (#661 leg 3) — written down before the window opens.
+
 ## AD-5 — WHAT THE PLAN BECOMES
 | # | was | now |
 |---|---|---|
 | **P-1 crypto ceiling 6.5** | shipped on a pooled cohort beating a VTS control | ✅ **SHIPS — on the POST-EPOCH cohort (+0.422 %, 51.4 %, n=459) against the live-lane control (−0.171 %, 42.4 %).** The pre-epoch half is stated beside it, not hidden. |
-| **P-1 xStock ceiling 6.5** | shipped on "the strongest result" | ⚠️ **NO EVIDENCE EITHER WAY — its cohort is withdrawn as an artifact.** What survives is that it is CATEGORICALLY off (0 of 406) and nobody decided that. **Langston rules: ship on Kyle's placed ruling, or hold for evidence.** |
+| **P-1 xStock ceiling 6.5** | shipped on "the strongest result" | ✅ **SHIPS — LANGSTON RULED IT, 2026-09-20, and on the arithmetic rather than the cohort:** both multipliers are single `'*'` rows, so the geometry is class-invariant and xStock is categorically off **by construction**. ⛔ **And the corpus a hold would wait for does not exist: all 256 rows ever written in that cell are three symbols, every one priced ≤ $7.43 — the integrity fix relabels it to n=0, not to a readable number.** Holding it would re-impose by hand the rule Kyle struck. |
 | **P-2 xStock `strong_bull_trend` floor 1.95** | shipped on the same cohort | ✅ **SHIPS ON THE CORRECTNESS ARGUMENT ALONE, which never needed the cohort:** its floor EQUALS its own constant RR, so the comparison is decided by float noise. Identical footing to crypto `vwap_bounce`. |
 | **P-3 crypto `vwap_pullback` 2.44 → 1.95** | *"admits the good half, refuses the bad half"* | ✅ **SHIPS, JUSTIFICATION CORRECTED.** The two RR points are **perfectly separated in TIME** — RR 0.80 ran 2026-06-25 → 08-05 (n=63), RR 2.00 ran 08-07 → 09-18 (n=82), **no overlap.** There is no bad half left to refuse: **the floor currently refuses 100 % of what the strategy now produces, and that population realises +3.6 to +3.8 % on BOTH sides of the epoch bump.** |
 | **P-4 withdrawals** | six cells | **unchanged** — none of this touches them. |

@@ -9,7 +9,7 @@
 **The audit overturned the scope's own OBJ-3 and part of OBJ-2 before any code was written.** Five proposed ceilings became one; three proposed floors became one, plus two correctness seeds. **Every withdrawal carries its reason inside the migration header**, because a later reader will otherwise re-propose exactly those six.
 
 ## 1. NEW — `drizzle/migrations/2026-09-21-b-reach-baseline-adjust-geometry-baseline.sql` (+ rollback, out of git per §7.1)
-**Four rows ship:**
+**SIX rows ship across five cells** — r2: Langston reversed the xStock `vwap_pullback` withdrawal at Step 4 and it ships at 6.0:
 ```sql
 ('expectancy_gates', 'reach_atr_max', '6.5'::jsonb,  'crypto_spot', '*', '*', 'strong_bull_trend', …),
 ('expectancy_gates', 'reach_atr_max', '6.5'::jsonb,  'xstock_spot', '*', '*', 'strong_bull_trend', …),
@@ -22,7 +22,8 @@
 DELETE FROM module_constants
  WHERE module_name = 'expectancy_gates' AND constant_name = 'target_floor_pct';
 ```
-**FOUR INVARIANTS, each raising rather than shipping a half-applied baseline:** (1) both ceilings landed **and neither is below its class default** — your binding-forward condition on the `2.4g-3` ratchet, enforced by a join rather than by a literal; (2) **every** seeded per-strategy `min_rr` stays ≤ its class `min_rr_unknown_floor`, so a drifted token is never more permissively treated than a known one; (3) the three seeded floors are strictly below 2.0; (4) `target_floor_pct` is gone **AND** the per-class `min_rr` default rows that inherit its fail-hard duty are present — *"DO NOT DEPLOY"* if not.
+**SIX INVARIANTS, each raising rather than shipping a half-applied geometry baseline.**
+⭐ **(4b) and (5) were Langston-ordered at Step 4, and both are mutation-proved against LIVE staging in a rolled-back transaction.** **(4b)** refuses to apply while a wildcard-`asset_class` `min_rr` row exists — because THAT, not the presence of the per-class rows, is what the moved fail-hard actually rests on. **(5)** pins `strong_bull_trend`'s stop 3.0 and target 6.0: **6.5 and 1.95 are functions of those two rows, nothing else pinned them, and `2.4g-5` is still open on exactly the lever that moves them.** ✅ **Mutation proof: flipping (5)'s expected target to 5.0 raises and aborts the transaction.** The original four: (1) both ceilings landed **and neither is below its class default** — your binding-forward condition on the `2.4g-3` ratchet, enforced by a join rather than by a literal; (2) **every** seeded per-strategy `min_rr` stays ≤ its class `min_rr_unknown_floor`, so a drifted token is never more permissively treated than a known one; (3) the three seeded floors are strictly below 2.0; (4) `target_floor_pct` is gone **AND** the per-class `min_rr` default rows that inherit its fail-hard duty are present — *"DO NOT DEPLOY"* if not.
 
 ## 2. MODIFIED — the gate resolver, and the reason the deletion is not a deletion
 `server/core/calculations/expectancy.ts`
