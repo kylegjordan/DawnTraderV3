@@ -14,10 +14,12 @@ import { evaluatePendingMaker } from '../../core/trading/pending-maker-logic.js'
 import { isDiscontinuityActive, _testClearAllState, _testGetSymbolEntry, _testInjectDividendCalendar } from '../../services/price-discontinuity-detector.js';
 import { seedXstockUniverse } from '../helpers/seed-xstock-universe.js';
 import { resolveSentinelLane } from '../../services/tec-evaluator.js';
-import { xstockTransactableSides } from '../../services/active-execution-engine.js';
+import { xstockTransactableSides } from '../../asset_classes/xstock_spot/transactable-sides.js';
 
 const AEE = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf-8').replace(/\r\n/g, '\n');
 const count = (re: RegExp) => (AEE.match(re) ?? []).length;
+// `8a-P4c` P2: the predicate's ONE definition now lives in the shared module both lanes import.
+const SIDES = readFileSync(join(process.cwd(), 'server/asset_classes/xstock_spot/transactable-sides.ts'), 'utf-8').replace(/\r\n/g, '\n');
 
 describe('8a-P4b — J1: the sides are captured once, from the frame the guard judged', () => {
   it('xsBid/xsAsk are assigned on exactly two arms: the validated line and the guard-off arm', () => {
@@ -44,7 +46,12 @@ describe('8a-P4b — J1: the sides are captured once, from the frame the guard j
   it('Step 4 BLOCKER-1: BOTH capture sites take their sides through the ONE uncrossed predicate', () => {
     expect(count(/const _gSides = xstockTransactableSides\(_raw\);/g)).toBe(1);
     expect(count(/const _offSides = xstockTransactableSides\(_offRaw\);/g)).toBe(1);
-    expect(count(/xstockTransactableSides\(/g)).toBe(3); // the definition + the two sites, nothing else
+    // ⛔ `8a-P4c` P2 + Langston CONDITION-3: RE-POINTED, not relaxed. The subject is unchanged — paper calls the ONE shared
+    // predicate at exactly these two sites; the definition moved to `transactable-sides.ts`, so it is counted THERE.
+    expect(count(/xstockTransactableSides\(/g)).toBe(2); // the two sites, nothing else — no second definition in the engine
+    expect(count(/function xstockTransactableSides/g)).toBe(0);
+    expect(count(/import \{ xstockTransactableSides \} from '\.\.\/asset_classes\/xstock_spot\/transactable-sides\.js';/g)).toBe(1);
+    expect((SIDES.match(/export function xstockTransactableSides\(/g) ?? []).length).toBe(1);
     expect(AEE.indexOf('const _gSides = xstockTransactableSides(_raw);')).toBeLessThan(AEE.indexOf('xsBid = _gSides.bid;'));
     expect(AEE.indexOf('const _offSides = xstockTransactableSides(_offRaw);')).toBeLessThan(AEE.indexOf('xsBid = _offSides.bid;'));
   });

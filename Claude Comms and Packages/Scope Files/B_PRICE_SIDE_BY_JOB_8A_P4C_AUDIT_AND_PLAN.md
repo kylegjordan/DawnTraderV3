@@ -104,6 +104,8 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 - **Capability:** one pure classifier, fixture-tested on every arm (a row with no bid, a crossed row, each age and spread bucket, each divergence). **Live known-positive:** `noRow` (14+ xStock no-mark streaks in one pass at `8a-P3` Step 7).
 - **Coverage:** `error.log` holds ~14 days; the window below is 5 sessions; the extract names its file range.
 - **Invocation:** `looks > 0` in each bucket (200 open xStock VTS trades today). **A bucket with no looks is UNKNOWN, not zero.**
+- ➕ **REACHABILITY OF THE SYMBOL FLOOR, MEASURED ON DAY 1 (Langston's Step-3 rider, 2026-09-22T14:07:47Z):** at the **first full `regular` hour** of the window, count per lane the symbols with any `regular` look and state the number out loud. The floor needs ≥ 50 symbols at ≥ 120 `regular` looks over the window, and decisions sit on ~99 symbols — a thin margin, and the shadow lane may not reach it. **A lane that cannot clear 50 is INCONCLUSIVE-EXTEND by construction, and that is known on day 1, not discovered at close. It is NOT licence to relax the floor.**
+- ⚠️ **Cross-lane reach (Langston):** the new lines are on `console.warn` (~14-day `error.log`), while `8a-P3`'s `[VTS_TOUCH]` stays on `console.log` (~4.5 h `out.log`) — any comparison between them over the window has 14 days on one side and hours on the other.
 
 ### B4. THE DECISION RULE — PRE-REGISTERED HERE, BEFORE THE INSTRUMENT IS BUILT
 - **Window:** from the instrument deploy's restart, **five full US weekday sessions**. A later restart does not reset emitted totals; a build change splits the window.

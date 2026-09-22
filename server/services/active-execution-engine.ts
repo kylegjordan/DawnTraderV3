@@ -488,23 +488,10 @@ import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_clas
 import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis } from '../asset_classes/xstock_spot/book-state-tracker.js';
 import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
+import { xstockTransactableSides } from '../asset_classes/xstock_spot/transactable-sides.js';
 
-/**
- * ⛔⛔ `8a-P4b` Step 4 BLOCKER-1 (Langston) — THE ONE PREDICATE BOTH xSTOCK CAPTURE SITES USE (J1 guarded, J2 unguarded).
- * A frame's sides become DECISION inputs (X1 fill on the ask, X2 rest fill and X3 trigger on the bid) only if both are
- * present, the bid is positive, and the book is NOT CROSSED (`ask >= bid`). The book-state guard's `two_sided` verdict
- * does NOT carry the uncrossed test (`book-state.ts` computes `twoSidedNow` and the exit path never uses it; a crossed
- * frame has a null mid, so the departure arms compare NaN and pass), and the archiver stores whatever the venue sent.
- * A crossed frame would hand X3 a bid above the ask and X2/X1 inflated/depressed fills — all optimistic, the one
- * direction row `8a` exists to close. `null` ⇒ no decision and no fill this tick, exactly as a missing side.
- */
-export function xstockTransactableSides(
-  raw: { bid: number | null; ask: number | null } | null | undefined,
-): { bid: number; ask: number } | null {
-  if (!raw || raw.bid === null || raw.ask === null) return null;
-  if (!(raw.bid > 0) || !(raw.ask >= raw.bid)) return null; // also rejects NaN
-  return { bid: raw.bid, ask: raw.ask };
-}
+// `8a-P4c` P2: `xstockTransactableSides` — the one usable-side predicate — lives in the shared module
+// `asset_classes/xstock_spot/transactable-sides.ts`, so the VTS lane calls the same function (Langston, 2026-09-22).
 
 /**
  * PURE — chooses the price-skip alert copy. Extracted so the BRANCH is testable without a

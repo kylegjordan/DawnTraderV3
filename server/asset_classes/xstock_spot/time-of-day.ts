@@ -66,3 +66,32 @@ export function getTimeOfDayClass(utcTs: Date | number): TimeOfDayClass {
   if (minutesAfterMidnight < 16 * 60) return 'close_hour';
   return 'after_close';
 }
+
+/**
+ * `8a-P4c` — the four NEW YORK TRADING SESSIONS the VTS xStock instrument buckets by (pre-registered in
+ * `Scope Files/B_PRICE_SIDE_BY_JOB_8A_P4C_AUDIT_AND_PLAN.md` §B1). Distinct from the seven observation buckets
+ * above: those split the regular day, these split the 24/5 week into the regimes a quote's age and spread differ by.
+ *   regular   — 09:30 to 16:00 ET
+ *   pre       — 04:00 to 09:30 ET
+ *   after     — 16:00 to 20:00 ET
+ *   overnight — 20:00 to 04:00 ET
+ * No pooled rate across these is ever published (Langston, 2026-09-22): xStock quote quality is a mixture over them.
+ */
+export type XstockSession = 'regular' | 'pre' | 'after' | 'overnight';
+
+export function getXstockSession(utcTs: Date | number): XstockSession {
+  const d = utcTs instanceof Date ? utcTs : new Date(utcTs);
+  const parts = NY_TZ_FORMATTER.formatToParts(d);
+  let hour = 0;
+  let minute = 0;
+  for (const p of parts) {
+    if (p.type === 'hour') hour = Number(p.value);
+    else if (p.type === 'minute') minute = Number(p.value);
+  }
+  if (hour === 24) hour = 0;
+  const m = hour * 60 + minute;
+  if (m >= 9 * 60 + 30 && m < 16 * 60) return 'regular';
+  if (m >= 4 * 60 && m < 9 * 60 + 30) return 'pre';
+  if (m >= 16 * 60 && m < 20 * 60) return 'after';
+  return 'overnight';
+}

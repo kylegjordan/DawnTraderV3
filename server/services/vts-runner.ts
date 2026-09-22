@@ -89,6 +89,7 @@ import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled 
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
 import { resolveVtsBookedExitPrice } from '../core/trading/vts-exit-booking.js';
+import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
 import {
   selectCryptoTouch,
   transactableSide,
@@ -168,6 +169,10 @@ const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
 const _vtsNoTriggerStreak = new Map<string, { sinceMs: number; alerted: boolean; lastReason: string }>();
 // The shadow lane's floor (BLOCKER-1): one count, not a streak, so its starvation is visible without pooling into the real lane.
 const _vtsShadowTouch = { looks: 0, noTransactableSide: 0 };
+// `8a-P4c` increment 1 — the VTS xStock decision-quote instrument, one per lane. TELEMETRY ONLY: nothing reads it to
+// decide; every xStock decision still reads `last`. Pre-registration: `Scope Files/B_PRICE_SIDE_BY_JOB_8A_P4C_AUDIT_AND_PLAN.md` §B4.
+const _xsVtsInstrument = new XsVtsInstrument('vts');
+const _xsShadowInstrument = new XsVtsInstrument('shadow');
 // HF9: applyGovernance removed (dead import — governance gate moved to SQE)
 import { isStrategyEligible, logGovernanceBlock, getPreScoreExclusionStats } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
@@ -3124,7 +3129,9 @@ async function resolveOpenVirtualTrades(): Promise<{
     : new Map<string, CachedPrice>();
 
   // Xstock leg — read latest tick per symbol from xstock_spot_ticker_snap.
-  const xstockPriceMap = new Map<string, { symbol: string; price: number; bid: number; ask: number }>();
+  // `8a-P4c` P1: `rawQuote` carries the row's UNDEFAULTED sides and its capture time for the instrument. The zero-defaulted
+  // `bid`/`ask` beside it are unchanged (no xStock decision reads them); increment 2 (X0) replaces them with these.
+  const xstockPriceMap = new Map<string, { symbol: string; price: number; bid: number; ask: number; rawQuote: XsQuoteRow }>();
   if (xstockSymbols.size > 0) {
     try {
       const xstockSymbolListSql = Array.from(xstockSymbols)
@@ -3135,7 +3142,8 @@ async function resolveOpenVirtualTrades(): Promise<{
           symbol::text AS symbol,
           last::text AS price,
           bid::text AS bid,
-          ask::text AS ask
+          ask::text AS ask,
+          (EXTRACT(EPOCH FROM captured_at) * 1000)::text AS at_ms
         FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '5 minutes'
           AND symbol IN (${xstockSymbolListSql})
@@ -3143,7 +3151,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       `));
       const rows = (result as any).rows ?? result;
       if (Array.isArray(rows)) {
-        for (const r of rows as Array<{ symbol: string; price: string; bid: string; ask: string }>) {
+        for (const r of rows as Array<{ symbol: string; price: string; bid: string; ask: string; at_ms: string }>) {
           const price = parseFloat(r.price);
           if (Number.isFinite(price) && price > 0) {
             xstockPriceMap.set(r.symbol, {
@@ -3151,6 +3159,7 @@ async function resolveOpenVirtualTrades(): Promise<{
               price,
               bid: parseFloat(r.bid) || 0,
               ask: parseFloat(r.ask) || 0,
+              rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms) },
             });
           }
         }
@@ -3191,6 +3200,7 @@ async function resolveOpenVirtualTrades(): Promise<{
   // cap on moonbag mode (passing slot total = Infinity signals unlimited).
   // The B64b 7-day MAX_HOLD_MS safety valve is preserved as a stale-cleanup
   // outer bound.
+  _xsVtsInstrument.beginPass(Date.now()); // `8a-P4c` increment 1 — one pass per resolve call
   for (const [tradeId, trade] of openVirtualTrades) {
     // B-NEW-36 (2026-05-20): skip weekend-suspended trades. See the
     // symbol-collection loop above for full rationale (pre-audit §4.2).
@@ -3228,6 +3238,10 @@ async function resolveOpenVirtualTrades(): Promise<{
           else _vtsTouch.entryFillRefusedSteady++;
         }
         try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_entry_fill' }, _pt.selection); } catch { /* a recorder never breaks the resolve loop */ }
+      }
+      if (trade.assetClass === 'xstock_spot') {
+        // `8a-P4c` increment 1 — would the ASK have filled this rest, beside today's `last` rule? Counted, never decided on.
+        _xsVtsInstrument.recordPendingLook(xstockPriceMap.get(trade.symbol)?.rawQuote ?? null, _pLimit);
       }
       const _pOutcome = evaluatePendingMaker({
         side: 'buy', // VTS trades are long-only by construction
@@ -3318,6 +3332,11 @@ async function resolveOpenVirtualTrades(): Promise<{
     // One touch read per crypto trade per resolve tick with the VTS exit lane's OWN ceilings (derivations at
     // `VTS_EXIT_TOUCH_MAX_AGE_MS` / `_SPREAD_FRACTION`). `null` ⇒ the evaluator makes NO DECISION this cycle
     // (`no_transactable_side`), never a midpoint fallback. xStock: the mark, explicitly (`8a-P4`).
+    if (trade.assetClass === 'xstock_spot') {
+      // `8a-P4c` increment 1 — the quote this decision reads (its age, sides, spread), and what the bid WOULD do.
+      _xsVtsInstrument.recordLook(trade.symbol, xstockPriceMap.get(trade.symbol)?.rawQuote ?? null, Date.now(),
+        trade.stopLoss ?? null, trade.takeProfit ?? null);
+    }
     let _vtsExitBid: number | null = null;
     let _vtsTriggerPrice: number | null = currentPrice;
     if (trade.assetClass === 'crypto_spot') {
@@ -3526,6 +3545,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     console.log(`[8a-P3][VTS_TOUCH] exitLooks=${_vtsTouch.exitLooks} exitNoTransactableSide=${_vtsTouch.exitNoTransactableSide} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} bookedNoBidClamp=${_vtsTouch.bookedNoBidClamp} openNoTriggerStreaks=${_vtsNoTriggerStreak.size}`);
   }
   for (const k of Object.keys(_vtsTouch) as Array<keyof typeof _vtsTouch>) _vtsTouch[k] = 0;
+  _xsVtsInstrument.endPass(); // `8a-P4c` increment 1 — `console.warn`, so it lands in the ~14-day error.log
   // Prune per-trade state for trades that left by ANY path, not only the fill/decision paths (Langston Step-4 nit).
   for (const id of Array.from(_vtsNoTriggerStreak.keys())) if (!openVirtualTrades.has(id)) _vtsNoTriggerStreak.delete(id);
   for (const id of Array.from(_vtsEntryFillLooked)) if (!openVirtualTrades.has(id)) _vtsEntryFillLooked.delete(id);
@@ -4142,21 +4162,28 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     ? await priceCache.getBatch(bucketType, cryptoSymbolList)
     : new Map<string, CachedPrice>();
 
-  const xstockPriceMap = new Map<string, { price: number }>();
+  const xstockPriceMap = new Map<string, { price: number; rawQuote: XsQuoteRow }>();
   if (xstockSymbols.size > 0) {
     try {
       const xstockSymbolListSql = Array.from(xstockSymbols).map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
       const result: any = await db.execute(sql.raw(`
-        SELECT DISTINCT ON (symbol) symbol::text AS symbol, last::text AS price
+        SELECT DISTINCT ON (symbol) symbol::text AS symbol, last::text AS price,
+          bid::text AS bid, ask::text AS ask, (EXTRACT(EPOCH FROM captured_at) * 1000)::text AS at_ms
         FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '5 minutes' AND symbol IN (${xstockSymbolListSql})
         ORDER BY symbol, captured_at DESC
       `));
       const rows = (result as any).rows ?? result;
       if (Array.isArray(rows)) {
-        for (const r of rows as Array<{ symbol: string; price: string }>) {
+        // `8a-P4c` P4b — the sides and capture time are carried for the instrument ONLY; every shadow decision still reads `last`.
+        for (const r of rows as Array<{ symbol: string; price: string; bid: string; ask: string; at_ms: string }>) {
           const price = parseFloat(r.price);
-          if (Number.isFinite(price) && price > 0) xstockPriceMap.set(r.symbol, { price });
+          if (Number.isFinite(price) && price > 0) {
+            xstockPriceMap.set(r.symbol, {
+              price,
+              rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms) },
+            });
+          }
         }
       }
     } catch (err) {
@@ -4171,6 +4198,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
 
   const { getTrailingState } = await import('./trailing-exit-controller.js');
   const toClose: Array<{ id: string; trade: OpenVirtualTrade; exitPrice: number; exitReason: string }> = [];
+  _xsShadowInstrument.beginPass(Date.now()); // `8a-P4c` P4b — the shadow lane is measured and read on its own
   for (const [tradeId, trade] of openShadowTrades) {
     if (!trade.assetClass) { openShadowTrades.delete(tradeId); continue; }
     const holdDurationMs = now - trade.openedAt;
@@ -4185,6 +4213,10 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
           'sell',
         )
       : null;
+    if (trade.assetClass === 'xstock_spot') {
+      _xsShadowInstrument.recordLook(trade.symbol, xstockPriceMap.get(trade.symbol)?.rawQuote ?? null, Date.now(),
+        trade.stopLoss ?? null, trade.takeProfit ?? null);
+    }
     const existingTecState = getTrailingState(tradeId);
     const tecSeed = existingTecState ? undefined : {
       tradeMode: 'TARGET' as const,
@@ -4242,6 +4274,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
   }
   _vtsShadowTouch.looks = 0;
   _vtsShadowTouch.noTransactableSide = 0;
+  _xsShadowInstrument.endPass();
 
   for (const { id, trade, exitPrice, exitReason } of toClose) {
     await shadowClose(id, trade, exitPrice, exitReason, now);
@@ -4768,8 +4801,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   await resolveOpenVirtualTrades();
 
   // reorg-B4: drain the SEPARATE shadow-trade Map (telemetry-only selection-quality
-  // layer). No-op until paper-mode active trading is on (the promotion boundary that
-  // opens shadows is dormant at rtb_total=0 today). Own try/catch — a shadow-resolve
+  // layer, booked to `rtb_shadow_pairings`). LIVE since paper-mode active trading turned on — `8a-P4c` (2026-09-22)
+  // measured 65 open / 1,264 closed xStock pairings in 14 days; the "dormant at rtb_total=0" note that stood here was
+  // stale (Langston NIT-6). Own try/catch — a shadow-resolve
   // fault must never perturb the live VTS cycle.
   try {
     await resolveOpenShadowTrades();
