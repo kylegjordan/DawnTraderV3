@@ -1071,7 +1071,7 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 - **`wrong-object`** — I read KII's missing snapshot-archive frames as an exit-decision shape, and then named an unread cache file as the archiver's cause (`#1072`).
 - At Step 10 the new §18.0.1 table first said a paper taker exit books the mark; the code books a depth walk across the bids — caught at the object before commit.
 
-⏳ **WHY IT IS OPEN.** `8a-P4c` (VTS xStock) is not built; the paper xStock bid trigger re-lands at `3n.q7` behind the restart-durable guard `3n.q8`; the X3 divergence instrument and `CROSSED_NOT_CAPTURED` are live but unexercised; the escape legs cannot be exercised until `3n.q8`. **One completion report when both halves land.** Record: `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md`.
+⏳ **WHY IT IS OPEN.** `8a-P4c` (VTS xStock) is IN PROGRESS — **increment 1, the telemetry-only instrument, deployed `bc199185e` 2026-09-22 and confirmed by Langston at Step 8**; its pre-registered window runs `2026-09-22T14:38:49.748Z` → `2026-09-30T00:00:00.000Z`, and rules A-D (plan §B4) then fix the shape of increments 2-3; the paper xStock bid trigger re-lands at `3n.q7` behind the restart-durable guard `3n.q8`; the X3 divergence instrument and `CROSSED_NOT_CAPTURED` are live but unexercised; the escape legs cannot be exercised until `3n.q8`. **One completion report when both halves land.** Record: `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md`.
 
 ---
 

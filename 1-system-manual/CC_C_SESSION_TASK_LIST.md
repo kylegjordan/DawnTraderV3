@@ -18,7 +18,7 @@
 | 3b.h-6 | `B-OHLC-FRAME-GUARD` (`#1028`) | deployed `29cce1076`; Step 4 approved; **paused at Step 7** — only the on-screen panel check is left | me (behind the Codex experiment) |
 | 3 | `F-G-1` `B-GRID-REPRESENTABILITY` | window closed 2026-09-04; **conversion to a completion report owed**; OBJ-9 re-opened, bounded to the ordering guarantee (`#1031`) | me |
 | 3c | `F-G-2` `B-EXIT-TRANSACTABLE-SIDE` | crypto half deployed 2026-09-02; **observation window VOID since 2026-09-05** | the level-basis and reachability work, then re-open |
-| 3n / 3n.q / 3n.q2 | `B-PRICE-SIDE-BY-JOB` — exit and fill side (`8a-P2`, `8a-P3`, `8a-P4`; one batch, two halves) | `8a-P2` + `8a-P3` + `8a-P4a` + `8a-P4b` (with C1) deployed; the `8a-P3` window closed 2026-09-22 12:16:07Z; **Step 10 governance landed 2026-09-22**; progress report `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md` | me — **`8a-P4c` (VTS xStock)** is the next build; one completion report when both halves land |
+| 3n / 3n.q / 3n.q2 | `B-PRICE-SIDE-BY-JOB` — exit and fill side (`8a-P2`, `8a-P3`, `8a-P4`; one batch, two halves) | `8a-P2` + `8a-P3` + `8a-P4a` + `8a-P4b` (with C1) deployed; the `8a-P3` window closed 2026-09-22 12:16:07Z; **Step 10 governance landed 2026-09-22**; progress report `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md` | me — **`8a-P4c` (VTS xStock)**: increment 1 (the instrument) deployed `bc199185e` + Step-8 confirmed 2026-09-22; window to 2026-09-30T00:00Z, then increments 2-3; one completion report when both halves land |
 | 3n (`8c`) | `B-PRICE-SIDE-BY-JOB` row `8c` | P1 only; **HELD** | the decision recorded on the row |
 | 3n.l | `B-REST-SIDES-TO-CACHE` (`#1056`) | scope APPROVED r4 2026-09-13 (`6036fd1a6`); Step 2 next | built during `8c`'s window, deployed after it |
 | RUN ORDER banner | `B-SIZING-DEC-RESTORE` | obj-1, obj-10, obj-11 LIVE at `213e162dc` (it sizes every trade); obj-2..5 and Steps 4-11 not built; declared in `GOVERNANCE_EXCEPTIONS.md` 2026-09-12 | **Kyle** — its queue position against the price work is his |
@@ -84,7 +84,7 @@ Derived 2026-09-11 from the plan's own rows; the `3n.*` rows re-derived 2026-09-
 | 3n.l | `B-REST-SIDES-TO-CACHE` (`#1056`) — see §0a |
 | 3n.m | `B-BOOK-SUBSCRIPTION-REACH` |
 | 3n.n | `B-DECISION-INSTANT-QUOTE` |
-| 3n.q2 | **`8a-P4c` — VTS xStock**, the remainder of the xStock half (the list is on the plan row) |
+| 3n.q2 | **`8a-P4c` — VTS xStock**, the remainder of the xStock half (the list is on the plan row) — increment 1 LIVE and Step-8 confirmed; read rules A-D at the 2026-09-30T00:00Z window close, then build increments 2-3 |
 | 3n.q3 | `B-VTS-NO-DECISION-VALVE` |
 | 3n.q4 | `B-EXIT-LINE-IDENTITY` |
 | 3n.q5 | `B-BOOK-STATE-RING-INDEPENDENT-BOUND` |

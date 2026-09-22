@@ -397,4 +397,42 @@ Positive control: 232 SYM lines for that hour = 131 + 101. **Both lanes clear th
 - ⭐ **WINDOW — CONFIRMED. Extract range at close: `2026-09-22T14:38:49.748Z` → `2026-09-30T00:00:00.000Z`** (Tue 29 Sep 20:00 EDT). The anchor is `pm_uptime`, NOT the record's `deployed_at` (a post-check stamp). **Tuesday 22's partial regular hours are IN and are read** — only the `weekend` label removes looks. No US market holiday in the span. **The 20:00 ET edge is inert for rules A/B/C (regular-only) and binds only rule D's per-session counts — say so when publishing.**
 - **FOR THE CLOSE (none blocking):** (1) `noRow`, `ageUnknown` and every non-`regular` session label are **LIVE-UNEXERCISED** (0 across 170 passes) — readable only because the fixtures positive-control them; **the live zeros may never be cited as proof the fault arm fires** (`#661` leg 3). Weekend/overnight get exercised by construction on Saturday — state it then. (2) `error.log` rotates daily at 00:00Z with 14 archives kept: the close extract spans **nine** files (09-22 … 09-30) — name all nine and cut the 09-22 file at 14:38:49.748Z. (3) The §B4 floor is in LOOKS and stands, but a symbol with three concurrent trades gets three looks a pass, so *"≥ 120 looks ≈ one hour of held time"* is not an equivalence — never quote it as held time.
 - **Out of scope, folded:** the off-hours `TEC_STALE_FAIL_CLOSED` xStock exit-eval skips at 02:11Z (cache age 359,744 ms vs the 300,000 ms ceiling) are pre-deploy and are exactly the ceiling rule B re-derives in this batch; Kyle's `#994` makes off-hours holds acceptable by design — rule-24 outcome (2), the work in hand.
-**`STEP: 8 of 11` done for increment 1 · NEXT: increment 1's own governance (Step 10), then the window runs to its close.**
+**`STEP: 10 of 11` done for increment 1 (§9.2) · NEXT: the window runs to 2026-09-30T00:00Z; then rules A-D, recorded before increment 2.**
+
+### 9.2 STEP 9 + STEP 10 FOR INCREMENT 1 (CC-C, 2026-09-22)
+**Step 9 — green.** Every increment-1 item (P1-P5, P4b, P4c) is evidenced at Step 7 and re-derived by Langston at Step 8; the two fence files pass (44 tests). ⚠️ **One partial, disclosed:** the stale *"dormant at `rtb_total=0` today"* claim had FOUR hits repo-wide — 1 already correct, 1 fixed by `P4c`, and **2 left (the `resolveOpenShadowTrades` docblock and the RTB shadow-capture comment), now carried by plan item P11** (comment-only; rides the next reviewed code change).
+**Step 10 — the ledger** (also in the governance commit message):
+
+CHANGE-CLASS: architecture
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | The open batch's reason now says increment 1 is deployed and Step-8 confirmed, with its window. |
+| T1 | `PHASE_HISTORY.md` | ✅ | The still-open line names increment 1 as live and says its window decides increments 2-3. |
+| T1 | `PHASE_19_PLAN.md` | ✅ | Row `3n.q2` gains increment 1's status; row `3n.q3` gained the valve-instance disposition and `#1075` earlier today. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_C.md` | ✅ | Shared: VTS outcome reads use the rule-8 register and key by `trade_id`; mine: position moved to Step 10. |
+| T1 | the batch `SCOPE` | ✅ | Present: `B_PRICE_SIDE_BY_JOB_8A_P4_SCOPE.md` (amended this morning); increment 1 adds no scope. |
+| T1 | the batch `PRE_AUDIT` | ✅ | `B_PRICE_SIDE_BY_JOB_8A_P4C_AUDIT_AND_PLAN.md`: P11 now carries the two remaining stale-comment sites (Step 9). |
+| T1 | the `COMPLETION_REPORT` | ✅ | Progress report §9 / §9.1 / §9.2: Step 7, the day-1 floor, Step 8 and its riders, the valve note, this ledger — batch stays OPEN. |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md`: `3n.q2` rows show increment 1 live and the window; the CC-A, CC-B and CC-INFRA lists are not mine. |
+| T1 | Langston's `MEMORY.md` | ❌ BLOCKED | The writer refuses (exit 4: `MEMORY.md` was edited outside the composer, `#1057`); reported to Infra Claude 13:07Z; the edit is staged. |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | §18.0.1 gains the VTS xStock increment-1 paragraph: decisions still on the mark, the instrument decides the guard's shape. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | New runtime-state row S28: the two instrument singletons, their writers and their restart behaviour. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#1075` opened (the archive labels class from the ticker) and given its real MET/USD instance. |
+| T2 | `CHANGES_AND_FIXES.md` | N/A | Increment 1 fixes no defect; `#1075` is open and homed in `RUNNING_ISSUES`. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level change; the `3n` rows live in `PHASE_19_PLAN`. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | ✅ | Calibration-epoch rule 8: the by-id register, three buckets, the price-match discriminator, the EUR reach limit. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | No constitutional baseline touched. |
+| T2 | `STORAGE_POLICY.md` | N/A | No table or retention changed (the `error.log` rotation was measured, not changed). |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | Working list reviewed: items A-F unchanged by a telemetry-only increment. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | ✅ | Item 10 records that the quarterly collision re-audit never had a trigger (`#1075`). |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | No role, gate or method changed. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | The reviewer's build is unchanged. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No stable rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No `CLAUDE.md` change. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | Nothing removed; the predicate was relocated byte-identical (Langston verified). |
+| T2 | `MISTAKE_PATTERNS.md` | ✅ | A `silence-not-evidence` instance: three timeouts filed as non-members on an alert's silence. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | The declared-open row, re-justified 13:24Z today, is unchanged; alert `1ae9a06b` is the `#1074` class. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | The ack/resolve process is unchanged. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | The board's columns and fields are unchanged. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | No daily model/feature check was run by this session. |
