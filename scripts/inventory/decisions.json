@@ -315,8 +315,8 @@
   ""
  ],
  "B-XSTOCK-SESSION-FRESHNESS": [
-  "MUST",
-  "exit checks outside US regular hours are skipped on a flat ceiling, leaving positions unwatched; the ENTRY half is a Kyle decision (trade outside regular hours or not)",
+  "HELPFUL",
+  "CORRECTED (Langston): Kyle ruled 2026-09-03 — off-hours entries allowed at the same bar; exit freshness the same standard round the clock, 'we just hold'. Exit side: change nothing. Remaining: keep the alert's record but stop paging, and the flat 15s entry age against the risk-derived exit ceiling",
   ""
  ],
  "row:3b.f-c-a": [
@@ -701,8 +701,8 @@
  ],
  "B-NONFIAT-QUOTE-DENOMINATION": [
   "MUST",
-  "pairs quoted in a non-fiat currency — sizing and P&L are wrong if treated as USD, unless such pairs are excluded from trading",
-  "verify"
+  "the universe admits non-USD-quoted pairs and pure fiat pairs (USD/CAD, EUR/USD) whose sizing and P&L we handle wrong. Kyle's fork: fix the maths, or exclude the pairs (nearly free)",
+  ""
  ],
  "B-PRICE-FLOOR-REVIEW": [
   "DECIDE",
@@ -745,8 +745,8 @@
   ""
  ],
  "rm:25-11": [
-  "MUST",
-  "size to the order book and exit a thin market — with real capital a position larger than the book cannot be exited at the modelled price; a risk control, not an edge",
+  "HELPFUL",
+  "SPLIT (Langston): the liquidity-aware sizing MODEL is Phase 25 calibration. The small fail-closed REFUSAL half is a separate MUST item (25-11a)",
   ""
  ],
  "rm:25-12": [
@@ -771,7 +771,7 @@
  ],
  "rm:25-16": [
   "MUST",
-  "trade size, concurrency and STARTING BALANCE — its own row calls it a go-live prerequisite: the day-one balance and concurrency must be evidence-backed",
+  "the evidence study for trade size, concurrency and starting balance — its own row calls it a go-live prerequisite. The NUMBERS it informs are Kyle's (a DECIDE)",
   ""
  ],
  "rm:25-17": [
@@ -791,7 +791,7 @@
  ],
  "rm:25-19": [
   "MUST",
-  "validate the Net Expectancy gate's judgement — it is the gate that decides which trades get real money (Kyle: 'we have to look at its judgment skills')",
+  "NARROWED (Langston): state the Net Expectancy gate's measured accept/reject outcome on the population it actually ran on, population named. A full judgement verdict needs #596 first and is Phase 25",
   ""
  ],
  "rm:25-2": [
@@ -865,8 +865,8 @@
   ""
  ],
  "rm:25-8": [
-  "MUST",
-  "xStock position cap 0.50 is an inherited PLACEHOLDER — a position-size limit on real capital cannot be a placeholder",
+  "PRUNE",
+  "WRONG AT THE REF (Langston, measured): pattern_max_position_pct is 0.0667 for both classes since 2026-07-16, applied as a true minimum — there is no 0.50 placeholder. The real finding is a rider on B-SIZING-DEC-RESTORE",
   ""
  ],
  "rm:25-9": [
@@ -945,8 +945,8 @@
   ""
  ],
  "rm:20.4.6": [
-  "MUST",
-  "pure fiat currency pairs (USD/CAD, EUR/USD) are admitted to the crypto universe — its own row calls it a pre-live guardrail",
+  "MERGE:B-NONFIAT-QUOTE-DENOMINATION",
+  "same mechanism: the universe admits instruments whose denomination we handle wrong (Langston)",
   ""
  ],
  "rm:20.5": [
@@ -1145,8 +1145,8 @@
   "verify"
  ],
  "#168": [
-  "HELPFUL",
-  "CI cannot catch a production build that crashes on boot — in live that deploy leaves positions unmanaged",
+  "MUST",
+  "CI cannot catch a build that crashes on boot — a live deploy that boots into a crash leaves positions unmanaged; same family as #681 (Langston)",
   ""
  ],
  "#169": [
@@ -1296,7 +1296,7 @@
  ],
  "#296": [
   "MUST",
-  "35 separate Kraken clients instead of one rate-limited client — live orders must not trip the venue's rate limit",
+  "NARROWED (Langston): a shared rate budget and backoff on the order-PLACING and order-CANCELLING paths — a rate-limit rejection on an exit costs money. Consolidating the 35 clients is a refactor, AFTER",
   ""
  ],
  "#297": [
@@ -1370,8 +1370,8 @@
   ""
  ],
  "#506": [
-  "HELPFUL",
-  "order-book subscriptions accumulate with no unsubscribe",
+  "MUST",
+  "order-book subscriptions accumulate with no unsubscribe — a DEPENDENCY of B-BOOK-SUBSCRIPTION-REACH, which takes subscriptions from ~3 a day to a 35-41 symbol pool (Langston)",
   ""
  ],
  "#513": [
@@ -1400,8 +1400,8 @@
   ""
  ],
  "#521": [
-  "HELPFUL",
-  "the engine heartbeat is structurally dead — nothing notices a dead engine",
+  "MUST",
+  "the engine heartbeat is structurally dead — nothing notices a dead engine; in live that is real positions with no manager (Langston)",
   ""
  ],
  "#525": [
@@ -1825,8 +1825,8 @@
   ""
  ],
  "B-DASHBOARD-AUTH-RACE": [
-  "HELPFUL",
-  "the portfolio card 401s on page load and never recovers — in live the operator sees no balance",
+  "MUST",
+  "#903: the portfolio card 401s on load and never recovers — in live, an operator with no balance. Operator-reach family with #401, #517, #935 (Langston)",
   ""
  ],
  "B-DEPLOY-DRIFT-LINE": [
@@ -1910,8 +1910,8 @@
   ""
  ],
  "B-LEARNING-SYSTEM-CENSUS": [
-  "HELPFUL",
-  "at least three older learning systems still wired, disposition unknown — anything that could still steer a decision must be known before live",
+  "MUST",
+  "#661: at least three older learning systems still wired, disposition unknown — anything that could still steer a live decision must be known before live (its own reason is a MUST predicate — Langston)",
   ""
  ],
  "B-MBIM-SWITCH-ON": [
@@ -1951,8 +1951,8 @@
  ],
  "B-SEC-HARDEN": [
   "MUST",
-  "157 of 216 state-changing routes have no authorisation check — security before real capital",
-  ""
+  "157 of 216 state-changing routes carry no authorisation check (Infra's count, not re-derived). Langston: the deciding fact is network reachability — public dashboard puts it in group A; Infra to state the boundary",
+  "verify"
  ],
  "B-SHARED-TREE-COMMIT-ATOMICITY": [
   "PRUNE",
@@ -1961,7 +1961,7 @@
  ],
  "B-SIZING-DEC-RESTORE": [
   "MUST",
-  "paper per-trade allocation is 20% where the governed decision says 6.67%, and Kyle did not know — position sizing on real capital",
+  "paper per-trade allocation is 20% where the governed decision says 6.67%, and Kyle did not know. RIDER (Langston): pattern signals size at 6.67% while other signals size at the guardrail (20% paper / 30% live) and nobody has stated why. Both sizing fields are user-locked, so the output is Kyle's number",
   ""
  ],
  "B-SQE-DEADCODE-PURGE": [
@@ -1996,7 +1996,7 @@
  ],
  "B-VENUE-RESTING-EXITS": [
   "MUST",
-  "our protective stop exists only while our process runs — if the server dies, a live position has no stop at the exchange",
+  "a live position must have a protective mechanism that survives our process dying. The FORM is Kyle's decision (resting venue stops vs a flatten-on-death watchdog)",
   ""
  ],
  "B-VERIFY-DISCIPLINE": [
@@ -2061,12 +2061,12 @@
  ],
  "rm:21-3a": [
   "MUST",
-  "the Live Guardrails tab — live guardrail values in the database that no screen shows or edits today (#401, #667)",
+  "the Live Guardrails tab — and what it would show: the live guardrail row is an ELEVEN-MONTH-OLD DEFAULT (2025-10-29) that differs from paper on six fields (per-trade 30%, exposure 25%, 12 slots, kill switch 15%, risk per trade 4%). No screen shows or edits it (#401, #667)",
   ""
  ],
  "rm:21-3b": [
-  "MUST",
-  "set the go-live WebSocket-uptime threshold against the rolling window it is measured over — a calibration call",
+  "DECIDE",
+  "roadmap hard blocker whose work is a NUMBER: the go-live WebSocket-uptime threshold against the rolling window it is measured over",
   ""
  ],
  "rm:21-3c": [
@@ -2082,6 +2082,16 @@
  "rm:19-17b": [
   "MUST",
   "switch live_engine_enabled on as a number at go-live — the live start path is gated on it",
+  ""
+ ],
+ "#734": [
+  "MERGE:rm:21-3c",
+  "the issue is folded into the hard blocker 21-3c",
+  ""
+ ],
+ "#668": [
+  "KYLE-PARKED",
+  "the governance-standardisation arc — a DIFFERENT thing from B-SIZING-DEC-RESTORE, which only cites it",
   ""
  ]
 }

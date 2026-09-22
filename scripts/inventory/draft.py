@@ -15,8 +15,32 @@ MANUAL = [
          bucket="HELPFUL", flag="", src="PHASE_19_PLAN:231 (queued; my extractor read that table as history)",
          why="Retire the dead volatility cache and its 0.015 fallback (rule 18). Two riders from Langston: the live fail-loud path has never been exercised, and a `?? 0.5` default in the RTB service is an untested hypothesis."),
     dict(key="P19-B6.10", name="P19-B6.10 — retire the old per-mode guardrails table", row="plan history table", phase="19", owner="?",
-         bucket="HELPFUL", flag="verify", src="PHASE_19_PLAN:227 (queued)",
-         why="The old guardrails table and its deprecated endpoint are superseded by the new one; before live there should be exactly one source of guardrail values."),
+         bucket="MUST", flag="", src="PHASE_19_PLAN:227 (queued); Langston measured 2026-09-22",
+         why="VERIFIED (Langston): the legacy guardrails table still carries its own LIVE row — max position $1,158.09, max daily loss $1,000 — against an $824 account, beside a different live row in the new table. Two live risk rows, two tables, different numbers. Pairs with 21-3a."),
+    dict(key="KRAKEN-LIVE-KEY", name="Provision the live Kraken API key", row="", phase="21", owner="?",
+         bucket="MUST", flag="", src="Langston review 2026-09-22 — absent from all 608 items",
+         why="Nothing in the inventory provisions the live exchange credential: trade-only, withdrawals disabled, IP-allowlisted, with a stated rotation and a stated blast radius if it leaks. Live-only, cheap, catastrophic tail."),
+    dict(key="LIVE-FEE-SCHEDULE", name="Confirm the live fee schedule before the first real order", row="", phase="21", owner="?",
+         bucket="MUST", flag="", src="Langston review 2026-09-22",
+         why="The EV gate is a fee-difference machine. The xStock fee contract created a live epoch and sits in observation; the older fee-accuracy item was pruned with a verify flag. No row says the live fees are right."),
+    dict(key="25-11a", name="25-11a — refuse a position larger than the visible book", row="split from 25-11", phase="25", owner="?",
+         bucket="MUST", flag="", src="Langston review 2026-09-22",
+         why="Small and fail-closed: do not open a position larger than a stated fraction of visible depth, and do not model an exit at a price the book cannot fill. Whether it ever binds depends on Kyle's day-one size."),
+    dict(key="DISK-HEADROOM", name="One number: months of database headroom at the measured write rate", row="", phase="20", owner="?",
+         bucket="MUST", flag="", src="Langston review 2026-09-22",
+         why="A full disk stops the engine with real positions open. Not retention work, one measurement: if the headroom comfortably clears the run-in, retention stays where it is (HELPFUL/AFTER)."),
+    dict(key="DEAD-CODE-REACHABILITY", name="Reachability census: which dead code can a live path reach", row="", phase="19", owner="?",
+         bucket="MUST", flag="", src="Langston review 2026-09-22",
+         why="The roadmap's capital-letters blocker (#953) is a legacy limb reachable from a live path. Rule: dead code reachable from a live path is MUST, the rest AFTER. The census sorts #528, #518, #742, 3n.a, 3n.b and the other dead-code items."),
+    dict(key="DAY-ONE-NUMBERS", name="Day-one balance, per-trade size and concurrency", row="", phase="25", owner="Kyle",
+         bucket="DECIDE", flag="", src="Langston review 2026-09-22",
+         why="25-16 produces the evidence; the numbers are Kyle's (both sizing fields are user-locked)."),
+    dict(key="PROCESS-DEATH-FORM", name="How a live position is protected if our server dies", row="", phase="21", owner="Kyle",
+         bucket="DECIDE", flag="", src="Langston review 2026-09-22",
+         why="Resting stop orders at the exchange (strongest; changes fill behaviour and collides with the price grid, maker/taker and BE/moonbag), or a watchdog that flattens positions when our process dies (cheaper, weaker)."),
+    dict(key="NONFIAT-FORK", name="Non-USD and pure-fiat pairs: fix the maths or exclude them", row="", phase="19", owner="Kyle",
+         bucket="DECIDE", flag="", src="Langston review 2026-09-22",
+         why="Excluding them is nearly free; fixing the denomination maths lets them trade."),
     dict(key="P19-B6.5g", name="P19-B6.5g", row="plan history table", phase="19", owner="?",
          bucket="MERGE:#233", flag="verify", src="PHASE_19_PLAN:222 (queued)", why="its core is #233"),
     dict(key="P19-B15", name="P19-B15 — live and paper share one pipeline", row="plan history table", phase="19", owner="?",
@@ -62,23 +86,56 @@ def ident(r):
 def fl(r): return " ⚠️ *verify*" if r["flag"] == "verify" else ""
 
 MUST_GROUPS = [
-    ("A. Roadmap hard blockers — already written as blockers, in those words (roadmap §3.5)",
-     ["rm:21.1.a", "rm:21-3a", "rm:21-3b", "rm:21-3c", "rm:21-3d", "rm:19-17b"]),
-    ("B. Building live mode itself", ["rm:21.1", "rm:21.2", "rm:21.3", "#322", "#517", "rm:19-10"]),
+    ("A. Roadmap hard blockers (roadmap §3.5, in its own words) + the live risk rows and the live key",
+     ["rm:21.1.a", "rm:21-3a", "P19-B6.10", "rm:21-3c", "rm:21-3d", "rm:19-17b", "KRAKEN-LIVE-KEY"]),
+    ("B. Building live mode itself", ["rm:21.1", "rm:21.2", "rm:21.3", "#322", "#517", "rm:19-10", "LIVE-FEE-SCHEDULE"]),
     ("C. Risk controls on real capital", ["B-KILLSWITCH-DENOMINATOR", "B-TOTAL-DRAWDOWN-WARNING", "#519", "B-SIZING-DEC-RESTORE",
-        "rm:25-8", "rm:25-11", "rm:25-16", "B-VENUE-RESTING-EXITS", "rm:19-9", "B-NONFIAT-QUOTE-DENOMINATION", "rm:20.4.6"]),
+        "25-11a", "rm:25-16", "B-VENUE-RESTING-EXITS", "rm:19-9", "B-NONFIAT-QUOTE-DENOMINATION"]),
     ("D. Price truth — how old, which side, is the feed alive", ["B-PRICE-AGE-TRUTH", "B-PRICE-AGE-REFUSAL", "B-TWO-CACHE-INTENT",
-        "B-PRICE-STALENESS-BOUND", "row:6", "B-OPENTRADE-REFRESH-LANE", "B-XSTOCK-SESSION-FRESHNESS", "B-EQUITY-RECONNECT-STALL-TIMER",
+        "B-PRICE-STALENESS-BOUND", "row:6", "B-OPENTRADE-REFRESH-LANE", "B-EQUITY-RECONNECT-STALL-TIMER",
         "B-XSTOCK-LIVE-FEED", "B-WS-SUBSCRIBE-CLASS-FILTER", "B-OHLC-FRAME-GUARD", "B-PRICE-SIDE-BY-JOB", "B-REST-SIDES-TO-CACHE",
-        "B-BOOK-SUBSCRIPTION-REACH", "B-TICKER-BBO-TRIGGER"]),
+        "B-BOOK-SUBSCRIPTION-REACH", "#506", "B-TICKER-BBO-TRIGGER"]),
     ("E. Entry and exit correctness", ["B-EXIT-TRIGGER-FILL-PARITY", "F-G-2", "B-EXIT-TICKER-LEG-ADAPTER-SIDES", "B-XSTOCK-BID-TRIGGER-RELAND",
         "B-BOOK-STATE-RING-INDEPENDENT-BOUND", "B-BOOK-STATE-RESTART-DURABLE", "B-ENTRY-LEVEL-RECHECK", "B-GRID-LIVE-PATH-PARITY",
-        "B-INTENT-ENTRY-PARITY", "row:3h.b", "B-TARGET-FABRICATION", "#204", "#233", "row:8", "B-CLOSE-WRITER-COSTS"]),
+        "B-INTENT-ENTRY-PARITY", "row:3h.b", "DEAD-CODE-REACHABILITY", "B-TARGET-FABRICATION", "#204", "#233", "row:8", "B-CLOSE-WRITER-COSTS"]),
     ("F. Knowing which instrument and which mode a record belongs to", ["B-SYMBOL-CLASS-IDENTITY", "B-UNIVERSE-REFRESH-ACTS",
         "B-RTB-SIGNAL-IDENTITY", "B-MODE-PREDICATE-SWEEP"]),
-    ("G. The evidence Kyle's comfortable-in-paper judgement rests on", ["rm:19-11", "#235", "rm:25-19", "B-RTB-REFRESH-CONSOLIDATE"]),
-    ("H. Security and operations", ["B-SEC-HARDEN", "#935", "#296", "#681", "B-ENGINE-STOP-DURATION-COLUMN"]),
+    ("G. The evidence Kyle's comfortable-in-paper judgement rests on", ["rm:19-11", "#235", "rm:25-19", "B-RTB-REFRESH-CONSOLIDATE",
+        "B-LEARNING-SYSTEM-CENSUS"]),
+    ("H. Operator reach, security and operations", ["B-SEC-HARDEN", "#935", "B-DASHBOARD-AUTH-RACE", "#296", "#681", "#168", "#521",
+        "B-ENGINE-STOP-DURATION-COLUMN", "DISK-HEADROOM"]),
 ]
+# Kyle's decisions come FIRST; each names what it unlocks (Langston 1(b)).
+UNLOCKS = {
+    "#323": "how B-KILLSWITCH-DENOMINATOR and #519 behave (auto-stop, alert-only, or user-set)",
+    "BE-MOONBAG": "if 'build and on': 3n.c trailing-state durability (+#677, #678) becomes MUST",
+    "rm:19-18": "the shape of 21.1, the live engine",
+    "rm:21-3b": "go-live itself (roadmap hard blocker)",
+    "DAY-ONE-NUMBERS": "25-16's output, B-SIZING-DEC-RESTORE, and whether 25-11a ever binds",
+    "PROCESS-DEATH-FORM": "the form of B-VENUE-RESTING-EXITS",
+    "NONFIAT-FORK": "the form of B-NONFIAT-QUOTE-DENOMINATION (fix vs exclude)",
+    "B-VTS-NO-DECISION-VALVE": "learning lane only — no MUST",
+    "B-PRICE-FLOOR-REVIEW": "no MUST",
+    "B-TARGET-MULTIPLE-VS-HORIZON": "no MUST (gated on 2.4g-3)",
+}
+# MUST -> prerequisites. Closure is COMPUTED (Langston 1(a)): every prerequisite of a MUST must itself be MUST or DECIDE, or done.
+DEPS = {
+    "B-PRICE-AGE-REFUSAL": ["B-TWO-CACHE-INTENT"],
+    "B-SYMBOL-CLASS-IDENTITY": ["B-UNIVERSE-REFRESH-ACTS"],
+    "B-RTB-SIGNAL-IDENTITY": ["B-SYMBOL-CLASS-IDENTITY"],
+    "B-BOOK-SUBSCRIPTION-REACH": ["#506"],
+    "B-PRICE-SIDE-BY-JOB": ["B-REST-SIDES-TO-CACHE", "B-TICKER-BBO-TRIGGER", "B-EXIT-TICKER-LEG-ADAPTER-SIDES"],
+    "rm:21-3a": ["P19-B6.10"],
+    "B-KILLSWITCH-DENOMINATOR": ["#323"],
+    "#519": ["#323"],
+    "B-VENUE-RESTING-EXITS": ["PROCESS-DEATH-FORM"],
+    "25-11a": ["DAY-ONE-NUMBERS"],
+    "rm:25-16": ["DAY-ONE-NUMBERS"],
+    "rm:21.1": ["rm:19-18"],
+    "B-NONFIAT-QUOTE-DENOMINATION": ["NONFIAT-FORK"],
+    "#681": ["#168"],
+    "rm:25-19": [],  # narrowed to the measured accept/reject outcome; the full verdict needs #596 and is Phase 25
+}
 byk = {r["key"]: r for r in rows}
 must = [r for r in rows if r["bucket"] == "MUST"]
 grouped = {k for _, ks in MUST_GROUPS for k in ks}
@@ -86,6 +143,16 @@ stray = [r["key"] for r in must if r["key"] not in grouped]
 assert not stray, f"MUST items not placed in a group: {stray}"
 for _, ks in MUST_GROUPS:
     for k in ks: assert byk[k]["bucket"] == "MUST", (k, byk[k]["bucket"])
+open_ok = {"MUST", "DECIDE", "PRUNE", "OBSERVATION"}
+closure_breaks = [(m, d, byk[d]["bucket"]) for m, ds in DEPS.items() for d in ds
+                  if byk[m]["bucket"] == "MUST" and byk[d]["bucket"] not in open_ok]
+assert not closure_breaks, f"MUST closure broken: {closure_breaks}"
+for k in UNLOCKS: assert byk[k]["bucket"] == "DECIDE", (k, byk[k]["bucket"])
+# identifiers that point at two items (Langston 1(c))
+iss = collections.defaultdict(list)
+for r in rows:
+    for x in r["issues"]: iss[x].append(r)
+collisions = {x: rs for x, rs in iss.items() if len(rs) > 1 and len({q["key"] for q in rs}) > 1}
 
 cnt = collections.Counter(r["bucket"].split(":")[0] for r in rows)
 L = []
@@ -102,13 +169,22 @@ A("- **`MUST` is anchored to roadmap §3.5's own hard-blocker list (group A), th
 A("- **`HELPFUL` = extremely helpful before live.** Mostly calibration and selection quality (paper still loses; these are how it stops), plus visibility.")
 A("- **`DECIDE` = not work until Kyle rules.** **`OBSERVATION` = already deployed; its window closes it.** **`MERGE` = the same work as another item.** **`PRUNE` = done, superseded, withdrawn, or an umbrella heading.**")
 A("- **⚠️ verify** = my read of the record; the owning session must confirm before the item moves.")
-A("- **Not yet in:** replies from OLD, ANALYST and Infra Claude (lane review, items never written down, and what Coltrane can actually touch), and Langston's full archive sweep. First tranche of his archive is in.")
+A("- **Langston review r1 applied (2026-09-22):** MUST set made dependency-closed; decisions moved first; live risk rows, live key, fee schedule, disk headroom, dead-code reachability added; 25-8 dropped as wrong at the ref.")
+A("- **Not yet in:** replies from OLD, ANALYST and Infra Claude (lane review, items never written down, and what Coltrane can actually touch), and Langston's full archive sweep.")
 A("")
 A("| bucket | items |")
 A("|---|---:|")
 for b in ["MUST", "DECIDE", "OBSERVATION", "HELPFUL", "AFTER", "KYLE-PARKED", "MERGE", "PRUNE"]:
     A(f"| {b} | {cnt.get(b, 0)} |")
 A(f"| **total** | **{len(rows)}** |")
+A("")
+dec_rows = [r for r in rows if r["bucket"] == "DECIDE"]
+A(f"## FIRST: KYLE'S DECISIONS — {len(dec_rows)} (several MUST items cannot start until these are made)")
+A("")
+A("| # | decision | what it unlocks | the fork |")
+A("|---:|---|---|---|")
+for j, r in enumerate(dec_rows, 1):
+    A(f"| {j} | {ident(r)} | {c(UNLOCKS.get(r['key'], '—'))} | {c(r['why'])}{fl(r)} |")
 A("")
 A(f"## MUST BEFORE LIVE — {len(must)} items, as a Phase-21 entry gate (PHASE_19_PLAN §6 form)")
 A("")
@@ -124,6 +200,15 @@ for title, ks in MUST_GROUPS:
         r = byk[k]; n += 1
         A(f"| {n} | {ident(r)} | {c(r['owner']) or '—'} | {c(r['why'])}{fl(r)} | ⏳ |")
     A("")
+A("**Dependency check (computed, not spot-checked):** every prerequisite of a MUST is itself a MUST or a Kyle decision. Edges checked: " + str(sum(len(v) for v in DEPS.values())) + ". The full Net Expectancy verdict (beyond 25-19's narrowed gate) needs #596 first and stays Phase 25.")
+A("")
+A(f"## IDENTIFIERS THAT POINT AT TWO ITEMS — {len(collisions)} (resolve in the reorganisation step)")
+A("")
+A("Some are honest shared citations; some are one number minted twice (#921, #559 are two different issues each). Minting fixes stay AFTER; this document's dedupe does not.")
+A("")
+for x, rs in sorted(collisions.items(), key=lambda t: int(t[0])):
+    A(f"- **#{x}** — " + " · ".join(f"{c(q['name'])} ({q['bucket']})" for q in rs))
+A("")
 def simple(title, bucket, note=""):
     rs = [r for r in rows if r["bucket"] == bucket]
     A(f"## {title} — {len(rs)}")
@@ -140,7 +225,6 @@ def simple(title, bucket, note=""):
         for r in ph[p]:
             A(f"- {ident(r)} ({c(r['owner']) or 'unowned'}) — {c(r['why'])}{fl(r)}")
         A("")
-simple("DECIDE — Kyle rules before these become work", "DECIDE")
 simple("OBSERVATION — deployed, running out their windows", "OBSERVATION")
 simple("EXTREMELY HELPFUL BEFORE LIVE", "HELPFUL")
 simple("AFTER LIVE — proposed deferrals (Kyle approves each)", "AFTER", "Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after live by the roadmap and are listed here without comment.")

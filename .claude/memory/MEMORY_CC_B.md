@@ -27,7 +27,11 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 - **★ A POSITIVE CONTROL THAT ALSO RETURNS ZERO EXPOSES THE INSTRUMENT, NOT THE DATA (2026-09-06).** Twice in one day a "clean" came from a tool that could not see: a NUL-byte file skipped by a scanner, then an ACL that denied reads. Both caught only because the control failed too.
 - **Recurring traps kept:** a new TEC `requireKey` hard-fails `primeTECConfig` in every DB-mocking TEC test and must be registered in `ALL_TEC_KEYS`; `fired_at` is the dispatcher PROMOTION tick, not body-creation time; quote freshness CEILINGS clamped, never raw `budget/σ`; `gh project item-list` returns false-negative field values — verify from the item's own `fieldValues`; **CI on this branch cancels itself** under four-session pushes, so `cancelled` is not a result; before calling an absence a gap, check the comparator is the same population (xStock is ~190× rarer on the active path, 15-minute bars).
 
-## ★★★ CURRENT POSITION (2026-09-21)
+## ★★★ CURRENT POSITION (2026-09-23)
+
+🟦 **ACTIVE: PRE-LIVE INVENTORY (row `3n.x`, Kyle 2026-09-23).** Draft at `0f6f445f3` = `Scope Files/PRE_LIVE_INVENTORY_DRAFT.md`, 608 items (MUST 66 in groups A-H). Pipeline + hand decisions: `scripts/inventory/` (`decisions.json` = every judged item; re-render with `draft.py`). **Dispatched to Langston for review; OLD/ANALYST/Infra lane replies + Coltrane description still owed.** Next: fold replies → re-render → report to Kyle → he picks the pre-live set → reorganise roadmap + four task lists, assign sessions, Coltrane trial. ⛔ The keyword-prune rule LEAKS (#596/#914/#994) — never trust the 155 auto-prunes without the owner.
+
+### (earlier) ★★★ CURRENT POSITION (2026-09-21)
 
 ⏳ **`3n.v` `B-REACH-BASELINE-ADJUST` — DEPLOYED `40f22a1bb` 2026-09-20T21:19:40Z. Step 10 done, OBSERVATION OPEN.** Record = `Batch Completion/B_REACH_BASELINE_ADJUST_PROGRESS_REPORT.md`. CI 4/4 run `35538205688`. Langston: Step-1 APPROVED/6 conditions, Step-2 PROCEED, **Step-4 FIVE ROUNDS** → APPROVED. Ships 6 rows / 5 cells (reach 6.5 SBT both classes · reach 6.0 xStock vwap_pullback · min_rr 1.95 ×3), **withdraws 5 cells on evidence**, deletes `target_floor_pct`.
 ⛔ **7-DAY TRIGGER, pre-registered: SBT >25% of class admissions, OR either class >2pp below its pre-deploy 7-day baseline — crypto −0.8981% n=50, xStock −0.6664% n=41.** ⚠️ **THE GATES ARE UNEXERCISED at deploy+15min** (3 SBT evals, all `invalid_atr`). Silence there proves nothing.
