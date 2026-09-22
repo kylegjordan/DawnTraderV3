@@ -229,6 +229,33 @@ Claude-in-Chrome, staging → Paper Trading → **Closed Trades**, 2026-09-18 ~1
 
 **⚠️ A COLLECTION GAP I CAUSED, stated (OBJ-5/6 of `8a-P3`):** the line collector ran as a loop in my laptop session and **stopped with it at 2026-09-19 03:24Z**; I did not restart it after the session restart. Collected `out.log` lines run to the rotated file `out__2026-09-19_02-27-58`; the oldest still on disk is `out__2026-09-22_01-12-02` ⇒ **~70 h of `[8a-P3]` / `TWIN_*` / `MARKETABLE_*` lines are unrecoverable** (they are log-only). The loop now runs ON STAGING (`/home/deploy/8ap3_collect_loop.sh`, hourly, self-terminating after 12:30Z) so it cannot die with a session. ⇒ **OBJ-6 is published on the collected reach with the gap named, never as a continuous window. OBJ-5 (maker fill rate) is re-derivable from `closed_trades` (placements and fills are persisted) and is read there.**
 
+## 5g. OBJ-5 AND OBJ-6 AT THE WINDOW END — 2026-09-22 12:16:07Z (CC-C, read 12:17-12:25Z)
+
+**The window and its splits, per the pre-registered RESTART RULE:** 2026-09-15 12:16:07Z → 2026-09-22 12:16:07Z, split at each restart's `pm_uptime`: **S1** → 09-19 00:02:33.231Z · **S2** → 00:54:06.306Z · **S3** → 09-20 21:19:29.674Z · **S4** → window end. **Twin switch** re-read at window close at the same site (`module_constants` `maker_taker/twin_enabled`): `crypto_spot` 1, `xstock_spot` 1, `updated_by p19-b7-2c` 2026-07-02 — unchanged from the window-open read, so **no flip split**.
+
+### OBJ-5 — honest crypto maker fill rate: COUNTS ONLY (every segment below the 30-floor)
+Read from `closed_trades` ∪ `active_open_positions` (placements and fills are persisted, so the log gap does not touch this objective), crypto, `chosen_entry_mode='maker'`, `opened_at` in the segment:
+
+| | S1 | S2 | S3 | S4 | window |
+|---|---|---|---|---|---|
+| **entry rests: placements / filled / never_filled** | 6 / 6 / 0 | 1 / 1 / 0 | 11 / 9 / 2 | 2 / 2 / 0 | **20 / 18 / 2** |
+| **exit rests: fill / convert** (`exit_rest_outcome`, by `closed_at`) | 9 / 0 | 1 / 0 | 9 / 0 | 7 / 0 | **26 / 0** |
+
+⇒ **INCONCLUSIVE — below floor in every segment; no rate is published.** ⚠️ `#1063` phantom rests (insert failed) never reach the DB, so these are REAL placements only.
+
+### OBJ-6 — the permissive no-ask arm, crypto only: 0 OBSERVED, on a stated partial reach
+**Numerator `ask=none` = 0 on every lane in every segment**, and **0 in the entire collected corpus**. **Instrument control, at the code:** the paper emitter prints `ask=${_b72cBestAsk ?? 'none'}` (`active-execution-engine.ts:5122`), so a no-ask rest cannot be logged any other way.
+**Reach — what the zero covers (log-only lines):** collected inside the window: **2026-09-18 06:43:11Z → 2026-09-19 02:27:43Z** and **2026-09-22 00:56:35Z → 12:15:37Z** (~31 h of the 168 h). ⛔ **UNKNOWN, not empty:** 09-15 12:16:07Z → 09-18 06:43:11Z (§5d) and 09-19 02:27:43Z → 09-22 00:56:35Z (§5f, the collector died with my session).
+
+| crypto, collected reach | S1 | S2 | S3 | S4 |
+|---|---|---|---|---|
+| paper `MAKER_RESTED` (A) · + fallback + dropped (B) | 165 · 316 | 55 · 105 | 72 · 128 | 157 · 277 |
+| VTS `MAKER_RESTED` (A) · B | 5 · 9 | 0 · 1 | 0 · 1 | 2 · 8 |
+| twins: `TWIN_OPENED` + `TWIN_SKIPPED reason=marketable_maker` | 75 + 65 = 140 | 6 + 4 = 10 | 9 + 3 = 12 | 15 + 21 = 36 |
+
+**Reading, by the pre-registered rules:** paper A and B clear the 30-floor in every segment ⇒ **0 / A per segment**, ⚠️ with A an UPPER BOUND (it includes `#1063` phantom rests, not joined for the new reach). VTS: below floor everywhere ⇒ counts only. Twins: S1 and S4 clear the floor ⇒ **"0 of 140" and "0 of 36", with no observed positive** (the twin rule forbids a ratio until one crypto `ask=none` exists); S2, S3 counts only. `TWIN_FAIL` = 0.
+**Exclusions, stated:** lines are de-duplicated on the full text (the live snapshot overlaps later rotations). **196** unlabelled lines of these kinds are all `[8.8.3-I3][OPEN_FAILED] stage=MAKER_MARKETABLE_DROPPED` — a COMPANION line for a dropped event already counted, so excluded. **277** `xstock_spot`-labelled lines are excluded from crypto; ⚠️ some carry crypto pairs (e.g. `STRK/USD … (xstock_spot)`), CC-B's `#1068` mislabelling, so crypto is read by the line's label and may under-count by those. Script + inputs on staging: `/home/deploy/8ap3_obj6.py`, `/home/deploy/8ap3_lines/`.
+
 ## 6. WHAT REMAINS
 
 - **Step 8:** Langston rules on the §5c discharge and the §5d legs. **Step 9:** OBJ-5 and OBJ-6 keep collecting to **2026-09-22 12:16:07Z** — OBJ-5's entry leg needs real placements, not rest lines.
