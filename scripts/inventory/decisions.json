@@ -300,18 +300,18 @@
   "verify"
  ],
  "B-PRICE-AGE-TRUTH": [
-  "MUST",
-  "an honest age on every price — acting on a stale price in live is a real-money error",
+  "PRUNE",
+  "CLOSED 2026-09-11 (plan row 3b.f, Langston's Step-11). Its 8g-bis tripwire stays live: it is the only place the unproven claim — that the honest age stamp reaches closed trades — can surface",
   ""
  ],
  "B-OPENTRADE-REFRESH-LANE": [
-  "MUST",
-  "open positions' prices must refresh — Kyle placed it himself, 2026-08-31",
+  "MERGE:B-PRICE-SIDE-BY-JOB",
+  "ABSORBED INTO 3n r5 on 2026-09-11 (decision D7: open positions enrolled in the fast refresh)",
   ""
  ],
  "B-PRICE-AGE-REFUSAL": [
-  "MUST",
-  "refuse to act on a price that is too old — the live counterpart of the age stamp",
+  "MERGE:B-PRICE-SIDE-BY-JOB",
+  "ABSORBED INTO 3n r5 on 2026-09-11 (D7 replaces the blanket refusal)",
   ""
  ],
  "B-XSTOCK-SESSION-FRESHNESS": [
@@ -345,13 +345,13 @@
   ""
  ],
  "B-EXIT-BOOK-AGE-STAMP": [
-  "HELPFUL",
-  "stamp the exit book's age — changes no behaviour, measurement only",
+  "PRUNE",
+  "CLOSED 2026-09-07 (plan row 3b.h)",
   ""
  ],
  "B-TICKER-BBO-TRIGGER": [
-  "MUST",
-  "trigger exits on the ticker's best bid/ask — prerequisite for the price-side rule",
+  "MERGE:B-PRICE-SIDE-BY-JOB",
+  "ABSORBED INTO 3n r5 on 2026-09-11 (D3)",
   ""
  ],
  "B-UNIVERSE-REFRESH-ACTS": [
@@ -405,8 +405,8 @@
   ""
  ],
  "B-TWO-CACHE-INTENT": [
-  "MUST",
-  "decide what the two price caches are for — it gates B-PRICE-AGE-REFUSAL, which is MUST",
+  "MERGE:B-PRICE-SIDE-BY-JOB",
+  "ABSORBED INTO 3n r5 on 2026-09-11 — already DECIDED: keep both caches (#971, PRICING_DECISIONS_2026-09-11); not open and not Kyle's",
   ""
  ],
  "B-PROVENANCE-LOSS-CENSUS": [
@@ -415,8 +415,8 @@
   ""
  ],
  "F-G-2": [
-  "MUST",
-  "exits booked on the side a counterparty fills — crypto half shipped (8a-P3); the xStock half is still open",
+  "MERGE:B-PRICE-SIDE-BY-JOB",
+  "ABSORBED INTO 3n r5 on 2026-09-11 (the exit switch is its decision D1)",
   ""
  ],
  "B-DEPLOY-REF-DECLARATION": [
@@ -491,7 +491,7 @@
  ],
  "B-PRICE-SIDE-BY-JOB": [
   "MUST",
-  "buy on the ask, sell on the bid, for every job a price does — Kyle's test is fidelity to live trading",
+  "buy on the ask, sell on the bid, for every job a price does — Kyle's test is fidelity to live trading. Since 2026-09-11 (r5) it CONTAINS the age-truth refusal, open-trade refresh, ticker trigger, two-cache decision and F-G-2's exit side; open by design until the xStock paper increments land",
   ""
  ],
  "B-VTS-MARK-SIDE": [
@@ -1951,8 +1951,8 @@
  ],
  "B-SEC-HARDEN": [
   "MUST",
-  "157 of 216 state-changing routes carry no authorisation check (Infra's count, not re-derived). Langston: the deciding fact is network reachability — public dashboard puts it in group A; Infra to state the boundary",
-  "verify"
+  "157 of 216 state-changing routes carry no authorisation check (Infra's count). REACHABILITY ANSWERED BY #935's measurement: the login page is public (internet → Caddy :443 → app), so an authorisation gap is reachable by anyone who gets past the login",
+  ""
  ],
  "B-SHARED-TREE-COMMIT-ATOMICITY": [
   "PRUNE",
@@ -2080,8 +2080,8 @@
   ""
  ],
  "rm:19-17b": [
-  "MUST",
-  "switch live_engine_enabled on as a number at go-live — the live start path is gated on it",
+  "DECIDE",
+  "THE GO-LIVE ACT ITSELF — flipping live_engine_enabled to 1. The plan parks it as a Phase 21 go-live checklist step (PHASE_19_PLAN:262): a terminal step with Kyle's hand on it, not a gate",
   ""
  ],
  "#734": [
