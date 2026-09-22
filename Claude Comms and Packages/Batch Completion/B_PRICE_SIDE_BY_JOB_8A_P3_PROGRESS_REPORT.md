@@ -362,3 +362,22 @@ CHANGE-CLASS: architecture (`8a-P3`, `8a-P4`, `8a-P4b`; `8a-P4a` is `sub_batch`)
 
 **CI per job, all four green, on every graded head** — `8a-P3`: runs in §1; `8a-P4a`/`8a-P4b`: `35406705232`, `35407191468`; C1: `35410627494`. **Governance files changed:** §7 (the Step-10 ledger, transcribed, `N/A` rows included).
 **Honest residual:** OBJ-5's rate and OBJ-2's comparison are not established; X3's re-land has no evidence yet by design; the escape has no staging evidence at all; `#1073`'s entry leg is unmeasured.
+
+## 9. `8a-P4c` INCREMENT 1 — THE VTS xSTOCK INSTRUMENT: DEPLOYED, STEP 7 (CC-C first pass, 2026-09-22)
+
+**What it is:** telemetry only — the age, sides and spread of the quote behind every VTS xStock decision, both lanes, per New York session and per symbol. **No decision moved** (fenced). Plan and pre-registration: `Scope Files/B_PRICE_SIDE_BY_JOB_8A_P4C_AUDIT_AND_PLAN.md` (§B4 at `9c64e9a2d`, Step-4 conditions at `bc199185e`). Change list: `Change Lists/B_PRICE_SIDE_BY_JOB_8A_P4C_CHANGE_LIST.md`.
+**Reviews:** Step 2 approved for increment 1 (14:03:44Z, conditions at r3); Step 4 approved with four conditions (14:30:39Z), all at `bc199185e`, Langston re-derived them (14:37:33Z). **CI 4/4 per job:** `6ddc55290` run `35739891082`; **`bc199185e` run `35741358532`** (temporary branch `migration/ci-cc-c-8a-p4c-inc1`).
+**Deploy:** `dt-deploy bc199185eaab3bf429787736ec67625bf69f27c6 --by cc-c` — record `deployed_at` 2026-09-22T14:39:00Z, `restart_time` 627, no migration. **`pm_uptime` 2026-09-22T14:38:49.748Z — the window's anchor.** Rollback: `40f22a1bb0ac1f3073d926decd453c3ec10b8a2a`. Runtime commits in the range: exactly `da65fda23` and `bc199185e` (Langston re-derived). Pre-deploy market check: 1 of 468 xStock symbols wider than 5%, 6 wider than 1.115% — no blowout (the `#1066` lesson).
+
+| check | object · population | result |
+|---|---|---|
+| **invocation (#661)** | `[8a-P4c][VTS_XS_TOUCH]` in `error.log` from the restart | first pass 14:39:53Z `lane=vts session=regular looks=106`; 14:39:54Z `lane=shadow session=regular looks=70`. **Both lanes reach the seam.** |
+| **fault rule (§B4)** | `ageUnknown` on those passes | **0** on both lanes. |
+| **errors since the restart** | `error.log` from 14:38:49Z, `TypeError`/`ReferenceError`/`Cannot read`/the two xStock price-fetch errors/`TEC_VTS_EXIT_EVAL_ISOLATED` | one line: the Kraken WS `toUpperCase` parse error at 14:38:55Z — pre-existing (11-15 a day, §5e). **Nothing from this change.** |
+| **paper xStock (the moved predicate)** | `EVAL_EXIT` after the restart | `noTriggerByClass=crypto:0/7,xstock:0/0` — **no paper xStock position is open**, so the capture sites are UNEXERCISED live; the re-pointed fence and the paper tests carry them until one opens. |
+| **UI** | Claude-in-Chrome, staging → Paper Trading, 14:41Z | the page renders: ACTIVE, 7 / 15 open (matches the engine's 7), realized balance, activity. **The instrument itself has no UI surface** — it is a log line. |
+| **weekly deploy observation** (alert `96198e10`, routed by Langston) | `scripts/batch-verify/dt-deploy-observation/daily_deploy_check.sh` on staging | **PASS on all four:** record = `dist/BUILD_SHA` = git HEAD = `bc199185e`; `restart_time` 627 = live (no crash-restart); `deployed_by_claimed` = `cc-c`; lock absent; installed `dt-deploy` sha256 = the blob at `bc199185e` (`6dbfe2dd…bc15`); the latest reflog move (14:38:33Z) matches the record. **Resolved 14:40:15Z** with evidence `deploy-record:bc199185e…`; **successor minted `969a30ba-e60d-422e-828e-fff1f1d81a6b`, due 2026-09-29T07:00:00Z.** |
+
+⚠️ **AN UNPLANNED READ, STATED (the §B4 discipline).** Confirming the lines existed meant reading one full pass line per lane, including its age and spread buckets. That is ONE pass (106 + 70 looks), not the window's aggregate, and no rule is read from it. **From here, verification parses only `looks`, `noRow`, `ageUnknown` and the symbol counts — never the buckets — until the window closes.**
+**The window, as I read §B4:** from `pm_uptime` 2026-09-22T14:38:49.748Z through the end of the fifth full weekday trading day after it — **Tue 2026-09-29 20:00 ET = 2026-09-30T00:00:00Z** (full days Wed, Thu, Fri, Mon, Tue; the partial Tuesday of the deploy and the weekend are counted but `weekend` is never read). **For Langston to confirm at Step 8.**
+**Still owed at Step 7:** the day-1 reachability count — symbols with `regular` looks per lane in the first full regular hour (15:00-16:00Z, flushed at 16:00Z as `[8a-P4c][VTS_XS_SYM]` lines), stated out loud.
