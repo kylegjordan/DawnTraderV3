@@ -67,6 +67,17 @@ describe('8a-P4c — classifyXstockVtsLook, every arm', () => {
     expect(l2.ageBucket).toBe(3); // ≤60 s
   });
 
+  it('a NEGATIVE age (row stamped after the decision) is age-unknown, not the freshest possible (CONDITION-1)', () => {
+    const l = classifyXstockVtsLook(row({ atMs: T0 + 5_000 }), T0, null, null);
+    expect(l.ageUnknown).toBe(true);
+    expect(l.ageMs).toBeNull();
+    expect(l.ageOver).toEqual(XS_VTS_AGE_CANDIDATES_MS.map(() => true));
+    expect(l.refusedAt).toEqual(XS_VTS_AGE_CANDIDATES_MS.map(() => true));
+    const zero = classifyXstockVtsLook(row({ atMs: T0 }), T0, null, null); // exactly now is a real, fresh age
+    expect(zero.ageUnknown).toBe(false);
+    expect(zero.ageMs).toBe(0);
+  });
+
   it('age unknown ⇒ counted as unknown and over every candidate', () => {
     const l = classifyXstockVtsLook(row({ atMs: null }), T0, null, null);
     expect(l.ageUnknown).toBe(true);

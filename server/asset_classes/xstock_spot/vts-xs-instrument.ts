@@ -91,7 +91,11 @@ export function classifyXstockVtsLook(
       bidFiresStop: false, lastFiresTarget: false,
     };
   }
-  const ageMs = row.atMs !== null && Number.isFinite(row.atMs) ? Math.max(0, nowMs - row.atMs) : null;
+  // Langston Step-4 CONDITION-1: a NEGATIVE age (a row stamped after the decision instant) is `ageUnknown`, never the
+  // freshest possible — the same disposition as the crypto stateless guard (`level-basis.ts:230`, `age_unknown`). It
+  // should never happen (the archiver stamps with its own clock), which is exactly why it is COUNTED, not rounded away.
+  const rawAgeMs = row.atMs !== null && Number.isFinite(row.atMs) ? nowMs - row.atMs : null;
+  const ageMs = rawAgeMs !== null && rawAgeMs >= 0 ? rawAgeMs : null;
   const ageUnknown = ageMs === null;
   const sides = xstockTransactableSides({ bid: row.bid, ask: row.ask });
   const sideUnusable = sides === null;
