@@ -20,7 +20,20 @@ Two geometry gates stand between a strategy's signal and a trade — the **rewar
 
 ## 3. What is LIVE, measured — and what is NOT
 ✅ **The six rows read back at the DB after the deploy**, and `target_floor_pct` returns **0 rows**.
-⛔⛔ **THE GATES THEMSELVES ARE UNEXERCISED, AND THIS IS THE REASON THE BATCH IS OPEN.** In the 15 minutes after the deploy, crypto `strong_bull_trend` logged **3 evaluations and all three dropped on `invalid_atr`** — they never reached either threshold. Every other changed cell logged **zero** evaluations. ⇒ **No post-deploy evaluation has touched a changed value.** Consistent with post-restart indicator warm-up; **not yet evidence of anything**, and silence here proves nothing (`#661` leg 3).
+⛔ **AT DEPLOY + 15 MIN THE GATES WERE UNEXERCISED** — 3 `strong_bull_trend` evaluations, all dropping on `invalid_atr` before reaching either threshold, and zero evaluations elsewhere. **That was the post-restart indicator warm-up, and it is left here because it is what the record said at the time.**
+
+✅✅ **AT DEPLOY + 44 HOURS THE FIX IS DECISIVE.** Deltas from the deploy snapshot to 2026-09-22T17:26:51Z:
+
+| cell | evals | passes | reach drops | rr drops | was |
+|---|---:|---:|---:|---:|---|
+| crypto `strong_bull_trend` | 19,556 | **19,537 (99.90 %)** | 9 | 0 | **0 passes of 367,009** |
+| xStock `strong_bull_trend` | 7 | **7** | 0 | 0 | **0 passes of 406** |
+| crypto `vwap_bounce` | 176 | **176** | 0 | **0** | 0.75 % refused on float noise |
+| crypto `vwap_pullback` | 12,835 | 435 | 12,400 | **0** | 88.35 % rr-refused |
+| xStock `vwap_pullback` | 5,093 | **1,848 (36.3 %)** | 2,840 | 0 | 9.20 % pass |
+
+⭐ **AND THE SEQUENTIAL-GATE FINDING (P-3) IS CONFIRMED IN THE LIVE DATA, WHICH IS THE PART TO KEEP:** crypto `vwap_pullback`'s rr drops went to **zero** and its reach drops became the binding constraint (12,400). **Lowering a floor did not admit the refused population — it released it into the ceiling behind it, exactly as predicted, and the naive single-gate estimate would have overstated the benefit ~4×.**
+⚠️ **NOT YET SETTLED: PASS-arm (a) — a `strong_bull_trend` signal reaching the active pipeline PAST the second gate application. A guard pass is not a trade, and that arm is still unmeasured.**
 
 ## 4. ⛔ THE PRE-REGISTERED CRITERION — written BEFORE the deploy, in the audit and in the rollback file
 **Window: 7 days from 2026-09-20T21:19:40Z.**
