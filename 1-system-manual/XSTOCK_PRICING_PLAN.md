@@ -60,7 +60,7 @@
 | **P3** | **Absent data fails the entry gate.** No placeholder, no silent pass. | ⚠️ **This will reduce overnight entries. That is the intended effect, not a side effect.** |
 | **P4** | **A plausibility check at ingest: a price whose move from the last good one is implausible does not become the mark; the last good value holds and the event is counted.** | ⭐ **CAUSAL, not clock-based — catches 20:15 AND the other three boundaries AND mid-session glitches, with nobody enumerating them.** ⚠️ **Needs a false-positive budget: a check that suppresses a real crash is worse than the defect.** |
 | **P5** | **Record the book's age and the mark's kind on every close.** | ⚠️ **Kyle is right that this is not needed for the P1 fix — the age is already computed. It makes the FINDING readable instead of reconstructed, and it is the only way P5 and the laundering question can ever be measured.** ⇒ **Useful, not blocking.** |
-| **P6** | **Name, per decision, which price it reads.** | ⛔ **KYLE'S CALL. Last, because it should be decided on clean data.** |
+| **P6** | **Name, per decision, which price it reads.** | ⛔ ~~KYLE'S CALL. Last, because it should be decided on clean data.~~ ➕ **SUPERSEDED 2026-09-22 for triggers, fills and bookings: Kyle DELEGATED the per-job decision to CC-C + Langston on 2026-09-03 (plan row `3n`), after this row was written.** The rule and the live per-lane state: `SYSTEM_MANUAL` §18.0.1. **xStock today:** paper resting fills on the sides (`8a-P4b`); paper trigger still on the mark (re-land `3n.q7`); VTS xStock on the mark until `8a-P4c`. Ranking (an estimate) keeps the midpoint by the same rule. |
 
 ---
 
@@ -71,7 +71,7 @@
 3. **P3 — the entry gate's fail-open.** ⚠️ **Third and not first, deliberately: it is the only fix that REDUCES trading, and P1 and P2 are the ones bleeding.** ✅ **But it is the condition on leaning further into overnight.**
 4. **P4 — the plausibility check.** After 1-3, because it is the one with a false-positive budget to design and the one whose absence is best understood.
 5. **P5 — the instrumentation.** ⚠️ **Demoted from first to fifth on Kyle's correction.** Anywhere; it blocks nothing.
-6. **P6 — decide the number per job.** **Kyle's, on clean data.**
+6. **P6 — decide the number per job.** ~~Kyle's, on clean data.~~ ➕ **Delegated to CC-C + Langston 2026-09-03 and largely done — see the P6 row above and `SYSTEM_MANUAL` §18.0.1 (updated 2026-09-22).**
 
 ⛔ **NOTHING HERE STOPS OVERNIGHT TRADING. Recommendation stands: keep trading all four sessions.** The prices are real; the defects are mostly not session-specific; and stopping would remove trades rather than defects — **and destroy the data we need to calibrate.**
 

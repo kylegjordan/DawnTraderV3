@@ -1,6 +1,6 @@
-# B-PRICE-SIDE-BY-JOB row `8a-P3` — PROGRESS REPORT (crypto half; the batch is OPEN)
+# B-PRICE-SIDE-BY-JOB rows `8a-P3` + `8a-P4` — PROGRESS REPORT — OPEN: waiting on `8a-P4c` (VTS xStock) and the xStock trigger re-land
 
-**Status:** `STEP: 8 of 11` · `NEXT STEP: 9 of 11`. **This is not a completion report.** Kyle, 2026-09-15: the exit/fill-side work is one batch in two halves and is not presented as complete until both land. The xStock half (`8a-P4`) has not started.
+**Status:** `STEP: 10 of 11` (governance landed 2026-09-22) · `NEXT STEP: 11 of 11`, as an honest progress report. **This is not a completion report.** Kyle, 2026-09-15: the exit/fill-side work is one batch in two halves and is not presented as complete until both land. The crypto half (`8a-P3`) and the paper xStock half (`8a-P4a`, `8a-P4b` with C1) are live; `8a-P4c` (VTS xStock) is not built. *(Until 2026-09-22 this line read "STEP 8 … the xStock half has not started"; the file keeps its `8A_P3` name because every citation points at it.)*
 **Scope / audit / plan:** `Scope Files/B_PRICE_SIDE_BY_JOB_8A_P3_SCOPE_AUDIT_AND_PLAN.md` (r4 approved `0b6c93d20`, OBJ-6 restated at Step 4 r3). **Change list:** `Change Lists/B_PRICE_SIDE_BY_JOB_8A_P3_CHANGE_LIST.md` (§6-§7 carry every review round).
 
 ---
@@ -270,12 +270,58 @@ Read from `closed_trades` ∪ `active_open_positions` (placements and fills are 
 Same input, no usable ask: **paper refuses the open upstream** (`no_book` / `thin_book` → `DEPTH_GATE`, a non-trade); **VTS rests a position.** So VTS takes opens paper structurally cannot — exactly what the `aee:5117-5118` comment was written to prevent (*"opposite policies on one seam would make the comparison meaningless"*). Exposure in the collected reach is nil (0 of 7 VTS rests carried `ask=none`), but the asymmetry is real.
 **DISPOSITION (§9.4 #2): added to `8a-P4`'s existing "no-ask placement policy on both lanes" item** (the `8a-P4c` row of the `8a-P4` scope and `PHASE_19_PLAN` row `3n.q2`), owner CC-C — the lane asymmetry and the dead `?? 'none'`. No new batch.
 
-## 6. WHAT REMAINS
+## 6. WHAT REMAINS *(rewritten 2026-09-22 at Step 10; the HOME lines below are unchanged)*
 
-- **Step 8:** Langston rules on the §5c discharge and the §5d legs. **Step 9:** OBJ-5 and OBJ-6 keep collecting to **2026-09-22 12:16:07Z** — OBJ-5's entry leg needs real placements, not rest lines.
-- **Step 10** governance · **Step 11** held for the xStock half.
-- **`8a-P4` (xStock half), not started — ITS FIRST ITEM IS AN INSTRUMENT (Langston C2):** since deploy 2, xStock no-decision volume on VTS has **no instrument at all** (the fence excludes it, and so every non-crypto class), and that count is the evidence `8a-P4` needs to size its `#994` notify rules. Then: paper xStock trigger on the bid; VTS xStock trigger and booking; xStock resting fills; the hollow-book guard for VTS; C8 VTS taker entry booking; the no-ask placement policy on both lanes; the VTS xStock no-decision rail under `#994`; the twin `ask=` formatting nit at `vts-runner` `:4700`; **added 2026-09-18 (§5d):** the `MAKER_RESTED` line moved after the insert commits, and the `aee` `:2656-2658` decision-price comment corrected; **(§5c, Langston)** the VTS no-decision rail keyed on the trade id with an automatic re-arm.
+- **Step 11 — an honest progress report, NOT a close.** The window-end objectives are recorded (§5g, accepted by Langston at `7ae429f81`): OBJ-5 counts only (below the floor), OBJ-6 "0 of 70" maker twins. **What is NOT done:**
+  - **`8a-P4c` — VTS xStock** (row `3n.q2`): the xStock no-decision instrument FIRST (Langston C2), VTS xStock trigger + booking, the VTS hollow-book guard, C8, the no-ask placement policy on both lanes (now with the §5g lane asymmetry and the dead `?? 'none'`), the no-decision rail keyed on the trade id, an epoch migration that also re-stamps the two stale `updated_at` rows (`ADJUSTMENT_FRAMEWORK` epoch rule 7), and the `aee:2806` comment beside the decision-price stamp, which still says xStock triggers on the bid (stale since C1).
+  - **The paper xStock bid trigger** — withdrawn by C1; re-land `3n.q7`, after `3n.q8` `B-BOOK-STATE-RESTART-DURABLE` (`#1066`).
+  - **Unexercised live arms, discharging with time:** the X3 bid-divergence instrument, `CROSSED_NOT_CAPTURED`, and `8a-P4a`'s escape legs (the last unreachable until `3n.q8`, because a restart re-vacates the ring they need).
+  - **`8a-P2`'s open gate is now met on its own evidence:** 3 of 4 paper crypto stops since `8a-P3` deploy 2 fired while the mark was still above the stop (§5d) — the bid trigger has produced output. Its conversion folds into this batch's single completion report.
+- **Carry to Langston:** which arm booked `vts_KII_USD_strong_bull_trend_1789490949547` (a `bookedNoBidClamp` increment or a bid booking), read after 2026-09-22 16:49:09Z.
 - **`HOME: B-VTS-NO-DECISION-VALVE, owner CC-C, placed in PHASE_19_PLAN at 3n, after 8a-P4`** — a time bound on a refused VTS exit, before the 7-day max-hold books a timeout at the mark (§5c).
 - **`HOME: B-EXIT-LINE-IDENTITY, owner CC-C, placed in PHASE_19_PLAN at 3n, after 8a-P3`** — put the trade id (and asset class) on the `[11.6][Exit]` line **and on the VTS no-decision streak line (added 2026-09-18, Langston Step 8 C2)**, the only close-reason carrier, so OBJ-2-style reads stop needing a symbol-and-second join. Not done in this batch because changing the emitter mid-window splits the window. The plan rows for this, `8a-P4` and `3b.f-e` are written at Step 10.
 - **Placed elsewhere:** `B-BOOK-STATE-RESEED-ESCAPE` (built as `8a-P4a`, row `3n.q2`, owner CC-C — ⛔ this line read `3b.f-e` until 2026-09-22; that row is `B-EQUITY-RECONNECT-STALL-TIMER`) — the `seedImplausible`-terminal absorbing state, plus the D3 date consistency in that region.
   ⛔ **LIVE ON 2026-09-18, IN US REGULAR HOURS:** all three held paper xStock positions are locked in it — ANET/USD (seed 09-18 00:16:40Z, `seedSpread` 0.01000 vs retained median 0.00253), AMC/USD (09-17 00:16:33Z, 0.02256 vs 0.00374), LOW/USD (09-17 20:16:31Z, 0.01461 vs 0.00026), each `SEED_IMPLAUSIBLE … chain can never validate` (`book-state-tracker.ts:172-203`), each refusing exit evaluation every tick since (396 `REFUSE unvalidated` lines per symbol in the 10 minutes to 19:27Z; no other symbol). Every seed landed off-hours, when a wide spread is normal; a chain ends only at a yield (`book-state-tracker.ts:252-273`), and a book that stays two-sided never yields — so nothing re-seeds it. **Exposure at 19:36Z, from the captured ticker (`xstock_spot_ticker_snap_2026_09_18`, last row per symbol):** **LOW bid 192.32 vs stop 193.47 — 0.6% BELOW its stop, a stop that cannot fire**; AMC bid 2.71 vs target 2.7081 — at its target; ANET bid 198.18 vs stop 193.66 — 2.3% above. *(The REST last-known-good marks first read for this — LOW 194.17, AMC 2.905 — were stale and are not used.)* **The books have recovered:** last-60-minute median spreads AMC 0.00368 (retained 0.00374), ANET 0.00086 (0.00253), LOW 0.00062 (0.00026, 2.4× — under `kRel` 3), so by the guard's own test a fresh seed now would be plausible on all three; only the missing re-seed holds them. ⇒ **pulled forward as the FIRST item of the xStock half.** No restart: Langston measured that a restart clears the lock without fixing it, and it would also zero this batch's in-memory counters.
+
+## 7. GOVERNANCE FILES CHANGED — STEP 10, 2026-09-22 (transcribed from the governance commit message, not from memory)
+
+CHANGE-CLASS: architecture (`8a-P3`, `8a-P4`, `8a-P4b`; `8a-P4a` is `sub_batch`)
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | New entry for `8a-P3` + `8a-P4` (OPEN): shas, CI, reviews, evidence, the two false-stop rows and the recorded mistakes. |
+| T1 | `PHASE_HISTORY.md` | ✅ | Plain-language entry for the exit and fill side, `8a-P2` → `8a-P4`. |
+| T1 | `PHASE_19_PLAN.md` | ✅ | Dated status on rows `3n.q` and `3n.q2`; the `8a-P4c` remainder gains the lane asymmetry and the epoch re-stamp; `#1073` added to `3n.q3`. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_C.md` | ✅ | Shared: two of my entries rewritten current and shorter (the file was over its cap before this edit, now under); mine: position moved to Step 10 done, next Step 11. |
+| T1 | the batch `SCOPE` | ✅ | `8a-P4` scope row `8a-P4c`: the no-ask lane asymmetry and the epoch re-stamp added. |
+| T1 | the batch `PRE_AUDIT` | ✅ | Present: `8A_P3_SCOPE_AUDIT_AND_PLAN`, `8A_P4A_AUDIT_AND_PLAN`, `8A_P4B_AUDIT_AND_PLAN` (Step 2); nothing in them changed at Step 10. |
+| T1 | the `COMPLETION_REPORT` | ✅ | Batch is open, so the progress report: §5g window-end record (r4), §6 rewritten, §7 this ledger. |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | Mine re-dated 2026-09-22, open-and-stalled rewritten, 17 `3n` rows added; the other three are not mine. |
+| T1 | Langston's `MEMORY.md` | ⏳ **BLOCKED, not done** | The writer REFUSED (exit 4): his `MEMORY.md` was edited outside the composer. Reconciliation is Infra Claude's (`#1057`), asked 2026-09-22; my edit is staged and re-applied after. |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | §3.5.1a re-seed judgement, escape and restart hole; §3.5.1b xStock side capture; §18.0.1 per-lane price table; fill-test pointers in B7.2c and B8.6. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | S25, S25b and S27 re-censused; the VTS booking line superseded for crypto; pending-maker, book-state and exit-path entries for `8a-P3`/`8a-P4`. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#741` annotated (bucket 2 implemented); `#1073` filed — a price refusal suspends a resting order's deadline, homed on `3n.q3`. |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | New entry: four fixes, one same-night withdrawal, stated residuals. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level change; the work sits inside Phase 19 row `3n`. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | ✅ | Calibration-epoch rule 7 (a bump sets `updated_at`) and the `8a-P3`/`8a-P4b` precedents. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | No risk limit, gate or constitutional value moved. |
+| T2 | `STORAGE_POLICY.md` | N/A | No table, column or retention changed; the only data writes are three `module_constants` epoch rows. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | ✅ | Working-list review: no A–F status change; two xStock epoch boundaries to split at. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | ✅ | New `R-SIDES`: which price each job reads, and the post-close symmetric widening. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | No role, gate or method changed. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | His model, runtime, invocation and files are unchanged. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No stable rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No `CLAUDE.md` change. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | Nothing removed; the dead `?? 'none'` is homed at `8a-P4c`, not deleted. |
+| T2 | `MISTAKE_PATTERNS.md` | ✅ | `wrong-object` ×3 instance: denominator rows that could not carry the numerator. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | No exception granted. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | The ack/resolve process did not change. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | The board's columns, fields and ownership did not change. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model check did not run inside this batch. |
+| + | `XSTOCK_PRICING_PLAN.md` | ✅ | Row P6 marked superseded for triggers, fills and bookings (delegated 2026-09-03). |
+| + | `ACTIVE_PATH_FLOW.md` | ✅ | §6.3: "every exit decision reads a midpoint" superseded; the midpoint-stop question answered. |
+
+`REVIEWER r1: object (the System Manual + System Impact Map diff) · what else is consistent with the code · 12 hits; the load-bearing ones re-derived at the code (capture sites log only, VTS fallback books the evaluator's exit price, resting entries pass the guard) · corrected; one side-finding filed as #1073 · re-derived y`
+`REVIEWER r2: object (the corrected diff) · were r1's twelve points met, and what else is unsupported · 11 of 12 met; point 4 left in two phrases; 4 new (J2 silent drop, the paper booking clamp parenthetical, S25b "refreshed every frame", a stale code comment at aee:2806) · corrected; the comment homed in 8a-P4c · re-derived y`
+`REVIEWER r3 (cap round): object (the re-corrected diff) · were r2's points met, and what else is unsupported · all five met; three residual wordings (the J2 logging scope, VTS xStock no-mark timing, 'VTS exit rest') · corrected directly, no fourth round · re-derived y`
+

@@ -348,12 +348,13 @@ If step 2 fails, the signal has **already left the queue** and is **deliberately
 2. ✅ **The xStock quote we store is Kraken's real executable top-of-book.** Not inferred, not fabricated.
 3. ✅ **The wide xStock bids are a genuine symmetric two-sided widening** — `#955`: mean position of the last trade in the spread is 0.45-0.55 in every band, against 0.49 across 5.28 M tight quotes.
 4. ✅ **Every exit decision, both classes, both lanes, reads a computed midpoint** — 23 of 23 stamped closes.
+   ➕ **SUPERSEDED 2026-09-14 → 09-19 by `B-PRICE-SIDE-BY-JOB` (`8a-P2` → `8a-P4`) — true of the 23 closes it measured, no longer true of the system.** Crypto stops and targets are decided on the bid in both lanes, and every crypto resting fill on the side a counterparty fills; paper xStock resting fills read the sides of the frame the book-state guard admitted. **Still on the midpoint today:** the paper xStock stop/target trigger (withdrawn from the bid by C1 after a false stop; re-land `3n.q7`) and every VTS xStock seam (`8a-P4c`). Per-lane table: `SYSTEM_MANUAL` §18.0.1.
 5. ✅ **What is missing on xStock is the LADDER, not the quote** — and the ladder was already named as needed by a ratified decision.
 
 **OPEN, AND EACH HAS A HOME:**
 | open question | home |
 |---|---|
-| Should a stop trigger on a midpoint? | `F-G-2` (3c), instrument `OBJ-0` |
+| Should a stop trigger on a midpoint? | ✅ **ANSWERED — no: on the side a counterparty fills (Kyle delegated the rule 2026-09-03; row `3n`).** Built for crypto (`8a-P2`, `8a-P3`); paper xStock re-lands at `3n.q7` behind `3n.q8`. *(`F-G-2`'s `OBJ-0` shadow instrument was removed by `8a-P2`.)* |
 | Three xStock price definitions from one frame — intended? | ✅ **`#957` — a SCHEDULED REVIEW (§9.4 disposition 4), placed as the FIRST QUESTION of `B-DECIDED-INTENT-INDEX` (3b.g).** ★ *Filed as a review and not a defect on purpose: calling it a defect would commit the exact error `#956` records — asserting behaviour is unintended from a corpus that cannot answer it.* |
 | Should two crypto producers share one cache slot? | write-side reformulation of rule 1b — **unowned** |
 | The ladder half of the ratified depth decision | `B-XSTOCK-BOOK-LADDER` (3b.d) |

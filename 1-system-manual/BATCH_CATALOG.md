@@ -1052,6 +1052,29 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 ---
 
+## `B-PRICE-SIDE-BY-JOB` rows `8a-P3` + `8a-P4` — FILLS, VTS AND xSTOCK MOVE OFF THE MIDPOINT (2026-09-15 → 2026-09-22, CC-C) — ⏳ **OPEN**
+
+**ONE BATCH WITH `8a-P2`, TWO HALVES (Kyle 2026-09-15: nothing is called done until both land).** **CHANGE-CLASS** `architecture` (`8a-P3`, `8a-P4`, `8a-P4b`); `8a-P4a` `sub_batch`.
+**Deployed:** `8a-P3` deploy 1 `7e3d64c842becab7d1ad7395919ceae02477e80d` (2026-09-15 11:59:22Z) and deploy 2 `91647c9b99e2c0c1c548bab6127134301fd5f6a0` (12:15:04Z) · `8a-P4a` + `8a-P4b` inside `323ae277641368acb057e8ffa7643894aa1c2799` (2026-09-19 00:02:33Z, jointly with CC-B's `B-FEED-MISMATCH-FIX`, an ancestor) · Step 9 C1 `084e6605ff9fc32bcd13843b610d22b3cec6f146` (00:54:06Z) · all carried by the current build `40f22a1bb` (restart 2026-09-20 21:19:29Z). **CI 4/4 per job on every graded head** — run ids in the record §1 and §5e (C1: `35410627494`).
+**Langston:** `8a-P3` Step 4 approved `aecb8b15d` → `91647c9b9`; Step 8 C1/C2 discharged 2026-09-18 · `8a-P4a` Step 4 approved `82a55bd00` · `8a-P4b` approved `00ba34873` (r2) · C1 approved 2026-09-19 00:53Z · `8a-P4` Step 8 part 2 confirmed 2026-09-22 06:38Z · the OBJ-5/OBJ-6 window-end record accepted at `7ae429f81` (r4).
+
+**WHAT SHIPPED** (the full per-lane table is `SYSTEM_MANUAL` §18.0.1). **Crypto:** resting fills on the sides in both lanes (buy on the ask, sell on the bid); VTS stop/target decided on the bid and booked at the bid; VTS placement and twin checks on the ask; three new level-basis stages (`active_entry_fill`, `vts_entry_fill`, `vts_exit_trigger`). **xStock paper:** the book-state re-seed escape (`8a-P4a`); resting fills on the sides taken from the frame the guard admitted (X1/X2); the bid trigger (X3) withdrawn by C1 — back on the mark, with the bid's would-fire logged. **Epochs:** crypto `vts` 5 → 6 and `paper_sim` created at 3; xStock `paper_sim` 4 → 5 → 6, `vts` 7 → 8 (read the live values from `module_constants`; date the boundaries by the deploys — two migrations left `updated_at` untouched).
+
+**EVIDENCE, on the populations the record names:** crypto rested target exits decided below the midpoint **8 / 8** (before: 0 / 18, all AT the mid); crypto maker entry fills below the limit **4 / 4** (before: 29 / 29 at it); VTS crypto fill lines ask ≤ limit **52 / 52**; crypto taker stops — **3 of 4 fired while the mark was still above the stop**, so `8a-P2`'s bid trigger has now produced output. xStock: an AMC target rest sat with the mid above its limit ~95 s and filled only when the bid crossed; an AMC entry rest saw the mid touch its limit in 21 frames while the ask never did, and did not fill. **OBJ-5** 20 placements / 18 filled / 2 never filled — below the 30-floor, counts only. **OBJ-6** 0 of 70 maker twins in the one segment above the floor (under ~4.2% at 95%); the paper legs are unreachable by construction.
+
+**FALSE STOPS — NAMED, NOT DELETED (`#596`):** MDB/USD `8ec14a38-47f9-4c39-a0e9-9f6e29ef2292` (`#1065`, a stub bid under X3) · ANET/USD `b2a1dcd3-3696-4e66-9123-6ad3f2544166` (`#1066`, a restart cold-seed). Outcome-sourced reads exclude both by id.
+
+⛔⛔ **THE MISTAKES, RECORDED RATHER THAN SUMMARISED AWAY:**
+- **`enumerator-blind-spot`** — the X3 audit enumerated the guard's arms and missed a SYMMETRIC outward widening, the one shape every arm passes; MDB fired within 13 minutes of the deploy.
+- **`skipped-the-gate` ×2** — I deployed C1 (a restart) during a market-wide post-close blowout, and ANET closed on a false stop 12 s later; and I ran the `8a-P3` line collector as a loop in my laptop session, so it died with the session and ~70 h of log-only lines were lost.
+- **`wrong-object` ×3 at the window end, one shape** — I reported the paper no-ask zeros as observations when that arm is unreachable there; counted taker twins into a maker denominator; then left skip rows that cannot carry the numerator inside the denominator the floor is judged against.
+- **`wrong-object`** — I read KII's missing snapshot-archive frames as an exit-decision shape, and then named an unread cache file as the archiver's cause (`#1072`).
+- At Step 10 the new §18.0.1 table first said a paper taker exit books the mark; the code books a depth walk across the bids — caught at the object before commit.
+
+⏳ **WHY IT IS OPEN.** `8a-P4c` (VTS xStock) is not built; the paper xStock bid trigger re-lands at `3n.q7` behind the restart-durable guard `3n.q8`; the X3 divergence instrument and `CROSSED_NOT_CAPTURED` are live but unexercised; the escape legs cannot be exercised until `3n.q8`. **One completion report when both halves land.** Record: `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md`.
+
+---
+
 ## `B-FEED-MISMATCH-FIX` (`PHASE_19_PLAN` row `3n.u`) — ⏳ OPEN, OBSERVATION. Owner CC-B. change-class `architecture`.
 **Kyle 2026-09-19:** *"fix the incorrect feeds that are not going to be fixed by analyst"* — the price-feed defects from the `3n.t` per-situation audit that were NOT in CC-C's `B-PRICE-SIDE-BY-JOB` lane.
 **Deployed `323ae277641368acb057e8ffa7643894aa1c2799` 2026-09-19 00:02:43Z**, jointly with CC-C `8a-P4a`/`8a-P4b` (they are ancestors; `dt-deploy` cannot exclude an ancestor). Langston: Step-1 approved, Step-2 cleared r5 after four rounds (BLOCKER-3/4/5 on where the reference bid comes from), Step-4 r2 APPROVED, **Step-8 CONFIRMED 00:13:29Z**.

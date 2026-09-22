@@ -4121,3 +4121,20 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 - **The crypto leg's cohort is a mixture and its segments are small** — recut at every epoch bump the control runs n=12 / 14 / 33 and swings +2.556 % → −1.840 %. **What carries that leg is Kyle's replay evidence plus the pre-registered rollback trigger, not the cohort.**
 - **Per-class VTS statistics over this window are contaminated** — see `3n.v2`.
 **STATUS: FIXED, deployed 2026-09-20T21:19:40Z; 7-day observation open with its trigger and baselines pre-registered.**
+
+---
+
+### `B-PRICE-SIDE-BY-JOB` `8a-P3` + `8a-P4` (`3n.q`, `3n.q2`) — fills, VTS and xStock off the midpoint. Deployed `8a-P3` 2026-09-15 (`7e3d64c84`, `91647c9b9`); `8a-P4a`/`8a-P4b` 2026-09-19 00:02:33Z (`323ae2776`); C1 00:54:06Z (`084e6605f`). CC-C.
+**FIXED**
+1. **Resting maker orders filled on the MIDPOINT.** A resting buy filled when the mid reached its limit and a resting sell likewise — optimistic by half a spread even on a clean book (`#741` bucket 2). Now a buy fills on **ask ≤ limit** and a sell on **bid ≥ limit**, in paper and VTS crypto and in paper xStock; a missing side ⇒ no fill that tick. Measured after: crypto rested target exits decided below the mid **8 / 8** (before: 0 / 18); an AMC xStock target rest held ~95 s with the mid above its limit until the bid crossed.
+2. **VTS crypto decided and booked its exits on the midpoint.** Now decided on the bid (`null` ⇒ no decision) and booked at the bid; the no-bid fallback (the evaluator's own exit price) is counted on the real lane.
+3. **VTS crypto maker placement and twin checks read the midpoint.** Now the ask (`placementAsk`); the B53 admission estimate keeps the mid by the same rule.
+4. **A recovered xStock book could stay locked out of exit evaluation indefinitely** (`8a-P4a`): a seed-implausible comparator chain had no end short of the next hollow episode; on 2026-09-18 all three held positions were locked in regular hours, one past its stop. Now a recovered book escapes by the same retained-ring test (three conditions, no clock).
+**WITHDRAWN IN THE SAME NIGHT**
+- **The xStock paper stop/target trigger on the bid (X3)** — a stub bid in the symmetric post-close widening fired a false MDB stop 13 minutes in (`#1065`). Back on the mark (C1), the bid's would-fire logged; re-land `3n.q7` after `3n.q8`.
+**RESIDUALS, STATED.**
+- **A restart empties the book-state guard's retained ring and cold seeds pass vacuously** — ANET false stop 12 s after the C1 restart (`#1066`); `3n.q8`.
+- **VTS xStock is unchanged** at every seam until `8a-P4c`; **paper and VTS disagree on a no-ask placement** (paper refuses, VTS rests) — `8a-P4c`'s no-ask item.
+- **Two epoch rows carry stale `updated_at` stamps** — `ADJUSTMENT_FRAMEWORK` calibration-epoch rule 7; corrected by `8a-P4c`'s migration.
+- **Unexercised live:** the X3 divergence instrument, `CROSSED_NOT_CAPTURED`, and the escape legs (unreachable until `3n.q8`).
+**STATUS: FIXED on the legs above; batch OPEN for `8a-P4c`.** Record: `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md`.

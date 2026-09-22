@@ -601,6 +601,13 @@ When onboarding a class whose venue serves MIXED instrument types (Kraken Future
 4. **Degraded-feed refusal sits ABOVE persistence** (fetches throw before any write; the plausibility floor refuses a below-half universe collapse unless `--confirm-delisting`) — a truncated venue response must never shrink a persisted registry as a side effect.
 Companion pattern: **one venue = one capture ENGINE, one facade per class** (`kraken-futures-archiver.ts` + thin facades) — zero caller churn on the existing class, per-class kill-switches, and the new class ships default-OFF until the first live recompute reports symbol-count + GB/mo. Born-daily partitioning at the standing 30-day hot rule (STORAGE_POLICY §2.5) — a class born AFTER the retention rule needs no monthly-era transition machinery.
 
+### R-SIDES — Which price each job reads, and what the new class's book does after its market closes (`B-PRICE-SIDE-BY-JOB`, 2026-09; used at any class that will trigger, fill or book)
+
+A new class inherits the rule in `SYSTEM_MANUAL` §18.0.1: an estimate keeps the midpoint; a trigger, a fill or a booking takes the side a counterparty fills (a buy on the ask, a sell on the bid), and a missing side means no decision, never a midpoint fallback. **Three things learned putting xStock on it:**
+1. **Find out what the venue's book does in the minutes after the underlying market closes, BEFORE a stop reads a side.** xStock books widen SYMMETRICALLY for a few minutes after the US close — both sides move out, the mid barely moves. A guard that looks for ONE side departing from the other passes that shape by construction, and a stop on the bid then fires on a stub (`#1065`, 13 minutes after deploy). The mark was safe there; the side was not.
+2. **A guard that remembers what a normal spread looks like must survive a restart,** or the first frame after a restart is judged against nothing and passes (`#1066`). Put that memory somewhere durable before any decision leans on it.
+3. **Take both sides from the SAME frame the guard judged,** through one predicate (`bid > 0`, `ask ≥ bid`) at every capture site — a second fetch, or a second predicate, is how two sites drift.
+
 ---
 
 ## Part 3 — Worked example: `xstock_spot` (B79, Phase 24)

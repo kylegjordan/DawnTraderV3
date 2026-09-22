@@ -1,4 +1,4 @@
-# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-09-11
+# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-09-22
 
 > ⛔ **KYLE'S STANDING RULE, 2026-09-05:** every session keeps its own task list.
 > - **It holds:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — in working order.
@@ -18,11 +18,13 @@
 | 3b.h-6 | `B-OHLC-FRAME-GUARD` (`#1028`) | deployed `29cce1076`; Step 4 approved; **paused at Step 7** — only the on-screen panel check is left | me (behind the Codex experiment) |
 | 3 | `F-G-1` `B-GRID-REPRESENTABILITY` | window closed 2026-09-04; **conversion to a completion report owed**; OBJ-9 re-opened, bounded to the ordering guarantee (`#1031`) | me |
 | 3c | `F-G-2` `B-EXIT-TRANSACTABLE-SIDE` | crypto half deployed 2026-09-02; **observation window VOID since 2026-09-05** | the level-basis and reachability work, then re-open |
-| 3b.f | `B-PRICE-AGE-TRUTH` (`#951`) | CLOSED 2026-09-11 (Langston confirmed at Step 11; `Batch Completion/B_PRICE_AGE_TRUTH_COMPLETION_REPORT.md`) | nothing |
-| 3n | `B-PRICE-SIDE-BY-JOB` r5 | decisions D1-D10 reached 2026-09-11; **OBJ-7 (P-7a..P-7j) deployed 2026-09-11T20:09:47Z; Step 7 done, and the pre-registered P-7j check FAILED; Step 8 with Langston** (`Change Lists/B_PRICE_SIDE_BY_JOB_OBJ7_CHANGE_LIST.md`) | Langston's review; the `#951` terminal read (gate `0db25f1d`) taken immediately before the OBJ-7 deploy, per pre-audit A-9.9 |
+| 3n / 3n.q / 3n.q2 | `B-PRICE-SIDE-BY-JOB` — exit and fill side (`8a-P2`, `8a-P3`, `8a-P4`; one batch, two halves) | `8a-P2` + `8a-P3` + `8a-P4a` + `8a-P4b` (with C1) deployed; the `8a-P3` window closed 2026-09-22 12:16:07Z; **Step 10 governance landed 2026-09-22**; progress report `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md` | me — **`8a-P4c` (VTS xStock)** is the next build; one completion report when both halves land |
+| 3n (`8c`) | `B-PRICE-SIDE-BY-JOB` row `8c` | P1 only; **HELD** | the decision recorded on the row |
+| 3n.l | `B-REST-SIDES-TO-CACHE` (`#1056`) | scope APPROVED r4 2026-09-13 (`6036fd1a6`); Step 2 next | built during `8c`'s window, deployed after it |
+| RUN ORDER banner | `B-SIZING-DEC-RESTORE` | obj-1, obj-10, obj-11 LIVE at `213e162dc` (it sizes every trade); obj-2..5 and Steps 4-11 not built; declared in `GOVERNANCE_EXCEPTIONS.md` 2026-09-12 | **Kyle** — its queue position against the price work is his |
 | 3b.f-c | `B-XSTOCK-SESSION-FRESHNESS` | open; the entry-side flat 15 s ceiling is its subject | me |
 
-**Closed 2026-09-11:** 3b.b `B-XSTOCK-FEED-SANITY` (`#943`) — window INCONCLUSIVE, stopped; the acceptance re-arms on the post-OBJ-7 instrument.
+**Closed 2026-09-11:** 3b.b `B-XSTOCK-FEED-SANITY` (`#943`) — window INCONCLUSIVE, stopped; the acceptance re-arms on the post-OBJ-7 instrument · 3b.f `B-PRICE-AGE-TRUTH` (`#951`) — Langston confirmed Step 11.
 
 ## 0b. OUTSIDE THE PLAN — current direction from Kyle
 
@@ -33,7 +35,7 @@
 
 ## 0. THE QUEUE — every plan row naming CC-C as owner, in plan order
 
-Derived 2026-09-11 from the plan's own rows. Rows marked ⚠️ carry a closed or withdrawn word somewhere in the row; **confirm the row before working them.**
+Derived 2026-09-11 from the plan's own rows; the `3n.*` rows re-derived 2026-09-22 (plan lines 87-125, owner column read per row). Rows marked ⚠️ carry a closed or withdrawn word somewhere in the row; **confirm the row before working them.**
 
 | plan row | item |
 |---|---|
@@ -50,7 +52,7 @@ Derived 2026-09-11 from the plan's own rows. Rows marked ⚠️ carry a closed o
 | 3n.0 | `B-VTS-MARK-SIDE` |
 | 3b.h-4 | `B-SYMBOL-CLASS-IDENTITY` (`#1024`) |
 | 3b.h-7 | `B-FUTURES-BAR-FINAL` (`#1030`) |
-| 3b.h-8 | `B-ARCHIVE-WRITER-LIFECYCLE` (`#1034`, `#1032`; Step 1 also reviews `#1036`, `#1037`) — position proposed, Langston to confirm |
+| 3b.h-8 | `B-ARCHIVE-WRITER-LIFECYCLE` (`#1034`, `#1032`; Step 1 also reviews `#1036`, `#1037`; ➕ `#1072` added 2026-09-22 — the crypto snapshot archiver's membership is frozen at each restart, three legs) — position proposed, Langston to confirm |
 | 3b.i | `B-DISPATCH-STAGING-VERIFY` (`#964`) |
 | 3b.j | ⚠️ `B-SCANNER-DEDUPE-DEAD-TABLE` (`#965`) |
 | 3b.k | ⚠️ `B-CHANGE-CLASS-PARSER` (`#968`) |
@@ -75,6 +77,23 @@ Derived 2026-09-11 from the plan's own rows. Rows marked ⚠️ carry a closed o
 | 3n.d | `B-GRID-REFUSAL-RATE` |
 | 3n.e | `B-CANONICAL-CORPUS-ACCURACY` (`#733`) |
 | 3n.f | `B-DIAG-READ-INTEGRITY` (`#1014`) |
+| 3n.g | `B-QUOTE-PEG-DEVIATION-WATCH` |
+| 3n.h | `B-QUOTE-LEG-INTEGRITY` (`#1050`) |
+| 3n.i | `B-QUOTE-ADMISSION-LEGACY-SWEEP` (`#937`) |
+| 3n.k | `B-FAMILY-POOL-REACHABILITY` (`#1052`) |
+| 3n.l | `B-REST-SIDES-TO-CACHE` (`#1056`) — see §0a |
+| 3n.m | `B-BOOK-SUBSCRIPTION-REACH` |
+| 3n.n | `B-DECISION-INSTANT-QUOTE` |
+| 3n.q2 | **`8a-P4c` — VTS xStock**, the remainder of the xStock half (the list is on the plan row) |
+| 3n.q3 | `B-VTS-NO-DECISION-VALVE` |
+| 3n.q4 | `B-EXIT-LINE-IDENTITY` |
+| 3n.q5 | `B-BOOK-STATE-RING-INDEPENDENT-BOUND` |
+| 3n.q6 | `B-EXIT-DECISION-RUNG-STAMP` (`#1064`) |
+| 3n.q8 | `B-BOOK-STATE-RESTART-DURABLE` (`#1066`) — before 3n.q7 |
+| 3n.q7 | `B-XSTOCK-BID-TRIGGER-RELAND` — after 3n.q8 |
+| 3n.r | `B-TSC-COVERS-TESTS` |
+| 3n.o | `B-CRYPTO-MARK-AGE-GATE` |
+| 3n.p | `B-EXIT-TICKER-LEG-ADAPTER-SIDES` |
 | 4 | `F-5` — per-strategy reach structure (pulled forward by Kyle, after 3n) |
 | 4.b | `B-KILLSWITCH-DENOMINATOR` (`#618` remaining legs) |
 | 5.a | `B-NONFIAT-QUOTE-DENOMINATION` (`#966`) |
