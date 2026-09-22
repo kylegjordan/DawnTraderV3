@@ -3,7 +3,7 @@
 change-class: architecture
 
 **Owner:** CC-C. **Plan row:** `3n.q2`. **Scope:** `Scope Files/B_PRICE_SIDE_BY_JOB_8A_P4_SCOPE.md` (approved r2 `e9a6b7f68`; Step 1 for this piece discharged by Langston 2026-09-22T13:37:16Z). **The xStock half's last piece: VTS xStock.** One batch, one completion report (Kyle, 2026-09-15); the record is `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md`.
-**Status:** `STEP: 2 of 11` · `NEXT STEP: 3 of 11` (increment 1 only — see §C).
+**Status:** `STEP: 2 of 11` — **APPROVED for increment 1 by Langston 2026-09-22T14:03:44Z, conditional on the §B4 amendment (r3), which lands HERE, before any instrument code** · `NEXT STEP: 3 of 11` (increment 1 only — see §C).
 **Read at:** `origin/migration/aws-supabase` `74e0e61a6`. Staging DB read 2026-09-22 ~13:45Z.
 
 ---
@@ -14,7 +14,7 @@ change-class: architecture
 |---|---|---|---|
 | 1 | Scope §1 X4 and X9 read "the mark (`lastPrice`)". | They read the **close of the latest 15-minute bar** — `scanner.ts` sets `price = latestBar.close` and passes it as `lastPrice` into `evaluateXstockPairForVTS` (`scanner.ts:909-910`, `:934-938`; used at `eval-cycle.ts:957` and `:1235`). | Read at the caller. Not a live quote at all. |
 | 2 | Scope §1 X7 (the VTS stop/target trigger) is one site, `vts-runner:3322-3328`. | **Two sites** — the real lane (`vts-runner.ts:3322-3345`) and the **shadow lane** (`vts-runner.ts:4205`, `triggerPrice: crypto ? _sExitBid : currentPrice`). X8 likewise has two sites (`:3514` real; `:4237` shadow). ⚠️ **The shadow lane is the RTB shadow-pairing study, not VTS's trade records** — it books through `shadowClose` into `rtb_shadow_pairings` (`:4066-4081`, `rtb-shadow-store.js`). **Live for xStock:** 66 open and 1,258 closed pairings opened in the last 14 days (read ~13:55Z). | Census at every hop (§9.5(a)). The shadow lane reads `last` only (`:4146-4160`). |
-| 3 | Scope §1 X0: "a missing side becomes ZERO … a SELL comparator on `bid = 0` fires every stop it reads". | Still true at the code (`vts-runner.ts:3152-3153`, `parseFloat(r.bid) \|\| 0`) — but **measured rare in the source table**: in the 24 h to ~13:45Z, **1** row with no bid, **0** with no ask, **95** crossed, out of **2,945,680** rows on **468** symbols. | A latent hazard, not a frequent one. ⚠️ **Read before this document's decision rule was written, so the missing/crossed-side share is NOT a pre-registered metric** (§B4). |
+| 3 | Scope §1 X0: "a missing side becomes ZERO … a SELL comparator on `bid = 0` fires every stop it reads". | Still true at the code (`vts-runner.ts:3152-3153`, `parseFloat(r.bid) \|\| 0`) — but **measured rare in the source table**: in the 24 h to ~13:45Z, **1** row with no bid, **0** with no ask, **95** crossed, out of **2,945,680** rows on **468** symbols. | A latent hazard, not a frequent one. ⚠️ **Read before this document's decision rule was written, so the missing/crossed-side share is NOT a pre-registered metric** (§B4). ⛔ **Wrong population for any claim about DECISIONS (Langston F-5): this is every row of the table over 468 symbols; decisions read the latest row per symbol, at ~30 s instants, on the ~99 symbols holding open trades. Never quote it as evidence about decisions — `sideUnusable` is that instrument.** |
 | 4 | Scope §1: the VTS xStock row age bound is 300 s; Step 2 derives a ceiling from risk. | Unchanged; the derivation needs the age distribution AT the decision instants, which only the instrument gives. §B4 rule B pre-registers how the ceiling is chosen. | — |
 
 ---
@@ -90,9 +90,14 @@ Per look (from the same row the decision uses, with `captured_at` now carried):
 - **the spread** `(ask − bid) / mid`, bucketed `≤0.25% · ≤0.5% · ≤1.11% · ≤2% · ≤5% · >5%`;
 - **divergence** — `bidFiresStop` (bid ≤ stop while `last` > stop) and `lastFiresTarget` (`last` ≥ target while bid < target): the looks where the rule would change the decision.
 Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelowLimit` vs `lastAtOrBelowLimit`.
+➕ **r3 (Langston BLOCKER-1, CONDITION-2, FINDING-4):**
+- **SYMBOL-KEYED.** Every counter is also kept per `(lane, session, symbol)`. Pooled shares cannot tell "every name occasionally wide" from "five names always wide" — at 174 open trades over 99 symbols (max 4 per symbol) each symbol carries ~1% of looks — and without symbol keys in the emitted record that is unrecoverable from the window.
+- **THE UNION.** For each candidate age ceiling `c` in {15, 30, 60, 120, 300} s, a look is REFUSED-AT-`c` if `noRow` OR age > `c` OR `sideUnusable` OR spread > 1.11%. The stateless guard's refusal is that union, not either arm.
+- **BOTH LANES.** The shadow-pairing lane's query gains `bid, ask, captured_at` (columns only, no behaviour change) and runs the SAME classifier under `lane=shadow`. It is ~37% of the real lane's look volume (Langston: 65 open / 1,264 closed in 14 days, still opening today), has no weekend skip, and plausibly holds the thin names the real lane did not take — the population the guard exists for.
 
 ### B2. How it reports
-- One line per pass, `[8a-P4c][VTS_XS_TOUCH]`, only when looks > 0, **on `console.warn` ⇒ `error.log`** (daily files, ~14-day reach). ⚠️ **Not `console.log`**: `out.log` rotates in ~20 minutes (~4.5 h reach), which is how `8a-P3` lost ~70 h of lines.
+- One line per pass per lane, `[8a-P4c][VTS_XS_TOUCH] lane=… session=…`, only when looks > 0, **on `console.warn` ⇒ `error.log`** (daily files, ~14-day reach).
+- ➕ **r3:** one roll-up line per `(lane, session, symbol)` per clock hour, `[8a-P4c][VTS_XS_SYM]` — looks, `noRow`, `sideUnusable`, wide (> 1.11%), age over each candidate, the union at each candidate — flushed at the hour boundary and on a session change. ⚠️ A restart loses the partial hour held in memory; the window records each restart. ⚠️ **Not `console.log`**: `out.log` rotates in ~20 minutes (~4.5 h reach), which is how `8a-P3` lost ~70 h of lines.
 - **No behaviour change.** Every decision still reads `last`; a fence test pins that.
 
 ### B3. The three legs (`#661`)
@@ -102,12 +107,16 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 
 ### B4. THE DECISION RULE — PRE-REGISTERED HERE, BEFORE THE INSTRUMENT IS BUILT
 - **Window:** from the instrument deploy's restart, **five full US weekday sessions**. A later restart does not reset emitted totals; a build change splits the window.
-- **n-floor:** **1,000 looks per bucket**; below it, counts only.
-- **Rule A — which guard.** Let **W = the share of `regular` looks with a usable pair whose spread exceeds 1.11%.**
-  - **W ≤ 5% ⇒ build the STATELESS guard:** an age ceiling (rule B), the spread ceiling (re-derived at build from the then-current p10 stop distance), and the shared usable-side predicate. No comparator state ⇒ no restart hole.
-  - **W > 5% ⇒ build the STATEFUL guard as scoped** (own state, shared predicate). `3n.q8`'s restart-durable ring then becomes a prerequisite for it too.
+- ~~n-floor: 1,000 looks per bucket~~ — **struck at r3 (Langston §D4): at ~20,900 looks/hour it binds in minutes and gives false assurance.** ➕ **SYMBOL FLOOR instead:** a symbol counts toward any rule only with **≥ 120 `regular` looks** in the window (about one hour of held time); the reading is INCONCLUSIVE-EXTEND unless **≥ 50 distinct symbols** clear that floor on the lane being read.
+- **Rule B is read FIRST — the age ceiling `c*`.** The smallest of **{15 s, 30 s, 60 s, 120 s, 300 s}** whose `regular` AGE refusal share (`noRow` + older than `c`) is **≤ 1%**. If none qualifies, 300 s stays and the gap goes to the feed row (`3b.e`, `#950`), not to this batch. ➕ **Reported beside it, free (Langston §D2): the paper lane's 15 s entry ceiling (`xstock_fill_safety.active_fill_max_age_ms`) and its live refusals in the same window (e.g. alert `7a8cb0a5`, RKT/USD 26,023 ms).**
+- **Rule A — which guard. ➕ r3: THE UNION BINDS, NOT EITHER ARM (CONDITION-2).** Let **U = the share of `regular` looks REFUSED-AT-`c*`**, over ALL regular looks — not reach-conditioned (Langston §D1).
+  - **CONCENTRATION CLAUSE, read BEFORE U (BLOCKER-1):** let **K = the number of floor-clearing symbols whose own `regular` union share at `c*` exceeds 50%.**
+  - **K ≥ 3 ⇒ pooled U does NOT decide.** A stateless ceiling would refuse those names almost always and never evaluate their exits. **Tie-break, stated now: build a PER-SYMBOL RELATIVE ceiling** — refuse when spread > max(1.11%, `k` × the symbol's trailing-median spread computed from the PERSISTED table, as the scanner already does for depth at `scanner.ts:688`), `k` = 3 (the paper guard's `kRel`), plus the age ceiling `c*`. Its reference lives in the database, not in memory, so it has no restart hole; a median resists a few minutes of post-close blowout, so it still sees the symmetric widening.
+  - **K ≤ 2 and U ≤ 5% ⇒ build the STATELESS guard:** `c*`, the 1.11% spread ceiling (re-derived at build from the then-current p10 stop distance), and the shared usable-side predicate. No comparator state ⇒ no restart hole.
+  - **K ≤ 2 and U > 5% ⇒ build the STATEFUL guard as scoped** (own state, shared predicate); `3n.q8`'s restart-durable ring becomes its prerequisite.
   - *Why 5%:* a ceiling that refuses more than one in twenty regular-hours decisions leaves positions un-evaluated for material stretches in the session where stops matter. The stateful guard refuses only what departs from a symbol's own normal. **A judgement — attack it.**
-- **Rule B — the age ceiling.** The smallest of **{15 s, 30 s, 60 s, 120 s, 300 s}** whose `regular` refusal share (`noRow` + older than the ceiling) is **≤ 1%**. If none qualifies, 300 s stays and the gap goes to the feed row (`3b.e`, `#950`), not to this batch.
+- ➕ **r3 — EACH LANE IS READ ON ITS OWN (FINDING-4).** Rules A-B are evaluated separately on `lane=vts` and `lane=shadow`; a design applies to a lane only if that lane's own reading supports it. If the two lanes point to different guards, increment 3's Step 2 carries both and says why.
+- ⛔ **DISCIPLINE (Langston): nobody reads the spread or age distribution — from the table or the instrument — before the window closes.** One un-pre-registered read already happened (row 0 #3, sides only) and is labelled; a read of the quantity rule A turns on would spend the pre-registration.
 - **Rule C — alerting (`#994`).** Any off-hours refusal share is ACCEPTED (Kyle, 2026-09-03: off-hours holds are acceptable by design). **Off-hours refusals are logged but never notify; a `regular`-hours streak does notify.**
 - **Rule D — materiality, descriptive only.** `bidFiresStop` and `lastFiresTarget` counts per bucket, with their denominators. No gate.
 - **Falsifies the instrument, not the design:** zero looks in `regular` over the window, or `noRow` = 0 while trades are demonstrably open with no recent row ⇒ the instrument is broken, and it is fixed before any rule is read.
@@ -120,10 +129,12 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 | P | from | change |
 |---|---|---|
 | **P1** | A1 | Carry `captured_at` in the real-lane xStock query and the map entry. No decision reads it yet. |
-| **P2** | A5, B1 | Move `xstockTransactableSides` from `active-execution-engine.ts` to a shared module; both lanes import the one function (Langston's ruling). **Behaviour-identical for paper**, fenced. |
+| **P2** | A5, B1 | Move `xstockTransactableSides` from `active-execution-engine.ts` to a shared module; both lanes import the one function (Langston's ruling). **Behaviour-identical for paper.** ⛔ **r3 CONDITION-3:** `b-price-side-8a-p4b-paper-xstock.test.ts:47` asserts `count(/xstockTransactableSides\(/g) === 3` in the paper engine (the definition + the two sites). Its SUBJECT is "paper calls the shared predicate at exactly these two sites" — **re-point it** (two call sites in the engine, the one definition in the new module), never relax it. |
 | **P3** | B1 | A pure `classifyXstockVtsLook(row, nowMs, stop, target)` and a session classifier (New York time). Fixture-tested on every arm. |
-| **P4** | B2 | Per-pass counters by session; one `[8a-P4c][VTS_XS_TOUCH]` line on `console.warn`. Pending looks counted separately. |
-| **P5** | B2 | Fence: every xStock VTS decision still reads `last` (a test that fails if any xStock seam changes). |
+| **P4** | B1, B2 | Per-pass counters by lane and session, and per-`(lane, session, symbol)` hourly roll-ups; `[8a-P4c][VTS_XS_TOUCH]` and `[8a-P4c][VTS_XS_SYM]` on `console.warn`. Pending looks counted separately. The union at each candidate age ceiling. |
+| **P4b** | B1 r3 | The shadow lane's query gains `bid, ask, captured_at`; the same classifier under `lane=shadow`. Columns only — every shadow decision still reads `last`. |
+| **P4c** | Langston NIT-6 | The stale comment at `vts-runner.ts:4768-4770` ("No-op until paper-mode active trading is on … dormant at `rtb_total=0` today") is corrected — the shadow lane is live. |
+| **P5** | B2 | Fence: every xStock VTS decision, real lane AND shadow lane, still reads `last` (a test that fails if any xStock seam changes). |
 **No epoch change** (no decision moves). **Deploy, then the five-session window, then rule A-D are read and the result recorded before increment 2.**
 
 ### Increment 2 — X0 (after the instrument's read)
@@ -163,3 +174,4 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 ## F. REVIEW RECORD
 `REVIEWER r1: object (§0 + §A against the code) · which claims the code does not support, and where else a side reaches an xStock decision · 6 hits (a line cite; the booking wording; weekend pending + shadow still run; silent no-decision skips; a census that was not repo-wide; the shadow lane books to rtb_shadow_pairings) + the spread-as-estimate routes · every hit re-derived at the code, corrected · re-derived y`
 `REVIEWER r2: object (the corrected §0/§A/§C against the code) · were r1's points met, and what else is unsupported · 7 of 7 met; residual wording (the booking arms, 'no reason recorded', two uncited readers, the freeze does NOT skip the stop comparison) · re-derived at the code (tec-evaluator.ts:494, trailing-exit-controller.ts:1570, :1585), corrected · re-derived y`
+`LANGSTON Step 2 (2026-09-22T14:03:44Z): APPROVED for increment 1, conditional — BLOCKER-1 (symbol keys + concentration clause), CONDITION-2 (the union binds), CONDITION-3 (re-point the P2 fence), FINDING-4 (measure the shadow lane), FINDING-5 (row 0 #3's population), NIT-6 (the stale shadow comment); §D settled. All folded at r3, committed before any instrument code.`
