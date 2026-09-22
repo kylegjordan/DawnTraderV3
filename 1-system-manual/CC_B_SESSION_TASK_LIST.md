@@ -6,7 +6,7 @@
 
 | batch | step | waiting on |
 |---|---|---|
-| **`B-GEOMETRY-REACH-BASELINE`** (`#1052`, row 2.4g-2) | **10 of 11 — governance** | nothing; Step 11 completion report next |
+| ~~`B-GEOMETRY-REACH-BASELINE`~~ (`#1052`, row 2.4g-2) | **CLOSED 2026-09-13** | nothing — Step 11 CONFIRMED by Langston; this row was STALE in the list for ten days |
 | **`B-XSTOCK-FEE-CONTRACT`** (`#1010`, row 2.4-FEE) | **OBSERVATION** | P8 window (PASS = zero class-(iii) AND xStock maker share ≤1.0 % at n≥300, ~21 days from 2026-09-11T20:09Z) and Arm B (EV-gate admission) |
 | **`T-W20C-SCALAR-LEG`** (alert `a3610acf`, row 2.4-FEE-c) | **not started — OVERDUE since 09-07** | me: the two harness legs, then the ≥99 % gate test. July aged out; re-scope first |
 | **`B-ARCHIVE-RETENTION-SIZING`** (`#592`, alert `74424570`, row 2.4f) | **blocked on Kyle** | his retention decision. Slope now recorded: +1.07 GB / ~2 days |
