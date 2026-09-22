@@ -326,3 +326,38 @@ CHANGE-CLASS: architecture (`8a-P3`, `8a-P4`, `8a-P4b`; `8a-P4a` is `sub_batch`)
 `REVIEWER r3 (cap round): object (the re-corrected diff) · were r2's points met, and what else is unsupported · all five met; three residual wordings (the J2 logging scope, VTS xStock no-mark timing, 'VTS exit rest') · corrected directly, no fourth round · re-derived y`
 
 ➕ **Step-10 review (Langston, 2026-09-22T13:22:54Z): APPROVED on one condition — the declared-open row in `GOVERNANCE_EXCEPTIONS.md` — landed in the follow-up commit.** `#1073` ruled outcome (2) provisionally, with its conversion trigger recorded on the issue.
+
+## 8. STEP 11 — THE OBJECTIVES AT THE HALF-WAY POINT (2026-09-22; a PROGRESS state, NOT a close)
+
+⛔ **OPEN ITEMS FIRST (§6 has the detail):** `8a-P4c` VTS xStock (owner CC-C, row `3n.q2`) · the xStock bid-trigger re-land `3n.q7` after `3n.q8` (`#1066`) · `#1073` on `3n.q3` · unexercised live arms (X3 divergence, `CROSSED_NOT_CAPTURED`, the escape legs). **This report converts to `…_COMPLETION_REPORT.md` only when both halves land**, carrying (a) the data against each criterion as pre-registered and (b) the decision taken on it.
+
+### `8a-P3` — crypto (scope `B_PRICE_SIDE_BY_JOB_8A_P3_SCOPE_AUDIT_AND_PLAN.md` §5)
+| OBJ | status | evidence |
+|---|---|---|
+| **1** maker fills decided on the transactable side | **YES** — one sub-leg unreadable | paper C2 rested target exits decided below the mid **8 / 8** (control 0 / 18); C1 maker entry fills below the limit **4 / 4** (control 29 / 29 at it); VTS C3 **52 / 52** ask ≤ limit (§5d). C1's "above the mid" leg is UNREADABLE — no entry-side mid is persisted. |
+| **2** VTS crypto stops/targets decided on the bid | **PARTIAL — NOT COMPARABLE by its own pre-registration** | target leg 1 and 2 against the 30-floor; the stop leg is descriptive only; superseded onto `B-EXIT-LINE-IDENTITY` (`3n.q4`) (§5b). |
+| **3** VTS crypto booked at the bid | **PARTIAL** | the archive records no bid; readable: `bookedNoBidClamp` = 0 over 720 passes, plus the resolver's fence (§5b). |
+| **4** xStock unchanged at shared sites, by statement | **YES** | class tripwire tests; `8a-P3` did not move any xStock epoch (§4). |
+| **5** honest crypto maker fill rate | **INCONCLUSIVE — counts only** | 20 placements / 18 filled / 2 never filled; exit rests 26 fill / 0 convert; below the floor in every segment; age refusals beside it (§5g). |
+| **6** the permissive no-ask arm sized | **YES, on the one reachable population** | 0 of 70 maker twins in S1 (under ~4.2% at 95%); the paper legs are unreachable by construction; VTS counts only (§5g). |
+| **7** UI | **YES** | Closed Trades, 12 post-deploy crypto closes match the DB rows (§5d). |
+
+### `8a-P4a` — the re-seed escape (scope `B_PRICE_SIDE_BY_JOB_8A_P4A_SCOPE.md` §4)
+| OBJ | status | evidence |
+|---|---|---|
+| **1** a recovered implausible chain ends and re-seeds | **PARTIAL** | unit: eleven fixtures on the real tracker, green in CI. Staging: **could not occur** — every restart re-vacates the retained ring the escape needs (§5f, Langston) ⇒ a forward condition, reachable via `3n.q8`. |
+| **2** hollow protections unchanged | **YES** | the r3-r5 fixtures unmodified and green; the 7.00/1000.00 book never escapes. |
+| **3** no clock term; crypto untouched | **YES** | source fence on the three `book-state*` modules; class tripwire. |
+| **4** the escape observable; each refusal episode carries its basis | **PARTIAL** | wired; `REFUSAL_BASIS` observed (4 lines on 2026-09-21, AMC and SPCE); `SEED_ESCAPED` 0 — could not occur (§5f). |
+
+### `8a-P4` — xStock (scope `B_PRICE_SIDE_BY_JOB_8A_P4_SCOPE.md` §4; `8a-P4b` shipped, `8a-P4c` not built)
+| OBJ | status | evidence |
+|---|---|---|
+| **1** every xStock trigger, fill and booking on the transactable side, both lanes | **PARTIAL** | paper resting fills: X2 and X1 DISCRIMINATING PASS on AMC (§5f); the paper trigger is back on the mark (C1, `#1065`), re-land `3n.q7`; VTS xStock is `8a-P4c`. |
+| **2** no stop on a collapsed bid, either lane | **PARTIAL** | paper: no bid-driven stop since C1; one false stop on the MARK after a restart cold-seed (`#1066`) — a different mechanism, homed `3n.q8`; VTS is `8a-P4c`. |
+| **3** crypto unchanged except C8 and the rail | **YES, for `8a-P4a`/`8a-P4b`** | class tripwires; C8 and the rail belong to `8a-P4c`. |
+| **4** the off-hours standard does not loosen | **YES** | no clock term anywhere; source fence. |
+| **5** UI | **YES** | Closed Trades renders LOW/USD's close with its DB values (§5e). |
+
+**CI per job, all four green, on every graded head** — `8a-P3`: runs in §1; `8a-P4a`/`8a-P4b`: `35406705232`, `35407191468`; C1: `35410627494`. **Governance files changed:** §7 (the Step-10 ledger, transcribed, `N/A` rows included).
+**Honest residual:** OBJ-5's rate and OBJ-2's comparison are not established; X3's re-land has no evidence yet by design; the escape has no staging evidence at all; `#1073`'s entry leg is unmeasured.
