@@ -380,5 +380,12 @@ CHANGE-CLASS: architecture (`8a-P3`, `8a-P4`, `8a-P4b`; `8a-P4a` is `sub_batch`)
 
 ⚠️ **AN UNPLANNED READ, STATED (the §B4 discipline).** Confirming the lines existed meant reading one full pass line per lane, including its age and spread buckets. That is ONE pass (106 + 70 looks), not the window's aggregate, and no rule is read from it. **From here, verification parses only `looks`, `noRow`, `ageUnknown` and the symbol counts — never the buckets — until the window closes.**
 **The window, as I read §B4:** from `pm_uptime` 2026-09-22T14:38:49.748Z through the end of the fifth full weekday trading day after it — **Tue 2026-09-29 20:00 ET = 2026-09-30T00:00:00Z** (full days Wed, Thu, Fri, Mon, Tue; the partial Tuesday of the deploy and the weekend are counted but `weekend` is never read). **For Langston to confirm at Step 8.**
-**Still owed at Step 7:** the day-1 reachability count — symbols with `regular` looks per lane in the first full regular hour (15:00-16:00Z, flushed at 16:00Z as `[8a-P4c][VTS_XS_SYM]` lines), stated out loud.
+**Day-1 reachability (Langston's rider), read 2026-09-22 16:01:20Z — object: the `[8a-P4c][VTS_XS_SYM]` lines for `hour=2026-09-22T15Z` in `error.log`, `session=regular`; population: every symbol with at least one regular look in the first full regular hour (11:00-12:00 ET). Only looks and symbol counts were parsed.**
+
+| lane | symbols with a regular look | looks | per-symbol looks, min / median / max | symbols already ≥ 120 in this one hour |
+|---|---|---|---|---|
+| `vts` | **131** | 7,213 | 2 / 60 / 180 | 3 |
+| `shadow` | **101** | 5,130 | 2 / 60 / 120 | 1 |
+
+Positive control: 232 SYM lines for that hour = 131 + 101. **Both lanes clear the 50-symbol floor on the number of symbols observed, so neither is INCONCLUSIVE-EXTEND by construction.** ⚠️ **What this does NOT show:** the floor is ≥ 120 regular looks PER SYMBOL over the window, and a symbol only accrues looks while a trade on it is open. At the median rate (60 an hour) that is two regular hours of an open trade — a projection, not a measurement; the floor is read at window close.
 ➕ **THE CRYPTO VTS VALVE INSTANCES INSIDE THIS WINDOW (plan row `3n.q3`, Langston 2026-09-22 15:09Z):** no valve build before the window closes — instances are excluded BY ID, never by code. The set, its evidence and its enumeration obligation live in ONE place: **`ADJUSTMENT_FRAMEWORK`, calibration epochs, rule 8.** Instant captures are scheduled on staging for KII (2026-09-22 16:47:30Z) and EGLD (2026-09-26 09:01Z). **At this window's close the rule-8 enumeration runs alongside rules A-D.**
