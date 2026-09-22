@@ -19,10 +19,10 @@
 | DECIDE | 12 |
 | OBSERVATION | 4 |
 | HELPFUL | 122 |
-| AFTER | 150 |
+| AFTER | 149 |
 | KYLE-PARKED | 10 |
 | MERGE | 60 |
-| PRUNE | 194 |
+| PRUNE | 195 |
 | **total** | **617** |
 
 ## FIRST: KYLE'S DECISIONS — 12 (several MUST items cannot start until these are made)
@@ -56,7 +56,7 @@
 | 4 | **21-3c engine-start health gate refuses live** #734 | — | the engine-start health gate refuses to start in live, for two independent reasons; fixing one alone leaves live blocked (#734) | ⏳ |
 | 5 | **21-3d B-MODE-DELETE-SCOPE** | — | the reset functions delete BOTH modes' data — must be scoped to one mode before live data exists (B-MODE-DELETE-SCOPE) | ⏳ |
 | 6 | **Provision the live Kraken API key** | Kyle | Nothing in the inventory provisions the live exchange credential: trade-only, withdrawals disabled, IP-allowlisted, with a stated rotation and a stated blast radius if it leaks. Live-only, cheap, catastrophic tail. | ⏳ |
-| 7 | **B-SEC-HARDEN** #1022 #1023 | CC-INFRA | 157 of 216 state-changing routes carry no authorisation check (Infra's count). REACHABILITY ANSWERED BY #935's measurement: the login page is public (internet → Caddy :443 → app), so an authorisation gap is reachable by anyone who gets past the login | ⏳ |
+| 7 | **B-SEC-HARDEN** #1022 #1023 | CC-INFRA | 157 of 216 state-changing routes carry no authorisation check (Infra count, NOT re-derived — it sizes the batch, not its placement). REACHABILITY re-derived by Langston on the box: the login is public (internet → Caddy :443 → app). Scope note: the app binds 0.0.0.0:5000, so only the host firewall keeps it off the internet — the current path, not an enforced one | ⏳ |
 
 ### B. Building live mode itself
 
@@ -154,6 +154,10 @@
 **Dependency check (computed, not spot-checked):** every PRECEDENCE prerequisite of a MUST is itself a MUST or a Kyle decision — 20 edges checked (containment — a batch listing its own sub-parts — is kept separate and not counted). Every decision's unlock list is enforced as an edge. PRUNE and OBSERVATION are NOT admissible prerequisites.
 
 ⚠️ **THE MUST SET IS NOT CLOSED TODAY — it is closed CONDITIONAL on three things:** the dead-code reachability census (which moves items INTO MUST), Kyle's decisions above, and the lane replies still owed by OLD, ANALYST and Infra Claude. The full Net Expectancy verdict (beyond 25-19's narrowed gate) needs #596 first and stays Phase 25.
+
+**Status pass (mechanical, `status_pass.py`, re-runnable):** 121 plan table rows carry CLOSED / ABSORBED / WITHDRAWN; 19 map to a still-open draft item by row id or batch name. Each was read: 1 was a real close (B-DISAGREEMENT-FINDER, pruned); the other 18 are a sub-item or a figure withdrawn inside a live row, a previous slot occupant, or a row id reused by another table. Items with no plan row were checked against their issue entries for a resolution note: none found; #935 (filed as a hotfix) awaits CC-C's confirmation.
+
+**Why-string scan (word-boundary match on every MUST key):** 0 unlinked mentions; 3 declared non-precedence cross-references (B-DASHBOARD-AUTH-RACE → #935: same operator-reach family; B-DASHBOARD-AUTH-RACE → #517: same operator-reach family; B-SEC-HARDEN → #935: cites #935's measurement as reachability evidence).
 
 **Ownership:** 22 of 65 MUST items have no owner — assigning them is the reorganisation step.
 
@@ -335,7 +339,7 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **#1033** (CC-C) — an absent volume is stored as zero — indistinguishable from a minute that genuinely traded nothing; the liquidity filter reads it
 - **#1072** (CC-C) — the crypto price-history recorder's symbol set is frozen — the same blind spot Langston hit today: not one euro-priced pair ever recorded
 
-## AFTER LIVE — proposed deferrals (Kyle approves each) — 150
+## AFTER LIVE — proposed deferrals (Kyle approves each) — 149
 
 Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after live by the roadmap and are listed here without comment.
 
@@ -420,7 +424,6 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **#449** (CC-B) — governance checker read a frozen rulebook ⚠️ *verify*
 - **B-ALERT-TAXONOMY** #446 (CC-A) — alert categories
 - **#419** (CC-B) — funnel counter will not balance under error rows
-- **B-DISAGREEMENT-FINDER** #975 (CC-A) — mistake-pattern tooling
 - **#970** (CC-A) — multi-homed decisions in our records
 - **B-GOV-REPORTING** #747 #752 #946 (CC-A) — Langston memory size
 - **#660** (Kyle) — trade tables' 365-day hot window never re-asked
@@ -599,9 +602,9 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **P19-B6.5g** `plan history table` | `#233` | its core is #233 ⚠️ *verify* |
 | **P19-B15 — live and paper share one pipeline** `plan history table` | `#322` | same work as #322 |
 
-## PRUNED — 194
+## PRUNED — 195
 
-### Judged — 43
+### Judged — 44
 
 - **B-EXIT-PROVENANCE-TICKER-RETENTION** `2` #911 — landed ed86a758e, gate discharged, closed 2026-08-30
 - **row:3b.b** #943 #958 #960 — B-XSTOCK-FEED-SANITY closed 2026-09-11 (inconclusive); its acceptance re-arms under 3n OBJ-7
@@ -636,6 +639,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **B-MBIM-SWITCH-ON** #507 — closed 2026-08-24 with its retention flip armed ⚠️ *verify*
 - **B-CC-WORKTREE-ISOLATION** #460 — two sessions sharing one working tree — solved by separate clones
 - **#496** — an orphaned bridge process from July ⚠️ *verify*
+- **B-DISAGREEMENT-FINDER** #975 — CLOSED 2026-08-31 ON A NEGATIVE RESULT (plan row 8.5) — found by the mechanical status pass
 - **#143** — May runtime observation of the SQE evaluation — superseded by active paper running ⚠️ *verify*
 - **#146** — deploy-sha verification — delivered by dt-deploy ⚠️ *verify*
 - **#232** — confirm the netEV floor value before active paper turned on — active paper is on ⚠️ *verify*

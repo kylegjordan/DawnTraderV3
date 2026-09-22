@@ -136,6 +136,9 @@ DEPS = {
     "B-EXIT-TRIGGER-FILL-PARITY": ["B-PRICE-SIDE-BY-JOB"],
     "#681": ["#168"],
 }
+# Declared NON-precedence cross-references (a reason cites another item as evidence or as a family member).
+RELATES = {("B-DASHBOARD-AUTH-RACE", "#935"): "same operator-reach family", ("B-DASHBOARD-AUTH-RACE", "#517"): "same operator-reach family",
+           ("B-SEC-HARDEN", "#935"): "cites #935's measurement as reachability evidence"}
 CONTAINS = {"B-PRICE-SIDE-BY-JOB": ["B-REST-SIDES-TO-CACHE", "B-EXIT-TICKER-LEG-ADAPTER-SIDES", "B-XSTOCK-BID-TRIGGER-RELAND"]}
 for dk, (_, ms) in UNLOCKS.items():
     for m in ms: DEPS.setdefault(m, []).append(dk)
@@ -149,6 +152,9 @@ for _, ks in MUST_GROUPS:
 closure_breaks = [(m, d, byk[d]["bucket"]) for m, ds in DEPS.items() for d in ds
                   if byk[m]["bucket"] == "MUST" and byk[d]["bucket"] not in ("MUST", "DECIDE")]
 assert not closure_breaks, f"MUST closure broken: {closure_breaks}"
+for p, ch in CONTAINS.items():
+    assert byk[p]["bucket"] == "MUST", (p, byk[p]["bucket"])
+    for k in ch: assert byk[k]["bucket"] in ("MUST", "MERGE:" + p), ("CONTAINS child not MUST", k, byk[k]["bucket"])
 for k in UNLOCKS: assert byk[k]["bucket"] == "DECIDE", (k, byk[k]["bucket"])
 undecided = [r["key"] for r in rows if r["bucket"] == "DECIDE" and r["key"] not in UNLOCKS]
 assert not undecided, f"DECIDE items with no UNLOCKS entry: {undecided}"
@@ -157,9 +163,9 @@ must_keys = {r["key"] for r in must}
 why_unlinked = []
 for r in must:
     for k in must_keys:
-        if k != r["key"] and len(k) > 6 and k in r["why"] and k not in DEPS.get(r["key"], []) and r["key"] not in DEPS.get(k, []) \
+        if k != r["key"] and re.search(r"(?<![A-Za-z0-9#:-])" + re.escape(k) + r"(?![A-Za-z0-9-])", r["why"]) and k not in DEPS.get(r["key"], []) and r["key"] not in DEPS.get(k, []) \
            and k not in CONTAINS.get(r["key"], []) and r["key"] not in CONTAINS.get(k, []):
-            why_unlinked.append((r["key"], k))
+            if (r["key"], k) not in RELATES: why_unlinked.append((r["key"], k))
 unowned = [r["key"] for r in must if not r["owner"] or r["owner"] in ("?", "(none)")]
 # identifiers that point at two items (Langston 1(c))
 iss = collections.defaultdict(list)
@@ -222,6 +228,10 @@ A("")
 if why_unlinked:
     A("**Reasons that name another MUST with no edge either way (check these):** " + "; ".join(f"{x} → {y}" for x, y in why_unlinked))
     A("")
+A("**Status pass (mechanical, `status_pass.py`, re-runnable):** 121 plan table rows carry CLOSED / ABSORBED / WITHDRAWN; 19 map to a still-open draft item by row id or batch name. Each was read: 1 was a real close (B-DISAGREEMENT-FINDER, pruned); the other 18 are a sub-item or a figure withdrawn inside a live row, a previous slot occupant, or a row id reused by another table. Items with no plan row were checked against their issue entries for a resolution note: none found; #935 (filed as a hotfix) awaits CC-C's confirmation.")
+A("")
+A("**Why-string scan (word-boundary match on every MUST key):** " + str(len(why_unlinked)) + " unlinked mentions; " + str(len(RELATES)) + " declared non-precedence cross-references (" + "; ".join(f"{a} → {b}: {w}" for (a, b), w in RELATES.items()) + ").")
+A("")
 A(f"**Ownership:** {len(unowned)} of {len(must)} MUST items have no owner — assigning them is the reorganisation step.")
 A("")
 A(f"## IDENTIFIERS THAT POINT AT TWO ITEMS — {len(collisions)} (resolve in the reorganisation step)")

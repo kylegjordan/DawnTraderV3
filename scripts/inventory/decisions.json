@@ -1835,8 +1835,8 @@
   "verify"
  ],
  "B-DISAGREEMENT-FINDER": [
-  "AFTER",
-  "mistake-pattern tooling",
+  "PRUNE",
+  "CLOSED 2026-08-31 ON A NEGATIVE RESULT (plan row 8.5) — found by the mechanical status pass",
   ""
  ],
  "B-DISCORD-CONNECT-RESILIENCE": [
@@ -1951,7 +1951,7 @@
  ],
  "B-SEC-HARDEN": [
   "MUST",
-  "157 of 216 state-changing routes carry no authorisation check (Infra's count). REACHABILITY ANSWERED BY #935's measurement: the login page is public (internet → Caddy :443 → app), so an authorisation gap is reachable by anyone who gets past the login",
+  "157 of 216 state-changing routes carry no authorisation check (Infra count, NOT re-derived — it sizes the batch, not its placement). REACHABILITY re-derived by Langston on the box: the login is public (internet → Caddy :443 → app). Scope note: the app binds 0.0.0.0:5000, so only the host firewall keeps it off the internet — the current path, not an enforced one",
   ""
  ],
  "B-SHARED-TREE-COMMIT-ATOMICITY": [
