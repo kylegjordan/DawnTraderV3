@@ -300,7 +300,7 @@ CHANGE-CLASS: architecture (`8a-P3`, `8a-P4`, `8a-P4b`; `8a-P4a` is `sub_batch`)
 | T1 | Langston's `MEMORY.md` | ⏳ **BLOCKED, not done** | The writer REFUSED (exit 4): his `MEMORY.md` was edited outside the composer. Reconciliation is Infra Claude's (`#1057`), asked 2026-09-22; my edit is staged and re-applied after. |
 | T2 | `SYSTEM_MANUAL.md` | ✅ | §3.5.1a re-seed judgement, escape and restart hole; §3.5.1b xStock side capture; §18.0.1 per-lane price table; fill-test pointers in B7.2c and B8.6. |
 | T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | S25, S25b and S27 re-censused; the VTS booking line superseded for crypto; pending-maker, book-state and exit-path entries for `8a-P3`/`8a-P4`. |
-| T2 | `RUNNING_ISSUES.md` | ✅ | `#741` annotated (bucket 2 implemented); `#1073` filed — a price refusal suspends a resting order's deadline, homed on `3n.q3`. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#741` annotated (bucket 2 implemented); `#1073` filed — a price refusal suspends a resting order's deadline, homed on `3n.q3`, ruled outcome (2) provisionally with a conversion trigger. |
 | T2 | `CHANGES_AND_FIXES.md` | ✅ | New entry: four fixes, one same-night withdrawal, stated residuals. |
 | T2 | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level change; the work sits inside Phase 19 row `3n`. |
 | T2 | `ADJUSTMENT_FRAMEWORK.md` | ✅ | Calibration-epoch rule 7 (a bump sets `updated_at`) and the `8a-P3`/`8a-P4b` precedents. |
@@ -314,7 +314,7 @@ CHANGE-CLASS: architecture (`8a-P3`, `8a-P4`, `8a-P4b`; `8a-P4a` is `sub_batch`)
 | T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | No `CLAUDE.md` change. |
 | T2 | `DELETED_COMPONENTS_LOG.md` | N/A | Nothing removed; the dead `?? 'none'` is homed at `8a-P4c`, not deleted. |
 | T2 | `MISTAKE_PATTERNS.md` | ✅ | `wrong-object` ×3 instance: denominator rows that could not carry the numerator. |
-| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | No exception granted. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | Declared-open row for `B-PRICE-SIDE-BY-JOB` (open since 2026-09-03T20:38:36Z) — Langston's Step-10 condition; without it the checker graded nothing for this batch. |
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | The ack/resolve process did not change. |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | The board's columns, fields and ownership did not change. |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model check did not run inside this batch. |
@@ -325,3 +325,4 @@ CHANGE-CLASS: architecture (`8a-P3`, `8a-P4`, `8a-P4b`; `8a-P4a` is `sub_batch`)
 `REVIEWER r2: object (the corrected diff) · were r1's twelve points met, and what else is unsupported · 11 of 12 met; point 4 left in two phrases; 4 new (J2 silent drop, the paper booking clamp parenthetical, S25b "refreshed every frame", a stale code comment at aee:2806) · corrected; the comment homed in 8a-P4c · re-derived y`
 `REVIEWER r3 (cap round): object (the re-corrected diff) · were r2's points met, and what else is unsupported · all five met; three residual wordings (the J2 logging scope, VTS xStock no-mark timing, 'VTS exit rest') · corrected directly, no fourth round · re-derived y`
 
+➕ **Step-10 review (Langston, 2026-09-22T13:22:54Z): APPROVED on one condition — the declared-open row in `GOVERNANCE_EXCEPTIONS.md` — landed in the follow-up commit.** `#1073` ruled outcome (2) provisionally, with its conversion trigger recorded on the issue.
