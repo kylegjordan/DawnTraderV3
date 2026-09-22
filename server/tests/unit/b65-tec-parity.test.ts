@@ -737,4 +737,22 @@ describe('8a-P2 — the trigger decides and the mark does not', () => {
     expect(d.shouldExit).toBe(false);
     expect(d.noDecisionReason).toBe('no_transactable_side');
   });
+
+  it('D7: ⛔ CURRENT BEHAVIOUR, PINNED — the max-hold valve sits ABOVE the refusal, so a refused crypto VTS exit books its timeout at the MARK (`3n.q3`)', async () => {
+    // The EGLD shape (alert `70511ef0`, 2026-09-22): mark above the target, bid refused, hold past 7 days.
+    // Step 2 (the valve) returns before step 2b (the refusal), with `exitPrice = currentPrice`; the VTS
+    // resolver then has no bid and falls to the clamp arm, whose price IS that mark. ⇒ the booked row
+    // is a timeout at a price no seller could get. `B-VTS-NO-DECISION-VALVE` inverts this test —
+    // until it lands, the rows it produces are excluded by id (ADJUSTMENT_FRAMEWORK, calibration epochs, rule 8).
+    const d = await evaluateTECExit({
+      ...base, entryPrice: 4.18, stopPrice: 4.045, targetPrice: 4.45,
+      currentPrice: 4.47, triggerPrice: null, holdDurationMs: 8 * 86400_000,
+    });
+    expect(d.shouldExit).toBe(true);
+    expect(d.exitReason).toBe('timeout');
+    expect(d.exitPrice).toBe(4.47);
+    expect(d.noDecisionReason).toBeUndefined();
+    const { resolveVtsBookedExitPrice } = await import('../../core/trading/vts-exit-booking.js');
+    expect(resolveVtsBookedExitPrice('crypto_spot', null, 4.47, d.exitPrice)).toEqual({ price: 4.47, arm: 'clamp_no_bid' });
+  });
 });
