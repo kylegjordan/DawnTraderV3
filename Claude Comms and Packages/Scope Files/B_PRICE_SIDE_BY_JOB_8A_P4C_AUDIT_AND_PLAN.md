@@ -13,8 +13,8 @@ change-class: architecture
 | # | PREVIOUSLY STATED | NOW | REASON |
 |---|---|---|---|
 | 1 | Scope §1 X4 and X9 read "the mark (`lastPrice`)". | They read the **close of the latest 15-minute bar** — `scanner.ts` sets `price = latestBar.close` and passes it as `lastPrice` into `evaluateXstockPairForVTS` (`scanner.ts:909-910`, `:934-938`; used at `eval-cycle.ts:957` and `:1235`). | Read at the caller. Not a live quote at all. |
-| 2 | Scope §1 X7 (the VTS stop/target trigger) is one site, `vts-runner:3322-3328`. | **Two sites** — the real lane (`vts-runner.ts:3322-3345`) and the **shadow lane** (`vts-runner.ts:4205`, `triggerPrice: crypto ? _sExitBid : currentPrice`). X8 likewise has two booking sites (`:3514` real, `:4237` shadow). | Census at every hop (§9.5(a)). The shadow lane reads `last` only (`:4145-4160`). |
-| 3 | Scope §1 X0: "a missing side becomes ZERO … a SELL comparator on `bid = 0` fires every stop it reads". | Still true at the code (`vts-runner.ts:3150-3151`, `parseFloat(r.bid) \|\| 0`) — but **measured rare in the source table**: in the 24 h to ~13:45Z, **1** row with no bid, **0** with no ask, **95** crossed, out of **2,945,680** rows on **468** symbols. | A latent hazard, not a frequent one. ⚠️ **Read before this document's decision rule was written, so the missing/crossed-side share is NOT a pre-registered metric** (§B4). |
+| 2 | Scope §1 X7 (the VTS stop/target trigger) is one site, `vts-runner:3322-3328`. | **Two sites** — the real lane (`vts-runner.ts:3322-3345`) and the **shadow lane** (`vts-runner.ts:4205`, `triggerPrice: crypto ? _sExitBid : currentPrice`). X8 likewise has two sites (`:3514` real; `:4237` shadow). ⚠️ **The shadow lane is the RTB shadow-pairing study, not VTS's trade records** — it books through `shadowClose` into `rtb_shadow_pairings` (`:4066-4081`, `rtb-shadow-store.js`). **Live for xStock:** 66 open and 1,258 closed pairings opened in the last 14 days (read ~13:55Z). | Census at every hop (§9.5(a)). The shadow lane reads `last` only (`:4146-4160`). |
+| 3 | Scope §1 X0: "a missing side becomes ZERO … a SELL comparator on `bid = 0` fires every stop it reads". | Still true at the code (`vts-runner.ts:3152-3153`, `parseFloat(r.bid) \|\| 0`) — but **measured rare in the source table**: in the 24 h to ~13:45Z, **1** row with no bid, **0** with no ask, **95** crossed, out of **2,945,680** rows on **468** symbols. | A latent hazard, not a frequent one. ⚠️ **Read before this document's decision rule was written, so the missing/crossed-side share is NOT a pre-registered metric** (§B4). |
 | 4 | Scope §1: the VTS xStock row age bound is 300 s; Step 2 derives a ceiling from risk. | Unchanged; the derivation needs the age distribution AT the decision instants, which only the instrument gives. §B4 rule B pre-registers how the ceiling is chosen. | — |
 
 ---
@@ -23,13 +23,14 @@ change-class: architecture
 
 ### A1. The VTS xStock quote read (X0) — what it does now
 - **Real lane** (`vts-runner.ts:3126-3160`): one `DISTINCT ON (symbol)` query over `xstock_spot_ticker_snap`, `captured_at > NOW() - INTERVAL '5 minutes'`, selecting `last` as the price and `bid`, `ask` as sides. A row is kept only if `last > 0`; sides default to `0` when missing. **`captured_at` is not carried**, so no decision knows the quote's age inside the 5-minute window.
-- **The sides are fetched and never read for an xStock decision.** `priceDataMap.get` returns them (`:3165-3174`), but every xStock seam takes `currentPrice` = `last`: the pending fill (`:3217`, `_pFillPrice = currentPrice` off the crypto branch), the trigger (`:3322`, `_vtsTriggerPrice = currentPrice`), the booking (`resolveVtsBookedExitPrice` → `clamp_class_seam`).
+- **The fetched sides are never the price a trigger, fill or booking compares against.** `priceDataMap.get` returns them (`:3165-3174`), but the pending fill takes `last` (`:3217`, `_pFillPrice = currentPrice` off the crypto branch), the trigger takes `last` (`:3322`), and the booking returns the evaluator's own exit price (`clamp_class_seam`, `vts-exit-booking.ts:44`) — the stop/target level on a stop/target hit, `last` on a timeout.
+- ⚠️ **But a SPREAD computed from the sides does reach xStock VTS decisions, as an ESTIMATE** (a second reader's catch, re-read at the code): the scanner's spread and depth medians feed the admission filters (`scanner.ts:646`, `:688` → `eval-cycle.ts:346`, `:349`); the measured spread feeds the cost metrics (`cost-model.ts:262-267`) behind the pre-open gates, the maker/taker choice and the booked friction (`eval-cycle.ts:898`, `:808`, `:1018`); and it sets the break-even and rung floors (`trailing-exit-controller.ts:1113-1119`), so it can move the stop the trigger is compared against. **These are estimate jobs, which keep the spread by the `3n` rule — out of this piece's scope, stated so no reader assumes the sides are inert.**
 - **Shadow lane** (`vts-runner.ts:4145-4168`): its own query, `last` only, same 5-minute window.
 - **UI** (`vts-runner.ts:6045-6078`): `last` for display — an estimate, out of scope by the rule.
-- **Weekend:** `weekend_suspended` trades are skipped entirely (`:3108`, `:3197`); nothing here runs Fri 20:00 → Sun 20:00 ET.
+- **Weekend:** open trades are suspended (`vts-trade-persistence.ts:241-243` matches `state = 'open'` only) and skipped (`:3108`, `:3197`). ⚠️ **Two things still run:** a PENDING xStock rest is not suspended, so X5 still checks `last` over the weekend (only the drop is held, `:3244-3248`); and the shadow lane has no weekend skip. The TEC freeze (`trailing-exit-controller.ts:1032`) skips stop evaluation only while `isXstockMarketOpenUTC` is false — the weekend close (`market-hours.ts:104-106`: xStock is 24/5).
 - **No book-state guard exists on either VTS lane.**
 
-**Census, repo-wide, tests excluded:** readers of `xstock_spot_ticker_snap` in the VTS lane — **exactly three** (`vts-runner.ts:3139`, `:4151`, `:6056`); the scanner reads it twice for the entry side (`scanner.ts:646`, ticker + sides within 30 min; `:688`, 20-min depth medians); the paper lane reads it through `active-dispatch.ts:77` (age) and `depth-source.ts` (the fill walk). **Writers:** the equity archiver only (`#950`: built as an archive sharing no state with trading, now the trading feed).
+**Census, tests excluded:** readers of `xstock_spot_ticker_snap` in the VTS runner — **exactly three** (`vts-runner.ts:3139`, `:4151`, `:6056`); elsewhere, `markets/xstock-grid-refresher.ts:64` (the `last` prints behind the price grid that rounds xStock VTS levels at signal birth), `sigma-rate.ts:92`, `:160`, `price-liveness.ts:145`, `qd-probe-service.ts:136` and `routes.ts:8468`; the scanner reads it twice for the entry side (`scanner.ts:646`, ticker + sides within 30 min; `:688`, 20-min depth medians); the paper lane reads it through `active-dispatch.ts:77` (age) and `depth-source.ts` (the fill walk). **Writers:** the equity archiver only (`#950`: built as an archive sharing no state with trading, now the trading feed).
 
 ### A2. The cells, at the ref
 | cell | lane | site | reads today | target |
@@ -38,12 +39,12 @@ change-class: architecture
 | **X9** twin placement | VTS | `eval-cycle.ts:1235` | the same bar close | **ASK** — moves with X4 in one commit |
 | **X5** resting entry fill | VTS real | `vts-runner.ts:3217` | `last` | **ASK** ≤ limit |
 | **X6** placement ask for the VTS generate path | VTS | `vts-runner.ts:2258-2265` (`placementAsk`, non-crypto ⇒ `currentMarketPrice`) | the mark | **ASK** (only if xStock reaches this path — §A5 Q1) |
-| **X7** stop/target trigger | VTS **real + shadow** | `vts-runner.ts:3322` · `:4205` | `last` | **BID** |
-| **X8** exit booking | VTS **real + shadow** | `:3514` · `:4237` → `clamp_class_seam` | the evaluator's own exit price | **BID** |
+| **X7** stop/target trigger | VTS real · RTB shadow pairings | `vts-runner.ts:3322` · `:4205` | `last` | **BID** |
+| **X8** exit booking | VTS real · RTB shadow pairings | `:3514` · `:4237` → `clamp_class_seam` | the evaluator's own exit price (stop/target level on a hit, `last` on a timeout) | **BID** |
 | **C8** taker entry booking | VTS, both classes | the signal level | the level | **ASK** |
 
 ### A3. What "no decision" looks like on VTS xStock today
-- The only no-decision path is **no usable price**: the symbol has no row within 5 minutes, so `currentPrice` is `null` and `evaluateTECExit` returns `no_usable_mark`.
+- The only no-decision path that carries a REASON is **no usable price**: no row within 5 minutes, so `currentPrice` is `null` and `evaluateTECExit` returns `no_usable_mark`. **Silent skips also exist, none recording a reason:** the weekend TEC freeze (`trailing-exit-controller.ts:1032`), the xStock-only price-discontinuity deferral (`price-discontinuity-detector.ts:269`), the per-trade error catch (`vts-runner.ts:3402-3410`) and the missing-asset-class skip (`:3281`). The instrument counts looks, `noRow` and the side arms — **not these**; stated as its limit.
 - **Known positive:** at `8a-P3` Step 7 (2026-09-15 12:05Z) the VTS no-decision rail opened 53-60 streaks in one pass, of which 14+ were xStock trades with no usable mark (`vts-runner.ts:3365-3369`, the comment that made the rail crypto-only).
 - **The rail is crypto-only by design since `8a-P3` deploy 2** — an xStock rail belongs to this piece, under Kyle's `#994` rule (off-hours staleness must not page).
 - ⇒ **xStock VTS no-decision volume has no instrument today** (Langston's C2) — nothing counts it, split by session or otherwise.
@@ -134,7 +135,7 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 | P | from | change |
 |---|---|---|
 | **P7** | A6, B4 | The VTS xStock guard: STATELESS or STATEFUL per rule A, its ceilings per rules A-B, its own state if stateful. |
-| **P8** | A2 | X5 (ask ≤ limit), X7 real + shadow (the bid; `null` ⇒ no decision), X8 real + shadow (book the bid; the `clamp_class_seam` arm goes), **X4 + X9 in one commit** (the ask, from the scanner's own ticker read at `scanner.ts:646`, which already fetches the sides). |
+| **P8** | A2 | X5 (ask ≤ limit), X7 real + shadow pairings (the bid; `null` ⇒ no decision), X8 real + shadow pairings (book the bid; the `clamp_class_seam` arm goes), **X4 + X9 in one commit** (the ask, from the scanner's own ticker read at `scanner.ts:646`, which already fetches the sides). |
 | **P9** | A2 | C8: a taker entry books at the ask, both classes. |
 | **P10** | A3, B4 rule C | The xStock no-decision rail, keyed on the trade id, with automatic re-arm; notifies in `regular` hours only. |
 | **P11** | scope row | The no-ask placement policy on both lanes (paper refuses at the depth gate, VTS rests — `8a-P3` §5g); the twin line's `ask=` label; the `aee:2806` comment. |
@@ -156,3 +157,8 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 ## E. PLAIN-LANGUAGE SUMMARY
 **What the audit found:** VTS xStock decides everything on the last traded price, over a quote up to five minutes old. Missing bids and asks are almost nonexistent in the data, so the real questions are how old the quote is and how wide the spread is when VTS decides. Two corrections to the scope: the entry checks use a 15-minute bar's close, not a live quote, and there is a second exit path (the shadow lane) that needs the same change.
 **The plan:** first, a counter that measures, at every VTS decision, the age and spread of the quote, split into US market hours and off-hours, without changing any decision. The rule for reading it is written above, before the data exists: if wide spreads are rare in market hours, VTS gets a simple age-and-spread ceiling, which also catches the whole-market widening that caused the MDB false stop; if they are common, it gets the paper-style guard with its own memory. Then the fixes themselves.
+
+---
+
+## F. REVIEW RECORD
+`REVIEWER r1: object (§0 + §A against the code) · which claims the code does not support, and where else a side reaches an xStock decision · 6 hits (a line cite; the booking wording; weekend pending + shadow still run; silent no-decision skips; a census that was not repo-wide; the shadow lane books to rtb_shadow_pairings) + the spread-as-estimate routes · every hit re-derived at the code, corrected · re-derived y`
