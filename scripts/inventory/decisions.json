@@ -1315,14 +1315,14 @@
   "verify"
  ],
  "#320": [
-  "HELPFUL",
-  "RTB should reject a queued signal whose class is inactive",
-  ""
+  "PRUNE",
+  "delivered as F1 of P19-B6.5b, CLOSED 2026-06-17 (plan history row) — the issue entry was never marked",
+  "verify"
  ],
  "#321": [
-  "AFTER",
-  "an uncalled witness method",
-  ""
+  "PRUNE",
+  "delivered as F2 of P19-B6.5b, CLOSED 2026-06-17 — the issue entry was never marked",
+  "verify"
  ],
  "#322": [
   "MUST",
@@ -1331,8 +1331,8 @@
  ],
  "#323": [
   "DECIDE",
-  "Kyle: should the daily-loss budget auto-stop, only alert, or be user-set",
-  ""
+  "Kyle: should the daily-loss budget auto-stop, only alert, or be user-set. NOTE: P19-B6.8 records '#323 fold' (the controls made user-settable) but B6.8 reads IN PROGRESS since 2026-06-29 — confirm whether this is already decided",
+  "verify"
  ],
  "#391": [
   "HELPFUL",
@@ -1750,9 +1750,9 @@
   ""
  ],
  "#970": [
-  "AFTER",
-  "multi-homed decisions in our records",
-  ""
+  "PRUNE",
+  "the measurement was delivered by B-DISAGREEMENT-FINDER (row 8.5) before it closed",
+  "verify"
  ],
  "#981": [
   "AFTER",
@@ -2035,8 +2035,8 @@
   ""
  ],
  "#596": [
-  "HELPFUL",
-  "the outcome record is not representative of all strategies — Langston: this BLOCKS any outcome-sourced ranking, so it sets the ORDER of Phase 25, not just its content",
+  "MERGE:B-OUTCOME-CORPUS-CAPTURE",
+  "home is plan row 2.4g B-OUTCOME-CORPUS-CAPTURE; carries Langston's ordering edge (representativeness blocks outcome-sourced ranking, which orders Phase 25)",
   ""
  ],
  "#914": [
@@ -2092,6 +2092,11 @@
  "#668": [
   "KYLE-PARKED",
   "the governance-standardisation arc — a DIFFERENT thing from B-SIZING-DEC-RESTORE, which only cites it",
+  ""
+ ],
+ "#671": [
+  "MERGE:B-DECISION-RECORDS",
+  "its home is plan row 12.3 B-DECISION-RECORDS — placed, so not parked",
   ""
  ]
 }

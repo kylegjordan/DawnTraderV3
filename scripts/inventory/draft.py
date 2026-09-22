@@ -17,6 +17,12 @@ MANUAL = [
     dict(key="P19-B6.10", name="P19-B6.10 — retire the old per-mode guardrails table", row="plan history table", phase="19", owner="?",
          bucket="MUST", flag="", src="PHASE_19_PLAN:227 (queued); Langston measured 2026-09-22",
          why="VERIFIED (Langston): the legacy guardrails table still carries its own LIVE row — max position $1,158.09, max daily loss $1,000 — against an $824 account, beside a different live row in the new table. Two live risk rows, two tables, different numbers. Pairs with 21-3a."),
+    dict(key="B-OUTCOME-CORPUS-CAPTURE", name="B-OUTCOME-CORPUS-CAPTURE", row="2.4g (second use of the id)", phase="19", owner="?",
+         bucket="MUST", flag="", src="PHASE_19_PLAN:561 — missed by the extractor because row id 2.4g is used twice (also B-WAKE-SOURCE-TRUTH); found by the issue-axis status pass",
+         why="Closed trades are HARD-DELETED at 90 days and the only record of what a trade earned is an unbacked, untiered log sink — 'the 90-day delete is running NOW'. With real money, trade records cannot expire. Also home of #596 (the outcome record's representativeness, which orders Phase 25)."),
+    dict(key="P19-B6.8", name="P19-B6.8 — per-mode guardrail completeness", row="plan history table", phase="19", owner="?",
+         bucket="HELPFUL", flag="verify", src="PHASE_19_PLAN:226 — status IN PROGRESS since 2026-06-29",
+         why="Reads IN PROGRESS for three months. Folded #323 (daily-loss controls made user-settable). Owner must say whether it closed unmarked or is still open; if open it sits beside 21-3a and P19-B6.10 on live guardrails."),
     dict(key="KRAKEN-LIVE-KEY", name="Provision the live Kraken API key", row="", phase="21", owner="Kyle",
          bucket="MUST", flag="", src="Langston review 2026-09-22 — absent from all 608 items",
          why="Nothing in the inventory provisions the live exchange credential: trade-only, withdrawals disabled, IP-allowlisted, with a stated rotation and a stated blast radius if it leaks. Live-only, cheap, catastrophic tail."),
@@ -53,7 +59,7 @@ MANUAL = [
          why="A required governance row cannot take N/A, and re-declaring the class lower would downgrade reviewed work. Governance only."),
     dict(key="PLAN-ID-COLLISIONS", name="Two plan-identity collisions", row="", phase="19", owner="CC-A",
          bucket="HELPFUL", flag="", src="Langston 2026-09-22; found again building this draft",
-         why="Row 3b.f-d names two different batches, and P19-B12 is both the §19.6 dashboard container and the dt-deploy executable issue. Fix during the reorganisation step, or items get lost."),
+         why="Row 3b.f-d names two different batches; row 2.4g names two (B-WAKE-SOURCE-TRUTH and B-OUTCOME-CORPUS-CAPTURE); and P19-B12 is both the §19.6 dashboard container and the dt-deploy executable issue. Fix during the reorganisation step, or items get lost."),
 ]
 
 NAMES = {"rm:21-3a": "21-3a Live Guardrails tab", "rm:21-3b": "21-3b go-live WebSocket-uptime threshold",
@@ -97,6 +103,7 @@ MUST_GROUPS = [
     ("D. Price truth — how old, which side, is the feed alive", ["B-PRICE-SIDE-BY-JOB", "B-PRICE-STALENESS-BOUND", "row:6",
         "B-EQUITY-RECONNECT-STALL-TIMER", "B-XSTOCK-LIVE-FEED", "B-WS-SUBSCRIBE-CLASS-FILTER", "B-OHLC-FRAME-GUARD",
         "B-REST-SIDES-TO-CACHE", "B-BOOK-SUBSCRIPTION-REACH", "#506"]),
+    ("D2. Keeping the record of what happened", ["B-OUTCOME-CORPUS-CAPTURE"]),
     ("E. Entry and exit correctness", ["B-EXIT-TRIGGER-FILL-PARITY", "B-EXIT-TICKER-LEG-ADAPTER-SIDES", "B-XSTOCK-BID-TRIGGER-RELAND",
         "B-BOOK-STATE-RING-INDEPENDENT-BOUND", "B-BOOK-STATE-RESTART-DURABLE", "B-ENTRY-LEVEL-RECHECK", "B-GRID-LIVE-PATH-PARITY",
         "B-INTENT-ENTRY-PARITY", "row:3h.b", "DEAD-CODE-REACHABILITY", "B-TARGET-FABRICATION", "#204", "#233", "row:8", "B-CLOSE-WRITER-COSTS"]),
@@ -228,7 +235,7 @@ A("")
 if why_unlinked:
     A("**Reasons that name another MUST with no edge either way (check these):** " + "; ".join(f"{x} → {y}" for x, y in why_unlinked))
     A("")
-A("**Status pass (mechanical, `status_pass.py`, re-runnable):** 121 plan table rows carry CLOSED / ABSORBED / WITHDRAWN; 19 map to a still-open draft item by row id or batch name. Each was read: 1 was a real close (B-DISAGREEMENT-FINDER, pruned); the other 18 are a sub-item or a figure withdrawn inside a live row, a previous slot occupant, or a row id reused by another table. Items with no plan row were checked against their issue entries for a resolution note: none found; #935 (filed as a hotfix) awaits CC-C's confirmation.")
+A("**Status pass (mechanical, `scripts/inventory/status_pass.py`, reads the GOVERNED plan at the stamped ref):** two axes over the WHOLE row text — rows that name an open item by row id or batch name, and rows that cite an open item's `#NNN`. Every hit was read. Name axis: 1 real close (B-DISAGREEMENT-FINDER). Issue axis: #320/#321 delivered in P19-B6.5b (closed 2026-06-17), #970 delivered by row 8.5, #671 and #596 have placed homes — and it surfaced B-OUTCOME-CORPUS-CAPTURE, missing because plan id 2.4g is used twice. The rest are homes, cross-references or a restart number. Items with no plan citation were checked against their issue entries: no resolution notes; #935 awaits CC-C.")
 A("")
 A("**Why-string scan (word-boundary match on every MUST key):** " + str(len(why_unlinked)) + " unlinked mentions; " + str(len(RELATES)) + " declared non-precedence cross-references (" + "; ".join(f"{a} → {b}: {w}" for (a, b), w in RELATES.items()) + ").")
 A("")
