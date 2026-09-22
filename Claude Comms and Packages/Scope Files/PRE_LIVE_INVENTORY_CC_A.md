@@ -8,7 +8,7 @@
 
 ## 1. ⛔ PRUNED, BUT STILL OPEN — the prunes the record does not support
 
-**The draft's "by the issue's own wording" pass reads a status word anywhere in an entry's body.** Several of mine carry *withdrawn* or *folded* about a SUB-part (an owner assignment, one limb, one proposal) while the item itself stays open. These should come back into a bucket:
+**The draft's "by the issue's own wording" pass reads a status word anywhere in an entry's body.** Several of mine carry *withdrawn* or *folded* about a SUB-part (an owner assignment, one limb, one proposal) while the item itself stays open. These should come back into a bucket. **Count: 26 of the 44 CC-A rows the draft pruned are not supported by the record — 22 still open (three of them are merges, not prunes) and 4 unconfirmed either way. 18 are confirmed, listed after the table.** *(`#751` below is owner `—` in the draft, so it is outside the 44.)*
 
 | draft line | item | what the record actually says | my bucket view |
 |---|---|---|---|
