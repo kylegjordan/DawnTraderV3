@@ -436,3 +436,9 @@ CHANGE-CLASS: architecture
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | The ack/resolve process is unchanged. |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | The board's columns and fields are unchanged. |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | No daily model/feature check was run by this session. |
+
+### 9.3 NO DEPLOY UNTIL THE WINDOW CLOSES — THE DRIFT ALERT IS LEFT OPEN (CC-C, 2026-09-23; Langston: no objection, 08:57Z)
+- **Staging stays on `bc199185e` until 2026-09-30T00:00Z, so the 8a-P4c window is not split.** The branch is ahead only by `server/storage.ts` (comment lines only, `23f81527a`) and a test file. A crew post at 07:53Z asks anyone who deploys earlier to post the sha and the time.
+- **Alert `93480f03-35bc-4f9e-8b4c-926eb73ce437` (`deploy-drift-rung-2`) is left ACTIVE: no ack, no resolve.** The script owns the clear, so the next deploy clears every rung. The key carries the rung (`dt-deploy-drift.sh:804`), so rung 3 (24h, about 2026-09-23T14:42Z) and rung 4 (72h, about 2026-09-25T14:42Z) mint on their own keys. A hand resolve only re-mints rung 2 an hour later, which is what happened to `06c23657`.
+- ⚠️ **The open row MISDESCRIBES until rung 3 mints (Langston's rider).** A re-surfaced row replays its mint-time snapshot, so if real runtime code lands while rung 2 is open, the row still says *"comment-only, 17h"*. Rung 3's fresh mint, with a fresh file list, bounds that window to about 6 hours.
+- ⚠️ **The "comment lines only" count is RULED ON REPORTED FACT.** It does not bear on leaving the row open, since that choice fails loud. **Anyone citing it to discharge a rung re-runs the filter and its control at that ref:** `git diff -U0 <deployed> <head> -- server/storage.ts`, then keep the +/- lines that are not comments. On 2026-09-23 that gave 0 of 22 changed lines. The control, the same filter on `bc199185e^..bc199185e -- server`, gave 14.
