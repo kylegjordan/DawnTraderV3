@@ -61,11 +61,25 @@ No scaffolding: every objective below is functional.
 - `#733`, `#734`, `#736` — homes in the table above.
 - **New today:** `getClosedTradesGlobal` has zero callers. It is dead code under rule 18, and its deletion is folded into `4.c`.
 
+## REVIEW — LANGSTON, 2026-09-23 06:41Z: **CLOSEABLE — Step-8 PASS, Step-11 CONFIRMED**, one condition
+
+He re-derived the figures himself rather than taking them from this report:
+- **OBJ-2:** all three windows (**+14.28 / −25.11 / −295.10**) exact, rebuilt from `computeRollingEarnings`' own rules (n=78 in the 7-day window).
+- **The scoreboard:** 237 / −286.63 / −29.79%, exact. The time-weighted denominator covers the whole population: 0 of 237 rows have a null or zero base.
+- **OBJ-1's ">100 rows" is discharged LIVE:** the aggregate's own predicate set over `closed_trades` gives **768 trades, −356.86**, 7.7× the removed cap. `reconstructed_net_pnl` is null on 0 of 768, so condition 2 (one basis on both sides) holds in effect.
+- `e8eea2158` is one commit past the CI'd head and changes governance docs only.
+
+⚠️ **The fence's CI timing is RULED ON REPORTED FACT** — his token cannot read Actions logs. He made it non-load-bearing: CI runs a real Postgres, and the fence hard-throws when it cannot reach it.
+
+**CONDITION — MET in the follow-up commit:** the docblock at `server/storage.ts:3248-3258` still said, in the present tense, that `closed_trades` has no paper/live column and that a live caller would sum paper rows into a live kill switch. Step F falsified all of it. **Struck to dated history, comment-only**, carrying his rider for `4.b`: once `reconstructed_net_pnl` is ever populated, both sides of the ratio become a per-row net/recorded mixture.
+
+He also confirmed that the `MEMORY.md` ❌ row does not block the close: blocked with a named owner is not N/A.
+
 ## HONEST RESIDUAL
 
-- **OBJ-1's live acceptance** (*"the kill-switch denominator computed over >100 rows"*) was **not re-demonstrated live today.** Its equivalence rests on the code — one shared aggregate — plus the fences. The current engine session (since the 2026-09-22 14:38Z restart) may not hold 100 qualifying closes.
+- ~~OBJ-1's live acceptance was not re-demonstrated~~ — **discharged by Langston live: 768 rows** (above).
 - **Only paper mode was checked.** Live mode has no rows, so the partition is proven by the fence, not by live data.
-- **Step 8 (Langston's second pass) has not run yet.** This report is its object.
+- Step 8 and Step 11: **done** (above).
 
 ---
 

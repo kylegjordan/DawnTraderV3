@@ -3233,7 +3233,7 @@ export class DatabaseStorage implements IStorage {
   /**
    * ★ #618 (2026-07-31): the realized-P&L sum for a TIME window, computed IN SQL so it is
    * UNBOUNDED BY CONSTRUCTION. The daily-loss kill switch previously reached its 24h total
-   * through getClosedTrades(), whose `limit || 100` (:3148) is a 2025-10 LISTING default
+   * through getClosedTrades(), whose `limit || 100` (then :3148; REQUIRED since B-BALANCE-TRUTH Step A) was a 2025-10 LISTING default
    * ordered by `openedAt` — so a position held across more than 100 subsequent opens was
    * ABSENT from the kill switch's 24h loss total at the moment it closed, silently and with
    * no error. MEASURED over all 346 qualifying rows: worst-case rank-at-close 215; 3 rows
@@ -3245,17 +3245,15 @@ export class DatabaseStorage implements IStorage {
    * the row bound is removed — a reader comparing the two should see one difference, not two.
    * Both properties are fenced in `server/tests/integration/b-killswitch-window.test.ts`.
    *
-   * ⚠️⚠️ `mode` IS DELIBERATELY INERT — AND IT IS STRUCTURALLY UNUSABLE, NOT MERELY UNUSED
-   * (Langston Step-4, 2026-07-31; registered as a new #618 leg-3 site so the live-switch-on
-   * sweep finds it). `closed_trades` HAS NO paper/live discriminator column at all — the
-   * only mode-ish columns on it are `chosen_entry_mode`, `trade_mode` and `exit_fee_mode`,
-   * none of which partition paper from live. So this function CANNOT filter by mode even if
-   * it wanted to, and the parameter exists ONLY for signature parity with its siblings
-   * (`getClosedTrades`, `getClosedTradesGlobal`), which accept and ignore it identically.
-   * ⇒ SAFE TODAY only because the sole caller gates on `mode === 'paper'`
-   * (`daily-loss-budget.ts`). **A future `getRealizedPnlSince('live', …)` would sum PAPER
-   * rows into a LIVE kill switch.** Do not add a live caller until the table has a real
-   * discriminator; the fix belongs with #618 leg 3, not here.
+   * ⛔ HISTORY — STRUCK 2026-09-23 at B-BALANCE-TRUTH's close (Langston's Step-11 condition).
+   * From 2026-07-31 until Step F (2026-08-21) this block said `mode` was inert here because
+   * `closed_trades` had no paper/live column, that a live caller would sum PAPER rows into a
+   * LIVE kill switch, and that the fix belonged with #618 leg 3. Step F added
+   * `closed_trades.mode` (NOT NULL) and this function now filters on it — the
+   * `eq(closedTradesTable.mode, mode)` predicate below. That hazard is gone; what remains of
+   * #618 is PHASE_19_PLAN row 4.b (B-KILLSWITCH-DENOMINATOR). Rider for 4.b (Langston): while
+   * `reconstructed_net_pnl` is null on every row, HONEST_PNL is single-basis; once it is ever
+   * populated both sides of the ratio become a per-row net/recorded mixture.
    */
   /**
    * B-PHANTOM-FILL-RECONSTRUCT: THE honest realized-P&L expression. Defined ONCE and used by
