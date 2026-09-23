@@ -101,7 +101,7 @@ def fl(r): return " ⚠️ *verify*" if r["flag"] == "verify" else ""
 
 MUST_GROUPS = [
     ("A. Roadmap hard blockers (roadmap §3.5, in its own words), the live risk rows, the live key, and public-facing authorisation",
-     ["rm:21.1.a", "rm:21-3a", "P19-B6.10", "rm:21-3c", "rm:21-3d", "KRAKEN-LIVE-KEY", "B-SEC-HARDEN", "#615"]),
+     ["rm:21.1.a", "rm:21-3a", "P19-B6.10", "rm:21-3c", "rm:21-3d", "KRAKEN-LIVE-KEY", "B-SEC-HARDEN", "#615", "B-SSH-KEY-CENSUS"]),
     ("B. Building live mode itself", ["rm:21.1", "rm:21.2", "rm:21.3", "#322", "#517", "rm:19-10", "LIVE-FEE-SCHEDULE"]),
     ("C. Risk controls on real capital", ["B-KILLSWITCH-DENOMINATOR", "B-TOTAL-DRAWDOWN-WARNING", "#519", "B-SIZING-DEC-RESTORE",
         "25-11a", "rm:25-16", "#610", "B-VENUE-RESTING-EXITS", "rm:19-9", "B-NONFIAT-QUOTE-DENOMINATION"]),
@@ -124,7 +124,7 @@ MUST_GROUPS = [
 UNLOCKS = {
     "PAPER-STANDARD": ("the completion criterion for the paper run (19-11) and so for all of group G", ["rm:19-11"]),
     "#323": ("how the kill switch and the daily-loss trip behave (auto-stop, alert-only, or user-set)", ["B-KILLSWITCH-DENOMINATOR", "#519"]),
-    "BE-MOONBAG": ("if 'build and on': 3n.c trailing-state durability (+#677, #678) becomes MUST. Take together with the process-death decision", []),
+    "BE-MOONBAG": ("if 'build and on': B-TEC-STATE-DURABILITY and 3n.c (trailing state surviving a restart) become MUST. Take together with the process-death decision", []),
     "rm:19-18": ("the shape of 21.1, the live engine", ["rm:21.1"]),
     "rm:21-3b": ("go-live itself (roadmap hard blocker)", []),
     "DAY-ONE-NUMBERS": ("B-SIZING-DEC-RESTORE's target and 25-11a's threshold; decided AFTER 25-16's evidence", ["B-SIZING-DEC-RESTORE", "25-11a"]),
@@ -242,7 +242,7 @@ A("")
 if why_unlinked:
     A("**Reasons that name another MUST with no edge either way (check these):** " + "; ".join(f"{x} → {y}" for x, y in why_unlinked))
     A("")
-A("**Status pass (mechanical, `scripts/inventory/status_pass.py`, reads the GOVERNED plan at the stamped ref):** two axes over the WHOLE row text — rows that name an open item by row id or batch name, and rows that cite an open item's `#NNN`. Every hit was read. Name axis: 1 real close (B-DISAGREEMENT-FINDER). Issue axis: #320/#321 delivered in P19-B6.5b (closed 2026-06-17), #970 delivered by row 8.5, #671 and #596 have placed homes — and it surfaced B-OUTCOME-CORPUS-CAPTURE, missing because plan id 2.4g is used twice. The rest are homes, cross-references or a restart number. Items with no plan citation were checked against their issue entries: no resolution notes; #935 awaits CC-C.")
+A("**Status pass (`scripts/inventory/status_pass.py`, fetches, reads the GOVERNED plan at the stamped ref):** case-insensitive status vocabulary with word boundaries (closed|absorbed|withdrawn|deployed|done|shipped|resolved|superseded|delivered|landed), two axes over the whole row — rows naming an open item, and rows citing any of its issue numbers. Each hit carries the text round the status word NEAREST the mention. Read: every NEAR hit (within 120 chars) and every far hit on a MUST or HELPFUL item — 128 distinct items. Far hits on AFTER / OBSERVATION / DECIDE / PARKED items are listed in the tool output and NOT read (a missed close there leaves an item open, which costs attention, not correctness). The sweep for dropped plan rows (`dup_sweep.py`) finds headers by their separator line, not by position, and checks hand-added items too.")
 A("")
 A("**Why-string scan (word-boundary match on every MUST key):** " + str(len(why_unlinked)) + " unlinked mentions; " + str(len(RELATES)) + " declared non-precedence cross-references (" + "; ".join(f"{a} → {b}: {w}" for (a, b), w in RELATES.items()) + ").")
 A("")

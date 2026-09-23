@@ -8,28 +8,36 @@ sha = subprocess.check_output(["git", "-C", REPO, "rev-parse", "origin/migration
 L = subprocess.check_output(["git", "-C", REPO, "show", f"{sha}:1-system-manual/PHASE_19_PLAN.md"], text=True, encoding="utf-8").split("\n")
 items = json.load(io.open(os.path.join(HERE, "items_v3.json"), encoding="utf-8"))
 manual = set(json.load(io.open(os.path.join(HERE, "manual_keys.json"), encoding="utf-8")))
+extra = json.load(io.open(os.path.join(HERE, "manual_extra.json"), encoding="utf-8"))
+manual |= {m["key"] for m in extra} | {m["name"] for m in extra}
+items = items + extra
 keys = {i["key"] for i in items} | manual
 names = {(i.get("name") or "") for i in items} | manual
 blob = json.dumps(items, ensure_ascii=False)
-# table boundaries: header row = a '|' line followed by a '|---' line
+# table boundaries. A fragment created by a mid-table formatting line has DATA as its first row, so the
+# header is identified by the separator line that follows it, never assumed to be row 0 (Langston r6).
 tables, cur = [], None
-for n, l in enumerate(L, 1):
-    s = l.lstrip("> ").strip()
+raw = [l.lstrip("> ").strip() for l in L]
+for n, s in enumerate(raw, 1):
     if s.startswith("|"):
-        if cur is None: cur = {"start": n, "header": s[:80], "rows": []}
         c = [x.strip() for x in s.strip("|").split("|")]
-        if not set(c[0]) <= set("-: "): cur["rows"].append((n, c))
+        if set(c[0]) <= set("-: ") and c[0]:
+            continue  # separator line
+        nxt = raw[n] if n < len(raw) else ""
+        is_header = nxt.startswith("|") and set(nxt.strip("|").split("|")[0].strip()) <= set("-: ") and nxt.strip("|").split("|")[0].strip() != ""
+        if cur is None: cur = {"start": n, "header": s[:80], "rows": []}
+        if not is_header: cur["rows"].append((n, c))
     elif cur is not None:
         tables.append(cur); cur = None
 if cur: tables.append(cur)
 ids = collections.Counter()
 for t in tables:
-    for n, c in t["rows"][1:]: ids[re.sub(r"[*`~]", "", c[0]).strip()] += 1
+    for n, c in t["rows"]: ids[re.sub(r"[*`~]", "", c[0]).strip()] += 1
 dups = {k for k, v in ids.items() if v > 1}
 print(f"read at {sha[:9]}; tables {len(tables)}; duplicated row ids {len(dups)}")
 for t in tables:
     print(f"\n# table L{t['start']}: {t['header']}")
-    for n, c in t["rows"][1:]:
+    for n, c in t["rows"]:
         rid = re.sub(r"[*`~]", "", c[0]).strip()
         m = re.search(r"(B-[A-Z0-9][A-Z0-9-]+|P19-B[0-9][0-9.a-z]*|F-G-[0-9]|F-[0-9A-F](?:\([a-z]\))?)", " ".join(c[:2]))
         nm = m.group(1) if m else ""

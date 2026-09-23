@@ -15,24 +15,24 @@
 
 | bucket | items |
 |---|---:|
-| MUST | 72 |
+| MUST | 73 |
 | DECIDE | 13 |
 | OBSERVATION | 6 |
-| HELPFUL | 132 |
-| AFTER | 166 |
+| HELPFUL | 135 |
+| AFTER | 168 |
 | KYLE-PARKED | 9 |
-| UNCONFIRMED | 100 |
-| MERGE | 78 |
-| PRUNE | 75 |
-| **total** | **651** |
+| UNCONFIRMED | 86 |
+| MERGE | 80 |
+| PRUNE | 84 |
+| **total** | **654** |
 
 ## FIRST: KYLE'S DECISIONS — 13 (several MUST items cannot start until these are made)
 
 | # | decision | what it unlocks | the fork |
 |---:|---|---|---|
 | 1 | **What 'comfortable in paper' means — stated BEFORE the data** | the completion criterion for the paper run (19-11) and so for all of group G | The go-live gate is Kyle's comfort with paper results, and nothing asks him to state the standard in advance — so the paper run has no completion criterion. A standard stated after the data is not a standard. |
-| 2 | **#323** | how the kill switch and the daily-loss trip behave (auto-stop, alert-only, or user-set) | Kyle: should the daily-loss budget auto-stop, only alert, or be user-set. NOTE: P19-B6.8 records '#323 fold' (the controls made user-settable) but B6.8 reads IN PROGRESS since 2026-06-29 — confirm whether this is already decided ⚠️ *verify* |
-| 3 | **Break-even stop + moonbag trailing exits** | if 'build and on': 3n.c trailing-state durability (+#677, #678) becomes MUST. Take together with the process-death decision | Config-locked OFF on all four classes by two independent switches; 542 active closes, 0 ever latched. Kyle's 2026-06-11 directive wants a per-mode, per-class set — it has no plan row and no owner. Decide: launch live with them OFF (plain stop and target), or build and switch them on first. |
+| 2 | **#323** | how the kill switch and the daily-loss trip behave (auto-stop, alert-only, or user-set) | Kyle: should the daily-loss budget auto-stop, only alert, or be user-set. P19-B6.8 (CLOSED 2026-06-29) folded #323 and made those controls user-settable — this may already be answered; Kyle confirms ⚠️ *verify* |
+| 3 | **Break-even stop + moonbag trailing exits** | if 'build and on': B-TEC-STATE-DURABILITY and 3n.c (trailing state surviving a restart) become MUST. Take together with the process-death decision | Config-locked OFF on all four classes by two independent switches; 542 active closes, 0 ever latched. Kyle's 2026-06-11 directive wants a per-mode, per-class set — it has no plan row and no owner. Decide: launch live with them OFF (plain stop and target), or build and switch them on first. |
 | 4 | **19-18 NEW** | the shape of 21.1, the live engine | live-mode build approach (copy of paper + switch, or other) — a decision that must land before Phase 21 |
 | 5 | **21-3b go-live WebSocket-uptime threshold** #398 | go-live itself (roadmap hard blocker) | roadmap hard blocker whose work is a NUMBER: the go-live WebSocket-uptime threshold against the rolling window it is measured over |
 | 6 | **Day-one balance, per-trade size and concurrency** | B-SIZING-DEC-RESTORE's target and 25-11a's threshold; decided AFTER 25-16's evidence | 25-16 produces the evidence (a sensitivity range); the numbers are Kyle's — balance, per-trade size, concurrency, and 25-11a's fraction of visible book depth (both sizing fields are user-locked). |
@@ -44,7 +44,7 @@
 | 12 | **B-PRICE-FLOOR-REVIEW** `5.b` #967 | no MUST | minimum-price floor for tradeable symbols — its row says the decision is Kyle's |
 | 13 | **B-TARGET-MULTIPLE-VS-HORIZON** | no MUST (gated on 2.4g-3) | row 2.4g-5 — Kyle decides, gated on 2.4g-3 |
 
-## MUST BEFORE LIVE — 72 items, as a Phase-21 entry gate (PHASE_19_PLAN §6 form)
+## MUST BEFORE LIVE — 73 items, as a Phase-21 entry gate (PHASE_19_PLAN §6 form)
 
 > ⚠️ Roadmap §3.5's preamble still lists #213 as pending; it was resolved 2026-06-13 (`59d501fc4`). Not carried.
 
@@ -60,122 +60,123 @@
 | 6 | **Provision the live Kraken API key** | Kyle | Nothing in the inventory provisions the live exchange credential: trade-only, withdrawals disabled, IP-allowlisted, with a stated rotation and a stated blast radius if it leaks. Live-only, cheap, catastrophic tail. | ⏳ |
 | 7 | **B-SEC-HARDEN** #1022 #1023 | CC-INFRA | 157 of 216 state-changing routes carry no authorisation check (Infra count, NOT re-derived — it sizes the batch, not its placement). REACHABILITY re-derived by Langston on the box: the login is public (internet → Caddy :443 → app). Scope note: the app binds 0.0.0.0:5000, so only the host firewall keeps it off the internet — the current path, not an enforced one | ⏳ |
 | 8 | **#615** | CC-A | the reviewer's verification identity can read the app's secrets file, and the live Kraken key will sit on that box (CC-A, Langston re-derived the read) | ⏳ |
+| 9 | **B-SSH-KEY-CENSUS (investigation)** `status board` #924 | ? | two ungoverned SSH keys can log in as the account that owns the trading application; nobody knows whose they are. Kyle placed it at Phase-19 end: Phase 21 turns that box into the live path, and it is an hour. Remediation goes to 20.4 with #110 | ⏳ |
 
 ### B. Building live mode itself
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 9 | **21.1 Live Mode Engine** | — | the live mode engine itself | ⏳ |
-| 10 | **21.2 Paper-to-Live Transition Testing** | — | paper-to-live transition testing with small sizes | ⏳ |
-| 11 | **21.3 Live Mode Guardrails** | — | live mode guardrails — umbrella; its sub-items 21-3a..d are listed separately | ⏳ |
-| 12 | **#322** | Kyle | test-in-paper / bypass-in-live capability gating — Kyle's live-mode creation requirement | ⏳ |
-| 13 | **#517** | CC-B | the Live page's open and closed trade tabs are stubs — the operator must be able to see live trades | ⏳ |
-| 14 | **19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pre-existing** #139 | — | throwing asset-class resolution call sites would break a live path IF still present ⚠️ *verify* | ⏳ |
-| 15 | **Confirm the live fee schedule before the first real order** | ? | The EV gate is a fee-difference machine. The xStock fee contract created a live epoch and sits in observation; the older fee-accuracy item was pruned with a verify flag. No row says the live fees are right. | ⏳ |
+| 10 | **21.1 Live Mode Engine** | — | the live mode engine itself | ⏳ |
+| 11 | **21.2 Paper-to-Live Transition Testing** | — | paper-to-live transition testing with small sizes | ⏳ |
+| 12 | **21.3 Live Mode Guardrails** | — | live mode guardrails — umbrella; its sub-items 21-3a..d are listed separately | ⏳ |
+| 13 | **#322** | Kyle | test-in-paper / bypass-in-live capability gating — Kyle's live-mode creation requirement | ⏳ |
+| 14 | **#517** | CC-B | the Live page's open and closed trade tabs are stubs — the operator must be able to see live trades | ⏳ |
+| 15 | **19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pre-existing** #139 | — | throwing asset-class resolution call sites would break a live path IF still present ⚠️ *verify* | ⏳ |
+| 16 | **Confirm the live fee schedule before the first real order** | ? | The EV gate is a fee-difference machine. The xStock fee contract created a live epoch and sits in observation; the older fee-accuracy item was pruned with a verify flag. No row says the live fees are right. | ⏳ |
 
 ### C. Risk controls on real capital
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 16 | **B-KILLSWITCH-DENOMINATOR** `4.b` #618 | Kyle | the kill switch's remaining legs — Kyle placed it himself; the kill switch is the last line of capital protection | ⏳ |
-| 17 | **B-TOTAL-DRAWDOWN-WARNING** `3z` | CC-C | a mark-to-market total-drawdown warning — Kyle-ruled 2026-09-09; a risk control on real capital | ⏳ |
-| 18 | **#519** | CC-B | confirm the runtime daily-loss kill-switch trip fails loud, not silent | ⏳ |
-| 19 | **B-SIZING-DEC-RESTORE** #665 #666 #668 | CC-C | paper per-trade allocation is 20% where the governed decision says 6.67%, and Kyle did not know. RIDER (Langston): pattern signals size at 6.67% while other signals size at the guardrail (20% paper / 30% live) and nobody has stated why. Both sizing fields are user-locked, so the output is Kyle's number | ⏳ |
-| 20 | **25-11a — refuse a position larger than the visible book** `split from 25-11` | ? | Small and fail-closed: do not open a position larger than a stated fraction of visible depth, and do not model an exit at a price the book cannot fill. Whether it ever binds depends on Kyle's day-one size. | ⏳ |
-| 21 | **25-16 Trade-size / concurrency / win-rate dynamic + starting-balance sensiti** #408 | — | the evidence study for trade size, concurrency and starting balance — its own row calls it a go-live prerequisite. The NUMBERS it informs are Kyle's (a DECIDE) | ⏳ |
-| 22 | **#610** | CC-B | the AMR scales position size off an EV-gap ring with no staleness bound — stale data would size real positions (CC-A) | ⏳ |
-| 23 | **B-VENUE-RESTING-EXITS** #563 | Kyle | a live position must have a protective mechanism that survives our process dying. The FORM is Kyle's decision (resting venue stops vs a flatten-on-death watchdog) | ⏳ |
-| 24 | **19-9 B79.x failure-mode taxonomy** | — | entry-side failure modes (LULD halts, circuit breakers, splits, dividends, earnings) — its own text says required before live | ⏳ |
-| 25 | **B-NONFIAT-QUOTE-DENOMINATION** `5.a` #966 | Kyle | the universe admits non-USD-quoted pairs and pure fiat pairs (USD/CAD, EUR/USD) whose sizing and P&L we handle wrong. Kyle's fork: fix the maths, or exclude the pairs (nearly free) | ⏳ |
+| 17 | **B-KILLSWITCH-DENOMINATOR** `4.b` #618 | Kyle | the kill switch's remaining legs — Kyle placed it himself; the kill switch is the last line of capital protection | ⏳ |
+| 18 | **B-TOTAL-DRAWDOWN-WARNING** `3z` | CC-C | a mark-to-market total-drawdown warning — Kyle-ruled 2026-09-09; a risk control on real capital | ⏳ |
+| 19 | **#519** | CC-B | confirm the runtime daily-loss kill-switch trip fails loud, not silent | ⏳ |
+| 20 | **B-SIZING-DEC-RESTORE** #665 #666 #668 | CC-C | paper per-trade allocation is 20% where the governed decision says 6.67%, and Kyle did not know. RIDER (Langston): pattern signals size at 6.67% while other signals size at the guardrail (20% paper / 30% live) and nobody has stated why. Both sizing fields are user-locked, so the output is Kyle's number | ⏳ |
+| 21 | **25-11a — refuse a position larger than the visible book** `split from 25-11` | ? | Small and fail-closed: do not open a position larger than a stated fraction of visible depth, and do not model an exit at a price the book cannot fill. Whether it ever binds depends on Kyle's day-one size. | ⏳ |
+| 22 | **25-16 Trade-size / concurrency / win-rate dynamic + starting-balance sensiti** #408 | — | the evidence study for trade size, concurrency and starting balance — its own row calls it a go-live prerequisite. The NUMBERS it informs are Kyle's (a DECIDE) | ⏳ |
+| 23 | **#610** | CC-B | the AMR scales position size off an EV-gap ring with no staleness bound — stale data would size real positions (CC-A) | ⏳ |
+| 24 | **B-VENUE-RESTING-EXITS** #563 | Kyle | a live position must have a protective mechanism that survives our process dying. The FORM is Kyle's decision (resting venue stops vs a flatten-on-death watchdog) | ⏳ |
+| 25 | **19-9 B79.x failure-mode taxonomy** | — | entry-side failure modes (LULD halts, circuit breakers, splits, dividends, earnings) — its own text says required before live | ⏳ |
+| 26 | **B-NONFIAT-QUOTE-DENOMINATION** `5.a` #966 | Kyle | the universe admits non-USD-quoted pairs and pure fiat pairs (USD/CAD, EUR/USD) whose sizing and P&L we handle wrong. Kyle's fork: fix the maths, or exclude the pairs (nearly free) | ⏳ |
 
 ### D. Price truth — how old, which side, is the feed alive
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 26 | **B-PRICE-SIDE-BY-JOB** `3n` | CC-C | buy on the ask, sell on the bid, for every job a price does — Kyle's test is fidelity to live trading. Since 2026-09-11 (r5) it CONTAINS the age-truth refusal, open-trade refresh, ticker trigger, two-cache decision and F-G-2's exit side; open by design until the xStock paper increments land | ⏳ |
-| 27 | **B-PRICE-STALENESS-BOUND** #743 | CC-C | the last-known-good price is re-served with no age bound and re-stamped as fresh | ⏳ |
-| 28 | **row:6** | — | F-C staleness bound — a bound on how old a price may be when it is used | ⏳ |
-| 29 | **B-EQUITY-RECONNECT-STALL-TIMER** `3b.f-e` | CC-C | a stalled xStock feed reconnect leaves live positions unwatched | ⏳ |
-| 30 | **B-XSTOCK-LIVE-FEED** `3b.e` #950 | CC-C | both classes launch live together (D5); xStock live trading needs a correct live feed ⚠️ *verify* | ⏳ |
-| 31 | **B-WS-SUBSCRIBE-CLASS-FILTER** #559 | CC-A | xStock positions reported 'unmanageable' because the crypto subscribe set is not class-filtered ⚠️ *verify* | ⏳ |
-| 32 | **B-OHLC-FRAME-GUARD** `3b.h-6` #1028 #1029 #1030 | CC-C | validate price bars at every producer — opened from a CRITICAL alert; a bad bar feeds every indicator | ⏳ |
-| 33 | **B-REST-SIDES-TO-CACHE** `3n.l` #1056 | CC-C | the REST adapter parses bid and ask and then stores only the midpoint — the price-side rule needs the sides | ⏳ |
-| 34 | **B-BOOK-SUBSCRIPTION-REACH** `3n.m` #1060 | CC-C | the order book is the preferred price source but is subscribed for ~3 coins a day against a 35-41 symbol pool (Kyle directive 2026-09-13) | ⏳ |
-| 35 | **#506** | CC-B | order-book subscriptions accumulate with no unsubscribe — a DEPENDENCY of B-BOOK-SUBSCRIPTION-REACH, which takes subscriptions from ~3 a day to a 35-41 symbol pool (Langston) | ⏳ |
+| 27 | **B-PRICE-SIDE-BY-JOB** `3n` | CC-C | buy on the ask, sell on the bid, for every job a price does — Kyle's test is fidelity to live trading. Since 2026-09-11 (r5) it CONTAINS the age-truth refusal, open-trade refresh, ticker trigger, two-cache decision and F-G-2's exit side; open by design until the xStock paper increments land | ⏳ |
+| 28 | **B-PRICE-STALENESS-BOUND** #743 | CC-C | the last-known-good price is re-served with no age bound and re-stamped as fresh | ⏳ |
+| 29 | **row:6** | — | F-C staleness bound — a bound on how old a price may be when it is used | ⏳ |
+| 30 | **B-EQUITY-RECONNECT-STALL-TIMER** `3b.f-e` | CC-C | a stalled xStock feed reconnect leaves live positions unwatched | ⏳ |
+| 31 | **B-XSTOCK-LIVE-FEED** `3b.e` #950 | CC-C | both classes launch live together (D5); xStock live trading needs a correct live feed ⚠️ *verify* | ⏳ |
+| 32 | **B-WS-SUBSCRIBE-CLASS-FILTER** #559 | CC-A | xStock positions reported 'unmanageable' because the crypto subscribe set is not class-filtered ⚠️ *verify* | ⏳ |
+| 33 | **B-OHLC-FRAME-GUARD** `3b.h-6` #1028 #1029 #1030 | CC-C | validate price bars at every producer — opened from a CRITICAL alert; a bad bar feeds every indicator | ⏳ |
+| 34 | **B-REST-SIDES-TO-CACHE** `3n.l` #1056 | CC-C | the REST adapter parses bid and ask and then stores only the midpoint — the price-side rule needs the sides | ⏳ |
+| 35 | **B-BOOK-SUBSCRIPTION-REACH** `3n.m` #1060 | CC-C | the order book is the preferred price source but is subscribed for ~3 coins a day against a 35-41 symbol pool (Kyle directive 2026-09-13) | ⏳ |
+| 36 | **#506** | CC-B | order-book subscriptions accumulate with no unsubscribe — a DEPENDENCY of B-BOOK-SUBSCRIPTION-REACH, which takes subscriptions from ~3 a day to a 35-41 symbol pool (Langston) | ⏳ |
 
 ### D2. Keeping the record of what happened
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 36 | **B-OUTCOME-CORPUS-CAPTURE** `2.4g (second use of the id)` | ? | Closed trades are HARD-DELETED at 90 days and the only record of what a trade earned is an unbacked, untiered log sink — 'the 90-day delete is running NOW'. With real money, trade records cannot expire. Also home of #596 (the outcome record's representativeness, which orders Phase 25). | ⏳ |
+| 37 | **B-OUTCOME-CORPUS-CAPTURE** `2.4g (second use of the id)` | ? | Closed trades are HARD-DELETED at 90 days and the only record of what a trade earned is an unbacked, untiered log sink — 'the 90-day delete is running NOW'. With real money, trade records cannot expire. Also home of #596 (the outcome record's representativeness, which orders Phase 25). | ⏳ |
 
 ### E. Entry and exit correctness
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 37 | **B-EXIT-TRIGGER-FILL-PARITY** `3b.c` #954 #959 | Kyle | exits must fire on the price they would actually fill at — its own row says CRITICAL; wrong in live = wrong real exits | ⏳ |
-| 38 | **B-EXIT-TICKER-LEG-ADAPTER-SIDES** `3n.p` | CC-C | the exit path carries both sides of the price and cannot see them — needed to exit on the transactable side | ⏳ |
-| 39 | **B-XSTOCK-BID-TRIGGER-RELAND** `3n.q7` | CC-C | put the xStock stop/target trigger back on the transactable bid — price-side fidelity for xStock exits | ⏳ |
-| 40 | **B-BOOK-STATE-RING-INDEPENDENT-BOUND** `3n.q5` | CC-C | xStock exit plausibility bound — a false stop in live is a real loss (#1065 was one) | ⏳ |
-| 41 | **B-BOOK-STATE-RESTART-DURABLE** `3n.q8` #1066 | CC-C | a restart empties the xStock guard and a false stop fired 12 seconds after a deploy — every live restart would risk one | ⏳ |
-| 42 | **B-ENTRY-LEVEL-RECHECK** `3n.u2` | CC-B | nothing re-checks a signal's levels against the current price before the fill, on either class — in live a stale signal fills at a moved price | ⏳ |
-| 43 | **B-GRID-LIVE-PATH-PARITY** `3g` #939 | CC-C | venue-grid rounding on the LIVE order path — the grid today covers the orchestrator path; an off-grid live order is rejected by the venue | ⏳ |
-| 44 | **B-INTENT-ENTRY-PARITY** `3h` #928 #929 | CC-C | two other entry routes bypass the grid, and #953 is the same two routes on the exit side | ⏳ |
-| 45 | **row:3h.b** | CC-C | delete the dead exit limb before live so it cannot be reached — same family as the #953 hard blocker ⚠️ *verify* | ⏳ |
-| 46 | **Reachability census: which dead code can a live path reach** | ? | The roadmap's capital-letters blocker (#953) is a legacy limb reachable from a live path. Rule: dead code reachable from a live path is MUST, the rest AFTER. The census sorts #528, #518, #742, 3n.a, 3n.b and the other dead-code items. | ⏳ |
-| 47 | **B-TARGET-FABRICATION** `3i` #927 #930 | CC-C | signals given a default target the strategy never chose — trades on invented geometry | ⏳ |
-| 48 | **#204** | — | xStock corrupt stop prices (units/scale) at 45 times the crypto rate — a live stop at a wrong scale is a real loss; may be fixed by the venue grid ⚠️ *verify* | ⏳ |
-| 49 | **#233** | — | drift score and volume z-score fed as fixed defaults on the active path — its own row says pre-go-live verification; Kyle's rule is no hardcoded fallbacks ⚠️ *verify* | ⏳ |
-| 50 | **row:8** | — | F-E fill-integrity detector — catches a bad fill before it is booked | ⏳ |
-| 51 | **B-CLOSE-WRITER-COSTS** `3n.u3` | CC-B | a close can delete a position with no trade record, and one path books invented zero fees — the record Kyle judges by, and live accounting | ⏳ |
-| 52 | **B-EXIT-LATCH-INVESTIGATION** `7` #732 | CC-A | AN INVESTIGATION: is the hold-past-target Kyle saw a labelling artefact or a live exit-evaluation defect? Kyle: 'make sure it's not a symptom of a much bigger and uglier problem' — the exit defect cannot be bucketed without it | ⏳ |
-| 53 | **#630** | CC-A | the maker-order deadline has NEVER fired — the maker population in its proof window was empty. Live places resting maker orders with a deadline; exercise it once in paper before real capital (CC-A) | ⏳ |
+| 38 | **B-EXIT-TRIGGER-FILL-PARITY** `3b.c` #954 #959 | Kyle | exits must fire on the price they would actually fill at — its own row says CRITICAL; wrong in live = wrong real exits | ⏳ |
+| 39 | **B-EXIT-TICKER-LEG-ADAPTER-SIDES** `3n.p` | CC-C | the exit path carries both sides of the price and cannot see them — needed to exit on the transactable side | ⏳ |
+| 40 | **B-XSTOCK-BID-TRIGGER-RELAND** `3n.q7` | CC-C | put the xStock stop/target trigger back on the transactable bid — price-side fidelity for xStock exits | ⏳ |
+| 41 | **B-BOOK-STATE-RING-INDEPENDENT-BOUND** `3n.q5` | CC-C | xStock exit plausibility bound — a false stop in live is a real loss (#1065 was one) | ⏳ |
+| 42 | **B-BOOK-STATE-RESTART-DURABLE** `3n.q8` #1066 | CC-C | a restart empties the xStock guard and a false stop fired 12 seconds after a deploy — every live restart would risk one | ⏳ |
+| 43 | **B-ENTRY-LEVEL-RECHECK** `3n.u2` | CC-B | nothing re-checks a signal's levels against the current price before the fill, on either class — in live a stale signal fills at a moved price | ⏳ |
+| 44 | **B-GRID-LIVE-PATH-PARITY** `3g` #939 | CC-C | venue-grid rounding on the LIVE order path — the grid today covers the orchestrator path; an off-grid live order is rejected by the venue | ⏳ |
+| 45 | **B-INTENT-ENTRY-PARITY** `3h` #928 #929 | CC-C | two other entry routes bypass the grid, and #953 is the same two routes on the exit side | ⏳ |
+| 46 | **row:3h.b** | CC-C | delete the dead exit limb before live so it cannot be reached — same family as the #953 hard blocker ⚠️ *verify* | ⏳ |
+| 47 | **Reachability census: which dead code can a live path reach** | ? | The roadmap's capital-letters blocker (#953) is a legacy limb reachable from a live path. Rule: dead code reachable from a live path is MUST, the rest AFTER. The census sorts #528, #518, #742, 3n.a, 3n.b and the other dead-code items. | ⏳ |
+| 48 | **B-TARGET-FABRICATION** `3i` #927 #930 | CC-C | signals given a default target the strategy never chose — trades on invented geometry | ⏳ |
+| 49 | **#204** | — | xStock corrupt stop prices (units/scale) at 45 times the crypto rate — a live stop at a wrong scale is a real loss; may be fixed by the venue grid ⚠️ *verify* | ⏳ |
+| 50 | **#233** | — | drift score and volume z-score fed as fixed defaults on the active path — its own row says pre-go-live verification; Kyle's rule is no hardcoded fallbacks ⚠️ *verify* | ⏳ |
+| 51 | **row:8** | — | F-E fill-integrity detector — catches a bad fill before it is booked | ⏳ |
+| 52 | **B-CLOSE-WRITER-COSTS** `3n.u3` | CC-B | a close can delete a position with no trade record, and one path books invented zero fees — the record Kyle judges by, and live accounting | ⏳ |
+| 53 | **B-EXIT-LATCH-INVESTIGATION** `7` #732 | CC-A | AN INVESTIGATION: is the hold-past-target Kyle saw a labelling artefact or a live exit-evaluation defect? Kyle: 'make sure it's not a symptom of a much bigger and uglier problem' — the exit defect cannot be bucketed without it | ⏳ |
+| 54 | **#630** | CC-A | the maker-order deadline has NEVER fired — the maker population in its proof window was empty. Live places resting maker orders with a deadline; exercise it once in paper before real capital (CC-A) | ⏳ |
 
 ### F. Knowing which instrument and which mode a record belongs to
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 54 | **B-SYMBOL-CLASS-IDENTITY** `3b.h-4` #1006 #1024 | CC-C | a ticker shared by a coin and an equity is one key today; DASH has real trades across both classes — Kyle-ruled 2026-09-09 | ⏳ |
-| 55 | **B-UNIVERSE-REFRESH-ACTS** `3b.h-2` #1018 | CC-C | blocks B-SYMBOL-CLASS-IDENTITY, which is MUST | ⏳ |
-| 56 | **B-RTB-SIGNAL-IDENTITY** `2.4c` #1006 #1046 | CC-B | the ready-to-buy queue's identity carries no asset class — with tickers shared across classes (STX, STRK, DASH) the queue can confuse two instruments; takes its key from #1024 | ⏳ |
-| 57 | **B-MODE-PREDICATE-SWEEP** #736 | CC-C | three readers query closed trades directly and will mix live and paper P&L once live exists | ⏳ |
+| 55 | **B-SYMBOL-CLASS-IDENTITY** `3b.h-4` #1006 #1024 | CC-C | a ticker shared by a coin and an equity is one key today; DASH has real trades across both classes — Kyle-ruled 2026-09-09 | ⏳ |
+| 56 | **B-UNIVERSE-REFRESH-ACTS** `3b.h-2` #1018 | CC-C | blocks B-SYMBOL-CLASS-IDENTITY, which is MUST | ⏳ |
+| 57 | **B-RTB-SIGNAL-IDENTITY** `2.4c` #1006 #1046 | CC-B | the ready-to-buy queue's identity carries no asset class — with tickers shared across classes (STX, STRK, DASH) the queue can confuse two instruments; takes its key from #1024 | ⏳ |
+| 58 | **B-MODE-PREDICATE-SWEEP** #736 | CC-C | three readers query closed trades directly and will mix live and paper P&L once live exists | ⏳ |
 
 ### G. The evidence Kyle's comfortable-in-paper judgement rests on
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 58 | **19-11 §19.1 Paper Trading Run The act of actually running paper-active for a** | — | THE PAPER RUN ITSELF — it is the evidence Kyle's comfortable-in-paper gate is judged on | ⏳ |
-| 59 | **#235** | Kyle | the full end-to-end runtime audit of the crypto active pipeline — rule 23's closing step of Phase 19 | ⏳ |
-| 60 | **25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-06-21; RUNN** #370 | — | NARROWED (Langston): state the Net Expectancy gate's measured accept/reject outcome on the population it actually ran on, population named. A full judgement verdict needs #596 first and is Phase 25 | ⏳ |
-| 61 | **B-RTB-REFRESH-CONSOLIDATE** #535 | CC-A | the net-EV backstop was removed on an incomplete evidence base — its own row says SAFETY-RELEVANT | ⏳ |
-| 62 | **B-LEARNING-SYSTEM-CENSUS** #661 | Kyle | #661: at least three older learning systems still wired, disposition unknown — anything that could still steer a live decision must be known before live (its own reason is a MUST predicate — Langston) | ⏳ |
+| 59 | **19-11 §19.1 Paper Trading Run The act of actually running paper-active for a** | — | THE PAPER RUN ITSELF — it is the evidence Kyle's comfortable-in-paper gate is judged on | ⏳ |
+| 60 | **#235** | Kyle | the full end-to-end runtime audit of the crypto active pipeline — rule 23's closing step of Phase 19 | ⏳ |
+| 61 | **25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-06-21; RUNN** #370 | — | NARROWED (Langston): state the Net Expectancy gate's measured accept/reject outcome on the population it actually ran on, population named. A full judgement verdict needs #596 first and is Phase 25 | ⏳ |
+| 62 | **B-RTB-REFRESH-CONSOLIDATE** #535 | CC-A | the net-EV backstop was removed on an incomplete evidence base — its own row says SAFETY-RELEVANT | ⏳ |
+| 63 | **B-LEARNING-SYSTEM-CENSUS** #661 | Kyle | #661: at least three older learning systems still wired, disposition unknown — anything that could still steer a live decision must be known before live (its own reason is a MUST predicate — Langston) | ⏳ |
 
 ### H. Operator reach and operations
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 63 | **#935** | CC-C | any five failed logins lock EVERY user out — in live that includes Kyle reaching the stop controls ⚠️ *verify* | ⏳ |
-| 64 | **B-DASHBOARD-AUTH-RACE** #903 | CC-C | #903: the portfolio card 401s on load and never recovers — in live, an operator with no balance. Operator-reach family with #401, #517, #935 (Langston) | ⏳ |
-| 65 | **#296** | Kyle | NARROWED (Langston): a shared rate budget and backoff on the order-PLACING and order-CANCELLING paths — a rate-limit rejection on an exit costs money. Consolidating the 35 clients is a refactor, AFTER | ⏳ |
-| 66 | **#681** | CC-B | a deploy can outrun CI — in live, a deploy restarts real trading on code that has not passed | ⏳ |
-| 67 | **#168** | — | CI cannot catch a build that crashes on boot — a live deploy that boots into a crash leaves positions unmanaged; same family as #681 (Langston) | ⏳ |
-| 68 | **#521** | CC-B | the engine heartbeat is structurally dead — nothing notices a dead engine; in live that is real positions with no manager (Langston) | ⏳ |
-| 69 | **B-ENGINE-STOP-DURATION-COLUMN** `3n.u4` #1067 | CC-B | an engine stop returns an error after 25 days of session even though it flattened — in live an operator must be able to trust a stop's report; a small fix | ⏳ |
-| 70 | **One number: months of database headroom at the measured write rate** | ? | A full disk stops the engine with real positions open. Not retention work, one measurement: if the headroom comfortably clears the run-in, retention stays where it is (HELPFUL/AFTER). | ⏳ |
-| 71 | **B-TEC-PRIME-BOOT-RACE** `2.4j` #1053 | CC-B | On every restart the crypto exit loop throws on open positions for a tick — in live, every deploy leaves real positions unevaluated for that tick | ⏳ |
-| 72 | **#619** | CC-A | a restore from backup silently lacks seeded config, including risk config — found only at the worst time (CC-A) | ⏳ |
+| 64 | **#935** | CC-C | any five failed logins lock EVERY user out — in live that includes Kyle reaching the stop controls ⚠️ *verify* | ⏳ |
+| 65 | **B-DASHBOARD-AUTH-RACE** #903 | CC-C | #903: the portfolio card 401s on load and never recovers — in live, an operator with no balance. Operator-reach family with #401, #517, #935 (Langston) | ⏳ |
+| 66 | **#296** | Kyle | NARROWED (Langston): a shared rate budget and backoff on the order-PLACING and order-CANCELLING paths — a rate-limit rejection on an exit costs money. Consolidating the 35 clients is a refactor, AFTER | ⏳ |
+| 67 | **#681** | CC-B | a deploy can outrun CI — in live, a deploy restarts real trading on code that has not passed | ⏳ |
+| 68 | **#168** | — | CI cannot catch a build that crashes on boot — a live deploy that boots into a crash leaves positions unmanaged; same family as #681 (Langston) | ⏳ |
+| 69 | **#521** | CC-B | the engine heartbeat is structurally dead — nothing notices a dead engine; in live that is real positions with no manager (Langston) | ⏳ |
+| 70 | **B-ENGINE-STOP-DURATION-COLUMN** `3n.u4` #1067 | CC-B | an engine stop returns an error after 25 days of session even though it flattened — in live an operator must be able to trust a stop's report; a small fix | ⏳ |
+| 71 | **One number: months of database headroom at the measured write rate** | ? | A full disk stops the engine with real positions open. Not retention work, one measurement: if the headroom comfortably clears the run-in, retention stays where it is (HELPFUL/AFTER). | ⏳ |
+| 72 | **B-TEC-PRIME-BOOT-RACE** `2.4j` #1053 | CC-B | On every restart the crypto exit loop throws on open positions for a tick — in live, every deploy leaves real positions unevaluated for that tick | ⏳ |
+| 73 | **#619** | CC-A | a restore from backup silently lacks seeded config, including risk config — found only at the worst time (CC-A) | ⏳ |
 
 **Dependency check (computed, not spot-checked):** every PRECEDENCE prerequisite of a MUST is itself a MUST or a Kyle decision — 20 edges checked (containment — a batch listing its own sub-parts — is kept separate and not counted). Every decision's unlock list is enforced as an edge. PRUNE and OBSERVATION are NOT admissible prerequisites.
 
 ⚠️ **THE MUST SET IS NOT CLOSED TODAY — it is closed CONDITIONAL on three things:** the dead-code reachability census (which moves items INTO MUST), Kyle's decisions above, and the lane replies still owed by OLD, ANALYST and Infra Claude. The full Net Expectancy verdict (beyond 25-19's narrowed gate) needs #596 first and stays Phase 25.
 
-**Status pass (mechanical, `scripts/inventory/status_pass.py`, reads the GOVERNED plan at the stamped ref):** two axes over the WHOLE row text — rows that name an open item by row id or batch name, and rows that cite an open item's `#NNN`. Every hit was read. Name axis: 1 real close (B-DISAGREEMENT-FINDER). Issue axis: #320/#321 delivered in P19-B6.5b (closed 2026-06-17), #970 delivered by row 8.5, #671 and #596 have placed homes — and it surfaced B-OUTCOME-CORPUS-CAPTURE, missing because plan id 2.4g is used twice. The rest are homes, cross-references or a restart number. Items with no plan citation were checked against their issue entries: no resolution notes; #935 awaits CC-C.
+**Status pass (`scripts/inventory/status_pass.py`, fetches, reads the GOVERNED plan at the stamped ref):** case-insensitive status vocabulary with word boundaries (closed|absorbed|withdrawn|deployed|done|shipped|resolved|superseded|delivered|landed), two axes over the whole row — rows naming an open item, and rows citing any of its issue numbers. Each hit carries the text round the status word NEAREST the mention. Read: every NEAR hit (within 120 chars) and every far hit on a MUST or HELPFUL item — 128 distinct items. Far hits on AFTER / OBSERVATION / DECIDE / PARKED items are listed in the tool output and NOT read (a missed close there leaves an item open, which costs attention, not correctness). The sweep for dropped plan rows (`dup_sweep.py`) finds headers by their separator line, not by position, and checks hand-added items too.
 
 **Why-string scan (word-boundary match on every MUST key):** 0 unlinked mentions; 3 declared non-precedence cross-references (B-DASHBOARD-AUTH-RACE → #935: same operator-reach family; B-DASHBOARD-AUTH-RACE → #517: same operator-reach family; B-SEC-HARDEN → #935: cites #935's measurement as reachability evidence).
 
-**Ownership:** 23 of 72 MUST items have no owner — assigning them is the reorganisation step.
+**Ownership:** 24 of 73 MUST items have no owner — assigning them is the reorganisation step.
 
-## IDENTIFIERS THAT POINT AT TWO ITEMS — 37 (resolve in the reorganisation step)
+## IDENTIFIERS THAT POINT AT TWO ITEMS — 41 (resolve in the reorganisation step)
 
 Some are honest shared citations; some are one number minted twice (#921, #559 are two different issues each). Minting fixes stay AFTER; this document's dedupe does not.
 
@@ -191,12 +192,15 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **#668** — B-SIZING-DEC-RESTORE (MUST) · #668 (KYLE-PARKED)
 - **#671** — #671 (MERGE:B-DECISION-RECORDS) · 12.1 rulings-durability fix (HELPFUL)
 - **#672** — B-CATALOG-1 (AFTER) · 12.2 lookalike register (HELPFUL)
+- **#677** — #677 (MERGE:B-TEC-STATE-DURABILITY) · B-TEC-STATE-DURABILITY (HELPFUL)
+- **#678** — #678 (MERGE:B-TEC-STATE-DURABILITY) · B-TEC-STATE-DURABILITY (HELPFUL)
 - **#732** — #732 (MERGE:B-EXIT-LATCH-INVESTIGATION) · B-EXIT-LATCH-INVESTIGATION (MUST)
 - **#734** — 21-3c engine-start health gate refuses live (MUST) · #734 (MERGE:rm:21-3c)
 - **#739** — row:1 (AFTER) · B-RULES (UNCONFIRMED)
 - **#741** — B-MAKER-FILL-TRANSACTABLE-SIDE (PRUNE) · #741 (KYLE-PARKED)
 - **#751** — #751 (MERGE:B-EOL-NORMALISE) · B-EOL-NORMALISE (AFTER)
 - **#921** — F-G-1 (OBSERVATION) · B-HELSINKI-MOUNT-WATCH (AFTER)
+- **#924** — B-HELSINKI-MOUNT-WATCH (AFTER) · B-SSH-KEY-CENSUS (investigation) (MUST)
 - **#930** — B-TARGET-FABRICATION (MUST) · B-STRING-TRUTHINESS-GUARDS (HELPFUL)
 - **#934** — B-VENUE-PAIRS-REINIT (HELPFUL) · B-VPG-ROW-ALIGN (AFTER)
 - **#937** — B-QUOTE-ADMISSION-LEGACY-SWEEP (HELPFUL) · 20.4.6 TRADEABLE-UNIVERSE BOUNDARY (MERGE:B-NONFIAT-QUOTE-DENOMINATION) · B-QUOTE-CURRENCY-DENOMINATION (MERGE:B-NONFIAT-QUOTE-DENOMINATION)
@@ -216,6 +220,7 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **#1046** — B-RTB-SIGNAL-IDENTITY (MUST) · B-WRITER-ACTOR-ALLOWLIST (AFTER)
 - **#1057** — #1057 (UNCONFIRMED) · B-LANGSTON-RECONCILE-VERB (AFTER)
 - **#1060** — B-BOOK-SUBSCRIPTION-REACH (MUST) · B-DECISION-INSTANT-QUOTE (HELPFUL)
+- **#1063** — #1063 (MERGE:row:3m-ENUM) · 2.4g-3 population-boundary rider on #1063 (MERGE:row:3m-ENUM)
 
 ## OBSERVATION — deployed, running out their windows — 6
 
@@ -231,7 +236,7 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 
 - **B-DEPLOY-DRIFT-LINE** #1002 (CC-A) — plan row 4.55 reads OPEN — OBSERVATION WINDOW (criterion 4 satisfied 2026-09-09) ⚠️ *verify*
 
-## EXTREMELY HELPFUL BEFORE LIVE — 132
+## EXTREMELY HELPFUL BEFORE LIVE — 135
 
 **Phase 19**
 
@@ -289,6 +294,7 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **12.2 lookalike register** #672 (CC-A) — one page of the pairs that already caused wrong calls — FIRST BREAK by Langston's ruling
 - **B-CATALOG-2** `12.5` (CC-A) — its FIRST catalogue is the diagnostic-coverage map (Kyle: 'where we have diagnostics and where we don't') — how Kyle sees what live is and is not watched. The rest of the family is AFTER
 - **B-SCAN-BREADTH-DECLINE** `12.8` #1049 (CC-C) — a scheduled review of why the scanner sees so few pairs — breadth feeds selection
+- **B-TEC-STATE-DURABILITY** `status board` #678 #677 (?) — on restart the engine reads every open position's trailing progress from one /tmp file inside a catch-and-continue — a corrupt file boots with zero trailing progress while reporting healthy. Kyle placed it VERY LAST (a recovery-path exposure, not an active-trading blocker). Becomes MUST if BE/moonbag trailing is switched on. Overlaps 3n.c
 
 **Phase 25**
 
@@ -341,8 +347,10 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **#561** (Kyle) — volume / order book not filling in Open Trades; rename the column for xStocks
 - **#549** (CC-B) — four gaps in Open Trades fields
 - **#547** (CC-B) — Analyst's July soak findings — contents need the owner's read ⚠️ *verify*
+- **#529** (Kyle) — B-STRATEGY-WEIGHT-INVESTIGATION — Kyle wanted it before the runtime audit; open
 - **#527** (CC-B) — xStock eval cycle should pass friction components ⚠️ *verify*
 - **B-SQE-DEADCODE-PURGE** #533 (CC-A) — a dead SQE evaluator with a SHORTER gate list — delete before anything can call it
+- **#522** (Kyle) — catch-site audit homed from the #530 fix — open ⚠️ *verify*
 - **#518** (CC-B) — delete a dormant commented-out guardrail block (rule 18)
 - **#515** (CC-B) — capture the remaining learning-record columns on the active path
 - **B-TSC-BASELINE-TS2345-AUDIT** #510 (CC-B) — 32 suppressed type errors in the routes file, one tied to the balance ⚠️ *verify*
@@ -383,12 +391,13 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **#1072** (CC-C) — the crypto price-history recorder's symbol set is frozen — the same blind spot Langston hit today: not one euro-priced pair ever recorded
 - **#982 alert hold verb** (CC-A) — an ack silences an event-wait alert permanently and there is no un-ack; Kyle approved a third action subject to Langston's ruling; five alerts are acked-and-silenced waiting on it
 
-## AFTER LIVE — proposed deferrals (Kyle approves each) — 166
+## AFTER LIVE — proposed deferrals (Kyle approves each) — 168
 
 Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after live by the roadmap and are listed here without comment.
 
 **Phase 19**
 
+- **B-ASSET-CAPS-REMOVAL** `3b` #917 (unowned) — open: delete an orphaned pre-governance service (orphan premise confirmed by census) — the dead-code reachability census decides if it moves
 - **B-TSC-GUARD-DETERMINISM** `3b.h-3` #1019 (CC-A) — CI type-check guard determinism — tooling
 - **B-DISPATCH-STAGING-VERIFY** `3b.i` #964 (CC-C) — its own row says it blocks nothing
 - **B-SCANNER-DEDUPE-DEAD-TABLE** `3b.j` #965 (CC-C) — dead table cleanup
@@ -396,6 +405,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **B-CHECKER-CORE-PATHS** `3b.k-a` #993 (CC-A) — governance-checker core paths
 - **B-DEPLOY-REF-DECLARATION** `3c.a` #988 (CC-C) — deploy-tool declaration
 - **B-CANONICAL-FREEZE** `3i.c` #948 (CC-C) — its own row says governance hygiene, not on the trading path
+- **B-FUNNEL-PERP-CLASSES** `3j` #925 (CC-C) — open: the funnel can only key the two spot classes; perps come after live (an interim alert shipped in F-G-1)
 - **B-VPG-ROW-ALIGN** `3l` #934 (CC-C) — its own row says display-only
 - **B-ORPHAN-ROOT-SCANNER** `3n.a` (CC-C) — dead code (disposition 5) — legacy removal, no live effect
 - **row:3n.b** (CC-C) — orphan level tables (disposition 5) — legacy removal
@@ -597,7 +607,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **#741** (CC-A) — parked by Kyle, deliberately undated
 - **B-GDRIVE-UNMOUNT** #757 #759 (Infra Claude) — parked by Kyle, deliberately undated
 
-## MERGED INTO ANOTHER ITEM — 78
+## MERGED INTO ANOTHER ITEM — 80
 
 | item | merged into | why |
 |---|---|---|
@@ -655,8 +665,8 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **#237** | `#150` | same NOT NULL step |
 | **#297** | `rm:21.1` | a never-initialised engine global — part of replacing the live engine placeholder |
 | **#303** | `B-KILLSWITCH-DENOMINATOR` | the kill switch counts realised P&L only — unrealised drawdown never trips it ⚠️ *verify* |
-| **#678** | `row:3n.c` | all TEC trailing state lives in one temporary file |
-| **#677** | `row:3n.c` | trailing-state rehydrate seed missing two of three fields |
+| **#678** | `B-TEC-STATE-DURABILITY` | its declared home (status board) |
+| **#677** | `B-TEC-STATE-DURABILITY` | its declared home (status board) |
 | **#671** | `B-DECISION-RECORDS` | its home is plan row 12.3 B-DECISION-RECORDS — placed, so not parked |
 | **#667** | `rm:21-3a` | live guardrail values in the database no screen can show or edit — the Live Guardrails tab |
 | **#674** | `B-GATE-GUARD` | duplicate issue numbers — fixed by the number blocks |
@@ -676,13 +686,15 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **#999** | `B-HEARTBEAT-RESCOPE` | same item |
 | **#1038** | `B-INSTRUMENTS-OVER-RULES` | its home, plan row 3.5 |
 | **#1039** | `B-SCHEDULER-FIRST-TICK` | every scheduled task runs twice after a restart — same item |
+| **#1063** | `row:3m-ENUM` | its surviving half is row 3m-ENUM (the regime half was withdrawn) |
 | **P19-B6.5g** `plan history table` | `#233` | its core is #233 ⚠️ *verify* |
 | **P19-B15 — live and paper share one pipeline** `plan history table` | `#322` | same work as #322 |
 | **B-QUOTE-CURRENCY-DENOMINATION** `12.7` #937 #966 #967 | `B-NONFIAT-QUOTE-DENOMINATION` | the placed home of the non-fiat work: Kyle placed it LAST in Phase 19 |
+| **2.4g-3 population-boundary rider on #1063** #1063 | `row:3m-ENUM` | the B-PATTERN-ENUM-DRIFT deploy admits a class of opens that cannot open today, so realised outcomes after it are a different population — a condition on reading that batch's results |
 
-## PRUNED — 75
+## PRUNED — 84
 
-### Judged — 75
+### Judged — 84
 
 - **B-EXIT-PROVENANCE** `1` #913 — CLOSED 2026-08-30 (plan row 1)
 - **B-EXIT-PROVENANCE-TICKER-RETENTION** `2` #911 — landed ed86a758e, gate discharged, closed 2026-08-30
@@ -694,6 +706,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **B-MIN-STOP-DISTANCE** `3d` — WITHDRAWN 2026-08-27 on Kyle's caution + the evidence — no floor built (plan row 3d)
 - **B-MAKER-FILL-TRANSACTABLE-SIDE** `3n.q` #741 — built as 8a-P3 (crypto) and 8a-P4b (paper xStock); window closed 2026-09-22
 - **B-FEED-BY-SITUATION-AUDIT** `3n.t` — done 2026-09-18 — the per-situation feed audit and its determinations
+- **row:3n.x** — this row IS the inventory being built (PHASE_19_PLAN 3n.x)
 - **row:4** — F-5 per-strategy reach structure — delivered by B-GEOMETRY-REACH-BASELINE and B-REACH-BASELINE-ADJUST ⚠️ *verify*
 - **B-SCANNER-EGRESS-NORMALISE** `5` — closed 2026-08-30
 - **B-CROSS-SESSION-BLEED** `2` #753 — closed; its residual System-Manual rule conflict is governance, AFTER ⚠️ *verify*
@@ -716,9 +729,13 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **#599** — closed; head still reads OPEN, CC-A flipping it
 - **#595** — DONE, BATCH_CATALOG:462 (CC-A confirmed)
 - **#580** — superseded by the A1 removal (CC-A confirmed)
+- **B-OFFHOURS-BEHAVIOUR** #569 — superseded: now a design-discussion doc, not a code batch (plan L449) ⚠️ *verify*
 - **#554** — no push coordination across sessions — solved by separate clones
+- **B-REPO-RELOCATE** #567 — done 2026-07-23; #567 resolved by the relocation (plan L336) ⚠️ *verify*
+- **#562** — RESOLVED by P19-B8.5i, 2026-07-23 (plan L448)
 - **#542** — Google Drive mount git crashes — sessions moved to local clones 2026-07-23
 - **B-SHARED-TREE-COMMIT-ATOMICITY** #557 #559 — shared working tree — solved by separate clones ⚠️ *verify*
+- **B-REGIME-INPUTS-LIVE** #546 — closed; its OBJ-4 residual is B-VOLATILITY-CACHE-RETIRE, listed separately
 - **#544** — July xStock price-capture stop — incident record ⚠️ *verify*
 - **#543** — resolved 2026-09-02 (CC-A confirmed)
 - **#520** — RESOLVED with B-STAGING-LIVENESS-WATCH (plan L442)
@@ -727,10 +744,12 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **B-PROMOTION-RACE-FIX** #508 — CLOSED 2026-07-28, #508 resolved (plan L332)
 - **B-MBIM-SWITCH-ON** #507 — closed 2026-08-24 with its retention flip armed ⚠️ *verify*
 - **#503** — fixed by P19-B8.5c, CLOSED 2026-07-14 (plan L456)
+- **B-OPS-PM2-LOG** #499 — #499 resolved-as-corrected (plan P19-B8 row) ⚠️ *verify*
 - **#462** — resolved, BATCH_CATALOG:407 (CC-A confirmed)
 - **B-CC-WORKTREE-ISOLATION** #460 — two sessions sharing one working tree — solved by separate clones
 - **#496** — an orphaned bridge process from July ⚠️ *verify*
 - **B-DISAGREEMENT-FINDER** #975 — CLOSED 2026-08-31 ON A NEGATIVE RESULT (plan row 8.5) — found by the mechanical status pass
+- **#952** — re-filed as a leg of #941 (plan row 3c: ✅ DONE) ⚠️ *verify*
 - **#143** — May runtime observation of the SQE evaluation — superseded by active paper running ⚠️ *verify*
 - **#146** — deploy-sha verification — delivered by dt-deploy ⚠️ *verify*
 - **#232** — confirm the netEV floor value before active paper turned on — active paper is on ⚠️ *verify*
@@ -738,6 +757,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **#295** — DONE 2026-06-16 in P19-B4b.1 (plan L195)
 - **#300** — DONE 2026-06-16 in P19-B4b.2 (plan L196)
 - **P19-B6.7** #301 — CLOSED 2026-06-26 (plan history row)
+- **P19-B6.8** #302 — CLOSED 2026-06-29 (plan decision log L420) — the history table's 'IN PROGRESS' cell was stale
 - **#238** — strategy-gate seed before activation — activation happened ⚠️ *verify*
 - **#320** — delivered as F1 of P19-B6.5b, CLOSED 2026-06-17 (plan history row) — the issue entry was never marked ⚠️ *verify*
 - **#321** — delivered as F2 of P19-B6.5b, CLOSED 2026-06-17 — the issue entry was never marked ⚠️ *verify*
@@ -753,6 +773,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **#997** — external incident; head still OPEN, CC-A flipping it
 - **#1001** — staging behind the review branch on one day — its follow-up B-DEPLOY-DRIFT-LINE shipped ⚠️ *verify*
 - **#1021** — closed with B-DEPLOY-DRIFT-LINE 2026-09-09 (CC-A confirmed)
+- **#1051** — WITHDRAWN — the runtime contradicted the claim (plan row 2.4g-2)
 - **B-TASK-LIST-SLOT** — closed 2026-09-18 (CC-A confirmed)
 - **B-CANONICAL-BRIDGE-CHURN** — closed 2026-09-11 (CC-A confirmed)
 - **B-WAKE-QUIET** — closed 2026-09-05 (CC-A confirmed)
@@ -760,16 +781,13 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **P19-B8.5** — umbrella; Kyle ruled it stays open until Phase 19 closes — not work in itself
 - **B-WAKE-LEAD-NAME** `4.51` — CLOSING 2026-09-11 — Langston Step 4 + Step 8 confirmed; closes on Kyle's acknowledgement ⚠️ *verify*
 
-## UNCONFIRMED — 100 items the first pass pruned on a status WORD in the issue body ⚠️ each owner confirms
+## UNCONFIRMED — 86 items the first pass pruned on a status WORD in the issue body ⚠️ each owner confirms
 
 > The word-match prune is proven unreliable: CC-A found **26 of their 44** such prunes unsupported by the record (the word was about a sub-part — an owner, a limb, a first mechanism — while the item stayed open). None of these counts as done until its owner says so.
 
 | item | owner | why it was first pruned |
 |---|---|---|
-| **B-ASSET-CAPS-REMOVAL** `3b` #917 | — | pruned only because the issue body contains a status word — own status cell reads done/closed/absorbed |
 | **B-TSC-GUARD-NONCODE-EXEMPT** `~~3b.h-5~~` #1025 | CC-A | pruned only because the issue body contains a status word — own status cell reads done/closed/absorbed |
-| **B-FUNNEL-PERP-CLASSES** `3j` #925 | CC-C | pruned only because the issue body contains a status word — own status cell reads done/closed/absorbed |
-| **row:3n.x** | Kyle | pruned only because the issue body contains a status word — own status cell reads done/closed/absorbed |
 | **19.0.B — Daily loss-budget service + kill-switch auto-trip ( SHIPPED 2026-06-** | — | pruned only because the issue body contains a status word — own status cell reads done/closed/absorbed |
 | **16.1 Wave 6** | — | pruned only because the issue body contains a status word — own status cell reads done/closed/absorbed |
 | **21.4.2 Comprehensive lever-to- module_constants migration** | — | pruned only because the issue body contains a status word — own status cell reads done/closed/absorbed |
@@ -782,29 +800,22 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **#582** | CC-A | pruned only because the issue body contains a status word — issue body records it folded |
 | **#576** | CC-C | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **B-PAPER-LEGACY-TABLE-REWIRE** #573 | CC-B | pruned only because the issue body contains a status word — issue body records it folded |
-| **B-OFFHOURS-BEHAVIOUR** #569 | CC-B | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#553** | CC-C | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
-| **B-REPO-RELOCATE** #567 | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
 | **B-COMMS-RESTART-DURABILITY** #565 | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **B-CLAUDEMD-PLACEMENT** #564 | CC-C | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
-| **#562** | Kyle | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **B-RANKING-COMPONENT-CAPTURE** #555 | CC-A | #555 open, no closure statement found (CC-A reads it next) |
 | **#531** | Kyle | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **B-ATR-TRAILING-DECISION** #556 | CC-B | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#550** | CC-B | pruned only because the issue body contains a status word — issue body records it folded |
-| **B-REGIME-INPUTS-LIVE** #546 | CC-B | pruned only because the issue body contains a status word — own status cell reads done/closed/absorbed |
 | **#541** | CC-A | open, no closure statement found (CC-A) |
-| **#529** | Kyle | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **B-TRENDSTRENGTH-SOURCE** #538 | CC-A | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#536** | CC-B | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#524** | CC-B | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#523** | CC-B | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
-| **#522** | Kyle | pruned only because the issue body contains a status word — issue body records it folded |
 | **#514** | CC-B | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#509** | CC-B | pruned only because the issue body contains a status word — issue body records it superseded |
 | **#511** | CC-A | open, no closure statement found (CC-A) |
 | **#498** | CC-B | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
-| **B-OPS-PM2-LOG** #499 | CC-B | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#500** | Kyle | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **B-GOV-ORPHAN-CLASS** #352 #497 | CC-B | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#445** | CC-B | pruned only because the issue body contains a status word — issue body records it folded |
@@ -819,7 +830,6 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **#962** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#957** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#955** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
-| **#952** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **B-GOV-CLASS-PARSE** #947 | CC-INFRA | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#635** | CC-B | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#659** | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
@@ -834,7 +844,6 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **#624** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#225** | Kyle | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#299** | Kyle | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
-| **P19-B6.8** #302 | Kyle | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#326** | Kyle | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#327** | — | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **B-VTS-SETNULLREASON** #395 | CC-B | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
@@ -862,8 +871,6 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **B-BURN-THRESHOLD-BASIS** #932 | CC-INFRA | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#1057** | CC-INFRA | pruned only because the issue body contains a status word — issue body records it folded |
 | **#1047** | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
-| **#1051** | CC-B | pruned only because the issue body contains a status word — issue body records it withdrawn |
-| **#1063** | CC-B | pruned only because the issue body contains a status word — issue body records it resolved-in-body |
 | **#1065** | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
 | **#1075** | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
 
@@ -919,4 +926,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **B-QUOTE-CURRENCY-DENOMINATION** — PHASE_19_PLAN:619
 - **B-SCAN-BREADTH-DECLINE** — PHASE_19_PLAN:620
 - **#982 alert hold verb** — CC-A lane reply §4
+- **B-TEC-STATE-DURABILITY** — PHASE_19_PLAN:244 (missed: first row of a table fragment)
+- **B-SSH-KEY-CENSUS (investigation)** — PHASE_19_PLAN:252 (missed: status-board fragment)
+- **2.4g-3 population-boundary rider on #1063** — PHASE_19_PLAN:566 (missed: first row of a table fragment)
 

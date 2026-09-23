@@ -1331,7 +1331,7 @@
  ],
  "#323": [
   "DECIDE",
-  "Kyle: should the daily-loss budget auto-stop, only alert, or be user-set. NOTE: P19-B6.8 records '#323 fold' (the controls made user-settable) but B6.8 reads IN PROGRESS since 2026-06-29 — confirm whether this is already decided",
+  "Kyle: should the daily-loss budget auto-stop, only alert, or be user-set. P19-B6.8 (CLOSED 2026-06-29) folded #323 and made those controls user-settable — this may already be answered; Kyle confirms",
   "verify"
  ],
  "#391": [
@@ -1635,13 +1635,13 @@
   ""
  ],
  "#677": [
-  "MERGE:row:3n.c",
-  "trailing-state rehydrate seed missing two of three fields",
+  "MERGE:B-TEC-STATE-DURABILITY",
+  "its declared home (status board)",
   ""
  ],
  "#678": [
-  "MERGE:row:3n.c",
-  "all TEC trailing state lives in one temporary file",
+  "MERGE:B-TEC-STATE-DURABILITY",
+  "its declared home (status board)",
   ""
  ],
  "#679": [
@@ -2447,6 +2447,76 @@
  "B-MIN-STOP-DISTANCE": [
   "PRUNE",
   "WITHDRAWN 2026-08-27 on Kyle's caution + the evidence — no floor built (plan row 3d)",
+  ""
+ ],
+ "P19-B6.8": [
+  "PRUNE",
+  "CLOSED 2026-06-29 (plan decision log L420) — the history table's 'IN PROGRESS' cell was stale",
+  ""
+ ],
+ "#562": [
+  "PRUNE",
+  "RESOLVED by P19-B8.5i, 2026-07-23 (plan L448)",
+  ""
+ ],
+ "B-OFFHOURS-BEHAVIOUR": [
+  "PRUNE",
+  "superseded: now a design-discussion doc, not a code batch (plan L449)",
+  "verify"
+ ],
+ "B-REGIME-INPUTS-LIVE": [
+  "PRUNE",
+  "closed; its OBJ-4 residual is B-VOLATILITY-CACHE-RETIRE, listed separately",
+  ""
+ ],
+ "#1051": [
+  "PRUNE",
+  "WITHDRAWN — the runtime contradicted the claim (plan row 2.4g-2)",
+  ""
+ ],
+ "#1063": [
+  "MERGE:row:3m-ENUM",
+  "its surviving half is row 3m-ENUM (the regime half was withdrawn)",
+  ""
+ ],
+ "B-ASSET-CAPS-REMOVAL": [
+  "AFTER",
+  "open: delete an orphaned pre-governance service (orphan premise confirmed by census) — the dead-code reachability census decides if it moves",
+  ""
+ ],
+ "B-FUNNEL-PERP-CLASSES": [
+  "AFTER",
+  "open: the funnel can only key the two spot classes; perps come after live (an interim alert shipped in F-G-1)",
+  ""
+ ],
+ "#952": [
+  "PRUNE",
+  "re-filed as a leg of #941 (plan row 3c: ✅ DONE)",
+  "verify"
+ ],
+ "#522": [
+  "HELPFUL",
+  "catch-site audit homed from the #530 fix — open",
+  "verify"
+ ],
+ "#529": [
+  "HELPFUL",
+  "B-STRATEGY-WEIGHT-INVESTIGATION — Kyle wanted it before the runtime audit; open",
+  ""
+ ],
+ "B-OPS-PM2-LOG": [
+  "PRUNE",
+  "#499 resolved-as-corrected (plan P19-B8 row)",
+  "verify"
+ ],
+ "B-REPO-RELOCATE": [
+  "PRUNE",
+  "done 2026-07-23; #567 resolved by the relocation (plan L336)",
+  "verify"
+ ],
+ "row:3n.x": [
+  "PRUNE",
+  "this row IS the inventory being built (PHASE_19_PLAN 3n.x)",
   ""
  ]
 }
