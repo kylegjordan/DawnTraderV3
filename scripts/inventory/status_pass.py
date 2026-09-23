@@ -23,7 +23,8 @@ dec = json.load(io.open(os.path.join(HERE, "decisions.json"), encoding="utf-8"))
 def fb(i):
     d = dec.get(i["key"])
     if d: return d[0]
-    return "UNCONFIRMED" if i["bucket"] == "PRUNE" and "src" not in i else i["bucket"]
+    # keyed on the DECISION, never on provenance (Langston r7 F-2): a PRUNE with no decisions.json entry is unconfirmed
+    return "UNCONFIRMED" if i["bucket"] == "PRUNE" else i["bucket"]
 kw = re.compile(r"\b(closed|absorbed|withdrawn|deployed|done|shipped|resolved|superseded|delivered|landed)\b", re.I)
 NEAR = 120
 trows = []
@@ -34,9 +35,12 @@ for n, l in enumerate(L, 1):
     if len(c) < 2 or set(c[0]) <= set("-: "): continue
     body = " | ".join(c[1:])
     if kw.search(body): trows.append((n, re.sub(r"[*`~]", "", c[0]).strip(), body))
+import collections
+rid_count = collections.Counter(rid for _, rid, _ in trows)
+# a row id is only an identity if it is UNIQUE among status-bearing plan rows (ids 1-12, 2.4g, 3b.c, 3b.f-d repeat) — Langston r7 F-1
 open_b = {"MUST", "HELPFUL", "AFTER", "OBSERVATION", "DECIDE", "KYLE-PARKED", "UNCONFIRMED"}
 open_items = [i for i in items if fb(i) in open_b]
-print(f"status vocabulary: {kw.pattern} (case-insensitive)")
+print(f"status vocabulary: {kw.pattern} (case-insensitive, word-bounded — the old boundary-free form read 'UNDEPLOYED' as a close)")
 print(f"read {PATH} at {sha[:9]} ({REF}); table rows carrying a status word: {len(trows)}; open draft items: {len(open_items)}")
 def nearest(body, pos):
     m = min(kw.finditer(body), key=lambda m: abs(m.start() - pos))
@@ -46,7 +50,7 @@ for n, rid, body in trows:
     names = set(re.findall(r"(B-[A-Z0-9][A-Z0-9-]+|P19-B[0-9][0-9.a-z]*|F-G-[0-9])", body))
     for i in open_items:
         b = fb(i)
-        own = bool(i.get("row")) and i["row"] == rid
+        own = bool(i.get("row")) and i["row"] == rid and rid_count[rid] == 1
         nm = i.get("name") or i["key"]
         if own or nm in names or i["key"] in names:
             p = 0 if own else max(body.find(nm), body.find(i["key"]), 0)

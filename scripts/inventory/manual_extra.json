@@ -157,7 +157,7 @@
   "row": "4.51",
   "phase": "19",
   "owner": "Infra Claude",
-  "bucket": "PRUNE",
+  "bucket": "UNCONFIRMED",
   "flag": "verify",
   "src": "PHASE_19_PLAN:586",
   "issues": [],
@@ -461,5 +461,19 @@
    "1063"
   ],
   "why": "the B-PATTERN-ENUM-DRIFT deploy admits a class of opens that cannot open today, so realised outcomes after it are a different population — a condition on reading that batch's results"
+ },
+ {
+  "key": "B-FILTER-DIAG-STANDARDIZE",
+  "name": "B-FILTER-DIAG-STANDARDIZE",
+  "row": "status board L242",
+  "phase": "19",
+  "owner": "CC-B",
+  "bucket": "UNCONFIRMED",
+  "flag": "verify",
+  "src": "PHASE_19_PLAN:242 (named at Langston's r7 review)",
+  "issues": [
+   "662"
+  ],
+  "why": "deployed cf395a71c 2026-08-07 (BATCH_CATALOG:551); the plan's status cell still reads 'Langston Review HOLDING on 3 owed items' and nothing records that hold discharged. Its residual #675 is B-FILTER-DIAG-XSTOCK. CC-B (owner) confirms at the ref"
  }
 ]

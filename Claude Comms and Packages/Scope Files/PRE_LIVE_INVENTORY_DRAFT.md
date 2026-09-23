@@ -11,7 +11,8 @@
 - **`DECIDE` = not work until Kyle rules.** **`OBSERVATION` = already deployed; its window closes it.** **`MERGE` = the same work as another item.** **`PRUNE` = done, superseded, withdrawn, or an umbrella heading.**
 - **⚠️ verify** = my read of the record; the owning session must confirm before the item moves.
 - **Langston review r1 applied (2026-09-22):** MUST set made dependency-closed; decisions moved first; live risk rows, live key, fee schedule, disk headroom, dead-code reachability added; 25-8 dropped as wrong at the ref.
-- **Not yet in:** replies from OLD, ANALYST and Infra Claude (lane review, items never written down, and what Coltrane can actually touch), and Langston's full archive sweep.
+- **Langston review: APPROVED at r7 (`25f06f7d5`) with two tool conditions, both met in r8.** OLD Claude's lane reply is applied.
+- **Not yet in:** replies from ANALYST and Infra Claude (lane review, items never written down, and what Coltrane can actually touch), and Langston's full archive sweep.
 
 | bucket | items |
 |---|---:|
@@ -21,10 +22,10 @@
 | HELPFUL | 135 |
 | AFTER | 168 |
 | KYLE-PARKED | 9 |
-| UNCONFIRMED | 86 |
+| UNCONFIRMED | 88 |
 | MERGE | 80 |
-| PRUNE | 84 |
-| **total** | **654** |
+| PRUNE | 83 |
+| **total** | **655** |
 
 ## FIRST: KYLE'S DECISIONS — 13 (several MUST items cannot start until these are made)
 
@@ -176,7 +177,7 @@
 
 **Ownership:** 24 of 73 MUST items have no owner — assigning them is the reorganisation step.
 
-## IDENTIFIERS THAT POINT AT TWO ITEMS — 41 (resolve in the reorganisation step)
+## IDENTIFIERS THAT POINT AT TWO ITEMS — 42 (resolve in the reorganisation step)
 
 Some are honest shared citations; some are one number minted twice (#921, #559 are two different issues each). Minting fixes stay AFTER; this document's dedupe does not.
 
@@ -189,6 +190,7 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **#642** — #642 (AFTER) · B-ALERT-OWNERSHIP-REGISTER (AFTER)
 - **#646** — #646 (AFTER) · B-ALERT-ACK-PROCEDURE-DOCFIX (AFTER)
 - **#660** — #660 (AFTER) · B-STORAGE-CAP-RUNWAY (UNCONFIRMED)
+- **#662** — #662 (UNCONFIRMED) · B-FILTER-DIAG-STANDARDIZE (UNCONFIRMED)
 - **#668** — B-SIZING-DEC-RESTORE (MUST) · #668 (KYLE-PARKED)
 - **#671** — #671 (MERGE:B-DECISION-RECORDS) · 12.1 rulings-durability fix (HELPFUL)
 - **#672** — B-CATALOG-1 (AFTER) · 12.2 lookalike register (HELPFUL)
@@ -692,9 +694,9 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **B-QUOTE-CURRENCY-DENOMINATION** `12.7` #937 #966 #967 | `B-NONFIAT-QUOTE-DENOMINATION` | the placed home of the non-fiat work: Kyle placed it LAST in Phase 19 |
 | **2.4g-3 population-boundary rider on #1063** #1063 | `row:3m-ENUM` | the B-PATTERN-ENUM-DRIFT deploy admits a class of opens that cannot open today, so realised outcomes after it are a different population — a condition on reading that batch's results |
 
-## PRUNED — 84
+## PRUNED — 83
 
-### Judged — 84
+### Judged — 83
 
 - **B-EXIT-PROVENANCE** `1` #913 — CLOSED 2026-08-30 (plan row 1)
 - **B-EXIT-PROVENANCE-TICKER-RETENTION** `2` #911 — landed ed86a758e, gate discharged, closed 2026-08-30
@@ -779,9 +781,8 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **B-WAKE-QUIET** — closed 2026-09-05 (CC-A confirmed)
 - **B-GEOMETRY-REACH-BASELINE** — closed 2026-09-13; the task-list line is stale
 - **P19-B8.5** — umbrella; Kyle ruled it stays open until Phase 19 closes — not work in itself
-- **B-WAKE-LEAD-NAME** `4.51` — CLOSING 2026-09-11 — Langston Step 4 + Step 8 confirmed; closes on Kyle's acknowledgement ⚠️ *verify*
 
-## UNCONFIRMED — 86 items the first pass pruned on a status WORD in the issue body ⚠️ each owner confirms
+## UNCONFIRMED — 88 items the first pass pruned on a status WORD in the issue body ⚠️ each owner confirms
 
 > The word-match prune is proven unreliable: CC-A found **26 of their 44** such prunes unsupported by the record (the word was about a sub-part — an owner, a limb, a first mechanism — while the item stayed open). None of these counts as done until its owner says so.
 
@@ -873,6 +874,8 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **#1047** | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
 | **#1065** | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
 | **#1075** | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
+| **B-WAKE-LEAD-NAME** `4.51` | Infra Claude | CLOSING 2026-09-11 — Langston Step 4 + Step 8 confirmed; closes on Kyle's acknowledgement |
+| **B-FILTER-DIAG-STANDARDIZE** `status board L242` #662 | CC-B | deployed cf395a71c 2026-08-07 (BATCH_CATALOG:551); the plan's status cell still reads 'Langston Review HOLDING on 3 owed items' and nothing records that hold discharged.  |
 
 ## ADDED BY HAND — no file extraction reached these
 
@@ -929,4 +932,5 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 - **B-TEC-STATE-DURABILITY** — PHASE_19_PLAN:244 (missed: first row of a table fragment)
 - **B-SSH-KEY-CENSUS (investigation)** — PHASE_19_PLAN:252 (missed: status-board fragment)
 - **2.4g-3 population-boundary rider on #1063** — PHASE_19_PLAN:566 (missed: first row of a table fragment)
+- **B-FILTER-DIAG-STANDARDIZE** — PHASE_19_PLAN:242 (named at Langston's r7 review)
 
