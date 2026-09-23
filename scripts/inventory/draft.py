@@ -62,6 +62,9 @@ MANUAL = [
          why="Row 3b.f-d names two different batches; row 2.4g names two (B-WAKE-SOURCE-TRUTH and B-OUTCOME-CORPUS-CAPTURE); and P19-B12 is both the §19.6 dashboard container and the dt-deploy executable issue. Fix during the reorganisation step, or items get lost."),
 ]
 
+MANUAL += json.load(io.open(os.path.join(OUT, "manual_extra.json"), encoding="utf-8"))
+OWNER_FIX = {"#570": "CC-C", "B-GDRIVE-UNMOUNT": "Infra Claude", "#608": "CC-B", "#609": "CC-B", "#610": "CC-B", "#611": "CC-B",
+             "#612": "CC-B", "#972": "CC-B", "B-TRADE-RECORD-RETENTION": "CC-B"}
 NAMES = {"rm:21-3a": "21-3a Live Guardrails tab", "rm:21-3b": "21-3b go-live WebSocket-uptime threshold",
          "rm:21-3c": "21-3c engine-start health gate refuses live", "rm:21-3d": "21-3d B-MODE-DELETE-SCOPE",
          "rm:19-17b": "19-17b live_engine_enabled switch-on"}
@@ -69,7 +72,9 @@ keys = {i["key"]: i for i in items}
 def final(i):
     d = dec.get(i["key"])
     if d: return d[0], d[1], d[2]
-    return i["bucket"], i.get("why", ""), ("verify" if i["bucket"] == "PRUNE" else "")
+    if i["bucket"] == "PRUNE":
+        return "UNCONFIRMED", "pruned only because the issue body contains a status word — " + i.get("why", ""), "verify"
+    return i["bucket"], i.get("why", ""), ""
 
 rows = []
 for i in items:
@@ -80,11 +85,11 @@ for i in items:
         nm = i["key"][3:] + " " + re.split(r" — |\. |: ", t)[0][:70]
     nm = NAMES.get(i["key"], nm)
     rows.append(dict(key=i["key"], name=nm, row=i.get("row") or "", phase=i["phase"],
-                     owner=i.get("owner") or "", bucket=b, why=why, flag=flag, auto=i["key"] not in dec,
+                     owner=OWNER_FIX.get(i["key"], i.get("owner") or ""), bucket=b, why=why, flag=flag, auto=i["key"] not in dec,
                      issues=i.get("issues") or []))
 for m in MANUAL:
     rows.append(dict(key=m["key"], name=m["name"], row=m["row"], phase=m["phase"], owner=m["owner"], bucket=m["bucket"],
-                     why=m["why"], flag=m["flag"], auto=False, issues=[], src=m["src"]))
+                     why=m["why"], flag=m["flag"], auto=False, issues=m.get("issues", []), src=m["src"]))
 
 def c(x): return str(x).replace("|", "/").replace("\n", " ").strip()
 def ident(r):
@@ -96,23 +101,24 @@ def fl(r): return " ⚠️ *verify*" if r["flag"] == "verify" else ""
 
 MUST_GROUPS = [
     ("A. Roadmap hard blockers (roadmap §3.5, in its own words), the live risk rows, the live key, and public-facing authorisation",
-     ["rm:21.1.a", "rm:21-3a", "P19-B6.10", "rm:21-3c", "rm:21-3d", "KRAKEN-LIVE-KEY", "B-SEC-HARDEN"]),
+     ["rm:21.1.a", "rm:21-3a", "P19-B6.10", "rm:21-3c", "rm:21-3d", "KRAKEN-LIVE-KEY", "B-SEC-HARDEN", "#615"]),
     ("B. Building live mode itself", ["rm:21.1", "rm:21.2", "rm:21.3", "#322", "#517", "rm:19-10", "LIVE-FEE-SCHEDULE"]),
     ("C. Risk controls on real capital", ["B-KILLSWITCH-DENOMINATOR", "B-TOTAL-DRAWDOWN-WARNING", "#519", "B-SIZING-DEC-RESTORE",
-        "25-11a", "rm:25-16", "B-VENUE-RESTING-EXITS", "rm:19-9", "B-NONFIAT-QUOTE-DENOMINATION"]),
+        "25-11a", "rm:25-16", "#610", "B-VENUE-RESTING-EXITS", "rm:19-9", "B-NONFIAT-QUOTE-DENOMINATION"]),
     ("D. Price truth — how old, which side, is the feed alive", ["B-PRICE-SIDE-BY-JOB", "B-PRICE-STALENESS-BOUND", "row:6",
         "B-EQUITY-RECONNECT-STALL-TIMER", "B-XSTOCK-LIVE-FEED", "B-WS-SUBSCRIBE-CLASS-FILTER", "B-OHLC-FRAME-GUARD",
         "B-REST-SIDES-TO-CACHE", "B-BOOK-SUBSCRIPTION-REACH", "#506"]),
     ("D2. Keeping the record of what happened", ["B-OUTCOME-CORPUS-CAPTURE"]),
     ("E. Entry and exit correctness", ["B-EXIT-TRIGGER-FILL-PARITY", "B-EXIT-TICKER-LEG-ADAPTER-SIDES", "B-XSTOCK-BID-TRIGGER-RELAND",
         "B-BOOK-STATE-RING-INDEPENDENT-BOUND", "B-BOOK-STATE-RESTART-DURABLE", "B-ENTRY-LEVEL-RECHECK", "B-GRID-LIVE-PATH-PARITY",
-        "B-INTENT-ENTRY-PARITY", "row:3h.b", "DEAD-CODE-REACHABILITY", "B-TARGET-FABRICATION", "#204", "#233", "row:8", "B-CLOSE-WRITER-COSTS"]),
+        "B-INTENT-ENTRY-PARITY", "row:3h.b", "DEAD-CODE-REACHABILITY", "B-TARGET-FABRICATION", "#204", "#233", "row:8", "B-CLOSE-WRITER-COSTS",
+        "B-EXIT-LATCH-INVESTIGATION", "#630"]),
     ("F. Knowing which instrument and which mode a record belongs to", ["B-SYMBOL-CLASS-IDENTITY", "B-UNIVERSE-REFRESH-ACTS",
         "B-RTB-SIGNAL-IDENTITY", "B-MODE-PREDICATE-SWEEP"]),
     ("G. The evidence Kyle's comfortable-in-paper judgement rests on", ["rm:19-11", "#235", "rm:25-19", "B-RTB-REFRESH-CONSOLIDATE",
         "B-LEARNING-SYSTEM-CENSUS"]),
     ("H. Operator reach and operations", ["#935", "B-DASHBOARD-AUTH-RACE", "#296", "#681", "#168", "#521",
-        "B-ENGINE-STOP-DURATION-COLUMN", "DISK-HEADROOM"]),
+        "B-ENGINE-STOP-DURATION-COLUMN", "DISK-HEADROOM", "B-TEC-PRIME-BOOT-RACE", "#619"]),
 ]
 # Kyle's decisions come FIRST. UNLOCKS is structured: decision -> (text, MUST keys that wait on it). Each listed MUST gets the edge.
 UNLOCKS = {
@@ -126,6 +132,7 @@ UNLOCKS = {
     "NONFIAT-FORK": ("the form of B-NONFIAT-QUOTE-DENOMINATION (fix vs exclude)", ["B-NONFIAT-QUOTE-DENOMINATION"]),
     "rm:19-17b": ("nothing — it IS the go-live act, the last step", []),
     "B-VTS-NO-DECISION-VALVE": ("learning lane only — no MUST", []),
+    "B-AMR-CONTEXT-BONUS-REWIRE": ("no MUST — a ranking term Kyle ruled should be fixed, not deleted", []),
     "B-PRICE-FLOOR-REVIEW": ("no MUST", []),
     "B-TARGET-MULTIPLE-VS-HORIZON": ("no MUST (gated on 2.4g-3)", []),
 }
@@ -200,7 +207,7 @@ A("- **Not yet in:** replies from OLD, ANALYST and Infra Claude (lane review, it
 A("")
 A("| bucket | items |")
 A("|---|---:|")
-for b in ["MUST", "DECIDE", "OBSERVATION", "HELPFUL", "AFTER", "KYLE-PARKED", "MERGE", "PRUNE"]:
+for b in ["MUST", "DECIDE", "OBSERVATION", "HELPFUL", "AFTER", "KYLE-PARKED", "UNCONFIRMED", "MERGE", "PRUNE"]:
     A(f"| {b} | {cnt.get(b, 0)} |")
 A(f"| **total** | **{len(rows)}** |")
 A("")
@@ -284,13 +291,14 @@ A(f"### Judged — {len(pj)}")
 A("")
 for r in pj: A(f"- {ident(r)} — {c(r['why'])}{fl(r)}")
 A("")
-A(f"### By the issue's own wording — {len(pa)} ⚠️ owners confirm")
+uc = [r for r in rows if r["bucket"] == "UNCONFIRMED"]
+A(f"## UNCONFIRMED — {len(uc)} items the first pass pruned on a status WORD in the issue body ⚠️ each owner confirms")
 A("")
-A("> These were pruned because the issue body says withdrawn / resolved / folded / superseded. **That rule is known to leak:** three of Langston's items (#596, #914, #994) were pruned by it and are live, and have been reinstated above. Each owner should scan their own.")
+A("> The word-match prune is proven unreliable: CC-A found **26 of their 44** such prunes unsupported by the record (the word was about a sub-part — an owner, a limb, a first mechanism — while the item stayed open). None of these counts as done until its owner says so.")
 A("")
-A("| item | owner | rule |")
+A("| item | owner | why it was first pruned |")
 A("|---|---|---|")
-for r in pa: A(f"| {ident(r)} | {c(r['owner']) or '—'} | {c(r['why'])} |")
+for r in uc: A(f"| {ident(r)} | {c(r['owner']) or '—'} | {c(r['why'])[:170]} |")
 A("")
 A("## ADDED BY HAND — no file extraction reached these")
 A("")

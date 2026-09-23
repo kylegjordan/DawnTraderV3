@@ -1470,8 +1470,8 @@
   ""
  ],
  "#578": [
-  "MERGE:rm:21.1",
-  "the legacy trading engine is dead in both modes — Kyle ruled removal; part of building the live engine",
+  "MERGE:B-TRADING-ENGINE-REMOVAL",
+  "its placed home, row 11.5",
   ""
  ],
  "#583": [
@@ -1510,8 +1510,8 @@
   ""
  ],
  "#610": [
-  "HELPFUL",
-  "AMR EV-gap ring needs a staleness bound — AMR scales position size",
+  "MUST",
+  "the AMR scales position size off an EV-gap ring with no staleness bound — stale data would size real positions (CC-A)",
   ""
  ],
  "#612": [
@@ -1520,18 +1520,18 @@
   ""
  ],
  "#613": [
-  "AFTER",
-  "a read-only diagnostics credential for the reviewer",
+  "MERGE:#615",
+  "no read-only diagnostics credential — the fix for #615",
   ""
  ],
  "#615": [
-  "AFTER",
-  "reviewer identity is the app's secret-holding account",
+  "MUST",
+  "the reviewer's verification identity can read the app's secrets file, and the live Kraken key will sit on that box (CC-A, Langston re-derived the read)",
   ""
  ],
  "#619": [
-  "HELPFUL",
-  "a schema dump does not capture seed data — rebuilding from backup would lose it",
+  "MUST",
+  "a restore from backup silently lacks seeded config, including risk config — found only at the worst time (CC-A)",
   ""
  ],
  "#620": [
@@ -1560,9 +1560,9 @@
   "verify"
  ],
  "#630": [
-  "HELPFUL",
-  "the maker deadline was untested — the maker population was empty",
-  "verify"
+  "MUST",
+  "the maker-order deadline has NEVER fired — the maker population in its proof window was empty. Live places resting maker orders with a deadline; exercise it once in paper before real capital (CC-A)",
+  ""
  ],
  "#636": [
   "MERGE:B-PRICE-AGE-TRUTH",
@@ -1685,8 +1685,8 @@
   "verify"
  ],
  "#694": [
-  "AFTER",
-  "coordination noise — B-WAKE-QUIET closed; B-RULES-LAYER queued",
+  "MERGE:B-RULES-LAYER",
+  "its remaining leg is #998",
   ""
  ],
  "#697": [
@@ -1710,8 +1710,8 @@
   ""
  ],
  "#702": [
-  "AFTER",
-  "issue-number minting",
+  "MERGE:B-GATE-GUARD",
+  "settled; its residue is #745",
   ""
  ],
  "#740": [
@@ -1750,23 +1750,23 @@
   ""
  ],
  "#970": [
-  "PRUNE",
-  "the measurement was delivered by B-DISAGREEMENT-FINDER (row 8.5) before it closed",
+  "AFTER",
+  "its home B-DISAGREEMENT-FINDER closed on a negative result — needs a new home or a withdrawal (CC-A proposing)",
   "verify"
  ],
  "#981": [
-  "AFTER",
-  "wrong-object re-derivation mechanism",
+  "MERGE:B-CLAIM-REDERIVE",
+  "same item",
   ""
  ],
  "#998": [
-  "AFTER",
-  "rules layer (B-RULES-LAYER)",
+  "MERGE:B-RULES-LAYER",
+  "same item",
   ""
  ],
  "#999": [
-  "AFTER",
-  "heartbeat task wording",
+  "MERGE:B-HEARTBEAT-RESCOPE",
+  "same item",
   ""
  ],
  "B-ALERT-ACK-PROCEDURE-DOCFIX": [
@@ -1830,8 +1830,8 @@
   ""
  ],
  "B-DEPLOY-DRIFT-LINE": [
-  "PRUNE",
-  "closed 2026-09-07",
+  "OBSERVATION",
+  "plan row 4.55 reads OPEN — OBSERVATION WINDOW (criterion 4 satisfied 2026-09-09)",
   "verify"
  ],
  "B-DISAGREEMENT-FINDER": [
@@ -2097,6 +2097,356 @@
  "#671": [
   "MERGE:B-DECISION-RECORDS",
   "its home is plan row 12.3 B-DECISION-RECORDS — placed, so not parked",
+  ""
+ ],
+ "B-REVIEWER-LOOP": [
+  "AFTER",
+  "plan row 4, PLACED 2026-08-28, open (CC-A lane reply) — governance tooling",
+  ""
+ ],
+ "#589": [
+  "AFTER",
+  "the rule-18 cut never happened: getCalibratedProfit still defined, zero callers (CC-A, at the ref)",
+  ""
+ ],
+ "#593": [
+  "DECIDE",
+  "the AMR context-bonus arm is still present with no importer; Kyle ruled 2026-06-11 'dead-but-designed-to-work = FIX, not delete'. Rewire it (a ranking term) or reverse the ruling",
+  ""
+ ],
+ "#758": [
+  "MERGE:B-REVIEWER-LOOP",
+  "same item",
+  ""
+ ],
+ "#732": [
+  "MERGE:B-EXIT-LATCH-INVESTIGATION",
+  "same item",
+  ""
+ ],
+ "#623": [
+  "MERGE:B-MEASURE-GATE",
+  "leg 3 of B-MEASURE-GATE is open",
+  ""
+ ],
+ "#980": [
+  "MERGE:B-GOV-REPORTING",
+  "the CLAUDE.md wording change is homed at B-GOV-REPORTING (iv)",
+  ""
+ ],
+ "#751": [
+  "MERGE:B-EOL-NORMALISE",
+  "same item",
+  ""
+ ],
+ "#631": [
+  "HELPFUL",
+  "should the active path archive the four entry-mode fields VTS does — a decision owed; the active lane is what goes live",
+  ""
+ ],
+ "#978": [
+  "MERGE:B-STATE-ASSERTION-LINT",
+  "its home, plan row 6.5",
+  ""
+ ],
+ "#655": [
+  "AFTER",
+  "stateless parallel rulings — crew process",
+  ""
+ ],
+ "#642": [
+  "AFTER",
+  "a discredited number inside a scheduled gate (CC-A copy of a doubled number)",
+  ""
+ ],
+ "#674": [
+  "MERGE:B-GATE-GUARD",
+  "duplicate issue numbers — fixed by the number blocks",
+  ""
+ ],
+ "#683": [
+  "AFTER",
+  "flaky test collection failures",
+  ""
+ ],
+ "#748": [
+  "AFTER",
+  "the hook that loads CONDUCT.md has a silent fail path — cause not yet named",
+  ""
+ ],
+ "#1020": [
+  "AFTER",
+  "push guard inherits the previous call's working directory and refuses on a false zero (hit again building this draft)",
+  ""
+ ],
+ "#1038": [
+  "MERGE:B-INSTRUMENTS-OVER-RULES",
+  "its home, plan row 3.5",
+  ""
+ ],
+ "#574": [
+  "HELPFUL",
+  "a fabricated VolNoise=0.3 in the live ranker's expectancy kernel — HELPFUL if still live; the 07-13 fix may or may not have covered it",
+  "verify"
+ ],
+ "#575": [
+  "MERGE:#574",
+  "folded into #574's scope",
+  ""
+ ],
+ "#555": [
+  "UNCONFIRMED",
+  "open, no closure statement found (CC-A); owner reads it next",
+  "verify"
+ ],
+ "#541": [
+  "UNCONFIRMED",
+  "open, no closure statement found (CC-A)",
+  "verify"
+ ],
+ "#511": [
+  "UNCONFIRMED",
+  "open, no closure statement found (CC-A)",
+  "verify"
+ ],
+ "#341": [
+  "UNCONFIRMED",
+  "open, no closure statement found (CC-A)",
+  "verify"
+ ],
+ "#611": [
+  "HELPFUL",
+  "AMR arc (owner CC-B)",
+  "verify"
+ ],
+ "#608": [
+  "HELPFUL",
+  "AMR arc (owner CC-B)",
+  "verify"
+ ],
+ "#617": [
+  "UNCONFIRMED",
+  "open (CC-A); owner CC-B to read",
+  "verify"
+ ],
+ "#972": [
+  "HELPFUL",
+  "owner CC-B per its own head",
+  "verify"
+ ],
+ "#488": [
+  "PRUNE",
+  "RESOLVED 2026-07-11 by B-LANGSTON-QUEUE-2 (CC-A)",
+  ""
+ ],
+ "#1025": [
+  "PRUNE",
+  "withdrawn by CC-C, premise false (CC-A confirmed)",
+  ""
+ ],
+ "#591": [
+  "PRUNE",
+  "its limb evaporated with the gate's subject (CC-A confirmed)",
+  ""
+ ],
+ "#599": [
+  "PRUNE",
+  "closed; head still reads OPEN, CC-A flipping it",
+  ""
+ ],
+ "#595": [
+  "PRUNE",
+  "DONE, BATCH_CATALOG:462 (CC-A confirmed)",
+  ""
+ ],
+ "#580": [
+  "PRUNE",
+  "superseded by the A1 removal (CC-A confirmed)",
+  ""
+ ],
+ "#543": [
+  "PRUNE",
+  "resolved 2026-09-02 (CC-A confirmed)",
+  ""
+ ],
+ "#538": [
+  "PRUNE",
+  "resolved 2026-09-02 (CC-A confirmed)",
+  ""
+ ],
+ "#464": [
+  "PRUNE",
+  "class override is now wired, poller.mjs:492 (CC-A confirmed)",
+  ""
+ ],
+ "#462": [
+  "PRUNE",
+  "resolved, BATCH_CATALOG:407 (CC-A confirmed)",
+  ""
+ ],
+ "#448": [
+  "MERGE:B-ALERT-TAXONOMY",
+  "CC-A confirmed",
+  ""
+ ],
+ "#756": [
+  "PRUNE",
+  "guard killed, replaced by #757 (CC-A confirmed)",
+  ""
+ ],
+ "#749": [
+  "MERGE:B-CHUNK-ADDRESSING",
+  "CC-A confirmed",
+  ""
+ ],
+ "#750": [
+  "PRUNE",
+  "skill built 2026-08-29 (CC-A confirmed)",
+  ""
+ ],
+ "#739": [
+  "MERGE:row:1",
+  "into B-RULES-1e (CC-A confirmed)",
+  ""
+ ],
+ "#997": [
+  "PRUNE",
+  "external incident; head still OPEN, CC-A flipping it",
+  ""
+ ],
+ "#1021": [
+  "PRUNE",
+  "closed with B-DEPLOY-DRIFT-LINE 2026-09-09 (CC-A confirmed)",
+  ""
+ ],
+ "B-TASK-LIST-SLOT": [
+  "PRUNE",
+  "closed 2026-09-18 (CC-A confirmed)",
+  ""
+ ],
+ "B-CANONICAL-BRIDGE-CHURN": [
+  "PRUNE",
+  "closed 2026-09-11 (CC-A confirmed)",
+  ""
+ ],
+ "B-WAKE-QUIET": [
+  "PRUNE",
+  "closed 2026-09-05 (CC-A confirmed)",
+  ""
+ ],
+ "B-AMR-CONTEXT-BONUS-REWIRE": [
+  "DECIDE",
+  "#593: the AMR context-bonus arm is still present with no importer; Kyle ruled 2026-06-11 'dead-but-designed-to-work = FIX, not delete'. Rewire it (a ranking term) or reverse the ruling (CC-A)",
+  ""
+ ],
+ "B-RANKING-COMPONENT-CAPTURE": [
+  "UNCONFIRMED",
+  "#555 open, no closure statement found (CC-A reads it next)",
+  "verify"
+ ],
+ "B-GOV-5": [
+  "UNCONFIRMED",
+  "#341 open, no closure statement found (CC-A reads it next)",
+  "verify"
+ ],
+ "B-TRADE-RECORD-RETENTION": [
+  "UNCONFIRMED",
+  "#617 open (CC-A); owner CC-B to read — sits beside B-OUTCOME-CORPUS-CAPTURE (closed-trade retention)",
+  "verify"
+ ],
+ "B-DEPLOY-LOCK": [
+  "PRUNE",
+  "CLOSED 2026-08-06 (plan decision log L466) — confirmed by the plan",
+  ""
+ ],
+ "B-GOV-HEARTBEAT-REPAIR": [
+  "PRUNE",
+  "CLOSED 2026-08-01 (plan L465)",
+  ""
+ ],
+ "B-PROMOTION-RACE-FIX": [
+  "PRUNE",
+  "CLOSED 2026-07-28, #508 resolved (plan L332)",
+  ""
+ ],
+ "B-CLAUDEMD-SLIM": [
+  "PRUNE",
+  "CLOSED 2026-08-29 (plan row 12)",
+  ""
+ ],
+ "B-FEED-WS-SUBERR": [
+  "PRUNE",
+  "P19-B6.9 CLOSED 2026-06-30 (plan L422)",
+  ""
+ ],
+ "P19-B6.9": [
+  "PRUNE",
+  "CLOSED 2026-06-30 (plan L422)",
+  ""
+ ],
+ "P19-B6.7": [
+  "PRUNE",
+  "CLOSED 2026-06-26 (plan history row)",
+  ""
+ ],
+ "#295": [
+  "PRUNE",
+  "DONE 2026-06-16 in P19-B4b.1 (plan L195)",
+  ""
+ ],
+ "#300": [
+  "PRUNE",
+  "DONE 2026-06-16 in P19-B4b.2 (plan L196)",
+  ""
+ ],
+ "#503": [
+  "PRUNE",
+  "fixed by P19-B8.5c, CLOSED 2026-07-14 (plan L456)",
+  ""
+ ],
+ "#512": [
+  "PRUNE",
+  "RESOLVED with B-STAGING-LIVENESS-WATCH (plan L442)",
+  ""
+ ],
+ "#520": [
+  "PRUNE",
+  "RESOLVED with B-STAGING-LIVENESS-WATCH (plan L442)",
+  ""
+ ],
+ "#516": [
+  "PRUNE",
+  "shipped in P19-B8.8, 2026-07-16 (plan L453)",
+  ""
+ ],
+ "#236": [
+  "PRUNE",
+  "resolved by P19-B6.6 (plan row lists #236 RESOLVED)",
+  ""
+ ],
+ "#325": [
+  "PRUNE",
+  "repaired in P19-B6.5e Phase A, CLOSED 2026-06-18 (plan L403)",
+  ""
+ ],
+ "B-ALERT-ACTOR-ALLOWLIST": [
+  "PRUNE",
+  "CLOSED 2026-09-02 (plan row 2.4)",
+  ""
+ ],
+ "B-EXIT-PROVENANCE": [
+  "PRUNE",
+  "CLOSED 2026-08-30 (plan row 1)",
+  ""
+ ],
+ "B-XSTOCK-BOOK-LADDER": [
+  "MERGE:B-PRICE-SIDE-BY-JOB",
+  "ABSORBED INTO 3n r5 2026-09-11 (plan row 3b.d)",
+  ""
+ ],
+ "B-MIN-STOP-DISTANCE": [
+  "PRUNE",
+  "WITHDRAWN 2026-08-27 on Kyle's caution + the evidence — no floor built (plan row 3d)",
   ""
  ]
 }
