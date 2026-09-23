@@ -96,6 +96,7 @@ Derived 2026-09-11 from the plan's own rows; the `3n.*` rows re-derived 2026-09-
 | 3n.p | `B-EXIT-TICKER-LEG-ADAPTER-SIDES` |
 | 4 | `F-5` — per-strategy reach structure (pulled forward by Kyle, after 3n) |
 | 4.b | `B-KILLSWITCH-DENOMINATOR` (`#618` remaining legs) |
+| 4.c | `B-MODE-PREDICATE-SWEEP` (`#736`) — three mode-blind raw-SQL readers + delete `getClosedTradesGlobal`; placed 2026-09-23 at `B-BALANCE-TRUTH`'s close |
 | 5.a | `B-NONFIAT-QUOTE-DENOMINATION` (`#966`) |
 | 5.b | `B-PRICE-FLOOR-REVIEW` (`#967`) — **the decision is Kyle's** |
 | 3z | `B-TOTAL-DRAWDOWN-WARNING` (`#303`) — placed at the end of Phase 19 |

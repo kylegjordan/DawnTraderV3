@@ -3639,8 +3639,11 @@ Provides helper functions for building settings from guardrails_v2:
 **`getPortfolioBalanceV2(mode)`** (Phase 8.8.3-C7-FIX):
 - Formula: `Current Balance = Starting Balance + Realized P/L`
 - Sources realized P/L from closed trades within current engine session
-- Mode-aware: paper uses `getPaperSimTrades()`, live uses `getTrades()`
+- ⛔ **Since `B-BALANCE-TRUTH` Step B (2026-08-20, `e14f8870a`): realized P/L is a SQL AGGREGATE — `storage.getRealizedPnlSince(mode, sessionStart)`, the SAME aggregate and predicate set the daily-loss numerator uses (`daily-loss-budget.ts`), over EVERY qualifying row.** Before it, this read `getClosedTrades(mode, {closedOnly})`, which silently returned at most 100 rows — so the kill-switch denominator and the displayed balance went wrong once history passed 100 trades (`#618`). Both sides still sum `pnl`; **moving the ratio to `netPnl` must move BOTH sides in one batch.** *(This entry read "paper uses `getPaperSimTrades()`, live uses `getTrades()`" until 2026-09-23 — stale since the change.)*
 - Returns cash balance (excludes unrealized P/L)
+
+**The lifetime scoreboard — `storage.getLifetimeScoreboard(mode)` (`B-BALANCE-TRUTH`, Kyle-directed 2026-08-21).** The Earnings card's bottom line: **Lifetime Net P/L** and a **compounded time-weighted return** `∏(1 + pnlᵢ / anchor_balance_at_openᵢ) − 1` over closed trades of the mode since the **scoreboard epoch** — both legs, i.e. opened AND closed after it. The epoch is an explicit marker (`module_constants` `scoreboard` / `epoch_started_at` — read it there, never from here); absent a marker it is the first trade. **Time-weighted because the capital base changes for non-trading reasons (re-anchors), so any single denominator is wrong for all but one era.** ⛔ **The score moves ONLY when trades close — never on a re-anchor, never on a restart; resetting it is a separate deliberate act (Kyle: *"anytime we're going to reset the score, it has to be intentional"*).**
+**`closed_trades.mode` (paper | live, `NOT NULL`, since `B-BALANCE-TRUTH` Step F, 2026-08-21):** every storage reader partitions on it (fence: `b-balance-truth-mode-partition-fence`). ⚠️ **Three raw-SQL readers outside `storage.ts` do NOT yet (`#736`, plan row `4.c`).**
 
 **`buildSettingsFromGuardrails(mode)`**: Master builder that assembles a complete TradingSettings object from guardrails_v2 + portfolio_state. All values sourced from guardrails_v2 (visible in UI).
 
