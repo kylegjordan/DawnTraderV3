@@ -5919,7 +5919,7 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 ⇒ **INTERIM, LANDED IN THIS BATCH:** the miss is now LOUD — `[F-G-1][GRID_EVENT_UNCOUNTED]` on stderr naming the class and the reason, so an uncountable grid event announces itself instead of counting nothing quietly.
 ⇒ **HOME: `B-FUNNEL-PERP-CLASSES`, owner CC-C, placed in `PHASE_19_PLAN` §1 immediately after the perp active-path wiring item — it must land BEFORE perps trade, not after.** The widening is still not F-G-1's job; what changed is that "cannot happen" is no longer true, only "cannot happen yet."
 
-### #935 OPEN 2026-08-28 (CC-C — HOTFIX; surfaced by locking KYLE out of his own system) — THE LOGIN RATE LIMIT IS GLOBAL, NOT PER-CLIENT, SO ANY FIVE ATTEMPTS LOCK OUT EVERY USER
+### #935 ✅ CLOSED 2026-08-28 — SHIPPED `0e5ad6d62` (Langston-approved; CI 4/4 re-run on the deployed sha; still in the running build `bc199185e`, `server/index.ts:175`; `CHANGES_AND_FIXES` FIX-2026-08-28-A). *Header closed 2026-09-23 — it read OPEN after shipping; residuals homed at `#936` (Phase 16 §16.9) and `B-SEC-HARDEN` (the `0.0.0.0:5000` bind).* — was: OPEN 2026-08-28 (CC-C — HOTFIX; surfaced by locking KYLE out of his own system) — THE LOGIN RATE LIMIT IS GLOBAL, NOT PER-CLIENT, SO ANY FIVE ATTEMPTS LOCK OUT EVERY USER
 
 **Chain:** client → Caddy(:443) → nginx(:8080) → app(:5000). nginx forwards the real client in `X-Forwarded-For`, but **Express is never told to trust the proxy** (`trust proxy` set NOWHERE — censused), so `req.ip` resolves to the **proxy's** address for every request. `express-rate-limit` keys on `req.ip` ⇒ **all users, plus any localhost `curl` on the box, share ONE 5-attempt / 15-minute bucket.**
 
