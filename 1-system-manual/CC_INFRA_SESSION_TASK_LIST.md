@@ -14,7 +14,7 @@
 | ⏳ **`B-LANGSTON-CONTEXT`** increment 2 (rows 2.8b / pre-audit §20-§21) | **chunk 1: Step 7** (Step 6 approved 16:53Z) · **chunk 2 part 1** (P-6a.1, P-6a.2) at Step 3, pushed `624cd1733` | tonight's SCHEDULED runs (04:10Z index, 05:40/05:51Z size watches, 06:00Z privacy) — Langston's condition 3 | then chunk 2's writer (P-6b), P-2, Langston's retrofit, P-1b |
 | ⏳ **`B-WAKE-LEAD-NAME`** (row 4.51, `#1040`) | **Step 10** — Step 8 confirmed; FINDING-A approved; the FINDING-D hunk is with Langston | Langston's okay on `0df01c687` | then install the folded filter and write the completion report |
 | ⏸ **`B-TOKEN-WATCH`** | **Step 7**, paused | me — Langston round 11 is owed; the Helius feed is not yet pointed at the endpoint | ⛔ the Alchemy switch is NOT cleared (pre-registration amendment 15) |
-| ⏸ **`#651` `B-RULES-1E-LANGSTON-SLIM`** | not started | **Kyle** — no go given | transferred from CC-A |
+| ⏸ **`#974` `B-RULES-1E-LANGSTON-SLIM`** | not started | **Kyle** — no go given | transferred from CC-A. ⚠️ Filed here as `#651` until 2026-09-23, but `#651` is a CLOSED-AS-BUILT entry; `#974` is the open home. `#974` says the batch is placed in the plan, but it has **no `PHASE_19_PLAN` row** at `cafedeb85` |
 | ⏸ **`#670`** crew-status cold hand-off | open | me | warm tier grows unbounded; a policy item, not a capacity one |
 | ⏸ **`B-CREW-STATUS-2`** remainder | parked | **Kyle** (parked 2026-08-26) | ⛔ the costly unbuilt piece: persist derived facts at observation time |
 
