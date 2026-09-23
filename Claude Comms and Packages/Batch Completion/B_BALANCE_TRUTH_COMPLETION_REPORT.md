@@ -1,4 +1,4 @@
-# B-BALANCE-TRUTH — COMPLETION REPORT
+# B-BALANCE-TRUTH — COMPLETION REPORT — ✅ CLOSED 2026-09-23 (Langston Step-11 confirmed; condition met at `23f81527a`)
 
 **change-class: architecture** · **owner CC-C** · Phase 19 · issue `#618` (legs 1-2) · scope `Scope Files/B_BALANCE_TRUTH_SCOPE.md` (r3, Langston-approved 2026-08-20) · pre-audit `Scope Files/B_BALANCE_TRUTH_PRE_AUDIT.md` (r4 + parts 7, 7a, 7c, 8).
 
@@ -71,7 +71,7 @@ He re-derived the figures himself rather than taking them from this report:
 
 ⚠️ **The fence's CI timing is RULED ON REPORTED FACT** — his token cannot read Actions logs. He made it non-load-bearing: CI runs a real Postgres, and the fence hard-throws when it cannot reach it.
 
-**CONDITION — MET in the follow-up commit:** the docblock at `server/storage.ts:3248-3258` still said, in the present tense, that `closed_trades` has no paper/live column and that a live caller would sum paper rows into a live kill switch. Step F falsified all of it. **Struck to dated history, comment-only**, carrying his rider for `4.b`: once `reconstructed_net_pnl` is ever populated, both sides of the ratio become a per-row net/recorded mixture.
+**CONDITION — MET at `23f81527a` (CI `35828130435` 4/4 per job: Build · TypeScript Check (baseline gate) · Test Suite · Docker Build):** the docblock at `server/storage.ts:3248-3258` still said, in the present tense, that `closed_trades` has no paper/live column and that a live caller would sum paper rows into a live kill switch. Step F falsified all of it. **Struck to dated history, comment-only**, carrying his rider for `4.b`: once `reconstructed_net_pnl` is ever populated, both sides of the ratio become a per-row net/recorded mixture.
 
 He also confirmed that the `MEMORY.md` ❌ row does not block the close: blocked with a named owner is not N/A.
 
