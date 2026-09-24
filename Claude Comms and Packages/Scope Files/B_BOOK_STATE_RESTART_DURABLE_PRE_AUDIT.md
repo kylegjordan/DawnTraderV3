@@ -1,7 +1,7 @@
 # B-BOOK-STATE-RESTART-DURABLE — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
 **Owner:** CC-C · plan row `3n.q8` · `#1066` · scope `B_BOOK_STATE_RESTART_DURABLE_SCOPE.md` (r1, `6e2c5ec20`, **Step 1 APPROVED by Langston 2026-09-24 13:40Z**).
-**Status:** `STEP: 2 of 11` · `NEXT STEP: 3 of 11`. **r1 COMPLETE, dispatched to Langston 2026-09-24.** §0 was written first because it was the time-sensitive part.
+**Status:** `STEP: 2 of 11` DONE · `NEXT STEP: 3 of 11`. **r2 — Langston APPROVED r1 2026-09-24 14:02Z (re-derived at `b7bb41e93`, not ruled on reported fact), with one deploy BLOCKER and four conditions, all folded below as §6.** §0 was written first because it was the time-sensitive part.
 
 ---
 
@@ -49,7 +49,7 @@
 ## 2. FINDINGS
 
 **A1 — THE CENSUS (§9.5(a)).** Both stores are **module-private `const`s** (`:128`, `:137`), not exported, so only this file can touch them. That is the structural evidence behind the counts below; the grep only enumerates them.
-- `_retainedSpreads`: **write** exactly one (`:400`, in `clearBookStateComparator`); **delete** exactly one in production (`:313`, at a plausible seed), plus the test reset `:478`; **read** three (`:162` refusal basis, `:240` the escape, `:292` the seed judgement).
+- `_retainedSpreads`: **write** exactly one (`:400`, in `clearBookStateComparator`); **delete** exactly one in production (`:313`, at a plausible seed), plus the test reset `:478`; **read** four: `:162` refusal basis, `:240` the escape, `:292` the seed judgement, and `:406`'s `.has` in the clear log line *(r2: Langston's count; r1 said three)*.
 - `_comparators`: **write** `:315` (advance); **delete** `:402` (clear); **read** `:140`, `:157`, `:215`, `:364`; test reset `:478`.
 - **Importers:** `active-execution-engine.ts:488` (static: assess, advance, clear, takeChainRefusalBasis) and `routes.ts:13009`, `:13141` (dynamic, `assessBookStateNow` only, a read).
 - ➕ **What a fresh reader added, each re-derived at the ref:**
@@ -79,11 +79,12 @@
 
 **A11 — SIM AND SYSTEM MANUAL ARE BOTH SPECIFIC AND BOTH GO STALE WITH THIS.** SIM S25b says *"in memory"*; System Manual §3.5.1a carries the restart paragraph and the *"do not restart during a blowout"* caution. Both are content updates at Step 10 (Langston condition 4).
 
-**A12 — CALIBRATION, AND A SECOND SOURCE OF UNJUDGED SEEDS.** Every `REFUSAL_BASIS` line with `seedRetainedMedian=none` in the 15 error files on disk (2026-09-10 → now; the older restarts are out of reach):
+**A12 — CALIBRATION, AND A SECOND SOURCE OF UNJUDGED SEEDS.** Every `REFUSAL_BASIS` line with `seedRetainedMedian=none` in the error logs on disk: the **14 dated files** (oldest `error__2026-09-11`, covering 2026-09-10) plus today's `error.log`. The older restarts are out of reach. *(r2: r1 said "15 files", counting today's log as a dated file.)*
 - **2026-09-19 00:02:43 and 00:54:15: six lines, right after the two restarts** (§0).
 - **2026-09-21 15:50-15:53 (AMC, SPCE) and 2026-09-23 14:17 and 20:06 (OKTA, CEG): four lines NOT near any restart.** These are a symbol's **first** chain since the last restart, a newly held name with no ring yet: the genesis case (`3n.q5`'s ground).
 - ⚠️ **What this does NOT count:** `REFUSAL_BASIS` prints only when a chain **refuses**, so a vacuous seed that validated at once never appears. These are a floor, not a total.
-- ⇒ **Persistence helps the second source too.** A symbol held at any time since persistence began keeps its ring through later restarts, since S25b has no eviction. Only a name **never** held since persistence began stays unjudged, and that is `3n.q5`.
+- **Each of the four is the FIRST exit tick after its open** (Langston's timing, re-derivable from `closed_trades.opened_at`): AMC opened 15:50:40.851 → seed 15:50:41; SPCE 15:53:11.766 → 15:53:13; OKTA 14:17:00.404 → 14:17:00; CEG 20:06:01.734 → 20:06:02. That confirms genesis.
+- ⛔ **r1 OVERSTATED what persistence reaches here; this is the measured split** (`closed_trades`, lifetime holds, re-derived 2026-09-24): **SPCE 1, OKTA 1, CEG 1** — each only the hold that produced the seed. **Persistence cannot reach them by construction:** no earlier chain ever wrote a ring. **AMC 3** (2026-09-16 → 09-21) is the one in reach, and no `ringAfter=true` line exists for it on disk, so **even that is unproven**. ⇒ **Of the four non-restart seeds, persistence reaches at most one.** The rest are `3n.q5`'s genesis ground.
 - **Calibration scale:** the exits this changes are a small set, but not zero.
 
 **A13 — OUT OF REACH, NAMED.** The `8a-P4c` VTS xStock hollow-book guard is future work with **separate state** (System Manual §3.5.1b: *"shared predicate, separate state"*). This store covers the paper lane's tracker only. Whether that guard's state persists is its own decision when it is built.
@@ -101,15 +102,15 @@
 |---|---|---|
 | P1 | Extract `retainsRing(chain): boolean` (`!seedImplausible && observedMovement && spreads.length > 0`). `clearBookStateComparator` calls it; behaviour byte-identical. | A3, OBJ-1 |
 | P2 | Change S25b's value to `{ spreads: number[], seedBasis: 'judged' or 'vacuous', writtenAtMs: number }`. `seedBasis` comes from `prev.seedRetainedMedian != null` at the clear. The three readers (`:162`, `:240`, `:292`) read `.spreads`; nothing else changes. | A9, OBJ-3 |
-| P3 | `snapshotRetainableRings()`: for every symbol in the union of both maps, take the live chain's ring if it passes `retainsRing` (basis from that chain), otherwise the S25b entry, otherwise nothing. Built synchronously, so it is consistent. | A1, A2, OBJ-1 |
+| P3 | `snapshotRetainableRings()`: for every symbol in the union of both maps, take the live chain's ring if it passes `retainsRing` (basis from that chain), otherwise the S25b entry, otherwise nothing. Built synchronously, so it is consistent. ⛔ **Rests on NAMED INVARIANT I-1 (§6 C4), fenced by a mutation-proved test.** | A1, A2, OBJ-1, I-1 |
 | P4 | Store: table `xstock_book_state_rings` (`symbol` PK, `spreads double precision[]`, `seed_basis` in {judged, vacuous}, `source` in {live, retained}, `written_at`, `persisted_at`). Migration + rollback file, **both in git**, MANIFEST forward-only. | A7, OBJ-5 |
 | P5 | Writer: one module, `book-state-ring-store.ts`. **A full snapshot every 30 s** (upsert present, delete absent) **plus a flush in the shutdown sequence** beside `persistTrailingStates`. A failed write logs, counts, and **never throws into the exit loop**. Crash loss is bounded by 30 s. | A1, A6, OBJ-5 |
 | P6 | Restore **before `resumeActiveEngines()` (`server/index.ts:510`)**, so no exit loop runs before the rings are back. **Per row:** finite positive spreads, `1 <= length <= ringCap`, known basis; an invalid row is **skipped and counted**. **Whole store unreadable:** empty maps plus alert `book-state-ring-restore-failed`, whose body says **RESOLVE, never ACK**. Only S25b is restored; `_comparators` starts empty. | A6, OBJ-2, Langston Q2 (a)(b) |
 | P7 | `console.warn` lines, so they survive for the reads: at boot, `RING_RESTORED n= skippedInvalid= judged= vacuous= ageMin p50/p90/max`; at a seed that consumes a restored ring, `RESTORED_RING_CONSUMED symbol ringAgeMs seedBasis verdict=plausible or implausible`. These are OBJ-4's downtime-age distribution and OBJ-6's evidence. | A8, OBJ-3, OBJ-4, Langston Q3 |
 | P8 | Tests against the **real** tracker, each mutation-proved: the shared predicate (breaking it in the snapshot fails a test); the snapshot's three cases; restore with a partial store and with an unreadable one; **a restored ring consumed at the first plausible seed** (condition 5); the basis follows the chain; the §0 sequence replayed (the same 0.32368 seed is refused after a restore, where today it is accepted). | OBJ-1, OBJ-2, OBJ-3 |
-| P9 | Step 7: after the deploy (on or after 2026-09-30), **one more restart**, during US regular hours and never in a spread blowout. Read `RING_RESTORED` and `RESTORED_RING_CONSUMED`. Pass: every restored symbol that seeds is **judged**, not vacuous. Control: §0. | OBJ-6 |
+| P9 | Step 7: after the deploy (**no earlier than 2026-10-02T20:10Z**, §6 C3), **one more restart**, during US regular hours and never in a spread blowout, **timed off a non-empty `xstock_book_state_rings` table (one query)**. ⛔ **PRE-REGISTERED NON-VACUITY FLOOR (Langston's BLOCKER): `RING_RESTORED n >= 1` AND `RESTORED_RING_CONSUMED >= 1` with a verdict; otherwise the result is INCONCLUSIVE-EXTEND and waits for the next restart, NEVER a pass.** When the floor is met, pass means every restored symbol that seeds is **judged**, not vacuous. Control: §0. ⚠️ **P9 proves WIRING only. The MECHANISM proof is P8's §0 replay, and P9 does not carry the verdict alone.** | OBJ-6, §6 C1 |
 | P10 | Step 10: SIM S25b amendment plus a new row for the store; System Manual §3.5.1a rewritten, with the caution removed **only after P9 passes**. | A11, condition 4 |
-| P11 | The calibration line: my recommendation below, for Langston to rule. | A12, OBJ-7 |
+| P11 | The calibration line: **impact NAMED, not epoch-bumped** (§6 C2, Langston's ruling). | A12, OBJ-7 |
 
 **UNAUDITED items in the plan: none.**
 
@@ -122,3 +123,35 @@
 ## 5. IN PLAIN LANGUAGE
 
 The xStock price check keeps a short record of how wide each stock's buy/sell gap normally is, and judges every fresh price against it. That record lives only in memory, so each of the 31 restarts in the last 19 days wiped it, and the first price after a restart was trusted without a check. The plan saves that record to the database every 30 seconds and on shutdown, and loads it back before trading resumes. It keeps one note per record saying whether it came from a checked price or an unchecked one. If loading fails, the system behaves exactly as it does today and raises an alarm. It is proven by replaying the ANET night, where the same price is refused after the fix, and by one real restart after 30 September.
+
+## 6. r2 — LANGSTON'S STEP-2 RULING, FOLDED (2026-09-24 14:02Z)
+
+**Q1 — the type change: TAKEN.** His stronger reason: changing S25b's value makes the **compiler** list every reader, and a parallel map lists none. All call sites read `medianOf(ring)`; `:406`'s `.has` is untouched.
+**Q2 — 30 s: TAKEN.** A ring is built over hundreds to tens of thousands of frames, so 30 s of crash loss is noise. The shutdown flush is the normal path, and the 30 s snapshot earns its place on a hard kill alone.
+
+**C1 — ⛔ BLOCKER on the DEPLOY, not the build: P9 could pass on an empty store.** Folded into P9 above: the pre-registered floor, INCONCLUSIVE-EXTEND when it is not met, and the restart timed off a non-empty table. His measurements, recorded as his:
+- 0 xStock positions right now.
+- Exactly one `COMPARATOR_CLEARED` with `ringAfter=true` since that field shipped on 09-19.
+- 4 restarts in the last 9 days (623 → 627), not the 1.6 a day the 19-day figure in A4 implies.
+
+**C2 — Q3: NO epoch bump, but NOT "no calibration impact". That wording was false and is withdrawn.** Refusing a seed changes when a stop fires; the 09-19 ANET row is a false `stop_hit`. The record reads **impact NAMED, not epoch-bumped**, for these reasons:
+- A bump resets every xStock learning aggregate (`outcome-feedback-store.ts:358`, his cite).
+- It would be a second corpus reset inside `B-XSTOCK-FEE-CONTRACT`'s window.
+- The contamination floor is 10 lines in 14 days, and persistence reaches at most 1 of the 4 non-restart ones (A12).
+
+**The two things he wanted back, measured, not asserted:**
+- **(a) Did `8a-P4b` already bump the xStock paper epoch? YES.** Live `module_constants` read 2026-09-24: `xstock_spot / * / paper_sim = 6`, `updated_at 2026-09-19 00:54:05.776Z`, `updated_by b-price-side-8a-p4b-c1`. `8a-P4b` moved it 4 → 5 and its C1 moved it 5 → 6 (`ADJUSTMENT_FRAMEWORK` rule 6, second precedent).
+- **(b) Why the deploy is held.** The only stated reason was the `8a-P4c` increment-1 window, which ends 2026-09-30T00:00Z; a deploy restart splits it (scope header, and `8A_P3` progress report §9.3). **Nothing else binds it.**
+
+**C3 — THE DEPLOY HOLD MOVES TO AFTER THE FEE WINDOW (his proposal, adopted).** 2026-09-30 falls inside the final two days of `B-XSTOCK-FEE-CONTRACT`'s three-week window. That window opened with the deploy of 2026-09-11 20:09:47Z; his reading is that it ends about 2026-10-02 20:09Z. ⇒ **Deploy no earlier than 2026-10-02T20:10Z**, and the confound disappears at no cost. ⚠️ The fee window is CC-B's, so its end is **confirmed with CC-B before the deploy**, not assumed.
+
+**C4 — INVARIANT I-1, NAMED AND FENCED (P3 rests on it).** Snapshotting a live chain's ring mid-life goes beyond "what a clear would have left". It is safe only because **`retainsRing` is MONOTONE over a chain's life: once true, it stays true.**
+- `observedMovement` only ever ORs (`:288`).
+- `seedImplausible` is fixed at the seed (`:289` carries it; it is set only in the `!prev` branch).
+- `spreads` never shrinks below one entry under the cap.
+
+⇒ **A ring snapshotted mid-life is one a later clear would also retain.** P8 adds a **mutation-proved fence**: if an edit makes `seedImplausible` settable mid-chain, or `observedMovement` clearable, the test fails. Otherwise P3 would silently persist rings a clear would refuse, in the permissive direction, the one that bit this mechanism at BLOCKER-3 and BLOCKER-4.
+
+**Nits, fixed in place:** A1's read count (4) and A12's file count (14 dated + today's). **Withdrawn by him, recorded:** his own concern about P5's delete-absent; an implausible chain still holds its S25b entry (`:313`), so the union catches it.
+
+**Board:** he has deliberately NOT set `Review = Approved` while the deploy-blocker stands, and will set it when P9's criterion comes back. The card moves to `Implementation` for Step 3.
