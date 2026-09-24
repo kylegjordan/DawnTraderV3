@@ -13,15 +13,14 @@
  *   6. THE §0 REPLAY (the mechanism proof): ANET's 0.32368 seed is accepted unjudged on an empty ring (today)
  *      and REFUSED once the ring is restored;
  *   7. the whole-store failure path: falls back to empty maps and raises the resolve-never-ack alert;
- *   8. the snapshot write: ONE upsert statement for every ring, then the delete-absent, in one transaction;
- *   9. ⛔ Step-4 BLOCKER-1: a FAILED restore (config or store unreadable, or the boot-only fence) leaves the
- *      sweep DISARMED, so no snapshot can delete the store; an over-long ring is truncated, not skipped.
+ *   8. the snapshot write: ONE upsert statement for every ring, and NO delete path at all (Step-4 r3);
+ *   9. failures alert: an all-invalid store fails the restore; repeated snapshot failures raise their own
+ *      alert once per streak; after a failed restore a snapshot still cannot delete anything.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const execute = vi.fn();
-const transaction = vi.fn();
-vi.mock('../../db', () => ({ db: { execute: (...a: unknown[]) => execute(...a), transaction: (...a: unknown[]) => transaction(...a) } }));
+vi.mock('../../db', () => ({ db: { execute: (...a: unknown[]) => execute(...a) } })); // the store issues single statements, no transaction
 const addAlert = vi.fn();
 vi.mock('../../services/system-alerts', () => ({ addAlert: (...a: unknown[]) => addAlert(...a) }));
 let configImpl: () => { trailingSpreadWindowSnaps: number } = () => ({ trailingSpreadWindowSnaps: 20 });
@@ -44,9 +43,11 @@ import {
   applyRestoredRings,
   restoreRingsAtBoot,
   persistRingSnapshot,
-  getRingStoreStats,
+  snapshotTick,
   _resetRingStoreForTest,
   RING_RESTORE_ALERT_KEY,
+  RING_SNAPSHOT_ALERT_KEY,
+  RING_SNAPSHOT_FAIL_ALERT_AFTER,
 } from '../../asset_classes/xstock_spot/book-state-ring-store';
 
 const K_REL = 3;
@@ -57,7 +58,6 @@ beforeEach(() => {
   _resetBookStateComparatorsForTest();
   _resetRingStoreForTest();
   execute.mockReset();
-  transaction.mockReset();
   addAlert.mockReset();
   configImpl = () => ({ trailingSpreadWindowSnaps: 20 });
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -306,62 +306,90 @@ describe('7 — the whole-store failure path: fall back, alert, never throw', ()
   });
 });
 
-/** Drive a snapshot write against a recording transaction; returns the statements' SQL text in order. */
-async function snapshotStatements(rowCount = 3): Promise<{ sqls: string[]; r: Awaited<ReturnType<typeof persistRingSnapshot>> }> {
+/** Record every statement the store sends through `db.execute`, in order, as its SQL text. */
+function recordStatements(result: unknown = { rows: [], rowCount: 0 }): string[] {
   const sqls: string[] = [];
-  const txExec = vi.fn(async (q: { queryChunks?: unknown[] }) => {
+  execute.mockImplementation(async (q: { queryChunks?: unknown[] }) => {
     sqls.push(JSON.stringify(q?.queryChunks ?? q));
-    return { rowCount };
+    return result;
   });
-  transaction.mockImplementation(async (fn: (tx: { execute: typeof txExec }) => Promise<void>) => fn({ execute: txExec }));
-  const r = await persistRingSnapshot(9_000);
-  return { sqls, r };
+  return sqls;
 }
 
-describe('8 — the snapshot write: ONE upsert statement for every ring, the sweep only when armed, ONE transaction', () => {
-  it('armed (after a healthy restore): one upsert for both rings, then the delete-absent', async () => {
-    execute.mockResolvedValueOnce({ rows: [] });
-    await restoreRingsAtBoot(); // a healthy (empty) store arms the sweep
-    expect(getRingStoreStats().sweepArmed).toBe(true);
+describe('8 — the snapshot write: ONE upsert statement for every ring, and NO delete path at all', () => {
+  it('two rings ⇒ exactly one statement, an upsert through jsonb_to_recordset, never a DELETE', async () => {
     movingHealthyChain('W1/USD');
     movingHealthyChain('W2/USD');
-    const { sqls, r } = await snapshotStatements(3);
-    expect(transaction).toHaveBeenCalledTimes(1);
-    expect(sqls).toHaveLength(2); // one upsert (not one per symbol) + the delete
+    const sqls = recordStatements();
+    const r = await persistRingSnapshot(9_000);
+    expect(sqls).toHaveLength(1); // one upsert for every ring, not one per symbol
     expect(sqls[0]).toContain('jsonb_to_recordset');
-    expect(sqls[1]).toContain('DELETE FROM xstock_book_state_rings');
-    expect(r).toMatchObject({ written: 2, deleted: 3, swept: true });
+    expect(sqls[0]).toContain('ON CONFLICT (symbol) DO UPDATE');
+    expect(sqls.some((s) => s.includes('DELETE'))).toBe(false);
+    expect(r).toMatchObject({ written: 2 });
+  });
+  it('an empty tracker ⇒ no statement at all (nothing to upsert, nothing ever deleted)', async () => {
+    const sqls = recordStatements();
+    const r = await persistRingSnapshot(9_000);
+    expect(sqls).toHaveLength(0);
+    expect(r).toMatchObject({ written: 0 });
+  });
+  it('a consumed ring is NOT deleted: after the plausible seed consumes it, the snapshot simply stops writing it', async () => {
+    movingHealthyChain('CNS/USD');
+    clearBookStateComparator('CNS/USD', 'yield');
+    movingHealthyChain('CNS/USD', 200_000, 1); // one frame: a plausible seed consumes the ring, no movement yet
+    const sqls = recordStatements();
+    await persistRingSnapshot(9_000);
+    expect(sqls.some((s) => s.includes('DELETE'))).toBe(false);
   });
 });
 
-describe('9 — ⛔ Step-4 BLOCKER-1: a FAILED restore must never let a snapshot DELETE the store', () => {
-  it('config unreadable at boot ⇒ the next snapshot is UPSERT-ONLY (no DELETE issued)', async () => {
-    configImpl = () => { throw new Error('knobs missing'); };
-    await restoreRingsAtBoot();
-    expect(getRingStoreStats().sweepArmed).toBe(false);
-    movingHealthyChain('U1/USD');
-    const { sqls, r } = await snapshotStatements();
-    expect(sqls.some((s) => s.includes('DELETE'))).toBe(false);
-    expect(sqls).toHaveLength(1);
-    expect(r).toMatchObject({ written: 1, deleted: 0, swept: false });
+describe('9 — ⛔ Step-4 r3: failures alert, and nothing can wipe the store', () => {
+  it('condition 1: EVERY stored row invalid ⇒ a whole-store failure: 0 loaded and the restore alert', async () => {
+    execute.mockResolvedValueOnce({ rows: [
+      { symbol: '', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) },
+      { symbol: 'B/USD', spreads: [], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) },
+    ] });
+    await expect(restoreRingsAtBoot()).resolves.toBe(0);
+    expect(addAlert).toHaveBeenCalledTimes(1);
+    expect((addAlert.mock.calls[0][0] as { dedupe_key: string }).dedupe_key).toBe(RING_RESTORE_ALERT_KEY);
   });
-  it('store unreadable at boot ⇒ no DELETE, even with nothing in the tracker (the case that would wipe it)', async () => {
-    execute.mockRejectedValueOnce(new Error('connection reset'));
-    await restoreRingsAtBoot();
-    const { sqls, r } = await snapshotStatements();
-    expect(sqls).toHaveLength(0); // nothing to upsert, and the sweep is disarmed
-    expect(r).toMatchObject({ written: 0, deleted: 0, swept: false });
+  it('an EMPTY store is not a failure: 0 loaded, no alert', async () => {
+    execute.mockResolvedValueOnce({ rows: [] });
+    await expect(restoreRingsAtBoot()).resolves.toBe(0);
+    expect(addAlert).not.toHaveBeenCalled();
   });
-  it('the tracker refusing the restore (the boot-only fence) also leaves the sweep disarmed', async () => {
+  it('the tracker refusing the restore (the boot-only fence) is a restore failure with the alert', async () => {
     movingHealthyChain('LIVE2/USD');
     execute.mockResolvedValueOnce({ rows: [{ symbol: 'X/USD', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) }] });
     await expect(restoreRingsAtBoot()).resolves.toBe(0);
-    expect(getRingStoreStats().sweepArmed).toBe(false);
     expect(addAlert).toHaveBeenCalledTimes(1);
   });
-  it('before ANY restore has run, the sweep is disarmed (a snapshot cannot delete by default)', async () => {
-    movingHealthyChain('D1/USD');
-    const { sqls } = await snapshotStatements();
+  it('after a FAILED restore, the next snapshot still issues no DELETE (the BLOCKER-1 shape cannot occur)', async () => {
+    configImpl = () => { throw new Error('knobs missing'); };
+    await restoreRingsAtBoot();
+    movingHealthyChain('U1/USD');
+    const sqls = recordStatements();
+    await snapshotTick();
+    expect(sqls).toHaveLength(1);
     expect(sqls.some((s) => s.includes('DELETE'))).toBe(false);
+  });
+  it(`condition 2: ${RING_SNAPSHOT_FAIL_ALERT_AFTER} consecutive snapshot failures raise the write-failure alert ONCE per streak; a success resets it`, async () => {
+    movingHealthyChain('F1/USD');
+    execute.mockRejectedValue(new Error('pool exhausted'));
+    for (let i = 1; i < RING_SNAPSHOT_FAIL_ALERT_AFTER; i++) await snapshotTick();
+    expect(addAlert).not.toHaveBeenCalled(); // one short of the threshold
+    await snapshotTick();
+    expect(addAlert).toHaveBeenCalledTimes(1);
+    const a = addAlert.mock.calls[0][0] as { dedupe_key: string; body: string };
+    expect(a.dedupe_key).toBe(RING_SNAPSHOT_ALERT_KEY);
+    expect(a.body).toMatch(/RESOLVE this row .* do not ACK it/);
+    await snapshotTick(); // still failing: no second alert in the same streak
+    expect(addAlert).toHaveBeenCalledTimes(1);
+    execute.mockResolvedValueOnce({ rows: [], rowCount: 1 }); // one success resets the streak
+    await snapshotTick();
+    execute.mockRejectedValue(new Error('pool exhausted'));
+    for (let i = 0; i < RING_SNAPSHOT_FAIL_ALERT_AFTER; i++) await snapshotTick();
+    expect(addAlert).toHaveBeenCalledTimes(2); // a NEW streak alerts again
   });
 });

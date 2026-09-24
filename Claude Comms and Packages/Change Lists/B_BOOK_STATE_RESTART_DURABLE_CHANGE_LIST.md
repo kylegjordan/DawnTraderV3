@@ -148,3 +148,20 @@ export function snapshotRetainableRings(): RingSnapshotEntry[] {
 **CLASS RE-DECLARED `sub_batch` → `architecture`** (checker alert `a6195e1f`; scope header amended). It adds nothing to the doc set beyond your condition 4.
 
 **Evidence at the new head:** 25/25 in the batch's file; **22 related files, 435 tests, all green**; **11/11 mutations killed** (M1-M7 as before, plus M8-M11); `check-tsc-baseline` **377 = 377**. CI: per job, on the re-dispatched head.
+
+
+---
+
+## r3 — LANGSTON'S STEP-4 r2 RULING (2026-09-24 14:51Z, APPROVED at `f33731a2f` with three fold-ins and one finding), FOLDED
+
+**Condition 1 — an all-invalid store is a whole-store failure.** If `rows.length > 0` and nothing validates, the restore returns 0 and raises `book-state-ring-restore-failed`; it is no longer read as an empty store. An EMPTY store (0 rows) is still not a failure. Test section 9, mutation **M12** → killed.
+**Condition 2 — repeated snapshot failures alert.** After `RING_SNAPSHOT_FAIL_ALERT_AFTER` = 10 consecutive failures (5 minutes), the sibling alert `book-state-ring-snapshot-failing` is raised, once per failure streak. Its body says RESOLVE, never ACK. A success resets the streak. Mutations **M13** (never alerts) and **M14** (a success does not reset the streak) → killed.
+**Condition 3 — the counters with no reader are gone.** `getRingStoreStats` and its six fields are deleted. The only counter left is `_consecutiveSnapshotFailures`, which condition 2 reads.
+
+**The FINDING (the sweep is an eviction in the permissive direction) — resolved a third way: THE STORE NO LONGER DELETES AT ALL.** I did not build the universe-membership sweep you recommended. The question for you is whether this satisfies your intent:
+- **Why not the universe sweep:** there is no exported universe accessor in reach (the equity archiver exports only stats and test hooks), so it needs new plumbing. As you said, it buys almost nothing: the table is one row per xStock symbol ever held, so it is bounded, and a row for a delisted symbol is inert because that symbol never seeds.
+- **What upsert-only achieves:** it never deletes a live name's evidence, which was the point of your recommendation. It removes the whole BLOCKER-1 class, since there is no delete to run after a failed read, so the `_sweepArmed` machinery and M8/M9 are gone with it. And it closes the consumption→first-movement gap: a consumed ring's row stays, so a restart in that gap is judged, not vacuous.
+- **What it costs, stated in the store header and owed to the S25b amendment at Step 10:** (1) a row lives until the symbol's next retained ring overwrites it, so a ring a process consumed can be restored again after a later restart. It judges one seed per PROCESS; condition 5 holds within a process but not across restarts. (2) Rows for symbols that leave the universe are never removed.
+- **The write is now a single statement** (`INSERT … SELECT FROM jsonb_to_recordset … ON CONFLICT DO UPDATE`), so no transaction is needed. Test 8 asserts one statement and no DELETE, including after a plausible seed consumes a ring.
+
+**Evidence at the new head:** 28/28 in the batch's file; **22 related files, 438 tests, all green**; **12/12 mutations killed** (M1-M7, M10-M14; M8/M9 retired with the sweep); `check-tsc-baseline` **377 = 377**. CI: per job, on the pushed head.
