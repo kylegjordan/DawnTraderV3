@@ -500,6 +500,21 @@ app.use((req, res, next) => {
     console.error('[Queue] ⚠️ Initialization failed:', error);
   }
 
+  // ⭐ 3n.q8 B-BOOK-STATE-RESTART-DURABLE (#1066): restore the xStock book-state guard's retained spread rings
+  // BEFORE resumeActiveEngines() below — that call starts the engines' exit loops, which seed the guard's
+  // chains, so a restore placed any later could let a first seed run unjudged (Step-2 audit A6; the
+  // trailing-state load at the B79.TEC block further down runs AFTER the engines, which is homed on plan
+  // row 3n.c as a hypothesis). The module config cache is warm (B72 warmup above). restoreRingsAtBoot()
+  // never throws and never fails closed: on a whole-store failure the guard runs as it did before 3n.q8
+  // and an alert is raised. Snapshots (every 30 s + the shutdown flush) start here too.
+  try {
+    const { restoreRingsAtBoot, startRingSnapshots } = await import('./asset_classes/xstock_spot/book-state-ring-store.js');
+    await restoreRingsAtBoot();
+    startRingSnapshots();
+  } catch (ringErr) {
+    console.error('[3n.q8][RING_STORE] ring restore/snapshot start failed — the guard runs as before 3n.q8:', ringErr);
+  }
+
   // Phase 27.F.8: Reset ActiveEngine service state FIRST (before any other services)
   try {
     const { resetActiveEngineService, resumeActiveEngines } = await import('./services/active-engine-service');
@@ -1645,6 +1660,15 @@ app.use((req, res, next) => {
         console.log('[B65.2][SHUTDOWN] Trailing states flushed to disk');
       } catch (err) {
         console.error('[B65.2][SHUTDOWN] Failed to flush trailing states:', err);
+      }
+
+      // 3n.q8 (#1066): flush the xStock book-state rings — the graceful path of the durable store. Bounded
+      // inside (5 s) and never throws, so it cannot hold the exit.
+      try {
+        const { flushRingSnapshotOnShutdown } = await import('./asset_classes/xstock_spot/book-state-ring-store.js');
+        await flushRingSnapshotOnShutdown();
+      } catch (err) {
+        console.error('[3n.q8][SHUTDOWN] ring flush import failed:', err);
       }
 
       console.log('[A4.R10R-4][SHUTDOWN] All core services stopped');

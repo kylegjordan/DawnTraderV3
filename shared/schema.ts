@@ -5192,3 +5192,21 @@ export const amrDecisionLedger = pgTable("amr_decision_ledger", {
 }));
 export type AmrDecisionLedgerRow = typeof amrDecisionLedger.$inferSelect;
 export type InsertAmrDecisionLedgerRow = typeof amrDecisionLedger.$inferInsert;
+
+// ═════════════════════════════════════════════════
+// 3n.q8 B-BOOK-STATE-RESTART-DURABLE (#1066) — the durable store of the
+// xStock book-state guard's retained spread rings (SIM S25b). One row per
+// symbol: "the ring a clear would leave behind right now", snapshotted every
+// 30 s and on shutdown, restored at boot before the engines resume. Written
+// and read ONLY by server/asset_classes/xstock_spot/book-state-ring-store.ts.
+// Market data, not trade state: never keyed by mode. Small, non-partitioned.
+// ═════════════════════════════════════════════════
+export const xstockBookStateRings = pgTable("xstock_book_state_rings", {
+  symbol: text("symbol").primaryKey(),
+  spreads: jsonb("spreads").notNull(),
+  seedBasis: text("seed_basis").notNull(),
+  source: text("source").notNull(),
+  writtenAt: timestamp("written_at", { withTimezone: true }).notNull(),
+  persistedAt: timestamp("persisted_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export type XstockBookStateRingRow = typeof xstockBookStateRings.$inferSelect;

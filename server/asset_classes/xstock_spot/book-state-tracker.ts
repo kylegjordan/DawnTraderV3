@@ -13,7 +13,10 @@
  * is MODE-INVARIANT market data (both engines read the same feed; the same class as S2/S5), one
  * writer (`advanceBookStateComparator`, called by the engine on a `two_sided` verdict AND on the
  * first frame of a symbol, where only `unknown`/`no_comparator` is reachable), any
- * number of readers (`assessBookStateNow`). Never keyed by mode. Never persisted. Empties on
+ * number of readers (`assessBookStateNow`). Never keyed by mode. `_comparators` is never persisted
+ * (a pre-downtime point reference is stale by construction); `_retainedSpreads` IS, since
+ * `3n.q8` `B-BOOK-STATE-RESTART-DURABLE` — see `snapshotRetainableRings` and `restoreRetainedRings`
+ * below, and `book-state-ring-store.ts`. `_comparators` empties on
  * restart (the FIRST frame after boot seeds it and reads `unknown`; judging starts on the second — which is
  * the honest cold state, and it is labelled).
  *
@@ -133,8 +136,48 @@ const _comparators = new Map<string, BookStateComparator>();
  * chain's trailing spreads are evidence about the INSTRUMENT, not about the dropped frame, so
  * discarding them is what leaves the next seed unjudgeable. Retained here, keyed by symbol,
  * and consumed exactly once: at the next seed.
+ *
+ * ⭐ `3n.q8` `B-BOOK-STATE-RESTART-DURABLE` — THE ENTRY CARRIES ITS PROVENANCE (Step-2 P2, Langston Q1).
+ * It was a bare `number[]`, so WHICH chain wrote a ring, and whether that chain's own seed was judged or
+ * vacuous, was lost at the clear. A persisted ring outlives the process, so its provenance must travel with
+ * it. Changing the VALUE type (rather than adding a parallel map) makes the compiler list every reader.
+ * ⛔ A RESTORED ring is consumed at the first PLAUSIBLE seed exactly like a clear-written one — it judges one
+ * seed and is gone. Persistence does NOT create a standing yardstick (Langston, Step-1 condition 5).
  */
-const _retainedSpreads = new Map<string, number[]>();
+export interface RetainedRing {
+  spreads: number[];
+  /** `judged` when the chain that wrote it had its own seed judged against a ring; `vacuous` when it cold-seeded. */
+  seedBasis: 'judged' | 'vacuous';
+  /**
+   * The FEED time of the last frame in the ring (`priorAtMs` of the chain that produced it) — how old the evidence
+   * is. ⛔ NOT the wall clock: this tracker reads no clock (Kyle 2026-09-03, fenced by `8a-P4a` test 10).
+   */
+  writtenAtMs: number;
+  /** True only for an entry loaded back from the durable store at boot. A clear never sets it. */
+  restored: boolean;
+}
+const _retainedSpreads = new Map<string, RetainedRing>();
+
+/**
+ * ⛔⛔ `3n.q8` P1 — THE r5 WRITE GATE, NAMED SO THE CLEAR AND THE SNAPSHOT SHARE ONE DEFINITION (Langston's
+ * design constraint on row `3n.q8`: persistence REUSES the r5 gate, it never re-derives it). The reasoning
+ * for each term lives at the clear, below; this is only the one place it is written.
+ *
+ * ⛔ INVARIANT I-1 (Step-2 r2, §6 C4) — `retainsRing` IS MONOTONE OVER A CHAIN'S LIFE: once true, it stays
+ * true. `observedMovement` only ever ORs (advance), `seedImplausible` is fixed at the seed (carried, set only
+ * in the `!prev` branch), and `spreads` never shrinks below one entry under the cap. THE SNAPSHOT OF A LIVE
+ * CHAIN RESTS ON THIS: a ring persisted mid-life is one a later clear would also retain. If an edit ever makes
+ * `seedImplausible` settable mid-chain or `observedMovement` clearable, the snapshot would persist rings a
+ * clear refuses — the PERMISSIVE direction (BLOCKER-3/4). Fenced by a mutation-proved test.
+ */
+export function retainsRing(chain: Pick<BookStateComparator, 'seedImplausible' | 'observedMovement' | 'spreads'>): boolean {
+  return !chain.seedImplausible && chain.observedMovement && chain.spreads.length > 0;
+}
+
+/** `3n.q8` — was this chain's own seed judged against a ring? Mirrors the seed test's own condition exactly. */
+function seedWasJudged(chain: Pick<BookStateComparator, 'seedRetainedMedian'>): boolean {
+  return chain.seedRetainedMedian !== null && chain.seedRetainedMedian > 0;
+}
 
 export function readBookStateComparator(symbol: string): BookStateComparator | null {
   return _comparators.get(symbol.toUpperCase()) ?? null;
@@ -160,7 +203,7 @@ export function takeChainRefusalBasis(symbol: string): {
   cmp.refusalBasisLogged = true;
   const currentMedian = medianOf(cmp.spreads);
   const live = _retainedSpreads.get(key);
-  const retainedMedianNow = live ? medianOf(live) : cmp.seedRetainedMedian;
+  const retainedMedianNow = live ? medianOf(live.spreads) : cmp.seedRetainedMedian;
   const ratio = currentMedian !== null && retainedMedianNow !== null && retainedMedianNow > 0
     ? currentMedian / retainedMedianNow : null;
   return {
@@ -238,7 +281,7 @@ export function advanceBookStateComparator(
   const movedNow = prev ? (frame.bid !== prev.priorBid || frame.ask !== prev.priorAsk) : false;
   // The run count this frame would produce on the CURRENT chain (used by the escape test and carried below).
   const escRetained = _retainedSpreads.get(key);
-  const escRetainedMedian = escRetained ? medianOf(escRetained) : null;
+  const escRetainedMedian = escRetained ? medianOf(escRetained.spreads) : null;
   const escThreshold = kRel !== null && escRetainedMedian !== null && escRetainedMedian > 0 ? kRel * escRetainedMedian : null;
   const runMovesNow = prev && prev.seedImplausible && escThreshold !== null
     ? (spreadNow <= escThreshold ? prev.plausibleRunMoves + (movedNow ? 1 : 0) : 0)
@@ -290,7 +333,7 @@ export function advanceBookStateComparator(
   let seedRetainedMedian: number | null = prev ? prev.seedRetainedMedian : null;
   if (!prev) {
     const retained = _retainedSpreads.get(key);
-    const retainedMedian = retained ? medianOf(retained) : null;
+    const retainedMedian = retained ? medianOf(retained.spreads) : null;
     seedRetainedMedian = retainedMedian;
     if (retainedMedian !== null && retainedMedian > 0) {
       const seedSpread = spreadNow;
@@ -311,6 +354,18 @@ export function advanceBookStateComparator(
     // next seed's yardstick. Keeping it means the datum stays OUTSIDE every broken chain,
     // which is the principle this whole mechanism rests on.
     if (!seedImplausible) _retainedSpreads.delete(key);
+    // ⭐ `3n.q8` P7 — A RESTORED ring judging a seed: the evidence OBJ-4 and P9 read. `console.warn`, so it lands in
+    // the ~14-day `error.log` (`COMPARATOR_SEEDED` is `console.log` and rotates away within hours). The token is
+    // the one pre-registered in the Step-2 plan; it means "a restored ring was USED at a seed", and `ringDeleted`
+    // says whether that use consumed it (a plausible seed) or left it for the next seed (an implausible one).
+    if (retained?.restored) {
+      const verdict = !(retainedMedian !== null && retainedMedian > 0) ? 'not_judged' : (seedImplausible ? 'implausible' : 'plausible');
+      console.warn(
+        `[3n.q8][BOOK_STATE] ${key} RESTORED_RING_CONSUMED verdict=${verdict} seedSpread=${spreadNow.toFixed(5)} ` +
+        `retainedMedian=${retainedMedian === null ? 'none' : retainedMedian.toFixed(5)} kRel=${kRel ?? 'unreadable'} ` +
+        `ringSeedBasis=${retained.seedBasis} ringAgeMs=${frame.atMs - retained.writtenAtMs} ringDeleted=${!seedImplausible}`,
+      );
+    }
   }
   _comparators.set(key, {
     priorMid: mid, priorBid: frame.bid, priorAsk: frame.ask,
@@ -396,8 +451,14 @@ export function clearBookStateComparator(symbol: string, reason: string): void {
   // VACUOUSLY — which is the one chain class that can seed hollow. `observedMovement` is the
   // POSITIVE property: a frozen 7.00/1000.00 artefact never sets it, so its ring can never
   // become the yardstick that the whole mechanism defines as coming from OUTSIDE.
-  if (!prev.seedImplausible && prev.observedMovement && prev.spreads.length > 0) {
-    _retainedSpreads.set(key, [...prev.spreads]);
+  // ⭐ `3n.q8` P1: the gate is `retainsRing`, the ONE definition the snapshot also uses (byte-identical terms).
+  if (retainsRing(prev)) {
+    _retainedSpreads.set(key, {
+      spreads: [...prev.spreads],
+      seedBasis: seedWasJudged(prev) ? 'judged' : 'vacuous',
+      writtenAtMs: prev.priorAtMs, // feed time of the ring's last frame — the tracker reads no clock
+      restored: false,
+    });
   }
   _comparators.delete(key);
   // `8a-P4a` Step 4 FINDING-1 (Langston): `observedMovement` and `ringAfter` make the r6 hole COUNTABLE. A yield with
@@ -472,6 +533,66 @@ export function assessBookStateNow(symbol: string): BookStateNow {
     comparatorValidated: cmp ? cmp.validated : null,
     comparatorFramesSinceSeed: cmp ? cmp.framesSinceSeed : null,
   };
+}
+
+/** `3n.q8` — one ring as the durable store holds it. `source` says which arm of OBJ-1 produced it. */
+export interface RingSnapshotEntry {
+  symbol: string;
+  spreads: number[];
+  seedBasis: 'judged' | 'vacuous';
+  source: 'live' | 'retained';
+  writtenAtMs: number;
+}
+
+/**
+ * ⭐ `3n.q8` P3 — "THE RING A CLEAR WOULD LEAVE BEHIND RIGHT NOW", for every symbol (OBJ-1, Langston Q1: the wider
+ * form). A restart is treated as a clear of every chain:
+ *   - a LIVE chain that passes `retainsRing` contributes its own trailing spreads (what its clear would retain);
+ *   - otherwise the symbol's existing S25b entry — ⛔ this arm is what makes the wider form faithful, not merely
+ *     bigger: an implausible chain does not consume the ring (`:313` family), so without it the wider form would
+ *     be NARROWER than persisting S25b alone (Langston, Step 1);
+ *   - otherwise nothing.
+ * ⛔ Rests on INVARIANT I-1 (`retainsRing` is monotone — see its docstring).
+ * Built synchronously from the one writer's maps on Node's single thread, so it is internally consistent.
+ * ⛔ Takes no clock: `writtenAtMs` is feed time (the chain's last frame); the STORE stamps `persisted_at`.
+ */
+export function snapshotRetainableRings(): RingSnapshotEntry[] {
+  const out: RingSnapshotEntry[] = [];
+  const keys = new Set<string>([...Array.from(_comparators.keys()), ...Array.from(_retainedSpreads.keys())]);
+  for (const key of Array.from(keys)) {
+    const cmp = _comparators.get(key);
+    if (cmp && retainsRing(cmp)) {
+      out.push({ symbol: key, spreads: [...cmp.spreads], seedBasis: seedWasJudged(cmp) ? 'judged' : 'vacuous', source: 'live', writtenAtMs: cmp.priorAtMs });
+      continue;
+    }
+    const r = _retainedSpreads.get(key);
+    if (r) out.push({ symbol: key, spreads: [...r.spreads], seedBasis: r.seedBasis, source: 'retained', writtenAtMs: r.writtenAtMs });
+  }
+  return out;
+}
+
+/**
+ * ⭐ `3n.q8` P6 — load rings back into S25b at boot. ONLY S25b: `_comparators` stays empty, so every chain
+ * re-seeds fresh and is JUDGED against the restored ring (a pre-downtime point reference is stale).
+ * A symbol that already has a live chain or a retained entry is left alone — at boot both maps are empty, so
+ * this matters only if a caller ever runs it late, and then live evidence wins over the store.
+ * Validation of each row happens in the store (`book-state-ring-store.ts`) before this is called.
+ * Returns the number of entries loaded.
+ */
+export function restoreRetainedRings(entries: ReadonlyArray<{ symbol: string; spreads: number[]; seedBasis: 'judged' | 'vacuous'; writtenAtMs: number }>): number {
+  let loaded = 0;
+  for (const e of entries) {
+    const key = e.symbol.toUpperCase();
+    if (_comparators.has(key) || _retainedSpreads.has(key)) continue;
+    _retainedSpreads.set(key, { spreads: [...e.spreads], seedBasis: e.seedBasis, writtenAtMs: e.writtenAtMs, restored: true });
+    loaded++;
+  }
+  return loaded;
+}
+
+/** Test-only: read a retained entry (S25b), so tests assert state without restating the rule. */
+export function _peekRetainedRingForTest(symbol: string): RetainedRing | null {
+  return _retainedSpreads.get(symbol.toUpperCase()) ?? null;
 }
 
 /** Test-only: reset every comparator. */
