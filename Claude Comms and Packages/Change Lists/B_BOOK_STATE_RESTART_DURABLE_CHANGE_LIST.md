@@ -117,3 +117,34 @@ export function snapshotRetainableRings(): RingSnapshotEntry[] {
 - Mutations (each applied, run and reverted; originals byte-compared after): M1 the snapshot bypasses the predicate → 2 failed · M2 `seedImplausible` cleared mid-chain (I-1) → 1 · M3 a plausible seed does not consume the ring → 1 · M4 the consumed line is not emitted → 1 · M5 restore loads nothing → 4 · M6 one bad row discards the store → 1 · M7 the clear drops `observedMovement` from its gate → 1. **7 of 7 killed.**
 - `node scripts/check-tsc-baseline.mjs` → **377 = 377**, no new (file, code) pair.
 - CI for `f07c86c37`: running at dispatch; the per-job result follows.
+
+
+---
+
+## r2 — LANGSTON'S STEP-4 RULING (2026-09-24 14:28Z, CHANGES-NEEDED), FOLDED
+
+**⛔ BLOCKER-1 — FIXED. A failed restore can no longer let a snapshot delete the store.**
+- **(a)** The delete sweep is ARMED only by a successful boot restore: config readable, query succeeded, and the tracker accepted the rows. Any whole-store failure leaves the store **UPSERT-ONLY for the life of the process**; stale rows are swept at the next healthy boot. The alert body now says so, which makes the old reassuring line true rather than false.
+- **(b)** An over-long ring is **TRUNCATED to its last `ringCap` values**, mirroring the tracker's own `spreads.shift()`, and never skipped. `spreads_length` now fires only on an empty ring, and `RING_RESTORED` counts `truncated=`.
+- **(c)** Test section 9 has 4 cases: config unreadable, store unreadable with an empty tracker, the tracker's fence refusing, and "before any restore". Each asserts **no DELETE is issued**. Mutations: **M8** (the sweep unguarded) → 3 failed; **M9** (the sweep armed at the top of the restore) → 3 failed; **M10** (over-long skipped, not truncated) → 1 failed.
+
+**FINDING-1 — ACCEPTED, no code.** The store docstring no longer calls the shutdown flush the normal path. **Until a real pm2 restart logs `SHUTDOWN_FLUSH written=`, the honest crash bound is the 30 s snapshot.** That line is a Step-7/8 read. The flush line also prints `swept=` and `durationMs=`.
+
+**FINDING-2 — FENCED (your preference).** `restoreRetainedRings` **throws if any live chain exists** (boot-only). `restoreRingsAtBoot` catches that as a restore failure, raises the alert, and leaves the sweep disarmed. Mutation **M11** (fence removed) → 2 failed.
+
+**Your answers, applied:**
+- **A** — done through the fence.
+- **B** — the token is kept. **Step-10 condition, recorded here so it cannot be lost: the P9 floor is a FILTERED count.** The record publishes all three verdicts (`plausible` / `implausible` / `not_judged`) and both `ringDeleted` values, enumerated. It names `verdict=not_judged ringDeleted=true` explicitly: a restored ring destroyed without judging anything.
+- **C** — a median-0 ring is **not** refused. It loads, and `RING_RESTORED` counts it as `cannotJudge=`, separate from `skippedInvalid`.
+- **D** — unchanged. **The exposure, stated for the record:** the window in which a restart seeds a symbol unjudged runs from the ring's **consumption** to the new chain's **first observed movement**. It is not 30 s; on a quiet name it can be long.
+
+**Nits:**
+- **`source`:** now selected and validated at restore, and `RING_RESTORED` prints `live=`/`retained=`. That is its reader.
+- **Two populations in one line:** fixed. `restoreRetainedRings` returns the symbols it loaded, and every count in `RING_RESTORED` comes from that set; `notLoaded=` shows the difference.
+- **Mixed clocks:** labelled in the line itself: `ringAgeMin(wallNow-lastFeedFrame)` and `downtimeMin(wallNow-newestPersist)`.
+- **`rowCount`:** still `res.rowCount`. **Shown non-zero once at Step 7** (the first swept snapshot after a real restart) or reported as unshown.
+- **O(symbols) round trips:** removed. **One `INSERT … SELECT FROM jsonb_to_recordset` for every ring**, plus the delete: 2 statements per snapshot whatever the symbol count (test 8 asserts 2). A per-process `FIRST_SNAPSHOT written= deleted= swept= durationMs=` line (warn) gives the measured duration against the 5 s budget at Step 7.
+
+**CLASS RE-DECLARED `sub_batch` → `architecture`** (checker alert `a6195e1f`; scope header amended). It adds nothing to the doc set beyond your condition 4.
+
+**Evidence at the new head:** 25/25 in the batch's file; **22 related files, 435 tests, all green**; **11/11 mutations killed** (M1-M7 as before, plus M8-M11); `check-tsc-baseline` **377 = 377**. CI: per job, on the re-dispatched head.

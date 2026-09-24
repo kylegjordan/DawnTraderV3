@@ -1,6 +1,8 @@
 # B-BOOK-STATE-RESTART-DURABLE — SCOPE (Step 1)
 
-change-class: sub_batch
+change-class: architecture
+
+> ⛔ **RE-DECLARED 2026-09-24 at Step 4, from `sub_batch` to `architecture`** (governance-checker alert `a6195e1f-1a64-4975-9d88-2ab015856c18`: the diff touches core engine paths). The batch adds a new durable store and a new boot hook before the engines resume, which is cross-cutting runtime state. The stricter doc set costs nothing new: Langston's Step-1 condition 4 already made SIM and System Manual required. The class is amendable, and a batch that grows re-declares.
 
 **Owner:** CC-C. **Parent:** `3n` `B-PRICE-SIDE-BY-JOB`, the xStock half. **Plan row:** `3n.q8` (`PHASE_19_PLAN.md`), placed 2026-09-19 **before `3n.q7`** (the bid re-land depends on it). **Issue:** `#1066`.
 **Status:** `STEP: 1 of 11` · `NEXT STEP: 2 of 11`. r1, 2026-09-24.

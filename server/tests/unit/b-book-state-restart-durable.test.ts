@@ -13,7 +13,9 @@
  *   6. THE §0 REPLAY (the mechanism proof): ANET's 0.32368 seed is accepted unjudged on an empty ring (today)
  *      and REFUSED once the ring is restored;
  *   7. the whole-store failure path: falls back to empty maps and raises the resolve-never-ack alert;
- *   8. the snapshot write: one upsert per ring plus one delete-absent, in one transaction.
+ *   8. the snapshot write: ONE upsert statement for every ring, then the delete-absent, in one transaction;
+ *   9. ⛔ Step-4 BLOCKER-1: a FAILED restore (config or store unreadable, or the boot-only fence) leaves the
+ *      sweep DISARMED, so no snapshot can delete the store; an over-long ring is truncated, not skipped.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -42,6 +44,8 @@ import {
   applyRestoredRings,
   restoreRingsAtBoot,
   persistRingSnapshot,
+  getRingStoreStats,
+  _resetRingStoreForTest,
   RING_RESTORE_ALERT_KEY,
 } from '../../asset_classes/xstock_spot/book-state-ring-store';
 
@@ -51,6 +55,7 @@ let warn: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   _resetBookStateComparatorsForTest();
+  _resetRingStoreForTest();
   execute.mockReset();
   transaction.mockReset();
   addAlert.mockReset();
@@ -168,13 +173,14 @@ describe('3 — the snapshot\'s three arms', () => {
   });
 });
 
-describe('4 — restore: per-row validation, partial stores, never over live evidence', () => {
-  const good = (symbol: string) => ({ symbol, spreads: [0.004, 0.0041, 0.0039], seed_basis: 'judged', written_at: new Date(1_000_000), persisted_at: new Date(2_000_000) });
-  it('a partial store loads its good rows and counts each bad one by reason', () => {
+describe('4 — restore: per-row validation, partial stores, the boot-only fence', () => {
+  const good = (symbol: string) => ({ symbol, spreads: [0.004, 0.0041, 0.0039], seed_basis: 'judged', source: 'retained', written_at: new Date(1_000_000), persisted_at: new Date(2_000_000) });
+  it('a partial store loads its good rows, TRUNCATES an over-long ring, and counts each bad one by reason', () => {
+    const long = Array.from({ length: 25 }, (_, i) => 0.001 * (i + 1)); // 25 values, ringCap 20
     const v = validateRingRows([
       good('A/USD'), good('B/USD'),
       { ...good('C/USD'), spreads: [] },
-      { ...good('D/USD'), spreads: new Array(21).fill(0.004) },
+      { ...good('D/USD'), spreads: long },
       { ...good('E/USD'), spreads: [0.004, -0.001] },
       { ...good('F/USD'), spreads: [0.004, Number.NaN] },
       { ...good('G/USD'), seed_basis: 'maybe' },
@@ -182,32 +188,43 @@ describe('4 — restore: per-row validation, partial stores, never over live evi
       { ...good(''), },
       { ...good('I/USD'), spreads: '[0.004,0.005]' }, // JSON text is accepted
       { ...good('J/USD'), spreads: '{broken' },
+      { ...good('K/USD'), source: 'elsewhere' },
     ], 20);
-    expect(v.entries.map((e) => e.symbol)).toEqual(['A/USD', 'B/USD', 'I/USD']);
+    expect(v.entries.map((e) => e.symbol)).toEqual(['A/USD', 'B/USD', 'D/USD', 'I/USD']);
+    // ⛔ Step-4 BLOCKER-1 (b): the over-long ring is KEPT as its last 20 values, not discarded.
+    expect(v.truncated).toBe(1);
+    expect(v.entries.find((e) => e.symbol === 'D/USD')!.spreads).toEqual(long.slice(5));
     expect(v.skippedInvalid).toBe(8);
-    expect(v.skipReasons).toEqual({ spreads_length: 2, spreads_value: 2, seed_basis: 1, timestamps: 1, symbol: 1, spreads_unparseable: 1 });
+    expect(v.skipReasons).toEqual({ spreads_length: 1, spreads_value: 2, seed_basis: 1, timestamps: 1, symbol: 1, spreads_unparseable: 1, source: 1 });
   });
-  it('applyRestoredRings loads into S25b as restored, and prints RING_RESTORED with the counts', () => {
-    const n = applyRestoredRings(validateRingRows([good('A/USD'), { ...good('B/USD'), seed_basis: 'vacuous' }], 20), 3_000_000);
-    expect(n).toBe(2);
+  it('applyRestoredRings loads into S25b as restored, and every count in RING_RESTORED comes from what loaded', () => {
+    const n = applyRestoredRings(validateRingRows([
+      good('A/USD'),
+      { ...good('B/USD'), seed_basis: 'vacuous', source: 'live' },
+      { ...good('Z/USD'), spreads: [0, 0, 0] }, // a locked book: VALID, loaded, but it cannot judge (answer C)
+    ], 20), 3_000_000);
+    expect(n).toBe(3);
     expect(_peekRetainedRingForTest('A/USD')).toMatchObject({ restored: true, seedBasis: 'judged' });
     const line = warn.mock.calls.map((c) => String(c[0])).find((s) => s.includes('RING_RESTORED'))!;
-    expect(line).toContain('n=2');
-    expect(line).toContain('judged=1 vacuous=1');
-    expect(line).toContain('downtimeMin=16.7'); // (3,000,000 − 2,000,000) ms
+    expect(line).toContain('n=3 notLoaded=0');
+    expect(line).toContain('judged=2 vacuous=1 cannotJudge=1 live=1 retained=2');
+    expect(line).toContain('ringAgeMin(wallNow-lastFeedFrame)');
+    expect(line).toContain('downtimeMin(wallNow-newestPersist)=16.7'); // (3,000,000 − 2,000,000) ms
   });
-  it('restore never overwrites a live chain or an existing retained entry', () => {
-    movingHealthyChain('LIV/USD');
+  it('an existing retained entry is not overwritten, and n counts only what loaded', () => {
     movingHealthyChain('KEEP/USD');
-    clearBookStateComparator('KEEP/USD', 'yield');
+    clearBookStateComparator('KEEP/USD', 'yield'); // no live chain remains; a retained entry does
     const keep = _peekRetainedRingForTest('KEEP/USD')!;
-    const n = restoreRetainedRings([
-      { symbol: 'LIV/USD', spreads: [0.9], seedBasis: 'judged', writtenAtMs: 1 },
-      { symbol: 'KEEP/USD', spreads: [0.9], seedBasis: 'judged', writtenAtMs: 1 },
-    ]);
-    expect(n).toBe(0);
-    expect(_peekRetainedRingForTest('LIV/USD')).toBeNull();
+    const n = applyRestoredRings(validateRingRows([good('KEEP/USD'), good('NEW/USD')], 20), 3_000_000);
+    expect(n).toBe(1);
     expect(_peekRetainedRingForTest('KEEP/USD')).toBe(keep);
+    const line = warn.mock.calls.map((c) => String(c[0])).find((s) => s.includes('RING_RESTORED'))!;
+    expect(line).toContain('n=1 notLoaded=1');
+  });
+  it('⛔ FINDING-2: restore is BOOT-ONLY — it throws if any live chain exists, and loads nothing', () => {
+    movingHealthyChain('LIV/USD');
+    expect(() => restoreRetainedRings([{ symbol: 'OTHER/USD', spreads: [0.9], seedBasis: 'judged', writtenAtMs: 1 }])).toThrow(/boot-only/);
+    expect(_peekRetainedRingForTest('OTHER/USD')).toBeNull();
   });
 });
 
@@ -282,22 +299,69 @@ describe('7 — the whole-store failure path: fall back, alert, never throw', ()
     expect(addAlert).toHaveBeenCalledTimes(1);
   });
   it('a healthy store ⇒ rows loaded, no alert', async () => {
-    execute.mockResolvedValueOnce({ rows: [{ symbol: 'OK/USD', spreads: [0.004], seed_basis: 'judged', written_at: new Date(1), persisted_at: new Date(2) }] });
+    execute.mockResolvedValueOnce({ rows: [{ symbol: 'OK/USD', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) }] });
     await expect(restoreRingsAtBoot()).resolves.toBe(1);
     expect(addAlert).not.toHaveBeenCalled();
     expect(_peekRetainedRingForTest('OK/USD')).toMatchObject({ restored: true });
   });
 });
 
-describe('8 — the snapshot write: one upsert per ring + one delete-absent, in ONE transaction', () => {
-  it('writes each snapshot entry and deletes the rest', async () => {
+/** Drive a snapshot write against a recording transaction; returns the statements' SQL text in order. */
+async function snapshotStatements(rowCount = 3): Promise<{ sqls: string[]; r: Awaited<ReturnType<typeof persistRingSnapshot>> }> {
+  const sqls: string[] = [];
+  const txExec = vi.fn(async (q: { queryChunks?: unknown[] }) => {
+    sqls.push(JSON.stringify(q?.queryChunks ?? q));
+    return { rowCount };
+  });
+  transaction.mockImplementation(async (fn: (tx: { execute: typeof txExec }) => Promise<void>) => fn({ execute: txExec }));
+  const r = await persistRingSnapshot(9_000);
+  return { sqls, r };
+}
+
+describe('8 — the snapshot write: ONE upsert statement for every ring, the sweep only when armed, ONE transaction', () => {
+  it('armed (after a healthy restore): one upsert for both rings, then the delete-absent', async () => {
+    execute.mockResolvedValueOnce({ rows: [] });
+    await restoreRingsAtBoot(); // a healthy (empty) store arms the sweep
+    expect(getRingStoreStats().sweepArmed).toBe(true);
     movingHealthyChain('W1/USD');
     movingHealthyChain('W2/USD');
-    const txExec = vi.fn().mockResolvedValue({ rowCount: 3 });
-    transaction.mockImplementation(async (fn: (tx: { execute: typeof txExec }) => Promise<void>) => fn({ execute: txExec }));
-    const r = await persistRingSnapshot(9_000);
+    const { sqls, r } = await snapshotStatements(3);
     expect(transaction).toHaveBeenCalledTimes(1);
-    expect(txExec).toHaveBeenCalledTimes(3); // two upserts + the delete
-    expect(r).toEqual({ written: 2, deleted: 3 });
+    expect(sqls).toHaveLength(2); // one upsert (not one per symbol) + the delete
+    expect(sqls[0]).toContain('jsonb_to_recordset');
+    expect(sqls[1]).toContain('DELETE FROM xstock_book_state_rings');
+    expect(r).toMatchObject({ written: 2, deleted: 3, swept: true });
+  });
+});
+
+describe('9 — ⛔ Step-4 BLOCKER-1: a FAILED restore must never let a snapshot DELETE the store', () => {
+  it('config unreadable at boot ⇒ the next snapshot is UPSERT-ONLY (no DELETE issued)', async () => {
+    configImpl = () => { throw new Error('knobs missing'); };
+    await restoreRingsAtBoot();
+    expect(getRingStoreStats().sweepArmed).toBe(false);
+    movingHealthyChain('U1/USD');
+    const { sqls, r } = await snapshotStatements();
+    expect(sqls.some((s) => s.includes('DELETE'))).toBe(false);
+    expect(sqls).toHaveLength(1);
+    expect(r).toMatchObject({ written: 1, deleted: 0, swept: false });
+  });
+  it('store unreadable at boot ⇒ no DELETE, even with nothing in the tracker (the case that would wipe it)', async () => {
+    execute.mockRejectedValueOnce(new Error('connection reset'));
+    await restoreRingsAtBoot();
+    const { sqls, r } = await snapshotStatements();
+    expect(sqls).toHaveLength(0); // nothing to upsert, and the sweep is disarmed
+    expect(r).toMatchObject({ written: 0, deleted: 0, swept: false });
+  });
+  it('the tracker refusing the restore (the boot-only fence) also leaves the sweep disarmed', async () => {
+    movingHealthyChain('LIVE2/USD');
+    execute.mockResolvedValueOnce({ rows: [{ symbol: 'X/USD', spreads: [0.004], seed_basis: 'judged', source: 'retained', written_at: new Date(1), persisted_at: new Date(2) }] });
+    await expect(restoreRingsAtBoot()).resolves.toBe(0);
+    expect(getRingStoreStats().sweepArmed).toBe(false);
+    expect(addAlert).toHaveBeenCalledTimes(1);
+  });
+  it('before ANY restore has run, the sweep is disarmed (a snapshot cannot delete by default)', async () => {
+    movingHealthyChain('D1/USD');
+    const { sqls } = await snapshotStatements();
+    expect(sqls.some((s) => s.includes('DELETE'))).toBe(false);
   });
 });

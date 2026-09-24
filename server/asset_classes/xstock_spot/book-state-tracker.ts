@@ -574,18 +574,24 @@ export function snapshotRetainableRings(): RingSnapshotEntry[] {
 /**
  * ⭐ `3n.q8` P6 — load rings back into S25b at boot. ONLY S25b: `_comparators` stays empty, so every chain
  * re-seeds fresh and is JUDGED against the restored ring (a pre-downtime point reference is stale).
- * A symbol that already has a live chain or a retained entry is left alone — at boot both maps are empty, so
- * this matters only if a caller ever runs it late, and then live evidence wins over the store.
+ * ⛔⛔ BOOT-ONLY, AND FENCED (Langston Step-4 FINDING-2, his preference): it THROWS if any live chain exists.
+ * A live chain is not automatically evidence — a `seedImplausible` or never-moved chain is exactly the broken
+ * chain whose yardstick must come from OUTSIDE — so "skip symbols with a live chain" would be the PERMISSIVE
+ * direction for a late caller nobody has designed. The fence refuses to grow that caller silently.
+ * A symbol that already has a retained entry is left alone (this process's own clear-written evidence wins).
  * Validation of each row happens in the store (`book-state-ring-store.ts`) before this is called.
- * Returns the number of entries loaded.
+ * Returns the symbols actually loaded, so the caller's counts share one population with `n`.
  */
-export function restoreRetainedRings(entries: ReadonlyArray<{ symbol: string; spreads: number[]; seedBasis: 'judged' | 'vacuous'; writtenAtMs: number }>): number {
-  let loaded = 0;
+export function restoreRetainedRings(entries: ReadonlyArray<{ symbol: string; spreads: number[]; seedBasis: 'judged' | 'vacuous'; writtenAtMs: number }>): string[] {
+  if (_comparators.size > 0) {
+    throw new Error(`restoreRetainedRings is boot-only: ${_comparators.size} live chain(s) already exist`);
+  }
+  const loaded: string[] = [];
   for (const e of entries) {
     const key = e.symbol.toUpperCase();
-    if (_comparators.has(key) || _retainedSpreads.has(key)) continue;
+    if (_retainedSpreads.has(key)) continue;
     _retainedSpreads.set(key, { spreads: [...e.spreads], seedBasis: e.seedBasis, writtenAtMs: e.writtenAtMs, restored: true });
-    loaded++;
+    loaded.push(key);
   }
   return loaded;
 }
