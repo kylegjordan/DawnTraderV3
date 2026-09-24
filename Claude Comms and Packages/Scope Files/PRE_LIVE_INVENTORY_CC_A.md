@@ -90,4 +90,21 @@ Cross-check of all 33 CC-A-owned `PHASE_19_PLAN` rows. **Missing entirely:**
 
 ---
 
+## 5. ADDENDUM 2026-09-24 — MY TASK LIST CHECKED ITEM BY ITEM AGAINST THE CURRENT DRAFT
+
+Kyle asked whether every batch, sub-batch, hotfix and investigation on `CC_A_SESSION_TASK_LIST.md` is in the inventory. **§§1-4 above were checked against the plan and the issue ledger, not the task list.** Checked now: 44 task-list items against the draft as it stands (which already carries §2's missing rows under ADDED BY HAND). **36 are present. These 8 are not, or survive only as a pruned or false match:**
+
+| # | item | why it is missing | my bucket view |
+|---|---|---|---|
+| 1 | **`B-MEASURE-GATE` leg 2 — the OBJ-4 live window** (≥50 real fires enumerated, precision ≥20 %, adjudicated by a session that did NOT write the guards; pre-registered in `B_MEASURE_GATE_LEG2_COMPLETION_REPORT.md` §OPEN AT CLOSE) | the only draft hit for "OBJ-4" is an unrelated batch | **OBSERVATION** |
+| 2 | **`#754`'s three unbuilt checker legs** — OPEN in its own head, and carried by row 10 (`B-GATE-GUARD` + `B-ISSUE-BLOCK-GUARD`), returned to priority by the `#1005` tripwire | the draft lists `#754` as UNCONFIRMED, owner Kyle, pruned on a body-word match | MERGE into row 10, owner CC-A, AFTER |
+| 3 | **`B-INSTRUMENTS-OVER-RULES` (row 3.5) — its two non-observation objectives:** (a) strip a 116-line "how I got this wrong" comment out of a live source file; (b) change what loads into a session — repo-wide rules plus only the rules for the area it touches | the draft carries 3.5 only as the usage-measure OBSERVATION, so these two vanish when the window closes | AFTER — (b) overlaps `B-RULES-LAYER` `#998` and `B-RULES-1e`; decide which carries it at the reorganisation |
+| 4 | **`B-GOV-REPORTING` (row 8) sub-items:** (iii) the governance ledger has no BLOCKED state · (iv) the alert read must say "whole file" (`#980`) · (v) the alert hold verb (`#982`) · (vi) no change-class fits infrastructure work (`#985`, CC-B's) — **and the review gate on its already-pushed work never ran** | row 8 is present by name only; the sub-items and the owed review are not | AFTER — ⚠️ except the owed review, which is overdue on work every session follows today |
+| 5 | **`STORAGE_POLICY.md` content refresh** — rode `B-RULES-1d` (closed 08-25) and was never separately verified | absent | AFTER — attach to `B-STORAGE-CATALOG` |
+| 6 | **GOV-ARC `#668` status-home refresh** — the one place saying where the governance programme stands; stale since 08-07 | ⚠️ the draft's `#668` is the OTHER `#668` (CC-C's sizing item, a legacy double) | AFTER |
+| 7 | **glossary of terms** — Kyle, 31 July: *"the glossary of terms or the dictionary of terms. We need to make sure that we are adding in."* Never given a name or a home. | absent | **HELPFUL** — Kyle asked for it, and it is how he looks a component up without asking |
+| 8 | **three process additions** (remediation plan §4): every rules-file edit goes through a Step-4 review; a regression test for every rule converted into a hook; measure whether an app-version change alters what loads | absent | AFTER |
+
+**Also found, in my own list rather than the draft:** its row for 3.5 still read "UNPLACED" (placed 2026-09-02) — corrected in the same commit. `#1001` is CC-C's and pruned in the draft; theirs to confirm.
+
 **Next from me:** the §1 "verify" rows (#555, #541, #511, #341, #574) read properly, and the two heading flips. If the reorganisation wants the scripts, they are in my scratchpad and I will commit them on request.
