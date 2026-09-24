@@ -103,3 +103,21 @@
 ---
 
 **Close-out:** the `#935` header is closed in the same commit as this file. No other document was changed.
+
+---
+
+## 7. KYLE'S LINE-BY-LINE CHECK (2026-09-24) — every line of `CC_C_SESSION_TASK_LIST.md` against `PRE_LIVE_INVENTORY_DRAFT.md` at `011ff77fa`
+
+**Method:** all **75** lines of the task list were checked: §0a 8, §0b 2, the queue 61, the "not in the queue" list 4. For each line I found where its batch name, plan row or issue number lands in the draft, and **read the landing line** to tell a real inventory entry from a passing mention or a stale one. A search was used to FIND each line; the verdict came from reading it.
+**Result: 69 of 75 are present and correctly placed** (the buckets from §§1-6 stand). **Six need action:**
+
+| # | task-list line | what the draft has | what it should have | bucket opinion |
+|---|---|---|---|---|
+| 1 | `3b.c` `B-EXIT-TRIGGER-FILL-PARITY` (`#959`) — my list: *withdrawn 2026-08-31, folded into 3b.b* | ⛔ **MUST #38, owner Kyle, quoting "its own row says CRITICAL"** (draft line 118) | **PRUNED (withdrawn).** The plan row's own correction note: *"WITHDRAWN AS A SEPARATE DEFECT 2026-08-31 (`#959` am. 1-2). The 14% trigger/fill gap was five xStock rows in the 00:15 UTC minute; outside it the gap is ~0.1%."* The draft read the pre-withdrawal text. The live trigger-vs-fill work is `B-PRICE-SIDE-BY-JOB` plus `3n.q7`, both already MUST. | prune; **this removes one false MUST and one false Kyle decision** |
+| 2 | `3n.q2` **`8a-P4c`** — VTS xStock, the rest of the xStock half | not named anywhere. The `B-PRICE-SIDE-BY-JOB` MUST line (#27) says *"until the xStock paper increments land"*, but `8a-P4c` is the **VTS** lane | name `8a-P4c` inside the #27 line so it cannot fall out (Kyle, 2026-09-15: one batch, two halves) | MUST, as part of #27 |
+| 3 | `3n` row **`8c`** — P1 only, **HELD** on the decision recorded on its row | not named (the only `8c` hit is Infra's unrelated `2.8c`) | name it inside #27 as held, with its row reference | MUST as part of #27, **held** |
+| 4 | §0b **the Codex experiment** (`CODEX_FINDINGS_BY_GROUP.md`; the register is r14 and ready) | only its prerequisite `#1027` (HELPFUL, line 391) | its own line: an independent review of the pricing architecture, **held until `#1027` clears** | **extremely helpful** — a second, outside reading of the price design before real money |
+| 5 | row `4` **`F-5`** — per-strategy reach structure | PRUNED as *"delivered by B-GEOMETRY-REACH-BASELINE and B-REACH-BASELINE-ADJUST ⚠️ verify"* (line 712) | **Prune VERIFIED for the STRUCTURE:** `B_GEOMETRY_REACH_BASELINE_COMPLETION_REPORT.md` OBJ-A.1 — *"`reach_atr_max` resolves per-(strategy × class)"*, YES. **But the reach FIT that row 4 gates on `F-E` has no item of its own that I can find.** Plan row 4 is corrected in this same commit. | the FIT: **extremely helpful** (calibration). ⚠️ Also check that MUST #51 *"F-E fill-integrity detector"* is the same thing as row 8's `F-E` (grading the closed trades against venue bars); the two descriptions differ |
+| 6 | §0b **standing ownership of `ACTIVE_PATH_FLOW.md`** | absent | **not an inventory item:** it is a living map kept current as batches land, not work with an end | none — a standing duty, listed so its absence is deliberate |
+
+**Everything else:** each of the other 69 lands in MUST, DECIDE, OBSERVATION, HELPFUL or AFTER, or is merged into a live item. Every merge was checked at its target line: `#949`, `#977`, `3b.f-b`, `#1017` and `#971` are absorbed into `B-PRICE-SIDE-BY-JOB` r5 (MUST), and `#936` was removed by Kyle in Phase 16 (roadmap 16.9). The two items my list names only by plan row are present by row: `3n.b` (AFTER, line 413) and `3n.c` (HELPFUL, line 261).

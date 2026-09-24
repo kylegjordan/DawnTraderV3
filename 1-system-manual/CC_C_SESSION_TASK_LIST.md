@@ -1,4 +1,4 @@
-# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-09-22
+# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-09-24
 
 > ⛔ **KYLE'S STANDING RULE, 2026-09-05:** every session keeps its own task list.
 > - **It holds:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — in working order.
@@ -23,6 +23,7 @@
 | 3n.l | `B-REST-SIDES-TO-CACHE` (`#1056`) | scope APPROVED r4 2026-09-13 (`6036fd1a6`); Step 2 next | built during `8c`'s window, deployed after it |
 | RUN ORDER banner | `B-SIZING-DEC-RESTORE` | obj-1, obj-10, obj-11 LIVE at `213e162dc` (it sizes every trade); obj-2..5 and Steps 4-11 not built; declared in `GOVERNANCE_EXCEPTIONS.md` 2026-09-12 | **Kyle** — its queue position against the price work is his |
 | 3b.f-c | `B-XSTOCK-SESSION-FRESHNESS` | open; the entry-side flat 15 s ceiling is its subject | me |
+| 3n.q8 | `B-BOOK-STATE-RESTART-DURABLE` (`#1066`) | **started 2026-09-24:** Step 1 approved (`6e2c5ec20`), Step 2 in progress, positive control captured (`87b4597d5`) | me; deploy after the `8a-P4c` window (2026-09-30T00:00Z) |
 
 **Closed 2026-09-11:** 3b.b `B-XSTOCK-FEED-SANITY` (`#943`) — window INCONCLUSIVE, stopped; the acceptance re-arms on the post-OBJ-7 instrument · 3b.f `B-PRICE-AGE-TRUTH` (`#951`) — Langston confirmed Step 11.
 
@@ -89,12 +90,12 @@ Derived 2026-09-11 from the plan's own rows; the `3n.*` rows re-derived 2026-09-
 | 3n.q4 | `B-EXIT-LINE-IDENTITY` |
 | 3n.q5 | `B-BOOK-STATE-RING-INDEPENDENT-BOUND` |
 | 3n.q6 | `B-EXIT-DECISION-RUNG-STAMP` (`#1064`) |
-| 3n.q8 | `B-BOOK-STATE-RESTART-DURABLE` (`#1066`) — before 3n.q7 |
+| 3n.q8 | `B-BOOK-STATE-RESTART-DURABLE` (`#1066`) — before 3n.q7 — **in progress, see §0a** |
 | 3n.q7 | `B-XSTOCK-BID-TRIGGER-RELAND` — after 3n.q8 |
 | 3n.r | `B-TSC-COVERS-TESTS` |
 | 3n.o | `B-CRYPTO-MARK-AGE-GATE` |
 | 3n.p | `B-EXIT-TICKER-LEG-ADAPTER-SIDES` |
-| 4 | `F-5` — per-strategy reach structure (pulled forward by Kyle, after 3n) |
+| 4 | `F-5` — the per-strategy reach STRUCTURE is delivered (`B-GEOMETRY-REACH-BASELINE` OBJ-A.1, 2026-09-13); what remains is the reach FIT on `F-E` |
 | 4.b | `B-KILLSWITCH-DENOMINATOR` (`#618` remaining legs) |
 | 4.c | `B-MODE-PREDICATE-SWEEP` (`#736`) — three mode-blind raw-SQL readers + delete `getClosedTradesGlobal`; placed 2026-09-23 at `B-BALANCE-TRUTH`'s close |
 | 5.a | `B-NONFIAT-QUOTE-DENOMINATION` (`#966`) |
