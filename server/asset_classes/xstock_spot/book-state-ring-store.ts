@@ -33,6 +33,18 @@
  *   never removed. The table is one row per xStock symbol ever held, so (2) is bounded and inert (a symbol that
  *   is no longer traded never seeds). Langston offered a universe-membership sweep; it buys almost nothing here
  *   and needs a universe source this module does not have, so it is not built — recorded for Step 10.
+ *   ⭐ WHY COST (1) IS BOUNDED, AND IT IS DIRECTIONAL (Langston, Step-4 r3 — the load-bearing half): eviction errs
+ *   PERMISSIVE (a deleted row ⇒ the next restart seeds vacuously), while a stale restored ring can only ever make
+ *   the guard REFUSE MORE, never accept more — absent the ring the seed is vacuously accepted anyway, because the
+ *   tracker judges a seed only when `retainedMedian > 0`. So on the accept/refuse axis cost (1) is bounded by
+ *   construction.
+ *   ⚠️ THE RESIDUAL IT DOES LEAVE IS A LABEL, NOT A RISK: a ring captured WIDE (a blowout, then a long gap) restores
+ *   and marks the new chain's seed `judged` although no CURRENT evidence judged it — S25b's provenance hazard
+ *   class. It is measurable per event: `RESTORED_RING_CONSUMED` prints `ringAgeMs` and `ringSeedBasis`, and the
+ *   Step-7 read reports the `ringAgeMs` distribution over CONSUMING SEEDS (not the boot line's loaded rows).
+ *   ⚠️ `RING_RESTORED n` IS A STORE CENSUS, NOT LIVE-UNIVERSE COVERAGE: with no eviction, `n` drifts above the
+ *   traded universe forever, and never-seeding dead rows drag the boot `ringAgeMin` percentiles. "Inert" is true
+ *   for seeding and false for that gauge — never read `n` as coverage.
  *
  * ⛔ FAILURE RULES (Langston Step-1 Q2 (a)(b); Step-4 r3 conditions 1-2):
  *   - A single invalid ROW is SKIPPED and COUNTED; the rest load. An OVER-LONG ring is TRUNCATED to its last

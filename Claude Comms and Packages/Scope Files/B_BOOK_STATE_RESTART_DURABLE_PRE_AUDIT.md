@@ -155,3 +155,15 @@ The xStock price check keeps a short record of how wide each stock's buy/sell ga
 **Nits, fixed in place:** A1's read count (4) and A12's file count (14 dated + today's). **Withdrawn by him, recorded:** his own concern about P5's delete-absent; an implausible chain still holds its S25b entry (`:313`), so the union catches it.
 
 **Board:** he has deliberately NOT set `Review = Approved` while the deploy-blocker stands, and will set it when P9's criterion comes back. The card moves to `Implementation` for Step 3.
+
+## 7. STEP 4 — APPROVED (r1 CHANGES-NEEDED → r2 → r3), AND WHAT IT ADDS TO STEPS 7-10
+
+**Step 4 APPROVED by Langston 2026-09-24 15:0xZ at `d7d8d509d`**, CI run `36016582885`, all four jobs green. The rounds are recorded in `Change Lists/B_BOOK_STATE_RESTART_DURABLE_CHANGE_LIST.md` (r1, r2, r3). **Design change from this plan: the store is UPSERT-ONLY** (no delete path). P5's "delete absent" is withdrawn on his finding that the sweep evicted in the permissive direction.
+
+**Added to P9 / the Step-7 read (his conditions, pre-registered here before any data):**
+- The P9 floor is a **FILTERED count**: enumerate `RESTORED_RING_CONSUMED` by all three `verdict` values and both `ringDeleted` values, and name `verdict=not_judged ringDeleted=true` explicitly (a restored ring destroyed without judging anything).
+- Report the **`ringAgeMs` distribution over CONSUMING SEEDS**, from the `RESTORED_RING_CONSUMED` lines. The boot line's `ringAgeMin` percentiles are over LOADED ROWS, a different population.
+- **`RING_RESTORED n` is a store census, not live-universe coverage**, so it is never read as coverage.
+- **Show `SHUTDOWN_FLUSH written=` from a real restart**, or state the crash bound as 30 s (FINDING-1).
+
+**Added to the Step-10 S25b amendment:** the store never deletes. A ring consumed in one process can be restored after a later restart: it judges one seed per process, which only ever refuses more, and its residual is a provenance LABEL. Delisted rows stay, and `n` is a census. The window a restart once exposed, between consumption and the next movement, is now covered because the row stays.
