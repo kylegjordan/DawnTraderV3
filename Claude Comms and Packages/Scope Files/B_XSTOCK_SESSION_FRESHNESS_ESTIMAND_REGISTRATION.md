@@ -539,3 +539,23 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 **Left ACTIVE, not acked**, per the routing and the `16500abc` precedent. ⚠️ **Stated so it is not assumed:** unlike the per-symbol `price-skip-paper-<sym>` rows in §17, this key is **ONE key for every xStock**, so while the row is active no symbol's next stale-fill block raises a new page (`system-alerts.ts:504-509` dedups on the key while `state !== 'resolved'`) (the block itself still happens and still logs). The detector for a genuine feed stall is the equity-feed silent-stall watchdog the body names, not this row. ⇒ **no new fact for the notify-suppression design beyond that reach.**
 
 ⛔ **§18's LEAVE-ACTIVE IS SUPERSEDED (2026-09-23).** Because the key is shared by every xStock, an open row mutes the whole class. From `3d05a4cd` on, Langston RESOLVES each instance with evidence so the key re-arms, and row `3b.f-c` now says the same. **Per his 12:03Z routing (`637a6916`), no further per-instance entries go into this document or the row.** The subject is unchanged: the flat entry ceiling against the risk-derived exit ceiling. It is carried as an objective of this row's Step-1 scope.
+
+---
+
+## §19 — A THIRD ATTRIBUTION BUCKET FOR AN ENTRY REFUSAL: THE GUARD READS THE ARCHIVE, AND THE ARCHIVE LAGS *(CC-C, 2026-09-25; Langston routed alert `7cb71394-c952-43e3-ac98-c7b64e2acc15` here, already resolved by him with evidence)*
+
+**The mechanism, at the ref.** The entry-fill freshness guard does not read the live quote. `getLatestTickAgeMs` (`active-dispatch.ts:74-79`) computes `NOW() - MAX(captured_at)` over **`xstock_spot_ticker_snap`**, the passive archive. That table is written through `ticker-batch-writer.ts`, which (a) keeps at most one frame per symbol per **throttle window**, read from `module_constants` `passive_archive` / `b74_ticker_snapshot_min_interval_ms` (**live value 4000 ms**, read 2026-09-25; code default 1000 ms at `:33`), and (b) makes buffered rows visible only on a **5,000 ms flush** (`BATCH_FLUSH_INTERVAL_MS`, `:30`). Each lag is inside the 15 s ceiling on its own; together they can hide up to about 9 s of freshness from the guard.
+
+**The measured instance (ARM/USD, re-derived at the object).** The alert's `triggers_at` is `05:02:54.008Z`. ARM's archived frames around it: `05:02:37.383Z`, then `05:02:52.085Z`, then `05:02:56.284Z`. At the refusal instant the newest VISIBLE row was `05:02:37.383Z`, giving an age of **16,625 ms** against the alert body's **16,610 ms** (Δ 15 ms, so this is that row). But a frame captured at `05:02:52.085Z` was **1.9 s old and still in the flush buffer.** ⇒ **The quote was fresh; the archive had not written it yet.** The symbol's own quote gap (`37.383` → `52.085`, 14.70 s) was UNDER the ceiling by itself, so **flush lag alone turned this into a refusal.**
+
+**THE BUCKETS for an entry-side stale-fill refusal, now three:**
+| # | bucket | discriminator |
+|---|---|---|
+| 1 | **Feed-wide stall** (Kyle's `#994` impaired case) | other xStock books received nothing in the same gap (§13's control) |
+| 2 | **The symbol's own quote gap** (thin or off-hours cadence) | the next row's `captured_at` is more than 15 s after the previous one, and the feed was serving other books |
+| 3 | ⭐ **Archive sampling lag** | a row with `captured_at` within 15 s of `triggers_at` exists in the table when read LATER. It was received but not yet flushed. |
+
+⚠️ **A reading rule this forces:** a refusal cannot be attributed from the table as it stood at the refusal instant, because bucket 3 is exactly the rows that were not there yet. **Read the table after the fact, and compare `captured_at` (not insertion time) against `triggers_at`.** Bucket 3 makes the guard's measured age an OVERSTATEMENT of the quote's age, so it errs toward refusing (the safe direction), never toward filling on an old price.
+⚠️ **Population limit: ONE instance.** How often bucket 3 decides a refusal is unmeasured, and it is `3b.f-c`'s to count across the alert population alongside buckets 1 and 2. **No change to `active_fill_max_age_ms` follows from this (OBJ-9 stands).** Whether the guard should read the live cache instead of the archive is a design question for this row, not a fix made here.
+
+**DISPOSITION: folded into this row (`3b.f-c`) as its third attribution bucket, per Langston's routing. The alert stays resolved (his evidence); future instances are resolved with evidence, never acked, because the shared dedupe key would mute every xStock stale-fill alarm.**
