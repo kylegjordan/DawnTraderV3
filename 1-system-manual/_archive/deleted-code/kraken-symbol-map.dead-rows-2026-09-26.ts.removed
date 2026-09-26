@@ -1,0 +1,12 @@
+// REMOVED 2026-09-26 by B-REST-SIDES-TO-CACHE (PHASE_19_PLAN 3n.l) OBJ-11, rule 18.
+// Six static rows from server/markets/kraken-symbol-map.ts whose REST pairs Kraken no longer lists in AssetPairs
+// (census 2026-09-26: 1,451 pairs, control ADAUSD present). 0 persisted rows for any of the six in closed_trades,
+// active_open_positions, vts_open_trades, exit_decision_archive, rtb_shadow_pool_members (all time) and
+// signal_eval_archive (7 days). MATIC was renamed POL; POL/USD resolves dynamically and is traded.
+// Record: 1-system-manual/DELETED_COMPONENTS_LOG.md. git history is the authoritative archive.
+  { internalSymbol: "EOS/USD", krakenRestPair: "EOSUSD", krakenWsPair: "EOS/USD", baseAsset: "EOS", quoteAsset: "USD" },
+  { internalSymbol: "ICX/USD", krakenRestPair: "ICXUSD", krakenWsPair: "ICX/USD", baseAsset: "ICX", quoteAsset: "USD" },
+  { internalSymbol: "MATIC/USD", krakenRestPair: "MATICUSD", krakenWsPair: "MATIC/USD", baseAsset: "MATIC", quoteAsset: "USD" },
+  { internalSymbol: "MKR/USD", krakenRestPair: "MKRUSD", krakenWsPair: "MKR/USD", baseAsset: "MKR", quoteAsset: "USD" },
+  { internalSymbol: "REP/USD", krakenRestPair: "REPUSD", krakenWsPair: "REP/USD", baseAsset: "REP", quoteAsset: "USD" },
+  { internalSymbol: "WAVES/USD", krakenRestPair: "WAVESUSD", krakenWsPair: "WAVES/USD", baseAsset: "WAVES", quoteAsset: "USD" },

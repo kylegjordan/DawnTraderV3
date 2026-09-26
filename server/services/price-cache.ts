@@ -22,6 +22,7 @@
 
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kraken-symbol-resolver';
+import { buildWriteKeyLedger, formatWriteKeyLedger, WriteKeyAccumulator, type RestWriteKeys, type WriteKeyLedger } from './market-data/rest-write-keys.js';
 
 export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';
 
@@ -101,10 +102,21 @@ export interface CachedPrice {
    */
   lastTradePrice: number | null;
   lastTradeReceivedAtMs: number | null;
+  /**
+   * `B-REST-SIDES-TO-CACHE` (`3n.l`) OBJ-10: WHICH WRITER last set `bid`/`ask`, so the writer mix `#1056` owes can be
+   * read off the cache instead of inferred by elimination (alert `5bfb2af5`). Moves ONLY with the sides it names, exactly
+   * like `sidesCapturedAtMs`: a writer that did not observe a side carries the previous value forward. `null` = no writer
+   * has ever stated sides for this key (the cold `bid === ask === price` row).
+   * ⛔ RECORD-ONLY: no decision reads it.
+   */
+  sidesWriter: SidesWriter | null;
 }
 
 /** P-7k: which quantity a cached `price` is. */
 export type CacheMarkKind = 'mid' | 'last';
+
+/** `3n.l` OBJ-10: the writer that last set a row's sides. The three REST ticker sites are named apart so a phantom or a stale side can be traced to its site. */
+export type SidesWriter = 'ws' | 'rest_poller' | 'rest_fetch' | 'rest_batch';
 
 /**
  * P-7k: P-7i's carry rule for this row, in ONE place, with one predicate deciding both halves (Langston chunk-3 C1).
@@ -238,6 +250,7 @@ class UnifiedPriceCache {
 
   private async refreshBucket(bucket: CacheBucket, now: number): Promise<void> {
     const symbols = Array.from(bucket.symbols);
+    const writes: RestWriteKeys[] = []; // `3n.l` P3: every key this pass writes, for the write-key ledger
     
     for (let i = 0; i < symbols.length; i += this.BATCH_SIZE) {
       const batch = symbols.slice(i, i + this.BATCH_SIZE);
@@ -264,6 +277,7 @@ class UnifiedPriceCache {
               // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
               // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
               venueObservedAtMs: null,
+              sidesWriter: 'rest_poller',
               // ⛔ REST path — NOT a push. Carries forward, never advances.
               lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
               // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
@@ -279,6 +293,7 @@ class UnifiedPriceCache {
             if (requestedSymbol && requestedSymbol !== normalizedSymbol) {
               this.cache.set(requestedSymbol, cachedPrice);
             }
+            writes.push({ responseKey: pair, writtenKeys: requestedSymbol && requestedSymbol !== normalizedSymbol ? [normalizedSymbol, requestedSymbol] : [normalizedSymbol] });
           }
           
           console.log(`[A4.R10R-1][PriceCache][${bucket.type}] refreshed ${batch.length} symbols`);
@@ -288,6 +303,9 @@ class UnifiedPriceCache {
       }
     }
 
+    // `3n.l` P3: requested / written / phantom / missing for this pass, and who wrote each member's sides.
+    this.logWriteKeys(buildWriteKeyLedger('refreshBucket', symbols, writes, sym => this.toKrakenSymbol(sym)),
+      `bucket=${bucket.type} sidesWriter=${this.sidesWriterCensus(symbols)}`);
     bucket.lastRefresh = now;
   }
 
@@ -396,6 +414,7 @@ class UnifiedPriceCache {
     
     try {
       let fetchedData: CachedPrice | null = null;
+      const writes: RestWriteKeys[] = []; // `3n.l` P3
       
       await this.safeFetch(1, async () => {
         const krakenSymbol = this.toKrakenSymbol(symbol);
@@ -418,6 +437,7 @@ class UnifiedPriceCache {
             // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
             // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
             venueObservedAtMs: null,
+            sidesWriter: 'rest_fetch',
             // ⛔ REST path — NOT a push. Carries forward, never advances.
             lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
             // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
@@ -433,9 +453,11 @@ class UnifiedPriceCache {
             this.cache.set(symbol, tickerData);
             fetchedData = tickerData;
           }
+          writes.push({ responseKey: pair, writtenKeys: fetchedData === tickerData && symbol !== normalizedSymbol ? [normalizedSymbol, symbol] : [normalizedSymbol] });
         }
       });
       
+      this.writeKeyAcc.getPrice.add(buildWriteKeyLedger('getPrice', [symbol], writes, sym => this.toKrakenSymbol(sym)));
       return fetchedData || this.cache.get(symbol) || null;
     } catch (err: any) {
       console.warn(`[A4.R10R-1][PriceCache] getPrice error for ${symbol}:`, err.message);
@@ -512,6 +534,7 @@ class UnifiedPriceCache {
     }
 
     if (missingSymbols.length > 0) {
+      const writes: RestWriteKeys[] = []; // `3n.l` P3
       try {
         for (let i = 0; i < missingSymbols.length; i += this.BATCH_SIZE) {
           const batch = missingSymbols.slice(i, i + this.BATCH_SIZE);
@@ -537,6 +560,7 @@ class UnifiedPriceCache {
                 // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
                 // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
                 venueObservedAtMs: null,
+                sidesWriter: 'rest_batch',
               // ⛔ REST path — NOT a push. Carries forward, never advances.
               lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
               // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
@@ -554,10 +578,12 @@ class UnifiedPriceCache {
                 this.cache.set(requestedSymbol, tickerData);
                 result.set(requestedSymbol, tickerData);
               }
+              writes.push({ responseKey: pair, writtenKeys: requestedSymbol && requestedSymbol !== normalizedSymbol ? [normalizedSymbol, requestedSymbol] : [normalizedSymbol] });
             }
           });
         }
         console.log(`[A4.R10R-1][PriceCache][getBatch] Fetched ${missingSymbols.length} missing symbols for ${bucketType}`);
+        this.writeKeyAcc.getBatch.add(buildWriteKeyLedger('getBatch', missingSymbols, writes, sym => this.toKrakenSymbol(sym)));
       } catch (err: any) {
         console.warn(`[A4.R10R-1][PriceCache][getBatch] Error fetching batch:`, err.message);
       }
@@ -587,6 +613,25 @@ class UnifiedPriceCache {
     const r = kinds.rows;
     const l = kinds.levelReads;
     console.log(`[A4.R10R-1][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} vts=${vts} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size} rowKind=mid:${r.mid},last:${r.last},unknown:${r.unknown} levelReadKind=mid:${l.mid},last:${l.last},unknown:${l.unknown}`);
+    // `3n.l` P3: the on-demand sites print their own interval, each on its own line (Step-2 condition c).
+    for (const acc of [this.writeKeyAcc.getPrice, this.writeKeyAcc.getBatch]) {
+      const line = acc.flushLine();
+      if (line) console.log(line);
+    }
+  }
+
+  /** `3n.l` P3: the on-demand REST sites' ledgers, summed between health lines. */
+  private writeKeyAcc = { getPrice: new WriteKeyAccumulator('getPrice'), getBatch: new WriteKeyAccumulator('getBatch') };
+
+  private logWriteKeys(ledger: WriteKeyLedger, extra: string): void {
+    console.log(formatWriteKeyLedger(ledger, extra));
+  }
+
+  /** `3n.l` OBJ-10: who last wrote the sides of each given symbol's row (`none` = no row, or a row with no stated sides). */
+  sidesWriterCensus(symbols: Iterable<string>): string {
+    const counts: Record<string, number> = { ws: 0, rest_poller: 0, rest_fetch: 0, rest_batch: 0, none: 0 };
+    for (const sym of symbols) counts[this.cache.get(sym)?.sidesWriter ?? 'none']++;
+    return Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(',');
   }
 
   /** P-7k: kinds of the cached prices the crypto quant lane read at evaluation entry, since the last HEALTH line (an upper bound on level-setting reads). */
@@ -690,6 +735,8 @@ class UnifiedPriceCache {
       // refresh the sides would date one observation while describing another — W-3 again,
       // one field over. When no side was supplied the previous stamp is carried, untouched.
       venueObservedAtMs: (bid !== null || ask !== null) ? venueObservedAtMs : (existing?.venueObservedAtMs ?? null),
+      // `3n.l` OBJ-10: moves with the sides it names, never on a tick that stated none.
+      sidesWriter: (bid !== null || ask !== null) ? 'ws' : (existing?.sidesWriter ?? null),
       // ⭐ ADVANCED HERE AND NOWHERE ELSE — this is the only writer fed by a venue PUSH. Every
       // other writer carries the previous value forward untouched, which is what makes a silent
       // socket death visible instead of masked by the REST poller.
@@ -719,6 +766,8 @@ class UnifiedPriceCache {
       // here on the first pass and caught it; the sides keep the age they actually have.
       sidesCapturedAtMs: existing?.sidesCapturedAtMs ?? null,
       venueObservedAtMs: existing?.venueObservedAtMs ?? null,
+      // `3n.l` OBJ-10: this writer carries the sides forward, so it carries their writer forward too.
+      sidesWriter: existing?.sidesWriter ?? null,
       lastWsMessageAtMs: existing?.lastWsMessageAtMs ?? null,
       // P-7k: the caller decides the kind from the REST sides it read (`markKindOf`), and passes REST `c[0]` as the print.
       markKind: markKind ?? null,

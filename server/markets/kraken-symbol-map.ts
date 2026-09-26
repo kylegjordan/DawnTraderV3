@@ -14,7 +14,15 @@
 
 export type KrakenPairMapping = {
   internalSymbol: string;    // Canonical format: "AVAX/USD"
-  krakenRestPair: string;    // Kraken REST API: "XAVAXZUSD" or "AVAXUSD"
+  /**
+   * Kraken's PRIMARY pair key — the key Kraken ANSWERS a REST ticker request by (`AssetPairs` result key), e.g.
+   * "XXBTZUSD", "ZGBPZUSD", or "ADAUSD" where the primary and the altname coincide.
+   * ⛔ NEVER the altname when the two differ (`B-REST-SIDES-TO-CACHE`, `#1056` amendments 1-4): Kraken accepts an
+   * altname request but answers under the primary, `normalizeInternal` then misses this row, and the cache files the
+   * response under a phantom (`ZGBPZ/USD` for "GBPUSD", alert `5bfb2af5`). This comment used to read
+   * `"XAVAXZUSD" or "AVAXUSD"`, which sanctioned exactly that form.
+   */
+  krakenRestPair: string;
   krakenWsPair: string;      // Kraken WebSocket: "AVAX/USD"
   baseAsset: string;         // "AVAX"
   quoteAsset: string;        // "USD"
@@ -43,16 +51,14 @@ export const KRAKEN_SYMBOL_MAP: KrakenPairMapping[] = [
   { internalSymbol: "DASH/USD", krakenRestPair: "DASHUSD", krakenWsPair: "DASH/USD", baseAsset: "DASH", quoteAsset: "USD" },
   { internalSymbol: "DOT/USD", krakenRestPair: "DOTUSD", krakenWsPair: "DOT/USD", baseAsset: "DOT", quoteAsset: "USD" },
   { internalSymbol: "ENJ/USD", krakenRestPair: "ENJUSD", krakenWsPair: "ENJ/USD", baseAsset: "ENJ", quoteAsset: "USD" },
-  { internalSymbol: "EOS/USD", krakenRestPair: "EOSUSD", krakenWsPair: "EOS/USD", baseAsset: "EOS", quoteAsset: "USD" },
   { internalSymbol: "ETH/USD", krakenRestPair: "XETHZUSD", krakenWsPair: "ETH/USD", baseAsset: "ETH", quoteAsset: "USD" },
-  { internalSymbol: "ETC/USD", krakenRestPair: "ETCUSD", krakenWsPair: "ETC/USD", baseAsset: "ETC", quoteAsset: "USD" },
+  { internalSymbol: "ETC/USD", krakenRestPair: "XETCZUSD", krakenWsPair: "ETC/USD", baseAsset: "ETC", quoteAsset: "USD" },
   { internalSymbol: "FIL/USD", krakenRestPair: "FILUSD", krakenWsPair: "FIL/USD", baseAsset: "FIL", quoteAsset: "USD" },
   { internalSymbol: "FLOW/USD", krakenRestPair: "FLOWUSD", krakenWsPair: "FLOW/USD", baseAsset: "FLOW", quoteAsset: "USD" },
   { internalSymbol: "FORTH/USD", krakenRestPair: "FORTHUSD", krakenWsPair: "FORTH/USD", baseAsset: "FORTH", quoteAsset: "USD" },
   { internalSymbol: "FXS/USD", krakenRestPair: "FXSUSD", krakenWsPair: "FXS/USD", baseAsset: "FXS", quoteAsset: "USD" },
   { internalSymbol: "GRT/USD", krakenRestPair: "GRTUSD", krakenWsPair: "GRT/USD", baseAsset: "GRT", quoteAsset: "USD" },
   { internalSymbol: "HNT/USD", krakenRestPair: "HNTUSD", krakenWsPair: "HNT/USD", baseAsset: "HNT", quoteAsset: "USD" },
-  { internalSymbol: "ICX/USD", krakenRestPair: "ICXUSD", krakenWsPair: "ICX/USD", baseAsset: "ICX", quoteAsset: "USD" },
   { internalSymbol: "INJ/USD", krakenRestPair: "INJUSD", krakenWsPair: "INJ/USD", baseAsset: "INJ", quoteAsset: "USD" },
   { internalSymbol: "KAVA/USD", krakenRestPair: "KAVAUSD", krakenWsPair: "KAVA/USD", baseAsset: "KAVA", quoteAsset: "USD" },
   { internalSymbol: "KNC/USD", krakenRestPair: "KNCUSD", krakenWsPair: "KNC/USD", baseAsset: "KNC", quoteAsset: "USD" },
@@ -61,8 +67,6 @@ export const KRAKEN_SYMBOL_MAP: KrakenPairMapping[] = [
   { internalSymbol: "LRC/USD", krakenRestPair: "LRCUSD", krakenWsPair: "LRC/USD", baseAsset: "LRC", quoteAsset: "USD" },
   { internalSymbol: "LTC/USD", krakenRestPair: "XLTCZUSD", krakenWsPair: "LTC/USD", baseAsset: "LTC", quoteAsset: "USD" },
   { internalSymbol: "MANA/USD", krakenRestPair: "MANAUSD", krakenWsPair: "MANA/USD", baseAsset: "MANA", quoteAsset: "USD" },
-  { internalSymbol: "MATIC/USD", krakenRestPair: "MATICUSD", krakenWsPair: "MATIC/USD", baseAsset: "MATIC", quoteAsset: "USD" },
-  { internalSymbol: "MKR/USD", krakenRestPair: "MKRUSD", krakenWsPair: "MKR/USD", baseAsset: "MKR", quoteAsset: "USD" },
   { internalSymbol: "NANO/USD", krakenRestPair: "NANOUSD", krakenWsPair: "NANO/USD", baseAsset: "NANO", quoteAsset: "USD" },
   { internalSymbol: "NEAR/USD", krakenRestPair: "NEARUSD", krakenWsPair: "NEAR/USD", baseAsset: "NEAR", quoteAsset: "USD" },
   { internalSymbol: "NOS/USD", krakenRestPair: "NOSUSD", krakenWsPair: "NOS/USD", baseAsset: "NOS", quoteAsset: "USD" },
@@ -73,7 +77,6 @@ export const KRAKEN_SYMBOL_MAP: KrakenPairMapping[] = [
   { internalSymbol: "QTUM/USD", krakenRestPair: "QTUMUSD", krakenWsPair: "QTUM/USD", baseAsset: "QTUM", quoteAsset: "USD" },
   { internalSymbol: "RARI/USD", krakenRestPair: "RARIUSD", krakenWsPair: "RARI/USD", baseAsset: "RARI", quoteAsset: "USD" },
   { internalSymbol: "REN/USD", krakenRestPair: "RENUSD", krakenWsPair: "REN/USD", baseAsset: "REN", quoteAsset: "USD" },
-  { internalSymbol: "REP/USD", krakenRestPair: "REPUSD", krakenWsPair: "REP/USD", baseAsset: "REP", quoteAsset: "USD" },
   { internalSymbol: "SAND/USD", krakenRestPair: "SANDUSD", krakenWsPair: "SAND/USD", baseAsset: "SAND", quoteAsset: "USD" },
   { internalSymbol: "SC/USD", krakenRestPair: "SCUSD", krakenWsPair: "SC/USD", baseAsset: "SC", quoteAsset: "USD" },
   { internalSymbol: "SNX/USD", krakenRestPair: "SNXUSD", krakenWsPair: "SNX/USD", baseAsset: "SNX", quoteAsset: "USD" },
@@ -83,7 +86,6 @@ export const KRAKEN_SYMBOL_MAP: KrakenPairMapping[] = [
   { internalSymbol: "TRX/USD", krakenRestPair: "TRXUSD", krakenWsPair: "TRX/USD", baseAsset: "TRX", quoteAsset: "USD" },
   { internalSymbol: "TRUMP/USD", krakenRestPair: "TRUMPUSD", krakenWsPair: "TRUMP/USD", baseAsset: "TRUMP", quoteAsset: "USD" },
   { internalSymbol: "UNI/USD", krakenRestPair: "UNIUSD", krakenWsPair: "UNI/USD", baseAsset: "UNI", quoteAsset: "USD" },
-  { internalSymbol: "WAVES/USD", krakenRestPair: "WAVESUSD", krakenWsPair: "WAVES/USD", baseAsset: "WAVES", quoteAsset: "USD" },
   { internalSymbol: "XLM/USD", krakenRestPair: "XXLMZUSD", krakenWsPair: "XLM/USD", baseAsset: "XLM", quoteAsset: "USD" },
   { internalSymbol: "XMR/USD", krakenRestPair: "XXMRZUSD", krakenWsPair: "XMR/USD", baseAsset: "XMR", quoteAsset: "USD" },
   { internalSymbol: "XRP/USD", krakenRestPair: "XXRPZUSD", krakenWsPair: "XRP/USD", baseAsset: "XRP", quoteAsset: "USD" },
@@ -137,7 +139,7 @@ export const KRAKEN_SYMBOL_MAP: KrakenPairMapping[] = [
   { internalSymbol: "BTC/GBP", krakenRestPair: "XXBTZGBP", krakenWsPair: "XBT/GBP", baseAsset: "BTC", quoteAsset: "GBP" },
   { internalSymbol: "DOT/GBP", krakenRestPair: "DOTGBP", krakenWsPair: "DOT/GBP", baseAsset: "DOT", quoteAsset: "GBP" },
   { internalSymbol: "ETH/GBP", krakenRestPair: "XETHZGBP", krakenWsPair: "ETH/GBP", baseAsset: "ETH", quoteAsset: "GBP" },
-  { internalSymbol: "GBP/USD", krakenRestPair: "GBPUSD", krakenWsPair: "GBP/USD", baseAsset: "GBP", quoteAsset: "USD" },
+  { internalSymbol: "GBP/USD", krakenRestPair: "ZGBPZUSD", krakenWsPair: "GBP/USD", baseAsset: "GBP", quoteAsset: "USD" },
 
   // === CHF Pairs ===
   { internalSymbol: "USD/CHF", krakenRestPair: "USDCHF", krakenWsPair: "USD/CHF", baseAsset: "USD", quoteAsset: "CHF" },
