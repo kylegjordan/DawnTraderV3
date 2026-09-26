@@ -77,6 +77,7 @@ The three REST constructions add `sidesWriter: 'rest_poller' | 'rest_fetch' | 'r
 
 - **GBP/USD** (in `openTrade`, `readyToBuy`, `vtsSimulation` today) gets fresh REST sides on every pass of each bucket it is in. The paper exit trigger's ticker rung and the VTS exit trigger can now decide during a WS silence where they refused before. **FINDING-3 applies from this deploy:** a REST write replaces WS sides with a receipt-stamped snapshot (pre-audit §2.4, measured at V4).
 - **ETC/USD:** the same, when polled (not polled today, pre-audit §2.1).
+- ⛔ **THE FRESHNESS CLOCK FLIPS FOR GBP/USD (Step-4 condition C3, Langston).** `touch-price.ts:177` ages the ticker rung by `venueObservedAtMs ?? sidesCapturedAtMs`, and `:183` labels it `venue` or `receipt`. The poller writes `venueObservedAtMs: null` and re-stamps `sidesCapturedAtMs` on every pass. **So from this deploy GBP/USD's ticker rung runs on OUR receipt clock instead of the venue's, and it can no longer age out during a venue silence: the refusal that produced `5bfb2af5` will not recur for it.** Every other REST-polled symbol has always been on the receipt clock. ⛔ **FROM HERE ON, A SILENT EXIT-TRIGGER RAIL IS NOT EVIDENCE THAT EXIT PRICES ARE FRESH** (`#661` leg 3): for a polled symbol the 2,000 ms gate measures our polling, not the venue. The systemic question is homed on row `3n.p` (`#1056` amendment 5). Kyle's 2026-09-03 ruling (one freshness standard round the clock) is not violated by the diff, but what the standard measures for polled symbols is now written down.
 - **The volume path: no change** (pre-audit §0 N-1b; C1 withdrawn).
 - **The six dead pairs:** `toKrakenRest` returns `null` with its warn, instead of a pair Kraken rejects. No persisted rows exist (pre-audit §2.5).
 - **Log volume:** one `[3n.l][WRITE_KEYS]` line per bucket pass (`openTrade` every ~2 s is ~43k lines a day in `out.log`), plus at most two site lines per minute.
@@ -94,3 +95,16 @@ The three REST constructions add `sidesWriter: 'rest_poller' | 'rest_fetch' | 'r
 1. **The `refreshBucket` line every pass** (43k lines a day on the 2 s bucket). The alternative is to print only when phantom or missing is non-empty, but then V1's PRESENCE assertion (GBP/USD in WRITTEN) has no line to read on a clean pass. I kept every pass.
 2. **`requested` for `refreshBucket` is the whole bucket.** A chunk whose fetch throws shows its symbols as MISSING, which is true (they got no write), but it mixes "Kraken omitted it" with "the request failed". The existing `Batch fetch error` warn names the second.
 3. **`sidesWriter` is set on a phantom row too** (the three REST constructions stamp before the key is chosen). A phantom row then carries `rest_*`, which is accurate about who wrote it.
+
+---
+
+## 6. STEP-4 RULING (Langston, 2026-09-26 21:13Z): APPROVED WITH FOUR CONDITIONS — how each was met (code at the next commit)
+| # | condition | done |
+|---|---|---|
+| **C1** | the ledger was lost on the error path at `getPrice` and `getBatch` | both `add` calls moved into `finally`; a failed fetch now shows its symbols as MISSING. Test 10; mutation M10 (getPrice) and M8 (getBatch) killed |
+| **C2** | the accumulated line mixed per-call sums with interval sets | the set fields are renamed `phantomDistinct` / `missingDistinct`, and the class docblock states which fields are sums and which are sets. Mutation M11 killed |
+| **C3** | the clockBasis flip was missing from §3 | stated in §3 above; the systemic half homed on `3n.p`; recorded in the completion report at Step 11 |
+| **C4** | test 2's fence held 18 of 44 | the fixture is now ALL 44 pairs whose primary differs from the altname (Kraken `AssetPairs`, 2026-09-26) |
+**Nits:** test 1's title now says the cache still requests by `toKrakenSymbol`; the pre-existing mis-indented lines in `getBatch`'s literal are re-indented; `sidesWriterCensus` is private.
+**Evidence after the fixes:** 10/10 tests; **11/11 mutations killed**; 18 related files, 241 tests; `check-tsc-baseline` 377 = 377. CI: per job, on the pushed head.
+**Judgement calls:** #1 approved and measured by Langston (out.log ~54.7 GB/day; the ledger adds ~0.02% of bytes); #2 accepted, with the correction that only `refreshBucket` behaves that way; #3 accepted.

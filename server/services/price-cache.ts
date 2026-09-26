@@ -412,9 +412,9 @@ class UnifiedPriceCache {
       this.subscribe(symbol, bucketType);
     }
     
+    const writes: RestWriteKeys[] = []; // `3n.l` P3
     try {
       let fetchedData: CachedPrice | null = null;
-      const writes: RestWriteKeys[] = []; // `3n.l` P3
       
       await this.safeFetch(1, async () => {
         const krakenSymbol = this.toKrakenSymbol(symbol);
@@ -457,11 +457,14 @@ class UnifiedPriceCache {
         }
       });
       
-      this.writeKeyAcc.getPrice.add(buildWriteKeyLedger('getPrice', [symbol], writes, sym => this.toKrakenSymbol(sym)));
       return fetchedData || this.cache.get(symbol) || null;
     } catch (err: any) {
       console.warn(`[A4.R10R-1][PriceCache] getPrice error for ${symbol}:`, err.message);
       return cached || null;
+    } finally {
+      // `3n.l` P3, Step-4 condition C1: recorded on the ERROR path too, so a failed fetch shows its symbol as MISSING
+      // instead of leaving the interval looking like the site was never called.
+      this.writeKeyAcc.getPrice.add(buildWriteKeyLedger('getPrice', [symbol], writes, sym => this.toKrakenSymbol(sym)));
     }
   }
 
@@ -561,12 +564,12 @@ class UnifiedPriceCache {
                 // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
                 venueObservedAtMs: null,
                 sidesWriter: 'rest_batch',
-              // ⛔ REST path — NOT a push. Carries forward, never advances.
-              lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
-              // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
-              // TRADE, so the row states that kind, and the same number is this write's print.
-              markKind: 'last',
-              ...carryLastTrade(this.cache.get(normalizedSymbol), parseFloat(ticker.c?.[0] || '0'), now),
+                // ⛔ REST path — NOT a push. Carries forward, never advances.
+                lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
+                // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
+                // TRADE, so the row states that kind, and the same number is this write's print.
+                markKind: 'last',
+                ...carryLastTrade(this.cache.get(normalizedSymbol), parseFloat(ticker.c?.[0] || '0'), now),
                 lastUpdatedAt: now,
               };
               
@@ -583,9 +586,12 @@ class UnifiedPriceCache {
           });
         }
         console.log(`[A4.R10R-1][PriceCache][getBatch] Fetched ${missingSymbols.length} missing symbols for ${bucketType}`);
-        this.writeKeyAcc.getBatch.add(buildWriteKeyLedger('getBatch', missingSymbols, writes, sym => this.toKrakenSymbol(sym)));
       } catch (err: any) {
         console.warn(`[A4.R10R-1][PriceCache][getBatch] Error fetching batch:`, err.message);
+      } finally {
+        // `3n.l` P3, Step-4 condition C1: a throwing chunk no longer discards the call's ledger, and the symbols it did
+        // not write show as MISSING, including those of the chunks after it that were never attempted.
+        this.writeKeyAcc.getBatch.add(buildWriteKeyLedger('getBatch', missingSymbols, writes, sym => this.toKrakenSymbol(sym)));
       }
     }
 
@@ -628,7 +634,7 @@ class UnifiedPriceCache {
   }
 
   /** `3n.l` OBJ-10: who last wrote the sides of each given symbol's row (`none` = no row, or a row with no stated sides). */
-  sidesWriterCensus(symbols: Iterable<string>): string {
+  private sidesWriterCensus(symbols: Iterable<string>): string {
     const counts: Record<string, number> = { ws: 0, rest_poller: 0, rest_fetch: 0, rest_batch: 0, none: 0 };
     for (const sym of symbols) counts[this.cache.get(sym)?.sidesWriter ?? 'none']++;
     return Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(',');

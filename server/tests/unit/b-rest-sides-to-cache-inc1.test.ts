@@ -20,13 +20,20 @@ function tick(bid: string, ask: string, last: string) {
 }
 
 /**
- * Kraken `AssetPairs`, 2026-09-26: altname → primary for pairs whose two names DIFFER. The static map must never carry
- * the altname for any of these (OBJ-8's invariant). The first two are the rows this increment corrects.
+ * Kraken `AssetPairs`, 2026-09-26: EVERY pair whose primary key differs from its altname (44 of 1,451; Step-4 condition
+ * C4 — the selection is the whole set, not a sample). The static map must never carry the altname for any of them
+ * (OBJ-8's invariant). A pair Kraken adds later is outside this fence; row `3n.l-a` owns the live check.
  */
 const ALTNAME_TO_PRIMARY: Record<string, string> = {
-  GBPUSD: 'ZGBPZUSD', ETCUSD: 'XETCZUSD', XBTUSD: 'XXBTZUSD', ETHUSD: 'XETHZUSD', XRPUSD: 'XXRPZUSD', LTCUSD: 'XLTCZUSD',
-  XBTEUR: 'XXBTZEUR', ETHEUR: 'XETHZEUR', XBTGBP: 'XXBTZGBP', ETHGBP: 'XETHZGBP', USDJPY: 'ZUSDZJPY', USDCAD: 'ZUSDZCAD',
-  XBTCAD: 'XXBTZCAD', ZECEUR: 'XZECZEUR', MLNUSD: 'XMLNZUSD', USDTUSD: 'USDTZUSD', XLMUSD: 'XXLMZUSD', XMRUSD: 'XXMRZUSD',
+  ETCETH: 'XETCXETH', ETCEUR: 'XETCZEUR', ETCUSD: 'XETCZUSD', ETCXBT: 'XETCXXBT', ETHCAD: 'XETHZCAD',
+  ETHEUR: 'XETHZEUR', ETHGBP: 'XETHZGBP', ETHJPY: 'XETHZJPY', ETHUSD: 'XETHZUSD', ETHXBT: 'XETHXXBT',
+  EURUSD: 'ZEURZUSD', GBPUSD: 'ZGBPZUSD', LTCEUR: 'XLTCZEUR', LTCJPY: 'XLTCZJPY', LTCUSD: 'XLTCZUSD',
+  LTCXBT: 'XLTCXXBT', MLNEUR: 'XMLNZEUR', MLNUSD: 'XMLNZUSD', MLNXBT: 'XMLNXXBT', USDCAD: 'ZUSDZCAD',
+  USDJPY: 'ZUSDZJPY', USDTUSD: 'USDTZUSD', XBTCAD: 'XXBTZCAD', XBTEUR: 'XXBTZEUR', XBTEUROP: 'XXBTEUROP',
+  XBTGBP: 'XXBTZGBP', XBTJPY: 'XXBTZJPY', XBTUSD: 'XXBTZUSD', XBTUSDQ: 'XXBTUSDQ', XBTUSDR: 'XXBTUSDR',
+  XDGXBT: 'XXDGXXBT', XLMEUR: 'XXLMZEUR', XLMGBP: 'XXLMZGBP', XLMUSD: 'XXLMZUSD', XLMXBT: 'XXLMXXBT',
+  XMREUR: 'XXMRZEUR', XMRUSD: 'XXMRZUSD', XMRXBT: 'XXMRXXBT', XRPCAD: 'XXRPZCAD', XRPEUR: 'XXRPZEUR',
+  XRPUSD: 'XXRPZUSD', XRPXBT: 'XXRPXXBT', ZECEUR: 'XZECZEUR', ZECUSD: 'XZECZUSD',
 };
 
 beforeAll(() => {
@@ -42,7 +49,7 @@ afterEach(() => {
 });
 
 describe('OBJ-8 — the static map carries the key Kraken answers by', () => {
-  it('1. Kraken\'s primary resolves to the internal symbol, and the request uses the primary', () => {
+  it('1. Kraken\'s primary resolves to the internal symbol; the resolver\'s request form is the primary (the price cache still asks by its own `toKrakenSymbol`, scope C1)', () => {
     expect(normalizeToInternalSymbol('ZGBPZUSD')).toBe('GBP/USD');
     expect(normalizeToInternalSymbol('XETCZUSD')).toBe('ETC/USD');
     expect(toKrakenRest('GBP/USD')).toBe('ZGBPZUSD');
@@ -96,8 +103,8 @@ describe('P3 — the write-key ledger (pure)', () => {
     acc.add(buildWriteKeyLedger('getPrice', ['X/USD'], [{ responseKey: 'XUSD', writtenKeys: ['Q/USD'] }], s => s));
     const line = acc.flushLine()!;
     expect(line).toContain('site=getPrice calls=1');
-    expect(line).toContain('phantom=1[Q/USD]');
-    expect(line).toContain('missing=1[X/USD]');
+    expect(line).toContain('phantomDistinct=1[Q/USD]');
+    expect(line).toContain('missingDistinct=1[X/USD]');
     expect(acc.flushLine()).toBeNull();
     expect(formatKeyList(Array.from({ length: 30 }, (_, i) => `K${i}`))).toContain('+5 more');
   });
@@ -161,5 +168,17 @@ describe('OBJ-10 — each row names the writer of its sides', () => {
     const n = logs.length;
     pc.logHealthLine();
     expect(logs.slice(n).some(l => l.includes('[3n.l][WRITE_KEYS]'))).toBe(false); // reset: no calls, no site lines
+  });
+
+  it('10. a failing fetch is still recorded: the symbol shows as MISSING at the health tick (Step-4 condition C1)', async () => {
+    const logs: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((...a: any[]) => { logs.push(a.join(' ')); });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    pc.krakenService.getTicker = vi.fn().mockRejectedValue(new Error('venue down'));
+    await pc.getPrice(FAKE, 'readyToBuy');
+    await pc.getBatch('vtsSimulation', [FAKE]);
+    pc.logHealthLine();
+    expect(logs.some(l => l.includes('site=getPrice calls=1 requested=1 written=0') && l.includes(`missingDistinct=1[${FAKE}]`))).toBe(true);
+    expect(logs.some(l => l.includes('site=getBatch calls=1 requested=1 written=0') && l.includes(`missingDistinct=1[${FAKE}]`))).toBe(true);
   });
 });

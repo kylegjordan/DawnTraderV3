@@ -83,9 +83,11 @@ After OBJ-8 the three REST sites land on `GBP/USD` (and `ETC/USD` when polled), 
 ## 4. VERIFICATION, PRE-REGISTERED BEFORE ANY DATA
 
 - **V1 (C3), re-stated as a PRESENCE (Step-2 condition a):** after the deploy's restart, on a pass whose **requested** list includes `GBP/USD`, **`GBP/USD` appears in the WRITTEN list under its own key**, at each of the three sites that handles it. **Absence of `ZGBPZ/USD` alone is NOT the criterion**, because it is equally satisfied when GBP/USD was simply not requested. As a secondary check, the phantom list names no `ZGBPZ/USD` and no `XETCZ/USD`. **Positive control on the same line: `XXBTZ/CAD`, `XZECZ/EUR`, `ZUSDZ/CAD` ARE named** (the three §2.1 pairs, row `3n.l-a`'s). An empty phantom line would prove the counter, not the fix. **The pre-fix phantom is memory-only and dies with the process: no migration.**
+- ⭐ **PRE-REGISTERED BEFORE V1 IS READ (Step-4 ruling): the phantom baseline is NON-ZERO by design.** Every Kraken pair whose primary differs from its altname and that the static map lacks lands on a phantom; today three such pairs are polled (`BTC/CAD`, `ZEC/EUR`, `USD/CAD`, `vtsSimulation`). **A non-zero phantom list containing exactly those is the expected state, not a failure of this fix.** Only a phantom derived from `GBP/USD` or `ETC/USD` fails V1.
+- ⏳ **SHELF LIFE: `out.log` keeps about 7 hours** (Langston measured 14 × 1 GB rotations spanning 14:03Z → 21:04Z on 2026-09-26). **The V1-V4 readings are harvested inside that window after the deploy and written to the batch record the same day** (`#1044`'s class).
 - **V2:** the `sidesWriter` census shows GBP/USD's sides written by the REST poller on each `openTrade` pass. **Control:** a WS-fed symbol shows `ws`.
 - **V3:** the `8a-P2` rail does not escalate GBP/USD across a WS silence longer than 2 s, if one occurs in the reading window. **An absence of silences is recorded as the test not having run, not as a pass.**
-- **V4 (C2):** the FINDING-3 bound is measured on GBP/USD at the post-OBJ-8 shape: how often a REST write replaces a WS side newer than the REST response.
+- **V4 (C2):** the FINDING-3 bound is measured on GBP/USD at the post-OBJ-8 shape: how often a REST write replaces a WS side newer than the REST response. GBP/USD had one live open paper position at the Step-4 review, so it can be read at once.
 - ⛔ **C6, pre-registered: OBJ-10's first live reading is taken after the one deploy, so it is already post-OBJ-1..3. It can never serve as a pre/post control for this batch's own change.**
 
 ---

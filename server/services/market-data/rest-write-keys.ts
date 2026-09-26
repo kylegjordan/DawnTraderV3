@@ -93,6 +93,10 @@ export function formatWriteKeyLedger(l: WriteKeyLedger, extra = ''): string {
 /**
  * Sums the ledgers of an on-demand site (`getPrice`, `getBatch`) between two health lines, so each site prints its
  * OWN line: a phantom is never attributed to a bucket pass that did not produce it (Langston, Step-2 condition c).
+ * ⚠️ THE LINE MIXES TWO KINDS OF FIELD, AND SAYS SO IN ITS NAMES (Step-4 condition C2): `calls`, `requested` and
+ * `written` are SUMS over the interval's calls; `phantomDistinct`, `missingDistinct` and `viaPrimary` are SETS,
+ * de-duplicated across the interval. The per-call identity does NOT hold on this line: `requested − written` is not
+ * `missingDistinct`'s count.
  */
 export class WriteKeyAccumulator {
   private calls = 0;
@@ -119,7 +123,7 @@ export class WriteKeyAccumulator {
     const phantom = Array.from(this.phantom).sort();
     const missing = Array.from(this.missing).sort();
     const line = `[3n.l][WRITE_KEYS] site=${this.site} calls=${this.calls} requested=${this.requested} written=${this.written} `
-      + `phantom=${phantom.length}${formatKeyList(phantom)} missing=${missing.length}${formatKeyList(missing)} `
+      + `phantomDistinct=${phantom.length}${formatKeyList(phantom)} missingDistinct=${missing.length}${formatKeyList(missing)} `
       + `viaPrimary=${formatKeyList(Array.from(this.viaPrimary).sort())}`;
     this.calls = 0;
     this.requested = 0;
