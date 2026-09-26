@@ -132,18 +132,26 @@ describe('F2 — feed agreement splits the interpretable subset from the ambiguo
     expect(row.bothPresentTickerWs).toBe(0);
   });
 
-  it('keeps the three cells summing to bothPresent, so a reclassification cannot hide', () => {
+  it('keeps the five cells summing to bothPresent, so a reclassification cannot hide', () => {
+    // `3n.l` increment 2, P11 split the WS cell by channel (Langston's Step-4 nit: the fixtures here must reach all five).
     recordFeedAgreement(sample('kraken_rest'));
     recordFeedAgreement(sample('kraken_ws'));
     recordFeedAgreement(sample('kraken_equities_ws'));
     recordFeedAgreement(sample(null));
+    recordFeedAgreement(sample('ws_ticker'));
+    recordFeedAgreement(sample('ws_book'));
+    recordFeedAgreement(sample('rest_adapter'));
 
     const row = getFeedAgreementRows().find(r => r.assetClass === 'crypto_spot')!;
-    expect(row.bothPresentTickerRest + row.bothPresentTickerWs + row.bothPresentTickerUnknown)
-      .toBe(row.bothPresent);
+    expect(row.bothPresentTickerRest + row.bothPresentTickerWsTicker + row.bothPresentTickerWsBook
+      + row.bothPresentTickerWs + row.bothPresentTickerUnknown).toBe(row.bothPresent);
+    expect(row.bothPresent).toBe(7);
     // `kraken_equities_ws` is not REST, so it must land on the ambiguous side, not the clean one.
-    expect(row.bothPresentTickerRest).toBe(1);
+    expect(row.bothPresentTickerRest).toBe(2);
     expect(row.bothPresentTickerWs).toBe(2);
+    expect(row.bothPresentTickerWsTicker).toBe(1);
+    expect(row.bothPresentTickerWsBook).toBe(1);
+    expect(row.bothPresentTickerUnknown).toBe(1);
   });
 
   it('does not classify a sample that never reached bothPresent', () => {

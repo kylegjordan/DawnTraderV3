@@ -174,7 +174,7 @@ Ladder rows gain `tickerAcceptedByBookVerdict: { book_absent, book_not_eligible,
 | **C3** | the discontinuity list missed F2's `Unknown` cell gaining the cold rows; `AgreementCell`'s `TickerUnknown` comment still said "no source stated" | §3 item (3); the comment rewritten to say what the cell now holds |
 | **C4** | (a) the counters' keys-to-instruments change belongs under discontinuities; (b) `getPrice`'s return value changes | §3 item (4) and the dual-key bullet |
 **His re-derivations, recorded:** three `bid:` constructors survive in `price-cache.ts` and all nine `set` sites route through them; with no sides the two writers differ in exactly `lastSource` and `lastWsMessageAtMs`; the counters' memo is safe because `normalizeInternal` reads only maps built at module init. **`#1076`: he rules (b), the governed meaning.**
-**Evidence after the conditions:** 18/18 in the increment file; 19/19 mutations killed (17 + M18, M19); the related suite and `check-tsc-baseline` re-run on the pushed head (in the commit message).
+**Evidence after the conditions:** 18/18 in the increment file; 19/19 mutations killed (17 + M18, M19); the related suite and `check-tsc-baseline` re-run on the pushed head (in the commit message). **Langston verified all four at `77b171d90` (23:07Z). CI:** run `36278341585` on `77b171d90`, 4/4 `success` per job. His nit (a feed-agreement test titled for three cells whose fixtures never reached the two new ones) is fixed: `b-price-side-obj8c-instrument-populations.test.ts` now drives all five cells and asserts each.
 
 ## 7. WHAT THIS DOES NOT DO
 
