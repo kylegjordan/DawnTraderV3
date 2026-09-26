@@ -140,13 +140,14 @@ describe('P3 + OBJ-8 through the cache — the refreshBucket pass (the path that
 });
 
 describe('OBJ-10 — each row names the writer of its sides', () => {
-  it('8. the WS writer names itself only when it states a side; the adapter REST writer carries the name forward', () => {
-    pc.updateFromWebSocket(FAKE, 10, 9.9, 10.1, Date.now(), null, 'mid', null);
-    expect(pc.getCachedPrice(FAKE).sidesWriter).toBe('ws');
-    pc.updateFromRest(FAKE, 10.05, 'mid', null);
-    expect(pc.getCachedPrice(FAKE).sidesWriter).toBe('ws');
+  it('8. the WS writer takes its channel name from the caller, only when it states a side; a REST write with no sides carries the name forward', () => {
+    // increment 2, P11: the WS writer is named by CHANNEL, from the caller (was the single literal `ws`).
+    pc.updateFromWebSocket(FAKE, 10, 9.9, 10.1, Date.now(), null, 'mid', null, 'ws_ticker');
+    expect(pc.getCachedPrice(FAKE).sidesWriter).toBe('ws_ticker');
+    pc.updateFromRest(FAKE, 10.05, 'mid', null, null);
+    expect(pc.getCachedPrice(FAKE).sidesWriter).toBe('ws_ticker');
     pc.cache.delete(FAKE);
-    pc.updateFromWebSocket(FAKE, 10, null, null, null, null, 'mid', null); // a tick with no sides, on a cold row
+    pc.updateFromWebSocket(FAKE, 10, null, null, null, null, 'mid', null, 'ws_ticker'); // a tick with no sides, on a cold row
     expect(pc.getCachedPrice(FAKE).sidesWriter).toBeNull();
   });
 

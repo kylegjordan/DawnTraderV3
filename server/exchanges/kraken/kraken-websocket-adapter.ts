@@ -25,6 +25,7 @@ import { volumeClassifier, VolumeTier, TIER_THRESHOLDS } from '../../services/ma
 import { translateV2ToV1, isValidV2TickerUpdate, KrakenV2TickerUpdate } from '../../services/market-data/kraken-v2-translator.js';
 import { observeBookTickerPair, buildBookTickerAlertCopy, BOOK_TICKER_ALERT_ARMED, BOOK_TICKER_FIRE_CONSECUTIVE } from '../../services/market-data/book-ticker-disagreement.js'; // B-PRICE-SIDE-BY-JOB r5 P-7e
 import { resolveVenueGrid } from '../../markets/venue-grid-resolver.js'; // P-7e: the published price tick
+import { pairwiseStatedSides } from '../../services/market-data/stated-sides.js'; // `3n.l` increment 2, P8
 import * as fs from 'fs';
 
 /**
@@ -897,13 +898,18 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // the average and no route back to the two prices it was averaged from.
       // ⛔ `a`/`b` are the venue's RAW sides; only `c` is the field we overwrite. Verified at
       // `kraken-v2-translator.ts:78-80`.
+      // ⛔ `3n.l` increment 2, P8 (OBJ-12): BOTH SIDES OR NEITHER. This guarded each side on its own, so a frame with one
+      // non-positive side stated the other, and the cache kept the old (or, cold, mark-filled) side beside it under a fresh
+      // stamp: two plausible sides, one of them not current, passing the whole level ladder. 0 such frames in 245,159
+      // (2026-09-26); the rule is for the one that comes. With no sides stated the cache keeps its sides AND their stamps.
+      const _statedSides = pairwiseStatedSides(bid, ask);
       this.emitPriceTick({
         symbol: internalSymbol,
         price: lastPrice,
         source: 'kraken_ws',
         producer: safeData.markKind === 'mid' ? 'kraken_ws_ticker_mid' : 'kraken_ws_ticker_last',
-        bid: Number.isFinite(bid) && bid > 0 ? bid : null,
-        ask: Number.isFinite(ask) && ask > 0 ? ask : null,
+        bid: _statedSides?.bid ?? null,
+        ask: _statedSides?.ask ?? null,
         sidesCapturedAtMs: now,
         // ⭐ THE VENUE'S OWN TIME, read from the raw frame rather than invented. `update` is the
         // unmodified venue object (`:699`), so this is Kraken's stamp, not ours.
@@ -1165,7 +1171,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       const bestBid = book.bids.size > 0 ? Math.max(...book.bids.keys()) : 0;
       const bestAsk = book.asks.size > 0 ? Math.min(...book.asks.keys()) : 0;
       
-      if (bestBid <= 0 || bestAsk <= 0) {
+      // ⛔ `3n.l` increment 2, P8 (OBJ-12): the same predicate as every other side producer. `<= 0` let a `NaN` level key
+      // through (`Math.max` over a `NaN` key is `NaN`, and `NaN <= 0` is false), writing a `NaN` side AND a `NaN` mark.
+      if (!pairwiseStatedSides(bestBid, bestAsk)) {
         continue;
       }
       
@@ -1358,7 +1366,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
       // B-PRICE-SIDE-BY-JOB r5 P-7k: unreachable (#742), stated anyway: on this raw v1 path `c[0]` is the last trade.
-      priceCache.updateFromWebSocket(internalSymbol, lastPrice, null, null, null, null, 'last', Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : null);
+      priceCache.updateFromWebSocket(internalSymbol, lastPrice, null, null, null, null, 'last', Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : null, null);
       
       // Phase 8.8.3-I6: Diagnostic logging to confirm WS -> cache pipeline
       console.log(`[I6][WS_CACHE_UPDATE] symbol=${internalSymbol} price=${lastPrice} timestamp=${new Date().toISOString()}`);

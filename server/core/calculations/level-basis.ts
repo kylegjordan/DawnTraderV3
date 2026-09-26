@@ -388,7 +388,19 @@ export interface FunnelOutcome {
    */
   acceptedAgeMs?: number;
   acceptedLeg?: 'book' | 'ticker';
+  /**
+   * `3n.l` increment 2, P12 (OBJ-7): on a LADDER walk the ticker rung accepted, what the BOOK rung said first. Supplied
+   * only for that case; see `FunnelCell.tickerAcceptedByBookVerdict`.
+   */
+  tickerAcceptedBookVerdict?: TickerAcceptBookVerdict;
 }
+
+/**
+ * `3n.l` increment 2, P12 (OBJ-7): the book rung's verdict on a walk the TICKER rung then accepted.
+ * `book_absent` = the book rung refused `no_book`; `book_not_eligible` = the caller ruled the book out (no caller does
+ * today: every one passes `bookEligible: true`); `book_refused` = a book existed and failed a quality check.
+ */
+export type TickerAcceptBookVerdict = 'book_absent' | 'book_not_eligible' | 'book_refused';
 
 interface FunnelCell {
   /**
@@ -422,6 +434,8 @@ interface FunnelCell {
    */
   acceptedAge: { book: number[]; ticker: number[] };
   acceptedAgeMaxMs: { book: number; ticker: number };
+  /** `3n.l` P12: ticker-rung acceptances split by the book rung's verdict (ladder cells only; zeros on `book` cells). */
+  tickerAcceptedByBookVerdict: Record<TickerAcceptBookVerdict, number>;
   /**
    * ⛔⛔ THE MAX'S OWN DENOMINATOR, PER LEG — ADDED 2026-09-14 BECAUSE THE MAX ALONE IS `#546`
    * INSIDE THE INSTRUMENT THIS BATCH BUILT TO PREVENT `#546` (Langston, Step-7 read).
@@ -448,6 +462,7 @@ function emptyCell(rung: LevelBasisRung, stage: LevelBasisStage): FunnelCell {
     acceptedAge: { book: newBuckets(), ticker: newBuckets() },
     acceptedAgeMaxMs: { book: 0, ticker: 0 },
     acceptedAgeN: { book: 0, ticker: 0 },
+    tickerAcceptedByBookVerdict: { book_absent: 0, book_not_eligible: 0, book_refused: 0 },
     byReason: {
       no_book: 0,
       one_sided_book: 0,
@@ -510,6 +525,7 @@ export function recordLevelBasisOutcome(key: LevelBasisRungKey, result: FunnelOu
       cell.acceptedAge[leg][bucketIndex(result.acceptedAgeMs)]++;
       if (result.acceptedAgeMs > cell.acceptedAgeMaxMs[leg]) cell.acceptedAgeMaxMs[leg] = result.acceptedAgeMs;
     }
+    if (result.tickerAcceptedBookVerdict) cell.tickerAcceptedByBookVerdict[result.tickerAcceptedBookVerdict]++;
     return;
   }
   if (result.reason) cell.byReason[result.reason]++;
@@ -607,6 +623,16 @@ export interface LevelBasisFunnelRow {
   acceptedAgeN: { book: number; ticker: number };
   /** The edge set the two histograms are on, carried so a reader never has to look it up. */
   acceptedAgeEdgesMs: readonly number[];
+  /**
+   * ⛔⛔ `3n.l` increment 2, P12 (OBJ-7) — THE BOOK-PRESENT / BOOK-ABSENT SPLIT OF THE TICKER RUNG'S ACCEPTANCES.
+   * On a `ladder` row: of the walks the ticker rung carried, how many had NO book (`book_absent`), a book the caller ruled
+   * out (`book_not_eligible`), or a book that failed a quality check (`book_refused`). Sums to the ticker-carried
+   * acceptances. Zeros on a `book` row. The per-lane book-present count itself is the `book` row's
+   * `attempted - byReason.no_book`.
+   * ★ Why it exists: `3n.l` puts a transactable side under symbols the book does not cover, and row `3n.m` would later
+   * widen book coverage. Without this split, coverage arriving mid-window reads as a change in `3n.l`'s own effect.
+   */
+  tickerAcceptedByBookVerdict: Record<TickerAcceptBookVerdict, number>;
 }
 
 /**
@@ -650,6 +676,7 @@ export function getLevelBasisFunnel(): LevelBasisFunnelRow[] {
       acceptedAgeMaxMs: { ...cell.acceptedAgeMaxMs },
       acceptedAgeN: { ...cell.acceptedAgeN },
       acceptedAgeEdgesMs: SIDE_AGE_BUCKET_EDGES_MS,
+      tickerAcceptedByBookVerdict: { ...cell.tickerAcceptedByBookVerdict },
     };
   });
 }
@@ -1106,21 +1133,18 @@ export function __resetSideAgeForTest(): void {
  *     (b) the book's own top vs a slightly older copy of itself — which MUST agree, and whose
  *         agreement is a statement about cache latency, not about the feeds.
  *
- * ⛔ AND THE CACHE CANNOT TODAY TELL THEM APART. `CachedPrice` carries `lastSource`
- * (`kraken_ws` | `kraken_rest` | `kraken_equities_ws`) and NO fine-grained producer, so both (a)
- * and (b) read as `kraken_ws`. The field that would settle it does not exist.
- *
- * ✅ WHAT IS DONE ABOUT IT HERE, AND WHAT IS NOT:
- *   - **DONE:** `bothPresent` is SPLIT by the ticker leg's `lastSource`. A `kraken_rest` leg is
- *     provably NOT the book's own top — REST never writes the book channel — so that subset is a
- *     genuine independent comparison and IS interpretable. A `kraken_ws` leg is AMBIGUOUS between
- *     (a) and (b) and is counted separately, never pooled with it.
- *   - ⛔ **NOT DONE, AND STATED RATHER THAN IMPLIED:** carrying a per-side producer on the cache
- *     entry would make the `kraken_ws` subset interpretable too. That is a write to `price-cache.ts`,
- *     which is a 🔒 LOCKED MODULE, and it is FOLDED INTO `3n.l` (`#1056`) — the batch already
- *     opening that file to stop `updateFromRest` discarding the sides. It is not scoped here.
- * ⇒ **UNTIL THEN: read `bothPresentTickerRest` and ignore `bothPresentTickerWs` for any claim
- *     about whether the two FEEDS agree. The `Ws` cell is not evidence in either direction.**
+ * ✅ `3n.l` increment 2, P11 — THE CACHE CAN NOW TELL THEM APART. `CachedPrice.sidesWriter` names the writer of the SIDES,
+ * and the WebSocket writer by CHANNEL: `ws_ticker` (the ticker channel) or `ws_book` (the book's own top). The split below
+ * keys on it (`signal-orchestrator.ts` passes `sidesWriter`, not `lastSource`):
+ *   - `bothPresentTickerRest` — a REST writer (`rest_*`): a genuine independent comparison.
+ *   - `bothPresentTickerWsTicker` — the ticker channel: ALSO a genuine cross-channel comparison.
+ *   - `bothPresentTickerWsBook` — the book's own top compared with a slightly older copy of itself: agreement here is a
+ *     statement about cache latency, never about the feeds.
+ *   - `bothPresentTickerWs` — a legacy `ws` / `kraken_ws` label or any other string: AMBIGUOUS. Expected 0 after deploy.
+ * ⛔ THE BPS HISTOGRAMS ARE STILL POOLED across all five cells; only the COUNTS are split. A feeds-agree claim may cite the
+ *   Rest and WsTicker counts, and not the pooled histograms, until the buckets are split too.
+ * ⛔ Before this change the field fed here was `lastSource` (the MARK's writer), and the comment read *"the cache cannot
+ *   today tell them apart … FOLDED INTO `3n.l`"*. That fold is this change. A reading from before it is not comparable.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /** Absolute difference buckets in BASIS POINTS (1 bp = 0.01%). */
@@ -1137,10 +1161,9 @@ export interface FeedAgreementSample {
   tickerBid: number | null;
   tickerAsk: number | null;
   /**
-   * ⛔ F2 — THE CACHE ENTRY'S `lastSource`, WHICH IS THE ONLY THING DISTINGUISHING A GENUINE
-   * CROSS-FEED COMPARISON FROM THE BOOK COMPARED WITH A COPY OF ITSELF. See the section docblock.
-   * `null`/absent when there was no cache entry at all. It is COARSE on purpose — it is the only
-   * provenance the cache actually carries, and inventing a finer one here would be a fabrication.
+   * ⛔ F2 — THE CACHE ENTRY'S `sidesWriter` (`3n.l` increment 2, P11; was `lastSource`, the MARK's writer), WHICH IS
+   * WHAT DISTINGUISHES A GENUINE CROSS-FEED COMPARISON FROM THE BOOK COMPARED WITH A COPY OF ITSELF. See the section
+   * docblock. `null`/absent when there was no cache entry at all, or the entry has never had stated sides.
    */
   tickerSidesSource?: string | null;
 }
@@ -1154,10 +1177,14 @@ interface AgreementCell {
    * feeds-agree claim may rest on.
    * `TickerWs`: last written by some `kraken_ws` producer — either the ticker channel or
    * `kraken_ws_book_mid`, i.e. possibly the book's own top. AMBIGUOUS, not evidence.
-   * `TickerUnknown`: no source stated. Counted rather than dropped, so the three always sum to
+   * `TickerUnknown`: no source stated. Counted rather than dropped, so the cells always sum to
    * `bothPresent` and a silent reclassification cannot hide in the arithmetic.
+   * `3n.l` increment 2, P11: `TickerWsTicker` (the ticker channel, genuine) and `TickerWsBook` (the book's own top, an
+   * echo) are split out of `TickerWs`, which now holds only an unrecognised WS label. See the section docblock.
    */
   bothPresentTickerRest: number;
+  bothPresentTickerWsTicker: number;
+  bothPresentTickerWsBook: number;
   bothPresentTickerWs: number;
   bothPresentTickerUnknown: number;
   bookOnly: number;
@@ -1190,7 +1217,8 @@ function newAgreementBuckets(): number[] {
 
 function emptyAgreementCell(): AgreementCell {
   return {
-    bothPresent: 0, bothPresentTickerRest: 0, bothPresentTickerWs: 0, bothPresentTickerUnknown: 0,
+    bothPresent: 0, bothPresentTickerRest: 0, bothPresentTickerWsTicker: 0, bothPresentTickerWsBook: 0,
+    bothPresentTickerWs: 0, bothPresentTickerUnknown: 0,
     bookOnly: 0, tickerOnly: 0, neither: 0,
     bidBuckets: newAgreementBuckets(), askBuckets: newAgreementBuckets(),
     bidTickerHigher: 0, bidTickerLower: 0, bidExact: 0,
@@ -1231,9 +1259,13 @@ export function recordFeedAgreement(s: FeedAgreementSample): void {
   cell.bothPresent++;
   // ⛔ F2 — classify BEFORE any bps arithmetic, so the interpretable subset is countable even if
   // a later edit changes how the differences are bucketed.
+  // `3n.l` increment 2, P11: `_src` is the SIDES' writer (`SidesWriter`). `kraken_rest` is still accepted as REST so a
+  // caller that has not moved off `lastSource` is not misfiled as WS.
   const _src = s.tickerSidesSource;
   if (typeof _src !== 'string' || _src.length === 0) cell.bothPresentTickerUnknown++;
-  else if (_src === 'kraken_rest') cell.bothPresentTickerRest++;
+  else if (_src.startsWith('rest_') || _src === 'kraken_rest') cell.bothPresentTickerRest++;
+  else if (_src === 'ws_ticker') cell.bothPresentTickerWsTicker++;
+  else if (_src === 'ws_book') cell.bothPresentTickerWsBook++;
   else cell.bothPresentTickerWs++;
 
   const bb = s.bookBid as number, ba = s.bookAsk as number;
@@ -1259,7 +1291,11 @@ export interface FeedAgreementRow {
   bothPresent: number;
   /** ⛔ F2 — the ONLY cell a feeds-agree claim may rest on. See the section docblock. */
   bothPresentTickerRest: number;
-  /** ⛔ F2 — AMBIGUOUS: the ticker leg may BE the book's own top. Not evidence in either direction. */
+  /** `3n.l` P11 — the ticker CHANNEL wrote the sides: a genuine cross-channel comparison. */
+  bothPresentTickerWsTicker: number;
+  /** `3n.l` P11 — the BOOK's own top wrote the sides: an echo. Agreement here measures cache latency, not the feeds. */
+  bothPresentTickerWsBook: number;
+  /** ⛔ F2 — AMBIGUOUS: an unrecognised WS label (legacy `ws` / `kraken_ws`). Expected 0 after `3n.l` increment 2. */
   bothPresentTickerWs: number;
   bothPresentTickerUnknown: number;
   bookOnly: number;
@@ -1286,6 +1322,8 @@ export function getFeedAgreementRows(): FeedAgreementRow[] {
       attempted: c.bothPresent + c.bookOnly + c.tickerOnly + c.neither,
       bothPresent: c.bothPresent,
       bothPresentTickerRest: c.bothPresentTickerRest,
+      bothPresentTickerWsTicker: c.bothPresentTickerWsTicker,
+      bothPresentTickerWsBook: c.bothPresentTickerWsBook,
       bothPresentTickerWs: c.bothPresentTickerWs,
       bothPresentTickerUnknown: c.bothPresentTickerUnknown,
       bookOnly: c.bookOnly,

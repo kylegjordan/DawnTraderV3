@@ -23,6 +23,7 @@
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kraken-symbol-resolver';
 import { buildWriteKeyLedger, formatWriteKeyLedger, WriteKeyAccumulator, type RestWriteKeys, type WriteKeyLedger } from './market-data/rest-write-keys.js';
+import { pairwiseStatedSides } from './market-data/stated-sides.js';
 
 export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';
 
@@ -115,8 +116,29 @@ export interface CachedPrice {
 /** P-7k: which quantity a cached `price` is. */
 export type CacheMarkKind = 'mid' | 'last';
 
-/** `3n.l` OBJ-10: the writer that last set a row's sides. The three REST ticker sites are named apart so a phantom or a stale side can be traced to its site. */
-export type SidesWriter = 'ws' | 'rest_poller' | 'rest_fetch' | 'rest_batch';
+/**
+ * `3n.l` OBJ-10: the writer that last set a row's sides. The three REST ticker sites are named apart so a phantom or a stale
+ * side can be traced to its site.
+ * `3n.l` increment 2, P11 (OBJ-14): the WebSocket writer is split by CHANNEL (`ws_ticker` / `ws_book`), because the book's
+ * own top arriving as the "ticker" leg is a copy of the book, not a second feed (`level-basis.ts` F2; `8c` §3c ruled its
+ * transport split uninterpretable while this said only `ws`). The REST adapter and the engine's REST fallback are named too.
+ * ⛔ Every writer states its own tag; none is inferred in the cache.
+ */
+export type SidesWriter =
+  | 'ws_ticker' | 'ws_book'
+  | 'rest_poller' | 'rest_fetch' | 'rest_batch'
+  | 'rest_adapter' | 'rest_engine';
+
+/** `3n.l` increment 2, P6: sides a caller of `updateFromRest` observed, WITH the writer that observed them (Langston Step-2 C2). */
+export interface StatedSides {
+  bid: number;
+  ask: number;
+  capturedAtMs: number;
+  writer: SidesWriter;
+}
+
+/** The REST ticker fields the cache's own three REST sites read (structural; `KrakenTicker` is not exported). */
+type RestTickerFields = { a?: string[]; b?: string[]; c?: string[]; v?: string[]; h?: string[]; l?: string[] };
 
 /**
  * P-7k: P-7i's carry rule for this row, in ONE place, with one predicate deciding both halves (Langston chunk-3 C1).
@@ -262,36 +284,12 @@ class UnifiedPriceCache {
           
           for (const [pair, ticker] of Object.entries(data)) {
             const normalizedSymbol = normalizeKrakenPair(pair);
-            const cachedPrice: CachedPrice = {
-              symbol: normalizedSymbol,
-              price: parseFloat(ticker.c?.[0] || '0'),
-              ask: parseFloat(ticker.a?.[0] || '0'),
-              bid: parseFloat(ticker.b?.[0] || '0'),
-              volume24h: parseFloat(ticker.v?.[1] || '0'),
-              high24h: parseFloat(ticker.h?.[1] || '0'),
-              low24h: parseFloat(ticker.l?.[1] || '0'),
-              lastSource: 'kraken_rest',
-              // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
-              // them — unlike the tick paths, which refresh the mark and leave the sides alone.
-              sidesCapturedAtMs: Date.now(),
-              // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
-              // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
-              venueObservedAtMs: null,
-              sidesWriter: 'rest_poller',
-              // ⛔ REST path — NOT a push. Carries forward, never advances.
-              lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
-              // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
-              // TRADE, so the row states that kind, and the same number is this write's print.
-              markKind: 'last',
-              ...carryLastTrade(this.cache.get(normalizedSymbol), parseFloat(ticker.c?.[0] || '0'), now),
-              lastUpdatedAt: now,
-            };
-            
-            this.cache.set(normalizedSymbol, cachedPrice);
-            
+            // `3n.l` increment 2 (P8, P9 ii): one row builder for the three REST ticker sites, built PER KEY WRITTEN.
+            this.cache.set(normalizedSymbol, this.restTickerRow(normalizedSymbol, normalizedSymbol, ticker, 'rest_poller', now));
+
             const requestedSymbol = batch.find(s => this.symbolsMatch(s, normalizedSymbol));
             if (requestedSymbol && requestedSymbol !== normalizedSymbol) {
-              this.cache.set(requestedSymbol, cachedPrice);
+              this.cache.set(requestedSymbol, this.restTickerRow(requestedSymbol, normalizedSymbol, ticker, 'rest_poller', now));
             }
             writes.push({ responseKey: pair, writtenKeys: requestedSymbol && requestedSymbol !== normalizedSymbol ? [normalizedSymbol, requestedSymbol] : [normalizedSymbol] });
           }
@@ -318,6 +316,44 @@ class UnifiedPriceCache {
     if (base === 'BTC') base = 'XBT';
     
     return `${base}${quote}`;
+  }
+
+  /**
+   * `3n.l` increment 2 — THE ROW THE THREE REST TICKER SITES WRITE (`refreshBucket`, `getPrice`, `getBatch`), built once
+   * instead of three copies, and built PER KEY WRITTEN.
+   * ⛔ P8 (OBJ-12): the REST sides are stated only as a pair that passes `pairwiseStatedSides`. Otherwise this write states
+   *    NO sides and the key's previous sides, their stamps and their writer are carried, the rule `updateFromWebSocket`
+   *    applies to a tick without sides. Before this a missing REST side was parsed as `0` and stored under a fresh stamp.
+   * ⛔ P9 (ii): `lastWsMessageAtMs` and the last-trade carry come from THIS key's previous row. The dual-key write used to
+   *    store ONE object under both keys, copying the normalised key's liveness onto the requested key with no push.
+   * `symbol` stays the normalised key on both rows, as before.
+   */
+  private restTickerRow(key: string, normalizedSymbol: string, ticker: RestTickerFields, writer: SidesWriter, now: number): CachedPrice {
+    const existing = this.cache.get(key);
+    const price = parseFloat(ticker.c?.[0] || '0');
+    const sides = pairwiseStatedSides(parseFloat(ticker.b?.[0] || '0'), parseFloat(ticker.a?.[0] || '0'));
+    return {
+      symbol: normalizedSymbol,
+      price,
+      ask: sides ? sides.ask : (existing?.ask ?? price),
+      bid: sides ? sides.bid : (existing?.bid ?? price),
+      volume24h: parseFloat(ticker.v?.[1] || '0'),
+      high24h: parseFloat(ticker.h?.[1] || '0'),
+      low24h: parseFloat(ticker.l?.[1] || '0'),
+      lastSource: 'kraken_rest',
+      // ⭐ A REST read that genuinely observed both sides dates them now. ⛔ The REST ticker carries no venue stamp we
+      // parse, so a stated side has `venueObservedAtMs: null`: absent is refusable, invented would look real.
+      sidesCapturedAtMs: sides ? Date.now() : (existing?.sidesCapturedAtMs ?? null),
+      venueObservedAtMs: sides ? null : (existing?.venueObservedAtMs ?? null),
+      sidesWriter: sides ? writer : (existing?.sidesWriter ?? null),
+      // ⛔ REST path — NOT a push. Carries forward, never advances.
+      lastWsMessageAtMs: existing?.lastWsMessageAtMs ?? null,
+      // P-7k (F1): these sites store the raw REST `c[0]` as `price`, the venue's LAST TRADE, and the same number is this
+      // write's print.
+      markKind: 'last',
+      ...carryLastTrade(existing, price, now),
+      lastUpdatedAt: now,
+    };
   }
 
   private symbolsMatch(a: string, b: string): boolean {
@@ -422,38 +458,20 @@ class UnifiedPriceCache {
         
         for (const [pair, ticker] of Object.entries(data)) {
           const normalizedSymbol = normalizeKrakenPair(pair);
-          const tickerData: CachedPrice = {
-            symbol: normalizedSymbol,
-            price: parseFloat(ticker.c?.[0] || '0'),
-            ask: parseFloat(ticker.a?.[0] || '0'),
-            bid: parseFloat(ticker.b?.[0] || '0'),
-            volume24h: parseFloat(ticker.v?.[1] || '0'),
-            high24h: parseFloat(ticker.h?.[1] || '0'),
-            low24h: parseFloat(ticker.l?.[1] || '0'),
-            lastSource: 'kraken_rest',
-            // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
-            // them — unlike the tick paths, which refresh the mark and leave the sides alone.
-            sidesCapturedAtMs: Date.now(),
-            // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
-            // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
-            venueObservedAtMs: null,
-            sidesWriter: 'rest_fetch',
-            // ⛔ REST path — NOT a push. Carries forward, never advances.
-            lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
-            // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
-            // TRADE, so the row states that kind, and the same number is this write's print.
-            markKind: 'last',
-            ...carryLastTrade(this.cache.get(normalizedSymbol), parseFloat(ticker.c?.[0] || '0'), now),
-            lastUpdatedAt: now,
-          };
-          
+          // `3n.l` increment 2 (P8, P9 ii): one row builder for the three REST ticker sites, built PER KEY WRITTEN.
+          const tickerData = this.restTickerRow(normalizedSymbol, normalizedSymbol, ticker, 'rest_fetch', now);
           this.cache.set(normalizedSymbol, tickerData);
-          
-          if (normalizedSymbol === symbol || this.symbolsMatch(normalizedSymbol, symbol)) {
-            this.cache.set(symbol, tickerData);
+
+          let wroteRequested = false;
+          if (normalizedSymbol === symbol) {
             fetchedData = tickerData;
+          } else if (this.symbolsMatch(normalizedSymbol, symbol)) {
+            const requestedRow = this.restTickerRow(symbol, normalizedSymbol, ticker, 'rest_fetch', now);
+            this.cache.set(symbol, requestedRow);
+            fetchedData = requestedRow;
+            wroteRequested = true;
           }
-          writes.push({ responseKey: pair, writtenKeys: fetchedData === tickerData && symbol !== normalizedSymbol ? [normalizedSymbol, symbol] : [normalizedSymbol] });
+          writes.push({ responseKey: pair, writtenKeys: wroteRequested ? [normalizedSymbol, symbol] : [normalizedSymbol] });
         }
       });
       
@@ -481,10 +499,26 @@ class UnifiedPriceCache {
    * window beside it, and the threshold is set later from the observed distribution.
    */
   countSymbolsWithMessageSince(sinceMs: number): number {
-    let n = 0;
-    for (const p of this.cache.values()) if (p.lastUpdatedAt >= sinceMs) n++;
-    return n;
+    const seen = new Set<string>();
+    for (const [key, p] of this.cache) if (p.lastUpdatedAt >= sinceMs) seen.add(this.instrumentOf(key));
+    return seen.size;
   }
+
+  /**
+   * `3n.l` increment 2, P9 (iii): the two liveness counters count INSTRUMENTS, not cache keys. A REST response that
+   * matches a requested symbol spelled differently from its normalised key is written under BOTH keys, and counting keys
+   * counted that instrument twice. Two keys are one instrument exactly when `symbolsMatch` says so, so the canonical form
+   * is the same normalisation. ⛔ NOT the row's `.symbol`: that merges a dual-key pair only while both keys hold rows
+   * from the same REST write, and any single-key writer re-sets it to its own key. Memoised: keys are few and stable, and
+   * the counters run on every recorded attempt.
+   * ⚠️ A PHANTOM key (a primary the static map lacks, row `3n.l-a`) still counts as its own instrument: it matches nothing.
+   */
+  private instrumentOf(key: string): string {
+    let c = this.instrumentMemo.get(key);
+    if (c === undefined) { c = normalizeKrakenPair(key); this.instrumentMemo.set(key, c); }
+    return c;
+  }
+  private instrumentMemo = new Map<string, string>();
 
   /**
    * ⭐⭐ THE ONE THAT CAN ACTUALLY SEE A DEAD SOCKET — counts symbols the venue PUSHED to us.
@@ -493,11 +527,11 @@ class UnifiedPriceCache {
    * "is the feed healthy" number would have thrown that away.
    */
   countSymbolsWithWsMessageSince(sinceMs: number): number {
-    let n = 0;
-    for (const p of this.cache.values()) {
-      if (p.lastWsMessageAtMs !== null && p.lastWsMessageAtMs >= sinceMs) n++;
+    const seen = new Set<string>();
+    for (const [key, p] of this.cache) {
+      if (p.lastWsMessageAtMs !== null && p.lastWsMessageAtMs >= sinceMs) seen.add(this.instrumentOf(key));
     }
-    return n;
+    return seen.size;
   }
 
   getAllCachedPrices(): CachedPrice[] {
@@ -548,38 +582,16 @@ class UnifiedPriceCache {
             
             for (const [pair, ticker] of Object.entries(data)) {
               const normalizedSymbol = normalizeKrakenPair(pair);
-              const tickerData: CachedPrice = {
-                symbol: normalizedSymbol,
-                price: parseFloat(ticker.c?.[0] || '0'),
-                ask: parseFloat(ticker.a?.[0] || '0'),
-                bid: parseFloat(ticker.b?.[0] || '0'),
-                volume24h: parseFloat(ticker.v?.[1] || '0'),
-                high24h: parseFloat(ticker.h?.[1] || '0'),
-                low24h: parseFloat(ticker.l?.[1] || '0'),
-                lastSource: 'kraken_rest',
-                // ⭐ THIS PATH GENUINELY OBSERVES BOTH SIDES (`ticker.a` / `ticker.b` above), so it dates
-                // them — unlike the tick paths, which refresh the mark and leave the sides alone.
-                sidesCapturedAtMs: Date.now(),
-                // ⛔ NULL, STATED — the REST ticker response is not the WebSocket frame and carries no
-                // venue stamp we parse. Absent is refusable; invented would be indistinguishable from real.
-                venueObservedAtMs: null,
-                sidesWriter: 'rest_batch',
-                // ⛔ REST path — NOT a push. Carries forward, never advances.
-                lastWsMessageAtMs: this.cache.get(normalizedSymbol)?.lastWsMessageAtMs ?? null,
-                // B-PRICE-SIDE-BY-JOB r5 P-7k (F1): this poller stores the raw REST `c[0]` as `price`, which is the venue's LAST
-                // TRADE, so the row states that kind, and the same number is this write's print.
-                markKind: 'last',
-                ...carryLastTrade(this.cache.get(normalizedSymbol), parseFloat(ticker.c?.[0] || '0'), now),
-                lastUpdatedAt: now,
-              };
-              
+              // `3n.l` increment 2 (P8, P9 ii): one row builder for the three REST ticker sites, built PER KEY WRITTEN.
+              const tickerData = this.restTickerRow(normalizedSymbol, normalizedSymbol, ticker, 'rest_batch', now);
               this.cache.set(normalizedSymbol, tickerData);
               result.set(normalizedSymbol, tickerData);
-              
+
               const requestedSymbol = batch.find(s => this.symbolsMatch(s, normalizedSymbol));
               if (requestedSymbol && requestedSymbol !== normalizedSymbol) {
-                this.cache.set(requestedSymbol, tickerData);
-                result.set(requestedSymbol, tickerData);
+                const requestedRow = this.restTickerRow(requestedSymbol, normalizedSymbol, ticker, 'rest_batch', now);
+                this.cache.set(requestedSymbol, requestedRow);
+                result.set(requestedSymbol, requestedRow);
               }
               writes.push({ responseKey: pair, writtenKeys: requestedSymbol && requestedSymbol !== normalizedSymbol ? [normalizedSymbol, requestedSymbol] : [normalizedSymbol] });
             }
@@ -635,7 +647,11 @@ class UnifiedPriceCache {
 
   /** `3n.l` OBJ-10: who last wrote the sides of each given symbol's row (`none` = no row, or a row with no stated sides). */
   private sidesWriterCensus(symbols: Iterable<string>): string {
-    const counts: Record<string, number> = { ws: 0, rest_poller: 0, rest_fetch: 0, rest_batch: 0, none: 0 };
+    // ⛔ Step-2 C1 (Langston): keyed to the union so a new writer that is not listed here fails the build. As
+    // `Record<string, number>` a widened union compiled and `counts[newWriter]++` printed `NaN`.
+    const counts: Record<SidesWriter | 'none', number> = {
+      ws_ticker: 0, ws_book: 0, rest_poller: 0, rest_fetch: 0, rest_batch: 0, rest_adapter: 0, rest_engine: 0, none: 0,
+    };
     for (const sym of symbols) counts[this.cache.get(sym)?.sidesWriter ?? 'none']++;
     return Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(',');
   }
@@ -716,6 +732,12 @@ class UnifiedPriceCache {
     markKind: CacheMarkKind | null,
     /** P-7k: this write's last trade, or `null`; a `null` keeps the row's pair (P-7i's carry rule). */
     lastTradePrice: number | null,
+    /**
+     * `3n.l` increment 2, P11: WHICH CHANNEL stated these sides, from the caller (`ws_ticker` / `ws_book`), never inferred
+     * here. REQUIRED. `null` only from a caller that states no sides. `?? null` below because a test file outside tsc can
+     * omit it.
+     */
+    sidesWriter: SidesWriter | null,
   ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
@@ -741,8 +763,8 @@ class UnifiedPriceCache {
       // refresh the sides would date one observation while describing another — W-3 again,
       // one field over. When no side was supplied the previous stamp is carried, untouched.
       venueObservedAtMs: (bid !== null || ask !== null) ? venueObservedAtMs : (existing?.venueObservedAtMs ?? null),
-      // `3n.l` OBJ-10: moves with the sides it names, never on a tick that stated none.
-      sidesWriter: (bid !== null || ask !== null) ? 'ws' : (existing?.sidesWriter ?? null),
+      // `3n.l` OBJ-10: moves with the sides it names, never on a tick that stated none. P11: the caller names the channel.
+      sidesWriter: (bid !== null || ask !== null) ? (sidesWriter ?? null) : (existing?.sidesWriter ?? null),
       // ⭐ ADVANCED HERE AND NOWHERE ELSE — this is the only writer fed by a venue PUSH. Every
       // other writer carries the previous value forward untouched, which is what makes a silent
       // socket death visible instead of masked by the REST poller.
@@ -754,26 +776,46 @@ class UnifiedPriceCache {
     });
   }
 
-  updateFromRest(symbol: string, price: number, markKind: CacheMarkKind | null, lastTradePrice: number | null): void {
+  /**
+   * `B-REST-SIDES-TO-CACHE` (`3n.l`) increment 2 — THE REST ADAPTER'S WRITER NOW TAKES THE SIDES IT READ (OBJ-1, OBJ-3).
+   * Until now it took the MARK only: the adapter parsed the REST ask and bid, logged them and stored only the midpoint,
+   * so a symbol served by this path kept whatever sides some other writer last left (or, cold, `bid === ask === price`).
+   *
+   * THE RULES ARE `updateFromWebSocket`'s: a STATED pair wins; with no sides stated the row's previous sides are kept;
+   * the mark substitution applies only when neither exists. `sidesCapturedAtMs` and `sidesWriter` move ONLY with stated
+   * sides. `venueObservedAtMs` is SET TO `null` when sides are stated (REST carries no venue stamp we parse; carrying the
+   * old one would date an observation it no longer describes) and carried untouched when none are.
+   *
+   * ⛔⛔ THE PAIRWISE-OR-NOTHING CONTRACT (scope r4 condition 3): `sides` is ONE object, so this writer cannot be handed one
+   * side. The producers that call it apply `pairwiseStatedSides` (`market-data/stated-sides.ts`) before they build it:
+   * the adapter's REST read (`live-pricing-adapter.ts`) today, and the engine's REST fallback through `updateCache` the day
+   * it states sides. A new caller must do the same; the object shape is what stops it from stating half a book.
+   *
+   * `lastSource: 'kraken_rest'` and `lastWsMessageAtMs` carried (a REST write is not a push), as before.
+   * `sides` is REQUIRED; `?? null` because a test file outside tsc can omit it.
+   */
+  updateFromRest(
+    symbol: string,
+    price: number,
+    markKind: CacheMarkKind | null,
+    lastTradePrice: number | null,
+    sides: StatedSides | null,
+  ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
+    const stated = sides ?? null;
     this.cache.set(symbol, {
       symbol,
       price,
-      ask: existing?.ask ?? price,
-      bid: existing?.bid ?? price,
+      ask: stated ? stated.ask : (existing?.ask ?? price),
+      bid: stated ? stated.bid : (existing?.bid ?? price),
       volume24h: existing?.volume24h ?? 0,
       high24h: existing?.high24h ?? price,
       low24h: existing?.low24h ?? price,
       lastSource: 'kraken_rest',
-      // ⛔⛔ PRESERVED, NEVER RE-STAMPED. `updateFromRest(symbol, price)` takes the MARK only and
-      // carries the previous sides forward untouched. Dating them "now" would assert an
-      // observation that never happened — W-3 rebuilt one line further down. I wrote `Date.now()`
-      // here on the first pass and caught it; the sides keep the age they actually have.
-      sidesCapturedAtMs: existing?.sidesCapturedAtMs ?? null,
-      venueObservedAtMs: existing?.venueObservedAtMs ?? null,
-      // `3n.l` OBJ-10: this writer carries the sides forward, so it carries their writer forward too.
-      sidesWriter: existing?.sidesWriter ?? null,
+      sidesCapturedAtMs: stated ? stated.capturedAtMs : (existing?.sidesCapturedAtMs ?? null),
+      venueObservedAtMs: stated ? null : (existing?.venueObservedAtMs ?? null),
+      sidesWriter: stated ? stated.writer : (existing?.sidesWriter ?? null),
       lastWsMessageAtMs: existing?.lastWsMessageAtMs ?? null,
       // P-7k: the caller decides the kind from the REST sides it read (`markKindOf`), and passes REST `c[0]` as the print.
       markKind: markKind ?? null,

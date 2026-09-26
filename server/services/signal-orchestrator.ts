@@ -2632,7 +2632,8 @@ export class SignalOrchestrator {
             // different comparisons — ticker-channel sides vs the book, and the book's own top vs
             // an older copy of itself (`kraken_ws_book_mid` writes the book's top into these very
             // fields). The full mechanism is in the `level-basis.ts` section docblock.
-            tickerSidesSource: _lbCache?.lastSource ?? null,
+            // `3n.l` increment 2, P11: the SIDES' writer (channel-named), not `lastSource`, the mark's writer.
+            tickerSidesSource: _lbCache?.sidesWriter ?? null,
           });
         }
 

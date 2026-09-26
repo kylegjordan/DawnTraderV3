@@ -55,12 +55,16 @@ describe('P-7k — every writer states the kind, and the last trade rides beside
     expect(row.lastTradeReceivedAtMs).toBeNull();
   });
 
-  it('4. all three cache REST poller sites state `last` and take `c[0]` as the print (source fence)', () => {
+  it('4. the three cache REST poller sites write through ONE row builder, which states `last` and takes `c[0]` as the print (source fence)', () => {
+    // `3n.l` increment 2 consolidated the three copies into `restTickerRow`; the fence now pins the builder and its callers.
     const src = readFileSync(resolve(__dirname, '../../services/price-cache.ts'), 'utf-8');
-    const sites = src.match(/markKind: 'last',\s*\.\.\.carryLastTrade\(this\.cache\.get\(normalizedSymbol\), parseFloat\(ticker\.c\?\.\[0\] \|\| '0'\), now\)/g) ?? [];
-    expect(sites.length).toBe(3);
-    // control: those three sites really are the ones that store `c[0]` as `price`
-    expect((src.match(/price: parseFloat\(ticker\.c\?\.\[0\] \|\| '0'\)/g) ?? []).length).toBe(3);
+    expect((src.match(/const price = parseFloat\(ticker\.c\?\.\[0\] \|\| '0'\);/g) ?? []).length).toBe(1);
+    expect((src.match(/markKind: 'last',\s*\.\.\.carryLastTrade\(existing, price, now\)/g) ?? []).length).toBe(1);
+    for (const site of ['rest_poller', 'rest_fetch', 'rest_batch']) {
+      expect((src.match(new RegExp(`this\\.restTickerRow\\([^)]*'${site}', now\\)`, 'g')) ?? []).length).toBeGreaterThanOrEqual(1);
+    }
+    // control: no inline copy of the old construction survives
+    expect((src.match(/price: parseFloat\(ticker\.c\?\.\[0\] \|\| '0'\)/g) ?? []).length).toBe(0);
   });
 
   it('5. the adapter hop carries the producer\'s kind into the unified row', () => {

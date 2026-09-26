@@ -33,6 +33,7 @@ import {
   type LevelBasisRefusal,
   type LevelBasisLane,
   type LevelBasisStage,
+  type TickerAcceptBookVerdict,
 } from './level-basis.js';
 
 /** Which clock an age was measured on. Never pooled. */
@@ -165,7 +166,8 @@ export interface CachedQuoteSides {
   ask: number | null | undefined;
   venueObservedAtMs: number | null | undefined;
   sidesCapturedAtMs: number | null | undefined;
-  lastSource: string | null | undefined;
+  /** `3n.l` increment 2, P11: the writer of the SIDES (`price-cache.ts` `SidesWriter`), which labels this leg. */
+  sidesWriter: string | null | undefined;
 }
 
 export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined): TouchLegInput | null {
@@ -181,29 +183,13 @@ export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined)
     // label stops describing the number beside it. Decision-inert today — a `0` stamp refuses at
     // the positive-finite check either way — but the two must not read the field differently.
     clockBasis: q.venueObservedAtMs != null ? 'venue' : 'receipt',
-    // ⚠️ RIDER 1 (Langston, 2026-09-13): `lastSource` dates the MARK's writer, NOT the SIDES' writer.
-    // `price-cache.ts` `updateFromRest` sets `lastSource: 'kraken_rest'` unconditionally while the
-    // sides come from `existing?.x ?? …` ⇒ **WS-pushed sides sitting under a later REST mark are
-    // recorded here as `kraken_rest`.**
-    // ⛔ AND THAT `??` HAS TWO ARMS — do NOT read this as "the REST writer never touches sides"
-    // (Langston's rider on my own wording, same review). On the UPDATE arm the previous sides carry
-    // forward untouched. With NO `existing`, `price-cache.ts:710-711` writes `bid = ask = price`
-    // and `sidesCapturedAtMs: null` — the synthetic zero-spread book this batch already names.
-    // ⛔⛔ CORRECTED 2026-09-13 (row `8a-P1`, Langston's condition): THIS SENTENCE STATED A
-    // MECHANISM THE CODE DOES NOT HAVE. It read "that arm refuses at `age_unknown` on the null
-    // stamp rather than mislabelling" — and the null stamp is never reached, because
-    // `buildLevelBasis` tests `bid === ask` FIRST: `locked_or_synthetic_book` at `level-basis.ts:221`
-    // precedes `age_unknown` at `:222`, by that function's own stated design ("checked LAST, after
-    // every structural fault, so a malformed book is never reported as merely old").
-    // ⇒ the synthetic zero-spread arm refuses as `locked_or_synthetic_book`, NOT `age_unknown`.
-    // ★ THE CONCLUSION SURVIVES — the bias DIRECTION is unchanged and the arm is still not a
-    //   carry-forward — but a wrong mechanism in a docblock is a stale citation in the present
-    //   tense, and it is read as current by everyone who comes after.
-    // That is W-3's shape one field over, in
-    // the very split that exists to make the transport truthful. **The bias UNDERSTATES the pushed
-    // transport**, so it is conservative in the same direction as the skew note above — which is
-    // why it is a stated limit on how the split may be read, not a blocker on recording it.
-    producer: q.lastSource ?? 'unknown',
+    // ✅ `3n.l` increment 2, P11 — RIDER 1 (Langston, 2026-09-13) IS CLOSED BY LABELLING THE SIDES' WRITER. This read
+    // `lastSource`, which dates the MARK's writer, so WS-pushed sides under a later REST mark were recorded as REST and
+    // row `8c` ruled its transport split uninterpretable (`8C_AUDIT` §3c). `sidesWriter` moves only with stated sides and
+    // names the channel (`ws_ticker` / `ws_book`) and the REST site. The cold `bid === ask === price` row has
+    // `sidesWriter: null` and refuses as `locked_or_synthetic_book` before its label is ever read.
+    // ⛔ The series is NOT continuous across this change: a reading before it and one after it label different things.
+    producer: q.sidesWriter ?? 'unknown',
   };
 }
 
@@ -248,10 +234,15 @@ export function recordTouchSelection(
   // QUANTITY and is correct for a REST quote — Kraken's REST `a[0]`/`b[0]` ARE a best bid/offer —
   // but that naming is only safe while the producer survives, because REST sides carry a poll
   // cadence and pushed sides do not, and that distinction IS the switch-on argument.
+  // `3n.l` increment 2, P12 (OBJ-7): when the TICKER carried the walk, record what the BOOK said first, so the ticker
+  // rung's acceptances split into book-absent / book-not-eligible / book-refused per lane.
+  const _bookVerdict: TickerAcceptBookVerdict | undefined = sel.ok && sel.bookRefusal !== null
+    ? (sel.bookRefusal === 'no_book' ? 'book_absent' : sel.bookRefusal === 'book_not_eligible' ? 'book_not_eligible' : 'book_refused')
+    : undefined;
   recordLevelBasisOutcome(
     { ...base, rung: 'ladder' },
     sel.ok
-      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}`, ..._age }
+      ? { ok: true, acceptedSource: `${sel.quote.basis}:${sel.quote.producer}`, ..._age, ...(_bookVerdict ? { tickerAcceptedBookVerdict: _bookVerdict } : {}) }
       : { ok: false, reason: sel.tickerRefusal },
   );
 }

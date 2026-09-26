@@ -208,14 +208,15 @@ describe('row 8c P1 — the ladder funnel', () => {
 
   it('10. the helper names the CLOCK from which stamp it used, and prefers the venue clock', () => {
     const venueLeg = tickerLegFromCachedQuote({
-      bid: 1, ask: 2, venueObservedAtMs: NOW - 500, sidesCapturedAtMs: NOW - 9_000, lastSource: 'kraken_ws_ticker',
+      bid: 1, ask: 2, venueObservedAtMs: NOW - 500, sidesCapturedAtMs: NOW - 9_000, sidesWriter: 'ws_ticker',
     })!;
-    expect(venueLeg).toMatchObject({ stampMs: NOW - 500, clockBasis: 'venue', producer: 'kraken_ws_ticker' });
+    // `3n.l` increment 2, P11: the leg is labelled by the SIDES' writer (was `lastSource`, the mark's writer).
+    expect(venueLeg).toMatchObject({ stampMs: NOW - 500, clockBasis: 'venue', producer: 'ws_ticker' });
 
     const receiptLeg = tickerLegFromCachedQuote({
-      bid: 1, ask: 2, venueObservedAtMs: null, sidesCapturedAtMs: NOW - 9_000, lastSource: 'kraken_rest',
+      bid: 1, ask: 2, venueObservedAtMs: null, sidesCapturedAtMs: NOW - 9_000, sidesWriter: 'rest_poller',
     })!;
-    expect(receiptLeg).toMatchObject({ stampMs: NOW - 9_000, clockBasis: 'receipt', producer: 'kraken_rest' });
+    expect(receiptLeg).toMatchObject({ stampMs: NOW - 9_000, clockBasis: 'receipt', producer: 'rest_poller' });
 
     // An absent quote is a null leg, not a leg with null fields — `no_ticker`, never `age_unknown`.
     expect(tickerLegFromCachedQuote(null)).toBeNull();

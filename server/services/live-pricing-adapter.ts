@@ -1,7 +1,8 @@
 import { contextBridge } from './context-bridge';
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service';
-import { priceCache } from './price-cache.js';
+import { priceCache, type SidesWriter } from './price-cache.js';
+import { pairwiseStatedSides } from './market-data/stated-sides.js';
 import { markKindOfProducer } from './market-data/price-basis.js';
 import { restRateLimiter } from './market-data/rest-rate-limiter.js';
 import { markKindOf } from './market-data/mark-kind.js';
@@ -222,6 +223,46 @@ export function toCachedProducer(p: PriceProducer): CachedProducer | null {
     case 'entry_seed':
     case 'mock':
       return p;
+    default: {
+      const _exhaustive: never = p;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * `B-REST-SIDES-TO-CACHE` (`3n.l`) increment 2, P11 (OBJ-14): WHICH WRITER a producer's sides are recorded under on the
+ * shared cache row. TOTAL over `CachedProducer`, with a `never` arm, so a new producer is a compile error until it is
+ * given a name here (the same discipline as `toCachedProducer`).
+ * `null` = this producer states no sides into the cache: the equities mark (`active-execution-engine.ts`, null sides), the
+ * re-serves, seeds, mock and walks. ⚠️ A producer that STARTS stating sides must be given a name here first: with
+ * `null`, its sides would be stored under an unnamed writer.
+ */
+export function sidesWriterOfProducer(p: CachedProducer): SidesWriter | null {
+  switch (p) {
+    case 'kraken_ws_ticker_mid':
+    case 'kraken_ws_ticker_last':
+    case 'kraken_ws_ticker_v1':
+      return 'ws_ticker';
+    case 'kraken_ws_book_mid':
+      return 'ws_book';
+    case 'kraken_rest_engine_fallback_mid':
+    case 'kraken_rest_engine_fallback_last':
+      return 'rest_engine';
+    case 'kraken_rest_poller':
+      return 'rest_adapter';
+    case 'kraken_equities_ws_mid':
+    case 'kraken_equities_ws_last':
+    case 'kraken_rest_rate_limited_reserve':
+    case 'xstock_rest_gate_reserve':
+    case 'last_known_good_all_apis_failed':
+    case 'last_known_good_fetch_exception':
+    case 'last_known_good_reserve':
+    case 'entry_seed':
+    case 'mock':
+    case 'crypto_ws_book_walk':
+    case 'xstock_ticker_snap_walk':
+      return null;
     default: {
       const _exhaustive: never = p;
       return _exhaustive;
@@ -894,7 +935,12 @@ export class LivePricingAdapter {
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache from REST
       const normalized = this.normalizeSymbol(symbol);
       // B-PRICE-SIDE-BY-JOB r5 P-7k: the unified row learns which quantity this is, and REST `c[0]` as its print.
-      priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull);
+      // ⛔ `3n.l` increment 2, P7 (OBJ-2): AND THE SIDES IT JUST PARSED, which this line used to drop one line after
+      // logging them. PAIRWISE: if either side is not finite and positive, NEITHER is stated and the cache keeps its
+      // own sides and stamps (`parseFloat(x || '0')` above turns a missing side into `0`, never `null`).
+      const _restSides = pairwiseStatedSides(bid, ask);
+      priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull,
+        _restSides ? { bid: _restSides.bid, ask: _restSides.ask, capturedAtMs: Date.now(), writer: 'rest_adapter' } : null);
       
       // A real venue read: `observedAt` is genuinely now, and it is the ONLY return here that
       // may say so.
@@ -1168,7 +1214,22 @@ export class LivePricingAdapter {
     // the shared cache had no route to the only clock that is not ours.
     // B-PRICE-SIDE-BY-JOB r5 P-7k: the producer states the kind; this write's own print goes through, and the unified row
     // applies P-7i's carry rule itself.
-    priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs, markKindOfProducer(producer), lastTradePrice ?? null);
+    // ⛔ `3n.l` increment 2, P9 (i): A REST WRITE GOES TO THE REST WRITER. This hop called `updateFromWebSocket` whatever
+    // `source` said, so the engine's REST fallback (`active-execution-engine.ts`, `source 'kraken_rest'`) labelled the
+    // shared row `kraken_ws` and advanced `lastWsMessageAtMs`, the field that exists to tell a push from a poll: in a
+    // socket outage every held symbol on the fallback would have counted as pushed. With no sides stated the two writers
+    // differ in exactly those two fields (Langston, Step 2). P11: the writer tag comes from the producer, never inferred
+    // in the cache.
+    const _writer = sidesWriterOfProducer(producer);
+    if (source === 'kraken_rest') {
+      const _paired = pairwiseStatedSides(bid, ask);
+      priceCache.updateFromRest(normalized, price, markKindOfProducer(producer), lastTradePrice ?? null,
+        _paired && _writer !== null && sidesCapturedAtMs !== null
+          ? { bid: _paired.bid, ask: _paired.ask, capturedAtMs: sidesCapturedAtMs, writer: _writer }
+          : null);
+    } else {
+      priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs, markKindOfProducer(producer), lastTradePrice ?? null, _writer);
+    }
     
     // Phase 8.8.3-I7-WS-D (D6): Diagnostic log for cache write
     console.log(`[I7-WS-D][CACHE_WRITE] symbol=${normalized} price=${price} source=${source}`);
