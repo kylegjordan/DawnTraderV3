@@ -1177,8 +1177,11 @@ interface AgreementCell {
    * feeds-agree claim may rest on.
    * `TickerWs`: last written by some `kraken_ws` producer — either the ticker channel or
    * `kraken_ws_book_mid`, i.e. possibly the book's own top. AMBIGUOUS, not evidence.
-   * `TickerUnknown`: no source stated. Counted rather than dropped, so the cells always sum to
-   * `bothPresent` and a silent reclassification cannot hide in the arithmetic.
+   * `TickerUnknown`: the row's sides have NO NAMED WRITER — since `3n.l` increment 2 (Step-4 C3) that is the cold
+   * mark-substituted pair (`bid === ask === price`, never stated by any writer), which is our own fabrication compared with
+   * the book and is NOT evidence. Before that change the field fed here was `lastSource`, which is always set, so this
+   * cell held almost nothing; the cold rows were filed under Ws / Rest. Counted rather than dropped, so the cells always
+   * sum to `bothPresent` and a silent reclassification cannot hide in the arithmetic.
    * `3n.l` increment 2, P11: `TickerWsTicker` (the ticker channel, genuine) and `TickerWsBook` (the book's own top, an
    * echo) are split out of `TickerWs`, which now holds only an unrecognised WS label. See the section docblock.
    */

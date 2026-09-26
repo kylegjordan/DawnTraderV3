@@ -148,6 +148,26 @@ describe('P7 + P8 — every side producer writes both sides or neither (OBJ-2, O
   });
 });
 
+describe('Step-4 C1 + C2 — the WS writer itself stores only a pair, and only with a named writer', () => {
+  it('17. a one-sided WS write moves nothing: sides, both stamps and the writer are kept', () => {
+    const before = seedWsRow(SYM, 1_000);
+    pc.updateFromWebSocket(SYM, 101, 100.5, null, 9_000, 9_000, 'last', null, 'ws_ticker');
+    const row = pc.getCachedPrice(SYM);
+    expect(row.price).toBe(101); // control: the write happened
+    for (const f of ['bid', 'ask', 'sidesCapturedAtMs', 'venueObservedAtMs', 'sidesWriter']) expect(row[f]).toBe(before[f]);
+  });
+
+  it('18. a pair with no named writer is not stored, so no row carries sides under a null writer', () => {
+    const before = seedWsRow(SYM, 1_000);
+    pc.updateFromWebSocket(SYM, 101, 100.5, 101.5, 9_000, 9_000, 'mid', null, null);
+    const row = pc.getCachedPrice(SYM);
+    for (const f of ['bid', 'ask', 'sidesCapturedAtMs', 'venueObservedAtMs', 'sidesWriter']) expect(row[f]).toBe(before[f]);
+    pc.cache.delete(SYM);
+    pc.updateFromWebSocket(SYM, 101, 100.5, 101.5, 9_000, 9_000, 'mid', null, null); // cold: the legacy pair, no writer
+    expect(pc.getCachedPrice(SYM)).toMatchObject({ bid: 101, ask: 101, sidesCapturedAtMs: null, sidesWriter: null });
+  });
+});
+
 describe('P9 — the "venue pushed" field moves only on a push, and its counters count instruments (OBJ-13)', () => {
   it('9. the engine REST fallback through `updateCache` no longer labels the row `kraken_ws` or advances the push field', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});

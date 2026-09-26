@@ -720,6 +720,16 @@ class UnifiedPriceCache {
    * ⛔ A STATED `null` MEANS "this writer did not observe a side" AND IS NOT COERCED. The legacy
    * `?? price` substitution survives ONLY for the cold case where nothing has ever been stored —
    * which is where the fabricated `bid === ask === price` book came from, now confined to it.
+   *
+   * ⛔⛔ `3n.l` increment 2, Step-4 C1 + C2 (Langston): SIDES ARE STATED ONLY AS A PAIR, AND ONLY WITH A NAMED WRITER.
+   * This writer keyed every arm on `bid !== null || ask !== null`, so `bid = 100, ask = null` stored a new bid beside the
+   * carried ask under a REFRESHED stamp and writer: the defect `pairwiseStatedSides` closes at every producer, left open
+   * at the door of the writer itself. And sides stated with a `null` writer were stored under `sidesWriter: null`, which
+   * the census reads as "no stated sides" and the F2 split as "unknown": both false for a row that has sides.
+   * ⇒ a pair that fails `pairwiseStatedSides`, or arrives with no writer, is treated as NO sides: the row keeps its sides,
+   * stamps and writer. Byte-inert today (no producer sends a one-sided pair or sides without a writer; Langston checked
+   * all three `emitPriceTick` sites and the engine's equities write). The same rule `updateFromRest` gets from its one
+   * `StatedSides` object.
    */
   updateFromWebSocket(
     symbol: string,
@@ -734,18 +744,20 @@ class UnifiedPriceCache {
     lastTradePrice: number | null,
     /**
      * `3n.l` increment 2, P11: WHICH CHANNEL stated these sides, from the caller (`ws_ticker` / `ws_book`), never inferred
-     * here. REQUIRED. `null` only from a caller that states no sides. `?? null` below because a test file outside tsc can
-     * omit it.
+     * here. REQUIRED. `null` only from a caller that states no sides: sides passed with a `null` (or, from a test file
+     * outside tsc, omitted) writer are NOT stored (Step-4 C2).
      */
     sidesWriter: SidesWriter | null,
   ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
-    // ⭐ A STATED side wins; an unstated one keeps what was there; and ONLY when neither exists
-    // does the legacy mark-substitution apply — so the fabricated two-sided book is confined to
-    // the cold-start case it came from rather than re-created on every tick.
-    const _bid = bid ?? existing?.bid ?? price;
-    const _ask = ask ?? existing?.ask ?? price;
+    // ⭐ A STATED PAIR wins; otherwise the row keeps what was there; and ONLY when nothing exists does the legacy
+    // mark-substitution apply — so the fabricated two-sided book is confined to the cold-start case it came from.
+    // Step-4 C1/C2: "stated" = a pair `pairwiseStatedSides` accepts, WITH a named writer.
+    const _pair = pairwiseStatedSides(bid, ask);
+    const _stated = _pair !== null && sidesWriter != null ? _pair : null;
+    const _bid = _stated ? _stated.bid : (existing?.bid ?? price);
+    const _ask = _stated ? _stated.ask : (existing?.ask ?? price);
     this.cache.set(symbol, {
       symbol,
       price,
@@ -758,13 +770,13 @@ class UnifiedPriceCache {
       // ⛔ ADVANCED ONLY WHEN A SIDE WAS ACTUALLY SUPPLIED. Re-stamping on a tick that did not
       // refresh the sides is the W-3 defect itself; leaving it alone is what lets a reader ask
       // "how old is this side?" and get a true answer.
-      sidesCapturedAtMs: (bid !== null || ask !== null) ? (sidesCapturedAtMs ?? Date.now()) : (existing?.sidesCapturedAtMs ?? null),
+      sidesCapturedAtMs: _stated ? (sidesCapturedAtMs ?? Date.now()) : (existing?.sidesCapturedAtMs ?? null),
       // ⛔ MOVES ONLY WITH THE SIDES IT DATES. A venue stamp advanced on a tick that did not
       // refresh the sides would date one observation while describing another — W-3 again,
       // one field over. When no side was supplied the previous stamp is carried, untouched.
-      venueObservedAtMs: (bid !== null || ask !== null) ? venueObservedAtMs : (existing?.venueObservedAtMs ?? null),
+      venueObservedAtMs: _stated ? venueObservedAtMs : (existing?.venueObservedAtMs ?? null),
       // `3n.l` OBJ-10: moves with the sides it names, never on a tick that stated none. P11: the caller names the channel.
-      sidesWriter: (bid !== null || ask !== null) ? (sidesWriter ?? null) : (existing?.sidesWriter ?? null),
+      sidesWriter: _stated ? sidesWriter : (existing?.sidesWriter ?? null),
       // ⭐ ADVANCED HERE AND NOWHERE ELSE — this is the only writer fed by a venue PUSH. Every
       // other writer carries the previous value forward untouched, which is what makes a silent
       // socket death visible instead of masked by the REST poller.

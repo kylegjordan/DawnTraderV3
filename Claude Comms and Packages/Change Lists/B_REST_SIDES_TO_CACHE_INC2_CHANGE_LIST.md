@@ -143,9 +143,9 @@ Ladder rows gain `tickerAcceptedByBookVerdict: { book_absent, book_not_eligible,
 - **FINDING-3:** on the 12 symbols also WS-written, an adapter REST write replaces WS sides with receipt-stamped ones, so their ticker rung flips to the receipt clock after each such write.
 - **A one-sided frame** (ticker, book `NaN`, REST ticker, adapter REST) now states no sides: the row keeps its sides AND their stamps, which then age out honestly. Observed 0 times in the pre-audit's populations.
 - **The engine's REST fallback** writes `lastSource: 'kraken_rest'` and leaves `lastWsMessageAtMs` alone (the only two fields that differ, Langston Step 2).
-- **Dual-key REST writes** give each key its own liveness and last-trade carry. `symbol` stays the normalised key on both rows, as before.
+- **Dual-key REST writes** give each key its own liveness and last-trade carry. `symbol` stays the normalised key on both rows, as before. ➕ *(Step-4 C4b)* **`getPrice` now RETURNS the requested key's row** (built from that key's own previous row) where it used to return the one shared object; the price and sides in it are the same REST read.
 - **The two liveness counters** count instruments: a symbol held under two keys counts once. A phantom key (`3n.l-a`) still counts as its own instrument.
-- ⛔ **SERIES DISCONTINUITIES, pre-registered:** the ticker leg's `producer` label (so `byAcceptedSource` keys) changes from `kraken_ws` / `kraken_rest` to the `SidesWriter` values; the F2 `bothPresentTickerWs` cell empties into `WsTicker` / `WsBook`. **No reading from before the deploy is comparable with one after it on these fields** (C6 already rules out pre/post on this deploy).
+- ⛔ **SERIES DISCONTINUITIES, pre-registered:** (1) the ticker leg's `producer` label (so `byAcceptedSource` keys) changes from `kraken_ws` / `kraken_rest` to the `SidesWriter` values; (2) the F2 `bothPresentTickerWs` cell empties into `WsTicker` / `WsBook`; (3) ➕ *(Step-4 C3)* **F2's `bothPresentTickerUnknown` gains a population:** a cold mark-substituted row (`bid === ask === price`, `sidesWriter: null`) still counts in `bothPresent` (`signal-orchestrator.ts:2629-2630`) and now lands in `Unknown`, where before it was filed under whatever `lastSource` said; (4) ➕ *(Step-4 C4a)* **the two liveness counters count instruments instead of keys** (recorded raw by all three call sites; no gate reads them). **No reading from before the deploy is comparable with one after it on these fields** (C6 already rules out pre/post on this deploy).
 - **Unchanged:** the price stored, the mark kind, `lastUpdatedAt`, every decision's ladder and ceilings, the adapter's own map.
 
 ## 4. EVIDENCE AT THE REF
@@ -166,6 +166,16 @@ Ladder rows gain `tickerAcceptedByBookVerdict: { book_absent, book_not_eligible,
 6. **F2 still files a legacy `kraken_rest` string as REST**, so a caller not yet moved off `lastSource` is not misfiled as WS. Nothing passes it today.
 7. **OBJ-4 also corrects chain step 5** ("THE SIDES ARE NOT ON THE EVENT"), stale since 2026-09-05 and adjacent to the line OBJ-4 named. Same list, same correction.
 
-## 6. WHAT THIS DOES NOT DO
+## 6. STEP-4 RULING (Langston, 2026-09-26 23:00Z): APPROVED WITH FOUR CONDITIONS, NO BLOCKER — how each was met (code at the next commit)
+| # | condition | done |
+|---|---|---|
+| **C1** | `updateFromWebSocket` still keyed its arms on `bid !== null \|\| ask !== null`: a one-sided call stored a new side beside a carried one under a refreshed stamp | the writer states sides only as a pair `pairwiseStatedSides` accepts; `updateFromRest`'s docblock ("the rules are `updateFromWebSocket`'s") is now true. Test 17; mutation M18 killed |
+| **C2** | sides stated with a `null` writer were stored under `sidesWriter: null`, which the census reads as "no stated sides" and F2 as "unknown" | a pair with no named writer is not stored (the REST writer's rule). Test 18; mutation M19 killed |
+| **C3** | the discontinuity list missed F2's `Unknown` cell gaining the cold rows; `AgreementCell`'s `TickerUnknown` comment still said "no source stated" | §3 item (3); the comment rewritten to say what the cell now holds |
+| **C4** | (a) the counters' keys-to-instruments change belongs under discontinuities; (b) `getPrice`'s return value changes | §3 item (4) and the dual-key bullet |
+**His re-derivations, recorded:** three `bid:` constructors survive in `price-cache.ts` and all nine `set` sites route through them; with no sides the two writers differ in exactly `lastSource` and `lastWsMessageAtMs`; the counters' memo is safe because `normalizeInternal` reads only maps built at module init. **`#1076`: he rules (b), the governed meaning.**
+**Evidence after the conditions:** 18/18 in the increment file; 19/19 mutations killed (17 + M18, M19); the related suite and `check-tsc-baseline` re-run on the pushed head (in the commit message).
+
+## 7. WHAT THIS DOES NOT DO
 
 No new REST call, poll or cadence change. No ceiling moves. The resolver stays untouched (`3n.l-a`). The xStock mark re-write's liveness and the per-symbol gap pooling are placed on `3b.f-c` (P10). The signal-birth feed question is `3n.u5` (CC-B). **One deploy for both increments, after `8a-P4c` (2026-09-30T00:00Z) and `3n.q8`'s fee window (not before 2026-10-02T20:10Z).**

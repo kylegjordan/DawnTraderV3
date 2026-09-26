@@ -28,7 +28,7 @@ afterEach(() => {
 
 describe('P-7k — every writer states the kind, and the last trade rides beside it', () => {
   it('1. the WS writer stores the stated kind and this write\'s print', () => {
-    pc.updateFromWebSocket(SYM, 2576.63, 2576.6, 2576.66, Date.now(), null, 'mid', 2576.65);
+    pc.updateFromWebSocket(SYM, 2576.63, 2576.6, 2576.66, Date.now(), null, 'mid', 2576.65, 'ws_ticker');
     const row = pc.getCachedPrice(SYM);
     expect(row.markKind).toBe('mid');
     expect(row.lastTradePrice).toBe(2576.65);
@@ -38,7 +38,7 @@ describe('P-7k — every writer states the kind, and the last trade rides beside
   it('2. a later write with no print keeps the pair WITH its original receipt time (P-7i\'s carry rule)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_700_000_000_000);
-    pc.updateFromWebSocket(SYM, 100, 99, 101, Date.now(), null, 'mid', 99.5);
+    pc.updateFromWebSocket(SYM, 100, 99, 101, Date.now(), null, 'mid', 99.5, 'ws_ticker');
     vi.setSystemTime(1_700_000_005_000);
     pc.updateFromRest(SYM, 100.2, 'mid', null);
     const row = pc.getCachedPrice(SYM);
@@ -109,7 +109,7 @@ describe('P-7k — the producer table is total and agrees with the suffixes', ()
 describe('P-7k — the mixture is readable, one interval per HEALTH line', () => {
   it('9. level reads are counted by kind, printed on the HEALTH line, and reset at each line', () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    pc.updateFromWebSocket(SYM, 10, 9.9, 10.1, Date.now(), null, 'mid', null);
+    pc.updateFromWebSocket(SYM, 10, 9.9, 10.1, Date.now(), null, 'mid', null, 'ws_ticker');
     pc.noteLevelRead(pc.getCachedPrice(SYM));
     pc.noteLevelRead(pc.getCachedPrice(SYM));
     pc.noteLevelRead(null); // no row, no read
