@@ -2928,7 +2928,7 @@
 [
 "MUST",
 "B-PLAN-CURRENCY-CHECK",
-"Keep the push-to-live plan current: the checker requires a batch close to touch its own plan line, plus a weekly census alert; CLAUDE.md points at the plan",
+"Keep the sprint-to-live plan current: the checker requires a batch close to touch its own plan line, plus a weekly census alert; CLAUDE.md points at the plan",
 "CC-A",
 "Langston ruling (keep-current mechanism) accepted by CC-A 2026-09-28; two named objectives in one row; may not close on the pointer swap alone; the weekly census is part of objective 1; 'listed' is read at the ref at close time"
 ],

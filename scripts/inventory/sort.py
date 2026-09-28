@@ -5,7 +5,7 @@ R consistent profitability evidence · L live-mode readiness (Kyle: live fixes m
 Everything else -> X (after live)."""
 import io, json, os, collections
 OUT = os.path.dirname(os.path.abspath(__file__))
-DEST = r"C:\DawnTraderV3-new\Claude Comms and Packages\Scope Files\PRE_LIVE_PUSH.md"
+DEST = r"C:\DawnTraderV3-new\Claude Comms and Packages\Scope Files\PRE_LIVE_SPRINT.md"
 rows = {r[1]: r for r in json.load(io.open(os.path.join(OUT, "sort_sheet.json"), encoding="utf-8"))}
 dec = json.load(io.open(os.path.join(OUT, "decisions.json"), encoding="utf-8"))
 kd = json.load(io.open(os.path.join(OUT, "kyle_decisions.json"), encoding="utf-8"))
@@ -56,7 +56,7 @@ J = {
  "B-KRAKEN-FEE-WATCH": "L", "P19-B12": "L", "rm:21-3b": "L", "DAY-ONE-NUMBERS": "L", "PROCESS-DEATH-FORM": "L", "rm:19-17b": "L",
  # profitability evidence
  "PAPER-STANDARD": "R",
- # Kyle 2026-09-28: the three flagged items join the push
+ # Kyle 2026-09-28: the three flagged items join the sprint
  "RULINGS-DURABILITY": "L", "COLTRANE-PARITY": "L", "#221": "C",
  # Kyle 2026-09-28: legacy code that could still reach a trade is removed BEFORE live (gated on DEAD-CODE-REACHABILITY);
  # pure tidying (database structure, tests, screens) stays after. Operator alerting joins too.
@@ -111,8 +111,8 @@ for k, r in rows.items():
     if c: push[c].append(r); continue
     if b == "MUST": missing.append(k); continue
     after.append(r)
-assert not missing, f"MUST items without a push category: {missing}"
-# the push key set order.py asserts against — written here so the two can never drift
+assert not missing, f"MUST items without a sprint category: {missing}"
+# the sprint key set order.py asserts against — written here so the two can never drift
 json.dump(sorted(r[1] for v in push.values() for r in v), open(os.path.join(OUT, "push_keys.json"), "w"), indent=0)
 unjudged = [r[1] for r in after if rows[r[1]][0] in ("HELPFUL", "DECIDE")]
 def c_(x): return str(x).replace("|", "/").replace("\n", " ").strip()
@@ -122,18 +122,18 @@ def why(r):
 def own(r): return OWNER.get(r[1], r[3])
 L = []; A = L.append
 total_push = sum(len(v) for v in push.values())
-A("# THE PUSH TO LIVE — the re-sorted list (Kyle's go-live rules, 2026-09-28)")
+A("# THE SPRINT TO LIVE — the re-sorted list (Kyle's go-live rules, 2026-09-28)")
 A("")
 A("**Kyle's rule:** everything needed to get paper to the point where the mechanics are sound and working as intended, the thresholds / gates / regimes / strategies / scores are tuned, the prices are right, paper tells the truth, we capture the data we mean to learn from, and paper trades profitably and consistently — plus the live-mode fixes, mixed into the same push. **Everything else goes after live.** No phase names: one list, prioritised next.")
 A("")
-A(f"**In the push: {total_push}** · **After live: {len(after)}** · **Running now (observation windows): {len(obs)}** · **Parked by Kyle: {len(parked)}** · awaiting owner confirmation: see the draft's UNCONFIRMED section.")
+A(f"**In the sprint: {total_push}** · **After live: {len(after)}** · **Running now (observation windows): {len(obs)}** · **Parked by Kyle: {len(parked)}** · awaiting owner confirmation: see the draft's UNCONFIRMED section.")
 A("")
-A("> ⚠️ **Category is not schedule (Langston S1):** the counts below say WHY an item is in the push; WHEN it runs is THE WORKING ORDER further down. Plan from the order, not from these counts.")
+A("> ⚠️ **Category is not schedule (Langston S1):** the counts below say WHY an item is in the sprint; WHEN it runs is THE WORKING ORDER further down. Plan from the order, not from these counts.")
 A("")
 A("| category | items |"); A("|---|---:|")
 for c in "MCPTDLR": A(f"| {LABEL[c]} | {len(push[c])} |")
 A("")
-A("> Source: `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) re-sorted by `scripts/inventory/sort.py`; the working order is `scripts/inventory/order.py` (asserts every push item appears exactly once); Kyle's decisions in `scripts/inventory/kyle_decisions.json`. The order is CC-B's draft for Langston's review; owners are provisional until the session assignment.")
+A("> Source: `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) re-sorted by `scripts/inventory/sort.py`; the working order is `scripts/inventory/order.py` (asserts every sprint item appears exactly once); Kyle's decisions in `scripts/inventory/kyle_decisions.json`. The order is CC-B's draft for Langston's review; owners are provisional until the session assignment.")
 A("")
 from order import WAVES
 TAG = {"M": "mechanics", "C": "tuning", "P": "prices", "T": "paper truth", "D": "learning data", "L": "live readiness", "R": "evidence"}

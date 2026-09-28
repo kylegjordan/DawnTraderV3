@@ -1,11 +1,11 @@
-"""Generate the governed push plan, 1-system-manual/PUSH_TO_LIVE_PLAN.md, from order.py + assignments.
+"""Generate the governed push plan, 1-system-manual/SPRINT_TO_LIVE_PLAN.md, from order.py + assignments.
 Owners are CC-B's proposal (2026-09-28, Kyle-directed); each owning session confirms on its first touch."""
 import io, json, os, collections
 from importlib import util
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = util.spec_from_file_location("order", os.path.join(HERE, "order.py")); o = util.module_from_spec(spec); spec.loader.exec_module(o)
 rows = {r[1]: r for r in json.load(io.open(os.path.join(HERE, "sort_sheet.json"), encoding="utf-8"))}
-DEST = r"C:\DawnTraderV3-new\1-system-manual\PUSH_TO_LIVE_PLAN.md"
+DEST = r"C:\DawnTraderV3-new\1-system-manual\SPRINT_TO_LIVE_PLAN.md"
 
 from clusters import CLUSTERS
 SHORT = {"CC-A": "CC-A (Old Claude)", "CC-B": "CC-B (New Claude)", "CC-C": "CC-C (Analyst Claude)", "Infra": "Infra Claude"}
@@ -19,18 +19,18 @@ PLATES = [
  ("CC-A (Old Claude)", "B-MEASURE-GATE beyond leg 2 — Step 2", "PAUSE cleanly: after live"),
  ("CC-A (Old Claude)", "B-INSTRUMENTS-OVER-RULES — usage measure to 2026-10-02", "FINISH the measure, then close"),
  ("CC-A (Old Claude)", "B-DEPLOY-DRIFT-LINE — observation window", "FINISH: convert when its criterion is read"),
- ("CC-A (Old Claude)", "B-SCHEDULER-FIRST-TICK — next up, not started", "HAND to Infra (its push row)"),
+ ("CC-A (Old Claude)", "B-SCHEDULER-FIRST-TICK — next up, not started", "HAND to Infra (its sprint row)"),
  ("CC-B (New Claude)", "B-REACH-BASELINE-ADJUST — 7-day review overdue", "FINISH: read the window, convert the report"),
  ("CC-B (New Claude)", "B-FEED-MISMATCH-FIX — observation to ~2026-10-10", "FINISH: convert at close"),
  ("CC-B (New Claude)", "B-XSTOCK-FEE-CONTRACT — observation (~21 days from 09-11)", "FINISH: convert at close"),
  ("CC-B (New Claude)", "B-ARCHIVE-RETENTION-SIZING — was waiting on Kyle", "CLOSE: Kyle decided 2026-09-23 (August moves to warm storage in October)"),
- ("CC-B (New Claude)", "T-W20C-SCALAR-LEG — not started", "stays as its push row (Wave A3)"),
+ ("CC-B (New Claude)", "T-W20C-SCALAR-LEG — not started", "stays as its sprint row (Wave A3)"),
  ("CC-C (Analyst Claude)", "B-OHLC-FRAME-GUARD — Step 7", "FINISH (Wave 0)"),
  ("CC-C (Analyst Claude)", "F-G-1 — conversion owed, reopened", "FINISH (Wave 0)"),
- ("CC-C (Analyst Claude)", "B-PRICE-SIDE-BY-JOB — 8a-P4c window to 09-30, then increments 2-3; plus B-XSTOCK-BID-TRIGGER-RELAND, B-VTS-NO-DECISION-VALVE and 8c per-leg levels on the crypto quant lane (needs Langston's hold re-ruled); CC-C estimate 2026-09-28: plate clear ~10-12 to 10-14, three deploys", "FINISH AND DEPLOY before the push starts (Kyle 2026-09-28: no trigger, fill or booking left on the midpoint)"),
+ ("CC-C (Analyst Claude)", "B-PRICE-SIDE-BY-JOB — 8a-P4c window to 09-30, then increments 2-3; plus B-XSTOCK-BID-TRIGGER-RELAND, B-VTS-NO-DECISION-VALVE and 8c per-leg levels on the crypto quant lane (needs Langston's hold re-ruled); CC-C estimate 2026-09-28: plate clear ~10-12 to 10-14, three deploys", "FINISH AND DEPLOY before the sprint starts (Kyle 2026-09-28: no trigger, fill or booking left on the midpoint)"),
  ("CC-C (Analyst Claude)", "B-REST-SIDES-TO-CACHE, B-BOOK-STATE-RESTART-DURABLE — built", "FINISH: deploy after 09-30 (Wave 0)"),
- ("CC-C (Analyst Claude)", "B-SIZING-DEC-RESTORE — half live", "FINISH: stays with CC-C (in flight); now placed in the push"),
- ("CC-C (Analyst Claude)", "B-XSTOCK-SESSION-FRESHNESS — open", "continues as its push row"),
+ ("CC-C (Analyst Claude)", "B-SIZING-DEC-RESTORE — half live", "FINISH: stays with CC-C (in flight); now placed in the sprint"),
+ ("CC-C (Analyst Claude)", "B-XSTOCK-SESSION-FRESHNESS — open", "continues as its sprint row"),
  ("CC-C (Analyst Claude)", "F-G-2 — window void since 09-05", "absorbed into B-PRICE-SIDE-BY-JOB; close as absorbed"),
  ("Infra Claude", "B-LANGSTON-CONTEXT increment 2 — chunk 1 Step 7, chunk 2 part 1 Step 3", "FINISH the chunks in flight, then PAUSE the rest (after live)"),
  ("Infra Claude", "B-WAKE-LEAD-NAME — Step 10", "FINISH"),
@@ -52,20 +52,20 @@ def ref(k):
     if k.startswith("row:"): return f"plan row {k[4:]}"
     return "— batch named at Step 1"
 L = []; A = L.append
-A("# PUSH TO LIVE — THE PLAN (governed, Tier 1)")
+A("# SPRINT TO LIVE — THE PLAN (governed, Tier 1)")
 A("")
-A("> **Kyle, 2026-09-28.** This document is the working plan from here to live trading. It replaces phase names: one list, in order. It is the **active phase plan** for `CLAUDE.md` §9.4 purposes — a new item's HOME is a placed row here. `PHASE_19_PLAN.md` stays as history and for the detail each row links to.")
+A("> **Kyle, 2026-09-28.** This document is the working plan from here to live trading. It replaces phase names: one list, in order. **Renamed 2026-09-29 (Kyle): the \"push to live\" is now the SPRINT TO LIVE; this file was `PUSH_TO_LIVE_PLAN.md`.** It is the **active phase plan** for `CLAUDE.md` §9.4 purposes — a new item's HOME is a placed row here. `PHASE_19_PLAN.md` stays as history and for the detail each row links to.")
 A("")
 A("## 0. Clear the plates first (Kyle, 2026-09-28)")
 A("")
-A("Before any session starts its push rows, everything it has in flight is **finished** (if it is in the push, or nearly done, or leads to something that must be finished) or **paused cleanly** at a batch boundary and moved to the after-live list. Each session confirms its own lines; this table is CC-B's read of the four task lists at 2026-09-28.")
+A("Before any session starts its sprint rows, everything it has in flight is **finished** (if it is in the sprint, or nearly done, or leads to something that must be finished) or **paused cleanly** at a batch boundary and moved to the after-live list. Each session confirms its own lines; this table is CC-B's read of the four task lists at 2026-09-28.")
 A("")
 A("| session | in flight now | disposition |"); A("|---|---|---|")
 for row in PLATES: A("| " + " | ".join(row) + " |")
 A("")
-A("## 1. The rule — what is in the push")
+A("## 1. The rule — what is in the sprint")
 A("")
-A("An item is in the push **only** if it serves one of these (Kyle's words, condensed):")
+A("An item is in the sprint **only** if it serves one of these (Kyle's words, condensed):")
 A("")
 A("1. **Mechanics** — the pipeline works as intended: filtering, pattern detection, DBS, regime classification, strategy selection and signal generation, SQE evaluation, the RTB pool and its refresh, opening and closing trades.")
 A("2. **Tuning** — thresholds, ranges, gates, regime classification, strategies, and the confidence and prediction scores.")
@@ -75,14 +75,14 @@ A("5. **Learning data** — we capture what we currently intend to learn from.")
 A("6. **Live-mode readiness** — the live engine, risk controls on real money, security, the live key, the environment.")
 A("7. **The evidence** — paper trading profitably and consistently, judged against Kyle's standard.")
 A("")
-A("**Everything else goes after live** — machine learning, the AMR, break-even / trailing / moonbag exits, the non-US-dollar currency conversion, crew and reviewer tooling, legacy cleanup that no live path can reach, research ideas. The after-live list is `Claude Comms and Packages/Scope Files/PRE_LIVE_PUSH.md` (208 items on 2026-09-28: 167 judged after-live in the Langston-approved r8 inventory + 41 judged after-live against these rules; the '172' in earlier review notes was a count from before later moves).")
+A("**Everything else goes after live** — machine learning, the AMR, break-even / trailing / moonbag exits, the non-US-dollar currency conversion, crew and reviewer tooling, legacy cleanup that no live path can reach, research ideas. The after-live list is `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md` (208 items on 2026-09-28: 167 judged after-live in the Langston-approved r8 inventory + 41 judged after-live against these rules; the '172' in earlier review notes was a count from before later moves).")
 A("")
-A("**Tooling boundary (Langston, 2026-09-28):** crew and reviewer tooling is in the push ONLY if it gates the push's own correctness (e.g. `B-PLAN-CURRENCY-CHECK`, which keeps this plan true). Everything else in that group waits for live.")
+A("**Tooling boundary (Langston, 2026-09-28):** crew and reviewer tooling is in the sprint ONLY if it gates the sprint's own correctness (e.g. `B-PLAN-CURRENCY-CHECK`, which keeps this plan true). Everything else in that group waits for live.")
 A("")
 A("## 2. New discoveries — the intake test (Kyle, 2026-09-28)")
 A("")
 A("Anything found while working — a bug, an issue, a needed fix — gets the same test **in the same turn it is found** (this is the §9.4 disposition, applied to this plan):")
-A("- **Meets the rule in §1** → it gets a row here, placed in the right wave, with an owner and a batch reference. It is part of the push.")
+A("- **Meets the rule in §1** → it gets a row here, placed in the right wave, with an owner and a batch reference. It is part of the sprint.")
 A("- **Does not** → it goes to the after-live list, with a one-line reason.")
 A("- ⛔ A discovery that can stop trading or lose money now is still a hotfix, and the hotfix path applies first.")
 A("")
@@ -91,7 +91,7 @@ A("")
 A("- **Every item is a batch** (or a hotfix, investigation or sub-batch), run through the normal eleven-step workflow; its report is linked from its row.")
 A("- **The owner updates its row at every batch close** (status + report link), in the same governance turn — and adds any discovery that passes §2. ⏳ **To be made a Tier-1 ledger row in `workflow-10-governance` and graded by the governance checker** (proposed below — Langston to rule).")
 A("- **Finish what is in flight** (Kyle): work already under way is completed, including any follow-on it was leading up to; a clean break is taken at the next batch boundary.")
-A("- **Clear plates first** (Kyle): before any session starts its push rows, it finishes or cleanly pauses everything it has in flight — see section 0.")
+A("- **Clear plates first** (Kyle): before any session starts its sprint rows, it finishes or cleanly pauses everything it has in flight — see section 0.")
 A("- **Owners** are assigned by connected group (section 6); reassign by editing the row and saying why.")
 A("")
 A("## 4. The plan")
@@ -132,11 +132,11 @@ A("| session | group | items |"); A("|---|---|---:|")
 _push = set(json.load(io.open(os.path.join(HERE, "push_keys.json"), encoding="utf-8")))
 for s, title, ks in CLUSTERS: A(f"| {SHORT[s]} | {title} | {len([k for k in ks if k in _push])} |")
 _stale = sorted(k for _, _, ks in CLUSTERS for k in ks if k not in _push)
-if _stale: print("cluster keys not in the push (not counted):", _stale)
+if _stale: print("cluster keys not in the sprint (not counted):", _stale)
 A("")
 A("## 7. Coltrane — proposed role (for Langston's view, then Kyle)")
 A("")
-A("- **Not an implementer in this push.** Making him one is its own setup batch: he cannot push to the review branch (his key reaches only the agent-work repo, so a session must pull, review and push his work), his clone has no installed packages so he cannot run the type check or tests, and a full build on the shared 3 GB reviewer box is unmeasured. Kyle: *don't spend a long batch setting him up.*")
+A("- **Not an implementer in this sprint.** Making him one is its own setup batch: he cannot push to the review branch (his key reaches only the agent-work repo, so a session must pull, review and push his work), his clone has no installed packages so he cannot run the type check or tests, and a full build on the shared 3 GB reviewer box is unmeasured. Kyle: *don't spend a long batch setting him up.*")
 A("- **A second, independent reviewer on the batches where a miss costs most** — a different model family reading the same diff after Langston's code review: the price layer (§1.3), risk controls and the live engine (§1.6), security, and the end-to-end runtime audit (`#522`). Read-only; his review goes in the channel and the batch report.")
 A("- **Two preconditions:** his privacy check (`COLTRANE-PARITY`, Wave B1) and Kyle allowing sessions to call him for those batch types (today only Kyle may).")
 A("")

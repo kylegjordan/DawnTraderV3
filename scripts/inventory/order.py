@@ -1,18 +1,18 @@
-"""The working ORDER of the push to live (CC-B draft, 2026-09-28, for Langston's review then Kyle).
+"""The working ORDER of the sprint to live (CC-B draft, 2026-09-28, for Langston's review then Kyle).
 Two tracks run side by side and meet at go-live:
   Track A — the trading system: foundations -> mechanics (+ learning data alongside) -> tuning -> the evidence.
   Track B — live-mode readiness: the environment decision, safety now, risk controls, restart/ops, the live engine, go-live prep.
 Wave 0 is this week's urgent and cheap items. Within a wave, the listed order is the working order; an item marked
-'after X' must wait for X. Every push item must appear exactly once (asserted)."""
+'after X' must wait for X. Every sprint item must appear exactly once (asserted)."""
 import io, json, os
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 WAVES = [
  ("0", "NOW — urgent, cheap, or already in flight. GATE: staging is held at bc199185e for the 8a-P4c window (to 2026-09-30 00:00Z); the held deploy is not before 2026-10-02 20:10Z (GOVERNANCE_EXCEPTIONS.md:28) - the deploy-drift alerts clear on that deploy", [
    ("B-PLAN-CURRENCY-CHECK", "keeps this plan current: checker close-diff rule + weekly census alert, then the CLAUDE.md pointer swap (Langston ruling, OLD Claude)"),
-   ("B-XSTOCK-BID-TRIGGER-RELAND", "midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the push starts): paper xStock stop/target triggers back on the bid"),
-   ("B-VTS-MARK-SIDE", "midpoint off, before the push: the VTS xStock prices on the right side (8a-P4c increments 2-3)"),
-   ("B-VTS-NO-DECISION-VALVE", "midpoint off, before the push: a VTS trade with no usable sell price no longer books its timeout at the midpoint"),
+   ("B-XSTOCK-BID-TRIGGER-RELAND", "midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid"),
+   ("B-VTS-MARK-SIDE", "midpoint off, before the sprint: the VTS xStock prices on the right side (8a-P4c increments 2-3)"),
+   ("B-VTS-NO-DECISION-VALVE", "midpoint off, before the sprint: a VTS trade with no usable sell price no longer books its timeout at the midpoint"),
    ("RULINGS-DURABILITY", "cheap and irreversible if lost: copy Langston's rulings file to a read-only replica"),
    ("DISK-HEADROOM", "database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) move one month of one-minute price bars as the proof and flip their hot window 365 -> 30 days (~19 GB out); then measure months of headroom"),
    ("CONTEXT-BRIDGE-TTL", "this week: make the retention demonstrably free bytes on a named table - install the missing 14-day job (1.48 GB); #688 (four monthly-partitioned tables) rides the disk item"),
@@ -90,7 +90,7 @@ WAVES = [
    ("B-STRING-TRUTHINESS-GUARDS", "hygiene: guards that treat '0' as true"),
    ("B-GUARD-COVERAGE-AUDIT", "hygiene: which guards cover which paths"),
    ("B-LEARNING-SYSTEM-CENSUS", "hygiene: old learning systems still wired"),
-   ("DEAD-CODE-REACHABILITY", "hygiene (Langston C6): rules on ALL 22 legacy items - the 5 removals below AND the 17 in the after-live 'Legacy and dead-code cleanup' group; any it finds reachable from a trade joins the push by the section-2 intake test, the rest stay after live"),
+   ("DEAD-CODE-REACHABILITY", "hygiene (Langston C6): rules on ALL 22 legacy items - the 5 removals below AND the 17 in the after-live 'Legacy and dead-code cleanup' group; any it finds reachable from a trade joins the sprint by the section-2 intake test, the rest stay after live"),
    ("B-TRADING-ENGINE-REMOVAL", "legacy removal, after the census confirms it dead: the older second trading engine (Kyle 2026-09-28)"),
    ("B-SQE-DEADCODE-PURGE", "legacy removal, after the census: a dead SQE copy that checks fewer gates"),
    ("rm:16.6", "legacy removal, after the census: the old trailing-percent exit code, so it cannot re-enter a live exit"),
@@ -134,7 +134,7 @@ WAVES = [
    ("#220", "an error thrown 64,494 times in VTS strategy runs"),
    ("#1072", "the price-history recorder's frozen symbol set"),
    ("B-ARCHIVE-WRITER-LIFECYCLE", "the archive writer's lifecycle"),
-   ("#1078", "B-ARCHIVE-FLUSH-DRAIN-ORDER: the writer drains its buffer before it holds a slot, so a slot timeout throws the rows away (670 on 2026-09-28) - in the push because it loses learning data"),
+   ("#1078", "B-ARCHIVE-FLUSH-DRAIN-ORDER: the writer drains its buffer before it holds a slot, so a slot timeout throws the rows away (670 on 2026-09-28) - in the sprint because it loses learning data"),
    ("B-ROLLBACK-EPOCH-FORWARD", "epochs across a rollback"),
    ("#590", "calibration store reset at the formula change"),
    ("B-PROVENANCE-LOSS-CENSUS", "where decision provenance is lost"),
@@ -178,7 +178,7 @@ WAVES = [
  ]),
  ("B1", "TRACK B · Safety now — can start immediately, in parallel with Track A", [
    ("rm:21.1.a", "B1 (Langston F10): the legacy live exit route is a re-entry risk today, whatever the environment"),
-   ("B-SEC-HARDEN", "route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the push)"),
+   ("B-SEC-HARDEN", "route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the sprint)"),
    ("B-SSH-KEY-CENSUS", "whose are the two unknown keys"),
    ("#615", "the reviewer identity must not read the secrets file"),
    ("COLTRANE-PARITY", "before the Coltrane trial: a privacy check like Langston's"),
@@ -187,7 +187,7 @@ WAVES = [
    ("P19-B12", "the deploy tool's own executable comes from the reviewed code"),
  ]),
  ("B2", "TRACK B · Risk controls and restart safety — fixed in paper, carried to live", [
-   ("B-VENUE-QUIET-ALERTING", "operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the push)"),
+   ("B-VENUE-QUIET-ALERTING", "operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the sprint)"),
    ("#692", "operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options"),
    ("#634", "the kill switch must not fail open"),
    ("#632", "the daily-loss count survives a restart"),
@@ -235,8 +235,8 @@ if __name__ == "__main__":
     missing = set(push) - set(seen)
     extra = set(seen) - set(push)
     assert not dup, f"listed twice: {dup}"
-    assert not missing, f"push items not ordered: {sorted(missing)}"
-    assert not extra, f"ordered but not in the push: {sorted(extra)}"
+    assert not missing, f"sprint items not ordered: {sorted(missing)}"
+    assert not extra, f"ordered but not in the sprint: {sorted(extra)}"
     # S2 (Langston): every note that opens with "after <KEY>" must name an item that exists and comes EARLIER
     idx = {k: i for i, k in enumerate(seen)}
     import re as _re
