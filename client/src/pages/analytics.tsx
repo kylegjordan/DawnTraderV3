@@ -1849,16 +1849,19 @@ interface PassiveArchiveUniverseStatsUI {
   // Aligned to the server's four values (drift-dashboard-aggregator.ts PassiveArchiveUniverseStats).
   universe: 'xstock_spot' | 'xstock_perp' | 'crypto_spot' | 'crypto_perp';
   configuredSymbols: number;
-  activeSymbolsInWindow: number;
-  ohlcRowsInWindow: number;
-  tickerRowsInWindow: number;
+  // `null` = the window count is UNKNOWN (timed out or unreadable) — rendered "—", never 0 (B-OHLC-FRAME-GUARD r6).
+  activeSymbolsInWindow: number | null;
+  ohlcRowsInWindow: number | null;
+  tickerRowsInWindow: number | null;
   cumulativeOhlcScanned: number;
   cumulativeTickerScanned: number;
   ohlcFramesSkipped: number;
   wsConnected: boolean;
   ohlcStoreFraction: number | null;
   tickerStoreFraction: number | null;
-  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING';
+  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING' | 'COUNT_UNKNOWN';
+  // Why a count is unknown: timeout = load, error = the query failed, shape = an unexpected reply.
+  countUnknownReason: 'timeout' | 'error' | 'shape' | null;
   diskBytes: number;
   diskPretty: string;
 }
@@ -1893,17 +1896,20 @@ function PassiveArchiveSection() {
     return u;
   };
 
-  const statusBadge = (status: PassiveArchiveUniverseStatsUI['status']) => {
+  const statusBadge = (status: PassiveArchiveUniverseStatsUI['status'], reason: PassiveArchiveUniverseStatsUI['countUnknownReason']) => {
     switch (status) {
       case 'OK': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">OK</span>;
       case 'NO_OHLC_DATA': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500">NO OHLC</span>;
       case 'NO_TICKER_DATA': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500">NO TICKER</span>;
       case 'DISCONNECTED': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">DISCONNECTED</span>;
       case 'STARTING': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">STARTING</span>;
+      case 'COUNT_UNKNOWN': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500">COUNT UNKNOWN{reason ? ` · ${reason}` : ''}</span>;
+      // A status this build does not know must still show, never render as a blank cell.
+      default: return <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{String(status)}</span>;
     }
   };
 
-  const fmtN = (n: number) => n.toLocaleString();
+  const fmtN = (n: number | null) => n != null ? n.toLocaleString() : '—';
   const fmtPct = (f: number | null) => f != null ? `${(f * 100).toFixed(0)}%` : '—';
 
   return (
@@ -1981,7 +1987,7 @@ function PassiveArchiveSection() {
                       <td className="px-2 py-2 text-right font-mono text-muted-foreground">{fmtN(u.cumulativeTickerScanned)}</td>
                       <td className="px-2 py-2 text-right font-mono text-[10px]">{fmtPct(u.tickerStoreFraction)}</td>
                       <td className="px-2 py-2 text-right font-mono">{u.diskPretty}</td>
-                      <td className="px-2 py-2">{statusBadge(u.status)}</td>
+                      <td className="px-2 py-2">{statusBadge(u.status, u.countUnknownReason)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1992,7 +1998,7 @@ function PassiveArchiveSection() {
                 <strong>Reading:</strong> "Configured" = symbols in archiver universe at startup. "Active in window" = distinct symbols with ≥1 row in the selected time window. "Stored (window)" = rows persisted to DB in the window — the canonical capture metric. "Scanned (since PID)" = in-process cumulative counter incremented on every WS message received since the current PM2 process started — useful for spotting silent drops between WS receive and DB write. "Store %" = stored ÷ scanned, ideally close to 100% (drift below indicates insert errors, partition-routing failures, or batch drops). "Skipped (since PID)" = one-minute bars the frame guard refused because a price, volume or time was missing or malformed; they are counted here and not stored. On the perp rows a refused bar is looked at again every minute until a newer one is accepted, so a burst of refusals inflates "scanned" and drags "store %" down: check "skipped" before reading a low store % as a feed collapse.
               </div>
               <div>
-                <strong>Status:</strong> OK = data flowing. NO OHLC = WS connected but no OHLC bars received (e.g., feed-name mismatch). NO TICKER = WS connected but no ticker updates. DISCONNECTED = WS down. STARTING = archiver still initializing.
+                <strong>Status:</strong> OK = data flowing. NO OHLC = WS connected but no OHLC bars received (e.g., feed-name mismatch). NO TICKER = WS connected but no ticker updates. DISCONNECTED = WS down. STARTING = archiver still initializing. COUNT UNKNOWN = WS connected, but a stored-rows count for the window could not be read, so the counts show "—" (unknown), not 0. The suffix says why: timeout = the count took longer than its 4-second limit (load), error = the query failed, shape = the database answered in an unexpected form.
               </div>
               <div>
                 <strong>Reset note:</strong> "Scanned" counters are in-process and reset on PM2 restart. "Stored" counts come from DB queries and persist across restarts.

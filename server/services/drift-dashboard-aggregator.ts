@@ -670,16 +670,20 @@ function formatBytes(bytes: number): string {
   return `${v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)} ${units[i]}`;
 }
 
+export type CountUnknownReason = 'timeout' | 'error' | 'shape';
+
 export interface PassiveArchiveUniverseStats {
   // P19-B-PERPFEED OBJ-5: aligned to the RUNTIME values (`cfg.name` at :967 —
   // the old equity_* literals were stale doc; runtime emitted xstock_* since B69).
   universe: 'xstock_spot' | 'xstock_perp' | 'crypto_spot' | 'crypto_perp';
   // Universe sizing
   configuredSymbols: number;          // from archiver in-memory config
-  activeSymbolsInWindow: number;      // count(DISTINCT symbol) in window
-  // Stored (DB)
-  ohlcRowsInWindow: number;
-  tickerRowsInWindow: number;
+  // count(DISTINCT symbol) in window. `null` = UNKNOWN: a window count could not be read (timed out,
+  // failed, or came back in an unexpected shape). Never 0 for unknown (B-OHLC-FRAME-GUARD r6, item 46).
+  activeSymbolsInWindow: number | null;
+  // Stored (DB). `null` = UNKNOWN, as above.
+  ohlcRowsInWindow: number | null;
+  tickerRowsInWindow: number | null;
   // Scanned (in-process counters; reset on PM2 restart). *scanned* = every item the parser RECEIVES —
   // counted before the frame guard in every producer since B-OHLC-FRAME-GUARD (#1029).
   cumulativeOhlcScanned: number;
@@ -692,10 +696,14 @@ export interface PassiveArchiveUniverseStats {
   // scanned-but-not-stored share).
   // ⚠️ Step-2 C7: on a futures leg a rejected candle is re-scanned every poll, so a mass rejection INFLATES
   // scanned and COLLAPSES this ratio — a counting artifact, not a feed collapse. Read ohlcFramesSkipped.
-  ohlcStoreFraction: number | null;   // stored / scanned, null when scanned=0
+  ohlcStoreFraction: number | null;   // stored / scanned, null when scanned=0 OR the stored count is unknown
   tickerStoreFraction: number | null;
-  // Health note
-  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING';
+  // Health note. COUNT_UNKNOWN = the feed is connected but a window count is unknown, so the count-based
+  // statuses (OK / NO_OHLC_DATA / NO_TICKER_DATA) cannot be decided.
+  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING' | 'COUNT_UNKNOWN';
+  // Why a window count is unknown, the worst of the two: `timeout` = load (the 4 s limit), `error` = the query
+  // failed, `shape` = the reply was not one row of two counts. `null` when both counts were read.
+  countUnknownReason: CountUnknownReason | null;
   // B70.2 — disk usage per universe (sum of OHLC + ticker partition sizes)
   diskBytes: number;
   diskPretty: string;
@@ -874,36 +882,50 @@ export async function computePassiveArchiveStatus(
     { name: 'crypto_perp' as const, ohlcTable: 'crypto_perp_ohlc_1m', tickerTable: 'crypto_perp_ticker_snap', stats: getCryptoPerpStats() },
   ];
 
-  // 2026-05-01: count + COUNT(DISTINCT) on ~400k-row partitioned crypto_spot_*
-  // tables takes 50s+ each on Supabase remote (verified via psql timing). Six
-  // queries × 50s = endpoint times out. Wrap each query in a per-statement
-  // timeout (4s) with a graceful fallback that flags the row "unknown" and
-  // surfaces in-process counters instead. UI then renders cumulative counts +
-  // a `db_query_timeout: true` flag rather than spinning forever.
+  // Each window count runs under its own 4 s statement timeout, so one slow count cannot hold the endpoint.
+  //
+  // ⛔ B-OHLC-FRAME-GUARD r6 (item 46): until this revision the timeout was applied by sending
+  // `BEGIN; SET LOCAL …; SELECT …; COMMIT;` as ONE string. node-postgres answers a multi-statement string
+  // with an ARRAY of four Results (BEGIN, SET, SELECT, COMMIT), and the old parse read element [0] —
+  // BEGIN's, which has no rows — so every count read 0 with `timedOut: false`, on every call, from
+  // 2026-05-01 (`545094dcb`) to this fix. Measured on staging 2026-09-28 through this driver: the array
+  // held `[SELECT rows:[{row_count:206012, sym_count:503}]]` at index 2 while the code returned 0.
+  // The timeout is now set inside a real transaction on one pooled client, and the SELECT is the value
+  // the transaction returns.
+  //
+  // ⛔ AN UNREADABLE COUNT IS UNKNOWN (`null`), NEVER 0. A timeout, a query error, or a result that is not
+  // exactly one row of two non-negative integers all yield `null`, and everything derived from that count
+  // (active symbols, store %, status) is unknown too. A zero here reads as "nothing was captured", which is
+  // the one thing this panel exists to detect.
   const PASSIVE_QUERY_TIMEOUT_MS = 4000;
-  async function safeCount(
-    sqlText: string,
-  ): Promise<{ rowCount: number; symCount: number; timedOut: boolean }> {
+  // Bounded fan-out (Langston, Step 7 ruling 2026-09-28): the pool is shared with the archive writers, so at
+  // most three window counts run at once.
+  const PASSIVE_COUNT_CONCURRENCY = 3;
+  // `unknown` says WHY a count is unknown (Langston rider (a)): a timeout is load, an error or a bad shape is a
+  // fault. They must stay distinguishable, or the next reader repeats item 46's misread in the other direction.
+  type CountOutcome = { rowCount: number | null; symCount: number | null; unknown: CountUnknownReason | null };
+  const unknownCount = (unknown: CountUnknownReason): CountOutcome => ({ rowCount: null, symCount: null, unknown });
+  const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+  async function safeCount(sqlText: string): Promise<CountOutcome> {
     try {
-      // Wrap in explicit transaction so SET LOCAL scopes to this query only
-      // and is reset on COMMIT (won't leak to other queries on the same
-      // pooled connection).
-      const wrapped = `BEGIN; SET LOCAL statement_timeout = ${PASSIVE_QUERY_TIMEOUT_MS}; ${sqlText}; COMMIT;`;
-      const rows = await db.execute(sql.raw(wrapped));
-      const result = (Array.isArray(rows) ? rows : (rows as any).rows ?? []) as Array<{ row_count: number; sym_count: number }>;
-      return {
-        rowCount: result[0]?.row_count ?? 0,
-        symCount: result[0]?.sym_count ?? 0,
-        timedOut: false,
-      };
+      const res = await db.transaction(async (tx) => {
+        await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${PASSIVE_QUERY_TIMEOUT_MS}`));
+        return tx.execute(sql.raw(sqlText));
+      });
+      const rows = (res as any)?.rows;
+      // Test for the GOOD shape, never for absence: exactly one row whose two fields are counts.
+      if (!Array.isArray(rows) || rows.length !== 1 || !isCount(rows[0]?.row_count) || !isCount(rows[0]?.sym_count)) {
+        console.warn('[PassiveArchive] Aggregator count returned an unexpected shape — reported as unknown');
+        return unknownCount('shape');
+      }
+      return { rowCount: rows[0].row_count, symCount: rows[0].sym_count, unknown: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('statement timeout') || msg.includes('canceling statement')) {
-        return { rowCount: 0, symCount: 0, timedOut: true };
+        return unknownCount('timeout');
       }
-      // Real error — log + fail gracefully; aggregator should still return.
       console.warn(`[PassiveArchive] Aggregator count query failed: ${msg}`);
-      return { rowCount: 0, symCount: 0, timedOut: true };
+      return unknownCount('error');
     }
   }
 
@@ -923,40 +945,60 @@ export async function computePassiveArchiveStatus(
     }
   }
 
+  // The eight window counts, two per universe, run through PASSIVE_COUNT_CONCURRENCY workers. Results are
+  // written by index, so the output order does not depend on which count finished first.
+  const windowIso = windowStart.toISOString();
+  const countSql = universeConfigs.flatMap((cfg) => [
+    `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
+       FROM ${cfg.ohlcTable}
+       WHERE interval_begin >= '${windowIso}'`,
+    `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
+       FROM ${cfg.tickerTable}
+       WHERE captured_at >= '${windowIso}'`,
+  ]);
+  const counts: CountOutcome[] = new Array(countSql.length);
+  let nextCount = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(PASSIVE_COUNT_CONCURRENCY, countSql.length) }, async () => {
+      while (nextCount < countSql.length) {
+        const i = nextCount++;
+        counts[i] = await safeCount(countSql[i]);
+      }
+    }),
+  );
+
   const universes: PassiveArchiveUniverseStats[] = [];
   let passiveTotalDiskBytes = 0;
-  for (const cfg of universeConfigs) {
-    const ohlc = await safeCount(
-      `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
-       FROM ${cfg.ohlcTable}
-       WHERE interval_begin >= '${windowStart.toISOString()}'`,
-    );
+  for (const [u, cfg] of universeConfigs.entries()) {
+    const ohlc = counts[2 * u];
+    const ticker = counts[2 * u + 1];
     const ohlcCount = ohlc.rowCount;
-    const ohlcSyms = ohlc.symCount;
-
-    const ticker = await safeCount(
-      `SELECT count(*)::int AS row_count, count(DISTINCT symbol)::int AS sym_count
-       FROM ${cfg.tickerTable}
-       WHERE captured_at >= '${windowStart.toISOString()}'`,
-    );
     const tickerCount = ticker.rowCount;
-    const tickerSyms = ticker.symCount;
 
-    // Active = max of OHLC + ticker symbol counts
-    const activeSymbols = Math.max(ohlcSyms, tickerSyms);
+    // Active = max of OHLC + ticker symbol counts — unknown if either side is unknown.
+    const activeSymbols = ohlc.symCount != null && ticker.symCount != null
+      ? Math.max(ohlc.symCount, ticker.symCount)
+      : null;
 
-    // Store fractions (DB rows / in-process scanned)
-    const ohlcStoreFraction = cfg.stats.cumulativeOhlcRows > 0
+    // Store fractions (DB rows / in-process scanned) — unknown if the stored count is unknown.
+    const ohlcStoreFraction = ohlcCount != null && cfg.stats.cumulativeOhlcRows > 0
       ? Math.min(1, ohlcCount / cfg.stats.cumulativeOhlcRows)
       : null;
-    const tickerStoreFraction = cfg.stats.cumulativeTickerSnaps > 0
+    const tickerStoreFraction = tickerCount != null && cfg.stats.cumulativeTickerSnaps > 0
       ? Math.min(1, tickerCount / cfg.stats.cumulativeTickerSnaps)
       : null;
 
-    // Status determination
+    // Status determination. The connection states do not depend on the counts; every count-based status
+    // does, so an unknown count yields COUNT_UNKNOWN instead of a status computed from a missing number.
+    // The worst reason among the two counts: a fault outranks a shape surprise, which outranks load.
+    const reasons = [ohlc.unknown, ticker.unknown];
+    const countUnknownReason: CountUnknownReason | null =
+      reasons.includes('error') ? 'error' : reasons.includes('shape') ? 'shape' : reasons.includes('timeout') ? 'timeout' : null;
     let status: PassiveArchiveUniverseStats['status'] = 'OK';
     if (!cfg.stats.connected) {
       status = cfg.stats.configuredSymbols === 0 ? 'STARTING' : 'DISCONNECTED';
+    } else if (ohlcCount == null || tickerCount == null) {
+      status = 'COUNT_UNKNOWN';
     } else if (ohlcCount === 0 && cfg.stats.cumulativeOhlcRows === 0) {
       status = 'NO_OHLC_DATA';
     } else if (tickerCount === 0 && cfg.stats.cumulativeTickerSnaps === 0) {
@@ -984,6 +1026,7 @@ export async function computePassiveArchiveStatus(
       ohlcStoreFraction,
       tickerStoreFraction,
       status,
+      countUnknownReason,
       diskBytes: universeBytes,
       diskPretty: formatBytes(universeBytes),
     });
