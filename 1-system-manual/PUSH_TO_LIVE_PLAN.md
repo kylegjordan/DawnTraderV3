@@ -68,109 +68,109 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
-| 1 | B-OUTCOME-CORPUS-CAPTURE | B-OUTCOME-CORPUS-CAPTURE | CC-B (New Claude) | QUEUED | — | first: closed trades are being hard-deleted at 90 days right now — every day lost is data we cannot recover |
-| 2 | 12.1 rulings-durability fix | — batch named at Step 1 | Infra Claude | QUEUED | — | cheap and irreversible if lost: copy Langston's rulings file to a read-only replica |
-| 3 | Months of database headroom | — batch named at Step 1 | Infra Claude | QUEUED | — | database at 81% (critical): confirm the October move to warm storage lands, then measure months of headroom |
-| 4 | Define 'comfortable in paper' in numbers | — batch named at Step 1 | CC-C (Analyst Claude) + Langston | QUEUED | — | set the numbers for 'comfortable in paper' BEFORE the evidence comes in ⭐ Kyle approves the numbers. |
-| 5 | Fix duplicated plan ids | — batch named at Step 1 | Infra Claude | QUEUED | — | part of rewriting the plan: no two items share a number |
-| 6 | B-OHLC-FRAME-GUARD | B-OHLC-FRAME-GUARD | CC-C (Analyst Claude) | IN FLIGHT — Step 7 | — | in flight: only the on-screen check is left |
-| 7 | B-REST-SIDES-TO-CACHE | B-REST-SIDES-TO-CACHE | CC-C (Analyst Claude) | BUILT — deploy after 2026-09-30 | — | built and reviewed: deploy after the 2026-09-30 VTS window closes |
-| 8 | B-BOOK-STATE-RESTART-DURABLE | B-BOOK-STATE-RESTART-DURABLE | CC-C (Analyst Claude) | BUILT — deploy after 2026-09-30 | — | built and reviewed: deploy with the one above |
-| 9 | F-G-1 reopens: the OHLC writer can write an older bar over a newer one | F-G-1-REOPEN | CC-C (Analyst Claude) | REOPENED — Step 3 | — | the OHLC writer can put an older bar over a newer one — it feeds the bars signals are built from |
-| 10 | B-PRICE-SIDE-BY-JOB | B-PRICE-SIDE-BY-JOB | CC-C (Analyst Claude) | IN FLIGHT — 8a-P4c window to 2026-09-30 | — | in flight: its xStock increments follow the 09-30 window |
+| 1 | 12.1 rulings-durability fix | — batch named at Step 1 | Infra Claude | QUEUED | — | cheap and irreversible if lost: copy Langston's rulings file to a read-only replica |
+| 2 | Months of database headroom | — batch named at Step 1 | Infra Claude | QUEUED | — | database at 81% (critical): confirm the October move to warm storage lands, then measure months of headroom |
+| 3 | Define 'comfortable in paper' in numbers | — batch named at Step 1 | CC-C (Analyst Claude) + Langston | QUEUED | — | set the numbers for 'comfortable in paper' BEFORE the evidence comes in ⭐ Kyle approves the numbers. |
+| 4 | Fix duplicated plan ids | — batch named at Step 1 | Infra Claude | QUEUED | — | part of rewriting the plan: no two items share a number |
+| 5 | B-OHLC-FRAME-GUARD | B-OHLC-FRAME-GUARD | CC-C (Analyst Claude) | IN FLIGHT — Step 7 | — | in flight: only the on-screen check is left |
+| 6 | B-REST-SIDES-TO-CACHE | B-REST-SIDES-TO-CACHE | CC-C (Analyst Claude) | BUILT — deploy after 2026-09-30 | — | built and reviewed: deploy after the 2026-09-30 VTS window closes |
+| 7 | B-BOOK-STATE-RESTART-DURABLE | B-BOOK-STATE-RESTART-DURABLE | CC-C (Analyst Claude) | BUILT — deploy after 2026-09-30 | — | built and reviewed: deploy with the one above |
+| 8 | F-G-1 reopens: the OHLC writer can write an older bar over a newer one | F-G-1-REOPEN | CC-C (Analyst Claude) | REOPENED — Step 3 | — | the OHLC writer can put an older bar over a newer one — it feeds the bars signals are built from |
+| 9 | B-PRICE-SIDE-BY-JOB | B-PRICE-SIDE-BY-JOB | CC-C (Analyst Claude) | IN FLIGHT — 8a-P4c window to 2026-09-30 | — | in flight: its xStock increments follow the 09-30 window |
 
 ### Wave A1 — TRACK A · Foundations — the things that corrupt everything downstream
 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
-| 11 | B-UNIVERSE-REFRESH-ACTS | B-UNIVERSE-REFRESH-ACTS | Infra Claude | QUEUED | — | first link of the identity chain |
-| 12 | B-SYMBOL-CLASS-IDENTITY | B-SYMBOL-CLASS-IDENTITY | Infra Claude | QUEUED | — | after B-UNIVERSE-REFRESH-ACTS: a ticker shared by a coin and a stock becomes two instruments |
-| 13 | B-RTB-SIGNAL-IDENTITY | B-RTB-SIGNAL-IDENTITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY |
-| 14 | B-VTS-CLASS-LABEL-INTEGRITY | B-VTS-CLASS-LABEL-INTEGRITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY: correct the mislabelled VTS rows |
-| 15 | B-CLOSED-TRADES-CLASS-BACKFILL | B-CLOSED-TRADES-CLASS-BACKFILL | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY |
-| 16 | Exclude plain-currency and non-dollar pairs | — batch named at Step 1 | Infra Claude | QUEUED | — | Kyle's decision: exclude plain currency pairs and non-dollar crypto now |
-| 17 | B-NONFIAT-QUOTE-DENOMINATION | B-NONFIAT-QUOTE-DENOMINATION | Infra Claude | QUEUED | — | the exclusion itself, if small |
-| 18 | B-QUOTE-ADMISSION-LEGACY-SWEEP | B-QUOTE-ADMISSION-LEGACY-SWEEP | Infra Claude | QUEUED | — | with the exclusion: what the old allowed-pairs list is for |
-| 19 | B-QUOTE-LEG-INTEGRITY | B-QUOTE-LEG-INTEGRITY | Infra Claude | QUEUED | — | with the exclusion |
-| 20 | B-PRICE-FLOOR-REVIEW | B-PRICE-FLOOR-REVIEW | Infra Claude | QUEUED | — | replace the $0.25 floor with a real market-depth test |
-| 21 | B-VENUE-PAIRS-REINIT | B-VENUE-PAIRS-REINIT | Infra Claude | QUEUED | — | a changed exchange price step must not refuse orders |
-| 22 | B-SCAN-BREADTH-DECLINE | B-SCAN-BREADTH-DECLINE | Infra Claude | QUEUED | — | why the scanner sees so few pairs — breadth feeds selection |
-| 23 | B-XSTOCK-LIVE-FEED | B-XSTOCK-LIVE-FEED | CC-C (Analyst Claude) | QUEUED | — | the xStock feed became our trading feed without a decision — decide and fix |
-| 24 | row:6 | plan row 6 | CC-C (Analyst Claude) | QUEUED | — | a bound on how old a price may be when used |
-| 25 | B-PRICE-STALENESS-BOUND | B-PRICE-STALENESS-BOUND | CC-C (Analyst Claude) | QUEUED | — | the last-known-good price is re-served with no age bound |
-| 26 | B-EQUITY-RECONNECT-STALL-TIMER | B-EQUITY-RECONNECT-STALL-TIMER | CC-C (Analyst Claude) | QUEUED | — | a stalled xStock reconnect leaves positions unwatched |
-| 27 | B-WS-SUBSCRIBE-CLASS-FILTER | B-WS-SUBSCRIBE-CLASS-FILTER | Infra Claude | QUEUED | — | the crypto subscribe set is not class-filtered |
-| 28 | #506 | #506 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | book subscriptions never unsubscribe |
-| 29 | B-BOOK-SUBSCRIPTION-REACH | B-BOOK-SUBSCRIPTION-REACH | CC-C (Analyst Claude) | QUEUED | — | after #506: subscribe the order book for the whole pool, not ~3 coins |
-| 30 | B-CRYPTO-MARK-AGE-GATE | B-CRYPTO-MARK-AGE-GATE | CC-C (Analyst Claude) | QUEUED | — | crypto mark age |
-| 31 | B-XSTOCK-SESSION-FRESHNESS | B-XSTOCK-SESSION-FRESHNESS | CC-C (Analyst Claude) | QUEUED | — | xStock entry-age limit vs the exit standard Kyle ruled |
-| 32 | B-XSTOCK-ENTRY-COMPARATOR | B-XSTOCK-ENTRY-COMPARATOR | CC-C (Analyst Claude) | QUEUED | — | xStock entry-price cross-check |
-| 33 | B-DECIDED-INTENT-INDEX | B-DECIDED-INTENT-INDEX | CC-C (Analyst Claude) | QUEUED | — | xStock's three definitions of 'the price' from one frame |
-| 34 | B-POST-GRID-MUTATION-CENSUS | B-POST-GRID-MUTATION-CENSUS | CC-C (Analyst Claude) | QUEUED | — | what changes a stop after it is rounded |
-| 35 | row:7 | plan row 7 | CC-C (Analyst Claude) | QUEUED | — | the VTS reads prices through the shared accessor |
-| 36 | #1033 | #1033 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | an absent volume is stored as zero and the liquidity filter reads it |
-| 37 | #972 | #972 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | xStock ATR reads empty around the open and close |
-| 38 | #566 | #566 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | volatility measured with a lag |
-| 39 | Independent review of the pricing architecture (Codex) | — batch named at Step 1 | CC-C (Analyst Claude) (+ Coltrane) | QUEUED | — | after the price items: an independent review of the whole price layer |
-| 40 | B-SIZING-DEC-RESTORE | B-SIZING-DEC-RESTORE | CC-C (Analyst Claude) | IN FLIGHT — half live | — | paper sizing to Kyle's intent (~$140-150 a trade, 15-20 open) |
-| 41 | #628 | #628 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | with B-SIZING-DEC-RESTORE: its two sizing sites |
+| 10 | B-UNIVERSE-REFRESH-ACTS | B-UNIVERSE-REFRESH-ACTS | Infra Claude | QUEUED | — | first link of the identity chain |
+| 11 | B-SYMBOL-CLASS-IDENTITY | B-SYMBOL-CLASS-IDENTITY | Infra Claude | QUEUED | — | after B-UNIVERSE-REFRESH-ACTS: a ticker shared by a coin and a stock becomes two instruments |
+| 12 | B-RTB-SIGNAL-IDENTITY | B-RTB-SIGNAL-IDENTITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY |
+| 13 | B-VTS-CLASS-LABEL-INTEGRITY | B-VTS-CLASS-LABEL-INTEGRITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY: correct the mislabelled VTS rows |
+| 14 | B-CLOSED-TRADES-CLASS-BACKFILL | B-CLOSED-TRADES-CLASS-BACKFILL | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY |
+| 15 | Exclude plain-currency and non-dollar pairs | — batch named at Step 1 | Infra Claude | QUEUED | — | Kyle's decision: exclude plain currency pairs and non-dollar crypto now |
+| 16 | B-NONFIAT-QUOTE-DENOMINATION | B-NONFIAT-QUOTE-DENOMINATION | Infra Claude | QUEUED | — | the exclusion itself, if small |
+| 17 | B-QUOTE-ADMISSION-LEGACY-SWEEP | B-QUOTE-ADMISSION-LEGACY-SWEEP | Infra Claude | QUEUED | — | with the exclusion: what the old allowed-pairs list is for |
+| 18 | B-QUOTE-LEG-INTEGRITY | B-QUOTE-LEG-INTEGRITY | Infra Claude | QUEUED | — | with the exclusion |
+| 19 | B-PRICE-FLOOR-REVIEW | B-PRICE-FLOOR-REVIEW | Infra Claude | QUEUED | — | replace the $0.25 floor with a real market-depth test |
+| 20 | B-VENUE-PAIRS-REINIT | B-VENUE-PAIRS-REINIT | Infra Claude | QUEUED | — | a changed exchange price step must not refuse orders |
+| 21 | B-SCAN-BREADTH-DECLINE | B-SCAN-BREADTH-DECLINE | Infra Claude | QUEUED | — | why the scanner sees so few pairs — breadth feeds selection |
+| 22 | B-XSTOCK-LIVE-FEED | B-XSTOCK-LIVE-FEED | CC-C (Analyst Claude) | QUEUED | — | the xStock feed became our trading feed without a decision — decide and fix |
+| 23 | row:6 | plan row 6 | CC-C (Analyst Claude) | QUEUED | — | a bound on how old a price may be when used |
+| 24 | B-PRICE-STALENESS-BOUND | B-PRICE-STALENESS-BOUND | CC-C (Analyst Claude) | QUEUED | — | the last-known-good price is re-served with no age bound |
+| 25 | B-EQUITY-RECONNECT-STALL-TIMER | B-EQUITY-RECONNECT-STALL-TIMER | CC-C (Analyst Claude) | QUEUED | — | a stalled xStock reconnect leaves positions unwatched |
+| 26 | B-WS-SUBSCRIBE-CLASS-FILTER | B-WS-SUBSCRIBE-CLASS-FILTER | Infra Claude | QUEUED | — | the crypto subscribe set is not class-filtered |
+| 27 | #506 | #506 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | book subscriptions never unsubscribe |
+| 28 | B-BOOK-SUBSCRIPTION-REACH | B-BOOK-SUBSCRIPTION-REACH | CC-C (Analyst Claude) | QUEUED | — | after #506: subscribe the order book for the whole pool, not ~3 coins |
+| 29 | B-CRYPTO-MARK-AGE-GATE | B-CRYPTO-MARK-AGE-GATE | CC-C (Analyst Claude) | QUEUED | — | crypto mark age |
+| 30 | B-XSTOCK-SESSION-FRESHNESS | B-XSTOCK-SESSION-FRESHNESS | CC-C (Analyst Claude) | QUEUED | — | xStock entry-age limit vs the exit standard Kyle ruled |
+| 31 | B-XSTOCK-ENTRY-COMPARATOR | B-XSTOCK-ENTRY-COMPARATOR | CC-C (Analyst Claude) | QUEUED | — | xStock entry-price cross-check |
+| 32 | B-DECIDED-INTENT-INDEX | B-DECIDED-INTENT-INDEX | CC-C (Analyst Claude) | QUEUED | — | xStock's three definitions of 'the price' from one frame |
+| 33 | B-POST-GRID-MUTATION-CENSUS | B-POST-GRID-MUTATION-CENSUS | CC-C (Analyst Claude) | QUEUED | — | what changes a stop after it is rounded |
+| 34 | row:7 | plan row 7 | CC-C (Analyst Claude) | QUEUED | — | the VTS reads prices through the shared accessor |
+| 35 | #1033 | #1033 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | an absent volume is stored as zero and the liquidity filter reads it |
+| 36 | #972 | #972 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | xStock ATR reads empty around the open and close |
+| 37 | #566 | #566 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | volatility measured with a lag |
+| 38 | Independent review of the pricing architecture (Codex) | — batch named at Step 1 | CC-C (Analyst Claude) (+ Coltrane) | QUEUED | — | after the price items: an independent review of the whole price layer |
+| 39 | B-SIZING-DEC-RESTORE | B-SIZING-DEC-RESTORE | CC-C (Analyst Claude) | IN FLIGHT — half live | — | paper sizing to Kyle's intent (~$140-150 a trade, 15-20 open) |
+| 40 | #628 | #628 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | with B-SIZING-DEC-RESTORE: its two sizing sites |
 
 ### Wave A2 — TRACK A · Mechanics, stage by stage — can start as A1's pieces land
 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
-| 42 | #233 | #233 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | signals: drift and volume inputs fed as fixed defaults |
-| 43 | #199 | #199 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | strategies: xStock volume confirmation removed for lack of an honest feed |
-| 44 | row:3m-ENUM | plan row 3m-ENUM | CC-B (New Claude) | QUEUED | — | strategies: volatility_edge's pattern path is silently dead |
-| 45 | B-SILENT-STRATEGY-CENSUS | B-SILENT-STRATEGY-CENSUS | CC-B (New Claude) | QUEUED | — | strategies: three wired strategies never evaluated |
-| 46 | B-TARGET-FABRICATION | B-TARGET-FABRICATION | CC-C (Analyst Claude) | QUEUED | — | signals: default targets the strategy never chose |
-| 47 | #574 | #574 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | SQE: a made-up volatility input in the ranker |
-| 48 | B-RTB-REFRESH-CONSOLIDATE | B-RTB-REFRESH-CONSOLIDATE | CC-B (New Claude) | QUEUED | — | RTB: the net-EV backstop removed on thin evidence |
-| 49 | #570 | #570 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | RTB: one refresh bucket fires but does not refresh |
-| 50 | #699 | #699 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | RTB: does promotion evict, or is the screen stale |
-| 51 | 19.2 Audit & Debug — - Verify FinalScore, Hybrid Score, Confidenc | roadmap 19.2 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | SQE: verify every score calculates correctly |
-| 52 | B-ENTRY-LEVEL-RECHECK | B-ENTRY-LEVEL-RECHECK | CC-B (New Claude) | QUEUED | — | open: re-check a signal's levels against the current price before the fill |
-| 53 | B-INTENT-ENTRY-PARITY | B-INTENT-ENTRY-PARITY | CC-C (Analyst Claude) | QUEUED | — | open: two entry routes bypass the price grid |
-| 54 | B-GRID-LIVE-PATH-PARITY | B-GRID-LIVE-PATH-PARITY | CC-C (Analyst Claude) | QUEUED | — | open: grid rounding on the live order path |
-| 55 | A resting order's deadline must run whether or not a price is usable | — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | open: a resting order's deadline runs even when no price is usable |
-| 56 | #630 | #630 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | open: exercise the maker-order deadline once |
-| 57 | B-EXIT-TRIGGER-FILL-PARITY | B-EXIT-TRIGGER-FILL-PARITY | CC-C (Analyst Claude) | QUEUED | — | close: exits fire on the price they would fill at |
-| 58 | B-EXIT-TICKER-LEG-ADAPTER-SIDES | B-EXIT-TICKER-LEG-ADAPTER-SIDES | CC-C (Analyst Claude) | QUEUED | — | close: the exit path sees both price sides |
-| 59 | B-XSTOCK-BID-TRIGGER-RELAND | B-XSTOCK-BID-TRIGGER-RELAND | CC-C (Analyst Claude) | QUEUED | — | close: xStock triggers back on the bid |
-| 60 | B-BOOK-STATE-RING-INDEPENDENT-BOUND | B-BOOK-STATE-RING-INDEPENDENT-BOUND | CC-C (Analyst Claude) | QUEUED | — | close: xStock exit plausibility bound |
-| 61 | #204 | #204 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | close: xStock stop prices at the wrong scale |
-| 62 | row:3h.b | plan row 3h.b | CC-C (Analyst Claude) | QUEUED | — | close: remove the second exit implementation |
-| 63 | B-EXIT-LATCH-INVESTIGATION | B-EXIT-LATCH-INVESTIGATION | CC-C (Analyst Claude) | QUEUED | — | close: is the hold-past-target a label or a real exit defect |
-| 64 | Map EXIT_PATH_MACHINERY_AUDIT §10 items to their homes | — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | close: map the exit audit's items to homes |
-| 65 | #166 | #166 — batch named at Step 1 | Infra Claude | QUEUED | — | close: the TEC stale-cache fence keeps firing |
-| 66 | B-CLOSE-WRITER-COSTS | B-CLOSE-WRITER-COSTS | CC-A (Old Claude) | QUEUED | — | close: no close without a trade record, no invented zero fees |
-| 67 | B-SCHEDULER-FIRST-TICK | B-SCHEDULER-FIRST-TICK | Infra Claude | QUEUED — next in CC-A's list | — | restarts: every scheduled job runs twice after a restart |
-| 68 | #585 | #585 — batch named at Step 1 | Infra Claude | QUEUED | — | restarts: auto-resume skips a malformed session |
-| 69 | B-STRING-TRUTHINESS-GUARDS | B-STRING-TRUTHINESS-GUARDS | Infra Claude | QUEUED | — | hygiene: guards that treat '0' as true |
-| 70 | B-GUARD-COVERAGE-AUDIT | B-GUARD-COVERAGE-AUDIT | Infra Claude | QUEUED | — | hygiene: which guards cover which paths |
-| 71 | B-LEARNING-SYSTEM-CENSUS | B-LEARNING-SYSTEM-CENSUS | Infra Claude | QUEUED | — | hygiene: old learning systems still wired |
-| 72 | Dead-code reachability census | — batch named at Step 1 | Infra Claude | QUEUED | — | hygiene: which dead code a trade can still reach (pulls items forward if any) |
-| 73 | B-MODE-PREDICATE-SWEEP | B-MODE-PREDICATE-SWEEP | Infra Claude | QUEUED | — | hygiene: readers that would mix live and paper P&L |
-| 74 | row:8 | plan row 8 | CC-C (Analyst Claude) | QUEUED | — | paper truth: fill-integrity detector |
-| 75 | B-COST-MATH-CONSOLIDATION | B-COST-MATH-CONSOLIDATION | CC-A (Old Claude) | QUEUED | — | paper truth: one home for cost maths |
-| 76 | #527 | #527 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | paper truth: xStock friction components |
-| 77 | B-IMPLEMENTATION-SHORTFALL | B-IMPLEMENTATION-SHORTFALL | CC-C (Analyst Claude) | QUEUED | — | paper truth: separate stale-signal cost from execution cost |
-| 78 | B-GRID-REFUSAL-RATE | B-GRID-REFUSAL-RATE | CC-C (Analyst Claude) | QUEUED | — | paper truth: how often the grid refuses |
-| 79 | B-VALIDATE-OBSERVABILITY | B-VALIDATE-OBSERVABILITY | Infra Claude | QUEUED | — | paper truth: make validation failures visible |
-| 80 | B-DIAG-READ-INTEGRITY | B-DIAG-READ-INTEGRITY | Infra Claude | QUEUED | — | paper truth: diagnostics that read a status code as data |
-| 81 | B-FILTER-DIAG-XSTOCK | B-FILTER-DIAG-XSTOCK | Infra Claude | QUEUED | — | paper truth: the empty xStock decline table |
-| 82 | #664 | #664 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: a hardcoded 'strategies evaluated' |
-| 83 | #419 | #419 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: funnel counts under errors |
-| 84 | #549 | #549 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: Open Trades field gaps |
-| 85 | #561 | #561 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: volume / order book columns in Open Trades |
-| 86 | #547 | #547 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: the Analyst's July findings (owner reads) |
-| 87 | #522 | #522 — batch named at Step 1 | CC-A (Old Claude) + Langston (+ Coltrane) | QUEUED | — | LAST in A2: the full runtime pipeline audit, both classes, end to end |
-| 88 | #235 | #235 — batch named at Step 1 | CC-A (Old Claude) + Langston | QUEUED | — | with #522: the crypto pipeline validated end to end |
+| 41 | #233 | #233 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | signals: drift and volume inputs fed as fixed defaults |
+| 42 | #199 | #199 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | strategies: xStock volume confirmation removed for lack of an honest feed |
+| 43 | row:3m-ENUM | plan row 3m-ENUM | CC-B (New Claude) | QUEUED | — | strategies: volatility_edge's pattern path is silently dead |
+| 44 | B-SILENT-STRATEGY-CENSUS | B-SILENT-STRATEGY-CENSUS | CC-B (New Claude) | QUEUED | — | strategies: three wired strategies never evaluated |
+| 45 | B-TARGET-FABRICATION | B-TARGET-FABRICATION | CC-C (Analyst Claude) | QUEUED | — | signals: default targets the strategy never chose |
+| 46 | #574 | #574 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | SQE: a made-up volatility input in the ranker |
+| 47 | B-RTB-REFRESH-CONSOLIDATE | B-RTB-REFRESH-CONSOLIDATE | CC-B (New Claude) | QUEUED | — | RTB: the net-EV backstop removed on thin evidence |
+| 48 | #570 | #570 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | RTB: one refresh bucket fires but does not refresh |
+| 49 | #699 | #699 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | RTB: does promotion evict, or is the screen stale |
+| 50 | 19.2 Audit & Debug — - Verify FinalScore, Hybrid Score, Confidenc | roadmap 19.2 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | SQE: verify every score calculates correctly |
+| 51 | B-ENTRY-LEVEL-RECHECK | B-ENTRY-LEVEL-RECHECK | CC-B (New Claude) | QUEUED | — | open: re-check a signal's levels against the current price before the fill |
+| 52 | B-INTENT-ENTRY-PARITY | B-INTENT-ENTRY-PARITY | CC-C (Analyst Claude) | QUEUED | — | open: two entry routes bypass the price grid |
+| 53 | B-GRID-LIVE-PATH-PARITY | B-GRID-LIVE-PATH-PARITY | CC-C (Analyst Claude) | QUEUED | — | open: grid rounding on the live order path |
+| 54 | A resting order's deadline must run whether or not a price is usable | — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | open: a resting order's deadline runs even when no price is usable |
+| 55 | #630 | #630 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | open: exercise the maker-order deadline once |
+| 56 | B-EXIT-TRIGGER-FILL-PARITY | B-EXIT-TRIGGER-FILL-PARITY | CC-C (Analyst Claude) | QUEUED | — | close: exits fire on the price they would fill at |
+| 57 | B-EXIT-TICKER-LEG-ADAPTER-SIDES | B-EXIT-TICKER-LEG-ADAPTER-SIDES | CC-C (Analyst Claude) | QUEUED | — | close: the exit path sees both price sides |
+| 58 | B-XSTOCK-BID-TRIGGER-RELAND | B-XSTOCK-BID-TRIGGER-RELAND | CC-C (Analyst Claude) | QUEUED | — | close: xStock triggers back on the bid |
+| 59 | B-BOOK-STATE-RING-INDEPENDENT-BOUND | B-BOOK-STATE-RING-INDEPENDENT-BOUND | CC-C (Analyst Claude) | QUEUED | — | close: xStock exit plausibility bound |
+| 60 | #204 | #204 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | close: xStock stop prices at the wrong scale |
+| 61 | row:3h.b | plan row 3h.b | CC-C (Analyst Claude) | QUEUED | — | close: remove the second exit implementation |
+| 62 | B-EXIT-LATCH-INVESTIGATION | B-EXIT-LATCH-INVESTIGATION | CC-C (Analyst Claude) | QUEUED | — | close: is the hold-past-target a label or a real exit defect |
+| 63 | Map EXIT_PATH_MACHINERY_AUDIT §10 items to their homes | — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | close: map the exit audit's items to homes |
+| 64 | #166 | #166 — batch named at Step 1 | Infra Claude | QUEUED | — | close: the TEC stale-cache fence keeps firing |
+| 65 | B-CLOSE-WRITER-COSTS | B-CLOSE-WRITER-COSTS | CC-A (Old Claude) | QUEUED | — | close: no close without a trade record, no invented zero fees |
+| 66 | B-SCHEDULER-FIRST-TICK | B-SCHEDULER-FIRST-TICK | Infra Claude | QUEUED — next in CC-A's list | — | restarts: every scheduled job runs twice after a restart |
+| 67 | #585 | #585 — batch named at Step 1 | Infra Claude | QUEUED | — | restarts: auto-resume skips a malformed session |
+| 68 | B-STRING-TRUTHINESS-GUARDS | B-STRING-TRUTHINESS-GUARDS | Infra Claude | QUEUED | — | hygiene: guards that treat '0' as true |
+| 69 | B-GUARD-COVERAGE-AUDIT | B-GUARD-COVERAGE-AUDIT | Infra Claude | QUEUED | — | hygiene: which guards cover which paths |
+| 70 | B-LEARNING-SYSTEM-CENSUS | B-LEARNING-SYSTEM-CENSUS | Infra Claude | QUEUED | — | hygiene: old learning systems still wired |
+| 71 | Dead-code reachability census | — batch named at Step 1 | Infra Claude | QUEUED | — | hygiene: which dead code a trade can still reach (pulls items forward if any) |
+| 72 | B-MODE-PREDICATE-SWEEP | B-MODE-PREDICATE-SWEEP | Infra Claude | QUEUED | — | hygiene: readers that would mix live and paper P&L |
+| 73 | row:8 | plan row 8 | CC-C (Analyst Claude) | QUEUED | — | paper truth: fill-integrity detector |
+| 74 | B-COST-MATH-CONSOLIDATION | B-COST-MATH-CONSOLIDATION | CC-A (Old Claude) | QUEUED | — | paper truth: one home for cost maths |
+| 75 | #527 | #527 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | paper truth: xStock friction components |
+| 76 | B-IMPLEMENTATION-SHORTFALL | B-IMPLEMENTATION-SHORTFALL | CC-C (Analyst Claude) | QUEUED | — | paper truth: separate stale-signal cost from execution cost |
+| 77 | B-GRID-REFUSAL-RATE | B-GRID-REFUSAL-RATE | CC-C (Analyst Claude) | QUEUED | — | paper truth: how often the grid refuses |
+| 78 | B-VALIDATE-OBSERVABILITY | B-VALIDATE-OBSERVABILITY | Infra Claude | QUEUED | — | paper truth: make validation failures visible |
+| 79 | B-DIAG-READ-INTEGRITY | B-DIAG-READ-INTEGRITY | Infra Claude | QUEUED | — | paper truth: diagnostics that read a status code as data |
+| 80 | B-FILTER-DIAG-XSTOCK | B-FILTER-DIAG-XSTOCK | Infra Claude | QUEUED | — | paper truth: the empty xStock decline table |
+| 81 | #664 | #664 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: a hardcoded 'strategies evaluated' |
+| 82 | #419 | #419 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: funnel counts under errors |
+| 83 | #549 | #549 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: Open Trades field gaps |
+| 84 | #561 | #561 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: volume / order book columns in Open Trades |
+| 85 | #547 | #547 — batch named at Step 1 | Infra Claude | QUEUED | — | paper truth: the Analyst's July findings (owner reads) |
+| 86 | #522 | #522 — batch named at Step 1 | CC-A (Old Claude) + Langston (+ Coltrane) | QUEUED | — | LAST in A2: the full runtime pipeline audit, both classes, end to end |
+| 87 | #235 | #235 — batch named at Step 1 | CC-A (Old Claude) + Langston | QUEUED | — | with #522: the crypto pipeline validated end to end |
 
 ### Wave A3 — TRACK A · Learning data — alongside A2; must finish before tuning reads the data
 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
+| 88 | B-OUTCOME-CORPUS-CAPTURE | B-OUTCOME-CORPUS-CAPTURE | CC-B (New Claude) | QUEUED | — | what each VTS trade earned, recorded durably, with a measured/defaulted flag on its inputs. NOT a deletion clock: the 90-day delete was fixed 2026-07-30/08-06 (365 days, archive before delete); nothing is due for deletion before 2027-05 |
 | 89 | B-PAPER-LANE-PROVENANCE | B-PAPER-LANE-PROVENANCE | CC-B (New Claude) | QUEUED | — | paper records its decision inputs |
 | 90 | T-W20C-SCALAR-LEG | — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | after B-PAPER-LANE-PROVENANCE: the parity harness proves recorded history replays |
 | 91 | #515 | #515 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | remaining learning columns on the active path |

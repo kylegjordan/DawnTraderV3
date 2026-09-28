@@ -9,7 +9,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 WAVES = [
  ("0", "NOW — urgent, cheap, or already in flight (this week)", [
-   ("B-OUTCOME-CORPUS-CAPTURE", "first: closed trades are being hard-deleted at 90 days right now — every day lost is data we cannot recover"),
    ("RULINGS-DURABILITY", "cheap and irreversible if lost: copy Langston's rulings file to a read-only replica"),
    ("DISK-HEADROOM", "database at 81% (critical): confirm the October move to warm storage lands, then measure months of headroom"),
    ("PAPER-STANDARD", "set the numbers for 'comfortable in paper' BEFORE the evidence comes in"),
@@ -103,6 +102,7 @@ WAVES = [
    ("#235", "with #522: the crypto pipeline validated end to end"),
  ]),
  ("A3", "TRACK A · Learning data — alongside A2; must finish before tuning reads the data", [
+   ("B-OUTCOME-CORPUS-CAPTURE", "what each VTS trade earned, recorded durably, with a measured/defaulted flag on its inputs. NOT a deletion clock: the 90-day delete was fixed 2026-07-30/08-06 (365 days, archive before delete); nothing is due for deletion before 2027-05"),
    ("B-PAPER-LANE-PROVENANCE", "paper records its decision inputs"),
    ("T-W20C-SCALAR-LEG", "after B-PAPER-LANE-PROVENANCE: the parity harness proves recorded history replays"),
    ("#515", "remaining learning columns on the active path"),
