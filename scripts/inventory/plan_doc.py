@@ -34,6 +34,7 @@ PLATES = [
  ("CC-C (Analyst Claude)", "F-G-2 — window void since 09-05", "absorbed into B-PRICE-SIDE-BY-JOB; close as absorbed"),
  ("Infra Claude", "B-LANGSTON-CONTEXT increment 2 — chunk 1 Step 7, chunk 2 part 1 Step 3", "FINISH the chunks in flight, then PAUSE the rest (after live)"),
  ("Infra Claude", "B-WAKE-LEAD-NAME — Step 10", "FINISH"),
+ ("Infra Claude", "B-CREDENTIALS-PRIVATE-REPO (#1023) — NEW, Kyle 2026-09-28: (1) Kyle changes the two test-user passwords and the owner password himself; (2) no password in the repo again: sessions read it from a server-only file; (3) document-only pushes skip the CI check while the deploy gate still finds a green check for the code it deploys; (4) give Langston's review reads, the Helsinki backup mirror and every other reader a read key; (5) then make the repo private (GitHub Pro $4/month if the minutes need it)", "RUN NOW, while the other plates clear (Kyle 2026-09-28)"),
  ("Infra Claude", "B-TOKEN-WATCH — Step 7, paused", "stays PAUSED: research, after live"),
  ("Infra Claude", "#670, B-CREW-STATUS-2, #974", "stay parked / after live"),
 ]

@@ -168,7 +168,7 @@ WAVES = [
    ("rm:19-11", "the paper run judged against Kyle's standard"),
  ]),
  ("B1", "TRACK B · Safety now — can start immediately, in parallel with Track A", [
-   ("B-SEC-HARDEN", "rotate the public owner password first (Kyle), then route authorisation"),
+   ("B-SEC-HARDEN", "route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the push)"),
    ("B-SSH-KEY-CENSUS", "whose are the two unknown keys"),
    ("#615", "the reviewer identity must not read the secrets file"),
    ("COLTRANE-PARITY", "before the Coltrane trial: a privacy check like Langston's"),

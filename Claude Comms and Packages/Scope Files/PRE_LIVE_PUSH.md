@@ -187,7 +187,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 
 ### Wave B1 — TRACK B · Safety now — can start immediately, in parallel with Track A
 
-148. **B-SEC-HARDEN** (CC-A) · *live readiness* — rotate the public owner password first (Kyle), then route authorisation
+148. **B-SEC-HARDEN** (CC-A) · *live readiness* — route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the push)
 149. **B-SSH-KEY-CENSUS (investigation)** (?) · *live readiness* — whose are the two unknown keys
 150. **#615** (CC-A) · *live readiness* — the reviewer identity must not read the secrets file
 151. **Coltrane parity: a privacy check like Langston's** (Infra Claude) · *live readiness* — before the Coltrane trial: a privacy check like Langston's
