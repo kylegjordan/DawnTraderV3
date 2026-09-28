@@ -7,58 +7,39 @@ spec = util.spec_from_file_location("order", os.path.join(HERE, "order.py")); o 
 rows = {r[1]: r for r in json.load(io.open(os.path.join(HERE, "sort_sheet.json"), encoding="utf-8"))}
 DEST = r"C:\DawnTraderV3-new\1-system-manual\PUSH_TO_LIVE_PLAN.md"
 
-OWN = {
- # Wave 0
- "B-OUTCOME-CORPUS-CAPTURE": "CC-B", "RULINGS-DURABILITY": "Infra", "DISK-HEADROOM": "Infra", "PAPER-STANDARD": "CC-C + Langston",
- "PLAN-ID-COLLISIONS": "CC-B", "B-OHLC-FRAME-GUARD": "CC-C", "B-REST-SIDES-TO-CACHE": "CC-C", "B-BOOK-STATE-RESTART-DURABLE": "CC-C",
- "F-G-1-REOPEN": "CC-C", "B-PRICE-SIDE-BY-JOB": "CC-C",
- # A1
- "B-UNIVERSE-REFRESH-ACTS": "CC-C", "B-SYMBOL-CLASS-IDENTITY": "CC-C", "B-RTB-SIGNAL-IDENTITY": "CC-B", "B-VTS-CLASS-LABEL-INTEGRITY": "CC-B",
- "B-CLOSED-TRADES-CLASS-BACKFILL": "CC-B", "NONFIAT-FORK": "CC-C", "B-NONFIAT-QUOTE-DENOMINATION": "CC-C", "B-QUOTE-ADMISSION-LEGACY-SWEEP": "CC-C",
- "B-QUOTE-LEG-INTEGRITY": "CC-C", "B-PRICE-FLOOR-REVIEW": "CC-C", "B-VENUE-PAIRS-REINIT": "CC-C", "B-SCAN-BREADTH-DECLINE": "CC-C",
- "B-XSTOCK-LIVE-FEED": "CC-C", "row:6": "CC-C", "B-PRICE-STALENESS-BOUND": "CC-C", "B-EQUITY-RECONNECT-STALL-TIMER": "CC-C",
- "B-WS-SUBSCRIBE-CLASS-FILTER": "CC-A", "#506": "CC-C", "B-BOOK-SUBSCRIPTION-REACH": "CC-C", "B-CRYPTO-MARK-AGE-GATE": "CC-C",
- "B-XSTOCK-SESSION-FRESHNESS": "CC-C", "B-XSTOCK-ENTRY-COMPARATOR": "CC-C", "B-DECIDED-INTENT-INDEX": "CC-C", "B-POST-GRID-MUTATION-CENSUS": "CC-C",
- "row:7": "CC-C", "#1033": "CC-C", "#972": "CC-B", "#566": "CC-B", "CODEX-PRICING-REVIEW": "CC-C + Coltrane", "B-SIZING-DEC-RESTORE": "CC-C", "#628": "CC-C",
- # A2
- "#233": "CC-B", "#199": "CC-B", "row:3m-ENUM": "CC-B", "B-SILENT-STRATEGY-CENSUS": "CC-B", "B-TARGET-FABRICATION": "CC-C", "#574": "CC-A",
- "B-RTB-REFRESH-CONSOLIDATE": "CC-A", "#570": "CC-C", "#699": "CC-C", "rm:19.2": "CC-A", "B-ENTRY-LEVEL-RECHECK": "CC-B",
- "B-INTENT-ENTRY-PARITY": "CC-C", "B-GRID-LIVE-PATH-PARITY": "CC-C", "RESTING-ORDER-DEADLINE": "CC-C", "#630": "CC-A",
- "B-EXIT-TRIGGER-FILL-PARITY": "CC-C", "B-EXIT-TICKER-LEG-ADAPTER-SIDES": "CC-C", "B-XSTOCK-BID-TRIGGER-RELAND": "CC-C",
- "B-BOOK-STATE-RING-INDEPENDENT-BOUND": "CC-C", "#204": "CC-C", "row:3h.b": "CC-C", "B-EXIT-LATCH-INVESTIGATION": "CC-A", "EXIT-PATH-AUDIT-MAP": "CC-C",
- "#166": "CC-B", "B-CLOSE-WRITER-COSTS": "CC-B", "B-SCHEDULER-FIRST-TICK": "CC-A", "#585": "CC-B", "B-STRING-TRUTHINESS-GUARDS": "CC-A",
- "B-GUARD-COVERAGE-AUDIT": "CC-A", "B-LEARNING-SYSTEM-CENSUS": "CC-A", "DEAD-CODE-REACHABILITY": "CC-A", "B-MODE-PREDICATE-SWEEP": "CC-C",
- "row:8": "CC-C", "B-COST-MATH-CONSOLIDATION": "CC-C", "#527": "CC-B", "B-IMPLEMENTATION-SHORTFALL": "CC-C", "B-GRID-REFUSAL-RATE": "CC-C",
- "B-VALIDATE-OBSERVABILITY": "CC-C", "B-DIAG-READ-INTEGRITY": "CC-B", "B-FILTER-DIAG-XSTOCK": "CC-B", "#664": "CC-B", "#419": "CC-B",
- "#549": "CC-B", "#561": "CC-B", "#547": "CC-C", "#522": "CC-A + Langston (+ Coltrane)", "#235": "CC-A + Langston",
- # A3
- "B-PAPER-LANE-PROVENANCE": "CC-B", "T-W20C-SCALAR-LEG": "CC-B", "#515": "CC-B", "#631": "CC-B", "#504": "CC-B", "B-DECISION-INSTANT-QUOTE": "CC-C",
- "B-EXIT-DECISION-RUNG-STAMP": "CC-C", "B-TRADE-RECORD-JOINABILITY": "CC-B", "B-VPNL-WRITER-BOUND": "CC-B", "B-VTS-MARK-SIDE": "CC-C",
- "B-VTS-NO-DECISION-VALVE": "CC-C + Langston", "#658": "CC-C", "#220": "CC-B", "#1072": "CC-C", "B-ARCHIVE-WRITER-LIFECYCLE": "CC-C",
- "B-EPOCH-PARITY-FENCE": "CC-C", "B-ROLLBACK-EPOCH-FORWARD": "CC-B", "#590": "CC-A", "B-OBS-WINDOW-EVIDENCE-CAPTURE": "CC-C",
- "B-PROVENANCE-LOSS-CENSUS": "CC-C", "#231": "CC-B", "rm:25-9": "CC-C", "row:9": "CC-C",
- # A4
- "#914": "CC-C", "rm:25-18": "CC-C", "#645": "CC-C", "B-EXCURSION-RECORD": "CC-B", "rm:25-17": "CC-B", "rm:25-17b": "CC-B", "rm:25-20": "CC-B",
- "B-TARGET-MULTIPLE-VS-HORIZON": "CC-B", "rm:25-26": "CC-B", "B-EXIT-MAKER-VS-TAKER-REVIEW": "CC-B", "#648": "CC-B", "#201": "CC-B", "#529": "CC-B",
- "B-FAMILY-POOL-REACHABILITY": "CC-C", "B-IDEAL-POOL-STARVATION": "CC-A", "rm:25-12": "CC-C", "rm:25-13": "CC-C", "rm:25-14": "CC-C",
- "rm:25-2": "CC-A", "rm:25-10": "CC-A", "rm:25-7": "CC-A", "rm:16.7": "CC-A", "#588": "CC-A", "rm:25-4": "CC-A", "rm:25-3": "CC-C",
- "rm:25-15": "CC-C", "rm:25-19": "CC-C", "#644": "CC-C", "#221": "CC-A", "#149": "CC-B",
- # A5
- "rm:19-11": "CC-C + Langston",
- # B
- "B-SEC-HARDEN": "CC-A (Kyle rotates the password first)", "B-SSH-KEY-CENSUS": "Infra", "#615": "Infra", "COLTRANE-PARITY": "Infra",
- "#681": "Infra", "#168": "Infra", "P19-B12": "Infra",
- "#634": "CC-B", "#632": "CC-C", "B-KILLSWITCH-DENOMINATOR": "CC-C", "B-TOTAL-DRAWDOWN-WARNING": "CC-C", "#519": "CC-B", "B-TEC-PRIME-BOOT-RACE": "CC-B",
- "#521": "CC-B", "B-ENGINE-STOP-DURATION-COLUMN": "CC-B", "#619": "CC-A", "B-DASHBOARD-AUTH-RACE": "CC-C", "#296": "CC-A",
- "rm:21.1.a": "CC-C", "rm:21-3c": "CC-C", "rm:21-3d": "CC-A", "rm:19-10": "CC-A", "rm:21.1": "CC-A", "#322": "CC-A", "P19-B6.10": "CC-A",
- "rm:21-3a": "CC-A", "#517": "CC-A", "rm:21.3": "CC-A", "rm:19-9": "CC-A", "25-11a": "CC-A", "PROCESS-DEATH-FORM": "Kyle (CC-A + Langston propose)",
- "B-VENUE-RESTING-EXITS": "CC-A", "B-KRAKEN-FEE-WATCH": "CC-B",
- "KRAKEN-LIVE-KEY": "Kyle + Infra", "LIVE-FEE-SCHEDULE": "CC-C", "rm:25-16": "CC-C", "DAY-ONE-NUMBERS": "Kyle", "rm:21-3b": "CC-C + Langston",
- "rm:21.2": "CC-A", "rm:19-17b": "Kyle",
-}
-OWN.update({k: "CC-A" for k in ["#632", "B-KILLSWITCH-DENOMINATOR", "B-TOTAL-DRAWDOWN-WARNING", "rm:21.1.a", "rm:21-3c", "B-SCAN-BREADTH-DECLINE",
-    "B-PRICE-FLOOR-REVIEW", "B-VENUE-PAIRS-REINIT", "rm:25-3", "rm:25-15", "rm:25-19", "#644", "LIVE-FEE-SCHEDULE", "rm:25-16"]})
-OWN.update({"B-DASHBOARD-AUTH-RACE": "Infra", "B-GRID-REFUSAL-RATE": "CC-B", "B-VALIDATE-OBSERVABILITY": "CC-B"})
+from clusters import CLUSTERS
+SHORT = {"CC-A": "CC-A (Old Claude)", "CC-B": "CC-B (New Claude)", "CC-C": "CC-C (Analyst Claude)", "Infra": "Infra Claude"}
+OWN = {k: SHORT[s] for s, _, ks in CLUSTERS for k in ks}
+PLUS = {"PAPER-STANDARD": " + Langston", "rm:21-3b": " + Langston", "B-VTS-NO-DECISION-VALVE": " + Langston", "rm:19-11": " + Langston",
+        "#522": " + Langston (+ Coltrane)", "#235": " + Langston", "CODEX-PRICING-REVIEW": " (+ Coltrane)"}
+for k, v in PLUS.items(): OWN[k] += v
+PLATES = [
+ ("CC-A (Old Claude)", "B-GOV-REPORTING — pushed, the review gate never ran", "FINISH: its rules are in use by all four sessions; run Langston's gate"),
+ ("CC-A (Old Claude)", "B-RULES-1e — Step 2", "PAUSE cleanly: crew tooling, after live"),
+ ("CC-A (Old Claude)", "B-MEASURE-GATE beyond leg 2 — Step 2", "PAUSE cleanly: after live"),
+ ("CC-A (Old Claude)", "B-INSTRUMENTS-OVER-RULES — usage measure to 2026-10-02", "FINISH the measure, then close"),
+ ("CC-A (Old Claude)", "B-DEPLOY-DRIFT-LINE — observation window", "FINISH: convert when its criterion is read"),
+ ("CC-A (Old Claude)", "B-SCHEDULER-FIRST-TICK — next up, not started", "HAND to Infra (its push row)"),
+ ("CC-B (New Claude)", "B-REACH-BASELINE-ADJUST — 7-day review overdue", "FINISH: read the window, convert the report"),
+ ("CC-B (New Claude)", "B-FEED-MISMATCH-FIX — observation to ~2026-10-10", "FINISH: convert at close"),
+ ("CC-B (New Claude)", "B-XSTOCK-FEE-CONTRACT — observation (~21 days from 09-11)", "FINISH: convert at close"),
+ ("CC-B (New Claude)", "B-ARCHIVE-RETENTION-SIZING — was waiting on Kyle", "CLOSE: Kyle decided 2026-09-23 (August moves to warm storage in October)"),
+ ("CC-B (New Claude)", "T-W20C-SCALAR-LEG — not started", "stays as its push row (Wave A3)"),
+ ("CC-C (Analyst Claude)", "B-OHLC-FRAME-GUARD — Step 7", "FINISH (Wave 0)"),
+ ("CC-C (Analyst Claude)", "F-G-1 — conversion owed, reopened", "FINISH (Wave 0)"),
+ ("CC-C (Analyst Claude)", "B-PRICE-SIDE-BY-JOB — 8a-P4c window to 09-30, then increments 2-3", "FINISH (Wave 0)"),
+ ("CC-C (Analyst Claude)", "B-REST-SIDES-TO-CACHE, B-BOOK-STATE-RESTART-DURABLE — built", "FINISH: deploy after 09-30 (Wave 0)"),
+ ("CC-C (Analyst Claude)", "B-SIZING-DEC-RESTORE — half live", "FINISH: stays with CC-C (in flight); now placed in the push"),
+ ("CC-C (Analyst Claude)", "B-XSTOCK-SESSION-FRESHNESS — open", "continues as its push row"),
+ ("CC-C (Analyst Claude)", "F-G-2 — window void since 09-05", "absorbed into B-PRICE-SIDE-BY-JOB; close as absorbed"),
+ ("Infra Claude", "B-LANGSTON-CONTEXT increment 2 — chunk 1 Step 7, chunk 2 part 1 Step 3", "FINISH the chunks in flight, then PAUSE the rest (after live)"),
+ ("Infra Claude", "B-WAKE-LEAD-NAME — Step 10", "FINISH"),
+ ("Infra Claude", "B-TOKEN-WATCH — Step 7, paused", "stays PAUSED: research, after live"),
+ ("Infra Claude", "#670, B-CREW-STATUS-2, #974", "stay parked / after live"),
+]
+KYLE_ACT = {"KRAKEN-LIVE-KEY": "Kyle creates the key on Kraken; Infra sets it up", "DAY-ONE-NUMBERS": "Kyle sets the numbers; CC-A brings the evidence",
+            "PROCESS-DEATH-FORM": "Kyle picks; CC-A + Langston propose", "rm:19-17b": "Kyle approves the switch", "B-SEC-HARDEN": "Kyle rotates the password first",
+            "PAPER-STANDARD": "Kyle approves the numbers"}
 STATUS = {"B-OHLC-FRAME-GUARD": "IN FLIGHT — Step 7", "B-REST-SIDES-TO-CACHE": "BUILT — deploy after 2026-09-30", "B-BOOK-STATE-RESTART-DURABLE": "BUILT — deploy after 2026-09-30",
           "F-G-1-REOPEN": "REOPENED — Step 3", "B-PRICE-SIDE-BY-JOB": "IN FLIGHT — 8a-P4c window to 2026-09-30", "B-SIZING-DEC-RESTORE": "IN FLIGHT — half live",
           "B-EXIT-LATCH-INVESTIGATION": "QUEUED", "B-SCHEDULER-FIRST-TICK": "QUEUED — next in CC-A's list"}
@@ -73,6 +54,13 @@ L = []; A = L.append
 A("# PUSH TO LIVE — THE PLAN (governed, Tier 1)")
 A("")
 A("> **Kyle, 2026-09-28.** This document is the working plan from here to live trading. It replaces phase names: one list, in order. It is the **active phase plan** for `CLAUDE.md` §9.4 purposes — a new item's HOME is a placed row here. `PHASE_19_PLAN.md` stays as history and for the detail each row links to.")
+A("")
+A("## 0. Clear the plates first (Kyle, 2026-09-28)")
+A("")
+A("Before any session starts its push rows, everything it has in flight is **finished** (if it is in the push, or nearly done, or leads to something that must be finished) or **paused cleanly** at a batch boundary and moved to the after-live list. Each session confirms its own lines; this table is CC-B's read of the four task lists at 2026-09-28.")
+A("")
+A("| session | in flight now | disposition |"); A("|---|---|---|")
+for row in PLATES: A("| " + " | ".join(row) + " |")
 A("")
 A("## 1. The rule — what is in the push")
 A("")
@@ -100,7 +88,8 @@ A("")
 A("- **Every item is a batch** (or a hotfix, investigation or sub-batch), run through the normal eleven-step workflow; its report is linked from its row.")
 A("- **The owner updates its row at every batch close** (status + report link), in the same governance turn — and adds any discovery that passes §2. ⏳ **To be made a Tier-1 ledger row in `workflow-10-governance` and graded by the governance checker** (proposed below — Langston to rule).")
 A("- **Finish what is in flight** (Kyle): work already under way is completed, including any follow-on it was leading up to; a clean break is taken at the next batch boundary.")
-A("- **Owners are proposals** (CC-B, 2026-09-28) until each session confirms on first touch; reassign by editing the row.")
+A("- **Clear plates first** (Kyle): before any session starts its push rows, it finishes or cleanly pauses everything it has in flight — see section 0.")
+A("- **Owners** are assigned by connected group (section 6); reassign by editing the row and saying why.")
 A("")
 A("## 4. The plan")
 A("")
@@ -116,9 +105,10 @@ for wid, title, items in o.WAVES:
         n += 1
         r = rows.get(k); nm = c_(r[2]) if r else k
         ow = OWN.get(k, "?")
-        for s in ("CC-A", "CC-B", "CC-C", "Infra", "Kyle"):
+        for s in ("CC-A", "CC-B", "CC-C", "Infra"):
             if ow.startswith(s): load[s] += 1
-        A(f"| {n} | {nm} | {ref(k)} | {ow} | {STATUS.get(k, 'QUEUED')} | — | {c_(note)} |")
+        kn = f" ⭐ {KYLE_ACT[k]}." if k in KYLE_ACT else ""
+        A(f"| {n} | {nm} | {ref(k)} | {ow} | {STATUS.get(k, 'QUEUED')} | — | {c_(note)}{kn} |")
     A("")
 A("## 5. Running now — observation windows")
 A("")
@@ -129,10 +119,12 @@ for k, own, closes in [("8a-P4c (VTS xStock price instrument)", "CC-C", "2026-09
                        ("B-DEPLOY-DRIFT-LINE", "CC-A", "observation window open"), ("B-INSTRUMENTS-OVER-RULES", "CC-A", "2026-10-02")]:
     A(f"| {k} | {own} | {closes} |")
 A("")
-A("## 6. Load per session (proposed)")
+A("## 6. Who owns what — grouped so connected work stays with one session")
 A("")
-A("| session | items |"); A("|---|---:|")
-for s, v in load.most_common(): A(f"| {s} | {v} |")
+A("Kyle 2026-09-28: an even split by connected groups; earlier ownership is not a factor; Kyle owns no rows — his decisions and actions are marked ⭐ inside the owning session's row.")
+A("")
+A("| session | group | items |"); A("|---|---|---:|")
+for s, title, ks in CLUSTERS: A(f"| {SHORT[s]} | {title} | {len(ks)} |")
 A("")
 A("## 7. Coltrane — proposed role (for Langston's view, then Kyle)")
 A("")
