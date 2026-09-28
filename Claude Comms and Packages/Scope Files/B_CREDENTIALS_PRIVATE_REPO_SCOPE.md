@@ -1,0 +1,83 @@
+# B-CREDENTIALS-PRIVATE-REPO — SCOPE (Step 1 of 11)
+
+change-class: non_architecture
+
+**Owner:** Infra Claude (CC-INFRA) · **Opened:** 2026-09-28 · **Issue:** `#1023` (home recorded as amendment 2) · **Placement:** `PUSH_TO_LIVE_PLAN.md` §0, Infra plate (`:31`, placed at `a3b300a75`) — must finish **before the push starts**.
+**Directive (Kyle, 2026-09-28, relayed by NEW Claude 20:37Z; the order is Kyle's):** (1) Kyle rotates the test-user and owner passwords himself; (2) no password in the repo again — anything that needs one reads it from a server-only file; (3) CI skips document-only pushes; (4) census every unauthenticated reader of the repo before the flip and give each read-only access; (5) then make the repo private, with GitHub Pro only if measured minutes need it. Kyle's cost ceiling: *"$15-20 ok, $60-70 not."* Kyle on the test accounts (2026-09-25): *"let's delete these test users. Um, unless you guys need them. And if you need them, then we can change the passwords on them."*
+
+> **CHANGE-CLASS REASONING, stated out loud:** `non_architecture`. No trading code, strategy, regime, filter, signal-pipeline or maths changes. It does change CI triggering, a governance rule (`CLAUDE.md` §7's API command) and the reviewer's read path. ⇒ **`SYSTEM_IMPACT_MAP.md` IS applicable** (its Helsinki read-path table at `:2811-2815` and its CI row at `:1184` both change). **`SYSTEM_MANUAL.md` is applicable for ONE stale line**: `:10122` asserts *"No CI/CD pipelines — no `.github/workflows/`"*, which is false at the ref. Amendable if Langston reads it differently.
+
+---
+
+## 1. WHAT THIS BATCH IS FOR (plain language)
+
+Today the password for a staging account with full owner rights is written in our public GitHub repo, and staging's login page is on the open internet (`#1023`, re-verified 2026-09-23/24). This batch changes that password so the published one is dead, arranges for the crew's checks to use a new password that **no person and no session ever sees**, stops our automated tests from running on document-only changes (about three runs in four today), and moves every tool that reads the repo without logging in onto a keyed path. **Then** it makes the repo private, for a cost inside Kyle's limit.
+
+---
+
+## 2. OBJECTIVES — each with its verification
+
+| # | objective | verified by |
+|---|---|---|
+| **OBJ-0** | **Kyle rotates all three staging passwords himself** (`testuser`, `testuser123`, `kylegjordan`) at Settings → **Users** → *Registered Users* → **Reset Password** (`client/src/pages/settings.tsx:321,553,612` → `POST /api/admin/users/:userId/reset-password`, `server/routes.ts:1195`, guarded by `requireAdmin` = `users.is_admin`; **all three accounts are `is_admin = true`**). Steps were sent to him 2026-09-28. **No session sets or sees these values.** | ⛔ **The previously-published `testuser123` credential FAILS** on the `CLAUDE.md` §7 localhost login (expect 401, where today it returns a token with `role: owner`). **Positive control:** the same call returned a token on 2026-09-24, so the instrument can see success. Kyle confirms his own account. **No old `kylegjordan`/`testuser` value is ever tried by a session.** |
+| **OBJ-1** | **A server-held service credential for `testuser123`, which nobody sees** — ⚠️ **NEEDS KYLE'S EXPLICIT YES (decision D1).** A root-run script on staging generates a long random password, sets it through the same local admin route, and writes it to a root-only file (`/etc/dawntrader/staging-api.env`, 0600 root). **It never prints the value.** A wrapper **`dt-api <METHOD> <path> [json]`** on staging logs in on localhost and makes the call, so **the credential never leaves the staging box**. For Langston's and Coltrane's browsers, `agent-staging-session` stops logging in from Helsinki with a copied password (`/etc/langston/staging.env` today): it **fetches a freshly minted 7-day session over the existing langston→staging SSH key**, and the Helsinki password file is removed. | (a) `dt-api GET /api/vts/filter-diagnostics` returns data; (b) the credential file is 0600 root and nothing else on either box contains the value (search by the value's own hash, not the value); (c) the Langston and Coltrane browsers open signed in after the next 04:40Z refresh **run by the timer, not by hand** (`env -i` reproduction, per the 09-11 lesson); (d) `/etc/langston/staging.env` is gone; (e) a deliberately-failed mint raises the existing `agent-unit-failure@` page (mutation). |
+| **OBJ-2** | **No credential in the repo again.** `CLAUDE.md` §7's authenticated-API command becomes `dt-api …`; `workflow-07-verify-cc` (the only `.claude` file naming `testuser123`) and the four scripts touched since 2026-08-10 that log in (`scripts/analysis/b_price_side_obj7_step7_reads.sh`, `…/b_price_side_p7a_baseline.sh`, `scripts/batch-verify/b-alert-actor-allowlist/p987_verify.sh`, `scripts/codex-export/redaction-rules.mjs` — CC-B's and mine) move to `dt-api` or drop the literal. ★ **The control is STRUCTURAL, not a guard: after OBJ-1 no session holds the value, so no session can paste it** (rule 29's *prefer impossible over intercepted*). The other 42 of the 46 non-markdown files carrying the value (Replit-era diagnostics and archives) stay as history: after OBJ-0 the value is dead. | `git grep` at the ref for the old literal outside history-archive paths = 0 in live code, skills and rules. **Control:** the same grep returns ≥1 today. |
+| **OBJ-3** | **CI skips document-only pushes.** `.github/workflows/ci.yml` gains a `paths-ignore` for documentation-only paths (`**/*.md`, `1-system-manual/**`, `Claude Comms and Packages/**`, `.claude/memory/**` — final list at Step 2, derived from the measured docs-only population, **not guessed**). GitHub evaluates the whole push's changed files, so a push that mixes a code commit with a later doc commit still runs. `workflow-05-ci` changes from *"the latest run"* to **"the run for the newest code-touching commit in the range being deployed or closed"**, and gets the exact command. ⚠️ **NEW Claude's WATCH item, checked at the ref: `dt-deploy` does NOT query CI** (its chain is lock → fetch → sha-on-branch → dirty-worktree → reset → build → migrate → restart → assert; `scripts/dt-deploy.sh:17` at the ref; no `gh run`/Actions/check-run call anywhere in it), and the governance checker does not read Actions either. **The consumers of "green at the sha" are the procedural gate in `workflow-05`/`workflow-11` and the warn-only `guard-ci-cited.mjs`,** which checks that a run id is CITED, not its sha. | (a) a docs-only push produces **no run**; (b) a code push still produces **4/4 green**; (c) a mixed push runs; (d) 7 days of **billable minutes measured** from job timings (not wall-clock) and projected to a month, against Kyle's ceiling; (e) cancelled runs fall from 200-350/month (they were largely docs pushes cancelling code runs through `cancel-in-progress`, a hypothesis this measurement tests). |
+| **OBJ-4** | **Every reader that uses GitHub without logging in moves to a keyed or local path BEFORE the flip** (census below, §4). Preference order: **(i) read the local Helsinki mirror** (no GitHub credential at all), **(ii) an existing read-only deploy key**, **(iii) only then a new token.** | For each reader: it works on the new path while the repo is still public; then `git grep` for `raw.githubusercontent.com` / `api.github.com` / `https://github.com/kylegjordan` in live scripts and in Langston's and Coltrane's loaded instructions = 0 (**control:** 6 repo files + the Langston bridge match today). |
+| **OBJ-5** | **`DawnTraderV3-agent-work` goes private too, and its Actions are DISABLED.** It is a COMPLETE PUBLIC COPY (measured `PUBLIC`), and it carries the same workflow file: 0 runs so far, but **on a private repo every future run would bill.** | visibility = private; Actions disabled; both agents' write keys still push (a canary push from each). |
+| **OBJ-6** | **The flip: `DawnTraderV3` → private.** ⚠️ **Kyle's explicit go at that moment** (outward-facing, and it changes account settings). **GitHub Pro only if OBJ-3's measured minutes exceed the 2,000 free.** | visibility = private; every OBJ-4 reader re-run and working; an unauthenticated `curl` of a raw file returns 404 (**control:** 200 today); `dt-deploy` fetch works; the Helsinki mirror's next 15-minute sync is reproduction-verified. **Rollback = flip back to public (instant).** |
+| **OBJ-7** | **`testuser` — REMOVE, after a census.** Nothing live uses it (census 2026-09-25: no script, skill or box file names it). But **"first user in the table" lookups exist** (`server/services/cle-orchestrator.ts:480-481`, `users[0].id`), and **73 tables carry a `user_id` column**. ⇒ Step 2 counts rows referencing its id per table (index-aware, never an unbounded scan on the 150 GB tables) and lists every first-user lookup. **Delete only if both come back clean**; otherwise it stays disabled (OBJ-0 already kills its password) with a named follow-up. `testuser123` stays, as the crew's service account (OBJ-1). | the census table in the pre-audit; then either the row is gone and a restart shows the engine resolving the same user as before, or a recorded reason it stays. |
+| **OBJ-8** | **`backups and data dumps/` leaves the tree** (about 96 MB compressed: two database dumps and a full-backup zip containing Kyle's personal ChatGPT export — `#1023` am.1). `git rm` under rule 18, logged in `DELETED_COMPONENTS_LOG.md`. **History is NOT rewritten**: a rewrite would break thousands of sha citations across governance. Going private is what stops new readers. ⚠️ **Kyle's yes is needed (D2).** | the folder is absent at the ref; the log entry exists. |
+
+---
+
+## 3. DECISIONS NEEDED FROM KYLE (asked in plain language, separately)
+- **D1:** may a script on the server **create and store** the crew's new `testuser123` password, with no person or session ever seeing it? *(The alternative is that he picks it himself, and then it has to reach the server somehow, which puts it in a chat or a file.)*
+- **D2:** remove the backups folder from the repo's current files (it stays in history)?
+- **D3 (at OBJ-6):** the go for the flip, and Pro only if the measured minutes need it.
+
+---
+
+## 4. THE READER CENSUS (measured 2026-09-28 on both boxes + the tree)
+
+| reader | how it reads GitHub today | after the flip |
+|---|---|---|
+| staging deploy fetch (`/home/deploy/dawntrader`) | `git@github.com:` + deploy key 162102340 *staging deploy (read-only)*, last used 09-23 | ✅ unchanged |
+| Helsinki mirror `/srv/dawntrader-backup.git` (`dt-backup-sync.sh`, `*/15`) | `git@github.com:` + deploy key 162102394 *helsinki langston (read-only)* | ✅ unchanged |
+| `dt-review` (Langston's whole-tree reads) | ssh, same key | ✅ unchanged |
+| Coltrane mirror `/srv/coltrane-repo.git` | local, from the Helsinki mirror | ✅ unchanged |
+| **Langston bridge `resolve_review_ref()`** | `git ls-remote https://github.com/…` anonymous (`discord-langston-bridge.py:144`) | ⛔ **breaks** → ssh remote with the existing read-only key |
+| **Langston's single-file reads** | `raw.githubusercontent.com/<sha>/<path>`, anonymous (bridge prompt text `:168`; SIM `:2813`: *"Single-file reads … go straight to the raw GitHub URL"*) | ⛔ **breaks** → `dt-review show <sha>:<path>` from the mirror. ★ This also removes the path behind **`#1043`** (a sha-pinned raw read served the WRONG FILE twice). **Relation to be ruled at Step 2: this may dissolve `B-READ-MODEL-BLOB-VERIFY` rather than satisfy it.** |
+| **`dt-deploy-drift.sh`** | GitHub compare API, anonymous (`:21`) + https ls-remote (`:23`) | ⛔ **breaks** → compute the range from the local mirror with git |
+| **`dt-push-notice.sh`** | compare API, anonymous (`:45`) | ⛔ **breaks** → same |
+| **`agent-work-sync`** | fetches the REAL repo with the **agent-work** deploy key (`REAL=git@github-agentwork:…/DawnTraderV3.git`) — works today only because the repo is public | ⛔ **breaks** → fetch from `/srv/dawntrader-backup.git` locally |
+| `comms-infra/laptop/crew-status.py` | `api.github.com`, anonymous | ⛔ **breaks** → the laptop's authenticated `gh` |
+| laptop clones, Drive bundle, `fresh-rules` hook | authenticated git on the laptop | ✅ unchanged |
+| GitHub Actions itself | inside GitHub | ✅ unchanged (minutes now billed, OBJ-3) |
+| Langston/Coltrane ad-hoc web reads of github.com pages | anonymous | ⛔ → instructions point at `dt-review` / `coltrane-review` |
+
+⚠️ **Census reach, stated:** repo tree at the ref (`raw.githubusercontent|api.github.com` over `.claude comms-infra scripts`, non-markdown); both boxes' repos under `/srv /home/*/* /home/* /opt/* /root/*`, plus scripts in `/usr/local/bin`, `/etc/systemd/system`, `/etc/cron.d`, `/opt/discord-bridges` and root's crontab. **Not covered:** user crontabs other than root's on Helsinki, and anything inside the app itself calling GitHub at runtime. Both are Step 2 items.
+
+---
+
+## 5. PROVENANCE READ (1.b)
+
+**Corpora searched:** `RUNNING_ISSUES.md`, `BATCH_CATALOG.md`, completion reports (grep `paths-ignore|skip ci|docs-only CI` = 0 hits, so **no prior decision exists to reverse**); `git log -S` unpathed at `origin/migration/aws-supabase`; `SYSTEM_IMPACT_MAP.md` / `SYSTEM_MANUAL.md`.
+
+| thing | introduced | intent, quoted | disposition |
+|---|---|---|---|
+| CI workflow | `02e18f208` 2026-03-30, *"Batch 40: Migration scaffolding"* | *"GitHub Actions CI (typecheck, test, build, Docker build on PR)"*; push triggers on `migration/**` arrived in `9ec7eae83` (*"Batch 40b: Database driver swap"*), with no path filter ever discussed | **(2) relevant, needs updating**: it was built to validate CODE, and document-only runs are an unconsidered side-effect, not a decision. `INFERRED-FROM-CODE` for the "unconsidered" part: no text says either way. |
+| `CLAUDE.md` §7 credential | `81e4b8094` 2026-04-14, *"Phase 15b lock + governance transition"*: `Credentials: \`testuser123 / SecurePass123!\` or \`kylegjordan\` credentials.` | the value itself first entered the tree `c710aa893` 2025-10-11 (Replit era) as a test login | **(2)**: the API call is still needed; the literal is not. |
+| `agent-staging-session` + `/etc/langston/staging.env` | `5f44d5dc8` 2026-09-09 (B-COLTRANE; Kyle: *"I don't need read only. Let's just give the access."*) | signed-in browsers for both agents, minted by §7's API call server-to-server | **(2)**: keep the capability; move the password off Helsinki. |
+| raw single-file read path | `17ddb76ea` 2026-08-06 (reconcile) / B-REPO-RELOCATE 2026-07-23 | *"Single-file reads do NOT use it — they go straight to the raw GitHub URL at the stamped sha"* (SIM `:2813`) | **(2)**: same intent (read at the stamped sha); the path must change. |
+| drift / push-notice API calls | `0723ecdf1` 2026-09-05: *"the range via the GitHub compare API. No clone, no fetch, no working copy - which deletes stale-ref risk by construction"*; `d971f9d81` 2026-09-03 | a no-working-copy range read | **(2)**: the mirror's pull-before-read (as `dt-review` does) preserves *"stale-ref risk deleted by construction"*. **Step 2 must show the mirror path keeps that property** rather than re-introducing a stale ref. |
+| `backups and data dumps/` | `f6f13c451` 2026-02-08 *"Saved progress at the end of the loop"* (Replit era) | none stated | **(5) disconnected, remove** from the tree (rule 18). |
+| `testuser` account | created 2025-11-27 with the others | test login, no current user | **(5)**, pending the OBJ-7 census. |
+
+---
+
+## 6. RISKS AND WHAT THIS BATCH DOES NOT DO
+- **What has already been published stays published.** Rotation (OBJ-0) is the fix for credentials; nothing fixes the data already downloadable. Traffic, measured 2026-09-24: 0 forks, 0 stars, 1 page view in 14 days; clone counts cannot separate outsiders from our own CI, so **no claim is made either way.**
+- **Route authorisation (`#1022`, 157/216 mutating routes unguarded) stays in `B-SEC-HARDEN`** — also now Infra Claude's.
+- **Order matters:** OBJ-4 lands and is verified while the repo is still PUBLIC, so the flip (OBJ-6) finds nothing left to break. The flip is the LAST objective.
+- **Between OBJ-0 and OBJ-1, the crew's scripted staging API checks and the agents' browsers are down** (Kyle was told). UI verification in Claude-in-Chrome uses Kyle's own session and is unaffected.
