@@ -128,39 +128,39 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 96. **#549** (CC-B) · *paper truth* — paper truth: Open Trades field gaps
 97. **#561** (Kyle) · *paper truth* — paper truth: volume / order book columns in Open Trades
 98. **#547** (CC-B) · *paper truth* — paper truth: the Analyst's July findings (owner reads)
-99. **#522** (Kyle) · *mechanics* — LAST in A2: the full runtime pipeline audit, both classes, end to end
-100. **#235** (Kyle) · *mechanics* — with #522: the crypto pipeline validated end to end
+99. **B-EPOCH-PARITY-FENCE** (CC-C) · *learning data* — moved ahead of row:9 (Langston 2026-09-28): one home for the calibration epoch AND stamp the resolved epoch onto each trade row at write time (closed_trades.calibration_state is a dead column today) - so a per-cell restart becomes a checkable row filter, dated by DEPLOY (epoch rule 7)
+100. **row:9** () · *learning data* — THE LEARNING-RECORD RESTART (Kyle 2026-09-28, Langston AGREE WITH CHANGES): moved from the end of A3 to after the LAST fix that changes what a closed trade looks like - the test, applied once per row by its owner: does it change entry_price, exit_price, quantity, the cost/fee terms or the class/strategy label on a closed trade? The prerequisites, by key (S2-enforced): after B-XSTOCK-BID-TRIGGER-RELAND, after B-VTS-MARK-SIDE, after B-VTS-NO-DECISION-VALVE, after B-SIZING-DEC-RESTORE, after #628, after B-REST-SIDES-TO-CACHE, after B-BOOK-STATE-RESTART-DURABLE, after F-G-1-REOPEN, after B-PRICE-SIDE-BY-JOB, after B-SYMBOL-CLASS-IDENTITY, after B-RTB-SIGNAL-IDENTITY, after B-XSTOCK-LIVE-FEED, after row:6, after B-PRICE-STALENESS-BOUND, after B-CRYPTO-MARK-AGE-GATE, after #977, after B-XSTOCK-SESSION-FRESHNESS, after B-XSTOCK-ENTRY-COMPARATOR, after B-DECIDED-INTENT-INDEX, after B-POST-GRID-MUTATION-CENSUS, after row:7, after #972, after #566, after B-TARGET-FABRICATION, after B-ENTRY-LEVEL-RECHECK, after B-INTENT-ENTRY-PARITY, after B-GRID-LIVE-PATH-PARITY, after RESTING-ORDER-DEADLINE, after B-EXIT-TRIGGER-FILL-PARITY, after B-EXIT-TICKER-LEG-ADAPTER-SIDES, after B-BOOK-STATE-RING-INDEPENDENT-BOUND, after #204, after row:3h.b, after #166, after B-CLOSE-WRITER-COSTS, after B-COST-MATH-CONSOLIDATION, after #527. Not prerequisites: B-VTS-CLASS-LABEL-INTEGRITY and B-CLOSED-TRADES-CLASS-BACKFILL (they repair history in place). It must STATE which populations it restarts (active paper, VTS, the rejected arm). after B-EPOCH-PARITY-FENCE. AFTER THE RESTART, three cases, named: (1) a fix that changes no trade outcome restarts nothing; (2) one that changes one strategy or one class restarts only that cell, dated by deploy, read through the stamped epoch; (3) one that changes outcomes across ALL cells is a global restart
+101. **#522** (Kyle) · *mechanics* — LAST in A2: the full runtime pipeline audit, both classes, end to end
+102. **#235** (Kyle) · *mechanics* — with #522: the crypto pipeline validated end to end
 
 ### Wave A3 — TRACK A · Learning data — alongside A2; must finish before tuning reads the data
 
-101. **B-OUTCOME-CORPUS-CAPTURE** (?) · *learning data* — what each VTS trade earned, recorded durably, with a measured/defaulted flag on its inputs. NOT a deletion clock: the 90-day delete was fixed 2026-07-30/08-06 (365 days, archive before delete); nothing is due for deletion before 2027-05
-102. **B-EXCURSION-RECORD** (CC-B) · *tuning* — early (Langston F5): capture costs calendar time - record how far trades travel; rm:25-17b is blocked on it by ruling
-103. **25-9 xStock pair_correlation per-pair WR data accumulation (B68.3** () · *learning data* — early (Langston F5): xStock per-pair correlation data accumulates from here
-104. **B-PAPER-LANE-PROVENANCE** (CC-B) · *learning data* — paper records its decision inputs
-105. **T-W20C-SCALAR-LEG** (CC-B) · *learning data* — after B-PAPER-LANE-PROVENANCE: capture integrity - the parity harness proves recorded history replays to the same decisions
-106. **#515** (CC-B) · *learning data* — remaining learning columns on the active path
-107. **#631** (CC-A) · *learning data* — entry-mode fields on the active archive
-108. **#504** (CC-A) · *learning data* — regime on maker/taker shadow rows
-109. **#513** (CC-B) · *learning data* — the VTS books maker target exits the way the paper lane would
-110. **B-DECISION-INSTANT-QUOTE** (CC-C) · *learning data* — the exact quote at decision time
-111. **B-EXIT-DECISION-RUNG-STAMP** (CC-C) · *learning data* — which price rung an exit used
-112. **B-TRADE-RECORD-JOINABILITY** (CC-B) · *learning data* — trade records join across stores
-113. **B-VPNL-WRITER-BOUND** (CC-B) · *learning data* — an unbounded learning column
-114. **#658** (CC-C) · *learning data* — VTS posture multipliers contaminating learning rows
-115. **#220** () · *learning data* — an error thrown 64,494 times in VTS strategy runs
-116. **#1072** (CC-C) · *learning data* — the price-history recorder's frozen symbol set
-117. **B-ARCHIVE-WRITER-LIFECYCLE** (CC-C) · *learning data* — the archive writer's lifecycle
-118. **B-ARCHIVE-FLUSH-DRAIN-ORDER** (CC-B) · *learning data* — B-ARCHIVE-FLUSH-DRAIN-ORDER: the writer drains its buffer before it holds a slot, so a slot timeout throws the rows away (670 on 2026-09-28) - in the push because it loses learning data
-119. **B-EPOCH-PARITY-FENCE** (CC-C) · *learning data* — one home for the calibration epoch
-120. **B-ROLLBACK-EPOCH-FORWARD** (CC-B) · *learning data* — epochs across a rollback
-121. **#590** (CC-A) · *learning data* — calibration store reset at the formula change
-122. **B-PROVENANCE-LOSS-CENSUS** (CC-C) · *learning data* — where decision provenance is lost
-123. **#231** () · *learning data* — ablation record id gap
-124. **row:9** () · *learning data* — LAST in A3: the gate for restarting the learning record clean after the fixes - it must STATE which populations it restarts (active paper, VTS, the rejected arm), because ACCUMULATION-GATE counts from that reset
+103. **B-OUTCOME-CORPUS-CAPTURE** (?) · *learning data* — what each VTS trade earned, recorded durably, with a measured/defaulted flag on its inputs. NOT a deletion clock: the 90-day delete was fixed 2026-07-30/08-06 (365 days, archive before delete); nothing is due for deletion before 2027-05
+104. **B-EXCURSION-RECORD** (CC-B) · *tuning* — early (Langston F5): capture costs calendar time - record how far trades travel; rm:25-17b is blocked on it by ruling
+105. **25-9 xStock pair_correlation per-pair WR data accumulation (B68.3** () · *learning data* — early (Langston F5): xStock per-pair correlation data accumulates from here
+106. **B-PAPER-LANE-PROVENANCE** (CC-B) · *learning data* — paper records its decision inputs
+107. **T-W20C-SCALAR-LEG** (CC-B) · *learning data* — after B-PAPER-LANE-PROVENANCE: capture integrity - the parity harness proves recorded history replays to the same decisions
+108. **#515** (CC-B) · *learning data* — remaining learning columns on the active path
+109. **#631** (CC-A) · *learning data* — entry-mode fields on the active archive
+110. **#504** (CC-A) · *learning data* — regime on maker/taker shadow rows
+111. **#513** (CC-B) · *learning data* — the VTS books maker target exits the way the paper lane would
+112. **B-DECISION-INSTANT-QUOTE** (CC-C) · *learning data* — the exact quote at decision time
+113. **B-EXIT-DECISION-RUNG-STAMP** (CC-C) · *learning data* — which price rung an exit used
+114. **B-TRADE-RECORD-JOINABILITY** (CC-B) · *learning data* — trade records join across stores
+115. **B-VPNL-WRITER-BOUND** (CC-B) · *learning data* — an unbounded learning column
+116. **#658** (CC-C) · *learning data* — VTS posture multipliers contaminating learning rows
+117. **#220** () · *learning data* — an error thrown 64,494 times in VTS strategy runs
+118. **#1072** (CC-C) · *learning data* — the price-history recorder's frozen symbol set
+119. **B-ARCHIVE-WRITER-LIFECYCLE** (CC-C) · *learning data* — the archive writer's lifecycle
+120. **B-ARCHIVE-FLUSH-DRAIN-ORDER** (CC-B) · *learning data* — B-ARCHIVE-FLUSH-DRAIN-ORDER: the writer drains its buffer before it holds a slot, so a slot timeout throws the rows away (670 on 2026-09-28) - in the push because it loses learning data
+121. **B-ROLLBACK-EPOCH-FORWARD** (CC-B) · *learning data* — epochs across a rollback
+122. **#590** (CC-A) · *learning data* — calibration store reset at the formula change
+123. **B-PROVENANCE-LOSS-CENSUS** (CC-C) · *learning data* — where decision provenance is lost
+124. **#231** () · *learning data* — ablation record id gap
 
 ### Wave A4 — TRACK A · Tuning — reads the clean data; costs -> geometry -> strategies -> regimes -> scores -> gates -> ranking
 
-125. **Accumulation gate between the clean learning-record restart and tuning** (CC-B) · *evidence* — FIRST in A4 (Langston F4, conditions 2-3): closes per cell only when the floor is MET or the cell is PUBLISHED UNDERPOWERED - naming a floor never closes it. POPULATIONS, named per item: ACTIVE = closed_trades paper (~12 closes/day on 2026-09-28; 17 of 38 strategy x class cells non-empty, 21 empty); VTS = vts_open_trades closed (~1,060/day); REJECTED = the VTS-tagged refused signals simulated to close. row:9 must state which of the three its reset restarts; until it does, assume all three restart at zero
+125. **Accumulation gate between the clean learning-record restart and tuning** (CC-B) · *evidence* — FIRST in A4 (Langston F4, conditions 2-3, clock ruling 2026-09-28): closes per cell only when the floor is MET or the cell is PUBLISHED UNDERPOWERED - naming a floor never closes it. Counts from row:9. POPULATIONS, named per item: ACTIVE = closed_trades paper (12.1/day all-time, 8.3 last 30 days, 7.4 last 7 on 2026-09-28 - use the current rate); VTS = vts_open_trades closed (~1,060/day); REJECTED = the VTS-tagged refused signals simulated to close. THE DISTRIBUTION BINDS, NOT THE START DATE: at a floor of 30 on the active lane, 8 of 38 strategy x class cells get there inside 90 days and 30 do not at any start date (21 have never traded) - Step 1 must state what happens to a permanently underpowered cell; #644 (exploration subsidy) is one of the answers and its position is re-argued there. FIELDS: an item that needs a field captured in A3 counts only rows carrying it - it prints n_total and n_with_field and closes on n_with_field; rows missing the field are excluded, never defaulted (#546)
 126. **#914** (CC-C) · *tuning* — costs: the per-leg cost term - after ACCUMULATION-GATE; cell = per class x fee side; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
 127. **25-18 friction_safety_buffer per-class evaluation (reorg-B2 delibe** () · *tuning* — costs: the per-class safety margin - after ACCUMULATION-GATE; cell = per class (2 cells); population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
 128. **#645** (CC-C) · *tuning* — costs: a crypto-era net-EV floor applied to xStocks - after ACCUMULATION-GATE; cell = per class (2 cells); population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
@@ -170,10 +170,10 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 132. **B-TARGET-MULTIPLE-VS-HORIZON** (CC-B) · *tuning* — geometry: move targets that sit too far - after ACCUMULATION-GATE; cell = strategy x class; population = VTS (excursion record); a cell below the floor is published UNDERPOWERED, never fitted
 133. **25-26 Trade HOLD-TIME / timeframe study — do slower (multi-day) tr** () · *tuning* — geometry: do slower trades clear the fee wall - after ACCUMULATION-GATE; cell = hold-time bucket x class; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
 134. **B-EXIT-MAKER-VS-TAKER-REVIEW** (CC-B) · *tuning* — geometry: maker exits profitable, taker target exits negative - after ACCUMULATION-GATE; cell = exit reason x fee side x class; population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
-135. **#221** (Kyle) · *tuning* — ranking first (Langston F6): rank the queue, then ask who is missing from it
-136. **#149** () · *tuning* — with #221: ranking
+135. **#221** (Kyle) · *tuning* — ranking first (Langston F6): rank the queue, then ask who is missing from it. NO gate clause, reason: a ranking-rule change, code-only, reads no accumulated per-cell data - if its Step 1 finds it fits weights on data, it takes the gate clause then
+136. **#149** () · *tuning* — with #221: per-class RTB refresh cadence calibration - after ACCUMULATION-GATE; cell = per class (2 cells); population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
 137. **B-FAMILY-POOL-REACHABILITY** (CC-C) · *tuning* — before #648/#201/#529: can each strategy family reach the pool at all - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three
-138. **B-IDEAL-POOL-STARVATION** (CC-A) · *tuning* — before #648/#201/#529: is the ideal pool starved
+138. **B-IDEAL-POOL-STARVATION** (CC-A) · *tuning* — before #648/#201/#529: is the ideal pool starved (~4-5% of slots against a nominal 70%) - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three
 139. **#648** (CC-A) · *tuning* — strategies: six never traded - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three
 140. **#201** () · *tuning* — strategies: range_trade starved - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three
 141. **#529** (Kyle) · *tuning* — strategies: the strategy-weighting chain - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
@@ -183,13 +183,13 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 145. **25-2 §19.0.A Regime classifier confidence-chain calibration B-NEW** () · *tuning* — regimes: confidence-chain calibration - after ACCUMULATION-GATE; cell = regime x class (5 x 2); population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
 146. **25-10 Crypto confidence-modifier calibration Kyle 2026-05-27 voice** () · *tuning* — regimes: crypto confidence modifiers - after ACCUMULATION-GATE; cell = regime, crypto; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
 147. **25-7 #94 B79.3 xStock equity-equivalent macro confidence modifier** () · *tuning* — regimes: xStock macro modifiers - after ACCUMULATION-GATE; cell = regime, xStock; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
-148. **B-RETIRED-SCORE-REMOVAL** () · *tuning* — scores: retire the retired scores
+148. **B-RETIRED-SCORE-REMOVAL** () · *tuning* — scores: retire the retired scores. NO gate clause, reason: a code-only removal, reads no accumulated data
 149. **#588** (CC-A) · *tuning* — scores: a validated quality term in the ranking - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
 150. **25-4 §19.4 SQE Recalibration (B66 conditional) Rebuild SQE thresh** () · *tuning* — scores: SQE recalibration - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE + REJECTED; a cell below the floor is published UNDERPOWERED, never fitted
 151. **25-3 §19.0.3 TFS sustainability gate value-scope decision Recalib** () · *tuning* — gates: the sustainability gate - after ACCUMULATION-GATE; cell = one regime x class; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
 152. **25-15 DATA-BLOCKED STUDY (intraday-coverage gap) — HCE rejected-ar** () · *tuning* — gates: does the Net Expectancy gate reject winners - after ACCUMULATION-GATE; cell = gate verdict x class; population = REJECTED (name the instrument first; its title still says DATA-BLOCKED); a cell below the floor is published UNDERPOWERED, never fitted
 153. **25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-0** () · *tuning* — gates: the Net Expectancy gate's measured judgement - after ACCUMULATION-GATE; cell = gate verdict x class; population = REJECTED + ACTIVE (name the instrument first); a cell below the floor is published UNDERPOWERED, never fitted
-154. **#644** (CC-C) · *tuning* — gates: the exploration subsidy decision
+154. **#644** (CC-C) · *tuning* — gates: the exploration-subsidy decision. NO gate clause, reason: a decision, not a per-cell fit - and it is one of the answers for a permanently underpowered cell, so ACCUMULATION-GATE's Step 1 re-argues its position
 
 ### Wave A5 — TRACK A · The evidence — runs continuously; judged at the end
 
