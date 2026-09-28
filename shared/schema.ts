@@ -5022,6 +5022,12 @@ const ohlcColumns = {
   tradeCount: integer("trade_count"),
   metadata: jsonb("metadata").notNull().default(sql`'{"schema_version": 1}'::jsonb`),
   capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  // F-G-1 reopen P3 (OBJ-9 ②, 2026-09-29): when THIS process received the bar — stamped at the one
+  // chokepoint, `bufferOhlcBar`, never by a producer. The batch writer's upsert refuses to let an
+  // earlier arrival overwrite a later one. NULLABLE with no default: rows written before the column
+  // existed stay NULL, and a NULL stored stamp accepts the first stamped write. `captured_at` keeps
+  // its meaning (database write time) for every existing reader.
+  arrivedAt: timestamp("arrived_at", { withTimezone: true }),
 } as const;
 
 // B79.0e (2026-05-10): renamed from equity_*→xstock_* per B69 namespace

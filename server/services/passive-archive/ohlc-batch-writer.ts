@@ -237,38 +237,146 @@ function releaseSlot(): void {
   if (next) next();
 }
 
-/** Buffer a single OHLC bar for the given asset class. Flushed automatically. */
+/**
+ * Buffer a single OHLC bar for the given asset class. Flushed automatically.
+ *
+ * ⛔ F-G-1 reopen P3 (OBJ-9 ②) — THE ARRIVAL STAMP IS SET HERE, AT THE ONE CHOKEPOINT, AND NOWHERE
+ * ELSE. `arrivedAt` is when THIS process received the bar; the upsert below refuses to let an
+ * earlier arrival overwrite a later one. It is stamped here and not in the three producers
+ * (`crypto-spot-archiver.ts:135`, `equity-spot-archiver.ts:121`, `kraken-futures-archiver.ts:124`)
+ * because every producer payload is an `as any` cast: a producer that forgot the field would compile
+ * clean, land NULL, and pass the guard's `IS NULL` arm — a guard that reads as installed while
+ * protecting nothing. A producer cannot omit what it does not supply. (Langston, Step 2.)
+ * The spread puts the stamp LAST, so a stray `arrivedAt` on a producer row cannot override it.
+ */
 export function bufferOhlcBar(assetClass: ArchiveAssetClass, row: InsertEquitySpotOhlc1m): void {
-  buffers[assetClass].push(row);
+  buffers[assetClass].push({ ...row, arrivedAt: new Date() });
 }
 
-/** Flush a single asset class buffer. Called by the periodic timer or on shutdown. */
-async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
-  const batch = buffers[assetClass];
-  if (batch.length === 0) return;
-  const rawRows = batch.splice(0, batch.length); // drain atomically
+/** ms since epoch of a row's arrival stamp; `-Infinity` when absent, so an unstamped row never beats a stamped one. */
+function arrivalMs(row: InsertEquitySpotOhlc1m): number {
+  const a = (row as { arrivedAt?: unknown }).arrivedAt;
+  if (a instanceof Date) return a.getTime();
+  if (a == null) return Number.NEGATIVE_INFINITY;
+  const t = new Date(String(a)).getTime();
+  return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
+}
 
-  // B-NEW-35 (2026-05-20): de-dupe the in-buffer batch by (symbol, interval_begin)
-  // BEFORE the INSERT. Kraken WS sends multiple OHLC updates per minute as the
-  // bar evolves with each tick; the archiver buffers all of them. With ON CONFLICT
-  // DO UPDATE, PG throws "ON CONFLICT DO UPDATE command cannot affect row a
-  // second time" when one INSERT contains multiple rows that target the same
-  // unique constraint. Solution: keep only the LAST row per (symbol, interval_begin)
-  // in the buffer — the last write IS the latest WS update IS the correct
-  // cumulative OHLCV for that minute. Map insertion-order semantics give "last
-  // wins" naturally.
+/**
+ * One row per `(symbol, interval_begin)` — the one Postgres needs, because a single
+ * `ON CONFLICT DO UPDATE` statement cannot touch the same row twice (B-NEW-35, 2026-05-20).
+ *
+ * ⛔ F-G-1 reopen P3 (OBJ-9 ②): the survivor is the LATEST ARRIVAL, TIES BROKEN BY LAST INSERTED.
+ * B-NEW-35 kept the last row in buffer order because "the last write IS the latest WS update" —
+ * true only while buffer order IS arrival order, which a retried batch used to break. ② said: do
+ * not rely on preserving order. The tie-break is `>=`, so equal millisecond stamps keep today's
+ * last-inserted semantics exactly; a strict `>` would silently flip them to first-wins (Langston
+ * condition 2). Exported for the fence.
+ */
+export function dedupeLatestArrival(rawRows: InsertEquitySpotOhlc1m[]): InsertEquitySpotOhlc1m[] {
   const dedupedMap = new Map<string, InsertEquitySpotOhlc1m>();
   for (const row of rawRows) {
     const ts = (row as any).intervalBegin instanceof Date
       ? (row as any).intervalBegin.toISOString()
       : String((row as any).intervalBegin);
-    dedupedMap.set(`${row.symbol}::${ts}`, row);
+    const key = `${row.symbol}::${ts}`;
+    const prev = dedupedMap.get(key);
+    if (prev === undefined || arrivalMs(row) >= arrivalMs(prev)) dedupedMap.set(key, row);
   }
-  const rows = Array.from(dedupedMap.values());
+  return Array.from(dedupedMap.values());
+}
+
+/**
+ * ⛔ F-G-1 reopen P2 (OBJ-9, A2) — ONE FLUSH PER CLASS AT A TIME.
+ * Two schedulers call the flush: the 5 s timer and the shutdown drain. Nothing stopped a second
+ * flush of a class starting while the first was still waiting on a pool slot or writing, and two
+ * overlapping flushes of one class are the process-local half of `#1031`. A call that finds a flush
+ * in flight now returns THAT promise instead of starting another.
+ */
+const inFlight: Partial<Record<ArchiveAssetClass, Promise<void>>> = {};
+
+/**
+ * ⛔ Langston condition 3 — THE GUARD'S POSITIVE CONTROL. Counts the calls that were coalesced into
+ * an in-flight flush. A guard that was never installed and a guard that was never exercised are
+ * equally silent (`#661` leg 3), so no absence of overlap may be claimed until this is non-zero on
+ * at least one class. Published on every successful upsert line and via the getter below.
+ */
+const coalescedFlushes: Record<ArchiveAssetClass, number> = {
+  xstock_spot: 0,
+  xstock_perp: 0,
+  crypto_spot: 0,
+  crypto_perp: 0,
+};
+
+/** The per-class coalesced-flush counts since process start (a copy). */
+export function getOhlcWriterCoalescedFlushes(): Record<ArchiveAssetClass, number> {
+  return { ...coalescedFlushes };
+}
+
+/** Flush a single asset class buffer. Called by the periodic timer or on shutdown. */
+export function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
+  const running = inFlight[assetClass];
+  if (running) {
+    coalescedFlushes[assetClass]++;
+    return running;
+  }
+  const p: Promise<void> = doFlushAssetClass(assetClass).finally(() => {
+    if (inFlight[assetClass] === p) delete inFlight[assetClass];
+  });
+  inFlight[assetClass] = p;
+  return p;
+}
+
+/**
+ * The chunked upsert, with the arrival guard. Exported so the integration fence can drive the REAL
+ * SQL with explicit arrival stamps — the cross-process case (a deploy overlaps two processes) cannot
+ * be produced through `bufferOhlcBar`, which always stamps now.
+ */
+export async function upsertOhlcRows(assetClass: ArchiveAssetClass, rows: InsertEquitySpotOhlc1m[]): Promise<void> {
+  const table = tableForAssetClass[assetClass];
+  const CHUNK_SIZE = 1000;
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    const slice = rows.slice(i, i + CHUNK_SIZE);
+    await db.insert(table as any).values(slice as any)
+      .onConflictDoUpdate({
+        target: [(table as any).symbol, (table as any).intervalBegin],
+        set: {
+          open:       sql`EXCLUDED.open`,
+          high:       sql`EXCLUDED.high`,
+          low:        sql`EXCLUDED.low`,
+          close:      sql`EXCLUDED.close`,
+          volume:     sql`EXCLUDED.volume`,
+          vwap:       sql`EXCLUDED.vwap`,
+          tradeCount: sql`EXCLUDED.trade_count`,
+          capturedAt: sql`NOW()`,
+          arrivedAt:  sql`EXCLUDED.arrived_at`,
+        },
+        // ⛔ F-G-1 reopen P3 — THE DATABASE-SIDE GUARD, AND WHY IT IS LOAD-BEARING AFTER P1 + P2.
+        // P1 and P2 close the PROCESS-LOCAL overlap. A DEPLOY OVERLAPS TWO PROCESSES — the old one
+        // draining its buffer while the new one flushes, two in-flight maps, no shared exclusion —
+        // so only a guard in the database protects a fresher bar from an older arrival written
+        // second. `<=` accepts an equal stamp (same bar re-offered); NULL on the stored row accepts
+        // the first stamped write (every row written before this column existed).
+        setWhere: sql`${(table as any).arrivedAt} IS NULL OR ${(table as any).arrivedAt} <= EXCLUDED.arrived_at`,
+      });
+  }
+}
+
+async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
+  const buf = buffers[assetClass];
+  if (buf.length === 0) return;
+  // ⛔ F-G-1 reopen P1 (OBJ-9 ①) — SNAPSHOT, WRITE, AND ONLY THEN REMOVE.
+  // This read `buf.splice(0, buf.length)` BEFORE the write, and the transient catch put the rows
+  // back with `unshift`. So while a flush was in flight its rows were in NO buffer, and a failed
+  // flush re-queued them AHEAD of rows that arrived during it — the order-dependence ② forbids.
+  // Now the first `n` rows stay where they are until the write succeeds. Rows that arrive during
+  // the flush are pushed BEHIND them, so the front `n` are exactly the rows written: P2 guarantees
+  // no second flush of this class can touch the front while this one is in flight.
+  const n = buf.length;
+  const rows = dedupeLatestArrival(buf.slice(0, n));
   try {
     await acquireSlot();
     try {
-      const table = tableForAssetClass[assetClass];
       // Drizzle insert; PK includes auto-generated `id` so no realistic
       // conflict on the primary key. Partition routing is automatic via
       // PARTITION BY RANGE.
@@ -300,28 +408,15 @@ async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       // existing rows first; Phase 3 (this code change) deploys after both.
       //
       // Reference: B_NEW_35_SCOPE.md §2 + Langston Step 1 Q4 ACK.
-      const CHUNK_SIZE = 1000;
-      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-        const slice = rows.slice(i, i + CHUNK_SIZE);
-        await db.insert(table as any).values(slice as any)
-          .onConflictDoUpdate({
-            target: [(table as any).symbol, (table as any).intervalBegin],
-            set: {
-              open:       sql`EXCLUDED.open`,
-              high:       sql`EXCLUDED.high`,
-              low:        sql`EXCLUDED.low`,
-              close:      sql`EXCLUDED.close`,
-              volume:     sql`EXCLUDED.volume`,
-              vwap:       sql`EXCLUDED.vwap`,
-              tradeCount: sql`EXCLUDED.trade_count`,
-              capturedAt: sql`NOW()`,
-            },
-          });
-      }
-      console.log(`[B74][batch-writer] ${assetClass} upserted ${rows.length} rows`);
+      // F-G-1 reopen: the chunked upsert and its arrival guard now live in `upsertOhlcRows` above.
+      await upsertOhlcRows(assetClass, rows);
+      console.log(`[B74][batch-writer] ${assetClass} upserted ${rows.length} rows (coalesced=${coalescedFlushes[assetClass]})`);
     } finally {
       releaseSlot();
     }
+    // P1: the write succeeded — NOW the snapshot leaves the buffer. Rows pushed during the flush
+    // sit behind it and stay for the next one.
+    buf.splice(0, n);
     // BLOCKER-11: the fault is over, so the NEXT permanent failure is genuinely new and must
     // not be swallowed by a latch set hours ago.
     clearPermanentAlertLatch('ohlc', assetClass);
@@ -331,6 +426,8 @@ async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       // PERMANENT — do NOT re-buffer. Retrying rows that will fail identically forever is the
       // OOM #705 warns about, and #704 is the measured case: 15 hours, 4,802 stderr lines, and
       // ZERO alerts. The drop stays; the SILENCE is what this fixes.
+      // The snapshot's `n` raw rows leave the buffer here, on the permanent branch only.
+      buf.splice(0, n);
       console.error(
         `[B74][batch-writer] ${assetClass} PERMANENT flush failure (${rows.length} rows dropped, NOT retried):`,
         detail,
@@ -338,20 +435,15 @@ async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       void alertPermanentWriteFailure('ohlc', assetClass, detail.slice(0, 300), rows.length);
       return;
     }
-    // TRANSIENT — put the rows back for the next flush.
-    // ⛔ RE-ADD AT THE FRONT, and this is decided TOGETHER with the eviction end (Langston's
-    // rider) rather than separately. B-NEW-35's dedup keeps the LAST row per (symbol, minute)
-    // because "the last write IS the latest WS update". That invariant is TEMPORAL, so appending
-    // older retried rows would let a STALE row overwrite a fresher bar. Prepending preserves it:
-    // older rows enter the Map first and any fresher row overwrites them, exactly as B-NEW-35
-    // specifies — with no change to the dedup itself.
-    const buf = buffers[assetClass];
-    buf.unshift(...rows);
-    // ⛔ AND THE BOUND EVICTS FROM THE SAME END WE RE-ADD TO — which sounds self-defeating and is
-    // not. At the cap the retry is failing persistently, and shedding the OLDEST is the honest
-    // policy. Langston's objection was that this makes the retry "silently stop working": it is
-    // NOT silent, because the shed is counted and logged here. A bound that drops quietly is the
-    // defect; a bound that drops loudly is the design.
+    // TRANSIENT — the rows are STILL at the front of the buffer (P1: nothing was removed), so there
+    // is nothing to put back. ⛔ The old `unshift(...rows)` is deleted: it existed only because the
+    // rows had been drained before the write, and re-queuing them AHEAD of rows that arrived during
+    // the flush was the order-dependence ② forbids. The next flush re-reads them, and the dedupe and
+    // the upsert guard judge by ARRIVAL, not by position.
+    // ⛔ THE BOUND SHEDS THE OLDEST — at the cap the retry is failing persistently, and shedding the
+    // OLDEST is the honest policy. Langston's objection was that this makes the retry "silently stop
+    // working": it is NOT silent, because the shed is counted and logged here. A bound that drops
+    // quietly is the defect; a bound that drops loudly is the design.
     if (buf.length > RETRY_BUFFER_MAX) {
       const shed = buf.length - RETRY_BUFFER_MAX;
       buf.splice(0, shed);
@@ -385,6 +477,12 @@ export async function stopBatchWriter(): Promise<void> {
     clearInterval(flushTimer);
     flushTimer = null;
   }
+  // ⛔ F-G-1 reopen P2 — AWAIT EVERY IN-FLIGHT FLUSH FIRST, THEN RUN ONE FINAL FLUSH. With the
+  // in-flight guard, a drain call that lands mid-flush is COALESCED into that flush and returns when
+  // it ends — without writing the rows buffered after its snapshot. So the drain waits the flights
+  // out and then flushes what is left; otherwise a timer that happened to be mid-flush would make
+  // the shutdown drain skip a class. (The drain's race with `process.exit` stays `#1034`'s.)
+  await Promise.allSettled(Object.values(inFlight));
   await Promise.all(ALL_ARCHIVE_CLASSES.map(flushAssetClass)); // derived, see the timer above
 }
 

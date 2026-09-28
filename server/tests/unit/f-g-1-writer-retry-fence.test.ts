@@ -171,7 +171,8 @@ describe('F-G-1 OBJ-9 — RETRY vs DROP, observed through the buffer instead of 
     expect(_dbState.inserted.flat()).toHaveLength(0);
   });
 
-  // MUTATION: invert the classifier, or drop the `buf.unshift(...rows)`, and this fails.
+  // MUTATION: invert the classifier, or remove the rows from the buffer BEFORE the write (the pre-
+  // F-G-1-reopen `splice(0, length)` without its `unshift` re-add), and this fails.
   it('RETAINS on a transient failure — the same rows are re-offered on the next flush', async () => {
     _dbState.throwWith = new Error('deadlock detected');
     bufferOhlcBar('crypto_spot', bar(1));
@@ -186,9 +187,14 @@ describe('F-G-1 OBJ-9 — RETRY vs DROP, observed through the buffer instead of 
     expect(rows.map((r: any) => r.symbol).sort()).toEqual(['T1/USD', 'T2/USD']);
   });
 
-  // MUTATION: change `unshift` to `push` and this fails. B-NEW-35's dedup keeps the LAST row per
-  // (symbol, minute) because "the last write IS the latest WS update" — a TEMPORAL invariant. So
-  // appending retried rows would let a STALE row overwrite a fresher bar.
+  // ⛔ F-G-1 REOPEN (2026-09-29): THE `unshift` THIS TEST WAS WRITTEN FOR IS DELETED. Rows now stay in
+  // the buffer until the write succeeds (P1) and the dedupe keeps the latest ARRIVAL (P3), so the
+  // property below no longer rests on position at all. It still fails if BOTH are reverted: rows
+  // drained before the write, re-added at the BACK, and a last-inserted dedupe. Position-independence
+  // itself is fenced in `f-g-1-reopen-writer-order.test.ts`.
+  // The original rationale, kept: B-NEW-35's dedup kept the LAST row per (symbol, minute) because
+  // "the last write IS the latest WS update" — a TEMPORAL invariant — so a retried row appended
+  // after a fresher one would let a STALE row overwrite a fresher bar.
   //
   // ⛔⛔ MY FIRST VERSION OF THIS TEST COULD NOT FAIL, AND I ONLY KNOW THAT BECAUSE I RAN THE
   // MUTATION. It buffered the fresh row AFTER the failed flush had already returned — by which
@@ -200,11 +206,11 @@ describe('F-G-1 OBJ-9 — RETRY vs DROP, observed through the buffer instead of 
   // the insert itself.
   // ★ This is the same defect Langston caught in the alert assertion, in the test written to
   // replace it: a control that cannot fire is the same defect as the fence it guards.
-  it('re-adds retried rows at the FRONT, so a fresher bar still wins B-NEW-35 last-wins', async () => {
+  it('a retried row never beats a fresher bar that arrived during the failed flush', async () => {
     const stale = { ...bar(1), close: '111' };
     const fresh = { ...bar(1), close: '999' }; // same symbol + minute
     _dbState.throwWith = new Error('deadlock detected');
-    // the fresh WS update arrives mid-flush: buffer drained, rows not yet re-added
+    // the fresh WS update arrives mid-flush, while the failing write is in flight
     _dbState.onFlush = () => { _dbState.onFlush = null; bufferOhlcBar('crypto_spot', fresh); };
     bufferOhlcBar('crypto_spot', stale);
     await stopBatchWriter();          // stale fails; buffer already holds `fresh`
