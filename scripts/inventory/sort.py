@@ -62,6 +62,7 @@ J = {
  # pure tidying (database structure, tests, screens) stays after. Operator alerting joins too.
  "B-TRADING-ENGINE-REMOVAL": "M", "B-SQE-DEADCODE-PURGE": "M", "rm:16.6": "M", "#589": "M", "B-WS-V1-RESIDUE-SWEEP": "M",
  "B-VENUE-QUIET-ALERTING": "L", "#692": "L",
+ "B-LIVE-PROCESS-SPLIT": "L",
  # the reorganisation itself
  "PLAN-ID-COLLISIONS": "M",
  # decided / confirmed by Kyle — no work

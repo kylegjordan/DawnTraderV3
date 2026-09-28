@@ -191,7 +191,8 @@ WAVES = [
    ("B-DASHBOARD-AUTH-RACE", "the portfolio card never recovers from a 401"),
    ("#296", "one rate-limited path for placing and cancelling orders"),
  ]),
- ("B3", "TRACK B · The live engine — after Kyle's production-environment decision", [
+ ("B3", "TRACK B · The live engine — environment decided 2026-09-28: live as its own program on the same server", [
+   ("B-LIVE-PROCESS-SPLIT", "FIRST in B3: live runs as its own program on the same server; shapes how rm:21.1 builds live"),
    ("rm:21.1.a", "hard blocker: the legacy live exit route"),
    ("rm:21-3c", "the engine-start health gate refuses live"),
    ("rm:21-3d", "reset functions must not delete both modes' data"),
