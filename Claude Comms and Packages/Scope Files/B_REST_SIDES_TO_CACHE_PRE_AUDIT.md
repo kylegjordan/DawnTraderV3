@@ -252,7 +252,7 @@ He re-derived every code claim at `c84e10119`, including P9(i)'s field-by-field 
 Am. 4's locked-file reason is a sequencing concern: `3n.l` lands its `price-cache.ts` edits before any `3n.u5` change to that file. `3n.m` keeps the book's reach and channel cost, which is an input to `3n.u5`'s answer.
 `HOME: B-CRYPTO-BIRTH-FEED, owner CC-B, placed in PHASE_19_PLAN at row 3n.u5, after 3n.u4`
 
-## 13. STEP-3 ADDENDUM (2026-09-27, built at `69c9d8d1b`)
+## 13. STEP-3 ADDENDUM (2026-09-26 UTC, built at `69c9d8d1b`)
 Two things surfaced while building, both folded, both named in the Step-4 change list (§5 calls 1 and 7):
 - **P8 reaches three more producers than §9 named.** The cache's own REST ticker sites (`refreshBucket`, `getPrice`, `getBatch`) wrote `parseFloat(x || '0')` for each side unconditionally, with a fresh `sidesCapturedAtMs`: a missing side became a stated `0`. §8.1's census listed the routes into `updateFromWebSocket` and the adapter's `updateFromRest`, and missed these three writers of the same fields. **Fixed with the same predicate, through one builder (`restTickerRow`) that replaces the three copies.** `MISTAKE: enumerator-blind-spot [B-REST-SIDES-TO-CACHE] — the producer census enumerated the two writer functions' callers and not the cache's own direct writes of the same fields.`
 - **OBJ-4 also corrects chain step 5** of the same System Manual list (*"THE SIDES ARE NOT ON THE EVENT"*, stale since 2026-09-05).
