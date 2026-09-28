@@ -9,6 +9,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 WAVES = [
  ("0", "NOW — urgent, cheap, or already in flight (this week)", [
+   ("B-XSTOCK-BID-TRIGGER-RELAND", "midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the push starts): paper xStock stop/target triggers back on the bid"),
+   ("B-VTS-MARK-SIDE", "midpoint off, before the push: the VTS xStock prices on the right side (8a-P4c increments 2-3)"),
+   ("B-VTS-NO-DECISION-VALVE", "midpoint off, before the push: a VTS trade with no usable sell price no longer books its timeout at the midpoint"),
    ("RULINGS-DURABILITY", "cheap and irreversible if lost: copy Langston's rulings file to a read-only replica"),
    ("DISK-HEADROOM", "database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) move one month of one-minute price bars as the proof and flip their hot window 365 -> 30 days (~19 GB out); then measure months of headroom"),
    ("PAPER-STANDARD", "set the numbers for 'comfortable in paper' BEFORE the evidence comes in"),
@@ -70,7 +73,6 @@ WAVES = [
    ("#630", "open: exercise the maker-order deadline once"),
    ("B-EXIT-TRIGGER-FILL-PARITY", "close: exits fire on the price they would fill at"),
    ("B-EXIT-TICKER-LEG-ADAPTER-SIDES", "close: the exit path sees both price sides"),
-   ("B-XSTOCK-BID-TRIGGER-RELAND", "close: xStock triggers back on the bid"),
    ("B-BOOK-STATE-RING-INDEPENDENT-BOUND", "close: xStock exit plausibility bound"),
    ("#204", "close: xStock stop prices at the wrong scale"),
    ("row:3h.b", "close: remove the second exit implementation"),
@@ -84,6 +86,11 @@ WAVES = [
    ("B-GUARD-COVERAGE-AUDIT", "hygiene: which guards cover which paths"),
    ("B-LEARNING-SYSTEM-CENSUS", "hygiene: old learning systems still wired"),
    ("DEAD-CODE-REACHABILITY", "hygiene: which dead code a trade can still reach (pulls items forward if any)"),
+   ("B-TRADING-ENGINE-REMOVAL", "legacy removal, after the census confirms it dead: the older second trading engine (Kyle 2026-09-28)"),
+   ("B-SQE-DEADCODE-PURGE", "legacy removal, after the census: a dead SQE copy that checks fewer gates"),
+   ("rm:16.6", "legacy removal, after the census: the old trailing-percent exit code, so it cannot re-enter a live exit"),
+   ("#589", "legacy removal, after the census: the unused calibrated-profit calculator"),
+   ("B-WS-V1-RESIDUE-SWEEP", "legacy removal, after the census: the dead first-generation Kraken price handler"),
    ("B-MODE-PREDICATE-SWEEP", "hygiene: readers that would mix live and paper P&L"),
    ("row:8", "paper truth: fill-integrity detector"),
    ("B-COST-MATH-CONSOLIDATION", "paper truth: one home for cost maths"),
@@ -112,8 +119,6 @@ WAVES = [
    ("B-EXIT-DECISION-RUNG-STAMP", "which price rung an exit used"),
    ("B-TRADE-RECORD-JOINABILITY", "trade records join across stores"),
    ("B-VPNL-WRITER-BOUND", "an unbounded learning column"),
-   ("B-VTS-MARK-SIDE", "the VTS marks on the right side"),
-   ("B-VTS-NO-DECISION-VALVE", "only if quick (Kyle): VTS trades stuck with no usable sell price"),
    ("#658", "VTS posture multipliers contaminating learning rows"),
    ("#220", "an error thrown 64,494 times in VTS strategy runs"),
    ("#1072", "the price-history recorder's frozen symbol set"),
@@ -172,6 +177,8 @@ WAVES = [
    ("P19-B12", "the deploy tool's own executable comes from the reviewed code"),
  ]),
  ("B2", "TRACK B · Risk controls and restart safety — fixed in paper, carried to live", [
+   ("B-VENUE-QUIET-ALERTING", "operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the push)"),
+   ("#692", "operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options"),
    ("#634", "the kill switch must not fail open"),
    ("#632", "the daily-loss count survives a restart"),
    ("B-KILLSWITCH-DENOMINATOR", "the kill switch's remaining legs"),

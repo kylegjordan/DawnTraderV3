@@ -58,6 +58,10 @@ J = {
  "PAPER-STANDARD": "R",
  # Kyle 2026-09-28: the three flagged items join the push
  "RULINGS-DURABILITY": "L", "COLTRANE-PARITY": "L", "#221": "C",
+ # Kyle 2026-09-28: legacy code that could still reach a trade is removed BEFORE live (gated on DEAD-CODE-REACHABILITY);
+ # pure tidying (database structure, tests, screens) stays after. Operator alerting joins too.
+ "B-TRADING-ENGINE-REMOVAL": "M", "B-SQE-DEADCODE-PURGE": "M", "rm:16.6": "M", "#589": "M", "B-WS-V1-RESIDUE-SWEEP": "M",
+ "B-VENUE-QUIET-ALERTING": "L", "#692": "L",
  # the reorganisation itself
  "PLAN-ID-COLLISIONS": "M",
  # decided / confirmed by Kyle — no work
@@ -105,6 +109,8 @@ for k, r in rows.items():
     if b == "MUST": missing.append(k); continue
     after.append(r)
 assert not missing, f"MUST items without a push category: {missing}"
+# the push key set order.py asserts against — written here so the two can never drift
+json.dump(sorted(r[1] for v in push.values() for r in v), open(os.path.join(OUT, "push_keys.json"), "w"), indent=0)
 unjudged = [r[1] for r in after if rows[r[1]][0] in ("HELPFUL", "DECIDE")]
 def c_(x): return str(x).replace("|", "/").replace("\n", " ").strip()
 def why(r):
