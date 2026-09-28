@@ -3088,7 +3088,12 @@ export class ActiveExecutionEngine {
         } else if (_div && _open) {
           _open.ticks++;
         } else if (_open) {
-          console.warn(`[8a-P4b][X3_BID_DIVERGENCE_END] ${position.symbol} leg=${_open.leg} ticks=${_open.ticks} durMs=${Date.now() - _open.startMs} endedBy=${decision.shouldExit ? 'mark_exit' : 'converged'} mark=${currentPrice}${_xsTag}`);
+          // `3n.q7` Step-4 C4 (Langston 2026-09-19 notes (a)/(b), dispositioned 2026-09-29 as FIXED here): `endedBy=frame_lost`
+          // when the run ended because the frame stopped being capturable (no bid), not `converged`. `ticks` counts the
+          // evaluated ticks inside the run; `durMs` is wall time START→END and includes ticks the guard refused, so it
+          // overstates the interval a re-landed trigger would have been live. The RATE source is now the per-tick
+          // `[3n.q7][XS_FRAME]` line; this pair is a run summary.
+          console.warn(`[8a-P4b][X3_BID_DIVERGENCE_END] ${position.symbol} leg=${_open.leg} ticks=${_open.ticks} durMs=${Date.now() - _open.startMs} endedBy=${decision.shouldExit ? 'mark_exit' : (xsFrame.bid === null ? 'frame_lost' : 'converged')} mark=${currentPrice}${_xsTag}`);
           this._xsBidDivergence.delete(position.id);
         }
       }
@@ -3113,10 +3118,14 @@ export class ActiveExecutionEngine {
           symbol: position.symbol, positionId: String(position.id), evalCls: _evalCls, frame: xsFrame,
           mark: currentPrice, stopLoss, takeProfit,
           bidWouldFire: _xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no', markExit: !!decision.shouldExit,
+          exitReason: decision.exitReason ?? null, // Step-4 C1: a non-level exit is not a bid-vs-mark divergence
         });
         if (_xsLine !== null) {
           if (_evalCls === 'xstock') this._xsFramesEmitted++;
-          if ((_evalCls === 'xstock') !== (xsFrame !== null)) this._xsFrameClassMismatch++; // either direction
+          // ⛔ Step-4 C3: written as either direction, but only ONE is reachable (a stored class outside the union with
+          // a frame; `evalCls xstock` with no frame cannot occur, see `xstock-exit-frame-log.ts`). A ZERO here is NOT
+          // evidence the two resolvers agree on every row (`#661` leg 3); it only says no junk stored class was seen.
+          if ((_evalCls === 'xstock') !== (xsFrame !== null)) this._xsFrameClassMismatch++;
           console.warn(_xsLine);
         }
       }

@@ -7,7 +7,7 @@
 |---|---|---|
 | i | **declared change-class** | `sub_batch` — `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_SCOPE.md` (Langston C1; the checker's own `batchIdToFileRegex` + `CHANGE_CLASS_MARKER` read it as `sub_batch`, and reject the near-miss `…RELANDX_SCOPE.md`) |
 | ii | **doc set for `sub_batch`** (`config.mjs:129-132`) | `completion_report`: **absent, due Step 11** · `batch_catalog`: **absent, due Step 10** · `phase_history`: **absent, due Step 10** · `scope`: **present**, `B_XSTOCK_BID_TRIGGER_RELAND_SCOPE.md` · `pre_audit`: **present**, `B_XSTOCK_BID_TRIGGER_RELAND_PRE_AUDIT.md` (`d00b3af9a`) · `system_manual`: **judged N/A**, no pricing or decision change · `sim`: **applicable, due Step 10** (exit-path log line + two per-cycle counters + the fence) · `changes_and_fixes`: **applicable, due Step 10** · `running_issues`: **judged N/A** unless the window read files a finding · `deleted_log`: **N/A**, nothing removed · `adjustment_framework`: **N/A** · `phase_19_plan`: **applicable, due Step 10** (row `3n.q7`) |
-| iii | **Step-2 reference** | `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_PRE_AUDIT.md` at `d00b3af9a` — cleared by Langston 2026-09-29 with C1-C3 |
+| iii | **Step-2 reference** | `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_PRE_AUDIT.md` at `d00b3af9a` — cleared by Langston 2026-09-28T22:58Z with C1-C3 |
 
 ## FILES
 | file | status |
@@ -64,3 +64,12 @@ Behaviour (called): frame=ok + basis · each of the four reasons · null object 
 1. **The emit uses `console.warn` inside the per-position loop, synchronously.** At 20 held xStock positions it is ~13 lines/s; PM2 buffers stdio. Acceptable, or should it batch per cycle?
 2. **`markExit` reads `decision.shouldExit`** — the mark trigger's verdict, the other half of the bid-vs-mark comparison. The static stop/target caveat (row `3n.q7` note (c)) still binds.
 3. **`positionId` is `String(position.id)`**: the episode key for the n-floor. A position that reopens under a new id is a new episode.
+
+## ✅ STEP 4 — APPROVED at `f0a5db295` (Langston, 2026-09-29), four conditions, all folded in the deployed ref
+| # | condition | disposition |
+|---|---|---|
+| 1 | `markExit` is true for ANY exit reason while `bidWouldFire` is level-only; a non-level exit (`timeout`, `stale_timeout`, `moonbag_timeout`) would read as a divergence. | **Done:** the line carries `exitReason=<reason|none>` from `decision.exitReason`; tested. |
+| 2 | Bind the budget to position count, not line length: ~48 held crosses 1 GB/day and shortens `error.log`'s reach for every instrument. | **Done (plan P3):** re-budget above 30 concurrent xStock positions or any `error.log` day over 600 MB. |
+| 3 | The mirror arm (`evalCls xstock`, no frame) is unreachable by construction; the mismatch counter is one-directional and its zero is not evidence of agreement. | **Done:** labelled in code (helper and engine). |
+| 4 | The 2026-09-19 notes (a) `endedBy=converged` on a lost frame and (b) `ticks` vs `durMs` were undispositioned. | **FIXED, not withdrawn:** the X3 END line prints `endedBy=frame_lost` when the bid disappeared; the `ticks`/`durMs` convention is stated at the line; the per-tick line is named the rate source. Tested. |
+**Nit:** the Step-2 clearance is dated 2026-09-28T22:58Z (was stamped 2026-09-29). **Line length:** typical 217 B, true worst 330 B, measured with the real function.

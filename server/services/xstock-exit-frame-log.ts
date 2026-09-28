@@ -47,6 +47,13 @@ export interface XsExitFrameLineInput {
   takeProfit: number | null;
   bidWouldFire: 'stop' | 'target' | 'no';
   markExit: boolean;
+  /**
+   * WHY the mark arm exited (the evaluator's `exitReason`), or null. Langston Step-4 condition 1: `bidWouldFire`
+   * is LEVEL-only, but `markExit` is true for ANY exit reason, including the non-level arms (`timeout`,
+   * `stale_timeout`, `moonbag_timeout`, config-gated off today — a lock, not a construction guarantee). Without the
+   * reason, a time close would enter the bid-vs-mark discordant cell as a false divergence.
+   */
+  exitReason: string | null;
 }
 
 const f5 = (v: number | null): string => (v === null || !Number.isFinite(v) ? 'none' : v.toFixed(5));
@@ -62,11 +69,16 @@ export function xsExitFrameLine(i: XsExitFrameLineInput): string | null {
     i.frame === null ? 'frame=none reason=no_frame_object'
       : (i.frame.bid === null || i.frame.ask === null) ? `frame=none reason=${i.frame.reason ?? 'unset'}`
         : `frame=ok basis=${i.frame.basis ?? 'none'}`;
+  // ⛔ Langston Step-4 condition 3 — THE FIRST ARM BELOW IS UNREACHABLE BY CONSTRUCTION TODAY: `evalCls === 'xstock'`
+  // ⟺ the stored class is `xstock_spot` ⟹ `asValidAssetClass` returns it ⟹ the caller's `_posClass` is `xstock_spot`
+  // ⟹ a frame object IS built. So `reason=no_frame_object` + `evalCls=xstock posClass=not_xstock` cannot print; it is
+  // kept as a label for a future resolver change, never as a measured case. The reachable mismatch is one-directional:
+  // a stored class outside the union (evalCls `other`) with a frame.
   const mismatch =
     evalIsXs && i.frame === null ? ' class_mismatch evalCls=xstock posClass=not_xstock'
       : !evalIsXs ? ` class_mismatch evalCls=${i.evalCls} posClass=xstock_spot`
         : '';
   const sides = i.frame === null ? ''
     : ` bid=${i.frame.bid ?? 'none'} ask=${i.frame.ask ?? 'none'} spread=${f5(i.frame.spread)} thr=${f5(i.frame.thr)}`;
-  return `[3n.q7][XS_FRAME] ${i.symbol} pos=${i.positionId} ${state}${mismatch} mark=${i.mark} sl=${i.stopLoss ?? 'none'} tp=${i.takeProfit ?? 'none'}${sides} bidWouldFire=${i.bidWouldFire} markExit=${i.markExit ? 'y' : 'n'}`;
+  return `[3n.q7][XS_FRAME] ${i.symbol} pos=${i.positionId} ${state}${mismatch} mark=${i.mark} sl=${i.stopLoss ?? 'none'} tp=${i.takeProfit ?? 'none'}${sides} bidWouldFire=${i.bidWouldFire} markExit=${i.markExit ? 'y' : 'n'} exitReason=${i.exitReason ?? 'none'}`;
 }

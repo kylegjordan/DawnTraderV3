@@ -17,7 +17,7 @@ const CODE = RAW.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/[^\n]*
 const base = (over: Partial<XsExitFrameLineInput> = {}): XsExitFrameLineInput => ({
   symbol: 'NVDA/USD', positionId: 'pos-1', evalCls: 'xstock',
   frame: { bid: 181.23, ask: 181.31, spread: 0.00044, thr: 0.0123, basis: 'raw_guarded', reason: null },
-  mark: 181.27, stopLoss: 176.5, takeProfit: 190.25, bidWouldFire: 'no', markExit: false,
+  mark: 181.27, stopLoss: 176.5, takeProfit: 190.25, bidWouldFire: 'no', markExit: false, exitReason: null,
   ...over,
 });
 
@@ -26,7 +26,7 @@ describe('3n.q7 inc-1 — the line (called, not grepped)', () => {
     const l = xsExitFrameLine(base())!;
     expect(l).toContain('[3n.q7][XS_FRAME] NVDA/USD pos=pos-1 frame=ok basis=raw_guarded');
     expect(l).toContain('bid=181.23 ask=181.31');
-    expect(l).toContain('bidWouldFire=no markExit=n');
+    expect(l).toContain('bidWouldFire=no markExit=n exitReason=none');
     expect(l).not.toContain('class_mismatch');
   });
 
@@ -55,13 +55,23 @@ describe('3n.q7 inc-1 — the line (called, not grepped)', () => {
     expect(xsExitFrameLine(base({ evalCls: 'crypto', frame: null }))).toBeNull();
   });
 
-  // Langston C3: the budget assumed ~250 B and re-budgets above ~375 B. A realistic worst-case line stays under it.
-  it('a realistic long line stays inside the 375 B re-budget trigger', () => {
+  // Langston Step-4 condition 1: a non-level mark exit carries its reason, so it never reads as a bid/mark divergence.
+  // MUTATION: drop the exitReason token and this fails.
+  it('a mark exit prints its reason (a time close is not a divergence)', () => {
+    const l = xsExitFrameLine(base({ markExit: true, exitReason: 'timeout' }))!;
+    expect(l).toContain('bidWouldFire=no markExit=y exitReason=timeout');
+  });
+
+  // Langston C3 + Step-4 re-derivation: the TRUE worst case (float-noise prices, class_mismatch, a full uuid, the longest
+  // symbol, the longest exit reason) measured 315 B before exitReason; it must stay under the 375 B re-budget trigger.
+  it('the true worst-case line stays inside the 375 B re-budget trigger', () => {
     const l = xsExitFrameLine(base({
-      symbol: 'BRK.B/USD', positionId: '8f9d1d0e-1234-4abc-9def-0123456789ab',
-      frame: { bid: 481.2345, ask: 481.9876, spread: 0.00156, thr: 0.01234, basis: 'raw_unguarded', reason: null },
-      mark: 481.61105, stopLoss: 470.123456, takeProfit: 505.987654, bidWouldFire: 'target', markExit: true,
+      symbol: 'BRK.B/USD', positionId: '8f9d1d0e-1234-4abc-9def-0123456789ab', evalCls: 'other',
+      frame: { bid: 481.23450000000003, ask: 481.98760000000004, spread: 0.00156, thr: 0.01234, basis: 'raw_unguarded', reason: null },
+      mark: 481.61105000000003, stopLoss: 470.12345600000004, takeProfit: 505.98765400000004,
+      bidWouldFire: 'target', markExit: true, exitReason: 'trailing_stop_hit',
     }))!;
+    expect(l).toContain('class_mismatch evalCls=other posClass=xstock_spot');
     expect(Buffer.byteLength(l, 'utf8')).toBeLessThan(375);
   });
 });
@@ -73,6 +83,7 @@ describe('3n.q7 inc-1 — the wiring (source, comments stripped)', () => {
     expect(at).toBeGreaterThan(0);
     const after = CODE.slice(at, at + 900);
     expect(after).toMatch(/xsExitFrameLine\(\{[\s\S]*evalCls:\s*_evalCls[\s\S]*frame:\s*xsFrame/);
+    expect(after).toMatch(/exitReason:\s*decision\.exitReason \?\? null/);
     expect(after).toMatch(/console\.warn\(_xsLine\)/);
     expect(after).toMatch(/if \(_evalCls === 'xstock'\) this\._xsFramesEmitted\+\+;/);
   });
@@ -89,6 +100,12 @@ describe('3n.q7 inc-1 — the wiring (source, comments stripped)', () => {
     expect(CODE).toMatch(/xsFrameReason = 'unguarded_crossed';/);
     expect(CODE).toMatch(/xsFrameReason = 'unguarded_not_two_sided';/);
     expect(CODE).toMatch(/xsFrameReason = _crossed \? 'guarded_crossed' : 'guarded_non_finite';/);
+  });
+
+  // Step-4 condition 4: the X3 run summary no longer calls a lost frame 'converged'.
+  // MUTATION: revert the endedBy ternary and this fails.
+  it("the X3 END line says frame_lost when the run ended because the bid disappeared", () => {
+    expect(CODE).toMatch(/endedBy=\$\{decision\.shouldExit \? 'mark_exit' : \(xsFrame\.bid === null \? 'frame_lost' : 'converged'\)\}/);
   });
 
   it('the counters reset each cycle, after the fence reads them', () => {
