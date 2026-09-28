@@ -2917,5 +2917,19 @@
 "Live mode runs as its own program on the same server",
 "CC-A",
 "Kyle 2026-09-28 (Langston's recommendation): a paper/VTS deploy never restarts live; live takes new code on a schedule Kyle sets, after paper has proven it; each side starts only its own jobs; live records isolated so a full analytics database cannot block a live close; each side its own fast price feed, the heavy scan shared through the database, one writer per record; built so a later move to a second server is a settings change"
+],
+[
+"MUST",
+"STAGING-RESIZE",
+"Resize the staging server one step up before live",
+"Infra Claude",
+"Infra 2026-09-28 (environment AGREE, condition): the app uses ~0.9 GB of 3.8 GB and token-watch shares the box; a second program needs the headroom"
+],
+[
+"MUST",
+"B-PLAN-CURRENCY-CHECK",
+"Keep the push-to-live plan current: the checker requires a batch close to touch its own plan line, plus a weekly census alert; CLAUDE.md points at the plan",
+"CC-A",
+"Langston ruling (keep-current mechanism) accepted by CC-A 2026-09-28; two named objectives in one row; may not close on the pointer swap alone; the weekly census is part of objective 1; 'listed' is read at the ref at close time"
 ]
 ]

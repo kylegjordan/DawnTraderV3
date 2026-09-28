@@ -9,6 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 WAVES = [
  ("0", "NOW — urgent, cheap, or already in flight (this week)", [
+   ("B-PLAN-CURRENCY-CHECK", "keeps this plan current: checker close-diff rule + weekly census alert, then the CLAUDE.md pointer swap (Langston ruling, OLD Claude)"),
    ("B-XSTOCK-BID-TRIGGER-RELAND", "midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the push starts): paper xStock stop/target triggers back on the bid"),
    ("B-VTS-MARK-SIDE", "midpoint off, before the push: the VTS xStock prices on the right side (8a-P4c increments 2-3)"),
    ("B-VTS-NO-DECISION-VALVE", "midpoint off, before the push: a VTS trade with no usable sell price no longer books its timeout at the midpoint"),
@@ -192,7 +193,9 @@ WAVES = [
    ("#296", "one rate-limited path for placing and cancelling orders"),
  ]),
  ("B3", "TRACK B · The live engine — environment decided 2026-09-28: live as its own program on the same server", [
-   ("B-LIVE-PROCESS-SPLIT", "FIRST in B3: live runs as its own program on the same server; shapes how rm:21.1 builds live"),
+   ("#517", "FIRST in B3 (OLD Claude condition 1): the live trade tables - open positions carry NO mode marker today (storage.ts:4519), so this lands BEFORE the program split"),
+   ("STAGING-RESIZE", "before the split (Infra condition): one server size up, a second program needs the memory"),
+   ("B-LIVE-PROCESS-SPLIT", "after #517 and B-SCHEDULER-FIRST-TICK: live as its own program on the same server - startup made mode-aware (index.ts starts every job unconditionally), Kraken's request budget shared across both programs on one address, archivers and scans run in exactly one program; shapes how rm:21.1 builds live"),
    ("rm:21.1.a", "hard blocker: the legacy live exit route"),
    ("rm:21-3c", "the engine-start health gate refuses live"),
    ("rm:21-3d", "reset functions must not delete both modes' data"),
@@ -201,7 +204,6 @@ WAVES = [
    ("#322", "test-in-paper / bypass-in-live switches"),
    ("P19-B6.10", "one source of guardrail values"),
    ("rm:21-3a", "after P19-B6.10: the Live Guardrails tab"),
-   ("#517", "after rm:21.1: the live trade tables"),
    ("rm:21.3", "the live guardrails umbrella"),
    ("rm:19-9", "entry-side failure modes (halts, splits, earnings)"),
    ("25-11a", "refuse a position larger than the visible book"),
