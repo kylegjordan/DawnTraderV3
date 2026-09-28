@@ -8,18 +8,22 @@ import io, json, os
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 WAVES = [
- ("0", "NOW — urgent, cheap, or already in flight (this week)", [
+ ("0", "NOW — urgent, cheap, or already in flight. GATE: staging is held at bc199185e for the 8a-P4c window (to 2026-09-30 00:00Z); the held deploy is not before 2026-10-02 20:10Z (GOVERNANCE_EXCEPTIONS.md:28) - the deploy-drift alerts clear on that deploy", [
    ("B-PLAN-CURRENCY-CHECK", "keeps this plan current: checker close-diff rule + weekly census alert, then the CLAUDE.md pointer swap (Langston ruling, OLD Claude)"),
    ("B-XSTOCK-BID-TRIGGER-RELAND", "midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the push starts): paper xStock stop/target triggers back on the bid"),
    ("B-VTS-MARK-SIDE", "midpoint off, before the push: the VTS xStock prices on the right side (8a-P4c increments 2-3)"),
    ("B-VTS-NO-DECISION-VALVE", "midpoint off, before the push: a VTS trade with no usable sell price no longer books its timeout at the midpoint"),
    ("RULINGS-DURABILITY", "cheap and irreversible if lost: copy Langston's rulings file to a read-only replica"),
    ("DISK-HEADROOM", "database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) move one month of one-minute price bars as the proof and flip their hot window 365 -> 30 days (~19 GB out); then measure months of headroom"),
+   ("CONTEXT-BRIDGE-TTL", "this week: make the retention demonstrably free bytes on a named table - install the missing 14-day job (1.48 GB); #688 (four monthly-partitioned tables) rides the disk item"),
    ("PAPER-STANDARD", "set the numbers for 'comfortable in paper' BEFORE the evidence comes in"),
-   ("PLAN-ID-COLLISIONS", "part of rewriting the plan: no two items share a number"),
+   ("B-SIZING-DEC-RESTORE", "wave 0 (Langston F7): Kyle's ruled shape, today's values (option c); every close before it books at the wrong notional"),
+   ("#628", "with B-SIZING-DEC-RESTORE: its two sizing sites"),
+   ("#521", "wave 0 (Langston F11): nothing notices a dead engine - a silent halt voids every observation window"),
+   ("PLAN-ID-COLLISIONS", "a chore, not mechanics (Langston): no two plan items share a number"),
    ("B-OHLC-FRAME-GUARD", "in flight: only the on-screen check is left"),
-   ("B-REST-SIDES-TO-CACHE", "built and reviewed: deploy after the 2026-09-30 VTS window closes"),
-   ("B-BOOK-STATE-RESTART-DURABLE", "built and reviewed: deploy with the one above"),
+   ("B-REST-SIDES-TO-CACHE", "built and reviewed: ships in the ONE held deploy, not before 2026-10-02 20:10Z"),
+   ("B-BOOK-STATE-RESTART-DURABLE", "built and reviewed: same held deploy"),
    ("F-G-1-REOPEN", "the OHLC writer can put an older bar over a newer one — it feeds the bars signals are built from"),
    ("B-PRICE-SIDE-BY-JOB", "in flight: its xStock increments follow the 09-30 window"),
  ]),
@@ -29,6 +33,7 @@ WAVES = [
    ("B-RTB-SIGNAL-IDENTITY", "after B-SYMBOL-CLASS-IDENTITY"),
    ("B-VTS-CLASS-LABEL-INTEGRITY", "after B-SYMBOL-CLASS-IDENTITY: correct the mislabelled VTS rows"),
    ("B-CLOSED-TRADES-CLASS-BACKFILL", "after B-SYMBOL-CLASS-IDENTITY"),
+   ("#150", "after B-SYMBOL-CLASS-IDENTITY: the RTB asset-class column made NOT NULL after a zero-null soak"),
    ("NONFIAT-FORK", "Kyle's decision: exclude plain currency pairs and non-dollar crypto now"),
    ("B-NONFIAT-QUOTE-DENOMINATION", "the exclusion itself, if small"),
    ("B-QUOTE-ADMISSION-LEGACY-SWEEP", "with the exclusion: what the old allowed-pairs list is for"),
@@ -44,6 +49,7 @@ WAVES = [
    ("#506", "book subscriptions never unsubscribe"),
    ("B-BOOK-SUBSCRIPTION-REACH", "after #506: subscribe the order book for the whole pool, not ~3 coins"),
    ("B-CRYPTO-MARK-AGE-GATE", "crypto mark age"),
+   ("#977", "the shared price-cache refresh lane for open positions runs but nothing subscribes - staleness hits selection (CC-C)"),
    ("B-XSTOCK-SESSION-FRESHNESS", "xStock entry-age limit vs the exit standard Kyle ruled"),
    ("B-XSTOCK-ENTRY-COMPARATOR", "xStock entry-price cross-check"),
    ("B-DECIDED-INTENT-INDEX", "xStock's three definitions of 'the price' from one frame"),
@@ -53,8 +59,6 @@ WAVES = [
    ("#972", "xStock ATR reads empty around the open and close"),
    ("#566", "volatility measured with a lag"),
    ("CODEX-PRICING-REVIEW", "after the price items: an independent review of the whole price layer"),
-   ("B-SIZING-DEC-RESTORE", "paper sizing to Kyle's intent (~$140-150 a trade, 15-20 open)"),
-   ("#628", "with B-SIZING-DEC-RESTORE: its two sizing sites"),
  ]),
  ("A2", "TRACK A · Mechanics, stage by stage — can start as A1's pieces land", [
    ("#233", "signals: drift and volume inputs fed as fixed defaults"),
@@ -92,6 +96,7 @@ WAVES = [
    ("rm:16.6", "legacy removal, after the census: the old trailing-percent exit code, so it cannot re-enter a live exit"),
    ("#589", "legacy removal, after the census: the unused calibrated-profit calculator"),
    ("B-WS-V1-RESIDUE-SWEEP", "legacy removal, after the census: the dead first-generation Kraken price handler"),
+   ("#218", "legacy removal, after the census: a dead function carrying a hardcoded fee default"),
    ("B-MODE-PREDICATE-SWEEP", "hygiene: readers that would mix live and paper P&L"),
    ("row:8", "paper truth: fill-integrity detector"),
    ("B-COST-MATH-CONSOLIDATION", "paper truth: one home for cost maths"),
@@ -111,11 +116,14 @@ WAVES = [
  ]),
  ("A3", "TRACK A · Learning data — alongside A2; must finish before tuning reads the data", [
    ("B-OUTCOME-CORPUS-CAPTURE", "what each VTS trade earned, recorded durably, with a measured/defaulted flag on its inputs. NOT a deletion clock: the 90-day delete was fixed 2026-07-30/08-06 (365 days, archive before delete); nothing is due for deletion before 2027-05"),
+   ("B-EXCURSION-RECORD", "early (Langston F5): capture costs calendar time - record how far trades travel; rm:25-17b is blocked on it by ruling"),
+   ("rm:25-9", "early (Langston F5): xStock per-pair correlation data accumulates from here"),
    ("B-PAPER-LANE-PROVENANCE", "paper records its decision inputs"),
-   ("T-W20C-SCALAR-LEG", "after B-PAPER-LANE-PROVENANCE: the parity harness proves recorded history replays"),
+   ("T-W20C-SCALAR-LEG", "after B-PAPER-LANE-PROVENANCE: capture integrity - the parity harness proves recorded history replays to the same decisions"),
    ("#515", "remaining learning columns on the active path"),
    ("#631", "entry-mode fields on the active archive"),
    ("#504", "regime on maker/taker shadow rows"),
+   ("#513", "the VTS books maker target exits the way the paper lane would"),
    ("B-DECISION-INSTANT-QUOTE", "the exact quote at decision time"),
    ("B-EXIT-DECISION-RUNG-STAMP", "which price rung an exit used"),
    ("B-TRADE-RECORD-JOINABILITY", "trade records join across stores"),
@@ -127,28 +135,28 @@ WAVES = [
    ("B-EPOCH-PARITY-FENCE", "one home for the calibration epoch"),
    ("B-ROLLBACK-EPOCH-FORWARD", "epochs across a rollback"),
    ("#590", "calibration store reset at the formula change"),
-   ("B-OBS-WINDOW-EVIDENCE-CAPTURE", "capture window evidence at the event"),
    ("B-PROVENANCE-LOSS-CENSUS", "where decision provenance is lost"),
    ("#231", "ablation record id gap"),
-   ("rm:25-9", "xStock per-pair correlation data"),
    ("row:9", "LAST in A3: the gate for restarting the learning record clean after the fixes"),
  ]),
  ("A4", "TRACK A · Tuning — reads the clean data; costs -> geometry -> strategies -> regimes -> scores -> gates -> ranking", [
+   ("ACCUMULATION-GATE", "FIRST in A4 (Langston F4): after row:9 restarts the record, a named per-cell n-floor before any per-strategy x class fit; a cell that cannot reach it resolves UNDERPOWERED"),
    ("#914", "costs: the per-leg cost term"),
    ("rm:25-18", "costs: the per-class safety margin"),
    ("#645", "costs: a crypto-era net-EV floor applied to xStocks"),
-   ("B-EXCURSION-RECORD", "geometry: record how far trades travel"),
    ("rm:25-17", "after B-EXCURSION-RECORD: target geometry for all strategies"),
    ("rm:25-17b", "geometry: crypto reach ceilings"),
    ("rm:25-20", "geometry: per-strategy minimum reward-to-risk"),
    ("B-TARGET-MULTIPLE-VS-HORIZON", "geometry: move targets that sit too far"),
    ("rm:25-26", "geometry: do slower trades clear the fee wall"),
    ("B-EXIT-MAKER-VS-TAKER-REVIEW", "geometry: maker exits profitable, taker target exits negative"),
+   ("#221", "ranking first (Langston F6): rank the queue, then ask who is missing from it"),
+   ("#149", "with #221: ranking"),
+   ("B-FAMILY-POOL-REACHABILITY", "before #648/#201/#529: can each strategy family reach the pool at all"),
+   ("B-IDEAL-POOL-STARVATION", "before #648/#201/#529: is the ideal pool starved"),
    ("#648", "strategies: six never traded"),
    ("#201", "strategies: range_trade starved"),
    ("#529", "strategies: the strategy-weighting chain"),
-   ("B-FAMILY-POOL-REACHABILITY", "strategies: reachability in the family pool"),
-   ("B-IDEAL-POOL-STARVATION", "strategies: the ideal pool gets 4-5% of slots"),
    ("rm:25-12", "xStock: entry-trigger sweep"),
    ("rm:25-13", "xStock: geometry reconstruction"),
    ("rm:25-14", "xStock: per-strategy entry re-fit"),
@@ -162,13 +170,13 @@ WAVES = [
    ("rm:25-15", "gates: does the Net Expectancy gate reject winners"),
    ("rm:25-19", "gates: the Net Expectancy gate's measured judgement"),
    ("#644", "gates: the exploration subsidy decision"),
-   ("#221", "ranking: crypto vs xStock signals in one queue"),
-   ("#149", "ranking: per-class RTB refresh cadence"),
  ]),
  ("A5", "TRACK A · The evidence — runs continuously; judged at the end", [
+   ("rm:25-16", "during A5 (Langston F8): the trade-size / concurrency study reads the sizing-correct paper run; only DAY-ONE-NUMBERS (the decision) waits in B4"),
    ("rm:19-11", "the paper run judged against Kyle's standard"),
  ]),
  ("B1", "TRACK B · Safety now — can start immediately, in parallel with Track A", [
+   ("rm:21.1.a", "B1 (Langston F10): the legacy live exit route is a re-entry risk today, whatever the environment"),
    ("B-SEC-HARDEN", "route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the push)"),
    ("B-SSH-KEY-CENSUS", "whose are the two unknown keys"),
    ("#615", "the reviewer identity must not read the secrets file"),
@@ -186,7 +194,6 @@ WAVES = [
    ("B-TOTAL-DRAWDOWN-WARNING", "a mark-to-market drawdown warning"),
    ("#519", "the daily-loss trip fails loud"),
    ("B-TEC-PRIME-BOOT-RACE", "restarts: the exit loop throws for a tick on open positions"),
-   ("#521", "restarts: nothing notices a dead engine"),
    ("B-ENGINE-STOP-DURATION-COLUMN", "an engine stop reports failure when it worked"),
    ("#619", "a restore from backup lacks seeded config"),
    ("B-DASHBOARD-AUTH-RACE", "the portfolio card never recovers from a 401"),
@@ -196,7 +203,6 @@ WAVES = [
    ("#517", "FIRST in B3 (OLD Claude condition 1): the live trade tables - open positions carry NO mode marker today (storage.ts:4519), so this lands BEFORE the program split"),
    ("STAGING-RESIZE", "before the split (Infra condition): one server size up, a second program needs the memory"),
    ("B-LIVE-PROCESS-SPLIT", "after #517 and B-SCHEDULER-FIRST-TICK: live as its own program on the same server - startup made mode-aware (index.ts starts every job unconditionally), Kraken's request budget shared across both programs on one address, archivers and scans run in exactly one program; shapes how rm:21.1 builds live"),
-   ("rm:21.1.a", "hard blocker: the legacy live exit route"),
    ("rm:21-3c", "the engine-start health gate refuses live"),
    ("rm:21-3d", "reset functions must not delete both modes' data"),
    ("rm:19-10", "throwing asset-class lookups on the live path"),
@@ -214,8 +220,7 @@ WAVES = [
  ("B4", "TRACK B · Go-live preparation — last", [
    ("KRAKEN-LIVE-KEY", "the live key: trade-only, no withdrawals, locked to the server"),
    ("LIVE-FEE-SCHEDULE", "after KRAKEN-LIVE-KEY: confirm live fees"),
-   ("rm:25-16", "the trade-size / concurrency study at the real balance"),
-   ("DAY-ONE-NUMBERS", "after rm:25-16: Kyle sets the live money settings"),
+   ("DAY-ONE-NUMBERS", "after rm:25-16 (run during A5): Kyle sets the live money settings"),
    ("rm:21-3b", "the feed-reliability threshold (Analyst + Langston)"),
    ("rm:21.2", "paper-to-live testing at small size"),
    ("rm:19-17b", "LAST: the go-live switch"),
@@ -231,4 +236,15 @@ if __name__ == "__main__":
     assert not dup, f"listed twice: {dup}"
     assert not missing, f"push items not ordered: {sorted(missing)}"
     assert not extra, f"ordered but not in the push: {sorted(extra)}"
+    # S2 (Langston): every note that opens with "after <KEY>" must name an item that exists and comes EARLIER
+    idx = {k: i for i, k in enumerate(seen)}
+    import re as _re
+    bad = []
+    for _, _, items in WAVES:
+        for k, note in items:
+            for dep in _re.findall(r"\bafter ([#A-Za-z0-9:._-]*[#:A-Z0-9][#A-Za-z0-9:._-]*)", note):
+                dep = dep.rstrip(".:,")
+                if dep not in idx: bad.append((k, dep, "missing")); continue
+                if idx[dep] >= idx[k]: bad.append((k, dep, "not earlier"))
+    assert not bad, f"after-X references broken: {bad}"
     print("ordered", len(seen), "of", len(push))

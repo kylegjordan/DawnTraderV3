@@ -2931,5 +2931,26 @@
 "Keep the push-to-live plan current: the checker requires a batch close to touch its own plan line, plus a weekly census alert; CLAUDE.md points at the plan",
 "CC-A",
 "Langston ruling (keep-current mechanism) accepted by CC-A 2026-09-28; two named objectives in one row; may not close on the pointer swap alone; the weekly census is part of objective 1; 'listed' is read at the ref at close time"
+],
+[
+"MUST",
+"CONTEXT-BRIDGE-TTL",
+"Install the context_bridge_log 14-day TTL job",
+"Infra Claude",
+"Langston F3 2026-09-28: its TTL job was never installed (1.48 GB, 86% of 1.82 M rows past window, absent from both sweep lists) - the this-week half of the disk item"
+],
+[
+"MUST",
+"ACCUMULATION-GATE",
+"Accumulation gate between the clean learning-record restart and tuning",
+"CC-B",
+"Langston F4 2026-09-28: tuning may not start the moment row:9 resets the record; a named per-cell n-floor (strategy x class) must be met first, and a per-cell tuning item that cannot reach it resolves UNDERPOWERED instead of fitting on n=3 (17 of 38 cells had data, 21 had none, 2026-09-28)"
+],
+[
+"MUST",
+"#977",
+"#977",
+"CC-C",
+"the 2-second refresh lane for open positions is built and runs, but nothing subscribes to it - staleness lands on selection (CC-C correction 2026-09-28)"
 ]
 ]

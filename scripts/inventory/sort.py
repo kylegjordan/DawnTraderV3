@@ -43,7 +43,7 @@ J = {
  # learning data
  "#1072": "D", "#220": "D", "#504": "D", "#515": "D", "#590": "D", "#631": "D", "#658": "D", "#231": "D", "B-ARCHIVE-WRITER-LIFECYCLE": "D",
  "B-CLOSED-TRADES-CLASS-BACKFILL": "D", "B-DECISION-INSTANT-QUOTE": "D", "B-EPOCH-PARITY-FENCE": "D", "B-EXIT-DECISION-RUNG-STAMP": "D",
- "B-OBS-WINDOW-EVIDENCE-CAPTURE": "D", "B-PAPER-LANE-PROVENANCE": "D", "B-PROVENANCE-LOSS-CENSUS": "D", "B-ROLLBACK-EPOCH-FORWARD": "D",
+ "B-PAPER-LANE-PROVENANCE": "D", "B-PROVENANCE-LOSS-CENSUS": "D", "B-ROLLBACK-EPOCH-FORWARD": "D",
  "B-TRADE-RECORD-JOINABILITY": "D", "B-VPNL-WRITER-BOUND": "D", "B-VTS-CLASS-LABEL-INTEGRITY": "D", "B-VTS-MARK-SIDE": "D",
  "T-W20C-SCALAR-LEG": "D", "rm:25-9": "D", "row:9": "D", "B-VTS-NO-DECISION-VALVE": "D",
  # calibration
@@ -63,6 +63,8 @@ J = {
  "B-TRADING-ENGINE-REMOVAL": "M", "B-SQE-DEADCODE-PURGE": "M", "rm:16.6": "M", "#589": "M", "B-WS-V1-RESIDUE-SWEEP": "M",
  "B-VENUE-QUIET-ALERTING": "L", "#692": "L",
  "B-LIVE-PROCESS-SPLIT": "L", "STAGING-RESIZE": "L", "B-PLAN-CURRENCY-CHECK": "L",
+ # Langston order/sort review 2026-09-28 + CC-C corrections
+ "CONTEXT-BRIDGE-TTL": "L", "ACCUMULATION-GATE": "R", "#513": "D", "#150": "M", "#218": "M", "#977": "P",
  # the reorganisation itself
  "PLAN-ID-COLLISIONS": "M",
  # decided / confirmed by Kyle — no work
@@ -125,6 +127,8 @@ A("")
 A("**Kyle's rule:** everything needed to get paper to the point where the mechanics are sound and working as intended, the thresholds / gates / regimes / strategies / scores are tuned, the prices are right, paper tells the truth, we capture the data we mean to learn from, and paper trades profitably and consistently — plus the live-mode fixes, mixed into the same push. **Everything else goes after live.** No phase names: one list, prioritised next.")
 A("")
 A(f"**In the push: {total_push}** · **After live: {len(after)}** · **Running now (observation windows): {len(obs)}** · **Parked by Kyle: {len(parked)}** · awaiting owner confirmation: see the draft's UNCONFIRMED section.")
+A("")
+A("> ⚠️ **Category is not schedule (Langston S1):** the counts below say WHY an item is in the push; WHEN it runs is THE WORKING ORDER further down. Plan from the order, not from these counts.")
 A("")
 A("| category | items |"); A("|---|---:|")
 for c in "MCPTDLR": A(f"| {LABEL[c]} | {len(push[c])} |")

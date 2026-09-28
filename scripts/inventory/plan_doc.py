@@ -122,6 +122,8 @@ for k, own, closes in [("8a-P4c (VTS xStock price instrument)", "CC-C", "2026-09
 A("")
 A("## 6. Who owns what — grouped so connected work stays with one session")
 A("")
+A("> The numbers below are an item TALLY, not effort — items differ in size by an order of magnitude (Langston).")
+A("")
 A("Kyle 2026-09-28: an even split by connected groups; earlier ownership is not a factor; Kyle owns no rows — his decisions and actions are marked ⭐ inside the owning session's row.")
 A("")
 A("| session | group | items |"); A("|---|---|---:|")
