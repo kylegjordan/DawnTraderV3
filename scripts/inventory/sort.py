@@ -64,7 +64,7 @@ J = {
  "B-VENUE-QUIET-ALERTING": "L", "#692": "L",
  "B-LIVE-PROCESS-SPLIT": "L", "STAGING-RESIZE": "L", "B-PLAN-CURRENCY-CHECK": "L",
  # Langston order/sort review 2026-09-28 + CC-C corrections
- "CONTEXT-BRIDGE-TTL": "L", "ACCUMULATION-GATE": "R", "#513": "D", "#150": "M", "#218": "M", "#977": "P",
+ "CONTEXT-BRIDGE-TTL": "L", "ACCUMULATION-GATE": "R", "#513": "D", "#150": "M", "#218": "M", "#977": "P", "#1078": "D",
  # the reorganisation itself
  "PLAN-ID-COLLISIONS": "M",
  # decided / confirmed by Kyle — no work

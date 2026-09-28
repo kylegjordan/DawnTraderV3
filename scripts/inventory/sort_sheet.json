@@ -2952,5 +2952,12 @@
 "#977",
 "CC-C",
 "the 2-second refresh lane for open positions is built and runs, but nothing subscribes to it - staleness lands on selection (CC-C correction 2026-09-28)"
+],
+[
+"MUST",
+"#1078",
+"B-ARCHIVE-FLUSH-DRAIN-ORDER",
+"CC-B",
+"the archive writer drains its buffer BEFORE it gets a write slot, so a 5 s slot timeout discards rows that a retry would have saved (670 rows on 2026-09-28) - learning data lost (CC-C placement request 21d7e84a2; Langston C1)"
 ]
 ]

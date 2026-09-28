@@ -2,7 +2,7 @@
 
 **Kyle's rule:** everything needed to get paper to the point where the mechanics are sound and working as intended, the thresholds / gates / regimes / strategies / scores are tuned, the prices are right, paper tells the truth, we capture the data we mean to learn from, and paper trades profitably and consistently — plus the live-mode fixes, mixed into the same push. **Everything else goes after live.** No phase names: one list, prioritised next.
 
-**In the push: 197** · **After live: 208** · **Running now (observation windows): 7** · **Parked by Kyle: 7** · awaiting owner confirmation: see the draft's UNCONFIRMED section.
+**In the push: 198** · **After live: 208** · **Running now (observation windows): 7** · **Parked by Kyle: 7** · awaiting owner confirmation: see the draft's UNCONFIRMED section.
 
 > ⚠️ **Category is not schedule (Langston S1):** the counts below say WHY an item is in the push; WHEN it runs is THE WORKING ORDER further down. Plan from the order, not from these counts.
 
@@ -12,7 +12,7 @@
 | 2. Tuning — thresholds, gates, ranges, regimes, strategies, confidence and prediction scores | 32 |
 | 3. Prices — the feed is correct and paper uses the right price for each job | 19 |
 | 4. Paper tells the truth — no mistake that makes results look better or worse than they are | 13 |
-| 5. Learning data — capturing what we intend to learn from | 26 |
+| 5. Learning data — capturing what we intend to learn from | 27 |
 | 6. Live-mode readiness — the live engine, risk controls on real money, security, the key, the environment | 48 |
 | 7. The evidence — trading profitably and consistently in paper | 3 |
 
@@ -107,7 +107,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 75. **B-STRING-TRUTHINESS-GUARDS** (CC-C) · *mechanics* — hygiene: guards that treat '0' as true
 76. **B-GUARD-COVERAGE-AUDIT** (CC-C) · *mechanics* — hygiene: which guards cover which paths
 77. **B-LEARNING-SYSTEM-CENSUS** (Kyle) · *mechanics* — hygiene: old learning systems still wired
-78. **Dead-code reachability census** (?) · *mechanics* — hygiene: which dead code a trade can still reach (pulls items forward if any)
+78. **Dead-code reachability census** (?) · *mechanics* — hygiene (Langston C6): rules on ALL 22 legacy items - the 5 removals below AND the 17 in the after-live 'Legacy and dead-code cleanup' group; any it finds reachable from a trade joins the push by the section-2 intake test, the rest stay after live
 79. **B-TRADING-ENGINE-REMOVAL** (CC-A) · *mechanics* — legacy removal, after the census confirms it dead: the older second trading engine (Kyle 2026-09-28)
 80. **B-SQE-DEADCODE-PURGE** (CC-A) · *mechanics* — legacy removal, after the census: a dead SQE copy that checks fewer gates
 81. **16.6 Trailing-Percent Code Purge (added 2026-04-25, Kyle directiv** () · *mechanics* — legacy removal, after the census: the old trailing-percent exit code, so it cannot re-enter a live exit
@@ -150,104 +150,105 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 115. **#220** () · *learning data* — an error thrown 64,494 times in VTS strategy runs
 116. **#1072** (CC-C) · *learning data* — the price-history recorder's frozen symbol set
 117. **B-ARCHIVE-WRITER-LIFECYCLE** (CC-C) · *learning data* — the archive writer's lifecycle
-118. **B-EPOCH-PARITY-FENCE** (CC-C) · *learning data* — one home for the calibration epoch
-119. **B-ROLLBACK-EPOCH-FORWARD** (CC-B) · *learning data* — epochs across a rollback
-120. **#590** (CC-A) · *learning data* — calibration store reset at the formula change
-121. **B-PROVENANCE-LOSS-CENSUS** (CC-C) · *learning data* — where decision provenance is lost
-122. **#231** () · *learning data* — ablation record id gap
-123. **row:9** () · *learning data* — LAST in A3: the gate for restarting the learning record clean after the fixes
+118. **B-ARCHIVE-FLUSH-DRAIN-ORDER** (CC-B) · *learning data* — B-ARCHIVE-FLUSH-DRAIN-ORDER: the writer drains its buffer before it holds a slot, so a slot timeout throws the rows away (670 on 2026-09-28) - in the push because it loses learning data
+119. **B-EPOCH-PARITY-FENCE** (CC-C) · *learning data* — one home for the calibration epoch
+120. **B-ROLLBACK-EPOCH-FORWARD** (CC-B) · *learning data* — epochs across a rollback
+121. **#590** (CC-A) · *learning data* — calibration store reset at the formula change
+122. **B-PROVENANCE-LOSS-CENSUS** (CC-C) · *learning data* — where decision provenance is lost
+123. **#231** () · *learning data* — ablation record id gap
+124. **row:9** () · *learning data* — LAST in A3: the gate for restarting the learning record clean after the fixes - it must STATE which populations it restarts (active paper, VTS, the rejected arm), because ACCUMULATION-GATE counts from that reset
 
 ### Wave A4 — TRACK A · Tuning — reads the clean data; costs -> geometry -> strategies -> regimes -> scores -> gates -> ranking
 
-124. **Accumulation gate between the clean learning-record restart and tuning** (CC-B) · *evidence* — FIRST in A4 (Langston F4): after row:9 restarts the record, a named per-cell n-floor before any per-strategy x class fit; a cell that cannot reach it resolves UNDERPOWERED
-125. **#914** (CC-C) · *tuning* — costs: the per-leg cost term
-126. **25-18 friction_safety_buffer per-class evaluation (reorg-B2 delibe** () · *tuning* — costs: the per-class safety margin
-127. **#645** (CC-C) · *tuning* — costs: a crypto-era net-EV floor applied to xStocks
-128. **25-17 TARGET-GEOMETRY CALIBRATION — ALL 19 CANONICAL STRATEGIES, B** () · *tuning* — after B-EXCURSION-RECORD: target geometry for all strategies
-129. **25-17b CRYPTO reach_atr_max DECISION — the reachability-ceiling que** () · *tuning* — geometry: crypto reach ceilings
-130. **25-20 Per-strategy × per-class minRR (reward-vs-risk floor) RECALI** () · *tuning* — geometry: per-strategy minimum reward-to-risk
-131. **B-TARGET-MULTIPLE-VS-HORIZON** (CC-B) · *tuning* — geometry: move targets that sit too far
-132. **25-26 Trade HOLD-TIME / timeframe study — do slower (multi-day) tr** () · *tuning* — geometry: do slower trades clear the fee wall
-133. **B-EXIT-MAKER-VS-TAKER-REVIEW** (CC-B) · *tuning* — geometry: maker exits profitable, taker target exits negative
-134. **#221** (Kyle) · *tuning* — ranking first (Langston F6): rank the queue, then ask who is missing from it
-135. **#149** () · *tuning* — with #221: ranking
-136. **B-FAMILY-POOL-REACHABILITY** (CC-C) · *tuning* — before #648/#201/#529: can each strategy family reach the pool at all
-137. **B-IDEAL-POOL-STARVATION** (CC-A) · *tuning* — before #648/#201/#529: is the ideal pool starved
-138. **#648** (CC-A) · *tuning* — strategies: six never traded
-139. **#201** () · *tuning* — strategies: range_trade starved
-140. **#529** (Kyle) · *tuning* — strategies: the strategy-weighting chain
-141. **25-12 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) —** () · *tuning* — xStock: entry-trigger sweep
-142. **25-13 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) —** () · *tuning* — xStock: geometry reconstruction
-143. **25-14 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) —** () · *tuning* — xStock: per-strategy entry re-fit
-144. **25-2 §19.0.A Regime classifier confidence-chain calibration B-NEW** () · *tuning* — regimes: confidence-chain calibration
-145. **25-10 Crypto confidence-modifier calibration Kyle 2026-05-27 voice** () · *tuning* — regimes: crypto confidence modifiers
-146. **25-7 #94 B79.3 xStock equity-equivalent macro confidence modifier** () · *tuning* — regimes: xStock macro modifiers
-147. **B-RETIRED-SCORE-REMOVAL** () · *tuning* — scores: retire the retired scores
-148. **#588** (CC-A) · *tuning* — scores: a validated quality term in the ranking
-149. **25-4 §19.4 SQE Recalibration (B66 conditional) Rebuild SQE thresh** () · *tuning* — scores: SQE recalibration
-150. **25-3 §19.0.3 TFS sustainability gate value-scope decision Recalib** () · *tuning* — gates: the sustainability gate
-151. **25-15 DATA-BLOCKED STUDY (intraday-coverage gap) — HCE rejected-ar** () · *tuning* — gates: does the Net Expectancy gate reject winners
-152. **25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-0** () · *tuning* — gates: the Net Expectancy gate's measured judgement
-153. **#644** (CC-C) · *tuning* — gates: the exploration subsidy decision
+125. **Accumulation gate between the clean learning-record restart and tuning** (CC-B) · *evidence* — FIRST in A4 (Langston F4, conditions 2-3): closes per cell only when the floor is MET or the cell is PUBLISHED UNDERPOWERED - naming a floor never closes it. POPULATIONS, named per item: ACTIVE = closed_trades paper (~12 closes/day on 2026-09-28; 17 of 38 strategy x class cells non-empty, 21 empty); VTS = vts_open_trades closed (~1,060/day); REJECTED = the VTS-tagged refused signals simulated to close. row:9 must state which of the three its reset restarts; until it does, assume all three restart at zero
+126. **#914** (CC-C) · *tuning* — costs: the per-leg cost term - after ACCUMULATION-GATE; cell = per class x fee side; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+127. **25-18 friction_safety_buffer per-class evaluation (reorg-B2 delibe** () · *tuning* — costs: the per-class safety margin - after ACCUMULATION-GATE; cell = per class (2 cells); population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+128. **#645** (CC-C) · *tuning* — costs: a crypto-era net-EV floor applied to xStocks - after ACCUMULATION-GATE; cell = per class (2 cells); population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
+129. **25-17 TARGET-GEOMETRY CALIBRATION — ALL 19 CANONICAL STRATEGIES, B** () · *tuning* — after B-EXCURSION-RECORD: target geometry for all strategies - after ACCUMULATION-GATE; cell = strategy x class; population = VTS (excursion record); a cell below the floor is published UNDERPOWERED, never fitted
+130. **25-17b CRYPTO reach_atr_max DECISION — the reachability-ceiling que** () · *tuning* — geometry: crypto reach ceilings - after ACCUMULATION-GATE; cell = strategy x class, crypto; population = VTS (excursion record); a cell below the floor is published UNDERPOWERED, never fitted
+131. **25-20 Per-strategy × per-class minRR (reward-vs-risk floor) RECALI** () · *tuning* — geometry: per-strategy minimum reward-to-risk - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE + REJECTED; a cell below the floor is published UNDERPOWERED, never fitted
+132. **B-TARGET-MULTIPLE-VS-HORIZON** (CC-B) · *tuning* — geometry: move targets that sit too far - after ACCUMULATION-GATE; cell = strategy x class; population = VTS (excursion record); a cell below the floor is published UNDERPOWERED, never fitted
+133. **25-26 Trade HOLD-TIME / timeframe study — do slower (multi-day) tr** () · *tuning* — geometry: do slower trades clear the fee wall - after ACCUMULATION-GATE; cell = hold-time bucket x class; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+134. **B-EXIT-MAKER-VS-TAKER-REVIEW** (CC-B) · *tuning* — geometry: maker exits profitable, taker target exits negative - after ACCUMULATION-GATE; cell = exit reason x fee side x class; population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
+135. **#221** (Kyle) · *tuning* — ranking first (Langston F6): rank the queue, then ask who is missing from it
+136. **#149** () · *tuning* — with #221: ranking
+137. **B-FAMILY-POOL-REACHABILITY** (CC-C) · *tuning* — before #648/#201/#529: can each strategy family reach the pool at all - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three
+138. **B-IDEAL-POOL-STARVATION** (CC-A) · *tuning* — before #648/#201/#529: is the ideal pool starved
+139. **#648** (CC-A) · *tuning* — strategies: six never traded - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three
+140. **#201** () · *tuning* — strategies: range_trade starved - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three
+141. **#529** (Kyle) · *tuning* — strategies: the strategy-weighting chain - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
+142. **25-12 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) —** () · *tuning* — xStock: entry-trigger sweep - after ACCUMULATION-GATE; cell = xStock strategy (19 cells; 2 above 30 on 2026-09-28); population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+143. **25-13 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) —** () · *tuning* — xStock: geometry reconstruction - after ACCUMULATION-GATE; cell = xStock strategy; population = VTS (excursion record); a cell below the floor is published UNDERPOWERED, never fitted
+144. **25-14 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) —** () · *tuning* — xStock: per-strategy entry re-fit - after ACCUMULATION-GATE; cell = xStock strategy; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+145. **25-2 §19.0.A Regime classifier confidence-chain calibration B-NEW** () · *tuning* — regimes: confidence-chain calibration - after ACCUMULATION-GATE; cell = regime x class (5 x 2); population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+146. **25-10 Crypto confidence-modifier calibration Kyle 2026-05-27 voice** () · *tuning* — regimes: crypto confidence modifiers - after ACCUMULATION-GATE; cell = regime, crypto; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+147. **25-7 #94 B79.3 xStock equity-equivalent macro confidence modifier** () · *tuning* — regimes: xStock macro modifiers - after ACCUMULATION-GATE; cell = regime, xStock; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+148. **B-RETIRED-SCORE-REMOVAL** () · *tuning* — scores: retire the retired scores
+149. **#588** (CC-A) · *tuning* — scores: a validated quality term in the ranking - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted
+150. **25-4 §19.4 SQE Recalibration (B66 conditional) Rebuild SQE thresh** () · *tuning* — scores: SQE recalibration - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE + REJECTED; a cell below the floor is published UNDERPOWERED, never fitted
+151. **25-3 §19.0.3 TFS sustainability gate value-scope decision Recalib** () · *tuning* — gates: the sustainability gate - after ACCUMULATION-GATE; cell = one regime x class; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted
+152. **25-15 DATA-BLOCKED STUDY (intraday-coverage gap) — HCE rejected-ar** () · *tuning* — gates: does the Net Expectancy gate reject winners - after ACCUMULATION-GATE; cell = gate verdict x class; population = REJECTED (name the instrument first; its title still says DATA-BLOCKED); a cell below the floor is published UNDERPOWERED, never fitted
+153. **25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-0** () · *tuning* — gates: the Net Expectancy gate's measured judgement - after ACCUMULATION-GATE; cell = gate verdict x class; population = REJECTED + ACTIVE (name the instrument first); a cell below the floor is published UNDERPOWERED, never fitted
+154. **#644** (CC-C) · *tuning* — gates: the exploration subsidy decision
 
 ### Wave A5 — TRACK A · The evidence — runs continuously; judged at the end
 
-154. **25-16 Trade-size / concurrency / win-rate dynamic + starting-balan** () · *live readiness* — during A5 (Langston F8): the trade-size / concurrency study reads the sizing-correct paper run; only DAY-ONE-NUMBERS (the decision) waits in B4
-155. **19-11 §19.1 Paper Trading Run The act of actually running paper-ac** () · *evidence* — the paper run judged against Kyle's standard
+155. **25-16 Trade-size / concurrency / win-rate dynamic + starting-balan** () · *live readiness* — during A5 (Langston F8): the trade-size / concurrency study reads the sizing-correct paper run; only DAY-ONE-NUMBERS (the decision) waits in B4
+156. **19-11 §19.1 Paper Trading Run The act of actually running paper-ac** () · *evidence* — the paper run judged against Kyle's standard
 
 ### Wave B1 — TRACK B · Safety now — can start immediately, in parallel with Track A
 
-156. **B-LEGACY-LIVE-EXIT-PATH** (CC-C) · *live readiness* — B1 (Langston F10): the legacy live exit route is a re-entry risk today, whatever the environment
-157. **B-SEC-HARDEN** (CC-A) · *live readiness* — route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the push)
-158. **B-SSH-KEY-CENSUS (investigation)** (?) · *live readiness* — whose are the two unknown keys
-159. **#615** (CC-A) · *live readiness* — the reviewer identity must not read the secrets file
-160. **Coltrane parity: a privacy check like Langston's** (Infra Claude) · *live readiness* — before the Coltrane trial: a privacy check like Langston's
-161. **#681** (CC-B) · *live readiness* — a deploy must not outrun CI
-162. **#168** () · *live readiness* — with #681: CI catches a build that crashes on boot
-163. **P19-B12** (CC-B) · *live readiness* — the deploy tool's own executable comes from the reviewed code
+157. **B-LEGACY-LIVE-EXIT-PATH** (CC-C) · *live readiness* — B1 (Langston F10): the legacy live exit route is a re-entry risk today, whatever the environment
+158. **B-SEC-HARDEN** (CC-A) · *live readiness* — route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the push)
+159. **B-SSH-KEY-CENSUS (investigation)** (?) · *live readiness* — whose are the two unknown keys
+160. **#615** (CC-A) · *live readiness* — the reviewer identity must not read the secrets file
+161. **Coltrane parity: a privacy check like Langston's** (Infra Claude) · *live readiness* — before the Coltrane trial: a privacy check like Langston's
+162. **#681** (CC-B) · *live readiness* — a deploy must not outrun CI
+163. **#168** () · *live readiness* — with #681: CI catches a build that crashes on boot
+164. **P19-B12** (CC-B) · *live readiness* — the deploy tool's own executable comes from the reviewed code
 
 ### Wave B2 — TRACK B · Risk controls and restart safety — fixed in paper, carried to live
 
-164. **B-VENUE-QUIET-ALERTING** (Kyle) · *live readiness* — operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the push)
-165. **#692** (CC-C) · *live readiness* — operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options
-166. **#634** (CC-B) · *live readiness* — the kill switch must not fail open
-167. **#632** (CC-C) · *live readiness* — the daily-loss count survives a restart
-168. **B-KILLSWITCH-DENOMINATOR** (CC-C) · *live readiness* — the kill switch's remaining legs
-169. **B-TOTAL-DRAWDOWN-WARNING** (CC-C) · *live readiness* — a mark-to-market drawdown warning
-170. **#519** (CC-B) · *live readiness* — the daily-loss trip fails loud
-171. **B-TEC-PRIME-BOOT-RACE** (CC-B) · *live readiness* — restarts: the exit loop throws for a tick on open positions
-172. **B-ENGINE-STOP-DURATION-COLUMN** (CC-B) · *live readiness* — an engine stop reports failure when it worked
-173. **#619** (CC-A) · *live readiness* — a restore from backup lacks seeded config
-174. **B-DASHBOARD-AUTH-RACE** (CC-C) · *live readiness* — the portfolio card never recovers from a 401
-175. **#296** (Kyle) · *live readiness* — one rate-limited path for placing and cancelling orders
+165. **B-VENUE-QUIET-ALERTING** (Kyle) · *live readiness* — operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the push)
+166. **#692** (CC-C) · *live readiness* — operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options
+167. **#634** (CC-B) · *live readiness* — the kill switch must not fail open
+168. **#632** (CC-C) · *live readiness* — the daily-loss count survives a restart
+169. **B-KILLSWITCH-DENOMINATOR** (CC-C) · *live readiness* — the kill switch's remaining legs
+170. **B-TOTAL-DRAWDOWN-WARNING** (CC-C) · *live readiness* — a mark-to-market drawdown warning
+171. **#519** (CC-B) · *live readiness* — the daily-loss trip fails loud
+172. **B-TEC-PRIME-BOOT-RACE** (CC-B) · *live readiness* — restarts: the exit loop throws for a tick on open positions
+173. **B-ENGINE-STOP-DURATION-COLUMN** (CC-B) · *live readiness* — an engine stop reports failure when it worked
+174. **#619** (CC-A) · *live readiness* — a restore from backup lacks seeded config
+175. **B-DASHBOARD-AUTH-RACE** (CC-C) · *live readiness* — the portfolio card never recovers from a 401
+176. **#296** (Kyle) · *live readiness* — one rate-limited path for placing and cancelling orders
 
 ### Wave B3 — TRACK B · The live engine — environment decided 2026-09-28: live as its own program on the same server
 
-176. **#517** (CC-B) · *live readiness* — FIRST in B3 (OLD Claude condition 1): the live trade tables - open positions carry NO mode marker today (storage.ts:4519), so this lands BEFORE the program split
-177. **Resize the staging server one step up before live** (Infra Claude) · *live readiness* — before the split (Infra condition): one server size up, a second program needs the memory
-178. **Live mode runs as its own program on the same server** (CC-A) · *live readiness* — after #517 and B-SCHEDULER-FIRST-TICK: live as its own program on the same server - startup made mode-aware (index.ts starts every job unconditionally), Kraken's request budget shared across both programs on one address, archivers and scans run in exactly one program; shapes how rm:21.1 builds live
-179. **21-3c (NEW, KYLE-RULED 2026-08-21 — RUNNING_ISSUES #734): the engi** (CC-C) · *live readiness* — the engine-start health gate refuses live
-180. **21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B-** () · *live readiness* — reset functions must not delete both modes' data
-181. **19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr** () · *live readiness* — throwing asset-class lookups on the live path
-182. **21.1 Live Mode Engine — - Create Live Mode trading engine based o** () · *live readiness* — build live on the paper engine (Option A)
-183. **#322** (Kyle) · *live readiness* — test-in-paper / bypass-in-live switches
-184. **P19-B6.10 retire the old per-mode guardrails table** (?) · *live readiness* — one source of guardrail values
-185. **21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the "** () · *live readiness* — after P19-B6.10: the Live Guardrails tab
-186. **21.3 Live Mode Guardrails — - 21-3a (NEW, P19-B6.8a 2026-06-30 —** () · *live readiness* — the live guardrails umbrella
-187. **19-9 B79.x failure-mode taxonomy — entry-side gap LULD halts / ci** () · *live readiness* — entry-side failure modes (halts, splits, earnings)
-188. **25-11a refuse a position larger than the visible book** (?) · *live readiness* — refuse a position larger than the visible book
-189. **Protect live positions if our server dies** (Kyle) · *live readiness* — decide how live positions are protected if the server dies
-190. **B-VENUE-RESTING-EXITS** (Kyle) · *live readiness* — after PROCESS-DEATH-FORM: build that protection
-191. **B-KRAKEN-FEE-WATCH** (CC-B) · *live readiness* — notice when the exchange changes fees
+177. **#517** (CC-B) · *live readiness* — FIRST in B3 (OLD Claude condition 1): the live trade tables - open positions carry NO mode marker today (storage.ts:4519), so this lands BEFORE the program split
+178. **Resize the staging server one step up before live** (Infra Claude) · *live readiness* — before the split (Infra condition): one server size up, a second program needs the memory
+179. **Live mode runs as its own program on the same server** (CC-A) · *live readiness* — after #517 and B-SCHEDULER-FIRST-TICK: live as its own program on the same server - startup made mode-aware (index.ts starts every job unconditionally), Kraken's request budget shared across both programs on one address, archivers and scans run in exactly one program; shapes how rm:21.1 builds live
+180. **21-3c (NEW, KYLE-RULED 2026-08-21 — RUNNING_ISSUES #734): the engi** (CC-C) · *live readiness* — the engine-start health gate refuses live
+181. **21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B-** () · *live readiness* — reset functions must not delete both modes' data
+182. **19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr** () · *live readiness* — throwing asset-class lookups on the live path
+183. **21.1 Live Mode Engine — - Create Live Mode trading engine based o** () · *live readiness* — build live on the paper engine (Option A)
+184. **#322** (Kyle) · *live readiness* — test-in-paper / bypass-in-live switches
+185. **P19-B6.10 retire the old per-mode guardrails table** (?) · *live readiness* — one source of guardrail values
+186. **21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the "** () · *live readiness* — after P19-B6.10: the Live Guardrails tab
+187. **21.3 Live Mode Guardrails — - 21-3a (NEW, P19-B6.8a 2026-06-30 —** () · *live readiness* — the live guardrails umbrella
+188. **19-9 B79.x failure-mode taxonomy — entry-side gap LULD halts / ci** () · *live readiness* — entry-side failure modes (halts, splits, earnings)
+189. **25-11a refuse a position larger than the visible book** (?) · *live readiness* — refuse a position larger than the visible book
+190. **Protect live positions if our server dies** (Kyle) · *live readiness* — decide how live positions are protected if the server dies
+191. **B-VENUE-RESTING-EXITS** (Kyle) · *live readiness* — after PROCESS-DEATH-FORM: build that protection
+192. **B-KRAKEN-FEE-WATCH** (CC-B) · *live readiness* — notice when the exchange changes fees
 
 ### Wave B4 — TRACK B · Go-live preparation — last
 
-192. **Provision the live Kraken API key** (Kyle) · *live readiness* — the live key: trade-only, no withdrawals, locked to the server
-193. **Confirm the live fee schedule** (?) · *live readiness* — after KRAKEN-LIVE-KEY: confirm live fees
-194. **Day-one live money settings** (Kyle) · *live readiness* — after rm:25-16 (run during A5): Kyle sets the live money settings
-195. **21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calib** (CC-C + Langston) · *live readiness* — the feed-reliability threshold (Analyst + Langston)
-196. **21.2 Paper-to-Live Transition Testing — - Run parallel paper+live** () · *live readiness* — paper-to-live testing at small size
-197. **19-17b ITEM-4 step 3 standing note (2026-06-10): Phase-21 go-live M** () · *live readiness* — LAST: the go-live switch
+193. **Provision the live Kraken API key** (Kyle) · *live readiness* — the live key: trade-only, no withdrawals, locked to the server
+194. **Confirm the live fee schedule** (?) · *live readiness* — after KRAKEN-LIVE-KEY: confirm live fees
+195. **Day-one live money settings** (Kyle) · *live readiness* — after rm:25-16 (run during A5): Kyle sets the live money settings
+196. **21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calib** (CC-C + Langston) · *live readiness* — the feed-reliability threshold (Analyst + Langston)
+197. **21.2 Paper-to-Live Transition Testing — - Run parallel paper+live** () · *live readiness* — paper-to-live testing at small size
+198. **19-17b ITEM-4 step 3 standing note (2026-06-10): Phase-21 go-live M** () · *live readiness* — LAST: the go-live switch
 
 ## Running now — observation windows (7)
 
