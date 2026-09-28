@@ -1,8 +1,10 @@
 # B-GUARDRAIL-FAIL-CLOSED (`#1081`, row `4.a`) — SCOPE
 
+> ✅ **Step 1 APPROVED** by Langston 2026-09-28 (UTC): reuse `GUARDRAIL_READ_FAIL`; conditions C1-C3 carried in `B_GUARDRAIL_FAIL_CLOSED_PRE_AUDIT.md`.
+
 change-class: non_architecture
 
-> **Owner:** CC-C. **Found** 2026-09-29 while tracing `#1079` (a second reader flagged the exposure arm; CC-C re-derived it and found the cooldown arm). **Rule 23, fix-on-find.** **Rule 24 outcome (3):** legacy that no longer fits today's intent.
+> **Owner:** CC-C. **Found** 2026-09-28 (UTC) while tracing `#1079` (a second reader flagged the exposure arm; CC-C re-derived it and found the cooldown arm). **Rule 23, fix-on-find.** **Rule 24 outcome (3):** legacy that no longer fits today's intent.
 
 ## THE DEFECT, AT `origin/migration/aws-supabase`
 Two pre-trade risk checks in `server/services/trade-safety.ts` return **PASS** when the check itself throws:
@@ -35,4 +37,4 @@ Two pre-trade risk checks in `server/services/trade-safety.ts` return **PASS** w
 **Consequence, stated:** at promotion a refused signal is removed from the RTB pool and not restored (`ACTIVE_PATH_FLOW.md:249`, working as designed). A transient database fault during a check therefore drops that signal instead of opening it. That is the fail-closed trade.
 
 ## GOVERNANCE (Step 10)
-`CHANGES_AND_FIXES`, `RUNNING_ISSUES` (`#1081` closed), `BATCH_CATALOG`, `PHASE_HISTORY`, `PHASE_19_PLAN` row `4.a`; SIM entry for the trade-safety checks; System Manual judged at Step 2 (guardrail behaviour on error; likely a one-line addition to the guardrail section).
+`CHANGES_AND_FIXES`, `RUNNING_ISSUES` (`#1081` closed), `BATCH_CATALOG`, `PHASE_HISTORY`, `PHASE_19_PLAN` row `4.a`, `MEMORY`; SIM entry for the trade-safety checks; System Manual judged at Step 2 (guardrail behaviour on error; likely a one-line addition to the guardrail section).
