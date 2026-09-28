@@ -35,5 +35,5 @@ CLUSTERS = [
    "#634", "#632", "B-KILLSWITCH-DENOMINATOR", "B-TOTAL-DRAWDOWN-WARNING", "#519", "rm:25-12", "rm:25-13", "rm:25-14", "rm:25-9",
    "rm:21.1.a", "rm:21-3c", "rm:21-3d", "rm:19-10", "rm:21.1", "#322", "P19-B6.10", "rm:21-3a", "#517", "rm:21.3", "rm:19-9", "25-11a",
    "PROCESS-DEATH-FORM", "B-VENUE-RESTING-EXITS", "rm:25-16", "DAY-ONE-NUMBERS", "rm:21.2", "rm:19-17b",
-   "#522", "#235", "B-TRADING-ENGINE-REMOVAL", "#589"]),
+   "#522", "#235", "B-TRADING-ENGINE-REMOVAL", "#589", "B-LIVE-PROCESS-SPLIT"]),
 ]

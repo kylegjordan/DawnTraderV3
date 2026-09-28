@@ -1,1 +1,2921 @@
-[["OBSERVATION", "F-G-1", "F-G-1", "Kyle", "venue price grid — deployed 2026-08-28, observation window open"], ["AFTER", "B-ASSET-CAPS-REMOVAL", "B-ASSET-CAPS-REMOVAL", "", "open: delete an orphaned pre-governance service (orphan premise confirmed by census) — the dead-code reachability census decides if it moves"], ["HELPFUL", "B-ROLLBACK-EPOCH-FORWARD", "B-ROLLBACK-EPOCH-FORWARD", "CC-B", "calibration-epoch bookkeeping across a rollback — keeps learning data unmixed"], ["MUST", "B-EXIT-TRIGGER-FILL-PARITY", "B-EXIT-TRIGGER-FILL-PARITY", "Kyle", "exits must fire on the price they would actually fill at — its own row says CRITICAL; wrong in live = wrong real exits"], ["MUST", "B-XSTOCK-LIVE-FEED", "B-XSTOCK-LIVE-FEED", "CC-C", "both classes launch live together (D5); xStock live trading needs a correct live feed"], ["HELPFUL", "B-XSTOCK-SESSION-FRESHNESS", "B-XSTOCK-SESSION-FRESHNESS", "Kyle", "CORRECTED (Langston): Kyle ruled 2026-09-03 — off-hours entries allowed at the same bar; exit freshness the same standard round the clock, 'we just hold'. Exit side: change nothing. Remaining: keep the alert's record but"], ["HELPFUL", "B-OBS-WINDOW-EVIDENCE-CAPTURE", "B-OBS-WINDOW-EVIDENCE-CAPTURE", "CC-C", "capture observation-window evidence at the event — measurement quality"], ["MUST", "B-EQUITY-RECONNECT-STALL-TIMER", "B-EQUITY-RECONNECT-STALL-TIMER", "CC-C", "a stalled xStock feed reconnect leaves live positions unwatched"], ["HELPFUL", "B-XSTOCK-ENTRY-COMPARATOR", "B-XSTOCK-ENTRY-COMPARATOR", "CC-C", "xStock entry-price comparator — price-truth lane"], ["HELPFUL", "B-VENUE-QUIET-ALERTING", "B-VENUE-QUIET-ALERTING", "Kyle", "alert when a venue goes quiet — observability that matters once capital is exposed"], ["HELPFUL", "B-DECIDED-INTENT-INDEX", "B-DECIDED-INTENT-INDEX", "CC-C", "index of decided intents — groundwork for the exit-path redesign"], ["MUST", "B-UNIVERSE-REFRESH-ACTS", "B-UNIVERSE-REFRESH-ACTS", "CC-C", "blocks B-SYMBOL-CLASS-IDENTITY, which is MUST"], ["AFTER", "B-TSC-GUARD-DETERMINISM", "B-TSC-GUARD-DETERMINISM", "CC-A", "CI type-check guard determinism — tooling"], ["HELPFUL", "B-VTS-MARK-SIDE", "B-VTS-MARK-SIDE", "CC-C", "the learning lane's mark side — VTS is not live, but it is the calibration record"], ["MUST", "B-SYMBOL-CLASS-IDENTITY", "B-SYMBOL-CLASS-IDENTITY", "CC-C", "a ticker shared by a coin and an equity is one key today; DASH has real trades across both classes — Kyle-ruled 2026-09-09"], ["MUST", "B-TOTAL-DRAWDOWN-WARNING", "B-TOTAL-DRAWDOWN-WARNING", "CC-C", "a mark-to-market total-drawdown warning — Kyle-ruled 2026-09-09; a risk control on real capital"], ["MUST", "B-OHLC-FRAME-GUARD", "B-OHLC-FRAME-GUARD", "CC-C", "validate price bars at every producer — opened from a CRITICAL alert; a bad bar feeds every indicator"], ["HELPFUL", "B-FUTURES-BAR-FINAL", "B-FUTURES-BAR-FINAL", "CC-C", "futures bar finality — perps are post-live, but check whether any live-class signal reads these bars"], ["HELPFUL", "B-ARCHIVE-WRITER-LIFECYCLE", "B-ARCHIVE-WRITER-LIFECYCLE", "CC-C", "archive-writer lifecycle — integrity of the recorded history"], ["AFTER", "B-DISPATCH-STAGING-VERIFY", "B-DISPATCH-STAGING-VERIFY", "CC-C", "its own row says it blocks nothing"], ["AFTER", "B-SCANNER-DEDUPE-DEAD-TABLE", "B-SCANNER-DEDUPE-DEAD-TABLE", "CC-C", "dead table cleanup"], ["AFTER", "B-CHANGE-CLASS-PARSER", "B-CHANGE-CLASS-PARSER", "CC-C", "governance-checker parser"], ["AFTER", "B-CHECKER-CORE-PATHS", "B-CHECKER-CORE-PATHS", "CC-A", "governance-checker core paths"], ["HELPFUL", "B-PROVENANCE-LOSS-CENSUS", "B-PROVENANCE-LOSS-CENSUS", "CC-C", "where decision provenance is lost — measurement integrity"], ["AFTER", "B-DEPLOY-REF-DECLARATION", "B-DEPLOY-REF-DECLARATION", "CC-C", "deploy-tool declaration"], ["HELPFUL", "B-GUARD-COVERAGE-AUDIT", "B-GUARD-COVERAGE-AUDIT", "CC-C", "audit which guards cover which paths"], ["HELPFUL", "B-VALIDATE-OBSERVABILITY", "B-VALIDATE-OBSERVABILITY", "CC-C", "make validation failures visible"], ["HELPFUL", "B-POST-GRID-MUTATION-CENSUS", "B-POST-GRID-MUTATION-CENSUS", "Kyle", "investigation (no code): do stops get mutated off the grid after rounding"], ["MUST", "B-GRID-LIVE-PATH-PARITY", "B-GRID-LIVE-PATH-PARITY", "CC-C", "venue-grid rounding on the LIVE order path — the grid today covers the orchestrator path; an off-grid live order is rejected by the venue"], ["MUST", "B-INTENT-ENTRY-PARITY", "B-INTENT-ENTRY-PARITY", "CC-C", "two other entry routes bypass the grid, and #953 is the same two routes on the exit side"], ["MUST", "row:3h.b", "row:3h.b", "CC-C", "delete the dead exit limb before live so it cannot be reached — same family as the #953 hard blocker"], ["MUST", "B-TARGET-FABRICATION", "B-TARGET-FABRICATION", "CC-C", "signals given a default target the strategy never chose — trades on invented geometry"], ["HELPFUL", "B-STRING-TRUTHINESS-GUARDS", "B-STRING-TRUTHINESS-GUARDS", "CC-C", "the class of guards that treat the string '0' as true — correctness hygiene"], ["AFTER", "B-CANONICAL-FREEZE", "B-CANONICAL-FREEZE", "CC-C", "its own row says governance hygiene, not on the trading path"], ["AFTER", "B-FUNNEL-PERP-CLASSES", "B-FUNNEL-PERP-CLASSES", "CC-C", "open: the funnel can only key the two spot classes; perps come after live (an interim alert shipped in F-G-1)"], ["HELPFUL", "B-VENUE-PAIRS-REINIT", "B-VENUE-PAIRS-REINIT", "CC-C", "re-read venue pair rules when they change — else a changed tick size refuses orders"], ["AFTER", "B-VPG-ROW-ALIGN", "B-VPG-ROW-ALIGN", "CC-C", "its own row says display-only"], ["HELPFUL", "row:3m-ENUM", "row:3m-ENUM", "CC-C", "volatility_edge's pattern-confirmed path is rejected by both sinks — a strategy path silently dead"], ["MUST", "B-PRICE-SIDE-BY-JOB", "B-PRICE-SIDE-BY-JOB", "CC-C", "buy on the ask, sell on the bid, for every job a price does — Kyle's test is fidelity to live trading. Since 2026-09-11 (r5) it CONTAINS the age-truth refusal, open-trade refresh, ticker trigger, two-cache decision and F"], ["AFTER", "B-ORPHAN-ROOT-SCANNER", "B-ORPHAN-ROOT-SCANNER", "CC-C", "dead code (disposition 5) — legacy removal, no live effect"], ["AFTER", "row:3n.b", "row:3n.b", "CC-C", "orphan level tables (disposition 5) — legacy removal"], ["HELPFUL", "row:3n.c", "row:3n.c", "CC-C", "trailing-exit state lost on restart — becomes MUST the moment trailing exits are switched on (see BE-MOONBAG)"], ["HELPFUL", "B-GRID-REFUSAL-RATE", "B-GRID-REFUSAL-RATE", "CC-C", "how often the venue grid refuses a signal — a symptom measurement"], ["AFTER", "B-CANONICAL-CORPUS-ACCURACY", "B-CANONICAL-CORPUS-ACCURACY", "CC-C", "accuracy of the pre-governance reference corpus"], ["AFTER", "B-DIAG-READ-INTEGRITY", "B-DIAG-READ-INTEGRITY", "CC-C", "diagnostics reads that took a status code for a body"], ["HELPFUL", "B-QUOTE-PEG-DEVIATION-WATCH", "B-QUOTE-PEG-DEVIATION-WATCH", "CC-C", "watch for quote-peg deviation; its row says it gates nothing"], ["HELPFUL", "B-QUOTE-LEG-INTEGRITY", "B-QUOTE-LEG-INTEGRITY", "CC-C", "writer-side assertion that quote legs are sane"], ["HELPFUL", "B-QUOTE-ADMISSION-LEGACY-SWEEP", "B-QUOTE-ADMISSION-LEGACY-SWEEP", "Kyle", "decide what the legacy allowed-pairs list is for"], ["HELPFUL", "B-HORIZON-GRID-COMPARABILITY", "B-HORIZON-GRID-COMPARABILITY", "CC-B", "makes holding-horizon numbers comparable — precondition for the exit-policy evaluator"], ["HELPFUL", "B-FAMILY-POOL-REACHABILITY", "B-FAMILY-POOL-REACHABILITY", "CC-C", "reachability inside the family pool"], ["MUST", "B-REST-SIDES-TO-CACHE", "B-REST-SIDES-TO-CACHE", "CC-C", "the REST adapter parses bid and ask and then stores only the midpoint — the price-side rule needs the sides"], ["MUST", "B-BOOK-SUBSCRIPTION-REACH", "B-BOOK-SUBSCRIPTION-REACH", "CC-C", "the order book is the preferred price source but is subscribed for ~3 coins a day against a 35-41 symbol pool (Kyle directive 2026-09-13)"], ["HELPFUL", "B-DECISION-INSTANT-QUOTE", "B-DECISION-INSTANT-QUOTE", "CC-C", "record the exact quote at the decision instant — measurement"], ["DECIDE", "B-VTS-NO-DECISION-VALVE", "B-VTS-NO-DECISION-VALVE", "CC-C", "Kyle's policy call: time-bound a refused learning-lane exit, or loosen the spread ceiling (Langston recommends time-bound)"], ["HELPFUL", "B-EXIT-LINE-IDENTITY", "B-EXIT-LINE-IDENTITY", "CC-C", "trade id and class on the exit log line, so a close is read by identity"], ["MUST", "B-BOOK-STATE-RING-INDEPENDENT-BOUND", "B-BOOK-STATE-RING-INDEPENDENT-BOUND", "CC-C", "xStock exit plausibility bound — a false stop in live is a real loss (#1065 was one)"], ["HELPFUL", "B-EXIT-DECISION-RUNG-STAMP", "B-EXIT-DECISION-RUNG-STAMP", "CC-C", "stamp which price rung an exit decision used — provenance"], ["MUST", "B-BOOK-STATE-RESTART-DURABLE", "B-BOOK-STATE-RESTART-DURABLE", "CC-C", "a restart empties the xStock guard and a false stop fired 12 seconds after a deploy — every live restart would risk one"], ["MUST", "B-XSTOCK-BID-TRIGGER-RELAND", "B-XSTOCK-BID-TRIGGER-RELAND", "CC-C", "put the xStock stop/target trigger back on the transactable bid — price-side fidelity for xStock exits"], ["AFTER", "B-PRICE-DOC-CONSOLIDATE", "B-PRICE-DOC-CONSOLIDATE", "Kyle", "merge two price documents into one — Kyle wants it done, but it is documentation"], ["OBSERVATION", "B-FEED-MISMATCH-FIX", "B-FEED-MISMATCH-FIX", "CC-B", "deployed 2026-09-19; 300 taker closes or 21 days"], ["MUST", "B-ENTRY-LEVEL-RECHECK", "B-ENTRY-LEVEL-RECHECK", "CC-B", "nothing re-checks a signal's levels against the current price before the fill, on either class — in live a stale signal fills at a moved price"], ["MUST", "B-CLOSE-WRITER-COSTS", "B-CLOSE-WRITER-COSTS", "CC-B", "a close can delete a position with no trade record, and one path books invented zero fees — the record Kyle judges by, and live accounting"], ["MUST", "B-ENGINE-STOP-DURATION-COLUMN", "B-ENGINE-STOP-DURATION-COLUMN", "CC-B", "an engine stop returns an error after 25 days of session even though it flattened — in live an operator must be able to trust a stop's report; a small fix"], ["OBSERVATION", "B-REACH-BASELINE-ADJUST", "B-REACH-BASELINE-ADJUST", "Kyle", "deployed 2026-09-20; 7-day rollback window"], ["HELPFUL", "B-VTS-CLASS-LABEL-INTEGRITY", "B-VTS-CLASS-LABEL-INTEGRITY", "CC-C", "backfill of mislabelled learning rows — only after the MUST key fix (#1024)"], ["HELPFUL", "B-GATE-WILDCARD-REFUSE", "B-GATE-WILDCARD-REFUSE", "CC-B", "code-side guard behind a migration invariant that already refuses the bad row"], ["HELPFUL", "B-SILENT-STRATEGY-CENSUS", "B-SILENT-STRATEGY-CENSUS", "CC-B", "three wired strategies have never been evaluated — more strategies alive means better selection"], ["AFTER", "B-OPEN-OBLIGATION-SWEEP", "B-OPEN-OBLIGATION-SWEEP", "CC-B", "process instrument for homed-but-unwatched items"], ["HELPFUL", "B-EXIT-MAKER-VS-TAKER-REVIEW", "B-EXIT-MAKER-VS-TAKER-REVIEW", "CC-B", "Kyle's observation: maker exits profitable, taker target exits negative — possibly a large P&L lever"], ["AFTER", "B-TSC-COVERS-TESTS", "B-TSC-COVERS-TESTS", "CC-C", "type-checking coverage for test files — tooling"], ["HELPFUL", "B-CRYPTO-MARK-AGE-GATE", "B-CRYPTO-MARK-AGE-GATE", "CC-C", "crypto mark-age gate — its original premise was withdrawn; the rewritten row survives"], ["MUST", "B-EXIT-TICKER-LEG-ADAPTER-SIDES", "B-EXIT-TICKER-LEG-ADAPTER-SIDES", "CC-C", "the exit path carries both sides of the price and cannot see them — needed to exit on the transactable side"], ["MUST", "B-KILLSWITCH-DENOMINATOR", "B-KILLSWITCH-DENOMINATOR", "Kyle", "the kill switch's remaining legs — Kyle placed it himself; the kill switch is the last line of capital protection"], ["MUST", "B-NONFIAT-QUOTE-DENOMINATION", "B-NONFIAT-QUOTE-DENOMINATION", "Kyle", "the universe admits non-USD-quoted pairs and pure fiat pairs (USD/CAD, EUR/USD) whose sizing and P&L we handle wrong. Kyle's fork: fix the maths, or exclude the pairs (nearly free)"], ["DECIDE", "B-PRICE-FLOOR-REVIEW", "B-PRICE-FLOOR-REVIEW", "Kyle", "minimum-price floor for tradeable symbols — its row says the decision is Kyle's"], ["MUST", "row:6", "row:6", "", "F-C staleness bound — a bound on how old a price may be when it is used"], ["HELPFUL", "row:7", "row:7", "", "F-D learning-lane accessor and isolation"], ["MUST", "row:8", "row:8", "", "F-E fill-integrity detector — catches a bad fill before it is booked"], ["HELPFUL", "row:9", "row:9", "", "F-F(b) the reset gate — when the learning record restarts clean after the price fixes"], ["AFTER", "B-ALERT-LIFECYCLE", "B-ALERT-LIFECYCLE", "", "alert-tooling quality of life; its own row says it does not block the trading sequence"], ["AFTER", "row:1", "row:1", "CC-A", "crew-process rule mechanisms (B-RULES-1e) — governance tooling, no effect on trading"], ["OBSERVATION", "B-XSTOCK-FEE-CONTRACT", "B-XSTOCK-FEE-CONTRACT", "Kyle", "deployed 2026-09-11; its 21-day window closes it"], ["HELPFUL", "B-KRAKEN-FEE-WATCH", "B-KRAKEN-FEE-WATCH", "CC-B", "the venue changed fees on 07-09 and we noticed on 09-06 — in live, a stale fee is a wrong EV gate"], ["HELPFUL", "T-W20C-SCALAR-LEG", "T-W20C-SCALAR-LEG", "CC-B", "the parity harness — gates Phase 25's use of recorded decision history (25-12)"], ["HELPFUL", "B-PAPER-LANE-PROVENANCE", "B-PAPER-LANE-PROVENANCE", "CC-B", "paper lane records no decision inputs, so it cannot be replayed — pairs with the parity harness"], ["HELPFUL", "B-FILTER-DIAG-XSTOCK", "B-FILTER-DIAG-XSTOCK", "CC-B", "xStock per-strategy decline table is empty — visibility into why xStock signals die"], ["AFTER", "B-SCRIPTS-TSC-COVERAGE", "B-SCRIPTS-TSC-COVERAGE", "CC-B", "type-checking coverage for the scripts folder — tooling"], ["MUST", "B-RTB-SIGNAL-IDENTITY", "B-RTB-SIGNAL-IDENTITY", "CC-B", "the ready-to-buy queue's identity carries no asset class — with tickers shared across classes (STX, STRK, DASH) the queue can confuse two instruments; takes its key from #1024"], ["AFTER", "B-WRITER-ACTOR-ALLOWLIST", "B-WRITER-ACTOR-ALLOWLIST", "CC-B", "Langston memory-tool actor names — reviewer tooling"], ["AFTER", "B-PYCACHE-PREFIX-INVOCATION", "B-PYCACHE-PREFIX-INVOCATION", "", "reviewer-tooling hardening on the Helsinki box; not the trading path (a planted-cache execution vector — worth doing, not a live blocker)"], ["AFTER", "B-WAKE-SOURCE-TRUTH", "B-WAKE-SOURCE-TRUTH", "CC-INFRA", "crew wake-source documentation"], ["AFTER", "B-ARCHIVE-RETENTION-SIZING", "B-ARCHIVE-RETENTION-SIZING", "Kyle", "Kyle decided 2026-09-23: no action, August tiers to warm in October; the uninstalled context_bridge_log TTL job is a separate small defect"], ["AFTER", "rm:19-5", "19-5 §19.x Boot Readiness Coordinator Unify the patchwork boot se", "", "boot readiness coordinator — conditional on boot cascades, which have not recurred"], ["MUST", "rm:19-9", "19-9 B79.x failure-mode taxonomy — entry-side gap LULD halts / ci", "", "entry-side failure modes (LULD halts, circuit breakers, splits, dividends, earnings) — its own text says required before live"], ["MUST", "rm:19-10", "19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr", "", "throwing asset-class resolution call sites would break a live path IF still present"], ["MUST", "rm:19-11", "19-11 §19.1 Paper Trading Run The act of actually running paper-ac", "", "THE PAPER RUN ITSELF — it is the evidence Kyle's comfortable-in-paper gate is judged on"], ["HELPFUL", "rm:19-13", "19-13 §19.3 Performance Validation Latency, throughput, queue dept", "", "latency / throughput / cadence under load — matters more as volume grows than on day one"], ["AFTER", "rm:19-15", "19-15 #97 xStock asset-specific characteristics inventory Earnings", "", "xStock fundamentals enrichment (earnings, P/E, ratings) — plumbing, not a live-safety need"], ["HELPFUL", "rm:19-16", "19-16 B79.6 sector-aware portfolio-cluster prevention Equities clu", "", "sector-cluster prevention — correlated xStock positions multiply risk; concurrency caps bound it today"], ["HELPFUL", "rm:19-17", "19-17 NEW — Active Trading Simulations (Kyle directive 2026-05-27)", "", "active-trading simulations — more learning data per day for Phase 25; not a live-safety need"], ["DECIDE", "rm:19-17b", "19-17b ITEM-4 step 3 standing note (2026-06-10): Phase-21 go-live M", "", "THE GO-LIVE ACT ITSELF — flipping live_engine_enabled to 1. The plan parks it as a Phase 21 go-live checklist step (PHASE_19_PLAN:262): a terminal step with Kyle's hand on it, not a gate"], ["DECIDE", "rm:19-18", "19-18 NEW — Live mode active-trading build approach (Kyle directiv", "", "live-mode build approach (copy of paper + switch, or other) — a decision that must land before Phase 21"], ["HELPFUL", "rm:19.2", "19.2 Audit & Debug — - Verify FinalScore, Hybrid Score, Confidenc", "", "verify the scoring stack calculates correctly (FinalScore, Hybrid, Confidence, Regime Weight) — umbrella; split into concrete checks"], ["HELPFUL", "rm:19.6", "19.6 External Source Connection & Capacity Diagnostics Dashboard ", "", "external-source and capacity diagnostics dashboard — visibility that catches a live problem fast"], ["AFTER", "rm:19.6.4", "19.6.4 Forward role — ML / AI conversational layer API — When the M", "", "forward role for the ML conversational layer — Phase 17/18"], ["HELPFUL", "rm:19.6.6", "19.6.6 Internal subsystem health + EARLY-FAILURE detection (NEW 202", "", "early-failure detection — catch failures in progress; high value once real capital is exposed"], ["AFTER", "rm:25-1", "25-1 B79.0n.ML-CALIBRATION T2 (umbrella v4 #15) Tier 2 ML calibra", "", "ML calibration tier 2 — its own row says it needs live evidence"], ["HELPFUL", "rm:25-2", "25-2 §19.0.A Regime classifier confidence-chain calibration B-NEW", "", "regime confidence-chain calibration"], ["HELPFUL", "rm:25-3", "25-3 §19.0.3 TFS sustainability gate value-scope decision Recalib", "", "sustainability gate: recalibrate, re-target or retire"], ["HELPFUL", "rm:25-4", "25-4 §19.4 SQE Recalibration (B66 conditional) Rebuild SQE thresh", "", "SQE recalibration, with named sub-items"], ["AFTER", "rm:25-6", "25-6 AMR posture-model M2 calibration (post-launch — Phase 17/18 ", "", "AMR posture model calibration — its own row says post-launch"], ["HELPFUL", "rm:25-7", "25-7 #94 B79.3 xStock equity-equivalent macro confidence modifier", "", "xStock macro confidence modifiers (Kyle settled #94 here)"], ["HELPFUL", "rm:25-9", "25-9 xStock pair_correlation per-pair WR data accumulation (B68.3", "", "xStock per-pair correlation data accumulation"], ["HELPFUL", "rm:25-10", "25-10 Crypto confidence-modifier calibration Kyle 2026-05-27 voice", "", "crypto confidence-modifier calibration"], ["HELPFUL", "rm:25-11", "25-11 Order-book / liquidity-aware position sizing + thin-market e", "", "SPLIT (Langston): the liquidity-aware sizing MODEL is Phase 25 calibration. The small fail-closed REFUSAL half is a separate MUST item (25-11a)"], ["HELPFUL", "rm:25-17", "25-17 TARGET-GEOMETRY CALIBRATION — ALL 19 CANONICAL STRATEGIES, B", "", "target geometry calibration across all 19 strategies, both classes"], ["MUST", "rm:25-16", "25-16 Trade-size / concurrency / win-rate dynamic + starting-balan", "", "the evidence study for trade size, concurrency and starting balance — its own row calls it a go-live prerequisite. The NUMBERS it informs are Kyle's (a DECIDE)"], ["HELPFUL", "rm:25-12", "25-12 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) — ", "", "xStock entry-trigger sweep (data-capture gap #206)"], ["HELPFUL", "rm:25-13", "25-13 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) — ", "", "xStock faithful geometry reconstruction + stop-anchor replay"], ["HELPFUL", "rm:25-14", "25-14 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) — ", "", "xStock per-strategy entry re-fit, ORB edge, vwap_bounce power test"], ["HELPFUL", "rm:25-15", "25-15 DATA-BLOCKED STUDY (intraday-coverage gap) — HCE rejected-ar", "", "does the Net Expectancy gate reject signals that would have won — was data-blocked; the learning lane's refused-signal record found in 3n.v may now unblock it"], ["HELPFUL", "rm:25-17b", "25-17b CRYPTO reach_atr_max DECISION — the reachability-ceiling que", "", "crypto reach ceiling decision — strong_bull_trend was set in 3n.v; the remaining strategies are untested"], ["HELPFUL", "rm:25-18", "25-18 friction_safety_buffer per-class evaluation (reorg-B2 delibe", "", "per-class safety margin on the friction model"], ["MUST", "rm:25-19", "25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-0", "", "NARROWED (Langston): state the Net Expectancy gate's measured accept/reject outcome on the population it actually ran on, population named. A full judgement verdict needs #596 first and is Phase 25"], ["HELPFUL", "rm:25-20", "25-20 Per-strategy × per-class minRR (reward-vs-risk floor) RECALI", "", "per-strategy, per-class minimum reward-to-risk from win rates — partly delivered by 2.4g and 3n.v"], ["AFTER", "rm:25-22", "25-22 Edge-decay monitor — selection-IC + per-strategy calibration", "", "edge-decay monitor — research idea; most valuable once live"], ["AFTER", "rm:25-23", "25-23 Probabilistic hidden-state (HMM-style) regime inference → re", "", "hidden-state regime inference — research idea"], ["AFTER", "rm:25-24", "25-24 Orthogonal weak-feature enrichment of the per-cycle selectio", "", "weak-feature ranking enrichment — research idea"], ["AFTER", "rm:25-25", "25-25 Cross-instrument / relative-value (statistical-arbitrage) si", "", "cross-instrument / relative-value signals — research idea"], ["HELPFUL", "rm:25-26", "25-26 Trade HOLD-TIME / timeframe study — do slower (multi-day) tr", "", "do slower trades clear the fee wall — the fee wall is the main reason paper loses"], ["HELPFUL", "rm:25-27", "25-27 Profitable-signal PROFILE → reverse-engineer a scanner PRE-S", "", "profile of a profitable signal, reversed into a scanner pre-screen"], ["AFTER", "rm:16.2", "16.2 Database Phase A-B: Isolation & Modularization — - Confirm w", "", "database isolation and modularisation — no live-safety effect (a proposed deferral: the run order puts Phase 16 before live)"], ["AFTER", "rm:16.3", "16.3 Database Phase C: Schema Simplification — - Drop Wave 3 tabl", "", "drop legacy tables and enums — proposed deferral"], ["HELPFUL", "rm:16.4", "16.4 Wave 7: Post-L-Series Cleanup — - SafetyGuardrails service r", "", "remove the old SafetyGuardrails service — only matters if any live path still consults it"], ["AFTER", "rm:16.5", "16.5 LSP Error Resolution — - Delete legacy files causing LSP err", "", "editor/type error cleanup"], ["HELPFUL", "rm:16.7", "B-RETIRED-SCORE-REMOVAL", "", "remove retired scores — confirm nothing on the live ranking path still reads one"], ["HELPFUL", "rm:16.6", "16.6 Trailing-Percent Code Purge (added 2026-04-25, Kyle directiv", "", "purge legacy trailing-percent exit code so it cannot re-enter a live exit"], ["HELPFUL", "rm:16.8", "16.8 Predictive-Learning / ML-Era Teardown REMAINDER (added 2026-", "", "ML-era teardown remainder — Kyle decided REMOVE"], ["AFTER", "rm:16.9", "16.9 resetRateLimiter() — INERT ON THE ONLY ENVIRONMENT WE RUN (a", "", "inert rate-limiter reset — Kyle slotted it in Phase 16"], ["AFTER", "rm:20.1", "20.1 Database Phase D: Migration Rebaseline — - Generate fresh ba", "", "migration rebaseline"], ["HELPFUL", "rm:20.2", "20.2 Database Phase E: Index & Retention Hygiene — - Audit index ", "", "index and retention hygiene — database at 72% of plan (Kyle: August moves to warm storage in October)"], ["AFTER", "rm:20.3", "20.3 Test Infrastructure — - Add unified test runner scripts ( te", "", "test runner and frontend test tooling"], ["HELPFUL", "rm:20.4.5", "20.4.5 Observability hardening (NEW 2026-06-12 — §19.6.6 long-tail)", "", "observability hardening"], ["AFTER", "rm:20.5", "20.5 Architecture Cleanup — - Decompose monolithic pages (enhance", "", "decompose large pages and route files"], ["MUST", "rm:21.1", "21.1 Live Mode Engine — - Create Live Mode trading engine based o", "", "the live mode engine itself"], ["MUST", "rm:21.1.a", "B-LEGACY-LIVE-EXIT-PATH", "", "a live exit route places a real market order outside the governed path — the roadmap's own words: NO REAL CAPITAL TRADES UNTIL THIS IS CLOSED (#953, owner CC-C)"], ["MUST", "rm:21.2", "21.2 Paper-to-Live Transition Testing — - Run parallel paper+live", "", "paper-to-live transition testing with small sizes"], ["AFTER", "rm:21.4", "21.4 POST-LAUNCH REVISIT — the strong-trend lane's absent volume ", "", "already placed post-live in the roadmap"], ["MUST", "rm:21.3", "21.3 Live Mode Guardrails — - 21-3a (NEW, P19-B6.8a 2026-06-30 — ", "", "live mode guardrails — umbrella; its sub-items 21-3a..d are listed separately"], ["AFTER", "rm:22.1", "22.1 Build & Deploy Pipeline — - Production build validation - En", "", "already placed post-live in the roadmap"], ["AFTER", "rm:22.2", "22.2 Monitoring & Observability — - Production logging strategy (", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.1", "17.1 Scope & Grounding (Week 23) — - Define full scope of ML inte", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.2", "17.2 ML Touchpoint & Influence Mapping (Weeks 24-25) — #### Featu", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.3", "17.3 Infrastructure Design (Weeks 25-26) — - In-process module vs", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.4", "17.4 Research & Feature Engineering (Weeks 26-27) — - Evaluate ML", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.5", "17.5 Blueprint Assembly (Weeks 27-28) — - Merge data flow, touchp", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.6", "17.6 Trend Mining Engine — design consideration (Kyle directive 2", "", "already placed post-live in the roadmap"], ["AFTER", "rm:18.1", "18.1 Crawl: Feature Store & Data Pipeline — - Build Feature Store", "", "already placed post-live in the roadmap"], ["AFTER", "rm:18.2", "18.2 Walk: Model Training & Validation — - Train initial models o", "", "already placed post-live in the roadmap"], ["AFTER", "rm:18.3", "18.3 Run: Integration & Parallel Execution — - Wire Inbound touch", "", "already placed post-live in the roadmap"], ["AFTER", "rm:18.4", "18.4 Fly: ML as Primary Intelligence — - ML replaces rules-based ", "", "already placed post-live in the roadmap"], ["AFTER", "rm:18.5", "18.5 Trend Mining Engine — parallel architecture (per Phase 17.6 ", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.5.1", "17.5.1 Rules-Based Policy Engine — - Implement the policy execution", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.5.2", "17.5.2 Predictive Adjustment Execution — - Wire Predictive Adjustme", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.5.3", "17.5.3 Calibration Execution — - Learning Calibration can now updat", "", "already placed post-live in the roadmap"], ["AFTER", "rm:17.5.4", "17.5.4 Regime-Aware Adaptation — - Structural Regime (Global + Pair", "", "already placed post-live in the roadmap"], ["AFTER", "rm:21.4.1", "21.4.1 8-module extraction — Per MODULARIZATION_SYNTHESIS_FROM_B63_", "", "already placed post-live in the roadmap"], ["AFTER", "rm:21.4.3", "21.4.3 storage.ts modularization (folded in from Phase 16.2) — Phas", "", "already placed post-live in the roadmap"], ["AFTER", "rm:21.5.2", "21.5.2 Perpetual Futures Integration — - Add Kraken Futures API end", "", "already placed post-live in the roadmap"], ["AFTER", "rm:21.5.3", "21.5.3 Cross-Asset Infrastructure — - Unified portfolio view across", "", "already placed post-live in the roadmap"], ["AFTER", "rm:20.3.1", "20.3.1 — Unit/integration test-tier separation (RUNNING_ISSUES #226", "", "unit / integration test-tier separation"], ["MUST", "rm:21-3a", "21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the \"", "", "the Live Guardrails tab — and what it would show: the live guardrail row is an ELEVEN-MONTH-OLD DEFAULT (2025-10-29) that differs from paper on six fields (per-trade 30%, exposure 25%, 12 slots, kill switch 15%, risk per"], ["DECIDE", "rm:21-3b", "21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calib", "", "roadmap hard blocker whose work is a NUMBER: the go-live WebSocket-uptime threshold against the rolling window it is measured over"], ["MUST", "rm:21-3d", "21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B-", "", "the reset functions delete BOTH modes' data — must be scoped to one mode before live data exists (B-MODE-DELETE-SCOPE)"], ["MUST", "rm:21-3c", "21-3c (NEW, KYLE-RULED 2026-08-21 — RUNNING_ISSUES #734): the engi", "", "the engine-start health gate refuses to start in live, for two independent reasons; fixing one alone leaves live blocked (#734)"], ["AFTER", "#606", "#606", "CC-B", "a method note filed as its own entry"], ["HELPFUL", "B-IMPLEMENTATION-SHORTFALL", "B-IMPLEMENTATION-SHORTFALL", "CC-C", "#603: no arrival price is persisted, so measured slippage mixes a stale signal with execution cost; 24 closed trades show a >1% intended-vs-fill gap (CC-C)"], ["HELPFUL", "#648", "#648", "CC-A", "six of nineteen strategies have never traded (renumbered from #594) — part of the #596 ordering constraint"], ["AFTER", "B-AMR-CONTEXT-BONUS-REWIRE", "B-AMR-CONTEXT-BONUS-REWIRE", "CC-A", "Kyle 2026-09-28: all AMR work after live"], ["HELPFUL", "#590", "#590", "CC-A", "calibration store reset at the formula change"], ["HELPFUL", "#588", "#588", "CC-A", "put a validated quality term back into the ranking — the ranking is the edge"], ["AFTER", "#589", "#589", "CC-A", "the rule-18 cut never happened: getCalibratedProfit still defined, zero callers (CC-A, at the ref)"], ["HELPFUL", "#585", "#585", "CC-B", "the engine's auto-resume skips a malformed session row — exits keep running"], ["HELPFUL", "B-IDEAL-POOL-STARVATION", "B-IDEAL-POOL-STARVATION", "CC-A", "#597: the ideal pool gets ~4-5% of slots against a nominal 70% — travels with #596 and #648 as a Phase 25 ordering constraint"], ["HELPFUL", "#574", "#574", "CC-A", "a fabricated VolNoise=0.3 in the live ranker's expectancy kernel — HELPFUL if still live; the 07-13 fix may or may not have covered it"], ["KYLE-PARKED", "B-ALERT-DEDUPE-REASON-DRIFT", "B-ALERT-DEDUPE-REASON-DRIFT", "CC-B", "parked by Kyle, deliberately undated"], ["HELPFUL", "#570", "#570", "CC-A", "one RTB refresh bucket fires but does not refresh its signals"], ["AFTER", "B-VERIFY-DISCIPLINE", "B-VERIFY-DISCIPLINE", "CC-C", "absence-reads-as-pass defect class"], ["HELPFUL", "#566", "#566", "CC-B", "volatility measured with a lag"], ["MUST", "B-VENUE-RESTING-EXITS", "B-VENUE-RESTING-EXITS", "Kyle", "a live position must have a protective mechanism that survives our process dying. The FORM is Kyle's decision (resting venue stops vs a flatten-on-death watchdog)"], ["HELPFUL", "#561", "#561", "Kyle", "volume / order book not filling in Open Trades; rename the column for xStocks"], ["MUST", "B-WS-SUBSCRIBE-CLASS-FILTER", "B-WS-SUBSCRIBE-CLASS-FILTER", "CC-A", "xStock positions reported 'unmanageable' because the crypto subscribe set is not class-filtered"], ["HELPFUL", "#549", "#549", "CC-B", "four gaps in Open Trades fields"], ["HELPFUL", "#547", "#547", "CC-B", "Analyst's July soak findings — contents need the owner's read"], ["HELPFUL", "#529", "#529", "Kyle", "B-STRATEGY-WEIGHT-INVESTIGATION — Kyle wanted it before the runtime audit; open"], ["AFTER", "#528", "#528", "CC-B", "delete an unused 1,376-line trades page (rule 18)"], ["HELPFUL", "#527", "#527", "CC-B", "xStock eval cycle should pass friction components"], ["HELPFUL", "B-SQE-DEADCODE-PURGE", "B-SQE-DEADCODE-PURGE", "CC-A", "a dead SQE evaluator with a SHORTER gate list — delete before anything can call it"], ["MUST", "B-RTB-REFRESH-CONSOLIDATE", "B-RTB-REFRESH-CONSOLIDATE", "CC-A", "the net-EV backstop was removed on an incomplete evidence base — its own row says SAFETY-RELEVANT"], ["AFTER", "B-EOL-POLICY", "B-EOL-POLICY", "", "line-ending policy"], ["AFTER", "#537", "#537", "CC-B", "untracked orphan script"], ["HELPFUL", "#522", "#522", "Kyle", "catch-site audit homed from the #530 fix — open"], ["MUST", "#521", "#521", "CC-B", "the engine heartbeat is structurally dead — nothing notices a dead engine; in live that is real positions with no manager (Langston)"], ["MUST", "#519", "#519", "CC-B", "confirm the runtime daily-loss kill-switch trip fails loud, not silent"], ["HELPFUL", "#518", "#518", "CC-B", "delete a dormant commented-out guardrail block (rule 18)"], ["MUST", "#517", "#517", "CC-B", "the Live page's open and closed trade tabs are stubs — the operator must be able to see live trades"], ["HELPFUL", "#515", "#515", "CC-B", "capture the remaining learning-record columns on the active path"], ["AFTER", "#513", "#513", "CC-B", "maker target exits in the VTS lane"], ["HELPFUL", "B-TSC-BASELINE-TS2345-AUDIT", "B-TSC-BASELINE-TS2345-AUDIT", "CC-B", "32 suppressed type errors in the routes file, one tied to the balance"], ["MUST", "#506", "#506", "CC-B", "order-book subscriptions accumulate with no unsubscribe — a DEPENDENCY of B-BOOK-SUBSCRIPTION-REACH, which takes subscriptions from ~3 a day to a 35-41 symbol pool (Langston)"], ["HELPFUL", "B-CLOSED-TRADES-CLASS-BACKFILL", "B-CLOSED-TRADES-CLASS-BACKFILL", "CC-B", "historical closed trades all carry the default class — backfill after #1024"], ["HELPFUL", "#504", "#504", "CC-A", "stamp regime on maker/taker shadow rows — learning record"], ["AFTER", "B-GOV-INTEGRITY-0", "B-GOV-INTEGRITY-0", "CC-A", "reviewer frozen rulebook"], ["AFTER", "B-DISCORD-CONNECT-RESILIENCE", "B-DISCORD-CONNECT-RESILIENCE", "CC-A", "Discord library crash on outage"], ["AFTER", "#463", "#463", "", "bridge code reviewed by documentation, not diff"], ["AFTER", "B-LANGSTON-QUEUE-2", "B-LANGSTON-QUEUE-2", "CC-A", "review queue lock"], ["AFTER", "B-GOV-INTEGRITY-3", "B-GOV-INTEGRITY-3", "CC-A", "message id spans"], ["KYLE-PARKED", "B-GOV-INTEGRITY-2", "B-GOV-INTEGRITY-2", "CC-B", "parked by Kyle, deliberately undated"], ["AFTER", "#449", "#449", "CC-B", "governance checker read a frozen rulebook"], ["AFTER", "B-ALERT-TAXONOMY", "B-ALERT-TAXONOMY", "CC-A", "alert categories"], ["AFTER", "#419", "#419", "CC-B", "funnel counter will not balance under error rows"], ["KYLE-PARKED", "B-RULES-1E-LANGSTON-SLIM", "B-RULES-1E-LANGSTON-SLIM", "CC-A", "parked by Kyle, deliberately undated"], ["HELPFUL", "#972", "#972", "CC-A", "owner CC-B per its own head"], ["AFTER", "#970", "#970", "CC-A", "its home B-DISAGREEMENT-FINDER closed on a negative result — needs a new home or a withdrawal (CC-A proposing)"], ["AFTER", "B-GOV-REPORTING", "B-GOV-REPORTING", "CC-A", "Langston memory size"], ["AFTER", "#660", "#660", "Kyle", "trade tables' 365-day hot window never re-asked"], ["MUST", "B-LEARNING-SYSTEM-CENSUS", "B-LEARNING-SYSTEM-CENSUS", "Kyle", "#661: at least three older learning systems still wired, disposition unknown — anything that could still steer a live decision must be known before live (its own reason is a MUST predicate — Langston)"], ["HELPFUL", "#658", "#658", "CC-C", "VTS applying posture multipliers that were pinned off"], ["AFTER", "#646", "#646", "CC-C", "resolved_by not populated on manual resolve"], ["HELPFUL", "#645", "#645", "CC-C", "the net-EV floor is one crypto-era constant exported to xStock"], ["AFTER", "#644", "#644", "CC-C", "a finding, not work; its decision (whether the exploration subsidy ending on its own is wanted) must be visible in calibration (CC-C)"], ["MUST", "#634", "#634", "CC-C", "the daily-loss evaluator's failure counter has no reader: a persistent fault stops the kill switch evaluating while trading continues — fails open on a risk boundary (CC-C, re-derived at the ref). Owner CC-B"], ["MUST", "#632", "#632", "CC-C", "the daily-loss window restarts at zero on every process restart — Kyle 2026-09-28: fix now, the fix carries to production"], ["HELPFUL", "#631", "#631", "CC-A", "should the active path archive the four entry-mode fields VTS does — a decision owed; the active lane is what goes live"], ["MUST", "#630", "#630", "CC-A", "the maker-order deadline has NEVER fired — the maker population in its proof window was empty. Live places resting maker orders with a deadline; exercise it once in paper before real capital (CC-A)"], ["AFTER", "B-MEASURE-GATE", "B-MEASURE-GATE", "CC-A", "re-surfacing alerts re-emit old measurements"], ["HELPFUL", "#628", "#628", "CC-C", "its two SIZING sites ride B-SIZING-DEC-RESTORE; display sites can wait (CC-C)"], ["AFTER", "#144", "#144", "", "perpetual-futures activation checklist — perps come after live"], ["AFTER", "#147", "#147", "", "per-class telemetry disk persistence"], ["AFTER", "#148", "#148", "", "health check permission error on a Replit-era path"], ["HELPFUL", "#149", "#149", "", "per-class RTB refresh cadence calibration"], ["AFTER", "#150", "#150", "", "make the RTB asset-class column NOT NULL after a zero-null soak"], ["AFTER", "#151", "#151", "", "Phase 16 register entry"], ["AFTER", "#152", "#152", "", "document the locked-module override boundary"], ["AFTER", "#154", "#154", "", "dead optional constructor argument"], ["AFTER", "#155", "#155", "", "perp reason truncated in a diagnostic endpoint"], ["AFTER", "#156", "#156", "", "audit candidate for per-class consumer swaps"], ["AFTER", "#157", "#157", "", "line-number drift in a diagnostic payload"], ["AFTER", "#158", "#158", "", "inefficient 24h filter at volume"], ["AFTER", "#159", "#159", "", "log volume gating for a canary line"], ["HELPFUL", "#166", "#166", "", "TEC stale-cache fence still firing thousands of times"], ["MUST", "#168", "#168", "", "CI cannot catch a build that crashes on boot — a live deploy that boots into a crash leaves positions unmanaged; same family as #681 (Langston)"], ["HELPFUL", "#169", "#169", "", "the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed"], ["AFTER", "#171", "#171", "", "corrupt manifest needs a manual runbook"], ["AFTER", "#172", "#172", "", "stale duplicate retention keys"], ["AFTER", "#173", "#173", "", "a recurring zero-null guard once Phase 25 reads the dataset"], ["AFTER", "#198", "#198", "", "cron-evidence verifier edge case"], ["HELPFUL", "#199", "#199", "", "no honest xStock volume feed, so volume confirmation was removed from xStock strategies"], ["HELPFUL", "#201", "#201", "", "range_trade is starved at the decision substrate"], ["AFTER", "#202", "#202", "", "study scripts leave files on staging that block the next pull"], ["MUST", "#204", "#204", "", "xStock corrupt stop prices (units/scale) at 45 times the crypto rate — a live stop at a wrong scale is a real loss; may be fixed by the venue grid"], ["AFTER", "#610", "#610", "CC-A", "AMR stays watch-only until after live (Kyle 2026-09-28) — its sizing cannot touch trades before then"], ["AFTER", "#611", "#611", "CC-A", "AMR work after live (Kyle 2026-09-28)"], ["AFTER", "#612", "#612", "CC-A", "AMR work after live (Kyle 2026-09-28)"], ["MUST", "#615", "#615", "CC-A", "the reviewer's verification identity can read the app's secrets file, and the live Kraken key will sit on that box (CC-A, Langston re-derived the read)"], ["MUST", "#619", "#619", "CC-A", "a restore from backup silently lacks seeded config, including risk config — found only at the worst time (CC-A)"], ["HELPFUL", "B-COST-MATH-CONSOLIDATION", "B-COST-MATH-CONSOLIDATION", "CC-C", "one home for cost math"], ["HELPFUL", "#626", "#626", "CC-C", "an open question shipped in a user-facing string"], ["AFTER", "#625", "#625", "CC-B", "orphan sweep lacks a branch for deadline keys"], ["AFTER", "#621", "#621", "CC-C", "code-review gate grades a diff by mechanism"], ["AFTER", "B-AMR-INPUT-INTEGRITY-ARC", "B-AMR-INPUT-INTEGRITY-ARC", "CC-C", "Kyle 2026-09-28: AMR fixes after live; stalled since 2026-07-30 with no plan row — place it in the post-live section"], ["AFTER", "#608", "#608", "CC-A", "AMR work after live (Kyle 2026-09-28)"], ["AFTER", "#609", "#609", "CC-A", "AMR work after live (Kyle 2026-09-28)"], ["AFTER", "B-STORAGE-CATALOG", "B-STORAGE-CATALOG", "CC-A", "unmanaged app-local file store"], ["AFTER", "#209", "#209", "", "ratchet the type-check baseline down"], ["KYLE-PARKED", "#221", "#221", "Kyle", "parked by Kyle, deliberately undated"], ["AFTER", "#217", "#217", "", "RTB context bonus in shadow"], ["AFTER", "#218", "#218", "", "dead function carrying a hardcoded fee default"], ["AFTER", "#219", "#219", "", "dormant flip-rate governance input"], ["HELPFUL", "#220", "#220", "", "an undefined-function error logged 64,494 times in VTS strategy execution"], ["HELPFUL", "#229", "#229", "Kyle", "four symbol-format modules that accept different forms — consolidate"], ["AFTER", "#231", "#231", "", "ablation record id gap"], ["MUST", "#233", "#233", "", "drift score and volume z-score fed as fixed defaults on the active path — its own row says pre-go-live verification; Kyle's rule is no hardcoded fallbacks"], ["AFTER", "#234", "#234", "", "390 non-active-path type errors, each homed"], ["MUST", "#235", "#235", "Kyle", "the full end-to-end runtime audit of the crypto active pipeline — rule 23's closing step of Phase 19"], ["AFTER", "#298", "#298", "Kyle", "ticker shown instead of company name"], ["MUST", "#296", "#296", "Kyle", "NARROWED (Langston): a shared rate budget and backoff on the order-PLACING and order-CANCELLING paths — a rate-limit rejection on an exit costs money. Consolidating the 35 clients is a refactor, AFTER"], ["MUST", "#322", "#322", "Kyle", "test-in-paper / bypass-in-live capability gating — Kyle's live-mode creation requirement"], ["DECIDE", "#323", "#323", "Kyle", "Kyle: should the daily-loss budget auto-stop, only alert, or be user-set. P19-B6.8 (CLOSED 2026-06-29) folded #323 and made those controls user-settable — this may already be answered; Kyle confirms"], ["AFTER", "B-GOV-2", "B-GOV-2", "", "checker always-on gate"], ["HELPFUL", "#391", "#391", "CC-B", "monitor the xStock in-hours flat-price block rate"], ["KYLE-PARKED", "#392", "#392", "CC-B", "parked by Kyle, deliberately undated"], ["AFTER", "#642", "#642", "CC-A", "a discredited number inside a scheduled gate (CC-A copy of a doubled number)"], ["AFTER", "B-ALERT-OWNERSHIP-REGISTER", "B-ALERT-OWNERSHIP-REGISTER", "CC-B", "alert ownership transfer"], ["AFTER", "B-ALERT-ACK-PROCEDURE-DOCFIX", "B-ALERT-ACK-PROCEDURE-DOCFIX", "CC-B", "alert procedure doc"], ["AFTER", "#655", "#655", "CC-A", "stateless parallel rulings — crew process"], ["HELPFUL", "#664", "#664", "CC-B", "a diagnostic computes 'strategies evaluated' from a hardcoded 9"], ["MUST", "B-SIZING-DEC-RESTORE", "B-SIZING-DEC-RESTORE", "CC-C", "paper per-trade allocation is 20% where the governed decision says 6.67%, and Kyle did not know. RIDER (Langston): pattern signals size at 6.67% while other signals size at the guardrail (20% paper / 30% live) and nobody"], ["KYLE-PARKED", "#668", "#668", "Kyle", "the governance-standardisation arc — a DIFFERENT thing from B-SIZING-DEC-RESTORE, which only cites it"], ["AFTER", "#683", "#683", "CC-A", "flaky test collection failures"], ["HELPFUL", "B-EXIT-PATH-TYPING", "B-EXIT-PATH-TYPING", "CC-A", "the exit path is untyped"], ["AFTER", "B-CATALOG-1", "B-CATALOG-1", "Kyle", "table catalogue + lookalike register"], ["AFTER", "#669", "#669", "CC-B", "Langston Step-4 finding (B) — contents need the owner's read"], ["AFTER", "#670", "#670", "", "crew-status cold hand-off"], ["AFTER", "#673", "#673", "CC-A", "desktop sessions and the CLI are different versions"], ["AFTER", "#679", "#679", "CC-B", "persistent threshold alerts re-fire forever once resolved"], ["AFTER", "#680", "#680", "CC-B", "type-check gate at push time"], ["MUST", "#681", "#681", "CC-B", "a deploy can outrun CI — in live, a deploy restarts real trading on code that has not passed"], ["HELPFUL", "#699", "#699", "CC-C", "does RTB promotion evict, or is the UI stale"], ["AFTER", "#697", "#697", "Kyle", "storage overview UI page (Kyle directive)"], ["KYLE-PARKED", "#693", "#693", "CC-C", "parked by Kyle, deliberately undated"], ["HELPFUL", "#692", "#692", "CC-C", "Kyle 2026-09-28: not a defect (slots shrink with the balance by design; the 08-12 freeze was a one-step manual reset). Build instead an alert when no new trade has opened for a set time because the allowance is full, wit"], ["AFTER", "#689", "#689", "CC-C", "storage-fraction numerator/denominator mismatch"], ["HELPFUL", "B-DAILY-CUTOVER-SWEEP", "B-DAILY-CUTOVER-SWEEP", "CC-C", "four tables idle 29 nights then sweep everything at once"], ["AFTER", "#687", "#687", "CC-C", "equity-perp universe file stale — perps are after live (merges into P19-B-PERPFEED)"], ["AFTER", "#686", "#686", "CC-C", "relocate a runtime file out of bridge/canonical; its reader's scheduler is dead — no live effect (CC-C)"], ["MUST", "B-PRICE-STALENESS-BOUND", "B-PRICE-STALENESS-BOUND", "CC-C", "the last-known-good price is re-served with no age bound and re-stamped as fresh"], ["AFTER", "B-WS-V1-RESIDUE-SWEEP", "B-WS-V1-RESIDUE-SWEEP", "CC-C", "dead Kraken v1 ticker handler (rule 18)"], ["KYLE-PARKED", "#741", "#741", "CC-A", "parked by Kyle, deliberately undated"], ["AFTER", "B-CHUNK-ADDRESSING", "B-CHUNK-ADDRESSING", "CC-A", "comms outage cause"], ["AFTER", "B-GDRIVE-UNMOUNT", "B-GDRIVE-UNMOUNT", "CC-A", "placed 2026-08-28, not parked; owner Infra Claude; absorbs #921"], ["AFTER", "B-REVIEWER-LOOP", "B-REVIEWER-LOOP", "CC-A", "plan row 4, PLACED 2026-08-28, open (CC-A lane reply) — governance tooling"], ["AFTER", "#748", "#748", "CC-A", "the hook that loads CONDUCT.md has a silent fail path — cause not yet named"], ["AFTER", "#746", "#746", "CC-A", "Langston's second model site has no repo source"], ["AFTER", "B-GATE-GUARD", "B-GATE-GUARD", "CC-A", "issue-number blocks"], ["AFTER", "#740", "#740", "CC-A", "skill description colon trap"], ["HELPFUL", "B-BALANCE-TRUTH", "B-BALANCE-TRUTH", "CC-C", "four closed trades with null P&L that pass every check — Step F sequencing lives with 21-3d"], ["MUST", "B-MODE-PREDICATE-SWEEP", "B-MODE-PREDICATE-SWEEP", "CC-C", "three readers query closed trades directly and will mix live and paper P&L once live exists"], ["AFTER", "#700", "#700", "CC-A", "crew process"], ["AFTER", "#701", "#701", "CC-A", "crew process"], ["HELPFUL", "#685", "#685", "CC-C", "crypto 1-minute bars cannot be tiered to warm storage"], ["HELPFUL", "B-EPOCH-PARITY-FENCE", "B-EPOCH-PARITY-FENCE", "CC-C", "the epoch value still has two homes — learning-data integrity"], ["MUST", "B-DASHBOARD-AUTH-RACE", "B-DASHBOARD-AUTH-RACE", "CC-C", "#903: the portfolio card 401s on load and never recovers — in live, an operator with no balance. Operator-reach family with #401, #517, #935 (Langston)"], ["AFTER", "B-GOV-4", "B-GOV-4", "CC-C", "checker entry test"], ["HELPFUL", "#914", "#914", "CC-C", "SPLIT: the price half is retired; the COST half (0.05% per leg) is Phase 25 work"], ["AFTER", "#920", "#920", "", "reviewer grep returns zero on a bad flag"], ["AFTER", "#942", "#942", "CC-C", "info alerts outside the no-silent-drop guarantee"], ["AFTER", "B-TSC-GUARD-CWD", "B-TSC-GUARD-CWD", "CC-INFRA", "push guard working directory"], ["AFTER", "B-BURN-THRESHOLD-BASIS", "B-BURN-THRESHOLD-BASIS", "CC-INFRA", "not withdrawn — token-watch alarm tuning (Infra)"], ["AFTER", "B-TOKENWATCH-OBSERVED-AT", "B-TOKENWATCH-OBSERVED-AT", "CC-INFRA", "token watch tooling"], ["AFTER", "B-TOKENWATCH-PAIR-SELECT", "B-TOKENWATCH-PAIR-SELECT", "CC-INFRA", "token watch tooling"], ["OBSERVATION", "B-DEPLOY-DRIFT-LINE", "B-DEPLOY-DRIFT-LINE", "CC-A", "plan row 4.55 reads OPEN — OBSERVATION WINDOW (criterion 4 satisfied 2026-09-09)"], ["HELPFUL", "P19-B12", "P19-B12", "CC-B", "the deploy tool's own executable is not derived from the reviewed ref"], ["AFTER", "#1020", "#1020", "CC-A", "push guard inherits the previous call's working directory and refuses on a false zero (hit again building this draft)"], ["MUST", "B-SEC-HARDEN", "B-SEC-HARDEN", "CC-INFRA", "157 of 216 state-changing routes carry no authorisation check (Infra count, NOT re-derived — it sizes the batch, not its placement). REACHABILITY re-derived by Langston on the box: the login is public (internet → Caddy :"], ["AFTER", "#1026", "#1026", "CC-C", "chunked Langston dispatch leaks parts into the channel — comms"], ["HELPFUL", "#1033", "#1033", "CC-C", "an absent volume is stored as zero — indistinguishable from a minute that genuinely traded nothing; the liquidity filter reads it"], ["AFTER", "#1035", "#1035", "CC-C", "Langston's alert prompt lists only three owners"], ["AFTER", "#1043", "#1043", "CC-INFRA", "a pinned GitHub read served the wrong file — reviewer tooling"], ["AFTER", "#1055", "#1055", "", "delete a dead legacy write on Langston's box"], ["HELPFUL", "#1072", "#1072", "CC-C", "the crypto price-history recorder's symbol set is frozen — the same blind spot Langston hit today: not one euro-priced pair ever recorded"], ["HELPFUL", "B-SCHEDULER-FIRST-TICK", "B-SCHEDULER-FIRST-TICK", "CC-A", "row 4.58 — scheduler first-tick behaviour; with a pre-read of ten unread market-scanner helpers"], ["AFTER", "B-DECISION-RECORDS", "B-DECISION-RECORDS", "CC-A", "decision-history durability and catalogues (CC-A governance lane)"], ["HELPFUL", "B-EXCURSION-RECORD", "B-EXCURSION-RECORD", "CC-B", "row 2.4g-3 — record how far each trade travelled, needed to set the remaining reach ceilings from evidence"], ["HELPFUL", "B-TRADE-RECORD-JOINABILITY", "B-TRADE-RECORD-JOINABILITY", "CC-B", "row 2.4g-4 — trade records that cannot be joined across stores, missing DI and a zero ATR on every xStock shadow row: the learning record Phase 25 calibrates from"], ["DECIDE", "B-TARGET-MULTIPLE-VS-HORIZON", "B-TARGET-MULTIPLE-VS-HORIZON", "CC-B", "row 2.4g-5 — Kyle decides, gated on 2.4g-3"], ["HELPFUL", "B-LANGSTON-LEDGER-SPLIT", "B-LANGSTON-LEDGER-SPLIT", "CC-B", "how the reviewer's loaded set stops growing; with 2.8a/2.8c (Infra)"], ["MUST", "B-TEC-PRIME-BOOT-RACE", "B-TEC-PRIME-BOOT-RACE", "CC-B", "On every restart the crypto exit loop throws on open positions for a tick — in live, every deploy leaves real positions unevaluated for that tick"], ["HELPFUL", "B-EXIT-POLICY-EVALUATOR", "B-EXIT-POLICY-EVALUATOR", "CC-B", "our expectancy model cannot rank exit alternatives; needs B-OUTCOME-CORPUS-CAPTURE first (not a defect — a missing capability)"], ["HELPFUL", "B-VPNL-WRITER-BOUND", "B-VPNL-WRITER-BOUND", "CC-B", "a learning-record column is written unbounded and a mean taken from it reversed a published conclusion — calibration-record integrity"], ["AFTER", "B-FRESHNESS-LOG-READER", "B-FRESHNESS-LOG-READER", "CC-B", "nothing reads the rules-freshness hook's log — crew tooling"], ["AFTER", "B-SHARED-TMP-ISOLATION", "B-SHARED-TMP-ISOLATION", "CC-B", "sessions share /tmp so a commit message can be another session's — crew tooling"], ["AFTER", "B-CHANGE-CLASS-DOCSET-FIT", "B-CHANGE-CLASS-DOCSET-FIT", "CC-B", "governance checker doc-set matrix — governance"], ["AFTER", "B-LANGSTON-FILE-FLOOR", "B-LANGSTON-FILE-FLOOR", "Infra Claude", "reviewer's always-loaded file size — reviewer tooling"], ["AFTER", "B-LANGSTON-LOAD-RATCHET", "B-LANGSTON-LOAD-RATCHET", "Infra Claude", "reviewer tooling"], ["AFTER", "B-LEDGER-HEADLINE-INJECT", "B-LEDGER-HEADLINE-INJECT", "Infra Claude", "reviewer tooling"], ["AFTER", "B-LANGSTON-RECONCILE-VERB", "B-LANGSTON-RECONCILE-VERB", "Infra Claude", "reviewer tooling"], ["AFTER", "B-UMBRELLA-OPEN-STATE", "B-UMBRELLA-OPEN-STATE", "CC-B", "governance checker state for umbrella batches"], ["OBSERVATION", "B-INSTRUMENTS-OVER-RULES", "B-INSTRUMENTS-OVER-RULES", "CC-A", "the code-search-tool usage measure runs 2026-09-18 → 10-02 (pre-registered)"], ["HELPFUL", "B-READ-MODEL-BLOB-VERIFY", "B-READ-MODEL-BLOB-VERIFY", "Infra Claude", "the reviewer's pinned reads served the wrong file twice — a reviewer reading the wrong object weakens every review before live (Infra)"], ["AFTER", "B-RULES-LAYER", "B-RULES-LAYER", "CC-A", "Kyle-directed: move behavioural rules to a stronger layer — crew process"], ["AFTER", "B-HEARTBEAT-RESCOPE", "B-HEARTBEAT-RESCOPE", "CC-A", "hourly heartbeat task purpose — crew tooling"], ["HELPFUL", "B-SLOT-PLACEMENT-CHECK", "B-SLOT-PLACEMENT-CHECK", "CC-A", "Kyle's own ask: a newly slotted item reaches the plan and the owning task list at the moment it is slotted — the failure this inventory is repairing by hand"], ["AFTER", "B-STATE-ASSERTION-LINT", "B-STATE-ASSERTION-LINT", "CC-A", "sentences true when written and wrong now — governance tooling"], ["AFTER", "B-CLAIM-REDERIVE", "B-CLAIM-REDERIVE", "CC-A", "re-derive a load-bearing number at the Stop boundary — crew tooling"], ["MUST", "B-EXIT-LATCH-INVESTIGATION", "B-EXIT-LATCH-INVESTIGATION", "CC-A", "AN INVESTIGATION: is the hold-past-target Kyle saw a labelling artefact or a live exit-evaluation defect? Kyle: 'make sure it's not a symptom of a much bigger and uglier problem' — the exit defect cannot be bucketed with"], ["AFTER", "B-HOOK-ESTATE-VERSION", "B-HOOK-ESTATE-VERSION", "CC-C", "clones run different versions of one hook — crew tooling"], ["AFTER", "B-ALERT-WINDOW-EXPIRY", "B-ALERT-WINDOW-EXPIRY", "CC-A", "no terminal alert state for 'can no longer be observed' — alert tooling"], ["AFTER", "B-EOL-NORMALISE", "B-EOL-NORMALISE", "CC-A", "line-ending normalisation"], ["AFTER", "B-CREW-BOARD-REMOVAL", "B-CREW-BOARD-REMOVAL", "CC-A", "retired board code — gated on Kyle"], ["HELPFUL", "B-TRADING-ENGINE-REMOVAL", "B-TRADING-ENGINE-REMOVAL", "CC-A", "delete the legacy TradingEngine that runs in neither mode (Kyle-ruled). The dead-code reachability census decides whether it is MUST"], ["HELPFUL", "RULINGS-DURABILITY", "12.1 rulings-durability fix", "CC-A", "Langston's ~3,028 rulings sit in one file on one box outside git — Langston placed it FIRST BREAK: irreversible loss, cheapest row on the list"], ["HELPFUL", "LOOKALIKE-REGISTER", "12.2 lookalike register", "CC-A", "one page of the pairs that already caused wrong calls — FIRST BREAK by Langston's ruling"], ["HELPFUL", "B-CATALOG-2", "B-CATALOG-2", "CC-A", "its FIRST catalogue is the diagnostic-coverage map (Kyle: 'where we have diagnostics and where we don't') — how Kyle sees what live is and is not watched. The rest of the family is AFTER"], ["AFTER", "DECOMMISSION-RESIDUE", "12.6 decommission residue", "CC-A", "per-table rule-18 census of 9 walter_* tables + backups — its bytes count toward the 72% disk sizing"], ["HELPFUL", "B-SCAN-BREADTH-DECLINE", "B-SCAN-BREADTH-DECLINE", "CC-C", "a scheduled review of why the scanner sees so few pairs — breadth feeds selection"], ["HELPFUL", "#982", "#982 alert hold verb", "CC-A", "an ack silences an event-wait alert permanently and there is no un-ack; Kyle approved a third action subject to Langston's ruling; five alerts are acked-and-silenced waiting on it"], ["HELPFUL", "B-TEC-STATE-DURABILITY", "B-TEC-STATE-DURABILITY", "?", "on restart the engine reads every open position's trailing progress from one /tmp file inside a catch-and-continue — a corrupt file boots with zero trailing progress while reporting healthy. Kyle placed it VERY LAST (a r"], ["MUST", "B-SSH-KEY-CENSUS", "B-SSH-KEY-CENSUS (investigation)", "?", "two ungoverned SSH keys can log in as the account that owns the trading application; nobody knows whose they are. Kyle placed it at Phase-19 end: Phase 21 turns that box into the live path, and it is an hour. Remediation"], ["HELPFUL", "SHADOW-BE-MOONBAG", "Shadow break-even and moonbag calculations (paper now, live later)", "?", "Kyle: launch with both off, but compute what break-even stops and moonbags WOULD have done on every paper trade (and live trades once live), so we can analyse which helps — including moonbags alone"], ["MUST", "F-G-1-REOPEN", "F-G-1 reopens: the OHLC writer can write an older bar over a newer one", "CC-C", "F-G-1's window closed 2026-09-04 (crypto PASS n=24, xStock underpowered n=19) and it REOPENS at Step 3: the OHLC writer's retry can write an OLDER bar over a NEWER one, and xStock 1-minute bars roll into the 15-minute sn"], ["OBSERVATION", "8a-P4c", "8a-P4c increment 1 — the VTS xStock price instrument", "CC-C", "deployed bc199185e; window to 2026-09-30T00:00Z; pre-registered rules A-D then decide increments 2-3"], ["HELPFUL", "CODEX-PRICING-REVIEW", "Independent review of the pricing architecture (Codex)", "CC-C", "an independent review of the price layer before real capital; brief, prompt and findings register (r14) ready; was held for #1027, which is now fixed"], ["HELPFUL", "EXIT-PATH-AUDIT-MAP", "Map EXIT_PATH_MACHINERY_AUDIT §10 items to their homes", "CC-C", "its surviving items are believed absorbed into 3n, 3h/3h.b and 3i; full coverage not yet proved; map item by item"], ["MUST", "RESTING-ORDER-DEADLINE", "A resting order's deadline must run whether or not a price is usable", "CC-C", "on the PAPER lane, both classes, every price-refusal path skips the resting-order deadline check, so a rest can fill after a real system would have cancelled it; in live the order rests at the venue and a cancel needs no"], ["HELPFUL", "B-LANGSTON-CONTEXT", "B-LANGSTON-CONTEXT remaining pieces", "Infra Claude", "the reviewer's memory composer: P-2 retrofit + #1055, P-1b, and the privacy-check positive control"], ["HELPFUL", "LANGSTON-MEMORY-APPENDS", "Stop appending closed-batch history to Langston's memory", "Infra Claude", "every batch close appends to his memory and nothing evicts; keep current state and generalising rulings, evict by supersession"], ["HELPFUL", "COLTRANE-PARITY", "Coltrane parity: a privacy check like Langston's", "Infra Claude", "no Coltrane privacy check exists; a precondition for the implementor trial"], ["AFTER", "B-TOKEN-WATCH-REST", "B-TOKEN-WATCH Steps 7-11", "Infra Claude", "research feed paused at Step 7; no trading link"], ["HELPFUL", "CONVERSATION-SWEEP", "The 11 GB old-conversation sweep for things discussed and never picked", "Infra Claude", "Kyle asked for everything discussed and not gotten back to; this feeds the inventory itself"], ["DECIDE", "BE-MOONBAG", "Break-even stop + moonbag exits", "(none)", ""], ["HELPFUL", "B-VOLATILITY-CACHE-RETIRE", "B-VOLATILITY-CACHE-RETIRE", "CC-B", ""], ["MUST", "P19-B6.10", "P19-B6.10 retire the old per-mode guardrails table", "?", ""], ["MUST", "KRAKEN-LIVE-KEY", "Provision the live Kraken API key", "Kyle", ""], ["MUST", "LIVE-FEE-SCHEDULE", "Confirm the live fee schedule", "?", ""], ["MUST", "25-11a", "25-11a refuse a position larger than the visible book", "?", ""], ["MUST", "DISK-HEADROOM", "Months of database headroom", "?", ""], ["MUST", "DEAD-CODE-REACHABILITY", "Dead-code reachability census", "?", ""], ["DECIDE", "PAPER-STANDARD", "Define 'comfortable in paper' in numbers", "Kyle", ""], ["DECIDE", "DAY-ONE-NUMBERS", "Day-one live money settings", "Kyle", ""], ["DECIDE", "PROCESS-DEATH-FORM", "Protect live positions if our server dies", "Kyle", ""], ["DECIDE", "NONFIAT-FORK", "Exclude plain-currency and non-dollar pairs", "Kyle", ""], ["MUST", "B-OUTCOME-CORPUS-CAPTURE", "B-OUTCOME-CORPUS-CAPTURE", "?", ""], ["HELPFUL", "PLAN-ID-COLLISIONS", "Fix duplicated plan ids", "CC-A", ""], ["AFTER", "B-CROSS-SESSION-BLEED-SM-CONFLICT", "System Manual row conflict", "CC-B", ""]]
+[
+[
+"OBSERVATION",
+"F-G-1",
+"F-G-1",
+"Kyle",
+"venue price grid — deployed 2026-08-28, observation window open"
+],
+[
+"AFTER",
+"B-ASSET-CAPS-REMOVAL",
+"B-ASSET-CAPS-REMOVAL",
+"",
+"open: delete an orphaned pre-governance service (orphan premise confirmed by census) — the dead-code reachability census decides if it moves"
+],
+[
+"HELPFUL",
+"B-ROLLBACK-EPOCH-FORWARD",
+"B-ROLLBACK-EPOCH-FORWARD",
+"CC-B",
+"calibration-epoch bookkeeping across a rollback — keeps learning data unmixed"
+],
+[
+"MUST",
+"B-EXIT-TRIGGER-FILL-PARITY",
+"B-EXIT-TRIGGER-FILL-PARITY",
+"Kyle",
+"exits must fire on the price they would actually fill at — its own row says CRITICAL; wrong in live = wrong real exits"
+],
+[
+"MUST",
+"B-XSTOCK-LIVE-FEED",
+"B-XSTOCK-LIVE-FEED",
+"CC-C",
+"both classes launch live together (D5); xStock live trading needs a correct live feed"
+],
+[
+"HELPFUL",
+"B-XSTOCK-SESSION-FRESHNESS",
+"B-XSTOCK-SESSION-FRESHNESS",
+"Kyle",
+"CORRECTED (Langston): Kyle ruled 2026-09-03 — off-hours entries allowed at the same bar; exit freshness the same standard round the clock, 'we just hold'. Exit side: change nothing. Remaining: keep the alert's record but"
+],
+[
+"HELPFUL",
+"B-OBS-WINDOW-EVIDENCE-CAPTURE",
+"B-OBS-WINDOW-EVIDENCE-CAPTURE",
+"CC-C",
+"capture observation-window evidence at the event — measurement quality"
+],
+[
+"MUST",
+"B-EQUITY-RECONNECT-STALL-TIMER",
+"B-EQUITY-RECONNECT-STALL-TIMER",
+"CC-C",
+"a stalled xStock feed reconnect leaves live positions unwatched"
+],
+[
+"HELPFUL",
+"B-XSTOCK-ENTRY-COMPARATOR",
+"B-XSTOCK-ENTRY-COMPARATOR",
+"CC-C",
+"xStock entry-price comparator — price-truth lane"
+],
+[
+"HELPFUL",
+"B-VENUE-QUIET-ALERTING",
+"B-VENUE-QUIET-ALERTING",
+"Kyle",
+"alert when a venue goes quiet — observability that matters once capital is exposed"
+],
+[
+"HELPFUL",
+"B-DECIDED-INTENT-INDEX",
+"B-DECIDED-INTENT-INDEX",
+"CC-C",
+"index of decided intents — groundwork for the exit-path redesign"
+],
+[
+"MUST",
+"B-UNIVERSE-REFRESH-ACTS",
+"B-UNIVERSE-REFRESH-ACTS",
+"CC-C",
+"blocks B-SYMBOL-CLASS-IDENTITY, which is MUST"
+],
+[
+"AFTER",
+"B-TSC-GUARD-DETERMINISM",
+"B-TSC-GUARD-DETERMINISM",
+"CC-A",
+"CI type-check guard determinism — tooling"
+],
+[
+"HELPFUL",
+"B-VTS-MARK-SIDE",
+"B-VTS-MARK-SIDE",
+"CC-C",
+"the learning lane's mark side — VTS is not live, but it is the calibration record"
+],
+[
+"MUST",
+"B-SYMBOL-CLASS-IDENTITY",
+"B-SYMBOL-CLASS-IDENTITY",
+"CC-C",
+"a ticker shared by a coin and an equity is one key today; DASH has real trades across both classes — Kyle-ruled 2026-09-09"
+],
+[
+"MUST",
+"B-TOTAL-DRAWDOWN-WARNING",
+"B-TOTAL-DRAWDOWN-WARNING",
+"CC-C",
+"a mark-to-market total-drawdown warning — Kyle-ruled 2026-09-09; a risk control on real capital"
+],
+[
+"MUST",
+"B-OHLC-FRAME-GUARD",
+"B-OHLC-FRAME-GUARD",
+"CC-C",
+"validate price bars at every producer — opened from a CRITICAL alert; a bad bar feeds every indicator"
+],
+[
+"HELPFUL",
+"B-FUTURES-BAR-FINAL",
+"B-FUTURES-BAR-FINAL",
+"CC-C",
+"futures bar finality — perps are post-live, but check whether any live-class signal reads these bars"
+],
+[
+"HELPFUL",
+"B-ARCHIVE-WRITER-LIFECYCLE",
+"B-ARCHIVE-WRITER-LIFECYCLE",
+"CC-C",
+"archive-writer lifecycle — integrity of the recorded history"
+],
+[
+"AFTER",
+"B-DISPATCH-STAGING-VERIFY",
+"B-DISPATCH-STAGING-VERIFY",
+"CC-C",
+"its own row says it blocks nothing"
+],
+[
+"AFTER",
+"B-SCANNER-DEDUPE-DEAD-TABLE",
+"B-SCANNER-DEDUPE-DEAD-TABLE",
+"CC-C",
+"dead table cleanup"
+],
+[
+"AFTER",
+"B-CHANGE-CLASS-PARSER",
+"B-CHANGE-CLASS-PARSER",
+"CC-C",
+"governance-checker parser"
+],
+[
+"AFTER",
+"B-CHECKER-CORE-PATHS",
+"B-CHECKER-CORE-PATHS",
+"CC-A",
+"governance-checker core paths"
+],
+[
+"HELPFUL",
+"B-PROVENANCE-LOSS-CENSUS",
+"B-PROVENANCE-LOSS-CENSUS",
+"CC-C",
+"where decision provenance is lost — measurement integrity"
+],
+[
+"AFTER",
+"B-DEPLOY-REF-DECLARATION",
+"B-DEPLOY-REF-DECLARATION",
+"CC-C",
+"deploy-tool declaration"
+],
+[
+"HELPFUL",
+"B-GUARD-COVERAGE-AUDIT",
+"B-GUARD-COVERAGE-AUDIT",
+"CC-C",
+"audit which guards cover which paths"
+],
+[
+"HELPFUL",
+"B-VALIDATE-OBSERVABILITY",
+"B-VALIDATE-OBSERVABILITY",
+"CC-C",
+"make validation failures visible"
+],
+[
+"HELPFUL",
+"B-POST-GRID-MUTATION-CENSUS",
+"B-POST-GRID-MUTATION-CENSUS",
+"Kyle",
+"investigation (no code): do stops get mutated off the grid after rounding"
+],
+[
+"MUST",
+"B-GRID-LIVE-PATH-PARITY",
+"B-GRID-LIVE-PATH-PARITY",
+"CC-C",
+"venue-grid rounding on the LIVE order path — the grid today covers the orchestrator path; an off-grid live order is rejected by the venue"
+],
+[
+"MUST",
+"B-INTENT-ENTRY-PARITY",
+"B-INTENT-ENTRY-PARITY",
+"CC-C",
+"two other entry routes bypass the grid, and #953 is the same two routes on the exit side"
+],
+[
+"MUST",
+"row:3h.b",
+"row:3h.b",
+"CC-C",
+"delete the dead exit limb before live so it cannot be reached — same family as the #953 hard blocker"
+],
+[
+"MUST",
+"B-TARGET-FABRICATION",
+"B-TARGET-FABRICATION",
+"CC-C",
+"signals given a default target the strategy never chose — trades on invented geometry"
+],
+[
+"HELPFUL",
+"B-STRING-TRUTHINESS-GUARDS",
+"B-STRING-TRUTHINESS-GUARDS",
+"CC-C",
+"the class of guards that treat the string '0' as true — correctness hygiene"
+],
+[
+"AFTER",
+"B-CANONICAL-FREEZE",
+"B-CANONICAL-FREEZE",
+"CC-C",
+"its own row says governance hygiene, not on the trading path"
+],
+[
+"AFTER",
+"B-FUNNEL-PERP-CLASSES",
+"B-FUNNEL-PERP-CLASSES",
+"CC-C",
+"open: the funnel can only key the two spot classes; perps come after live (an interim alert shipped in F-G-1)"
+],
+[
+"HELPFUL",
+"B-VENUE-PAIRS-REINIT",
+"B-VENUE-PAIRS-REINIT",
+"CC-C",
+"re-read venue pair rules when they change — else a changed tick size refuses orders"
+],
+[
+"AFTER",
+"B-VPG-ROW-ALIGN",
+"B-VPG-ROW-ALIGN",
+"CC-C",
+"its own row says display-only"
+],
+[
+"HELPFUL",
+"row:3m-ENUM",
+"row:3m-ENUM",
+"CC-C",
+"volatility_edge's pattern-confirmed path is rejected by both sinks — a strategy path silently dead"
+],
+[
+"MUST",
+"B-PRICE-SIDE-BY-JOB",
+"B-PRICE-SIDE-BY-JOB",
+"CC-C",
+"buy on the ask, sell on the bid, for every job a price does — Kyle's test is fidelity to live trading. Since 2026-09-11 (r5) it CONTAINS the age-truth refusal, open-trade refresh, ticker trigger, two-cache decision and F"
+],
+[
+"AFTER",
+"B-ORPHAN-ROOT-SCANNER",
+"B-ORPHAN-ROOT-SCANNER",
+"CC-C",
+"dead code (disposition 5) — legacy removal, no live effect"
+],
+[
+"AFTER",
+"row:3n.b",
+"row:3n.b",
+"CC-C",
+"orphan level tables (disposition 5) — legacy removal"
+],
+[
+"HELPFUL",
+"row:3n.c",
+"row:3n.c",
+"CC-C",
+"trailing-exit state lost on restart — becomes MUST the moment trailing exits are switched on (see BE-MOONBAG)"
+],
+[
+"HELPFUL",
+"B-GRID-REFUSAL-RATE",
+"B-GRID-REFUSAL-RATE",
+"CC-C",
+"how often the venue grid refuses a signal — a symptom measurement"
+],
+[
+"AFTER",
+"B-CANONICAL-CORPUS-ACCURACY",
+"B-CANONICAL-CORPUS-ACCURACY",
+"CC-C",
+"accuracy of the pre-governance reference corpus"
+],
+[
+"AFTER",
+"B-DIAG-READ-INTEGRITY",
+"B-DIAG-READ-INTEGRITY",
+"CC-C",
+"diagnostics reads that took a status code for a body"
+],
+[
+"HELPFUL",
+"B-QUOTE-PEG-DEVIATION-WATCH",
+"B-QUOTE-PEG-DEVIATION-WATCH",
+"CC-C",
+"watch for quote-peg deviation; its row says it gates nothing"
+],
+[
+"HELPFUL",
+"B-QUOTE-LEG-INTEGRITY",
+"B-QUOTE-LEG-INTEGRITY",
+"CC-C",
+"writer-side assertion that quote legs are sane"
+],
+[
+"HELPFUL",
+"B-QUOTE-ADMISSION-LEGACY-SWEEP",
+"B-QUOTE-ADMISSION-LEGACY-SWEEP",
+"Kyle",
+"decide what the legacy allowed-pairs list is for"
+],
+[
+"HELPFUL",
+"B-HORIZON-GRID-COMPARABILITY",
+"B-HORIZON-GRID-COMPARABILITY",
+"CC-B",
+"makes holding-horizon numbers comparable — precondition for the exit-policy evaluator"
+],
+[
+"HELPFUL",
+"B-FAMILY-POOL-REACHABILITY",
+"B-FAMILY-POOL-REACHABILITY",
+"CC-C",
+"reachability inside the family pool"
+],
+[
+"MUST",
+"B-REST-SIDES-TO-CACHE",
+"B-REST-SIDES-TO-CACHE",
+"CC-C",
+"the REST adapter parses bid and ask and then stores only the midpoint — the price-side rule needs the sides"
+],
+[
+"MUST",
+"B-BOOK-SUBSCRIPTION-REACH",
+"B-BOOK-SUBSCRIPTION-REACH",
+"CC-C",
+"the order book is the preferred price source but is subscribed for ~3 coins a day against a 35-41 symbol pool (Kyle directive 2026-09-13)"
+],
+[
+"HELPFUL",
+"B-DECISION-INSTANT-QUOTE",
+"B-DECISION-INSTANT-QUOTE",
+"CC-C",
+"record the exact quote at the decision instant — measurement"
+],
+[
+"DECIDE",
+"B-VTS-NO-DECISION-VALVE",
+"B-VTS-NO-DECISION-VALVE",
+"CC-C",
+"Kyle's policy call: time-bound a refused learning-lane exit, or loosen the spread ceiling (Langston recommends time-bound)"
+],
+[
+"HELPFUL",
+"B-EXIT-LINE-IDENTITY",
+"B-EXIT-LINE-IDENTITY",
+"CC-C",
+"trade id and class on the exit log line, so a close is read by identity"
+],
+[
+"MUST",
+"B-BOOK-STATE-RING-INDEPENDENT-BOUND",
+"B-BOOK-STATE-RING-INDEPENDENT-BOUND",
+"CC-C",
+"xStock exit plausibility bound — a false stop in live is a real loss (#1065 was one)"
+],
+[
+"HELPFUL",
+"B-EXIT-DECISION-RUNG-STAMP",
+"B-EXIT-DECISION-RUNG-STAMP",
+"CC-C",
+"stamp which price rung an exit decision used — provenance"
+],
+[
+"MUST",
+"B-BOOK-STATE-RESTART-DURABLE",
+"B-BOOK-STATE-RESTART-DURABLE",
+"CC-C",
+"a restart empties the xStock guard and a false stop fired 12 seconds after a deploy — every live restart would risk one"
+],
+[
+"MUST",
+"B-XSTOCK-BID-TRIGGER-RELAND",
+"B-XSTOCK-BID-TRIGGER-RELAND",
+"CC-C",
+"put the xStock stop/target trigger back on the transactable bid — price-side fidelity for xStock exits"
+],
+[
+"AFTER",
+"B-PRICE-DOC-CONSOLIDATE",
+"B-PRICE-DOC-CONSOLIDATE",
+"Kyle",
+"merge two price documents into one — Kyle wants it done, but it is documentation"
+],
+[
+"OBSERVATION",
+"B-FEED-MISMATCH-FIX",
+"B-FEED-MISMATCH-FIX",
+"CC-B",
+"deployed 2026-09-19; 300 taker closes or 21 days"
+],
+[
+"MUST",
+"B-ENTRY-LEVEL-RECHECK",
+"B-ENTRY-LEVEL-RECHECK",
+"CC-B",
+"nothing re-checks a signal's levels against the current price before the fill, on either class — in live a stale signal fills at a moved price"
+],
+[
+"MUST",
+"B-CLOSE-WRITER-COSTS",
+"B-CLOSE-WRITER-COSTS",
+"CC-B",
+"a close can delete a position with no trade record, and one path books invented zero fees — the record Kyle judges by, and live accounting"
+],
+[
+"MUST",
+"B-ENGINE-STOP-DURATION-COLUMN",
+"B-ENGINE-STOP-DURATION-COLUMN",
+"CC-B",
+"an engine stop returns an error after 25 days of session even though it flattened — in live an operator must be able to trust a stop's report; a small fix"
+],
+[
+"OBSERVATION",
+"B-REACH-BASELINE-ADJUST",
+"B-REACH-BASELINE-ADJUST",
+"Kyle",
+"deployed 2026-09-20; 7-day rollback window"
+],
+[
+"HELPFUL",
+"B-VTS-CLASS-LABEL-INTEGRITY",
+"B-VTS-CLASS-LABEL-INTEGRITY",
+"CC-C",
+"backfill of mislabelled learning rows — only after the MUST key fix (#1024)"
+],
+[
+"HELPFUL",
+"B-GATE-WILDCARD-REFUSE",
+"B-GATE-WILDCARD-REFUSE",
+"CC-B",
+"code-side guard behind a migration invariant that already refuses the bad row"
+],
+[
+"HELPFUL",
+"B-SILENT-STRATEGY-CENSUS",
+"B-SILENT-STRATEGY-CENSUS",
+"CC-B",
+"three wired strategies have never been evaluated — more strategies alive means better selection"
+],
+[
+"AFTER",
+"B-OPEN-OBLIGATION-SWEEP",
+"B-OPEN-OBLIGATION-SWEEP",
+"CC-B",
+"process instrument for homed-but-unwatched items"
+],
+[
+"HELPFUL",
+"B-EXIT-MAKER-VS-TAKER-REVIEW",
+"B-EXIT-MAKER-VS-TAKER-REVIEW",
+"CC-B",
+"Kyle's observation: maker exits profitable, taker target exits negative — possibly a large P&L lever"
+],
+[
+"AFTER",
+"B-TSC-COVERS-TESTS",
+"B-TSC-COVERS-TESTS",
+"CC-C",
+"type-checking coverage for test files — tooling"
+],
+[
+"HELPFUL",
+"B-CRYPTO-MARK-AGE-GATE",
+"B-CRYPTO-MARK-AGE-GATE",
+"CC-C",
+"crypto mark-age gate — its original premise was withdrawn; the rewritten row survives"
+],
+[
+"MUST",
+"B-EXIT-TICKER-LEG-ADAPTER-SIDES",
+"B-EXIT-TICKER-LEG-ADAPTER-SIDES",
+"CC-C",
+"the exit path carries both sides of the price and cannot see them — needed to exit on the transactable side"
+],
+[
+"MUST",
+"B-KILLSWITCH-DENOMINATOR",
+"B-KILLSWITCH-DENOMINATOR",
+"Kyle",
+"the kill switch's remaining legs — Kyle placed it himself; the kill switch is the last line of capital protection"
+],
+[
+"MUST",
+"B-NONFIAT-QUOTE-DENOMINATION",
+"B-NONFIAT-QUOTE-DENOMINATION",
+"Kyle",
+"the universe admits non-USD-quoted pairs and pure fiat pairs (USD/CAD, EUR/USD) whose sizing and P&L we handle wrong. Kyle's fork: fix the maths, or exclude the pairs (nearly free)"
+],
+[
+"DECIDE",
+"B-PRICE-FLOOR-REVIEW",
+"B-PRICE-FLOOR-REVIEW",
+"Kyle",
+"minimum-price floor for tradeable symbols — its row says the decision is Kyle's"
+],
+[
+"MUST",
+"row:6",
+"row:6",
+"",
+"F-C staleness bound — a bound on how old a price may be when it is used"
+],
+[
+"HELPFUL",
+"row:7",
+"row:7",
+"",
+"F-D learning-lane accessor and isolation"
+],
+[
+"MUST",
+"row:8",
+"row:8",
+"",
+"F-E fill-integrity detector — catches a bad fill before it is booked"
+],
+[
+"HELPFUL",
+"row:9",
+"row:9",
+"",
+"F-F(b) the reset gate — when the learning record restarts clean after the price fixes"
+],
+[
+"AFTER",
+"B-ALERT-LIFECYCLE",
+"B-ALERT-LIFECYCLE",
+"",
+"alert-tooling quality of life; its own row says it does not block the trading sequence"
+],
+[
+"AFTER",
+"row:1",
+"row:1",
+"CC-A",
+"crew-process rule mechanisms (B-RULES-1e) — governance tooling, no effect on trading"
+],
+[
+"OBSERVATION",
+"B-XSTOCK-FEE-CONTRACT",
+"B-XSTOCK-FEE-CONTRACT",
+"Kyle",
+"deployed 2026-09-11; its 21-day window closes it"
+],
+[
+"HELPFUL",
+"B-KRAKEN-FEE-WATCH",
+"B-KRAKEN-FEE-WATCH",
+"CC-B",
+"the venue changed fees on 07-09 and we noticed on 09-06 — in live, a stale fee is a wrong EV gate"
+],
+[
+"HELPFUL",
+"T-W20C-SCALAR-LEG",
+"T-W20C-SCALAR-LEG",
+"CC-B",
+"the parity harness — gates Phase 25's use of recorded decision history (25-12)"
+],
+[
+"HELPFUL",
+"B-PAPER-LANE-PROVENANCE",
+"B-PAPER-LANE-PROVENANCE",
+"CC-B",
+"paper lane records no decision inputs, so it cannot be replayed — pairs with the parity harness"
+],
+[
+"HELPFUL",
+"B-FILTER-DIAG-XSTOCK",
+"B-FILTER-DIAG-XSTOCK",
+"CC-B",
+"xStock per-strategy decline table is empty — visibility into why xStock signals die"
+],
+[
+"AFTER",
+"B-SCRIPTS-TSC-COVERAGE",
+"B-SCRIPTS-TSC-COVERAGE",
+"CC-B",
+"type-checking coverage for the scripts folder — tooling"
+],
+[
+"MUST",
+"B-RTB-SIGNAL-IDENTITY",
+"B-RTB-SIGNAL-IDENTITY",
+"CC-B",
+"the ready-to-buy queue's identity carries no asset class — with tickers shared across classes (STX, STRK, DASH) the queue can confuse two instruments; takes its key from #1024"
+],
+[
+"AFTER",
+"B-WRITER-ACTOR-ALLOWLIST",
+"B-WRITER-ACTOR-ALLOWLIST",
+"CC-B",
+"Langston memory-tool actor names — reviewer tooling"
+],
+[
+"AFTER",
+"B-PYCACHE-PREFIX-INVOCATION",
+"B-PYCACHE-PREFIX-INVOCATION",
+"",
+"reviewer-tooling hardening on the Helsinki box; not the trading path (a planted-cache execution vector — worth doing, not a live blocker)"
+],
+[
+"AFTER",
+"B-WAKE-SOURCE-TRUTH",
+"B-WAKE-SOURCE-TRUTH",
+"CC-INFRA",
+"crew wake-source documentation"
+],
+[
+"AFTER",
+"B-ARCHIVE-RETENTION-SIZING",
+"B-ARCHIVE-RETENTION-SIZING",
+"Kyle",
+"Kyle decided 2026-09-23: no action, August tiers to warm in October; the uninstalled context_bridge_log TTL job is a separate small defect"
+],
+[
+"AFTER",
+"rm:19-5",
+"19-5 §19.x Boot Readiness Coordinator Unify the patchwork boot se",
+"",
+"boot readiness coordinator — conditional on boot cascades, which have not recurred"
+],
+[
+"MUST",
+"rm:19-9",
+"19-9 B79.x failure-mode taxonomy — entry-side gap LULD halts / ci",
+"",
+"entry-side failure modes (LULD halts, circuit breakers, splits, dividends, earnings) — its own text says required before live"
+],
+[
+"MUST",
+"rm:19-10",
+"19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr",
+"",
+"throwing asset-class resolution call sites would break a live path IF still present"
+],
+[
+"MUST",
+"rm:19-11",
+"19-11 §19.1 Paper Trading Run The act of actually running paper-ac",
+"",
+"THE PAPER RUN ITSELF — it is the evidence Kyle's comfortable-in-paper gate is judged on"
+],
+[
+"HELPFUL",
+"rm:19-13",
+"19-13 §19.3 Performance Validation Latency, throughput, queue dept",
+"",
+"latency / throughput / cadence under load — matters more as volume grows than on day one"
+],
+[
+"AFTER",
+"rm:19-15",
+"19-15 #97 xStock asset-specific characteristics inventory Earnings",
+"",
+"xStock fundamentals enrichment (earnings, P/E, ratings) — plumbing, not a live-safety need"
+],
+[
+"HELPFUL",
+"rm:19-16",
+"19-16 B79.6 sector-aware portfolio-cluster prevention Equities clu",
+"",
+"sector-cluster prevention — correlated xStock positions multiply risk; concurrency caps bound it today"
+],
+[
+"HELPFUL",
+"rm:19-17",
+"19-17 NEW — Active Trading Simulations (Kyle directive 2026-05-27)",
+"",
+"active-trading simulations — more learning data per day for Phase 25; not a live-safety need"
+],
+[
+"DECIDE",
+"rm:19-17b",
+"19-17b ITEM-4 step 3 standing note (2026-06-10): Phase-21 go-live M",
+"",
+"THE GO-LIVE ACT ITSELF — flipping live_engine_enabled to 1. The plan parks it as a Phase 21 go-live checklist step (PHASE_19_PLAN:262): a terminal step with Kyle's hand on it, not a gate"
+],
+[
+"DECIDE",
+"rm:19-18",
+"19-18 NEW — Live mode active-trading build approach (Kyle directiv",
+"",
+"live-mode build approach (copy of paper + switch, or other) — a decision that must land before Phase 21"
+],
+[
+"HELPFUL",
+"rm:19.2",
+"19.2 Audit & Debug — - Verify FinalScore, Hybrid Score, Confidenc",
+"",
+"verify the scoring stack calculates correctly (FinalScore, Hybrid, Confidence, Regime Weight) — umbrella; split into concrete checks"
+],
+[
+"HELPFUL",
+"rm:19.6",
+"19.6 External Source Connection & Capacity Diagnostics Dashboard ",
+"",
+"external-source and capacity diagnostics dashboard — visibility that catches a live problem fast"
+],
+[
+"AFTER",
+"rm:19.6.4",
+"19.6.4 Forward role — ML / AI conversational layer API — When the M",
+"",
+"forward role for the ML conversational layer — Phase 17/18"
+],
+[
+"HELPFUL",
+"rm:19.6.6",
+"19.6.6 Internal subsystem health + EARLY-FAILURE detection (NEW 202",
+"",
+"early-failure detection — catch failures in progress; high value once real capital is exposed"
+],
+[
+"AFTER",
+"rm:25-1",
+"25-1 B79.0n.ML-CALIBRATION T2 (umbrella v4 #15) Tier 2 ML calibra",
+"",
+"ML calibration tier 2 — its own row says it needs live evidence"
+],
+[
+"HELPFUL",
+"rm:25-2",
+"25-2 §19.0.A Regime classifier confidence-chain calibration B-NEW",
+"",
+"regime confidence-chain calibration"
+],
+[
+"HELPFUL",
+"rm:25-3",
+"25-3 §19.0.3 TFS sustainability gate value-scope decision Recalib",
+"",
+"sustainability gate: recalibrate, re-target or retire"
+],
+[
+"HELPFUL",
+"rm:25-4",
+"25-4 §19.4 SQE Recalibration (B66 conditional) Rebuild SQE thresh",
+"",
+"SQE recalibration, with named sub-items"
+],
+[
+"AFTER",
+"rm:25-6",
+"25-6 AMR posture-model M2 calibration (post-launch — Phase 17/18 ",
+"",
+"AMR posture model calibration — its own row says post-launch"
+],
+[
+"HELPFUL",
+"rm:25-7",
+"25-7 #94 B79.3 xStock equity-equivalent macro confidence modifier",
+"",
+"xStock macro confidence modifiers (Kyle settled #94 here)"
+],
+[
+"HELPFUL",
+"rm:25-9",
+"25-9 xStock pair_correlation per-pair WR data accumulation (B68.3",
+"",
+"xStock per-pair correlation data accumulation"
+],
+[
+"HELPFUL",
+"rm:25-10",
+"25-10 Crypto confidence-modifier calibration Kyle 2026-05-27 voice",
+"",
+"crypto confidence-modifier calibration"
+],
+[
+"HELPFUL",
+"rm:25-11",
+"25-11 Order-book / liquidity-aware position sizing + thin-market e",
+"",
+"SPLIT (Langston): the liquidity-aware sizing MODEL is Phase 25 calibration. The small fail-closed REFUSAL half is a separate MUST item (25-11a)"
+],
+[
+"HELPFUL",
+"rm:25-17",
+"25-17 TARGET-GEOMETRY CALIBRATION — ALL 19 CANONICAL STRATEGIES, B",
+"",
+"target geometry calibration across all 19 strategies, both classes"
+],
+[
+"MUST",
+"rm:25-16",
+"25-16 Trade-size / concurrency / win-rate dynamic + starting-balan",
+"",
+"the evidence study for trade size, concurrency and starting balance — its own row calls it a go-live prerequisite. The NUMBERS it informs are Kyle's (a DECIDE)"
+],
+[
+"HELPFUL",
+"rm:25-12",
+"25-12 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) — ",
+"",
+"xStock entry-trigger sweep (data-capture gap #206)"
+],
+[
+"HELPFUL",
+"rm:25-13",
+"25-13 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) — ",
+"",
+"xStock faithful geometry reconstruction + stop-anchor replay"
+],
+[
+"HELPFUL",
+"rm:25-14",
+"25-14 PHASE-24 xSTOCK CALIBRATION BLOCK (data-capture gap #206) — ",
+"",
+"xStock per-strategy entry re-fit, ORB edge, vwap_bounce power test"
+],
+[
+"HELPFUL",
+"rm:25-15",
+"25-15 DATA-BLOCKED STUDY (intraday-coverage gap) — HCE rejected-ar",
+"",
+"does the Net Expectancy gate reject signals that would have won — was data-blocked; the learning lane's refused-signal record found in 3n.v may now unblock it"
+],
+[
+"HELPFUL",
+"rm:25-17b",
+"25-17b CRYPTO reach_atr_max DECISION — the reachability-ceiling que",
+"",
+"crypto reach ceiling decision — strong_bull_trend was set in 3n.v; the remaining strategies are untested"
+],
+[
+"HELPFUL",
+"rm:25-18",
+"25-18 friction_safety_buffer per-class evaluation (reorg-B2 delibe",
+"",
+"per-class safety margin on the friction model"
+],
+[
+"MUST",
+"rm:25-19",
+"25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-0",
+"",
+"NARROWED (Langston): state the Net Expectancy gate's measured accept/reject outcome on the population it actually ran on, population named. A full judgement verdict needs #596 first and is Phase 25"
+],
+[
+"HELPFUL",
+"rm:25-20",
+"25-20 Per-strategy × per-class minRR (reward-vs-risk floor) RECALI",
+"",
+"per-strategy, per-class minimum reward-to-risk from win rates — partly delivered by 2.4g and 3n.v"
+],
+[
+"AFTER",
+"rm:25-22",
+"25-22 Edge-decay monitor — selection-IC + per-strategy calibration",
+"",
+"edge-decay monitor — research idea; most valuable once live"
+],
+[
+"AFTER",
+"rm:25-23",
+"25-23 Probabilistic hidden-state (HMM-style) regime inference → re",
+"",
+"hidden-state regime inference — research idea"
+],
+[
+"AFTER",
+"rm:25-24",
+"25-24 Orthogonal weak-feature enrichment of the per-cycle selectio",
+"",
+"weak-feature ranking enrichment — research idea"
+],
+[
+"AFTER",
+"rm:25-25",
+"25-25 Cross-instrument / relative-value (statistical-arbitrage) si",
+"",
+"cross-instrument / relative-value signals — research idea"
+],
+[
+"HELPFUL",
+"rm:25-26",
+"25-26 Trade HOLD-TIME / timeframe study — do slower (multi-day) tr",
+"",
+"do slower trades clear the fee wall — the fee wall is the main reason paper loses"
+],
+[
+"HELPFUL",
+"rm:25-27",
+"25-27 Profitable-signal PROFILE → reverse-engineer a scanner PRE-S",
+"",
+"profile of a profitable signal, reversed into a scanner pre-screen"
+],
+[
+"AFTER",
+"rm:16.2",
+"16.2 Database Phase A-B: Isolation & Modularization — - Confirm w",
+"",
+"database isolation and modularisation — no live-safety effect (a proposed deferral: the run order puts Phase 16 before live)"
+],
+[
+"AFTER",
+"rm:16.3",
+"16.3 Database Phase C: Schema Simplification — - Drop Wave 3 tabl",
+"",
+"drop legacy tables and enums — proposed deferral"
+],
+[
+"HELPFUL",
+"rm:16.4",
+"16.4 Wave 7: Post-L-Series Cleanup — - SafetyGuardrails service r",
+"",
+"remove the old SafetyGuardrails service — only matters if any live path still consults it"
+],
+[
+"AFTER",
+"rm:16.5",
+"16.5 LSP Error Resolution — - Delete legacy files causing LSP err",
+"",
+"editor/type error cleanup"
+],
+[
+"HELPFUL",
+"rm:16.7",
+"B-RETIRED-SCORE-REMOVAL",
+"",
+"remove retired scores — confirm nothing on the live ranking path still reads one"
+],
+[
+"HELPFUL",
+"rm:16.6",
+"16.6 Trailing-Percent Code Purge (added 2026-04-25, Kyle directiv",
+"",
+"purge legacy trailing-percent exit code so it cannot re-enter a live exit"
+],
+[
+"HELPFUL",
+"rm:16.8",
+"16.8 Predictive-Learning / ML-Era Teardown REMAINDER (added 2026-",
+"",
+"ML-era teardown remainder — Kyle decided REMOVE"
+],
+[
+"AFTER",
+"rm:16.9",
+"16.9 resetRateLimiter() — INERT ON THE ONLY ENVIRONMENT WE RUN (a",
+"",
+"inert rate-limiter reset — Kyle slotted it in Phase 16"
+],
+[
+"AFTER",
+"rm:20.1",
+"20.1 Database Phase D: Migration Rebaseline — - Generate fresh ba",
+"",
+"migration rebaseline"
+],
+[
+"HELPFUL",
+"rm:20.2",
+"20.2 Database Phase E: Index & Retention Hygiene — - Audit index ",
+"",
+"index and retention hygiene — database at 72% of plan (Kyle: August moves to warm storage in October)"
+],
+[
+"AFTER",
+"rm:20.3",
+"20.3 Test Infrastructure — - Add unified test runner scripts ( te",
+"",
+"test runner and frontend test tooling"
+],
+[
+"HELPFUL",
+"rm:20.4.5",
+"20.4.5 Observability hardening (NEW 2026-06-12 — §19.6.6 long-tail)",
+"",
+"observability hardening"
+],
+[
+"AFTER",
+"rm:20.5",
+"20.5 Architecture Cleanup — - Decompose monolithic pages (enhance",
+"",
+"decompose large pages and route files"
+],
+[
+"MUST",
+"rm:21.1",
+"21.1 Live Mode Engine — - Create Live Mode trading engine based o",
+"",
+"the live mode engine itself"
+],
+[
+"MUST",
+"rm:21.1.a",
+"B-LEGACY-LIVE-EXIT-PATH",
+"",
+"a live exit route places a real market order outside the governed path — the roadmap's own words: NO REAL CAPITAL TRADES UNTIL THIS IS CLOSED (#953, owner CC-C)"
+],
+[
+"MUST",
+"rm:21.2",
+"21.2 Paper-to-Live Transition Testing — - Run parallel paper+live",
+"",
+"paper-to-live transition testing with small sizes"
+],
+[
+"AFTER",
+"rm:21.4",
+"21.4 POST-LAUNCH REVISIT — the strong-trend lane's absent volume ",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"MUST",
+"rm:21.3",
+"21.3 Live Mode Guardrails — - 21-3a (NEW, P19-B6.8a 2026-06-30 — ",
+"",
+"live mode guardrails — umbrella; its sub-items 21-3a..d are listed separately"
+],
+[
+"AFTER",
+"rm:22.1",
+"22.1 Build & Deploy Pipeline — - Production build validation - En",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:22.2",
+"22.2 Monitoring & Observability — - Production logging strategy (",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.1",
+"17.1 Scope & Grounding (Week 23) — - Define full scope of ML inte",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.2",
+"17.2 ML Touchpoint & Influence Mapping (Weeks 24-25) — #### Featu",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.3",
+"17.3 Infrastructure Design (Weeks 25-26) — - In-process module vs",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.4",
+"17.4 Research & Feature Engineering (Weeks 26-27) — - Evaluate ML",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.5",
+"17.5 Blueprint Assembly (Weeks 27-28) — - Merge data flow, touchp",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.6",
+"17.6 Trend Mining Engine — design consideration (Kyle directive 2",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:18.1",
+"18.1 Crawl: Feature Store & Data Pipeline — - Build Feature Store",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:18.2",
+"18.2 Walk: Model Training & Validation — - Train initial models o",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:18.3",
+"18.3 Run: Integration & Parallel Execution — - Wire Inbound touch",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:18.4",
+"18.4 Fly: ML as Primary Intelligence — - ML replaces rules-based ",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:18.5",
+"18.5 Trend Mining Engine — parallel architecture (per Phase 17.6 ",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.5.1",
+"17.5.1 Rules-Based Policy Engine — - Implement the policy execution",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.5.2",
+"17.5.2 Predictive Adjustment Execution — - Wire Predictive Adjustme",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.5.3",
+"17.5.3 Calibration Execution — - Learning Calibration can now updat",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:17.5.4",
+"17.5.4 Regime-Aware Adaptation — - Structural Regime (Global + Pair",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:21.4.1",
+"21.4.1 8-module extraction — Per MODULARIZATION_SYNTHESIS_FROM_B63_",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:21.4.3",
+"21.4.3 storage.ts modularization (folded in from Phase 16.2) — Phas",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:21.5.2",
+"21.5.2 Perpetual Futures Integration — - Add Kraken Futures API end",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:21.5.3",
+"21.5.3 Cross-Asset Infrastructure — - Unified portfolio view across",
+"",
+"already placed post-live in the roadmap"
+],
+[
+"AFTER",
+"rm:20.3.1",
+"20.3.1 — Unit/integration test-tier separation (RUNNING_ISSUES #226",
+"",
+"unit / integration test-tier separation"
+],
+[
+"MUST",
+"rm:21-3a",
+"21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the \"",
+"",
+"the Live Guardrails tab — and what it would show: the live guardrail row is an ELEVEN-MONTH-OLD DEFAULT (2025-10-29) that differs from paper on six fields (per-trade 30%, exposure 25%, 12 slots, kill switch 15%, risk per"
+],
+[
+"DECIDE",
+"rm:21-3b",
+"21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calib",
+"",
+"roadmap hard blocker whose work is a NUMBER: the go-live WebSocket-uptime threshold against the rolling window it is measured over"
+],
+[
+"MUST",
+"rm:21-3d",
+"21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B-",
+"",
+"the reset functions delete BOTH modes' data — must be scoped to one mode before live data exists (B-MODE-DELETE-SCOPE)"
+],
+[
+"MUST",
+"rm:21-3c",
+"21-3c (NEW, KYLE-RULED 2026-08-21 — RUNNING_ISSUES #734): the engi",
+"",
+"the engine-start health gate refuses to start in live, for two independent reasons; fixing one alone leaves live blocked (#734)"
+],
+[
+"AFTER",
+"#606",
+"#606",
+"CC-B",
+"a method note filed as its own entry"
+],
+[
+"HELPFUL",
+"B-IMPLEMENTATION-SHORTFALL",
+"B-IMPLEMENTATION-SHORTFALL",
+"CC-C",
+"#603: no arrival price is persisted, so measured slippage mixes a stale signal with execution cost; 24 closed trades show a >1% intended-vs-fill gap (CC-C)"
+],
+[
+"HELPFUL",
+"#648",
+"#648",
+"CC-A",
+"six of nineteen strategies have never traded (renumbered from #594) — part of the #596 ordering constraint"
+],
+[
+"AFTER",
+"B-AMR-CONTEXT-BONUS-REWIRE",
+"B-AMR-CONTEXT-BONUS-REWIRE",
+"CC-A",
+"Kyle 2026-09-28: all AMR work after live"
+],
+[
+"HELPFUL",
+"#590",
+"#590",
+"CC-A",
+"calibration store reset at the formula change"
+],
+[
+"HELPFUL",
+"#588",
+"#588",
+"CC-A",
+"put a validated quality term back into the ranking — the ranking is the edge"
+],
+[
+"AFTER",
+"#589",
+"#589",
+"CC-A",
+"the rule-18 cut never happened: getCalibratedProfit still defined, zero callers (CC-A, at the ref)"
+],
+[
+"HELPFUL",
+"#585",
+"#585",
+"CC-B",
+"the engine's auto-resume skips a malformed session row — exits keep running"
+],
+[
+"HELPFUL",
+"B-IDEAL-POOL-STARVATION",
+"B-IDEAL-POOL-STARVATION",
+"CC-A",
+"#597: the ideal pool gets ~4-5% of slots against a nominal 70% — travels with #596 and #648 as a Phase 25 ordering constraint"
+],
+[
+"HELPFUL",
+"#574",
+"#574",
+"CC-A",
+"a fabricated VolNoise=0.3 in the live ranker's expectancy kernel — HELPFUL if still live; the 07-13 fix may or may not have covered it"
+],
+[
+"KYLE-PARKED",
+"B-ALERT-DEDUPE-REASON-DRIFT",
+"B-ALERT-DEDUPE-REASON-DRIFT",
+"CC-B",
+"parked by Kyle, deliberately undated"
+],
+[
+"HELPFUL",
+"#570",
+"#570",
+"CC-A",
+"one RTB refresh bucket fires but does not refresh its signals"
+],
+[
+"AFTER",
+"B-VERIFY-DISCIPLINE",
+"B-VERIFY-DISCIPLINE",
+"CC-C",
+"absence-reads-as-pass defect class"
+],
+[
+"HELPFUL",
+"#566",
+"#566",
+"CC-B",
+"volatility measured with a lag"
+],
+[
+"MUST",
+"B-VENUE-RESTING-EXITS",
+"B-VENUE-RESTING-EXITS",
+"Kyle",
+"a live position must have a protective mechanism that survives our process dying. The FORM is Kyle's decision (resting venue stops vs a flatten-on-death watchdog)"
+],
+[
+"HELPFUL",
+"#561",
+"#561",
+"Kyle",
+"volume / order book not filling in Open Trades; rename the column for xStocks"
+],
+[
+"MUST",
+"B-WS-SUBSCRIBE-CLASS-FILTER",
+"B-WS-SUBSCRIBE-CLASS-FILTER",
+"CC-A",
+"xStock positions reported 'unmanageable' because the crypto subscribe set is not class-filtered"
+],
+[
+"HELPFUL",
+"#549",
+"#549",
+"CC-B",
+"four gaps in Open Trades fields"
+],
+[
+"HELPFUL",
+"#547",
+"#547",
+"CC-B",
+"Analyst's July soak findings — contents need the owner's read"
+],
+[
+"HELPFUL",
+"#529",
+"#529",
+"Kyle",
+"B-STRATEGY-WEIGHT-INVESTIGATION — Kyle wanted it before the runtime audit; open"
+],
+[
+"AFTER",
+"#528",
+"#528",
+"CC-B",
+"delete an unused 1,376-line trades page (rule 18)"
+],
+[
+"HELPFUL",
+"#527",
+"#527",
+"CC-B",
+"xStock eval cycle should pass friction components"
+],
+[
+"HELPFUL",
+"B-SQE-DEADCODE-PURGE",
+"B-SQE-DEADCODE-PURGE",
+"CC-A",
+"a dead SQE evaluator with a SHORTER gate list — delete before anything can call it"
+],
+[
+"MUST",
+"B-RTB-REFRESH-CONSOLIDATE",
+"B-RTB-REFRESH-CONSOLIDATE",
+"CC-A",
+"the net-EV backstop was removed on an incomplete evidence base — its own row says SAFETY-RELEVANT"
+],
+[
+"AFTER",
+"B-EOL-POLICY",
+"B-EOL-POLICY",
+"",
+"line-ending policy"
+],
+[
+"AFTER",
+"#537",
+"#537",
+"CC-B",
+"untracked orphan script"
+],
+[
+"HELPFUL",
+"#522",
+"#522",
+"Kyle",
+"catch-site audit homed from the #530 fix — open"
+],
+[
+"MUST",
+"#521",
+"#521",
+"CC-B",
+"the engine heartbeat is structurally dead — nothing notices a dead engine; in live that is real positions with no manager (Langston)"
+],
+[
+"MUST",
+"#519",
+"#519",
+"CC-B",
+"confirm the runtime daily-loss kill-switch trip fails loud, not silent"
+],
+[
+"HELPFUL",
+"#518",
+"#518",
+"CC-B",
+"delete a dormant commented-out guardrail block (rule 18)"
+],
+[
+"MUST",
+"#517",
+"#517",
+"CC-B",
+"the Live page's open and closed trade tabs are stubs — the operator must be able to see live trades"
+],
+[
+"HELPFUL",
+"#515",
+"#515",
+"CC-B",
+"capture the remaining learning-record columns on the active path"
+],
+[
+"AFTER",
+"#513",
+"#513",
+"CC-B",
+"maker target exits in the VTS lane"
+],
+[
+"HELPFUL",
+"B-TSC-BASELINE-TS2345-AUDIT",
+"B-TSC-BASELINE-TS2345-AUDIT",
+"CC-B",
+"32 suppressed type errors in the routes file, one tied to the balance"
+],
+[
+"MUST",
+"#506",
+"#506",
+"CC-B",
+"order-book subscriptions accumulate with no unsubscribe — a DEPENDENCY of B-BOOK-SUBSCRIPTION-REACH, which takes subscriptions from ~3 a day to a 35-41 symbol pool (Langston)"
+],
+[
+"HELPFUL",
+"B-CLOSED-TRADES-CLASS-BACKFILL",
+"B-CLOSED-TRADES-CLASS-BACKFILL",
+"CC-B",
+"historical closed trades all carry the default class — backfill after #1024"
+],
+[
+"HELPFUL",
+"#504",
+"#504",
+"CC-A",
+"stamp regime on maker/taker shadow rows — learning record"
+],
+[
+"AFTER",
+"B-GOV-INTEGRITY-0",
+"B-GOV-INTEGRITY-0",
+"CC-A",
+"reviewer frozen rulebook"
+],
+[
+"AFTER",
+"B-DISCORD-CONNECT-RESILIENCE",
+"B-DISCORD-CONNECT-RESILIENCE",
+"CC-A",
+"Discord library crash on outage"
+],
+[
+"AFTER",
+"#463",
+"#463",
+"",
+"bridge code reviewed by documentation, not diff"
+],
+[
+"AFTER",
+"B-LANGSTON-QUEUE-2",
+"B-LANGSTON-QUEUE-2",
+"CC-A",
+"review queue lock"
+],
+[
+"AFTER",
+"B-GOV-INTEGRITY-3",
+"B-GOV-INTEGRITY-3",
+"CC-A",
+"message id spans"
+],
+[
+"KYLE-PARKED",
+"B-GOV-INTEGRITY-2",
+"B-GOV-INTEGRITY-2",
+"CC-B",
+"parked by Kyle, deliberately undated"
+],
+[
+"AFTER",
+"#449",
+"#449",
+"CC-B",
+"governance checker read a frozen rulebook"
+],
+[
+"AFTER",
+"B-ALERT-TAXONOMY",
+"B-ALERT-TAXONOMY",
+"CC-A",
+"alert categories"
+],
+[
+"AFTER",
+"#419",
+"#419",
+"CC-B",
+"funnel counter will not balance under error rows"
+],
+[
+"KYLE-PARKED",
+"B-RULES-1E-LANGSTON-SLIM",
+"B-RULES-1E-LANGSTON-SLIM",
+"CC-A",
+"parked by Kyle, deliberately undated"
+],
+[
+"HELPFUL",
+"#972",
+"#972",
+"CC-A",
+"owner CC-B per its own head"
+],
+[
+"AFTER",
+"#970",
+"#970",
+"CC-A",
+"its home B-DISAGREEMENT-FINDER closed on a negative result — needs a new home or a withdrawal (CC-A proposing)"
+],
+[
+"AFTER",
+"B-GOV-REPORTING",
+"B-GOV-REPORTING",
+"CC-A",
+"Langston memory size"
+],
+[
+"AFTER",
+"#660",
+"#660",
+"Kyle",
+"trade tables' 365-day hot window never re-asked"
+],
+[
+"MUST",
+"B-LEARNING-SYSTEM-CENSUS",
+"B-LEARNING-SYSTEM-CENSUS",
+"Kyle",
+"#661: at least three older learning systems still wired, disposition unknown — anything that could still steer a live decision must be known before live (its own reason is a MUST predicate — Langston)"
+],
+[
+"HELPFUL",
+"#658",
+"#658",
+"CC-C",
+"VTS applying posture multipliers that were pinned off"
+],
+[
+"AFTER",
+"#646",
+"#646",
+"CC-C",
+"resolved_by not populated on manual resolve"
+],
+[
+"HELPFUL",
+"#645",
+"#645",
+"CC-C",
+"the net-EV floor is one crypto-era constant exported to xStock"
+],
+[
+"AFTER",
+"#644",
+"#644",
+"CC-C",
+"a finding, not work; its decision (whether the exploration subsidy ending on its own is wanted) must be visible in calibration (CC-C)"
+],
+[
+"MUST",
+"#634",
+"#634",
+"CC-C",
+"the daily-loss evaluator's failure counter has no reader: a persistent fault stops the kill switch evaluating while trading continues — fails open on a risk boundary (CC-C, re-derived at the ref). Owner CC-B"
+],
+[
+"MUST",
+"#632",
+"#632",
+"CC-C",
+"the daily-loss window restarts at zero on every process restart — Kyle 2026-09-28: fix now, the fix carries to production"
+],
+[
+"HELPFUL",
+"#631",
+"#631",
+"CC-A",
+"should the active path archive the four entry-mode fields VTS does — a decision owed; the active lane is what goes live"
+],
+[
+"MUST",
+"#630",
+"#630",
+"CC-A",
+"the maker-order deadline has NEVER fired — the maker population in its proof window was empty. Live places resting maker orders with a deadline; exercise it once in paper before real capital (CC-A)"
+],
+[
+"AFTER",
+"B-MEASURE-GATE",
+"B-MEASURE-GATE",
+"CC-A",
+"re-surfacing alerts re-emit old measurements"
+],
+[
+"HELPFUL",
+"#628",
+"#628",
+"CC-C",
+"its two SIZING sites ride B-SIZING-DEC-RESTORE; display sites can wait (CC-C)"
+],
+[
+"AFTER",
+"#144",
+"#144",
+"",
+"perpetual-futures activation checklist — perps come after live"
+],
+[
+"AFTER",
+"#147",
+"#147",
+"",
+"per-class telemetry disk persistence"
+],
+[
+"AFTER",
+"#148",
+"#148",
+"",
+"health check permission error on a Replit-era path"
+],
+[
+"HELPFUL",
+"#149",
+"#149",
+"",
+"per-class RTB refresh cadence calibration"
+],
+[
+"AFTER",
+"#150",
+"#150",
+"",
+"make the RTB asset-class column NOT NULL after a zero-null soak"
+],
+[
+"AFTER",
+"#151",
+"#151",
+"",
+"Phase 16 register entry"
+],
+[
+"AFTER",
+"#152",
+"#152",
+"",
+"document the locked-module override boundary"
+],
+[
+"AFTER",
+"#154",
+"#154",
+"",
+"dead optional constructor argument"
+],
+[
+"AFTER",
+"#155",
+"#155",
+"",
+"perp reason truncated in a diagnostic endpoint"
+],
+[
+"AFTER",
+"#156",
+"#156",
+"",
+"audit candidate for per-class consumer swaps"
+],
+[
+"AFTER",
+"#157",
+"#157",
+"",
+"line-number drift in a diagnostic payload"
+],
+[
+"AFTER",
+"#158",
+"#158",
+"",
+"inefficient 24h filter at volume"
+],
+[
+"AFTER",
+"#159",
+"#159",
+"",
+"log volume gating for a canary line"
+],
+[
+"HELPFUL",
+"#166",
+"#166",
+"",
+"TEC stale-cache fence still firing thousands of times"
+],
+[
+"MUST",
+"#168",
+"#168",
+"",
+"CI cannot catch a build that crashes on boot — a live deploy that boots into a crash leaves positions unmanaged; same family as #681 (Langston)"
+],
+[
+"HELPFUL",
+"#169",
+"#169",
+"",
+"the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed"
+],
+[
+"AFTER",
+"#171",
+"#171",
+"",
+"corrupt manifest needs a manual runbook"
+],
+[
+"AFTER",
+"#172",
+"#172",
+"",
+"stale duplicate retention keys"
+],
+[
+"AFTER",
+"#173",
+"#173",
+"",
+"a recurring zero-null guard once Phase 25 reads the dataset"
+],
+[
+"AFTER",
+"#198",
+"#198",
+"",
+"cron-evidence verifier edge case"
+],
+[
+"HELPFUL",
+"#199",
+"#199",
+"",
+"no honest xStock volume feed, so volume confirmation was removed from xStock strategies"
+],
+[
+"HELPFUL",
+"#201",
+"#201",
+"",
+"range_trade is starved at the decision substrate"
+],
+[
+"AFTER",
+"#202",
+"#202",
+"",
+"study scripts leave files on staging that block the next pull"
+],
+[
+"MUST",
+"#204",
+"#204",
+"",
+"xStock corrupt stop prices (units/scale) at 45 times the crypto rate — a live stop at a wrong scale is a real loss; may be fixed by the venue grid"
+],
+[
+"AFTER",
+"#610",
+"#610",
+"CC-A",
+"AMR stays watch-only until after live (Kyle 2026-09-28) — its sizing cannot touch trades before then"
+],
+[
+"AFTER",
+"#611",
+"#611",
+"CC-A",
+"AMR work after live (Kyle 2026-09-28)"
+],
+[
+"AFTER",
+"#612",
+"#612",
+"CC-A",
+"AMR work after live (Kyle 2026-09-28)"
+],
+[
+"MUST",
+"#615",
+"#615",
+"CC-A",
+"the reviewer's verification identity can read the app's secrets file, and the live Kraken key will sit on that box (CC-A, Langston re-derived the read)"
+],
+[
+"MUST",
+"#619",
+"#619",
+"CC-A",
+"a restore from backup silently lacks seeded config, including risk config — found only at the worst time (CC-A)"
+],
+[
+"HELPFUL",
+"B-COST-MATH-CONSOLIDATION",
+"B-COST-MATH-CONSOLIDATION",
+"CC-C",
+"one home for cost math"
+],
+[
+"HELPFUL",
+"#626",
+"#626",
+"CC-C",
+"an open question shipped in a user-facing string"
+],
+[
+"AFTER",
+"#625",
+"#625",
+"CC-B",
+"orphan sweep lacks a branch for deadline keys"
+],
+[
+"AFTER",
+"#621",
+"#621",
+"CC-C",
+"code-review gate grades a diff by mechanism"
+],
+[
+"AFTER",
+"B-AMR-INPUT-INTEGRITY-ARC",
+"B-AMR-INPUT-INTEGRITY-ARC",
+"CC-C",
+"Kyle 2026-09-28: AMR fixes after live; stalled since 2026-07-30 with no plan row — place it in the post-live section"
+],
+[
+"AFTER",
+"#608",
+"#608",
+"CC-A",
+"AMR work after live (Kyle 2026-09-28)"
+],
+[
+"AFTER",
+"#609",
+"#609",
+"CC-A",
+"AMR work after live (Kyle 2026-09-28)"
+],
+[
+"AFTER",
+"B-STORAGE-CATALOG",
+"B-STORAGE-CATALOG",
+"CC-A",
+"unmanaged app-local file store"
+],
+[
+"AFTER",
+"#209",
+"#209",
+"",
+"ratchet the type-check baseline down"
+],
+[
+"KYLE-PARKED",
+"#221",
+"#221",
+"Kyle",
+"parked by Kyle, deliberately undated"
+],
+[
+"AFTER",
+"#217",
+"#217",
+"",
+"RTB context bonus in shadow"
+],
+[
+"AFTER",
+"#218",
+"#218",
+"",
+"dead function carrying a hardcoded fee default"
+],
+[
+"AFTER",
+"#219",
+"#219",
+"",
+"dormant flip-rate governance input"
+],
+[
+"HELPFUL",
+"#220",
+"#220",
+"",
+"an undefined-function error logged 64,494 times in VTS strategy execution"
+],
+[
+"HELPFUL",
+"#229",
+"#229",
+"Kyle",
+"four symbol-format modules that accept different forms — consolidate"
+],
+[
+"AFTER",
+"#231",
+"#231",
+"",
+"ablation record id gap"
+],
+[
+"MUST",
+"#233",
+"#233",
+"",
+"drift score and volume z-score fed as fixed defaults on the active path — its own row says pre-go-live verification; Kyle's rule is no hardcoded fallbacks"
+],
+[
+"AFTER",
+"#234",
+"#234",
+"",
+"390 non-active-path type errors, each homed"
+],
+[
+"MUST",
+"#235",
+"#235",
+"Kyle",
+"the full end-to-end runtime audit of the crypto active pipeline — rule 23's closing step of Phase 19"
+],
+[
+"AFTER",
+"#298",
+"#298",
+"Kyle",
+"ticker shown instead of company name"
+],
+[
+"MUST",
+"#296",
+"#296",
+"Kyle",
+"NARROWED (Langston): a shared rate budget and backoff on the order-PLACING and order-CANCELLING paths — a rate-limit rejection on an exit costs money. Consolidating the 35 clients is a refactor, AFTER"
+],
+[
+"MUST",
+"#322",
+"#322",
+"Kyle",
+"test-in-paper / bypass-in-live capability gating — Kyle's live-mode creation requirement"
+],
+[
+"DECIDE",
+"#323",
+"#323",
+"Kyle",
+"Kyle: should the daily-loss budget auto-stop, only alert, or be user-set. P19-B6.8 (CLOSED 2026-06-29) folded #323 and made those controls user-settable — this may already be answered; Kyle confirms"
+],
+[
+"AFTER",
+"B-GOV-2",
+"B-GOV-2",
+"",
+"checker always-on gate"
+],
+[
+"HELPFUL",
+"#391",
+"#391",
+"CC-B",
+"monitor the xStock in-hours flat-price block rate"
+],
+[
+"KYLE-PARKED",
+"#392",
+"#392",
+"CC-B",
+"parked by Kyle, deliberately undated"
+],
+[
+"AFTER",
+"#642",
+"#642",
+"CC-A",
+"a discredited number inside a scheduled gate (CC-A copy of a doubled number)"
+],
+[
+"AFTER",
+"B-ALERT-OWNERSHIP-REGISTER",
+"B-ALERT-OWNERSHIP-REGISTER",
+"CC-B",
+"alert ownership transfer"
+],
+[
+"AFTER",
+"B-ALERT-ACK-PROCEDURE-DOCFIX",
+"B-ALERT-ACK-PROCEDURE-DOCFIX",
+"CC-B",
+"alert procedure doc"
+],
+[
+"AFTER",
+"#655",
+"#655",
+"CC-A",
+"stateless parallel rulings — crew process"
+],
+[
+"HELPFUL",
+"#664",
+"#664",
+"CC-B",
+"a diagnostic computes 'strategies evaluated' from a hardcoded 9"
+],
+[
+"MUST",
+"B-SIZING-DEC-RESTORE",
+"B-SIZING-DEC-RESTORE",
+"CC-C",
+"paper per-trade allocation is 20% where the governed decision says 6.67%, and Kyle did not know. RIDER (Langston): pattern signals size at 6.67% while other signals size at the guardrail (20% paper / 30% live) and nobody"
+],
+[
+"KYLE-PARKED",
+"#668",
+"#668",
+"Kyle",
+"the governance-standardisation arc — a DIFFERENT thing from B-SIZING-DEC-RESTORE, which only cites it"
+],
+[
+"AFTER",
+"#683",
+"#683",
+"CC-A",
+"flaky test collection failures"
+],
+[
+"HELPFUL",
+"B-EXIT-PATH-TYPING",
+"B-EXIT-PATH-TYPING",
+"CC-A",
+"the exit path is untyped"
+],
+[
+"AFTER",
+"B-CATALOG-1",
+"B-CATALOG-1",
+"Kyle",
+"table catalogue + lookalike register"
+],
+[
+"AFTER",
+"#669",
+"#669",
+"CC-B",
+"Langston Step-4 finding (B) — contents need the owner's read"
+],
+[
+"AFTER",
+"#670",
+"#670",
+"",
+"crew-status cold hand-off"
+],
+[
+"AFTER",
+"#673",
+"#673",
+"CC-A",
+"desktop sessions and the CLI are different versions"
+],
+[
+"AFTER",
+"#679",
+"#679",
+"CC-B",
+"persistent threshold alerts re-fire forever once resolved"
+],
+[
+"AFTER",
+"#680",
+"#680",
+"CC-B",
+"type-check gate at push time"
+],
+[
+"MUST",
+"#681",
+"#681",
+"CC-B",
+"a deploy can outrun CI — in live, a deploy restarts real trading on code that has not passed"
+],
+[
+"HELPFUL",
+"#699",
+"#699",
+"CC-C",
+"does RTB promotion evict, or is the UI stale"
+],
+[
+"AFTER",
+"#697",
+"#697",
+"Kyle",
+"storage overview UI page (Kyle directive)"
+],
+[
+"KYLE-PARKED",
+"#693",
+"#693",
+"CC-C",
+"parked by Kyle, deliberately undated"
+],
+[
+"HELPFUL",
+"#692",
+"#692",
+"CC-C",
+"Kyle 2026-09-28: not a defect (slots shrink with the balance by design; the 08-12 freeze was a one-step manual reset). Build instead an alert when no new trade has opened for a set time because the allowance is full, wit"
+],
+[
+"AFTER",
+"#689",
+"#689",
+"CC-C",
+"storage-fraction numerator/denominator mismatch"
+],
+[
+"HELPFUL",
+"B-DAILY-CUTOVER-SWEEP",
+"B-DAILY-CUTOVER-SWEEP",
+"CC-C",
+"four tables idle 29 nights then sweep everything at once"
+],
+[
+"AFTER",
+"#687",
+"#687",
+"CC-C",
+"equity-perp universe file stale — perps are after live (merges into P19-B-PERPFEED)"
+],
+[
+"AFTER",
+"#686",
+"#686",
+"CC-C",
+"relocate a runtime file out of bridge/canonical; its reader's scheduler is dead — no live effect (CC-C)"
+],
+[
+"MUST",
+"B-PRICE-STALENESS-BOUND",
+"B-PRICE-STALENESS-BOUND",
+"CC-C",
+"the last-known-good price is re-served with no age bound and re-stamped as fresh"
+],
+[
+"AFTER",
+"B-WS-V1-RESIDUE-SWEEP",
+"B-WS-V1-RESIDUE-SWEEP",
+"CC-C",
+"dead Kraken v1 ticker handler (rule 18)"
+],
+[
+"KYLE-PARKED",
+"#741",
+"#741",
+"CC-A",
+"parked by Kyle, deliberately undated"
+],
+[
+"AFTER",
+"B-CHUNK-ADDRESSING",
+"B-CHUNK-ADDRESSING",
+"CC-A",
+"comms outage cause"
+],
+[
+"AFTER",
+"B-GDRIVE-UNMOUNT",
+"B-GDRIVE-UNMOUNT",
+"CC-A",
+"placed 2026-08-28, not parked; owner Infra Claude; absorbs #921"
+],
+[
+"AFTER",
+"B-REVIEWER-LOOP",
+"B-REVIEWER-LOOP",
+"CC-A",
+"plan row 4, PLACED 2026-08-28, open (CC-A lane reply) — governance tooling"
+],
+[
+"AFTER",
+"#748",
+"#748",
+"CC-A",
+"the hook that loads CONDUCT.md has a silent fail path — cause not yet named"
+],
+[
+"AFTER",
+"#746",
+"#746",
+"CC-A",
+"Langston's second model site has no repo source"
+],
+[
+"AFTER",
+"B-GATE-GUARD",
+"B-GATE-GUARD",
+"CC-A",
+"issue-number blocks"
+],
+[
+"AFTER",
+"#740",
+"#740",
+"CC-A",
+"skill description colon trap"
+],
+[
+"HELPFUL",
+"B-BALANCE-TRUTH",
+"B-BALANCE-TRUTH",
+"CC-C",
+"four closed trades with null P&L that pass every check — Step F sequencing lives with 21-3d"
+],
+[
+"MUST",
+"B-MODE-PREDICATE-SWEEP",
+"B-MODE-PREDICATE-SWEEP",
+"CC-C",
+"three readers query closed trades directly and will mix live and paper P&L once live exists"
+],
+[
+"AFTER",
+"#700",
+"#700",
+"CC-A",
+"crew process"
+],
+[
+"AFTER",
+"#701",
+"#701",
+"CC-A",
+"crew process"
+],
+[
+"HELPFUL",
+"#685",
+"#685",
+"CC-C",
+"crypto 1-minute bars cannot be tiered to warm storage"
+],
+[
+"HELPFUL",
+"B-EPOCH-PARITY-FENCE",
+"B-EPOCH-PARITY-FENCE",
+"CC-C",
+"the epoch value still has two homes — learning-data integrity"
+],
+[
+"MUST",
+"B-DASHBOARD-AUTH-RACE",
+"B-DASHBOARD-AUTH-RACE",
+"CC-C",
+"#903: the portfolio card 401s on load and never recovers — in live, an operator with no balance. Operator-reach family with #401, #517, #935 (Langston)"
+],
+[
+"AFTER",
+"B-GOV-4",
+"B-GOV-4",
+"CC-C",
+"checker entry test"
+],
+[
+"HELPFUL",
+"#914",
+"#914",
+"CC-C",
+"SPLIT: the price half is retired; the COST half (0.05% per leg) is Phase 25 work"
+],
+[
+"AFTER",
+"#920",
+"#920",
+"",
+"reviewer grep returns zero on a bad flag"
+],
+[
+"AFTER",
+"#942",
+"#942",
+"CC-C",
+"info alerts outside the no-silent-drop guarantee"
+],
+[
+"AFTER",
+"B-TSC-GUARD-CWD",
+"B-TSC-GUARD-CWD",
+"CC-INFRA",
+"push guard working directory"
+],
+[
+"AFTER",
+"B-BURN-THRESHOLD-BASIS",
+"B-BURN-THRESHOLD-BASIS",
+"CC-INFRA",
+"not withdrawn — token-watch alarm tuning (Infra)"
+],
+[
+"AFTER",
+"B-TOKENWATCH-OBSERVED-AT",
+"B-TOKENWATCH-OBSERVED-AT",
+"CC-INFRA",
+"token watch tooling"
+],
+[
+"AFTER",
+"B-TOKENWATCH-PAIR-SELECT",
+"B-TOKENWATCH-PAIR-SELECT",
+"CC-INFRA",
+"token watch tooling"
+],
+[
+"OBSERVATION",
+"B-DEPLOY-DRIFT-LINE",
+"B-DEPLOY-DRIFT-LINE",
+"CC-A",
+"plan row 4.55 reads OPEN — OBSERVATION WINDOW (criterion 4 satisfied 2026-09-09)"
+],
+[
+"HELPFUL",
+"P19-B12",
+"P19-B12",
+"CC-B",
+"the deploy tool's own executable is not derived from the reviewed ref"
+],
+[
+"AFTER",
+"#1020",
+"#1020",
+"CC-A",
+"push guard inherits the previous call's working directory and refuses on a false zero (hit again building this draft)"
+],
+[
+"MUST",
+"B-SEC-HARDEN",
+"B-SEC-HARDEN",
+"CC-INFRA",
+"157 of 216 state-changing routes carry no authorisation check (Infra count, NOT re-derived — it sizes the batch, not its placement). REACHABILITY re-derived by Langston on the box: the login is public (internet → Caddy :"
+],
+[
+"AFTER",
+"#1026",
+"#1026",
+"CC-C",
+"chunked Langston dispatch leaks parts into the channel — comms"
+],
+[
+"HELPFUL",
+"#1033",
+"#1033",
+"CC-C",
+"an absent volume is stored as zero — indistinguishable from a minute that genuinely traded nothing; the liquidity filter reads it"
+],
+[
+"AFTER",
+"#1035",
+"#1035",
+"CC-C",
+"Langston's alert prompt lists only three owners"
+],
+[
+"AFTER",
+"#1043",
+"#1043",
+"CC-INFRA",
+"a pinned GitHub read served the wrong file — reviewer tooling"
+],
+[
+"AFTER",
+"#1055",
+"#1055",
+"",
+"delete a dead legacy write on Langston's box"
+],
+[
+"HELPFUL",
+"#1072",
+"#1072",
+"CC-C",
+"the crypto price-history recorder's symbol set is frozen — the same blind spot Langston hit today: not one euro-priced pair ever recorded"
+],
+[
+"HELPFUL",
+"B-SCHEDULER-FIRST-TICK",
+"B-SCHEDULER-FIRST-TICK",
+"CC-A",
+"row 4.58 — scheduler first-tick behaviour; with a pre-read of ten unread market-scanner helpers"
+],
+[
+"AFTER",
+"B-DECISION-RECORDS",
+"B-DECISION-RECORDS",
+"CC-A",
+"decision-history durability and catalogues (CC-A governance lane)"
+],
+[
+"HELPFUL",
+"B-EXCURSION-RECORD",
+"B-EXCURSION-RECORD",
+"CC-B",
+"row 2.4g-3 — record how far each trade travelled, needed to set the remaining reach ceilings from evidence"
+],
+[
+"HELPFUL",
+"B-TRADE-RECORD-JOINABILITY",
+"B-TRADE-RECORD-JOINABILITY",
+"CC-B",
+"row 2.4g-4 — trade records that cannot be joined across stores, missing DI and a zero ATR on every xStock shadow row: the learning record Phase 25 calibrates from"
+],
+[
+"DECIDE",
+"B-TARGET-MULTIPLE-VS-HORIZON",
+"B-TARGET-MULTIPLE-VS-HORIZON",
+"CC-B",
+"row 2.4g-5 — Kyle decides, gated on 2.4g-3"
+],
+[
+"HELPFUL",
+"B-LANGSTON-LEDGER-SPLIT",
+"B-LANGSTON-LEDGER-SPLIT",
+"CC-B",
+"how the reviewer's loaded set stops growing; with 2.8a/2.8c (Infra)"
+],
+[
+"MUST",
+"B-TEC-PRIME-BOOT-RACE",
+"B-TEC-PRIME-BOOT-RACE",
+"CC-B",
+"On every restart the crypto exit loop throws on open positions for a tick — in live, every deploy leaves real positions unevaluated for that tick"
+],
+[
+"HELPFUL",
+"B-EXIT-POLICY-EVALUATOR",
+"B-EXIT-POLICY-EVALUATOR",
+"CC-B",
+"our expectancy model cannot rank exit alternatives; needs B-OUTCOME-CORPUS-CAPTURE first (not a defect — a missing capability)"
+],
+[
+"HELPFUL",
+"B-VPNL-WRITER-BOUND",
+"B-VPNL-WRITER-BOUND",
+"CC-B",
+"a learning-record column is written unbounded and a mean taken from it reversed a published conclusion — calibration-record integrity"
+],
+[
+"AFTER",
+"B-FRESHNESS-LOG-READER",
+"B-FRESHNESS-LOG-READER",
+"CC-B",
+"nothing reads the rules-freshness hook's log — crew tooling"
+],
+[
+"AFTER",
+"B-SHARED-TMP-ISOLATION",
+"B-SHARED-TMP-ISOLATION",
+"CC-B",
+"sessions share /tmp so a commit message can be another session's — crew tooling"
+],
+[
+"AFTER",
+"B-CHANGE-CLASS-DOCSET-FIT",
+"B-CHANGE-CLASS-DOCSET-FIT",
+"CC-B",
+"governance checker doc-set matrix — governance"
+],
+[
+"AFTER",
+"B-LANGSTON-FILE-FLOOR",
+"B-LANGSTON-FILE-FLOOR",
+"Infra Claude",
+"reviewer's always-loaded file size — reviewer tooling"
+],
+[
+"AFTER",
+"B-LANGSTON-LOAD-RATCHET",
+"B-LANGSTON-LOAD-RATCHET",
+"Infra Claude",
+"reviewer tooling"
+],
+[
+"AFTER",
+"B-LEDGER-HEADLINE-INJECT",
+"B-LEDGER-HEADLINE-INJECT",
+"Infra Claude",
+"reviewer tooling"
+],
+[
+"AFTER",
+"B-LANGSTON-RECONCILE-VERB",
+"B-LANGSTON-RECONCILE-VERB",
+"Infra Claude",
+"reviewer tooling"
+],
+[
+"AFTER",
+"B-UMBRELLA-OPEN-STATE",
+"B-UMBRELLA-OPEN-STATE",
+"CC-B",
+"governance checker state for umbrella batches"
+],
+[
+"OBSERVATION",
+"B-INSTRUMENTS-OVER-RULES",
+"B-INSTRUMENTS-OVER-RULES",
+"CC-A",
+"the code-search-tool usage measure runs 2026-09-18 → 10-02 (pre-registered)"
+],
+[
+"HELPFUL",
+"B-READ-MODEL-BLOB-VERIFY",
+"B-READ-MODEL-BLOB-VERIFY",
+"Infra Claude",
+"the reviewer's pinned reads served the wrong file twice — a reviewer reading the wrong object weakens every review before live (Infra)"
+],
+[
+"AFTER",
+"B-RULES-LAYER",
+"B-RULES-LAYER",
+"CC-A",
+"Kyle-directed: move behavioural rules to a stronger layer — crew process"
+],
+[
+"AFTER",
+"B-HEARTBEAT-RESCOPE",
+"B-HEARTBEAT-RESCOPE",
+"CC-A",
+"hourly heartbeat task purpose — crew tooling"
+],
+[
+"HELPFUL",
+"B-SLOT-PLACEMENT-CHECK",
+"B-SLOT-PLACEMENT-CHECK",
+"CC-A",
+"Kyle's own ask: a newly slotted item reaches the plan and the owning task list at the moment it is slotted — the failure this inventory is repairing by hand"
+],
+[
+"AFTER",
+"B-STATE-ASSERTION-LINT",
+"B-STATE-ASSERTION-LINT",
+"CC-A",
+"sentences true when written and wrong now — governance tooling"
+],
+[
+"AFTER",
+"B-CLAIM-REDERIVE",
+"B-CLAIM-REDERIVE",
+"CC-A",
+"re-derive a load-bearing number at the Stop boundary — crew tooling"
+],
+[
+"MUST",
+"B-EXIT-LATCH-INVESTIGATION",
+"B-EXIT-LATCH-INVESTIGATION",
+"CC-A",
+"AN INVESTIGATION: is the hold-past-target Kyle saw a labelling artefact or a live exit-evaluation defect? Kyle: 'make sure it's not a symptom of a much bigger and uglier problem' — the exit defect cannot be bucketed with"
+],
+[
+"AFTER",
+"B-HOOK-ESTATE-VERSION",
+"B-HOOK-ESTATE-VERSION",
+"CC-C",
+"clones run different versions of one hook — crew tooling"
+],
+[
+"AFTER",
+"B-ALERT-WINDOW-EXPIRY",
+"B-ALERT-WINDOW-EXPIRY",
+"CC-A",
+"no terminal alert state for 'can no longer be observed' — alert tooling"
+],
+[
+"AFTER",
+"B-EOL-NORMALISE",
+"B-EOL-NORMALISE",
+"CC-A",
+"line-ending normalisation"
+],
+[
+"AFTER",
+"B-CREW-BOARD-REMOVAL",
+"B-CREW-BOARD-REMOVAL",
+"CC-A",
+"retired board code — gated on Kyle"
+],
+[
+"HELPFUL",
+"B-TRADING-ENGINE-REMOVAL",
+"B-TRADING-ENGINE-REMOVAL",
+"CC-A",
+"delete the legacy TradingEngine that runs in neither mode (Kyle-ruled). The dead-code reachability census decides whether it is MUST"
+],
+[
+"HELPFUL",
+"RULINGS-DURABILITY",
+"12.1 rulings-durability fix",
+"CC-A",
+"Langston's ~3,028 rulings sit in one file on one box outside git — Langston placed it FIRST BREAK: irreversible loss, cheapest row on the list"
+],
+[
+"HELPFUL",
+"LOOKALIKE-REGISTER",
+"12.2 lookalike register",
+"CC-A",
+"one page of the pairs that already caused wrong calls — FIRST BREAK by Langston's ruling"
+],
+[
+"HELPFUL",
+"B-CATALOG-2",
+"B-CATALOG-2",
+"CC-A",
+"its FIRST catalogue is the diagnostic-coverage map (Kyle: 'where we have diagnostics and where we don't') — how Kyle sees what live is and is not watched. The rest of the family is AFTER"
+],
+[
+"AFTER",
+"DECOMMISSION-RESIDUE",
+"12.6 decommission residue",
+"CC-A",
+"per-table rule-18 census of 9 walter_* tables + backups — its bytes count toward the 72% disk sizing"
+],
+[
+"HELPFUL",
+"B-SCAN-BREADTH-DECLINE",
+"B-SCAN-BREADTH-DECLINE",
+"CC-C",
+"a scheduled review of why the scanner sees so few pairs — breadth feeds selection"
+],
+[
+"HELPFUL",
+"#982",
+"#982 alert hold verb",
+"CC-A",
+"an ack silences an event-wait alert permanently and there is no un-ack; Kyle approved a third action subject to Langston's ruling; five alerts are acked-and-silenced waiting on it"
+],
+[
+"HELPFUL",
+"B-TEC-STATE-DURABILITY",
+"B-TEC-STATE-DURABILITY",
+"?",
+"on restart the engine reads every open position's trailing progress from one /tmp file inside a catch-and-continue — a corrupt file boots with zero trailing progress while reporting healthy. Kyle placed it VERY LAST (a r"
+],
+[
+"MUST",
+"B-SSH-KEY-CENSUS",
+"B-SSH-KEY-CENSUS (investigation)",
+"?",
+"two ungoverned SSH keys can log in as the account that owns the trading application; nobody knows whose they are. Kyle placed it at Phase-19 end: Phase 21 turns that box into the live path, and it is an hour. Remediation"
+],
+[
+"HELPFUL",
+"SHADOW-BE-MOONBAG",
+"Shadow break-even and moonbag calculations (paper now, live later)",
+"?",
+"Kyle: launch with both off, but compute what break-even stops and moonbags WOULD have done on every paper trade (and live trades once live), so we can analyse which helps — including moonbags alone"
+],
+[
+"MUST",
+"F-G-1-REOPEN",
+"F-G-1 reopens: the OHLC writer can write an older bar over a newer one",
+"CC-C",
+"F-G-1's window closed 2026-09-04 (crypto PASS n=24, xStock underpowered n=19) and it REOPENS at Step 3: the OHLC writer's retry can write an OLDER bar over a NEWER one, and xStock 1-minute bars roll into the 15-minute sn"
+],
+[
+"OBSERVATION",
+"8a-P4c",
+"8a-P4c increment 1 — the VTS xStock price instrument",
+"CC-C",
+"deployed bc199185e; window to 2026-09-30T00:00Z; pre-registered rules A-D then decide increments 2-3"
+],
+[
+"HELPFUL",
+"CODEX-PRICING-REVIEW",
+"Independent review of the pricing architecture (Codex)",
+"CC-C",
+"an independent review of the price layer before real capital; brief, prompt and findings register (r14) ready; was held for #1027, which is now fixed"
+],
+[
+"HELPFUL",
+"EXIT-PATH-AUDIT-MAP",
+"Map EXIT_PATH_MACHINERY_AUDIT §10 items to their homes",
+"CC-C",
+"its surviving items are believed absorbed into 3n, 3h/3h.b and 3i; full coverage not yet proved; map item by item"
+],
+[
+"MUST",
+"RESTING-ORDER-DEADLINE",
+"A resting order's deadline must run whether or not a price is usable",
+"CC-C",
+"on the PAPER lane, both classes, every price-refusal path skips the resting-order deadline check, so a rest can fill after a real system would have cancelled it; in live the order rests at the venue and a cancel needs no"
+],
+[
+"HELPFUL",
+"B-LANGSTON-CONTEXT",
+"B-LANGSTON-CONTEXT remaining pieces",
+"Infra Claude",
+"the reviewer's memory composer: P-2 retrofit + #1055, P-1b, and the privacy-check positive control"
+],
+[
+"HELPFUL",
+"LANGSTON-MEMORY-APPENDS",
+"Stop appending closed-batch history to Langston's memory",
+"Infra Claude",
+"every batch close appends to his memory and nothing evicts; keep current state and generalising rulings, evict by supersession"
+],
+[
+"HELPFUL",
+"COLTRANE-PARITY",
+"Coltrane parity: a privacy check like Langston's",
+"Infra Claude",
+"no Coltrane privacy check exists; a precondition for the implementor trial"
+],
+[
+"AFTER",
+"B-TOKEN-WATCH-REST",
+"B-TOKEN-WATCH Steps 7-11",
+"Infra Claude",
+"research feed paused at Step 7; no trading link"
+],
+[
+"HELPFUL",
+"CONVERSATION-SWEEP",
+"The 11 GB old-conversation sweep for things discussed and never picked",
+"Infra Claude",
+"Kyle asked for everything discussed and not gotten back to; this feeds the inventory itself"
+],
+[
+"DECIDE",
+"BE-MOONBAG",
+"Break-even stop + moonbag exits",
+"(none)",
+""
+],
+[
+"HELPFUL",
+"B-VOLATILITY-CACHE-RETIRE",
+"B-VOLATILITY-CACHE-RETIRE",
+"CC-B",
+""
+],
+[
+"MUST",
+"P19-B6.10",
+"P19-B6.10 retire the old per-mode guardrails table",
+"?",
+""
+],
+[
+"MUST",
+"KRAKEN-LIVE-KEY",
+"Provision the live Kraken API key",
+"Kyle",
+""
+],
+[
+"MUST",
+"LIVE-FEE-SCHEDULE",
+"Confirm the live fee schedule",
+"?",
+""
+],
+[
+"MUST",
+"25-11a",
+"25-11a refuse a position larger than the visible book",
+"?",
+""
+],
+[
+"MUST",
+"DISK-HEADROOM",
+"Months of database headroom",
+"?",
+""
+],
+[
+"MUST",
+"DEAD-CODE-REACHABILITY",
+"Dead-code reachability census",
+"?",
+""
+],
+[
+"DECIDE",
+"PAPER-STANDARD",
+"Define 'comfortable in paper' in numbers",
+"Kyle",
+""
+],
+[
+"DECIDE",
+"DAY-ONE-NUMBERS",
+"Day-one live money settings",
+"Kyle",
+""
+],
+[
+"DECIDE",
+"PROCESS-DEATH-FORM",
+"Protect live positions if our server dies",
+"Kyle",
+""
+],
+[
+"DECIDE",
+"NONFIAT-FORK",
+"Exclude plain-currency and non-dollar pairs",
+"Kyle",
+""
+],
+[
+"MUST",
+"B-OUTCOME-CORPUS-CAPTURE",
+"B-OUTCOME-CORPUS-CAPTURE",
+"?",
+""
+],
+[
+"HELPFUL",
+"PLAN-ID-COLLISIONS",
+"Fix duplicated plan ids",
+"CC-A",
+""
+],
+[
+"AFTER",
+"B-CROSS-SESSION-BLEED-SM-CONFLICT",
+"System Manual row conflict",
+"CC-B",
+""
+],
+[
+"MUST",
+"B-LIVE-PROCESS-SPLIT",
+"Live mode runs as its own program on the same server",
+"CC-A",
+"Kyle 2026-09-28 (Langston's recommendation): a paper/VTS deploy never restarts live; live takes new code on a schedule Kyle sets, after paper has proven it; each side starts only its own jobs; live records isolated so a full analytics database cannot block a live close; each side its own fast price feed, the heavy scan shared through the database, one writer per record; built so a later move to a second server is a settings change"
+]
+]

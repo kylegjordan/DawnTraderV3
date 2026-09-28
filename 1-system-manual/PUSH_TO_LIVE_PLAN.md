@@ -272,37 +272,38 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 166 | B-DASHBOARD-AUTH-RACE | B-DASHBOARD-AUTH-RACE | Infra Claude | QUEUED | — | the portfolio card never recovers from a 401 |
 | 167 | #296 | #296 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | one rate-limited path for placing and cancelling orders |
 
-### Wave B3 — TRACK B · The live engine — after Kyle's production-environment decision
+### Wave B3 — TRACK B · The live engine — environment decided 2026-09-28: live as its own program on the same server
 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
-| 168 | B-LEGACY-LIVE-EXIT-PATH | roadmap 21.1.a — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | hard blocker: the legacy live exit route |
-| 169 | 21-3c (NEW, KYLE-RULED 2026-08-21 — RUNNING_ISSUES #734): the engi | roadmap 21-3c — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the engine-start health gate refuses live |
-| 170 | 21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B- | roadmap 21-3d — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | reset functions must not delete both modes' data |
-| 171 | 19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr | roadmap 19-10 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | throwing asset-class lookups on the live path |
-| 172 | 21.1 Live Mode Engine — - Create Live Mode trading engine based o | roadmap 21.1 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | build live on the paper engine (Option A) |
-| 173 | #322 | #322 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | test-in-paper / bypass-in-live switches |
-| 174 | P19-B6.10 retire the old per-mode guardrails table | P19-B6.10 | CC-A (Old Claude) | QUEUED | — | one source of guardrail values |
-| 175 | 21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the " | roadmap 21-3a — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | after P19-B6.10: the Live Guardrails tab |
-| 176 | #517 | #517 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | after rm:21.1: the live trade tables |
-| 177 | 21.3 Live Mode Guardrails — - 21-3a (NEW, P19-B6.8a 2026-06-30 — | roadmap 21.3 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the live guardrails umbrella |
-| 178 | 19-9 B79.x failure-mode taxonomy — entry-side gap LULD halts / ci | roadmap 19-9 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | entry-side failure modes (halts, splits, earnings) |
-| 179 | 25-11a refuse a position larger than the visible book | — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | refuse a position larger than the visible book |
-| 180 | Protect live positions if our server dies | — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | decide how live positions are protected if the server dies ⭐ Kyle picks; CC-A + Langston propose. |
-| 181 | B-VENUE-RESTING-EXITS | B-VENUE-RESTING-EXITS | CC-A (Old Claude) | QUEUED | — | after PROCESS-DEATH-FORM: build that protection |
-| 182 | B-KRAKEN-FEE-WATCH | B-KRAKEN-FEE-WATCH | CC-C (Analyst Claude) | QUEUED | — | notice when the exchange changes fees |
+| 168 | Live mode runs as its own program on the same server | B-LIVE-PROCESS-SPLIT | CC-A (Old Claude) | QUEUED | — | FIRST in B3: live runs as its own program on the same server; shapes how rm:21.1 builds live |
+| 169 | B-LEGACY-LIVE-EXIT-PATH | roadmap 21.1.a — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | hard blocker: the legacy live exit route |
+| 170 | 21-3c (NEW, KYLE-RULED 2026-08-21 — RUNNING_ISSUES #734): the engi | roadmap 21-3c — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the engine-start health gate refuses live |
+| 171 | 21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B- | roadmap 21-3d — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | reset functions must not delete both modes' data |
+| 172 | 19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr | roadmap 19-10 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | throwing asset-class lookups on the live path |
+| 173 | 21.1 Live Mode Engine — - Create Live Mode trading engine based o | roadmap 21.1 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | build live on the paper engine (Option A) |
+| 174 | #322 | #322 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | test-in-paper / bypass-in-live switches |
+| 175 | P19-B6.10 retire the old per-mode guardrails table | P19-B6.10 | CC-A (Old Claude) | QUEUED | — | one source of guardrail values |
+| 176 | 21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the " | roadmap 21-3a — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | after P19-B6.10: the Live Guardrails tab |
+| 177 | #517 | #517 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | after rm:21.1: the live trade tables |
+| 178 | 21.3 Live Mode Guardrails — - 21-3a (NEW, P19-B6.8a 2026-06-30 — | roadmap 21.3 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the live guardrails umbrella |
+| 179 | 19-9 B79.x failure-mode taxonomy — entry-side gap LULD halts / ci | roadmap 19-9 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | entry-side failure modes (halts, splits, earnings) |
+| 180 | 25-11a refuse a position larger than the visible book | — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | refuse a position larger than the visible book |
+| 181 | Protect live positions if our server dies | — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | decide how live positions are protected if the server dies ⭐ Kyle picks; CC-A + Langston propose. |
+| 182 | B-VENUE-RESTING-EXITS | B-VENUE-RESTING-EXITS | CC-A (Old Claude) | QUEUED | — | after PROCESS-DEATH-FORM: build that protection |
+| 183 | B-KRAKEN-FEE-WATCH | B-KRAKEN-FEE-WATCH | CC-C (Analyst Claude) | QUEUED | — | notice when the exchange changes fees |
 
 ### Wave B4 — TRACK B · Go-live preparation — last
 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
-| 183 | Provision the live Kraken API key | — batch named at Step 1 | Infra Claude | QUEUED | — | the live key: trade-only, no withdrawals, locked to the server ⭐ Kyle creates the key on Kraken; Infra sets it up. |
-| 184 | Confirm the live fee schedule | — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | after KRAKEN-LIVE-KEY: confirm live fees |
-| 185 | 25-16 Trade-size / concurrency / win-rate dynamic + starting-balan | roadmap 25-16 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the trade-size / concurrency study at the real balance |
-| 186 | Day-one live money settings | — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | after rm:25-16: Kyle sets the live money settings ⭐ Kyle sets the numbers; CC-A brings the evidence. |
-| 187 | 21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calib | roadmap 21-3b — batch named at Step 1 | CC-C (Analyst Claude) + Langston | QUEUED | — | the feed-reliability threshold (Analyst + Langston) |
-| 188 | 21.2 Paper-to-Live Transition Testing — - Run parallel paper+live | roadmap 21.2 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | paper-to-live testing at small size |
-| 189 | 19-17b ITEM-4 step 3 standing note (2026-06-10): Phase-21 go-live M | roadmap 19-17b — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | LAST: the go-live switch ⭐ Kyle approves the switch. |
+| 184 | Provision the live Kraken API key | — batch named at Step 1 | Infra Claude | QUEUED | — | the live key: trade-only, no withdrawals, locked to the server ⭐ Kyle creates the key on Kraken; Infra sets it up. |
+| 185 | Confirm the live fee schedule | — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | after KRAKEN-LIVE-KEY: confirm live fees |
+| 186 | 25-16 Trade-size / concurrency / win-rate dynamic + starting-balan | roadmap 25-16 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the trade-size / concurrency study at the real balance |
+| 187 | Day-one live money settings | — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | after rm:25-16: Kyle sets the live money settings ⭐ Kyle sets the numbers; CC-A brings the evidence. |
+| 188 | 21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calib | roadmap 21-3b — batch named at Step 1 | CC-C (Analyst Claude) + Langston | QUEUED | — | the feed-reliability threshold (Analyst + Langston) |
+| 189 | 21.2 Paper-to-Live Transition Testing — - Run parallel paper+live | roadmap 21.2 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | paper-to-live testing at small size |
+| 190 | 19-17b ITEM-4 step 3 standing note (2026-06-10): Phase-21 go-live M | roadmap 19-17b — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | LAST: the go-live switch ⭐ Kyle approves the switch. |
 
 ## 5. Running now — observation windows
 
@@ -325,7 +326,7 @@ Kyle 2026-09-28: an even split by connected groups; earlier ownership is not a f
 | CC-C (Analyst Claude) | Prices and the exit price path; paper sizing (in flight); the paper standard and judging the evidence | 49 |
 | Infra Claude | Identity, the coin list and exclusions; restarts, deploys, security and the servers; what the diagnostic screens show | 48 |
 | CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 45 |
-| CC-A (Old Claude) | Trade records and costs; scores, regimes and gates; the xStock tuning studies; risk controls; the live engine; the final end-to-end audit | 47 |
+| CC-A (Old Claude) | Trade records and costs; scores, regimes and gates; the xStock tuning studies; risk controls; the live engine; the final end-to-end audit | 48 |
 
 ## 7. Coltrane — proposed role (for Langston's view, then Kyle)
 

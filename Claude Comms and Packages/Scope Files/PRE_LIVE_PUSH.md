@@ -2,7 +2,7 @@
 
 **Kyle's rule:** everything needed to get paper to the point where the mechanics are sound and working as intended, the thresholds / gates / regimes / strategies / scores are tuned, the prices are right, paper tells the truth, we capture the data we mean to learn from, and paper trades profitably and consistently — plus the live-mode fixes, mixed into the same push. **Everything else goes after live.** No phase names: one list, prioritised next.
 
-**In the push: 189** · **After live: 210** · **Running now (observation windows): 7** · **Parked by Kyle: 7** · awaiting owner confirmation: see the draft's UNCONFIRMED section.
+**In the push: 190** · **After live: 210** · **Running now (observation windows): 7** · **Parked by Kyle: 7** · awaiting owner confirmation: see the draft's UNCONFIRMED section.
 
 | category | items |
 |---|---:|
@@ -11,7 +11,7 @@
 | 3. Prices — the feed is correct and paper uses the right price for each job | 18 |
 | 4. Paper tells the truth — no mistake that makes results look better or worse than they are | 13 |
 | 5. Learning data — capturing what we intend to learn from | 26 |
-| 6. Live-mode readiness — the live engine, risk controls on real money, security, the key, the environment | 44 |
+| 6. Live-mode readiness — the live engine, risk controls on real money, security, the key, the environment | 45 |
 | 7. The evidence — trading profitably and consistently in paper | 2 |
 
 > Source: `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) re-sorted by `scripts/inventory/sort.py`; the working order is `scripts/inventory/order.py` (asserts every push item appears exactly once); Kyle's decisions in `scripts/inventory/kyle_decisions.json`. The order is CC-B's draft for Langston's review; owners are provisional until the session assignment.
@@ -211,33 +211,34 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 166. **B-DASHBOARD-AUTH-RACE** (CC-C) · *live readiness* — the portfolio card never recovers from a 401
 167. **#296** (Kyle) · *live readiness* — one rate-limited path for placing and cancelling orders
 
-### Wave B3 — TRACK B · The live engine — after Kyle's production-environment decision
+### Wave B3 — TRACK B · The live engine — environment decided 2026-09-28: live as its own program on the same server
 
-168. **B-LEGACY-LIVE-EXIT-PATH** (CC-C) · *live readiness* — hard blocker: the legacy live exit route
-169. **21-3c (NEW, KYLE-RULED 2026-08-21 — RUNNING_ISSUES #734): the engi** (CC-C) · *live readiness* — the engine-start health gate refuses live
-170. **21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B-** () · *live readiness* — reset functions must not delete both modes' data
-171. **19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr** () · *live readiness* — throwing asset-class lookups on the live path
-172. **21.1 Live Mode Engine — - Create Live Mode trading engine based o** () · *live readiness* — build live on the paper engine (Option A)
-173. **#322** (Kyle) · *live readiness* — test-in-paper / bypass-in-live switches
-174. **P19-B6.10 retire the old per-mode guardrails table** (?) · *live readiness* — one source of guardrail values
-175. **21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the "** () · *live readiness* — after P19-B6.10: the Live Guardrails tab
-176. **#517** (CC-B) · *live readiness* — after rm:21.1: the live trade tables
-177. **21.3 Live Mode Guardrails — - 21-3a (NEW, P19-B6.8a 2026-06-30 —** () · *live readiness* — the live guardrails umbrella
-178. **19-9 B79.x failure-mode taxonomy — entry-side gap LULD halts / ci** () · *live readiness* — entry-side failure modes (halts, splits, earnings)
-179. **25-11a refuse a position larger than the visible book** (?) · *live readiness* — refuse a position larger than the visible book
-180. **Protect live positions if our server dies** (Kyle) · *live readiness* — decide how live positions are protected if the server dies
-181. **B-VENUE-RESTING-EXITS** (Kyle) · *live readiness* — after PROCESS-DEATH-FORM: build that protection
-182. **B-KRAKEN-FEE-WATCH** (CC-B) · *live readiness* — notice when the exchange changes fees
+168. **Live mode runs as its own program on the same server** (CC-A) · *live readiness* — FIRST in B3: live runs as its own program on the same server; shapes how rm:21.1 builds live
+169. **B-LEGACY-LIVE-EXIT-PATH** (CC-C) · *live readiness* — hard blocker: the legacy live exit route
+170. **21-3c (NEW, KYLE-RULED 2026-08-21 — RUNNING_ISSUES #734): the engi** (CC-C) · *live readiness* — the engine-start health gate refuses live
+171. **21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B-** () · *live readiness* — reset functions must not delete both modes' data
+172. **19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr** () · *live readiness* — throwing asset-class lookups on the live path
+173. **21.1 Live Mode Engine — - Create Live Mode trading engine based o** () · *live readiness* — build live on the paper engine (Option A)
+174. **#322** (Kyle) · *live readiness* — test-in-paper / bypass-in-live switches
+175. **P19-B6.10 retire the old per-mode guardrails table** (?) · *live readiness* — one source of guardrail values
+176. **21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the "** () · *live readiness* — after P19-B6.10: the Live Guardrails tab
+177. **#517** (CC-B) · *live readiness* — after rm:21.1: the live trade tables
+178. **21.3 Live Mode Guardrails — - 21-3a (NEW, P19-B6.8a 2026-06-30 —** () · *live readiness* — the live guardrails umbrella
+179. **19-9 B79.x failure-mode taxonomy — entry-side gap LULD halts / ci** () · *live readiness* — entry-side failure modes (halts, splits, earnings)
+180. **25-11a refuse a position larger than the visible book** (?) · *live readiness* — refuse a position larger than the visible book
+181. **Protect live positions if our server dies** (Kyle) · *live readiness* — decide how live positions are protected if the server dies
+182. **B-VENUE-RESTING-EXITS** (Kyle) · *live readiness* — after PROCESS-DEATH-FORM: build that protection
+183. **B-KRAKEN-FEE-WATCH** (CC-B) · *live readiness* — notice when the exchange changes fees
 
 ### Wave B4 — TRACK B · Go-live preparation — last
 
-183. **Provision the live Kraken API key** (Kyle) · *live readiness* — the live key: trade-only, no withdrawals, locked to the server
-184. **Confirm the live fee schedule** (?) · *live readiness* — after KRAKEN-LIVE-KEY: confirm live fees
-185. **25-16 Trade-size / concurrency / win-rate dynamic + starting-balan** () · *live readiness* — the trade-size / concurrency study at the real balance
-186. **Day-one live money settings** (Kyle) · *live readiness* — after rm:25-16: Kyle sets the live money settings
-187. **21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calib** (CC-C + Langston) · *live readiness* — the feed-reliability threshold (Analyst + Langston)
-188. **21.2 Paper-to-Live Transition Testing — - Run parallel paper+live** () · *live readiness* — paper-to-live testing at small size
-189. **19-17b ITEM-4 step 3 standing note (2026-06-10): Phase-21 go-live M** () · *live readiness* — LAST: the go-live switch
+184. **Provision the live Kraken API key** (Kyle) · *live readiness* — the live key: trade-only, no withdrawals, locked to the server
+185. **Confirm the live fee schedule** (?) · *live readiness* — after KRAKEN-LIVE-KEY: confirm live fees
+186. **25-16 Trade-size / concurrency / win-rate dynamic + starting-balan** () · *live readiness* — the trade-size / concurrency study at the real balance
+187. **Day-one live money settings** (Kyle) · *live readiness* — after rm:25-16: Kyle sets the live money settings
+188. **21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calib** (CC-C + Langston) · *live readiness* — the feed-reliability threshold (Analyst + Langston)
+189. **21.2 Paper-to-Live Transition Testing — - Run parallel paper+live** () · *live readiness* — paper-to-live testing at small size
+190. **19-17b ITEM-4 step 3 standing note (2026-06-10): Phase-21 go-live M** () · *live readiness* — LAST: the go-live switch
 
 ## Running now — observation windows (7)
 
