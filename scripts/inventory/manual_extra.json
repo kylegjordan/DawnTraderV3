@@ -475,5 +475,157 @@
    "662"
   ],
   "why": "deployed cf395a71c 2026-08-07 (BATCH_CATALOG:551); the plan's status cell still reads 'Langston Review HOLDING on 3 owed items' and nothing records that hold discharged. Its residual #675 is B-FILTER-DIAG-XSTOCK. CC-B (owner) confirms at the ref"
+ },
+ {
+  "key": "SHADOW-BE-MOONBAG",
+  "name": "Shadow break-even and moonbag calculations (paper now, live later)",
+  "row": "",
+  "phase": "19",
+  "owner": "?",
+  "bucket": "HELPFUL",
+  "flag": "",
+  "src": "Kyle 2026-09-28 (decision 3)",
+  "issues": [],
+  "why": "Kyle: launch with both off, but compute what break-even stops and moonbags WOULD have done on every paper trade (and live trades once live), so we can analyse which helps — including moonbags alone"
+ },
+ {
+  "key": "F-G-1-REOPEN",
+  "name": "F-G-1 reopens: the OHLC writer can write an older bar over a newer one",
+  "row": "3 (F-G-1)",
+  "phase": "19",
+  "owner": "CC-C",
+  "bucket": "MUST",
+  "flag": "",
+  "src": "CC-C lane reply §5; F_G_1_PROGRESS_REPORT §7; #1031",
+  "issues": [
+   "1031"
+  ],
+  "why": "F-G-1's window closed 2026-09-04 (crypto PASS n=24, xStock underpowered n=19) and it REOPENS at Step 3: the OHLC writer's retry can write an OLDER bar over a NEWER one, and xStock 1-minute bars roll into the 15-minute snapshot the scanner reads to generate signals"
+ },
+ {
+  "key": "8a-P4c",
+  "name": "8a-P4c increment 1 — the VTS xStock price instrument",
+  "row": "3n",
+  "phase": "19",
+  "owner": "CC-C",
+  "bucket": "OBSERVATION",
+  "flag": "",
+  "src": "CC-C lane reply §5",
+  "issues": [],
+  "why": "deployed bc199185e; window to 2026-09-30T00:00Z; pre-registered rules A-D then decide increments 2-3"
+ },
+ {
+  "key": "CODEX-PRICING-REVIEW",
+  "name": "Independent review of the pricing architecture (Codex)",
+  "row": "",
+  "phase": "19",
+  "owner": "CC-C",
+  "bucket": "HELPFUL",
+  "flag": "",
+  "src": "CC-C lane reply §5",
+  "issues": [],
+  "why": "an independent review of the price layer before real capital; brief, prompt and findings register (r14) ready; was held for #1027, which is now fixed"
+ },
+ {
+  "key": "EXIT-PATH-AUDIT-MAP",
+  "name": "Map EXIT_PATH_MACHINERY_AUDIT §10 items to their homes",
+  "row": "",
+  "phase": "19",
+  "owner": "CC-C",
+  "bucket": "HELPFUL",
+  "flag": "",
+  "src": "CC-C lane reply §5",
+  "issues": [],
+  "why": "its surviving items are believed absorbed into 3n, 3h/3h.b and 3i; full coverage not yet proved; map item by item"
+ },
+ {
+  "key": "RESTING-ORDER-DEADLINE",
+  "name": "A resting order's deadline must run whether or not a price is usable",
+  "row": "3n.q3",
+  "phase": "19",
+  "owner": "CC-C",
+  "bucket": "MUST",
+  "flag": "",
+  "src": "CC-C lane reply §4 (#1073)",
+  "issues": [
+   "1073"
+  ],
+  "why": "on the PAPER lane, both classes, every price-refusal path skips the resting-order deadline check, so a rest can fill after a real system would have cancelled it; in live the order rests at the venue and a cancel needs no price. Exit leg 0 of 320 affected; entry leg unmeasured, measure first"
+ },
+ {
+  "key": "#690",
+  "name": "#690 audit FAILs have no alert path",
+  "row": "",
+  "phase": "issue",
+  "owner": "CC-C",
+  "bucket": "UNCONFIRMED",
+  "flag": "verify",
+  "src": "CC-C lane reply §5",
+  "issues": [
+   "690"
+  ],
+  "why": "not verified; in CC-C's open list"
+ },
+ {
+  "key": "B-LANGSTON-CONTEXT",
+  "name": "B-LANGSTON-CONTEXT remaining pieces",
+  "row": "2.8b",
+  "phase": "19",
+  "owner": "Infra Claude",
+  "bucket": "HELPFUL",
+  "flag": "",
+  "src": "Infra lane reply",
+  "issues": [
+   "1055"
+  ],
+  "why": "the reviewer's memory composer: P-2 retrofit + #1055, P-1b, and the privacy-check positive control"
+ },
+ {
+  "key": "LANGSTON-MEMORY-APPENDS",
+  "name": "Stop appending closed-batch history to Langston's memory",
+  "row": "",
+  "phase": "19",
+  "owner": "Infra Claude",
+  "bucket": "HELPFUL",
+  "flag": "",
+  "src": "Infra lane reply (Kyle 2026-09-18)",
+  "issues": [],
+  "why": "every batch close appends to his memory and nothing evicts; keep current state and generalising rulings, evict by supersession"
+ },
+ {
+  "key": "COLTRANE-PARITY",
+  "name": "Coltrane parity: a privacy check like Langston's",
+  "row": "",
+  "phase": "19",
+  "owner": "Infra Claude",
+  "bucket": "HELPFUL",
+  "flag": "",
+  "src": "Infra lane reply (Kyle standing rule 2026-09-09)",
+  "issues": [],
+  "why": "no Coltrane privacy check exists; a precondition for the implementor trial"
+ },
+ {
+  "key": "B-TOKEN-WATCH-REST",
+  "name": "B-TOKEN-WATCH Steps 7-11",
+  "row": "",
+  "phase": "19",
+  "owner": "Infra Claude",
+  "bucket": "AFTER",
+  "flag": "",
+  "src": "Infra lane reply",
+  "issues": [],
+  "why": "research feed paused at Step 7; no trading link"
+ },
+ {
+  "key": "CONVERSATION-SWEEP",
+  "name": "The 11 GB old-conversation sweep for things discussed and never picked up",
+  "row": "",
+  "phase": "19",
+  "owner": "Infra Claude",
+  "bucket": "HELPFUL",
+  "flag": "",
+  "src": "Infra lane reply",
+  "issues": [],
+  "why": "Kyle asked for everything discussed and not gotten back to; this feeds the inventory itself"
  }
 ]

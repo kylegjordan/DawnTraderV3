@@ -1,0 +1,92 @@
+{
+ "PAPER-STANDARD": {
+  "date": "2026-09-28",
+  "status": "answered-shape",
+  "kyle": "Comfortable = (1) trading profitably, consistently, over a sustained period — 'maybe a month, maybe a week'; (2) the major calibration done — thresholds, gates, regime and strategy ranges tuned well enough to start; (3) the mechanical pipeline confirmed working end to end — filtering and strategy selection, signal generation, SQE evaluation, RTB refresh, opening and closing trades. Then move to live. Kyle: 'more of a discussion' — the numbers are proposed by CC-C + Langston for his approval."
+ },
+ "#323": {
+  "date": "2026-09-28",
+  "status": "confirmed",
+  "kyle": "Settled by P19-B6.8 (2026-06-29, completion report row 3): warning alerts at 50% and 75% of the daily-loss budget, automatic stop at 100%, manual restart; both warning levels user-settable per mode. Put back to Kyle to confirm it still stands. Kyle 2026-09-28: 'your answer is still correct'."
+ },
+ "BE-MOONBAG": {
+  "date": "2026-09-28",
+  "status": "decided",
+  "kyle": "Launch with break-even stop AND moonbag OFF. Run SHADOW calculations for both (moonbag and break-even) on paper now, and on live once live runs, so we can analyse what makes most sense — including running moonbags alone. Break-even was killing lots of trades; no plan to turn it back on for now. Correction: both were switched off long before 2026-08-30 (moonbag qualifying set empty since 2026-05-26, trailing off since 2026-07-23)."
+ },
+ "rm:19-18": {
+  "date": "2026-09-28",
+  "status": "confirmed",
+  "kyle": "Settled 2026-06-13 by P19-B2 Option A (Kyle sign-off): live reuses the paper engine by extension; only the two order-placement points differ. Put back to Kyle to confirm. Kyle 2026-09-28: 'still right, still correct'."
+ },
+ "rm:21-3b": {
+  "date": "2026-09-28",
+  "status": "delegated",
+  "kyle": "Kyle 2026-09-28: the go-live WebSocket-uptime threshold is decided by ANALYST Claude (CC-C) + Langston, reported to Kyle with the reason."
+ },
+ "DAY-ONE-NUMBERS": {
+  "date": "2026-09-28",
+  "status": "deferred-to-live-work",
+  "kyle": "Live settings stay as they are for now; set them when the live-mode work comes up. PAPER intent (Kyle): paper balance = the actual Kraken balance, max exposure 100%, per-trade size a % of the balance giving a consistent ~$140-150 per trade (the likely live starting size), and 15-20 trades able to open at once. Open question routed to CC-C: which setting governs paper slots today (the slots guardrail vs balance x exposure / trade size), and is it binding, or is the ready-to-buy pool the limit (~5-7 open)."
+ },
+ "PHASE-BLENDING": {
+  "date": "2026-09-28",
+  "status": "direction",
+  "kyle": "The phases blend: the reorganised plan is ONE prioritised order of the MUST and EXTREMELY-HELPFUL items; the live-mode fixes (Phase 21 / 20) are mixed in where they belong rather than held as a separate phase."
+ },
+ "NONFIAT-FORK": {
+  "date": "2026-09-28",
+  "status": "decided",
+  "kyle": "Exclude plain currency pairs (USD/CAD, EUR/USD etc.) now, and exclude crypto pairs priced in euros or other non-dollar currencies now; KEEP pairs priced in dollar-pegged coins (USDC/USDT). Condition: only if part two is not a lot of coding — the owning session confirms size first and comes back if it is large. The proper currency-conversion build (B-QUOTE-CURRENCY-DENOMINATION, was the last Phase-19 item) moves to AFTER live, like the break-even/moonbag work."
+ },
+ "PROCESS-DEATH-FORM": {
+  "date": "2026-09-28",
+  "status": "parked-with-live-work",
+  "kyle": "Live-only; parked with the live-mode work when it comes up in the order (proposed 2026-09-28, Kyle did not object)."
+ },
+ "rm:19-17b": {
+  "date": "2026-09-28",
+  "status": "parked-with-live-work",
+  "kyle": "The go-live switch itself; parked with the live-mode work."
+ },
+ "B-VTS-NO-DECISION-VALVE": {
+  "date": "2026-09-28",
+  "status": "delegated",
+  "kyle": "Handed to ANALYST Claude + Langston; whatever was decided under the 2026-09-03 price-side delegation stands. Before live only if quick; otherwise park until after live."
+ },
+ "AMR-ALL": {
+  "date": "2026-09-28",
+  "status": "decided-after-live",
+  "kyle": "ALL AMR work goes AFTER live: the input fixes (B-AMR-INPUT-INTEGRITY arc: EV-gap persistence, friction lens, the break-even 'stormy' question, the combining maths), the context-bonus rewire (#593, was decision 11), and the ML brain (25-6). Kyle: time is needed to make sure it watches through the correct lens so its decisions are sensible. The AMR stays in SHADOW (watch-only) through launch — confirm it is still shadow on the go-live checklist. Finding recorded: the arc (owner CC-B) stalled 2026-07-30 with no plan row or task-list line; 7-day shadow read at 2026-09-28: crypto would be SURVIVAL 59.8% / NORMAL 27.8% / DEFENSIVE 12.5% of 20,158 ledger rows; xStock SURVIVAL 55.2% / no reading 28.6% / NORMAL 11.7% / DEFENSIVE 2.7% / AGGRESSIVE 1.7% of 20,158."
+ },
+ "B-PRICE-FLOOR-REVIEW": {
+  "date": "2026-09-28",
+  "status": "decided-conditional",
+  "kyle": "If low-priced coins can be traded profitably when the book is deep enough (fees for both classes considered), do not close those opportunities: lower the $0.25 floor and REPLACE it with a proper order-book requirement that looks at traded volume / number of trades and depth, not just a liquidity proxy. VTS evidence read 2026-09-28 (exit_decision_archive, source vts-runner, crypto, pnl_pct = net of fees): 60 days — under $0.05 n=647 win 39.7% avg -0.89%; $0.05-0.25 n=706 win 43.3% avg -0.17%; $0.25+ n=2027 win 38.4% avg -0.79%. Since 2026-09-19: n=183 win 45.9% avg +0.32%; n=200 win 50.0% avg +1.71%; n=644 win 39.6% avg -0.26%. Depth at entry is not recorded."
+ },
+ "B-TARGET-MULTIPLE-VS-HORIZON": {
+  "date": "2026-09-28",
+  "status": "folded-into-go-live-push",
+  "kyle": "Kyle: the strategy floor/ceiling/reward-risk review should already be done; if anything remains it is part of this push to live. Done: B-GEOMETRY-REACH-BASELINE (2026-09-13) + B-REACH-BASELINE-ADJUST (2026-09-20). Remaining: whether to move the TARGETS for strategies whose targets are too far — calibration, in the push, owner CC-B. Not a Kyle decision."
+ },
+ "GO-LIVE-CRITERIA": {
+  "date": "2026-09-28",
+  "status": "direction",
+  "kyle": "THE sorting rule for the whole list: everything needed to reach (a) mechanics sound and working as intended — filtering, pattern detection, DBS, regime classification, strategy selection and signal generation, SQE evaluation, the RTB pool and its refresh, opening and closing trades; (b) calibration — thresholds, ranges, gates, regime classification, strategies tuned, confidence and predictive scores fixed; (c) the price feed correct and the right prices used in paper; (d) no mistake that makes paper look better or worse than the truth; (e) trading profitably and consistently. Everything else goes AFTER live — no ML, AMR, break-even/trailing/moonbag, or other bells and whistles now. Stop naming phases: one prioritised list. ADDED 2026-09-28: (f) tasks that make sure we are capturing the right data to learn from — everything currently intended to be captured."
+ },
+ "#632": {
+  "date": "2026-09-28",
+  "status": "fix-in-push",
+  "kyle": "Kyle's reasoning: even with a separate production environment, production restarts happen when releases are pushed, so fix it on staging now and carry the fix forward. The daily-loss count must survive a restart."
+ },
+ "#692": {
+  "date": "2026-09-28",
+  "status": "no-fix-alert-instead",
+  "kyle": "Kyle: slots shrinking as the balance falls is the design, not a defect. The 2026-08-12 freeze came from a one-step manual balance reset. Instead: an alert when no new trade has opened for a set period because the allowance is full (e.g. the same five trades open for a week), with the option to close manually or have the system exit them promptly."
+ },
+ "LIVE-ENVIRONMENT": {
+  "date": "2026-09-28",
+  "status": "analysis-requested",
+  "kyle": "Kyle wants the ideal setup analysed before deciding: keep everything on staging, or a separate production environment for live so paper/VTS development deploys (frequent restarts) do not disrupt live trading. Needs difficulty, server and database resources, cost. Routed to Infra Claude + Langston. Facts 2026-09-28: one app process on one 2-CPU / 3.7 GB staging server (disk 73%), one database at 81% of 200 GB; live is designed to run inside the same process as paper (P19-B2 Option A); the staging-vs-production split was planned only for after live (roadmap Phase 22); the app process has restarted 627 times since pm2 was set up. Kyle follow-up 2026-09-28: under option C, can the Kraken FX5 scans, xStock scans and other asset-class scans be SHARED between the production (live) server and the paper/VTS server, so we do not exceed rate limits? Forwarded to Infra."
+ }
+}

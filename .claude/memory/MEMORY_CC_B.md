@@ -29,7 +29,7 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 
 ## ★★★ CURRENT POSITION (2026-09-23)
 
-🟦 **ACTIVE: PRE-LIVE INVENTORY (row `3n.x`, Kyle 2026-09-23).** Draft at `0f6f445f3` = `Scope Files/PRE_LIVE_INVENTORY_DRAFT.md`, 608 items (MUST 66 in groups A-H). Pipeline + hand decisions: `scripts/inventory/` (`decisions.json` = every judged item; re-render with `draft.py`). **Dispatched to Langston for review; OLD/ANALYST/Infra lane replies + Coltrane description still owed.** Next: fold replies → re-render → report to Kyle → he picks the pre-live set → reorganise roadmap + four task lists, assign sessions, Coltrane trial. ⛔ The keyword-prune rule LEAKS (#596/#914/#994) — never trust the 155 auto-prunes without the owner.
+🟦 **ACTIVE: THE PUSH TO LIVE (row `3n.x`).** Kyle walked all 13 decisions 2026-09-28 (record: `scripts/inventory/kyle_decisions.json`) and set the rule: everything for mechanics / tuning / prices / paper-truth / learning-data / profitability + live fixes is IN; ML, AMR, BE/moonbag, non-USD conversion, tooling = AFTER live; no phase names. Re-sorted list: `Scope Files/PRE_LIVE_PUSH.md` via `scripts/inventory/sort.py` (179 in push, 219 after). **Next:** prioritise the push into one working order + assign sessions (Coltrane trial), then rewrite plan + four task lists. **Owed to Kyle:** Infra's production-environment analysis (options A/B/C + shared feed + rate limits); Analyst's paper-slot answer; each session's line-by-line task-list coverage check; my own 3n.v 7-day review (due 09-27). ⛔ Say "the VTS", never "practice lane". ⛔ Lessons: plan tables split by formatting lines; row ids repeat; keyword prunes are not prunes.
 
 ### (earlier) ★★★ CURRENT POSITION (2026-09-21)
 

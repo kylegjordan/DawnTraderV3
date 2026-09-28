@@ -76,3 +76,4 @@
 **Settled Kyle decisions (authoritative homes in roadmap/RUNNING_ISSUES — not repeated here):** #94→25-7 · #226→20.3.1 · #5→leave · #80→Phase-25. New CLAUDE.md rules (surfaced-issue-scheduling §9.4, temp Phase-19-doc-upkeep §3 Tier-1, never-leave-legacy rule 18) live in CLAUDE.md — read there, not here.
 
 **★ PRICE SIDE — THE RULE IS CC-C + LANGSTON'S (Kyle delegated 2026-09-03, row `3n`) AND IS LIVE:** an estimate keeps the midpoint; a trigger, fill or booking takes the side a counterparty fills — **BUY on the ASK, SELL on the BID; a missing side ⇒ no decision.** Per-lane state: `SYSTEM_MANUAL` §18.0.1 — read it there, never from here. ★ **Kyle's test is fidelity to live trading, not better-looking results.**
+- [Say "the VTS", never "practice lane"](feedback_vts_name.md)

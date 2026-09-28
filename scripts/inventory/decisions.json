@@ -985,8 +985,8 @@
   ""
  ],
  "B-LANGSTON-LEDGER-SPLIT": [
-  "AFTER",
-  "Langston's memory file size — reviewer tooling",
+  "HELPFUL",
+  "how the reviewer's loaded set stops growing; with 2.8a/2.8c (Infra)",
   ""
  ],
  "B-SCHEDULER-FIRST-TICK": [
@@ -1020,8 +1020,8 @@
   ""
  ],
  "#1027": [
-  "HELPFUL",
-  "Coltrane cannot read the repository — a PREREQUISITE for the Coltrane implementor trial",
+  "PRUNE",
+  "fixed on the box 2026-09-11 (git ownership guard); re-measured live and fresh 2026-09-22 — no longer blocks the Coltrane trial (Infra); ledger entry closing is CC-C's",
   "verify"
  ],
  "#1033": [
@@ -1055,8 +1055,8 @@
   ""
  ],
  "#1074": [
-  "AFTER",
-  "the governance checker's open-batch alerts have no clear path",
+  "MERGE:B-ALERT-QUEUE-INTEGRITY",
+  "owner CC-B: the class fix is item (iv) of 2.4b (CC-C)",
   ""
  ],
  "#143": [
@@ -1505,18 +1505,18 @@
   "verify"
  ],
  "#609": [
-  "HELPFUL",
-  "4,408 AMR rows with null score and inputs",
+  "AFTER",
+  "AMR work after live (Kyle 2026-09-28)",
   ""
  ],
  "#610": [
-  "MUST",
-  "the AMR scales position size off an EV-gap ring with no staleness bound — stale data would size real positions (CC-A)",
+  "AFTER",
+  "AMR stays watch-only until after live (Kyle 2026-09-28) — its sizing cannot touch trades before then",
   ""
  ],
  "#612": [
-  "HELPFUL",
-  "AMR consumer cannot tell a clamped value from a real one",
+  "AFTER",
+  "AMR work after live (Kyle 2026-09-28)",
   ""
  ],
  "#613": [
@@ -1556,8 +1556,8 @@
  ],
  "#628": [
   "HELPFUL",
-  "a 50000 constant defeats a working fail-safe",
-  "verify"
+  "its two SIZING sites ride B-SIZING-DEC-RESTORE; display sites can wait (CC-C)",
+  ""
  ],
  "#630": [
   "MUST",
@@ -1665,9 +1665,9 @@
   ""
  ],
  "#686": [
-  "HELPFUL",
-  "rewritten 08-17 — contents need the owner's read",
-  "verify"
+  "AFTER",
+  "relocate a runtime file out of bridge/canonical; its reader's scheduler is dead — no live effect (CC-C)",
+  ""
  ],
  "#689": [
   "AFTER",
@@ -1680,9 +1680,9 @@
   "verify"
  ],
  "#692": [
-  "PRUNE",
-  "the 08-12 balance re-anchor froze opens for four days — incident record",
-  "verify"
+  "HELPFUL",
+  "Kyle 2026-09-28: not a defect (slots shrink with the balance by design; the 08-12 freeze was a one-step manual reset). Build instead an alert when no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options",
+  ""
  ],
  "#694": [
   "MERGE:B-RULES-LAYER",
@@ -1740,9 +1740,9 @@
   ""
  ],
  "#935": [
-  "MUST",
-  "any five failed logins lock EVERY user out — in live that includes Kyle reaching the stop controls",
-  "verify"
+  "PRUNE",
+  "SHIPPED 2026-08-28 as 0e5ad6d62 and still in the running build (CC-C lane reply); header closed. Residuals homed: #936 (Phase 16) and the 0.0.0.0:5000 bind (B-SEC-HARDEN)",
+  ""
  ],
  "#942": [
   "AFTER",
@@ -1785,8 +1785,8 @@
   ""
  ],
  "B-AMR-INPUT-INTEGRITY-ARC": [
-  "HELPFUL",
-  "AMR's friction input is half a constant — gates every AMR weight change",
+  "AFTER",
+  "Kyle 2026-09-28: AMR fixes after live; stalled since 2026-07-30 with no plan row — place it in the post-live section",
   ""
  ],
  "B-BALANCE-TRUTH": [
@@ -1895,8 +1895,8 @@
   ""
  ],
  "B-HELSINKI-MOUNT-WATCH": [
-  "AFTER",
-  "wedged mount detection on the reviewer box",
+  "MERGE:B-GDRIVE-UNMOUNT",
+  "#921 superseded: the mount is removed, not watched (Infra). #924 is B-SSH-KEY-CENSUS, listed separately",
   ""
  ],
  "B-IDEAL-POOL-STARVATION": [
@@ -1940,8 +1940,8 @@
   ""
  ],
  "B-REVIEWER-LOOP-AVAILABILITY": [
-  "AFTER",
-  "fresh-reviewer availability",
+  "PRUNE",
+  "RESOLVED for its cause 2026-08-28 (Infra)",
   ""
  ],
  "B-RTB-REFRESH-CONSOLIDATE": [
@@ -2215,14 +2215,14 @@
   "verify"
  ],
  "#611": [
-  "HELPFUL",
-  "AMR arc (owner CC-B)",
-  "verify"
+  "AFTER",
+  "AMR work after live (Kyle 2026-09-28)",
+  ""
  ],
  "#608": [
-  "HELPFUL",
-  "AMR arc (owner CC-B)",
-  "verify"
+  "AFTER",
+  "AMR work after live (Kyle 2026-09-28)",
+  ""
  ],
  "#617": [
   "UNCONFIRMED",
@@ -2335,8 +2335,8 @@
   ""
  ],
  "B-AMR-CONTEXT-BONUS-REWIRE": [
-  "DECIDE",
-  "#593: the AMR context-bonus arm is still present with no importer; Kyle ruled 2026-06-11 'dead-but-designed-to-work = FIX, not delete'. Rewire it (a ranking term) or reverse the ruling (CC-A)",
+  "AFTER",
+  "Kyle 2026-09-28: all AMR work after live",
   ""
  ],
  "B-RANKING-COMPONENT-CAPTURE": [
@@ -2522,6 +2522,76 @@
  "B-WAKE-LEAD-NAME": [
   "PRUNE",
   "Langston ruled its Step 4 and Step 8 (plan row 4.51 CLOSING 2026-09-11); closes on Kyle acknowledgement",
+  ""
+ ],
+ "#634": [
+  "MUST",
+  "the daily-loss evaluator's failure counter has no reader: a persistent fault stops the kill switch evaluating while trading continues — fails open on a risk boundary (CC-C, re-derived at the ref). Owner CC-B",
+  ""
+ ],
+ "#632": [
+  "MUST",
+  "the daily-loss window restarts at zero on every process restart — Kyle 2026-09-28: fix now, the fix carries to production",
+  ""
+ ],
+ "B-IMPLEMENTATION-SHORTFALL": [
+  "HELPFUL",
+  "#603: no arrival price is persisted, so measured slippage mixes a stale signal with execution cost; 24 closed trades show a >1% intended-vs-fill gap (CC-C)",
+  ""
+ ],
+ "#633": [
+  "MERGE:P19-B6.10",
+  "the target-goal safety check cannot fail — its home is the legacy-guardrails retirement (CC-C)",
+  ""
+ ],
+ "#957": [
+  "MERGE:B-DECIDED-INTENT-INDEX",
+  "xStock's three definitions of the price from one frame — the first question of B-DECIDED-INTENT-INDEX (row 3b.g)",
+  ""
+ ],
+ "#687": [
+  "AFTER",
+  "equity-perp universe file stale — perps are after live (merges into P19-B-PERPFEED)",
+  ""
+ ],
+ "B-UNIVERSE-BOUNDARY-FIAT": [
+  "MERGE:B-NONFIAT-QUOTE-DENOMINATION",
+  "the home #937/#938 folded into — its shape is Kyle's decision 8 (exclude plain fiat + non-dollar pairs now)",
+  ""
+ ],
+ "#962": [
+  "PRUNE",
+  "DONE by 8a-P3 / 8a-P4b (CC-C)",
+  ""
+ ],
+ "#644": [
+  "AFTER",
+  "a finding, not work; its decision (whether the exploration subsidy ending on its own is wanted) must be visible in calibration (CC-C)",
+  "verify"
+ ],
+ "#1075": [
+  "MERGE:B-SYMBOL-CLASS-IDENTITY",
+  "its collision-set half belongs in 3b.h-4: the VTS derives the carried class from the ticker; the collision set is 135 days old and WEN/USD sat outside it (CC-C)",
+  ""
+ ],
+ "B-BURN-THRESHOLD-BASIS": [
+  "AFTER",
+  "not withdrawn — token-watch alarm tuning (Infra)",
+  ""
+ ],
+ "#1057": [
+  "MERGE:B-LANGSTON-RECONCILE-VERB",
+  "its live half is the reconcile verb, row 2.8d (Infra)",
+  ""
+ ],
+ "B-GDRIVE-UNMOUNT": [
+  "AFTER",
+  "placed 2026-08-28, not parked; owner Infra Claude; absorbs #921",
+  ""
+ ],
+ "B-READ-MODEL-BLOB-VERIFY": [
+  "HELPFUL",
+  "the reviewer's pinned reads served the wrong file twice — a reviewer reading the wrong object weakens every review before live (Infra)",
   ""
  ]
 }
