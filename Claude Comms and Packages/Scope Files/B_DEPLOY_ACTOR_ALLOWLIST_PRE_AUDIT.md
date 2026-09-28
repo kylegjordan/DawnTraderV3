@@ -12,7 +12,7 @@ change-class: non_architecture · **Owner:** CC-B · **Issue:** `#656` residual 
 |---|---|
 | **PREVIOUSLY STATED** | *"three deploys, three spellings, three sessions."* |
 | **NOW** | **five recorded attributions, three sessions, FOUR distinct spellings** — `ANALYST-Claude` ×2 (CC-C) · `cc-c` ×1 (CC-C) · `cc-a` ×1 (CC-A) · `CC-B` ×1 (CC-B). |
-| **REASON** | I attributed one spelling per session **by inference from the string** and never checked who used which. CC-C corrected it unprompted; I re-derived it at `F_G_2_PROGRESS_REPORT.md:9,:21` and the live record. **Two of the four are the same session one day apart.** |
+| **REASON** | I attributed one spelling per session **by inference from the string** and never checked who used which. CC-C corrected it unprompted; I re-derived it at `F_G_2_COMPLETION_REPORT.md:9,:21` and the live record. **Two of the four are the same session one day apart.** |
 
 | | |
 |---|---|

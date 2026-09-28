@@ -87,4 +87,4 @@ change-class: non_architecture
 
 ## 9. REVIEWER LOOP RECORD
 `REVIEWER r1: <pending>`
-`CC-C r1 (unsolicited, exception (c)): claim-only, on the spelling population · HIT — two of the three spellings were one session · RE-DERIVED at the objects (F_G_2_PROGRESS_REPORT:9,:21 and the live record) · scope corrected to r2 before Langston ruled.`
+`CC-C r1 (unsolicited, exception (c)): claim-only, on the spelling population · HIT — two of the three spellings were one session · RE-DERIVED at the objects (F_G_2_COMPLETION_REPORT:9,:21 and the live record) · scope corrected to r2 before Langston ruled.`

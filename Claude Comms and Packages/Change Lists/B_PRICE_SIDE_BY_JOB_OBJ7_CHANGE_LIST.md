@@ -148,7 +148,7 @@ const _lastTradeReceivedAtMs = lastTradePrice !== null ? now : (_prevRow?.lastTr
 | item | fix | where |
 |---|---|---|
 | **BLOCKER-1** — a rejected unsubscribe was silently discarded | every unsubscribe carries a `req_id`; the reply is matched to what we asked; a rejection logs `[P-7b][WS_UNSUB_REJECTED]` with channel, symbols, depth and error; `Unsub OK` now prints channel and depth | `kraken-websocket-adapter.ts` `handleV2SystemMessage`, `trackUnsubscribe`, both unsubscribe sends |
-| **BLOCKER-2** — OBJ-7's deploy splits F-G-2's crypto window under A4 | recorded in F-G-2 §4a as the fourth event; the split sha is written there at Step 6 before the restart | `F_G_2_PROGRESS_REPORT.md` §4a; Step 6 prep |
+| **BLOCKER-2** — OBJ-7's deploy splits F-G-2's crypto window under A4 | recorded in F-G-2 §4a as the fourth event; the split sha is written there at Step 6 before the restart | `F_G_2_COMPLETION_REPORT.md` §4a; Step 6 prep |
 | P-7b: pin the `softResubscribe` ordering | comment at the clear block, plus a test that the unsubscribe carries the granted depth | adapter; test 8 |
 | P-7b: a mixed-depth test | two symbols at 10 and 25 → two messages, partitioned by depth | test 7 |
 | P-7b finding: cleanup before the book send | the send moved below the local cleanup | adapter; test 10 |
@@ -158,7 +158,7 @@ const _lastTradeReceivedAtMs = lastTradePrice !== null ? now : (_prevRow?.lastTr
 | P-7g residuals and the Step-8 check | stated under P-7g above | this file |
 | chunk-2 carry: two REST governors | stated in the chunk-2 dispatch | — |
 
-Also recorded from your F-G-2 closing read: §0b in `F_G_2_PROGRESS_REPORT.md`, and the window-sizing item placed on P-8a.
+Also recorded from your F-G-2 closing read: §0b in `F_G_2_COMPLETION_REPORT.md`, and the window-sizing item placed on P-8a.
 
 ## STEP 4 r2 — CHUNKS 2 AND 3, AND CHUNK 1 r2's CONDITIONS: WHERE EACH ITEM LANDED
 
@@ -192,7 +192,7 @@ Also recorded from your F-G-2 closing read: §0b in `F_G_2_PROGRESS_REPORT.md`, 
 |---|---|---|---|
 | **C1** — `LiveTouchBasis` was hand-written | Derived: the table is `Object.freeze({…} as const satisfies Record<PriceBasisOrNone, boolean>)`, and `LiveTouchBasis` is a mapped type over its `true` keys | `price-basis.ts` | p7c 7/7; tsc unchanged |
 | **C2** — `isLiveTouchBasis` has no caller | **Pre-placed for OBJ-8's decision-side basis stamp; no non-test caller until then.** Stated here and at the object | `price-basis.ts` docblock | — |
-| **C3** — F-G-2 §0 contradicted §0b | §0's rate is marked SUPERSEDED in its body, with both populations. §0's is the 7 days before the window, when the arm existed for only about 2.3 days (deployed 2026-09-02T08:49:47Z), so about 3 stamped closes a day, not 1. §0b's is the armed arm since 09-02, about 5 a day | `F_G_2_PROGRESS_REPORT.md` §0 | — |
+| **C3** — F-G-2 §0 contradicted §0b | §0's rate is marked SUPERSEDED in its body, with both populations. §0's is the 7 days before the window, when the arm existed for only about 2.3 days (deployed 2026-09-02T08:49:47Z), so about 3 stamped closes a day, not 1. §0b's is the armed arm since 09-02, about 5 a day | `F_G_2_COMPLETION_REPORT.md` §0 | — |
 | **BLOCKER-2** carry | Step 6 fills §4a's and D3's slots with the sha and UTC, and commits that, before the restart; Step 8 shows them filled | Steps 5-8 plan | — |
 | `bookDepth` is never deleted | **No work now (disposition 5), with the citation.** Every production book subscribe asks depth 10 (`kraken-websocket-adapter.ts:1516-1518`); the only other request is the depth-1 path below, which never reaches the ACK. So every recorded depth is 10, and a stale entry names the depth being unsubscribed. **Re-opened by the first change that requests a second depth**, which must clear the entry on unsubscribe in that same change | — | — |
 | the depth-1 path (`switchToBookChannel`, `:2730`): does it fire, and is it rejected? | **Measured: it does not fire, and it cannot.** (i) `[I7-WS-G][CHANNEL_SWITCH]` = 0 across all 15 `out` files on staging (`out.log` plus 14 rotated; the oldest closed 2026-09-10T05:25Z); positive control, `Sub OK:` = 129 in the same files. (ii) The sibling branch `[I7-WS-G][RESUBSCRIBE]` = 0 in 13 of those 15 files (the two oldest not read), and `[I7-WS-G][UNSTABLE]` = 0 in the error logs for 2026-09-09 onward, so `triggerCorrectiveAction` did not act in that reach. (iii) Every `Sub Error:` in the error logs rotated 2026-09-04 onward is `Already subscribed` (316 of 316); no depth rejection. (iv) The mechanism: the gate is `internalSymbol.includes(hint.replace('/', ''))` (`:2713-2719`), and `normalizeToInternalSymbol` returns `BASE/QUOTE` with the slash (`kraken-symbol-resolver.ts:90-116`), so for all four hints, e.g. `'TIA/USD'.includes('TIAUSD')`, it is false. Unreachable by construction. (v) Kraken's v2 book documentation: depth is *one of `10`, `25`, `100`, `500`, `1000`*, so a depth-1 request is invalid by specification. **Proposed rule-18 disposition (b), for your ruling:** delete `switchToBookChannel`, `scheduleBookChannelRevert` and the `prefer_book` hint, `HOME: OBJ-8 item 8i, owner CC-C, PHASE_19_PLAN 3n`, with the rule-18 census at the deletion | scope 8i; pre-audit P-8i | — |

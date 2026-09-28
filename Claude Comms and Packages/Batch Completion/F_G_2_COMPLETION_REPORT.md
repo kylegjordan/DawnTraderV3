@@ -1,4 +1,55 @@
-# OPEN — F-G-2 / `B-EXIT-TRANSACTABLE-SIDE` — PROGRESS REPORT
+# CLOSED (ABSORBED) — F-G-2 / `B-EXIT-TRANSACTABLE-SIDE` — COMPLETION REPORT
+
+> **Converted from `F_G_2_PROGRESS_REPORT.md` on 2026-09-28 by CC-C (workflow-11: convert, never rewrite).** Everything below the conversion section is the progress report as it stood, kept as the record: the pre-registered criteria, the step evidence and the ship-time tier ledger (§8).
+> **DISPOSITION: CLOSED AS ABSORBED.** OBJ-5a/5b/5c shipped and pass their pre-registered checks (below). OBJ-0's question was superseded onto `B-PRICE-SIDE-BY-JOB` and is not answered here. **Decision:** Langston ruled 2026-09-14 that the shadow arm is removed and OBJ-0 superseded (§0 top of the record). Kyle's 2026-09-28 plate list (relayed by NEW Claude) directs *"close F-G-2 as absorbed"*. CC-C checked the pre-registered data before closing (below) rather than closing on the direction alone.
+
+## C1. ⭐ WHAT DATA CAME IN, AGAINST EACH CRITERION AS WRITTEN (§4)
+
+| criterion (§4, quoted as pre-registered) | outcome at conversion, 2026-09-28 |
+|---|---|
+| **4a. OBJ-0, the 2×2**: *"crypto closes whose row carries `fg2Shadow` with `seededFrom='cold'` … n-floor 30"*; brake *"n-floor 52 … one-sided Wilson … `< 5%`"* | **NOT ANSWERED, AND IT CAN NO LONGER BE.** The window was declared VOID on 2026-09-05 (§0) and never re-anchored. The instrument was REMOVED by `B-PRICE-SIDE-BY-JOB` `8a-P2` (deployed `7d4cdf5a8`, archive `_archive/deleted-code/fg2-shadow-arm-aee.ts.removed`). Once the live arm read the bid, the comparison became bid-against-bid and its discordant cell was empty by construction (Langston, 2026-09-14). **No verdict is claimed, positive or negative.** The switch this window was built to justify was made instead by `8a-P2` (paper crypto) and `8a-P3` (VTS crypto, 2026-09-15), on Kyle's fidelity-to-live standard (§4a, 2026-09-05). |
+| **4b. OBJ-5a**: *"PASS = every such row with a live mark books `exitPrice ≠` the trigger where the mark differed"*; twins excluded; *"n-floor 20 clamp-traversing crypto closes or 7 days"* | ✅ **PASS, with 4 rows undetermined.** Object: `logs/virtual_trades/*.json` on staging, de-duplicated by id. Population: crypto (`assetClass='crypto_spot'`), non-twin, exited `2026-09-02T08:49:47Z` (deploy) to `2026-09-15T12:15:04.144Z` (the `8a-P3` anchor, after which exits book the bid and the criterion no longer describes the code). `stop_hit` **519 of 523** and `target_hit` **223 of 223** booked off the trigger. **4 `stop_hit` rows booked exactly at the stop:** HYPE/EUR 72.02, RAY/USD 1.077, GRT/USD 0.01812, ACU/USD 0.1218, all confirmed in `exit_decision_archive` as `SL_hit` at the stop. Neither the log nor the archive's `state_snapshot` records the mark at exit, so each is either a mark exactly on the stop (every one of these prices sits on its venue grid) or a no-mark clamp. **Both arms fall outside the criterion's population as written.** Recorded as `n_undetermined = 4`, not as passes. Precision: 0 failures in 742 ⇒ one-sided 95% bound ≈ 0.40%; counting all 4 undetermined as failures, the rate is ≤ 0.54%. Twins: 0 twin rows with a stop/target exit in the window. **Negative control (pass-through reasons unchanged): UNMEASURED**, because the stored rows carry no mark to compare against. |
+| **4c. OBJ-5b**: *"PASS = `frictionCost ≈ costEntryFeeFraction + costExitFeeFraction + 2·costSlippageFraction + costSpreadFraction` (\|Δ\| < 1e-9) on every row, split inline / twin / xStock, and on maker rows `costEntryFeeFraction = 0.0040` while `costExitFeeFraction = 0.0080`. n-floor 20 rows with at least 3 maker twins"* | ✅ **PASS.** Population: VTS rows OPENED in the same window. **Inline crypto 747 / 747** (logs); **xStock 568 / 568** (logs; 1 more row carries no cost fields and is excluded, named); **twins 194 / 194** (`vts_open_trades.context`, `mtTwin='true'`, because twin log rows carry no cost fields). Maker rows: inline **26 / 26** and maker twins **159 / 159** at entry 0.0040 / exit 0.0080; the 35 taker twins read 0.0080 / 0.0080. The floor is met many times over. |
+| **4d.** the 0.05%/leg slippage constant against a measured 0.0612%/leg residual, *"re-measured at the 09-07 `#951` window"* | ⚠️ **NOT RE-MEASURED, AND OVERTAKEN.** Crypto VTS exits have booked the BID since `8a-P3` (2026-09-15), which changes the basis the residual was measured on. The constant's calibration is homed as a Phase-25 question (`POST_AUDIT_ROADMAP.md:654`), so tuning owns it, not this batch. |
+| **Langston Step-4 condition 3** (§7): *"state that the open-trades table renders 0.60/0.60 per fee leg on a maker row while `context` carries 0.40/0.80"* | **STATED, as recorded at Step 7 (§3, UI line): one row, two surfaces, two different fee pictures.** Not re-measured at conversion. |
+
+## C2. OBJECTIVES — YES / NO / PARTIAL
+| objective | result | evidence |
+|---|---|---|
+| OBJ-0 — measure the bid-side exit decision as a shadow arm (crypto) | **NO — superseded** | C1 row 4a; Langston 2026-09-14 |
+| OBJ-1 — the shadow arm's plumbing (seed, witnesses, stamps) | **YES, then REMOVED** | §3, §2 rows 6b/7b; removed by `8a-P2` |
+| OBJ-5a — VTS books the observed mark, not the clamp (crypto) | **YES** | C1 row 4b |
+| OBJ-5b — maker entry fee charged where a maker was paid | **YES** | C1 row 4c |
+| OBJ-5c — one epoch cut for VTS learning history | **YES** | §3 (`calibration_epoch` crypto 4→5, xStock 5→6) |
+| xStock decision-side legs | **HELD, and carried elsewhere** | `8a-P4c` (`B-PRICE-SIDE-BY-JOB`), on CC-C's before-the-push plate |
+
+**CI:** the shipped heads were `2cc4a03ec` (run `33609980643`) and `093d1878f` (run `33621666817`), both 4/4 per job (§2). The conversion changes no code.
+
+## C3. GOVERNANCE AT CLOSE — THE TIER LEDGER FOR THIS CONVERSION (the ship-time ledger is §8)
+**CHANGE-CLASS: architecture** (unchanged). This close changes no code, so the Tier-2 architecture documents are judged N/A for the CLOSE. Their content landed at ship (§8).
+
+| document | status | one line |
+|---|---|---|
+| Completion report | ✅ | this file, converted from the progress report (`git mv`, history kept) |
+| `BATCH_CATALOG.md` | ✅ | F-G-2 row closed as absorbed, with the 4b/4c results |
+| `PHASE_HISTORY.md` | ✅ | one-line close entry |
+| `PHASE_19_PLAN.md` | ✅ | row 3c: CLOSED (absorbed), pointer to this report |
+| `PUSH_TO_LIVE_PLAN.md` | ⏳ | section 0's F-G-2 line. The file is generated, so NEW Claude updates it; requested in the same turn |
+| MEMORY — own `MEMORY_CC_C.md` | ✅ | F-G-2 no longer carried as open |
+| MEMORY — Langston `/home/langston/MEMORY.md` | ⛔ BLOCKED | write access is `#1057` (Infra); the one-line entry is staged for him in the Step-11 dispatch |
+| `SYSTEM_MANUAL.md` / `SYSTEM_IMPACT_MAP.md` | N/A (close) | no code or semantics change at close; ship-time content is §8 |
+| `RUNNING_ISSUES.md` | N/A | no new issue. `#914`/`#943` are unchanged by the close |
+| `CHANGES_AND_FIXES.md` · `ADJUSTMENT_FRAMEWORK.md` · `AUTHORITY_BASELINE.md` · `STORAGE_POLICY.md` · `DELETED_COMPONENTS_LOG.md` | N/A | no fix, knob, invariant, retention or removal at close. The shadow arm's removal is logged under `8a-P2` |
+| `MISTAKE_PATTERNS.md` | N/A | no trailer in this conversion |
+
+## C4. HONEST RESIDUAL
+- **OBJ-0's question was never answered by this batch's instrument.** The decision it was meant to inform was made on fidelity instead. Whether the bid trigger produces spurious stops, the brake's question, is now `3n.o` (`B-CRYPTO-MARK-AGE-GATE`) and the exit ticker-leg work.
+- **4 of 746** crypto stop/target rows in 4b are undetermined, because no stored field records the exit mark.
+- **4b's negative control is unmeasured,** for the same reason.
+
+---
+
+# RECORD — the progress report as it stood before conversion (kept verbatim below this line)
 
 ⛔⛔ **OBJ-0 IS NOT "AWAITING RE-OPEN". IT IS UNANSWERABLE BY THAT INSTRUMENT, AND THE INSTRUMENT IS GONE (Langston ruling, 2026-09-14).**
 **THE SHADOW ARM WAS REMOVED** by `B-PRICE-SIDE-BY-JOB` row `8a-P2` (P2-7), deployed `7d4cdf5a8985facb06189216c2375f0e79f5bf64`.

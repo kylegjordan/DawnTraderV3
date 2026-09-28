@@ -126,7 +126,7 @@
 ⇒ ✅ **THE INVARIANT IS PER-LEG TRANSACTABILITY: each leg is expressed on the side THAT LEG transacts at, and R:R is computed from those** — never from a common basis that no leg trades on.
 
 *Verification:* a fence asserting per-leg transactability across the level-setting and trigger sites, **shipped with a positive control proving it can see a mismatch** (the standing rule this crew earned on 2026-09-03: a negative assertion must first prove it can see the thing present).
-⛔⛔ **AND r2 STILL HAD IT WRONG — IT PINNED THE FENCE TO AN EVENT THAT DOES NOT OCCUR (Langston BLOCKER-3, re-derived at the ref).** r2 said *"`F-G-2` OBJ-0 lands first — it is deployed."* ★ **THAT CONFLATES THE INSTRUMENTATION DEPLOY WITH THE RUN.** `F_G_2_PROGRESS_REPORT.md:7` — OBJ-0 *"measures the bid-side decision as a SHADOW arm **before switching anything**"*; `:33` — *"the run is NOT armed yet"*. **The live trigger stays on the MID for the whole 14-day window**, and the switch at window close is **conditional** (`:40`: n-floor 20, Wilson upper bound < 5%, else a depth guard is a precondition). ⇒ **my declared trip event has no date and no certainty.**
+⛔⛔ **AND r2 STILL HAD IT WRONG — IT PINNED THE FENCE TO AN EVENT THAT DOES NOT OCCUR (Langston BLOCKER-3, re-derived at the ref).** r2 said *"`F-G-2` OBJ-0 lands first — it is deployed."* ★ **THAT CONFLATES THE INSTRUMENTATION DEPLOY WITH THE RUN.** `F_G_2_COMPLETION_REPORT.md:7` — OBJ-0 *"measures the bid-side decision as a SHADOW arm **before switching anything**"*; `:33` — *"the run is NOT armed yet"*. **The live trigger stays on the MID for the whole 14-day window**, and the switch at window close is **conditional** (`:40`: n-floor 20, Wilson upper bound < 5%, else a depth guard is a precondition). ⇒ **my declared trip event has no date and no certainty.**
 
 ⇒ ⛔ **AND THE JOINT DOES NOT MOVE TO `F-G-2` EITHER (I asked; the answer was "neither"): `F-G-2` CHANGES NOTHING ON THE LIVE DECISION PATH, SO IT CANNOT OWN A JOINT IT NEVER CREATES.** The joint belongs here, because this batch owns the census.
 
@@ -147,9 +147,9 @@
 | **window VOID / re-opened** | ⇒ **re-arms against the new window; the decision is re-taken, never inherited.** |
 | **the mismatch becomes the STANDING state** | ⇒ **OBJ-3b is promoted to an assertion OF THE MISMATCH — never left as a counter of a condition nobody intends to fix.** |
 
-*Verification:* the disposition is read from `F_G_2_PROGRESS_REPORT.md` **at the ref, on the day of this batch's deploy**, and the branch taken is recorded in this scope's status section with the ref it was read at.
+*Verification:* the disposition is read from `F_G_2_COMPLETION_REPORT.md` **at the ref, on the day of this batch's deploy**, and the branch taken is recorded in this scope's status section with the ref it was read at.
 
-✅✅ **BRANCH READ AND RECORDED 2026-09-12 (CC-C), AS THIS VERIFICATION LINE REQUIRES — read from `F_G_2_PROGRESS_REPORT.md` AT REF `90f22b990`, NOT from D10 and NOT from memory.**
+✅✅ **BRANCH READ AND RECORDED 2026-09-12 (CC-C), AS THIS VERIFICATION LINE REQUIRES — read from `F_G_2_COMPLETION_REPORT.md` AT REF `90f22b990`, NOT from D10 and NOT from memory.**
 **THE BRANCH IS `window VOID / re-opened`.** §0 of that report: *"WINDOW DECLARED VOID 2026-09-05 ON KYLE'S DIRECTION — RE-OPENED AFTER THE LEVEL-BASIS AND REACHABILITY WORK LANDS"*; §D10: *"Retired as a deploy gate; the window stays VOID. It is not a pass and may not become one: criteria are not re-registered against data already seen."*
 
 ⇒ **WHAT THAT MEANS FOR THIS ROW, IN THE REPORT'S OWN WORDS (§35 item 3):** *"THE SWITCH IS NOT MADE. Exits still trigger and book on the MID throughout the interim. ⇒ `B-PRICE-SIDE-BY-JOB` OBJ-3b (level-basis ↔ trigger-basis COHERENCE) has NO disposition to read at its deploy, so it does NOT ship with OBJ-3a — it waits for the re-opened window. OBJ-3a (per-leg level transactability) is unaffected and ships: the scope split them for exactly this reason."*

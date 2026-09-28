@@ -52,7 +52,7 @@ This deliberately sits outside our normal batch workflow. **Nothing here is comm
 - **One landing unit per group.** Each has its own commit, its own rollback, its own change-class and its own document set. A single rollback point for a change spanning pricing, fees, sizing, identity and risk is not a rollback point.
 - **Open observation windows.** Three pricing batches sit in observation, or are waiting for a window to re-open: 3c `F-G-2`, 3b.f `#951` and 3b.b `#943`.
   - Nothing from this experiment deploys into an open window until that window's own split/void rule has been applied and the deploy record has been enumerated, with a positive control.
-  - A change that moves the crypto level basis voids F-G-2's window outright; it does not split it (`Batch Completion/F_G_2_PROGRESS_REPORT.md`).
+  - A change that moves the crypto level basis voids F-G-2's window outright; it does not split it (`Batch Completion/F_G_2_COMPLETION_REPORT.md`).
 - **Work owned elsewhere.** Several groups overlap work that has a named owner and is in flight: 2.4-FEE and 2.4c (CC-B), 3b.b and 3c (CC-C). For each group, the design report says what Coltrane may touch and what stays with the owner.
 - **Measurement gate.**
   - Every number names its object and its population.
@@ -88,7 +88,7 @@ Every item below was re-checked against its issue entry and plan row on 2026-09-
   - The crypto half, plus VTS cost booking, deployed on 2 September.
   - The shadow test of deciding exits on the bid was voided on 5 September. It re-opens after the level and reachability work.
   - The xStock legs wait on 3b.b and 3b.d.
-  - *(ours: plan row 3c `F-G-2` `B-EXIT-TRANSACTABLE-SIDE`; `Batch Completion/F_G_2_PROGRESS_REPORT.md` §0)*
+  - *(ours: plan row 3c `F-G-2` `B-EXIT-TRANSACTABLE-SIDE`; `Batch Completion/F_G_2_COMPLETION_REPORT.md` §0)*
 - **Exit trigger versus exit fill — withdrawn as a separate defect.**
   - The trigger reads the live midpoint. The fill reads the bid from the archive, which is sampled every 4 seconds.
   - The 14% average gap first reported came from five xStock trades in the 00:15 UTC minute. Outside that minute the gap is about 0.1%, and the fill equals the ticker bid.
