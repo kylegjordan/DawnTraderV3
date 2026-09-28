@@ -23,7 +23,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 ### Wave 0 — NOW — urgent, cheap, or already in flight (this week)
 
 1. **12.1 rulings-durability fix** (CC-A) · *live readiness* — cheap and irreversible if lost: copy Langston's rulings file to a read-only replica
-2. **Months of database headroom** (?) · *live readiness* — database at 81% (critical): confirm the October move to warm storage lands, then measure months of headroom
+2. **Months of database headroom** (?) · *live readiness* — database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) move one month of one-minute price bars as the proof and flip their hot window 365 -> 30 days (~19 GB out); then measure months of headroom
 3. **Define 'comfortable in paper' in numbers** (CC-C + Langston) · *evidence* — set the numbers for 'comfortable in paper' BEFORE the evidence comes in
 4. **Fix duplicated plan ids** (CC-A) · *mechanics* — part of rewriting the plan: no two items share a number
 5. **B-OHLC-FRAME-GUARD** (CC-C) · *prices* — in flight: only the on-screen check is left

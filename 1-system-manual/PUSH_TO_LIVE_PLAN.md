@@ -69,7 +69,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
 | 1 | 12.1 rulings-durability fix | — batch named at Step 1 | Infra Claude | QUEUED | — | cheap and irreversible if lost: copy Langston's rulings file to a read-only replica |
-| 2 | Months of database headroom | — batch named at Step 1 | Infra Claude | QUEUED | — | database at 81% (critical): confirm the October move to warm storage lands, then measure months of headroom |
+| 2 | Months of database headroom | — batch named at Step 1 | Infra Claude | QUEUED | — | database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) move one month of one-minute price bars as the proof and flip their hot window 365 -> 30 days (~19 GB out); then measure months of headroom |
 | 3 | Define 'comfortable in paper' in numbers | — batch named at Step 1 | CC-C (Analyst Claude) + Langston | QUEUED | — | set the numbers for 'comfortable in paper' BEFORE the evidence comes in ⭐ Kyle approves the numbers. |
 | 4 | Fix duplicated plan ids | — batch named at Step 1 | Infra Claude | QUEUED | — | part of rewriting the plan: no two items share a number |
 | 5 | B-OHLC-FRAME-GUARD | B-OHLC-FRAME-GUARD | CC-C (Analyst Claude) | IN FLIGHT — Step 7 | — | in flight: only the on-screen check is left |

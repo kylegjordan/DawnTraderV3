@@ -10,7 +10,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WAVES = [
  ("0", "NOW — urgent, cheap, or already in flight (this week)", [
    ("RULINGS-DURABILITY", "cheap and irreversible if lost: copy Langston's rulings file to a read-only replica"),
-   ("DISK-HEADROOM", "database at 81% (critical): confirm the October move to warm storage lands, then measure months of headroom"),
+   ("DISK-HEADROOM", "database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) move one month of one-minute price bars as the proof and flip their hot window 365 -> 30 days (~19 GB out); then measure months of headroom"),
    ("PAPER-STANDARD", "set the numbers for 'comfortable in paper' BEFORE the evidence comes in"),
    ("PLAN-ID-COLLISIONS", "part of rewriting the plan: no two items share a number"),
    ("B-OHLC-FRAME-GUARD", "in flight: only the on-screen check is left"),
