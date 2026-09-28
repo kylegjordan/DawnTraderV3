@@ -1,39 +1,68 @@
-# PAPER-STANDARD — "comfortable in paper", in numbers (PROPOSAL r1, for Langston, then Kyle)
+# PAPER-STANDARD — "comfortable in paper", in numbers (PROPOSAL r2, for Langston, then Kyle)
 
-> **Owner:** CC-C + Langston · **Kyle approves the numbers** · **Plan:** `PUSH_TO_LIVE_PLAN.md` Wave 0 row 8 ("set the numbers for 'comfortable in paper' BEFORE the evidence comes in").
+> **Owner:** CC-C + Langston · **Kyle approves the numbers** · **Plan:** `SPRINT_TO_LIVE_PLAN.md` Wave 0 row 8 ("set the numbers for 'comfortable in paper' BEFORE the evidence comes in").
 > **Why now:** Kyle's go-live gate (`POST_AUDIT_ROADMAP.md:37`) is *"calibrate in paper until COMFORTABLE with wins/losses/profit — THEN proceed."* A standard written after the evidence arrives can always be made to pass. So it is fixed here first, and not changed once the window opens.
 
+> **r2 (2026-09-29) — Langston's r1 ruling (CHANGES-NEEDED, six defects, re-derived by him at `5365f1f16`/`9b0e3022`) folded in, disposition 1:**
+> - **S5 was the model, not a test of it.** Modelled slippage is `DEFAULT_SLIPPAGE = 0.0005` per leg (`exchange-defaults.ts:21`; `xstock_spot/friction.ts:14`), so round trip = exactly 0.10%. r1's "≤ 0.10% of trade size" let the model be wrong by its whole allowance. Now **per leg, ≤ 0.02%**, with the mean and p90 published beside the median and a never-fill BAR.
+> - **S2 keeps the mean** (net P&L is n × mean) but the naive percentile bootstrap is lenient on a right-skewed mean. Now **BCa**, seed recorded, three bounds published, disagreement ⇒ INCONCLUSIVE.
+> - **S3's "no trade > 25% of net" was degenerate** (its denominator is the statistic under test, so it tightens as the result nears the bar). Replaced by **leave-k-out on S2**, on the winning side AND the losing side.
+> - **S1 + S2 give ~50% power at the bar.** Stated for Kyle with the n that buys 80%.
+> - **§4.1's labels were wrong.** Both options are positive-edge bars, ~2.3× apart; relabelled.
+> - **The void rule could not be met on today's deploy cadence and had no detector.** The window is now a **deliberate deploy freeze** with a guard, homed as its own batch; the symbol set joins the void list.
+> - **§2 carries its own deploy boundaries** and is labelled a planning estimate.
+> - ➕ **NEW since r1, from `#1079`:** xStock has opened ~1 trade a day since 2026-09-18 because the two classes share one exposure budget. **The xStock half of S1 cannot be reached in useful time until Kyle rules on that.**
+
 ## 1. WHAT THE NUMBERS MUST SERVE
-1. **Fidelity to live:** judged only on trades that paper executes the way live would. That means the **organic lane only** (the exploration lane deliberately admits trades expected to lose, and would read as strategy failure: `MEMORY_CC_C` headline finding), at **today's sizing** (Kyle's option (c), 2026-09-28).
-2. **One clean window per class:** it opens only after the pricing work and the reachability fit land (*"the reset is last"*). **No calibration-epoch boundary inside it.** A deploy that changes a price, a fee, a level or a gate splits or voids the window, as pre-registered below.
+1. **Fidelity to live:** judged only on trades that paper executes the way live would. That means the **organic lane only** (the exploration lane deliberately admits trades expected to lose, and would read as strategy failure), at **today's sizing** (Kyle's option (c), 2026-09-28).
+2. **One clean window per class:** it opens only after the pricing work and the reachability fit land (*"the reset is last"*). **No calibration-epoch boundary inside it** — enforced by the freeze in §3, not by memory.
 3. **Per class, separately:** crypto and xStock are judged on their own numbers. Neither class's result can carry the other.
 
-## 2. MEASURED STARTING POINT (active paper, `closed_trades`, `closed_at` in the last 14 days, 2026-09-28)
-| class | closes (organic) | per day | net total | net per trade (mean ± sd) | win rate |
-|---|---|---|---|---|---|
-| crypto | 103 (99 filled) | 7.4 | −$5.74 | −$0.06 ± $10.70 | 39.8% |
-| xStock | 41 (40 filled) | 2.9 | −$28.43 | −$0.71 ± $4.87 | 36.6% |
-*No exploration-lane closes in the window. Average trade size: crypto $93, xStock $143. These are the pre-reset numbers the standard must NOT be judged on.*
-⇒ **The spread is wide** (crypto per-trade sd ≈ $10.70). A test that must *prove* profit at 90% confidence needs a large average edge or a large sample: at n = 150 crypto trades, the mean would have to exceed about **+$1.12 a trade (≈ 1.2% of trade size)**; at n = 300, about +$0.79.
+## 2. MEASURED STARTING POINT — A PLANNING ESTIMATE, NOT A VERDICT
+Active paper, `closed_trades`, `closed_at` in the 14 days to 2026-09-28.
+| class | closes (organic) | per day | net total | net per trade (mean ± sd) | win rate | never filled |
+|---|---|---|---|---|---|---|
+| crypto | 103 (99 filled) | 7.4 | −$5.74 | −$0.06 ± $10.70 | 39.8% | 4 / 103 = 3.9% |
+| xStock | 41 (40 filled) | 2.9 | −$28.43 | −$0.71 ± $4.87 | 36.6% | 1 / 41 = 2.4% |
+
+*No exploration-lane closes in the window. Average trade size: crypto $93, xStock $143.*
+⛔ **By this standard's own S6, this window is VOID:** it spans the staging deploys of 2026-09-14, 09-15, 09-19, 09-20 and 09-22, several of which changed prices. It sizes the tests; it is never read against them. **The post-reset spread may differ, and the spread is what sets the n each test needs.**
+⚠️ **xStock's 2.9 a day includes the 09-14..16 burst.** Since 2026-09-18 xStock has opened about one trade a day (`#1079`).
 
 ## 3. THE PROPOSED STANDARD — ALL MUST HOLD, PER CLASS
 | # | test | proposed number | why this number |
 |---|---|---|---|
-| S1 | **minimum sample** | crypto **≥ 150** filled organic closes AND **≥ 21 days**; xStock **≥ 100** AND **≥ 30 calendar days** | about 3 weeks for crypto and 5 for xStock at today's rates; long enough to span more than one regime |
-| S2 | **profitable after all costs** | total net P&L **> 0**, AND the **one-sided 80% lower bound** of mean net per trade (bootstrap, 10,000 resamples) **> −$0.25** | S2 asks "not losing, with reasonable confidence", not "proven profitable at 90%". The 90% version is shown beside it as information: at the measured spread it would need months. ⚠️ **What the proposed bar still demands:** at the measured crypto spread and n = 150, a lower bound above −$0.25 needs a mean of about **+$0.48 a trade** (≈ 0.5% of trade size), so it is not a lenient bar. **This is the main number for Kyle.** |
-| S3 | **consistent, not one lucky run** | net positive in **≥ 3 of the last 4 weekly buckets**, and **no single trade > 25%** of the window's total net profit | stops one outlier carrying the verdict (the measured sd shows outliers exist) |
+| S1 | **minimum sample** | crypto **≥ 150** filled organic closes AND **≥ 21 days**; xStock **≥ 100** AND **≥ 30 calendar days** | at today's rates about 3 weeks for crypto. ⚠️ **xStock at ~1 close a day under the shared budget (`#1079`) needs ~100 days; the xStock window is not anchored until Kyle rules on `#1079`.** |
+| S2 | **profitable after all costs** | total net P&L **> 0**, AND the **one-sided lower bound on mean net per trade** clears the bar Kyle picks in §4.1 | **Statistic:** the MEAN (net P&L is n × mean; a trimmed or median bound above zero is compatible with a losing account, and at a ~40% win rate the right tail is where the money is). **Method:** **BCa bootstrap**, 10,000 resamples, **seed recorded in the read**; the percentile and studentized bounds published beside it. ⛔ **If the three bounds disagree by more than $0.25, the sample is too skewed for any of them ⇒ INCONCLUSIVE, not PASS.** **Reach limit, stated up front:** at n = 150 the resampling support in the far tail is one or two trades, so the bound assumes the observed tail is representative. |
+| S3 | **not carried by a few trades** | the S2 bound, recomputed with the **single largest winner removed (k = 1), must still clear the bar** | a test on the result's own robustness, which does not get harder as the result nears the bar (r1's 25%-of-net rule did). **Published, not gated:** the bound at k = 0, 1, 2, 3, 5 winners removed, and the top-5 winners' share of net. ➕ **Loss side, published:** the S2 bound with the single largest LOSS removed. **If that flips a FAIL to a PASS, the FAIL stands** and the worst loss gets a named investigation, because a left tail that decides the verdict may be systematic (the stop-clamp arm at `tec-evaluator.ts:371` is live). |
 | S4 | **bounded pain** | peak-to-trough drop in cumulative net **≤ 8% of the paper balance**, and **no daily-loss kill-switch trip** in the window | the kill switch is the live safety line, so the window must not have needed it |
-| S5 | **executes like live** | the maker fill rate is reported with its never-filled count; booked exit slippage is compared with the modelled cost, and the median gap must be **≤ 0.10% of trade size** | profit that depends on fills live would not get is not profit |
-| S6 | **reported honestly** | every number carries n, the window and the class; the exploration lane and never-filled rows are shown separately, never pooled | rule 29 |
+| S5 | **executes like live** | **per leg**, the median of (booked slippage − modelled slippage) **≤ +0.02% of trade size**, adverse positive; AND never-filled **≤ 5%** of attempted opens | **Modelled slippage is 0.05% a leg and has never been measured** (`cost-model.ts:242-243`; the uncalibrated constant is homed at `#914` COST half, Phase 25). **S5 is the only test here that could show that constant is wrong**, so its bar sits well inside it: 0.02% a leg = 0.04% round trip ≈ 8% of the +0.52% edge S2 option A demands. **Published beside the median:** the mean gap and the 90th percentile, because P&L moves with the mean. **Never-fill bar:** never-filled rows leave the P&L population and are not random (the book moved away), so the passing population is selected optimistically; today's rates are 3.9% / 2.4%. |
+| S6 | **reported honestly** | every number carries n, the window and the class; the exploration lane and never-filled rows are shown separately, never pooled; **the read states the window's freeze record** | rule 29 |
 
-**Window mechanics (pre-registered):** the window opens at a stated anchor after the reset. A deploy that changes a price job, a fee, a level, a gate or sizing **voids** the window and re-opens it; it is never split and pooled. Hitting S1 triggers the read, and the read is done once. A FAIL on any test is reported as a FAIL, with the named follow-up, never as "extend until it passes". One extension is allowed only for S1 (not enough trades), stated in advance.
+### Window mechanics (pre-registered) — A DELIBERATE DEPLOY FREEZE
+**Why:** r1 said a price, fee, level, gate or sizing deploy voids the window. Langston measured the cadence: the 60 most recent staging deploys span 2026-08-20 → 09-22, 34 days, **longest quiet stretch 6 days**, against 21 clean days for crypto and 30 for xStock. (He did not classify those deploys by category, so this bounds the disturbance rate; it does not prove infeasibility.) Queued work already sits inside the void categories: `3n` `B-PRICE-SIDE-BY-JOB`, the four refused reach ceilings (2.4g-3), `#967`'s price floor, `B-VENUE-PAIRS-REINIT`, the F-G-2 bid switch, `#1024`'s restored alias symbols. **Loosening the rule is not the fix. Freezing is.**
+1. **Void categories:** a change to a price job, a fee, a level, a gate, sizing, **or the tradable symbol set**.
+2. **Before the anchor:** everything queued in those categories has landed. The freeze names the code paths it protects.
+3. **Kyle signs the freeze** when the window opens; the anchor is the timestamp he signs.
+4. **Enforced, not remembered:** while the window is open, `dt-deploy` alerts on (or refuses) a deploy touching the frozen paths. **HOME: `B-PAPER-WINDOW-FREEZE-GUARD` (`#1080`), owner CC-C, placed in `PHASE_19_PLAN.md` row `3n.y`, immediately after `3n` `B-PRICE-SIDE-BY-JOB`, before the window anchor** (Langston, 2026-09-28). Without it, "no voiding deploy occurred" is an unevidenced negative at read time.
+5. **A breach voids and re-opens the window; it is never split and pooled.** Hitting S1 triggers the read, and the read is done once. A FAIL on any test is reported as a FAIL with a named follow-up, never "extend until it passes". **One extension is allowed, for S1 only (not enough trades), stated here in advance.**
+6. **The S5 query and the bootstrap script are committed with the anchor**, before the first trade in the window.
 
 ## 4. DECISIONS THAT ARE KYLE'S
-1. **S2's bar:** "not losing with 80% confidence (> −$0.25 a trade)" as proposed, or "profitable with 90% confidence" (needs a larger edge or months more data).
-2. **S4's drawdown limit:** 8% of balance as proposed, or tighter or looser.
-3. **Whether both classes must pass before either goes live** (the plan's D5, *"launch live TOGETHER"*), or whether crypto may go first if xStock is still collecting.
+1. **S2's bar — both options require a real positive edge; they differ by about 2.3× in how much.**
 
-## 5. FOR LANGSTON — the questions I want attacked
-- Is a bootstrap lower bound on the mean the right statistic under these fat tails, or should S2 use a trimmed mean or a median-based bound?
-- S3's "no single trade > 25% of net": the right guard, or a leave-one-out re-test of S2?
-- Does S5's 0.10% median-gap threshold match what the fee and slippage model assumes today?
+   | option | the test | crypto needs about (n = 150) | xStock needs about (n = 100) |
+   |---|---|---|---|
+   | **A (proposed)** | 80% confident the average trade is better than −$0.25 | **+$0.48 a trade** (+0.52% of size) | +$0.16 a trade (+0.11%) |
+   | **B** | 90% confident the average trade is above $0 | **+$1.12 a trade** (+1.2% of size) | +$0.62 a trade (+0.44%) |
+
+   ⚠️ **What either option buys at the minimum sample:** a system whose true edge sits exactly at the bar **fails the test half the time**. A test that passes such a system 80% of the time needs about **610 crypto closes (~82 days at today's rate)** under option A, and about **400 xStock closes**. Failing closed is the right direction for a go-live gate; **the choice is how long Kyle is willing to wait for a surer answer.**
+2. **S4's drawdown limit:** 8% of balance as proposed, or tighter or looser.
+3. **Whether both classes must pass before either goes live** (the plan's D5, *"launch live TOGETHER"*), or whether crypto may go first while xStock is still collecting.
+4. **The freeze itself:** signing it at the anchor (§3 step 3) means no pricing, fee, level, gate, sizing or symbol-set change reaches paper until the read.
+➕ **Linked, decided separately: `#1079` (`RUNNING_ISSUES`), how the two classes share the exposure budget.** Under today's first-come budget, xStock cannot reach S1 in useful time.
+
+## 5. FOR LANGSTON — r2 questions
+- S5's per-leg 0.02% and the ≤ 5% never-fill bar: right numbers, or should the never-fill bar be relative (e.g. no worse than the pre-window rate)?
+- S3's loss-side rule: FAIL stands and the worst loss is investigated. Should a systematic left tail instead be its own gate?
+- The freeze guard: alert or refuse? r2 leaves it to the batch's Step 1.
