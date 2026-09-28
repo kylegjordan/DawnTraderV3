@@ -915,7 +915,7 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 **Record:** `B_WAKE_QUIET_COMPLETION_REPORT.md`.
 
 
-## B-DEPLOY-DRIFT-LINE (CC-A, ⛔ **OPEN — OBSERVATION WINDOW**, installed 2026-09-07) — Phase 19, plan row 4.55 · `#1002`, folds `#1008`
+## B-DEPLOY-DRIFT-LINE (CC-A, ✅ **CLOSED 2026-09-09 — all four criteria PASS**, installed 2026-09-07; *heading corrected 2026-09-28 — it still read OPEN nineteen days after the close, and the push plan copied it*) — Phase 19, plan row 4.55 · `#1002`, folds `#1008`
 
 **WHAT IT IS FOR.** Every deploy check we owned compared the deployment **against itself**. `dt-deploy.sh:191` gates the deploy EVENT on branch membership; `daily_deploy_check.sh` compares `record.sha` to `dist/BUILD_SHA` and to the staging clone's local `HEAD`. **The review branch is not an operand of any of them**, so none could see the branch advancing after a deploy — which is how staging sat 55 commits behind with `active-execution-engine.ts` and `signal-orchestrator.ts` undeployed while paper trading ran, with every check green (`#1001`).
 
