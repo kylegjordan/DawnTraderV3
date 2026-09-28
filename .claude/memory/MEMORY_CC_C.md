@@ -91,7 +91,7 @@
 
 ➕ **PLACED: `#965` (3b.j — T2 *is* enforced at `aee:3570`, the scanner check is dead legacy) · `#966` (5.a — non-USD quote denomination, DIRECTION PER QUOTE: BTC overstates/fail-safe, a SUB-DOLLAR quote INVERTS and is too PERMISSIVE) · `#967` (5.b — the $0.25 active price floor excludes DOGE *and* ADA, KYLE'S DECISION) · `#968` (3b.k — change-class marker needs line-start AND colon OUTSIDE the bold).**
 
-⏳ **`F-G-1` — window CLOSED 2026-09-04 (crypto PASS n=24, xStock underpowered n=19); CONVERSION OWED. OBJ-9 ① AND ② both unmet in production (`#1031`, progress report §7 + am.) ⇒ reopen BOUNDED to the ordering guarantee (Langston 09-11); writer residuals → `3b.h-8`.** Read the verdict on the INTENT-side columns; `entry_price` is the fill.
+⏳ **`F-G-1` REOPEN (OBJ-9 ①②, `#1031`) — `STEP: 2 of 11` (pre-audit `4d4e60372`, option A/B/C ruling asked) · `NEXT: 3`, rides deploy 2.** Conversion still owed after it. **Plate 09-28 (Kyle): `3n.q7` instrument question to Langston (frames only in out.log ~6 h) · `3n.q3` policy · PAPER-STANDARD numbers · 8a-P4c at 09-30.**
 
 ✅ **RATCHET — CONFIRMED OFF, AND IT IS KYLE'S OWN DECISION WITH A REASON THAT HAS EXPIRED.** 0 break-even latches in 705 states; `break_even_enabled=false` on all four classes since May. ★★ **HIS REASON (2026-08-30): break-evens exited trades BEFORE WE COULD SEE HOW THEY FINISHED — AND THAT WAS WHEN WE WERE VTS-ONLY, NOT PAPER TRADING.** ⇒ ⛔ **THE CONDITION IT RESTS ON HAS CHANGED. RE-ASK IT; DO NOT TREAT IT AS SETTLED.**
 
