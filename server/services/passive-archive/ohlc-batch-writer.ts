@@ -169,7 +169,10 @@ export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', asse
       // way until it is fixed" — refuted live (3,632 and 3,297 bars landed in the next two hours). Assert only
       // what ONE failed flush supports, and lead with the constraint an operator acts on (Langston, Step-4
       // FINDING-2): while this alert is unresolved it is NOT raised again.
-      body: `${dropped} rows dropped in this flush. The error was classified permanent, so these rows were `
+      // F-G-1 reopen (Langston Step-4 condition 4): "UP TO". Both writers upsert in 1,000-row chunks that commit one
+      // at a time, so a permanent failure on chunk k leaves chunks 1..k-1 LANDED. Asserting all N dropped is the
+      // over-claim this batch exists to remove.
+      body: `Up to ${dropped} rows dropped in this flush (chunks commit one at a time, so rows in chunks before the failing one may have landed). The error was classified permanent, so these rows were `
         + `discarded rather than retried, which lets the next flush for this class succeed if the fault was `
         + `specific to them. If the fault persists, later flushes drop their rows too, and this alert is NOT `
         + `raised again while it is unresolved: resolve it once the cause is fixed. After that, a fault that is `
@@ -429,7 +432,7 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       // The snapshot's `n` raw rows leave the buffer here, on the permanent branch only.
       buf.splice(0, n);
       console.error(
-        `[B74][batch-writer] ${assetClass} PERMANENT flush failure (${rows.length} rows dropped, NOT retried):`,
+        `[B74][batch-writer] ${assetClass} PERMANENT flush failure (up to ${rows.length} rows dropped, NOT retried; earlier chunks may have landed):`,
         detail,
       );
       void alertPermanentWriteFailure('ohlc', assetClass, detail.slice(0, 300), rows.length);

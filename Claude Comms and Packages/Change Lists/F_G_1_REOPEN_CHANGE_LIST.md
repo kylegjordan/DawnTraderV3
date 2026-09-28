@@ -1,6 +1,6 @@
 # F-G-1 REOPEN (OBJ-9 ① and ②, #1031) — STEP 4 CHANGE LIST
 
-**Graded ref:** `4f9df55e1` on `origin/migration/aws-supabase` (code commit `7cae297a3`, rebased). **CI:** run `36493264716`, 4/4 green (TypeScript Check · Test Suite · Build · Docker Build), per job. The integration fence ran against CI's Postgres, not skipped: all 6 legs `✓` in the Test Suite log.
+**Graded ref:** `4f9df55e1` on `origin/migration/aws-supabase` (the code commit itself, after the rebase). ⛔ *An earlier version of this line named `7cae297a3`, the pre-rebase local sha, which does not exist at origin (Langston).* **CI:** run `36493264716`, 4/4 green (TypeScript Check · Test Suite · Build · Docker Build), per job. The integration fence ran against CI's Postgres, not skipped: all 6 legs `✓` in the Test Suite log.
 
 ## DISPATCH HEADER (workflow-04, three fields)
 | # | field | value |
@@ -124,3 +124,15 @@ Integration fence (6, real `crypto_spot_ohlc_1m` partition `_2026_09`): CONTROL 
 2. **`arrivalMs` treats an unparseable stamp as `-Infinity`.** Post-chokepoint every buffered row is a `Date`; the fallback only matters for a row that bypassed `bufferOhlcBar`, which the census says does not exist. Fail-open to "loses the dedupe" was chosen over throwing inside the flush.
 3. **The coalesced counter is in-process and resets on restart.** P5 reads it from the `upserted N rows (coalesced=K)` lines in `out.log`, whose reach is hours. Enough for P5's single read after deploy, not a durable record.
 4. **The permanent branch removes the raw `n`, logs `rows.length` (deduped).** Unchanged semantics; the log counts what was attempted, not what was buffered.
+
+## ✅ STEP 4 — APPROVED (Langston, 2026-09-29, re-derived at `4f9df55e1`), four conditions
+| # | condition | disposition |
+|---|---|---|
+| C1 | Name `upsertOhlcRows` in the SIM entry as a NON-BUFFER write path that bypasses the buffer, the in-flight guard and the dedupe; record that a caller handing it rows without `arrivedAt` gets a silent no-op on conflict (`arrived_at <= NULL` is NULL). | **Step 10**, SIM entry for the OHLC batch writer. |
+| C2 | The coalesced counter is CUMULATIVE and printed on every success line: P5 takes the LAST value, never a sum. | **Folded into P5** (below). |
+| C3 | State the log window (stdout rotates 6-8×/day at 1 GB, hours of reach) and that the expected steady-state value is ZERO; a live zero is never published as "no overlap occurred". The proof P2 works is the mutation-killed unit leg. | **Folded into P5** (below). |
+| C4 | The permanent alert asserted "N rows dropped" while chunks commit one at a time: make it "up to". | **Done in code:** the shared `alertPermanentWriteFailure` body and both writers' `PERMANENT flush failure` lines now read "up to N rows dropped … earlier chunks may have landed" (`ohlc-batch-writer.ts`, `ticker-batch-writer.ts`; the ticker writer also chunks at 1,000, `:135`). Re-runs CI at Step 5. |
+
+**P5, restated with C2 + C3:** new rows carry `arrived_at` (read on `crypto_spot`); `coalesced=` is read as the LAST value on the latest `upserted … rows` line inside the hours `out.log` reaches, and its expected value is ZERO (flushes finish well inside 5 s). A zero is reported as "not exercised", never as "no overlap occurred"; P2 is proved by the mutation-killed unit leg, not by the live counter.
+**§13:** `#1082` `B-ARCHIVE-RETRY-BACKOFF`, row `3b.h-9` (beside `3b.h-8`; no F-G-1-reopen row exists in `PHASE_19_PLAN`).
+**Deploy note (Langston):** staging is on `bc199185e`; `2026-09-24-b-book-state-restart-durable.sql` precedes this migration in MANIFEST, so the deploy runs both and aborts before the restart if the earlier one fails.

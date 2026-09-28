@@ -162,7 +162,7 @@ async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<voi
     const detail = err instanceof Error ? err.message : String(err);
     if (!isTransientWriteError(err)) {
       console.error(
-        `[B74][ticker-writer] ${assetClass} PERMANENT flush failure (${rows.length} rows dropped, NOT retried):`,
+        `[B74][ticker-writer] ${assetClass} PERMANENT flush failure (up to ${rows.length} rows dropped, NOT retried; earlier chunks may have landed):`,
         detail,
       );
       void alertPermanentWriteFailure('ticker', assetClass, detail.slice(0, 300), rows.length);
