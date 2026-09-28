@@ -698,8 +698,10 @@ export interface PassiveArchiveUniverseStats {
   // scanned and COLLAPSES this ratio — a counting artifact, not a feed collapse. Read ohlcFramesSkipped.
   ohlcStoreFraction: number | null;   // stored / scanned, null when scanned=0 OR the stored count is unknown
   tickerStoreFraction: number | null;
-  // Health note. COUNT_UNKNOWN = the feed is connected but a window count is unknown, so the count-based
-  // statuses (OK / NO_OHLC_DATA / NO_TICKER_DATA) cannot be decided.
+  // Health note. NO_OHLC_DATA / NO_TICKER_DATA = connected, and that side has received nothing since the process
+  // started (the in-process scanned counter, which is never unknown) while its window count is 0 OR unknown.
+  // COUNT_UNKNOWN = connected, neither side is known dead, and a window count is unknown, so OK cannot be decided.
+  // Nothing unknown is ever reported as OK (B-OHLC-FRAME-GUARD r6, Langston Step 4 C1 and its follow-up).
   status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING' | 'COUNT_UNKNOWN';
   // Why a window count is unknown, the worst of the two: `timeout` = load (the 4 s limit), `error` = the query
   // failed, `shape` = the reply was not one row of two counts. `null` when both counts were read.
@@ -1002,20 +1004,20 @@ export async function computePassiveArchiveStatus(
       ? Math.min(1, tickerCount / cfg.stats.cumulativeTickerSnaps)
       : null;
 
-    // Status determination. The connection states do not depend on the counts; every count-based status
-    // does, so an unknown count yields COUNT_UNKNOWN instead of a status computed from a missing number.
-    // The worst reason among the two counts: a fault outranks a shape surprise, which outranks load.
+    // Status determination: see the order below. The worst reason among the two counts: a fault outranks a shape
+    // surprise, which outranks load.
     const reasons = [ohlc.unknown, ticker.unknown];
     const countUnknownReason: CountUnknownReason | null =
       reasons.includes('error') ? 'error' : reasons.includes('shape') ? 'shape' : reasons.includes('timeout') ? 'timeout' : null;
-    // Order (Langston, Step 4 C1): a side that is KNOWN to be dead is reported even when the other side is unknown
-    // — COUNT_UNKNOWN must never mask a supported alarm — and nothing unknown is ever reported as OK.
+    // Order (Langston, Step 4 C1): connection states; then a side KNOWN to be dead — nothing scanned since the process
+    // started, with a window count of 0 or unknown (an unknown count cannot contradict the in-process zero, so it
+    // must not mask the alarm, Langston's follow-up) — then COUNT_UNKNOWN; OK only when every count was read.
     let status: PassiveArchiveUniverseStats['status'] = 'OK';
     if (!cfg.stats.connected) {
       status = cfg.stats.configuredSymbols === 0 ? 'STARTING' : 'DISCONNECTED';
-    } else if (ohlcCount === 0 && cfg.stats.cumulativeOhlcRows === 0) {
+    } else if ((ohlcCount === 0 || ohlcCount == null) && cfg.stats.cumulativeOhlcRows === 0) {
       status = 'NO_OHLC_DATA';
-    } else if (tickerCount === 0 && cfg.stats.cumulativeTickerSnaps === 0) {
+    } else if ((tickerCount === 0 || tickerCount == null) && cfg.stats.cumulativeTickerSnaps === 0) {
       status = 'NO_TICKER_DATA';
     } else if (ohlcCount == null || tickerCount == null) {
       status = 'COUNT_UNKNOWN';

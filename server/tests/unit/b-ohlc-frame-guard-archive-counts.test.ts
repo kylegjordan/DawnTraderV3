@@ -229,6 +229,25 @@ describe('passive archive window counts — read the SELECT, not the transaction
     }
   });
 
+  it('6c. an UNKNOWN count does not mask a side that has scanned nothing since start (Langston C1 follow-up)', async () => {
+    for (const u of UNIVERSES) h.stats[u].cumulativeOhlcRows = 0;
+    setAll(() => TIMEOUT, () => count(3000, 500));
+    const r = await computePassiveArchiveStatus('rolling_24h');
+    for (const u of r.universes) {
+      expect(u.ohlcRowsInWindow).toBeNull(); // the count is still unknown, and shown as such
+      expect(u.status).toBe('NO_OHLC_DATA');
+    }
+    for (const u of UNIVERSES) { h.stats[u].cumulativeOhlcRows = 1000; h.stats[u].cumulativeTickerSnaps = 0; }
+    setAll(() => count(800, 480), () => new Error('connection terminated'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r2 = await computePassiveArchiveStatus('rolling_24h');
+    for (const u of r2.universes) expect(u.status).toBe('NO_TICKER_DATA');
+    // control: with something scanned, an unknown count is COUNT_UNKNOWN, never a dead-side alarm
+    for (const u of UNIVERSES) h.stats[u].cumulativeTickerSnaps = 4000;
+    const r3 = await computePassiveArchiveStatus('rolling_24h');
+    for (const u of r3.universes) expect(u.status).toBe('COUNT_UNKNOWN');
+  });
+
   it('7. a disconnected feed reports DISCONNECTED even when its counts are unknown', async () => {
     h.stats.crypto_perp.connected = false;
     setAll(() => TIMEOUT, () => TIMEOUT);

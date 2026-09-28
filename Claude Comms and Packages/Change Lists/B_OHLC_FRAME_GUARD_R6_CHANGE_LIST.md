@@ -84,3 +84,9 @@ Readable count carried through · `SET LOCAL` inside the transaction before the 
 | J4 | `error.log` is lagging; the drop is the writer's own 2-slot semaphore and the rows are spliced before the slot (`archive-batch-writer.ts:194` vs `:73-93`) | **Accepted:** Step-7 method is now `pg_stat_activity` sampling with an abort at 7 of 10, `rolling_24h` only, and a pre-registered RENDERING claim. The drain order is `#1078` `B-ARCHIVE-FLUSH-DRAIN-ORDER`, and the mechanism correction is `#1037` am.2. The Data Archive rider (`:797` `timedOut` never assigned, `:830` 0/0 on failure) is recorded on `#1037` am.2. |
 
 **Tests now 11** (all passing). **Mutations: 12 of 12 killed**: the original nine (M3 re-anchored as M3': the COUNT_UNKNOWN branch removed) plus M10-M12.
+
+## Step 4 follow-up (Langston, 2026-09-28, re-derived at `21d7e84a2`)
+| gap | disposition |
+|---|---|
+| Stale contract comments at `:701-702` (the exported type) and `:1006` still stated the pre-C1 precedence | **Rewritten** to the order the code implements. |
+| C1's arms required `count === 0`, so an UNKNOWN count with nothing scanned since start still read `COUNT_UNKNOWN` (`fix-follows-pointer`) | **Folded in (disposition 1):** a side is dead when nothing has been scanned since the process started and its window count is 0 OR unknown. Test 6c, with a control that an unknown count WITH something scanned stays `COUNT_UNKNOWN`. Mutations M13-ohlc and M13-ticker (each arm reverted) are killed. **Tests 12/12.** |
