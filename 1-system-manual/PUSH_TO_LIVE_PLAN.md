@@ -21,7 +21,7 @@ Before any session starts its push rows, everything it has in flight is **finish
 | CC-B (New Claude) | T-W20C-SCALAR-LEG — not started | stays as its push row (Wave A3) |
 | CC-C (Analyst Claude) | B-OHLC-FRAME-GUARD — Step 7 | FINISH (Wave 0) |
 | CC-C (Analyst Claude) | F-G-1 — conversion owed, reopened | FINISH (Wave 0) |
-| CC-C (Analyst Claude) | B-PRICE-SIDE-BY-JOB — 8a-P4c window to 09-30, then increments 2-3; plus B-XSTOCK-BID-TRIGGER-RELAND and B-VTS-NO-DECISION-VALVE | FINISH AND DEPLOY before the push starts (Kyle 2026-09-28: no trigger, fill or booking left on the midpoint) |
+| CC-C (Analyst Claude) | B-PRICE-SIDE-BY-JOB — 8a-P4c window to 09-30, then increments 2-3; plus B-XSTOCK-BID-TRIGGER-RELAND, B-VTS-NO-DECISION-VALVE and 8c per-leg levels on the crypto quant lane (needs Langston's hold re-ruled); CC-C estimate 2026-09-28: plate clear ~10-12 to 10-14, three deploys | FINISH AND DEPLOY before the push starts (Kyle 2026-09-28: no trigger, fill or booking left on the midpoint) |
 | CC-C (Analyst Claude) | B-REST-SIDES-TO-CACHE, B-BOOK-STATE-RESTART-DURABLE — built | FINISH: deploy after 09-30 (Wave 0) |
 | CC-C (Analyst Claude) | B-SIZING-DEC-RESTORE — half live | FINISH: stays with CC-C (in flight); now placed in the push |
 | CC-C (Analyst Claude) | B-XSTOCK-SESSION-FRESHNESS — open | continues as its push row |
