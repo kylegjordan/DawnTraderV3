@@ -27,6 +27,12 @@ export type RtbBlockReason =
   | 'MAX_TOTAL_EXPOSURE'
   | 'MAX_TRADES'
   | 'ENGINE_STOPPING'
+  // B-GUARDRAIL-FAIL-CLOSED (#1081, Langston Step-2 condition): the two `TradeSafetyResultCode` members this union
+  // lacked, so both were counted as OTHER. `CORRELATION_EXPOSURE` fires live (`trade-safety.ts` correlation guard);
+  // `GUARDRAIL_READ_FAIL` is what a check that cannot verify its limit now returns. A test fences that EVERY
+  // `TradeSafetyResultCode` member is counted under its own name (array literals are not exhaustiveness-checked).
+  | 'CORRELATION_EXPOSURE'
+  | 'GUARDRAIL_READ_FAIL'
   | 'OTHER';
 
 /**
@@ -162,7 +168,8 @@ class RtbMetricsService {
       'KILL_SWITCH', 'NO_STOP_LOSS', 'INVALID_STOP_LOSS', 'POSITION_LIMIT',
       'COOLDOWN', 'MAX_POSITION', 'LPCP_LOW_PRICE', 'LPCP_MIN_NOTIONAL',
       'FX_CONVERSION_FAILED', 'PORTFOLIO_RISK', 'INSUFFICIENT_BALANCE',
-      'MAX_EXPOSURE', 'MAX_TOTAL_EXPOSURE', 'MAX_TRADES', 'ENGINE_STOPPING', 'OTHER'
+      'MAX_EXPOSURE', 'MAX_TOTAL_EXPOSURE', 'MAX_TRADES', 'ENGINE_STOPPING',
+      'CORRELATION_EXPOSURE', 'GUARDRAIL_READ_FAIL', 'OTHER'
     ];
     for (const reason of reasons) {
       this.stats.blockedByReason[reason] = 0;
@@ -510,7 +517,8 @@ class RtbMetricsService {
       'KILL_SWITCH', 'NO_STOP_LOSS', 'INVALID_STOP_LOSS', 'POSITION_LIMIT',
       'COOLDOWN', 'MAX_POSITION', 'LPCP_LOW_PRICE', 'LPCP_MIN_NOTIONAL',
       'FX_CONVERSION_FAILED', 'PORTFOLIO_RISK', 'INSUFFICIENT_BALANCE',
-      'MAX_EXPOSURE', 'MAX_TOTAL_EXPOSURE', 'MAX_TRADES', 'ENGINE_STOPPING'
+      'MAX_EXPOSURE', 'MAX_TOTAL_EXPOSURE', 'MAX_TRADES', 'ENGINE_STOPPING',
+      'CORRELATION_EXPOSURE', 'GUARDRAIL_READ_FAIL',
     ];
     
     if (knownReasons.includes(reason as RtbBlockReason)) {
