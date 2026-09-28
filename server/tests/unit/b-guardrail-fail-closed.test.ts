@@ -121,6 +121,15 @@ describe('#1081 — the class, not the instance: every TradeSafetyResultCode is 
     expect(codes.length).toBe(17);
   });
 
+  // Langston Step-4 NIT-2: the round-trip below proves `normalizeBlockReason`'s list only, because `recordBlock` does
+  // `(… || 0) + 1`. `initializeBlockReasons` is fenced here: a code missing from it would VANISH from the breakdown
+  // instead of showing 0. MUTATION: drop a code from `initializeBlockReasons` alone and this fails.
+  it('every code is present, at 0, in a freshly reset breakdown', () => {
+    rtbMetricsService.reset();
+    const byReason = rtbMetricsService.getStats().blockedByReason as Record<string, number>;
+    for (const c of codes) expect(byReason[c], c).toBe(0);
+  });
+
   it.each(codes)('%s is counted under its own name, not OTHER', (code) => {
     rtbMetricsService.reset();
     rtbMetricsService.recordBlock('X/USD', 'breakout', code);

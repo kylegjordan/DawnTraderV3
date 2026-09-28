@@ -48,3 +48,13 @@ The REAL `checkGuardrailRisk` is driven with only its data boundaries stubbed (`
 1. **The class fence reads the type from source.** A `Record<RtbBlockReason, number>` exhaustiveness construct was your alternative; I chose the test because it also fences the RUNTIME lists, which a type cannot. Acceptable?
 2. **The log keeps the old tag at the front** (`[8.8.3-H4] Error checking cooldown: [B-GUARDRAIL-FAIL-CLOSED]…`) so any existing alert or grep on the old string still fires; the new tag is what new greps use.
 3. **A thrown check now drops the promoted signal** (removed from the RTB pool, not restored, `ACTIVE_PATH_FLOW.md:249`). That is the fail-closed trade, stated in the scope; a transient database fault during a promotion pass costs the signals it touches.
+
+## ✅ STEP 4 — APPROVED at `551e13bc1` (Langston, 2026-09-28), three record-side conditions and two nits, all folded
+| # | item | disposition |
+|---|---|---|
+| C1 | The ledger amendments cited pre-edit line numbers in the commit that moved them. Class rule: a ref cited in a commit that also moves lines is stamped post-edit. | **Done:** `#698` am.4 now `:360` / `:398` / `:394` / `:365-376`; `#1084` am.1 now `:715` (all at `551e13bc1`). The sizing scope's census rows carry both refs. |
+| C2 | `#1084` am.1 read as if the `/test/` contamination were fixed here. | **Done:** reworded (homed at `4.b1`, not fixed by `#1081`), plus what `#1081` changed: a `/test/` call that throws now mints `GUARDRAIL_READ_FAIL` in the live counters. |
+| C3 | The `GUARDRAIL_READ_FAIL` bucket aggregates FOUR emitters: `trade-safety.ts:328` cooldown threw, `:373` `maxPositionPercent` unreadable, `:650` `maxTotalExposurePct` unreadable, `:685` exposure read threw. The count is not a diagnosis; the log tag is the only discriminator. | **Step 10:** stated in the completion report and the SIM entry. |
+| NIT-1 | The catches logged `error.message` only; the old lines carried the stack. | **Done:** the Error object is appended as the second `console.error` argument, on the same line (no line moved). |
+| NIT-2 | The class fence proved `normalizeBlockReason`'s list but not `initializeBlockReasons`'s. | **Done:** one test asserts every code is present at 0 after `reset()`; mutation (drop `CORRELATION_EXPOSURE` from `initializeBlockReasons` only) KILLED. 23 tests. |
+**§13:** `#1086` `B-GUARDRAIL-POLICY-ORPHAN`, row `4.b2`. **Step 8 observable (Langston):** `CHECK_THREW` lines in `error.log`; **zero post-deploy is an UNEXERCISED path (`#661` leg 3), never a pass.** **Deploy note:** Step 6 rides on the branch head, which carries other sessions' undeployed commits; the ride-along set is named at the deploy.

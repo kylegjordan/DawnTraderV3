@@ -322,7 +322,7 @@ async function checkSymbolCooldown(
     // errored was treated as satisfied. `GUARDRAIL_READ_FAIL` is the code `P19-B8.8` defined for exactly this state
     // (`:79`, "guardrail input unreadable, fail-closed"); the log line keeps the old tag so existing greps still find it.
     const _msg = error instanceof Error ? error.message : String(error);
-    console.error(`[8.8.3-H4] Error checking cooldown: [B-GUARDRAIL-FAIL-CLOSED][CHECK_THREW check=COOLDOWN mode=${mode}] ${trade.symbol}: ${_msg} — refusing, the cooldown cannot be verified`);
+    console.error(`[8.8.3-H4] Error checking cooldown: [B-GUARDRAIL-FAIL-CLOSED][CHECK_THREW check=COOLDOWN mode=${mode}] ${trade.symbol}: ${_msg} — refusing, the cooldown cannot be verified`, error);
     return {
       ok: false,
       code: 'GUARDRAIL_READ_FAIL',
@@ -679,7 +679,7 @@ async function checkMaxTotalExposure(
     // ⛔ B-GUARDRAIL-FAIL-CLOSED (#1081) — the same function refuses on an unreadable cap (`P19-B8.8`, above) and used
     // to PASS on a throw (`321a4fd45`, 2025-12-04). A total-exposure limit that cannot be computed is not satisfied.
     const _msg = error instanceof Error ? error.message : String(error);
-    console.error(`[8.8.3-B3][MAX_TOTAL_EXPOSURE_ERROR] [B-GUARDRAIL-FAIL-CLOSED][CHECK_THREW check=MAX_TOTAL_EXPOSURE mode=${mode}] ${trade.symbol}: ${_msg} — refusing, total exposure cannot be verified`);
+    console.error(`[8.8.3-B3][MAX_TOTAL_EXPOSURE_ERROR] [B-GUARDRAIL-FAIL-CLOSED][CHECK_THREW check=MAX_TOTAL_EXPOSURE mode=${mode}] ${trade.symbol}: ${_msg} — refusing, total exposure cannot be verified`, error);
     return {
       ok: false,
       code: 'GUARDRAIL_READ_FAIL',
