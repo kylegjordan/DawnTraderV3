@@ -151,7 +151,18 @@ describe('passive archive window counts — read the SELECT, not the transaction
     expect(r.universes.every((u) => u.tickerRowsInWindow === null && u.status === 'COUNT_UNKNOWN')).toBe(true);
     // an error is NOT reported as load: the reason keeps the two apart (Langston rider (a))
     expect(r.universes.every((u) => u.countUnknownReason === 'error')).toBe(true);
-    expect(warn.mock.calls.some((c) => String(c[0]).includes('count query failed'))).toBe(true);
+    // ONE line per aggregation call, naming how many counts failed (Langston Step 4 C2), not one per count
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(/4 of 8 window counts unreadable .*first: relation does not exist/);
+  });
+
+  it('4c. a persistent fault on every count still writes ONE line per call (C2 — the #1037 check reads this stream)', async () => {
+    setAll(() => new Error('connection terminated'), () => ({ rows: [] }));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await computePassiveArchiveStatus('rolling_24h');
+    await computePassiveArchiveStatus('rolling_24h');
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(String(warn.mock.calls[0][0])).toMatch(/^\[PassiveArchive\] 8 of 8 window counts unreadable/);
   });
 
   it('4b. with a timeout on one side and an error on the other, the reason is the fault, not the load', async () => {
@@ -201,6 +212,20 @@ describe('passive archive window counts — read the SELECT, not the transaction
       expect(u.ohlcRowsInWindow).toBe(0);
       expect(u.activeSymbolsInWindow).toBe(500);
       expect(u.status).toBe('NO_OHLC_DATA');
+    }
+  });
+
+  it('6b. a side KNOWN to be dead is reported even when the other side is unknown (Langston Step 4 C1)', async () => {
+    for (const u of UNIVERSES) h.stats[u].cumulativeTickerSnaps = 0;
+    setAll(() => TIMEOUT, () => count(0, 0));
+    const r = await computePassiveArchiveStatus('rolling_24h');
+    for (const u of r.universes) expect(u.status).toBe('NO_TICKER_DATA');
+    for (const u of UNIVERSES) { h.stats[u].cumulativeTickerSnaps = 4000; h.stats[u].cumulativeOhlcRows = 0; }
+    setAll(() => count(0, 0), () => TIMEOUT);
+    const r2 = await computePassiveArchiveStatus('rolling_24h');
+    for (const u of r2.universes) {
+      expect(u.status).toBe('NO_OHLC_DATA');
+      expect(u.countUnknownReason).toBe('timeout'); // the unknown side is still reported
     }
   });
 

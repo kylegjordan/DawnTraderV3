@@ -899,13 +899,21 @@ export async function computePassiveArchiveStatus(
   // the one thing this panel exists to detect.
   const PASSIVE_QUERY_TIMEOUT_MS = 4000;
   // Bounded fan-out (Langston, Step 7 ruling 2026-09-28): the pool is shared with the archive writers, so at
-  // most three window counts run at once.
+  // most three window counts run at once. ⚠️ This bounds how many counts run together, NOT the endpoint's time:
+  // the pool has no connection-acquire timeout, so `db.transaction` can wait for a client before its BEGIN, and
+  // the disk-size lookups below are untimed. The latencies recorded in the scope are measurements under load.
+  // Peak simultaneous connections held by this panel rise from 1 to 3; total connection-seconds are about the
+  // same (Langston, Step 4 judgement 1).
   const PASSIVE_COUNT_CONCURRENCY = 3;
   // `unknown` says WHY a count is unknown (Langston rider (a)): a timeout is load, an error or a bad shape is a
   // fault. They must stay distinguishable, or the next reader repeats item 46's misread in the other direction.
   type CountOutcome = { rowCount: number | null; symCount: number | null; unknown: CountUnknownReason | null };
   const unknownCount = (unknown: CountUnknownReason): CountOutcome => ({ rowCount: null, symCount: null, unknown });
   const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+  // Faults (errors and bad shapes) are collected and logged ONCE per call, never once per count: the panel
+  // refetches every 30 s, and a per-count warn from a persistent fault would flood `error.log`, the stream the
+  // `#1037` drop check reads (Langston, Step 4 C2). A timeout is load and is not logged at all.
+  const countFaults: string[] = [];
   async function safeCount(sqlText: string): Promise<CountOutcome> {
     try {
       const res = await db.transaction(async (tx) => {
@@ -915,16 +923,19 @@ export async function computePassiveArchiveStatus(
       const rows = (res as any)?.rows;
       // Test for the GOOD shape, never for absence: exactly one row whose two fields are counts.
       if (!Array.isArray(rows) || rows.length !== 1 || !isCount(rows[0]?.row_count) || !isCount(rows[0]?.sym_count)) {
-        console.warn('[PassiveArchive] Aggregator count returned an unexpected shape — reported as unknown');
+        countFaults.push('unexpected result shape');
         return unknownCount('shape');
       }
       return { rowCount: rows[0].row_count, symCount: rows[0].sym_count, unknown: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      // A cancelled SELECT is followed by drizzle's ROLLBACK on the same client; if that ROLLBACK itself fails, its
+      // error surfaces here instead of the timeout, so a timeout can land as `error`. That is the safe direction
+      // (a fault reported, never load hidden), so it is left as is (Langston, Step 4 judgement 2).
       if (msg.includes('statement timeout') || msg.includes('canceling statement')) {
         return unknownCount('timeout');
       }
-      console.warn(`[PassiveArchive] Aggregator count query failed: ${msg}`);
+      countFaults.push(msg);
       return unknownCount('error');
     }
   }
@@ -966,6 +977,9 @@ export async function computePassiveArchiveStatus(
       }
     }),
   );
+  if (countFaults.length > 0) {
+    console.warn(`[PassiveArchive] ${countFaults.length} of ${countSql.length} window counts unreadable — reported as unknown; first: ${countFaults[0]}`);
+  }
 
   const universes: PassiveArchiveUniverseStats[] = [];
   let passiveTotalDiskBytes = 0;
@@ -994,15 +1008,17 @@ export async function computePassiveArchiveStatus(
     const reasons = [ohlc.unknown, ticker.unknown];
     const countUnknownReason: CountUnknownReason | null =
       reasons.includes('error') ? 'error' : reasons.includes('shape') ? 'shape' : reasons.includes('timeout') ? 'timeout' : null;
+    // Order (Langston, Step 4 C1): a side that is KNOWN to be dead is reported even when the other side is unknown
+    // — COUNT_UNKNOWN must never mask a supported alarm — and nothing unknown is ever reported as OK.
     let status: PassiveArchiveUniverseStats['status'] = 'OK';
     if (!cfg.stats.connected) {
       status = cfg.stats.configuredSymbols === 0 ? 'STARTING' : 'DISCONNECTED';
-    } else if (ohlcCount == null || tickerCount == null) {
-      status = 'COUNT_UNKNOWN';
     } else if (ohlcCount === 0 && cfg.stats.cumulativeOhlcRows === 0) {
       status = 'NO_OHLC_DATA';
     } else if (tickerCount === 0 && cfg.stats.cumulativeTickerSnaps === 0) {
       status = 'NO_TICKER_DATA';
+    } else if (ohlcCount == null || tickerCount == null) {
+      status = 'COUNT_UNKNOWN';
     }
 
     // B70.2 — disk usage = sum of OHLC + ticker partition sizes for this universe

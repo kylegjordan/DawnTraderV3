@@ -65,10 +65,22 @@ Readable count carried through · `SET LOCAL` inside the transaction before the 
 | `rolling_7d` | 12.3 s | 1 of 8 |
 | `rolling_30d` | 12.3 s | 0 of 8 |
 
-The worst case is three rounds of the 4 s limit, well inside the 30 s abort. **The residual** (7- and 30-day counts cannot finish in 4 s) needs a cheaper measure and is homed outside this batch (scope r6).
+~~The worst case is three rounds of the 4 s limit, well inside the 30 s abort.~~ *Struck at Step 4 (J1): these are measurements under the load at the time, not a bound.* **The residual** (7- and 30-day counts cannot finish in 4 s) needs a cheaper measure and is homed outside this batch (scope r6).
 
 ## Judgement calls to attack
 1. **Concurrency 3 vs serial.** Serially, all eight 24 h counts finished (your run: 0.1–3.8 s each). At 3 concurrent, three ticker counts time out at 24 h. Serial trades completeness for an unbounded worst case (8 × 4 s > 30 s). I chose the bound.
 2. **Precedence error > shape > timeout** for the single reason field, rather than two per-side reason fields.
 3. **`COUNT_UNKNOWN` if EITHER side is unknown**, even when the other side alone would give `NO_TICKER_DATA`.
 4. The Step-7 re-check: after `#1037` am.1, is watching `error.log` and stopping at the first drop line enough, or should the check wait for `#1037`'s mitigation?
+
+## Step 4 — ✅ APPROVED WITH CONDITIONS (Langston, 2026-09-28 19:49Z, read at `2b26efb96`)
+| # | condition / finding | disposition |
+|---|---|---|
+| C1 | `COUNT_UNKNOWN` above the count-based statuses masked a KNOWN-dead side | **Built:** connection states, then `NO_OHLC_DATA`, then `NO_TICKER_DATA`, then `COUNT_UNKNOWN`, then OK. New test 6b; mutation M10 (the old order) killed. |
+| C2 | per-count `console.warn`: 8 lines per request at a 30 s refetch, on the stream the `#1037` check greps | **Built:** faults are collected and logged ONCE per call (`N of 8 window counts unreadable …; first: …`). Timeouts are not logged. Tests 4 and 4c; mutations M11 (per-count warn) and M12 (summary removed) killed. |
+| J1 | "worst case three rounds" is not a bound: no acquire timeout, untimed disk lookups | **Accepted:** the scope and the code comment now call the latencies measurements under load. Peak connections go from 1 to 3, total connection-seconds about unchanged. `#1037` am.1's "less pressure" is struck in place. |
+| J2 | a failed ROLLBACK can surface a timeout as `error` | **Accepted, comment added** (the safe direction). |
+| J3 | either-side → `COUNT_UNKNOWN` | **Folded into C1.** |
+| J4 | `error.log` is lagging; the drop is the writer's own 2-slot semaphore and the rows are spliced before the slot (`archive-batch-writer.ts:194` vs `:73-93`) | **Accepted:** Step-7 method is now `pg_stat_activity` sampling with an abort at 7 of 10, `rolling_24h` only, and a pre-registered RENDERING claim. The drain order is `#1078` `B-ARCHIVE-FLUSH-DRAIN-ORDER`, and the mechanism correction is `#1037` am.2. The Data Archive rider (`:797` `timedOut` never assigned, `:830` 0/0 on failure) is recorded on `#1037` am.2. |
+
+**Tests now 11** (all passing). **Mutations: 12 of 12 killed**: the original nine (M3 re-anchored as M3': the COUNT_UNKNOWN branch removed) plus M10-M12.
