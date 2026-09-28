@@ -57,6 +57,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module-constants-service.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
+import { xsExitFrameLine } from './xstock-exit-frame-log.js'; // 3n.q7 increment 1: per-tick xStock exit frame line
 // P19-B4a (C4): top-level resolveAssetClass dropped — all sites now prefer the
 // stamp (asValidAssetClass) then fall through to safeResolveAssetClass (skip on null).
 import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
@@ -1849,6 +1850,9 @@ export class ActiveExecutionEngine {
         // carried to the exit check for the LOG ONLY: the bid-trigger measurement window the re-land row needs.
         let xsSpread: number | null = null;
         let xsThr: number | null = null;
+        // `3n.q7` increment 1 (Langston condition 2) — WHY an evaluated xStock tick has no transactable sides. Set on the
+        // four arms that reach the evaluator with `xsBid` null; every other failure `continue`s before the evaluator.
+        let xsFrameReason: string | null = null;
 
         // ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
         // Kraken spot REST carries NO tokenized equities (empirically proven: Ticker
@@ -1966,7 +1970,10 @@ export class ActiveExecutionEngine {
                 xsSideBasis = 'raw_unguarded';
                 xsSpread = (_offSides.ask - _offSides.bid) / ((_offSides.ask + _offSides.bid) / 2);
               } else if (_offRaw && _offRaw.bid !== null && _offRaw.ask !== null && _offRaw.bid > 0 && _offRaw.ask > 0) {
+                xsFrameReason = 'unguarded_crossed';
                 console.warn(`[8a-P4b][BOOK_STATE] ${position.symbol} CROSSED_NOT_CAPTURED basis=unguarded bid=${_offRaw.bid} ask=${_offRaw.ask} — no decision this tick`);
+              } else {
+                xsFrameReason = 'unguarded_not_two_sided'; // a side missing, non-positive or non-finite
               }
             } else {
               const { result: _r, cfg: _c, raw: _raw } = _bs;
@@ -2185,6 +2192,7 @@ export class ActiveExecutionEngine {
                   // Below the refusal both sides are finite-positive (`book-state.ts` `pos`), so today only a cross
                   // reaches here; the non-finite text exists so a future change to that predicate cannot be logged as one.
                   const _crossed = Number.isFinite(_raw.bid) && Number.isFinite(_raw.ask) && (_raw.ask as number) < (_raw.bid as number);
+                  xsFrameReason = _crossed ? 'guarded_crossed' : 'guarded_non_finite';
                   console.warn(`[8a-P4b][BOOK_STATE] ${position.symbol} ${_crossed ? 'CROSSED_NOT_CAPTURED' : 'SIDES_NOT_CAPTURED reason=non_finite'} basis=guarded bid=${_raw.bid} ask=${_raw.ask} — no decision this tick`);
                 }
               }
@@ -2637,7 +2645,7 @@ export class ActiveExecutionEngine {
           //   The bid trigger re-lands under row `3n.q7` (`B-XSTOCK-BID-TRIGGER-RELAND`), on Langston's three conditions.
           _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null,
           // Log only: the frame X3 WOULD have read, so the containment interval is the re-land's measurement window.
-          _posClass === 'xstock_spot' ? { bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr } : null,
+          _posClass === 'xstock_spot' ? { bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason } : null,
         );
 
         // I7-ROOT-FIX: Track exit evaluation for diagnostics
@@ -2800,7 +2808,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch}`);
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,
@@ -2814,6 +2822,14 @@ export class ActiveExecutionEngine {
         + ` evaluator-scoped partition no longer closes. An arm has been added, moved or lost; until it`
         + ` is fixed, a ZERO in any arm is NOT evidence of absence and #661 leg 3 is NOT discharged.`);
     }
+    // `3n.q7` increment 1 — the frame-line fence. Equal BY CONSTRUCTION today (the emit sits next to `invoked++`), so a
+    // mismatch means the two lines have drifted apart in the code. It is a DRIFT DETECTOR, never proof of coverage.
+    if (this._xsFramesEmitted !== this._exitEvalByClass.xstock.invoked) {
+      console.error(`[3n.q7][XS_FRAME_RECONCILE_BROKEN] emitted=${this._xsFramesEmitted} invoked=${this._exitEvalByClass.xstock.invoked}`
+        + ` — the frame line and the xStock invocation count have drifted apart; the frame population is no longer the evaluated one.`);
+    }
+    this._xsFramesEmitted = 0;
+    this._xsFrameClassMismatch = 0;
     this._noTriggerRefusals = 0;
     this._exitEvalInvoked = 0;
     this._exitEvalByClass = { crypto: { invoked: 0, refused: 0 }, xstock: { invoked: 0, refused: 0 }, other: { invoked: 0, refused: 0 } };
@@ -2888,6 +2904,9 @@ export class ActiveExecutionEngine {
   // `8a-P4b` Step 9 C1 — per-position open bid-vs-mark divergence runs (log only). Bounded by held xStock positions; an
   // entry is left behind only when a position closes by a path that skips the exit check (a rest fill, a flatten).
   private _xsBidDivergence = new Map<string, { startMs: number; ticks: number; leg: 'stop' | 'target' }>();
+  // `3n.q7` increment 1 — per-cycle frame-line counters (reset with the other exit counters).
+  private _xsFramesEmitted = 0;
+  private _xsFrameClassMismatch = 0;
   private _exitEvalNoHit = 0;
   private _exitEvalHit = 0;
   private _exitEvalNoMark = 0;
@@ -2920,7 +2939,7 @@ export class ActiveExecutionEngine {
     //    on the mark, unchanged (the explicit third arm at the evaluator call).
     triggerBid: number | null = null,
     // `8a-P4b` Step 9 C1 — LOG ONLY, never a decision input: the xStock frame the bid trigger would have read.
-    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null } | null = null,
+    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null; basis?: string | null; reason?: string | null } | null = null,
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
     const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;
@@ -3083,6 +3102,24 @@ export class ActiveExecutionEngine {
       this._exitEvalInvoked++;
       const _evalCls = positionAssetClass === 'crypto_spot' ? 'crypto' : positionAssetClass === 'xstock_spot' ? 'xstock' : 'other';
       this._exitEvalByClass[_evalCls].invoked++;
+      // ⭐ `3n.q7` increment 1 — ONE FRAME LINE PER EVALUATED xSTOCK EXIT TICK (telemetry only; Langston Step-2 C1-C3).
+      // Emitted when EITHER resolver says xStock: the evaluator's `_evalCls` (from the stored class) or the caller's frame
+      // object (from `_posClass`). A frame that exists is never dropped because the two disagree (C2); the line says
+      // `class_mismatch`. `_xsFramesEmitted` counts only `_evalCls === 'xstock'` emits, so it reconciles to
+      // `_exitEvalByClass.xstock.invoked` BY CONSTRUCTION — the EVAL_EXIT fence detects future drift between the two
+      // lines, and is never evidence of population coverage.
+      {
+        const _xsLine = xsExitFrameLine({
+          symbol: position.symbol, positionId: String(position.id), evalCls: _evalCls, frame: xsFrame,
+          mark: currentPrice, stopLoss, takeProfit,
+          bidWouldFire: _xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no', markExit: !!decision.shouldExit,
+        });
+        if (_xsLine !== null) {
+          if (_evalCls === 'xstock') this._xsFramesEmitted++;
+          if ((_evalCls === 'xstock') !== (xsFrame !== null)) this._xsFrameClassMismatch++; // either direction
+          console.warn(_xsLine);
+        }
+      }
 
 
       // ── F-G-2 OBJ-0 SHADOW ARM — REMOVED 2026-09-14 BY `8a-P2` (P2-7) ─────────────────────

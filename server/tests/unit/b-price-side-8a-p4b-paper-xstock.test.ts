@@ -92,7 +92,9 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
   it('X3 (Step 9 C1): the trigger slot carries ONLY the crypto ladder bid; xStock passes its frame to the LOG argument', () => {
     // C1 (Langston, 2026-09-19): the xStock trigger is the mark again. `xsBid` must NOT reach the trigger slot.
     expect(AEE).not.toMatch(/_posClass === 'xstock_spot' \? xsBid : \(_lsSel/);
-    expect(AEE).toMatch(/_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : null,\s*\n(\s*\/\/[^\n]*\n)*\s*_posClass === 'xstock_spot' \? \{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr \} : null,\s*\n\s*\);/);
+    expect(AEE).toMatch(/_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : null,\s*\n(\s*\/\/[^\n]*\n)*\s*_posClass === 'xstock_spot' \? \{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason \} : null,\s*\n\s*\);/);
+    // `3n.q7` increment 1 (2026-09-29) extended the LOG argument with the side basis and the no-sides reason; it is still
+    // the log argument only — the trigger slot above is unchanged.
   });
 
   it('X3 (Step 9 C1): the evaluator trigger is three-way — crypto the ladder bid, xStock and any other class the mark', () => {
