@@ -105,5 +105,11 @@
   "decision": "Run B-CREDENTIALS-PRIVATE-REPO (#1023, Infra) now, while the other plates clear, before the push: Kyle rotates the two test-user passwords and the owner password himself; no password in the repo again; document-only pushes skip CI with the deploy gate intact; readers (Langston, Helsinki mirror, staging deploy) get read keys; then the repo goes private, GitHub Pro $4/month if needed (budget: $15-20/month ok, $60-70 not).",
   "date": "2026-09-28",
   "source": "Kyle in Desktop chat 2026-09-28"
+ },
+ "PAPER-RESET-3000": {
+  "date": "2026-09-29",
+  "status": "decided",
+  "decision": "Kyle 2026-09-29, SUPERSEDING option (c) of 2026-09-28: keep ONE shared pot for crypto and xStock; HARD RESET the paper trading record with a new portfolio balance of $3,000; size every trade at ~$150 so ~20 can be open (exposure cap stays 100% of the balance); RETIRE the open-slots guardrail; during the sprint the per-trade size is kept at ~$150 as the balance moves (the max-position % is monitored and adjusted, i.e. fixed-notional sizing). Routed to CC-C as B-SIZING-DEC-RESTORE (#698). CC-B assumptions stated to Kyle: the reset keeps every old trade stored (marked as the earlier period, nothing deleted - the existing reset buttons delete both modes and must not be used, rm:21-3d); open positions at reset are closed and recorded with a reset reason.",
+  "source": "Kyle in Desktop chat 2026-09-29, after Coltrane's finding that xStock opens were blocked by the shared exposure cap"
  }
 }

@@ -32,7 +32,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 6. **Months of database headroom** (?) · *live readiness* — database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) move one month of one-minute price bars as the proof and flip their hot window 365 -> 30 days (~19 GB out); then measure months of headroom
 7. **Install the context_bridge_log 14-day TTL job** (Infra Claude) · *live readiness* — this week: make the retention demonstrably free bytes on a named table - install the missing 14-day job (1.48 GB); #688 (four monthly-partitioned tables) rides the disk item
 8. **Define 'comfortable in paper' in numbers** (CC-C + Langston) · *evidence* — set the numbers for 'comfortable in paper' BEFORE the evidence comes in
-9. **B-SIZING-DEC-RESTORE** (CC-C) · *mechanics* — wave 0 (Langston F7): Kyle's ruled shape, today's values (option c); every close before it books at the wrong notional
+9. **B-SIZING-DEC-RESTORE** (CC-C) · *mechanics* — wave 0 - KYLE 2026-09-29 (supersedes option c): one shared pot; HARD RESET paper to a $3,000 balance, old trades kept (nothing deleted); ~$150 per trade held as the balance moves (fixed-notional), ~20 open at 100% exposure; RETIRE the open-slots guardrail (rule 18); the obj-1 size formula correction (#698 am.1) comes first
 10. **#628** (CC-C) · *mechanics* — with B-SIZING-DEC-RESTORE: its two sizing sites
 11. **#521** (CC-B) · *live readiness* — wave 0 (Langston F11): nothing notices a dead engine - a silent halt voids every observation window
 12. **Fix duplicated plan ids** (CC-A) · *mechanics* — a chore, not mechanics (Langston): no two plan items share a number
