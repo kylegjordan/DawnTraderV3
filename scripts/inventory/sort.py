@@ -56,6 +56,8 @@ J = {
  "B-KRAKEN-FEE-WATCH": "L", "P19-B12": "L", "rm:21-3b": "L", "DAY-ONE-NUMBERS": "L", "PROCESS-DEATH-FORM": "L", "rm:19-17b": "L",
  # profitability evidence
  "PAPER-STANDARD": "R",
+ # Kyle 2026-09-28: the three flagged items join the push
+ "RULINGS-DURABILITY": "L", "COLTRANE-PARITY": "L", "#221": "C",
  # the reorganisation itself
  "PLAN-ID-COLLISIONS": "M",
  # decided / confirmed by Kyle — no work
@@ -96,7 +98,7 @@ push, after, parked, obs, missing = collections.defaultdict(list), [], [], [], [
 for k, r in rows.items():
     b = r[0]
     if b == "OBSERVATION": obs.append(r); continue
-    if b == "KYLE-PARKED": parked.append(r); continue
+    if b == "KYLE-PARKED" and k not in cat: parked.append(r); continue
     c = cat.get(k)
     if c == "DONE": continue
     if c: push[c].append(r); continue
@@ -120,24 +122,27 @@ A("")
 A("| category | items |"); A("|---|---:|")
 for c in "MCPTDLR": A(f"| {LABEL[c]} | {len(push[c])} |")
 A("")
-A("> Source: `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) re-sorted by `scripts/inventory/sort.py`; Kyle's decisions in `scripts/inventory/kyle_decisions.json`. The order WITHIN each category is not yet the working order — prioritising the whole push is the next step.")
+A("> Source: `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) re-sorted by `scripts/inventory/sort.py`; the working order is `scripts/inventory/order.py` (asserts every push item appears exactly once); Kyle's decisions in `scripts/inventory/kyle_decisions.json`. The order is CC-B's draft for Langston's review; owners are provisional until the session assignment.")
 A("")
-for c in "MCPTDLR":
-    A(f"## {LABEL[c]} — {len(push[c])}")
-    A("")
-    for r in sorted(push[c], key=lambda r: (r[0] != "MUST", r[1])):
-        star = "★ " if r[0] == "MUST" else ""
-        A(f"- {star}**{c_(r[2])}** ({c_(own(r)) or 'unowned'}) — {why(r)}")
-    A("")
-A("★ = was on the must-before-live list; the rest were 'extremely helpful' or moved up by your rules.")
+from order import WAVES
+TAG = {"M": "mechanics", "C": "tuning", "P": "prices", "T": "paper truth", "D": "learning data", "L": "live readiness", "R": "evidence"}
+A("## THE WORKING ORDER")
 A("")
+A("Two tracks run side by side and meet at go-live. **Track A** is the trading system: foundations first (the things that corrupt everything downstream), then the mechanics stage by stage with the learning-data work alongside, then tuning on the clean data, then the evidence. **Track B** is live-mode readiness: safety work that can start now, risk controls and restart safety, the live engine (after your production-environment decision), and go-live preparation. **Wave 0** is this week. Within a wave the numbers are the working order; 'after X' means it waits for X.")
+A("")
+n = 0
+for wid, title, items in WAVES:
+    A(f"### Wave {wid} — {title}")
+    A("")
+    for k, note in items:
+        n += 1
+        r = rows.get(k)
+        nm = c_(r[2]) if r else k
+        A(f"{n}. **{nm}** ({c_(own(r)) if r else '—'}) · *{TAG.get(cat.get(k, ''), '')}* — {c_(note)}")
+    A("")
 A(f"## Running now — observation windows ({len(obs)})")
 A("")
 for r in obs: A(f"- **{c_(r[2])}** ({c_(r[3]) or '—'}) — {why(r)}")
-A("")
-A("## Worth a second look before they go after live")
-A("")
-for k, w in EXCEPTION_CANDIDATES.items(): A(f"- **{k}** — {w}")
 A("")
 A(f"## After live — {len(after)}")
 A("")
