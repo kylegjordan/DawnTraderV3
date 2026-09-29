@@ -24,6 +24,19 @@
 ⇒ **NO ROLLBACK — A KYLE OVERRIDE OF THE PRE-REGISTERED CONSEQUENCE, recorded as one. The six rows stay. The pre-registered text is kept exactly as written, not rewritten to pass. The arm counted the wrong thing; counted on the right thing it still fires by half a point; Kyle's reason is not the count but the premise — the RTB ranking decides what opens.**
 ⛔ **The lesson, recorded because it is mine:** a crowding guard must count what the ranking OPENS, not SQE-pass rows that repeat every cycle; and a pre-registration must be the document written before the deploy, not a restatement added after it. `MISTAKE: wrong-object [B-REACH-BASELINE-ADJUST] — the pre-registered crowding arm counted SQE admission rows (re-counted every cycle into an unbounded RTB pool) instead of trades opened.`
 
+### (d) AFTER THE CLOSE — KYLE 2026-09-30, AND THE FIRST READ OF ALL SIX SETTINGS
+**Kyle, 2026-09-30:** *keep the strong_bull_trend override and keep observing it;* and the other adjusted strategies had no reporting — *"I would like to understand what's happened there."* ⇒ **the override stands, and a weekly read of all six rows is scheduled (`8a7b57c8`, first 2026-10-07T12:00Z, re-minted each week).** The pre-registered criterion covered only strong_bull_trend and the class P&L; nothing had been set for the other cells, which is why nothing was reported.
+**First read, 2026-09-30, paper trades opened since the deploy (2026-09-20T21:19:40Z) against the same length of time before it** (queries: `B_REACH_BASELINE_ADJUST_EVIDENCE/paper_cells_pre_post.sql`, `paper_reject_reasons.sql`):
+| setting | paper trades before → after | what happened |
+|---|---|---|
+| strong_bull_trend crypto, reach 6.5 | 0 → 20 opened, 16 filled | 6 winners, average −0.42 % per filled trade, net −$12.61; 3 still open. **PREVIOUSLY STATED: +1.07 % over 11 filled. NOW: −0.42 % over 16 filled. REASON: the earlier figure covered the first seven days; the trades opened since were weaker.** |
+| strong_bull_trend xStock, reach 6.5 + min_rr 1.95 | 0 → 0 | unexercised |
+| vwap_pullback crypto, min_rr 1.95 | 1 → 0 | its signals pass the SQE (431 admitted rows) but none was picked to open |
+| vwap_bounce crypto, min_rr 1.95 | 0 → 0 | all 1,406 paper evaluations rejected at the SQE's Net Expectancy gate, just below zero after fees — the lower floor cannot help a signal the fees already sink |
+| vwap_pullback xStock, reach 6.0 | 17 → 1 | xStock opening fell for every strategy (22 → 6), the shared exposure cap (Coltrane); not this setting |
+**In the VTS the settings did open the gates** (simulated trades opened: vwap_pullback crypto 179 → 346, vwap_pullback xStock 645 → 726, strong_bull_trend crypto 832 → 29,120), but the simulated outcomes are thin in this window and straddle the 2026-09-15 change to how crypto VTS exits are priced, so they are not a verdict. ⚠️ The xStock strong_bull_trend VTS rows are the `#1068` contamination and are not read at all.
+⇒ **So far only strong_bull_trend crypto has produced evidence, and it is the thing to watch.** The weekly read carries it, alongside the successor test `#1095` (sprint row 135a).
+
 ### (c) Objectives
 | objective | result | evidence |
 |---|---|---|

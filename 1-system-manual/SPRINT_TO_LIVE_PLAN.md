@@ -64,6 +64,7 @@ Anything found while working — a bug, an issue, a needed fix — gets the same
 - **Every item is a batch** (or a hotfix, investigation or sub-batch), run through the normal eleven-step workflow; its report is linked from its row.
 - **The owner updates its row at every batch close** (status + report link), in the same governance turn — and adds any discovery that passes §2. ✅ **A Tier-1 ledger row in `workflow-10-governance` (Langston ruled, 2026-09-29, `B-GOV-REPORTING` G6); grading it is `B-PLAN-CURRENCY-CHECK`.**
 - **Finish what is in flight** (Kyle): work already under way is completed, including any follow-on it was leading up to; a clean break is taken at the next batch boundary.
+- ⛔ **KYLE 2026-09-30 — NO SPRINT WORK, NOT EVEN PLANNING OR REVIEW, UNTIL EVERY SESSION HAS REACHED ITS STOPPING POINT.** Each session first finishes, closes or pauses everything identified in section 0; when all four have reached what can be done before the sprint, the sprint starts. (Asked by CC-B whether sprint rows could begin Steps 1-5 early; Kyle said no.)
 - **Clear plates first** (Kyle): before any session starts its sprint rows, it finishes or cleanly pauses everything it has in flight — see section 0.
 - **Owners** are assigned by connected group (section 6); reassign by editing the row and saying why.
 
