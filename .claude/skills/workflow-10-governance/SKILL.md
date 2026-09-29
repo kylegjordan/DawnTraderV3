@@ -54,7 +54,7 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 4. **What is unproven, stated as unproven**, and what would falsify it.
 5. **The governance files changed so far** — same naming rule as above.
 
-**CONVERSION — when the data is in AND the decision or action has been taken:** the progress report **BECOMES** the completion report — same batch, renamed to `<BATCH-ID>_COMPLETION_REPORT.md`, recording **BOTH halves explicitly:**
+**CONVERSION — when the data is in AND the decision or action has been taken:** the progress report **BECOMES** the completion report — same batch, renamed to `<BATCH-ID>_COMPLETION_REPORT.md` (grep the old filename and update every reference in the same commit — `workflow-11-completion`), recording **BOTH halves explicitly:**
 1. **WHAT DATA CAME IN** — the observation’s actual result, set **against the criterion the report pre-registered** (quote the criterion as written, then the outcome).
 2. **WHAT DECISION OR ACTION WAS TAKEN ON IT** — and by whom. ⛔ **A completion report that states the data and not the decision has not closed the loop.**
 Then complete the objectives table and the governance-files list. ⛔ **You do not write a fresh report from memory** — the whole point is that the evidence was captured while it was fresh.
