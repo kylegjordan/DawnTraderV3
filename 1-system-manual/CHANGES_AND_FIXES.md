@@ -4121,6 +4121,7 @@ Deploys `b8ab812de` (chunk A) + `2c986c231` (chunk B); CI green; Step-8 CONFIRME
 - **The crypto leg's cohort is a mixture and its segments are small** — recut at every epoch bump the control runs n=12 / 14 / 33 and swings +2.556 % → −1.840 %. **What carries that leg is Kyle's replay evidence plus the pre-registered rollback trigger, not the cohort.**
 - **Per-class VTS statistics over this window are contaminated** — see `3n.v2`.
 **STATUS: FIXED, deployed 2026-09-20T21:19:40Z; 7-day observation open with its trigger and baselines pre-registered.**
+**CLOSED 2026-09-29.** The first residual is retired: by deploy + 44 h the gates were exercised (crypto `strong_bull_trend` 19,537 of 19,556 guard passes). The pre-registered crowding arm FIRED (63.6 % of SQE admission rows; 25.5 % even of trades opened) and Kyle overrode the rollback, because the RTB ranking, not the SQE pass count, decides what opens — details in the completion report.
 
 ---
 

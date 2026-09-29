@@ -20,7 +20,7 @@ PLATES = [
  ("CC-A (Old Claude)", "B-INSTRUMENTS-OVER-RULES — usage measure to 2026-10-02", "FINISH the measure, then close"),
  ("CC-A (Old Claude)", "B-DEPLOY-DRIFT-LINE — observation window", "FINISH: convert when its criterion is read"),
  ("CC-A (Old Claude)", "B-SCHEDULER-FIRST-TICK — next up, not started", "HAND to Infra (its sprint row)"),
- ("CC-B (New Claude)", "B-REACH-BASELINE-ADJUST — 7-day review overdue", "FINISH: read the window, convert the report"),
+ ("CC-B (New Claude)", "B-REACH-BASELINE-ADJUST — 7-day review read 2026-09-28", "✅ CLOSED 2026-09-29: the crowding arm fired; Kyle overrode the rollback and kept the rows"),
  ("CC-B (New Claude)", "B-FEED-MISMATCH-FIX — observation to ~2026-10-10", "FINISH: convert at close"),
  ("CC-B (New Claude)", "B-XSTOCK-FEE-CONTRACT — observation (~21 days from 09-11)", "FINISH: convert at close"),
  ("CC-B (New Claude)", "B-ARCHIVE-RETENTION-SIZING — was waiting on Kyle", "CLOSE: Kyle decided 2026-09-23 (August moves to warm storage in October)"),
@@ -117,7 +117,7 @@ A("## 5. Running now — observation windows")
 A("")
 A("| item | owner | closes |"); A("|---|---|---|")
 for k, own, closes in [("8a-P4c (VTS xStock price instrument)", "CC-C", "2026-09-30T00:00Z"), ("B-FEED-MISMATCH-FIX", "CC-B", "300 taker closes or 2026-10-10"),
-                       ("B-REACH-BASELINE-ADJUST", "CC-B", "7-day review due 2026-09-27 — overdue"), ("B-XSTOCK-FEE-CONTRACT", "CC-B", "21 days from 2026-09-11"),
+                       ("B-REACH-BASELINE-ADJUST", "CC-B", "✅ closed 2026-09-29"), ("B-XSTOCK-FEE-CONTRACT", "CC-B", "21 days from 2026-09-11"),
                        ("F-G-1 (venue price grid)", "CC-C", "window closed 2026-09-04 — conversion owed; reopened, see Wave 0"),
                        ("B-DEPLOY-DRIFT-LINE", "CC-A", "observation window open"), ("B-INSTRUMENTS-OVER-RULES", "CC-A", "2026-10-02")]:
     A(f"| {k} | {own} | {closes} |")
