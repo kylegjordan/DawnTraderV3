@@ -17,7 +17,7 @@
 ⚠️ **The size right now:** about 83 % of the 200 GB cap (Langston, 2026-09-28). **The expected relief is about 53 GB on 2026-10-01**, then about 19 GB more once the one-minute-bar flip executes. **Neither has happened yet**, so the disk alert stays open until they do.
 
 ## 3. What this close hands on — each placed, one owner each
-- **The 2026-10-01 check that the August move landed** — CC-B's verification alert (minted 2026-09-28, triggers 2026-10-01T06:00Z, pre-registered: every August partition dropped with `bytes_warm > 0` and `failed=0`, database down by roughly 50 GB; one failed night = re-check 10-02; two = investigate). **CC-B keeps it**, and the disk alert `3035e031` resolves on it.
+- **The 2026-10-01 check that the August move landed** — **CC-B keeps it, as two scheduled alerts:** `a881c69c` (2026-10-01T12:00Z: verify the August tier ran, then resolve the parked disk warning so its key re-arms) and `c25e722d` (2026-10-02T08:00Z: verify the enumerated 52.24 GiB was reclaimed). Pass: every August partition logged dropped with `bytes_warm > 0` and `failed=0`; one failed night = re-check the next day; two = investigate. ⚠️ A third check minted 2026-09-28 (`04c3acc8`) duplicated these and was withdrawn on 2026-09-29. The disk alert `3035e031` resolves on them.
 - **The one-minute-bar flip and the months-of-headroom measurement** — `SPRINT_TO_LIVE_PLAN` row 6 `DISK-HEADROOM`, owner **Infra**, wave 0.
 - **The never-installed 14-day job on `context_bridge_log`** (1.48 GB) — `SPRINT_TO_LIVE_PLAN` row 7 `CONTEXT-BRIDGE-TTL`, owner **Infra**, wave 0.
 - **`#688`** (four monthly-partitioned tables) rides the disk row.

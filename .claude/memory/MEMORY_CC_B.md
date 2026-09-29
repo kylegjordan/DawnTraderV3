@@ -51,8 +51,8 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 - Earlier (07-14→16 arc, B8.5a-g, B8.1-B8.4c, B-GOV, B7.2 family, B-RENAME, reorg-B3/B4): repo completion reports. Lessons kept: `#551` a held pair's context change is unknowable without re-checking on a timer; paper mode exists to LEARN (`#501`).
 
 ## OTHER OPEN
-- **MINE — alert `a3610acf` `T-W20C-SCALAR-LEG` (B-NEW-53 parity, roadmap 25-12):** successor to `7c4a873f` which I resolved 2026-08-31. **No longer data-blocked** (`signal_eval_provenance` 15.29M rows for August, `settled_window_hash` 100%). Work: re-scope (July aged out), then the two harness legs, then the ≥99% gate test. **PLACED 2026-09-11 at `PHASE_19_PLAN` row 2.4-FEE-c** (Langston's routing); `#682 B-FILTER-DIAG-XSTOCK` placed at 2.4-FEE-d (it had no row). ⛔ Not acked — owned = routed, row left active (`#982`).
-- **Weekly `dt-deploy` observation — MINE (Langston-routed).** `ca0e211c` run 2026-09-11 15:06Z: all four PASS at record sha `29cce1076` (deployed_by_claimed `cc-c`, installed sha256 == blob); resolved `--evidence 29cce1076…`; **successor `96198e10` minted, triggers 2026-09-17T07:00Z** — re-mint on each resolve, the CLI ignores recurrence.
+- **`T-W20C-SCALAR-LEG`** — alert `a3610acf` RESOLVED 2026-09-28 (Langston routed: its home is sprint row 107, after B-PAPER-LANE-PROVENANCE). Scope r1 drafted 2026-09-13 (`6e97a8f1c`), never ruled.
+- **Weekly `dt-deploy` observation — MINE.** 2026-09-29 run: all four PASS at `bc199185e`; successor `ac32818d` triggers 2026-10-06T07:00Z (first run to see the held deploy). Re-mint on each resolve. **Oct-1 storage checks: `a881c69c` + `c25e722d` (mine); `04c3acc8` withdrawn as a duplicate.**
 - CC-A lanes (not mine): B-SEC-HARDEN follow-ups · #499 · #501 harness · P25 research doc.
 - **SCORING REDESIGN (Kyle-RATIFIED):** `P25_SCORING_STACK_PRESTUDY.md` PART II = locked Phase-25 blueprint (finalScore RETIRE · hybridScore two-layer model+Platt · regimeWeight SPLIT · ZERO new hardcoded decision constants).
 
