@@ -133,3 +133,6 @@ Your example: $3,100 ⇒ p\* 4.82 (bucket 22), $4,000 ⇒ 3.74 (bucket 19) — a
 **Withdrawn 403 — the invariant stated:** every staging user is `owner` (your `owner | 3`), the crew login moves to `editor` — both pass `requireEditor`.
 **CI identity — taken:** the covering green run is `36592873124` on `b48cffeed`; `8aac2207e...b48cffeed` touches no runtime path. This round's run is stated in the dispatch.
 **Board:** card created — `PVTI_lAHODmulEM4BfQP4zg9eoOI`, Implementation · Analyst · Batch · Blocked on Nothing · Phase 19 · `#698 #1093 #1100 #1103`. `Review` is yours to set.
+
+## r4 — your re-grade (16:28Z, APPROVED at `dd420ebe1`) — the condition before RUN, landed
+The step-7 log read now lives in `server/scripts/lib/app-log-reader.ts`: it reads the TAIL when more than its 8 MiB cap was written (your 13.1-22.1 MB/min measurement), follows a copy-then-truncate rotation into the newest `out__<date>.log` from the old offset, and reports `bytesSinceOffset` / `capped` / `rotated` / `rotatedFrom` / `error` in the READ-BACK and in the miss message. Tests (unit §6, real temp files): small write; more than the cap with the line at the end; a rotation; an unreadable file — a head read fails exactly the cap test, dropping the sibling read fails exactly the rotation test. Your within-bucket residual (~7.14%, ≈ $135-155) is recorded in PRE_AUDIT §16.7.

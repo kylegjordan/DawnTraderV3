@@ -45,9 +45,9 @@
  *    "nothing deleted" is the pre-run population counted twice. Two operator routes (close-trade/:id,
  *    force-clear-stranded) do insert at close — this run calls neither, and one called by hand mid-run would show here.
  */
-import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { db } from '../db.js';
+import { logOffsets, readLogsSince, type LogReadReport } from './lib/app-log-reader.js';
 import { sql } from 'drizzle-orm';
 import { executeReanchor, getAnchorState } from '../services/portfolio-anchor-service.js';
 import { evaluatePaperSizeBand } from '../services/paper-size-band.js';
@@ -132,30 +132,6 @@ async function readBand(): Promise<{ low: number; high: number; target: number }
     && (band.low as number) < (band.high as number);
   if (!ok) refuse(`the paper_size_band rows are not three finite values with low < high (read: ${JSON.stringify(Object.fromEntries(m))})`);
   return band as { low: number; high: number; target: number };
-}
-
-/** Byte offsets of the app's log files now, so a later read sees only what was written after this instant. */
-function logOffsets(): Map<string, number> {
-  return new Map(APP_LOGS.map((f) => { try { return [f, statSync(f).size] as [string, number]; } catch { return [f, -1] as [string, number]; } }));
-}
-/** What the app has logged since `offsets` (a file that rotated — now shorter — is read from its start). */
-function logTextSince(offsets: Map<string, number>): string {
-  let out = '';
-  for (const [f, from] of offsets) {
-    if (from < 0) continue;
-    try {
-      const size = statSync(f).size;
-      const start = size < from ? 0 : from;
-      if (size <= start) continue;
-      const fd = openSync(f, 'r');
-      try {
-        const buf = Buffer.alloc(Math.min(size - start, 8 * 1024 * 1024));
-        readSync(fd, buf, 0, buf.length, start);
-        out += buf.toString('utf8');
-      } finally { closeSync(fd); }
-    } catch { /* unreadable: the caller reports "no verdict line" */ }
-  }
-  return out;
 }
 
 /** The paper kill switch, as the app reads it (Langston condition 2: a reset must not finish with trading latched shut). */
@@ -296,7 +272,7 @@ async function main() {
   // ── (6) start, continuing ────────────────────────────────────────────────────────────────────────────────────
   state.step = '6';
   if (await engineRunning()) refuse('the engine is RUNNING already — somebody started it during the reset, at whatever size was set then');
-  const logsBeforeStart = logOffsets();
+  const logsBeforeStart = logOffsets(APP_LOGS);
   const startRequestedAt = new Date();
   const start = await api('POST', '/active-engine/start', { mode: 'continue' });
   if (start.status !== 200 || !start.json?.success) refuse(`start failed (HTTP ${start.status}: ${start.json?.error ?? 'no body'})`);
@@ -318,9 +294,14 @@ async function main() {
   // THE LIVE BAND MONITOR'S OWN VERDICT (Langston's nit, taken): the start hook runs `checkPaperSizeBand` inside the app
   // — resolving its inputs exactly as it will on every close — and logs one `[PaperSizeBand][<VERDICT>] trigger=engine_start`
   // line. That line is what is asserted. It is fire-and-forget after the start, so it is waited for (up to 60 s).
+  // The reader takes the NEWEST bytes when more than its cap was written, and follows a rotation into the rotated file
+  // (Langston's re-grade condition: out.log grows 13-22 MB a minute and rotates at 1 GB); its report says which.
   let bandLine: string | null = null;
+  let logReport: LogReadReport[] = [];
   for (let waited = 0; waited <= 60_000 && !bandLine; waited += 2_000) {
-    const m = logTextSince(logsBeforeStart).match(/\[PaperSizeBand\]\[(IN|LOW|HIGH|UNREADABLE)\] trigger=engine_start[^\n]*/);
+    const read = readLogsSince(logsBeforeStart);
+    logReport = read.report;
+    const m = read.text.match(/\[PaperSizeBand\]\[(IN|LOW|HIGH|UNREADABLE)\] trigger=engine_start[^\n]*/);
     if (m) bandLine = m[0];
     else await new Promise((r) => setTimeout(r, 2_000));
   }
@@ -346,6 +327,7 @@ async function main() {
     killSwitchTripped: killSwitchAfter,
     band,
     bandMonitorLine: bandLine,
+    bandMonitorLogRead: logReport.map((r) => ({ file: r.file, bytesSinceOffset: r.bytesSinceOffset, capped: r.capped, rotated: r.rotated, rotatedFrom: r.rotatedFrom, error: r.error })),
     bandFormulaCrossCheck: { status: verdict.status, size: Number.isFinite(verdict.size) ? Number(verdict.size.toFixed(2)) : null },
   };
   console.log(`[${RESET_TAG}][7] READ-BACK ${JSON.stringify(readBack)}`);
@@ -357,7 +339,7 @@ async function main() {
   if (rowsAfter !== rowsBefore) problems.push(`paper rows opened before the run: ${rowsBefore} at step 0, ${rowsAfter} now — rows were deleted, or a close route that inserts at close ran mid-reset`);
   if (resetAfter !== resetCount) problems.push(`'reset' closes moved from ${resetCount} to ${resetAfter} after the stop`);
   if (killSwitchAfter) problems.push('the paper KILL SWITCH IS TRIPPED — the engine is running but will not trade');
-  if (!bandLine) problems.push(`no band-monitor verdict line (trigger=engine_start) in ${APP_LOGS.join(' / ')} within 60 s of the start`);
+  if (!bandLine) problems.push(`no band-monitor verdict line (trigger=engine_start) within 60 s of the start — read: ${JSON.stringify(logReport.map((r) => ({ f: r.file, bytes: r.bytesSinceOffset, capped: r.capped, rotated: r.rotated, err: r.error })))}`);
   else if (!bandLine.startsWith('[PaperSizeBand][IN]')) problems.push(`the live band monitor says: ${bandLine}`);
   if (verdict.status !== 'in') problems.push(`the band formula at the app's balance says ${verdict.status} ($${verdict.size})`);
   if (problems.length) {

@@ -76,6 +76,10 @@ vi.mock('../../storage.js', async (orig) => {
 import { evaluatePaperSizeBand, checkPaperSizeBand, readPaperSizeBand, bandDedupeKey } from '../../services/paper-size-band.js';
 import { ActivePortfolioManager } from '../../services/active-portfolio-manager.js';
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
+import { appendFileSync, copyFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { logOffsets, readLogsSince } from '../../scripts/lib/app-log-reader.js';
 
 const BAND = { low: 140, high: 150, target: 145 };
 const PROV = { producer: 'crypto_ws_book_walk' as const, source: 'kraken_ws', observedAtMs: 1 };
@@ -386,5 +390,56 @@ describe('5 — #1100: the stop never sells a resting maker buy that never fille
     expect(res.error).toMatch(/not pending/);
     expect(h.updateClosedTrade).not.toHaveBeenCalled();
     expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
+  });
+});
+
+describe('6 — the app-log reader finds a line written at the NEW end (Langston re-grade condition)', () => {
+  const LINE = '2026-10-02 20:16:03 +00:00: [PaperSizeBand][IN] trigger=engine_start size=$145.50\n';
+  const junk = (n: number) => 'x'.repeat(n - 1) + '\n';
+  let dir: string;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'inc3-logs-')); });
+
+  it('a small write: the line is read, nothing capped', () => {
+    const f = join(dir, 'out.log');
+    writeFileSync(f, junk(500));
+    const off = logOffsets([f]);
+    appendFileSync(f, LINE);
+    const { text, report } = readLogsSince(off, 1024);
+    expect(text).toContain('[PaperSizeBand][IN] trigger=engine_start');
+    expect(report[0]).toMatchObject({ capped: false, rotated: false, bytesSinceOffset: Buffer.byteLength(LINE), error: null });
+  });
+
+  // MUTATION: read from the offset forward (the head) instead of the tail and this line — written after more than the
+  // cap — is never reached; on staging the cap is consumed in ~23-38 s of the 60 s wait.
+  it('more than the cap written, the line at the end: the TAIL is read, and the report says capped', () => {
+    const f = join(dir, 'out.log');
+    writeFileSync(f, junk(100));
+    const off = logOffsets([f]);
+    appendFileSync(f, junk(5000));
+    appendFileSync(f, LINE);
+    const { text, report } = readLogsSince(off, 1024);
+    expect(text).toContain('[PaperSizeBand][IN] trigger=engine_start');
+    expect(report[0].capped).toBe(true);
+    expect(report[0].bytesSinceOffset).toBe(5000 + Buffer.byteLength(LINE));
+  });
+
+  // MUTATION: drop the rotated-sibling read and the line — written before the rotation — is lost.
+  it('a rotation after the offset (pm2-logrotate copies, then truncates): the line is found in the rotated file', () => {
+    const f = join(dir, 'out.log');
+    writeFileSync(f, junk(800));
+    const off = logOffsets([f]);
+    appendFileSync(f, LINE);
+    copyFileSync(f, join(dir, 'out__2026-10-02_20-16-05.log'));
+    writeFileSync(f, junk(50)); // truncated, then new writes
+    const { text, report } = readLogsSince(off, 4096);
+    expect(text).toContain('[PaperSizeBand][IN] trigger=engine_start');
+    expect(report[0].rotated).toBe(true);
+    expect(report[0].rotatedFrom).toMatch(/out__2026-10-02_20-16-05\.log$/);
+  });
+
+  it('a file that could not be read when the offset was taken is reported, not silently skipped', () => {
+    const off = logOffsets([join(dir, 'missing.log')]);
+    const { report } = readLogsSince(off);
+    expect(report[0].error).toMatch(/unreadable/);
   });
 });
