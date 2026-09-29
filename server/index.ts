@@ -10,7 +10,6 @@ import { marketDataHealthCheck } from "./services/market-data-health-check";
 import { healthRouter } from "./routes/health.js"; // Phase 41F-D/F: Health monitoring routes
 import { statusRouter } from "./routes/status.js"; // Phase 1: Status and version routes
 import dseRouter from "./routes/dse.js"; // Directive 11.3: Dynamic Sizing Engine routes
-import chapletRouter from "../chaplet/index.js"; // Phase M4: Chaplet Context Service
 import { env } from "./config/index.js"; // Phase 1: Typed environment config
 import regimeMapRouter from "./routes/regime-map.js"; // Phase 14: Dynamic regime map API
 import version from "./version.json";
@@ -499,10 +498,10 @@ app.use((req, res, next) => {
   // Directive 11.3: Mount Dynamic Sizing Engine routes
   app.use('/api/diagnostics', dseRouter);
   
-  // Phase M4: Mount Chaplet Context Service (read-only)
-  app.use('/chaplet', chapletRouter);
-  console.log('[Server] Chaplet mounted at /chaplet (read-only)');
-  
+  // B-CHAPLET-OFF-HOTFIX (#1101): the Phase M4 Chaplet router is no longer mounted. It served the
+  // deployed file tree to the public internet with no authentication. Its code is deleted in
+  // B-CHAPLET-DELETE (rule 18); do not re-mount it.
+
   console.log('[Server] API routes mounted at /api');
 
   // Phase 41F-B-5: Initialize operation queues and clear orphaned state
