@@ -17,8 +17,11 @@ Item: { id, requester, summary, pointer, state, gate_type, blocked_on, added_ts,
   blocked_on = { who: CC-A|CC-B|Kyle, want: "<awaited artifact/commit>" } | None
 """
 import json
+import os
 import re
 import time
+import fcntl
+import contextlib
 from pathlib import Path
 
 # Priority order (Langston §6a): a step4-diff blocks a CC's push → it jumps ahead of a
@@ -91,7 +94,11 @@ def new_item(item_id, requester, summary, pointer=None, gate_type=None, now=None
     now = now if now is not None else time.time()
     gt = gate_type if gate_type in GATE_PRIORITY else DEFAULT_GATE
     return {
-        "id": str(item_id), "requester": requester, "summary": (summary or "")[:500],
+        # OBJ-1 (#488, Kyle-approved 2026-07-10 / signed off 2026-07-11): the `[:500]` slice is
+        # DELETED. It chopped Langston's review summaries mid-sentence, so a re-feed handed him a
+        # truncated review and he couldn't complete it (it parked the items Kyle surfaced 2026-07-11).
+        # The summary is stored whole. Kyle: "remove the limit rather than announce it."
+        "id": str(item_id), "requester": requester, "summary": (summary or ""),
         "pointer": pointer, "state": "ready", "gate_type": gt,
         "blocked_on": None, "added_ts": now, "last_touched_ts": now,
     }
@@ -247,15 +254,29 @@ def pick_next_ready(items):
     return sorted(ready, key=lambda i: (GATE_PRIORITY.get(i.get("gate_type"), 99), i.get("added_ts", 0)))[0]
 
 
+TERMINAL_STATES = ("done", "noop", "error")
+
+
 def apply_marker(items, marker, now=None):
     """Transition the item named by the marker. Returns (item, action) where action ∈
-    done|blocked|error|unknown-id. Pure (mutates the items list in place)."""
+    done|blocked|error|noop|ready|unknown-id|dup-terminal. Pure (mutates the items list in place).
+
+    OBJ-4 (#401): a SECOND, CONTRADICTORY verdict on an already-terminal item is NOT silently
+    applied. A terminal item (done|noop|error) may only leave that state via an explicit `ready`
+    un-park; any other marker on it (e.g. a `blocked`/`error` arriving after `done`, or a second
+    differing verdict) is a duplicate/contradiction — returned as `dup-terminal` WITHOUT mutating,
+    so the bridge can flag it instead of letting a late verdict quietly overwrite a settled one. An
+    identical repeat (same terminal status) is a harmless no-op and is also reported as dup-terminal
+    (idempotent — nothing changes)."""
     now = now if now is not None else time.time()
     item = next((i for i in items if i.get("id") == marker.get("id")), None)
     if item is None:
         return None, "unknown-id"
-    item["last_touched_ts"] = now
     st = marker["status"]
+    # OBJ-4 guard: don't overwrite a terminal state except via the sanctioned `ready` un-park.
+    if item.get("state") in TERMINAL_STATES and st != "ready":
+        return item, "dup-terminal"
+    item["last_touched_ts"] = now
     if st == "done":
         item["state"] = "done"
         item.pop("self_advance_refires", None)   # R4 (#345): terminal settle clears the per-id re-fire counter
@@ -331,9 +352,96 @@ def load_queue(path):
         return []
 
 
-def save_queue(path, items, keep_done=20):
-    """Persist. Prune oldest done/error beyond keep_done so the file can't grow unbounded."""
-    terminal = [i for i in items if i.get("state") in ("done", "error")]
-    live = [i for i in items if i.get("state") not in ("done", "error")]
-    terminal.sort(key=lambda i: i.get("last_touched_ts", 0), reverse=True)
-    Path(path).write_text(json.dumps(live + terminal[:keep_done], indent=2))
+# OBJ-3 (#489): terminal items beyond keep_done are MOVED to this append-only archive,
+# never deleted. Same directory as the live file (default alongside it).
+def _archive_path(path):
+    return str(path) + ".archive.jsonl"
+
+
+def _lock_path(path):
+    return str(path) + ".lock"
+
+
+@contextlib.contextmanager
+def queue_lock(path):
+    """OBJ-5 (#495): serialize the read-modify-write across writers. Hold this around a
+    load_queue → mutate → save_queue sequence so a second writer cannot clobber the first's
+    changes (the lost-update race that the 17-day ghost bridge made real). An exclusive
+    advisory flock on a sidecar lockfile; released on context exit even if the body raises."""
+    lp = _lock_path(path)
+    fd = os.open(lp, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
+def locked_update(path, mutate):
+    """OBJ-5: the atomic read-modify-write primitive. Holds queue_lock across load → mutate →
+    save so no interleaving writer can lose an update. `mutate(items)` edits the list in place
+    (its return value, if any, is returned to the caller). Prefer this over separate
+    load_queue()/save_queue() calls in any path that MUTATES the queue."""
+    with queue_lock(path):
+        items = load_queue(path)
+        result = mutate(items)
+        save_queue(path, items, _locked=True)
+        return result
+
+
+def save_queue(path, items, keep_done=100000, _locked=False):
+    """Persist the review queue — MOVE-NOT-DELETE, atomic, and lock-serialized.
+
+    OBJ-3 (#489, DATA-LOSS): this function NEVER deletes a terminal item. Terminal items
+    (done|error) beyond keep_done are APPENDED to an append-only archive (`<path>.archive.jsonl`)
+    and fsync'd to disk BEFORE the live file is replaced, then dropped from the live file — the
+    exact move-not-delete discipline B-STORAGE-HARDEN imposes on 25 GB of database, applied to
+    the one file that holds the reviewer's verdicts. Every eviction is logged by id. The prior
+    version silently DELETED the least-recently-touched terminal rows (its docstring wrongly said
+    "oldest"); on 2026-07-10 it destroyed three completed verdicts, incl. id 1525099586660733028
+    ("STOP. The twelfth error is live..."). keep_done stays high (default 100000) so eviction is
+    rare, but even at the cap nothing is lost — it is archived.
+
+    OBJ-5 (#495): the write is atomic (temp file + os.replace) and serialized by queue_lock, so a
+    concurrent writer can neither see a half-written file nor clobber another's update. When called
+    via locked_update the lock is already held (`_locked=True` skips re-acquiring it — flock is not
+    reentrant across separate open fds).
+    """
+    def _write():
+        terminal = [i for i in items if i.get("state") in ("done", "error")]
+        live = [i for i in items if i.get("state") not in ("done", "error")]
+        # sort terminal newest-first; anything beyond keep_done is EVICTED (archived, not deleted)
+        terminal.sort(key=lambda i: i.get("last_touched_ts", 0), reverse=True)
+        keep = terminal[:keep_done]
+        evicted = terminal[keep_done:]
+        if evicted:
+            # move-not-delete: append to the archive and fsync BEFORE the live file loses them
+            arch = _archive_path(path)
+            with open(arch, "a") as af:
+                for it in evicted:
+                    af.write(json.dumps(it) + "\n")
+                af.flush()
+                os.fsync(af.fileno())
+            try:
+                with open("/var/log/langston-queue-evictions.log", "a") as lf:
+                    lf.write("%s archived %d terminal item(s) to %s: %s\n" % (
+                        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        len(evicted), arch, [i.get("id") for i in evicted]))
+            except Exception:
+                pass
+        # atomic replace: temp in same dir → fsync → os.replace (never a torn live file)
+        tmp = "%s.tmp.%d" % (path, os.getpid())
+        with open(tmp, "w") as tf:
+            tf.write(json.dumps(live + keep, indent=2))
+            tf.flush()
+            os.fsync(tf.fileno())
+        os.replace(tmp, path)
+
+    if _locked:
+        _write()
+    else:
+        with queue_lock(path):
+            _write()
