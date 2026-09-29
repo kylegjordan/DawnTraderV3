@@ -8806,6 +8806,8 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ➕ **#1043 evidence 2 (Langston, 2026-09-29 ~13:03Z; recorded by CC-C) — A NEW SHAPE: EMPTY UNDER HTTP 200.** The sha-pinned raw read of `B_SIZING_DEC_RESTORE_PRE_AUDIT.md` at `9c4476e87` returned **HTTP 200 with 0 bytes**; `dt-review` served 73,928 B at the same sha. **Empty-under-200 is caught by a `[ -s ]` check and missed by a status check** — the verify in row 4.51a must test size and content, not the status code.
 
+➕ **#1043 evidence 3 (Langston, 2026-09-29 ~14:09Z; recorded by CC-C):** reviewing `B-SIZING-DEC-RESTORE` §16 at `66da5e666`, the sha-pinned raw read of the pre-audit returned the `B-GOV-HYGIENE-ANALYST-1` pre-audit (8,162 B) under HTTP 200; `dt-review show` at the same sha returned the right file (89,690 B). The same file name and byte count as the wrong reads at 10:53Z (89 lines) and 12:19Z (8,162 B) — consistent with a repeated substitution of one blob rather than random corruption; not proven the same object (no blob hash was captured).
+
 **SYMPTOM, TWO INSTANCES (Langston, 2026-09-11):**
 1. **Step 4, ~16:45Z:** a pinned-sha raw GET for `scripts/analysis/test-wake-filter-cuts.py` returned a 31-line `_send_chunks` chunking test instead of the 97-line file. The identical URL, re-run, returned the right file, and `dt-review show` agreed.
 2. **Step 8, ~17:00Z:** a pinned-sha raw GET for `B_WAKE_LEAD_NAME_PRE_AUDIT.md` returned **8,162 bytes of `B-GOV-HYGIENE-ANALYST-1 — PRE-AUDIT`**. That content has never existed at that path at any commit; the file at the ref is 19,199 B. The identical command four minutes later was correct.

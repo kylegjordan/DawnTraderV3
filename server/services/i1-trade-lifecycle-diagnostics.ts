@@ -28,6 +28,7 @@ type CloseReason =
   | 'max_holding_period'
   | 'guardrail'
   | 'manual_stop'
+  | 'reset'  // B-SIZING-DEC-RESTORE increment 3: the PAPER-RESET-3000 flatten
   | 'engine_stop_cleanup'  // Phase 8.8.3-I3: Added for trade reconciliation on stop
   | 'unknown';
 
@@ -231,7 +232,8 @@ class I1TradeLifecycleDiagnosticsService {
     symbol: string,
     strategy: string,
     exitPrice: number,
-    pnl: number
+    pnl: number,
+    closeReason: 'manual_stop' | 'reset' = 'manual_stop'
   ): void {
     const event: TradeLifecycleEvent = {
       tradeId,
@@ -239,7 +241,7 @@ class I1TradeLifecycleDiagnosticsService {
       strategy,
       eventType: 'TRADE_FORCE_CLOSE',
       source: 'hard_stop',
-      closeReason: 'manual_stop',
+      closeReason,
       exitPrice,
       pnl,
       timestamp: new Date()
@@ -248,10 +250,10 @@ class I1TradeLifecycleDiagnosticsService {
     this.totalForceClosed++;
     this.totalClosed++;
     
-    if (!this.byCloseReason['manual_stop']) {
-      this.byCloseReason['manual_stop'] = 0;
+    if (!this.byCloseReason[closeReason]) {
+      this.byCloseReason[closeReason] = 0;
     }
-    this.byCloseReason['manual_stop']++;
+    this.byCloseReason[closeReason]++;
     
     if (!this.byStrategy[strategy]) {
       this.byStrategy[strategy] = { opened: 0, closed: 0 };

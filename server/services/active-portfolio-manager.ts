@@ -7,6 +7,7 @@ import { SignalOrchestrator } from './signal-orchestrator';
 import type { StrategySignal } from './strategy-engine';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { livePricingAdapter, type PriceProducer } from './live-pricing-adapter.js';
+import type { FlattenCloseType } from './active-execution-engine';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -266,6 +267,59 @@ export class ActivePortfolioManager {
    * @returns Summary of closure results for diagnostics
    */
   /**
+   * B-SIZING-DEC-RESTORE increment 3 (PRE_AUDIT §16.4 B2): the flatten's price resolution, EXTRACTED so the flatten
+   * and the read-only pre-check (`flattenPrecheck`, `GET /active-engine/flatten-precheck`) call the SAME code and can
+   * never disagree about which positions can be closed. Order unchanged: a quote of any source but
+   * `no_reliable_price`, else the best bid of the depth snapshot the fill will walk, else null (no observed price).
+   */
+  async resolveFlattenPrice(
+    position: { id: string; symbol: string; assetClass?: string | null },
+  ): Promise<{ price: number; provenance: { producer: PriceProducer; source: string; observedAtMs: number | null }; sourceLabel: string } | null> {
+    const { getDepthSnapshot } = await import('./execution/depth-source.js');
+    const { asValidAssetClass, safeResolveAssetClass } = await import('../../shared/asset-classes.js');
+    const cls = asValidAssetClass(position.assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
+
+    const quote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
+    if (quote && quote.price && quote.source !== 'no_reliable_price') {
+      return {
+        price: quote.price,
+        provenance: { producer: quote.producer, source: quote.source, observedAtMs: quote.observedAt },
+        sourceLabel: quote.source,
+      };
+    }
+    if (cls) {
+      const snap = await getDepthSnapshot(position.symbol, cls);
+      const bestBid = snap?.bids?.[0]?.price;
+      if (snap && typeof bestBid === 'number' && bestBid > 0) {
+        return {
+          price: bestBid,
+          provenance: {
+            producer: cls === 'xstock_spot' ? 'xstock_ticker_snap_walk' : 'crypto_ws_book_walk',
+            source: cls === 'xstock_spot' ? 'kraken_equities_ws' : 'kraken_ws',
+            observedAtMs: Date.now() - snap.ageMs,
+          },
+          sourceLabel: 'book_best_bid',
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * B-SIZING-DEC-RESTORE increment 3 (§16.4 B2): READ-ONLY — which open positions could be flattened right now.
+   * Closes nothing by construction; the reset script refuses to stop the engine unless every row has a price.
+   */
+  async flattenPrecheck(): Promise<Array<{ positionId: string; symbol: string; hasObservedPrice: boolean; source: string | null }>> {
+    const open = await storage.getActiveOpenPositions(this.mode);
+    const out: Array<{ positionId: string; symbol: string; hasObservedPrice: boolean; source: string | null }> = [];
+    for (const position of open) {
+      const resolved = await this.resolveFlattenPrice(position);
+      out.push({ positionId: position.id, symbol: position.symbol, hasObservedPrice: resolved !== null, source: resolved?.sourceLabel ?? null });
+    }
+    return out;
+  }
+
+  /**
    * ⛔⛔ B-FEED-MISMATCH-FIX P2 — THE ONE FLATTEN PATH. Every operator/stop flatten (engine stop, kill switch,
    * close-all, stranded clear) closes ONE position through here, so all of them get the order placer's walk,
    * the fee, the provenance stamps and the C3 non-filled rule — none books its own price any more.
@@ -285,32 +339,12 @@ export class ActivePortfolioManager {
   private async _flattenOne(
     position: { id: string; symbol: string; assetClass?: string | null },
     tag: string,
+    closeType: FlattenCloseType,
   ): Promise<{ status: 'closed' | 'left_open' | 'failed'; reason?: string }> {
-    const { getDepthSnapshot } = await import('./execution/depth-source.js');
-    const { asValidAssetClass, safeResolveAssetClass } = await import('../../shared/asset-classes.js');
-    const cls = asValidAssetClass(position.assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
-
-    let price: number | null = null;
-    let provenance: { producer: PriceProducer; source: string; observedAtMs: number | null } | null = null;
-    let label = '';
-    const quote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
-    if (quote && quote.price && quote.source !== 'no_reliable_price') {
-      price = quote.price;
-      provenance = { producer: quote.producer, source: quote.source, observedAtMs: quote.observedAt };
-      label = `${tag}_${quote.source}`;
-    } else if (cls) {
-      const snap = await getDepthSnapshot(position.symbol, cls);
-      const bestBid = snap?.bids?.[0]?.price;
-      if (snap && typeof bestBid === 'number' && bestBid > 0) {
-        price = bestBid;
-        provenance = {
-          producer: cls === 'xstock_spot' ? 'xstock_ticker_snap_walk' : 'crypto_ws_book_walk',
-          source: cls === 'xstock_spot' ? 'kraken_equities_ws' : 'kraken_ws',
-          observedAtMs: Date.now() - snap.ageMs,
-        };
-        label = `${tag}_book_best_bid`;
-      }
-    }
+    const resolved = await this.resolveFlattenPrice(position);
+    const price = resolved?.price ?? null;
+    const provenance = resolved?.provenance ?? null;
+    const label = resolved ? `${tag}_${resolved.sourceLabel}` : '';
 
     if (price === null || provenance === null) {
       console.error(`[B-FEED-MISMATCH-FIX][FLATTEN_LEFT_OPEN] ${position.symbol} pos=${position.id} (${tag}): no quote and no book — NOT closed, NOT deleted`);
@@ -333,7 +367,7 @@ export class ActivePortfolioManager {
       return { status: 'left_open', reason: 'no observed price (no quote, no book)' };
     }
 
-    const result = await this.executionEngine.forceClosePosition(position.id, price, label, provenance);
+    const result = await this.executionEngine.forceClosePosition(position.id, price, label, provenance, closeType);
     if (!result.success) return { status: 'failed', reason: result.error };
     const stillOpen = await storage.getActiveOpenPosition(this.mode, position.id);
     if (stillOpen) {
@@ -343,7 +377,9 @@ export class ActivePortfolioManager {
     return { status: 'closed' };
   }
 
-  async forceCloseAllOpenPositionsOnStop(): Promise<{
+  // B-SIZING-DEC-RESTORE increment 3 (§16.4 B1): `closeType` labels every row this flatten writes; the reset passes
+  // 'reset'. Default 'manual_stop' keeps every existing stop exactly as it was.
+  async forceCloseAllOpenPositionsOnStop(closeType: FlattenCloseType = 'manual_stop'): Promise<{
     closedCount: number;
     failedCount: number;
     skippedCount: number;
@@ -387,7 +423,7 @@ export class ActivePortfolioManager {
         // ⛔ B-FEED-MISMATCH-FIX P2 — ONE FLATTEN PATH, NO ENTRY-PRICE REQUEST. This loop used to request the
         // close at `position.avgPrice` when no quote existed, which made the recorded slippage equal the trade's
         // gross P&L with its sign inverted. `_flattenOne` resolves an OBSERVED price or leaves the position open.
-        const outcome = await this._flattenOne(position, 'manual_stop');
+        const outcome = await this._flattenOne(position, closeType, closeType);
         if (outcome.status === 'closed') {
           closedCount++;
           details.push({ positionId: position.id, symbol: position.symbol, status: 'closed', reason: outcome.reason });
@@ -645,7 +681,7 @@ export class ActivePortfolioManager {
     let closed = 0, leftOpen = 0, failed = 0;
     for (const position of openPositions) {
       try {
-        const outcome = await this._flattenOne(position, 'manual_close_all');
+        const outcome = await this._flattenOne(position, 'manual_close_all', 'manual_stop');
         if (outcome.status === 'closed') closed++;
         else if (outcome.status === 'left_open') leftOpen++;
         else failed++;

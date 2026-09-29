@@ -596,10 +596,17 @@ import { getStrategyDependency, type RegimeStability } from '../config/strategy-
 import { INTERIM_NO_POSTURE_MODE, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 
 interface ExitCondition {
-  type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
+  type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop' | 'reset';
   price?: number;
   reason: string;
 }
+
+/**
+ * B-SIZING-DEC-RESTORE increment 3 (PRE_AUDIT §16.4 B1): the close CONDITION of an operator flatten. `reset` is
+ * Kyle's PAPER-RESET-3000 — the engine's own stop flattens the book (race-free: new trades are blocked first) and
+ * each row lands with `close_reason = 'reset'`, machine-readable, so other windows can exclude it by query (CC-B).
+ */
+export type FlattenCloseType = 'manual_stop' | 'reset';
 
 // Phase 8.8.3-AJ8: Session tracking for RTB metrics reset
 // Metrics only count from session start - resetting when engine stops
@@ -958,6 +965,17 @@ export class ActiveExecutionEngine {
           .then(({ evaluateDailyLossBudgetOnClose }) => evaluateDailyLossBudgetOnClose(_dlbMode))
           .catch((err: any) => console.error('[DailyLossBudget] hook dispatch error:', err?.message ?? err));
       });
+
+      // B-SIZING-DEC-RESTORE increment 3 (P4 / obj-14): the paper size band, on every paper close — the balance moves
+      // only when a trade closes (F10). Same shape as the daily-loss hook: tick-deferred, fire-and-forget, LOGS a
+      // failure and never throws into the close path (its fail-hard is at boot, PRE_AUDIT §16.4 C1).
+      if (_dlbMode === 'paper') {
+        setImmediate(() => {
+          void import('./paper-size-band.js')
+            .then(({ checkPaperSizeBand }) => checkPaperSizeBand('close'))
+            .catch((err: any) => console.error('[PaperSizeBand] close hook error:', err?.message ?? err));
+        });
+      }
 
       await this.checkRtbPromotion();
     };
@@ -1395,6 +1413,9 @@ export class ActiveExecutionEngine {
     // the literal `exitProvenance` inside this method's span and passes green whether or not the
     // value was `undefined` at runtime — the one hole the fence structurally cannot see.
     provenance: { producer: PriceProducer; source: string; observedAtMs: number | null },
+    // B-SIZING-DEC-RESTORE increment 3: the close condition — was a hardcoded 'manual_stop'. REQUIRED (the one
+    // production caller, `_flattenOne`, passes it) so a caller cannot silently mislabel a reset as a manual stop.
+    closeType: FlattenCloseType,
   ): Promise<{ success: boolean; error?: string }> {
     console.log('[DEBUG-B9][ENGINE_FORCE_CLOSE]', {
       positionId,
@@ -1405,9 +1426,11 @@ export class ActiveExecutionEngine {
 
     try {
       const exitCondition: ExitCondition = {
-        type: 'manual_stop',
+        type: closeType,
         price: exitPrice,
-        reason: 'Manual stop requested by user',
+        reason: closeType === 'reset'
+          ? 'Paper reset (PAPER-RESET-3000): flattened by the engine stop'
+          : 'Manual stop requested by user',
       };
 
       await this.closePosition(positionId, exitPrice, exitCondition, priceSource, {
@@ -4276,7 +4299,9 @@ export class ActiveExecutionEngine {
       // P19-B8.5f (OBJ-5): was 'UNKNOWN'. Correct now that OBJ-1 makes this exit actually
       // fire — see the MAX_HOLD note on AJ19BCloseEvent.closeReason.
       'max_holding_period': 'MAX_HOLD',
-      'guardrail': 'KILL_SWITCH'
+      'guardrail': 'KILL_SWITCH',
+      // B-SIZING-DEC-RESTORE increment 3: the reset's flatten runs inside the engine stop.
+      'reset': 'ENGINE_STOP'
     };
     
     // Log AJ19-B close event
@@ -4332,14 +4357,15 @@ export class ActiveExecutionEngine {
     });
 
     // [8.8.3-I1] Trade lifecycle close event
-    const isForceClose = exitCondition.type === 'manual_stop' || exitCondition.type === 'guardrail';
+    const isForceClose = exitCondition.type === 'manual_stop' || exitCondition.type === 'guardrail' || exitCondition.type === 'reset';
     if (isForceClose) {
       i1TradeLifecycleDiagnostics.logForceClose(
         trade?.id || positionId,
         position.symbol,
         position.strategyName || 'unknown',
         actualExitPrice,
-        netPnl
+        netPnl,
+        exitCondition.type === 'reset' ? 'reset' : 'manual_stop'
       );
     } else {
       const closeReason = exitCondition.type as any;
@@ -4375,7 +4401,7 @@ export class ActiveExecutionEngine {
     );
     
     // Phase 8.8.3-C5-1: Balance Reconciliation after trade close
-    const isManualClose = exitCondition.type === 'manual_stop';
+    const isManualClose = exitCondition.type === 'manual_stop' || exitCondition.type === 'reset';
     await c5FinancialDiagnostics.logBalanceReconciliation(
       this.mode,
       isManualClose ? 'manual_close' : 'trade_close'

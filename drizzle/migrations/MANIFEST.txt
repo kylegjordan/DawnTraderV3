@@ -210,3 +210,4 @@
 2026-09-29-b-sizing-p5-guardrail-pct-range.sql
 2026-09-29-b-sizing-inc2a-retire-max-open-positions.sql
 2026-09-29-b-sizing-inc2b-position-pct-floor.sql
+2026-09-29-b-sizing-inc3-paper-size-band.sql

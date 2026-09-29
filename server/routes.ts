@@ -11577,9 +11577,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     const userId = req.user!.id;
     
     try {
+      // B-SIZING-DEC-RESTORE increment 3 (PRE_AUDIT §16.4 B1): an optional `reason`. 'reset' labels every close the
+      // stop's flatten writes `close_reason = 'reset'` (PAPER-RESET-3000); absent keeps 'manual_stop'. Anything else
+      // is refused rather than guessed.
+      const reason = (req.body || {}).reason;
+      if (reason !== undefined && reason !== 'reset') {
+        return res.status(400).json({ error: 'reason must be "reset" or absent', received: reason });
+      }
       // Use unified service function to ensure consistent state management
       const { stopActiveEngine } = await import('./services/active-engine-service.js');
-      const result = await stopActiveEngine(userId);
+      const result = await stopActiveEngine(userId, reason === 'reset' ? 'reset' : 'manual_stop');
       
       // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
       
@@ -13254,7 +13261,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Calculate analytics
       const closedAtTP = trades.filter(t => t.closeReason === 'target_hit');
       const closedAtSL = trades.filter(t => t.closeReason === 'stop_hit');
-      const closedManually = trades.filter(t => t.closeReason === 'manual_close' || t.closeReason === 'timeout');
+      // B-SIZING-DEC-RESTORE increment 3: the PAPER-RESET-3000 flatten is an operator close too.
+      const closedManually = trades.filter(t => t.closeReason === 'manual_close' || t.closeReason === 'timeout' || t.closeReason === 'reset');
       
       // B-PHANTOM-FILL-RECONSTRUCT: classify on the HONEST figure, not the recorded one.
       // MEASURED on the live table: of the 21 phantom-fill rows, 11 were recorded as wins and
@@ -13574,6 +13582,24 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // B7.A: Duplicate reset route removed - use main route at /api/active-engine/reset with hard reset service
+
+  // B-SIZING-DEC-RESTORE increment 3 (PRE_AUDIT §16.4 B2): READ-ONLY. Which open paper positions the engine's stop
+  // could flatten right now — the same price resolution the flatten uses. Closes nothing, by construction; the reset
+  // script refuses to stop the engine unless every position has an observed price.
+  apiRouter.get('/active-engine/flatten-precheck', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+      const manager = getGlobalActiveEngineManager('paper');
+      if (!manager) {
+        return res.status(400).json({ ok: false, error: 'Paper engine not running — nothing to pre-check' });
+      }
+      const positions = await manager.flattenPrecheck();
+      res.json({ ok: true, positions, allPriced: positions.every((p: { hasObservedPrice: boolean }) => p.hasObservedPrice), count: positions.length });
+    } catch (error: any) {
+      console.error('[B-SIZING-DEC-RESTORE][FLATTEN_PRECHECK] failed:', error);
+      res.status(500).json({ ok: false, error: error?.message || 'flatten pre-check failed' });
+    }
+  });
 
   apiRouter.get('/active-engine/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

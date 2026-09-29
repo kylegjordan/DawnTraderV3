@@ -6,6 +6,7 @@
  */
 
 import { nanoid } from 'nanoid';
+import type { FlattenCloseType } from './active-execution-engine';
 import { storage } from '../storage.js';
 import type { InsertActiveEngineSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
@@ -725,6 +726,14 @@ export async function startActiveEngine(
         
         // Phase 8.8.3-C5-1: Balance Reconciliation at session start
         await c5FinancialDiagnostics.logBalanceReconciliation('paper', 'session_start');
+
+        // B-SIZING-DEC-RESTORE increment 3 (P4 / obj-14): the paper size band, once at engine start (the balance
+        // changes at a start: F2). Fire-and-forget; never blocks or throws into the start.
+        setImmediate(() => {
+          void import('./paper-size-band.js')
+            .then(({ checkPaperSizeBand }) => checkPaperSizeBand('engine_start'))
+            .catch((err: any) => console.error('[PaperSizeBand] start hook error:', err?.message ?? err));
+        });
         
         return {
           success: true,
@@ -799,8 +808,13 @@ export async function startActiveEngine(
  * - If running session exists, stops manager and updates database
  * - Emits cluster bus event on successful stop
  */
-export async function stopActiveEngine(userId: string): Promise<ActiveEngineResult> {
-  console.log(`[41F][QUEUE] stopActiveEngine called (userId: ${userId})`);
+export async function stopActiveEngine(
+  userId: string,
+  // B-SIZING-DEC-RESTORE increment 3 (PRE_AUDIT §16.4 B1): how the stop's flatten labels its closes. The reset
+  // passes 'reset'; every other stop is unchanged ('manual_stop').
+  closeType: FlattenCloseType = 'manual_stop',
+): Promise<ActiveEngineResult> {
+  console.log(`[41F][QUEUE] stopActiveEngine called (userId: ${userId}, closeType: ${closeType})`);
   
   // Phase 41F: Use operation queue instead of busy flag and operation lock
   try {
@@ -860,7 +874,7 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
             // This ensures no race condition - engine is dead, now clean up positions
             console.log('[8.8.3-I2][STOP_FLOW][5_FORCE_CLOSE_START] Closing all open positions...');
             try {
-              const closeResult = await currentManager.forceCloseAllOpenPositionsOnStop();
+              const closeResult = await currentManager.forceCloseAllOpenPositionsOnStop(closeType);
               for (const d of closeResult.details) {
                 if (d.status === 'left_open') _deliberatelyOpen.set(d.positionId, d.symbol);
               }

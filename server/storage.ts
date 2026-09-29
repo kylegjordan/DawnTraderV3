@@ -544,6 +544,8 @@ export interface IStorage {
   getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }>;
   // B-SIZING-DEC-RESTORE 2b (#1093): the symbol cooldown's own read — EXACT symbol (+ asset class when known).
   getLastClosedAtForSymbol(mode: TradingMode, symbol: string, assetClass: AssetClass | null): Promise<Date | null>;
+  // B-SIZING-DEC-RESTORE inc 3 (P1 step 5): the ONE named writer of the dashboard epoch; returns the read-back.
+  setScoreboardEpoch(startedAt: Date, updatedBy: string): Promise<{ epochStartedAt: Date; updatedBy: string | null }>;
   // Phase 8.8.3-C5: Paginated trades with sorting support
   getClosedTradesPaginated(mode: TradingMode, filters: {
     limit?: number;
@@ -3612,6 +3614,34 @@ export class DatabaseStorage implements IStorage {
    * `closedOnly` rule, unchanged, so the only behaviour change is the match. The search box keeps its substring.
    * #1094 (the LIVE cooldown reads the legacy trades table) swaps its call site to this method in increment 2d.
    */
+  /**
+   * B-SIZING-DEC-RESTORE increment 3 (P1 step 5; PRE_AUDIT §13.4 C3): the ONE named writer of the dashboard epoch
+   * (`module_constants` scoreboard / epoch_started_at) — until now no CODE path wrote it (F4; the reader is
+   * getLifetimeScoreboard). Its one prior value was a hand edit (cc-c, 2026-08-24, the #741/#743 window), whose
+   * `updated_by` note this write REPLACES — the caller logs the prior row first (the reset script's step 5).
+   * `updated_by` IS the epoch's audit trail, so the caller must name itself (the reset passes its run id). Stored as a
+   * JSON string timestamp, the shape the reader casts (`(value #>> '{}')::timestamptz`).
+   * Returns the row as read back, so the caller verifies the write rather than assuming it.
+   */
+  async setScoreboardEpoch(startedAt: Date, updatedBy: string): Promise<{ epochStartedAt: Date; updatedBy: string | null }> {
+    if (!(startedAt instanceof Date) || Number.isNaN(startedAt.getTime())) throw new Error('[setScoreboardEpoch] startedAt is not a valid date');
+    if (!updatedBy || !updatedBy.trim()) throw new Error('[setScoreboardEpoch] updatedBy is required (it is the audit trail)');
+    const iso = startedAt.toISOString();
+    await db.execute(sql`
+      INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_at, updated_by)
+      VALUES ('scoreboard', '*', '*', '*', '*', 'epoch_started_at', to_jsonb(${iso}::text), now(), ${updatedBy})
+      ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)
+      DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by`);
+    const res: any = await db.execute(sql`
+      SELECT (value #>> '{}')::timestamptz AS ts, updated_by
+        FROM module_constants
+       WHERE module_name = 'scoreboard' AND constant_name = 'epoch_started_at'
+       LIMIT 1`);
+    const row = (res?.rows ?? res)?.[0];
+    if (!row?.ts) throw new Error('[setScoreboardEpoch] the epoch row did not read back');
+    return { epochStartedAt: new Date(row.ts), updatedBy: row.updated_by ?? null };
+  }
+
   async getLastClosedAtForSymbol(mode: TradingMode, symbol: string, assetClass: AssetClass | null): Promise<Date | null> {
     const conditions: any[] = [
       eq(closedTradesTable.mode, mode),

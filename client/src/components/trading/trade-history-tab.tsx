@@ -201,6 +201,7 @@ export function TradeHistoryTab() {
                 <SelectItem value="stop_hit">Stop Loss</SelectItem>
                 <SelectItem value="manual_stop">Manual Stop</SelectItem>
                 <SelectItem value="manual_close">Manual Close</SelectItem>
+                <SelectItem value="reset">Paper Reset</SelectItem>
                 <SelectItem value="engine_stop_cleanup">Engine Stop Clean</SelectItem>
                 <SelectItem value="hard_reset">Hard Reset</SelectItem>
               </SelectContent>
