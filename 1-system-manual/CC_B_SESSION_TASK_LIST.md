@@ -17,7 +17,7 @@
 | `c25e722d` | 2026-10-02T08:00Z | the pre-registered 52.24 GiB reclaim from the October 1 archive move (Langston's; I follow through). A no-op sweep is a defect at sprint row 6. |
 | `ac32818d` | 2026-10-06T07:00Z | the weekly `dt-deploy` observation; re-mint on each resolve |
 
-## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (52)
+## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (53)
 
 **Wave A1 — foundations:** 39a `B-CRYPTO-BIRTH-FEED` (⭐ Kyle decision rides `#977`) · 46 `#972` xStock ATR empty around the open and close · 47 `#566` volatility measured with a lag.
 
@@ -25,7 +25,7 @@
 
 **Wave A3 — learning data:** 103 `B-OUTCOME-CORPUS-CAPTURE` · 104 `B-EXCURSION-RECORD` · 106 `B-PAPER-LANE-PROVENANCE` (`#1059`) · 107 `T-W20C-SCALAR-LEG` · 107a `B-FEE-BASIS-STAMP` (`#1097`) · 108 `#515` · 109 `#631` · 110 `#504` · 114 `B-TRADE-RECORD-JOINABILITY` · 115 `B-VPNL-WRITER-BOUND` · 116 `#658` · 117 `#220` · 119 `B-ARCHIVE-WRITER-LIFECYCLE` (+ `#1062`) · 120 `B-ARCHIVE-FLUSH-DRAIN-ORDER` (`#1078`) · 121 `B-ROLLBACK-EPOCH-FORWARD` · 122 `#590` · 123 `B-PROVENANCE-LOSS-CENSUS` · 124 `#231`.
 
-**Wave B2 — risk controls and restart safety:** 166a `B-EXIT-SKIP-ALERT-CLEAR` (`#638`, with `#572`), the exit-skip operator alert that never clears.
+**Wave B2 — risk controls and restart safety:** 166a `B-EXIT-SKIP-ALERT-CLEAR` (`#638`, with `#572`), the exit-skip operator alert that never clears · 166b `B-XSTOCK-WEEKEND-POSTURE` (`#531`), stop opening xStock positions before a scheduled closure.
 
 **Wave A4 — tuning (after the accumulation gate):** 125 the accumulation gate · 129 roadmap 25-17 target geometry · 130 25-17b crypto reach ceilings · 131 25-20 per-strategy minimum reward-to-risk (+ `#372`) · 132 `B-TARGET-MULTIPLE-VS-HORIZON` · 133 25-26 hold-time study · 134 `B-EXIT-MAKER-VS-TAKER-REVIEW` · 135 `#221` ranking · 135a `B-CROWDING-CRITERION-OBJECT` (`#1095`) · 136 `#149` · 137 `B-FAMILY-POOL-REACHABILITY` · 138 `B-IDEAL-POOL-STARVATION` · 139 `#648` · 140 `#201` · 141 `#529`.
 
@@ -33,7 +33,7 @@
 `#569` → row 9 · `#567` (mark plausibility) → row 17 · `#635` → row 34 · `#684`, `#393` → row 40 · `#641` → row 69 · `#1041` → row 196 (all CC-C) · `#662`, `#682`, `#675` → row 93 and `#1013` → row 160a (Infra, confirmed) · `#370`, `#375` → row 153 (CC-A).
 
 ## After live — mine, listed in `Scope Files/PRE_LIVE_SPRINT.md`
-`#639`, `#551` (break-even and trailing) · 2.4b `B-ALERT-QUEUE-INTEGRITY` (`#647`, `#1074`, `#654`) · `B-CREW-SENDER-IDENTITY` · `B-CHANGE-CLASS-DOCSET-FIT` (row 2.7; now two instances) · `B-FRESHNESS-LOG-READER` · `B-SHARED-TMP-ISOLATION` · `B-UMBRELLA-OPEN-STATE` · `B-OPEN-OBLIGATION-SWEEP` (`#1071`) · `B-GATE-WILDCARD-REFUSE` (`#1069`) · `B-PRICE-DOC-CONSOLIDATE` (`3n.s`) · `B-VOLATILITY-CACHE-RETIRE` · `#1042`, the `#507` rider (legacy) · `#518`, `#528`, `#537`.
+`#639`, `#551` (break-even and trailing) · 2.4b `B-ALERT-QUEUE-INTEGRITY` (`#647`, `#1074`, `#654`) · `B-CREW-SENDER-IDENTITY` · `B-CHANGE-CLASS-DOCSET-FIT` (row 2.7; now two instances) · `B-FRESHNESS-LOG-READER` · `B-SHARED-TMP-ISOLATION` · `B-UMBRELLA-OPEN-STATE` · `B-OPEN-OBLIGATION-SWEEP` (`#1071`) · `B-GATE-WILDCARD-REFUSE` (`#1069`) · `B-PRICE-DOC-CONSOLIDATE` (`3n.s`) · `B-VOLATILITY-CACHE-RETIRE` · `#1042`, the `#507` rider (legacy) · `#518`, `#528`, `#537` · `#444` · `#481` (in B-GOV-INTEGRITY-2) · `#600`, `#604` (in B-AMR-INPUT-INTEGRITY-ARC).
 
 ## Closed recently
 `B-ARCHIVE-RETENTION-SIZING` (`#592`, row 2.4f) 2026-09-29, a decision item · `B-REACH-BASELINE-ADJUST` (row `3n.v`) 2026-09-29, crowding arm fired and Kyle overrode · `3n.x`, the pre-live review, became the Sprint to Live plan itself · `3n.t` `B-FEED-BY-SITUATION-AUDIT` was done 2026-09-18 (its findings became `3n.u`); its plan status cell was stale until 2026-09-29 · withdrawn or closed at the 2026-09-29 homing: `#556`, `#636`, `#544`, `#507` (core), `#1098` (the node_modules `#567`); `#640` was already withdrawn.

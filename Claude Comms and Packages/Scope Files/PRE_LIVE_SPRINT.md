@@ -260,7 +260,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - **B-INSTRUMENTS-OVER-RULES** (CC-A) — the code-search-tool usage measure runs 2026-09-18 → 10-02 (pre-registered)
 - **8a-P4c increment 1 — the VTS xStock price instrument** (CC-C) — deployed bc199185e; window to 2026-09-30T00:00Z; pre-registered rules A-D then decide increments 2-3
 
-## After live — 217
+## After live — 219
 
 ### AMR and machine learning — 31
 
@@ -270,7 +270,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - #611 (CC-B) — AMR work after live (Kyle 2026-09-28)
 - #612 (CC-B) — AMR work after live (Kyle 2026-09-28)
 - B-AMR-CONTEXT-BONUS-REWIRE (CC-A) — Kyle 2026-09-28: all AMR work after live
-- B-AMR-INPUT-INTEGRITY-ARC (CC-C) — Kyle 2026-09-28: AMR fixes after live; stalled since 2026-07-30 with no plan row — place it in the post-live section
+- B-AMR-INPUT-INTEGRITY-ARC (CC-C) — Kyle 2026-09-28: AMR fixes after live; stalled since 2026-07-30 with no plan row — place it in the post-live section · carries `#604` (leg A) and `#600` (a stale AMR comment blesses the wrong cap; land before any AMR flip) (2026-09-29)
 - 17.1 Scope & Grounding (Week 23) — - Define full scope of ML inte (—) — already placed post-live in the roadmap
 - 17.2 ML Touchpoint & Influence Mapping (Weeks 24-25) — #### Featu (—) — already placed post-live in the roadmap
 - 17.3 Infrastructure Design (Weeks 25-26) — - In-process module vs (—) — already placed post-live in the roadmap
@@ -305,7 +305,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
-### Crew, reviewer, governance and alert tooling — 69
+### Crew, reviewer, governance and alert tooling — 71
 
 - B-RULES-CHANGE-CLASS (CC-A) — the `rules_change` change-class: a five-field case file pushed alone and ruled on BEFORE a rules edit lands; its own definition is its first case (Langston 2026-08-26, restored 2026-09-29, #744). ⛔ BEFORE B-GATE-GUARD (its line, under Other, carries the dependency)
 - 2.4b B-ALERT-QUEUE-INTEGRITY (CC-B) — #647 (no claim or lock discipline on the alert file; the watchdog appends outside the lock; rewrites drop malformed rows) + #1074 (open-batch backstop alerts have no resolve edge) + #654 (the checker ignores open-retired rows and treats any COMPLETION filename as a close) — alert tooling (added 2026-09-29)
@@ -364,6 +364,8 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-SCRIPTS-TSC-COVERAGE (CC-B) — type-checking coverage for the scripts folder — tooling
 - B-SHARED-TMP-ISOLATION (CC-B) — sessions share /tmp so a commit message can be another session's — crew tooling
 - B-STATE-ASSERTION-LINT (CC-A) — sentences true when written and wrong now — governance tooling
+- #653 (CC-A proposed at filing; CC-B filed) — two System Manual lines still tell a session to git pull the retired clone, in a Replit-era section; documentation only, CLAUDE.md §7.1 binds (added 2026-09-29)
+- #444 (CC-B) — nothing checks that an issue's named home batch is still open, so an issue homed to a closed batch looks homed and silently dies; if Langston rules it gates plan currency, it moves to sprint row 1 (added 2026-09-29)
 - B-TOKENWATCH-OBSERVED-AT (CC-INFRA) — token watch tooling
 - B-TOKENWATCH-PAIR-SELECT (CC-INFRA) — token watch tooling
 - B-TSC-COVERS-TESTS (CC-C) — type-checking coverage for test files — tooling
@@ -449,7 +451,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-GDRIVE-UNMOUNT (Infra Claude) — placed 2026-08-28, not parked; owner Infra Claude; absorbs #921
 - B-GOV-INTEGRITY-3 (CC-A) — message id spans
 - B-HORIZON-GRID-COMPARABILITY (CC-B) — makes holding-horizon numbers comparable — precondition for the exit-policy evaluator
-- B-LANGSTON-QUEUE-2 (CC-A) — review queue lock
+- B-LANGSTON-QUEUE-2 (CC-A) — review queue lock · the batch itself closed 2026-07-11; what remains here is `#484` (a Langston verdict does not record which invoke produced it or what it saw) and `#486` (a follow-up that does not name Langston is dropped silently) (2026-09-29)
 - B-OBS-WINDOW-EVIDENCE-CAPTURE (CC-C) — capture observation-window evidence at the event — measurement quality
 - B-PRICE-DOC-CONSOLIDATE (Kyle) — merge two price documents into one — Kyle wants it done, but it is documentation
 - B-QUOTE-PEG-DEVIATION-WATCH (CC-C) — watch for quote-peg deviation; its row says it gates nothing
@@ -503,7 +505,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 ## Parked by Kyle — 7 (unchanged)
 
 - B-ALERT-DEDUPE-REASON-DRIFT — parked by Kyle, deliberately undated
-- B-GOV-INTEGRITY-2 — parked by Kyle, deliberately undated
+- B-GOV-INTEGRITY-2 — parked by Kyle, deliberately undated · carries `#481` (the general governed-read helper and lint; the dangerous shape is already blocked by a hook)
 - B-RULES-1E-LANGSTON-SLIM — parked by Kyle, deliberately undated
 - #392 — parked by Kyle, deliberately undated
 - #668 — the governance-standardisation arc — a DIFFERENT thing from B-SIZING-DEC-RESTORE, which only cites it

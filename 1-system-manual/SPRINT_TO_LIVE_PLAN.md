@@ -105,7 +105,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 18 | B-UNIVERSE-REFRESH-ACTS | B-UNIVERSE-REFRESH-ACTS | Infra Claude | QUEUED | — | first link of the identity chain |
 | 19 | B-SYMBOL-CLASS-IDENTITY | B-SYMBOL-CLASS-IDENTITY | Infra Claude | QUEUED | — | after B-UNIVERSE-REFRESH-ACTS: a ticker shared by a coin and a stock becomes two instruments |
 | 20 | B-RTB-SIGNAL-IDENTITY | B-RTB-SIGNAL-IDENTITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY |
-| 21 | B-VTS-CLASS-LABEL-INTEGRITY | B-VTS-CLASS-LABEL-INTEGRITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY: correct the mislabelled VTS rows |
+| 21 | B-VTS-CLASS-LABEL-INTEGRITY | B-VTS-CLASS-LABEL-INTEGRITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY: correct the mislabelled VTS rows · carries `#1068` |
 | 22 | B-CLOSED-TRADES-CLASS-BACKFILL | B-CLOSED-TRADES-CLASS-BACKFILL | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY |
 | 23 | #150 | #150 — batch named at Step 1 | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY: the RTB asset-class column made NOT NULL after a zero-null soak |
 | 24 | Exclude plain-currency and non-dollar pairs | — batch named at Step 1 | Infra Claude | QUEUED | — | Kyle's decision: exclude plain currency pairs and non-dollar crypto now |
@@ -141,8 +141,8 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 |---:|---|---|---|---|---|---|
 | 49 | #233 | #233 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | signals: drift and volume inputs fed as fixed defaults · + `#514` (bury or resurrect the shadow HF8/HF9 gates whose stability input is fabricated; the verdict carries to row 150) - homed 2026-09-29 by CC-B |
 | 50 | #199 | #199 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | strategies: xStock volume confirmation removed for lack of an honest feed |
-| 51 | row:3m-ENUM | plan row 3m-ENUM | CC-B (New Claude) | QUEUED | — | strategies: volatility_edge's pattern path is silently dead |
-| 52 | B-SILENT-STRATEGY-CENSUS | B-SILENT-STRATEGY-CENSUS | CC-B (New Claude) | QUEUED | — | strategies: three wired strategies never evaluated |
+| 51 | row:3m-ENUM | plan row 3m-ENUM | CC-B (New Claude) | QUEUED | — | strategies: volatility_edge's pattern path is silently dead · carries `#1063` |
+| 52 | B-SILENT-STRATEGY-CENSUS | B-SILENT-STRATEGY-CENSUS | CC-B (New Claude) | QUEUED | — | strategies: three wired strategies never evaluated · carries `#1070` |
 | 53 | B-TARGET-FABRICATION | B-TARGET-FABRICATION | CC-C (Analyst Claude) | QUEUED | — | signals: default targets the strategy never chose |
 | 54 | #574 | #574 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | SQE: a made-up volatility input in the ranker |
 | 55 | B-RTB-REFRESH-CONSOLIDATE | B-RTB-REFRESH-CONSOLIDATE | CC-B (New Claude) | QUEUED | — | RTB: the net-EV backstop removed on thin evidence |
@@ -202,7 +202,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
 | 103 | B-OUTCOME-CORPUS-CAPTURE | B-OUTCOME-CORPUS-CAPTURE | CC-B (New Claude) | QUEUED | — | what each VTS trade earned, recorded durably, with a measured/defaulted flag on its inputs. NOT a deletion clock: the 90-day delete was fixed 2026-07-30/08-06 (365 days, archive before delete); nothing is due for deletion before 2027-05 |
-| 104 | B-EXCURSION-RECORD | B-EXCURSION-RECORD | CC-B (New Claude) | QUEUED | — | early (Langston F5): capture costs calendar time - record how far trades travel; rm:25-17b is blocked on it by ruling |
+| 104 | B-EXCURSION-RECORD | B-EXCURSION-RECORD | CC-B (New Claude) | QUEUED | — | early (Langston F5): capture costs calendar time - record how far trades travel; rm:25-17b is blocked on it by ruling · + `#1061` (the target gate's floor and ceiling are in different units; gated by this row's ratchet) |
 | 105 | 25-9 xStock pair_correlation per-pair WR data accumulation (B68.3 | roadmap 25-9 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | early (Langston F5): xStock per-pair correlation data accumulates from here |
 | 106 | B-PAPER-LANE-PROVENANCE | B-PAPER-LANE-PROVENANCE | CC-B (New Claude) | QUEUED | — | paper records its decision inputs |
 | 107 | T-W20C-SCALAR-LEG | — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | after B-PAPER-LANE-PROVENANCE: capture integrity - the parity harness proves recorded history replays to the same decisions |
@@ -220,7 +220,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 118 | #1072 | #1072 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | the price-history recorder's frozen symbol set |
 | 119 | B-ARCHIVE-WRITER-LIFECYCLE | B-ARCHIVE-WRITER-LIFECYCLE | CC-B (New Claude) | QUEUED | — | the archive writer's lifecycle · + `#1062` (analytical queries filled the connection pool and the ticker and archive writers dropped rows; Step 1 reviews it with `#1037`; coordinate with `#1082`) - homed 2026-09-29 by CC-B |
 | 120 | B-ARCHIVE-FLUSH-DRAIN-ORDER | #1078 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | B-ARCHIVE-FLUSH-DRAIN-ORDER: the writer drains its buffer before it holds a slot, so a slot timeout throws the rows away (670 on 2026-09-28) - in the sprint because it loses learning data |
-| 121 | B-ROLLBACK-EPOCH-FORWARD | B-ROLLBACK-EPOCH-FORWARD | CC-B (New Claude) | QUEUED | — | epochs across a rollback |
+| 121 | B-ROLLBACK-EPOCH-FORWARD | B-ROLLBACK-EPOCH-FORWARD | CC-B (New Claude) | QUEUED | — | epochs across a rollback · carries `#1045` |
 | 122 | #590 | #590 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | calibration store reset at the formula change |
 | 123 | B-PROVENANCE-LOSS-CENSUS | B-PROVENANCE-LOSS-CENSUS | CC-B (New Claude) | QUEUED | — | where decision provenance is lost |
 | 124 | #231 | #231 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | ablation record id gap |
@@ -242,7 +242,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 135 | #221 | #221 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | ranking first (Langston F6): rank the queue, then ask who is missing from it. NO gate clause, reason: a ranking-rule change, code-only, reads no accumulated per-cell data - if its Step 1 finds it fits weights on data, it takes the gate clause then |
 | 135a | Does the ranking bound one strategy's share of what opens? | B-CROWDING-CRITERION-OBJECT (`#1095`) | CC-B (New Claude) | QUEUED | — | after #221: the successor test Langston placed when Kyle overrode 3n.v's fired crowding trigger (2026-09-29) - re-register the criterion on trades opened, and measure whether the ranking caps a single strategy's share (strong_bull_trend held 25.5 % of crypto opens) |
 | 136 | #149 | #149 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | with #221: per-class RTB refresh cadence calibration - after ACCUMULATION-GATE; cell = per class (2 cells); population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted |
-| 137 | B-FAMILY-POOL-REACHABILITY | B-FAMILY-POOL-REACHABILITY | CC-B (New Claude) | QUEUED | — | before #648/#201/#529: can each strategy family reach the pool at all - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three |
+| 137 | B-FAMILY-POOL-REACHABILITY | B-FAMILY-POOL-REACHABILITY | CC-B (New Claude) | QUEUED | — | before #648/#201/#529: can each strategy family reach the pool at all - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three · carries `#1052` (the `addFamilyPoolSurvivors` dead writer) |
 | 138 | B-IDEAL-POOL-STARVATION | B-IDEAL-POOL-STARVATION | CC-B (New Claude) | QUEUED | — | before #648/#201/#529: is the ideal pool starved (~4-5% of slots against a nominal 70%) - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three |
 | 139 | #648 | #648 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | strategies: six never traded - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three |
 | 140 | #201 | #201 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | strategies: range_trade starved - after ACCUMULATION-GATE; an ABSENCE diagnosis: publish UNREACHABLE (zero signals emitted in the signal-evaluation archive), NEVER-SELECTED (signals emitted, zero RTB promotions) or UNDERPOWERED (both non-zero, n below the floor) - never one verdict for all three |
@@ -255,7 +255,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 147 | 25-7 #94 B79.3 xStock equity-equivalent macro confidence modifier | roadmap 25-7 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | regimes: xStock macro modifiers - after ACCUMULATION-GATE; cell = regime, xStock; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted |
 | 148 | B-RETIRED-SCORE-REMOVAL | roadmap 16.7 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | scores: retire the retired scores. NO gate clause, reason: a code-only removal, reads no accumulated data |
 | 149 | #588 | #588 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | scores: a validated quality term in the ranking - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE; a cell below the floor is published UNDERPOWERED, never fitted |
-| 150 | 25-4 §19.4 SQE Recalibration (B66 conditional) Rebuild SQE thresh | roadmap 25-4 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | scores: SQE recalibration - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE + REJECTED; a cell below the floor is published UNDERPOWERED, never fitted |
+| 150 | 25-4 §19.4 SQE Recalibration (B66 conditional) Rebuild SQE thresh | roadmap 25-4 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | scores: SQE recalibration - after ACCUMULATION-GATE; cell = strategy x class; population = ACTIVE + REJECTED; a cell below the floor is published UNDERPOWERED, never fitted · + `#502` (DI unification) and `#498` (the RTB-refresh re-score), gated on row 49's verdict |
 | 151 | 25-3 §19.0.3 TFS sustainability gate value-scope decision Recalib | roadmap 25-3 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | gates: the sustainability gate - after ACCUMULATION-GATE; cell = one regime x class; population = ACTIVE + VTS; a cell below the floor is published UNDERPOWERED, never fitted |
 | 152 | 25-15 DATA-BLOCKED STUDY (intraday-coverage gap) — HCE rejected-ar | roadmap 25-15 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | gates: does the Net Expectancy gate reject winners - after ACCUMULATION-GATE; cell = gate verdict x class; population = REJECTED (name the instrument first; its title still says DATA-BLOCKED); a cell below the floor is published UNDERPOWERED, never fitted |
 | 153 | 25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-0 | roadmap 25-19 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | gates: the Net Expectancy gate's measured judgement - after ACCUMULATION-GATE; cell = gate verdict x class; population = REJECTED + ACTIVE (name the instrument first); a cell below the floor is published UNDERPOWERED, never fitted · + `#370` and `#375` (does Net Expectancy judge well; do the sub-1.0-RR strategies survive EV) |
@@ -280,22 +280,23 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 161 | Coltrane parity: a privacy check like Langston's | — batch named at Step 1 | Infra Claude | QUEUED | — | before the Coltrane trial: a privacy check like Langston's |
 | 162 | #681 | #681 — batch named at Step 1 | Infra Claude | QUEUED | — | a deploy must not outrun CI |
 | 163 | #168 | #168 — batch named at Step 1 | Infra Claude | QUEUED | — | with #681: CI catches a build that crashes on boot |
-| 164 | P19-B12 | P19-B12 | Infra Claude | QUEUED | — | the deploy tool's own executable comes from the reviewed code |
+| 164 | P19-B12 | P19-B12 | Infra Claude | QUEUED | — | the deploy tool's own executable comes from the reviewed code · carries `#1004` and `#652` |
 
 ### Wave B2 — TRACK B · Risk controls and restart safety — fixed in paper, carried to live
 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
-| 165 | B-VENUE-QUIET-ALERTING | B-VENUE-QUIET-ALERTING | Infra Claude | QUEUED | — | operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the sprint) |
+| 165 | B-VENUE-QUIET-ALERTING | B-VENUE-QUIET-ALERTING | Infra Claude | QUEUED | — | operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the sprint) · carries `#526` (with `#994`) |
 | 166 | #692 | #692 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options |
 | 166a | The exit-skip operator alert clears itself when the engine prices the position again | B-EXIT-SKIP-ALERT-CLEAR (`#638`, with `#572`) | CC-B (New Claude) | QUEUED | — | operator alert, after `#692`: the price-skip alert raises once and never learns the condition cleared, so it sits on healthy symbols and blocks its own key (0 to 4 re-raises in 12.6 h after a manual sweep, 2026-07-31). Langston ruled option (b): hold the alert id in the engine's own state and resolve it at the moment the engine already resets the skip streak (`active-execution-engine.ts:2426`). `#572` (the held key freezes the alert's words) is the same lever; Step 1 settles whether (b) discharges it or a store-side refresh stays a Kyle scope call. Placed 2026-09-29 |
+| 166b | xStock weekend posture: stop opening new positions before a scheduled closure | B-XSTOCK-WEEKEND-POSTURE (`#531`, folding `#583`(a)) | CC-B (New Claude) | QUEUED | — | risk control before live, after 166a (same price-skip family): new xStock trades can open hours before the 48 h Friday-to-Sunday closure and sit through it with an inoperative stop. The crew-locked fix (RI:207, Kyle-delegated): a calendar entry cutoff before a scheduled closure, a fire counter, and a defined state for unscheduled halts; it extends the SQE's `xstock_weekend_closure` check. Coordinate with row 165 (`#526`) and row 188 (19-9 halts). Placed 2026-09-29 |
 | 167 | #634 | #634 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the kill switch must not fail open |
 | 168 | #632 | #632 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the daily-loss count survives a restart |
 | 169 | B-KILLSWITCH-DENOMINATOR | B-KILLSWITCH-DENOMINATOR | CC-A (Old Claude) | QUEUED | — | the kill switch's remaining legs |
 | 170 | B-TOTAL-DRAWDOWN-WARNING | B-TOTAL-DRAWDOWN-WARNING | CC-A (Old Claude) | QUEUED | — | a mark-to-market drawdown warning |
 | 171 | #519 | #519 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the daily-loss trip fails loud |
 | 172 | B-TEC-PRIME-BOOT-RACE | B-TEC-PRIME-BOOT-RACE | Infra Claude | QUEUED | — | restarts: the exit loop throws for a tick on open positions |
-| 173 | B-ENGINE-STOP-DURATION-COLUMN | B-ENGINE-STOP-DURATION-COLUMN | Infra Claude | QUEUED | — | an engine stop reports failure when it worked |
+| 173 | B-ENGINE-STOP-DURATION-COLUMN | B-ENGINE-STOP-DURATION-COLUMN | Infra Claude | QUEUED | — | an engine stop reports failure when it worked · carries `#1067` |
 | 174 | #619 | #619 — batch named at Step 1 | Infra Claude | QUEUED | — | a restore from backup lacks seeded config |
 | 175 | B-DASHBOARD-AUTH-RACE | B-DASHBOARD-AUTH-RACE | Infra Claude | QUEUED | — | the portfolio card never recovers from a 401 |
 | 176 | #296 | #296 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | one rate-limited path for placing and cancelling orders |
@@ -321,7 +322,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 189 | 25-11a refuse a position larger than the visible book | — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | refuse a position larger than the visible book |
 | 190 | Protect live positions if our server dies | — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | decide how live positions are protected if the server dies ⭐ Kyle picks; CC-A + Langston propose. |
 | 191 | B-VENUE-RESTING-EXITS | B-VENUE-RESTING-EXITS | CC-A (Old Claude) | QUEUED | — | after PROCESS-DEATH-FORM: build that protection |
-| 192 | B-KRAKEN-FEE-WATCH | B-KRAKEN-FEE-WATCH | CC-C (Analyst Claude) | QUEUED | — | notice when the exchange changes fees |
+| 192 | B-KRAKEN-FEE-WATCH | B-KRAKEN-FEE-WATCH | CC-C (Analyst Claude) | QUEUED | — | notice when the exchange changes fees · carries `#1011` |
 
 ### Wave B4 — TRACK B · Go-live preparation — last
 
@@ -356,7 +357,7 @@ Kyle 2026-09-28: an even split by connected groups; earlier ownership is not a f
 |---|---|---:|
 | CC-C (Analyst Claude) | Prices and the exit price path; paper sizing (in flight); the paper standard and judging the evidence | 51 |
 | Infra Claude | Identity, the coin list and exclusions; restarts, deploys, security and the servers; what the diagnostic screens show | 52 |
-| CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 52 |
+| CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 53 |
 | CC-A (Old Claude) | Trade records and costs; scores, regimes and gates; the xStock tuning studies; risk controls; the live engine; the final end-to-end audit | 50 |
 
 ## 7. Coltrane — proposed role (for Langston's view, then Kyle)
