@@ -121,6 +121,8 @@ FORWARD              DROP VIEW ×4, ALTER TABLE ×3, DELETE 1, COMMIT
 PROBE 1              columns, CHECK, views, constant row GONE; default_max_total_exposure_pct=0.25 kept
 ROLLBACK             ALTER ×4, UPDATE 1, UPDATE 1, UPDATE 10, INSERT 0 1, CREATE VIEW ×4, COMMIT
 PROBE 2 vs PROBE 0   IDENTICAL (diff empty) — view definitions by md5, column defs, CHECK, all 12 values
+                     (identity over the probe's PROJECTION: the restored constant row's updated_by is
+                      'b-sizing-inc2a-rollback' by design — do not test full-row equality)
 FORWARD again        same statements, COMMIT
 PROBE 3 vs PROBE 1   IDENTICAL
 DROP DATABASE        scratch databases remaining: 0
@@ -131,3 +133,5 @@ DROP DATABASE        scratch databases remaining: 0
 - Local unit run: 283 of 287 files pass. The 4 failures are this laptop only — 2 need Postgres (`ECONNREFUSED`), 2 fail to parse a line-2 comment under Windows — and none imports a file changed here. CI is the judge.
 - The e2e `config-snapshot.spec.ts` change was not run locally.
 - `CURRENT_SETTINGS_REGISTRY.md` is annotated, not regenerated (the row still exists on staging until the deploy).
+
+## Step 4 r2 — APPROVED by Langston at `3d008bd0e` (2026-09-29 12:19Z). Conditions carried in PRE_AUDIT §14.7: Step 7 attributes against the whole deployed range; 2b's `p`-entry guard is a DB CHECK.
