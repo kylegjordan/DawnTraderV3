@@ -1,13 +1,13 @@
-# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-11
+# CC-A (OLD Claude) — SESSION TASK LIST — plain language, as of 2026-09-29
 
 > 📁 **Lives in `1-system-manual/` since 2026-09-11** (moved from `Scope Files/` — `B-TASK-LIST-SLOT` P3; the convention is written in `workflow-10-governance`'s Tier-1 task-list row).
 
 > ⛔⛔ **KYLE'S STANDING RULE, 2026-09-05: EVERY SESSION KEEPS ITS OWN TASK LIST, AND IT IS UPDATED IN THREE PLACES OR IT IS NOT UPDATED.**
 > **WHAT IT HOLDS:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — **in the order they will be worked.**
 > **WHEN IT IS UPDATED:** (1) **every time a batch closes**, and (2) **every time a new batch, sub-batch, hotfix or investigation is decided and slotted.**
-> **THE THREE PLACES, ALL IN THE SAME TURN:** **this file** → **`PHASE_19_PLAN.md`** (or the active phase plan) → **`POST_AUDIT_ROADMAP.md`** where it is a roadmap-level item.
+> **THE THREE PLACES, ALL IN THE SAME TURN:** **this file** → **the active plan, `1-system-manual/SPRINT_TO_LIVE_PLAN.md`** (Kyle 2026-09-28), or for work that waits for live **`Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md`** → **`POST_AUDIT_ROADMAP.md`** where it is a roadmap-level item. *(`PHASE_19_PLAN.md` is history since 2026-09-28.)*
 > ★ **HIS REASON, IN HIS WORDS:** *"we keep losing track of which session is working on which batches, and what order they need to work on those things in. And as we add more things with each of these sessions, we lose track of what else we were working on and when we need to work on these things."*
-> ⚠️ **THE PLAN IS THE AUTHORITY; THIS FILE IS THE INDEX.** Every row below is derived from `PHASE_19_PLAN.md` — **if the two disagree, the plan wins and this file is stale.** Re-derive rather than hand-edit the order.
+> ⚠️ **THE PLAN IS THE AUTHORITY; THIS FILE IS THE INDEX.** Section 0a is current as of 2026-09-29; the queue in section 0 below was derived from `PHASE_19_PLAN.md` on 2026-09-05 and is superseded by the sprint plan's CC-A rows and the after-live list — **if they disagree, the plans win.**
 
 ---
 
@@ -18,10 +18,10 @@
 
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
-| ⛔ **`B-GOV-REPORTING`** (row 8) | **pushed to the branch — the review gate NEVER RAN** | me | **Scope exists; no pre-audit, no completion report.** These reporting + ledger-matrix rules landed 2026-08-26 and **all four sessions are following them right now.** Highest-risk open item I own |
-| ⛔ **`B-SCHEDULER-FIRST-TICK`** (row 4.58, `#1039`) | **not started — found 2026-09-11** | nothing — NEXT UP (4.57 closed 2026-09-18) | every scheduler task runs twice at its first interval after a restart; impact per task unmeasured |
-| ⏳ **`B-RULES-1e`** (row 1) | **Step 2**, with Langston | Langston / me | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
-| ⏳ **`B-MEASURE-GATE`** beyond leg 2 (row 6) | **Step 2** | me | Step 1 approved 2026-08-31. Leg 2 CLOSED 2026-09-02 — the rest is not |
+| ⏳ **`B-GOV-REPORTING`** (sprint plan §0) | **Step 4 DONE 2026-09-29 — Langston ruled all six gates (G1-G4, G6, r7), r8 clearance sent** | **Step 10: Langston's memory row BLOCKED on `#1057`** (his memory writer has refused every write since 09-13; Infra Claude to reconcile) | retroactive pre-audit filed; completion report next. Record: scope §7 |
+| ➡️ **`B-SCHEDULER-FIRST-TICK`** (`#1039`) | **HANDED to Infra Claude** — sprint plan row 73 names Infra Claude as owner | — | not mine any more; listed so the hand-off is visible |
+| ⏸ **`B-RULES-1e`** | **PAUSED at Step 2** (sprint plan §0: crew tooling, after live) | nothing until after live | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
+| ⏸ **`B-MEASURE-GATE`** beyond leg 2 | **PAUSED at Step 2** (sprint plan §0: after live) | nothing until after live | Step 1 approved 2026-08-31; leg 2 CLOSED 2026-09-02 |
 | ⛔ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | **OBJ-1 REOPENED 2026-09-11 (`#1038`); the tool LOADS since 14:12Z** | the in-session demo + a 14-day usage measure | it had never loaded (no plugin-cache copy); sessions get it on their next restart |
 
 ---
@@ -61,8 +61,13 @@
 | 12.5 | `B-CATALOG-2` | batch | after 12.4 |
 | 12.6 | decommission residue (rule-18 removal) | batch | after 12.4 |
 
+### ➕ NEXT, AND NEW HOMES FROM `B-GOV-REPORTING` (2026-09-29)
+- ▶ **NEXT: `B-PLAN-CURRENCY-CHECK`** — sprint plan row 1. Keeps the sprint plan true: the checker requires a batch close to touch its own plan line; a weekly census alert; the inventory scripts refuse to write the governed docs; `order.py`'s frozen coverage assertion fixed or retired; an audit of the inventory's UNCONFIRMED prune reasons.
+- **After live, crew tooling (`PRE_LIVE_SPRINT.md`):** `B-RULES-CHANGE-CLASS` (the rules_change class, before `B-GATE-GUARD`) · `B-CHECKER-BLOCK-GATE` (`#1107`, gated on measuring the checker's precision) · `B-GOV-LEDGER-GRADE` (`#1099`).
+- ✅ **`#947` `B-GOV-CLASS-PARSE` CLOSED 2026-09-29 as `#968`'s duplicate** (Langston) — the parser fix is CC-C's `B-CHANGE-CLASS-PARSER`.
+
 ### ⛔ OPEN LOOPS THAT ARE NOT BATCHES — they have no row and will be lost if they are not listed here
-- ✅ **NOT MINE — Langston's `AWAITING KYLE` block was RE-HOMED BY KYLE 2026-08-30 to INFRA CLAUDE'S instruction-file workstream** (*"that is the responsibility of Infra Claude… I don't wanna mix that work"*), and removed from CC-A's queue entirely — see `RUNNING_ISSUES` at the `AWAITING KYLE` entry. ⛔ **THIS LINE SAID "OWED TO KYLE, 52 DAYS" UNTIL 2026-09-08 AND WAS STALE BY NINE DAYS.** ★ **Caught only because I went to read the item before raising it to Kyle — had I trusted this file I would have put another session's re-homed work in his chat, which is exactly what rule 28 forbids.** **What STAYS with CC-A: the matrix's missing `BLOCKED` state, in `B-GOV-REPORTING` at queue 8.**
+- ✅ **Langston's `AWAITING KYLE` block (his MEMORY :23) — ANSWERED BY KYLE 2026-07-10** (Discord messages `1525131232940130386` and `1525135850265120838`, `kind=''`): the checker may block work, real issues only (the blocking is now `#1107` `B-CHECKER-BLOCK-GATE`, mine, after live); a closing records why, with references; the pending-verification state. Only his memory line was stale; its replacement text is Langston's own and lands with `B-GOV-REPORTING`'s Step 10. The 📊 REPORT label is the one thing put back to Kyle (2026-09-29). *(This line had said the block was re-homed to Infra Claude on 08-30 — wrong: Kyle's 08-30 re-home was the MEMORY trim.)*
 - ⛔ **OWED TO LANGSTON: the alert-verb design (`#982`)** — two questions put to him and unanswered: must a hold leave the back-off untouched, and must it require an existing ack so it can never orphan.
 - **`#761`** — the comms outage; evidence kept at `/root/evidence/761/`, **cause still unknown.**
 - **Ten unread diagnostic-buffer helpers in `market-scanner.ts`** (found 2026-09-18 by the code search tool's own diagnostics; Replit-era `92d11cff3`; no ledger entry) — **a rule-18 provenance read + state-write census, before calling them dead.** Run it before `B-SCHEDULER-FIRST-TICK` Step 2 (row 4.58). Record `#1038`.
