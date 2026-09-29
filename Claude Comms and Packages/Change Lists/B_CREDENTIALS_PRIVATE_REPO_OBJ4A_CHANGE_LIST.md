@@ -352,3 +352,76 @@ esac
 - **GATE 4a-1 — Langston, 2026-09-29T20:45Z: APPROVED WITH CONDITIONS** (dt-review at `2767d358a` right; bridge note and your-files r4 correct). C1 provenance states the integrity basis on every read · C2 the peel `error:` kept out of the output · C3 the ref-invariant wording · nit: `(never | head)` back in `instrument_traps:18` (your-files r5, every file still net-negative). **Folded at `3b7b46f59`.**
 - **GATE 4a-2 — Langston, 2026-09-29T21:14Z: APPROVED WITH CONDITIONS, no blocker** ("no new review round"). 1 the undecidable rewind arms + a renamed known file → FAIL-INFRA, header sentence corrected · 2 `GIT_*` unset in dt-backup-sync AND dt-review · 3 a failed page is logged · 4 files replaced by rename, target dirs root-owned 0755 checked in pre-flight · 5 an EXIT handler reports the state on any unexpected exit · riders: exact cron line, the "3 times since 09-02" number re-derived with its population, call 6's reach written into the header, discord.py pinning homed to the GB-8 bridges increment. **Folded at `445b6a505`.**
 - **Tests, from the committed blobs at `445b6a505`:** dt-review 95/95 · dt-backup-sync 55/55 · deploy.sh 60/60. Each condition has a CONTROL that fails on the version you reviewed (`2767d358a`, or `3b7b46f59` for the reader's GIT_* case).
+
+---
+## STEP 4 CLOSED, STEP 5, AND THE ROOT RUN YOU ASKED FOR
+- **Step 4 CLOSED — Langston, 2026-09-29T21:47Z: "BOTH GATES' CONDITIONS MET at `445b6a505`. OBJ-4a Step 4 is CLOSED — APPROVED."** Board `Review` stays unset by agreement: the card is batch-level and the GB-8 bridges increment still owes a gate.
+- **Correction:** the confirm dispatch cited `dt-review:357` and `:295`; at `445b6a505` they are **`:358`** (the provenance line) and **`:296`** (the peel redirect). The quoted code was exact; the numbers were each one short.
+- **Observation (a) FOLDED:** your-files **r6** — the store INDEX line 40 carries *never `| head`* as well (index file now -15 bytes; every file still net-negative; all 19 BEFORE lines re-checked live: exact).
+- **Observation (b) DECLINED, with the reason:** `INSTALL-VERIFY FAILED` keeps `DIED=1` and prints no state note. It already lists every file that does not match; adding text now would put an unreviewed change into the installer minutes before it runs as root. (You called it the right call over a false note; it stays as reviewed.)
+- **CI, per job, on the reviewed code `445b6a505` (run `36633724430`):** Build success · TypeScript Check (baseline gate) success · Test Suite success · Docker Build success. ⚠️ CI builds and tests the trading app; it does NOT run these shell scripts. The Helsinki suites are their tests.
+- **`deploy_tests.sh` as ROOT on Helsinki at `445b6a505`** (the suite file there has sha256 `3aa4d38dd8b7…`, equal to the committed blob), **60/60**, every line:
+
+```text
+PASS test copy: no live write path left in executable lines
+PASS D0 self-check: a copy whose bytes differ from deploy.sh at --sha is refused
+PASS D0b process substitution (no file to check) is refused
+PASS D1-BLOCKER: symlinked lock -> the root-owned target is untouched (rc=0)
+PASS D1-BLOCKER CONTROL: r1 handed the root-owned target to langston
+PASS D1 readers installed + verified (dt-review bfff20f4576669c841c0e687df37c125132a32a8)
+PASS D1 the fetch lock is a langston-owned regular file (created by flock as langston)
+PASS D1 decision 14 asserted: refspec dropped, refs/remotes/* empty
+PASS D2: a forged blob is caught by the re-hash BEFORE install; nothing changed
+PASS D2 CONTROL: r1 INSTALLED the forged bytes (its gate fired only afterwards, rc=3)
+PASS D3 short sha refused
+PASS D3 off-branch sha refused
+PASS D3 absent sha refused
+PASS D3 unknown group refused
+PASS D3 --only '' and --only , refused (no silent no-op)
+PASS D3 missing --sha refused
+PASS D4 pre-flight names the missing files and changes nothing
+PASS D5 bridges: 11 files installed + verified (crew-status-post.py included)
+PASS D5 a fresh host is seeded with COMMS_BACKEND=discord
+PASS D5 the running bridges are named NOT RESTARTED; no restart issued
+PASS D6 notices: 3 files installed + verified; drift log langston-owned
+PASS F2-D4: an existing cron line is found; the crontab is untouched
+PASS F2-D4: a missing line is ADDED; the other lines are kept
+PASS F2-D4: a failed crontab read -> refused, crontab untouched
+PASS F3-D2a: ... and refused in PRE-FLIGHT: nothing was installed
+PASS F3-D2a CONTROL: r3 refused only AFTER installing (rc=2)
+PASS F2-D4 CONTROL: r1 WIPED langston's crontab on a failed read (0 line(s) left)
+PASS F2-D7: a symlinked log is refused; the target stays root-owned
+PASS F3-D2b: ... and refused in PRE-FLIGHT: nothing was installed
+PASS F3-D2b CONTROL: r3 refused the symlink only AFTER installing
+PASS F2-D7 CONTROL: r1 chowned the symlink's root-owned target to langston
+PASS F2-D5: run by a relative path, the self-check still finds the file
+PASS F2-D5 CONTROL: r2 falsely refused a relative path
+PASS F2-B5: the mirror's reflog is on (core.logAllRefUpdates=always)
+PASS F2-D1: notices retires its 3 stale staging copies (bridges' copies untouched)
+PASS F2-D1: bridges retires the units, the drop-in dir and the old deploy.sh
+PASS F2-D9: an unmanaged drop-in is named loudly
+PASS F2-D10: an unchanged discord.py is reported as unchanged
+PASS F3-D1: a late lock timeout names what WAS installed; daemon-reload ran first
+PASS F3-D1 CONTROL: r3 said 'nothing was changed' after installing
+PASS F3-D3: bridges are read back with is-active after enable
+PASS F3-D3 CONTROL: r3 never read the bridges back
+PASS F3-D4: an exported GIT_DIR with a planted filter runs nothing; the install verifies
+PASS F3-D4 CONTROL: r3's root git RAN the planted filter as root (rc=0)
+PASS F3-D5: a warning on the crontab read is not written into the crontab
+PASS F3-D5 CONTROL: r3 wrote sudo's warning into langston's crontab
+PASS F3-D6: --only with a newline refused
+PASS F3-D6 CONTROL: r3 ran readers only and reported 'bridges' as done
+PASS F3-D6: the report names the groups run
+PASS G2-D4: dt-backup-sync.sh replaced by rename (inode 393725 -> 393699)
+PASS G2-D4 CONTROL: r4 truncated it in place (same inode 393699)
+PASS G2-D4b: a group-writable target dir is refused before any install
+PASS G2-D5a: a failure inside the install loop reports a PARTIAL install (rc=1)
+PASS G2-D5a: no temporary file is left in the target dir
+PASS G2-D5a CONTROL: r4 stopped mid-install and said nothing about the state (rc=1)
+PASS G2-D5b: a post-install failure in a function says the files ARE installed (rc=1)
+PASS G2-D5b CONTROL: r4 stopped after installing and said nothing (rc=1)
+PASS G2-D6: a different dt-backup-sync cron line refuses in pre-flight
+PASS G2-D6 CONTROL: r4 took the stale line as 'already present'
+PASS G2 positive: a clean run still installs and writes the canonical cron line
+DEPLOY SUMMARY: 60 pass, 0 fail
+```
