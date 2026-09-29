@@ -217,6 +217,10 @@ export interface IStorage {
   // Phase 2: Guardrails V2 methods (Core Four - Single Source of Truth)
   getGuardrailsV2(params: { mode: 'live' | 'paper' }): Promise<GuardrailsV2 | null>;
   upsertGuardrailsV2(data: InsertGuardrailsV2): Promise<GuardrailsV2>;
+  /** #1088: the kill switch's OWN three columns and nothing else (never the merge list in upsertGuardrailsV2). */
+  setKillSwitchState(mode: 'live' | 'paper', state: { tripped: boolean; reason: string | null; trippedAt: Date | null }): Promise<GuardrailsV2>;
+  /** B-SIZING-DEC-RESTORE P6: the guardrails write and its audit rows commit together or not at all. */
+  upsertGuardrailsV2WithAudit(data: InsertGuardrailsV2, audit: InsertAuditLog[]): Promise<GuardrailsV2>;
 
   // Phase 4: Goals Presets methods
   getGoalsPresets(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets[]>;
@@ -777,8 +781,10 @@ export class DatabaseStorage implements IStorage {
     return result || null;
   }
 
-  async upsertGuardrailsV2(data: InsertGuardrailsV2): Promise<GuardrailsV2> {
-    const existing = await this.getGuardrailsV2({ mode: data.mode });
+  // B-SIZING-DEC-RESTORE P6: `exec` lets upsertGuardrailsV2WithAudit run the same write inside its transaction;
+  // every other caller keeps the module `db`. The field list below is unchanged.
+  async upsertGuardrailsV2(data: InsertGuardrailsV2, exec: Pick<typeof db, 'select' | 'update' | 'insert'> = db): Promise<GuardrailsV2> {
+    const [existing] = await exec.select().from(guardrailsV2).where(eq(guardrailsV2.mode, data.mode));
     
     if (existing) {
       // For updates, merge with existing values to preserve unmodified fields
@@ -809,7 +815,7 @@ export class DatabaseStorage implements IStorage {
         lastUpdated: new Date()
       };
       
-      const [result] = await db
+      const [result] = await exec
         .update(guardrailsV2)
         .set(updateData)
         .where(eq(guardrailsV2.mode, data.mode))
@@ -820,9 +826,58 @@ export class DatabaseStorage implements IStorage {
         ...data,
         lastUpdated: new Date()
       };
-      const [result] = await db.insert(guardrailsV2).values(insertData).returning();
+      const [result] = await exec.insert(guardrailsV2).values(insertData).returning();
       return result;
     }
+  }
+
+  /**
+   * B-SIZING-DEC-RESTORE P6 (PRE_AUDIT §13 F8): the guardrails write and its audit rows in ONE transaction.
+   * The settings route used to save first and write `audit_log` afterwards, outside the save, so a failed
+   * audit insert returned an error with the new value already live and unrecorded. Kyle now adjusts the
+   * paper position % by hand every few days, and the paper window reads these rows as its stamp
+   * (`#1080` am.2), so an edit must never land without its record.
+   */
+  async upsertGuardrailsV2WithAudit(data: InsertGuardrailsV2, audit: InsertAuditLog[]): Promise<GuardrailsV2> {
+    return await db.transaction(async (tx) => {
+      const row = await this.upsertGuardrailsV2(data, tx);
+      if (audit.length > 0) {
+        await tx.insert(auditLog).values(audit);
+      }
+      return row;
+    });
+  }
+
+  /**
+   * #1088 (B-SIZING-DEC-RESTORE P7): write the kill switch's state — `killSwitchTripped`,
+   * `killSwitchReason`, `killSwitchTrippedAt` — and NOTHING else.
+   *
+   * WHY A SEPARATE METHOD: `tripKillSwitch`/`resetKillSwitch` used to call `upsertGuardrailsV2`, whose
+   * UPDATE writes a hand-maintained field list that never included these three columns, so a trip
+   * stopped the engine but was never saved (the per-trade kill check, the status routes and the
+   * banner all read `false`). They also re-wrote EVERY other column from a read taken moments
+   * earlier, so a guardrail saved in between was silently reverted (PRE_AUDIT §13 F9). A write that
+   * names only its own columns can do neither.
+   * Fail-hard: no row for the mode is a real error, never a silent no-op.
+   */
+  async setKillSwitchState(
+    mode: 'live' | 'paper',
+    state: { tripped: boolean; reason: string | null; trippedAt: Date | null },
+  ): Promise<GuardrailsV2> {
+    const [result] = await db
+      .update(guardrailsV2)
+      .set({
+        killSwitchTripped: state.tripped,
+        killSwitchReason: state.reason,
+        killSwitchTrippedAt: state.trippedAt,
+        lastUpdated: new Date(),
+      })
+      .where(eq(guardrailsV2.mode, mode))
+      .returning();
+    if (!result) {
+      throw new Error(`[#1088][setKillSwitchState] no guardrails_v2 row for mode=${mode} — kill-switch state NOT written`);
+    }
+    return result;
   }
 
   // Phase 4: Goals Presets methods

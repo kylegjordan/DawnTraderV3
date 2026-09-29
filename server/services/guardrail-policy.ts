@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
-import type { GuardrailsV2, InsertGuardrailsV2 } from '@shared/schema';
+import type { GuardrailsV2 } from '@shared/schema';
 import { storage } from '../storage';
 
 /**
@@ -223,11 +223,12 @@ class GuardrailPolicyService {
   public getEffective(guardrail: GuardrailsV2): EffectiveGuardrails {
     const lockedByUser = (guardrail.lockedByUser as Record<string, boolean>) || {};
     
-    // REB 8.8.3-G: Include maxPositionPercentPct with fallback for existing rows
+    // B-SIZING-DEC-RESTORE P5: NO fallback. The column is NOT NULL and (P5) CHECKed to 0 < p <= 100, so the
+    // old `value ? parse : (paper 30 | live 10)` could only ever fire on a stored 0 — and then it MASKED it,
+    // reporting 30 while the sizer refused every open on the real 0. Parse the stored value and let
+    // RULE_012 in validate() report it (rule 15: no hard-coded fallback for a DB-governed setting).
     const guardrailAny = guardrail as any;
-    const maxPositionPercentPct = guardrailAny.maxPositionPercentPct 
-      ? parseFloat(String(guardrailAny.maxPositionPercentPct))
-      : guardrail.mode === 'paper' ? 30.00 : 10.00;
+    const maxPositionPercentPct = parseFloat(String(guardrail.maxPositionPercentPct));
     
     // REB 8.8.3-H: LPCP fields with safe defaults
     const lpcp = {
@@ -451,6 +452,35 @@ class GuardrailPolicyService {
       }
     }
 
+    // RULE_012 / RULE_013 (B-SIZING-DEC-RESTORE P5): bound BOTH sizing percentages to 0 < x <= 100.
+    // Nothing refused a mistyped value before: 50 typed for 5 saved (trades 10x larger), an emptied box
+    // saved 0 (the sizer then refuses every open, active-position-sizing.ts:180-184). The sizer is
+    // B x e x p (:225-227), so p above e is coherent and NOT refused (PRE_AUDIT §13 F13). Same
+    // present-but-non-finite => FAIL rule as RULE_011: a skipped check would read as a pass.
+    const pctRangeRules: Array<{ id: string; name: string; param: 'maxPositionPercentPct' | 'maxTotalExposurePct'; fallbackMsg: string }> = [
+      { id: 'RULE_012', name: 'Position Size Range', param: 'maxPositionPercentPct', fallbackMsg: 'Max position % must satisfy 0 < p <= 100 (got {value})' },
+      { id: 'RULE_013', name: 'Total Exposure Range', param: 'maxTotalExposurePct', fallbackMsg: 'Max total exposure % must satisfy 0 < e <= 100 (got {value})' },
+    ];
+    for (const r of pctRangeRules) {
+      const raw = (guardrail as Record<string, unknown>)[r.param];
+      if (raw === undefined) continue;
+      const v = parseFloat(String(raw));
+      const ok = Number.isFinite(v) && v > 0 && v <= 100;
+      if (!ok) {
+        const rule = this.rulesConfig.rules.find(x => x.id === r.id);
+        failures.push({
+          ruleId: r.id,
+          ruleName: rule?.name || r.name,
+          severity: 'error',
+          message: (rule?.error_message || r.fallbackMsg).replace('{value}', String(raw)),
+          param: r.param,
+          value: v,
+          expected: '0 < x <= 100',
+        });
+        this.incrementMetric('ruleFailures', r.id);
+      }
+    }
+
     // Determine overall status
     const hasErrors = failures.some(f => f.severity === 'error');
     const hasWarnings = failures.some(f => f.severity === 'warn');
@@ -480,28 +510,12 @@ class GuardrailPolicyService {
   public async tripKillSwitch(mode: TradingMode, reason: string, lossPercent?: number, threshold?: number): Promise<void> {
     console.log(`[GuardrailPolicy] 🚨 KILL SWITCH TRIPPED for ${mode}: ${reason}`);
     
-    // 1. Persist kill switch state to database
-    const guardrails = await storage.getGuardrailsV2({ mode });
-    // P19-B3b: getGuardrailsV2 returns GuardrailsV2 | null; destructuring before a
-    // null guard is what tsc flagged ("property does not exist on ... | null").
-    // Guard null (fail-hard — a kill switch with no configured guardrails row is a
-    // real error, not something to silently default).
-    if (!guardrails) {
-      throw new Error(`[GuardrailPolicy] Cannot trip kill switch: no guardrails_v2 row for mode=${mode}`);
-    }
-    const { lockedByUser: _lockedByUserRaw, ...rest } = guardrails;
-    // P19-B3b: the jsonb select type surfaces lockedByUser as `unknown`, but the insert
-    // shape wants the column's Json lock-map type. Narrow to the exact insert field type
-    // (the per-parameter lock map this jsonb column holds) — type-accurate, not `any`.
-    const lockedByUser = _lockedByUserRaw as InsertGuardrailsV2['lockedByUser'];
-    await storage.upsertGuardrailsV2({
-      ...rest,
-      mode,
-      lockedByUser,
-      killSwitchTripped: true,
-      killSwitchReason: reason,
-      killSwitchTrippedAt: new Date()
-    });
+    // 1. Persist kill switch state to database — ONLY its own three columns (#1088).
+    // It used to go through `upsertGuardrailsV2`, whose update list never carried these columns, so a
+    // trip was never saved; and it re-wrote every other guardrail from a read taken just before, so a
+    // setting saved in between was reverted (PRE_AUDIT §13 F9). `setKillSwitchState` throws when the
+    // mode has no row — a kill switch with no configured guardrails row is a real error.
+    await storage.setKillSwitchState(mode, { tripped: true, reason, trippedAt: new Date() });
     
     // 2. REB 8.8.3-KS-B: Stop trading using SAME path as /api/trading/stop
     // Set isEngineActive = false
@@ -573,24 +587,8 @@ class GuardrailPolicyService {
   public async resetKillSwitch(mode: TradingMode): Promise<void> {
     console.log(`[GuardrailPolicy] ✅ Kill switch reset for ${mode}`);
     
-    // Persist to database
-    const guardrails = await storage.getGuardrailsV2({ mode });
-    // P19-B3b: null guard before destructure (GuardrailsV2 | null), same as tripKillSwitch.
-    if (!guardrails) {
-      throw new Error(`[GuardrailPolicy] Cannot reset kill switch: no guardrails_v2 row for mode=${mode}`);
-    }
-    const { lockedByUser: _lockedByUserRaw, ...rest } = guardrails;
-    // P19-B3b: narrow the jsonb `unknown` select type to the insert column type
-    // (same as tripKillSwitch above).
-    const lockedByUser = _lockedByUserRaw as InsertGuardrailsV2['lockedByUser'];
-    await storage.upsertGuardrailsV2({
-      ...rest,
-      mode,
-      lockedByUser,
-      killSwitchTripped: false,
-      killSwitchReason: null,
-      killSwitchTrippedAt: null
-    });
+    // Persist to database — ONLY the kill switch's own three columns (#1088; see tripKillSwitch).
+    await storage.setKillSwitchState(mode, { tripped: false, reason: null, trippedAt: null });
 
     // P19-B6: clear the in-memory daily-loss-budget state for this mode — releases the
     // `killInProgress` re-entrancy latch AND re-arms the warning tiers (Langston invariant 1b).

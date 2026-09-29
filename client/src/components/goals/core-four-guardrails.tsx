@@ -239,12 +239,25 @@ export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
   });
 
   const handleValueChange = (key: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setEditedValues(prev => ({ ...prev, [key]: numValue }));
+    // B-SIZING-DEC-RESTORE P5 (Langston B3): an emptied or non-numeric box is NOT zero. It used to save 0,
+    // and a 0 in the position or exposure % makes the sizer refuse every open. Keep what was typed, so the box
+    // shows it, and let handleSave refuse anything that is not a finite number. Applies to all eight fields.
+    const numValue = value.trim() === '' ? NaN : Number(value);
+    setEditedValues(prev => ({ ...prev, [key]: Number.isFinite(numValue) ? numValue : value }));
     setHasChanges(true);
   };
 
   const handleSave = () => {
+    // B-SIZING-DEC-RESTORE P5: nothing that is not a number leaves this screen (an empty box used to save 0).
+    const notNumbers = Object.entries(editedValues).filter(([, v]) => typeof v !== 'number' || !Number.isFinite(v));
+    if (notNumbers.length > 0) {
+      toast({
+        title: "Enter a number",
+        description: `Not saved: ${notNumbers.map(([k]) => k).join(', ')} must be a number (an empty box is not zero), for ${mode} mode.`,
+        variant: "destructive",
+      });
+      return;
+    }
     // P19-B6.8: per-mode daily-loss warning-tier coherency (RULE_011) — validated against THIS mode's
     // effective row (edited values merged over the loaded mode row), so paper and live never cross-bleed.
     // The tiers are % OF the kill-switch threshold, so 0 < warn1 < warn2 < 100 guarantees BOTH warnings

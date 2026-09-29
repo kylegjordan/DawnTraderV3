@@ -1682,120 +1682,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       console.log(`[GuardrailsV2:${requestId}] Upserting guardrails for mode: ${mode}`, updatePayload);
 
-      // Phase 28.C: Get old values for audit logging
+      // B-SIZING-DEC-RESTORE P6 (PRE_AUDIT §13 F8): SIGN the edit. The payload never set lastUpdatedBy, so the
+      // row kept whoever wrote last (e.g. a migration label) after every UI save.
+      updatePayload.lastUpdatedBy = String(userId);
+
+      // Phase 28.C: old values for the audit rows, read BEFORE the write.
       const oldGuardrails = await storage.getGuardrailsV2({ mode });
 
-      // Upsert guardrails_v2
-      const guardrailsData = await storage.upsertGuardrailsV2(updatePayload);
+      // B-SIZING-DEC-RESTORE P6: one audit row per CHANGED field, derived from the payload (so no field can be
+      // missed, as maxTotalExposurePct and the warning tiers were), numbers compared as numbers.
+      const { buildGuardrailAuditEntries } = await import('./services/guardrail-audit.js');
+      const auditEntries = buildGuardrailAuditEntries(
+        oldGuardrails as unknown as Record<string, unknown> | null, updatePayload, userId, mode);
 
-      // Phase 28.C: Log changes to audit_log
-      if (oldGuardrails) {
-        const auditPromises = [];
-        
-        if (portfolioRiskPerTradePct !== undefined && oldGuardrails.portfolioRiskPerTradePct !== String(portfolioRiskPerTradePct)) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'portfolioRiskPerTradePct',
-            oldValue: oldGuardrails.portfolioRiskPerTradePct,
-            newValue: String(portfolioRiskPerTradePct),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        if (symbolCooldownMinutes !== undefined && oldGuardrails.symbolCooldownMinutes !== symbolCooldownMinutes) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'symbolCooldownMinutes',
-            oldValue: String(oldGuardrails.symbolCooldownMinutes),
-            newValue: String(symbolCooldownMinutes),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        if (maxOpenPositions !== undefined && oldGuardrails.maxOpenPositions !== maxOpenPositions) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'maxOpenPositions',
-            oldValue: String(oldGuardrails.maxOpenPositions),
-            newValue: String(maxOpenPositions),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        if (dailyLossKillSwitchPct !== undefined && oldGuardrails.dailyLossKillSwitchPct !== String(dailyLossKillSwitchPct)) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'dailyLossKillSwitchPct',
-            oldValue: oldGuardrails.dailyLossKillSwitchPct,
-            newValue: String(dailyLossKillSwitchPct),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        // Phase 8.8.3-J7.1: Audit logging for new guardrail fields
-        if (maxPositionPercentPct !== undefined && oldGuardrails.maxPositionPercentPct !== String(maxPositionPercentPct)) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'maxPositionPercentPct',
-            oldValue: oldGuardrails.maxPositionPercentPct,
-            newValue: String(maxPositionPercentPct),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        if (lowPriceThreshold !== undefined && oldGuardrails.lowPriceThreshold !== String(lowPriceThreshold)) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'lowPriceThreshold',
-            oldValue: oldGuardrails.lowPriceThreshold,
-            newValue: String(lowPriceThreshold),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        if (lowPriceMinStopAtrMult !== undefined && oldGuardrails.lowPriceMinStopAtrMult !== String(lowPriceMinStopAtrMult)) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'lowPriceMinStopAtrMult',
-            oldValue: oldGuardrails.lowPriceMinStopAtrMult,
-            newValue: String(lowPriceMinStopAtrMult),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        if (lowPriceMinPositionNotional !== undefined && oldGuardrails.lowPriceMinPositionNotional !== String(lowPriceMinPositionNotional)) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'lowPriceMinPositionNotional',
-            oldValue: oldGuardrails.lowPriceMinPositionNotional,
-            newValue: String(lowPriceMinPositionNotional),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        if (lockedByUser !== undefined && JSON.stringify(oldGuardrails.lockedByUser) !== JSON.stringify(lockedByUser)) {
-          auditPromises.push(storage.addAuditLog({
-            entityType: 'guardrails',
-            field: 'lockedByUser',
-            oldValue: JSON.stringify(oldGuardrails.lockedByUser),
-            newValue: JSON.stringify(lockedByUser),
-            changedBy: userId,
-            tradingMode: mode
-          }));
-        }
-        
-        await Promise.all(auditPromises);
-        if (auditPromises.length > 0) {
-          console.log(`[GuardrailsV2:${requestId}] Logged ${auditPromises.length} audit entries`);
-        }
+      // Upsert guardrails_v2 AND its audit rows in ONE transaction (P6): an edit never lands unrecorded.
+      const guardrailsData = await storage.upsertGuardrailsV2WithAudit(updatePayload, auditEntries);
+      if (auditEntries.length > 0) {
+        console.log(`[GuardrailsV2:${requestId}] Logged ${auditEntries.length} audit entries (same transaction as the save)`);
       }
 
       // Phase 3: Emit telemetry event if manual override state changed
