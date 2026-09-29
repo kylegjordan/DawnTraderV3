@@ -17,6 +17,29 @@
 
 ⛔ **BOTH VERDICTS EXCLUDE 17 SYMBOLS UNTIL `#1024` LANDS** — `A` · `ADI` · `CAT` · `CVX` · `DASH` · `EDU` · `ES` · `IR` · `MET` · `OPEN` · `PEP` · `STRK` · `STX` · `SUI` · `T` · `WELL` · `WEN` (all `/USD`), which share an exact cache key with a Kraken crypto pair. **Their historical share is 1.09 % (3 of 274 xStock closes), ABOVE P8's 1.0 % PASS line** — so the exclusion is not immaterial by construction, and **if restoring them would flip an arm, that arm is INCONCLUSIVE-EXTEND, never PASS on the remainder** (Langston, deploy conditions 6 and 7).
 
+### ⏳ INTERIM READ, 2026-09-29 — the window is still open to 2026-10-02T20:09:47Z; the verdict of record is re-run after it closes
+Read at 2026-09-29T14:19:38Z (P8) and 14:00Z (Arm B) on staging by a read-only reader, then **re-derived independently by a second reader with its own SQL — every figure matched.** Pre-registered text quoted from `B_XSTOCK_FEE_CONTRACT_PRE_AUDIT.md:239-249` (P8) and `:262-281` (Arm B). Queries: session scratchpad `p8_q1..q5.sql`, `rv1..rv4.sql`, `armb_read*.sql`, `p8_fine.sql`.
+
+**P8 — INCONCLUSIVE-EXTEND under the rule, on TWO counts (Langston 2026-09-29):**
+1. **The gate.** Verdict population (17 alias symbols excluded): **116 maker of 2,096 decisions = 5.53 %, and all 116 maker picks are class (iii)** (r ≤ 0.3478; class (i) 0, class (ii) 0). Buckets: booked-new 6, **booked-old 0**, no position 110. **Leg 1, n ≥ 300: MET** inside single stretches (718 and 865). **Leg 2, zero class-(iii): NOT MET.** The share sits between the PASS line (1.0 %) and every candidate `p₀`: **24.0 % (24/100, :241, 16:45Z) · 21.9 % (25/114 pooled) and 20.5 % (23/112 verdict population), both frozen at 20:01:34Z** — §K's n = 114. Alias rows restored: 122/2,153 = 5.67 %, no flip.
+2. **The window is not one population.** **Eighteen deploys** landed inside it (the staging deploy clone's history); seventeen changed trading code. None is discharged as inert.
+- ★ **THE VERDICT IS THE SAME HOWEVER THE WINDOW IS SPLIT.** Counting decisions and maker picks between every pair of consecutive deploys, **all 79 possible stretches with n ≥ 300 hold at least 35 class-(iii) picks and a maker share of 4.82 %–6.11 %** — so PASS is unreachable and NO IMPROVEMENT is unreachable on every split. **A per-deploy inertness argument cannot change the result, so none is claimed.**
+- **These 2,096 rows are never pooled with any extension.**
+- *Context, not verdict:* the instrument cannot separate a bypass from a thin genuine survivor (the pre-audit's own honest limit, `:231`). The one discriminating sign in hand points to the corrected fee REACHING the decision: the implied maker-over-taker advantage (the recorded EVs with the fill haircut undone, per entry) shifted at the deploy: **before it, 0 of 113 joined decisions (maker and taker) fell below 0.004 — the old fee gap — and the minimum was 0.00464; after it, 62 of the 122 maker picks fall below 0.004** (the new gap is 0.0012). Re-checker's query `rv3.sql`. The decision row records no fee, so this is not proof. **And an extension on this instrument can reach PASS only if the maker share falls to about zero.**
+
+**Arm B — a RISE in every segment, no flip; no PASS/FAIL line exists (:277).** Segments are split at the `B-PRICE-SIDE-BY-JOB` deploys (:278); no pooled figure.
+| segment | B1 VTS admission rate (verdict pop.) | B2 paper admitted per trading day |
+|---|---|---|
+| baseline (frozen Step-6) | 98/50,633 = 0.194 % | 20.6 |
+| S0 fee deploy → 8a-P2 | 41/5,285 = 0.776 % (4.0×) | 48.4 (2.3×) |
+| S1 → 8a-P3 | 270/11,135 = 2.425 % (12.5×) | 236.3 (11.5×) |
+| S2 → 8a-P4b | 765/40,650 = 1.882 % (9.7×) | 211.7 (10.3×) |
+| S3 (weekend) | empty | empty |
+| S4 → 8a-P4c | 250/15,783 = 1.584 % (8.2×) | 146.0 (7.1×) |
+| S5 → read | 908/46,457 = 1.954 % (10.1×) | 173.5 (8.4×) |
+**Limits on the size:** the same restart also deployed OBJ-7 and reset the xStock learning epoch, so the rise is not the fee's alone · short segments are skewed by time of day (off-hours rates are flat from the deploy on, 12–17× the baseline's off-hours rate) · the row-level B1 rate overstates the loosening (setup-level 6.2 % → 42.3 %, 6.9× against 10.1×) · B2 is not independent of B1 · `3n.v` is shown inert for B1 in code (the xStock VTS reach and min-reward-to-risk gates only tag).
+**⚠️ The frozen baseline counts a US holiday:** `:264` calls 2026-09-07 "a partial Sunday"; it was Monday, Labor Day, and all 1,748 of its gate rows are alias symbols. The registered figure stands (20.6/day); with 09-07 replaced by the prior trading day, 09-03, it is 31.2/day (B1 0.217 %). Both printed at the verdict.
+
 ---
 
 ## 1. WHAT WAS WRONG, AND WHAT IT COST
