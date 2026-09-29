@@ -1,0 +1,120 @@
+// ARCHIVED — B-SIZING-DEC-RESTORE increment 2d (2026-09-29). NOT COMPILED (.removed). Git history is authoritative.
+// PRE_AUDIT §18.5 (Langston's Step-2 BLOCKER on P-8) / #1110: the ratio was identically 0.97 × correlationScale, so
+// `bound` (< 0.95) was an indicator on getScalingFactor, not on any clamp; `wasClamped` was a constant false. A buffer
+// edit to 0.94 would have read 100% bound and fired Phase 25's ranker switch on arithmetic. RETIRED; the respec is
+// B-CLAMP-ESTIMAND-RESPEC (SPRINT_TO_LIVE_PLAN row 9e).
+
+// ── active-position-sizing.ts ──
+  let estimatedValue = quantity * entryPrice;
+  // Retained for the result contract: nothing is clamped any more because the size IS
+  // the cap. Reporting a clamp that cannot occur would misdescribe the sizing decision.
+  const wasClamped = false;
+
+
+  // P19-B7.1 (OBJ-5): the effective-risk-fraction ratio = actual dollar-risk after ALL reductions
+  // (notional clamp + covariance correlationScale) ÷ the intended riskAmount. One field absorbing
+  // BOTH reductions — crucially correlationScale, which does NOT flip wasClamped (CC-A A.2b), so a
+  // wasClamped-only watch is blind to covariance decoherence. = 1 when the position risks exactly
+  // its intended fraction; < 1 when a clamp or the covariance scale held it below. The open-path /
+  // shadow telemetry bins on this to measure how often R-rank decoheres from realized-$EV (Phase-25:
+  // >~15-20% bind → switch the honest ranker to realized-$EV at the post-clamp executed size).
+  // ★ obj-1 CHANGES WHAT THIS INVARIANT CAN MEAN — read before "fixing" it.
+  // The OBJ-5 ratio was defined for FIXED-FRACTIONAL-RISK sizing: risk at most
+  // `riskAmount`, where clamps and the covariance scale could only REDUCE it. Under
+  // fixed-notional there IS no riskAmount to be a fraction of — the size is a share of
+  // the portfolio and the stop is not an input — so the old ratio has no denominator and
+  // computing one would invent a number.
+  //
+
+
+  // ★ THE RATIO IS RE-POINTED, NOT DELETED — it has a LIVE consumer.
+  // `rtb-metrics-service.ts` bins on this to measure how often sizing decoheres from
+  // intent. Deleting the field would leave that reader without a writer, which is the
+  // trap this batch's own pre-audit made a census mandatory for — so the field keeps its
+  // name and its ROLE ("how much of the intended size actually got deployed") and gets
+  // the only denominator that means anything under fixed-notional: the intended
+  // per-trade notional. Still ≤ 1, still reduced only by the covariance scale.
+  const effectiveRiskFractionRatio = perTradeNotional > 0 ? estimatedValue / perTradeNotional : 0;
+
+
+
+// ── active-execution-engine.ts (processSignal, FALLBACK_SIZED branch) ──
+            // P19-B7.1 (OBJ-5, Langston CHANGE-1): record the SIZED signal's effective-risk-fraction
+            // for the clamp-bind watch — INSIDE the opened-gate so the population is EXACTLY opened
+            // positions (per actually-SIZED signal, NOT per candidate). A clamped-to-zero-but-valid
+            // result would otherwise stamp ratio=0 → bound=true and inflate boundRate with non-trades,
+            // biasing the Phase-25 go/no-go (boundRate >~15-20% flips the ranker to realized-$EV).
+            if (sizingResult.sizingDetails) {
+              rtbMetricsService.recordSizingClampSample({
+                symbol: signal.symbol,
+                strategy: signal.strategy,
+                assetClass: typeof _sizeClass === 'string' ? _sizeClass : undefined,
+                effectiveRiskFractionRatio: sizingResult.sizingDetails.effectiveRiskFractionRatio,
+                wasClamped: sizingResult.sizingDetails.wasClamped,
+                timestamp: Date.now(),
+              });
+            }
+
+
+// ── rtb-metrics-service.ts ──
+/**
+ * P19-B7.1 (OBJ-5): one sized-signal's risk-fraction telemetry — the clamp-bind watch.
+ * Recorded once per actually-SIZED signal at the open path (NOT per candidate — denominator
+ * trap). `effectiveRiskFractionRatio` = deployed notional ÷ intended per-trade notional (≤1)
+ * — RE-POINTED by B-SIZING-DEC-RESTORE obj-1: sizing is fixed-notional now, so the old
+ * "dollar-risk ÷ intended riskAmount" denominator no longer exists. Same ROLE (how much
+ * of the intended size actually got deployed), correct basis. `bound` =
+ * the ratio fell materially below 1 (a clamp or the covariance scale held the position below its
+ * intended risk). The Phase-25 GO/NO-GO reads the bind-RATE: >~15-20% bound → the sizer is
+ * piecewise-notional in practice, R-rank overstates the top of the book → switch the honest
+ * ranker to realized-$EV at the executed size; <~5% → noise, keep R. All zero until paper-active.
+ */
+export interface SizingClampSample {
+  symbol: string;
+  strategy: string;
+  assetClass?: string;
+  effectiveRiskFractionRatio: number;
+  wasClamped: boolean;     // the notional cap bound (sizer's own flag)
+  bound: boolean;          // ratio < BIND_THRESHOLD (absorbs notional clamp AND covariance scale)
+  timestamp: number;
+}
+
+
+  // ── P19-B7.1 (OBJ-5): the sizing clamp-bind watch (the wired deliverable, not prose). ──
+  private sizingClampSamples: SizingClampSample[] = [];
+  private readonly MAX_SIZING_CLAMP_SAMPLES = 500;
+  /** A position risking < this fraction of its intended risk counts as "bound" (clamp/scale held it down). */
+  private readonly SIZING_BIND_THRESHOLD = 0.95;
+
+  /** P19-B7.1 (OBJ-5): record one SIZED signal's effective-risk-fraction. Bounded buffer; called once per open-path sizing. */
+  recordSizingClampSample(sample: Omit<SizingClampSample, 'bound'>): void {
+    const bound = Number.isFinite(sample.effectiveRiskFractionRatio)
+      && sample.effectiveRiskFractionRatio < this.SIZING_BIND_THRESHOLD;
+    this.sizingClampSamples.push({ ...sample, bound });
+    if (this.sizingClampSamples.length > this.MAX_SIZING_CLAMP_SAMPLES) {
+      this.sizingClampSamples = this.sizingClampSamples.slice(-this.MAX_SIZING_CLAMP_SAMPLES);
+    }
+  }
+
+  /** P19-B7.1 (OBJ-5): full sizing-clamp sample buffer for the diagnostics surface. */
+  getSizingClampSamples(): SizingClampSample[] {
+    return [...this.sizingClampSamples];
+  }
+
+
+  /**
+   * P19-B7.1 (OBJ-5): the clamp-bind summary — the Phase-25 decision input. `boundRate` is the
+   * fraction of SIZED signals held below their intended risk by a clamp or the covariance scale.
+   * >~0.15-0.20 → R-rank decoheres from realized-$EV in practice (switch the honest ranker to
+   * realized-$EV at executed size; §13). All zero until paper-active trading is on.
+   */
+  getSizingClampProof(): { totalSamples: number; boundCount: number; boundRate: number | null; meanRatio: number | null } {
+    const s = this.sizingClampSamples;
+    if (s.length === 0) return { totalSamples: 0, boundCount: 0, boundRate: null, meanRatio: null };
+    const boundCount = s.filter((x) => x.bound).length;
+    // CHANGE-1 (Langston): guard the mean against a non-finite ratio — one NaN/undefined would
+    // otherwise poison the whole summary via reduce. meanRatio is over the finite ratios only.
+    const finite = s.filter((x) => Number.isFinite(x.effectiveRiskFractionRatio));
+    const meanRatio = finite.length > 0 ? finite.reduce((a, x) => a + x.effectiveRiskFractionRatio, 0) / finite.length : null;
+    return { totalSamples: s.length, boundCount, boundRate: boundCount / s.length, meanRatio };
+  }

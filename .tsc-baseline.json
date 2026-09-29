@@ -4,8 +4,8 @@
   "frozen_at_commit": "d3e643032",
   "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 372,
-  "file_count": 48,
+  "total_errors": 367,
+  "file_count": 47,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -98,7 +98,6 @@
           "Argument of type '{ symbol: string; baseCurrency: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | \"liquidity_trap\" | \"dhma\" | \"morning_star\" | \"inside_bar_reversal\" | \"support_bounce\" | \"pivot_": 1,
           "Argument of type '{ minVolume: string | null; minDailyRange: any; minPrice: string | null; maxPrice: string | null; maxBidAskSpread: string | null; excludeStablecoins: boolean | null; rsiMin: number | null; rsiMax: number | null; volatilityMin: string | null; volatilityMax: string | null; quoteCurre": 1,
           "Argument of type '{ status: string; limit: number; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 2,
-          "Argument of type '{ symbol: string; strategy: \"vwap_pullback\"; entryPrice: number; stopPrice: number; targetPrice: number; confidence: number; mode: \"live\" | \"paper\"; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
           "Argument of type '{}' is not assignable to parameter of type '\"live\" | \"paper\"'.": 5,
           "Argument of type '{ strategy: string; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
           "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: string; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: string | undefined; mode: \"live\" | \"paper\"; strategy: string; assetClass: string; }'.": 2,
@@ -126,8 +125,6 @@
           "Property 'executeTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
           "Property 'modeRegistry' does not exist on type 'typeof import(\"<ROOT>/server/services/mode-registry\")'.": 2,
           "Property 'minDailyRange' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; minVolume: string | null; minPrice: string | null; maxBidAskSpread: string | null; excludeStablecoins: boolean | null; lockedByUser: unknown; managedByLottie: boolea": 2,
-          "Property 'approved' does not exist on type 'TradeSafetyResult'.": 1,
-          "Property 'reason' does not exist on type 'TradeSafetyResult'.": 1,
           "Property 'dormant' does not exist on type '{}'.": 2,
           "Property 'getExecutionConfigs' does not exist on type 'DatabaseStorage'.": 1,
           "Property 'upsertExecutionConfig' does not exist on type 'DatabaseStorage'.": 1,
@@ -512,17 +509,6 @@
       }
     },
     {
-      "path": "server/services/m5e-validation-service.ts",
-      "phase_tag": "TBD (audit pending)",
-      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
-      "errors": {
-        "TS2339": {
-          "Property 'di' does not exist on type 'Phase10TradeRecord'.": 1,
-          "Property 'gsi' does not exist on type 'Phase10TradeRecord'.": 1
-        }
-      }
-    },
-    {
       "path": "server/services/memory-lifecycle.ts",
       "phase_tag": "TBD (audit pending)",
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
@@ -735,6 +721,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-09-29T17:25:38.400Z",
-  "last_synced_by_batch": "B-SIZING-DEC-RESTORE-2c"
+  "last_synced_at_iso": "2026-09-29T20:02:32.907Z",
+  "last_synced_by_batch": "B-SIZING-DEC-RESTORE-2d"
 }

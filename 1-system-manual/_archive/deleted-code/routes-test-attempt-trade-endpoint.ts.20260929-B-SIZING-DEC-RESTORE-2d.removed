@@ -1,0 +1,51 @@
+// ARCHIVED — B-SIZING-DEC-RESTORE increment 2d (2026-09-29). NOT COMPILED (.removed). Git history is authoritative.
+// PRE_AUDIT §18.1 F4 / plan P-4: zero client or script callers; it called checkGuardrailRisk(tradeCandidate, mode,
+// settings) against the (mode, trade, ...) signature. The same family as 2c's two deleted test routes.
+
+  // Test endpoint to check if trade execution is blocked during suspension
+  apiRouter.post('/test/attempt-trade', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.body.mode || req.query.mode || 'paper') as 'live' | 'paper';
+      
+      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
+      const settings = await buildSettingsFromModeLevel(mode, userId);
+      
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found for this mode' });
+      }
+
+      // Create a test signal
+      const testSignal = {
+        symbol: 'ETHUSD',
+        strategy: 'vwap_pullback' as const,
+        entryPrice: 3000,
+        stopPrice: 2950,
+        targetPrice: 3100,
+        confidence: 0.8,
+        metadata: { test: true }
+      };
+
+      // [9.6.3] Run through risk checks using checkGuardrailRisk
+      const tradeCandidate = {
+        symbol: testSignal.symbol,
+        strategy: testSignal.strategy,
+        entryPrice: testSignal.entryPrice,
+        stopPrice: testSignal.stopPrice,
+        targetPrice: testSignal.targetPrice,
+        confidence: testSignal.confidence,
+        mode
+      };
+      const riskCheck = await checkGuardrailRisk(tradeCandidate, mode, settings);
+
+      res.json({
+        killSwitchTripped: settings.killSwitchTripped,
+        riskCheckApproved: riskCheck.approved,
+        riskCheckReason: riskCheck.reason,
+        testSignal
+      });
+    } catch (error: any) {
+      console.error('Test attempt-trade error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });

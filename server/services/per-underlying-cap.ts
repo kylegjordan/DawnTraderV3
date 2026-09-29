@@ -90,19 +90,44 @@ export function assignCohortHash(symbol: string): 0 | 1 {
  *                           same path (do NOT mix paths; VTS and paper have
  *                           separate caps that would otherwise conflate)
  */
+/**
+ * B-SIZING-DEC-RESTORE 2d (#1096 sibling, PRE_AUDIT §18 P-9): a missing or malformed `per_underlying_cap` row is a
+ * CONFIG ERROR, thrown as this class so the callers can tell it from a transient lookup failure. Both refuse the
+ * signal; they are counted under DIFFERENT reasons (Langston's Step-2 condition — never collapsed).
+ */
+export class PerUnderlyingCapConfigError extends Error {
+  constructor(constantName: string, raw: unknown) {
+    super(`per_underlying_cap.${constantName} is missing or malformed (${JSON.stringify(raw)})`);
+    this.name = 'PerUnderlyingCapConfigError';
+  }
+}
+
+export type PerUnderlyingCapUnavailable = 'config_missing' | 'lookup_failed';
+
+/** Which of the two failure classes a thrown cap check belongs to. */
+export function classifyPerUnderlyingCapFailure(err: unknown): PerUnderlyingCapUnavailable {
+  return err instanceof PerUnderlyingCapConfigError ? 'config_missing' : 'lookup_failed';
+}
+
 export async function checkPerUnderlyingCap(
   symbol: string,
   openTradeSymbols: string[],
 ): Promise<PerUnderlyingCapDecision> {
-  // Resolve module_constants. The `getConstant` calls fall through to the
-  // global wildcard rows seeded by the migration. If a row is missing
-  // (someone hand-edited the table), default to safe values.
-  const enabled =
-    (await getConstant<boolean>('per_underlying_cap', 'b67_3_enabled', GLOBAL_KEY)) ?? false;
-  const splitActive =
-    (await getConstant<boolean>('per_underlying_cap', 'b67_3_universe_split_active', GLOBAL_KEY)) ?? true;
-  const cap =
-    (await getConstant<number>('per_underlying_cap', 'b67_3_max_concurrent_per_underlying', GLOBAL_KEY)) ?? 2;
+  // Resolve module_constants (the global wildcard rows the migrations seed: enabled true, split true, cap 2).
+  // ⛔ B-SIZING-DEC-RESTORE 2d (P-9): NO FALLBACKS (rule 15). The comment that stood here said "default to safe
+  // values" and did the OPPOSITE — a missing `b67_3_enabled` row DISABLED the cap (`?? false`), and a missing cap row
+  // invented a 2. A missing or malformed row now throws PerUnderlyingCapConfigError and both callers REFUSE the signal.
+  const enabledRaw = await getConstant<unknown>('per_underlying_cap', 'b67_3_enabled', GLOBAL_KEY);
+  if (typeof enabledRaw !== 'boolean') throw new PerUnderlyingCapConfigError('b67_3_enabled', enabledRaw);
+  const splitRaw = await getConstant<unknown>('per_underlying_cap', 'b67_3_universe_split_active', GLOBAL_KEY);
+  if (typeof splitRaw !== 'boolean') throw new PerUnderlyingCapConfigError('b67_3_universe_split_active', splitRaw);
+  const capRaw = await getConstant<unknown>('per_underlying_cap', 'b67_3_max_concurrent_per_underlying', GLOBAL_KEY);
+  if (typeof capRaw !== 'number' || !Number.isInteger(capRaw) || capRaw < 1) {
+    throw new PerUnderlyingCapConfigError('b67_3_max_concurrent_per_underlying', capRaw);
+  }
+  const enabled: boolean = enabledRaw;
+  const splitActive: boolean = splitRaw;
+  const cap: number = capRaw;
 
   const cohort = assignCohortHash(symbol);
   const shadowMode = !enabled;

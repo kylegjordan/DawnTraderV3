@@ -100,27 +100,6 @@ export interface EvInputSample {
   timestamp: number;
 }
 
-/**
- * P19-B7.1 (OBJ-5): one sized-signal's risk-fraction telemetry — the clamp-bind watch.
- * Recorded once per actually-SIZED signal at the open path (NOT per candidate — denominator
- * trap). `effectiveRiskFractionRatio` = deployed notional ÷ intended per-trade notional (≤1)
- * — RE-POINTED by B-SIZING-DEC-RESTORE obj-1: sizing is fixed-notional now, so the old
- * "dollar-risk ÷ intended riskAmount" denominator no longer exists. Same ROLE (how much
- * of the intended size actually got deployed), correct basis. `bound` =
- * the ratio fell materially below 1 (a clamp or the covariance scale held the position below its
- * intended risk). The Phase-25 GO/NO-GO reads the bind-RATE: >~15-20% bound → the sizer is
- * piecewise-notional in practice, R-rank overstates the top of the book → switch the honest
- * ranker to realized-$EV at the executed size; <~5% → noise, keep R. All zero until paper-active.
- */
-export interface SizingClampSample {
-  symbol: string;
-  strategy: string;
-  assetClass?: string;
-  effectiveRiskFractionRatio: number;
-  wasClamped: boolean;     // the notional cap bound (sizer's own flag)
-  bound: boolean;          // ratio < BIND_THRESHOLD (absorbs notional clamp AND covariance scale)
-  timestamp: number;
-}
 
 /** P19-B7.2 (OBJ-6): one maker/taker best-of-both decision, recorded at signal-gen. */
 export interface MakerTakerDecisionSample {
@@ -314,26 +293,6 @@ class RtbMetricsService {
     return [...this.evInputSamples];
   }
 
-  // ── P19-B7.1 (OBJ-5): the sizing clamp-bind watch (the wired deliverable, not prose). ──
-  private sizingClampSamples: SizingClampSample[] = [];
-  private readonly MAX_SIZING_CLAMP_SAMPLES = 500;
-  /** A position risking < this fraction of its intended risk counts as "bound" (clamp/scale held it down). */
-  private readonly SIZING_BIND_THRESHOLD = 0.95;
-
-  /** P19-B7.1 (OBJ-5): record one SIZED signal's effective-risk-fraction. Bounded buffer; called once per open-path sizing. */
-  recordSizingClampSample(sample: Omit<SizingClampSample, 'bound'>): void {
-    const bound = Number.isFinite(sample.effectiveRiskFractionRatio)
-      && sample.effectiveRiskFractionRatio < this.SIZING_BIND_THRESHOLD;
-    this.sizingClampSamples.push({ ...sample, bound });
-    if (this.sizingClampSamples.length > this.MAX_SIZING_CLAMP_SAMPLES) {
-      this.sizingClampSamples = this.sizingClampSamples.slice(-this.MAX_SIZING_CLAMP_SAMPLES);
-    }
-  }
-
-  /** P19-B7.1 (OBJ-5): full sizing-clamp sample buffer for the diagnostics surface. */
-  getSizingClampSamples(): SizingClampSample[] {
-    return [...this.sizingClampSamples];
-  }
 
   // ── P19-B7.2 (OBJ-6): maker/taker decision telemetry + the maker-PICK-RATE monitoring line ──
   private makerTakerSamples: MakerTakerDecisionSample[] = [];
@@ -443,22 +402,6 @@ class RtbMetricsService {
     return { totalSamples: s.length, makerCount, takerCount: s.length - makerCount, makerPickRate: makerCount / s.length, hardFloorCount };
   }
 
-  /**
-   * P19-B7.1 (OBJ-5): the clamp-bind summary — the Phase-25 decision input. `boundRate` is the
-   * fraction of SIZED signals held below their intended risk by a clamp or the covariance scale.
-   * >~0.15-0.20 → R-rank decoheres from realized-$EV in practice (switch the honest ranker to
-   * realized-$EV at executed size; §13). All zero until paper-active trading is on.
-   */
-  getSizingClampProof(): { totalSamples: number; boundCount: number; boundRate: number | null; meanRatio: number | null } {
-    const s = this.sizingClampSamples;
-    if (s.length === 0) return { totalSamples: 0, boundCount: 0, boundRate: null, meanRatio: null };
-    const boundCount = s.filter((x) => x.bound).length;
-    // CHANGE-1 (Langston): guard the mean against a non-finite ratio — one NaN/undefined would
-    // otherwise poison the whole summary via reduce. meanRatio is over the finite ratios only.
-    const finite = s.filter((x) => Number.isFinite(x.effectiveRiskFractionRatio));
-    const meanRatio = finite.length > 0 ? finite.reduce((a, x) => a + x.effectiveRiskFractionRatio, 0) / finite.length : null;
-    return { totalSamples: s.length, boundCount, boundRate: boundCount / s.length, meanRatio };
-  }
 
   /**
    * reorg-B3 (#233, OBJ-6): compact proof summary derived from the EV-input samples — answers
@@ -562,9 +505,6 @@ class RtbMetricsService {
     // reorg-B3 (#233, OBJ-4): the EV-input proof surface (empty until paper-active turns on).
     evInputThreadProof: { totalSamples: number; withNonNullDbs: number; withNonNullDi: number; strongTrendBranchFired: number; strongTrendWithDbs: number };
     recentEvInputSamples: EvInputSample[];
-    // P19-B7.1 (OBJ-5): the sizing clamp-bind watch surface (empty until paper-active turns on).
-    sizingClampProof: { totalSamples: number; boundCount: number; boundRate: number | null; meanRatio: number | null };
-    recentSizingClampSamples: SizingClampSample[];
     // P19-B7.2 (OBJ-6): maker/taker decision watch — makerPickRate is the too-loose-haircut early warning.
     makerPickProof: { totalSamples: number; makerCount: number; takerCount: number; makerPickRate: number | null; hardFloorCount: number };
     recentMakerTakerSamples: MakerTakerDecisionSample[];
@@ -606,10 +546,6 @@ class RtbMetricsService {
       // (bounded). Empty until paper-active turns on; the #233-working signal is strongTrendWithDbs>0.
       evInputThreadProof: this.getEvInputThreadProof(),
       recentEvInputSamples: this.evInputSamples.slice(-25),
-      // P19-B7.1 (OBJ-5): the sizing clamp-bind watch — boundRate is the Phase-25 ranker decision
-      // input (>~0.15-0.20 → switch the honest ranker to realized-$EV). Zero until paper-active.
-      sizingClampProof: this.getSizingClampProof(),
-      recentSizingClampSamples: this.sizingClampSamples.slice(-25),
       // P19-B7.2 (OBJ-6): the maker-pick-rate watch — an implausibly high makerPickRate before live
       // calibration = the haircut is too loose (Langston Step-2 item 1). Zero until paper-active.
       makerPickProof: this.getMakerPickProof(),
@@ -636,7 +572,6 @@ class RtbMetricsService {
     this.bySymbol = {};
     this.byStrategy = {};
     this.evInputSamples = []; // reorg-B3 (#233, OBJ-4): clear the EV-input proof buffer on session reset
-    this.sizingClampSamples = []; // P19-B7.1 (OBJ-5): clear the sizing clamp-bind buffer on session reset
     console.log(`[8.8.3-I2][RTB_METRICS_RESET] Session reset at ${this.stats.sessionStart.toISOString()}`);
   }
 

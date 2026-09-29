@@ -76,13 +76,8 @@ export interface EffectiveGuardrails {
   dailyLossWarning1Pct: number; // P19-B6: tier-1 warning, % OF the kill threshold (coherency: 0 < w1 < w2 < 100)
   dailyLossWarning2Pct: number; // P19-B6: tier-2 warning, % OF the kill threshold
   maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
-  maxTotalExposurePct: number; // B-SIZING-DEC-RESTORE (Langston Step-4 FINDING-3): so RULE_013 reaches every validate(getEffective(row)) site
-  // REB 8.8.3-H: Low-Priced Coin Protection (LPCP) Module
-  lpcp: {
-    minStopAtrMult: number;       // Minimum stop distance as ATR multiple
-    minPositionNotional: number;   // Minimum trade notional in USD
-    threshold: number;             // Price threshold for low-priced coin rules
-  };
+  maxTotalExposurePct: number; // B-SIZING-DEC-RESTORE (Langston Step-4 FINDING-3): RULE_013 reads it
+  // (the `lpcp` block went with getEffective in increment 2d — no rule read it; the values stay in the DB, #518)
   management: {
     isManualOverride: boolean;
     tunedByLatti: boolean;
@@ -205,63 +200,6 @@ class GuardrailPolicyService {
   }
 
   // ============================================================================
-  // Effective Value Resolution
-  // ============================================================================
-
-  /**
-   * Resolves effective guardrail values based on manual override vs LATTI management.
-   * 
-   * Resolution logic:
-   * 1. If is_manual_override = true OR locked_by_user[param] = true → use DB value (manual)
-   * 2. Else use DB value (LATTI-managed)
-   * 
-   * Note: The DB row already contains the effective values. This method primarily
-   * structures the response and resolves per-parameter lock states.
-   */
-  public getEffective(guardrail: GuardrailsV2): EffectiveGuardrails {
-    const lockedByUser = (guardrail.lockedByUser as Record<string, boolean>) || {};
-    
-    // B-SIZING-DEC-RESTORE P5: NO fallback. The column is NOT NULL and (P5) CHECKed to 0 < p <= 100, so the
-    // old `value ? parse : (paper 30 | live 10)` could only ever fire on a stored 0 — and then it MASKED it,
-    // reporting 30 while the sizer refused every open on the real 0. Parse the stored value and let
-    // RULE_012 in validate() report it (rule 15: no hard-coded fallback for a DB-governed setting).
-    const guardrailAny = guardrail as any;
-    const maxPositionPercentPct = parseFloat(String(guardrail.maxPositionPercentPct));
-    
-    // REB 8.8.3-H: LPCP fields with safe defaults
-    const lpcp = {
-      minStopAtrMult: guardrailAny.lowPriceMinStopAtrMult 
-        ? parseFloat(String(guardrailAny.lowPriceMinStopAtrMult)) 
-        : 3.0,
-      minPositionNotional: guardrailAny.lowPriceMinPositionNotional 
-        ? parseFloat(String(guardrailAny.lowPriceMinPositionNotional)) 
-        : 25.00,
-      threshold: guardrailAny.lowPriceThreshold 
-        ? parseFloat(String(guardrailAny.lowPriceThreshold)) 
-        : 0.50
-    };
-    
-    return {
-      mode: guardrail.mode as TradingMode,
-      symbolCooldownMinutes: guardrail.symbolCooldownMinutes,
-      dailyLossKillSwitchPct: parseFloat(String(guardrail.dailyLossKillSwitchPct)),
-      // P19-B6: warning tiers (% of kill threshold). Fallback to defaults for pre-migration rows.
-      dailyLossWarning1Pct: guardrailAny.dailyLossWarning1Pct != null ? parseFloat(String(guardrailAny.dailyLossWarning1Pct)) : 50.00,
-      dailyLossWarning2Pct: guardrailAny.dailyLossWarning2Pct != null ? parseFloat(String(guardrailAny.dailyLossWarning2Pct)) : 75.00,
-      maxPositionPercentPct, // REB 8.8.3-G
-      // B-SIZING-DEC-RESTORE FINDING-3: without this field RULE_013 hit its `undefined` skip at every
-      // validate(getEffective(row)) site (routes.ts PUT response, storage getGuardrailsCompliance). No fallback.
-      maxTotalExposurePct: parseFloat(String(guardrail.maxTotalExposurePct)),
-      lpcp, // REB 8.8.3-H
-      management: {
-        isManualOverride: guardrail.isManualOverride,
-        tunedByLatti: guardrail.tunedByLatti,
-        lockedByUser
-      }
-    };
-  }
-
-  // ============================================================================
   // Coherency Validation
   // ============================================================================
 
@@ -365,7 +303,7 @@ class GuardrailPolicyService {
     // P19-B6 fix (Langston Step-4 Blocker-1): decimal(5,2) columns arrive off Drizzle as STRINGS,
     // so a raw `warn1 < warn2` would be a LEXICOGRAPHIC compare ("9.00" < "80.00" === false → a
     // legal config rejected; "80.00" < "9.00" === true → an inverted one passes). parseFloat both
-    // (mirroring the getEffective() resolver) before the numeric ordering compare.
+    // before the numeric ordering compare.
     const warn1raw = guardrail.dailyLossWarning1Pct;
     const warn2raw = guardrail.dailyLossWarning2Pct;
     if (warn1raw !== undefined && warn2raw !== undefined) {

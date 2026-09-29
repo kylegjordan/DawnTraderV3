@@ -1,0 +1,94 @@
+// ARCHIVED — B-SIZING-DEC-RESTORE increment 2d (2026-09-29). NOT COMPILED (.removed). Git history is authoritative.
+// PRE_AUDIT §18.1 F2 / plan P-2 (#1090): none of the route's five field names is a guardrails_v2 column, so an approved
+// call changed only lastUpdatedBy and replied 'updated'. Its one client caller fired only on a guardrail_update log,
+// which only this route writes — staging's ai_orchestrator_logs held 0 such rows (2026-09-29).
+
+// ── server/routes.ts ──
+  // Update Guardrail (admin only - AI-proposed configuration change)
+  apiRouter.post('/orchestrator/updateGuardrail', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      
+      // Validate request body using Zod schema
+      const { orchestratorUpdateGuardrailSchema } = await import('@shared/schema');
+      const validated = orchestratorUpdateGuardrailSchema.parse(req.body);
+
+      // Log the recommendation
+      const logData = {
+        userId,
+        category: 'guardrail_update',
+        recommendation: `Update ${validated.field} to ${validated.value} in ${validated.mode} mode`,
+        urgencyLevel: 'high' as const,
+        status: validated.approved ? 'approved' as const : 'pending' as const,
+        actionTaken: validated.reason || null,
+        metadata: { mode: validated.mode, field: validated.field, value: validated.value }
+      };
+      
+      await storage.createOrchestratorLog(logData);
+
+      // Only execute if approved
+      if (validated.approved) {
+        // [9.7] Use guardrails_v2 instead of legacy guardrails table
+        const currentGuardrails = await storage.getGuardrailsV2({ mode: validated.mode });
+        
+        if (!currentGuardrails) {
+          return res.status(404).json({ error: 'Guardrails not found. Please initialize guardrails first.' });
+        }
+
+        // Update the specific field
+        const updateData = {
+          mode: validated.mode,
+          [validated.field]: validated.value,
+          lastUpdatedBy: userId
+        };
+
+        const result = await storage.upsertGuardrailsV2(updateData);
+
+        console.info(`[Orchestrator][9.7] Guardrail V2 updated: ${validated.field} = ${validated.value} (${validated.mode} mode)`);
+        
+        // Phase 8.6.5: Invalidate caches and refresh context
+        const { configChangeHandler } = await import('./services/config-change-handler');
+        await configChangeHandler.handleConfigChange({
+          userId,
+          mode: validated.mode,
+          configType: 'guardrails',
+          source: 'direct'
+        });
+        
+        res.json({ success: true, message: 'Guardrail updated successfully', data: result });
+      } else {
+        res.json({ success: true, message: 'Guardrail update proposal logged for review' });
+      }
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      }
+      console.error('[Orchestrator] Error updating guardrail:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+
+// ── shared/schema.ts ──
+export const orchestratorUpdateGuardrailSchema = z.object({
+  mode: z.enum(['live', 'paper']),
+  // B-SIZING-DEC-RESTORE obj-4: 'maxOpenPositions' REMOVED. Before increment 2a this route really wrote
+  // guardrails_v2.max_open_positions; with the column gone it would reply "updated" and write nothing, so it is
+  // refused here (400) instead. The other legacy names are #1090's (increment 2b).
+  field: z.enum(['maxDailyLoss', 'maxDrawdown', 'maxPositionSize', 'riskPerTrade', 'aiCanAdjust']),
+  value: z.union([z.string(), z.number(), z.boolean()]),
+  approved: z.boolean(),
+  reason: z.string().optional(),
+});
+
+
+// ── client/src/pages/ai-transparency.tsx (the approve handler's guardrail_update branch) ──
+      } else if (log.category === 'guardrail_update' && log.metadata) {
+        endpoint = '/api/orchestrator/updateGuardrail';
+        payload = {
+          mode: log.metadata.mode,
+          field: log.metadata.field,
+          value: log.metadata.value,
+          approved: true,
+          reason: 'Approved by admin via AI Transparency'
+        };

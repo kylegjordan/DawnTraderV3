@@ -239,7 +239,7 @@ import {
   computeMultiTfAgreement,
 } from '../core/metrics/multi-tf-agreement.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
-import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
+import { checkPerUnderlyingCap, formatDecisionLog, classifyPerUnderlyingCapFailure } from './per-underlying-cap.js';
 // P19-B-FEEVIABILITY OBJ-1a: geometry-config VERSION stamp on SQE-reject archive rows
 // (the B-NEW-53 per-strategy resolved-constants hash — version-not-value, Langston r2.1(b)).
 import { resolveConstantsProvenance, recordConstantsVersion, gateConstantsVersionFor } from './data-archive/decision-provenance.js';
@@ -1292,8 +1292,13 @@ export class SignalOrchestrator {
         return null; // hard reject; signal does not enter RTB queue
       }
     } catch (err) {
-      console.error(`[B67.3][cap-check] Failed for ${rawSignal.symbol}; allowing through:`, err instanceof Error ? err.message : err);
-      // Fail-open by design: a B67.3 lookup error must not block trading.
+      // ⛔ B-SIZING-DEC-RESTORE 2d (P-9): FAIL-CLOSED. This used to let the signal through on any error, so a broken or
+      // missing cap row silently removed the cap. A missing/malformed row (config_missing) and a failed lookup
+      // (lookup_failed) both REFUSE, each under its own post-SQE reason so neither can hide inside the other.
+      const why = classifyPerUnderlyingCapFailure(err);
+      console.error(`[B-SIZING-DEC-RESTORE][PER_UNDERLYING_CAP_UNAVAILABLE reason=${why}] ${rawSignal.symbol}: refused —`, err instanceof Error ? err.message : err);
+      if (_fClass) recordActivePostSqeReject(sizingContext.mode, _fClass, `position_cap_${why}`);
+      return null;
     }
 
     // Phase 8.8.4-C.5: Queue SQE-qualified signal to RTB pool

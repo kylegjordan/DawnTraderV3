@@ -393,7 +393,6 @@ import { assignCohortHash as assignCohortHashForPersistence } from './per-underl
 import { getMarketContextEngine } from './market-context-engine';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
 import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
-import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { livePricingAdapter, isKrakenVenueSource, type PriceProducer } from './live-pricing-adapter';
@@ -1091,9 +1090,6 @@ export class ActiveExecutionEngine {
     
     // Phase 8.8.3-AJ17: Start diagnostic session to capture all AJ16 logs
     aj17DiagnosticRunner.startSession(this.mode);
-    
-    // Phase 8.8.3-AJ18: Start starvation diagnostic session
-    aj18Diagnostic.startSession(this.mode);
     
     console.log(`[PaperExecution:${this.mode}] Starting paper trading engine`);
 
@@ -4370,22 +4366,6 @@ export class ActiveExecutionEngine {
       timestamp: new Date().toISOString()
     }));
     
-    // [AJ18] Trade lifecycle - CLOSE event
-    const openTime = position.openedAt ? new Date(position.openedAt).getTime() : Date.now();
-    const holdingMinutes = (Date.now() - openTime) / 60000;
-    aj18Diagnostic.logTradeLifecycle({
-      cycleId: aj18Diagnostic.getCycleId(),
-      eventType: 'CLOSE',
-      tradeId: trade?.id,
-      symbol: position.symbol,
-      strategy: position.strategyName,
-      entryPrice: avgPrice,
-      exitPrice: actualExitPrice,
-      pnl: netPnl,
-      closeReason: exitCondition.type,
-      holdingDurationMinutes: holdingMinutes
-    });
-
     // [8.8.3-I1] Trade lifecycle close event
     const isForceClose = exitCondition.type === 'manual_stop' || exitCondition.type === 'guardrail' || exitCondition.type === 'reset';
     if (isForceClose) {
@@ -5850,16 +5830,6 @@ export class ActiveExecutionEngine {
         timestamp: new Date().toISOString()
       }));
       
-      // [AJ18] Trade lifecycle - OPEN event
-      aj18Diagnostic.logTradeLifecycle({
-        cycleId: aj18Diagnostic.getCycleId(),
-        eventType: 'OPEN',
-        tradeId: trade.id,
-        symbol: signal.symbol,
-        strategy: signal.strategy,
-        entryPrice: actualEntryPrice
-      });
-
       // [8.8.3-I2] Record successful RTB open in central metrics service (source of truth)
       rtbMetricsService.recordOpen(signal.symbol, signal.strategy);
       
@@ -6107,13 +6077,19 @@ export class ActiveExecutionEngine {
       // than multiplying by a neutral 1.0 left lying around.
       let strategyMode: StrategyMode = INTERIM_NO_POSTURE_MODE;
       let modeOverlay: StrategyModeOverlay | null = null;
-      // P19-B6.5d: prefer the carried signal stamp (collision-correct); safe-resolve
-      // fallback + flag a missing stamp (Langston §B stamp-missing-active).
+      // B-SIZING-DEC-RESTORE 2d (#1096, PRE_AUDIT §18 P-7): the carried class stamp is REQUIRED here. A signal without a
+      // valid one is REFUSED — never re-derived from the ticker. The SIM's carry-the-stamp invariant (SYSTEM_IMPACT_MAP
+      // "P19-B6.5d") forbids re-deriving the class at a downstream active-path site: `safeResolveAssetClass(symbol,
+      // 'kraken')` resolves the xStock/crypto COLLISION tickers (DASH/USD …) as crypto, which would hand this signal
+      // crypto's AMR row, class-open count and pattern cap. The stamp is thrown-on-absent at the RTB writer
+      // (`queueSQESignal`) and validated there too, so this refusal is the backstop, not a path.
       const _amrStamp = asValidAssetClass(signal.metadata?.assetClass);
-      const _amrClass = _amrStamp ?? safeResolveAssetClass(signal.symbol, 'kraken');
-      if (!_amrStamp && _amrClass) {
-        console.warn(`[P19-B6.5d][STAMP_MISSING_ACTIVE] execution_entry re-derived asset class for ${signal.symbol} — the sizing stamp should have been carried`);
+      if (!_amrStamp) {
+        console.error(`[B-SIZING-DEC-RESTORE][STAMP_MISSING_REFUSED] ${signal.symbol}: no valid asset-class stamp at execution entry (${String(signal.metadata?.assetClass)}) — refused, not re-derived from the ticker`);
+        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'UNCLASSIFIABLE', 'no valid asset-class stamp at execution entry');
+        return { opened: false, stage: 'UNCLASSIFIABLE', reason: 'no valid asset-class stamp at execution entry — refused, not re-derived' };
       }
+      const _amrClass = _amrStamp;
       if (_amrClass !== null) {
         try {
           const { getActiveModeForClass } = await import('./amr-weather-report.js');
@@ -6254,21 +6230,6 @@ export class ActiveExecutionEngine {
           });
 
           if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
-            // P19-B7.1 (OBJ-5, Langston CHANGE-1): record the SIZED signal's effective-risk-fraction
-            // for the clamp-bind watch — INSIDE the opened-gate so the population is EXACTLY opened
-            // positions (per actually-SIZED signal, NOT per candidate). A clamped-to-zero-but-valid
-            // result would otherwise stamp ratio=0 → bound=true and inflate boundRate with non-trades,
-            // biasing the Phase-25 go/no-go (boundRate >~15-20% flips the ranker to realized-$EV).
-            if (sizingResult.sizingDetails) {
-              rtbMetricsService.recordSizingClampSample({
-                symbol: signal.symbol,
-                strategy: signal.strategy,
-                assetClass: typeof _sizeClass === 'string' ? _sizeClass : undefined,
-                effectiveRiskFractionRatio: sizingResult.sizingDetails.effectiveRiskFractionRatio,
-                wasClamped: sizingResult.sizingDetails.wasClamped,
-                timestamp: Date.now(),
-              });
-            }
             // 11.7S: Apply mode overlay to position size
             const adjustedQuantity = sizingResult.quantity * (modeOverlay?.positionSizeMultiplier ?? 1);
             const adjustedValue = sizingResult.estimatedValue * (modeOverlay?.positionSizeMultiplier ?? 1);

@@ -1763,46 +1763,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 5: GuardrailPolicy Service Endpoints
-  // GET /api/guardrails-v2/effective?mode=paper|live - Get computed effective guardrails
-  apiRouter.get('/guardrails-v2/effective', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const mode = req.query.mode as 'live' | 'paper';
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
-      }
-
-      // Get raw guardrails from database
-      const guardrailsData = await storage.getGuardrailsV2({ mode });
-
-      if (!guardrailsData) {
-        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No guardrails found for mode: ${mode}` });
-      }
-
-      // Compute effective values using GuardrailPolicy
-      const { guardrailPolicy } = await import('./services/guardrail-policy');
-      const effectiveValues = guardrailPolicy.getEffective(guardrailsData);
-      
-      // Validate coherency
-      const coherencyResult = guardrailPolicy.validate(effectiveValues);
-
-      // Check kill switch status (now async for database persistence)
-      const isKillSwitchTripped = await guardrailPolicy.isKillSwitchTripped(mode);
-
-      res.json({ 
-        ok: true, 
-        data: {
-          ...effectiveValues,
-          coherency: coherencyResult,
-          killSwitchTripped: isKillSwitchTripped
-        }
-      });
-    } catch (error: any) {
-      console.error('[GuardrailsV2:Effective] GET error:', error.message);
-      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
-    }
-  });
-
   // POST /api/guardrails-v2/kill-switch/trip?mode=paper|live - Trip the kill switch
   apiRouter.post('/guardrails-v2/kill-switch/trip', authenticateToken, requireEditor, async (req: AuthenticatedRequest, res) => {
     try {
@@ -1871,31 +1831,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       code: 'DEPRECATED', 
       detail: 'Goals Learning Engine removed in Directive 11.8B-C - Phase 11 Predictive Learning is now the single authority' 
     });
-  });
-
-  // GET /api/analytics/guardrails-compliance?mode=paper|live - Get coherency status
-  apiRouter.get('/analytics/guardrails-compliance', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = req.query.mode as 'live' | 'paper';
-      console.log(`[REB 2.8.14][/api/analytics/guardrails-compliance] GET request - userId: ${userId}, mode: ${mode}`);
-
-      if (!mode || (mode !== 'live' && mode !== 'paper')) {
-        console.error(`[REB 2.8.14][/api/analytics/guardrails-compliance] Invalid mode parameter: ${mode}`);
-        return res.status(400).json({ ok: false, code: 'INVALID_MODE', detail: 'Mode parameter is required and must be "live" or "paper"' });
-      }
-
-      const compliance = await storage.getGuardrailsCompliance({ mode });
-      
-      if (!compliance) {
-        return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No compliance data found for mode: ${mode}` });
-      }
-
-      res.json({ ok: true, data: compliance });
-    } catch (error: any) {
-      console.error('[GuardrailsCompliance] GET error:', error.message);
-      res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
-    }
   });
 
   // Directive 11.4H.5 Task 3: Market Events API
@@ -2965,131 +2900,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error: any) {
       console.error('[AJ17] Error downloading diagnostic bundle:', error.message);
       res.status(500).json({ ok: false, error: 'Failed to download AJ17 diagnostic bundle' });
-    }
-  });
-
-  // Phase 8.8.3-AJ18: Enhanced RTB Starvation Diagnostic Endpoints
-  apiRouter.get('/diagnostics/aj18/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
-      const status = aj18DiagnosticRunner.getSessionStatus();
-      
-      res.json({
-        ok: true,
-        ...status,
-        lastBundlePath: aj18DiagnosticRunner.getLastBundlePath()
-      });
-    } catch (error: any) {
-      console.error('[AJ18] Error fetching session status:', error.message);
-      res.status(500).json({ ok: false, error: 'Failed to fetch AJ18 session status' });
-    }
-  });
-
-  apiRouter.post('/diagnostics/aj18/start', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
-      const mode = req.mode!;
-      const { durationMinutes = 20 } = req.body;
-      
-      if (aj18DiagnosticRunner.isSessionActive()) {
-        return res.status(400).json({
-          ok: false,
-          error: 'A diagnostic session is already active. Stop it first.'
-        });
-      }
-      
-      aj18DiagnosticRunner.startSession(mode, durationMinutes);
-      
-      res.json({
-        ok: true,
-        message: `AJ18 diagnostic session started (${mode} mode, ${durationMinutes} minutes)`,
-        session: aj18DiagnosticRunner.getCurrentSession()
-      });
-    } catch (error: any) {
-      console.error('[AJ18] Error starting session:', error.message);
-      res.status(500).json({ ok: false, error: 'Failed to start AJ18 diagnostic session' });
-    }
-  });
-
-  apiRouter.post('/diagnostics/aj18/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
-      
-      if (!aj18DiagnosticRunner.isSessionActive()) {
-        return res.status(400).json({
-          ok: false,
-          error: 'No active diagnostic session to stop.'
-        });
-      }
-      
-      const session = await aj18DiagnosticRunner.stopSessionAndGenerateReport();
-      
-      res.json({
-        ok: true,
-        message: 'AJ18 diagnostic session stopped and report generated',
-        session
-      });
-    } catch (error: any) {
-      console.error('[AJ18] Error stopping session:', error.message);
-      res.status(500).json({ ok: false, error: 'Failed to stop AJ18 diagnostic session' });
-    }
-  });
-
-  apiRouter.get('/diagnostics/aj18/live-metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
-      
-      if (!aj18DiagnosticRunner.isSessionActive()) {
-        return res.json({
-          ok: true,
-          sessionActive: false,
-          message: 'No active session. Start a session first.'
-        });
-      }
-      
-      const metrics = aj18DiagnosticRunner.getLiveMetrics();
-      
-      res.json({
-        ok: true,
-        ...metrics
-      });
-    } catch (error: any) {
-      console.error('[AJ18] Error fetching live metrics:', error.message);
-      res.status(500).json({ ok: false, error: 'Failed to fetch AJ18 live metrics' });
-    }
-  });
-
-  apiRouter.get('/diagnostics/aj18/download', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { aj18DiagnosticRunner } = await import('./services/aj18-diagnostic-runner.js');
-      const fs = await import('fs');
-      
-      const lastSession = aj18DiagnosticRunner.getLastCompletedSession();
-      
-      if (!lastSession || !lastSession.zipPath) {
-        return res.status(404).json({ 
-          ok: false, 
-          error: 'No AJ18 diagnostic bundle available. Complete a diagnostic session first.' 
-        });
-      }
-      
-      if (!fs.existsSync(lastSession.zipPath)) {
-        return res.status(404).json({ 
-          ok: false, 
-          error: 'Diagnostic bundle file not found. It may have been cleaned up.' 
-        });
-      }
-      
-      const fileName = `aj18-diagnostic-${lastSession.sessionId}.zip`;
-      
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-      
-      const fileStream = fs.createReadStream(lastSession.zipPath);
-      fileStream.pipe(res);
-    } catch (error: any) {
-      console.error('[AJ18] Error downloading diagnostic bundle:', error.message);
-      res.status(500).json({ ok: false, error: 'Failed to download AJ18 diagnostic bundle' });
     }
   });
 
@@ -15148,54 +14958,6 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // Test endpoint to check if trade execution is blocked during suspension
-  apiRouter.post('/test/attempt-trade', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = (req.body.mode || req.query.mode || 'paper') as 'live' | 'paper';
-      
-      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
-      const settings = await buildSettingsFromModeLevel(mode, userId);
-      
-      if (!settings) {
-        return res.status(404).json({ error: 'Settings not found for this mode' });
-      }
-
-      // Create a test signal
-      const testSignal = {
-        symbol: 'ETHUSD',
-        strategy: 'vwap_pullback' as const,
-        entryPrice: 3000,
-        stopPrice: 2950,
-        targetPrice: 3100,
-        confidence: 0.8,
-        metadata: { test: true }
-      };
-
-      // [9.6.3] Run through risk checks using checkGuardrailRisk
-      const tradeCandidate = {
-        symbol: testSignal.symbol,
-        strategy: testSignal.strategy,
-        entryPrice: testSignal.entryPrice,
-        stopPrice: testSignal.stopPrice,
-        targetPrice: testSignal.targetPrice,
-        confidence: testSignal.confidence,
-        mode
-      };
-      const riskCheck = await checkGuardrailRisk(tradeCandidate, mode, settings);
-
-      res.json({
-        killSwitchTripped: settings.killSwitchTripped,
-        riskCheckApproved: riskCheck.approved,
-        riskCheckReason: riskCheck.reason,
-        testSignal
-      });
-    } catch (error: any) {
-      console.error('Test attempt-trade error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // Strategy test endpoint - analyze watchlist pairs for signals
   apiRouter.post('/strategies/test', authenticateToken, validateMode, async (req: AuthenticatedRequest, res) => {
     try {
@@ -19378,70 +19140,6 @@ Please:
         return res.status(400).json({ error: 'Validation failed', details: error.errors });
       }
       console.error('[Orchestrator] Error updating goal:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update Guardrail (admin only - AI-proposed configuration change)
-  apiRouter.post('/orchestrator/updateGuardrail', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      
-      // Validate request body using Zod schema
-      const { orchestratorUpdateGuardrailSchema } = await import('@shared/schema');
-      const validated = orchestratorUpdateGuardrailSchema.parse(req.body);
-
-      // Log the recommendation
-      const logData = {
-        userId,
-        category: 'guardrail_update',
-        recommendation: `Update ${validated.field} to ${validated.value} in ${validated.mode} mode`,
-        urgencyLevel: 'high' as const,
-        status: validated.approved ? 'approved' as const : 'pending' as const,
-        actionTaken: validated.reason || null,
-        metadata: { mode: validated.mode, field: validated.field, value: validated.value }
-      };
-      
-      await storage.createOrchestratorLog(logData);
-
-      // Only execute if approved
-      if (validated.approved) {
-        // [9.7] Use guardrails_v2 instead of legacy guardrails table
-        const currentGuardrails = await storage.getGuardrailsV2({ mode: validated.mode });
-        
-        if (!currentGuardrails) {
-          return res.status(404).json({ error: 'Guardrails not found. Please initialize guardrails first.' });
-        }
-
-        // Update the specific field
-        const updateData = {
-          mode: validated.mode,
-          [validated.field]: validated.value,
-          lastUpdatedBy: userId
-        };
-
-        const result = await storage.upsertGuardrailsV2(updateData);
-
-        console.info(`[Orchestrator][9.7] Guardrail V2 updated: ${validated.field} = ${validated.value} (${validated.mode} mode)`);
-        
-        // Phase 8.6.5: Invalidate caches and refresh context
-        const { configChangeHandler } = await import('./services/config-change-handler');
-        await configChangeHandler.handleConfigChange({
-          userId,
-          mode: validated.mode,
-          configType: 'guardrails',
-          source: 'direct'
-        });
-        
-        res.json({ success: true, message: 'Guardrail updated successfully', data: result });
-      } else {
-        res.json({ success: true, message: 'Guardrail update proposal logged for review' });
-      }
-    } catch (error: any) {
-      if (error.name === 'ZodError') {
-        return res.status(400).json({ error: 'Validation failed', details: error.errors });
-      }
-      console.error('[Orchestrator] Error updating guardrail:', error);
       res.status(500).json({ error: error.message });
     }
   });

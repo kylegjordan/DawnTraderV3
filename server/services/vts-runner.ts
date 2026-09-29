@@ -214,7 +214,7 @@ import {
   computeMultiTfAgreement,
 } from '../core/metrics/multi-tf-agreement.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
-import { checkPerUnderlyingCap, formatDecisionLog, assignCohortHash } from './per-underlying-cap.js';
+import { checkPerUnderlyingCap, formatDecisionLog, assignCohortHash, classifyPerUnderlyingCapFailure } from './per-underlying-cap.js';
 import { INTERIM_NO_POSTURE_MODE, type StrategyMode } from '../core/governance/strategy-modes.js';
 import fs from 'fs/promises';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -2226,8 +2226,13 @@ async function generatePhase10Signal(
       return null;
     }
   } catch (err) {
-    console.error(`[B67.3][cap-check][VTS] Failed for ${symbol}; allowing through:`, err instanceof Error ? err.message : err);
-    // Fail-open: B67.3 lookup error must not block VTS data accumulation.
+    // ⛔ B-SIZING-DEC-RESTORE 2d (P-9): the VTS REFUSES too — COUNTED AND SURFACED, never silent (Langston: a silent
+    // refusal window is the #596 representativeness hole, absence correlating with what broke). Its own null reasons,
+    // distinct from `per_underlying_cap` (a real cap reject) and from each other.
+    const why = classifyPerUnderlyingCapFailure(err);
+    console.error(`[B-SIZING-DEC-RESTORE][PER_UNDERLYING_CAP_UNAVAILABLE reason=${why}][VTS] ${symbol}: refused —`, err instanceof Error ? err.message : err);
+    setNullReason(`per_underlying_cap_unavailable_${why}`);
+    return null;
   }
   
   // Directive 11.6: Create open virtual trade for real-price resolution

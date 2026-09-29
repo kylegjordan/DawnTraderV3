@@ -236,33 +236,20 @@ async function checkSymbolCooldown(
       return { ok: true };
     }
 
-    // P19-B6.5b (F3 / audit H16): active-paper closes write to closed_trades, NOT the legacy
-    // `trades` table — so reading getTrades() for paper made this per-symbol cooldown a SILENT NO-OP
-    // (it always found zero closed trades → returned ok:true → cooldown never enforced). Re-point paper
-    // mode to closed_trades (the same table daily-loss-budget already reads correctly). Live keeps
-    // the legacy `trades` read until the Phase-21 live path is built. Both branches resolve a single
-    // most-recent CLOSED-trade timestamp for this symbol.
-    let lastTradeTime: number | null = null;
-    if (mode === 'paper') {
-      // B-SIZING-DEC-RESTORE 2b (#1093): EXACT symbol + asset class. This read used getClosedTradesPaginated's
-      // SUBSTRING filter (the search box's), so C/USD matched LTC/USD and a Dash-coin close could pause DoorDash.
-      // Measured over 09-16..09-29: all 77 cooldown blocks had the symbol's own close, so on that history this
-      // changes nothing; it can only ever make the cooldown less strict, never more.
-      if (!trade.assetClass) {
-        console.warn(`[B-SIZING-DEC-RESTORE][COOLDOWN_CLASS_UNKNOWN] ${trade.symbol}: no asset class on the trade — matching the symbol in any class (stricter)`);
-      }
-      const closedAt = await storage.getLastClosedAtForSymbol(mode, trade.symbol, trade.assetClass ?? null);
-      lastTradeTime = closedAt ? closedAt.getTime() : null;
-    } else {
-      const lastTrades = await storage.getTrades(mode, {
-        symbol: trade.symbol,
-        status: 'closed' as const,
-        limit: 1,
-      });
-      const last = lastTrades?.[0];
-      const t = last ? (last.exitTime || last.entryTime) : null;
-      lastTradeTime = t ? new Date(t).getTime() : null;
+    // P19-B6.5b (F3 / audit H16): active closes write to closed_trades, NOT the legacy `trades` table — reading
+    // getTrades() made this cooldown a SILENT NO-OP (it always found zero closes → ok:true). B6.5b re-pointed PAPER
+    // and left LIVE on the legacy read "until the Phase-21 live path is built". B-SIZING-DEC-RESTORE 2d (#1094): the
+    // active engine writes live closes to closed_trades too (`createClosedTrade(this.mode, …)`), so BOTH modes read
+    // the one exact lookup — live's legacy read found nothing, always, and would have at go-live.
+    // B-SIZING-DEC-RESTORE 2b (#1093): EXACT symbol + asset class. This read used getClosedTradesPaginated's SUBSTRING
+    // filter (the search box's), so C/USD matched LTC/USD and a Dash-coin close could pause DoorDash. Measured over
+    // 09-16..09-29: all 77 cooldown blocks had the symbol's own close, so on that history this changes nothing; it can
+    // only ever make the cooldown less strict, never more.
+    if (!trade.assetClass) {
+      console.warn(`[B-SIZING-DEC-RESTORE][COOLDOWN_CLASS_UNKNOWN] ${trade.symbol}: no asset class on the trade — matching the symbol in any class (stricter)`);
     }
+    const closedAt = await storage.getLastClosedAtForSymbol(mode, trade.symbol, trade.assetClass ?? null);
+    const lastTradeTime: number | null = closedAt ? closedAt.getTime() : null;
 
     if (lastTradeTime === null) {
       // [AJ16.2] Log cooldown check - no previous closed trade for this symbol

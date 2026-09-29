@@ -56,17 +56,8 @@ describe('P5 + 2b — the sizing percentages are bounded: 1 <= p <= 100 (RULE_01
   });
 });
 
-describe('P5 — getEffective no longer masks a stored value with a hard-coded 30 / 10', () => {
-  // MUTATION: restore `value ? parse : (paper 30 | live 10)` and this fails — 0 reads as 30.
-  it('a stored 0.00 reads as 0, not 30', () => {
-    const eff = guardrailPolicy.getEffective({ mode: 'paper', maxPositionPercentPct: '0.00', lockedByUser: {} } as any);
-    expect(eff.maxPositionPercentPct).toBe(0);
-  });
-  it('CONTROL — a stored 5.00 reads as 5', () => {
-    const eff = guardrailPolicy.getEffective({ mode: 'paper', maxPositionPercentPct: '5.00', lockedByUser: {} } as any);
-    expect(eff.maxPositionPercentPct).toBe(5);
-  });
-});
+// (P5's `getEffective` masking tests left with getEffective itself — increment 2d, #1089: its only readers were an uncalled
+//  route and a report nothing displayed. The legacy-deletion fence asserts it does not come back.)
 
 describe('P6 — one audit row per CHANGED field: the payload\'s fields, the WRITTEN row\'s values', () => {
   const old = {
@@ -116,11 +107,5 @@ describe('P6 — one audit row per CHANGED field: the payload\'s fields, the WRI
   });
 });
 
-describe('FINDING-3 — RULE_013 reaches validate(getEffective(row))', () => {
-  // MUTATION: drop maxTotalExposurePct from getEffective and this fails — RULE_013 skips on `undefined`.
-  it('a stored exposure of 0 fails RULE_013 through getEffective', () => {
-    const eff = guardrailPolicy.getEffective({ mode: 'paper', maxPositionPercentPct: '5.00', maxTotalExposurePct: '0.00', lockedByUser: {} } as any);
-    expect(eff.maxTotalExposurePct).toBe(0);
-    expect(guardrailPolicy.validate(eff).failures.map((f) => f.ruleId)).toContain('RULE_013');
-  });
-});
+// (FINDING-3's `validate(getEffective(row))` test left with getEffective in increment 2d. RULE_013 on a stored exposure of
+//  0 is still pinned above — 'exposure % 0 is refused' — on the path that remains, validate() of the saved values.)

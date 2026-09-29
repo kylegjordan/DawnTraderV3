@@ -4243,17 +4243,6 @@ export const orchestratorUpdateGoalSchema = z.object({
   reason: z.string().optional(),
 });
 
-export const orchestratorUpdateGuardrailSchema = z.object({
-  mode: z.enum(['live', 'paper']),
-  // B-SIZING-DEC-RESTORE obj-4: 'maxOpenPositions' REMOVED. Before increment 2a this route really wrote
-  // guardrails_v2.max_open_positions; with the column gone it would reply "updated" and write nothing, so it is
-  // refused here (400) instead. The other legacy names are #1090's (increment 2b).
-  field: z.enum(['maxDailyLoss', 'maxDrawdown', 'maxPositionSize', 'riskPerTrade', 'aiCanAdjust']),
-  value: z.union([z.string(), z.number(), z.boolean()]),
-  approved: z.boolean(),
-  reason: z.string().optional(),
-});
-
 export const orchestratorUpdateStrategySchema = z.object({
   mode: z.enum(['live', 'paper']),
   strategy: z.enum(['vwap_pullback', 'abcd_long', 'sma_trend_ride', 'breakout', 'mean_reversion', 'range_trading', 'vwap_bounce', 'liquidity_trap']),
@@ -4264,7 +4253,6 @@ export const orchestratorUpdateStrategySchema = z.object({
 });
 
 export type OrchestratorUpdateGoal = z.infer<typeof orchestratorUpdateGoalSchema>;
-export type OrchestratorUpdateGuardrail = z.infer<typeof orchestratorUpdateGuardrailSchema>;
 export type OrchestratorUpdateStrategy = z.infer<typeof orchestratorUpdateStrategySchema>;
 
 export type InsertLearningFragment = z.infer<typeof insertLearningFragmentSchema>;

@@ -225,7 +225,6 @@ export interface IStorage {
   // Phase 4: Goals Presets methods
   getGoalsPresets(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets[]>;
   getActiveGoalsPreset(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets | null>;
-  getGuardrailsCompliance(params: { mode: 'live' | 'paper' }): Promise<any>;
 
   // Phase 6: Goals Learning Metrics methods
   getLearningSummary(params: { mode: 'live' | 'paper' }): Promise<any>;
@@ -838,11 +837,10 @@ export class DatabaseStorage implements IStorage {
    * The settings route used to save first and write `audit_log` afterwards, outside the save, so a failed
    * audit insert returned an error with the new value already live and unrecorded. Kyle now adjusts the
    * paper position % by hand every few days, and the paper window reads these rows as its stamp
-   * (`#1080` am.2), so an edit made through the SETTINGS ROUTE never lands without its record. ⛔ NOT every
-   * writer of the table: THREE still write through the bare `upsertGuardrailsV2` (census at `5af3acb49`,
-   * Langston Step-4): `selectGoalsPreset` (DELETED in increment 2a, rule 18), `config-update-service.ts`
-   * `updateGuardrailsV2` (no importers), and the LIVE admin route `POST /api/orchestrator/updateGuardrail`
-   * (`routes.ts`, `#1090`), which is unaudited. All three are in increment 2's rule-18 census.
+   * (`#1080` am.2), so an edit made through the SETTINGS ROUTE never lands without its record. ✅ SINCE INCREMENT
+   * 2d THIS IS THE ONLY CALLER of the bare `upsertGuardrailsV2` (census 2026-09-29): the three bare writers Langston's
+   * Step-4 census named at `5af3acb49` are gone — `selectGoalsPreset` (2a), `config-update-service.ts` (2c) and the
+   * admin route `POST /api/orchestrator/updateGuardrail` (2d, `#1090`). A new direct caller writes unaudited — use this.
    */
   async upsertGuardrailsV2WithAudit(data: InsertGuardrailsV2, buildAudit: (written: GuardrailsV2) => InsertAuditLog[]): Promise<GuardrailsV2> {
     return await db.transaction(async (tx) => {
@@ -916,31 +914,6 @@ export class DatabaseStorage implements IStorage {
         eq(goalsPresets.isActive, true)
       ));
     return result || null;
-  }
-
-  async getGuardrailsCompliance(params: { mode: 'live' | 'paper' }): Promise<any> {
-    // Get active preset
-    const activePreset = await this.getActiveGoalsPreset(params);
-    
-    // Get current guardrails
-    const guardrails = await this.getGuardrailsV2(params);
-    
-    if (!guardrails) {
-      return null;
-    }
-
-    // Validate coherency using guardrail policy
-    const { guardrailPolicy } = await import('./services/guardrail-policy');
-    const effectiveValues = guardrailPolicy.getEffective(guardrails);
-    const coherencyResult = guardrailPolicy.validate(effectiveValues);
-    const isKillSwitchTripped = await guardrailPolicy.isKillSwitchTripped(params.mode);
-
-    return {
-      mode: params.mode,
-      activePreset: activePreset?.name || 'custom',
-      coherency: coherencyResult,
-      killSwitchTripped: isKillSwitchTripped
-    };
   }
 
   // Phase 6: Goals Learning Metrics methods

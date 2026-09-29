@@ -30,7 +30,6 @@ vi.mock('../../storage', () => ({
 
 import { deriveSlotCount, resolveEffectivePositionPct, sizeActivePositionForSignal } from '../../services/active-position-sizing.js';
 import { buildSettingsFromGuardrails } from '../../services/guardrail-settings.js';
-import { orchestratorUpdateGuardrailSchema } from '../../../shared/schema';
 import { guardrailPolicy } from '../../services/guardrail-policy.js';
 
 // The engine's two promotion loops refuse admissions on exactly this predicate (active-execution-engine.ts, both
@@ -153,33 +152,19 @@ describe('ONE derivation (§14.4 BLOCKER-1) — every slot reader calls it, noth
       .toContain('const effectiveMaxPositionPct = resolveEffectivePositionPct(safeMaxPositionPct, signalSourcePool, params.assetClass);');
   });
 
-  it('the settings builder, m5e and the state snapshot all take the count from deriveSlotCount', () => {
-    for (const f of ['server/services/guardrail-settings.ts', 'server/services/m5e-validation-service.ts', 'server/services/state-awareness.ts']) {
+  // (m5e left this list in increment 2d — the harness is deleted, P-11.)
+  it('the settings builder and the state snapshot take the count from deriveSlotCount', () => {
+    for (const f of ['server/services/guardrail-settings.ts', 'server/services/state-awareness.ts']) {
       expect(src(f), f).toContain('deriveSlotCount(');
     }
   });
 
-  // MUTATION: put m5e's `Math.floor(e / p)` twin back and this fails — on live (e 25, p 30) it answered 0-then-1
-  // where the sizer fits 3.
-  it('the m5e twin `floor(e / p)` and its `Math.max(…, 1)` are gone', () => {
-    const m5e = src('server/services/m5e-validation-service.ts');
-    expect(m5e).not.toMatch(/Math\.floor\(\s*\w*[Ee]xposure\w*\s*\/\s*\w*[Pp]osition\w*\s*\)/);
-    expect(m5e).not.toMatch(/Math\.max\(\s*\w*[Ss]lots\w*\s*,\s*1\s*\)/);
-  });
+  // (the m5e `floor(e / p)` twin test left with the harness in increment 2d; the legacy-deletion fence now asserts the
+  //  harness does not come back.)
 });
 
-describe('the orchestrator route refuses the retired field (second-reader finding, fixed in 2a)', () => {
-  // Before 2a, POST /orchestrator/updateGuardrail really wrote guardrails_v2.max_open_positions. With the column gone
-  // the storage merge would drop it and the route would reply "Guardrail updated successfully" — so the field leaves
-  // the route's allowed list and the request fails validation (400). MUTATION: put it back in the enum and this fails.
-  const req = (field: string) => ({ mode: 'paper', field, value: 5, approved: true });
-  it('maxOpenPositions is refused', () => {
-    expect(orchestratorUpdateGuardrailSchema.safeParse(req('maxOpenPositions')).success).toBe(false);
-  });
-  it('CONTROL: a field still on the list is accepted, so the refusal above is the field, not the fixture', () => {
-    expect(orchestratorUpdateGuardrailSchema.safeParse(req('riskPerTrade')).success).toBe(true);
-  });
-});
+// (2a's test that POST /orchestrator/updateGuardrail refused maxOpenPositions is gone with the route itself —
+//  increment 2d, #1090; the legacy-deletion fence now asserts the route and its schema do not come back.)
 
 describe('P3 (increment 2b, §15.1 G2) — the fallback sizer reads the working balance', () => {
   const src = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf-8').replace(/\r\n/g, '\n');

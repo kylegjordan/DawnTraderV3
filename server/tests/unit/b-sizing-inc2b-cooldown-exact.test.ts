@@ -114,3 +114,21 @@ describe('#1093 — the engine hands the cooldown the asset class of the signal'
     expect(block).toContain('assetClass: asValidAssetClass((signal as any).metadata?.assetClass) ?? undefined');
   });
 });
+
+describe('#1094 (increment 2d) — LIVE reads the same exact lookup; the legacy `trades` read is gone', () => {
+  // Live's cooldown used to read the legacy `trades` table, which the active engine never writes: it always found no
+  // close and always passed. MUTATION: restore the live `storage.getTrades` branch and both tests fail.
+  it('live mode asks getLastClosedAtForSymbol, in mode live, with the exact symbol and class', async () => {
+    await checkGuardrailRisk('live', trade('BTC/USD', 'crypto_spot'));
+    expect(_cooldown.calls).toEqual([['live', 'BTC/USD', 'crypto_spot']]);
+  });
+
+  it('a live close two minutes ago blocks in live mode, on exactly that close time', async () => {
+    const closedAt = new Date(Date.now() - 2 * 60_000);
+    _cooldown.lastClosedAt = closedAt;
+    const r = await checkGuardrailRisk('live', trade('BTC/USD', 'crypto_spot'));
+    expect(r.ok).toBe(false);
+    expect((r as any).code).toBe('COOLDOWN');
+    expect(_aj16.checks.find((c) => c.guardrailCooldown === true)?.lastTradeTime?.getTime()).toBe(closedAt.getTime());
+  });
+});

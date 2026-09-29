@@ -2228,7 +2228,16 @@ class ReadyToBuyService {
         `none supplied for symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}.`,
       );
     }
-    const resolvedAssetClass = input.assetClass; // string, narrowed non-undefined by the throw above
+    // B-SIZING-DEC-RESTORE 2d (#1096, PRE_AUDIT §18 P-7): PRESENT is not VALID. A non-standard string used to pass the
+    // throw above and was written as-is; the engine's `asValidAssetClass` then read it as MISSING at execution. Validate
+    // here, at the one writer, so a malformed stamp fails at its source instead of surfacing as a refusal downstream.
+    const resolvedAssetClass = asValidAssetClass(input.assetClass);
+    if (!resolvedAssetClass) {
+      throw new Error(
+        `[B-SIZING-DEC-RESTORE][STAMP_INVALID] queueSQESignal received an assetClass that is not a known class ` +
+        `(${String(input.assetClass)}) for symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}.`,
+      );
+    }
 
     // P19-B6.5b (F1b / RUNNING_ISSUES #320 — defense-in-depth): queueSQESignal is the SINGLE live RTB
     // admission chokepoint. The per-asset-class active gate is enforced upstream at the entry points

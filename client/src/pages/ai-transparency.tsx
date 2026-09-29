@@ -269,15 +269,6 @@ export default function AITransparencyPage() {
           approved: true,
           reason: 'Approved by admin via AI Transparency'
         };
-      } else if (log.category === 'guardrail_update' && log.metadata) {
-        endpoint = '/api/orchestrator/updateGuardrail';
-        payload = {
-          mode: log.metadata.mode,
-          field: log.metadata.field,
-          value: log.metadata.value,
-          approved: true,
-          reason: 'Approved by admin via AI Transparency'
-        };
       } else if (log.category === 'strategy_update' && log.metadata) {
         endpoint = '/api/orchestrator/updateStrategy';
         payload = {

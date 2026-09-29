@@ -374,4 +374,71 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       for (const g of RETIREMENT_GUARD) expect(routes.includes(g), `mask string not found: ${g}`).toBe(true);
     });
   });
+
+  describe('increment 2d — the legacy sweep (PRE_AUDIT §18, Langston §18.5)', () => {
+    // SCOPE as obj-3: server/ + client/src + shared/ + types/ + scripts/, tests and _archive excluded; comments stripped.
+    const files2d = (() => {
+      const extra: string[] = [];
+      const walk = (dir: string) => {
+        if (!existsSync(dir)) return;
+        for (const entry of readdirSync(dir)) {
+          const p = join(dir, entry);
+          if (statSync(p).isDirectory()) {
+            if (entry === 'node_modules' || entry === 'tests' || entry === '_archive') continue;
+            walk(p);
+          } else if (/\.(ts|tsx|mjs|js)$/.test(entry) && !/\.test\.(ts|mjs|js)$/.test(entry)) {
+            extra.push(p);
+          }
+        }
+      };
+      walk(join(REPO, 'shared'));
+      walk(join(REPO, 'types'));
+      walk(join(REPO, 'scripts'));
+      return [...FILES, ...extra];
+    })();
+    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const _c = new Map<string, string>();
+    const codeOf2d = (f: string) => {
+      let c = _c.get(f);
+      if (c === undefined) { c = strip(read(f)); _c.set(f, c); }
+      return c;
+    };
+    const hitsFor = (rx: RegExp) => files2d.filter((f) => rx.test(codeOf2d(f))).map((f) => f.replace(REPO, ''));
+
+    it('the deleted files are gone (AJ18 x2, the M5E harness, the coherency widget)', () => {
+      for (const f of ['server/services/aj18-diagnostic-runner.ts', 'server/services/aj18-rtb-diagnostic.ts',
+        'server/services/m5e-validation-service.ts', 'client/src/components/goals/coherency-status-widget.tsx']) {
+        expect(existsSync(join(REPO, f)), f).toBe(false);
+      }
+    });
+
+    // Each deleted route by its path; each deleted symbol as a whole word (getEffective ≠ getEffectiveATR).
+    const GONE: Array<[string, RegExp]> = [
+      ['/diagnostics/aj18 routes', /diagnostics\/aj18/],
+      ['POST /orchestrator/updateGuardrail', /orchestrator\/updateGuardrail\b/],
+      ['GET /guardrails-v2/effective', /guardrails-v2\/effective/],
+      ['GET /analytics/guardrails-compliance', /analytics\/guardrails-compliance/],
+      ['POST /test/attempt-trade', /test\/attempt-trade/],
+      ['the /validation/*m5e* routes', /validation\/(run-m5e|m5e-status)/],
+      ['getEffective', /\bgetEffective\b/],
+      ['getGuardrailsCompliance', /\bgetGuardrailsCompliance\b/],
+      ['orchestratorUpdateGuardrailSchema', /\borchestratorUpdateGuardrailSchema\b/],
+      ['aj18Diagnostic / aj18DiagnosticRunner', /\baj18Diagnostic(Runner)?\b/],
+      ['the clamp-bind stream', /\b(recordSizingClampSample|getSizingClampProof|SIZING_BIND_THRESHOLD|sizingClampSamples)\b/],
+      ['the retired sizer fields', /\b(effectiveRiskFractionRatio|wasClamped)\b/],
+      ['the M5E harness', /\b(startFullM5EValidation|getM5EStatus|disablePassiveLearning\(\);\s*const simResult)\b/],
+    ];
+    for (const [label, rx] of GONE) {
+      it(`${label} does not come back`, () => {
+        expect(hitsFor(rx)).toEqual([]);
+      });
+    }
+
+    it('POSITIVE CONTROL: the same scan finds live siblings of what was deleted, so an empty result is not blindness', () => {
+      expect(hitsFor(/diagnostics\/aj17/).length).toBeGreaterThan(0);       // AJ17's routes stayed
+      expect(hitsFor(/\bgetEffectiveATR\b/).length).toBeGreaterThan(0);     // the word boundary is real
+      expect(hitsFor(/orchestrator\/updateStrategy\b/).length).toBeGreaterThan(0); // the sibling route stayed
+      expect(hitsFor(/validation\/run-m5d/).length).toBeGreaterThan(0);     // M5D is not M5E (unaudited, not touched)
+    });
+  });
 });
