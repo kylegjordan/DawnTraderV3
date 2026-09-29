@@ -17,6 +17,10 @@ comms-infra/langston-memory/** text eol=lf
 # dt-deploy on staging (#649, exit 127). Scope by PATH, not by extension.
 comms-infra/codex/** text eol=lf
 
+# B-CREDENTIALS-PRIVATE-REPO: dt-review and dt-backup-sync.sh ship to Helsinki; dt-review has
+# no extension, so the *.sh rule below does not cover it. Scope by PATH (same reason as codex).
+comms-infra/helsinki/** text eol=lf
+
 # B-DEPLOY-LOCK (#649): ALL shell scripts ship LF — a CRLF working copy broke
 # dt-deploy.sh's shebang on staging (exit 127). Same class as the helsinki rule.
 *.sh text eol=lf

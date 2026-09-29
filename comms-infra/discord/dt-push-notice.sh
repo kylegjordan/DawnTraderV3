@@ -87,7 +87,7 @@ DRIFT=""
 #   #1002, dt-deploy-drift.sh into the SAME directory by the SAME route. The batch that carries
 #   the drift check was adding an instance of the #1004 class the check exists to catch.
 #   The ORACLE-BLIND test below is about the MIRROR, so it fires once; the BLOB test is per-file.
-WATCHED="/usr/local/bin/dt-push-notice.sh /usr/local/bin/dt-deploy-drift.sh /usr/local/bin/cc-send"
+WATCHED="/usr/local/bin/dt-push-notice.sh /usr/local/bin/dt-deploy-drift.sh /usr/local/bin/cc-send /usr/local/bin/dt-review /usr/local/bin/dt-backup-sync.sh"
 if [ -d "$MIRROR" ]; then
   MIRROR_AT=$(stat -c %Y "$MIRROR/FETCH_HEAD" 2>/dev/null || echo 0)
   NOW=$(date +%s)

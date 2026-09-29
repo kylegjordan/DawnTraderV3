@@ -1,43 +1,269 @@
 #!/bin/sh
-# dt-review — Langston's WHOLE-TREE-SEARCH fallback for reviewing at the graded ref.
+# dt-review — Langston's reader for the review branch, served from the Helsinki mirror
+# (/srv/dawntrader-backup.git). B-CREDENTIALS-PRIVATE-REPO OBJ-4a; installed by
+# comms-infra/discord/deploy.sh from a reviewed sha, never by hand.
 #
-# Default review path is reading single files straight off the review branch on
-# GitHub (raw URL at the exact commit). This helper exists ONLY for the rarer case
-# that needs the whole codebase at once — "every caller of X", "appears nowhere
-# else", a blast-radius census — which GitHub will not serve to an outside machine.
+# ★ KYLE'S RULE, 2026-07-23: PULL FROM GITHUB FIRST so the files are current. Every call
+# fetches the branch before it reads. A HEAD read (no sha given) after a failed fetch is
+# REFUSED, never served stale (the #546/#568 absent-as-valid class). A PINNED read is
+# content-addressed, so it is served after a failed fetch, under a DEGRADED header.
 #
-# ★ KYLE'S RULE, 2026-07-23, ENFORCED HERE SO IT CANNOT BE FORGOTTEN: before reading
-# the Hetzner backup, PULL FROM GITHUB FIRST so the files are current. This script
-# fetches before every read. If the fetch fails it REFUSES to read rather than hand
-# back possibly-stale bytes (the #546/#568 absent-as-valid class).
+#   dt-review grep [@<sha>] <pattern> [<path>...]   BRE, as git grep -n -e (no flags)
+#   dt-review show [<sha>|@<sha>] <path>             exact file bytes
+#   dt-review ls   [@<sha>]                          every path in the tree
+#   dt-review ref                                    the branch head after a fresh fetch
 #
-# The backup is langston-owned, so the fetch needs no sudo. The repo's push URL is
-# DISABLED — this is a read path only; nothing here can write upstream.
+# OUTPUT. On-branch reads: EXACT bytes on stdout, provenance on stderr — so a line number
+# taken from stdout IS the file's line number (the old stdout header made every count +1).
+# OFF-BRANCH and DEGRADED reads: the loud line goes to BOTH stderr AND stdout line 1, so
+# neither `2>/dev/null` nor reading stdout alone can drop it (Langston, B-CREDENTIALS C3).
+#
+# EXIT. 0 served (grep: at least one match) · 1 grep found nothing, or REFUSED (not in the
+# mirror, not a file, head read after a failed fetch) · 2 usage: a flag, a non-hex sha, a
+# ref name, a wrong argument count, or not running as langston. Usage errors are decided
+# BEFORE any fetch, so a refused call never touches the network or the mirror (#920, A10).
+#
+# The mirror is langston-owned and its push URL is DISABLED: nothing here writes upstream.
+# The fetch shares a lock with dt-backup-sync.sh and writes no FETCH_HEAD (A3, A4).
 
 REPO=/srv/dawntrader-backup.git
 BRANCH=migration/aws-supabase
 REMOTE=git@github.com:kylegjordan/DawnTraderV3.git
+LOCK="$REPO/dt-fetch.lock"
+FETCH_OK="$REPO/DT_REVIEW_FETCH_OK"
+SYNC_PASS="$REPO/DT_SYNC_PASS"
+LOCK_WAIT=90
 
-if ! git --git-dir="$REPO" fetch --quiet "$REMOTE" "+refs/heads/$BRANCH:refs/heads/$BRANCH" 2>/dev/null; then
-  echo "dt-review: FETCH FROM GITHUB FAILED — refusing to read a possibly-stale backup." >&2
-  echo "dt-review: do not assert file contents from here; read single files off the branch instead." >&2
-  exit 1
-fi
-REF=$(git --git-dir="$REPO" rev-parse "$BRANCH")
+usage() {
+  cat >&2 <<'EOF'
+usage: dt-review grep [@<sha>] <pattern> [<path>...]   BRE, like git grep -n -e (no flags)
+       dt-review show [<sha>|@<sha>] <path>             exact file bytes
+       dt-review ls   [@<sha>]                          every path in the tree
+       dt-review ref                                    the branch head after a fresh fetch
+  <sha> is 7-40 lowercase hex characters. Branch and tag names are refused.
+  Flags are refused. To search for a pattern that starts with '-' or '@', write it as
+  '[-]...' or '[@]...'.
+EOF
+  exit 2
+}
 
-cmd="$1"; shift 2>/dev/null
+# A refusal decided before the fetch: stderr only, nothing on stdout, exit 2.
+refuse() {
+  printf 'REFUSED: %s\n' "$1" >&2
+  exit 2
+}
+
+no_flag() {
+  case "$2" in
+    -*) refuse "dt-review $1 takes no flags — got '$2'. Nothing was read." ;;
+  esac
+}
+
+# ---- 1. PARSE (no network, no mirror access) ----------------------------------------
+[ $# -ge 1 ] || usage
+cmd=$1
+shift
+PIN=
 case "$cmd" in
   grep)
-    pat="$1"; shift 2>/dev/null
-    echo "# whole-tree search at $REF (pulled from GitHub just now)"
-    if [ $# -gt 0 ]; then
-      git --git-dir="$REPO" grep -n -e "$pat" "$REF" -- "$@"
-    else
-      git --git-dir="$REPO" grep -n -e "$pat" "$REF"
+    if [ $# -ge 1 ]; then
+      case "$1" in @*) PIN=${1#@}; [ -n "$PIN" ] || usage; shift ;; esac
     fi
+    [ $# -ge 1 ] || usage
+    pat=$1
+    shift
+    no_flag grep "$pat"
+    for p in "$@"; do no_flag grep "$p"; done
     ;;
-  show)  echo "# $1 at $REF (pulled from GitHub just now)"; git --git-dir="$REPO" show "$REF:$1" ;;
-  ls)    git --git-dir="$REPO" ls-tree -r --name-only "$REF" ;;
-  ref)   echo "$REF" ;;
-  *)     echo "usage: dt-review grep <pattern> [<path>...] | show <path> | ls | ref" >&2; exit 2 ;;
+  show)
+    case $# in
+      1) path=$1 ;;
+      2) PIN=${1#@}; path=$2 ;;
+      *) usage ;;
+    esac
+    [ -n "$path" ] || usage
+    no_flag show "$path"
+    ;;
+  ls)
+    case $# in
+      0) ;;
+      1) case "$1" in @*) PIN=${1#@} ;; *) usage ;; esac ;;
+      *) usage ;;
+    esac
+    ;;
+  ref)
+    [ $# -eq 0 ] || usage
+    ;;
+  -*)
+    refuse "dt-review takes no flags — got '$cmd'. Nothing was read."
+    ;;
+  *)
+    usage
+    ;;
+esac
+
+if [ -n "$PIN" ]; then
+  if ! printf '%s' "$PIN" | grep -Eqx '[0-9a-f]{7,40}'; then
+    refuse "'$PIN' is not a commit id (7-40 lowercase hex). Branch and tag names are refused: every ref in the mirror is an ancestor of $BRANCH, so a stale one would be served as if it were graded. Nothing was read."
+  fi
+fi
+
+if [ "$(id -un)" != langston ]; then
+  refuse "dt-review must run as langston, the mirror's owner; as $(id -un) its fetch would leave objects that account owns in langston's repository. Nothing was read."
+fi
+
+# ---- 2. FETCH (under the lock shared with dt-backup-sync.sh) ------------------------
+now() { date -u +%s; }
+
+# Age of the NEWER success stamp, naming which one. Never FETCH_HEAD's mtime: a failed
+# fetch truncates and touches FETCH_HEAD, so its age cannot mean "last success" (A3).
+age() {
+  best=0
+  which=
+  for f in "$FETCH_OK" "$SYNC_PASS"; do
+    [ -f "$f" ] || continue
+    t=$(awk 'NR==1{print $1}' "$f")
+    case "$t" in ''|*[!0-9]*) continue ;; esac
+    if [ "$t" -gt "$best" ]; then best=$t; which=${f##*/}; fi
+  done
+  if [ "$best" -eq 0 ]; then
+    echo "at an unknown time (no success stamp)"
+    return
+  fi
+  d=$(( $(now) - best ))
+  if [ "$d" -lt 120 ]; then
+    echo "${d}s ago ($which)"
+  elif [ "$d" -lt 7200 ]; then
+    echo "$(( d / 60 ))m ago ($which)"
+  else
+    echo "$(( d / 3600 ))h$(( d % 3600 / 60 ))m ago ($which)"
+  fi
+}
+
+FETCH=ok
+REASON=
+# A failed redirection on `exec` is FATAL in dash (a special builtin), so the lock file is
+# checked with an external command first and a failure becomes a stated reason, not a crash.
+touch "$LOCK" 2>/dev/null
+if [ -w "$LOCK" ]; then
+  exec 9>>"$LOCK"
+  if flock -w "$LOCK_WAIT" 9; then
+    ERR=$(git --git-dir="$REPO" fetch --quiet --no-write-fetch-head "$REMOTE" "+refs/heads/$BRANCH:refs/heads/$BRANCH" 2>&1)
+    if [ $? -eq 0 ]; then
+      printf '%s %s\n' "$(now)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$FETCH_OK"
+    else
+      FETCH=failed
+      REASON=$(printf '%s\n' "$ERR" | sed -n '/./{p;q;}')
+      [ -n "$REASON" ] || REASON="git fetch exited non-zero with no message"
+    fi
+  else
+    FETCH=busy
+    REASON="mirror busy: the fetch lock was held for more than ${LOCK_WAIT}s"
+  fi
+  exec 9>&-
+else
+  FETCH=failed
+  REASON="cannot open the fetch lock $LOCK"
+fi
+
+# The POSITIVE CONTROL for every absence reported below: if the branch head itself cannot
+# be read, the mirror is unreadable and "not in the mirror" would be a claim the instrument
+# cannot make (#546/#568). So refuse here, with git's own words.
+HEAD=$(git --git-dir="$REPO" rev-parse --verify "refs/heads/$BRANCH" 2>&1)
+if ! printf '%s' "$HEAD" | grep -Eqx '[0-9a-f]{40}'; then
+  echo "REFUSED: cannot read $BRANCH in the mirror $REPO — nothing served" >&2
+  echo "dt-review: git said: $(printf '%s\n' "$HEAD" | sed -n '/./{p;q;}')" >&2
+  exit 2
+fi
+case "$FETCH" in
+  ok)     LAST=ok ;;
+  busy)   LAST="SKIPPED ($REASON)" ;;
+  *)      LAST="FAILED ($REASON)" ;;
+esac
+
+# ---- 3. RESOLVE what to read --------------------------------------------------------
+LOUD=
+if [ -z "$PIN" ]; then
+  if [ "$FETCH" != ok ]; then
+    if [ "$FETCH" = busy ]; then
+      echo "REFUSED: $REASON; mirror head is $HEAD from $(age) — no head read served" >&2
+    else
+      echo "REFUSED: fetch from GitHub failed; mirror head is $HEAD from $(age) — no head read served" >&2
+      echo "dt-review: reason: $REASON" >&2
+    fi
+    exit 1
+  fi
+  SHA=$HEAD
+  PLACE="on $BRANCH"
+else
+  SHA=$(git --git-dir="$REPO" rev-parse --verify --quiet "$PIN^{commit}")
+  if [ -z "$SHA" ]; then
+    n=$(git --git-dir="$REPO" rev-parse --disambiguate="$PIN" 2>&1 | grep -Ecx '[0-9a-f]{40}')
+    if [ "$n" -gt 1 ]; then
+      echo "REFUSED: $PIN is ambiguous in the mirror ($n objects share that prefix) — give more of the sha" >&2
+    else
+      echo "REFUSED: $PIN is not in the mirror (mirror head $HEAD, fetched $(age); last fetch $LAST)" >&2
+    fi
+    exit 1
+  fi
+  git --git-dir="$REPO" merge-base --is-ancestor "$SHA" "refs/heads/$BRANCH"
+  rc=$?
+  case $rc in
+    0) PLACE="on $BRANCH" ;;
+    1) PLACE="OFF $BRANCH"
+       LOUD="OFF-BRANCH: $SHA is not an ancestor of $BRANCH — content is exact, provenance is NOT the graded ref" ;;
+    *) # An error must never read as off-branch (the #920 class).
+       echo "REFUSED: could not tell whether $SHA is on $BRANCH (merge-base exit $rc) — nothing served" >&2
+       exit 2 ;;
+  esac
+  if [ "$FETCH" != ok ]; then
+    D="DEGRADED: fetch failed; content is exact for $SHA (content-addressed)"
+    [ "$FETCH" = busy ] && D="DEGRADED: fetch skipped ($REASON); content is exact for $SHA (content-addressed)"
+    if [ -n "$LOUD" ]; then LOUD="$LOUD
+$D"; else LOUD=$D; fi
+  fi
+fi
+
+# ---- 4. SERVE -----------------------------------------------------------------------
+provenance() {
+  echo "# $1 at $SHA — $PLACE (mirror fetched $(age); last fetch $LAST)" >&2
+  if [ -n "$LOUD" ]; then
+    printf '%s\n' "$LOUD" >&2
+    printf '%s\n' "$LOUD"
+  fi
+}
+
+case "$cmd" in
+  show)
+    t=$(git --git-dir="$REPO" cat-file -t "$SHA:$path" 2>&1)
+    if [ "$t" != blob ]; then
+      echo "REFUSED: '$path' is not a file at $SHA — nothing served" >&2
+      echo "dt-review: git said: $(printf '%s\n' "$t" | sed -n '/./{p;q;}')" >&2
+      exit 1
+    fi
+    provenance "show $path"
+    git --git-dir="$REPO" cat-file blob "$SHA:$path"
+    ;;
+  grep)
+    provenance "grep '$pat'"
+    if [ $# -gt 0 ]; then
+      git --git-dir="$REPO" grep -n -e "$pat" "$SHA" -- "$@"
+    else
+      git --git-dir="$REPO" grep -n -e "$pat" "$SHA"
+    fi
+    rc=$?
+    case $rc in
+      0) ;;
+      1) echo "# 0 matches for '$pat' at $SHA" >&2 ;;
+      *) echo "dt-review: git grep failed (exit $rc)" >&2; rc=2 ;;
+    esac
+    exit $rc
+    ;;
+  ls)
+    provenance ls
+    git --git-dir="$REPO" ls-tree -r --name-only "$SHA"
+    ;;
+  ref)
+    echo "$HEAD"
+    ;;
 esac
