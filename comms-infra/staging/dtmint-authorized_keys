@@ -1,0 +1,1 @@
+restrict,command="sudo -n -u dtapi /usr/local/bin/dt-api mint",from="204.168.141.77" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGgS4BbqOk9ecstQApMUE39jKma59DfKW17Q7wMmGOH/ dtmint@helsinki-agent-staging-session

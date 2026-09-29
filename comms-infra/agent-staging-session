@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mint a staging session for Coltrane's browser, so it opens already logged in.
+"""Refresh BOTH headless agents' staging browser sessions from ONE crew-login mint.
 
 ★ KYLE'S RULING, 2026-09-09, AFTER I PUT THE READ-ONLY QUESTION TO HIM TWICE:
   *"The way it's been working now is that the sessions navigate through the browser to a
@@ -11,40 +11,45 @@
     would and would not have stopped; it stands as a finding for `B-SEC-HARDEN`, not as a
     blocker on this. Do not re-litigate it here.
 
-⛔⛔ NO PASSWORD IS EVER TYPED INTO A FORM, AND THAT BOUNDARY IS UNTOUCHED. `CLAUDE.md` §7
-    permits exactly one use of the staging credentials — **the authenticated API call** — and
-    that is all this does: one POST to `/api/auth/login`, server to server. The tokens it
-    returns are written into a Playwright storage-state file, which the browser loads as its
-    starting state. **The browser therefore OPENS logged in rather than logging itself in**,
-    which is the same position Kyle's own Chrome is in when a session verifies through it.
+★ B-CREDENTIALS-PRIVATE-REPO OBJ-1 (#1023) — NO PASSWORD ON THIS BOX ANY MORE. The token comes
+  from staging's crew login: one ssh with a dedicated key whose ONLY power is a forced command,
+  `sudo -n -u dtapi /usr/local/bin/dt-api mint` (staging's dtmint account, from= this box). The
+  two password files this script used to read (/etc/langston/staging.env, /etc/coltrane/staging.env)
+  and its public-host login are RETIRED (DELETED_COMPONENTS_LOG). One mint writes both agents'
+  storage states; staging hands back the same token for 20 h, so a re-run costs no login.
 
-⛔ CREDENTIALS COME FROM A ROOT-ONLY FILE AND NEVER FROM argv. Langston caught a live OAuth
-   token in a command line on 2026-09-01: `ps` is world-readable, `/proc` has no hidepid, and
-   another human has a shell on that box. Same rule, same reason, different secret.
+⛔⛔ NO PASSWORD IS EVER TYPED INTO A FORM, AND THAT BOUNDARY IS UNTOUCHED. The tokens are written
+    into a Playwright storage-state file, which the browser loads as its starting state. **The
+    browser therefore OPENS logged in rather than logging itself in**, which is the same position
+    Kyle's own Chrome is in when a session verifies through it.
 
-⚠️ THE TOKEN LASTS 7 DAYS (`routes.ts:157`, extended from 12h because Kyle prefers no session
-   timeout), so the refresh timer runs daily — comfortably inside it. ★ A file that is merely
-   PRESENT proves nothing about whether it still works, which is why `--check` asks the API
-   rather than reading the file's timestamp.
+⛔ THE TOKEN NEVER TOUCHES argv, stdout or a log: it arrives on the ssh's stdout into memory and
+   goes straight into each agent's 0600 state file.
+
+⚠️ THE TOKEN LASTS 7 DAYS (routes.ts issueTokens), the timer runs daily, and a mint is refused
+   unless it still has 6 days left (OBJ-1(e)). ★ A file that is merely PRESENT proves nothing about
+   whether it still works, which is why `--check` asks the API rather than reading a timestamp.
 """
 
 import argparse
+import calendar
 import json
 import os
+import shutil
 import ssl
+import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
-# ⛔ ONE SCRIPT, PARAMETERISED BY USER — NOT TWO COPIES. Langston needs exactly this and a
-#    second copy is the #641 shape: two files, one fix, and the one nobody edited wins.
-#    Each agent still gets its OWN credential file and its OWN session file, which is the
-#    separation Kyle asked for; what is shared is the CODE, not the state.
-AGENT = "coltrane"                       # overridden by --user
-ENV_FILE = ""                            # set in main()
-STATE_FILE = ""
+AGENTS = ("coltrane", "langston")
 BASE = "https://188.245.193.8.sslip.io"
-ORIGIN = BASE
+ORIGIN = BASE                               # the storage state is keyed to the PUBLIC origin (C-10)
+MINT_KEY = "/root/.ssh/dtmint_ed25519"
+MINT_TARGET = "dtmint@188.245.193.8"
+KNOWN_HOSTS = "/root/.ssh/known_hosts"
+MIN_EXP_LEFT_S = 6 * 86400
 NL = chr(10)
 
 # ⚠️ The staging cert is for the sslip.io host and is valid, but the box also answers on a
@@ -53,112 +58,90 @@ NL = chr(10)
 CTX = ssl.create_default_context()
 
 
-def read_env():
-    """⛔ Reads the credentials. Never prints them, never returns them to a caller that logs."""
-    out = {}
+def state_file(agent):
+    return "/home/%s/.staging-session.json" % agent
+
+
+def mint():
+    """One ssh; the forced command on staging decides what runs. We pass NO command."""
+    cmd = ["/usr/bin/ssh", "-i", MINT_KEY, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+           "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + KNOWN_HOSTS,
+           "-o", "ConnectTimeout=20", "-T", MINT_TARGET]
     try:
-        with open(ENV_FILE, encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    out[k.strip()] = v.strip().strip('"').strip("'")
-    except FileNotFoundError:
-        print("REFUSED: %s does not exist. This is the absence of the CREDENTIAL FILE, not "
-              "of a session — do not read it as 'staging is down'." % ENV_FILE)
-        raise SystemExit(2)
-    except PermissionError:
-        print("REFUSED: cannot read %s. Run this as root; the file is 600 by design."
-              % ENV_FILE)
-        raise SystemExit(2)
-    if not out.get("STAGING_USER") or not out.get("STAGING_PASS"):
-        print("REFUSED: %s is missing STAGING_USER or STAGING_PASS." % ENV_FILE)
-        raise SystemExit(2)
-    return out
-
-
-def api_login(env):
-    body = json.dumps({"username": env["STAGING_USER"],
-                       "password": env["STAGING_PASS"]}).encode("utf-8")
-    req = urllib.request.Request(BASE + "/api/auth/login", data=body,
-                                 headers={"Content-Type": "application/json"},
-                                 method="POST")
+        r = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        print("FAILED: the mint did not answer within 180 s. The sessions were NOT refreshed.")
+        raise SystemExit(3)
+    if r.returncode != 0:
+        # stderr is dt-api's or ssh's own text — it never carries the token
+        print("FAILED: the mint exited %d: %s. The sessions were NOT refreshed; the old ones stay "
+              "until they expire." % (r.returncode, r.stderr.decode("utf-8", "replace").strip()[:400]))
+        raise SystemExit(3)
     try:
-        with urllib.request.urlopen(req, timeout=30, context=CTX) as r:
-            return json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        # ⛔ Report the STATUS, never the body — a failed auth response can echo input back.
-        print("FAILED: login returned HTTP %d. The session was NOT refreshed; the old one "
-              "stays in place until it expires." % e.code)
-        raise SystemExit(3)
-    except Exception as e:
-        print("FAILED: %s: %s. The session was NOT refreshed." % (type(e).__name__, e))
-        raise SystemExit(3)
-
-
-def write_state(tokens):
-    """The storage-state shape Playwright loads. ⚠️ All THREE keys are written because
-    `client/src/lib/auth.ts:14-17` sets `accessToken`, `refreshToken` AND a legacy `token`,
-    and `getAccessToken()` falls back to the legacy one. Writing only the modern name would
-    work today and break on whichever path still reads the old key."""
-    access = tokens.get("accessToken")
-    refresh = tokens.get("refreshToken", "")
-    if not access:
-        print("FAILED: login succeeded but returned no accessToken. NOT writing a state "
-              "file — a file with no token in it is worse than none, because the browser "
-              "would open, look logged out, and nobody would know why.")
+        j = json.loads(r.stdout.decode("utf-8"))
+    except ValueError:
+        print("FAILED: the mint returned something that is not JSON. NOT writing a state file.")
         raise SystemExit(4)
+    if not j.get("accessToken"):
+        print("FAILED: the mint returned no accessToken. NOT writing a state file — a file with no "
+              "token in it is worse than none, because the browser would open, look logged out, "
+              "and nobody would know why.")
+        raise SystemExit(4)
+    try:
+        exp = calendar.timegm(time.strptime(j.get("exp", ""), "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:
+        print("FAILED: the mint's exp is unreadable. NOT writing a state file.")
+        raise SystemExit(4)
+    if exp - time.time() < MIN_EXP_LEFT_S:
+        print("FAILED: the minted token expires %s — under the 6-day floor. NOT writing it." % j["exp"])
+        raise SystemExit(4)
+    return j
+
+
+def write_state(agent, tokens):
+    """The storage-state shape Playwright loads. ⚠️ All THREE keys are written because
+    `client/src/lib/auth.ts` sets `accessToken`, `refreshToken` AND a legacy `token`, and
+    `getAccessToken()` falls back to the legacy one. Writing only the modern name would work
+    today and break on whichever path still reads the old key."""
+    access, refresh = tokens["accessToken"], tokens.get("refreshToken", "")
     state = {"cookies": [], "origins": [{"origin": ORIGIN, "localStorage": [
         {"name": "accessToken", "value": access},
         {"name": "refreshToken", "value": refresh},
         {"name": "token", "value": access}]}]}
-    tmp = STATE_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
+    path = state_file(agent)
+    tmp = path + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(state, fh)
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, STATE_FILE)          # atomic: never a half-written state file
-    try:
-        import shutil
-        shutil.chown(STATE_FILE, AGENT, AGENT)
-    except Exception as e:
-        print("WARNING: wrote %s but could not chown it: %s" % (STATE_FILE, e))
+    shutil.chown(tmp, agent, agent)            # owned by the agent BEFORE it becomes visible
+    os.replace(tmp, path)                      # atomic: never a half-written state file
 
 
-def check():
-    """⛔ ASK THE API, DO NOT STAT THE FILE. A present, recent, well-formed state file whose
-    token has been invalidated looks identical to a working one from the outside."""
+def check(agent):
+    """⛔ ASK THE API, DO NOT STAT THE FILE — through the route the crew login's own control uses
+    (OBJ-1(a): GET /api/settings sits behind authenticateToken, which also looks the user up)."""
     try:
-        with open(STATE_FILE, encoding="utf-8") as fh:
+        with open(state_file(agent), encoding="utf-8") as fh:
             state = json.load(fh)
         tok = [i["value"] for o in state["origins"] for i in o["localStorage"]
                if i["name"] == "accessToken"][0]
     except Exception as e:
         print("NO SESSION: %s: %s" % (type(e).__name__, e))
         return 1
-    # ⛔ THE ENDPOINT IS READ FROM THE CODE, NOT GUESSED. The first version probed
-    #    `/api/auth/me`, which DOES NOT EXIST — the four real ones are login, refresh,
-    #    register and verify (`routes.ts:995`). It returned 404 and the checker announced
-    #    "SESSION DEAD", which was a lie about a token that was perfectly good.
-    req = urllib.request.Request(BASE + "/api/auth/verify",
-                                 headers={"Authorization": "Bearer " + tok})
+    req = urllib.request.Request(BASE + "/api/settings", headers={"Authorization": "Bearer " + tok})
     try:
         with urllib.request.urlopen(req, timeout=20, context=CTX) as r:
-            who = json.loads(r.read().decode("utf-8"))
-        u = who.get("user") or {}
-        print("SESSION OK — the API accepted the stored token (user: %s, role: %s)."
-              % (u.get("username") or who.get("username") or "?", u.get("role") or "?"))
+            r.read()
+        print("SESSION OK — the API served GET /api/settings with %s's stored token." % agent)
         return 0
     except urllib.error.HTTPError as e:
-        # ⛔⛔ 404 IS NOT 401. A missing endpoint and a rejected token are different facts and
-        #    collapsing them is how a checker reports a healthy session as dead — measured,
-        #    on this very script's first run.
-        if e.code in (401, 403):
-            print("SESSION DEAD — the API REJECTED the stored token (HTTP %d). Re-run "
-                  "without --check to mint a new one." % e.code)
+        # ⛔⛔ 404 IS NOT 401. A missing endpoint and a rejected token are different facts.
+        if e.code == 401:
+            print("SESSION DEAD — the API REJECTED %s's stored token (HTTP 401). Re-run without "
+                  "--check to mint a new one." % agent)
             return 1
-        print("INCONCLUSIVE — the probe endpoint returned HTTP %d, which says nothing about "
-              "the token. Check the endpoint before believing anything about the session."
-              % e.code)
+        print("INCONCLUSIVE — GET /api/settings answered HTTP %d, which says nothing certain "
+              "about the token." % e.code)
         return 2
     except Exception as e:
         print("UNKNOWN — could not reach staging to test the token: %s: %s" % (type(e).__name__, e))
@@ -168,19 +151,20 @@ def check():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split(NL)[0])
     ap.add_argument("--check", action="store_true",
-                    help="test the STORED token against the API; does not mint a new one")
-    ap.add_argument("--user", default="coltrane", choices=("coltrane", "langston"),
-                    help="which agent's session to mint or check")
+                    help="test an agent's STORED token against the API; mints nothing")
+    ap.add_argument("--user", choices=AGENTS, help="with --check: which agent (default: both)")
     a = ap.parse_args()
-    global AGENT, ENV_FILE, STATE_FILE
-    AGENT = a.user
-    ENV_FILE = "/etc/%s/staging.env" % AGENT
-    STATE_FILE = "/home/%s/.staging-session.json" % AGENT
     if a.check:
-        return check()
-    write_state(api_login(read_env()))
-    print("Wrote %s — %s's browser will now open staging already signed in."
-          % (STATE_FILE, AGENT))
+        codes = [check(u) for u in ([a.user] if a.user else AGENTS)]
+        return max(codes)
+    if a.user:
+        ap.error("--user only goes with --check: one mint always refreshes both agents")
+    tokens = mint()
+    for agent in AGENTS:
+        write_state(agent, tokens)
+    print("Refreshed %s — both browsers will open staging signed in (token %s, expires %s)."
+          % (", ".join(state_file(x) for x in AGENTS),
+             "reused" if tokens.get("reused") else "fresh", tokens.get("exp")))
     return 0
 
 

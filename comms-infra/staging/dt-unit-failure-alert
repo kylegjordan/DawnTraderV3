@@ -1,0 +1,21 @@
+#!/bin/sh
+# dt-unit-failure-alert <unit> — raise ONE system alert, naming Infra Claude, that a staging unit
+# failed. Called by dt-unit-failure@.service (User=deploy), the staging twin of Helsinki's
+# agent-unit-failure@. B-CREDENTIALS-PRIVATE-REPO OBJ-1 (#1023), pre-audit §2.2 item 10.
+#
+# WHO IT REACHES (C6 / GB-7): the alert queue that every CC session reads on every turn, and — at
+# the dispatcher's next 15-minute tick — the Discord alerts webhook, which always engages Langston.
+# The dedupe key keeps ONE open alert per unit; once it is resolved, the next failure raises anew.
+set -eu
+unit="${1:-}"
+case "$unit" in
+  ''|*[!A-Za-z0-9@._:-]*) echo "dt-unit-failure-alert: refusing an empty or unsafe unit name" >&2; exit 2 ;;
+esac
+now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cd /home/deploy/dawntrader
+exec /usr/bin/npm run -s system-alerts -- add \
+  --triggers-at "$now" --category breakage --severity warning \
+  --title "Infra Claude — staging unit $unit failed" \
+  --body "Infra Claude — the staging unit $unit failed at $now. As root on staging: journalctl -u $unit -n 60. For dt-install-drift every non-OK line names a file that differs from its committed copy, a permission, a dt-api PAGE (/var/lib/dt-api/page.json) or a stale source." \
+  --dedupe-key "dt-unit-failure:$unit" \
+  --metadata "{\"unit\":\"$unit\",\"owner\":\"CC-INFRA\",\"batch\":\"B-CREDENTIALS-PRIVATE-REPO\"}"

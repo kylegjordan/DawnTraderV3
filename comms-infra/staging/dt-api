@@ -1,0 +1,642 @@
+#!/usr/bin/env python3
+"""dt-api — the crew login: one authenticated call to the staging API, with no password held by the caller.
+
+B-CREDENTIALS-PRIVATE-REPO OBJ-1 (#1023). Scope §2.1, pre-audit §2.2 r4, Langston's Step-2
+ruling (pre-audit §6, conditions C1-C11).
+
+USAGE (always as the dtapi user — `sudo -u dtapi /usr/local/bin/dt-api ...`):
+    dt-api GET [--mode paper|live] <path>[?<query>]         a read
+    dt-api --write <POST|PUT|PATCH|DELETE> [--mode paper|live] <path>
+                                                            a write; JSON body on stdin
+    dt-api mint                                             the agents' browser token
+                                                            (only through dtmint's forced command)
+
+EXIT CODES
+    0  the app answered 2xx; its body is on stdout
+    1  the app answered, but not 2xx; its body is on stdout and the status on stderr
+    2  REFUSED by dt-api's own rules — nothing was sent to the app
+    3  dt-api could not get a working login (lock timeout, login refused or rate-capped,
+       the app unreachable) — the caller's request was NOT sent; OR the request was sent and
+       the app never answered (the text says which)
+    5  PAGE — a condition a human must look at; the text names who; nothing was re-minted
+
+⛔ WHAT THIS IS, AND IS NOT (C11, the r3 reviewer — stated, not implied):
+   * WRITES are default-DENY: an explicit allowlist, EMPTY on day one, so every write refuses.
+   * READS are default-ALLOW against a denylist built from an INCOMPLETE census of GETs that
+     run work. The denylist is an ACCIDENT GUARD, NOT A BOUNDARY: the CC sessions reach
+     staging as root, both agents hold the account's token in their own files, and `deploy`
+     holds full root until #1102. It binds only `dt-api` calls from `deploy` once #1102 lands.
+   * The file this reads is private to dtapi. That stops casual exposure (no chat, no repo,
+     no Helsinki file). It is not a wall against root.
+
+⛔ THE GRAMMAR AND THE DENYLIST BIND THE CALLER'S ARGUMENTS ONLY (C5). dt-api's own calls to
+   /api/auth/login and /api/auth/verify are made below, outside the argument dispatcher.
+"""
+
+import base64
+import errno
+import fcntl
+import http.client
+import json
+import os
+import pwd
+import re
+import sys
+import time
+
+# ── CONSTANTS (the test harness substitutes ONLY this block; it asserts the rest is identical) ──
+APP_HOST = "127.0.0.1"            # ⛔ not "localhost": the app listens on 0.0.0.0:5000, IPv4 only (D-7)
+APP_PORT = 5000
+ENV_FILE = "/etc/dt-api/staging-api.env"
+STATE_DIR = "/var/lib/dt-api"
+EXPECT_USER = "dtapi"
+MINT_CALLER = "dtmint"
+LOCK_TIMEOUT_S = 30
+HTTP_TIMEOUT_S = 120
+LOGIN_TIMEOUT_S = 20
+# ── END CONSTANTS ──
+
+TOKEN_FILE = os.path.join(STATE_DIR, "token.json")
+NEG_FILE = os.path.join(STATE_DIR, "negcache.json")
+LEDGER = os.path.join(STATE_DIR, "login-ledger.jsonl")
+LOCK_FILE = os.path.join(STATE_DIR, "lock")
+PAGE_FILE = os.path.join(STATE_DIR, "page.json")
+CALL_LOG = os.path.join(STATE_DIR, "calls.log")
+
+# ⛔ THE LIMITER'S ARITHMETIC (loginLimiter, routes.ts:86-92; express-rate-limit 8.1.0,
+#    dist/index.mjs:71,132,150): 5 attempts per key per FIXED 900 s window that opens at the
+#    key's first hit; every attempt counts, successes included. Every login dt-api makes is
+#    a loopback call with no X-Forwarded-For, so with `trust proxy 2` (index.ts:175) the key
+#    is "127.0.0.1" — THE LOOPBACK BUCKET (C3). The ledger below records exactly that bucket
+#    and nothing else; the response headers are authoritative, the ledger is a second record (C4).
+WINDOW_S = 900
+DTAPI_CAP = 2                     # dt-api's own logins (calls + mints) per 900 s, whatever the reason
+NEG_S = 900                       # after a login 401 / 404 / 429 (a 429 uses its RateLimit-Reset)
+BACKOFF_500_S = 60                # after a login 5xx or no answer: back off, keep the current token
+MINT_REUSE_S = 20 * 3600          # a mint younger than this is handed out again (C-10)
+MIN_EXP_LEFT_S = 6 * 86400        # ... and only if it still has 6 days left (OBJ-1(e))
+
+METHODS_WRITE = ("POST", "PUT", "PATCH", "DELETE")
+
+# ── THE RULES — one text per rule, exit 2 for every refusal (pre-audit §2.2.2 r4) ──
+TXT_MALFORMED = "REFUSED: dt-api malformed request: %s"
+TXT_WHOLE_ROUTE = "REFUSED: dt-api does not call account, credential or mode-switch routes"
+TXT_READ_ACCOUNT = "REFUSED: dt-api does not read account or credential routes"
+TXT_READ_JOB = "REFUSED: dt-api does not trigger jobs through GET: %s"
+TXT_NEEDS_WRITE = "REFUSED: dt-api writes need --write"
+TXT_NOT_ALLOWLISTED = "REFUSED: dt-api write not allowlisted: %s %s"
+
+# (c) whole-route denials, EVERY method (scope §2.1(3)). The two resets only return 410 today;
+#     they stay denied as harmless extras (D-2).
+WHOLE_ROUTE_DENY = (
+    "/api/trading/set-mode",
+    "/api/kill-switch/reset",
+    "/api/guardrails-v2/kill-switch/reset",
+)
+# (a) read denylist, account and credential prefixes: the path equal to one, or under it.
+#     GET /api/user/profile returns the whole users row, bcrypt hash included (storage.getUser
+#     is a select-all); GET /api/admin/users returns every row. No other GET returns a row.
+READ_DENY_PREFIXES = ("/api/admin", "/api/auth", "/api/user")
+# (b) GETs that RUN WORK — the Step-3 census (C1): all 442 GET definitions across routes.ts and
+#     the 15 sub-router files, each body read and followed one level into what it calls; its
+#     control, GET /api/system/formula-audit, is a route no path match finds. ":x" matches one
+#     path segment. ⚠️ C11: calls deeper than one level were not traced exhaustively, so this
+#     list can be incomplete. It is an accident guard. (Method + table: the OBJ-1 change list.)
+#     Denied: a GET whose PURPOSE is a job — an audit, a test harness, a scan, an export or
+#     report file, a learning update, a pool initialisation, a size log. ALLOWED on purpose,
+#     stated rather than implied: ordinary dashboard reads whose side effect is incidental
+#     and which the website triggers on every load anyway — price refresh on a stale price,
+#     cost-cache fill, a cached recompute or broadcast, a first-run config row.
+READ_DENY_JOBS = (
+    "/api/audit/run",                          # routes/audit.ts — unauthenticated; runs the audit, writes a report
+    "/api/signal-audit/run",                   # routes/signal-audit.ts — unauthenticated; writes a report
+    "/api/system/formula-audit",               # runs the audit AND writes a report, no /run in its name (C1 control)
+    "/api/system/formula-audit/run",           # writes reports, inserts alerts, deletes old reports
+    "/api/system/feed-health/run",             # records a snapshot, writes a file, inserts alerts
+    "/api/reb-2-12/run",                       # sandbox test harnesses: full Kraken ticker + per-pair
+    "/api/reb-2-12/run-all",                   #   history, up to 15 cycles; nothing persisted, but a
+    "/api/reb-2-14/run",                       #   burst of exchange calls on the key live trading uses
+    "/api/reb-2-15/run",
+    "/api/reb-2-14-15/run-all",
+    "/api/execution/timing/export",            # writes a CSV file
+    "/api/diagnostics/kraken-documentation",   # APPENDS to replit.md in the deployed working tree
+    "/api/vts/export",                         # routes/vts.ts — writes a CSV when format=csv
+    "/api/vts/audit",                          # routes/vts.ts — writes a validation report
+    "/api/vts/skipped-signals/export",         # routes/vts.ts — flushes a buffer to files
+    "/api/database/status",                    # inserts a database-size row every call; may add an alert
+    "/api/filters/diagnostics",                # a whole-universe Kraken scan (limit 9999)
+    "/api/active-engine/diagnostics/scan",     # a universe scan with strategy probes; moves guard counters
+    "/api/active-engine/filtered-pairs",       # may initialise the live filter pool from Kraken; broadcasts
+    "/api/learning/profile/:id/evaluate",      # may change a learning profile's phase
+    "/api/strategic/recommendations",          # generates recommendations; broadcasts; logs
+    "/api/diagnostics/tec/costs",              # stamps default costs into the shared cost cache
+    "/api/diagnostics/tec/costs/:symbol",      #   (for ANY symbol string passed in)
+)
+# Writes: an explicit allowlist, EMPTY on day one (decision 19, Langston 2026-09-29T17:30Z).
+#   Each entry: ("METHOD", "/api/path/:param"). A kill-switch trip is NOT reachable through
+#   dt-api: trip it from the website or from a root shell.
+WRITE_ALLOW = ()
+
+# CASE-INSENSITIVE, like Express's own mount and route matching: "/API/trading/set-mode" reaches
+# set-mode, so it must pass the grammar and be DENIED by rule 2 — not dismissed as malformed.
+PATH_RE = re.compile(r"^/api/[A-Za-z0-9/_.:-]+$", re.IGNORECASE)
+QUERY_RE = re.compile(r"^[A-Za-z0-9_.=&,:-]*$")
+
+
+class Refused(Exception):
+    pass
+
+
+# ───────────────────────────── the grammar and the rules ─────────────────────────────
+
+def _bad_chars(s):
+    for ch in s:
+        o = ord(ch)
+        if o < 0x21 or o == 0x7F or o > 0x7E:      # space, controls, DEL, non-ASCII
+            return True
+    return False
+
+
+def canon(path):
+    """For MATCHING only: lowercase (Express matches case-insensitively) and strip ONE trailing
+    '/' (Express is not strict). The ORIGINAL text is what gets sent (D-4, D-5)."""
+    p = path.lower()
+    if len(p) > 1 and p.endswith("/"):
+        p = p[:-1]
+    return p
+
+
+def _seg_match(pattern, path):
+    ps, qs = pattern.split("/"), path.split("/")
+    if len(ps) != len(qs):
+        return False
+    return all(a == b or (a.startswith(":") and b != "") for a, b in zip(ps, qs))
+
+
+def parse(argv):
+    """argv (without the program name) -> dict(kind, method, mode, path, query, target).
+    Raises Refused(text) — every refusal is exactly one of the TXT_* texts."""
+    if not argv:
+        raise Refused(TXT_MALFORMED % "no arguments (usage: dt-api GET <path>)")
+    if argv == ["mint"]:
+        return {"kind": "mint"}
+    a = list(argv)
+    write = False
+    if a[0] == "--write":
+        write = True
+        a.pop(0)
+        if not a or a[0] not in METHODS_WRITE:
+            raise Refused(TXT_MALFORMED % "--write must be followed by POST, PUT, PATCH or DELETE")
+    if not a:
+        raise Refused(TXT_MALFORMED % "no method")
+    method = a.pop(0)
+    if method != "GET" and method not in METHODS_WRITE:
+        raise Refused(TXT_MALFORMED % ("unknown method (GET, POST, PUT, PATCH, DELETE only)"))
+    if write and method == "GET":
+        raise Refused(TXT_MALFORMED % "--write must be followed by POST, PUT, PATCH or DELETE")
+    mode = None
+    if a and a[0] == "--mode":
+        if len(a) < 2 or a[1] not in ("paper", "live"):
+            raise Refused(TXT_MALFORMED % "--mode takes paper or live")
+        mode = a[1]
+        a = a[2:]
+    if not a:
+        raise Refused(TXT_MALFORMED % "no path")
+    target = a.pop(0)
+    if a:
+        raise Refused(TXT_MALFORMED % "an argument after the path")
+    # ── rule 1: the grammar, on the raw text, before anything else ──
+    for bad, why in (("#", "'#'"), ("%", "'%'"), ("..", "'..'"), ("/./", "'/./'"),
+                     ("//", "'//'"), ("\\", "a backslash")):
+        if bad in target:
+            raise Refused(TXT_MALFORMED % ("contains %s" % why))
+    if _bad_chars(target):
+        raise Refused(TXT_MALFORMED % "contains a space, a control character or non-ASCII")
+    path, sep, query = target.partition("?")
+    if not PATH_RE.match(path):
+        raise Refused(TXT_MALFORMED % "the path must match ^/api/[A-Za-z0-9/_.:-]+$")
+    segs = path.split("/")[1:]
+    if segs and segs[-1] == "":
+        segs = segs[:-1]                                   # one trailing '/' is allowed
+    if any(s in ("", ".", "..") for s in segs):
+        raise Refused(TXT_MALFORMED % "an empty, '.' or '..' path segment")   # C10: a trailing '/.'
+    if sep:
+        if method != "GET":
+            raise Refused(TXT_MALFORMED % "a query is allowed on GET only")
+        if not QUERY_RE.match(query):
+            raise Refused(TXT_MALFORMED % "the query must match ^[A-Za-z0-9_.=&,:-]*$")
+    c = canon(path)
+    # ── rule 2: the whole-route denials, for EVERY method ──
+    if c in WHOLE_ROUTE_DENY:
+        raise Refused(TXT_WHOLE_ROUTE)
+    if method == "GET":
+        # ── rule 3: the read denylist ──
+        for pre in READ_DENY_PREFIXES:
+            if c == pre or c.startswith(pre + "/"):
+                raise Refused(TXT_READ_ACCOUNT)
+        for pat in READ_DENY_JOBS:
+            if _seg_match(pat, c):
+                raise Refused(TXT_READ_JOB % path)
+    else:
+        # ── rule 4 / rule 5 ──
+        if not write:
+            raise Refused(TXT_NEEDS_WRITE)
+        if not any(m == method and _seg_match(p, c) for m, p in WRITE_ALLOW):
+            raise Refused(TXT_NOT_ALLOWLISTED % (method, path))
+    return {"kind": "call", "method": method, "mode": mode, "path": path,
+            "query": query if sep else None, "target": target}
+
+
+# ───────────────────────────── state files ─────────────────────────────
+
+def _now():
+    return time.time()
+
+
+def _iso(t):
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+
+
+def _read_json(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return None
+    except (ValueError, OSError):
+        return None
+
+
+def _write_json(path, obj):
+    tmp = "%s.tmp.%d" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(obj, fh)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
+def _append(path, line):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
+
+
+def ledger_entries():
+    out = []
+    try:
+        with open(LEDGER, encoding="utf-8") as fh:
+            for ln in fh:
+                try:
+                    out.append(json.loads(ln))
+                except ValueError:
+                    continue
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def ledger_sent_since(since, whos=None):
+    return [e for e in ledger_entries()
+            if e.get("phase") == "sent" and e.get("ts", 0) >= since
+            and (whos is None or e.get("who") in whos)]
+
+
+def call_log(fields):
+    try:
+        if os.path.exists(CALL_LOG) and os.path.getsize(CALL_LOG) > 1_000_000:
+            with open(CALL_LOG, encoding="utf-8") as fh:
+                keep = fh.readlines()[-2000:]
+            tmp = CALL_LOG + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.writelines(keep)
+            os.replace(tmp, CALL_LOG)
+        _append(CALL_LOG, json.dumps(fields, sort_keys=True))
+    except OSError:
+        pass                                          # a log failure never blocks a call
+
+
+class Lock:
+    """dt-api's flock. The setter takes the SAME lock from before its step (0) through (5), so
+    dt-api cannot read the cache or log in mid-change. A wait longer than LOCK_TIMEOUT_S
+    REFUSES with its own text rather than re-minting (C7)."""
+
+    def __init__(self):
+        self.fd = None
+
+    def __enter__(self):
+        self.fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o600)
+        deadline = _now() + LOCK_TIMEOUT_S
+        while True:
+            try:
+                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except OSError as e:
+                if e.errno not in (errno.EAGAIN, errno.EACCES):
+                    raise
+            if _now() >= deadline:
+                os.close(self.fd)
+                self.fd = None
+                die(3, "REFUSED: dt-api waited %d s for its credential lock — a password change "
+                       "may be in progress. Nothing was sent; try again in a minute." % LOCK_TIMEOUT_S)
+            time.sleep(0.2)
+
+    def __exit__(self, *exc):
+        if self.fd is not None:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
+            os.close(self.fd)
+            self.fd = None
+
+
+# ───────────────────────────── output ─────────────────────────────
+
+def die(code, text):
+    sys.stderr.write(text.rstrip("\n") + "\n")
+    sys.stderr.flush()
+    raise SystemExit(code)
+
+
+def page(kind, detail):
+    """C6 / GB-7 — WHO THE PAGE REACHES: (1) the caller, now, on stderr, naming Infra Claude;
+    (2) every session and Langston through a system alert, raised by the staging hourly
+    `dt-install-drift` run while page.json exists (dedupe key dt-unit-failure:...);
+    (3) for the scheduled mint, Helsinki's agent-unit-failure@ on the next 04:40Z run.
+    ⛔ No re-mint happens on a page: a login would spend the shared loopback bucket on a
+    problem a login cannot fix."""
+    try:
+        _write_json(PAGE_FILE, {"ts": _iso(_now()), "kind": kind, "detail": detail})
+    except OSError:
+        pass
+    die(5, "PAGE (dt-api, %s): %s\nInfra Claude owns this. Nothing was re-minted; the crew login "
+           "will keep refusing until it is handled (root: cat %s)." % (kind, detail, PAGE_FILE))
+
+
+# ───────────────────────────── HTTP ─────────────────────────────
+
+def app_request(method, path, token=None, body=None, mode=None, timeout=None):
+    """One request to the app on loopback. Returns (status, headers{lower: value}, body bytes),
+    or (None, {}, error text) when the app did not answer. ⛔ NO X-Forwarded-For is ever sent:
+    the limiter must key this on 127.0.0.1 (C3)."""
+    hdrs = {"Accept": "application/json", "Connection": "close"}
+    if token:
+        hdrs["Authorization"] = "Bearer " + token     # in memory only — never argv, never a file we print
+    if mode:
+        hdrs["x-app-mode"] = mode
+    data = None
+    if body is not None:
+        data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
+        hdrs["Content-Type"] = "application/json"
+    conn = http.client.HTTPConnection(APP_HOST, APP_PORT, timeout=timeout or HTTP_TIMEOUT_S)
+    try:
+        conn.request(method, path, body=data, headers=hdrs)
+        r = conn.getresponse()
+        return r.status, {k.lower(): v for k, v in r.getheaders()}, r.read()
+    except (OSError, http.client.HTTPException) as e:
+        return None, {}, ("%s: %s" % (type(e).__name__, e)).encode()
+    finally:
+        conn.close()
+
+
+def _json(b):
+    try:
+        return json.loads(b.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        return None
+
+
+def jwt_claims(tok):
+    """Unverified read of exp/iat — for scheduling only; the server is the verifier."""
+    try:
+        mid = tok.split(".")[1]
+        mid += "=" * (-len(mid) % 4)
+        return json.loads(base64.urlsafe_b64decode(mid.encode()).decode("utf-8"))
+    except Exception:
+        return {}
+
+
+# ───────────────────────────── the login ─────────────────────────────
+
+def read_env():
+    out = {}
+    try:
+        with open(ENV_FILE, encoding="utf-8") as fh:
+            for ln in fh:
+                ln = ln.strip()
+                if ln and not ln.startswith("#") and "=" in ln:
+                    k, v = ln.split("=", 1)
+                    out[k.strip()] = v.strip()
+    except FileNotFoundError:
+        die(3, "REFUSED: %s does not exist — the crew password has not been set on this box "
+               "(the setter writes it). Nothing was sent." % ENV_FILE)
+    except PermissionError:
+        die(3, "REFUSED: cannot read %s — run dt-api as dtapi (sudo -u dtapi). Nothing was sent."
+            % ENV_FILE)
+    if not out.get("DT_API_USER") or not out.get("DT_API_PASS"):
+        die(3, "REFUSED: %s lacks DT_API_USER or DT_API_PASS. Nothing was sent." % ENV_FILE)
+    return out
+
+
+def login(who):
+    """A fresh login on the loopback bucket. Caller holds the Lock. Returns the token record."""
+    t = _now()
+    neg = _read_json(NEG_FILE)
+    if neg and neg.get("until", 0) > t:
+        die(3, "REFUSED: dt-api will not log in again until %s — the last login got %s (%s). "
+               "Nothing was sent." % (_iso(neg["until"]), neg.get("status"), neg.get("reason")))
+    recent = ledger_sent_since(t - WINDOW_S, whos=("dt-api", "mint"))
+    if len(recent) >= DTAPI_CAP:
+        die(3, "REFUSED: dt-api has already logged in %d times in the last %d s (cap %d, whatever "
+               "the reason) — the loopback login bucket is shared and small. Nothing was sent; "
+               "retry after %s." % (len(recent), WINDOW_S, DTAPI_CAP,
+                                    _iso(min(e["ts"] for e in recent) + WINDOW_S)))
+    env = read_env()
+    _append(LEDGER, json.dumps({"ts": t, "who": who, "phase": "sent", "bucket": "loopback"}))
+    st, h, b = app_request("POST", "/api/auth/login",
+                           body={"username": env["DT_API_USER"], "password": env["DT_API_PASS"]},
+                           timeout=LOGIN_TIMEOUT_S)
+    rem, rst = h.get("ratelimit-remaining"), h.get("ratelimit-reset")
+    _append(LEDGER, json.dumps({"ts": _now(), "who": who, "phase": "result", "status": st,
+                                "remaining": rem, "reset": rst, "bucket": "loopback"}))
+    if st == 200:
+        j = _json(b) or {}
+        tok = j.get("accessToken")
+        if not tok:
+            die(3, "FAILED: login returned 200 without an accessToken. Nothing was sent.")
+        cl = jwt_claims(tok)
+        rec = {"accessToken": tok, "refreshToken": j.get("refreshToken", ""),
+               "issued_at": t, "exp": cl.get("exp"), "who": who,
+               "role": (j.get("user") or {}).get("role")}
+        _write_json(TOKEN_FILE, rec)
+        try:
+            os.unlink(NEG_FILE)
+        except FileNotFoundError:
+            pass
+        if rem == "0":
+            sys.stderr.write("dt-api: note — the loopback login bucket is now empty for %s s "
+                             "(RateLimit-Remaining 0)\n" % rst)
+        return rec
+    if st in (401, 404, 429):
+        until = t + NEG_S
+        if st == 429 and rst and rst.isdigit():
+            until = t + int(rst)
+        reason = {401: "wrong password for the crew user", 404: "the crew user does not exist",
+                  429: "the loopback login bucket is exhausted"}[st]
+        _write_json(NEG_FILE, {"until": until, "status": st, "reason": reason})
+        # A 401 or 404 will not fix itself: someone changed the crew password or removed the row,
+        # and only a person re-running the setter (or restoring the row) fixes it. A 429 does.
+        if st == 404:
+            page("crew-user-missing", "login answered 404 — the crew user %s does not exist"
+                 % env["DT_API_USER"])
+        if st == 401:
+            page("crew-password-wrong", "login answered 401 — the stored crew password no longer "
+                 "matches; re-run the setter (dt-api-set-crew-password)")
+        die(3, "FAILED: login answered %d (%s). dt-api will not try again until %s. Nothing was "
+               "sent." % (st, reason, _iso(until)))
+    _write_json(NEG_FILE, {"until": t + BACKOFF_500_S, "status": st,
+                           "reason": "the app did not answer the login cleanly"})
+    die(3, "FAILED: login got %s — backing off %d s and keeping any current token. Nothing was "
+           "sent." % (st if st is not None else b.decode("utf-8", "replace"), BACKOFF_500_S))
+
+
+def cached_token():
+    rec = _read_json(TOKEN_FILE)
+    if not rec or not rec.get("accessToken"):
+        return None
+    exp = rec.get("exp")
+    if isinstance(exp, (int, float)) and exp <= _now() + 60:
+        return None                                   # certain to be refused: do not spend a call on it
+    return rec
+
+
+def get_token():
+    with Lock():
+        return cached_token() or login("dt-api")
+
+
+# ───────────────────────────── the 401 path (C6: three cases) ─────────────────────────────
+
+def classify_401(token):
+    """The caller's route answered 401. Returns "route" (the token is fine, the route itself said
+    401), "dead" (re-mint), or pages. Order: probe /api/settings, then /api/auth/verify."""
+    st, _, b = app_request("GET", "/api/settings", token=token)
+    if st == 200:
+        return "route"
+    if st != 401:
+        die(3, "FAILED: the route answered 401 and the probe GET /api/settings answered %s — dt-api "
+               "cannot tell whether the token is good. Nothing was re-minted." % st)
+    probe_err = (_json(b) or {}).get("error")
+    vs, _, vb = app_request("GET", "/api/auth/verify", token=token)
+    if vs == 401:
+        return "dead"                                 # signature or expiry: a login fixes it
+    if vs != 200:
+        die(3, "FAILED: /api/auth/verify answered %s — dt-api cannot classify the 401. Nothing "
+               "was re-minted." % vs)
+    # The signature is good, so a login cannot help (routes.ts:216-240: the DB lookup runs after it).
+    if probe_err == "User account not found":        # routes.ts:219
+        page("crew-user-missing", "the token is signature-valid but the API says 'User account "
+             "not found' — the crew row has been deleted or replaced")
+    if probe_err == "Invalid or expired token":      # routes.ts:240 — ANY exception, a DB error included
+        page("token-refused", "the token is signature-valid but GET /api/settings refuses it — "
+             "the app's user lookup or its database is failing")
+    page("token-refused-unknown", "the token is signature-valid but GET /api/settings answered 401 "
+         "with an unrecognised body")
+
+
+# ───────────────────────────── the verbs ─────────────────────────────
+
+def do_call(req):
+    body = None
+    if req["method"] in ("POST", "PUT", "PATCH"):
+        raw = sys.stdin.buffer.read()
+        if raw.strip():
+            if _json(raw) is None:
+                die(2, TXT_MALFORMED % "the stdin body is not JSON")
+            body = raw
+    rec = get_token()
+    st, h, b = app_request(req["method"], req["target"], token=rec["accessToken"], body=body,
+                    mode=req["mode"])
+    if st == 401:
+        verdict = classify_401(rec["accessToken"])
+        if verdict == "dead":
+            with Lock():
+                cur = cached_token()
+                if cur and cur["accessToken"] != rec["accessToken"]:
+                    rec = cur                          # someone re-minted while we checked
+                else:
+                    rec = login("dt-api")
+            st, h, b = app_request(req["method"], req["target"], token=rec["accessToken"], body=body,
+                            mode=req["mode"])          # ONE retry, never more
+    if st is None:
+        die(3, "FAILED: the app did not answer (%s). For a write, check whether it took effect "
+               "before retrying." % b.decode("utf-8", "replace"))
+    sys.stdout.buffer.write(b)
+    sys.stdout.buffer.flush()
+    sys.stderr.write("dt-api: HTTP %d %s %s\n" % (st, req["method"], req["path"]))
+    return 0 if 200 <= st < 300 else 1
+
+
+def do_mint():
+    """The agents' browser token (C-10). ⛔ Refused unless sudo says the caller is dtmint — a
+    second layer beside sudoers, which gives `deploy` only the GET and --write forms."""
+    if os.environ.get("SUDO_USER") != MINT_CALLER:
+        die(2, "REFUSED: dt-api mint is only reachable through the %s forced-command key"
+            % MINT_CALLER)
+    with Lock():
+        rec = cached_token()
+        t = _now()
+        reused = False
+        if rec and t - rec.get("issued_at", 0) < MINT_REUSE_S and \
+                isinstance(rec.get("exp"), (int, float)) and rec["exp"] - t >= MIN_EXP_LEFT_S:
+            vs, _, _ = app_request("GET", "/api/auth/verify", token=rec["accessToken"])
+            if vs == 200:
+                reused = True
+            elif vs != 401:
+                die(3, "FAILED: /api/auth/verify answered %s; not handing out a token it could not "
+                       "check." % vs)
+        if not reused:
+            rec = login("mint")
+    exp = rec.get("exp")
+    if not isinstance(exp, (int, float)) or exp - _now() < MIN_EXP_LEFT_S:
+        die(3, "FAILED: the minted token expires %s — under the %d-day floor; not handing it out."
+            % (exp and _iso(exp), MIN_EXP_LEFT_S // 86400))
+    sys.stdout.write(json.dumps({"accessToken": rec["accessToken"],
+                                 "refreshToken": rec.get("refreshToken", ""),
+                                 "issued_at": _iso(rec["issued_at"]), "exp": _iso(exp),
+                                 "reused": reused}) + "\n")
+    return 0
+
+
+def main(argv):
+    if argv and argv[0] in ("-h", "--help"):
+        sys.stdout.write(__doc__)
+        return 0
+    try:
+        req = parse(argv)
+    except Refused as r:
+        die(2, str(r))
+    me = pwd.getpwuid(os.geteuid()).pw_name
+    if me != EXPECT_USER:
+        die(2, "REFUSED: run dt-api as %s — sudo -u %s /usr/local/bin/dt-api ... (running it as "
+               "%s would leave its cache owned by the wrong account)." % (EXPECT_USER, EXPECT_USER, me))
+    os.umask(0o077)
+    if not os.path.isdir(STATE_DIR):
+        die(3, "REFUSED: %s is missing — dt-api is not installed completely." % STATE_DIR)
+    fields = {"ts": _iso(_now()), "caller": os.environ.get("SUDO_USER", "?"),
+              "verb": req["kind"]}
+    if req["kind"] == "call":
+        fields.update(method=req["method"], path=canon(req["path"]))
+    code = 3
+    try:
+        code = do_mint() if req["kind"] == "mint" else do_call(req)
+        return code
+    except SystemExit as e:
+        code = e.code
+        raise
+    finally:
+        fields["exit"] = code
+        call_log(fields)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

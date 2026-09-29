@@ -1,0 +1,10 @@
+[Unit]
+Description=Raise a system alert (naming Infra Claude) that staging unit %i failed
+Documentation=file:///usr/local/bin/dt-unit-failure-alert
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/dawntrader
+ExecStart=/usr/local/bin/dt-unit-failure-alert %i
+TimeoutStartSec=120

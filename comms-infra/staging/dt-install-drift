@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""dt-install-drift — is every file B-CREDENTIALS-PRIVATE-REPO installed on THIS box byte-for-byte
+the committed copy? Pre-audit §2.2 item 10 (C-18). Runs as root, hourly, on each box; a failure
+pages through the box's failure unit (staging: dt-unit-failure@ → a system alert naming Infra
+Claude; Helsinki: agent-unit-failure@ → the crew channel).
+
+⛔ ROOT RUNS NO GIT. The committed copy's blob id is read by the account that OWNS the repo
+   (deploy on staging, langston on Helsinki), and root re-hashes the installed file itself
+   (sha1 of "blob <len>\\0<bytes>", git's own object hash). A deploy-owned repo read by root
+   would hand root that repo's config — the class safe.directory exists to prevent.
+⚠️ STATED RESIDUAL: the blob id comes from the repo owner's git, so an owner who could edit both
+   the repo and an installed file could make them agree. On staging that owner is deploy, who is
+   root until #1102 — so this detects accidents and hand edits, it is not a tamper boundary.
+
+A file it cannot read is a FAIL, never a skip. Every line it prints is one fact:
+    OK       <installed path>  = <repo path> at <sha>
+    DRIFT    <installed path>  differs from <repo path> at <sha>
+    MISSING  <installed path>
+    PERM     <installed path>  mode/owner is X, wanted Y
+    STATE    a runtime fact that must hold (dt-api's state, a page, the mint key's pairing)
+    SOURCE   the committed source itself is unreadable or stale — a mirror-health fact, not drift
+EXIT: 0 all OK · 1 anything else (the unit fails, the page fires).
+"""
+import grp
+import hashlib
+import json
+import os
+import pwd
+import socket
+import stat
+import subprocess
+import sys
+import time
+
+# ── CONSTANTS (a test harness substitutes ONLY this block) ──
+HOSTNAME = None                  # None = socket.gethostname()
+ROOT = ""                        # a prefix on every absolute path it reads (tests only)
+RUNUSER = ["/usr/sbin/runuser", "-u"]
+# ── END CONSTANTS ──
+
+GIT_ENV = ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "HOME=/nonexistent", "GIT_CONFIG_NOSYSTEM=1"]
+
+BOXES = {
+    "dawntrader-staging": {
+        "git_as": "deploy",
+        # the governance checker's own clone: fetched by its timer every 30 min, so it is the
+        # freshest committed copy on this box (the deployed app's clone moves only at a deploy)
+        "git_dir": "/opt/governance-checker/DawnTraderV3/.git",
+        "ref": "refs/remotes/origin/migration/aws-supabase",
+        "stamps": ["/opt/governance-checker/DawnTraderV3/.git/FETCH_HEAD"],
+        "max_age_s": 3 * 3600,
+        "files": [
+            ("comms-infra/staging/dt-api", "/usr/local/bin/dt-api", 0o755, "root", "root"),
+            ("comms-infra/staging/dt-api-set-crew-password", "/usr/local/sbin/dt-api-set-crew-password", 0o700, "root", "root"),
+            ("comms-infra/staging/sudoers-dtapi", "/etc/sudoers.d/dtapi", 0o440, "root", "root"),
+            ("comms-infra/staging/dtmint-authorized_keys", "/home/dtmint/.ssh/authorized_keys", 0o640, "root", "dtmint"),
+            ("comms-infra/staging/dt-install-drift", "/usr/local/sbin/dt-install-drift", 0o700, "root", "root"),
+            ("comms-infra/staging/dt-unit-failure-alert", "/usr/local/bin/dt-unit-failure-alert", 0o755, "root", "root"),
+            ("comms-infra/staging/systemd/dt-install-drift.service", "/etc/systemd/system/dt-install-drift.service", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-install-drift.timer", "/etc/systemd/system/dt-install-drift.timer", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-unit-failure@.service", "/etc/systemd/system/dt-unit-failure@.service", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-install-drift.service.d/onfailure.conf",
+             "/etc/systemd/system/dt-install-drift.service.d/onfailure.conf", 0o644, "root", "root"),
+        ],
+        "dirs": [
+            ("/etc/dt-api", 0o750, "root", "dtapi"),
+            ("/var/lib/dt-api", 0o700, "dtapi", "dtapi"),
+            ("/home/dtmint/.ssh", 0o750, "root", "dtmint"),
+        ],
+        "private": [("/etc/dt-api/staging-api.env", 0o600, "dtapi", "dtapi")],
+        "checks": ["dt_api_page", "setter_marker", "dtmint_shell"],
+    },
+    "dawntrader-agent": {
+        "git_as": "langston",
+        "git_dir": "/srv/dawntrader-backup.git",
+        "ref": "refs/heads/migration/aws-supabase",
+        "stamps": ["/srv/dawntrader-backup.git/DT_SYNC_PASS", "/srv/dawntrader-backup.git/DT_REVIEW_FETCH_OK"],
+        "max_age_s": 3 * 3600,
+        "files": [
+            ("comms-infra/agent-staging-session", "/usr/local/bin/agent-staging-session", 0o750, "root", "root"),
+            ("comms-infra/systemd/agent-staging-session.service", "/etc/systemd/system/agent-staging-session.service", 0o644, "root", "root"),
+            ("comms-infra/systemd/agent-staging-session.timer", "/etc/systemd/system/agent-staging-session.timer", 0o644, "root", "root"),
+            ("comms-infra/systemd/onfailure.conf", "/etc/systemd/system/agent-staging-session.service.d/onfailure.conf", 0o644, "root", "root"),
+            ("comms-infra/staging/dt-install-drift", "/usr/local/sbin/dt-install-drift", 0o700, "root", "root"),
+            ("comms-infra/staging/systemd/dt-install-drift.service", "/etc/systemd/system/dt-install-drift.service", 0o644, "root", "root"),
+            ("comms-infra/staging/systemd/dt-install-drift.timer", "/etc/systemd/system/dt-install-drift.timer", 0o644, "root", "root"),
+            ("comms-infra/systemd/onfailure.conf", "/etc/systemd/system/dt-install-drift.service.d/onfailure.conf", 0o644, "root", "root"),
+        ],
+        "dirs": [],
+        "private": [("/root/.ssh/dtmint_ed25519", 0o600, "root", "root")],
+        "checks": ["mint_key_pairing"],
+    },
+}
+
+PROBLEMS = []
+
+
+def out(kind, text):
+    line = "%-8s %s" % (kind, text)
+    print(line, flush=True)
+    if kind != "OK":
+        PROBLEMS.append(line)
+
+
+def P(path):
+    return ROOT + path
+
+
+def git_blob(box, sha, repo_path):
+    """The committed copy's bytes and blob id, read by the repo's owner (never root)."""
+    base = RUNUSER + [box["git_as"], "--"] + GIT_ENV + ["git", "--git-dir=" + P(box["git_dir"])]
+    r = subprocess.run(base + ["rev-parse", "--verify", "%s:%s" % (sha, repo_path)],
+                       capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        return None, None, r.stderr.strip()[:200]
+    bid = r.stdout.strip()
+    c = subprocess.run(base + ["cat-file", "blob", bid], capture_output=True, timeout=60)
+    if c.returncode != 0:
+        return None, None, c.stderr.decode("utf-8", "replace").strip()[:200]
+    return bid, c.stdout, None
+
+
+def blob_hash(data):
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def read_installed(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError("not a regular file")
+        chunks = []
+        while True:
+            b = os.read(fd, 1 << 20)
+            if not b:
+                break
+            chunks.append(b)
+        return st, b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def owner_ok(st, mode, user, group):
+    try:
+        uid, gid = pwd.getpwnam(user).pw_uid, grp.getgrnam(group).gr_gid
+    except KeyError as e:
+        return False, "the account %s does not exist" % e
+    have = (stat.S_IMODE(st.st_mode), st.st_uid, st.st_gid)
+    if have != (mode, uid, gid):
+        return False, "mode/owner is %o %s:%s, wanted %o %s:%s" % (
+            have[0], _name(pwd.getpwuid, have[1]), _name(grp.getgrgid, have[2]), mode, user, group)
+    return True, ""
+
+
+def _name(fn, i):
+    try:
+        return fn(i)[0]
+    except KeyError:
+        return str(i)
+
+
+def source_fresh(box):
+    newest = None
+    for s in box["stamps"]:
+        s = P(s)
+        try:
+            with open(s) as fh:
+                first = fh.read(64).split()
+            t = float(first[0]) if first and first[0].replace(".", "", 1).isdigit() else os.stat(s).st_mtime
+        except (OSError, ValueError):
+            continue
+        newest = t if newest is None else max(newest, t)
+    return newest
+
+
+def check_extra(name, box):
+    if name == "dt_api_page":
+        p = P("/var/lib/dt-api/page.json")
+        if os.path.exists(p):
+            try:
+                pg = json.load(open(p))
+                out("STATE", "dt-api raised a PAGE at %s: %s — %s (handle it, then remove %s)"
+                    % (pg.get("ts"), pg.get("kind"), pg.get("detail"), p))
+            except (OSError, ValueError) as e:
+                out("STATE", "dt-api's page file exists and cannot be read: %s" % e)
+    elif name == "setter_marker":
+        p = P("/var/lib/dt-api-setter/marker.json")
+        if os.path.exists(p):
+            out("STATE", "an interrupted setter run left its marker at %s — re-run the setter to "
+                         "reconcile it" % p)
+    elif name == "dtmint_shell":
+        try:
+            sh = pwd.getpwnam("dtmint").pw_shell
+            if sh != "/bin/sh":
+                out("STATE", "dtmint's shell is %s; the forced command needs /bin/sh" % sh)
+        except KeyError:
+            out("STATE", "the dtmint account does not exist")
+    elif name == "mint_key_pairing":
+        if not box["_sha"]:
+            out("STATE", "the mint key's pairing is NOT checked: the committed source is unreadable")
+            return
+        pub = subprocess.run(["/usr/bin/ssh-keygen", "-y", "-f", P("/root/.ssh/dtmint_ed25519")],
+                             capture_output=True, text=True, timeout=30)
+        bid, data, err = git_blob(box, box["_sha"], "comms-infra/staging/dtmint-authorized_keys")
+        if pub.returncode != 0 or data is None:
+            out("STATE", "cannot compare the mint key with the committed authorized_keys: %s"
+                % (pub.stderr.strip() or err))
+            return
+        key = " ".join(pub.stdout.split()[:2])
+        if key not in data.decode("utf-8", "replace"):
+            out("STATE", "the mint key's public half is NOT the one in the committed "
+                         "comms-infra/staging/dtmint-authorized_keys — the mint will be refused")
+        else:
+            out("OK", "the mint key pairs with the committed authorized_keys")
+
+
+def main():
+    if os.geteuid() != 0:
+        print("REFUSED: run as root (it must read root-only files and must not run git itself).")
+        return 2
+    host = HOSTNAME or socket.gethostname()
+    box = BOXES.get(host)
+    if not box:
+        print("REFUSED: this host (%s) has no manifest — nothing is checked, which is a FAIL." % host)
+        return 1
+    base = RUNUSER + [box["git_as"], "--"] + GIT_ENV + ["git", "--git-dir=" + P(box["git_dir"])]
+    r = subprocess.run(base + ["rev-parse", "--verify", box["ref"] + "^{commit}"],
+                       capture_output=True, text=True, timeout=60)
+    # ⛔ An unreadable source skips ONLY the hash comparisons: the permission and runtime checks
+    #    below (a dt-api PAGE, a setter marker) need no git, and must never ride on it.
+    sha = r.stdout.strip() if r.returncode == 0 else None
+    box["_sha"] = sha
+    if sha is None:
+        out("SOURCE", "cannot read %s in %s as %s: %s — installed files NOT compared" % (
+            box["ref"], box["git_dir"], box["git_as"], r.stderr.strip()[:200]))
+    t = source_fresh(box)
+    age = None if t is None else time.time() - t
+    if age is None:
+        out("SOURCE", "no freshness stamp is readable (%s)" % ", ".join(box["stamps"]))
+    elif age > box["max_age_s"]:
+        out("SOURCE", "the committed source was last refreshed %d min ago (limit %d) — a stale "
+                      "source, not drift" % (age // 60, box["max_age_s"] // 60))
+    print("# %s — installed files vs %s at %s (source refreshed %s)" % (
+        host, box["ref"], sha[:12] if sha else "UNREADABLE", "?" if age is None else "%d min ago" % (age // 60)), flush=True)
+    for repo_path, inst, mode, user, group in (box["files"] if sha else []):
+        path = P(inst)
+        bid, _, err = git_blob(box, sha, repo_path)
+        if bid is None:
+            out("SOURCE", "%s is not readable at %s: %s" % (repo_path, sha[:12], err))
+            continue
+        try:
+            st, data = read_installed(path)
+        except FileNotFoundError:
+            out("MISSING", path)
+            continue
+        except OSError as e:
+            out("MISSING", "%s cannot be read as a regular file: %s" % (path, e))
+            continue
+        if blob_hash(data) != bid:
+            out("DRIFT", "%s differs from %s at %s" % (path, repo_path, sha[:12]))
+        else:
+            out("OK", "%s = %s at %s" % (path, repo_path, sha[:12]))
+        ok, why = owner_ok(st, mode, user, group)
+        if not ok:
+            out("PERM", "%s %s" % (path, why))
+    for d, mode, user, group in box["dirs"]:
+        try:
+            st = os.lstat(P(d))
+            ok, why = owner_ok(st, mode, user, group) if stat.S_ISDIR(st.st_mode) else (False, "not a directory")
+            if not ok:
+                out("PERM", "%s %s" % (P(d), why))
+        except FileNotFoundError:
+            out("MISSING", P(d))
+    for f, mode, user, group in box["private"]:
+        try:
+            st = os.lstat(P(f))
+            ok, why = owner_ok(st, mode, user, group) if stat.S_ISREG(st.st_mode) else (False, "not a regular file")
+            if not ok:
+                out("PERM", "%s %s" % (P(f), why))
+        except FileNotFoundError:
+            out("MISSING", P(f))
+    for c in box["checks"]:
+        check_extra(c, box)
+    verdict = "PASS" if not PROBLEMS else "FAIL (%d problem%s)" % (len(PROBLEMS), "" if len(PROBLEMS) == 1 else "s")
+    print("dt-install-drift %s: %s" % (host, verdict), flush=True)
+    return 0 if not PROBLEMS else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,11 +1,10 @@
 [Unit]
-Description=Refresh the staging browser session for BOTH headless agents (token lasts 7d; this runs daily)
+Description=Refresh the staging browser session for BOTH headless agents from one crew-login mint (token lasts 7d; this runs daily)
 Documentation=file:///usr/local/bin/agent-staging-session
 
-# NOTE: /api/auth/login is rate-limited (loginLimiter). Repeated manual runs WILL return
-# HTTP 429 - that is the limiter, not a broken credential. The script refuses to overwrite a
-# working session on any failure, so a 429 costs nothing: the existing 7-day token stands.
+# B-CREDENTIALS-PRIVATE-REPO OBJ-1: the token comes from staging's `dt-api mint` through the
+# dtmint forced-command key — no password on this box. Staging reuses a mint younger than 20 h,
+# so a manual re-run costs no login. A failure keeps the existing 7-day sessions in place.
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/agent-staging-session --user coltrane
-ExecStartPost=/usr/local/bin/agent-staging-session --user langston
+ExecStart=/usr/local/bin/agent-staging-session

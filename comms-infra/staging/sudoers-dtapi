@@ -1,0 +1,15 @@
+# /etc/sudoers.d/dtapi — B-CREDENTIALS-PRIVATE-REPO OBJ-1 (#1023), pre-audit §2.2 items 1 and 5.
+#
+# INSTALL (never edit in place):
+#   visudo -cf <this file>                                    # must say "parsed OK"
+#   install -m 0440 -o root -g root <this file> /etc/sudoers.d/dtapi
+# ⛔ THE INSTALLED NAME HAS NO DOT: sudo silently SKIPS a file in sudoers.d whose name contains
+#    a '.' or ends in '~' — the rule would look installed and do nothing.
+# Evidence: `sudo -l -U deploy` and `sudo -l -U dtmint`, before and after, stored in the change list.
+#
+# ⚠️ An accident guard, not a boundary, until #1102 removes deploy's `NOPASSWD: ALL`.
+#    In sudoers a `*` matches across words, so `GET *` also matches `GET mint`; dt-api refuses
+#    that itself (the path grammar), and refuses `mint` unless SUDO_USER is dtmint.
+
+deploy ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api GET *, /usr/local/bin/dt-api --write *
+dtmint ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api mint

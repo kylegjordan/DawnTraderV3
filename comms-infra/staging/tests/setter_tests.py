@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+"""Setter suite — B-CREDENTIALS-PRIVATE-REPO OBJ-1. Run AS ROOT on a Linux box with python3-bcrypt:
+    python3 setter_tests.py
+
+It runs COPIES of the committed setter and dt-api whose only differences are their CONSTANTS
+blocks (asserted), against fakeapp.py (logins checked with real bcrypt against a JSON "database")
+and fakepsql.py (the setter's two statements against the same file). Cases: the pre-audit's
+kill tests after (1), (1b), (2), (4) with their expected end states; the password-only mutation;
+forced failures at (3) and (6); a restore that itself fails; the budget; PGPASSFILE refusals;
+the lock held across the commit; and the value's shape. Judge by exit code.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+import bcrypt
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import fakeapp  # noqa: E402
+
+DT_SRC = os.path.join(HERE, "..", "dt-api")
+SET_SRC = os.environ.get("SETTER_SRC") or os.path.join(HERE, "..", "dt-api-set-crew-password")
+FAKEPSQL = os.path.join(HERE, "fakepsql.py")
+PASS = FAIL = 0
+V1 = "OldValue_1abcdefghij"
+
+
+def check(name, ok, detail=""):
+    global PASS, FAIL
+    if ok:
+        PASS += 1
+    else:
+        FAIL += 1
+        print("FAIL: %s %s" % (name, detail))
+
+
+def substitute(src_path, consts, out_path):
+    src = open(src_path, encoding="utf-8").read()
+    a = src.index("# ── CONSTANTS")
+    b = src.index("# ── END CONSTANTS ──")
+    shipped = set(re.findall(r"^([A-Z_]+) =", src[a:b], re.M))
+    check("%s: the test block sets exactly the shipped constants" % os.path.basename(src_path),
+          shipped == set(consts), "%s vs %s" % (sorted(shipped), sorted(consts)))
+    block = "# ── CONSTANTS (test copy) ──\n" + "".join("%s = %s\n" % kv for kv in consts.items())
+    out = src[:a] + block + src[b:]
+    open(out_path, "w", encoding="utf-8").write(out)
+    return out_path
+
+
+class Rig:
+    def __init__(self, live_env=None, kill=None, verify=None, db_extra=None):
+        self.tmp = tempfile.mkdtemp(prefix="setter-t-")
+        os.makedirs(self.p("state"), mode=0o700)
+        os.makedirs(self.p("etc"), mode=0o750)
+        self.db = self.p("db.json")
+        json.dump({"users": {"testuser123": {"password": bcrypt.hashpw(V1.encode(), bcrypt.gensalt(10)).decode(),
+                                             "role": "owner"}}, **(db_extra or {})}, open(self.db, "w"))
+        self.app = fakeapp.App(db_path=self.db)
+        self.srv, port = fakeapp.serve(self.app)
+        self.dt = substitute(DT_SRC, {
+            "APP_HOST": '"127.0.0.1"', "APP_PORT": str(port), "ENV_FILE": repr(self.p("etc/staging-api.env")),
+            "STATE_DIR": repr(self.p("state")), "EXPECT_USER": '"root"', "MINT_CALLER": '"dtmint"',
+            "LOCK_TIMEOUT_S": "1", "HTTP_TIMEOUT_S": "10", "LOGIN_TIMEOUT_S": "10"}, self.p("dt-api"))
+        self.kill = kill
+        self.verify = verify or [sys.executable, self.dt, "GET", "/api/settings"]
+        self.write_setter()
+        if live_env:
+            self.write_env(live_env)
+
+    def write_setter(self, src=None):
+        self.setter = substitute(src or SET_SRC, {
+            "DT_API_PATH": repr(self.dt), "PSQL": repr(FAKEPSQL), "DT_API_VERIFY": repr(self.verify),
+            "SETTER_DIR": repr(self.p("setter")), "SETTER_LOCK": repr(self.p("setter.lock")),
+            "DTAPI_ACCOUNT": '"root"', "EXPECT_ROOT": "True", "KILL_AFTER": repr(self.kill)},
+            self.p("setter-under-test"))
+
+    def p(self, *a):
+        return os.path.join(self.tmp, *a)
+
+    def write_env(self, value):
+        with open(self.p("etc/staging-api.env"), "w") as fh:
+            fh.write("DT_API_USER=testuser123\nDT_API_PASS=%s\n" % value)
+        os.chmod(self.p("etc/staging-api.env"), 0o600)
+
+    def env_value(self, name="etc/staging-api.env"):
+        try:
+            for ln in open(self.p(name)):
+                if ln.startswith("DT_API_PASS="):
+                    return ln.strip().split("=", 1)[1]
+        except FileNotFoundError:
+            return None
+
+    def dbrow(self):
+        return json.load(open(self.db))["users"]["testuser123"]
+
+    def pgpass(self, mode=0o600, path=None):
+        path = path or self.p("pgpass")
+        with open(path, "w") as fh:
+            fh.write("%s:5432:postgres:postgres:secret\n" % self.db)
+        os.chmod(path, mode)
+        return path
+
+    def run(self, pgpass=None, env=None):
+        e = {"PATH": "/usr/bin:/bin"}
+        if pgpass is not False:
+            e["PGPASSFILE"] = pgpass or self.pgpass()
+        e.update(env or {})
+        try:
+            r = subprocess.run([sys.executable, self.setter], env=e, capture_output=True, text=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            return 124, "", "TIMEOUT"
+        return r.returncode, r.stdout, r.stderr
+
+    def ledger(self):
+        try:
+            return [json.loads(l) for l in open(self.p("state", "login-ledger.jsonl"))]
+        except FileNotFoundError:
+            return []
+
+    def age_ledger(self, secs=1000):
+        rows = self.ledger()
+        with open(self.p("state", "login-ledger.jsonl"), "w") as fh:
+            for r in rows:
+                r["ts"] -= secs
+                fh.write(json.dumps(r) + "\n")
+
+    def marker(self):
+        try:
+            return json.load(open(self.p("setter", "marker.json")))
+        except FileNotFoundError:
+            return None
+
+    def close(self):
+        self.srv.shutdown()
+
+
+def matches(value, h):
+    return bool(value) and bcrypt.checkpw(value.encode(), h.encode())
+
+
+def clean(r):
+    return (r.marker() is None and not os.path.exists(r.p("setter", "old-env"))
+            and not os.path.exists(r.p("etc", ".staging-api.env.new")))
+
+
+# ── 1. the happy path, first run (no env yet) ──
+r = Rig()
+c, o, e = r.run()
+row, v = r.dbrow(), r.env_value()
+check("happy: exit 0", c == 0, o + e)
+check("happy: role is editor, the new hash verifies the env's value", row["role"] == "editor" and matches(v, row["password"]))
+check("happy: the old value no longer logs in", not matches(V1, row["password"]))
+check("happy: the value's shape (41 chars, one '_', an upper, a digit)",
+      bool(v) and re.fullmatch(r"[A-Za-z0-9_]{41}", v) and v.count("_") == 1 and re.search("[A-Z]", v) and re.search(r"\d", v), str(v and len(v)))
+st = os.stat(r.p("etc/staging-api.env"))
+check("happy: the env is 0600 owned by DTAPI_ACCOUNT", st.st_mode & 0o777 == 0o600 and st.st_uid == 0)
+check("happy: marker, old-env copy and temp env are gone", clean(r))
+check("happy: the run-only PGPASSFILE was removed", not os.path.exists(r.p("pgpass")))
+led = [x for x in r.ledger() if x.get("phase") == "sent"]
+check("happy: exactly one setter login (3) and one dt-api login (6), both on the loopback bucket",
+      [x["who"] for x in led] == ["setter", "dt-api"] and all(x["bucket"] == "loopback" for x in led), str(led))
+argv = open(r.db + ".argv").read()
+check("happy: no hash ever rode psql's argv", "$2" not in argv and "secret" not in argv)
+check("happy: the value never reached stdout or stderr", v not in o and v not in e)
+check("happy: the report names (1)..(7)", all(("(%s)" % s) in o for s in ("1", "1b", "2", "3", "4", "5", "6", "7")), o)
+check("happy: the token dt-api cached at (6) carries role editor", json.load(open(r.p("state", "token.json")))["role"] == "editor")
+r.close()
+
+# ── 2. a second rotation: the live env holds V1, and dt-api ALREADY holds a valid cached token ──
+r = Rig(live_env=V1)
+q = subprocess.run([sys.executable, r.dt, "GET", "/api/settings"], env={"PATH": "/usr/bin:/bin"}, capture_output=True)
+old_tok = json.load(open(r.p("state", "token.json")))
+r.age_ledger()                  # that login is > 900 s old as far as the budget is concerned
+c, o, e = r.run()
+v2 = r.env_value()
+check("rotation: exit 0, the env changed, the db matches it", q.returncode == 0 and c == 0 and v2 != V1
+      and matches(v2, r.dbrow()["password"]), o + e)
+new_tok = json.load(open(r.p("state", "token.json")))
+led = [x["who"] for x in r.ledger() if x.get("phase") == "sent"]
+check("rotation: (5) purged the still-valid old token, so (6) proved the NEW value with a fresh login",
+      new_tok["accessToken"] != old_tok["accessToken"] and new_tok["role"] == "editor" and led[-2:] == ["setter", "dt-api"], str(led))
+r.close()
+
+# ── 2b. (3)'s role check is a second, independent layer ──
+r = Rig(live_env=V1)
+r.app.force_role = "owner"
+c, o, e = r.run()
+check("(3) a login reporting role owner FAILS and restores", c == 1 and "user.role" in o and r.dbrow()["role"] == "owner"
+      and r.env_value() == V1 and clean(r), o + e)
+r.close()
+
+# ── 3. the budget ──
+r = Rig()
+os.makedirs(r.p("state"), exist_ok=True)
+with open(r.p("state", "login-ledger.jsonl"), "w") as fh:
+    fh.write(json.dumps({"ts": time.time() - 100, "who": "dt-api", "phase": "sent", "bucket": "loopback"}) + "\n")
+before = r.dbrow()
+c, o, e = r.run()
+check("budget: a loopback login 100 s ago REFUSES, nothing touched", c == 2 and "REFUSED: the ledger records" in e and r.dbrow() == before, e)
+check("budget: the PGPASSFILE is removed even on a refusal", not os.path.exists(r.p("pgpass")))
+r.close()
+
+# ── 4. the mutation: a setter that writes only the password must FAIL ──
+src = open(SET_SRC, encoding="utf-8").read()
+old = "SET password = '%(h)s', role = '%(r)s', updated_at"
+check("mutation text found exactly once", src.count(old) == 1)
+mut = os.path.join(tempfile.mkdtemp(), "mutant")
+open(mut, "w", encoding="utf-8").write(src.replace(old, "SET password = '%(h)s', updated_at"))
+r = Rig()
+r.write_setter(mut)
+c, o, e = r.run()
+row = r.dbrow()
+check("mutation: password-only write FAILS and is rolled back", c == 1 and "ROLLED BACK" in o and row["role"] == "owner"
+      and matches(V1, row["password"]) and r.env_value() is None and clean(r), o + e)
+r.close()
+
+# ── 5. a forced failure at (6) restores hash, role AND env ──
+r = Rig(live_env=V1, verify=["/bin/false"])
+c, o, e = r.run()
+row = r.dbrow()
+check("fail at (6): exit 1, hash + role + env restored", c == 1 and row["role"] == "owner" and matches(V1, row["password"])
+      and r.env_value() == V1 and clean(r), o + e)
+check("fail at (6): dt-api's cache purged", not os.path.exists(r.p("state", "token.json")))
+r.close()
+
+# ── 6. a failure at (3) restores hash + role; the env was never touched ──
+r = Rig(live_env=V1)
+r.app.login_status = 500
+c, o, e = r.run()
+row = r.dbrow()
+check("fail at (3): exit 1, hash + role restored, env untouched", c == 1 and "(3)" in o and row["role"] == "owner"
+      and matches(V1, row["password"]) and r.env_value() == V1 and clean(r), o + e)
+r.close()
+
+# ── 7-10. kill tests with the pre-audit's expected end states ──
+for step, live, want_new in (("1", V1, False), ("1b", V1, False), ("2", V1, True), ("2", None, True), ("4", V1, True)):
+    r = Rig(live_env=live, kill=step)
+    c, o, e = r.run()
+    check("kill after (%s): the run died by SIGKILL" % step, c == -9, "%s %s" % (c, e))
+    committed_hash = r.dbrow()["password"]
+    temp_v = r.env_value("etc/.staging-api.env.new")
+    r.kill = None
+    r.write_setter()
+    if step == "4":
+        r.age_ledger()          # (3) logged in; the budget would (correctly) refuse for 900 s
+    c, o, e = r.run()
+    row, v = r.dbrow(), r.env_value()
+    if want_new:
+        ok = c == 0 and row["role"] == "editor" and v not in (None, V1) and matches(v, row["password"]) and clean(r)
+    else:
+        ok = c == 0 and row["role"] == "owner" and v == V1 and matches(V1, row["password"]) and clean(r) and "OLD value stands" in o
+    check("kill after (%s)%s: (0) reconciles to the %s value" % (step, "" if live else " (first run)", "NEW" if want_new else "OLD"), ok, o + e)
+    r.close()
+
+# ── 11. reconcile gets a 500: not an answer — touch nothing ──
+r = Rig(live_env=V1, kill="2")
+r.run()
+r.kill = None
+r.write_setter()
+r.app.login_status = 500
+m0 = r.marker()
+c, o, e = r.run()
+check("reconcile + login 500: exit 3, marker kept, nothing touched", c == 3 and r.marker() == m0 and r.env_value() == V1, o + e)
+r.close()
+
+# ── 12. neither logs in, but the row never changed: nothing to restore ──
+r = Rig()
+os.makedirs(r.p("setter"), mode=0o700)
+row0 = r.dbrow()
+json.dump({"started": "x", "old_hash": row0["password"], "old_role": "owner", "had_env": False, "phase": "committing"},
+          open(r.p("setter", "marker.json"), "w"))
+with open(r.p("etc", ".staging-api.env.new"), "w") as fh:
+    fh.write("DT_API_USER=testuser123\nDT_API_PASS=NeverCommitted_9\n")
+c, o, e = r.run()
+check("reconcile: commit never landed -> cleanup, OLD stands, no page", c == 0 and "commit never landed" in o and clean(r), o + e)
+r.close()
+
+# ── 13. neither logs in AND the row was changed by someone else: restore + page ──
+r = Rig()
+os.makedirs(r.p("setter"), mode=0o700)
+row0 = r.dbrow()
+json.dump({"started": "x", "old_hash": row0["password"], "old_role": "owner", "had_env": False, "phase": "committing"},
+          open(r.p("setter", "marker.json"), "w"))
+db = json.load(open(r.db))
+db["users"]["testuser123"]["password"] = bcrypt.hashpw(b"SomeoneElse_1", bcrypt.gensalt(10)).decode()
+json.dump(db, open(r.db, "w"))
+c, o, e = r.run()
+check("reconcile: an outside change -> restored to the marker and PAGE", c == 1 and "PAGE" in e
+      and r.dbrow()["password"] == row0["password"] and clean(r), o + e)
+r.close()
+
+# ── 14. a restore that itself fails keeps the marker (exit 4) ──
+r = Rig(live_env=V1, db_extra={"fail_writes_from": 2})
+r.app.login_status = 500
+c, o, e = r.run()
+check("restore fails: exit 4, the marker is KEPT", c == 4 and r.marker() is not None and "RESTORE FAILED" in e, o + e)
+r.close()
+
+# ── 15. PGPASSFILE refusals ──
+r = Rig()
+c, o, e = r.run(pgpass=False)
+check("no PGPASSFILE: exit 2", c == 2 and "set PGPASSFILE" in e, e)
+c, o, e = r.run(pgpass=r.pgpass(mode=0o644))
+check("PGPASSFILE 0644: exit 2", c == 2 and "mode 0600" in e, e)
+c, o, e = r.run(env={"PGPASSFILE": "/home/deploy/x"})
+check("PGPASSFILE under /home: exit 2", c == 2 and "under /home" in e, e)
+check("refusals touched nothing", r.dbrow()["role"] == "owner" and r.env_value() is None)
+r.close()
+
+# ── 16. dt-api's lock is held across the commit (C7 from the caller's side) ──
+r = Rig(db_extra={"sleep_on_write": 4})
+p = subprocess.Popen([sys.executable, r.setter], env={"PATH": "/usr/bin:/bin", "PGPASSFILE": r.pgpass()},
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+time.sleep(1.5)
+r.write_env(V1)                 # a caller with SOME env, so a refusal can only be the lock
+q = subprocess.run([sys.executable, r.dt, "GET", "/api/settings"], env={"PATH": "/usr/bin:/bin"},
+                   capture_output=True, text=True, timeout=30)
+p.communicate(timeout=120)
+check("a dt-api call during the commit waits, then refuses on the lock", q.returncode == 3 and "credential lock" in q.stderr, q.stderr)
+r.close()
+
+# ── 17. the generator, 2000 draws ──
+import importlib.util  # noqa: E402
+from importlib.machinery import SourceFileLoader  # noqa: E402
+r = Rig()
+spec = importlib.util.spec_from_loader("setter_mod", SourceFileLoader("setter_mod", r.setter))
+S = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(S)
+vals = [S.gen_value() for _ in range(2000)]
+check("gen_value: 2000 draws, all valid, all distinct", len(set(vals)) == 2000 and all(
+    re.fullmatch(r"[A-Za-z0-9_]{41}", x) and x.count("_") == 1 and re.search("[A-Z]", x) and re.search(r"\d", x) for x in vals))
+check("gen_value: validatePasswordStrength's special set holds '_'", "_" in "!@#$%^&*()_+=-{};:'\",.<>?")
+r.close()
+
+print("setter suite: %d passed, %d failed" % (PASS, FAIL))
+sys.exit(1 if FAIL else 0)

@@ -1,0 +1,10 @@
+[Unit]
+Description=Are the B-CREDENTIALS-PRIVATE-REPO files installed on this box the committed copies? (dt-install-drift)
+Documentation=file:///usr/local/sbin/dt-install-drift
+# OnFailure= comes from a per-box drop-in: staging pages through dt-unit-failure@ (a system
+# alert), Helsinki through agent-unit-failure@ (the crew channel). The unit file is shared.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dt-install-drift
+TimeoutStartSec=300
