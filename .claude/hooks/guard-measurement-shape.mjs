@@ -262,10 +262,13 @@ const SHAPES = [
     // THAN A JUDGEMENT CALL. Governance MANDATED a tail on every turn — CLAUDE.md §10.5 required
     // `tail -50 …/system-alerts.jsonl` until 2026-09-29 (it now requires a whole-file read, #980),
     // and MEMORY.md item 4 still requires `tail -30 …/cc-discord-inbox.jsonl` at session start. Both matched, both fired,
-    // on a shape that CAN NEVER BECOME A CLAIM. ⇒ unlike batch-session contamination this never
-    // washes out: it scales with turn count, in every session, forever. A guard that fires on a
-    // command the rules oblige you to run every turn is a banner-blindness generator by
-    // construction. Reader-found; `head` and `git log -N` are kept because neither is mandated.
+    // on a shape that CAN NEVER BECOME A CLAIM. ⇒ while §10.5 mandated its tail, this scaled with
+    // turn count, in every session. SINCE 2026-09-29 ONLY THE SESSION-START inbox tail is mandated —
+    // measured: 37 SessionStart events across all sessions in the 8 days 2026-09-22..29
+    // (~/.claude/instructions-loaded.jsonl), about 5 a day. `tail` STAYS OUT OF THE SHAPE for now,
+    // because that read is still mandated; whether to re-admit it at that magnitude is
+    // B-MEASURE-GATE leg 3's call. A guard that fires on a command the rules oblige you to run is a
+    // banner-blindness generator by construction. Reader-found; `head` and `git log -N` are kept because neither is mandated.
     // ⛔ AND A LOG READ IS EXEMPT, FOR THE SAME REASON `tail` IS ABSENT. The project's own
     // permission allowlist PINNED `tail -50 …/system-alerts.jsonl 2>&1 | head -60` until 2026-09-29
     // (removed with #980; the §10.5 read is now a whole-file script) — and the `head -60` fired. That is a FOURTH home for the
