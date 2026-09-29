@@ -40,6 +40,35 @@ Kyle, 2026-09-19: *"fix the incorrect feeds that are not going to be fixed by an
 - an arm that cannot be reached at all when its condition demonstrably occurred (e.g. a cold book with no reference that did NOT produce a refusal).
 **STILL UNOBSERVED and therefore NOT verified:** the refusal itself · `walk_yield` · `walk_no_reference` · `synthetic_reference`. **Post-deploy silence on these proves nothing** (`#661` leg 3).
 
+## 4a. ⛔ DATED AMENDMENT, 2026-09-29 — HOW §4 IS READ. Made BEFORE the window closes, at Langston's rulings (14:21Z C1; 14:33Z C2 and the boundary blocker). §4 above is unchanged.
+**Status when written:** 64 taker closes since the deploy (crypto 57, xStock 7; Langston's count, 14:21Z) of the 300 the window asks for; at ~6 a day it reaches about 130 by the time cap.
+
+**A0 — THE WINDOW IS NOT ONE POPULATION. Every boundary below splits it, unless discharged per class in writing here:**
+| boundary | crypto | xStock |
+|---|---|---|
+| `084e6605f`, deployed 2026-09-19T00:53:53Z — *"the xStock exit trigger returns to the mark"* | **DISCHARGED:** the value the crypto exit trigger receives is unchanged (the `_lsSel` bid or null, before and after; `active-execution-engine.ts` diff `323ae2776..084e6605f`); every other change is xStock-only or log-only | **SPLIT:** the xStock exit trigger itself changed (bid → mark) |
+| `40f22a1bb`, deployed 2026-09-20T21:19:16Z — `3n.v` geometry rows | **DISCHARGED:** it touches no close-path file (`active-execution-engine.ts` and `server/services/execution/` unchanged); it changes which trades open, not how a book is walked at close | **DISCHARGED**, same argument |
+| `bc199185e`, deployed 2026-09-22T14:38:33Z — `8a-P4c` inc 1 | **DISCHARGED:** the only engine change moves `xstockTransactableSides` to a shared module, body byte-identical (compared at both shas); the rest is the VTS instrument | **DISCHARGED**, same comparison |
+| the held deploy (not before 2026-10-02T20:10Z) | **SPLIT** unless discharged here before it lands | **SPLIT** unless discharged |
+| the $3,000 paper reset (`B-SIZING-DEC-RESTORE`) | **SPLIT — for the whole window, not just its own rows:** rows opened after it are sized off the restored balance, and fills walk deeper with size | **SPLIT** |
+⛔ **The reset instant is read AT THE OBJECT — the epoch row or migration stamp — never estimated, before any per-side cut is published.** Rows closed by the reset are excluded from all four criteria and from the no-fill-on-hit-stop count, and reported separately by count (ruled 14:21Z); the reset's close label is CC-C's allowlisted constant inside `B-SIZING-DEC-RESTORE`.
+
+**C1 — every criterion is published PER SIDE of each undischarged boundary. PASS needs the same result on both sides; disagreement ⇒ INCONCLUSIVE-EXTEND.**
+
+**C2 — THE SHORT-n RULE:**
+- **(a)** The window closes at **2026-10-10T00:02:43Z** whatever n is — the time cap was pre-registered as *"whichever comes first"*. No in-place extension.
+- **(b)** Criteria 1 and 3 are refusal-shaped, so **one event is a FAIL at any n.** The floor binds only the PASS direction.
+- **(c)** Criterion 1 is read on **two cuts, both printed with both denominators on both sides:**
+  - **PRIMARY (binding) — the at-risk population:** taker closes whose book was NOT warm at the close (`exit_fill_book_warmth` in `stale_book`, `thin_book`, `no_book`), the only closes where harm can occur. Pre-deploy, 3 of 8 not-warm xStock closes were harmful (37.5 %) — an UPPER bound, because 8/49 counted by age only and is a floor. **PASS needs at least 8 at-risk closes on that class and side, with zero harmful** — a minimum floor.
+  - **SENSITIVITY (non-binding) — all taker closes, at least 50 on that class and side** (3/50 = 6.0 % < the pre-deploy 3/49 = 6.1 %).
+  - **The two cuts must agree, or the reading is INCONCLUSIVE.**
+  - ⚠️ **A crypto PASS says only that crypto's harm rate is not as high as xStock's pre-deploy estimate; crypto's own was never measured** (its pre-deploy at-risk count was 0 of 45). That sentence goes in the PASS wording itself.
+- **(d)** Criterion 4 (`up_tol`) has **three outcomes:** no not-warm close on the class ⇒ INCONCLUSIVE · not-warm closes all outside the empty interval (0.47 %–5.15 %) ⇒ **CONFIRMED-UNCHANGED, n stated** · a point inside it ⇒ re-seed.
+- **(e)** The four unobserved arms (the refusal, `walk_yield`, `walk_no_reference`, `synthetic_reference`): silence with no demonstrated condition is "not verified", never PASS — **but silence WITH the condition demonstrably present is a FAIL at any n** (§4 FAIL bullet 4).
+- **(f)** Anything INCONCLUSIVE continues only as a **NEW window opened after the held deploy and the reset**, never pooled with this one.
+
+**Projected, stated before the data:** xStock will be INCONCLUSIVE (7 taker closes, split at `084e6605f`). Crypto's at-risk population was 0 of 45 before the deploy, so its primary cut is likely to fall short of 8 — INCONCLUSIVE on the right grounds rather than a PASS on trades where harm could not occur.
+
 ## 5. What is unproven, and what would falsify it
 - **`up_tol = 0.01` is a CHOICE INSIDE AN EMPTY INTERVAL**, not a derivation: healthy max +0.47% (KTA), lowest harm +5.15% (SPGI), nothing observed between, n=90. **Crypto's row grades n=0 not-warm closes.** Falsified by a post-deploy crypto close refused at a divergence a wider bound would have admitted, or by a harmful xStock row below 1%.
 - **The gate cannot see a book and a witness that went stale TOGETHER** (both read 0.00% divergence — SYY at 213 s, NEM hollow at 90 s). That class is decision-side and stays with CC-C's `3b.f-c`/`#943`.
