@@ -18,7 +18,7 @@
 
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
-| ⏳ **`B-GOV-REPORTING`** (sprint plan §0) | **Step 4 DONE 2026-09-29 — Langston ruled all six gates (G1-G4, G6, r7), r8 clearance sent** | **Step 10: Langston's memory row BLOCKED on `#1057`** (his memory writer has refused every write since 09-13; Infra Claude to reconcile) | retroactive pre-audit filed; completion report next. Record: scope §7 |
+| ⏳ **`B-GOV-REPORTING`** (sprint plan §0) | **Step 11 — the completion report is with Langston** (Step 4 APPROVED 2026-09-29, r8) | Langston | Step 10 done, including his memory (written 18:57Z after Infra Claude's `#1057` reconcile). Report: `Claude Comms and Packages/Batch Completion/B_GOV_REPORTING_COMPLETION_REPORT.md` |
 | ➡️ **`B-SCHEDULER-FIRST-TICK`** (`#1039`) | **HANDED to Infra Claude** — sprint plan row 73 names Infra Claude as owner | — | not mine any more; listed so the hand-off is visible |
 | ⏸ **`B-RULES-1e`** | **PAUSED at Step 2** (sprint plan §0: crew tooling, after live) | nothing until after live | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
 | ⏸ **`B-MEASURE-GATE`** beyond leg 2 | **PAUSED at Step 2** (sprint plan §0: after live) | nothing until after live | Step 1 approved 2026-08-31; leg 2 CLOSED 2026-09-02 |

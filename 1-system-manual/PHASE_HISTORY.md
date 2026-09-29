@@ -1249,4 +1249,4 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **One discovery mattered beyond the rules themselves:** of four decisions listed as *"awaiting Kyle"*, three had in fact been answered by Kyle on 10 July; only Langston's memory had not been updated. The fourth, the name of a report label, had been dropped from his list and was never answered, so it is the one question put back to him. The blocking power Kyle approved for the governance checker, never built, now has a home after live.
 
-⏳ **Closes when** Langston's memory file is reconciled by Infra Claude (`#1057`), this batch's update to it is written, and Langston confirms the completion report.
+⏳ **Closes when** Langston confirms the completion report. His memory file was reconciled by Infra Claude (`#1057`) and this batch's update to it written on 2026-09-29.
