@@ -119,6 +119,7 @@ Active paper, `closed_trades`, `closed_at` in the 14 days to 2026-09-28.
 2. **S4's drawdown limit:** 8% of balance as proposed (**$240 on the $3,000 reset**, about 1.6 full trades' notional), or tighter or looser.
 3. **Whether both classes must pass before either goes live** (the plan's D5, *"launch live TOGETHER"*), or whether crypto may go first while xStock is still collecting.
 4. **The freeze itself:** signing it at the anchor (§3 step 3) means no pricing, fee, level, gate, sizing or symbol-set change reaches paper until the read.
+   ➕ **One carve-out, forced by Kyle's `PAPER-RESET-3000` correction (2026-09-29):** the paper max-position % is MONITORED and ADJUSTED so each trade stays near $140-150 as the balance moves (`B_SIZING_DEC_RESTORE_SCOPE.md` r7 obj-14). Those adjustments are sizing changes, so without a carve-out the freeze either blocks Kyle's mechanism or voids the window at every adjustment. **Proposed:** they are allowed during the window ONLY as rule-bound changes that restore the normal-posture size to $145 (no other sizing change), each stamped on the window record with the old and new %, and the read reports trade size per stretch between stamps. ⚠️ **Not yet ruled by Langston.**
 ✅ **`#1079` DECIDED by Kyle (2026-09-29, `PAPER-RESET-3000`):** one shared pot, $3,000, ~$150 a trade, about 20 open. The reset DATE and the window ANCHOR are different events: the reset is planned with the second deploy after 2026-10-02; the anchor waits for the freeze conditions in §3.
 
 ## 5. LANGSTON'S RULING
