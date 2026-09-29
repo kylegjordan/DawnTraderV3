@@ -5894,9 +5894,10 @@ export class ActiveExecutionEngine {
         targetPrice: signal.targetPrice.toString(),
         confidence: (signal.confidence * 100).toString(),
         portfolioValue: portfolioValue.toString(),
-        // §17 P-2 / §17.4 C3: the dollars this position actually risks — the FILLED quantity (`quantity` was re-set to
-        // the fill's quantity after the depth-walk, so a partial fill is not overstated) × the distance from the fill
-        // price to the stop. A measurement, not a setting.
+        // §17 P-2 / §17.4 C3: the dollars this position risks, a measurement, not a setting. TAKER open: the FILLED
+        // quantity (`quantity` is re-set to the fill's quantity after the depth-walk, so a partial fill is not
+        // overstated) × |fill price − stop|. MAKER left resting at its limit: nothing has filled yet, so it is the
+        // requested, lot-rounded quantity × |limit − stop| — the risk IF it fills (`actualEntryPrice` is the limit).
         riskAmount: (quantity * Math.abs(actualEntryPrice - signal.stopPrice)).toFixed(2),
         positionSize: quantity.toString(),
         tradeId: trade.id,

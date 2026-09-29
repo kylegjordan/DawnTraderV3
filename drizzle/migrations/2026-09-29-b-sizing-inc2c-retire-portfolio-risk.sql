@@ -33,11 +33,15 @@ ALTER TABLE goals_presets DROP COLUMN IF EXISTS portfolio_risk_per_trade_pct;
 DO $$
 DECLARE n integer;
 BEGIN
-  -- Scoped to the schema the unqualified ALTERs above resolved to: a second `guardrails_v2` table exists in schema
-  -- `dawntrader_v2` (measured 2026-09-29, without this column), and an unscoped check would read another schema's table.
-  SELECT count(*) INTO n FROM information_schema.columns
-   WHERE column_name = 'portfolio_risk_per_trade_pct' AND table_name IN ('guardrails_v2', 'goals_presets')
-     AND table_schema = current_schema();
+  -- Reads the SAME tables the unqualified ALTERs above resolved to: `to_regclass` resolves an unqualified name through
+  -- the search path exactly as ALTER TABLE does. A second `guardrails_v2` exists in schema `dawntrader_v2` (measured
+  -- 2026-09-29, without this column), so a check by table NAME could read another schema's table.
+  IF to_regclass('guardrails_v2') IS NULL OR to_regclass('goals_presets') IS NULL THEN
+    RAISE EXCEPTION 'b-sizing-inc2c: guardrails_v2 or goals_presets does not resolve on the search path';
+  END IF;
+  SELECT count(*) INTO n FROM pg_attribute
+   WHERE attrelid IN (to_regclass('guardrails_v2'), to_regclass('goals_presets'))
+     AND attname = 'portfolio_risk_per_trade_pct' AND NOT attisdropped;
   IF n <> 0 THEN
     RAISE EXCEPTION 'b-sizing-inc2c: portfolio_risk_per_trade_pct still present on % table(s) after the drop', n;
   END IF;

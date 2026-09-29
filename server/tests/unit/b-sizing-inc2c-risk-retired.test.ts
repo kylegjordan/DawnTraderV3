@@ -64,6 +64,23 @@ describe('2 — the engine never re-sizes by risk ÷ stop, in any mode', () => {
     expect(engine).not.toMatch(/this\.mode\s*===\s*'paper'\s*&&\s*signal\.quantity/);
   });
 
+  // Wording-independent (the object-round reader: the regex above catches only the ORIGINAL condition's text). Inside
+  // executeSimulatedTrade the quantity is declared ONCE from the signal and reassigned in exactly two places — the venue
+  // lot rounding and the depth-walk fill. Any re-size, however it is written, adds an assignment and fails here.
+  it('executeSimulatedTrade sets quantity once from the signal and reassigns it only for lot rounding and the fill', () => {
+    const start = engine.indexOf('private async executeSimulatedTrade(');
+    expect(start).toBeGreaterThan(-1);
+    const rest = engine.slice(start + 1);
+    const next = rest.search(/\n  (private |public |protected )?(async )?[A-Za-z_]+\s*\(/);
+    const body = next === -1 ? rest : rest.slice(0, next);
+    expect(body.match(/\blet quantity\b[^;]*;/g)).toEqual(['let quantity: number = signal.quantity ?? 0;']);
+    const assigns = (body.match(/^[^\S\n]*(?:if \([^\n]*\)[^\S\n]*)?quantity\s*(?:[-+*/]?=)(?!=)[^;\n]*;/gm) ?? []).map((s) => s.trim());
+    expect(assigns).toEqual([
+      'if (_venueQty !== null) quantity = _venueQty.quantity;',
+      'quantity = _openFill.fillQty;',
+    ]);
+  });
+
   it('no risk ÷ stop sizing, no risk %, no silent 4.0', () => {
     expect(engine).not.toContain('riskAmount / stopDistance');
     expect(engine).not.toContain('riskPerTradePct');
