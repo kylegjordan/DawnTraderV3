@@ -831,33 +831,6 @@ export async function checkGuardrailRisk(
 }
 
 /**
- * Calculate position size based on risk amount and stop distance
- * @param symbol Trading pair symbol
- * @param riskAmount Risk amount in USD
- * @param entryPrice Entry price
- * @param stopPrice Stop loss price
- * @returns Position sizing info
- */
-export function calculatePositionSize(
-  riskAmount: number,
-  entryPrice: number,
-  stopPrice: number
-): {
-  quantity: number;
-  notionalValue: number;
-} {
-  const stopDistance = Math.abs(entryPrice - stopPrice);
-  if (stopDistance === 0) {
-    return { quantity: 0, notionalValue: 0 };
-  }
-  
-  const quantity = riskAmount / stopDistance;
-  const notionalValue = quantity * entryPrice;
-  
-  return { quantity, notionalValue };
-}
-
-/**
  * Calculate risk/reward ratio
  */
 export function calculateRiskReward(

@@ -24,7 +24,7 @@ import { AlertsService } from "./services/alerts-service";
 import { dailyBriefService } from "./services/daily-brief";
 import { insertTradingSettingsSchema, insertWatchlistPairSchema, insertGuardrailsSchema, insertScreenerFiltersSchema, reasoningTrace, reasoningQueue, awarenessStateLog, ethicalPrinciple, ethicalViolationLog, crossAgentEthicsSession, clusterResultLog, tuningPolicy, tuningEvent, strategyParamSchema, semanticMemory, systemAlerts } from "@shared/schema";
 import { z } from 'zod';
-import { validateGuardrails, validateFilters, validateNoLegacyKeys, LegacyFieldError } from "../types/config";
+import { validateFilters, validateNoLegacyKeys, LegacyFieldError } from "../types/config";
 import { databaseMonitor } from "./services/database-monitor";
 import { stockService } from "./services/stocks";
 import { marketDataService } from "./services/market-data";

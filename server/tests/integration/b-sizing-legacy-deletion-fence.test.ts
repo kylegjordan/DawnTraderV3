@@ -276,17 +276,39 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
   });
 
   describe('obj-3 — Portfolio Risk per Trade, retired in paper AND live (increment 2c, PRE_AUDIT §17)', () => {
-    // SCOPE, as obj-4: server/ + client/src, tests and _archive excluded. NOT scanned, deliberately: shared/schema.ts still
-    // declares the LEGACY `trading_settings` columns `risk_per_trade` / `risk_per_trade_pct` (a different table, #1106's), and
-    // drizzle/migrations hold the history. The UNRELATED names `riskPerTrade` (the VTS runner's own config, strategy params,
-    // AI-prompt placeholders — §17.1) are NOT this setting and are not fenced; `.riskPerTradePct` (a read of the retired
-    // settings field) is.
+    // SCOPE — WIDER THAN obj-4: server/ + client/src + shared/ + types/ + scripts/, tests and _archive excluded. ⚠️ The Step-4
+    // fresh-reader round found `types/config.ts` still REQUIRING the field in its zod schema — outside the server/ + client/src
+    // walk, so this fence passed while a reader survived. The legacy `trading_settings` columns in shared/schema.ts are
+    // `risk_per_trade` / `risk_per_trade_pct` (a different table, #1106's), which none of the names below matches.
+    // drizzle/migrations hold the history and are not scanned. The UNRELATED names `riskPerTrade` (the VTS runner's own
+    // config, strategy params, AI-prompt placeholders — §17.1) are NOT this setting and are not fenced; `.riskPerTradePct`
+    // (a read of the retired settings field) is.
+    const OBJ3_FILES = (() => {
+      const extra: string[] = [];
+      const walk = (dir: string) => {
+        if (!existsSync(dir)) return;
+        for (const entry of readdirSync(dir)) {
+          const p = join(dir, entry);
+          if (statSync(p).isDirectory()) {
+            if (entry === 'node_modules' || entry === 'tests' || entry === '_archive') continue;
+            walk(p);
+          } else if (/\.(ts|tsx|mjs|js)$/.test(entry) && !/\.test\.(ts|mjs|js)$/.test(entry)) {
+            extra.push(p);
+          }
+        }
+      };
+      walk(join(REPO, 'shared'));
+      walk(join(REPO, 'types'));
+      walk(join(REPO, 'scripts'));
+      return [...FILES, ...extra];
+    })();
     const DELETED = [
       'portfolioRiskPerTradePct',
       'portfolio_risk_per_trade_pct',
       'getRiskPercentageV2',
       'calculateRiskAmount',
       'detectOverrideConflict',
+      'getPortfolioRiskPct',
       '.riskPerTradePct',
     ];
 
@@ -316,12 +338,30 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
     for (const sym of DELETED) {
       it(`\`${sym}\` is absent from every source file's code`, () => {
         const hits: string[] = [];
-        for (const f of FILES) {
+        for (const f of OBJ3_FILES) {
           if (codeOf(f).includes(sym)) hits.push(f.replace(REPO, ''));
         }
         expect(hits).toEqual([]);
       });
     }
+
+    // Name collisions make these two regex checks rather than substrings: `validateGuardrailsCoherence` (server/index.ts)
+    // is a different, live function; `calculatePositionSize` survives as an unrelated METHOD in asset-capabilities.ts.
+    it('the unused guardrails validator (it parsed the retired field) is gone — `validateGuardrails` as a whole word', () => {
+      const hits = OBJ3_FILES.filter((f) => /\bvalidateGuardrails\b/.test(codeOf(f))).map((f) => f.replace(REPO, ''));
+      expect(hits).toEqual([]);
+    });
+
+    it('trade-safety no longer carries the risk-amount ÷ stop-distance sizer `calculatePositionSize`', () => {
+      expect(codeOf(join(REPO, 'server/services/trade-safety.ts'))).not.toMatch(/\bcalculatePositionSize\b/);
+    });
+
+    it('POSITIVE CONTROL: the widened scan reaches types/, shared/ and scripts/', () => {
+      const rel = OBJ3_FILES.map((f) => f.replace(REPO, '').replace(/\\/g, '/'));
+      expect(rel).toContain('/types/config.ts');
+      expect(rel).toContain('/shared/schema.ts');
+      expect(rel.some((f) => f.startsWith('/scripts/'))).toBe(true);
+    });
 
     it('POSITIVE CONTROL: the scan sees the retired term where it genuinely still is (before masking)', () => {
       const routes = FILES.find((f) => f.endsWith(join('server', 'routes.ts')));

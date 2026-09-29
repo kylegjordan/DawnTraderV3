@@ -4,7 +4,8 @@ export const TradingMode = z.enum(['live', 'paper']);
 export type TradingMode = z.infer<typeof TradingMode>;
 
 export const GuardrailsSchema = z.object({
-  portfolioRiskPerTradePct: z.coerce.number().min(0.10).max(5.00),
+  // B-SIZING-DEC-RESTORE increment 2c: portfolioRiskPerTradePct RETIRED in paper and live (Kyle 2026-09-29) — every trade is
+  // sized by the exposure budget and maxPositionPercentPct.
   dailyLossKillSwitchPct: z.coerce.number().min(1.00).max(20.00),
   symbolCooldownMinutes: z.coerce.number().int().min(1).max(90),
   // B-SIZING-DEC-RESTORE obj-4: maxOpenPositions RETIRED. The per-position percent is carried, and the
@@ -109,7 +110,8 @@ export function validateNoLegacyKeys(data: Record<string, any>): void {
       maxDailyLoss: 'dailyLossKillSwitchPct',
       maxDrawdown: 'dailyLossKillSwitchPct',
       maxPositionSize: 'maxPositionPercentPct',
-      riskPerTrade: 'portfolioRiskPerTradePct',
+      // increment 2c: the risk % is retired, so a legacy risk key is pointed at the setting that now sizes a trade.
+      riskPerTrade: 'maxPositionPercentPct',
       cooldownMinutes: 'symbolCooldownMinutes',
       priceDeltaTrigger: null,
       avgVolumeRatio: 'minVolume',
@@ -124,11 +126,6 @@ export function validateNoLegacyKeys(data: Record<string, any>): void {
   }
 }
 
-export function validateGuardrails(data: unknown): Guardrails {
-  validateNoLegacyKeys(data as Record<string, any>);
-  return GuardrailsSchema.parse(data);
-}
-
 export function validateFilters(data: unknown): Filters {
   validateNoLegacyKeys(data as Record<string, any>);
   return FiltersSchema.parse(data);
@@ -136,10 +133,6 @@ export function validateFilters(data: unknown): Filters {
 
 export function validateGoals(data: unknown): Goals {
   return GoalsSchema.parse(data);
-}
-
-export function getPortfolioRiskPct(guardrails: Guardrails): number {
-  return guardrails.portfolioRiskPerTradePct;
 }
 
 export function getKillSwitchPct(guardrails: Guardrails): number {

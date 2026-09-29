@@ -5107,8 +5107,11 @@ export class ActiveExecutionEngine {
     // live): EVERY mode takes the fixed-notional quantity sized upstream. `processSignal`'s B6 block always runs before
     // this (the only call is `processSignal`'s `return await this.executeSimulatedTrade(...)`): it trusts a pre-sized
     // signal or sizes it through `sizeActivePositionForSignal` — the same sizer, the same rule (§17.4 C2).
-    // Live used to DISCARD that quantity and re-size as balance × risk% ÷ stop distance: an UNBOUNDED sizer — 200% of the
-    // balance in one position at a 2% stop — with nothing after it re-checking exposure or max position (Langston J-1).
+    // The live arm used to DISCARD that quantity and re-size as balance × risk% ÷ stop distance: an UNBOUNDED sizer — 200%
+    // of the balance in one position at a 2% stop — with nothing after it re-checking exposure or max position (Langston
+    // J-1). ⚠️ That arm had NO live instance: this engine is only ever started in paper (`active-engine-service.ts`,
+    // `const mode = 'paper'`), and live mode today opens through the legacy TradingEngine, Phase-21-gated and removed by
+    // sprint row 79. It would have become live sizing at the Phase-21 live build — which is why it goes now.
     // A signal that reaches here unsized is REFUSED, never re-sized by another rule.
     let quantity: number = signal.quantity ?? 0;
     if (!(quantity > 0)) {

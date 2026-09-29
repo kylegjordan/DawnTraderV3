@@ -6,6 +6,8 @@
  *   2. The execution engine takes the fixed-notional quantity in EVERY mode and never re-sizes by risk ÷ stop — the live
  *      arm that sized `balance × risk% ÷ stop distance` (200% of the balance at a 2% stop, nothing re-checking) is gone,
  *      and an unsized signal is REFUSED (P-1). Proved at the source: `executeSimulatedTrade` needs the full engine to run.
+ *      ⚠️ SCOPE: this engine only. It is started in paper only today; live mode opens through the legacy TradingEngine
+ *      (`trading-engine.ts`, $100 ÷ stop, Phase-21-gated, sprint row 79), which this file does not read.
  *   3. The call-graph fact P-1 rests on (§17.4 C2): the only call into `executeSimulatedTrade` is in `processSignal`, AFTER
  *      the B6 sizing block — so an upstream-unsized signal is sized by the same sizer before it can reach the refusal.
  *   4. The execution audit records the real balance and the dollars the FILLED position risks (P-2, §17.4 C3).

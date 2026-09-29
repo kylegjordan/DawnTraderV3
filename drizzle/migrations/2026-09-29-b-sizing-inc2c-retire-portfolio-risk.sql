@@ -33,8 +33,11 @@ ALTER TABLE goals_presets DROP COLUMN IF EXISTS portfolio_risk_per_trade_pct;
 DO $$
 DECLARE n integer;
 BEGIN
+  -- Scoped to the schema the unqualified ALTERs above resolved to: a second `guardrails_v2` table exists in schema
+  -- `dawntrader_v2` (measured 2026-09-29, without this column), and an unscoped check would read another schema's table.
   SELECT count(*) INTO n FROM information_schema.columns
-   WHERE column_name = 'portfolio_risk_per_trade_pct' AND table_name IN ('guardrails_v2', 'goals_presets');
+   WHERE column_name = 'portfolio_risk_per_trade_pct' AND table_name IN ('guardrails_v2', 'goals_presets')
+     AND table_schema = current_schema();
   IF n <> 0 THEN
     RAISE EXCEPTION 'b-sizing-inc2c: portfolio_risk_per_trade_pct still present on % table(s) after the drop', n;
   END IF;

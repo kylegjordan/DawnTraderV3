@@ -4,8 +4,13 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 --
 -- ⛔ ORDER: this rollback runs BEFORE 2a's rollback (2026-09-29-b-sizing-inc2a-retire-max-open-positions-rollback.sql),
--- because 2a's rollback re-creates views that select portfolio_risk_per_trade_pct (§17.4 C5). ⛔ Roll the CODE back to a
--- tree that declares the column first.
+-- because 2a's rollback re-creates views that select portfolio_risk_per_trade_pct (§17.4 C5).
+-- ⛔ THE SQL GOES BEFORE THE CODE (corrected at the Step-4 fresh-reader round — this line said the opposite): pre-2c code
+-- declares the column in Drizzle and names it in every select, so pre-2c code running against a table WITHOUT the column
+-- fails its guardrail and goal-preset reads. Post-2c code does not name the column, so it runs unharmed on a table that
+-- has it again (guardrails_v2 inserts take the DEFAULT 1.50; nothing inserts into goals_presets). Order: this file, then
+-- 2a's rollback, then deploy the older code.
+-- ⚠️ Not re-runnable: ADD COLUMN has no IF NOT EXISTS, so a second run fails loudly inside its transaction.
 --
 -- Restores both columns, the CHECK, the default, NOT NULL, and the VALUES THEY HELD, read from staging on 2026-09-29
 -- (increment 2c Step 3):
