@@ -99,12 +99,13 @@ want() { local g; for g in "${GROUPS_WANTED[@]}"; do [ "$g" = "$1" ] && return 0
 
 # ---- 1. the sha: a commit in the mirror, and on the review branch ----------------------
 # stdout and stderr are read SEPARATELY: a warning must never be taken for the answer, and a
-# failed read is "not in the mirror" only when the mirror itself is demonstrably readable.
+# failed read is "not in the mirror" only when git's ONLY message is its not-found line (git
+# 2.43 says "could not get object info" for an absent full id) AND the mirror is readable.
 ERRF=$(mktemp)
 rc=0; t=$(git_l cat-file -t "$SHA" 2>"$ERRF") || rc=$?
 terr=$(cat "$ERRF")
 if [ $rc -ne 0 ]; then
-  if [ "$(printf '%s\n' "$terr" | grep -c .)" -eq 1 ] && printf '%s' "$terr" | grep -q "Not a valid object name" \
+  if [ "$(printf '%s\n' "$terr" | grep -c .)" -eq 1 ] && printf '%s' "$terr" | grep -qE "Not a valid object name|could not get object info" \
      && git_l cat-file -e "refs/heads/$BRANCH^{commit}" 2>/dev/null; then
     rm -f "$ERRF"; die "$SHA is not in the mirror yet — wait for the */15 dt-backup-sync run, then re-run"
   fi

@@ -109,7 +109,7 @@ L update-ref "refs/heads/$B" "$TC"
 # ---- refusals ----
 run "$T/deploy.sh" --sha "${TC:0:12}" --only readers; [ $RC -eq 2 ] && grep -q "FULL 40-hex" "$T/out" && ok "D3 short sha refused" || bad D3a "$RC"
 OFFC=$(L commit-tree -p "$TC" -m off "$(L rev-parse "$TC^{tree}")")
-run "$T/deploy.sh" --sha "$OFFC" --only readers; [ $RC -eq 2 ] && grep -q "is not on $B" "$T/out" && ok "D3 off-branch sha refused" || bad D3b "$RC $(cat "$T/out")"
+run "$T/deploy.sh" --sha "$OFFC" --only readers; [ $RC -eq 2 ] && grep -q "is not an ancestor of $B as read from the mirror" "$T/out" && ok "D3 off-branch sha refused" || bad D3b "$RC $(cat "$T/out")"
 run "$T/deploy.sh" --sha 0123456789abcdef0123456789abcdef01234567; [ $RC -eq 2 ] && grep -q "not in the mirror yet" "$T/out" && ok "D3 absent sha refused" || bad D3c "$RC $(cat "$T/out")"
 run "$T/deploy.sh" --sha "$TC" --only readers,frobs; [ $RC -eq 2 ] && grep -q "unknown group 'frobs'" "$T/out" && ok "D3 unknown group refused" || bad D3d "$RC"
 run "$T/deploy.sh" --sha "$TC" --only ""; A=$RC; run "$T/deploy.sh" --sha "$TC" --only ,; Bb=$RC
