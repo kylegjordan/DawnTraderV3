@@ -113,3 +113,23 @@ Related suites re-run: `b-guardrail-fail-closed`, `p19-b6-daily-loss-budget` (+ 
 | FINDING-5 (record) | `selectGoalsPreset` writes guardrails through the bare upsert (no audit, no `lastUpdatedBy`) | **Wording narrowed** in the storage docstring (the settings ROUTE never lands an edit unrecorded, not every writer); `selectGoalsPreset` has no callers, so it joins increment 2's rule-18 census |
 | record | **paper now sits AT the exposure ceiling** (100.00): a future "raise exposure" is a migration, not a setting | stated here; SIM + System Manual at Step 10 |
 | record | `audit_log` on staging has NO foreign key at all (only `audit_log_pkey`), so the first rollback leg tested a constraint production does not have either | the varchar(100) leg stands |
+
+### Evidence for FINDING-2 — the CI log lines (Langston cannot open job logs; pasted verbatim, ANSI stripped)
+Run `36550084772` on `5af3acb49`, job Test Suite:
+```
+ ✓ server/tests/integration/b-sizing-inc1-guardrails-db.test.ts > B-SIZING-INC1-GUARDRAILS-DB > the persistence is only proved on the test database (guard on the guard) 1ms
+ ✓ … > CONTROL — after a reset the row reads not-tripped, no reason, no time 8ms
+ ✓ … > a trip SAVES all three kill-switch columns 8ms
+ ✓ … > a reset CLEARS all three kill-switch columns 7ms
+ ✓ … > a trip does NOT revert a guardrail saved after a stale read 12ms
+ ✓ … > CONTROL — the CHECKs accept 5 and 100 2ms
+ ✓ … > the database refuses max_position_percent_pct = 0 3ms
+ ✓ … > the database refuses max_position_percent_pct = 500 12ms
+ ✓ … > the database refuses max_total_exposure_pct = 0 9ms
+ ✓ … > CONTROL — a guardrails write with no audit rows lands 20ms
+ ✓ … > a failing audit row rolls the guardrails write back 6ms
+ ✓ … > a valid audit row is written with the stored value, beside the save 9ms
+ Test Files  312 passed (312)
+      Tests  3658 passed (3658)
+```
+The run-level summary carries NO skipped count at all (vitest prints `| N skipped` when any test skips), so no test in the whole suite skipped. **FINDING-5 corrected:** the storage docstring now names all THREE bare-upsert writers (Langston's census), and the live one is `#1090`, homed to increment 2.

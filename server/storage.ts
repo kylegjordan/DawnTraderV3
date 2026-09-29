@@ -836,9 +836,11 @@ export class DatabaseStorage implements IStorage {
    * The settings route used to save first and write `audit_log` afterwards, outside the save, so a failed
    * audit insert returned an error with the new value already live and unrecorded. Kyle now adjusts the
    * paper position % by hand every few days, and the paper window reads these rows as its stamp
-   * (`#1080` am.2), so an edit made through the SETTINGS ROUTE never lands without its record. (Not every
-   * writer of the table: `selectGoalsPreset` still writes through the bare upsert — it has no callers;
-   * Langston Step-4 FINDING-5.)
+   * (`#1080` am.2), so an edit made through the SETTINGS ROUTE never lands without its record. ⛔ NOT every
+   * writer of the table: THREE still write through the bare `upsertGuardrailsV2` (census at `5af3acb49`,
+   * Langston Step-4): `selectGoalsPreset` (this file, no callers), `config-update-service.ts`
+   * `updateGuardrailsV2` (no importers), and the LIVE admin route `POST /api/orchestrator/updateGuardrail`
+   * (`routes.ts`, `#1090`), which is unaudited. All three are in increment 2's rule-18 census.
    */
   async upsertGuardrailsV2WithAudit(data: InsertGuardrailsV2, buildAudit: (written: GuardrailsV2) => InsertAuditLog[]): Promise<GuardrailsV2> {
     return await db.transaction(async (tx) => {

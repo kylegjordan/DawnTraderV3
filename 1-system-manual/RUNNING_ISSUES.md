@@ -9856,3 +9856,9 @@ REVIEWER: claim-only · "what other outcomes can a one-sided xStock book produce
 **Not yet measured:** whether any enforcement path reads these through `getEffective` rather than the row (increment 2 censuses it first).
 **RULE 24: outcome (1) or (3), undetermined until the census.**
 **HOME:** added to `B-SIZING-DEC-RESTORE` (`#698`) increment 2, owner CC-C, placed at `PHASE_19_PLAN.md:19` (the batch's own placement), beside obj-3/obj-4's removal of the same function's dead inputs.
+
+### #1090 OPEN 2026-09-29 (Langston, `B-SIZING-DEC-RESTORE` Step-4 ruling on increment 1; recorded by CC-C) — **A LIVE ADMIN ROUTE WRITES GUARDRAIL NAMES THE TABLE DOES NOT HAVE, AND REPORTS SUCCESS**
+**What:** `POST /api/orchestrator/updateGuardrail` (`routes.ts:19617`, `authenticateToken` + `requireAdmin`, live) writes `{ [validated.field]: validated.value }` through the bare `storage.upsertGuardrailsV2` (`routes.ts:19634`). Its Zod enum (`shared/schema.ts:4248`) is `maxDailyLoss | maxDrawdown | maxPositionSize | maxOpenPositions | riskPerTrade | aiCanAdjust`: five of the six are not `guardrails_v2` columns, so the update's merge list drops them, while the route logs *"Guardrail V2 updated"* and returns 200. It writes no audit row and bypasses RULE_012 / RULE_013. `#1088` with the sign flipped: a write that is reported but never happens.
+**Two dead siblings of the same bare write:** `selectGoalsPreset` (`storage.ts:949`, no callers) and `config-update-service.ts` `updateGuardrailsV2` (`:81`, no importers).
+**RULE 24: outcome (3), legacy that no longer fits (the enum names predate guardrails_v2); rule 18.**
+**HOME:** added to `B-SIZING-DEC-RESTORE` (`#698`) increment 2's rule-18 census, owner CC-C, placed at `PHASE_19_PLAN.md:19` — the route flagged LIVE (a behaviour change needs a disposition, not a silent delete), the other two as dead code.
