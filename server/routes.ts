@@ -12697,6 +12697,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on closed_trades. Derive from symbol.
       const closedTradePayload = {
         symbol: position.symbol,
+        // B-SIZING-DEC-RESTORE 2d (fresh-reader round 1, folded): carry the position's class. Unset, the row took the
+        // column default `crypto_spot`, so a manual close of an xStock would be booked as crypto — and the class-exact
+        // cooldown (2b, #1093) would then miss the xStock's own close. Latent: 0 manual closes on staging to date.
+        assetClass: position.assetClass,
         baseCurrency: position.symbol.split('/')[0] || position.symbol,
         strategyName: position.strategyName,
         side: position.side,
@@ -12853,6 +12857,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           await storage.createClosedTrade('paper', {
             id: position.id,
             symbol: position.symbol,
+            assetClass: position.assetClass, // B-SIZING-DEC-RESTORE 2d: as the manual close above (was the crypto_spot default)
             strategyName: position.strategyName,
             side: position.side,
             quantity: position.quantity?.toString() || '0',

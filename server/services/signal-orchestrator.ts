@@ -1281,8 +1281,12 @@ export class SignalOrchestrator {
     // rejected without actually rejecting. Cohort 1 (control) bypasses the
     // cap during the A/B observation window.
     try {
-      const activeTrades = await storage.getActiveTrades(sizingContext.mode);
-      const openSymbols = activeTrades.map((t) => t.symbol);
+      // ⛔ B-SIZING-DEC-RESTORE 2d (fresh-reader round 1, folded): the count comes from the ENGINE'S open positions.
+      // It used `storage.getActiveTrades`, which reads the legacy `trades` table — 0 rows on staging, never written by
+      // the active engine — so this cap counted 0 opens on every active signal and never limited anything. Pending
+      // makers are included: they hold a slot, as in the engine's own count.
+      const openPositions = await storage.getActiveOpenPositions(sizingContext.mode);
+      const openSymbols = openPositions.map((p) => p.symbol);
       const capDecision = await checkPerUnderlyingCap(rawSignal.symbol, openSymbols);
       console.log(formatDecisionLog(rawSignal.symbol, capDecision));
       if (!capDecision.allowed) {

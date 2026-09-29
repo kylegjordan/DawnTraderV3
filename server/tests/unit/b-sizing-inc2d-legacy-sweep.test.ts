@@ -108,3 +108,24 @@ describe('P-7 — a missing class stamp is refused, not re-derived', () => {
     expect(src).toMatch(/if \(!resolvedAssetClass\) \{\s*throw new Error\(\s*`\[B-SIZING-DEC-RESTORE\]\[STAMP_INVALID\]/);
   });
 });
+
+describe('fresh-reader round 1 folds — the cap counts real positions; manual closes keep their class', () => {
+  // MUTATION: point the cap back at storage.getActiveTrades (the legacy `trades` table, 0 rows on staging) and this fails.
+  it("the active lane's per-underlying cap counts the ENGINE's open positions, not the legacy trades table", () => {
+    const src = code('server/services/signal-orchestrator.ts');
+    const at = src.indexOf('const capDecision = await checkPerUnderlyingCap(rawSignal.symbol, openSymbols);');
+    expect(at).toBeGreaterThan(-1);
+    const before = src.slice(Math.max(0, at - 400), at);
+    expect(before).toContain('const openPositions = await storage.getActiveOpenPositions(sizingContext.mode);');
+    expect(before).not.toContain('getActiveTrades');
+  });
+
+  it('both manual close writers carry the asset class of the position (was the crypto_spot column default)', () => {
+    const src = code('server/routes.ts');
+    const manual = src.slice(src.indexOf('const closedTradePayload = {'), src.indexOf('const closedTradePayload = {') + 400);
+    expect(manual).toContain('assetClass: position.assetClass,');
+    const strandedAt = src.indexOf("closeReason: 'stranded_clear'");
+    const stranded = src.slice(src.lastIndexOf("await storage.createClosedTrade('paper', {", strandedAt), strandedAt);
+    expect(stranded).toContain('assetClass: position.assetClass,');
+  });
+});

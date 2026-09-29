@@ -7,7 +7,7 @@
 | ii | **That class's doc set** | scope — present (r8) · pre_audit — present (`B_SIZING_DEC_RESTORE_PRE_AUDIT.md` **§18** audit + plan, **§18.5** your ruling, **§18.6** as built) · completion_report — due at batch close · batch_catalog — due at close · phase_history — due at close · system_manual — **due at Step 10** (with 2c's rules section + its `sections/PHASE4_…` mirror: the sizing chapter loses the clamp-bind input, the cooldown reads one table in both modes, the per-underlying cap fails closed) · sim — **due at Step 10** (the deleted modules and routes, the retired stream, `:95`'s Phase-25 note, the refusal at execution entry against the `:81` invariant) · running_issues — present (`#1108`, `#1109`, `#1110` new; notes on `#1089`, `#664`, `#297`, `#1096`, `#399`) · deleted_log — present (2d entry) · changes_and_fixes — judged at Step 10 · roadmap — N/A · phase_19_plan — N/A (history; the active plan's rows 9c, 9d, 9e added) |
 | iii | **Step-2 reference** | `B_SIZING_DEC_RESTORE_PRE_AUDIT.md` §18 (at `758794487`) and your ruling §18.5 (19:40Z) |
 
-**tsc baseline:** 372 → 367 (reason in §18.6) · **graded ref:** the commit carrying this list · CI stated in the dispatch · **P-6 (`never_filled`) is not in this change** — it waits on Kyle.
+**tsc baseline:** 372 → 367 (reason in §18.6; plus one pre-existing TS2345 on the manual-close payload re-worded by its new `assetClass` field — re-synced, net zero, your P-14 note) · **graded ref:** the commit carrying this list · CI stated in the dispatch · **P-6 (`never_filled`) is not in this change** — it waits on Kyle.
 
 ## What 2d is
 The rule-18 sweep of what increment 2's census found, plus three silent fallbacks turned into loud refusals, and the clamp-bind stream retired per your blocker.
@@ -55,8 +55,12 @@ return null;
 ```
 Staging's rows are JSON `true` / `true` / `2` (`jsonb_typeof`, measured), so the strict checks pass on live values. **Ships unexercised; the tests are the evidence, and post-deploy silence is not.**
 
+## Folded after the fresh-reader round (§18.6.1)
+- **The active lane's per-underlying cap counted the legacy `trades` table** (0 rows on staging), so it never limited an active signal. It now counts `storage.getActiveOpenPositions(mode)`. **A restored risk control — it changes what opens after the deploy.**
+- **Manual and stranded closes carry `position.assetClass`** (they took the `crypto_spot` default; 0 such rows to date).
+
 ## Tests and mutations
-See §18.6: 8 new behaviour tests (pre-2d cap file fails 3, pre-2d orchestrator fails 1), 2 new live cooldown tests (pre-2d `trade-safety` fails both), the fence's 2d section (a planted route string fails exactly 1).
+See §18.6 and §18.6.1: 10 new behaviour tests (the two folds each fail when reverted) (pre-2d cap file fails 3, pre-2d orchestrator fails 1), 2 new live cooldown tests (pre-2d `trade-safety` fails both), the fence's 2d section (a planted route string fails exactly 1).
 
 ## Judgement calls to attack
 1. The P-9 refusal on the VTS reason names: one per failure class (`…_config_missing`, `…_lookup_failed`) rather than the single `per_underlying_cap_unavailable` you wrote — your "distinct reasons, never collapsed" applied to the VTS too.

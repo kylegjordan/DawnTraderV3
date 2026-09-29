@@ -95,7 +95,7 @@
           "Argument of type 'string | null' is not assignable to parameter of type 'string'.": 6,
           "Argument of type 'string' is not assignable to parameter of type '\"live\" | \"paper\"'.": 3,
           "Argument of type '\"dryrun_trade\"' is not assignable to parameter of type '\"trade_opened\" | \"trade_closed\" | \"trade_error\"'.": 1,
-          "Argument of type '{ symbol: string; baseCurrency: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | \"liquidity_trap\" | \"dhma\" | \"morning_star\" | \"inside_bar_reversal\" | \"support_bounce\" | \"pivot_": 1,
+          "Argument of type '{ symbol: string; assetClass: string; baseCurrency: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | \"liquidity_trap\" | \"dhma\" | \"morning_star\" | \"inside_bar_reversal\" | \"suppo": 1,
           "Argument of type '{ minVolume: string | null; minDailyRange: any; minPrice: string | null; maxPrice: string | null; maxBidAskSpread: string | null; excludeStablecoins: boolean | null; rsiMin: number | null; rsiMax: number | null; volatilityMin: string | null; volatilityMax: string | null; quoteCurre": 1,
           "Argument of type '{ status: string; limit: number; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 2,
           "Argument of type '{}' is not assignable to parameter of type '\"live\" | \"paper\"'.": 5,
@@ -721,6 +721,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-09-29T20:02:32.907Z",
+  "last_synced_at_iso": "2026-09-29T20:25:18.536Z",
   "last_synced_by_batch": "B-SIZING-DEC-RESTORE-2d"
 }
