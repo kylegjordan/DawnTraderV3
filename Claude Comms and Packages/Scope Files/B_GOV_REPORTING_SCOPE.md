@@ -224,7 +224,7 @@ change-class: non_architecture
 | 7 | 08-30T02:55Z: a BLOCKED cell carries its blocker's reference | third verdict token `BLOCKED — <ref>` with its own one-line form; a batch with any BLOCKED row does not close. ⚠️ Not the use plan row 8 item (i) first imagined — a class that does not fit is re-declared, per his `#985` ruling |
 | 8 | plan row 8 item (ii) | the ledger now says it is a PROMPT, not a PROOF, and names the checker as the independent detector |
 | 9 | 08-30T01:43Z: 10.b gives two answers for his cap in one file | both copies now carry the SUM ratchet he ruled and Kyle approved on 09-05 (`PHASE_19_PLAN` row 2.8b): read `langston-size-watch --status`, record the sum before and after in the ledger, never restate it per file |
-| 10 | 08-28T07:38Z: the sibling check's `isInstruction` misses the two always-loaded rule files | `CLAUDE.md` and `CONDUCT.md` added; it runs clean at 15 instruction files |
+| 10 | 08-28T07:38Z: the sibling check's `isInstruction` misses the two always-loaded rule files | `CLAUDE.md` and `CONDUCT.md` added; it runs clean at 15 instruction files — a FORWARD guard: neither file carries the markers today, so it catches nothing yet (Langston, G2) |
 | 11 | 08-26T20:10Z rider: sweep the batch due date | the last `due 2026-09-05` in `PHASE_19_PLAN` removed |
 
 ### 7b. NEVER PUT TO LANGSTON — the gates this batch still owes
@@ -251,9 +251,9 @@ change-class: non_architecture
 
 ### 7d. QUESTIONS THIS ROUND RAISED, FOR THE GATES (not decided here)
 - **`c` has no instrument either.** The live poller passes `requiredOnly: true` at both call sites (`poller.mjs:315`, `:698`), so a conditional document is never graded — his 08-29 premise that absence *"routes a low-sev alert to me"* does not hold today. Stated in the legend; a fix belongs with `B-GOV-LEDGER-GRADE`.
-- **The claim-only / object-round interaction** — bug-investigation now labels its reconciliation as an interpretation awaiting him; the same interaction sits unreconciled in the four workflow skills.
+- ✅ **RULED AT G2 (2026-09-29): the claim-only / object-round interaction** — claim-only for the intermediate rounds, the object round to terminate; a claim-only round that names a new object is a hit. Landed in all five files that carry the loop.
 - **workflow-10 says two places at its "IT GOES IN TWO PLACES" line and three at its "TWO PLACES, BOTH DURABLE" section** (the post + two durable homes). r6 first "fixed" :88 and reverted it: the 09-13 wording was never put to him, so it goes to G4 as found.
-- **The phrase ban.** His 07:15Z ruling replaced it with the deletion test; his 07:27Z reply says *"'The reviewer agreed' stays banned"* — which may echo a dispatch that attributed the ban to him. Which stands?
+- ✅ **RULED AT G2 (2026-09-29): the phrase ban — BOTH rulings stand.** The deletion test is the gate, the ban is the floor. **Origin, corrected:** the ban was CC-A's in construction (his 07:15Z: *"you built it as a phrase ban"*); CC-A's 07:26Z *"exactly as you set it"* misattributed it to him; he ratified it at 07:27Z, so it stands as his from then. The four workflow skills said he had struck it — corrected to bug-investigation's text.
 - **bug-investigation's fresh-reviewer rule vs its last round** — *"Round 3's reader must not know what rounds 1 and 2 said"* sits beside a last round that must read the objects the earlier rounds named.
 - **The new active-plan ledger row** (`SPRINT_TO_LIVE_PLAN.md`, required every batch close) carries out the plan's own §3 rule, which the plan says is *"to be made a Tier-1 ledger row … Langston to rule"* — this is that row, for his ruling.
 - **`B-GOV-LEDGER-GRADE`'s placement** — re-placed after live from the GOV-ARC list he named.
@@ -263,3 +263,4 @@ change-class: non_architecture
 - **`PRE_LIVE_SPRINT.md` is generated** (`scripts/inventory/sort.py`): r6's hand edits there (the `B-GOV-LEDGER-GRADE` line, the removed after-live `B-GOV-REPORTING` line, the `B-GATE-GUARD` note) are lost on the next regeneration unless NEW Claude carries them into the inventory sources.
 - **`workflow-11` now drops the Kyle-acknowledgement step** (Kyle, 2026-09-02; the memory note homed the correction to the next governance batch touching this skill — this one).
 - **G1 (2026-09-29): APPROVED with three conditions, all carried out** — the §8 pointer takes the rule from row 2.8b and both numbers from the tool; the guard comment states its measured magnitude; §9.4 names `SPRINT_TO_LIVE_PLAN.md` (the CLAUDE.md pointer swap, moved here from `B-PLAN-CURRENCY-CHECK`). His correction to the round record applied.
+- **G2 (2026-09-29): APPROVED with one condition, carried out** — the four workflow skills said he had struck the phrase ban while bug-investigation said it stands; all five now carry the plain ban and his gate/floor ruling. Items 2-5 cleared; edit 10's corrected text cleared.
