@@ -288,6 +288,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 |---:|---|---|---|---|---|---|
 | 165 | B-VENUE-QUIET-ALERTING | B-VENUE-QUIET-ALERTING | Infra Claude | QUEUED | — | operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the sprint) |
 | 166 | #692 | #692 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options |
+| 166a | The exit-skip operator alert clears itself when the engine prices the position again | B-EXIT-SKIP-ALERT-CLEAR (`#638`, with `#572`) | CC-B (New Claude) | QUEUED | — | operator alert, after `#692`: the price-skip alert raises once and never learns the condition cleared, so it sits on healthy symbols and blocks its own key (0 to 4 re-raises in 12.6 h after a manual sweep, 2026-07-31). Langston ruled option (b): hold the alert id in the engine's own state and resolve it at the moment the engine already resets the skip streak (`active-execution-engine.ts:2426`). `#572` (the held key freezes the alert's words) is the same lever; Step 1 settles whether (b) discharges it or a store-side refresh stays a Kyle scope call. Placed 2026-09-29 |
 | 167 | #634 | #634 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the kill switch must not fail open |
 | 168 | #632 | #632 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | the daily-loss count survives a restart |
 | 169 | B-KILLSWITCH-DENOMINATOR | B-KILLSWITCH-DENOMINATOR | CC-A (Old Claude) | QUEUED | — | the kill switch's remaining legs |
@@ -355,7 +356,7 @@ Kyle 2026-09-28: an even split by connected groups; earlier ownership is not a f
 |---|---|---:|
 | CC-C (Analyst Claude) | Prices and the exit price path; paper sizing (in flight); the paper standard and judging the evidence | 51 |
 | Infra Claude | Identity, the coin list and exclusions; restarts, deploys, security and the servers; what the diagnostic screens show | 52 |
-| CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 51 |
+| CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 52 |
 | CC-A (Old Claude) | Trade records and costs; scores, regimes and gates; the xStock tuning studies; risk controls; the live engine; the final end-to-end audit | 50 |
 
 ## 7. Coltrane — proposed role (for Langston's view, then Kyle)
