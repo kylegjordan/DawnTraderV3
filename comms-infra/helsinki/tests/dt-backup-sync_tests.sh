@@ -6,7 +6,8 @@
 # SETUP (as root on Helsinki): mkdir -p /tmp/dtr-test/src, then copy in
 #   dt-backup-sync.sh         the version under test
 #   dt-backup-sync.baseline   comms-infra/helsinki/dt-backup-sync.sh at ab68732d7 (the live copy)
-#   dt-backup-sync.r1         the same path at b4db96b9c (before the fresh-reader round)
+#   dt-backup-sync.r1         the same path at b4db96b9c (before fresh-reader round 1)
+#   dt-backup-sync.r2         the same path at b9ca76485 (before fresh-reader round 2)
 # and chown -R langston. Run: cd /home/langston && sudo -u langston HOME=/home/langston bash <this>.
 # Remove /tmp/dtr-test afterwards. "CONTROL" lines must FAIL on the older copy they name.
 set -u
@@ -32,28 +33,41 @@ mk() { # name source lockwait
 mk bs_new  /tmp/dtr-test/src/dt-backup-sync.sh       2
 mk bs_base /tmp/dtr-test/src/dt-backup-sync.baseline 2
 mk bs_r1   /tmp/dtr-test/src/dt-backup-sync.r1       2
+mk bs_r2   /tmp/dtr-test/src/dt-backup-sync.r2       2
 
-cat > "$T/bin/git" <<EOF
+cat > "$T/bin/git" <<'EOF'
 #!/bin/bash
 R=/usr/bin/git
+T=__T__
+B=__B__
 advance() {
-  h=\$(\$R --git-dir=$T/src.git rev-parse refs/heads/$B)
-  n=\$(\$R --git-dir=$T/src.git commit-tree -p "\$h" -m adv "\$(\$R --git-dir=$T/src.git rev-parse "\$h^{tree}")")
-  \$R --git-dir=$T/src.git update-ref refs/heads/$B "\$n"
+  h=$($R --git-dir=$T/src.git rev-parse refs/heads/$B)
+  n=$($R --git-dir=$T/src.git commit-tree -p "$h" -m adv "$($R --git-dir=$T/src.git rev-parse "$h^{tree}")")
+  $R --git-dir=$T/src.git update-ref refs/heads/$B "$n"
 }
-case "\$1" in
+# The subcommand is the first argument that is not a global option ("-c k=v" and "-C dir"
+# take a value): the scripts under test call `git -c gc.auto=0 ... fetch`.
+sub=; skip=
+for a in "$@"; do
+  if [ -n "$skip" ]; then skip=; continue; fi
+  case "$a" in -c|-C) skip=1 ;; -*) ;; *) sub=$a; break ;; esac
+done
+case "$sub" in
   ls-remote)
-    if [ "\${DTT_MODE:-}" = before_lsremote ] && [ ! -e $T/fired ]; then touch $T/fired; advance; fi
-    \$R "\$@"; rc=\$?
-    if [ "\${DTT_MODE:-}" = after_lsremote ] && [ ! -e $T/fired ]; then touch $T/fired; advance; fi
-    exit \$rc ;;
+    # reread_empty: the SECOND read answers exit 0 with no branch (checked BEFORE the real read)
+    if [ "${DTT_MODE:-}" = reread_empty ] && [ -e $T/fired ]; then exit 0; fi
+    if [ "${DTT_MODE:-}" = before_lsremote ] && [ ! -e $T/fired ]; then touch $T/fired; advance; fi
+    $R "$@"; rc=$?
+    if { [ "${DTT_MODE:-}" = after_lsremote ] || [ "${DTT_MODE:-}" = reread_empty ]; } && [ ! -e $T/fired ]; then touch $T/fired; advance; fi
+    exit $rc ;;
   fetch)
-    [ "\${DTT_MODE:-}" = noop_fetch ] && exit 0
-    [ "\${DTT_MODE:-}" = fail_fetch ] && { echo "fatal: simulated fetch failure" >&2; exit 1; }
-    exec \$R "\$@" ;;
-  *) exec \$R "\$@" ;;
+    [ "${DTT_MODE:-}" = noop_fetch ] && exit 0
+    [ "${DTT_MODE:-}" = fail_fetch ] && { echo "fatal: simulated fetch failure" >&2; exit 1; }
+    exec $R "$@" ;;
+  *) exec $R "$@" ;;
 esac
 EOF
+sed -i -e "s#__T__#$T#" -e "s#__B__#$B#" "$T/bin/git"
 chmod +x "$T/bin/git"
 export PATH="$T/bin:$PATH"
 
@@ -119,5 +133,29 @@ $R --git-dir="$T/mirror.git" config remote.origin.url "$T/empty.git"
 run none bs_new
 [ $RC -eq 1 ] && has "FAIL-INFRA GitHub answered but has NO branch" && ok "B6c a source with no such branch is named as that, not as 'could not read'" || bad B6c "rc=$RC $LOGL"
 $R --git-dir="$T/mirror.git" config remote.origin.url "$T/src.git"
+
+
+# ================= round 2 (CONTROLS run the r2 copy, b9ca76485) =================
+run none bs_new >/dev/null
+# F2-B1: GitHub answers the RE-READ with no branch; that must never be a PASS.
+run reread_empty bs_new
+[ $RC -eq 1 ] && has "FAIL-INFRA GitHub answered the re-read with NO branch" && ok "F2-B1: an empty re-read -> FAIL-INFRA, not a PASS" || bad F2-B1 "rc=$RC $LOGL"
+run reread_empty bs_r2
+[ $RC -eq 0 ] && has PASS && ok "F2-B1 CONTROL: r2 PASSED with an empty re-read ($(echo "$LOGL" | grep -o 'GitHub moved again, to [^,]*'))" || bad F2-B1c "rc=$RC $LOGL"
+run none bs_new >/dev/null
+# F2-B3: an object of the head's tree OTHER than the known file is missing.
+H=$($R --git-dir="$T/src.git" rev-parse refs/heads/$B)
+FAKE=$(printf 'also never stored %s' "$(date +%s%N)" | $R hash-object --stdin)
+NT=$( { $R --git-dir="$T/src.git" ls-tree "$H"; printf '100644 blob %s\tzz-missing.txt\n' "$FAKE"; } | $R --git-dir="$T/src.git" mktree --missing)
+NC=$($R --git-dir="$T/src.git" commit-tree -p "$H" -m "a missing non-known blob" "$NT")
+$R --git-dir="$T/src.git" update-ref refs/heads/$B "$NC"; $R --git-dir="$T/mirror.git" update-ref refs/heads/$B "$NC"
+run noop_fetch bs_new
+[ $RC -eq 1 ] && has FAIL-REPRODUCE && echo "$LOGL" | grep -q "missing-objects=1" && ok "F2-B3: a missing object anywhere in the head's tree FAILs (missing-objects=1)" || bad F2-B3 "rc=$RC $LOGL"
+run noop_fetch bs_r2
+[ $RC -eq 0 ] && has PASS && ok "F2-B3 CONTROL: r2 PASSED it (only the known file was checked)" || bad F2-B3c "rc=$RC $LOGL"
+$R --git-dir="$T/src.git" update-ref refs/heads/$B "$H"; $R --git-dir="$T/mirror.git" update-ref refs/heads/$B "$H"
+run none bs_new
+[ $RC -eq 0 ] && has PASS && ok "F2 positive: a healthy mirror still PASSes after all of the above" || bad F2p "rc=$RC $LOGL"
+[ ! -e "$T/mirror.git/objects/info/alternates" ] || [ "$(wc -l < "$T/mirror.git/objects/info/alternates")" -ge 1 ]
 
 echo "BSYNC SUMMARY: $PASSN pass, $FAILN fail"

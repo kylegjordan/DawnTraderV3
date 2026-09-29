@@ -11,15 +11,20 @@
 #  - GitHub's head is read BEFORE the fetch. It used to be read after, so a push landing
 #    between the two made github != mirror and raised a false "BACKUP REPRODUCTION FAIL"
 #    (3 times since 09-02, each with a commit 0-3 s before the tick). A mirror AHEAD of that
-#    earlier read passes only if a second read shows GitHub at or beyond the mirror, so a
-#    force-push BACK to an older commit is not waved through.
+#    earlier read passes only if a second read shows GitHub at or beyond the mirror. (That
+#    covers a rewind DURING a run. A rewind BETWEEN runs is simply fetched; the dropped commits
+#    stay recoverable only because deploy.sh turns on the mirror's reflog, core.logAllRefUpdates.)
 #  - The fetch AND the reproduction clone hold the lock dt-review also takes: a dt-review
 #    fetch landing between them would otherwise move the branch and fail a good backup.
 #  - Every step's exit status is checked. A step that could not complete is FAIL-INFRA,
 #    worded as "not a verdict either way" with git's own first line — never an asserted cause.
-#  - Reproduction = a clone FROM the mirror (its exit checked), its HEAD equal to the mirror,
-#    and the known file's blob RE-HASHED from its bytes (a clone can "succeed" with a blob
-#    missing; `rev-parse HEAD:<path>` alone reads only the tree entry).
+#  - Reproduction = a --shared clone FROM the mirror (its exit checked; nothing is copied, so
+#    /tmp space is not a dependency), its HEAD equal to the mirror, EVERY object of the head's
+#    tree present, and the known file's blob RE-HASHED from its bytes. (A local clone's exit
+#    says nothing about objects; the tree check is what does. History behind the head is not
+#    walked here — that would read the whole 460 MB pack every 15 minutes.)
+#  - git's automatic gc is OFF for the fetches (it could delete packs under a running clone);
+#    `gc --auto` runs HERE instead, synchronously, inside the lock, after the reproduction.
 #  - On PASS, DT_SYNC_PASS is written atomically as "<epoch> <iso>" of ONE instant. That, not
 #    FETCH_HEAD's mtime, is the mirror's age: a failed fetch truncates and touches FETCH_HEAD.
 #  - One delayed retry on ls-remote and on the fetch: this key saw 13 transient publickey
@@ -86,7 +91,7 @@ rc=$?
 if [ $rc -eq 75 ]; then gate_fail "the fetch lock was held for more than ${LOCK_WAIT}s"
 elif [ $rc -ne 0 ]; then gate_fail "flock exited $rc"; fi
 do_fetch() {   # `9>&-`: no child (e.g. a detached gc --auto) may inherit the lock
-  FERR=$(timeout "$FETCH_TIMEOUT" git fetch --prune --quiet origin "+refs/heads/*:refs/heads/*" 2>&1 9>&-)
+  FERR=$(timeout "$FETCH_TIMEOUT" git -c gc.auto=0 -c maintenance.auto=false fetch --prune --quiet origin "+refs/heads/*:refs/heads/*" 2>&1 9>&-)
   frc=$?
   [ -n "$FERR" ] && printf '%s\n' "$FERR" >> "$LOG"
   return $frc
@@ -102,7 +107,14 @@ MIR=$(git rev-parse --verify --quiet "refs/heads/$BRANCH^{commit}")
 # 3. In sync: the mirror equals GitHub's head as read before the fetch; or it is AHEAD of
 #    that read AND a second read shows GitHub at or beyond the mirror (a push landed during
 #    the run). A mirror GitHub has moved BACK from (a force-push) fails.
-anc() { git merge-base --is-ancestor "$1" "$2" 2>>"$LOG"; }
+# 0 = yes, 1 = no; anything else (or any message from git) means the walk itself failed,
+# which is FAIL-INFRA, never a "no".
+anc() {
+  am=$(git merge-base --is-ancestor "$1" "$2" 2>&1)
+  arc=$?
+  [ -z "$am" ] || gate_fail "could not compare $1 with $2: $(first_line "$am")"
+  case $arc in 0|1) return $arc ;; *) gate_fail "could not compare $1 with $2 (merge-base exit $arc)" ;; esac
+}
 SRC2=
 NOTE=
 if [ "$SRC" = "$MIR" ]; then
@@ -110,35 +122,50 @@ if [ "$SRC" = "$MIR" ]; then
 else
   read_src_retry
   [ "$SRC_RC" -eq 0 ] || gate_fail "the mirror ($MIR) differs from GitHub's head read before the fetch ($SRC), and the re-read failed: $SRC_ERR"
+  [ -n "$SRC_OUT" ] || gate_fail "GitHub answered the re-read with NO branch $BRANCH"
   SRC2=$SRC_OUT
   SYNC=
   if [ "$MIR" = "$SRC2" ]; then
     SYNC=1
   elif anc "$SRC" "$MIR"; then
-    if git cat-file -e "$SRC2^{commit}" 2>>"$LOG"; then
+    # Is GitHub's newer head in the mirror? Only a CLEAN "no" (exit 1, no message) may be read
+    # as "not yet fetched"; anything else is a failed read.
+    ce=$(git cat-file -e "$SRC2" 2>&1)
+    crc=$?
+    if [ $crc -eq 0 ]; then
       anc "$MIR" "$SRC2" && SYNC=1
+      [ -n "$SYNC" ] || NOTE=" (GitHub MOVED BACK during the run: the mirror holds $MIR, which GitHub's latest $SRC2 does not contain; the next run re-syncs)"
+    elif [ $crc -eq 1 ] && [ -z "$ce" ]; then
+      SYNC=1; NOTE=" (GitHub moved again, to $SRC2, during the run; the mirror holds exactly what GitHub served at fetch time)"
     else
-      SYNC=1; NOTE=" (GitHub moved again, to $SRC2, during the run)"
+      gate_fail "could not check whether GitHub's latest $SRC2 is in the mirror: $(first_line "$ce")"
     fi
   fi
 fi
 
 # 4. Reproduction: clone FROM the mirror (still under the lock), and re-hash the known file.
-TMP=$(mktemp -d)
-CERR=$(git clone --quiet --no-checkout --branch "$BRANCH" "$REPO" "$TMP/r" 2>&1 9>&-)
+TMP=$(mktemp -d) || gate_fail "cannot create a temporary directory"
+CERR=$(git clone --quiet --shared --no-checkout --branch "$BRANCH" "$REPO" "$TMP/r" 2>&1 9>&-)
 crc=$?
-exec 9>&-
 if [ $crc -ne 0 ]; then
   rm -rf "$TMP"
+  case "$CERR" in
+    *"No space left"*|*"Permission denied"*|*"$TMP"*) gate_fail "the reproduction clone failed for a LOCAL reason (exit $crc): $(first_line "$CERR")" ;;
+  esac
   repro_fail "a clone FROM the mirror failed (exit $crc): $(first_line "$CERR") — github=$SRC mirror=$MIR"
 fi
 REP_C=$(git -C "$TMP/r" rev-parse --verify --quiet HEAD)
 REP_B=$(git -C "$TMP/r" rev-parse --verify --quiet "HEAD:$KNOWN")
 REHASH=
-[ -n "$REP_B" ] && REHASH=$(git -C "$TMP/r" cat-file blob "$REP_B" | git hash-object --stdin)
+[ -n "$REP_B" ] && REHASH=$(git -C "$TMP/r" cat-file blob "$REP_B" | git hash-object --no-filters --stdin)
+# Every object the head's tree names must exist (the clone's exit status cannot say so).
+MISSING=$(git -C "$TMP/r" ls-tree -r -t --object-only HEAD 2>&1 | git -C "$TMP/r" cat-file --batch-check='%(objectname) %(objecttype)' 2>&1 | grep -c ' missing$')
 rm -rf "$TMP"
+# git's own housekeeping, now, synchronously, inside the lock (it is off during the fetches).
+git -c gc.autoDetach=false gc --auto --quiet 2>>"$LOG" 9>&- || log "WARN gc --auto failed (see the lines above); the gate result is unaffected"
+exec 9>&-
 
-if [ -n "$SYNC" ] && [ "$MIR" = "$REP_C" ] && [ -n "$REP_B" ] && [ "$REHASH" = "$REP_B" ]; then
+if [ -n "$SYNC" ] && [ "$MIR" = "$REP_C" ] && [ -n "$REP_B" ] && [ "$REHASH" = "$REP_B" ] && [ "$MISSING" = 0 ]; then
   NOW=$(date -u +%s)
   tmp="$PASS_STAMP.tmp.$$"
   if printf '%s %s\n' "$NOW" "$(date -u -d "@$NOW" +%Y-%m-%dT%H:%M:%SZ)" > "$tmp" && mv -f "$tmp" "$PASS_STAMP"; then
@@ -148,5 +175,5 @@ if [ -n "$SYNC" ] && [ "$MIR" = "$REP_C" ] && [ -n "$REP_B" ] && [ "$REHASH" = "
     gate_fail "the backup reproduced, but $PASS_STAMP could not be written"
   fi
 else
-  repro_fail "github=$SRC${SRC2:+ github-reread=$SRC2} mirror=$MIR reproduced=$REP_C $KNOWN blob=$REP_B re-hashed=$REHASH in-sync=${SYNC:-no}"
+  repro_fail "github=$SRC${SRC2:+ github-reread=$SRC2} mirror=$MIR reproduced=$REP_C $KNOWN blob=$REP_B re-hashed=$REHASH missing-objects=$MISSING in-sync=${SYNC:-no}$NOTE"
 fi

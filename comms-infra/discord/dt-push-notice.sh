@@ -63,9 +63,9 @@ fi
 
 # ── DRIFT CHECK (added 2026-09-03, #995 OBJ-9, Langston: he asked for it and the reason is
 # that deploy-time convergence CANNOT REACH BETWEEN DEPLOYS — proven the same hour, when the
-# tree held this file and $BRIDGE_DIR did not). deploy.sh installs from $BRIDGE_DIR, not from
-# the tree, and nothing in the repo performs or verifies the scp that populates it. So the
-# repo is source-of-truth VIA A RUNBOOK STEP, and a runbook step is exactly what goes unrun.
+# tree held this file and $BRIDGE_DIR did not). Until B-CREDENTIALS-PRIVATE-REPO, deploy.sh
+# installed from a hand-populated $BRIDGE_DIR; it now installs from a reviewed sha and verifies
+# every file. This check still earns its place: it catches a hand edit made BETWEEN deploys.
 # Compared against the backup mirror, which self-pulls from GitHub every 15 min, so this needs
 # no credential and no working copy. FAIL-QUIET BY DESIGN: any error here (mirror missing,
 # fetch behind, sha unreadable) leaves DRIFT empty and the notice proceeds untouched — a

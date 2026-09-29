@@ -6,7 +6,8 @@
 # SETUP (as root on Helsinki): mkdir -p /tmp/dtr-test/src, then copy in
 #   dt-review            the version under test
 #   dt-review.baseline   comms-infra/helsinki/dt-review at ab68732d7 (the verbatim live copy)
-#   dt-review.r1         comms-infra/helsinki/dt-review at b4db96b9c (before the fresh-reader round)
+#   dt-review.r1         comms-infra/helsinki/dt-review at b4db96b9c (before fresh-reader round 1)
+#   dt-review.r2         comms-infra/helsinki/dt-review at b9ca76485 (before fresh-reader round 2)
 # and chown -R langston. Run: cd /home/langston && sudo -u langston HOME=/home/langston bash <this>.
 # Remove /tmp/dtr-test afterwards.
 # Every "CONTROL" line runs the same check against an OLDER copy and must FAIL there: a check
@@ -37,6 +38,7 @@ mk_dtr dtr_fail "$T/nonexistent.git"  90 "$T/src/dt-review"
 mk_dtr dtr_busy "$GH"                  3 "$T/src/dt-review"
 mk_dtr r1       "$GH"                 90 "$T/src/dt-review.r1"
 mk_dtr r1_fail  "$T/nonexistent.git"  90 "$T/src/dt-review.r1"
+mk_dtr r2       "$GH"                 90 "$T/src/dt-review.r2"
 sed -e "s#^REPO=.*#REPO=$T/mirror.git#" "$T/src/dt-review.baseline" > "$T/dtr_base"; chmod +x "$T/dtr_base"
 
 run() { "$@" > "$T/o" 2> "$T/e"; RC=$?; OUT=$(cat "$T/o"); ERR=$(cat "$T/e"); }
@@ -102,7 +104,7 @@ $M update-ref -d "refs/heads/$HEXNAME"
 
 # ---------- (c) a made-up sha ----------
 run "$T/dtr" show 0123456789abcdef0123456789abcdef01234567 CLAUDE.md
-[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: 0123456789abcdef0123456789abcdef01234567 is not in the mirror (mirror head $(cur), fetched .* ago (DT_REVIEW_FETCH_OK); last fetch ok)" && ok "c: made-up sha -> the not-in-mirror text" || bad c "rc=$RC ${ERR:0:200}"
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: 0123456789abcdef0123456789abcdef01234567 is not in the mirror (migration/aws-supabase head $(cur), fetched .* ago (DT_REVIEW_FETCH_OK); last fetch ok; other branches last synced " && ok "c: made-up sha -> the not-in-mirror text" || bad c "rc=$RC ${ERR:0:200}"
 
 # ---------- F-R2: a commit whose TREE is missing -> exit 3, never "not a file" ----------
 BROKEN=$(printf 'tree 1111111111111111111111111111111111111111\nauthor t <t@i> 1 +0000\ncommitter t <t@i> 1 +0000\n\nbroken\n' | $M hash-object -t commit --literally -w --stdin)
@@ -154,7 +156,7 @@ run "$T/dtr" show "$PIN" comms-infra
 run "$T/dtr_fail" show "$PIN" "$P"; DG=$(tail -n +2 "$T/o" | git hash-object --stdin)
 [ $RC -eq 0 ] && [ "$(sed -n 1p "$T/o")" = "DEGRADED: fetch failed; content is exact for $PIN (content-addressed)" ] && [ "$DG" = "$WANT" ] && ok "d: pinned read after a failed fetch -> DEGRADED + exact content" || bad d "rc=$RC"
 run "$T/dtr_fail" show CLAUDE.md
-[ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "^REFUSED: fetch from GitHub failed; mirror head is $(cur) from .* — no head read served" && echo "$ERR" | grep -q "^dt-review: reason: " && ok "d: head read after a failed fetch refused, with git's reason" || bad d2 "rc=$RC ${ERR:0:160}"
+[ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "^REFUSED: fetch failed; mirror head is $(cur) from .* — no head read served" && echo "$ERR" | grep -q "^dt-review: reason: " && ok "d: head read after a failed fetch refused, with git's reason" || bad d2 "rc=$RC ${ERR:0:160}"
 run "$T/dtr_fail" show 0123456789abcdef0123456789abcdef01234567 CLAUDE.md
 echo "$ERR" | grep -q "last fetch FAILED (" && ok "d: not-in-mirror names 'last fetch FAILED (<reason>)'" || bad d3 "${ERR:0:160}"
 ( flock "$T/mirror.git/dt-fetch.lock" sleep 12 ) & sleep 1
@@ -182,5 +184,58 @@ echo "$ERR" | grep -q "stamp unreadable: DT_REVIEW_FETCH_OK" && ok "R12: a garba
 [ "$(awk '{print NF}' "$T/mirror.git/DT_REVIEW_FETCH_OK")" = 2 ] && ok "success stamp rewritten after a good fetch: $(cat "$T/mirror.git/DT_REVIEW_FETCH_OK")" || bad stamp "$(cat "$T/mirror.git/DT_REVIEW_FETCH_OK")"
 rm -f "$T/mirror.git/FETCH_HEAD"; "$T/dtr" ref >/dev/null 2>&1
 [ ! -e "$T/mirror.git/FETCH_HEAD" ] && ok "dt-review wrote no FETCH_HEAD" || bad fh x
+
+
+# ================= round 2 (fresh-reader round 2 on b9ca76485); CONTROLS run the r2 copy =================
+# F2-1: an unparseable commit that IS in the mirror must never be "not in the mirror".
+BADC=$(printf 'this is not a commit\n' | $M hash-object -t commit --literally -w --stdin)
+run "$T/dtr" show "$BADC" CLAUDE.md
+[ $RC -eq 3 ] && ! echo "$ERR" | grep -q "not in the mirror" && ok "F2-1: an unparseable commit -> exit 3, never 'not in the mirror'" || bad F2-1 "rc=$RC ${ERR:0:160}"
+run "$T/r2" show "$BADC" CLAUDE.md
+echo "$ERR" | grep -q "is not in the mirror" && ok "F2-1 CONTROL: r2 called it 'not in the mirror'" || bad F2-1c "rc=$RC ${ERR:0:160}"
+# F2-2: a searched file whose blob is MISSING must make grep refuse, not report "0 matches".
+MB=$(printf 'never stored %s' "$(date +%s%N)" | $M hash-object --stdin)
+MT=$(printf '100644 blob %s\tonly.txt\n' "$MB" | $M mktree --missing)
+MC=$($M commit-tree -p "$(cur)" -m "missing blob" "$MT")
+run "$T/dtr" grep "@$MC" anything only.txt
+[ $RC -eq 3 ] && [ -z "$OUT" ] && ok "F2-2: grep over a missing blob -> exit 3, no result claimed" || bad F2-2 "rc=$RC ${ERR:0:160}"
+run "$T/r2" grep "@$MC" anything only.txt
+echo "$ERR" | grep -q "# 0 matches" && ok "F2-2 CONTROL: r2 reported '# 0 matches' over a file it could not read" || bad F2-2c "rc=$RC ${ERR:0:160}"
+# F2-3: a FORGED blob (bytes that do not hash to its name) must never be served.
+X=$(printf 'forged-%s' "$(date +%s%N)" | sha1sum | cut -c1-40)
+python3 - "$T/mirror.git/objects" "$X" <<'PY'
+import os, sys, zlib
+objdir, oid = sys.argv[1:3]
+data = b"a forged line\n"
+d = os.path.join(objdir, oid[:2]); os.makedirs(d, exist_ok=True)
+open(os.path.join(d, oid[2:]), "wb").write(zlib.compress(b"blob %d\0" % len(data) + data))
+PY
+FT=$(printf '100644 blob %s\tforged.txt\n' "$X" | $M mktree)
+FC=$($M commit-tree -p "$(cur)" -m "forged blob" "$FT")
+run "$T/dtr" show "$FC" forged.txt
+[ $RC -eq 3 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "re-hashes to" && ok "F2-3: a forged blob is caught by the re-hash; nothing served" || bad F2-3 "rc=$RC ${ERR:0:160}"
+run "$T/r2" show "$FC" forged.txt
+[ $RC -eq 0 ] && echo "$OUT" | grep -q "a forged line" && ok "F2-3 CONTROL: r2 served the forged bytes as exact" || bad F2-3c "rc=$RC"
+# F2-5: one mistyped path among good ones; a pin written after the pattern.
+run "$T/dtr" grep resolve_review_ref comms-infra no/such/dir
+[ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "path 'no/such/dir' matches no file" && ok "F2-5: one bad path among good ones -> REFUSED before searching" || bad F2-5 "rc=$RC ${ERR:0:160}"
+run "$T/r2" grep resolve_review_ref comms-infra no/such/dir
+[ $RC -eq 0 ] && ok "F2-5 CONTROL: r2 searched, skipped the bad path silently (rc=0)" || bad F2-5c "rc=$RC"
+run "$T/dtr" grep resolve_review_ref comms-infra "@$PIN"
+[ $RC -eq 2 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "a pin goes BEFORE the pattern" && ok "F2-5b: a pin written after the pattern -> refused (exit 2)" || bad F2-5b "rc=$RC ${ERR:0:160}"
+# F2-6: path forms are refused before the fetch, never reported as missing or broken.
+run "$T/dtr" show ./CLAUDE.md; A=$RC; run "$T/dtr" show comms-infra/; Bb=$RC; run "$T/dtr" show /CLAUDE.md; Cc=$RC; run "$T/dtr" grep x ''; Dd=$RC
+[ "$A$Bb$Cc$Dd" = 2222 ] && ok "F2-6: './x', 'dir/', '/x' and an empty grep path -> exit 2" || bad F2-6 "$A$Bb$Cc$Dd"
+run "$T/r2" show ./CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "is not in the tree" && ok "F2-6 CONTROL: r2 said './CLAUDE.md' is not in the tree" || bad F2-6c "rc=$RC ${ERR:0:120}"
+# F2-11: a config setting must not change the pattern type.
+$M config grep.patternType extended
+run "$T/dtr" grep 'resolve_review_ref\|zq_never_absent' comms-infra; NA=$RC
+run "$T/r2" grep 'resolve_review_ref\|zq_never_absent' comms-infra; NB=$RC
+$M config --unset grep.patternType
+[ $NA -eq 0 ] && ok "F2-11: BRE alternation still works with grep.patternType=extended set" || bad F2-11 "rc=$NA"
+[ $NB -eq 1 ] && ok "F2-11 CONTROL: r2 silently switched to ERE and found nothing" || bad F2-11c "rc=$NB"
+# show re-hash, positive: a normal pinned read still serves the exact blob.
+run "$T/dtr" show "$PIN" "$P"; [ $RC -eq 0 ] && [ "$(git hash-object --stdin < "$T/o")" = "$WANT" ] && ok "F2-3 positive: a clean pinned read still serves the exact blob" || bad F2-3p "rc=$RC"
 
 echo "DTR SUMMARY: $PASSN pass, $FAILN fail"

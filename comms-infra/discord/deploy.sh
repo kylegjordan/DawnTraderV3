@@ -14,8 +14,12 @@
 #   copy it to /root/deploy-<sha>.sh on the box, then as root:
 #             git hash-object /root/deploy-<sha>.sh                       # must equal the blob id
 #             bash /root/deploy-<sha>.sh --sha <sha> --only readers
-# The script also refuses to run unless its own bytes equal deploy.sh at --sha (read through
-# the verified walk below), so an old or hand-edited installer cannot install a new sha.
+# From THIS version on, the installer refuses to run unless its own bytes equal deploy.sh at
+# --sha (read through the verified walk below). OLDER installers do not refuse: the one before
+# 2026-09-29 installed whatever sat in /opt/discord-bridges, and a1ea15b50's has no self-check.
+# So the bridges and notices groups RETIRE the old installer's staging copies from
+# /opt/discord-bridges (moved to /root/deploy-retired/<UTC>/), leaving an old installer nothing
+# stale to put back.
 #
 # ⛔ WHY IT TAKES A SHA (B-CREDENTIALS-PRIVATE-REPO GB-1, #1004). It used to install WHATEVER
 # had been copied into /opt/discord-bridges, checking only that files were present. That is
@@ -35,6 +39,9 @@
 #   /etc/langston/discord-cc-bot.env, /etc/langston/discord-langston-bot.env,
 #   /etc/dawntrader/discord-comms.env (from discord-comms.env.template)
 set -euo pipefail
+# Resolve this script's own path BEFORE leaving the caller's directory (a relative $0 would
+# otherwise be read against /).
+SELF_FILE=$(readlink -f -- "$0" 2>/dev/null || true)
 cd /
 
 MIRROR=/srv/dawntrader-backup.git
@@ -82,7 +89,7 @@ while [ $# -gt 0 ]; do
 done
 [ "$(id -u)" -eq 0 ] || die "run as root"
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || die "--sha must be the FULL 40-hex reviewed sha (got '$SHA')"
-[ -f "$0" ] || die "run this script from a FILE (see HOW TO RUN IT), so its own bytes can be checked against $SELF_PATH at --sha"
+[ -n "$SELF_FILE" ] && [ -f "$SELF_FILE" ] || die "run this script from a FILE (see HOW TO RUN IT), so its own bytes can be checked against $SELF_PATH at --sha"
 IFS=, read -r -a GROUPS_WANTED <<< "$ONLY"
 [ ${#GROUPS_WANTED[@]} -gt 0 ] || die "--only names no group"
 for g in "${GROUPS_WANTED[@]}"; do
@@ -91,19 +98,26 @@ done
 want() { local g; for g in "${GROUPS_WANTED[@]}"; do [ "$g" = "$1" ] && return 0; done; return 1; }
 
 # ---- 1. the sha: a commit in the mirror, and on the review branch ----------------------
-t=$(git_l cat-file -t "$SHA" 2>&1) || {
-  case "$t" in
-    *"Not a valid object name"*|*"could not get object info"*)
-      die "$SHA is not in the mirror yet — wait for the */15 dt-backup-sync run, then re-run" ;;
-    *) die "cannot read $SHA in the mirror: $t" ;;
-  esac
-}
-[ "$t" = commit ] || die "$SHA is a $t, not a commit"
-rc=0; mb=$(git_l merge-base --is-ancestor "$SHA" "refs/heads/$BRANCH" 2>&1) || rc=$?
+# stdout and stderr are read SEPARATELY: a warning must never be taken for the answer, and a
+# failed read is "not in the mirror" only when the mirror itself is demonstrably readable.
+ERRF=$(mktemp)
+rc=0; t=$(git_l cat-file -t "$SHA" 2>"$ERRF") || rc=$?
+terr=$(cat "$ERRF")
+if [ $rc -ne 0 ]; then
+  if [ "$(printf '%s\n' "$terr" | grep -c .)" -eq 1 ] && printf '%s' "$terr" | grep -q "Not a valid object name" \
+     && git_l cat-file -e "refs/heads/$BRANCH^{commit}" 2>/dev/null; then
+    rm -f "$ERRF"; die "$SHA is not in the mirror yet — wait for the */15 dt-backup-sync run, then re-run"
+  fi
+  rm -f "$ERRF"; die "cannot read $SHA in the mirror: $terr"
+fi
+[ "$t" = commit ] || { rm -f "$ERRF"; die "$SHA is a $t, not a commit"; }
+rc=0; git_l merge-base --is-ancestor "$SHA" "refs/heads/$BRANCH" 2>"$ERRF" || rc=$?
+mb=$(cat "$ERRF"); rm -f "$ERRF"
+[ -z "$mb" ] || die "could not tell whether $SHA is on $BRANCH: $mb"
 case $rc in
   0) ;;
-  1) die "$SHA is not on $BRANCH — only reviewed commits on the review branch are installed" ;;
-  *) die "could not tell whether $SHA is on $BRANCH (merge-base exit $rc): $mb" ;;
+  1) die "$SHA is not an ancestor of $BRANCH as read from the mirror — only commits on the review branch are installed" ;;
+  *) die "could not tell whether $SHA is on $BRANCH (merge-base exit $rc)" ;;
 esac
 
 # ---- 2. PRE-FLIGHT: read + VERIFY every selected file from the sha, before any change ----
@@ -187,8 +201,8 @@ blob_of() { awk -v p="$1" '$1 == p {print $2}' "$STAGE/.blobs"; }
 
 # The installer itself must be the copy at --sha.
 SELF_WANT=$(blob_of "$SELF_PATH")
-SELF_GOT=$(git hash-object "$0")
-[ "$SELF_GOT" = "$SELF_WANT" ] || die "this installer ($0, blob $SELF_GOT) is not $SELF_PATH at $SHA (blob $SELF_WANT) — run the reviewed copy"
+SELF_GOT=$(git hash-object "$SELF_FILE")
+[ "$SELF_GOT" = "$SELF_WANT" ] || die "this installer ($SELF_FILE, blob $SELF_GOT) is not $SELF_PATH at $SHA (blob $SELF_WANT) — run the reviewed copy"
 
 if want bridges; then
   for f in /etc/langston/discord-cc-bot.env /etc/langston/discord-langston-bot.env /etc/dawntrader/discord-comms.env; do
@@ -207,20 +221,33 @@ echo "== pre-flight: ${#SELECTED[@]} files read from $SHA, every object re-hashe
 # leave a half-installed host. flock creates the lock file AS LANGSTON: root never touches a
 # path inside a directory another account can write (a symlink there would hand langston a
 # root-owned file — the fresh-reader BLOCKER on the first version of this script).
-if want readers; then
-  sudo -u langston flock -w 300 "$MIRROR/dt-fetch.lock" sh -c '
+mirror_state() {   # decision 14 (A9) + the reflog; as langston, under the shared lock
+  rc=0
+  sudo -u langston flock -w 300 -E 75 "$MIRROR/dt-fetch.lock" sh -c '
     set -e
     M=$1
     rc=0; git --git-dir="$M" config --unset-all remote.origin.fetch || rc=$?
     [ $rc -eq 0 ] || [ $rc -eq 5 ] || { echo "cannot drop remote.origin.fetch (git config exit $rc)" >&2; exit 1; }
+    git --git-dir="$M" config core.logAllRefUpdates always
     refs=$(git --git-dir="$M" for-each-ref --format="delete %(refname)" refs/remotes/)
     [ -z "$refs" ] || printf "%s\n" "$refs" | git --git-dir="$M" update-ref --no-deref --stdin
-  ' sh "$MIRROR" || die "could not update the mirror's refspec/refs (see above) — nothing installed"
-  # Langston decision 14 (A9), asserted rather than printed: the stale-ref producer is gone.
-  if git_l config --get-all remote.origin.fetch >/dev/null; then die "remote.origin.fetch is still set"; fi
+  ' sh "$MIRROR" || rc=$?
+  case $rc in
+    0) ;;
+    75) die "the mirror's fetch lock was held for more than 300s — nothing was changed; re-run" ;;
+    *) die "could not update the mirror's refspec/refs (exit $rc; see above)" ;;
+  esac
+  # Asserted, not printed. `config --get` exits 1 for an ABSENT key; any other status is a
+  # failed read. The positive control proves the config is readable at all.
+  git_l config --get remote.origin.url >/dev/null || die "cannot read the mirror's config"
+  rc=0; git_l config --get-all remote.origin.fetch >/dev/null || rc=$?
+  [ $rc -eq 1 ] || die "remote.origin.fetch is still set, or unreadable (git config exit $rc)"
   n=$(git_l for-each-ref refs/remotes/ | wc -l)
   [ "$n" -eq 0 ] || die "refs/remotes/* still holds $n refs"
-  echo "   mirror: configured fetch refspec dropped; refs/remotes/* empty"
+}
+if want readers; then
+  mirror_state
+  echo "   mirror: configured fetch refspec dropped; refs/remotes/* empty; reflog on"
 fi
 
 # ---- 4. bridges: the venv ---------------------------------------------------------------
@@ -229,14 +256,16 @@ if want bridges; then
   apt-get install -y python3-venv </dev/null >/dev/null 2>&1 || true
   mkdir -p "$BRIDGE_DIR"
   [ -d "$VENV" ] || python3 -m venv "$VENV"
+  # NOT tied to --sha: pip installs what PyPI serves today. Say so when a version changes.
+  v0=$("$VENV/bin/python3" -c 'import discord; print(discord.__version__)' 2>/dev/null || echo none)
   "$VENV/bin/pip" install --upgrade pip >/dev/null
   "$VENV/bin/pip" install -U "discord.py>=2.3" >/dev/null
   v=$("$VENV/bin/python3" -c 'import discord; print(discord.__version__)')
-  echo "discord.py: $v"
+  if [ "$v" = "$v0" ]; then echo "discord.py: $v (unchanged)"
+  else echo "   ⚠ discord.py CHANGED $v0 -> $v — from PyPI, NOT reviewed at this sha; it takes effect at the next bridge restart"; fi
 fi
 
 # ---- 5. install every selected file, then VERIFY every one -------------------------------
-INSTALL_TS=$(date +%s)
 for e in "${SELECTED[@]}"; do
   IFS='|' read -r grp path target mode <<< "$e"
   mkdir -p "$(dirname "$target")"
@@ -260,33 +289,70 @@ if [ -n "$BAD" ]; then
   exit 3
 fi
 echo "== install-verify: all ${#SELECTED[@]} installed files equal their verified blobs at $SHA =="
+INSTALL_TS=$(date +%s)   # AFTER the last install: a unit that entered active at or before it runs older code
+
+# The old installer's STAGING COPIES in $BRIDGE_DIR are what an old installer would put back:
+# retire them (moved, not deleted — recorded in DELETED_COMPONENTS_LOG).
+RETIRE=""
+if want notices; then RETIRE="$RETIRE cc-send dt-push-notice.sh dt-deploy-drift.sh"; fi
+if want bridges; then RETIRE="$RETIRE discord-cc-bridge.service discord-langston-bridge.service discord-bridge-failed-notify@.service discord-langston-bridge.service.d comms-active.env deploy.sh"; fi
+RDIR=/root/deploy-retired/$(date -u +%Y%m%dT%H%M%SZ)
+for f in $RETIRE; do
+  if [ -e "$BRIDGE_DIR/$f" ] || [ -L "$BRIDGE_DIR/$f" ]; then
+    mkdir -p "$RDIR"; mv "$BRIDGE_DIR/$f" "$RDIR/"
+    echo "   retired stale staging copy $BRIDGE_DIR/$f -> $RDIR/"
+  fi
+done
 
 # ---- 6. per-group state, after the files are verified ------------------------------------
-add_langston_cron() { # match, line — a commented-out line does not count as present
-  if sudo -u langston crontab -l 2>/dev/null | grep -v '^[[:space:]]*#' | grep -Fq "$1"; then
+add_langston_cron() { # match, line — read ONCE; a read failure never becomes an empty crontab
+  local cur rc=0
+  cur=$(sudo -u langston crontab -l 2>&1) || rc=$?
+  if [ $rc -ne 0 ]; then
+    case "$cur" in
+      "no crontab for langston"*) cur="" ;;
+      *) die "cannot read langston's crontab (exit $rc): $cur — nothing written" ;;
+    esac
+  fi
+  # Presence is tested on the captured text (no early-exit pipe under pipefail), and a
+  # commented-out line does not count.
+  if grep -v '^[[:space:]]*#' <<< "$cur" | grep -F "$1" >/dev/null; then
     echo "   langston cron already present for $1"
   else
-    { sudo -u langston crontab -l 2>/dev/null || true; echo "$2"; } | sudo -u langston crontab -
+    if [ -n "$cur" ]; then printf '%s\n%s\n' "$cur" "$2"; else printf '%s\n' "$2"; fi | sudo -u langston crontab -
     echo "   installed langston cron: $2"
   fi
 }
+# /var/log is root:syslog 0775 on this host (measured 2026-09-29), so a log path there can be
+# swapped for a symlink by the syslog group: refuse a symlink, never follow one with chown.
+langston_log() {
+  [ ! -L "$1" ] || die "$1 is a symlink — refusing to chown it"
+  [ -e "$1" ] || install -o langston -g langston -m 0644 /dev/null "$1"
+  chown -h langston:langston "$1"
+}
 if want bridges || want notices; then
   mkdir -p /etc/dawntrader
-  [ -f /etc/dawntrader/comms-active.env ] || install -m 0644 "$STAGE/$SEED_PATH" /etc/dawntrader/comms-active.env
+  if [ ! -f /etc/dawntrader/comms-active.env ]; then
+    install -m 0644 "$STAGE/$SEED_PATH" /etc/dawntrader/comms-active.env
+    [ "$(git hash-object /etc/dawntrader/comms-active.env)" = "$(blob_of "$SEED_PATH")" ] \
+      || die "the seeded /etc/dawntrader/comms-active.env does not equal $SEED_PATH at $SHA"
+    echo "   seeded /etc/dawntrader/comms-active.env from $SHA (verified)"
+  fi
 fi
 if want notices; then
   # dt-deploy-drift.sh runs hourly as langston, so its log and its main-arm cap stamp
   # directory must be langston-writable BEFORE the first run (#1002). /var/log and /var/lib
   # are root-owned, so these paths cannot be swapped under root by another account.
-  touch /var/log/dt-deploy-drift.log
-  chown langston:langston /var/log/dt-deploy-drift.log
+  langston_log /var/log/dt-deploy-drift.log
   mkdir -p /var/lib/dt-deploy-drift
   chown langston:langston /var/lib/dt-deploy-drift
   add_langston_cron dt-deploy-drift.sh '17 * * * * /usr/local/bin/dt-deploy-drift.sh >/dev/null 2>&1'
 fi
 if want readers; then
-  touch /var/log/dt-backup-sync.log
-  chown langston:langston /var/log/dt-backup-sync.log
+  langston_log /var/log/dt-backup-sync.log
+  # The OLD fetchers took no lock, so a fetch in flight during step 3 could re-create
+  # refs/remotes/*. The new ones are installed now: re-assert the mirror's state.
+  mirror_state
   add_langston_cron dt-backup-sync.sh '*/15 * * * * /usr/local/bin/dt-backup-sync.sh >/dev/null 2>&1'
 fi
 
@@ -299,7 +365,16 @@ if want bridges; then
   for u in discord-cc-bridge.service discord-langston-bridge.service; do
     since=$(systemctl show -p ActiveEnterTimestamp --value "$u")
     since_s=$(date -d "$since" +%s 2>/dev/null || echo 0)
-    if [ "$since_s" -lt "$INSTALL_TS" ]; then
+    # A drop-in this manifest does not own changes the unit behind the gate's back.
+    for d in "$UNITS/$u.d" "/etc/systemd/system.control/$u.d" "/run/systemd/system.control/$u.d"; do
+      [ -d "$d" ] || continue
+      for f in "$d"/*; do
+        [ -e "$f" ] || continue
+        case "$f" in "$UNITS/discord-langston-bridge.service.d/self-advance.conf") continue ;; esac
+        echo "   ⚠ UNMANAGED DROP-IN: $f changes $u and is not installed or verified by this script"
+      done
+    done
+    if [ "$since_s" -le "$INSTALL_TS" ]; then
       echo "   ⚠ NOT RESTARTED: $u has run since $since — it still executes the code from BEFORE this install. Restart it in a window with no queued review: systemctl restart $u"
     fi
   done

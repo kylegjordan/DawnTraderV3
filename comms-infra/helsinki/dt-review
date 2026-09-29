@@ -19,13 +19,16 @@
 # neither `2>/dev/null` nor reading stdout alone can drop it (Langston, B-CREDENTIALS C3).
 # That one line is a header, not file content: drop it before numbering or counting.
 #
-# EXIT. 0 served (grep: at least one match) · 1 nothing served: grep found no match, or
-# REFUSED (not in the mirror, not in the tree, not a file, a grep path that matches no file,
-# a head read after a failed fetch) · 2 the caller's request: a flag, a non-hex sha, a sha
-# naming a non-commit, a ref name, a wrong argument count, or not running as langston (all
-# but the non-commit case are decided BEFORE any fetch, so they never touch the network or
-# the mirror — #920, A10) · 3 the mirror or git failed (an unreadable ref or tree, a
-# merge-base or grep error): nothing is claimed about the file.
+# EXIT. 0 served (grep: at least one match) · 1 nothing served: grep found no match ("# 0
+# matches" on stderr: a MEASURED zero), or REFUSED (not in the mirror, ambiguous, not in the
+# tree, not a file, a grep path that matches no file, a head read after a failed fetch) ·
+# 2 the caller's request was refused: a flag, a bad path form, a non-hex sha, a ref name, a
+# wrong argument count, or not running as langston — all decided BEFORE any fetch (#920,
+# A10) — plus two found only by reading the mirror: a sha naming a non-commit, and a
+# hex-named branch · 3 the mirror or git failed (an unreadable object, a failed walk, a
+# re-hash mismatch, a grep that could not read every file): nothing is claimed.
+# Nothing reaches stdout until the whole result is in hand, so a failure never leaves a
+# partial listing behind. `show` re-hashes the commit, every tree on the path and the blob.
 #
 # The mirror is langston-owned and its push URL is DISABLED: nothing here writes upstream.
 # The fetch shares a lock with dt-backup-sync.sh and writes no FETCH_HEAD (A3, A4).
@@ -73,6 +76,24 @@ no_flag() {
   esac
 }
 
+# Path forms git would silently normalise or reject AFTER the fetch are refused here, so a
+# wrong spelling is never reported as a missing file or a broken mirror.
+path_form() {   # cmd path
+  case "$2" in
+    '') refuse "dt-review $1: an empty path. Nothing was read." ;;
+    /*) refuse "dt-review $1: '$2' is absolute — paths are relative to the repository root. Nothing was read." ;;
+    .|./*|*/./*|*/.) refuse "dt-review $1: '$2' — write it without '.' segments. Nothing was read." ;;
+    ..|../*|*/../*|*/..) refuse "dt-review $1: '$2' contains '..'. Nothing was read." ;;
+    @*) refuse "dt-review $1: '$2' starts with '@' — a pin goes BEFORE the pattern: grep @<sha> <pattern> [<path>...]. Nothing was read." ;;
+  esac
+  if [ "$1" = show ]; then
+    case "$2" in
+      */) refuse "dt-review show: '$2' ends in '/' — show reads one file. Nothing was read." ;;
+      :*) refuse "dt-review show: '$2' — pathspec magic is not a file path. Nothing was read." ;;
+    esac
+  fi
+}
+
 # ---- 1. PARSE (no network, no mirror access) ----------------------------------------
 [ $# -ge 1 ] || usage
 cmd=$1
@@ -88,7 +109,7 @@ case "$cmd" in
     pat=$1
     shift
     no_flag grep "$pat"
-    for p in "$@"; do no_flag grep "$p"; done
+    for p in "$@"; do no_flag grep "$p"; path_form grep "$p"; done
     ;;
   show)
     case $# in
@@ -96,8 +117,8 @@ case "$cmd" in
       2) PINNED=1; PIN=${1#@}; path=$2 ;;
       *) usage ;;
     esac
-    [ -n "$path" ] || usage
     no_flag show "$path"
+    path_form show "$path"
     ;;
   ls)
     case $# in
@@ -135,13 +156,13 @@ fi
 # ---- 2. FETCH (under the lock shared with dt-backup-sync.sh) ------------------------
 now() { date -u +%s; }
 
-# Age of the NEWER success stamp, naming which one. Never FETCH_HEAD's mtime: a failed
-# fetch truncates and touches FETCH_HEAD, so its age cannot mean "last success" (A3).
+# Age of the NEWEST of the named success stamps, naming which one. Never FETCH_HEAD's mtime:
+# a failed fetch truncates and touches FETCH_HEAD, so its age cannot mean "last success" (A3).
 age() {
   best=0
   which=
   unreadable=
-  for f in "$FETCH_OK" "$SYNC_PASS"; do
+  for f in "$@"; do
     [ -e "$f" ] || continue
     t=$(awk 'NR==1{print $1}' "$f")
     case "$t" in
@@ -178,11 +199,11 @@ if [ -f "$LOCK" ] && [ -w "$LOCK" ]; then
   flock -w "$LOCK_WAIT" -E 75 9
   rc=$?
   if [ $rc -eq 0 ]; then
-    # `9>&-`: the lock fd must not leak into git or its children, or a detached
-    # `gc --auto` would keep holding the shared lock after this script exits. Bounded: a
-    # stalled connection can no longer hold the lock indefinitely.
+    # `9>&-`: the lock fd never leaks into git's children. Auto-gc is OFF here: it could delete
+    # packs under dt-backup-sync's reproduction clone; dt-backup-sync runs it inside the lock.
+    # Bounded: a stalled connection can no longer hold the lock indefinitely.
     ERR=$(GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2' \
-      timeout "$FETCH_TIMEOUT" git --git-dir="$REPO" fetch --quiet --no-write-fetch-head "$REMOTE" \
+      timeout "$FETCH_TIMEOUT" git -c gc.auto=0 -c maintenance.auto=false --git-dir="$REPO" fetch --quiet --no-write-fetch-head "$REMOTE" \
       "+refs/heads/$BRANCH:refs/heads/$BRANCH" 2>&1 9>&-)
     frc=$?
     if [ $frc -eq 0 ]; then
@@ -208,6 +229,11 @@ else
   REASON="cannot open the fetch lock $LOCK"
 fi
 
+# Scratch space for verified output: mode 0700, removed on exit. Repo bytes only, never
+# anyone's private data; still never a fixed path in shared /tmp.
+TMPD=$(mktemp -d) || broken "cannot create a temporary directory"
+trap 'rm -rf "$TMPD"' EXIT
+
 # The POSITIVE CONTROL for every absence reported below: the branch head must resolve to a
 # COMMIT whose TREE is readable. Otherwise "not in the mirror" or "not in the tree" would be
 # claims the instrument cannot make (#546/#568), so it exits 3 instead.
@@ -225,14 +251,31 @@ case "$FETCH" in
   *)      LAST="FAILED ($REASON)" ;;
 esac
 
+# An ABSENCE claim also needs the whole object store readable: the head's newest objects can
+# be fine while an older pack is not, and git then reports "no such object" for what is there.
+store_readable() {
+  for f in "$REPO"/objects/pack/*.pack "$REPO"/objects/pack/*.idx "$REPO"/objects/[0-9a-f][0-9a-f]; do
+    [ -e "$f" ] || continue
+    if [ -d "$f" ]; then [ -r "$f" ] && [ -x "$f" ] || { STORE_ERR="unreadable: $f"; return 1; }
+    else [ -f "$f" ] && [ -r "$f" ] || { STORE_ERR="unreadable: $f"; return 1; }; fi
+  done
+  if [ -f "$REPO/objects/info/alternates" ]; then
+    while IFS= read -r alt; do
+      case "$alt" in ''|'#'*) continue ;; esac
+      [ -d "$alt" ] && [ -r "$alt" ] && [ -x "$alt" ] || { STORE_ERR="unreadable alternate: $alt"; return 1; }
+    done < "$REPO/objects/info/alternates"
+  fi
+  return 0
+}
+
 # ---- 3. RESOLVE what to read --------------------------------------------------------
 LOUD=
 if [ -z "$PINNED" ]; then
   if [ "$FETCH" != ok ]; then
     case "$FETCH" in
-      busy)  say "REFUSED: $REASON; mirror head is $HEAD from $(age) — no head read served" ;;
-      local) say "REFUSED: no fetch was attempted ($REASON); mirror head is $HEAD from $(age) — no head read served" ;;
-      *)     say "REFUSED: fetch from GitHub failed; mirror head is $HEAD from $(age) — no head read served"
+      busy)  say "REFUSED: $REASON; mirror head is $HEAD from $(age "$FETCH_OK" "$SYNC_PASS") — no head read served" ;;
+      local) say "REFUSED: no fetch was attempted ($REASON); mirror head is $HEAD from $(age "$FETCH_OK" "$SYNC_PASS") — no head read served" ;;
+      *)     say "REFUSED: fetch failed; mirror head is $HEAD from $(age "$FETCH_OK" "$SYNC_PASS") — no head read served"
              say "dt-review: reason: $REASON" ;;
     esac
     exit 1
@@ -242,22 +285,31 @@ if [ -z "$PINNED" ]; then
 else
   SHA=$(git --git-dir="$REPO" rev-parse --verify --quiet "$PIN^{commit}")
   if [ -z "$SHA" ]; then
-    # Why did it not resolve? Only a clean "no such commit" may be reported as absence.
+    # Why did it not resolve? Only a CLEAN "no such commit" may be reported as absence.
     t=$(git --git-dir="$REPO" cat-file -t "$PIN" 2>&1)
     case "$t" in
-      blob|tree|tag) refuse "$PIN names a $t, not a commit. dt-review pins take a COMMIT id." ;;
+      blob|tree) refuse "$PIN names a $t, not a commit. dt-review pins take a COMMIT id." ;;
+      tag)       refuse "$PIN names a tag that does not resolve to a commit." ;;
     esac
-    cands=$(git --git-dir="$REPO" rev-parse --disambiguate="$PIN" 2>&1)
-    [ $? -eq 0 ] || broken "could not look $PIN up in the mirror" "$cands"
+    cands=$(git --git-dir="$REPO" rev-parse --disambiguate="$PIN" 2>"$TMPD/e")
+    drc=$?
+    [ $drc -eq 0 ] && [ ! -s "$TMPD/e" ] || broken "could not look $PIN up in the mirror" "$(cat "$TMPD/e")"
     nc=0
     for o in $cands; do
-      [ "$(git --git-dir="$REPO" cat-file -t "$o" 2>&1)" = commit ] && nc=$((nc + 1))
+      ot=$(git --git-dir="$REPO" cat-file -t "$o" 2>&1) || broken "$PIN matches object $o, which the mirror cannot read" "$ot"
+      case "$ot" in
+        commit) nc=$((nc + 1)) ;;
+        tag) git --git-dir="$REPO" rev-parse --verify --quiet "$o^{commit}" >/dev/null && nc=$((nc + 1)) ;;
+      esac
     done
     if [ "$nc" -gt 1 ]; then
       say "REFUSED: $PIN is ambiguous in the mirror ($nc commits share that prefix) — give more of the sha"
-    else
-      say "REFUSED: $PIN is not in the mirror (mirror head $HEAD, fetched $(age); last fetch $LAST)"
+      exit 1
     fi
+    # One commit that exists but will not resolve is a damaged object, not an absent one.
+    [ "$nc" -eq 0 ] || broken "$PIN names a commit the mirror holds but cannot read"
+    store_readable || broken "cannot claim $PIN is absent: $STORE_ERR"
+    say "REFUSED: $PIN is not in the mirror ($BRANCH head $HEAD, fetched $(age "$FETCH_OK" "$SYNC_PASS"); last fetch $LAST; other branches last synced $(age "$SYNC_PASS"))"
     exit 1
   fi
   # A 7-39 character name can resolve as a BRANCH before it resolves as an object id; a
@@ -267,13 +319,16 @@ else
     *) refuse "'$PIN' resolved to $SHA, which is not that object id (a ref with a hex name?). Nothing was read." ;;
   esac
   e=$(git --git-dir="$REPO" cat-file -e "$SHA^{tree}" 2>&1) || broken "the tree of $SHA is unreadable in the mirror" "$e"
-  git --git-dir="$REPO" merge-base --is-ancestor "$SHA" "refs/heads/$BRANCH"
+  # Against the SAME head this call reports. Any message from git is a failed walk (git
+  # before 2.45 can exit 1 on an unreadable commit), and a failed walk is never "off-branch".
+  mb=$(git --git-dir="$REPO" merge-base --is-ancestor "$SHA" "$HEAD" 2>&1)
   rc=$?
+  [ -z "$mb" ] || broken "could not tell whether $SHA is on $BRANCH" "$mb"
   case $rc in
     0) PLACE="on $BRANCH" ;;
     1) PLACE="OFF $BRANCH"
        LOUD="OFF-BRANCH: $SHA is not an ancestor of $BRANCH — content is exact, provenance is NOT the graded ref" ;;
-    *) broken "could not tell whether $SHA is on $BRANCH (merge-base exit $rc)" ;;   # never "off-branch"
+    *) broken "could not tell whether $SHA is on $BRANCH (merge-base exit $rc)" ;;
   esac
   if [ "$FETCH" != ok ]; then
     D="DEGRADED: fetch failed; content is exact for $SHA (content-addressed)"
@@ -283,59 +338,95 @@ else
   fi
 fi
 
-# ---- 4. SERVE -----------------------------------------------------------------------
+# ---- 4. SERVE — every result is complete before anything reaches stdout ----------------
 provenance() {
-  say "# $1 at $SHA — $PLACE (mirror fetched $(age); last fetch $LAST)"
+  say "# $1 at $SHA — $PLACE (mirror fetched $(age "$FETCH_OK" "$SYNC_PASS"); last fetch $LAST)"
   if [ -n "$LOUD" ]; then
     say "$LOUD"
     printf '%s\n' "$LOUD"
   fi
 }
+# Re-hash an object from its bytes: git does not re-verify an object's hash when it walks a
+# tree or streams a blob, and the mirror's store is writable by other accounts (A11).
+rehash() {  # type oid -> the bytes in $TMPD/obj, or exit 3
+  git --git-dir="$REPO" cat-file "$1" "$2" > "$TMPD/obj" 2> "$TMPD/e" || broken "cannot read $1 $2" "$(cat "$TMPD/e")"
+  # --git-dir: git 2.43's `hash-object -t tree` SEGFAULTS outside a repository (measured on
+  # Helsinki, exit 139). Nothing is written (no -w).
+  h=$(git --git-dir="$REPO" hash-object --no-filters -t "$1" --stdin < "$TMPD/obj")
+  [ "$h" = "$2" ] || broken "$1 $2 re-hashes to $h: the mirror's copy is NOT the committed content"
+}
+G="git -c color.grep=never -c grep.column=false -c grep.lineNumber=false -c grep.fullName=false --git-dir=$REPO"
 
 case "$cmd" in
   show)
-    # ls-tree tells "no such path" (exit 0, no matching line) apart from "the mirror cannot
-    # read a tree on the way" (non-zero). `cat-file -t` reported both as a missing path.
-    ent=$(git -c core.quotePath=false --git-dir="$REPO" ls-tree --format='%(objecttype) %(path)' "$SHA" -- "$path" 2>&1)
-    [ $? -eq 0 ] || broken "cannot read the trees of $SHA" "$ent"
-    kind=$(printf '%s\n' "$ent" | DTR_PATH=$path awk '{t=$1; sub(/^[^ ]* /,""); if ($0 == ENVIRON["DTR_PATH"]) {print t; exit}}')
-    case "$kind" in
-      blob) ;;
-      '') say "REFUSED: '$path' is not in the tree at $SHA — nothing served"; exit 1 ;;
-      *)  say "REFUSED: '$path' at $SHA is a $kind, not a file — nothing served"; exit 1 ;;
-    esac
+    rehash commit "$SHA"
+    cur=$(sed -n '1s/^tree //p' "$TMPD/obj")
+    [ ${#cur} -eq 40 ] || broken "commit $SHA has no tree line"
+    rest=$path
+    while :; do
+      comp=${rest%%/*}
+      rehash tree "$cur"
+      ent=$(git -c core.quotePath=false --git-dir="$REPO" ls-tree "$cur" -- "$comp" 2>&1) || broken "cannot list tree $cur" "$ent"
+      line=$(printf '%s\n' "$ent" | DTR_C=$comp awk -F'\t' '$2 == ENVIRON["DTR_C"] {print $1; exit}')
+      if [ -z "$line" ]; then
+        store_readable || broken "cannot claim '$path' is absent: $STORE_ERR"
+        say "REFUSED: '$path' is not in the tree at $SHA — nothing served"; exit 1
+      fi
+      set -- $line          # mode type oid (ls-tree's fixed, space-free first field)
+      if [ "$rest" = "$comp" ]; then
+        [ "$2" = blob ] || { say "REFUSED: '$path' at $SHA is a $2, not a file — nothing served"; exit 1; }
+        break
+      fi
+      [ "$2" = tree ] || { say "REFUSED: '$path' is not in the tree at $SHA ('$comp' is a $2) — nothing served"; exit 1; }
+      cur=$3
+      rest=${rest#*/}
+    done
+    rehash blob "$3"
     provenance "show $path"
-    git --git-dir="$REPO" cat-file blob "$SHA:$path" || exit 3
+    cat "$TMPD/obj"
     ;;
   grep)
-    provenance "grep '$pat'"
+    # Every path must name at least one file BEFORE the search, so a mistyped path is never
+    # silently skipped (rc 0) or reported as "no matches" (rc 1). Pathspec magic (':(...)')
+    # cannot be proven by listing and is passed through.
+    for p in "$@"; do
+      case "$p" in :*) continue ;; esac
+      hit=$($G grep -l --max-count=1 -e '' "$SHA" -- "$p" 2>"$TMPD/e" | sed -n 1p)
+      [ -s "$TMPD/e" ] && broken "could not check path '$p'" "$(cat "$TMPD/e")"
+      [ -n "$hit" ] || hit=$(git --git-dir="$REPO" ls-tree -r --name-only "$SHA" -- "$p" | sed -n 1p)
+      [ -n "$hit" ] || { say "REFUSED: path '$p' matches no file at $SHA — nothing was searched"; exit 1; }
+    done
     if [ $# -gt 0 ]; then
-      git --git-dir="$REPO" grep -n -e "$pat" "$SHA" -- "$@"
+      $G grep -G -n -e "$pat" "$SHA" -- "$@" > "$TMPD/out" 2> "$TMPD/e"
     else
-      git --git-dir="$REPO" grep -n -e "$pat" "$SHA"
+      $G grep -G -n -e "$pat" "$SHA" > "$TMPD/out" 2> "$TMPD/e"
     fi
     rc=$?
     case $rc in
-      0) ;;
-      1) # A pathspec that reaches no file ALSO exits 1. Prove each path names at least one
-         # file (with grep's own pathspec engine) before calling the result "no matches".
-         for p in "$@"; do
-           hit=$(git --git-dir="$REPO" grep -l -e '' "$SHA" -- "$p" | sed -n 1p)
-           [ -n "$hit" ] || hit=$(git --git-dir="$REPO" ls-tree -r --name-only "$SHA" -- "$p" | sed -n 1p)
-           if [ -z "$hit" ]; then
-             say "REFUSED: path '$p' matches no file at $SHA — the search did not cover it"
-             exit 1
-           fi
-         done
-         if [ $# -gt 0 ]; then say "# 0 matches for '$pat' at $SHA in: $*"
-         else say "# 0 matches for '$pat' at $SHA (whole tree)"; fi ;;
-      *) say "dt-review: git grep failed (exit $rc) — no result claimed"; rc=3 ;;
+      0|1) ;;
+      *) broken "git grep failed (exit $rc)" "$(cat "$TMPD/e")" ;;
     esac
+    # A file git could not read is SKIPPED by git grep, which still exits by hit count.
+    if [ -s "$TMPD/e" ]; then
+      cat "$TMPD/e" >&2
+      broken "git grep could not read every file — no result claimed"
+    fi
+    provenance "grep '$pat'"
+    if [ $rc -eq 0 ]; then
+      cat "$TMPD/out"
+    elif [ $# -gt 0 ]; then
+      say "# 0 matches for '$pat' at $SHA in: $*"
+    else
+      say "# 0 matches for '$pat' at $SHA (whole tree)"
+    fi
     exit $rc
     ;;
   ls)
+    git --git-dir="$REPO" ls-tree -r --name-only "$SHA" > "$TMPD/out" 2> "$TMPD/e"
+    lrc=$?
+    [ $lrc -eq 0 ] && [ ! -s "$TMPD/e" ] || broken "the listing is incomplete (ls-tree exit $lrc)" "$(cat "$TMPD/e")"
     provenance ls
-    git --git-dir="$REPO" ls-tree -r --name-only "$SHA" || exit 3
+    cat "$TMPD/out"
     ;;
   ref)
     printf '%s\n' "$HEAD"
