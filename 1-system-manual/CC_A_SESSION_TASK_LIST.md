@@ -62,7 +62,7 @@
 | 12.6 | decommission residue (rule-18 removal) | batch | after 12.4 |
 
 ### ➕ NEXT, AND NEW HOMES FROM `B-GOV-REPORTING` (2026-09-29)
-- ▶ **NEXT: `B-PLAN-CURRENCY-CHECK`** — sprint plan row 1. Keeps the sprint plan true: the checker requires a batch close to touch its own plan line; a weekly census alert; the inventory scripts refuse to write the governed docs; `order.py`'s frozen coverage assertion fixed or retired; an audit of the inventory's UNCONFIRMED prune reasons.
+- ▶ **NEXT: `B-PLAN-CURRENCY-CHECK`** — sprint plan row 1. Keeps the sprint plan true: the checker requires a batch close to touch its own plan line; a weekly census alert; the inventory scripts refuse to write the governed docs; `order.py`'s frozen coverage assertion fixed or retired; an audit of the inventory's UNCONFIRMED prune reasons; a census of the homes that still carry a date (fourteen HOME lines, CC-C's, handed to their owner).
 - **After live, crew tooling (`PRE_LIVE_SPRINT.md`):** `B-RULES-CHANGE-CLASS` (the rules_change class, before `B-GATE-GUARD`) · `B-CHECKER-BLOCK-GATE` (`#1107`, gated on measuring the checker's precision) · `B-GOV-LEDGER-GRADE` (`#1099`).
 - ✅ **`#947` `B-GOV-CLASS-PARSE` CLOSED 2026-09-29 as `#968`'s duplicate** (Langston) — the parser fix is CC-C's `B-CHANGE-CLASS-PARSER`.
 
@@ -127,7 +127,7 @@ Kyle's diagnosis (08-20 → 08-31): every step burns time on sessions announcing
 | `#571` `B-WS-SUBSCRIBE-BOUNDARY-CLASS` | the venue price-feed subscribe boundary; obligations #44 #45 #46 (09-02: a 13.8-minute post-restart gap with no alert) | Phase 19, mine |
 | `#578` `B-TRADING-ENGINE-REMOVAL` | delete the legacy trading engine that runs in neither paper nor live mode (Kyle-ruled legacy, July) | **own batch, UNPLACED — to be given a row (see §4)** |
 | `#582` `B-FINALSCORE-TELEMETRY-RETIRE` | retire the report-only readers of the retired score (the prerequisite for dropping its columns) | **own batch, UNPLACED — to be given a row (see §4)** |
-| Langston's `AWAITING KYLE` block | ✅ **RE-HOMED BY KYLE 2026-08-30 to Infra Claude's instruction-file workstream; OUT of CC-A's queue.** The fail-open vs fail-closed question and the two standing-rule proposals go with it. | **not CC-A's — do not put it to Kyle** |
+| Langston's `AWAITING KYLE` block | ⛔ **SUPERSEDED 2026-09-29 — see the ANSWERED line above:** this row said Kyle re-homed the block to Infra Claude on 08-30; his 08-30 re-home was the MEMORY trim. | **answered by Kyle 2026-07-10; only the REPORT label goes back to him** |
 | the five event-wait alerts CC-A owns | acknowledged = silenced (#982); restored when the undo command exists | nothing urgent (Kyle 09-02) |
 | `#990` (was #986) | GitHub began refusing anonymous downloads from both Hetzner servers; fixed 09-02 with two read-only deploy keys Kyle registered; left for Kyle: delete the stale Replit read/write key | resolved; Replit key = Kyle's click |
 

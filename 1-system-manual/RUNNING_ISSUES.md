@@ -3115,7 +3115,7 @@ During the 33-min sustained paper window (session `paper_cHEmpUkX01`), every `he
 
 ### #646 OPEN 2026-07-31 (Langston found it against his OWN mandated behaviour; CC-B filing + owner) — ★ §10.5's WRITTEN INSTRUCTION MANUFACTURES THE BLIND SPOT IT EXISTS TO PREVENT — **DOC LEG, DELIBERATELY SPLIT OUT AND NOT RIDING ANY BATCH**
 
-➕ **2026-09-29 (CC-A, `B-GOV-REPORTING` r6 + r10) — THE THREE NAMED SITES NOW CARRY THE CORRECTION:** `CLAUDE.md` §10.5 step 3 and the shared `MEMORY.md` item 3 (r6, `9608a3da5`, Langston's 09-13 wording: route an event-wait alert, do not ack it), and `ALERT_HANDLING_PROTOCOL.md` step 4 (r10, at Step 11 — a reader found r6 had left it). The code leg (`#638`: an ack should not be able to create a blind spot) is untouched and stays CC-B's.
+➕ **2026-09-29 (CC-A, `B-GOV-REPORTING` r6 + r10) — THE THREE NAMED SITES NOW CARRY THE CORRECTION:** `CLAUDE.md` §10.5 step 3 and the shared `MEMORY.md` — at its hook-layer paragraph, not item 3, the line this entry names (r6, `9608a3da5`, Langston's 09-13 wording: route an event-wait alert, do not ack it; item 3 does not carry it), and `ALERT_HANDLING_PROTOCOL.md` step 4 (r10, at Step 11 — a reader found r6 had left it). The code leg (`#638`: an ack should not be able to create a blind spot) is untouched and stays CC-B's.
 
 **HOME: `B-ALERT-ACK-PROCEDURE-DOCFIX`, owner CC-B. ⚠️ SPLIT FROM `B-ALERT-DEDUPE-REASON-DRIFT` ON LANGSTON'S RULING AND THAT SPLIT IS THE POINT: "a correction filed anywhere other than §10.5 itself LOSES TO THE LIVE WRONG INSTRUCTION sitting in three auto-loaded files."** ⇒ **the doc fix is IMMEDIATE and SEPARATE; the batch (#638) is the real fix — an ack should not be ABLE to create a blind spot.** **Do NOT let this ride #637/#638.**
 
