@@ -441,6 +441,40 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       expect(codeOf2d(join(REPO, 'server/routes.ts'))).toContain("apiRouter.all('*'");
     });
 
+    // Step-4 nit (b), Langston: full-line comments are stripped first, but a "/*" inside a TRAILING line comment or a
+    // STRING still opens a false block match that blanks code up to the next "*/" — silently, as it did through three
+    // earlier blocks. Nothing is blanked today (the one false opener in the scan set has no "*/" after it), so the
+    // property is PINNED as an assertion instead of trusted as an absence.
+    const falseOpeners = (src: string): number[] => {
+      const at: number[] = [];
+      let offset = 0;
+      for (const line of src.split('\n')) {
+        const t = line.trimStart();
+        if (!t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*')) {
+          for (let k = line.indexOf('/*'); k >= 0; k = line.indexOf('/*', k + 2)) {
+            const before = line.slice(0, k);
+            const odd = (q: string) => before.split(q).length % 2 === 0;
+            if (before.includes('//') || odd("'") || odd('"') || odd('`')) at.push(offset + k);
+          }
+        }
+        offset += line.length + 1;
+      }
+      return at;
+    };
+    const openerReport = () => files2d.flatMap((f) => {
+      const src = read(f);
+      return falseOpeners(src).map((pos) => ({ file: f.replace(REPO, '').replace(/\\/g, '/'), closes: src.indexOf('*/', pos + 2) >= 0 }));
+    });
+
+    // MUTATION: append "// see /api/*" to any code line that has a block comment below it and this fails.
+    it('no false block-comment opener (in a trailing comment or a string) is followed by a "*/" that would blank code', () => {
+      expect(openerReport().filter((o) => o.closes)).toEqual([]);
+    });
+
+    it('POSITIVE CONTROL: the opener detector sees the known in-string "xstock_spot/*" in the geometry-sweep script', () => {
+      expect(openerReport().map((o) => o.file)).toContain('/scripts/b5-w2a-geometry-sweep.ts');
+    });
+
     it('POSITIVE CONTROL: the same scan finds live siblings of what was deleted, so an empty result is not blindness', () => {
       expect(hitsFor(/diagnostics\/aj17/).length).toBeGreaterThan(0);       // AJ17's routes stayed
       expect(hitsFor(/\bgetEffectiveATR\b/).length).toBeGreaterThan(0);     // the word boundary is real

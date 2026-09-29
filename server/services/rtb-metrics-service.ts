@@ -47,6 +47,7 @@ export type OpenFailStage =
   | 'EV_REJECT'           // Net-Expectancy gate (11.8B)
   | 'SIZING_INVALID'      // quantity <= 0 / no valid portfolio value
   | 'UNCLASSIFIABLE'      // open/trade asset-class could not be resolved
+  | 'STAMP_MISSING'       // B-SIZING-DEC-RESTORE 2d: a signal reached execution entry with no valid carried class stamp (refused, never re-derived) — kept apart from UNCLASSIFIABLE so the two causes never share a counter
   | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
   | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
   | 'VALIDATE_REJECTED'   // P19-B8.5 (OBJ-8): Kraken validate=true returned a DEFINITIVE order-level rejection — the venue would refuse this order, so paper refuses it too (paper-only leg)
@@ -154,7 +155,7 @@ class RtbMetricsService {
     }
     // P19-B6.5e: initialize the open-stage failure breakdown
     const stages: OpenFailStage[] = [
-      'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'DEPTH_GATE',
+      'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'STAMP_MISSING', 'DEPTH_GATE',
       'FILL_REJECTED', 'MAKER_MARKETABLE_DROPPED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
     ];
     for (const stage of stages) {

@@ -1286,8 +1286,12 @@ export class SignalOrchestrator {
       // the active engine — so this cap counted 0 opens on every active signal and never limited anything. Pending
       // makers are included: they hold a slot, as in the engine's own count.
       const openPositions = await storage.getActiveOpenPositions(sizingContext.mode);
-      const openSymbols = openPositions.map((p) => p.symbol);
-      const capDecision = await checkPerUnderlyingCap(rawSignal.symbol, openSymbols);
+      // The cap counts SAME-CLASS opens only (Langston Step-4 FINDING-1); the class is the pipe's stamp, guaranteed
+      // non-empty by the STAMP_MISSING throw above, and each position carries its own NOT NULL column.
+      const capDecision = await checkPerUnderlyingCap(
+        { symbol: rawSignal.symbol, assetClass: sizingContext.assetClass },
+        openPositions.map((p) => ({ symbol: p.symbol, assetClass: p.assetClass })),
+      );
       console.log(formatDecisionLog(rawSignal.symbol, capDecision));
       if (!capDecision.allowed) {
         // P19-B8.4b: POST-SQE reject (passed the SQE, dropped before the RTB queue) — kept distinct from the

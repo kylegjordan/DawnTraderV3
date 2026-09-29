@@ -6086,8 +6086,8 @@ export class ActiveExecutionEngine {
       const _amrStamp = asValidAssetClass(signal.metadata?.assetClass);
       if (!_amrStamp) {
         console.error(`[B-SIZING-DEC-RESTORE][STAMP_MISSING_REFUSED] ${signal.symbol}: no valid asset-class stamp at execution entry (${String(signal.metadata?.assetClass)}) — refused, not re-derived from the ticker`);
-        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'UNCLASSIFIABLE', 'no valid asset-class stamp at execution entry');
-        return { opened: false, stage: 'UNCLASSIFIABLE', reason: 'no valid asset-class stamp at execution entry — refused, not re-derived' };
+        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'STAMP_MISSING', 'no valid asset-class stamp at execution entry');
+        return { opened: false, stage: 'STAMP_MISSING', reason: 'no valid asset-class stamp at execution entry — refused, not re-derived' };
       }
       const _amrClass = _amrStamp;
       if (_amrClass !== null) {

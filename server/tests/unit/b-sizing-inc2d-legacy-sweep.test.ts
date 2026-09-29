@@ -35,6 +35,10 @@ const REPO = resolve(__dirname, '../../..');
 const stripComments = (src: string) => src.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
 const code = (rel: string) => stripComments(readFileSync(join(REPO, rel), 'utf-8'));
 
+// The cap takes positions WITH their stamped class (Langston Step-4 FINDING-1); these helpers keep the tests readable.
+const crypto = (symbol: string) => ({ symbol, assetClass: 'crypto_spot' });
+const xstock = (symbol: string) => ({ symbol, assetClass: 'xstock_spot' });
+
 function seed() {
   _rows['b67_3_enabled'] = true;
   _rows['b67_3_universe_split_active'] = false;
@@ -44,7 +48,7 @@ beforeEach(() => { for (const k of Object.keys(_rows)) delete _rows[k]; _throw =
 
 describe('P-9 — the per-underlying cap reads its three rows with no fallback', () => {
   it('CONTROL: the seeded rows (true, false, 2) give a real decision — the cap reached at 2 open', async () => {
-    const d = await checkPerUnderlyingCap('ETH/USD', ['ETH/USD', 'ETH/EUR']);
+    const d = await checkPerUnderlyingCap(crypto('ETH/USD'), [crypto('ETH/USD'), crypto('ETH/EUR')]);
     expect(d.allowed).toBe(false);
     expect(d.reason).toBe('cap_reached');
     expect(d.cap).toBe(2);
@@ -53,7 +57,7 @@ describe('P-9 — the per-underlying cap reads its three rows with no fallback',
   // MUTATION: put `?? false` back on the enabled read and this fails (a missing row would silently DISABLE the cap).
   it('a MISSING enabled row is a config error — never "cap off"', async () => {
     delete _rows['b67_3_enabled'];
-    await expect(checkPerUnderlyingCap('ETH/USD', [])).rejects.toBeInstanceOf(PerUnderlyingCapConfigError);
+    await expect(checkPerUnderlyingCap(crypto('ETH/USD'), [])).rejects.toBeInstanceOf(PerUnderlyingCapConfigError);
   });
 
   it('a missing split row, a missing cap row, and malformed values are config errors too', async () => {
@@ -61,17 +65,45 @@ describe('P-9 — the per-underlying cap reads its three rows with no fallback',
       ['b67_3_max_concurrent_per_underlying', '2'], ['b67_3_max_concurrent_per_underlying', 0], ['b67_3_enabled', 'true']] as const) {
       seed();
       if (v === undefined) delete _rows[k]; else _rows[k] = v;
-      await expect(checkPerUnderlyingCap('ETH/USD', []), `${k}=${String(v)}`).rejects.toBeInstanceOf(PerUnderlyingCapConfigError);
+      await expect(checkPerUnderlyingCap(crypto('ETH/USD'), []), `${k}=${String(v)}`).rejects.toBeInstanceOf(PerUnderlyingCapConfigError);
     }
   });
 
   it('the two failure classes are told apart: config_missing vs lookup_failed', async () => {
     delete _rows['b67_3_enabled'];
-    const cfg = await checkPerUnderlyingCap('ETH/USD', []).catch((e) => e);
+    const cfg = await checkPerUnderlyingCap(crypto('ETH/USD'), []).catch((e) => e);
     expect(classifyPerUnderlyingCapFailure(cfg)).toBe('config_missing');
     _throw = new Error('connection reset');
-    const net = await checkPerUnderlyingCap('ETH/USD', []).catch((e) => e);
+    const net = await checkPerUnderlyingCap(crypto('ETH/USD'), []).catch((e) => e);
     expect(classifyPerUnderlyingCapFailure(net)).toBe('lookup_failed');
+  });
+});
+
+describe('Step-4 FINDING-1 — the cap counts SAME-CLASS opens only', () => {
+  // DASH is the one base measured under both classes in closed_trades (Langston, at 7c43e2422).
+  // MUTATION: drop the class comparison inside checkPerUnderlyingCap and this fails (open=2 → cap_reached).
+  it('two open DASH xStock positions do not count against a DASH crypto signal', async () => {
+    const d = await checkPerUnderlyingCap(crypto('DASH/USD'), [xstock('DASH/USD'), xstock('DASH/USD')]);
+    expect(d.currentOpenCount).toBe(0);
+    expect(d.allowed).toBe(true);
+  });
+
+  it('CONTROL: two open DASH crypto positions DO reach the cap for the same signal', async () => {
+    const d = await checkPerUnderlyingCap(crypto('DASH/USD'), [crypto('DASH/USD'), crypto('DASH/EUR'), xstock('DASH/USD')]);
+    expect(d.currentOpenCount).toBe(2);
+    expect(d.reason).toBe('cap_reached');
+  });
+
+  it('(source-text) the VTS hands the cap its entry-resolved class and each open record with its own class', () => {
+    const src = code('server/services/vts-runner.ts');
+    expect(src).toContain('.map((t) => ({ symbol: t.symbol, assetClass: t.assetClass }));');
+    expect(src).toContain('const capDecision = await checkPerUnderlyingCap({ symbol, assetClass: _assetClass }, openPositions);');
+  });
+
+  it('a candidate with no class stamp is REFUSED as a failed lookup, never counted against everything or nothing', async () => {
+    const e = await checkPerUnderlyingCap({ symbol: 'DASH/USD', assetClass: '' }, [crypto('DASH/USD')]).catch((x) => x);
+    expect(e).toBeInstanceOf(Error);
+    expect(classifyPerUnderlyingCapFailure(e)).toBe('lookup_failed');
   });
 });
 
@@ -92,13 +124,15 @@ describe('P-9 — both callers REFUSE on either failure, each under its own reas
 });
 
 describe('P-7 — a missing class stamp is refused, not re-derived', () => {
-  it('execution entry refuses a signal with no valid stamp (UNCLASSIFIABLE), with no ticker fallback at that read', () => {
+  // Stage renamed at Step 4 (Langston nit a): STAMP_MISSING, so it never shares a counter with an unclassifiable SYMBOL.
+  it('execution entry refuses a signal with no valid stamp (STAMP_MISSING), with no ticker fallback at that read', () => {
     const src = code('server/services/active-execution-engine.ts');
     const at = src.indexOf('const _amrStamp = asValidAssetClass(signal.metadata?.assetClass);');
     expect(at).toBeGreaterThan(-1);
     const block = src.slice(at, at + 900);
     expect(block).toContain('[B-SIZING-DEC-RESTORE][STAMP_MISSING_REFUSED]');
-    expect(block).toContain("return { opened: false, stage: 'UNCLASSIFIABLE'");
+    expect(block).toContain("return { opened: false, stage: 'STAMP_MISSING'");
+    expect(block).not.toContain("stage: 'UNCLASSIFIABLE'");
     expect(block).not.toContain('safeResolveAssetClass(signal.symbol');
   });
 
@@ -128,11 +162,15 @@ describe('fresh-reader round 1 folds — the cap counts real positions; manual c
   // MUTATION: point the cap back at storage.getActiveTrades (the legacy `trades` table, 0 rows on staging) and this fails.
   it("the active lane's per-underlying cap counts the ENGINE's open positions, not the legacy trades table", () => {
     const src = code('server/services/signal-orchestrator.ts');
-    const at = src.indexOf('const capDecision = await checkPerUnderlyingCap(rawSignal.symbol, openSymbols);');
+    const at = src.indexOf('const capDecision = await checkPerUnderlyingCap(');
     expect(at).toBeGreaterThan(-1);
     const before = src.slice(Math.max(0, at - 400), at);
     expect(before).toContain('const openPositions = await storage.getActiveOpenPositions(sizingContext.mode);');
     expect(before).not.toContain('getActiveTrades');
+    // …and hands the cap each position WITH its class, and the candidate with the pipe's stamp (FINDING-1).
+    const call = src.slice(at, at + 300);
+    expect(call).toContain('{ symbol: rawSignal.symbol, assetClass: sizingContext.assetClass }');
+    expect(call).toContain('openPositions.map((p) => ({ symbol: p.symbol, assetClass: p.assetClass }))');
   });
 
   it('both manual close writers carry the asset class of the position (was the crypto_spot column default)', () => {

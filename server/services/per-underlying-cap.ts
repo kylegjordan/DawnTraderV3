@@ -109,10 +109,24 @@ export function classifyPerUnderlyingCapFailure(err: unknown): PerUnderlyingCapU
   return err instanceof PerUnderlyingCapConfigError ? 'config_missing' : 'lookup_failed';
 }
 
+/**
+ * One position as the cap sees it: its ticker and its STAMPED asset class — carried from the row or the pipe, never
+ * re-derived from the ticker (SYSTEM_IMPACT_MAP carry-the-stamp invariant).
+ */
+export interface CapPosition {
+  symbol: string;
+  assetClass: string;
+}
+
 export async function checkPerUnderlyingCap(
-  symbol: string,
-  openTradeSymbols: string[],
+  candidate: CapPosition,
+  openPositions: readonly CapPosition[],
 ): Promise<PerUnderlyingCapDecision> {
+  const symbol = candidate.symbol;
+  // A candidate with no class cannot be compared; the throw is a lookup failure, so both callers REFUSE (P-9).
+  if (!candidate.assetClass) {
+    throw new Error(`[B-SIZING-DEC-RESTORE] per-underlying cap: ${symbol} carries no asset-class stamp`);
+  }
   // Resolve module_constants (the global wildcard rows the migrations seed: enabled true, split true, cap 2).
   // ⛔ B-SIZING-DEC-RESTORE 2d (P-9): NO FALLBACKS (rule 15). The comment that stood here said "default to safe
   // values" and did the OPPOSITE — a missing `b67_3_enabled` row DISABLED the cap (`?? false`), and a missing cap row
@@ -135,11 +149,15 @@ export async function checkPerUnderlyingCap(
   const parsed = fxConversionService.parseSymbol(symbol);
   const baseCurrency = parsed.baseCurrency || symbol;
 
-  // Count concurrent opens that share this base currency. We re-parse each
-  // open symbol — performance-acceptable because open-trade lists are
-  // bounded (≤ tens, not thousands).
-  const matchingOpens = openTradeSymbols.filter((sym) => {
-    const otherBase = fxConversionService.parseSymbol(sym).baseCurrency || sym;
+  // Count concurrent opens that share this base currency WITHIN THE CANDIDATE'S ASSET CLASS. We re-parse each
+  // open symbol — performance-acceptable because open-trade lists are bounded (≤ tens, not thousands).
+  // ⛔ B-SIZING-DEC-RESTORE 2d (Langston Step-4 FINDING-1): SAME CLASS ONLY. A base currency is not one underlying
+  // across classes — DASH the coin and DASH the xStock share a base and nothing else (the one base measured under both
+  // classes in closed_trades). Both callers hand this function BOTH classes' opens (one open-positions table; one VTS
+  // map), so the filter lives HERE, where no caller can forget it, and it compares the STAMPED class.
+  const matchingOpens = openPositions.filter((p) => {
+    if (p.assetClass !== candidate.assetClass) return false;
+    const otherBase = fxConversionService.parseSymbol(p.symbol).baseCurrency || p.symbol;
     return otherBase.toUpperCase() === baseCurrency.toUpperCase();
   });
   const currentOpenCount = matchingOpens.length;

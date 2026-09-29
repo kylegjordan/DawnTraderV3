@@ -842,6 +842,31 @@ let shadowDropCount = 0; // count of reject-new-at-cap events (surfaced + alerte
 const shadowOpenBySignal: Map<string, string> = new Map();
 
 /**
+ * B-SIZING-DEC-RESTORE 2d (Langston Step-4 FINDING-3): how a VTS null reason is COUNTED and ARCHIVED — one table for
+ * both. A POST-SIGNAL rejection means the strategy DID produce a signal and a later gate turned it away: it is counted
+ * as `rejected`, not as a strategy null, and archived under that gate's stage. Anything absent from the table is a true
+ * strategy null (`strategy_internal`).
+ * The per-underlying cap's three reasons were counted as strategy nulls (`per_underlying_cap` since B67.3; the two
+ * `_unavailable_` reasons of 2d inherited it), so a config outage read as "the strategy found nothing" in the population
+ * `#1070` reads. They are a capacity gate, so `tcl` — the table's own semantics for `max_open_trades`.
+ */
+const VTS_POST_SIGNAL_STAGE: ReadonlyMap<string, 'sqe' | 'tcl'> = new Map<string, 'sqe' | 'tcl'>([
+  ['net_ev_rejected', 'sqe'], // the EV gate is the SQE-equivalent in the VTS
+  ['duplicate_position', 'tcl'], // TCL semantics — already-have-position dedup
+  ['max_open_trades', 'tcl'], // TCL semantics — capacity gate
+  ['per_underlying_cap', 'tcl'],
+  ['per_underlying_cap_unavailable_config_missing', 'tcl'],
+  ['per_underlying_cap_unavailable_lookup_failed', 'tcl'],
+]);
+export function classifyVtsNullReason(detailReason: string): {
+  isPostSignalRejection: boolean;
+  stage: 'sqe' | 'tcl' | 'strategy_internal';
+} {
+  const stage = VTS_POST_SIGNAL_STAGE.get(detailReason);
+  return stage ? { isPostSignalRejection: true, stage } : { isPostSignalRejection: false, stage: 'strategy_internal' };
+}
+
+/**
  * reorg-B4 — the ONE derivation of the per-signal dedupe key, called at ALL three
  * sites (open / rehydration re-seed / close delete) so they are byte-identical by
  * construction (Langston Step-4: the open key and the rehydration key must match
@@ -2218,8 +2243,12 @@ async function generatePhase10Signal(
   // active-trading path in signal-orchestrator.
   try {
     // P19-B7.2c: twins excluded from the clustering/per-underlying gate too (typed tag).
-    const openSymbols = Array.from(openVirtualTrades.values()).filter((t) => t.mtTwin !== true).map((t) => t.symbol);
-    const capDecision = await checkPerUnderlyingCap(symbol, openSymbols);
+    // Same-class opens only (the filter is inside the cap); `_assetClass` is the entry-resolved class, and every open
+    // record carries its own (set at open, and from the asset_class column on rehydration).
+    const openPositions = Array.from(openVirtualTrades.values())
+      .filter((t) => t.mtTwin !== true)
+      .map((t) => ({ symbol: t.symbol, assetClass: t.assetClass }));
+    const capDecision = await checkPerUnderlyingCap({ symbol, assetClass: _assetClass }, openPositions);
     console.log(formatDecisionLog(symbol, capDecision));
     if (!capDecision.allowed) {
       setNullReason('per_underlying_cap');
@@ -5313,25 +5342,13 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         if (!result) {
           // Batch 50: Distinguish true strategy nulls from post-signal rejections
           const detailReason = getNullReason();
-          const isPostSignalRejection = detailReason === 'net_ev_rejected' || detailReason === 'duplicate_position' || detailReason === 'max_open_trades';
+          // One table decides both the counter and the archived stage (classifyVtsNullReason, above).
+          const { isPostSignalRejection, stage: mappedStage } = classifyVtsNullReason(detailReason);
 
-          // B70.1 Step 3.6b: signal-eval reject archive. Map VTS reject reasons
-          // to the canonical reject_stage enum.
-          //   net_ev_rejected     → 'sqe' (EV gate is the SQE-equivalent in VTS)
-          //   duplicate_position  → 'tcl' (TCL semantics — already-have-position dedup)
-          //   max_open_trades     → 'tcl' (TCL semantics — capacity gate)
-          //   conditions_not_met  → 'strategy_internal'
-          //   anything else null  → 'strategy_internal'
+          // B70.1 Step 3.6b: signal-eval reject archive, under the canonical reject_stage from classifyVtsNullReason.
           try {
             const { archiveSignalEval, buildBarProvenance } = await import('./data-archive/signal-eval-archiver.js');
             const { safeResolveAssetClass } = await import('../../shared/asset-classes.js'); // P19-B3a #139: safe variant (alarms + crypto_spot fallback at use site)
-            const stageMap: Record<string, 'sqe' | 'tcl' | 'strategy_internal'> = {
-              net_ev_rejected: 'sqe',
-              duplicate_position: 'tcl',
-              max_open_trades: 'tcl',
-            };
-            const mappedStage =
-              stageMap[detailReason] ?? (isPostSignalRejection ? 'sqe' : 'strategy_internal');
             archiveSignalEval({
       mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
               symbol: pair.symbol,
