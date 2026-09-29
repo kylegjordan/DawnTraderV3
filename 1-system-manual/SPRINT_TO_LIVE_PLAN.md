@@ -8,7 +8,7 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 
 | session | in flight now | disposition |
 |---|---|---|
-| CC-A (Old Claude) | B-GOV-REPORTING — ✅ Langston's gate RAN and APPROVED 2026-09-29 (G1-G4, G6, r7, r8); Steps 5-10 done; Step 11 with Langston — report `Claude Comms and Packages/Batch Completion/B_GOV_REPORTING_COMPLETION_REPORT.md` | FINISH: Langston confirms the completion report (Step 11) |
+| CC-A (Old Claude) | B-GOV-REPORTING — ✅ CLOSED 2026-09-29 (Step 4 APPROVED, r8; Step 11 CONFIRMED 20:31Z) — report `Claude Comms and Packages/Batch Completion/B_GOV_REPORTING_COMPLETION_REPORT.md` | NEXT: `B-PLAN-CURRENCY-CHECK` (row 1) |
 | CC-A (Old Claude) | B-RULES-1e — Step 2 | PAUSE cleanly: crew tooling, after live |
 | CC-A (Old Claude) | B-MEASURE-GATE beyond leg 2 — Step 2 | PAUSE cleanly: after live |
 | CC-A (Old Claude) | B-INSTRUMENTS-OVER-RULES — usage measure to 2026-10-02 | FINISH the measure, then close |

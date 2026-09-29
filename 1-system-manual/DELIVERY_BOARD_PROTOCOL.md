@@ -106,7 +106,7 @@ Done in the SAME session with Langston that splits the new phase into batches (�
 **WHO: the session that will OWN the work creates its own card.** Not Kyle, not Langston, not whoever noticed.
 
 **THE TWO TRIGGERS — these are the moments, and there is no third:**
-1. **A FINDING DURING A BATCH CREATES A NEW BATCH OR SUB-BATCH.** ⇒ **the session that surfaced it creates the card THEN AND THERE**, in the same turn it decides the work is real. ★ **This is the same instant §9.4 requires a named owner and a dated home — the card IS that home made visible.** Do not defer it to "when I start it".
+1. **A FINDING DURING A BATCH CREATES A NEW BATCH OR SUB-BATCH.** ⇒ **the session that surfaced it creates the card THEN AND THERE**, in the same turn it decides the work is real. ★ **This is the same instant §9.4 requires a named owner and a placed home — a position in the active plan, never a date — and the card IS that home made visible.** *(Read "a dated home" until 2026-09-29, which misattributed a date to the rule that forbids one; `B-GOV-REPORTING` r12, found by Langston at Step 11.)* Do not defer it to "when I start it".
 2. **PHASE PLANNING.** When a phase closes and the next is opened with Langston, the phase is split into batches and each is assigned to a session. ⇒ **each session then creates cards for ITS OWN assigned batches**, all into `Backlog`, and moves the one it is starting to `Scope`.
 
 **SET `Phase` WHEN YOU CREATE THE CARD** — the phase the batch belongs to. It costs one click at creation and it is what makes the archive answerable at the transition (§2b); back-filling 30 cards later is the alternative.

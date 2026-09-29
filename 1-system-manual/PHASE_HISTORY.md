@@ -1241,7 +1241,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **`B-ARCHIVE-RETENTION-SIZING` (row `2.4f`, `#592`) CLOSED 2026-09-29 — a decision item, closed by Kyle's two storage decisions, not by code.** No retention window changed for the archive families: August's partitions leave hot storage on the 2026-10-01 run (about 52 GiB). The one-minute price bars go from 365 to 30 days once that move proves the family can be tiered (Infra, sprint row 6). The pre-registered check of the October move is Langston's `c25e722d` (2026-10-02). What stays open: the windows are still not sized to the write rate, so until the one-minute flip lands the critical disk alarm fires every month by design. Record: `Batch Completion/B_ARCHIVE_RETENTION_SIZING_COMPLETION_REPORT.md`.
 
-### 2026-09-29 — B-GOV-REPORTING (CC-A, sprint plan §0) — ⏳ CLOSING
+### 2026-09-29 — B-GOV-REPORTING (CC-A, sprint plan §0) — ✅ CLOSED
 
 **The rules for how sessions report their work, and for the checklist of governance documents each batch must update, had been in use by every session for a month, but the review of them was never finished.** Some of Langston's August conditions had never been carried out, and several changes had never been shown to him at all. This batch finished that before the sprint to live.
 
@@ -1249,4 +1249,4 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **One discovery mattered beyond the rules themselves:** of four decisions listed as *"awaiting Kyle"*, three had in fact been answered by Kyle on 10 July; only Langston's memory had not been updated. The fourth, the name of a report label, had been dropped from his list with no answer from him that we know of, so it is the one question put back to him. The blocking power Kyle approved for the governance checker, never built, now has a home after live.
 
-⏳ **Closes when** Langston confirms the completion report. His memory file was reconciled by Infra Claude (`#1057`) and this batch's update to it written on 2026-09-29.
+✅ **Closed 2026-09-29:** Langston confirmed the completion report with two small conditions — one more stale line saying "a dated home", and a note on why the last two commits needed no test run of their own — both met. His memory file was reconciled by Infra Claude (`#1057`) and this batch's update to it written the same day.
