@@ -260,7 +260,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - **B-INSTRUMENTS-OVER-RULES** (CC-A) — the code-search-tool usage measure runs 2026-09-18 → 10-02 (pre-registered)
 - **8a-P4c increment 1 — the VTS xStock price instrument** (CC-C) — deployed bc199185e; window to 2026-09-30T00:00Z; pre-registered rules A-D then decide increments 2-3
 
-## After live — 209
+## After live — 215
 
 ### AMR and machine learning — 31
 
@@ -296,15 +296,19 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - 25-27 Profitable-signal PROFILE → reverse-engineer a scanner PRE-S (—) — profile of a profitable signal, reversed into a scanner pre-screen
 - 25-6 AMR posture-model M2 calibration (post-launch — Phase 17/18 (—) — AMR posture model calibration — its own row says post-launch
 
-### Break-even, trailing and moonbag exits — 4
+### Break-even, trailing and moonbag exits — 6
 
 - B-TEC-STATE-DURABILITY (?) — on restart the engine reads every open position's trailing progress from one /tmp file inside a catch-and-continue — a corrupt file boots with zero trailing pro
 - Break-even stop + moonbag exits ((none)) — 
 - Shadow break-even and moonbag calculations (paper now, live later) (?) — Kyle: launch with both off, but compute what break-even stops and moonbags WOULD have done on every paper trade (and live trades once live), so we can analyse w
 - row:3n.c (CC-C) — trailing-exit state lost on restart — becomes MUST the moment trailing exits are switched on (see BE-MOONBAG)
+- #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
+- #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
-### Crew, reviewer, governance and alert tooling — 65
+### Crew, reviewer, governance and alert tooling — 67
 
+- 2.4b B-ALERT-QUEUE-INTEGRITY (CC-B) — #647 (no claim or lock discipline on the alert file; the watchdog appends outside the lock; rewrites drop malformed rows) + #1074 (open-batch backstop alerts have no resolve edge) + #654 (the checker ignores open-retired rows and treats any COMPLETION filename as a close) — alert tooling (added 2026-09-29)
+- B-CREW-SENDER-IDENTITY (CC-B) — `cc-send --sender` is free text over one shared webhook, so a Discord display name is a claim, not an identity — crew tooling, same class as B-WRITER-ACTOR-ALLOWLIST (added 2026-09-29)
 - #1026 (Infra Claude) — chunked Langston dispatch leaks parts into the channel — comms
 - #1035 (Infra Claude) — Langston's alert prompt lists only three owners
 - #1043 (CC-INFRA) — a pinned GitHub read served the wrong file — reviewer tooling
@@ -371,8 +375,10 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - 20.3 Test Infrastructure — - Add unified test runner scripts ( te (—) — test runner and frontend test tooling
 - row:1 (CC-A) — crew-process rule mechanisms (B-RULES-1e) — governance tooling, no effect on trading
 
-### Legacy and dead-code cleanup (the reachability census may pull some forward) — 17
+### Legacy and dead-code cleanup (the reachability census may pull some forward) — 19
 
+- #1042 (CC-B) — `calibration_ledger.decision_grade` is a flag no code reads and no screen shows; it read true on wrong xStock fee rates (added 2026-09-29)
+- #507 rider (CC-B) — `triggerSoftResubscribe` in the mini-book integrity monitor is kept and never called; #507's own checksum work is done (added 2026-09-29)
 - #1055 (—) — delete a dead legacy write on Langston's box
 - #154 (—) — dead optional constructor argument
 - #518 (CC-B) — delete a dormant commented-out guardrail block (rule 18)
