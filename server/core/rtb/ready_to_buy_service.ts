@@ -2099,6 +2099,35 @@ class ReadyToBuyService {
     // Directive 8.8.4-A3.R1: Normalize pair key to uppercase BASE/QUOTE format
     const normalizedSymbol = normalizePairKey(input.symbol);
 
+    // ⛔ B-SIZING-DEC-RESTORE 2d (fresh-reader object round, folded): the class checks run FIRST, before the
+    // duplicate check and the tiebreak. They sat below the tiebreak, which EXPIRES the incumbent signal before the
+    // throw — so a higher-ranked signal with no (or an invalid) class knocked out a valid incumbent and only then
+    // failed. Validated here, nothing downstream in this function acts on an unclassed signal.
+    // P19-B4a stamp-at-source (Langston Q4 backstop): the orchestrator stamps assetClass
+    // at the per-pipe dispatch chokepoint (sizingContext.assetClass), so a missing
+    // assetClass on this single caller path is a real bug — an `as any` / JSON-boundary /
+    // future-caller bypass that defeated the required-field type. FAIL LOUD rather than
+    // re-derive from the symbol: re-derivation mislabels the collision-set tickers (exist
+    // as BOTH xStock and crypto with identical canonical form, so only the pipe is correct).
+    // The QUEUE_FALLBACK warn stays as the zero-target tripwire for the A4 SET-NOT-NULL gate.
+    if (!input.assetClass) {
+      console.warn(`[B79.0n.RTB][QUEUE_FALLBACK] queueSQESignal received NO assetClass — upstream stamp bug. symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`);
+      throw new Error(
+        `[B79.0n.RTB][STAMP_MISSING] queueSQESignal requires a stamped assetClass (stamp-at-source); ` +
+        `none supplied for symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}.`,
+      );
+    }
+    // B-SIZING-DEC-RESTORE 2d (#1096, PRE_AUDIT §18 P-7): PRESENT is not VALID. A non-standard string used to pass the
+    // throw above and was written as-is; the engine's `asValidAssetClass` then read it as MISSING at execution. Validate
+    // here, at the one writer, so a malformed stamp fails at its source instead of surfacing as a refusal downstream.
+    const resolvedAssetClass = asValidAssetClass(input.assetClass);
+    if (!resolvedAssetClass) {
+      throw new Error(
+        `[B-SIZING-DEC-RESTORE][STAMP_INVALID] queueSQESignal received an assetClass that is not a known class ` +
+        `(${String(input.assetClass)}) for symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}.`,
+      );
+    }
+
     // Directive 8.8.4-A3.R8.5: Trust upstream SQE result
     // SQE evaluation already happened upstream before calling queueSQESignal
     // Log trace for audit trail without re-running evaluation
@@ -2212,31 +2241,6 @@ class ReadyToBuyService {
       // New signal ranks higher - expire the old one
       console.log(`[8.8.4-C.5][RTB_TIEBREAK][REPLACE] ${normalizedSymbol}/${input.strategy}: new R=${newR.toFixed(4)} > incumbent R=${existingR.toFixed(4)} — replacing`);
       await this.expireSignal(existingSignal.id, 'Replaced by higher-R-multiple SQE signal');
-    }
-
-    // P19-B4a stamp-at-source (Langston Q4 backstop): the orchestrator stamps assetClass
-    // at the per-pipe dispatch chokepoint (sizingContext.assetClass), so a missing
-    // assetClass on this single caller path is a real bug — an `as any` / JSON-boundary /
-    // future-caller bypass that defeated the required-field type. FAIL LOUD rather than
-    // re-derive from the symbol: re-derivation mislabels the collision-set tickers (exist
-    // as BOTH xStock and crypto with identical canonical form, so only the pipe is correct).
-    // The QUEUE_FALLBACK warn stays as the zero-target tripwire for the A4 SET-NOT-NULL gate.
-    if (!input.assetClass) {
-      console.warn(`[B79.0n.RTB][QUEUE_FALLBACK] queueSQESignal received NO assetClass — upstream stamp bug. symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}`);
-      throw new Error(
-        `[B79.0n.RTB][STAMP_MISSING] queueSQESignal requires a stamped assetClass (stamp-at-source); ` +
-        `none supplied for symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}.`,
-      );
-    }
-    // B-SIZING-DEC-RESTORE 2d (#1096, PRE_AUDIT §18 P-7): PRESENT is not VALID. A non-standard string used to pass the
-    // throw above and was written as-is; the engine's `asValidAssetClass` then read it as MISSING at execution. Validate
-    // here, at the one writer, so a malformed stamp fails at its source instead of surfacing as a refusal downstream.
-    const resolvedAssetClass = asValidAssetClass(input.assetClass);
-    if (!resolvedAssetClass) {
-      throw new Error(
-        `[B-SIZING-DEC-RESTORE][STAMP_INVALID] queueSQESignal received an assetClass that is not a known class ` +
-        `(${String(input.assetClass)}) for symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}.`,
-      );
     }
 
     // P19-B6.5b (F1b / RUNNING_ISSUES #320 — defense-in-depth): queueSQESignal is the SINGLE live RTB

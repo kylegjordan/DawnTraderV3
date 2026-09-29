@@ -152,7 +152,7 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
     ];
 
     const stripComments = (src: string) =>
-      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      src.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
 
     // Each file is read and stripped ONCE and reused by every name check below: re-reading ~1,000 files per name
     // timed out under a parallel test run (2026-09-29, the first scan in this block), a flake, not a finding.
@@ -236,7 +236,7 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
     ];
 
     const stripComments = (src: string) =>
-      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      src.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
     const _codeCache = new Map<string, string>(); // read-once, as in the obj-10 block
     const codeOf = (f: string) => {
       const hit = _codeCache.get(f);
@@ -320,7 +320,7 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
     ];
 
     const stripComments = (src: string) =>
-      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      src.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
     const _codeCache = new Map<string, string>();
     const codeOf = (f: string) => {
       const hit = _codeCache.get(f);
@@ -396,7 +396,7 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       walk(join(REPO, 'scripts'));
       return [...FILES, ...extra];
     })();
-    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const strip = (src: string) => src.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
     const _c = new Map<string, string>();
     const codeOf2d = (f: string) => {
       let c = _c.get(f);
@@ -433,6 +433,13 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
         expect(hitsFor(rx)).toEqual([]);
       });
     }
+
+    // The object-round reader found the stripper blind to ~500 lines of routes.ts: a LINE comment containing "/api/*"
+    // opened a block-comment match that ran to the next "*/". Full-line comments are now stripped first. MUTATION: put
+    // the block strip first again and this fails — `apiRouter.all('*'` sits inside that stretch.
+    it('POSITIVE CONTROL: the stripped routes.ts still contains code from after the "/api/*" line comment', () => {
+      expect(codeOf2d(join(REPO, 'server/routes.ts'))).toContain("apiRouter.all('*'");
+    });
 
     it('POSITIVE CONTROL: the same scan finds live siblings of what was deleted, so an empty result is not blindness', () => {
       expect(hitsFor(/diagnostics\/aj17/).length).toBeGreaterThan(0);       // AJ17's routes stayed

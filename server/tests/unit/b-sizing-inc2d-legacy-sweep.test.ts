@@ -32,7 +32,7 @@ import {
 } from '../../services/per-underlying-cap';
 
 const REPO = resolve(__dirname, '../../..');
-const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const stripComments = (src: string) => src.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
 const code = (rel: string) => stripComments(readFileSync(join(REPO, rel), 'utf-8'));
 
 function seed() {
@@ -100,6 +100,21 @@ describe('P-7 — a missing class stamp is refused, not re-derived', () => {
     expect(block).toContain('[B-SIZING-DEC-RESTORE][STAMP_MISSING_REFUSED]');
     expect(block).toContain("return { opened: false, stage: 'UNCLASSIFIABLE'");
     expect(block).not.toContain('safeResolveAssetClass(signal.symbol');
+  });
+
+  // Object-round fold: the class checks sat BELOW the tiebreak, which expires the incumbent before the throw. MUTATION:
+  // move them back below `expireSignal(existingSignal.id` and this fails.
+  it('the RTB writer checks the class BEFORE the duplicate check and the tiebreak can act', () => {
+    const src = code('server/core/rtb/ready_to_buy_service.ts');
+    const fn = src.indexOf('async queueSQESignal(');
+    const invalid = src.indexOf('[B-SIZING-DEC-RESTORE][STAMP_INVALID]', fn);
+    const missing = src.indexOf('[B79.0n.RTB][STAMP_MISSING]', fn);
+    const dup = src.indexOf('storage.hasActivePair(normalizedSymbol', fn);
+    const expire = src.indexOf('this.expireSignal(existingSignal.id', fn);
+    for (const i of [invalid, missing, dup, expire]) expect(i).toBeGreaterThan(fn);
+    expect(missing).toBeLessThan(dup);
+    expect(invalid).toBeLessThan(dup);
+    expect(invalid).toBeLessThan(expire);
   });
 
   it('the RTB writer rejects a present-but-invalid class at its source', () => {

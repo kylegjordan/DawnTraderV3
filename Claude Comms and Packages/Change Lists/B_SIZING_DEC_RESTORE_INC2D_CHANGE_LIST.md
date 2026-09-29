@@ -59,6 +59,10 @@ Staging's rows are JSON `true` / `true` / `2` (`jsonb_typeof`, measured), so the
 - **The active lane's per-underlying cap counted the legacy `trades` table** (0 rows on staging), so it never limited an active signal. It now counts `storage.getActiveOpenPositions(mode)`. **A restored risk control — it changes what opens after the deploy.**
 - **Manual and stranded closes carry `position.assetClass`** (they took the `crypto_spot` default; 0 such rows to date).
 
+## Folded after the object round (§18.6.2)
+- **`queueSQESignal` checks the class FIRST** — it sat below the tiebreak, which expires the incumbent before the throw.
+- **The fence stripper strips full-line comments first** (all six copies) — a `/api/*` line comment hid ~500 lines of `routes.ts` from every fence scan; a positive control now asserts that stretch is scanned.
+
 ## Tests and mutations
 See §18.6 and §18.6.1: 10 new behaviour tests (the two folds each fail when reverted) (pre-2d cap file fails 3, pre-2d orchestrator fails 1), 2 new live cooldown tests (pre-2d `trade-safety` fails both), the fence's 2d section (a planted route string fails exactly 1).
 

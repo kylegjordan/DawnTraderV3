@@ -23,7 +23,7 @@ import { tradeNotional, bufferedTradeNotional, sizeActivePositionForSignal } fro
 import { evaluatePaperSizeBand } from '../../services/paper-size-band.js';
 
 const REPO = resolve(__dirname, '../../..');
-const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const stripComments = (src: string) => src.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
 const code = (rel: string) => stripComments(readFileSync(join(REPO, rel), 'utf-8'));
 
 describe('1 — one trade-size formula', () => {
