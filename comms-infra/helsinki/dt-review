@@ -1,0 +1,43 @@
+#!/bin/sh
+# dt-review — Langston's WHOLE-TREE-SEARCH fallback for reviewing at the graded ref.
+#
+# Default review path is reading single files straight off the review branch on
+# GitHub (raw URL at the exact commit). This helper exists ONLY for the rarer case
+# that needs the whole codebase at once — "every caller of X", "appears nowhere
+# else", a blast-radius census — which GitHub will not serve to an outside machine.
+#
+# ★ KYLE'S RULE, 2026-07-23, ENFORCED HERE SO IT CANNOT BE FORGOTTEN: before reading
+# the Hetzner backup, PULL FROM GITHUB FIRST so the files are current. This script
+# fetches before every read. If the fetch fails it REFUSES to read rather than hand
+# back possibly-stale bytes (the #546/#568 absent-as-valid class).
+#
+# The backup is langston-owned, so the fetch needs no sudo. The repo's push URL is
+# DISABLED — this is a read path only; nothing here can write upstream.
+
+REPO=/srv/dawntrader-backup.git
+BRANCH=migration/aws-supabase
+REMOTE=git@github.com:kylegjordan/DawnTraderV3.git
+
+if ! git --git-dir="$REPO" fetch --quiet "$REMOTE" "+refs/heads/$BRANCH:refs/heads/$BRANCH" 2>/dev/null; then
+  echo "dt-review: FETCH FROM GITHUB FAILED — refusing to read a possibly-stale backup." >&2
+  echo "dt-review: do not assert file contents from here; read single files off the branch instead." >&2
+  exit 1
+fi
+REF=$(git --git-dir="$REPO" rev-parse "$BRANCH")
+
+cmd="$1"; shift 2>/dev/null
+case "$cmd" in
+  grep)
+    pat="$1"; shift 2>/dev/null
+    echo "# whole-tree search at $REF (pulled from GitHub just now)"
+    if [ $# -gt 0 ]; then
+      git --git-dir="$REPO" grep -n -e "$pat" "$REF" -- "$@"
+    else
+      git --git-dir="$REPO" grep -n -e "$pat" "$REF"
+    fi
+    ;;
+  show)  echo "# $1 at $REF (pulled from GitHub just now)"; git --git-dir="$REPO" show "$REF:$1" ;;
+  ls)    git --git-dir="$REPO" ls-tree -r --name-only "$REF" ;;
+  ref)   echo "$REF" ;;
+  *)     echo "usage: dt-review grep <pattern> [<path>...] | show <path> | ls | ref" >&2; exit 2 ;;
+esac
