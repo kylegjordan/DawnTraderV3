@@ -20,6 +20,9 @@ Three fresh-reader rounds changed four of the texts OBJ-4a's row wrote before th
 - **Pinned read after a failed fetch:** `DEGRADED: fetch failed (<git's first line>); content is exact (re-hashed) for <sha>` for `show`; for `grep`/`ls` it says `content is as stored (not re-hashed)` — only `show` re-hashes what it serves.
 - **Off-branch:** `OFF-BRANCH: <sha> is not an ancestor of migration/aws-supabase — content is exact (re-hashed), provenance is NOT the graded ref` (for `grep`/`ls`: `content is as stored (not re-hashed)`). Combined with a degraded fetch it is ONE line: `OFF-BRANCH: … | DEGRADED: …`.
 - **Unchanged in meaning, added:** an invalid BRE is the CALLER's error (exit 2, `REFUSED: the pattern is not a valid BRE (<git's reason>). Nothing was searched.`), not a mirror failure.
+- **Added at Step 4 (Langston gate 4a-1 C1, folded at `3b7b46f59`):** EVERY read's provenance line on stderr now states its integrity basis — `…; content is exact (re-hashed) (…)` for `show`, `…; content is as stored (not re-hashed) (…)` for `grep`/`ls` — not only a degraded or off-branch read.
+- **Added at Step 4 (Langston gate 4a-2, folded at `445b6a505`):** the backup gate's two undecidable in-sync arms and a renamed known file are `FAIL-INFRA … NOT a verdict on the backup either way`, never `FAIL-REPRODUCE`; a failed page is logged as `PAGE FAILED (cc-send exit N: …) — the alarm above did NOT reach Discord`.
+- **HOME, Langston gate 4a-2 rider:** `--only readers` never runs the unpinned `pip install -U "discord.py>=2.3"`; the bridges install does. ⇒ **the GB-8 bridges increment of THIS batch pins discord.py** (owner CC-INFRA, §9.4 disposition 1).
 
 ## ROUND RECORD — the fresh-reader loop reached its CAP (3 rounds)
 - `REVIEWER r1: object (r2 at b4948145b) · Langston-ruling coverage + code-claim check · ~15 gaps · fixed in r3`

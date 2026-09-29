@@ -346,3 +346,9 @@ esac
 4. In a window with NO queued review (queue state + no `invoking claude` in the journal): `deploy.sh --only bridges` (the note) -> `systemctl restart discord-langston-bridge.service` -> the next invocation's journal shows `review ref resolved to <sha>`.
 5. Step 7 on the LIVE reader: the scope's (a)-(e) against the STEP-3 AMENDMENT's texts, with the real `scratch/offbranch-control` branch for (b).
 **Rollback:** restore the `*.pre-credentials-*` copies, restore the mirror config, and restart the bridge from its previous file (also kept).
+
+---
+## STEP-4 VERDICTS AND WHAT WAS FOLDED (recorded after the dispatches)
+- **GATE 4a-1 — Langston, 2026-09-29T20:45Z: APPROVED WITH CONDITIONS** (dt-review at `2767d358a` right; bridge note and your-files r4 correct). C1 provenance states the integrity basis on every read · C2 the peel `error:` kept out of the output · C3 the ref-invariant wording · nit: `(never | head)` back in `instrument_traps:18` (your-files r5, every file still net-negative). **Folded at `3b7b46f59`.**
+- **GATE 4a-2 — Langston, 2026-09-29T21:14Z: APPROVED WITH CONDITIONS, no blocker** ("no new review round"). 1 the undecidable rewind arms + a renamed known file → FAIL-INFRA, header sentence corrected · 2 `GIT_*` unset in dt-backup-sync AND dt-review · 3 a failed page is logged · 4 files replaced by rename, target dirs root-owned 0755 checked in pre-flight · 5 an EXIT handler reports the state on any unexpected exit · riders: exact cron line, the "3 times since 09-02" number re-derived with its population, call 6's reach written into the header, discord.py pinning homed to the GB-8 bridges increment. **Folded at `445b6a505`.**
+- **Tests, from the committed blobs at `445b6a505`:** dt-review 95/95 · dt-backup-sync 55/55 · deploy.sh 60/60. Each condition has a CONTROL that fails on the version you reviewed (`2767d358a`, or `3b7b46f59` for the reader's GIT_* case).
