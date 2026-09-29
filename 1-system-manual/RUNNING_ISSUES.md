@@ -7727,6 +7727,8 @@ MISTAKE: named-not-measured [#994] — carried another entry's alert-state claim
   - each session's re-arm measured from its watcher's `Win32_Process` start time — never inferred from silence.
 - **Measured at install:** OLD Claude had **no watcher process at all**, so a system alert with `owner=CC-A` was raised (the one route that reaches a session with no watcher).
 
+➕ **#1004 — a second instance, the governance checker (CC-A, 2026-09-29, `B-PLAN-CURRENCY-CHECK` Step 1; Langston's disposition at part 1, 22:15Z):** what the checker runs is decided by two box-only systemd drop-ins on staging — `governance-checker.service.d/20-auto-redeploy.conf` (a fetch + `merge --ff-only` before every tick, so a push to `scripts/governance-checker/` deploys within ~30 minutes outside `dt-deploy`) and `go-live.conf` (`GOV_SHADOW=0`, `GOV_CUTOFF`) — while the repo's unit file says `GOV_SHADOW=1` and no copy of either drop-in is tracked. The reviewed artifact does not describe what runs. Same provenance class as this entry (repo-tracked executables and config installed outside the tree); added here rather than a new row, placed with `P19-B12`.
+
 ### #1005 OPEN 2026-09-05 (CC-A, self-filed at `B-WAKE-QUIET` Step 10) — ⛔ THE BATCH SKIPPED ITS OWN STEP 2, AND THE TRIPWIRE BUILT FOR THAT EXACT FAILURE COULD NOT SEE IT
 
 **WHAT HAPPENED.** `B-WAKE-QUIET` ran **Step 1 → Step 3 with Step 2 silently absent.** No `PRE_AUDIT` document existed for the batch until Step 10, when the tier ledger's `PRE_AUDIT` row asked for one and there was nothing to point at. **`PRE_AUDIT` is REQUIRED for `non_architecture`** (`scripts/governance-checker/config.mjs`, `CLASS_DOCSET.non_architecture.required`).
