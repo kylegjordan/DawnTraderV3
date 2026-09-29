@@ -29,6 +29,7 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 | Infra Claude | B-LANGSTON-CONTEXT increment 2 — chunk 1 Step 7, chunk 2 part 1 Step 3 | FINISH the chunks in flight, then PAUSE the rest (after live) |
 | Infra Claude | B-WAKE-LEAD-NAME — Step 10 | FINISH |
 | Infra Claude | B-CREDENTIALS-PRIVATE-REPO (#1023) — NEW, Kyle 2026-09-28: (1) Kyle changes the two test-user passwords and the owner password himself; (2) no password in the repo again: sessions read it from a server-only file; (3) document-only pushes skip the CI check while the deploy gate still finds a green check for the code it deploys; (4) give Langston's review reads, the Helsinki backup mirror and every other reader a read key; (5) then make the repo private (GitHub Pro $4/month if the minutes need it) | RUN NOW, while the other plates clear (Kyle 2026-09-28) |
+| Infra Claude | B-TRANSCRIPT-ARCHIVE — NEW, Kyle 2026-09-29 (relayed by NEW Claude): make the old conversation transcripts TEXT-ONLY, ARCHIVED and SEARCHABLE — one readable text file per conversation (Kyle's messages and the sessions' replies, timestamped, tool dumps dropped), a one-page index in the shared memory folder, exact duplicates removed only after the archive is checked, and confirm or set up the nightly Drive backup of transcripts (CLAUDE.md 3.1). Keep ALL history. | START after B-CREDENTIALS-PRIVATE-REPO closes (Kyle's order). ★ It also unblocks the owed 11 GB conversation sweep (CC_INFRA_SESSION_TASK_LIST 0b) |
 | Infra Claude | B-TOKEN-WATCH — Step 7, paused | stays PAUSED: research, after live |
 | Infra Claude | #670, B-CREW-STATUS-2, #974 | stay parked / after live |
 
@@ -166,7 +167,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 83 | B-WS-V1-RESIDUE-SWEEP | B-WS-V1-RESIDUE-SWEEP | Infra Claude | QUEUED | — | legacy removal, after the census: the dead first-generation Kraken price handler |
 | 84 | #218 | #218 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | legacy removal, after the census: a dead function carrying a hardcoded fee default |
 | 85 | B-MODE-PREDICATE-SWEEP | B-MODE-PREDICATE-SWEEP | Infra Claude | QUEUED | — | hygiene: readers that would mix live and paper P&L |
-| 85a | B-USER-RESOLUTION-PIN (`#1092`) | B-USER-RESOLUTION-PIN | Infra Claude | QUEUED | — | hygiene: "the first user in the table" is unordered, and a password reset changed who it is (measured 2026-09-29); delete or pin each pick, after the census (78), before 179 |
+| 85a | B-USER-RESOLUTION-PIN (`#1092`) | B-USER-RESOLUTION-PIN | Infra Claude | QUEUED | — | hygiene: "the first user in the table" is unordered, and a password reset changed who it is (measured 2026-09-29); delete or pin each pick, then delete the testuser account; after the census (78), before 179 |
 | 86 | row:8 | plan row 8 | CC-C (Analyst Claude) | QUEUED | — | paper truth: fill-integrity detector |
 | 87 | B-COST-MATH-CONSOLIDATION | B-COST-MATH-CONSOLIDATION | CC-A (Old Claude) | QUEUED | — | paper truth: one home for cost maths |
 | 88 | #527 | #527 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | paper truth: xStock friction components |

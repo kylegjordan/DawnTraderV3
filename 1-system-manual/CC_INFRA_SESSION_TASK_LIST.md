@@ -24,7 +24,7 @@
 
 > ⛔ **The order and the text below are COPIED from the sprint plan's row numbers — if they differ, the plan wins.** `PHASE_19_PLAN.md` no longer orders this work (Kyle, 2026-09-28: one list, in order).
 
-**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` (#1023) — Step 1, sent back by Langston 2026-09-28 (CHANGES-NEEDED), revision in progress. Kyle's D1 = yes (all six can use the crew login), D2 = no (backups folder stays).
+**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` (#1023) — Step 1, sent back by Langston 2026-09-28 (CHANGES-NEEDED), revision in progress. Kyle's D1 = yes (all six can use the crew login), D2 = no (backups folder stays). **THEN:** `B-TRANSCRIPT-ARCHIVE` (Kyle 2026-09-29, via NEW Claude) — text-only, archived, searchable transcripts + index + verified Drive backup; placed in the sprint plan §0 after this batch.
 
 | row | item | what it is for |
 |---|---|---|
