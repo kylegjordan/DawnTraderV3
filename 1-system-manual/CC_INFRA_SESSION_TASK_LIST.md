@@ -24,7 +24,7 @@
 
 > ⛔ **The order and the text below are COPIED from the sprint plan's row numbers — if they differ, the plan wins.** `PHASE_19_PLAN.md` no longer orders this work (Kyle, 2026-09-28: one list, in order).
 
-**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` (#1023) — Step 1, sent back by Langston 2026-09-28 (CHANGES-NEEDED), revision in progress. Kyle's D1 = yes (all six can use the crew login), D2 = no (backups folder stays). **THEN:** `B-TRANSCRIPT-ARCHIVE` (Kyle 2026-09-29, via NEW Claude) — text-only, archived, searchable transcripts + index + verified Drive backup; placed in the sprint plan §0 after this batch.
+**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` (#1023) — Step 1, sent back by Langston 2026-09-28 (CHANGES-NEEDED), revision in progress. Kyle's D1 = yes (all six can use the crew login), D2 = no (backups folder stays). **URGENT, IN FLIGHT:** `B-CHAPLET-OFF-HOTFIX` (#1101, Langston-ordered) — close `/chaplet` at the edge now, unmount rides the next deploy; then `B-CHAPLET-DELETE` (`PHASE_19_PLAN` 4.51b). **ALSO MINE (NEW Claude, 2026-09-29):** sprint row 160a `#1013` (scan commits for secrets), after this batch; notes on rows 93 (+#662) and 78 (+2 after-live legacy items). **THEN:** `B-TRANSCRIPT-ARCHIVE` (Kyle 2026-09-29, via NEW Claude) — text-only, archived, searchable transcripts + index + verified Drive backup; placed in the sprint plan §0 after this batch.
 
 | row | item | what it is for |
 |---|---|---|
