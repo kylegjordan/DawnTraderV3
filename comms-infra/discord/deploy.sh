@@ -39,6 +39,7 @@
 #   /etc/langston/discord-cc-bot.env, /etc/langston/discord-langston-bot.env,
 #   /etc/dawntrader/discord-comms.env (from discord-comms.env.template)
 set -euo pipefail
+umask 022
 # Root never runs git itself (its blob ids are computed below, by python), and the git it runs
 # AS LANGSTON must not inherit the caller's repository or config: an exported GIT_DIR would point
 # git at a directory another account can write, whose config can run commands.
@@ -80,16 +81,39 @@ readers|comms-infra/helsinki/dt-backup-sync.sh|/usr/local/bin/dt-backup-sync.sh|
 
 # A refusal. Once files are installed it also says so, and what did and did not run after that,
 # so a refusal late in the run never reads as "nothing was changed".
+INSTALLING=
 INSTALLED=
 DONE_STEPS=
 GROUPS_TXT=
-die() {
-  echo "deploy.sh: $*" >&2
+STAGE=
+DIED=
+state_note() {
   if [ -n "$INSTALLED" ]; then
     echo "deploy.sh: NOTE — the files at $SHA ARE installed and verified ($GROUPS_TXT); completed after that:${DONE_STEPS:- nothing}. Everything after that did NOT run — re-run the same command to finish." >&2
+  elif [ -n "$INSTALLING" ]; then
+    echo "deploy.sh: NOTE — the install loop was interrupted: some files at $SHA may be installed and others not, and install-verify did NOT run. Re-run the same command." >&2
   fi
+}
+die() {
+  DIED=1
+  echo "deploy.sh: $*" >&2
+  state_note
   exit 2
 }
+# ANY other exit that is not 0 — set -e / pipefail on an unguarded command, anywhere, including
+# inside a function — still says what state it left (Langston, gate 4a-2: the reorder fixed the
+# ORDER of the post-install steps, not their REPORTING). The command's own message is above it.
+CUR_TMP=
+on_exit() {
+  rc=$?
+  [ -n "$STAGE" ] && rm -rf "$STAGE"
+  [ -n "$CUR_TMP" ] && rm -f "$CUR_TMP"   # a half-written install never lingers beside its target
+  if [ $rc -ne 0 ] && [ -z "$DIED" ]; then
+    echo "deploy.sh: STOPPED by an unexpected failure (exit $rc) — its own message is above." >&2
+    if [ -n "$INSTALLED$INSTALLING" ]; then state_note; else echo "deploy.sh: nothing was installed." >&2; fi
+  fi
+}
+trap on_exit EXIT
 # Every read of the mirror runs AS LANGSTON, from /.
 git_l() { sudo -u langston git --git-dir="$MIRROR" "$@"; }
 # A file's git blob id, computed by root WITHOUT git: sha1("blob <size>\0" + the bytes).
@@ -162,7 +186,6 @@ esac
 
 # ---- 2. PRE-FLIGHT: read + VERIFY every selected file from the sha, before any change ----
 STAGE=$(mktemp -d)
-trap 'rm -rf "$STAGE"' EXIT
 SELECTED=()
 PATHS=("$SELF_PATH")
 while IFS='|' read -r grp path target mode; do
@@ -176,7 +199,7 @@ if want bridges || want notices; then PATHS+=("$SEED_PATH"); fi
 # The walk: commit (must hash to --sha) -> root tree -> each path component -> blob. Every
 # object is read as langston and re-hashed by root; a mismatch or a missing path stops the run
 # with nothing changed. Prints "<path> <blob id>" for each staged file.
-python3 - "$MIRROR" "$SHA" "$STAGE" "${PATHS[@]}" > "$STAGE/.blobs" <<'PY' || { echo "== PRE-FLIGHT FAILED — nothing has been changed." >&2; exit 2; }
+python3 - "$MIRROR" "$SHA" "$STAGE" "${PATHS[@]}" > "$STAGE/.blobs" <<'PY' || { DIED=1; echo "== PRE-FLIGHT FAILED — nothing has been changed." >&2; exit 2; }
 import hashlib, os, subprocess, sys
 mirror, sha, stage = sys.argv[1:4]
 paths = sys.argv[4:]
@@ -246,17 +269,35 @@ SELF_GOT=$(blob_hash "$SELF_FILE")
 
 if want bridges; then
   for f in /etc/langston/discord-cc-bot.env /etc/langston/discord-langston-bot.env /etc/dawntrader/discord-comms.env; do
-    [ -f "$f" ] || { echo "== PRE-FLIGHT FAILED — MISSING $f; provision before deploying bridges" >&2; exit 2; }
+    [ -f "$f" ] || { DIED=1; echo "== PRE-FLIGHT FAILED — MISSING $f; provision before deploying bridges" >&2; exit 2; }
   done
   # CC_BOT_ID is hard-required (load_shared_config raises without it → both bridges crash-loop).
   for k in DISCORD_CHANNEL_ID KYLE_DISCORD_ID CC_BOT_ID; do
     grep -q "^${k}=" /etc/dawntrader/discord-comms.env \
-      || { echo "== PRE-FLIGHT FAILED — MISSING $k in /etc/dawntrader/discord-comms.env" >&2; exit 2; }
+      || { DIED=1; echo "== PRE-FLIGHT FAILED — MISSING $k in /etc/dawntrader/discord-comms.env" >&2; exit 2; }
   done
 fi
 # What step 7 needs and can be checked now IS checked now, above every mutation, so a refusal
 # there can only be a race (the old installer's rule: pre-flight above every mutation).
+DRIFT_CRON='17 * * * * /usr/local/bin/dt-deploy-drift.sh >/dev/null 2>&1'
+SYNC_CRON='*/15 * * * * /usr/local/bin/dt-backup-sync.sh >/dev/null 2>&1'
+cron_conflict() { # match, canonical line: a DIFFERENT uncommented line for the same job refuses
+  local other
+  other=$(grep -v '^[[:space:]]*#' <<< "$CRON0" | grep -F -- "$1" | grep -vxF -- "$2" || true)
+  [ -z "$other" ] || die "langston's crontab has a different $1 line ('$(head -n1 <<< "$other")'); nothing was changed — reconcile it by hand"
+}
 if want notices || want readers; then read_cron; CRON0=$CRON_TXT; fi
+if want notices; then cron_conflict dt-deploy-drift.sh "$DRIFT_CRON"; fi
+if want readers; then cron_conflict dt-backup-sync.sh "$SYNC_CRON"; fi
+# Files are replaced by RENAME (step 5), so every target directory must be root-owned and not
+# writable by group or other: a temporary name inside it must not be raceable.
+for e in "${SELECTED[@]}"; do
+  IFS='|' read -r grp path target mode <<< "$e"
+  d=$(dirname "$target")
+  while [ ! -e "$d" ]; do d=$(dirname "$d"); done
+  [ "$(stat -c %u "$d")" = 0 ] && [ $(( 0$(stat -c %a "$d") & 022 )) -eq 0 ] \
+    || die "$d (holding $target) is not root-owned with no group/other write — refusing to install there"
+done
 if want notices; then no_symlink /var/log/dt-deploy-drift.log; fi
 if want readers; then no_symlink /var/log/dt-backup-sync.log; fi
 echo "== pre-flight: ${#SELECTED[@]} files read from $SHA, every object re-hashed (groups: $GROUPS_TXT) =="
@@ -312,10 +353,17 @@ if want bridges; then
 fi
 
 # ---- 5. install every selected file, then VERIFY every one -------------------------------
+INSTALLING=1
 for e in "${SELECTED[@]}"; do
   IFS='|' read -r grp path target mode <<< "$e"
   mkdir -p "$(dirname "$target")"
-  install -m "$mode" "$STAGE/$path" "$target"
+  # Replace by RENAME, never in place: `install` over an existing file truncates its inode, so
+  # a script running from it (dt-backup-sync.sh, every 15 min) would read the NEW bytes at its
+  # OLD offset. A rename leaves the running copy on its own inode. (Measured, gate 4a-2.)
+  CUR_TMP=$(mktemp "$target.deploy.XXXXXX")
+  install -m "$mode" "$STAGE/$path" "$CUR_TMP"
+  mv -f "$CUR_TMP" "$target"
+  CUR_TMP=
   echo "   installed $target"
 done
 if want bridges; then chmod -R a+rX "$BRIDGE_DIR"; fi
@@ -331,6 +379,7 @@ for e in "${SELECTED[@]}"; do
   fi
 done
 if [ -n "$BAD" ]; then
+  DIED=1
   printf "== INSTALL-VERIFY FAILED at %s:%b\n" "$SHA" "$BAD" >&2
   exit 3
 fi
@@ -396,9 +445,8 @@ fi
 add_langston_cron() { # match, line — against the crontab read in pre-flight; a change since refuses
   read_cron
   [ "$CRON_TXT" = "$CRON0" ] || die "langston's crontab changed since pre-flight — the $1 cron was NOT written"
-  # Presence is tested on the captured text (no early-exit pipe under pipefail), and a
-  # commented-out line does not count.
-  if grep -v '^[[:space:]]*#' <<< "$CRON_TXT" | grep -F "$1" >/dev/null; then
+  # Presence = the EXACT canonical line (a different line for the same job refused in pre-flight).
+  if grep -qxF -- "$2" <<< "$CRON_TXT"; then
     echo "   langston cron already present for $1"
   else
     if [ -n "$CRON_TXT" ]; then printf '%s\n%s\n' "$CRON_TXT" "$2"; else printf '%s\n' "$2"; fi | sudo -u langston crontab -
@@ -421,7 +469,7 @@ if want notices; then
   langston_log /var/log/dt-deploy-drift.log
   mkdir -p /var/lib/dt-deploy-drift
   chown langston:langston /var/lib/dt-deploy-drift
-  add_langston_cron dt-deploy-drift.sh '17 * * * * /usr/local/bin/dt-deploy-drift.sh >/dev/null 2>&1'
+  add_langston_cron dt-deploy-drift.sh "$DRIFT_CRON"
 fi
 if want readers; then
   langston_log /var/log/dt-backup-sync.log
@@ -429,6 +477,6 @@ if want readers; then
   # refs/remotes/*. The new ones are installed now: re-assert the mirror's state.
   mirror_state
   DONE_STEPS="$DONE_STEPS mirror-state"
-  add_langston_cron dt-backup-sync.sh '*/15 * * * * /usr/local/bin/dt-backup-sync.sh >/dev/null 2>&1'
+  add_langston_cron dt-backup-sync.sh "$SYNC_CRON"
 fi
 echo "Done: $GROUPS_TXT at $SHA."

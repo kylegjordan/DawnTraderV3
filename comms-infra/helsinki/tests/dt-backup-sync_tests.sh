@@ -15,6 +15,7 @@
 #   dt-backup-sync.r1         the same path at b4db96b9c (before fresh-reader round 1)
 #   dt-backup-sync.r2         the same path at b9ca76485 (before fresh-reader round 2)
 #   dt-backup-sync.r3         the same path at 764ec389b (before fresh-reader round 3)
+#   dt-backup-sync.r4         the same path at 2767d358a (what Langston approved with conditions at gate 4a-2)
 # and chown -R langston. Run: cd /home/langston && sudo -u langston HOME=/home/langston bash <this>.
 # Remove /tmp/dtr-test afterwards. "CONTROL" lines must FAIL on the older copy they name.
 set -u
@@ -35,7 +36,9 @@ $R --git-dir="$T/mirror.git" config remote.origin.url "$T/src.git"
 cat > "$T/bin/ccsend" <<EOF
 #!/bin/bash
 [ -e /proc/\$\$/fd/9 ] && touch $T/fd9-ccsend
+echo WOULD-POST "\$@" >> $T/posted
 echo WOULD-POST "\$@"
+[ -z "\${CCSEND_FAIL:-}" ] || { echo "cc-send: simulated failure" >&2; exit 1; }
 EOF
 chmod +x "$T/bin/ccsend"
 
@@ -51,6 +54,7 @@ mk bs_base $S/dt-backup-sync.baseline 2
 mk bs_r1   $S/dt-backup-sync.r1       2
 mk bs_r2   $S/dt-backup-sync.r2       2
 mk bs_r3   $S/dt-backup-sync.r3       2
+mk bs_r4   $S/dt-backup-sync.r4       2
 mk bs_new_norepo $S/dt-backup-sync.sh 2 "s#^REPO=.*#REPO=$T/no-such-mirror.git#"
 mk bs_r3_norepo  $S/dt-backup-sync.r3 2 "s#^REPO=.*#REPO=$T/no-such-mirror.git#"
 mk bs_new_user   $S/dt-backup-sync.sh 2 "s#!= langston ]#!= nosuchuser ]#"
@@ -64,6 +68,11 @@ B=__B__
 advance() {
   h=$($R --git-dir=$T/src.git rev-parse refs/heads/$B)
   n=$($R --git-dir=$T/src.git commit-tree -p "$h" -m "adv $(date +%s%N)" "$($R --git-dir=$T/src.git rev-parse "$h^{tree}")")
+  $R --git-dir=$T/src.git update-ref refs/heads/$B "$n"
+}
+sibling() {  # GitHub force-pushed to a commit that does NOT contain its previous head
+  h=$($R --git-dir=$T/src.git rev-parse refs/heads/$B)
+  n=$($R --git-dir=$T/src.git commit-tree -p "$h~1" -m "sibling $(date +%s%N)" "$($R --git-dir=$T/src.git rev-parse "$h^{tree}")")
   $R --git-dir=$T/src.git update-ref refs/heads/$B "$n"
 }
 rewind() {  # GitHub force-pushed back to the parent of its head
@@ -86,6 +95,8 @@ case "$sub" in
     $R "$@"; rc=$?
     case "$M" in after_lsremote|reread_empty|after_lsremote_push|after_lsremote_rewind)
       [ ! -e $T/fired ] && { touch $T/fired; advance; } ;;
+    sibling_then_push)
+      [ ! -e $T/fired ] && { touch $T/fired; sibling; } ;;
     esac
     exit $rc ;;
   fetch)
@@ -95,6 +106,7 @@ case "$sub" in
     $R "$@"; rc=$?
     [ "$M" = after_lsremote_push ] && advance
     [ "$M" = after_lsremote_rewind ] && rewind
+    [ "$M" = sibling_then_push ] && advance
     exit $rc ;;
   clone)
     [ "$M" = clone_fail ] && { echo "fatal: simulated clone failure" >&2; exit 128; }
@@ -114,9 +126,9 @@ sed -i -e "s#__T__#$T#" -e "s#__B__#$B#" "$T/bin/git"
 chmod +x "$T/bin/git"
 export PATH="$T/bin:$PATH"
 
-run() { rm -f "$T/fired" "$T/fd9-ccsend" "$T/fd9-lsremote"; : > "$T/sync.log"; DTT_MODE=$1 "$T/$2" > "$T/out" 2>&1; RC=$?; LOGL=$(grep -v '^fatal\|^error\|^warning' "$T/sync.log" | tail -1); }
+run() { rm -f "$T/fired" "$T/fd9-ccsend" "$T/fd9-lsremote" "$T/posted"; : > "$T/sync.log"; DTT_MODE=$1 "$T/$2" > "$T/out" 2>&1; RC=$?; LOGL=$(grep -v '^fatal\|^error\|^warning' "$T/sync.log" | tail -1); }
 has() { [ "${LOGL#* $1}" != "$LOGL" ]; }
-posted() { grep -q WOULD-POST "$T/out"; }
+posted() { [ -s "$T/posted" ]; }
 # Make the SAME object in both stores (fixed dates -> the same ids), for states a fetch cannot build.
 both() { for g in src mirror; do "$@" "$T/$g.git"; done; }
 mkbroken() { # tree-line msg replaced-name gitdir -> BRK; fixed dates give the same id in both stores
@@ -262,6 +274,58 @@ run none bs_new_user
 [ $RC -eq 2 ] && posted && ok "F3-B5b: the wrong user -> exit 2 and a page" || bad F3-B5b "rc=$RC $LOGL"
 run none bs_r3_user
 [ $RC -eq 2 ] && ! posted && ok "F3-B5b CONTROL: r3 refused and paged nobody" || bad F3-B5bc "rc=$RC $LOGL"
+
+# ================= Langston's gate 4a-2 conditions (APPROVED WITH CONDITIONS on 2767d358a); CONTROLS run r4 =================
+run none bs_new >/dev/null
+# G2-1a: GitHub force-pushed to a commit NOT containing the pre-fetch head, then moved again: this
+# box cannot tell that from a bad ref -> FAIL-INFRA (not a verdict), never "backup not valid".
+run sibling_then_push bs_new
+[ $RC -eq 1 ] && has FAIL-INFRA && grep -q "a rewind-and-move during the run and a bad ref look the same from here" "$T/sync.log" && ok "G2-1a: undecidable rewind-and-move -> FAIL-INFRA" || bad G2-1a "rc=$RC $LOGL"
+run none bs_new >/dev/null
+run sibling_then_push bs_r4
+[ $RC -eq 1 ] && has FAIL-REPRODUCE && ok "G2-1a CONTROL: r4 called it 'backup NOT valid'" || bad G2-1ac "rc=$RC $LOGL"
+run none bs_new >/dev/null
+# G2-1b: the same, when GitHub's pre-fetch head was never fetched (the other undecidable arm).
+( rm -f "$T/fired"; DTT_MODE=before_lsremote git ls-remote "$T/src.git" >/dev/null; rm -f "$T/fired" )
+run sibling_then_push bs_new
+[ $RC -eq 1 ] && has FAIL-INFRA && grep -q "the mirror does not hold" "$T/sync.log" && ok "G2-1b: pre-fetch head never held + GitHub moved again -> FAIL-INFRA" || bad G2-1b "rc=$RC $LOGL"
+run none bs_new >/dev/null
+( rm -f "$T/fired"; DTT_MODE=before_lsremote git ls-remote "$T/src.git" >/dev/null; rm -f "$T/fired" )
+run sibling_then_push bs_r4
+[ $RC -eq 1 ] && has FAIL-REPRODUCE && ok "G2-1b CONTROL: r4 called it 'backup NOT valid'" || bad G2-1bc "rc=$RC $LOGL"
+run none bs_new >/dev/null
+# G2-1c: the known file renamed away -> the check could not run -> FAIL-INFRA.
+H=$($R --git-dir="$T/src.git" rev-parse refs/heads/$B)
+KB=$($R --git-dir="$T/src.git" rev-parse "$H:CLAUDE.md")
+rm -f "$T/brk.ids"; both mkbroken "$(printf '100644 blob %s\tCLAUDE-renamed.md' "$KB")" "CLAUDE.md renamed" CLAUDE.md
+brk_same && ok "G2-1c harness: the rename commit has one id in both stores" || bad G2-1c-pre "$(cat "$T/brk.ids")"
+run noop_fetch bs_new
+[ $RC -eq 1 ] && has "FAIL-INFRA CLAUDE.md is not in the head's tree" && ok "G2-1c: a renamed known file -> FAIL-INFRA, not a verdict" || bad G2-1c "rc=$RC $LOGL"
+run noop_fetch bs_r4
+[ $RC -eq 1 ] && has FAIL-REPRODUCE && ok "G2-1c CONTROL: r4 called the backup NOT valid" || bad G2-1cc "rc=$RC $LOGL"
+$R --git-dir="$T/src.git" update-ref refs/heads/$B "$H"; $R --git-dir="$T/mirror.git" update-ref refs/heads/$B "$H"
+# G2-3: a page that fails is logged.
+CCSEND_FAIL=1; export CCSEND_FAIL
+run fail_fetch bs_new
+grep -q "PAGE FAILED (cc-send exit 1: cc-send: simulated failure) — the alarm above did NOT reach Discord" "$T/sync.log" && ok "G2-3: a failed page is logged with cc-send's own line" || bad G2-3 "$(tail -2 "$T/sync.log")"
+run fail_fetch bs_r4
+! grep -q "PAGE FAILED" "$T/sync.log" && posted && ok "G2-3 CONTROL: r4's failed page left no trace in the log" || bad G2-3c "$(tail -2 "$T/sync.log")"
+unset CCSEND_FAIL
+# G2-2: an exported GIT_OBJECT_DIRECTORY must not point the gate at another store. The mirror is
+# MISSING a blob that only the test GitHub holds; a decoy object dir reaches GitHub's store.
+run none bs_new >/dev/null
+H=$($R --git-dir="$T/src.git" rev-parse refs/heads/$B)
+OB=$(printf 'only in the test GitHub %s' "$H" | $R --git-dir="$T/src.git" hash-object -w --stdin)
+rm -f "$T/brk.ids"; both mkbroken "$(printf '100644 blob %s\tzz-only-in-src.txt' "$OB")" "a blob only GitHub holds" zz-only-in-src.txt
+brk_same && ok "G2-2 harness: one commit id in both stores" || bad G2-2-pre "$(cat "$T/brk.ids")"
+mkdir -p "$T/decoy-objects/info"; printf '%s\n' "$T/src.git/objects" > "$T/decoy-objects/info/alternates"
+GIT_OBJECT_DIRECTORY="$T/decoy-objects"; export GIT_OBJECT_DIRECTORY
+run noop_fetch bs_new; NRC=$RC; NL=$LOGL
+run noop_fetch bs_r4; RRC=$RC; RL=$LOGL
+unset GIT_OBJECT_DIRECTORY
+[ $NRC -eq 1 ] && [ "${NL#* FAIL-REPRODUCE}" != "$NL" ] && echo "$NL" | grep -q "missing-objects=1" && ok "G2-2: with GIT_OBJECT_DIRECTORY exported, the gate still checks the MIRROR (missing-objects=1)" || bad G2-2 "rc=$NRC $NL"
+[ $RRC -eq 0 ] && [ "${RL#* PASS}" != "$RL" ] && ok "G2-2 CONTROL: r4 checked the decoy store and logged PASS for a mirror missing a blob" || bad G2-2c "rc=$RRC $RL"
+$R --git-dir="$T/src.git" update-ref refs/heads/$B "$H"; $R --git-dir="$T/mirror.git" update-ref refs/heads/$B "$H"
 
 run none bs_new
 [ $RC -eq 0 ] && has PASS && ok "positive: a healthy mirror still PASSes after all of the above" || bad Fp "rc=$RC $LOGL"

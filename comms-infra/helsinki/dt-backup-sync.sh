@@ -8,17 +8,23 @@
 # reviewed sha (B-CREDENTIALS-PRIVATE-REPO OBJ-4a).
 #
 # B-CREDENTIALS-PRIVATE-REPO, 2026-09-29 (pre-audit A3, A4, A5, and a fresh-reader round):
-#  - GitHub's head is read BEFORE the fetch. It used to be read after, so a push landing
-#    between the two made github != mirror and raised a false "BACKUP REPRODUCTION FAIL"
-#    (3 times since 09-02, each with a commit 0-3 s before the tick).
+#  - GitHub's head is read BEFORE the fetch. It used to be read after, so GitHub moving
+#    during a run read as a bad backup. MEASURED over all five rotations of this log
+#    (2026-08-30T00:00:01Z..2026-09-29T21:15:01Z, 2,972 runs): 10 FAIL-REPRODUCE, and in EVERY
+#    one the mirror was an ancestor of GitHub's head, 1-3 commits behind — never a corrupt
+#    mirror. Two pairs repeated across consecutive runs (09-02), which also fits a fetch that
+#    failed silently; the old script ignored the fetch's exit and could not tell them apart.
 #  - IN SYNC means, after the fetch, the mirror's branch EQUALS GitHub's head as read before
 #    the fetch, OR equals a second read taken after it, OR the fetch MOVED the branch to a
 #    descendant of the first read (a push landed between the read and the fetch; a fetch can
 #    only write what GitHub served). A fetch that exits 0 WITHOUT moving the branch is not in
-#    sync unless GitHub reads the same head. A rewind DURING a run therefore passes (the mirror
-#    is GitHub as served at fetch time) and the next run follows it; a rewind BETWEEN runs is
-#    simply fetched. Either way the dropped commits stay recoverable only because deploy.sh
-#    turns on the mirror's reflog (core.logAllRefUpdates).
+#    sync unless GitHub reads the same head. A rewind DURING a run passes ONLY when GitHub is
+#    still at the rewound head at the second read (or the mirror contains the first read). If
+#    GitHub moved AGAIN, this box cannot tell "GitHub rewound to a commit we never held" from
+#    "the branch ref was written to garbage", so those two outcomes are FAIL-INFRA (not a
+#    verdict), never FAIL-REPRODUCE; the next run decides. A rewind BETWEEN runs is simply
+#    fetched. The dropped commits stay recoverable only because deploy.sh turns on the mirror's
+#    reflog (core.logAllRefUpdates).
 #  - The fetch AND the reproduction clone hold the lock dt-review also takes: a dt-review
 #    fetch landing between them would otherwise move the branch and fail a good backup.
 #  - Every step's exit status is checked. A step that could not complete is FAIL-INFRA,
@@ -29,13 +35,24 @@
 #    says nothing about objects; the tree check is what does, and that check must PROVE it ran
 #    (a listing of at least one line, and an answer for every line) or it is FAIL-INFRA too,
 #    never a zero. History behind the head is not walked — that would read the whole 460 MB
-#    pack every 15 minutes.
+#    pack every 15 minutes. A known file missing from the head (renamed) is FAIL-INFRA: the
+#    check could not run, which says nothing about the backup.
+#  - REACH, stated (Langston, gate 4a-2): `--shared` + batch-check proves the head's objects
+#    are LOCATABLE, not VALID; only the known file's bytes are re-hashed; nothing behind the
+#    head is checked. That is acceptable only because dt-review `show` re-hashes the commit,
+#    every tree and the blob at a pin. dt-review `grep`/`ls` at a pin are covered by NEITHER
+#    instrument, and they say so on every read ("content is as stored (not re-hashed)").
 #  - git's automatic gc is OFF for the fetches (it could delete packs under a running clone);
 #    `gc --auto` runs HERE instead, synchronously, inside the lock, after the reproduction.
 #  - On PASS, DT_SYNC_PASS is written atomically as "<epoch> <iso>" of ONE instant. That, not
 #    FETCH_HEAD's mtime, is the mirror's age: a failed fetch truncates and touches FETCH_HEAD.
 #  - One delayed retry on ls-remote and on the fetch: this key saw 13 transient publickey
 #    denials since 09-02 (GB-10), each of which used to page as an infra failure.
+#  - Every git command here runs in $REPO by cd, never by --git-dir, so the caller's GIT_*
+#    environment is cleared first: an exported GIT_DIR or GIT_OBJECT_DIRECTORY would silently
+#    point the whole gate at another store while it logged PASS naming $REPO.
+#  - A page that fails is LOGGED: it is the gate's only alarm (cc-send fails loudly when its
+#    backend file is missing, and that exit used to be discarded).
 REPO=/srv/dawntrader-backup.git
 LOG=/var/log/dt-backup-sync.log
 BRANCH=migration/aws-supabase
@@ -45,6 +62,8 @@ PASS_STAMP="$REPO/DT_SYNC_PASS"
 LOCK_WAIT=300
 RETRY_AFTER=20
 FETCH_TIMEOUT=600
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
+      GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_NAMESPACE
 export GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2'
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -53,7 +72,11 @@ first_line() { printf '%s\n' "$1" | sed -n '/./{p;q;}'; }
 
 # `9>&-` on every child here and below: no child (an ssh master, a backgrounded helper, a
 # detached gc) may inherit the lock and hold it after this script exits.
-page() { cc-send --sender "Backup gate" --message "$1" 2>/dev/null 9>&-; }
+page() {
+  po=$(cc-send --sender "Backup gate" --message "$1" 2>&1 >/dev/null 9>&-)   # its error text only
+  prc=$?
+  [ $prc -eq 0 ] || log "PAGE FAILED (cc-send exit $prc: $(first_line "$po")) — the alarm above did NOT reach Discord"
+}
 # The gate could not complete. NOT a verdict on the backup, in either direction.
 gate_fail() {
   log "FAIL-INFRA $1 — the gate could not complete; NOT a verdict on the backup either way"
@@ -144,6 +167,7 @@ present() {
 SRC2=
 NOTE=
 SYNC=
+INFRA_WHY=
 if [ "$SRC" = "$MIR" ]; then
   SYNC=1
 else
@@ -156,12 +180,12 @@ else
   elif [ "$MIR" = "$MIR0" ]; then
     NOTE=" (the fetch exited 0 but did not move the branch off $MIR0, a head GitHub showed neither before nor after it)"
   elif ! present "$SRC"; then
-    NOTE=" (the fetch moved the branch to $MIR, but the mirror does not hold $SRC, GitHub's head read before the fetch)"
+    INFRA_WHY="the fetch moved the branch to $MIR, the mirror does not hold $SRC (GitHub's head before the fetch), and GitHub now reads $SRC2: a rewind-and-move during the run and a bad ref look the same from here"
   elif anc "$SRC" "$MIR"; then
     SYNC=1
     NOTE=" (a push landed during the run: the fetch moved the branch from ${MIR0:-nothing} to $MIR, which contains GitHub's earlier head; GitHub has since moved to $SRC2, which the next run fetches)"
   else
-    NOTE=" (the fetch moved the branch to $MIR, which does not contain $SRC, GitHub's head read before the fetch)"
+    INFRA_WHY="the fetch moved the branch to $MIR, which does not contain $SRC (GitHub's head before the fetch), and GitHub now reads $SRC2: a rewind-and-move during the run and a bad ref look the same from here"
   fi
 fi
 
@@ -208,6 +232,14 @@ git -c gc.autoDetach=false gc --auto --quiet 2>>"$LOG" 9>&- || log "WARN gc --au
 exec 9>&-
 
 [ -z "$OBJ_ERR" ] || gate_fail "the object check could not complete: $OBJ_ERR — github=$SRC mirror=$MIR reproduced=$REP_C"
+# The object check ran. A missing object, a head the clone does not reproduce, or known bytes
+# that do not re-hash are verdicts. What this box cannot decide is not.
+if [ "$MISSING" = 0 ] && [ "$MIR" = "$REP_C" ] && [ -z "$REP_B" ]; then
+  gate_fail "$KNOWN is not in the head's tree (renamed?), so the known-file check could not run — github=$SRC mirror=$MIR"
+fi
+if [ "$MISSING" = 0 ] && [ "$MIR" = "$REP_C" ] && [ "$REHASH" = "$REP_B" ] && [ -n "$INFRA_WHY" ]; then
+  gate_fail "$INFRA_WHY"
+fi
 if [ -n "$SYNC" ] && [ "$MIR" = "$REP_C" ] && [ -n "$REP_B" ] && [ "$REHASH" = "$REP_B" ] && [ "$MISSING" = 0 ]; then
   NOW=$(date -u +%s)
   tmp="$PASS_STAMP.tmp.$$"

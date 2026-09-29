@@ -5,9 +5,12 @@
 # Because deploy.sh refuses to run unless its own bytes equal deploy.sh at --sha, the test copy is
 # committed into the TEST mirror as a child of the sha under test, and that commit is installed.
 # Args: <full sha under test> <old sha that predates comms-infra/helsinki/>
-# SETUP: /tmp/dtr-test/src/deploy.r1, deploy.r2, deploy.r3 = comms-infra/discord/deploy.sh at b4db96b9c,
-# b9ca76485 and 764ec389b (before fresh-reader rounds 1, 2 and 3), for the CONTROL lines, which must FAIL
-# on them. r3 has the self-check too, so it is committed like the copy under test (TC3, on 764ec389b).
+# SETUP: /tmp/dtr-test/src/deploy.r1, deploy.r2, deploy.r3, deploy.r4 = comms-infra/discord/deploy.sh at
+# b4db96b9c, b9ca76485, 764ec389b (before fresh-reader rounds 1, 2, 3) and 2767d358a (what Langston approved
+# with conditions at gate 4a-2), for the CONTROL lines, which must FAIL on them. r3 and r4 have the
+# self-check too, so each is committed like the copy under test (TC3 on 764ec389b, TC4 on 2767d358a).
+# The redirected target directories are root-owned 0755, as on the box: the installer now refuses any
+# other (it replaces files by rename inside them).
 # The test copies also shorten two waits: the bridges' `sleep 8` and the lock's `flock -w 300`.
 set -u
 SHA=$1; OLD=$2
@@ -15,6 +18,7 @@ T=/tmp/dtr-test/dep
 B=migration/aws-supabase
 [ "$(id -u)" -eq 0 ] || { echo "run as root"; exit 9; }
 rm -rf "$T"; mkdir -p "$T"/{bin,opt/venv/bin,units,log,lib,etc,stub}; chown -R langston:langston "$T"
+chown root:root "$T/bin" "$T/opt" "$T/units" "$T/etc"; chmod 0755 "$T/bin" "$T/opt" "$T/units" "$T/etc"
 PASSN=0; FAILN=0
 ok()  { PASSN=$((PASSN+1)); echo "PASS $1"; }
 bad() { FAILN=$((FAILN+1)); echo "FAIL $1 :: $2"; }
@@ -51,6 +55,9 @@ L update-ref "refs/heads/$B" "$TC"
 redirect /tmp/dtr-test/src/deploy.r3 > "$T/deploy.r3"; chown langston:langston "$T/deploy.r3"
 TB3=$(L hash-object -w "$T/deploy.r3")
 TC3=$(L commit-tree -p "$TC" -m "test: redirected r3 deploy.sh" "$(tree_with 764ec389b comms-infra/discord/deploy.sh "$TB3" 100755)")
+redirect /tmp/dtr-test/src/deploy.r4 > "$T/deploy.r4"; chown langston:langston "$T/deploy.r4"
+TB4=$(L hash-object -w "$T/deploy.r4")
+TC4=$(L commit-tree -p "$TC" -m "test: redirected r4 deploy.sh" "$(tree_with 2767d358a comms-infra/discord/deploy.sh "$TB4" 100755)")
 
 printf '#!/bin/sh\necho "stub $(basename $0) $*"\n' > "$T/stub/apt-get"
 # systemctl stub; HOLDLOCK=1 grabs the mirror's fetch lock (8 s) at daemon-reload, i.e. after the install.
@@ -71,6 +78,7 @@ if [ "\$1" = -l ]; then
   [ -f $T/crontab.txt ] || { echo "no crontab for langston" >&2; exit 1; }
   cat $T/crontab.txt
 else
+  [ "\${FAKECRON:-}" = failwrite ] && { echo "crontab: simulated write failure" >&2; exit 1; }
   cat > $T/crontab.txt
 fi
 EOF2
@@ -148,7 +156,7 @@ run "$T/deploy.sh" --sha "$TC" --only notices
 
 # ================= round 2 (fresh-reader round 2 on b9ca76485) =================
 # F2-D4: the crontab is read ONCE; a failed read never becomes an empty crontab.
-printf '# langston crontab\n*/15 * * * * /usr/local/bin/dt-backup-sync.sh >/dev/null 2>&1\n5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"
+printf '# langston crontab\n*/15 * * * * %s/bin/dt-backup-sync.sh >/dev/null 2>&1\n5 4 * * * /usr/local/bin/other-job\n' "$T" > "$T/crontab.txt"
 cp "$T/crontab.txt" "$T/crontab.before"
 run "$T/deploy.sh" --sha "$TC" --only readers
 cmp -s "$T/crontab.txt" "$T/crontab.before" && grep -q "langston cron already present for dt-backup-sync.sh" "$T/out" && ok "F2-D4: an existing cron line is found; the crontab is untouched" || bad F2-D4a "$(tail -2 "$T/out")"
@@ -252,5 +260,63 @@ run "$T/deploy.r3" --sha "$TC3" --only "$(printf 'readers\nbridges')"
 L update-ref "refs/heads/$B" "$TC"
 run "$T/deploy.sh" --sha "$TC" --only readers
 grep -q "^Done: readers at $TC\.$" "$T/out" && ok "F3-D6: the report names the groups run" || bad F3-D6r "$(tail -1 "$T/out")"
+
+
+# ================= Langston's gate 4a-2 conditions (APPROVED WITH CONDITIONS on 2767d358a); CONTROLS run r4 (TC4) =================
+# install stub: FAILINSTALL=<substring> makes the install of a matching target fail (inside the loop).
+cat > "$T/stub/install" <<'EOF4'
+#!/bin/sh
+for a in "$@"; do last=$a; done
+if [ -n "${FAILINSTALL:-}" ]; then case "$last" in *"$FAILINSTALL"*) echo "install: simulated failure for $last" >&2; exit 1 ;; esac; fi
+exec /usr/bin/install "$@"
+EOF4
+chmod +x "$T/stub/install"
+printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"
+L update-ref "refs/heads/$B" "$TC"
+run "$T/deploy.sh" --sha "$TC" --only readers
+# G2-D4: files are replaced by RENAME, never truncated in place (a running script keeps its inode).
+I0=$(stat -c %i "$T/bin/dt-backup-sync.sh")
+run "$T/deploy.sh" --sha "$TC" --only readers
+I1=$(stat -c %i "$T/bin/dt-backup-sync.sh")
+[ $RC -eq 0 ] && [ "$I0" != "$I1" ] && ok "G2-D4: dt-backup-sync.sh replaced by rename (inode $I0 -> $I1)" || bad G2-D4 "rc=$RC inode $I0 -> $I1"
+L update-ref "refs/heads/$B" "$TC4"
+I0=$(stat -c %i "$T/bin/dt-backup-sync.sh")
+run "$T/deploy.r4" --sha "$TC4" --only readers
+I1=$(stat -c %i "$T/bin/dt-backup-sync.sh")
+[ "$I0" = "$I1" ] && ok "G2-D4 CONTROL: r4 truncated it in place (same inode $I0)" || bad G2-D4c "rc=$RC inode $I0 -> $I1"
+L update-ref "refs/heads/$B" "$TC"
+# G2-D4b: a target directory writable by group/other is refused in pre-flight (a rename there could be raced).
+chmod 0775 "$T/bin"
+run "$T/deploy.sh" --sha "$TC" --only readers
+[ $RC -eq 2 ] && grep -q "is not root-owned with no group/other write" "$T/out" && ! grep -q "installed $T/bin" "$T/out" && ok "G2-D4b: a group-writable target dir is refused before any install" || bad G2-D4b "rc=$RC $(tail -2 "$T/out")"
+chmod 0755 "$T/bin"
+# G2-D5: an unexpected failure INSIDE the install loop says the install is partial.
+FAILINSTALL=dt-backup-sync.sh bash "$T/deploy.sh" --sha "$TC" --only readers > "$T/out" 2>&1; RC=$?
+[ $RC -ne 0 ] && grep -q "STOPPED by an unexpected failure" "$T/out" && grep -q "the install loop was interrupted" "$T/out" && ok "G2-D5a: a failure inside the install loop reports a PARTIAL install (rc=$RC)" || bad G2-D5a "rc=$RC $(tail -3 "$T/out")"
+! ls "$T"/bin/*.deploy.* >/dev/null 2>&1 && ok "G2-D5a: no temporary file is left in the target dir" || bad G2-D5t "$(ls "$T"/bin/*.deploy.* 2>&1)"
+L update-ref "refs/heads/$B" "$TC4"
+FAILINSTALL=dt-backup-sync.sh bash "$T/deploy.r4" --sha "$TC4" --only readers > "$T/out" 2>&1; RC=$?
+[ $RC -ne 0 ] && ! grep -q "interrupted\|ARE installed\|STOPPED" "$T/out" && ok "G2-D5a CONTROL: r4 stopped mid-install and said nothing about the state (rc=$RC)" || bad G2-D5ac "rc=$RC $(tail -3 "$T/out")"
+L update-ref "refs/heads/$B" "$TC"
+# G2-D5b: an unexpected failure AFTER the install (the crontab write, inside a function) says what IS installed.
+printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"   # the line is absent, so it must be WRITTEN
+FAKECRON=failwrite bash "$T/deploy.sh" --sha "$TC" --only readers > "$T/out" 2>&1; RC=$?
+[ $RC -ne 0 ] && grep -q "STOPPED by an unexpected failure" "$T/out" && grep -q "ARE installed and verified" "$T/out" && ok "G2-D5b: a post-install failure in a function says the files ARE installed (rc=$RC)" || bad G2-D5b "rc=$RC $(tail -3 "$T/out")"
+L update-ref "refs/heads/$B" "$TC4"
+printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"
+FAKECRON=failwrite bash "$T/deploy.r4" --sha "$TC4" --only readers > "$T/out" 2>&1; RC=$?
+[ $RC -ne 0 ] && ! grep -q "ARE installed" "$T/out" && ok "G2-D5b CONTROL: r4 stopped after installing and said nothing (rc=$RC)" || bad G2-D5bc "rc=$RC $(tail -3 "$T/out")"
+L update-ref "refs/heads/$B" "$TC"
+# G2-D6: a DIFFERENT line for the same cron job is refused in pre-flight, never silently accepted.
+printf '*/15 * * * * /opt/old/dt-backup-sync.sh >/dev/null 2>&1\n' > "$T/crontab.txt"
+run "$T/deploy.sh" --sha "$TC" --only readers
+[ $RC -eq 2 ] && grep -q "has a different dt-backup-sync.sh line" "$T/out" && ! grep -q "installed $T/bin" "$T/out" && ok "G2-D6: a different dt-backup-sync cron line refuses in pre-flight" || bad G2-D6 "rc=$RC $(tail -2 "$T/out")"
+L update-ref "refs/heads/$B" "$TC4"
+run "$T/deploy.r4" --sha "$TC4" --only readers
+grep -q "langston cron already present for dt-backup-sync.sh" "$T/out" && ok "G2-D6 CONTROL: r4 took the stale line as 'already present'" || bad G2-D6c "rc=$RC $(tail -2 "$T/out")"
+L update-ref "refs/heads/$B" "$TC"
+printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"
+run "$T/deploy.sh" --sha "$TC" --only readers
+[ $RC -eq 0 ] && grep -qxF "*/15 * * * * $T/bin/dt-backup-sync.sh >/dev/null 2>&1" "$T/crontab.txt" && ok "G2 positive: a clean run still installs and writes the canonical cron line" || bad G2p "rc=$RC $(tail -2 "$T/out")"
 
 echo "DEPLOY SUMMARY: $PASSN pass, $FAILN fail"

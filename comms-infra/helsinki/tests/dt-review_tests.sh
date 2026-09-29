@@ -10,6 +10,7 @@
 #   dt-review.r2         comms-infra/helsinki/dt-review at b9ca76485 (before fresh-reader round 2)
 #   dt-review.r3         comms-infra/helsinki/dt-review at 764ec389b (before fresh-reader round 3)
 #   dt-review.r4         comms-infra/helsinki/dt-review at 2767d358a (what Langston approved with conditions at gate 4a-1)
+#   dt-review.r5         comms-infra/helsinki/dt-review at 3b7b46f59 (gate 4a-1 conditions folded; before gate 4a-2 condition 2)
 # and chown -R langston. Run: cd /home/langston && sudo -u langston HOME=/home/langston bash <this>.
 # Remove /tmp/dtr-test afterwards.
 # Every "CONTROL" line runs the same check against an OLDER copy and must FAIL there: a check
@@ -44,6 +45,7 @@ mk_dtr r2       "$GH"                 90 "$T/src/dt-review.r2"
 mk_dtr r3       "$GH"                 90 "$T/src/dt-review.r3"
 mk_dtr r3_fail  "$T/nonexistent.git"  90 "$T/src/dt-review.r3"
 mk_dtr r4       "$GH"                 90 "$T/src/dt-review.r4"
+mk_dtr r5       "$GH"                 90 "$T/src/dt-review.r5"
 sed -e "s#^REPO=.*#REPO=$T/mirror.git#" "$T/src/dt-review.baseline" > "$T/dtr_base"; chmod +x "$T/dtr_base"
 
 run() { "$@" > "$T/o" 2> "$T/e"; RC=$?; OUT=$(cat "$T/o"); ERR=$(cat "$T/e"); }
@@ -331,7 +333,7 @@ run "$T/r3" show "$BT" CLAUDE.md
 run "$T/dtr" grep resolve_review_ref comms-infra
 [ $RC -eq 0 ] && echo "$ERR" | grep -q "^# grep 'resolve_review_ref' at $(cur) — on migration/aws-supabase; content is as stored (not re-hashed) (" && ok "G1-C1: an on-branch, fetch-ok grep says 'as stored (not re-hashed)'" || bad G1-C1 "rc=$RC ${ERR:0:200}"
 run "$T/r4" grep resolve_review_ref comms-infra
-[ $RC -eq 0 ] && ! echo "$ERR$OUT" | grep -q "not re-hashed" && ok "G1-C1 CONTROL: r4 said nothing about integrity on the same read" || bad G1-C1c "rc=$RC"
+[ $RC -eq 0 ] && ! echo "$ERR" | grep -q "not re-hashed" && ok "G1-C1 CONTROL: r4 said nothing about integrity on the same read (its stderr; stdout is search hits, which include this test's own line)" || bad G1-C1c "rc=$RC"
 run "$T/dtr" ls "@$PIN"
 echo "$ERR" | grep -q "content is as stored (not re-hashed)" && ok "G1-C1: ls says it too" || bad G1-C1l "${ERR:0:160}"
 run "$T/dtr" show "$PIN" "$P"
@@ -345,5 +347,20 @@ echo "$ERR" | head -1 | grep -q "^error:" && ok "G1-C2 CONTROL: r4 printed git's
 # G1-C3: the branch-name refusal gives the true reason (a name can move), not a mutable invariant.
 run "$T/dtr" show main CLAUDE.md
 [ $RC -eq 2 ] && echo "$ERR" | grep -q "a name can move and a pin cannot" && ! echo "$ERR" | grep -q "every ref in the mirror" && ok "G1-C3: the refusal states why (a name can move)" || bad G1-C3 "rc=$RC ${ERR:0:200}"
+
+# ================= Langston's gate 4a-2 condition 2, applied to the reader; CONTROL runs r5 (3b7b46f59) =================
+# G2-R: --git-dir does not stop an exported GIT_OBJECT_DIRECTORY from redirecting reads. A commit
+# in the test mirror names a blob the mirror does NOT hold; a decoy object dir reaches a side
+# store that does. The reader must read the MIRROR (exit 3), not the decoy.
+rm -rf "$T/side.git" "$T/decoy-objects"; git init -q --bare "$T/side.git"
+SB=$(printf 'only in a side store %s\n' "$(date +%s%N)" | git --git-dir="$T/side.git" hash-object -w --stdin)
+ST=$(printf '100644 blob %s\tside.txt\n' "$SB" | $M mktree --missing)
+SC=$($M commit-tree -p "$(cur)" -m "names a blob only a side store holds (test mirror only)" "$ST")
+mkdir -p "$T/decoy-objects/info"; printf '%s\n%s\n' "$T/mirror.git/objects" "$T/side.git/objects" > "$T/decoy-objects/info/alternates"
+GIT_OBJECT_DIRECTORY="$T/decoy-objects" run "$T/dtr" show "$SC" side.txt; NRC=$RC; NOUT=$OUT
+GIT_OBJECT_DIRECTORY="$T/decoy-objects" run "$T/r5" show "$SC" side.txt; RRC=$RC; ROUT=$OUT
+[ $NRC -eq 3 ] && [ -z "$NOUT" ] && ok "G2-R: with GIT_OBJECT_DIRECTORY exported, the reader still reads the mirror (exit 3, nothing served)" || bad G2-R "rc=$NRC out=${NOUT:0:80}"
+[ $RRC -eq 0 ] && echo "$ROUT" | grep -q "only in a side store" && ok "G2-R CONTROL: r5 served a blob from a store that is NOT the mirror" || bad G2-Rc "rc=$RRC out=${ROUT:0:120}"
+rm -rf "$T/side.git" "$T/decoy-objects"
 
 echo "DTR SUMMARY: $PASSN pass, $FAILN fail"
