@@ -357,7 +357,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-MEASURE-GATE (CC-A) — re-surfacing alerts re-emit old measurements
 - B-OPEN-OBLIGATION-SWEEP (CC-B) — process instrument for homed-but-unwatched items
 - B-PYCACHE-PREFIX-INVOCATION (—) — reviewer-tooling hardening on the Helsinki box; not the trading path (a planted-cache execution vector — worth doing, not a live blocker)
-- B-READ-MODEL-BLOB-VERIFY (Infra Claude) — the reviewer's pinned reads served the wrong file twice — a reviewer reading the wrong object weakens every review before live (Infra)
+- ~~B-READ-MODEL-BLOB-VERIFY (Infra Claude)~~ — **SUPERSEDED 2026-09-29 (§9.4 disposition 5): B-CREDENTIALS-PRIVATE-REPO OBJ-4a's `dt-review show <sha>` re-hashes commit, trees and blob (live on Helsinki, Langston Step 8); `#1043` closes at that batch's OBJ-6 flip.** Was: the reviewer's pinned reads served the wrong file twice — a reviewer reading the wrong object weakens every review before live (Infra)
 - B-REVIEWER-LOOP (CC-A) — plan row 4, PLACED 2026-08-28, open (CC-A lane reply) — governance tooling
 - B-RULES-LAYER (CC-A) — Kyle-directed: move behavioural rules to a stronger layer — crew process
 - B-CHECKER-BLOCK-GATE (CC-A) — #1107: let the governance checker block a close, as Kyle approved 2026-07-10 for real issues only; ⛔ AFTER B-RULES-LAYER; gated on the measured checker-precision figure (the share of its alerts that were real)

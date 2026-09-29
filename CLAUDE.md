@@ -393,7 +393,7 @@ ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/l
 
 **★ NOTHING CARRIES TO AN INDEPENDENT CLONE** — git identity (global is empty; the first commit outright FAILS without it), remotes, `http.postBuffer` 500 MB, untracked local config (`.claude/launch.json`). `node_modules` are per-clone, never shared.
 
-**★ LANGSTON READS OFF THE REVIEW BRANCH — no working copy at all.** Single file = raw GitHub at the stamped sha; whole-tree search = `dt-review` (pulls from GitHub FIRST, refuses on failed fetch). **Full detail: `1-system-manual/LANGSTON_ARCHITECTURE.md` §6.** Never `/mnt/gdrive`.
+**★ LANGSTON READS OFF THE REVIEW BRANCH — no working copy at all.** Single file = `dt-review show <sha> <path>` (every object re-hashed); search = `dt-review grep @<sha>` (stored bytes, not re-hashed); both pull from GitHub FIRST. Raw GitHub works only until the repo goes private. **Full detail: `1-system-manual/LANGSTON_ARCHITECTURE.md` §6.** Never `/mnt/gdrive`.
 
 **`C:\dev` is RETIRED** (deleted 2026-07-24; stashes archived at `root@204.168.141.77:/root/backups/dev-bench-stashes-2026-07-23/`). **The old Google Drive working folder is RETIRED** (push URL disabled, marker file at its root, moved by Kyle to `Frozen Jan - July 2026 REPO/`).
 
