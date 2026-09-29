@@ -360,7 +360,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-READ-MODEL-BLOB-VERIFY (Infra Claude) — the reviewer's pinned reads served the wrong file twice — a reviewer reading the wrong object weakens every review before live (Infra)
 - B-REVIEWER-LOOP (CC-A) — plan row 4, PLACED 2026-08-28, open (CC-A lane reply) — governance tooling
 - B-RULES-LAYER (CC-A) — Kyle-directed: move behavioural rules to a stronger layer — crew process
-- B-CHECKER-BLOCK-GATE (CC-A) — #1107: let the governance checker block a close, as Kyle approved 2026-07-10 for real issues only; ⛔ GATED on first measuring the checker's precision (the share of its alerts that were real)
+- B-CHECKER-BLOCK-GATE (CC-A) — #1107: let the governance checker block a close, as Kyle approved 2026-07-10 for real issues only; ⛔ AFTER B-RULES-LAYER; gated on the measured checker-precision figure (the share of its alerts that were real)
 - B-SCRIPTS-TSC-COVERAGE (CC-B) — type-checking coverage for the scripts folder — tooling
 - B-SHARED-TMP-ISOLATION (CC-B) — sessions share /tmp so a commit message can be another session's — crew tooling
 - B-STATE-ASSERTION-LINT (CC-A) — sentences true when written and wrong now — governance tooling
