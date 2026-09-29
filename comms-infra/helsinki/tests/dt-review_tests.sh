@@ -9,6 +9,7 @@
 #   dt-review.r1         comms-infra/helsinki/dt-review at b4db96b9c (before fresh-reader round 1)
 #   dt-review.r2         comms-infra/helsinki/dt-review at b9ca76485 (before fresh-reader round 2)
 #   dt-review.r3         comms-infra/helsinki/dt-review at 764ec389b (before fresh-reader round 3)
+#   dt-review.r4         comms-infra/helsinki/dt-review at 2767d358a (what Langston approved with conditions at gate 4a-1)
 # and chown -R langston. Run: cd /home/langston && sudo -u langston HOME=/home/langston bash <this>.
 # Remove /tmp/dtr-test afterwards.
 # Every "CONTROL" line runs the same check against an OLDER copy and must FAIL there: a check
@@ -42,6 +43,7 @@ mk_dtr r1_fail  "$T/nonexistent.git"  90 "$T/src/dt-review.r1"
 mk_dtr r2       "$GH"                 90 "$T/src/dt-review.r2"
 mk_dtr r3       "$GH"                 90 "$T/src/dt-review.r3"
 mk_dtr r3_fail  "$T/nonexistent.git"  90 "$T/src/dt-review.r3"
+mk_dtr r4       "$GH"                 90 "$T/src/dt-review.r4"
 sed -e "s#^REPO=.*#REPO=$T/mirror.git#" "$T/src/dt-review.baseline" > "$T/dtr_base"; chmod +x "$T/dtr_base"
 
 run() { "$@" > "$T/o" 2> "$T/e"; RC=$?; OUT=$(cat "$T/o"); ERR=$(cat "$T/e"); }
@@ -323,5 +325,25 @@ run "$T/dtr" show "$BT" CLAUDE.md
 [ $RC -eq 3 ] && ok "F3-9b: a tag with a missing target -> exit 3" || bad F3-9b "rc=$RC ${ERR:0:160}"
 run "$T/r3" show "$BT" CLAUDE.md
 [ $RC -eq 2 ] && ok "F3-9b CONTROL: r3 called it the caller's error (exit 2)" || bad F3-9bc "rc=$RC ${ERR:0:120}"
+
+# ================= Langston's gate 4a-1 conditions (APPROVED WITH CONDITIONS on 2767d358a); CONTROLS run r4 =================
+# G1-C1: EVERY read states its integrity basis — on-branch and fetch-ok too, not only under a loud header.
+run "$T/dtr" grep resolve_review_ref comms-infra
+[ $RC -eq 0 ] && echo "$ERR" | grep -q "^# grep 'resolve_review_ref' at $(cur) — on migration/aws-supabase; content is as stored (not re-hashed) (" && ok "G1-C1: an on-branch, fetch-ok grep says 'as stored (not re-hashed)'" || bad G1-C1 "rc=$RC ${ERR:0:200}"
+run "$T/r4" grep resolve_review_ref comms-infra
+[ $RC -eq 0 ] && ! echo "$ERR$OUT" | grep -q "not re-hashed" && ok "G1-C1 CONTROL: r4 said nothing about integrity on the same read" || bad G1-C1c "rc=$RC"
+run "$T/dtr" ls "@$PIN"
+echo "$ERR" | grep -q "content is as stored (not re-hashed)" && ok "G1-C1: ls says it too" || bad G1-C1l "${ERR:0:160}"
+run "$T/dtr" show "$PIN" "$P"
+[ $RC -eq 0 ] && echo "$ERR" | grep -q "; content is exact (re-hashed) (" && ok "G1-C1: show says 'exact (re-hashed)'" || bad G1-C1s "${ERR:0:200}"
+# G1-C2: a blob pin (full or short) prints no raw git "error:" ahead of dt-review's own refusal.
+run "$T/dtr" show "$WANT" CLAUDE.md; A=$ERR; ARC=$RC
+run "$T/dtr" show "$SP" CLAUDE.md; Bq=$ERR; BRC=$RC
+! printf '%s\n%s\n' "$A" "$Bq" | grep -q "^error:" && [ $ARC -eq 2 ] && [ $BRC -eq 1 ] && ok "G1-C2: blob pins refuse (2 / 1) with no unattributed git 'error:' line" || bad G1-C2 "rc=$ARC/$BRC ${A:0:120} | ${Bq:0:120}"
+run "$T/r4" show "$WANT" CLAUDE.md
+echo "$ERR" | head -1 | grep -q "^error:" && ok "G1-C2 CONTROL: r4 printed git's raw 'error:' first" || bad G1-C2c "${ERR:0:160}"
+# G1-C3: the branch-name refusal gives the true reason (a name can move), not a mutable invariant.
+run "$T/dtr" show main CLAUDE.md
+[ $RC -eq 2 ] && echo "$ERR" | grep -q "a name can move and a pin cannot" && ! echo "$ERR" | grep -q "every ref in the mirror" && ok "G1-C3: the refusal states why (a name can move)" || bad G1-C3 "rc=$RC ${ERR:0:200}"
 
 echo "DTR SUMMARY: $PASSN pass, $FAILN fail"

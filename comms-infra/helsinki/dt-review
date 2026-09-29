@@ -147,7 +147,7 @@ if [ -n "$PINNED" ]; then
     ''|*[!0-9a-f]*) ok= ;;
     *) if [ ${#PIN} -ge 7 ] && [ ${#PIN} -le 40 ]; then ok=1; else ok=; fi ;;
   esac
-  [ -n "$ok" ] || refuse "'$PIN' is not a commit id (7-40 lowercase hex). Branch and tag names are refused: every ref in the mirror is an ancestor of $BRANCH, so a stale one would be served as if it were graded. Nothing was read."
+  [ -n "$ok" ] || refuse "'$PIN' is not a commit id (7-40 lowercase hex). Branch and tag names are refused: a name can move and a pin cannot, so only a pin says exactly what was read. Nothing was read."
 fi
 
 if [ "$(id -un)" != langston ]; then
@@ -286,7 +286,10 @@ if [ -z "$PINNED" ]; then
   SHA=$HEAD
   PLACE="on $BRANCH"
 else
-  SHA=$(git --git-dir="$REPO" rev-parse --verify --quiet "$PIN^{commit}")
+  # --quiet does not silence the peel error ("... dereferences to blob type"): it is KEPT in a
+  # file, not printed, because the classification below states the reason in dt-review's words
+  # and an unattributed git line first would read as an instrument failure.
+  SHA=$(git --git-dir="$REPO" rev-parse --verify --quiet "$PIN^{commit}" 2>"$TMPD/peel")
   if [ -z "$SHA" ]; then
     # Why did it not resolve? Only a CLEAN "no such commit" may be reported as absence.
     t=$(git --git-dir="$REPO" cat-file -t "$PIN" 2>&1)
@@ -347,7 +350,8 @@ fi
 
 # ---- 4. SERVE — every result is complete before anything reaches stdout ----------------
 provenance() {
-  say "# $1 at $SHA — $PLACE (mirror fetched $(age "$FETCH_OK" "$SYNC_PASS"); last fetch $LAST)"
+  # Every read states its integrity basis, not only a degraded or off-branch one.
+  say "# $1 at $SHA — $PLACE; $EXACT (mirror fetched $(age "$FETCH_OK" "$SYNC_PASS"); last fetch $LAST)"
   if [ -n "$LOUD" ]; then
     say "$LOUD"
     printf '%s\n' "$LOUD"
