@@ -24,6 +24,7 @@
 2c. `3n.u3` `B-CLOSE-WRITER-COSTS` — Langston's Step-4 findings: write the close row instead of deleting when no trade row exists; no invented `fees 0 / slippage 0` on stranded-clear.
 2d. `3n.u4` `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`) — an engine stop overflows `run_for_ms` once the session is older than 24.85 days; the flatten completes but the session row stays `running`. Found by exercising the stop path.
 3. ~~**`3n.v` `B-REACH-BASELINE-ADJUST`**~~ ✅ **CLOSED 2026-09-29** — the crowding arm fired; Kyle overrode the rollback and kept the rows. Record = `Batch Completion/B_REACH_BASELINE_ADJUST_COMPLETION_REPORT.md`. Split out and placed: `3n.v2` `B-VTS-CLASS-LABEL-INTEGRITY` (`#1068`) · `3n.v3` `B-GATE-WILDCARD-REFUSE` (`#1069`) · `3n.v4` `B-SILENT-STRATEGY-CENSUS` (`#1070`) · `3n.v5` `B-OPEN-OBLIGATION-SWEEP` (`#1071`).
+3b. `3n.v6` / sprint row 135a `B-CROWDING-CRITERION-OBJECT` (`#1095`) — NEW 2026-09-29, Langston's successor test for Kyle's override: does the ranking bound one strategy's share of what opens.
 3a. ~~`3n.v` `B-REACH-BASELINE-ADJUST`~~ — Kyle ruled the one-way rule goes; after CC-C's exit fix (`8a-P2`).
 4. `3n.x` review — necessary vs nice-to-have before live mode (CC-B drafts, Kyle decides).
 
