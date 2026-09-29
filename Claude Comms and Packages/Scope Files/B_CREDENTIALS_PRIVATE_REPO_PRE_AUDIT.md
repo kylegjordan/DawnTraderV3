@@ -393,10 +393,10 @@ Before each commit, the whole file is scanned for both credential values (read f
 ---
 
 ## PLAIN-LANGUAGE SUMMARY (for Kyle)
-Seven parallel checks went through every piece of this batch against the real code and servers, and a fresh reviewer then checked my write-up against them.
+Seven parallel checks went through every piece of this batch against the real code and servers, and three fresh reviewers in turn checked my write-up against them. The last round's fixes have not been re-reviewed; Langston reviews them next.
 - **Two security holes were handled during the check:** the public file route is closed, and the server's passwordless admin is filed.
 - **The work itself changes in several ways:**
-  - The crew login can only make changes that are on an explicit short list. Its reads block the account pages, because one of them hands back a scrambled password.
+  - The crew login starts out **read-only**: it can make no changes at all until a specific change is added to its list. Its reads also block the account pages, because one of them hands back a scrambled password.
   - The password check becomes a proper script. It ignores the backups you chose to keep, instead of failing on them forever.
   - Several wrong assumptions about which keys and tools do what are corrected.
   - The server's notice script is an old version. The reviewed one gets installed, and every install is now checked against the reviewed copy.
@@ -409,7 +409,8 @@ Seven parallel checks went through every piece of this batch against the real co
   - your own password;
   - removing the server's passwordless admin;
   - the spending limit;
-  - accepting that going private switches off GitHub's own password scanner until ours is built.
+  - accepting that going private switches off GitHub's own password scanner until ours is built;
+  - adding one new read-only key to GitHub, if Langston keeps it.
 
 ---
 # APPENDIX A — THE SEVEN AUDIT READERS' FINDINGS (generated verbatim from their structured results)
