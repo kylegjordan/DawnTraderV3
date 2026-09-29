@@ -267,7 +267,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
 | 157 | B-LEGACY-LIVE-EXIT-PATH | roadmap 21.1.a — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | B1 (Langston F10): the legacy live exit route is a re-entry risk today, whatever the environment |
-| 158 | B-SEC-HARDEN | B-SEC-HARDEN | Infra Claude | QUEUED | — | route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the sprint) ⭐ Kyle rotates the password first. |
+| 158 | B-SEC-HARDEN | B-SEC-HARDEN | Infra Claude | QUEUED | — | route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the sprint) ⭐ Kyle rotates the password first. ➕ `#1102`: remove the staging app account's passwordless root (with row 160 `#615` and `#924`; needs Kyle's go). Its verification carries the crew-login `mint` negative test handed over by `B-CREDENTIALS-PRIVATE-REPO` (pre-audit §2.2.5). |
 | 159 | B-SSH-KEY-CENSUS (investigation) | B-SSH-KEY-CENSUS | Infra Claude | QUEUED | — | whose are the two unknown keys |
 | 160 | #615 | #615 — batch named at Step 1 | Infra Claude | QUEUED | — | the reviewer identity must not read the secrets file |
 | 160a | Scan commits for secrets | `#1013` — batch named at Step 1 | Infra Claude | QUEUED | — | security, after `#615`: real (almost certainly expired) Replit-era JWTs sit in committed chat-transcript files and nothing scans commits for secrets - build after B-CREDENTIALS-PRIVATE-REPO OBJ-3 as a separate always-run workflow, before row 193 (the live Kraken key). Placed 2026-09-29 by CC-B; Infra confirmed it takes the row (2026-09-29) |

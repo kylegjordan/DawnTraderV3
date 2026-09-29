@@ -1,6 +1,6 @@
 # B-CREDENTIALS-PRIVATE-REPO — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
-**Step 2 of 11 · Infra Claude (CC-INFRA) · 2026-09-29 · r3 · scope r6 at `de8281f70` (Step 1 APPROVED WITH CONDITIONS, Langston 14:28Z) · issue `#1023`**
+**Step 2 of 11 · Infra Claude (CC-INFRA) · 2026-09-29 · r4 · scope r6 at `de8281f70` (Step 1 APPROVED WITH CONDITIONS, Langston 14:28Z) · issue `#1023`**
 
 **How this document was produced:** seven read-only audit readers, one per component group:
 - **A** `dt-review` and the mirror
@@ -25,7 +25,9 @@ Their full cited findings are **Appendix A**, generated from their structured re
 **Fresh-reader loop on this document:**
 - `REVIEWER r1: object (93acc96d8) · synthesis faithfulness + coverage/design · 1 blocker, ~20 should-fix/minor · fixed in r2`
 - `REVIEWER r2: object (e16c354c5) · fix-check + cold adversarial · 14 of 21 fixed, 6 partly, 12 new (1 blocker: the mint restriction bound nothing) · all fixed in r3 (this)`
-- ⛔ **r3 goes to a third and final reader round, then to Langston, whatever that round finds** (the three-round cap). **r3's corrections are the least-reviewed text here. Read §2.2 first.**
+- `REVIEWER r3: object (0ade9c8ea) · fix-check + cold §2.2 · items (b)-(q) satisfied, (a) partly; 0 blockers; ~15 should-fix/minor, nearly all in §2.2 (setter state machine, token-cache lockout, refusal precedence, grammar, the allowlist's contents, what dtmint really buys) · fixed in r4 (this)`
+- `READ-BACK of r4 (me, at the rendered file, NOT a fresh reviewer) · found 3 more of the r3 kind, all fixed: the "%" character both rejected and allowed; "#" and "?x=1" test variants that would hit the format check first and get a different text than the test expected; the setter holding dt-api's lock while calling dt-api (a deadlock). Also: #1102's HOME named sprint row 158, but the row did not mention it; it is now placed there (§2.7).`
+- ⛔ **THE CAP IS REACHED.** **r4's corrections have NOT been read by a fresh reviewer.** They are the §2.2 text marked `r4`. **Read §2.2 first.** No reader disagreement is outstanding: every r3 item was accepted and applied. **The r3 reviewer's code citations were re-derived at the ref before use:** `/api/auth/verify` checks the signature only (`routes.ts:996-1012`); `authenticateToken`'s catch-all turns a DB error in its user lookup into `401 Invalid or expired token` (`routes.ts:216` → `:240`), which is why a DB outage looks like a dead token; `GET /api/system/formula-audit` has no `manage_system` gate (`:15701`) and writes `/tmp/audit_report.txt` (`formula-audit.ts:269` → `:881`); `/api/config` has GET `:467` and PUT `:478`, no POST; CI's four checkouts are `actions/checkout@v4` with no `fetch-depth` (`ci.yml:35,86,122,148`).
 
 ---
 
@@ -78,61 +80,110 @@ Their full cited findings are **Appendix A**, generated from their structured re
 - **`#1102`** (`deploy`'s passwordless root) and **`#1104`** (the Google-key alerts) filed.
 
 ### 2.2 OBJ-1 (crew login)
-1. **OBJ-1(c)'s sudo check, as written, cannot pass while `deploy` has full root** (D-1). **Proposal:** the check becomes "the `dtapi` and `dtmint` entries are the only NEW sudo entries"; removing full root is `#1102`. The `dtapi` rationale is restated: it keeps the credential out of casual reads, and it is **not** a boundary while `deploy` is root.
+1. **OBJ-1(c)'s sudo check, as written, cannot pass while `deploy` has full root** (D-1).
+   - **r4 replacement: POSITIVE assertions against a recorded baseline** (r3 reviewer):
+     - record `sudo -l -U deploy` before the change;
+     - afterwards, `sudo -l -U deploy` shows **the exact `dtapi` lines**, and `sudo -l -U dtmint` shows **exactly the mint line**;
+     - install each drop-in with `visudo -cf`, then `install -m 0440`, under a filename with **no dot**, because `sudo` silently skips a name with a dot or a trailing `~`.
+   - Removing full root is `#1102`.
+   - The `dtapi` rationale is restated: it keeps the credential out of casual reads, and it is **not** a boundary while `deploy` is root.
 2. **`dt-api` access model (`SYNTHESIS DESIGN`, for Langston) (D-2…D-5, D-8, D-12):**
-   - **WRITES** (POST, PUT, PATCH, DELETE) need `--write` **and** a place on an **explicit ALLOWLIST** seeded from the crew's live scripts. Anything else is refused with `REFUSED: dt-api write not allowlisted: <METHOD> <path>` and exit 2.
+   - **WRITES** (POST, PUT, PATCH, DELETE) need `--write` **and** a place on an **explicit ALLOWLIST**, which **starts empty** (below).
    - **READS** (GET) are allowed on `/api/`, with query strings and an optional `x-app-mode` header, **except a READ DENYLIST**:
-     - (a) the prefixes `/api/admin/`, `/api/auth/` and `/api/user/`, because `/api/user/profile` returns the password hash (D-12; `routes.ts:1044-1051`, `storage.ts:700-703`);
+     - (a) the prefixes `/api/admin`, `/api/auth` and `/api/user` (a path equal to one, or starting with it plus `/`), because `/api/user/profile` returns the password hash (D-12; `routes.ts:1044-1051`, `storage.ts:702-705` at `0ade9c8`);
      - (b) the **GET routes that run work**, named **now** because C6 asked for this at Step 2:
        - `/api/audit/run` and `/api/signal-audit/run` (D-12);
        - `/api/system/formula-audit/run` (`routes.ts:15726`) and `/api/system/feed-health/run` (`:15781`), both under `manage_system`, which the editor role holds;
-       - the path-matched candidates at `routes.ts:6912, 6959, 6986, 7010, 7035`, **denied until Step 3 shows they do not run work**.
+       - the path-matched candidates at `routes.ts:6912, 6959, 6986, 7010, 7035`, **denied until Step 3 shows they do not run work**;
+       - **r4:** `GET /api/system/formula-audit` (`routes.ts:15701-15704`), which runs the same audit as `/run` **without** its `manage_system` gate and writes a report file (`formula-audit.ts:269`, `:881`). It was found by the r3 reviewer's body scan. That scan **also found all 7 named `routes.ts` routes**, which serves as its control. **This list is therefore path-matched plus one body-scan pass, not yet the full census**, which Step 3 runs with the method below.
 
        **Census method, carried into Step 3:** every `.get(` handler, across `routes.ts` and every mounted sub-router, whose body calls a run, trigger or job function. **Control:** the method finds `/api/audit/run`.
      - (c) the whole-route cases the scope names — `/api/trading/set-mode`, `/api/kill-switch/reset` and `/api/guardrails-v2/kill-switch/reset` — are **denied for every method**, with the scope's text `REFUSED: dt-api does not call account, credential or mode-switch routes`.
-   - **Matching:** lowercase for matching only, an optional trailing slash, and `..`, `//`, `\` and `%` rejected. **The original case is what gets sent** (D-4, D-5).
-   - **The read side is an accident guard, NOT a boundary** (C6). **Writes are allowlisted.**
-   - **OBJ-1(c)'s refusal test, rewritten for this model:**
-     - write-side negatives: `--write POST` to `/api/safety/kill-switch`, `/api/trading/start`, `/api/trading/set-mode` and `/api/config`, and `PUT /api/guardrails-v2`, each refused with the not-allowlisted text, **plus one allowlisted positive control**;
-     - read-side negatives: the three prefixes with case, trailing-slash and query variants; every named work-running GET; and the three whole-route cases (GET and POST, with and without a trailing slash).
+   - **r4 — THE GRAMMAR (r3 reviewer), checked on the raw arguments before anything else:**
+     - **reject outright, anywhere:** `#`, `%`, `..`, `/./`, `//`, `\`, spaces and control characters;
+     - split at the first `?` into path and query;
+     - **path grammar, case-insensitive:** `^/api/[A-Za-z0-9/_.:-]+$`;
+     - **query grammar:** `^[A-Za-z0-9_.=&,:-]*$`, and a query is allowed **on GET only**;
+     - `--write` must be followed by POST, PUT, PATCH or DELETE, and `dt-api` refuses any argument after the path;
+     - **for matching only:** strip one trailing `/` and lowercase the path, because Express matches routes case-insensitively and ignores a trailing slash (D-4, D-5). Every denial matches the path alone, so `?x=1` or a trailing `/` can never slip past an exact-route denial. **The original text is what gets sent.**
+   - **r4 — PRECEDENCE: one rule, one text, exit 2 for every refusal:**
+     1. the grammar → `REFUSED: dt-api malformed request: <reason>`;
+     2. the whole-route denials (c), **for every method** → the scope's text, `REFUSED: dt-api does not call account, credential or mode-switch routes`;
+     3. on GET, the read denylist → class (a) `REFUSED: dt-api does not read account or credential routes`; class (b) `REFUSED: dt-api does not trigger jobs through GET: <path>`;
+     4. any other method without `--write` → `REFUSED: dt-api writes need --write`;
+     5. with `--write`, the allowlist → `REFUSED: dt-api write not allowlisted: <METHOD> <path>`.
+   - **r4 — THE WRITE ALLOWLIST STARTS EMPTY.** No live crew script needs a write through the crew login: the 4 credential-carrying scripts in P6 are reads, re-checked at Step 3, where any needed entry is added with its `script:line` and exact matching after canonicalisation. **So `dt-api` refuses every write on day one.** The kill-switch **trip**, which the scope said "stays allowed", is therefore **not** reachable through `dt-api`. It remains available through the UI and to the root sessions. **Stated as a change from the scope.**
+   - ⚠️ **BOTH SIDES ARE ACCIDENT GUARDS, NOT BOUNDARIES (r3 reviewer):**
+     - the CC sessions reach staging as **root**, which `#1102` does not change;
+     - both agents hold the account's token in their own files;
+     - so the allowlist binds **only `dt-api` calls from `deploy`**, and only once `#1102` lands.
+   - **OBJ-1(c)'s refusal test, rewritten so that every case has exactly ONE expected text (r4):**
+     - **all of them run from root** (`sudo -u dtapi dt-api …`), so they test `dt-api`'s own rules and give the same result before and after `#1102`. The sudoers lines are proved separately, by item 1's assertions;
+     - **rule 1, malformed:** each whole-route path and each class-(a) prefix with a `#`, a `%2e`, a `//` and a space; and a `?x=1` on a `--write` call;
+     - **rule 2, whole-route:** the three paths as `GET`, `--write POST` and `--write PUT`, each plain, with a trailing `/` and in upper case; plus `GET <path>?x=1`;
+     - **rule 3, read denylist:** the three prefixes and every named work-running GET, each with a trailing `/`, in upper case and with `?x=1`, expecting its own class's text;
+     - **rule 4:** `POST /api/safety/kill-switch` without `--write`;
+     - **rule 5, not allowlisted:** `--write POST /api/safety/kill-switch`, `--write POST /api/trading/start`, **`--write PUT /api/config`** (the dangerous one is PUT; there is no POST, `routes.ts:467,478`) and `--write PUT /api/guardrails-v2`;
+     - **positive controls:** `GET /api/settings` and `GET /api/settings?x=1` return 200. Because the allowlist starts empty there is no allowlisted write to use as a control; **stated rather than invented**.
 3. **`users.role` is varchar** (measured), and `requireEditor` accepts **both** `'owner'` and `'editor'` (`routes.ts:268-275`), so **a `requireEditor` call cannot prove the role change** (r2 reviewer). ⇒ **The proofs are:**
    - `UPDATE … RETURNING role` returns exactly `'editor'`;
    - the step-3 login response's `user.role` is `'editor'`;
    - **mutation case:** a setter that writes only the password must FAIL.
 
    The one inline owner check, `POST /api/cognitive/run` (`routes.ts:6479`), refuses the crew row once it is an editor. That route **has no caller** (D-8, which also re-runs Langston's C1 census and confirms it). **C1 is closed.**
-4. **The setter is COMMIT-THEN-VERIFY, with a compensating restore and crash recovery** (r1 and r2 reviewers).
-   - **(0)** Start-of-run reconciliation: if a saved-state marker or an orphaned temp env exists, complete it or restore it first, then shred the temp file.
-   - **(1)** Save the old hash and role to a root-only marker.
-   - **(2)** Assert the new hash has the prefix `$2b$10$`. This prefix is **INFERRED** from `python3-bcrypt` 3.2.2 until measured (D-10). Commit `password` and `role='editor'` with `WHERE username='testuser123'` and `RETURNING role`. Assert exactly 1 row, with `'editor'`.
-   - **(3)** Purge the `dt-api` cache, then do a fresh login and make the **first** attempt count, because the limiter counts every attempt (D-7). Assert a token issued after the start, with `user.role='editor'`.
-   - **(4)** Rename the env file into place.
-   - **(5)** Purge the cache again, under the **same `flock`** that `dt-api`'s re-mint holds.
-   - **On any failure:** a compensating `UPDATE` restores the saved hash and role; assert 1 row, then re-read. The old env stays.
-   - **Signals and residual:** handleable signals are trapped. **The non-atomic window between (2) and the restore is a stated residual.**
-   - **Generated value:** it uses only characters `validatePasswordStrength` accepts (D-10).
-   - **Mutation tests:** a forced failure after (2) restores the old state, and a kill between (2) and (4) is recovered by (0) on the next run.
+4. **The setter — r4, written out in full (r1, r2 and r3 reviewers).** It runs as root and uses a **run-only `PGPASSFILE`** (root `0600`, created for the run, removed on exit; the database password is not read from `/home/deploy`).
+   - **Locks:** a setter-only lock for the whole run, so two runs cannot overlap. And `dt-api`'s own `flock`, taken **before (0) and held through (5)**, so `dt-api` cannot mint or read the cache mid-change. **It is released before (6)**, because (6) calls `dt-api`, which takes the same lock (holding it would deadlock). A failure at (6) re-takes it before restoring.
+   - **Login budget:** the setter and `dt-api` record every login in **one shared ledger** (root-owned, written under `dt-api`'s lock). The setter **starts only when the ledger shows no login in the last 15 minutes**. It then spends at most 4 logins (2 in (0), 1 in (3), 1 in (6)), under the limiter's 5 per 15 minutes (D-7).
+   - **(0) Start-of-run reconciliation, deterministic.** If a marker exists:
+     - if the live env logs in, delete the marker and any temp env;
+     - else, if the temp env logs in, rename it into place and delete the marker;
+     - else, restore from the marker and page.
+     - ⚠️ **A 500 or a timeout on either login is not an answer:** exit and retry later, touching nothing.
+   - **(1) Save.** Write a marker holding the old hash and role, and copy the old env aside, both root `0600`.
+   - **(1b) Temp env.** Write the new value to a temp env: `0600 dtapi:dtapi`, **on the same filesystem** as the real env.
+   - **(2) COMMIT.** First assert that the new hash has the prefix `$2b$10$` (**INFERRED** from `python3-bcrypt` 3.2.2 until measured, D-10). Then commit `password` and `role='editor'` with `WHERE username='testuser123'` and `RETURNING role`, asserting exactly 1 row and `'editor'`.
+   - **(3) Verify the value.** A fresh login with the new value. Assert a token issued after the start, with `user.role='editor'`.
+   - **(4) THE COMMIT POINT.** Rename the temp env into place.
+   - **(5) Purge.** Clear `dt-api`'s cache **and its negative cache**. Then release `dt-api`'s lock.
+   - **(6) Verify the path `dt-api` really uses.** Force a fresh mint, then `sudo -u dtapi dt-api GET /api/settings` must return 200.
+   - **(7) Clean up.** Delete the marker and the old-env copy, **last**.
+   - **Failures:**
+     - **before (4):** restore the hash and role from the marker (assert 1 row, then re-read); the old env was never touched.
+     - **at (5) or (6):** restore the hash, role **and env** together from (1).
+   - **Kill tests, with the expected end state:**
+     - a kill after (1) or (1b): (0) finds the live env logs in and deletes the marker and the temp env; **old** value;
+     - a kill after (2): (0) finds the temp env logs in, completes, and ends with the **new** value;
+     - a kill after (4): (0) finds the live env logs in and deletes the marker; **new** value.
+   - **Mutation tests:** a setter that writes only the password must FAIL (the role proof), and a forced failure at (6) must restore all three.
+   - **The value:** 40 characters from `[A-Za-z0-9]`, plus **one `_`**, which `validatePasswordStrength` accepts and which is safe inside quotes and shells. It is ≤72 bytes (the bcrypt limit), and it avoids `'` and `"`, which the existing parser strips (`agent-staging-session:65`).
+   - **Stated residual:** the non-atomic window between (2) and a restore.
 5. **`mint` goes to a dedicated account, not `deploy`** (the r2 BLOCKER). Sudoers matches the user and the arguments, never the SSH key, and `deploy` is root until `#1102`. So "an entry reachable only by the forced-command key" cannot work while that key logs in as `deploy`. ⇒
-   - a new unprivileged account **`dtmint`**, whose `authorized_keys` carries **only** the forced-command key: `command="sudo -n -u dtapi /usr/local/bin/dt-api mint",no-pty,no-port-forwarding,from="204.168.141.77"`;
+   - a new unprivileged account **`dtmint`**, with login shell **`/bin/sh`** (a `nologin` shell would break the forced command). Its `authorized_keys` carries **only** the forced-command key: `restrict,command="sudo -n -u dtapi /usr/local/bin/dt-api mint",from="204.168.141.77"` (`restrict` also blocks agent, X11 and port forwarding, a pty, and `~/.ssh/rc`). **Step 3 reads staging's `sshd_config`** (`AllowUsers`, `AllowGroups`, `Match` blocks) before creating it;
    - one sudoers line, `dtmint ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api mint`;
-   - **`deploy`'s `dtapi` line allows only the read and write forms**, and `dt-api` also refuses `mint` unless `SUDO_USER=dtmint`.
+   - **`deploy`'s `dtapi` lines allow only the read and write forms**, written out: `deploy ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api GET *, /usr/local/bin/dt-api --write *`. Note that in sudoers `*` matches across words, so `dt-api` **also** refuses `mint` unless `SUDO_USER=dtmint`, as a second layer.
 
    ⚠️ **Honest limits:**
    - **Until `#1102` removes `deploy`'s `NOPASSWD: ALL`, `deploy` — which is Langston's shell — can still become `dtapi` directly.** So the `mint` restriction only **takes effect once `#1102` lands**; that dependency sits on Langston decision 4.
    - Helsinki root already holds an unrestricted `deploy` shell (C-13).
+   - ⚠️ **r4, the third limit (r3 reviewer):** one mint writes **both** agents' storage states, and Langston's copy (`/home/langston/.staging-session.json`, langston `0600`) is loaded by his own tools. **So the langston account holds the minted 7-day token by design**, and that token works against the public host without `dt-api`.
+   - ⇒ **What `dtmint` really buys:** no password stored on Helsinki, and a rate-bounded mint (one per agent per day). **It does not keep the token away from Langston.**
 
-   **P5 negative test, meaningful only after `#1102`:** an interactive `deploy` shell running `sudo -n -u dtapi /usr/local/bin/dt-api mint` is refused. **Control:** the forced-command key mints.
+   **r4: the `mint` negative test moves to `#1102`'s own verification**, because it can only mean anything after `#1102` lands. The test: an interactive `deploy` shell running `sudo -n -u dtapi /usr/local/bin/dt-api mint` gets **sudo's own refusal text** (not `dt-api`'s), with the forced-command key minting as its control. **OBJ-1 closes without it.** `#1102` is now **placed** in `SPRINT_TO_LIVE_PLAN.md` row 158 (`B-SEC-HARDEN`), which carries this test; before r4 the row did not mention it.
 6. **Mint details (C-10):** one mint writes both agents' storage states, keyed to the **public origin**, and a mint younger than 20 h is reused.
 7. **Token cache (D-6, D-7):**
    - negative-cache **only** a login 401, 404 or 429;
-   - on a **login 500**, back off 60 s, keep the current token, and **never** take the 15-minute lockout (r2 reviewer: otherwise a DB outage burns the shared limiter);
+   - **r4:** before any re-mint, check the cached token with `GET /api/auth/verify`, which checks the signature only, with no DB lookup (`routes.ts:996-1012`). **If the token is signature-valid and unexpired but other routes answer 401, the problem is the DB or the user lookup, so do NOT log in** (r3 reviewer: a DB outage would otherwise burn the shared limiter within about 5 minutes);
+   - **hard cap: at most 2 logins per 15 minutes**, whatever the reason, counted in the shared ledger (item 4). A signature-valid token that the other routes refuse **pages** rather than re-minting;
+   - on a login 500, back off 60 s and keep the current token;
    - re-mint only when a probe of `GET /api/settings` also returns 401, which catches the sub-routers' `Invalid token` answers (e.g. `server/routes/vts.ts:119-120`);
    - call `127.0.0.1`, with no `X-Forwarded-For`.
 
-   **Drill:** a simulated DB 500 across 10 calls spends at most 2 limiter slots.
+   **Drill (r4):** a simulated DB outage, with 10 calls at 90 s intervals, spends **at most 2** limiter slots, and the setter's own login still succeeds afterwards.
 8. **Deadline (C-6):** the agents' browser refresh **fails from 2026-09-30 04:40Z**, and their tokens expire around **2026-10-06 04:40Z**. ⇒ OBJ-1 comes **second, after OBJ-4a**. The daily failure page from 09-30 is expected and announced.
 9. **OBJ-0b comes after OBJ-1's mint path, with a cache purge** (C-7). The alias `coltrane-staging-session` is deleted under rule 18 (C-8).
-10. **Staging drift check:** each of these is hashed against its committed copy — the installed `dt-api`, the setter, the sudoers drop-ins, `dtmint`'s `authorized_keys`, and **every systemd unit and drop-in this batch installs on either box** (C-18). **Control:** a deliberately edited copy fails.
+10. **Staging drift check:** each of these is hashed against its committed copy — the installed `dt-api`, the setter, the sudoers drop-ins, `dtmint`'s `authorized_keys`, and **every systemd unit and drop-in this batch installs on either box** (C-18).
+    - **r4:** it runs as **root**, daily, **on each box**, as a timer with an `agent-unit-failure@` page. **A file it cannot read is a FAIL**, never a skip.
+    - **Control:** a deliberately edited copy fails.
 
 ### 2.3 OBJ-2 (literals)
 1. **`scripts/credential-scan.py`** replaces a verification that could not run (E1, E2). It:
@@ -226,6 +277,9 @@ Their full cited findings are **Appendix A**, generated from their structured re
 
    **So nothing automatic replaces GitHub's scanning after the flip.**
    ⇒ **PROPOSAL:** add the scanner as a **CI step** in OBJ-3's workflow edit. It scans the tree only, not the archives, so it is fast; it still sees only those two values.
+   - ⚠️ **r4:** CI's `actions/checkout@v4` makes a depth-1 clone (`ci.yml:35`, `:86`, `:122`, `:148`), so the introducing objects are absent. ⇒ the CI step first runs `git fetch --depth=1 origin <the two introducing shas>`. GitHub serves reachable commits by sha; **Step 3 proves this**.
+   - **Control:** the step turns red on a planted literal in a CI test branch.
+   - Its cost is added to the F4 minute estimate at Step 3.
    **RECOMMEND:** Kyle accepts the remaining gap in writing, on that honest basis, until `#1013` lands in its planned slot. **Kyle's decision.**
 4. **Google keys (`#1104`, G4 + E6):** **Kyle** checks whether they are valid and revokes them. They are probably also in the kept `Full_Backup` zip (§0), so this ties to D2. **It is an OBJ-6 gate** (`#1104`'s HOME), and `#1104` is amended to record the Full_Backup copy.
 5. **Spending limit:** set in the UI only; **Kyle** (G5).
@@ -308,6 +362,11 @@ Their full cited findings are **Appendix A**, generated from their structured re
 12. `agent-work-sync`'s STALE-SOURCE and SOURCE-UNFRESH: page, or stay quiet? And is the 45-minute limit right? (C open 2, C open 3)
 13. Where the Helsinki scripts live: `comms-infra/discord/` (what `deploy.sh` installs from) or a new `comms-infra/helsinki/` (A open 6).
 14. Prune the mirror's stale `refs/remotes/*`, or drop its configured fetch refspec (A open 7).
+15. **r4:** `paths-ignore`, or `paths:` with ordered `!` patterns (F open 2).
+16. **r4:** does `workflow-05-ci:19`'s "never push on red CI" apply to docs-only pushes that no longer produce a run? (F open 4)
+17. **r4:** should `grep` and `ls` also accept a pinned sha? (A open 3; P2 pins `show` only)
+18. **r4:** confirm that splitting the dual-role key stays with `#924`/`#615` (GB open 5).
+19. **r4:** the write allowlist starts EMPTY, so the kill-switch trip is not reachable through `dt-api` (a change from the scope).
 
 **Kyle:**
 1. Pro: confirm in the UI, or grant `read:user` (G1).
