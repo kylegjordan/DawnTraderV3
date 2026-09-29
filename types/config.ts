@@ -7,7 +7,10 @@ export const GuardrailsSchema = z.object({
   portfolioRiskPerTradePct: z.coerce.number().min(0.10).max(5.00),
   dailyLossKillSwitchPct: z.coerce.number().min(1.00).max(20.00),
   symbolCooldownMinutes: z.coerce.number().int().min(1).max(90),
-  maxOpenPositions: z.coerce.number().int().min(1).max(20)
+  // B-SIZING-DEC-RESTORE obj-4: maxOpenPositions RETIRED. The per-position percent is carried, and the
+  // open-positions count is DERIVED from it on the server (null when the percent is unreadable).
+  maxPositionPercentPct: z.coerce.number().gt(0).max(100),
+  derivedSlots: z.number().int().positive().nullable()
 });
 
 export type Guardrails = z.infer<typeof GuardrailsSchema>;
@@ -105,7 +108,7 @@ export function validateNoLegacyKeys(data: Record<string, any>): void {
     const legacyMap: Record<string, string | null> = {
       maxDailyLoss: 'dailyLossKillSwitchPct',
       maxDrawdown: 'dailyLossKillSwitchPct',
-      maxPositionSize: 'maxOpenPositions',
+      maxPositionSize: 'maxPositionPercentPct',
       riskPerTrade: 'portfolioRiskPerTradePct',
       cooldownMinutes: 'symbolCooldownMinutes',
       priceDeltaTrigger: null,
@@ -145,10 +148,6 @@ export function getKillSwitchPct(guardrails: Guardrails): number {
 
 export function getSymbolCooldown(guardrails: Guardrails): number {
   return guardrails.symbolCooldownMinutes;
-}
-
-export function getMaxPositions(guardrails: Guardrails): number {
-  return guardrails.maxOpenPositions;
 }
 
 export function getMinVolume(filters: Filters): number {

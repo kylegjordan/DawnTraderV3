@@ -1210,7 +1210,8 @@ app.use((req, res, next) => {
         const guardrails = guardrailsData ? {
           portfolioRiskPerTradePct: parseFloat(String(guardrailsData.portfolioRiskPerTradePct)),
           symbolCooldownMinutes: guardrailsData.symbolCooldownMinutes,
-          maxOpenPositions: guardrailsData.maxOpenPositions,
+          // B-SIZING-DEC-RESTORE obj-4: the open-positions setting is retired; the slot count is derived.
+          maxPositionPercentPct: parseFloat(String(guardrailsData.maxPositionPercentPct)),
           dailyLossKillSwitchPct: parseFloat(String(guardrailsData.dailyLossKillSwitchPct))
         } : null;
         
@@ -1274,11 +1275,11 @@ app.use((req, res, next) => {
       // Detailed breakdown for debugging
       if (paperSnapshot.guardrails) {
         const g = paperSnapshot.guardrails;
-        console.log(`[Audit] Paper guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, maxPos=${g.maxOpenPositions}, killSwitch=${g.dailyLossKillSwitchPct}%`);
+        console.log(`[Audit] Paper guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, positionPct=${g.maxPositionPercentPct}% (slots derived), killSwitch=${g.dailyLossKillSwitchPct}%`);
       }
       if (liveSnapshot.guardrails) {
         const g = liveSnapshot.guardrails;
-        console.log(`[Audit] Live guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, maxPos=${g.maxOpenPositions}, killSwitch=${g.dailyLossKillSwitchPct}%`);
+        console.log(`[Audit] Live guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, positionPct=${g.maxPositionPercentPct}% (slots derived), killSwitch=${g.dailyLossKillSwitchPct}%`);
       }
       
       // Phase 28: FilterCoherence Telemetry (with database-persisted override flags)
@@ -1361,7 +1362,6 @@ app.use((req, res, next) => {
           const coreParams = [
             'portfolioRiskPerTradePct',
             'symbolCooldownMinutes',
-            'maxOpenPositions',
             'dailyLossKillSwitchPct'
           ];
           

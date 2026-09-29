@@ -38,9 +38,6 @@ function getDefaultMaxTotalExposurePct(): number {
   // Stored as a 0–1 ratio (0.25 == 25%). Callers convert to whatever scale they need.
   return getCachedNumberRequired('guardrail_defaults', 'default_max_total_exposure_pct', _GUARDRAIL_DEFAULTS_KEY);
 }
-function getMaxOpenTradesDefault(): number {
-  return getCachedNumberRequired('guardrail_defaults', 'max_open_trades_default', _GUARDRAIL_DEFAULTS_KEY);
-}
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
 export const calculateRiskAmount = _calculateRiskAmount;
@@ -73,7 +70,6 @@ export type TradeSafetyResultCode =
   | 'INSUFFICIENT_BALANCE'
   | 'MAX_EXPOSURE'
   | 'MAX_TOTAL_EXPOSURE'
-  | 'MAX_TRADES'
   | 'ENGINE_STOPPING' // Phase 8.8.3-I2: Block during hard stop
   | 'CORRELATION_EXPOSURE' // Directive 9.4: Covariance Guard
   | 'GUARDRAIL_READ_FAIL'; // P19-B8.8: blocking check refused — guardrail input unreadable (fail-closed, no substitution)
@@ -603,28 +599,12 @@ async function checkLowPricedCoinProtection(
 }
 
 /**
- * Check 7: Max Open Trades
- * Guardrail: maxOpenPositions (number)
+ * Check 7 (Max Open Trades) is RETIRED — B-SIZING-DEC-RESTORE obj-4 (PRE_AUDIT §14 D2). It compared open
+ * positions to the `max_open_positions` setting and, when that value was unreadable, silently substituted
+ * the `guardrail_defaults` max-open-trades default row (5). The setting is gone; how many can be open is DERIVED
+ * from the per-trade share (`deriveSlotCount`), and the cap on committed money is `checkMaxTotalExposure`
+ * below (fail-closed), which binds at the same point by construction.
  */
-async function checkMaxOpenTrades(
-  mode: 'live' | 'paper',
-  settings: TradingSettings
-): Promise<TradeSafetyResult> {
-  const activePositions = await getActivePositions(mode);
-  // B72.1: fallback resolved from guardrail_defaults.max_open_trades_default
-  const maxOpenTrades = (settings as any).maxOpenTrades || getMaxOpenTradesDefault();
-
-  if (activePositions.length >= maxOpenTrades) {
-    console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:MAX_TRADES, current:${activePositions.length}, max:${maxOpenTrades}`);
-    return {
-      ok: false,
-      code: 'MAX_TRADES',
-      reason: `Maximum open trades limit reached (${maxOpenTrades})`
-    };
-  }
-
-  return { ok: true };
-}
 
 /**
  * Check 8: Max Total Portfolio Exposure
@@ -807,12 +787,7 @@ export async function checkGuardrailRisk(
     return recordBlock(lpcpCheck);
   }
   
-  const maxTradesCheck = await checkMaxOpenTrades(mode, settings);
-  if (!maxTradesCheck.ok) {
-    logGuardrailCheck('MAX_OPEN_TRADES', maxTradesCheck);
-    return recordBlock(maxTradesCheck);
-  }
-  
+  // B-SIZING-DEC-RESTORE obj-4: the open-slots check is retired; the exposure check below is the cap.
   // Phase 8.8.3-B3: Check total portfolio exposure
   const totalExposureCheck = await checkMaxTotalExposure(mode, trade, settings);
   if (!totalExposureCheck.ok) {

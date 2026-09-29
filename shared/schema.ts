@@ -161,6 +161,8 @@ export const executionBlockReasonEnum = pgEnum("execution_block_reason", [
   "PORTFOLIO_RISK",
   "INSUFFICIENT_BALANCE",
   "MAX_EXPOSURE",
+  // B-SIZING-DEC-RESTORE obj-4: MAX_TRADES is HISTORICAL ONLY — never emitted since the open-slots check was
+  // retired. Kept because it is a database enum value that stored rows hold (Postgres cannot drop one in place).
   "MAX_TRADES"
 ]);
 
@@ -318,8 +320,7 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   // 2. Symbol Cooldown (minutes) - Range: 1 - 90
   symbolCooldownMinutes: integer("symbol_cooldown_minutes").notNull().default(15),
   
-  // 3. Max Open Positions (count) - Range: 1 - 20
-  maxOpenPositions: integer("max_open_positions").notNull().default(5),
+  // 3. (Max Open Positions) max_open_positions RETIRED — B-SIZING-DEC-RESTORE obj-4 (2026-09-29): slots are derived from max_position_percent_pct (deriveSlotCount).
   
   // 4. Daily Loss Kill Switch (%) - Range: 1.00% - 20.00%
   dailyLossKillSwitchPct: decimal("daily_loss_kill_switch_pct", { precision: 5, scale: 2 }).notNull().default("7.00"),
@@ -385,7 +386,7 @@ export const goalsPresets = pgTable("goals_presets", {
   portfolioRiskPerTradePct: decimal("portfolio_risk_per_trade_pct", { precision: 5, scale: 2 }).notNull(),
   dailyLossKillSwitchPct: decimal("daily_loss_kill_switch_pct", { precision: 5, scale: 2 }).notNull(),
   symbolCooldownMinutes: integer("symbol_cooldown_minutes").notNull(),
-  maxOpenPositions: integer("max_open_positions").notNull(),
+  // max_open_positions RETIRED — B-SIZING-DEC-RESTORE obj-4 (2026-09-29): slots are derived from max_position_percent_pct (deriveSlotCount).
   
   // Analytics (estimated performance)
   tradesPerDayEst: decimal("trades_per_day_est", { precision: 5, scale: 2 }).notNull(),

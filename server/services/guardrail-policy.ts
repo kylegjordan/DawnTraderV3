@@ -23,7 +23,7 @@ export type CoherencyStatus = 'PASS' | 'WARN' | 'FAIL';
  * Phase 8.8.4-B: Guardrail Category Types
  * 
  * CAPACITY_GUARDRAILS: Control how many trades can be open
- * - maxOpenPositions, maxTotalExposure, position limits
+ * - maxTotalExposure, position limits (the open-positions setting was retired: slots are derived)
  * - Signals blocked by capacity can be queued for later
  * 
  * QUALITY_GUARDRAILS: Control which signals deserve to be trades
@@ -33,7 +33,6 @@ export type CoherencyStatus = 'PASS' | 'WARN' | 'FAIL';
 export type GuardrailCategory = 'CAPACITY' | 'QUALITY';
 
 export const CAPACITY_GUARDRAILS = [
-  'MAX_TRADES',           // Max simultaneous open trades
   'MAX_TOTAL_EXPOSURE',   // Total portfolio exposure limit
   'POSITION_LIMIT',       // Already have position in symbol
   'SLOT_CONFLICT',        // Post-guardrail slot overflow
@@ -74,7 +73,6 @@ export interface EffectiveGuardrails {
   mode: TradingMode;
   portfolioRiskPerTradePct: number;
   symbolCooldownMinutes: number;
-  maxOpenPositions: number;
   dailyLossKillSwitchPct: number;
   dailyLossWarning1Pct: number; // P19-B6: tier-1 warning, % OF the kill threshold (coherency: 0 < w1 < w2 < 100)
   dailyLossWarning2Pct: number; // P19-B6: tier-2 warning, % OF the kill threshold
@@ -248,7 +246,6 @@ class GuardrailPolicyService {
       mode: guardrail.mode as TradingMode,
       portfolioRiskPerTradePct: parseFloat(String(guardrail.portfolioRiskPerTradePct)),
       symbolCooldownMinutes: guardrail.symbolCooldownMinutes,
-      maxOpenPositions: guardrail.maxOpenPositions,
       dailyLossKillSwitchPct: parseFloat(String(guardrail.dailyLossKillSwitchPct)),
       // P19-B6: warning tiers (% of kill threshold). Fallback to defaults for pre-migration rows.
       dailyLossWarning1Pct: guardrailAny.dailyLossWarning1Pct != null ? parseFloat(String(guardrailAny.dailyLossWarning1Pct)) : 50.00,
@@ -283,7 +280,6 @@ class GuardrailPolicyService {
 
     const risk = guardrail.portfolioRiskPerTradePct;
     const cooldown = guardrail.symbolCooldownMinutes;
-    const positions = guardrail.maxOpenPositions;
     const killSwitch = guardrail.dailyLossKillSwitchPct;
     const isManualOverride = guardrail.management?.isManualOverride;
     const tunedByLatti = guardrail.management?.tunedByLatti;
@@ -309,23 +305,9 @@ class GuardrailPolicyService {
       }
     }
 
-    // RULE_002: Total Exposure ≤ 50% Cap (Phase 28.E)
-    if (positions !== undefined && risk !== undefined) {
-      const totalExposure = positions * risk;
-      if (totalExposure > 50) {
-        const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_002')!;
-        failures.push({
-          ruleId: 'RULE_002',
-          ruleName: rule.name,
-          severity: 'error',
-          message: rule.error_message.replace('{total}', totalExposure.toFixed(2)),
-          param: 'maxOpenPositions',
-          value: totalExposure,
-          expected: '<= 50%'
-        });
-        this.incrementMetric('ruleFailures', 'RULE_002');
-      }
-    }
+    // RULE_002 (Total Exposure ≤ 50%, computed as open positions × risk %) is DELETED — B-SIZING-DEC-RESTORE
+    // obj-4 (PRE_AUDIT §14.4 D7): with the open-positions setting gone it is uncomputable. Under the derived
+    // model, floor(100 / p) × p ≤ 100 holds by construction; the bound that matters is RULE_012 on p.
 
     // RULE_003: Cooldown ≥ 0 minutes (Phase 28.E)
     if (cooldown !== undefined && cooldown < 0) {
@@ -408,20 +390,8 @@ class GuardrailPolicyService {
       this.incrementMetric('ruleFailures', 'RULE_007');
     }
 
-    // RULE_008: Max Positions Range
-    if (positions !== undefined && (positions < 1 || positions > 20)) {
-      const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_008')!;
-      failures.push({
-        ruleId: 'RULE_008',
-        ruleName: rule.name,
-        severity: 'error',
-        message: rule.error_message.replace('{value}', String(positions)),
-        param: 'maxOpenPositions',
-        value: positions,
-        expected: '1 - 20'
-      });
-      this.incrementMetric('ruleFailures', 'RULE_008');
-    }
+    // RULE_008 (Max Positions Range, 1-20) is DELETED with the setting it checked (B-SIZING-DEC-RESTORE
+    // obj-4). The slot count is derived, floor(100 / p); p itself is bounded by RULE_012.
 
     // RULE_011: Daily loss warning tiers strictly ordered + strictly below kill (P19-B6)
     // warn1/warn2 are % OF the kill threshold; equal tiers = duplicate noise, warn2=100 is inert.
@@ -646,7 +616,6 @@ class GuardrailPolicyService {
       const paramMap: Record<string, keyof EffectiveGuardrails> = {
         portfolioRiskPerTradePct: 'portfolioRiskPerTradePct',
         symbolCooldownMinutes: 'symbolCooldownMinutes',
-        maxOpenPositions: 'maxOpenPositions',
         dailyLossKillSwitchPct: 'dailyLossKillSwitchPct'
       };
 

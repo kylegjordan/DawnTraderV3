@@ -1,0 +1,41 @@
+// Archived 2026-09-29 by B-SIZING-DEC-RESTORE increment 2a (rule 18). No callers anywhere (interface + impl only,
+// Langston census at 5af3acb49). It wrote guardrails_v2 through the bare upsert with no audit row, and it set
+// maxOpenPositions from goals_presets.max_open_positions, a column this increment drops. See DELETED_COMPONENTS_LOG.
+
+  async selectGoalsPreset(params: { mode: 'live' | 'paper'; presetName: string }): Promise<{ preset: GoalsPresets; guardrails: GuardrailsV2 }> {
+    // Step 1: Deactivate all presets for this mode
+    await db
+      .update(goalsPresets)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(goalsPresets.mode, params.mode));
+
+    // Step 2: Activate the selected preset
+    const [preset] = await db
+      .update(goalsPresets)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(and(
+        eq(goalsPresets.mode, params.mode),
+        eq(goalsPresets.name, params.presetName as any)
+      ))
+      .returning();
+
+    if (!preset) {
+      throw new Error(`Preset ${params.presetName} not found for mode ${params.mode}`);
+    }
+
+    // Step 3: Apply preset values to guardrails_v2
+    const guardrailsUpdate: InsertGuardrailsV2 = {
+      mode: params.mode,
+      portfolioRiskPerTradePct: preset.portfolioRiskPerTradePct,
+      dailyLossKillSwitchPct: preset.dailyLossKillSwitchPct,
+      symbolCooldownMinutes: preset.symbolCooldownMinutes,
+      maxOpenPositions: preset.maxOpenPositions,
+      tunedByLatti: params.presetName !== 'custom',
+      isManualOverride: params.presetName === 'custom'
+    };
+
+    const guardrails = await this.upsertGuardrailsV2(guardrailsUpdate);
+
+    return { preset, guardrails };
+  }
+

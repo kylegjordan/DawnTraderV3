@@ -84,7 +84,8 @@ test.describe('Config Snapshot Viewer - Phase 27.G E2E Tests', () => {
     // Verify guardrails fields are displayed
     await expect(page.getByText('Portfolio Risk per Trade')).toBeVisible();
     await expect(page.getByText('Symbol Cooldown')).toBeVisible();
-    await expect(page.getByText('Max Open Positions')).toBeVisible();
+    // B-SIZING-DEC-RESTORE obj-4: the setting is retired; the snapshot shows the DERIVED count instead.
+    await expect(page.getByText('Open Positions Allowed (derived)')).toBeVisible();
     await expect(page.getByText('Daily Loss Kill Switch')).toBeVisible();
   });
 

@@ -154,7 +154,7 @@
           "Property 'healthScore' does not exist on type '{ metadata: unknown; id: string; role: \"coordinator\" | \"trading\" | \"analysis\" | \"research\" | \"compliance\" | \"general\"; name: string; version: string | null; status: \"offline\" | \"degraded\" | \"healthy\" | \"draining\"; createdAt: Date; updatedAt: Date; lastH": 1,
           "Property 'completedAt' does not exist on type 'PgTableWithColumns<{ name: \"cluster_result_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"cluster_result_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; i": 1,
           "Property 'conflictId' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | \"rejected\" |": 1,
-          "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"conservative\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; maxOpenPositions: number; portfolioRiskPerTradePct: string; symbolCooldownMinutes: number; dail": 1,
+          "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"conservative\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; portfolioRiskPerTradePct: string; symbolCooldownMinutes: number; dailyLossKillSwitchPct: string": 1,
           "Property 'getPortfolioBalance' does not exist on type 'DatabaseStorage'.": 1
         },
         "TS2552": {
@@ -736,5 +736,7 @@
         }
       }
     }
-  ]
+  ],
+  "last_synced_at_iso": "2026-09-29T11:07:04.843Z",
+  "last_synced_by_batch": "B-SIZING-DEC-RESTORE"
 }

@@ -2076,7 +2076,6 @@ export class SignalOrchestrator {
       const settings = {
         smaLength: 20,
         riskPerTradePercent: 2.0,
-        maxOpenPositions: 5,
         dailyLossLimitPercent: 10.0,
         whitelistedSymbols: [],
         blacklistedSymbols: [],

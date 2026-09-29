@@ -215,10 +215,10 @@ class E2EValidator {
         this.recordSuccess(`Found guardrailsV2 for both modes: ${guardrailsData.length} rows`);
         
         for (const guardrail of guardrailsData) {
-          this.logReport(`  - Mode: ${guardrail.mode}, Risk: ${guardrail.portfolioRiskPerTradePct}%, MaxPositions: ${guardrail.maxOpenPositions}`);
+          this.logReport(`  - Mode: ${guardrail.mode}, Risk: ${guardrail.portfolioRiskPerTradePct}%, PositionPct: ${guardrail.maxPositionPercentPct}% (slots derived)`);
           this.result.metrics[`guardrails_${guardrail.mode}`] = {
             risk: guardrail.portfolioRiskPerTradePct,
-            maxPositions: guardrail.maxOpenPositions,
+            maxPositionPct: guardrail.maxPositionPercentPct,
             cooldown: guardrail.symbolCooldownMinutes,
             killSwitch: guardrail.dailyLossKillSwitchPct
           };

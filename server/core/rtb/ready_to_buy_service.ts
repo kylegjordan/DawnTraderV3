@@ -994,7 +994,7 @@ class ReadyToBuyService {
             // recreate the same bug flipped): `refreshAndRank` is the ONLY path that REFRESHES a
             // signal — sole caller of `acquireRefreshedInputs` and sole writer of
             // `lastRefreshedAt`/the refreshed fields. Every other `updateRtbSignal` site
-            // (`removeSignalBySymbol`, the promotion-cleanup fallback, `criteria-limiter`) writes
+            // (`removeSignalBySymbol`, the promotion-cleanup fallback; `criteria-limiter` was deleted by B-SIZING-DEC-RESTORE, rule 18) writes
             // `status:'promoted'` + `promotedAt` — EXIT writes that touch no decision input.
             const _refreshState = this.getSignalRefreshState(mode, signal.signalId);
             _refreshState.isRefreshing = true;

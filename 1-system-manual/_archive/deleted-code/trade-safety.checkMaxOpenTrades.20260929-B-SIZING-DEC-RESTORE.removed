@@ -1,0 +1,68 @@
+// ARCHIVE — NOT COMPILED. Deleted by B-SIZING-DEC-RESTORE increment 2a (obj-4, #698), 2026-09-29.
+// Source: server/services/trade-safety.ts at 232cd3e5b. Git history is authoritative; this is a browse copy.
+// Why: the open-slots setting is retired (slots derived, floor(100 / max_position_percent_pct));
+// checkMaxTotalExposure is the pre-trade cap (PRE_AUDIT §14.2 D2, Langston-approved §14.4).
+
+function getMaxOpenTradesDefault(): number {
+  return getCachedNumberRequired('guardrail_defaults', 'max_open_trades_default', _GUARDRAIL_DEFAULTS_KEY);
+}
+
+
+/**
+ * Check 7: Max Open Trades
+ * Guardrail: maxOpenPositions (number)
+ */
+async function checkMaxOpenTrades(
+  mode: 'live' | 'paper',
+  settings: TradingSettings
+): Promise<TradeSafetyResult> {
+  const activePositions = await getActivePositions(mode);
+  // B72.1: fallback resolved from guardrail_defaults.max_open_trades_default
+  const maxOpenTrades = (settings as any).maxOpenTrades || getMaxOpenTradesDefault();
+
+  if (activePositions.length >= maxOpenTrades) {
+    console.warn(`[8.8.3-H4][GUARDRAIL_BLOCK] code:MAX_TRADES, current:${activePositions.length}, max:${maxOpenTrades}`);
+    return {
+      ok: false,
+      code: 'MAX_TRADES',
+      reason: `Maximum open trades limit reached (${maxOpenTrades})`
+    };
+  }
+
+  return { ok: true };
+
+// --- its call site in checkGuardrailRisk ---
+  const maxTradesCheck = await checkMaxOpenTrades(mode, settings);
+  if (!maxTradesCheck.ok) {
+    logGuardrailCheck('MAX_OPEN_TRADES', maxTradesCheck);
+    return recordBlock(maxTradesCheck);
+  }
+
+// --- server/services/i1-trade-lifecycle-diagnostics.ts logSlotState (no callers) ---
+  
+  /**
+   * Log slot state snapshot for capacity diagnostics
+   */
+  logSlotState(snapshot: {
+    sessionId: string;
+    maxOpenTradesConfigured: number;
+    currentOpenTrades: number;
+    pendingSignals: number;
+    rtbQueueLength: number;
+    blockReasonsSnapshot: Record<string, number>;
+  }): void {
+    const slotSnapshot: SlotStateSnapshot = {
+      ...snapshot,
+      timestamp: new Date()
+    };
+    
+    this.slotStateSnapshots.push(slotSnapshot);
+    if (this.slotStateSnapshots.length > this.MAX_SNAPSHOTS) {
+      this.slotStateSnapshots.shift();
+    }
+    
+    console.log(`[8.8.3-I1][SLOT_STATE] ${JSON.stringify({
+      ...snapshot,
+      ts: slotSnapshot.timestamp.toISOString()
+    })}`);
+  }

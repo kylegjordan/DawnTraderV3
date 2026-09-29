@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { provenanceLogger } from './provenance-logger.js';
 import crypto from 'crypto';
+import { deriveSlotCount, resolveEffectivePositionPct } from './active-position-sizing.js';
 
 interface StateSnapshot {
   timestamp: string;
@@ -260,7 +261,8 @@ class StateAwarenessService {
       // [9.7] Return percentage-based fields from guardrails_v2
       portfolioRiskPerTradePct: result.portfolioRiskPerTradePct ? parseFloat(String(result.portfolioRiskPerTradePct)) : null,
       symbolCooldownMinutes: result.symbolCooldownMinutes,
-      maxOpenPositions: result.maxOpenPositions,
+      // B-SIZING-DEC-RESTORE obj-4: the open-positions setting is retired; how many can be open is derived.
+      derivedSlots: deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(result.maxPositionPercentPct)), 'quant')),
       dailyLossKillSwitchPct: result.dailyLossKillSwitchPct ? parseFloat(String(result.dailyLossKillSwitchPct)) : null,
       maxPositionPercentPct: result.maxPositionPercentPct ? parseFloat(String(result.maxPositionPercentPct)) : null,
       maxTotalExposurePct: result.maxTotalExposurePct ? parseFloat(String(result.maxTotalExposurePct)) : null,

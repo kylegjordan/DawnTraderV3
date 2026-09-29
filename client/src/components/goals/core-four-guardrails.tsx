@@ -29,7 +29,7 @@ interface GuardrailsV2 {
   mode: string;
   portfolioRiskPerTradePct: number;
   symbolCooldownMinutes: number;
-  maxOpenPositions: number;
+  // B-SIZING-DEC-RESTORE obj-4: maxOpenPositions RETIRED — how many can be open is derived from maxPositionPercentPct.
   dailyLossKillSwitchPct: number;
   dailyLossWarning1Pct: number; // P19-B6.8: tier-1 daily-loss warning, % OF the kill threshold
   dailyLossWarning2Pct: number; // P19-B6.8: tier-2 daily-loss warning, % OF the kill threshold
@@ -41,7 +41,7 @@ interface GuardrailsV2 {
 }
 
 interface GuardrailParam {
-  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'maxOpenPositions' | 'dailyLossKillSwitchPct' | 'dailyLossWarning1Pct' | 'dailyLossWarning2Pct' | 'maxPositionPercentPct' | 'maxTotalExposurePct'>;
+  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'dailyLossKillSwitchPct' | 'dailyLossWarning1Pct' | 'dailyLossWarning2Pct' | 'maxPositionPercentPct' | 'maxTotalExposurePct'>;
   label: string;
   description: string;
   unit: string;
@@ -65,11 +65,6 @@ const CORE_FOUR_PARAMS_BASE: Omit<GuardrailParam, 'description'>[] = [
     key: 'symbolCooldownMinutes',
     label: 'Symbol Cooldown',
     unit: 'minutes'
-  },
-  {
-    key: 'maxOpenPositions',
-    label: 'Max Open Positions',
-    unit: 'count'
   },
   {
     key: 'dailyLossKillSwitchPct',
@@ -110,11 +105,10 @@ const GUARDRAIL_DESCRIPTIONS: Record<string, string> = {
   maxTotalExposurePct: 'The maximum percentage of your portfolio that can be invested across all open positions at any time.',
   portfolioRiskPerTradePct: 'How much of your portfolio you plan to risk on each individual trade when sizing position and stop distance.',
   symbolCooldownMinutes: 'After a trade closes on a symbol, wait this many minutes before opening another trade on the same symbol.',
-  maxOpenPositions: 'The maximum number of simultaneous open positions allowed at once.',
   dailyLossKillSwitchPct: 'If your portfolio loses this percent or more in a single day, trading automatically stops until you resume.',
   dailyLossWarning1Pct: 'First early-warning alert, as a percent of your Daily Loss Kill Switch. e.g. 50 alerts you when the day\'s loss reaches half of your kill-switch limit — well before trading stops. Must be below Warning 2.',
   dailyLossWarning2Pct: 'Second early-warning alert, as a percent of your Daily Loss Kill Switch. e.g. 75 alerts you at three-quarters of your kill-switch limit — the last warning before trading auto-stops at 100%. Must be above Warning 1 and below 100.',
-  maxPositionPercentPct: 'The maximum size of any single position as a percent of your total portfolio value. Larger positions will be blocked.'
+  maxPositionPercentPct: 'The size of each position, as a percent of the Max Total Portfolio Exposure budget. It also sets how many positions can be open at once: the budget holds 100 divided by this percent (rounded down), so 5% allows 20.'
 };
 
 // Phase 8.8.3-C7-FIX: Format currency for display
@@ -184,7 +178,7 @@ export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
   const currentBalance = portfolioData?.cashBalance ?? null;
 
   // Fetch Core Four Guardrails from guardrails_v2 endpoint
-  const { data: guardrails, isLoading } = useQuery<{ok: boolean; data: GuardrailsV2}>({
+  const { data: guardrails, isLoading } = useQuery<{ok: boolean; data: GuardrailsV2; derivedSlots: number | null}>({
     queryKey: ['/api/guardrails-v2', mode],
     queryFn: async () => {
       const response = await fetch(`/api/guardrails-v2?mode=${mode}`, {
@@ -381,6 +375,17 @@ export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
                     {param.unit}
                   </span>
                 </div>
+                {param.key === 'maxPositionPercentPct' && (
+                  // B-SIZING-DEC-RESTORE obj-4 (§14.4 D1): READ-ONLY. The old Max Open Positions box is retired; this
+                  // shows the count the saved percent allows, with its basis. It changes when the percent is saved.
+                  <p className="mt-2 text-sm text-muted-foreground" data-testid="derived-slot-count">
+                    Open positions allowed:{' '}
+                    <span className="font-semibold text-foreground">
+                      {guardrails.derivedSlots == null ? 'unreadable' : `${guardrails.derivedSlots} slots`}
+                    </span>
+                    {' '}— {String(data.maxPositionPercentPct)}% per position (saved value; worked out from this setting, not set separately).
+                  </p>
+                )}
               </div>
             );
           })}

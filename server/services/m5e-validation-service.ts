@@ -24,6 +24,7 @@ import { startM5CValidationSession, getM5CSessionTrades, stopAutonomousSimulatio
 import { startPaperTradeRecording, savePaperSessionTrades, getPaperSessionTrades, compareLatestSessions } from './vts-live-comparison-audit.js';
 import { systemConfigService } from './system-config.js';
 import { storage } from '../storage.js';
+import { deriveSlotCount, resolveEffectivePositionPct } from './active-position-sizing.js';
 
 interface M5EMetricsSnapshot {
   timestamp: string;
@@ -130,11 +131,18 @@ async function getDynamicSlots(): Promise<{ slots: number; maxExposure: number; 
       console.error(`[P19-B8.8][M5E_GUARDRAIL_READ_FAIL] unreadable guardrail fields (maxTotalExposurePct=${String(g.maxTotalExposurePct)}, maxPositionPercentPct=${String(g.maxPositionPercentPct)}) — refusing dynamic-slots compute`);
       return null;
     }
-    const dynamicSlots = Math.floor(maxExposure / maxPosition);
+    // B-SIZING-DEC-RESTORE §14.4 BLOCKER-1: the ONE slot derivation, shared with the engine. This used to
+    // compute floor(maxExposure / maxPosition) with a floor of 1 — a second answer to "how many can be
+    // open" that agreed with the sizer only at e = 100 (live, p 30 / e 25: 1 here, 3 in the sizer).
+    const dynamicSlots = deriveSlotCount(resolveEffectivePositionPct(maxPosition, 'quant'));
+    if (!Number.isFinite(dynamicSlots) || dynamicSlots <= 0) {
+      console.error(`[B-SIZING-DEC-RESTORE][M5E_SLOTS_UNDERIVABLE] maxPosition=${maxPosition}% gives ${dynamicSlots} slots — refusing, no floor substituted`);
+      return null;
+    }
 
-    console.log(`[M5E][GUARDRAIL] Dynamic slots: maxExposure=${maxExposure}% / maxPosition=${maxPosition}% = ${dynamicSlots} slots`);
+    console.log(`[M5E][GUARDRAIL] Dynamic slots: floor(100 / maxPosition ${maxPosition}%) = ${dynamicSlots} slots (maxExposure=${maxExposure}% sizes the budget, not the count)`);
 
-    return { slots: Math.max(dynamicSlots, 1), maxExposure, maxPosition };
+    return { slots: dynamicSlots, maxExposure, maxPosition };
   } catch (err) {
     console.error('[P19-B8.8][M5E_GUARDRAIL_READ_FAIL] error reading guardrails — refusing dynamic-slots compute:', err);
     return null;

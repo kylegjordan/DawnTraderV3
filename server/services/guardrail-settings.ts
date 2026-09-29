@@ -11,6 +11,7 @@
 
 import { storage } from '../storage';
 import { TradingSettings } from '@shared/schema';
+import { deriveSlotCount, resolveEffectivePositionPct } from './active-position-sizing.js';
 
 /**
  * Phase 8.8.3-H4: Calculate risk amount from percentage
@@ -187,7 +188,7 @@ export async function getPortfolioBalanceV2(
  * - portfolioRiskPerTradePct
  * - maxPositionPercentPct
  * - dailyLossKillSwitchPct
- * - maxOpenPositions
+ * - maxOpenTrades (DERIVED from maxPositionPercentPct since B-SIZING-DEC-RESTORE obj-4)
  * - killSwitchTripped
  * - lowPriceThreshold (LPCP)
  * - lowPriceMinStopAtrMult (LPCP)
@@ -235,13 +236,16 @@ export async function buildSettingsFromGuardrails(
     portfolioValue: portfolioValue.toString(),
     riskPerTradePct: riskPct.toString(),
     killSwitchTripped: guardrails.killSwitchTripped || false,
-    // P19-B8.7 (OBJ-3): the `|| 5` fallback is GONE — it silently substituted a
-    // made-up concurrency cap whenever the DB value was absent/unparseable (and was
-    // the ancestor of the UI's phantom "5"). The raw Number flows through (NaN when
-    // unreadable); every consumer must handle it loudly: the engine promotion loop
-    // HALTS admissions for the tick (safe-degrade, never a fabricated cap), the API
-    // ships it to an honest em-dash. No-hardcoded-fallbacks (CLAUDE.md §11).
-    maxOpenTrades: Number(guardrails.maxOpenPositions),
+    // B-SIZING-DEC-RESTORE obj-4 (PRE_AUDIT §14): the `max_open_positions` SETTING is retired. How many
+    // can be open is DERIVED from the per-trade share through the sizer's own resolver, so the slot count
+    // and the trade size can never disagree (§14.4 BLOCKER-1/2): p = 5 ⇒ 20, p = 20 ⇒ 5, live p = 30 ⇒ 3.
+    // The key name is kept for the internal object (its readers all mean "how many can be open"); the
+    // settings SCREEN shows it as a derived, read-only value (§14.4 D1). ⚠️ It shares its name with the
+    // LEGACY `trading_settings.max_open_trades` column (`TradingSettings`, default 3) — a known collision,
+    // closed by increment 2b's rule-18 census, not by this line.
+    // P19-B8.7's rule still holds: no fabricated cap. An unreadable p gives NaN (p = 0 gives Infinity),
+    // and the engine's promotion loops HALT on !Number.isFinite rather than invent a number.
+    maxOpenTrades: deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(guardrails.maxPositionPercentPct)), 'quant')),
     // P19-B8.8: the ': "7.00"' kill-switch default is GONE (same dead-but-dangerous
     // family as above — a defaulted KILL SWITCH is the worst number to fabricate).
     dailyLossKillSwitch: String(guardrails.dailyLossKillSwitchPct),

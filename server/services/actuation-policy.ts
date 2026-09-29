@@ -109,18 +109,8 @@ export class ActuationPolicyService {
         maxDailyChanges: 1,
         confidenceThreshold: 85,
         enabled: false // Disabled by default for safety
-      },
-      {
-        variableName: 'maxOpenPositions',
-        variableCategory: 'guardrail',
-        minValue: '3',
-        maxValue: '7',
-        stepSize: '1',
-        cooldownHours: 72,
-        maxDailyChanges: 1,
-        confidenceThreshold: 85,
-        enabled: false // Disabled by default for safety
       }
+      // B-SIZING-DEC-RESTORE obj-4: the maxOpenPositions policy is removed with the setting (slots are derived).
     ];
 
     for (const policy of defaultPolicies) {

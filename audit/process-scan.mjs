@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'fs';
 
 const scanLines = readFileSync('/tmp/grep-scan.txt', 'utf8').split('\n');
 const currentFields = [
-  'portfolioRiskPerTradePct', 'dailyLossKillSwitchPct', 'symbolCooldownMinutes', 'maxOpenPositions',
+  'portfolioRiskPerTradePct', 'dailyLossKillSwitchPct', 'symbolCooldownMinutes', 'maxPositionPercentPct',
   'minVolume', 'minLiquidity', 'minPrice', 'maxPrice', 'minMarketCap', 'maxBidAskSpread',
   'rsiMin', 'rsiMax', 'volatilityMin', 'volatilityMax', 'excludeStablecoins', 'allowRegulatedOnly',
   'universeSize', 'quoteCurrencies', 'activeTimeframes', 'confidenceThreshold',

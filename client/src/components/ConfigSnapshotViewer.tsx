@@ -222,8 +222,10 @@ export function ConfigSnapshotViewer() {
                   testId="field-cooldown"
                 />
                 <ConfigField
-                  label="Max Open Positions"
-                  value={snapshot.guardrails.maxOpenPositions.toString()}
+                  label="Open Positions Allowed (derived)"
+                  value={snapshot.guardrails.derivedSlots == null
+                    ? `unreadable (${snapshot.guardrails.maxPositionPercentPct}% per position)`
+                    : `${snapshot.guardrails.derivedSlots} — ${snapshot.guardrails.maxPositionPercentPct}% per position`}
                   testId="field-max-positions"
                 />
                 <ConfigField

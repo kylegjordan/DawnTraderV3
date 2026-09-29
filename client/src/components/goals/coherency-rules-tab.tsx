@@ -30,14 +30,8 @@ const coherencyRules: CoherencyRule[] = [
     status: "PASS",
     phase: "Phase 28.E"
   },
-  {
-    id: "RULE_002",
-    name: "Total Exposure Limit",
-    description: "Total portfolio exposure must be ≤ 50% of portfolio value",
-    severity: "error",
-    status: "PASS",
-    phase: "Phase 28.E"
-  },
+  // B-SIZING-DEC-RESTORE obj-4: RULE_002 (Total Exposure Limit) and RULE_008 (Max Positions Range) are
+  // RETIRED with the open-positions setting; how many can be open is derived from the position percent.
   {
     id: "RULE_003",
     name: "Cooldown Minimum",
@@ -76,13 +70,6 @@ const coherencyRules: CoherencyRule[] = [
     phase: "Phase 28.E"
   },
   {
-    id: "RULE_008",
-    name: "Max Positions Range",
-    description: "Maximum open positions must be between 1 and 20",
-    severity: "error",
-    status: "PASS"
-  },
-  {
     id: "RULE_009",
     name: "Mode Isolation",
     description: "Each mode (paper/live) must have exactly one guardrails record",
@@ -92,7 +79,7 @@ const coherencyRules: CoherencyRule[] = [
   {
     id: "RULE_010",
     name: "Learning Expansion Safety Caps",
-    description: "Learning-adjusted values must not exceed global safety caps (Kill Switch: 25%, Risk: 5%, Cooldown: 90min, Positions: 20)",
+    description: "Learning-adjusted values must not exceed global safety caps (Kill Switch: 25%, Risk: 5%, Cooldown: 90min)",
     severity: "error",
     status: "PASS",
     phase: "Phase 28.E"

@@ -197,4 +197,65 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       }
     });
   });
+
+  describe('obj-4 — the open-slots setting (max_open_positions) and its satellites (increment 2a, PRE_AUDIT §14)', () => {
+    // SCOPE, stated so the fence is not read as wider than it is: server/ + client/src, tests and _archive excluded
+    // (the walk above). NOT scanned, deliberately: shared/schema.ts still holds the LEGACY `guardrails` v1 column and
+    // the orchestrator route's zod enum, both increment 2b's (§14.2 D5, #1090); drizzle/migrations hold the history.
+    // The VTS null-reason key `max_open_trades` is a NAME COLLISION, not this setting (§14.2 D8) — and no DELETED name
+    // below is a substring of it, so it needs no mask.
+    const DELETED = [
+      'maxOpenPositions',
+      'max_open_positions',
+      'getMaxOpenTradesDefault',
+      'max_open_trades_default',
+      'checkMaxOpenTrades',
+      'selectGoalsPreset',
+      'logSlotState',
+      'slotStateSnapshots',
+    ];
+
+    // The ONE place code must still name the retired field: the PUT refuses it with 422 RETIRED_FIELD, so a stale
+    // client gets a named refusal instead of a silent drop. Masked exactly, and the mask is asserted to exist below.
+    const RETIREMENT_GUARD = [
+      'rawPayload.maxOpenPositions',
+      "fieldName: 'maxOpenPositions'",
+      "'maxOpenPositions is retired:",
+    ];
+
+    const stripComments = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const codeOf = (f: string) => {
+      let code = stripComments(read(f));
+      for (const g of RETIREMENT_GUARD) code = code.split(g).join('«RETIRED»');
+      return code;
+    };
+
+    it('criteria-limiter.ts (dead, no importers) is gone', () => {
+      expect(existsSync(join(REPO, 'server/core/criteria-limiter.ts'))).toBe(false);
+    });
+
+    for (const sym of DELETED) {
+      it(`\`${sym}\` is absent from every source file's code`, () => {
+        const hits: string[] = [];
+        for (const f of FILES) {
+          if (codeOf(f).includes(sym)) hits.push(f.replace(REPO, ''));
+        }
+        expect(hits).toEqual([]);
+      });
+    }
+
+    // §14.4 D9 (his third addition): a fence that matches nothing cannot pass. This file's own reader must SEE the term
+    // in a real source file before its "absent" means anything: routes.ts names it in code, in the retirement guard.
+    it('POSITIVE CONTROL: the scan sees the retired term where it genuinely still is (before masking)', () => {
+      const routes = FILES.find((f) => f.endsWith(join('server', 'routes.ts')));
+      expect(routes, 'routes.ts not in the scanned set').toBeDefined();
+      expect(stripComments(read(routes!))).toContain('maxOpenPositions');
+    });
+
+    it('POSITIVE CONTROL: every masked retirement-guard string really is in routes.ts — the mask cannot drift', () => {
+      const routes = stripComments(read(join(REPO, 'server/routes.ts')));
+      for (const g of RETIREMENT_GUARD) expect(routes.includes(g), `mask string not found: ${g}`).toBe(true);
+    });
+  });
 });

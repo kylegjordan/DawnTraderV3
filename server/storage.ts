@@ -225,7 +225,6 @@ export interface IStorage {
   // Phase 4: Goals Presets methods
   getGoalsPresets(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets[]>;
   getActiveGoalsPreset(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets | null>;
-  selectGoalsPreset(params: { mode: 'live' | 'paper'; presetName: string }): Promise<{ preset: GoalsPresets; guardrails: GuardrailsV2 }>;
   getGuardrailsCompliance(params: { mode: 'live' | 'paper' }): Promise<any>;
 
   // Phase 6: Goals Learning Metrics methods
@@ -791,7 +790,6 @@ export class DatabaseStorage implements IStorage {
       const updateData = {
         portfolioRiskPerTradePct: data.portfolioRiskPerTradePct ?? existing.portfolioRiskPerTradePct,
         symbolCooldownMinutes: data.symbolCooldownMinutes ?? existing.symbolCooldownMinutes,
-        maxOpenPositions: data.maxOpenPositions ?? existing.maxOpenPositions,
         dailyLossKillSwitchPct: data.dailyLossKillSwitchPct ?? existing.dailyLossKillSwitchPct,
         // P19-B6.8: the daily-loss warning tiers were in the table (B6) + validated (RULE_011) + read by the
         // failsafe, but the UPDATE merge-map dropped them — so a user save never persisted. Now merged like
@@ -838,7 +836,7 @@ export class DatabaseStorage implements IStorage {
    * paper position % by hand every few days, and the paper window reads these rows as its stamp
    * (`#1080` am.2), so an edit made through the SETTINGS ROUTE never lands without its record. ⛔ NOT every
    * writer of the table: THREE still write through the bare `upsertGuardrailsV2` (census at `5af3acb49`,
-   * Langston Step-4): `selectGoalsPreset` (this file, no callers), `config-update-service.ts`
+   * Langston Step-4): `selectGoalsPreset` (DELETED in increment 2a, rule 18), `config-update-service.ts`
    * `updateGuardrailsV2` (no importers), and the LIVE admin route `POST /api/orchestrator/updateGuardrail`
    * (`routes.ts`, `#1090`), which is unaudited. All three are in increment 2's rule-18 census.
    */
@@ -914,43 +912,6 @@ export class DatabaseStorage implements IStorage {
         eq(goalsPresets.isActive, true)
       ));
     return result || null;
-  }
-
-  async selectGoalsPreset(params: { mode: 'live' | 'paper'; presetName: string }): Promise<{ preset: GoalsPresets; guardrails: GuardrailsV2 }> {
-    // Step 1: Deactivate all presets for this mode
-    await db
-      .update(goalsPresets)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(goalsPresets.mode, params.mode));
-
-    // Step 2: Activate the selected preset
-    const [preset] = await db
-      .update(goalsPresets)
-      .set({ isActive: true, updatedAt: new Date() })
-      .where(and(
-        eq(goalsPresets.mode, params.mode),
-        eq(goalsPresets.name, params.presetName as any)
-      ))
-      .returning();
-
-    if (!preset) {
-      throw new Error(`Preset ${params.presetName} not found for mode ${params.mode}`);
-    }
-
-    // Step 3: Apply preset values to guardrails_v2
-    const guardrailsUpdate: InsertGuardrailsV2 = {
-      mode: params.mode,
-      portfolioRiskPerTradePct: preset.portfolioRiskPerTradePct,
-      dailyLossKillSwitchPct: preset.dailyLossKillSwitchPct,
-      symbolCooldownMinutes: preset.symbolCooldownMinutes,
-      maxOpenPositions: preset.maxOpenPositions,
-      tunedByLatti: params.presetName !== 'custom',
-      isManualOverride: params.presetName === 'custom'
-    };
-
-    const guardrails = await this.upsertGuardrailsV2(guardrailsUpdate);
-
-    return { preset, guardrails };
   }
 
   async getGuardrailsCompliance(params: { mode: 'live' | 'paper' }): Promise<any> {

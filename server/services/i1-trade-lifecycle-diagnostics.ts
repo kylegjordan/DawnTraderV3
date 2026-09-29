@@ -57,16 +57,6 @@ interface HardStopSummary {
   };
 }
 
-interface SlotStateSnapshot {
-  timestamp: Date;
-  sessionId: string;
-  maxOpenTradesConfigured: number;
-  currentOpenTrades: number;
-  pendingSignals: number;
-  rtbQueueLength: number;
-  blockReasonsSnapshot: Record<string, number>;
-}
-
 interface I1TradeLifecycleSummary {
   sessionStart: Date;
   totalSignals: number;
@@ -77,7 +67,7 @@ interface I1TradeLifecycleSummary {
   byStrategy: Record<string, { opened: number; closed: number }>;
   recentEvents: TradeLifecycleEvent[];
   hardStopSummaries: HardStopSummary[];
-  slotStateSnapshots: SlotStateSnapshot[];
+  // B-SIZING-DEC-RESTORE obj-4: slotStateSnapshots removed — its only writer (logSlotState) had no callers.
 }
 
 class I1TradeLifecycleDiagnosticsService {
@@ -86,7 +76,6 @@ class I1TradeLifecycleDiagnosticsService {
   private sessionStart: Date = new Date();
   private events: TradeLifecycleEvent[] = [];
   private hardStopSummaries: HardStopSummary[] = [];
-  private slotStateSnapshots: SlotStateSnapshot[] = [];
   
   private totalSignals = 0;
   private totalOpened = 0;
@@ -97,7 +86,6 @@ class I1TradeLifecycleDiagnosticsService {
   private byStrategy: Record<string, { opened: number; closed: number }> = {};
   
   private readonly MAX_EVENTS = 800; // Combined with snapshots stays under 1000
-  private readonly MAX_SNAPSHOTS = 100;
   
   private constructor() {}
   
@@ -313,33 +301,6 @@ class I1TradeLifecycleDiagnosticsService {
   }
   
   /**
-   * Log slot state snapshot for capacity diagnostics
-   */
-  logSlotState(snapshot: {
-    sessionId: string;
-    maxOpenTradesConfigured: number;
-    currentOpenTrades: number;
-    pendingSignals: number;
-    rtbQueueLength: number;
-    blockReasonsSnapshot: Record<string, number>;
-  }): void {
-    const slotSnapshot: SlotStateSnapshot = {
-      ...snapshot,
-      timestamp: new Date()
-    };
-    
-    this.slotStateSnapshots.push(slotSnapshot);
-    if (this.slotStateSnapshots.length > this.MAX_SNAPSHOTS) {
-      this.slotStateSnapshots.shift();
-    }
-    
-    console.log(`[8.8.3-I1][SLOT_STATE] ${JSON.stringify({
-      ...snapshot,
-      ts: slotSnapshot.timestamp.toISOString()
-    })}`);
-  }
-  
-  /**
    * Get aggregated summary
    */
   getSummary(): I1TradeLifecycleSummary {
@@ -353,7 +314,6 @@ class I1TradeLifecycleDiagnosticsService {
       byStrategy: { ...this.byStrategy },
       recentEvents: this.events.slice(-100).reverse(),
       hardStopSummaries: [...this.hardStopSummaries],
-      slotStateSnapshots: this.slotStateSnapshots.slice(-20)
     };
   }
   
@@ -364,7 +324,6 @@ class I1TradeLifecycleDiagnosticsService {
     this.sessionStart = new Date();
     this.events = [];
     this.hardStopSummaries = [];
-    this.slotStateSnapshots = [];
     this.totalSignals = 0;
     this.totalOpened = 0;
     this.totalClosed = 0;

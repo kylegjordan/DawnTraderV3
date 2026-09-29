@@ -37,7 +37,7 @@ const strategyEngine = new StrategyEngine();
 const STRATEGY = 'vwap_pullback';
 const ASSET_CLASS = 'xstock_spot' as const;
 const STRATEGY_CALL_SETTINGS = {
-  smaLength: 20, riskPerTradePercent: 2.0, maxOpenPositions: 5,
+  smaLength: 20, riskPerTradePercent: 2.0,
   dailyLossLimitPercent: 10.0, whitelistedSymbols: [], blacklistedSymbols: [], allowedTradingPairs: [],
 } as any;
 const MAX_BARS_15M = 240;

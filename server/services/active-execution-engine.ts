@@ -994,7 +994,7 @@ export class ActiveExecutionEngine {
       // stays alive (skip, not throw).
       const maxTrades = Number(modeSettings.maxOpenTrades);
       if (!Number.isFinite(maxTrades) || maxTrades <= 0) {
-        console.error(`[P19-B8.7][GUARDRAIL_READ_FAIL:${this.mode}] max_open_positions unreadable (${maxTrades}) — ADMISSIONS HALTED this tick (safe-degrade, no fabricated cap). Seed/repair guardrails_v2.`);
+        console.error(`[P19-B8.7][GUARDRAIL_READ_FAIL:${this.mode}] derived slot count unreadable (${maxTrades}; B-SIZING-DEC-RESTORE: floor(100 / max_position_percent_pct)) — ADMISSIONS HALTED this tick (safe-degrade, no fabricated cap). Seed/repair guardrails_v2.max_position_percent_pct.`);
         return;
       }
       const openSlots = maxTrades - openPositions.length;
@@ -4442,7 +4442,7 @@ export class ActiveExecutionEngine {
       // fabricated cap; unreadable → halt this promotion pass loudly, loop survives.
       const maxTrades = Number(modeSettings.maxOpenTrades);
       if (!Number.isFinite(maxTrades) || maxTrades <= 0) {
-        console.error(`[P19-B8.7][GUARDRAIL_READ_FAIL:${this.mode}] max_open_positions unreadable (${maxTrades}) — promotion pass HALTED (safe-degrade, no fabricated cap). Seed/repair guardrails_v2.`);
+        console.error(`[P19-B8.7][GUARDRAIL_READ_FAIL:${this.mode}] derived slot count unreadable (${maxTrades}; B-SIZING-DEC-RESTORE: floor(100 / max_position_percent_pct)) — promotion pass HALTED (safe-degrade, no fabricated cap). Seed/repair guardrails_v2.max_position_percent_pct.`);
         return;
       }
       let openSlots = maxTrades - openPositions.length;

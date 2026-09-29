@@ -8,6 +8,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
+import { deriveSlotCount, resolveEffectivePositionPct } from './services/active-position-sizing.js';
 import { db } from "./db";
 import { sql, eq, and, desc } from "drizzle-orm";
 import { KrakenService } from "./exchanges/kraken/kraken.js";
@@ -1377,7 +1378,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         maxDailyLoss: 'maxDailyLoss',
         maxDrawdownPct: 'maxDrawdown',
         maxDrawdown: 'maxDrawdown',
-        maxOpenPositions: 'maxOpenPositions',
         riskPerTradePct: 'riskPerTrade',
         riskPerTrade: 'riskPerTrade',
         maxPositionSize: 'maxPositionSize',
@@ -1390,7 +1390,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       };
 
       // Type coercion - integers
-      const intFields = ['maxOpenPositions', 'maxPositionSize', 'maxRequiredCapital', 'cooldownMinutes', 'microLoopInterval'];
+      const intFields = ['maxPositionSize', 'maxRequiredCapital', 'cooldownMinutes', 'microLoopInterval'];
       // Type coercion - decimals
       const decimalFields = ['maxDailyLoss', 'maxDrawdown', 'maxDrawdownPct', 'riskPerTrade', 'riskPerTradePct', 'maxRiskPerTradeLimit', 'priceDeltaTrigger'];
 
@@ -1519,7 +1519,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(404).json({ ok: false, code: 'NOT_FOUND', detail: `No guardrails found for mode: ${mode}` });
       }
 
-      res.json({ ok: true, data: guardrailsData });
+      // B-SIZING-DEC-RESTORE obj-4 (§14.4 D1): how many positions can be open is DERIVED, never stored. It is
+      // served beside the row, from the ONE derivation, so the screen shows it without a second formula.
+      // An unreadable percent gives NaN, which JSON sends as null; the screen shows it as unreadable.
+      const derivedSlots = deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(guardrailsData.maxPositionPercentPct)), 'quant'));
+      res.json({ ok: true, data: guardrailsData, derivedSlots });
     } catch (error: any) {
       console.error('[GuardrailsV2] GET error:', error.message);
       res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });
@@ -1564,9 +1568,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const symbolCooldownMinutes = rawPayload.symbolCooldownMinutes !== undefined 
         ? parseInt(String(rawPayload.symbolCooldownMinutes), 10) 
         : undefined;
-      const maxOpenPositions = rawPayload.maxOpenPositions !== undefined 
-        ? parseInt(String(rawPayload.maxOpenPositions), 10) 
-        : undefined;
+      // B-SIZING-DEC-RESTORE obj-4: maxOpenPositions is RETIRED (slots are derived from maxPositionPercentPct).
+      // A client still sending it is REFUSED, loudly — silently ignoring it would report a save that never
+      // happened, the #1090 class.
+      if (rawPayload.maxOpenPositions !== undefined) {
+        return res.status(422).json({
+          ok: false,
+          code: 'RETIRED_FIELD',
+          detail: 'maxOpenPositions is retired: how many trades can be open is derived from maxPositionPercentPct (floor(100 / p)). Change the position % instead.',
+          fieldName: 'maxOpenPositions',
+        });
+      }
       const dailyLossKillSwitchPct = rawPayload.dailyLossKillSwitchPct !== undefined 
         ? parseFloat(String(rawPayload.dailyLossKillSwitchPct)) 
         : undefined;
@@ -1618,7 +1630,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const validationPayload: any = { mode };
       if (portfolioRiskPerTradePct !== undefined) validationPayload.portfolioRiskPerTradePct = portfolioRiskPerTradePct;
       if (symbolCooldownMinutes !== undefined) validationPayload.symbolCooldownMinutes = symbolCooldownMinutes;
-      if (maxOpenPositions !== undefined) validationPayload.maxOpenPositions = maxOpenPositions;
       if (dailyLossKillSwitchPct !== undefined) validationPayload.dailyLossKillSwitchPct = dailyLossKillSwitchPct;
       if (dailyLossWarning1Pct !== undefined) validationPayload.dailyLossWarning1Pct = dailyLossWarning1Pct;
       if (dailyLossWarning2Pct !== undefined) validationPayload.dailyLossWarning2Pct = dailyLossWarning2Pct;
@@ -1667,7 +1678,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const updatePayload: any = { mode };
       if (portfolioRiskPerTradePct !== undefined) updatePayload.portfolioRiskPerTradePct = String(portfolioRiskPerTradePct);
       if (symbolCooldownMinutes !== undefined) updatePayload.symbolCooldownMinutes = symbolCooldownMinutes;
-      if (maxOpenPositions !== undefined) updatePayload.maxOpenPositions = maxOpenPositions;
       if (dailyLossKillSwitchPct !== undefined) updatePayload.dailyLossKillSwitchPct = String(dailyLossKillSwitchPct);
       if (dailyLossWarning1Pct !== undefined) updatePayload.dailyLossWarning1Pct = String(dailyLossWarning1Pct);
       if (dailyLossWarning2Pct !== undefined) updatePayload.dailyLossWarning2Pct = String(dailyLossWarning2Pct);
@@ -9576,7 +9586,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         byCloseReason: summary.byCloseReason,
         byStrategy: summary.byStrategy,
         hardStopSummaries: summary.hardStopSummaries,
-        slotStateSnapshots: includeRaw ? summary.slotStateSnapshots : summary.slotStateSnapshots.length,
         recentEvents: includeRaw ? summary.recentEvents : summary.recentEvents.slice(0, 20)
       });
     } catch (error: any) {
@@ -12148,8 +12157,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // P19-B8.7 (OBJ-3, Kyle 2026-07-16): the display previously computed slots as
       // floor(exposure ÷ per-trade-cap) via dynamic-slots — a number the engine never
       // enforces (it produced "11/5" + a false OVER LIMIT banner). ONE authoritative
-      // count: the SAME guardrails_v2.max_open_positions the promotion loop gates on
-      // (active-execution-engine.ts — buildSettingsFromGuardrails.maxOpenTrades).
+      // count: the SAME value the promotion loop gates on — buildSettingsFromGuardrails.maxOpenTrades,
+      // DERIVED since B-SIZING-DEC-RESTORE obj-4 as floor(100 / p) (the setting it once read is retired).
       // Unreadable value → NaN flows to the client, which renders an honest em-dash
       // (never a fabricated cap); the engine side fail-halts admissions separately.
       const { buildSettingsFromGuardrails } = await import('./services/guardrail-settings.js');
@@ -12740,8 +12749,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const netPnl = realizedPnl + unrealizedPnl;
       const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
       
-      // P19-B8.7 (OBJ-3): TopBar slots re-keyed to the SAME guardrails_v2.max_open_positions
-      // the engine enforces (was the dynamic-slots exposure ratio — retired). NaN → honest
+      // P19-B8.7 (OBJ-3): TopBar slots re-keyed to the SAME count the engine enforces —
+      // buildSettingsFromGuardrails.maxOpenTrades, derived as floor(100 / p) since B-SIZING-DEC-RESTORE obj-4. NaN → honest
       // display fallback client-side, never a fabricated cap.
       const { buildSettingsFromGuardrails } = await import('./services/guardrail-settings.js');
       const maxOpenTrades = Number((await buildSettingsFromGuardrails(mode)).maxOpenTrades);
@@ -17161,7 +17170,7 @@ Provide specific, actionable recommendations.`,
       const allBlockReasons = [
         'KILL_SWITCH', 'STOP_LOSS_REQUIRED', 'ASSET_MAX_POSITIONS', 'COOLDOWN',
         'MAX_POSITION', 'LPCP_LOW_PRICE', 'LPCP_MIN_NOTIONAL', 'FX_CONVERSION_FAILED',
-        'PORTFOLIO_RISK', 'INSUFFICIENT_BALANCE', 'MAX_EXPOSURE', 'MAX_TRADES', 'UNKNOWN'
+        'PORTFOLIO_RISK', 'INSUFFICIENT_BALANCE', 'MAX_EXPOSURE', 'UNKNOWN'
       ];
       const byReason: Record<string, number> = {};
       allBlockReasons.forEach(reason => {
@@ -21973,7 +21982,9 @@ Please:
       const guardrails = guardrailsData ? {
         portfolioRiskPerTradePct: parseFloat(String(guardrailsData.portfolioRiskPerTradePct)),
         symbolCooldownMinutes: guardrailsData.symbolCooldownMinutes,
-        maxOpenPositions: guardrailsData.maxOpenPositions,
+        // B-SIZING-DEC-RESTORE obj-4: the open-positions setting is retired; the count shown is DERIVED.
+        maxPositionPercentPct: parseFloat(String(guardrailsData.maxPositionPercentPct)),
+        derivedSlots: deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(guardrailsData.maxPositionPercentPct)), 'quant')),
         dailyLossKillSwitchPct: parseFloat(String(guardrailsData.dailyLossKillSwitchPct))
       } : null;
       
@@ -22024,7 +22035,7 @@ Please:
         portfolioValue,
         provenance: {
           guardrails_source: 'guardrails_v2',
-          guardrails_columns: ['portfolio_risk_per_trade_pct', 'symbol_cooldown_minutes', 'max_open_positions', 'daily_loss_kill_switch_pct'],
+          guardrails_columns: ['portfolio_risk_per_trade_pct', 'symbol_cooldown_minutes', 'max_position_percent_pct', 'daily_loss_kill_switch_pct'],
           filters_source: 'screener_filters',
           filters_columns: ['min_volume', 'min_liquidity', 'min_price', 'max_price', 'min_market_cap', 'max_bid_ask_spread', 'rsi_min', 'rsi_max', 'volatility_min', 'volatility_max', 'exclude_stablecoins', 'allow_regulated_only', 'universe_size', 'quote_currencies', 'active_timeframes', 'confidence_threshold'],
           goals_source: 'goals_presets',

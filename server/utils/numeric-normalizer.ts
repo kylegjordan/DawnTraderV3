@@ -117,7 +117,6 @@ const NUMERIC_FIELDS: NumericFieldMap = {
   // Position sizing
   quantity: true,
   positionSize: true,
-  maxOpenPositions: true,
   
   // Spread and market cap
   maxBidAskSpread: true,

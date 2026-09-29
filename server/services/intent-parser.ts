@@ -105,19 +105,10 @@ const intentPatterns: IntentPattern[] = [
     }),
     requiresConfirmation: true,
   },
-  {
-    type: 'configuration',
-    action: 'update',
-    entity: 'max_trades',
-    patterns: [
-      /(?:set|change|update)\s+(?:the\s+)?(?:max(?:imum)?\s+)?(?:open\s+)?trades?\s+(?:to\s+)?(\d+)/i,
-    ],
-    extractParams: (match) => ({
-      settingName: 'maxOpenTrades',
-      settingValue: parseInt(match[1]),
-    }),
-    requiresConfirmation: true,
-  },
+  // B-SIZING-DEC-RESTORE obj-4: the 'set max open trades to N' command is REMOVED. It fed command-router's
+  // generic storage.updateTradingSettings call, whose implementation was purged in Phase 41F-L (commented out
+  // in storage.ts), so it could only fail; and how many trades can be open is now DERIVED from the position
+  // percent (guardrails), so there is nothing to set. The generic path itself is increment 2b's (#1090 family).
 
   // Strategy Configuration
   {
@@ -429,16 +420,6 @@ export function validateCommandSafety(intent: ParsedIntent, currentSettings?: an
     }
   }
 
-  // Max trades validation
-  if (intent.parameters.settingName === 'maxOpenTrades') {
-    const value = intent.parameters.settingValue as number;
-    if (value > 10) {
-      errors.push('Maximum open trades cannot exceed 10');
-    } else if (value > 5) {
-      warnings.push('More than 5 open trades requires careful monitoring');
-    }
-  }
-
   return {
     safe: errors.length === 0,
     warnings,
@@ -477,9 +458,6 @@ export function generateConfirmationMessage(intent: ParsedIntent): string {
   if (type === 'configuration' && action === 'update') {
     if (parameters.settingName === 'maxExposurePercent') {
       return `Confirm: Set maximum exposure to ${parameters.settingValue}%?`;
-    }
-    if (parameters.settingName === 'maxOpenTrades') {
-      return `Confirm: Set maximum open trades to ${parameters.settingValue}?`;
     }
   }
 

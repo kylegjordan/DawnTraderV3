@@ -239,7 +239,6 @@ function vtsResolveClassOrLoggedDefault(symbol: string): AssetClass {
 const STRATEGY_CALL_SETTINGS = {
   smaLength: 20,
   riskPerTradePercent: 2.0,
-  maxOpenPositions: 5,
   dailyLossLimitPercent: 10.0,
   whitelistedSymbols: [],
   blacklistedSymbols: [],

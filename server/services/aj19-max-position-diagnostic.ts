@@ -12,7 +12,7 @@
  * 
  * Block Reason Clarification:
  * - MAX_POSITION (checkPositionSizeCap): Position size % of portfolio exceeds limit
- * - MAX_TRADES (checkMaxOpenTrades): Total count of open trades >= maxOpenTrades
+ * - (MAX_TRADES, the open-slots check, was retired by B-SIZING-DEC-RESTORE obj-4; the exposure check is the cap)
  * - POSITION_LIMIT (checkMaxPositionsPerAsset): Already have position in same symbol
  */
 

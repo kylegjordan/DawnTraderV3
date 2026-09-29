@@ -46,7 +46,6 @@ export async function updateGuardrailsV2(
   updates: {
     portfolioRiskPerTradePct?: string | number;
     symbolCooldownMinutes?: number;
-    maxOpenPositions?: number;
     dailyLossKillSwitchPct?: string | number;
     maxPositionPercentPct?: string | number;
     maxTotalExposurePct?: string | number;
@@ -62,9 +61,6 @@ export async function updateGuardrailsV2(
     }
     if (updates.symbolCooldownMinutes !== undefined) {
       updatePayload.symbolCooldownMinutes = updates.symbolCooldownMinutes;
-    }
-    if (updates.maxOpenPositions !== undefined) {
-      updatePayload.maxOpenPositions = updates.maxOpenPositions;
     }
     if (updates.dailyLossKillSwitchPct !== undefined) {
       updatePayload.dailyLossKillSwitchPct = String(updates.dailyLossKillSwitchPct);

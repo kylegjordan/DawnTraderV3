@@ -15,7 +15,7 @@ metadata:
 # Core Four Guardrails:
 # 1. portfolio_risk_per_trade_pct - Percentage of portfolio risked per trade
 # 2. symbol_cooldown_minutes - Cooldown period before re-trading same symbol
-# 3. max_open_positions - Maximum concurrent open positions
+# 3. (max_open_positions RETIRED by B-SIZING-DEC-RESTORE obj-4, 2026-09-29: slots are derived, floor(100 / max_position_percent_pct); RULE_002 and RULE_008 deleted with it)
 # 4. daily_loss_kill_switch_pct - Portfolio loss % triggering auto-shutdown
 
 rules:
@@ -35,25 +35,6 @@ rules:
       - portfolio_risk_per_trade_pct: 4.00
         daily_loss_kill_switch_pct: 7.00
         result: "FAIL (4.00 > 3.50)"
-
-  - name: "Total Exposure ≤ 50% Cap"
-    id: "RULE_002"
-    description: "Total portfolio exposure (positions * risk) must not exceed 50%"
-    condition: "max_open_positions * portfolio_risk_per_trade_pct <= 50"
-    rationale: "Phase 28.E: Simplified fail-safe preventing aggregate risk from exceeding half of portfolio value"
-    severity: "error"
-    error_message: "Total exposure ({total}%) exceeds 50% of portfolio. Reduce max positions or risk per trade."
-    phase: "Phase 28.E"
-    example_valid:
-      - max_open_positions: 5
-        portfolio_risk_per_trade_pct: 1.50
-        total_exposure: 7.50
-        result: "PASS (7.50 <= 50)"
-    example_invalid:
-      - max_open_positions: 100
-        portfolio_risk_per_trade_pct: 1.50
-        total_exposure: 150.00
-        result: "FAIL (150.00 > 50)"
 
   - name: "Cooldown ≥ 0 minutes"
     id: "RULE_003"
@@ -137,20 +118,6 @@ rules:
       - daily_loss_kill_switch_pct: 30.00
         result: "FAIL (exceeds 25.00%)"
 
-  - name: "Max Positions Range"
-    id: "RULE_008"
-    description: "Maximum open positions must be between 1 and 20"
-    condition: "max_open_positions >= 1 and max_open_positions <= 20"
-    rationale: "Minimum 1 position enables trading, maximum 20 prevents over-diversification and management overhead"
-    severity: "error"
-    error_message: "Maximum open positions ({value}) must be between 1 and 20"
-    example_valid:
-      - max_open_positions: 5
-        result: "PASS"
-    example_invalid:
-      - max_open_positions: 50
-        result: "FAIL (exceeds 20)"
-
   - name: "Mode Isolation"
     id: "RULE_009"
     description: "Each mode (paper/live) must have exactly one guardrails record"
@@ -167,8 +134,7 @@ rules:
     condition: |
       portfolio_risk_per_trade_pct <= 5.00 AND
       daily_loss_kill_switch_pct <= 25.00 AND
-      symbol_cooldown_minutes <= 90 AND
-      max_open_positions <= 20
+      symbol_cooldown_minutes <= 90
     rationale: "Phase 6 adaptive learning engine automatically expands preset boundaries by 5% when performance meets threshold. Safety caps prevent runaway expansion and ensure system remains within acceptable risk limits. Phase 28.E: Updated kill switch cap to 25% to align with RULE_007."
     severity: "error"
     error_message: "Learning-adjusted value exceeds safety cap: {parameter} = {value} (max: {cap})"
@@ -178,7 +144,6 @@ rules:
       portfolio_risk_per_trade_pct: 5.00
       daily_loss_kill_switch_pct: 25.00
       symbol_cooldown_minutes: 90
-      max_open_positions: 20
     notes: |
       - Learning engine expands presets by 5% when 30-day avg return >= 80% of target
       - All expansions are capped at safety maximums to prevent excessive risk
@@ -283,7 +248,7 @@ migration_rules:
 enforcement:
   backend:
     - endpoint: "PUT /api/guardrails"
-      rules: ["RULE_001", "RULE_002", "RULE_003", "RULE_004", "RULE_005", "RULE_006", "RULE_007", "RULE_008"]
+      rules: ["RULE_001", "RULE_003", "RULE_004", "RULE_005", "RULE_006", "RULE_007", "RULE_012", "RULE_013"]
       timing: "pre-commit validation before database write"
       failure_action: "return 400 Bad Request with specific rule violation message"
     
@@ -307,11 +272,6 @@ enforcement:
       type: "CHECK constraint"
       sql: "daily_loss_kill_switch_pct >= 1.00 AND daily_loss_kill_switch_pct <= 20.00"
     
-    - constraint: "check_positions_range"
-      rule: "RULE_008"
-      type: "CHECK constraint"
-      sql: "max_open_positions >= 1 AND max_open_positions <= 20"
-    
     - constraint: "check_cooldown_minimum"
       rule: "RULE_003"
       type: "CHECK constraint"
@@ -323,7 +283,6 @@ test_cases:
     - name: "Baseline Configuration"
       portfolio_risk_per_trade_pct: 0.90
       symbol_cooldown_minutes: 15
-      max_open_positions: 5
       daily_loss_kill_switch_pct: 7.00
       is_manual_override: false
       tuned_by_latti: true
@@ -332,7 +291,6 @@ test_cases:
     - name: "Conservative Configuration"
       portfolio_risk_per_trade_pct: 0.50
       symbol_cooldown_minutes: 30
-      max_open_positions: 3
       daily_loss_kill_switch_pct: 5.00
       is_manual_override: false
       tuned_by_latti: true
@@ -341,7 +299,6 @@ test_cases:
     - name: "Aggressive Configuration"
       portfolio_risk_per_trade_pct: 2.00
       symbol_cooldown_minutes: 5
-      max_open_positions: 10
       daily_loss_kill_switch_pct: 20.00
       is_manual_override: true
       tuned_by_latti: false
@@ -365,12 +322,6 @@ test_cases:
       expected_violation: "RULE_006"
       expected_message: "Portfolio risk per trade (6.00%) must be between 0.10% and 5.00%"
     
-    - name: "Total Exposure Exceeds 100%"
-      max_open_positions: 100
-      portfolio_risk_per_trade_pct: 1.50
-      expected_violation: "RULE_002 (warn)"
-      expected_message: "Total exposure (150.00%) exceeds 100% of portfolio"
-
 # Phase 3 Extensions (Future)
 phase_3_additions:
   - name: "Per-Parameter Manual Override Tracking"
@@ -386,20 +337,20 @@ phase_3_additions:
 integrations:
   latti:
     service: "HeuristicTraderService"
-    reads: ["portfolio_risk_per_trade_pct", "symbol_cooldown_minutes", "max_open_positions"]
+    reads: ["portfolio_risk_per_trade_pct", "symbol_cooldown_minutes"]
     respects: "is_manual_override flag (skips adjustment if true)"
     enforces: ["RULE_001", "RULE_006"]
   
   risk_manager:
     service: "RiskManager"
-    reads: ["portfolio_risk_per_trade_pct", "daily_loss_kill_switch_pct", "max_open_positions"]
-    enforces: ["RULE_001", "RULE_007", "RULE_008"]
+    reads: ["portfolio_risk_per_trade_pct", "daily_loss_kill_switch_pct"]
+    enforces: ["RULE_001", "RULE_007"]
     triggers: "Emergency shutdown on kill switch breach"
   
   trading_engine:
     service: "TradingEngine"
-    reads: ["symbol_cooldown_minutes", "max_open_positions"]
-    enforces: ["RULE_003", "RULE_008"]
+    reads: ["symbol_cooldown_minutes"]
+    enforces: ["RULE_003"]
     blocks: "New trade execution if guardrails violated"
 
 # Audit Trail

@@ -38,6 +38,38 @@ import { getCachedNumberRequired } from './module-constants-service.js';
 // threshold alert write lives inside rtb-metrics, not here; sizing stays sync).
 import { rtbMetricsService } from './rtb-metrics-service.js';
 
+/**
+ * B-SIZING-DEC-RESTORE (obj-2, PRE_AUDIT §14.4 BLOCKER-2): THE ONE resolver of the per-trade share of the
+ * exposure budget. The sizer AND the slot derivation (`deriveSlotCount`) read it, so a term added here
+ * — obj-5's posture multiplier must land HERE — moves both together, and §1's named breach (N slots
+ * sized at ×1.25 = 125% of the budget) cannot re-arm through the slot count.
+ * Pattern-pool signals are capped at their class's pattern share; the quant pool is uncapped.
+ */
+export function resolveEffectivePositionPct(
+  maxPositionPct: number,
+  sourcePool: string, // 'pattern' caps; anything else is the quant pool (the sizer's own semantics)
+  assetClass?: AssetClass,
+): number {
+  if (sourcePool !== 'pattern') return maxPositionPct;
+  const patternMaxPct = getPatternPoolGuardrailsForAssetClass(assetClass as AssetClass).MAX_POSITION_PCT * 100;
+  return Math.min(maxPositionPct, patternMaxPct);
+}
+
+/**
+ * B-SIZING-DEC-RESTORE (obj-2 / obj-4, PRE_AUDIT §14): HOW MANY POSITIONS THE EXPOSURE BUDGET HOLDS — the ONE
+ * derivation (the retired `max_open_positions` setting and m5e's `floor(e/p)` twin both answered this
+ * differently; §14.4 BLOCKER-1). `p` slices the exposure BUDGET, not the balance (the sizer below:
+ * budget = balance × e, trade = budget × p × 0.97), so the budget holds `floor(100 / effectiveP)` trades,
+ * independent of `e`. ⚠️ Deliberately ~3% conservative: N slots commit N × p × 0.97 = 97% of the budget
+ * at p = 100/N. Do not "correct" the floor to use the buffer.
+ * Callers pass the QUANT-pool `effectiveP` (the largest per-trade share, so the fewest slots).
+ * Non-finite or non-positive input returns `NaN`, `Infinity` or a negative number; every caller HALTS
+ * on `!Number.isFinite(slots) || slots <= 0` rather than inventing a cap.
+ */
+export function deriveSlotCount(effectivePositionPct: number): number {
+  return Math.floor(100 / effectivePositionPct);
+}
+
 function getMaxPositionBufferFactor(): number {
   return getCachedNumberRequired('active_sizing', 'max_position_buffer_factor',
     { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
@@ -120,15 +152,13 @@ export interface ActivePositionSizingResult {
  * 
  * Pure function - no DB calls, no network calls.
  * 
- * B6 Logic:
- * 1. Calculate risk amount: portfolioValue × (portfolioRiskPerTradePct / 100)
- * 2. Calculate stop distance: |entryPrice - stopPrice|
- * 3. Calculate raw quantity (risk-based): riskAmount / stopDistance
- * 4. Calculate exposure budget: portfolioValue × (maxTotalExposurePct / 100)
- * 5. Calculate maxNotional: exposureBudget × (maxPositionPercentPct / 100)
- * 6. Apply buffer factor to maxNotional
- * 7. Clamp quantity if risk-based notional exceeds bufferedMaxNotional
- * 8. Return quantity and estimatedValue
+ * What runs (B-SIZING-DEC-RESTORE obj-1, fixed-notional; the risk-based steps this header used to list
+ * were retired 2026-08-07 and cost a withdrawn ratification when read as current — Langston §13.4 F):
+ * 1. Exposure budget: portfolioValue × (maxTotalExposurePct / 100)
+ * 2. Per-trade share: effectiveP = resolveEffectivePositionPct(maxPositionPercentPct, pool, class)
+ * 3. Per-trade notional: exposureBudget × (effectiveP / 100), then × the 0.97 buffer
+ * 4. quantity = notional / entryPrice; the stop plays no part in the size
+ * 5. The covariance correlationScale may scale it down afterwards (never up)
  * 
  * Returns { quantity: 0, estimatedValue: 0 } for any invalid input
  * (NaN, zero, negative values, malformed data)
@@ -192,16 +222,12 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
   // B-NEW-43 chunk 3 (2026-05-22): sourcePool now arrives as a typed param —
   // the prior `signal` reference was undeclared (TS2304).
   const signalSourcePool = params.sourcePool || 'quant';
-  let effectiveMaxPositionPct = safeMaxPositionPct;
+  // B-SIZING-DEC-RESTORE §14.4: the ONE resolver (shared with deriveSlotCount). B79.0n.ORCHESTRATOR's
+  // per-class pattern cap lives there — both classes DB-resolved (pattern_pool_gates.pattern_max_position_pct).
+  const effectiveMaxPositionPct = resolveEffectivePositionPct(safeMaxPositionPct, signalSourcePool, params.assetClass);
   if (signalSourcePool === 'pattern') {
-    // B79.0n.ORCHESTRATOR (2026-05-27): resolve per-class pattern pool cap via
-    // dispatcher. Crypto returns 0.15 literal (unchanged); xstock returns
-    // 0.50 DB-resolved (real behavioral correction — pre-batch was crypto's
-    // 0.15 due to class-bound import; post-batch routes correctly).
-    const guardrails = getPatternPoolGuardrailsForAssetClass(params.assetClass);
-    const patternMaxPct = guardrails.MAX_POSITION_PCT * 100;
-    if (effectiveMaxPositionPct > patternMaxPct) {
-      effectiveMaxPositionPct = patternMaxPct;
+    const patternMaxPct = effectiveMaxPositionPct;
+    if (patternMaxPct < safeMaxPositionPct) {
       console.log(`[14.5][SIZING][B79.0n.ORCHESTRATOR] Pattern pool signal — capping position at ${patternMaxPct}% (vs ${safeMaxPositionPct}% quant) assetClass=${params.assetClass}`);
     }
   }

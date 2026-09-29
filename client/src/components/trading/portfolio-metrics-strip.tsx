@@ -26,8 +26,8 @@ interface PortfolioSummary {
   totalPositionValue: number;
   openTradesCount: number;
   slotsAvailable: number;
-  // P19-B8.7 Step-9: the engine-enforced cap (guardrails max_open_positions),
-  // already serialized by the summary route since the B8.7 re-key.
+  // P19-B8.7 Step-9: the engine-enforced cap, already serialized by the summary route since the B8.7 re-key.
+  // B-SIZING-DEC-RESTORE obj-4: DERIVED from max_position_percent_pct (floor(100 / p)); no longer a setting.
   maxOpenTrades?: number;
 }
 

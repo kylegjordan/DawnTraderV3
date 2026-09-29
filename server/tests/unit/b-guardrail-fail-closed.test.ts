@@ -117,8 +117,10 @@ describe('#1081 — the class, not the instance: every TradeSafetyResultCode is 
     .replace(/\/\/[^\n]*/g, '');
   const codes = [...block.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
 
+  // B-SIZING-DEC-RESTORE obj-4: 17 -> 16, MAX_TRADES left the union with the retired open-slots check.
   it('the type declares the expected number of members (the parser is not reading nothing)', () => {
-    expect(codes.length).toBe(17);
+    expect(codes.length).toBe(16);
+    expect(codes).not.toContain('MAX_TRADES');
   });
 
   // Langston Step-4 NIT-2: the round-trip below proves `normalizeBlockReason`'s list only, because `recordBlock` does

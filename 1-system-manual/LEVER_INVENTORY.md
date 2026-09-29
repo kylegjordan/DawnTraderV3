@@ -278,7 +278,7 @@ Full 93-row table preserved in B72 working transcript. Canonical IDs `B72-STRAT-
 | B72-EXEC-009 | pre-execution-validator.ts | 247-249 | strategyRiskProfile weights | 0.5–0.8 | weight | strategy_profiles | (*, *, <strategy>, *) | risk_profile_{risk,consistency} | MEDIUM | 3 strategies hardcoded — extend to all 17 |
 | B72-EXEC-010 | pre-execution-validator.ts | 256-262 | alignmentScore weights | 0.2–0.4 (×4) | weight | goal_alignment | (*, *, *, *) | alignment_score_weight_* | **HIGH** | Tight coupling, atomic block |
 | B72-EXEC-011 | trade-safety.ts | 368 | total_exposure_allocation default | 0.25 | ratio | guardrail_defaults | (*, *, *, *) | default_max_total_exposure_pct | LOW | Mirrors guardrails_v2 — document precedence |
-| B72-EXEC-017 | trade-safety.ts | 556 | maxOpenTrades default | 5 | limit | guardrail_defaults | (*, *, *, *) | max_open_trades_default | LOW | Fallback if guardrail row missing |
+| ~~B72-EXEC-017~~ | ~~trade-safety.ts~~ | ~~556~~ | ~~maxOpenTrades default~~ | ~~5~~ | ~~limit~~ | ~~guardrail_defaults~~ | ~~(*, *, *, *)~~ | ~~max_open_trades_default~~ | — | **RETIRED 2026-09-29 (B-SIZING-DEC-RESTORE inc 2a, `#698`):** the lever, its reader `getMaxOpenTradesDefault` and the open-slots check are deleted; slots are derived from `max_position_percent_pct`. `DELETED_COMPONENTS_LOG.md`. |
 | B72-EXEC-026 | risk-concentration.ts | 44 | correlationThreshold | 0.75 | threshold | concentration_risk | (*, *, *, *) | correlation_threshold | MEDIUM | Directive 9.4 covariance guard |
 | B72-EXEC-027 | risk-concentration.ts | 45 | maxConcentration | 2.5 | ceiling | concentration_risk | (*, *, *, *) | max_concentration_score | MEDIUM | Overexposure cap |
 | B72-EXEC-028 | risk-concentration.ts | 46 | minScalingFactor | 0.25 | floor | concentration_risk | (*, *, *, *) | min_scaling_factor | MEDIUM | Position scaling floor |
@@ -543,7 +543,7 @@ Rows for these are already seeded in `module_constants`; only source-side wiring
 |---|---|---|---|
 | 1 | `server/core/adaptive-manager.ts` | `adaptive_weights` | Lazy `get decayRate()` accessor + `_decayRateOverride` for setDecayRate / constructor arg |
 | 2 | `server/services/risk-concentration.ts` | `concentration_risk` | Lazy `get config()` accessor + `_configOverride` partial override |
-| 3 | `server/services/trade-safety.ts` | `guardrail_defaults` | Two helper functions (`getDefaultMaxTotalExposurePct`, `getMaxOpenTradesDefault`) at fallback callsites |
+| 3 | `server/services/trade-safety.ts` | `guardrail_defaults` | Two helper functions (`getDefaultMaxTotalExposurePct`, `getMaxOpenTradesDefault`) at fallback callsites — *`getMaxOpenTradesDefault` RETIRED 2026-09-29 (B-SIZING-DEC-RESTORE inc 2a); `guardrail_defaults` keeps one row, so the zero-rows boot check still passes* |
 | 4 | `server/services/pre-execution-validator.ts` | `goal_alignment` + `strategy_profiles` | One `resolveGoalAlignmentConfig()` snapshot per validate() call (atomic), per-strategy `resolveStrategyProfile()` |
 | 5 | `server/strategies/strategy-modes.ts` (already shipped under B72 main commit `791e72b5`) | `governance_modes` | Object.defineProperty getter on STRATEGY_MODE_OVERLAYS.confidenceFloor |
 
