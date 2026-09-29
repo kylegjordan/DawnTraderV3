@@ -9862,3 +9862,5 @@ REVIEWER: claim-only · "what other outcomes can a one-sided xStock book produce
 **Two dead siblings of the same bare write:** `selectGoalsPreset` (`storage.ts:949`, no callers) and `config-update-service.ts` `updateGuardrailsV2` (`:81`, no importers).
 **RULE 24: outcome (3), legacy that no longer fits (the enum names predate guardrails_v2); rule 18.**
 **HOME:** added to `B-SIZING-DEC-RESTORE` (`#698`) increment 2's rule-18 census, owner CC-C, placed at `PHASE_19_PLAN.md:19` — the route flagged LIVE (a behaviour change needs a disposition, not a silent delete), the other two as dead code.
+
+➕ **#1090 amendment 1 (2026-09-29, Langston's increment-1 approval; disposition 2, added to this item's home):** a SECOND surface of the same class — `upsertGuardrailsV2`'s INSERT branch spreads `...data` raw (`storage.ts:826-827`), so a phantom field would reach the insert; today it is blocked only by the orchestrator route's 404 when no row exists, i.e. unreachable. Increment 2's census covers it with the route.
