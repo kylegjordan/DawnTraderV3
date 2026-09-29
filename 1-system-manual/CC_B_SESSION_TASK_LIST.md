@@ -1,142 +1,38 @@
-# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-09-13
+# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-09-29
 
-> 📁 **RENAMED AND RE-HOMED 2026-09-13 (`B-GEOMETRY-REACH-BASELINE` Step 10).** It was `CLAUDE_NEW_PHASE_19_TASK_LIST.md`; the Tier-1 ledger row mandates `1-system-manual/CC_B_SESSION_TASK_LIST.md`, matching `CC_A` and `CC_INFRA`. **CC-A moved theirs on 2026-09-11 under `B-TASK-LIST-SLOT` P3 and mine was never moved with it.**
+> **Rebuilt 2026-09-29 from `SPRINT_TO_LIVE_PLAN.md`, which is the authority: if this list and the plan disagree, this list is stale.** The previous version (as of 2026-09-13, with the original 2026-09-01 census) is in git history at `23b4700b2`. Every row points at its record (plan row, `RUNNING_ISSUES` number, alert id); the record is the truth, this file is the index. Kyle 2026-09-05: every slotted task lands here in the same turn.
 
 ## ⛔ OPEN AND STALLED — every batch I have opened and not closed, the step it stalled at, and what it waits on
 
 | batch | step | waiting on |
 |---|---|---|
-| ~~`B-GEOMETRY-REACH-BASELINE`~~ (`#1052`, row 2.4g-2) | **CLOSED 2026-09-13** | nothing — Step 11 CONFIRMED by Langston; this row was STALE in the list for ten days |
-| **`B-XSTOCK-FEE-CONTRACT`** (`#1010`, row 2.4-FEE) | **OBSERVATION** | P8 window (PASS = zero class-(iii) AND xStock maker share ≤1.0 % at n≥300, ~21 days from 2026-09-11T20:09Z) and Arm B (EV-gate admission) |
-| **`T-W20C-SCALAR-LEG`** (alert `a3610acf`, row 2.4-FEE-c) | **not started — OVERDUE since 09-07** | me: the two harness legs, then the ≥99 % gate test. July aged out; re-scope first |
-| ~~**`B-ARCHIVE-RETENTION-SIZING`**~~ (`#592`, row 2.4f) | ✅ **CLOSED 2026-09-29** | decision item, decided by Kyle; `Batch Completion/B_ARCHIVE_RETENTION_SIZING_COMPLETION_REPORT.md`. The October 1 move check stays mine. |
+| **`B-FEED-MISMATCH-FIX`** (row `3n.u`) | **STEP 10 of 11 — observation window** | the data: 300 taker closes or 2026-10-10T00:02:43Z, whichever first. How it is read (per side of each boundary, the short-n rule, the reset excluded) is fixed in amendment 4a (`0c8918c5d`), Langston-confirmed. Then the progress report converts to the completion report. |
+| **`B-XSTOCK-FEE-CONTRACT`** (`#1010`, row 2.4-FEE) | **closed batch, observation still open** | 2026-10-02T20:09:47Z: P8 closes INCONCLUSIVE (Langston 2026-09-29 — PASS was unreachable by construction); Arm B's verdict of record is re-run after the window and Langston re-derives it. The held deploy may go at or after 20:10Z. Successor: `B-FEE-BASIS-STAMP` (`#1097`, sprint row 107a). |
+| **`T-W20C-SCALAR-LEG`** (sprint row 107) | **scope r1 drafted 2026-09-13 (`6e97a8f1c`), never ruled** | its turn in the sprint, after row 106 `B-PAPER-LANE-PROVENANCE` |
+| **`B-FEED-BY-SITUATION-AUDIT`** (row `3n.t`) | **held since 2026-09-15** | a placement: it was held behind `3n.s`, which is now after live, and it sits in neither list — asked of Langston 2026-09-29 |
 
-## ⭐ KYLE 2026-09-15 — BATCH WORK HELD (weekly budget); INVESTIGATIONS ONLY
+## Checks I hold (alerts)
 
-**RUNNING NOW (read-only investigations, Kyle-directed):**
-- **`3n.t` `B-FEED-BY-SITUATION-AUDIT`** — every path (paper · VTS · live) × class (crypto · xStock) × price job: feed wired today vs correct feed, and fresh enough. ⚠️ `PRICE_FEED_MAP.md` §3 already judges right-kind (Q1) and freshness (Q2) for **8 situations only**; VTS exits/fills/booking, xStock active rows and every live-mode cell are NOT judged (§2 says live mode is "unverified").
-- **`3n.w` `B-EXIT-MAKER-VS-TAKER-REVIEW`** — paper exit outcomes by fill type (stops excluded); the "no taker fallback on target exits" option.
-
-**HELD, IN THIS ORDER (plan rows in the `3n` table):**
-1. `3n.s` `B-PRICE-DOC-CONSOLIDATE` — combine the feed map with `PRICING_DATA_ARCHITECTURE.md`.
-2. **`3n.u` `B-FEED-MISMATCH-FIX` — DEPLOYED `323ae2776` 2026-09-19, Langston Step-8 CONFIRMED; Step 10 governance done, Step 11 = a PROGRESS report (observation window on the unobserved arms).** Close-fill freshness contract + the stop-flow flatten/reconciler + close-all.
-2b. `3n.u2` `B-ENTRY-LEVEL-RECHECK` — split out by Langston; re-check levels against the current price before the fill, both classes.
-2c. `3n.u3` `B-CLOSE-WRITER-COSTS` — Langston's Step-4 findings: write the close row instead of deleting when no trade row exists; no invented `fees 0 / slippage 0` on stranded-clear.
-2d. `3n.u4` `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`) — an engine stop overflows `run_for_ms` once the session is older than 24.85 days; the flatten completes but the session row stays `running`. Found by exercising the stop path.
-3. ~~**`3n.v` `B-REACH-BASELINE-ADJUST`**~~ ✅ **CLOSED 2026-09-29** — the crowding arm fired; Kyle overrode the rollback and kept the rows. Record = `Batch Completion/B_REACH_BASELINE_ADJUST_COMPLETION_REPORT.md`. Split out and placed: `3n.v2` `B-VTS-CLASS-LABEL-INTEGRITY` (`#1068`) · `3n.v3` `B-GATE-WILDCARD-REFUSE` (`#1069`) · `3n.v4` `B-SILENT-STRATEGY-CENSUS` (`#1070`) · `3n.v5` `B-OPEN-OBLIGATION-SWEEP` (`#1071`).
-3b. `3n.v6` / sprint row 135a `B-CROWDING-CRITERION-OBJECT` (`#1095`) — NEW 2026-09-29, Langston's successor test for Kyle's override: does the ranking bound one strategy's share of what opens.
-3a. ~~`3n.v` `B-REACH-BASELINE-ADJUST`~~ — Kyle ruled the one-way rule goes; after CC-C's exit fix (`8a-P2`).
-4. `3n.x` review — necessary vs nice-to-have before live mode (CC-B drafts, Kyle decides).
-
-## THE QUEUE, in working order (as of 2026-09-13; the held list above now comes first)
-
-1. **`B-GEOMETRY-REACH-BASELINE` Step 11** — completion report, then close.
-2. **`T-W20C-SCALAR-LEG`** — re-scope the window, build the two harness legs, run the gate test.
-3. **`B-EXCURSION-RECORD`** (row 2.4g-3) — carries the five non-shipping ceilings, `vwap_pullback`, the ratchet constraint, and the `weekend_suspended` non-terminal xStock row class.
-4. **`B-TRADE-RECORD-JOINABILITY`** (row 2.4g-4) — id-space split, archive stage split, `realDiAtOpen` NULL on 3,685, and the xStock-shadow `atrAtOpen = 0` on 1,029 of 1,029.
-5. **`B-KRAKEN-FEE-WATCH`** (row 2.4-FEE-b) · **`B-ALERT-QUEUE-INTEGRITY`** (2.4b) · **`B-RTB-SIGNAL-IDENTITY`** (2.4c, `#1006`) · **`B-VENUE-QUIET-ALERTING`** (`#526`) · **`B-CREW-SENDER-IDENTITY`** · **`B-VOLATILITY-CACHE-RETIRE`**.
-6. **Not mine but placed by me:** `B-TARGET-MULTIPLE-VS-HORIZON` (row 2.4g-5) — **Kyle decides**, gated on 2.4g-3.
-
----
-
-## THE ORIGINAL CENSUS, preserved below
-
-
-> **Owner:** Claude New (CC-B). **Created 2026-09-01 at Kyle's direction.** This is the one place my open work is enumerated — batches, hotfixes, investigations, alerts and small owed items — so it can be reviewed and pruned. ⚠️ **Kyle's expectation, stated when he asked for it: many of these will be REMOVED, because Claude Old is reworking the governance system and Analyst Claude is working the pricing issues, and several of my items will dissolve under that work. Nothing here is being re-prioritised yet; this is the census.**
->
-> ⭐⭐ **MANDATORY, KYLE 2026-09-05: EVERY TIME A TASK IS SLOTTED, IT GOES IN THIS FILE IN THE SAME TURN.** His words — *"this is going to become a mandatory thing, and every time we slot in a new task it goes into this file, so we can keep an updated list of what we're working on for each session."* ⛔ **CORRECTED SAME DAY — MY FIRST CENSUS WAS WRONG AND KYLE CAUGHT IT.** I wrote *"this is the ONLY session task-list file that exists"*. **FALSE.** I searched ONE folder (`1-system-manual/`) with one spelling, and the "positive control" I ran only proved MY OWN file existed — **an instrument that could not have detected the others.** Re-run over the WHOLE repo: **THREE exist.**
-> | session | file |
-> |---|---|
-> | CC-B (this one) | `1-system-manual/CLAUDE_NEW_PHASE_19_TASK_LIST.md` |
-> | CC-A | `Claude Comms and Packages/Scope Files/CC_A_SESSION_TASK_LIST.md` |
-> | CC-INFRA | `Claude Comms and Packages/Scope Files/CC_INFRA_SESSION_TASK_LIST.md` |
-> | **CC-C** | ⛔ **NONE** |
->
-> ⭐ **AND THE INCONSISTENCY IS ITSELF THE FINDING: two folders, two naming conventions.** Mine is `CLAUDE_NEW_PHASE_19_*` under `1-system-manual/`; theirs are `CC_<X>_SESSION_*` under `Scope Files/`. **That is exactly why a folder-scoped search missed them**, and it will keep doing so for anyone else who looks. **If this is becoming a mandatory system-wide practice it needs ONE location and ONE naming rule** — flagged for Kyle, not decided here.
->
-> **RULES FOR THIS FILE.** Every row points at its authoritative record (`RUNNING_ISSUES` number, plan row, alert id) — **the record is the truth; this file is the index.** A row leaves by being marked `CLOSED — <where>` or `REMOVED — <why, who decided>`, never by deletion, so the pruning Kyle described is visible. Built from the repo and the alert queue on 2026-09-01, not from memory — two memory items were found stale in the process and are recorded in §G.
-
----
-
-## A. In flight
-
-- **Alert `763ea6b5` (deploy drift rung 1) — ROUTED TO ME by Langston 2026-09-12 01:24Z. DISPOSITION: RECORD THE HOLD, DO NOT DEPLOY.** Staging sits at `b597f1bf2`, the review branch at `119d2a34c`. **Measured across the undeployed range: exactly TWO runtime files, `server/utils/adaptive-kalman.ts` and `server/tests/unit/b-price-side-p7j-smoother-observation.test.ts`, and BOTH belong to CC-C's `B-PRICE-SIDE-BY-JOB` (`2fb280c11`, `ffe2fbe16`), which is mid-flight at Step 9.** **Control: none of my own commits in that range touch a runtime path** — they are scope, governance and memory files only. ⇒ **Deploying to clear this alert would ship another session's Step-9 runtime change ahead of its own review, which is the exact failure the drift line exists to surface.** The hold is deliberate and CC-C's to clear on their deploy. ⚠️ **Left ACTIVE and unacked** per `#982` and Langston's instruction — the row should keep surfacing until the deploy actually happens.
-- **`B-XSTOCK-FEE-CONTRACT` (`#1010`, plan row 2.4-FEE, change-class `architecture`) — ⏳ OBSERVATION.** Deployed `b597f1bf2` 2026-09-11 20:09:47Z; Step 8 CONFIRMED by Langston 2026-09-12 00:32Z. Both legs verified in booked money (taker `0.001000` ×14; first-ever negative fee `CRM/USD` `-0.000200` at 00:16:31Z, 92-row control at `+0.004000`). **What remains:** the Step-11 completion report, then the two three-week observation windows — P8 (maker share ≤ 1.0% at n≥300, zero class-(iii)) and Arm B (EV-gate admission), both with the 17 alias symbols excluded until `#1024`. **Record:** `Change Lists/B_XSTOCK_FEE_CONTRACT_CHANGE_LIST.md` §9-§10.
-| item | state | record |
+| alert | when | what |
 |---|---|---|
-| **`B-XSTOCK-FEE-CONTRACT`** (`#1010`) | **STEP: 3 of 11 · NEXT STEP: 4 of 11.** Step 1 approved with five rulings; Step 2 (audit and plan, `B_XSTOCK_FEE_CONTRACT_PRE_AUDIT.md` r5) approved by Langston 2026-09-11 16:14Z with three rulings — implementation under way. Scope r1 written 2026-09-11 on Kyle's pivot directive. xStock is charged the crypto schedule (taker `0.008` vs account-confirmed `0.0010`; maker `0.004` vs `−0.0002`). Nine objectives: rates, a boot rail that accepts a rebate, the seed, one fee resolver, a per-site sign census, xStock-only epoch bump, the stale stored copies, subject-vs-probe tests, and a read-only shadow-pool re-rank. Card `PVTI_lAHODmulEM4BfQP4zg6h554`. | `B_XSTOCK_FEE_CONTRACT_SCOPE.md` · plan row `2.4-FEE` |
-| ~~`B-DEPLOY-ACTOR-ALLOWLIST`~~ | ✅ **CLOSED 2026-09-04** — this row still read "Step 11, awaiting Langston" a week after plan row `2.4a` recorded the close. Corrected 2026-09-11. | `B_DEPLOY_ACTOR_ALLOWLIST_COMPLETION_REPORT.md` · plan row `2.4a` |
+| `c25e722d` | 2026-10-02T08:00Z | the pre-registered 52.24 GiB reclaim from the October 1 archive move (Langston's; I follow through). A no-op sweep is a defect at sprint row 6. |
+| `ac32818d` | 2026-10-06T07:00Z | the weekly `dt-deploy` observation; re-mint on each resolve |
 
-## B. Batches placed in `PHASE_19_PLAN.md` §governance queue, owned by CC-B
+## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (51)
 
-| plan row | batch | what it is | starts when |
-|---|---|---|---|
-| 2.4 | ~~`B-ALERT-ACTOR-ALLOWLIST`~~ (`#987`) | ✅ **CLOSED 2026-09-02** — one canonical actor table gating both alert write paths; deployed `fa563982c`; Langston Steps 1/2/4/8/11 approved. | done |
-| §3b, row `3b.f-d` | ★★ **`B-VENUE-QUIET-ALERTING`** (`#526` + Kyle's `#994` folded in) | **Alert economics for the xStock venue-quiet family — the rail stays, the paging changes.** Kyle's ruling fixes the boundary: freshness does NOT loosen, entries run round the clock, exit gate unchanged ⇒ **alerting design only.** Langston gates it; the emit stays and delivery changes; suppression is never an ack; CC-C handed over the quiet-vs-impaired cohort discriminator. **Named + owned since 2026-07-17, PLACED 2026-09-03 — its old home named a moment that had passed.** | ⚠️ **ordering vs 2.4a/2.4b is KYLE'S call — surfaced, not assumed** |
-| 2.4a | **`B-DEPLOY-ACTOR-ALLOWLIST`** (`#656` residual) | The deploy record's `--by` is validated by SHAPE only (`dt-deploy.sh:81`); import `ALERT_ACTORS`, exact-match, refuse otherwise. **First item: date the bare `782 rows` in the `ALERT_ACTORS` header comment (`system-alerts.ts:186`).** Langston's Step-4 find on #987. | after Kyle's alert review |
-| **NEW — 2.4-PRE** | ⭐⭐ **`B-XSTOCK-FEE-CONTRACT`** (`#1010`) — **AHEAD OF EVERYTHING ELSE IN THIS LIST.** ⛔ **We charge xStock the CRYPTO fee schedule.** `fee_model`/`xstock_spot` holds `spot_taker_fee 0.008` and `spot_maker_fee 0.004` — byte-identical to the crypto rows, same write timestamp `2026-06-10 21:50:44Z`, no per-class override anywhere in an UNBOUNDED sweep of the table. **Kraken's published Pro xStocks schedule is flat: taker 0.0010, maker −0.0002 (a REBATE).** ⇒ taker **8× too high**, maker the **wrong sign**, round trip modelled at 1.60 % against a published 0.20 %. ⭐ **Why it outranks the queue: the net-EV gate is computed from these rates, so this distorted SELECTION, not just booking** — every xStock viability question behind it is unanswerable until the cost input is right. ⛔ **NOT a constant edit: re-pricing every live gate at once splits the historical population at an undated boundary.** Correct the rates, give the fee model a per-product identity so a schedule cannot be inherited by the wrong asset class again, stamp the boundary. ⚠️ **Two open inputs, both Kyle-side or trace-side, neither a reason to doubt the divergence: which TIER the account is on, and whether our xStocks come through Kraken Pro's xStocks market.** | `#1010` · `1-system-manual/external-references/KRAKEN_FEE_SCHEDULE_REFERENCE.md` §2 |
-| **NEW — 2.4-PRE-b** | **`B-KRAKEN-FEE-WATCH`** (`#1011`) — **immediately AFTER the above, deliberately.** The venue changed its schedule 2026-07-09 and we noticed 2026-09-06, by hand. Pages are PUBLIC — no credential needed. ⛔ **THREE objects, not two: the live pages, our transcription, and `module_constants`. A page-only diff is structurally blind to `#1010`.** Built against uncorrected values it would bake the error into its baseline — hence second. ⚠️ The committed captures are IMAGES (`pdftotext` → 0 lines); the watcher fetches the live pages. | `#1011` |
-| 2.4b | **`B-ALERT-QUEUE-INTEGRITY`** (`#647` named home) | Three items in the alert-file family: the watchdog's lock-free append (`staging-liveness-watchdog.mjs:108`), the lossy rewrite (`system-alerts.ts:301-325`), poller-vs-heartbeat benign-regex drift (`poller.mjs:394` vs `heartbeat-check.mjs:63`). Latent today (0 malformed / 0 dups measured 2026-09-02). | after 2.4a |
-| **NEW — 2.4c** | ★★ **`B-RTB-SIGNAL-IDENTITY`** (`#1006`) | **KYLE-DIRECTED 2026-09-05.** ⛔ **What makes a SIGNAL unique is not what makes a ROW unique, and the RTB lane never got the fix the rest of the system did.** `asset_class` was added to composite keys in **two** places with the reason stated in code — the market-context cache (`market-context-engine.ts:44`, *"to prevent any cross-asset-class cache pollution"*, B79.0n.MCE) and the VTS re-entry/setup keys (`vts-runner.ts:4151-4154`, *"isolates xstock vs crypto re-entry namespaces"*, P19-B6.5d). **It never reached RTB.** The unique index is declared `(mode,symbol,strategy,status)` and is LIVE as `(mode,symbol,strategy)` — **the repository does not describe the database** — the upsert targets three columns, `ready_to_buy_service.ts:911` and `rtb-refresh-service.ts:330,412` key on `${mode}:${symbol}:${strategy}`, and `removeSignalBySymbol` (`:572-584`) matches the **symbol alone**, no strategy, no class. `active_open_positions` is unique on symbol alone too. ⭐ **THE SHAPE IS THE POINT: one idea applied in two components and not a third, for three months, with nothing noticing.** ⚠️ **URGENCY MEASURED, with a control: across 703 closed trades — 439 crypto over 109 symbols, 264 xStock over 142 — ZERO symbols appear in both classes.** Structurally real, never realized; exposure grows as the xStock universe grows (the plausible collisions are ordinary tickers like CVX, DASH, OPEN). **Fix before it bites, not tonight.** ⛔ **OPEN QUESTION Kyle raised and I could NOT confirm: he also recalls the LANE (pattern vs quant) being part of the key. `source` is a real column on several tables but participates in NO uniqueness key in the RTB path, and `rtb_signals` has no `source` column. Settle that before scoping — it changes what the key is.** | `#1006` · surfaced by the Codex advisor, every citation re-derived and the DB branch measured by CC-B |
-| **NEW — 2.4d** | **`B-CONSTANTS-UPDATED-AT`** (Langston §13, 2026-09-05) | **`module_constants.updated_at` is NOT refreshed on at least one UPDATE path** — a live row reads a **September author against a June timestamp**, so the column cannot date a change. Blast radius includes the *"as of"* column in `CURRENT_SETTINGS_REGISTRY.md`, and it is why the Codex fee-era table has to be built from deploy times instead. **Ride-along: `cost_model.default_taker_fee = 0.0026` is still resident (`#595` retired-key class).** ⚠️ **Langston placed this at 2.4c; that slot is taken by `B-RTB-SIGNAL-IDENTITY`, so it is 2.4d — same write-path-integrity family, immediately after.** | Langston §13 ruling 2026-09-05 |
-| 2.5 | **`B-FRESHNESS-LOG-READER`** | Nothing reads the run record the rules-refresher writes every session start. Build the reader: freeze detector, per-path staleness ceiling (P10), the `self_at_origin` watch, the clone allowlist (report the excluded count; basename is insufficient — `DawnTraderV3` is `git clone`'s default name). | A closes |
-| 2.6 | **`B-SHARED-TMP-ISOLATION`** (`#979`) | All four sessions share `/tmp`. Sweep every writer to the shared namespace (not just `commit -F`; includes the Helsinki `scp` path), an ALLOWLIST guard that refuses `-F` outside the session scratchpad, amend rule 25.c (*the message is content too*), and the archived-blob == source-blob check. | after 2.5 |
-| 2.7 | **`B-CHANGE-CLASS-DOCSET-FIT`** | Langston's §13 from the close of A: the change-class matrix welds `SYSTEM_MANUAL` to `SIM`, but their triggers differ, so infrastructure batches (hooks, bridges, alerting, governance tooling) have no class that fits — six mis-tiered `N/A` rows in `GOVERNANCE_EXCEPTIONS` already. Bug-taxonomy outcome (2): working-as-designed, unaddressed — a scope decision. `CODE_PREFIXES` has no `.claude/` entry either. | after 2.6 |
-| 2.9 | **`B-UMBRELLA-OPEN-STATE`** | The checker has no state for a batch legitimately open until a phase closes; build the designed `umbrella-namespace` row type. | after 2.8 |
-| §1 board, after `B-TEC-REGIME-PARAM-REMOVAL` | **`B-VOLATILITY-CACHE-RETIRE`** | `B-REGIME-INPUTS-LIVE`'s undone OBJ-4: retire the orphan volatility cache + `0.015` fallback after the blast-radius pass on BOTH `dse.ts` route sites (`:56` reads, `:78` clears) and the classifier limb; carries the live fail-loud exercise. **Moved out of the governance queue 2026-09-02 (Kyle): it is a code deletion.** | after `B-ALERT-ACTOR-ALLOWLIST` |
+**Wave A1 — foundations:** 39a `B-CRYPTO-BIRTH-FEED` (⭐ Kyle decision rides `#977`) · 46 `#972` xStock ATR empty around the open and close · 47 `#566` volatility measured with a lag.
 
-## C. Trading-side issues owned by CC-B
+**Wave A2 — mechanics, stage by stage:** 49 `#233` drift and volume inputs fed as fixed defaults (+ `#514`) · 50 `#199` xStock volume confirmation · 51 `3m-ENUM` volatility_edge's pattern path · 52 `B-SILENT-STRATEGY-CENSUS` (`#1070`) · 54 `#574` a made-up volatility input in the ranker · 55 `B-RTB-REFRESH-CONSOLIDATE` · 56 `#570` a refresh bucket that does not refresh · 57 `#699` does promotion evict · 58 roadmap 19.2 verify every score · 59 `B-ENTRY-LEVEL-RECHECK` · 80 `B-SQE-DEADCODE-PURGE` · 80a `B-NORMALIZER-RETIRE` (`#371` family) · 97a `B-PAPER-LEGACY-TABLE-REWIRE` (`#573`) · 99 `B-EPOCH-PARITY-FENCE` · 100 row 9, the learning-record restart.
 
-| issue | plain terms | placement |
-|---|---|---|
-| **`#972`** — xStock volatility (ATR) empty on both sides of every trade | 2/2 live xStock opens and 61/61 closes carry no ATR; crypto carries 107 distinct values in the same column. **Still a HYPOTHESIS** — xStock ATR may be honestly unsourced. | xStock line, ahead of the deferred `#581` fence (Langston's placement). **The "volatility issue."** |
-| **`#682`** — `B-FILTER-DIAG-XSTOCK` | Instrument the xStock active path's per-strategy decline taxonomy; the named home `#675` waits on. Carried an old-form due date (2026-08-12), now past. | own batch |
-| **`#675`** | Paper xStock per-strategy decline table empty while crypto's fills; two dispositions, evidence cannot yet separate them. | closes with `#682` |
-| **`#684`** | xStock fill-freshness limit blocks ~60% of the book at any moment; the guard is right, the 15,000 ms threshold was never calibrated. | unplaced |
-| **`#634`** | Daily-loss evaluator's failure counter has zero readers (Langston-assigned). | unplaced |
-| **`#635` / `#636`** | xStock stall watchdog catches a TOTAL stall only; snap-arrival ≠ mark-freshness. | unplaced |
-| **`#639` / `#640`** | Stop-loss in force at close not persisted; two persisted columns never populated on any row. | unplaced |
-| **`#573`** — `B-PAPER-LEGACY-TABLE-REWIRE` | Paper "Active Trades" card reads the retired `paper_trades` table; prerequisite of dropping it. Full reader census first. | Langston-ruled near-term |
-| **`#625`** | `decideOrp…` — split out of `#605` at Langston's instruction. | unplaced |
-| **`#592`** — database growth | **Kyle assigned this to CC-B in conversation (2026-08-31); the ledger still reads OWNER UNASSIGNED — to be recorded.** Storage picture has moved: 133 GB, rolling-30 partitions from 08-01, sweeps cron-driven. | unplaced |
+**Wave A3 — learning data:** 103 `B-OUTCOME-CORPUS-CAPTURE` · 104 `B-EXCURSION-RECORD` · 106 `B-PAPER-LANE-PROVENANCE` (`#1059`) · 107 `T-W20C-SCALAR-LEG` · 107a `B-FEE-BASIS-STAMP` (`#1097`) · 108 `#515` · 109 `#631` · 110 `#504` · 114 `B-TRADE-RECORD-JOINABILITY` · 115 `B-VPNL-WRITER-BOUND` · 116 `#658` · 117 `#220` · 119 `B-ARCHIVE-WRITER-LIFECYCLE` (+ `#1062`) · 120 `B-ARCHIVE-FLUSH-DRAIN-ORDER` (`#1078`) · 121 `B-ROLLBACK-EPOCH-FORWARD` · 122 `#590` · 123 `B-PROVENANCE-LOSS-CENSUS` · 124 `#231`.
 
-## D. Governance / infrastructure issues owned by CC-B (the long tail — the ones Kyle expects Claude Old's work to absorb)
+**Wave A4 — tuning (after the accumulation gate):** 125 the accumulation gate · 129 roadmap 25-17 target geometry · 130 25-17b crypto reach ceilings · 131 25-20 per-strategy minimum reward-to-risk (+ `#372`) · 132 `B-TARGET-MULTIPLE-VS-HORIZON` · 133 25-26 hold-time study · 134 `B-EXIT-MAKER-VS-TAKER-REVIEW` · 135 `#221` ranking · 135a `B-CROWDING-CRITERION-OBJECT` (`#1095`) · 136 `#149` · 137 `B-FAMILY-POOL-REACHABILITY` · 138 `B-IDEAL-POOL-STARVATION` · 139 `#648` · 140 `#201` · 141 `#529`.
 
-| family | issues |
-|---|---|
-| Deploy safety | `#649` (partly addressed by `dt-deploy`), `#652` (`pm2 save`), `#653`, `#681` (a deploy can outrun CI), `#680` (`B-TSC-PUSH-GATE`, Langston PROCEED) |
-| Alert-system defects | `#638` (exit-skip class has no clear path), `#642` **(minted twice — collision to untangle)**, `#646`, `#679` (persistent threshold re-fires on resolve), `#654` (checker ages `open` forever) |
-| Governance checker | `#637` (dead-man switch OFF), `#643`, `#660` (projected cap breach), `#662` (`B-ACTIVE-NULL-TAXONOMY`), **`#663` (KYLE DECISION OWED)**, `#664` |
-| Doc divergence | `#641` (`latchTriggerPrice`, 13+ sites) |
-| Close-only | **`#669`** — diagnosed, stale test retired, CI 4/4 green; needs its CLOSE written |
+## My issues that now sit in another session's row (homed 2026-09-29; `RUNNING_ISSUES` "HOMING 2026-09-29")
+`#569` → row 9 · `#567` (mark plausibility) → row 17 · `#635` → row 34 · `#684`, `#393` → row 40 · `#641` → row 69 · `#1041` → row 196 (all CC-C) · `#662`, `#682`, `#675` → row 93 and `#1013` → row 160a (Infra, confirmed) · `#370`, `#375` → row 153 (CC-A).
 
-**Filed or endorsed by CC-B, NOT owned** (listed so nothing hides; not mine to work): `#647` (CC-C), `#621`, `#608`, `#609`, `#637`'s sibling filings.
+## After live — mine, listed in `Scope Files/PRE_LIVE_SPRINT.md`
+`#639`, `#551` (break-even and trailing) · 2.4b `B-ALERT-QUEUE-INTEGRITY` (`#647`, `#1074`, `#654`) · `B-CREW-SENDER-IDENTITY` · `B-CHANGE-CLASS-DOCSET-FIT` (row 2.7; now two instances) · `B-FRESHNESS-LOG-READER` · `B-SHARED-TMP-ISOLATION` · `B-UMBRELLA-OPEN-STATE` · `B-OPEN-OBLIGATION-SWEEP` (`#1071`) · `B-GATE-WILDCARD-REFUSE` (`#1069`) · `B-PRICE-DOC-CONSOLIDATE` (`3n.s`) · `B-VOLATILITY-CACHE-RETIRE` · `#1042`, the `#507` rider (legacy) · `#518`, `#528`, `#537`.
 
-## E. Alerts
-
-| alert | owner | asks | state at this write |
-|---|---|---|---|
-| **`2b0a4688`** — `#605` pin proof | CC-B | verify the `hasGovernance` pin on a naturally aged-out batch | **CLOSED 2026-09-02 — PASS, resolved by cc-b with the two-check evidence; record at `#605`** |
-| `27860643` — B-STORAGE-HARDEN Wave C | CC-A (body) | verify first natural `signal_eval_archive` tiering | due |
-| `ae2e739b` — exit checks skipped, MDT/USD | unowned | mark older than ceiling | due, NEW |
-| `f6ae5419` · `c5cf4a87` · `23f004a4` | CC-A (body) | VC-2 decision point · vts GC knob revisit · `#602` first learning write | cleared from the due list 2026-09-01 ~06:30Z |
-
-⚠️ **None of the five carried an owner in metadata — owner appears only in body text.** That is `#647`'s subject (CC-C).
-
-## F. Small owed items
-
-- **Board card "July storage migration (run manually, end of August)" → move to Complete:** the 2026-09-01 02:15Z nightly did it (xstock_spot_ticker_snap/2026-07, 31/31 slices verified, hot partition dropped; Langston resolved alert `4869c830`; Claude Old closed the review as #991). Told by Claude Old 2026-09-02; card not yet moved.
-
-- **`P19-B8.5` umbrella:** Kyle ruled 2026-09-02 it stays open until Phase 19 closes; stale-open alert resolved against `GOVERNANCE_EXCEPTIONS:82`; mechanism gap → `B-UMBRELLA-OPEN-STATE` (plan 2.9, mine).
-- **Claude Old answered 2026-09-02; Kyle ruled:** `B-REGIME-INPUTS-LIVE` (alert `8aa095a2`) → **CLOSED 2026-09-02 (retroactive report filed; #543/#538 resolved; OBJ-4 → `B-VOLATILITY-CACHE-RETIRE`)** — was — verified against the repo and the channel: code deployed (ancestor of the live sha), Langston Step-4 read at the ref 2026-07-20 21:05, live-verified by him 2026-08-31 (501 trades, 448 distinct regimeWeights); missing = retroactive completion report, catalog + history rows, #543/#538 disposition. `B-RETIRED-SCORE-REMOVAL` (#558, `f4ffaf53`) → **Phase 16, mine** — re-homed at `POST_AUDIT_ROADMAP` §16.7.
-
-- Delete scheduled task `verify-p19-b8-5h-dbs-carry` — still listed on 2026-09-01; I asserted on 2026-07-29 that it was gone and it was not.
-- Record `#592` owner = CC-B. Write `#669`'s close.
-- `MEMORY_CC_B.md` is over the 24,576-B cap; the residual is the Kyle-flagged FEEDBACK block, and the fix is promoting those rules to `CLAUDE.md` (needs coordination).
-- Langston's `MEMORY.md`: his REVIEWER LEDGER alone is 34,605 B; **his** call, homed at `B-LANGSTON-LEDGER-SPLIT` (Langston + Infra).
-
-## G. Corrections to my own memory, found building this list
-
-- **B-FILTER-DIAG-STANDARDIZE's governance close was NOT still owed** — `BATCH_CATALOG`, `PHASE_HISTORY` and the completion report all carry it. Only `#675` survives as a residual.
-- **"B-ATR-RESTORE is the next batch" was wrong** — B8.5k was rolled back and B8.5l fixed the shared-volatility root cause in July. The live volatility item is `#972`.
-- **`#669`'s "CI 4/4 is unsatisfiable" was three weeks stale**; already corrected 2026-08-31.
+## Closed recently
+`B-ARCHIVE-RETENTION-SIZING` (`#592`, row 2.4f) 2026-09-29, a decision item · `B-REACH-BASELINE-ADJUST` (row `3n.v`) 2026-09-29, crowding arm fired and Kyle overrode · `3n.x`, the pre-live review, became the Sprint to Live plan itself · withdrawn or closed at the 2026-09-29 homing: `#556`, `#636`, `#544`, `#507` (core), `#1098` (the node_modules `#567`); `#640` was already withdrawn.
