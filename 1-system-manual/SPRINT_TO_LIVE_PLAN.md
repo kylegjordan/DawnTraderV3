@@ -72,7 +72,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
-| 1 | Keep the sprint-to-live plan current: the checker requires a batch close to touch its own plan line, plus a weekly census alert; CLAUDE.md points at the plan | B-PLAN-CURRENCY-CHECK | CC-A (Old Claude) | QUEUED | — | keeps this plan current: checker close-diff rule + weekly census alert, then the CLAUDE.md pointer swap (Langston ruling, OLD Claude) |
+| 1 | Keep the sprint-to-live plan current: the checker requires a batch close to touch its own plan line, plus a weekly census alert; CLAUDE.md points at the plan | B-PLAN-CURRENCY-CHECK | CC-A (Old Claude) | QUEUED | — | keeps this plan current: checker close-diff rule + weekly census alert, then the CLAUDE.md pointer swap (Langston ruling, OLD Claude) — ✅ the pointer swap LANDED in `B-GOV-REPORTING` r6 (Langston's G1 condition 3, 2026-09-29: §9.4 now names this plan); the checker rule and the census alert remain |
 | 2 | B-XSTOCK-BID-TRIGGER-RELAND | B-XSTOCK-BID-TRIGGER-RELAND | CC-C (Analyst Claude) | QUEUED | — | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
 | 3 | B-VTS-MARK-SIDE | B-VTS-MARK-SIDE | CC-C (Analyst Claude) | QUEUED | — | midpoint off, before the sprint: the VTS xStock prices on the right side (8a-P4c increments 2-3) |
 | 4 | B-VTS-NO-DECISION-VALVE | B-VTS-NO-DECISION-VALVE | CC-C (Analyst Claude) + Langston | QUEUED | — | midpoint off, before the sprint: a VTS trade with no usable sell price no longer books its timeout at the midpoint |

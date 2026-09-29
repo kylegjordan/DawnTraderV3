@@ -45,7 +45,7 @@ for a in last.values():
     due.append(a)
 
 acked = [a for a in last.values()
-         if a.get('acknowledged_by') == 'langston' and a.get('state') != 'resolved'
+         if str(a.get('acknowledged_by') or '').strip().lower().startswith('langston') and a.get('state') != 'resolved'
          and (when(a.get('acknowledged_at')) or now - datetime.timedelta(days=2)) > now - datetime.timedelta(hours=24)]
 
 for a in sorted(due, key=lambda x: str(x.get('triggers_at') or '')):

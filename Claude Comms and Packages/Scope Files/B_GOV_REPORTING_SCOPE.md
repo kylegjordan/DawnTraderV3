@@ -208,6 +208,8 @@ change-class: non_architecture
 **Why now:** Kyle, 2026-09-29 — finish this batch before the sprint to live (it is on CC-A's section-0 plate in `SPRINT_TO_LIVE_PLAN.md`, *"pushed, the review gate never ran"*).
 **How the state below was established:** every landed edit was reconstructed from its commits and from every Langston ruling in `/var/log/cc-discord-inbox.jsonl` (Helsinki) — by four independent readers, each checked by an adversarial verifier trying to refute it, then a completeness pass over all 49 commits to `CONDUCT.md`, `CLAUDE.md` and `.claude/skills` since 2026-08-26. ⚠️ **The load-bearing items were then re-derived by CC-A at the ref** (the bug-investigation markers, workflow-11 :17, `CLAUDE.md` :529/:534/:539/:566-567, the due date, workflow-10's matrix lines, the sibling check's predicate). Full record: `Change Lists/B_GOV_REPORTING_CHANGE_LIST_r6.md`.
 
+⛔ **THIS SECTION DID NOT GATE THE WORK AND MAY NOT BE CITED AS THOUGH IT DID (`#1005`).** It is analysis written after the edits it audits — retroactive, and labelled so; the batch has no Step 2 that preceded its code (Langston, G1, 2026-09-29).
+
 ⛔ **"THE REVIEW GATE NEVER RAN" OVERSTATED IT.** Langston ruled on edits 1-5 (2026-08-26T20:10Z), 6-8 (08-27T15:59Z), 9 (08-27T18:57Z, conditions verified 19:07Z), 10 (08-28T07:15Z) and 11 r1-r3 (08-28). **What was actually owed is narrower and worse:** fixes he asked for that were never made, and changes that were never put to him.
 
 ### 7a. RULINGS CARRIED OUT IN r6 (never applied until now)
@@ -260,3 +262,4 @@ change-class: non_architecture
 - **`PHASE_19_PLAN` row 8 item (v)** still gives *"an acknowledged keyed row blocks the next mint"* as the reason to leave an alert active — the half-truth his 09-13 ruling corrected. That plan is history; say whether it should be annotated.
 - **`PRE_LIVE_SPRINT.md` is generated** (`scripts/inventory/sort.py`): r6's hand edits there (the `B-GOV-LEDGER-GRADE` line, the removed after-live `B-GOV-REPORTING` line, the `B-GATE-GUARD` note) are lost on the next regeneration unless NEW Claude carries them into the inventory sources.
 - **`workflow-11` now drops the Kyle-acknowledgement step** (Kyle, 2026-09-02; the memory note homed the correction to the next governance batch touching this skill — this one).
+- **G1 (2026-09-29): APPROVED with three conditions, all carried out** — the §8 pointer takes the rule from row 2.8b and both numbers from the tool; the guard comment states its measured magnitude; §9.4 names `SPRINT_TO_LIVE_PLAN.md` (the CLAUDE.md pointer swap, moved here from `B-PLAN-CURRENCY-CHECK`). His correction to the round record applied.

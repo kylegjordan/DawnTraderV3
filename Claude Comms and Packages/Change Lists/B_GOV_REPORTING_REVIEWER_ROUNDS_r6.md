@@ -22,7 +22,7 @@
 
 ## DECLINED OR LEFT OPEN, WITH MY POSITION
 - **The dormant `tail -20` in `wake-watcher-heartbeat-cc-a`** — that task is unregistered (the live heartbeat reads the whole file); it belongs to `B-WAKE-OUT-OF-BAND` (2.4g-b), which already says to measure it before rebuilding it.
-- **`due-alerts.py`'s clause-(b) population** leaves out rows Langston acked and that were then resolved — deliberately: a resolved alert owes no follow-through. The `fired_at` leg of (b) is not covered; say if it should be.
+- ~~**`due-alerts.py`'s clause-(b) population** … the `fired_at` leg of (b) is not covered~~ — **WITHDRAWN (Langston, G1): backwards.** The `fired_at` leg is a strict subset of the ack leg (an ack cannot precede its fire; a resurface does not rewrite `fired_at`), so the script is broader than the wording, never narrower. His nit applied instead: `acknowledged_by` is matched case-insensitively by prefix, catching his 27 historical ack spellings.
 - **Shared `MEMORY.md` item 3 still names the dead `langston-alert-invokes.log`** — `#1054`, Infra Claude.
 - **The hotfix's one R cell is graded only once a completion report exists** — the `#754` blind spot, already stated in the skill's honest limit.
 - **Tier-1 unconditional (`CLAUDE.md` §3.0) vs judged `SCOPE`/`PRE_AUDIT` for `sub_batch`**, **row 8 item (v)**, **the generated after-live list** — G6 questions.
