@@ -17,7 +17,7 @@ WAVES = [
    ("DISK-HEADROOM", "database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) move one month of one-minute price bars as the proof and flip their hot window 365 -> 30 days (~19 GB out); then measure months of headroom"),
    ("CONTEXT-BRIDGE-TTL", "this week: make the retention demonstrably free bytes on a named table - install the missing 14-day job (1.48 GB); #688 (four monthly-partitioned tables) rides the disk item"),
    ("PAPER-STANDARD", "set the numbers for 'comfortable in paper' BEFORE the evidence comes in"),
-   ("B-SIZING-DEC-RESTORE", "wave 0 - KYLE 2026-09-29 (supersedes option c): one shared pot; HARD RESET paper to a $3,000 balance, old trades kept (nothing deleted); ~$150 per trade held as the balance moves (fixed-notional), ~20 open at 100% exposure; RETIRE the open-slots guardrail (rule 18); the obj-1 size formula correction (#698 am.1) comes first"),
+   ("B-SIZING-DEC-RESTORE", "wave 0 - KYLE 2026-09-29 (supersedes option c): one shared pot; paper reset to a $3,000 balance - only the paper dashboard starts from zero, nothing deleted, open positions closed and labelled as closed by the reset; sized by the max-position % guardrail, MONITORED and ADJUSTED so each trade stays near $140-150 (5% to start), about 20 open at 100% exposure; RETIRE the open-slots guardrail (rule 18); the obj-1 size formula correction (#698 am.1) comes first"),
    ("#628", "with B-SIZING-DEC-RESTORE: its two sizing sites"),
    ("#521", "wave 0 (Langston F11): nothing notices a dead engine - a silent halt voids every observation window"),
    ("PLAN-ID-COLLISIONS", "a chore, not mechanics (Langston): no two plan items share a number"),
