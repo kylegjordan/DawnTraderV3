@@ -9870,3 +9870,10 @@ REVIEWER: claim-only · "what other outcomes can a one-sided xStock book produce
 **HOME:** added to `B-SIZING-DEC-RESTORE` (`#698`) increment 2's rule-18 census, owner CC-C, placed at `PHASE_19_PLAN.md:19` — the route flagged LIVE (a behaviour change needs a disposition, not a silent delete), the other two as dead code.
 
 ➕ **#1090 amendment 1 (2026-09-29, Langston's increment-1 approval; disposition 2, added to this item's home):** a SECOND surface of the same class — `upsertGuardrailsV2`'s INSERT branch spreads `...data` raw (`storage.ts:826-827`), so a phantom field would reach the insert; today it is blocked only by the orchestrator route's 404 when no row exists, i.e. unreachable. Increment 2's census covers it with the route.
+### #1091 OPEN 2026-09-29 (CC-A; Langston's §9.4 surface, disposition 3 decided by CC-A as the drift line's owner) — THE DEPLOY-DRIFT LINE HAS NO WAY TO KNOW A HOLD IS DELIBERATE, SO A WRITTEN HOLD ESCALATES FOREVER
+
+**Observed:** staging is held at `bc199185e` by a written hold (`GOVERNANCE_EXCEPTIONS.md:28-30`, CC-C, not before 2026-10-02T20:10Z; Kyle's 2026-09-28 no-deploy direction). The drift line's rungs 2, 3 and 4 (`93480f03`, `5d6b67cf`, `d9caf6f5`) have been open since 2026-09-23/25 and are re-routed every turn. The sibling open-batch backstop has a re-justification row; the drift line has none.
+**Why it is a push item, not after-live:** Kyle decided 2026-09-28 that the live program takes new code on a schedule he sets. **A deliberate lag becomes the live program's normal state**, so without this the drift line either cries permanently about live or gets ignored — and then a real missed deploy looks identical to the hold, which is the undetectable state `B-DEPLOY-DRIFT-LINE` was built to end.
+**Shape (not decided — Step 1):** a hold row with an owner, a reason and an EXPIRY, per program (paper / live); the line stays quiet within a live hold and fires again on expiry; a hold without an expiry is refused.
+HOME: B-DRIFT-HOLD-AWARE, owner CC-A, placed in SPRINT_TO_LIVE_PLAN wave B3 at 179b, after 179 B-LIVE-PROCESS-SPLIT.
+
