@@ -54,42 +54,59 @@ describe('P5 — getEffective no longer masks a stored value with a hard-coded 3
   });
 });
 
-describe('P6 — one audit row per CHANGED field, derived from the payload', () => {
+describe('P6 — one audit row per CHANGED field: the payload\'s fields, the WRITTEN row\'s values', () => {
   const old = {
     mode: 'paper', maxPositionPercentPct: '20.00', maxTotalExposurePct: '100.00', dailyLossWarning1Pct: '50.00',
     lockedByUser: { a: true }, isManualOverride: false, lastUpdatedBy: 'someone',
   };
+  const written = (over: Record<string, unknown>) => ({ ...old, ...over });
 
   // MUTATION: go back to a hand-written per-field list without exposure and this fails.
   it('an exposure change is audited (the old list missed it)', () => {
-    const e = buildGuardrailAuditEntries(old, { mode: 'paper', maxTotalExposurePct: '90' }, 'u1', 'paper');
+    const e = buildGuardrailAuditEntries(old, written({ maxTotalExposurePct: '90.00' }), ['mode', 'maxTotalExposurePct'], 'u1', 'paper');
     expect(e).toHaveLength(1);
-    expect(e[0]).toMatchObject({ field: 'maxTotalExposurePct', oldValue: '100.00', newValue: '90', changedBy: 'u1', tradingMode: 'paper' });
+    expect(e[0]).toMatchObject({ field: 'maxTotalExposurePct', oldValue: '100.00', newValue: '90.00', changedBy: 'u1', tradingMode: 'paper' });
   });
 
-  it('a position % change is audited', () => {
-    const e = buildGuardrailAuditEntries(old, { mode: 'paper', maxPositionPercentPct: '5' }, 'u1', 'paper');
-    expect(e.map((x) => x.field)).toEqual(['maxPositionPercentPct']);
+  // FINDING-1: the value logged is what the database TOOK. A field sent but not written (the merge list
+  // dropped it) is NOT logged. MUTATION: read the new value from the payload instead and this fails.
+  it('a field the database did not change gets no row, whatever was sent', () => {
+    const e = buildGuardrailAuditEntries(old, written({}), ['maxPositionPercentPct'], 'u1', 'paper');
+    expect(e).toHaveLength(0);
   });
 
-  // MUTATION: compare as strings and this fails — "5.00" vs "5" would log a change that is not one.
-  it('re-saving the same number in another format is NOT audited', () => {
-    expect(buildGuardrailAuditEntries(old, { mode: 'paper', maxPositionPercentPct: '20' }, 'u1', 'paper')).toHaveLength(0);
+  it('the logged value is the stored one', () => {
+    const e = buildGuardrailAuditEntries(old, written({ maxPositionPercentPct: '6.56' }), ['maxPositionPercentPct'], 'u1', 'paper');
+    expect(e[0].newValue).toBe('6.56');
+  });
+
+  // MUTATION: compare as strings and this fails — "20" vs "20.00" would log a change that is not one.
+  it('the same number in another format is NOT audited', () => {
+    expect(buildGuardrailAuditEntries(old, written({ maxPositionPercentPct: '20' }), ['maxPositionPercentPct'], 'u1', 'paper')).toHaveLength(0);
   });
 
   it('mode and lastUpdatedBy never get a row; the lock map compares as JSON', () => {
-    const e = buildGuardrailAuditEntries(old, { mode: 'paper', lastUpdatedBy: 'u1', lockedByUser: { a: true } }, 'u1', 'paper');
-    expect(e).toHaveLength(0);
-    const e2 = buildGuardrailAuditEntries(old, { mode: 'paper', lockedByUser: { a: false } }, 'u1', 'paper');
+    const f = ['mode', 'lastUpdatedBy', 'lockedByUser'];
+    expect(buildGuardrailAuditEntries(old, written({ lastUpdatedBy: 'u1' }), f, 'u1', 'paper')).toHaveLength(0);
+    const e2 = buildGuardrailAuditEntries(old, written({ lockedByUser: { a: false } }), f, 'u1', 'paper');
     expect(e2.map((x) => x.field)).toEqual(['lockedByUser']);
   });
 
   it('booleans compare as values', () => {
-    expect(buildGuardrailAuditEntries(old, { mode: 'paper', isManualOverride: false }, 'u1', 'paper')).toHaveLength(0);
-    expect(buildGuardrailAuditEntries(old, { mode: 'paper', isManualOverride: true }, 'u1', 'paper')).toHaveLength(1);
+    expect(buildGuardrailAuditEntries(old, written({}), ['isManualOverride'], 'u1', 'paper')).toHaveLength(0);
+    expect(buildGuardrailAuditEntries(old, written({ isManualOverride: true }), ['isManualOverride'], 'u1', 'paper')).toHaveLength(1);
   });
 
   it('no existing row ⇒ no rows (nothing to diff against)', () => {
-    expect(buildGuardrailAuditEntries(null, { mode: 'paper', maxPositionPercentPct: '5' }, 'u1', 'paper')).toHaveLength(0);
+    expect(buildGuardrailAuditEntries(null, written({ maxPositionPercentPct: '5.00' }), ['maxPositionPercentPct'], 'u1', 'paper')).toHaveLength(0);
+  });
+});
+
+describe('FINDING-3 — RULE_013 reaches validate(getEffective(row))', () => {
+  // MUTATION: drop maxTotalExposurePct from getEffective and this fails — RULE_013 skips on `undefined`.
+  it('a stored exposure of 0 fails RULE_013 through getEffective', () => {
+    const eff = guardrailPolicy.getEffective({ mode: 'paper', maxPositionPercentPct: '5.00', maxTotalExposurePct: '0.00', lockedByUser: {} } as any);
+    expect(eff.maxTotalExposurePct).toBe(0);
+    expect(guardrailPolicy.validate(eff).failures.map((f) => f.ruleId)).toContain('RULE_013');
   });
 });

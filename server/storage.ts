@@ -220,7 +220,7 @@ export interface IStorage {
   /** #1088: the kill switch's OWN three columns and nothing else (never the merge list in upsertGuardrailsV2). */
   setKillSwitchState(mode: 'live' | 'paper', state: { tripped: boolean; reason: string | null; trippedAt: Date | null }): Promise<GuardrailsV2>;
   /** B-SIZING-DEC-RESTORE P6: the guardrails write and its audit rows commit together or not at all. */
-  upsertGuardrailsV2WithAudit(data: InsertGuardrailsV2, audit: InsertAuditLog[]): Promise<GuardrailsV2>;
+  upsertGuardrailsV2WithAudit(data: InsertGuardrailsV2, buildAudit: (written: GuardrailsV2) => InsertAuditLog[]): Promise<GuardrailsV2>;
 
   // Phase 4: Goals Presets methods
   getGoalsPresets(params: { mode: 'live' | 'paper' }): Promise<GoalsPresets[]>;
@@ -836,11 +836,16 @@ export class DatabaseStorage implements IStorage {
    * The settings route used to save first and write `audit_log` afterwards, outside the save, so a failed
    * audit insert returned an error with the new value already live and unrecorded. Kyle now adjusts the
    * paper position % by hand every few days, and the paper window reads these rows as its stamp
-   * (`#1080` am.2), so an edit must never land without its record.
+   * (`#1080` am.2), so an edit made through the SETTINGS ROUTE never lands without its record. (Not every
+   * writer of the table: `selectGoalsPreset` still writes through the bare upsert — it has no callers;
+   * Langston Step-4 FINDING-5.)
    */
-  async upsertGuardrailsV2WithAudit(data: InsertGuardrailsV2, audit: InsertAuditLog[]): Promise<GuardrailsV2> {
+  async upsertGuardrailsV2WithAudit(data: InsertGuardrailsV2, buildAudit: (written: GuardrailsV2) => InsertAuditLog[]): Promise<GuardrailsV2> {
     return await db.transaction(async (tx) => {
       const row = await this.upsertGuardrailsV2(data, tx);
+      // The audit rows are built from the row the database RETURNED (Langston Step-4 FINDING-1), so the
+      // log records what was saved, never what was merely sent.
+      const audit = buildAudit(row);
       if (audit.length > 0) {
         await tx.insert(auditLog).values(audit);
       }

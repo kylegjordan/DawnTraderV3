@@ -79,6 +79,7 @@ export interface EffectiveGuardrails {
   dailyLossWarning1Pct: number; // P19-B6: tier-1 warning, % OF the kill threshold (coherency: 0 < w1 < w2 < 100)
   dailyLossWarning2Pct: number; // P19-B6: tier-2 warning, % OF the kill threshold
   maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
+  maxTotalExposurePct: number; // B-SIZING-DEC-RESTORE (Langston Step-4 FINDING-3): so RULE_013 reaches every validate(getEffective(row)) site
   // REB 8.8.3-H: Low-Priced Coin Protection (LPCP) Module
   lpcp: {
     minStopAtrMult: number;       // Minimum stop distance as ATR multiple
@@ -253,6 +254,9 @@ class GuardrailPolicyService {
       dailyLossWarning1Pct: guardrailAny.dailyLossWarning1Pct != null ? parseFloat(String(guardrailAny.dailyLossWarning1Pct)) : 50.00,
       dailyLossWarning2Pct: guardrailAny.dailyLossWarning2Pct != null ? parseFloat(String(guardrailAny.dailyLossWarning2Pct)) : 75.00,
       maxPositionPercentPct, // REB 8.8.3-G
+      // B-SIZING-DEC-RESTORE FINDING-3: without this field RULE_013 hit its `undefined` skip at every
+      // validate(getEffective(row)) site (routes.ts PUT response, storage getGuardrailsCompliance). No fallback.
+      maxTotalExposurePct: parseFloat(String(guardrail.maxTotalExposurePct)),
       lpcp, // REB 8.8.3-H
       management: {
         isManualOverride: guardrail.isManualOverride,

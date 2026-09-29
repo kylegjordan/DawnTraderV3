@@ -26,12 +26,14 @@ import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
 import { storage } from '../../storage.js';
 import { guardrailPolicy } from '../../services/guardrail-policy.js';
+import { buildGuardrailAuditEntries } from '../../services/guardrail-audit.js';
 
 const RAW_DB_URL = process.env.DATABASE_URL ?? '';
 const isTestDb =
   /^postgres(ql)?:\/\/[^@]*@(localhost|127\.0\.0\.1|postgres)(:\d+)?\/test(\?|$)/.test(RAW_DB_URL);
 const IS_CI = !!process.env.CI;
 const TAG = 'B-SIZING-INC1-GUARDRAILS-DB';
+const TEST_ACTOR = 'b-sizing-inc1-test';
 let dbReachable = true;
 let snapshot: Record<string, unknown> | null = null;
 
@@ -66,6 +68,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!dbReachable || !isTestDb) return;
+  await db.execute(sql`DELETE FROM audit_log WHERE changed_by = ${TEST_ACTOR}`);
   if (snapshot) {
     const s = snapshot as any;
     await db.execute(sql`UPDATE guardrails_v2 SET
@@ -155,7 +158,7 @@ describe(TAG, () => {
   // CONTROL: with no audit rows the write lands, so a failed write below is the audit row's doing.
   it('CONTROL — a guardrails write with no audit rows lands', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
-    await storage.upsertGuardrailsV2WithAudit({ mode: 'paper', maxPositionPercentPct: '6.00' } as any, []);
+    await storage.upsertGuardrailsV2WithAudit({ mode: 'paper', maxPositionPercentPct: '6.00' } as any, () => []);
     expect(Number((await paperRow())!.max_position_percent_pct)).toBe(6);
   });
 
@@ -166,8 +169,26 @@ describe(TAG, () => {
   it('a failing audit row rolls the guardrails write back', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
     const badAudit = [{ entityType: 'guardrails', field: 'x'.repeat(150), oldValue: '6.00', newValue: '8.00',
-      changedBy: 'b-sizing-inc1-test', tradingMode: 'paper' }] as any;
-    await expect(storage.upsertGuardrailsV2WithAudit({ mode: 'paper', maxPositionPercentPct: '8.00' } as any, badAudit)).rejects.toThrow();
+      changedBy: TEST_ACTOR, tradingMode: 'paper' }] as any;
+    await expect(storage.upsertGuardrailsV2WithAudit({ mode: 'paper', maxPositionPercentPct: '8.00' } as any, () => badAudit)).rejects.toThrow();
     expect(Number((await paperRow())!.max_position_percent_pct)).toBe(6);
+  });
+  // FINDING-2 — the OTHER direction: a valid audit row is WRITTEN, in the save's transaction, and it
+  // records what the column STORED (numeric(5,2) turns a sent 6.555 into 6.56 — FINDING-1).
+  // MUTATION: delete `tx.insert(auditLog)` from upsertGuardrailsV2WithAudit and this fails (no row).
+  it('a valid audit row is written with the stored value, beside the save', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+    await db.execute(sql`DELETE FROM audit_log WHERE changed_by = ${TEST_ACTOR}`);
+    const before = await storage.getGuardrailsV2({ mode: 'paper' });
+    const saved = await storage.upsertGuardrailsV2WithAudit({ mode: 'paper', maxPositionPercentPct: '6.555' } as any, (written) =>
+      buildGuardrailAuditEntries(before as any, written as any, ['maxPositionPercentPct'], TEST_ACTOR, 'paper'));
+    expect(Number(saved.maxPositionPercentPct)).toBe(6.56);
+    const res: any = await db.execute(sql`
+      SELECT field, old_value, new_value FROM audit_log WHERE changed_by = ${TEST_ACTOR}`);
+    const rows = res?.rows ?? res;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].field).toBe('maxPositionPercentPct');
+    expect(rows[0].old_value).toBe('6.00');
+    expect(rows[0].new_value).toBe('6.56');
   });
 });

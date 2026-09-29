@@ -1689,16 +1689,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 28.C: old values for the audit rows, read BEFORE the write.
       const oldGuardrails = await storage.getGuardrailsV2({ mode });
 
-      // B-SIZING-DEC-RESTORE P6: one audit row per CHANGED field, derived from the payload (so no field can be
-      // missed, as maxTotalExposurePct and the warning tiers were), numbers compared as numbers.
+      // B-SIZING-DEC-RESTORE P6: one audit row per CHANGED field over the payload's own fields (so none can be
+      // missed, as maxTotalExposurePct and the warning tiers were), numbers compared as numbers — and the
+      // VALUES taken from the row the database returned, inside the save's transaction (Langston FINDING-1).
       const { buildGuardrailAuditEntries } = await import('./services/guardrail-audit.js');
-      const auditEntries = buildGuardrailAuditEntries(
-        oldGuardrails as unknown as Record<string, unknown> | null, updatePayload, userId, mode);
-
-      // Upsert guardrails_v2 AND its audit rows in ONE transaction (P6): an edit never lands unrecorded.
-      const guardrailsData = await storage.upsertGuardrailsV2WithAudit(updatePayload, auditEntries);
-      if (auditEntries.length > 0) {
-        console.log(`[GuardrailsV2:${requestId}] Logged ${auditEntries.length} audit entries (same transaction as the save)`);
+      const payloadFields = Object.keys(updatePayload);
+      let auditCount = 0;
+      const guardrailsData = await storage.upsertGuardrailsV2WithAudit(updatePayload, (written) => {
+        const rows = buildGuardrailAuditEntries(
+          oldGuardrails as unknown as Record<string, unknown> | null,
+          written as unknown as Record<string, unknown>, payloadFields, userId, mode);
+        auditCount = rows.length;
+        return rows;
+      });
+      if (auditCount > 0) {
+        console.log(`[GuardrailsV2:${requestId}] Logged ${auditCount} audit entries (same transaction as the save)`);
       }
 
       // Phase 3: Emit telemetry event if manual override state changed

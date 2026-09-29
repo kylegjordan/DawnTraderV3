@@ -102,3 +102,14 @@ Related suites re-run: `b-guardrail-fail-closed`, `p19-b6-daily-loss-budget` (+ 
 3. **Exposure bounded at `≤ 100`.** `#698` am.1 once weighed `e` = 400 as a config-only option; that option died with the two-term formula (F13), and spot trading cannot commit more than the balance.
 4. **`getEffective`'s fallback removed in this increment, not deferred**: it is the same field P5 bounds, and it masked the one value (0) the sizer refuses on.
 5. **The integration file combines P5, P6 and P7 legs** because they write the same `guardrails_v2` row and vitest runs files in parallel.
+
+## Step 4 — APPROVED at `aa6f934cf` with two conditions (Langston, 2026-09-29); both landed, plus three records
+| # | item | disposition |
+|---|---|---|
+| FINDING-1 (condition) | the audit recorded what the route SENT, not what the database TOOK — two hand-maintained lists (route whitelist, merge map) could diverge and the log would assert a change that never happened | **Landed:** `buildGuardrailAuditEntries(old, written, fields, …)` takes the payload's FIELDS and the VALUES from the row `upsertGuardrailsV2` returned; `upsertGuardrailsV2WithAudit` takes a builder and calls it inside the transaction |
+| FINDING-2 (condition) | the transaction was proved in one direction only; deleting `tx.insert(auditLog)` left every leg green | **Landed:** a real-DB leg saves `6.555`, reads `audit_log` back and expects one row, old `6.00`, new `6.56` (the stored value) |
+| FINDING-3 (record) | `EffectiveGuardrails` lacked `maxTotalExposurePct`, so RULE_013 could never fire through `validate(getEffective(row))` | **Fixed now** rather than recorded: the field is added (no fallback); unit leg + mutation (drop it → 1 fails) |
+| FINDING-4 (§13, HYPOTHESIS) | a `type="number"` controlled input may let `7.5` land as `75` (browser value sanitisation) — passes RULE_012, both CHECKs and the sizer | **HOME:** folded into increment 2 as a named P5(b) item, owner CC-C, placed with the obj-3/obj-4 UI work, verified by an actual typed-entry check in the browser, not a code read |
+| FINDING-5 (record) | `selectGoalsPreset` writes guardrails through the bare upsert (no audit, no `lastUpdatedBy`) | **Wording narrowed** in the storage docstring (the settings ROUTE never lands an edit unrecorded, not every writer); `selectGoalsPreset` has no callers, so it joins increment 2's rule-18 census |
+| record | **paper now sits AT the exposure ceiling** (100.00): a future "raise exposure" is a migration, not a setting | stated here; SIM + System Manual at Step 10 |
+| record | `audit_log` on staging has NO foreign key at all (only `audit_log_pkey`), so the first rollback leg tested a constraint production does not have either | the varchar(100) leg stands |
