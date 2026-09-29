@@ -150,22 +150,30 @@ REVIEW_BRANCH = "migration/aws-supabase"
 def resolve_review_ref():
     """Return the current review-branch head sha from GitHub, or None.
 
-    Reads GitHub directly (git ls-remote) — no local repo, nothing to drift. On failure,
-    git's own first line is LOGGED: it used to be discarded, leaving only "RESOLVE FAILED".
+    Reads GitHub directly (git ls-remote) — no local repo, nothing to drift. EVERY failure
+    is LOGGED (git's first line, an exception, or an empty answer): they used to be discarded,
+    leaving only "RESOLVE FAILED". One retry after 5 s: this key has had transient publickey
+    denials (13 since 2026-09-02, GB-10).
     """
-    try:
-        r = subprocess.run(
-            ["git", "ls-remote", REVIEW_REMOTE, "refs/heads/" + REVIEW_BRANCH],
-            capture_output=True, text=True, timeout=60,
-            env=dict(os.environ, GIT_SSH_COMMAND="ssh -o BatchMode=yes"))
-        if r.returncode != 0:
-            first = next((ln for ln in (r.stderr or "").splitlines() if ln.strip()), "no message")
-            log("review ref ls-remote exit %d: %s" % (r.returncode, first[:200]))
-            return None
-        parts = (r.stdout or "").split()
-        return parts[0] if parts else None
-    except Exception:
-        return None
+    env = dict(os.environ, GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10")
+    for attempt in (1, 2):
+        try:
+            r = subprocess.run(
+                ["git", "ls-remote", REVIEW_REMOTE, "refs/heads/" + REVIEW_BRANCH],
+                capture_output=True, text=True, timeout=30, env=env)
+            parts = (r.stdout or "").split()
+            if r.returncode == 0 and parts:
+                return parts[0]
+            if r.returncode != 0:
+                first = next((ln for ln in (r.stderr or "").splitlines() if ln.strip()), "no message")
+                log("review ref ls-remote attempt %d exit %d: %s" % (attempt, r.returncode, first[:200]))
+            else:
+                log("review ref ls-remote attempt %d: GitHub returned no %s" % (attempt, REVIEW_BRANCH))
+        except Exception as e:
+            log("review ref ls-remote attempt %d raised %s: %s" % (attempt, type(e).__name__, str(e)[:200]))
+        if attempt == 1:
+            time.sleep(5)
+    return None
 
 
 REVIEW_SOURCE_NOTE = (
@@ -176,9 +184,12 @@ REVIEW_SOURCE_NOTE = (
     " - Search / list, pinned:  dt-review grep @%(ref)s '<BRE>' [<path>...]  |  "
     "dt-review ls @%(ref)s . Without @<sha> they read the mirror head AT CALL TIME and print "
     "that sha on stderr: compare it with this commit.\n"
-    " - No flags; a pattern starting with '-' or '@' is written '[-]...' or '[@]...'. A line "
-    "starting OFF-BRANCH: or DEGRADED: is part of the answer. REFUSED means nothing was "
-    "served: do not assert file contents.]\n\n"
+    " - No flags; a pattern starting with '-' or '@' is written '[-]...' or '[@]...'.\n"
+    " - EXCEPTION to exact output: if stdout line 1 starts OFF-BRANCH: or DEGRADED:, it is a "
+    "one-line header, not file content. Read it, then drop it before numbering or counting.\n"
+    " - Exit 0 = served; 1 = nothing served (grep: no match, or REFUSED: read stderr); "
+    "2 = your request was refused; 3 = the mirror or git failed. On 1, 2 or 3 do not assert "
+    "file contents.]\n\n"
 )
 
 REVIEW_SOURCE_FAIL_NOTE = (

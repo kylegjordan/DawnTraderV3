@@ -15,13 +15,17 @@
 #
 # OUTPUT. On-branch reads: EXACT bytes on stdout, provenance on stderr — so a line number
 # taken from stdout IS the file's line number (the old stdout header made every count +1).
-# OFF-BRANCH and DEGRADED reads: the loud line goes to BOTH stderr AND stdout line 1, so
+# OFF-BRANCH and/or DEGRADED reads: ONE loud line goes to stdout line 1 AND to stderr, so
 # neither `2>/dev/null` nor reading stdout alone can drop it (Langston, B-CREDENTIALS C3).
+# That one line is a header, not file content: drop it before numbering or counting.
 #
-# EXIT. 0 served (grep: at least one match) · 1 grep found nothing, or REFUSED (not in the
-# mirror, not a file, head read after a failed fetch) · 2 usage: a flag, a non-hex sha, a
-# ref name, a wrong argument count, or not running as langston. Usage errors are decided
-# BEFORE any fetch, so a refused call never touches the network or the mirror (#920, A10).
+# EXIT. 0 served (grep: at least one match) · 1 nothing served: grep found no match, or
+# REFUSED (not in the mirror, not in the tree, not a file, a grep path that matches no file,
+# a head read after a failed fetch) · 2 the caller's request: a flag, a non-hex sha, a sha
+# naming a non-commit, a ref name, a wrong argument count, or not running as langston (all
+# but the non-commit case are decided BEFORE any fetch, so they never touch the network or
+# the mirror — #920, A10) · 3 the mirror or git failed (an unreadable ref or tree, a
+# merge-base or grep error): nothing is claimed about the file.
 #
 # The mirror is langston-owned and its push URL is DISABLED: nothing here writes upstream.
 # The fetch shares a lock with dt-backup-sync.sh and writes no FETCH_HEAD (A3, A4).
@@ -33,6 +37,7 @@ LOCK="$REPO/dt-fetch.lock"
 FETCH_OK="$REPO/DT_REVIEW_FETCH_OK"
 SYNC_PASS="$REPO/DT_SYNC_PASS"
 LOCK_WAIT=90
+FETCH_TIMEOUT=120
 
 usage() {
   cat >&2 <<'EOF'
@@ -40,17 +45,26 @@ usage: dt-review grep [@<sha>] <pattern> [<path>...]   BRE, like git grep -n -e 
        dt-review show [<sha>|@<sha>] <path>             exact file bytes
        dt-review ls   [@<sha>]                          every path in the tree
        dt-review ref                                    the branch head after a fresh fetch
-  <sha> is 7-40 lowercase hex characters. Branch and tag names are refused.
+  <sha> is 7-40 lowercase hex characters naming a COMMIT. Branch and tag names are refused.
   Flags are refused. To search for a pattern that starts with '-' or '@', write it as
   '[-]...' or '[@]...'.
 EOF
   exit 2
 }
 
-# A refusal decided before the fetch: stderr only, nothing on stdout, exit 2.
+say() { printf '%s\n' "$*" >&2; }          # printf, never echo: dash's echo rewrites \-escapes
+
+# A refusal of the caller's request: stderr only, nothing on stdout, exit 2.
 refuse() {
-  printf 'REFUSED: %s\n' "$1" >&2
+  say "REFUSED: $1"
   exit 2
+}
+
+# The mirror or git failed: say so, quote git, claim nothing about the file, exit 3.
+broken() {
+  say "REFUSED: $1 — nothing served"
+  [ -n "$2" ] && say "dt-review: git said: $(printf '%s\n' "$2" | sed -n '/./{p;q;}')"
+  exit 3
 }
 
 no_flag() {
@@ -63,11 +77,12 @@ no_flag() {
 [ $# -ge 1 ] || usage
 cmd=$1
 shift
+PINNED=
 PIN=
 case "$cmd" in
   grep)
     if [ $# -ge 1 ]; then
-      case "$1" in @*) PIN=${1#@}; [ -n "$PIN" ] || usage; shift ;; esac
+      case "$1" in @*) PINNED=1; PIN=${1#@}; shift ;; esac
     fi
     [ $# -ge 1 ] || usage
     pat=$1
@@ -77,8 +92,8 @@ case "$cmd" in
     ;;
   show)
     case $# in
-      1) path=$1 ;;
-      2) PIN=${1#@}; path=$2 ;;
+      1) case "$1" in @*) usage ;; esac; path=$1 ;;
+      2) PINNED=1; PIN=${1#@}; path=$2 ;;
       *) usage ;;
     esac
     [ -n "$path" ] || usage
@@ -87,7 +102,7 @@ case "$cmd" in
   ls)
     case $# in
       0) ;;
-      1) case "$1" in @*) PIN=${1#@} ;; *) usage ;; esac ;;
+      1) case "$1" in @*) PINNED=1; PIN=${1#@} ;; *) usage ;; esac ;;
       *) usage ;;
     esac
     ;;
@@ -102,10 +117,15 @@ case "$cmd" in
     ;;
 esac
 
-if [ -n "$PIN" ]; then
-  if ! printf '%s' "$PIN" | grep -Eqx '[0-9a-f]{7,40}'; then
-    refuse "'$PIN' is not a commit id (7-40 lowercase hex). Branch and tag names are refused: every ref in the mirror is an ancestor of $BRANCH, so a stale one would be served as if it were graded. Nothing was read."
-  fi
+# A given pin must be, as a WHOLE string, 7-40 lowercase hex. (A `grep -x` test is
+# line-by-line, so a multi-line argument could pass it; an EMPTY pin used to fall through to
+# an unheaded head read.)
+if [ -n "$PINNED" ]; then
+  case "$PIN" in
+    ''|*[!0-9a-f]*) ok= ;;
+    *) if [ ${#PIN} -ge 7 ] && [ ${#PIN} -le 40 ]; then ok=1; else ok=; fi ;;
+  esac
+  [ -n "$ok" ] || refuse "'$PIN' is not a commit id (7-40 lowercase hex). Branch and tag names are refused: every ref in the mirror is an ancestor of $BRANCH, so a stale one would be served as if it were graded. Nothing was read."
 fi
 
 if [ "$(id -un)" != langston ]; then
@@ -120,18 +140,24 @@ now() { date -u +%s; }
 age() {
   best=0
   which=
+  unreadable=
   for f in "$FETCH_OK" "$SYNC_PASS"; do
-    [ -f "$f" ] || continue
+    [ -e "$f" ] || continue
     t=$(awk 'NR==1{print $1}' "$f")
-    case "$t" in ''|*[!0-9]*) continue ;; esac
+    case "$t" in
+      ''|*[!0-9]*) unreadable="$unreadable ${f##*/}"; continue ;;
+    esac
     if [ "$t" -gt "$best" ]; then best=$t; which=${f##*/}; fi
   done
   if [ "$best" -eq 0 ]; then
-    echo "at an unknown time (no success stamp)"
+    if [ -n "$unreadable" ]; then echo "at an unknown time (stamp unreadable:$unreadable)"
+    else echo "at an unknown time (no success stamp)"; fi
     return
   fi
   d=$(( $(now) - best ))
-  if [ "$d" -lt 120 ]; then
+  if [ "$d" -lt 0 ]; then
+    echo "in the future by $(( -d ))s ($which; clock skew)"
+  elif [ "$d" -lt 120 ]; then
     echo "${d}s ago ($which)"
   elif [ "$d" -lt 7200 ]; then
     echo "$(( d / 60 ))m ago ($which)"
@@ -140,57 +166,75 @@ age() {
   fi
 }
 
+# FETCH is ok | failed (git fetch ran and failed) | busy (the lock stayed held) | local (no
+# fetch was attempted, for a reason on this box — never reported as GitHub's fault).
 FETCH=ok
 REASON=
 # A failed redirection on `exec` is FATAL in dash (a special builtin), so the lock file is
-# checked with an external command first and a failure becomes a stated reason, not a crash.
+# checked with an external command first.
 touch "$LOCK" 2>/dev/null
-if [ -w "$LOCK" ]; then
+if [ -f "$LOCK" ] && [ -w "$LOCK" ]; then
   exec 9>>"$LOCK"
-  if flock -w "$LOCK_WAIT" 9; then
-    ERR=$(git --git-dir="$REPO" fetch --quiet --no-write-fetch-head "$REMOTE" "+refs/heads/$BRANCH:refs/heads/$BRANCH" 2>&1)
-    if [ $? -eq 0 ]; then
-      printf '%s %s\n' "$(now)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$FETCH_OK"
+  flock -w "$LOCK_WAIT" -E 75 9
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    # `9>&-`: the lock fd must not leak into git or its children, or a detached
+    # `gc --auto` would keep holding the shared lock after this script exits. Bounded: a
+    # stalled connection can no longer hold the lock indefinitely.
+    ERR=$(GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2' \
+      timeout "$FETCH_TIMEOUT" git --git-dir="$REPO" fetch --quiet --no-write-fetch-head "$REMOTE" \
+      "+refs/heads/$BRANCH:refs/heads/$BRANCH" 2>&1 9>&-)
+    frc=$?
+    if [ $frc -eq 0 ]; then
+      tmp="$FETCH_OK.tmp.$$"
+      if printf '%s %s\n' "$(now)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$tmp" && mv -f "$tmp" "$FETCH_OK"; then :
+      else rm -f "$tmp"; say "dt-review: WARNING: could not write $FETCH_OK"; fi
     else
       FETCH=failed
       REASON=$(printf '%s\n' "$ERR" | sed -n '/./{p;q;}')
-      [ -n "$REASON" ] || REASON="git fetch exited non-zero with no message"
+      [ $frc -eq 124 ] && REASON="git fetch timed out after ${FETCH_TIMEOUT}s"
+      [ -n "$REASON" ] || REASON="git fetch exited $frc with no message"
     fi
-  else
+  elif [ $rc -eq 75 ]; then
     FETCH=busy
     REASON="mirror busy: the fetch lock was held for more than ${LOCK_WAIT}s"
+  else
+    FETCH=local
+    REASON="flock exited $rc"
   fi
   exec 9>&-
 else
-  FETCH=failed
+  FETCH=local
   REASON="cannot open the fetch lock $LOCK"
 fi
 
-# The POSITIVE CONTROL for every absence reported below: if the branch head itself cannot
-# be read, the mirror is unreadable and "not in the mirror" would be a claim the instrument
-# cannot make (#546/#568). So refuse here, with git's own words.
-HEAD=$(git --git-dir="$REPO" rev-parse --verify "refs/heads/$BRANCH" 2>&1)
-if ! printf '%s' "$HEAD" | grep -Eqx '[0-9a-f]{40}'; then
-  echo "REFUSED: cannot read $BRANCH in the mirror $REPO — nothing served" >&2
-  echo "dt-review: git said: $(printf '%s\n' "$HEAD" | sed -n '/./{p;q;}')" >&2
-  exit 2
-fi
+# The POSITIVE CONTROL for every absence reported below: the branch head must resolve to a
+# COMMIT whose TREE is readable. Otherwise "not in the mirror" or "not in the tree" would be
+# claims the instrument cannot make (#546/#568), so it exits 3 instead.
+HEAD=$(git --git-dir="$REPO" rev-parse --verify --quiet "refs/heads/$BRANCH^{commit}")
+case "$HEAD" in
+  ''|*[!0-9a-f]*) broken "cannot read $BRANCH in the mirror $REPO" \
+                    "$(git --git-dir="$REPO" rev-parse --verify "refs/heads/$BRANCH^{commit}" 2>&1)" ;;
+esac
+[ ${#HEAD} -eq 40 ] || broken "the mirror's $BRANCH does not resolve to one commit"
+e=$(git --git-dir="$REPO" cat-file -e "$HEAD^{tree}" 2>&1) || broken "the tree of $BRANCH ($HEAD) is unreadable in the mirror" "$e"
 case "$FETCH" in
   ok)     LAST=ok ;;
   busy)   LAST="SKIPPED ($REASON)" ;;
+  local)  LAST="NOT ATTEMPTED ($REASON)" ;;
   *)      LAST="FAILED ($REASON)" ;;
 esac
 
 # ---- 3. RESOLVE what to read --------------------------------------------------------
 LOUD=
-if [ -z "$PIN" ]; then
+if [ -z "$PINNED" ]; then
   if [ "$FETCH" != ok ]; then
-    if [ "$FETCH" = busy ]; then
-      echo "REFUSED: $REASON; mirror head is $HEAD from $(age) — no head read served" >&2
-    else
-      echo "REFUSED: fetch from GitHub failed; mirror head is $HEAD from $(age) — no head read served" >&2
-      echo "dt-review: reason: $REASON" >&2
-    fi
+    case "$FETCH" in
+      busy)  say "REFUSED: $REASON; mirror head is $HEAD from $(age) — no head read served" ;;
+      local) say "REFUSED: no fetch was attempted ($REASON); mirror head is $HEAD from $(age) — no head read served" ;;
+      *)     say "REFUSED: fetch from GitHub failed; mirror head is $HEAD from $(age) — no head read served"
+             say "dt-review: reason: $REASON" ;;
+    esac
     exit 1
   fi
   SHA=$HEAD
@@ -198,51 +242,70 @@ if [ -z "$PIN" ]; then
 else
   SHA=$(git --git-dir="$REPO" rev-parse --verify --quiet "$PIN^{commit}")
   if [ -z "$SHA" ]; then
-    n=$(git --git-dir="$REPO" rev-parse --disambiguate="$PIN" 2>&1 | grep -Ecx '[0-9a-f]{40}')
-    if [ "$n" -gt 1 ]; then
-      echo "REFUSED: $PIN is ambiguous in the mirror ($n objects share that prefix) — give more of the sha" >&2
+    # Why did it not resolve? Only a clean "no such commit" may be reported as absence.
+    t=$(git --git-dir="$REPO" cat-file -t "$PIN" 2>&1)
+    case "$t" in
+      blob|tree|tag) refuse "$PIN names a $t, not a commit. dt-review pins take a COMMIT id." ;;
+    esac
+    cands=$(git --git-dir="$REPO" rev-parse --disambiguate="$PIN" 2>&1)
+    [ $? -eq 0 ] || broken "could not look $PIN up in the mirror" "$cands"
+    nc=0
+    for o in $cands; do
+      [ "$(git --git-dir="$REPO" cat-file -t "$o" 2>&1)" = commit ] && nc=$((nc + 1))
+    done
+    if [ "$nc" -gt 1 ]; then
+      say "REFUSED: $PIN is ambiguous in the mirror ($nc commits share that prefix) — give more of the sha"
     else
-      echo "REFUSED: $PIN is not in the mirror (mirror head $HEAD, fetched $(age); last fetch $LAST)" >&2
+      say "REFUSED: $PIN is not in the mirror (mirror head $HEAD, fetched $(age); last fetch $LAST)"
     fi
     exit 1
   fi
+  # A 7-39 character name can resolve as a BRANCH before it resolves as an object id; a
+  # hex-named branch must never be served as if it were the object the caller named (A8).
+  case "$SHA" in
+    "$PIN"*) ;;
+    *) refuse "'$PIN' resolved to $SHA, which is not that object id (a ref with a hex name?). Nothing was read." ;;
+  esac
+  e=$(git --git-dir="$REPO" cat-file -e "$SHA^{tree}" 2>&1) || broken "the tree of $SHA is unreadable in the mirror" "$e"
   git --git-dir="$REPO" merge-base --is-ancestor "$SHA" "refs/heads/$BRANCH"
   rc=$?
   case $rc in
     0) PLACE="on $BRANCH" ;;
     1) PLACE="OFF $BRANCH"
        LOUD="OFF-BRANCH: $SHA is not an ancestor of $BRANCH — content is exact, provenance is NOT the graded ref" ;;
-    *) # An error must never read as off-branch (the #920 class).
-       echo "REFUSED: could not tell whether $SHA is on $BRANCH (merge-base exit $rc) — nothing served" >&2
-       exit 2 ;;
+    *) broken "could not tell whether $SHA is on $BRANCH (merge-base exit $rc)" ;;   # never "off-branch"
   esac
   if [ "$FETCH" != ok ]; then
     D="DEGRADED: fetch failed; content is exact for $SHA (content-addressed)"
     [ "$FETCH" = busy ] && D="DEGRADED: fetch skipped ($REASON); content is exact for $SHA (content-addressed)"
-    if [ -n "$LOUD" ]; then LOUD="$LOUD
-$D"; else LOUD=$D; fi
+    [ "$FETCH" = local ] && D="DEGRADED: no fetch was attempted ($REASON); content is exact for $SHA (content-addressed)"
+    if [ -n "$LOUD" ]; then LOUD="$LOUD | $D"; else LOUD=$D; fi     # ONE line, never two
   fi
 fi
 
 # ---- 4. SERVE -----------------------------------------------------------------------
 provenance() {
-  echo "# $1 at $SHA — $PLACE (mirror fetched $(age); last fetch $LAST)" >&2
+  say "# $1 at $SHA — $PLACE (mirror fetched $(age); last fetch $LAST)"
   if [ -n "$LOUD" ]; then
-    printf '%s\n' "$LOUD" >&2
+    say "$LOUD"
     printf '%s\n' "$LOUD"
   fi
 }
 
 case "$cmd" in
   show)
-    t=$(git --git-dir="$REPO" cat-file -t "$SHA:$path" 2>&1)
-    if [ "$t" != blob ]; then
-      echo "REFUSED: '$path' is not a file at $SHA — nothing served" >&2
-      echo "dt-review: git said: $(printf '%s\n' "$t" | sed -n '/./{p;q;}')" >&2
-      exit 1
-    fi
+    # ls-tree tells "no such path" (exit 0, no matching line) apart from "the mirror cannot
+    # read a tree on the way" (non-zero). `cat-file -t` reported both as a missing path.
+    ent=$(git -c core.quotePath=false --git-dir="$REPO" ls-tree --format='%(objecttype) %(path)' "$SHA" -- "$path" 2>&1)
+    [ $? -eq 0 ] || broken "cannot read the trees of $SHA" "$ent"
+    kind=$(printf '%s\n' "$ent" | DTR_PATH=$path awk '{t=$1; sub(/^[^ ]* /,""); if ($0 == ENVIRON["DTR_PATH"]) {print t; exit}}')
+    case "$kind" in
+      blob) ;;
+      '') say "REFUSED: '$path' is not in the tree at $SHA — nothing served"; exit 1 ;;
+      *)  say "REFUSED: '$path' at $SHA is a $kind, not a file — nothing served"; exit 1 ;;
+    esac
     provenance "show $path"
-    git --git-dir="$REPO" cat-file blob "$SHA:$path"
+    git --git-dir="$REPO" cat-file blob "$SHA:$path" || exit 3
     ;;
   grep)
     provenance "grep '$pat'"
@@ -254,16 +317,27 @@ case "$cmd" in
     rc=$?
     case $rc in
       0) ;;
-      1) echo "# 0 matches for '$pat' at $SHA" >&2 ;;
-      *) echo "dt-review: git grep failed (exit $rc)" >&2; rc=2 ;;
+      1) # A pathspec that reaches no file ALSO exits 1. Prove each path names at least one
+         # file (with grep's own pathspec engine) before calling the result "no matches".
+         for p in "$@"; do
+           hit=$(git --git-dir="$REPO" grep -l -e '' "$SHA" -- "$p" | sed -n 1p)
+           [ -n "$hit" ] || hit=$(git --git-dir="$REPO" ls-tree -r --name-only "$SHA" -- "$p" | sed -n 1p)
+           if [ -z "$hit" ]; then
+             say "REFUSED: path '$p' matches no file at $SHA — the search did not cover it"
+             exit 1
+           fi
+         done
+         if [ $# -gt 0 ]; then say "# 0 matches for '$pat' at $SHA in: $*"
+         else say "# 0 matches for '$pat' at $SHA (whole tree)"; fi ;;
+      *) say "dt-review: git grep failed (exit $rc) — no result claimed"; rc=3 ;;
     esac
     exit $rc
     ;;
   ls)
     provenance ls
-    git --git-dir="$REPO" ls-tree -r --name-only "$SHA"
+    git --git-dir="$REPO" ls-tree -r --name-only "$SHA" || exit 3
     ;;
   ref)
-    echo "$HEAD"
+    printf '%s\n' "$HEAD"
     ;;
 esac
