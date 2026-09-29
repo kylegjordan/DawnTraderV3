@@ -16,7 +16,7 @@
 | 6. Live-mode readiness — the live engine, risk controls on real money, security, the key, the environment | 48 |
 | 7. The evidence — trading profitably and consistently in paper | 3 |
 
-> Source: `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) re-sorted by `scripts/inventory/sort.py`; the working order is `scripts/inventory/order.py` (asserts every sprint item appears exactly once); Kyle's decisions in `scripts/inventory/kyle_decisions.json`. The order is CC-B's draft for Langston's review; owners are provisional until the session assignment.
+> ⛔ **HAND-MAINTAINED SINCE 2026-09-29 — EDIT THIS FILE DIRECTLY; DO NOT RE-RUN `scripts/inventory/`** (Langston ruling 2026-09-29). It was first BUILT from `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) by `scripts/inventory/sort.py`, with the working order from `order.py` and Kyle's decisions in `kyle_decisions.json`; those scripts are now history. Re-running `sort.py` would overwrite this file and silently drop every edit made by hand since (three sessions' edits so far). The working plan is `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, also hand-maintained. ⚠️ A green `order.py` coverage run grades the frozen `push_keys.json`, not this list, so it is not evidence the plan is complete. Making the scripts refuse to write is folded into sprint row 1 `B-PLAN-CURRENCY-CHECK` (CC-A).
 
 ## THE WORKING ORDER
 

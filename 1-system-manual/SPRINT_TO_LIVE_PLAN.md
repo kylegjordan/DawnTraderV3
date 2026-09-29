@@ -59,6 +59,7 @@ Anything found while working — a bug, an issue, a needed fix — gets the same
 
 ## 3. How this plan is kept current
 
+- ⛔ **THIS FILE IS HAND-MAINTAINED SINCE 2026-09-29 — EDIT IT DIRECTLY; DO NOT RE-RUN `scripts/inventory/plan_doc.py`** (Langston ruling 2026-09-29). It was first built by that script; a regeneration would silently drop every hand edit since. The same holds for the after-live list, `Scope Files/PRE_LIVE_SPRINT.md` (built by `sort.py`). Making the scripts refuse to write is folded into row 1 `B-PLAN-CURRENCY-CHECK` (CC-A).
 - **Every item is a batch** (or a hotfix, investigation or sub-batch), run through the normal eleven-step workflow; its report is linked from its row.
 - **The owner updates its row at every batch close** (status + report link), in the same governance turn — and adds any discovery that passes §2. ⏳ **To be made a Tier-1 ledger row in `workflow-10-governance` and graded by the governance checker** (proposed below — Langston to rule).
 - **Finish what is in flight** (Kyle): work already under way is completed, including any follow-on it was leading up to; a clean break is taken at the next batch boundary.
