@@ -1240,3 +1240,13 @@ Kyle asked every session to bring its task list up to date at every batch close.
 **Still open, each placed:** three readers that do not yet filter on the paper/live tag (plan row `4.c`), the kill switch's remaining work (`4.b`), and the reset functions that delete both modes' data (roadmap `21-3d`).
 
 **`B-ARCHIVE-RETENTION-SIZING` (row `2.4f`, `#592`) CLOSED 2026-09-29 — a decision item, closed by Kyle's two storage decisions, not by code.** No retention window changed for the archive families: August's partitions leave hot storage on the 2026-10-01 run (about 52 GiB). The one-minute price bars go from 365 to 30 days once that move proves the family can be tiered (Infra, sprint row 6). The pre-registered check of the October move is Langston's `c25e722d` (2026-10-02). What stays open: the windows are still not sized to the write rate, so until the one-minute flip lands the critical disk alarm fires every month by design. Record: `Batch Completion/B_ARCHIVE_RETENTION_SIZING_COMPLETION_REPORT.md`.
+
+### 2026-09-29 — B-GOV-REPORTING (CC-A, sprint plan §0) — ⏳ CLOSING
+
+**The rules for how sessions report their work, and for the checklist of governance documents each batch must update, had been in use by every session for a month without Langston ever reviewing most of them as they landed.** Some of his August conditions had never been carried out, and seven changes had never been shown to him at all. This batch finished that before the sprint to live.
+
+**It was done one question at a time,** and each question was checked by a fresh reader, who was never in the room, before it went to him. He ruled on everything and approved it. Along the way he withdrew five of his own earlier rulings when the record contradicted them, and the batch found several places where one copy of a rule had been fixed and its siblings left behind — the same mistake the batch was written to prevent, recorded each time.
+
+**One discovery mattered beyond the rules themselves:** of four decisions listed as *"awaiting Kyle"*, three had in fact been answered by Kyle on 10 July; only Langston's memory had not been updated. The fourth, the name of a report label, had been dropped from his list and was never answered, so it is the one question put back to him. The blocking power Kyle approved for the governance checker, never built, now has a home after live.
+
+⏳ **Closes when** Langston's memory file is reconciled by Infra Claude (`#1057`), this batch's update to it is written, and Langston confirms the completion report.

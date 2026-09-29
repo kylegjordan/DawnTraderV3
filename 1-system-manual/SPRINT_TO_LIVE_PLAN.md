@@ -8,7 +8,7 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 
 | session | in flight now | disposition |
 |---|---|---|
-| CC-A (Old Claude) | B-GOV-REPORTING — pushed, the review gate never ran | FINISH: its rules are in use by all four sessions; run Langston's gate |
+| CC-A (Old Claude) | B-GOV-REPORTING — ✅ Langston's gate RAN and APPROVED 2026-09-29 (G1-G4, G6, r7, r8); closing: Step 10's Langston-memory row waits on `#1057` | FINISH: its rules are in use by all four sessions; run Langston's gate |
 | CC-A (Old Claude) | B-RULES-1e — Step 2 | PAUSE cleanly: crew tooling, after live |
 | CC-A (Old Claude) | B-MEASURE-GATE beyond leg 2 — Step 2 | PAUSE cleanly: after live |
 | CC-A (Old Claude) | B-INSTRUMENTS-OVER-RULES — usage measure to 2026-10-02 | FINISH the measure, then close |
