@@ -259,7 +259,6 @@ class StateAwarenessService {
 
     return result ? {
       // [9.7] Return percentage-based fields from guardrails_v2
-      portfolioRiskPerTradePct: result.portfolioRiskPerTradePct ? parseFloat(String(result.portfolioRiskPerTradePct)) : null,
       symbolCooldownMinutes: result.symbolCooldownMinutes,
       // B-SIZING-DEC-RESTORE obj-4: the open-positions setting is retired; how many can be open is derived.
       derivedSlots: deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(result.maxPositionPercentPct)), 'quant')),

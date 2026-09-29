@@ -82,6 +82,22 @@ function getMaxPositionBufferFactor(): number {
 }
 
 /**
+ * B-SIZING-DEC-RESTORE increment 2c (PRE_AUDIT §17 P-4): THE size of a normal trade — balance × exposure % × max
+ * position % × the buffer factor. The ONE formula, in two forms: `tradeNotional` takes the buffer as an argument (pure —
+ * the paper size band, whose inputs are passed in for testing), `bufferedTradeNotional` reads it fail-hard from the DB (the
+ * sizer above, the max-position check's missing-notional branch, the pre-execution validator's estimate). Before 2c those
+ * callers either re-derived it or fell back to risk ÷ stop distance.
+ * Pre-covariance and pre-pattern-cap for a caller that passes the raw `maxPositionPct` — say which in the caller.
+ */
+export function tradeNotional(balance: number, maxTotalExposurePct: number, maxPositionPct: number, bufferFactor: number): number {
+  return balance * (maxTotalExposurePct / 100) * (maxPositionPct / 100) * bufferFactor;
+}
+
+export function bufferedTradeNotional(balance: number, maxTotalExposurePct: number, maxPositionPct: number): number {
+  return tradeNotional(balance, maxTotalExposurePct, maxPositionPct, getMaxPositionBufferFactor());
+}
+
+/**
  * AJ9: Buffer factor for max position sizing.
  * Size positions at 97% of max to provide 3% wiggle room for price fluctuations.
  * This prevents trades from being blocked by MAX_POSITION during execution.
@@ -197,7 +213,7 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
   
   // P19-B8.8: DB-governed sizing inputs are read RAW — the hardcoded fallbacks
   // ('1.50'/'10.00'/null→100) and the safe* re-default layer are retired. The schema
-  // makes all three fields notNull-with-default and both live callers pass a full
+  // makes both fields notNull-with-default and both live callers pass a full
   // guardrails_v2 row or null, so a missing/unparseable/non-positive value can only
   // mean a real fault (missing row, schema drift, out-of-range write). The old
   // null→100 branch silently UNCAPPED portfolio exposure on exactly that fault.
@@ -205,8 +221,9 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
   // path; loop intact, nothing sized on fabricated inputs) + rail the refusal so a
   // persistently broken row alerts instead of silently starving trading.
   const guardrailsAny = guardrails as any;
+  // B-SIZING-DEC-RESTORE increment 2c: Portfolio Risk per Trade is RETIRED (Kyle 2026-09-29) — it was a REQUIRED input
+  // here that sized nothing (its value reached only the audit log), so a missing column would have refused every signal.
   const sizingInputs: Array<[string, unknown]> = [
-    ['portfolioRiskPerTradePct', guardrailsAny?.portfolioRiskPerTradePct],
     ['maxPositionPercentPct', guardrailsAny?.maxPositionPercentPct],
     ['maxTotalExposurePct', guardrailsAny?.maxTotalExposurePct],
   ];
@@ -221,7 +238,6 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
     parsedInputs[field] = value;
   }
   rtbMetricsService.recordSizingGuardrailReadOk();
-  const safeRiskPct = parsedInputs.portfolioRiskPerTradePct;
   const safeMaxPositionPct = parsedInputs.maxPositionPercentPct;
   const safeMaxTotalExposurePct = parsedInputs.maxTotalExposurePct;
   // Phase 14.5: Pattern pool signals use reduced position sizing (15% vs 25%)
@@ -256,7 +272,8 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
   // error from tipping a fill over the venue's limit.
   const exposureBudget = portfolioValue * (safeMaxTotalExposurePct / 100);
   const perTradeNotional = exposureBudget * (effectiveMaxPositionPct / 100);
-  const bufferedMaxNotional = perTradeNotional * getMaxPositionBufferFactor();
+  // B-SIZING-DEC-RESTORE increment 2c: the ONE formula, shared with every caller that needs a normal trade's size.
+  const bufferedMaxNotional = bufferedTradeNotional(portfolioValue, safeMaxTotalExposurePct, effectiveMaxPositionPct);
 
   let quantity = bufferedMaxNotional / entryPrice;
 
@@ -338,7 +355,6 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
     rawNotional: perTradeNotional,
     sizedQuantity: quantity,
     sizedNotional: estimatedValue,
-    riskPct: safeRiskPct,
     maxPositionUsd: perTradeNotional,
     bufferFactor: getMaxPositionBufferFactor(),
   });

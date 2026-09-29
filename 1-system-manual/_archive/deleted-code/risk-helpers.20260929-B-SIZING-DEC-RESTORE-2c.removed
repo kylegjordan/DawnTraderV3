@@ -1,0 +1,91 @@
+// ARCHIVED — B-SIZING-DEC-RESTORE increment 2c (2026-09-29). NOT COMPILED (.removed). Git history is authoritative.
+// Deleted with Portfolio Risk per Trade (Kyle 2026-09-29). Callers proved absent at the time (git grep, tests excluded):
+//   getRiskPercentageV2 — last callers were trade-safety (import only), the two deleted test routes and the builder itself
+//   calculateRiskAmount — last callers pre-execution-validator + trade-safety (both moved onto bufferedTradeNotional)
+//   getRiskPercentage (deprecated) — 0 callers;  buildSettingsFromModeLevel (deprecated alias) — 0 callers (routes aliases the REAL builder)
+//   GuardrailPolicy.detectOverrideConflict — 0 callers repo-wide
+
+export function calculateRiskAmount(portfolioValue: number, riskPerTradePct: number): number {
+  if (portfolioValue <= 0 || riskPerTradePct <= 0) {
+    return 0;
+  }
+  return (portfolioValue * riskPerTradePct) / 100;
+}
+export function getRiskPercentageV2(
+  mode: 'live' | 'paper',
+  guardrails: { portfolioRiskPerTradePct: string | number } | null
+): number {
+  if (!guardrails) {
+    console.warn(`[8.8.3-H4][GuardrailSettings] No guardrails provided for mode=${mode}, using default 4%`);
+    return 4.00;
+  }
+
+  const riskPct = Number(guardrails.portfolioRiskPerTradePct);
+  if (riskPct <= 0 || isNaN(riskPct)) {
+    console.warn(`[8.8.3-H4][GuardrailSettings] Invalid risk percentage (${riskPct}) for mode=${mode}, using default 4%`);
+    return 4.00;
+  }
+
+  return riskPct;
+}
+export async function buildSettingsFromModeLevel(
+  mode: 'live' | 'paper',
+  userId?: string,
+  globalContextId?: string
+): Promise<any> {
+  console.log(`[8.8.3-H4][DEPRECATION] buildSettingsFromModeLevel called - use buildSettingsFromGuardrails instead`);
+  return buildSettingsFromGuardrails(mode, userId, globalContextId);
+}
+export function getRiskPercentage(
+  settings: TradingSettings,
+  portfolioValue: number
+): number {
+  console.warn('[8.8.3-H4][DEPRECATION] getRiskPercentage(settings, portfolioValue) called. Migrate to getRiskPercentageV2()');
+  
+  if (settings.riskPerTradePct && parseFloat(String(settings.riskPerTradePct)) > 0) {
+    return parseFloat(String(settings.riskPerTradePct));
+  }
+  
+  if ((settings as any).riskPerTrade && portfolioValue > 0) {
+    const dollarRisk = parseFloat(String((settings as any).riskPerTrade));
+    return (dollarRisk / portfolioValue) * 100;
+  }
+  
+  return 4.00;
+}
+  public detectOverrideConflict(
+    currentGuardrail: GuardrailsV2,
+    incomingPayload: Partial<EffectiveGuardrails>
+  ): { hasConflict: boolean; conflicts: string[] } {
+    const lockedByUser = (currentGuardrail.lockedByUser as Record<string, boolean>) || {};
+    const conflicts: string[] = [];
+
+    // If system is LATTI-managed and user tries to override without locking
+    if (currentGuardrail.tunedByLatti && !currentGuardrail.isManualOverride) {
+      const paramMap: Record<string, keyof EffectiveGuardrails> = {
+        portfolioRiskPerTradePct: 'portfolioRiskPerTradePct',
+        symbolCooldownMinutes: 'symbolCooldownMinutes',
+        dailyLossKillSwitchPct: 'dailyLossKillSwitchPct'
+      };
+
+      for (const [param, payloadKey] of Object.entries(paramMap)) {
+        if (incomingPayload[payloadKey] !== undefined && !lockedByUser[param]) {
+          conflicts.push(param);
+        }
+      }
+    }
+
+    if (conflicts.length > 0) {
+      console.warn(`[GuardrailPolicy] Override conflict detected: ${conflicts.join(', ')}`);
+      this.emitEvent('guardrail.override.conflict', {
+        mode: currentGuardrail.mode,
+        conflicts,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return {
+      hasConflict: conflicts.length > 0,
+      conflicts
+    };
+  }

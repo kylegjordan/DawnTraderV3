@@ -13,10 +13,9 @@ import { TradingSettings, ActiveOpenPosition, Trade } from '@shared/schema';
 import type { AssetClass } from '../../shared/asset-classes.js';
 import { 
   buildSettingsFromGuardrails as _buildSettingsFromGuardrails, 
-  getRiskPercentageV2, 
-  calculateRiskAmount as _calculateRiskAmount,
   getPortfolioBalanceV2 
 } from './guardrail-settings';
+import { bufferedTradeNotional } from './active-position-sizing.js';
 import { fxConversionService } from './fx-conversion-service.js';
 import { marketDataService } from './market-data';
 import { aj16Diagnostic } from './aj16-rtb-diagnostic';
@@ -41,7 +40,6 @@ function getDefaultMaxTotalExposurePct(): number {
 }
 
 export const buildSettingsFromGuardrails = _buildSettingsFromGuardrails;
-export const calculateRiskAmount = _calculateRiskAmount;
 
 export interface TradeCandidate {
   symbol: string;
@@ -389,19 +387,24 @@ async function checkPositionSizeCap(
     sizingSource = 'pre-sized (P2)';
     console.log(`[AJ10.1][TRUST_PRESIZED] Using pre-computed notional=$${positionValue.toFixed(2)} for ${trade.symbol}`);
   } else {
-    // Fallback: Recalculate from risk parameters (only for signals without pre-sizing)
-    const riskPerTradePct = parseFloat(settings.riskPerTradePct?.toString() || '4');
-    const riskAmount = calculateRiskAmount(portfolioValue, riskPerTradePct);
-    const stopDistance = Math.abs(trade.entryPrice - trade.stopPrice);
-    
-    if (stopDistance === 0) {
-      return { ok: true };
+    // ⛔ B-SIZING-DEC-RESTORE increment 2c (PRE_AUDIT §17 P-4): an unsized candidate is checked at the size the sizer
+    // WOULD give it — the ONE fixed-notional formula (`bufferedTradeNotional`) — never re-derived as risk % ÷ stop
+    // distance (the retired Portfolio Risk per Trade, which fell to a '4' literal). The callers that arrive here without
+    // a notional are the legacy TradingEngine (sprint row 79) and the pre-execution validator; the active engine always
+    // passes one. Pre-covariance and pre-pattern-cap, so it checks the largest size the sizer could give. An unreadable
+    // exposure budget refuses, exactly like the cap above.
+    const maxTotalExposurePct = parseFloat(String((settings as any).maxTotalExposurePct));
+    if (!Number.isFinite(maxTotalExposurePct) || maxTotalExposurePct <= 0) {
+      console.error(`[B-SIZING-DEC-RESTORE][GUARDRAIL_READ_FAIL check=POSITION_SIZE_CAP mode=${mode}] maxTotalExposurePct unreadable (raw=${String((settings as any).maxTotalExposurePct)}) — refusing trade, no fallback substitution`);
+      return {
+        ok: false,
+        code: 'GUARDRAIL_READ_FAIL',
+        reason: 'maxTotalExposurePct unreadable — an unsized candidate cannot be sized to check the cap',
+      };
     }
-    
-    const positionSize = riskAmount / stopDistance;
-    positionValue = positionSize * trade.entryPrice;
-    sizingSource = 'recalculated';
-    console.log(`[AJ10.1][RECALC_SIZING] No pre-sized value for ${trade.symbol}, recalculated notional=$${positionValue.toFixed(2)}`);
+    positionValue = bufferedTradeNotional(portfolioValue, maxTotalExposurePct, maxPositionPercent);
+    sizingSource = 'fixed-notional (unsized candidate)';
+    console.log(`[AJ10.1][UNSIZED_CANDIDATE] No pre-sized value for ${trade.symbol}, checked at the fixed-notional size $${positionValue.toFixed(2)}`);
   }
   
   const positionPercent = (positionValue / portfolioValue) * 100;
@@ -465,7 +468,7 @@ async function checkPositionSizeCap(
 
   if (wouldBlock) {
     // AJ10.5: Diagnostic logging for MAX_POSITION blocks
-    console.warn(`[AJ10.5][MAX_POSITION_BLOCK] ${new Date().toISOString()} | symbol=${trade.symbol} | strategy=${trade.strategy} | estimatedValue=$${positionValue.toFixed(2)} | allowedMax=$${maxPositionValue.toFixed(2)} | maxPct=${maxPositionPercent}% | portfolioRiskPct=${settings.riskPerTradePct || '?'}% | sizingSource=${sizingSource}`);
+    console.warn(`[AJ10.5][MAX_POSITION_BLOCK] ${new Date().toISOString()} | symbol=${trade.symbol} | strategy=${trade.strategy} | estimatedValue=$${positionValue.toFixed(2)} | allowedMax=$${maxPositionValue.toFixed(2)} | maxPct=${maxPositionPercent}% | sizingSource=${sizingSource}`);
     
     // AJ19: Dry-run mode - log but don't block
     if (aj19Diagnostic.isDryRunMode()) {

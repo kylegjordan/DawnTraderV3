@@ -1220,7 +1220,6 @@ app.use((req, res, next) => {
         const activePreset = await storage.getActiveGoalsPreset({ mode });
         
         const guardrails = guardrailsData ? {
-          portfolioRiskPerTradePct: parseFloat(String(guardrailsData.portfolioRiskPerTradePct)),
           symbolCooldownMinutes: guardrailsData.symbolCooldownMinutes,
           // B-SIZING-DEC-RESTORE obj-4: the open-positions setting is retired; the slot count is derived.
           maxPositionPercentPct: parseFloat(String(guardrailsData.maxPositionPercentPct)),
@@ -1287,11 +1286,11 @@ app.use((req, res, next) => {
       // Detailed breakdown for debugging
       if (paperSnapshot.guardrails) {
         const g = paperSnapshot.guardrails;
-        console.log(`[Audit] Paper guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, positionPct=${g.maxPositionPercentPct}% (slots derived), killSwitch=${g.dailyLossKillSwitchPct}%`);
+        console.log(`[Audit] Paper guardrails active: cooldown=${g.symbolCooldownMinutes}min, positionPct=${g.maxPositionPercentPct}% (slots derived), killSwitch=${g.dailyLossKillSwitchPct}%`);
       }
       if (liveSnapshot.guardrails) {
         const g = liveSnapshot.guardrails;
-        console.log(`[Audit] Live guardrails active: portfolioRisk=${g.portfolioRiskPerTradePct}%, cooldown=${g.symbolCooldownMinutes}min, positionPct=${g.maxPositionPercentPct}% (slots derived), killSwitch=${g.dailyLossKillSwitchPct}%`);
+        console.log(`[Audit] Live guardrails active: cooldown=${g.symbolCooldownMinutes}min, positionPct=${g.maxPositionPercentPct}% (slots derived), killSwitch=${g.dailyLossKillSwitchPct}%`);
       }
       
       // Phase 28: FilterCoherence Telemetry (with database-persisted override flags)
@@ -1371,8 +1370,8 @@ app.use((req, res, next) => {
           }
           
           // Core four guardrail parameters
+          // B-SIZING-DEC-RESTORE increment 2c: Portfolio Risk per Trade is retired (Kyle 2026-09-29).
           const coreParams = [
-            'portfolioRiskPerTradePct',
             'symbolCooldownMinutes',
             'dailyLossKillSwitchPct'
           ];

@@ -15,7 +15,7 @@ import { KrakenService } from "./exchanges/kraken/kraken.js";
 import { TradingEngine, EngineSettingsBus } from "./services/trading-engine";
 import { getPassiveLearningBuffer, getREB211DriftBuffer, getREB211IntegrityBuffer, getREB211TimingBuffer, getREB211MismatchBuffer, getREB211StressBuffer, getActiveAuditBuffer, getReb211bSymbolTraces } from "./services/market-scanner";
 import { getPortfolioBalanceV2, buildSettingsFromGuardrails as buildSettingsFromModeLevel } from "./services/guardrail-settings";
-import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from "./services/trade-safety";
+import { buildSettingsFromGuardrails, checkGuardrailRisk, type TradeCandidate } from "./services/trade-safety";
 import { formulaAuditService } from "./services/formula-audit";
 import { AlertsService } from "./services/alerts-service";
 // B-NEW-43 (2026-05-22): missing imports — dailyBriefService / semanticMemory / systemAlerts
@@ -1562,9 +1562,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       // Field mapping (camelCase from frontend)
-      const portfolioRiskPerTradePct = rawPayload.portfolioRiskPerTradePct !== undefined 
-        ? parseFloat(String(rawPayload.portfolioRiskPerTradePct)) 
-        : undefined;
+      // B-SIZING-DEC-RESTORE increment 2c: Portfolio Risk per Trade is RETIRED in paper and live (Kyle 2026-09-29) — every
+      // trade is sized by the exposure budget and maxPositionPercentPct. A client still sending it is REFUSED, loudly:
+      // ignoring it would report a save that never happened (the #1090 class; the maxOpenPositions pattern below).
+      if (rawPayload.portfolioRiskPerTradePct !== undefined) {
+        return res.status(422).json({
+          ok: false,
+          code: 'RETIRED_FIELD',
+          detail: 'portfolioRiskPerTradePct is retired: every trade is sized by the exposure budget and maxPositionPercentPct. Change the position % instead.',
+          fieldName: 'portfolioRiskPerTradePct',
+        });
+      }
       const symbolCooldownMinutes = rawPayload.symbolCooldownMinutes !== undefined 
         ? parseInt(String(rawPayload.symbolCooldownMinutes), 10) 
         : undefined;
@@ -1628,7 +1636,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Build validation payload
       const validationPayload: any = { mode };
-      if (portfolioRiskPerTradePct !== undefined) validationPayload.portfolioRiskPerTradePct = portfolioRiskPerTradePct;
       if (symbolCooldownMinutes !== undefined) validationPayload.symbolCooldownMinutes = symbolCooldownMinutes;
       if (dailyLossKillSwitchPct !== undefined) validationPayload.dailyLossKillSwitchPct = dailyLossKillSwitchPct;
       if (dailyLossWarning1Pct !== undefined) validationPayload.dailyLossWarning1Pct = dailyLossWarning1Pct;
@@ -1676,7 +1683,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       // Build update payload
       const updatePayload: any = { mode };
-      if (portfolioRiskPerTradePct !== undefined) updatePayload.portfolioRiskPerTradePct = String(portfolioRiskPerTradePct);
       if (symbolCooldownMinutes !== undefined) updatePayload.symbolCooldownMinutes = symbolCooldownMinutes;
       if (dailyLossKillSwitchPct !== undefined) updatePayload.dailyLossKillSwitchPct = String(dailyLossKillSwitchPct);
       if (dailyLossWarning1Pct !== undefined) updatePayload.dailyLossWarning1Pct = String(dailyLossWarning1Pct);
@@ -15087,180 +15093,6 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // Portfolio guardrails test endpoint - simulate multiple signals
-  apiRouter.post('/guardrails/test', async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const mode = (req.body.mode || req.query.mode || 'paper') as 'live' | 'paper';
-      
-      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
-      const settings = await buildSettingsFromModeLevel(mode, userId);
-      
-      if (!settings) {
-        return res.status(404).json({ error: 'Settings not found for this mode' });
-      }
-
-      console.log('\n🛡️  PORTFOLIO GUARDRAILS TEST');
-      console.log('='.repeat(60));
-      console.log('Settings:', {
-        riskPerTrade: settings.riskPerTrade,
-        maxExposure: `${settings.maxExposurePercent}%`,
-        maxOpenTrades: settings.maxOpenTrades,
-        stopBuffer: `${settings.stopBufferPercent}%`,
-        slippageMajors: `${settings.slippageToleranceMajors}%`,
-        slippageMidcaps: `${settings.slippageToleranceMidcaps}%`
-      });
-
-      // [9.6.3] RiskManager removed - using checkGuardrailRisk from trade-safety
-      const { checkGuardrailRisk } = await import('./services/trade-safety');
-      const { TradingEngine } = await import('./services/trading-engine');
-      
-      const tradingEngine = new TradingEngine(mode);
-
-      // Simulate 5 different trading signals
-      const testSignals = [
-        {
-          symbol: 'BTCUSD',
-          strategy: 'vwap_pullback' as const,
-          entryPrice: 65000,
-          stopPrice: 64000,
-          targetPrice: 67000,
-          confidence: 0.85,
-          metadata: { vwap: 64500 }
-        },
-        {
-          symbol: 'ETHUSD',
-          strategy: 'abcd_long' as const,
-          entryPrice: 3500,
-          stopPrice: 3400,
-          targetPrice: 3700,
-          confidence: 0.80,
-          metadata: { breakout: true }
-        },
-        {
-          symbol: 'SOLUSD',
-          strategy: 'sma_trend_ride' as const,
-          entryPrice: 150,
-          stopPrice: 145,
-          targetPrice: 160,
-          confidence: 0.75,
-          metadata: { sma: 148 }
-        },
-        {
-          symbol: 'XRPUSD',
-          strategy: 'vwap_pullback' as const,
-          entryPrice: 2.50,
-          stopPrice: 2.40,
-          targetPrice: 2.70,
-          confidence: 0.70,
-          metadata: { vwap: 2.45 }
-        },
-        {
-          symbol: 'ADAUSD',
-          strategy: 'sma_trend_ride' as const,
-          entryPrice: 0.75,
-          stopPrice: 0.70,
-          targetPrice: 0.85,
-          confidence: 0.65,
-          metadata: { sma: 0.73 }
-        }
-      ];
-
-      const results = [];
-
-      for (let i = 0; i < testSignals.length; i++) {
-        const signal = testSignals[i];
-        console.log(`\n📊 Signal ${i + 1}/${testSignals.length}: ${signal.symbol} (${signal.strategy})`);
-        console.log(`   Entry: $${signal.entryPrice}, Stop: $${signal.stopPrice}, Target: $${signal.targetPrice}`);
-
-        // [9.6.3] Check pre-trade risk using checkGuardrailRisk
-        const tradeCandidate = {
-          symbol: signal.symbol,
-          strategy: signal.strategy,
-          entryPrice: signal.entryPrice,
-          stopPrice: signal.stopPrice,
-          targetPrice: signal.targetPrice,
-          confidence: signal.confidence,
-          mode
-        };
-        const riskCheck = await checkGuardrailRisk(tradeCandidate, mode, settings);
-        
-        if (riskCheck.approved) {
-          // [9.6.3] Calculate position details using percentage-based risk from guardrail-settings
-          const { getRiskPercentageV2, calculateRiskAmount, getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
-          const guardrails = await storage.getGuardrailsV2({ mode });
-          const portfolioValue = await getPortfolioBalanceV2(mode) || 50000;
-          const pct = getRiskPercentageV2(mode, guardrails);
-          const riskAmount = calculateRiskAmount(portfolioValue, pct);
-          const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
-          const quantity = riskAmount / stopDistance;
-          const positionValue = signal.entryPrice * quantity;
-          
-          // Apply stop buffer
-          const stopBuffer = parseFloat(settings.stopBufferPercent || '0.3') / 100;
-          const bufferedStop = signal.stopPrice * (1 - stopBuffer);
-          
-          console.log(`   ✅ APPROVED - Position: ${quantity.toFixed(4)} units ($${positionValue.toFixed(2)})`);
-          console.log(`   Stop Buffer Applied: ${signal.stopPrice} → ${bufferedStop.toFixed(6)} (${settings.stopBufferPercent}%)`);
-          
-          results.push({
-            signal: `${signal.symbol} ${signal.strategy}`,
-            status: 'APPROVED',
-            quantity: quantity.toFixed(4),
-            positionValue: positionValue.toFixed(2),
-            bufferedStop: bufferedStop.toFixed(6)
-          });
-        } else {
-          console.log(`   ❌ REJECTED - ${riskCheck.reason}`);
-          results.push({
-            signal: `${signal.symbol} ${signal.strategy}`,
-            status: 'REJECTED',
-            reason: riskCheck.reason
-          });
-        }
-      }
-
-      // [9.6.3] Get portfolio metrics via mode-based storage queries
-      const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
-      const currentBalance = await getPortfolioBalanceV2(mode) || 50000;
-      const openPositions = mode === 'paper' 
-        ? await storage.getActiveOpenPositions(mode)
-        : await storage.getActiveTrades(mode);
-      const metrics = {
-        openTradesCount: openPositions.length,
-        currentExposure: 0,
-        realizedPL: 0,
-        totalValue: currentBalance
-      };
-      
-      console.log('\n📈 Portfolio Metrics:');
-      console.log(`   Open Trades: ${metrics.openTradesCount}/${settings.maxOpenTrades}`);
-      console.log(`   Portfolio Value: $${metrics.totalValue.toFixed(2)}`);
-      console.log('='.repeat(60));
-
-      res.json({
-        success: true,
-        guardrails: {
-          riskPerTrade: settings.riskPerTrade,
-          maxExposure: settings.maxExposurePercent,
-          maxOpenTrades: settings.maxOpenTrades,
-          stopBuffer: settings.stopBufferPercent,
-          slippageTolerance: {
-            majors: settings.slippageToleranceMajors,
-            midcaps: settings.slippageToleranceMidcaps,
-            small: settings.slippageToleranceSmall
-          }
-        },
-        results,
-        portfolioMetrics: metrics,
-        message: 'Check server logs for detailed guardrail application'
-      });
-    } catch (error: any) {
-      console.error('Guardrails test error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // REB 8.8.3-KS-B: Kill Switch status endpoint for frontend compatibility
   apiRouter.get('/kill-switch/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
@@ -15312,88 +15144,6 @@ Provide specific, actionable recommendations.`,
       res.json(events);
     } catch (error: any) {
       console.error('Kill switch events error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Test endpoint for simulating kill switch scenarios
-  apiRouter.post('/test/simulate-loss', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { scenario, mode = 'paper' } = req.body; // 'warning', 'kill', or custom loss %
-      
-      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
-      const settings = await buildSettingsFromModeLevel(mode as 'live' | 'paper', userId);
-      if (!settings) {
-        return res.status(404).json({ error: 'Settings not found for this mode' });
-      }
-
-      // P19-B8.8: || '7.00' / '75.00' substitutions removed (test-only endpoint,
-      // same hygiene) — unreadable kill-switch settings refuse the simulation.
-      const killSwitchPercent = parseFloat(String(settings.dailyLossKillSwitch));
-      const warningTriggerPercent = parseFloat(String(settings.dailyLossWarningTrigger));
-      if (!Number.isFinite(killSwitchPercent) || !Number.isFinite(warningTriggerPercent)) {
-        return res.status(422).json({ error: 'Kill-switch settings unreadable — cannot simulate loss scenario' });
-      }
-      
-      let targetLossPercent: number;
-      
-      if (scenario === 'warning') {
-        // Set loss to warning threshold (e.g., 75% of 7% = -5.25%)
-        targetLossPercent = killSwitchPercent * (warningTriggerPercent / 100);
-      } else if (scenario === 'kill') {
-        // Set loss to just above kill threshold (e.g., -7.5%)
-        targetLossPercent = killSwitchPercent * 1.1;
-      } else if (typeof req.body.lossPercent === 'number') {
-        // Custom loss percentage
-        targetLossPercent = req.body.lossPercent;
-      } else {
-        return res.status(400).json({ error: 'Invalid scenario. Use "warning", "kill", or provide lossPercent' });
-      }
-
-      // [9.6.3] Create simulated trade using percentage-based risk from guardrail-settings
-      const { getRiskPercentageV2, calculateRiskAmount, getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
-      const guardrails = await storage.getGuardrailsV2({ mode: mode as 'live' | 'paper' });
-      const portfolioValue = await getPortfolioBalanceV2(mode as 'live' | 'paper') || 50000;
-      const pct = getRiskPercentageV2(mode as 'live' | 'paper', guardrails);
-      const riskAmount = calculateRiskAmount(portfolioValue, pct);
-      const lossAmount = (riskAmount / 0.01) * (targetLossPercent / 100); // Scale up the loss
-      
-      const simulatedTrade = await storage.createTrade({
-        userId,
-        symbol: 'BTCUSD',
-        strategy: 'vwap_pullback',
-        mode: mode as 'live' | 'paper',
-        entryPrice: '50000',
-        quantity: (Math.abs(lossAmount) / 50000).toFixed(8),
-        stopPrice: '49500',
-        targetPrice: '51000',
-        status: 'closed',
-        exitPrice: (50000 - Math.abs(lossAmount) / (Math.abs(lossAmount) / 50000)).toFixed(2),
-        exitTime: new Date(),
-        realizedPL: lossAmount.toString(),
-        realizedPLR: '-1.0',
-        riskAmount: riskAmount.toString(),
-        metadata: { test: true, scenario }
-      });
-
-      // [9.6.3] Check kill switch using guardrail-policy instead of RiskManager
-      const { guardrailPolicy } = await import('./services/guardrail-policy.js');
-      const killSwitchTripped = await guardrailPolicy.isKillSwitchTripped(mode as 'live' | 'paper');
-      const result = { triggered: killSwitchTripped, reason: killSwitchTripped ? 'Kill switch tripped' : null };
-      
-      // Phase 41F-L.E2E-PURGE: Get updated settings from mode-level config
-      const updatedSettings = await buildSettingsFromModeLevel(mode as 'live' | 'paper', userId);
-
-      res.json({
-        success: true,
-        simulatedTrade,
-        killSwitchResult: result,
-        killSwitchTripped: updatedSettings?.killSwitchTripped || false,
-        targetLossPercent
-      });
-    } catch (error: any) {
-      console.error('Test simulate-loss error:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -22010,7 +21760,6 @@ Please:
       // Fetch Guardrails from guardrails_v2 (Core Four)
       const guardrailsData = await storage.getGuardrailsV2({ mode });
       const guardrails = guardrailsData ? {
-        portfolioRiskPerTradePct: parseFloat(String(guardrailsData.portfolioRiskPerTradePct)),
         symbolCooldownMinutes: guardrailsData.symbolCooldownMinutes,
         // B-SIZING-DEC-RESTORE obj-4: the open-positions setting is retired; the count shown is DERIVED.
         maxPositionPercentPct: parseFloat(String(guardrailsData.maxPositionPercentPct)),
@@ -22065,7 +21814,7 @@ Please:
         portfolioValue,
         provenance: {
           guardrails_source: 'guardrails_v2',
-          guardrails_columns: ['portfolio_risk_per_trade_pct', 'symbol_cooldown_minutes', 'max_position_percent_pct', 'daily_loss_kill_switch_pct'],
+          guardrails_columns: ['symbol_cooldown_minutes', 'max_position_percent_pct', 'daily_loss_kill_switch_pct'],
           filters_source: 'screener_filters',
           filters_columns: ['min_volume', 'min_liquidity', 'min_price', 'max_price', 'min_market_cap', 'max_bid_ask_spread', 'rsi_min', 'rsi_max', 'volatility_min', 'volatility_max', 'exclude_stablecoins', 'allow_regulated_only', 'universe_size', 'quote_currencies', 'active_timeframes', 'confidence_threshold'],
           goals_source: 'goals_presets',

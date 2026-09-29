@@ -4,7 +4,7 @@
   "frozen_at_commit": "d3e643032",
   "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 377,
+  "total_errors": 372,
   "file_count": 48,
   "files": [
     {
@@ -98,7 +98,6 @@
           "Argument of type '{ symbol: string; baseCurrency: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | \"liquidity_trap\" | \"dhma\" | \"morning_star\" | \"inside_bar_reversal\" | \"support_bounce\" | \"pivot_": 1,
           "Argument of type '{ minVolume: string | null; minDailyRange: any; minPrice: string | null; maxPrice: string | null; maxBidAskSpread: string | null; excludeStablecoins: boolean | null; rsiMin: number | null; rsiMax: number | null; volatilityMin: string | null; volatilityMax: string | null; quoteCurre": 1,
           "Argument of type '{ status: string; limit: number; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 2,
-          "Argument of type '{ symbol: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\"; entryPrice: number; stopPrice: number; targetPrice: number; confidence: number; mode: \"live\" | \"paper\"; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
           "Argument of type '{ symbol: string; strategy: \"vwap_pullback\"; entryPrice: number; stopPrice: number; targetPrice: number; confidence: number; mode: \"live\" | \"paper\"; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
           "Argument of type '{}' is not assignable to parameter of type '\"live\" | \"paper\"'.": 5,
           "Argument of type '{ strategy: string; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
@@ -127,8 +126,8 @@
           "Property 'executeTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
           "Property 'modeRegistry' does not exist on type 'typeof import(\"<ROOT>/server/services/mode-registry\")'.": 2,
           "Property 'minDailyRange' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; minVolume: string | null; minPrice: string | null; maxBidAskSpread: string | null; excludeStablecoins: boolean | null; lockedByUser: unknown; managedByLottie: boolea": 2,
-          "Property 'approved' does not exist on type 'TradeSafetyResult'.": 2,
-          "Property 'reason' does not exist on type 'TradeSafetyResult'.": 3,
+          "Property 'approved' does not exist on type 'TradeSafetyResult'.": 1,
+          "Property 'reason' does not exist on type 'TradeSafetyResult'.": 1,
           "Property 'dormant' does not exist on type '{}'.": 2,
           "Property 'getExecutionConfigs' does not exist on type 'DatabaseStorage'.": 1,
           "Property 'upsertExecutionConfig' does not exist on type 'DatabaseStorage'.": 1,
@@ -154,7 +153,7 @@
           "Property 'healthScore' does not exist on type '{ metadata: unknown; id: string; role: \"coordinator\" | \"trading\" | \"analysis\" | \"research\" | \"compliance\" | \"general\"; name: string; version: string | null; status: \"offline\" | \"degraded\" | \"healthy\" | \"draining\"; createdAt: Date; updatedAt: Date; lastH": 1,
           "Property 'completedAt' does not exist on type 'PgTableWithColumns<{ name: \"cluster_result_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"cluster_result_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; i": 1,
           "Property 'conflictId' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | \"rejected\" |": 1,
-          "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"conservative\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; portfolioRiskPerTradePct: string; symbolCooldownMinutes: number; dailyLossKillSwitchPct: string": 1,
+          "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"conservative\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; symbolCooldownMinutes: number; dailyLossKillSwitchPct: string; tradesPerDayEst: string; targetD": 1,
           "Property 'getPortfolioBalance' does not exist on type 'DatabaseStorage'.": 1
         },
         "TS2552": {
@@ -172,7 +171,6 @@
         },
         "TS2353": {
           "Object literal may only specify known properties, and 'lattiLastAnchorTime' does not exist in type 'Partial<{ metadata: unknown; id: string; tradingMode: \"live\" | \"paper\"; createdAt: Date; updatedAt: Date; lastHeartbeat: Date | null; lastSafeState: unknown; isEngineActive: boolean; activeAssetClasse": 2,
-          "Object literal may only specify known properties, and 'userId' does not exist in type '{ symbol: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | \"liquidity_trap\" | \"dhma\" | ": 1,
           "Object literal may only specify known properties, and 'event' does not exist in type 'Omit<ContextUpdate, \"timestamp\" | \"traceId\">'.": 1
         },
         "TS2307": {
@@ -737,6 +735,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-09-29T11:07:04.843Z",
-  "last_synced_by_batch": "B-SIZING-DEC-RESTORE"
+  "last_synced_at_iso": "2026-09-29T17:25:38.400Z",
+  "last_synced_by_batch": "B-SIZING-DEC-RESTORE-2c"
 }

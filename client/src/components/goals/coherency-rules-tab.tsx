@@ -22,14 +22,8 @@ interface CoherencyRule {
 
 // Phase 28.E Rationalized Coherency Rules
 const coherencyRules: CoherencyRule[] = [
-  {
-    id: "RULE_001",
-    name: "Portfolio Risk vs Kill Switch",
-    description: "Portfolio Risk per Trade must be ≤ 50% × Daily Loss Kill Switch",
-    severity: "error",
-    status: "PASS",
-    phase: "Phase 28.E"
-  },
+  // B-SIZING-DEC-RESTORE increment 2c: RULE_001 (Portfolio Risk vs Kill Switch) and RULE_006 (Portfolio Risk Range) are
+  // RETIRED with Portfolio Risk per Trade (Kyle 2026-09-29); every trade is sized by the exposure budget and position %.
   // B-SIZING-DEC-RESTORE obj-4: RULE_002 (Total Exposure Limit) and RULE_008 (Max Positions Range) are
   // RETIRED with the open-positions setting; how many can be open is derived from the position percent.
   {
@@ -51,13 +45,6 @@ const coherencyRules: CoherencyRule[] = [
     id: "RULE_005",
     name: "Manual Override Exclusivity",
     description: "Parameters cannot be locked by both user and system simultaneously",
-    severity: "error",
-    status: "PASS"
-  },
-  {
-    id: "RULE_006",
-    name: "Portfolio Risk Range",
-    description: "Portfolio risk per trade must be between 0.10% and 5.00%",
     severity: "error",
     status: "PASS"
   },

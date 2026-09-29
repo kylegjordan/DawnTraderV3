@@ -1,0 +1,179 @@
+// ARCHIVED — B-SIZING-DEC-RESTORE increment 2c (2026-09-29), deleted from server/routes.ts. NOT COMPILED (.removed).
+// Why: it read the retired Portfolio Risk per Trade (getRiskPercentageV2 / calculateRiskAmount); Langston J-3: delete,
+// never stub. Callers proved absent: git grep over client/ + scripts/ for the path (0), with a positive control
+// ('guardrails-v2' found in 3 client files). Git history is the authoritative archive.
+
+  // Portfolio guardrails test endpoint - simulate multiple signals
+  apiRouter.post('/guardrails/test', async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const mode = (req.body.mode || req.query.mode || 'paper') as 'live' | 'paper';
+      
+      // Phase 41F-L.E2E-PURGE: Build settings from mode-level config
+      const settings = await buildSettingsFromModeLevel(mode, userId);
+      
+      if (!settings) {
+        return res.status(404).json({ error: 'Settings not found for this mode' });
+      }
+
+      console.log('\n🛡️  PORTFOLIO GUARDRAILS TEST');
+      console.log('='.repeat(60));
+      console.log('Settings:', {
+        riskPerTrade: settings.riskPerTrade,
+        maxExposure: `${settings.maxExposurePercent}%`,
+        maxOpenTrades: settings.maxOpenTrades,
+        stopBuffer: `${settings.stopBufferPercent}%`,
+        slippageMajors: `${settings.slippageToleranceMajors}%`,
+        slippageMidcaps: `${settings.slippageToleranceMidcaps}%`
+      });
+
+      // [9.6.3] RiskManager removed - using checkGuardrailRisk from trade-safety
+      const { checkGuardrailRisk } = await import('./services/trade-safety');
+      const { TradingEngine } = await import('./services/trading-engine');
+      
+      const tradingEngine = new TradingEngine(mode);
+
+      // Simulate 5 different trading signals
+      const testSignals = [
+        {
+          symbol: 'BTCUSD',
+          strategy: 'vwap_pullback' as const,
+          entryPrice: 65000,
+          stopPrice: 64000,
+          targetPrice: 67000,
+          confidence: 0.85,
+          metadata: { vwap: 64500 }
+        },
+        {
+          symbol: 'ETHUSD',
+          strategy: 'abcd_long' as const,
+          entryPrice: 3500,
+          stopPrice: 3400,
+          targetPrice: 3700,
+          confidence: 0.80,
+          metadata: { breakout: true }
+        },
+        {
+          symbol: 'SOLUSD',
+          strategy: 'sma_trend_ride' as const,
+          entryPrice: 150,
+          stopPrice: 145,
+          targetPrice: 160,
+          confidence: 0.75,
+          metadata: { sma: 148 }
+        },
+        {
+          symbol: 'XRPUSD',
+          strategy: 'vwap_pullback' as const,
+          entryPrice: 2.50,
+          stopPrice: 2.40,
+          targetPrice: 2.70,
+          confidence: 0.70,
+          metadata: { vwap: 2.45 }
+        },
+        {
+          symbol: 'ADAUSD',
+          strategy: 'sma_trend_ride' as const,
+          entryPrice: 0.75,
+          stopPrice: 0.70,
+          targetPrice: 0.85,
+          confidence: 0.65,
+          metadata: { sma: 0.73 }
+        }
+      ];
+
+      const results = [];
+
+      for (let i = 0; i < testSignals.length; i++) {
+        const signal = testSignals[i];
+        console.log(`\n📊 Signal ${i + 1}/${testSignals.length}: ${signal.symbol} (${signal.strategy})`);
+        console.log(`   Entry: $${signal.entryPrice}, Stop: $${signal.stopPrice}, Target: $${signal.targetPrice}`);
+
+        // [9.6.3] Check pre-trade risk using checkGuardrailRisk
+        const tradeCandidate = {
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          entryPrice: signal.entryPrice,
+          stopPrice: signal.stopPrice,
+          targetPrice: signal.targetPrice,
+          confidence: signal.confidence,
+          mode
+        };
+        const riskCheck = await checkGuardrailRisk(tradeCandidate, mode, settings);
+        
+        if (riskCheck.approved) {
+          // [9.6.3] Calculate position details using percentage-based risk from guardrail-settings
+          const { getRiskPercentageV2, calculateRiskAmount, getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
+          const guardrails = await storage.getGuardrailsV2({ mode });
+          const portfolioValue = await getPortfolioBalanceV2(mode) || 50000;
+          const pct = getRiskPercentageV2(mode, guardrails);
+          const riskAmount = calculateRiskAmount(portfolioValue, pct);
+          const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
+          const quantity = riskAmount / stopDistance;
+          const positionValue = signal.entryPrice * quantity;
+          
+          // Apply stop buffer
+          const stopBuffer = parseFloat(settings.stopBufferPercent || '0.3') / 100;
+          const bufferedStop = signal.stopPrice * (1 - stopBuffer);
+          
+          console.log(`   ✅ APPROVED - Position: ${quantity.toFixed(4)} units ($${positionValue.toFixed(2)})`);
+          console.log(`   Stop Buffer Applied: ${signal.stopPrice} → ${bufferedStop.toFixed(6)} (${settings.stopBufferPercent}%)`);
+          
+          results.push({
+            signal: `${signal.symbol} ${signal.strategy}`,
+            status: 'APPROVED',
+            quantity: quantity.toFixed(4),
+            positionValue: positionValue.toFixed(2),
+            bufferedStop: bufferedStop.toFixed(6)
+          });
+        } else {
+          console.log(`   ❌ REJECTED - ${riskCheck.reason}`);
+          results.push({
+            signal: `${signal.symbol} ${signal.strategy}`,
+            status: 'REJECTED',
+            reason: riskCheck.reason
+          });
+        }
+      }
+
+      // [9.6.3] Get portfolio metrics via mode-based storage queries
+      const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
+      const currentBalance = await getPortfolioBalanceV2(mode) || 50000;
+      const openPositions = mode === 'paper' 
+        ? await storage.getActiveOpenPositions(mode)
+        : await storage.getActiveTrades(mode);
+      const metrics = {
+        openTradesCount: openPositions.length,
+        currentExposure: 0,
+        realizedPL: 0,
+        totalValue: currentBalance
+      };
+      
+      console.log('\n📈 Portfolio Metrics:');
+      console.log(`   Open Trades: ${metrics.openTradesCount}/${settings.maxOpenTrades}`);
+      console.log(`   Portfolio Value: $${metrics.totalValue.toFixed(2)}`);
+      console.log('='.repeat(60));
+
+      res.json({
+        success: true,
+        guardrails: {
+          riskPerTrade: settings.riskPerTrade,
+          maxExposure: settings.maxExposurePercent,
+          maxOpenTrades: settings.maxOpenTrades,
+          stopBuffer: settings.stopBufferPercent,
+          slippageTolerance: {
+            majors: settings.slippageToleranceMajors,
+            midcaps: settings.slippageToleranceMidcaps,
+            small: settings.slippageToleranceSmall
+          }
+        },
+        results,
+        portfolioMetrics: metrics,
+        message: 'Check server logs for detailed guardrail application'
+      });
+    } catch (error: any) {
+      console.error('Guardrails test error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+

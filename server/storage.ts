@@ -792,7 +792,7 @@ export class DatabaseStorage implements IStorage {
     if (existing) {
       // For updates, merge with existing values to preserve unmodified fields
       const updateData = {
-        portfolioRiskPerTradePct: data.portfolioRiskPerTradePct ?? existing.portfolioRiskPerTradePct,
+        // B-SIZING-DEC-RESTORE increment 2c: portfolio_risk_per_trade_pct is dropped with the setting (Kyle 2026-09-29).
         symbolCooldownMinutes: data.symbolCooldownMinutes ?? existing.symbolCooldownMinutes,
         dailyLossKillSwitchPct: data.dailyLossKillSwitchPct ?? existing.dailyLossKillSwitchPct,
         // P19-B6.8: the daily-loss warning tiers were in the table (B6) + validated (RULE_011) + read by the

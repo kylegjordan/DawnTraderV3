@@ -17,7 +17,6 @@ export interface FeasibilityResult {
   details?: {
     targetPerTrade: number;
     maxPositionPercentPct: number;
-    portfolioRiskPerTradePct: number;
     portfolioBalance?: number;
   };
 }
@@ -54,11 +53,11 @@ export class GoalFeasibilityService {
     // P19-B8.8: the || '3.00' / '12.00' / '100.00' substitutions are GONE — the
     // exposure one LOOSENED the cap to 100% on a failed read, feeding a BLOCKING
     // feasibility check. Unreadable limits → refuse the feasibility PASS loudly.
-    const portfolioRiskPerTradePct = parseFloat(String(guardrails.portfolioRiskPerTradePct));
+    // B-SIZING-DEC-RESTORE increment 2c (§17 P-6): Portfolio Risk per Trade is retired — it was a required read here that
+    // decided nothing (its value was only echoed in `details`), so a missing column would have blocked every goal save.
     const maxPositionPercentPct = parseFloat(String(guardrails.maxPositionPercentPct));
     const maxTotalExposurePct = parseFloat(String(guardrails.maxTotalExposurePct));
     const unreadable = [
-      ['portfolioRiskPerTradePct', portfolioRiskPerTradePct],
       ['maxPositionPercentPct', maxPositionPercentPct],
       ['maxTotalExposurePct', maxTotalExposurePct],
     ].filter(([, v]) => !Number.isFinite(v as number) || (v as number) <= 0);
@@ -71,7 +70,7 @@ export class GoalFeasibilityService {
       };
     }
 
-    console.log(`[GoalFeasibility][9.7] Guardrails loaded: portfolioRiskPerTradePct=${portfolioRiskPerTradePct}%, maxPositionPercentPct=${maxPositionPercentPct}%`);
+    console.log(`[GoalFeasibility][9.7] Guardrails loaded: maxPositionPercentPct=${maxPositionPercentPct}%`);
 
     // Check 1: Target per Trade vs Portfolio Balance (percentage-based)
     if (portfolioBalance && portfolioBalance > 0) {
@@ -89,7 +88,6 @@ export class GoalFeasibilityService {
           details: {
             targetPerTrade,
             maxPositionPercentPct,
-            portfolioRiskPerTradePct,
             portfolioBalance,
           },
         };
@@ -107,7 +105,6 @@ export class GoalFeasibilityService {
           details: {
             targetPerTrade,
             maxPositionPercentPct,
-            portfolioRiskPerTradePct,
             portfolioBalance,
           },
         };
@@ -122,7 +119,6 @@ export class GoalFeasibilityService {
           details: {
             targetPerTrade,
             maxPositionPercentPct,
-            portfolioRiskPerTradePct,
             portfolioBalance,
           },
         };
@@ -137,7 +133,6 @@ export class GoalFeasibilityService {
       details: {
         targetPerTrade,
         maxPositionPercentPct,
-        portfolioRiskPerTradePct,
         portfolioBalance,
       },
     };

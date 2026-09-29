@@ -30,7 +30,6 @@ export interface B5SizingCalledEntry {
   rawNotional: number | null;
   sizedQuantity: number;
   sizedNotional: number;
-  riskPct: number;
   maxPositionUsd: number;
   bufferFactor: number;
   timestamp: string;
@@ -189,7 +188,6 @@ class B5SizingAuditService {
     rawNotional: number | null;
     sizedQuantity: number;
     sizedNotional: number;
-    riskPct: number;
     maxPositionUsd: number;
     bufferFactor: number;
   }): void {
@@ -201,7 +199,6 @@ class B5SizingAuditService {
       rawNotional: params.rawNotional,
       sizedQuantity: params.sizedQuantity,
       sizedNotional: params.sizedNotional,
-      riskPct: params.riskPct,
       maxPositionUsd: params.maxPositionUsd,
       bufferFactor: params.bufferFactor,
       timestamp: new Date().toISOString(),
@@ -212,7 +209,7 @@ class B5SizingAuditService {
     console.log(`[B5.SIZING_CALLED] strategy=${params.strategy} symbol=${params.symbol} ` +
       `entry_price=${params.entryPrice} raw_notional=${params.rawNotional ?? 'null'} ` +
       `sized_quantity=${params.sizedQuantity} sized_notional=${params.sizedNotional} ` +
-      `risk_pct=${params.riskPct} max_position_usd=${params.maxPositionUsd} ` +
+      `max_position_usd=${params.maxPositionUsd} ` +
       `buffer_factor=${params.bufferFactor}`);
   }
 

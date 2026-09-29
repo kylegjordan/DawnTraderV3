@@ -14,45 +14,6 @@ import { TradingSettings } from '@shared/schema';
 import { deriveSlotCount, resolveEffectivePositionPct } from './active-position-sizing.js';
 
 /**
- * Phase 8.8.3-H4: Calculate risk amount from percentage
- * Replaces old dollar-based risk_per_trade with percentage-based calculation
- * @param portfolioValue Current portfolio value in USD
- * @param riskPerTradePct Risk percentage (e.g., 4.0 for 4%)
- * @returns Risk amount in USD
- */
-export function calculateRiskAmount(portfolioValue: number, riskPerTradePct: number): number {
-  if (portfolioValue <= 0 || riskPerTradePct <= 0) {
-    return 0;
-  }
-  return (portfolioValue * riskPerTradePct) / 100;
-}
-
-/**
- * Phase 8.8.3-H4: Get risk percentage from mode-level guardrails
- * Single source of truth: guardrails_v2.portfolio_risk_per_trade_pct
- * @param mode Trading mode (live/paper)
- * @param guardrails Guardrails configuration for the mode
- * @returns Risk percentage (e.g., 4.0 for 4%)
- */
-export function getRiskPercentageV2(
-  mode: 'live' | 'paper',
-  guardrails: { portfolioRiskPerTradePct: string | number } | null
-): number {
-  if (!guardrails) {
-    console.warn(`[8.8.3-H4][GuardrailSettings] No guardrails provided for mode=${mode}, using default 4%`);
-    return 4.00;
-  }
-
-  const riskPct = Number(guardrails.portfolioRiskPerTradePct);
-  if (riskPct <= 0 || isNaN(riskPct)) {
-    console.warn(`[8.8.3-H4][GuardrailSettings] Invalid risk percentage (${riskPct}) for mode=${mode}, using default 4%`);
-    return 4.00;
-  }
-
-  return riskPct;
-}
-
-/**
  * Phase 8.8.3-H4/C7: Get portfolio balance from mode-level portfolio_state
  * Phase 8.8.3-C7-FIX: Now returns Current Balance = Starting Balance + Realized P/L
  * This is the cash balance available for risk calculations, not including unrealized P/L
@@ -185,7 +146,6 @@ export async function getPortfolioBalanceV2(
  * Fetches guardrails_v2 + portfolio_state and builds a TradingSettings-like object
  * 
  * All values are sourced from guardrails_v2 (visible in Guardrails tab):
- * - portfolioRiskPerTradePct
  * - maxPositionPercentPct
  * - dailyLossKillSwitchPct
  * - maxOpenTrades (DERIVED from maxPositionPercentPct since B-SIZING-DEC-RESTORE obj-4)
@@ -197,13 +157,18 @@ export async function getPortfolioBalanceV2(
  * @param mode Trading mode
  * @param userId User ID (optional for global context lookup)
  * @param globalContextId Optional global context ID
+ * ⛔ Portfolio Risk per Trade is RETIRED in paper and live (B-SIZING-DEC-RESTORE increment 2c, Kyle 2026-09-29): every
+ * trade is sized by the exposure budget and the max-position % (`active-position-sizing.ts`), so no risk % is built.
+ * ⚠️ The return type is still the legacy `TradingSettings` row type (`as any` below), so a reader of a field this
+ * builder never sets type-checks and reads undefined — 24 such fields today. Replacing it with a real type is its own
+ * item, `#1106` `B-SETTINGS-REAL-TYPE`; until then the legacy-deletion fence is what keeps the retired risk names out.
  * @returns Settings-compatible object with all fields populated from mode-level sources
  */
 export async function buildSettingsFromGuardrails(
   mode: 'live' | 'paper',
   userId?: string,
   globalContextId?: string
-): Promise<TradingSettings & { 
+): Promise<TradingSettings & {
   killSwitchTripped: boolean;
   lpcpLowPriceThresholdUsd: number;
   lpcpMinStopAtrMultiple: number;
@@ -216,7 +181,6 @@ export async function buildSettingsFromGuardrails(
 
   // [9.7] getPortfolioBalanceV2 now only takes mode (mode-based architecture)
   const portfolioValue = await getPortfolioBalanceV2(mode);
-  const riskPct = getRiskPercentageV2(mode, guardrails);
 
   const guardrailsAny = guardrails as any;
   
@@ -234,7 +198,6 @@ export async function buildSettingsFromGuardrails(
   
   return {
     portfolioValue: portfolioValue.toString(),
-    riskPerTradePct: riskPct.toString(),
     killSwitchTripped: guardrails.killSwitchTripped || false,
     // B-SIZING-DEC-RESTORE obj-4 (PRE_AUDIT §14): the `max_open_positions` SETTING is retired. How many
     // can be open is DERIVED from the per-trade share through the sizer's own resolver, so the slot count
@@ -262,37 +225,3 @@ export async function buildSettingsFromGuardrails(
   } as any;
 }
 
-/**
- * @deprecated Use buildSettingsFromGuardrails() instead
- * Temporary alias for backward compatibility during migration
- */
-export async function buildSettingsFromModeLevel(
-  mode: 'live' | 'paper',
-  userId?: string,
-  globalContextId?: string
-): Promise<any> {
-  console.log(`[8.8.3-H4][DEPRECATION] buildSettingsFromModeLevel called - use buildSettingsFromGuardrails instead`);
-  return buildSettingsFromGuardrails(mode, userId, globalContextId);
-}
-
-/**
- * @deprecated Use getRiskPercentageV2() instead
- * Legacy function for backward compatibility
- */
-export function getRiskPercentage(
-  settings: TradingSettings,
-  portfolioValue: number
-): number {
-  console.warn('[8.8.3-H4][DEPRECATION] getRiskPercentage(settings, portfolioValue) called. Migrate to getRiskPercentageV2()');
-  
-  if (settings.riskPerTradePct && parseFloat(String(settings.riskPerTradePct)) > 0) {
-    return parseFloat(String(settings.riskPerTradePct));
-  }
-  
-  if ((settings as any).riskPerTrade && portfolioValue > 0) {
-    const dollarRisk = parseFloat(String((settings as any).riskPerTrade));
-    return (dollarRisk / portfolioValue) * 100;
-  }
-  
-  return 4.00;
-}

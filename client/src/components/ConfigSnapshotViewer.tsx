@@ -212,11 +212,6 @@ export function ConfigSnapshotViewer() {
             {snapshot?.guardrails ? (
               <div className="space-y-3">
                 <ConfigField
-                  label="Portfolio Risk per Trade"
-                  value={`${snapshot.guardrails.portfolioRiskPerTradePct}%`}
-                  testId="field-portfolio-risk"
-                />
-                <ConfigField
                   label="Symbol Cooldown"
                   value={`${snapshot.guardrails.symbolCooldownMinutes} min`}
                   testId="field-cooldown"

@@ -92,7 +92,7 @@ describe('the invariant — N slots never commit more than the exposure budget',
     const r = sizeActivePositionForSignal({
       mode: 'paper', portfolioValue: 3000, entryPrice: 100, stopPrice: 97, symbol: 'TEST/USD',
       strategy: 'breakout' as any, assetClass: 'crypto_spot' as any,
-      guardrails: { portfolioRiskPerTradePct: '1.00', maxPositionPercentPct: '5.00', maxTotalExposurePct: '100.00' } as any,
+      guardrails: { maxPositionPercentPct: '5.00', maxTotalExposurePct: '100.00' } as any,
     });
     const slots = deriveSlotCount(resolveEffectivePositionPct(5, 'quant'));
     expect(slots).toBe(20);
@@ -110,7 +110,7 @@ describe('the invariant — N slots never commit more than the exposure budget',
 
 describe('buildSettingsFromGuardrails — maxOpenTrades is derived from the row, not read from it', () => {
   const row = (p: unknown) => ({
-    mode: 'paper', maxPositionPercentPct: p, maxTotalExposurePct: '100.00', portfolioRiskPerTradePct: '1.00',
+    mode: 'paper', maxPositionPercentPct: p, maxTotalExposurePct: '100.00',
     dailyLossKillSwitchPct: '7.00', killSwitchTripped: false,
     lowPriceThreshold: '1', lowPriceMinStopAtrMult: '1', lowPriceMinPositionNotional: '1',
   });

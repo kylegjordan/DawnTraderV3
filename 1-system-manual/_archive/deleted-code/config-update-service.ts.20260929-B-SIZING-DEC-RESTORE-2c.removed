@@ -1,3 +1,9 @@
+// ARCHIVED — B-SIZING-DEC-RESTORE increment 2c (2026-09-29), deleted from server/services/config-update-service.ts.
+// NOT COMPILED (.removed). Why: zero importers in server/, client/, shared/, scripts/ (git grep for 'config-update-service',
+// 'ConfigUpdateService', 'configUpdateService': only the file itself and two storage.ts comments; control: 'guardrail-settings'
+// found in 3+ importing files), and it wrote the retired Portfolio Risk per Trade. It was on increment 2d's list (§15.3 B);
+// deleted in 2c because it named the retired field. Git history is the authoritative archive.
+
 /**
  * Configuration Update Service
  * Provides direct function calls for updating guardrails, goals, and screeners

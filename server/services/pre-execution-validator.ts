@@ -3,7 +3,8 @@ import { slippageFeeModel } from './slippage-fee-model';
 import { TradeSignal } from './trading-engine';
 import { nanoid } from 'nanoid';
 import { provenanceLogger } from './provenance-logger';
-import { buildSettingsFromGuardrails, checkGuardrailRisk, calculateRiskAmount, type TradeCandidate } from './trade-safety';
+import { buildSettingsFromGuardrails, checkGuardrailRisk, type TradeCandidate } from './trade-safety';
+import { bufferedTradeNotional } from './active-position-sizing.js';
 import { getCachedNumbersForModule, getCachedNumberRequired } from './module-constants-service.js';
 // B-4.5: per-class fee resolution (DB-governed) for the fee-aware validation block.
 import { getFrictionForAssetClass } from '../core/math/cost-model.js';
@@ -91,21 +92,24 @@ export class PreExecutionValidator {
       // Phase 8.8.3-H4: Build complete settings from guardrails
       const settings = await buildSettingsFromGuardrails(request.mode);
 
-      // P19-B3b: portfolioValue/riskPerTradePct inherit TradingSettings' nullable
-      // decimal columns (string | null). buildSettingsFromGuardrails populates them
-      // from guardrails_v2, but the declared return type leaks the nullable source.
-      // Fail hard (no silent fallback) if the DB-sourced values are missing — the
-      // catch block below converts the throw into a blocked ValidationResponse.
-      if (settings.portfolioValue == null || settings.riskPerTradePct == null) {
+      // P19-B3b: portfolioValue inherits TradingSettings' nullable decimal column (string | null).
+      // buildSettingsFromGuardrails populates it, but the declared return type leaks the nullable source.
+      // Fail hard (no silent fallback) if a DB-sourced value is missing — the catch block below converts
+      // the throw into a blocked ValidationResponse.
+      // ⛔ B-SIZING-DEC-RESTORE increment 2c (§17 P-5): the estimate is sized by the ONE fixed-notional formula
+      // (exposure budget × max position % × buffer) — Portfolio Risk per Trade is retired, and a null risk no longer
+      // blocks every validation. Pre-covariance: the largest size the sizer could give this signal.
+      const maxTotalExposurePct = parseFloat(String((settings as any).maxTotalExposurePct));
+      const maxPositionPct = parseFloat(String((settings as any).maxPositionPercent));
+      if (settings.portfolioValue == null || !Number.isFinite(maxTotalExposurePct) || !Number.isFinite(maxPositionPct)) {
         throw new Error(
           `[PreValidator] Missing DB-sourced sizing settings for mode=${request.mode} ` +
-          `(portfolioValue=${settings.portfolioValue}, riskPerTradePct=${settings.riskPerTradePct})`
+          `(portfolioValue=${settings.portfolioValue}, maxTotalExposurePct=${(settings as any).maxTotalExposurePct}, maxPositionPercent=${(settings as any).maxPositionPercent})`
         );
       }
 
       const portfolioValue = parseFloat(settings.portfolioValue);
-      const riskPct = parseFloat(settings.riskPerTradePct);
-      const riskAmount = calculateRiskAmount(portfolioValue, riskPct);
+      const estimatedNotional = bufferedTradeNotional(portfolioValue, maxTotalExposurePct, maxPositionPct);
 
       // B72.1: snapshot goal_alignment config ONCE per validation call
       const goalCfg = resolveGoalAlignmentConfig();
@@ -130,8 +134,7 @@ export class PreExecutionValidator {
       
       const riskCheckResult = await checkGuardrailRisk(request.mode, tradeCandidate);
 
-      const stopDistance = Math.abs(request.signal.entryPrice - request.signal.stopPrice);
-      const quantity = riskAmount / stopDistance;
+      const quantity = request.signal.entryPrice > 0 ? estimatedNotional / request.signal.entryPrice : 0;
 
       const slippageModel = slippageFeeModel.modelSlippage(
         'buy',

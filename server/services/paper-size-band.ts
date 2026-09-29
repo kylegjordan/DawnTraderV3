@@ -20,6 +20,7 @@
  * `target` is NOT a band member: it feeds only the p* suggestion (§16.4 C2).
  */
 import { getCachedNumberRequired } from './module-constants-service.js';
+import { tradeNotional } from './active-position-sizing.js';
 
 const GLOBAL_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as const;
 
@@ -56,7 +57,8 @@ export function evaluatePaperSizeBand(
   const { balance, e, p, buffer } = input;
   const ok = [balance, e, p, buffer].every((v) => Number.isFinite(v) && v > 0);
   if (!ok) return { status: 'unreadable', size: NaN, pStar: NaN };
-  const size = balance * (e / 100) * (p / 100) * buffer;
+  // B-SIZING-DEC-RESTORE increment 2c: the sizer's own formula (`tradeNotional`), not a copy of it.
+  const size = tradeNotional(balance, e, p, buffer);
   const pStar = (band.target / (balance * (e / 100) * buffer)) * 100;
   if (size < band.low) return { status: 'low', size, pStar };
   if (size > band.high) return { status: 'high', size, pStar };

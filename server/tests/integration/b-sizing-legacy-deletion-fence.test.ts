@@ -274,4 +274,64 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       for (const g of RETIREMENT_GUARD) expect(routes.includes(g), `mask string not found: ${g}`).toBe(true);
     });
   });
+
+  describe('obj-3 — Portfolio Risk per Trade, retired in paper AND live (increment 2c, PRE_AUDIT §17)', () => {
+    // SCOPE, as obj-4: server/ + client/src, tests and _archive excluded. NOT scanned, deliberately: shared/schema.ts still
+    // declares the LEGACY `trading_settings` columns `risk_per_trade` / `risk_per_trade_pct` (a different table, #1106's), and
+    // drizzle/migrations hold the history. The UNRELATED names `riskPerTrade` (the VTS runner's own config, strategy params,
+    // AI-prompt placeholders — §17.1) are NOT this setting and are not fenced; `.riskPerTradePct` (a read of the retired
+    // settings field) is.
+    const DELETED = [
+      'portfolioRiskPerTradePct',
+      'portfolio_risk_per_trade_pct',
+      'getRiskPercentageV2',
+      'calculateRiskAmount',
+      'detectOverrideConflict',
+      '.riskPerTradePct',
+    ];
+
+    // The ONE place code must still name the retired field: the PUT refuses it with 422 RETIRED_FIELD (the obj-4 pattern).
+    const RETIREMENT_GUARD = [
+      'rawPayload.portfolioRiskPerTradePct',
+      "fieldName: 'portfolioRiskPerTradePct'",
+      "'portfolioRiskPerTradePct is retired:",
+    ];
+
+    const stripComments = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const _codeCache = new Map<string, string>();
+    const codeOf = (f: string) => {
+      const hit = _codeCache.get(f);
+      if (hit !== undefined) return hit;
+      let code = stripComments(read(f));
+      for (const g of RETIREMENT_GUARD) code = code.split(g).join('«RETIRED»');
+      _codeCache.set(f, code);
+      return code;
+    };
+
+    it('config-update-service.ts (dead, no importers, wrote the retired field) is gone', () => {
+      expect(existsSync(join(REPO, 'server/services/config-update-service.ts'))).toBe(false);
+    });
+
+    for (const sym of DELETED) {
+      it(`\`${sym}\` is absent from every source file's code`, () => {
+        const hits: string[] = [];
+        for (const f of FILES) {
+          if (codeOf(f).includes(sym)) hits.push(f.replace(REPO, ''));
+        }
+        expect(hits).toEqual([]);
+      });
+    }
+
+    it('POSITIVE CONTROL: the scan sees the retired term where it genuinely still is (before masking)', () => {
+      const routes = FILES.find((f) => f.endsWith(join('server', 'routes.ts')));
+      expect(routes, 'routes.ts not in the scanned set').toBeDefined();
+      expect(stripComments(read(routes!))).toContain('portfolioRiskPerTradePct');
+    });
+
+    it('POSITIVE CONTROL: every masked retirement-guard string really is in routes.ts — the mask cannot drift', () => {
+      const routes = stripComments(read(join(REPO, 'server/routes.ts')));
+      for (const g of RETIREMENT_GUARD) expect(routes.includes(g), `mask string not found: ${g}`).toBe(true);
+    });
+  });
 });

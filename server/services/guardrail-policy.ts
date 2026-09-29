@@ -71,7 +71,6 @@ export function isQualityBlock(code: string): boolean {
 
 export interface EffectiveGuardrails {
   mode: TradingMode;
-  portfolioRiskPerTradePct: number;
   symbolCooldownMinutes: number;
   dailyLossKillSwitchPct: number;
   dailyLossWarning1Pct: number; // P19-B6: tier-1 warning, % OF the kill threshold (coherency: 0 < w1 < w2 < 100)
@@ -244,7 +243,6 @@ class GuardrailPolicyService {
     
     return {
       mode: guardrail.mode as TradingMode,
-      portfolioRiskPerTradePct: parseFloat(String(guardrail.portfolioRiskPerTradePct)),
       symbolCooldownMinutes: guardrail.symbolCooldownMinutes,
       dailyLossKillSwitchPct: parseFloat(String(guardrail.dailyLossKillSwitchPct)),
       // P19-B6: warning tiers (% of kill threshold). Fallback to defaults for pre-migration rows.
@@ -278,32 +276,16 @@ class GuardrailPolicyService {
       throw new Error('Coherency rules not loaded');
     }
 
-    const risk = guardrail.portfolioRiskPerTradePct;
     const cooldown = guardrail.symbolCooldownMinutes;
     const killSwitch = guardrail.dailyLossKillSwitchPct;
     const isManualOverride = guardrail.management?.isManualOverride;
     const tunedByLatti = guardrail.management?.tunedByLatti;
 
-    // RULE_001: Risk ≤ 50% × KillSwitch (Phase 28.E)
-    if (risk !== undefined && killSwitch !== undefined) {
-      const maxAllowedRisk = killSwitch * 0.5;
-      if (risk > maxAllowedRisk) {
-        const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_001')!;
-        failures.push({
-          ruleId: 'RULE_001',
-          ruleName: rule.name,
-          severity: 'error',
-          message: rule.error_message
-            .replace('{value}', risk.toFixed(2))
-            .replace('{kill_switch}', killSwitch.toFixed(2))
-            .replace('{max_allowed}', maxAllowedRisk.toFixed(2)),
-          param: 'portfolioRiskPerTradePct',
-          value: risk,
-          expected: `<= ${maxAllowedRisk.toFixed(2)}%`
-        });
-        this.incrementMetric('ruleFailures', 'RULE_001');
-      }
-    }
+    // RULE_001 (Risk ≤ 50% × KillSwitch, Phase 28.E) and RULE_006 (Portfolio Risk Range 0.10-5.00) are DELETED —
+    // B-SIZING-DEC-RESTORE increment 2c: Portfolio Risk per Trade is retired in paper and live (Kyle 2026-09-29), and both
+    // rules existed only for it. ⚠️ WHAT IS NO LONGER BOUNDED: RULE_001 kept one trade's risk under half the kill switch;
+    // nothing now bounds a single trade's worst-case loss (size × stop distance) against the kill switch — `#1105`
+    // B-TRADE-LOSS-BOUND-DECISION (sprint row 9a) is Kyle's decision on whether it should be.
 
     // RULE_002 (Total Exposure ≤ 50%, computed as open positions × risk %) is DELETED — B-SIZING-DEC-RESTORE
     // obj-4 (PRE_AUDIT §14.4 D7): with the open-positions setting gone it is uncomputable. Under the derived
@@ -358,21 +340,6 @@ class GuardrailPolicyService {
         const current = this.metrics.overrideConflicts.get(mode) || 0;
         this.metrics.overrideConflicts.set(mode, current + 1);
       }
-    }
-
-    // RULE_006: Portfolio Risk Range
-    if (risk !== undefined && (risk < 0.10 || risk > 5.00)) {
-      const rule = this.rulesConfig.rules.find(r => r.id === 'RULE_006')!;
-      failures.push({
-        ruleId: 'RULE_006',
-        ruleName: rule.name,
-        severity: 'error',
-        message: rule.error_message.replace('{value}', risk.toFixed(2)),
-        param: 'portfolioRiskPerTradePct',
-        value: risk,
-        expected: '0.10% - 5.00%'
-      });
-      this.incrementMetric('ruleFailures', 'RULE_006');
     }
 
     // RULE_007: Kill Switch ≤ 25% of Portfolio (Phase 28.E)
@@ -603,51 +570,6 @@ class GuardrailPolicyService {
       // Fail-safe: assume tripped on error for safety
       return true;
     }
-  }
-
-  // ============================================================================
-  // Conflict Detection
-  // ============================================================================
-
-  /**
-   * Detects conflicts when trying to set manual values while LATTI owns the field.
-   * Returns true if conflict detected.
-   */
-  public detectOverrideConflict(
-    currentGuardrail: GuardrailsV2,
-    incomingPayload: Partial<EffectiveGuardrails>
-  ): { hasConflict: boolean; conflicts: string[] } {
-    const lockedByUser = (currentGuardrail.lockedByUser as Record<string, boolean>) || {};
-    const conflicts: string[] = [];
-
-    // If system is LATTI-managed and user tries to override without locking
-    if (currentGuardrail.tunedByLatti && !currentGuardrail.isManualOverride) {
-      const paramMap: Record<string, keyof EffectiveGuardrails> = {
-        portfolioRiskPerTradePct: 'portfolioRiskPerTradePct',
-        symbolCooldownMinutes: 'symbolCooldownMinutes',
-        dailyLossKillSwitchPct: 'dailyLossKillSwitchPct'
-      };
-
-      for (const [param, payloadKey] of Object.entries(paramMap)) {
-        if (incomingPayload[payloadKey] !== undefined && !lockedByUser[param]) {
-          conflicts.push(param);
-        }
-      }
-    }
-
-    if (conflicts.length > 0) {
-      console.warn(`[GuardrailPolicy] Override conflict detected: ${conflicts.join(', ')}`);
-      this.emitEvent('guardrail.override.conflict', {
-        mode: currentGuardrail.mode,
-        conflicts,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    return {
-      hasConflict: conflicts.length > 0,
-      conflicts
-    };
   }
 
   // ============================================================================

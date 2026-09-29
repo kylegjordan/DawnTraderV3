@@ -381,8 +381,8 @@ const EXIT_TRIGGER_MAX_SPREAD_FRACTION = 0.02;
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
-import { buildSettingsFromGuardrails, calculateRiskAmount, getPortfolioBalanceV2 } from './guardrail-settings';
-import type { TradingSettings, PriceData, InsertExecutionAttemptAudit, GuardrailsV2 } from '@shared/schema';
+import { buildSettingsFromGuardrails, getPortfolioBalanceV2 } from './guardrail-settings';
+import type { TradingSettings, PriceData, InsertExecutionAttemptAudit } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
 import { sizeActivePositionForSignal, validateActivePortfolioValue, type StrategyType } from './active-position-sizing';
@@ -4762,8 +4762,9 @@ export class ActiveExecutionEngine {
   // - injectForcedTrade() - removed
   // All signal generation now flows through: FX5 → SignalOrchestrator → SQE → RTB → TCL
 
-  // Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
   // Phase 8.8.4-A: Added signalId for SLAL lifecycle tracking
+  // B-SIZING-DEC-RESTORE increment 2c: the `cycleContext` parameter (Phase 8.8.3-J7) is DELETED — the only caller never
+  // passed it, so every paper open recorded a zero balance and a zero risk in execution_attempt_audit (52 of 52 in 7 days).
   private async executeSimulatedTrade(
     // reorg-B3 (#233): diAtQueue/dbsScoreAtQueue are the at-queue EV inputs carried onto the
     // promoted signal (already parsed string→number at the rtb-row→StrategySignal conversion).
@@ -4771,7 +4772,6 @@ export class ActiveExecutionEngine {
     // → kernel documented defaults.
     signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; chosenNetEv?: number | null; takerNetEv?: number | null },
     settings: TradingSettings,
-    cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
   ): Promise<OpenOutcome> {
     // P19-B6.5e: returns a typed OpenOutcome. Every post-guardrail early-exit below
     // records an `openFailed` (so the I3 invariant reconciles) AND returns a labelled
@@ -4804,7 +4804,7 @@ export class ActiveExecutionEngine {
         confidence: signal.confidence,
         estimatedValue: signal.estimatedValue,
         quantity: signal.quantity,
-        portfolioValue: cycleContext?.portfolioValue,
+        portfolioValue: Number(settings.portfolioValue),
         mode: this.mode,
         reason: 'Signal passed filters and strategies - would open trade in normal mode'
       });
@@ -5103,39 +5103,24 @@ export class ActiveExecutionEngine {
       }
     });
 
-    // Phase 8.8.3-J7: Use pre-sized quantity from signal (computed at P2)
-    // For paper mode, use the pre-computed quantity; for live mode, use fallback calculation
-    let quantity: number;
-    let portfolioValue: number;
-    let riskAmount: number;
-    
-    if (this.mode === 'paper' && signal.quantity && signal.quantity > 0) {
-      // J7: Use pre-sized quantity from P2
-      quantity = signal.quantity;
-      portfolioValue = cycleContext?.portfolioValue || 0;
-      const riskPct = parseFloat(String(cycleContext?.guardrails?.portfolioRiskPerTradePct || '1.50'));
-      riskAmount = (portfolioValue * riskPct) / 100;
-      console.log(`[J7][EXEC_P3] Using pre-sized quantity: ${quantity.toFixed(8)} (portfolio: $${portfolioValue.toFixed(2)})`);
-    } else {
-      // Fallback for live mode or if no pre-sized quantity (should not happen in paper mode after J7)
-      portfolioValue = parseFloat(settings.portfolioValue || '0');
-      if (portfolioValue <= 0) {
-        console.error(`[J7][EXEC_P3_ERROR] No valid portfolio value for ${this.mode} mode - cannot size position`);
-        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', `no valid portfolio value (${portfolioValue})`);
-        return { opened: false, stage: 'SIZING_INVALID', reason: `no valid portfolio value (${portfolioValue})` };
-      }
-      const riskPerTradePct = parseFloat(settings.riskPerTradePct || '4.0');
-      riskAmount = (portfolioValue * riskPerTradePct) / 100;
-      const stopDistance = Math.abs(signal.entryPrice - signal.stopPrice);
-      quantity = stopDistance > 0 ? riskAmount / stopDistance : 0;
-      console.log(`[J7][EXEC_P3_FALLBACK] Calculated quantity: ${quantity.toFixed(8)} (mode: ${this.mode})`);
+    // ⛔ B-SIZING-DEC-RESTORE increment 2c (PRE_AUDIT §17 P-1; Kyle 2026-09-29: Portfolio Risk per Trade removed in paper AND
+    // live): EVERY mode takes the fixed-notional quantity sized upstream. `processSignal`'s B6 block always runs before
+    // this (the only call is `processSignal`'s `return await this.executeSimulatedTrade(...)`): it trusts a pre-sized
+    // signal or sizes it through `sizeActivePositionForSignal` — the same sizer, the same rule (§17.4 C2).
+    // Live used to DISCARD that quantity and re-size as balance × risk% ÷ stop distance: an UNBOUNDED sizer — 200% of the
+    // balance in one position at a 2% stop — with nothing after it re-checking exposure or max position (Langston J-1).
+    // A signal that reaches here unsized is REFUSED, never re-sized by another rule.
+    let quantity: number = signal.quantity ?? 0;
+    if (!(quantity > 0)) {
+      console.error(`[B-SIZING-DEC-RESTORE][UNSIZED_AT_EXECUTION:${this.mode}] ${signal.symbol} reached execution with no fixed-notional quantity (${signal.quantity}) — refused, not re-sized`);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', `unsized at execution (quantity=${signal.quantity})`);
+      return { opened: false, stage: 'SIZING_INVALID', reason: `unsized at execution (quantity=${signal.quantity})` };
     }
-    
-    if (quantity <= 0) {
-      console.log(`[8.8.3-F][RISK_REJECT] Invalid position size (quantity=${quantity}) - skipping trade`);
-      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', `invalid position size (quantity=${quantity})`);
-      return { opened: false, stage: 'SIZING_INVALID', reason: `invalid position size (quantity=${quantity})` };
-    }
+    // §17 P-2: the working balance at open, recorded on the audit row (it was cycleContext's, never passed ⇒ 0).
+    const portfolioValue = await getPortfolioBalanceV2(this.mode);
+    console.log(`[J7][EXEC_P3] Using pre-sized quantity: ${quantity.toFixed(8)} (mode: ${this.mode}, balance: $${portfolioValue.toFixed(2)})`);
+    // (the `quantity <= 0` re-check that stood here is gone with the risk ÷ stop arm it guarded — the refusal above covers
+    // every non-positive and NaN quantity, so it could no longer fire)
 
     // P19-B4b.1: resolve the position class BEFORE the depth gate + fill — an
     // unclassifiable symbol skips here rather than reaching the fill with no class.
@@ -5906,7 +5891,10 @@ export class ActiveExecutionEngine {
         targetPrice: signal.targetPrice.toString(),
         confidence: (signal.confidence * 100).toString(),
         portfolioValue: portfolioValue.toString(),
-        riskAmount: riskAmount.toString(),
+        // §17 P-2 / §17.4 C3: the dollars this position actually risks — the FILLED quantity (`quantity` was re-set to
+        // the fill's quantity after the depth-walk, so a partial fill is not overstated) × the distance from the fill
+        // price to the stop. A measurement, not a setting.
+        riskAmount: (quantity * Math.abs(actualEntryPrice - signal.stopPrice)).toFixed(2),
         positionSize: quantity.toString(),
         tradeId: trade.id,
       }).catch(err => console.error('[8.8.3-J][AUDIT_ERROR] Failed to log opened execution attempt:', err));

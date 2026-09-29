@@ -28,10 +28,8 @@ vi.mock('../../storage', () => ({
 }));
 vi.mock('../../services/guardrail-settings', () => ({
   buildSettingsFromGuardrails: async () => ({
-    killSwitchTripped: false, portfolioValue: 1000, maxPositionPercent: 20, maxOpenTrades: 20, maxTotalExposurePct: 100, riskPerTradePct: 4,
+    killSwitchTripped: false, portfolioValue: 1000, maxPositionPercent: 20, maxOpenTrades: 20, maxTotalExposurePct: 100,
   }),
-  getRiskPercentageV2: async () => 4,
-  calculateRiskAmount: (v: number, p: number) => (v * p) / 100,
   getPortfolioBalanceV2: async () => 1000,
 }));
 vi.mock('../../services/aj16-rtb-diagnostic', () => ({

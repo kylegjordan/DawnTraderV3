@@ -27,7 +27,8 @@ import {
 
 interface GuardrailsV2 {
   mode: string;
-  portfolioRiskPerTradePct: number;
+  // B-SIZING-DEC-RESTORE increment 2c: Portfolio Risk per Trade RETIRED (Kyle 2026-09-29) — every trade is sized by the
+  // exposure budget and the Max Position Percent, in paper and live. The server refuses the field (422 RETIRED_FIELD).
   symbolCooldownMinutes: number;
   // B-SIZING-DEC-RESTORE obj-4: maxOpenPositions RETIRED — how many can be open is derived from maxPositionPercentPct.
   dailyLossKillSwitchPct: number;
@@ -41,7 +42,7 @@ interface GuardrailsV2 {
 }
 
 interface GuardrailParam {
-  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'dailyLossKillSwitchPct' | 'dailyLossWarning1Pct' | 'dailyLossWarning2Pct' | 'maxPositionPercentPct' | 'maxTotalExposurePct'>;
+  key: keyof Pick<GuardrailsV2, 'symbolCooldownMinutes' | 'dailyLossKillSwitchPct' | 'dailyLossWarning1Pct' | 'dailyLossWarning2Pct' | 'maxPositionPercentPct' | 'maxTotalExposurePct'>;
   label: string;
   description: string;
   unit: string;
@@ -54,11 +55,6 @@ const CORE_FOUR_PARAMS_BASE: Omit<GuardrailParam, 'description'>[] = [
   {
     key: 'maxTotalExposurePct',
     label: 'Max Total Portfolio Exposure',
-    unit: '%'
-  },
-  {
-    key: 'portfolioRiskPerTradePct',
-    label: 'Portfolio Risk per Trade',
     unit: '%'
   },
   {
@@ -95,7 +91,6 @@ const CORE_FOUR_PARAMS_BASE: Omit<GuardrailParam, 'description'>[] = [
 // Phase 8.8.3-C7-FIX: Keys that use Current Balance for their calculations
 const CURRENT_BALANCE_GUARDRAILS = new Set([
   'maxTotalExposurePct',
-  'portfolioRiskPerTradePct',
   'dailyLossKillSwitchPct',
   'maxPositionPercentPct'
 ]);
@@ -103,7 +98,6 @@ const CURRENT_BALANCE_GUARDRAILS = new Set([
 // Phase 8.8.3-C7-FIX: Base descriptions for each guardrail
 const GUARDRAIL_DESCRIPTIONS: Record<string, string> = {
   maxTotalExposurePct: 'The maximum percentage of your portfolio that can be invested across all open positions at any time.',
-  portfolioRiskPerTradePct: 'How much of your portfolio you plan to risk on each individual trade when sizing position and stop distance.',
   symbolCooldownMinutes: 'After a trade closes on a symbol, wait this many minutes before opening another trade on the same symbol.',
   dailyLossKillSwitchPct: 'If your portfolio loses this percent or more in a single day, trading automatically stops until you resume.',
   dailyLossWarning1Pct: 'First early-warning alert, as a percent of your Daily Loss Kill Switch. e.g. 50 alerts you when the day\'s loss reaches half of your kill-switch limit — well before trading stops. Must be below Warning 2.',

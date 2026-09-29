@@ -314,8 +314,9 @@ export const guardrailsV2 = pgTable("guardrails_v2", {
   
   // CORE FOUR GUARDRAILS (percent-based, portfolio-relative)
   
-  // 1. Portfolio Risk per Trade (%) - Range: 0.10% - 5.00%
-  portfolioRiskPerTradePct: decimal("portfolio_risk_per_trade_pct", { precision: 5, scale: 2 }).notNull().default("1.50"),
+  // 1. portfolio_risk_per_trade_pct RETIRED — B-SIZING-DEC-RESTORE increment 2c (Kyle 2026-09-29): every trade is sized
+  //    by the exposure budget and max_position_percent_pct, in paper and live. Column + CHECK dropped by
+  //    2026-09-29-b-sizing-inc2c-retire-portfolio-risk.sql (declaration and column go in the same commit, §17.4 C1).
   
   // 2. Symbol Cooldown (minutes) - Range: 1 - 90
   symbolCooldownMinutes: integer("symbol_cooldown_minutes").notNull().default(15),
@@ -383,7 +384,7 @@ export const goalsPresets = pgTable("goals_presets", {
   name: goalsPresetNameEnum("name").notNull(),
   
   // Guardrail values for this preset
-  portfolioRiskPerTradePct: decimal("portfolio_risk_per_trade_pct", { precision: 5, scale: 2 }).notNull(),
+  // portfolio_risk_per_trade_pct RETIRED — B-SIZING-DEC-RESTORE increment 2c (2026-09-29); column dropped in the same commit.
   dailyLossKillSwitchPct: decimal("daily_loss_kill_switch_pct", { precision: 5, scale: 2 }).notNull(),
   symbolCooldownMinutes: integer("symbol_cooldown_minutes").notNull(),
   // max_open_positions RETIRED — B-SIZING-DEC-RESTORE obj-4 (2026-09-29): slots are derived from max_position_percent_pct (deriveSlotCount).
@@ -2487,7 +2488,6 @@ export const insertGuardrailsV2Schema = createInsertSchema(guardrailsV2).omit({
   id: true,
   lastUpdated: true,
 }).extend({
-  portfolioRiskPerTradePct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   dailyLossKillSwitchPct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   maxPositionPercentPct: z.union([z.string(), z.number()]).transform(val => String(val)).optional(), // REB 8.8.3-G
 });
@@ -2499,7 +2499,6 @@ export const insertGoalsPresetsSchema = createInsertSchema(goalsPresets).omit({
   updatedAt: true,
   lastAdjustedAt: true,
 }).extend({
-  portfolioRiskPerTradePct: z.union([z.string(), z.number()]).transform(val => String(val)),
   dailyLossKillSwitchPct: z.union([z.string(), z.number()]).transform(val => String(val)),
   tradesPerDayEst: z.union([z.string(), z.number()]).transform(val => String(val)),
   targetDailyAvgEarningPct: z.union([z.string(), z.number()]).transform(val => String(val)),

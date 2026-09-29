@@ -24,8 +24,8 @@ import { rtbMetricsService } from '../../services/rtb-metrics-service.js';
 import { addAlert } from '../../services/system-alerts.js';
 import { GoalFeasibilityService } from '../../services/goal-feasibility.js';
 
+// B-SIZING-DEC-RESTORE increment 2c: Portfolio Risk per Trade is RETIRED — the row carries only what the sizer reads.
 const VALID_GUARDRAILS = {
-  portfolioRiskPerTradePct: '1.95',
   maxPositionPercentPct: '6.67',
   maxTotalExposurePct: '100.00',
 } as any;
@@ -56,7 +56,7 @@ describe('P19-B8.8 sizer: refuse-the-signal-loudly, no fallback substitution', (
     expect(r.estimatedValue).toBeGreaterThan(0);
   });
 
-  const FIELDS = ['portfolioRiskPerTradePct', 'maxPositionPercentPct', 'maxTotalExposurePct'] as const;
+  const FIELDS = ['maxPositionPercentPct', 'maxTotalExposurePct'] as const;
   const BAD_VALUES: Array<[string, unknown]> = [
     ['missing (undefined)', undefined],
     ['null', null],
@@ -74,6 +74,13 @@ describe('P19-B8.8 sizer: refuse-the-signal-loudly, no fallback substitution', (
       });
     }
   }
+
+  // B-SIZING-DEC-RESTORE increment 2c (§17 A3): the retired field used to be a REQUIRED input that sized nothing, so a row
+  // without it — every row once the column is dropped — refused every signal. MUTATION: put it back in the required list.
+  it('2c: a row with NO portfolioRiskPerTradePct sizes (it is no longer a required input)', () => {
+    const r = sizeWith({ maxPositionPercentPct: '6.67', maxTotalExposurePct: '100.00' });
+    expect(r.quantity).toBeGreaterThan(0);
+  });
 
   it('whole row null → invalidResult (the old null→100 exposure-uncap is gone)', () => {
     const r = sizeWith(null);
@@ -96,7 +103,7 @@ describe('P19-B8.8 rail: consecutive-refusal counter + alert latch', () => {
   it('latches ONE system alert at the threshold, not one per refusal', async () => {
     const { threshold } = rtbMetricsService.getSizingReadFailRail();
     for (let i = 0; i < threshold + 5; i++) {
-      sizeWith({ ...VALID_GUARDRAILS, portfolioRiskPerTradePct: 'broken' });
+      sizeWith({ ...VALID_GUARDRAILS, maxTotalExposurePct: 'broken' });
     }
     const rail = rtbMetricsService.getSizingReadFailRail();
     expect(rail.consecutive).toBe(threshold + 5);
@@ -120,6 +127,15 @@ describe('P19-B8.8 goal-feasibility: unreadable limits BLOCK (never assume 100%)
     expect(r.status).toBe('BLOCK');
     expect(r.reason).toContain('unreadable');
     expect(r.reason).toContain('maxTotalExposurePct');
+  });
+
+  // B-SIZING-DEC-RESTORE increment 2c (§17 A4): a missing risk field used to BLOCK every goal save. MUTATION: put it back
+  // in the unreadable check and this returns BLOCK.
+  it('2c: a row with NO portfolioRiskPerTradePct is evaluated normally, not BLOCKED as unreadable', async () => {
+    const svc = serviceWith({ maxPositionPercentPct: '6.67', maxTotalExposurePct: '100.00' });
+    const r = await svc.evaluateGoal('u1', 'paper', { targetPerTrade: 10, portfolioBalance: 2250 } as any);
+    expect(r.reason ?? '').not.toContain('unreadable');
+    expect(r.status).not.toBe('BLOCK');
   });
 
   it('control: readable limits do not hit the unreadable BLOCK', async () => {

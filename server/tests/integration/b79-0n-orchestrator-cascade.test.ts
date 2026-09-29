@@ -51,7 +51,6 @@ describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
       portfolioValue: 10000,
       guardrails: {
         userId: 0,
-        portfolioRiskPerTradePct: '1.5',
         maxPositionPercentPct: '25',
         maxTotalExposurePct: '100',
       } as any,

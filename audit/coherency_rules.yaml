@@ -13,29 +13,12 @@ metadata:
   changelog: "Phase 28.E Final: Added Control Modes Reference to UI, finalized documentation, version updated to v2.2-phase28efinal"
 
 # Core Four Guardrails:
-# 1. portfolio_risk_per_trade_pct - Percentage of portfolio risked per trade
+# 1. (portfolio_risk_per_trade_pct RETIRED by B-SIZING-DEC-RESTORE increment 2c, Kyle 2026-09-29: every trade is sized by the exposure budget and max_position_percent_pct, in paper AND live; RULE_001 and RULE_006 deleted with it — `#1105` holds the open question of bounding one trade's worst-case loss against the kill switch)
 # 2. symbol_cooldown_minutes - Cooldown period before re-trading same symbol
 # 3. (max_open_positions RETIRED by B-SIZING-DEC-RESTORE obj-4, 2026-09-29: slots are derived, floor(100 / max_position_percent_pct); RULE_002 and RULE_008 deleted with it)
 # 4. daily_loss_kill_switch_pct - Portfolio loss % triggering auto-shutdown
 
 rules:
-  - name: "Risk ≤ 50% × KillSwitch"
-    id: "RULE_001"
-    description: "Portfolio risk per trade must not exceed 50% of daily loss kill switch (extreme fail-safe)"
-    condition: "portfolio_risk_per_trade_pct <= daily_loss_kill_switch_pct * 0.5"
-    rationale: "Phase 28.E: Simplified extreme fail-safe ensuring at least 2x buffer between risk per trade and kill switch threshold"
-    severity: "error"
-    error_message: "Portfolio risk per trade ({value}%) cannot exceed 50% of daily loss kill switch ({kill_switch}%). Maximum allowed: {max_allowed}%"
-    phase: "Phase 28.E"
-    example_valid:
-      - portfolio_risk_per_trade_pct: 3.50
-        daily_loss_kill_switch_pct: 7.00
-        result: "PASS (3.50 <= 7.00 * 0.5)"
-    example_invalid:
-      - portfolio_risk_per_trade_pct: 4.00
-        daily_loss_kill_switch_pct: 7.00
-        result: "FAIL (4.00 > 3.50)"
-
   - name: "Cooldown ≥ 0 minutes"
     id: "RULE_003"
     description: "Symbol cooldown must be at least 0 minutes (default allowed)"
@@ -87,20 +70,6 @@ rules:
         tuned_by_latti: true
         result: "FAIL (conflicting ownership)"
 
-  - name: "Portfolio Risk Range"
-    id: "RULE_006"
-    description: "Portfolio risk per trade must be between 0.10% and 5.00%"
-    condition: "portfolio_risk_per_trade_pct >= 0.10 and portfolio_risk_per_trade_pct <= 5.00"
-    rationale: "Enforces sane risk bounds - too low (< 0.10%) limits growth, too high (> 5%) invites ruin"
-    severity: "error"
-    error_message: "Portfolio risk per trade ({value}%) must be between 0.10% and 5.00%"
-    example_valid:
-      - portfolio_risk_per_trade_pct: 1.50
-        result: "PASS"
-    example_invalid:
-      - portfolio_risk_per_trade_pct: 6.00
-        result: "FAIL (exceeds 5.00%)"
-
   - name: "Kill Switch ≤ 25% of Portfolio"
     id: "RULE_007"
     description: "Daily loss kill switch must be between 1.00% and 25.00%"
@@ -132,7 +101,6 @@ rules:
     id: "RULE_010"
     description: "Learning-adjusted preset values must not exceed global safety caps"
     condition: |
-      portfolio_risk_per_trade_pct <= 5.00 AND
       daily_loss_kill_switch_pct <= 25.00 AND
       symbol_cooldown_minutes <= 90
     rationale: "Phase 6 adaptive learning engine automatically expands preset boundaries by 5% when performance meets threshold. Safety caps prevent runaway expansion and ensure system remains within acceptable risk limits. Phase 28.E: Updated kill switch cap to 25% to align with RULE_007."
@@ -141,7 +109,6 @@ rules:
     phase: "Phase 6 / Phase 28.E"
     enforcement: "GoalsLearningEngine service enforces caps during expansion calculations"
     safety_caps:
-      portfolio_risk_per_trade_pct: 5.00
       daily_loss_kill_switch_pct: 25.00
       symbol_cooldown_minutes: 90
     notes: |
@@ -150,12 +117,9 @@ rules:
       - Caps apply to both manual presets and learning-adjusted presets
       - Provides backstop against algorithmic over-optimization
     example_valid:
-      - portfolio_risk_per_trade_pct: 4.95
-        daily_loss_kill_switch_pct: 24.50
+      - daily_loss_kill_switch_pct: 24.50
         result: "PASS (within caps)"
     example_invalid:
-      - portfolio_risk_per_trade_pct: 5.50
-        result: "FAIL (exceeds 5.00% cap)"
       - daily_loss_kill_switch_pct: 26.00
         result: "FAIL (exceeds 25.00% cap)"
 
@@ -244,24 +208,15 @@ migration_rules:
 enforcement:
   backend:
     - endpoint: "PUT /api/guardrails"
-      rules: ["RULE_001", "RULE_003", "RULE_004", "RULE_005", "RULE_006", "RULE_007", "RULE_012", "RULE_013"]
+      rules: ["RULE_003", "RULE_004", "RULE_005", "RULE_007", "RULE_012", "RULE_013"]
       timing: "pre-commit validation before database write"
       failure_action: "return 400 Bad Request with specific rule violation message"
     
-    - endpoint: "POST /api/tuning/enable"
-      rules: ["RULE_001", "RULE_006"]
-      timing: "validate LATTI field bounds against guardrail limits"
-      failure_action: "reject tuning policy if bounds exceed guardrails"
   
   database:
     - constraint: "guardrails_v2_mode_idx"
       rule: "RULE_009"
       type: "UNIQUE INDEX"
-    
-    - constraint: "check_portfolio_risk_range"
-      rule: "RULE_006"
-      type: "CHECK constraint"
-      sql: "portfolio_risk_per_trade_pct >= 0.10 AND portfolio_risk_per_trade_pct <= 5.00"
     
     - constraint: "check_kill_switch_range"
       rule: "RULE_007"
@@ -277,7 +232,6 @@ enforcement:
 test_cases:
   valid_scenarios:
     - name: "Baseline Configuration"
-      portfolio_risk_per_trade_pct: 0.90
       symbol_cooldown_minutes: 15
       daily_loss_kill_switch_pct: 7.00
       is_manual_override: false
@@ -285,7 +239,6 @@ test_cases:
       expected_result: "PASS all rules"
     
     - name: "Conservative Configuration"
-      portfolio_risk_per_trade_pct: 0.50
       symbol_cooldown_minutes: 30
       daily_loss_kill_switch_pct: 5.00
       is_manual_override: false
@@ -293,7 +246,6 @@ test_cases:
       expected_result: "PASS all rules"
     
     - name: "Aggressive Configuration"
-      portfolio_risk_per_trade_pct: 2.00
       symbol_cooldown_minutes: 5
       daily_loss_kill_switch_pct: 20.00
       is_manual_override: true
@@ -301,28 +253,17 @@ test_cases:
       expected_result: "PASS all rules"
   
   invalid_scenarios:
-    - name: "Risk Exceeds Kill Switch Threshold"
-      portfolio_risk_per_trade_pct: 1.50
-      daily_loss_kill_switch_pct: 7.00
-      expected_violation: "RULE_001"
-      expected_message: "Portfolio risk per trade (1.50%) cannot exceed 10% of daily loss kill switch (7.00%). Maximum allowed: 0.70%"
-    
     - name: "Conflicting Control Flags"
       is_manual_override: true
       tuned_by_latti: true
       expected_violation: "RULE_005"
       expected_message: "Conflicting control flags: is_manual_override and tuned_by_latti cannot both be true"
     
-    - name: "Risk Out of Range"
-      portfolio_risk_per_trade_pct: 6.00
-      expected_violation: "RULE_006"
-      expected_message: "Portfolio risk per trade (6.00%) must be between 0.10% and 5.00%"
-    
 # Phase 3 Extensions (Future)
 phase_3_additions:
   - name: "Per-Parameter Manual Override Tracking"
     description: "Track which specific Core Four parameters are manually overridden"
-    schema_addition: "locked_by_user JSONB { riskPerTrade: boolean, cooldown: boolean, positions: boolean, killSwitch: boolean }"
+    schema_addition: "locked_by_user JSONB { cooldown: boolean, killSwitch: boolean }"
     
   - name: "LATTI Adjustment Auditing"
     description: "Log all LATTI automatic adjustments with before/after values"
@@ -333,14 +274,13 @@ phase_3_additions:
 integrations:
   latti:
     service: "HeuristicTraderService"
-    reads: ["portfolio_risk_per_trade_pct", "symbol_cooldown_minutes"]
+    reads: ["symbol_cooldown_minutes"]
     respects: "is_manual_override flag (skips adjustment if true)"
-    enforces: ["RULE_001", "RULE_006"]
   
   risk_manager:
     service: "RiskManager"
-    reads: ["portfolio_risk_per_trade_pct", "daily_loss_kill_switch_pct"]
-    enforces: ["RULE_001", "RULE_007"]
+    reads: ["daily_loss_kill_switch_pct"]
+    enforces: ["RULE_007"]
     triggers: "Emergency shutdown on kill switch breach"
   
   trading_engine:
