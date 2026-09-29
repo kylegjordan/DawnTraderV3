@@ -467,6 +467,9 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
     });
 
     // MUTATION: append "// see /api/*" to any code line that has a block comment below it and this fails.
+    // KNOWN FALSE-POSITIVE MODE (Langston, Step-4 confirm): an apostrophe inside a double-quoted string, on a line that
+    // also carries a real inline block comment, trips the odd-quote count; with any later block-comment close this fails.
+    // Fail-loud and fail-closed — so a red here is a line to READ, not proof that code was blanked.
     it('no false block-comment opener (in a trailing comment or a string) is followed by a "*/" that would blank code', () => {
       expect(openerReport().filter((o) => o.closes)).toEqual([]);
     });
