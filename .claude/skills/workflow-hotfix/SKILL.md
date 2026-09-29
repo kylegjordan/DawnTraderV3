@@ -86,7 +86,7 @@ Implement, commit with explicit paths, push to `migration/aws-supabase`. ⚠️ 
 
 ## ⛔ 5. IT STILL GETS A RECORD — a fast path is not a silent one
 - **`CHANGES_AND_FIXES.md`** — symptom, mechanism, fix, blast-radius result, Langston's approval, the deployed sha.
-- **`RUNNING_ISSUES.md`** — open an entry if anything was deferred; **close the entry if this closed it**. If §2 path B turned up other sites or a larger fault, **each gets a named, dated home NOW** (§9.4) — "we'll get to it" is not a disposition.
+- **`RUNNING_ISSUES.md`** — open an entry if anything was deferred; **close the entry if this closed it**. If §2 path B turned up other sites or a larger fault, **each gets a named, placed home NOW** (§9.4) — "we'll get to it" is not a disposition.
 - **`BATCH_CATALOG.md`** — one row. **The commit subject leads with the batch-id** (the checker’s `extractBatchId` matches a batch-id ANYWHERE in the subject, so never put a CLOSED or not-yet-existent id in a subject you are only REFERENCING — it grades as a fresh batch needing docs and floods missing-doc alerts). **The change-class lives in the SCOPE FILE header (§2.35), not in the commit subject** — the checker does not read it from there.
 - **A short completion note**, not a full report: what broke, what was done, how it was verified, what Langston said.
 

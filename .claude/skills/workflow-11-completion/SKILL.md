@@ -41,9 +41,9 @@ Any change to a previously-stated number gets surfaced as **PREVIOUSLY STATED: X
 ## THEN
 Report to Kyle in the `CONDUCT.md` §6 format, move the board card, and **update your CURRENT POSITION block.**
 
-## ⛔ EVERY DEFERRAL GETS A DATED HOME — A PHASE NAME IS NOT A HOME
+## ⛔ EVERY DEFERRAL GETS A PLACED HOME — A PHASE NAME IS NOT A HOME
 **MEASURED 2026-08-21, and it is precisely what §9.4 exists to stop:** a code comment deferred a real design decision with *"paper joins in Phase 19 as a SEPARATE operator decision."* **It is Phase 19. The deferral came due and nobody noticed** — it was found months later by reading the comment, not by any tracker.
-⇒ **A deferral written only into a CODE COMMENT is invisible to every process we have.** It needs a `RUNNING_ISSUES.md` entry with **a named owner and a DATE**, and the completion report must name it. **"In Phase 19", "post-launch" and "later" are not homes.**
+⇒ **A deferral written only into a CODE COMMENT is invisible to every process we have.** It needs a `RUNNING_ISSUES.md` entry with **a named owner and a PLACE in the active plan — never a date** (`CLAUDE.md` §9.4; a date belongs only to a period whose length is the point), and the completion report must name it. **"In Phase 19", "post-launch" and "later" are not homes.**
 
 
 ## ⛔ BEFORE THIS STEP LEAVES YOUR HANDS — REVIEW IT THE WAY LANGSTON WOULD

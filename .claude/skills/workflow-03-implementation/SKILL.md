@@ -12,7 +12,7 @@ description: STEP 3 ONLY of the DawnTrader batch workflow - Implementation. Use 
 - **Surgical edits, explicitly documented. No speculative refactoring.**
 - **NO PATCHES.** Every fix long-term, structural, scalable. When a problem surfaces, find the **root cause** and design the right architecture. No "good enough for now."
 - **No hard-coded fallbacks for DB-governed settings.** If it should come from the DB, **fail hard when the DB is empty** — never silently default.
-- **Never leave legacy lingering.** At the moment you surface it: delete it now through the full workflow, or **schedule a concrete dated deletion**. Record removals in `DELETED_COMPONENTS_LOG.md`.
+- **Never leave legacy lingering.** At the moment you surface it: delete it now through the full workflow, or **place a concrete deletion in the active plan** (never a date — §9.4). Record removals in `DELETED_COMPONENTS_LOG.md`.
 
 ## ⛔ COMMIT DISCIPLINE — THE MANDATED FORM
 ```

@@ -8,7 +8,7 @@ description: STEP 9 ONLY of the DawnTrader batch workflow - Iterate. Use when a 
 **Ends when:** every scope objective is green.
 
 If any objective is not met: **fix → Langston reviews → push → CI → deploy → verify.** Repeat until all green.
-⛔ **Do not close with an objective silently unmet.** An open item is disclosable — a **named owner, a dated home, and BOTH a closing condition and a failure condition written before the fact.** What disqualifies a close is an objective *claimed* on evidence nobody can read.
+⛔ **Do not close with an objective silently unmet.** An open item is disclosable — a **named owner, a placed home (a position in the active plan, never a date — §9.4), and BOTH a closing condition and a failure condition written before the fact.** What disqualifies a close is an objective *claimed* on evidence nobody can read.
 
 ## ⛔ A PARTIAL FIX PRESENTED AS COMPLETE IS WORSE THAN NO FIX
 **Fixing one of five identical sites is a worse outcome than fixing none — because it makes the remaining four look investigated.** When you fix a defect, **grep repo-wide for the PATTERN, not for the symptom you were handed**, and state how many sites you found and how many you changed.
