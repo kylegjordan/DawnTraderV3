@@ -4371,6 +4371,8 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 **⚠️ HONEST LIMIT, STATED NOW SO THE BUILD DOES NOT OVERSELL ITSELF:** this catches a push with no scope file. **It cannot detect a scope file that exists but was written AFTER the work and never reviewed** — which is precisely what I did here. The mechanism narrows the hole; it does not close it. The remaining hole is the honesty of the person filing.
 
+➕ **2026-09-29 (CC-A, `B-GOV-REPORTING` r6) — TWO LANGSTON RULINGS ON THE RULES-FILE GATE THAT WERE RECORDED NOWHERE, placed here because this is their subject (§9.4 disposition 2):** (a) **2026-08-26T20:12Z** — rules-file changes get a third change-class, `rules_change`, rather than a fourth process beside batch and hotfix: a five-field ~15-line case file pushed alone and ruled on BEFORE the rule edit lands; (b) **2026-08-27T15:59Z** (on `#747`) — a push touching a governed artifact carries a `SCOPE:` trailer naming the item. Both were lost from every record until the r6 reconstruction. ⛔ **His ordering constraint on (a): *"the rules_change class definition is itself a rules change — run it through its own process as the first one … it lands before #744 ships, or the guard enforces a rule that still doesn't exist."***
+
 ---
 
 ### #740 OPEN 2026-08-23 (CC-A; Langston directed the filing after re-deriving the frontmatter himself at `d0fc181c7` — 12/12 descriptions present, 0 colon-space) — ★★ **A `": "` IN A SKILL DESCRIPTION SILENTLY DISARMS THAT SKILL’S AUTO-INVOKE TRIGGER. VALID FILE, NO ERROR, PLAUSIBLE FALLBACK — THE #546 SHAPE.**
@@ -7105,6 +7107,8 @@ for a in last.values():
 ---
 ✅ **ALREADY MITIGATED, INDEPENDENT OF THE FIX:** all eight mandated forms from all three homes are now a committed regression fixture (`scripts/measure-gate/test-guard-measurement-shape.mjs` §M) that requires **ZERO fires**. **The guard cannot regress onto the mandated set without the suite failing** — which is Langston’s condition that this ship as a test arm, not a review step.
 
+✅ **2026-09-29 (CC-A, `B-GOV-REPORTING` r6) — THE DOC HALF IS DONE.** `CLAUDE.md` §10.5 step 1 and shared `MEMORY.md` item 3 now require the whole-file filtered read, never a tail; the tail allowlist entries in `.claude/settings.local.json` are gone. The filter recorded above reads a PATH, so a piped read opened a stray local copy on the laptop and printed nothing — replaced by `scripts/due-alerts.py`, sent over stdin (`ssh root@188.245.193.8 'python3 -' < scripts/due-alerts.py`), which prints full ids, each body and its metadata, Langston's acks of the last 24h and a COUNT line naming the host; tested 2026-09-29, it returned the same 5 due alerts as the hook. The hook now prints `0 due alerts` instead of staying silent. **Still open: Langston's own always-loaded file — Infra Claude's half (Kyle, 2026-08-30).** Closes with `B-GOV-REPORTING`.
+
 ---
 
 ### #981 OPEN 2026-09-02 (CC-A; Langston refused both OBJ-6d shapes on principle and named the one he would accept) — ⛔ RESULT-INSPECTION CANNOT REACH `wrong-object`'S MOTIVATING CASE; THE RE-DERIVATION MUST BE SOURCED FROM THE **CLAIM**
@@ -7129,6 +7133,8 @@ for a in last.values():
 **FIRST INSTANCE was mine** (five event-wait alerts I own, acked = silenced, restorable by nothing). ⇒ **2 sessions, 2 batches — the promotion floor in `MISTAKE_PATTERNS.md` for a pattern, and here it is a missing VERB rather than a habit, so a rule cannot cover it.**
 **SIZING, measured at the objects rather than guessed:** `scripts/system-alerts.ts:337-355` is a flat `switch` with parallel `ack`/`resolve` cases; `server/services/system-alerts.ts` has `ackAlert(id, by)` at `:533` and `resolveAlert(...)` at `:559` in the same shape. **An `unack` (or better, a non-terminal `hold`) is one service function, one CLI case, one usage-string line, one test.** ⚠️ **Two real design questions, NOT trivia:** (a) the re-surface back-off runs from `fired_at`, *"NEVER from `acknowledged_at`"* (`:684`) — so an unack must be checked not to restart a back-off clock; (b) **an `unack` can un-own a row, which is exactly the accountability the ack was carrying** — Langston will want a rule that it cannot clear `acknowledged_by`, only the silence.
 ⇒ **RECOMMENDATION (Kyle's call, put to him 2026-09-03): PULL `#982` OUT of `B-GOV-REPORTING` (queue row 8) and do it as a standalone micro-batch AHEAD of the row-4 work.** It is small, it is blocking honest recording in a LIVE batch belonging to another session, and every day it waits adds rows that read as fixed and are not. **If he declines, it stays at row 8 item (v) and CC-C's mitigation stands.**
+
+➕ **2026-09-29 (CC-A, `B-GOV-REPORTING` r6):** Langston's 2026-09-13 sentence landed in `CLAUDE.md` §10.5 at step 3 — any alert that is not resolved (scheduled, active or acknowledged) blocks the next mint of its dedupe key (`server/services/system-alerts.ts`, the non-terminal dedupe check). It describes today's code, so it did not wait for the verb. **The verb itself stays on the after-live list.** ⚠️ **The protocol document still teaches ack-as-ownership** (`ALERT_HANDLING_PROTOCOL.md` step 4) — that correction is `#646` (`B-ALERT-ACK-PROCEDURE-DOCFIX`, CC-B); `CLAUDE.md` §10.5 now carries the routing rule and points at `#646`.
 
 ### #984 OPEN 2026-09-02 (CC-A; RENUMBERED from #983 — CC-INFRA minted #983 ten minutes earlier at 2a8e6cf00, the newer entry renumbers; a fresh reader found it at Step 7, Langston named the hazard at Step 8) — ⛔ `guard-measurement-shape` WRITES `fired` AS A LIST, AND AN EMPTY LIST IS TRUTHY: A NAIVE READER SCORES EVERY ROW AS A FIRE
 
@@ -9957,3 +9963,12 @@ Found rebuilding CC-B's task list: each was open or unplaced in both `SPRINT_TO_
 - `#507` — CORE DONE: the adapter computes the CRC32 and resubscribes on a mismatch (`kraken-websocket-adapter.ts:1138-1152`); 26,396 of 26,396 checksums matched (RI:9106). The uncalled `triggerSoftResubscribe` goes after live.
 - `#1098` (the node_modules `#567`, renumbered above) — CLOSED.
 
+### #1099 OPEN 2026-09-29 (CC-A; Langston named the home on 2026-08-29 and it was never created; minted as #1096, then #1097 — both were taken by the time it was pushed, and the newer entry renumbers) — THE GOVERNANCE CHECKER GRADES A LEDGER IT CANNOT SEE, AND COUNTS A REPORT THAT SAYS "NOT CLOSED" AS A CLOSE
+
+Four pieces of checker work, not rules text — three Langston put under `B-GOV-REPORTING`, one found 2026-09-29:
+1. **The commit-message ledger grade** (his 2026-08-29T10:37Z): the filled tier ledger is mandated into the governance commit message, so a checker can grade its PRESENCE and COMPLETENESS — every row present, every row a verdict token and a non-empty line — without judging contents. Inherits `#754`'s blind spot (nothing seen until the completion report first-adds).
+2. **`POST_AUDIT_ROADMAP.md` is conditional for both batch classes but absent from `sub_batch`** (`scripts/governance-checker/config.mjs:138`) — probably not deliberate.
+3. **A completion-report-named file counts as a close even when it opens `NOT CLOSED`** (his 2026-09-01T02:44Z).
+4. **A `c` (conditional) document is never graded at all:** both live call sites pass `requiredOnly: true` (`scripts/governance-checker/poller.mjs:315`, `:698`), so his 2026-08-29 premise that a missing conditional doc *"routes a low-sev alert to me"* does not hold (found 2026-09-29).
+⚠️ **RE-PLACED, NOT AS NAMED:** Langston named `placed in the GOV-ARC list, after B-GOV-REPORTING` (`PHASE_19_PLAN`). That plan is now history and none of this changes trading, so under the sprint's §2 intake test it goes after live — **put to him at `B-GOV-REPORTING`'s gate.**
+HOME: B-GOV-LEDGER-GRADE, owner CC-A, placed in PRE_LIVE_SPRINT.md after live, crew-tooling category (that list is unordered within a category: *"Category is not schedule"*).

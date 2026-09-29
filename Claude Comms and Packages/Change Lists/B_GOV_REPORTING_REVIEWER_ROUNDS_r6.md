@@ -1,0 +1,95 @@
+# B-GOV-REPORTING r6 — THE FRESH-READER ROUND RECORD (for Langston)
+
+**The loop ran three rounds and hit its cap.** Per the step skills, the cap outcome is not neutral: this is the full record. Each round was a fresh set of readers (one per gate, plus one looking for rulings r6 missed), handed the working tree, your rulings and the previous round's called-out items — never the earlier readers' reasoning. Every round was an OBJECT round (read the diff and the files at the ref, ran the commands).
+
+⛔ **Nothing below is offered as evidence that r6 is right.** Strike this file from the dispatch and the changes still stand or fall on their own citations. It is here so you can see what was argued, what changed, and what I declined.
+
+| round | called-out items it checked | satisfied | new items raised (must / should / note) |
+|---|---|---|---|
+| r1 | — (first read) | — | 24 must-fix |
+| r2 | 25 (r1's) | 19 | 2 / 19 / 20 |
+| r3 | 26 (r2's must+should) | 20 | 1 / 12 / 17 |
+
+## AFTER r3 — WHAT I CHANGED (committed with this record)
+- **10.b's impossible instruction (r3's must-fix):** the sum may only go down, the sync appends, the trim is Infra's. The skill now STATES the three cannot all hold, keeps the sync to the closure line, records the before/after sum, and routes the rise to Infra Claude — and the conflict is a G6 question to you.
+- The `PHASE_19_PLAN` verdict slot restored as its own T1 row (a `P19-*` batch still owes it); the active-plan row made conditional on the batch having a sprint row, with a stated `N/A` form for one that does not.
+- A `BLOCKED` row of ANY kind now blocks the close (it was only REQUIRED rows), parked with the blocker named in the task list's OPEN AND STALLED line — not on a progress report, which is for observation windows.
+- The hotfix cells made true for a `P19-*` hotfix and for the scope + catalogue rows `workflow-hotfix` requires; the `R*` legend names the class-override route.
+- `workflow-11` drops the Kyle-acknowledgement step (his 2026-09-02 ruling; my memory note homed the correction to the next governance batch touching that skill — this one), and "dated home" becomes a placed home (§9.4).
+- `bug-investigation` keeps the plain phrase ban AS WELL AS the deletion test (stricter under either reading of your 07:15Z / 07:27Z rulings — which reading stands is a G6 question); its open question now says where your ruling lands.
+- The sibling check's orphan detection restored (the AND I added had weakened it); `CLAUDE.md` §10.5's post-diagnosis line now says an event-wait alert is routed, pointing at `#646` for the protocol document; the §8 sentence stating another file's current content removed; the crew-board pointer moved to the after-live list.
+- Records: `B-GOV-LEDGER-GRADE` (renumbered `#1099` at push — `#1096` and `#1097` were both taken by then) says four pieces, its home no longer claims an order the after-live list does not have, the after-live line says it is a RE-PLACEMENT; `B-GATE-GUARD`'s after-live line carries the `rules_change` ordering; `MISTAKE_PATTERNS` record 1 counts two, not one.
+
+## DECLINED OR LEFT OPEN, WITH MY POSITION
+- **The dormant `tail -20` in `wake-watcher-heartbeat-cc-a`** — that task is unregistered (the live heartbeat reads the whole file); it belongs to `B-WAKE-OUT-OF-BAND` (2.4g-b), which already says to measure it before rebuilding it.
+- **`due-alerts.py`'s clause-(b) population** leaves out rows Langston acked and that were then resolved — deliberately: a resolved alert owes no follow-through. The `fired_at` leg of (b) is not covered; say if it should be.
+- **Shared `MEMORY.md` item 3 still names the dead `langston-alert-invokes.log`** — `#1054`, Infra Claude.
+- **The hotfix's one R cell is graded only once a completion report exists** — the `#754` blind spot, already stated in the skill's honest limit.
+- **Tier-1 unconditional (`CLAUDE.md` §3.0) vs judged `SCOPE`/`PRE_AUDIT` for `sub_batch`**, **row 8 item (v)**, **the generated after-live list** — G6 questions.
+
+## THE THIRD ROUND'S FULL OUTPUT (the unresolved state before the changes above)
+
+### G1
+- r2-item **SATISFIED** — 1. CLAUDE.md §10.5: the hook gives only id, severity and title and is capped at 25, while step 2 requires body and metadata. Open gaps were (a) no source for metadata, (b) body cut at 400 characters, (c) the by-hand read triggered only for acting, which is step 3, not surfacing, which is step 2
+- r2-item **SATISFIED** — 2. MEMORY.md:16: clause (b), Langston's acks within the last 24h, had no executable command, and the `or` made the hook look sufficient
+- r2-item **SATISFIED** — 3. Dropped rule: shared MEMORY.md:58 removed `owned = routed, row left active` (the #982 event-wait prescription) with no replacement
+- r2-item **SATISFIED** — 4. Three records say Langston's 09-13 dedupe sentence landed at §10.5 STEP 3, but it sat under STEP 1
+- r2-item **NOT_SATISFIED** — 5. A tail sibling of #980 survives: CC-A's hourly heartbeat task reads alerts with `tail -20`, and the #980 annotation does not name it
+- NEW **should_fix** — CLAUDE.md:202 (rule 25.a) puts the new home for B-CREW-BOARD-REMOVAL in a plan that the active plan calls history, and does not name the item's live placement. The pointer is also ambiguous: PHASE_19_PLAN has two rows numbered 11.
+- NEW **should_fix** — The two always-loaded homes for the per-turn alert check disagree on whether the script must run on an ordinary turn with due alerts. MEMORY.md:16 sends (a) to the hook alone, but CLAUDE.md requires the script for the body and metadata of every due alert.
+- NEW **note** — MEMORY.md:16 now names due-alerts.py as the instrument for clause (b), but the script selects a different population from the one (b) states.
+- NEW **note** — The header of due-alerts.py describes output the code no longer produces.
+- NEW **note** — CLAUDE.md:570 says `an ack also stops it surfacing` without qualification. That holds only for the per-turn read. The dispatcher still re-surfaces acknowledged warning and critical alerts.
+- NEW **note** — The new sentence at CLAUDE.md:419 (§8) states the current content of another file inside a paragraph whose own lesson forbids exactly that. The paragraph also still carries the per-file `~24KB` cap in its narrative.
+- NEW **note** — The rewritten MEMORY.md:16 still points clause (b) at a log that has been dead since June.
+- NEW **note** — Object hygiene: the working tree is 13 commits behind origin, and PHASE_19_PLAN.md changed on origin in the meantime. So `git diff origin/migration/aws-supabase -- 1-system-manual/PHASE_19_PLAN.md` shows two reversal hunks that r6 did not write.
+
+### G2
+- r2-item **SATISFIED** — G2-1: bug-investigation/SKILL.md:49 claimed the claim-only/object-round interpretation was 'PUT TO LANGSTON 2026-09-29 AND NOT YET RULED'. It was never put to him, and 'NOT YET RULED' was a live status with no pointer.
+- r2-item **SATISFIED** — G2-2: the sibling check's TERMINATION marker was the loop heading, not Langston's 08-28T07:15Z object-round condition. It passed while bug-investigation lacked his corrections and would pass again if they regressed. Suggested fix: add 'termination requires an *object* round' as a second required mar
+- NEW **should_fix** — The sibling check's new conjunction weakens its ORPHAN detection. `orphan` (:40) is computed from `term`, and `term` now needs BOTH markers (:38). So an instruction file that carries the loop heading 'it is a loop, not a one-shot' but not the mechanism is no longer reported. The old script reported it as TERMINATION WITHOUT MECHANISM. Fix: compute orphans from files carrying EITHER termination marker, and keep the AND only for `missing`.
+- NEW **should_fix** — workflow-11-completion still requires Kyle's acknowledgement to close a batch. Kyle's 2026-09-02 directive removed that requirement, and the correction was explicitly homed to THIS batch. r6 edits workflow-11 but neither makes the correction nor records a §9.4 disposition for it.
+- NEW **note** — bug-investigation:47 deletes the explicit phrase ban and presents 'a deletion test, not a phrase ban' as settled. Scope §7d:254 records that exact question as OPEN ('Which stands?'). Line :49 flags its own open question inline; :47 carries no such flag. The change list's G2 gate line also does not carry the question, so the G2 dispatch will show it to Langston as decided.
+- NEW **note** — bug-investigation:49 is an instruction with a live conditional ('Until he rules, satisfy BOTH') that names neither where the ruling will be recorded nor what retires the interim text. Once Langston rules, the skill goes stale unless someone remembers to edit it, and the pointer will still lead to a scope section headed 'not decided here'.
+- NEW **note** — This is pre-existing and outside the diff, but it sits in a file this diff edits. workflow-11:30 requires an open scope item to carry a 'dated home', and CLAUDE.md §9.4 forbids a calendar date on a home.
+
+### G3
+- r2-item **NOT_SATISFIED** — 1 (round-1 #3). BLOCKER-2 'grep the class': the lines saying the CHECKER requires exactly one document of a hotfix are false for a P19-* hotfix
+- r2-item **SATISFIED** — 2 (round-1 #4). T1 PHASE_19_PLAN made 'judged' for non-P19 batches; the remaining leg was shared MEMORY.md:13 still saying 'PHASE_19_PLAN progress' is unconditional
+- r2-item **SATISFIED** — 3. :130 gave 'the class table has no correct exit for it (#985)' as a ground for BLOCKED, but Langston's #985 ruling retired that use
+- r2-item **NOT_SATISFIED** — 4. The hotfix column contradicts workflow-hotfix, and the SCOPE row's tokens misstate what the checker does
+- r2-item **SATISFIED** — 5. The BLOCKED close path at :130 was incomplete: it did not say whether a batch closes, it cleared the alert via na-skip without stating the tier, a na-skip clears permanently, and BLOCKED fails LEDGER_TOKEN
+- r2-item **SATISFIED** — 6. CLAUDE.md:419 still pointed readers to Langston's per-file MEMORY header for his cap (a third copy)
+- r2-item **SATISFIED** — 7. :127's universal claim ('every other Tier 3 … is a parameter, fee, data … tier') was false because of governance-DOCUMENT Tier 3s
+- r2-item **SATISFIED** — 8. The new SPRINT_TO_LIVE_PLAN ledger row turns a proposal awaiting Langston into a Tier-1 obligation that §7a did not claim
+- NEW **must_fix** — 10.b (SKILL.md:203) states Langston's ratchet and then, in the same paragraph, tells the session to break it: 'THE SUM MAY ONLY GO DOWN' is followed by 'A sync is an append … record the rise, do not cut his file yourself' and 'assume a prune is due'. As written the instruction cannot be followed, and it overrides a ruling that nobody re-ruled.
+- NEW **should_fix** — The PHASE_19_PLAN verdict slot was dropped from the ledger. The class matrix still marks it R for any P19-* batch, but the table a session fills in and posts has no row for it, so a P19-* batch can fill every row and still fail the checker.
+- NEW **should_fix** — BLOCKED on a JUDGED row has no close rule. :130 says only that a BLOCKED REQUIRED row blocks the close, which invites a close with an owed (applicable) update not landed. The progress report it parks on is also defined for observation windows, not for blockers.
+- NEW **note** — The hotfix column's only R cell (CHANGES_AND_FIXES, :113) is graded only after a completion report exists, and the same column marks COMPLETION_REPORT 'judged · c'. For a hotfix that writes only workflow-hotfix's 'short completion note', the R cell can have no live instrument, and the cell does not say so.
+- NEW **note** — :127's list of the 'other' Tier 3 kinds is still not exhaustive. The document-tier claim holds, but the sentence meant to stop the question coming back is still refuted by a live governance document.
+- NEW **note** — Always-loaded CLAUDE.md:84 says 'Tier-1 is unconditional every batch AND sub-batch', but two T1 ledger rows (SCOPE :142, PRE_AUDIT :143) are 'judged' for sub_batch in the class matrix this diff rewrote (:106, :107). This is the 'grep the class' axis again.
+- NEW **note** — The author's claim map for this file (scope §7a row 7) describes a BLOCKED mechanism the working-tree file no longer contains.
+- NEW **note** — The new active-plan row is REQUIRED in every class (:119, :140 'your row') and has no exit for a batch that has no row in SPRINT_TO_LIVE_PLAN. That is the BLOCKER-2 shape: N/A is forbidden on a REQUIRED row and no re-declared class removes it.
+
+### MISSED
+- r2-item **NOT_SATISFIED** — 1. CLAUDE.md §10.5: land the 09-13T21:47Z sentence next to step 3 and :576/577; correct MEMORY.md:58 and PHASE_19_PLAN:617 item (v); record on #982 / PRE_LIVE_SPRINT:324
+- r2-item **SATISFIED** — 2. The 09-13 sentence's placement is recorded as 'landed at step 3' in three places, but it sat inside step 1
+- r2-item **NOT_SATISFIED** — 3. Change list G1 misstates the 09-13 ruling as 'an acked alert blocks the next mint of its key' and drops the active-row half
+- r2-item **SATISFIED** — 4. Two RUNNING_ISSUES annotations sit after their entry's closing `---`; the #982 annotation abuts `### #984`
+- r2-item **NOT_SATISFIED** — 5. B-GOV-LEDGER-GRADE is recorded as the home Langston named but is placed elsewhere, and its HOME lacks `after <item>`
+- r2-item **SATISFIED** — 6. The 7d 'conditional docs are never graded' finding is not recorded at its named destination (#1097)
+- r2-item **SATISFIED** — 7. Folding rules_change into #744 drops Langston's ordering constraint
+- r2-item **SATISFIED** — 8. MISTAKE_PATTERNS record 1 has no slug; record 2 is filed under a dated heading rather than with its slug
+- r2-item **SATISFIED** — 9. The 7c disposition row for the MISTAKE_PATTERNS records is orphaned outside the table
+- r2-item **SATISFIED** — 10. A third, per-file copy of Langston's memory cap survives in CLAUDE.md §8
+- r2-item **SATISFIED** — 11. r6 breaks the offline mandated-command fixture (M0 red for the allowlist home; the due-alerts read uncovered)
+- NEW **should_fix** — The change list's gate plan gives no gate to the items the scope says go to Langston 'at the gate'. That includes the B-GOV-LEDGER-GRADE re-placement, the MISTAKE_PATTERNS candidate occurrence, the rules_change record on #744, and the seven §7d questions.
+- NEW **should_fix** — The change list's field (ii), 'that class's doc set', omits `phase_19_plan`, even though the batch edits PHASE_19_PLAN.md. This is the same document Langston's 08-29 BLOCKER-1 was about.
+- NEW **should_fix** — MISTAKE_PATTERNS record 1 misstates Langston's count as ONE occurrence. He counted two: one copied edit-series plus the F-G line. As written, the record's own 'third occurrence completes the count' does not add up.
+- NEW **should_fix** — The #1097 home, and the removal of the after-live B-GOV-REPORTING line, were hand-written into a GENERATED file. The next run of the generator silently deletes the home and restores the removed line.
+- NEW **should_fix** — r6 writes part of #646's §10.5 ack doc-fix (CC-B's `B-ALERT-ACK-PROCEDURE-DOCFIX`) into CLAUDE.md:570 without cross-referencing #646. The 'definitive process' doc that §10.5 points to still tells owners to ack, which contradicts the new line. #982's own HOME line was also never updated.
+- NEW **should_fix** — The rules_change-before-#744 ordering is recorded only in the ledger entry. Neither plan row that sequences B-GATE-GUARD carries it, and under §9.4 the ledger points at the plan while the position lives in the plan.
+- NEW **note** — #1097's intro and the sprint-list line disagree with the entry body. The intro says three items and there are four. The sprint line lists only three and states one of them as a decided fix.
+- NEW **note** — The #980 annotation describes due-alerts.py's output as 'the start of each body'. The script prints the body up to 100,000 characters (in effect the whole body) plus metadata.
+- NEW **note** — Issue-number uniqueness holds, but the #1097 append will conflict with origin's #1096 at pull time.
+

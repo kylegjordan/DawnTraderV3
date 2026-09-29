@@ -643,7 +643,7 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 **DECISION 3 — the HOTFIX path is quicker but NOT unreviewed.** Kyle: Langston reviews it BEFORE staging. If in doubt it is a batch.
 **DECISION 4 — depth goes to runbooks, but the runbook strategy is now MEASURED AND WEAK.** Across five runbooks: 3 commits and 9 mentions ever (control: RUNNING_ISSUES has 370). **So §6 was NOT gutted** — Kyle’s point stands that the comms rules got followed BECAUSE they were in the always-loaded file.
 **DECISION 5 — an always-loaded file must not assert a live config value.** Name where to read it. Adopted after the shared MEMORY carried the wrong Langston model for 17 days.
-**DEFERRED WITH A NAME, not dropped:** Infra Claude’s onboarding into the crew comms (Kyle, ~1-2 weeks, date open) · the crew-board keep-narrow-or-kill decision (delegated to CC-A + Langston) · the `read-the-field` promotion argument · #739 and #740 to `B-RULES-1e`, due 2026-09-05.
+**DEFERRED WITH A NAME, not dropped:** Infra Claude’s onboarding into the crew comms (Kyle, ~1-2 weeks, date open) · the crew-board keep-narrow-or-kill decision (delegated to CC-A + Langston) · the `read-the-field` promotion argument · #739 and #740 to `B-RULES-1e`.
 
 ### B-MISTAKES-FILE — closed 2026-08-20 (CC-A) · §5 decision-log entry
 

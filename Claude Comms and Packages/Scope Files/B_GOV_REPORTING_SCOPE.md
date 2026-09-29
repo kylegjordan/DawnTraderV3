@@ -75,7 +75,7 @@ change-class: non_architecture
 ⚠️ **WHY IT WAS NEEDED, and it is a self-inflicted one: I had written "Kyle must approve spawning one" into the rule myself.** Four skills carried the mechanism and it was used **zero times in two days.** **A mechanism I gated out of existence while recording it as shipped.**
 
 **THE DESIGN, and the part that carries the weight:** hand the reviewer **only the object and the claim**, and ask **"what other states of the world are consistent with this object?"** — never *"does this support my claim?"* **The first can reach wrong-object; the second structurally cannot.** Scope it to that one output, never to a disposition.
-★ **WHY A SUBAGENT AND NOT A STANCE — this is the §6b finding and it is what Kyle actually asked for:** a session told to review statelessly **will report that it did, because it cannot tell from the inside.** §6b IS that mode version — live, auto-loaded, and it failed **3 of 4** real errors. **What works is a PROCESS BOUNDARY, not a stance:** a fresh process holds only what it was handed.
+★ **WHY A SUBAGENT AND NOT A STANCE — this is the §6b finding and it is what Kyle actually asked for:** a session told to review statelessly **will report that it did, because it cannot tell from the inside.** §6b IS that mode version — live, auto-loaded, and it failed ~~**3 of 4**~~ *(struck — see §7c)* real errors. **What works is a PROCESS BOUNDARY, not a stance:** a fresh process holds only what it was handed.
 ⚠️ **THE LIMITS, stated rather than discovered later:** hand it my SUMMARY and it reviews my summary — the same failure one level down; it is blind to context it NEEDS, not only to context it should ignore; it costs tokens, so it is for load-bearing claims only.
 **EVIDENCE: ONE RUN.** It contradicted a Langston ruling — 8 absences in §9.5 including the clause the section is titled after — and I re-derived all eight with a control. **§9.5 was re-classified Class A → Class B on it.** ⚠️ **One run, one claim, my choice of target. A positive result, NOT proof it generalises**, and it is not offered as one.
 
@@ -200,3 +200,63 @@ change-class: non_architecture
 1. **Is anything checkable at all?** The chat message is not in the repo. Candidates: a `PostToolUse`-style session-side hook; the completion report carrying the table VERBATIM as posted (checkable) plus Langston ruling at Step 11 that it WAS posted; or accepting that this one is unenforceable and saying so plainly rather than leaving a rule that reads as covered.
 2. **Whatever lands must NOT be another instruction** — `#995` measured three instruction-shaped fixes and all three failed.
 3. **Population:** how many Step-10 reports since 2026-08-28 posted the table? **Not measured yet, and the measurement is part of the item** — Kyle's report is a symptom, not a count.
+
+---
+
+## 7. r6 — 2026-09-29: WHAT "THE GATE NEVER RAN" ACTUALLY MEANT, AND WHAT FINISHING THIS BATCH IS
+
+**Why now:** Kyle, 2026-09-29 — finish this batch before the sprint to live (it is on CC-A's section-0 plate in `SPRINT_TO_LIVE_PLAN.md`, *"pushed, the review gate never ran"*).
+**How the state below was established:** every landed edit was reconstructed from its commits and from every Langston ruling in `/var/log/cc-discord-inbox.jsonl` (Helsinki) — by four independent readers, each checked by an adversarial verifier trying to refute it, then a completeness pass over all 49 commits to `CONDUCT.md`, `CLAUDE.md` and `.claude/skills` since 2026-08-26. ⚠️ **The load-bearing items were then re-derived by CC-A at the ref** (the bug-investigation markers, workflow-11 :17, `CLAUDE.md` :529/:534/:539/:566-567, the due date, workflow-10's matrix lines, the sibling check's predicate). Full record: `Change Lists/B_GOV_REPORTING_CHANGE_LIST_r6.md`.
+
+⛔ **"THE REVIEW GATE NEVER RAN" OVERSTATED IT.** Langston ruled on edits 1-5 (2026-08-26T20:10Z), 6-8 (08-27T15:59Z), 9 (08-27T18:57Z, conditions verified 19:07Z), 10 (08-28T07:15Z) and 11 r1-r3 (08-28). **What was actually owed is narrower and worse:** fixes he asked for that were never made, and changes that were never put to him.
+
+### 7a. RULINGS CARRIED OUT IN r6 (never applied until now)
+| # | his ruling | what r6 did |
+|---|---|---|
+| 1 | 08-28T07:15Z, edit 10: deletion test not phrase ban; termination needs an OBJECT round; erosion = narrower-checkable vs hedge; cap sends the full round record | **the `bug-investigation` skill never received them** — it was built on 08-28 from the pre-correction source. Applied; a claim-only clean can no longer close an investigation's loop |
+| 2 | 08-28T07:27Z: the round count is not evidence | the four workflow skills + bug-investigation said *"the round COUNT is the useful number"* beside it — reworded to *"the MECHANISM's own denominator … never EVIDENCE that a finding is right"* |
+| 3 | 08-26T20:10Z condition 2 | workflow-11 :17 still trailed *"quote the criterion"* behind (b), inside a changelog line — line removed, the pre-registration sentence moved to (a) |
+| 4 | 08-27T15:59Z edit-6 condition (b): cut the annotations from the rule body (*"six of them archaeology"*) | two he named had survived, three more of the same kind sat beside them, and one was added 09-05 — all cut; the one rule inside them kept; history → `_archive/CLAUDE_MD_RULE_HISTORY.md` |
+| 5 | 09-01T06:18Z (#980): the `tail -50` in §10.5 is a real defect, and so is its allowlist variant | `CLAUDE.md` §10.5 and shared `MEMORY.md` item 3 require the whole-file filtered read; the hook now SAYS `0 due` rather than staying silent; the manual fallback is a tested script (`scripts/due-alerts.py`) because the filter on `#980` read a path; the tail allowlist entries are gone. **And his 09-13 sentence landed at step 3:** any unresolved alert — active or acknowledged — blocks the next mint of its key |
+| 6 | 08-29T10:37Z BLOCKER-1, BLOCKER-2, the `graded` column | workflow-10's class matrix now carries what the checker does with each cell (`R` / `c` / `—` / `ledger row`); `PHASE_19_PLAN` split out as REQUIRED-for-`P19-*`; the false *"the checker does not grade them"* sentence removed; the T1 row reconciled |
+| 7 | 08-30T02:55Z: a BLOCKED cell carries its blocker's reference | third verdict token `BLOCKED — <ref>` with its own one-line form; a batch with any BLOCKED row does not close. ⚠️ Not the use plan row 8 item (i) first imagined — a class that does not fit is re-declared, per his `#985` ruling |
+| 8 | plan row 8 item (ii) | the ledger now says it is a PROMPT, not a PROOF, and names the checker as the independent detector |
+| 9 | 08-30T01:43Z: 10.b gives two answers for his cap in one file | both copies now carry the SUM ratchet he ruled and Kyle approved on 09-05 (`PHASE_19_PLAN` row 2.8b): read `langston-size-watch --status`, record the sum before and after in the ledger, never restate it per file |
+| 10 | 08-28T07:38Z: the sibling check's `isInstruction` misses the two always-loaded rule files | `CLAUDE.md` and `CONDUCT.md` added; it runs clean at 15 instruction files |
+| 11 | 08-26T20:10Z rider: sweep the batch due date | the last `due 2026-09-05` in `PHASE_19_PLAN` removed |
+
+### 7b. NEVER PUT TO LANGSTON — the gates this batch still owes
+1. **edit 10's corrected text in the four workflow skills** (`37633550d`) — ruled on as a draft, never read back.
+2. **edit 11 r3-r5** (`8d8780547`, `81155c942`, `7ee9b3625`) — *"Fix that and I'll clear it"* (08-28T11:58Z); the fix landed and the clearance was never given.
+3. **the Observation board-column paragraph** (`a97a7325a`, workflow-10 :46) — used by him operationally since 09-04, never ruled on.
+4. **the 2026-09-13 wording** (`f29e27f5c`, Kyle's two-place rule) and **scope §6**.
+5. **`df368871f`** — the `CONDUCT.md` §6b rewrite and the base reviewer block in four skills; it carries this batch's own mistake trailer and is in no edit list.
+6. **everything in 7a above.**
+
+### 7c. DISPOSITIONS — work Langston filed under this batch that does not belong in finishing it
+| item | disposition |
+|---|---|
+| `#982` the alert hold verb | **(2)** — already on the after-live list (`PRE_LIVE_SPRINT.md`, crew tooling). His 09-13 sentence did NOT wait for it: it describes today's code and landed in r6 (7a row 5) |
+| two pattern records he directed on 2026-08-28 (07:38Z Q5, 12:55Z item 4) | **(1)** — written to `MISTAKE_PATTERNS.md` with slugs `sibling-left-stale` and `partial-apply-reported-as-complete`, plus one candidate distinct occurrence for him to count or refuse |
+| the checker counts a report that opens `NOT CLOSED` as a finished batch (his 09-01T02:44Z) · the commit-message ledger grade · `roadmap` missing from `sub_batch` | **(3)** — `HOME: B-GOV-LEDGER-GRADE (#1099), owner CC-A, placed in PRE_LIVE_SPRINT.md after live, after B-GATE-GUARD` — ⚠️ **a RE-PLACEMENT of the home he named (the GOV-ARC list in `PHASE_19_PLAN`, now history); put to him at the gate** — the home he named on 08-29 and nobody created |
+| the change-class parser (his 08-30T02:55Z) | **(2)** — already homed: `#968` `B-CHANGE-CLASS-PARSER`, CC-C |
+| the `rules_change` class (his 08-26T20:12Z) · the `SCOPE:` trailer on a governed-artifact push (08-27T15:59Z, `#747`) | **(2)** — both are the gate on rules-file pushes, which is `#744` `B-GATE-GUARD`; recorded on `#744` **with his ordering: `rules_change` lands BEFORE `#744` ships** |
+| `#751` line endings | **(2)** — `B-EOL-NORMALISE`, already on the after-live list |
+| edit 3's rider — *"scheduled ≠ verified"* must be recorded as Kyle's answer, not land as a side effect | **(4)** — it is the AWAITING-KYLE item, re-homed to Infra Claude 2026-08-30; put to Langston as a question, not decided here |
+| edit 7's `DISPOSITION:` line offers four values after §9.4 gained a fifth | **(4)** — a question for Langston. ⚠️ **An earlier draft said `CONDUCT.md` was over its cap: that was the Windows working copy. The stored file is 24,417 B, 159 B under.** And it amends an existing rule's value list rather than adding a rule, so one-in-one-out is not triggered. |
+
+★ **One struck line:** §2b edit 9 above says *"§6b … failed **3 of 4** real errors"*. Langston ruled on 2026-08-26T21:41Z that the table behind that figure is unevidenced — *"Do not ship that table into the file, into a report, or to Kyle."* It stands struck here: ~~3 of 4~~.
+
+### 7d. QUESTIONS THIS ROUND RAISED, FOR THE GATES (not decided here)
+- **`c` has no instrument either.** The live poller passes `requiredOnly: true` at both call sites (`poller.mjs:315`, `:698`), so a conditional document is never graded — his 08-29 premise that absence *"routes a low-sev alert to me"* does not hold today. Stated in the legend; a fix belongs with `B-GOV-LEDGER-GRADE`.
+- **The claim-only / object-round interaction** — bug-investigation now labels its reconciliation as an interpretation awaiting him; the same interaction sits unreconciled in the four workflow skills.
+- **workflow-10 says two places at its "IT GOES IN TWO PLACES" line and three at its "TWO PLACES, BOTH DURABLE" section** (the post + two durable homes). r6 first "fixed" :88 and reverted it: the 09-13 wording was never put to him, so it goes to G4 as found.
+- **The phrase ban.** His 07:15Z ruling replaced it with the deletion test; his 07:27Z reply says *"'The reviewer agreed' stays banned"* — which may echo a dispatch that attributed the ban to him. Which stands?
+- **bug-investigation's fresh-reviewer rule vs its last round** — *"Round 3's reader must not know what rounds 1 and 2 said"* sits beside a last round that must read the objects the earlier rounds named.
+- **The new active-plan ledger row** (`SPRINT_TO_LIVE_PLAN.md`, required every batch close) carries out the plan's own §3 rule, which the plan says is *"to be made a Tier-1 ledger row … Langston to rule"* — this is that row, for his ruling.
+- **`B-GOV-LEDGER-GRADE`'s placement** — re-placed after live from the GOV-ARC list he named.
+- **10.b cannot all hold today:** the sync appends, the sum may not rise (row 2.8b), and the trim is Infra Claude's (`#946`). The skill now says so and routes the rise to Infra — is that the right interim?
+- **`CLAUDE.md` §3.0 says Tier-1 is unconditional every batch AND sub-batch,** while the class matrix makes `SCOPE` and `PRE_AUDIT` judged for a `sub_batch` (unchanged by r6, but in rows r6 edited).
+- **`PHASE_19_PLAN` row 8 item (v)** still gives *"an acknowledged keyed row blocks the next mint"* as the reason to leave an alert active — the half-truth his 09-13 ruling corrected. That plan is history; say whether it should be annotated.
+- **`PRE_LIVE_SPRINT.md` is generated** (`scripts/inventory/sort.py`): r6's hand edits there (the `B-GOV-LEDGER-GRADE` line, the removed after-live `B-GOV-REPORTING` line, the `B-GATE-GUARD` note) are lost on the next regeneration unless NEW Claude carries them into the inventory sources.
+- **`workflow-11` now drops the Kyle-acknowledgement step** (Kyle, 2026-09-02; the memory note homed the correction to the next governance batch touching this skill — this one).

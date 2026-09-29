@@ -186,6 +186,10 @@ function extractCommands(path, label) {
     for (const m of line.matchAll(/`([^`]*(?:tail|cat)\s[^`]*(?:system-alerts|cc-discord-inbox|cc-wake)[^`]*)`/g)) {
       out.push({ site: at, cmd: m[1].trim() }); hit = true;
     }
+    // B-GOV-REPORTING r6 (#980): the §10.5 alert read is now a whole-file script sent over stdin.
+    for (const m of line.matchAll(/`([^`]*due-alerts\.py[^`]*)`/g)) {
+      out.push({ site: at, cmd: m[1].trim() }); hit = true;
+    }
     // ⛔ FENCED BLOCKS. `CLAUDE.md:279` — the §6.6 mandated inbox read — lives inside a ```bash
     // fence, NOT backticks, so the pattern above never saw it. A home written as a fence was
     // invisible to a fixture whose whole point is that a reworded home gets picked up.
@@ -204,6 +208,9 @@ function extractCommands(path, label) {
     // FIX, one level in: the home was added because JSON isn't backticked, and inside it the
     // double-quoted entries were still being skipped. Reader-found.
     for (const m of line.matchAll(/"Bash\(((?:[^"\\]|\\.)*(?:tail|cat)\s(?:[^"\\]|\\.)*(?:system-alerts|cc-discord-inbox|cc-wake)(?:[^"\\]|\\.)*)\)"/g)) {
+      out.push({ site: at, cmd: m[1].replace(/\\"/g, '"').replace(/:\*$/, '').trim() });
+    }
+    for (const m of line.matchAll(/"Bash\(((?:[^"\\]|\\.)*due-alerts\.py(?:[^"\\]|\\.)*)\)"/g)) {
       out.push({ site: at, cmd: m[1].replace(/\\"/g, '"').replace(/:\*$/, '').trim() });
     }
   });
