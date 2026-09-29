@@ -5,8 +5,10 @@
 # Because deploy.sh refuses to run unless its own bytes equal deploy.sh at --sha, the test copy is
 # committed into the TEST mirror as a child of the sha under test, and that commit is installed.
 # Args: <full sha under test> <old sha that predates comms-infra/helsinki/>
-# SETUP: /tmp/dtr-test/src/deploy.r1 = comms-infra/discord/deploy.sh at b4db96b9c and deploy.r2 = the same
-# path at b9ca76485 (before fresh-reader rounds 1 and 2), for the CONTROL lines, which must FAIL on them.
+# SETUP: /tmp/dtr-test/src/deploy.r1, deploy.r2, deploy.r3 = comms-infra/discord/deploy.sh at b4db96b9c,
+# b9ca76485 and 764ec389b (before fresh-reader rounds 1, 2 and 3), for the CONTROL lines, which must FAIL
+# on them. r3 has the self-check too, so it is committed like the copy under test (TC3, on 764ec389b).
+# The test copies also shorten two waits: the bridges' `sleep 8` and the lock's `flock -w 300`.
 set -u
 SHA=$1; OLD=$2
 T=/tmp/dtr-test/dep
@@ -28,7 +30,8 @@ redirect() { # source -> stdout: every write path under $T, cron calls echoed
   sed -e "s#^MIRROR=.*#MIRROR=$T/mirror.git#" -e "s#^BRIDGE_DIR=.*#BRIDGE_DIR=$T/opt#" -e "s#^UNITS=.*#UNITS=$T/units#" \
       -e "s#/usr/local/bin/#$T/bin/#g" -e "s#/var/log/#$T/log/#g" -e "s#/var/lib/dt-deploy-drift#$T/lib/dt-deploy-drift#g" \
       -e "s#/etc/dawntrader/comms-active.env#$T/etc/comms-active.env#g" -e "s#mkdir -p /etc/dawntrader#mkdir -p $T/etc#" \
-      -e "s#/root/deploy-retired#$T/retired#g" -e "s#sudo -u langston crontab#$T/stub/fakecrontab#g" "$1"
+      -e "s#/root/deploy-retired#$T/retired#g" -e "s#sudo -u langston crontab#$T/stub/fakecrontab#g" \
+      -e "s#^  sleep 8\$#  sleep 0#" -e "s#flock -w 300 #flock -w 3 #" "$1"
 }
 L cat-file blob "$SHA:comms-infra/discord/deploy.sh" > "$T/deploy.orig"
 redirect "$T/deploy.orig" > "$T/deploy.sh"
@@ -44,12 +47,25 @@ tree_with() { # base-commit path blob mode -> new tree id
 TB=$(L hash-object -w "$T/deploy.sh")
 TC=$(L commit-tree -p "$SHA" -m "test: redirected deploy.sh" "$(tree_with "$SHA" comms-infra/discord/deploy.sh "$TB" 100755)")
 L update-ref "refs/heads/$B" "$TC"
+# TC3 = 764ec389b with the redirected r3 copy as deploy.sh, parented on TC (on-branch when the branch is moved to it).
+redirect /tmp/dtr-test/src/deploy.r3 > "$T/deploy.r3"; chown langston:langston "$T/deploy.r3"
+TB3=$(L hash-object -w "$T/deploy.r3")
+TC3=$(L commit-tree -p "$TC" -m "test: redirected r3 deploy.sh" "$(tree_with 764ec389b comms-infra/discord/deploy.sh "$TB3" 100755)")
 
-printf '#!/bin/sh\necho "stub $(basename $0) $*"\n' > "$T/stub/apt-get"; cp "$T/stub/apt-get" "$T/stub/systemctl"
+printf '#!/bin/sh\necho "stub $(basename $0) $*"\n' > "$T/stub/apt-get"
+# systemctl stub; HOLDLOCK=1 grabs the mirror's fetch lock (8 s) at daemon-reload, i.e. after the install.
+cat > "$T/stub/systemctl" <<EOF3
+#!/bin/sh
+echo "stub systemctl \$*"
+if [ -n "\${HOLDLOCK:-}" ] && [ "\$1" = daemon-reload ]; then ( flock $T/mirror.git/dt-fetch.lock sleep 8 ) >/dev/null 2>&1 & sleep 0.5; fi
+exit 0
+EOF3
 printf '#!/bin/sh\nexit 0\n' > "$T/opt/venv/bin/pip"; printf '#!/bin/sh\necho 2.9.9-stub\n' > "$T/opt/venv/bin/python3"
 # fakecrontab: langston's crontab lives in $T/crontab.txt; FAKECRON=fail makes the READ fail.
+# HOLDCRON=1 grabs the mirror's fetch lock (8 s) at the FIRST crontab read (r3 reads it only after installing).
 cat > "$T/stub/fakecrontab" <<EOF2
 #!/bin/sh
+if [ -n "\${HOLDCRON:-}" ] && [ "\$1" = -l ] && [ ! -e $T/held ]; then touch $T/held; ( flock $T/mirror.git/dt-fetch.lock sleep 8 ) >/dev/null 2>&1 & sleep 0.5; fi
 if [ "\$1" = -l ]; then
   [ "\${FAKECRON:-}" = fail ] && { echo "crontab: simulated read failure" >&2; exit 2; }
   [ -f $T/crontab.txt ] || { echo "no crontab for langston" >&2; exit 1; }
@@ -142,6 +158,12 @@ grep -q "other-job" "$T/crontab.txt" && grep -q "dt-backup-sync.sh" "$T/crontab.
 printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"; cp "$T/crontab.txt" "$T/crontab.before"
 FAKECRON=fail bash "$T/deploy.sh" --sha "$TC" --only readers > "$T/out" 2>&1; RC=$?
 [ $RC -eq 2 ] && grep -q "cannot read langston's crontab" "$T/out" && cmp -s "$T/crontab.txt" "$T/crontab.before" && ok "F2-D4: a failed crontab read -> refused, crontab untouched" || bad F2-D4c "rc=$RC $(tail -2 "$T/out")"
+! grep -q "installed $T/bin" "$T/out" && ok "F3-D2a: ... and refused in PRE-FLIGHT: nothing was installed" || bad F3-D2a "$(grep installed "$T/out" | head -2)"
+L update-ref "refs/heads/$B" "$TC3"
+FAKECRON=fail bash "$T/deploy.r3" --sha "$TC3" --only readers > "$T/out" 2>&1; RC=$?
+[ $RC -eq 2 ] && grep -q "installed $T/bin" "$T/out" && ok "F3-D2a CONTROL: r3 refused only AFTER installing (rc=$RC)" || bad F3-D2ac "rc=$RC $(tail -2 "$T/out")"
+cp "$T/crontab.before" "$T/crontab.txt"
+L update-ref "refs/heads/$B" "$TC"
 FAKECRON=fail bash "$T/deploy.r1" --sha "$SHA" --only readers > "$T/out" 2>&1
 grep -q "other-job" "$T/crontab.txt" && bad F2-D4-ctl "r1 kept it" || ok "F2-D4 CONTROL: r1 WIPED langston's crontab on a failed read ($(wc -l < "$T/crontab.txt") line(s) left)"
 cp "$T/crontab.before" "$T/crontab.txt"
@@ -151,6 +173,11 @@ echo "root-owned log victim" > "$T/victim2"; chown root:root "$T/victim2"
 rm -f "$T/log/dt-backup-sync.log"; ln -s "$T/victim2" "$T/log/dt-backup-sync.log"
 run "$T/deploy.sh" --sha "$TC" --only readers
 [ $RC -eq 2 ] && grep -q "is a symlink — refusing to chown it" "$T/out" && [ "$(stat -c %U "$T/victim2")" = root ] && ok "F2-D7: a symlinked log is refused; the target stays root-owned" || bad F2-D7 "rc=$RC owner=$(stat -c %U "$T/victim2")"
+! grep -q "installed $T/bin" "$T/out" && ok "F3-D2b: ... and refused in PRE-FLIGHT: nothing was installed" || bad F3-D2b "$(grep installed "$T/out" | head -2)"
+L update-ref "refs/heads/$B" "$TC3"
+run "$T/deploy.r3" --sha "$TC3" --only readers
+[ $RC -eq 2 ] && grep -q "installed $T/bin" "$T/out" && grep -q "is a symlink" "$T/out" && ok "F3-D2b CONTROL: r3 refused the symlink only AFTER installing" || bad F3-D2bc "rc=$RC $(tail -2 "$T/out")"
+L update-ref "refs/heads/$B" "$TC"
 run "$T/deploy.r1" --sha "$SHA" --only readers
 [ "$(stat -c %U "$T/victim2")" = langston ] && ok "F2-D7 CONTROL: r1 chowned the symlink's root-owned target to langston" || bad F2-D7c "owner=$(stat -c %U "$T/victim2")"
 rm -f "$T/log/dt-backup-sync.log"; L update-ref "refs/heads/$B" "$TC"
@@ -172,5 +199,52 @@ run "$T/deploy.sh" --sha "$TC" --only bridges
 grep -q "UNMANAGED DROP-IN: $T/units/discord-langston-bridge.service.d/override.conf" "$T/out" && ok "F2-D9: an unmanaged drop-in is named loudly" || bad F2-D9 x
 grep -q "discord.py: 2.9.9-stub (unchanged)" "$T/out" && ok "F2-D10: an unchanged discord.py is reported as unchanged" || bad F2-D10 "$(grep discord.py "$T/out")"
 rm -f "$T/units/discord-langston-bridge.service.d/override.conf"
+
+
+# ================= round 3 (fresh-reader round 3 on 764ec389b); CONTROLS run the r3 copy (TC3) =================
+# F3-D1: a lock timeout AFTER the install says what WAS installed, and the units were reloaded first.
+L update-ref "refs/heads/$B" "$TC"
+HOLDLOCK=1 bash "$T/deploy.sh" --sha "$TC" --only bridges,readers > "$T/out" 2>&1; RC=$?
+flock "$T/mirror.git/dt-fetch.lock" true   # wait out the holder
+[ $RC -eq 2 ] && grep -q "fetch lock was held" "$T/out" && grep -q "ARE installed and verified" "$T/out" && ! grep -q "nothing was changed" "$T/out" && grep -q "stub systemctl daemon-reload" "$T/out" && grep -q "completed after that: retire seed units" "$T/out" && ok "F3-D1: a late lock timeout names what WAS installed; daemon-reload ran first" || bad F3-D1 "rc=$RC $(tail -3 "$T/out")"
+L update-ref "refs/heads/$B" "$TC3"; rm -f "$T/held"
+HOLDCRON=1 bash "$T/deploy.r3" --sha "$TC3" --only notices,readers > "$T/out" 2>&1; RC=$?
+flock "$T/mirror.git/dt-fetch.lock" true
+[ $RC -eq 2 ] && grep -q "installed $T/bin" "$T/out" && grep -q "nothing was changed" "$T/out" && ok "F3-D1 CONTROL: r3 said 'nothing was changed' after installing" || bad F3-D1c "rc=$RC $(tail -3 "$T/out")"
+rm -f "$T/held"; L update-ref "refs/heads/$B" "$TC"
+# F3-D3: the post-enable readout is back.
+run "$T/deploy.sh" --sha "$TC" --only bridges
+[ $RC -eq 0 ] && grep -q "stub systemctl is-active discord-cc-bridge.service discord-langston-bridge.service" "$T/out" && ok "F3-D3: bridges are read back with is-active after enable" || bad F3-D3 "rc=$RC"
+L update-ref "refs/heads/$B" "$TC3"
+run "$T/deploy.r3" --sha "$TC3" --only bridges
+[ $RC -eq 0 ] && ! grep -q "stub systemctl is-active" "$T/out" && ok "F3-D3 CONTROL: r3 never read the bridges back" || bad F3-D3c "rc=$RC"
+L update-ref "refs/heads/$B" "$TC"
+# F3-D4: root's hashing does not depend on (or run) git: an exported GIT_DIR changes nothing.
+GIT_DIR=/nonexistent bash "$T/deploy.sh" --sha "$TC" --only readers > "$T/out" 2>&1; RC=$?
+[ $RC -eq 0 ] && grep -q "install-verify: all 2 installed files" "$T/out" && ok "F3-D4: an exported GIT_DIR does not reach root's hashing" || bad F3-D4 "rc=$RC $(tail -2 "$T/out")"
+L update-ref "refs/heads/$B" "$TC3"
+GIT_DIR=/nonexistent bash "$T/deploy.r3" --sha "$TC3" --only readers > "$T/out" 2>&1; RC=$?
+[ $RC -ne 0 ] && ok "F3-D4 CONTROL: r3's root git obeyed the caller's GIT_DIR and failed (rc=$RC)" || bad F3-D4c "rc=$RC"
+L update-ref "refs/heads/$B" "$TC"
+# F3-D5: a crontab read that succeeds with a warning on stderr never writes the warning back.
+printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"
+sed -i 's#^  cat '"$T"'/crontab.txt#  echo "sudo: unable to resolve host x" >\&2; cat '"$T"'/crontab.txt#' "$T/stub/fakecrontab"
+run "$T/deploy.sh" --sha "$TC" --only readers
+[ $RC -eq 0 ] && ! grep -q "unable to resolve" "$T/crontab.txt" && grep -q "dt-backup-sync.sh" "$T/crontab.txt" && ok "F3-D5: a warning on the crontab read is not written into the crontab" || bad F3-D5 "rc=$RC $(cat "$T/crontab.txt")"
+printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"
+L update-ref "refs/heads/$B" "$TC3"
+run "$T/deploy.r3" --sha "$TC3" --only readers
+grep -q "unable to resolve" "$T/crontab.txt" && ok "F3-D5 CONTROL: r3 wrote sudo's warning into langston's crontab" || bad F3-D5c "rc=$RC $(cat "$T/crontab.txt")"
+L update-ref "refs/heads/$B" "$TC"
+sed -i 's#echo "sudo: unable to resolve host x" >&2; ##' "$T/stub/fakecrontab"
+# F3-D6: --only with a newline is refused, and the reports name only the groups actually run.
+run "$T/deploy.sh" --sha "$TC" --only "$(printf 'readers\nbridges')"
+[ $RC -eq 2 ] && grep -q "\-\-only takes group names separated by commas" "$T/out" && ok "F3-D6: --only with a newline refused" || bad F3-D6 "rc=$RC $(tail -2 "$T/out")"
+L update-ref "refs/heads/$B" "$TC3"
+run "$T/deploy.r3" --sha "$TC3" --only "$(printf 'readers\nbridges')"
+[ $RC -eq 0 ] && grep -q "^bridges at " "$T/out" && ok "F3-D6 CONTROL: r3 ran readers only and reported 'bridges' as done" || bad F3-D6c "rc=$RC $(tail -2 "$T/out")"
+L update-ref "refs/heads/$B" "$TC"
+run "$T/deploy.sh" --sha "$TC" --only readers
+grep -q "^Done: readers at $TC\.$" "$T/out" && ok "F3-D6: the report names the groups run" || bad F3-D6r "$(tail -1 "$T/out")"
 
 echo "DEPLOY SUMMARY: $PASSN pass, $FAILN fail"

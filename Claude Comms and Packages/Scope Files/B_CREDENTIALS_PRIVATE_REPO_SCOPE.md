@@ -13,6 +13,14 @@ change-class: non_architecture
 - **§2.1 is superseded by pre-audit §2.2 (r4) wherever they differ**: the `dtmint` account for `mint`, the grammar and precedence, the empty write allowlist, the setter's steps, the token cache. Langston's eleven Step-3 conditions are pre-audit §6.
 - **The kill-switch trip is not reachable through `dt-api`** (decision 19; amended in place at §2.1(3)).
 
+## STEP-3 AMENDMENT — OBJ-4a's outcome texts as BUILT (Step 7 checks against THESE; the row's pre-written texts are kept as written)
+Three fresh-reader rounds changed four of the texts OBJ-4a's row wrote before the run. Each change and its reason:
+- **Head read after a failed fetch:** `REFUSED: fetch failed; mirror head is <ref>, fetched <age> — no head read served`, then `dt-review: reason: <git's first line>` on its own line. *"from GitHub"* is dropped because a fetch can fail for a reason on this box, and the cause is quoted rather than asserted. Two sibling texts exist that the row did not foresee: `REFUSED: mirror busy: the fetch lock was held for more than <n>s; …` and `REFUSED: no fetch was attempted (<reason>); …`.
+- **Not in the mirror:** `REFUSED: <sha> is not in the mirror (migration/aws-supabase head <ref>, fetched <age>; last fetch <ok|FAILED (<reason>)|SKIPPED (…)|NOT ATTEMPTED (…)>; other branches last synced <age>)`. For a SHORT sha whose prefix only a blob or tree shares: `REFUSED: no commit with prefix <sha> is in the mirror (a blob shares the prefix) (…the same freshness fields…)`.
+- **Pinned read after a failed fetch:** `DEGRADED: fetch failed (<git's first line>); content is exact (re-hashed) for <sha>` for `show`; for `grep`/`ls` it says `content is as stored (not re-hashed)` — only `show` re-hashes what it serves.
+- **Off-branch:** `OFF-BRANCH: <sha> is not an ancestor of migration/aws-supabase — content is exact (re-hashed), provenance is NOT the graded ref` (for `grep`/`ls`: `content is as stored (not re-hashed)`). Combined with a degraded fetch it is ONE line: `OFF-BRANCH: … | DEGRADED: …`.
+- **Unchanged in meaning, added:** an invalid BRE is the CALLER's error (exit 2, `REFUSED: the pattern is not a valid BRE (<git's reason>). Nothing was searched.`), not a mirror failure.
+
 ## ROUND RECORD — the fresh-reader loop reached its CAP (3 rounds)
 - `REVIEWER r1: object (r2 at b4948145b) · Langston-ruling coverage + code-claim check · ~15 gaps · fixed in r3`
 - `REVIEWER r2: object (r3 at 8cf041381) · fix-check + cold adversarial · 4 partly, 17 new · fixed in r4`

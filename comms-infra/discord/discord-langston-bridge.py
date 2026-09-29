@@ -179,8 +179,10 @@ def resolve_review_ref():
 REVIEW_SOURCE_NOTE = (
     "[REVIEW SOURCE — branch migration/aws-supabase at commit %(ref)s. This is the graded ref. "
     "Do NOT read from /mnt/gdrive, any local working copy, or raw.githubusercontent.com.\n"
-    " - Single file, pinned:  dt-review show %(ref)s <path>  — exact bytes on stdout, "
-    "provenance on stderr, so a line number from stdout is the file's line number.\n"
+    " - Single file, pinned:  dt-review show %(ref)s <path>  — exact bytes on STDOUT ONLY; "
+    "provenance goes to stderr, and a bare call SHOWS it above the file (with an OFF-BRANCH/DEGRADED "
+    "header, that header twice). Number lines from stdout alone: save it to a file, check the exit, "
+    "then grep -n / sed -n 'Np' the file; never number after 2>&1.\n"
     " - Search / list, pinned:  `dt-review grep @%(ref)s '<BRE>' [<path>...]`  |  "
     "`dt-review ls @%(ref)s`  (without @<sha> they read the mirror head AT CALL TIME and print "
     "that sha on stderr: compare it with this commit).\n"
@@ -199,7 +201,7 @@ REVIEW_SOURCE_FAIL_NOTE = (
 )
 
 
-def invoke_claude(prompt, session_id, state=None, _retry_count=0):
+def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False):
     """Identical contract to the Telegram bridge: claude -p with a stable session-id,
     Opus 4.8 [1m], acceptEdits; auto-rotate UUID once on 'already in use'."""
     try:
@@ -207,13 +209,16 @@ def invoke_claude(prompt, session_id, state=None, _retry_count=0):
     except Exception:
         pass
     # --- point Langston at the review branch on GitHub; he reads off it, no checkout ---
-    _ref = resolve_review_ref()
-    if _ref:
-        log("review ref resolved to %s" % _ref[:9])
-        prompt = (REVIEW_SOURCE_NOTE % {"ref": _ref}) + prompt
-    else:
-        log("REVIEW REF RESOLVE FAILED")
-        prompt = REVIEW_SOURCE_FAIL_NOTE + prompt
+    # ONCE per message: the UUID-rotation retry below passes the already-noted prompt with
+    # _noted=True, so it neither re-resolves (a second, possibly different sha) nor adds a second note.
+    if not _noted:
+        _ref = resolve_review_ref()
+        if _ref:
+            log("review ref resolved to %s" % _ref[:9])
+            prompt = (REVIEW_SOURCE_NOTE % {"ref": _ref}) + prompt
+        else:
+            log("REVIEW REF RESOLVE FAILED")
+            prompt = REVIEW_SOURCE_FAIL_NOTE + prompt
 
     env = os.environ.copy()
     env["CLAUDE_CODE_OAUTH_TOKEN"] = OAUTH_TOKEN
@@ -238,7 +243,7 @@ def invoke_claude(prompt, session_id, state=None, _retry_count=0):
                 log(f"session UUID locked, rotating {session_id[:8]}... -> {new_uuid[:8]}...")
                 state["session_id"] = new_uuid
                 save_state(state)
-                return invoke_claude(prompt, new_uuid, state=state, _retry_count=_retry_count + 1)
+                return invoke_claude(prompt, new_uuid, state=state, _retry_count=_retry_count + 1, _noted=True)
             return f"_Langston bridge error: claude returned exit code {result.returncode}_\n\n```\n{result.stderr[:1500]}\n```"
         log(f"claude returned {len(result.stdout)} chars in {elapsed:.1f}s")
         return result.stdout.strip()

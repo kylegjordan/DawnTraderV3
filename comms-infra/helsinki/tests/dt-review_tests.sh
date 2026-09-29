@@ -8,6 +8,7 @@
 #   dt-review.baseline   comms-infra/helsinki/dt-review at ab68732d7 (the verbatim live copy)
 #   dt-review.r1         comms-infra/helsinki/dt-review at b4db96b9c (before fresh-reader round 1)
 #   dt-review.r2         comms-infra/helsinki/dt-review at b9ca76485 (before fresh-reader round 2)
+#   dt-review.r3         comms-infra/helsinki/dt-review at 764ec389b (before fresh-reader round 3)
 # and chown -R langston. Run: cd /home/langston && sudo -u langston HOME=/home/langston bash <this>.
 # Remove /tmp/dtr-test afterwards.
 # Every "CONTROL" line runs the same check against an OLDER copy and must FAIL there: a check
@@ -39,6 +40,8 @@ mk_dtr dtr_busy "$GH"                  3 "$T/src/dt-review"
 mk_dtr r1       "$GH"                 90 "$T/src/dt-review.r1"
 mk_dtr r1_fail  "$T/nonexistent.git"  90 "$T/src/dt-review.r1"
 mk_dtr r2       "$GH"                 90 "$T/src/dt-review.r2"
+mk_dtr r3       "$GH"                 90 "$T/src/dt-review.r3"
+mk_dtr r3_fail  "$T/nonexistent.git"  90 "$T/src/dt-review.r3"
 sed -e "s#^REPO=.*#REPO=$T/mirror.git#" "$T/src/dt-review.baseline" > "$T/dtr_base"; chmod +x "$T/dtr_base"
 
 run() { "$@" > "$T/o" 2> "$T/e"; RC=$?; OUT=$(cat "$T/o"); ERR=$(cat "$T/e"); }
@@ -138,9 +141,11 @@ run "$T/dtr" grep $ABSENT comms-infra
 run "$T/dtr" grep $ABSENT
 [ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "^# 0 matches .*(whole tree)" && ok "grep 0 matches (whole tree): exit 1, empty stdout" || bad grep0 "rc=$RC"
 
-# ---------- F-R6 / R9: exit 3 for git's own failure; patterns printed verbatim ----------
+# ---------- F-R6 (amended in round 3, F3-7) / R9: an invalid BRE is the CALLER's error; patterns printed verbatim ----------
 run "$T/dtr" grep 'a\{'
-[ $RC -eq 3 ] && echo "$ERR" | grep -q "git grep failed" && ok "R6: an invalid BRE -> exit 3 (git failed), nothing claimed" || bad R6 "rc=$RC"
+[ $RC -eq 2 ] && [ -z "$OUT" ] && echo "$ERR" | grep -qF "REFUSED: the pattern is not a valid BRE ('a\\{': Unmatched" && ok "R6/F3-7: an invalid BRE -> exit 2 (the caller's pattern), git's reason quoted" || bad R6 "rc=$RC ${ERR:0:160}"
+run "$T/r3" grep 'a\{'
+[ $RC -eq 3 ] && ok "F3-7 CONTROL: r3 called a pattern typo 'the mirror or git failed' (exit 3)" || bad F3-7c "rc=$RC"
 run "$T/dtr" grep 'x\cy'
 echo "$ERR" | grep -qF "grep 'x\\cy' at" && ok "R9: a backslash pattern is printed verbatim (no dash echo escape)" || bad R9 "${ERR:0:120}"
 run "$T/r1" grep 'x\cy'
@@ -154,9 +159,11 @@ run "$T/dtr" show "$PIN" no/such/file.md
 run "$T/dtr" show "$PIN" comms-infra
 [ $RC -eq 1 ] && echo "$ERR" | grep -q "is a tree, not a file" && ok "show of a directory: 'is a tree, not a file'" || bad dir "rc=$RC ${ERR:0:120}"
 run "$T/dtr_fail" show "$PIN" "$P"; DG=$(tail -n +2 "$T/o" | git hash-object --stdin)
-[ $RC -eq 0 ] && [ "$(sed -n 1p "$T/o")" = "DEGRADED: fetch failed; content is exact for $PIN (content-addressed)" ] && [ "$DG" = "$WANT" ] && ok "d: pinned read after a failed fetch -> DEGRADED + exact content" || bad d "rc=$RC"
+DL1=$(sed -n 1p "$T/o")
+case "$DL1" in "DEGRADED: fetch failed (fatal: "*"); content is exact (re-hashed) for $PIN") DOK=1 ;; *) DOK= ;; esac
+[ $RC -eq 0 ] && [ -n "$DOK" ] && [ "$DG" = "$WANT" ] && ok "d: pinned read after a failed fetch -> DEGRADED naming git's reason + exact content" || bad d "rc=$RC l1=${DL1:0:160}"
 run "$T/dtr_fail" show CLAUDE.md
-[ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "^REFUSED: fetch failed; mirror head is $(cur) from .* — no head read served" && echo "$ERR" | grep -q "^dt-review: reason: " && ok "d: head read after a failed fetch refused, with git's reason" || bad d2 "rc=$RC ${ERR:0:160}"
+[ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "^REFUSED: fetch failed; mirror head is $(cur), fetched .* — no head read served" && echo "$ERR" | grep -q "^dt-review: reason: " && ok "d: head read after a failed fetch refused, with git's reason" || bad d2 "rc=$RC ${ERR:0:160}"
 run "$T/dtr_fail" show 0123456789abcdef0123456789abcdef01234567 CLAUDE.md
 echo "$ERR" | grep -q "last fetch FAILED (" && ok "d: not-in-mirror names 'last fetch FAILED (<reason>)'" || bad d3 "${ERR:0:160}"
 ( flock "$T/mirror.git/dt-fetch.lock" sleep 12 ) & sleep 1
@@ -237,5 +244,84 @@ $M config --unset grep.patternType
 [ $NB -eq 1 ] && ok "F2-11 CONTROL: r2 silently switched to ERE and found nothing" || bad F2-11c "rc=$NB"
 # show re-hash, positive: a normal pinned read still serves the exact blob.
 run "$T/dtr" show "$PIN" "$P"; [ $RC -eq 0 ] && [ "$(git hash-object --stdin < "$T/o")" = "$WANT" ] && ok "F2-3 positive: a clean pinned read still serves the exact blob" || bad F2-3p "rc=$RC"
+
+# ================= round 3 (fresh-reader round 3 on 764ec389b); CONTROLS run the r3 copy =================
+# F3-1: an empty middle segment is the caller's spelling, refused before the fetch.
+rm -f "$T/mirror.git/DT_REVIEW_FETCH_OK"
+run "$T/dtr" show comms-infra//discord/deploy.sh
+[ $RC -eq 2 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "has an empty segment" && [ ! -e "$T/mirror.git/DT_REVIEW_FETCH_OK" ] && ok "F3-1: 'a//b' -> exit 2 before any fetch" || bad F3-1 "rc=$RC ${ERR:0:160}"
+run "$T/r3" show comms-infra//discord/deploy.sh
+[ $RC -eq 3 ] && ok "F3-1 CONTROL: r3 fetched, then called the spelling 'the mirror or git failed' (exit 3)" || bad F3-1c "rc=$RC ${ERR:0:120}"
+
+# A test commit with awkward names: an empty file, names needing C-quoting, a ':' component.
+EB=$(: | $M hash-object -w --stdin)
+HB=$(printf 'hello from a test file\n' | $M hash-object -w --stdin)
+SUB=$(printf '100644 blob %s\t:colon.txt\0' "$HB" | $M mktree -z)
+# One printf per entry: in a printf FORMAT, "\0100644" is the octal escape \0100 ('@'), not NUL.
+QT=$( { printf '100644 blob %s\t%s\0' "$EB" empty.txt; printf '100644 blob %s\t%s\0' "$HB" 'q"uote.txt'
+        printf '100644 blob %s\t%s\0' "$HB" 'back\slash.txt'; printf '040000 tree %s\t%s\0' "$SUB" d
+        printf '100644 blob %s\t%s\0' "$($M rev-parse "$(cur):CLAUDE.md")" CLAUDE.md; } | $M mktree -z)
+[ "$($M ls-tree --name-only -z "$QT" | tr '\0' '\n' | grep -c .)" -eq 5 ] && ok "F3 harness: the awkward-names tree has its 5 entries" || bad F3-pre "$($M ls-tree "$QT")"
+QC=$($M commit-tree -p "$(cur)" -m "round-3 awkward names (test mirror only)" "$QT")
+
+# F3-2a: a magic pathspec that matches nothing must refuse, not report a measured zero.
+run "$T/dtr" grep "@$QC" hello ':(glob)nosuch/**'
+[ $RC -eq 1 ] && [ -z "$OUT" ] && echo "$ERR" | grep -q "^REFUSED: path ':(glob)nosuch/\*\*' matches no file" && ok "F3-2a: a magic pathspec matching nothing -> REFUSED" || bad F3-2a "rc=$RC ${ERR:0:160}"
+run "$T/r3" grep "@$QC" hello ':(glob)nosuch/**'
+echo "$ERR" | grep -q "^# 0 matches" && ok "F3-2a CONTROL: r3 reported '# 0 matches' over an empty population" || bad F3-2ac "rc=$RC ${ERR:0:160}"
+# F3-2b: a glob whose only match is an EMPTY file is a real, measured zero.
+run "$T/dtr" grep "@$QC" hello 'empt*.txt'
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^# 0 matches for 'hello' at $QC" && ok "F3-2b: a glob matching only an empty file -> '# 0 matches' (a measured zero)" || bad F3-2b "rc=$RC ${ERR:0:160}"
+run "$T/r3" grep "@$QC" hello 'empt*.txt'
+echo "$ERR" | grep -q "matches no file" && ok "F3-2b CONTROL: r3 said the path matches no file while empty.txt exists" || bad F3-2bc "rc=$RC ${ERR:0:160}"
+# F3-2c: a negative magic pathspec is proven, and still searches.
+run "$T/dtr" grep "@$QC" 'hello from a test' ':!CLAUDE.md'
+[ $RC -eq 0 ] && [ "$(tail -n +2 "$T/o" | grep -c .)" -eq 3 ] && ok "F3-2c: ':!CLAUDE.md' is proven and searched (3 hits below the OFF-BRANCH line)" || bad F3-2c "rc=$RC out=${OUT:0:160}"
+
+# F3-3: names that ls-tree C-quotes, and a ':' component below the root.
+for NM in 'q"uote.txt' 'back\slash.txt' 'd/:colon.txt'; do
+  run "$T/dtr" show "$QC" "$NM"
+  L1=$(sed -n 1p "$T/o"); REST=$(tail -n +2 "$T/o" | git hash-object --stdin)
+  [ $RC -eq 0 ] && [ "${L1#OFF-BRANCH:}" != "$L1" ] && [ "$REST" = "$HB" ] && ok "F3-3: show '$NM' -> the exact blob" || bad F3-3 "'$NM' rc=$RC ${ERR:0:160}"
+  run "$T/r3" show "$QC" "$NM"
+  [ $RC -eq 1 ] && echo "$ERR" | grep -q "is not in the tree" && ok "F3-3 CONTROL: r3 said '$NM' is not in the tree" || bad F3-3c "'$NM' rc=$RC ${ERR:0:120}"
+done
+
+# F3-4: a correctly stored commit with an fsck oddity (bad timezone) is served, not called tampered.
+TZC=$(printf 'tree %s\nauthor t <t@i> 1 +0000\ncommitter t <t@i> 1 -12345\n\nbad timezone\n' "$($M rev-parse "$(cur)^{tree}")" | $M hash-object -t commit --literally -w --stdin)
+run "$T/dtr" show "$TZC" CLAUDE.md
+REST=$(tail -n +2 "$T/o" | git hash-object --stdin)
+[ $RC -eq 0 ] && [ "$REST" = "$($M rev-parse "$(cur):CLAUDE.md")" ] && ok "F3-4: a stored commit with a bad timezone re-hashes and serves the exact blob" || bad F3-4 "rc=$RC ${ERR:0:200}"
+run "$T/r3" show "$TZC" CLAUDE.md
+[ $RC -eq 3 ] && echo "$ERR" | grep -q "re-hashes to" && ok "F3-4 CONTROL: r3 called a well-stored commit 'NOT the committed content'" || bad F3-4c "rc=$RC ${ERR:0:160}"
+
+# F3-6: under DEGRADED, grep and ls do not claim exactness; the failed variant names its reason.
+run "$T/dtr_fail" grep "@$PIN" resolve_review_ref comms-infra
+L1=$(sed -n 1p "$T/o")
+case "$L1" in "DEGRADED: fetch failed (fatal: "*"); content is as stored (not re-hashed) for $PIN") G6=1 ;; *) G6= ;; esac
+[ $RC -eq 0 ] && [ -n "$G6" ] && ok "F3-6: a degraded grep says 'as stored (not re-hashed)' and names git's reason" || bad F3-6 "rc=$RC l1=${L1:0:160}"
+run "$T/r3_fail" grep "@$PIN" resolve_review_ref comms-infra
+sed -n 1p "$T/o" | grep -q "content is exact" && ok "F3-6 CONTROL: r3 claimed 'content is exact' for an unverified grep" || bad F3-6c "$(sed -n 1p "$T/o" | cut -c1-120)"
+
+# F3-8: a stamp with a leading zero is unreadable, never octal arithmetic.
+printf '0999 x\n' > "$T/mirror.git/DT_REVIEW_FETCH_OK"; rm -f "$T/mirror.git/DT_SYNC_PASS"
+run "$T/dtr_fail" show CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "stamp unreadable: DT_REVIEW_FETCH_OK" && ok "F3-8: stamp '0999' -> 'stamp unreadable', exit 1" || bad F3-8 "rc=$RC ${ERR:0:200}"
+run "$T/r3_fail" show CLAUDE.md
+echo "$ERR" | grep -q "Illegal number: 0999" && echo "$ERR" | grep -q "from  —" && ok "F3-8 CONTROL: r3 did octal arithmetic on the stamp and printed an empty age (rc=$RC)" || bad F3-8c "rc=$RC ${ERR:0:160}"
+"$T/dtr" ref > "$T/o" 2>&1   # a good fetch rewrites the stamp
+
+# F3-9: a SHORT pin whose prefix only a blob shares is "no such commit", with the freshness data.
+SP=$(printf '%s' "$WANT" | cut -c1-12)
+run "$T/dtr" show "$SP" CLAUDE.md
+[ $RC -eq 1 ] && echo "$ERR" | grep -q "^REFUSED: no commit with prefix $SP is in the mirror (a blob shares the prefix) (migration/aws-supabase head " && ok "F3-9: a short pin shared only by a blob -> exit 1 with freshness" || bad F3-9 "rc=$RC ${ERR:0:200}"
+run "$T/r3" show "$SP" CLAUDE.md
+[ $RC -eq 2 ] && echo "$ERR" | grep -q "names a blob" && ok "F3-9 CONTROL: r3 told the caller it was their error (exit 2)" || bad F3-9c "rc=$RC ${ERR:0:160}"
+# F3-9b: a tag whose target is missing is a broken mirror (exit 3), not a caller error.
+BT=$(printf 'object 2222222222222222222222222222222222222222\ntype commit\ntag broken\ntagger t <t@i> 1 +0000\n\nx\n' | $M hash-object -t tag --literally -w --stdin)
+run "$T/dtr" show "$BT" CLAUDE.md
+[ $RC -eq 3 ] && ok "F3-9b: a tag with a missing target -> exit 3" || bad F3-9b "rc=$RC ${ERR:0:160}"
+run "$T/r3" show "$BT" CLAUDE.md
+[ $RC -eq 2 ] && ok "F3-9b CONTROL: r3 called it the caller's error (exit 2)" || bad F3-9bc "rc=$RC ${ERR:0:120}"
 
 echo "DTR SUMMARY: $PASSN pass, $FAILN fail"
