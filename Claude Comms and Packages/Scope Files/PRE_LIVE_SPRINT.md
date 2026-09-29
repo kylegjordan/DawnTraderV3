@@ -2,7 +2,7 @@
 
 **Kyle's rule:** everything needed to get paper to the point where the mechanics are sound and working as intended, the thresholds / gates / regimes / strategies / scores are tuned, the prices are right, paper tells the truth, we capture the data we mean to learn from, and paper trades profitably and consistently — plus the live-mode fixes, mixed into the same push. **Everything else goes after live.** No phase names: one list, prioritised next.
 
-**In the sprint: 198** · **After live: 208** · **Running now (observation windows): 7** · **Parked by Kyle: 7** · awaiting owner confirmation: see the draft's UNCONFIRMED section.
+**In the sprint: 198** · **After live: 217** · **Running now (observation windows): 7** · **Parked by Kyle: 7** · awaiting owner confirmation: see the draft's UNCONFIRMED section.
 
 > ⚠️ **Category is not schedule (Langston S1):** the counts below say WHY an item is in the sprint; WHEN it runs is THE WORKING ORDER further down. Plan from the order, not from these counts.
 
@@ -22,7 +22,7 @@
 
 Two tracks run side by side and meet at go-live. **Track A** is the trading system: foundations first (the things that corrupt everything downstream), then the mechanics stage by stage with the learning-data work alongside, then tuning on the clean data, then the evidence. **Track B** is live-mode readiness: safety work that can start now, risk controls and restart safety, the live engine (after your production-environment decision), and go-live preparation. **Wave 0** is this week. Within a wave the numbers are the working order; 'after X' means it waits for X.
 
-### Wave 0 — NOW — urgent, cheap, or already in flight. GATE: staging is held at bc199185e for the 8a-P4c window (to 2026-09-30 00:00Z); the held deploy is not before 2026-10-02 20:10Z (GOVERNANCE_EXCEPTIONS.md:28) - the deploy-drift alerts clear on that deploy
+### Wave 0 — NOW — urgent, cheap, or already in flight. GATE: staging is held at bc199185e for the 8a-P4c window (to 2026-09-30 00:00Z); the held deploy is not before 2026-10-02 20:10Z (GOVERNANCE_EXCEPTIONS.md, the 2026-09-29T15:10Z deploy-hold row) - the deploy-drift alerts clear on that deploy
 
 1. **Keep the sprint-to-live plan current: the checker requires a batch close to touch its own plan line, plus a weekly census alert; CLAUDE.md points at the plan** (CC-A) · *live readiness* — keeps this plan current: checker close-diff rule + weekly census alert, then the CLAUDE.md pointer swap (Langston ruling, OLD Claude)
 2. **B-XSTOCK-BID-TRIGGER-RELAND** (CC-C) · *mechanics* — midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid
@@ -260,7 +260,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - **B-INSTRUMENTS-OVER-RULES** (CC-A) — the code-search-tool usage measure runs 2026-09-18 → 10-02 (pre-registered)
 - **8a-P4c increment 1 — the VTS xStock price instrument** (CC-C) — deployed bc199185e; window to 2026-09-30T00:00Z; pre-registered rules A-D then decide increments 2-3
 
-## After live — 215
+## After live — 217
 
 ### AMR and machine learning — 31
 
@@ -305,7 +305,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
-### Crew, reviewer, governance and alert tooling — 67
+### Crew, reviewer, governance and alert tooling — 69
 
 - B-RULES-CHANGE-CLASS (CC-A) — the `rules_change` change-class: a five-field case file pushed alone and ruled on BEFORE a rules edit lands; its own definition is its first case (Langston 2026-08-26, restored 2026-09-29, #744). ⛔ BEFORE B-GATE-GUARD (its line, under Other, carries the dependency)
 - 2.4b B-ALERT-QUEUE-INTEGRITY (CC-B) — #647 (no claim or lock discipline on the alert file; the watchdog appends outside the lock; rewrites drop malformed rows) + #1074 (open-batch backstop alerts have no resolve edge) + #654 (the checker ignores open-retired rows and treats any COMPLETION filename as a close) — alert tooling (added 2026-09-29)
