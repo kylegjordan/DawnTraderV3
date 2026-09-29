@@ -259,9 +259,9 @@ const SHAPES = [
   {
     id: 'truncation-is-not-population',
     // ⛔⛔ `tail` IS DELIBERATELY NOT IN THIS SHAPE, AND THE REASON IS A PERMANENT FLOOR RATHER
-    // THAN A JUDGEMENT CALL. Governance MANDATES a tail on every turn — CLAUDE.md §10.5 requires
-    // `tail -50 …/system-alerts.jsonl` BEFORE RESPONDING TO ANY USER MESSAGE, and MEMORY.md item
-    // 4 requires `tail -30 …/cc-discord-inbox.jsonl` at session start. Both matched, both fired,
+    // THAN A JUDGEMENT CALL. Governance MANDATED a tail on every turn — CLAUDE.md §10.5 required
+    // `tail -50 …/system-alerts.jsonl` until 2026-09-29 (it now requires a whole-file read, #980),
+    // and MEMORY.md item 4 still requires `tail -30 …/cc-discord-inbox.jsonl` at session start. Both matched, both fired,
     // on a shape that CAN NEVER BECOME A CLAIM. ⇒ unlike batch-session contamination this never
     // washes out: it scales with turn count, in every session, forever. A guard that fires on a
     // command the rules oblige you to run every turn is a banner-blindness generator by

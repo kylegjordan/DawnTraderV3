@@ -15,13 +15,18 @@ import { execSync } from 'node:child_process';
 // instruction differently, so matching one wording silently excludes the other.
 const MECHANISM   = 'what other states of the world are consistent';
 const TERMINATION = 'it is a loop, not a one-shot';
+// Langston 2026-08-28T07:15Z: the loop's TERMINATION CONDITION is an object round, not the heading.
+// The heading alone passed while bug-investigation lacked his corrections (B-GOV-REPORTING r6).
+const OBJECT_ROUND = 'termination requires an *object* round';
 
 // Scope and completion documents QUOTE the mechanism while RECORDING a change to
 // it. They are records, not instructions. Holding them to the invariant makes
 // the check fire on correct work, which is how a check gets switched off.
 const isInstruction = (f) =>
   /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(f) ||
-  /^1-system-manual\/_pending-skills\/.+\.md$/.test(f);
+  /^1-system-manual\/_pending-skills\/.+\.md$/.test(f) ||
+  // Langston 2026-08-28T07:38Z: the two always-loaded rule files are instruction files too.
+  f === 'CLAUDE.md' || f === 'CONDUCT.md';
 
 const tracked = execSync('git ls-files "*.md"', { encoding: 'utf8' })
   .split('\n').filter(Boolean).filter(isInstruction);
@@ -30,9 +35,11 @@ const has = (f, s) => {
   try { return readFileSync(f, 'utf8').toLowerCase().includes(s); } catch { return false; }
 };
 const mech = tracked.filter((f) => has(f, MECHANISM));
-const term = tracked.filter((f) => has(f, TERMINATION));
+const term = tracked.filter((f) => has(f, TERMINATION) && has(f, OBJECT_ROUND));
 const missing = mech.filter((f) => !term.includes(f));
-const orphan  = term.filter((f) => !mech.includes(f));
+// Orphans are judged on EITHER marker (a reader found the AND weakened this: a loop heading with no mechanism went unreported).
+const anyTerm = tracked.filter((f) => has(f, TERMINATION) || has(f, OBJECT_ROUND));
+const orphan  = anyTerm.filter((f) => !mech.includes(f));
 
 console.log(`instruction files: ${tracked.length}`);
 console.log(`carrying mechanism: ${mech.length}`);

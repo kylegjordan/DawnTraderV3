@@ -5,16 +5,15 @@ description: STEP 11 ONLY of the DawnTrader batch workflow - the Completion Repo
 
 # STEP 11 — COMPLETION REPORT
 
-**Ends when:** Langston confirms and **Kyle acknowledges**. Only then is the batch CLOSED.
+**Ends when:** Langston confirms. **Then the batch is CLOSED — Kyle does NOT acknowledge a close** (Kyle, 2026-09-02: never block on him for an ack; move the card, post the block).
 
 ## ⛔ FIRST: DOES THIS BATCH ALREADY HAVE A **PROGRESS REPORT**? THEN YOU ARE *CONVERTING*, NOT WRITING (Kyle directive 2026-08-26)
 
 **If the batch was parked on an observation window, a soak, or evidence that had to accumulate, it already has `<BATCH-ID>_PROGRESS_REPORT.md`** — see `workflow-10-governance` for when one is written.
 
 ⛔ **DO NOT WRITE A FRESH REPORT FROM MEMORY. CONVERT THAT FILE.** Rename it to `<BATCH-ID>_COMPLETION_REPORT.md` and finish it:
-1. **(a) WHAT DATA CAME IN.** The observation’s actual result, set against the criterion the progress report **PRE-REGISTERED** — **quote the criterion as written, then the outcome.**
+1. **(a) WHAT DATA CAME IN.** The observation’s actual result, set against the criterion the progress report **PRE-REGISTERED** — **quote the criterion as written, then the outcome.** ★ **A criterion chosen after seeing the window can always be made to pass. That is exactly what pre-registration prevents, and rewriting it now destroys the protection.**
 2. **(b) WHAT DECISION OR ACTION WAS TAKEN ON IT, and by whom.** ⛔ **A report carrying (a) and not (b) has NOT closed the loop.**
-   *(Split into two sub-items 2026-08-27, Langston condition 2: the merged version left "quote the criterion as written" trailing behind (b), reading as though you quote a criterion for the DECISION — and its emphasis markers were unbalanced, rendering bold from a mid-clause comma, in the file whose subject is legibility.)* — quote the criterion as written, then the outcome. ★ **A criterion chosen after seeing the window can always be made to pass. That is exactly what pre-registration prevents, and rewriting it now destroys the protection.**
 3. Complete the objectives table and the governance-files-changed list.
    ⛔⛔ **THE GOVERNANCE-FILES-CHANGED LIST IS *COPIED FROM STEP 10's TIER LEDGER*, NEVER WRITTEN FROM WHAT YOU REMEMBER DOING (Kyle directive 2026-08-28).** ★ **Writing it from recollection is half of the skipped-tier defect: the session that skipped a tier also writes the report, so the checklist and the report are never compared and the omission is invisible in both.** ⇒ **open the step-10 table and transcribe it, `N/A` rows included.** ⚠️ **If there is no filled table, Step 10 is not finished — go back and fill it rather than reconstructing the list here.**
 4. ⚠️ **If the observation FAILED its criterion, the conversion RECORDS THE FAILURE — it does not become a delay.** Either the report closes the batch with a negative result and a named follow-up, or the batch reopens at the step that needs redoing.
@@ -28,7 +27,7 @@ Save to `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md
 - **Scope objectives checklist — YES / NO / PARTIAL, each with its evidence.**
 - **The list of governance files ACTUALLY changed** (including Langston's MEMORY). **If SIM or the System Manual were applicable and are absent from that list, the close is rejected.**
 - **CI run ID + green status, per-job.**
-- **Any scope item left open — stated at the TOP, not buried**, with its owner, dated home, closing condition and failure condition.
+- **Any scope item left open — stated at the TOP, not buried**, with its owner, its PLACED home (a position in the active plan — never a date, `CLAUDE.md` §9.4), closing condition and failure condition.
 - **New findings**: what was turned up that was not in scope, and the investigation that settled it. **If it turned out NOT to be a defect, leave it out entirely.**
 - **Honest residual.** What this batch did not establish.
 
@@ -85,10 +84,10 @@ Report to Kyle in the `CONDUCT.md` §6 format, move the board card, and **update
 ⚠️ **TWO WAYS THE LOOP FAILS:**
 1. ⛔ **EROSION — AND *SHRINKAGE IS NOT THE SIGNAL* (Langston corrected my diagnostic, 2026-08-28).** ⚠️ **#675 narrowed hard under his own retraction and the disposition SURVIVED on a different mechanism — that was CORRECT narrowing.** ★ **THE DISCRIMINATOR: did each round replace a checkable assertion with a NARROWER CHECKABLE ONE, or with a HEDGE?** ⇒ **apply rule 29 to the FINAL text — object, population, and something that would falsify it. If those three survive, the narrowing was healthy however much it shrank. If not, withdraw under §9.4 disposition 5.**
 2. ⛔ **A LOOP THAT WILL NOT CLOSE — CAP AT THREE ROUNDS.** ⛔ **The cap outcome is NOT NEUTRAL: send the FULL ROUND RECORD, because the unresolved disagreement is the first thing Langston rules on, before the substance.** **Iterating to agreement selects for persistence, not truth.**
-**Record every round:** `REVIEWER r<n>: <object|claim-only> · <verdict> · <what you changed>`. ★ **The round COUNT is the useful number — a finding that took three rounds and one that took none are not equally trustworthy.**
+**Record every round:** `REVIEWER r<n>: <object|claim-only> · <verdict> · <what you changed>`. ★ **The round record is the MECHANISM's own denominator — how often the loop runs and how often it closes — and never EVIDENCE that a finding is right.**
 
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
-**Blocked on = Langston** for his sign-off → then **Blocked on = Kyle** for acknowledgement → then move to **`Complete`**. **Not before Kyle acknowledges.**
+**Blocked on = Langston** for his sign-off → then move to **`Complete`** (no Kyle acknowledgement, 2026-09-02).
 ★ **LANGSTON SETS THE `Review` FIELD; THE SESSION MOVES THE CARD.** *(Kyle’s wording, 2026-08-24.)* ⛔ **His approval is NOT the move** — he sets `Review = Approved`, then YOU move it and update `Blocked on`. If approval also moved the card the board would freeze every time he is mid-review, at FOUR gates per batch.
 ⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
 
@@ -97,6 +96,6 @@ Report to Kyle in the `CONDUCT.md` §6 format, move the board card, and **update
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
 > This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
 
-11. **Completion Report** — Scope objectives checklist with YES / NO / PARTIAL + evidence. List ACTUALLY-edited governance files (including Langston's MEMORY per 10.b). Save to `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md`. Langston reviews + confirms. Batch CLOSED only after Kyle's acknowledgment.
+11. **Completion Report** — Scope objectives checklist with YES / NO / PARTIAL + evidence. List ACTUALLY-edited governance files (including Langston's MEMORY per 10.b). Save to `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md`. Langston reviews + confirms. Batch CLOSED only after Kyle's acknowledgment. ⛔ **SUPERSEDED 2026-09-02 (Kyle): a close needs no acknowledgement from him — see the top of this skill.**
 
 ---

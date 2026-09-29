@@ -132,7 +132,12 @@ function main() {
 
   const [, due, total] = countLine.split('|');
   note({ decided: true, due: Number(due), total_ids: Number(total), ms });
-  if (!alerts.length) return; // genuine "no alerts" — the COUNT line proves the filter ran.
+  // Genuine "no alerts" — the COUNT line proves the filter ran. It is SAID, not left silent
+  // (B-GOV-REPORTING r6): §10.5 treats hook silence as "did not run", so zero must be visible.
+  if (!alerts.length) {
+    emit(`§10.5: 0 due alerts (whole file, ${total} ids; ${ms}ms) — the filter ran.`);
+    return;
+  }
 
   const shown = alerts.slice(0, MAX_INJECT);
   const body = shown.map((l) => {

@@ -344,7 +344,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-GOV-2 (—) — checker always-on gate
 - B-GOV-4 (CC-C) — checker entry test
 - B-GOV-INTEGRITY-0 (CC-A) — reviewer frozen rulebook
-- B-GOV-REPORTING (CC-A) — Langston memory size
+- B-GOV-LEDGER-GRADE (#1099, CC-A) — the checker grades the commit-message ledger's presence and completeness; `roadmap` probably belongs in `sub_batch`; a report that opens NOT CLOSED should not count as a close; and a conditional doc is never graded today. ⚠️ RE-PLACED here from the GOV-ARC list Langston named on 2026-08-29 (that plan is history) — put to him at B-GOV-REPORTING's gate.
 - B-HEARTBEAT-RESCOPE (CC-A) — hourly heartbeat task purpose — crew tooling
 - B-HOOK-ESTATE-VERSION (CC-C) — clones run different versions of one hook — crew tooling
 - B-LANGSTON-CONTEXT remaining pieces (Infra Claude) — the reviewer's memory composer: P-2 retrofit + #1055, P-1b, and the privacy-check positive control
@@ -442,7 +442,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-EXIT-LINE-IDENTITY (CC-C) — trade id and class on the exit log line, so a close is read by identity
 - B-EXIT-PATH-TYPING (CC-A) — the exit path is untyped
 - B-EXIT-POLICY-EVALUATOR (CC-B) — our expectancy model cannot rank exit alternatives; needs B-OUTCOME-CORPUS-CAPTURE first (not a defect — a missing capability)
-- B-GATE-GUARD (CC-A) — issue-number blocks
+- B-GATE-GUARD (CC-A) — issue-number blocks; ⛔ AFTER the `rules_change` class lands (Langston 2026-08-26, recorded on #744), and it carries the `SCOPE:` trailer on governed-artifact pushes
 - B-GATE-WILDCARD-REFUSE (CC-B) — code-side guard behind a migration invariant that already refuses the bad row
 - B-GDRIVE-UNMOUNT (Infra Claude) — placed 2026-08-28, not parked; owner Infra Claude; absorbs #921
 - B-GOV-INTEGRITY-3 (CC-A) — message id spans
