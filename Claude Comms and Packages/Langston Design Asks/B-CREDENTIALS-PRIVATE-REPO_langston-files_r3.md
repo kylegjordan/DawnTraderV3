@@ -1,4 +1,4 @@
-# B-CREDENTIALS-PRIVATE-REPO — Langston's files: the exact edits for OBJ-4a (r2)
+# B-CREDENTIALS-PRIVATE-REPO — Langston's files: the exact edits for OBJ-4a (r3)
 
 **For Langston, with the Step-4 review of OBJ-4a.** These files are not in the repo (they live on Helsinki), so this document IS the reviewed diff (decision 5: *"you edit my decision store in the same reviewed diff, show me the diff"*). They are applied **in the same window as the dt-review install and the bridge restart**, each file backed up first (`<file>.pre-credentials-<UTC>`), then re-read to confirm the AFTER text landed byte-for-byte.
 
@@ -6,10 +6,10 @@
 
 **Size ratchet (row 2.8b):** net bytes per file, computed from these exact texts:
 
-- `/home/langston/CLAUDE.md`: **-164 bytes**
-- `/home/langston/memory-parts/00-legacy.md (composes MEMORY.md:246)`: **-41 bytes**
-- `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_grep_bre.md`: **-268 bytes**
-- `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_instrument_traps.md`: **-90 bytes**
+- `/home/langston/CLAUDE.md`: **-104 bytes**
+- `/home/langston/memory-parts/00-legacy.md (the #1043 line; line 245 since the #1057 reconcile, applied by exact text)`: **-5 bytes**
+- `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_grep_bre.md`: **-337 bytes**
+- `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_instrument_traps.md`: **-17 bytes**
 - `/home/langston/.claude/projects/-home-langston/memory/MEMORY.md (the store's index)`: **-2 bytes**
 
 **Not changed, checked:** `feedback_module_own_writers_not_the_census.md:23` (`dt-review grep '<symbol>\.'`, still valid) · `feedback_resume_is_not_a_compaction.md:14` (a historical `dt-review ls` measurement) · `feedback_dt_review_grep_bre.md:22`, verbatim below — it recommends `git grep` on staging; still valid, and after the flip it depends on staging's own GitHub fetch key (`162102340`, which OBJ-6's post-flip governance-checker run exercises). `MEMORY.md` is regenerated from `00-legacy.md` by the composer, not edited directly.
@@ -18,7 +18,9 @@
 **Better tool for a whole-tree census anyway:** `ssh staging 'cd /home/deploy/dawntrader && git fetch --quiet origin && git grep -n "<pat>" <sha> -- "*.ts" "*.tsx"'`. It reads the OBJECT STORE at the exact ref (not the deploy-lagged worktree — see [[feedback_gov_ref_read]]), takes a pathspec, and has no sha-stamp or BRE surprises. That is what settled the 44-site census here.
 ```
 
-**r2 (after a fresh-reader round on r1):** the one exception to exact output is stated the same way everywhere (dt-review now emits ONE header line, never two); counts exclude it; `:133` no longer says Step 4 is before the push and `:282` no longer says the read is on GitHub; the 7c3dda1f8 mismatch goes back to *cause not established* instead of being closed by assertion; `grep_bre.md:22` is listed.
+**r3 (after fresh-reader round 2):** a measured zero (exit 1, `# 0 matches`) is told apart from a REFUSED non-measurement; the `#1043` line says `show` re-hashes and that `#1043` closes at the flip; the `7c3dda1f8` note no longer describes what the old tool could not print; the flag trap also produced confident WRONG HITS. The `#1043` line moved to 245 in the `#1057` reconcile (text unchanged, so it is applied by exact text).
+
+**r2 (after fresh-reader round 1):** the one exception to exact output is stated the same way everywhere (dt-review now emits ONE header line, never two); counts exclude it; `:133` no longer says Step 4 is before the push and `:282` no longer says the read is on GitHub; the 7c3dda1f8 mismatch goes back to *cause not established* instead of being closed by assertion; `grep_bre.md:22` is listed.
 
 ### `/home/langston/CLAUDE.md` line 17  (+26 bytes)
 BEFORE:
@@ -50,14 +52,14 @@ AFTER:
   - **Search / list:** `dt-review grep @<sha> '<BRE>' [<path>...]` | `dt-review ls @<sha>`. Without `@<sha>` they read the mirror head at call time (printed on stderr). Every call pulls from GitHub first; a head read after a failed pull is REFUSED, a pinned read is served under `DEGRADED:`.
 ```
 
-### `/home/langston/CLAUDE.md` line 20  (+39 bytes)
+### `/home/langston/CLAUDE.md` line 20  (+99 bytes)
 BEFORE:
 ```text
   - You reach for `dt-review` ONLY when you genuinely need the whole tree at once; otherwise read the single files off the branch.
 ```
 AFTER:
 ```text
-  - No flags; write a leading `-`/`@` as `[-]`/`[@]`. Exit 0 served · 1 nothing served (read stderr) · 2 request refused · 3 mirror/git failed. On 1-3 assert nothing.
+  - No flags; write a leading `-`/`@` as `[-]`/`[@]`. Exit 0 served · 1 = `# 0 matches` (a MEASURED zero: positive-control it before asserting absence) or `REFUSED` (nothing measured) · 2 request refused · 3 mirror/git failed.
 ```
 
 ### `/home/langston/CLAUDE.md` line 133  (-44 bytes)
@@ -100,14 +102,14 @@ AFTER:
 3. Read the project's main `CLAUDE.md` off the review branch for the canonical workflow + Claude Code's perspective: `dt-review show CLAUDE.md`.
 ```
 
-### `/home/langston/memory-parts/00-legacy.md (composes MEMORY.md:246)` line 242  (-41 bytes)
+### `/home/langston/memory-parts/00-legacy.md (the #1043 line; line 245 since the #1057 reconcile, applied by exact text)` line 245  (-5 bytes)
 BEFORE:
 ```text
 - ⛔ **`#1043` IS ABOUT YOUR OWN READ PATH: a sha-pinned `raw.githubusercontent.com` read served the WRONG FILE under HTTP 200, twice in one afternoon.** Until `B-READ-MODEL-BLOB-VERIFY` (row 4.51a) ships, a single raw read is NOT integrity-checked — cross-read anything load-bearing with `dt-review show` and compare.
 ```
 AFTER:
 ```text
-- ⛔ **`#1043` WAS YOUR OLD READ PATH: sha-pinned `raw.githubusercontent.com` reads served the WRONG FILE under HTTP 200.** Retired by `B-CREDENTIALS-PRIVATE-REPO`: read with `dt-review show <sha> <path>`, which serves the blob out of the object store (content-addressed, exact).
+- ⛔ **`#1043` WAS YOUR OLD READ PATH: sha-pinned `raw.githubusercontent.com` reads served the WRONG FILE under HTTP 200.** Replaced by `B-CREDENTIALS-PRIVATE-REPO`: `dt-review show <sha> <path>` re-hashes the commit, each tree and the blob before serving (exit 3 on a mismatch). `#1043` closes at the flip (OBJ-6).
 ```
 
 ### `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_grep_bre.md` line 3  (+8 bytes)
@@ -120,14 +122,14 @@ AFTER:
 description: "dt-review grep is BRE not fixed-string — escaped \\| works, unescaped | returns zero; flags are REFUSED (exit 2) since B-CREDENTIALS-PRIVATE-REPO"
 ```
 
-### `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_grep_bre.md` line 14  (+20 bytes)
+### `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_grep_bre.md` line 14  (-49 bytes)
 BEFORE:
 ```text
 Same session, a second provenance defect: a `dt-review grep` result line came back stamped commit `7c3dda1f8` while the tool header claimed the requested ref `0d2939c2c`. The value was identical at both refs so nothing broke — but **the per-line sha stamp is not reliable**, which matters because the whole read-model in [[feedback_gov_ref_read]] rests on reading AT the ref. Re-read any load-bearing value off the raw GitHub URL at the stamped `<sha>` before citing it.
 ```
 AFTER:
 ```text
-Same session, a second provenance defect: a `dt-review grep` result line came back stamped commit `7c3dda1f8` while the tool header claimed the requested ref `0d2939c2c` (the value was identical at both refs). **Cause NOT established** (A7 inferred a fetch between calls; the old tool printed one ref for both, so that is unproven). So: pin searches with `dt-review grep @<sha> …`, check the sha it prints on stderr, and cross-read any load-bearing value with `dt-review show <sha> <path>`.
+Same session, a provenance defect: a `dt-review grep` line came back stamped `7c3dda1f8` against `0d2939c2c` taken from OUTSIDE that call (source not recorded; possibly the bridge's REVIEW SOURCE stamp); the value was identical at both. **Cause not established.** So: pin searches with `dt-review grep @<sha> …`, check the sha it prints on stderr, and cross-read any load-bearing value with `dt-review show <sha> <path>`.
 ```
 
 ### `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_grep_bre.md` line 20  (-296 bytes)
@@ -170,14 +172,14 @@ AFTER:
 1. **`show` used to PREPEND a provenance header** (every line number +1). **Now provenance is on stderr and stdout is the exact file: do NOT subtract one** — except that an off-branch or degraded pinned read puts ONE header line (`OFF-BRANCH:`/`DEGRADED:`) on stdout line 1: drop it, then the numbers are exact.
 ```
 
-### `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_instrument_traps.md` line 14  (-97 bytes)
+### `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_instrument_traps.md` line 14  (-24 bytes)
 BEFORE:
 ```text
 2. **`dt-review grep` silently returns ZERO for any flag** — `-i`, `-n` are swallowed and nothing matches, with no error and no marker. It reads exactly like a clean absence. Pattern only, no flags; and **positive-control every grep whose answer is a zero** (a known-present string through the same invocation).
 ```
 AFTER:
 ```text
-2. **`grep` used to silently return ZERO for any flag.** Flags are now REFUSED (exit 2). A zero is exit 1 with `# 0 matches` on stderr. Still **positive-control every zero** (a known-present string, same invocation).
+2. **`grep` used to silently return ZERO for any flag — or CONFIDENT WRONG HITS (exit 0) when the next word named a path (A1), so past flag-based hits are suspect too.** Flags are now REFUSED (exit 2). A zero is exit 1 with `# 0 matches` on stderr. Still **positive-control every zero**.
 ```
 
 ### `/home/langston/.claude/projects/-home-langston/memory/feedback_dt_review_instrument_traps.md` line 18  (+72 bytes)

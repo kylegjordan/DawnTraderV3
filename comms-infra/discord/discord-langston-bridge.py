@@ -181,15 +181,15 @@ REVIEW_SOURCE_NOTE = (
     "Do NOT read from /mnt/gdrive, any local working copy, or raw.githubusercontent.com.\n"
     " - Single file, pinned:  dt-review show %(ref)s <path>  — exact bytes on stdout, "
     "provenance on stderr, so a line number from stdout is the file's line number.\n"
-    " - Search / list, pinned:  dt-review grep @%(ref)s '<BRE>' [<path>...]  |  "
-    "dt-review ls @%(ref)s . Without @<sha> they read the mirror head AT CALL TIME and print "
-    "that sha on stderr: compare it with this commit.\n"
+    " - Search / list, pinned:  `dt-review grep @%(ref)s '<BRE>' [<path>...]`  |  "
+    "`dt-review ls @%(ref)s`  (without @<sha> they read the mirror head AT CALL TIME and print "
+    "that sha on stderr: compare it with this commit).\n"
     " - No flags; a pattern starting with '-' or '@' is written '[-]...' or '[@]...'.\n"
     " - EXCEPTION to exact output: if stdout line 1 starts OFF-BRANCH: or DEGRADED:, it is a "
     "one-line header, not file content. Read it, then drop it before numbering or counting.\n"
-    " - Exit 0 = served; 1 = nothing served (grep: no match, or REFUSED: read stderr); "
-    "2 = your request was refused; 3 = the mirror or git failed. On 1, 2 or 3 do not assert "
-    "file contents.]\n\n"
+    " - Exit 0 = served. Exit 1 = either '# 0 matches' on stderr (a MEASURED zero: positive-control "
+    "it before you assert an absence) or 'REFUSED:' (nothing was measured). Exit 2 = your request "
+    "was refused; 3 = the mirror or git failed. After REFUSED, 2 or 3, assert nothing about the file.]\n\n"
 )
 
 REVIEW_SOURCE_FAIL_NOTE = (
