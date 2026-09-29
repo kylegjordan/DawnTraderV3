@@ -166,6 +166,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 83 | B-WS-V1-RESIDUE-SWEEP | B-WS-V1-RESIDUE-SWEEP | Infra Claude | QUEUED | — | legacy removal, after the census: the dead first-generation Kraken price handler |
 | 84 | #218 | #218 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | legacy removal, after the census: a dead function carrying a hardcoded fee default |
 | 85 | B-MODE-PREDICATE-SWEEP | B-MODE-PREDICATE-SWEEP | Infra Claude | QUEUED | — | hygiene: readers that would mix live and paper P&L |
+| 85a | B-USER-RESOLUTION-PIN (`#1092`) | B-USER-RESOLUTION-PIN | Infra Claude | QUEUED | — | hygiene: "the first user in the table" is unordered, and a password reset changed who it is (measured 2026-09-29); delete or pin each pick, after the census (78), before 179 |
 | 86 | row:8 | plan row 8 | CC-C (Analyst Claude) | QUEUED | — | paper truth: fill-integrity detector |
 | 87 | B-COST-MATH-CONSOLIDATION | B-COST-MATH-CONSOLIDATION | CC-A (Old Claude) | QUEUED | — | paper truth: one home for cost maths |
 | 88 | #527 | #527 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | paper truth: xStock friction components |

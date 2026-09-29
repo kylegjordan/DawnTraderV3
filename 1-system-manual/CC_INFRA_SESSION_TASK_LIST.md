@@ -1,9 +1,9 @@
-# CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-09-11
+# CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-09-29
 
 > 📁 **Lives in `1-system-manual/`** beside the other session lists (`workflow-10-governance` Tier-1 task-list row).
 > ⚠️ **CREATED 2026-09-11 AT `B-WAKE-LEAD-NAME` STEP 10 — IT DID NOT EXIST BEFORE.** Only `CC_A_SESSION_TASK_LIST.md` was in this folder (control: the same listing showed that file), so every earlier close by this session had no list to update.
-> ⛔ **THE PLAN IS THE AUTHORITY; THIS FILE IS THE INDEX.** Every row is derived from `PHASE_19_PLAN.md`. If the two disagree, the plan wins and this file is stale.
-> **UPDATED IN THREE PLACES, IN THE SAME TURN:** this file → `PHASE_19_PLAN.md` → `POST_AUDIT_ROADMAP.md` where it is roadmap-level. **When:** every batch close, and every time a batch, sub-batch, hotfix or investigation is slotted.
+> ⛔ **THE PLAN IS THE AUTHORITY; THIS FILE IS THE INDEX.** Every row is derived from `SPRINT_TO_LIVE_PLAN.md` (Kyle 2026-09-28: one list, in order; it replaced the phase plan for ordering). If the two disagree, the plan wins and this file is stale.
+> **UPDATED IN THREE PLACES, IN THE SAME TURN:** this file → `SPRINT_TO_LIVE_PLAN.md` → `POST_AUDIT_ROADMAP.md` where it is roadmap-level. **When:** every batch close, and every time a batch, sub-batch, hotfix or investigation is slotted.
 
 ---
 
@@ -20,21 +20,66 @@
 
 ---
 
-## 0. ⭐ THE QUEUE — IN WORKING ORDER (derived from `PHASE_19_PLAN.md`)
+## 0. ⭐ THE QUEUE — MY ROWS IN `SPRINT_TO_LIVE_PLAN.md` (the authority; re-derived 2026-09-29)
 
-| order | row | batch | state per the plan |
-|---|---|---|---|
-| 1 | 4.51 | `B-WAKE-LEAD-NAME` (`#1040`) | closing — see 0a |
-| 2 | 2.8b | `B-LANGSTON-LOAD-RATCHET`, in flight as `B-LANGSTON-CONTEXT` P-5 | see 0a |
-| 3 | **4.51a** | **`B-READ-MODEL-BLOB-VERIFY` (`#1043`)** — Langston's read of a pinned file served the wrong content twice; verify blob hashes in `dt-review show` | placed 2026-09-11 |
-| 4 | 3 | `B-GDRIVE-UNMOUNT` (`#757`) + `#759` | placed 2026-08-28 — ⚠️ re-derive its state from the box before starting; the mount's disposition was ruled 2026-08-28 (`#921`) |
-| 5 | 2.8a | `B-LANGSTON-FILE-FLOOR` (with Langston) | placed 2026-09-05 |
-| 6 | 2.8 | `B-LANGSTON-LEDGER-SPLIT` (Langston + me) | placed 2026-09-01; its size figure was corrected in place |
-| 7 | 2.8c | `B-LEDGER-HEADLINE-INJECT` | placed 2026-09-09 — must land before 2.8 can ship |
+> ⛔ **The order and the text below are COPIED from the sprint plan's row numbers — if they differ, the plan wins.** `PHASE_19_PLAN.md` no longer orders this work (Kyle, 2026-09-28: one list, in order).
 
-**Findings still to investigate** — the unslotted table in `PHASE_19_PLAN.md`, token-watch family, read there for full text: `B-TOKENWATCH-OBSERVED-AT` · `B-TOKENWATCH-PAIR-SELECT` · `B-HELSINKI-MOUNT-WATCH` · `B-BURN-THRESHOLD-BASIS`.
+**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` (#1023) — Step 1, sent back by Langston 2026-09-28 (CHANGES-NEEDED), revision in progress. Kyle's D1 = yes (all six can use the crew login), D2 = no (backups folder stays).
 
-**Not batches, and not in this queue:** `B-COLTRANE` (Kyle: outside the eleven-step workflow; only Kyle requests Coltrane).
+| row | item | what it is for |
+|---|---|---|
+| 5 | 12.1 rulings-durability fix | cheap and irreversible if lost: copy Langston's rulings file to a read-only replica |
+| 6 | Months of database headroom | database at 81% (critical): confirm the October 1 move of August to warm storage lands; then (Kyle 2026-09-28) |
+| 7 | Install the context_bridge_log 14-day TTL job | this week: make the retention demonstrably free bytes on a named table - install the missing 14-day job (1.48  |
+| 11 | #521 | wave 0 (Langston F11): nothing notices a dead engine - a silent halt voids every observation window |
+| 12 | Fix duplicated plan ids | a chore, not mechanics (Langston): no two plan items share a number |
+| 18 | B-UNIVERSE-REFRESH-ACTS | first link of the identity chain |
+| 19 | B-SYMBOL-CLASS-IDENTITY | after B-UNIVERSE-REFRESH-ACTS: a ticker shared by a coin and a stock becomes two instruments |
+| 20 | B-RTB-SIGNAL-IDENTITY | after B-SYMBOL-CLASS-IDENTITY |
+| 21 | B-VTS-CLASS-LABEL-INTEGRITY | after B-SYMBOL-CLASS-IDENTITY: correct the mislabelled VTS rows |
+| 22 | B-CLOSED-TRADES-CLASS-BACKFILL | after B-SYMBOL-CLASS-IDENTITY |
+| 23 | #150 | after B-SYMBOL-CLASS-IDENTITY: the RTB asset-class column made NOT NULL after a zero-null soak |
+| 24 | Exclude plain-currency and non-dollar pairs | Kyle's decision: exclude plain currency pairs and non-dollar crypto now |
+| 25 | B-NONFIAT-QUOTE-DENOMINATION | the exclusion itself, if small |
+| 26 | B-QUOTE-ADMISSION-LEGACY-SWEEP | with the exclusion: what the old allowed-pairs list is for |
+| 27 | B-QUOTE-LEG-INTEGRITY | with the exclusion |
+| 28 | B-PRICE-FLOOR-REVIEW | replace the $0.25 floor with a real market-depth test |
+| 29 | B-VENUE-PAIRS-REINIT | a changed exchange price step must not refuse orders |
+| 30 | B-SCAN-BREADTH-DECLINE | why the scanner sees so few pairs — breadth feeds selection |
+| 35 | B-WS-SUBSCRIBE-CLASS-FILTER | the crypto subscribe set is not class-filtered |
+| 71 | #166 | close: the TEC stale-cache fence keeps firing |
+| 73 | B-SCHEDULER-FIRST-TICK | restarts: every scheduled job runs twice after a restart |
+| 74 | #585 | restarts: auto-resume skips a malformed session |
+| 75 | B-STRING-TRUTHINESS-GUARDS | hygiene: guards that treat '0' as true |
+| 76 | B-GUARD-COVERAGE-AUDIT | hygiene: which guards cover which paths |
+| 77 | B-LEARNING-SYSTEM-CENSUS | hygiene: old learning systems still wired |
+| 78 | Dead-code reachability census | hygiene (Langston C6): rules on ALL 22 legacy items - the 5 removals below AND the 17 in the after-live 'Legac |
+| 81 | 16.6 Trailing-Percent Code Purge (added 2026-04-25, Kyle directiv | legacy removal, after the census: the old trailing-percent exit code, so it cannot re-enter a live exit |
+| 83 | B-WS-V1-RESIDUE-SWEEP | legacy removal, after the census: the dead first-generation Kraken price handler |
+| 85 | B-MODE-PREDICATE-SWEEP | hygiene: readers that would mix live and paper P&L |
+| 85a | B-USER-RESOLUTION-PIN (`#1092`) | hygiene: "the first user in the table" is unordered, and a password reset changed who it is (measured 2026-09- |
+| 91 | B-VALIDATE-OBSERVABILITY | paper truth: make validation failures visible |
+| 92 | B-DIAG-READ-INTEGRITY | paper truth: diagnostics that read a status code as data |
+| 93 | B-FILTER-DIAG-XSTOCK | paper truth: the empty xStock decline table |
+| 94 | #664 | paper truth: a hardcoded 'strategies evaluated' |
+| 95 | #419 | paper truth: funnel counts under errors |
+| 96 | #549 | paper truth: Open Trades field gaps |
+| 97 | #561 | paper truth: volume / order book columns in Open Trades |
+| 98 | #547 | paper truth: the Analyst's July findings (owner reads) |
+| 158 | B-SEC-HARDEN | route authorisation (the password rotation moved to B-CREDENTIALS-PRIVATE-REPO, run before the sprint) ⭐ Kyle  |
+| 159 | B-SSH-KEY-CENSUS (investigation) | whose are the two unknown keys |
+| 160 | #615 | the reviewer identity must not read the secrets file |
+| 161 | Coltrane parity: a privacy check like Langston's | before the Coltrane trial: a privacy check like Langston's |
+| 162 | #681 | a deploy must not outrun CI |
+| 163 | #168 | with #681: CI catches a build that crashes on boot |
+| 164 | P19-B12 | the deploy tool's own executable comes from the reviewed code |
+| 165 | B-VENUE-QUIET-ALERTING | operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the sprint) |
+| 172 | B-TEC-PRIME-BOOT-RACE | restarts: the exit loop throws for a tick on open positions |
+| 173 | B-ENGINE-STOP-DURATION-COLUMN | an engine stop reports failure when it worked |
+| 174 | #619 | a restore from backup lacks seeded config |
+| 175 | B-DASHBOARD-AUTH-RACE | the portfolio card never recovers from a 401 |
+| 178 | Resize the staging server one step up before live | before the split (Infra condition): one server size up, a second program needs the memory |
+| 193 | Provision the live Kraken API key | the live key: trade-only, no withdrawals, locked to the server ⭐ Kyle creates the key on Kraken; Infra sets it |
 
 ---
 
