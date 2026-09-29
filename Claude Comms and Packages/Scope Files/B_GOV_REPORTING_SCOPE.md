@@ -234,6 +234,7 @@ change-class: non_architecture
 4. **the 2026-09-13 wording** (`f29e27f5c`, Kyle's two-place rule) and **scope §6**.
 5. **`df368871f`** — the `CONDUCT.md` §6b rewrite and the base reviewer block in four skills; it carries this batch's own mistake trailer and is in no edit list.
 6. **everything in 7a above.**
+7. **`c8627a0b9`** (2026-08-27 — `#749` and the Observation column made SKIPPABLE) — missed by this list; found by the G4 dispatch reader (`Change Lists/B_GOV_REPORTING_REVIEWER_ROUNDS_r6.md`, G4 r1) and ruled at G4 item 1.
 
 ### 7c. DISPOSITIONS — work Langston filed under this batch that does not belong in finishing it
 | item | disposition |
@@ -269,3 +270,4 @@ change-class: non_architecture
 - **G6 (2026-09-29): all nine ruled; r8 carries them** — Tier-1 binds by the class matrix for the DECLARED class; the active-plan row approved (name + full path); `B-GOV-LEDGER-GRADE` after live; `#947` closed into `#968` (he vacated his 08-30 fold); `B-RULES-CHANGE-CLASS` restored; `sibling-left-stale` stays at two and the one-event-one-slug rule recorded; history left as written; the object round's inputs bounded; outcome (2) gets a decision block. r7's two conditions carried (the decision half at `workflow-10` :65; his `:23` text). `#1107` `B-CHECKER-BLOCK-GATE` homes the blocking Kyle approved on 2026-07-10.
 - **r8 (2026-09-29T18:50Z): CLEARED, board `Review = Approved`** — his residual rulings (the slugs, the decision value bounded to a placed row, `#1107`'s ordering on its line, rungs 2 and 3 resolved as superseded) carried at `9f2bca15f`. He withdrew his r7 "pre-fix rows".
 - **r9 (2026-09-29, `912d296b3`, `8d68418c0`): the no-dates rule carried to its eight sibling sites in `CLAUDE.md` and five skills, and to the playbook** — found at Step 11; goes to him with the completion report.
+- **r10 (2026-09-29, Step 11, the round-2 reader on the completion report): two stale siblings of rules this batch changed** — `DELIVERY_BOARD_PROTOCOL.md` :131's Kyle-acknowledgement step (G2 removed it from `workflow-11`) and `ALERT_HANDLING_PROTOCOL.md` step 4's ack-as-claim for event-wait alerts (r6 carried the correction to two of `#646`'s three sites); both brought into line, with the report's own corrections. Goes to him with the completion report.

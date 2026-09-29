@@ -39,6 +39,7 @@
    npm run system-alerts -- ack <id> --by <cc-a|cc-b|cc-c|cc-infra|kyle|langston>
    ```
    `--by` is mandatory — an ownerless ack is meaningless. `acknowledged_by` IS the owner record. **Since B-ALERT-ACTOR-ALLOWLIST (#987) it must be a canonical actor from `ALERT_ACTORS` in `server/services/system-alerts.ts` (`cc-a` | `cc-b` | `cc-c` | `cc-infra` | `governance-checker` | `governance-checker-heartbeat` | `b-new-40-soak-verify` | `kyle` | `langston`); the stored value is the canonical form, and free text — including the retired `cc-session-<date>` — is refused with the set named.**
+   ⚠️ **An EVENT-WAIT alert is routed, not acked** — an ack also takes it out of the per-turn read, and either way its next occurrence cannot fire until it is resolved (`CLAUDE.md` §10.5 step 3; Langston 2026-09-13, `#982`). *Added 2026-09-29 (`B-GOV-REPORTING` r10) as the third of the three sites `#646` names; its code leg (`#638`) is unchanged.*
 
 5. **Do the follow-through.** The owner does the actual work (the `action`), through the normal workflow if it's a code/governance change.
 

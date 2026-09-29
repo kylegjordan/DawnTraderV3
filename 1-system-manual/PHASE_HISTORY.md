@@ -1243,9 +1243,9 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 ### 2026-09-29 — B-GOV-REPORTING (CC-A, sprint plan §0) — ⏳ CLOSING
 
-**The rules for how sessions report their work, and for the checklist of governance documents each batch must update, had been in use by every session for a month without Langston ever reviewing most of them as they landed.** Some of his August conditions had never been carried out, and seven changes had never been shown to him at all. This batch finished that before the sprint to live.
+**The rules for how sessions report their work, and for the checklist of governance documents each batch must update, had been in use by every session for a month, but the review of them was never finished.** Some of Langston's August conditions had never been carried out, and several changes had never been shown to him at all. This batch finished that before the sprint to live.
 
-**It was done one question at a time,** and each question was checked by a fresh reader, who was never in the room, before it went to him. He ruled on everything and approved it. Along the way he withdrew five of his own earlier rulings when the record contradicted them, and the batch found several places where one copy of a rule had been fixed and its siblings left behind — the same mistake the batch was written to prevent, recorded each time.
+**It was done one question at a time,** and each question was checked by a fresh reader, who was never in the room, before it went to him. He ruled on every question put to him and approved the changes; the last few fixes go to him with the completion report. Along the way he withdrew several of his own earlier rulings when the record contradicted them, and the batch found several places where one copy of a rule had been fixed and its siblings left behind — the same mistake the batch was written to prevent, recorded each time.
 
 **One discovery mattered beyond the rules themselves:** of four decisions listed as *"awaiting Kyle"*, three had in fact been answered by Kyle on 10 July; only Langston's memory had not been updated. The fourth, the name of a report label, had been dropped from his list and was never answered, so it is the one question put back to him. The blocking power Kyle approved for the governance checker, never built, now has a home after live.
 
