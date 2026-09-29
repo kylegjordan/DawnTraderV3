@@ -219,12 +219,18 @@ L update-ref "refs/heads/$B" "$TC3"
 run "$T/deploy.r3" --sha "$TC3" --only bridges
 [ $RC -eq 0 ] && ! grep -q "stub systemctl is-active" "$T/out" && ok "F3-D3 CONTROL: r3 never read the bridges back" || bad F3-D3c "rc=$RC"
 L update-ref "refs/heads/$B" "$TC"
-# F3-D4: root's hashing does not depend on (or run) git: an exported GIT_DIR changes nothing.
-GIT_DIR=/nonexistent bash "$T/deploy.sh" --sha "$TC" --only readers > "$T/out" 2>&1; RC=$?
-[ $RC -eq 0 ] && grep -q "install-verify: all 2 installed files" "$T/out" && ok "F3-D4: an exported GIT_DIR does not reach root's hashing" || bad F3-D4 "rc=$RC $(tail -2 "$T/out")"
+# F3-D4: root runs no git of its own. An exported GIT_DIR naming a repository whose config holds a
+# clean filter (measured on this box: root's `git hash-object` then RUNS it) must run nothing.
+git init -q "$T/evil"
+git -C "$T/evil" config filter.pwn.clean "sh -c 'touch $T/FILTER_RAN_AS_\$(id -un); cat'"
+echo "* filter=pwn" > "$T/evil/.git/info/attributes"
+rm -f "$T"/FILTER_RAN_AS_*
+GIT_DIR="$T/evil/.git" bash "$T/deploy.sh" --sha "$TC" --only readers > "$T/out" 2>&1; RC=$?
+[ $RC -eq 0 ] && grep -q "install-verify: all 2 installed files" "$T/out" && ! ls "$T"/FILTER_RAN_AS_* >/dev/null 2>&1 && ok "F3-D4: an exported GIT_DIR with a planted filter runs nothing; the install verifies" || bad F3-D4 "rc=$RC $(ls "$T"/FILTER_RAN_AS_* 2>&1 | head -1)"
 L update-ref "refs/heads/$B" "$TC3"
-GIT_DIR=/nonexistent bash "$T/deploy.r3" --sha "$TC3" --only readers > "$T/out" 2>&1; RC=$?
-[ $RC -ne 0 ] && ok "F3-D4 CONTROL: r3's root git obeyed the caller's GIT_DIR and failed (rc=$RC)" || bad F3-D4c "rc=$RC"
+GIT_DIR="$T/evil/.git" bash "$T/deploy.r3" --sha "$TC3" --only readers > "$T/out" 2>&1; RC=$?
+[ -e "$T/FILTER_RAN_AS_root" ] && ok "F3-D4 CONTROL: r3's root git RAN the planted filter as root (rc=$RC)" || bad F3-D4c "rc=$RC"
+rm -f "$T"/FILTER_RAN_AS_*
 L update-ref "refs/heads/$B" "$TC"
 # F3-D5: a crontab read that succeeds with a warning on stderr never writes the warning back.
 printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"
