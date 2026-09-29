@@ -381,6 +381,8 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 
 ### Legacy and dead-code cleanup (the reachability census may pull some forward) — 19
 
+- B-AI-CHAT-REMOVAL (CC-C) — Kyle 2026-09-30: the AI chat is dead code, remove it with finality. Its ACTION path (intent executor + the seven `/intent/*` routes + the approval components) goes NOW in `B-SIZING-DEC-RESTORE` 2e because it touches paper trading; THIS entry is the rest — conversation, saved chats, chat logs/costs routes, and the unmounted assistant/panel/container/sidebar/insights components (`ai-opportunities-tab` is mounted and stays). 0 calls in ~11 days of access logs. Pull forward if Kyle wants it before live.
+
 - #1042 (CC-B) — `calibration_ledger.decision_grade` is a flag no code reads and no screen shows; it read true on wrong xStock fee rates (added 2026-09-29)
 - #507 rider (CC-B) — `triggerSoftResubscribe` in the mini-book integrity monitor is kept and never called; #507's own checksum work is done (added 2026-09-29)
 - #1055 (—) — delete a dead legacy write on Langston's box
