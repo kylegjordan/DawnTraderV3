@@ -345,7 +345,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-GOV-2 (—) — checker always-on gate
 - B-GOV-4 (CC-C) — checker entry test
 - B-GOV-INTEGRITY-0 (CC-A) — reviewer frozen rulebook
-- B-GOV-LEDGER-GRADE (#1099, CC-A) — the checker grades the commit-message ledger's presence and completeness; `roadmap` probably belongs in `sub_batch`; a report that opens NOT CLOSED should not count as a close; and a conditional doc is never graded today. ⚠️ RE-PLACED here from the GOV-ARC list Langston named on 2026-08-29 (that plan is history) — put to him at B-GOV-REPORTING's gate.
+- B-GOV-LEDGER-GRADE (#1099, CC-A) — the checker grades the commit-message ledger's presence and completeness; `roadmap` probably belongs in `sub_batch`; a report that opens NOT CLOSED should not count as a close; and a conditional doc is never graded today. ✅ Here by Langston's ruling (2026-09-29, B-GOV-REPORTING G6): the GOV-ARC list he named on 2026-08-29 is in a history plan, and GOV-ARC itself (#668) is parked by Kyle, so it confers no position.
 - B-HEARTBEAT-RESCOPE (CC-A) — hourly heartbeat task purpose — crew tooling
 - B-HOOK-ESTATE-VERSION (CC-C) — clones run different versions of one hook — crew tooling
 - B-LANGSTON-CONTEXT remaining pieces (Infra Claude) — the reviewer's memory composer: P-2 retrofit + #1055, P-1b, and the privacy-check positive control
