@@ -12,7 +12,7 @@ import { buildGuardrailAuditEntries } from '../../services/guardrail-audit';
 const fails = (payload: Record<string, unknown>) =>
   guardrailPolicy.validate({ mode: 'paper', ...payload } as any).failures.map((f) => f.ruleId);
 
-describe('P5 — both sizing percentages are bounded to 0 < x <= 100 (RULE_012 / RULE_013)', () => {
+describe('P5 + 2b — the sizing percentages are bounded: 1 <= p <= 100 (RULE_012), 0 < e <= 100 (RULE_013)', () => {
   // CONTROL: a valid pair passes both rules, so a failure below is the value's doing.
   it('CONTROL — 5 / 100 passes', () => {
     const f = fails({ maxPositionPercentPct: 5, maxTotalExposurePct: 100 });
@@ -20,9 +20,23 @@ describe('P5 — both sizing percentages are bounded to 0 < x <= 100 (RULE_012 /
     expect(f).not.toContain('RULE_013');
   });
 
-  // MUTATION: delete the RULE_012 loop entry and these fail.
+  // MUTATION: delete the RULE_012 loop entry and these fail. Reasons (increment 2b moved the floor from > 0 to >= 1):
+  // 0 and -1 are below the floor; 500 and 100.01 above the ceiling; NaN and '' are not numbers.
   it.each([[0], [-1], [500], [100.01], [Number.NaN], ['']])('position % %s is refused', (v) => {
     expect(fails({ maxPositionPercentPct: v })).toContain('RULE_012');
+  });
+
+  // Increment 2b (PRE_AUDIT §15.1 G1): the floor is 1. MUTATION: put the floor back to `> 0` and 0.5 / 0.99 pass.
+  // 0.5 is the decimal slip that would derive floor(100 / 0.5) = 200 positions since 2a.
+  it.each([[0.5], [0.99]])('position % %s is refused — below the floor of 1', (v) => {
+    expect(fails({ maxPositionPercentPct: v })).toContain('RULE_012');
+  });
+  it.each([[1], [100]])('position % %s is accepted — the edges of 1 <= p <= 100', (v) => {
+    expect(fails({ maxPositionPercentPct: v })).not.toContain('RULE_012');
+  });
+  // RULE_013 keeps its > 0 floor (an exposure typo is loud: the budget collapses and the band alert fires).
+  it('exposure % 0.5 is accepted — RULE_013 has no floor of 1', () => {
+    expect(fails({ maxTotalExposurePct: 0.5 })).not.toContain('RULE_013');
   });
 
   it.each([[0], [150], ['abc']])('exposure % %s is refused', (v) => {

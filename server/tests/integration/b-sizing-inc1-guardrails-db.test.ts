@@ -146,8 +146,19 @@ describe(TAG, () => {
     expect(Number((await paperRow())!.max_position_percent_pct)).toBe(5);
   });
 
-  // MUTATION: drop the migration's constraints and these fail — the bad value saves.
-  for (const [col, v] of [['max_position_percent_pct', 0], ['max_position_percent_pct', 500], ['max_total_exposure_pct', 0]] as const) {
+  // Increment 2b: the edges of the new position range are accepted — 1 and 100.
+  it('CONTROL (2b) — the position CHECK accepts its edges, 1 and 100', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+    await db.execute(sql`UPDATE guardrails_v2 SET max_position_percent_pct = 1.00 WHERE mode = 'paper'`);
+    expect(Number((await paperRow())!.max_position_percent_pct)).toBe(1);
+    await db.execute(sql`UPDATE guardrails_v2 SET max_position_percent_pct = 100.00 WHERE mode = 'paper'`);
+    expect(Number((await paperRow())!.max_position_percent_pct)).toBe(100);
+  });
+
+  // MUTATION: drop the migrations' constraints and these fail — the bad value saves. Increment 2b replaced the
+  // position constraint's floor (> 0 → >= 1, 2026-09-29-b-sizing-inc2b-position-pct-floor.sql): 0 and 0.99 are below
+  // it, 100.01 and 500 above the ceiling; exposure keeps increment 1's > 0.
+  for (const [col, v] of [['max_position_percent_pct', 0], ['max_position_percent_pct', 0.99], ['max_position_percent_pct', 100.01], ['max_position_percent_pct', 500], ['max_total_exposure_pct', 0]] as const) {
     it(`the database refuses ${col} = ${v}`, async (ctx) => {
       if (!dbReachable || !isTestDb) ctx.skip(); // run-time skip: it.each hands no test context
       await expect(db.execute(sql.raw(`UPDATE guardrails_v2 SET ${col} = ${v} WHERE mode = 'paper'`))).rejects.toThrow();

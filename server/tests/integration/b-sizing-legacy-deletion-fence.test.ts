@@ -52,7 +52,11 @@ function sourceFiles(): string[] {
 }
 
 const FILES = sourceFiles();
-const read = (f: string) => readFileSync(f, 'utf-8');
+// Read every source file ONCE, at collection time (outside any test's 5 s timeout). Each check used to re-read the
+// ~1,000 files itself, and under a parallel run the first scan of a block timed out (2026-09-29) — a flake that
+// could hide or fake a result. The fence still reads the tree as it is on disk at the start of the run.
+const _SOURCE = new Map<string, string>(FILES.map((f) => [f, readFileSync(f, 'utf-8')] as const));
+const read = (f: string) => _SOURCE.get(f) ?? readFileSync(f, 'utf-8');
 
 describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear', () => {
   // Guard against the fence itself becoming vacuous: if the walk returns nothing,
@@ -150,9 +154,15 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
     const stripComments = (src: string) =>
       src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
+    // Each file is read and stripped ONCE and reused by every name check below: re-reading ~1,000 files per name
+    // timed out under a parallel test run (2026-09-29, the first scan in this block), a flake, not a finding.
+    const _codeCache = new Map<string, string>();
     const codeOf = (f: string) => {
+      const hit = _codeCache.get(f);
+      if (hit !== undefined) return hit;
       let code = stripComments(read(f));
       for (const s of SURVIVORS) code = code.split(s).join('«AMR»');
+      _codeCache.set(f, code);
       return code;
     };
 
@@ -227,9 +237,13 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
 
     const stripComments = (src: string) =>
       src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const _codeCache = new Map<string, string>(); // read-once, as in the obj-10 block
     const codeOf = (f: string) => {
+      const hit = _codeCache.get(f);
+      if (hit !== undefined) return hit;
       let code = stripComments(read(f));
       for (const g of RETIREMENT_GUARD) code = code.split(g).join('«RETIRED»');
+      _codeCache.set(f, code);
       return code;
     };
 

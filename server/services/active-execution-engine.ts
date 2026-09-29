@@ -381,7 +381,7 @@ const EXIT_TRIGGER_MAX_SPREAD_FRACTION = 0.02;
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
-import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
+import { buildSettingsFromGuardrails, calculateRiskAmount, getPortfolioBalanceV2 } from './guardrail-settings';
 import type { TradingSettings, PriceData, InsertExecutionAttemptAudit, GuardrailsV2 } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
@@ -6166,11 +6166,13 @@ export class ActiveExecutionEngine {
         signalAny.preComputedNotional = signalAny.estimatedValue;
         console.log(`[B6][TRUST_SIZED] ${signal.symbol}: qty=${signalAny.quantity.toFixed(8)}, value=$${signalAny.estimatedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay?.positionSizeMultiplier ?? 1})`);
       } else {
-        console.log(`[B6][FALLBACK_SIZING] Signal missing sizing fields for ${signal.symbol}, will size in executeSimulatedTrade`);
+        console.log(`[B6][FALLBACK_SIZING] Signal missing sizing fields for ${signal.symbol}, sizing here from guardrails_v2 and the working balance`);
         const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
-        // [9.6.3] Use mode-only query (mode-based architecture - userId not needed for storage lookup)
-        const portfolioState = await storage.getPortfolioState({ mode: this.mode });
-        const portfolioValue = portfolioState ? parseFloat(String(portfolioState.balance)) : 0;
+        // B-SIZING-DEC-RESTORE P3 (PRE_AUDIT §15.1 G2): the fallback sizer's balance is the WORKING balance
+        // (anchor + realized P&L since the session start, getPortfolioBalanceV2) — the same one the main sizers and
+        // the `settings` passed on below use. It read the bare anchor (portfolio_state.balance) before, so a signal
+        // sized here would have been sized from a different number than every other trade in the session.
+        const portfolioValue = await getPortfolioBalanceV2(this.mode);
         
         if (portfolioValue > 0) {
           // P19-B4a (C4): prefer the signal stamp; reuse the _amrClass resolved

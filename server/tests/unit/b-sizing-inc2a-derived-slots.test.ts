@@ -31,6 +31,7 @@ vi.mock('../../storage', () => ({
 import { deriveSlotCount, resolveEffectivePositionPct, sizeActivePositionForSignal } from '../../services/active-position-sizing.js';
 import { buildSettingsFromGuardrails } from '../../services/guardrail-settings.js';
 import { orchestratorUpdateGuardrailSchema } from '../../../shared/schema';
+import { guardrailPolicy } from '../../services/guardrail-policy.js';
 
 // The engine's two promotion loops refuse admissions on exactly this predicate (active-execution-engine.ts, both
 // GUARDRAIL_READ_FAIL sites). It is restated here so the unit legs test what the loops actually do with the value.
@@ -61,11 +62,13 @@ describe('deriveSlotCount — floor(100 / effectiveP)', () => {
     expect(loopsHalt(deriveSlotCount(-5))).toBe(true);
   });
 
-  // §14.4 D4 condition, stated as a test so nobody reads it as covered: p = 0.5 is FINITE and does NOT halt.
-  // The bound on it is increment 2b's p-entry guard, which is why 2a and 2b deploy together.
-  it('KNOWN GAP, bounded by 2b: p = 0.5 ⇒ 200 slots and the loops do NOT halt', () => {
+  // §14.4 D4: p = 0.5 is FINITE and the loops do NOT halt on it — 200 slots. Increment 2b closes it at ENTRY:
+  // RULE_012 and the DB CHECK refuse p < 1 (the derivation itself stays a pure function).
+  it('p = 0.5 ⇒ 200 slots, the loops do not halt — and 2b refuses p = 0.5 at entry', () => {
     expect(deriveSlotCount(0.5)).toBe(200);
     expect(loopsHalt(deriveSlotCount(0.5))).toBe(false);
+    const failures = guardrailPolicy.validate({ mode: 'paper', maxPositionPercentPct: 0.5 } as any).failures.map((f) => f.ruleId);
+    expect(failures).toContain('RULE_012');
   });
 });
 
@@ -175,5 +178,20 @@ describe('the orchestrator route refuses the retired field (second-reader findin
   });
   it('CONTROL: a field still on the list is accepted, so the refusal above is the field, not the fixture', () => {
     expect(orchestratorUpdateGuardrailSchema.safeParse(req('riskPerTrade')).success).toBe(true);
+  });
+});
+
+describe('P3 (increment 2b, §15.1 G2) — the fallback sizer reads the working balance', () => {
+  const src = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf-8').replace(/\r\n/g, '\n');
+  const i = src.indexOf('[B6][FALLBACK_SIZING]');
+  const branch = src.slice(i, i + 1400);
+  // MUTATION: put `storage.getPortfolioState` back in the fallback branch and the first assertion fails.
+  it('the fallback branch sizes from getPortfolioBalanceV2, not the bare anchor', () => {
+    expect(i).toBeGreaterThan(0);
+    expect(branch).not.toContain('getPortfolioState');
+    expect(branch).toContain('await getPortfolioBalanceV2(this.mode)');
+  });
+  it('its log line no longer claims it sizes somewhere else', () => {
+    expect(branch).not.toContain('will size in executeSimulatedTrade');
   });
 });

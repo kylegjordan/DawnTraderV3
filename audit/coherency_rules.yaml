@@ -182,19 +182,21 @@ rules:
 
   - name: "Position Size Range"
     id: "RULE_012"
-    description: "The per-trade position size must be a positive share of at most 100% (B-SIZING-DEC-RESTORE P5)"
-    condition: "0 < max_position_percent_pct <= 100"
-    rationale: "B-SIZING-DEC-RESTORE (#698) P5: Kyle adjusts this % by hand to hold each paper trade near $140-150. Nothing bounded it: 50 typed for 5 saved (trades 10x larger), an emptied box saved 0 (every open refused by the sizer), and a value above 100 sized one trade above the whole exposure budget. The sizer is B x e x p (active-position-sizing.ts:225-227), so p above e is COHERENT and deliberately NOT refused (PRE_AUDIT section 13 F13)."
+    description: "The per-trade position size must be between 1% and 100% of the exposure budget (B-SIZING-DEC-RESTORE P5; floor 1 from increment 2b)"
+    condition: "1 <= max_position_percent_pct <= 100"
+    rationale: "B-SIZING-DEC-RESTORE (#698) P5: Kyle adjusts this % by hand to hold each paper trade near $140-150. Nothing bounded it: 50 typed for 5 saved (trades 10x larger), an emptied box saved 0 (every open refused by the sizer), and a value above 100 sized one trade above the whole exposure budget. The sizer is B x e x p (active-position-sizing.ts:225-227), so p above e is COHERENT and deliberately NOT refused (PRE_AUDIT section 13 F13). Increment 2b (PRE_AUDIT section 15.1 G1) raised the floor to 1: the open-positions count is now floor(100 / p), so a decimal slip to 0.5 would allow 200 positions. The floor is headroom (p = 1 holds $145 up to a ~$14,950 balance) and a decimal-slip guard, NOT a micro-position guard; the size band alert is the only check that sees dollars. A LIVE upper typo has no detector (the band alert reads paper) - Phase 21."
     severity: "error"
-    error_message: "Max position % must satisfy 0 < p <= 100 (got {value})"
+    error_message: "Max position % must satisfy 1 <= p <= 100 (got {value})"
     phase: "Phase 19 / B-SIZING-DEC-RESTORE"
     enforcement: "GuardrailPolicy.validate() + guardrails settings API + DB CHECK guardrails_v2_max_position_percent_pct_range"
     example_valid:
       - max_position_percent_pct: 5.00
         result: "PASS"
     example_invalid:
+      - max_position_percent_pct: 0.5
+        result: "FAIL (below 1: would derive 200 slots)"
       - max_position_percent_pct: 0
-        result: "FAIL (not positive)"
+        result: "FAIL (below 1)"
       - max_position_percent_pct: 500
         result: "FAIL (above 100)"
 
