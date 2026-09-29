@@ -75,6 +75,7 @@ NEG_S = 900                       # after a login 401 / 404 / 429 (a 429 uses it
 BACKOFF_500_S = 60                # after a login 5xx or no answer: back off, keep the current token
 MINT_REUSE_S = 20 * 3600          # a mint younger than this is handed out again (C-10)
 MIN_EXP_LEFT_S = 6 * 86400        # ... and only if it still has 6 days left (OBJ-1(e))
+PROBE_TIMEOUT_S = 15              # /api/settings and /api/auth/verify probes: short, the lock may be held
 
 METHODS_WRITE = ("POST", "PUT", "PATCH", "DELETE")
 
@@ -95,7 +96,8 @@ WHOLE_ROUTE_DENY = (
 )
 # (a) read denylist, account and credential prefixes: the path equal to one, or under it.
 #     GET /api/user/profile returns the whole users row, bcrypt hash included (storage.getUser
-#     is a select-all); GET /api/admin/users returns every row. No other GET returns a row.
+#     is a select-all) — the ONLY GET that returns a hash. /api/admin/* (the user list, sanitised)
+#     and /api/auth/* are denied as account and credential ROUTES, not because they leak a hash.
 READ_DENY_PREFIXES = ("/api/admin", "/api/auth", "/api/user")
 # (b) GETs that RUN WORK — the Step-3 census (C1): all 442 GET definitions across routes.ts and
 #     the 15 sub-router files, each body read and followed one level into what it calls; its
@@ -131,6 +133,9 @@ READ_DENY_JOBS = (
     "/api/strategic/recommendations",          # generates recommendations; broadcasts; logs
     "/api/diagnostics/tec/costs",              # stamps default costs into the shared cost cache
     "/api/diagnostics/tec/costs/:symbol",      #   (for ANY symbol string passed in)
+    "/api/test/kraken-balance",                # calls the exchange's PRIVATE API with the live key
+    "/api/test/finnhub-feed",                  # three external feed calls
+    "/api/learning/fallback-test",             # calls the app's own API over HTTP
 )
 # Writes: an explicit allowlist, EMPTY on day one (decision 19, Langston 2026-09-29T17:30Z).
 #   Each entry: ("METHOD", "/api/path/:param"). A kill-switch trip is NOT reachable through
@@ -269,16 +274,23 @@ def _read_json(path):
 
 def _write_json(path, obj):
     tmp = "%s.tmp.%d" % (path, os.getpid())
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump(obj, fh)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, path)
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(obj, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)                 # never leave a half-written copy (it may hold a token)
+        except OSError:
+            pass
+        raise
 
 
 def _append(path, line):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)   # root appends here too
     with os.fdopen(fd, "a", encoding="utf-8") as fh:
         fh.write(line + "\n")
 
@@ -308,7 +320,7 @@ def call_log(fields):
         if os.path.exists(CALL_LOG) and os.path.getsize(CALL_LOG) > 1_000_000:
             with open(CALL_LOG, encoding="utf-8") as fh:
                 keep = fh.readlines()[-2000:]
-            tmp = CALL_LOG + ".tmp"
+            tmp = "%s.tmp.%d" % (CALL_LOG, os.getpid())
             with open(tmp, "w", encoding="utf-8") as fh:
                 fh.writelines(keep)
             os.replace(tmp, CALL_LOG)
@@ -326,7 +338,7 @@ class Lock:
         self.fd = None
 
     def __enter__(self):
-        self.fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o600)
+        self.fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         deadline = _now() + LOCK_TIMEOUT_S
         while True:
             try:
@@ -357,19 +369,29 @@ def die(code, text):
     raise SystemExit(code)
 
 
-def page(kind, detail):
+def page(kind, detail, drop_token=False):
     """C6 / GB-7 — WHO THE PAGE REACHES: (1) the caller, now, on stderr, naming Infra Claude;
     (2) every session and Langston through a system alert, raised by the staging hourly
     `dt-install-drift` run while page.json exists (dedupe key dt-unit-failure:...);
     (3) for the scheduled mint, Helsinki's agent-unit-failure@ on the next 04:40Z run.
     ⛔ No re-mint happens on a page: a login would spend the shared loopback bucket on a
-    problem a login cannot fix."""
+    problem a login cannot fix.
+    ★ STICKY (fresh-reader r1): while page.json exists dt-api makes NO login at all — a timer that
+    re-tried a known-bad password every 15 minutes would keep spending the bucket AND keep the
+    setter's quiet-900-s precondition from ever holding. Calls on a still-good cached token go on.
+    The page is cleared by a person (after the cause is fixed) or by the setter when it succeeds."""
+    if drop_token:
+        try:
+            os.unlink(TOKEN_FILE)          # a token the app will never accept again is not a cache
+        except FileNotFoundError:
+            pass
     try:
         _write_json(PAGE_FILE, {"ts": _iso(_now()), "kind": kind, "detail": detail})
     except OSError:
         pass
-    die(5, "PAGE (dt-api, %s): %s\nInfra Claude owns this. Nothing was re-minted; the crew login "
-           "will keep refusing until it is handled (root: cat %s)." % (kind, detail, PAGE_FILE))
+    die(5, "PAGE (dt-api, %s): %s\nInfra Claude owns this. Nothing was re-minted, and dt-api makes "
+           "NO login while the page stands: fix the cause, then remove %s as root (the setter "
+           "removes it when it succeeds)." % (kind, detail, PAGE_FILE))
 
 
 # ───────────────────────────── HTTP ─────────────────────────────
@@ -394,6 +416,9 @@ def app_request(method, path, token=None, body=None, mode=None, timeout=None):
         return r.status, {k.lower(): v for k, v in r.getheaders()}, r.read()
     except (OSError, http.client.HTTPException) as e:
         return None, {}, ("%s: %s" % (type(e).__name__, e)).encode()
+    except ValueError:
+        # http.client puts the offending header VALUE in its message — i.e. the token. Never show it.
+        return None, {}, b"ValueError: a request header or the path was invalid (value not shown)"
     finally:
         conn.close()
 
@@ -440,6 +465,11 @@ def read_env():
 def login(who):
     """A fresh login on the loopback bucket. Caller holds the Lock. Returns the token record."""
     t = _now()
+    pg = _read_json(PAGE_FILE)
+    if pg is not None or os.path.exists(PAGE_FILE):
+        die(5, "PAGE STANDING (dt-api, %s since %s): dt-api makes no login until it is handled. "
+               "Infra Claude owns it; root removes %s once the cause is fixed. Nothing was sent."
+               % ((pg or {}).get("kind", "?"), (pg or {}).get("ts", "?"), PAGE_FILE))
     neg = _read_json(NEG_FILE)
     if neg and neg.get("until", 0) > t:
         die(3, "REFUSED: dt-api will not log in again until %s — the last login got %s (%s). "
@@ -451,6 +481,8 @@ def login(who):
                "retry after %s." % (len(recent), WINDOW_S, DTAPI_CAP,
                                     _iso(min(e["ts"] for e in recent) + WINDOW_S)))
     env = read_env()
+    mine = [e for e in ledger_entries() if e.get("phase") == "result" and e.get("who") in ("dt-api", "mint")]
+    prev = mine[-1] if mine else None
     _append(LEDGER, json.dumps({"ts": t, "who": who, "phase": "sent", "bucket": "loopback"}))
     st, h, b = app_request("POST", "/api/auth/login",
                            body={"username": env["DT_API_USER"], "password": env["DT_API_PASS"]},
@@ -473,8 +505,12 @@ def login(who):
         except FileNotFoundError:
             pass
         if rem == "0":
-            sys.stderr.write("dt-api: note — the loopback login bucket is now empty for %s s "
-                             "(RateLimit-Remaining 0)\n" % rst)
+            # C4: the headers are authoritative — the next login would meet a 429, so do not send it
+            wait = int(rst) if rst and rst.isdigit() else WINDOW_S
+            _write_json(NEG_FILE, {"until": t + wait, "status": 200,
+                                   "reason": "RateLimit-Remaining 0: the loopback bucket is empty"})
+            sys.stderr.write("dt-api: note — the loopback login bucket is now empty for %d s "
+                             "(RateLimit-Remaining 0); no login until then\n" % wait)
         return rec
     if st in (401, 404, 429):
         until = t + NEG_S
@@ -495,6 +531,9 @@ def login(who):
                "sent." % (st, reason, _iso(until)))
     _write_json(NEG_FILE, {"until": t + BACKOFF_500_S, "status": st,
                            "reason": "the app did not answer the login cleanly"})
+    if prev is not None and (prev.get("status") is None or prev.get("status", 0) >= 500):
+        page("login-failing", "two dt-api logins in a row got %s and %s — the app's login is "
+             "failing (a 5xx or no answer), not the password" % (prev.get("status"), st))
     die(3, "FAILED: login got %s — backing off %d s and keeping any current token. Nothing was "
            "sent." % (st if st is not None else b.decode("utf-8", "replace"), BACKOFF_500_S))
 
@@ -504,8 +543,8 @@ def cached_token():
     if not rec or not rec.get("accessToken"):
         return None
     exp = rec.get("exp")
-    if isinstance(exp, (int, float)) and exp <= _now() + 60:
-        return None                                   # certain to be refused: do not spend a call on it
+    if not isinstance(exp, (int, float)) or exp <= _now() + 60:
+        return None                                   # expired, or no readable expiry: never reuse it
     return rec
 
 
@@ -519,14 +558,14 @@ def get_token():
 def classify_401(token):
     """The caller's route answered 401. Returns "route" (the token is fine, the route itself said
     401), "dead" (re-mint), or pages. Order: probe /api/settings, then /api/auth/verify."""
-    st, _, b = app_request("GET", "/api/settings", token=token)
+    st, _, b = app_request("GET", "/api/settings", token=token, timeout=PROBE_TIMEOUT_S)
     if st == 200:
         return "route"
     if st != 401:
         die(3, "FAILED: the route answered 401 and the probe GET /api/settings answered %s — dt-api "
                "cannot tell whether the token is good. Nothing was re-minted." % st)
     probe_err = (_json(b) or {}).get("error")
-    vs, _, vb = app_request("GET", "/api/auth/verify", token=token)
+    vs, _, vb = app_request("GET", "/api/auth/verify", token=token, timeout=PROBE_TIMEOUT_S)
     if vs == 401:
         return "dead"                                 # signature or expiry: a login fixes it
     if vs != 200:
@@ -535,7 +574,7 @@ def classify_401(token):
     # The signature is good, so a login cannot help (routes.ts:216-240: the DB lookup runs after it).
     if probe_err == "User account not found":        # routes.ts:219
         page("crew-user-missing", "the token is signature-valid but the API says 'User account "
-             "not found' — the crew row has been deleted or replaced")
+             "not found' — the crew row has been deleted or replaced", drop_token=True)
     if probe_err == "Invalid or expired token":      # routes.ts:240 — ANY exception, a DB error included
         page("token-refused", "the token is signature-valid but GET /api/settings refuses it — "
              "the app's user lookup or its database is failing")
@@ -559,12 +598,22 @@ def do_call(req):
     if st == 401:
         verdict = classify_401(rec["accessToken"])
         if verdict == "dead":
-            with Lock():
-                cur = cached_token()
-                if cur and cur["accessToken"] != rec["accessToken"]:
-                    rec = cur                          # someone re-minted while we checked
-                else:
-                    rec = login("dt-api")
+            first = b
+            try:
+                with Lock():
+                    cur = cached_token()
+                    if cur and cur["accessToken"] != rec["accessToken"]:
+                        rec = cur                      # someone re-minted while we checked
+                    else:
+                        rec = login("dt-api")
+            except SystemExit:
+                # the request itself WAS sent once and answered 401; say so, and hand back its body
+                sys.stdout.buffer.write(first)
+                sys.stdout.buffer.flush()
+                sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered "
+                                 "HTTP 401 (body on stdout); the refusal above is about the re-mint "
+                                 "and the retry, which were NOT sent.\n")
+                raise
             st, h, b = app_request(req["method"], req["target"], token=rec["accessToken"], body=body,
                             mode=req["mode"])          # ONE retry, never more
     if st is None:
@@ -588,18 +637,24 @@ def do_mint():
         reused = False
         if rec and t - rec.get("issued_at", 0) < MINT_REUSE_S and \
                 isinstance(rec.get("exp"), (int, float)) and rec["exp"] - t >= MIN_EXP_LEFT_S:
-            vs, _, _ = app_request("GET", "/api/auth/verify", token=rec["accessToken"])
+            # ⛔ /api/auth/verify checks the SIGNATURE only (no DB): a token for a deleted or replaced
+            #    row passes it. GET /api/settings runs authenticateToken's user lookup (fresh-reader r1).
+            vs, _, _ = app_request("GET", "/api/settings", token=rec["accessToken"],
+                                   timeout=PROBE_TIMEOUT_S)
             if vs == 200:
                 reused = True
-            elif vs != 401:
-                die(3, "FAILED: /api/auth/verify answered %s; not handing out a token it could not "
+            elif vs == 401:
+                if classify_401(rec["accessToken"]) == "route":
+                    reused = True              # the probe recovered between the two reads
+            else:
+                die(3, "FAILED: GET /api/settings answered %s; not handing out a token it could not "
                        "check." % vs)
         if not reused:
             rec = login("mint")
     exp = rec.get("exp")
     if not isinstance(exp, (int, float)) or exp - _now() < MIN_EXP_LEFT_S:
         die(3, "FAILED: the minted token expires %s — under the %d-day floor; not handing it out."
-            % (exp and _iso(exp), MIN_EXP_LEFT_S // 86400))
+            % (_iso(exp) if isinstance(exp, (int, float)) else "unreadable", MIN_EXP_LEFT_S // 86400))
     sys.stdout.write(json.dumps({"accessToken": rec["accessToken"],
                                  "refreshToken": rec.get("refreshToken", ""),
                                  "issued_at": _iso(rec["issued_at"]), "exp": _iso(exp),
@@ -611,10 +666,6 @@ def main(argv):
     if argv and argv[0] in ("-h", "--help"):
         sys.stdout.write(__doc__)
         return 0
-    try:
-        req = parse(argv)
-    except Refused as r:
-        die(2, str(r))
     me = pwd.getpwuid(os.geteuid()).pw_name
     if me != EXPECT_USER:
         die(2, "REFUSED: run dt-api as %s — sudo -u %s /usr/local/bin/dt-api ... (running it as "
@@ -622,17 +673,25 @@ def main(argv):
     os.umask(0o077)
     if not os.path.isdir(STATE_DIR):
         die(3, "REFUSED: %s is missing — dt-api is not installed completely." % STATE_DIR)
-    fields = {"ts": _iso(_now()), "caller": os.environ.get("SUDO_USER", "?"),
-              "verb": req["kind"]}
-    if req["kind"] == "call":
-        fields.update(method=req["method"], path=canon(req["path"]))
+    fields = {"ts": _iso(_now()), "caller": os.environ.get("SUDO_USER", "?"), "verb": "refused"}
     code = 3
     try:
+        try:
+            req = parse(argv)
+        except Refused as r:
+            die(2, str(r))                     # refusals are logged too (the audit trail)
+        fields["verb"] = req["kind"]
+        if req["kind"] == "call":
+            fields.update(method=req["method"], path=canon(req["path"]))
         code = do_mint() if req["kind"] == "mint" else do_call(req)
         return code
     except SystemExit as e:
         code = e.code
         raise
+    except Exception as e:
+        # ⛔ the TYPE only: a message can carry a header value, i.e. a token
+        code = 3
+        die(3, "FAILED: dt-api hit an internal %s; nothing further was sent." % type(e).__name__)
     finally:
         fields["exit"] = code
         call_log(fields)

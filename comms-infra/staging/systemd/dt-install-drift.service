@@ -7,4 +7,4 @@ Documentation=file:///usr/local/sbin/dt-install-drift
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/dt-install-drift
-TimeoutStartSec=300
+TimeoutStartSec=900

@@ -136,8 +136,9 @@ EXPECTED_JOBS = {
     "/api/vts/audit", "/api/vts/skipped-signals/export", "/api/database/status",
     "/api/filters/diagnostics", "/api/active-engine/diagnostics/scan",
     "/api/active-engine/filtered-pairs", "/api/learning/profile/:id/evaluate",
-    "/api/strategic/recommendations", "/api/diagnostics/tec/costs", "/api/diagnostics/tec/costs/:symbol"}
-check("the shipped job denylist is exactly the census (23)", set(JOBS) == EXPECTED_JOBS and len(JOBS) == 23,
+    "/api/strategic/recommendations", "/api/diagnostics/tec/costs", "/api/diagnostics/tec/costs/:symbol",
+    "/api/test/kraken-balance", "/api/test/finnhub-feed", "/api/learning/fallback-test"}
+check("the shipped job denylist is exactly the census (26)", set(JOBS) == EXPECTED_JOBS and len(JOBS) == 26,
       str(sorted(set(JOBS) ^ EXPECTED_JOBS)))
 JOBS = sorted(EXPECTED_JOBS)
 
@@ -285,6 +286,65 @@ R.app.db_ok = True
 R.app.user_missing = True
 c, o, e = R.run("GET", "/api/settings")
 check("C6 'User account not found': PAGE crew-user-missing, no login", c == 5 and "crew-user-missing" in e and len(R.app.logins()) == n0, e)
+check("... and the token it cannot use any more is dropped from the cache", not os.path.exists(R.st("token.json")))
+c, o, e = R.run("GET", "/api/settings")
+check("... the next call makes NO login while the page stands (sticky)", c == 5 and "PAGE STANDING" in e and len(R.app.logins()) == n0, e)
+os.unlink(R.st("page.json"))
+R.app.user_missing = False
+rows = R.ledger()                                  # 15 minutes later: the cap's window has passed
+with open(R.st("login-ledger.jsonl"), "w") as fh:
+    for x in rows:
+        x["ts"] -= 1000
+        fh.write(json.dumps(x) + chr(10))
+c, o, e = R.run("GET", "/api/settings")
+check("... once a person clears the page, one fresh login and served", c == 0 and len(R.app.logins()) == n0 + 1, e)
+R.close()
+
+# mint: reuse is checked through a DB-backed route, never the signature-only /auth/verify
+R = Rig()
+c, o, e = R.run("mint", env={"SUDO_USER": "dtmint"})
+R.app.user_missing = True
+n0 = len(R.app.logins())
+c, o, e = R.run("mint", env={"SUDO_USER": "dtmint"})
+check("mint does NOT hand out a token the app refuses after its user lookup (verify alone says 200)",
+      c == 5 and "crew-user-missing" in e and o == "" and len(R.app.logins()) == n0, "%s %s %r" % (c, e, o[:40]))
+R.close()
+
+# the dead-token path: the request WAS sent once; a failed re-mint must say so and return its body
+R = Rig()
+R.run("GET", "/api/settings")
+R.app.revoke_all()
+R.app.login_status = 500
+c, o, e = R.run("GET", "/api/other/route")
+check("a failed re-mint says the request WAS sent and hands back the first 401 body",
+      c == 3 and "WAS sent once" in e and "Invalid or expired token" in o, "%s %r %s" % (c, o[:60], e))
+R.close()
+
+# a token that breaks the HTTP header must never be printed
+R = Rig()
+R.run("GET", "/api/settings")
+tok = jload(R.st("token.json"))
+bad = tok["accessToken"] + "\nSECRETPART"
+tok["accessToken"] = bad
+json.dump(tok, open(R.st("token.json"), "w"))
+c, o, e = R.run("GET", "/api/settings")
+check("an invalid header value exits 3 and prints no token", c == 3 and "SECRETPART" not in e + o and tok["accessToken"][:20] not in e + o, e)
+R.close()
+
+# refusals are logged (the audit trail)
+R = Rig()
+R.run("GET", "/api/user/profile")
+log = [json.loads(l) for l in open(R.st("calls.log"))]
+check("a refusal is in the call log with exit 2", log and log[-1]["verb"] == "refused" and log[-1]["exit"] == 2, str(log[-1:]))
+R.close()
+
+# C4: an empty bucket after a successful login is honoured before the next login is sent
+R = Rig()
+R.app.limit = 1
+c, o, e = R.run("GET", "/api/settings")
+neg = jload(R.st("negcache.json"))
+check("RateLimit-Remaining 0 after a login -> no login until the reset", c == 0 and neg.get("status") == 200
+      and neg.get("until", 0) > time.time() + 800, str(neg))
 R.close()
 
 # ═══════════════════════════ login failures, negative cache, cap ═══════════════════════════
@@ -293,7 +353,13 @@ R.app.password = "something-else"
 c, o, e = R.run("GET", "/api/settings")
 check("login 401: PAGE crew-password-wrong + negative cache", c == 5 and "crew-password-wrong" in e, e)
 c, o, e = R.run("GET", "/api/settings")
-check("... and the next call refuses WITHOUT contacting the app", c == 3 and "will not log in again until" in e and len(R.app.logins()) == 1, e)
+check("... and the next call refuses WITHOUT contacting the app (the page stands)", c == 5 and "PAGE STANDING" in e and len(R.app.logins()) == 1, e)
+neg = jload(R.st("negcache.json"))
+neg["until"] = time.time() - 1
+json.dump(neg, open(R.st("negcache.json"), "w"))
+c, o, e = R.run("GET", "/api/settings")
+check("... and still none after the negative cache expires: the known-bad password is not retried",
+      c == 5 and len(R.app.logins()) == 1, e)
 R.close()
 
 R = Rig()
@@ -311,12 +377,13 @@ c, o, e = R.run("GET", "/api/settings")
 check("... within the backoff: no login", c == 3 and len(R.app.logins()) == 1, e)
 neg["until"] = time.time() - 1
 json.dump(neg, open(R.st("negcache.json"), "w"))
-R.run("GET", "/api/settings")                      # 90 s later, still 500: the second login
+c, o, e = R.run("GET", "/api/settings")            # 90 s later, still 500: the second login
+check("two 5xx logins in a row PAGE login-failing (not retried forever)", c == 5 and "login-failing" in e and len(R.app.logins()) == 2, e)
 neg = jload(R.st("negcache.json"))
 neg["until"] = time.time() - 1
 json.dump(neg, open(R.st("negcache.json"), "w"))
-c, o, e = R.run("GET", "/api/settings")            # another 90 s: the cap stops the third
-check("the cap: 2 logins per 900 s whatever the reason", c == 3 and "already logged in 2 times" in e and len(R.app.logins()) == 2, e)
+c, o, e = R.run("GET", "/api/settings")            # another 90 s: the page stands, no third login
+check("... and no third login while that page stands", c == 5 and len(R.app.logins()) == 2, e)
 R.app.login_status = None
 R.close()
 

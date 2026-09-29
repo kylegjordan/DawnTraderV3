@@ -35,7 +35,7 @@ import argparse
 import calendar
 import json
 import os
-import shutil
+import pwd
 import ssl
 import subprocess
 import sys
@@ -46,6 +46,7 @@ import urllib.request
 AGENTS = ("coltrane", "langston")
 BASE = "https://188.245.193.8.sslip.io"
 ORIGIN = BASE                               # the storage state is keyed to the PUBLIC origin (C-10)
+SSH = "/usr/bin/ssh"
 MINT_KEY = "/root/.ssh/dtmint_ed25519"
 MINT_TARGET = "dtmint@188.245.193.8"
 KNOWN_HOSTS = "/root/.ssh/known_hosts"
@@ -64,7 +65,7 @@ def state_file(agent):
 
 def mint():
     """One ssh; the forced command on staging decides what runs. We pass NO command."""
-    cmd = ["/usr/bin/ssh", "-i", MINT_KEY, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+    cmd = [SSH, "-i", MINT_KEY, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
            "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + KNOWN_HOSTS,
            "-o", "ConnectTimeout=20", "-T", MINT_TARGET]
     try:
@@ -79,8 +80,10 @@ def mint():
         raise SystemExit(3)
     try:
         j = json.loads(r.stdout.decode("utf-8"))
-    except ValueError:
-        print("FAILED: the mint returned something that is not JSON. NOT writing a state file.")
+    except (ValueError, UnicodeDecodeError):
+        j = None
+    if not isinstance(j, dict):
+        print("FAILED: the mint returned something that is not a JSON object. NOT writing a state file.")
         raise SystemExit(4)
     if not j.get("accessToken"):
         print("FAILED: the mint returned no accessToken. NOT writing a state file — a file with no "
@@ -88,7 +91,7 @@ def mint():
               "and nobody would know why.")
         raise SystemExit(4)
     try:
-        exp = calendar.timegm(time.strptime(j.get("exp", ""), "%Y-%m-%dT%H:%M:%SZ"))
+        exp = calendar.timegm(time.strptime(str(j.get("exp", "")), "%Y-%m-%dT%H:%M:%SZ"))
     except ValueError:
         print("FAILED: the mint's exp is unreadable. NOT writing a state file.")
         raise SystemExit(4)
@@ -108,13 +111,34 @@ def write_state(agent, tokens):
         {"name": "accessToken", "value": access},
         {"name": "refreshToken", "value": refresh},
         {"name": "token", "value": access}]}]}
-    path = state_file(agent)
-    tmp = path + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump(state, fh)
-    shutil.chown(tmp, agent, agent)            # owned by the agent BEFORE it becomes visible
-    os.replace(tmp, path)                      # atomic: never a half-written state file
+    # ⛔⛔ ROOT WRITES INTO A DIRECTORY THE AGENT OWNS, SO EVERY STEP IS BY HANDLE, NEVER BY PATH
+    #    (fresh-reader r1, BLOCKER: a path-based chown after close let the agent swap the temp file
+    #    for a symlink and have root chown /etc/shadow to it). The home is opened O_NOFOLLOW and
+    #    every name is resolved relative to that handle; the temp is created O_EXCL (a planted file
+    #    or link fails the run instead of being reused); ownership is set on the OPEN fd; the data
+    #    is fsync'd before the rename; rename never follows a link at its destination.
+    pw = pwd.getpwnam(agent)
+    home = os.path.dirname(state_file(agent))
+    name = os.path.basename(state_file(agent))
+    tmp = name + ".tmp"
+    dfd = os.open(home, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        try:
+            os.unlink(tmp, dir_fd=dfd)         # a leftover from an earlier crash (a link is removed, not followed)
+        except FileNotFoundError:
+            pass
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dfd)
+        try:
+            os.fchown(fd, pw.pw_uid, pw.pw_gid)
+            os.fchmod(fd, 0o600)
+            os.write(fd, json.dumps(state).encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
 
 
 def check(agent):
@@ -156,7 +180,7 @@ def main():
     a = ap.parse_args()
     if a.check:
         codes = [check(u) for u in ([a.user] if a.user else AGENTS)]
-        return max(codes)
+        return 1 if 1 in codes else max(codes)   # a DEAD session is never hidden behind an INCONCLUSIVE one
     if a.user:
         ap.error("--user only goes with --check: one mint always refreshes both agents")
     tokens = mint()

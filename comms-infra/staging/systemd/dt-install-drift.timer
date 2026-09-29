@@ -1,10 +1,12 @@
 [Unit]
-Description=Hourly: installed B-CREDENTIALS-PRIVATE-REPO files vs their committed copies (and dt-api pages)
+Description=Daily: installed B-CREDENTIALS-PRIVATE-REPO files vs the reviewed copies they were installed from
 
 [Timer]
-OnBootSec=10min
-OnCalendar=hourly
-RandomizedDelaySec=300
+# DAILY, the pre-audit's cadence (item 10 r4). It was hourly in the first build, which with a
+# broadcast failure page would have posted 24 times a day for a single standing problem.
+OnBootSec=15min
+OnCalendar=*-*-* 05:15:00 UTC
+RandomizedDelaySec=600
 Persistent=true
 
 [Install]

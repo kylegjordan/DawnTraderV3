@@ -35,6 +35,14 @@ MUTATIONS = [
      'hdrs = {"Accept": "application/json", "Connection": "close", "X-Forwarded-For": "10.0.0.9"}'),
     ("no lock timeout refusal", "if _now() >= deadline:", "if False:"),
     ("runs as any account", "if me != EXPECT_USER:", "if False:"),
+    ("the page is not sticky", "    if pg is not None or os.path.exists(PAGE_FILE):", "    if False:"),
+    ("mint trusts the signature-only verify", '            vs, _, _ = app_request("GET", "/api/settings", token=rec["accessToken"],',
+     '            vs, _, _ = app_request("GET", "/api/auth/verify", token=rec["accessToken"],'),
+    ("an empty bucket is ignored", "        if rem == \"0\":\n            # C4", "        if False:\n            # C4"),
+    ("repeated 5xx never pages", "    if prev is not None and (prev.get(\"status\") is None", "    if False and (prev.get(\"status\") is None"),
+    ("a missing row keeps its dead token", "not found' — the crew row has been deleted or replaced\", drop_token=True)",
+     "not found' — the crew row has been deleted or replaced\")"),
+    ("a header error prints the token", "    except ValueError:\n        # http.client", "    except ZeroDivisionError:\n        # http.client"),
 ]
 
 SUITE = os.path.join(HERE, "dt_api_tests.py")

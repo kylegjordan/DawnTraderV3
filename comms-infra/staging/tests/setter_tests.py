@@ -28,6 +28,7 @@ SET_SRC = os.environ.get("SETTER_SRC") or os.path.join(HERE, "..", "dt-api-set-c
 FAKEPSQL = os.path.join(HERE, "fakepsql.py")
 PASS = FAIL = 0
 V1 = "OldValue_1abcdefghij"
+NL = chr(10)
 
 
 def check(name, ok, detail=""):
@@ -277,7 +278,7 @@ json.dump({"started": "x", "old_hash": row0["password"], "old_role": "owner", "h
 with open(r.p("etc", ".staging-api.env.new"), "w") as fh:
     fh.write("DT_API_USER=testuser123\nDT_API_PASS=NeverCommitted_9\n")
 c, o, e = r.run()
-check("reconcile: commit never landed -> cleanup, OLD stands, no page", c == 0 and "commit never landed" in o and clean(r), o + e)
+check("reconcile: commit never landed -> cleanup, OLD stands, no page", c == 0 and "The OLD value stands" in o and "PAGE" not in e and clean(r), o + e)
 r.close()
 
 # ── 13. neither logs in AND the row was changed by someone else: restore + page ──
@@ -292,6 +293,55 @@ json.dump(db, open(r.db, "w"))
 c, o, e = r.run()
 check("reconcile: an outside change -> restored to the marker and PAGE", c == 1 and "PAGE" in e
       and r.dbrow()["password"] == row0["password"] and clean(r), o + e)
+check("... and the page is DURABLE (page.json), not only terminal text", os.path.exists(r.p("state", "page.json")))
+r.close()
+
+# ── 13b. a restore killed between its DB and env halves (r1 BLOCKER): row is back to OLD, env holds NEW ──
+r = Rig(live_env="NewValue_9zzzzzzzzzzz")
+os.makedirs(r.p("setter"), mode=0o700)
+row0 = r.dbrow()                                 # the row holds V1's hash: the DB half WAS restored
+json.dump({"started": "x", "old_hash": row0["password"], "old_role": "owner", "had_env": True, "phase": "renamed"},
+          open(r.p("setter", "marker.json"), "w"))
+with open(r.p("setter", "old-env"), "w") as fh:
+    fh.write("DT_API_USER=testuser123" + NL + "DT_API_PASS=" + V1 + NL)
+c, o, e = r.run()
+check("reconcile: DB restored but env still NEW -> the env is restored from the copy, OLD stands, nothing lost",
+      c == 0 and r.env_value() == V1 and matches(V1, r.dbrow()["password"]) and clean(r), o + e)
+r.close()
+
+# ── 13c. a second invocation while a run holds the setter lock must NOT delete that run's PGPASSFILE ──
+import fcntl  # noqa: E402
+r = Rig()
+lk = os.open(r.p("setter.lock"), os.O_RDWR | os.O_CREAT, 0o600)
+fcntl.flock(lk, fcntl.LOCK_EX)
+pg = r.pgpass()
+c, o, e = r.run(pgpass=pg)
+check("a refused second run leaves the running run's PGPASSFILE in place", c == 2 and "another setter run" in e and os.path.exists(pg), e)
+fcntl.flock(lk, fcntl.LOCK_UN)
+os.close(lk)
+r.close()
+
+# ── 13d. a psql from an earlier run still connected: touch nothing ──
+r = Rig(db_extra={"orphans": 1})
+c, o, e = r.run()
+check("an earlier run's psql still connected -> exit 3, nothing touched", c == 3 and "still connected" in e
+      and r.dbrow()["role"] == "owner" and r.marker() is None, e)
+r.close()
+
+# ── 13e. a marker that cannot be read is recovery data: refuse, do not overwrite it ──
+r = Rig()
+os.makedirs(r.p("setter"), mode=0o700)
+open(r.p("setter", "marker.json"), "w").write("{not json")
+c, o, e = r.run()
+check("an unreadable marker -> exit 4, kept, nothing touched", c == 4 and open(r.p("setter", "marker.json")).read() == "{not json"
+      and r.dbrow()["role"] == "owner", e)
+r.close()
+
+# ── 13f. a standing dt-api page (the reason someone runs the setter) must not block (6) ──
+r = Rig(live_env=V1)
+json.dump({"ts": "t", "kind": "crew-password-wrong", "detail": "d"}, open(r.p("state", "page.json"), "w"))
+c, o, e = r.run()
+check("a standing page is cleared at (5), so (6) can log in; the run succeeds", c == 0 and not os.path.exists(r.p("state", "page.json")), o + e)
 r.close()
 
 # ── 14. a restore that itself fails keeps the marker (exit 4) ──
@@ -335,6 +385,13 @@ vals = [S.gen_value() for _ in range(2000)]
 check("gen_value: 2000 draws, all valid, all distinct", len(set(vals)) == 2000 and all(
     re.fullmatch(r"[A-Za-z0-9_]{41}", x) and x.count("_") == 1 and re.search("[A-Z]", x) and re.search(r"\d", x) for x in vals))
 check("gen_value: validatePasswordStrength's special set holds '_'", "_" in "!@#$%^&*()_+=-{};:'\",.<>?")
+r.close()
+
+# ── 18. the run log survives the terminal ──
+r = Rig()
+r.run()
+log = open(r.p("setter", "run.log")).read() if os.path.exists(r.p("setter", "run.log")) else ""
+check("every step is in the run log too (an ssh that drops loses nothing)", "(7) removed the marker" in log, log[-200:])
 r.close()
 
 print("setter suite: %d passed, %d failed" % (PASS, FAIL))

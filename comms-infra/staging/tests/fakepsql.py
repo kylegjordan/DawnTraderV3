@@ -30,6 +30,10 @@ def save():
     os.replace(tmp, db_path)
 
 
+if sql.startswith("SELECT 'ORPHANS'"):
+    print("ORPHANS|%d" % db.get("orphans", 0))
+    sys.exit(0)
+
 if sql.startswith("SELECT 'STATE'"):
     u = re.search(r"WHERE username = '([^']+)'", sql).group(1)
     row = db["users"].get(u)

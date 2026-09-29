@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
-"""dt-install-drift — is every file B-CREDENTIALS-PRIVATE-REPO installed on THIS box byte-for-byte
-the committed copy? Pre-audit §2.2 item 10 (C-18). Runs as root, hourly, on each box; a failure
-pages through the box's failure unit (staging: dt-unit-failure@ → a system alert naming Infra
-Claude; Helsinki: agent-unit-failure@ → the crew channel).
+"""dt-install-drift — is what B-CREDENTIALS-PRIVATE-REPO installed on THIS box still exactly what
+was reviewed and installed, and is it actually in force? Pre-audit §2.2 item 10 (C-18). Runs as
+root, DAILY (the spec's cadence), on each box; a failure pages through the box's failure unit
+(staging: dt-unit-failure@ → a system alert naming Infra Claude; Helsinki: agent-unit-failure@ →
+the crew channel).
 
-⛔ ROOT RUNS NO GIT. The committed copy's blob id is read by the account that OWNS the repo
-   (deploy on staging, langston on Helsinki), and root re-hashes the installed file itself
-   (sha1 of "blob <len>\\0<bytes>", git's own object hash). A deploy-owned repo read by root
-   would hand root that repo's config — the class safe.directory exists to prevent.
-⚠️ STATED RESIDUAL: the blob id comes from the repo owner's git, so an owner who could edit both
-   the repo and an installed file could make them agree. On staging that owner is deploy, who is
-   root until #1102 — so this detects accidents and hand edits, it is not a tamper boundary.
+WHAT IT COMPARES AGAINST — the INSTALLED sha, not the branch head (fresh-reader r1): the install
+records the reviewed sha it installed from in INSTALLED_SHA. Every file is hashed against its blob
+AT THAT SHA, so a change sitting in review is not "drift". A committed change that is NOT yet
+installed is reported as PENDING, and pages only once the commit that made it is over a week old.
 
-A file it cannot read is a FAIL, never a skip. Every line it prints is one fact:
-    OK       <installed path>  = <repo path> at <sha>
-    DRIFT    <installed path>  differs from <repo path> at <sha>
-    MISSING  <installed path>
-    PERM     <installed path>  mode/owner is X, wanted Y
-    STATE    a runtime fact that must hold (dt-api's state, a page, the mint key's pairing)
-    SOURCE   the committed source itself is unreadable or stale — a mirror-health fact, not drift
-EXIT: 0 all OK · 1 anything else (the unit fails, the page fires).
+⛔ ROOT RUNS NO GIT. The blob ids are read by the account that OWNS the repo (deploy on staging,
+   langston on Helsinki); root re-hashes the installed file itself (sha1 of "blob <len>\\0<bytes>").
+⚠️ STATED RESIDUAL: the ids come from the repo owner's git, so an owner who could edit the repo AND
+   an installed file could make them agree. On staging that owner is deploy, who is root until
+   #1102 — this detects accidents and hand edits; it is not a tamper boundary.
+
+Every line it prints is one fact; anything but OK/PENDING fails the run:
+    OK       <path> = <repo path> at <installed sha>
+    DRIFT    <path> differs from <repo path> at <installed sha>
+    MISSING  <path>
+    PERM     <path> mode/owner is X, wanted Y
+    PENDING  <repo path> changed on the branch after the install (fails once over 7 days old)
+    UNIT     a unit or timer is not in force as installed (reload, enablement, extra drop-ins)
+    STATE    a runtime fact that must hold (a dt-api page, a setter marker, accounts, keys, sudo)
+    SOURCE   the committed source is unreadable or stale — mirror health, not drift
+EXIT: 0 = nothing but OK/PENDING · 1 = anything else.
 """
 import grp
 import hashlib
@@ -36,15 +42,21 @@ import time
 HOSTNAME = None                  # None = socket.gethostname()
 ROOT = ""                        # a prefix on every absolute path it reads (tests only)
 RUNUSER = ["/usr/sbin/runuser", "-u"]
+SYSTEMCTL = "/usr/bin/systemctl"
 # ── END CONSTANTS ──
 
 GIT_ENV = ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "HOME=/nonexistent", "GIT_CONFIG_NOSYSTEM=1"]
+INSTALLED_SHA = "/var/lib/dt-install-drift/installed.sha"
+CLASSES_OUT = "/run/dt-install-drift.classes"      # read by dt-unit-failure-alert for its dedupe key
+PENDING_DAYS = 7
+MARKER_MAX_AGE_S = 2 * 3600
+GIT_TIMEOUT_S = 30
 
 BOXES = {
     "dawntrader-staging": {
         "git_as": "deploy",
-        # the governance checker's own clone: fetched by its timer every 30 min, so it is the
-        # freshest committed copy on this box (the deployed app's clone moves only at a deploy)
+        # the governance checker's own clone: fetched by its timer every 30 min — the freshest
+        # committed copy on this box (the deployed app's clone moves only at a deploy)
         "git_dir": "/opt/governance-checker/DawnTraderV3/.git",
         "ref": "refs/remotes/origin/migration/aws-supabase",
         "stamps": ["/opt/governance-checker/DawnTraderV3/.git/FETCH_HEAD"],
@@ -65,10 +77,14 @@ BOXES = {
         "dirs": [
             ("/etc/dt-api", 0o750, "root", "dtapi"),
             ("/var/lib/dt-api", 0o700, "dtapi", "dtapi"),
+            ("/home/dtmint", 0o750, "dtmint", "dtmint"),
             ("/home/dtmint/.ssh", 0o750, "root", "dtmint"),
+            ("/var/lib/dt-install-drift", 0o755, "root", "root"),
         ],
         "private": [("/etc/dt-api/staging-api.env", 0o600, "dtapi", "dtapi")],
-        "checks": ["dt_api_page", "setter_marker", "dtmint_shell"],
+        "units": {"dt-install-drift.service": ["/etc/systemd/system/dt-install-drift.service.d/onfailure.conf"]},
+        "timers": ["dt-install-drift.timer"],
+        "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2"],
     },
     "dawntrader-agent": {
         "git_as": "langston",
@@ -85,39 +101,44 @@ BOXES = {
             ("comms-infra/staging/systemd/dt-install-drift.service", "/etc/systemd/system/dt-install-drift.service", 0o644, "root", "root"),
             ("comms-infra/staging/systemd/dt-install-drift.timer", "/etc/systemd/system/dt-install-drift.timer", 0o644, "root", "root"),
             ("comms-infra/systemd/onfailure.conf", "/etc/systemd/system/dt-install-drift.service.d/onfailure.conf", 0o644, "root", "root"),
+            # the paging chain these units' failures ride on (r1: it was not covered)
+            ("comms-infra/systemd/agent-unit-failure@.service", "/etc/systemd/system/agent-unit-failure@.service", 0o644, "root", "root"),
+            ("comms-infra/tools/agent-unit-failure-alert", "/usr/local/bin/agent-unit-failure-alert", 0o755, "root", "root"),
         ],
-        "dirs": [],
+        "dirs": [("/var/lib/dt-install-drift", 0o755, "root", "root")],
         "private": [("/root/.ssh/dtmint_ed25519", 0o600, "root", "root")],
-        "checks": ["mint_key_pairing"],
+        "units": {"agent-staging-session.service": ["/etc/systemd/system/agent-staging-session.service.d/onfailure.conf"],
+                  "dt-install-drift.service": ["/etc/systemd/system/dt-install-drift.service.d/onfailure.conf"]},
+        "timers": ["agent-staging-session.timer", "dt-install-drift.timer"],
+        "checks": ["mint_key_pairing", "staging_host_key"],
     },
 }
 
 PROBLEMS = []
+CLASSES = set()
 
 
-def out(kind, text):
+def out(kind, text, cls=None):
     line = "%-8s %s" % (kind, text)
     print(line, flush=True)
-    if kind != "OK":
+    if kind not in ("OK", "PENDING"):
         PROBLEMS.append(line)
+        CLASSES.add(cls or kind)
 
 
 def P(path):
     return ROOT + path
 
 
-def git_blob(box, sha, repo_path):
-    """The committed copy's bytes and blob id, read by the repo's owner (never root)."""
-    base = RUNUSER + [box["git_as"], "--"] + GIT_ENV + ["git", "--git-dir=" + P(box["git_dir"])]
-    r = subprocess.run(base + ["rev-parse", "--verify", "%s:%s" % (sha, repo_path)],
-                       capture_output=True, text=True, timeout=60)
+def git(box, *args, binary=False):
+    cmd = RUNUSER + [box["git_as"], "--"] + GIT_ENV + ["git", "--git-dir=" + P(box["git_dir"])] + list(args)
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=GIT_TIMEOUT_S)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return None, "%s running git" % type(e).__name__
     if r.returncode != 0:
-        return None, None, r.stderr.strip()[:200]
-    bid = r.stdout.strip()
-    c = subprocess.run(base + ["cat-file", "blob", bid], capture_output=True, timeout=60)
-    if c.returncode != 0:
-        return None, None, c.stderr.decode("utf-8", "replace").strip()[:200]
-    return bid, c.stdout, None
+        return None, r.stderr.decode("utf-8", "replace").strip()[:200] or "git exited %d" % r.returncode
+    return (r.stdout if binary else r.stdout.decode("utf-8", "replace").strip()), None
 
 
 def blob_hash(data):
@@ -141,6 +162,13 @@ def read_installed(path):
         os.close(fd)
 
 
+def _name(fn, i):
+    try:
+        return fn(i)[0]
+    except KeyError:
+        return str(i)
+
+
 def owner_ok(st, mode, user, group):
     try:
         uid, gid = pwd.getpwnam(user).pw_uid, grp.getgrnam(group).gr_gid
@@ -151,13 +179,6 @@ def owner_ok(st, mode, user, group):
         return False, "mode/owner is %o %s:%s, wanted %o %s:%s" % (
             have[0], _name(pwd.getpwuid, have[1]), _name(grp.getgrgid, have[2]), mode, user, group)
     return True, ""
-
-
-def _name(fn, i):
-    try:
-        return fn(i)[0]
-    except KeyError:
-        return str(i)
 
 
 def source_fresh(box):
@@ -174,78 +195,131 @@ def source_fresh(box):
     return newest
 
 
+def systemctl(*args):
+    try:
+        r = subprocess.run([SYSTEMCTL] + list(args), capture_output=True, text=True, timeout=30)
+        return r.returncode, r.stdout.strip()
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return None, type(e).__name__
+
+
+def check_units(box):
+    for unit, dropins in box["units"].items():
+        rc, o = systemctl("show", "-p", "LoadState,NeedDaemonReload,DropInPaths", unit)
+        props = dict(ln.split("=", 1) for ln in o.splitlines() if "=" in ln) if rc == 0 else {}
+        if rc != 0 or props.get("LoadState") != "loaded":
+            out("UNIT", "%s is not loaded (%s)" % (unit, props.get("LoadState") or o), "UNIT")
+            continue
+        if props.get("NeedDaemonReload") != "no":
+            out("UNIT", "%s changed on disk and systemd has not reloaded it — the running definition "
+                        "is not the installed one" % unit, "UNIT")
+        have = sorted(x for x in props.get("DropInPaths", "").split() if x)
+        if have != sorted(dropins):
+            out("UNIT", "%s drop-ins are %s, wanted exactly %s (an extra drop-in can override "
+                        "OnFailure or ExecStart)" % (unit, have or "none", dropins), "UNIT")
+    for t in box["timers"]:
+        for verb, want in (("is-enabled", "enabled"), ("is-active", "active")):
+            rc, o = systemctl(verb, t)
+            if o != want:
+                out("UNIT", "%s %s says %r, wanted %r" % (t, verb, o, want), "UNIT")
+
+
 def check_extra(name, box):
     if name == "dt_api_page":
         p = P("/var/lib/dt-api/page.json")
-        if os.path.exists(p):
+        if os.path.lexists(p):
             try:
                 pg = json.load(open(p))
-                out("STATE", "dt-api raised a PAGE at %s: %s — %s (handle it, then remove %s)"
-                    % (pg.get("ts"), pg.get("kind"), pg.get("detail"), p))
-            except (OSError, ValueError) as e:
-                out("STATE", "dt-api's page file exists and cannot be read: %s" % e)
+                pg = pg if isinstance(pg, dict) else {}
+            except (OSError, ValueError):
+                pg = {}
+            kind = str(pg.get("kind", "unreadable"))
+            out("STATE", "dt-api raised a PAGE at %s: %s — %s (fix the cause, then remove %s; dt-api "
+                "makes no login while it stands)" % (pg.get("ts"), kind, pg.get("detail"), p),
+                "PAGE-" + "".join(c for c in kind if c.isalnum() or c == "-")[:40])
     elif name == "setter_marker":
         p = P("/var/lib/dt-api-setter/marker.json")
-        if os.path.exists(p):
-            out("STATE", "an interrupted setter run left its marker at %s — re-run the setter to "
-                         "reconcile it" % p)
-    elif name == "dtmint_shell":
+        if os.path.lexists(p):
+            age = time.time() - os.lstat(p).st_mtime
+            if age > MARKER_MAX_AGE_S:
+                out("STATE", "an interrupted setter run left its marker at %s (%d min old) — re-run "
+                             "the setter to reconcile it" % (p, age // 60), "MARKER")
+    elif name == "accounts":
         try:
-            sh = pwd.getpwnam("dtmint").pw_shell
-            if sh != "/bin/sh":
-                out("STATE", "dtmint's shell is %s; the forced command needs /bin/sh" % sh)
+            if pwd.getpwnam("dtmint").pw_shell not in ("/bin/sh", "/usr/bin/sh"):
+                out("STATE", "dtmint's shell is %s; the forced command needs /bin/sh"
+                    % pwd.getpwnam("dtmint").pw_shell, "ACCOUNT")
         except KeyError:
-            out("STATE", "the dtmint account does not exist")
+            out("STATE", "the dtmint account does not exist", "ACCOUNT")
+        try:
+            if pwd.getpwnam("dtapi").pw_shell not in ("/usr/sbin/nologin", "/sbin/nologin"):
+                out("STATE", "dtapi has a login shell (%s); it must be nologin"
+                    % pwd.getpwnam("dtapi").pw_shell, "ACCOUNT")
+        except KeyError:
+            out("STATE", "the dtapi account does not exist", "ACCOUNT")
+        try:
+            for ln in open(P("/etc/shadow")):
+                f = ln.split(":")
+                if f[0] in ("dtmint", "dtapi") and len(f) > 1 and f[1] not in ("*", "!", "!*"):
+                    out("STATE", "%s has a usable password hash in shadow; it must have none" % f[0], "ACCOUNT")
+        except OSError as e:
+            out("STATE", "cannot read the shadow file: %s" % e, "ACCOUNT")
+    elif name == "sudoers_others":
+        d = P("/etc/sudoers.d")
+        try:
+            for fn in sorted(os.listdir(d)):
+                if fn == "dtapi":
+                    continue
+                try:
+                    txt = open(os.path.join(d, fn), encoding="utf-8", errors="replace").read()
+                except OSError as e:
+                    out("STATE", "cannot read %s/%s: %s" % (d, fn, e), "SUDO")
+                    continue
+                if "dtapi" in txt or "dtmint" in txt:
+                    out("STATE", "%s/%s also mentions dtapi or dtmint — only /etc/sudoers.d/dtapi may"
+                        % (d, fn), "SUDO")
+        except OSError as e:
+            out("STATE", "cannot list %s: %s" % (d, e), "SUDO")
+    elif name == "no_authorized_keys2":
+        p = P("/home/dtmint/.ssh/authorized_keys2")
+        if os.path.lexists(p):
+            out("STATE", "%s exists — sshd reads it too, and it carries no forced command" % p, "KEYS")
     elif name == "mint_key_pairing":
-        if not box["_sha"]:
-            out("STATE", "the mint key's pairing is NOT checked: the committed source is unreadable")
+        if not box.get("_sha"):
+            out("STATE", "the mint key's pairing is NOT checked: no installed sha to read it at", "KEYS")
             return
-        pub = subprocess.run(["/usr/bin/ssh-keygen", "-y", "-f", P("/root/.ssh/dtmint_ed25519")],
-                             capture_output=True, text=True, timeout=30)
-        bid, data, err = git_blob(box, box["_sha"], "comms-infra/staging/dtmint-authorized_keys")
+        try:
+            pub = subprocess.run(["/usr/bin/ssh-keygen", "-y", "-f", P("/root/.ssh/dtmint_ed25519")],
+                                 capture_output=True, text=True, timeout=30)
+        except (subprocess.TimeoutExpired, OSError) as e:
+            out("STATE", "cannot read the mint key: %s" % type(e).__name__, "KEYS")
+            return
+        data, err = git(box, "cat-file", "blob", "%s:comms-infra/staging/dtmint-authorized_keys" % box["_sha"], binary=True)
         if pub.returncode != 0 or data is None:
             out("STATE", "cannot compare the mint key with the committed authorized_keys: %s"
-                % (pub.stderr.strip() or err))
+                % (pub.stderr.strip() or err), "KEYS")
             return
         key = " ".join(pub.stdout.split()[:2])
         if key not in data.decode("utf-8", "replace"):
             out("STATE", "the mint key's public half is NOT the one in the committed "
-                         "comms-infra/staging/dtmint-authorized_keys — the mint will be refused")
+                         "comms-infra/staging/dtmint-authorized_keys — the mint will be refused", "KEYS")
         else:
             out("OK", "the mint key pairs with the committed authorized_keys")
+    elif name == "staging_host_key":
+        try:
+            r = subprocess.run(["/usr/bin/ssh-keygen", "-F", "188.245.193.8", "-f", P("/root/.ssh/known_hosts")],
+                               capture_output=True, text=True, timeout=30)
+            if r.returncode != 0 or "188.245.193.8" not in r.stdout:
+                out("STATE", "root's known_hosts has no entry for staging — the mint (StrictHostKeyChecking=yes) "
+                             "will fail", "KEYS")
+        except (subprocess.TimeoutExpired, OSError) as e:
+            out("STATE", "cannot check root's known_hosts: %s" % type(e).__name__, "KEYS")
 
 
-def main():
-    if os.geteuid() != 0:
-        print("REFUSED: run as root (it must read root-only files and must not run git itself).")
-        return 2
-    host = HOSTNAME or socket.gethostname()
-    box = BOXES.get(host)
-    if not box:
-        print("REFUSED: this host (%s) has no manifest — nothing is checked, which is a FAIL." % host)
-        return 1
-    base = RUNUSER + [box["git_as"], "--"] + GIT_ENV + ["git", "--git-dir=" + P(box["git_dir"])]
-    r = subprocess.run(base + ["rev-parse", "--verify", box["ref"] + "^{commit}"],
-                       capture_output=True, text=True, timeout=60)
-    # ⛔ An unreadable source skips ONLY the hash comparisons: the permission and runtime checks
-    #    below (a dt-api PAGE, a setter marker) need no git, and must never ride on it.
-    sha = r.stdout.strip() if r.returncode == 0 else None
-    box["_sha"] = sha
-    if sha is None:
-        out("SOURCE", "cannot read %s in %s as %s: %s — installed files NOT compared" % (
-            box["ref"], box["git_dir"], box["git_as"], r.stderr.strip()[:200]))
-    t = source_fresh(box)
-    age = None if t is None else time.time() - t
-    if age is None:
-        out("SOURCE", "no freshness stamp is readable (%s)" % ", ".join(box["stamps"]))
-    elif age > box["max_age_s"]:
-        out("SOURCE", "the committed source was last refreshed %d min ago (limit %d) — a stale "
-                      "source, not drift" % (age // 60, box["max_age_s"] // 60))
-    print("# %s — installed files vs %s at %s (source refreshed %s)" % (
-        host, box["ref"], sha[:12] if sha else "UNREADABLE", "?" if age is None else "%d min ago" % (age // 60)), flush=True)
-    for repo_path, inst, mode, user, group in (box["files"] if sha else []):
+def compare_files(box, sha):
+    for repo_path, inst, mode, user, group in box["files"]:
         path = P(inst)
-        bid, _, err = git_blob(box, sha, repo_path)
+        bid, err = git(box, "rev-parse", "--verify", "%s:%s" % (sha, repo_path))
         if bid is None:
             out("SOURCE", "%s is not readable at %s: %s" % (repo_path, sha[:12], err))
             continue
@@ -264,6 +338,67 @@ def main():
         ok, why = owner_ok(st, mode, user, group)
         if not ok:
             out("PERM", "%s %s" % (path, why))
+
+
+def pending(box, sha, head):
+    """Files whose committed copy moved on the branch after the install."""
+    if sha == head:
+        return
+    for repo_path in sorted({f[0] for f in box["files"]}):
+        a, _ = git(box, "rev-parse", "--verify", "%s:%s" % (sha, repo_path))
+        b, _ = git(box, "rev-parse", "--verify", "%s:%s" % (head, repo_path))
+        if a == b:
+            continue
+        ct, _ = git(box, "log", "-1", "--format=%ct", sha + ".." + head, "--", repo_path)
+        age = (time.time() - int(ct)) / 86400 if ct and ct.isdigit() else None
+        text = "%s changed on the branch after the install at %s (%s)" % (
+            repo_path, sha[:12], "age unknown" if age is None else "%.1f days ago" % age)
+        out("PENDING", text)
+        if age is None or age > PENDING_DAYS:
+            out("STATE", "a reviewed change to %s has waited over %d days to be installed" % (repo_path, PENDING_DAYS),
+                "PENDING-STALE")
+
+
+def run():
+    if os.geteuid() != 0:
+        print("REFUSED: run as root (it must read root-only files and must not run git itself).")
+        return 2
+    host = HOSTNAME or socket.gethostname()
+    box = BOXES.get(host)
+    if not box:
+        print("REFUSED: this host (%s) has no manifest — nothing is checked, which is a FAIL." % host)
+        return 1
+    head, err = git(box, "rev-parse", "--verify", box["ref"] + "^{commit}")
+    if head is None:
+        out("SOURCE", "cannot read %s in %s as %s: %s" % (box["ref"], box["git_dir"], box["git_as"], err))
+    t = source_fresh(box)
+    age = None if t is None else time.time() - t
+    if age is None:
+        out("SOURCE", "no freshness stamp is readable (%s)" % ", ".join(box["stamps"]))
+    elif age > box["max_age_s"]:
+        out("SOURCE", "the committed source was last refreshed %d min ago (limit %d) — PENDING below "
+                      "may be incomplete; the installed comparison is unaffected" % (age // 60, box["max_age_s"] // 60))
+    sha = None
+    try:
+        sha = open(P(INSTALLED_SHA)).read().strip()
+    except OSError:
+        out("STATE", "no installed sha at %s — the install did not record what it installed" % INSTALLED_SHA, "INSTALL")
+    if sha and (len(sha) != 40 or any(c not in "0123456789abcdef" for c in sha)):
+        out("STATE", "the installed sha %r is not a 40-hex sha" % sha[:60], "INSTALL")
+        sha = None
+    if sha and head:
+        anc, aerr = git(box, "merge-base", "--is-ancestor", sha, head)
+        if anc is None:
+            out("STATE", "the installed sha %s is not on %s — installed from an unreviewed commit? (%s)"
+                % (sha[:12], box["ref"], aerr), "INSTALL")
+    box["_sha"] = sha
+    print("# %s — installed files vs %s (branch head %s, source refreshed %s)" % (
+        host, sha[:12] if sha else "NO INSTALLED SHA", head[:12] if head else "UNREADABLE",
+        "?" if age is None else "%d min ago" % (age // 60)), flush=True)
+    if sha:
+        compare_files(box, sha)
+        if head:
+            pending(box, sha, head)
     for d, mode, user, group in box["dirs"]:
         try:
             st = os.lstat(P(d))
@@ -280,11 +415,33 @@ def main():
                 out("PERM", "%s %s" % (P(f), why))
         except FileNotFoundError:
             out("MISSING", P(f))
+    check_units(box)
     for c in box["checks"]:
-        check_extra(c, box)
+        try:
+            check_extra(c, box)
+        except Exception as e:                  # a check that crashes is a FAIL with a line, never a traceback
+            out("STATE", "the %s check could not run: %s" % (c, type(e).__name__), "CHECK")
     verdict = "PASS" if not PROBLEMS else "FAIL (%d problem%s)" % (len(PROBLEMS), "" if len(PROBLEMS) == 1 else "s")
     print("dt-install-drift %s: %s" % (host, verdict), flush=True)
     return 0 if not PROBLEMS else 1
+
+
+def main():
+    try:
+        code = run()
+    except Exception as e:
+        print("STATE    dt-install-drift itself failed: %s" % type(e).__name__, flush=True)
+        CLASSES.add("CRASH")
+        code = 1
+    try:                                        # the failure class, for the alert's dedupe key
+        tmp = P(CLASSES_OUT) + ".tmp"
+        with open(tmp, "w") as fh:
+            fh.write(",".join(sorted(CLASSES)) + "\n")
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, P(CLASSES_OUT))
+    except OSError:
+        pass
+    return code
 
 
 if __name__ == "__main__":

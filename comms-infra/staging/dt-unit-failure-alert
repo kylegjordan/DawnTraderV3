@@ -3,19 +3,28 @@
 # failed. Called by dt-unit-failure@.service (User=deploy), the staging twin of Helsinki's
 # agent-unit-failure@. B-CREDENTIALS-PRIVATE-REPO OBJ-1 (#1023), pre-audit §2.2 item 10.
 #
-# WHO IT REACHES (C6 / GB-7): the alert queue that every CC session reads on every turn, and — at
-# the dispatcher's next 15-minute tick — the Discord alerts webhook, which always engages Langston.
-# The dedupe key keeps ONE open alert per unit; once it is resolved, the next failure raises anew.
+# WHO IT REACHES (C6 / GB-7): the alert queue every CC session reads on every turn, and — at the
+# dispatcher's next 15-minute tick — the Discord alerts webhook, which always engages Langston.
+#
+# THE DEDUPE KEY CARRIES THE FAILURE CLASS (fresh-reader r1): any non-resolved alert with the same
+# key blocks a new one, so a key of the unit alone would let an acked-but-open DRIFT alert swallow
+# a later dt-api PAGE. dt-install-drift writes its classes (e.g. "DRIFT,PAGE-token-refused") to
+# /run/dt-install-drift.classes; a new class is a new alert.
 set -eu
 unit="${1:-}"
 case "$unit" in
   ''|*[!A-Za-z0-9@._:-]*) echo "dt-unit-failure-alert: refusing an empty or unsafe unit name" >&2; exit 2 ;;
 esac
+classes=""
+if [ "$unit" = "dt-install-drift.service" ] && [ -r /run/dt-install-drift.classes ]; then
+  classes=$(head -c 200 /run/dt-install-drift.classes | tr -cd 'A-Za-z0-9,_-')
+fi
+key="dt-unit-failure:$unit${classes:+:$classes}"
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 cd /home/deploy/dawntrader
 exec /usr/bin/npm run -s system-alerts -- add \
   --triggers-at "$now" --category breakage --severity warning \
-  --title "Infra Claude — staging unit $unit failed" \
-  --body "Infra Claude — the staging unit $unit failed at $now. As root on staging: journalctl -u $unit -n 60. For dt-install-drift every non-OK line names a file that differs from its committed copy, a permission, a dt-api PAGE (/var/lib/dt-api/page.json) or a stale source." \
-  --dedupe-key "dt-unit-failure:$unit" \
-  --metadata "{\"unit\":\"$unit\",\"owner\":\"CC-INFRA\",\"batch\":\"B-CREDENTIALS-PRIVATE-REPO\"}"
+  --title "Infra Claude — staging unit $unit failed${classes:+ ($classes)}" \
+  --body "Infra Claude — the staging unit $unit failed at $now${classes:+ with $classes}. As root on staging: journalctl -u $unit -n 80. For dt-install-drift every non-OK line names a file that differs from what was installed, a unit not in force, a dt-api PAGE (/var/lib/dt-api/page.json: fix the cause, then remove it), or a stale source." \
+  --dedupe-key "$key" \
+  --metadata "{\"unit\":\"$unit\",\"classes\":\"$classes\",\"owner\":\"CC-INFRA\",\"batch\":\"B-CREDENTIALS-PRIVATE-REPO\"}"
