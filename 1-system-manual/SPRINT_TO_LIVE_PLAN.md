@@ -230,6 +230,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 122 | #590 | #590 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | calibration store reset at the formula change |
 | 123 | B-PROVENANCE-LOSS-CENSUS | B-PROVENANCE-LOSS-CENSUS | CC-B (New Claude) | QUEUED | — | where decision provenance is lost |
 | 124 | #231 | #231 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | ablation record id gap |
+| 124a | Correct what the AMR observes, so it learns correctly while it stays watch-only | B-AMR-INPUT-INTEGRITY-ARC (`#600`, `#604` leg A, `#608`, `#609`, `#610`, `#611`, `#612`) | CC-C (Analyst Claude) | QUEUED | — | after row 124 · MOVED INTO THE SPRINT by Kyle 2026-09-30 (was after-live): the AMR stays OFF and does not size trades; its observations are skewed (a predicate true on every cycle, null-score ledger rows, a ring with no staleness bound, a composite averaging unlike terms, a clamp it cannot tell from real conditions), so what it learns before switch-on is wrong. Turning it ON stays after live, decided on what it would have done |
 
 ### Wave A4 — TRACK A · Tuning — reads the clean data; costs -> geometry -> strategies -> regimes -> scores -> gates -> ranking
 

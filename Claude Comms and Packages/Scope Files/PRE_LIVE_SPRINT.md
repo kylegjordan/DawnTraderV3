@@ -264,13 +264,13 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 
 ### AMR and machine learning — 31
 
-- #608 (CC-B) — AMR work after live (Kyle 2026-09-28)
-- #609 (CC-B) — AMR work after live (Kyle 2026-09-28)
-- #610 (CC-B) — AMR stays watch-only until after live (Kyle 2026-09-28) — its sizing cannot touch trades before then
-- #611 (CC-B) — AMR work after live (Kyle 2026-09-28)
-- #612 (CC-B) — AMR work after live (Kyle 2026-09-28)
+- #608 (CC-B) — ➡️ MOVED to the sprint, `SPRINT_TO_LIVE_PLAN` row 124a (Kyle 2026-09-30: fix the AMR's observation lens before live; switch-on stays after live)
+- #609 (CC-B) — ➡️ MOVED to the sprint, row 124a (Kyle 2026-09-30)
+- #610 (CC-B) — ➡️ MOVED to the sprint, row 124a (Kyle 2026-09-30) — the AMR still stays watch-only until after live; only its observations are corrected
+- #611 (CC-B) — ➡️ MOVED to the sprint, row 124a (Kyle 2026-09-30)
+- #612 (CC-B) — ➡️ MOVED to the sprint, row 124a (Kyle 2026-09-30)
 - B-AMR-CONTEXT-BONUS-REWIRE (CC-A) — Kyle 2026-09-28: all AMR work after live
-- B-AMR-INPUT-INTEGRITY-ARC (CC-C) — Kyle 2026-09-28: AMR fixes after live; stalled since 2026-07-30 with no plan row — place it in the post-live section · carries `#604` (leg A) and `#600` (a stale AMR comment blesses the wrong cap; land before any AMR flip) (2026-09-29)
+- B-AMR-INPUT-INTEGRITY-ARC (CC-C) — ➡️ MOVED to the sprint, row 124a (Kyle 2026-09-30: fix the observation lens in the sprint; switch-on after live). Was: Kyle 2026-09-28: AMR fixes after live; stalled since 2026-07-30 with no plan row — place it in the post-live section · carries `#604` (leg A) and `#600` (a stale AMR comment blesses the wrong cap; land before any AMR flip) (2026-09-29)
 - 17.1 Scope & Grounding (Week 23) — - Define full scope of ML inte (—) — already placed post-live in the roadmap
 - 17.2 ML Touchpoint & Influence Mapping (Weeks 24-25) — #### Featu (—) — already placed post-live in the roadmap
 - 17.3 Infrastructure Design (Weeks 25-26) — - In-process module vs (—) — already placed post-live in the roadmap
