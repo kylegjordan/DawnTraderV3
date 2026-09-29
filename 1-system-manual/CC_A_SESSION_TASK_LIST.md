@@ -62,7 +62,7 @@
 | 12.6 | decommission residue (rule-18 removal) | batch | after 12.4 |
 
 ### ➕ NEXT, AND NEW HOMES FROM `B-GOV-REPORTING` (2026-09-29)
-- ▶ **IN FLIGHT: `B-PLAN-CURRENCY-CHECK`** — Step 1 APPROVED 2026-09-29T22:34Z; Step 2 next. Scope `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_SCOPE.md`. Sprint plan row 1.
+- ▶ **IN FLIGHT: `B-PLAN-CURRENCY-CHECK`** — **PRE-SPRINT (Kyle 2026-09-30)**. Step 1 APPROVED 2026-09-29T22:34Z; Step 2 next. Scope `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_SCOPE.md`. Sprint plan row 1.
 - ▶ **QUEUED: `B-PRUNE-REASON-AUDIT`** (`#1114`) — sprint plan row 1a, after row 1: the 69 + 5 UNCONFIRMED prune reasons audited item by item. Split out of row 1 by Langston at its Step 1. Keeps the sprint plan true: the checker requires a batch close to touch its own plan line; a weekly census alert; the inventory scripts refuse to write the governed docs; `order.py`'s frozen coverage assertion fixed or retired; an audit of the inventory's UNCONFIRMED prune reasons; a census of the homes that still carry a date (fourteen HOME lines, CC-C's, handed to their owner).
 - **After live, crew tooling (`PRE_LIVE_SPRINT.md`):** `B-RULES-CHANGE-CLASS` (the rules_change class, before `B-GATE-GUARD`) · `B-CHECKER-BLOCK-GATE` (`#1107`, gated on measuring the checker's precision) · `B-GOV-LEDGER-GRADE` (`#1099`).
 - ✅ **`#947` `B-GOV-CLASS-PARSE` CLOSED 2026-09-29 as `#968`'s duplicate** (Langston) — the parser fix is CC-C's `B-CHANGE-CLASS-PARSER`.

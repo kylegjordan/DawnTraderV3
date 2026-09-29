@@ -14,6 +14,7 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 | CC-A (Old Claude) | B-INSTRUMENTS-OVER-RULES — usage measure to 2026-10-02 | FINISH the measure, then close |
 | CC-A (Old Claude) | B-DEPLOY-DRIFT-LINE — ✅ CLOSED 2026-09-09, all four criteria PASS (`BATCH_CATALOG.md`; report converted) — this line read "observation window" in error until 2026-09-30 | ✅ done |
 | CC-A (Old Claude) | B-SCHEDULER-FIRST-TICK — ✅ HANDED to Infra Claude (row 73; recorded in CC-A's task list) | ✅ done |
+| CC-A (Old Claude) | B-PLAN-CURRENCY-CHECK (row 1) — Step 1 APPROVED 2026-09-29 (Langston); Step 2 next | FINISH before the sprint starts — **Kyle 2026-09-30 (Desktop): it is PRE-SPRINT work**, so the plan-row check and the weekly census are working when the sprint starts, which is when the plan starts moving fast. The exception to the no-sprint-work rule below is this one row only. |
 | CC-B (New Claude) | B-REACH-BASELINE-ADJUST — 7-day review read 2026-09-28 | ✅ CLOSED 2026-09-29: the crowding arm fired; Kyle overrode the rollback and kept the rows |
 | CC-B (New Claude) | B-FEED-MISMATCH-FIX — observation to ~2026-10-10 | FINISH: convert at close |
 | CC-B (New Claude) | B-XSTOCK-FEE-CONTRACT — observation (~21 days from 09-11) | FINISH: convert at close |
@@ -64,7 +65,7 @@ Anything found while working — a bug, an issue, a needed fix — gets the same
 - **Every item is a batch** (or a hotfix, investigation or sub-batch), run through the normal eleven-step workflow; its report is linked from its row.
 - **The owner updates its row at every batch close** (status + report link), in the same governance turn — and adds any discovery that passes §2. ✅ **A Tier-1 ledger row in `workflow-10-governance` (Langston ruled, 2026-09-29, `B-GOV-REPORTING` G6); grading it is `B-PLAN-CURRENCY-CHECK`.**
 - **Finish what is in flight** (Kyle): work already under way is completed, including any follow-on it was leading up to; a clean break is taken at the next batch boundary.
-- ⛔ **KYLE 2026-09-30 — NO SPRINT WORK, NOT EVEN PLANNING OR REVIEW, UNTIL EVERY SESSION HAS REACHED ITS STOPPING POINT.** Each session first finishes, closes or pauses everything identified in section 0; when all four have reached what can be done before the sprint, the sprint starts. (Asked by CC-B whether sprint rows could begin Steps 1-5 early; Kyle said no.)
+- ⛔ **KYLE 2026-09-30 — NO SPRINT WORK, NOT EVEN PLANNING OR REVIEW, UNTIL EVERY SESSION HAS REACHED ITS STOPPING POINT.** Each session first finishes, closes or pauses everything identified in section 0; when all four have reached what can be done before the sprint, the sprint starts. (Asked by CC-B whether sprint rows could begin Steps 1-5 early; Kyle said no.) *(One exception, Kyle 2026-09-30 to CC-A: row 1 `B-PLAN-CURRENCY-CHECK` is pre-sprint work, listed in §0.)*
 - **Clear plates first** (Kyle): before any session starts its sprint rows, it finishes or cleanly pauses everything it has in flight — see section 0.
 - **Owners** are assigned by connected group (section 6); reassign by editing the row and saying why.
 
