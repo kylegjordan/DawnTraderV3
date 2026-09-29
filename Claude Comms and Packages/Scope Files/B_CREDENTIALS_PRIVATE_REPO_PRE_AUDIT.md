@@ -1,147 +1,272 @@
 # B-CREDENTIALS-PRIVATE-REPO — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
-**Step 2 of 11 · Infra Claude (CC-INFRA) · 2026-09-29 · scope r6 at `de8281f70` (Step 1 APPROVED WITH CONDITIONS, Langston 14:28Z) · issue `#1023`**
-**How this was produced:** seven read-only audit readers, one per component group (A dt-review and the mirror · B drift and push-notice · C agent-work-sync, the Coltrane mirror and agent-staging-session · D the `dt-api` facts · E the credential literals · F CI · G the flip and governance). Their full, cited findings are **Appendix A** (generated from their structured results; nothing paraphrased away). Sections 0-4 are my synthesis. **Every plan item in §3 cites the finding IDs it falls out of**; an item with no audit behind it is marked `UNAUDITED`.
-**Refs:** readers cited `origin/migration/aws-supabase` between `d103be2b5` and `cc9bcaa43`, plus named live files on Helsinki and staging. Server reads were read-only, with two process breaches, both disclosed and cleaned up: group B wrote `/tmp/.x` on Helsinki (timestamps only; checked for anything secret, then removed by me at ~16:20Z), and group E wrote and deleted a temp pattern file in the same command. **No secret value appears in this document** (scanned before commit, §5).
+**Step 2 of 11 · Infra Claude (CC-INFRA) · 2026-09-29 · r2 · scope r6 at `de8281f70` (Step 1 APPROVED WITH CONDITIONS, Langston 14:28Z) · issue `#1023`**
+
+**How this document was produced:** seven read-only audit readers, one per component group:
+- **A** `dt-review` and the mirror
+- **B** drift and push-notice
+- **C** agent-work-sync, the Coltrane mirror and agent-staging-session
+- **D** the `dt-api` facts
+- **E** credential literals
+- **F** CI
+- **G** the flip and governance
+
+Their full cited findings are **Appendix A**, generated from their structured results. Sections 0-4 are my synthesis. **Every plan item cites the finding IDs it falls out of.** Where the synthesis **departs from a reader's recommendation**, that is marked `SYNTHESIS DESIGN` with the reason. Anything with no audit behind it is marked `UNAUDITED`.
+
+**Refs:** readers cited `origin/migration/aws-supabase` from `d103be2b5` to `b48cffeed` (G read at `0c8918c5d`), plus named live files on Helsinki and staging.
+
+**Process breaches, disclosed:**
+- **Three server writes:**
+  - group C's shell redirect created `/tmp/.x` on Helsinki (two config-file paths);
+  - group B then overwrote it (timestamps). I checked it for secret-like strings (0) and removed it at ~16:20Z;
+  - group E wrote and deleted a temp pattern file under `/dev/shm` in the same command.
+- **Groups D and E each saw a credential literal in their own tool output.** No reader quotes a value, and neither does this document (§5).
+
+**Fresh-reader loop on this document:** `REVIEWER r1: object (93acc96d8) · synthesis faithfulness + coverage/design · 1 blocker, ~20 should-fix/minor · all fixed in r2 (this)`.
 
 ---
 
-## 0. PREVIOUSLY STATED vs NOW — the numbers that moved (read these first)
+## 0. PREVIOUSLY STATED vs NOW — the numbers that moved
 
-- **PREVIOUSLY STATED:** GitHub Pro's 3,000 minutes cover *"the roughly 2,600 we measured"* (scope D3). **NOW:** under the docs-only filter R1, the last 30 days would have billed **3,049-3,183** minutes, about **$1.10 a month over** Pro's allowance; filter R2 (which also skips `comms-infra/**` and `token-watch/**`, both never read by CI) fits at **2,364-2,473**. Without any skip: **11,788** minutes, about $53 overage. **REASON:** the earlier weeks were busier (F4).
-- **PREVIOUSLY STATED:** cancelled CI runs are *"200-350 a month"* (OBJ-3(f)). **NOW:** **463 in the 30 days to 2026-09-29T14:59Z**; model estimate after R1: about 30. **REASON:** the stated figure was never measured over this window (F9).
-- **PREVIOUSLY STATED:** OBJ-2's live fix list is *"the 4 recent scripts + `bridge/runtime/directive-template.md`"*. **NOW:** **9 LIVE files + 1 kept (the redaction rule) + the seeder**, plus **26 LEGACY-RUNNABLE** Replit-era scripts that nothing reads, and **13 of 22 tracked compressed archives** carry a literal that `git grep` cannot see (E4, E5, E6).
-- **PREVIOUSLY STATED:** `dt-api`'s denylist guards the kill-switch reset routes `/api/kill-switch/reset` and `/api/guardrails-v2/kill-switch/reset`. **NOW:** **both return 410 (dead)**. The switch is really reset by `POST /api/safety/kill-switch {enabled:false}` (`requireAdmin`) and by `POST /api/trading/start` (`requireEditor`), and the denylist covers **10 of 250** mutating route definitions (D-2, D-3).
-- **PREVIOUSLY STATED:** `#920` is `dt-review grep -i <term>` returning zero hits *"with exit 0"*. **NOW:** the parser takes `-i` as the pattern and `<term>` as a path: it **exits 1** with zero hits, and when `<term>` names a path it returns **confident wrong hits with exit 0** (A1).
-- **PREVIOUSLY STATED:** `dtapi` exists *"so a bug in `dt-api` cannot turn a compromise of the web app into root"* (scope §2.1(1)). **NOW:** **`deploy` already has passwordless root** (`/etc/sudoers.d/deploy`, `#1102`), so that reason is false today (D-1, C-14).
-- **PREVIOUSLY STATED:** `dt-push-notice.sh` and `dt-deploy-drift.sh` both use *"Langston's personal staging key"* for GitHub. **NOW:** push-notice's key **is** the registered read-only GitHub deploy key `162102394` (it also opens a staging shell); **drift uses that key only for staging, and reads GitHub anonymously over https** (GB-2, GB-3, G2).
-- **PREVIOUSLY STATED (`#1101`):** the 15:00:27Z `/chaplet` requests had an unknown source. **NOW:** they were **this audit's own readers** (groups D and E disclosed their status-only probes). There is still no instrument that can tell outside access from ours (the logging gap in `#1022`'s amendment).
+- **PREVIOUSLY STATED:** Pro's 3,000 minutes cover *"the roughly 2,600 we measured"* (scope D3).
+  **NOW:** under filter R1, the last 30 days bill **3,049-3,183** minutes, about $1.10 a month over. Filter R2 (which also skips `comms-infra/**` and `token-watch/**`) fits at **2,364-2,473**. With no skip: **11,788**.
+  **REASON:** the earlier weeks were busier (F4). *The "0 of 1,526 read-set files" match figure is R1's (F2). R2's extra two directories were checked by the r1 reviewer: no CI input reads them.*
+- **PREVIOUSLY STATED:** cancelled runs run at *"200-350 a month"*.
+  **NOW:** **463 in the 30 days to 2026-09-29T14:59Z**; about 30 are expected after R1.
+  **REASON:** the earlier figure was never measured (F9).
+- **PREVIOUSLY STATED:** OBJ-2's live fixes are *"4 recent scripts + the directive template"*.
+  **NOW:** **10 LIVE files + the seeder**:
+  - the 9 of E5, plus **E9's third hard-coded credential**, `e2e/config-snapshot.spec.ts:18-19` (`admin`/`admin123`);
+  - plus **26 legacy-runnable scripts** (E4);
+  - plus **13 of 22 compressed archives** that `git grep` cannot see (E6).
+- **PREVIOUSLY STATED:** `dt-api` denies the kill-switch reset routes.
+  **NOW:** both return **410 (dead)**. The real reset paths are `POST /api/safety/kill-switch` and `POST /api/trading/start`. The denylist covers **10 of 250** mutating definitions (D-2, D-3). **`GET /api/user/profile` returns the caller's full `users` row, including its password hash**, and some GETs **run work** (`/api/audit/run`) (D-12).
+- **PREVIOUSLY STATED:** `#920` returns zero hits with exit 0.
+  **NOW:** it exits **1** with zero hits, and returns **confident wrong hits with exit 0** when the term names a path (A1).
+- **PREVIOUSLY STATED:** `dtapi` protects against *"a compromise of the web app into root"*.
+  **NOW:** **`deploy` already has passwordless root** (`#1102`) (D-1, C-14).
+- **PREVIOUSLY STATED:** push-notice and drift use *"Langston's personal staging key"* for GitHub.
+  **NOW:** push-notice's key **is** the registered read-only GitHub deploy key `162102394`, and it also opens a staging shell. **Drift uses that key only for staging and reads GitHub anonymously** (GB-2, GB-3, G2).
+- **PREVIOUSLY STATED (`#1101`):** the 15:00:27Z `/chaplet` requests came from an unknown source.
+  **NOW:** **group E disclosed its 5 status-only probes, and they match the 5 lines group D observed.** No instrument can separate outside access from ours.
+- **PREVIOUSLY STATED (#1104 at filing):** the 4 flagged Google API keys are in a file *deleted from the tree*.
+  **NOW:** the tracked `backups and data dumps/DawnTrader_Full_Backup_2026-02-06.zip` holds the same path's `conversations.json`, with **70 AIza-shaped strings, 4 distinct**. That matches the 4 alerts, **PLAUSIBLE, not confirmed**. ⇒ they are **likely still in the tip tree**, inside an archive GitHub cannot scan, and **D2 keeps it there** (E6 + G4; the r1 reviewer's measurement).
+- **`users.role` type:** `character varying`, default `'owner'`. **Measured by me** after the audit (~16:35Z, `information_schema.columns` on the staging DB; types only, no values). D-9 had it as INFERRED from the pg_dump.
 
 ---
 
-## 1. THE SIX SOURCES — which were read
+## 1. THE SIX SOURCES
 
-| # | source | read? | where it shows up |
+| # | source | read? | notes |
 |---|---|---|---|
-| 1 | the CODE at the ref | ✅ all seven groups, with `path:line` | Appendix A |
-| 2 | RUNTIME logs + database | ✅ nginx access logs (15 days), `dt-backup-sync` logs (about 08-29 → 09-29), staging `auth.log` sudo lines (30 days), pm2, systemd units and timers, both boxes' crontabs; the DB (only `users` column types and roles; no values) | A5, D-1, E3, G8; §0 |
-| 3 | `SYSTEM_IMPACT_MAP.md` per component | ✅ | stale at `:1184`, `:1186`, `:2813-2815`, `:3686`; **silent** on `dt-backup-sync`, `agent-work-sync`, `coltrane-repo-refresh`, `agent-staging-session`, deploy keys, `main` protection, `/chaplet`, `deploy`'s sudo, the auth surface (A15, C-11, D-13, G8) |
-| 4 | `SYSTEM_MANUAL.md` | ✅ | CI falsely absent at `:10122`, `:10716-10722`, `:10763`; the seeder at `:7513-7514`, `:8160`; auth §3 stale (token lifetime, register status, verify auth, editor vs owner, viewer); `/chaplet` at `:7297` (D-13, G8) |
-| 5 | the ledger (`RUNNING_ISSUES`, `BATCH_CATALOG`, completion reports) | ✅ | `#920`, `#593` (wrong grep semantics), `#990`, `#1027`, `#995`, `#1043`, `#924`, `#110`, `#1022`; **not in the ledger:** the `dt-backup-sync` false-FAIL race (A5), the Coltrane-owned mirror packs (A11), the 4 open GitHub secret-scanning alerts (G4), `deploy`'s root (`#1102`, now filed) |
-| 6 | `bridge/canonical/` | ✅ | **no coverage** of CI, the staging deploy path or the review read path (G11). Provenance comes only from repo history, as scope §5 already does |
+| 1 | code at the ref | ✅ all seven groups | Appendix A |
+| 2 | runtime + DB | ✅ nginx access logs (15 d), `dt-backup-sync` logs (~08-29→09-29), staging `auth.log` sudo lines (30 d), pm2, units, timers, **all crontabs on both boxes** (G7: langston has `dt-backup-sync` */15 and drift hourly; coltrane and nova have none), and the DB (the `users` column type, read by me) | A5, D-1, E3, G7; §0 |
+| 3 | `SYSTEM_IMPACT_MAP.md` | ✅ | **Stale:** `:1184`, `:1186`, `:2813-2815`, `:3686`. **Silent on:** `dt-backup-sync`, `agent-work-sync`, `coltrane-repo-refresh`, `agent-staging-session`, deploy keys, `main` protection, `/chaplet`, `deploy`'s sudo, the auth surface, the staging governance-checker (A15, C-11, D-13, G7, G8) |
+| 4 | `SYSTEM_MANUAL.md` | ✅ | CI falsely absent at `:10122`, `:10716-10722`, `:10763`; the seeder at `:7513-7514`, `:8160`; auth §3 stale; `/chaplet` at `:7297` (D-13, G8) |
+| 5 | the ledger | ✅ | Existing: `#920`, `#593`, `#990`, `#1027`, `#995`, `#1043`, `#924`, `#110`, `#1022`, `#1008`, `#681`. **Absent from every ledger, per the readers:** the `dt-backup-sync` false-FAIL race (A5) · Coltrane-owned mirror packs (A11) · the Google-key alerts (G4 → now `#1104`) · `deploy`'s root (→ `#1102`) · **`#1008`'s fix committed but never installed**, and the dual-role key (GB) · no push notice ever reaches Infra Claude (GB-7) · `users.role` is varchar · `/api/user/profile` returns the hash · the login 404-vs-401 username leak (D) · `main` 3,480 commits behind, with drift logging "behind 0" (G9) |
+| 6 | `bridge/canonical/` | ✅ | **No coverage** of CI, the staging deploy path or the review read path (G11) |
 
 ---
 
-## 2. WHAT THE AUDIT CHANGES — the synthesis, grouped by objective
+## 2. WHAT THE AUDIT CHANGES
 
-### 2.1 Already done during Step 2 (found by this audit)
-- **`/chaplet` (`#1101`) is CLOSED at the edge** by `B-CHAPLET-OFF-HOTFIX` (Langston-reviewed; verified from outside 16:11Z; the code unmount `53045a6d7` rides the next deploy; deletion is `B-CHAPLET-DELETE`, `PHASE_19_PLAN` 4.51b). Langston ruled that it **falsifies OBJ-6's premise**, so **OBJ-6 cannot be claimed until the unmount is deployed** (D-11, E3).
-- **`deploy`'s passwordless root filed as `#1102`**, home `B-SEC-HARDEN` with `#615`/`#924`; removal needs Kyle's go (D-1, C-14).
+### 2.1 Done during Step 2
+- **`/chaplet` (`#1101`) closed at the edge** by `B-CHAPLET-OFF-HOTFIX` (Langston-reviewed and confirmed; unmount `53045a6d7` rides the next deploy; deletion is `B-CHAPLET-DELETE`, `PHASE_19_PLAN` 4.51b). **OBJ-6 cannot be claimed until the unmount is deployed** (Langston) (D-11, E3).
+- **`#1102`** (`deploy`'s passwordless root) and **`#1104`** (the Google-key alerts) filed.
 
-### 2.2 OBJ-1 (crew login) — the design changes
-1. **OBJ-1(c) cannot pass as written** while `deploy` has full root (D-1). **Proposal:** OBJ-1(c) becomes *"the `dtapi` entry is the only NEW sudo entry"*; removing full root is `#1102` in `B-SEC-HARDEN`. The `dtapi` rationale is restated: it keeps the credential out of casual reads, and **it is not a boundary while `deploy` is root**.
-2. **`dt-api` flips from a denylist to GET-by-default + a WRITE ALLOWLIST** (D-2, D-3, D-4). Reads take any `/api/` path, **query strings allowed** (199 of 697 handlers read `req.query`; the trip route needs `?mode=`) and an optional `x-app-mode` header. **Writes** need `--write`, and only routes on an explicit allowlist are accepted. The allowlist starts from the census of what the crew's live scripts actually call. ⇒ **the kill-switch reset, mode switch, config and guardrail writes are unreachable by construction** rather than by a list that ages open (Langston's C6). **Path handling:** the path part is canonicalised (reject `..`, `//`, `\`, `%2e`-style encodings, and lowercase for matching only); **the original case is sent**, because lowercasing breaks symbol and filename parameters (D-4).
-3. **`users.role` is `varchar`** (measured: `character varying`, default `'owner'`), so any string is accepted, and `requireEditor` is an exact compare (D-9). ⇒ the setter asserts the value is exactly `'editor'` and proves it with a **`requireEditor` route call**, not only `UPDATE 1`.
-4. **Deadline (C-6):** the agents' browser refresh **fails from 2026-09-30 04:40Z** (the Helsinki env files hold `testuser123`'s old password), and their current tokens expire about **2026-10-06 04:40Z**. ⇒ **OBJ-1's mint path is sequenced second, right after OBJ-4a.** The daily failure page from 09-30 is expected and is announced to the crew rather than silenced.
-5. **OBJ-0b (JWT rotation) must come AFTER OBJ-1's mint path, with a cache purge** (C-7); the mint's 20-hour reuse guard is bypassed on a rotation.
-6. **Legacy alias:** `/usr/local/bin/coltrane-staging-session` is a symlink with no referrer; it is deleted with the password-login path (rule 18) (C-8).
+### 2.2 OBJ-1 (crew login)
+1. **OBJ-1(c) as written cannot pass** while `deploy` has full root (D-1). **Proposal:** (c) checks that the `dtapi` entries are the only NEW sudo entries; full-root removal is `#1102`. The `dtapi` rationale is restated: it keeps the credential out of casual reads, and it is **not** a boundary while `deploy` is root.
+2. **`dt-api` access model — `SYNTHESIS DESIGN`, for Langston to rule (D-2, D-3, D-4, D-5, D-12):**
+   - **WRITES** (POST, PUT, PATCH, DELETE) need `--write` and an **explicit ALLOWLIST** seeded from the crew's live scripts. Mode switch, kill-switch reset, config and guardrail writes are unreachable **by construction**.
+   - **READS** (GET) are allowed on `/api/`, with query strings and an optional `x-app-mode` header, **except a READ DENYLIST** that keeps the scope's OBJ-1(c) refusals:
+     - the prefixes `/api/admin/`, `/api/auth/` and `/api/user/`, because **`/api/user/profile` returns the password hash** (D-12; `routes.ts:1044-1051`, `storage.ts:700-703`);
+     - plus the GET routes that **run work**, listed by name (`/api/audit/run`, `/api/signal-audit/run`, and any others found in Step 3's census).
+   - **The read side is an accident guard, NOT a boundary** (C6); writes are allowlisted.
+   - Matching canonicalises the path: lowercase **for matching only**, an optional trailing slash, and `..`, `//`, `\` and `%` sequences rejected. **The original case is what gets sent**, so symbol and filename parameters survive.
+   - OBJ-1(c)'s refusal list gains the trailing-slash forms of the whole-route denials (D-5). Its `?x=1` case changes to *"query strings on a denied prefix are refused"*.
+3. **`users.role` is varchar** (measured), and `requireEditor` is an exact compare (D-9). ⇒ the setter asserts exactly `'editor'`, then proves it with a `requireEditor` route call.
+4. **The setter is COMMIT-THEN-VERIFY, with a compensating restore.** The r1 reviewer showed the in-transaction proof cannot work: the login and `authenticateToken` run on the app's own DB connection (`routes.ts:950,964,216-229`), so they cannot see an uncommitted update. **Order:**
+   1. save the old hash and role;
+   2. commit `password` and `role='editor'` (`WHERE username='testuser123'`, assert `UPDATE 1`);
+   3. log in fresh, making the **first** attempt count, because the limiter counts every attempt (D-7);
+   4. make a `requireEditor` call;
+   5. only then rename the env file into place.
 
-### 2.3 OBJ-2 (literals) — the method changes
-1. **The committed verification cannot run as written:** `git grep` has no `--pathspec-from-file` (E1), and an empty pattern file silently turns the ref into the pattern and searches the worktree (E2). ⇒ a committed scanner, **`scripts/credential-scan.py`**, reads each value from its **introducing object** (the published one from `81e4b8094:CLAUDE.md`; the seeder's from its introducing commit, since the file itself is deleted), **refuses on an empty or short pattern**, applies the committed exclusion list, and **also opens the tracked compressed archives** (E6). It exits non-zero on any hit and prints paths only.
-2. **LIVE = 9 files + the seeder** (E5); the redaction rule is kept. **The 26 LEGACY-RUNNABLE scripts** (Replit-era, unread, not archive copies): **proposal, delete under rule 18 in this batch**, because they carry the literal and excluding them would blind the scan to future literals in runnable code (E4). Langston rules.
-3. **The seeder** has no CI or test dependency (E8) ⇒ deleted. Its rule-18 `.removed` archive copy is **redacted**, or the scan cannot reach 0 (E8).
-4. **Archives outside `backups and data dumps/`** that carry literals (repo root, `downloads/`, `docs/`, `test-results/`, `dawntrader-v2/docs/reference/`): **proposal, treated like D2** (kept; the flip protects them), listed by exact path in the exclusion file. Kyle and Langston confirm (E open 5).
+   **On any failure:** a compensating `UPDATE` restores the saved hash and role, and the old env stays. **Mutation test** that path. Hashing uses **`python3-bcrypt` 3.2.2**, present as root on staging. Its `$2b$` output is accepted by `bcryptjs` 3.0.2 (D-10). The generated value uses only characters `validatePasswordStrength` accepts (D-10).
+5. **`mint` must not be reachable from Langston's interactive shell** (the r1 reviewer). The scope's `deploy ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api` would allow `mint`. ⇒ `deploy`'s sudoers line is **restricted to the non-mint forms** (sudoers argument matching). `mint` runs only through a **separate** entry, reachable only by the **forced-command key**. ⚠️ **Honest limit (C-13):** Helsinki root already holds an unrestricted `deploy` shell (#924 key 2), so this bounds Langston's interactive use, **not root on Helsinki**.
+6. **Mint details (C-10):** one mint writes both agents' storage states, still keyed to the **public origin**, so a Coltrane failure no longer skips Langston's.
+7. **Token cache (D-6):** negative-cache **only** a login 401, 404 or 429, **never a 500**. Re-mint only when a probe of `GET /api/settings` (behind `authenticateToken`) also returns 401. Call `127.0.0.1`.
+8. **Deadline (C-6):** the agents' browser refresh **fails from 2026-09-30 04:40Z**, and their tokens expire around **2026-10-06 04:40Z**. ⇒ OBJ-1 is sequenced **second, after OBJ-4a**. The daily failure page from 09-30 is expected and is announced to the crew.
+9. **OBJ-0b comes AFTER OBJ-1's mint path**, with a cache purge (C-7). The alias `coltrane-staging-session` is deleted under rule 18 (C-8).
+10. **Staging drift check** for `dt-api`, the setter and the sudoers drop-in (the scope §2.1(1) requirement, carried): hash the installed files against the committed `comms-infra/staging/` copies; **control:** a deliberately edited copy fails.
+
+### 2.3 OBJ-2 (literals)
+1. **`scripts/credential-scan.py`** replaces a verification that could not run (E1, E2). It:
+   - reads each value from its **introducing object** (the published value from `81e4b8094:CLAUDE.md`; the seeder's from its introducing commit);
+   - **refuses an empty or short pattern**;
+   - applies the committed exclusion list, which handles paths with spaces;
+   - **opens the tracked archives** (E6);
+   - prints paths only, and exits non-zero on any hit.
+2. **The exclusion list, which is what lets it exit 0 (the r1 reviewer's contradiction):**
+   - **`backups and data dumps/` is excluded BY EXACT PATH, citing D2**. Its archives do hold the literal: 11 of 106 members in the `.tar.gz`, 23 of 2,071 in the `Full_Backup` zip (re-measured by the r1 reviewer).
+   - The other archives are listed by exact path, per E's list.
+   - ⚠️ **C4 question for Langston:** `attached_assets/` has zero readers. Is it excluded as a directory, or by its ~270 exact paths (E open 6)?
+3. **LIVE fixes: 10 files + the seeder** (E5, **E9 folded, disposition 1**: `admin`/`admin123` becomes env-required). The redaction rule is kept. **The 26 legacy-runnable scripts are proposed for deletion under rule 18 in this batch**, for **Kyle and Langston** to decide (E4).
+4. **The seeder is deleted.** No CI or test depends on it (E8), and its `.removed` copy is **redacted**.
+5. **Archives outside `backups and data dumps/`** that carry literals are kept like D2 (the flip protects them) and listed by path, for **Kyle and Langston** to confirm (E open 5).
 
 ### 2.4 OBJ-3 (CI)
-1. **R1 or R2** (F4): **recommend R2** — it fits inside Pro's 3,000 minutes, and CI never reads `comms-infra/**` or `token-watch/**`. Built from narrow patterns that match **0 of the 1,526 read-set files** (F1, F2).
-2. **The finder for "the newest code-touching commit"** matches by **tree equality**, not branch head, and drops the `--branch` filter. It has been exercised: exit 0 green, 1 red, 3 only-cancelled (F5).
-3. **Add `workflow_dispatch:`**, so a temporary CI branch at a docs-only tip can still force a run (F6). The shared concurrency group is accepted and stated.
-4. **A read-set guard** (F14): a CI step fails if any test or build input path matches `paths-ignore`, plus an empirical deletion test at Step 7.
+1. **R2 recommended** (fits inside Pro); **Kyle and Langston** decide (F4, F open 1).
+2. **The newest-code-commit finder** works by tree equality, without `--branch`, and has been exercised (F5).
+3. **`workflow_dispatch:` is added** (F6). The shared concurrency group means a dispatch and a push on the same ref can cancel each other; that is **for Langston to accept** (F open 5).
+4. **Read-set guard:** a CI step fails if a test or build input matches `paths-ignore`, plus a deletion test at Step 7 (F14).
+5. **`.dockerignore` extension**: saves about 27% of billable minutes, and no build step reads those paths (F10). **Folded (disposition 1).**
+6. **No required checks are added to `main`** alongside the flip (F11). The F5 finder is the building block for `#681` (F15): noted on `#681`, **not** done here. F8 (red CI in another lane) is theirs and already fixed (`f99317bd1`).
 
-### 2.5 OBJ-4 / OBJ-4a (readers) — the method changes
-1. **`dt-review` and `dt-backup-sync.sh` are committed VERBATIM first** (hash-verified against live), then changed, so the functional change is a reviewable diff (A12).
-2. **Parse BEFORE fetch; reject flags with exit 2 and stderr, no stdout** (A1, A10). **`#920`'s real reproduction is written so it FAILS on today's code** (mutation control against the verbatim copy).
-3. **One shared `flock`** for every fetch into the mirror; **`dt-review` fetches with `--no-write-fetch-head`**, so `FETCH_HEAD` belongs to `dt-backup-sync` only; **mirror age is read from a stamp written on success** (`DT_SYNC_PASS`), not from `FETCH_HEAD`, which a failed fetch truncates and re-stamps (A3, A4, GB-5).
-4. **`dt-backup-sync`'s false FAIL-REPRODUCE race** (3 false alarms since 09-02, each 0-3 s after a push): read `ls-remote` before the fetch, and PASS if the source equals the mirror or is its ancestor. Folded as disposition 1, because OBJ-6 grades this gate (A5).
-5. **Header placement — Langston rules (A2):** recommend exact bytes on stdout for on-branch reads, with provenance on stderr; OFF-BRANCH and DEGRADED on **both** stderr and stdout line 1. ⚠️ **His memorised "+1, subtract one" correction must be rewritten in his decision store in the same deploy**, or he will be off by one the other way (A2, A13).
-6. **Drift (GB-3, GB-4, G2):** it keeps **Langston's existing read-only deploy key `162102394`** for `ls-remote` (no new credential; it already runs as `langston`). Before computing a range it **fetches the head sha itself** under the shared lock (with `--no-write-fetch-head`), so "head not in mirror" stops being routine noise and refuses only when that fetch fails.
-7. **Push-notice (GB-1, GB-2):** ⚠️ **the live copy is the pre-`#1008` version**; the committed, reviewed fix was never installed. ⇒ **install the repo version first**, then add the own-cache fetch (root-owned cache, existing read-only key) and "`STATE` after a readable diff". **Separating the key's two roles** (GitHub reader vs staging shell) is `#924`/`#615` work, **not** this batch (GB-2).
-8. **agent-work-sync (C-1…C-4):** exit codes `0` in sync/advanced · `3` DIVERGED (including work ahead with commits the source never held — **the tamper signal is kept**) · `4` STALE-SOURCE (the source lags but holds the work head) · `5` SOURCE-UNFRESH (stamp older than 45 min). The **failure page carries the reason text**, not just the exit code. The refresh and the sync are chained with `OnSuccess=`.
-9. **Coltrane-owned hardlinked packs** hold about 95% of the mirror's packed bytes (A11): **disposition 2, an item under OBJ-4**: break the hardlinks from Coltrane's side, then re-own them `langston`.
-10. **Langston's instruction files:** the rewrite list gains the prose raw-read lines the URL pattern cannot see, and a second prose pattern covers them in the verification (A6).
+### 2.5 OBJ-4 / OBJ-4a (readers)
+1. **Commit `dt-review` and `dt-backup-sync.sh` verbatim first** (A12). ⭐ **INSTALL-VERIFY GATE on every install in this batch** (GB-1): after install, `git hash-object <live file>` must equal the blob at the reviewed sha, **and `BRIDGE_DIR` is refreshed from the reviewed sha before any `deploy.sh` run**. Today `deploy.sh:37-48` checks presence only and reinstalls whatever `/opt/discord-bridges` holds, which is how `#1008` was committed and never installed. `dt-review` and `dt-backup-sync` join push-notice's WATCHED list.
+2. **`dt-review`:**
+   - parse **before** fetch;
+   - refuse flags with exit 2, a message on stderr and nothing on stdout;
+   - **`#920`'s real reproduction** fails on the baseline copy (A1, A10);
+   - one shared `flock`;
+   - `--no-write-fetch-head`;
+   - a `DT_SYNC_PASS` stamp written on success (A3, A4).
+   ⚠️ **Narrowed from the scope:** `show` takes a **hex sha only, not a ref name**, because every named ref in the mirror is an ancestor of the branch and would be served with no OFF-BRANCH header even when stale (A8). **For Langston.**
+3. **`dt-backup-sync` race** (A5): 3 false FAIL-REPRODUCE alarms since 09-02, each at a tick with **a commit timestamped 0-3 s before it**. Fix: `ls-remote` before the fetch, and PASS if the source equals the mirror or is its ancestor. **Folded, disposition 1.**
+4. ⭐ **Mirror-age consumers move off `FETCH_HEAD`** (A3, GB-5, C-5; the r1 reviewer found this missing from the plan):
+   - **dt-push-notice's `#995` floor** reads `DT_SYNC_PASS`;
+   - **`coltrane-repo-refresh` refuses to stamp** when `DT_SYNC_PASS` is older than the limit, and its false header comment (*"goes stale LOUDLY"*) is corrected (C-5);
+   - it reads `refs/heads/$B` explicitly, never the stale `refs/remotes/origin/*` (C-15), and its `Documentation=` value is fixed (C-15).
+5. **Header placement** (A2): exact bytes on stdout for on-branch reads, with provenance on stderr; OFF-BRANCH and DEGRADED go to both. **Langston's "+1" correction in his decision store is rewritten in the same deploy**, and **who edits his decision store is his call** (A2, A13).
+6. **Drift, three options, for Langston (GB open 1, GB-3, GB-4, GB-10, GB-12, G2):**
+   - **(i) GB's design, RECOMMENDED:** keep key `162102394` for `ls-remote`. If the head is **not yet in the mirror while `DT_SYNC_PASS` is 20 minutes old or less**, log `HEAD_NOT_YET_IN_MIRROR` and measure at the mirror head, raising **no** alert.
+   - **(ii)** refuse, which fires routinely at `:17` after the `:15` sync (GB-4).
+   - **(iii)** `SYNTHESIS DESIGN, UNAUDITED`: drift fetches the head sha itself under the shared lock with `--no-write-fetch-head`. That avoids GB-5's `FETCH_HEAD` concern, but **fetching by sha over a deploy key is still INFERRED** (GB open 3).
+   - **All options:** one delayed retry on `ls-remote` or fetch, because 13 transient publickey denials have hit this key since 09-02 (GB-10).
+   - **GB-12, folded:** the compare API's 300-file cap goes, so the `file-gate-undecidable` mint branch is **deleted under rule 18**. **PREVIOUSLY/NOW for `RUNTIME_N`:** a rename now counts as two paths. That is stated in the alert body, in the change log and here.
+   - **G9, folded:** the main-arm prints `behind_by`, not `total_commits`, which today logs *"behind 0"* while `main` is 3,480 behind.
+7. **Push-notice (GB-1, GB-2, GB-7, GB-8, GB-13, G2):**
+   - **Order constraint (GB-8):** the own-cache fetch **replaces the compare API in the same install** that brings the `#1008` code live. Installing `#1008` alone would wake three sessions on every push after the flip.
+   - **The caveat posts ONCE per unreadable episode**, never per tick (GB-8).
+   - **`STATE` is written only after a readable diff** (A, scope).
+   - **Key B**, a new dedicated **read-only deploy key** owned by root for push-notice only, separates the GitHub reader from the staging shell. **GB recommends it in this batch (GB-2); it is kept, for Langston to confirm.** Splitting the dual-role key used by the mirror, `dt-review` and drift stays `#924`/`#615` (GB open 5).
+   - **GB-7:** add `Infra Claude` to the escalated banner's name list, so the escalated notice reaches the session running this batch.
+   - **GB-13:** add logrotate for both logs.
+8. **agent-work-sync (C-1…C-4, C-9, C-17):**
+   - **Exit codes:** `0` in sync or advanced · `3` DIVERGED, **tamper signal kept** · `4` STALE-SOURCE · `5` SOURCE-UNFRESH.
+   - **The failure page carries the numeric exit status** (`agent-unit-failure-alert` adds `-p ExecMainStatus` plus the unit's last journal line, per C-3).
+   - Chained with `OnSuccess=`, with a cutover order.
+   - **The re-point precedes the flip** (C-17: about 96 failure pages a day otherwise).
+9. **Coltrane-owned hardlinked packs** (A11), disposition 2 under OBJ-4: break the links from Coltrane's side, then re-own them as `langston`.
+10. **Langston's instruction files** (A6): the rewrite covers the prose raw-read lines too, and verification adds a prose pattern.
 
-### 2.6 OBJ-6 (the flip) — new gates
-1. **`gh api user --jq .plan.name` returns EMPTY with today's token** (G1, F12) ⇒ **Kyle confirms Pro in the GitHub UI, or grants the token `read:user`**; an empty value is treated as a failure, never a pass.
-2. **The flip turns OFF GitHub's own secret scanning and push protection** (provider patterns only; Pro does not keep them for a personal private repo) (G3). ⇒ **row 160a `#1013` (our own secret scan) must be live BEFORE the flip**, or the gap is accepted by Kyle in writing.
-3. **4 OPEN GitHub secret-scanning alerts: Google API keys from 2025-11-29**, in a file deleted from the tree on 2026-02-26 but still in history (G4). **Not in the ledger.** ⇒ a new issue, and **Kyle checks whether those keys are still valid and revokes them.** No session can check a Google key.
-4. **Actions spending limit:** there is no API; UI only (G5).
-5. **`main` protection vs admins:** whether the classic force-push and delete blocks bind an admin when `enforce_admins` is false is ambiguous in the docs (G open 1). Langston or Kyle rules whether `CLAUDE.md:389` is reworded or `enforce_admins` is turned on. It is not tested on `main`.
-6. **OBJ-6 adds `/chaplet` → 404 from outside** to its checks, and cannot be claimed until the code unmount is deployed (`#1101`).
+### 2.6 OBJ-5 and OBJ-6
+1. **OBJ-5:** Actions disabled **at REPO level, BEFORE the flip** (C-9). Keys are proven by **fingerprint**, never by `last_used` (C-16). Verified by **`GET actions/permissions` → `enabled:false`**, not by the run count (G10).
+2. **Pro gate:** `gh api user --jq .plan.name` returns **empty** with today's token (G1, F12). ⇒ **Kyle** confirms Pro in the UI, or grants `read:user`. **Empty is treated as FAIL.**
+3. **The flip turns OFF GitHub's secret scanning and push protection** for this personal repo (G3). ⚠️ The r1 reviewer showed the `#1013` scanner (row 160a) sits **behind `#615`** in the sprint, so gating on it would reorder the sprint. ⇒ **RECOMMEND: Kyle accepts the gap, recorded in writing.** `credential-scan.py` (OBJ-2) already covers our known literals, and `#1013` follows in its planned slot. **Kyle's decision.**
+4. **Google keys (`#1104`, G4 + E6):** **Kyle** checks whether they are valid and revokes them. They are probably also in the kept `Full_Backup` zip (§0), so this ties to D2.
+5. **Spending limit:** set in the UI only; **Kyle** (G5).
+6. **`main` and admins** (G6): the classic force-push and delete blocks may not bind the only admin, and every session pushes as that admin. ⇒ **Langston and Kyle** rule: reword `CLAUDE.md:389` and `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md:66`, or turn on `enforce_admins`. Not tested on `main`.
+7. **OBJ-6 post-flip checks add:** `/chaplet` → 404, and a **staging governance-checker** run (G7; key `162102340` survives).
 
-### 2.7 Governance — the ledger grows (G8, A15, C-11, D-13, F13)
-Added to scope §7: `REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md` (`:37-38`, and the retired path at `:50`); `SYSTEM_MANUAL.md` becomes a **multi-site** edit (CI at `:10122`, `:10716-10722`, `:10763`; the seeder at `:7513-7514`, `:8160`; auth §3's stale facts); the SIM gains rows for every silent component listed in §1; `#593`'s wrong grep semantic is corrected; `#920`'s text is corrected and its owner moved; `PHASE_19_PLAN.md:258` (`#920`'s only placement) is updated.
+### 2.7 Governance (G8, G6, A15, C-11, C-12, C-13, D-12, D-13, F7, F13, GB)
+- **SIM:** the stale rows `:1184`, `:1186`, `:2812-2815`, `:3684-3686`, plus new rows for every silent component (§1).
+- **System Manual:** CI (`:10122`, `:10716-10722`, `:10763`), the seeder (`:7513-7514`, `:8160`), auth §3, `/chaplet` (`:7297`).
+- **`LANGSTON_ARCHITECTURE.md`:** `:110-117`, `:131`, `:137`.
+- **`REPO_TOPOLOGY_AND_SYNC_RUNBOOK.md`:** `:36-38`, `:50` (retired path), `:66` (main protection).
+- **`CLAUDE.md`:** §7, and `:17` (*"4/4 green"*), `:149` (cites the removed rule 19), `:389` (F7, G6).
+- **Workflow skills:** `workflow-05`, `-06` and `-11`, plus the hook's text (F7).
+- **Ledger:**
+  - correct `#593` and `#920` (text and owner);
+  - `#920`'s placement at `PHASE_19_PLAN.md:258`;
+  - **`#1008`, plus an annotation on `B-DEPLOY-DRIFT-LINE`'s close claim** (`BATCH_CATALOG:920`, its completion report `:29`: *committed, never installed*);
+  - **close `#1027`** (C-12);
+  - **`#924` amendments** naming both key identities (C-13);
+  - **`#1022` amendment** (D-12: 155 not 157; the sub-router counts);
+  - **correct `#1013`'s "nothing scans"** (G3);
+  - **new entries for A5 and A11**;
+  - a `#681` note (F15).
+- **`DELETED_COMPONENTS_LOG`:** both Helsinki password files, the password-login path, the alias, the seeder, the drift `file-gate-undecidable` branch, and the legacy scripts if approved.
 
 ---
 
-## 3. IMPLEMENTATION PLAN — each item cites its findings
+## 3. IMPLEMENTATION PLAN
 
 | # | item | from | verified by |
 |---|---|---|---|
-| P0 | ✅ **Done:** `/chaplet` closed at the edge (`B-CHAPLET-OFF-HOTFIX`) | D-11, E3 | 404 ×6 from outside, 16:11Z |
-| P1 | Commit `dt-review` + `dt-backup-sync.sh` **verbatim** into `comms-infra/discord/`; add them to `deploy.sh` (preflight, install, the langston cron line, the lock file) | A12 | repo blob = live `hash-object`: `ce4eb49b1`, `89834cae1` |
-| P2 | `dt-review` rewrite: parse-first grammar, flag refusal (exit 2), pinned `show <sha> <path>` with reachability plus OFF-BRANCH/DEGRADED/REFUSED texts, shared `flock`, `--no-write-fetch-head`, success stamp | A1-A4, A7-A10 | Appendix A group A plan items (the `#920` repro fails on the baseline copy; the off-branch control is built on `scratch/offbranch-control`) |
-| P3 | `dt-backup-sync.sh`: `ls-remote` before the fetch, PASS on source ⊑ mirror, exit status checked, `DT_SYNC_PASS` stamp | A5, A3 | no FAIL on a push within 2 s of a tick; a dead remote for 2 h+ fires the floor (control: today's `FETCH_HEAD` check stays green) |
-| P4 | Bridge: ssh `REVIEW_REMOTE`, stderr logged, prompt notes rewritten; Langston's `CLAUDE.md`/`MEMORY.md` (through the composer)/decision store updated **in the same deploy** as P2 | A6, A7, A2, A17 | journal shows `review ref resolved`; raw-URL grep = 0 plus the prose pattern = 0 bar named exclusions; one known line matches the laptop with no offset |
-| P5 | **OBJ-1:** `dtapi` user and single new sudo entry; setter (value on stdin, `WHERE username`, `role='editor'` exactly, fresh login and a `requireEditor` call, rollback); `dt-api` GET-by-default plus write allowlist; token cache (`/var/lib/dt-api`, `flock`, a probe before re-mint, negative cache); `dt-api mint` behind a forced-command key with a 20 h reuse guard; `agent-staging-session` re-pointed; both Helsinki env files and the `coltrane-staging-session` alias retired | D-1…D-4, D-9, C-6…C-8, C-14 | scope OBJ-1(a)-(h) as amended in §2.2; **by 2026-10-06 04:40Z** |
-| P6 | **OBJ-2:** `scripts/credential-scan.py` + `scripts/credential-scan-excludes.txt`; fix the 9 LIVE files; delete the seeder (redacted `.removed`) and, if Langston agrees, the 26 legacy-runnable scripts; `CLAUDE.md` §7 → `dt-api` | E1-E6, E8 | the scanner exits 0; **controls:** it exits non-zero today and on an empty pattern file; it finds a planted literal inside a test archive |
-| P7 | **OBJ-3:** `paths-ignore` R2 on both triggers; `workflow_dispatch`; the tree-equality finder script; the read-set guard step; `workflow-05`/`-06`/`-11` and hook text | F1-F7, F13, F14 | scope OBJ-3(a)-(f), with (f) re-based to 463/30 d |
-| P8 | **OBJ-4:** install the repo `dt-push-notice.sh` first, then the own-cache fetch and `STATE` after a readable diff; drift keeps key `162102394` for `ls-remote` and fetches the head sha under the lock; `agent-work-sync` exit codes 0/3/4/5 with the reason in the page, `OnSuccess=` chaining, cutover order; Coltrane-owned packs re-owned | GB-1…GB-5, G2, C-1…C-4, A11 | scope OBJ-4(a)-(e) as amended |
-| P9 | **OBJ-0b** (if D4 = yes): rotate both JWT secrets in a planned `dt-deploy`, purge the `dt-api` cache, re-mint both agents | C-7 | a pre-rotation token gets 401; the agents are signed in within minutes |
-| P10 | **OBJ-5:** agent-work private, Actions disabled; canaries on throwaway branches | (scope) — **`UNAUDITED` beyond group C's reads of that repo** (C open 4: why it has never run CI is unknown) | scope OBJ-5 |
-| P11 | **OBJ-6:** gates — the `/chaplet` unmount deployed; Pro confirmed (UI or `read:user`); a protection baseline read from both APIs; `#1013` scanner live or the gap accepted in writing; the Google-key alerts handled by Kyle; the spending-limit decision. Then the flip and the post-flip checks, including `/chaplet` 404 | G1-G5, D-11 | scope OBJ-6 as amended |
-| P12 | Governance per §2.7 | G8, A15, C-11, D-13, F13 | the completion report's governance list |
+| P0 | ✅ `/chaplet` closed at the edge | D-11, E3 | 404 ×6 from outside, 16:11Z; Langston confirmed |
+| P1 | Commit `dt-review` + `dt-backup-sync.sh` verbatim; `deploy.sh` preflight, install, cron and lock; **install-verify gate + `BRIDGE_DIR` refresh**; add both to WATCHED | A12, GB-1 | repo blob = live `hash-object` (`ce4eb49b1`, `89834cae1`); after each install, live = reviewed blob |
+| P2 | `dt-review` rewrite (§2.5.2, hex-only `show`) | A1-A4, A7-A10 | Appendix A group A items; `#920` repro fails on the baseline; off-branch control on `scratch/offbranch-control` |
+| P3 | `dt-backup-sync.sh` race fix + `DT_SYNC_PASS` | A5, A3 | no FAIL on a push within 2 s of a tick |
+| P3b | **Mirror-age consumers:** push-notice `#995` floor and `coltrane-repo-refresh` gate read `DT_SYNC_PASS`; C-5 comment; C-15 explicit `refs/heads` and `Documentation=` | A3, GB-5, C-5, C-15 | a dead remote for 2 h+ fires both (**control:** today's `FETCH_HEAD`-based checks stay green) |
+| P4 | Bridge + Langston's files + decision store, **in the same deploy as P2** | A2, A6, A7, A13, A17 | journal `review ref resolved`; both patterns = 0 bar named exclusions; one known line matches the laptop with no offset |
+| P5 | **OBJ-1** per §2.2 (items 1-10) | D-1…D-7, D-9, D-10, D-12, C-6…C-10, C-13, C-14 | scope OBJ-1(a)-(h) as amended; **by 2026-10-06 04:40Z** |
+| P6 | **OBJ-2** per §2.3 | E1-E6, E8, E9 | scanner exits 0; **controls:** non-zero today, on an empty pattern file, and on a planted literal inside a test archive |
+| P7 | **OBJ-3** per §2.4 | F1-F7, F10, F11, F13-F15 | scope OBJ-3(a)-(f), (f) re-based to 463/30 d |
+| P8 | **OBJ-4** per §2.5.6-§2.5.9 | GB-1…GB-5, GB-7, GB-8, GB-10, GB-12, GB-13, G2, G9, C-1…C-4, C-17, A11 | scope OBJ-4(a)-(e) as amended; escalated banner reaches Infra Claude (GB-7); caveat once per episode |
+| P9 | **OBJ-0b** (D4), after P5 | C-7 | a pre-rotation token gets 401; agents signed in within minutes |
+| P10 | **OBJ-5** | C-9, C-16, C-17, G10 | **`GET actions/permissions` → `enabled:false`**; fingerprint proof; canaries on throwaway branches |
+| P11 | **OBJ-6** gates, flip, post-checks | G1-G7, D-11 | gates in §2.6; post-flip includes `/chaplet` 404 and a governance-checker run |
+| P12 | Governance per §2.7 | G8, G6, A15, C-11-C-13, D-12, D-13, F7, F13 | the completion report's list |
 
 ---
 
-## 4. DECISIONS
+## 4. DECISIONS — the complete list, with owners
 
-**For Langston (rulings wanted with this Step 2):**
-1. `dt-api`: GET-by-default plus a write allowlist, replacing the denylist (§2.2.2).
-2. OBJ-1(c) restated, with full-root removal left to `#1102` (§2.2.1).
-3. The `dt-review` header placement, and **who edits his decision store** (A2; it is his auto-memory).
-4. Delete the 26 legacy-runnable scripts in this batch (E4).
-5. R2 over R1 (F4).
-6. Drift keeps key `162102394` and fetches the head itself (GB, G2 open 1), rather than a new root key.
-7. `agent-work-sync` exit-code design (C open 1).
-8. Head-not-in-mirror as a refusal only when the self-fetch fails (GB open 2).
-9. `#1013` before the flip, or the gap accepted in writing (G3).
+**Langston:**
+1. `dt-api` access model: write allowlist plus read denylist (§2.2.2).
+2. OBJ-1(c) restated, with full root left to `#1102` (§2.2.1).
+3. The setter's commit-then-verify with compensating restore (§2.2.4).
+4. `mint` restricted to the forced-command entry, with the Helsinki-root limit accepted (§2.2.5).
+5. The `dt-review` header placement, and who edits his decision store (A2).
+6. Hex-only `show`, narrowed from the scope's `[<ref>]` (A8).
+7. **Drift: options (i), (ii) or (iii)**, with (i) recommended (GB open 1, GB-3, GB-4, G2).
+8. Push-notice **key B** in this batch (GB-2).
+9. `agent-work-sync` exit codes (C open 1).
+10. The `workflow_dispatch` shared concurrency group (F open 5).
+11. `attached_assets/` excluded as a directory or by exact paths (C4; E open 6).
 
-**For Kyle:**
-1. **Pro:** confirm it in GitHub's settings, or let the tool read the plan.
-2. **The four Google API keys** flagged by GitHub: are they still valid? Revoke them if so.
-3. **D4:** rotate the login-signing key.
-4. **D5:** your own password against the November 2025 one.
-5. **`#1102`:** your go to remove `deploy`'s passwordless root.
-6. **Spending limit:** set it in GitHub's billing page, yes or no.
+**Kyle:**
+1. Pro: confirm in the UI, or grant `read:user` (G1).
+2. The 4 Google API keys (`#1104`): valid? Revoke them.
+3. D4: rotate the login-signing key.
+4. D5: your own password against the November 2025 one.
+5. `#1102`: remove `deploy`'s passwordless root.
+6. Actions spending limit (G5).
+7. **Accept, in writing, that the flip turns off GitHub's secret scanning** until `#1013` lands (§2.6.3).
+
+**Kyle and Langston together:**
+1. R1 or R2 (R2 recommended) (F4).
+2. Delete the 26 legacy-runnable scripts in this batch (E4).
+3. Keep, like D2, the literal-carrying archives outside `backups and data dumps/` (E open 5).
+4. `main` vs admins: reword or turn on `enforce_admins` (G6).
 
 ---
 
 ## 5. SAFETY OF THIS DOCUMENT
-Before commit, the whole file was scanned for both credential values (read from their introducing objects, never printed), for private-key blocks, and for token-shaped strings (`sk-`, `ghp_`, `AKIA`, `AIza`); result recorded in the commit message. Appendix A is the readers' own text; they report names, lengths, counts and booleans only.
+Before each commit, the whole file is scanned for both credential values (read from their introducing objects, never printed), private-key blocks and token-shaped strings (`sk-`, `ghp_`, `AKIA`, `AIza`). The result is in the commit message, with a positive control.
 
 ---
 
 ## PLAIN-LANGUAGE SUMMARY (for Kyle)
-Seven parallel checks went through every piece of this batch against the real code and servers.
-- **Two security holes were already dealt with while doing it.** The public file route is closed, and the server's admin-without-password problem is filed.
-- **The rest changes how some of the work gets done, not what we're trying to do:**
-  - the crew login becomes read-only by default, with an explicit short list of allowed changes;
-  - the password check becomes a proper script instead of a one-line command;
-  - a few assumptions about which keys and tools do what turned out wrong and are corrected;
-  - the notice script on the server is an old version, so the reviewed one gets installed first.
-- **The paid GitHub plan still covers the build minutes** if we also skip two tool folders the tests never read.
-- **A new time limit:** the agents' staging logins stop refreshing tomorrow morning and fully expire around 6 October, so the crew login gets built second.
-- **You have a short list of decisions:** Pro, the old Google keys, the login-signing key reset, your own password, removing the server's passwordless admin, and the spending limit.
+Seven parallel checks went through every piece of this batch against the real code and servers, and a fresh reviewer then checked my write-up against them.
+- **Two security holes were handled during the check:** the public file route is closed, and the server's passwordless admin is filed.
+- **The work itself changes in several ways:**
+  - The crew login can only make changes that are on an explicit short list. Its reads block the account pages, because one of them hands back a scrambled password.
+  - The password check becomes a proper script. It ignores the backups you chose to keep, instead of failing on them forever.
+  - Several wrong assumptions about which keys and tools do what are corrected.
+  - The server's notice script is an old version. The reviewed one gets installed, and every install is now checked against the reviewed copy.
+- **Pro still covers the build minutes** if we also skip two tool folders the tests never read.
+- **A new time limit:** the agents' staging logins stop refreshing tomorrow morning and expire around 6 October, so the crew login is built second.
+- **Your decisions are listed in §4:**
+  - the paid plan;
+  - the old Google keys, which are probably also inside the backup zip you're keeping;
+  - the login-signing key reset;
+  - your own password;
+  - removing the server's passwordless admin;
+  - the spending limit;
+  - accepting that going private switches off GitHub's own password scanner until ours is built.
 
 ---
 # APPENDIX A — THE SEVEN AUDIT READERS' FINDINGS (generated verbatim from their structured results)
