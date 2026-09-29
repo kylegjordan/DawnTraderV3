@@ -148,7 +148,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 49 | #233 | #233 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | signals: drift and volume inputs fed as fixed defaults · + `#514` (bury or resurrect the shadow HF8/HF9 gates whose stability input is fabricated; the verdict carries to row 150) - homed 2026-09-29 by CC-B |
 | 50 | #199 | #199 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | strategies: xStock volume confirmation removed for lack of an honest feed |
 | 51 | row:3m-ENUM | plan row 3m-ENUM | CC-B (New Claude) | QUEUED | — | strategies: volatility_edge's pattern path is silently dead · carries `#1063` |
-| 52 | B-SILENT-STRATEGY-CENSUS | B-SILENT-STRATEGY-CENSUS | CC-B (New Claude) | QUEUED | — | strategies: three wired strategies never evaluated · carries `#1070` |
+| 52 | B-SILENT-STRATEGY-CENSUS | B-SILENT-STRATEGY-CENSUS | CC-B (New Claude) | QUEUED | — | strategies: three wired strategies never evaluated · carries `#1070` · + the xStock half (2026-09-30): 10 of 19 strategies switched off for xStock since May, strong_bull_trend among them - ⭐ Kyle decides which to switch on |
 | 53 | B-TARGET-FABRICATION | B-TARGET-FABRICATION | CC-C (Analyst Claude) | QUEUED | — | signals: default targets the strategy never chose |
 | 54 | #574 | #574 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | SQE: a made-up volatility input in the ranker |
 | 55 | B-RTB-REFRESH-CONSOLIDATE | B-RTB-REFRESH-CONSOLIDATE | CC-B (New Claude) | QUEUED | — | RTB: the net-EV backstop removed on thin evidence |

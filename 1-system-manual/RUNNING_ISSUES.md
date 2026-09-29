@@ -9756,6 +9756,8 @@ const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
 **HOME:** `PHASE_19_PLAN` row **`3n.v3`** `B-GATE-WILDCARD-REFUSE` — a resolver read that refuses a wildcard-asset-class match for a key that named a concrete class.
 
 ### #1070 OPEN 2026-09-21 (CC-B; `B-REACH-BASELINE-ADJUST` Step 2) — ⚠️ **THREE WIRED STRATEGIES HAVE NEVER REACHED THE GEOMETRY GUARD IN 89 DAYS.**
+➕ **2026-09-30 (CC-B, answering Kyle): THE xSTOCK HALF OF THIS QUESTION — 10 of 19 strategies are switched OFF for xStock in `strategy_gates` since the 2026-05-11 onboarding (`b79.0m.a`), strong_bull_trend among them, so the xStock loop skips them silently (`eval-cycle.ts:472-490`).** `B-REACH-BASELINE-ADJUST` shipped two xStock strong_bull_trend rows for a strategy that cannot run (record: that report §0 (d)). ⭐ **Decision for Kyle, carried by this batch (sprint row 52): which of the ten to switch on for xStock.** Disposition 2 (added to this batch).
+
 `abcd_long`, `breakout` and `orb` each have a live `recordGuardEval` call site and are wired on BOTH lanes, and **none has a bucket in the guard tracker at all — zero EVALUATIONS, not zero passes.**
 ⚠️ **TWO LIVE HYPOTHESES AND THE CENSUS MUST DISCRIMINATE THEM (Langston): the guard call sits BELOW each detector's early returns**, so *"something upstream refuses them"* and *"their detectors never fire"* both fit the same silence. **Cheapest first cut: whether each appears in the regime→strategy map at all.**
 *(`liquidity_trap` is NOT a member — deliberately disabled since Batch 45 as long-only-incompatible, and correctly absent.)*
