@@ -137,7 +137,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 |---|---|---|---|---|
 | **T1** | `BATCH_CATALOG.md` | every batch (a hotfix: one row, `workflow-hotfix` §5) |  |  |
 | **T1** | `PHASE_HISTORY.md` | every batch (a hotfix: judged — see the class table) |  |  |
-| **T1** | ★ **the ACTIVE plan, `SPRINT_TO_LIVE_PLAN.md`** — your row: status + report link, and any discovery that passes its §2 | ⛔ **EVERY batch close for a batch with a row there** (the plan's own §3); a batch with none: `N/A — after live, <its PRE_LIVE_SPRINT.md line>`. ⚠️ **Nothing grades it yet — that is `B-PLAN-CURRENCY-CHECK`.** |  |  |
+| **T1** | ★ **the ACTIVE plan, `SPRINT_TO_LIVE_PLAN.md`** — your row: status + report link, and any discovery that passes its §2 | ⛔ **EVERY batch close for a batch with a row there** (the plan's own §3); a batch with none: `N/A — after live: <the item's NAME> in Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md` (a name, never a line number — lines move). ⚠️ **Nothing grades it yet — that is `B-PLAN-CURRENCY-CHECK`.** |  |  |
 | **T1** | `PHASE_19_PLAN.md` — now HISTORY | **a `P19-*` batch: REQUIRED** (the checker enforces it); any other: `N/A — not a P19 batch` |  |  |
 | **T1** | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | every batch |  |  |
 | **T1** | the batch `SCOPE` | written at Step 1 |  |  |

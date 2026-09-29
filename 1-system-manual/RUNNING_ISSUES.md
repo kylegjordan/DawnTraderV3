@@ -1694,7 +1694,7 @@ The cause is real and forced — Kraken has no public REST for xStocks (`AssetPa
 
 ---
 
-### #947 OPEN 2026-08-29 (CC-INFRA, found when Kyle asked why B-TOKEN-WATCH's change-class was undecided) — THIRTEEN SCOPE FILES DECLARE A CHANGE-CLASS THE CHECKER CANNOT READ, BECAUSE ITS PATTERN IS LINE-ANCHORED
+### #947 CLOSED 2026-09-29 — DUPLICATE OF #968 (was OPEN 2026-08-29; CC-INFRA, found when Kyle asked why B-TOKEN-WATCH's change-class was undecided) — THIRTEEN SCOPE FILES DECLARE A CHANGE-CLASS THE CHECKER CANNOT READ, BECAUSE ITS PATTERN IS LINE-ANCHORED
 
 `CHANGE_CLASS_MARKER` (`scripts/governance-checker/config.mjs:180`) begins with a line anchor followed by optional list markers, so a declaration is only seen at the START of a line. **But the house style for a scope header is one line carrying several fields** — `**Batch:** X · **Created:** Y · **change-class:** non_architecture` — and a mid-line declaration never matches.
 
@@ -1711,6 +1711,8 @@ The cause is real and forced — Kraken has no public REST for xStocks (`AssetPa
 ⇒ **HOME: `B-GOV-CLASS-PARSE`, owner CC-A (the B-GOV series owns `scripts/governance-checker/`), placed in `PHASE_19_PLAN` at the governance-tooling tail, after the existing B-GOV items.** No date — the queue in front of it moves.
 
 ★ **NOT a defect, checked and cleared:** an invalid class fails CLOSED — `readDeclaredClass` returns `DEFAULT_CLASS` with `reason: invalid-class:<x>`, which is the correct behaviour and is why `auditable` is not a second bug.
+
+✅ **CLOSED 2026-09-29 AS A DUPLICATE OF `#968` (Langston, `B-GOV-REPORTING` G6; CC-A).** One defect had two open issues and two owners; `B-GOV-CLASS-PARSE` was named here and never placed in any plan, and the inventory's first pass pruned it with a false reason (corrected in `PRE_LIVE_INVENTORY_DRAFT.md`). Langston VACATED his 2026-08-30 ruling that folded the fix into `B-GOV-REPORTING`: the failure is the line anchor, and changing the pattern re-grades eight other sessions' closed batches — a change with a blast radius that needs its own batch with a re-grade plan. The three facts only this entry had are carried into `#968`.
 
 ### #946 OPEN 2026-08-29 (CC-A) — ⛔ LANGSTON’S `MEMORY.md` IS **2× ITS CAP**, AND THE PARTS THAT LOOK LOAD-BEARING **ALREADY EXCEED IT ON THEIR OWN**
 
@@ -3249,6 +3251,8 @@ Today the sizer computes `$2,250 × 100% × 20% × 0.97 = $436.50` per trade, an
 ⚠️ **BOARD AUDIT DONE IN THE SAME PASS — AND IT FOUND TWO FALSE STATES, WHICH IS THE PROTOCOL’S OWN NAMED FAILURE MODE ("an un-updated board becomes a confidently wrong second record, which is worse than none"):** (1) **one card titled `B-RULES-1b/1c` sat at `Complete` while 1c was still at Step-1** — a conflated card is COMPLETE only for its earliest leg, so the board asserted finished work that was parked; **SPLIT: 1b retitled + left Complete (it genuinely is), a new `B-RULES-1c` card created at `Scope` carrying the two gates.** (2) **`B-RULES-1a` was titled "(IN PROGRESS, CC-A)" while its status read `Complete`** — same defect, smaller; retitled to CLOSED. ★ **NEITHER would have surfaced on its own: both cards LOOKED populated, and the title/status disagreement is only visible if you read both fields against each other.** **`Issue` set + READ BACK on GOV-ARC (#668), GOV Part 2 (#671), B-CATALOG-1 (#672), B-RULES-1c (#668) — exit codes NOT trusted, per the option-ID-regeneration lesson that silently cleared every Owner twice.** — one place where drift is visible without Kyle having to notice it. | OPEN (owner CC-A, next action) |
 
 **PLACED 2026-09-02 (Langston PROCEED, `B-RULES-1e` gate lifted as circular):** the arc's pieces now have POSITIONED rows in `PHASE_19_PLAN.md` §governance queue — **12.1** rulings-durability (first break) · **12.2** lookalike register (first break) · **12.3** `B-DECISION-RECORDS` · **12.4** `B-CATALOG-1` (OBJ-A..E incl. ORM↔DB drift, glossary, `B-STORAGE-CATALOG` paper close, #601 remainder) · **12.5** `B-CATALOG-2` family · **12.6** decommission residue. Status here was stale by four closes (1c, 1d, leg 2, `B-CLAUDEMD-SLIM`); the plain-language index is `Scope Files/CC_A_SESSION_TASK_LIST.md` §5.
+➕ **2026-09-29 (CC-A, `B-GOV-REPORTING` G6):** `B-GOV-LEDGER-GRADE` (`#1099`), which Langston named on 2026-08-29 as a child of this arc, lives after live in `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md`, crew tooling. This arc is parked by Kyle (that file's "Parked by Kyle" section), so it confers no position on a child (Langston).
+
 ### #683 OPEN 2026-08-07 (CC-A; §13 home required by Langston at B-TEC Step-4 — an OBSERVATION needs a home or an explicit not-actionable declaration, NOT silence) — THE LOCAL VITEST SUITE IS NON-DETERMINISTIC ON DB-DEPENDENT FILES
 
 **MEASURED (CC-A workstation, three consecutive full `npx vitest run` invocations, same tree, 2026-08-07):** **run 1 = 0 test failures + 10 test FILES failed at COLLECTION** · **run 2 = 2 test failures** · **run 3 = 0 failures.** The collection failures are DB access at import time (e.g. `b63-item16-dbs-store.test.ts:36` — `await db.select().from(moduleConstants)`); the failing FILE SET differed between runs.
@@ -6375,6 +6379,8 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 
 ---
+
+➕ **CARRIED FROM `#947` (closed as this entry's duplicate, 2026-09-29, Langston `B-GOV-REPORTING` G6; recorded by CC-A):** (1) of the files that carry the phrase, 13 hold a REAL declaration the pattern rejects and 3 only MENTION it in prose — the prose ones are correctly unparsed; (2) the LINE ANCHOR, not the colon inside the bold, is the cause for most — a candidate pattern tolerant of the asterisks fixed 2 and left 11; (3) relaxing the pattern RE-GRADES other sessions' closed batches (8 would move from the strict set to the one they declared), so the fix needs a re-grade plan, and a naive de-anchoring would start reading the prose mentions as declarations.
 
 ### #966 AMENDMENT 2 — **THE ERROR IS NOT UNIFORMLY CONSERVATIVE. IT INVERTS, AND THE INVERTED SIDE IS THE DANGEROUS ONE.**
 

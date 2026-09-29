@@ -307,6 +307,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 
 ### Crew, reviewer, governance and alert tooling — 67
 
+- B-RULES-CHANGE-CLASS (CC-A) — the `rules_change` change-class: a five-field case file pushed alone and ruled on BEFORE a rules edit lands; its own definition is its first case (Langston 2026-08-26, restored 2026-09-29, #744). ⛔ BEFORE B-GATE-GUARD (its line, under Other, carries the dependency)
 - 2.4b B-ALERT-QUEUE-INTEGRITY (CC-B) — #647 (no claim or lock discipline on the alert file; the watchdog appends outside the lock; rewrites drop malformed rows) + #1074 (open-batch backstop alerts have no resolve edge) + #654 (the checker ignores open-retired rows and treats any COMPLETION filename as a close) — alert tooling (added 2026-09-29)
 - B-CREW-SENDER-IDENTITY (CC-B) — `cc-send --sender` is free text over one shared webhook, so a Discord display name is a claim, not an identity — crew tooling, same class as B-WRITER-ACTOR-ALLOWLIST (added 2026-09-29)
 - #1026 (Infra Claude) — chunked Langston dispatch leaks parts into the channel — comms
@@ -442,7 +443,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-EXIT-LINE-IDENTITY (CC-C) — trade id and class on the exit log line, so a close is read by identity
 - B-EXIT-PATH-TYPING (CC-A) — the exit path is untyped
 - B-EXIT-POLICY-EVALUATOR (CC-B) — our expectancy model cannot rank exit alternatives; needs B-OUTCOME-CORPUS-CAPTURE first (not a defect — a missing capability)
-- B-GATE-GUARD (CC-A) — issue-number blocks; ⛔ AFTER the `rules_change` class lands (Langston 2026-08-26, recorded on #744), and it carries the `SCOPE:` trailer on governed-artifact pushes
+- B-GATE-GUARD (CC-A) — issue-number blocks; ⛔ AFTER B-RULES-CHANGE-CLASS lands (crew tooling; Langston 2026-08-26, restored 2026-09-29, recorded on #744), and it carries the `SCOPE:` trailer on governed-artifact pushes
 - B-GATE-WILDCARD-REFUSE (CC-B) — code-side guard behind a migration invariant that already refuses the bad row
 - B-GDRIVE-UNMOUNT (Infra Claude) — placed 2026-08-28, not parked; owner Infra Claude; absorbs #921
 - B-GOV-INTEGRITY-3 (CC-A) — message id spans

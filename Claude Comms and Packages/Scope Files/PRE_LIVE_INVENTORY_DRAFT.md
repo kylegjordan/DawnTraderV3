@@ -831,7 +831,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 | **#962** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#957** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#955** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |
-| **B-GOV-CLASS-PARSE** #947 | CC-INFRA | pruned only because the issue body contains a status word — issue body records it withdrawn |
+| **B-GOV-CLASS-PARSE** #947 | CC-A (named in #947's HOME) | pruned only because the issue body contains a status word — ⛔ the reason recorded here, "issue body records it withdrawn", was FALSE: the body records no withdrawal. **CLOSED 2026-09-29 as a duplicate of #968** (Langston, `B-GOV-REPORTING` G6), its three facts carried into #968 |
 | **#635** | CC-B | pruned only because the issue body contains a status word — issue body records it withdrawn |
 | **#659** | CC-C | pruned only because the issue body contains a status word — issue body records it folded |
 | **#644** | CC-C | pruned only because the issue body contains a status word — issue body records it withdrawn |

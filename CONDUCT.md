@@ -101,9 +101,9 @@ Anything you turn up that was **not part of the batch's scope** — a bug, a bre
 # 🟨 FINDING — <the thing, in six words>
 ---
 ```
-⚠️ **Only after the investigation settles it.** A suspected bug is not reportable until you have read the code and its history; **if it turns out NOT to be a bug, it is not mentioned at all.**
+⚠️ **Only after the investigation settles it.** A suspected bug is not reportable until you have read the code and its history; **if nothing is owed — no defect, no decision — it is not mentioned at all.**
 ★ **IF THE FINDING NEEDS HIS DECISION, SAY SO IN THE HEADER ITSELF** — `# 🟥 DECISION REQUIRED — <finding>` — because he decides whether to stop and read from the header alone.
-⛔⛔ **AND EVERY FINDING BLOCK ENDS WITH ITS DISPOSITION — A LINE YOU CANNOT LEAVE BLANK (§9.4, trigger corrected 2026-08-27):** `DISPOSITION: folded into this batch | added to <batch> | own batch, placed after <item> | review scheduled at <point>`. ⛔ **"Announced" is not one of them.** ⚠️ **Without this line a session completes the block correctly and decides nothing.**
+⛔⛔ **AND EVERY FINDING BLOCK ENDS WITH ITS DISPOSITION — A LINE YOU CANNOT LEAVE BLANK (§9.4, trigger corrected 2026-08-27):** `DISPOSITION: folded into this batch | added to <batch> | own batch, placed after <item> | review scheduled at <point> | decision required — no work, on <ref> | no work — withdrawn, citing <ref>`. ⛔ **"Announced" is not one of them.** ⚠️ **Without this line a session completes the block correctly and decides nothing.**
 
 ### ⛔ WHEN A DECISION IS HIS, OR A STEP HALTED
 ```
