@@ -10,7 +10,8 @@
 **Code commits:** `e41359ee8` (CI `36561934311`: TypeScript Check, Test Suite, Build, Docker Build all success) + the commit carrying this list (second-reader fixes R1-R3, below) · **tsc baseline:** 377 → 377
 
 ## What this increment is
-Kyle's corrected `PAPER-RESET-3000` retires the open-slots guardrail. How many positions can be open is now **derived**: `floor(100 / effectiveP)`, from ONE function reading the sizer's own resolver. Nothing trades differently until deploy; after deploy paper's count becomes `floor(100 / 20)` = **5** (today's `p` = 20) instead of the setting's 15 — exposure already binds paper at about that — and it becomes **20** when the reset sets `p` = 5. Live derives **3**. ⛔ **2a deploys only together with 2b** (your D4 condition: `p` = 0.5 derives 200 slots until 2b's `p`-entry guard).
+Kyle's corrected `PAPER-RESET-3000` retires the open-slots guardrail. How many positions can be open is now **derived**: `floor(100 / effectiveP)`, from ONE function reading the sizer's own resolver. Nothing trades differently until deploy. **PREVIOUSLY STATED: after deploy paper's count becomes 5 (at today's `p` = 20) instead of 15, "and exposure already binds paper at about that". NOW: that is FALSE — 8 paper positions are open ($753.67, read 2026-09-29 by Langston and re-read by CC-C) and the book has held 7-10 on 23 of the last 31 days (Langston); the stored 15 was binding, not exposure. REASON: correlation scaling shrinks positions below full size, so more of them fit the budget than `floor(100 / p)` counts.** Deploying 2a at `p` = 20 alone would cut the cap 15 → 5 against an 8-deep book: both promotion loops stop at `openSlots ≤ 0` until it drains to 4, and the Open-Trades tab shows `8 / 5` OVER_LIMIT.
+**⛔ DEPLOY ORDER, DECIDED: 2a, 2b and increment 3 (the reset) land in ONE window, and the reset runs immediately after the deploy.** The reset closes every open paper position (P1 step 2) and sets `p` = 5 ⇒ **20 slots** — no drain, no freeze. **Stated fallback:** if P1 refuses (it refuses when any held symbol has no observed price, F3), paper runs at 5 slots with no new admissions until the book drains below 5 or the reset completes; that is a tightening, and the Step-7 read-back records it. Live derives **3** (unchanged in practice: live has no positions). ⛔ **2a never deploys without 2b** (your D4 condition: `p` = 0.5 derives 200 slots until 2b's `p`-entry guard).
 
 ## Your §14.4 conditions — where each landed
 | condition | landed |
@@ -108,9 +109,23 @@ Read on staging before writing: `pg_depend` lists exactly these four views; the 
 - **R5, already homed:** the chat live path (`intent-executor.ts:474-487` → legacy `TradingEngine.processSignal`) lost the count leg of `checkGuardrailRisk` with `checkMaxOpenTrades`; exposure stands. `#578` (engine removal) + plan row `3h`; one-line note added on `#578`.
 - **R6-R8 → 2b's rule-18 census:** per-underlying cap's hardcoded fallback `2`; per-strategy `maxConcurrentPositions` shown on the strategies screen and enforced nowhere; AJ18 `maxPositions` diagnostics with no callers.
 
-## ⛔ JUDGEMENT CALL 9 — RULE ON THIS ONE (R4, not coded)
-`active-portfolio-manager.ts:58` hardcodes `MAX_OPEN_POSITIONS = 10` inside `checkPortfolioHealth`. **In live mode the engine START throws when 10 or more positions are open** (`:163-170`; paper only logs it). Unreachable today — live derives 3 — but **reachable at go-live** once live runs the reset sizing Kyle described (5% ⇒ 20 slots): a live restart with 10+ open would refuse to start. It is also a third answer to "how many can be open", which is what BLOCKER-1 exists to prevent.
-**My recommendation: delete the count leg in 2a.** A full book is a normal state, not a critical one, and admissions are already capped by the derived count. **Not coded, because it is a LIVE-mode start gate and Kyle's rule is that risk limits never loosen** — I want your ruling that removing a start-time check (not an admission cap) is not a loosening before I touch it. The same function's hardcoded 20% drawdown and 80% exposure legs go to 2b's rule-18 census either way.
+## JUDGEMENT CALL 9 — RULED BY LANGSTON: DELETE THE COUNT LEG (done)
+`active-portfolio-manager.ts` `MAX_OPEN_POSITIONS = 10` and both of its legs in `checkPortfolioHealth` (critical at 10, warning at 8) are deleted; the constant name is added to the deletion fence. **Not a loosening (his ruling): it never prevented an open; its only reachable effect was refusing to start the engine that manages stops and the kill switch.** Second census, measured: live engine start is not reachable today at all (`startActiveEngine` hard-codes `mode='paper'`, `active-engine-service.ts:458`), so the leg could only have bitten at go-live. **The 80% exposure and 20% drawdown legs of the same function → 2b's rule-18 census as ONE item** (the 80% leg becomes reachable at go-live: p = 5 / e = 100 ⇒ 97% ≥ 80).
+
+## The rollback, EXERCISED (Langston condition on #2)
+Scratch database on the staging cluster, built from `pg_dump --schema-only --schema=public` of the staging database plus the rows of `guardrails_v2`, `goals_presets`, `module_constants`, `guardrails`; the migration files copied were byte-identical to the committed blobs (md5 `5e7f4cf6…` forward, `fc82cbeb…` rollback). Restore errors: 6, all outside the objects under test (5 × `public.vector` / `semantic_memory` — the pgvector extension is not in the scratch database — and 1 × `schema "public" already exists`).
+```
+PROBE 0 (baseline)   cols ×2, CHECK [1,20], 4 views (md5 d37af49e / 641f14f8 / 68d683c8 / f370b0f5),
+                     const max_open_trades_default=5, v2 live 12 / paper 15, presets 3/5/8/12/5 ×2 modes
+FORWARD              DROP VIEW ×4, ALTER TABLE ×3, DELETE 1, COMMIT
+PROBE 1              columns, CHECK, views, constant row GONE; default_max_total_exposure_pct=0.25 kept
+ROLLBACK             ALTER ×4, UPDATE 1, UPDATE 1, UPDATE 10, INSERT 0 1, CREATE VIEW ×4, COMMIT
+PROBE 2 vs PROBE 0   IDENTICAL (diff empty) — view definitions by md5, column defs, CHECK, all 12 values
+FORWARD again        same statements, COMMIT
+PROBE 3 vs PROBE 1   IDENTICAL
+DROP DATABASE        scratch databases remaining: 0
+```
+⚠️ **For 2b (found by its census):** the rollback recreates views that ALSO select `portfolio_risk_per_trade_pct`; once 2b drops that column this rollback fails, so **2b's rollback must run first**. Recorded in PRE_AUDIT §14.6.
 
 ## Honest residuals
 - Local unit run: 283 of 287 files pass. The 4 failures are this laptop only — 2 need Postgres (`ECONNREFUSED`), 2 fail to parse a line-2 comment under Windows — and none imports a file changed here. CI is the judge.

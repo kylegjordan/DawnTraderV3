@@ -55,7 +55,10 @@ export class ActivePortfolioManager {
   
   // Portfolio-level guardrails
   private readonly MAX_DRAWDOWN_PERCENT = 20; // Max 20% drawdown
-  private readonly MAX_OPEN_POSITIONS = 10; // Max 10 concurrent positions
+  // B-SIZING-DEC-RESTORE (Langston Step-4 #9, 2026-09-29): MAX_OPEN_POSITIONS = 10 REMOVED — a third, hard-coded
+  // answer to "how many can be open". Its only reachable effect was to refuse a LIVE engine start with 10+ open,
+  // i.e. to refuse to start the engine that manages stops and the kill switch. Admissions are capped by the derived
+  // slot count (deriveSlotCount). The drawdown and exposure legs below are the same class: increment 2b.
   private readonly MAX_PORTFOLIO_EXPOSURE_PERCENT = 80; // Max 80% capital deployed
   private readonly WATCHLIST_REFRESH_INTERVAL_MS = 30 * 1000; // 30 seconds
 
@@ -597,14 +600,8 @@ export class ActivePortfolioManager {
       status = 'warning';
     }
 
-    // Check open positions count
-    if (stats.openPositions >= this.MAX_OPEN_POSITIONS) {
-      issues.push(`Open positions ${stats.openPositions} at maximum ${this.MAX_OPEN_POSITIONS}`);
-      status = 'critical';
-    } else if (stats.openPositions >= this.MAX_OPEN_POSITIONS * 0.8 && status === 'healthy') {
-      issues.push(`Open positions ${stats.openPositions} approaching limit ${this.MAX_OPEN_POSITIONS}`);
-      status = 'warning';
-    }
+    // B-SIZING-DEC-RESTORE: the open-positions count leg (critical at 10, warning at 8) is REMOVED — a full book is
+    // a normal state, not an unhealthy one (see the constant's note above). The count is still reported in metrics.
 
     // Check portfolio exposure
     const totalExposure = openPositions.reduce((sum, pos) => {

@@ -204,8 +204,8 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
 
 // P19-B4b D5 (S1 isolation): the active portfolio manager is now keyed BY MODE.
 // Pre-fix this was a single global slot shared by paper + live — the WORST split-brain leak,
-// because the manager owns the per-instance heat ceilings (MAX_OPEN_POSITIONS /
-// MAX_PORTFOLIO_EXPOSURE_PERCENT / MAX_DRAWDOWN). With one slot, whichever mode registered
+// because the manager owns the per-instance heat ceilings (MAX_PORTFOLIO_EXPOSURE_PERCENT /
+// MAX_DRAWDOWN; the MAX_OPEN_POSITIONS leg was removed by B-SIZING-DEC-RESTORE). With one slot, whichever mode registered
 // last owned those ceilings for BOTH modes. Now each mode has its own manager.
 // The accessors default to 'paper' so every existing paper-only caller is behavior-identical;
 // live wiring (Phase 21) passes mode='live'.

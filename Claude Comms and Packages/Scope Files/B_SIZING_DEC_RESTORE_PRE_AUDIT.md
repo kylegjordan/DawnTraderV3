@@ -197,6 +197,7 @@ He re-derived B1 himself (formula at `friction-divergence.ts:100`, evaluator `:1
 
 ### 14.3 WHAT 2a DOES TO A RUNNING SYSTEM (plain)
 Nothing until deploy. After deploy, paper's slot count becomes `floor(100 / 20)` = **5** (today's `p` is 20) instead of the setting's 15 — which is what already binds today (exposure caps paper at ~5-7 open), so the admission behaviour is unchanged until the reset sets `p` = 5 (20 slots). Live derives 3.
+> ⛔ **CORRECTED 2026-09-29 (Langston Step-4 BLOCKER on 2a). PREVIOUSLY STATED: exposure already caps paper at ~5-7 open, so admissions are unchanged. NOW: FALSE — 8 open ($753.67 of an $824.11 anchor, 91.5%) and 7-10 concurrent on 23 of 31 days; the stored 15 was binding. REASON: `correlationScale` shrinks positions after sizing (FINDING-1), so more positions fit than full-size slots.** ⇒ **Deploy order decided: 2a + 2b + increment 3 in ONE window, the reset run immediately after** (it closes the book and sets `p` = 5 ⇒ 20 slots). Fallback if P1 refuses: paper at 5 slots, no new admissions until the book drains — a tightening, recorded at Step 7.
 
 ### 14.4 LANGSTON'S RULING ON §14 (2026-09-29 10:03Z, at `a8b20eba9`) — FOLDED (r2)
 **Retraction, his:** §9 ADDITION 4 (*"p > e ⇒ floor(e/p) = 0 slots"*) is WITHDRAWN. `p` slices the exposure BUDGET, not the balance (`active-position-sizing.ts:225-227`): live = $824.11 × 0.25 × 0.30 = $61.81 against a $206.03 budget ⇒ 3 fit. ⇒ **`floor(100 / p)` is the derivation consistent with the sizer. It is ~3% conservative** (the 0.97 buffer): 20 slots commit 97% of the budget. **Written down so nobody "corrects" the floor later.**
@@ -231,3 +232,14 @@ Nothing until deploy. After deploy, paper's slot count becomes `floor(100 / 20)`
 | R8 | AJ18 `maxPositions` diagnostics (`aj18-rtb-diagnostic.ts:214,235`), no callers; `MAX_POSITIONS` in `scripts/seed-config.ts:29`, `validate-phase6.ts:52` | **2b rule-18 census (2)** |
 | R9 | `audit/transitional_view_guardrails_v1.sql`, `audit/schema_guardrails_v2.sql`, `db_map.json`, `inputs.json`, `guardrails_inventory.csv` still describe the column / view; nothing references them | **no work in 2a:** historical audit artifacts, named in `DELETED_COMPONENTS_LOG` so a grep is not read as a missed sweep |
 | — | Not findings, recorded so they are not re-raised: the AMR per-class slot cap, the one-position-per-symbol check and the VTS caps are SEPARATE mechanisms by design; `getRankedSignals`' default 15 is always overridden by the open-slot count; one count across both classes is Kyle's ONE pot |
+
+### 14.6 LANGSTON'S STEP-4 RULING ON 2a (2026-09-29 11:55Z, at `82fdbed4c`) — CHANGES-NEEDED, FOLDED
+| item | ruling | landed |
+|---|---|---|
+| BLOCKER (call 0) | "exposure already binds paper at about 5" is FALSE (8 open; 7-10 on 23/31 days) | claim corrected in §14.3 and the change list (PREVIOUSLY/NOW); **deploy order decided: 2a + 2b + the reset in one window**, fallback stated |
+| FINDING-1 | the docblock's "N slots commit 97%" ignores `correlationScale` (post-resolver shrink) | docblock corrected; **2b scope decision:** should the count gate follow committed dollars when correlation scaling is active? |
+| #1 views in rollback | KEEP | kept |
+| #2 rollback unexercised | NOT accepted | **EXERCISED** on a scratch database built from staging's real `public` schema + the four tables' rows: forward → rollback → forward; after-rollback state IDENTICAL to baseline (column definitions, the CHECK, the constant row, all 12 row values, the four views by `md5(pg_get_viewdef)`); second forward identical to the first; scratch database dropped (0 remain). Output in the change list |
+| #5 | put the obj-5 condition in the SCOPE | **C-5 in `B_SIZING_DEC_RESTORE_SCOPE.md` obj-5**, naming the two engine sites that apply `positionSizeMultiplier` outside the resolver today (`active-execution-engine.ts:6164-6165`, `:6218-6219`) |
+| #9 | DELETE the count leg (both legs); not a loosening | **deleted** in `active-portfolio-manager.ts` (+ the constant, + a comment in `active-engine-service.ts`); **the 80% exposure and 20% drawdown legs → 2b's rule-18 census as ONE item** (the exposure leg becomes reachable at go-live: p = 5 / e = 100 ⇒ 97% ≥ 80 ⇒ live start throws); `DELETED_COMPONENTS_LOG` says so |
+⛔ **ROLLBACK ORDER FOR 2b, found by the 2b census:** 2a's rollback recreates four views that ALSO select `portfolio_risk_per_trade_pct`; once 2b drops that column, 2a's rollback fails. ⇒ **2b's rollback runs first, always** — 2b's migration header and deletion-log entry must say so.

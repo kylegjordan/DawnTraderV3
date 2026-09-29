@@ -60,8 +60,14 @@ export function resolveEffectivePositionPct(
  * derivation (the retired `max_open_positions` setting and m5e's `floor(e/p)` twin both answered this
  * differently; §14.4 BLOCKER-1). `p` slices the exposure BUDGET, not the balance (the sizer below:
  * budget = balance × e, trade = budget × p × 0.97), so the budget holds `floor(100 / effectiveP)` trades,
- * independent of `e`. ⚠️ Deliberately ~3% conservative: N slots commit N × p × 0.97 = 97% of the budget
- * at p = 100/N. Do not "correct" the floor to use the buffer.
+ * independent of `e`. ⚠️ Deliberately ~3% conservative: N FULL-SIZE slots commit N × p × 0.97 = 97% of the
+ * budget at p = 100/N. Do not "correct" the floor to use the buffer.
+ * ⚠️ IT COUNTS FULL-SIZE SLOTS, AND POSITIONS ARE OFTEN SMALLER (Langston Step-4 FINDING-1, measured 2026-09-29):
+ * the covariance `correlationScale` shrinks quantity AFTER this share is applied (≤ 1, never up), so the count
+ * gate (engine `maxOpenTrades`) caps POSITIONS while the budget holds DOLLARS — on 09-29, 8 open positions, 5 of
+ * them $51-56 against a ~$160 full size, held 91.5% of the budget. The count therefore stays an UPPER bound on
+ * committed dollars (safe direction) and UNDER-uses the budget whenever correlation scaling is active. Whether
+ * that is intended is increment 2b's scope decision, not this function's.
  * Callers pass the QUANT-pool `effectiveP` (the largest per-trade share, so the fewest slots).
  * Non-finite or non-positive input returns `NaN`, `Infinity` or a negative number; every caller HALTS
  * on `!Number.isFinite(slots) || slots <= 0` rather than inventing a cap.

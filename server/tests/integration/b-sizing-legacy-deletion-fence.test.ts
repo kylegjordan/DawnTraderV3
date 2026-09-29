@@ -213,6 +213,8 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       'selectGoalsPreset',
       'logSlotState',
       'slotStateSnapshots',
+      // Langston Step-4 #9: the hard-coded open-positions ceiling in the live start-up health check.
+      'MAX_OPEN_POSITIONS',
     ];
 
     // The ONE place code must still name the retired field: the PUT refuses it with 422 RETIRED_FIELD, so a stale
