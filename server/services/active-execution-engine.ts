@@ -4771,6 +4771,8 @@ export class ActiveExecutionEngine {
       preComputedNotional: signal.estimatedValue,
       // Phase 8.8.4-A: SLAL lifecycle tracking ID
       signalId: signal.signalId,
+      // B-SIZING-DEC-RESTORE 2b (#1093): the cooldown matches the symbol within its own asset class.
+      assetClass: asValidAssetClass((signal as any).metadata?.assetClass) ?? undefined,
     };
 
     // [B4] Log funnel attempt - signal generated, entering guardrail check
