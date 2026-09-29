@@ -441,7 +441,7 @@ DEPLOY SUMMARY: 60 pass, 0 fail
 
 ---
 ## STEP 7 — FIRST-PASS VERIFICATION ON THE LIVE READER (`/usr/local/bin/dt-review` = blob `bfff20f4…`), 2026-09-29 ~22:10-22:16Z
-Every call as langston, from `/home/langston`: `cd /home/langston && sudo -u langston /usr/local/bin/dt-review …`; the scripts that ran them are committed with this section's commit (`step7`/`step7b` below are their content, verbatim in spirit — the exact commands are listed). **Checked against the scope's STEP-3 AMENDMENT texts.**
+Every call as langston, from `/home/langston`: `cd /home/langston && sudo -u langston /usr/local/bin/dt-review …`. The exact command for each check is in the table (the wrapper scripts were not committed; nothing in them beyond these commands and hashing their output). **Checked against the scope's STEP-3 AMENDMENT texts.**
 | # | the scope's check | command | result |
 |---|---|---|---|
 | **(a)** | pinned read = exact blob, for a file that changed after the pin | `dt-review show 445b6a505… "Claude Comms and Packages/Change Lists/B_CREDENTIALS_PRIVATE_REPO_OBJ4A_CHANGE_LIST.md"` then the same path unpinned | **rc 0; stdout blob `a14fd5a4…` = laptop `git rev-parse 445b6a505:<path>`**; the head read gives `d24f6e11…` = the laptop's head blob, so the pin is doing the work; stderr `… on migration/aws-supabase; content is exact (re-hashed) …` |
