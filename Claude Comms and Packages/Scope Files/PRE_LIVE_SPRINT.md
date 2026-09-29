@@ -260,7 +260,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - **B-INSTRUMENTS-OVER-RULES** (CC-A) — the code-search-tool usage measure runs 2026-09-18 → 10-02 (pre-registered)
 - **8a-P4c increment 1 — the VTS xStock price instrument** (CC-C) — deployed bc199185e; window to 2026-09-30T00:00Z; pre-registered rules A-D then decide increments 2-3
 
-## After live — 208
+## After live — 209
 
 ### AMR and machine learning — 31
 
@@ -303,7 +303,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - Shadow break-even and moonbag calculations (paper now, live later) (?) — Kyle: launch with both off, but compute what break-even stops and moonbags WOULD have done on every paper trade (and live trades once live), so we can analyse w
 - row:3n.c (CC-C) — trailing-exit state lost on restart — becomes MUST the moment trailing exits are switched on (see BE-MOONBAG)
 
-### Crew, reviewer, governance and alert tooling — 64
+### Crew, reviewer, governance and alert tooling — 65
 
 - #1026 (Infra Claude) — chunked Langston dispatch leaks parts into the channel — comms
 - #1035 (Infra Claude) — Langston's alert prompt lists only three owners
@@ -364,6 +364,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-TSC-GUARD-DETERMINISM (CC-A) — CI type-check guard determinism — tooling
 - B-UMBRELLA-OPEN-STATE (CC-B) — governance checker state for umbrella batches
 - B-WAKE-SOURCE-TRUTH (CC-INFRA) — crew wake-source documentation
+- B-WAKE-OUT-OF-BAND (CC-INFRA) — a way to wake a session whose wake watcher has died that does not travel through that watcher (the hourly heartbeat now posts to Discord, which a dead watcher cannot read; `#1054` amendment 2026-09-29). After B-WAKE-SOURCE-TRUTH, so it is specified against true docs. Intake test (§2): crew tooling, not in the §1 rule, so after live.
 - B-WRITER-ACTOR-ALLOWLIST (CC-B) — Langston memory-tool actor names — reviewer tooling
 - Stop appending closed-batch history to Langston's memory (Infra Claude) — every batch close appends to his memory and nothing evicts; keep current state and generalising rulings, evict by supersession
 - 12.2 lookalike register (CC-A) — one page of the pairs that already caused wrong calls — FIRST BREAK by Langston's ruling
