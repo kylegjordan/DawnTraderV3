@@ -1,6 +1,6 @@
 # B-CREDENTIALS-PRIVATE-REPO — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
-**Step 2 of 11 · Infra Claude (CC-INFRA) · 2026-09-29 · r4 · scope r6 at `de8281f70` (Step 1 APPROVED WITH CONDITIONS, Langston 14:28Z) · issue `#1023`**
+**Step 2 of 11 · ✅ LANGSTON: PROCEED WITH CONDITIONS (2026-09-29T17:30Z, at `3c293f168`; §6) · Infra Claude (CC-INFRA) · 2026-09-29 · r4 · scope r6 at `de8281f70` (Step 1 APPROVED WITH CONDITIONS, Langston 14:28Z) · issue `#1023`**
 
 **How this document was produced:** seven read-only audit readers, one per component group:
 - **A** `dt-review` and the mirror
@@ -389,6 +389,52 @@ Their full cited findings are **Appendix A**, generated from their structured re
 
 ## 5. SAFETY OF THIS DOCUMENT
 Before each commit, the whole file is scanned for both credential values (read from their introducing objects, never printed), private-key blocks and token-shaped strings (`sk-`, `ghp_`, `AKIA`, `AIza`). The result is in the commit message, with a positive control.
+
+---
+
+## 6. LANGSTON'S STEP-2 RULING — PROCEED, WITH CONDITIONS (2026-09-29T17:30Z, at `3c293f168`)
+
+**He re-derived at the ref, not on reported fact:** `routes.ts:216` → `:240` (the DB error becomes a 401) · `/auth/verify` `:996-1012` (no DB) · `/user/profile` `:1042-1051` with `storage.ts:702-705` (the hash goes over the wire) · `requireEditor` `:268-275` · `/config` `:467` / `:478` · formula-audit `:15701` / `:15726` · both kill-switch resets are 410 (`:1839`, `:15297`) · `loginLimiter` `:86-90` (15 min, max 5, `standardHeaders: true`) · `trust proxy 2` at `index.ts:174`, so a loopback call with no `X-Forwarded-For` is keyed on `127.0.0.1`, a separate bucket from the browser agents. Object cross-read via raw and `dt-review` (`#1043`).
+
+**The five asked for:**
+1. §2.2.2 access model: **APPROVED**. Decision 19 (empty allowlist; the trip is not reachable through `dt-api`) **APPROVED as a change from the scope**, and written into the scope at §2.1(3) so nobody discovers it in an emergency.
+2. §2.2.4 setter: **APPROVED with conditions** (C2-C4, C7).
+3. §2.2.5 `dtmint`: **APPROVED, limits accepted.** The r4 third limit is quoted verbatim in the completion report.
+4. §2.5.6 drift: **(i) APPROVED**; (iv) rejected; (iii) not to be built.
+5. §2.2.7 token cache: **APPROVED** (C5, C6).
+
+**CONDITIONS — all bind Step 3. Each is a line in the Step-3 change list, with its evidence:**
+- **C1** The census control must be a route the path match MISSES: `GET /api/system/formula-audit` (`:15701`), not `/api/audit/run`.
+- **C2** Do not assert `$2b$10$`. `python3-bcrypt`'s `gensalt()` defaults to 12 rounds (his hypothesis). **Measure the real prefix**, then assert only the shape `^\$2[aby]\$\d{2}\$` plus the length. Step (3)'s fresh login is the real proof.
+- **C3** Name the limiter bucket for every login: setter (0)/(3)/(6), `dt-api`'s re-mint, and the mint. The ledger governs **exactly the loopback bucket**, and says so.
+- **C4** Read the quota from the login response's rate-limit headers (`standardHeaders: true`; confirm the header names for `express-rate-limit ^8.1.0`). The headers are authoritative; the ledger stays as a second record. The window is **fixed**, not sliding, so "no login in the last 15 minutes" is re-worded.
+- **C5** The grammar and denylist bind **the caller's arguments only**. `dt-api`'s own `/api/auth/login` and `/api/auth/verify` calls sit outside the argument dispatcher.
+- **C6** Classify a 401 on `/auth/verify` **and** the 401 body: `User account not found` (`:219`) vs `Invalid or expired token` (`:240`). Three cases, not two. **Name who the page reaches** (GB-7).
+- **C7** `dt-api` waiting on the setter's lock gets a **timeout**, and expiry refuses with its own text instead of re-minting.
+- **C8** Drift (i)'s complement: head-not-in-mirror **with a stale stamp** raises a **mirror-health** line, never a drift rung.
+- **C9** GB-9 is live: three drift rungs are open now. **Drift lands before the flip, hard.**
+- **C10** Prove canonicalisation covers Express matching by **enumerating** the variants Express accepts for each denied route, including a trailing `/.`.
+- **C11** State the read side's residual plainly: writes are default-deny; **reads are default-allow against an incomplete census of GETs that run work.** Accepted by Langston as an accident guard. *(This line is that statement.)*
+
+**His other decisions:**
+- **2** ✅; the before and after `sudo -l -U` outputs are **stored as evidence**, not only run.
+- **3** ✅.
+- **5** ✅ placement. **I edit his decision store in the same reviewed diff**, and show him the diff.
+- **6** ✅ hex-only; a non-hex argument refuses loudly (exit 2, stderr, nothing on stdout).
+- **9** ✅ exit 3 = DIVERGED stays the tamper signal.
+- **10** `workflow_dispatch` gets **its own concurrency group**, so a manual re-run never cancels a push run.
+- **11** `attached_assets/` is excluded **as a directory, but pinned**: assert its file count and a manifest hash, and fail if either moves.
+- **12** STALE-SOURCE pages; SOURCE-UNFRESH is quiet below the limit and pages above it; keep 45 minutes.
+- **13** **`comms-infra/helsinki/`**, with `deploy.sh`'s install list extended explicitly (no glob) and the install-verify gate covering every entry (`#1004`).
+- **14** **Drop the configured fetch refspec, and prune.**
+- **15** **`paths-ignore`**, shipped in the same change as the F14 read-set guard.
+- **16** The no-push-on-red rule binds **the last completed run on the branch**. Reword `workflow-05-ci`, keep the binding.
+- **17** **Pin `grep` and `ls` too.**
+- **18** ✅ key-splitting stays with `#924`/`#615`.
+
+**His half of the joint decisions (Kyle's half still open):** R2, conditional on F14 shipping with it · delete the 26 legacy scripts · outside archives kept only with D2 treatment (exact path, stated reason, planted-literal control) · **turn on `enforce_admins`** · `main`'s 3,480-commit lag gets a named home.
+
+**§9.4, surfaced by him:** `GET /api/config` (`routes.ts:467`) has **no `authenticateToken`**. **Measured by me from Helsinki, outside the server, 2026-09-29 ~17:40Z:** `GET https://188.245.193.8.sslip.io/api/config` → **200, 1,164 bytes**, no token (status and size only, body not read); **control:** `GET /api/settings` → 401. **Disposition 2: folded into `#1022`** (amendment recorded there).
 
 ---
 
