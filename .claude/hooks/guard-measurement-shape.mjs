@@ -267,8 +267,8 @@ const SHAPES = [
     // command the rules oblige you to run every turn is a banner-blindness generator by
     // construction. Reader-found; `head` and `git log -N` are kept because neither is mandated.
     // ⛔ AND A LOG READ IS EXEMPT, FOR THE SAME REASON `tail` IS ABSENT. The project's own
-    // permission allowlist pins `tail -50 …/system-alerts.jsonl 2>&1 | head -60` — the capped
-    // form of the per-turn alert check — and the `head -60` fired. That is a FOURTH home for the
+    // permission allowlist PINNED `tail -50 …/system-alerts.jsonl 2>&1 | head -60` until 2026-09-29
+    // (removed with #980; the §10.5 read is now a whole-file script) — and the `head -60` fired. That is a FOURTH home for the
     // mandated set (reader-found; the first fixture was blind to it because allowlist entries
     // are JSON, not backticked prose). A read of a log to surface alerts can never become a
     // claim, so firing on it is the permanent-floor problem again.
