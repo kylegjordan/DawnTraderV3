@@ -73,7 +73,7 @@ vi.mock('../../storage.js', async (orig) => {
   };
 });
 
-import { evaluatePaperSizeBand, checkPaperSizeBand, readPaperSizeBand } from '../../services/paper-size-band.js';
+import { evaluatePaperSizeBand, checkPaperSizeBand, readPaperSizeBand, bandDedupeKey } from '../../services/paper-size-band.js';
 import { ActivePortfolioManager } from '../../services/active-portfolio-manager.js';
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
 
@@ -162,18 +162,21 @@ describe('2 — checkPaperSizeBand (the alert)', () => {
     expect(r.status).toBe('low');
     expect(h.addAlert).toHaveBeenCalledTimes(1);
     const arg = (h.addAlert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
-    expect(arg.dedupe_key).toBe('paper-size-band:7:low');
+    expect(arg.dedupe_key).toBe(bandDedupeKey(7, 'low', r.pStar, BAND));
+    expect(arg.dedupe_key).toMatch(/^paper-size-band:7:low:p\d+$/);
     expect(arg.category).toBe('reminder');
     expect(arg.severity).toBe('warning');
     expect(String(arg.title)).toContain(`set max position % to ${r.pStar.toFixed(2)}`);
     expect(String(arg.body)).toContain('Trigger: engine_start');
+    // Langston condition 1: the suggestion is stamped with the instant and the balance it was computed at
+    expect(String(arg.body)).toMatch(/^As at \d{4}-\d{2}-\d{2}T[\d:.]+Z, balance \$824\.11:/);
   });
 
   it('above the band keys the OTHER direction — a low alert cannot silence a high one', async () => {
     h.guardrails = { maxTotalExposurePct: '100.00', maxPositionPercentPct: '50.00' };
     await checkPaperSizeBand('close');
     const arg = (h.addAlert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
-    expect(arg.dedupe_key).toBe('paper-size-band:7:high');
+    expect(arg.dedupe_key).toMatch(/^paper-size-band:7:high:p\d+$/);
   });
 
   it('a NEW anchor version gets a NEW key — the reset re-arms the alarm', async () => {
@@ -181,7 +184,25 @@ describe('2 — checkPaperSizeBand (the alert)', () => {
     h.anchorVersion = 8;
     await checkPaperSizeBand('close');
     const arg = (h.addAlert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
-    expect(arg.dedupe_key).toBe('paper-size-band:8:low');
+    expect(arg.dedupe_key).toMatch(/^paper-size-band:8:low:p\d+$/);
+  });
+
+  // Langston condition 1: without the bucket a dedupe hit returned the FIRST alert unchanged, so its p* froze.
+  // MUTATION: drop the bucket from bandDedupeKey and the two keys below become equal.
+  it('the key moves when p* moves materially (his example: $3,100 vs $4,000 ⇒ 4.82% vs 3.74%)', () => {
+    const pStarAt = (balance: number) => evaluatePaperSizeBand({ balance, e: 100, p: 5, buffer: 0.97 }, BAND).pStar;
+    expect(bandDedupeKey(9, 'high', pStarAt(3100), BAND)).not.toBe(bandDedupeKey(9, 'high', pStarAt(4000), BAND));
+  });
+
+  it('CONTROL — a small move keeps the same key (3,093 vs 3,100: p* 4.83% vs 4.82%) — no alert storm', () => {
+    const pStarAt = (balance: number) => evaluatePaperSizeBand({ balance, e: 100, p: 5, buffer: 0.97 }, BAND).pStar;
+    expect(bandDedupeKey(9, 'high', pStarAt(3093), BAND)).toBe(bandDedupeKey(9, 'high', pStarAt(3100), BAND));
+  });
+
+  it('the bucket width is the band\'s own width (no new constant): a wider band gives coarser buckets', () => {
+    const narrow = [4.0, 4.2, 4.4, 4.6].map((ps) => bandDedupeKey(1, 'low', ps, BAND));
+    const wide = [4.0, 4.2, 4.4, 4.6].map((ps) => bandDedupeKey(1, 'low', ps, { low: 100, high: 200, target: 145 }));
+    expect(new Set(narrow).size).toBeGreaterThan(new Set(wide).size);
   });
 
   it('an unreadable guardrail raises NOTHING (it is the guardrail readers\' alarm, not this one)', async () => {

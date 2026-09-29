@@ -108,3 +108,28 @@ No xStock weekend wait on the stop's drop: that wait lets a shut book get its ch
 5. **The script still reads the DB directly** for the preconditions, A1 and the counts, and calls `executeReanchor` / `setScoreboardEpoch` in-process (neither writer has a route; adding one is the affordance (a) rejected). Everything the APP computes (status, pre-check, flatten, p, slots, balance) is now read from the app.
 6. **The corrected script has had no second fresh round** — the loop's cap outcome; you are the next reader. The round record is in PRE_AUDIT §16.5.
 7. **The close-seam hook fires on EVERY paper close** (2 DB reads in band; +1 anchor read + 1 alert write out of band). Acceptable, or throttle?
+
+## r3 — your Step-4 conditions (2026-09-29 16:00Z, graded `8aac2207e`) — each landed; full table PRE_AUDIT §16.6
+
+**C1 — the band alert's p\* no longer freezes.** `paper-size-band.ts`:
+```ts
+// was: dedupe_key: `paper-size-band:${anchorVersion}:${r.status}`
+dedupe_key: bandDedupeKey(anchorVersion, r.status, r.pStar, band),
+export function bandDedupeKey(anchorVersion, status, pStar, band) {
+  const ratio = band.high / band.low;                       // the band's own width (150/140 ≈ 1.071) — no new constant
+  const bucket = Number.isFinite(pStar) && pStar > 0 && ratio > 1 ? Math.floor(Math.log(pStar) / Math.log(ratio)) : 'x';
+  return `paper-size-band:${anchorVersion}:${status}:p${bucket}`;
+}
+// body now opens: `As at ${at.toISOString()}, balance $${balance.toFixed(2)}: …` + a line that a newer alert supersedes a stale one
+```
+Your example: $3,100 ⇒ p\* 4.82 (bucket 22), $4,000 ⇒ 3.74 (bucket 19) — a fresh alert; $3,093 ⇒ 4.83 stays in bucket 22 (no storm). ⚠️ An older bucket's row stays active until resolved; its body names its instant, so it reads as stale rather than current. Tests: the two balances key differently; the small move keys the same; a wider band gives coarser buckets; the body stamp.
+
+**C2 — the kill switch.** Step 0 REFUSES if `killSwitchTripped` (read from the app, `GET /guardrails-v2`); step 7 asserts it clear; a `guardrail` close at step 2 stays allowed and is logged as a loud WARNING.
+
+**Nit — taken.** Step 7 asserts the live band monitor's own `[PaperSizeBand][IN] trigger=engine_start` line, read from `out.log` + `error.log` from their byte offsets just before the start (PM2 sends the UNREADABLE line to `error.log`), waiting up to 60 s; the hand-assembled formula stays beside it as a cross-check. Pattern proved on sample lines (IN and UNREADABLE start lines match with the PM2 prefix; a `trigger=close` line does not). No line ⇒ a read-back mismatch (fails safe).
+
+**Your 1 — blast radius stated** on `#1100`, PRE_AUDIT §16.6 and here: close-all and the kill-switch flatten take the same pending branch; a "close all" with a resting maker now drops it as `never_filled`. Carried to the completion report and the System Manual row.
+**Your 2 — `#1103` `B-MAKER-CANCEL-ON-DROP`, owner CC-C, `SPRINT_TO_LIVE_PLAN` row 183a** (after row 183, with row 176 `#296`) — the active plan; `PHASE_19_PLAN` is history since 2026-09-28.
+**Withdrawn 403 — the invariant stated:** every staging user is `owner` (your `owner | 3`), the crew login moves to `editor` — both pass `requireEditor`.
+**CI identity — taken:** the covering green run is `36592873124` on `b48cffeed`; `8aac2207e...b48cffeed` touches no runtime path. This round's run is stated in the dispatch.
+**Board:** card created — `PVTI_lAHODmulEM4BfQP4zg9eoOI`, Implementation · Analyst · Batch · Blocked on Nothing · Phase 19 · `#698 #1093 #1100 #1103`. `Review` is yours to set.

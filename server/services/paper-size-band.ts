@@ -6,7 +6,8 @@
  * monitor. It computes the NORMAL-POSTURE, QUANT-POOL, PRE-COVARIANCE size the sizer would give a trade right now —
  *   size = getPortfolioBalanceV2('paper') × e/100 × p/100 × buffer
  * (active-position-sizing.ts: budget = balance × e, trade = budget × p, × the 0.97 buffer) — and raises ONE alert per
- * paper anchor version and direction when it leaves the band, naming the `p` that would restore the target.
+ * paper anchor version, direction and p* bucket (`bandDedupeKey`) when it leaves the band, naming the `p` that would
+ * restore the target, stamped with the instant and balance it was computed at.
  *
  * ⚠️ IT IS NOT A CLAIM THAT EVERY TRADE IS $140-150 (Langston §15.2): correlation scaling and the pattern-pool cap can
  * make an individual trade smaller. It watches the size the % SETS, which is what Kyle adjusts.
@@ -89,20 +90,38 @@ export async function checkPaperSizeBand(trigger: 'close' | 'engine_start'): Pro
   const anchor = await getAnchorState('paper');
   const anchorVersion = anchor?.anchorVersion ?? 'unknown';
   const side = r.status === 'low' ? 'below' : 'above';
+  const at = new Date();
   const { addAlert } = await import('./system-alerts.js');
   await addAlert({
-    triggers_at: new Date(),
+    triggers_at: at,
     category: 'reminder',
     severity: 'warning',
     title: `Paper trade size $${r.size.toFixed(2)} is ${side} the $${band.low}-$${band.high} band — set max position % to ${r.pStar.toFixed(2)}`,
-    body: `The size the paper max-position % gives a normal trade right now is $${r.size.toFixed(2)}, ${side} the `
-      + `$${band.low}-$${band.high} band Kyle set for PAPER-RESET-3000 (target $${band.target}). `
-      + `Object: the normal-posture, quant-pool, pre-covariance size = balance $${balance.toFixed(2)} x exposure ${e}% x `
+    body: `As at ${at.toISOString()}, balance $${balance.toFixed(2)}: the size the paper max-position % gives a normal `
+      + `trade is $${r.size.toFixed(2)}, ${side} the $${band.low}-$${band.high} band Kyle set for PAPER-RESET-3000 (target `
+      + `$${band.target}). Object: the normal-posture, quant-pool, pre-covariance size = balance x exposure ${e}% x `
       + `position ${p}% x buffer ${buffer}. Not every trade is this size: correlation scaling and the pattern-pool cap can `
       + `make an individual trade smaller. To restore $${band.target}, set Max Position Percent to ${r.pStar.toFixed(2)}% `
-      + `(paper guardrails). Trigger: ${trigger}; paper anchor version ${anchorVersion}. One alert per anchor version and `
-      + `direction; RESOLVE it once the % is adjusted. Owner: CC-C through the sprint (obj-14).`,
-    dedupe_key: `paper-size-band:${anchorVersion}:${r.status}`,
+      + `(paper guardrails). ⚠️ This suggestion is as at the instant above; the balance moves on every close, so if this `
+      + `alert has sat a while, a newer one with a fresher % supersedes it. Trigger: ${trigger}; paper anchor version `
+      + `${anchorVersion}. RESOLVE it once the % is adjusted. Owner: CC-C through the sprint (obj-14).`,
+    dedupe_key: bandDedupeKey(anchorVersion, r.status, r.pStar, band),
   });
   return r;
+}
+
+/**
+ * The alert's dedupe key: one alert per anchor version, direction AND p* BUCKET (Langston, increment 3 Step 4
+ * condition 1). Without the bucket, a dedupe hit returns the first alert unchanged (`system-alerts.ts` `addAlert`), so
+ * its p* — the alert's only actionable number — froze at the first fire while the pot kept moving; acting on it could
+ * leave the size out of band with the key still suppressed.
+ * ★ THE BUCKET WIDTH IS THE BAND'S OWN WIDTH, so no new constant: buckets are geometric with ratio high/low (150/140 ⇒
+ * ~7.1%), i.e. a fresh alert mints when the suggested p* has moved by about as much as the band is wide — the smallest
+ * move that changes what Kyle should set. A p* that is not a finite positive number keys to 'x' (never reached: an
+ * unreadable input raises no alert).
+ */
+export function bandDedupeKey(anchorVersion: number | string, status: 'low' | 'high', pStar: number, band: PaperSizeBand): string {
+  const ratio = band.high / band.low;
+  const bucket = Number.isFinite(pStar) && pStar > 0 && ratio > 1 ? Math.floor(Math.log(pStar) / Math.log(ratio)) : 'x';
+  return `paper-size-band:${anchorVersion}:${status}:p${bucket}`;
 }

@@ -21,8 +21,8 @@
  * ORDER, and it stops at the FIRST failure (no retry). Every refusal and every crash names the step AND the state it
  * leaves (engine stopped? anchor written?):
  *   (0) preconditions — the window's three migrations in the db:migrate ledger, 2b's floor and 3's band rows at the
- *       objects, no earlier PAPER-RESET-3000 anchor (A1), the engine running, no open closed_trades row without a
- *       position
+ *       objects, no earlier PAPER-RESET-3000 anchor (A1), the engine running, the paper KILL SWITCH NOT TRIPPED, no
+ *       open closed_trades row without a position
  *   (1) the READ-ONLY pre-check — every open paper position is closable (priced, or a pending maker)
  *   (2) POST /active-engine/stop { reason: 'reset' } — the engine blocks new trades FIRST, then flattens (race-free,
  *       §16.4 B1). REFUSES unless the stop's own flatten report is clean (ran, no throw, no failure, nothing left open,
@@ -35,8 +35,9 @@
  *   (6) POST /active-engine/start { mode: 'continue' } — NEVER 'new' (it hard-resets the tables). Engine re-checked
  *       STOPPED first, so a start somebody else made in steps 3-5 is caught rather than reported as ours.
  *   (7) the read-back, FROM THE APP: its portfolio summary (starting balance 3,000.00 and a session that began at our
- *       start), its derived slots (20), the band verdict at the app's balance; plus the anchor, the 'reset' closes and
- *       NOTHING DELETED (the paper rows opened before the run, counted at step 0 and again now)
+ *       start), the kill switch still clear, and THE LIVE BAND MONITOR'S OWN VERDICT at the start (the `[PaperSizeBand]`
+ *       line the start hook logs — it resolves its inputs the way it will on every close); plus the anchor, the 'reset'
+ *       closes and NOTHING DELETED (the paper rows opened before the run, counted at step 0 and again now)
  * ⚠️ RESUME POINT (A1): re-runnable up to and including the flatten; NOT after step 3 — the re-anchor mints a version,
  *    and step 0 refuses on its note. A run that stops after step 2 leaves the engine stopped; finishing it is a manual
  *    operator step (§16.5), never a re-run.
@@ -44,6 +45,8 @@
  *    "nothing deleted" is the pre-run population counted twice. Two operator routes (close-trade/:id,
  *    force-clear-stranded) do insert at close — this run calls neither, and one called by hand mid-run would show here.
  */
+import { closeSync, openSync, readSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
 import { executeReanchor, getAnchorState } from '../services/portfolio-anchor-service.js';
@@ -65,6 +68,10 @@ const REASONS_ALLOWED_AT_STOP = new Set(['reset', 'never_filled', 'stop_hit', 't
 const API = (process.env.DT_API_BASE || 'http://localhost:5000/api').replace(/\/$/, '');
 const TOKEN = process.env.DT_API_TOKEN || '';
 const RUN_ID = `paper-reset-3000-${new Date().toISOString()}`;
+// PM2 splits the app's streams: console.log → out.log, console.warn/error → error.log. The band monitor's IN/LOW/HIGH
+// lines are console.log and its UNREADABLE line is console.error, so both files are read.
+const APP_LOG_DIR = process.env.DT_APP_LOG_DIR || '/var/log/dawntrader';
+const APP_LOGS = ['out.log', 'error.log'].map((f) => join(APP_LOG_DIR, f));
 
 // What the run has done so far, so every exit — a refusal or a crash — says what state it leaves.
 const state = { step: '0', stopRequested: false, engineStopped: false, anchorWritten: false, pSet: false, epochSet: false, started: false };
@@ -127,6 +134,37 @@ async function readBand(): Promise<{ low: number; high: number; target: number }
   return band as { low: number; high: number; target: number };
 }
 
+/** Byte offsets of the app's log files now, so a later read sees only what was written after this instant. */
+function logOffsets(): Map<string, number> {
+  return new Map(APP_LOGS.map((f) => { try { return [f, statSync(f).size] as [string, number]; } catch { return [f, -1] as [string, number]; } }));
+}
+/** What the app has logged since `offsets` (a file that rotated — now shorter — is read from its start). */
+function logTextSince(offsets: Map<string, number>): string {
+  let out = '';
+  for (const [f, from] of offsets) {
+    if (from < 0) continue;
+    try {
+      const size = statSync(f).size;
+      const start = size < from ? 0 : from;
+      if (size <= start) continue;
+      const fd = openSync(f, 'r');
+      try {
+        const buf = Buffer.alloc(Math.min(size - start, 8 * 1024 * 1024));
+        readSync(fd, buf, 0, buf.length, start);
+        out += buf.toString('utf8');
+      } finally { closeSync(fd); }
+    } catch { /* unreadable: the caller reports "no verdict line" */ }
+  }
+  return out;
+}
+
+/** The paper kill switch, as the app reads it (Langston condition 2: a reset must not finish with trading latched shut). */
+async function killSwitchTripped(): Promise<boolean> {
+  const g = await api('GET', '/guardrails-v2?mode=paper');
+  if (g.status !== 200 || typeof g.json?.data?.killSwitchTripped !== 'boolean') refuse(`the paper kill switch could not be read (HTTP ${g.status})`);
+  return g.json.data.killSwitchTripped;
+}
+
 async function main() {
   log(`run id ${RUN_ID}; API ${API}`);
   if (!TOKEN) refuse('DT_API_TOKEN is not set (the crew login token, B-CREDENTIALS-PRIVATE-REPO OBJ-1)');
@@ -149,6 +187,9 @@ async function main() {
   if (!(await engineRunning())) {
     refuse('the paper engine is not running. If an earlier run of this script stopped it, read that run\'s log: the flatten is done and finishing is a manual operator step (PRE_AUDIT §16.5), not a re-run.');
   }
+  if (await killSwitchTripped()) {
+    refuse('the paper KILL SWITCH IS TRIPPED — a reset would finish with every read-back green and nothing trading. Clear it (or decide not to) first.');
+  }
   const anchorBefore = await getAnchorState('paper');
   if (!anchorBefore) refuse('no paper anchor state');
   // An open closed_trades row with no position is a stale row: the stop's reconciler would book it, and the engine's
@@ -160,7 +201,7 @@ async function main() {
   // The "nothing deleted" population: every paper row opened before this run began. Counted again at step 7.
   const runStart = new Date();
   const rowsBefore = await count(sql`SELECT count(*)::int AS n FROM closed_trades WHERE mode = 'paper' AND opened_at < ${runStart}`);
-  log(`ok — ledger has 2a/2b/3; floor ${floor.def}; band $${band.low}-$${band.high} (target $${band.target}); engine running; anchor v${anchorBefore.anchorVersion} $${anchorBefore.balance}; 0 stale rows; paper rows opened before ${runStart.toISOString()}: ${rowsBefore}`);
+  log(`ok — ledger has 2a/2b/3; floor ${floor.def}; band $${band.low}-$${band.high} (target $${band.target}); engine running; kill switch clear; anchor v${anchorBefore.anchorVersion} $${anchorBefore.balance}; 0 stale rows; paper rows opened before ${runStart.toISOString()}: ${rowsBefore}`);
 
   // ── (1) the read-only pre-check ───────────────────────────────────────────────────────────────────────────────
   state.step = '1';
@@ -203,6 +244,9 @@ async function main() {
   log(`closes since the stop began, by reason: ${JSON.stringify(byReason)}`);
   const unexpected = Object.keys(byReason).filter((r) => !REASONS_ALLOWED_AT_STOP.has(r));
   if (unexpected.length) refuse(`close reason(s) ${unexpected.join(', ')} since the stop began — 'manual_stop' means the reset label did not plumb; 'engine_stop_cleanup' means a row was booked by the reconciler, not closed by the flatten`);
+  if ((byReason['guardrail'] ?? 0) > 0) {
+    console.warn(`[${RESET_TAG}][2] ⚠️⚠️ WARNING — ${byReason['guardrail']} close(s) since the stop began carry 'guardrail': THE KILL SWITCH FLATTENED DURING THE RESET. Allowed here (the positions are closed either way); step 7 refuses to report success unless the switch reads clear.`);
+  }
   const resetCount = byReason['reset'] ?? 0;
   if (n - pending > 0 && resetCount === 0) refuse(`the pre-check saw ${n - pending} priced position(s) and no close carries 'reset'`);
   if (resetCount + (byReason['never_filled'] ?? 0) !== n) log(`NOTE — pre-check counted ${n}; the flatten closed ${resetCount} as reset and dropped ${byReason['never_filled'] ?? 0}: the engine ran between the two (reported, not refused)`);
@@ -252,6 +296,7 @@ async function main() {
   // ── (6) start, continuing ────────────────────────────────────────────────────────────────────────────────────
   state.step = '6';
   if (await engineRunning()) refuse('the engine is RUNNING already — somebody started it during the reset, at whatever size was set then');
+  const logsBeforeStart = logOffsets();
   const startRequestedAt = new Date();
   const start = await api('POST', '/active-engine/start', { mode: 'continue' });
   if (start.status !== 200 || !start.json?.success) refuse(`start failed (HTTP ${start.status}: ${start.json?.error ?? 'no body'})`);
@@ -269,6 +314,17 @@ async function main() {
   const rowsAfter = await count(sql`SELECT count(*)::int AS n FROM closed_trades WHERE mode = 'paper' AND opened_at < ${runStart}`);
   const resetAfter = await count(sql`
     SELECT count(*)::int AS n FROM closed_trades WHERE mode = 'paper' AND close_reason = 'reset' AND closed_at >= ${resetInstant}`);
+  const killSwitchAfter = await killSwitchTripped();
+  // THE LIVE BAND MONITOR'S OWN VERDICT (Langston's nit, taken): the start hook runs `checkPaperSizeBand` inside the app
+  // — resolving its inputs exactly as it will on every close — and logs one `[PaperSizeBand][<VERDICT>] trigger=engine_start`
+  // line. That line is what is asserted. It is fire-and-forget after the start, so it is waited for (up to 60 s).
+  let bandLine: string | null = null;
+  for (let waited = 0; waited <= 60_000 && !bandLine; waited += 2_000) {
+    const m = logTextSince(logsBeforeStart).match(/\[PaperSizeBand\]\[(IN|LOW|HIGH|UNREADABLE)\] trigger=engine_start[^\n]*/);
+    if (m) bandLine = m[0];
+    else await new Promise((r) => setTimeout(r, 2_000));
+  }
+  // The formula at the app's balance, reported beside it (a stated cross-check, not the assertion).
   const buf = Number((await rows<{ v: string }>(sql`
     SELECT value #>> '{}' AS v FROM module_constants
      WHERE module_name = 'active_sizing' AND constant_name = 'max_position_buffer_factor'
@@ -287,8 +343,10 @@ async function main() {
     derivedSlots: g.json.derivedSlots,
     rowsOpenedBeforeRun: { atStep0: rowsBefore, now: rowsAfter },
     resetCloses: { atStep2: resetCount, now: resetAfter },
+    killSwitchTripped: killSwitchAfter,
     band,
-    bandVerdict: { status: verdict.status, size: Number.isFinite(verdict.size) ? Number(verdict.size.toFixed(2)) : null },
+    bandMonitorLine: bandLine,
+    bandFormulaCrossCheck: { status: verdict.status, size: Number.isFinite(verdict.size) ? Number(verdict.size.toFixed(2)) : null },
   };
   console.log(`[${RESET_TAG}][7] READ-BACK ${JSON.stringify(readBack)}`);
   const problems: string[] = [];
@@ -298,7 +356,10 @@ async function main() {
   if (anchorAfter?.anchorVersion !== anchorVersion) problems.push('the anchor version moved after step 3');
   if (rowsAfter !== rowsBefore) problems.push(`paper rows opened before the run: ${rowsBefore} at step 0, ${rowsAfter} now — rows were deleted, or a close route that inserts at close ran mid-reset`);
   if (resetAfter !== resetCount) problems.push(`'reset' closes moved from ${resetCount} to ${resetAfter} after the stop`);
-  if (verdict.status !== 'in') problems.push(`the band verdict at the app's balance is ${verdict.status} ($${verdict.size})`);
+  if (killSwitchAfter) problems.push('the paper KILL SWITCH IS TRIPPED — the engine is running but will not trade');
+  if (!bandLine) problems.push(`no band-monitor verdict line (trigger=engine_start) in ${APP_LOGS.join(' / ')} within 60 s of the start`);
+  else if (!bandLine.startsWith('[PaperSizeBand][IN]')) problems.push(`the live band monitor says: ${bandLine}`);
+  if (verdict.status !== 'in') problems.push(`the band formula at the app's balance says ${verdict.status} ($${verdict.size})`);
   if (problems.length) {
     console.error(`[${RESET_TAG}][7] READ-BACK MISMATCH — ${problems.join('; ')}. The reset ran and the engine is running; report this, do not re-run.`);
     process.exit(2);

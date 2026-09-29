@@ -303,6 +303,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 181 | 21-3d (NEW, KYLE-DIRECTED 2026-08-21 — B-BALANCE-TRUTH Step G / B- | roadmap 21-3d — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | reset functions must not delete both modes' data |
 | 182 | 19-10 #139 vts-runner throwing resolveAssetClass call sites 10+ pr | roadmap 19-10 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | throwing asset-class lookups on the live path |
 | 183 | 21.1 Live Mode Engine — - Create Live Mode trading engine based o | roadmap 21.1 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | build live on the paper engine (Option A) |
+| 183a | Cancel the venue order when an unfilled maker is dropped | B-MAKER-CANCEL-ON-DROP (`#1103`) | CC-C (Analyst Claude) | QUEUED | — | after row 183, with row 176 (#296): in live mode a dropped resting buy must be cancelled at Kraken, or it can fill into a position nothing tracks (paper has no resting order) |
 | 184 | #322 | #322 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | test-in-paper / bypass-in-live switches |
 | 185 | P19-B6.10 retire the old per-mode guardrails table | P19-B6.10 | CC-A (Old Claude) | QUEUED | — | one source of guardrail values |
 | 186 | 21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the " | roadmap 21-3a — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | after P19-B6.10: the Live Guardrails tab |
