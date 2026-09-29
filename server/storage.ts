@@ -542,6 +542,8 @@ export interface IStorage {
   getDailyRealizedPnlSince(mode: TradingMode, since: Date): Promise<Array<{ date: string; pl: number }>>;
   getRecentClosedPnls(mode: TradingMode, n: number): Promise<number[]>;
   getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }>;
+  // B-SIZING-DEC-RESTORE 2b (#1093): the symbol cooldown's own read — EXACT symbol (+ asset class when known).
+  getLastClosedAtForSymbol(mode: TradingMode, symbol: string, assetClass: AssetClass | null): Promise<Date | null>;
   // Phase 8.8.3-C5: Paginated trades with sorting support
   getClosedTradesPaginated(mode: TradingMode, filters: {
     limit?: number;
@@ -3598,6 +3600,40 @@ export class DatabaseStorage implements IStorage {
         sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'`
       ))
       .orderBy(desc(closedTradesTable.openedAt));
+  }
+
+  /**
+   * B-SIZING-DEC-RESTORE increment 2b (#1093): WHEN DID THIS SYMBOL LAST CLOSE — for the symbol cooldown only.
+   * The cooldown used to ask getClosedTradesPaginated, whose symbol filter is a SUBSTRING match written for the
+   * Closed Trades search box (LOWER(symbol) LIKE '%sym%', 611ac7474): a check for C/USD also matched LTC/USD and
+   * INTC/USD, and DASH/USD exists in BOTH classes (the Dash coin and DoorDash, measured 2026-09-29), so a close on
+   * one could put another into cooldown. This reads the EXACT symbol, and the exact asset class when the caller
+   * knows it (null = any class: stricter, never looser). The closed-row rule is getClosedTradesPaginated's
+   * `closedOnly` rule, unchanged, so the only behaviour change is the match. The search box keeps its substring.
+   * #1094 (the LIVE cooldown reads the legacy trades table) swaps its call site to this method in increment 2d.
+   */
+  async getLastClosedAtForSymbol(mode: TradingMode, symbol: string, assetClass: AssetClass | null): Promise<Date | null> {
+    const conditions: any[] = [
+      eq(closedTradesTable.mode, mode),
+      eq(closedTradesTable.symbol, symbol),
+      sql`${closedTradesTable.closedAt} IS NOT NULL`,
+      sql`(
+        ${closedTradesTable.closeReason} = 'never_filled'
+        OR (
+          ${closedTradesTable.exitPrice} IS NOT NULL
+          AND ${closedTradesTable.exitPrice} > 0
+          AND ${closedTradesTable.closeReason} IS NOT NULL
+          AND ${closedTradesTable.closeReason} != ''
+        )
+      )`,
+    ];
+    if (assetClass !== null) conditions.push(sql`${closedTradesTable.assetClass} = ${assetClass}`);
+    const [row] = await db.select({ closedAt: closedTradesTable.closedAt })
+      .from(closedTradesTable)
+      .where(and(...conditions))
+      .orderBy(desc(closedTradesTable.closedAt))
+      .limit(1);
+    return row?.closedAt ? new Date(row.closedAt) : null;
   }
 
   // Phase 8.8.3-C5: Paginated trades with sorting and filtering support

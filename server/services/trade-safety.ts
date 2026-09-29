@@ -10,6 +10,7 @@
 
 import { storage } from '../storage';
 import { TradingSettings, ActiveOpenPosition, Trade } from '@shared/schema';
+import type { AssetClass } from '../../shared/asset-classes.js';
 import { 
   buildSettingsFromGuardrails as _buildSettingsFromGuardrails, 
   getRiskPercentageV2, 
@@ -54,6 +55,9 @@ export interface TradeCandidate {
   preComputedNotional?: number;
   // Phase 8.8.4-A: SLAL lifecycle tracking ID
   signalId?: string;
+  // B-SIZING-DEC-RESTORE 2b (#1093): the signal's asset class, so the symbol cooldown matches the right instrument
+  // (DASH/USD is both the Dash coin and DoorDash). Absent = the cooldown matches the symbol in any class (stricter).
+  assetClass?: AssetClass;
 }
 
 export type TradeSafetyResultCode = 
@@ -242,16 +246,15 @@ async function checkSymbolCooldown(
     // most-recent CLOSED-trade timestamp for this symbol.
     let lastTradeTime: number | null = null;
     if (mode === 'paper') {
-      const { trades: paperTrades } = await storage.getClosedTradesPaginated(mode, {
-        symbol: trade.symbol,
-        closedOnly: true,
-        sortBy: 'closedAt',
-        order: 'desc',
-        limit: 1,
-      });
-      const last = paperTrades?.[0];
-      const t = last?.closedAt ?? last?.openedAt ?? null;
-      lastTradeTime = t ? new Date(t).getTime() : null;
+      // B-SIZING-DEC-RESTORE 2b (#1093): EXACT symbol + asset class. This read used getClosedTradesPaginated's
+      // SUBSTRING filter (the search box's), so C/USD matched LTC/USD and a Dash-coin close could pause DoorDash.
+      // Measured over 09-16..09-29: all 77 cooldown blocks had the symbol's own close, so on that history this
+      // changes nothing; it can only ever make the cooldown less strict, never more.
+      if (!trade.assetClass) {
+        console.warn(`[B-SIZING-DEC-RESTORE][COOLDOWN_CLASS_UNKNOWN] ${trade.symbol}: no asset class on the trade — matching the symbol in any class (stricter)`);
+      }
+      const closedAt = await storage.getLastClosedAtForSymbol(mode, trade.symbol, trade.assetClass ?? null);
+      lastTradeTime = closedAt ? closedAt.getTime() : null;
     } else {
       const lastTrades = await storage.getTrades(mode, {
         symbol: trade.symbol,
