@@ -34,7 +34,7 @@
 
 ★ **AND IT DOES NOT BLOCK YOU.** A batch sitting in `Observation` is not work in progress — **move on to the next batch and come back when the data is there.** That is the point of separating it from the working stages.
 
-**THE REPORT TRACKS THE COLUMN, ONE DOCUMENT THROUGHOUT:** while the card is in `Observation` the batch has a **progress report**; when the data arrives and the decision is taken, **the same file becomes the completion report** — not a rewrite. *(Full rule: `workflow-10-governance`; the conversion: `workflow-11-completion`.)*
+**THE REPORT TRACKS THE COLUMN, ONE DOCUMENT THROUGHOUT:** while the card is in `Observation` the batch has a **progress report**; when the data arrives and the decision is taken, **the same file becomes the completion report** — not a rewrite; renamed, with every reference to the old name updated in the same commit. *(Full rule: `workflow-10-governance`; the conversion: `workflow-11-completion`.)*
 *(Steps 5–6 merged: they always happen together. Steps 7–9 merged: a card sits in Verification while the iterate loop runs.)*
 
 **FIELDS ON EVERY CARD:**

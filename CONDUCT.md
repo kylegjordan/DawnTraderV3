@@ -123,7 +123,7 @@ Say what is blocked, the options in plain terms, your recommendation, and what h
 
 ⛔ **BEFORE ANYTHING LEAVES YOUR HANDS — a dispatch, a report, a commit, a claim in a document:**
 1. **GO BACK TO THE OBJECT** — re-open the file, re-run the query, re-derive the number. **Re-reading your own reasoning is not this step.**
-2. ★ **WOULD THIS CHECK HAVE COME OUT DIFFERENTLY IF I WERE WRONG?** If not, **it does not DISCRIMINATE** — including when the record itself says so (its type, its source, its own stated scope). **RELIABILITY IS NOT VALIDITY:** the same answer twice is reliability; whether the thing measured IS the thing claimed is validity. ⇒ **a check that cannot come out differently is a fence that was never mutation-proved.**
+2. ★ **WOULD THIS CHECK HAVE COME OUT DIFFERENTLY IF I WERE WRONG?** If not, **it does not DISCRIMINATE** — including when the record itself says so (its type, its source, its own stated scope). **RELIABILITY IS NOT VALIDITY:** the same answer twice is reliability; whether the thing measured IS the thing claimed is validity. ⇒ **a check that cannot come out differently whether or not the claim is true is a fence that was never mutation-proved.**
 3. **CHECK THE WHOLE PATH, not the piece you suspect.**
 *(Per-step detail lives in the workflow step skills, phrased for what that step gets wrong.)*
 
