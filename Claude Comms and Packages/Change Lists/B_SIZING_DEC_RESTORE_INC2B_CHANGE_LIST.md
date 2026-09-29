@@ -95,3 +95,9 @@ const closedAt = await storage.getLastClosedAtForSymbol(mode, trade.symbol, trad
 ## Honest residuals
 - The fallback-balance change is verified by a source fence and by census B's "not firing"; no runtime path exercised it (it does not fire on staging).
 - Local unit runs: the five sizing files pass together (124/124), twice.
+
+## Step 4 — APPROVED by Langston at `137208180` (2026-09-29 14:02Z); his conditions, landed (PRE_AUDIT §15.7)
+- **`never_filled`:** homed to increment 2d beside `#1094`, as a yes/no for Kyle (`#1093` am.2).
+- **Why stamp-only (Langston condition 2, answered with evidence):** the file's own fallback ladder (`asValidAssetClass(stamp) ?? safeResolveAssetClass(symbol, 'kraken')`, `active-execution-engine.ts:6061-6062`) resolves by TICKER, and run on this tree it returns `crypto_spot` for `DASH/USD` (with a `[B79.0f][COLLISION_RESOLVE]` warning), and ALSO for `NVDA/USD` and `C/USD` — xStocks are stored without the `x` suffix, and the `'kraken'` exchange resolves an unsuffixed pair as crypto. So on a stamp-missing xStock signal the ladder would hand the cooldown the WRONG class and it would miss the xStock's own close: LOOSER, the one direction #1093 must never move. Stamp-only falls back to ANY class (stricter) and logs `[COOLDOWN_CLASS_UNKNOWN]`. Measured: 0 `STAMP_MISSING_ACTIVE` against 792 `TRUST_SIZED` in the retained log window (Langston). The engine's own fallback has the same flaw: `#1096`, home 2d.
+- **A NEW REFUSAL PATH (honest residual):** the fallback sizer's balance is now `getPortfolioBalanceV2` — anchor + session realized P&L, unclamped, 0 on a throw — so a signal reaching that branch can take `SIZING_INVALID` where the bare anchor (effectively always > 0) used to size it. It has not fired (census B).
+- **Rollback note:** the cooldown's `getLastClosedAtForSymbol` is additive; 2d's `#1094` swap is pre-registered in the scope.
