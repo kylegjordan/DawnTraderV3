@@ -141,20 +141,26 @@ def save_state(state):
     Path(STATE_FILE).write_text(json.dumps(state, indent=2))
 
 
-REVIEW_REMOTE = "https://github.com/kylegjordan/DawnTraderV3.git"
+# B-CREDENTIALS-PRIVATE-REPO OBJ-4a: over ssh with langston's read-only deploy key, so this
+# still resolves after the repo goes private (the service runs User=langston).
+REVIEW_REMOTE = "git@github.com:kylegjordan/DawnTraderV3.git"
 REVIEW_BRANCH = "migration/aws-supabase"
 
 
 def resolve_review_ref():
     """Return the current review-branch head sha from GitHub, or None.
 
-    Reads GitHub directly (git ls-remote) — no local repo, nothing to drift.
+    Reads GitHub directly (git ls-remote) — no local repo, nothing to drift. On failure,
+    git's own first line is LOGGED: it used to be discarded, leaving only "RESOLVE FAILED".
     """
     try:
         r = subprocess.run(
             ["git", "ls-remote", REVIEW_REMOTE, "refs/heads/" + REVIEW_BRANCH],
-            capture_output=True, text=True, timeout=60)
+            capture_output=True, text=True, timeout=60,
+            env=dict(os.environ, GIT_SSH_COMMAND="ssh -o BatchMode=yes"))
         if r.returncode != 0:
+            first = next((ln for ln in (r.stderr or "").splitlines() if ln.strip()), "no message")
+            log("review ref ls-remote exit %d: %s" % (r.returncode, first[:200]))
             return None
         parts = (r.stdout or "").split()
         return parts[0] if parts else None
@@ -163,19 +169,21 @@ def resolve_review_ref():
 
 
 REVIEW_SOURCE_NOTE = (
-    "[REVIEW SOURCE — read at the review branch on GitHub, commit %s. This is the "
-    "graded ref. Do NOT read from /mnt/gdrive or any local working copy (retired).\n"
-    " - Single file: read  https://raw.githubusercontent.com/kylegjordan/DawnTraderV3/%s/<path>  "
-    "with the Bash tool (curl -s <url>) or WebFetch.\n"
-    " - Whole-tree search (every caller / appears-nowhere-else / blast-radius census, "
-    "which GitHub will not serve): run  dt-review grep '<pattern>'  |  dt-review show <path>  |  "
-    "dt-review ls  — it pulls from GitHub FIRST, then searches the Hetzner backup at this exact "
-    "head, so it is never stale. If it prints FETCH FAILED, do not assert file contents.]\n\n"
+    "[REVIEW SOURCE — branch migration/aws-supabase at commit %(ref)s. This is the graded ref. "
+    "Do NOT read from /mnt/gdrive, any local working copy, or raw.githubusercontent.com.\n"
+    " - Single file, pinned:  dt-review show %(ref)s <path>  — exact bytes on stdout, "
+    "provenance on stderr, so a line number from stdout is the file's line number.\n"
+    " - Search / list, pinned:  dt-review grep @%(ref)s '<BRE>' [<path>...]  |  "
+    "dt-review ls @%(ref)s . Without @<sha> they read the mirror head AT CALL TIME and print "
+    "that sha on stderr: compare it with this commit.\n"
+    " - No flags; a pattern starting with '-' or '@' is written '[-]...' or '[@]...'. A line "
+    "starting OFF-BRANCH: or DEGRADED: is part of the answer. REFUSED means nothing was "
+    "served: do not assert file contents.]\n\n"
 )
 
 REVIEW_SOURCE_FAIL_NOTE = (
     "[!! COULD NOT RESOLVE THE REVIEW-BRANCH HEAD from GitHub just now. Before asserting what any "
-    "file contains, verify the exact commit yourself (git ls-remote, or  dt-review ref ) and read "
+    "file contains, verify the exact commit yourself ( dt-review ref ) and read "
     "at it; if you cannot, say so plainly and decline to rule on file contents.]\n\n"
 )
 
@@ -191,7 +199,7 @@ def invoke_claude(prompt, session_id, state=None, _retry_count=0):
     _ref = resolve_review_ref()
     if _ref:
         log("review ref resolved to %s" % _ref[:9])
-        prompt = (REVIEW_SOURCE_NOTE % (_ref, _ref)) + prompt
+        prompt = (REVIEW_SOURCE_NOTE % {"ref": _ref}) + prompt
     else:
         log("REVIEW REF RESOLVE FAILED")
         prompt = REVIEW_SOURCE_FAIL_NOTE + prompt
