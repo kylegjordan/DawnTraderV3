@@ -9979,3 +9979,23 @@ HOME: B-GOV-LEDGER-GRADE, owner CC-A, placed in PRE_LIVE_SPRINT.md after live, c
 **Fix (folded into increment 3, §9.4 disposition 1 — the reset depends on it):** the never-filled disposition is extracted to ONE engine method (`_dropUnfilledMaker`, used by the deadline drop and the stop); `_flattenOne` sends a pending position to `dropPendingMakerOnFlatten`, which re-reads it and refuses if it filled meanwhile. The flatten pre-check reports a pending maker as closable with no price asked for. Tests: `b-sizing-inc3-reset-and-band` §5, mutation-proved (removing the pending branch fails exactly the drop test).
 **HOME: `B-SIZING-DEC-RESTORE` increment 3, owner CC-C, placed at `PHASE_19_PLAN.md:19`** — ships in the window's one deploy (≥ 2026-10-02T20:10Z, row 29). REVIEWER: object handed (the reset script at `6f97cdc2c`) · "what other states are consistent with a clean exit?" · 8 states listed, this one among them · re-derived y.
 
+
+---
+
+### #1101 OPEN 2026-09-29 (CC-INFRA; found by a B-CREDENTIALS-PRIVATE-REPO Step-2 audit reader, confirmed at the code) — ⛔ **AN UNAUTHENTICATED ROUTE ON STAGING SERVES THE APP'S OWN FILE TREE TO THE PUBLIC INTERNET**
+
+**What:** `chaplet/index.ts` is mounted at `/chaplet` (`server/index.ts:490`) with **no authentication** on any of its routes. Its `/repo/file/*` route returns files from the deployed working tree; its `/context/file/:folder/:filename` route returns files under `bridge/`. It is reachable publicly through Caddy → nginx `location /` → the app.
+**Measured (status codes only, no content kept):** a request on 2026-09-29 around 15:00Z got 200 for `package.json`, `CLAUDE.md` and a chat archive, and **403 for `.env`**. Source of that request unknown (nginx logs every public request as `127.0.0.1`, see `#1023` am.); nginx shows no other real requests 2026-09-15 → 09-29.
+**Why it matters:** the deployed tree holds the repo content, the chat archives, and `backups and data dumps/`. **Making the GitHub repo private (`B-CREDENTIALS-PRIVATE-REPO` OBJ-6) does not close this path** — the server itself hands the same files out. The deny rules are a hand-written list, not an allowlist, and the route's input handling has **not** been security-reviewed. ⛔ **Deliberately not probed further; the remedy is removal, not testing.**
+**Provenance:** `SYSTEM_MANUAL.md:7297` records *"Chaplet routes at /chaplet (read-only)"* — Replit-era tooling for an earlier AI context bridge. No live caller found in the repo.
+**Ledger:** `chaplet` has 0 other hits in `RUNNING_ISSUES`, the SIM, `BATCH_CATALOG` or completion reports. `#1022` covers `/api` routes only.
+**HOME (proposed, needs Kyle + Langston): take `/chaplet` OFF now via the hotfix path (`workflow-hotfix`, Langston review before staging), then delete it under rule 18 (`DELETED_COMPONENTS_LOG`). It is a precondition for `B-CREDENTIALS-PRIVATE-REPO` OBJ-6 — the flip may not claim the content is private while this runs.**
+
+---
+
+### #1102 OPEN 2026-09-29 (CC-INFRA; B-CREDENTIALS-PRIVATE-REPO Step-2 audit) — ⛔ **THE STAGING APP'S OWN ACCOUNT (`deploy`) HAS PASSWORDLESS ROOT, AND NOTHING RECORDS IT**
+
+**Measured:** `/etc/sudoers.d/deploy` reads `deploy ALL=(ALL) NOPASSWD: ALL` (mode 0644, dated 2026-03-30); `sudo -l -U deploy` confirms it. The web app runs as `deploy` (pm2), and **three SSH keys log in as `deploy`** (`#924`), so each of them is effectively root on the trading server. **Actual use, 2026-08-30 → 09-29:** 15 `sudo` calls by `deploy`, all interactive (bash, find, head, journalctl, ls, python3, true); **no automated path depends on it** (none of `deploy`'s units, no crontab, and `dt-deploy` has no `sudo`).
+**Contradicts a written premise:** `B_NEW_41_SCOPE.md:21` described `deploy` as a *"least-privilege posture"*; the sudoers file predated that text (2026-03-30 vs 2026-05-17).
+**Consequence for `B-CREDENTIALS-PRIVATE-REPO`:** its OBJ-1 `dtapi` design assumed `deploy` was not root. The crew-login design stands, but its protective claim must be restated, and OBJ-1(c)'s "exactly one sudo entry" check cannot pass without this being fixed.
+**HOME:** `B-SEC-HARDEN` (sprint row 158, Infra Claude) together with `#615` (sprint row 160, the reviewer identity must not be `deploy`) and `#924` (the ungoverned keys) — disposition 2 on the §9.4 scale. Removing it is a server-access change and needs Kyle's go.
