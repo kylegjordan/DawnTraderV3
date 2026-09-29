@@ -195,6 +195,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 105 | 25-9 xStock pair_correlation per-pair WR data accumulation (B68.3 | roadmap 25-9 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | early (Langston F5): xStock per-pair correlation data accumulates from here |
 | 106 | B-PAPER-LANE-PROVENANCE | B-PAPER-LANE-PROVENANCE | CC-B (New Claude) | QUEUED | — | paper records its decision inputs |
 | 107 | T-W20C-SCALAR-LEG | — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | after B-PAPER-LANE-PROVENANCE: capture integrity - the parity harness proves recorded history replays to the same decisions |
+| 107a | Record which fee each xStock maker/taker decision used | B-FEE-BASIS-STAMP (`#1097`) | CC-B (New Claude) | QUEUED | — | learning data, after T-W20C-SCALAR-LEG: B-XSTOCK-FEE-CONTRACT's successor test (Langston 2026-09-29) - stamp the resolved fee rate and schedule epoch on the decision row at the decision site; may fold into row 106 at Step 1 |
 | 108 | #515 | #515 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | remaining learning columns on the active path |
 | 109 | #631 | #631 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | entry-mode fields on the active archive |
 | 110 | #504 | #504 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | regime on maker/taker shadow rows |
@@ -341,7 +342,7 @@ Kyle 2026-09-28: an even split by connected groups; earlier ownership is not a f
 |---|---|---:|
 | CC-C (Analyst Claude) | Prices and the exit price path; paper sizing (in flight); the paper standard and judging the evidence | 51 |
 | Infra Claude | Identity, the coin list and exclusions; restarts, deploys, security and the servers; what the diagnostic screens show | 51 |
-| CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 47 |
+| CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 48 |
 | CC-A (Old Claude) | Trade records and costs; scores, regimes and gates; the xStock tuning studies; risk controls; the live engine; the final end-to-end audit | 50 |
 
 ## 7. Coltrane — proposed role (for Langston's view, then Kyle)
