@@ -160,10 +160,13 @@ describe(TAG, () => {
   });
 
   // MUTATION: write the audit rows outside the transaction (the old route) and this fails — 8.00 lands unrecorded.
+  // The audit row is made to fail on a constraint the database ALWAYS enforces: `field` is varchar(100).
+  // (A first version used an unknown `changed_by` user; CI showed the test database does not enforce that
+  // foreign key, so the insert succeeded and the leg failed for the wrong reason.)
   it('a failing audit row rolls the guardrails write back', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
-    const badAudit = [{ entityType: 'guardrails', field: 'maxPositionPercentPct', oldValue: '6.00', newValue: '8.00',
-      changedBy: 'no-such-user-b-sizing-inc1', tradingMode: 'paper' }] as any;
+    const badAudit = [{ entityType: 'guardrails', field: 'x'.repeat(150), oldValue: '6.00', newValue: '8.00',
+      changedBy: 'b-sizing-inc1-test', tradingMode: 'paper' }] as any;
     await expect(storage.upsertGuardrailsV2WithAudit({ mode: 'paper', maxPositionPercentPct: '8.00' } as any, badAudit)).rejects.toThrow();
     expect(Number((await paperRow())!.max_position_percent_pct)).toBe(6);
   });
