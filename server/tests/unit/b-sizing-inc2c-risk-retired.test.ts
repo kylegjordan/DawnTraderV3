@@ -89,7 +89,7 @@ describe('2 — the engine never re-sizes by risk ÷ stop, in any mode', () => {
 
   it('an unsized signal is REFUSED as SIZING_INVALID at execution', () => {
     expect(engine).toContain('[B-SIZING-DEC-RESTORE][UNSIZED_AT_EXECUTION:');
-    expect(engine).toMatch(/if \(!\(quantity > 0\)\) \{[\s\S]{0,400}stage: 'SIZING_INVALID'/);
+    expect(engine).toMatch(/if \(!\(quantity > 0\)\) \{[\s\S]{0,800}stage: 'SIZING_INVALID'/);
   });
 });
 

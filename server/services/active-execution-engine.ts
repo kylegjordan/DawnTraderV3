@@ -5115,13 +5115,12 @@ export class ActiveExecutionEngine {
     // A signal that reaches here unsized is REFUSED, never re-sized by another rule.
     let quantity: number = signal.quantity ?? 0;
     if (!(quantity > 0)) {
-      console.error(`[B-SIZING-DEC-RESTORE][UNSIZED_AT_EXECUTION:${this.mode}] ${signal.symbol} reached execution with no fixed-notional quantity (${signal.quantity}) — refused, not re-sized`);
+      // Reachable today only if B6's posture overlay zeroed a sized signal (`positionSizeMultiplier` 0 in either B6 arm).
+      console.error(`[B-SIZING-DEC-RESTORE][UNSIZED_AT_EXECUTION:${this.mode}] ${signal.symbol} reached execution with no positive quantity (${signal.quantity}) — refused, not re-sized (a zero from the B6 sizer or from its posture multiplier)`);
       rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', `unsized at execution (quantity=${signal.quantity})`);
       return { opened: false, stage: 'SIZING_INVALID', reason: `unsized at execution (quantity=${signal.quantity})` };
     }
-    // §17 P-2: the working balance at open, recorded on the audit row (it was cycleContext's, never passed ⇒ 0).
-    const portfolioValue = await getPortfolioBalanceV2(this.mode);
-    console.log(`[J7][EXEC_P3] Using pre-sized quantity: ${quantity.toFixed(8)} (mode: ${this.mode}, balance: $${portfolioValue.toFixed(2)})`);
+    console.log(`[J7][EXEC_P3] Using pre-sized quantity: ${quantity.toFixed(8)} (mode: ${this.mode})`);
     // (the `quantity <= 0` re-check that stood here is gone with the risk ÷ stop arm it guarded — the refusal above covers
     // every non-positive and NaN quantity, so it could no longer fire)
 
@@ -5883,6 +5882,10 @@ export class ActiveExecutionEngine {
         }
       });
       
+      // §17 P-2: the working balance, recorded on the audit row (it was cycleContext's, never passed ⇒ 0). Read HERE,
+      // after the open, so a refused attempt pays no DB round-trips and the balance is contemporaneous with the write
+      // (Langston Step-4 nit b). getPortfolioBalanceV2 cannot throw (its catch returns 0).
+      const portfolioValue = await getPortfolioBalanceV2(this.mode);
       // Phase 8.8.3-J: Execution Attempt Audit - OPENED decision (non-blocking)
       this.logExecutionAttempt({
         mode: this.mode,
