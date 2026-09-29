@@ -9,7 +9,6 @@
 | **`B-FEED-MISMATCH-FIX`** (row `3n.u`) | **STEP 10 of 11 — observation window** | the data: 300 taker closes or 2026-10-10T00:02:43Z, whichever first. How it is read (per side of each boundary, the short-n rule, the reset excluded) is fixed in amendment 4a (`0c8918c5d`), Langston-confirmed. Then the progress report converts to the completion report. |
 | **`B-XSTOCK-FEE-CONTRACT`** (`#1010`, row 2.4-FEE) | **closed batch, observation still open** | 2026-10-02T20:09:47Z: P8 closes INCONCLUSIVE (Langston 2026-09-29 — PASS was unreachable by construction); Arm B's verdict of record is re-run after the window and Langston re-derives it. The held deploy may go at or after 20:10Z. Successor: `B-FEE-BASIS-STAMP` (`#1097`, sprint row 107a). |
 | **`T-W20C-SCALAR-LEG`** (sprint row 107) | **scope r1 drafted 2026-09-13 (`6e97a8f1c`), never ruled** | its turn in the sprint, after row 106 `B-PAPER-LANE-PROVENANCE` |
-| **`B-FEED-BY-SITUATION-AUDIT`** (row `3n.t`) | **held since 2026-09-15** | a placement: it was held behind `3n.s`, which is now after live, and it sits in neither list — asked of Langston 2026-09-29 |
 
 ## Checks I hold (alerts)
 
@@ -35,4 +34,4 @@
 `#639`, `#551` (break-even and trailing) · 2.4b `B-ALERT-QUEUE-INTEGRITY` (`#647`, `#1074`, `#654`) · `B-CREW-SENDER-IDENTITY` · `B-CHANGE-CLASS-DOCSET-FIT` (row 2.7; now two instances) · `B-FRESHNESS-LOG-READER` · `B-SHARED-TMP-ISOLATION` · `B-UMBRELLA-OPEN-STATE` · `B-OPEN-OBLIGATION-SWEEP` (`#1071`) · `B-GATE-WILDCARD-REFUSE` (`#1069`) · `B-PRICE-DOC-CONSOLIDATE` (`3n.s`) · `B-VOLATILITY-CACHE-RETIRE` · `#1042`, the `#507` rider (legacy) · `#518`, `#528`, `#537`.
 
 ## Closed recently
-`B-ARCHIVE-RETENTION-SIZING` (`#592`, row 2.4f) 2026-09-29, a decision item · `B-REACH-BASELINE-ADJUST` (row `3n.v`) 2026-09-29, crowding arm fired and Kyle overrode · `3n.x`, the pre-live review, became the Sprint to Live plan itself · withdrawn or closed at the 2026-09-29 homing: `#556`, `#636`, `#544`, `#507` (core), `#1098` (the node_modules `#567`); `#640` was already withdrawn.
+`B-ARCHIVE-RETENTION-SIZING` (`#592`, row 2.4f) 2026-09-29, a decision item · `B-REACH-BASELINE-ADJUST` (row `3n.v`) 2026-09-29, crowding arm fired and Kyle overrode · `3n.x`, the pre-live review, became the Sprint to Live plan itself · `3n.t` `B-FEED-BY-SITUATION-AUDIT` was done 2026-09-18 (its findings became `3n.u`); its plan status cell was stale until 2026-09-29 · withdrawn or closed at the 2026-09-29 homing: `#556`, `#636`, `#544`, `#507` (core), `#1098` (the node_modules `#567`); `#640` was already withdrawn.
