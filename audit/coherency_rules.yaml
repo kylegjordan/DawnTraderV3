@@ -234,15 +234,9 @@ migration_rules:
     severity: "error"
     notes: "Validate using reference portfolio balance at migration time"
 
-  - name: "No Data Loss"
-    id: "MIG_003"
-    description: "Legacy records must be preserved in transitional view"
-    condition: "COUNT(guardrails) = COUNT(v_guardrails_transitional)"
-    severity: "error"
-    validation_query: |
-      SELECT COUNT(*) as legacy_count FROM guardrails
-      UNION ALL
-      SELECT COUNT(*) as view_count FROM v_guardrails_transitional
+  # MIG_003 ("No Data Loss", COUNT(guardrails) = COUNT(v_guardrails_transitional)) REMOVED by
+  # B-SIZING-DEC-RESTORE increment 2a: the view is dropped (it selected max_open_positions). Nothing executes
+  # migration_rules (guardrail-policy.ts reads only .rules); the rule is kept in git history.
 
 # Enforcement Strategy
 enforcement:

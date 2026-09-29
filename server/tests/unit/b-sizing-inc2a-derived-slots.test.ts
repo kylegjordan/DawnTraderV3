@@ -30,6 +30,7 @@ vi.mock('../../storage', () => ({
 
 import { deriveSlotCount, resolveEffectivePositionPct, sizeActivePositionForSignal } from '../../services/active-position-sizing.js';
 import { buildSettingsFromGuardrails } from '../../services/guardrail-settings.js';
+import { orchestratorUpdateGuardrailSchema } from '../../../shared/schema';
 
 // The engine's two promotion loops refuse admissions on exactly this predicate (active-execution-engine.ts, both
 // GUARDRAIL_READ_FAIL sites). It is restated here so the unit legs test what the loops actually do with the value.
@@ -161,5 +162,18 @@ describe('ONE derivation (§14.4 BLOCKER-1) — every slot reader calls it, noth
     const m5e = src('server/services/m5e-validation-service.ts');
     expect(m5e).not.toMatch(/Math\.floor\(\s*\w*[Ee]xposure\w*\s*\/\s*\w*[Pp]osition\w*\s*\)/);
     expect(m5e).not.toMatch(/Math\.max\(\s*\w*[Ss]lots\w*\s*,\s*1\s*\)/);
+  });
+});
+
+describe('the orchestrator route refuses the retired field (second-reader finding, fixed in 2a)', () => {
+  // Before 2a, POST /orchestrator/updateGuardrail really wrote guardrails_v2.max_open_positions. With the column gone
+  // the storage merge would drop it and the route would reply "Guardrail updated successfully" — so the field leaves
+  // the route's allowed list and the request fails validation (400). MUTATION: put it back in the enum and this fails.
+  const req = (field: string) => ({ mode: 'paper', field, value: 5, approved: true });
+  it('maxOpenPositions is refused', () => {
+    expect(orchestratorUpdateGuardrailSchema.safeParse(req('maxOpenPositions')).success).toBe(false);
+  });
+  it('CONTROL: a field still on the list is accepted, so the refusal above is the field, not the fixture', () => {
+    expect(orchestratorUpdateGuardrailSchema.safeParse(req('riskPerTrade')).success).toBe(true);
   });
 });

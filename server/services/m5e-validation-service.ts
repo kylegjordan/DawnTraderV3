@@ -464,7 +464,7 @@ async function generateM5ESummary(comparisonReport: any): Promise<string> {
 - **Final Status**: ${allPassed ? '✅ PASSED' : '❌ FAILED'}
 
 ## Dynamic Guardrail Slot Calculation
-- **Formula**: maxSlots = floor(maxExposure / maxPosition)
+- **Formula**: maxSlots = floor(100 / maxPosition) (B-SIZING-DEC-RESTORE: the same derivation the engine uses; exposure sizes the budget, not the count)
 - **Max Exposure**: ${maxExposure}%
 - **Max Position**: ${maxPosition}%
 - **Computed Slots**: ${dynamicSlots}
@@ -546,7 +546,8 @@ ${allPassed
   
   const csvHeader = 'timestamp,elapsedMinutes,phase,feedLatencyMs,cacheWindow,vtsTradeCount,paperTradeCount,openPositions,avgDI,avgGSI,cacheHitRate,riskPerTrade,maxExposure,dynamicSlots,tradingActive';
   const csvRows = snapshots.map(s =>
-    `${s.timestamp},${s.elapsedMinutes},${s.phase},${s.feedLatencyMs},${s.cacheWindow || 200},${s.vtsTradeCount},${s.paperTradeCount},${s.openPositions || 0},${s.avgDI},${s.avgGSI},${s.cacheHitRate},${s.riskPerTrade || 3.5},${s.maxExposure || 40},${s.dynamicSlots || 8},${s.tradingActive}`
+    // B-SIZING-DEC-RESTORE: a missing value is an EMPTY cell, never a made-up one (was 200 / 0 / 3.5 / 40 / 8).
+    `${s.timestamp},${s.elapsedMinutes},${s.phase},${s.feedLatencyMs},${s.cacheWindow ?? ''},${s.vtsTradeCount},${s.paperTradeCount},${s.openPositions ?? ''},${s.avgDI},${s.avgGSI},${s.cacheHitRate},${s.riskPerTrade ?? ''},${s.maxExposure ?? ''},${s.dynamicSlots ?? ''},${s.tradingActive}`
   );
   const csvContent = [csvHeader, ...csvRows].join('\n');
   
