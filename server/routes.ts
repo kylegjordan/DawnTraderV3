@@ -11605,7 +11605,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       console.log('[41D-FIX] Broadcast triggered asynchronously');
       
-      res.json({ success: true, message: result.message });
+      // B-SIZING-DEC-RESTORE increment 3: what the stop's flatten did (null on the idempotent already-stopped path,
+      // where no flatten ran) — the reset script refuses on anything but a clean flatten.
+      res.json({ success: true, message: result.message, flatten: result.data?.flatten ?? null, idempotent: !!result.data?.isIdempotentReuse });
     } catch (error: any) {
       console.error('Error stopping paper trading simulation:', error);
       // P19-B4b D5: vestigial operation-lock clear removed (mechanism deleted).
@@ -13594,7 +13596,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.status(400).json({ ok: false, error: 'Paper engine not running — nothing to pre-check' });
       }
       const positions = await manager.flattenPrecheck();
-      res.json({ ok: true, positions, allPriced: positions.every((p: { hasObservedPrice: boolean }) => p.hasObservedPrice), count: positions.length });
+      // `allClosable`: every position is either priced (it will be flattened) or a pending maker (it will be dropped
+      // as never-filled, #1100). The reset refuses to stop the engine unless this is true.
+      res.json({ ok: true, positions, allClosable: positions.every((p: { closable: boolean }) => p.closable), count: positions.length });
     } catch (error: any) {
       console.error('[B-SIZING-DEC-RESTORE][FLATTEN_PRECHECK] failed:', error);
       res.status(500).json({ ok: false, error: error?.message || 'flatten pre-check failed' });

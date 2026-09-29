@@ -24,6 +24,23 @@ console.log('[41E-S][LIVE-CODE] active-engine-service.ts loaded');
 console.log('[8.8.3-I3][LOADED] Trade status consistency module integrated');
 console.log('[41F][QUEUE] Paper operation queue integrated');
 
+/** B-SIZING-DEC-RESTORE increment 3: the stop's flatten, as the caller sees it (the reset script gates on it). */
+export interface StopFlattenReport {
+  /** false ⇒ no manager was running, so no flatten was attempted */
+  ran: boolean;
+  /** the flatten threw; the stop went on without it */
+  threw: boolean;
+  closedCount: number;
+  failedCount: number;
+  skippedCount: number;
+  /** symbols the flatten left OPEN for want of any observed price */
+  leftOpen: string[];
+  /** symbols the orphan cleanup DELETED after the flatten — a position that should have closed and did not */
+  orphansDeleted: string[];
+  /** the stop-time reconciler's result, as it returned it */
+  reconcile: unknown;
+}
+
 export interface ActiveEngineResult {
   success: boolean;
   message: string;
@@ -852,6 +869,13 @@ export async function stopActiveEngine(
         // Phase 27.F.9: Stop portfolio manager and clear both references
         const currentManager = getGlobalActiveEngineManager();
         const t0 = Date.now();
+        // B-SIZING-DEC-RESTORE increment 3 (fresh-reader finding): what the stop's flatten ACTUALLY did, returned to the
+        // caller. The reset script refuses on anything but a clean flatten; until now every outcome here was log-only,
+        // and a failed close reached the caller as a plain success after the orphan cleanup below deleted it.
+        const flattenReport: StopFlattenReport = {
+          ran: false, threw: false, closedCount: 0, failedCount: 0, skippedCount: 0,
+          leftOpen: [], orphansDeleted: [], reconcile: null,
+        };
         
         if (currentManager) {
           // Phase 8.8.3-I2: CORRECTED STOP SEQUENCE
@@ -878,6 +902,11 @@ export async function stopActiveEngine(
               for (const d of closeResult.details) {
                 if (d.status === 'left_open') _deliberatelyOpen.set(d.positionId, d.symbol);
               }
+              flattenReport.ran = true;
+              flattenReport.closedCount = closeResult.closedCount;
+              flattenReport.failedCount = closeResult.failedCount;
+              flattenReport.skippedCount = closeResult.skippedCount;
+              flattenReport.leftOpen = [..._deliberatelyOpen.values()];
               console.log('[8.8.3-I2][STOP_FLOW][6_FORCE_CLOSE_RESULT]', {
                 closedCount: closeResult.closedCount,
                 failedCount: closeResult.failedCount,
@@ -890,6 +919,7 @@ export async function stopActiveEngine(
                 console.log(`[8.8.3-I2][STOP_FLOW][POSITION_CLOSED] ${detail.symbol} (${detail.positionId}): ${detail.status}${detail.reason ? ' - ' + detail.reason : ''}`);
               }
             } catch (closeErr) {
+              flattenReport.threw = true;
               console.error('[8.8.3-I2][STOP_FLOW][FORCE_CLOSE_ERROR]', closeErr);
               // Non-blocking: continue with stop even if force-close fails
             }
@@ -917,6 +947,7 @@ export async function stopActiveEngine(
                   console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP] Force-removing orphan position: ${orphan.symbol} (${orphan.id})`);
                   try {
                     await storage.deleteActiveOpenPosition('paper', orphan.id);
+                    flattenReport.orphansDeleted.push(orphan.symbol);
                     console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP_SUCCESS] Removed orphan: ${orphan.id}`);
                   } catch (cleanupErr) {
                     console.error(`[8.8.3-I2][STOP_FLOW][CLEANUP_FAILED] Could not remove orphan: ${orphan.id}`, cleanupErr);
@@ -933,6 +964,7 @@ export async function stopActiveEngine(
             console.log('[8.8.3-I3][STOP_FLOW][RECONCILE_START] Checking for stale trades...');
             try {
               const reconcileResult = await reconcileIncompleteTrades('paper', existingSession.sessionId, new Set(_deliberatelyOpen.values()));
+              flattenReport.reconcile = reconcileResult;
               console.log('[8.8.3-I3][STOP_FLOW][RECONCILE_RESULT]', reconcileResult);
             } catch (reconcileErr) {
               console.error('[8.8.3-I3][STOP_FLOW][RECONCILE_ERROR]', reconcileErr);
@@ -1015,6 +1047,7 @@ export async function stopActiveEngine(
             sessionId: existingSession.sessionId,
             stoppedAt,
             runDurationMs: runDuration,
+            flatten: flattenReport,
           },
           shouldBroadcast: true, // Phase 41F-B: Trigger broadcasts after queue completion
         };

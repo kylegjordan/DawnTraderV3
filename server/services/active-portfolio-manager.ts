@@ -9,6 +9,18 @@ import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js
 import { livePricingAdapter, type PriceProducer } from './live-pricing-adapter.js';
 import type { FlattenCloseType } from './active-execution-engine';
 
+/** B-SIZING-DEC-RESTORE increment 3: one row of the read-only flatten pre-check (`GET /active-engine/flatten-precheck`). */
+export interface FlattenPrecheckRow {
+  positionId: string;
+  symbol: string;
+  state: string;
+  /** the stop's flatten can dispose of it: an open position with an observed price, or a pending maker (dropped). */
+  closable: boolean;
+  /** null for a pending maker — it needs no price. */
+  hasObservedPrice: boolean | null;
+  source: string | null;
+}
+
 interface PortfolioMetrics {
   totalTrades: number;
   openPositions: number;
@@ -309,12 +321,19 @@ export class ActivePortfolioManager {
    * B-SIZING-DEC-RESTORE increment 3 (§16.4 B2): READ-ONLY — which open positions could be flattened right now.
    * Closes nothing by construction; the reset script refuses to stop the engine unless every row has a price.
    */
-  async flattenPrecheck(): Promise<Array<{ positionId: string; symbol: string; hasObservedPrice: boolean; source: string | null }>> {
+  // A PENDING maker needs no price — the flatten drops it as never-filled (`#1100`) — so `closable` is what the reset
+  // gates on; `hasObservedPrice` is null for a pending row rather than a claim about a price nobody needs.
+  async flattenPrecheck(): Promise<FlattenPrecheckRow[]> {
     const open = await storage.getActiveOpenPositions(this.mode);
-    const out: Array<{ positionId: string; symbol: string; hasObservedPrice: boolean; source: string | null }> = [];
+    const out: FlattenPrecheckRow[] = [];
     for (const position of open) {
+      const state = ((position as any).state ?? 'open') as string;
+      if (state === 'pending') {
+        out.push({ positionId: position.id, symbol: position.symbol, state, closable: true, hasObservedPrice: null, source: 'pending_maker_drop' });
+        continue;
+      }
       const resolved = await this.resolveFlattenPrice(position);
-      out.push({ positionId: position.id, symbol: position.symbol, hasObservedPrice: resolved !== null, source: resolved?.sourceLabel ?? null });
+      out.push({ positionId: position.id, symbol: position.symbol, state, closable: resolved !== null, hasObservedPrice: resolved !== null, source: resolved?.sourceLabel ?? null });
     }
     return out;
   }
@@ -337,10 +356,19 @@ export class ActivePortfolioManager {
    * because `closePosition` returns void.
    */
   private async _flattenOne(
-    position: { id: string; symbol: string; assetClass?: string | null },
+    position: { id: string; symbol: string; assetClass?: string | null; state?: string | null },
     tag: string,
     closeType: FlattenCloseType,
   ): Promise<{ status: 'closed' | 'left_open' | 'failed'; reason?: string }> {
+    // ⛔ `#1100`: a PENDING maker is a resting buy that never filled — there is nothing to sell. It is DROPPED as
+    // never-filled (the engine's one never-filled path), never flattened into a round trip that did not happen.
+    if (position.state === 'pending') {
+      const dropped = await this.executionEngine.dropPendingMakerOnFlatten(position.id);
+      if (!dropped.success) return { status: 'failed', reason: `pending maker not dropped: ${dropped.error}` };
+      const stillThere = await storage.getActiveOpenPosition(this.mode, position.id);
+      if (stillThere) return { status: 'failed', reason: 'pending maker drop returned success but the position remains' };
+      return { status: 'closed', reason: 'pending maker never filled — dropped as never_filled' };
+    }
     const resolved = await this.resolveFlattenPrice(position);
     const price = resolved?.price ?? null;
     const provenance = resolved?.provenance ?? null;

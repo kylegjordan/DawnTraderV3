@@ -1731,24 +1731,54 @@ export class ActiveExecutionEngine {
       if ((position.assetClass ?? 'crypto_spot') === 'xstock_spot' && !isXstockMarketOpenUTC(position.symbol, new Date())) {
         return; // market shut — wait for the first open tick
       }
-      const tradeId = (position.metadata as any)?.tradeId;
-      if (tradeId) {
-        await storage.updateClosedTrade(this.mode, tradeId, {
-          closedAt: new Date(),
-          // ⛔ B-EXIT-PROVENANCE OBJ-1 EXEMPTION, NAMED HERE RATHER THAN DISCOVERED AT STEP 8.
-          // This row is written with NULL exit provenance ON PURPOSE: the order NEVER FILLED, so
-          // no exit occurred and there is no price whose source could honestly be recorded.
-          // OBJ-1's "every post-deploy row carries a non-null exit_price_source" MUST exclude
-          // close_reason='never_filled'. Without that carve-out the coverage check reports a
-          // false failure, and the obvious "fix" is to stamp a price that never existed — which
-          // is worse than the gap it would be closing.
-          closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
-        } as any);
-      }
-      await storage.deleteActiveOpenPosition(this.mode, position.id);
-      console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: pending maker at ${limit} hit the hard-drop deadline unfilled — dropped (slot freed, never-filled record${tradeId ? '' : ' — no tradeId on metadata, position removed only'})`);
+      await this._dropUnfilledMaker(position, `pending maker at ${limit} hit the hard-drop deadline unfilled`);
     }
     // 'rest' — still resting; nothing to do this tick.
+  }
+
+  /**
+   * P19-B7.2c's never-filled disposition, the ONE implementation (extracted by B-SIZING-DEC-RESTORE increment 3 so the
+   * engine stop's flatten uses it too): a resting maker order that did not fill is DROPPED — the position is deleted
+   * (slot freed) and its closed_trades row is closed as `never_filled`, with no exit price and no P&L.
+   */
+  private async _dropUnfilledMaker(position: any, why: string): Promise<void> {
+    const tradeId = (position.metadata as any)?.tradeId;
+    if (tradeId) {
+      await storage.updateClosedTrade(this.mode, tradeId, {
+        closedAt: new Date(),
+        // ⛔ B-EXIT-PROVENANCE OBJ-1 EXEMPTION, NAMED HERE RATHER THAN DISCOVERED AT STEP 8.
+        // This row is written with NULL exit provenance ON PURPOSE: the order NEVER FILLED, so
+        // no exit occurred and there is no price whose source could honestly be recorded.
+        // OBJ-1's "every post-deploy row carries a non-null exit_price_source" MUST exclude
+        // close_reason='never_filled'. Without that carve-out the coverage check reports a
+        // false failure, and the obvious "fix" is to stamp a price that never existed — which
+        // is worse than the gap it would be closing.
+        closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
+      } as any);
+    }
+    await storage.deleteActiveOpenPosition(this.mode, position.id);
+    console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: ${why} — dropped (slot freed, never-filled record${tradeId ? '' : ' — no tradeId on metadata, position removed only'})`);
+  }
+
+  /**
+   * ⛔ B-SIZING-DEC-RESTORE increment 3 (fresh-reader finding, `#1100`): the engine stop's flatten must NOT close a
+   * PENDING maker as a trade. A pending position is a resting BUY that never filled — there is nothing to sell. Before
+   * this, the flatten walked a sell for it and booked a round trip that never happened, with P&L, under `manual_stop`
+   * (or, at the reset, `reset`). The stop is the operator cancelling the order, so it takes the never-filled
+   * disposition at once — no deadline, and no xStock weekend wait (that wait exists so a shut book gets its chance to
+   * fill before the deadline drops it; a cancelled order has no chance to wait for).
+   * Re-reads the position so a pending that filled in the meantime is REFUSED here and flattened as a trade instead.
+   */
+  async dropPendingMakerOnFlatten(positionId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const position = await storage.getActiveOpenPosition(this.mode, positionId);
+      if (!position) return { success: false, error: 'position not found' };
+      if ((position as any).state !== 'pending') return { success: false, error: `position is ${(position as any).state ?? 'open'}, not pending` };
+      await this._dropUnfilledMaker(position, 'pending maker cancelled by the engine stop, unfilled');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   private async checkOpenPositions(): Promise<void> {

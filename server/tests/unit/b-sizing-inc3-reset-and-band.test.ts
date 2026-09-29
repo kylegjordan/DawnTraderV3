@@ -25,6 +25,10 @@ const h = vi.hoisted(() => ({
   // read see the book empty — every close succeeded.
   emptyAfterFirstRead: false,
   stillOpen: null as unknown,
+  // For the pending-maker drop: what the engine re-reads, and what it writes.
+  positionById: null as unknown,
+  updateClosedTrade: vi.fn(async () => ({})),
+  deleteActiveOpenPosition: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../services/module-constants-service.js', async (orig) => ({
@@ -60,7 +64,9 @@ vi.mock('../../storage.js', async (orig) => {
         }
         if (prop === 'getClosedTradesCount') return async () => 0;
         if (prop === 'getRunningEngineSession') return async () => null;
-        if (prop === 'getActiveOpenPosition') return async () => h.stillOpen;
+        if (prop === 'getActiveOpenPosition') return async () => h.positionById ?? h.stillOpen;
+        if (prop === 'updateClosedTrade') return h.updateClosedTrade;
+        if (prop === 'deleteActiveOpenPosition') return h.deleteActiveOpenPosition;
         return (target as Record<string | symbol, unknown>)[prop];
       },
     }),
@@ -91,6 +97,9 @@ beforeEach(() => {
   h.openPositions = [];
   h.emptyAfterFirstRead = false;
   h.stillOpen = null;
+  h.positionById = null;
+  h.updateClosedTrade.mockClear();
+  h.deleteActiveOpenPosition.mockClear();
 });
 
 describe('1 — evaluatePaperSizeBand (pure)', () => {
@@ -256,8 +265,8 @@ describe('3 — the reset label travels the stop path', () => {
 
 describe('4 — one price resolver for the flatten and the pre-check; the pre-check closes nothing', () => {
   const mgrProto = ActivePortfolioManager.prototype as unknown as {
-    flattenPrecheck: () => Promise<Array<{ positionId: string; symbol: string; hasObservedPrice: boolean; source: string | null }>>;
-    _flattenOne: (p: unknown, tag: string, closeType: string) => Promise<{ status: string }>;
+    flattenPrecheck: () => Promise<Array<Record<string, unknown>>>;
+    _flattenOne: (p: unknown, tag: string, closeType: string) => Promise<{ status: string; reason?: string }>;
   };
 
   it('the pre-check reports each position through the resolver, and has no way to close one', async () => {
@@ -269,10 +278,18 @@ describe('4 — one price resolver for the flatten and the pre-check; the pre-ch
     };
     const out = await mgrProto.flattenPrecheck.call(fake);
     expect(out).toEqual([
-      { positionId: 'p-X', symbol: 'XXX/USD', hasObservedPrice: false, source: null },
-      { positionId: 'p-Y', symbol: 'YYY/USD', hasObservedPrice: true, source: 'book_best_bid' },
+      { positionId: 'p-X', symbol: 'XXX/USD', state: 'open', closable: false, hasObservedPrice: false, source: null },
+      { positionId: 'p-Y', symbol: 'YYY/USD', state: 'open', closable: true, hasObservedPrice: true, source: 'book_best_bid' },
     ]);
     expect(fake.resolveFlattenPrice).toHaveBeenCalledTimes(2);
+  });
+
+  it('#1100 — a PENDING maker is closable with no price asked for (it will be dropped, not sold)', async () => {
+    h.openPositions = [{ id: 'p-P', symbol: 'PPP/USD', state: 'pending' } as any];
+    const fake = { mode: 'paper', resolveFlattenPrice: vi.fn(async () => null) };
+    const out = await mgrProto.flattenPrecheck.call(fake);
+    expect(out).toEqual([{ positionId: 'p-P', symbol: 'PPP/USD', state: 'pending', closable: true, hasObservedPrice: null, source: 'pending_maker_drop' }]);
+    expect(fake.resolveFlattenPrice).not.toHaveBeenCalled();
   });
 
   // MUTATION: give _flattenOne its own inline price lookup again and it stops consulting the resolver — this position
@@ -288,5 +305,65 @@ describe('4 — one price resolver for the flatten and the pre-check; the pre-ch
     expect(outcome.status).toBe('left_open');
     expect(fake.resolveFlattenPrice).toHaveBeenCalledTimes(1);
     expect(forceClosePosition).not.toHaveBeenCalled();
+  });
+});
+
+describe('5 — #1100: the stop never sells a resting maker buy that never filled', () => {
+  const mgrProto = ActivePortfolioManager.prototype as unknown as {
+    _flattenOne: (p: unknown, tag: string, closeType: string) => Promise<{ status: string; reason?: string }>;
+  };
+  const engineProto = ActiveExecutionEngine.prototype as unknown as {
+    dropPendingMakerOnFlatten: (id: string) => Promise<{ success: boolean; error?: string }>;
+    _dropUnfilledMaker: unknown;
+  };
+
+  // MUTATION: remove the pending branch from _flattenOne and the pending maker reaches forceClosePosition — a walked
+  // sell and a booked P&L for a trade that never happened, the defect #1100 records.
+  it('the flatten DROPS a pending maker through the engine, and never walks a sell for it', async () => {
+    const forceClosePosition = vi.fn(async () => ({ success: true }));
+    const dropPendingMakerOnFlatten = vi.fn(async () => ({ success: true }));
+    const fake = { mode: 'paper', executionEngine: { forceClosePosition, dropPendingMakerOnFlatten }, resolveFlattenPrice: vi.fn() };
+    h.stillOpen = null; // gone after the drop
+    const outcome = await mgrProto._flattenOne.call(fake, { id: 'p-P', symbol: 'PPP/USD', state: 'pending' }, 'reset', 'reset');
+    expect(outcome.status).toBe('closed');
+    expect(outcome.reason).toMatch(/never_filled/);
+    expect(dropPendingMakerOnFlatten).toHaveBeenCalledWith('p-P');
+    expect(forceClosePosition).not.toHaveBeenCalled();
+    expect(fake.resolveFlattenPrice).not.toHaveBeenCalled();
+  });
+
+  it('CONTROL — an OPEN position still takes the priced flatten', async () => {
+    const forceClosePosition = vi.fn(async () => ({ success: true }));
+    const dropPendingMakerOnFlatten = vi.fn();
+    const fake = {
+      mode: 'paper',
+      executionEngine: { forceClosePosition, dropPendingMakerOnFlatten },
+      resolveFlattenPrice: vi.fn(async () => ({ price: 10, provenance: PROV, sourceLabel: 'kraken_ws' })),
+    };
+    const outcome = await mgrProto._flattenOne.call(fake, { id: 'p-O', symbol: 'OOO/USD', state: 'open' }, 'reset', 'reset');
+    expect(outcome.status).toBe('closed');
+    expect(forceClosePosition).toHaveBeenCalledTimes(1);
+    expect(dropPendingMakerOnFlatten).not.toHaveBeenCalled();
+  });
+
+  it('the engine drop closes the trade row as never_filled — no price, no P&L — and frees the slot', async () => {
+    h.positionById = { id: 'p-P', symbol: 'PPP/USD', state: 'pending', metadata: { tradeId: 't-9' } };
+    const res = await engineProto.dropPendingMakerOnFlatten.call({ mode: 'paper', _dropUnfilledMaker: engineProto._dropUnfilledMaker }, 'p-P');
+    expect(res.success).toBe(true);
+    expect(h.updateClosedTrade).toHaveBeenCalledTimes(1);
+    const [mode, tradeId, updates] = h.updateClosedTrade.mock.calls[0] as unknown as [string, string, Record<string, unknown>];
+    expect([mode, tradeId]).toEqual(['paper', 't-9']);
+    expect(updates.closeReason).toBe('never_filled');
+    expect(Object.keys(updates).sort()).toEqual(['closeReason', 'closedAt']); // no exit price, no P&L
+    expect(h.deleteActiveOpenPosition).toHaveBeenCalledWith('paper', 'p-P');
+  });
+
+  it('the engine REFUSES to drop a position that is no longer pending (it filled meanwhile — it is a trade now)', async () => {
+    h.positionById = { id: 'p-P', symbol: 'PPP/USD', state: 'open', metadata: { tradeId: 't-9' } };
+    const res = await engineProto.dropPendingMakerOnFlatten.call({ mode: 'paper', _dropUnfilledMaker: engineProto._dropUnfilledMaker }, 'p-P');
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/not pending/);
+    expect(h.updateClosedTrade).not.toHaveBeenCalled();
+    expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
   });
 });
