@@ -63,8 +63,14 @@ Staging's rows are JSON `true` / `true` / `2` (`jsonb_typeof`, measured), so the
 - **`queueSQESignal` checks the class FIRST** — it sat below the tiebreak, which expires the incumbent before the throw.
 - **The fence stripper strips full-line comments first** (all six copies) — a `/api/*` line comment hid ~500 lines of `routes.ts` from every fence scan; a positive control now asserts that stretch is scanned.
 
+## Folded after Langston's Step-4 ruling (§18.7)
+- **The cap counts SAME-CLASS opens only** (FINDING-1) — inside `checkPerUnderlyingCap`, for both callers; the VTS had the same collision.
+- **The VTS counts all three cap refusals as post-signal rejections at `tcl`** (FINDING-3) — one table, `classifyVtsNullReason`.
+- **`STAMP_MISSING` stage** (nit a); **the fence pins false block openers** (nit b, wider: in-string openers too).
+- **Not folded:** the cohort split (FINDING-2) is Kyle's — row 9f, `#1111`; M5D — row 9g, `#1112`.
+
 ## Tests and mutations
-See §18.6 and §18.6.1: 10 new behaviour tests (the two folds each fail when reverted) (pre-2d cap file fails 3, pre-2d orchestrator fails 1), 2 new live cooldown tests (pre-2d `trade-safety` fails both), the fence's 2d section (a planted route string fails exactly 1).
+⚠️ **Corrected at Step 4 (§18.7): of the 10 below, SIX are source-text assertions and FOUR drive the cap module; nothing drives the orchestrator catch or the count switch.** See §18.6 and §18.6.1: 10 new tests (the two folds each fail when reverted) (pre-2d cap file fails 3, pre-2d orchestrator fails 1), 2 new live cooldown tests (pre-2d `trade-safety` fails both), the fence's 2d section (a planted route string fails exactly 1).
 
 ## Judgement calls to attack
 1. The P-9 refusal on the VTS reason names: one per failure class (`…_config_missing`, `…_lookup_failed`) rather than the single `per_underlying_cap_unavailable` you wrote — your "distinct reasons, never collapsed" applied to the VTS too.

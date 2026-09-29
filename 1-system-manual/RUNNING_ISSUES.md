@@ -10093,3 +10093,13 @@ Kyle, 2026-07-10 on Discord (message `1525131232940130386`, `kind=''` — the au
 **Disposition in 2d:** the stream is RETIRED (§18.5), `wasClamped` deleted; the orchestrator transit change does not ship.
 **WHAT TO BUILD:** name the object the ranker decision should rest on (covariance-scale incidence under its own name, a threshold expressed relative to the buffer, or a different estimand), then instrument it on the opened population.
 **HOME: `B-CLAMP-ESTIMAND-RESPEC`, owner CC-C, placed in `SPRINT_TO_LIVE_PLAN.md` at row 9e, after row 9d** — before Phase 25 reads it.
+
+### #1111 OPEN 2026-09-29 (Langston, `B-SIZING-DEC-RESTORE` 2d Step-4 FINDING-2; recorded by CC-C) — **HALF THE UNIVERSE IS EXEMPT FROM THE PER-UNDERLYING CAP, BY AN A/B THAT NEVER PRODUCED A DATA POINT**
+**What:** `b67_3_universe_split_active = true` (seeded 2026-04-28, B67.3) sends the control cohort (FNV-1a hash of the symbol = 1) to `allowed: true, reason: 'control_cohort'` **before** the cap test (`per-underlying-cap.ts`, `checkPerUnderlyingCap`). Langston's re-implementation over the 321 distinct symbols in `closed_trades` at `7c43e2422`: **161 capped / 160 exempt (49.8%)**. The observation window could never run: the active lane's count was 0 for five months (it read the legacy `trades` table — fixed in 2d, §18.6.1), so turning the count on starts an A/B nobody reads and leaves half the underlyings uncapped.
+**Rule-24 outcome (2)** — working as designed, unaddressed ⇒ a scope decision; the flag moves the risk posture ⇒ **Kyle's**. **Not flipped in 2d.**
+**HOME: `B-CAP-COHORT-SPLIT-DECISION`, owner CC-C, placed in `SPRINT_TO_LIVE_PLAN.md` at row 9f, after row 9e.**
+
+### #1112 OPEN 2026-09-29 (Langston, `B-SIZING-DEC-RESTORE` 2d Step-4, the M5D attack; recorded by CC-C) — **THE M5D HARNESS IS UNAUDITED**
+**What:** 2d deleted the M5E validation harness after a census (callers, state writes — it could turn passive learning off). Its sibling M5D (`validation/run-m5d` routes) was left untouched and unaudited; no citation dissolves it, so it cannot be withdrawn. The 2d fence's positive control asserts M5D is still present — the right interim state.
+**WHAT TO DO:** the same census as M5E — every caller, every state it writes and each state's readers — then keep with a stated purpose, or delete through the workflow (rule 18).
+**HOME: `B-M5D-HARNESS-CENSUS`, owner CC-C, placed in `SPRINT_TO_LIVE_PLAN.md` at row 9g, after row 9f.**
