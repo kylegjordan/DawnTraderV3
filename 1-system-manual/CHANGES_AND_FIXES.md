@@ -1,5 +1,17 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-09-29-A — `B-CHAPLET-OFF-HOTFIX` (hotfix, `#1101`, Infra Claude) — an unauthenticated route served the staging app's file tree to the public internet
+
+**CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B-CHAPLET-OFF-HOTFIX_SCOPE.md`.
+**SYMPTOM (measured from Helsinki, outside, 16:11:07Z):** `/chaplet/repo/file/package.json`, `/Chaplet/repo/file/package.json`, `/CHAPLET/health`, `/chaplet/health`, `//chaplet/health` and a `bridge/reference/` chat archive via `/chaplet/context/file/…` all returned **200** with no login.
+**MECHANISM:** `server/index.ts:13` (import) and `:503` (mount, pre-fix line numbers at `53045a6d7`'s parent) mounted the Phase M4 `chaplet/` router at `/chaplet` with no auth; public path Caddy → nginx `location /` → app. Express routing is case-insensitive, so any capitalisation matched.
+**BLAST RADIUS:** one mount; **no code caller** (only descriptive mentions); live requests in 15 days were only the two audit probes of 2026-09-29; the router writes no state.
+**FIX, two parts** (staging could not take a normal deploy: 72 h+ behind, with other sessions' work on hold):
+- **(a) edge block, live 16:11:15Z:** in `/etc/nginx/sites-available/dawntrader`, before `location /`: `location ~* ^/chaplet { return 404; }`. ⚠️ **Langston's BLOCKER-1 changed the first draft** from `location ^~ /chaplet`, which is case-sensitive and would have left `/CHAPLET/…` open. Backup `dawntrader.pre-chaplet-off-20260929T161115Z`; `nginx -t` OK; graceful reload; **the app was not restarted** (pm2 restart count 627 before and after).
+- **(b) code unmount at `53045a6d7` (Langston: APPROVED at the ref):** the import and the mount are removed, with a comment pointing at `#1101`. **Pending the next normal `dt-deploy`.**
+**VERIFICATION (the same instrument as the symptom, 16:11:24Z):** all six `/chaplet` variants above → **404**. **Controls:** `/` 200, `/api/settings` without a token 401, `/token-watch/` 200 — unchanged.
+**STILL OPEN:** (b) goes live with the next deploy; the deletion of `chaplet/` is `B-CHAPLET-DELETE` (`PHASE_19_PLAN.md` row 4.51b, rule 18). **Found here and placed:** the repo's `deploy/nginx.conf` is a stale Batch-40 template (111 lines) that does not match the live 99-line config (103 after this change) → `B-SEC-HARDEN` (disposition 2 on the §9.4 scale).
+
 ### FIX-2026-07-31-B — `B-KILLSWITCH-WINDOW` (hotfix) — the daily-loss kill switch's 24h total was bounded by ROW COUNT, not by TIME
 **CLASS: `hotfix`.** Files: `server/storage.ts` (new `getRealizedPnlSince`), `server/services/daily-loss-budget.ts` (paper leg re-pointed).
 **DEFECT.** `compute24hSnapshot` reached its 24h realized-P&L through `storage.getClosedTrades(mode, {closedOnly:true})`, which returns at most **`limit || 100`** rows ordered **`desc(openedAt)`**, then filtered them to `closedAt >= windowStart`. ⇒ **the set was bounded by OPEN time while the question was asked in CLOSE time.** A position held across more than 100 subsequent opens was **absent from the kill switch's 24h loss total at the moment it closed** — silently, no error, no log. **Direction: it UNDER-COUNTS, so the switch trips LATER than configured.**
