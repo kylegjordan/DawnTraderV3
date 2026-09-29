@@ -18,4 +18,8 @@ ALTER TABLE guardrails_v2
   ADD CONSTRAINT guardrails_v2_max_position_percent_pct_range
   CHECK (max_position_percent_pct > 0 AND max_position_percent_pct <= 100);
 
+-- The forward file's `_migrations` row goes with it (column `name`, scripts/db-migrate.ts), so a later redeploy of the
+-- batch applies the forward file again instead of skipping it over a restored schema (Step-4 fresh-reader round, 2026-09-29).
+DELETE FROM _migrations WHERE name = '2026-09-29-b-sizing-inc2b-position-pct-floor.sql';
+
 COMMIT;

@@ -44,4 +44,8 @@ END;
 -- SET NOT NULL fails loudly if any row was not in the list above.
 ALTER TABLE goals_presets ALTER COLUMN portfolio_risk_per_trade_pct SET NOT NULL;
 
+-- The forward file's `_migrations` row goes with it (column `name`, scripts/db-migrate.ts), so a later redeploy of the
+-- batch applies the forward file again instead of skipping it over a restored schema (Step-4 fresh-reader round, 2026-09-29).
+DELETE FROM _migrations WHERE name = '2026-09-29-b-sizing-inc2c-retire-portfolio-risk.sql';
+
 COMMIT;

@@ -124,4 +124,8 @@ CREATE VIEW v_guardrails_transitional AS
    FROM guardrails_v2 g
      LEFT JOIN guardrails legacy ON legacy.mode = g.mode;
 
+-- The forward file's `_migrations` row goes with it (column `name`, scripts/db-migrate.ts), so a later redeploy of the
+-- batch applies the forward file again instead of skipping it over a restored schema (Step-4 fresh-reader round, 2026-09-29).
+DELETE FROM _migrations WHERE name = '2026-09-29-b-sizing-inc2a-retire-max-open-positions.sql';
+
 COMMIT;
