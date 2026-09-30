@@ -165,16 +165,18 @@ _PDIR = tempfile.mkdtemp(prefix="wakeprose-")
 def _prow(ts, marker):
     return json.dumps({"ts": ts, "kind": "langston_outbound", "text": "NEW Claude — see.\n\n" + marker})
 _pm = ['[[ALERT id=<full-uuid> owner=<CC-A|CC-B|Kyle> action="..."]]', '[[ALERT \u2026 owner=\u2026]]', '[[ALERT ...]]',
-       '[[ALERT id=c244f2b8-a1eb-4d26-abf2-000000000000 action="owner left off"]]', '[[ALERT id=none owner=CC-B action="x"]]']
+       '[[ALERT id=c244f2b8-a1eb-4d26-abf2-000000000000 action="owner left off"]]', '[[ALERT id=none owner=CC-B action="x"]]',
+       '[[ALERT owner=CC-B]]', '[[ALERT id = c244f2b8-a1eb-4d26-abf2-000000000000 owner=CC-B action="spaced id"]]']
 _pin = f"==> {LOG} <==\n" + "\n".join(_prow(f"2026-09-30T1{k}:00:00+00:00", m) for k, m in enumerate(_pm)) + "\n"
 subprocess.run([sys.executable, FILTER, "CC-A", "--state", os.path.join(_PDIR, "CC-A.json")], input=_pin.encode("utf-8"),
                capture_output=True, timeout=120)
 _pmeta = json.load(open(os.path.join(_PDIR, "CC-A.alert-owners.json"), encoding="utf-8")).get("_meta") or {}
 _prej = [r.get("marker", "") for r in _pmeta.get("rejects") or []]
-_pok = (_pmeta.get("skipped_as_prose") == 3 and len(_prej) == 2
-        and any("owner left off" in r for r in _prej) and any("id=none" in r for r in _prej))
+_pok = (_pmeta.get("skipped_as_prose") == 3 and len(_prej) == 4
+        and any("owner left off" in r for r in _prej) and any("id=none" in r for r in _prej)
+        and any(r.endswith("[[ALERT owner=CC-B]]") for r in _prej) and any("spaced id" in r for r in _prej))
 if not _pok: fails += 1
-print(f"  {'PASS' if _pok else '** FAIL **':10} prose rule: 3 quotations skipped and counted, 2 real defects reported "
+print(f"  {'PASS' if _pok else '** FAIL **':10} prose rule: 3 quotations skipped and counted, 4 real defects reported (incl. no-id-with-owner and a spaced id) "
       f"(skipped_as_prose={_pmeta.get('skipped_as_prose')}, rejects={len(_prej)})")
 print()
 print(f"({sum(1 for _, w in results if w)} of {len(CASES)} cases produced a wake — the instrument speaks)")

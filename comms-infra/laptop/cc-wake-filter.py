@@ -394,17 +394,19 @@ def record_owners(body, ts):
         own = OWNER_CANON.get(mo_.group(1).strip('",;').upper()) if mo_ else None
         if owners is None:
             owners = _load_owners()
-        if not aid or aid[0] in "<….":
+        if (not aid and not own) or (aid and aid[0] in "<…."):
             # Langston (amendment 1, after round 3): a marker whose id is ABSENT or a placeholder (`<uuid>`, `…`, `..`)
             # is Langston QUOTING the format, not routing — skipped. Keyed on the id, never the owner: a real id with a
-            # missing or wrong owner is the fat-finger this exists to catch, and still reports. COUNTED, never silent
+            # missing or wrong owner is the fat-finger this exists to catch, and still reports. An ABSENT id is prose only
+            # when there is no canonical owner either (Langston's condition): `[[ALERT owner=CC-B]]`, or an id `_MARK_ID`
+            # cannot read (`id = <uuid>`, spaced), names an owner and cannot route, so it REPORTS. COUNTED, never silent
             # (`_meta.skipped_as_prose`), so a future false skip stays measurable.
             _SKIPPED_PROSE[0] += 1
             meta = owners.setdefault("_meta", {})
             meta["skipped_as_prose"] = int(meta.get("skipped_as_prose") or 0) + 1
             changed = True
             continue
-        if not own or not _UUID.match(aid):
+        if not own or not aid or not _UUID.match(aid):
             # (c) IN-BAND, not stderr only (Langston): the record keeps the latest rejects, and the alert hook shows them,
             # so a marker Langston wrote that cannot route anything reaches someone who can tell him.
             _REJECTED[0] += 1
@@ -779,8 +781,12 @@ for raw in sys.stdin:
                   f"so this line matched no branch and was DROPPED. If you are testing by piping "
                   f"lines in, prepend: ==> /var/log/cc-discord-inbox.jsonl <==  — otherwise a "
                   f"silent run is NOT evidence of suppression.", file=sys.stderr, flush=True)
-    except Exception:
-        # never die on a malformed line
+    except Exception as _e:
+        # never die on a malformed line — but never drop one SILENTLY either (B-TOKEN-BURN-CUT amendment 1): the owner
+        # recorder runs inside this try, so a throw there would also drop the WAKE on the same line. stderr lands in the
+        # task's output file, visible to whoever reads the wake, invisible to the wake channel.
+        print(f"[cc-wake-filter] LINE DROPPED on {type(_e).__name__}: {_e} (cur={cur!r}) — {line[:160]!r}",
+              file=sys.stderr, flush=True)
         continue
 
 if ONCE:
