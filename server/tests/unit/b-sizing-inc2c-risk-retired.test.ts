@@ -39,7 +39,7 @@ describe('1 — one trade-size formula', () => {
   it('the sizer sizes exactly the shared formula (no covariance, quant pool)', () => {
     const r = sizeActivePositionForSignal({
       mode: 'paper', portfolioValue: 3000, entryPrice: 100, stopPrice: 97, symbol: 'ZZZ/USD',
-      strategy: 'breakout' as any, assetClass: 'crypto_spot' as any,
+      strategy: 'breakout' as any,
       guardrails: { maxPositionPercentPct: '5.00', maxTotalExposurePct: '100.00' } as any,
     });
     expect(r.estimatedValue).toBeCloseTo(bufferedTradeNotional(3000, 100, 5), 6);

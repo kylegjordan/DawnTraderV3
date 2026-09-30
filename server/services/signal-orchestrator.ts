@@ -812,13 +812,8 @@ export class SignalOrchestrator {
       stopPrice: rawSignal.stopPrice,
       symbol: rawSignal.symbol,
       strategy: strategyId,
-      // B-NEW-43 chunk 3: thread the signal's source pool so Phase 14.5
-      // pattern-pool reduced sizing applies (was an undeclared ref in TS2304).
-      sourcePool: rawSignal.metadata?.sourcePool,
-      // B79.0n.ORCHESTRATOR (2026-05-27): REQUIRED per-class dispatch key.
-      // Deterministic from symbol (resolveAssetClass) per Langston Step 2
-      // Probe 8 ACK — single source of truth, no silent crypto_spot fallback.
-      assetClass: sizingContext.assetClass,
+      // (B-SIZING-DEC-RESTORE 2e: the source pool and asset class are no longer sizing inputs — the pattern-list cap
+      //  they keyed is gone, Langston Step-4 A2 FINDING-2.)
     });
 
     // Phase 8.8.3-C5-2: Guardrail Input Verification - log balance used for trade sizing

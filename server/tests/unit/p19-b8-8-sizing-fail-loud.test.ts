@@ -37,7 +37,6 @@ const BASE_PARAMS = {
   stopPrice: 97,
   symbol: 'TEST/USD',
   strategy: 'breakout' as any,
-  assetClass: 'crypto_spot' as any,
 };
 
 function sizeWith(guardrails: any) {

@@ -55,17 +55,18 @@ describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
       } as any,
       entryPrice: 100,
       stopPrice: 97,
-      sourcePool: 'pattern' as const,
       mode: 'paper' as const, // P19-B4b D5: per-mode sizing param (S4 isolation)
       strategy: 'breakout' as const,
     };
 
-    // The three tests that stood here asserted the removed per-class cap (xStock 0.50 vs crypto 0.15) as their SUBJECT,
+    // The three tests that stood here asserted the removed per-class cap as their SUBJECT (day-1 values xStock 0.50 vs
+    // crypto 0.15 — both classes actually read 0.0667 from 2026-07-16 until 2e; Langston Step-4 A2 condition 2),
     // so they went with it (Langston §20 r2 condition 1). What replaces them: both classes size at exactly
     // balance x e x p x 0.97. MUTATION: re-introduce the pattern branch and the mock throws on the retired key.
-    it('an xStock and a crypto pattern signal size identically — $10,000 x 100% x 25% x 0.97 = $2,425', () => {
-      const xstock = sizeActivePositionForSignal({ ...baseParams, symbol: 'AAPLx/USD', assetClass: 'xstock_spot' });
-      const crypto = sizeActivePositionForSignal({ ...baseParams, symbol: 'BTC/USD', assetClass: 'crypto_spot' });
+    // (A2 FINDING-2: the sizer takes no asset class and no source pool since 2e — the symbol is the only difference.)
+    it('an xStock and a crypto signal size identically — $10,000 x 100% x 25% x 0.97 = $2,425', () => {
+      const xstock = sizeActivePositionForSignal({ ...baseParams, symbol: 'AAPLx/USD' });
+      const crypto = sizeActivePositionForSignal({ ...baseParams, symbol: 'BTC/USD' });
       expect(xstock.estimatedValue).toBeCloseTo(2425, 6);
       expect(crypto.estimatedValue).toBeCloseTo(2425, 6);
     });

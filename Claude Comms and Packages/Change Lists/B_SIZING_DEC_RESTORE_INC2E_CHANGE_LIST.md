@@ -27,3 +27,11 @@ Kyle's directives of 2026-09-30, as one increment for the ≥ 2026-10-02T20:10Z 
 - **Pe2's "never used", with its window:** 0 fallback/sizing-failure markers against **942 `TRUST_SIZED` in 12.2 h** of staging stdout (2026-09-29T13:37:47Z → 09-30T01:50:21Z). A rate bound, not an event proof.
 - **C1 (code):** the refusal alert's key no longer collapses to a constant with no session — a per-process boot token, stamped once.
 - **C4 (comments):** fourteen stale "A/B cohort marker" comments corrected, not the three named.
+
+## Step-4 gate A2 — CHANGES-NEEDED; all addressed — PRE_AUDIT §20.9
+- **The magnitude (condition 2):** the removed pattern-list cap read **0.0667 on both classes since 2026-07-16**, not the narrated 0.15 / 0.50. At `p = 20` pattern positions go from 6.67% to 20% (×3) until the reset; at the reset's `p = 5` the cap would not have bound.
+- **Blocker 1:** a SWEPT fence — every `deriveSlotCount(` in the codebase goes through the resolver (876 files, 5 occurrences; mutation-proved).
+- **Blocker 2:** the tab now says the final amount is rounded down to the exchange's lot size.
+- **Finding 1:** the buffer and the per-coin rule read independently; one unreadable row no longer hides the other.
+- **Finding 2:** `sourcePool` and `assetClass` dropped from the sizer's inputs (unread since 2e).
+- **Condition 1:** the orphan rows are deleted by the 2e migration (gate A1); the six doc lines naming the lever are Step-10 debts.

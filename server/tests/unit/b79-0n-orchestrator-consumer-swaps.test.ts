@@ -35,14 +35,15 @@ vi.mock('../../services/module-constants-service.js', () => ({
 
 describe('B79.0n.ORCHESTRATOR — consumer-site swap regression locks', () => {
   describe('active-position-sizing.ts (Chunk B)', () => {
-    it('ActivePositionSizingParams type has REQUIRED assetClass field', async () => {
-      // Compile-time contract: import the type and try to construct without
-      // assetClass — TypeScript should reject. Runtime check: the property
-      // is in the type's keyof shape.
+    // B-SIZING-DEC-RESTORE 2e (Langston Step-4 A2 FINDING-2): the REQUIRED assetClass this pinned was the pattern-list
+    // cap's dispatch key; the cap is gone, so the key is gone — the sizer has no per-class term (and no source pool).
+    it('ActivePositionSizingParams carries NO assetClass and NO sourcePool since 2e (source-text)', async () => {
       const mod = await import('../../services/active-position-sizing.js');
-      // ActivePositionSizingParams is a type alias — we can't keyof at runtime,
-      // but we can confirm the module exports the expected functions.
       expect(typeof mod.sizeActivePositionForSignal).toBe('function');
+      const src = readFileSync(join(process.cwd(), 'server/services/active-position-sizing.ts'), 'utf-8').replace(/\r\n/g, '\n');
+      const params = src.slice(src.indexOf('export interface ActivePositionSizingParams {'), src.indexOf('export interface ActivePositionSizingResult {'));
+      expect(params).toContain('mode: \'live\' | \'paper\';'); // positive control: the slice is the interface
+      expect(params).not.toMatch(/^\s*(assetClass|sourcePool)\??\s*:/m);
     });
 
     // B-SIZING-DEC-RESTORE 2e (Pe5, Kyle 2026-09-30): the sizer no longer reads ANY pattern guardrail — the pattern-list

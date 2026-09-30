@@ -1526,18 +1526,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // B-SIZING-DEC-RESTORE 2e (Pe6, Kyle 2026-09-30): the two size factors that are NOT settings on this screen, served
       // READ-ONLY so nothing about a trade's size is hidden — the 0.97 buffer and the per-coin rule. Read from the same
       // rows the sizer and the cap read (no second copy, no default): a missing row is shown as an error, never a value.
-      let sizingFactors: { bufferFactor: number; perCoin: { enabled: boolean; maxOpenPerCoin: number } } | null = null;
-      let sizingFactorsError: string | null = null;
+      // Step-4 A2 FINDING-1 (Langston): two INDEPENDENT reads, one state each — an unreadable per-coin row must not
+      // hide a buffer figure that reads fine (the two throw for different reasons, under different names).
+      const sizingFactors: {
+        bufferFactor: number | null; bufferFactorError: string | null;
+        perCoin: { enabled: boolean; maxOpenPerCoin: number } | null; perCoinError: string | null;
+      } = { bufferFactor: null, bufferFactorError: null, perCoin: null, perCoinError: null };
       try {
         const { getMaxPositionBufferFactor } = await import('./services/active-position-sizing.js');
+        sizingFactors.bufferFactor = getMaxPositionBufferFactor();
+      } catch (bufferErr: any) {
+        sizingFactors.bufferFactorError = bufferErr?.message || String(bufferErr);
+        console.error('[B-SIZING-DEC-RESTORE][GUARDRAILS_SIZING_FACTORS_UNREADABLE] buffer:', sizingFactors.bufferFactorError);
+      }
+      try {
         const { readPerUnderlyingCapConfig } = await import('./services/per-underlying-cap.js');
         const perCoin = await readPerUnderlyingCapConfig();
-        sizingFactors = { bufferFactor: getMaxPositionBufferFactor(), perCoin: { enabled: perCoin.enabled, maxOpenPerCoin: perCoin.cap } };
-      } catch (factorErr: any) {
-        sizingFactorsError = factorErr?.message ?? String(factorErr);
-        console.error('[B-SIZING-DEC-RESTORE][GUARDRAILS_SIZING_FACTORS_UNREADABLE]', sizingFactorsError);
+        sizingFactors.perCoin = { enabled: perCoin.enabled, maxOpenPerCoin: perCoin.cap };
+      } catch (perCoinErr: any) {
+        sizingFactors.perCoinError = perCoinErr?.message || String(perCoinErr);
+        console.error('[B-SIZING-DEC-RESTORE][GUARDRAILS_SIZING_FACTORS_UNREADABLE] per-coin:', sizingFactors.perCoinError);
       }
-      res.json({ ok: true, data: guardrailsData, derivedSlots, sizingFactors, sizingFactorsError });
+      res.json({ ok: true, data: guardrailsData, derivedSlots, sizingFactors });
     } catch (error: any) {
       console.error('[GuardrailsV2] GET error:', error.message);
       res.status(500).json({ ok: false, code: 'SERVER_ERROR', detail: error.message });

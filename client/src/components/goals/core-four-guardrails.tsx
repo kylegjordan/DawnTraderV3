@@ -173,8 +173,11 @@ export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
 
   // Fetch Core Four Guardrails from guardrails_v2 endpoint
   // B-SIZING-DEC-RESTORE 2e (Pe6): the size factors that are not settings here, served read-only beside the row.
-  type SizingFactors = { bufferFactor: number; perCoin: { enabled: boolean; maxOpenPerCoin: number } };
-  const { data: guardrails, isLoading } = useQuery<{ok: boolean; data: GuardrailsV2; derivedSlots: number | null; sizingFactors: SizingFactors | null; sizingFactorsError: string | null}>({
+  type SizingFactors = {
+    bufferFactor: number | null; bufferFactorError: string | null;
+    perCoin: { enabled: boolean; maxOpenPerCoin: number } | null; perCoinError: string | null;
+  };
+  const { data: guardrails, isLoading } = useQuery<{ok: boolean; data: GuardrailsV2; derivedSlots: number | null; sizingFactors: SizingFactors | null}>({
     queryKey: ['/api/guardrails-v2', mode],
     queryFn: async () => {
       const response = await fetch(`/api/guardrails-v2?mode=${mode}`, {
@@ -388,31 +391,49 @@ export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
         </div>
 
         {/* B-SIZING-DEC-RESTORE 2e (Pe6, Kyle 2026-09-30): READ-ONLY. Every factor in a trade's size that is not a setting
-            above, so nothing about the size is hidden. Read from the same rows the sizer and the per-coin rule use. */}
+            above, so nothing about the size is hidden. Read from the same rows the sizer and the per-coin rule use; each
+            line reads on its own, so one unreadable row never hides the other (Step-4 A2 FINDING-1). */}
         <div className="mt-6 rounded-md border p-4" data-testid="sizing-factors">
           <p className="text-sm font-semibold">Also part of every trade's size (fixed, not edited here)</p>
-          {guardrails.sizingFactors ? (
-            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-              <li data-testid="sizing-factor-buffer">
-                Size buffer:{' '}
-                <span className="font-semibold text-foreground">{(guardrails.sizingFactors.bufferFactor * 100).toFixed(0)}%</span>
-                {' '}— each trade is sized at this share of its slot, so a full book still fits under the exposure limit after a small drop in the balance.
-              </li>
-              <li data-testid="sizing-factor-per-coin">
-                Per-coin limit:{' '}
-                <span className="font-semibold text-foreground">
-                  {guardrails.sizingFactors.perCoin.enabled
-                    ? `at most ${guardrails.sizingFactors.perCoin.maxOpenPerCoin} open trades on the same coin`
-                    : 'off'}
+          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            <li data-testid="sizing-factor-buffer">
+              Size buffer:{' '}
+              {typeof guardrails.sizingFactors?.bufferFactor === 'number' ? (
+                <>
+                  {/* the setting itself, never a rounded figure (A2 nit): 0.97 → 97%, 0.975 → 97.5% */}
+                  <span className="font-semibold text-foreground">{Number((guardrails.sizingFactors.bufferFactor * 100).toFixed(4))}%</span>
+                  {' '}— each trade is sized at this share of its slot, so a full book still fits under the exposure limit after a small drop in the balance.
+                </>
+              ) : (
+                <span className="text-destructive" data-testid="sizing-factor-buffer-unreadable">
+                  unreadable: {guardrails.sizingFactors?.bufferFactorError || 'no value returned'}
                 </span>
-                {guardrails.sizingFactors.perCoin.enabled ? ' — every coin, each asset class on its own; ETH/USD, ETH/EUR and ETH/GBP all count toward the same ETH limit.' : ''}
-              </li>
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm text-destructive" data-testid="sizing-factors-unreadable">
-              Unreadable: {guardrails.sizingFactorsError ?? 'no value returned'}
-            </p>
-          )}
+              )}
+            </li>
+            <li data-testid="sizing-factor-per-coin">
+              Per-coin limit:{' '}
+              {guardrails.sizingFactors?.perCoin ? (
+                <>
+                  <span className="font-semibold text-foreground">
+                    {guardrails.sizingFactors.perCoin.enabled
+                      ? `at most ${guardrails.sizingFactors.perCoin.maxOpenPerCoin} open trades on the same coin`
+                      : 'off'}
+                  </span>
+                  {guardrails.sizingFactors.perCoin.enabled ? ' — every coin, each asset class on its own; ETH/USD, ETH/EUR and ETH/GBP all count toward the same ETH limit.' : ''}
+                </>
+              ) : (
+                <span className="text-destructive" data-testid="sizing-factor-per-coin-unreadable">
+                  unreadable: {guardrails.sizingFactors?.perCoinError || 'no value returned'}
+                </span>
+              )}
+            </li>
+            {/* Step-4 A2 BLOCKER-2: the venue's lot step is a third factor — the sized quantity is rounded DOWN to it and
+                the rounded amount is what fills (active-execution-engine.ts, roundQuantityForVenue). No number: it
+                varies by coin. */}
+            <li data-testid="sizing-factor-lot-rounding">
+              Exchange rounding: the final amount is rounded down to the smallest amount the exchange will trade for that coin, so a fill can land slightly under the figure shown.
+            </li>
+          </ul>
         </div>
 
         {hasChanges && (

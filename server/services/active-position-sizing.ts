@@ -24,7 +24,6 @@
 
 import type { GuardrailsV2 } from '@shared/schema';
 import { b5SizingAudit } from './b5-sizing-audit.js';
-import type { AssetClass } from '../../shared/asset-classes.js';
 // B72 (2026-05-05): getMaxPositionBufferFactor() moved to module='active_sizing'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // P19-B8.8: consecutive read-fail rail — in-memory counter increments only (the
@@ -105,16 +104,10 @@ export interface ActivePositionSizingParams {
   stopPrice: number;
   symbol: string;
   strategy: StrategyType;
-  /**
-   * B-NEW-43 chunk 3 (2026-05-22): the signal's source pool ('quant' | 'pattern'). Since 2e it no longer changes the
-   * size (the pattern-list cap is gone, Kyle 2026-09-30); callers still pass it and it is kept for the record.
-   */
-  sourcePool?: string;
-  /**
-   * B79.0n.ORCHESTRATOR (2026-05-27): the signal's asset class — REQUIRED, no default. It keyed the pattern-list
-   * cap until 2e removed it; it is kept as a required input so a future per-class term has its key.
-   */
-  assetClass: AssetClass;
+  // ⛔ B-SIZING-DEC-RESTORE 2e (Langston Step-4 A2 FINDING-2): NO `sourcePool` and NO `assetClass`. Both keyed the
+  // pattern-list size cap, which 2e removed (Kyle 2026-09-30); nothing read them after that, and a field kept "so a
+  // future term has its key" is a forward-load, not a home. The size is balance × e × p × buffer for every signal, and
+  // the type now says so. A per-class term, if one is ever decided, adds its key back with the term.
   /**
    * P19-B4b D5 (S4 isolation): the trading mode this sizing is for — required, no silent default. It named the
    * per-mode concentration store until 2e removed the correlation shrink (§20.4 J1b); it still labels the read-fail rail.

@@ -8,7 +8,7 @@
  * in the count (his retraction of ADDITION 4).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
 vi.mock('../../services/system-alerts.js', () => ({ addAlert: vi.fn(async () => ({ id: 'test-alert' })) }));
@@ -90,7 +90,7 @@ describe('the invariant — N slots never commit more than the exposure budget',
   it('through the sizer: Kyle\'s $3,000 reset at 5% ⇒ 20 × $145.50 = $2,910 ≤ $3,000', () => {
     const r = sizeActivePositionForSignal({
       mode: 'paper', portfolioValue: 3000, entryPrice: 100, stopPrice: 97, symbol: 'TEST/USD',
-      strategy: 'breakout' as any, assetClass: 'crypto_spot' as any,
+      strategy: 'breakout' as any,
       guardrails: { maxPositionPercentPct: '5.00', maxTotalExposurePct: '100.00' } as any,
     });
     const slots = deriveSlotCount(resolveEffectivePositionPct(5));
@@ -106,16 +106,19 @@ describe('the invariant — N slots never commit more than the exposure budget',
     expect(resolveEffectivePositionPct(5)).toBe(5);
   });
 
-  // And through the REAL sizer: a pattern signal and a quant signal of the same inputs size identically. MUTATION:
-  // re-introduce the pattern branch (the mocked 15% row) and the p = 20 pattern trade shrinks to 15%.
-  it('through the sizer: a pattern signal at p = 20 sizes the same as a quant one (2e)', () => {
+  // And through the REAL sizer: the sizer has NO source-pool input at all since 2e (A2 FINDING-2), so a pattern signal
+  // cannot size differently from a quant one — the TYPE forbids passing it. This pins the one size at p = 20.
+  it('through the sizer: every signal at p = 20 sizes 3000 x 100% x 20% x 0.97 = $582, and the sizer takes no source pool (2e)', () => {
     const base = { mode: 'paper' as const, portfolioValue: 3000, entryPrice: 100, stopPrice: 97, symbol: 'TEST/USD',
-      strategy: 'breakout' as any, assetClass: 'crypto_spot' as any,
+      strategy: 'breakout' as any,
       guardrails: { maxPositionPercentPct: '20.00', maxTotalExposurePct: '100.00' } as any };
-    const quant = sizeActivePositionForSignal({ ...base, sourcePool: 'quant' });
-    const pattern = sizeActivePositionForSignal({ ...base, sourcePool: 'pattern' });
-    expect(quant.estimatedValue).toBeCloseTo(582, 2); // 3000 x 100% x 20% x 0.97
-    expect(pattern.estimatedValue).toBeCloseTo(quant.estimatedValue, 6);
+    const r = sizeActivePositionForSignal(base);
+    expect(r.estimatedValue).toBeCloseTo(582, 2); // 3000 x 100% x 20% x 0.97
+    const sizer = readFileSync(join(process.cwd(), 'server/services/active-position-sizing.ts'), 'utf-8').replace(/\r\n/g, '\n');
+    const params = sizer.slice(sizer.indexOf('export interface ActivePositionSizingParams {'), sizer.indexOf('export interface ActivePositionSizingResult {'));
+    expect(params.length).toBeGreaterThan(100);          // the slice found the interface
+    expect(params).toContain('portfolioValue: number;'); // positive control
+    expect(params).not.toMatch(/^\s*(sourcePool|assetClass)\??\s*:/m);
   });
 });
 
@@ -173,6 +176,54 @@ describe('ONE derivation (§14.4 BLOCKER-1) — every slot reader calls it, noth
 
   // (the m5e `floor(e / p)` twin test left with the harness in increment 2d; the legacy-deletion fence now asserts the
   //  harness does not come back.)
+
+  // 2e Step-4 A2 BLOCKER-1 (Langston): since 2e the resolver is the identity, so an UNWRAPPED `deriveSlotCount(p)` is
+  // type-clean and behaves the same today — until obj-5's posture term lands inside the resolver, when an unwrapped
+  // site would report a slot count the engine does not use. So every call site is SWEPT, never listed: a new unwrapped
+  // call in a new file fails here. The hit count is printed as the positive control.
+  const ROOTS = ['server', 'client', 'shared', 'scripts'];
+  const walk = (dir: string, out: string[] = []): string[] => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (name === 'node_modules' || name === 'dist' || full.replace(/\\/g, '/') === 'server/tests') continue;
+      const st = statSync(full);
+      if (st.isDirectory()) walk(full, out);
+      else if (/\.(ts|tsx|mts|mjs|js)$/.test(name)) out.push(full);
+    }
+    return out;
+  };
+  const CALL = /deriveSlotCount\(/g;
+  const WRAPPED = 'deriveSlotCount(resolveEffectivePositionPct(';
+  const unwrapped = (text: string): number => {
+    let n = 0;
+    for (const m of text.matchAll(CALL)) {
+      const at = m.index ?? 0;
+      if (text.slice(Math.max(0, at - 16), at) === 'export function ') continue; // the definition
+      if (!text.startsWith(WRAPPED, at)) n++;
+    }
+    return n;
+  };
+  it('capability arm — the sweep predicate sees an unwrapped call and passes a wrapped one and the definition', () => {
+    expect(unwrapped('const s = deriveSlotCount(p);')).toBe(1);
+    expect(unwrapped('const s = deriveSlotCount(resolveEffectivePositionPct(p));')).toBe(0);
+    expect(unwrapped('export function deriveSlotCount(effectivePositionPct: number): number {')).toBe(0);
+  });
+  it('EVERY deriveSlotCount call in the codebase goes through resolveEffectivePositionPct (swept, not listed)', () => {
+    const files = ROOTS.flatMap((r) => walk(r));
+    let calls = 0;
+    const bad: string[] = [];
+    for (const f of files) {
+      const text = readFileSync(f, 'utf-8');
+      const hits = (text.match(CALL) ?? []).length;
+      if (hits === 0) continue;
+      calls += hits;
+      if (unwrapped(text) > 0) bad.push(f);
+    }
+    console.log(`[A2 BLOCKER-1 sweep] ${files.length} files, ${calls} deriveSlotCount( occurrences incl. the definition`);
+    expect(files.length).toBeGreaterThan(500);   // the walk reached the tree
+    expect(calls).toBeGreaterThanOrEqual(5);      // positive control: the definition + today's four call sites
+    expect(bad).toEqual([]);
+  });
 });
 
 // (2a's test that POST /orchestrator/updateGuardrail refused maxOpenPositions is gone with the route itself —
