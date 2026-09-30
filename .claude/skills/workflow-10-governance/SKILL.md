@@ -115,7 +115,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 | `POST_AUDIT_ROADMAP.md` | judged · c | judged · c | judged · — | judged · — |
 | `DELETED_COMPONENTS_LOG.md` | judged · c | judged · c | judged · c | judged · c |
 | `ADJUSTMENT_FRAMEWORK.md` | judged · c | judged · c | judged · c | judged · — |
-| `PHASE_19_PLAN.md` (history) | ⛔ **REQUIRED for a `P19-*` batch, ANY class** (`REQUIRED_IF`) · R; a non-P19 batch: `N/A — not a P19 batch` · c | same | same | ⛔ **REQUIRED for a `P19-*` batch** (`REQUIRED_IF`) · R; a non-P19 batch: `N/A — not a P19 batch` · — |
+| `PHASE_19_PLAN.md` — *in-flight rows finish here; flips to history at `B-P19-PLAN-TO-HISTORY` (`#1126`)* | ⛔ **a `P19-*` batch: REQUIRED, ANY class** (`REQUIRED_IF` in `scripts/governance-checker/config.mjs` — a batch-ID test, nothing about rows) · R; **any other batch whose row is still IN FLIGHT there: REQUIRED — finish that row** · — (no instrument: only this table asks); **any other: `N/A — no row there`** · — (the predicate's answer, as in the `SPRINT_TO_LIVE_PLAN.md` row's "a batch with none" cell — not a judged-away obligation) | same | same | ⛔ **a `P19-*` batch: REQUIRED** (`REQUIRED_IF`) · R; **any other batch whose row is still IN FLIGHT there: REQUIRED — finish that row** · —; **any other: `N/A — no row there`** · — |
 | the ACTIVE plan — `SPRINT_TO_LIVE_PLAN.md`: your row | **REQUIRED if the batch has a row there** · — | same | same | same |
 | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` · Langston’s `MEMORY.md` | **REQUIRED** · — | **REQUIRED** · — | **REQUIRED** · — | **REQUIRED** · — |
 | your own session task list (the other three: `N/A — not mine`) | **REQUIRED** · ledger row | **REQUIRED** · ledger row | **REQUIRED** · ledger row | **REQUIRED** · ledger row |
@@ -138,7 +138,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 | **T1** | `BATCH_CATALOG.md` | every batch (a hotfix: one row, `workflow-hotfix` §5) |  |  |
 | **T1** | `PHASE_HISTORY.md` | every batch (a hotfix: judged — see the class table) |  |  |
 | **T1** | ★ **the ACTIVE plan, `SPRINT_TO_LIVE_PLAN.md`** — your row: status + report link, and any discovery that passes its §2 | ⛔ **EVERY batch close for a batch with a row there** (the plan's own §3); a batch with none: `N/A — after live: <the item's NAME> in Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md` (a name, never a line number — lines move). ⚠️ **Nothing grades it yet — that is `B-PLAN-CURRENCY-CHECK`.** |  |  |
-| **T1** | `PHASE_19_PLAN.md` — now HISTORY | **a `P19-*` batch: REQUIRED** (the checker enforces it); any other: `N/A — not a P19 batch` |  |  |
+| **T1** | `PHASE_19_PLAN.md` — *in-flight rows finish here; flips to history at `B-P19-PLAN-TO-HISTORY` (`#1126`)* | **a `P19-*` batch: REQUIRED** (the checker enforces it: a batch-ID test, nothing about rows); **any other batch whose row is still IN FLIGHT there: REQUIRED — finish that row** (only this table asks; nothing grades it); **any other: `N/A — no row there`** (the predicate's answer, not a judged-away obligation) |  |  |
 | **T1** | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | every batch |  |  |
 | **T1** | the batch `SCOPE` | written at Step 1 |  |  |
 | **T1** | ★ **the batch `PRE_AUDIT`** | written at Step 2. ⛔ **REQUIRED by the governance checker for BOTH change classes (`config.mjs:127,:131`) and it was ABSENT from this ledger — so a fully-filled table could still FAIL the checker.** |  |  |

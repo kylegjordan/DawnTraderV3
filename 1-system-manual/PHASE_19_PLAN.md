@@ -1,10 +1,12 @@
-# PHASE_19_PLAN.md — Phase 19: Paper Mode Audit & Debug — RUNNING PLAN
+# PHASE_19_PLAN.md — Phase 19: Paper Mode Audit & Debug — nothing new is added here; in-flight rows finish here
 
-> **🔄 RUNNING GOVERNANCE DOCUMENT (Kyle directive 2026-06-12).** Tier-1 during Phase 19: updated after **EVERY Phase-19 batch AND sub-batch** — sequence position, per-item status, decisions taken. Created 2026-06-12 at phase kickoff (Claude New + Kyle planning session). Langston sequence review: **✅ APPROVED 2026-06-12** ("APPROVE the B1→B14 sequence as ordered — no re-sequencing required") with 4 required additions + 3 recommendations, ALL folded in same-day (B7a/B7b split §1, pre-flight checklist §6, disposition table §7, decisions §5).
+> ⛔ **NOTHING NEW IS ADDED HERE; IN-FLIGHT ROWS FINISH HERE** (Langston, R2-Q1 (a), 2026-09-30, `B-PLAN-CURRENCY-CHECK`). The running plan is `SPRINT_TO_LIVE_PLAN.md` (Kyle, 2026-09-28): a new item's HOME is a row there, or a line in `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md` for work that waits for live. A batch whose row is still in flight here finishes that row here. This file becomes history when its last in-flight row closes; that flip is `B-P19-PLAN-TO-HISTORY` (`#1126`), triggered by that close, with no date.
+>
+> **🔄 RUNNING GOVERNANCE DOCUMENT (Kyle directive 2026-06-12).** Tier-1 during Phase 19, and now for the rows still in flight here: updated after **EVERY Phase-19 batch AND sub-batch** — sequence position, per-item status, decisions taken. Created 2026-06-12 at phase kickoff (Claude New + Kyle planning session). Langston sequence review: **✅ APPROVED 2026-06-12** ("APPROVE the B1→B14 sequence as ordered — no re-sequencing required") with 4 required additions + 3 recommendations, ALL folded in same-day (B7a/B7b split §1, pre-flight checklist §6, disposition table §7, decisions §5).
 >
 > **One-home rule:** this doc owns Phase-19 **sequencing + live status + phase-scoped decisions**. Item DETAIL stays homed in `POST_AUDIT_ROADMAP.md` §3.2 (locked items 19-1…19-20, §19.6.x, 19.x) — entries here pointer to those anchors, never duplicate them. Batch-level detail lives in the normal scope/completion files per CLAUDE.md §2.
 >
-> **Retire from Tier 1 at Phase-19 close** (becomes a historical record).
+> **Retire from Tier 1 when the last in-flight row here closes** (becomes a historical record): `B-P19-PLAN-TO-HISTORY` (`#1126`), no date. *(It read "at Phase-19 close"; Langston R2-Q1 (a), 2026-09-30.)*
 
 ---
 

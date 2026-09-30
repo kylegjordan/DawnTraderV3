@@ -30,6 +30,7 @@
 
 | plan row | item | kind | state |
 |---|---|---|---|
+| sprint 1g | `B-P19-PLAN-TO-HISTORY` (`#1126`) | batch | QUEUED — starts when `PHASE_19_PLAN.md`'s last in-flight row closes (Langston R2-Q1 (a), 2026-09-30) |
 | 4.55 | ✅ **CLOSED 2026-09-09** — `B-DEPLOY-DRIFT-LINE` (`#1002`) | batch | all four criteria met |
 | 3b.h-3 | **`B-TSC-GUARD-DETERMINISM`** (`#1019`) | batch | ⭐ **KYLE-ASSIGNED 2026-09-07**, on his rule *"whoever implemented the most recent push/deploy guard"*. The tsc-baseline guard refused a push containing ZERO TypeScript, citing 209 groups dropping below baseline; running the checker by hand seconds later returned OK on identical 377-vs-377 totals, and a retry passed with nothing changed. ⛔ **CC-C wrote it up as a HYPOTHESIS, not a finding, because it predicts a DETERMINISTIC refusal and the retry passed** — something is non-deterministic between invocations and they did not find it |
 | 4.56a | ✅ **CLOSED 2026-09-11** — `B-CANONICAL-BRIDGE-CHURN` (`#402`) | batch | U-1 met; five residuals at `P19-B12` |

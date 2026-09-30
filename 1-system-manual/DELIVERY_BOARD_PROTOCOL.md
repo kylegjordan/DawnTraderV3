@@ -142,7 +142,7 @@ Done in the SAME session with Langston that splits the new phase into batches (�
 
 ## 4c. ★ RECONCILIATION — roadmap, phase plan and board must agree (Kyle directive 2026-08-03)
 
-**TRIGGER: at the close of every batch, its OWNER reconciles three records and confirms they match** — `POST_AUDIT_ROADMAP.md`, the active phase plan (`PHASE_19_PLAN.md` during Phase 19), and this board.
+**TRIGGER: at the close of every batch, its OWNER reconciles three records and confirms they match** — `POST_AUDIT_ROADMAP.md`, the active plan (`SPRINT_TO_LIVE_PLAN.md`, or `PRE_LIVE_SPRINT.md` for work that waits for live; `PHASE_19_PLAN.md` for a batch whose row is still in flight there), and this board.
 
 **The check is three questions, and each has a precise answer — none of them require judgement:**
 1. **Does every OPEN batch in the phase plan have a card?** A batch with no card is invisible to Kyle.
