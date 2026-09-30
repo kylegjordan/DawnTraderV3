@@ -195,9 +195,13 @@ export function checkHeartbeat(nowMs = Date.now()) {
   // and re-opening an alert that is already open.
   const hb = existsSync(HB_STATE) ? JSON.parse(readFileSync(HB_STATE, 'utf8')) : {};
   // The pre-P28 file held ONE handle, `alertId`, for the silent-poller alert. Carry it into the
-  // keyed map on first read so an alert open across the upgrade keeps its handle.
+  // keyed map so an alert open across the upgrade keeps its handle. `alertId` WINS whenever it is
+  // present: this version always writes it equal to openAlertIds[SILENT_KEY], so the two differ only
+  // when a reverted (pre-P28) version wrote `alertId` last and carried this map forward stale — and
+  // then `alertId` is the live handle (a stale map entry would orphan the alert it opened).
   const openAlertIds = { ...(hb.openAlertIds ?? {}) };
-  if (!(SILENT_KEY in openAlertIds)) openAlertIds[SILENT_KEY] = hb.alertId ?? null;
+  if ('alertId' in hb) openAlertIds[SILENT_KEY] = hb.alertId ?? null;
+  else if (!(SILENT_KEY in openAlertIds)) openAlertIds[SILENT_KEY] = null;
   let st = null;
   if (existsSync(STATE_FILE)) {
     try { st = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch { /* unreadable → treat as silent */ }
