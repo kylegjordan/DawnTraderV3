@@ -182,6 +182,27 @@ export const LEDGER_ROWS = {
   },
 };
 
+// B-PLAN-CURRENCY-CHECK OBJ-1 (P32, re-cut) — the PLAN-STATE check, `gov-planline`. It grades the active plan's own
+// obligation (its §3: "The owner updates its row at every batch close (status + report link)") as a STATE at the
+// graded ref: a batch is graded once it has a completion report and its id is in the plan (§4 batch cell or §5 item
+// cell); the rule and its keys live in checker.mjs checkPlanState and poller.mjs decidePlanLineAlerts.
+// ⛔ DORMANT: `enabled: false` in committed source — flipped by ONE committed change after Langston's Step 4 and the
+// committed P39 runs (P61). NOT env-overridable (push is deploy; an env default is invisible at the graded ref).
+// No `sinceMs` (re-cut P32): a first-add gate would re-create the diff design's permanent exemption.
+// `naKey` shares the ONE flat `batchId:value` na-skip set with DOCS and LEDGER_ROWS, so it must equal neither's
+// keys; poller.test.mjs asserts the three key sets are disjoint.
+// The parse is STRICT-EQUAL to both headers (every §4 wave header; exactly one §5 header), fail-closed: a column
+// added anywhere makes the plan UNREADABLE, never silently regraded. `s5Header` carries the C′ `report` column
+// (Langston §10g C2 (ii)); it and the plan's own §5 header change in ONE commit, because a lone edit to either
+// FREEZEs the rule.
+export const PLAN_LINE = {
+  path: '1-system-manual/SPRINT_TO_LIVE_PLAN.md',
+  naKey: 'plan_line',
+  enabled: false,
+  s4Header: '| # | item | batch / reference | owner | status | report | note |',
+  s5Header: '| item | owner | closes | report |',
+};
+
 // Undeclared class → strictest (architecture) + flag (Item 5 / fail-closed).
 export const DEFAULT_CLASS = 'architecture';
 
