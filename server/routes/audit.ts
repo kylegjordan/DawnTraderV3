@@ -9,6 +9,7 @@ import express, { Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import { auditEngine } from "../services/system-audit-engine";
+import { resolveWithin, UnsafePathError } from "../services/safe-path";
 
 const router = express.Router();
 
@@ -89,9 +90,19 @@ router.get("/reports/:filename", async (req: Request, res: Response) => {
     if (!filename.startsWith("CSAV_Report_") || !filename.endsWith(".json")) {
       return res.status(400).json({ error: "Invalid report filename" });
     }
-    
-    const filePath = path.join(process.cwd(), "reports", filename);
-    
+
+    // B-SEC-HARDEN (#1022): the prefix/suffix check above does NOT stop a name
+    // that carries them and still walks out of the reports dir with `..`.
+    let filePath: string;
+    try {
+      filePath = resolveWithin(path.join(process.cwd(), "reports"), filename);
+    } catch (guardError: any) {
+      if (guardError instanceof UnsafePathError) {
+        return res.status(400).json({ error: "Invalid report filename" });
+      }
+      throw guardError;
+    }
+
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: "Report not found" });
     }

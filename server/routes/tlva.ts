@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import fs from 'fs/promises';
 import path from 'path';
 import { trainingAuditService } from '../services/training-audit-service';
+import { resolveWithin, UnsafePathError } from '../services/safe-path';
 
 const router = Router();
 const REPORTS_DIR = path.join(process.cwd(), 'reports');
@@ -109,8 +110,18 @@ router.get('/reports/:filename', requireAuth, async (req: Request, res: Response
     if (!filename.startsWith('TLVA_Report_') || !filename.endsWith('.json')) {
       return res.status(400).json({ ok: false, error: 'Invalid report filename' });
     }
-    
-    const reportPath = path.join(REPORTS_DIR, filename);
+
+    // B-SEC-HARDEN (#1022): the prefix/suffix check above does NOT stop a name
+    // that carries them and still walks out of the reports dir with `..`.
+    let reportPath: string;
+    try {
+      reportPath = resolveWithin(REPORTS_DIR, filename);
+    } catch (guardError: any) {
+      if (guardError instanceof UnsafePathError) {
+        return res.status(400).json({ ok: false, error: 'Invalid report filename' });
+      }
+      throw guardError;
+    }
     const content = await fs.readFile(reportPath, 'utf-8');
     const report = JSON.parse(content);
     

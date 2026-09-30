@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { resolveWithin, UnsafePathError } from './safe-path';
 
 export type FileCategory = 'report' | 'log' | 'export' | 'analysis';
 export type FileFormat = 'md' | 'json' | 'log' | 'csv' | 'xlsx' | 'txt';
@@ -242,15 +243,23 @@ class FilePersistenceService {
     category: FileCategory,
     filename: string
   ): Promise<{ success: boolean; content?: string; error?: string }> {
+    let filePath: string;
     try {
-      const basePath = this.BASE_PATHS[category];
-      const filePath = path.join(basePath, filename);
+      // B-SEC-HARDEN (#1022): contain the caller-supplied filename to its base dir.
+      filePath = resolveWithin(this.BASE_PATHS[category], filename);
+    } catch (guardError: any) {
+      if (guardError instanceof UnsafePathError) {
+        return { success: false, error: 'invalid filename' };
+      }
+      throw guardError;
+    }
+    try {
       const content = await fs.readFile(filePath, 'utf-8');
-      
+
       return { success: true, content };
     } catch (error: any) {
       try {
-        const tmpPath = path.join('/tmp', category, filename);
+        const tmpPath = resolveWithin(path.join('/tmp', category), filename);
         const content = await fs.readFile(tmpPath, 'utf-8');
         console.log(`[FilePersistence] Read from /tmp fallback: ${tmpPath}`);
         return { success: true, content };
@@ -262,13 +271,13 @@ class FilePersistenceService {
 
   async fileExists(category: FileCategory, filename: string): Promise<boolean> {
     try {
-      const basePath = this.BASE_PATHS[category];
-      const filePath = path.join(basePath, filename);
+      // B-SEC-HARDEN (#1022): contain the caller-supplied filename to its base dir.
+      const filePath = resolveWithin(this.BASE_PATHS[category], filename);
       await fs.access(filePath);
       return true;
     } catch {
       try {
-        const tmpPath = path.join('/tmp', category, filename);
+        const tmpPath = resolveWithin(path.join('/tmp', category), filename);
         await fs.access(tmpPath);
         return true;
       } catch {
@@ -416,7 +425,8 @@ class FilePersistenceService {
   }
 
   getDownloadPath(category: FileCategory, filename: string): string {
-    return path.join(this.BASE_PATHS[category], filename);
+    // B-SEC-HARDEN (#1022): contain the caller-supplied filename to its base dir.
+    return resolveWithin(this.BASE_PATHS[category], filename);
   }
 
   getSelfTestStatus(): boolean {
