@@ -51,6 +51,11 @@ LANG_NAME_LATE = ("Kyle — a long reply that does not name any session for a wh
                   + ("Filler that pushes the name past the 400-character truncation. " * 8)
                   + "OLD Claude, this part is for you.")
 LANG_OTHER = "NEW Claude — a plain reply addressed to someone else."
+# B-TOKEN-BURN-CUT amendment 1, OBJ-5 (Kyle 2026-09-30): the route to a second addressee is the explicit wake tag;
+# a later line that merely LEADS with a name does not wake (OPEN_RE is ^-anchored, not multiline — Langston C1).
+LANG_NAME_LATE_TAGGED = LANG_NAME_LATE.replace("OLD Claude, this part is for you.", "@CC-WAKE OLD Claude, this part is for you.")
+LANG_SECOND_LINE = "NEW Claude — fine.\n\nOLD Claude — you owe the census."
+
 # B-WAKE-LEAD-NAME (#1040) — scope OBJ-2 (a)(b)(c) and Langston's Step-2 conditions 3, 4, 5.
 MARK = lambda owner: "\n\n[[ALERT id=deadbeef-0000-0000-0000-000000000000 owner=" + owner + " action=\"look\"]]"
 LEAD_A = "OLD Claude — here is the answer to your dispatch; the r2 is fine." + MARK("CC-B")
@@ -75,7 +80,13 @@ CASES = [
     ("langston_outbound", None,    LANG_MARKER_MINE_NAMED, True,  "POSITIVE CONTROL: marker owns me AND he addresses me -> still wakes, with NO routing tag", ""),
     ("langston_outbound", None,    LANG_MARKER_THEIRS,     False, "REGRESSION GUARD: marker owns another session -> still suppressed"),
     ("langston_outbound", None,    LANG_NAMED,             True,  "POSITIVE CONTROL: plain reply addressed to me -> still wakes"),
-    ("langston_outbound", None,    LANG_NAME_LATE,         True,  "FINDING-5: my name appears only PAST byte 400 -> must WAKE (this is the ~118/2820 class the truncation used to swallow)"),
+    # RE-PINNED by B-TOKEN-BURN-CUT amendment 1 (OBJ-5, Kyle 2026-09-30, Langston approved): FINDING-5 pinned that a
+    # name past byte 400 must WAKE. The rule it guarded is the one Kyle removed — a passing mention in a reply
+    # addressed elsewhere no longer wakes (345 of 547 Langston-reply wakes in a week were that). Still decided on the
+    # FULL body; what changed is WHICH name counts: the opening one, or the explicit tag.
+    ("langston_outbound", None,    LANG_NAME_LATE,         False, "OBJ-5 (was FINDING-5): my name only deep in a reply addressed to Kyle -> silent now"),
+    ("langston_outbound", None,    LANG_NAME_LATE_TAGGED,  True,  "OBJ-5 C1: the same reply with the explicit @CC-WAKE tag -> WAKE (the second-addressee route)"),
+    ("langston_outbound", None,    LANG_SECOND_LINE,       False, "OBJ-5 C1: a later LINE leading with my name does not wake (OPEN_RE is not multiline)"),
     ("langston_outbound", None,    LANG_OTHER,             False, "REGRESSION GUARD: plain reply to someone else -> silent"),
     ("langston_outbound", None,    LEAD_A,           True,  "#1040 (a): reply OPENS with my name, another owner's marker -> WAKE, tagged CC-B (the defect)", "CC-B"),
     ("langston_outbound", None,    LEAD_B,           False, "#1040 (b): my name only MID-body, another owner's marker -> silent (the #995 cut, untouched)"),
@@ -94,9 +105,15 @@ CASES = [
 # which broke `_ROUTINE_PUSH`'s end-anchor and made a path I never edited look like a
 # regression. Both printed a confident FAIL table. A harness that corrupts its own input is
 # the same class as one that processes nothing.
+import tempfile, os
+_STATE = os.path.join(tempfile.mkdtemp(prefix="wakecuts-"), "CC-A.json")
+
+
 def run_one(kind, sender, text):
     stdin = f"==> {LOG} <==\n" + row(kind, sender, text) + "\n"
-    p = subprocess.run([sys.executable, FILTER, "CC-A"], input=stdin.encode('utf-8'),
+    # --state into a temp dir (B-TOKEN-BURN-CUT amendment 1): the filter now RECORDS alert owners beside its state
+    # file, and without this the suite's made-up markers were written into the running session's real record.
+    p = subprocess.run([sys.executable, FILTER, "CC-A", "--state", _STATE], input=stdin.encode('utf-8'),
                        capture_output=True, timeout=120)
     if p.returncode != 0:
         print("HARNESS FAILED — filter exited", p.returncode)

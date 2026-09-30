@@ -14,6 +14,9 @@ TWO MODES (B-TOKEN-BURN-CUT, #1127):
                                              completion notification is the wake. EOF (ssh dropped)
                                              saves and exits 3; the arm loop reconnects.
   cc-wake-filter.py <ALIAS> --positions      prints the follower's resume arguments from the state.
+  cc-wake-filter.py <ALIAS> --seed-owners    one-time: reads a follower stream from the start of the inbox,
+                                             records every alert-owner marker (below) and exits at the
+                                             first #@CAUGHTUP, printing nothing.
   --state PATH                               default C:/Users/kyleg/.claude/cc-wake-state/<ALIAS>.json
                                              (keyed per session and never in /tmp, which all four
                                              sessions share — #979).
@@ -307,6 +310,7 @@ STALE_S = 12 * 3600      # a state older than this is discarded rather than repl
 _flags = sys.argv[2:]
 ONCE = "--once" in _flags
 POSITIONS = "--positions" in _flags
+SEED = "--seed-owners" in _flags
 STATE = (_flags[_flags.index("--state") + 1] if "--state" in _flags[:-1]
          else os.path.join(os.path.expanduser("~"), ".claude", "cc-wake-state", f"{ALIAS}.json"))
 
@@ -332,6 +336,60 @@ def save_state(st):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(st, f)
     os.replace(tmp, STATE)
+
+
+# ── B-TOKEN-BURN-CUT amendment 1, OBJ-6 P12: THE ALERT-OWNER RECORD ──────────────────────────────────────
+# Ownership of an alert is NOT in the alert record (8 of 1,128 ids carry one); it lives only in Langston's
+# `[[ALERT id=… owner=…]]` markers. Every session's filter reads every Langston reply, so each records the
+# LAST marker per alert id into its OWN file (four watchers never write one file). The per-turn alert hook
+# (`.claude/hooks/inject-due-alerts.mjs` via `alert-split.mjs`) reads it to show a session only its own alerts.
+# C2 (Langston): the recorder runs BEFORE every decision in the Langston branch — a marker inside a reply
+# addressed to someone else, or one this session is not woken by, is still recorded; 42 of 42 alert triages
+# in his 09-23..09-30 window carry markers in replies that open with no session name. Last marker wins and
+# overwrites, so a re-route moves ownership away from a session that had it.
+# C6: only a 36-character uuid can match an alert row; a short or missing id, or an owner outside
+# ALERT_OWNERS, is NOT recorded and is named on stderr (the task output file), never silently dropped.
+OWNERS_FILE = os.path.join(os.path.dirname(STATE), f"{ALIAS}.alert-owners.json")
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+_MARK_ID = re.compile(r"\bid=([^\s\]]+)")
+_MARK_OWNER = re.compile(r"\bowner=([^\s\]]+)")
+_REJECTED = [0]
+
+
+def record_owners(body, ts):
+    owners, changed = None, False
+    for mk in ALERT_MARKER_STRIP.finditer(body or ""):
+        s = mk.group(0)
+        mi, mo_ = _MARK_ID.search(s), _MARK_OWNER.search(s)
+        aid = mi.group(1).strip('",;') if mi else None
+        own = OWNER_CANON.get(mo_.group(1).strip('",;').upper()) if mo_ else None
+        if not aid or not own or not _UUID.match(aid):
+            _REJECTED[0] += 1
+            print(f"[cc-wake-filter] alert marker NOT recorded (needs a 36-char id and an owner in "
+                  f"{', '.join(ALERT_OWNERS)}): {_flat(s)[:140]}", file=sys.stderr, flush=True)
+            continue
+        if owners is None:
+            try:
+                with open(OWNERS_FILE, encoding="utf-8") as f:
+                    owners = json.load(f)
+            except (FileNotFoundError, ValueError):
+                owners = {}
+        if (owners.get(aid) or {}).get("owner") != own:
+            owners[aid] = {"owner": own, "ts": ts}
+            changed = True
+    if changed:
+        os.makedirs(os.path.dirname(OWNERS_FILE), exist_ok=True)
+        tmp = OWNERS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(owners, f)
+        os.replace(tmp, OWNERS_FILE)
+
+
+if SEED:
+    class _Null:
+        def write(self, x): return len(x)
+        def flush(self): pass
+    sys.stdout = _Null()
 
 
 if POSITIONS:
@@ -396,6 +454,11 @@ pending = None     # (path, inode, end-offset) of the line about to arrive; comm
 for raw in sys.stdin:
     line = raw.rstrip("\n")
     if not line.strip():
+        continue
+    if SEED and line.startswith("#@"):
+        if line.startswith("#@CAUGHTUP"):
+            print(f"[cc-wake-filter] seed done: {OWNERS_FILE}; markers not recorded: {_REJECTED[0]}", file=sys.stderr)
+            sys.exit(0)
         continue
     if ONCE and line.startswith("#@"):
         _commit(pending)
@@ -496,6 +559,7 @@ for raw in sys.stdin:
                 if deliver:
                     print(f"WAKE[KYLE-VOICE->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
             elif kind == "langston_outbound":
+                record_owners(body_raw, d.get("ts"))   # C2: FIRST, before any branch can `continue`
                 # B-ALERT-PROTOCOL (#340): an alert-triage reply ends with an owner marker
                 # [[ALERT .. owner=<one of ALERT_OWNERS, defined above> ..]] — authoritative routing: owner==me
                 # wakes me; the other CC's marker suppresses (theirs); owner=Kyle wakes no CC
@@ -573,7 +637,15 @@ for raw in sys.stdin:
                     body = text
                     if deliver:
                         print(f"WAKE[LANGSTON->{ALIAS}]{routed}: {body}{media_suffix(d)}", flush=True)
-                elif MY_RE.search(full):
+                # ⛔ B-TOKEN-BURN-CUT amendment 1, OBJ-5 (Kyle 2026-09-30; Langston approved): a reply wakes this
+                # session only when it is ADDRESSED here — it OPENS with this session's name (his bridge prefixes the
+                # addressee, discord-langston-bridge.py:530-535) — or carries the explicit wake tag above. It used to
+                # be `MY_RE.search(full)`: the name ANYWHERE, so a passing mention in a reply to someone else woke
+                # this session (345 of 547 Langston-reply wakes, 09-23..09-30, were that). OPEN_RE is ^-anchored and
+                # NOT multiline: a line further down that leads with another name does NOT wake that session — the
+                # route for a second addressee is the explicit wake tag (C1). Do not add MULTILINE; it re-admits
+                # most of the passing mentions.
+                elif OPEN_RE.match(full):
                     print(f"WAKE[LANGSTON->{ALIAS}]{routed}: {text}{media_suffix(d)}", flush=True)
             elif kind == "langston_outbound_media":
                 # Langston uploaded a file with his reply. That upload is mirrored as its OWN

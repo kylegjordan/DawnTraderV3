@@ -29,6 +29,8 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { basename } from 'node:path';
+import { splitAlerts, CLONE_TO_ALIAS } from './alert-split.mjs';
 
 const HOST = process.env.DT_ALERT_HOST || 'root@188.245.193.8';
 const TIMEOUT_MS = 3000;
@@ -139,14 +141,45 @@ function main() {
     return;
   }
 
-  const shown = alerts.slice(0, MAX_INJECT);
-  const body = shown.map((l) => {
-    const [, id, sev, ...rest] = l.split('|');
-    return `• ${id.slice(0, 8)}… [${sev}] ${rest.join('|')}  (full id: ${id})`;
-  }).join('\n');
-  const more = alerts.length > MAX_INJECT ? `\n… +${alerts.length - MAX_INJECT} more due alerts NOT shown (cap ${MAX_INJECT}) — read the file.` : '';
-  emit(`§10.5 DUE ALERTS — ${due} active, unacknowledged, due now (whole file, ${total} ids; ${ms}ms):\n${body}${more}\n` +
-       `Surface each in plain language; ack only what you own; resolve only when fixed — with the FULL id: the CLI no-ops on a prefix.`);
+  const parsed = alerts.map((l) => { const [, id, sev, ...rest] = l.split('|'); return { id, sev, title: rest.join('|') }; });
+  const line = (a) => `• ${a.id.slice(0, 8)}… [${a.sev}] ${a.title}  (full id: ${a.id})`;
+  const cap = (list) => {
+    const shown = list.slice(0, MAX_INJECT).map(line).join('\n');
+    return list.length > MAX_INJECT ? `${shown}\n… +${list.length - MAX_INJECT} more NOT shown (cap ${MAX_INJECT}) — read the file.` : shown;
+  };
+  const CLOSE = 'ack only what you own; resolve only when fixed — with the FULL id: the CLI no-ops on a prefix.';
+
+  // B-TOKEN-BURN-CUT amendment 1, OBJ-6 (Kyle 2026-09-30): a session is shown ITS OWN due alerts, the not-yet-routed
+  // ones and any critical one — the rest is a count. The owner record is written by this session's wake filter.
+  // FAIL-OPEN: an unmapped clone or an unreadable owner record shows the full list, exactly as before.
+  const alias = CLONE_TO_ALIAS[basename(process.env.CLAUDE_PROJECT_DIR || '')] || null;
+  let owners = null, ownersWhy = 'no alias for this clone';
+  if (alias) {
+    try {
+      const dir = process.env.CC_WAKE_STATE_DIR || join(homedir(), '.claude', 'cc-wake-state'); // env: tests only
+      owners = JSON.parse(readFileSync(join(dir, `${alias}.alert-owners.json`), 'utf8'));
+    } catch (e) { owners = null; ownersWhy = `owner record unreadable (${e && e.code || 'parse error'})`; }
+  }
+  const s = splitAlerts(parsed, owners, alias);
+  if (!s.narrowed) {
+    note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: false, why: ownersWhy });
+    emit(`§10.5 DUE ALERTS — ${due} active, unacknowledged, due now (whole file, ${total} ids; ${ms}ms; full list — ${ownersWhy}):\n${cap(parsed)}\n` +
+         `Surface each in plain language; ${CLOSE}`);
+    return;
+  }
+  note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: true, alias,
+    mine: s.mine.length, unrouted: s.unrouted.length, critical: s.critical.length, others: s.others });
+  const parts = [];
+  if (s.mine.length) parts.push(`YOURS:\n${cap(s.mine)}`);
+  if (s.unrouted.length) parts.push(`NOT YET ROUTED — shown to every session until Langston routes it:\n${cap(s.unrouted)}`);
+  if (s.critical.length) parts.push(`CRITICAL — shown to every session:\n${s.critical.map((a) => `• ${a.id.slice(0, 8)}… [critical] ${a.title} — owner ${a.owner}  (full id: ${a.id})`).join('\n')}`);
+  const rest = s.others ? `${s.others} other due alert${s.others === 1 ? ' is' : 's are'} routed to other sessions or to Kyle — not yours to raise.` : '';
+  if (!parts.length) {
+    emit(`§10.5 (${alias}): ${due} due alerts, none of them yours — ${rest || 'all routed elsewhere.'} (whole file, ${total} ids; ${ms}ms — the filter ran.)`);
+    return;
+  }
+  emit(`§10.5 DUE ALERTS for ${alias} — ${due} due in total (whole file, ${total} ids; ${ms}ms):\n${parts.join('\n')}` +
+       `${rest ? `\n${rest}` : ''}\nSurface these in plain language; ${CLOSE}`);
 }
 
 try { main(); } catch (e) {
