@@ -1,6 +1,6 @@
 # B-PLAN-CURRENCY-CHECK — COMPLETION REPORT
 
-**Owner:** CC-A (OLD Claude) · **Sprint plan row 1** — PRE-SPRINT (Kyle, 2026-09-30) · **change-class `non_architecture`** · **Status:** DONE — Step 11 confirmation owed (Langston)
+**Owner:** CC-A (OLD Claude) · **Sprint plan row 1** — PRE-SPRINT (Kyle, 2026-09-30) · **change-class `non_architecture`** · **Status:** ✅ **CLOSED 2026-09-30** — Step 11 CONFIRMED by Langston (he re-derived CI per job, the ancestry to the graded ref `c1ed80893` — ten files after the last code commit, all governed docs — his memory part's sha and load, and every placement); board card `Complete`. Standing after close: A2's first live read is the W41 census row (above).
 **Record:** scope `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_SCOPE.md` (with `B_PLAN_CURRENCY_CHECK_OBJ1_RECUT.md`) · pre-audit `B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` · change list `Claude Comms and Packages/Change Lists/B_PLAN_CURRENCY_CHECK_CHANGE_LIST.md` · dry-run file `Scope Files/B_PLAN_CURRENCY_CHECK_P44_DRY_RUN.md` · W40 handover record `Scope Files/B_PLAN_CURRENCY_CHECK_CENSUS_2026-W40_HANDOVER.md` + its committed baseline `…_CENSUS_2026-W40.json`.
 
 ## ⚠️ LEFT OPEN AT CLOSE — each with an owner and a placed home

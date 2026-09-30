@@ -1251,7 +1251,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 ✅ **Closed 2026-09-29:** Langston confirmed the completion report with two small conditions — one more stale line saying "a dated home", and a note on why the last two commits needed no test run of their own — both met. His memory file was reconciled by Infra Claude (`#1057`) and this batch's update to it written the same day.
 
-### 2026-09-30 — B-PLAN-CURRENCY-CHECK (CC-A, sprint plan row 1) — ⏳ STEP 11 NEXT
+### 2026-09-30 — B-PLAN-CURRENCY-CHECK (CC-A, sprint plan row 1) — ✅ CLOSED
 
 **The sprint-to-live plan now has a checker behind it.** Until today the plan was kept current by hand and by memory; four sessions add to it, and a closed batch whose row still read "in flight" was invisible. The governance checker now flags a closed batch whose plan row was not updated, and once a week it compares the plan against the issue ledger and hands each session its worklist by issue number. A weekly review of the crew's recorded mistakes, which had silently stopped in early September, is now fired by the same checker.
 
