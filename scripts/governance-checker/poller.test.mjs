@@ -1401,6 +1401,22 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
     ok('P40 (Q6) a null id after exit 0 marks the week, records lastCensusAlertId null, and does not retry (also the shadow case: once a week)',
       adds(w.calls).length === 1 && st.lastCensusWeek === W40 && st.lastCensusAlertId === null && !(`gov-plancensus:${W40}` in st.openAlerts));
   }
+  // Step 4 G7-14 CONDITION 4: the failure alert names its category — health_check — instead of inheriting governance.
+  {
+    const st = fresh(), w = world([], { brokenRead: true });
+    maybeRunWeekly(st, MON, new Set(), w.deps);
+    const fail = adds(w.calls).find((c) => /failed/.test(c.dedupeKey || ''));
+    ok('G7-14 the census-failed alert is category health_check', fail && fail.category === 'health_check', JSON.stringify(fail && fail.category));
+  }
+  // Step 4 G7-13: the two causes of a null id are SPLIT. A store dedupe hit returns the existing row (so its id is parsed);
+  // outside shadow a null id means the CLI output was not parsed — said LOUDLY. In shadow there is no row — silent.
+  for (const [shadow, wantLoud] of [[false, true], [true, false]]) {
+    const st = fresh(), w = world([], { nullId: true });
+    const errs = [], orig = console.error; console.error = (...a) => errs.push(a.join(' '));
+    try { maybeRunWeekly(st, MON, new Set(), { ...w.deps, shadow }); } finally { console.error = orig; }
+    const loud = errs.some((e) => /printed no id/.test(e));
+    ok(`G7-13 null id, shadow=${shadow}: ${wantLoud ? 'said LOUDLY (a row exists but is untracked)' : 'silent (no row in shadow)'}`, loud === wantLoud, errs.join(' | ').slice(0, 160));
+  }
   // the liveness seed: set on the first tick that reads the flag on, before the gate
   {
     const st = fresh(), w = world([], { brokenRead: true });

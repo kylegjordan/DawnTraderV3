@@ -149,6 +149,7 @@ const PLAN = [
   '| CC-B (New Claude) | g | 3 |',
   '| CC-C (Analyst Claude) | g | 1 |',
   '| Infra Claude | g | 2 |',
+  '**How the tally is counted:** each row once, for the first session named. Total 8.',
   '## 7. end',
 ].join('\n');
 const plan = parsePlan(PLAN);
@@ -273,12 +274,25 @@ const plan = parsePlan(PLAN);
   const dec = s6AlertDecision(recountS6(parsePlan(untouched)), [{ sha: 'c2', text: untouched }, { sha: 'c1', text: PLAN }, { sha: null, text: PLAN }]);
   ok('§6 alerted when the §4 change left §6 untouched, naming that commit', dec.alert === true && dec.commit === 'c2' && dec.sameCommit === false);
   ok('§6 alerted when no tally change is found in the window (cannot be shown)', s6AlertDecision(recOff, [{ sha: 'c1', text: off }, { sha: null, text: off }]).alert === true);
+  // Step 4 G7-3 CONDITION 1: the STATED Total (prose) against the SUM of the cells — its own diff, alerting on its own
+  const tot = recountS6(plan);
+  ok('C1: the fixture stated Total 8 agrees with its cells', tot.statedTotal === 8 && tot.cellSum === 8 && tot.totalAgree === true);
+  const noTotal = recountS6(parsePlan(PLAN.replace(' Total 8.', '')));
+  ok('C1: a missing Total does not agree (never read as fine)', noTotal.statedTotal === null && noTotal.totalAgree === false);
+  const wrongTotal = recountS6(parsePlan(PLAN.replace('Total 8.', 'Total 7.')));
+  ok('C1: a wrong Total with cells that match the recount: the cells agree, the Total does not', wrongTotal.agree === true && wrongTotal.totalAgree === false);
+  const drift = parsePlan(addRow(PLAN).replace('| CC-B (New Claude) | g | 3 |', '| CC-B (New Claude) | g | 4 |'));
+  const dr = recountS6(drift);
+  ok('C1: the 2026-09-30 shape (a row added, its cell updated, the Total left): cells agree, Total 8 vs 9 disagrees', dr.agree && !dr.totalAgree && dr.cellSum === 9, JSON.stringify([dr.agree, dr.statedTotal, dr.cellSum]));
   // the live history reader (fakes injected): a failed read at a commit the log named refuses, never reads as ''
   // (as '' it would parse to no tally and report §6 as touched there — the alert above would be suppressed)
   const log = () => 'c2\nc1\n';
   const texts = { c2: untouched, c1: PLAN, 'c1^': null };
-  const h = gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => texts[sha] });
-  ok('§6 history: newest first, the oldest one\'s absent parent reads as \'\'', h.map((x) => x.sha).join() === 'c2,c1,' && h[2].text === '' && h[0].text === untouched);
+  const noParent = () => { throw new Error('unknown revision'); };
+  const h = gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => texts[sha], revParse: noParent });
+  ok('§6 history: newest first; the oldest one parent reads as empty ONLY when the parent commit does not exist', h.map((x) => x.sha).join() === 'c2,c1,' && h[2].text === '' && h[0].text === untouched);
+  // Step 4 G7-9 CONDITION 2: a parent that EXISTS but reads as nothing refuses (it would suppress the §6 alert)
+  ok('§6 history: an existing parent whose read failed REFUSES', throws(() => gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => texts[sha], revParse: () => 'p'.repeat(40) }), /though the parent exists/));
   ok('§6 history: a failed read at a logged commit REFUSES', throws(() => gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => (sha === 'c1' ? null : texts[sha]) }), /returned nothing at a commit that touched it/));
 }
 
@@ -334,7 +348,7 @@ function frameResurface(alert, d, nowMs) {
     d: { rows: big(999, (i) => ({ row: `${i}a`, why: 'item cell is one batch id', owner: 'CC-INFRA' })), excluded: big(999, (i) => ({ row: i })) },
     e: { refs: big(999, () => ({})), rowRefs: 999, unmatched: big(999, (i) => ({ row: `${i}`, target: longId, owner: 'CC-A' })), rowUnmatched: [], viaS0: [] },
     f: { all: big(999, (i) => `§4:${i}:${longId}`), ids: [], new: big(999, (i) => ({ key: `§4:${i}:${longId}`, where: `§4 row ${i}`, id: longId, owner: 'CC-B' })) },
-    g: { agree: false, diffs: [{ session: 'CC-A', recount: 9999, table: 1 }, { session: 'CC-B', recount: 9999, table: 1 }, { session: 'CC-C', recount: 9999, table: 1 }, { session: 'CC-INFRA', recount: 9999, table: 1 }], alert: true },
+    g: { agree: false, diffs: [{ session: 'CC-A', recount: 9999, table: 1 }, { session: 'CC-B', recount: 9999, table: 1 }, { session: 'CC-C', recount: 9999, table: 1 }, { session: 'CC-INFRA', recount: 9999, table: 1 }], alert: true, statedTotal: null, cellSum: 99999, totalAgree: false },
   };
   const week = '2026-W40';
   const t = censusAlert(r, { week, severity: 'warning', storeUnreadable: true });

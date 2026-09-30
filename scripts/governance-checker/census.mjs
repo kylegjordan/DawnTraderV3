@@ -164,6 +164,8 @@ export function parseLedger(text) {
     if (e.words.has('OPEN') && !closed) openR1.add(e.n);
     if (e.heads.filter((h) => h.word === 'OPEN').length >= 2) reused.push(e.n);
     if (e.words.has('OPEN') || closed) continue;           // the widening applies only to numbers with no status head
+    // Step 4 G7-2 (Langston): the self-contradicting detector below also runs ONLY on these no-status-head entries, so its
+    // count (5 at c6751f5b3) is a count of THAT subset — never a ledger-wide figure.
     for (const h of e.heads) {
       const hit = s1OnLine(L[h.i]);
       if (hit) {
@@ -411,6 +413,9 @@ export function listF(plan, reportNames, prevF) {
 }
 // (a): completion-named files first added between the previous census's ref and this ref. Each is matched against
 // the plan lines' ids; none → in-no-plan-line; some, none closed → not-closed-in-plan; one closed → not listed.
+// Step 4 G7-5 (Langston): "one closed → not listed" is deliberate, NOT a gap — (f) is (a)'s complement: a batch with one
+// closed line and one stale open line is not reported here, and the stale line lands in (f). Coverage is complete with no
+// double report; do not "fix" this into one list.
 export function listA(plan, addedNames) {
   const pls = planLines(plan), out = [];
   for (const name of addedNames) {
@@ -431,7 +436,15 @@ export function recountS6(plan) {
   for (const r of plan.s6) { const s = firstSession(r.session); const v = Number(deMark(r.items)); if (s) table[s] = (table[s] || 0) + (Number.isFinite(v) ? v : NaN); }
   const keys = [...new Set([...Object.keys(recount), ...Object.keys(table)])].sort();
   const diffs = keys.filter((k) => recount[k] !== table[k]).map((k) => ({ session: k, recount: recount[k] ?? 0, table: table[k] ?? 0 }));
-  return { recount, table, agree: diffs.length === 0, diffs };
+  // Step 4 G7-3 CONDITION 1 (Langston): the STATED Total lives in §6's prose ("Total N."), not in the table cells, so a
+  // recount that only compares cells goes quiet with a wrong Total in the doc (2026-09-30: Total 234 vs cells 236). The
+  // stated Total is parsed and compared with the SUM of the cells — its own diff, which alerts on its own (not subject to
+  // the same-commit rule below: fixing the cells and leaving the Total is exactly the miss it exists to catch).
+  const cellSum = Object.values(table).reduce((a, v) => a + v, 0);
+  const tm = /\bTotal (\d+)\./.exec(plan.s6Text || '');
+  const statedTotal = tm ? Number(tm[1]) : null;
+  const totalAgree = statedTotal !== null && statedTotal === cellSum;
+  return { recount, table, agree: diffs.length === 0, diffs, cellSum, statedTotal, totalAgree };
 }
 // The alert condition: §6 and the recount disagree AND §6 was NOT touched in the same commit as the newest §4
 // change that moved the tally (row 1's rule, not a new tolerance). `history` is [{sha, text}] of the plan at the
@@ -454,7 +467,7 @@ export function s6AlertDecision(rec, history) {
 // ══ THE CENSUS ═══════════════════════════════════════════════════════════════════════════════════════════
 // readers: { show(ref, path) → text|null, names(ref, dir) → basenames[], added(prevRef, ref, dir) → basenames[],
 //            planHistory(ref, path, n) → [{sha, text}] } — the live ones are gitReaders below.
-export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 20 }) {
+export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 20, openScope = null }) {
   if (!ref) throw new Error('census: no graded ref — refusing');
   const read = (p) => {
     const t = readers.show(ref, p);
@@ -462,6 +475,9 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
     return t;
   };
   const ledger = parseLedger(read(CENSUS_SOURCES.ledger));
+  // DRY RUN ONLY (Step 4 G7-8, Langston's same-ref control): `openScope: 'r1'` restricts OPEN to the audit's R1 set, so
+  // placement at the audit's ref can be compared like-for-like with its 352/117 and 354/115. The live tick never sets it.
+  if (openScope === 'r1') ledger.open = new Set(ledger.openR1);
   const plan = parsePlan(read(CENSUS_SOURCES.plan));
   const pls = parseAfterLive(read(CENSUS_SOURCES.afterLive));
   const roadmap = parseRoadmap(read(CENSUS_SOURCES.roadmap));
@@ -477,7 +493,8 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
   const c = datedHomes(ledger);
   const d = listD(plan), e = listE(plan), f = listF(plan, names, prevF), a = listA(plan, added);
   const rec = recountS6(plan);
-  const g = { ...rec, ...(rec.agree ? { alert: false } : s6AlertDecision(rec, readers.planHistory(ref, CENSUS_SOURCES.plan, historyDepth))) };
+  const g0 = { ...rec, ...(rec.agree ? { alert: false } : s6AlertDecision(rec, readers.planHistory(ref, CENSUS_SOURCES.plan, historyDepth))) };
+  const g = { ...g0, alert: g0.alert || !rec.totalAgree };   // C1: a stated Total that is missing or wrong alerts on its own
   const ownerSources = { ownerLine: 0, homeLine: 0, filer: 0, unknown: 0 };
   for (const n of ledger.open) ownerSources[owner(n).source]++;
   return {
@@ -494,7 +511,7 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
 
 // The terse counts object — FIRST in the metadata so the 300-character slice Discord shows is the counts (P45
 // round 3). h heads · n numbers · o OPEN · a [not-closed-in-plan, in-no-plan-line] · b [placed, unplaced, by
-// number, by HOME batch, parked, roadmap, U1..U6] · c [issues, lines, matches] · cx excluded dated · d rows ·
+// number, by HOME batch, parked, roadmap, U1..U6] · c [issues, lines, matches] · cx excluded dated · d rows · dx excluded d rows ·
 // e [refs, unmatched] · f [new, total] · g §6 alert (0/1) · sc self-contradicting · r reused numbers.
 export function censusCounts(r) {
   const p = r.b.placed, placed = p.number + p.homeBatch + p.parked + p.roadmap;
@@ -503,7 +520,7 @@ export function censusCounts(r) {
     a: [r.a.filter((x) => x.verdict === 'not-closed-in-plan').length, r.a.filter((x) => x.verdict === 'in-no-plan-line').length],
     b: [placed, r.b.unplaced.length, p.number, p.homeBatch, p.parked, p.roadmap, ...Object.values(r.b.byWhy)],
     c: [r.c.issues.length, r.c.lineCount, r.c.matchCount], cx: r.c.excluded.length,
-    d: r.d.rows.length, e: [r.e.refs.length, r.e.unmatched.length + r.e.rowUnmatched.length],
+    d: r.d.rows.length, dx: r.d.excluded.length, e: [r.e.refs.length, r.e.unmatched.length + r.e.rowUnmatched.length],
     f: [r.f.new.length, r.f.all.length], g: r.g.alert ? 1 : 0,
     sc: r.b.selfContradicting.length, r: r.b.reused.length,
   };
@@ -561,8 +578,11 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
         top(eAll, (x) => `row ${x.row} after ${x.target} (${planOwner(x.owner)})`),
       `(f) not-closed plan lines with a report: ${r.f.new.length} NEW of ${r.f.all.length} [owner ? ${qCount(r.f.new, (x) => x.owner)}]` +
         top(r.f.new, (x) => `${x.where} ${x.id} (${planOwner(x.owner)})`),
-      r.g.agree ? `(g) §6 recount agrees with the table` :
-        `(g) §6 recount vs table: ${r.g.diffs.map((x) => `${x.session} ${x.recount}/${x.table}`).join(', ')}${r.g.alert ? '; §6 not recounted with the §4 change' : '; recounted with the §4 change, no alert'}`,
+      // C1 kept inside the 1,000-char body at maximum sizes (the worst case was 991 before it): the Total clause is terse
+      // and the recount clause's suffix was shortened to pay for it.
+      '(g) ' + (!r.g.totalAgree ? `Total ${r.g.statedTotal ?? '—'}≠${r.g.cellSum}; ` : '') +
+      (r.g.agree ? `§6 recount agrees with the table` :
+        `§6 recount vs table: ${r.g.diffs.map((x) => `${x.session} ${x.recount}/${x.table}`).join(', ')}${r.g.alert ? '; not recounted with §4' : '; recounted with §4, no alert'}`),
       `Full lists: metadata.lists of this row (read by id in /var/log/dawntrader/system-alerts.jsonl); box file ${boxPath}.`,
     ].map(item).join('\n');
   };
@@ -631,7 +651,7 @@ export const gitReaders = {
   // The plan at each commit that touched it, newest first, plus the oldest one's parent (sha null). A failed read
   // at a commit the log NAMED throws (the census refuses): read as '' it would parse to no tally, place the tally
   // change at that commit and report §6 as touched there, SUPPRESSING the §6 alert off a read that failed. Only the
-  // parent may be absent (the file's creation), and it reads as ''. A commit in the window that DELETED the file
+  // parent may be absent, and only when the parent COMMIT does not exist (see below). A commit in the window that DELETED the file
   // refuses too (fail-closed; the census cannot tell that from a failed read). `io` is injectable for the tests.
   planHistory(ref, path, n, io = {}) {
     const show = io.show ?? showFileAt, log = io.log ?? git;
@@ -641,7 +661,22 @@ export const gitReaders = {
       if (typeof text !== 'string') throw new Error(`census: git show ${sha}:${path} returned nothing at a commit that touched it — refusing`);
       return { sha, text };
     });
-    if (shas.length) out.push({ sha: null, text: show(`${shas[shas.length - 1]}^`, path) ?? '' });
+    if (shas.length) {
+      // Step 4 G7-9 CONDITION 2 (Langston): '' is tolerated ONLY when the parent commit itself does not exist (the
+      // repository's first commit). A parent that EXISTS but whose read returned nothing — a failed read, a shallow
+      // clone — would parse to no tally, report §6 as touched and SUPPRESS the alert, so it refuses instead. (A file
+      // CREATED inside the 20-commit window therefore refuses too; for this plan that window never reaches its creation.)
+      const oldest = shas[shas.length - 1];
+      const text = show(`${oldest}^`, path);
+      if (typeof text === 'string') out.push({ sha: null, text });
+      else {
+        const revParse = io.revParse ?? ((s) => git(['rev-parse', '--verify', '--quiet', s]));
+        let parentExists = true;
+        try { revParse(`${oldest}^{commit}`); } catch { parentExists = false; }
+        if (parentExists) throw new Error(`census: git show ${oldest}^:${path} returned nothing though the parent exists — refusing (a failed read must not suppress the §6 alert)`);
+        out.push({ sha: null, text: '' });
+      }
+    }
     return out;
   },
   // The %B of every commit in prevRef..ref. Throws on a failed log.
@@ -666,7 +701,7 @@ function dryRun(argv) {
   if (!ref) { console.error('usage: node scripts/governance-checker/census.mjs --ref <sha> [--prev <sha>] [--dry-run] [--mistake-pass]'); process.exit(2); }
   const now = Date.parse(git(['show', '-s', '--format=%cI', ref]).trim());
   const prevRef = arg('--prev') || gitReaders.refBefore(ref, now - 7 * DAY_MS);
-  const r = runCensus({ ref, prevRef, readers: gitReaders });
+  const r = runCensus({ ref, prevRef, readers: gitReaders, openScope: argv.includes('--open-r1') ? 'r1' : null });
   const L = r._ledger;
   const out = (s) => console.log(s);
   out(`census dry run at ${ref} (list (a) window ${prevRef}..${ref}; week of the ref ${isoWeek(now)})`);
@@ -692,7 +727,7 @@ function dryRun(argv) {
   out(`    unmatched: ${r.e.unmatched.map((x) => `${x.row}:${x.target}`).join(' ')}`);
   out(`(f) ${r.f.all.length} lines / ${r.f.ids.length} ids: ${r.f.all.join(' ')}`);
   out(`(a) ${r.a.length}: ${r.a.map((x) => `${x.file} (${x.verdict})`).join('; ')}`);
-  out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, commit ${r.g.commit}`}`);
+  out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, commit ${r.g.commit}`} · stated Total ${r.g.statedTotal ?? 'NOT FOUND'} vs cells ${r.g.cellSum} (${r.g.totalAgree ? 'agree' : 'DISAGREE'})`);
   out(`owner sources over the ${L.open.size} OPEN issues (shown-as): ${JSON.stringify(r.ownerSources)}`);
   const src = { ownerLine: [], homeLine: [], filer: [] };
   for (const n of [...L.open].sort((a, b) => a - b)) { const o = ownerOfIssue(L.byNum.get(n)); for (const k of Object.keys(src)) if (o[k] && src[k].length < 10) src[k].push(`#${n}=${o[k]}`); }

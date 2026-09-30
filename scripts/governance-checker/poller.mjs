@@ -982,6 +982,12 @@ function runWeeklyLeg(leg, state, nowMs, liveIds, d) {
     const id = d.sink.add(intent, nowMs);
     state[leg.week] = week; state[leg.at] = nowMs; state[leg.ref] = d.ref; state[leg.id] = id ?? null;
     if (id) state.openAlerts[intent.dedupeKey] = id;
+    // Step 4 G7-13 (Langston's condition 3, answered with the store's code): a store DEDUPE HIT returns the EXISTING row
+    // (server/services/system-alerts.ts addAlert: `result = existing`) and the CLI prints it, so its id IS parsed — a
+    // null id outside shadow therefore means the CLI output was not parsed (format drift), not "a row we cannot name".
+    // Shadow is silent (no row exists); the other case is said LOUDLY, because next week's severity cannot see it.
+    else if (!(d.shadow ?? SHADOW_MODE)) console.error(`[gov-checker] ${leg.what} ${week}: the add exited 0 but printed no id — `
+      + 'the row exists but is not tracked, so next week cannot escalate on it. Check the system-alerts add output format.');
     after();
     d.save(state);                                      // saved AT the add (CE-A7): a later throw cannot re-add
     const failId = state.openAlerts[leg.failKey];
@@ -992,7 +998,9 @@ function runWeeklyLeg(leg, state, nowMs, liveIds, d) {
     const msg = String(e.message || e);
     console.error(`[gov-checker] ${leg.what} ${week} FAILED (week not recorded; the next tick retries): ${msg.slice(0, 300)}`);
     if (!state.openAlerts[leg.failKey]) {
-      const fid = d.sink.add({ dedupeKey: leg.failKey, severity: 'warning',
+      // Step 4 G7-14 CONDITION 4 (Langston): health_check EXPLICITLY — a census that threw is the instrument failing,
+      // not a doc-set gap; it used to inherit buildAddCommand's governance default.
+      const fid = d.sink.add({ dedupeKey: leg.failKey, severity: 'warning', category: 'health_check',
         title: `governance-checker ${leg.what} failed — the week is not recorded`,
         body: `The ${leg.what} for ${week} threw at ${d.ref ?? 'no graded ref'}: ${msg.slice(0, 300)}. Enforcement results this tick are unaffected. ` +
           `The week stays unrecorded, so the next tick retries; this alert resolves on the first success. Check the governance-checker poller's journal on staging.` }, nowMs);
