@@ -9,6 +9,11 @@ WHAT IT COMPARES AGAINST — the INSTALLED sha, not the branch head (fresh-reade
 records the reviewed sha it installed from in INSTALLED_SHA. Every file is hashed against its blob
 AT THAT SHA, so a change sitting in review is not "drift". A committed change that is NOT yet
 installed is reported as PENDING, and pages only once the commit that made it is over a week old.
+INSTALLED_SHA's format (r3 S6 — two install flows own some of the same Helsinki files):
+    <sha>                  the default: every file was installed from this sha
+    <sha> <repo path>      an override: THIS file was installed from that sha (the last line wins)
+so a flow that installs one file records its own sha for it, and neither flow's install reads as
+the other's drift.
 
 ⛔ ROOT RUNS NO GIT. The blob ids are read by the account that OWNS the repo (deploy on staging,
    langston on Helsinki); root re-hashes the installed file itself (sha1 of "blob <len>\\0<bytes>").
@@ -79,7 +84,7 @@ BOXES = {
         "dirs": [
             ("/etc/dt-api", 0o750, "root", "dtapi"),
             ("/var/lib/dt-api", 0o700, "dtapi", "dtapi"),
-            ("/home/dtmint", 0o750, "dtmint", "dtmint"),
+            ("/home/dtmint", 0o750, "root", "dtmint"),     # r3: root-owned, so .ssh cannot be renamed away
             ("/home/dtmint/.ssh", 0o750, "root", "dtmint"),
             ("/var/lib/dt-install-drift", 0o755, "root", "root"),
         ],
@@ -91,7 +96,9 @@ BOXES = {
         # the timer AND the paging template (r2: a drop-in on any of them can silence the chain)
         "units": {"dt-install-drift.service": (SS + "dt-install-drift.service", [SS + "dt-install-drift.service.d/onfailure.conf"]),
                   "dt-install-drift.timer": (SS + "dt-install-drift.timer", []),
-                  "dt-unit-failure@probe.service": (SS + "dt-unit-failure@.service", [])},
+                  # r3 S3: the INSTANCE that actually pages (OnFailure=dt-unit-failure@%N), not a
+                  # probe name — a drop-in for that one instance would otherwise go unseen
+                  "dt-unit-failure@dt-install-drift.service": (SS + "dt-unit-failure@.service", [])},
         "timers": ["dt-install-drift.timer"],
         "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2"],
     },
@@ -121,7 +128,8 @@ BOXES = {
                   "agent-staging-session.timer": (SS + "agent-staging-session.timer", []),
                   "dt-install-drift.service": (SS + "dt-install-drift.service", [SS + "dt-install-drift.service.d/onfailure.conf"]),
                   "dt-install-drift.timer": (SS + "dt-install-drift.timer", []),
-                  "agent-unit-failure@probe.service": (SS + "agent-unit-failure@.service", [])},
+                  "agent-unit-failure@agent-staging-session.service": (SS + "agent-unit-failure@.service", []),
+                  "agent-unit-failure@dt-install-drift.service": (SS + "agent-unit-failure@.service", [])},
         "timers": ["agent-staging-session.timer", "dt-install-drift.timer"],
         "checks": ["mint_key_pairing", "staging_host_key"],
     },
@@ -131,12 +139,28 @@ PROBLEMS = []
 CLASSES = set()
 
 
-def out(kind, text, cls=None):
+def out(kind, text, cls=None, subj=None):
+    """subj (r3 S2): WHAT failed — a path, a unit, a check. The alert is keyed per (class, subject),
+    so a standing alert for one file can never swallow a new failure of the same class elsewhere."""
     line = "%-8s %s" % (kind, text)
     print(line, flush=True)
     if kind not in ("OK", "PENDING"):
         PROBLEMS.append(line)
-        CLASSES.add(cls or kind)
+        CLASSES.add((cls or kind, subj or "-"))
+
+
+def read_small(path, limit=1 << 16):
+    """(stat, bytes) of a small file that ANOTHER account may control (dt-api's page, a fetch stamp).
+    r3: never follows a link, and never BLOCKS — a FIFO planted at the path used to hang the run until
+    its 30-minute timeout. Raises OSError for anything but a regular file."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError("not a regular file")
+        return st, os.read(fd, limit)
+    finally:
+        os.close(fd)
 
 
 def P(path):
@@ -195,15 +219,20 @@ def owner_ok(st, mode, user, group):
 
 
 def source_fresh(box):
+    """The newest SUCCESSFUL refresh. r3 S4, measured on git 2.43: a FAILED fetch truncates
+    FETCH_HEAD to 0 bytes AND refreshes its mtime, so an mtime alone reads a dead fetch as fresh —
+    after the repo goes private the checker's fetch fails and the stale check could never fire. A
+    stamp counts only if it has CONTENT (a successful fetch writes the refs it fetched)."""
     newest = None
     for s in box["stamps"]:
-        s = P(s)
         try:
-            with open(s) as fh:
-                first = fh.read(64).split()
-            t = float(first[0]) if first and first[0].replace(".", "", 1).isdigit() else os.stat(s).st_mtime
-        except (OSError, ValueError):
+            st, data = read_small(P(s), 64)
+        except OSError:
             continue
+        first = data.decode("utf-8", "replace").split()
+        if not first:
+            continue                            # an EMPTY stamp is a failed refresh, not a fresh one
+        t = float(first[0]) if first[0].replace(".", "", 1).isdigit() else st.st_mtime
         newest = t if newest is None else max(newest, t)
     return newest
 
@@ -221,23 +250,23 @@ def check_units(box):
         rc, o = systemctl("show", "-p", "LoadState,NeedDaemonReload,DropInPaths,FragmentPath", unit)
         props = dict(ln.split("=", 1) for ln in o.splitlines() if "=" in ln) if rc == 0 else {}
         if rc != 0 or props.get("LoadState") != "loaded":
-            out("UNIT", "%s is not loaded (%s)" % (unit, props.get("LoadState") or o), "UNIT")
+            out("UNIT", "%s is not loaded (%s)" % (unit, props.get("LoadState") or o), "UNIT", unit)
             continue
         if props.get("NeedDaemonReload") != "no":
             out("UNIT", "%s changed on disk and systemd has not reloaded it — the running definition "
-                        "is not the installed one" % unit, "UNIT")
+                        "is not the installed one" % unit, "UNIT", unit)
         if props.get("FragmentPath") != fragment:
             out("UNIT", "%s loads from %s, not the installed %s (a higher-priority copy shadows it)"
-                % (unit, props.get("FragmentPath") or "nowhere", fragment), "UNIT")
+                % (unit, props.get("FragmentPath") or "nowhere", fragment), "UNIT", unit)
         have = sorted(x for x in props.get("DropInPaths", "").split() if x)
         if have != sorted(dropins):
             out("UNIT", "%s drop-ins are %s, wanted exactly %s (an extra drop-in can override "
-                        "OnFailure or ExecStart)" % (unit, have or "none", dropins), "UNIT")
+                        "OnFailure or ExecStart)" % (unit, have or "none", dropins), "UNIT", unit)
     for t in box["timers"]:
         for verb, want in (("is-enabled", "enabled"), ("is-active", "active")):
             rc, o = systemctl(verb, t)
             if o != want:
-                out("UNIT", "%s %s says %r, wanted %r" % (t, verb, o, want), "UNIT")
+                out("UNIT", "%s %s says %r, wanted %r" % (t, verb, o, want), "UNIT", t)
 
 
 def check_extra(name, box):
@@ -245,82 +274,107 @@ def check_extra(name, box):
         p = P("/var/lib/dt-api/page.json")
         if os.path.lexists(p):
             try:
-                pg = json.load(open(p))
+                pg = json.loads(read_small(p)[1].decode("utf-8"))
                 pg = pg if isinstance(pg, dict) else {}
             except (OSError, ValueError):
                 pg = {}
             kind = str(pg.get("kind", "unreadable"))
             out("STATE", "dt-api raised a PAGE at %s: %s — %s (fix the cause, then remove %s; dt-api "
                 "makes no login while it stands)" % (pg.get("ts"), kind, pg.get("detail"), p),
-                "PAGE-" + "".join(c for c in kind if c.isalnum() or c == "-")[:40])
+                "PAGE-" + "".join(c for c in kind if c.isalnum() or c == "-")[:40], "page")
     elif name == "setter_marker":
         p = P("/var/lib/dt-api-setter/marker.json")
         if os.path.lexists(p):
             age = time.time() - os.lstat(p).st_mtime
             if age > MARKER_MAX_AGE_S:
                 out("STATE", "an interrupted setter run left its marker at %s (%d min old) — re-run "
-                             "the setter to reconcile it" % (p, age // 60), "MARKER")
+                             "the setter to reconcile it" % (p, age // 60), "MARKER", "marker")
     elif name == "accounts":
         try:
             if pwd.getpwnam("dtmint").pw_shell not in ("/bin/sh", "/usr/bin/sh"):
                 out("STATE", "dtmint's shell is %s; the forced command needs /bin/sh"
-                    % pwd.getpwnam("dtmint").pw_shell, "ACCOUNT")
+                    % pwd.getpwnam("dtmint").pw_shell, "ACCOUNT", "dtmint")
         except KeyError:
-            out("STATE", "the dtmint account does not exist", "ACCOUNT")
+            out("STATE", "the dtmint account does not exist", "ACCOUNT", "dtmint")
         try:
             if pwd.getpwnam("dtapi").pw_shell not in ("/usr/sbin/nologin", "/sbin/nologin"):
                 out("STATE", "dtapi has a login shell (%s); it must be nologin"
-                    % pwd.getpwnam("dtapi").pw_shell, "ACCOUNT")
+                    % pwd.getpwnam("dtapi").pw_shell, "ACCOUNT", "dtapi")
         except KeyError:
-            out("STATE", "the dtapi account does not exist", "ACCOUNT")
+            out("STATE", "the dtapi account does not exist", "ACCOUNT", "dtapi")
         try:
             for ln in open(P("/etc/shadow")):
                 f = ln.split(":")
                 if f[0] == "dtmint" and len(f) > 1 and f[1] != "*":
                     out("STATE", "dtmint's password field is %s, not '*' — a locked account can refuse the "
-                        "mint's key login, and a hash is a usable password" % ("a hash" if f[1][:1] not in ("!", "") else repr(f[1][:2])), "ACCOUNT")
-                if f[0] == "dtapi" and len(f) > 1 and not (f[1] in ("*", "") or f[1].startswith("!")):
-                    out("STATE", "dtapi has a usable password hash in shadow; it must have none", "ACCOUNT")
+                        "mint's key login, and a hash is a usable password" % ("a hash" if f[1][:1] not in ("!", "") else repr(f[1][:2])), "ACCOUNT", "dtmint")
+                # r3: an EMPTY field is not "no password" — it is an empty, usable one
+                if f[0] == "dtapi" and len(f) > 1 and not (f[1] == "*" or f[1].startswith("!")):
+                    out("STATE", "dtapi's password field is %s; it must be '*' or locked ('!')"
+                        % ("EMPTY (a usable empty password)" if f[1] == "" else "a usable hash"), "ACCOUNT", "dtapi")
         except OSError as e:
-            out("STATE", "cannot read the shadow file: %s" % e, "ACCOUNT")
+            out("STATE", "cannot read the shadow file: %s" % e, "ACCOUNT", "shadow")
+        # r3: a %group sudoers rule reaches a MEMBER without naming it — dtapi and dtmint must be in
+        # no supplementary group, so no group rule can ever apply to them
+        for g in grp.getgrall():
+            for who in ("dtapi", "dtmint"):
+                if who in g.gr_mem:
+                    out("STATE", "%s is a member of group %s — a %%%s sudoers rule would apply to it"
+                        % (who, g.gr_name, g.gr_name), "SUDO", who)
     elif name == "sudoers_others":
-        d = P("/etc/sudoers.d")
-        paths = [P("/etc/sudoers")]             # r2: the main file too, not only the drop-in dir
-        try:
-            paths += [os.path.join(d, fn) for fn in sorted(os.listdir(d)) if fn != "dtapi"]
-        except OSError as e:
-            out("STATE", "cannot list %s: %s" % (d, e), "SUDO")
-        for fp in paths:
+        # r2: the main file too, not only the drop-in dir. r3: and every file an @include /
+        # @includedir (or the older #include / #includedir) pulls in, followed to any depth.
+        todo, seen = [P("/etc/sudoers")], set()
+        mine = P("/etc/sudoers.d/dtapi")
+        while todo:
+            fp = todo.pop(0)
+            if fp in seen:
+                continue
+            seen.add(fp)
+            if os.path.isdir(fp):
+                try:
+                    todo += [os.path.join(fp, fn) for fn in sorted(os.listdir(fp))
+                             if "." not in fn and not fn.endswith("~")]      # sudo's own skip rule
+                except OSError as e:
+                    out("STATE", "cannot list %s: %s" % (fp, e), "SUDO", fp)
+                continue
             try:
                 txt = open(fp, encoding="utf-8", errors="replace").read()
             except OSError as e:
-                out("STATE", "cannot read %s: %s" % (fp, e), "SUDO")
+                out("STATE", "cannot read %s: %s" % (fp, e), "SUDO", fp)
                 continue
-            if "dtapi" in txt or "dtmint" in txt:
-                out("STATE", "%s also mentions dtapi or dtmint — only /etc/sudoers.d/dtapi may" % fp, "SUDO")
+            for ln in txt.splitlines():
+                w = ln.split()
+                if len(w) >= 2 and w[0] in ("@include", "#include", "@includedir", "#includedir"):
+                    todo.append(P(w[1]) if w[1].startswith("/") else os.path.join(os.path.dirname(fp), w[1]))
+                elif w and w[0] == "ALL" and "=" in ln:
+                    out("STATE", "%s has a rule for ALL users (%s) — it would apply to dtapi and dtmint"
+                        % (fp, ln.strip()[:80]), "SUDO", fp)
+            if fp != mine and ("dtapi" in txt or "dtmint" in txt):
+                out("STATE", "%s also mentions dtapi or dtmint — only /etc/sudoers.d/dtapi may" % fp, "SUDO", fp)
     elif name == "no_authorized_keys2":
         p = P("/home/dtmint/.ssh/authorized_keys2")
         if os.path.lexists(p):
-            out("STATE", "%s exists — sshd reads it too, and it carries no forced command" % p, "KEYS")
+            out("STATE", "%s exists — sshd reads it too, and it carries no forced command" % p, "KEYS", p)
     elif name == "mint_key_pairing":
         if not box.get("_sha"):
-            out("STATE", "the mint key's pairing is NOT checked: no installed sha to read it at", "KEYS")
+            out("STATE", "the mint key's pairing is NOT checked: no installed sha to read it at", "KEYS", "mint-key")
             return
         try:
             pub = subprocess.run(["/usr/bin/ssh-keygen", "-y", "-f", P("/root/.ssh/dtmint_ed25519")],
                                  capture_output=True, text=True, timeout=30)
         except (subprocess.TimeoutExpired, OSError) as e:
-            out("STATE", "cannot read the mint key: %s" % type(e).__name__, "KEYS")
+            out("STATE", "cannot read the mint key: %s" % type(e).__name__, "KEYS", "mint-key")
             return
         data, err = git(box, "cat-file", "blob", "%s:comms-infra/staging/dtmint-authorized_keys" % box["_sha"], binary=True)
         if pub.returncode != 0 or data is None:
             out("STATE", "cannot compare the mint key with the committed authorized_keys: %s"
-                % (pub.stderr.strip() or err), "KEYS")
+                % (pub.stderr.strip() or err), "KEYS", "mint-key")
             return
         key = " ".join(pub.stdout.split()[:2])
         if key not in data.decode("utf-8", "replace"):
             out("STATE", "the mint key's public half is NOT the one in the committed "
-                         "comms-infra/staging/dtmint-authorized_keys — the mint will be refused", "KEYS")
+                         "comms-infra/staging/dtmint-authorized_keys — the mint will be refused", "KEYS", "mint-key")
         else:
             out("OK", "the mint key pairs with the committed authorized_keys")
     elif name == "staging_host_key":
@@ -329,53 +383,94 @@ def check_extra(name, box):
                                capture_output=True, text=True, timeout=30)
             if r.returncode != 0 or "188.245.193.8" not in r.stdout:
                 out("STATE", "root's known_hosts has no entry for staging — the mint (StrictHostKeyChecking=yes) "
-                             "will fail", "KEYS")
+                             "will fail", "KEYS", "known_hosts")
         except (subprocess.TimeoutExpired, OSError) as e:
-            out("STATE", "cannot check root's known_hosts: %s" % type(e).__name__, "KEYS")
+            out("STATE", "cannot check root's known_hosts: %s" % type(e).__name__, "KEYS", "known_hosts")
 
 
-def compare_files(box, sha):
+def compare_files(box, shas):
+    """shas: repo path -> the sha that file was installed from (the default, or its override)."""
     for repo_path, inst, mode, user, group in box["files"]:
         path = P(inst)
+        sha = shas[repo_path]
         bid, err = git(box, "rev-parse", "--verify", "%s:%s" % (sha, repo_path))
         if bid is None:
-            out("SOURCE", "%s is not readable at %s: %s" % (repo_path, sha[:12], err))
+            out("SOURCE", "%s is not readable at %s: %s" % (repo_path, sha[:12], err), None, repo_path)
             continue
         try:
             st, data = read_installed(path)
         except FileNotFoundError:
-            out("MISSING", path)
+            out("MISSING", path, None, path)
             continue
         except OSError as e:
-            out("MISSING", "%s cannot be read as a regular file: %s" % (path, e))
+            out("MISSING", "%s cannot be read as a regular file: %s" % (path, e), None, path)
             continue
         if blob_hash(data) != bid:
-            out("DRIFT", "%s differs from %s at %s" % (path, repo_path, sha[:12]))
+            out("DRIFT", "%s differs from %s at %s" % (path, repo_path, sha[:12]), None, path)
         else:
             out("OK", "%s = %s at %s" % (path, repo_path, sha[:12]))
         ok, why = owner_ok(st, mode, user, group)
         if not ok:
-            out("PERM", "%s %s" % (path, why))
+            out("PERM", "%s %s" % (path, why), None, path)
 
 
-def pending(box, sha, head):
-    """Files whose committed copy moved on the branch after the install."""
-    if sha == head:
-        return
+def pending(box, shas, head):
+    """Files whose committed copy moved on the branch after their install. r3 S8: a git ERROR is
+    SOURCE (mirror health), never "waited over 7 days" — and both reads failing is no longer a
+    silent skip (None == None used to read as "unchanged")."""
     for repo_path in sorted({f[0] for f in box["files"]}):
-        a, _ = git(box, "rev-parse", "--verify", "%s:%s" % (sha, repo_path))
-        b, _ = git(box, "rev-parse", "--verify", "%s:%s" % (head, repo_path))
+        sha = shas[repo_path]
+        if sha == head:
+            continue
+        a, aerr = git(box, "rev-parse", "--verify", "%s:%s" % (sha, repo_path))
+        b, berr = git(box, "rev-parse", "--verify", "%s:%s" % (head, repo_path))
+        if a is None or b is None:
+            out("SOURCE", "cannot compare %s between the install and the branch head: %s"
+                % (repo_path, aerr or berr), None, repo_path)
+            continue
         if a == b:
             continue
-        cts, _ = git(box, "log", "--reverse", "--format=%ct", sha + ".." + head, "--", repo_path)
+        cts, err = git(box, "log", "--reverse", "--format=%ct", sha + ".." + head, "--", repo_path)
         ct = (cts or "").split()[:1]
-        age = (time.time() - int(ct[0])) / 86400 if ct and ct[0].isdigit() else None
-        text = "%s changed on the branch after the install at %s (%s)" % (
-            repo_path, sha[:12], "age unknown" if age is None else "%.1f days ago" % age)
-        out("PENDING", text)
-        if age is None or age > PENDING_DAYS:
+        if cts is None or not ct or not ct[0].isdigit():
+            out("SOURCE", "cannot date the change to %s after the install: %s"
+                % (repo_path, err or "no commit in the range touches it"), None, repo_path)
+            continue
+        age = (time.time() - int(ct[0])) / 86400
+        out("PENDING", "%s changed on the branch after the install at %s (%.1f days ago)" % (repo_path, sha[:12], age))
+        if age > PENDING_DAYS:
             out("STATE", "a reviewed change to %s has waited over %d days to be installed" % (repo_path, PENDING_DAYS),
-                "PENDING-STALE")
+                "PENDING-STALE", repo_path)
+
+
+def read_installed_shas(box):
+    """(default sha or None, {repo path: sha}) from INSTALLED_SHA — see the header for the format."""
+    try:
+        text = read_small(P(INSTALLED_SHA))[1].decode("utf-8", "replace")
+    except OSError:
+        out("STATE", "no installed sha at %s — the install did not record what it installed" % INSTALLED_SHA,
+            "INSTALL", "installed-sha")
+        return None, {}
+    known = {f[0] for f in box["files"]}
+    default, over, bad = None, {}, []
+    for ln in text.splitlines():
+        w = ln.split()
+        if not w:
+            continue
+        ok = len(w[0]) == 40 and all(c in "0123456789abcdef" for c in w[0])
+        if not ok or len(w) > 2 or (len(w) == 2 and w[1] not in known):
+            bad.append(ln.strip()[:80])
+        elif len(w) == 1:
+            if default is not None:
+                bad.append(ln.strip()[:80] + " (a second default)")
+            default = w[0]
+        else:
+            over[w[1]] = w[0]
+    if bad or default is None:
+        out("STATE", "the installed sha file is not <sha> [+ <sha> <repo path> lines for this box's files]: %s"
+            % ("; ".join(bad) or "no default sha line"), "INSTALL", "installed-sha")
+        return None, {}
+    return default, over
 
 
 def run():
@@ -389,64 +484,61 @@ def run():
         return 1
     head, err = git(box, "rev-parse", "--verify", box["ref"] + "^{commit}")
     if head is None:
-        out("SOURCE", "cannot read %s in %s as %s: %s" % (box["ref"], box["git_dir"], box["git_as"], err))
+        out("SOURCE", "cannot read %s in %s as %s: %s" % (box["ref"], box["git_dir"], box["git_as"], err), None, "head")
     t = source_fresh(box)
     age = None if t is None else time.time() - t
     if age is None:
-        out("SOURCE", "no freshness stamp is readable (%s)" % ", ".join(box["stamps"]))
+        out("SOURCE", "no freshness stamp has content (%s) — a failed fetch leaves an empty one"
+            % ", ".join(box["stamps"]), None, "stamp")
     elif age > box["max_age_s"]:
         out("SOURCE", "the committed source was last refreshed %d min ago (limit %d) — PENDING below "
-                      "may be incomplete; the installed comparison is unaffected" % (age // 60, box["max_age_s"] // 60))
-    sha = None
-    try:
-        sha = open(P(INSTALLED_SHA)).read().strip()
-    except OSError:
-        out("STATE", "no installed sha at %s — the install did not record what it installed" % INSTALLED_SHA, "INSTALL")
-    if sha and (len(sha) != 40 or any(c not in "0123456789abcdef" for c in sha)):
-        out("STATE", "the installed sha %r is not a 40-hex sha" % sha[:60], "INSTALL")
-        sha = None
+                      "may be incomplete; the installed comparison is unaffected" % (age // 60, box["max_age_s"] // 60),
+            None, "stamp")
+    sha, overrides = read_installed_shas(box)
     if sha and head:
-        have, _ = git(box, "cat-file", "-e", sha + "^{commit}")
-        if have is None:
-            # C8: the source has not fetched the installed commit yet — mirror health, not drift
-            out("SOURCE", "the installed sha %s is not in the source yet (it fetches every 30 min) — "
-                          "the installed files are NOT compared this run" % sha[:12])
-            sha = None
-        else:
-            anc, aerr = git(box, "merge-base", "--is-ancestor", sha, head)
+        for x in sorted({sha} | set(overrides.values())):
+            have, _ = git(box, "cat-file", "-e", x + "^{commit}")
+            if have is None:
+                # C8: the source has not fetched the installed commit yet — mirror health, not drift
+                out("SOURCE", "the installed sha %s is not in the source yet (it fetches every 30 min) — "
+                              "the installed files are NOT compared this run" % x[:12], None, "installed-sha")
+                sha = None
+                break
+            anc, aerr = git(box, "merge-base", "--is-ancestor", x, head)
             if anc is None:
                 out("STATE", "the installed sha %s is in the source but NOT on %s — installed from an "
-                    "unreviewed commit? (%s)" % (sha[:12], box["ref"], aerr), "INSTALL")
+                    "unreviewed commit? (%s)" % (x[:12], box["ref"], aerr), "INSTALL", x[:12])
     box["_sha"] = sha
-    print("# %s — installed files vs %s (branch head %s, source refreshed %s)" % (
-        host, sha[:12] if sha else "NO INSTALLED SHA", head[:12] if head else "UNREADABLE",
-        "?" if age is None else "%d min ago" % (age // 60)), flush=True)
+    print("# %s — installed files vs %s%s (branch head %s, source refreshed %s)" % (
+        host, sha[:12] if sha else "NO INSTALLED SHA", " + %d per-file" % len(overrides) if overrides else "",
+        head[:12] if head else "UNREADABLE", "?" if age is None else "%d min ago" % (age // 60)), flush=True)
     if sha:
-        compare_files(box, sha)
+        shas = {f[0]: overrides.get(f[0], sha) for f in box["files"]}
+        compare_files(box, shas)
         if head:
-            pending(box, sha, head)
+            pending(box, shas, head)
     for d, mode, user, group in box["dirs"]:
         try:
             st = os.lstat(P(d))
             ok, why = owner_ok(st, mode, user, group) if stat.S_ISDIR(st.st_mode) else (False, "not a directory")
             if not ok:
-                out("PERM", "%s %s" % (P(d), why))
+                out("PERM", "%s %s" % (P(d), why), None, d)
         except FileNotFoundError:
-            out("MISSING", P(d))
+            out("MISSING", P(d), None, d)
     for f, mode, user, group in box["private"]:
         try:
             st = os.lstat(P(f))
             ok, why = owner_ok(st, mode, user, group) if stat.S_ISREG(st.st_mode) else (False, "not a regular file")
             if not ok:
-                out("PERM", "%s %s" % (P(f), why))
+                out("PERM", "%s %s" % (P(f), why), None, f)
         except FileNotFoundError:
-            out("MISSING", P(f))
+            out("MISSING", P(f), None, f)
     check_units(box)
     for c in box["checks"]:
         try:
             check_extra(c, box)
         except Exception as e:                  # a check that crashes is a FAIL with a line, never a traceback
-            out("STATE", "the %s check could not run: %s" % (c, type(e).__name__), "CHECK")
+            out("STATE", "the %s check could not run: %s" % (c, type(e).__name__), "CHECK", c)
     verdict = "PASS" if not PROBLEMS else "FAIL (%d problem%s)" % (len(PROBLEMS), "" if len(PROBLEMS) == 1 else "s")
     print("dt-install-drift %s: %s" % (host, verdict), flush=True)
     return 0 if not PROBLEMS else 1
@@ -464,14 +556,18 @@ def write_classes(text):
 
 
 def main():
-    write_classes("CRASH")                      # r2: a run killed mid-way must not leave the LAST run's classes
+    # r2: a run killed mid-way must not leave the LAST run's classes (the unit's ExecStartPre removes
+    # the file too, for a run that cannot even start — r3 S5)
+    write_classes("CRASH -")
     try:
         code = run()
     except Exception as e:
         print("STATE    dt-install-drift itself failed: %s" % type(e).__name__, flush=True)
-        CLASSES.add("CRASH")
+        CLASSES.add(("CRASH", "-"))
         code = 1
-    write_classes(",".join(sorted(CLASSES)))    # the failure classes, one alert each
+    # one "<class> <subject>" line per failure: the alert script raises one alert for each (r3 S2)
+    write_classes("\n".join("%s %s" % (c, "".join(ch for ch in subj if ch.isalnum() or ch in "/._@:-")[:120] or "-")
+                            for c, subj in sorted(CLASSES)))
     return code
 
 

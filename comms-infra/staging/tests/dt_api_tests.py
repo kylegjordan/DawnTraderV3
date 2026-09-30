@@ -159,7 +159,7 @@ refused(R, ["--write", "GET", "/api/settings"], MAL + "--write must be followed 
 refused(R, ["GET", "/api/settings", "extra"], MAL + "an argument after the path", "rule 1 extra arg")
 refused(R, ["GET", "--mode", "demo", "/api/settings"], MAL + "--mode takes paper or live", "rule 1 bad mode")
 refused(R, ["HEAD", "/api/settings"], MAL + "unknown method (GET, POST, PUT, PATCH, DELETE only)", "rule 1 HEAD")
-refused(R, ["GET", "/api/settings?a=b'c"], MAL + "the query must match ^[A-Za-z0-9_.=&,:-]*$", "rule 1 bad query")
+refused(R, ["GET", "/api/settings?a=b'c"], MAL + "the query must match ^[A-Za-z0-9_.=&,:/-]*$", "rule 1 bad query")
 refused(R, ["GET", "/apix/settings"], MAL + "the path must match ^/api/[A-Za-z0-9/_.:-]+$", "rule 1 not /api/")
 refused(R, [], MAL + "no arguments (usage: dt-api GET <path>)", "rule 1 no args")
 refused(R, ["GET", "/api/settings/é"], MAL + "contains a space, a control character or non-ASCII", "rule 1 non-ASCII")
@@ -212,6 +212,8 @@ c, o, e = R.run("GET", "/api/settings")
 check("control GET /api/settings -> 0, body on stdout", c == 0 and json.loads(o)["ok"] and "HTTP 200" in e, e)
 c, o, e = R.run("GET", "/api/settings?x=1")
 check("control GET /api/settings?x=1 -> 0", c == 0 and json.loads(o)["path"] == "/api/settings?x=1", o)
+c, o, e = R.run("GET", "/api/market/ticker?symbol=BTC/USD")
+check("r3: a query may carry '/' (?symbol=BTC/USD)", c == 0 and json.loads(o)["path"] == "/api/market/ticker?symbol=BTC/USD", e)
 c, o, e = R.run("GET", "--mode", "live", "/api/guardrails-v2?mode=live")
 check("--mode live sends x-app-mode", c == 0 and json.loads(o)["mode"] == "live", o)
 c, o, e = R.run("GET", "/API/Market/Ticker/BTC:USD")
@@ -346,8 +348,19 @@ check("r2: after a token-refused page the next login is NOT blocked", c == 5 and
 R.app.user_missing = True
 R.run("GET", "/api/settings")
 pg = jload(R.st("page.json"))
-check("r2: a later page keeps the FIRST cause and records the later one", pg.get("kind") == "token-refused"
-      and any("crew-user-missing" in x for x in pg.get("later", [])) and pg.get("sticky") is True, str(pg))
+check("r3: a later STICKY cause outranks a standing non-sticky page: it becomes the kind, the old one moves to later",
+      pg.get("kind") == "crew-user-missing" and any("token-refused" in x for x in pg.get("later", []))
+      and pg.get("sticky") is True, str(pg))
+R.close()
+R = Rig()                                           # a cached token, so a call can page under a standing page
+R.run("GET", "/api/settings")
+json.dump({"ts": "t0", "kind": "crew-password-wrong", "detail": "d", "sticky": True}, open(R.st("page.json"), "w"))
+R.app.db_ok = False
+c, o, e = R.run("GET", "/api/other")
+pg = jload(R.st("page.json"))
+check("r2: under a standing STICKY page a later non-sticky cause is appended and the first kind kept",
+      c == 5 and "token-refused" in e and pg.get("kind") == "crew-password-wrong" and pg.get("ts") == "t0"
+      and pg.get("later", [""])[-1].endswith("token-refused"), "%s %s" % (e, pg))
 R.close()
 
 # r2: a 200 login that is not usable pages instead of looping
@@ -461,6 +474,119 @@ os.unlink(os.path.join(R.tmp, "env"))
 os.unlink(R.st("token.json"))
 c, o, e = R.run("GET", "/api/settings")
 check("no env file: exit 3, says the setter has not run", c == 3 and "has not been set" in e, e)
+R.close()
+
+# ═══════════════════════════ round 3 ═══════════════════════════
+# S1: two self-healed 5xx logins more than an hour apart are NOT "the login is failing"
+R = Rig()
+R.app.login_status = 500
+R.run("GET", "/api/settings")
+rows = R.ledger()
+with open(R.st("login-ledger.jsonl"), "w") as fh:
+    for x in rows:
+        x["ts"] -= 5000                              # the first failure is ~83 minutes old
+        fh.write(json.dumps(x) + chr(10))
+os.unlink(R.st("negcache.json"))
+c, o, e = R.run("GET", "/api/settings")
+check("r3 S1: two 5xx logins over an hour apart do NOT page", c == 3 and "PAGE" not in e and len(R.app.logins()) == 2, e)
+R.close()
+
+# S1: a login answer that is none of 200/401/404/429/5xx pages at once, sticky, and is not retried
+for status in (400, 403, 302):
+    R = Rig()
+    R.app.login_status = status
+    c, o, e = R.run("GET", "/api/settings")
+    pg = jload(R.st("page.json"))
+    check("r3 S1: login %d -> PAGE login-unexpected, sticky" % status,
+          c == 5 and "login-unexpected" in e and pg.get("kind") == "login-unexpected" and pg.get("sticky") is True, e)
+    os.unlink(R.st("negcache.json")) if os.path.exists(R.st("negcache.json")) else None
+    c, o, e = R.run("GET", "/api/settings")
+    check("r3 S1: ... and no second login while it stands (%d)" % status,
+          c == 5 and "PAGE STANDING" in e and len(R.app.logins()) == 1, e)
+    R.close()
+
+# S2: a hand-written page carries no flag; its KIND alone must make it sticky
+R = Rig()
+json.dump({"ts": "2026-09-30T00:00:00Z", "kind": "crew-password-wrong", "detail": "by hand"},
+          open(R.st("page.json"), "w"))
+c, o, e = R.run("GET", "/api/settings")
+check("r3 S2: a hand-written sticky-kind page (no flag) blocks the login", c == 5 and "PAGE STANDING" in e
+      and "crew-password-wrong" in e and not R.app.logins(), e)
+open(R.st("page.json"), "w").write("{not json")
+c, o, e = R.run("GET", "/api/settings")
+check("r3: an UNREADABLE page file blocks the login (fail closed)", c == 5 and "PAGE STANDING" in e and not R.app.logins(), e)
+R.close()
+
+# minor: a negative-cache write that fails must not stop the page after it
+R = Rig()
+os.makedirs(R.st("negcache.json"))
+R.app.password = "something-else"
+c, o, e = R.run("GET", "/api/settings")
+check("r3: an unwritable negative cache still PAGES crew-password-wrong (not an internal error)",
+      c == 5 and "crew-password-wrong" in e and "internal" not in e, e)
+R.close()
+
+# minor: a non-object login body pages, never a traceback
+R = Rig()
+R.app.login_body = [1, 2]
+c, o, e = R.run("GET", "/api/settings")
+check("r3: a 200 login whose body is a JSON list PAGEs login-malformed", c == 5 and "login-malformed" in e, e)
+R.close()
+
+# minor: the probe asks ONLY whether authenticateToken passed — a settings HANDLER 500 is not a dead token
+R = Rig()
+R.run("GET", "/api/settings")
+R.app.route_401.add("/api/some/route")
+R.app.route_500.add("/api/settings")
+c, o, e = R.run("GET", "/api/some/route")
+check("r3: route 401 + the probe's handler 500 -> the token is good: exit 1, no re-mint",
+      c == 1 and len(R.app.logins()) == 1 and "FAILED" not in e, e)
+c, o, e = R.run("mint", env={"SUDO_USER": "dtmint"})
+check("r3: a settings handler 500 does not block the daily mint (the token is reused)",
+      c == 0 and json.loads(o)["reused"] is True and len(R.app.logins()) == 1, e)
+R.app.route_500.clear()
+R.app.no_role = True                                # every authenticated route now answers 403 (:222-224)
+c, o, e = R.run("GET", "/api/some/route")
+check("r3: with no role a call's own 403 is the app's answer: exit 1, no page", c == 1 and "HTTP 403" in e
+      and not os.path.exists(R.st("page.json")), e)
+c, o, e = R.run("mint", env={"SUDO_USER": "dtmint"})
+pg = jload(R.st("page.json"))
+check("r3: the mint's probe 403 (a row with no role) PAGEs token-refused, hands out nothing",
+      c == 5 and o == "" and pg.get("kind") == "token-refused" and "403" in pg.get("detail", ""), "%s %s" % (e, pg))
+R.close()
+
+# minor: a reader that goes away does not turn an answered request into exit 3
+R = Rig()
+R.run("GET", "/api/settings")
+p = subprocess.Popen([sys.executable, R.bin, "GET", "/api/settings"], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={"PATH": "/usr/bin:/bin"})
+p.stdout.close()                                    # `| head -0`: nobody will read the body
+err = p.stderr.read().decode()
+rc = p.wait(timeout=30)
+check("r3: a closed stdout keeps the app's exit code (0), not 3", rc == 0 and "HTTP 200" in err, "%s %s" % (rc, err))
+R.close()
+
+# minor: a page drops the cached token ONLY if it is still the dead one (in-process: the module)
+from importlib.machinery import SourceFileLoader  # noqa: E402
+import importlib.util  # noqa: E402
+R = Rig()
+spec = importlib.util.spec_from_loader("dtapi_mod", SourceFileLoader("dtapi_mod", R.bin))
+M = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(M)
+json.dump({"accessToken": "NEW-TOKEN", "exp": time.time() + 9e5}, open(R.st("token.json"), "w"))
+_stderr, sys.stderr = sys.stderr, open(os.devnull, "w")
+try:
+    M.page("crew-user-missing", "test", drop_token="DEAD-TOKEN")
+except SystemExit:
+    pass
+kept = os.path.exists(R.st("token.json"))
+try:
+    M.page("crew-user-missing", "test", drop_token="NEW-TOKEN")
+except SystemExit:
+    pass
+sys.stderr = _stderr
+check("r3: a page keeps a token another caller minted meanwhile, and drops the dead one",
+      kept and not os.path.exists(R.st("token.json")))
 R.close()
 
 print("dt-api suite: %d passed, %d failed" % (PASS, FAIL))

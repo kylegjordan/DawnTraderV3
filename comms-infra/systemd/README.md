@@ -23,6 +23,8 @@
 
 Then `systemctl daemon-reload`.
 
+⛔ **Five of these files are ALSO watched by the daily `dt-install-drift` check** (B-CREDENTIALS-PRIVATE-REPO, `comms-infra/staging/README.md`): `systemd/agent-staging-session.{service,timer}`, `systemd/onfailure.conf`, `systemd/agent-unit-failure@.service` and `tools/agent-unit-failure-alert`. It compares each installed file with its blob at the sha it was installed from. **After installing any of them here, append `<the full sha you installed from> <repo path>` to `/var/lib/dt-install-drift/installed.sha`** (one line per file; the last line for a path wins). Otherwise the next daily check reports your install as DRIFT against the sha the credentials batch recorded.
+
 ---
 
 ## ⛔⛔ HOST CONFIG THAT IS NOT A FILE HERE — AND IT IS THE ONE THAT BROKE

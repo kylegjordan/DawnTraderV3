@@ -6,5 +6,8 @@ Documentation=file:///usr/local/sbin/dt-install-drift
 
 [Service]
 Type=oneshot
+# r3 S5: a run that cannot even start (a broken interpreter, a missing file) must not leave the LAST
+# run's failure list for the paging unit to read. The script also rewrites it first thing.
+ExecStartPre=/bin/rm -f /run/dt-install-drift.classes
 ExecStart=/usr/local/sbin/dt-install-drift
 TimeoutStartSec=1800

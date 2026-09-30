@@ -1,6 +1,8 @@
 [Unit]
 Description=Raise a system alert (naming Infra Claude) that staging unit %i failed
 Documentation=file:///usr/local/bin/dt-unit-failure-alert
+# r3 S7: never stop retrying (see Restart= below)
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
@@ -8,3 +10,7 @@ User=deploy
 WorkingDirectory=/home/deploy/dawntrader
 ExecStart=/usr/local/bin/dt-unit-failure-alert %i
 TimeoutStartSec=120
+# r3 S7: if raising the alert fails (npm, the app dir, the alert store), retry every 10 minutes
+# until it lands; each failure is in the journal. The per-failure dedupe keys make a retry harmless.
+Restart=on-failure
+RestartSec=10min

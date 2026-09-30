@@ -54,7 +54,8 @@ def substitute(src_path, consts, out_path):
 
 
 class Rig:
-    def __init__(self, live_env=None, kill=None, verify=None, db_extra=None):
+    def __init__(self, live_env=None, kill=None, verify=None, db_extra=None, account="root"):
+        self.account = account
         self.tmp = tempfile.mkdtemp(prefix="setter-t-")
         os.makedirs(self.p("state"), mode=0o700)
         os.makedirs(self.p("etc"), mode=0o750)
@@ -77,7 +78,7 @@ class Rig:
         self.setter = substitute(src or SET_SRC, {
             "DT_API_PATH": repr(self.dt), "PSQL": repr(FAKEPSQL), "DT_API_VERIFY": repr(self.verify),
             "SETTER_DIR": repr(self.p("setter")), "SETTER_LOCK": repr(self.p("setter.lock")),
-            "DTAPI_ACCOUNT": '"root"', "EXPECT_ROOT": "True", "KILL_AFTER": repr(self.kill)},
+            "DTAPI_ACCOUNT": repr(self.account), "EXPECT_ROOT": "True", "KILL_AFTER": repr(self.kill)},
             self.p("setter-under-test"))
 
     def p(self, *a):
@@ -337,7 +338,7 @@ r.close()
 # ── 13d. a psql from an earlier run still connected: touch nothing ──
 r = Rig(db_extra={"orphans": 1})
 c, o, e = r.run()
-check("an earlier run's psql still connected -> exit 3, nothing touched", c == 3 and "still connected" in e
+check("an earlier run's psql still connected -> exit 2 (refused, nothing touched)", c == 2 and "still connected" in e
       and r.dbrow()["role"] == "owner" and r.marker() is None, e)
 r.close()
 
@@ -368,8 +369,14 @@ r.close()
 r = Rig()
 c, o, e = r.run(pgpass=False)
 check("no PGPASSFILE: exit 2", c == 2 and "set PGPASSFILE" in e, e)
-c, o, e = r.run(pgpass=r.pgpass(mode=0o644))
+pg644 = r.pgpass(mode=0o644)
+c, o, e = r.run(pgpass=pg644)
 check("PGPASSFILE 0644: exit 2", c == 2 and "mode 0600" in e, e)
+check("r3: a REFUSED PGPASSFILE is left in place and the text says so", os.path.exists(pg644) and "NOT removed" in e, e)
+c, o, e = r.run(env={"PGPASSFILE": "/./home/deploy/x"})
+check("r3: '/./home/...' is caught on the resolved path", c == 2 and "resolves under /home" in e, e)
+c, o, e = r.run(env={"PGPASSFILE": "pgpass"})
+check("r3: a relative PGPASSFILE is refused", c == 2 and "absolute path" in e, e)
 c, o, e = r.run(env={"PGPASSFILE": "/home/deploy/x"})
 check("PGPASSFILE under /home: exit 2", c == 2 and "under /home" in e, e)
 check("refusals touched nothing", r.dbrow()["role"] == "owner" and r.env_value() is None)
@@ -410,8 +417,8 @@ time.sleep(1.5)                                    # inside (2)'s psql, which ru
 pr.send_signal(_sig.SIGTERM)
 o, e = pr.communicate(timeout=120)
 row = r.dbrow()
-check("r2: SIGTERM during the commit -> acted on at the next checkpoint, restored, exit 1",
-      pr.returncode == 1 and "acted on before (3)" in o and row["role"] == "owner" and matches(V1, row["password"])
+check("r3: SIGTERM during the commit -> acted on at the next checkpoint, restored, exit 3 (the contract's interrupt)",
+      pr.returncode == 3 and "acted on before (3)" in o and row["role"] == "owner" and matches(V1, row["password"])
       and r.env_value() == V1 and clean(r), o + e)
 r.close()
 r = Rig(live_env=V1, verify=["/bin/sh", "-c", "sleep 3; exec \"$0\" \"$@\"", sys.executable, "PLACEHOLDER", "GET", "/api/settings"])
@@ -453,8 +460,117 @@ r.kill = None
 r.write_setter()
 c, o, e = r.run()
 v = r.env_value()
-check("r2: a stale early phase over a landed commit -> reconciled by login to the NEW value",
-      c == 0 and "reconciling by login" in o and v != V1 and matches(v, r.dbrow()["password"]) and clean(r), o + e)
+check("r3 S2: an early phase over a changed row is NOT reconciled: exit 4, marker kept, nothing restored, PAGE",
+      c == 4 and "someone else" in e and r.marker() is not None and v == V1 and not matches(V1, r.dbrow()["password"])
+      and os.path.exists(r.p("state", "page.json"))
+      and json.load(open(r.p("state", "page.json"))).get("kind") == "setter-row-changed", o + e)
+r.close()
+
+# ── r3 S2: the plain case — someone else changed the row while the marker said 'temp-written' ──
+r = Rig(live_env=V1, kill="1b")
+r.run()
+db = json.load(open(r.db))
+theirs = bcrypt.hashpw(b"KylesOwn_1zzz", bcrypt.gensalt(10)).decode()
+db["users"]["testuser123"]["password"] = theirs
+json.dump(db, open(r.db, "w"))
+r.kill = None
+r.write_setter()
+n_sent = len([x for x in r.ledger() if x.get("phase") == "sent"])
+c, o, e = r.run()
+pg = json.load(open(r.p("state", "page.json"))) if os.path.exists(r.p("state", "page.json")) else {}
+check("r3 S2: someone else's change during a 'temp-written' run is KEPT (not restored over), exit 4, PAGE setter-row-changed, no login",
+      c == 4 and r.dbrow()["password"] == theirs and r.marker() is not None and pg.get("kind") == "setter-row-changed"
+      and len([x for x in r.ledger() if x.get("phase") == "sent"]) == n_sent, o + e + str(pg))
+r.close()
+
+# ── r3 S1: an env naming ANOTHER user proves nothing ──
+r = Rig(live_env=V1, kill="2")
+r.run()
+with open(r.p("etc/staging-api.env"), "w") as fh:
+    fh.write("DT_API_USER=kylegjordan" + NL + "DT_API_PASS=" + V1 + NL)
+temp_before = r.env_value("etc/.staging-api.env.new")
+r.kill = None
+r.write_setter()
+c, o, e = r.run()
+check("r3 S1: reconcile with a live env naming another user -> exit 4, the temp env (the only copy of the new value) KEPT",
+      c == 4 and "names a user other than" in e and r.marker() is not None and temp_before
+      and r.env_value("etc/.staging-api.env.new") == temp_before and matches(temp_before, r.dbrow()["password"]), o + e)
+r.close()
+r = Rig()
+with open(r.p("etc/staging-api.env"), "w") as fh:
+    fh.write("DT_API_USER=kylegjordan" + NL + "DT_API_PASS=x" + NL)
+c, o, e = r.run()
+check("r3 S1: a fresh run over a live env naming another user -> exit 2, nothing touched",
+      c == 2 and "other than testuser123" in e and r.dbrow()["role"] == "owner" and r.marker() is None, e)
+r.close()
+
+# ── r3 S3: the restored env's check login gets no answer: exit 3, NO page ──
+r = Rig(live_env="NewValue_9zzzzzzzzzzz")
+os.makedirs(r.p("setter"), mode=0o700)
+row0 = r.dbrow()
+json.dump({"started": "x", "old_hash": row0["password"], "old_role": "owner", "had_env": True, "phase": "renamed"},
+          open(r.p("setter", "marker.json"), "w"))
+with open(r.p("setter", "old-env"), "w") as fh:
+    fh.write("DT_API_USER=testuser123" + NL + "DT_API_PASS=" + V1 + NL)
+r.app.login_status, r.app.login_status_skip = 500, 1     # the live login answers (401); the check login gets a 500
+c, o, e = r.run()
+check("r3 S3: a 500 on the restored env's check login -> exit 3 and NO page (not an answer about the value)",
+      c == 3 and "no usable answer" in e and not os.path.exists(r.p("state", "page.json")) and r.env_value() == V1, o + e)
+r.close()
+
+# ── r3 S5: a restored env that logs in clears a standing page ──
+r = Rig(live_env="NewValue_9zzzzzzzzzzz")
+os.makedirs(r.p("setter"), mode=0o700)
+row0 = r.dbrow()
+json.dump({"started": "x", "old_hash": row0["password"], "old_role": "owner", "had_env": True, "phase": "renamed"},
+          open(r.p("setter", "marker.json"), "w"))
+with open(r.p("setter", "old-env"), "w") as fh:
+    fh.write("DT_API_USER=testuser123" + NL + "DT_API_PASS=" + V1 + NL)
+json.dump({"ts": "t", "kind": "crew-password-wrong", "detail": "d", "sticky": True}, open(r.p("state", "page.json"), "w"))
+c, o, e = r.run()
+check("r3 S5: the restored env logs in -> exit 0 AND the standing page is cleared (dt-api is not left blocked)",
+      c == 0 and not os.path.exists(r.p("state", "page.json")) and r.env_value() == V1, o + e)
+r.close()
+
+# ── r3 S4: a (6) failure puts the page (5) cleared back up, with the failure added ──
+r = Rig(live_env=V1, verify=["/bin/false"])
+json.dump({"ts": "t", "kind": "crew-password-wrong", "detail": "d", "sticky": True}, open(r.p("state", "page.json"), "w"))
+c, o, e = r.run()
+pg = json.load(open(r.p("state", "page.json"))) if os.path.exists(r.p("state", "page.json")) else {}
+check("r3 S4: fail at (6) with a standing page -> restored, the page is BACK (first cause kept) with setter-restored added",
+      c == 1 and pg.get("kind") == "crew-password-wrong" and any("setter-restored" in x for x in pg.get("later", [])), o + e + str(pg))
+r.close()
+r = Rig(live_env=V1, verify=["/bin/false"])
+c, o, e = r.run()
+pg = json.load(open(r.p("state", "page.json"))) if os.path.exists(r.p("state", "page.json")) else {}
+check("r3 S4: fail at (6) with no page -> a DURABLE setter-restored page", c == 1 and pg.get("kind") == "setter-restored", o + e + str(pg))
+r.close()
+
+# ── r3: the env copy is checked BEFORE the database is restored ──
+r = Rig(live_env=V1)
+r.verify = ["/bin/sh", "-c", "rm -f '%s'; exit 1" % r.p("setter", "old-env")]
+r.write_setter()
+c, o, e = r.run()
+check("r3: a missing old-env copy fails the restore BEFORE the database is touched: exit 4, marker kept, row still NEW",
+      c == 4 and "missing" in e and r.marker() is not None and r.dbrow()["role"] == "editor", o + e)
+r.close()
+
+# ── r3: a 200 login dt-api would page as malformed is not "ok" for a reconcile ──
+r = Rig(live_env=V1, kill="2")
+r.run()
+r.kill = None
+r.write_setter()
+m0 = r.marker()
+r.app.login_body = [1, 2]
+c, o, e = r.run()
+check("r3: reconcile + a malformed 200 login -> exit 3, touch nothing", c == 3 and r.marker() == m0 and r.env_value() == V1, o + e)
+r.close()
+
+# ── r3: a setup error has the setter's own exit (3), not Python's 1 ──
+r = Rig(account="no-such-account-xyz")
+c, o, e = r.run()
+check("r3: a missing dtapi account -> exit 3 'could not prepare', nothing touched",
+      c == 3 and "could not prepare" in e and r.dbrow()["role"] == "owner", e)
 r.close()
 
 # ── 18. the run log survives the terminal ──

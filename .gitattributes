@@ -38,3 +38,8 @@ comms-infra/helsinki/** text eol=lf
 # Host config and host tools run on Linux: a CRLF shebang breaks #!/bin/sh (2026-09-11)
 comms-infra/systemd/** text eol=lf
 comms-infra/tools/** text eol=lf
+
+# B-CREDENTIALS-PRIVATE-REPO OBJ-1 (r3): the crew-login tools install on staging and Helsinki; most
+# have no extension, and a CRLF copy broke the fake-psql shebang in this batch's own test run.
+comms-infra/staging/** text eol=lf
+comms-infra/agent-staging-session text eol=lf

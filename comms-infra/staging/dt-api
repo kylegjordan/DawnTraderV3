@@ -73,7 +73,8 @@ WINDOW_S = 900
 DTAPI_CAP = 2                     # dt-api's own logins (calls + mints) per 900 s, whatever the reason
 NEG_S = 900                       # after a login 401 / 404 / 429 (a 429 uses its RateLimit-Reset)
 BACKOFF_500_S = 60                # after a login 5xx or no answer: back off, keep the current token
-LOGIN_FAILING_GAP_S = 600         # two failed logins this far apart, no success between -> page
+LOGIN_FAILING_GAP_S = 600         # two failed logins at least this far apart, no success between ...
+LOGIN_FAILING_WINDOW_S = 3600     # ... and at most this far apart (r3: two self-healed blips a day apart are not "failing")
 MINT_REUSE_S = 20 * 3600          # a mint younger than this is handed out again (C-10)
 MIN_EXP_LEFT_S = 6 * 86400        # ... and only if it still has 6 days left (OBJ-1(e))
 PROBE_TIMEOUT_S = 10              # /api/settings and /api/auth/verify probes: short, the lock may be held
@@ -146,7 +147,7 @@ WRITE_ALLOW = ()
 # CASE-INSENSITIVE, like Express's own mount and route matching: "/API/trading/set-mode" reaches
 # set-mode, so it must pass the grammar and be DENIED by rule 2 — not dismissed as malformed.
 PATH_RE = re.compile(r"^/api/[A-Za-z0-9/_.:-]+$", re.IGNORECASE)
-QUERY_RE = re.compile(r"^[A-Za-z0-9_.=&,:-]*$")
+QUERY_RE = re.compile(r"^[A-Za-z0-9_.=&,:/-]*$")   # r3: "/" so ?symbol=BTC/USD is expressible; a query never routes
 
 
 class Refused(Exception):
@@ -230,7 +231,7 @@ def parse(argv):
         if method != "GET":
             raise Refused(TXT_MALFORMED % "a query is allowed on GET only")
         if not QUERY_RE.match(query):
-            raise Refused(TXT_MALFORMED % "the query must match ^[A-Za-z0-9_.=&,:-]*$")
+            raise Refused(TXT_MALFORMED % "the query must match ^[A-Za-z0-9_.=&,:/-]*$")
     c = canon(path)
     # ── rule 2: the whole-route denials, for EVERY method ──
     if c in WHOLE_ROUTE_DENY:
@@ -373,10 +374,48 @@ def die(code, text):
     raise SystemExit(code)
 
 
-STICKY_KINDS = ("crew-password-wrong", "crew-user-missing", "login-failing", "login-malformed")
+STICKY_KINDS = ("crew-password-wrong", "crew-user-missing", "login-failing", "login-malformed",
+                "login-unexpected")
 
 
-def page(kind, detail, drop_token=False):
+def page_sticky(pg):
+    """r3: stickiness is read from the FLAG *and* from the KIND — a page written by hand has no
+    flag. A page file that exists but cannot be read is treated as sticky (fail closed)."""
+    if not isinstance(pg, dict):
+        return True
+    return bool(pg.get("sticky")) or pg.get("kind") in STICKY_KINDS
+
+
+def page_standing():
+    """The standing page record, or None. A page file that cannot be read comes back as a
+    sticky placeholder, never as None."""
+    if not os.path.lexists(PAGE_FILE):
+        return None
+    pg = _read_json(PAGE_FILE)
+    return pg if isinstance(pg, dict) else {"kind": "unreadable-page", "sticky": True}
+
+
+def page_merge(old, kind, detail, sticky):
+    """The ONE rule for adding a cause to a page — dt-api's pages and the setter's durable pages
+    both go through it (r3: the setter used to overwrite the first cause)."""
+    now = _iso(_now())
+    if old is None:
+        return {"ts": now, "kind": kind, "detail": detail, "sticky": sticky}
+    later = old.get("later")
+    later = list(later)[-20:] if isinstance(later, list) else []
+    if sticky and not page_sticky(old):
+        # r3: a STICKY cause OUTRANKS a standing non-sticky one. The kind is what the drift class
+        # and the refusal text read, so the worse cause becomes the kind and the old cause moves
+        # to `later` — otherwise a wrong password hides behind a token-refused.
+        later.append("%s %s" % (old.get("ts", "?"), old.get("kind", "?")))
+        return {"ts": now, "kind": kind, "detail": detail, "sticky": True, "later": later}
+    # r2: otherwise the FIRST cause stays the kind; later ones are appended, and stickiness only
+    # ever grows
+    later.append("%s %s" % (now, kind))
+    return dict(old, later=later, sticky=page_sticky(old) or sticky)
+
+
+def page(kind, detail, drop_token=None):
     """C6 / GB-7 — WHO THE PAGE REACHES: (1) the caller, now, on stderr, naming Infra Claude;
     (2) every session and Langston through a system alert, raised by the staging DAILY
     `dt-install-drift` run (05:15Z) while page.json exists (one alert per page class);
@@ -388,22 +427,19 @@ def page(kind, detail, drop_token=False):
     makes NO login (a timer re-trying a known-bad password spent the bucket and kept the setter's
     quiet-900-s precondition from ever holding). A token-refused page (a DB or lookup failure,
     which may heal) is recorded and alerted but NOT sticky (r2). Calls on a good cached token go on.
-    The page is cleared by a person (after the cause is fixed) or by the setter when it succeeds."""
+    The page is cleared by a person (after the cause is fixed) or by the setter when it succeeds.
+    drop_token: the DEAD token's text — the cache is removed only if it still holds that token
+    (r3: never a token another caller minted meanwhile). Callers hold the Lock."""
     if drop_token:
-        try:
-            os.unlink(TOKEN_FILE)          # a token the app will never accept again is not a cache
-        except FileNotFoundError:
-            pass
+        cur = _read_json(TOKEN_FILE)
+        if isinstance(cur, dict) and cur.get("accessToken") == drop_token:
+            try:
+                os.unlink(TOKEN_FILE)      # a token the app will never accept again is not a cache
+            except FileNotFoundError:
+                pass
     sticky = kind in STICKY_KINDS
     try:
-        old = _read_json(PAGE_FILE)
-        if isinstance(old, dict):
-            # r2: keep the FIRST cause; later ones are appended, and stickiness only ever grows
-            later = (old.get("later") or [])[-20:] + ["%s %s" % (_iso(_now()), kind)]
-            rec = dict(old, later=later, sticky=bool(old.get("sticky")) or sticky)
-        else:
-            rec = {"ts": _iso(_now()), "kind": kind, "detail": detail, "sticky": sticky}
-        _write_json(PAGE_FILE, rec)
+        _write_json(PAGE_FILE, page_merge(page_standing(), kind, detail, sticky))
     except OSError:
         pass
     die(5, "PAGE (dt-api, %s): %s\nInfra Claude owns this. Nothing was re-minted.%s The daily "
@@ -448,6 +484,12 @@ def _json(b):
         return None
 
 
+def _obj(b):
+    """The body as a JSON OBJECT, or {} — r3: a list or a scalar must not raise on .get()."""
+    j = _json(b)
+    return j if isinstance(j, dict) else {}
+
+
 def jwt_claims(tok):
     """Unverified read of exp/iat — for scheduling only; the server is the verifier."""
     try:
@@ -483,11 +525,11 @@ def read_env():
 def login(who):
     """A fresh login on the loopback bucket. Caller holds the Lock. Returns the token record."""
     t = _now()
-    pg = _read_json(PAGE_FILE)
-    if (isinstance(pg, dict) and pg.get("sticky")) or (os.path.exists(PAGE_FILE) and not isinstance(pg, dict)):
+    pg = page_standing()
+    if pg is not None and page_sticky(pg):
         die(5, "PAGE STANDING (dt-api, %s since %s): dt-api makes no login until it is handled. "
                "Infra Claude owns it; root removes %s once the cause is fixed. Nothing was sent."
-               % ((pg or {}).get("kind", "?"), (pg or {}).get("ts", "?"), PAGE_FILE))
+               % (pg.get("kind", "?"), pg.get("ts", "?"), PAGE_FILE))
     neg = _read_json(NEG_FILE)
     if neg and neg.get("until", 0) > t:
         die(3, "REFUSED: dt-api will not log in again until %s — the last login got %s (%s). "
@@ -516,15 +558,17 @@ def login(who):
     _append(LEDGER, json.dumps({"ts": _now(), "who": who, "phase": "result", "status": st,
                                 "remaining": rem, "reset": rst, "bucket": "loopback"}))
     if st == 200:
-        j = _json(b) or {}
+        j = _obj(b)
         tok = j.get("accessToken")
+        if not isinstance(tok, str):
+            tok = None
         cl = jwt_claims(tok) if tok else {}
         if not tok or not isinstance(cl.get("exp"), (int, float)):
             page("login-malformed", "the login answered 200 without %s — every call would log in "
                  "again" % ("an accessToken" if not tok else "a readable token expiry"))
         rec = {"accessToken": tok, "refreshToken": j.get("refreshToken", ""),
                "issued_at": t, "exp": cl.get("exp"), "who": who,
-               "role": (j.get("user") or {}).get("role")}
+               "role": j["user"].get("role") if isinstance(j.get("user"), dict) else None}
         _write_json(TOKEN_FILE, rec)
         try:
             os.unlink(NEG_FILE)
@@ -533,8 +577,7 @@ def login(who):
         if rem == "0":
             # C4: the headers are authoritative — the next login would meet a 429, so do not send it
             wait = int(rst) if rst and rst.isdigit() else WINDOW_S
-            _write_json(NEG_FILE, {"until": t + wait, "status": 200,
-                                   "reason": "RateLimit-Remaining 0: the loopback bucket is empty"})
+            _neg(t + wait, 200, "RateLimit-Remaining 0: the loopback bucket is empty")
             sys.stderr.write("dt-api: note — the loopback login bucket is now empty for %d s "
                              "(RateLimit-Remaining 0); no login until then\n" % wait)
         return rec
@@ -544,7 +587,7 @@ def login(who):
             until = t + int(rst)
         reason = {401: "wrong password for the crew user", 404: "the crew user does not exist",
                   429: "the loopback login bucket is exhausted"}[st]
-        _write_json(NEG_FILE, {"until": until, "status": st, "reason": reason})
+        _neg(until, st, reason)
         # A 401 or 404 will not fix itself: someone changed the crew password or removed the row,
         # and only a person re-running the setter (or restoring the row) fixes it. A 429 does.
         if st == 404:
@@ -555,16 +598,32 @@ def login(who):
                  "matches; re-run the setter (dt-api-set-crew-password)")
         die(3, "FAILED: login answered %d (%s). dt-api will not try again until %s. Nothing was "
                "sent." % (st, reason, _iso(until)))
-    _write_json(NEG_FILE, {"until": t + BACKOFF_500_S, "status": st,
-                           "reason": "the app did not answer the login cleanly"})
+    if st is not None and st < 500:
+        # r3: every OTHER answer (400, 403, a 3xx, another 4xx) is neither a password, a user, a
+        # rate nor an availability answer — the login request or the app's login route has
+        # changed, and no retry fixes that. It used to fall into the 5xx branch and be retried.
+        page("login-unexpected", "login answered %d — not a password (401), user (404), rate (429) "
+             "or availability (5xx) answer; the login request or the app's login route has changed" % st)
+    _neg(t + BACKOFF_500_S, st, "the app did not answer the login cleanly")
     # r2: a restart makes two failures a minute apart; only two failures at least 10 minutes apart
-    #     with NO successful loopback login between them (anyone's) is "the login is failing"
-    if prev is not None and (prev.get("status") is None or prev.get("status", 0) >= 500) \
-            and t - prev.get("ts", t) >= LOGIN_FAILING_GAP_S:
+    #     with NO successful loopback login between them (anyone's) is "the login is failing".
+    # r3: ... and at most LOGIN_FAILING_WINDOW_S apart: two self-healed blips a day apart are not.
+    ps, pts = (prev or {}).get("status"), (prev or {}).get("ts")
+    if prev is not None and (ps is None or (isinstance(ps, int) and ps >= 500)) \
+            and isinstance(pts, (int, float)) and LOGIN_FAILING_GAP_S <= t - pts <= LOGIN_FAILING_WINDOW_S:
         page("login-failing", "loopback logins got %s and then, %d min later, %s — the app's login is "
-             "failing (a 5xx or no answer), not the password" % (prev.get("status"), (t - prev["ts"]) // 60, st))
+             "failing (a 5xx or no answer), not the password" % (ps, (t - pts) // 60, st))
     die(3, "FAILED: login got %s — backing off %d s and keeping any current token. Nothing was "
            "sent." % (st if st is not None else b.decode("utf-8", "replace"), BACKOFF_500_S))
+
+
+def _neg(until, status, reason):
+    """The negative cache. r3: a failure to WRITE it must never stop the page that follows it
+    (an OSError here used to escape as an internal error, before the 401/404 page)."""
+    try:
+        _write_json(NEG_FILE, {"until": until, "status": status, "reason": reason})
+    except OSError as e:
+        sys.stderr.write("dt-api: WARNING — could not write the negative cache (%s)\n" % e.strerror)
 
 
 def cached_token():
@@ -584,16 +643,29 @@ def get_token():
 
 # ───────────────────────────── the 401 path (C6: three cases) ─────────────────────────────
 
+def auth_passed(status):
+    """r3: the probe asks ONE question — did authenticateToken (routes.ts:180-240) let the token
+    through? It answers only 401 (no/bad/expired token, no DB row, ANY exception) or 403 (a row
+    with no role); every other answer means it called next(), so a handler 5xx is the HANDLER's
+    health, not the token's. (/api/settings used to be read as "200 or unknown", so a settings
+    handler failure blocked the daily mint.)"""
+    return status is not None and status not in (401, 403)
+
+
 def classify_401(token):
     """The caller's route answered 401. Returns "route" (the token is fine, the route itself said
-    401), "dead" (re-mint), or pages. Order: probe /api/settings, then /api/auth/verify."""
+    401), "dead" (re-mint), or pages. Order: probe /api/settings, then /api/auth/verify.
+    The caller holds the Lock (r3: a page may drop the cached token)."""
     st, _, b = app_request("GET", "/api/settings", token=token, timeout=PROBE_TIMEOUT_S)
-    if st == 200:
+    if auth_passed(st):
         return "route"
-    if st != 401:
-        die(3, "FAILED: the route answered 401 and the probe GET /api/settings answered %s — dt-api "
-               "cannot tell whether the token is good. Nothing was re-minted." % st)
-    probe_err = (_json(b) or {}).get("error")
+    if st is None:
+        die(3, "FAILED: the route answered 401 and the probe GET /api/settings got no answer — "
+               "dt-api cannot tell whether the token is good. Nothing was re-minted.")
+    if st == 403:
+        page("token-refused", "the token is accepted but GET /api/settings answered 403 — the crew "
+             "row has no role (routes.ts: 'User account improperly configured')")
+    probe_err = _obj(b).get("error")
     vs, _, vb = app_request("GET", "/api/auth/verify", token=token, timeout=PROBE_TIMEOUT_S)
     if vs == 401:
         return "dead"                                 # signature or expiry: a login fixes it
@@ -603,7 +675,7 @@ def classify_401(token):
     # The signature is good, so a login cannot help (routes.ts:216-240: the DB lookup runs after it).
     if probe_err == "User account not found":        # routes.ts:219
         page("crew-user-missing", "the token is signature-valid but the API says 'User account "
-             "not found' — the crew row has been deleted or replaced", drop_token=True)
+             "not found' — the crew row has been deleted or replaced", drop_token=token)
     if probe_err == "Invalid or expired token":      # routes.ts:240 — ANY exception, a DB error included
         page("token-refused", "the token is signature-valid but GET /api/settings refuses it — "
              "the app's user lookup or its database is failing")
@@ -612,6 +684,19 @@ def classify_401(token):
 
 
 # ───────────────────────────── the verbs ─────────────────────────────
+
+def _emit(b):
+    """The app's body to stdout. r3: a reader that went away (`| head`) does not change what the app
+    answered, so it must not turn the exit code into 3 — stdout is pointed at /dev/null instead."""
+    try:
+        sys.stdout.buffer.write(b)
+        sys.stdout.buffer.flush()
+    except BrokenPipeError:
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except OSError:
+            pass
+
 
 def do_call(req):
     body = None
@@ -627,9 +712,9 @@ def do_call(req):
     if st == 401:
         first = b
         try:
-            verdict = classify_401(rec["accessToken"])
-            if verdict == "dead":
-                with Lock():
+            with Lock():                               # r3: the probes AND any token drop under the lock
+                verdict = classify_401(rec["accessToken"])
+                if verdict == "dead":
                     cur = cached_token()
                     if cur and cur["accessToken"] != rec["accessToken"]:
                         rec = cur                      # someone re-minted while we checked
@@ -638,8 +723,7 @@ def do_call(req):
         except SystemExit as e:
             # the request itself WAS sent once and answered 401: hand back its body, say so, and
             # exit 1 (the contract's "the app answered non-2xx") — a PAGE keeps its 5 (r2)
-            sys.stdout.buffer.write(first)
-            sys.stdout.buffer.flush()
+            _emit(first)
             sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered HTTP 401 "
                              "(body on stdout); the line above is about the check or the re-mint "
                              "after it, and no retry was sent.\n")
@@ -650,8 +734,7 @@ def do_call(req):
     if st is None:
         die(3, "FAILED: the app did not answer (%s). For a write, check whether it took effect "
                "before retrying." % b.decode("utf-8", "replace"))
-    sys.stdout.buffer.write(b)
-    sys.stdout.buffer.flush()
+    _emit(b)
     sys.stderr.write("dt-api: HTTP %d %s %s\n" % (st, req["method"], req["path"]))
     return 0 if 200 <= st < 300 else 1
 
@@ -672,14 +755,13 @@ def do_mint():
             #    row passes it. GET /api/settings runs authenticateToken's user lookup (fresh-reader r1).
             vs, _, _ = app_request("GET", "/api/settings", token=rec["accessToken"],
                                    timeout=PROBE_TIMEOUT_S)
-            if vs == 200:
+            if auth_passed(vs):
                 reused = True
-            elif vs == 401:
-                if classify_401(rec["accessToken"]) == "route":
-                    reused = True              # the probe recovered between the two reads
-            else:
-                die(3, "FAILED: GET /api/settings answered %s; not handing out a token it could not "
-                       "check." % vs)
+            elif vs is None:
+                die(3, "FAILED: GET /api/settings got no answer; not handing out a token it could not "
+                       "check.")
+            elif classify_401(rec["accessToken"]) == "route":
+                reused = True                  # the probe recovered between the two reads
         if not reused:
             rec = login("mint")
     exp = rec.get("exp")

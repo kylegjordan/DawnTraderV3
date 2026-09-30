@@ -126,7 +126,8 @@ def systemd(**over):
                     "agent-staging-session.timer": {"fragment": SS + "agent-staging-session.timer"},
                     "dt-install-drift.service": {"fragment": SS + "dt-install-drift.service", "dropins": [SS + "dt-install-drift.service.d/onfailure.conf"]},
                     "dt-install-drift.timer": {"fragment": SS + "dt-install-drift.timer"},
-                    "agent-unit-failure@probe.service": {"fragment": SS + "agent-unit-failure@.service"}},
+                    "agent-unit-failure@agent-staging-session.service": {"fragment": SS + "agent-unit-failure@.service"},
+                    "agent-unit-failure@dt-install-drift.service": {"fragment": SS + "agent-unit-failure@.service"}},
           "timers": {"agent-staging-session.timer": {"is-enabled": "enabled", "is-active": "active"},
                      "dt-install-drift.timer": {"is-enabled": "enabled", "is-active": "active"}}}
     for k, v in over.items():
@@ -148,9 +149,19 @@ def install_all():
     os.chmod(d2, 0o644)
 
 
-def run():
-    r = subprocess.run([sys.executable, tested], capture_output=True, text=True, timeout=180)
+def run(timeout=180):
+    try:
+        r = subprocess.run([sys.executable, tested], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "TIMEOUT: dt-install-drift did not finish in %d s" % timeout
     return r.returncode, r.stdout + r.stderr
+
+
+def classes():
+    try:
+        return [tuple(ln.split(" ", 1)) for ln in open(T + "/run/dt-install-drift.classes").read().splitlines() if ln]
+    except FileNotFoundError:
+        return None
 
 
 stamp(); installed(C1); systemd(); install_all()
@@ -164,8 +175,40 @@ p = T + "/usr/local/bin/agent-staging-session"
 open(p, "a").write("# hand edit" + NL)
 c, o = run()
 check("CONTROL: an edited copy -> DRIFT, exit 1", c == 1 and "DRIFT    %s" % p in o and "FAIL (1 problem)" in o, o)
-check("... and the class DRIFT reaches the classes file", "DRIFT" in open(T + "/run/dt-install-drift.classes").read())
+check("... and the class DRIFT reaches the classes file", ("DRIFT", p) in (classes() or []), str(classes()))
+p2 = T + "/usr/local/bin/agent-unit-failure-alert"
+open(p2, "a").write("# hand edit" + NL)
+c, o = run()
+check("r3 S2: two DRIFT files are two (class, subject) lines — one alert each",
+      ("DRIFT", p) in classes() and ("DRIFT", p2) in classes() and len(classes()) == 2, str(classes()))
 install_all()
+
+# r3 S6: a file installed by ANOTHER flow at a later sha records its own sha, and is not drift
+open(os.path.join(work, "comms-infra/tools/agent-unit-failure-alert"), "a").write("# the other flow's change" + NL)
+sh("git", "-C", work, "add", "-A")
+sh("git", "-C", work, *GIT_ID, "commit", "-qm", "other-flow")
+CO = sh("git", "-C", work, "rev-parse", "HEAD")
+sh("git", "-C", bare, "fetch", "-q", work, "HEAD:refs/heads/migration/aws-supabase")
+shutil.copyfile(os.path.join(work, "comms-infra/tools/agent-unit-failure-alert"), p2)
+os.chmod(p2, 0o755)
+c, o = run()
+check("r3 S6 CONTROL: the other flow's install with NO per-file line -> DRIFT against the default sha", c == 1 and "DRIFT    %s" % p2 in o, o)
+open(T + "/var/lib/dt-install-drift/installed.sha", "w").write(C1 + NL + CO + " comms-infra/tools/agent-unit-failure-alert" + NL)
+c, o = run()
+check("r3 S6: with its per-file line (<sha> <repo path>) -> OK at its own sha, PASS", c == 0 and "OK       %s = comms-infra/tools/agent-unit-failure-alert at %s" % (p2, CO[:12]) in o, o)
+open(T + "/var/lib/dt-install-drift/installed.sha", "w").write(C1 + NL + CO + " comms-infra/not-in-the-manifest" + NL)
+c, o = run()
+check("r3 S6: a per-file line for a path this box does not install -> INSTALL", c == 1 and "the installed sha file is not" in o, o)
+installed(C1)
+sh("git", "-C", bare, "update-ref", "refs/heads/migration/aws-supabase", C1)
+sh("git", "-C", work, "reset", "-q", "--hard", C1)   # the later cases build on C1
+install_all()
+
+# r3 S4: a stamp with NO content (a failed fetch truncates FETCH_HEAD and refreshes its mtime) is not fresh
+open(os.path.join(bare, "DT_SYNC_PASS"), "w").write("")
+c, o = run()
+check("r3 S4: an EMPTY stamp with a fresh mtime -> SOURCE, not fresh", c == 1 and "no freshness stamp has content" in o, o)
+stamp()
 
 os.chmod(p, 0o755)
 c, o = run()
@@ -231,6 +274,7 @@ installed(C1)
 stamp(age=5 * 3600)
 c, o = run()
 check("a stale source -> SOURCE, and the installed comparison still runs clean", c == 1 and "SOURCE   the committed source" in o
+      and ("SOURCE", "stamp") in classes()
       and "DRIFT" not in o and o.count(NL + "OK") >= 9, o)
 stamp()
 
@@ -247,9 +291,11 @@ check("a timer not enabled/active -> UNIT", c == 1 and "dt-install-drift.timer i
 systemd(units={"dt-install-drift.timer": {"fragment": SS + "dt-install-drift.timer", "dropins": [SS + "dt-install-drift.timer.d/yearly.conf"]}})
 c, o = run()
 check("r2: a drop-in on the TIMER -> UNIT", c == 1 and "dt-install-drift.timer drop-ins are" in o, o)
-systemd(units={"agent-unit-failure@probe.service": {"fragment": SS + "agent-unit-failure@.service", "dropins": [SS + "agent-unit-failure@.service.d/x.conf"]}})
+systemd(units={"agent-unit-failure@dt-install-drift.service": {"fragment": SS + "agent-unit-failure@.service",
+               "dropins": [SS + "agent-unit-failure@dt-install-drift.service.d/x.conf"]}})
 c, o = run()
-check("r2: a drop-in on the PAGING TEMPLATE -> UNIT", c == 1 and "agent-unit-failure@probe.service drop-ins are" in o, o)
+check("r3 S3: a drop-in on the REAL paging instance (not a probe name) -> UNIT", c == 1
+      and "agent-unit-failure@dt-install-drift.service drop-ins are" in o, o)
 systemd(units={"dt-install-drift.service": {"fragment": "/etc/systemd/system.control/dt-install-drift.service",
                                             "dropins": [SS + "dt-install-drift.service.d/onfailure.conf"]}})
 c, o = run()
@@ -273,6 +319,16 @@ c, o = run()
 check("root's known_hosts without staging -> STATE", c == 1 and "no entry for staging" in o, o)
 os.replace(kh + ".x", kh)
 
+# r3 S8: a file the branch head no longer has is SOURCE ("cannot compare"), never a silent skip or PENDING
+os.rename(os.path.join(work, "comms-infra/tools/agent-unit-failure-alert"), os.path.join(T, "aufa.x"))
+sh("git", "-C", work, "add", "-A")
+sh("git", "-C", work, *GIT_ID, "commit", "-qm", "gone")
+sh("git", "-C", bare, "fetch", "-q", work, "HEAD:refs/heads/migration/aws-supabase")
+c, o = run()
+check("r3 S8: a git read that fails in the PENDING check -> SOURCE naming the file, no PENDING line",
+      c == 1 and "cannot compare comms-infra/tools/agent-unit-failure-alert" in o and "PENDING  comms-infra/tools" not in o, o)
+sh("git", "-C", bare, "update-ref", "refs/heads/migration/aws-supabase", C1)
+
 write_copy("some-other-box")
 c, o = run()
 check("an unknown host is a FAIL, never a silent pass", c == 1 and "has no manifest" in o, o)
@@ -285,12 +341,19 @@ os.makedirs(T + "/var/lib/dt-api-setter", exist_ok=True)
 mk = T + "/var/lib/dt-api-setter/marker.json"
 open(mk, "w").write("{}")
 open(T + "/etc/shadow", "w").write("dtmint:!:1::::::" + NL + "dtapi:!$6$abc:1::::::" + NL)
-open(T + "/etc/sudoers", "w").write("root ALL=(ALL) ALL" + NL + "dtmint ALL=(ALL) NOPASSWD: ALL" + NL)
+open(T + "/etc/sudoers", "w").write("root ALL=(ALL) ALL" + NL + "dtmint ALL=(ALL) NOPASSWD: ALL" + NL +
+                                    "@include /etc/sudoers.extra" + NL + "@includedir /etc/sudoers.d" + NL)
+open(T + "/etc/sudoers.extra", "w").write("# pulled in by @include" + NL + "dtapi ALL=(root) ALL" + NL)
 os.makedirs(T + "/etc/sudoers.d", exist_ok=True)
+open(T + "/etc/sudoers.d/zz-everyone", "w").write("ALL ALL=(ALL) NOPASSWD: /bin/true" + NL)
+open(T + "/etc/sudoers.d/dtapi", "w").write("deploy ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api GET *" + NL)
 c, o = run()
 check("r2: dtmint locked with '!' is flagged (the mint needs '*')", "dtmint's password field is" in o, o)
 check("r2: dtapi '!$6$...' (locked with a hash) is NOT flagged", "dtapi has a usable password hash" not in o, o)
 check("r2: a grant in the MAIN sudoers file is flagged", "%s/etc/sudoers also mentions" % T in o, o)
+check("r3: a file pulled in by @include is followed and flagged", "%s/etc/sudoers.extra also mentions" % T in o, o)
+check("r3: a rule for ALL users (in an @includedir file) is flagged", "zz-everyone has a rule for ALL users" in o, o)
+check("r3: /etc/sudoers.d/dtapi itself is NOT flagged for naming dtapi", "sudoers.d/dtapi also mentions" not in o, o)
 check("a YOUNG setter marker (a run in progress) is not flagged", "interrupted setter run" not in o, o)
 os.utime(mk, (time.time() - 3 * 3600, time.time() - 3 * 3600))
 c, o = run()
@@ -298,8 +361,18 @@ check("staging: a dt-api page and an OLD setter marker are each a STATE failure"
       and "raised a PAGE at t: token-refused" in o and "interrupted setter run" in o, o)
 check("an unreadable source still runs the page and marker checks, and says so", "cannot read" in o
       and "raised a PAGE" in o, o)
-cl = open(T + "/run/dt-install-drift.classes").read()
-check("the page's own class reaches the classes file (a new class = a new alert)", "PAGE-token-refused" in cl and "MARKER" in cl, cl)
+cl = classes()
+check("the page's own class reaches the classes file (a new class = a new alert)",
+      ("PAGE-token-refused", "page") in cl and ("MARKER", "marker") in cl, str(cl))
+open(T + "/etc/shadow", "w").write("dtmint:*:1::::::" + NL + "dtapi::1::::::" + NL)
+c, o = run()
+check("r3: an EMPTY dtapi password field (a usable empty password) is flagged", "dtapi's password field is EMPTY" in o, o)
+os.unlink(T + "/var/lib/dt-api/page.json")
+os.mkfifo(T + "/var/lib/dt-api/page.json")
+c, o = run(timeout=60)
+check("r3: a FIFO planted at page.json does not hang the run, and still FAILS as a page",
+      c == 1 and "raised a PAGE" in o and "unreadable" in o, o[-300:])
+os.unlink(T + "/var/lib/dt-api/page.json")
 
 print("drift suite: %d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

@@ -6,37 +6,51 @@
 # WHO IT REACHES (C6 / GB-7): the alert queue every CC session reads on every turn, and — at the
 # dispatcher's next 15-minute tick — the Discord alerts webhook, which always engages Langston.
 #
-# ONE ALERT PER FAILURE CLASS (fresh-reader r1 + r2): any non-resolved alert with the same dedupe
-# key blocks a new one, so one key per unit would let an acked-but-open DRIFT alert swallow a later
-# dt-api PAGE. dt-install-drift writes its classes (e.g. "DRIFT,PAGE-token-refused") to
-# CLASSES_FILE; each class gets its own key, so a NEW class always raises a new alert, and a class
-# that clears does not re-raise the others.
+# ONE ALERT PER (CLASS, SUBJECT) — fresh-reader r1, r2 and r3: any non-resolved alert with the same
+# dedupe key blocks a new one. One key per unit let an acked-but-open DRIFT alert swallow a later
+# dt-api PAGE (r1); one key per CLASS still let a standing DRIFT alert on one file swallow a new
+# DRIFT on another (r3 S2). dt-install-drift writes one "<class> <subject>" line per failure to
+# CLASSES_FILE; each line gets its own key (the subject hashed), so a new failure always raises.
 # ⚠️ The unit arrives as systemd's %N — the name WITHOUT ".service" (r2 caught the first build
 #    comparing against "dt-install-drift.service", which never matched).
+# ⚠️ If THIS script fails (npm, the app dir or the alert store broken) the unit retries every 10
+#    minutes (Restart=on-failure) and every failure is in the journal; there is no second channel
+#    on staging — stated, not solved (r3 S7).
 set -eu
 APP_DIR=/home/deploy/dawntrader
 NPM=/usr/bin/npm
 CLASSES_FILE=/run/dt-install-drift.classes
+NL='
+'
 unit="${1:-}"
 case "$unit" in
   ''|*[!A-Za-z0-9@._:-]*) echo "dt-unit-failure-alert: refusing an empty or unsafe unit name" >&2; exit 2 ;;
 esac
-classes=""
+lines=""
 case "$unit" in
   dt-install-drift|dt-install-drift.service)
-    [ -r "$CLASSES_FILE" ] && classes=$(head -c 400 "$CLASSES_FILE" | tr -cd 'A-Za-z0-9,_-') ;;
+    # /run is root-owned and the file is written by root; at most 40 failures, sanitised per line
+    if [ -f "$CLASSES_FILE" ] && [ -r "$CLASSES_FILE" ]; then
+      lines=$(head -n 40 "$CLASSES_FILE" | tr -cd "A-Za-z0-9 ,_./@:${NL}-")
+    fi ;;
 esac
-[ -n "$classes" ] || classes="UNIT-FAILED"
+[ -n "$(printf '%s' "$lines" | tr -d " ${NL}")" ] || lines="UNIT-FAILED -"
+all=$(printf '%s%s' "$lines" "$NL" | awk 'NF {print $1}' | sort -u | tr "$NL" ',' | sed 's/,$//')
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 cd "$APP_DIR"
 rc=0
-for cls in $(printf '%s' "$classes" | tr ',' ' '); do
+while read -r cls subj; do
+  [ -n "$cls" ] || continue
+  subj=${subj:--}
+  key=$(printf '%s' "$subj" | sha1sum | cut -c1-12)
   "$NPM" run -s system-alerts -- add \
     --triggers-at "$now" --category breakage --severity warning \
-    --title "Infra Claude — staging unit $unit failed: $cls" \
-    --body "Infra Claude — the staging unit $unit failed at $now (class $cls; all classes this run: $classes). As root on staging: journalctl -u $unit -n 80. For dt-install-drift every non-OK line names a file that differs from what was installed, a unit not in force, a dt-api PAGE (/var/lib/dt-api/page.json: fix the cause, then remove it), or a stale source." \
-    --dedupe-key "dt-unit-failure:$unit:$cls" \
-    --metadata "{\"unit\":\"$unit\",\"class\":\"$cls\",\"classes\":\"$classes\",\"owner\":\"CC-INFRA\",\"batch\":\"B-CREDENTIALS-PRIVATE-REPO\"}" \
+    --title "Infra Claude — staging unit $unit failed: $cls $subj" \
+    --body "Infra Claude — the staging unit $unit failed at $now (class $cls, on $subj; all classes this run: $all). As root on staging: journalctl -u $unit -n 80. For dt-install-drift every non-OK line names a file that differs from what was installed, a unit not in force, a dt-api PAGE (/var/lib/dt-api/page.json: fix the cause, then remove it), or a stale source." \
+    --dedupe-key "dt-unit-failure:$unit:$cls:$key" \
+    --metadata "{\"unit\":\"$unit\",\"class\":\"$cls\",\"subject\":\"$subj\",\"classes\":\"$all\",\"owner\":\"CC-INFRA\",\"batch\":\"B-CREDENTIALS-PRIVATE-REPO\"}" \
     || rc=1
-done
+done <<EOF_LINES
+$lines
+EOF_LINES
 exit $rc

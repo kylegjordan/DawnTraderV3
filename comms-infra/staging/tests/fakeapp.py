@@ -32,9 +32,13 @@ class App:
         self.login_status = None          # force a status (e.g. 500) instead of normal handling
         self.force_role = None            # report this role on a login, whatever the row says
         self.login_status_times = None    # with login_status: force it only this many times
+        self.login_status_skip = 0        # r3: with login_status: answer this many logins normally first
         self.db_ok = True
         self.user_missing = False
         self.route_401 = set()
+        self.route_500 = set()            # r3: a route whose HANDLER fails after authenticateToken passed
+        self.no_role = False              # r3: the row has no role -> authenticateToken answers 403 (:222-224)
+        self.login_body = None            # r3: replace a 200 login body (e.g. a JSON list)
         self.tokens = {}                  # token -> {"exp":, "revoked":}
         self.requests = []
         self.buckets = {}                 # key -> {"hits":, "reset":}
@@ -104,6 +108,8 @@ def make_handler(app):
                 return 401, {"error": "User account not found"}
             if not app.db_ok:
                 return 401, {"error": "Invalid or expired token"}
+            if app.no_role:
+                return 403, {"error": "User account improperly configured - no role assigned"}
             return 200, None
 
         def _record(self, method):
@@ -128,7 +134,9 @@ def make_handler(app):
                            "RateLimit-Reset": str(max(0, int(b["reset"] - now + 0.999)))}
                     if b["hits"] > app.limit:
                         return self._send(429, {"error": "Too many login attempts, please try again later."}, hdr)
-                    if app.login_status and app.login_status_times != 0:
+                    if app.login_status and app.login_status_skip > 0:
+                        app.login_status_skip -= 1
+                    elif app.login_status and app.login_status_times != 0:
                         if app.login_status_times:
                             app.login_status_times -= 1
                         return self._send(app.login_status, {"error": "Login failed"}, hdr)
@@ -143,6 +151,8 @@ def make_handler(app):
                         return self._send(401, {"error": "Invalid credentials"}, hdr)
                     role = app.force_role or role
                     tok = app.issue(role)
+                    if app.login_body is not None:
+                        return self._send(200, app.login_body, hdr)
                     return self._send(200, {"accessToken": tok, "refreshToken": "r" + tok[-6:],
                                             "token": tok, "user": {"username": app.user,
                                                                    "role": role}}, hdr)
@@ -169,6 +179,8 @@ def make_handler(app):
                 return self._send(st, err)
             if self.path.split("?")[0] in app.route_401:
                 return self._send(401, {"error": "this route refuses"})
+            if self.path.split("?")[0] in app.route_500:
+                return self._send(500, {"error": "Failed to fetch settings"})
             return self._send(200, {"ok": True, "path": self.path,
                                     "mode": self.headers.get("x-app-mode")})
 
