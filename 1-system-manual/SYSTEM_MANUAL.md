@@ -4555,13 +4555,14 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 > ### ⛔⛔ WHAT THIS DOES NOT GUARANTEE
 >
 > The VPG guarantees prices are on the venue grid **as the signal orchestrator emits them.** It does
-> **not** guarantee that every price reaching execution is on the grid. **Three routes reach a trade
-> without passing through the seam**, and one live component deliberately does not call it:
+> **not** guarantee that every price reaching execution is on the grid. **Routes reach a trade
+> without passing through the seam** (three when written; since 2026-09-30, `#927` plus the two survivors under `#928`),
+> and one live component deliberately does not call it:
 >
 > | | the path | home |
 > |---|---|---|
 > | `#928` | ~~the HTTP intent path (price triple straight from the request body)~~ — **deleted 2026-09-30** with the AI chat's action path (B-SIZING-DEC-RESTORE 2e). `#929` (the fallback-sizing arm) deleted too. **Survives:** `POST /api/paper/trade/test` (quantity from the request body, no sizer, no guardrail check), and `#953` in the same batch | `B-INTENT-ENTRY-PARITY` (scope shrank to the survivors) |
-> | `#929` | **position sizing has TWO callers**; the fallback-sizing arm of the promoted-signal path never consults the VPG | folded into `#928` |
+> | `#929` | ~~position sizing has TWO callers~~ — **CLOSED 2026-09-30:** the fallback-sizing arm is deleted (B-SIZING-DEC-RESTORE 2e); the sizer has one production caller, downstream of the seam | closed |
 > | `#927` | the promotion path **invents** a target (`entry * 1.02`) in **three** places, one of which is the RTB **ranking** key — so pool ORDER can depend on an invented number | `B-TARGET-FABRICATION` |
 > | `#923` | the **trailing exit controller DOES NOT call the VPG** and ratchets a live stop off-grid | row **3f.b**, `B-POST-GRID-MUTATION-CENSUS` — **not** `F-G-2` (corrected 2026-08-28) |
 > | `#939` | two live-path sites mutate a gridded price after the VPG; both dormant today *(renumbered from `#924` on a collision)* | row 3g |
