@@ -1,6 +1,10 @@
-// B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
+// B-GOV poller — pure decision-logic tests (no git, no ssh; the filesystem only where named:
+// the P29 presence check reads this directory, and nothing else touches a file).
 // Run: node scripts/governance-checker/poller.test.mjs
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts } from './poller.mjs';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody } from './poller.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows } from './checker.mjs';
 
@@ -760,6 +764,47 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
   ok('P27 isoWeek 2025-12-31 (Wednesday; its Thursday is 2026-01-01) → 2026-W01', w('2025-12-31T23:00:00Z') === '2026-W01', w('2025-12-31T23:00:00Z'));
   let threw = false; try { isoWeek(NaN); } catch { threw = true; }
   ok('P27 isoWeek throws on a non-finite input rather than keying a week "NaN-WNaN"', threw);
+}
+
+// ─── B-PLAN-CURRENCY-CHECK P29: the drift list covers every checker PROCESS; injectable blobAt ───
+// Expected outputs stated first: heartbeat-check.mjs is listed and every listed file exists (a listed
+// file absent at both refs is now a counted no-op, so the presence check is what keeps one out of the
+// tree); a differing heartbeat blob reads as drift; a README-only difference does not; a file absent at
+// BOTH refs is skipped and counted WITHOUT blinding the check for the others (R1-Q15); absent at ONE ref
+// and any other read failure still fail OPEN (the 2026-07-11 ruling); the alert body names every file.
+{
+  const here = dirname(fileURLToPath(import.meta.url));
+  ok('P29 heartbeat-check.mjs is in DRIFT_LOADED_FILES', DRIFT_LOADED_FILES.includes('heartbeat-check.mjs'));
+  const missing = DRIFT_LOADED_FILES.filter((f) => !existsSync(join(here, f)));
+  ok('P29 every DRIFT_LOADED_FILES entry exists beside poller.mjs (a listed-but-absent file is caught here, in CI)',
+    missing.length === 0, missing.join(', '));
+  const blobs = (over = {}) => (ref, f) => {
+    const k = `${ref === 'HEAD' ? 'H' : 'O'}:${f}`;
+    if (k in over) { const v = over[k]; if (v instanceof Error) throw v; return v; }
+    return f === 'census.mjs' ? null : `blob-${f}`;
+  };
+  const same = checkerCodeDrift(blobs());
+  ok('P29 identical blobs → not drifted', same.drifted === false && !same.error && same.compared.length === DRIFT_LOADED_FILES.length);
+  ok('P29 a differing heartbeat-check.mjs blob → drifted', checkerCodeDrift(blobs({ 'O:heartbeat-check.mjs': 'blob-new' })).drifted === true);
+  const readme = checkerCodeDrift(blobs({ 'H:README.md': 'r-old', 'O:README.md': 'r-new' }));
+  ok('P29 a README-only difference → not drifted (README is not a loaded file)', readme.drifted === false && !readme.error);
+  const withCensus = [...DRIFT_LOADED_FILES, 'census.mjs'];
+  const skip = checkerCodeDrift(blobs(), withCensus);
+  ok('P29 a listed file absent at BOTH refs is a no-op, and COUNTED',
+    skip.drifted === false && !skip.error && skip.absentBoth.length === 1 && skip.absentBoth[0] === 'census.mjs', JSON.stringify(skip));
+  const stillSees = checkerCodeDrift(blobs({ 'O:poller.mjs': 'blob-new' }), withCensus);
+  ok('P29 ...and does not blind the check: a real poller.mjs difference beside it still reads as drift',
+    stillSees.drifted === true && stillSees.absentBoth.length === 1);
+  const oneSide = checkerCodeDrift(blobs({ 'O:heartbeat-check.mjs': null }));
+  ok('P29 absent at ONE ref only still fails open (the named residual)', oneSide.drifted === false && /absent at .* only/.test(oneSide.error || ''), JSON.stringify(oneSide));
+  const broken = checkerCodeDrift(blobs({ 'O:config.mjs': new Error('fatal: Not a valid object name') }));
+  ok('P29 any other read failure still fails open (2026-07-11)', broken.drifted === false && /Not a valid object name/.test(broken.error || ''));
+  const behind = checkerCodeDrift(blobs({ 'O:poller.mjs': 'blob-with-the-longer-list' }), ['poller.mjs', 'checker.mjs', 'config.mjs']);
+  ok('P29 a list extension with the box behind: HEAD\'s old list, poller.mjs blobs differ → drifted', behind.drifted === true);
+  const body = driftAlertBody(checkerCodeDrift(blobs({ 'O:poller.mjs': 'blob-new' })));
+  const named = (body.match(/loaded-code \(([^)]*)\)/) || [])[1];
+  ok('P29 the drift body names every listed file (derived from the array, not hard-coded)',
+    named === DRIFT_LOADED_FILES.join('|'), String(named));
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);

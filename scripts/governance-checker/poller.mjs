@@ -611,37 +611,66 @@ export function decideMalformedAlerts(malformed, openAlertKeys, refSha) {
 // #490 recurrence guard ("who checks the checker"): detect when the DEPLOYED checker CODE has
 // drifted from origin. #449 recurred once because the box silently fell 388 commits behind and
 // nobody noticed — a manual git pull was a patch, not a fix. Compare the checker's OWN LOADED code
-// (the exact files `node poller.mjs` executes) against origin's; if they differ, the box is running
-// logic that no longer matches what was reviewed and pushed. Scoped to the loaded files ONLY (NOT the
-// whole repo, NOT even the whole checker subtree) so a routine governance-doc push never trips it — the
-// checker's code changes ~5×/90d, docs push thousands of times (#490: grade the code, not the repo
-// count; and grade what the process LOADS, not what sits beside it). origin is already fetched this
-// tick. A rev-parse failure is NOT drift — don't manufacture a false alarm.
-// Narrowed per Langston's drift-guard ruling (2026-07-11): hash ONLY the files the poller process
-// actually LOADS, not the whole subtree. `ExecStart=node poller.mjs`; poller imports `./config.mjs`
-// + `./checker.mjs`; checker imports `./config.mjs`; config imports nothing local — so the complete
-// graded-logic closure is exactly {poller.mjs, checker.mjs, config.mjs}. The other files in the dir
-// (README.md, poller.test.mjs, backtest/heartbeat scripts, the .service/.timer units) are NOT the
-// enforcer, so a docs/test/unit-only push must NOT flip the drift signal (that was the surviving
-// false-positive in the subtree predicate). ★ CONSCIOUSLY ACCEPTED (Langston Step-4, 2026-07-11): a
-// `.service`/`.timer` change (e.g. a changed `ExecStart`, or the auto-redeploy drop-in itself) is now
-// OUT OF SCOPE for THIS check — it is the unit that STARTS poller, not logic poller RUNS. Deploy-config
-// drift is a separate concern (the drop-in is box-side config, not repo-graded); this guard answers
-// only "is the running GRADING LOGIC current?". rev-parse failure → drifted:false (fail-open, never a
-// manufactured false STALE — a git hiccup can't disable the enforcer).
-const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs'];
-function checkerCodeDrift() {
+// against origin's; if they differ, the box is running logic that no longer matches what was reviewed
+// and pushed. Scoped to the loaded files ONLY (NOT the whole repo, NOT even the whole checker subtree)
+// so a routine governance-doc push never trips it — the checker's code changes ~5×/90d, docs push
+// thousands of times (#490: grade the code, not the repo count; and grade what the process LOADS, not
+// what sits beside it). origin is already fetched this tick. A read failure is NOT drift — don't
+// manufacture a false alarm.
+// Narrowed per Langston's drift-guard ruling (2026-07-11) to the files a checker process LOADS, not the
+// whole subtree. B-PLAN-CURRENCY-CHECK P29 (OBJ-3 condition 2) widens "the poller process" to EVERY
+// checker PROCESS on the box, because both run from this one clone and pick up new code only through
+// the poller's ExecStartPre fast-forward (CE-A12): the poller (`ExecStart=node poller.mjs`; poller
+// imports `./config.mjs` + `./checker.mjs`; checker imports `./config.mjs`) and the heartbeat
+// (`node heartbeat-check.mjs`, its own unit; it imports `./config.mjs`). config imports nothing local, so
+// the closure is exactly the list below. ⛔ A file joins this list ONLY in the commit that creates it
+// (`census.mjs` joins in P43's commit, never earlier): poller.test.mjs asserts every entry exists
+// beside this file. The other files in the dir (README.md, the tests, backtest, the previews, the
+// differential harness, the .service/.timer units) are NOT loaded by a checker process, so a
+// docs/test/unit-only push must NOT flip the drift signal (the surviving false-positive in the subtree
+// predicate). ★ CONSCIOUSLY ACCEPTED (Langston Step-4, 2026-07-11): a `.service`/`.timer` change (e.g. a
+// changed `ExecStart`, or the auto-redeploy drop-in itself) is OUT OF SCOPE for THIS check — it is the
+// unit that STARTS a process, not logic a process RUNS. Deploy-config drift is a separate concern (the
+// drop-in is box-side config, not repo-graded); this guard answers only "is the running LOGIC current?".
+// FAIL-OPEN (2026-07-11, unchanged): any read failure → drifted:false, never a manufactured false STALE —
+// a git hiccup can't disable the enforcer. The ONE carve-out (Langston, §10e R1-Q15; §10j 3(d)): a listed
+// path absent at BOTH refs is a NO-OP — skipped, COUNTED in `absentBoth` and LOGGED by the tick — so one
+// such path no longer blinds the check for every other file. Absent at ONE ref only is still a read
+// failure and still fails open (P29's named residual: a listed file deleted on the branch while the box
+// is behind; this batch deletes no listed file).
+export const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs', 'heartbeat-check.mjs'];
+// The blob id of one checker file at a ref, or null when the path is absent there. Throws on any other
+// failure (a bad ref, a non-blob at the path, unexpected output) — the caller fails open on a throw.
+function gitBlobAt(ref, file) {
+  const out = execFileSync('git', ['ls-tree', '--full-tree', ref, '--', `scripts/governance-checker/${file}`],
+    { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+  if (out === '') return null;
+  const m = out.match(/^\d{6} blob ([0-9a-f]{40,64})\t/);
+  if (!m) throw new Error(`git ls-tree ${ref} -- ${file}: unexpected output ${JSON.stringify(out.slice(0, 120))}`);
+  return m[1];
+}
+// `blobAt(ref, file)` is injectable (the test seam); the refs are HEAD (what this box runs) and BRANCH.
+export function checkerCodeDrift(blobAt = gitBlobAt, files = DRIFT_LOADED_FILES) {
+  const absentBoth = [];
   try {
-    const hashAt = (ref) => DRIFT_LOADED_FILES
-      .map(f => execFileSync('git', ['rev-parse', `${ref}:scripts/governance-checker/${f}`],
-        { cwd: REPO_ROOT, encoding: 'utf8' }).trim())
-      .join('|');
-    const local = hashAt('HEAD');
-    const origin = hashAt(BRANCH);
-    return { drifted: local !== origin, local, origin };
+    const compared = [], local = [], origin = [];
+    for (const f of files) {
+      const l = blobAt('HEAD', f);
+      const o = blobAt(BRANCH, f);
+      if (l == null && o == null) { absentBoth.push(f); continue; }
+      if (l == null || o == null) throw new Error(`${f} is absent at ${l == null ? 'HEAD' : BRANCH} only`);
+      compared.push(f); local.push(l); origin.push(o);
+    }
+    return { drifted: local.join('|') !== origin.join('|'), local: local.join('|'), origin: origin.join('|'), compared, absentBoth };
   } catch (e) {
-    return { drifted: false, error: String(e.message || e) };
+    return { drifted: false, error: String(e.message || e), absentBoth };
   }
+}
+// The drift alert body names the files it compared — derived, never hard-coded (CE-A12(a)).
+export function driftAlertBody(drift) {
+  return `Deployed checker loaded-code (${drift.compared.join('|')}) ${drift.local} differs from origin ${drift.origin}. The box is ` +
+    `running governance logic that no longer matches what was reviewed and pushed; grading may be wrong. ` +
+    `Redeploy scripts/governance-checker/ (git pull on the checker box) and this clears. (#490 recurrence guard.)`;
 }
 
 export function tick(nowMs = Date.now()) {
@@ -703,13 +732,15 @@ export function tick(nowMs = Date.now()) {
   // redeploy gap can never again let the box grade with stale logic the way #449 hid for two weeks.
   const DRIFT_KEY = 'gov-code-drift';
   const drift = checkerCodeDrift();
+  if (drift.absentBoth.length > 0) {
+    console.warn(`[gov-checker] drift check: ${drift.absentBoth.length} listed file(s) absent at BOTH HEAD and ${BRANCH}, ` +
+      `skipped as a no-op (R1-Q15): ${drift.absentBoth.join(', ')}`);
+  }
   if (drift.drifted) {
     if (!state.openAlerts[DRIFT_KEY]) {
       const id = alertSink.add({ dedupeKey: DRIFT_KEY, severity: 'warning',
         title: 'governance-checker code is STALE vs origin — redeploy the checker box',
-        body: `Deployed checker loaded-code (poller.mjs|checker.mjs|config.mjs) ${drift.local} differs from origin ${drift.origin}. The box is ` +
-          `running governance logic that no longer matches what was reviewed and pushed; grading may be wrong. ` +
-          `Redeploy scripts/governance-checker/ (git pull on the checker box) and this clears. (#490 recurrence guard.)` }, nowMs);
+        body: driftAlertBody(drift) }, nowMs);
       if (id) state.openAlerts[DRIFT_KEY] = id;
     }
   } else if (state.openAlerts[DRIFT_KEY]) {
