@@ -51,3 +51,6 @@
 
 ## 6. Not found (searched: repo at HEAD, commit messages, both Telegram archives)
 Langston's own words for Q2 · Langston's "PIA round-2 Q3 regime-compatibility appendix", the authority the code cites for the three patterns (it went through a `/tmp` file on his box and was never committed) · the per-strategy Step-2 audit rev 2 promised · any reason for support_bounce leaving and pivot_shift joining · per-strategy reasons for the five "Defer" strategies · any Kyle decision closing open decision #7 · what re-stamped ORB's row on 2026-05-18.
+
+## 7. Decision
+**KYLE 2026-09-30: proceed as recommended - liquidity_trap and defensive_hedge stay off for good; ORB stays on its own path (15-minute validation, roadmap 25-14); the five with no recorded reason (strong_bull_trend, adaptive_flow, reverse_impulse, volatility_edge, support_bounce) are the candidates, switched on one or two at a time, each with a pass/fail criterion written before it goes on, strong_bull_trend first; and the overdue per-strategy check of the nine already on (Phase D.1) runs before any is added; dhma and abcd_long need an equity-bar detection test before they are candidates.** Recorded at sprint row 52 and `#1070`.
