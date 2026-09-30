@@ -10,7 +10,8 @@ description: STEP 1 ONLY of the DawnTrader batch workflow - Planning and Scope. 
 ## DO
 1. Kyle gives a directive → draft `Claude Comms and Packages/Scope Files/BATCH_N_SCOPE.md` with **numbered objectives + verification criteria for each**.
 2. **Declare the change-class on a header line** — `change-class: architecture | non_architecture | sub_batch | hotfix`. Written NOW, so Langston reviews it before code exists. **Undeclared or unparseable defaults to the STRICTEST doc-set AND raises a flag** (fail-closed).
-3. Dispatch to Langston, leading the post with **"Langston"** (his bridge only engages when his name STARTS the post).
+3. **If the batch is a row of `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4 — or a line of its §5 — write its batch id into that row's `batch / reference` cell (the §5 line's `item` cell) in the scope commit**, leading the cell (`B-…`, `T-…`, `P<n>-B…`). An id left in the item cell, or behind `— batch named at Step 1`, cannot be matched to the batch's completion report.
+4. Dispatch to Langston, leading the post with **"Langston"** (his bridge only engages when his name STARTS the post).
 
 ## ⛔ MANDATORY 1.a — ARCHITECTURAL READ BEFORE DRAFTING
 Read the relevant sections of `SYSTEM_IMPACT_MAP.md` **and** `SYSTEM_MANUAL.md` for **every** component the batch touches. **Caller-site counts, dependencies, blast radius and surface-API claims come from those reads or a compile-driven probe — NOT from grep and NOT from memory.**
