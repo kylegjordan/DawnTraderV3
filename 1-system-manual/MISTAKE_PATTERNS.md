@@ -241,6 +241,7 @@ I enumerated book subscribers by grepping `subscribeToSymbols`, classified every
 **INSTANCE 2 — `B-OHLC-FRAME-GUARD` Step-2 review, Langston, 2026-09-11/12** (`RUNNING_ISSUES` `#979`, the two amendments; they may record one event). On his server a fetch to `/tmp/pa.md` / `/tmp/scope.md` failed silently against root-owned July files, and he read another batch's document as the one under review. **A READ, not a commit** — the class is the shared namespace, not the syscall.
 **INSTANCE 3 — `B-PLAN-CURRENCY-CHECK` review, Langston, 2026-09-30** (`#979`, recurrence). **The same two files**, never removed after instance 2 named them. New faces: a piped read reports exit 0 over the failed redirect, and a root write over a langston-named file succeeds with no error to suppress. **Both decoys moved to `/root/tmp-decoy-evidence-979/`.**
 ★ **What three instances show: every reader who got caught fixed their OWN habit, and the shared hazard stayed in place for everyone else.** That is the argument for a mechanism over a practice.
+⚠️ **IF PROMOTED, PROMOTE IT AS A SHARED-NAMESPACE PATTERN, NOT A COMMIT-MESSAGE ONE (Langston, 2026-09-30).** The instances have three faces: a WRITE collision (instance 1), a READ collision (2 and 3), and CONFIDENTIALITY (`#979`'s 09-11 Infra amendment). Worded as a commit-message pattern, it misses the read half again, which is exactly how instance 3 happened.
 
 ---
 
