@@ -97,6 +97,8 @@ Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value
 
 ## 📌 OPEN THREADS
 
+- **★ EMITTER fix (MINE, B-TOKEN-BURN-CUT amd-1, #1026/#1035; acked CC-A 09-30):** `discord-langston-bridge.py` owner=/blocked-on= templates → 6-way. ⛔ BLOCKED: repo(`bb97931a`)≠live(`29074992`) RECONCILE, `cadb175b1` set-ratification, restart only when bridge IDLE (kills in-flight). Detail = my ack in-channel.
+
 - **B-CREW-STATUS-2 remainder — PARKED (Kyle, 2026-08-26).** ⛔ **The unbuilt item with real cost: persist derived facts AT OBSERVATION — compaction and reflog expiry destroy provenance for good.**
 - **#651 B-RULES-1E-LANGSTON-SLIM** — Langston's instruction-file restructure (lean core + on-demand modules + ledger split). Transferred to me by CC-A. **NOT STARTED**; Kyle has not given the go.
 - **#670** — crew-status snapshots have no cold hand-off; warm tier grows unbounded (~18 MB/yr gz, policy-conformance not capacity).
