@@ -9,6 +9,7 @@ import {
   statusWord, parseLedger, datedHomes, parsePlan, parseAfterLive, parseRoadmap, placement, cellClosed, listD, listE,
   listF, listA, planLines, recountS6, s6AlertDecision, runCensus, censusCounts, censusLists, censusMetadata, censusAlert,
   tallyMistakes, mistakePassAlert, ownerOfIssue, idsIn, hasId, headStatement, DATED_EXCLUSIONS, TITLE_MAX, gitReaders,
+  historyStruck, parseHandover, HANDOVER_FILE_RE,
 } from './census.mjs';
 import { CENSUS_BODY_MAX } from './config.mjs';
 
@@ -329,7 +330,7 @@ const WORLD = {
 };
 const readers = (over = {}) => ({
   show: (ref, p) => (p in (over.files || {}) ? over.files[p] : WORLD[p]),
-  names: () => over.names ?? ['B_BETA_COMPLETION_REPORT.md'],
+  names: (ref, dir) => (over.namesByDir && dir in over.namesByDir ? over.namesByDir[dir] : (over.names ?? ['B_BETA_COMPLETION_REPORT.md'])),
   added: (prev, ref) => { (over.calls || []).push(['added', prev, ref]); return over.added ?? []; },
   planHistory: () => [], refBefore: () => 'p'.repeat(40), bodies: () => [],
 });
@@ -367,7 +368,8 @@ function frameResurface(alert, d, nowMs) {
     ref: 'f'.repeat(40), selfCheck: { heads: 9999, numbers: 9999, open: 9999, openR1: 9999, s1: 9999, s2: 9999 },
     a: big(999, (i) => ({ file: `${longId}_${i}_COMPLETION_REPORT.md`, verdict: i % 2 ? 'in-no-plan-line' : 'not-closed-in-plan', owner: null })),
     b: { placed: { number: 9999, homeBatch: 9999, parked: 9999, roadmap: 9999 }, unplaced: big(999, (i) => ({ n: 10000 + i, code: 'U5', why: 'HOME batch in no list', owner: 'owner ?' })),
-      byWhy: { U1: 9999, U2: 9999, U3: 9999, U4: 9999, U5: 9999, U6: 9999 }, selfContradicting: big(999, (i) => ({ issue: i })), reused: big(999, (i) => i) },
+      byWhy: { U1: 9999, U2: 9999, U3: 9999, U4: 9999, U5: 9999, U6: 9999 }, selfContradicting: big(999, (i) => ({ issue: i })), reused: big(999, (i) => i),
+      handover: { records: 9999, stillUnplaced: big(999, (i) => i), placedSince: big(999, (i) => i), closedSince: big(999, (i) => i) } },
     c: { issues: big(999, (i) => ({ n: 20000 + i, lines: [1, 2], owner: 'filer CC-INFRA' })), lineCount: 9999, matchCount: 9999, excluded: [{ issue: 696 }] },
     d: { rows: big(999, (i) => ({ row: `${i}a`, why: 'item cell is one batch id', owner: 'CC-INFRA' })), excluded: big(999, (i) => ({ row: i })) },
     e: { refs: big(999, () => ({})), rowRefs: 999, unmatched: big(999, (i) => ({ row: `${i}`, target: longId, owner: 'CC-A' })), rowUnmatched: [], viaS0: [] },
@@ -409,6 +411,46 @@ function frameResurface(alert, d, nowMs) {
   ok('P46 body leads OLD Claude, carries the counts and the resolve instruction', /^OLD Claude — weekly mistake-pattern pass 2026-W40/.test(m.body) && /wrong-object 2/.test(m.body) && /resolve with the run-log commit sha/.test(m.body));
   ok('P46 metadata counts first', m.metadata.startsWith('{"counts":{"t":3,'));
   ok('P46 title ≤ 80', m.title.length <= TITLE_MAX);
+}
+
+// ── W40 finding (NEW Claude): a date inside OBJ-8's conversion HISTORY note is struck. The first four are real W40
+// list-(c) lines (RUNNING_ISSUES at 13fa6bbce: :3629, :429, :3732, :5090) — all 13 hits of that census were this shape.
+// The last three are the controls: a LIVE dated home, quoted or bracketed, must still hit.
+{
+  const at = (l, w) => historyStruck(l, l.indexOf(w));
+  ok('R2 history: READ "OWNER: … DUE: <date>" is struck (#680 form)', at('This home READ "OWNER: CC-B. DUE: 2026-08-09" until 2026-09-30', 'DUE') === true);
+  ok('R2 history: READ "(owner …, due <date>)" is struck (#455 form)', at('This home READ "(owner CC-B, due 2026-07-12)" until 2026-09-30', 'due') === true);
+  ok('R2 history: (Was: "… due <date>" is struck (#705 form)', at('*(Was: "its own small batch after the #618 build — due 2026-09-05"; dated homes', 'due') === true);
+  ok('R2 history: (Was `<id>`, due <date> is struck (#908 form)', at('*(Was `B-LIQUIDITY-UNIT-AUDIT`, due 2026-09-05 — that batch', 'due') === true);
+  ok('R2 history control: a live HOME … due <date> still hits', at('HOME: B-X, owner CC-A, due 2026-10-05', 'due') === false);
+  ok('R2 history control: a quoted live home (no READ/Was) still hits', at('HOME: "B-X, owner CC-A, due 2026-10-05"', 'due') === false);
+  ok('R2 history control: a bracket that is not (Was …) still hits', at('(owner CC-A, due 2026-10-05)', 'due') === false);
+}
+
+// ── A2 (Langston, W40): handover records → three states per item ──
+{
+  const HO = ['# x', 'Every item above is **handed over 2026-09-30** — post id 1.', '## THE SETS', '### CC-B — 2', '| # | why |', '|---|---|',
+    '| `#300` | U1 — no HOME line |', '| `#999` | U1 — no HOME line |', '## THE OTHER LISTS, BY ID', '| `#400` | 546 | owner CC-B |'].join('\n');
+  const h = parseHandover(HO, 'fx');
+  ok('A2 parseHandover: the date and ONLY the items under ## THE SETS (#400 in a later section is not an item)',
+    h.date === '2026-09-30' && [...h.issues].sort().join() === '300,999');
+  ok('A2 parseHandover REFUSES a record with no date', throws(() => parseHandover(HO.replace('handed over', 'given'), 'fx'), /no "handed over/));
+  ok('A2 parseHandover REFUSES a record naming no items', throws(() => parseHandover(HO.replace(/\| `#\d+`/g, '| x'), 'fx'), /names no items/));
+  ok('A2 the file pattern: a W40 record matches, the census JSON does not',
+    HANDOVER_FILE_RE.test('B_PLAN_CURRENCY_CHECK_CENSUS_2026-W40_HANDOVER.md') && !HANDOVER_FILE_RE.test('B_PLAN_CURRENCY_CHECK_CENSUS_2026-W40.json'));
+  const SF = 'Claude Comms and Packages/Scope Files';
+  const hr = readers({ namesByDir: { [SF]: ['X_CENSUS_2026-W40_HANDOVER.md', 'PRE_LIVE_SPRINT.md'] }, files: { [`${SF}/X_CENSUS_2026-W40_HANDOVER.md`]: HO } });
+  const r = runCensus({ ref: 'a'.repeat(40), prevRef: 'b'.repeat(40), readers: hr });
+  const u300 = r.b.unplaced.find((x) => x.n === 300);
+  ok('A2 runCensus: one record read; #999 (not OPEN) is closed-since, never unplaced',
+    r.b.handover.records === 2 && r.b.handover.closedSince.join() === '999' && !r.b.unplaced.some((x) => x.n === 999));
+  ok('A2 runCensus: #300 is either still unplaced WITH its handover date, or placed — never "never surfaced"',
+    (u300 && u300.handedOver === '2026-09-30' && r.b.handover.stillUnplaced.includes(300)) || r.b.handover.placedSince.includes(300));
+  ok('A2 runCensus: an item NOT in any record carries no handover date', r.b.unplaced.filter((x) => x.n !== 300).every((x) => x.handedOver === null));
+  ok('A2 runCensus REFUSES an empty Scope Files listing (a failed read must not read as "never surfaced")',
+    throws(() => runCensus({ ref: 'a', prevRef: 'b', readers: readers({ namesByDir: { [SF]: [] } }) }), /listing .* is EMPTY/));
+  const txt = censusAlert(r, { week: '2026-W40', severity: 'info' });
+  ok('A2 the body carries the handover clause at normal sizes', /handed over 2: \d+ unplaced, \d+ placed, 1 closed/.test(txt.body), txt.body.slice(0, 400));
 }
 
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);

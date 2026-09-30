@@ -39,7 +39,10 @@ export const CENSUS_SOURCES = {
   afterLive: 'Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md',
   roadmap: '1-system-manual/POST_AUDIT_ROADMAP.md',
   reportsDir: DOCS.completion_report.dir,
+  // A2 (Langston, W40): the committed handover records — one per census week that handed items to their owners.
+  handoverDir: 'Claude Comms and Packages/Scope Files',
 };
+export const HANDOVER_FILE_RE = /_CENSUS_\d{4}-W\d\d_HANDOVER\.md$/;
 export const CENSUS_KEY_PREFIX = 'gov-plancensus:';
 export const MISTAKEPASS_KEY_PREFIX = 'gov-mistakepass:';
 export const CENSUS_FAILED_KEY = 'gov-census-failed';
@@ -213,12 +216,44 @@ export function ownerOfIssue(e) {
   return { label: 'owner ?', source: 'unknown', ownerLine, homeLine, filer };
 }
 
+// ══ A2 — handover records (Langston, W40) ═════════════════════════════════════════════════════════════
+// A handover record names, by id, the items a census week handed to their owners. It states its date as
+// `handed over <YYYY-MM-DD>`, and its items as `| \`#N\` |` table rows under `## THE SETS` (up to the next `## `).
+// A record with no date or no items is refused: a record that names nothing would make every item read as never
+// surfaced, which is the absent-as-valid shape this exists to prevent.
+export function parseHandover(text, name = 'handover record') {
+  const dm = /handed over \*{0,2}(\d{4}-\d\d-\d\d)/.exec(text || '');
+  if (!dm) throw new Error(`census: ${name} states no "handed over <date>" — refusing`);
+  const L = lines(text), issues = new Set();
+  let on = false;
+  for (const l of L) {
+    if (/^## /.test(l)) on = /^## THE SETS\b/.test(l);
+    else if (on) { const m = /^\|\s*`#(\d+)`\s*\|/.exec(l); if (m) issues.add(Number(m[1])); }
+  }
+  if (issues.size === 0) throw new Error(`census: ${name} names no items under "## THE SETS" — refusing`);
+  return { date: dm[1], issues };
+}
+
 // ══ R2 — dated homes (list (c)) ══════════════════════════════════════════════════════════════════════════
 const DUE_RE = /\bdue\b\W{0,3}(20\d\d-\d\d-\d\d)/gi;
+// HISTORY-STRUCK (W40, NEW Claude's finding, measured: all 13 list-(c) lines were this): OBJ-8's conversion form records
+// the old home as a history note — `This home READ "<old text>" until <date>` or `(Was: "<old>"` / `(Was <old>, due …` —
+// and the old text carries the old due date. A match is struck when it sits inside a double-quoted span whose opening
+// quote directly follows `READ` or `Was` (`:` optional), or inside a parenthetical that opens with `Was`. Narrow on
+// purpose: a live `HOME: … due <date>`, quoted or not, still hits.
+export function historyStruck(line, idx) {
+  let q = -1;
+  for (let k = 0; k < idx; k++) if (line[k] === '"') q = q === -1 ? k : -1;   // q = the opening quote idx is inside, or -1
+  if (q !== -1 && /\b(READ|Was):?\s*$/i.test(line.slice(0, q))) return true;
+  const open = line.lastIndexOf('(', idx);
+  if (open !== -1 && !line.slice(open, idx).includes(')') && /^\(\s*Was\b/i.test(line.slice(open))) return true;
+  return false;
+}
 // For each OPEN issue: its SPAN is every line from each head to the line before the next head, stopping early at
 // a `# ` or `## ` heading. A span line qualifies on `\bHOME\b` (case-SENSITIVE) or `\bOWNER\b` (case-INSENSITIVE,
 // R1-Q3). A match is `due` + up to 3 non-word characters + an ISO date, unless the character right before `due`
-// is `"` or `` ` `` (QUOTED-STRUCK). `opts.owner=false` gives R2 as first written; `opts.exclusions` the Q25 set.
+// is `"` or `` ` `` (QUOTED-STRUCK), or it is HISTORY-STRUCK (`historyStruck`, above). `opts.owner=false` gives R2 as first
+// written; `opts.exclusions` the Q25 set.
 export function datedHomes(ledger, openSet = ledger.open, opts = {}) {
   const owner = opts.owner ?? true, exclusions = opts.exclusions ?? DATED_EXCLUSIONS;
   const L = ledger.lines, found = new Map(), excluded = [];
@@ -231,6 +266,7 @@ export function datedHomes(ledger, openSet = ledger.open, opts = {}) {
         if (!(/\bHOME\b/.test(L[j]) || (owner && /\bOWNER\b/i.test(L[j])))) continue;
         for (const m of L[j].matchAll(DUE_RE)) {
           if (m.index > 0 && '"`'.includes(L[j][m.index - 1])) continue;
+          if (historyStruck(L[j], m.index)) continue;
           hits.push({ line: j + 1, date: m[1] });
         }
       }
@@ -487,9 +523,23 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
   if (!prevRef) throw new Error('census: no previous ref for list (a) — refusing');
   const added = readers.added(prevRef, ref, CENSUS_SOURCES.reportsDir);
 
+  // A2: the handover records at the ref. The Scope Files listing is never empty, so an empty read is a FAILED read.
+  const sfNames = readers.names(ref, CENSUS_SOURCES.handoverDir);
+  if (!Array.isArray(sfNames) || sfNames.length === 0) throw new Error(`census: the ${CENSUS_SOURCES.handoverDir} listing at ${ref} is EMPTY — refusing (a failed read would mark every item never surfaced)`);
+  const handedOn = new Map();                                    // n → the EARLIEST handover date
+  for (const f of sfNames.filter((x) => HANDOVER_FILE_RE.test(x)).sort()) {
+    const h = parseHandover(read(`${CENSUS_SOURCES.handoverDir}/${f}`), f);
+    for (const n of h.issues) if (!handedOn.has(n) || h.date < handedOn.get(n)) handedOn.set(n, h.date);
+  }
+
   const owner = (n) => ownerOfIssue(ledger.byNum.get(n));
   const place = placement(ledger, plan, pls, roadmap, names);
-  const unplaced = [...place].filter(([, v]) => v.startsWith('U')).map(([n, v]) => ({ n, code: v, why: UNPLACED_WHY[v], owner: owner(n).label }));
+  const unplaced = [...place].filter(([, v]) => v.startsWith('U')).map(([n, v]) => ({ n, code: v, why: UNPLACED_WHY[v], owner: owner(n).label, handedOver: handedOn.get(n) ?? null }));
+  // The three states (Langston A2): never surfaced / handed over, still unplaced / placed. A handed item that is no
+  // longer OPEN is reported apart as closed — neither a placement nor an ignored handover.
+  const handover = { records: handedOn.size, stillUnplaced: unplaced.filter((x) => x.handedOver).map((x) => x.n),
+    placedSince: [...handedOn.keys()].filter((n) => place.has(n) && !place.get(n).startsWith('U')).sort((a, b) => a - b),
+    closedSince: [...handedOn.keys()].filter((n) => !ledger.open.has(n)).sort((a, b) => a - b) };
   const tallyOf = (v) => [...place.values()].filter((x) => x === v).length;
   const c = datedHomes(ledger);
   const d = listD(plan), e = listE(plan), f = listF(plan, names, prevF), a = listA(plan, added);
@@ -503,7 +553,7 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
     selfCheck: { heads: ledger.heads.length, numbers: ledger.byNum.size, open: ledger.open.size, openR1: ledger.openR1.size, s1: ledger.s1.size, s2: ledger.s2.size },
     a,
     b: { placed: { number: tallyOf('number'), homeBatch: tallyOf('homeBatch'), parked: tallyOf('parked'), roadmap: tallyOf('roadmap') },
-      unplaced, byWhy: Object.fromEntries(Object.keys(UNPLACED_WHY).map((k) => [k, tallyOf(k)])),
+      unplaced, handover, byWhy: Object.fromEntries(Object.keys(UNPLACED_WHY).map((k) => [k, tallyOf(k)])),
       selfContradicting: ledger.selfContradicting, reused: ledger.reused },
     c: { issues: c.issues.map((n) => ({ n, lines: [...new Set(c.byIssue.get(n).map((h) => h.line))], owner: owner(n).label })), lineCount: c.lineCount, matchCount: c.matchCount, excluded: c.excluded },
     d, e, f, g, ownerSources, _ledger: ledger,
@@ -524,6 +574,8 @@ export function censusCounts(r) {
     d: r.d.rows.length, dx: r.d.excluded.length, e: [r.e.refs.length, r.e.unmatched.length + r.e.rowUnmatched.length],
     f: [r.f.new.length, r.f.all.length], g: r.g.alert ? 1 : 0,
     sc: r.b.selfContradicting.length, r: r.b.reused.length,
+    // A2: [records, handed-over-still-unplaced, placed-since, closed-since]; absent before any handover record exists.
+    ...(r.b.handover ? { hv: [r.b.handover.records, r.b.handover.stillUnplaced.length, r.b.handover.placedSince.length, r.b.handover.closedSince.length] } : {}),
   };
 }
 
@@ -531,7 +583,9 @@ export function censusCounts(r) {
 export function censusLists(r) {
   return {
     a: r.a.map((x) => x.file),
-    b: r.b.unplaced.map((x) => [x.n, x.code]), sc: r.b.selfContradicting.map((x) => x.issue), reused: r.b.reused,
+    b: r.b.unplaced.map((x) => (x.handedOver ? [x.n, x.code, x.handedOver] : [x.n, x.code])),
+    hv: r.b.handover ? { placed: r.b.handover.placedSince, closed: r.b.handover.closedSince } : null,
+    sc: r.b.selfContradicting.map((x) => x.issue), reused: r.b.reused,
     c: r.c.issues.map((x) => x.n), cx: r.c.excluded.map((x) => x.issue),
     d: r.d.rows.map((x) => x.row), dx: r.d.excluded.map((x) => x.row),
     e: [...r.e.unmatched, ...r.e.rowUnmatched].map((x) => [x.row, x.target]),
@@ -559,7 +613,7 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
   if (title.length > TITLE_MAX) throw new Error(`census: title over ${TITLE_MAX} characters`);
   const qCount = (xs, f) => xs.filter((x) => f(x) === 'owner ?' || f(x) == null).length;
   const planOwner = (o) => (o ? o : 'owner ?');
-  const lineFor = (k) => {
+  const lineFor = (k, withHandover = true) => {
     const top = (xs, fmt) => (k === 0 || xs.length === 0 ? '' : ' — ' + xs.slice(0, k).map(fmt).join('; '));
     const p = r.b.placed, placed = p.number + p.homeBatch + p.parked + p.roadmap;
     const eAll = [...r.e.unmatched, ...r.e.rowUnmatched];
@@ -569,6 +623,7 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
       `(a) new reports: ${r.a.filter((x) => x.verdict === 'not-closed-in-plan').length} not closed in plan, ${r.a.filter((x) => x.verdict === 'in-no-plan-line').length} in no plan line [owner ? ${qCount(r.a, (x) => x.owner)}]` +
         top(r.a, (x) => `${x.file} (${x.verdict}, ${planOwner(x.owner)})`),
       `(b) OPEN ${r.selfCheck.open}: placed ${placed} (by # ${p.number}, HOME batch ${p.homeBatch}, parked ${p.parked}, roadmap ${p.roadmap}), unplaced ${r.b.unplaced.length} [owner ? ${qCount(r.b.unplaced, (x) => x.owner)}]` +
+        (withHandover && r.b.handover && r.b.handover.records ? `; handed over ${r.b.handover.records}: ${r.b.handover.stillUnplaced.length} unplaced, ${r.b.handover.placedSince.length} placed, ${r.b.handover.closedSince.length} closed` : '') +
         top(r.b.unplaced, (x) => `#${x.n} ${x.why} (${x.owner})`) +
         `; self-contradicting ${r.b.selfContradicting.length}, reused ${r.b.reused.length}`,
       `(c) dated homes: ${r.c.issues.length} issues / ${r.c.lineCount} lines (excluded by name ${r.c.excluded.length}) [owner ? ${qCount(r.c.issues, (x) => x.owner)}]` +
@@ -587,8 +642,11 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
       `Full lists: metadata.lists of this row (read by id in /var/log/dawntrader/system-alerts.jsonl); box file ${boxPath}.`,
     ].map(item).join('\n');
   };
-  // Examples are dropped first (3 → 2 → 1 → 0 per list), counts never.
+  // Examples are dropped first (3 → 2 → 1 → 0 per list), then the A2 handover clause; the list counts never. The handover
+  // split is never lost: every unplaced item carries `handedOver` and `b.handover` holds the three sets, in metadata and
+  // in the box file (A2: at maximum sizes the clause did not fit — the worst case was 992 before it).
   for (const k of [3, 2, 1, 0]) { const body = lineFor(k); if (body.length <= CENSUS_BODY_MAX) return { title, body, severity }; }
+  { const body = lineFor(0, false); if (body.length <= CENSUS_BODY_MAX) return { title, body, severity }; }
   throw new Error(`census: the body is over ${CENSUS_BODY_MAX} characters with every example dropped — refusing`);
 }
 
