@@ -10,7 +10,7 @@
 
 **NEW `comms-infra/laptop/cc-wake-follow.py`** — the Helsinki-side reader (plan P1). Never installed remotely: the laptop pipes it into `ssh … "python3 - ARGS"`. Args `path:inode:offset` or `path:end` (parsed from the RIGHT, so a path may hold a colon). Emits a `==> path <==` header before the first content line of every run (C7), `#@AT` start points (so a file with no traffic still has a stored position), `#@POS` BEFORE each complete line, `#@CAUGHTUP` on every idle 1 s pass (teardown, C8), `#@KEEPALIVE` every 300 s. Re-opens from 0 on a new inode or a shrunk file (C2); never consumes a trailing chunk without `\n`; a content line shaped like a control or header gets a zero-width prefix so it cannot steer the filter.
 
-**MODIFIED `comms-infra/laptop/cc-wake-filter.py`** (P2) — routing UNCHANGED; the default streaming mode is unchanged (the 22-case `test-wake-filter-cuts.py` passes before and after). Added:
+**MODIFIED `comms-infra/laptop/cc-wake-filter.py`** (P2) — **routing changed in exactly two named places, both of which apply in streaming mode too: `_HEARTBEAT_BAD` gains the `watchers: … DEAD` / `control: NOT answered` tokens, and the `WATCHER-CONTROL` intercept in the `cc-wake.log` branch; both are covered by T9 and T12a-d. The 22 pre-existing cases in `test-wake-filter-cuts.py` are unaffected — they pass before and after, and have no case for either change** (corrected at Step 4, Langston condition 1). Added:
 - `--positions` prints resume args; a state older than 12 h is discarded, and the next run prints one `WAKE[WATCHER->…]` line naming the UTC it threw away (C10).
 - `--once` wraps stdout in a tap that counts and tags wake lines `[src=<file>@<offset> id=<message_id>]` (C10). It commits a position only after the line is processed, and on `#@CAUGHTUP` after a delivery it saves, then exits 0 — print before save, so a kill gives a duplicate, never a loss (judgement call (a)). `#@KEEPALIVE` saves and touches `<state>.alive`. EOF saves and exits 3.
 - `WATCHER-CONTROL <ALIAS> <nonce>` in `cc-wake.log` writes `<state>.control`, with no print; another alias's control line is ignored.
@@ -35,6 +35,14 @@
 1. The switch held to Step 6 rather than landing with the code (the deaf-session argument above).
 2. Every idle 1 s pass writes `#@CAUGHTUP` (~11 bytes/s per session over ssh) so teardown is ~1 s; the alternative, keepalive-only writes, lets an orphaned follower live up to 300 s on your box.
 3. The daily control is gated on all four `.alive` files existing, so it is inert until every session has switched.
-4. `--once` exits only on `#@CAUGHTUP` after a delivery — a stream with no idle pass (sustained writes > 1/s) would not end. Your 24,332-row measurement puts the longest sub-1 s run at 7 rows / 1.7 s.
+4. `--once` exits only on `#@CAUGHTUP` after a delivery. ~~A stream with no idle pass (sustained writes > 1/s) would not end~~ —**wrong condition, corrected by Langston:** a data pass skips the sleep, so `#@CAUGHTUP` follows every data pass within a millisecond; he measured 4 writes/s ending every second. Non-termination needs a complete line on every zero-sleep pass, forever — microseconds apart, not seconds.
 
 NOT RE-READ: nothing in this change list went to a second reader.
+
+## Step 4 — APPROVED (Langston, 2026-09-30T12:09:59Z, at `3a31cf3a6`); four conditions, discharged at `2159259707`
+He re-ran the 18-case suite on his box (18/18) and measured JC3 with a positive control: the parent filter answers `WATCHER-CONTROL CC-A …` with a WAKE, so the all-four `.alive` gate is necessary.
+- **C1** — the "routing unchanged" claim re-worded above.
+- **C2** — `test-wake-filter-cuts.py` now defaults to the repo copy found relative to itself, so it runs wherever the repo is; the live copy is passed explicitly.
+- **C3** — `cc-wake-follow.py` states that the first-pass keepalive is deliberate (a later one would false-DEAD every arm under 300 s) and the reach limit: `.alive` proves the pipeline STARTED, not that the filter DELIVERS — a filter crashing after the keepalive is re-armed every 30 s and re-touches `.alive` while the session is deaf; only the daily control reaches the read path. Carried into the completion report.
+- **C4** — `ARM_SWITCH.py` takes `--ref=<reviewed sha>` and, before any edit, verifies each of the three live copies (`cc-wake-filter.py`, `cc-wake-follow.py`, the heartbeat `SKILL.md`) is present and sha256-equal to its blob at that ref; `--install` writes them from the blob first. A real run with nothing installed: `ABORT (gate)`, nothing edited.
+- **Nits folded:** a line longer than the 1 MiB read is read through to its newline (T11b — the pre-fix follower fails it, `rc=None`); a trailing `--state` with no value no longer raises.
