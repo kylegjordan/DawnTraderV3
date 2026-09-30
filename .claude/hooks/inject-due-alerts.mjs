@@ -30,7 +30,7 @@ import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { basename } from 'node:path';
-import { splitAlerts, CLONE_TO_ALIAS } from './alert-split.mjs';
+import { splitAlerts, capBuckets, CLONE_TO_ALIAS, CHURN_HOURS } from './alert-split.mjs';
 
 const HOST = process.env.DT_ALERT_HOST || 'root@188.245.193.8';
 const TIMEOUT_MS = 3000;
@@ -174,15 +174,16 @@ function main() {
   }
   note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: true, alias,
     mine: s.mine.length, unrouted: s.unrouted.length, critical: s.critical.length, others: s.others });
-  // FINDING-2 (Langston): ONE total cap across the three shown groups (it was per group, and critical was uncapped).
-  let budget = MAX_INJECT, cut = 0;
-  const take = (list) => { const k = list.slice(0, Math.max(0, budget)); budget -= k.length; cut += list.length - k.length; return k; };
-  const mineS = take(s.mine), unroutedS = take(s.unrouted), criticalS = take(s.critical);
+  // One cap, priority order critical → unrouted → yours (round 3 BLOCKER-2); the pure logic is capBuckets, tested.
+  const c = capBuckets(s, MAX_INJECT);
   const parts = [];
-  if (mineS.length) parts.push(`YOURS:\n${mineS.map(line).join('\n')}`);
-  if (unroutedS.length) parts.push(`NOT YET ROUTED — shown to every session until Langston routes it:\n${unroutedS.map(line).join('\n')}`);
-  if (criticalS.length) parts.push(`CRITICAL — shown to every session:\n${criticalS.map((a) => `• ${a.id.slice(0, 8)}… [critical] ${a.title} — owner ${a.owner}  (full id: ${a.id})`).join('\n')}`);
-  if (cut) parts.push(`… +${cut} more NOT shown (cap ${MAX_INJECT} in total) — read the file.`);
+  if (c.mine.length) parts.push(`YOURS:\n${c.mine.map(line).join('\n')}`);
+  if (c.unrouted.length) parts.push(`NOT YET ROUTED — shown to every session until Langston routes it (or its owner has changed within ${CHURN_HOURS} h):\n${c.unrouted.map(line).join('\n')}`);
+  if (c.critical.length) parts.push(`CRITICAL — shown to every session:\n${c.critical.map((a) => `• ${a.id.slice(0, 8)}… [critical] ${a.title} — owner ${a.owner}  (full id: ${a.id})`).join('\n')}`);
+  if (c.cutTotal) parts.push(`… +${c.cutTotal} more NOT shown (cap ${MAX_INJECT} in total: ${Object.entries(c.cut).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(', ')}) — read the file.`);
+  // Round 3 BLOCKER-3: the churn goes to the one who makes it — Langston — via CC-A, like the rejects.
+  if (alias === 'CC-A' && s.churning.length) parts.push(`⚠ ${s.churning.length} due alert(s) changed owner within ${CHURN_HOURS} h, so they read as unrouted — tell Langston, leading with his name: `
+    + s.churning.map((a) => `${a.id.slice(0, 8)} (now ${a.owner}, ${a.flips} changes)`).join(', '));
   // (c) (Langston): markers he wrote that could not be recorded reach someone who can tell him — ONE session, the
   // owner of this mechanism (CC-A), not all four; the last 24 h only.
   const rejects = (alias === 'CC-A' && owners._meta && Array.isArray(owners._meta.rejects))

@@ -165,7 +165,11 @@ ALERT_OWNER_RE = re.compile(
 
 # #995 OBJ-11: used to remove routing markers before a PROSE name check — the marker carries
 # an alias in `owner=`, which is routing metadata and must not read as being addressed.
-ALERT_MARKER_STRIP = re.compile(r"\[\[ALERT\b[^\]]*\]\]", re.I)
+# B-TOKEN-BURN-CUT amendment 1 round 3 (Langston finding 1): the strip used `[^\]]*`, which cannot cross a `]` inside
+# action= — 10 of 3,776 markers were never stripped (suppression still worked only because ALERT_OWNER_RE reached them,
+# and OBJ-5's ^-anchored OPEN_RE now masks the rest). ONE locator for the strip and the owner recorder: `[[ALERT` to the
+# first `]]` on the same line.
+ALERT_MARKER_STRIP = re.compile(r"\[\[ALERT\b[^\n]*?\]\]", re.I)
 
 # B-WAKE-LEAD-NAME (#1040): does the reply OPEN with this session's name? His bridge prepends the
 # triggering author's display name to every NON-alert reply by construction
@@ -355,7 +359,7 @@ _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 # `action="…"`, so 10 REAL markers (valid uuid, valid owner) were unreachable — one of them a re-route, leaving a stale
 # owner — and the miss was invisible (nothing counted it). The recorder uses its OWN locator: from `[[ALERT` to the
 # first `]]` on the same line. It recovers 10 of 11; the 11th is a bare prose `[[ALERT` with no marker, correctly left.
-MARKER_FULL = re.compile(r"\[\[ALERT\b[^\n]*?\]\]", re.I)
+MARKER_FULL = ALERT_MARKER_STRIP   # one list, built once (the strip above now uses this pattern)
 _MARK_ID = re.compile(r"\bid=([^\s\]]+)")
 _MARK_OWNER = re.compile(r"\bowner=([^\s\]]+)")
 _REJECTED = [0]
@@ -398,13 +402,25 @@ def record_owners(body, ts):
             meta = owners.setdefault("_meta", {})
             rej = meta.setdefault("rejects", [])
             snip = _flat(s)[:140]
-            if not any(r.get("marker") == snip for r in rej):
+            same = [r for r in rej if r.get("marker") == snip]
+            if same:
+                if same[0].get("ts") != ts:
+                    same[0]["ts"] = ts          # round 3 finding (2): a re-issued bad marker stays inside the 24 h window
+                    changed = True
+            else:
                 rej.append({"ts": ts, "marker": snip})
                 meta["rejects"] = rej[-REJECTS_KEPT:]
                 changed = True
             continue
-        if (owners.get(aid) or {}).get("owner") != own:
-            owners[aid] = {"owner": own, "ts": ts}
+        prev = owners.get(aid)
+        if not prev:
+            owners[aid] = {"owner": own, "ts": ts, "flips": 0}      # a first routing is not a change
+            changed = True
+        elif prev.get("owner") != own:
+            # round 3 BLOCKER-3 (Langston): his routing is re-guessed per invoke — 17 of 96 ids since 09-23 were routed
+            # to more than one owner (191 flips). The record keeps WHEN the owner last changed and how often; the hook
+            # reads a recently-changed owner as UNROUTED (shown to everyone) instead of trusting the latest guess.
+            owners[aid] = {"owner": own, "ts": ts, "changed_at": ts, "flips": int(prev.get("flips") or 0) + 1}
             changed = True
     if changed:
         _save_owners(owners)

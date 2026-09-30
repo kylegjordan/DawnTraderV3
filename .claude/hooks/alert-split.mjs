@@ -23,8 +23,12 @@ export const CLONE_TO_ALIAS = {
   'DawnTraderV3-infra': 'CC-INFRA',
 };
 
-// alerts: [{ id, sev, title }] · owners: { <uuid>: { owner } } or null · alias: 'CC-A' | … | null
-export function splitAlerts(alerts, owners, alias) {
+// Round 3 BLOCKER-3 (Langston): an owner that CHANGED within this window is not trusted — the alert reads as unrouted
+// (shown to every session, the true statement) and is listed as churning so Langston can settle it.
+export const CHURN_HOURS = 24;
+
+// alerts: [{ id, sev, title }] · owners: { <uuid>: { owner, changed_at?, flips? } } or null · alias · nowMs
+export function splitAlerts(alerts, owners, alias, nowMs = Date.now()) {
   if (!alias || !owners || typeof owners !== 'object') {
     return { narrowed: false, why: alias ? 'owner record not seeded yet' : 'no alias for this clone', mine: [], unrouted: [], critical: [], others: 0 };
   }
@@ -33,14 +37,28 @@ export function splitAlerts(alerts, owners, alias) {
   if (!owners._meta || !owners._meta.seeded_at) {
     return { narrowed: false, why: 'owner record present but not seeded', mine: [], unrouted: [], critical: [], others: 0 };
   }
-  const mine = [], unrouted = [], critical = [];
+  const mine = [], unrouted = [], critical = [], churning = [];
   let others = 0;
   for (const a of alerts) {
-    const owner = owners[a.id] && owners[a.id].owner;
+    const rec = owners[a.id];
+    const changedMs = rec && rec.changed_at ? Date.parse(rec.changed_at) : NaN;
+    const churned = Number.isFinite(changedMs) && nowMs - changedMs < CHURN_HOURS * 3600000;
+    if (churned) churning.push({ ...a, owner: rec.owner, flips: rec.flips || 0 });
+    const owner = rec && !churned ? rec.owner : null;
     if (owner === alias) mine.push(a);
     else if (!owner) unrouted.push(a);
     else if (String(a.sev).toLowerCase() === 'critical') critical.push({ ...a, owner });
     else others += 1;
   }
-  return { narrowed: true, mine, unrouted, critical, others };
+  return { narrowed: true, mine, unrouted, critical, others, churning };
+}
+
+// Round 3 BLOCKER-2 (Langston): ONE cap, taken in PRIORITY order — critical, then unrouted, then yours — so a runaway
+// of one's own alerts can never push a critical or an unrouted one out of view; the cut is named per group.
+export function capBuckets(s, max) {
+  let budget = max;
+  const take = (list) => { const k = list.slice(0, Math.max(0, budget)); budget -= k.length; return k; };
+  const critical = take(s.critical), unrouted = take(s.unrouted), mine = take(s.mine);
+  const cut = { critical: s.critical.length - critical.length, unrouted: s.unrouted.length - unrouted.length, mine: s.mine.length - mine.length };
+  return { critical, unrouted, mine, cut, cutTotal: cut.critical + cut.unrouted + cut.mine };
 }

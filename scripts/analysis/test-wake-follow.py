@@ -193,6 +193,8 @@ own = json.load(open(OWN)) if os.path.exists(OWN) else {}
 err = r.stderr.decode("utf-8", "replace")
 case("T11c the recorder: markers in replies NOT addressed here are still recorded (C2)", own.get(U2, {}).get("owner") == "CC-B", str(own))
 case("T11d the recorder: the last marker wins, so a re-route moves ownership away", own.get(U1, {}).get("owner") == "CC-C", str(own))
+case("T11j round 3 BLOCKER-3: the re-route is recorded as a CHANGE (changed_at set, flips 1); a first routing is not",
+     own.get(U1, {}).get("changed_at") == "2026-09-30T13:00:00Z" and own.get(U1, {}).get("flips") == 1 and "changed_at" not in own.get(U2, {}), str(own.get(U1)))
 ids_recorded = [k for k in own if k != "_meta"]
 case("T11e C6: a short id and an unknown owner are NOT recorded, and each is named on stderr",
      len(ids_recorded) == 3 and err.count("NOT recorded") == 2, f"n={len(ids_recorded)} stderr={err.count('NOT recorded')}")

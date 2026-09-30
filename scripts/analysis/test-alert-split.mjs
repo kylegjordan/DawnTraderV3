@@ -1,7 +1,7 @@
 // B-TOKEN-BURN-CUT amendment 1, OBJ-6 — tests for .claude/hooks/alert-split.mjs (pure). Run: node scripts/analysis/test-alert-split.mjs
 // Every case states its expectation before it runs; the suite ends with a count of cases that SHOWED something, so a
 // run that shows nothing can never read as a pass.
-import { splitAlerts, CLONE_TO_ALIAS } from '../../.claude/hooks/alert-split.mjs';
+import { splitAlerts, capBuckets, CLONE_TO_ALIAS, CHURN_HOURS } from '../../.claude/hooks/alert-split.mjs';
 
 let pass = 0, fail = 0, shown = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
@@ -29,6 +29,34 @@ ok('a SEEDED record with no routings narrows, and every alert is unrouted (shown
 ok('(b) a record PRESENT but never seeded does NOT narrow (it would call every alert unrouted — false)',
   (() => { const u = splitAlerts(alerts, { 'mine-1': { owner: 'CC-A' } }, 'CC-A'); return u.narrowed === false && /not seeded/.test(u.why); })());
 ok('the clone map covers the four sessions', ['DawnTraderV3-old', 'DawnTraderV3-new', 'DawnTraderV3-analyst', 'DawnTraderV3-infra'].every((k) => CLONE_TO_ALIAS[k]));
+
+// ── round 3 BLOCKER-3: a recently CHANGED owner is not trusted ──
+{
+  const NOW = Date.parse('2026-09-30T16:00:00Z');
+  const o = { _meta: { seeded_at: 'x' },
+    'flip-recent': { owner: 'CC-A', changed_at: '2026-09-30T15:00:00Z', flips: 43 },
+    'flip-old': { owner: 'CC-A', changed_at: '2026-09-28T10:00:00Z', flips: 2 },
+    'stable': { owner: 'CC-A', flips: 0 } };
+  const r = splitAlerts([A('flip-recent'), A('flip-old'), A('stable')], o, 'CC-A', NOW);
+  shown += r.mine.length + r.unrouted.length;
+  ok(`BLOCKER-3: an owner changed within ${CHURN_HOURS} h reads UNROUTED (shown to every session)`, r.unrouted.map((a) => a.id).join() === 'flip-recent');
+  ok('BLOCKER-3: an owner changed long ago, and a never-changed one, are trusted', r.mine.map((a) => a.id).join() === 'flip-old,stable');
+  ok('BLOCKER-3: the churning alert is listed with its current owner and change count', r.churning.length === 1 && r.churning[0].owner === 'CC-A' && r.churning[0].flips === 43);
+  const b2 = splitAlerts([A('flip-recent')], o, 'CC-B', NOW);
+  ok('BLOCKER-3: the same churning alert is unrouted for another session too, never counted away', b2.unrouted.length === 1 && b2.others === 0);
+}
+// ── round 3 BLOCKER-2: one cap, priority critical → unrouted → yours, cut named per group ──
+{
+  const many = (n, p) => Array.from({ length: n }, (_, i) => A(`${p}-${i}`));
+  const s = { mine: many(25, 'm'), unrouted: many(1, 'u'), critical: [{ ...A('c-0', 'critical'), owner: 'CC-B' }] };
+  const c = capBuckets(s, 25);
+  ok('BLOCKER-2: at the cap, the critical and the unrouted alert are KEPT and two of yours are cut',
+    c.critical.length === 1 && c.unrouted.length === 1 && c.mine.length === 23 && c.cut.mine === 2 && c.cutTotal === 2, JSON.stringify(c.cut));
+  const flood = capBuckets({ mine: [], unrouted: many(3, 'u'), critical: many(30, 'c') }, 25);
+  ok('BLOCKER-2: criticals alone past the cap are cut, and the cut names the group', flood.critical.length === 25 && flood.cut.critical === 5 && flood.cut.unrouted === 3);
+  const under = capBuckets({ mine: many(2, 'm'), unrouted: many(2, 'u'), critical: [] }, 25);
+  ok('BLOCKER-2: under the cap nothing is cut', under.cutTotal === 0 && under.mine.length === 2 && under.unrouted.length === 2);
+}
 
 console.log(`\nAlert split tests: ${pass} passed, ${fail} failed (${shown} alerts shown across the cases — the instrument speaks)`);
 process.exit(fail === 0 ? 0 : 1);

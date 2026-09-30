@@ -45,13 +45,23 @@ if not DRY and not bad:
     r = subprocess.run(["python3", "-u", f"{S}/cc-wake-filter.py", "CC-A", "--seed-owners",
                         "--state", f"{tmpd}/SEED.json"], stdin=fol.stdout, capture_output=True)
     fol.kill()
-    print(r.stderr.decode("utf-8", "replace").strip().splitlines()[-1])
+    lines = r.stderr.decode("utf-8", "replace").strip().splitlines()
+    print(lines[-1] if lines else "(the seed printed nothing on stderr)")
     data = open(f"{tmpd}/CC-A.alert-owners.json", "rb").read()
     if b'"seeded_at"' not in data:
         sys.exit("ABORT: the seed did not finish (no seeded_at) — nothing copied")
+    # Round 3 finding (3): an ATOMIC replace into each live record (a running watcher reads and writes these), then every
+    # one READ BACK and checked for seeded_at — a clobbered seed falls open to the full list, which looks like "not seeded".
     for a in ("CC-A", "CC-B", "CC-C", "CC-INFRA"):
-        open(f"{S}/cc-wake-state/{a}.alert-owners.json", "wb").write(data)
-    print("seeded", len(data), "bytes into the four owner records")
+        dst = f"{S}/cc-wake-state/{a}.alert-owners.json"
+        open(dst + ".seedtmp", "wb").write(data)
+        os.replace(dst + ".seedtmp", dst)
+    import json as _json
+    for a in ("CC-A", "CC-B", "CC-C", "CC-INFRA"):
+        back = _json.load(open(f"{S}/cc-wake-state/{a}.alert-owners.json", encoding="utf-8"))
+        if not (back.get("_meta") or {}).get("seeded_at"):
+            sys.exit(f"ABORT: {a}'s owner record has no seeded_at after the copy — the seed was clobbered; re-run")
+    print("seeded", len(data), "bytes into the four owner records, each read back with seeded_at")
 
 # (3) the rule text
 EDITS = [
