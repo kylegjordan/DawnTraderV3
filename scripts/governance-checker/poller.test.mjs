@@ -5,9 +5,9 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdi
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic } from './poller.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek } from './config.mjs';
-import { ledgerRowInText, checkLedgerRows } from './checker.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence } from './poller.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF } from './config.mjs';
+import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse('2026-06-17T12:00:00Z');
@@ -863,6 +863,98 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
     tmps.length === 1 && JSON.stringify(JSON.parse(readFileSync(join(dir2, tmps[0]), 'utf8'))) === JSON.stringify(after));
   rmSync(dir, { recursive: true, force: true });
   rmSync(dir2, { recursive: true, force: true });
+}
+
+// ── B-PLAN-CURRENCY-CHECK P58 (6) / §10j 3(c): ONE GOV_REF/GOV_BRANCH resolution, warned once on divergence ──
+// Expected first: neither set → the default, silent; GOV_REF only → it, silent; GOV_BRANCH only → it, silent;
+// both set and equal → that value, silent; both set and DIFFERENT → GOV_REF, exactly ONE warning naming both
+// values and the winner. Planted fault: returning `branch || ref` (GOV_BRANCH winning) fails the last case;
+// deleting the warn call fails its warning count.
+{
+  const run = (env) => { const w = []; const ref = resolveGovRefEnv(env, (m) => w.push(m)); return { ref, w }; };
+  const none = run({});
+  ok('P58(6) neither env var set → the default ref, no warning', none.ref === DEFAULT_GOV_REF && none.w.length === 0);
+  const refOnly = run({ GOV_REF: 'origin/x' });
+  ok('P58(6) GOV_REF only → GOV_REF, no warning', refOnly.ref === 'origin/x' && refOnly.w.length === 0);
+  const brOnly = run({ GOV_BRANCH: 'origin/y' });
+  ok('P58(6) GOV_BRANCH only → GOV_BRANCH (the alias), no warning', brOnly.ref === 'origin/y' && brOnly.w.length === 0);
+  const agree = run({ GOV_REF: 'origin/z', GOV_BRANCH: 'origin/z' });
+  ok('P58(6) both set and agreeing → that ref, no warning', agree.ref === 'origin/z' && agree.w.length === 0);
+  const differ = run({ GOV_REF: 'origin/a', GOV_BRANCH: 'origin/b' });
+  ok('P58(6) both set and DIFFERENT → GOV_REF wins, ONE warning', differ.ref === 'origin/a' && differ.w.length === 1, JSON.stringify(differ));
+  ok('P58(6) the warning prints BOTH values and which won',
+    /origin\/a/.test(differ.w[0] || '') && /origin\/b/.test(differ.w[0] || '') && /GOV_REF wins/.test(differ.w[0] || ''), differ.w[0]);
+  ok('P58(6) the module-level GOV_REF is the same resolution of this process env', GOV_REF === resolveGovRefEnv(process.env, () => {}));
+}
+
+// ── B-PLAN-CURRENCY-CHECK N8 (2) / P58: the sha stamped on a doc-set resolve IS the sha the docPresent read used ──
+// The git exec is faked: fetch succeeds; `rev-parse` returns sha A on its first call and sha B on any later
+// call (a push landing mid-tick); every read records the ref it was given. Expected first: ONE fetch in the
+// process (ensureFetched does not fetch again after the resolver); ONE rev-parse; docPresent's ls-tree and
+// show calls both read at A; checkerResolveEvidence() === A. Planted faults, each run before trusting the
+// pass: (i) the wrappers reading GOV_REF instead of `_resolvedRef ?? GOV_REF` → the reads name
+// 'origin/migration/aws-supabase' ≠ A → FAIL; (ii) the resolver not setting `_fetchedThisRun` → a second
+// fetch → FAIL; (iii) resolveGradedRef stamping a fresh `rev-parse` → B ≠ A → FAIL.
+{
+  const A = 'a'.repeat(40), B = 'b'.repeat(40);
+  const calls = [];
+  let revParses = 0;
+  const fake = (cmd, args) => {
+    calls.push(args);
+    if (args[0] === 'fetch') return '';
+    if (args[0] === 'rev-parse') { revParses++; return `${revParses === 1 ? A : B}\n`; }
+    if (args[0] === 'ls-tree') return 'Claude Comms and Packages/Batch Completion/B_N8_COMPLETION_REPORT.md\n';
+    if (args[0] === 'show') return 'B-N8 entry\nmore\nlines\nhere\nand more\n';
+    throw new Error(`unexpected git ${args.join(' ')}`);
+  };
+  __setGitExecForTest(fake);
+  const r = resolveGradedRef();
+  const hasReport = docPresent('B-N8', 'completion_report');
+  const hasEntry = docPresent('B-N8', 'batch_catalog');
+  const evidence = checkerResolveEvidence();
+  const reads = calls.filter((a) => a[0] === 'ls-tree' || a[0] === 'show');
+  const readRefs = reads.map((a) => (a[0] === 'ls-tree' ? a[2] : a[1].split(':')[0]));
+  ok('N8(2) the resolver fetched and resolved sha A', r.fetchOk === true && r.sha === A, JSON.stringify(r));
+  ok('N8(2) both docPresent reads happened and found the doc', hasReport === true && hasEntry === true && reads.length === 2);
+  ok('N8(2) the evidence stamped on a resolve IS the sha every docPresent read used',
+    evidence === A && readRefs.every((x) => x === evidence), JSON.stringify({ evidence, readRefs }));
+  ok('N8(2) ONE fetch in the process — ensureFetched does not fetch again after the resolver',
+    calls.filter((a) => a[0] === 'fetch').length === 1, JSON.stringify(calls.filter((a) => a[0] === 'fetch')));
+  ok('N8(2) ONE rev-parse — a moved ref (B) is never read', revParses === 1);
+  ok('N8 the resolution is cached for the process', resolveGovRefSha() === resolveGovRefSha() && revParses === 1);
+
+  // A FAILED fetch is reported, not swallowed: fetchOk false, no sha, the evidence is the honest sentinel,
+  // and no second fetch follows (so the tick's gov-fetch-failed path fires, and nothing reads a moved ref).
+  const calls2 = [];
+  __setGitExecForTest((cmd, args) => {
+    calls2.push(args);
+    if (args[0] === 'fetch') throw new Error('fatal: unable to access origin');
+    if (args[0] === 'ls-tree') return '';
+    throw new Error(`unexpected git ${args.join(' ')}`);
+  });
+  const f = resolveGradedRef();
+  docPresent('B-N8', 'completion_report');
+  ok('P58(2) a failed fetch is REPORTED (fetchOk false, the error kept, no sha)',
+    f.fetchOk === false && /unable to access/.test(f.fetchError) && f.sha === null, JSON.stringify(f));
+  ok('P58(2) after a failed fetch the evidence is the sanctioned sentinel, never a stale sha', checkerResolveEvidence() === 'NO-EVIDENCE-GIVEN');
+  ok('P58(3) after a failed fetch no second fetch runs and nothing is rev-parsed',
+    calls2.filter((a) => a[0] === 'fetch').length === 1 && !calls2.some((a) => a[0] === 'rev-parse'), JSON.stringify(calls2));
+
+  // A rev-parse that does not return a commit sha THROWS (fail-closed) — never a graded sha of null or junk.
+  __setGitExecForTest((cmd, args) => (args[0] === 'fetch' ? '' : args[0] === 'rev-parse' ? 'origin/migration/aws-supabase\n' : ''));
+  let threw = null;
+  try { resolveGovRefSha(); } catch (e) { threw = e; }
+  ok('P58 a rev-parse without a commit sha throws out of the resolve (fail-closed)', threw !== null && /not a commit sha/.test(threw.message));
+
+  // explicit-ref readers read exactly the ref they are given, with no fetch
+  const calls3 = [];
+  __setGitExecForTest((cmd, args) => { calls3.push(args); return args[0] === 'ls-tree' ? 'd/x.md\n' : 'text'; });
+  const names = lsTreeNamesAt(A, 'd');
+  const text = showFileAt(A, 'd/x.md');
+  ok('N8 lsTreeNamesAt / showFileAt read at the given ref and never fetch',
+    names.join() === 'x.md' && text === 'text' && calls3.length === 2 && calls3[0][2] === A && calls3[1][1] === `${A}:d/x.md`, JSON.stringify(calls3));
+  __setGitExecForTest(null);
+  resolveGradedRef(() => ({ fetchOk: false, sha: null })); // leave the poller's module sha as a fresh process has it
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);

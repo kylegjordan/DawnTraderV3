@@ -278,6 +278,26 @@ export function resolveEvidenceOrSentinel(sha) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// B-PLAN-CURRENCY-CHECK P58 (6) / N8 — THE GRADED REF: ONE resolution of GOV_REF and GOV_BRANCH
+// ─────────────────────────────────────────────────────────────────────────────
+// Before this, poller.mjs read GOV_BRANCH alone while checker.mjs read `GOV_REF || GOV_BRANCH`, so setting
+// GOV_REF alone made the two files grade DIFFERENT refs, undetected (Langston §10i, his finding 1). Both now
+// import GOV_REF from here, and the old names stay as aliases (poller.mjs keeps BRANCH = GOV_REF). §10j 3(c):
+// when BOTH env vars are set to DIFFERENT values, GOV_REF wins and ONE warning is printed at resolution,
+// naming both values and the winner; silent when only one is set or both agree; it warns, it never fails.
+// Resolved once per process at module load, so "once" is by construction. Pure over (env, warn) so all four
+// input states are unit-tested. The box's unit sets only GOV_BRANCH (governance-checker.service).
+export const DEFAULT_GOV_REF = 'origin/migration/aws-supabase';
+export function resolveGovRefEnv(env, warn = console.warn) {
+  const ref = env.GOV_REF || '', branch = env.GOV_BRANCH || '';
+  if (ref && branch && ref !== branch) {
+    warn(`[gov-checker] GOV_REF=${ref} and GOV_BRANCH=${branch} are both set and differ — grading at GOV_REF=${ref} (GOV_REF wins; GOV_BRANCH is its alias)`);
+  }
+  return ref || branch || DEFAULT_GOV_REF;
+}
+export const GOV_REF = resolveGovRefEnv(process.env);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // B-PLAN-CURRENCY-CHECK OBJ-10 (P21-P25) — the exceptions ledger's grammar
 // ─────────────────────────────────────────────────────────────────────────────
 

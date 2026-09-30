@@ -25,15 +25,19 @@ import {
   EXCEPTIONS_V2_ENABLED, EXCEPTION_CONFIRMERS, EXCEPTION_ACCEPT_BY_TYPE, EXCEPTION_TYPES,
   UMBRELLA_NOT_IMPLEMENTED, CLASS_OVERRIDE_VALUE,
   EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, EXCEPTIONS_MALFORMED_BID_CAP,
+  GOV_REF,
 } from './config.mjs';
 import {
   checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass,
   docPresent, completionReportCommitTime, scopeCommitTime, checkLedgerRows,
+  resolveGovRefSha,
 } from './checker.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
-const BRANCH = process.env.GOV_BRANCH || 'origin/migration/aws-supabase';
+// P58 (6): ONE resolution of GOV_REF/GOV_BRANCH, in config.mjs; BRANCH stays as its alias here. Every REF
+// READ in a tick uses the sha resolved from it (gradedRefSha), never this symbolic name (P58 (5)).
+const BRANCH = GOV_REF;
 const STATE_FILE = process.env.GOV_STATE_FILE || join(SCRIPT_DIR, '.gov-checker-state.json');
 const STAGING = process.env.GOV_STAGING || 'deploy@188.245.193.8';
 const STAGING_REPO = process.env.GOV_STAGING_REPO || '/home/deploy/dawntrader';
@@ -349,11 +353,19 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
 // ── SIDE-EFFECT WRAPPERS (run only when deployed) ──────────────────────────────
 // OBJ-5c: a failed fetch degrades to fetchOk=false (the tick then flags low-sev + skips
 // evaluation, never a false RED off stale state).
+// B-PLAN-CURRENCY-CHECK P58 / N8: the fetch is checker.mjs's resolveGovRefSha() — the ONE fetch point of the
+// process — called IN PLACE OF the poller's own fetch; it reports a failed fetch (so gov-fetch-failed still
+// fires) and stops ensureFetched from fetching a second time. The log runs AT THE RESOLVED SHA (P58 (4)),
+// so the window, the checker's reads and the resolve evidence all name one commit. A failed fetch returns
+// no commits: the tick grades nothing on that path (it did not before either — the log was read and dropped).
 function gitFetchAndLog(n = 300) {
-  let fetchOk = true;
-  try { execFileSync('git', ['fetch', '--quiet', 'origin'], { cwd: REPO_ROOT, timeout: 60000 }); }
-  catch (e) { fetchOk = false; console.warn(`[gov-checker] git fetch failed (stale local clone): ${String(e.message).slice(0, 150)}`); }
-  const out = execFileSync('git', ['log', BRANCH, `-n${n}`, '--pretty=COMMIT|%H|%cI|%s', '--name-only'],
+  const r = resolveGradedRef();
+  if (!r.fetchOk) {
+    console.warn(`[gov-checker] git fetch failed (stale local clone): ${String(r.fetchError).slice(0, 150)}`);
+    return { commits: [], fetchOk: false };
+  }
+  const fetchOk = true;
+  const out = execFileSync('git', ['log', r.sha, `-n${n}`, '--pretty=COMMIT|%H|%cI|%s', '--name-only'],
     { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const commits = []; let cur = null;
   for (const raw of out.split('\n')) {
@@ -414,10 +426,19 @@ function appendShadowLog(entry) {
 // once per tick after the fetch; if it can't be computed, resolve falls back to the sanctioned
 // `NO-EVIDENCE-GIVEN` sentinel — an HONEST admission, never a fabricated reference (#447).
 let gradedRefSha = null;
-function checkerResolveEvidence() {
+export function checkerResolveEvidence() {
   // #637: shape test delegated to config.mjs — the HEARTBEAT is a separate
   // process issuing its own resolves and must agree on the shape. One SSOT.
   return resolveEvidenceOrSentinel(gradedRefSha);
+}
+// P58 (5) / N8 (3): gradedRefSha is the RESOLVER'S sha — the sha every checker read in this process lands on —
+// not a separate `rev-parse BRANCH` taken after the fetch and before the checker's own (former) second
+// fetch. A failed fetch leaves it null, so a resolve on that path carries the honest sentinel. Exported (with
+// the resolver injectable) so a test can assert the evidence equals the sha the reads used.
+export function resolveGradedRef(resolver = resolveGovRefSha) {
+  const r = resolver();
+  gradedRefSha = r.fetchOk ? r.sha : null;
+  return r;
 }
 const alertSink = {
   add({ dedupeKey, severity, title, body }, nowMs) {
@@ -477,17 +498,18 @@ function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
 // the checker manufactured a flood of false doc-gap alerts. checker.mjs:28 already declares the
 // invariant — "all reads go through GOV_REF after a fetch, never a stale copy" — and docPresent
 // honours it; loadExceptions was the one place that violated it. origin is fetched by
-// gitFetchAndLog() earlier this tick, so `git show BRANCH:<path>` sees the pushed state.
+// gitFetchAndLog() earlier this tick, and the read is `git show <resolved sha>:<path>` (P58 (5)).
 // FAIL-LOUD: an unreadable/empty rulebook must THROW, never fall back to an empty exception set —
 // that silent-{} default is the original defect in a new mask (no suppressions ⇒ false-alarm flood,
 // or, if the grader ever trusted it, silent under-enforcement). tick() catches the throw, raises a
 // critical alert, and refuses to grade rather than grade permissively.
-function readGovernedExceptions() {
+// P58 (5): read AT THE RESOLVED SHA (the #449 site), never the symbolic BRANCH a later fetch could move.
+function readGovernedExceptions(ref) {
   const relPath = '1-system-manual/GOVERNANCE_EXCEPTIONS.md';
-  const raw = execFileSync('git', ['show', `${BRANCH}:${relPath}`],
+  const raw = execFileSync('git', ['show', `${ref}:${relPath}`],
     { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
   if (!raw || !raw.trim()) {
-    throw new Error(`governed read of ${relPath} at ${BRANCH} returned empty — refusing to grade with no rulebook (#449 fail-loud)`);
+    throw new Error(`governed read of ${relPath} at ${ref} returned empty — refusing to grade with no rulebook (#449 fail-loud)`);
   }
   return raw;
 }
@@ -495,8 +517,8 @@ function readGovernedExceptions() {
 // B-PLAN-CURRENCY-CHECK P21: the tick reads the rulebook through ONE of two PURE parsers, chosen by the
 // committed flag EXCEPTIONS_V2_ENABLED (config.mjs; false = today's exact rule, so the push is inert to
 // grading). The #449 fail-loud throw stays in readGovernedExceptions, ahead of either parser.
-function loadExceptions() {
-  const raw = readGovernedExceptions();
+function loadExceptions(ref) {
+  const raw = readGovernedExceptions(ref);
   return EXCEPTIONS_V2_ENABLED ? parseExceptions(raw) : parseExceptionsLegacy(raw);
 }
 
@@ -665,16 +687,17 @@ function gitBlobAt(ref, file) {
   if (!m) throw new Error(`git ls-tree ${ref} -- ${file}: unexpected output ${JSON.stringify(out.slice(0, 120))}`);
   return m[1];
 }
-// `blobAt(ref, file)` is injectable (the test seam); the refs are HEAD (what this box runs) and BRANCH.
-export function checkerCodeDrift(blobAt = gitBlobAt, files = DRIFT_LOADED_FILES) {
+// `blobAt(ref, file)` is injectable (the test seam); the refs are HEAD (what this box runs) and `originRef` —
+// the tick passes the RESOLVED sha (P58 (5)); the symbolic BRANCH is only the default for other callers.
+export function checkerCodeDrift(blobAt = gitBlobAt, files = DRIFT_LOADED_FILES, originRef = BRANCH) {
   const absentBoth = [];
   try {
     const compared = [], local = [], origin = [];
     for (const f of files) {
       const l = blobAt('HEAD', f);
-      const o = blobAt(BRANCH, f);
+      const o = blobAt(originRef, f);
       if (l == null && o == null) { absentBoth.push(f); continue; }
-      if (l == null || o == null) throw new Error(`${f} is absent at ${l == null ? 'HEAD' : BRANCH} only`);
+      if (l == null || o == null) throw new Error(`${f} is absent at ${l == null ? 'HEAD' : originRef} only`);
       compared.push(f); local.push(l); origin.push(o);
     }
     return { drifted: local.join('|') !== origin.join('|'), local: local.join('|'), origin: origin.join('|'), compared, absentBoth };
@@ -719,7 +742,7 @@ export function tick(nowMs = Date.now()) {
       if (id) { state.openAlerts[FETCH_KEY] = id; state.fetchFailSev = 'warning'; }
     }
     // #637 (Langston's correction to option (a)): this path updates lastTick and
-    // returns BEFORE gradedRefSha is set from rev-parse. Persisting the LAST GOOD
+    // returns with gradedRefSha null (the resolver resolves nothing on a failed fetch). Persisting the LAST GOOD
     // sha here would let the heartbeat resolve carrying a ref this tick never
     // graded at — a stale-but-plausible token, which is worse than an honest
     // sentinel. Write NULL explicitly: this tick graded nothing.
@@ -728,13 +751,11 @@ export function tick(nowMs = Date.now()) {
     return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: false };
   }
   state.fetchFailStreak = 0; state.fetchFailSev = undefined;
-  // Layer-B evidence seam (#447): capture the exact ref sha this tick grades at, so every resolve
-  // the checker issues carries a re-derivable reference (`git show <sha>:<doc>`) that Layer-A can
-  // shape-validate. Set only after a confirmed fetch; if it can't be computed, checkerResolveEvidence()
-  // falls back to the sanctioned NO-EVIDENCE-GIVEN sentinel rather than fabricate one.
-  try {
-    gradedRefSha = execFileSync('git', ['rev-parse', BRANCH], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
-  } catch { gradedRefSha = null; }
+  // Layer-B evidence seam (#447): the exact ref sha this tick grades at, so every resolve the checker
+  // issues carries a re-derivable reference (`git show <sha>:<doc>`) that Layer-A can shape-validate.
+  // P58 (5) / N8: it is now set by gitFetchAndLog → resolveGradedRef — the RESOLVER'S sha, the one every
+  // checker read in this process uses — in place of the separate `rev-parse BRANCH` that stood here. A
+  // rev-parse failure there throws out of the tick (fail-closed) rather than grading with no sha.
   if (state.openAlerts[FETCH_KEY]) { alertSink.resolve(state.openAlerts[FETCH_KEY]); delete state.openAlerts[FETCH_KEY]; }
   // OBJ-4 (B-GOV-ORPHAN-CLASS): per-tick store-reconcile. state.openAlerts is only a dedup cache; the
   // alert STORE is the SSOT. Snapshot the live (active+scheduled) id set ONCE here — BEFORE the drift/
@@ -747,9 +768,9 @@ export function tick(nowMs = Date.now()) {
   // #490 recurrence guard: warn if the deployed checker code has drifted from origin, so a silent
   // redeploy gap can never again let the box grade with stale logic the way #449 hid for two weeks.
   const DRIFT_KEY = 'gov-code-drift';
-  const drift = checkerCodeDrift();
+  const drift = checkerCodeDrift(undefined, undefined, gradedRefSha);
   if (drift.absentBoth.length > 0) {
-    console.warn(`[gov-checker] drift check: ${drift.absentBoth.length} listed file(s) absent at BOTH HEAD and ${BRANCH}, ` +
+    console.warn(`[gov-checker] drift check: ${drift.absentBoth.length} listed file(s) absent at BOTH HEAD and ${gradedRefSha}, ` +
       `skipped as a no-op (R1-Q15): ${drift.absentBoth.join(', ')}`);
   }
   if (drift.drifted) {
@@ -791,10 +812,10 @@ export function tick(nowMs = Date.now()) {
   // tick with zero opens/resolves so nothing is mis-graded off a rulebook we could not read.
   let exceptions;
   try {
-    exceptions = loadExceptions();
+    exceptions = loadExceptions(gradedRefSha);
   } catch (e) {
     const EXC_KEY = 'gov-exceptions-unreadable';
-    const body = `The governance checker could not read GOVERNANCE_EXCEPTIONS.md at ${BRANCH}: ${String(e.message || e).slice(0, 300)}. ` +
+    const body = `The governance checker could not read GOVERNANCE_EXCEPTIONS.md at ${BRANCH} (${gradedRefSha}): ${String(e.message || e).slice(0, 300)}. ` +
       `Refusing to grade this tick — grading with no rulebook would re-open every dispositioned batch (#449). No alerts opened or resolved. Investigate the checker's git access to the ref.`;
     if (!state.openAlerts[EXC_KEY]) {
       const id = alertSink.add({ dedupeKey: EXC_KEY, severity: 'critical',
@@ -881,7 +902,7 @@ export function tick(nowMs = Date.now()) {
   for (const key of orphanResolve) {
     const id = state.openAlerts[key];
     if (id) { alertSink.resolve(id); delete state.openAlerts[key]; }
-    console.warn(`[gov-checker] orphan-sweep RESOLVED ${key} (verified satisfied at ${BRANCH})`);
+    console.warn(`[gov-checker] orphan-sweep RESOLVED ${key} (verified satisfied at ${gradedRefSha})`);
   }
   for (const key of orphanKeep) {
     console.warn(`[gov-checker] orphan-sweep KEPT ${key} (still missing out-of-window — real gap, not silenced)`);
