@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence } from './poller.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF } from './config.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF, PLAN_LINE } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
@@ -955,6 +955,16 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
     names.join() === 'x.md' && text === 'text' && calls3.length === 2 && calls3[0][2] === A && calls3[1][1] === `${A}:d/x.md`, JSON.stringify(calls3));
   __setGitExecForTest(null);
   resolveGradedRef(() => ({ fetchOk: false, sha: null })); // leave the poller's module sha as a fresh process has it
+}
+
+// ── B-PLAN-CURRENCY-CHECK P32: the PLAN_LINE table — dormant at landing, key disjoint from DOCS and LEDGER_ROWS ──
+// Planted faults: `enabled: true` fails the first; `naKey: 'task_lists'` (or any DOCS key) fails the second.
+{
+  ok('P32 PLAN_LINE.enabled === false at landing (rewritten only by the P61 flip commit)', PLAN_LINE.enabled === false);
+  ok('P32 PLAN_LINE.naKey is disjoint from the DOCS and LEDGER_ROWS keys (one flat na-skip namespace)',
+    ![...Object.keys(DOCS), ...Object.keys(LEDGER_ROWS)].includes(PLAN_LINE.naKey));
+  ok('P32 no sinceMs (re-cut: a state check has no first-add gate)', !('sinceMs' in PLAN_LINE));
+  ok('C′ the §5 header carries the report column', PLAN_LINE.s5Header === '| item | owner | closes | report |');
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);

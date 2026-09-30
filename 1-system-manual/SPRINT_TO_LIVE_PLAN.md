@@ -366,11 +366,11 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 
 ## 5. Running now — observation windows
 
-| item | owner | closes |
-|---|---|---|
-| B-FEED-MISMATCH-FIX | CC-B | 300 taker closes or 2026-10-10 (paused for the sprint start, Kyle 2026-09-30) |
-| B-XSTOCK-FEE-CONTRACT | CC-B | 2026-10-02T20:09:47Z, not extended (Langston 2026-09-29) |
-| B-INSTRUMENTS-OVER-RULES | CC-A | 2026-10-02 |
+| item | owner | closes | report |
+|---|---|---|---|
+| B-FEED-MISMATCH-FIX | CC-B | 300 taker closes or 2026-10-10 (paused for the sprint start, Kyle 2026-09-30) | — |
+| B-XSTOCK-FEE-CONTRACT | CC-B | 2026-10-02T20:09:47Z, not extended (Langston 2026-09-29) | — |
+| B-INSTRUMENTS-OVER-RULES | CC-A | 2026-10-02 | — |
 
 ## 6. Who owns what — grouped so connected work stays with one session
 
