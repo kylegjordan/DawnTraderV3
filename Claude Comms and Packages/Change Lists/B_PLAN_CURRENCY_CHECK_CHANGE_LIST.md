@@ -87,3 +87,13 @@ Tests at `79c52eded`: poller 432/0, heartbeat 84/0, census 125/0.
 - **P39 runs re-taken at the rebased shas (G6-7):** run 1 at `42aac2a63` — 3 PASS (rows 35, 55, 87), `B-XSTOCK-FEE-CONTRACT:s5` FAIL on report, malformed none, opens exactly that key; run 3 fixtures 12 ok / 0 BAD; (b″) `--listing-empty` at `42aac2a63` → FROZEN, opens exactly `gov-planline-listing-empty`; (b‴) at `a698e6188` (parent of the rebased C′ commit `d56cd23fb`) → FROZEN, opens exactly `gov-planline-unreadable`. All as pre-registered.
 Tests at `496176683`: poller 432/0 (win32; +3 inode checks on Linux), heartbeat 103/0, census 125/0.
 
+## PART 3 (G6) — APPROVED with conditions (Langston, 2026-09-30 ~14:05Z), discharged at `c62354460`
+He re-derived run 1 (`rows4=236 rows5=3 ids=127`, 4 graded, the one true positive confirmed at the object), (b″), (b‴) and run 3 on his own invocation — G6-7 discharged on his measurement.
+- **C1** — `gov-planline-listing-empty` posts as `health_check` (ALERT_CATEGORIES: a git read failing is system health); the rest stay `governance`. Pinned.
+- **C2** — `resolveGovRefSha` refuses (throws) when `GOV_REF`'s first segment is a configured remote other than `origin`; a local branch holding a slash is not mistaken for a remote (pure `govRefRemoteRefusal`, four cases). Nothing live changes: the box grades `origin/migration/aws-supabase`.
+- **C3** — the tick line prints `planOpened` / `planResolved`.
+- **P61 OBLIGATION (recorded here so the flip cannot be bare):** the flip commit carries the first live tick's `plan.liveness` line AND its opened/resolved counts, posted before any plan-line alert is trusted.
+- **G6-1** C1 above · **G6-2** APPROVED, *better than the re-cut*: each key reports only its own read; FREEZE stays the conjunction — this departure from "listing only after the plan parses" is recorded here WITH his ruling · **G6-3/-4/-6** confirmed · nit folded (U+2010, U+2011, U+FF0D read as EMPTY) · **G6-8** accepted for this gate, with the P61 obligation.
+- **Reach, for the completion report:** 4 of 127 plan ids are graded (the rule grades CLOSED batches), and batches that live in `PHASE_19_PLAN.md` are invisible to it — a quiet check is never a current plan.
+- **Homes:** `#1133` `B-GOV-ENROLMENT-WINDOW-OBJECT` at row 1j (his G4-1 answer: its own home, not G6); `#1134` `B-PLAN-ROW-DISAPPEARANCE` at row 1k — checked against the census first: list (a) covers only reports ADDED since the last run, so it is not disposition 5.
+Tests at `c62354460`: poller 438/0, heartbeat 103/0, census 125/0, run 3 12 ok.
