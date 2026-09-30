@@ -220,16 +220,22 @@ export function takeChainRefusalBasis(symbol: string): {
  * ⛔ WHY IT IS NEEDED: `assessBookState` builds the threshold from the CHAIN'S OWN trailing median spread
  * (`book-state-tracker.ts` passes `medianOf(cmp.spreads)`), so on a chain that was seeded inside a blowout the
  * threshold is itself blown, and a would-refuse test computed from it cannot fire. `tb` says whether that chain's
- * seed was ever judged against an outside ring (`j`) or seeded vacuously (`v`); `ret` is the live retained ring's
- * median (null when there is none) — the outside datum a reader needs to tell a real would-refuse from a
- * self-referential one.
+ * seed was ever judged against an outside ring (`j`) or seeded vacuously (`v`); `seedRet` is the retained median that
+ * seed was judged against (null when it seeded vacuously) — the outside datum a reader needs to tell a real
+ * would-refuse from a self-referential one.
+ * ⛔ Langston 565e784ce Step-4 (2026-09-30), BOTH fields corrected:
+ *   - the trailing median is NOT read here any more: by the time the frame line is built the advance has already
+ *     pushed this frame into the ring, so a median read here includes the frame being judged. The caller takes the
+ *     pre-advance value the threshold was actually built from, `_r.inputs.trailingMedianSpreadFrac`.
+ *   - the LIVE retained ring cannot coexist with a validated chain (a plausible seed consumes it; only a clear or a
+ *     boot restore writes one, and the restore refuses while any chain exists), so on every emitted line it was
+ *     null by construction. `seedRetainedMedian` is carried for the chain's life and is the one outside datum that
+ *     can be non-null there.
  */
-export function readThresholdBasis(symbol: string): { trail: number | null; ret: number | null; tb: 'j' | 'v' } | null {
-  const key = symbol.toUpperCase();
-  const cmp = _comparators.get(key);
+export function readThresholdBasis(symbol: string): { seedRet: number | null; tb: 'j' | 'v' } | null {
+  const cmp = _comparators.get(symbol.toUpperCase());
   if (!cmp) return null;
-  const live = _retainedSpreads.get(key);
-  return { trail: medianOf(cmp.spreads), ret: live ? medianOf(live.spreads) : null, tb: seedWasJudged(cmp) ? 'j' : 'v' };
+  return { seedRet: cmp.seedRetainedMedian, tb: seedWasJudged(cmp) ? 'j' : 'v' };
 }
 
 /**

@@ -32,8 +32,9 @@ export interface XsExitFrame {
   /** Why there are no transactable sides on an evaluated tick; null when there are. */
   reason?: string | null;
   /**
-   * The threshold's basis (Langston inc-2 Step-1 BLOCKER-2): `trail` = the chain's own trailing median spread the
-   * threshold was built from; `ret` = the live retained ring's median (the outside datum), null when none; `tb` = `j`
+   * The threshold's basis (Langston inc-2 Step-1 BLOCKER-2; fields corrected at his 565e784ce Step 4): `trail` = the
+   * chain's trailing median spread the threshold was built from (the predicate's own pre-advance input); `ret` = the
+   * retained median the chain's SEED was judged against (the outside datum), null when it seeded vacuously; `tb` = `j`
    * when the chain's seed was judged against a ring, `v` when it seeded vacuously. Null on the unguarded arm.
    */
   trail?: number | null;

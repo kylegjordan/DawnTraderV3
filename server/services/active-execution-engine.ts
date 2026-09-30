@@ -1900,7 +1900,7 @@ export class ActiveExecutionEngine {
         let xsSpread: number | null = null;
         let xsThr: number | null = null;
         // `3n.q7` inc-1 amendment (Langston inc-2 Step-1 BLOCKER-2): what that threshold was built from — log only.
-        let xsThrBasis: { trail: number | null; ret: number | null; tb: 'j' | 'v' } | null = null;
+        let xsThrBasis: { trail: number | null; ret: number | null; tb: 'j' | 'v' | null } | null = null;
         // `3n.q7` increment 1 (Langston condition 2) — WHY an evaluated xStock tick has no transactable sides. Set on the
         // four arms that reach the evaluator with `xsBid` null; every other failure `continue`s before the evaluator.
         let xsFrameReason: string | null = null;
@@ -2231,7 +2231,10 @@ export class ActiveExecutionEngine {
                   xsSideBasis = 'raw_guarded';
                   xsSpread = _r.inputs.spreadFrac ?? null;
                   xsThr = _r.inputs.departureThresholdFrac ?? null;
-                  xsThrBasis = readThresholdBasis(position.symbol);
+                  // Langston 565e784ce Step 4: `trail` is the predicate's PRE-advance input (the one the threshold above was
+                  // built from — the advance has already added this frame to the ring), `ret` the seed's judged-against median.
+                  const _tb = readThresholdBasis(position.symbol);
+                  xsThrBasis = { trail: _r.inputs.trailingMedianSpreadFrac ?? null, ret: _tb?.seedRet ?? null, tb: _tb?.tb ?? null };
                 } else {
                   // Step 4 r2 residual (Langston): name WHICH fact refused, so this line carries one fact at both sites.
                   // Below the refusal both sides are finite-positive (`book-state.ts` `pos`), so today only a cross

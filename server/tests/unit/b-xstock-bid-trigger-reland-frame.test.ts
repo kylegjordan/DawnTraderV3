@@ -97,7 +97,7 @@ describe('3n.q7 inc-1 — the wiring (source, comments stripped)', () => {
   // MUTATION: drop the reason from the caller's frame object and this fails.
   it('the caller carries the basis and the reason into the frame, and sets the reason on all four hollow arms', () => {
     expect(CODE).toMatch(/\{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis\?\.trail \?\? null, ret: xsThrBasis\?\.ret \?\? null, tb: xsThrBasis\?\.tb \?\? null \}/);
-    expect(CODE).toMatch(/xsThr = _r\.inputs\.departureThresholdFrac \?\? null;\s*xsThrBasis = readThresholdBasis\(position\.symbol\);/);
+    expect(CODE).toMatch(/xsThr = _r\.inputs\.departureThresholdFrac \?\? null;\s*const _tb = readThresholdBasis\(position\.symbol\);/);
     expect(CODE).toMatch(/xsFrameReason = 'unguarded_crossed';/);
     expect(CODE).toMatch(/xsFrameReason = 'unguarded_not_two_sided';/);
     expect(CODE).toMatch(/xsFrameReason = _crossed \? 'guarded_crossed' : 'guarded_non_finite';/);
@@ -129,7 +129,7 @@ describe('3n.q7 inc-1 amendment — the threshold basis on the line', () => {
 });
 
 describe('3n.q7 inc-1 amendment — readThresholdBasis at the real tracker (pure: no flag set)', () => {
-  it('a cold-seeded chain is vacuous with no retained ring; after a healthy clear the next chain is judged and ret is live', async () => {
+  it('a cold-seeded chain is vacuous with no seed ring; a chain seeded after a healthy clear is judged and carries that ring median', async () => {
     const T = await import('../../asset_classes/xstock_spot/book-state-tracker');
     T._resetBookStateComparatorsForTest();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -140,19 +140,29 @@ describe('3n.q7 inc-1 amendment — readThresholdBasis at the real tracker (pure
       const bid = 100 + i * 0.01;
       T.advanceBookStateComparator('TST/USD', { bid, ask: bid + 0.1, last: bid, atMs: (t += 1_500) }, 20, true, 3);
     }
-    const cold = T.readThresholdBasis('TST/USD')!;
-    expect(cold.tb).toBe('v');
-    expect(cold.ret).toBeNull();
-    expect(cold.trail).toBeCloseTo(0.1 / 100.17, 3);
+    expect(T.readThresholdBasis('TST/USD')).toEqual({ seedRet: null, tb: 'v' });
+    const ringMedian = (() => { const c = T.readBookStateComparator('TST/USD')!; const s2 = [...c.spreads].sort((a, b2) => a - b2); const h = s2.length >> 1; return s2.length % 2 ? s2[h] : (s2[h - 1] + s2[h]) / 2; })();
     T.clearBookStateComparator('TST/USD', 'yield_after_60_hollow'); // live + moved ⇒ the ring is retained
     T.advanceBookStateComparator('TST/USD', { bid: 100.3, ask: 100.4, last: 100.3, atMs: (t += 1_500) }, 20, true, 3);
     const judged = T.readThresholdBasis('TST/USD')!;
     expect(judged.tb).toBe('j');
-    // a plausible seed consumes the ring (r4), so ret is null again — the line says so rather than inventing one
-    expect(judged.ret).toBeNull();
+    // the seed's judged-against median survives the ring being consumed — the one outside datum a validated chain has
+    expect(judged.seedRet).toBeCloseTo(ringMedian, 12);
     // pure: the refusal basis is still reported as `first` after any number of reads
     T.readThresholdBasis('TST/USD');
     expect(T.takeChainRefusalBasis('TST/USD')!.first).toBe(true);
     warn.mockRestore(); log.mockRestore();
+  });
+});
+
+// Langston 565e784ce Step 4 BLOCKER-1: `trail` must be the threshold's own PRE-advance input, not a re-read of the ring
+// after the advance has pushed this frame into it. Pinned at the capture site (comments stripped).
+describe('3n.q7 inc-1 amendment — trail is the predicate input, not a post-advance re-read', () => {
+  it('the capture takes _r.inputs.trailingMedianSpreadFrac and the reader no longer returns a median', () => {
+    const aee = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf8').replace(/\/\/[^\n]*/g, '');
+    expect(aee).toMatch(/xsThrBasis = \{ trail: _r\.inputs\.trailingMedianSpreadFrac \?\? null, ret: _tb\?\.seedRet \?\? null, tb: _tb\?\.tb \?\? null \}/);
+    const trk = readFileSync(join(process.cwd(), 'server/asset_classes/xstock_spot/book-state-tracker.ts'), 'utf8');
+    const fn = trk.slice(trk.indexOf('export function readThresholdBasis'), trk.indexOf('export function readThresholdBasis') + 400);
+    expect(fn).not.toMatch(/medianOf|_retainedSpreads/);
   });
 });
