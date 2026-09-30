@@ -628,11 +628,20 @@ export const gitReaders = {
     if (!/^[0-9a-f]{40,64}$/.test(sha)) throw new Error(`no commit on ${ref} at or before ${new Date(ms).toISOString()}`);
     return sha;
   },
-  // The plan at each commit that touched it, newest first, plus the oldest one's parent (sha null).
-  planHistory(ref, path, n) {
-    const shas = git(['log', `-n${n}`, '--format=%H', ref, '--', path]).split('\n').filter(Boolean);
-    const out = shas.map((sha) => ({ sha, text: showFileAt(sha, path) ?? '' }));
-    if (shas.length) out.push({ sha: null, text: showFileAt(`${shas[shas.length - 1]}^`, path) ?? '' });
+  // The plan at each commit that touched it, newest first, plus the oldest one's parent (sha null). A failed read
+  // at a commit the log NAMED throws (the census refuses): read as '' it would parse to no tally, place the tally
+  // change at that commit and report §6 as touched there, SUPPRESSING the §6 alert off a read that failed. Only the
+  // parent may be absent (the file's creation), and it reads as ''. A commit in the window that DELETED the file
+  // refuses too (fail-closed; the census cannot tell that from a failed read). `io` is injectable for the tests.
+  planHistory(ref, path, n, io = {}) {
+    const show = io.show ?? showFileAt, log = io.log ?? git;
+    const shas = log(['log', `-n${n}`, '--format=%H', ref, '--', path]).split('\n').filter(Boolean);
+    const out = shas.map((sha) => {
+      const text = show(sha, path);
+      if (typeof text !== 'string') throw new Error(`census: git show ${sha}:${path} returned nothing at a commit that touched it — refusing`);
+      return { sha, text };
+    });
+    if (shas.length) out.push({ sha: null, text: show(`${shas[shas.length - 1]}^`, path) ?? '' });
     return out;
   },
   // The %B of every commit in prevRef..ref. Throws on a failed log.

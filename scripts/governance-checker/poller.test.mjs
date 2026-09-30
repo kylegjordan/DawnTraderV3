@@ -1404,6 +1404,7 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
     const pass1 = a.find((x) => x.dedupeKey === `gov-mistakepass:${W40}`);
     ok('P46 a census fault does not block the pass (its own keys and gate)', a.some((x) => x.dedupeKey === CENSUS_FAILED_KEY) && pass1 && st.lastMistakePassWeek === W40 && st.lastCensusWeek === undefined);
     ok('P46 the pass is verification/info with a counts-first body', pass1.category === 'verification' && pass1.severity === 'info' && /wrong-object 1/.test(pass1.body) && pass1.metadata.startsWith('{"counts":'));
+    ok('P41/P46 the pass carries --dedupe-key = its own week key (the store write guard)', pass1.storeDedupeKey === `gov-mistakepass:${W40}`);
     st.openAlerts[`gov-mistakepass:${W40}`] = 'ack-1';                  // acknowledged, never resolved (the 8a07c40b shape)
     maybeRunWeekly(st, MON + 7 * DAY, new Set(['ack-1']), w.deps);
     const pass2 = adds(w.calls).find((x) => x.dedupeKey === `gov-mistakepass:${W41}`);
