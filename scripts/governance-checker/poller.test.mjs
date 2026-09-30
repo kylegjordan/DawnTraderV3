@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdi
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence } from './poller.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence, decidePlanLineAlerts, decidePlanReadAlerts, decidePlanLineTick, runPlanLineRule, makeVerifyPlanLine, planMalformedSignature, PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY } from './poller.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF, PLAN_LINE } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt, planRowsByBatch, statusIsDefault, cellNamesFile, checkPlanState, findGlobDoc } from './checker.mjs';
 
@@ -1087,6 +1087,150 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
   ok('P34 findGlobDoc(bid, doc, names) filters the given listing', got.length === 1 && /B_X_COMPLETION_REPORT\.md$/.test(got[0]), JSON.stringify(got));
   ok('P34 ...and runs no git at all', calls.length === 0, JSON.stringify(calls));
   __setGitExecForTest(null);
+}
+
+// ── B-PLAN-CURRENCY-CHECK P36: decidePlanLineAlerts — per-leg keys, bodies that do not move, the malformed singleton ──
+// Expected first, per case. Planted faults run before trusting the pass: ignoring `enabled` fails the flag-off
+// case; naming `lineNos` in the body fails the "same string" cases; resolving the malformed key on EVERY tick it
+// is open (not only on a signature change) fails the same-signature case; dropping the na-skip check fails it.
+{
+  const L = (o) => ({ bid: 'B-X', leg: 's4', fail: true, why: ['status', 'report'], rowNos: ['35'], lineNos: [777], reports: ['B_X_COMPLETION_REPORT.md'], ...o });
+  const na0 = new Set();
+  const off = decidePlanLineAlerts([L()], [{ section: 4, rowNo: '9', lineNo: 5, cellCount: 8 }], na0, { enabled: false, shadow: false });
+  ok('P36 flag off → no intents for ANY gov-planline key (FREEZE)', off.toOpen.length === 0 && off.toResolveKeys.length === 0);
+  const on = decidePlanLineAlerts([L()], [], na0, { enabled: true, shadow: false });
+  const o = on.toOpen.find((a) => a.dedupeKey === 'gov-planline:B-X:s4');
+  ok('P36 a failing leg opens its per-leg key at warning', o && o.severity === 'warning');
+  ok('P36 the body names the id, the §4 row, the report and the preview command', o && /B-X/.test(o.body) && /§4 row 35/.test(o.body) && /B_X_COMPLETION_REPORT\.md/.test(o.body) && /plan-lines-preview\.mjs/.test(o.body));
+  const bodyOf = (leg) => decidePlanLineAlerts([L(leg)], [], na0, { enabled: true, shadow: false }).toOpen.find((a) => a.dedupeKey === 'gov-planline:B-X:s4')?.body;
+  const bBoth = bodyOf({}), bStatus = bodyOf({ why: ['status'] }), bReport = bodyOf({ why: ['report'] }), bMoved = bodyOf({ lineNos: [787] });
+  ok('P36 N7: the body is the SAME string for a status-only, a report-only and a both-tests failure', bBoth === bStatus && bBoth === bReport);
+  ok('P36 N7: ...and for the same row moved down ten lines (no line number in the body)', bBoth === bMoved && !/777|787/.test(bBoth));
+  ok('P36 shadow → the per-leg key opens at info', decidePlanLineAlerts([L()], [], na0, { enabled: true, shadow: true }).toOpen[0].severity === 'info');
+  const pass = decidePlanLineAlerts([L({ fail: false, why: [] })], [], na0, { enabled: true, shadow: false });
+  ok('P36 a passing leg resolves its key', pass.toResolveKeys.includes('gov-planline:B-X:s4') && !pass.toOpen.some((a) => a.dedupeKey.startsWith('gov-planline:')));
+  const naSkip = decidePlanLineAlerts([L(), L({ leg: 's5', rowNos: [null] })], [], new Set(['B-X:plan_line']), { enabled: true, shadow: false });
+  ok('P36 a confirmed na-skip `B-X:plan_line` resolves BOTH legs', naSkip.toResolveKeys.includes('gov-planline:B-X:s4') && naSkip.toResolveKeys.includes('gov-planline:B-X:s5') && naSkip.toOpen.length === 0);
+  const s5 = decidePlanLineAlerts([L({ leg: 's5', rowNos: [null], why: ['report'] })], [], na0, { enabled: true, shadow: false }).toOpen[0];
+  ok('P36 an s5 leg opens `gov-planline:<bid>:s5` and names §5, not a row', s5.dedupeKey === 'gov-planline:B-X:s5' && /§5/.test(s5.body) && !/row null/.test(s5.body));
+  const amb = decidePlanLineAlerts([L({ why: ['ambiguous'], rowNos: ['35', '36'], lineNos: [1, 2] })], [], na0, { enabled: true, shadow: false }).toOpen[0];
+  ok('P36 an ambiguous leg names every row number', /rows 35, 36/.test(amb.body) && /more than one/.test(amb.body));
+  const mal = [{ section: 4, rowNo: '138a', lineNo: 256, cellCount: 8 }, { section: 5, rowNo: null, lineNo: 360, cellCount: 3 }];
+  const mOpen = decidePlanLineAlerts([], mal, na0, { enabled: true, shadow: false, refSha: 'c'.repeat(40) });
+  const mi = mOpen.toOpen.find((a) => a.dedupeKey === PLANLINE_MALFORMED_KEY);
+  ok('P36 malformed rows open the singleton, every line number AND cell count in the body, stamped with the ref sha',
+    mi && /138a/.test(mi.body) && /line 256, 8 cells/.test(mi.body) && /§5 line 360 \(3 cells\)/.test(mi.body) && mi.body.includes('c'.repeat(40)), mi && mi.body);
+  ok('P36 ...and does not resolve it when it is not open', !mOpen.toResolveKeys.includes(PLANLINE_MALFORMED_KEY));
+  const sig = planMalformedSignature(mal);
+  const same = decidePlanLineAlerts([], mal, na0, { enabled: true, shadow: false, malformedOpen: true, malformedSig: sig });
+  ok('P36 open under the SAME signature → no resolve (the add is deduped; no flap)', !same.toResolveKeys.includes(PLANLINE_MALFORMED_KEY) && same.malformedSig === sig);
+  const moved = decidePlanLineAlerts([], [{ ...mal[0], lineNo: 257 }, mal[1]], na0, { enabled: true, shadow: false, malformedOpen: true, malformedSig: sig });
+  ok('P36 open under a DIFFERENT signature (a row moved a line) → resolve AND open again',
+    moved.toResolveKeys.includes(PLANLINE_MALFORMED_KEY) && moved.toOpen.some((a) => a.dedupeKey === PLANLINE_MALFORMED_KEY) && moved.malformedSig !== sig);
+  const none = decidePlanLineAlerts([], [], na0, { enabled: true, shadow: false, malformedOpen: true, malformedSig: sig });
+  ok('P36 no malformed rows → the singleton resolves; signature null', none.toResolveKeys.includes(PLANLINE_MALFORMED_KEY) && none.malformedSig === null);
+  ok('P36 the signature is over content (rowNo+lineNo+cellCount), order-independent',
+    planMalformedSignature([mal[1], mal[0]]) === sig && planMalformedSignature([{ ...mal[0], cellCount: 9 }, mal[1]]) !== sig && planMalformedSignature([]) === null);
+}
+
+// ── P38: decidePlanReadAlerts — two unreadable keys, each decided by its own read (N7) ──
+{
+  const r = (o) => decidePlanReadAlerts({ refSha: 'd'.repeat(40), shadow: false, ...o });
+  const bad = r({ planError: 'a §4 table header differs', listingEmpty: false });
+  ok('P38 plan unreadable → `gov-planline-unreadable` opens (warning); the listing key resolves',
+    bad.toOpen.length === 1 && bad.toOpen[0].dedupeKey === PLANLINE_UNREADABLE_KEY && bad.toOpen[0].severity === 'warning' && bad.toResolveKeys.join() === PLANLINE_LISTING_EMPTY_KEY);
+  const empty = r({ planError: null, listingEmpty: true });
+  ok('P38 listing empty → `gov-planline-listing-empty` opens (warning), naming the listing; the plan key resolves',
+    empty.toOpen.length === 1 && empty.toOpen[0].dedupeKey === PLANLINE_LISTING_EMPTY_KEY && /Batch Completion/.test(empty.toOpen[0].body) && empty.toResolveKeys.join() === PLANLINE_UNREADABLE_KEY);
+  const good = r({ planError: null, listingEmpty: false });
+  ok('P38 both reads good → both singletons resolve, none opens', good.toOpen.length === 0 && good.toResolveKeys.length === 2);
+  const both = r({ planError: 'x', listingEmpty: true });
+  ok('P38 both reads bad → both singletons open', both.toOpen.length === 2 && both.toResolveKeys.length === 0);
+  ok('P38 N7: every singleton key is disjoint from the per-leg regex (a hyphen, not a colon)',
+    [PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY].every((k) => !/^gov-planline:(.+):(s4|s5)$/.test(k)));
+}
+
+// ── P38: decidePlanLineTick — the rule for one tick, from the two reads; FREEZE on either bad read ──
+{
+  const R = 'B_PLAN_X_COMPLETION_REPORT.md';
+  const text = planFixture();
+  const names = [R, 'B_OTHER_COMPLETION_REPORT.md'];
+  const sha = 'e'.repeat(40);
+  const off = decidePlanLineTick({ enabled: false, refSha: sha, planText: text, names, malformedSig: 'kept' });
+  ok('P38 flag off → no intents, no liveness line, verifier keeps (FREEZE), stored signature kept',
+    off.toOpen.length === 0 && off.toResolveKeys.length === 0 && off.liveness === null && off.verifyPlanLine('B-PLAN-X', 's4') === false && off.malformedSig === 'kept');
+  const t = decidePlanLineTick({ enabled: true, refSha: sha, planText: text, names, shadow: false });
+  ok('P38 a good tick opens the failing leg (B-PLAN-X row 1 is QUEUED / —)', t.toOpen.some((a) => a.dedupeKey === 'gov-planline:B-PLAN-X:s4'));
+  ok('P38 ...grades only ids with a report (B-BOLD and B-WIN have none)', !t.toOpen.some((a) => /B-BOLD|B-WIN/.test(a.dedupeKey)) && t.legs.length === 1);
+  ok('P38 ...resolves both read singletons', t.toResolveKeys.includes(PLANLINE_UNREADABLE_KEY) && t.toResolveKeys.includes(PLANLINE_LISTING_EMPTY_KEY));
+  ok('P38 the liveness line prints ref=<the sha read at> and the counts',
+    t.liveness === `[gov-checker] planline: enabled ref=${sha} rows4=4 rows5=1 ids=3 graded=1 legs=1 fail=1 malformed=0`, t.liveness);
+  ok('P38 the verifier: a graded leg → null (owned this tick); a leg not graded → true (not required at the ref)',
+    t.verifyPlanLine('B-PLAN-X', 's4') === null && t.verifyPlanLine('B-GONE', 's4') === true && t.verifyPlanLine('B-PLAN-X', 's5') === true);
+  const bad = decidePlanLineTick({ enabled: true, refSha: sha, planText: text.replace(H5, '| item | owner | closes |'), names, shadow: false });
+  ok('P38 plan unreadable (a lone §5 header edit) → ONLY the unreadable key opens; zero per-leg intents',
+    bad.toOpen.map((a) => a.dedupeKey).join() === PLANLINE_UNREADABLE_KEY && !bad.toResolveKeys.some((k) => k.startsWith('gov-planline:')));
+  ok('P38 ...the verifier keeps every per-leg key; the liveness line says FROZEN',
+    bad.verifyPlanLine('B-PLAN-X', 's4') === false && bad.verifyPlanLine('B-GONE', 's5') === false && /ref=e+ FROZEN \(plan unreadable\)/.test(bad.liveness));
+  const absent = decidePlanLineTick({ enabled: true, refSha: sha, planText: null, names, shadow: false });
+  ok('P38 plan absent at the ref (null, what showFileAt returns) → the unreadable key opens; zero per-leg intents',
+    absent.toOpen.map((a) => a.dedupeKey).join() === PLANLINE_UNREADABLE_KEY && !absent.toResolveKeys.some((k) => k.startsWith('gov-planline:')));
+  const emptyL = decidePlanLineTick({ enabled: true, refSha: sha, planText: text, names: [], shadow: false });
+  ok('P38 listing EMPTY with a good plan → ONLY the listing key opens; zero per-leg intents; the verifier keeps (no flap)',
+    emptyL.toOpen.map((a) => a.dedupeKey).join() === PLANLINE_LISTING_EMPTY_KEY && !emptyL.toResolveKeys.some((k) => k.startsWith('gov-planline:'))
+      && emptyL.verifyPlanLine('B-PLAN-X', 's4') === false && /FROZEN \(Batch Completion listing empty\)/.test(emptyL.liveness));
+  ok('P38 ...and the malformed singleton is neither opened nor resolved on a frozen tick',
+    ![...bad.toOpen, ...emptyL.toOpen].some((a) => a.dedupeKey === PLANLINE_MALFORMED_KEY) && ![...bad.toResolveKeys, ...emptyL.toResolveKeys].includes(PLANLINE_MALFORMED_KEY));
+}
+
+// ── P38 + N8: runPlanLineRule reads BOTH inputs at the ONE resolved sha and prints it as ref= ──
+// Faked git whose ref MOVES: rev-parse returns A first and B on any later call. Expected first: the plan read
+// and the listing read both name A; the liveness line prints ref=A; the resolve evidence is A. Planted fault:
+// runPlanLineRule reading through the symbolic showFile/lsTreeNames (GOV_REF) fails it; a flag-off rule
+// making ANY read fails the flag-off case.
+{
+  const A = 'a'.repeat(40), B = 'b'.repeat(40);
+  const reads = [];
+  let rp = 0;
+  __setGitExecForTest((cmd, args) => {
+    if (args[0] === 'fetch') return '';
+    if (args[0] === 'rev-parse') { rp++; return `${rp === 1 ? A : B}\n`; }
+    if (args[0] === 'show') { reads.push(args[1].split(':')[0]); return planFixture(); }
+    if (args[0] === 'ls-tree') { reads.push(args[2]); return 'Claude Comms and Packages/Batch Completion/B_PLAN_X_COMPLETION_REPORT.md\n'; }
+    throw new Error(`unexpected git ${args.join(' ')}`);
+  });
+  resolveGradedRef();
+  const t = runPlanLineRule({ enabled: true, shadow: false });
+  ok('P38/N8 both reads were made at the resolved sha A', reads.length === 2 && reads.every((r) => r === A), JSON.stringify(reads));
+  ok('P38/N8 the liveness line prints ref=A, and the resolve evidence is A', t.liveness.includes(`ref=${A}`) && checkerResolveEvidence() === A);
+  ok('P38/N8 the ref was resolved once (a moved ref B is never read)', rp === 1);
+  reads.length = 0;
+  const off = runPlanLineRule({ enabled: false, malformedSig: 's' });
+  ok('P38 flag off → NO read at all, no intents, no liveness line', reads.length === 0 && off.toOpen.length === 0 && off.liveness === null && off.malformedSig === 's');
+  __setGitExecForTest(null);
+  resolveGradedRef(() => ({ fetchOk: false, sha: null }));
+}
+
+// ── P37: decideOrphanSweep's per-leg branch ──
+{
+  const noop = () => false;
+  const keys = ['gov-planline:B-GONE:s4', 'gov-planline:B-LIVE:s4', 'gov-planline:B-WIN:s5', PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY];
+  const v = makeVerifyPlanLine([{ bid: 'B-LIVE', leg: 's4' }]);
+  const res = decideOrphanSweep(keys, new Set(), noop, noop, noop, v);
+  ok('P37 a key whose id left the plan (not graded this tick) → RESOLVED (verified: not required at the ref)', res.resolve.includes('gov-planline:B-GONE:s4'));
+  ok('P37 a key graded this tick → skipped (decidePlanLineAlerts owns it; neither resolved nor kept)', !res.resolve.includes('gov-planline:B-LIVE:s4') && !res.keep.includes('gov-planline:B-LIVE:s4'));
+  ok('P37 an s5 key after its §5 line is removed → RESOLVED', res.resolve.includes('gov-planline:B-WIN:s5'));
+  ok('P37 the three singletons are not matched by the per-leg regex', ![PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY].some((k) => res.resolve.includes(k) || res.keep.includes(k)));
+  const noVerifier = decideOrphanSweep(['gov-planline:B-GONE:s4'], new Set(), noop);
+  ok('P37 no verifier injected → KEPT', noVerifier.keep.includes('gov-planline:B-GONE:s4') && noVerifier.resolve.length === 0);
+  const frozen = decideOrphanSweep(['gov-planline:B-WS-SUBSCRIBE-CLASS-FILTER:s4'], new Set(), noop, noop, noop,
+    decidePlanLineTick({ enabled: true, refSha: 'f'.repeat(40), planText: planFixture(), names: [], shadow: false }).verifyPlanLine);
+  ok('P37 an open per-leg key with an EMPTY listing → KEPT (the flap case: a join on [] would call it not required)',
+    frozen.keep.includes('gov-planline:B-WS-SUBSCRIBE-CLASS-FILTER:s4') && frozen.resolve.length === 0);
+  const seen = [];
+  decideOrphanSweep(['gov-planline:B-X-Y:s4'], new Set(['B-X-Y']), noop, noop, noop, (bid, leg) => { seen.push(`${bid}|${leg}`); return true; });
+  ok('P37 the per-leg key is verified by its bid (group 1), never as `<bid>:s4`; the commit window does not skip it',
+    seen.join() === 'B-X-Y|s4', seen.join());
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);

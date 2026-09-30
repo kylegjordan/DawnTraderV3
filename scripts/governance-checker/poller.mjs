@@ -25,12 +25,12 @@ import {
   EXCEPTIONS_V2_ENABLED, EXCEPTION_CONFIRMERS, EXCEPTION_ACCEPT_BY_TYPE, EXCEPTION_TYPES,
   UMBRELLA_NOT_IMPLEMENTED, CLASS_OVERRIDE_VALUE,
   EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, EXCEPTIONS_MALFORMED_BID_CAP,
-  GOV_REF,
+  GOV_REF, PLAN_LINE, DOCS,
 } from './config.mjs';
 import {
   checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass,
   docPresent, completionReportCommitTime, scopeCommitTime, checkLedgerRows,
-  resolveGovRefSha,
+  resolveGovRefSha, showFileAt, lsTreeNamesAt, findGlobDoc, planRowsByBatch, checkPlanState,
 } from './checker.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -167,7 +167,13 @@ export function propagateGovernanceToParents(batches) {
 // symptom). Resolve such orphans — but RE-VERIFY first via the injected `verify(bid,doc)` (the live
 // tick passes a whole-tree GOV_REF check), NEVER blind-resolve: a genuinely-missing doc on a closed
 // batch that merely aged out must STAY surfaced (Langston Step-2 Finding 2 — no cry-silence). PURE.
-export function decideOrphanSweep(openAlertKeys, enforceableIds, verify, isClassDeclared = () => false, verifyLedgerRow = () => false) {
+// B-PLAN-CURRENCY-CHECK P37: a 6th verifier for the plan-state rule's PER-LEG keys (`gov-planline:<bid>:s4|s5`).
+// There is no window to age out of — the rule enrols from the plan — so an orphan is a key whose leg this tick did
+// not grade: its id left the plan, lost its report, or its section stopped carrying it. `verifyPlanLine(bid, leg)`
+// returns null for a leg graded this tick (decidePlanLineAlerts owns it: skipped here), true when the leg is not
+// required at the ref (RESOLVE — verified, never blind), false to KEEP. The default, and what the tick passes
+// when the flag is off, the plan is unreadable or the listing is empty, is () => false: FREEZE (Q16).
+export function decideOrphanSweep(openAlertKeys, enforceableIds, verify, isClassDeclared = () => false, verifyLedgerRow = () => false, verifyPlanLine = () => false) {
   const resolve = [], keep = [];
   for (const key of openAlertKeys) {
     const docgap = /^gov-docgap:(.+):([^:]+)$/.exec(key);
@@ -196,6 +202,16 @@ export function decideOrphanSweep(openAlertKeys, enforceableIds, verify, isClass
       const bid = lrow[1], row = lrow[2];
       if (enforceableIds.has(bid)) continue;   // still in-window → handled by decideAlerts
       (verifyLedgerRow(bid, row) ? resolve : keep).push(key);
+      continue;
+    }
+    // P37: the per-leg regex, bid in group 1 — so `gov-planline:<bid>:s4` is verified by its bid, never as
+    // '<bid>:s4'. The three singletons (`gov-planline-unreadable`, `-listing-empty`, `-malformed`) use a
+    // hyphen, never match here, and are owned by the tick (N7).
+    const pl = PLANLINE_LEG_RE.exec(key);
+    if (pl) {
+      const v = verifyPlanLine(pl[1], pl[2]);
+      if (v === null) continue;               // graded this tick → decidePlanLineAlerts owns it
+      (v ? resolve : keep).push(key);
       continue;
     }
     // other orphan key types are not swept here
@@ -348,6 +364,150 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
     }
   }
   return { toOpen, toResolveKeys };
+}
+
+// ── B-PLAN-CURRENCY-CHECK OBJ-1 (P36-P38) — the plan-state rule's decisions (`gov-planline`) ────────────────
+// DORMANT: the tick reaches any of this only when PLAN_LINE.enabled (config.mjs, false in committed source).
+// Keys (Langston §10d Q15, §10g N7): one PER LEG, `gov-planline:<bid>:s4|s5`, at `warning` (Q17); and three
+// singletons the tick owns — the plan unreadable (a GOVERNANCE problem: the plan text or its headers), the Batch
+// Completion listing empty (an INFRA problem: the checker's git read), and the malformed-row list. The singletons
+// use a hyphen, so none can match the per-leg regex in decideOrphanSweep. FREEZE (Q16): with the flag off, or with
+// either read unusable, no per-leg key is opened or resolved and the orphan verifier keeps every one.
+export const PLANLINE_UNREADABLE_KEY = 'gov-planline-unreadable';
+export const PLANLINE_LISTING_EMPTY_KEY = 'gov-planline-listing-empty';
+export const PLANLINE_MALFORMED_KEY = 'gov-planline-malformed';
+const PLANLINE_LEG_RE = /^gov-planline:(.+):(s4|s5)$/;
+const PLANLINE_PREVIEW = 'node scripts/governance-checker/plan-lines-preview.mjs --ref <sha>';
+
+// The malformed singleton's signature — its CONTENT (rowNo+lineNo+cellCount per row), so a change in the list
+// while the alert is open re-opens it with a fresh body instead of leaving a stale one (N7; the checker never
+// rewrites the body of an open alert). null when there is nothing malformed.
+export function planMalformedSignature(malformed) {
+  if (!malformed || malformed.length === 0) return null;
+  return malformed.map((m) => `${m.section}:${m.rowNo ?? ''}:${m.lineNo}:${m.cellCount}`).sort().join(',');
+}
+
+// Per-leg bodies name ONLY facts that do not move (N7 (b)): the id, the leg, the §4 row number(s), the report
+// file(s) resolved for the batch, the requirement, and the preview command that shows the current line. They
+// never name a line number or which test failed, so a partial fix or an edit above the row cannot leave the open
+// alert's body wrong.
+function planLegIntent(l, sev) {
+  const where = l.leg === 's4'
+    ? `§4 row${l.rowNos.length > 1 ? 's' : ''} ${l.rowNos.join(', ')}`
+    : `§5 (observation windows) line${l.rowNos.length > 1 ? 's' : ''}`;
+  const reports = l.reports.map((n) => `\`${n}\``).join(', ');
+  const requirement = l.why.includes('ambiguous')
+    ? `Its id is in more than one ${l.leg === 's4' ? '§4 row' : '§5 line'}; exactly one may carry it, and that one must be current.`
+    : l.leg === 's4'
+      ? `At a batch close the row's status must not be the machine default (empty, or QUEUED…) AND its report cell must name ${l.reports.length > 1 ? 'one of those reports' : 'that report'}.`
+      : `At a batch close the line's report cell must name ${l.reports.length > 1 ? 'one of those reports' : 'that report'} (the window's close condition stays in \`closes\`).`;
+  return {
+    dedupeKey: `gov-planline:${l.bid}:${l.leg}`, severity: sev('warning'),
+    title: `Plan not current for ${l.bid}: ${where} (SPRINT_TO_LIVE_PLAN.md)`,
+    body: `Batch ${l.bid} has a completion report (${reports}), and its ${where} in 1-system-manual/SPRINT_TO_LIVE_PLAN.md is not current. ` +
+      `The plan's §3 obligation: "The owner updates its row at every batch close (status + report link)". ${requirement} ` +
+      `Update the plan, or mark it N/A (Langston-confirmed: \`${l.bid} | na-skip | ${PLAN_LINE.naKey}\` in GOVERNANCE_EXCEPTIONS.md). ` +
+      `This alert resolves on the first tick at which the ${l.leg === 's4' ? 'row' : 'line'} passes. Current verdict: ${PLANLINE_PREVIEW}.`,
+  };
+}
+
+// P36 (Langston §10g C1, N7): the per-leg decision, its own pure function — NOT a block inside decideAlerts,
+// whose loop is the commit window's batches; this rule enrols from the plan. `legs` are checkPlanState's.
+// A failing leg opens its key; a passing leg, or a confirmed na-skip `<bid>:plan_line` (one value covers both
+// legs), resolves it. `malformed` non-empty opens the singleton — and when it is open under a DIFFERENT
+// signature, resolves it and opens it again (the tick processes these resolves BEFORE the opens); empty
+// resolves it. `enabled` false ⇒ nothing at all (FREEZE, Q16).
+export function decidePlanLineAlerts(legs, malformed, na, opts = {}) {
+  const enabled = opts.enabled ?? PLAN_LINE.enabled;
+  const malformedSig = planMalformedSignature(malformed);
+  if (!enabled) return { toOpen: [], toResolveKeys: [], malformedSig: opts.malformedSig ?? null };
+  const sev = (level) => ((opts.shadow ?? SHADOW_MODE) ? 'info' : level);
+  const toOpen = [], toResolveKeys = [];
+  for (const l of legs) {
+    const key = `gov-planline:${l.bid}:${l.leg}`;
+    if (!l.fail || na.has(`${l.bid}:${PLAN_LINE.naKey}`)) { toResolveKeys.push(key); continue; }
+    toOpen.push(planLegIntent(l, sev));
+  }
+  if (malformedSig === null) {
+    toResolveKeys.push(PLANLINE_MALFORMED_KEY);
+  } else {
+    if (opts.malformedOpen && opts.malformedSig !== malformedSig) toResolveKeys.push(PLANLINE_MALFORMED_KEY);
+    const at = opts.refSha ? `at ${opts.refSha}` : 'at the graded ref (its sha was unavailable this tick)';
+    toOpen.push({
+      dedupeKey: PLANLINE_MALFORMED_KEY, severity: sev('warning'),
+      title: `SPRINT_TO_LIVE_PLAN.md has ${malformed.length} plan row(s) the checker cannot read`,
+      body: `1-system-manual/SPRINT_TO_LIVE_PLAN.md ${at}: ` +
+        malformed.map((m) => (m.section === 4
+          ? `§4 row ${m.rowNo} (line ${m.lineNo}, ${m.cellCount} cells)`
+          : `§5 line ${m.lineNo} (${m.cellCount} cells)`)).join('; ') +
+        `. Each has a cell count other than its table header's, so the plan-state check skips it. Fix the row's cells ` +
+        `(a stray \`|\` in a cell is the usual cause). The line numbers are as read at that sha; this alert resolves when ` +
+        `none remain, and re-opens with a fresh list if the list changes while it is open.`,
+    });
+  }
+  return { toOpen, toResolveKeys, malformedSig };
+}
+
+// P38 (N7): the two read singletons. Each read decides its own key: a failed read opens it, a good read resolves
+// it. They are independent, so each key says only what its own read found.
+export function decidePlanReadAlerts({ planError, listingEmpty, refSha, shadow } = {}) {
+  const sev = (level) => ((shadow ?? SHADOW_MODE) ? 'info' : level);
+  const toOpen = [], toResolveKeys = [];
+  if (planError) {
+    toOpen.push({ dedupeKey: PLANLINE_UNREADABLE_KEY, severity: sev('warning'),
+      title: 'The plan-state check cannot read SPRINT_TO_LIVE_PLAN.md — plan rows are not graded',
+      body: `The governance checker could not parse 1-system-manual/SPRINT_TO_LIVE_PLAN.md at ${refSha}: ${String(planError).slice(0, 300)}. ` +
+        `The plan is absent or empty, or a table header differs from the one the checker reads (config.mjs PLAN_LINE; a header and PLAN_LINE change in ONE commit). ` +
+        `No plan-row alert is opened or resolved until it reads again (FREEZE). A governance fix: correct the plan or PLAN_LINE.` });
+  } else toResolveKeys.push(PLANLINE_UNREADABLE_KEY);
+  if (listingEmpty) {
+    toOpen.push({ dedupeKey: PLANLINE_LISTING_EMPTY_KEY, severity: sev('warning'),
+      title: 'The plan-state check read an EMPTY Batch Completion listing — plan rows are not graded',
+      body: `\`git ls-tree\` of "Claude Comms and Packages/Batch Completion/" at ${refSha} returned no files (the reader returns an empty list on ANY error). ` +
+        `The directory is never truly empty, so this is the checker's git read failing, not a governance state. No plan-row alert is opened or resolved ` +
+        `until it reads again (FREEZE) — grading on an empty listing would call every leg "not required" and resolve every open one. An infra fix: the checker box's clone.` });
+  } else toResolveKeys.push(PLANLINE_LISTING_EMPTY_KEY);
+  return { toOpen, toResolveKeys };
+}
+
+// P37: the orphan verifier for per-leg keys, built from THIS tick's graded legs (read at the one resolved sha):
+// a leg graded this tick → null (decidePlanLineAlerts owns it); any other leg → true (not required at the ref:
+// its id left the plan, lost its report, or its section no longer carries it).
+export function makeVerifyPlanLine(legs) {
+  const graded = new Set(legs.map((l) => `${l.bid}:${l.leg}`));
+  return (bid, leg) => (graded.has(`${bid}:${leg}`) ? null : true);
+}
+
+// P38: the whole rule for one tick, as a pure function of the two reads. Returns the intents, the orphan verifier,
+// the liveness line (null when the rule does not run) and the malformed signature to store.
+export function decidePlanLineTick({ enabled = PLAN_LINE.enabled, refSha, planText, names, naConfirmed = new Set(), malformedOpen = false, malformedSig = null, shadow } = {}) {
+  if (!enabled) return { toOpen: [], toResolveKeys: [], verifyPlanLine: () => false, liveness: null, malformedSig };
+  let join = null, planError = null;
+  try { join = planRowsByBatch(planText); } catch (e) { planError = String(e.message || e); }
+  const listingEmpty = !Array.isArray(names) || names.length === 0;
+  const read = decidePlanReadAlerts({ planError, listingEmpty, refSha, shadow });
+  if (planError || listingEmpty) {
+    const why = [planError && 'plan unreadable', listingEmpty && 'Batch Completion listing empty'].filter(Boolean).join(' + ');
+    return { ...read, verifyPlanLine: () => false, liveness: `[gov-checker] planline: enabled ref=${refSha} FROZEN (${why})`, malformedSig };
+  }
+  const reportsFor = (bid) => findGlobDoc(bid, 'completion_report', names).map((p) => p.replace(/\\/g, '/').split('/').pop());
+  const { legs, graded } = checkPlanState(join, reportsFor);
+  const d = decidePlanLineAlerts(legs, join.malformed, naConfirmed, { enabled, refSha, malformedOpen, malformedSig, shadow });
+  const liveness = `[gov-checker] planline: enabled ref=${refSha} rows4=${join.rows4} rows5=${join.rows5} ids=${join.rows.size} ` +
+    `graded=${graded.length} legs=${legs.length} fail=${legs.filter((l) => l.fail).length} malformed=${join.malformed.length}`;
+  return { toOpen: [...read.toOpen, ...d.toOpen], toResolveKeys: [...read.toResolveKeys, ...d.toResolveKeys],
+    verifyPlanLine: makeVerifyPlanLine(legs), liveness, malformedSig: d.malformedSig, legs, join };
+}
+
+// P38 + N8: the tick's entry. Reads NOTHING when the flag is off. Otherwise both reads are made at `refSha` —
+// the resolver's sha (the default), the sha the resolve evidence carries and the liveness line prints — through
+// the explicit-ref readers, so the rule cannot read a ref that moved after the resolve.
+export function runPlanLineRule(ctx = {}, io = { showFileAt, lsTreeNamesAt }, refSha = gradedRefSha) {
+  const enabled = ctx.enabled ?? PLAN_LINE.enabled;
+  if (!enabled) return decidePlanLineTick({ enabled: false, malformedSig: ctx.malformedSig ?? null });
+  return decidePlanLineTick({ ...ctx, enabled, refSha,
+    planText: io.showFileAt(refSha, PLAN_LINE.path),
+    names: io.lsTreeNamesAt(refSha, DOCS.completion_report.dir) });
 }
 
 // ── SIDE-EFFECT WRAPPERS (run only when deployed) ──────────────────────────────
@@ -862,6 +1022,31 @@ export function tick(nowMs = Date.now()) {
     b.declaredClass = ovr;
     b.classDeclared = true;
   }
+  // P38 (B-PLAN-CURRENCY-CHECK OBJ-1), DORMANT behind PLAN_LINE.enabled: the plan-state rule. It reads NOTHING with
+  // the flag off (so a plan edit cannot page while the rule is dormant). On: the plan and the Batch Completion
+  // listing are each read ONCE, at gradedRefSha (the resolver's sha — the one the resolve evidence carries).
+  // Resolves run BEFORE opens, so a changed malformed list resolves the old singleton and re-opens it. The
+  // other rules continue whatever this rule finds: an unreadable plan or empty listing FREEZES only this rule.
+  let planVerify = () => false, planOpened = 0, planResolved = 0;
+  if (PLAN_LINE.enabled) {
+    const plan = runPlanLineRule({ naConfirmed: exceptions.naConfirmed,
+      malformedOpen: Boolean(state.openAlerts[PLANLINE_MALFORMED_KEY]), malformedSig: state.planMalformedSig ?? null });
+    for (const k of plan.toResolveKeys) {
+      const id = state.openAlerts[k];
+      if (id) { alertSink.resolve(id); delete state.openAlerts[k]; planResolved++; }
+    }
+    for (const a of plan.toOpen) {
+      if (!state.openAlerts[a.dedupeKey]) {
+        const id = alertSink.add(a, nowMs);
+        if (id) { state.openAlerts[a.dedupeKey] = id; planOpened++; }
+      }
+    }
+    if (state.openAlerts[PLANLINE_MALFORMED_KEY]) state.planMalformedSig = plan.malformedSig; else delete state.planMalformedSig;
+    planVerify = plan.verifyPlanLine;
+    // The liveness line exists only when the rule runs (P38): the counts are a pure function of the two reads at
+    // `ref=`, so an offline plan-lines-preview.mjs run at that sha reproduces them.
+    console.log(plan.liveness);
+  }
   const confirmedOverride = (bid) => exceptions.classOverride.has(bid);
   const { toOpen, toResolveKeys } = decideAlerts(enforceable, exceptions, nowMs, { confirmedOverride });
   // dedupe via own state (logical key → alert id); only add if not already open.
@@ -898,7 +1083,7 @@ export function tick(nowMs = Date.now()) {
   // report no longer grades (null), or a confirmed N/A exists — re-verified at GOV_REF, never blind.
   const verifyLedgerRow = makeVerifyLedgerRow(exceptions.naConfirmed);
   const { resolve: orphanResolve, keep: orphanKeep } =
-    decideOrphanSweep(Object.keys(state.openAlerts), enforceableIds, verifyDoc, isClassDeclared, verifyLedgerRow);
+    decideOrphanSweep(Object.keys(state.openAlerts), enforceableIds, verifyDoc, isClassDeclared, verifyLedgerRow, planVerify);
   for (const key of orphanResolve) {
     const id = state.openAlerts[key];
     if (id) { alertSink.resolve(id); delete state.openAlerts[key]; }
@@ -912,7 +1097,8 @@ export function tick(nowMs = Date.now()) {
   state.gradedRefSha = gradedRefSha;
   state.lastTick = nowMs;
   saveState(state);
-  return { opened: toOpen.length, resolved: toResolveKeys.length + orphanResolve.length, untaggedCode };
+  // planOpened / planResolved count CONFIRMED sink calls, kept apart from the intent counts beside them (#1107).
+  return { opened: toOpen.length, resolved: toResolveKeys.length + orphanResolve.length, untaggedCode, planOpened, planResolved };
 }
 
 // CLI entry (only when run directly on the box)
