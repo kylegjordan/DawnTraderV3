@@ -15,7 +15,7 @@ import {
   DOCS, CLASS_DOCSET, DEFAULT_CLASS, HOLLOW_NET_LINE_FLOOR, REQUIRED_IF,
   CODE_PREFIXES, GOVERNANCE_PREFIXES, HOUSEKEEPING_ONLY_PATHS, HOUSEKEEPING_ONLY_BASENAMES,
   SCOPE_DIR, CHANGE_CLASS_MARKER, VALID_CLASSES, CORE_ENGINE_PATHS,
-  extractBatchId, batchIdToFileRegex, LEDGER_ROWS,
+  extractBatchId, batchIdToFileRegex, LEDGER_ROWS, GOV_REF,
 } from './config.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -31,8 +31,33 @@ const sjoin = (...parts) => parts.join('/');
 // between deploys, so reading doc files from the working tree made the checker see new batch commits but
 // MISS their (existing) doc files → a flood of false "missing doc" alerts. All commit + file reads now go
 // through GOV_REF after a fetch, so the checker always grades the actual pushed state, never a stale copy.
-const GOV_REF = process.env.GOV_REF || process.env.GOV_BRANCH || 'origin/migration/aws-supabase';
+// GOV_REF is resolved ONCE, in config.mjs (B-PLAN-CURRENCY-CHECK P58 (6)); GOV_BRANCH is its alias.
+//
+// ── B-PLAN-CURRENCY-CHECK N8 / P58 — ONE FETCH POINT, ONE SHA (Langston §10g N8, §10i P58 (1)-(6)) ──
+// Before this, the poller fetched and captured its graded sha, and then the FIRST checker read ran a
+// SECOND fetch here (ensureFetched), so a push landing between the two made every later read — and the
+// evidence sha the poller stamps on a resolve — disagree. Now the poller calls resolveGovRefSha() IN PLACE
+// OF its own fetch: it fetches `origin` once, REPORTS a failure (the poller's gov-fetch-failed path still
+// fires), sets `_fetchedThisRun` so ensureFetched never fetches again in this process, and caches the sha
+// in `_resolvedRef`. Every symbolic reader below reads `_resolvedRef ?? GOV_REF`, so every read lands on
+// that one sha BY CONSTRUCTION. A process that never calls the resolver (the heartbeat, the backtest, the
+// previews) keeps the symbolic GOV_REF and ensureFetched's own fetch, exactly as before.
 let _fetchedThisRun = false;
+let _resolvedRef = null;
+let _resolution = null;
+// Every git call in this module goes through `_git`, so a test can see the ref each read used without a
+// repo or a network (__setGitExecForTest). The live value is execFileSync, called exactly as before.
+let _exec = execFileSync;
+const _git = (args, opts = {}) => _exec('git', args, { cwd: REPO_ROOT, ...opts });
+const readRef = () => _resolvedRef ?? GOV_REF;
+// TEST SEAM ONLY: swap the git exec (null restores execFileSync) and forget this process's fetch and
+// resolution, so each test starts from a fresh process's state. Returns the previous exec.
+export function __setGitExecForTest(fn) {
+  const prev = _exec;
+  _exec = fn || execFileSync;
+  _fetchedThisRun = false; _resolvedRef = null; _resolution = null;
+  return prev;
+}
 function ensureFetched() {
   if (_fetchedThisRun) return;
   _fetchedThisRun = true;
@@ -40,31 +65,60 @@ function ensureFetched() {
     const slash = GOV_REF.indexOf('/');
     const remote = slash > 0 ? GOV_REF.slice(0, slash) : 'origin';
     const branch = slash > 0 ? GOV_REF.slice(slash + 1) : GOV_REF;
-    execFileSync('git', ['fetch', '--quiet', remote, branch],
-      { cwd: REPO_ROOT, encoding: 'utf8', timeout: 60000, stdio: 'pipe' });
+    _git(['fetch', '--quiet', remote, branch], { encoding: 'utf8', timeout: 60000, stdio: 'pipe' });
   } catch { /* offline / fetch fail → grade against whatever GOV_REF currently points at */ }
 }
-// list basenames of files directly under `dir` AT GOV_REF; [] if the dir is absent at the ref.
-export function lsTreeNames(dir) {
-  ensureFetched();
+// THE one fetch point for a poller tick. Returns { fetchOk, fetchError, sha }, cached for the process.
+// (1) fetches `origin`, as the poller's own fetch did (stderr is not captured, so it reaches the journal);
+// (2) a failed fetch is RETURNED, not swallowed — fetchOk:false, sha:null, nothing resolved, and the reads
+//     keep the symbolic GOV_REF (the poller grades nothing on a failed fetch);
+// (3) sets `_fetchedThisRun` (no second fetch) and `_resolvedRef`;
+// after a good fetch the sha is `rev-parse --verify GOV_REF^{commit}`, and a failure there THROWS out of
+// the tick (fail-closed: there is no ref to grade at; the heartbeat's dead-man then fires).
+export function resolveGovRefSha() {
+  if (_resolution) return _resolution;
+  _fetchedThisRun = true;
+  let fetchOk = true, fetchError = null;
+  try { _git(['fetch', '--quiet', 'origin'], { timeout: 60000 }); }
+  catch (e) { fetchOk = false; fetchError = String(e.message || e); }
+  let sha = null;
+  if (fetchOk) {
+    sha = String(_git(['rev-parse', '--verify', `${GOV_REF}^{commit}`], { encoding: 'utf8' })).trim();
+    if (!/^[0-9a-f]{40,64}$/.test(sha)) throw new Error(`rev-parse ${GOV_REF}: not a commit sha: ${JSON.stringify(sha.slice(0, 80))}`);
+    _resolvedRef = sha;
+  }
+  _resolution = { fetchOk, fetchError, sha };
+  return _resolution;
+}
+// list basenames of files directly under `dir` AT `ref`; [] if the dir is absent at the ref. No fetch:
+// the caller names the ref (the poller passes the resolved sha).
+export function lsTreeNamesAt(ref, dir) {
   try {
-    const out = execFileSync('git', ['ls-tree', '--name-only', GOV_REF, `${dir.replace(/\/+$/, '')}/`],
-      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const out = _git(['ls-tree', '--name-only', ref, `${dir.replace(/\/+$/, '')}/`],
+      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     return out.split('\n').filter(Boolean).map((p) => p.split('/').pop());
   } catch { return []; }
 }
-// read a file's content AT GOV_REF; null if the file is absent at the ref.
+// read a file's content AT `ref`; null if the file is absent at the ref. No fetch (as lsTreeNamesAt).
+export function showFileAt(ref, relPath) {
+  try {
+    return _git(['show', `${ref}:${relPath}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  } catch { return null; }
+}
+// list basenames of files directly under `dir` AT GOV_REF (the resolved sha once the poller has resolved it).
+export function lsTreeNames(dir) {
+  ensureFetched();
+  return lsTreeNamesAt(readRef(), dir);
+}
+// read a file's content AT GOV_REF (the resolved sha once resolved); null if the file is absent at the ref.
 export function showFile(relPath) {
   ensureFetched();
-  try {
-    return execFileSync('git', ['show', `${GOV_REF}:${relPath}`],
-      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  } catch { return null; }
+  return showFileAt(readRef(), relPath);
 }
 export function gitLog(n = 200) {
   ensureFetched();
-  const out = execFileSync('git', ['log', GOV_REF, `-n${n}`, '--pretty=COMMIT|%H|%cI|%s', '--name-only'],
-    { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const out = _git(['log', readRef(), `-n${n}`, '--pretty=COMMIT|%H|%cI|%s', '--name-only'],
+    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const commits = [];
   let cur = null;
   for (const raw of out.split('\n')) {
@@ -130,9 +184,8 @@ function gitPath(p) { return p.replace(/\\/g, '/'); } // forward slashes for git
 function firstAddCommitMs(relPath) {
   ensureFetched();
   try {
-    const out = execFileSync('git',
-      ['log', GOV_REF, '--diff-filter=A', '--reverse', '--format=%cI', '--', gitPath(relPath)],
-      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    const out = _git(['log', readRef(), '--diff-filter=A', '--reverse', '--format=%cI', '--', gitPath(relPath)],
+      { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
     const first = out.split('\n').find(Boolean); // --reverse ⇒ oldest ADD first
     return first ? Date.parse(first) : null;
   } catch { return null; }

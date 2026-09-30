@@ -15,9 +15,9 @@
 import { execFileSync } from 'node:child_process';
 import { computeBatchStates, anchorClosedBatches, applyCutoff } from './poller.mjs';
 import { gitLog, completionReportCommitTime, scopeCommitTime, checkLedgerRows, findGlobDoc, REPO_ROOT } from './checker.mjs';
-import { ENFORCEMENT_CUTOFF_MS, LEDGER_ROWS } from './config.mjs';
+import { ENFORCEMENT_CUTOFF_MS, LEDGER_ROWS, GOV_REF } from './config.mjs';
 
-const ref = process.env.GOV_REF || process.env.GOV_BRANCH || 'origin/migration/aws-supabase';
+const ref = GOV_REF; // P58 (6): the one GOV_REF/GOV_BRANCH resolution, config.mjs
 const commits = gitLog(300);
 const sha = execFileSync('git', ['rev-parse', '--short', ref], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
 const { batches } = computeBatchStates(commits);
