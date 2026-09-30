@@ -93,9 +93,12 @@ const throws = (fn, re) => { try { fn(); return false; } catch (e) { return re.t
     '### #907 OPEN (CC-A) x', '### #907 WITHDRAWN', 'HOME: B-W due 2026-09-05',
     '### #810 OPEN (CC-A) x', 'a line with neither gate word, due 2026-09-01',
     '### #811 OPEN (CC-A) x', '## a heading ends the span', 'HOME: B-V due 2026-09-01',
+    // BLOCKER-1 (Langston): a REAL conversion note (RI :3647 form at 13fa6bbce) — struck through datedHomes, not the helper alone.
+    '### #681 OPEN (CC-INFRA) x', '**`HOME: #681, owner CC-INFRA, placed at row 162, after row 161`.** This home READ "OWNER: CC-B. DUE: 2026-08-12" until 2026-09-30 (OBJ-8).',
   ].join('\n'));
   const c = datedHomes(L);
   ok('R2 #738 upper-case `DUE` on a HOME line is found', c.issues.includes(738));
+  ok('R2 history WIRED (BLOCKER-1): a READ "… DUE: <date>" conversion note on a HOME line is NOT a dated home', !c.issues.includes(681));
   ok('R2 #744 quoted-struck (`"DUE`) excluded', !c.issues.includes(744));
   ok('R2 #705 backticked `due` excluded (the typographic reach limit)', !c.issues.includes(705));
   ok('R1-Q3 #680 an OWNER line with DUE is found', c.issues.includes(680));
@@ -369,7 +372,7 @@ function frameResurface(alert, d, nowMs) {
     a: big(999, (i) => ({ file: `${longId}_${i}_COMPLETION_REPORT.md`, verdict: i % 2 ? 'in-no-plan-line' : 'not-closed-in-plan', owner: null })),
     b: { placed: { number: 9999, homeBatch: 9999, parked: 9999, roadmap: 9999 }, unplaced: big(999, (i) => ({ n: 10000 + i, code: 'U5', why: 'HOME batch in no list', owner: 'owner ?' })),
       byWhy: { U1: 9999, U2: 9999, U3: 9999, U4: 9999, U5: 9999, U6: 9999 }, selfContradicting: big(999, (i) => ({ issue: i })), reused: big(999, (i) => i),
-      handover: { records: 9999, stillUnplaced: big(999, (i) => i), placedSince: big(999, (i) => i), closedSince: big(999, (i) => i) } },
+      handover: { handed: 9999, stillUnplaced: big(999, (i) => i), placedSince: big(999, (i) => i), closedSince: big(999, (i) => i), vanishedSince: big(999, (i) => i) } },
     c: { issues: big(999, (i) => ({ n: 20000 + i, lines: [1, 2], owner: 'filer CC-INFRA' })), lineCount: 9999, matchCount: 9999, excluded: [{ issue: 696 }] },
     d: { rows: big(999, (i) => ({ row: `${i}a`, why: 'item cell is one batch id', owner: 'CC-INFRA' })), excluded: big(999, (i) => ({ row: i })) },
     e: { refs: big(999, () => ({})), rowRefs: 999, unmatched: big(999, (i) => ({ row: `${i}`, target: longId, owner: 'CC-A' })), rowUnmatched: [], viaS0: [] },
@@ -442,15 +445,16 @@ function frameResurface(alert, d, nowMs) {
   const hr = readers({ namesByDir: { [SF]: ['X_CENSUS_2026-W40_HANDOVER.md', 'PRE_LIVE_SPRINT.md'] }, files: { [`${SF}/X_CENSUS_2026-W40_HANDOVER.md`]: HO } });
   const r = runCensus({ ref: 'a'.repeat(40), prevRef: 'b'.repeat(40), readers: hr });
   const u300 = r.b.unplaced.find((x) => x.n === 300);
-  ok('A2 runCensus: one record read; #999 (not OPEN) is closed-since, never unplaced',
-    r.b.handover.records === 2 && r.b.handover.closedSince.join() === '999' && !r.b.unplaced.some((x) => x.n === 999));
+  ok('A2 runCensus: one record, two handed ITEMS; #999 is in no ledger entry, so it is VANISHED, not closed (FINDING-2)',
+    r.b.handover.handed === 2 && r.b.handover.vanishedSince.join() === '999' && r.b.handover.closedSince.length === 0 && !r.b.unplaced.some((x) => x.n === 999));
   ok('A2 runCensus: #300 is either still unplaced WITH its handover date, or placed — never "never surfaced"',
     (u300 && u300.handedOver === '2026-09-30' && r.b.handover.stillUnplaced.includes(300)) || r.b.handover.placedSince.includes(300));
   ok('A2 runCensus: an item NOT in any record carries no handover date', r.b.unplaced.filter((x) => x.n !== 300).every((x) => x.handedOver === null));
   ok('A2 runCensus REFUSES an empty Scope Files listing (a failed read must not read as "never surfaced")',
     throws(() => runCensus({ ref: 'a', prevRef: 'b', readers: readers({ namesByDir: { [SF]: [] } }) }), /listing .* is EMPTY/));
   const txt = censusAlert(r, { week: '2026-W40', severity: 'info' });
-  ok('A2 the body carries the handover clause at normal sizes', /handed over 2: \d+ unplaced, \d+ placed, 1 closed/.test(txt.body), txt.body.slice(0, 400));
+  ok('A2 the body carries the handover clause at normal sizes', /handed over 2: \d+ unplaced, \d+ placed, 0 closed, 1 vanished/.test(txt.body), txt.body.slice(0, 400));
+  ok('A2 nit: the bold date form `**handed over** 2026-09-30` parses', parseHandover(HO.replace('handed over 2026-09-30', '**handed over** 2026-09-30'), 'fx').date === '2026-09-30');
 }
 
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);

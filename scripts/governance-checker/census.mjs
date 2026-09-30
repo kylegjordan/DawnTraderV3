@@ -222,7 +222,7 @@ export function ownerOfIssue(e) {
 // A record with no date or no items is refused: a record that names nothing would make every item read as never
 // surfaced, which is the absent-as-valid shape this exists to prevent.
 export function parseHandover(text, name = 'handover record') {
-  const dm = /handed over \*{0,2}(\d{4}-\d\d-\d\d)/.exec(text || '');
+  const dm = /handed over\**\s*\**\s*(\d{4}-\d\d-\d\d)/.exec(text || '');   // bold around the words or the date
   if (!dm) throw new Error(`census: ${name} states no "handed over <date>" — refusing`);
   const L = lines(text), issues = new Set();
   let on = false;
@@ -240,7 +240,9 @@ const DUE_RE = /\bdue\b\W{0,3}(20\d\d-\d\d-\d\d)/gi;
 // the old home as a history note — `This home READ "<old text>" until <date>` or `(Was: "<old>"` / `(Was <old>, due …` —
 // and the old text carries the old due date. A match is struck when it sits inside a double-quoted span whose opening
 // quote directly follows `READ` or `Was` (`:` optional), or inside a parenthetical that opens with `Was`. Narrow on
-// purpose: a live `HOME: … due <date>`, quoted or not, still hits.
+// purpose: a live `HOME: … due <date>`, quoted or not, still hits. RESIDUALS (Langston, named not fixed): the match is
+// case-insensitive, so lowercase prose `was "…"` strikes too; and the parenthetical arm needs only NO `)` before the date,
+// so an UNCLOSED `(Was …` strikes a live `due` later on the same line. Neither shape occurs in the corpus at 13fa6bbce.
 export function historyStruck(line, idx) {
   let q = -1;
   for (let k = 0; k < idx; k++) if (line[k] === '"') q = q === -1 ? k : -1;   // q = the opening quote idx is inside, or -1
@@ -537,9 +539,13 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
   const unplaced = [...place].filter(([, v]) => v.startsWith('U')).map(([n, v]) => ({ n, code: v, why: UNPLACED_WHY[v], owner: owner(n).label, handedOver: handedOn.get(n) ?? null }));
   // The three states (Langston A2): never surfaced / handed over, still unplaced / placed. A handed item that is no
   // longer OPEN is reported apart as closed — neither a placement nor an ignored handover.
-  const handover = { records: handedOn.size, stillUnplaced: unplaced.filter((x) => x.handedOver).map((x) => x.n),
+  // `handed` counts handed ITEMS (not record files). FINDING-2 (Langston): an id no longer OPEN is split — `closedSince` if the
+  // ledger still carries it (stamped closed or withdrawn), `vanishedSince` if it is gone from the ledger entirely (a renumbered
+  // or removed entry, e.g. the #594→#648 history), so a renumbering never reads as a close.
+  const handover = { handed: handedOn.size, stillUnplaced: unplaced.filter((x) => x.handedOver).map((x) => x.n),
     placedSince: [...handedOn.keys()].filter((n) => place.has(n) && !place.get(n).startsWith('U')).sort((a, b) => a - b),
-    closedSince: [...handedOn.keys()].filter((n) => !ledger.open.has(n)).sort((a, b) => a - b) };
+    closedSince: [...handedOn.keys()].filter((n) => !ledger.open.has(n) && ledger.byNum.has(n)).sort((a, b) => a - b),
+    vanishedSince: [...handedOn.keys()].filter((n) => !ledger.byNum.has(n)).sort((a, b) => a - b) };
   const tallyOf = (v) => [...place.values()].filter((x) => x === v).length;
   const c = datedHomes(ledger);
   const d = listD(plan), e = listE(plan), f = listF(plan, names, prevF), a = listA(plan, added);
@@ -574,8 +580,8 @@ export function censusCounts(r) {
     d: r.d.rows.length, dx: r.d.excluded.length, e: [r.e.refs.length, r.e.unmatched.length + r.e.rowUnmatched.length],
     f: [r.f.new.length, r.f.all.length], g: r.g.alert ? 1 : 0,
     sc: r.b.selfContradicting.length, r: r.b.reused.length,
-    // A2: [records, handed-over-still-unplaced, placed-since, closed-since]; absent before any handover record exists.
-    ...(r.b.handover ? { hv: [r.b.handover.records, r.b.handover.stillUnplaced.length, r.b.handover.placedSince.length, r.b.handover.closedSince.length] } : {}),
+    // A2: [handed ITEMS, still unplaced, placed since, closed since, vanished since].
+    ...(r.b.handover ? { hv: [r.b.handover.handed, r.b.handover.stillUnplaced.length, r.b.handover.placedSince.length, r.b.handover.closedSince.length, r.b.handover.vanishedSince.length] } : {}),
   };
 }
 
@@ -584,7 +590,7 @@ export function censusLists(r) {
   return {
     a: r.a.map((x) => x.file),
     b: r.b.unplaced.map((x) => (x.handedOver ? [x.n, x.code, x.handedOver] : [x.n, x.code])),
-    hv: r.b.handover ? { placed: r.b.handover.placedSince, closed: r.b.handover.closedSince } : null,
+    hv: r.b.handover ? { placed: r.b.handover.placedSince, closed: r.b.handover.closedSince, vanished: r.b.handover.vanishedSince } : null,
     sc: r.b.selfContradicting.map((x) => x.issue), reused: r.b.reused,
     c: r.c.issues.map((x) => x.n), cx: r.c.excluded.map((x) => x.issue),
     d: r.d.rows.map((x) => x.row), dx: r.d.excluded.map((x) => x.row),
@@ -623,7 +629,7 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
       `(a) new reports: ${r.a.filter((x) => x.verdict === 'not-closed-in-plan').length} not closed in plan, ${r.a.filter((x) => x.verdict === 'in-no-plan-line').length} in no plan line [owner ? ${qCount(r.a, (x) => x.owner)}]` +
         top(r.a, (x) => `${x.file} (${x.verdict}, ${planOwner(x.owner)})`),
       `(b) OPEN ${r.selfCheck.open}: placed ${placed} (by # ${p.number}, HOME batch ${p.homeBatch}, parked ${p.parked}, roadmap ${p.roadmap}), unplaced ${r.b.unplaced.length} [owner ? ${qCount(r.b.unplaced, (x) => x.owner)}]` +
-        (withHandover && r.b.handover && r.b.handover.records ? `; handed over ${r.b.handover.records}: ${r.b.handover.stillUnplaced.length} unplaced, ${r.b.handover.placedSince.length} placed, ${r.b.handover.closedSince.length} closed` : '') +
+        (withHandover && r.b.handover && r.b.handover.handed ? `; handed over ${r.b.handover.handed}: ${r.b.handover.stillUnplaced.length} unplaced, ${r.b.handover.placedSince.length} placed, ${r.b.handover.closedSince.length} closed` + (r.b.handover.vanishedSince.length ? `, ${r.b.handover.vanishedSince.length} vanished` : '') : '') +
         top(r.b.unplaced, (x) => `#${x.n} ${x.why} (${x.owner})`) +
         `; self-contradicting ${r.b.selfContradicting.length}, reused ${r.b.reused.length}`,
       `(c) dated homes: ${r.c.issues.length} issues / ${r.c.lineCount} lines (excluded by name ${r.c.excluded.length}) [owner ? ${qCount(r.c.issues, (x) => x.owner)}]` +
