@@ -373,5 +373,7 @@ function frameResurface(alert, d, nowMs) {
   ok('P46 title ≤ 80', m.title.length <= TITLE_MAX);
 }
 
+ok('PLANTED CI CONTROL (B-PLAN-CURRENCY-CHECK Step 4): must FAIL this step', false);
+
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

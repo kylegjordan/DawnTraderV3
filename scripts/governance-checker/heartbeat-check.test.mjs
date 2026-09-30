@@ -260,5 +260,7 @@ const reset = () => { rmSync(STATE, { force: true }); rmSync(HB, { force: true }
 }
 rmSync(TMP, { recursive: true, force: true });
 
+ok('PLANTED CI CONTROL (B-PLAN-CURRENCY-CHECK Step 4): must FAIL this step', false);
+
 console.log(`\nHeartbeat tests: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

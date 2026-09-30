@@ -1417,6 +1417,8 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
   }
 }
 
+ok('PLANTED CI CONTROL (B-PLAN-CURRENCY-CHECK Step 4): must FAIL this step', false);
+
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 
