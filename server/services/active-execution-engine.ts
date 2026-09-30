@@ -611,6 +611,12 @@ export type FlattenCloseType = 'manual_stop' | 'reset';
 // Metrics only count from session start - resetting when engine stops
 const engineSessionStart: Map<string, Date | null> = new Map();
 
+// B-SIZING-DEC-RESTORE 2e (Langston Step-4 A1 condition 1): a per-PROCESS token for an alert key that must never collapse
+// to a constant. Before an engine session starts, and after a stop, there is no session start — a constant there would
+// let the first alert silence every later one until resolved (system-alerts.ts dedupe). Stamped ONCE at module load, so
+// a restart mints a new one; deriving it per call from process.uptime() would jitter by a millisecond and split the key.
+const PROCESS_BOOT_TOKEN = `boot-${new Date().toISOString()}`;
+
 export function getEngineSessionStart(mode: 'live' | 'paper'): Date | null {
   return engineSessionStart.get(mode) || null;
 }
@@ -5528,7 +5534,8 @@ export class ActiveExecutionEngine {
         entryObservedAtMs: null,
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
-        // B67.3: cohort marker (0=capped treatment / 1=uncapped control)
+        // B67.3: cohort hash (0 = was capped treatment / 1 = was uncapped control) — data only since 2026-09-30, when
+        // B-SIZING-DEC-RESTORE 2e retired the A/B split; nothing branches on it
         pairIdHash,
         // B67.2.1: regime classifier confidence + macro modifier + phase
         regimeConfidenceRaw: _b67_2_1_rawConf,
@@ -6198,10 +6205,13 @@ export class ActiveExecutionEngine {
         // B-SIZING-DEC-RESTORE 2e (Pe2, Kyle 2026-09-30: "There should not be a backup sizing path"): a signal is sized
         // ONCE, at birth, by the one formula (balance × max exposure × max position % × the buffer). One that arrives
         // without BOTH fields is REFUSED here — never re-sized by a second path. The fallback that stood here (B6) sized
-        // it again from the guardrails and was never used (0 FALLBACK_SIZING against every promoted signal pre-sized).
+        // it again from the guardrails; it fired 0 times against 942 TRUST_SIZED in a measured 12.2 h window of staging
+        // stdout (Langston, Step-4 A1 — stdout retains ~12 h, so that bounds a RATE; a seam break is an EVENT).
         // An unsized signal means the sizing seam broke, so it is LOUD: logged, counted, and one alert per engine
         // session — the key carries the session start, so the first one never silences a later session's (Langston
         // condition 7; RESOLVE the row, never ack it — an acked row blocks every later occurrence, system-alerts.ts).
+        // With no session (before start, or draining after a stop) it carries the process's boot token, never a
+        // constant (Langston Step-4 A1 condition 1).
         const _sessionStart = getEngineSessionStart(this.mode);
         console.error(`[B-SIZING-DEC-RESTORE][UNSIZED_SIGNAL_REFUSED:${this.mode}] ${signal.symbol}/${signal.strategy}: arrived without quantity AND estimated value (quantity=${signalAny.quantity}, estimatedValue=${signalAny.estimatedValue}) — refused, not re-sized`);
         rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', 'signal arrived unsized — sizing happens at signal birth');
@@ -6213,7 +6223,7 @@ export class ActiveExecutionEngine {
             severity: 'warning',
             title: `An unsized ${this.mode} signal reached execution and was refused (${signal.symbol})`,
             body: `A ${this.mode} signal for ${signal.symbol} (${signal.strategy}) arrived at execution without a size, so it was refused rather than sized a second way. Every signal is sized once, when it is created; this means that step did not run for it. Resolve this alert (do not acknowledge it) once the cause is known.`,
-            dedupe_key: `unsized-signal-${this.mode}-${_sessionStart ? _sessionStart.toISOString() : 'no-session'}`,
+            dedupe_key: `unsized-signal-${this.mode}-${_sessionStart ? _sessionStart.toISOString() : PROCESS_BOOT_TOKEN}`,
           });
         } catch (alertErr) {
           console.error('[B-SIZING-DEC-RESTORE][UNSIZED_SIGNAL_REFUSED] alert raise failed (the loud log above stands):', alertErr instanceof Error ? alertErr.message : alertErr);

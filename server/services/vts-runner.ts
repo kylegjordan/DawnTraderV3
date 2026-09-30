@@ -784,9 +784,9 @@ interface OpenVirtualTrade {
   originalStopPrice?: number;
   latchTriggerPrice?: number;
   rungTargetHistory?: number[];
-  // B67.3 (2026-04-29): cohort marker for the per-underlying limits A/B
-  // observation. 0 = capped treatment, 1 = uncapped control. Persisted on
-  // close to JSONL so end-of-observation cohort comparison can group trades.
+  // B67.3 (2026-04-29): cohort hash from the per-underlying limits A/B observation (0 = was capped treatment, 1 = was
+  // uncapped control). ⛔ The A/B was retired 2026-09-30 (B-SIZING-DEC-RESTORE 2e): the cap now covers every coin and
+  // nothing branches on this value. It is still persisted on close — KEEP-AS-DATA, read by the CSV export only.
   pairIdHash?: number;
   // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier +
   // phase persisted at trade-open per Kyle directive (master plan §0.11.D).
@@ -2448,7 +2448,7 @@ async function generatePhase10Signal(
     // ratcheting and is available on closed-trade record + open-trade API.
     originalStopPrice: stopLoss,
     rungTargetHistory: [],
-    // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation.
+    // B67.3 (2026-04-29): per-underlying-cap A/B cohort hash — DATA ONLY since 2026-09-30 (B-SIZING-DEC-RESTORE 2e retired the split; nothing branches on it).
     pairIdHash: assignCohortHash(symbol),
     // B67.2.1 (2026-04-29): capture regime classifier confidence + macro
     // modifier + phase at trade-open. Read from MCE cached context +
@@ -3787,7 +3787,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         pairDirectionalBiasScore: trade.pairDirectionalBiasScore,
         globalDirectionalBiasScore: trade.globalDirectionalBiasScore,
         filterTier: trade.filterTier,
-        // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+        // B67.3 (2026-04-29): per-underlying-cap A/B cohort hash — DATA ONLY since 2026-09-30 (B-SIZING-DEC-RESTORE 2e retired the split; nothing branches on it)
         pairIdHash: trade.pairIdHash,
         // B67.2.1 (2026-04-29): regime confidence + macro modifier + phase
         regimeConfidenceRaw: trade.regimeConfidenceRaw,
@@ -6274,7 +6274,7 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
           rungTargetHistory: ts?.rungTargetHistory ?? trade.rungTargetHistory ?? null,
         };
       })(),
-      // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+      // B67.3 (2026-04-29): per-underlying-cap A/B cohort hash — DATA ONLY since 2026-09-30 (B-SIZING-DEC-RESTORE 2e retired the split; nothing branches on it)
       pairIdHash: trade.pairIdHash ?? null,
       // B67.2.1 (2026-04-29): regime confidence + macro modifier + phase persisted
       // at trade-open. Surfaced on the open-trades UI so daily monitoring can see

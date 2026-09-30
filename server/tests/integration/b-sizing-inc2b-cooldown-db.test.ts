@@ -1,5 +1,7 @@
 /**
  * B-SIZING-DEC-RESTORE increment 2b (#1093) — THE COOLDOWN'S READ IS EXACT, ON REAL POSTGRES.
+ * ⚠️ The file name predates increment 2e, which WITHDREW 2b's position-% floor; the cooldown fix and 2e's never_filled
+ * pin live here and the name is KEPT on purpose — `storage.ts` cites this exact path, and a rename breaks citations.
  *
  * `storage.getLastClosedAtForSymbol` replaces the Closed Trades search box's SUBSTRING filter for the symbol cooldown.
  * Rows are seeded for look-alike symbols (one name inside another) and for a symbol present in BOTH classes (DASH/USD

@@ -894,7 +894,7 @@ export class VTSService extends EventEmitter {
     // replay-ablation join can match on it. Ablation rows store the same id at
     // emit time; without persisting it on the trade record the join breaks.
     originalSignalId?: string;
-    // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+    // B67.3 (2026-04-29): per-underlying-cap A/B cohort hash — DATA ONLY since 2026-09-30 (B-SIZING-DEC-RESTORE 2e retired the split; nothing branches on it)
     pairIdHash?: number;
     // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
     // captured at trade-open, propagated to closed-trade record + JSONL.
@@ -1055,7 +1055,7 @@ export class VTSService extends EventEmitter {
       originalStopPrice: tradeData.originalStopPrice ?? null,
       latchTriggerPrice: tradeData.latchTriggerPrice ?? null,
       rungTargetHistory: tradeData.rungTargetHistory ?? null,
-      // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+      // B67.3 (2026-04-29): per-underlying-cap A/B cohort hash — DATA ONLY since 2026-09-30 (B-SIZING-DEC-RESTORE 2e retired the split; nothing branches on it)
       pairIdHash: tradeData.pairIdHash ?? null,
       // B67.2.1 (2026-04-29): regime confidence + macro modifier + phase
       regimeConfidenceRaw: tradeData.regimeConfidenceRaw ?? null,

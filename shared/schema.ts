@@ -1936,6 +1936,8 @@ export const closedTradesTable = pgTable("closed_trades", {
   exitRestDurationMs: integer("exit_rest_duration_ms"),
   // B67.3 — A/B universe-split cohort marker. CRC32(symbol) % 2 at trade open.
   // Cohort 0: per-underlying cap ENABLED. Cohort 1: cap DISABLED (control).
+  // ⛔ RETIRED 2026-09-30 (B-SIZING-DEC-RESTORE 2e, Kyle): the split is gone and the cap covers every coin. The column
+  // stays as DATA (KEEP-AS-DATA, J2) — historical rows carry it; nothing branches on it.
   // NULL on trades opened before B67.3 deploy.
   pairIdHash: integer("pair_id_hash"),
   // B67.2.1 — Regime classifier confidence + macro modifier + phase persisted

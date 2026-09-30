@@ -193,7 +193,10 @@ describe('2e Pe2 (Kyle 2026-09-30: no backup sizing path) — an unsized signal 
   it('the else of the two-field test refuses, counts, alerts once per engine session, and returns SIZING_INVALID', () => {
     expect(tail).toContain('[B-SIZING-DEC-RESTORE][UNSIZED_SIGNAL_REFUSED:');
     expect(tail).toContain("rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', 'signal arrived unsized");
-    expect(tail).toMatch(/dedupe_key: `unsized-signal-\$\{this\.mode\}-\$\{_sessionStart \? _sessionStart\.toISOString\(\) : 'no-session'\}`/);
+    expect(tail).toMatch(/dedupe_key: `unsized-signal-\$\{this\.mode\}-\$\{_sessionStart \? _sessionStart\.toISOString\(\) : PROCESS_BOOT_TOKEN\}`/);
+    // Step-4 A1 condition 1: with no session the key must not collapse to a constant — a per-process token, stamped once
+    expect(src).not.toContain("'no-session'");
+    expect(src).toMatch(/^const PROCESS_BOOT_TOKEN = `boot-\$\{new Date\(\)\.toISOString\(\)\}`;$/m);
     expect(tail).toContain("return { opened: false, stage: 'SIZING_INVALID', reason: 'signal arrived unsized");
   });
 });

@@ -1118,7 +1118,7 @@ export async function evaluateXstockPairForVTS(
             // B70.2 admitted-features key SET so a Phase-25 cross-class query reads ONE
             // schema. Pure reads from the hoisted xOpenTrade record + in-scope locals;
             // `?? null` preserves each JSONB key. null where xStock genuinely lacks the
-            // value: pairIdHash = crypto-only cohort A/B marker (B67.3); strategyPhaseWeight
+            // value: pairIdHash = crypto-only cohort hash (B67.3; data only, A/B retired 2026-09-30); strategyPhaseWeight
             // = eval-cycle applies no phase-preference; the global-market-structure fields
             // are crypto concepts resolved INSIDE registerOpenVtsTrade post-hook (B-NEW-22),
             // not part of the xStock decision.
@@ -1164,7 +1164,7 @@ export async function evaluateXstockPairForVTS(
               phaseAgeSeconds: xOpenTrade.phaseAgeSeconds ?? null,
               strategyPhaseWeight: null, // no phase-preference modulation on xStock
               // Cohort marker + ATR
-              pairIdHash: null, // crypto-only cohort A/B marker (B67.3)
+              pairIdHash: null, // crypto-only cohort hash (B67.3; data only, A/B retired 2026-09-30)
               atrAtOpen: xOpenTrade.atrAtOpen ?? null,
               // P19-B5b #94: decision-time equity-macro snapshot (VIX/DXY z + raw +
               // freshness). Distinct from `macroModifierValue` above (the AMR modifier

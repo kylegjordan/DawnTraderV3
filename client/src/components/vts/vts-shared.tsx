@@ -49,7 +49,7 @@ export interface OpenTrade {
   // B61 (2026-04-15): numeric DBS scores alongside categories
   pairDirectionalBiasScore: number | null;
   globalDirectionalBiasScore: number | null;
-  // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+  // B67.3 (2026-04-29): per-underlying-cap A/B cohort hash — DATA ONLY since 2026-09-30 (B-SIZING-DEC-RESTORE 2e retired the split; nothing branches on it)
   pairIdHash?: number | null;
   // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
   // captured at trade-open. NULL on trades opened pre-B67.2.1.
@@ -131,7 +131,7 @@ export interface ClosedTrade {
   // B61 (2026-04-15): numeric DBS scores alongside categories
   pairDirectionalBiasScore: number | null;
   globalDirectionalBiasScore: number | null;
-  // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+  // B67.3 (2026-04-29): per-underlying-cap A/B cohort hash — DATA ONLY since 2026-09-30 (B-SIZING-DEC-RESTORE 2e retired the split; nothing branches on it)
   pairIdHash?: number | null;
   // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
   // captured at trade-open. NULL on trades opened pre-B67.2.1.

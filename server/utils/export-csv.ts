@@ -136,7 +136,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   originalStopPrice: number | null;
   latchTriggerPrice: number | null;
   rungTargetHistory: number[] | null;
-  // B67.3 (2026-04-29): cohort marker for per-underlying-cap A/B observation
+  // B67.3 (2026-04-29): per-underlying-cap A/B cohort hash — DATA ONLY since 2026-09-30 (B-SIZING-DEC-RESTORE 2e retired the split; nothing branches on it)
   pairIdHash: number | null;
   // B67.2.1 (2026-04-29): regime classifier confidence + macro modifier + phase
   regimeConfidenceRaw: number | null;
@@ -363,7 +363,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             originalStopPrice: typeof trade.originalStopPrice === 'number' ? trade.originalStopPrice : null,
             latchTriggerPrice: typeof trade.latchTriggerPrice === 'number' ? trade.latchTriggerPrice : null,
             rungTargetHistory: Array.isArray(trade.rungTargetHistory) ? trade.rungTargetHistory : null,
-            // B67.3 (2026-04-29): cohort marker
+            // B67.3 (2026-04-29): cohort hash — data only since the A/B split was retired 2026-09-30
             pairIdHash: typeof trade.pairIdHash === 'number' ? trade.pairIdHash : null,
             // B67.2.1 (2026-04-29): regime confidence + macro modifier + phase
             regimeConfidenceRaw: typeof trade.regimeConfidenceRaw === 'number' ? trade.regimeConfidenceRaw : null,

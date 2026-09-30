@@ -21,3 +21,9 @@ Kyle's directives of 2026-09-30, as one increment for the ≥ 2026-10-02T20:10Z 
 1. The reset script's precondition — I re-pointed it from 2b's floor to increment 1's range; it was not in §20's census.
 2. The refusal alert's dedupe key uses the engine session START; a restart mints a new key. Is that the right grain?
 3. Keeping the sizer's `sourcePool`/`assetClass` params as record-only inputs rather than dropping them.
+
+## Step-4 gate A1 — APPROVED with four conditions (Langston); conditions built — PRE_AUDIT §20.8
+- **Pe1's premise, measured (his read):** staging `_migrations` 170 rows, a 2026-09 `b-*` file present as the positive control, **0 rows matching `%b-sizing%`**; `guardrails_v2` has no increment-1 range constraint and still has `max_open_positions_check` + `portfolio_risk_per_trade_pct_check` ⇒ 1/2a/2b/2c/3 all undeployed; withdrawing 2b's pair orphans nothing.
+- **Pe2's "never used", with its window:** 0 fallback/sizing-failure markers against **942 `TRUST_SIZED` in 12.2 h** of staging stdout (2026-09-29T13:37:47Z → 09-30T01:50:21Z). A rate bound, not an event proof.
+- **C1 (code):** the refusal alert's key no longer collapses to a constant with no session — a per-process boot token, stamped once.
+- **C4 (comments):** fourteen stale "A/B cohort marker" comments corrected, not the three named.
