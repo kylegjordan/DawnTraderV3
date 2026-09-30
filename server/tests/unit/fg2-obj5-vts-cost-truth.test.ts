@@ -39,8 +39,9 @@ describe('OBJ-5a — resolveVtsBookedExitPrice (the class seam + the null arm)',
     expect(resolveVtsBookedExitPrice('crypto_spot', mark, mark, clamp).price).toBe(mark);
   });
 
-  it('xStock: keeps the CLAMP even when a differing mark exists (§7.4 row 2 seam)', () => {
-    expect(resolveVtsBookedExitPrice('xstock_spot', 118.75, 118.75, 122.0).price).toBe(122.0);
+  // `8a-P4c` increment 3 (P8b): the §7.4 class seam is CLOSED — xStock books the guarded bid on the same arms as crypto.
+  it('xStock: books the observed bid like crypto — the §7.4 class seam is closed (8a-P4c increment 3)', () => {
+    expect(resolveVtsBookedExitPrice('xstock_spot', 118.75, 118.75, 122.0)).toEqual({ price: 118.75, arm: 'bid' });
   });
 
   it('null arm: no live mark ⇒ the evaluator\'s own price, never NaN/0', () => {

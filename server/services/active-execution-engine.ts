@@ -483,6 +483,8 @@ import { ageExemptionOfProducer } from './market-data/price-basis.js'; // P-7h �
 // (`mark-staleness`); the σ MEASUREMENT is cached (`sigma-rate-cache`) so the exit path
 // never awaits a DB read to decide whether a mark is trustworthy.
 import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_classes/xstock_spot/mark-staleness.js';
+// `8a-P4c` increment 3: the ONE reader of the mark-staleness and σ-cache knobs, shared with the VTS xStock exit guard.
+import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
 // B-XSTOCK-FEED-SANITY (#943, closes #567) — the book-state guard: the tracker is the one reader every
 // label site calls; the comparator advances ONLY here, after a two_sided verdict at the decision site.
 import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis } from '../asset_classes/xstock_spot/book-state-tracker.js';
@@ -787,16 +789,10 @@ export class ActiveExecutionEngine {
    * DROPPED, so the ceiling falls to the floor rather than widening off a stale statistic).
    * No hardcoded fallbacks — a missing knob throws to the caller's fail-safe skip (§5).
    */
-  private _sigmaCacheCfg(minObservations: number): SigmaCacheConfig {
-    const at = { exchange: '*', assetClass: 'xstock_spot' as const, strategy: '*', regime: '*' };
-    return {
-      windowMs: getCachedNumberRequired('mark_staleness', 'sigma_window_ms', at),
-      refreshAfterMs: getCachedNumberRequired('mark_staleness', 'sigma_refresh_after_ms', at),
-      maxAgeMs: getCachedNumberRequired('mark_staleness', 'sigma_max_age_ms', at),
-      minObservations,
-      classwidePercentile: getCachedNumberRequired('mark_staleness', 'sigma_classwide_percentile', at),
-      queryTimeoutMs: getCachedNumberRequired('mark_staleness', 'sigma_query_timeout_ms', at),
-    };
+  private _sigmaCacheCfg(): SigmaCacheConfig {
+    // `8a-P4c` increment 3: read through the ONE shared reader, so paper and the VTS xStock exit guard can never hand
+    // the σ-cache singletons different parameters (Langston, Step-2 r2 σ condition). Behaviour-identical for paper.
+    return readXstockSigmaCacheConfig();
   }
 
   /**
@@ -1830,9 +1826,7 @@ export class ActiveExecutionEngine {
           ?? safeResolveAssetClass(p.symbol, 'kraken')) === 'xstock_spot')
         .map((p) => p.symbol);
       if (_xstockSymbols.length > 0) {
-        const _minObs = getCachedNumberRequired('mark_staleness', 'sigma_min_observations',
-          { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' });
-        ensureSigmaFresh(_xstockSymbols, this._sigmaCacheCfg(_minObs));
+        ensureSigmaFresh(_xstockSymbols, this._sigmaCacheCfg());
       }
     } catch (sigmaKickErr) {
       // Knobs cold ⇒ no refresh kicked ⇒ cache ages out ⇒ per-position floor. The
@@ -1934,19 +1928,12 @@ export class ActiveExecutionEngine {
           // of THIS position's remaining room to its stop — so tolerance shrinks as danger
           // rises, and a position near its stop gets the tightest window.
           let _msCfg: MarkStalenessConfig;
-          let _sigmaMinObs: number;
+          let _sigmaCfg: SigmaCacheConfig;
           try {
-            const _at = { exchange: '*', assetClass: 'xstock_spot' as const, strategy: '*', regime: '*' };
-            _msCfg = {
-              budgetK: getCachedNumberRequired('mark_staleness', 'budget_k', _at),
-              nullStopBudgetPct: getCachedNumberRequired('mark_staleness', 'null_stop_budget_pct', _at),
-              floorMs: getCachedNumberRequired('mark_staleness', 'floor_ms', _at),
-              capMs: getCachedNumberRequired('mark_staleness', 'cap_ms', _at),
-              // σ younger than one refresh period is as fresh as the design allows; past
-              // that, σ is inflated with age so stale evidence cannot buy a wide window.
-              sigmaFullCreditMs: getCachedNumberRequired('mark_staleness', 'sigma_refresh_after_ms', _at),
-            };
-            _sigmaMinObs = getCachedNumberRequired('mark_staleness', 'sigma_min_observations', _at);
+            // `8a-P4c` increment 3: the ONE shared reader (behaviour-identical; the knobs and their fail-closed
+            // throw are unchanged).
+            _msCfg = readXstockMarkStalenessConfig();
+            _sigmaCfg = readXstockSigmaCacheConfig();
           } catch (knobErr) {
             console.error(`[P19-B8.5e][EQUITY_MARK] mark_staleness knobs unavailable — xstock mark NOT actionable for ${position.symbol} (fail-safe skip):`, knobErr instanceof Error ? knobErr.message : knobErr);
             withoutPrice++;
@@ -1961,7 +1948,7 @@ export class ActiveExecutionEngine {
           const _eqAge = Date.now() - _eqTick.tsMs;
           // σ read is pure-memory here; the refresh was kicked (non-blocking) before the
           // loop. A cache miss yields `null` ⇒ the policy lands on the FLOOR — fail-closed.
-          const _sigma = getCachedSigma(position.symbol, this._sigmaCacheCfg(_sigmaMinObs));
+          const _sigma = getCachedSigma(position.symbol, _sigmaCfg);
           const _ceiling = computeStalenessCeiling(
             {
               currentPrice: _eqTick.price,

@@ -154,10 +154,10 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     const shadow = vts.filter((a) => /sentinelLane:\s*'vts_shadow',/.test(a));
     expect(real).toHaveLength(1);
     expect(shadow).toHaveLength(1);
-    // VTS real: its own trigger variable — the BID on crypto, the MARK on xStock until `8a-P4c` moves it
+    // VTS real: its own trigger variable — the BID on both classes since `8a-P4c` increment 3
     expect(real[0]).toMatch(/triggerPrice:\s*_vtsTriggerPrice,/);
-    // VTS shadow: the bid on crypto, the mark otherwise
-    expect(shadow[0]).toMatch(/triggerPrice:\s*trade\.assetClass === 'crypto_spot' \? _sExitBid : currentPrice,/);
+    // VTS shadow: the guarded bid on both classes (`8a-P4c` increment 3)
+    expect(shadow[0]).toMatch(/triggerPrice:\s*_sExitBid,/);
     // paper / live: the engine's own mode names the machine, and the trigger is the class three-way (2d)
     expect(args[0]).toMatch(/sentinelLane:\s*this\.mode,/);
   });

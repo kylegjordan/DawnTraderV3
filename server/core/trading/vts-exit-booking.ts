@@ -24,9 +24,10 @@
  *  - `clamp_no_bid`     — ⚠️ NEW with `8a-P3`: a live mark but no usable bid ⇒ the clamp. The clamp is
  *                         the free-exit fiction this file exists to kill, and this set is strictly larger
  *                         than before, so the caller COUNTS it (Langston r1 F3).
- *  - `clamp_class_seam` — xStock.
+ *  ⛔ `8a-P4c` increment 3 (P8b): the `clamp_class_seam` arm is GONE — xStock books on the same three arms as crypto,
+ *     its bid from the VTS xStock exit guard (`selectVtsXstockExitBid` in vts-runner.ts).
  */
-export type VtsBookingArm = 'bid' | 'clamp_no_mark' | 'clamp_no_bid' | 'clamp_class_seam';
+export type VtsBookingArm = 'bid' | 'clamp_no_mark' | 'clamp_no_bid';
 
 export interface VtsBookedExit {
   price: number;
@@ -41,7 +42,6 @@ export function resolveVtsBookedExitPrice(
   observedMark: number | null | undefined,
   clampPrice: number,
 ): VtsBookedExit {
-  if (assetClass !== 'crypto_spot') return { price: clampPrice, arm: 'clamp_class_seam' };
   if (!usable(observedMark)) return { price: clampPrice, arm: 'clamp_no_mark' };
   if (!usable(observedBid)) return { price: clampPrice, arm: 'clamp_no_bid' };
   return { price: observedBid, arm: 'bid' };

@@ -192,18 +192,23 @@ describe('8a-P4c — XsVtsInstrument: per-pass lines and the hourly per-symbol r
   });
 });
 
-describe('8a-P4c — P5 fence: no xStock VTS decision moved, and nothing reads the instrument back', () => {
-  it('the real-lane xStock seams still read `last` (currentPrice)', () => {
+// The increment-1 P5 fence pinned "no xStock VTS decision moved". Increment 3 MOVES the exit decisions by design (plan §C3,
+// P8a/P8b); its subject is re-pointed, not relaxed: the exit trigger and booking now read the GUARDED bid on both lanes,
+// and the resting entry fill still reads `last` until increment 3b moves it.
+describe('8a-P4c — the xStock VTS exits read the guarded bid (increment 3); the instrument is still write-only', () => {
+  it('real lane: the xStock trigger and booking take the guard\'s bid; the pending fill still reads `last` (3b moves it)', () => {
     expect(count(VTS, /let _pFillPrice: number \| null = currentPrice;/g)).toBe(1);
-    expect(count(VTS, /let _vtsTriggerPrice: number \| null = currentPrice;/g)).toBe(1);
+    expect(count(VTS, /const _xsExit = selectVtsXstockExitBid\(trade\.symbol, _xsRow, trade\.stopLoss \?\? null, Date\.now\(\)\);/g)).toBe(1);
+    expect(count(VTS, /_vtsExitBid = _xsExit\.bid;\s*_vtsTriggerPrice = _vtsExitBid;/g)).toBe(1);
     expect(count(VTS, /resolveVtsBookedExitPrice\(trade\.assetClass, _vtsExitBid, currentPrice, decision\.exitPrice\)/g)).toBe(1);
   });
 
-  it('the shadow lane still triggers xStock on `last`', () => {
-    expect(count(VTS, /triggerPrice: trade\.assetClass === 'crypto_spot' \? _sExitBid : currentPrice,/g)).toBe(1);
+  it('shadow lane: xStock triggers on the same guard', () => {
+    expect(count(VTS, /const _sx = selectVtsXstockExitBid\(trade\.symbol, _sxRow, trade\.stopLoss \?\? null, Date\.now\(\)\);/g)).toBe(1);
+    expect(count(VTS, /triggerPrice: _sExitBid,/g)).toBe(1);
   });
 
-  it('the instrument is only WRITTEN from the runner — no reader of its state, and rawQuote feeds only the instrument', () => {
+  it('the instrument is only WRITTEN from the runner — no reader of its state; rawQuote feeds the instrument and the exit guard', () => {
     const uses = VTS.match(/_xs(Vts|Shadow)Instrument\.(\w+)\(/g) ?? [];
     const verbs = new Set(uses.map((u) => u.replace(/^_xs(Vts|Shadow)Instrument\./, '').replace('(', '')));
     expect(Array.from(verbs).sort()).toEqual(['beginPass', 'endPass', 'recordLook', 'recordPendingLook']);
