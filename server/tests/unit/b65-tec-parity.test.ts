@@ -753,6 +753,6 @@ describe('8a-P2 — the trigger decides and the mark does not', () => {
     expect(d.exitPrice).toBe(4.47);
     expect(d.noDecisionReason).toBeUndefined();
     const { resolveVtsBookedExitPrice } = await import('../../core/trading/vts-exit-booking.js');
-    expect(resolveVtsBookedExitPrice('crypto_spot', null, 4.47, d.exitPrice)).toEqual({ price: 4.47, arm: 'clamp_no_bid' });
+    expect(resolveVtsBookedExitPrice(null, 4.47, d.exitPrice)).toEqual({ price: 4.47, arm: 'clamp_no_bid' });
   });
 });

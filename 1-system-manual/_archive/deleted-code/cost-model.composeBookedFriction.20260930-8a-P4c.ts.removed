@@ -1,0 +1,17 @@
+// ARCHIVED — B-PRICE-SIDE-BY-JOB 8a-P4c increment 3a-ii (#1118), 2026-09-30. Deleted from server/core/math/cost-model.ts.
+// Replaced by composeVtsLegFriction (server/core/trading/vts-friction.ts): the spread half is charged per leg, only on a
+// leg booked at a level. Zero production callers remained after the per-leg rule; the one test caller was re-pointed.
+// Non-compilable by suffix; git history (the parent of the 3a-ii commit) is the authoritative archive.
+
+/**
+ * F-G-2 OBJ-5b — the BOOKED round-trip friction for a trade whose ENTRY leg paid a
+ * mode-specific fee. `feeEntry` is the effective entry mode's rate (maker or taker);
+ * `feeExit` is ALWAYS the taker rate — exits take liquidity. One maker leg, never two
+ * (Langston condition 3, 2026-09-02). Shared by all three VTS write paths (crypto
+ * inline, the twin overlay via planTwin, the xStock eval-cycle) so the formula cannot
+ * drift between them — computeTotalRoundTripCost above stays the PRE-decision,
+ * taker-both-legs estimate the admission guard reads (pre-audit P13).
+ */
+export function composeBookedFriction(feeEntry: number, feeExit: number, slippage: number, spread: number): number {
+  return feeEntry + feeExit + (slippage * 2) + spread;
+}

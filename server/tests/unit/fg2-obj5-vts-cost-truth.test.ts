@@ -14,6 +14,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { resolveVtsBookedExitPrice } from '../../core/trading/vts-exit-booking.js';
 import { planTwin } from '../../core/trading/pending-maker-logic.js';
+import { composeVtsLegFriction } from '../../core/trading/vts-friction.js';
 
 vi.mock('../../services/module-constants-service.js', () => ({
   getCachedNumberRequired: () => { throw new Error('not needed by these tests'); },
@@ -36,19 +37,20 @@ describe('OBJ-5a — resolveVtsBookedExitPrice (the class seam + the null arm)',
     const clamp = 100;      // TEC's stop
     const mark = 99.85;     // where the bid actually was
     expect(mark).not.toBe(clamp);
-    expect(resolveVtsBookedExitPrice('crypto_spot', mark, mark, clamp).price).toBe(mark);
+    expect(resolveVtsBookedExitPrice(mark, mark, clamp).price).toBe(mark);
   });
 
-  it('xStock: keeps the CLAMP even when a differing mark exists (§7.4 row 2 seam)', () => {
-    expect(resolveVtsBookedExitPrice('xstock_spot', 118.75, 118.75, 122.0).price).toBe(122.0);
+  // `8a-P4c` increment 3 (P8b): the §7.4 class seam is CLOSED — xStock books the guarded bid on the same arms as crypto.
+  it('xStock: books the observed bid like crypto — the §7.4 class seam is closed (8a-P4c increment 3)', () => {
+    expect(resolveVtsBookedExitPrice(118.75, 118.75, 122.0)).toEqual({ price: 118.75, arm: 'bid' });
   });
 
   it('null arm: no live mark ⇒ the evaluator\'s own price, never NaN/0', () => {
-    expect(resolveVtsBookedExitPrice('crypto_spot', null, null, 100).price).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', undefined, undefined, 100).price).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', NaN, NaN, 100).price).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', 0, 0, 100).price).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', -1, -1, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(null, null, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(undefined, undefined, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(NaN, NaN, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(0, 0, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(-1, -1, 100).price).toBe(100);
   });
 });
 
@@ -83,49 +85,59 @@ describe('OBJ-5b — planTwin re-prices the twin\'s OWN entry fee (the majority 
     nowMs: 1_000_000,
   };
 
-  it('maker twin of a TAKER-chosen leg: friction = chosen − taker + maker; fractions honest', () => {
-    const chosenFriction = composeBooked(FEE_TAKER, FEE_TAKER, SLIP, SPREAD);
+  // `8a-P4c` 3a-ii (BLOCKER-1) re-point: the twin COMPOSES its own friction over its own leg (per-leg spread rule) — it
+  // is no longer the chosen leg's friction plus the entry-fee delta, which the per-leg rule makes wrong by ½·spread.
+  it('maker twin of a TAKER-chosen leg: its OWN per-leg friction — a limit fill and a bid exit carry no spread half', () => {
+    const chosenFriction = composeVtsLegFriction({
+      entryFee: FEE_TAKER, exitFee: FEE_TAKER, slippage: SLIP, spread: SPREAD, entryPriceBasis: 'level', exitSideBooked: true,
+    });
     const plan = planTwin({
       ...base,
       pendingMaker: false,
       decisionChosenMode: 'taker',
-      chosenFrictionCost: chosenFriction,
-      chosenEntryFeeRate: FEE_TAKER,
+      chosenSlippage: SLIP,
+      chosenSpread: SPREAD,
     });
     expect(plan.kind).toBe('open');
     if (plan.kind !== 'open') return;
     expect(plan.twinMode).toBe('maker');
     expect(plan.overlay.entryFeeRate).toBe(FEE_MAKER);
-    expect(plan.overlay.frictionCost).toBeCloseTo(composeBooked(FEE_MAKER, FEE_TAKER, SLIP, SPREAD), 10);
+    expect(plan.overlay.entryPriceBasis).toBe('limit');
+    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_MAKER + FEE_TAKER + 2 * SLIP, 10);
     expect(plan.overlay.costEntryFeeFraction).toBe(FEE_MAKER);
     expect(plan.overlay.costExitFeeFraction).toBe(FEE_TAKER);
     expect(plan.overlay.costFeeFraction).toBeCloseTo((FEE_MAKER + FEE_TAKER) / 2, 10);
-    // the defect this kills: the twin used to INHERIT the chosen leg's taker friction under a maker stamp
+    // F-G-2's defect stays dead: the twin does not INHERIT the chosen leg's taker friction under a maker stamp
     expect(plan.overlay.frictionCost).not.toBeCloseTo(chosenFriction, 10);
+    // BLOCKER-1: nor is it the old fee-delta derivation, which carried the chosen taker leg's entry spread half
+    expect(plan.overlay.frictionCost).not.toBeCloseTo(chosenFriction - FEE_TAKER + FEE_MAKER, 10);
   });
 
-  it('taker twin of a PENDING-MAKER chosen leg: friction = chosen − maker + taker', () => {
-    const chosenFriction = composeBooked(FEE_MAKER, FEE_TAKER, SLIP, SPREAD);
+  // `8a-P4c` 3b (P9): a taker twin now books the guarded ASK — on its side at entry, so no spread half at either leg.
+  it('taker twin of a PENDING-MAKER chosen leg: its OWN per-leg friction — booked at the ask, no spread half', () => {
     const plan = planTwin({
       ...base,
       pendingMaker: true,
       decisionChosenMode: 'maker',
-      chosenFrictionCost: chosenFriction,
-      chosenEntryFeeRate: FEE_MAKER,
+      chosenSlippage: SLIP,
+      chosenSpread: SPREAD,
     });
     expect(plan.kind).toBe('open');
     if (plan.kind !== 'open') return;
     expect(plan.twinMode).toBe('taker');
-    expect(plan.overlay.frictionCost).toBeCloseTo(composeBooked(FEE_TAKER, FEE_TAKER, SLIP, SPREAD), 10);
+    expect(plan.overlay.entryPriceBasis).toBe('ask');
+    expect(plan.overlay.entryPrice).toBe(101); // the placement ask
+    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_TAKER + FEE_TAKER + 2 * SLIP, 10);
     expect(plan.overlay.costEntryFeeFraction).toBe(FEE_TAKER);
   });
 
-  it('without the chosen leg\'s figures the overlay carries NO friction (degrades to inherit, never to 0)', () => {
-    const plan = planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker' });
-    expect(plan.kind).toBe('open');
-    if (plan.kind !== 'open') return;
-    expect(plan.overlay.frictionCost).toBeUndefined();
-    expect(plan.overlay.costFeeFraction).toBeUndefined();
+  // `8a-P4c` 3a-ii FINDING-2 (Langston): the old optional arm let a twin inherit the chosen leg's fee fractions under its
+  // OWN basis and recompose to neither leg's number. The inputs are required now: without them the twin is SKIPPED.
+  it('without the chosen leg\'s figures the twin is SKIPPED (chosen_leg_unpriced) — never inherited, never 0', () => {
+    expect(planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker', chosenSlippage: undefined, chosenSpread: undefined }))
+      .toEqual({ kind: 'skip', reason: 'chosen_leg_unpriced' });
+    expect(planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker', chosenSlippage: SLIP, chosenSpread: Number.NaN }))
+      .toEqual({ kind: 'skip', reason: 'chosen_leg_unpriced' });
   });
 
   it('the skip paths are untouched by the re-price inputs', () => {
@@ -134,8 +146,8 @@ describe('OBJ-5b — planTwin re-prices the twin\'s OWN entry fee (the majority 
       placementTransactablePrice: 99,  // marketable at placement ⇒ maker twin skipped
       pendingMaker: false,
       decisionChosenMode: 'taker',
-      chosenFrictionCost: 0.02,
-      chosenEntryFeeRate: FEE_TAKER,
+      chosenSlippage: SLIP,
+      chosenSpread: SPREAD,
     });
     expect(plan).toEqual({ kind: 'skip', reason: 'marketable_maker' });
   });

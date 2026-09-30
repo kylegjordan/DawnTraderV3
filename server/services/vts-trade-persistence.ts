@@ -185,7 +185,8 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
  * P19-B7.2c — flip a PENDING maker order to OPEN on an honest trade-through fill.
  * Idempotent via `WHERE state='pending'` (a retry after partial failure matches
  * zero rows). The entry price + reserved maker fee were written at placement and
- * do not change on fill (the fill IS the resting limit).
+ * do not change on fill (the fill IS the resting limit — every maker writer, the maker twin
+ * included since `8a-P4c` 3b, sets entryPrice to its limit).
  */
 export async function markPendingMakerFilled(tradeId: string): Promise<void> {
   await db.execute(sql`
