@@ -52,6 +52,7 @@ import { validatePasswordStrength, hashPassword, verifyPassword, getPasswordStre
 // Directive 12.2.3: uiBob import removed (file deleted in Batch 7A)
 // Directive 12.2.3: cortexCore import removed (file deleted in Batch 7A)
 import { filePersistence } from "./services/file-persistence";
+import { UnsafePathError } from "./services/safe-path";
 import { memoryLifecycle } from "./services/memory-lifecycle";
 import { getPermissionsForRole, Permission } from './config/permissions.js';
 import type { UserRole } from './config/permissions.js';
@@ -14698,6 +14699,11 @@ Provide specific, actionable recommendations.`,
       res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
       res.send(result.content);
     } catch (error) {
+      // B-SEC-HARDEN (#1022): a containment rejection is a client error, not a 500
+      // (Coltrane review 2026-09-30 — getDownloadPath throws before the read).
+      if (error instanceof UnsafePathError) {
+        return res.status(400).json({ error: 'Invalid filename' });
+      }
       console.error('Error downloading file:', error);
       res.status(500).json({ error: 'Failed to download file' });
     }

@@ -13,8 +13,13 @@ describe('resolveWithin — containment guard', () => {
     expect(out.startsWith(base + path.sep)).toBe(true);
   });
 
-  it('rejects a name that carries the report prefix/suffix but walks up with ..', () => {
-    // This is the shape the old startsWith/endsWith checks let through.
+  it('rejects a name that carries the report prefix/suffix and GENUINELY escapes the base', () => {
+    // Coltrane review 2026-09-30: 'CSAV_Report_../../secret.json' normalises to a SIBLING
+    // inside the base (<base>/secret.json), so it does not escape and was a weak fixture.
+    // 'CSAV_Report_x/../../sentinel.json' passes the old startsWith/endsWith checks AND
+    // normalises OUTSIDE the base — the real shape the old checks let through.
+    expect(() => resolveWithin(base, 'CSAV_Report_x/../../sentinel.json')).toThrow(UnsafePathError);
+    // the weak fixture is still rejected (on the separator check), kept as a regression guard:
     expect(() => resolveWithin(base, 'CSAV_Report_../../secret.json')).toThrow(UnsafePathError);
   });
 

@@ -13,6 +13,17 @@ import path from 'path';
  * It rejects, rather than sanitising: an out-of-bounds name is a bug or an
  * attempt, never something to silently rewrite into an in-bounds one.
  *
+ * SCOPE, stated so callers do not over-trust it (Coltrane review, 2026-09-30):
+ *  - This is LEXICAL containment. It does NOT resist a symlink: an accepted
+ *    basename that names a symlink pointing outside the base still reads
+ *    through it. On staging the base dirs are trusted and not attacker-writable,
+ *    but do not rely on this helper where that is not true.
+ *  - It is for callers that supply a plain basename. It deliberately rejects a
+ *    legitimate nested name (e.g. `command_history/x.json`), so it must NOT be
+ *    applied unchanged to writers that use subdirectories.
+ *  - baseDir must be a real directory, not `/` (a `/` base makes the prefix
+ *    check `//` and rejects valid children). No current caller uses `/`.
+ *
  * @throws {UnsafePathError} if `name` is not a plain in-directory basename, or
  *         the resolved path is not strictly inside `baseDir`.
  * @returns the absolute, contained path.
