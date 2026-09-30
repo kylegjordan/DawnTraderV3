@@ -55,3 +55,6 @@ Searched `RUNNING_ISSUES.md` and `BATCH_CATALOG.md` for the wake-watcher path an
 
 ## 6. Placement
 Pre-sprint, second exception after row 1 (Kyle, 2026-09-30: *"it's important that we get this done or figured out before we go into the sprint"*). Proposed plan row **1h** in `SPRINT_TO_LIVE_PLAN.md` §4 and a §0 line, taken ahead of row 1's Step 4 because every idle hour costs every session two wakes; **placement is for Langston to confirm at this step.**
+
+## 7. Amendment 1 (Kyle, 2026-09-30) — OBJ-5 and OBJ-6
+OBJ-5: a Langston reply wakes only the session it is addressed to. OBJ-6: each session is shown only its own due alerts plus any new unrouted one. Scope, audit and plan in `B_TOKEN_BURN_CUT_AMENDMENT_1.md`.
