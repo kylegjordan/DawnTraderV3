@@ -183,7 +183,7 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 ---
 
 ## C2. INCREMENT 2 — X0: PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (Step 2 r1, 2026-09-30, CC-C)
-**change-class: sub_batch** (increment of `B-PRICE-SIDE-BY-JOB`, class `architecture`). **No decision moves ⇒ no epoch change.** Ships in the ≥ 2026-10-02T20:10Z window. Increment 1's window read is confirmed (progress report §9.6-§9.8).
+*This increment rides the file's one graded class — line 3, `architecture` (Langston Step-2 condition 5, 2026-09-30: a second marker mid-document, bold and in a lower class, is struck; it deletes code under `server/` and adds a tracked script, so the stricter doc set is the honest one).* **No decision moves ⇒ no epoch change.** Ships in the ≥ 2026-10-02T20:10Z window. Increment 1's window read is confirmed (progress report §9.6-§9.8).
 
 **PREVIOUSLY STATED vs NOW:** PREVIOUSLY STATED (P6, above): "sides become `number | null` … every consumer branches on `null`." NOW: the zero-defaulted sides have **no consumer at all**, so they are DELETED, not retyped. REASON: the census below.
 
@@ -203,3 +203,14 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 
 **Judgement call:** deleting rather than retyping the dead fields — P6's wording assumed consumers existed.
 **Plain language:** a missing price side was being filled in as zero on the main VTS lane. Nothing ever read that zero, so it could not cause a false stop. This piece deletes it, so nothing can start reading it later. The pricing read's script also goes into the repo, fixed so the last hour of each day is counted.
+
+### C2.3 STEP 2 — LANGSTON: PROCEED, WITH BLOCKER-1 AND FOUR CONDITIONS (2026-09-30 01:31Z; census re-derived by him at `7fc76ca43`)
+| # | ruling | as built (Step 3) |
+|---|---|---|
+| **BLOCKER-1** | P6b's control `after SYM == after TOUCH` is satisfied by `0 == 0` — add (a) a NEGATIVE control, (b) enumerate + fail loud on the rotations, (c) publish the segment totals | (a) `--sym-cut stamp` restores the old cut and reproduces the gap **vts 8,638 / shadow 6,825 exactly**; (b) the required rotations are enumerated from the range, a missing one is FATAL (exit 2, nothing printed — shown on a 2026-08-01 start), `.gz` opened explicitly, per-file line counts printed; (c) every session's TOUCH and SYM totals published, `readable` false on a zero |
+| **C2** | restart-straddling hours: exclude by name, equality over unrestarted hours, fixed now | restarts read from PM2's own log; an hour holding a restart after a lane's first line is excluded BY NAME with the count published. The window holds ONE restart, the instrument's deploy at the window's own start (14:38:49Z, before any line; PM2 uptime since 2026-09-22T14:38:49.748Z) ⇒ **0 hours excluded** |
+| **C3** | delete, type-enforced, fence mutation-proved both directions | the entry type and the helper's return type carry no side; fence `b-price-side-8a-p4c-x0-fence.test.ts`, 4 mutations each red on its own test |
+| **C4** | the crypto projection goes too, same commit — two change-list rows | done; two rows in the increment-2 change list (xStock: outcome 1; crypto: outcome 3) |
+| **C5** | one graded marker | struck above |
+| **NIT-6** | `DELETED_COMPONENTS_LOG` line, no archive owed | done |
+**P6b's control, as read at the closed window (`hour` cut):** after-session SYM looks = TOUCH looks on both lanes (vts 211,691 · shadow 163,326); **per-(hour, session) equality holds in every graded cell — vts 182 of 182 over 177 hours, shadow 179 of 179 over 174** (TOUCH lines placed by stream order, so a pass straddling an hour counts where its looks were recorded). Rule readings unchanged: c* vts 120 s / shadow 60 s, U 1.76% / 1.47%, K 0.

@@ -3162,9 +3162,12 @@ async function resolveOpenVirtualTrades(): Promise<{
     : new Map<string, CachedPrice>();
 
   // Xstock leg — read latest tick per symbol from xstock_spot_ticker_snap.
-  // `8a-P4c` P1: `rawQuote` carries the row's UNDEFAULTED sides and its capture time for the instrument. The zero-defaulted
-  // `bid`/`ask` beside it are unchanged (no xStock decision reads them); increment 2 (X0) replaces them with these.
-  const xstockPriceMap = new Map<string, { symbol: string; price: number; bid: number; ask: number; rawQuote: XsQuoteRow }>();
+  // `8a-P4c` P1: `rawQuote` carries the row's UNDEFAULTED sides and its capture time for the instrument.
+  // ⛔ `8a-P4c` increment 2 (X0): there are NO `bid`/`ask` fields on this entry, and the type forbids them. They were
+  // `parseFloat(side) || 0` — a missing side fabricated as ZERO, which a SELL comparator would read as a price every stop
+  // clears. Nothing read them, so they are deleted rather than retyped (plan §C2, Langston C3). A side is read from
+  // `rawQuote`, where a missing side is `null`, never zero.
+  const xstockPriceMap = new Map<string, { symbol: string; price: number; rawQuote: XsQuoteRow }>();
   if (xstockSymbols.size > 0) {
     try {
       const xstockSymbolListSql = Array.from(xstockSymbols)
@@ -3190,8 +3193,6 @@ async function resolveOpenVirtualTrades(): Promise<{
             xstockPriceMap.set(r.symbol, {
               symbol: r.symbol,
               price,
-              bid: parseFloat(r.bid) || 0,
-              ask: parseFloat(r.ask) || 0,
               rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms) },
             });
           }
@@ -3204,13 +3205,17 @@ async function resolveOpenVirtualTrades(): Promise<{
 
   // Unified lookup helper: returns the current price for a trade, dispatching
   // by trade.assetClass. Used inside the per-trade loop below.
+  // ⛔ `8a-P4c` increment 2 (X0, Langston C3/C4): it returns the PRICE ONLY — no side, on either class. Sides carry no
+  // stamp here, so a side read through this helper would be unstamped: crypto touch readers read fresh from the cache
+  // (see `VTS_CRYPTO_TOUCH_READERS`), xStock readers read `rawQuote`. The return type makes that compile-enforced.
   const priceDataMap = {
-    get(symbol: string, assetClass?: string): { price: number; bid?: number; ask?: number } | undefined {
+    get(symbol: string, assetClass?: string): { price: number } | undefined {
       if (assetClass === 'xstock_spot') {
-        return xstockPriceMap.get(symbol);
+        const x = xstockPriceMap.get(symbol);
+        return x ? { price: x.price } : undefined;
       }
       const p = cryptoPriceMap.get(symbol);
-      return p ? { price: p.price, bid: p.bid, ask: p.ask } : undefined;
+      return p ? { price: p.price } : undefined;
     },
   };
   

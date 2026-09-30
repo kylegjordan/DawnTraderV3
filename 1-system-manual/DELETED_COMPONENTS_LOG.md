@@ -1065,3 +1065,11 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 
 **ARCHIVE:** `_archive/deleted-code/` — `intent-executor.ts…`, `ApprovalPrompt.tsx…`, `InteractiveNotification.tsx…`, `routes-intent-and-approval-endpoints.ts…` (all `.20260930-B-SIZING-DEC-RESTORE-2e.removed`). The code-only removals (fallback branch, split, pattern cap, correlation block) live in git history at the 2e commit.
 **LEFT, NAMED, so a later grep is not read as a missed sweep:** `getScalingFactor` (row 135b); `assignCohortHash` and the seven `pairIdHash` writers — the `pair_id_hash` column is KEEP-AS-DATA (J2; readers are the CSV export and a client pass-through); `PORTFOLIO_RISK` in the block-reason enum types and `shared/schema.ts`'s pg enum (historical rows may hold it; only the AJ8 display list dropped it); the rest of the AI chat (`B-AI-CHAT-REMOVAL`, after-live list); `scripts/classify-baseline.mjs` no longer names `intent-executor` (swept).
+
+## 2026-09-30 — `B-PRICE-SIDE-BY-JOB` row `8a-P4c` increment 2 (X0), CC-C (plan §C2; Langston Step 2 PROCEED 01:31Z, conditions C3/C4 + NIT-6)
+| what | why | disposition | blast-radius verification |
+|---|---|---|---|
+| the real VTS lane's `bid`/`ask` on each xStock price entry (`parseFloat(side) \|\| 0`) + the fields on its type | a missing side fabricated as ZERO — a SELL comparator on it would fire every stop. Taxonomy outcome 1, latent defect | (5) disconnected → DELETED, type-enforced | census (plan §C2 E1, re-derived by Langston at `7fc76ca43`): the only reader of the entry is the lookup helper's one caller, which reads `.price`; sides are read from `rawQuote` (null, never zero) |
+| the crypto `bid`/`ask` projection in the same helper's return | faithful values with the stamp dropped — contradicts the file's own invariant that crypto touch readers read fresh from the cache (`8a-P3` r3 FINDING-2). Outcome 3, legacy | (5) disconnected → DELETED; the helper returns the price only | same caller, `.price` only; the crypto touch path reads `VTS_CRYPTO_TOUCH_READERS`, untouched |
+
+**ARCHIVE:** none owed — no file is removed; the fields live in git history at the increment-2 commit. **Fence:** `server/tests/unit/b-price-side-8a-p4c-x0-fence.test.ts`.
