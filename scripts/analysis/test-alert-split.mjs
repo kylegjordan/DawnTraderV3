@@ -7,6 +7,7 @@ let pass = 0, fail = 0, shown = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
 const A = (id, sev = 'warning') => ({ id, sev, title: `alert ${id}` });
 const owners = {
+  _meta: { seeded_at: '2026-09-30T14:00:00Z' },
   'mine-1': { owner: 'CC-A' }, 'theirs-1': { owner: 'CC-B' }, 'kyle-1': { owner: 'Kyle' }, 'crit-theirs': { owner: 'CC-B' },
   'crit-mine': { owner: 'CC-A' },
 };
@@ -23,8 +24,10 @@ const b = splitAlerts(alerts, owners, 'CC-B');
 ok('the same record read as CC-B: its own two, the unrouted two, and the critical one routed to CC-A on its critical line', b.mine.map((a) => a.id).join() === 'theirs-1,crit-theirs' && b.critical.map((a) => a.id).join() === 'crit-mine' && b.unrouted.length === 2);
 ok('FAIL-OPEN: no owner record → not narrowed', splitAlerts(alerts, null, 'CC-A').narrowed === false);
 ok('FAIL-OPEN: no alias (unmapped clone) → not narrowed', splitAlerts(alerts, owners, null).narrowed === false);
-ok('an empty owner record narrows, and every alert is unrouted (shown), none counted away',
-  (() => { const e = splitAlerts(alerts, {}, 'CC-A'); return e.narrowed && e.unrouted.length === alerts.length && e.others === 0; })());
+ok('a SEEDED record with no routings narrows, and every alert is unrouted (shown), none counted away',
+  (() => { const e = splitAlerts(alerts, { _meta: { seeded_at: 'x' } }, 'CC-A'); return e.narrowed && e.unrouted.length === alerts.length && e.others === 0; })());
+ok('(b) a record PRESENT but never seeded does NOT narrow (it would call every alert unrouted — false)',
+  (() => { const u = splitAlerts(alerts, { 'mine-1': { owner: 'CC-A' } }, 'CC-A'); return u.narrowed === false && /not seeded/.test(u.why); })());
 ok('the clone map covers the four sessions', ['DawnTraderV3-old', 'DawnTraderV3-new', 'DawnTraderV3-analyst', 'DawnTraderV3-infra'].every((k) => CLONE_TO_ALIAS[k]));
 
 console.log(`\nAlert split tests: ${pass} passed, ${fail} failed (${shown} alerts shown across the cases — the instrument speaks)`);

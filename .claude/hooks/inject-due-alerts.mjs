@@ -153,26 +153,41 @@ function main() {
   // ones and any critical one — the rest is a count. The owner record is written by this session's wake filter.
   // FAIL-OPEN: an unmapped clone or an unreadable owner record shows the full list, exactly as before.
   const alias = CLONE_TO_ALIAS[basename(process.env.CLAUDE_PROJECT_DIR || '')] || null;
-  let owners = null, ownersWhy = 'no alias for this clone';
+  let owners = null, readWhy = null;
   if (alias) {
     try {
       const dir = process.env.CC_WAKE_STATE_DIR || join(homedir(), '.claude', 'cc-wake-state'); // env: tests only
       owners = JSON.parse(readFileSync(join(dir, `${alias}.alert-owners.json`), 'utf8'));
-    } catch (e) { owners = null; ownersWhy = `owner record unreadable (${e && e.code || 'parse error'})`; }
+    } catch (e) {
+      owners = null;
+      // (a) (Langston): a missing record is the normal state before the seed, not a fault — say so.
+      readWhy = e && e.code === 'ENOENT' ? 'owner record not seeded yet' : `owner record unreadable (${e && e.code || 'parse error'})`;
+    }
   }
   const s = splitAlerts(parsed, owners, alias);
   if (!s.narrowed) {
-    note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: false, why: ownersWhy });
-    emit(`§10.5 DUE ALERTS — ${due} active, unacknowledged, due now (whole file, ${total} ids; ${ms}ms; full list — ${ownersWhy}):\n${cap(parsed)}\n` +
+    const why = readWhy || s.why;
+    note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: false, why });
+    emit(`§10.5 DUE ALERTS — ${due} active, unacknowledged, due now (whole file, ${total} ids; ${ms}ms; full list — ${why}):\n${cap(parsed)}\n` +
          `Surface each in plain language; ${CLOSE}`);
     return;
   }
   note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: true, alias,
     mine: s.mine.length, unrouted: s.unrouted.length, critical: s.critical.length, others: s.others });
+  // FINDING-2 (Langston): ONE total cap across the three shown groups (it was per group, and critical was uncapped).
+  let budget = MAX_INJECT, cut = 0;
+  const take = (list) => { const k = list.slice(0, Math.max(0, budget)); budget -= k.length; cut += list.length - k.length; return k; };
+  const mineS = take(s.mine), unroutedS = take(s.unrouted), criticalS = take(s.critical);
   const parts = [];
-  if (s.mine.length) parts.push(`YOURS:\n${cap(s.mine)}`);
-  if (s.unrouted.length) parts.push(`NOT YET ROUTED — shown to every session until Langston routes it:\n${cap(s.unrouted)}`);
-  if (s.critical.length) parts.push(`CRITICAL — shown to every session:\n${s.critical.map((a) => `• ${a.id.slice(0, 8)}… [critical] ${a.title} — owner ${a.owner}  (full id: ${a.id})`).join('\n')}`);
+  if (mineS.length) parts.push(`YOURS:\n${mineS.map(line).join('\n')}`);
+  if (unroutedS.length) parts.push(`NOT YET ROUTED — shown to every session until Langston routes it:\n${unroutedS.map(line).join('\n')}`);
+  if (criticalS.length) parts.push(`CRITICAL — shown to every session:\n${criticalS.map((a) => `• ${a.id.slice(0, 8)}… [critical] ${a.title} — owner ${a.owner}  (full id: ${a.id})`).join('\n')}`);
+  if (cut) parts.push(`… +${cut} more NOT shown (cap ${MAX_INJECT} in total) — read the file.`);
+  // (c) (Langston): markers he wrote that could not be recorded reach someone who can tell him — ONE session, the
+  // owner of this mechanism (CC-A), not all four; the last 24 h only.
+  const rejects = (alias === 'CC-A' && owners._meta && Array.isArray(owners._meta.rejects))
+    ? owners._meta.rejects.filter((r) => Date.now() - Date.parse(r.ts || 0) < 86400000) : [];
+  if (rejects.length) parts.push(`⚠ ${rejects.length} alert marker(s) Langston wrote in the last 24 h could not be recorded (no 36-char id, or an owner outside the set) — tell him, leading with his name. Latest: ${rejects[rejects.length - 1].marker}`);
   const rest = s.others ? `${s.others} other due alert${s.others === 1 ? ' is' : 's are'} routed to other sessions or to Kyle — not yours to raise.` : '';
   if (!parts.length) {
     emit(`§10.5 (${alias}): ${due} due alerts, none of them yours — ${rest || 'all routed elsewhere.'} (whole file, ${total} ids; ${ms}ms — the filter ran.)`);

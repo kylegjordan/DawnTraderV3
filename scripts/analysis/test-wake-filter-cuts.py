@@ -55,6 +55,8 @@ LANG_OTHER = "NEW Claude — a plain reply addressed to someone else."
 # a later line that merely LEADS with a name does not wake (OPEN_RE is ^-anchored, not multiline — Langston C1).
 LANG_NAME_LATE_TAGGED = LANG_NAME_LATE.replace("OLD Claude, this part is for you.", "@CC-WAKE OLD Claude, this part is for you.")
 LANG_SECOND_LINE = "NEW Claude — fine.\n\nOLD Claude — you owe the census."
+# Step 4 BLOCKER-1: a marker whose action= text holds a `]`, in a reply opening with my name -> still wakes me.
+LANG_BRACKET_MARKER = "OLD Claude — see this.\n[[ALERT id=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee owner=CC-B action=\"read list [3] first\"]]"
 
 # B-WAKE-LEAD-NAME (#1040) — scope OBJ-2 (a)(b)(c) and Langston's Step-2 conditions 3, 4, 5.
 MARK = lambda owner: "\n\n[[ALERT id=deadbeef-0000-0000-0000-000000000000 owner=" + owner + " action=\"look\"]]"
@@ -87,6 +89,7 @@ CASES = [
     ("langston_outbound", None,    LANG_NAME_LATE,         False, "OBJ-5 (was FINDING-5): my name only deep in a reply addressed to Kyle -> silent now"),
     ("langston_outbound", None,    LANG_NAME_LATE_TAGGED,  True,  "OBJ-5 C1: the same reply with the explicit @CC-WAKE tag -> WAKE (the second-addressee route)"),
     ("langston_outbound", None,    LANG_SECOND_LINE,       False, "OBJ-5 C1: a later LINE leading with my name does not wake (OPEN_RE is not multiline)"),
+    ("langston_outbound", None,    LANG_BRACKET_MARKER,    True,  "Step 4 BLOCKER-1: a marker with `]` inside action=, reply opening with my name -> WAKE", "CC-B"),
     ("langston_outbound", None,    LANG_OTHER,             False, "REGRESSION GUARD: plain reply to someone else -> silent"),
     ("langston_outbound", None,    LEAD_A,           True,  "#1040 (a): reply OPENS with my name, another owner's marker -> WAKE, tagged CC-B (the defect)", "CC-B"),
     ("langston_outbound", None,    LEAD_B,           False, "#1040 (b): my name only MID-body, another owner's marker -> silent (the #995 cut, untouched)"),

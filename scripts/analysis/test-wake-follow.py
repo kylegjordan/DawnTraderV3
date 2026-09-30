@@ -175,7 +175,7 @@ case("T11b a line longer than 1 MiB is delivered, not stalled on", rc == 0 and l
 
 # 11c. amendment 1 OBJ-6 P12: the alert-owner recorder (streaming mode; Langston C2, C6).
 OWN = os.path.join(T, "state", "CC-A.alert-owners.json")
-U1, U2 = "11111111-2222-3333-4444-555555555555", "66666666-7777-8888-9999-000000000000"
+U1, U2, U3 = "11111111-2222-3333-4444-555555555555", "66666666-7777-8888-9999-000000000000", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 def lang(text):
     return json.dumps({"kind": "langston_outbound", "transport": "discord", "ts": "2026-09-30T13:00:00Z", "text": text})
 rows = [
@@ -184,6 +184,8 @@ rows = [
     lang("Kyle — bad one.\n[[ALERT id=deadbeef owner=CC-A action=\"short id\"]]"),                   # C6: short id, not recorded
     lang(f"Kyle — bad owner.\n[[ALERT id={U2} owner=OLD-Claude action=\"x\"]]"),                     # C6: owner outside the set
     lang(f"Kyle — re-routed.\n[[ALERT id={U1} owner=CC-C action=\"moved\"]]"),                       # last marker wins
+    # Step 4 BLOCKER-1: a `]` INSIDE action= — ALERT_MARKER_STRIP could not reach this; MARKER_FULL must.
+    lang(f"Kyle — bracket.\n[[ALERT id={U3} owner=CC-INFRA action=\"see list [3] first\"]]"),
 ]
 r = subprocess.run([sys.executable, FILTER, "CC-A", "--state", STATE],
                    input=(f"==> {INBOX} <==\n" + "\n".join(rows) + "\n").encode(), capture_output=True, env=ENV)
@@ -191,8 +193,14 @@ own = json.load(open(OWN)) if os.path.exists(OWN) else {}
 err = r.stderr.decode("utf-8", "replace")
 case("T11c the recorder: markers in replies NOT addressed here are still recorded (C2)", own.get(U2, {}).get("owner") == "CC-B", str(own))
 case("T11d the recorder: the last marker wins, so a re-route moves ownership away", own.get(U1, {}).get("owner") == "CC-C", str(own))
+ids_recorded = [k for k in own if k != "_meta"]
 case("T11e C6: a short id and an unknown owner are NOT recorded, and each is named on stderr",
-     len(own) == 2 and err.count("NOT recorded") == 2, f"n={len(own)} stderr={err.count('NOT recorded')}")
+     len(ids_recorded) == 3 and err.count("NOT recorded") == 2, f"n={len(ids_recorded)} stderr={err.count('NOT recorded')}")
+case("T11g BLOCKER-1: a marker with a `]` inside action= IS recorded", own.get(U3, {}).get("owner") == "CC-INFRA", str(own.get(U3)))
+case("T11h (c): the two rejects are kept IN the record (_meta.rejects), not only on stderr",
+     len((own.get("_meta") or {}).get("rejects", [])) == 2, str((own.get("_meta") or {}).get("rejects")))
+case("T11i (b): a streaming-mode record is NOT marked seeded (only --seed-owners sets seeded_at)",
+     "seeded_at" not in (own.get("_meta") or {}))
 case("T11f nothing here woke CC-A (every reply addressed to someone else)", not r.stdout.strip(), r.stdout.decode()[:120])
 
 # 12. the heartbeat's new watcher/control fields (streaming mode, the filter's own routing): an all-clear

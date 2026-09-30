@@ -26,7 +26,12 @@ export const CLONE_TO_ALIAS = {
 // alerts: [{ id, sev, title }] · owners: { <uuid>: { owner } } or null · alias: 'CC-A' | … | null
 export function splitAlerts(alerts, owners, alias) {
   if (!alias || !owners || typeof owners !== 'object') {
-    return { narrowed: false, mine: [], unrouted: [], critical: [], others: 0 };
+    return { narrowed: false, why: alias ? 'owner record not seeded yet' : 'no alias for this clone', mine: [], unrouted: [], critical: [], others: 0 };
+  }
+  // (b) (Langston, Step 4): a record that never finished a whole-inbox seed would call every alert "not yet routed" —
+  // a false statement indistinguishable from the true one. Only a seeded record narrows.
+  if (!owners._meta || !owners._meta.seeded_at) {
+    return { narrowed: false, why: 'owner record present but not seeded', mine: [], unrouted: [], critical: [], others: 0 };
   }
   const mine = [], unrouted = [], critical = [];
   let others = 0;

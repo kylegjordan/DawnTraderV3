@@ -39,13 +39,17 @@ if not DRY and not bad:
                          capture_output=True, text=True, check=True).stdout.strip()
     fol = subprocess.Popen(["ssh", "-o", "ConnectTimeout=15", "root@204.168.141.77", f"python3 - /var/log/cc-discord-inbox.jsonl:{ino}:0"],
                            stdin=open(f"{S}/cc-wake-follow.py", "rb"), stdout=subprocess.PIPE)
+    # FINDING-3 (Langston): seed into a THROWAWAY dir — seeding at the live path would race CC-A's running watcher.
+    import tempfile
+    tmpd = tempfile.mkdtemp(prefix="owner-seed-")
     r = subprocess.run(["python3", "-u", f"{S}/cc-wake-filter.py", "CC-A", "--seed-owners",
-                        "--state", f"{S}/cc-wake-state/SEED.json"], stdin=fol.stdout, capture_output=True)
+                        "--state", f"{tmpd}/SEED.json"], stdin=fol.stdout, capture_output=True)
     fol.kill()
     print(r.stderr.decode("utf-8", "replace").strip().splitlines()[-1])
-    src = f"{S}/cc-wake-state/CC-A.alert-owners.json"   # the seed ran as CC-A, so that is the file it wrote
-    data = open(src, "rb").read()
-    for a in ("CC-B", "CC-C", "CC-INFRA"):
+    data = open(f"{tmpd}/CC-A.alert-owners.json", "rb").read()
+    if b'"seeded_at"' not in data:
+        sys.exit("ABORT: the seed did not finish (no seeded_at) — nothing copied")
+    for a in ("CC-A", "CC-B", "CC-C", "CC-INFRA"):
         open(f"{S}/cc-wake-state/{a}.alert-owners.json", "wb").write(data)
     print("seeded", len(data), "bytes into the four owner records")
 

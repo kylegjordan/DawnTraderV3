@@ -351,38 +351,63 @@ def save_state(st):
 # ALERT_OWNERS, is NOT recorded and is named on stderr (the task output file), never silently dropped.
 OWNERS_FILE = os.path.join(os.path.dirname(STATE), f"{ALIAS}.alert-owners.json")
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+# ⛔ Step 4 BLOCKER-1 (Langston, measured over 3,766 markers): ALERT_MARKER_STRIP's `[^\]]*` cannot cross a `]` inside
+# `action="…"`, so 10 REAL markers (valid uuid, valid owner) were unreachable — one of them a re-route, leaving a stale
+# owner — and the miss was invisible (nothing counted it). The recorder uses its OWN locator: from `[[ALERT` to the
+# first `]]` on the same line. It recovers 10 of 11; the 11th is a bare prose `[[ALERT` with no marker, correctly left.
+MARKER_FULL = re.compile(r"\[\[ALERT\b[^\n]*?\]\]", re.I)
 _MARK_ID = re.compile(r"\bid=([^\s\]]+)")
 _MARK_OWNER = re.compile(r"\bowner=([^\s\]]+)")
 _REJECTED = [0]
 
 
+REJECTS_KEPT = 20
+
+
+def _load_owners():
+    try:
+        with open(OWNERS_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def _save_owners(owners):
+    os.makedirs(os.path.dirname(OWNERS_FILE), exist_ok=True)
+    tmp = OWNERS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(owners, f)
+    os.replace(tmp, OWNERS_FILE)
+
+
 def record_owners(body, ts):
     owners, changed = None, False
-    for mk in ALERT_MARKER_STRIP.finditer(body or ""):
+    for mk in MARKER_FULL.finditer(body or ""):
         s = mk.group(0)
         mi, mo_ = _MARK_ID.search(s), _MARK_OWNER.search(s)
         aid = mi.group(1).strip('",;') if mi else None
         own = OWNER_CANON.get(mo_.group(1).strip('",;').upper()) if mo_ else None
+        if owners is None:
+            owners = _load_owners()
         if not aid or not own or not _UUID.match(aid):
+            # (c) IN-BAND, not stderr only (Langston): the record keeps the latest rejects, and the alert hook shows them,
+            # so a marker Langston wrote that cannot route anything reaches someone who can tell him.
             _REJECTED[0] += 1
             print(f"[cc-wake-filter] alert marker NOT recorded (needs a 36-char id and an owner in "
                   f"{', '.join(ALERT_OWNERS)}): {_flat(s)[:140]}", file=sys.stderr, flush=True)
+            meta = owners.setdefault("_meta", {})
+            rej = meta.setdefault("rejects", [])
+            snip = _flat(s)[:140]
+            if not any(r.get("marker") == snip for r in rej):
+                rej.append({"ts": ts, "marker": snip})
+                meta["rejects"] = rej[-REJECTS_KEPT:]
+                changed = True
             continue
-        if owners is None:
-            try:
-                with open(OWNERS_FILE, encoding="utf-8") as f:
-                    owners = json.load(f)
-            except (FileNotFoundError, ValueError):
-                owners = {}
         if (owners.get(aid) or {}).get("owner") != own:
             owners[aid] = {"owner": own, "ts": ts}
             changed = True
     if changed:
-        os.makedirs(os.path.dirname(OWNERS_FILE), exist_ok=True)
-        tmp = OWNERS_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(owners, f)
-        os.replace(tmp, OWNERS_FILE)
+        _save_owners(owners)
 
 
 if SEED:
@@ -457,6 +482,11 @@ for raw in sys.stdin:
         continue
     if SEED and line.startswith("#@"):
         if line.startswith("#@CAUGHTUP"):
+            # (b) (Langston): only a record that finished a whole-inbox seed may narrow the alert list. A present but
+            # unseeded record (the Step-3 stray file) must never read as "every alert is unrouted".
+            o = _load_owners()
+            o.setdefault("_meta", {})["seeded_at"] = _utc()
+            _save_owners(o)
             print(f"[cc-wake-filter] seed done: {OWNERS_FILE}; markers not recorded: {_REJECTED[0]}", file=sys.stderr)
             sys.exit(0)
         continue
