@@ -1333,8 +1333,13 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
     const st = fresh(), before = JSON.stringify(st), w = world([], { flags: { census: false, mistakePass: false } });
     maybeRunWeekly(st, MON, new Set(), w.deps);
     ok('P40 flags OFF → state byte-identical and nothing called', JSON.stringify(st) === before && w.calls.length === 0 && w.saved.length === 0);
-    const def = fresh(); maybeRunWeekly(def, MON, new Set(), { sink: { add: () => { throw new Error('must not be called'); } } });
-    ok('P40 the COMMITTED flags (config.mjs) are off: the default deps touch nothing', JSON.stringify(def) === JSON.stringify(fresh()));
+    // P62 census flip (B-PLAN-CURRENCY-CHECK): the COMMITTED census flag is ON and the mistake-pass flag is still OFF. With the
+    // default deps the census leg is REACHED (its enabled-since anchor is set before the gate), the pass leg is not.
+    // Planted faults: census flag false → the first half fails; pass flag true → the second half fails.
+    const def = fresh();
+    try { maybeRunWeekly(def, MON, new Set(), { sink: { add: () => { throw new Error('no sink in tests'); } } }); } catch { /* a leg failure is contained in-state */ }
+    ok('P62 the COMMITTED flags: census ON (its leg is reached), mistake pass still OFF (its leg is not)',
+      def.censusEnabledSince != null && def.mistakePassEnabledSince == null, JSON.stringify(Object.keys(def)));
   }
   // two simulated Mondays → two distinct adds; a later tick in a run week → none
   {

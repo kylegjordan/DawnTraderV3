@@ -202,3 +202,45 @@ Weekly plan census 2026-W40 at d4a2679. owner=CC-A, do not ack. action="run the 
 Full lists: metadata.lists of this row (read by id in /var/log/dawntrader/system-alerts.jsonl); box file /var/lib/governance-checker/census/2026-W40.json.
 ```
 
+
+## P62 pre-registration — `node scripts/governance-checker/census.mjs --dry-run --ref ac7a21812f383175a597d7bf425af9c0b6125d1e` (2026-09-30, the base of the census flip)
+
+The census flip fires the 2026-W40 census on its first tick (mid-week enable fires at once). This is the expected content.
+
+```
+census dry run at ac7a21812f383175a597d7bf425af9c0b6125d1e (list (a) window 7f472d1c4fbea63c6db105aa7a38c160a8a95637..ac7a21812f383175a597d7bf425af9c0b6125d1e; week of the ref 2026-W40)
+self-check: heads 797 · numbers 691 · OPEN 539 (R1 487; widened S1 46, S2 8)
+(b) placed 391 (number 230 · HOME batch 150 · parked 2 · roadmap 9) · unplaced 148 {"U1":51,"U2":50,"U3":5,"U4":3,"U5":16,"U6":23}
+    R1-Q13 (a)↔(c) delta: 19 issue(s) place differently when every note-cell mention counts: #375→number #393→number #498→number #532→number #535→number #546→number #578→number #596→number #652→number #688→number #698→number #732→number #924→number #928→number #953→number #1008→number #1022→number #1051→number #1102→number
+    self-contradicting sub-list (3): #1098@L165 (head carries "CLOSED" before its final OPEN; filer CC-B) · #532@L315 (head carries "CLOSED" before its final OPEN; filer ?) · #348@L563 (head carries "RESOLVED" before its final OPEN; filer CC-A)
+    reused numbers (8): #559 #561 #642 #646 #648 #660 #741 #921
+(c) R1 × R2: 12 issues / 13 lines / 13 matches
+(c) R1w × R2: 13 issues / 14 lines / 14 matches
+(c) R1 × R2+OWNER: 12 issues / 14 lines / 14 matches
+(c) R1w × R2+OWNER, #696 counted: 13 issues / 15 lines / 15 matches
+(c) R1w × R2+OWNER, #696 excluded (Q25): 12 issues / 13 lines / 13 matches (excluded #696)
+    list (c) as ruled: #444 #451 #455 #480 #481 #485 #680 #681 #682 #684 #705 #908
+(d) 0 rows:  · excluded 0: 
+(e) type (i)+§0 refs 57 · unmatched 0 · resolved via §0 1 (160a→B-CREDENTIALS-PRIVATE-REPO) · "after row N" 62, unmatched 0
+    unmatched: 
+(f) 5 lines / 4 ids: §4:55:B-RTB-REFRESH-CONSOLIDATE §0:B-MEASURE-GATE §0:B-XSTOCK-FEE-CONTRACT §0:B-WAKE-LEAD-NAME §5:B-XSTOCK-FEE-CONTRACT
+(a) 1: F_G_2_COMPLETION_REPORT.md (in-no-plan-line)
+(g) §6: recount {"CC-A":63,"CC-INFRA":57,"CC-C":66,"CC-B":58} · table {"CC-C":66,"CC-INFRA":57,"CC-B":58,"CC-A":63} · agree · stated Total 244 vs cells 244 (agree)
+owner sources over the 539 OPEN issues (shown-as): {"ownerLine":368,"homeLine":43,"filer":25,"unknown":103}
+owner per-source counts (overlapping): {"ownerLine":368,"homeLine":373,"filer":324}
+    10-item hand-check sample, ownerLine: #206=CC-B #341=CC-A #348=CC-A #352=CC-B #392=CC-B #444=CC-B #448=CC-A #451=CC-A #452=CC-A #453=CC-A
+    10-item hand-check sample, homeLine: #297=CC-A #337=CC-B #341=CC-A #348=CC-A #352=CC-A #371=CC-B #372=CC-B #385=CC-B #391=CC-B #392=CC-B
+    10-item hand-check sample, filer: #206=CC-B #297=CC-C #337=CC-B #341=CC-A #348=CC-A #352=CC-A #395=CC-B #441=CC-A #443=CC-A #444=CC-B
+counts {"h":797,"n":691,"o":539,"a":[0,1],"b":[391,148,230,150,2,9,51,50,5,3,16,23],"c":[12,13,13],"cx":1,"d":0,"dx":0,"e":[57,0],"f":[5,5],"g":0,"sc":3,"r":8}
+title (63): Weekly plan census 2026-W40: sprint plan vs ledger (owner CC-A)
+body (952):
+Weekly plan census 2026-W40 at ac7a218. owner=CC-A, do not ack. action="run the weekly census worklist; resolve this row when the listed items are dispositioned".
+(a) new reports: 0 not closed in plan, 1 in no plan line [owner ? 1] — F_G_2_COMPLETION_REPORT.md (in-no-plan-line, owner ?)
+(b) OPEN 539: placed 391 (by # 230, HOME batch 150, parked 2, roadmap 9), unplaced 148 [owner ? 55] — #146 no HOME line (owner ?); self-contradicting 3, reused 8
+(c) dated homes: 12 issues / 13 lines (excluded by name 1) [owner ? 0] — #444 (owner CC-B)
+(d) id-less plan rows: 0 (excluded 0) [owner ? 0]
+(e) after-references: 119, 0 name no earlier row [owner ? 0]
+(f) not-closed plan lines with a report: 5 NEW of 5 [owner ? 0] — §4 row 55 B-RTB-REFRESH-CONSOLIDATE (CC-B)
+(g) §6 recount agrees with the table
+Full lists: metadata.lists of this row (read by id in /var/log/dawntrader/system-alerts.jsonl); box file /var/lib/governance-checker/census/2026-W40.json.
+```
