@@ -16,8 +16,8 @@
 
 3. **Assign the owner.** Langston ends his triage with a single machine-parseable last line:
    ```
-   [[ALERT id=<id> owner=<CC-A|CC-B|CC-C|CC-INFRA|Kyle> action="<one line>"]]
-   ⛔ **THE OWNER TOKEN SET IS AUTHORITATIVE HERE AND IS MIRRORED BY `ALERT_OWNERS` IN `cc-wake-filter.py`.** CC-C and CC-INFRA added 2026-08-23. **THIS SPEC GOVERNS THE EMITTER (Langston); the filter governs the reader.** They drifted apart until 2026-08-23, when the filter accepted values this document forbade him to write.
+   [[ALERT id=<id> owner=<CC-A|CC-B|CC-C|CC-INFRA|Kyle|Langston> action="<one line>"]]
+   ⛔ **THE OWNER TOKEN SET IS AUTHORITATIVE HERE AND IS MIRRORED BY `ALERT_OWNERS` IN `cc-wake-filter.py`.** CC-C and CC-INFRA added 2026-08-23; **`Langston` added 2026-09-30** (his ruling, `B-TOKEN-BURN-CUT` amendment 1) — only when the NEXT ACTION is his own (a ruling or a read), never for code follow-through, which he does not own (Roles below). He is already a canonical actor (`ALERT_ACTORS`); routing a row he holds to `Kyle` would manufacture a Kyle obligation. **The owner is whoever owes the next action — for a batch's alert, read it from that batch's plan row, never infer it from who is in the conversation.** **Format requirement (FINDING-5, `B-TOKEN-BURN-CUT`):** write `id=` and `owner=` before any `]` inside the action text — the recorder reads the id and owner from the marker, and a field placed after an inner `]` is not reached by every reader. ⚠️ **The emitter prompt in `discord-langston-bridge.py` still offers the old three-way set — `#1035` (Infra Claude).** **THIS SPEC GOVERNS THE EMITTER (Langston); the filter governs the reader.** They drifted apart until 2026-08-23, when the filter accepted values this document forbade him to write.
    ⚠️ **AND THE CAUSAL CLAIM I FIRST WROTE HERE WAS WRONG — STRUCK, NOT SOFTENED.** It said a correctly-emitted `owner=CC-C` "was never matched, so nobody was suppressed and an alert owned by one session woke others." **The enumeration was not what broke it.** The reader searched a **400-character truncation** while the marker is the **LAST line** of a triage whose median length is **2,289 characters**. **MEASURED (Langston, all history, both tailed files): 3,836 `langston_outbound` records · 1,025 carry `[[ALERT` · 1,021 past byte 400 ⇒ 99.6% discarded before the regex ran.** Both defects were real and both are fixed; only the attribution was wrong. ★ **If you change the set, change it in BOTH or the emitter and the reader disagree silently.**
    ⚠️ **AN OWNER ALIAS WITH NO `NAMES` ENTRY IS SILENTLY UNROUTABLE** — it suppresses every other session and wakes nobody, which is **indistinguishable from `owner=Kyle`** (a deliberate no-wake). `CC-INFRA` WAS in exactly that state until **2026-08-26**, when Kyle lifted the deferral and it gained a `NAMES` entry in `cc-wake-filter.py`. **Every owner token has a `NAMES` entry today** (read the two lists, not this line). **The invariant: every token in the owner set has a `NAMES` entry, or it is not in the set.**
    ```
@@ -66,7 +66,7 @@
 | `one_off` | per the alert body | Do the one-off task; resolve. |
 | `recurring` | owner of the recurring concern | Handle this instance; resolve (the next instance re-fires fresh). |
 
-(Defaults only — Langston's marker overrides per the actual cause.)
+(Defaults only — Langston's marker overrides per the actual cause. ⚠️ This table predates CC-C and CC-INFRA; where a batch owns the alert, its owner is the one named on the batch's plan row.)
 
 ## Roles
 - **Dispatcher** — fires, posts, invokes Langston, and runs the re-surface closure guarantee.

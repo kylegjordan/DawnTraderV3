@@ -163,7 +163,10 @@ OTHERS_RE = re.compile(
 # ALERT_HANDLING_PROTOCOL.md:19 (which governs the EMITTER, so the filter accepted values the spec
 # forbade him to write), and his own CLAUDE.md §10.5. Fixing a drift bug while leaving three copies
 # drifting is the #641 shape aimed at itself. The tuple is now the single source: derive, never restate.
-ALERT_OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "Kyle")
+# "Langston" added 2026-09-30 (his ruling, B-TOKEN-BURN-CUT amendment 1): he is already a canonical ACTOR (ALERT_ACTORS),
+# and routing a row he holds to Kyle would fake a Kyle obligation. Mirrors ALERT_HANDLING_PROTOCOL.md; the emitter prompt
+# in discord-langston-bridge.py is #1035 (Infra Claude).
+ALERT_OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "Kyle", "Langston")
 ALERT_OWNER_RE = re.compile(
     r"\[\[ALERT\b[^\]]*\bowner=(" + "|".join(re.escape(o) for o in ALERT_OWNERS) + r")\b", re.I)
 

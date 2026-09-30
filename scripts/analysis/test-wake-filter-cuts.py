@@ -159,6 +159,17 @@ _rej = (json.load(open(os.path.join(_RDIR, "CC-A.alert-owners.json"), encoding="
 _rok = len(_rej) == 2 and "badxxxxx" in _rej[-1].get("marker", "") and _rej[-1].get("ts", "").startswith("2026-09-30T12")
 if not _rok: fails += 1
 print(f"  {'PASS' if _rok else '** FAIL **':10} condition 2: a re-issued bad marker moves to the END of the rejects ({[(r.get('ts','')[11:16], r.get('marker','')[-40:]) for r in _rej]})")
+# owner=Langston is RECORDED, not rejected (his ruling, 2026-09-30).
+_LDIR = tempfile.mkdtemp(prefix="wakelang-")
+_lin = f"==> {LOG} <==\n" + json.dumps({"ts": "2026-09-30T18:00:00+00:00", "kind": "langston_outbound",
+       "text": "NEW Claude — holding this one.\n\n[[ALERT id=4cae3f6e-525f-41c9-9e64-3ffd79483f31 owner=Langston action=\"rule the class\"]]"}) + "\n"
+subprocess.run([sys.executable, FILTER, "CC-A", "--state", os.path.join(_LDIR, "CC-A.json")], input=_lin.encode("utf-8"),
+               capture_output=True, timeout=120)
+_lrec = json.load(open(os.path.join(_LDIR, "CC-A.alert-owners.json"), encoding="utf-8"))
+_lok = (_lrec.get("4cae3f6e-525f-41c9-9e64-3ffd79483f31") or {}).get("owner") == "Langston" and not (_lrec.get("_meta") or {}).get("rejects")
+if not _lok: fails += 1
+print(f"  {'PASS' if _lok else '** FAIL **':10} owner=Langston is recorded as the owner, not rejected")
+
 # Langston's id-keyed prose rule: a placeholder or absent id is a quotation (skipped, COUNTED); a real or wordy id
 # reports every defect — including a real id whose owner was left off (his mutation) and id=none (a real attempt).
 _PDIR = tempfile.mkdtemp(prefix="wakeprose-")

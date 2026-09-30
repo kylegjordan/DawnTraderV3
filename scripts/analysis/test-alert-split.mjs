@@ -66,5 +66,16 @@ ok('the clone map covers the four sessions', ['DawnTraderV3-old', 'DawnTraderV3-
   ok('BLOCKER-2: under the cap nothing is cut', under.cutTotal === 0 && under.mine.length === 2 && under.unrouted.length === 2);
 }
 
+// ── owner=Langston (his ruling, 2026-09-30): an alert he holds is counted away in EVERY session — no session alias is
+// "Langston" — unless it is critical (then one line, owner named). His own §10.5 read and the dispatcher's re-surface are
+// state-keyed and never read this record, so it still surfaces to him and still escalates to Kyle if he sits on it.
+{
+  const o = { _meta: { seeded_at: 'x' }, 'held-by-L': { owner: 'Langston', flips: 0 }, 'crit-L': { owner: 'Langston', flips: 0 } };
+  const rows = [A('held-by-L'), A('crit-L', 'critical')];
+  const per = ['CC-A', 'CC-B', 'CC-C', 'CC-INFRA'].map((al) => splitAlerts(rows, o, al));
+  ok('owner=Langston: counted away (not shown) in all four sessions', per.every((s) => s.others === 1 && s.mine.length === 0 && s.unrouted.length === 0));
+  ok('owner=Langston + critical: one line, owner named, in all four', per.every((s) => s.critical.length === 1 && s.critical[0].owner === 'Langston'));
+}
+
 console.log(`\nAlert split tests: ${pass} passed, ${fail} failed (${shown} alerts shown across the cases — the instrument speaks)`);
 process.exit(fail === 0 ? 0 : 1);
