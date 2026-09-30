@@ -344,7 +344,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-FRESHNESS-LOG-READER (CC-B) — nothing reads the rules-freshness hook's log — crew tooling
 - B-GOV-2 (—) — checker always-on gate
 - B-GOV-4 (CC-C) — checker entry test
-- B-GOV-INTEGRITY-0 (CC-A) — reviewer frozen rulebook
+- B-GOV-INTEGRITY-0 (CC-A) — reviewer frozen rulebook · carries `#455`'s CC-A leg (its home points here; Langston R2-Q10 (0), 2026-09-30)
 - B-GOV-LEDGER-GRADE (#1099, CC-A) — the checker grades the commit-message ledger's presence and completeness; `roadmap` probably belongs in `sub_batch`; a report that opens NOT CLOSED should not count as a close; and a conditional doc is never graded today. ✅ Here by Langston's ruling (2026-09-29, B-GOV-REPORTING G6): the GOV-ARC list he named on 2026-08-29 is in a history plan, and GOV-ARC itself (#668) is parked by Kyle, so it confers no position.
 - B-HEARTBEAT-RESCOPE (CC-A) — hourly heartbeat task purpose — crew tooling
 - B-HOOK-ESTATE-VERSION (CC-C) — clones run different versions of one hook — crew tooling
@@ -452,9 +452,9 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-GATE-GUARD (CC-A) — issue-number blocks; ⛔ AFTER B-RULES-CHANGE-CLASS lands (crew tooling; Langston 2026-08-26, restored 2026-09-29, recorded on #744), and it carries the `SCOPE:` trailer on governed-artifact pushes
 - B-GATE-WILDCARD-REFUSE (CC-B) — code-side guard behind a migration invariant that already refuses the bad row
 - B-GDRIVE-UNMOUNT (Infra Claude) — placed 2026-08-28, not parked; owner Infra Claude; absorbs #921
-- B-GOV-INTEGRITY-3 (CC-A) — message id spans
+- B-GOV-INTEGRITY-3 (CC-A) — message id spans · carries `#452` `#453` `#492` `#493` `#494` (their homes point here; B-PLAN-CURRENCY-CHECK P15, 2026-09-30)
 - B-HORIZON-GRID-COMPARABILITY (CC-B) — makes holding-horizon numbers comparable — precondition for the exit-policy evaluator
-- B-LANGSTON-QUEUE-2 (CC-A) — review queue lock · the batch itself closed 2026-07-11; what remains here is `#484` (a Langston verdict does not record which invoke produced it or what it saw) and `#486` (a follow-up that does not name Langston is dropped silently) (2026-09-29)
+- B-LANGSTON-QUEUE-2 (CC-A) — review queue lock · the batch itself closed 2026-07-11; what remains here is `#484` (a Langston verdict does not record which invoke produced it or what it saw) and `#486` (a follow-up that does not name Langston is dropped silently) (2026-09-29) · and `#487` (a staged artifact reaches Langston with no provenance header or read-back; Langston R2-Q10 (0), 2026-09-30)
 - B-OBS-WINDOW-EVIDENCE-CAPTURE (CC-C) — capture observation-window evidence at the event — measurement quality
 - B-PRICE-DOC-CONSOLIDATE (Kyle) — merge two price documents into one — Kyle wants it done, but it is documentation
 - B-QUOTE-PEG-DEVIATION-WATCH (CC-C) — watch for quote-peg deviation; its row says it gates nothing
