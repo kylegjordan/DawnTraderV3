@@ -322,3 +322,40 @@ export const CLASS_OVERRIDE_VALUE = new RegExp(
 export const EXCEPTIONS_MALFORMED_PREFIX = 'gov-exceptions-malformed:';
 export const EXCEPTIONS_MALFORMED_TYPE_CAP = 32;
 export const EXCEPTIONS_MALFORMED_BID_CAP = 64;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B-PLAN-CURRENCY-CHECK OBJ-3 / OBJ-4 (P27) — the weekly census and mistake pass
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ⛔ DORMANT BEHIND COMMITTED FLAGS (scope §10 Q9's form; §10e Q14 extends it to the mistake pass).
+// `false` = TODAY'S BEHAVIOUR: no weekly census, no weekly mistake-pattern pass, and no liveness
+// alert for either (heartbeat-check.mjs reads these same flags — this file is the one SSOT both
+// checker processes import). Each is flipped by its OWN one-line committed change, only after the
+// P44 dry run is committed, Langston has ruled its figures and his Step 4 is done (P62).
+// Committed source, never env: push is deploy, and an env default is invisible at the graded ref.
+export const WEEKLY_CENSUS_ENABLED = false;
+export const MISTAKE_PASS_ENABLED = false;
+
+// The weekly gate fires on the first successful tick at or after Monday CENSUS_HOUR_UTC:00Z of an
+// ISO week not yet run (§10e Q10, catch-up). The heartbeat raises a `warning` liveness alert when an
+// ENABLED census (or pass) has not run for more than CENSUS_STALE_DAYS days (P28). The census alert
+// body is capped at CENSUS_BODY_MAX characters; the full lists live in the box file (§10e Q19).
+export const CENSUS_HOUR_UTC = 9;
+export const CENSUS_STALE_DAYS = 8;
+export const CENSUS_BODY_MAX = 1000;
+
+// ISO-8601 week of a UTC instant, as 'YYYY-Www'. The year is the ISO WEEK-YEAR (the year of that
+// week's Thursday), so 2027-01-03 is '2026-W53' and 2027-01-04 is '2027-W01'. Pure; throws on a
+// non-finite input rather than returning 'NaN-WNaN' as a week key.
+export function isoWeek(ms) {
+  if (!Number.isFinite(ms)) throw new TypeError(`isoWeek: not a finite timestamp: ${ms}`);
+  const DAY_MS = 86400000;
+  const d = new Date(ms);
+  const dayFromMonday = (d.getUTCDay() + 6) % 7;
+  const thursday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - dayFromMonday + 3);
+  const weekYear = new Date(thursday).getUTCFullYear();
+  const jan4 = Date.UTC(weekYear, 0, 4);
+  const week1Monday = jan4 - ((new Date(jan4).getUTCDay() + 6) % 7) * DAY_MS;
+  const week = Math.floor((thursday - week1Monday) / (7 * DAY_MS)) + 1;
+  return `${weekYear}-W${String(week).padStart(2, '0')}`;
+}
