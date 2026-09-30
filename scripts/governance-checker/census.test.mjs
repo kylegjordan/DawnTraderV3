@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 // B-PLAN-CURRENCY-CHECK P43 / P45 / P46 — the census and mistake-pass RULES on pinned fixture text (no git, no
 // network, no filesystem). Each list has a positive and a negative control; the ruled fixtures of the Group-2 spec
 // §1 (R1 widened, the self-contradicting sub-list, R2 + OWNER with `#696` excluded, R3-Q6's negatives) are here.
@@ -299,7 +301,10 @@ const plan = parsePlan(PLAN);
   // `io.X ?? live` defaults in the checker are census.mjs planHistory's show, log and revParse; this leg leaves revParse
   // and the parent-exists decision to live git (show and log stay injected so the texts are fixed).
   {
-    const g = (a) => execFileSync('git', a, { encoding: 'utf8' }).trim();
+    // Round 3 (Langston): resolve against the SAME root planHistory uses (census.mjs REPO_ROOT, script-derived), not
+    // process.cwd() — a divergence would make the root leg pass vacuously.
+    const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const g = (a) => execFileSync('git', a, { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
     const root = g(['rev-list', '--max-parents=0', 'HEAD']).split('\n')[0];
     const shallow = g(['rev-parse', '--is-shallow-repository']) === 'true';
     const hRoot = gitReaders.planHistory('r', 'plan.md', 20, { log: () => `${root}\n`, show: (sha) => (sha === root ? PLAN : null) });
