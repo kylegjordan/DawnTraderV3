@@ -96,6 +96,13 @@ export interface BookStateConfig {
   feedCohortFloor: number;
   hollowSkipCap: number;
   ownMarkDeviationDPct: number;
+  /**
+   * `3n.q7` increment 2 (OBJ-1) — the `spread_blown` arm. ⛔ NOT A KNOB YET: the resolver sets it `false` as a code
+   * constant (`book-state-config.ts`), and only a test injects `true`. Increment 3 makes it the thirteenth knob when it
+   * becomes tunable, gated on the bid-trigger window's read and Kyle's overnight-hold decision. Required (not optional)
+   * so the compiler lists every config literal.
+   */
+  spreadBlownEnabled: boolean;
 }
 
 export interface BookStateInput {
@@ -242,6 +249,18 @@ export function assessBookState(input: BookStateInput, cfg: BookStateConfig): Bo
   }
   if (askDep > threshold && bidHeld && lastHeld) {
     reasons.push('ask_spiked');
+    return { state: 'hollow', reasons, inputs };
+  }
+
+  // (i-b) `3n.q7` increment 2 — THE SPREAD ITSELF HAS BLOWN OUT (§L (V); OFF until increment 3). The absolute test the
+  // D1 note above says the relative arms cannot give: a SYMMETRIC widening holds neither side (so (i) passes) and keeps
+  // the mid near fair (so (iii) passes) — the MDB/USD 2026-09-19 00:15Z stub bid (`#1065`). Judged against the SAME
+  // threshold as (i), so it adds no knob and no second yardstick.
+  // ⚠️ ITS LIMIT, pinned as a test rather than claimed: the threshold is built from the CHAIN'S OWN trailing spread, so on
+  // a chain seeded inside the blowout (no retained ring to judge the seed) the threshold is itself blown and this arm
+  // cannot fire. Only the seed-implausibility test against a retained ring reaches that chain.
+  if (cfg.spreadBlownEnabled && spreadFrac !== null && spreadFrac > threshold) {
+    reasons.push('spread_blown');
     return { state: 'hollow', reasons, inputs };
   }
 

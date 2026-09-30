@@ -10,12 +10,14 @@
  * control that cannot fire is the defect it guards.
  */
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { assessBookState, medianOf, BOOK_STATE_KNOBS, BOOK_STATE_SEED, type BookStateConfig, type BookStateInput } from '../../asset_classes/xstock_spot/book-state.js';
 
 const CFG: BookStateConfig = {
   enabled: true, kRel: 3, floorPct: 1.0, otherSideHoldPct: 0.5, lastHoldPct: 0.5, trailingSpreadWindowSnaps: 20,
   feedReadEnabled: false, feedStubFractionF: 0.10, feedStubWindowMs: 90_000, feedCohortFloor: 50, hollowSkipCap: 60,
-  ownMarkDeviationDPct: 5,
+  ownMarkDeviationDPct: 5, spreadBlownEnabled: false,
 };
 
 function frame(now: { bid: number | null; ask: number | null; last: number | null }, prior: { bid: number; ask: number; last: number | null } | null): BookStateInput {
@@ -510,5 +512,48 @@ describe('B-XSTOCK-FEED-SANITY — D1: a STATIC WIDE BOOK IS NOT A COLLAPSED BID
     const r = assessBookState(frame({ bid: 55, ask: 70.0, last: 59.87 }, prior), CFG);
     expect(r.state).toBe('hollow');
     expect(r.reasons).toContain('mark_deviation');
+  });
+});
+
+// `3n.q7` increment 2 OBJ-1 — the `spread_blown` arm, OFF by config; tested with the flag injected.
+describe('3n.q7 inc-2 OBJ-1 — spread_blown', () => {
+  // The MDB/USD 2026-09-19 frame: a warm, tight history (the 385.00/386.79 snapshot), then the 00:15:00.592Z stub-bid frame
+  // (bid 335.12, ask 465.00 — derived in 8A_P4B_AUDIT_AND_PLAN §L; mid 400.06, spread ~32.5%).
+  const prior = { bid: 385.0, ask: 386.79, last: 386.0 };
+  const warm = (now: { bid: number; ask: number; last: number | null }) => ({ ...frame(now, prior), trailingMedianSpreadFrac: 0.0046 });
+  const MDB = { bid: 335.12, ask: 465.0, last: 386.0 };
+  const ON: BookStateConfig = { ...CFG, spreadBlownEnabled: true };
+
+  it('OFF (the shipped config): the MDB frame reads two_sided exactly as before — the arm is inert', () => {
+    const r = assessBookState(warm(MDB), CFG);
+    expect(r.state).toBe('two_sided');
+    expect(r.reasons).toEqual(['two_sided']);
+  });
+  it('ON: the MDB frame reads hollow:spread_blown; the relative arms alone never saw it', () => {
+    const r = assessBookState(warm(MDB), ON);
+    expect(r.state).toBe('hollow');
+    expect(r.reasons).toEqual(['spread_blown']);
+    expect(r.inputs.spreadFrac!).toBeGreaterThan(r.inputs.departureThresholdFrac!);
+  });
+  it('ON: a normal-width frame on the same history reads two_sided', () => {
+    expect(assessBookState(warm({ bid: 385.4, ask: 387.1, last: 386.2 }), ON).state).toBe('two_sided');
+  });
+  it('ON: every earlier branch still wins first (branch order is the design)', () => {
+    expect(assessBookState(warm({ bid: 0, ask: 465, last: 386 }), ON).reasons).toEqual(['absent_bid']);
+    expect(assessBookState(frame(MDB, null), ON).reasons).toEqual(['no_comparator']);
+    // a one-sided collapse is still bid_collapsed, not spread_blown
+    expect(assessBookState(warm({ bid: 360, ask: 386.8, last: 386.0 }), ON).reasons).toEqual(['bid_collapsed']);
+  });
+  it('THE LIMIT, pinned: a chain seeded INSIDE the blowout (its own trailing spread is blown) does NOT fire', () => {
+    const blownSeed = { bid: 335.12, ask: 465.0, last: 386.0 };
+    const r = assessBookState({ ...frame({ bid: 335.5, ask: 464.5, last: 386.0 }, blownSeed), trailingMedianSpreadFrac: 0.3246 }, ON);
+    expect(r.state).toBe('two_sided');
+    expect(r.reasons).not.toContain('spread_blown');
+  });
+  it('the shipped resolver sets it false, and the knob list is untouched (still twelve)', () => {
+    const src = readFileSync(join(process.cwd(), 'server/asset_classes/xstock_spot/book-state-config.ts'), 'utf8');
+    expect(src).toMatch(/spreadBlownEnabled: false,/);
+    expect(BOOK_STATE_KNOBS.length).toBe(12);
+    expect(BOOK_STATE_KNOBS as readonly string[]).not.toContain('spread_blown_enabled');
   });
 });

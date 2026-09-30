@@ -38,6 +38,10 @@ export function resolveBookStateConfigSync(): BookStateConfig {
     feedCohortFloor: r.feed_cohort_floor,
     hollowSkipCap: r.hollow_skip_cap,
     ownMarkDeviationDPct: r.own_mark_deviation_d_pct,
+    // `3n.q7` increment 2: OFF, and deliberately NOT a knob yet (Langston, inc-2 Step 1 (a)). A thirteenth
+    // `module_constants` row would make the boot assertion's set-equality refuse to start the app for a switch that
+    // does nothing for three weeks. Increment 3 adds the knob when the arm is turned on.
+    spreadBlownEnabled: false,
   };
 }
 

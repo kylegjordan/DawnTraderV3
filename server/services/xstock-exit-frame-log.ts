@@ -68,6 +68,17 @@ export interface XsExitFrameLineInput {
 const f5 = (v: number | null): string => (v === null || !Number.isFinite(v) ? 'none' : v.toFixed(5));
 
 /**
+ * `3n.q7` increment 2 P9 (Langston, amendment approval item (b)): a null `trail` beside a SET `thr` is not "no basis" —
+ * the predicate took the prior-frame fallback (`book-state.ts`, a non-positive ring median), the MOST self-referential
+ * case. It must not render the same as a frame with no threshold at all.
+ */
+function trailText(frame: XsExitFrame): string {
+  const trail = frame.trail ?? null;
+  if (trail === null && frame.thr !== null && Number.isFinite(frame.thr)) return 'prior';
+  return f5(trail);
+}
+
+/**
  * The line to emit for one evaluated exit tick, or `null` when this tick is not an xStock tick on
  * EITHER resolver (a crypto row with no frame). Pure: the engine owns the counters and the write.
  */
@@ -89,6 +100,6 @@ export function xsExitFrameLine(i: XsExitFrameLineInput): string | null {
         : '';
   const sides = i.frame === null ? ''
     : ` bid=${i.frame.bid ?? 'none'} ask=${i.frame.ask ?? 'none'} spread=${f5(i.frame.spread)} thr=${f5(i.frame.thr)}` +
-      ` trail=${f5(i.frame.trail ?? null)} ret=${f5(i.frame.ret ?? null)} tb=${i.frame.tb ?? 'none'}`;
+      ` trail=${trailText(i.frame)} ret=${f5(i.frame.ret ?? null)} tb=${i.frame.tb ?? 'none'}`;
   return `[3n.q7][XS_FRAME] ${i.symbol} pos=${i.positionId} ${state}${mismatch} mark=${i.mark} sl=${i.stopLoss ?? 'none'} tp=${i.takeProfit ?? 'none'}${sides} bidWouldFire=${i.bidWouldFire} markExit=${i.markExit ? 'y' : 'n'} exitReason=${i.exitReason ?? 'none'}`;
 }

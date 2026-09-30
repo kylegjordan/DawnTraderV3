@@ -124,7 +124,8 @@ describe('3n.q7 inc-1 amendment — the threshold basis on the line', () => {
     const withBasis = xsExitFrameLine(base({ frame: { bid: 181.23, ask: 181.31, spread: 0.00044, thr: 0.0123, basis: 'raw_guarded', reason: null, trail: 0.00041, ret: 0.00038, tb: 'j' } }))!;
     expect(withBasis).toContain('thr=0.01230 trail=0.00041 ret=0.00038 tb=j');
     const without = xsExitFrameLine(base({ frame: { bid: 181.23, ask: 181.31, spread: 0.00044, thr: 0.0123, basis: 'raw_unguarded', reason: null } }))!;
-    expect(without).toContain('trail=none ret=none tb=none');
+    // thr is set with no trail ⇒ the prior-frame fallback (inc-2 P9), rendered distinctly from a frame with no threshold
+    expect(without).toContain('trail=prior ret=none tb=none');
   });
 });
 
@@ -162,7 +163,18 @@ describe('3n.q7 inc-1 amendment — trail is the predicate input, not a post-adv
     const aee = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf8').replace(/\/\/[^\n]*/g, '');
     expect(aee).toMatch(/xsThrBasis = \{ trail: _r\.inputs\.trailingMedianSpreadFrac \?\? null, ret: _tb\?\.seedRet \?\? null, tb: _tb\?\.tb \?\? null \}/);
     const trk = readFileSync(join(process.cwd(), 'server/asset_classes/xstock_spot/book-state-tracker.ts'), 'utf8');
-    const fn = trk.slice(trk.indexOf('export function readThresholdBasis'), trk.indexOf('export function readThresholdBasis') + 400);
+    const at = trk.indexOf('export function readThresholdBasis');
+    const fn = trk.slice(at, trk.indexOf('\n}', at) + 2); // to the closing brace (Langston nit (a)): no neighbouring prose
     expect(fn).not.toMatch(/medianOf|_retainedSpreads/);
+  });
+});
+
+// `3n.q7` increment 2 P9 — `trail=prior` when the threshold came from the prior-frame fallback.
+describe('3n.q7 inc-2 P9 — the fallback basis renders distinctly', () => {
+  it('a null trail beside a set thr prints prior; a null trail with no thr prints none; a set trail prints its value', () => {
+    const f = (trail: number | null, thr: number | null) => xsExitFrameLine(base({ frame: { bid: 181.23, ask: 181.31, spread: 0.00044, thr, basis: 'raw_guarded', reason: null, trail, ret: null, tb: 'v' } }))!;
+    expect(f(null, 0.0123)).toContain('trail=prior');
+    expect(f(null, null)).toContain('trail=none');
+    expect(f(0.00041, 0.0123)).toContain('trail=0.00041');
   });
 });
