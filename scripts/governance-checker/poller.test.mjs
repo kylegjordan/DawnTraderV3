@@ -1001,8 +1001,9 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
   resolveGradedRef(() => ({ fetchOk: false, sha: null })); // leave the poller's module sha as a fresh process has it
 }
 
-// ── B-PLAN-CURRENCY-CHECK P32: the PLAN_LINE table — dormant at landing, key disjoint from DOCS and LEDGER_ROWS ──
-// Planted faults: `enabled: true` fails the first; `naKey: 'task_lists'` (or any DOCS key) fails the second.
+// ── B-PLAN-CURRENCY-CHECK P32 / P61: the PLAN_LINE table — ENABLED since the P61 flip (dormant at landing), key disjoint
+// from DOCS and LEDGER_ROWS. Planted faults: `enabled: false` fails the first (Langston P61 C2: post-flip the fault is
+// the reversal — shown failing it, 441/1); `naKey: 'task_lists'` (or any DOCS key) fails the second.
 {
   ok('P61 PLAN_LINE.enabled === true (the flip commit; it was pinned false at landing, P32)', PLAN_LINE.enabled === true);
   ok('P32 PLAN_LINE.naKey is disjoint from the DOCS and LEDGER_ROWS keys (one flat na-skip namespace)',
