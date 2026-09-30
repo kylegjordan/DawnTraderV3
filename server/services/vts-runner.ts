@@ -3520,7 +3520,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       // trade id. Kyle cut the PAGE, not the measurement: the STREAK is tracked in every session for both classes, and
       // only the page is gated — an xStock no-decision pages only on time spent in the US `regular` session, whose clock
       // (`pageSinceMs`) restarts after any off-hours gap (so a quote slow to resume at the open cannot page on an
-      // overnight streak). Every streak's full length is logged when it ends — the cost of "we just hold" is measured.
+      // overnight streak), and pages at most once per such run. Every streak's full length is logged when it ends.
       // The 2026-09-15 crypto-only condition (53 streaks, 14+ of them xStock with no usable mark) is replaced, not dropped.
       const _ntXsOffHours = trade.assetClass === 'xstock_spot'
         && (isInXstockWeekendClose(new Date()) || getXstockSession(Date.now()) !== 'regular');

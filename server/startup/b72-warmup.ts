@@ -174,11 +174,11 @@ const PREFETCH_MODULES = [
   // on every xStock VTS exit look, both lanes. Unlisted = every look refuses. Seeds: 2026-09-30-b-price-side-8a-p4c-inc3.sql.
   // Asserted at boot below.
   'vts_xstock_touch',
-  // `#1123` (the class fix that came with BLOCKER-1): two modules READ SYNC but never listed here — their warmth rested on
-  // an incidental async read. `feed_health` = P19-B6.7's per-class liveness thresholds (`feed-integrity-monitor.ts`
-  // skips the liveness grade on a cold module); `strategy.orb` = B79.0d's ORB thresholds (`orb.ts` returns null — no
-  // ORB signal — on a cold module). The swept regression in `b-price-side-8a-p4c-inc3-guard.test.ts` keeps this list whole.
-  'feed_health',
+  // `#1123` (the class fix that came with BLOCKER-1): `strategy.orb` = B79.0d's ORB thresholds, read sync but never listed
+  // here. Behaviourally inert today — ORB's `strategy_gates` row is disabled, so `orb.ts` returns one branch before this
+  // read — listed so the eventual gate flip is not also a cold-cache fault. The swept regression in
+  // `b-price-side-8a-p4c-inc3-guard.test.ts` keeps this list whole; its ONE declared exception is `feed_health` (listing it
+  // arms the feed-liveness grade and its alerts — `B-FEED-HEALTH-GRADE-ARM`, CC-B, Langston r2 split).
   'strategy.orb',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];

@@ -6,8 +6,10 @@
  * gated. `pages` says whether this instant is paging time (crypto always; xStock only in the US `regular` session). The
  * page clock (`pageSinceMs`) runs only in paging time and RESTARTS after any off-hours gap — so a quote slow to resume at
  * the open cannot page on the strength of an overnight streak, and an in-session streak crossing the close does not
- * page off-hours. A streak pages at most ONCE (the `_recordPriceSkip` idiom). When a decision is made the streak ENDS
- * and is returned whole, so its full length — the cost of "we just hold" — is measured by the caller.
+ * page off-hours. A streak pages at most ONCE PER PAGING RUN (Langston r2 FINDING-2: the page clock and the page latch
+ * restart TOGETHER — otherwise a trade that paged once would stay silent every later session, however long it stayed
+ * stuck; one page per session per stuck trade is the cost signal for "we just hold"). When a decision is made the streak
+ * ENDS and is returned whole, so its full length is measured by the caller.
  */
 export interface NoTriggerStreak {
   sinceMs: number;
@@ -37,7 +39,12 @@ export function stepNoTriggerStreak(
   const next: NoTriggerStreak = prev
     ? { ...prev, lastReason: noDecisionReason }
     : { sinceMs: nowMs, pageSinceMs: null, alerted: false, lastReason: noDecisionReason };
-  next.pageSinceMs = pages ? (next.pageSinceMs ?? nowMs) : null;
+  if (pages && next.pageSinceMs === null) {
+    next.pageSinceMs = nowMs;
+    next.alerted = false; // a new paging run: its own page (FINDING-2)
+  } else if (!pages) {
+    next.pageSinceMs = null;
+  }
   const page = !next.alerted && next.pageSinceMs !== null && nowMs - next.pageSinceMs >= thresholdMs;
   if (page) next.alerted = true;
   return { next, page, ended: null };

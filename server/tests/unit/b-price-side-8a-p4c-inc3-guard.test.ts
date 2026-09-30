@@ -110,10 +110,20 @@ describe('8a-P4c inc 3 — the mark-staleness knobs have ONE reader (swept)', ()
 // Langston Step-4 (2026-09-30) BLOCKER-1 — the class, not the instance: EVERY module a sync reader names is prefetched.
 // A seeded row in an unprefetched module is unreachable from a sync caller (`getCachedConstant` throws "is not warm"), and
 // a fail-closed caller then reads as QUIET, not broken. `#1123`: the census that built this found two pre-existing misses
-// (`feed_health`, `strategy.orb`) beside `vts_xstock_touch`; all three are now listed.
+// (`feed_health`, `strategy.orb`) beside `vts_xstock_touch`. `vts_xstock_touch` and `strategy.orb` are listed;
+// `feed_health` is the ONE declared exception (Langston r2 SPLIT: listing it arms another owner's alerting path).
+// ⛔ r2 BLOCKER-3: the census reads SOURCE, not lines — the house style puts the module on the line AFTER `getCached…(`
+// (`orb.ts` `strategy_gates`, `strong-bull-trend.ts` `strategy_dbs_routing_guards`), which a per-line scan cannot see.
+// Comments are blanked first (newlines kept, so every `:line` still points at the call).
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 const SYNC_READER = /\b(getCachedConstant|getCachedNumbersForModule|getCachedNumberRequired|getCachedStringRequired)\s*(?:<[^>()]*>)?\(\s*([^,\s)]+)/g;
 const LITERAL = /^(['"])([^'"]*)\1$/;
+
+/** Blanks block and line comments, keeping every newline so offsets map to the same line. */
+function stripComments(src: string): string {
+  const blank = (m: string) => m.replace(/[^\n]/g, ' ');
+  return src.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/\/\/[^\n]*/g, blank);
+}
 
 function prefetchedModules(): Set<string> {
   const w = read('server/startup/b72-warmup.ts');
@@ -125,6 +135,15 @@ function prefetchedModules(): Set<string> {
   return set;
 }
 
+/** The DECLARED exceptions — a module read sync but deliberately not prefetched, each with its reason and its placed home.
+ *  The census asserts this list is exactly its misses: an exception that stops missing is stale and fails too. */
+const PREFETCH_EXCEPTIONS: Array<{ module: string; reason: string; home: string }> = [
+  { module: 'feed_health',
+    reason: 'prefetching it ARMS the feed-liveness grade (feed-integrity-monitor.ts, the only reader), which mints feed_health '
+      + 'alerts for both classes — a switch-on of another owner\'s component, not a VTS-instrumentation change (Langston r2)',
+    home: 'B-FEED-HEALTH-GRADE-ARM, owner CC-B, placed in SPRINT_TO_LIVE_PLAN.md after row 3 (#1123)' },
+];
+
 /** Non-literal first arguments, each resolved to its module by a definition this test re-reads (never trusted). */
 const RESOLVED_NON_LITERALS: Array<{ file: string; expr: string; module: string | null; def: { file: string; re: RegExp } | null }> = [
   { file: 'server/asset_classes/xstock_spot/book-state-config.ts', expr: 'BOOK_STATE_MODULE', module: 'book_state',
@@ -135,36 +154,40 @@ const RESOLVED_NON_LITERALS: Array<{ file: string; expr: string; module: string 
     def: { file: 'server/services/amr-context-bonus-shadow.ts', re: /const MOD\s*=\s*'ranking_context_bonus'/ } },
   { file: 'server/services/passive-archive/ohlc-frame-skip-tracker.ts', expr: 'OHLC_FRAME_SKIP_ALERT_KNOB.module', module: 'passive_archive',
     def: { file: 'server/services/passive-archive/ohlc-frame-skip-tracker.ts', re: /OHLC_FRAME_SKIP_ALERT_KNOB = \{ module: 'passive_archive'/ } },
-  // `strategy.${strategy}` — every strategy module is prefetched by name (the literal census covers each reader).
+  // `strategy.${…}` — dynamic over strategy names; every strategy module is prefetched by name (the controls assert it).
   { file: 'server/services/data-archive/decision-provenance.ts', expr: 'moduleName', module: null,
     def: { file: 'server/services/data-archive/decision-provenance.ts', re: /const moduleName = `strategy\.\$\{strategy\}`;/ } },
-  // The service's own pass-through (its callers are what the census reads).
+  { file: 'server/services/strategy-engine.ts', expr: '`strategy.${signal.strategy}`', module: null, def: null },
+  // The service itself: its four sync readers' own signatures (`moduleName:`) and its internal pass-throughs.
   { file: 'server/services/module-constants-service.ts', expr: 'moduleName', module: null, def: null },
+  { file: 'server/services/module-constants-service.ts', expr: 'moduleName:', module: null, def: null },
 ];
 
-type Miss = { at: string; module: string };
+type Read = { at: string; module: string };
 function syncReadCensus(files: Array<{ path: string; src: string }>, prefetched: Set<string>):
-  { literalReads: number; misses: Miss[]; unresolved: string[] } {
-  let literalReads = 0;
-  const misses: Miss[] = [];
+  { reads: Read[]; multiLine: Read[]; misses: Read[]; unresolved: string[] } {
+  const reads: Read[] = [];
+  const multiLine: Read[] = [];
+  const misses: Read[] = [];
   const unresolved: string[] = [];
   for (const { path, src } of files) {
-    src.split('\n').forEach((line, i) => {
-      const t = line.trim();
-      if (t.startsWith('//') || t.startsWith('*')) return;
-      for (const m of line.matchAll(SYNC_READER)) {
-        const arg = m[2];
-        const lit = LITERAL.exec(arg);
-        if (lit) {
-          literalReads++;
-          if (!prefetched.has(lit[2])) misses.push({ at: `${path}:${i + 1}`, module: lit[2] });
-        } else if (!RESOLVED_NON_LITERALS.some((r) => r.file === path && r.expr === arg)) {
-          unresolved.push(`${path}:${i + 1} ${arg}`);
-        }
+    const code = stripComments(src);
+    const lineAt = (i: number) => code.slice(0, i).split('\n').length;
+    for (const m of code.matchAll(SYNC_READER)) {
+      const at = `${path}:${lineAt(m.index as number)}`;
+      const arg = m[2];
+      const lit = LITERAL.exec(arg);
+      if (lit) {
+        const r = { at, module: lit[2] };
+        reads.push(r);
+        if (lineAt((m.index as number) + m[0].length - arg.length) !== lineAt(m.index as number)) multiLine.push(r);
+        if (!prefetched.has(lit[2])) misses.push(r);
+      } else if (!RESOLVED_NON_LITERALS.some((x) => x.file === path && x.expr === arg)) {
+        unresolved.push(`${at} ${arg}`);
       }
-    });
+    }
   }
-  return { literalReads, misses, unresolved };
+  return { reads, multiLine, misses, unresolved };
 }
 
 describe('8a-P4c inc 3 — BLOCKER-1 class: every sync-read module_constants module is prefetched (swept)', () => {
@@ -179,38 +202,68 @@ describe('8a-P4c inc 3 — BLOCKER-1 class: every sync-read module_constants mod
   };
   const files = walkAll('server').map((path) => ({ path, src: read(path) }));
   const prefetched = prefetchedModules();
+  const census = syncReadCensus(files, prefetched);
 
   it('the census reaches the tree and the prefetch list (positive control on both instruments)', () => {
     expect(files.length).toBeGreaterThan(300);
     expect(prefetched.has('mark_staleness')).toBe(true);
     expect(prefetched.has('strategy.abcd_long')).toBe(true); // a dotted name — the parse that once read these as absent
     expect(prefetched.has('passive_archive')).toBe(true);
-    expect(syncReadCensus(files, prefetched).literalReads).toBeGreaterThan(150);
+    // measured at 93c6ed052+: 200 literal reads over 219 call sites (the per-line scan saw fewer and missed the multi-line
+    // shape); a collapse means the scan broke, not that reads vanished
+    expect(census.reads.length).toBeGreaterThanOrEqual(190);
   });
 
-  it('NO sync reader names a module that is not prefetched — including vts_xstock_touch, feed_health, strategy.orb', () => {
-    const r = syncReadCensus(files, prefetched);
-    expect(r.misses).toEqual([]);
-    for (const m of ['vts_xstock_touch', 'feed_health', 'strategy.orb']) expect(prefetched.has(m)).toBe(true);
+  it('r2 BLOCKER-3 — REAL members of the multi-line shape are seen (the #744 rider: the failure class, on live code)', () => {
+    const has = (file: string, module: string) => census.multiLine.some((r) => r.at.startsWith(`${file}:`) && r.module === module);
+    expect(has('server/strategies/orb.ts', 'strategy_gates')).toBe(true);
+    expect(has('server/strategies/strong-bull-trend.ts', 'strategy_dbs_routing_guards')).toBe(true);
+  });
+
+  it('the ONLY misses are the declared exceptions — each with a reason and a placed home — and none is stale', () => {
+    expect(PREFETCH_EXCEPTIONS.map((e) => e.module)).toEqual(['feed_health']);
+    for (const e of PREFETCH_EXCEPTIONS) {
+      expect(e.reason.length).toBeGreaterThan(20);
+      expect(e.home).toMatch(/^B-[A-Z0-9-]+, owner CC-[A-Z]+, placed in \S+ /);
+      expect(prefetched.has(e.module)).toBe(false);
+    }
+    expect([...new Set(census.misses.map((m) => m.module))].sort()).toEqual(PREFETCH_EXCEPTIONS.map((e) => e.module).sort());
+    for (const m of ['vts_xstock_touch', 'strategy.orb']) expect(prefetched.has(m)).toBe(true);
   });
 
   it('every NON-literal module argument is resolved, and each resolution is re-read at its definition', () => {
-    expect(syncReadCensus(files, prefetched).unresolved).toEqual([]);
+    expect(census.unresolved).toEqual([]);
     for (const r of RESOLVED_NON_LITERALS) {
       if (r.def) expect(read(r.def.file)).toMatch(r.def.re);
       if (r.module) expect(prefetched.has(r.module)).toBe(true);
     }
   });
 
-  it('CAPABILITY — the census catches an unlisted literal, an unlisted generic read, and an unresolved identifier', () => {
+  it('CAPABILITY — single-line AND both real multi-line shapes on unlisted modules go red; comments are ignored', () => {
     const fake = [{ path: 'server/fake.ts', src: [
       "const a = getCachedNumberRequired('not_prefetched_mod', 'k', KEY);",
       "const b = getCachedConstant<string>('also_missing', 'k', KEY);",
       "const c = getCachedNumbersForModule(SOME_CONST, KEY);",
       "// getCachedNumberRequired('commented_out', 'k', KEY);",
+      "enabled = getCachedConstant<boolean>(",            // the orb.ts shape
+      "  'unlisted_gate', 'enabled',",
+      "  { exchange: '*', assetClass, strategy: S, regime: '*' },",
+      ");",
+      "const g = getCachedNumberRequired(",                // the strong-bull-trend.ts shape
+      "  'unlisted_guard',",
+      "  'dbs_min_threshold',",
+      ");",
+      "/* getCachedNumberRequired(",
+      "  'block_commented', 'k', KEY); */",
     ].join('\n') }];
     const r = syncReadCensus(fake, prefetched);
-    expect(r.misses.map((m) => m.module)).toEqual(['not_prefetched_mod', 'also_missing']);
+    expect(r.misses).toEqual([
+      { at: 'server/fake.ts:1', module: 'not_prefetched_mod' },
+      { at: 'server/fake.ts:2', module: 'also_missing' },
+      { at: 'server/fake.ts:5', module: 'unlisted_gate' },
+      { at: 'server/fake.ts:9', module: 'unlisted_guard' },
+    ]);
+    expect(r.multiLine.map((x) => x.module)).toEqual(['unlisted_gate', 'unlisted_guard']);
     expect(r.unresolved).toEqual(['server/fake.ts:3 SOME_CONST']);
   });
 });
@@ -352,6 +405,20 @@ describe('8a-P4c inc 3 — FINDING-1: the streak is tracked in every session; on
     expect(st.map((x) => x.page)).toEqual([false, false, false, false, false, false, true]);
     expect(st[3].next?.pageSinceMs).toBeNull();
     expect(st[4].next?.pageSinceMs).toBe(500 * MIN);
+  });
+
+  it('r2 FINDING-2 — a trade that paged and stays stuck pages ONCE MORE in each later session (clock and latch restart together)', () => {
+    const st = drive([
+      { t: 0, reason: 'no_transactable_side', pages: true },
+      { t: 10 * MIN, reason: 'no_transactable_side', pages: true },   // session 1 — page
+      { t: 30 * MIN, reason: 'no_transactable_side', pages: true },   // still session 1 — silent
+      { t: 40 * MIN, reason: 'no_transactable_side', pages: false },  // the close
+      { t: 900 * MIN, reason: 'no_transactable_side', pages: true },  // next open — a new run
+      { t: 910 * MIN, reason: 'no_transactable_side', pages: true },  // 10 min into it — page again
+      { t: 950 * MIN, reason: 'no_transactable_side', pages: true },  // silent for the rest of that run
+    ]);
+    expect(st.map((x) => x.page)).toEqual([false, true, false, false, false, true, false]);
+    expect(st[6].next?.sinceMs).toBe(0); // one streak throughout — only the page clock and latch restarted
   });
 
   it('a decision with no streak ends nothing', () => {
