@@ -78,6 +78,11 @@ const noRows = () => ({});
   const { toOpen } = decideAlerts(states, noStaleOpen, NOW, { ledgerRowCheck: noRows, docsetCheck: stubGap });
   ok('doc-gap opens for missing sim', hasKey(toOpen, 'gov-docgap:P19-B9:sim'));
   ok('doc-gap opens for missing system_manual', hasKey(toOpen, 'gov-docgap:P19-B9:system_manual'));
+  // P47 (round 3, R3-HY-6): the body says what the live path grades — PRESENCE only. Control: the old text
+  // ("is absent or hollow") passes the first half and FAILS the second.
+  const gapBody = (toOpen.find((i) => i.dedupeKey === 'gov-docgap:P19-B9:sim') || {}).body || '';
+  ok('P47: the doc-gap body says "is absent" and never "hollow" (hollowness is not graded live)',
+    /is absent/.test(gapBody) && !/hollow/i.test(gapBody), gapBody.slice(0, 120));
 }
 
 // ── doc-set gap RESOLVES when the doc is later supplied (Langston Step-4 a / Obj-13) ──

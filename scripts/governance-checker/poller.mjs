@@ -137,8 +137,10 @@ export function anchorClosedBatches(batches) {
       // SAFE BECAUSE SELF-REVOKING, by construction rather than by care: `closed` derives from
       // `completionReportCommitTime` → `findGlobDoc` → `git ls-tree GOV_REF` — presence AT THE
       // REF, not history ("null if the doc is absent at GOV_REF"). Delete the report and `closed`
-      // goes false, the pin lapses, window behaviour returns. A HOLLOWED (not deleted) doc is
-      // caught by the docgap block, which re-grades every tick on "absent or hollow".
+      // goes false, the pin lapses, window behaviour returns. A HOLLOWED (not deleted) report is
+      // NOT caught: the live docgap block grades PRESENCE only (docPresent); isHollowFile and
+      // preAuditStructure are called only by backtest.mjs. A hollowed completion report keeps the
+      // pin — residual homed at B-GOV-LEDGER-GRADE (#1099). (B-PLAN-CURRENCY-CHECK P47.)
       b.hasGovernance = true;
     }
   }
@@ -351,7 +353,7 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
         toOpen.push({
           dedupeKey: key, severity: sev('warning'),
           title: `Missing required governance doc: ${doc} for ${s.batchId}`,
-          body: `Batch ${s.batchId} (class ${klass}) closed but required doc "${doc}" is absent or hollow. Update it, or mark it N/A (Langston-confirmed) in GOVERNANCE_EXCEPTIONS.md.`,
+          body: `Batch ${s.batchId} (class ${klass}) closed but required doc "${doc}" is absent. Add it, or mark it N/A (Langston-confirmed) in GOVERNANCE_EXCEPTIONS.md.`,
         });
       }
       // (3b) B-TASK-LIST-SLOT (#1009) P1: Tier-1 LEDGER ROWS graded inside the completion report. Same
