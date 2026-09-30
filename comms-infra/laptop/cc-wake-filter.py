@@ -363,6 +363,7 @@ MARKER_FULL = ALERT_MARKER_STRIP   # one list, built once (the strip above now u
 _MARK_ID = re.compile(r"\bid=([^\s\]]+)")
 _MARK_OWNER = re.compile(r"\bowner=([^\s\]]+)")
 _REJECTED = [0]
+_SKIPPED_PROSE = [0]
 
 
 REJECTS_KEPT = 20
@@ -393,7 +394,17 @@ def record_owners(body, ts):
         own = OWNER_CANON.get(mo_.group(1).strip('",;').upper()) if mo_ else None
         if owners is None:
             owners = _load_owners()
-        if not aid or not own or not _UUID.match(aid):
+        if not aid or aid[0] in "<….":
+            # Langston (amendment 1, after round 3): a marker whose id is ABSENT or a placeholder (`<uuid>`, `…`, `..`)
+            # is Langston QUOTING the format, not routing — skipped. Keyed on the id, never the owner: a real id with a
+            # missing or wrong owner is the fat-finger this exists to catch, and still reports. COUNTED, never silent
+            # (`_meta.skipped_as_prose`), so a future false skip stays measurable.
+            _SKIPPED_PROSE[0] += 1
+            meta = owners.setdefault("_meta", {})
+            meta["skipped_as_prose"] = int(meta.get("skipped_as_prose") or 0) + 1
+            changed = True
+            continue
+        if not own or not _UUID.match(aid):
             # (c) IN-BAND, not stderr only (Langston): the record keeps the latest rejects, and the alert hook shows them,
             # so a marker Langston wrote that cannot route anything reaches someone who can tell him.
             _REJECTED[0] += 1
@@ -503,7 +514,8 @@ for raw in sys.stdin:
             o = _load_owners()
             o.setdefault("_meta", {})["seeded_at"] = _utc()
             _save_owners(o)
-            print(f"[cc-wake-filter] seed done: {OWNERS_FILE}; markers not recorded: {_REJECTED[0]}", file=sys.stderr)
+            print(f"[cc-wake-filter] seed done: {OWNERS_FILE}; markers not recorded: {_REJECTED[0]}; "
+                  f"skipped_as_prose: {_SKIPPED_PROSE[0]}", file=sys.stderr)
             sys.exit(0)
         continue
     if ONCE and line.startswith("#@"):

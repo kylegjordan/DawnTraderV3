@@ -159,6 +159,23 @@ _rej = (json.load(open(os.path.join(_RDIR, "CC-A.alert-owners.json"), encoding="
 _rok = len(_rej) == 2 and "badxxxxx" in _rej[-1].get("marker", "") and _rej[-1].get("ts", "").startswith("2026-09-30T12")
 if not _rok: fails += 1
 print(f"  {'PASS' if _rok else '** FAIL **':10} condition 2: a re-issued bad marker moves to the END of the rejects ({[(r.get('ts','')[11:16], r.get('marker','')[-40:]) for r in _rej]})")
+# Langston's id-keyed prose rule: a placeholder or absent id is a quotation (skipped, COUNTED); a real or wordy id
+# reports every defect — including a real id whose owner was left off (his mutation) and id=none (a real attempt).
+_PDIR = tempfile.mkdtemp(prefix="wakeprose-")
+def _prow(ts, marker):
+    return json.dumps({"ts": ts, "kind": "langston_outbound", "text": "NEW Claude — see.\n\n" + marker})
+_pm = ['[[ALERT id=<full-uuid> owner=<CC-A|CC-B|Kyle> action="..."]]', '[[ALERT \u2026 owner=\u2026]]', '[[ALERT ...]]',
+       '[[ALERT id=c244f2b8-a1eb-4d26-abf2-000000000000 action="owner left off"]]', '[[ALERT id=none owner=CC-B action="x"]]']
+_pin = f"==> {LOG} <==\n" + "\n".join(_prow(f"2026-09-30T1{k}:00:00+00:00", m) for k, m in enumerate(_pm)) + "\n"
+subprocess.run([sys.executable, FILTER, "CC-A", "--state", os.path.join(_PDIR, "CC-A.json")], input=_pin.encode("utf-8"),
+               capture_output=True, timeout=120)
+_pmeta = json.load(open(os.path.join(_PDIR, "CC-A.alert-owners.json"), encoding="utf-8")).get("_meta") or {}
+_prej = [r.get("marker", "") for r in _pmeta.get("rejects") or []]
+_pok = (_pmeta.get("skipped_as_prose") == 3 and len(_prej) == 2
+        and any("owner left off" in r for r in _prej) and any("id=none" in r for r in _prej))
+if not _pok: fails += 1
+print(f"  {'PASS' if _pok else '** FAIL **':10} prose rule: 3 quotations skipped and counted, 2 real defects reported "
+      f"(skipped_as_prose={_pmeta.get('skipped_as_prose')}, rejects={len(_prej)})")
 print()
 print(f"({sum(1 for _, w in results if w)} of {len(CASES)} cases produced a wake — the instrument speaks)")
 print("ALL PASS" if fails == 0 else f"{fails} FAILED")
