@@ -7,13 +7,24 @@
 // Coverage (Langston Step-1): process-death of the poller → caught here; host-death of
 // staging → already caught loudly by the live trading system's own monitoring.
 //
+// B-PLAN-CURRENCY-CHECK P28 (OBJ-3 liveness; scope §10i Q3, §10j 3(d)): the decision is now the
+// PURE `decideHeartbeat`, and `checkHeartbeat` is the IO shell around it. Two more legs share the
+// same seam — the weekly census and the weekly mistake-pattern pass each raise a `warning` when
+// ENABLED and silent for more than CENSUS_STALE_DAYS — and both are DORMANT until their
+// config.mjs flags flip (P62), so with today's committed flags only the silent-poller leg can
+// produce an intent. No flag of its own: the differential (heartbeat-check.test.mjs, derived with
+// heartbeat-differential.mjs at this refactor's parent) shows the silent-poller outcome unchanged.
+//
 // Run on staging via its own systemd timer: node scripts/governance-checker/heartbeat-check.mjs
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { TICK_MINUTES, HEARTBEAT_MISS_LIMIT, resolveEvidenceOrSentinel } from './config.mjs';
+import {
+  TICK_MINUTES, HEARTBEAT_MISS_LIMIT, resolveEvidenceOrSentinel,
+  WEEKLY_CENSUS_ENABLED, MISTAKE_PASS_ENABLED, CENSUS_STALE_DAYS,
+} from './config.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = process.env.GOV_STATE_FILE || join(SCRIPT_DIR, '.gov-checker-state.json');
@@ -22,13 +33,125 @@ const STAGING_REPO = process.env.GOV_STAGING_REPO || '/home/deploy/dawntrader';
 const RUN_REMOTE = process.env.GOV_REMOTE === '1';
 const STAGING = process.env.GOV_STAGING || 'deploy@188.245.193.8';
 
+// The three dedupe keys this process owns. `openAlertIds` (the heartbeat state file and the
+// decision's input) is keyed by THESE, never by handle field names (Langston, §10i Q3).
+export const SILENT_KEY = 'governance-checker-silent';
+export const CENSUS_SILENT_KEY = 'gov-census-silent';
+export const MISTAKEPASS_SILENT_KEY = 'gov-mistakepass-silent';
+
+const DAY_MS = 86400000;
+
+// ── PURE DECISION (unit-tested; no IO) ─────────────────────────────────────────
+
+// The dead-man test, unchanged from the pre-P28 inline expression: silent when no tick has ever
+// been recorded or the last one is older than TICK_MINUTES × HEARTBEAT_MISS_LIMIT (strictly).
+export function pollerSilent(lastTick, nowMs) {
+  const staleMs = TICK_MINUTES * HEARTBEAT_MISS_LIMIT * 60 * 1000;
+  return lastTick == null || (nowMs - lastTick) > staleMs;
+}
+
+// One liveness leg (census or mistake pass). Its anchor is the LATER of the last run and the
+// moment the flag was first seen on (P40 writes both into the poller's state file), so a
+// re-enable does not inherit an old silence. Defined cases:
+//   • disabled → no intent at all (neither open nor resolve; see the resolve rule below).
+//   • both anchors null → no intent: the since-key does not exist yet, and a missing anchor is
+//     never read as 0 (a Math.max(null, null) would make every enabled leg instantly stale).
+//   • an anchor present but not a finite number → OPEN (the state is unreadable, so silence
+//     cannot be ruled out); this can never resolve, because a resolve needs positive freshness.
+//   • stale is STRICTLY more than CENSUS_STALE_DAYS since the anchor.
+// A resolve is emitted only on POSITIVE evidence of freshness, with a handle to clear.
+function livenessIntent(key, what, enabled, lastAt, enabledSince, openId, nowMs) {
+  if (!enabled) return null;
+  const present = [lastAt, enabledSince].filter((v) => v != null);
+  if (present.length === 0) return null;
+  const bad = present.filter((v) => !Number.isFinite(v));
+  if (bad.length > 0) {
+    return openId ? null : { dedupeKey: key, severity: 'warning', action: 'open',
+      reason: `${what} is enabled but its state is unreadable (lastAt=${JSON.stringify(lastAt)}, enabledSince=${JSON.stringify(enabledSince)})` };
+  }
+  const anchor = Math.max(...present);
+  const ageDays = (nowMs - anchor) / DAY_MS;
+  const stale = (nowMs - anchor) > CENSUS_STALE_DAYS * DAY_MS;
+  const facts = `last run ${lastAt == null ? 'never' : new Date(lastAt).toISOString()}; ` +
+    `enabled since ${enabledSince == null ? 'unrecorded' : new Date(enabledSince).toISOString()}; ` +
+    `${ageDays.toFixed(1)} days since the later of the two (limit ${CENSUS_STALE_DAYS})`;
+  if (stale && !openId) return { dedupeKey: key, severity: 'warning', action: 'open', reason: `${what} is enabled but silent: ${facts}` };
+  if (!stale && openId) return { dedupeKey: key, severity: 'warning', action: 'resolve', reason: `${what} ran again: ${facts}` };
+  return null;
+}
+
+// Langston's signature (scope §10i Q3). Returns every intent this run should act on; the shell
+// performs them. `openAlertIds` maps dedupe key → the open alert's id (absent/null = none open).
+export function decideHeartbeat({ lastTick, lastCensusAt, lastMistakePassAt, censusEnabledSince,
+  mistakePassEnabledSince, censusEnabled, mistakePassEnabled, openAlertIds }, nowMs) {
+  const open = openAlertIds ?? {};
+  const intents = [];
+  const silent = pollerSilent(lastTick, nowMs);
+  if (silent && !open[SILENT_KEY]) {
+    intents.push({ dedupeKey: SILENT_KEY, severity: 'warning', action: 'open',
+      reason: lastTick == null ? 'no poller tick recorded' : `last poller tick ${Math.round((nowMs - lastTick) / 60000)}m ago` });
+  } else if (!silent && open[SILENT_KEY]) {
+    intents.push({ dedupeKey: SILENT_KEY, severity: 'warning', action: 'resolve',
+      reason: `poller ticks resumed (last tick ${Math.round((nowMs - lastTick) / 60000)}m ago)` });
+  }
+  for (const leg of [
+    livenessIntent(CENSUS_SILENT_KEY, 'the weekly plan census', censusEnabled, lastCensusAt, censusEnabledSince, open[CENSUS_SILENT_KEY], nowMs),
+    livenessIntent(MISTAKEPASS_SILENT_KEY, 'the weekly mistake-pattern pass', mistakePassEnabled, lastMistakePassAt, mistakePassEnabledSince, open[MISTAKEPASS_SILENT_KEY], nowMs),
+  ]) if (leg) intents.push(leg);
+  return { intents };
+}
+
+// The alert text for an OPEN intent. The silent-poller title and body are byte-for-byte the
+// pre-P28 text (the differential compares them).
+export function heartbeatAlertText(intent, { nowMs, lastTick }) {
+  if (intent.dedupeKey === SILENT_KEY) {
+    const ageMin = lastTick == null ? 'never' : Math.round((nowMs - lastTick) / 60000) + 'm';
+    return {
+      title: 'governance-checker appears SILENT — no tick within the dead-man window',
+      body: `The governance-checker poller has not written a heartbeat in over ${TICK_MINUTES * HEARTBEAT_MISS_LIMIT}m (last tick: ${ageMin} ago). It may be dead — enforcement is OFF until it resumes. Check the governance-checker.timer on staging.`,
+    };
+  }
+  if (intent.dedupeKey !== CENSUS_SILENT_KEY && intent.dedupeKey !== MISTAKEPASS_SILENT_KEY) {
+    throw new Error(`heartbeatAlertText: no text for dedupe key ${intent.dedupeKey}`);
+  }
+  const what = intent.dedupeKey === CENSUS_SILENT_KEY ? 'weekly plan census' : 'weekly mistake-pattern pass';
+  const flag = intent.dedupeKey === CENSUS_SILENT_KEY ? 'WEEKLY_CENSUS_ENABLED' : 'MISTAKE_PASS_ENABLED';
+  return {
+    title: `governance-checker ${what} is SILENT — enabled, but no run in over ${CENSUS_STALE_DAYS} days`,
+    body: `${flag} is true in config.mjs, but the governance checker has recorded no ${what} within ${CENSUS_STALE_DAYS} days ` +
+      `(${intent.reason}). The weekly gate may be failing without raising its failure alert. Check the governance-checker ` +
+      `poller's journal on staging. This clears on the first heartbeat run after a ${what} is recorded.`,
+  };
+}
+
+// Performs the intents through an injected sink and returns the next `openAlertIds`.
+// #637: a handle is nulled ONLY on a confirmed clear — discarding it on a failed resolve was the
+// half that made the dead-man alert unrecoverable (alert still open, the only id that could close
+// it thrown away in the same statement). An add that prints no id leaves the handle null, as before.
+export function applyHeartbeatIntents(intents, openAlertIds, sink, { nowMs, lastTick, gradedRefSha }) {
+  const next = { ...(openAlertIds ?? {}) };
+  for (const intent of intents) {
+    if (intent.action === 'open') {
+      const { title, body } = heartbeatAlertText(intent, { nowMs, lastTick });
+      next[intent.dedupeKey] = sink.add(intent.dedupeKey, intent.severity, title, body, nowMs);
+    } else if (intent.action === 'resolve') {
+      if (sink.resolve(next[intent.dedupeKey], gradedRefSha)) next[intent.dedupeKey] = null;
+    } else {
+      throw new Error(`applyHeartbeatIntents: unknown action ${JSON.stringify(intent.action)} for ${intent.dedupeKey}`);
+    }
+  }
+  return next;
+}
+
+// ── IO SHELL ───────────────────────────────────────────────────────────────────
+
 function runCli(cmd) {
   return RUN_REMOTE ? execFileSync('ssh', [STAGING, cmd], { encoding: 'utf8' })
                     : execFileSync('bash', ['-lc', cmd], { encoding: 'utf8' });
 }
 function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
-function addAlert(severity, title, body, nowMs) {
-  const meta = JSON.stringify({ dedupe_key: 'governance-checker-silent', source: 'governance-checker-heartbeat' });
+function addAlert(dedupeKey, severity, title, body, nowMs) {
+  const meta = JSON.stringify({ dedupe_key: dedupeKey, source: 'governance-checker-heartbeat' });
   const cmd = `cd ${STAGING_REPO} && npm run -s system-alerts -- add --triggers-at ${new Date(nowMs).toISOString()} ` +
     `--category governance --severity ${severity} --title ${shq(title)} --body ${shq(body)} --metadata ${shq(meta)}`;
   const out = runCli(cmd);
@@ -67,31 +190,37 @@ function resolveAlert(id, evidence) {
 }
 
 export function checkHeartbeat(nowMs = Date.now()) {
-  const staleMs = TICK_MINUTES * HEARTBEAT_MISS_LIMIT * 60 * 1000;
-  const hb = existsSync(HB_STATE) ? JSON.parse(readFileSync(HB_STATE, 'utf8')) : { alertId: null };
-  let lastTick = null;
+  // ⛔ No catch here: an unreadable heartbeat state file throws out of the run, which fails the
+  // systemd unit loudly (P64's no-catch rule, §10j 3(d)) rather than defaulting to "nothing open"
+  // and re-opening an alert that is already open.
+  const hb = existsSync(HB_STATE) ? JSON.parse(readFileSync(HB_STATE, 'utf8')) : {};
+  // The pre-P28 file held ONE handle, `alertId`, for the silent-poller alert. Carry it into the
+  // keyed map on first read so an alert open across the upgrade keeps its handle.
+  const openAlertIds = { ...(hb.openAlertIds ?? {}) };
+  if (!(SILENT_KEY in openAlertIds)) openAlertIds[SILENT_KEY] = hb.alertId ?? null;
+  let st = null;
   if (existsSync(STATE_FILE)) {
-    try { lastTick = JSON.parse(readFileSync(STATE_FILE, 'utf8')).lastTick; } catch { /* unreadable → treat as silent */ }
+    try { st = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch { /* unreadable → treat as silent */ }
   }
-  const silent = lastTick == null || (nowMs - lastTick) > staleMs;
-  if (silent && !hb.alertId) {
-    const ageMin = lastTick == null ? 'never' : Math.round((nowMs - lastTick) / 60000) + 'm';
-    hb.alertId = addAlert('warning',
-      'governance-checker appears SILENT — no tick within the dead-man window',
-      `The governance-checker poller has not written a heartbeat in over ${TICK_MINUTES * HEARTBEAT_MISS_LIMIT}m (last tick: ${ageMin} ago). It may be dead — enforcement is OFF until it resumes. Check the governance-checker.timer on staging.`,
-      nowMs);
-  } else if (!silent && hb.alertId) {
-    // #637: null the handle ONLY on a confirmed clear. Discarding it on failure
-    // was the half that made this unrecoverable — the alert stayed open AND the
-    // only id that could close it was thrown away in the same statement.
-    let gradedRefSha = null;
-    if (existsSync(STATE_FILE)) {
-      try { gradedRefSha = JSON.parse(readFileSync(STATE_FILE, 'utf8')).gradedRefSha; } catch { /* sentinel below */ }
-    }
-    if (resolveAlert(hb.alertId, gradedRefSha)) hb.alertId = null;
-  }
-  writeFileSync(HB_STATE, JSON.stringify(hb, null, 2));
-  return { silent, lastTick };
+  const lastTick = st?.lastTick ?? null;
+  const { intents } = decideHeartbeat({
+    lastTick,
+    lastCensusAt: st?.lastCensusAt ?? null,
+    lastMistakePassAt: st?.lastMistakePassAt ?? null,
+    censusEnabledSince: st?.censusEnabledSince ?? null,
+    mistakePassEnabledSince: st?.mistakePassEnabledSince ?? null,
+    censusEnabled: WEEKLY_CENSUS_ENABLED,
+    mistakePassEnabled: MISTAKE_PASS_ENABLED,
+    openAlertIds,
+  }, nowMs);
+  // #637: the resolve evidence is the sha the poller last GRADED at (it writes null on a tick that
+  // graded nothing); resolveEvidenceOrSentinel turns a missing or non-sha value into the sentinel.
+  const next = applyHeartbeatIntents(intents, openAlertIds, { add: addAlert, resolve: resolveAlert },
+    { nowMs, lastTick, gradedRefSha: st?.gradedRefSha ?? null });
+  // `alertId` is still written, mirroring the silent handle, so a revert of this commit reads the
+  // handle it expects instead of orphaning an open alert and adding a second one.
+  writeFileSync(HB_STATE, JSON.stringify({ alertId: next[SILENT_KEY] ?? null, openAlertIds: next }, null, 2));
+  return { silent: pollerSilent(lastTick, nowMs), lastTick, intents };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
