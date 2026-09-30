@@ -72,7 +72,7 @@ WAVES = [
    ("#699", "RTB: does promotion evict, or is the screen stale"),
    ("rm:19.2", "SQE: verify every score calculates correctly"),
    ("B-ENTRY-LEVEL-RECHECK", "open: re-check a signal's levels against the current price before the fill"),
-   ("B-INTENT-ENTRY-PARITY", "open: two entry routes bypass the price grid"),
+   ("B-INTENT-ENTRY-PARITY", "open: a test route sizes from the request body; a legacy close route books a random haircut"),
    ("B-GRID-LIVE-PATH-PARITY", "open: grid rounding on the live order path"),
    ("RESTING-ORDER-DEADLINE", "open: a resting order's deadline runs even when no price is usable"),
    ("#630", "open: exercise the maker-order deadline once"),

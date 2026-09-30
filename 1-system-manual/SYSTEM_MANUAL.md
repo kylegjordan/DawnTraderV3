@@ -4560,7 +4560,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 >
 > | | the path | home |
 > |---|---|---|
-> | `#928` | ~~the HTTP intent path (price triple straight from the request body)~~ — **deleted 2026-09-30** with the AI chat's action path (B-SIZING-DEC-RESTORE 2e). **Survives:** `POST /api/paper/trade/test` (quantity from the request body, no sizer, no guardrail check) and `#929` | `B-INTENT-ENTRY-PARITY` (scope shrank to the survivors) |
+> | `#928` | ~~the HTTP intent path (price triple straight from the request body)~~ — **deleted 2026-09-30** with the AI chat's action path (B-SIZING-DEC-RESTORE 2e). `#929` (the fallback-sizing arm) deleted too. **Survives:** `POST /api/paper/trade/test` (quantity from the request body, no sizer, no guardrail check), and `#953` in the same batch | `B-INTENT-ENTRY-PARITY` (scope shrank to the survivors) |
 > | `#929` | **position sizing has TWO callers**; the fallback-sizing arm of the promoted-signal path never consults the VPG | folded into `#928` |
 > | `#927` | the promotion path **invents** a target (`entry * 1.02`) in **three** places, one of which is the RTB **ranking** key — so pool ORDER can depend on an invented number | `B-TARGET-FABRICATION` |
 > | `#923` | the **trailing exit controller DOES NOT call the VPG** and ratchets a live stop off-grid | row **3f.b**, `B-POST-GRID-MUTATION-CENSUS` — **not** `F-G-2` (corrected 2026-08-28) |

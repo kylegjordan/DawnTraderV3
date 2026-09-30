@@ -89,7 +89,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 57. **#699** (CC-C) · *mechanics* — RTB: does promotion evict, or is the screen stale
 58. **19.2 Audit & Debug — - Verify FinalScore, Hybrid Score, Confidenc** () · *tuning* — SQE: verify every score calculates correctly
 59. **B-ENTRY-LEVEL-RECHECK** (CC-B) · *mechanics* — open: re-check a signal's levels against the current price before the fill
-60. **B-INTENT-ENTRY-PARITY** (CC-C) · *mechanics* — open: two entry routes bypass the price grid
+60. **B-INTENT-ENTRY-PARITY** (CC-C) · *mechanics* — open: a test route sizes from the request body; a legacy close route books a random haircut (the intent path and the fallback sizer were deleted 2026-09-30)
 61. **B-GRID-LIVE-PATH-PARITY** (CC-C) · *mechanics* — open: grid rounding on the live order path
 62. **A resting order's deadline must run whether or not a price is usable** (CC-C) · *mechanics* — open: a resting order's deadline runs even when no price is usable
 63. **#630** (CC-A) · *mechanics* — open: exercise the maker-order deadline once
