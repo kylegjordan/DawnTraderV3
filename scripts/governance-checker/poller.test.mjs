@@ -409,10 +409,12 @@ const noRows = () => ({});
 
 // ─── #637: resolve-evidence token shape — ONE SSOT shared by TWO processes ───
 // WARNING ON SCOPE: these fence the PURE helper the poller and the SEPARATE
-// heartbeat process now share. They do NOT exercise heartbeat-check's resolve
-// branch, which shells out via execFileSync with no injection seam - that half
-// is covered by the live staging run. Saying so because #594's lesson was a
-// suite that fenced the READER while the defect lived in the WRITER.
+// heartbeat process now share. heartbeat-check's resolve branch is tested in
+// heartbeat-check.test.mjs since P28 (the decision pure, the #637 handle rule
+// through an injected sink, and one shell run against an unreachable CLI);
+// the CLI call itself succeeding is still covered only by the live staging
+// run. Saying so because #594's lesson was a suite that fenced the READER
+// while the defect lived in the WRITER.
 ok('#637 a real sha passes through unchanged',
   resolveEvidenceOrSentinel('b7471a28c') === 'b7471a28c'
   && resolveEvidenceOrSentinel('0464c8219031') === '0464c8219031');

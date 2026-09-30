@@ -127,11 +127,17 @@ jobs:
       # is a STEP inside Test Suite instead, so the four-job count stays true.
       # `if: !cancelled()` runs it even when vitest fails, so a vitest failure
       # cannot hide a checker failure. Plain node, node builtins only: needs
-      # neither npm ci nor Postgres. The heartbeat step is added with P28,
-      # which creates heartbeat-check.test.mjs.
+      # neither npm ci nor Postgres. Each step has its own `if`, so a failing
+      # poller step does not hide the heartbeat step either. The heartbeat
+      # tests use temp files only; one of them runs `bash -lc` against a
+      # directory that does not exist, to show a failed resolve keeps its id.
       - name: Governance checker tests (poller)
         if: ${{ !cancelled() }}
         run: node scripts/governance-checker/poller.test.mjs
+
+      - name: Governance checker tests (heartbeat)
+        if: ${{ !cancelled() }}
+        run: node scripts/governance-checker/heartbeat-check.test.mjs
 
   build:
     name: Build
