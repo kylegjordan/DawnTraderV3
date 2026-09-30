@@ -361,3 +361,25 @@ describe('8a-P4c 3a-ii r3 — unpriced needs ALL FIVE absent; the fee columns ca
     expect(csv).toMatch(/frictionBasis: 'recomposed' \| 'stamped' \| 'unpriced' \| null;/);
   });
 });
+
+// Langston r3 note: the r2 sum test used symmetric fees only. The asymmetric cases — a maker entry against a taker exit,
+// and the xStock maker REBATE — must also make the five columns (fee per leg + slip/spread per leg) sum to `costs`.
+describe('8a-P4c 3a-ii r3 note — the columns sum to the recomposed friction with ASYMMETRIC fees too', () => {
+  it.each([
+    ['crypto maker entry / taker exit', 0.004, 0.008, 'limit', 'bid'],
+    ['xStock maker REBATE / taker exit', -0.0002, 0.001, 'limit', 'clamp_no_bid'],
+    ['xStock taker at the ask / taker exit', 0.001, 0.001, 'ask', 'bid'],
+  ] as const)('%s', (_label, feeIn, feeOut, basis, arm) => {
+    const t = {
+      frictionCost: 0, chosenEntryMode: basis === 'limit' ? 'maker' as const : 'taker' as const, entryPriceBasis: basis,
+      costEntryFeeFraction: feeIn, costExitFeeFraction: feeOut, costFeeFraction: (feeIn + feeOut) / 2,
+      costSlippageFraction: SLIP, costSpreadFraction: S,
+    };
+    const fr = recomposeVtsCloseFriction(t, arm);
+    const fee = vtsFeeByLeg(t) as { entry: number; exit: number };
+    const sh = vtsSpreadShareByLeg({ ...t, frictionBasis: 'recomposed', exitBookingArm: arm }, true);
+    const columns = fee.entry + (SLIP + S * sh.entry) + fee.exit + (SLIP + S * sh.exit);
+    expect(columns).toBeCloseTo(fr.friction, 12);
+    expect(fee.entry).toBe(feeIn); // the leg's own fee, sign kept
+  });
+});
