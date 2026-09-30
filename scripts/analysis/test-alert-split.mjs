@@ -44,6 +44,14 @@ ok('the clone map covers the four sessions', ['DawnTraderV3-old', 'DawnTraderV3-
   ok('BLOCKER-3: the churning alert is listed with its current owner and change count', r.churning.length === 1 && r.churning[0].owner === 'CC-A' && r.churning[0].flips === 43);
   const b2 = splitAlerts([A('flip-recent')], o, 'CC-B', NOW);
   ok('BLOCKER-3: the same churning alert is unrouted for another session too, never counted away', b2.unrouted.length === 1 && b2.others === 0);
+  // Round 3 condition 1 (Langston's mutation M5 survived 19/19): a churned CRITICAL routed to someone else must land in
+  // `unrouted` IN FULL, not on the one-line critical bucket — that bucket prints `owner X`, an owner the split has just
+  // decided not to trust. Live shape: 5c2e53a2, critical, 21 changes, currently routed to Kyle.
+  const oc = { _meta: { seeded_at: 'x' }, 'crit-flip': { owner: 'Kyle', changed_at: '2026-09-30T15:32:59Z', flips: 21 } };
+  const c3 = splitAlerts([A('crit-flip', 'critical')], oc, 'CC-B', NOW);
+  shown += c3.unrouted.length;
+  ok('condition 1 (M5): a churned CRITICAL routed elsewhere reads UNROUTED in full, not on the critical line',
+    c3.unrouted.map((a) => a.id).join() === 'crit-flip' && c3.critical.length === 0 && c3.others === 0);
 }
 // ── round 3 BLOCKER-2: one cap, priority critical → unrouted → yours, cut named per group ──
 {

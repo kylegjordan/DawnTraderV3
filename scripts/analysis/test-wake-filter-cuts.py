@@ -146,6 +146,19 @@ for case, wakes in results:
             label += "  [TAG WRONG: " + " | ".join(heads) + "]"
     if not ok: fails += 1
     print(f"  {'PASS' if ok else '** FAIL **':10} expected {'WAKE   ' if expect else 'silent '} got {'WAKE   ' if got else 'silent '}  {label}")
+# Round 3 condition 2 (Langston): a RE-ISSUED bad marker moves to the END of the rejects list, because the alert hook
+# reports rejects[-1] as "Latest". Bad X, then bad Y, then X again -> the last reject must be X, carrying the newest ts.
+_RDIR = tempfile.mkdtemp(prefix="wakerej-")
+def _rrow(ts, mid):
+    return json.dumps({"ts": ts, "kind": "langston_outbound", "text": f"NEW Claude — routing.\n\n[[ALERT id={mid} owner=CC-B action=\"x\"]]"})
+_rin = f"==> {LOG} <==\n" + "\n".join([_rrow("2026-09-30T10:00:00+00:00", "badxxxxx"), _rrow("2026-09-30T11:00:00+00:00", "badyyyyy"),
+                                       _rrow("2026-09-30T12:00:00+00:00", "badxxxxx")]) + "\n"
+_rp = subprocess.run([sys.executable, FILTER, "CC-A", "--state", os.path.join(_RDIR, "CC-A.json")], input=_rin.encode("utf-8"),
+                     capture_output=True, timeout=120)
+_rej = (json.load(open(os.path.join(_RDIR, "CC-A.alert-owners.json"), encoding="utf-8")).get("_meta") or {}).get("rejects") or []
+_rok = len(_rej) == 2 and "badxxxxx" in _rej[-1].get("marker", "") and _rej[-1].get("ts", "").startswith("2026-09-30T12")
+if not _rok: fails += 1
+print(f"  {'PASS' if _rok else '** FAIL **':10} condition 2: a re-issued bad marker moves to the END of the rejects ({[(r.get('ts','')[11:16], r.get('marker','')[-40:]) for r in _rej]})")
 print()
 print(f"({sum(1 for _, w in results if w)} of {len(CASES)} cases produced a wake — the instrument speaks)")
 print("ALL PASS" if fails == 0 else f"{fails} FAILED")

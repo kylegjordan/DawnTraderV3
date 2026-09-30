@@ -403,11 +403,11 @@ def record_owners(body, ts):
             rej = meta.setdefault("rejects", [])
             snip = _flat(s)[:140]
             same = [r for r in rej if r.get("marker") == snip]
-            if same:
-                if same[0].get("ts") != ts:
-                    same[0]["ts"] = ts          # round 3 finding (2): a re-issued bad marker stays inside the 24 h window
-                    changed = True
-            else:
+            if not (same and same[0].get("ts") == ts):
+                # round 3 finding (2): a re-issued bad marker stays inside the 24 h window. Round 3 condition 2 (Langston):
+                # it MOVES TO THE END rather than being refreshed in place — the alert hook reports rejects[-1] as "Latest",
+                # so an in-place refresh could report a just-re-issued marker behind a stale one.
+                rej = [r for r in rej if r.get("marker") != snip]
                 rej.append({"ts": ts, "marker": snip})
                 meta["rejects"] = rej[-REJECTS_KEPT:]
                 changed = True
