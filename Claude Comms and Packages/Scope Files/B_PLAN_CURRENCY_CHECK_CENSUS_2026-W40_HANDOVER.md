@@ -222,5 +222,5 @@ excluded by name: [{'issue': 696, 'lines': [3774, 3776], 'reason': 'length-is-th
 | §5 | `B-XSTOCK-FEE-CONTRACT` | CC-B |
 
 ## STATE, per item, from W41 on (A2)
-Every item above is **handed over 2026-09-30** (the post id is recorded below when sent). Next week's census reads this file and reports each item as one of three states — **never surfaced** / **handed over <date>, still unplaced** / **placed** — so a handover that was ignored does not read as a fresh finding, and a placement shows as progress. *(The census change that reads this file is built in this batch before W41.)*
+Every item above is **handed over 2026-09-30** — Discord `#general` post id **`1554940764759400560`** (~19:50Z), one post naming CC-B, CC-C and Infra Claude with each one's items by number; CC-A's own items are dispositioned by CC-A in this batch. Next week's census reads this file and reports each item as one of three states — **never surfaced** / **handed over <date>, still unplaced** / **placed** — so a handover that was ignored does not read as a fresh finding, and a placement shows as progress. *(The census change that reads this file is built in this batch before W41.)*
 
