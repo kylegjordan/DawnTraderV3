@@ -3,7 +3,7 @@
 // rule is unit-tested on fixtures (census.test.mjs) and the offline dry run (P44) reads the same code.
 //
 // ⛔ DORMANT: nothing here runs unless poller.mjs's maybeRunWeekly is reached with WEEKLY_CENSUS_ENABLED or
-// MISTAKE_PASS_ENABLED true (config.mjs; both false in committed source). The flags guard the RUN, not the
+// MISTAKE_PASS_ENABLED true (config.mjs — read the values there; this comment states none). The flags guard the RUN, not the
 // LOAD: poller.mjs imports this module statically, so this file lands in (or before) the commit whose
 // poller.mjs imports it (P40 round 2), and it is in DRIFT_LOADED_FILES (P29).
 //

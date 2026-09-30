@@ -33,7 +33,7 @@ When one of those two holds: it is recorded as a **DELIBERATE EXPERIMENT, never 
 
 `git log --grep='^MISTAKE:' --since=1.week` → group by slug → update counts → promote/displace/retire.
 **Owner CC-A · weekly · fired by the governance checker's weekly gate: one `verification` alert per ISO week, key `gov-mistakepass:<YYYY-Www>`, minted on the first tick at or after Monday 09:00Z (`poller.mjs`, the weekly gate; `config.mjs` `CENSUS_HOUR_UTC`).** The checker MINTS; CC-A runs the pass and **RESOLVES that week's row with the run-log commit sha as evidence. Nobody mints the next one** — the next week's key is new, so the store's dedupe check (`addAlert` in `server/services/system-alerts.ts`) never blocks it.
-⚠️ **DORMANT UNTIL `MISTAKE_PASS_ENABLED` FLIPS (`config.mjs`, `B-PLAN-CURRENCY-CHECK` P62).** Until then NO pass is scheduled by anything — see the 2026-09-30 run-log row for the gap this closes.
+⚠️ **Whether the pass is scheduled is `MISTAKE_PASS_ENABLED` in `config.mjs` — read it there; this line states no value** (a value quoted here would go stale at the next flip — `B-PLAN-CURRENCY-CHECK` P62). It was switched on by the P62 mistake-pass commit, 2026-09-30; the 2026-09-30 run-log row records the gap before it. **If it is enabled and a week goes unrun, the heartbeat raises `gov-mistakepass-silent` after `CENSUS_STALE_DAYS`.**
 ### ⛔⛔ SUPERSEDED 2026-08-27 — THE TRIPWIRE BELOW IS RETAINED AS A RECORD AND IS **NO LONGER THE GUARD** (`#732`)
 
 ⛔⛔ **KYLE RE-OPENED `#732` ON 2026-08-27 AS `B-EXIT-LATCH-INVESTIGATION`, PLACED IN THE `PHASE_19_PLAN` GOVERNANCE QUEUE AT POSITION 7. THE DEFERRAL BELOW NO LONGER HOLDS.**

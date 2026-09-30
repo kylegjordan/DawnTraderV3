@@ -378,11 +378,11 @@ export const EXCEPTIONS_MALFORMED_BID_CAP = 64;
 // B-PLAN-CURRENCY-CHECK OBJ-3 / OBJ-4 (P27) — the weekly census and mistake pass
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ⛔ DORMANT BEHIND COMMITTED FLAGS (scope §10 Q9's form; §10e Q14 extends it to the mistake pass).
-// `false` = TODAY'S BEHAVIOUR: no weekly census, no weekly mistake-pattern pass, and no liveness
-// alert for either (heartbeat-check.mjs reads these same flags — this file is the one SSOT both
-// checker processes import). Each is flipped by its OWN one-line committed change, only after the
-// P44 dry run is committed, Langston has ruled its figures and his Step 4 is done (P62).
+// ⛔ GATED BY COMMITTED FLAGS (scope §10 Q9's form; §10e Q14 extends it to the mistake pass). A flag's VALUE is the
+// literal below and nowhere else — no comment or document states it (P62 condition 1, Langston: a document quoting the
+// value goes stale at the next flip). `false` means: no weekly census / no weekly mistake-pattern pass, and no liveness
+// alert for it (heartbeat-check.mjs reads these same flags — this file is the one SSOT both checker processes import).
+// Each was flipped by its OWN one-line committed change, after the P44 dry run was committed and Langston's Step 4 (P62).
 // Committed source, never env: push is deploy, and an env default is invisible at the graded ref.
 export const WEEKLY_CENSUS_ENABLED = true;   // P62 census flip (B-PLAN-CURRENCY-CHECK) — see the block above
 export const MISTAKE_PASS_ENABLED = true;   // P62 mistake-pass flip (B-PLAN-CURRENCY-CHECK) — see the block above

@@ -10,9 +10,8 @@
 // B-PLAN-CURRENCY-CHECK P28 (OBJ-3 liveness; scope §10i Q3, §10j 3(d)): the decision is now the
 // PURE `decideHeartbeat`, and `checkHeartbeat` is the IO shell around it. Two more legs share the
 // same seam — the weekly census and the weekly mistake-pattern pass each raise a `warning` when
-// ENABLED and silent for more than CENSUS_STALE_DAYS — and both are DORMANT until their
-// config.mjs flags flip (P62), so with today's committed flags only the silent-poller leg can
-// produce an intent. No flag of its own: the differential (heartbeat-check.test.mjs, derived with
+// ENABLED and silent for more than CENSUS_STALE_DAYS — each only while its config.mjs flag is true (read
+// the value there; with both false only the silent-poller leg can produce an intent). No flag of its own: the differential (heartbeat-check.test.mjs, derived with
 // heartbeat-differential.mjs at this refactor's parent) shows the silent-poller outcome unchanged.
 //
 // Run on staging via its own systemd timer: node scripts/governance-checker/heartbeat-check.mjs

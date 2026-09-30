@@ -375,8 +375,8 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
 }
 
 // ── B-PLAN-CURRENCY-CHECK OBJ-1 (P36-P38) — the plan-state rule's decisions (`gov-planline`) ────────────────
-// ENABLED since the P61 flip (84b1dbb71, 2026-09-30): the tick reaches this only when PLAN_LINE.enabled (config.mjs) is true;
-// it was dormant (false in committed source) from landing until that flip.
+// GATED by PLAN_LINE.enabled (config.mjs — read the value there): the tick reaches this only when it is true. History:
+// dormant from landing until the P61 flip (84b1dbb71, 2026-09-30).
 // Keys (Langston §10d Q15, §10g N7): one PER LEG, `gov-planline:<bid>:s4|s5`, at `warning` (Q17); and three
 // singletons the tick owns — the plan unreadable (a GOVERNANCE problem: the plan text or its headers), the Batch
 // Completion listing empty (an INFRA problem: the checker's git read), and the malformed-row list. The singletons
@@ -913,8 +913,8 @@ export function driftAlertBody(drift) {
 }
 
 // ── B-PLAN-CURRENCY-CHECK OBJ-3 / OBJ-4 (P40, P42, P46) — the weekly gate ─────────────────────────────────────
-// ⛔ DORMANT: with WEEKLY_CENSUS_ENABLED and MISTAKE_PASS_ENABLED false (config.mjs, committed source) this
-// function returns without touching `state`, so a tick is exactly today's. Called at TWO sites in tick() — the
+// ⛔ GATED: with WEEKLY_CENSUS_ENABLED and MISTAKE_PASS_ENABLED both false (config.mjs — read the values there) this
+// function returns without touching `state`, so the tick is exactly the pre-P40 tick. Called at TWO sites in tick() — the
 // rulebook-unreadable branch before its saveState, and after the orphan sweep before the final saveState — and
 // NEVER on the fetch-fail path (there is no graded ref to read at).
 // Each leg (the census; the mistake pass) has its OWN state keys and failure key, so one leg's fault never blocks
@@ -1177,7 +1177,7 @@ export function tick(nowMs = Date.now()) {
     b.declaredClass = ovr;
     b.classDeclared = true;
   }
-  // P38 (B-PLAN-CURRENCY-CHECK OBJ-1), gated by PLAN_LINE.enabled (ON since the P61 flip, 84b1dbb71): the plan-state rule. It reads NOTHING with
+  // P38 (B-PLAN-CURRENCY-CHECK OBJ-1), gated by PLAN_LINE.enabled (read it in config.mjs; switched on by the P61 flip, 84b1dbb71): the plan-state rule. It reads NOTHING with
   // the flag off (so a plan edit cannot page while the rule is dormant). On: the plan and the Batch Completion
   // listing are each read ONCE, at gradedRefSha (the resolver's sha — the one the resolve evidence carries).
   // Resolves run BEFORE opens, so a changed malformed list resolves the old singleton and re-opens it. The
@@ -1248,7 +1248,7 @@ export function tick(nowMs = Date.now()) {
     console.warn(`[gov-checker] orphan-sweep KEPT ${key} (still missing out-of-window — real gap, not silenced)`);
   }
   if (untaggedCode > 0) console.warn(`[gov-checker] ${untaggedCode} untagged CODE commits in window (low-sev; see Obj-9)`);
-  // P40: the weekly census and mistake pass (DORMANT behind their config.mjs flags), after every enforcement
+  // P40: the weekly census and mistake pass (gated by their config.mjs flags — read the values there), after every enforcement
   // decision of this tick, so a weekly fault can never change what the tick graded.
   maybeRunWeekly(state, nowMs, liveIds);
   // #637: publish the graded sha so the SEPARATE heartbeat process can cite it.

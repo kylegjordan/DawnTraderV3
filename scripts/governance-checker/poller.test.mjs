@@ -1001,7 +1001,7 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
   resolveGradedRef(() => ({ fetchOk: false, sha: null })); // leave the poller's module sha as a fresh process has it
 }
 
-// ── B-PLAN-CURRENCY-CHECK P32 / P61: the PLAN_LINE table — ENABLED since the P61 flip (dormant at landing), key disjoint
+// ── B-PLAN-CURRENCY-CHECK P32 / P61: the PLAN_LINE table — the pin below asserts the committed value (switched on by the P61 flip; dormant at landing), key disjoint
 // from DOCS and LEDGER_ROWS. Planted faults: `enabled: false` fails the first (Langston P61 C2: post-flip the fault is
 // the reversal — shown failing it, 441/1); `naKey: 'task_lists'` (or any DOCS key) fails the second.
 {
@@ -1338,7 +1338,7 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
     // false → this fails.
     const def = fresh();
     try { maybeRunWeekly(def, MON, new Set(), { sink: { add: () => { throw new Error('no sink in tests'); } } }); } catch { /* a leg failure is contained in-state */ }
-    ok('P62 the COMMITTED flags: census ON and mistake pass ON (both legs are reached)',
+    ok('P62 flag READBACK: both committed weekly flags are true (their enabled-since anchors are set before either gate — this proves the flags, not that either leg ran; Langston P62 finding)',
       def.censusEnabledSince != null && def.mistakePassEnabledSince != null, JSON.stringify(Object.keys(def)));
   }
   // two simulated Mondays → two distinct adds; a later tick in a run week → none
