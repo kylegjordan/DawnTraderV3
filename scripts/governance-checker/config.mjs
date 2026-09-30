@@ -268,3 +268,57 @@ export function resolveEvidenceOrSentinel(sha) {
   if (/^[0-9]+$/.test(sha)) return 'NO-EVIDENCE-GIVEN';
   return sha;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B-PLAN-CURRENCY-CHECK OBJ-10 (P21-P25) — the exceptions ledger's grammar
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ⛔ DORMANT BEHIND A COMMITTED FLAG (Langston, scope §10i R1-Q6 (ii)). `false` = TODAY'S EXACT RULE:
+// poller.mjs `parseExceptionsLegacy` (exact type match, any non-`pending` confirmer counts, first
+// `declared:<class>` match wins) and NO `gov-exceptions-malformed` alerts — so the push that carries
+// the new parser is inert to grading. `true` = `parseExceptions` (closed type grammar, confirmer
+// roster, strict class-override shape) plus the malformed-row alerts. Flipped by a ONE-LINE committed
+// change after Langston's Step 4; DELETED in the batch's Step-10 commit, together with the legacy parse.
+// Committed source, never env: push is deploy, and an env default is invisible at the graded ref.
+export const EXCEPTIONS_V2_ENABLED = false;
+
+// P22 (Q11 (a)): the confirmer roster — the four roster sessions + the two humans of ALERT_ACTORS
+// (server/services/system-alerts.ts). A confirmer cell counts by its LEADING whitespace-delimited
+// token, lowercased, split on '+'; every part must be here. `open` accepts any member (today's
+// roster behaviour — the scope's Owner line is NOT parsed, so self-confirmation stays invisible:
+// residual recorded on #1099); `na-skip` and `class-override` need langston or kyle among the parts.
+export const EXCEPTION_CONFIRMERS = ['langston', 'kyle', 'cc-a', 'cc-b', 'cc-c', 'cc-infra'];
+export const EXCEPTION_ACCEPT_BY_TYPE = {
+  open: EXCEPTION_CONFIRMERS,
+  'na-skip': ['langston', 'kyle'],
+  'class-override': ['langston', 'kyle'],
+};
+
+// P23 (Q29 closed grammar; Q31 retirement by IN-PLACE retype only; R1-Q8; R3-Q11 (a)). Every type
+// cell must be one of these, exactly; anything else is malformed (never keyword-sniffed).
+//   honoured       — the three types the checker acts on.
+//   retired        — skipped entirely, confirmer included. Retirement is an IN-PLACE type edit: an
+//                    APPENDED `*-retired` row retires nothing (#654), so none is ever cross-matched.
+//   recordOnly     — `deploy-hold`: accepted silently; no code reads it, and a deploy-hold row does
+//                    NOT suspend the deadline (only an `open` row does).
+//   notImplemented — the umbrella types are documented but have no parser branch, so a row that
+//                    relies on one is FLAGGED rather than left inert (the #464 shape).
+export const EXCEPTION_TYPES = {
+  honoured: ['open', 'na-skip', 'class-override'],
+  retired: ['open-retired', 'na-skip-retired', 'class-override-retired'],
+  recordOnly: ['deploy-hold'],
+  notImplemented: ['umbrella-namespace', 'umbrella-done'],
+};
+export const UMBRELLA_NOT_IMPLEMENTED = 'not implemented — B-UMBRELLA-OPEN-STATE (CC-B)';
+
+// P24: the WHOLE class-override value must have this shape; the heuristic token stays OPTIONAL
+// (B-LANGSTON-QUEUE-2 is `declared:hotfix`). No `reclassified:` token (condition 4). Built from
+// VALID_CLASSES so the class list has one home.
+export const CLASS_OVERRIDE_VALUE = new RegExp(
+  `^declared:(${VALID_CLASSES.join('|')})(?: heuristic:(${VALID_CLASSES.join('|')}))?$`);
+
+// P25 (Q30): one `warning` alert per `<batchId>:<type-slug>`; the type token is slugged and capped,
+// never the raw cell echoed. Not a decideOrphanSweep type — the tick owns its resolution.
+export const EXCEPTIONS_MALFORMED_PREFIX = 'gov-exceptions-malformed:';
+export const EXCEPTIONS_MALFORMED_TYPE_CAP = 32;
+export const EXCEPTIONS_MALFORMED_BID_CAP = 64;

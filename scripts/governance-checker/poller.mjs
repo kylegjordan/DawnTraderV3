@@ -22,6 +22,9 @@ import {
   extractLeadingBatchId, parentBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
   DEFAULT_CLASS, VALID_CLASSES, SHADOW_MODE, ENFORCEMENT_CUTOFF_MS,
   resolveEvidenceOrSentinel,
+  EXCEPTIONS_V2_ENABLED, EXCEPTION_CONFIRMERS, EXCEPTION_ACCEPT_BY_TYPE, EXCEPTION_TYPES,
+  UMBRELLA_NOT_IMPLEMENTED, CLASS_OVERRIDE_VALUE,
+  EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, EXCEPTIONS_MALFORMED_BID_CAP,
 } from './config.mjs';
 import {
   checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass,
@@ -473,12 +476,23 @@ function readGovernedExceptions() {
   return raw;
 }
 
+// B-PLAN-CURRENCY-CHECK P21: the tick reads the rulebook through ONE of two PURE parsers, chosen by the
+// committed flag EXCEPTIONS_V2_ENABLED (config.mjs; false = today's exact rule, so the push is inert to
+// grading). The #449 fail-loud throw stays in readGovernedExceptions, ahead of either parser.
 function loadExceptions() {
+  const raw = readGovernedExceptions();
+  return EXCEPTIONS_V2_ENABLED ? parseExceptions(raw) : parseExceptionsLegacy(raw);
+}
+
+// TODAY'S RULE, unchanged — the loop body of the pre-batch loadExceptions, with only its read lifted
+// into the `raw` argument. Selected while EXCEPTIONS_V2_ENABLED is false; DELETED with the flag in the
+// batch's Step-10 commit. Exported so poller.test.mjs pins the flag-off behaviour.
+export function parseExceptionsLegacy(raw) {
   const open = new Set(), openSince = new Map(), naConfirmed = new Set(), classOverride = new Map();
   // ONE confirmed-semantics predicate, reused by every row type (Langston B-GOV-ORPHAN-CLASS Step-1):
   // a disposition counts only when a real confirmer signed it (not the literal 'pending' placeholder).
   const isConfirmed = (by) => Boolean(by) && by !== 'pending';
-  for (const line of readGovernedExceptions().split('\n')) {
+  for (const line of raw.split('\n')) {
     const cells = line.split('|').map((c) => c.trim());
     if (cells.length < 7) continue;
     const [, ts, bid, type, value, confirmedBy] = cells;
@@ -495,6 +509,103 @@ function loadExceptions() {
     }
   }
   return { open, openSince, naConfirmed, classOverride };
+}
+
+// B-PLAN-CURRENCY-CHECK OBJ-10 (P21-P24) — the ledger rule behind EXCEPTIONS_V2_ENABLED. PURE: text in,
+// sets out. Returns today's four outputs plus `malformed`: every row that cannot be honoured as written,
+// as { lineNo (1-based), batchId (slugged), typeSlug, reason } — the reason never echoes a raw cell
+// (P25 turns them into alerts). FAIL-CLOSED: a malformed row is IGNORED — the batch is graded as if the
+// row were absent, never honoured by a first match. The grammar lives in config.mjs (EXCEPTION_*).
+export function parseExceptions(raw) {
+  const open = new Set(), openSince = new Map(), naConfirmed = new Set(), classOverride = new Map();
+  const malformed = [];
+  const lines = raw.split('\n');
+  let commentFrom = 0; // line number of an open `<!--` block; 0 = outside a comment
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i], lineNo = i + 1;
+    // Round 2 (R2-HY-4): an HTML comment block — from a line containing `<!--` to one containing `-->` —
+    // is prose, never rows, however many `|` its lines hold.
+    if (commentFrom) { if (line.includes('-->')) commentFrom = 0; continue; }
+    const at = line.indexOf('<!--');
+    if (at !== -1) { if (!line.includes('-->', at + 4)) commentFrom = lineNo; continue; }
+    const cells = line.split('|').map((c) => c.trim());
+    if (cells.length < 7) continue;
+    const [, , bid, type, value, confirmedBy] = cells;
+    if (!bid || bid.startsWith('_')) continue;
+    if (bid === 'batch-id' || /^:?-+:?$/.test(bid)) continue; // the table's header row and separator
+    const flag = (reason) => malformed.push({ lineNo, batchId: slugBatchId(bid), typeSlug: slugType(type), reason });
+    // P23: the closed grammar. Retired rows are skipped whole, confirmer included; deploy-hold is record-only.
+    if (EXCEPTION_TYPES.retired.includes(type) || EXCEPTION_TYPES.recordOnly.includes(type)) continue;
+    if (EXCEPTION_TYPES.notImplemented.includes(type)) { flag(UMBRELLA_NOT_IMPLEMENTED); continue; }
+    if (!EXCEPTION_TYPES.honoured.includes(type)) { flag('unknown input-type: not in the closed grammar'); continue; }
+    // P22: the confirmer. `pending` is unconfirmed and silent; anything else that fails is flagged.
+    const verdict = confirmerVerdict(confirmedBy, type);
+    if (verdict === 'pending') continue;
+    if (verdict !== 'ok') { flag(verdict); continue; }
+    if (type === 'open') { open.add(bid); const m = value.match(/\d{4}-\d{2}-\d{2}T[\d:]+Z/); if (m) openSince.set(bid, Date.parse(m[0])); }
+    else if (type === 'na-skip') naConfirmed.add(`${bid}:${value}`);
+    else {
+      // P24: the WHOLE value must match — never a first match inside a longer value.
+      const m = CLASS_OVERRIDE_VALUE.exec(value);
+      if (!m) { flag('class-override value is not `declared:<class>` with an optional ` heuristic:<class>`'); continue; }
+      classOverride.set(bid, m[1]);
+    }
+  }
+  // An unterminated `<!--` swallowed every later line as prose — surface it rather than grade silently
+  // on the rows above it alone.
+  if (commentFrom) malformed.push({ lineNo: commentFrom, batchId: '_ledger', typeSlug: 'comment',
+    reason: 'unterminated `<!--` comment: every later line was skipped as prose' });
+  return { open, openSince, naConfirmed, classOverride, malformed };
+}
+
+// P22: 'ok' | 'pending' | a reason. The LEADING whitespace-delimited token, lowercased, split on '+';
+// every part must be a roster token and at least one must be in the type's accept set.
+function confirmerVerdict(cell, type) {
+  const token = String(cell || '').split(/\s+/)[0].toLowerCase();
+  if (token === 'pending') return 'pending';
+  const parts = token.split('+');
+  if (!token || !parts.every((p) => EXCEPTION_CONFIRMERS.includes(p))) {
+    return `confirmer is not ${EXCEPTION_CONFIRMERS.join(', ')}, a '+'-joined set of them, or pending`;
+  }
+  const accept = EXCEPTION_ACCEPT_BY_TYPE[type];
+  if (!parts.some((p) => accept.includes(p))) return `confirmer not permitted for ${type}: needs ${accept.join(' or ')}`;
+  return 'ok';
+}
+
+// P25 (Q30): key tokens are normalised — slugged and length-capped, never the raw cell.
+function slugType(t) {
+  const s = String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '')
+    .slice(0, EXCEPTIONS_MALFORMED_TYPE_CAP).replace(/-+$/, '');
+  return s || 'empty';
+}
+function slugBatchId(b) {
+  const s = String(b || '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+/, '')
+    .slice(0, EXCEPTIONS_MALFORMED_BID_CAP).replace(/-+$/, '');
+  return s || 'empty';
+}
+
+// P25 (Q30) pure core: malformed rows → `gov-exceptions-malformed:<batchId>:<type-slug>` intents at
+// `warning`. Every OPEN key of that prefix that is no longer malformed at the ref resolves (the tick
+// resolves with the graded-sha evidence). The key is not a decideOrphanSweep type, so the tick owns it.
+export function decideMalformedAlerts(malformed, openAlertKeys, refSha) {
+  const byKey = new Map();
+  for (const m of malformed) {
+    const key = `${EXCEPTIONS_MALFORMED_PREFIX}${m.batchId}:${m.typeSlug}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(m);
+  }
+  const at = refSha ? `at ${refSha}` : 'at the graded ref (its sha was unavailable this tick)';
+  const toOpen = [...byKey].map(([key, rows]) => ({
+    dedupeKey: key, severity: 'warning',
+    title: `Exceptions ledger row not honoured: ${rows[0].batchId} (${rows[0].typeSlug})`,
+    body: `GOVERNANCE_EXCEPTIONS.md ${at}: ` +
+      rows.slice(0, 10).map((r) => `line ${r.lineNo} — ${r.reason}`).join('; ') +
+      (rows.length > 10 ? `; and ${rows.length - 10} more` : '') +
+      `. The row is IGNORED (fail-closed): the batch is graded as if the row were absent. Correct it under the ` +
+      `ledger's edit rule (its grammar comment); this alert resolves on the first tick at which it parses cleanly.`,
+  }));
+  const toResolveKeys = openAlertKeys.filter((k) => k.startsWith(EXCEPTIONS_MALFORMED_PREFIX) && !byKey.has(k));
+  return { toOpen, toResolveKeys };
 }
 
 // #490 recurrence guard ("who checks the checker"): detect when the DEPLOYED checker CODE has
@@ -651,6 +762,23 @@ export function tick(nowMs = Date.now()) {
   if (state.openAlerts['gov-exceptions-unreadable']) {
     alertSink.resolve(state.openAlerts['gov-exceptions-unreadable']);
     delete state.openAlerts['gov-exceptions-unreadable'];
+  }
+  // P25 (B-PLAN-CURRENCY-CHECK OBJ-10), DORMANT behind EXCEPTIONS_V2_ENABLED: surface every ledger row the
+  // parser could not honour, and resolve (graded-sha evidence) each open key that now parses cleanly.
+  // Flag off → nothing opened AND nothing resolved: a reverted flag FREEZES an open malformed alert, never
+  // auto-clears it.
+  if (EXCEPTIONS_V2_ENABLED) {
+    const mal = decideMalformedAlerts(exceptions.malformed, Object.keys(state.openAlerts), gradedRefSha);
+    for (const a of mal.toOpen) {
+      if (!state.openAlerts[a.dedupeKey]) {
+        const id = alertSink.add(a, nowMs);
+        if (id) state.openAlerts[a.dedupeKey] = id;
+      }
+    }
+    for (const k of mal.toResolveKeys) {
+      const id = state.openAlerts[k];
+      if (id) { alertSink.resolve(id); delete state.openAlerts[k]; }
+    }
   }
   // OBJ-1 (B-GOV-ORPHAN-CLASS): apply confirmed class-overrides here — AFTER loadExceptions (the
   // readDeclaredClass loop at :466 ran before the ledger was read) and BEFORE decideAlerts. PRECEDENCE:
