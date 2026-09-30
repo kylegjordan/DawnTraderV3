@@ -9,7 +9,7 @@ import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, dec
 import { decideHeartbeat, CENSUS_SILENT_KEY } from './heartbeat-check.mjs';
 import { CENSUS_FAILED_KEY, MISTAKEPASS_FAILED_KEY } from './census.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF, PLAN_LINE } from './config.mjs';
-import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt, planRowsByBatch, statusIsDefault, cellNamesFile, checkPlanState, findGlobDoc } from './checker.mjs';
+import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt, planRowsByBatch, statusIsDefault, cellNamesFile, checkPlanState, findGlobDoc, govRefRemoteRefusal } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse('2026-06-17T12:00:00Z');
@@ -1179,6 +1179,8 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
   ok('P38 plan unreadable → `gov-planline-unreadable` opens (warning); the listing key resolves',
     bad.toOpen.length === 1 && bad.toOpen[0].dedupeKey === PLANLINE_UNREADABLE_KEY && bad.toOpen[0].severity === 'warning' && bad.toResolveKeys.join() === PLANLINE_LISTING_EMPTY_KEY);
   const empty = r({ planError: null, listingEmpty: true });
+  ok('G6 C1: the listing-empty key posts as health_check (a git read failing), the unreadable-plan key stays governance',
+    empty.toOpen[0]?.category === 'health_check' && (bad.toOpen[0]?.category ?? 'governance') === 'governance', JSON.stringify(empty.toOpen[0]?.category));
   ok('P38 listing empty → `gov-planline-listing-empty` opens (warning), naming the listing; the plan key resolves',
     empty.toOpen.length === 1 && empty.toOpen[0].dedupeKey === PLANLINE_LISTING_EMPTY_KEY && /Batch Completion/.test(empty.toOpen[0].body) && empty.toResolveKeys.join() === PLANLINE_UNREADABLE_KEY);
   const good = r({ planError: null, listingEmpty: false });
@@ -1453,6 +1455,14 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
     ok('P46 a pass failure opens gov-mistakepass-failed, not the census key', adds(wp.calls)[0].dedupeKey === MISTAKEPASS_FAILED_KEY && pf.lastMistakePassWeek === undefined);
   }
 }
+
+// ─── Step 4 G6 CONDITION 2 (Langston): a GOV_REF on another configured remote is refused, never graded stale ───
+ok('G6 C2: origin/<branch> → graded', govRefRemoteRefusal('origin/migration/aws-supabase', ['origin', 'upstream']) === null);
+ok('G6 C2: upstream/<branch>, upstream configured → REFUSED', /names remote "upstream"/.test(govRefRemoteRefusal('upstream/foo', ['origin', 'upstream']) || ''));
+ok('G6 C2: a local branch with a slash (first segment is not a remote) → graded', govRefRemoteRefusal('migration/aws-supabase', ['origin']) === null);
+ok('G6 C2: a bare local branch → graded', govRefRemoteRefusal('main', ['origin']) === null);
+// Nit (G6-4): U+2010, U+2011 and U+FF0D read as EMPTY like the other dashes.
+ok('G6-4 nit: U+2010 / U+2011 / U+FF0D placeholders are EMPTY', ['\u2010', '\u2011', '\uFF0D'].every((c) => statusIsDefault(c)), ['\u2010', '\u2011', '\uFF0D'].map((c) => statusIsDefault(c)).join());
 
 // ─── Step 4 BLOCKER-2 (Langston, 2026-09-30): pin the WRAPPER, not only writeStateAtomic ───
 // rename() installs a NEW inode; writeFileSync truncates the SAME one. So saveState replacing the file's inode is

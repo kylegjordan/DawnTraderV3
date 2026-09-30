@@ -75,8 +75,26 @@ function ensureFetched() {
 // (3) sets `_fetchedThisRun` (no second fetch) and `_resolvedRef`;
 // after a good fetch the sha is `rev-parse --verify GOV_REF^{commit}`, and a failure there THROWS out of
 // the tick (fail-closed: there is no ref to grade at; the heartbeat's dead-man then fires).
+// Pure (tested): the reason to refuse `ref`, or null. Refuse when its first path segment is a configured remote other
+// than `origin` — the resolver fetches origin only, so any other remote's tracking ref would be graded stale.
+export function govRefRemoteRefusal(ref, remotes) {
+  const slash = String(ref).indexOf('/');
+  const first = slash > 0 ? ref.slice(0, slash) : null;
+  if (!first || first === 'origin' || !remotes.includes(first)) return null;
+  return `GOV_REF ${JSON.stringify(ref)} names remote ${JSON.stringify(first)}; the checker fetches only origin — `
+    + 'refusing rather than grading a stale remote-tracking ref';
+}
 export function resolveGovRefSha() {
   if (_resolution) return _resolution;
+  // Step 4 G6-5 CONDITION 2 (Langston, 2026-09-30): this fetches `origin` only and then marks the process fetched, which
+  // also stops ensureFetched's remote-aware fetch. A GOV_REF on ANOTHER remote would therefore be graded at whatever
+  // stale sha that remote-tracking ref holds, with no warning (#449's shape). Silent-stale is the one outcome not
+  // allowed, so such a GOV_REF is REFUSED outright: the tick throws (fail-closed; the heartbeat's dead-man fires).
+  // Only a first segment that IS a configured remote counts — a local branch name that holds a slash is not a remote.
+  let remotes = [];
+  try { remotes = String(_git(['remote'], { encoding: 'utf8' })).split(/\s+/).filter(Boolean); } catch { remotes = []; }
+  const refusal = govRefRemoteRefusal(GOV_REF, remotes);
+  if (refusal) throw new Error(refusal);
   _fetchedThisRun = true;
   let fetchOk = true, fetchError = null;
   try { _git(['fetch', '--quiet', 'origin'], { timeout: 60000 }); }
@@ -361,7 +379,8 @@ export function planRowsByBatch(planText, extract = extractLeadingBatchId) {
 // matches /^queued\b/i. Empty = nothing left after markup is stripped and whitespace (NBSP included) and dash
 // characters (- ‒ – — ― −) are removed: the plan's placeholder for an empty cell. Any other text passes — no
 // terminal token (DONE, CLOSED, ✅) is ever looked for; the REPORT test is the real gate (R2).
-const PLAN_EMPTY_CELL = /^[\s\u2012-\u2015\u2212-]*$/;
+// Nit (Langston G6-4): U+2010, U+2011 and U+FF0D are dashes too — a placeholder typed with one must read as EMPTY.
+const PLAN_EMPTY_CELL = /^[\s\u2010-\u2015\u2212\uFF0D-]*$/;
 export function statusIsDefault(cell) {
   const d = deMark(cell);
   return PLAN_EMPTY_CELL.test(d) || /^queued\b/i.test(d);

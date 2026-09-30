@@ -467,7 +467,9 @@ export function decidePlanReadAlerts({ planError, listingEmpty, refSha, shadow }
         `No plan-row alert is opened or resolved until it reads again (FREEZE). A governance fix: correct the plan or PLAN_LINE.` });
   } else toResolveKeys.push(PLANLINE_UNREADABLE_KEY);
   if (listingEmpty) {
-    toOpen.push({ dedupeKey: PLANLINE_LISTING_EMPTY_KEY, severity: sev('warning'),
+    // Step 4 G6-1 CONDITION 1 (Langston): health_check, not governance — by ALERT_CATEGORIES' own definitions this is
+    // the checker's git read failing (system health), not a doc-set gap. The other plan-line keys stay governance.
+    toOpen.push({ dedupeKey: PLANLINE_LISTING_EMPTY_KEY, severity: sev('warning'), category: 'health_check',
       title: 'The plan-state check read an EMPTY Batch Completion listing — plan rows are not graded',
       body: `\`git ls-tree\` of "Claude Comms and Packages/Batch Completion/" at ${refSha} returned no files (the reader returns an empty list on ANY error). ` +
         `The directory is never truly empty, so this is the checker's git read failing, not a governance state. No plan-row alert is opened or resolved ` +
@@ -1251,5 +1253,7 @@ export function tick(nowMs = Date.now()) {
 // CLI entry (only when run directly on the box)
 if (import.meta.url === `file://${process.argv[1]}`) {
   const r = tick();
-  console.log(`[gov-checker] tick: opened=${r.opened} resolved=${r.resolved} untaggedCode=${r.untaggedCode}`);
+  // Step 4 G6 CONDITION 3 (Langston): the plan-line counts were returned and read by nobody — they are printed here, and
+  // the P61 flip carries the first live tick's line (with plan.liveness) before any plan-line alert is trusted.
+  console.log(`[gov-checker] tick: opened=${r.opened} resolved=${r.resolved} untaggedCode=${r.untaggedCode} planOpened=${r.planOpened} planResolved=${r.planResolved}`);
 }
