@@ -1,10 +1,11 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh; the filesystem only where named:
-// the P29 presence check reads this directory, and nothing else touches a file).
+// the P29 presence check reads this directory, and the P64 atomic-write tests use a temp directory).
 // Run: node scripts/governance-checker/poller.test.mjs
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody } from './poller.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic } from './poller.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows } from './checker.mjs';
 
@@ -807,6 +808,41 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
   const named = (body.match(/loaded-code \(([^)]*)\)/) || [])[1];
   ok('P29 the drift body names every listed file (derived from the array, not hard-coded)',
     named === DRIFT_LOADED_FILES.join('|'), String(named));
+}
+
+// ─── B-PLAN-CURRENCY-CHECK P64: saveState is atomic — temp file in the SAME directory, then rename ───
+{
+  const dir = mkdtempSync(join(tmpdir(), 'gov-state-'));
+  const target = join(dir, 'state.json');
+  const before = { openAlerts: { 'gov-code-drift': 'id-before' }, lastTick: 1 };
+  const after = { openAlerts: { 'gov-code-drift': 'id-after', 'gov-x': 'y'.repeat(5000) }, lastTick: 2 };
+
+  // Expected first (success): the target holds the COMPLETE new state and no temp file is left behind.
+  writeFileSync(target, JSON.stringify(before, null, 2));
+  writeStateAtomic(target, after);
+  ok('P64 success: the target holds the complete new state', JSON.stringify(JSON.parse(readFileSync(target, 'utf8'))) === JSON.stringify(after));
+  ok('P64 success: no temp file is left behind', readdirSync(dir).join() === 'state.json', readdirSync(dir).join());
+
+  // Expected first (a REAL failure between the write and the rename): the target is a non-empty
+  // DIRECTORY, so the write of the temp file succeeds and the OS refuses the rename (EISDIR on Linux,
+  // EPERM on Windows). Expected: the error PROPAGATES (nothing catches it, so the tick dies loudly); the
+  // target is untouched (its sentinel file intact — nothing torn reached it); and the complete new JSON
+  // sits in a temp file in the SAME directory as the target.
+  const dir2 = mkdtempSync(join(tmpdir(), 'gov-state-'));
+  const blocked = join(dir2, 'state.json');
+  mkdirSync(blocked);
+  writeFileSync(join(blocked, 'sentinel'), 'untouched');
+  let err = null;
+  try { writeStateAtomic(blocked, after); } catch (e) { err = e; }
+  ok('P64 induced rename failure: the error propagates (no catch)', err !== null && /EISDIR|EPERM|EEXIST|ENOTEMPTY|EACCES/.test(String(err.code)), String(err?.code));
+  ok('P64 induced rename failure: the target is untouched',
+    statSync(blocked).isDirectory() && readFileSync(join(blocked, 'sentinel'), 'utf8') === 'untouched');
+  const tmps = readdirSync(dir2).filter((f) => f !== 'state.json');
+  ok('P64 induced rename failure: the temp file is in the SAME directory as the target', tmps.length === 1 && tmps[0].startsWith('state.json'), tmps.join());
+  ok('P64 induced rename failure: the temp file holds the complete new state',
+    tmps.length === 1 && JSON.stringify(JSON.parse(readFileSync(join(dir2, tmps[0]), 'utf8'))) === JSON.stringify(after));
+  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir2, { recursive: true, force: true });
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);

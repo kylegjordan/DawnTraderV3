@@ -15,7 +15,7 @@
 //   Item4 — own systemd unit/timer, isolated from the dawntrader node event loop.
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -374,8 +374,24 @@ function runCli(cmd) {
     : execFileSync('bash', ['-lc', cmd], { encoding: 'utf8' });
 }
 
+// ⛔ NO catch-and-default here, deliberately (B-PLAN-CURRENCY-CHECK P64; Langston §10i). An unparseable
+// state file THROWS out of tick(), and a throw that kills the tick is FAIL-CLOSED and intended: the
+// tick grades nothing, writes no lastTick, and the SEPARATE heartbeat raises `governance-checker-silent`
+// after the dead-man window. Defaulting to an empty state would instead forget every open alert id and
+// the fetch-fail streak, and re-open alerts that are already open. What makes a torn file unlikely is
+// the atomic write below, not a catch here.
 function loadState() { return existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : { openAlerts: {}, lastTick: null }; }
-function saveState(s) { writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); }
+function saveState(s) { writeStateAtomic(STATE_FILE, s); }
+// P64 (§10e Q20; §10i): write the whole JSON to a temp file in the SAME directory as the target, then
+// rename() it over the target. A rename within one directory (one filesystem) replaces the target in a
+// single step, so a crash or a failure between the write and the rename leaves the previous complete
+// state in place, and a reader (this tick's next run, or the heartbeat) never sees a half-written file.
+// Nothing is caught: a failed write or rename throws out of the tick (fail-closed, as above).
+export function writeStateAtomic(path, s) {
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(s, null, 2));
+  renameSync(tmp, path);
+}
 
 // B-GOV-3 OBJ-2: SHADOW = LOG-ONLY. In shadow mode the sink writes the intended alert to a
 // local log and NEVER touches the §10.5 queue. Why at the SINK (the producer), not the §10.5
