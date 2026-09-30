@@ -179,3 +179,27 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 `REVIEWER r1: object (§0 + §A against the code) · which claims the code does not support, and where else a side reaches an xStock decision · 6 hits (a line cite; the booking wording; weekend pending + shadow still run; silent no-decision skips; a census that was not repo-wide; the shadow lane books to rtb_shadow_pairings) + the spread-as-estimate routes · every hit re-derived at the code, corrected · re-derived y`
 `REVIEWER r2: object (the corrected §0/§A/§C against the code) · were r1's points met, and what else is unsupported · 7 of 7 met; residual wording (the booking arms, 'no reason recorded', two uncited readers, the freeze does NOT skip the stop comparison) · re-derived at the code (tec-evaluator.ts:494, trailing-exit-controller.ts:1570, :1585), corrected · re-derived y`
 `LANGSTON Step 2 (2026-09-22T14:03:44Z): APPROVED for increment 1, conditional — BLOCKER-1 (symbol keys + concentration clause), CONDITION-2 (the union binds), CONDITION-3 (re-point the P2 fence), FINDING-4 (measure the shadow lane), FINDING-5 (row 0 #3's population), NIT-6 (the stale shadow comment); §D settled. All folded at r3, committed before any instrument code.`
+
+---
+
+## C2. INCREMENT 2 — X0: PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (Step 2 r1, 2026-09-30, CC-C)
+**change-class: sub_batch** (increment of `B-PRICE-SIDE-BY-JOB`, class `architecture`). **No decision moves ⇒ no epoch change.** Ships in the ≥ 2026-10-02T20:10Z window. Increment 1's window read is confirmed (progress report §9.6-§9.8).
+
+**PREVIOUSLY STATED vs NOW:** PREVIOUSLY STATED (P6, above): "sides become `number | null` … every consumer branches on `null`." NOW: the zero-defaulted sides have **no consumer at all**, so they are DELETED, not retyped. REASON: the census below.
+
+### C2.1 AUDIT — read at `46c9ba3a2`
+| # | finding | evidence |
+|---|---|---|
+| **E1** | the real lane's zero-defaulted sides are written and never read | `vts-runner.ts:3193-3194` (`bid: parseFloat(r.bid) \|\| 0`, `ask: …`) on each `xstockPriceMap` entry. Readers, census of the resolve function: the helper `priceDataMap.get` (`:3203-3211`) has ONE caller (`:3244`), which reads `.price` only (`:3245`); the pending look and the exit look read `rawQuote` (`:3277`, `:3370`); the crypto half of the helper returns `p.bid`/`p.ask` that nothing reads either. The other `priceDataMap` (`:5039`) is a different function's local over `priceCache.getBatch`. ⇒ **row 0 #3's hazard ("a SELL comparator on `bid = 0` fires every stop") cannot fire today: nothing compares against these fields.** Rule 18: dead fields, removed. |
+| **E2** | the shadow lane already carries only the undefaulted quote | `vts-runner.ts:4198-4220`: `{ price, rawQuote }`, sides through `parseQuoteNumber` (never a default). Nothing to change. |
+| **E3** | the undefaulted quote is already the age-carrying object | `rawQuote: { last, bid, ask, atMs }` via `parseQuoteNumber` (`vts-xs-instrument.ts`), `atMs` = `captured_at`; `null` for a missing or non-finite side. Increment 3's guard reads THIS object. |
+| **E4** | Langston's §9.8 correction 1 — a per-symbol roll-up is cut by its emitting line's stamp | a `VTS_XS_SYM` line is emitted ~5 s after the hour it describes; the window extract dropped the last `after` hour (vts 8,638, shadow 6,825 looks). No decision impact. The extract lived only in CC-C's scratchpad. |
+
+### C2.2 PLAN
+| # | item | from |
+|---|---|---|
+| **P6 r2** | delete the two zero-defaulted fields from the real lane's map entries and the unused `bid?`/`ask?` from `priceDataMap.get`'s return type (crypto half included); correct the stale comment at `:3165-3166` ("increment 2 (X0) replaces them"); a fence asserts the xStock read has no `\|\| 0` default on a side and the entry carries no `bid`/`ask`, with a positive control that `rawQuote` is carried on both lanes | E1-E3 |
+| **P6b** | commit the window extract as `scripts/analysis/p4c-window-extract.py`, cutting `VTS_XS_SYM` lines on their `hour=` field (inside the window ⇔ the hour it DESCRIBES starts before the end) and `VTS_XS_TOUCH` lines on their own stamp; re-run on the closed window as its control: `after` SYM looks must now equal `after` TOUCH looks on both lanes | E4 |
+
+**Judgement call:** deleting rather than retyping the dead fields — P6's wording assumed consumers existed.
+**Plain language:** a missing price side was being filled in as zero on the main VTS lane. Nothing ever read that zero, so it could not cause a false stop. This piece deletes it, so nothing can start reading it later. The pricing read's script also goes into the repo, fixed so the last hour of each day is counted.
