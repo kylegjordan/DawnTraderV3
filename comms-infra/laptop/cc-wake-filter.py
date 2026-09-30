@@ -1,12 +1,27 @@
 #!/usr/bin/env python3
-"""CC wake-channel filter — consumes a multi-file `tail -F` stream from Helsinki and
-emits one compact line per wake-worthy event. Each emitted line wakes the CC session
-(Monitor tool event). Sources:
-  /var/log/cc-bridge-inbox.jsonl       -> Kyle direct messages + voice notes + Langston wake-tagged posts
-  /var/log/langston-alert-invokes.log  -> Langston finished handling a system alert ("invoke DONE")
-  /var/log/cc-wake.log                 -> dedicated wake channel: ANY appended line wakes CC
+"""CC wake-channel filter — consumes a header-framed stream from Helsinki and emits one compact
+line per wake-worthy event. Sources:
+  /var/log/cc-discord-inbox.jsonl      -> Kyle (text + voice), Langston, the other sessions, alerts
+  /var/log/cc-wake.log                 -> dedicated wake channel: an appended line naming you wakes you
+
+TWO MODES (B-TOKEN-BURN-CUT, #1127):
+  cc-wake-filter.py <ALIAS>                  streaming: every wake line is printed and the process
+                                             runs on (the old Monitor form; the behavioural test
+                                             drives this mode).
+  cc-wake-filter.py <ALIAS> --once           event-only: reads `cc-wake-follow.py` output, prints the
+                                             wake line(s) of ONE burst, saves where it stopped and
+                                             EXITS 0 — so a background task ends, and its one
+                                             completion notification is the wake. EOF (ssh dropped)
+                                             saves and exits 3; the arm loop reconnects.
+  cc-wake-filter.py <ALIAS> --positions      prints the follower's resume arguments from the state.
+  --state PATH                               default C:/Users/kyleg/.claude/cc-wake-state/<ALIAS>.json
+                                             (keyed per session and never in /tmp, which all four
+                                             sessions share — #979).
+The `langston-alert-invokes.log` source is GONE: it has had no writer since the 2026-07-02 Discord
+cutover (0 bytes, mtime 2026-06-28); `DELETED_COMPONENTS_LOG.md`, B-TOKEN-BURN-CUT.
 """
-import sys, json, re
+import sys, json, re, os, time
+from datetime import datetime, timezone
 
 # Windows: pipe stdout defaults to cp1252 which cannot encode arrows/emoji in
 # message text -> print raises UnicodeEncodeError -> event silently lost.
@@ -95,7 +110,10 @@ _HEARTBEAT_BAD = re.compile(
     # saying "quiet but not stale" or "borderline stale". It was matching the WORD INSIDE A
     # NEGATION, which is not reading health at all. The token must be a verdict, not a mention.
     r"|inbox-log[^|]*(?<!not )(?<!borderline )\bSTALE\b"    # the log-age field reporting stale
-    r"|\bbridge[s]?\b[^|]{0,40}\b(?:down|dead|failed|inactive)\b",
+    r"|\bbridge[s]?\b[^|]{0,40}\b(?:down|dead|failed|inactive)\b"
+    # B-TOKEN-BURN-CUT: a heartbeat reporting a DEAD watcher or an unanswered control is a problem
+    # and must still be delivered; "not armed" and "all alive" are not verdicts of failure.
+    r"|\bwatchers:\s*[^|]*\bDEAD\b|\bcontrol:\s*NOT answered\b",
     re.I)
 
 def is_allclear_heartbeat(sender, text):
@@ -280,27 +298,154 @@ try:
 except Exception:
     pass  # fail-open: a filter that cannot set its encoding must still deliver wakes
 
+# ── B-TOKEN-BURN-CUT (#1127): the event-only mode ─────────────────────────────────────────────
+# The app now ends every Monitor within 30 minutes (CC 2.1.271) and each ending woke the session
+# with nothing to say. In --once mode this filter is the tail of a BACKGROUND TASK that ends on its
+# first wake: one completion notification per burst, none while idle. Routing below is unchanged.
+SOURCES = tuple(os.environ.get("CC_WAKE_SOURCES", "/var/log/cc-discord-inbox.jsonl /var/log/cc-wake.log").split())  # env: tests only
+STALE_S = 12 * 3600      # a state older than this is discarded rather than replaying days of chatter
+_flags = sys.argv[2:]
+ONCE = "--once" in _flags
+POSITIONS = "--positions" in _flags
+STATE = (_flags[_flags.index("--state") + 1] if "--state" in _flags
+         else os.path.join(os.path.expanduser("~"), ".claude", "cc-wake-state", f"{ALIAS}.json"))
+
+
+def _utc(ts=None):
+    return datetime.fromtimestamp(ts if ts is not None else time.time(), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def load_state():
+    try:
+        with open(STATE, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def save_state(st):
+    """Atomic: a reader never sees half a file, and a kill mid-write leaves the old state."""
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    st["alias"] = ALIAS
+    st["saved_at"] = _utc()
+    tmp = STATE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(st, f)
+    os.replace(tmp, STATE)
+
+
+if POSITIONS:
+    st = load_state()
+    pos = st.get("pos") or {}
+    saved = st.get("saved_epoch")
+    if pos and saved is not None and time.time() - saved > STALE_S:
+        # (c)/C10: say so ONCE, with the UTC of the position being thrown away — the lower bound a
+        # session needs to sweep the inbox by hand. The --once run prints it and ends.
+        st["stale_from"] = st.get("saved_at") or _utc(saved)
+        st["pos"] = {}
+        save_state(st)
+        pos = {}
+    print(" ".join(f"{p}:{pos[p][0]}:{pos[p][1]}" if p in pos else f"{p}:end" for p in SOURCES))
+    sys.exit(0)
+
+
+class _Tap:
+    """Counts the wake lines this run prints, and tags each with where it came from (C10) so a
+    duplicate delivered after a kill is recognisable. print() writes the whole string in one call,
+    so a multi-line body is tagged once, at its end."""
+    def __init__(self, real):
+        self.real, self.delivered, self.tag = real, 0, ""
+
+    def write(self, x):
+        if x.startswith("WAKE["):
+            x = x + self.tag
+            self.delivered += 1
+        return self.real.write(x)
+
+    def flush(self):
+        return self.real.flush()
+
+
+if ONCE:
+    TAP = _Tap(sys.stdout)
+    sys.stdout = TAP
+    STATE_NOW = load_state()
+    POS_NOW = dict(STATE_NOW.get("pos") or {})
+
+    def _checkpoint():
+        STATE_NOW["pos"] = POS_NOW
+        STATE_NOW["saved_epoch"] = time.time()
+        save_state(STATE_NOW)
+
+    _stale = STATE_NOW.pop("stale_from", None)
+    if _stale:
+        TAP.tag = ""
+        print(f"WAKE[WATCHER->{ALIAS}]: the watcher resumed after more than {STALE_S // 3600} h away; "
+              f"anything posted since {_stale} was NOT delivered. Sweep the Discord inbox from that "
+              f"time.", flush=True)
+        _checkpoint()
+
+
+def _commit(pending):
+    if pending:
+        POS_NOW[pending[0]] = [pending[1], pending[2]]
+
+
 cur = ""
+pending = None     # (path, inode, end-offset) of the line about to arrive; committed once processed
 for raw in sys.stdin:
     line = raw.rstrip("\n")
     if not line.strip():
+        continue
+    if ONCE and line.startswith("#@"):
+        _commit(pending)
+        pending = None
+        parts = line.split()
+        if parts[0] == "#@POS" and len(parts) >= 4:
+            _p, _i, _o = line.split(" ", 1)[1].rsplit(" ", 2)     # a path may hold a space
+            pending = (_p, int(_i), int(_o))
+            TAP.tag = ""
+        elif parts[0] == "#@AT" and len(parts) >= 4:
+            _p, _i, _o = line.split(" ", 1)[1].rsplit(" ", 2)
+            POS_NOW[_p] = [int(_i), int(_o)]        # a start point needs no line to be processed first
+        elif parts[0] == "#@KEEPALIVE":
+            _checkpoint()
+            try:
+                with open(STATE + ".alive", "w", encoding="utf-8") as f:
+                    f.write(_utc() + "\n")
+            except OSError:
+                pass
+        elif parts[0] == "#@CAUGHTUP" and TAP.delivered:
+            _checkpoint()          # print-then-save (judgement call (a)): a kill between the two
+            sys.exit(0)            # re-delivers — a duplicate wake, never a lost one
         continue
     m = re.match(r"^==> (.+) <==$", line.strip())
     if m:
         cur = m.group(1)
         continue
+    if ONCE and pending:
+        TAP.tag = f"  [src={os.path.basename(pending[0])}@{pending[2]}"
+        if "cc-discord-inbox" in cur:
+            try:
+                _mid = json.loads(line).get("message_id")
+                if _mid:
+                    TAP.tag += f" id={_mid}"
+            except Exception:
+                pass
+        TAP.tag += "]"
     try:
         if "cc-wake.log" in cur:
+            if line.strip().startswith("WATCHER-CONTROL"):
+                # The daily liveness control (P4): answered by a FILE, never by a wake, so proving
+                # the watcher is alive costs no turn. Another session's control line is ignored.
+                cparts = line.split()
+                if ONCE and len(cparts) >= 3 and cparts[1].upper() == ALIAS:
+                    with open(STATE + ".control", "w", encoding="utf-8") as f:
+                        f.write(f"{cparts[2]} {_utc()}\n")
+                continue
             deliver, body = addressed_to_me(line)
             if deliver:
                 print(f"WAKE[CHANNEL->{ALIAS}]: {body[:400]}", flush=True)
-        elif "langston-alert-invokes" in cur:
-            # B-ALERT-PROTOCOL (#340): alert wakes are now OWNER-ROUTED — only the named
-            # owner wakes, via the [[ALERT .. owner=X ..]] marker in Langston's Discord triage
-            # (handled in the langston_outbound branch below). The old broadcast "invoke DONE
-            # -> BOTH CC sessions, every alert" wake is SUPERSEDED + was flooding both sessions
-            # on a backlog clear (Kyle caught it 2026-06-24). Removed.
-            pass
         elif "cc-bridge-inbox" in cur or "cc-discord-inbox" in cur:
             try:
                 d = json.loads(line)
@@ -507,3 +652,10 @@ for raw in sys.stdin:
     except Exception:
         # never die on a malformed line
         continue
+
+if ONCE:
+    # EOF: the ssh leg dropped (or a harness closed stdin). Save what was processed; exit 0 only
+    # if this run delivered, so the arm loop ends — otherwise 3, and the arm loop reconnects.
+    _commit(pending)
+    _checkpoint()
+    sys.exit(0 if TAP.delivered else 3)
