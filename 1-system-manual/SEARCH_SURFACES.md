@@ -74,7 +74,7 @@
 ⛔⛔ **NEVER `tail -N` A LOG AND CALL THE RESULT THE POPULATION.** ★ **MEASURED (`#759`): the mandatory §10.5 alert check is written as `tail -50` against a file that was 736 rows — it saw ZERO of the six live alerts.** **The check ran, returned clean, and was blind.** ⇒ **parse the whole file and filter on the FIELD (`state`, `acknowledged_at`), never on position.**
 
 > ⛔⛔ **FINDING, 2026-08-30 — A DOCUMENTED WAKE SOURCE HAS BEEN DEAD FOR 63 DAYS.**
-> **`/var/log/langston-alert-invokes.log` is 0 bytes, last written 2026-06-28.** **`CLAUDE.md` §6.9 lists it as wake source 2 of 3, and the `MEMORY.md` §4.5 arm command tails it in every session.**
+> **`/var/log/langston-alert-invokes.log` is 0 bytes, last written 2026-06-28.** **`CLAUDE.md` §6.9 lists it as wake source 2 of 3, and the `MEMORY.md` §4.5 arm command tails it in every session.** ✅ *Both removed 2026-09-30 by `B-TOKEN-BURN-CUT` (`#1127`, discharging `#1054`'s documentation leg).*
 > **CONFIRMED, not inferred: there is NO live writer.** The handler `langston-alert-handler.sh` **does not exist** — only two dated backups predating the 2026-06-01 model switches. The only live references are `logrotate` (faithfully rotating an empty file) and a memory-index record. **POSITIVE CONTROL: a genuinely live log, `cc-discord-inbox.jsonl`, has findable writers in the bridge scripts.**
 > ✅ **IT IS NOT BREAKING ALERTS — the Discord path carries `langston_alert_inbound` × 1,151 and is alive.** ⇒ **the log is VESTIGIAL, superseded by Discord at the `#333` cutover.**
 > ⚠️ **BUT EVERY SESSION TAILS A DEAD FILE AND WOULD READ ITS SILENCE AS "NO ALERTS" — the absence-as-evidence failure, baked into our own architecture document.**

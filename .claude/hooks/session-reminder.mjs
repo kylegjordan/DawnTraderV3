@@ -10,7 +10,7 @@ process.stdout.write(
   '   origin/migration/aws-supabase). An asserted ABSENCE needs presence-evidence — never infer\n' +
   '   "absent" from an empty or failed read. A failed read must produce a REFUSAL, not a recollection.\n' +
   '2. WAKE WATCHER: if no WAKE events have arrived recently AND a compaction/resume just happened,\n' +
-  '   re-arm the Monitor per MEMORY 4.5 (judge liveness by recent WAKE events; do NOT blind-re-arm —\n' +
-  '   a duplicate Monitor double-wakes). Then sweep the Discord inbox for anything missed.\n'
+  '   re-arm the watcher per MEMORY 4.5 - a background task, NOT a Monitor (judge liveness by its file\n' +
+  '   ~/.claude/cc-wake-state/<ALIAS>.json.alive; do NOT blind-re-arm - two watchers deliver every wake twice).\n'
 );
 process.exit(0);
