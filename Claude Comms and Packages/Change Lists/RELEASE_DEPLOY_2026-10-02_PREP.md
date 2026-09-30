@@ -75,6 +75,8 @@ r1 said "re-deploy `bc199185e`, then run the rollbacks in reverse." That puts OL
 **Nit (Langston):** A carries one 8a-P4c commit, `6d1f46daa`, whose only runtime-path file is `server/tests/unit/b65-tec-parity.test.ts` (behaviour-inert). A `b65-tec-parity` failure in A's CI run belongs to 8a-P4c (ANALYST Claude), not to an A batch.
 **Behaviour census (Langston):** 51 commits touch `server/client/shared/drizzle` since the hold. Every batch among them is listed here except `B-BALANCE-TRUTH` (`23f81527a`), which is a docblock strike in `storage.ts`, so this table is complete for behaviour.
 
+**⛔ THE `/api/audit` EDGE BLOCK — IN PLACE THROUGH A, OFF ONLY AFTER B (consensus 2026-09-30 ~14:05Z: Langston, Infra Claude and NEW Claude; Kyle delegated the decision; Coltrane did not answer).** `#1022`'s anonymous file-read was proven live by Langston (HTTP 200 from outside the base). Deploy A (`ea456ad40`) does **not** contain the code fix. So the hole is closed at nginx: `location ~* ^/api/audit { return 404; }`, a prefix block (Langston's mechanism: immune to the `%2F` encoding question), next to the chaplet block. Infra installs it and proves it through the `sslip.io` host, and Langston clears the literal lines first. **Deploy A must not start while that block is absent.** It comes off only after B's Step 7 shows a traversal name returning 400 and a real download returning 200. Governance: a temporary edge denylist, bounded to B, with the structural fix already approved (Langston, acceptable under NO-PATCHES on those terms).
+
 **NOT delivered by either deploy:** the `comms-infra/` changes in the range. `dt-deploy` does not install them (`#1004`); Infra Claude installs its own.
 
 ## 6. Order on 10-02
