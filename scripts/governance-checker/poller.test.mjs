@@ -1,7 +1,7 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow } from './poller.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS } from './config.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts } from './poller.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
@@ -563,6 +563,185 @@ ok('#637 a plausible-but-invalid token is rejected to the sentinel (a lastTick i
   const dflt = decideOrphanSweep(['gov-ledgerrow:OLD-FIXED:task_lists'], new Set(), () => true);
   ok('P1 orphan sweep: no ledger verifier injected → KEEP, never a silent resolve (the doc-gap verifier does not leak across)',
     dflt.keep.includes('gov-ledgerrow:OLD-FIXED:task_lists'));
+}
+
+// ── B-PLAN-CURRENCY-CHECK OBJ-10 (P21-P25): the exceptions-ledger parser behind EXCEPTIONS_V2_ENABLED ──
+const exRow = (bid, type, value, by, reason = 'reason') => `| 2026-09-01T00:00:00Z | ${bid} | ${type} | ${value} | ${by} | ${reason} |`;
+const exLedger = (...rows) => ['# ledger', '', '| timestamp (UTC) | batch-id | input-type | value | confirmed_by | reason |', '|---|---|---|---|---|---|', ...rows].join('\n');
+const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
+{
+  // P21 + P22: one row per confirmer form at the ref (HY-A1), and each retirement idiom (HY-A6).
+  const raw = exLedger(
+    exRow('B-L-EXACT', 'na-skip', 'system_manual', 'langston'),
+    exRow('B-L-PAREN', 'na-skip', 'scope', 'langston (routed alert `15c6c33e`, 2026-09-29T14:43Z)'),
+    exRow('B-CCC-ALERT', 'open', 'open since 2026-09-03T20:38:36Z (re-justified)', 'cc-c (alert `94c35699`, 2026-09-29)'),
+    exRow('B-CCC-EXACT', 'open', 'open since 2026-08-21T00:00:00Z', 'cc-c'),
+    exRow('B-CCC-NA', 'na-skip', 'sim', 'cc-c (alert `abc12345`)'),
+    exRow('B-HOLD', 'deploy-hold', 'staging held at `bc199185e`', 'cc-b (Langston routed drift rung `d9caf6f5`)'),
+    exRow('B-PENDING', 'open', 'open since 2026-06-25', 'pending'),
+    exRow('B-PLUS', 'na-skip', 'pre_audit', 'langston+cc-a'),
+    exRow('B-LK', 'class-override', 'declared:hotfix', 'langston+kyle'),
+    exRow('B-CASE', 'na-skip', 'sim', 'Langston'),
+    exRow('B-WITHDRAWN', 'na-skip', 'system_manual', '⛔ **WITHDRAWN 2026-09-01 — THIS ROW SHOULD NOT EXIST.**'),
+    exRow('B-COMMA', 'na-skip', 'scope', 'langston,'),
+    exRow('B-EMPTY-BY', 'na-skip', 'scope', ''),
+    exRow('B-PLUS-BOGUS', 'na-skip', 'scope', 'langston+someone'),
+    exRow('B-RET-OPEN', 'open-retired', 'RETIRED 2026-06-26', 'pending'),
+    exRow('B-RET-NA', 'na-skip-retired', 'system_manual', '⛔ a withdrawn confirmer'),
+    exRow('B-RET-CO', 'class-override-retired', 'declared:nonsense', 'langston'),
+    exRow('B-CLOSED', 'closed', 'open since 2026-08-21T00:00:00Z', 'cc-c'),
+    exRow('B-CLOSED-BOLD', '**CLOSED 2026-08-26**', 'closed 2026-08-26T18:45:00Z', 'cc-c'),
+    exRow('B-UMB-NS', 'umbrella-namespace', 'owns P19-B6.*', 'langston'),
+    exRow('B-UMB-DONE', 'umbrella-done', 'done', 'langston'),
+    exRow('B-TYPO', 'na_skip', 'sim', 'langston'),
+    exRow('B-CAPS', 'Open', 'open since 2026-09-01T00:00:00Z', 'langston'),
+    // Q31: retirement is IN-PLACE only — an APPENDED open-retired row beneath a live open row retires nothing (#654).
+    exRow('B-APPENDED', 'open', 'open since 2026-07-30T00:00:00Z', 'langston'),
+    exRow('B-APPENDED', 'open-retired', 'open since 2026-07-30T00:00:00Z', 'langston'),
+    '<!--',
+    exRow('B-IN-COMMENT', 'open', 'open since 2026-01-01T00:00:00Z', 'langston', 'a 7-cell line inside a comment'),
+    '-->',
+  );
+  const r = parseExceptions(raw);
+  ok('EX P21: header row and separator are neither honoured nor malformed',
+    !r.malformed.some((m) => m.batchId === 'batch-id' || /^-+$/.test(m.batchId)));
+  ok('EX P21: a 7-cell line inside <!-- … --> is skipped — not honoured, not malformed',
+    !r.open.has('B-IN-COMMENT') && malFor(r, 'B-IN-COMMENT').length === 0);
+  ok('EX P22: `langston` exact → counts', r.naConfirmed.has('B-L-EXACT:system_manual'));
+  ok('EX P22: `langston (routed …)` → counts', r.naConfirmed.has('B-L-PAREN:scope'));
+  ok('EX P22: `cc-c (alert …)` on open → counts, with its open-since date',
+    r.open.has('B-CCC-ALERT') && r.openSince.get('B-CCC-ALERT') === Date.parse('2026-09-03T20:38:36Z'));
+  ok('EX P22: `cc-c` exact on open → counts', r.open.has('B-CCC-EXACT'));
+  ok('EX P22: `cc-c (alert …)` on na-skip → NOT permitted, flagged',
+    !r.naConfirmed.has('B-CCC-NA:sim') && malFor(r, 'B-CCC-NA').length === 1 && /not permitted for na-skip/.test(malFor(r, 'B-CCC-NA')[0].reason));
+  ok('EX P22: `pending` → unconfirmed and SILENT', !r.open.has('B-PENDING') && malFor(r, 'B-PENDING').length === 0);
+  ok('EX P22: `langston+cc-a` on na-skip → counts', r.naConfirmed.has('B-PLUS:pre_audit'));
+  ok('EX P22: `langston+kyle` → counts', r.classOverride.get('B-LK') === 'hotfix');
+  ok('EX P22: `Langston` (case) → counts', r.naConfirmed.has('B-CASE:sim'));
+  ok('EX P22: the ⛔ WITHDRAWN cell → unconfirmed AND flagged',
+    !r.naConfirmed.has('B-WITHDRAWN:system_manual') && malFor(r, 'B-WITHDRAWN').length === 1);
+  ok('EX P22: `langston,` → unconfirmed AND flagged', !r.naConfirmed.has('B-COMMA:scope') && malFor(r, 'B-COMMA').length === 1);
+  ok('EX P22: `langston+<non-roster>` → EVERY part must be a roster token: unconfirmed AND flagged',
+    !r.naConfirmed.has('B-PLUS-BOGUS:scope') && malFor(r, 'B-PLUS-BOGUS').length === 1 && /is not langston/.test(malFor(r, 'B-PLUS-BOGUS')[0].reason));
+  ok('EX P22: an empty confirmer cell → unconfirmed AND flagged', !r.naConfirmed.has('B-EMPTY-BY:scope') && malFor(r, 'B-EMPTY-BY').length === 1);
+  ok('EX P23: *-retired rows are skipped whole — not honoured, not flagged, confirmer included',
+    ['B-RET-OPEN', 'B-RET-NA', 'B-RET-CO'].every((b) => malFor(r, b).length === 0) &&
+    !r.open.has('B-RET-OPEN') && !r.naConfirmed.has('B-RET-NA:system_manual') && !r.classOverride.has('B-RET-CO'));
+  ok('EX P23: unknown type `closed` → flagged, not honoured',
+    !r.open.has('B-CLOSED') && malFor(r, 'B-CLOSED').length === 1 && malFor(r, 'B-CLOSED')[0].typeSlug === 'closed');
+  ok('EX P23: `**CLOSED 2026-08-26**` → flagged with a SLUGGED type token',
+    malFor(r, 'B-CLOSED-BOLD').length === 1 && malFor(r, 'B-CLOSED-BOLD')[0].typeSlug === 'closed-2026-08-26');
+  ok('EX P23 (R3-Q11 (a)): deploy-hold → neither honoured nor flagged',
+    !r.open.has('B-HOLD') && malFor(r, 'B-HOLD').length === 0);
+  ok('EX P23 (R1-Q8): umbrella-namespace and umbrella-done → FLAGGED "not implemented — B-UMBRELLA-OPEN-STATE"',
+    ['B-UMB-NS', 'B-UMB-DONE'].every((b) => malFor(r, b).length === 1 && malFor(r, b)[0].reason === UMBRELLA_NOT_IMPLEMENTED));
+  ok('EX P23: near-miss types (`na_skip`, `Open`) → flagged, never sniffed into a known type',
+    malFor(r, 'B-TYPO').length === 1 && malFor(r, 'B-CAPS').length === 1 && !r.naConfirmed.has('B-TYPO:sim') && !r.open.has('B-CAPS'));
+  ok('EX Q31: an APPENDED open-retired row retires nothing — the open row still counts', r.open.has('B-APPENDED'));
+  ok('EX P21: every malformed entry carries its 1-based line number',
+    r.malformed.every((m) => Number.isInteger(m.lineNo) && raw.split('\n')[m.lineNo - 1].includes(`| ${m.batchId} |`)));
+
+  // FLAG OFF = today's exact rule: pinned, so the push is inert to grading while EXCEPTIONS_V2_ENABLED is false.
+  const L = parseExceptionsLegacy(raw);
+  ok('EX legacy: returns today\'s four outputs and NO malformed list', !('malformed' in L));
+  ok('EX legacy: today counts the WITHDRAWN cell and `cc-c` on na-skip (any non-pending confirmer)',
+    L.naConfirmed.has('B-WITHDRAWN:system_manual') && L.naConfirmed.has('B-CCC-NA:sim') && L.naConfirmed.has('B-COMMA:scope'));
+  ok('EX legacy: today honours the 7-cell line inside the comment (the R2-HY-4 hole)', L.open.has('B-IN-COMMENT'));
+  ok('EX legacy: today ignores `closed`, retired and umbrella rows silently',
+    !L.open.has('B-CLOSED') && !L.open.has('B-RET-OPEN') && !L.open.has('B-UMB-NS'));
+}
+{
+  // P24: the strict class-override shape. Every declared(+optional heuristic) shape keeps today's class.
+  const shapes = [];
+  for (const d of VALID_CLASSES) { shapes.push(`declared:${d}`); for (const h of VALID_CLASSES) shapes.push(`declared:${d} heuristic:${h}`); }
+  const rows = shapes.map((v, i) => exRow(`B-CO-${i}`, 'class-override', v, 'langston'));
+  const good = parseExceptions(exLedger(...rows)), goodL = parseExceptionsLegacy(exLedger(...rows));
+  ok(`EX P24: all ${shapes.length} well-formed values accepted with TODAY's class, none flagged`,
+    good.malformed.length === 0 && shapes.every((_, i) => good.classOverride.get(`B-CO-${i}`) === goodL.classOverride.get(`B-CO-${i}`) && good.classOverride.has(`B-CO-${i}`)));
+  const bad = {
+    'B-RECLASS': 'declared:non_architecture reclassified:architecture',
+    'B-FOO': 'declared:foo',
+    'B-BADHEUR': 'declared:hotfix heuristic:bar',
+    'B-TRAIL': 'declared:hotfix heuristic:architecture extra',
+    'B-PREFIX': 'note declared:hotfix',
+  };
+  const b = parseExceptions(exLedger(...Object.entries(bad).map(([bid, v]) => exRow(bid, 'class-override', v, 'langston'))));
+  ok('EX P24: each malformed value is IGNORED and FLAGGED — never honoured by a first match',
+    Object.keys(bad).every((bid) => !b.classOverride.has(bid) && malFor(b, bid).length === 1 && malFor(b, bid)[0].typeSlug === 'class-override'));
+  const bL = parseExceptionsLegacy(exLedger(exRow('B-RECLASS', 'class-override', bad['B-RECLASS'], 'langston')));
+  ok('EX P24: control — today\'s first match DOES honour the reclassified value (the defect this closes)',
+    bL.classOverride.get('B-RECLASS') === 'non_architecture');
+  ok('EX P24: a pending class-override with a bad value stays silent (unconfirmed first)',
+    parseExceptions(exLedger(exRow('B-PEND-CO', 'class-override', 'declared:foo', 'pending'))).malformed.length === 0);
+}
+{
+  // P21 (round 2): the rewritten grammar comment, verbatim from GOVERNANCE_EXCEPTIONS.md → 0 rows, 0 malformed,
+  // under BOTH rules (the legacy rule reads a 7-cell line as a row, so the comment must hold no `|`).
+  const grammar = [
+    '<!--',
+    'GRAMMAR (B-PLAN-CURRENCY-CHECK OBJ-10, P21-P26; ruled by Langston 2026-09-30, scope §10i). Enforced by parseExceptions in scripts/governance-checker/poller.mjs from the one-line flip of EXCEPTIONS_V2_ENABLED in config.mjs; until that flip the checker applies the legacy rule (exact type match, any non-pending confirmer counts, the first declared:<class> match wins).',
+    'input-type, exactly one of:',
+    '  honoured: open, na-skip, class-override',
+    '  retired (skipped whole, confirmer included): open-retired, na-skip-retired, class-override-retired',
+    '  record-only: deploy-hold. No code reads it; the checker neither honours nor flags it. A deploy-hold row does NOT suspend the governance deadline; only an open row does.',
+    '  NOT IMPLEMENTED, flagged: umbrella-namespace, umbrella-done (the build is B-UMBRELLA-OPEN-STATE, CC-B)',
+    '  anything else is malformed: the row is ignored and raises gov-exceptions-malformed at warning.',
+    'confirmed_by: the LEADING word, lowercased, split on +; every part one of langston, kyle, cc-a, cc-b, cc-c, cc-infra. na-skip and class-override need langston or kyle among the parts; open accepts any of the six. pending = unconfirmed and silent. Anything else = unconfirmed and flagged.',
+    'value: na-skip = the doc key (or a ledger-row key such as task_lists); open = "open since <ISO>"; class-override = exactly "declared:<class>" or "declared:<class> heuristic:<class>", each class one of architecture, non_architecture, sub_batch, hotfix. Any other class-override value is ignored and flagged.',
+    'EDIT RULE: append-only, one row per declaration, with exactly two permitted in-place edits.',
+    '  (i) RETIREMENT is a type-cell edit: open to open-retired, na-skip to na-skip-retired, class-override to class-override-retired. An APPENDED retired row retires nothing (#654; alerts 5f64d950, 4e9d0ded, a1dc9d48, 9e08f8d8).',
+    '  (ii) a CORRECTION ruled by Langston to a value or reason cell, with the ruling and its date appended to the reason cell.',
+    'No line inside this comment may contain the pipe character: a line with 7 or more pipe-separated cells is read as a ledger row by the legacy rule.',
+    '-->',
+  ].join('\n');
+  const g = parseExceptions(grammar), gL = parseExceptionsLegacy(grammar);
+  const empty = (e) => e.open.size === 0 && e.naConfirmed.size === 0 && e.classOverride.size === 0;
+  ok('EX P21: the rewritten grammar comment yields 0 rows and 0 malformed (new rule)', empty(g) && g.malformed.length === 0);
+  ok('EX P21: … and 0 rows under the legacy rule too', empty(gL));
+  const unterminated = parseExceptions(exLedger('<!--', exRow('B-SWALLOWED', 'open', 'open since 2026-09-01T00:00:00Z', 'langston')));
+  ok('EX P21: an UNTERMINATED <!-- is surfaced as malformed, never swallowed silently',
+    !unterminated.open.has('B-SWALLOWED') && unterminated.malformed.length === 1 && unterminated.malformed[0].batchId === '_ledger');
+}
+{
+  // P25 (Q30): malformed rows → gov-exceptions-malformed:<batchId>:<type-slug> at warning; the tick resolves
+  // every open key of the prefix that no longer parses malformed.
+  const r = parseExceptions(exLedger(
+    exRow('B-CLOSED-BOLD', '**CLOSED 2026-08-26**', 'closed', 'cc-c'),
+    exRow('B-WD', 'na-skip', 'system_manual', '⛔ **WITHDRAWN 2026-09-01 — THIS ROW SHOULD NOT EXIST.**'),
+    exRow('B-WD', 'na-skip', 'sim', 'langston,'),
+    exRow('B-LONG', 'x'.repeat(200) + ' ' + '*'.repeat(10), 'v', 'langston'),
+  ));
+  const d = decideMalformedAlerts(r.malformed, [], 'abc1234def');
+  const keys = d.toOpen.map((a) => a.dedupeKey);
+  ok('EX P25: a malformed row opens gov-exceptions-malformed at warning',
+    keys.includes(`${EXCEPTIONS_MALFORMED_PREFIX}B-CLOSED-BOLD:closed-2026-08-26`) && d.toOpen.every((a) => a.severity === 'warning'));
+  ok('EX P25: two malformed rows of one batch+type share ONE key, and the body names both lines',
+    keys.filter((k) => k === `${EXCEPTIONS_MALFORMED_PREFIX}B-WD:na-skip`).length === 1 &&
+    (d.toOpen.find((a) => a.dedupeKey.endsWith('B-WD:na-skip')).body.match(/line \d+/g) || []).length === 2);
+  ok('EX P25: the key\'s type token is slugged and capped — never the raw cell',
+    keys.every((k) => /^gov-exceptions-malformed:[A-Za-z0-9._-]+:[a-z0-9-]+$/.test(k)) &&
+    keys.every((k) => k.split(':')[2].length <= EXCEPTIONS_MALFORMED_TYPE_CAP));
+  ok('EX P25: neither title nor body echoes a raw cell',
+    d.toOpen.every((a) => !/WITHDRAWN|⛔|\*\*CLOSED|x{40}/.test(a.title + a.body)));
+  ok('EX P25: the body names the graded sha, so a reader can re-derive it', d.toOpen.every((a) => a.body.includes('abc1234def')));
+  const stillBad = `${EXCEPTIONS_MALFORMED_PREFIX}B-CLOSED-BOLD:closed-2026-08-26`;
+  const fixed = `${EXCEPTIONS_MALFORMED_PREFIX}B-FIXED:closed`;
+  const openKeys = [stillBad, fixed, 'gov-docgap:B-FIXED:sim', 'gov-exceptions-unreadable', 'gov-ledgerrow:B-X:task_lists'];
+  const d2 = decideMalformedAlerts(r.malformed, openKeys, 'abc1234def');
+  ok('EX P25: fixing the row resolves its key; a still-malformed key is not resolved',
+    d2.toResolveKeys.includes(fixed) && !d2.toResolveKeys.includes(stillBad));
+  ok('EX P25: only keys of its own prefix are ever resolved (gov-docgap / gov-ledgerrow / gov-exceptions-unreadable untouched)',
+    d2.toResolveKeys.every((k) => k.startsWith(EXCEPTIONS_MALFORMED_PREFIX)));
+  const clean = parseExceptions(exLedger(exRow('B-OK', 'na-skip', 'sim', 'langston'), exRow('B-OK2', 'open', 'open since 2026-09-01T00:00:00Z', 'cc-b')));
+  const d3 = decideMalformedAlerts(clean.malformed, [], 'abc1234def');
+  ok('EX P25: a correct ledger opens nothing', clean.malformed.length === 0 && d3.toOpen.length === 0 && d3.toResolveKeys.length === 0);
+  const sweep = decideOrphanSweep([fixed, stillBad], new Set(), () => true, () => true, () => true);
+  ok('EX P25: the key is disjoint from the orphan sweep (the tick owns its resolution)',
+    sweep.resolve.length === 0 && sweep.keep.length === 0);
+  ok('EX P25: the prefix is disjoint from gov-docgap / gov-ledgerrow / gov-planline',
+    !['gov-docgap:', 'gov-ledgerrow:', 'gov-planline'].some((p) => EXCEPTIONS_MALFORMED_PREFIX.startsWith(p) || p.startsWith(EXCEPTIONS_MALFORMED_PREFIX)));
+  ok('EX P25: no sha → the body says so rather than inventing one',
+    decideMalformedAlerts(r.malformed, [], null).toOpen.every((a) => /sha was unavailable/.test(a.body)));
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
