@@ -19,7 +19,15 @@ export const BATCH_ID_PATTERNS = [
   // graded as the phantom `B-TEC` (#350 second failure mode). `(?:-[A-Z0-9]+)*` captures every
   // hyphen-joined uppercase/alnum segment (B-TEC-SELFHEAL, B-LANGSTON-QUEUE-345, B-GOV-2),
   // still stopping at whitespace or a lowercase continuation; `.<n>` sub-batch suffix preserved.
-  /\bB-[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*(?:\.\d+)?\b/,  // B-NAMES, B-GOV, B-GOV-2, B-TEC-SELFHEAL, B-NAMES.1
+  // B-PLAN-CURRENCY-CHECK P31 (CD-A9): a segment may also END in ONE lowercase letter after a digit
+  // (`[A-Z0-9]*\d[a-z]`) — the lettered sub-batch form B-RULES-1a / B-RULES-1e. Without it the old
+  // pattern could not end on the digit (no word boundary between `1` and `e`), backtracked, and
+  // graded the PHANTOM `B-RULES` for every B-RULES-1<x> commit. `B-RULES-1c/1d x` → B-RULES-1c.
+  /\bB-[A-Z][A-Z0-9]+(?:-(?:[A-Z0-9]*\d[a-z]|[A-Z0-9]+))*(?:\.\d+)?\b/,  // B-NAMES, B-GOV, B-GOV-2, B-TEC-SELFHEAL, B-NAMES.1, B-RULES-1e
+  // P31 (CD-A10): the T-* form (T-W20C-SCALAR-LEG), which no pattern matched, so those commits were
+  // untagged and the batch never graded. No F-G-* line: that grammar gap is B-BATCH-ID-ALIAS-GRAMMAR
+  // (#1116, Langston §10d Q7), not this batch.
+  /\bT-[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*\b/,     // T-W20C-SCALAR-LEG
 ];
 
 // Commits that legitimately carry NO batch tag (not code pushes — pre-audit §1.b.i).

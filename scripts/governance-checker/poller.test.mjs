@@ -262,6 +262,26 @@ const noRows = () => ({});
   ok('OBJ-1+2: leading B-TEC-SELFHEAL extracts whole', extractLeadingBatchId('B-TEC-SELFHEAL Step-10/11: close') === 'B-TEC-SELFHEAL');
 }
 
+// ── B-PLAN-CURRENCY-CHECK P31: a lowercase letter after a digit, and the T-* form ──
+// Planted-fault check (run before trusting these): with config.mjs's B pattern reverted to the pre-P31
+// `(?:-[A-Z0-9]+)*` and the T line removed, the first four FAIL (B-RULES phantom; T-* → null).
+{
+  ok('P31: B-RULES-1e extracts whole (not the phantom B-RULES)', extractLeadingBatchId('B-RULES-1e Step-3: code') === 'B-RULES-1e');
+  ok('P31: B-RULES-1a extracts whole', extractLeadingBatchId('B-RULES-1a close') === 'B-RULES-1a');
+  ok('P31: `B-RULES-1c/1d x` → B-RULES-1c', extractLeadingBatchId('B-RULES-1c/1d x') === 'B-RULES-1c');
+  ok('P31: T-W20C-SCALAR-LEG extracts', extractLeadingBatchId('T-W20C-SCALAR-LEG Step-1: scope') === 'T-W20C-SCALAR-LEG');
+  ok('P31 unchanged: B-TEC-SELFHEAL', extractLeadingBatchId('B-TEC-SELFHEAL fix') === 'B-TEC-SELFHEAL');
+  ok('P31 unchanged: B-GOV-4', extractLeadingBatchId('B-GOV-4 Step-3') === 'B-GOV-4');
+  ok('P31 unchanged: B-NAMES.1', extractLeadingBatchId('B-NAMES.1 foo') === 'B-NAMES.1');
+  ok('P31 unchanged: B-NEW-53a', extractLeadingBatchId('B-NEW-53a close') === 'B-NEW-53a');
+  ok('P31 unchanged: P19-B6.5a', extractLeadingBatchId('P19-B6.5a Step-3') === 'P19-B6.5a');
+  ok('P31 unchanged: a mid-subject B-GOV-4 → null', extractLeadingBatchId('Governance: concretize #350 B-GOV-4 home') === null);
+  ok("P31: batchIdToFileRegex('B-RULES-1a') matches B_RULES_1A_COMPLETION_REPORT.md",
+    batchIdToFileRegex('B-RULES-1a').test('B_RULES_1A_COMPLETION_REPORT.md'));
+  ok("P31: batchIdToFileRegex('T-W20C-SCALAR-LEG') matches T_W20C_SCALAR_LEG_SCOPE.md",
+    batchIdToFileRegex('T-W20C-SCALAR-LEG').test('T_W20C_SCALAR_LEG_SCOPE.md'));
+}
+
 // ── B-GOV-4 OBJ-3: anchorClosedBatches — pin closed-quiescent to the close event; re-open re-enrolls ──
 // NOTE: scopeAddTime here is what scopeCommitTime returns = the LATEST scope first-add (Math.max), so
 // a value AFTER completionAddTime models a genuine post-close scope rev (realistic re-open), not a
