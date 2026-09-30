@@ -24,7 +24,7 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 212 after live (+6 moved to the sprint, listed below)
+## After live — 213 after live (+6 moved to the sprint, listed below)
 
 > Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (3). Recounted 2026-09-30: 221 − 6 − 3 = 212. The theme headings below use the same rule.
 
@@ -71,13 +71,14 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
-### Crew, reviewer, governance and alert tooling — 69 (+3 struck through)
+### Crew, reviewer, governance and alert tooling — 70 (+3 struck through)
 
 - B-RULES-CHANGE-CLASS (CC-A) — the `rules_change` change-class: a five-field case file pushed alone and ruled on BEFORE a rules edit lands; its own definition is its first case (Langston 2026-08-26, restored 2026-09-29, #744). ⛔ BEFORE B-GATE-GUARD (its line, under Other, carries the dependency)
 - 2.4b B-ALERT-QUEUE-INTEGRITY (CC-B) — #647 (no claim or lock discipline on the alert file; the watchdog appends outside the lock; rewrites drop malformed rows) + #1074 (open-batch backstop alerts have no resolve edge) + #654 (the checker ignores open-retired rows and treats any COMPLETION filename as a close) — alert tooling (added 2026-09-29)
 - B-CREW-SENDER-IDENTITY (CC-B) — `cc-send --sender` is free text over one shared webhook, so a Discord display name is a claim, not an identity — crew tooling, same class as B-WRITER-ACTOR-ALLOWLIST (added 2026-09-29)
 - #1026 (Infra Claude) — chunked Langston dispatch leaks parts into the channel — comms
 - #1035 (Infra Claude) — Langston's alert prompt lists only three owners
+- B-REVIEW-REF-READ (Infra Claude, #1131) — Langston's review tool can read only `migration/aws-supabase`, so a throwaway `migration/<name>` review branch has no supported read path (Langston, 2026-09-30)
 - #1043 (CC-INFRA) — a pinned GitHub read served the wrong file — reviewer tooling
 - #169 (—) — the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed
 - #219 (—) — dormant flip-rate governance input

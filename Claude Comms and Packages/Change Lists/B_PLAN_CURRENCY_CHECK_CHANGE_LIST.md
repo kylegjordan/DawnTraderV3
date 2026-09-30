@@ -68,3 +68,12 @@
 - G7-14 `gov-census-failed` / `gov-mistakepass-failed` use category `governance` at warning.
 
 NOT RE-READ: nothing in this change list went to a second reader.
+
+## PART 1 (G4) — CHANGES-NEEDED (Langston, 2026-09-30, ~12:52Z), fixed at `79c52eded` on the review branch
+He re-derived G4-2 with his own parser (3 removals, 0 additions; V2 5 malformed at the parent, 0 at the push) and found the stronger property: **at the push commit the two parsers are output-identical** (open 7 / na 29 / classOverride 13) — the invariant the flip rests on.
+- **BLOCKER-1 — fixed:** `parseExceptions` skipped any line containing `<!--`, so a valid row with an inline aside vanished silently. Now complete spans are stripped repeatedly and only an unclosed opener enters block mode; a close-then-reopen line keeps the second comment open. Pinned beside the legacy-honours-it control; the pre-fix parser fails 4 of the new checks.
+- **CONDITION-1 — fixed:** the `_ledger:comment` reason names how many 7+-cell rows below the opener were skipped.
+- **G4-1** reading CONFIRMED; retypes stay in the push commit (HY-A4 re-derived on three legs: 4 open keys on the box name none of the three; 0/0/0 leading-subject counts against positive controls; each removal substantively right). Stated limit: the 300-commit window spans ~21 h — folded into G6.
+- **G4-3** KEEP the flag · **G4-4** KEEP flag-and-continue (not #449's refuse path) · **G4-5** YES, and the B-CROSS-SESSION-BLEED body corrected in place (he VACATED the `architecture` overrule at close, 2026-09-02) — done at `79c52eded` · **G4-6** RETIRE `exceptions-preview.mjs` at Step 10 (archive + `DELETED_COMPONENTS_LOG`; its output goes in the report) · **G4-7** pin PARSER EQUIVALENCE on a committed fixture frozen at `a3097dc6a`, not the flag value — done (`fixtures/exceptions-ledger-at-a3097dc6a.md`, 5 checks) · **G4-8** notices SENT 2026-09-30 with the corrected message ("your row never functioned; the retype makes that visible"); B-PHANTOM-FILL-RECONSTRUCT's real status goes back to him as his own item.
+- **Read path:** his `dt-review` cannot fetch a `migration/<name>` branch → `#1131`, `B-REVIEW-REF-READ`, Infra Claude, after live.
+Tests at `79c52eded`: poller 432/0, heartbeat 84/0, census 125/0.
