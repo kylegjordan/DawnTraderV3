@@ -231,6 +231,21 @@ const reset = () => { rmSync(STATE, { force: true }); rmSync(HB, { force: true }
     r.intents.length === 1 && r.intents[0].action === 'resolve' && after.openAlertIds[SILENT_KEY] === 'legacy-2', JSON.stringify(after));
 }
 {
+  // Expected first: revert then re-apply. A pre-P28 version rewrites the whole parsed file, so it
+  // updates `alertId` and carries this version's `openAlertIds` forward STALE. Here it opened
+  // 'reverted-3' while the stale map still says null. With the poller fresh, the live handle is
+  // `alertId`: a resolve is ATTEMPTED on 'reverted-3' (the unreachable CLI fails it, so it is kept).
+  // Reading the stale map instead would see nothing open and orphan 'reverted-3' for good.
+  reset();
+  writeFileSync(STATE, JSON.stringify({ lastTick: NOW - 10 * MIN, gradedRefSha: 'abc1234def' }));
+  writeFileSync(HB, JSON.stringify({ alertId: 'reverted-3', openAlertIds: { [SILENT_KEY]: null } }));
+  const r = checkHeartbeat(NOW);
+  const after = JSON.parse(readFileSync(HB, 'utf8'));
+  ok('P28 shell: after a revert and re-apply, `alertId` (written last) is the live handle, not the stale map',
+    r.intents.length === 1 && r.intents[0].action === 'resolve' && after.openAlertIds[SILENT_KEY] === 'reverted-3'
+    && after.alertId === 'reverted-3', JSON.stringify({ intents: r.intents, after }));
+}
+{
   // Expected first: the shell passes the COMMITTED flags. The state carries census and pass anchors
   // 20 days old. With both flags false (today) the run makes no call and returns no intent; with
   // either flipped it tries to add a liveness alert, and the unreachable CLI makes that throw.
