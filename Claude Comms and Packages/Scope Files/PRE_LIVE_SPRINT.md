@@ -259,8 +259,10 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-FUNNEL-PERP-CLASSES (CC-C) — open: the funnel can only key the two spot classes; perps come after live (an interim alert shipped in F-G-1)
 - B-FUTURES-BAR-FINAL (CC-C) — futures bar finality — perps are post-live, but check whether any live-class signal reads these bars
 
-### Storage, database and production hardening — 12
+### Storage, database and production hardening — 14
 
+- #407 (CC-A) — `vts_open_trades` has no drizzle schema declaration (the table exists live; W40 census, 2026-09-30)
+- #437 (CC-A) — the `db:migrate` ledger showed an applied migration as pending (2026-07-08); re-measure before scoping (W40 census)
 - #147 (—) — per-class telemetry disk persistence
 - #172 (—) — stale duplicate retention keys
 - #685 (CC-C) — crypto 1-minute bars cannot be tiered to warm storage
