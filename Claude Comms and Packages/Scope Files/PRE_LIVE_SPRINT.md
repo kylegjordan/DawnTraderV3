@@ -96,7 +96,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-ALERT-ACK-PROCEDURE-DOCFIX (CC-B) — alert procedure doc
 - B-ALERT-LIFECYCLE (CC-C) — alert-tooling quality of life; its own row says it does not block the trading sequence · owner from `RUNNING_ISSUES` `#912`'s HOME line, the only explicit owner statement (`#443`, the originating issue, names none): *"HOME: `B-ALERT-LIFECYCLE`, owner CC-C, slotted with the rest of that batch's checker-hardening scope."* (B-PLAN-CURRENCY-CHECK, Langston 2026-09-30; CC-C told — if CC-C declines, this cell records the disagreement and it returns to Langston)
 - B-ALERT-OWNERSHIP-REGISTER (CC-B) — alert ownership transfer
-- B-ALERT-TAXONOMY (CC-A) — alert categories
+- B-ALERT-TAXONOMY (CC-A) — alert categories · `#38`'s original scope was absorbed by `B-GOV-INTEGRITY-1` (2026-07-10: one category constant, validated at `addAlert`) · this line now carries `#448`'s residual: the creatable vocabulary still offers `soak_verification`, `verification` and `reminder`, one family with three creatable members — a scope decision, not a defect (Langston 2026-09-30)
 - B-ALERT-WINDOW-EXPIRY (CC-A) — no terminal alert state for 'can no longer be observed' — alert tooling
 - B-CANONICAL-CORPUS-ACCURACY (CC-C) — accuracy of the pre-governance reference corpus
 - B-CANONICAL-FREEZE (CC-C) — its own row says governance hygiene, not on the trading path
@@ -111,7 +111,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-GOV-2 (—) — checker always-on gate
 - B-GOV-4 (CC-C) — checker entry test
 - B-GOV-INTEGRITY-0 (CC-A) — reviewer frozen rulebook · carries `#455`'s CC-A leg (its home points here; Langston R2-Q10 (0), 2026-09-30)
-- B-GOV-LEDGER-GRADE (#1099, CC-A) — the checker grades the commit-message ledger's presence and completeness; `roadmap` probably belongs in `sub_batch`; a report that opens NOT CLOSED should not count as a close; and a conditional doc is never graded today. ✅ Here by Langston's ruling (2026-09-29, B-GOV-REPORTING G6): the GOV-ARC list he named on 2026-08-29 is in a history plan, and GOV-ARC itself (#668) is parked by Kyle, so it confers no position.
+- B-GOV-LEDGER-GRADE (#1099, CC-A) — the checker grades the commit-message ledger's presence and completeness; `roadmap` probably belongs in `sub_batch`; a report that opens NOT CLOSED should not count as a close; and a conditional doc is never graded today. ✅ Here by Langston's ruling (2026-09-29, B-GOV-REPORTING G6): the GOV-ARC list he named on 2026-08-29 is in a history plan, and GOV-ARC itself (#668) is parked by Kyle, so it confers no position. · `#451` (B-GOV-5's F7 leg): the `steps-combined:` scope declaration as a DECLARED PREDICATE the checker reads, beside the conditional doc that is never graded — cross-reference `B-CHANGE-CLASS-PARSER` (Langston 2026-09-30)
 - B-HEARTBEAT-RESCOPE (CC-A) — hourly heartbeat task purpose — crew tooling
 - B-HOOK-ESTATE-VERSION (CC-C) — clones run different versions of one hook — crew tooling
 - B-LANGSTON-CONTEXT remaining pieces (Infra Claude) — the reviewer's memory composer: P-2 retrofit + #1055, P-1b, and the privacy-check positive control
@@ -220,7 +220,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-GDRIVE-UNMOUNT (Infra Claude) — placed 2026-08-28, not parked; owner Infra Claude; absorbs #921
 - B-GOV-INTEGRITY-3 (CC-A) — message id spans · carries `#452` `#453` `#492` `#493` `#494` (their homes point here; B-PLAN-CURRENCY-CHECK P15, 2026-09-30)
 - B-HORIZON-GRID-COMPARABILITY (CC-B) — makes holding-horizon numbers comparable — precondition for the exit-policy evaluator
-- B-LANGSTON-QUEUE-2 (CC-A) — review queue lock · the batch itself closed 2026-07-11; what remains here is `#484` (a Langston verdict does not record which invoke produced it or what it saw) and `#486` (a follow-up that does not name Langston is dropped silently) (2026-09-29) · and `#487` (a staged artifact reaches Langston with no provenance header or read-back; Langston R2-Q10 (0), 2026-09-30)
+- B-LANGSTON-QUEUE-2 (CC-A) — review queue lock · the batch itself closed 2026-07-11; what remains here is `#484` (a Langston verdict does not record which invoke produced it or what it saw) and `#486` (a follow-up that does not name Langston is dropped silently) (2026-09-29) · and `#487` (a staged artifact reaches Langston with no provenance header or read-back; Langston R2-Q10 (0), 2026-09-30) · `#485`'s CC-A leg: the read-back rule only (its headline, the blocked set as an obligations register nothing reads, is CC-B's leg on the parked B-GOV-INTEGRITY-2 line; `B-OPEN-OBLIGATION-SWEEP` (CC-B) is the process instrument beside both) (Langston 2026-09-30)
 - B-OBS-WINDOW-EVIDENCE-CAPTURE (CC-C) — capture observation-window evidence at the event — measurement quality
 - B-PRICE-DOC-CONSOLIDATE (Kyle) — merge two price documents into one — Kyle wants it done, but it is documentation
 - B-QUOTE-PEG-DEVIATION-WATCH (CC-C) — watch for quote-peg deviation; its row says it gates nothing
@@ -274,7 +274,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 ## Parked by Kyle — 7 (unchanged)
 
 - B-ALERT-DEDUPE-REASON-DRIFT — parked by Kyle, deliberately undated
-- B-GOV-INTEGRITY-2 — parked by Kyle, deliberately undated · carries `#481` (the general governed-read helper and lint; the dangerous shape is already blocked by a hook) · `#480` · `#485` (CC-B's leg) — added 2026-09-30 when their dated homes were placed here
+- B-GOV-INTEGRITY-2 — parked by Kyle, deliberately undated · carries `#481` (the general governed-read helper and lint; the dangerous shape is already blocked by a hook) · `#480` · `#485` (CC-B's leg) — added 2026-09-30 when their dated homes were placed here · **re-homed when Kyle unparks it, or on the first leg that blocks sprint work** (Langston 2026-09-30; the owner cell stays empty while parked)
 - B-RULES-1E-LANGSTON-SLIM — parked by Kyle, deliberately undated
 - #392 — parked by Kyle, deliberately undated
 - #668 — the governance-standardisation arc — a DIFFERENT thing from B-SIZING-DEC-RESTORE, which only cites it
