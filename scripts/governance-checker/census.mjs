@@ -441,8 +441,9 @@ export function recountS6(plan) {
   // stated Total is parsed and compared with the SUM of the cells — its own diff, which alerts on its own (not subject to
   // the same-commit rule below: fixing the cells and leaving the Total is exactly the miss it exists to catch).
   const cellSum = Object.values(table).reduce((a, v) => a + v, 0);
-  const tm = /\bTotal (\d+)\./.exec(plan.s6Text || '');
-  const statedTotal = tm ? Number(tm[1]) : null;
+  // Nit (Langston): exactly ONE "Total N." in §6 — a second one would make "the stated Total" ambiguous, read as not agreeing.
+  const tms = [...(plan.s6Text || '').matchAll(/\bTotal (\d+)\./g)];
+  const statedTotal = tms.length === 1 ? Number(tms[0][1]) : null;
   const totalAgree = statedTotal !== null && statedTotal === cellSum;
   return { recount, table, agree: diffs.length === 0, diffs, cellSum, statedTotal, totalAgree };
 }
@@ -672,7 +673,9 @@ export const gitReaders = {
       else {
         const revParse = io.revParse ?? ((s) => git(['rev-parse', '--verify', '--quiet', s]));
         let parentExists = true;
-        try { revParse(`${oldest}^{commit}`); } catch { parentExists = false; }
+        // Round 2 (Langston): `<sha>^{commit}` is git's PEEL syntax — it resolves the commit to ITSELF, so the first build
+        // always found a "parent" and always refused. `<sha>^` asks for the parent; execFileSync throws when there is none.
+        try { revParse(`${oldest}^`); } catch { parentExists = false; }
         if (parentExists) throw new Error(`census: git show ${oldest}^:${path} returned nothing though the parent exists — refusing (a failed read must not suppress the §6 alert)`);
         out.push({ sha: null, text: '' });
       }

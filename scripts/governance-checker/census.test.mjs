@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 // B-PLAN-CURRENCY-CHECK P43 / P45 / P46 — the census and mistake-pass RULES on pinned fixture text (no git, no
 // network, no filesystem). Each list has a positive and a negative control; the ruled fixtures of the Group-2 spec
 // §1 (R1 widened, the self-contradicting sub-list, R2 + OWNER with `#696` excluded, R3-Q6's negatives) are here.
@@ -279,6 +280,8 @@ const plan = parsePlan(PLAN);
   ok('C1: the fixture stated Total 8 agrees with its cells', tot.statedTotal === 8 && tot.cellSum === 8 && tot.totalAgree === true);
   const noTotal = recountS6(parsePlan(PLAN.replace(' Total 8.', '')));
   ok('C1: a missing Total does not agree (never read as fine)', noTotal.statedTotal === null && noTotal.totalAgree === false);
+  const twoTotals = recountS6(parsePlan(PLAN.replace('## 6. Who owns what', '## 6. Who owns what\nAn older note said Total 8.')));
+  ok('C1 nit: two "Total N." lines in §6 are ambiguous — not agreeing', twoTotals.statedTotal === null && twoTotals.totalAgree === false);
   const wrongTotal = recountS6(parsePlan(PLAN.replace('Total 8.', 'Total 7.')));
   ok('C1: a wrong Total with cells that match the recount: the cells agree, the Total does not', wrongTotal.agree === true && wrongTotal.totalAgree === false);
   const drift = parsePlan(addRow(PLAN).replace('| CC-B (New Claude) | g | 3 |', '| CC-B (New Claude) | g | 4 |'));
@@ -291,6 +294,22 @@ const plan = parsePlan(PLAN);
   const noParent = () => { throw new Error('unknown revision'); };
   const h = gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => texts[sha], revParse: noParent });
   ok('§6 history: newest first; the oldest one parent reads as empty ONLY when the parent commit does not exist', h.map((x) => x.sha).join() === 'c2,c1,' && h[2].text === '' && h[0].text === untouched);
+  // Round 2 (Langston): the two legs above INJECT revParse; this leg does NOT — it runs the live `git rev-parse` against
+  // THIS repository, so the branch the live wiring takes is the one tested. Class check first (his rider): the only
+  // `io.X ?? live` defaults in the checker are census.mjs planHistory's show, log and revParse; this leg leaves revParse
+  // and the parent-exists decision to live git (show and log stay injected so the texts are fixed).
+  {
+    const g = (a) => execFileSync('git', a, { encoding: 'utf8' }).trim();
+    const root = g(['rev-list', '--max-parents=0', 'HEAD']).split('\n')[0];
+    const shallow = g(['rev-parse', '--is-shallow-repository']) === 'true';
+    const hRoot = gitReaders.planHistory('r', 'plan.md', 20, { log: () => `${root}\n`, show: (sha) => (sha === root ? PLAN : null) });
+    ok('C2 LIVE git: the ROOT commit has no parent, so its missing parent text reads as empty', hRoot.length === 2 && hRoot[1].text === '');
+    if (!shallow) {
+      const head = g(['rev-parse', 'HEAD']);
+      ok('C2 LIVE git: a commit whose parent EXISTS but reads as nothing REFUSES',
+        throws(() => gitReaders.planHistory('r', 'plan.md', 20, { log: () => `${head}\n`, show: (sha) => (sha === head ? PLAN : null) }), /though the parent exists/));
+    } else console.log('  (C2 live existing-parent leg skipped: shallow clone — every parent is absent there)');
+  }
   // Step 4 G7-9 CONDITION 2: a parent that EXISTS but reads as nothing refuses (it would suppress the §6 alert)
   ok('§6 history: an existing parent whose read failed REFUSES', throws(() => gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => texts[sha], revParse: () => 'p'.repeat(40) }), /though the parent exists/));
   ok('§6 history: a failed read at a logged commit REFUSES', throws(() => gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => (sha === 'c1' ? null : texts[sha]) }), /returned nothing at a commit that touched it/));
