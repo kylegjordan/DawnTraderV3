@@ -13,6 +13,7 @@ TARGETS = {
     "drift": (os.path.join(HERE, "..", "dt-install-drift"), os.path.join(HERE, "drift_tests.py"), "DRIFT_SRC", "drift suite"),
     "session": (os.path.join(HERE, "..", "..", "agent-staging-session"), os.path.join(HERE, "staging_session_tests.py"),
                 "ASS_SRC", "staging-session suite"),
+    "alert": (os.path.join(HERE, "..", "dt-unit-failure-alert"), os.path.join(HERE, "alert_tests.py"), "ALERT_SRC", "alert suite"),
 }
 MUTATIONS = [
     ("drift", "compare against the branch head, not the installed sha", "        compare_files(box, sha)\n", "        compare_files(box, head or sha)\n"),
@@ -31,6 +32,14 @@ MUTATIONS = [
      '            pass\n        except FileNotFoundError:\n            pass\n        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600, dir_fd=dfd)\n'),
     ("session", "home followed through a link", "    dfd = os.open(home, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)",
      "    dfd = os.open(home, os.O_RDONLY | os.O_DIRECTORY)"),
+    ("drift", "no FragmentPath check", '        if props.get("FragmentPath") != fragment:', "        if False:"),
+    ("drift", "PENDING age from the newest commit", '        cts, _ = git(box, "log", "--reverse",', '        cts, _ = git(box, "log", "-1",'),
+    ("drift", "a not-yet-fetched sha reads as tamper", '        if have is None:\n            # C8', '        if False:\n            # C8'),
+    ("drift", "main sudoers not scanned", '        paths = [P("/etc/sudoers")]', "        paths = []"),
+    ("drift", "dtmint '!' accepted", '        if f[0] == "dtmint" and len(f) > 1 and f[1] != "*":', '        if f[0] == "dtmint" and len(f) > 1 and f[1] not in ("*", "!"):'),
+    ("alert", "the %N name never matches (the r2 blocker)", "  dt-install-drift|dt-install-drift.service)", "  dt-install-drift.service)"),
+    ("alert", "one key for all classes", '    --dedupe-key "dt-unit-failure:$unit:$cls"', '    --dedupe-key "dt-unit-failure:$unit"'),
+    ("session", "one agent's failure stops the other", "        except Exception as e:\n            failed.append(agent)", "        except ZeroDivisionError as e:\n            failed.append(agent)"),
     ("session", "short token accepted", "    if exp - time.time() < MIN_EXP_LEFT_S:", "    if False:"),
 ]
 

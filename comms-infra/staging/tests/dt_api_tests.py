@@ -289,7 +289,8 @@ check("C6 'User account not found': PAGE crew-user-missing, no login", c == 5 an
 check("... and the token it cannot use any more is dropped from the cache", not os.path.exists(R.st("token.json")))
 c, o, e = R.run("GET", "/api/settings")
 check("... the next call makes NO login while the page stands (sticky)", c == 5 and "PAGE STANDING" in e and len(R.app.logins()) == n0, e)
-os.unlink(R.st("page.json"))
+if os.path.exists(R.st("page.json")):
+    os.unlink(R.st("page.json"))
 R.app.user_missing = False
 rows = R.ledger()                                  # 15 minutes later: the cap's window has passed
 with open(R.st("login-ledger.jsonl"), "w") as fh:
@@ -316,8 +317,8 @@ R.run("GET", "/api/settings")
 R.app.revoke_all()
 R.app.login_status = 500
 c, o, e = R.run("GET", "/api/other/route")
-check("a failed re-mint says the request WAS sent and hands back the first 401 body",
-      c == 3 and "WAS sent once" in e and "Invalid or expired token" in o, "%s %r %s" % (c, o[:60], e))
+check("a failed re-mint says the request WAS sent, hands back the first 401 body, and exits 1 (answered)",
+      c == 1 and "WAS sent once" in e and "Invalid or expired token" in o, "%s %r %s" % (c, o[:60], e))
 R.close()
 
 # a token that breaks the HTTP header must never be printed
@@ -329,6 +330,34 @@ tok["accessToken"] = bad
 json.dump(tok, open(R.st("token.json"), "w"))
 c, o, e = R.run("GET", "/api/settings")
 check("an invalid header value exits 3 and prints no token", c == 3 and "SECRETPART" not in e + o and tok["accessToken"][:20] not in e + o, e)
+check("... caught at the request itself (the named layer), not only by the catch-all", "a request header or the path was invalid" in e, e)
+R.close()
+
+# r2: a token-refused page (a DB blip, which may heal) is NOT sticky; the FIRST cause is kept
+R = Rig()
+R.run("GET", "/api/settings")
+R.app.db_ok = False
+c, o, e = R.run("GET", "/api/settings")
+R.app.db_ok = True
+R.app.revoke_all()
+c2, o2, e2 = R.run("GET", "/api/settings")
+check("r2: after a token-refused page the next login is NOT blocked", c == 5 and c2 == 0 and len(R.app.logins()) == 2, e2)
+R.app.user_missing = True
+R.run("GET", "/api/settings")
+pg = jload(R.st("page.json"))
+check("r2: a later page keeps the FIRST cause and records the later one", pg.get("kind") == "token-refused"
+      and any("crew-user-missing" in x for x in pg.get("later", [])) and pg.get("sticky") is True, str(pg))
+R.close()
+
+# r2: a 200 login that is not usable pages instead of looping
+R = Rig()
+def issue_noexp(role):
+    tok = '%s.%s.sigX' % (fakeapp._b64({'alg': 'HS256'}), fakeapp._b64({'id': 'u1', 'role': role}))
+    R.app.tokens[tok] = {'exp': time.time() + 99999, 'revoked': False}
+    return tok
+R.app.issue = issue_noexp
+c, o, e = R.run("GET", "/api/settings")
+check("r2: a login answering 200 without a readable expiry PAGEs login-malformed", c == 5 and "login-malformed" in e, e)
 R.close()
 
 # refusals are logged (the audit trail)
@@ -377,13 +406,23 @@ c, o, e = R.run("GET", "/api/settings")
 check("... within the backoff: no login", c == 3 and len(R.app.logins()) == 1, e)
 neg["until"] = time.time() - 1
 json.dump(neg, open(R.st("negcache.json"), "w"))
-c, o, e = R.run("GET", "/api/settings")            # 90 s later, still 500: the second login
-check("two 5xx logins in a row PAGE login-failing (not retried forever)", c == 5 and "login-failing" in e and len(R.app.logins()) == 2, e)
+c, o, e = R.run("GET", "/api/settings")            # 60 s later, still 500 (an app restart): the second login
+check("r2: two 5xx logins a minute apart (a restart) do NOT page", c == 3 and "PAGE" not in e and len(R.app.logins()) == 2, e)
+rows = R.ledger()                                  # ... 15 minutes later, still failing
+with open(R.st("login-ledger.jsonl"), "w") as fh:
+    for x in rows:
+        x["ts"] -= 1000
+        fh.write(json.dumps(x) + chr(10))
+neg = jload(R.st("negcache.json"))
+neg["until"] = time.time() - 1
+json.dump(neg, open(R.st("negcache.json"), "w"))
+c, o, e = R.run("GET", "/api/settings")
+check("two 5xx logins over 10 minutes apart, no success between, PAGE login-failing", c == 5 and "login-failing" in e and len(R.app.logins()) == 3, e)
 neg = jload(R.st("negcache.json"))
 neg["until"] = time.time() - 1
 json.dump(neg, open(R.st("negcache.json"), "w"))
 c, o, e = R.run("GET", "/api/settings")            # another 90 s: the page stands, no third login
-check("... and no third login while that page stands", c == 5 and len(R.app.logins()) == 2, e)
+check("... and no further login while that page stands", c == 5 and len(R.app.logins()) == 3, e)
 R.app.login_status = None
 R.close()
 

@@ -54,7 +54,7 @@ carry only the expected drop-ins and the timers are enabled and active, that no 
 names dtapi/dtmint, that dtmint has no `authorized_keys2`, the accounts' shells and password
 fields, the mint key's pairing and root's known_hosts. A committed change not yet installed is
 PENDING, and fails once it is over a week old.
-**Order: install → run the setter → write `installed.sha` → enable the timer → run `dt-install-drift`
+**Order: install → `daemon-reload` → run the setter → write `installed.sha` (0644 root) → `systemctl enable --now` the timer → run `dt-install-drift`
 by hand: its PASS is the install's verification** (before the setter the env file is MISSING).
 
 ## Accounts

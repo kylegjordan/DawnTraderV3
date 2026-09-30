@@ -31,6 +31,7 @@ class App:
         self.db_path = db_path
         self.login_status = None          # force a status (e.g. 500) instead of normal handling
         self.force_role = None            # report this role on a login, whatever the row says
+        self.login_status_times = None    # with login_status: force it only this many times
         self.db_ok = True
         self.user_missing = False
         self.route_401 = set()
@@ -127,7 +128,9 @@ def make_handler(app):
                            "RateLimit-Reset": str(max(0, int(b["reset"] - now + 0.999)))}
                     if b["hits"] > app.limit:
                         return self._send(429, {"error": "Too many login attempts, please try again later."}, hdr)
-                    if app.login_status:
+                    if app.login_status and app.login_status_times != 0:
+                        if app.login_status_times:
+                            app.login_status_times -= 1
                         return self._send(app.login_status, {"error": "Login failed"}, hdr)
                     try:
                         j = json.loads(raw.decode())

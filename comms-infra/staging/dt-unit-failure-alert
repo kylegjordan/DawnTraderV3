@@ -1,30 +1,42 @@
 #!/bin/sh
-# dt-unit-failure-alert <unit> — raise ONE system alert, naming Infra Claude, that a staging unit
+# dt-unit-failure-alert <unit> — raise system alerts, naming Infra Claude, that a staging unit
 # failed. Called by dt-unit-failure@.service (User=deploy), the staging twin of Helsinki's
 # agent-unit-failure@. B-CREDENTIALS-PRIVATE-REPO OBJ-1 (#1023), pre-audit §2.2 item 10.
 #
 # WHO IT REACHES (C6 / GB-7): the alert queue every CC session reads on every turn, and — at the
 # dispatcher's next 15-minute tick — the Discord alerts webhook, which always engages Langston.
 #
-# THE DEDUPE KEY CARRIES THE FAILURE CLASS (fresh-reader r1): any non-resolved alert with the same
-# key blocks a new one, so a key of the unit alone would let an acked-but-open DRIFT alert swallow
-# a later dt-api PAGE. dt-install-drift writes its classes (e.g. "DRIFT,PAGE-token-refused") to
-# /run/dt-install-drift.classes; a new class is a new alert.
+# ONE ALERT PER FAILURE CLASS (fresh-reader r1 + r2): any non-resolved alert with the same dedupe
+# key blocks a new one, so one key per unit would let an acked-but-open DRIFT alert swallow a later
+# dt-api PAGE. dt-install-drift writes its classes (e.g. "DRIFT,PAGE-token-refused") to
+# CLASSES_FILE; each class gets its own key, so a NEW class always raises a new alert, and a class
+# that clears does not re-raise the others.
+# ⚠️ The unit arrives as systemd's %N — the name WITHOUT ".service" (r2 caught the first build
+#    comparing against "dt-install-drift.service", which never matched).
 set -eu
+APP_DIR=/home/deploy/dawntrader
+NPM=/usr/bin/npm
+CLASSES_FILE=/run/dt-install-drift.classes
 unit="${1:-}"
 case "$unit" in
   ''|*[!A-Za-z0-9@._:-]*) echo "dt-unit-failure-alert: refusing an empty or unsafe unit name" >&2; exit 2 ;;
 esac
 classes=""
-if [ "$unit" = "dt-install-drift.service" ] && [ -r /run/dt-install-drift.classes ]; then
-  classes=$(head -c 200 /run/dt-install-drift.classes | tr -cd 'A-Za-z0-9,_-')
-fi
-key="dt-unit-failure:$unit${classes:+:$classes}"
+case "$unit" in
+  dt-install-drift|dt-install-drift.service)
+    [ -r "$CLASSES_FILE" ] && classes=$(head -c 400 "$CLASSES_FILE" | tr -cd 'A-Za-z0-9,_-') ;;
+esac
+[ -n "$classes" ] || classes="UNIT-FAILED"
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-cd /home/deploy/dawntrader
-exec /usr/bin/npm run -s system-alerts -- add \
-  --triggers-at "$now" --category breakage --severity warning \
-  --title "Infra Claude — staging unit $unit failed${classes:+ ($classes)}" \
-  --body "Infra Claude — the staging unit $unit failed at $now${classes:+ with $classes}. As root on staging: journalctl -u $unit -n 80. For dt-install-drift every non-OK line names a file that differs from what was installed, a unit not in force, a dt-api PAGE (/var/lib/dt-api/page.json: fix the cause, then remove it), or a stale source." \
-  --dedupe-key "$key" \
-  --metadata "{\"unit\":\"$unit\",\"classes\":\"$classes\",\"owner\":\"CC-INFRA\",\"batch\":\"B-CREDENTIALS-PRIVATE-REPO\"}"
+cd "$APP_DIR"
+rc=0
+for cls in $(printf '%s' "$classes" | tr ',' ' '); do
+  "$NPM" run -s system-alerts -- add \
+    --triggers-at "$now" --category breakage --severity warning \
+    --title "Infra Claude — staging unit $unit failed: $cls" \
+    --body "Infra Claude — the staging unit $unit failed at $now (class $cls; all classes this run: $classes). As root on staging: journalctl -u $unit -n 80. For dt-install-drift every non-OK line names a file that differs from what was installed, a unit not in force, a dt-api PAGE (/var/lib/dt-api/page.json: fix the cause, then remove it), or a stale source." \
+    --dedupe-key "dt-unit-failure:$unit:$cls" \
+    --metadata "{\"unit\":\"$unit\",\"class\":\"$cls\",\"classes\":\"$classes\",\"owner\":\"CC-INFRA\",\"batch\":\"B-CREDENTIALS-PRIVATE-REPO\"}" \
+    || rc=1
+done
+exit $rc

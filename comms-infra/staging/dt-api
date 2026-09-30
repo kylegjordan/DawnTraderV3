@@ -51,7 +51,7 @@ ENV_FILE = "/etc/dt-api/staging-api.env"
 STATE_DIR = "/var/lib/dt-api"
 EXPECT_USER = "dtapi"
 MINT_CALLER = "dtmint"
-LOCK_TIMEOUT_S = 30
+LOCK_TIMEOUT_S = 90
 HTTP_TIMEOUT_S = 120
 LOGIN_TIMEOUT_S = 20
 # ── END CONSTANTS ──
@@ -73,9 +73,10 @@ WINDOW_S = 900
 DTAPI_CAP = 2                     # dt-api's own logins (calls + mints) per 900 s, whatever the reason
 NEG_S = 900                       # after a login 401 / 404 / 429 (a 429 uses its RateLimit-Reset)
 BACKOFF_500_S = 60                # after a login 5xx or no answer: back off, keep the current token
+LOGIN_FAILING_GAP_S = 600         # two failed logins this far apart, no success between -> page
 MINT_REUSE_S = 20 * 3600          # a mint younger than this is handed out again (C-10)
 MIN_EXP_LEFT_S = 6 * 86400        # ... and only if it still has 6 days left (OBJ-1(e))
-PROBE_TIMEOUT_S = 15              # /api/settings and /api/auth/verify probes: short, the lock may be held
+PROBE_TIMEOUT_S = 10              # /api/settings and /api/auth/verify probes: short, the lock may be held
 
 METHODS_WRITE = ("POST", "PUT", "PATCH", "DELETE")
 
@@ -306,6 +307,9 @@ def ledger_entries():
                     continue
     except FileNotFoundError:
         pass
+    except OSError as e:
+        die(3, "REFUSED: cannot read the login ledger %s (%s) — it must be dtapi-owned 0600. Nothing "
+               "was sent." % (LEDGER, e.strerror))
     return out
 
 
@@ -350,8 +354,8 @@ class Lock:
             if _now() >= deadline:
                 os.close(self.fd)
                 self.fd = None
-                die(3, "REFUSED: dt-api waited %d s for its credential lock — a password change "
-                       "may be in progress. Nothing was sent; try again in a minute." % LOCK_TIMEOUT_S)
+                die(3, "REFUSED: dt-api waited %d s for its credential lock — a password change or "
+                       "a slow login/mint is in progress. Nothing was sent; try again in a minute." % LOCK_TIMEOUT_S)
             time.sleep(0.2)
 
     def __exit__(self, *exc):
@@ -369,29 +373,43 @@ def die(code, text):
     raise SystemExit(code)
 
 
+STICKY_KINDS = ("crew-password-wrong", "crew-user-missing", "login-failing", "login-malformed")
+
+
 def page(kind, detail, drop_token=False):
     """C6 / GB-7 — WHO THE PAGE REACHES: (1) the caller, now, on stderr, naming Infra Claude;
-    (2) every session and Langston through a system alert, raised by the staging hourly
-    `dt-install-drift` run while page.json exists (dedupe key dt-unit-failure:...);
+    (2) every session and Langston through a system alert, raised by the staging DAILY
+    `dt-install-drift` run (05:15Z) while page.json exists (one alert per page class);
     (3) for the scheduled mint, Helsinki's agent-unit-failure@ on the next 04:40Z run.
     ⛔ No re-mint happens on a page: a login would spend the shared loopback bucket on a
     problem a login cannot fix.
-    ★ STICKY (fresh-reader r1): while page.json exists dt-api makes NO login at all — a timer that
-    re-tried a known-bad password every 15 minutes would keep spending the bucket AND keep the
-    setter's quiet-900-s precondition from ever holding. Calls on a still-good cached token go on.
+    ★ STICKY for the faults a login cannot fix (fresh-reader r1): a wrong password, a missing
+    row, a login that keeps failing, a malformed login answer — while such a page stands dt-api
+    makes NO login (a timer re-trying a known-bad password spent the bucket and kept the setter's
+    quiet-900-s precondition from ever holding). A token-refused page (a DB or lookup failure,
+    which may heal) is recorded and alerted but NOT sticky (r2). Calls on a good cached token go on.
     The page is cleared by a person (after the cause is fixed) or by the setter when it succeeds."""
     if drop_token:
         try:
             os.unlink(TOKEN_FILE)          # a token the app will never accept again is not a cache
         except FileNotFoundError:
             pass
+    sticky = kind in STICKY_KINDS
     try:
-        _write_json(PAGE_FILE, {"ts": _iso(_now()), "kind": kind, "detail": detail})
+        old = _read_json(PAGE_FILE)
+        if isinstance(old, dict):
+            # r2: keep the FIRST cause; later ones are appended, and stickiness only ever grows
+            later = (old.get("later") or [])[-20:] + ["%s %s" % (_iso(_now()), kind)]
+            rec = dict(old, later=later, sticky=bool(old.get("sticky")) or sticky)
+        else:
+            rec = {"ts": _iso(_now()), "kind": kind, "detail": detail, "sticky": sticky}
+        _write_json(PAGE_FILE, rec)
     except OSError:
         pass
-    die(5, "PAGE (dt-api, %s): %s\nInfra Claude owns this. Nothing was re-minted, and dt-api makes "
-           "NO login while the page stands: fix the cause, then remove %s as root (the setter "
-           "removes it when it succeeds)." % (kind, detail, PAGE_FILE))
+    die(5, "PAGE (dt-api, %s): %s\nInfra Claude owns this. Nothing was re-minted.%s The daily "
+           "dt-install-drift run raises it as a system alert; remove %s as root once the cause is "
+           "fixed (the setter removes it when it succeeds)." % (
+               kind, detail, " dt-api makes NO login while this page stands." if sticky else "", PAGE_FILE))
 
 
 # ───────────────────────────── HTTP ─────────────────────────────
@@ -466,7 +484,7 @@ def login(who):
     """A fresh login on the loopback bucket. Caller holds the Lock. Returns the token record."""
     t = _now()
     pg = _read_json(PAGE_FILE)
-    if pg is not None or os.path.exists(PAGE_FILE):
+    if (isinstance(pg, dict) and pg.get("sticky")) or (os.path.exists(PAGE_FILE) and not isinstance(pg, dict)):
         die(5, "PAGE STANDING (dt-api, %s since %s): dt-api makes no login until it is handled. "
                "Infra Claude owns it; root removes %s once the cause is fixed. Nothing was sent."
                % ((pg or {}).get("kind", "?"), (pg or {}).get("ts", "?"), PAGE_FILE))
@@ -481,8 +499,15 @@ def login(who):
                "retry after %s." % (len(recent), WINDOW_S, DTAPI_CAP,
                                     _iso(min(e["ts"] for e in recent) + WINDOW_S)))
     env = read_env()
-    mine = [e for e in ledger_entries() if e.get("phase") == "result" and e.get("who") in ("dt-api", "mint")]
-    prev = mine[-1] if mine else None
+    results = [e for e in ledger_entries() if e.get("phase") == "result"]
+    last = results[-1] if results else None
+    # C4 (r2): the headers are authoritative — ANY loopback login (the setter's too) that left the
+    # bucket empty blocks a login until its reset, without spending an attempt to learn that again
+    if last and str(last.get("remaining")) == "0" and str(last.get("reset", "")).isdigit() \
+            and last.get("ts", 0) + int(last["reset"]) > t:
+        die(3, "REFUSED: the last loopback login (%s) left the bucket empty until %s. Nothing was sent."
+            % (last.get("who"), _iso(last["ts"] + int(last["reset"]))))
+    prev = last
     _append(LEDGER, json.dumps({"ts": t, "who": who, "phase": "sent", "bucket": "loopback"}))
     st, h, b = app_request("POST", "/api/auth/login",
                            body={"username": env["DT_API_USER"], "password": env["DT_API_PASS"]},
@@ -493,9 +518,10 @@ def login(who):
     if st == 200:
         j = _json(b) or {}
         tok = j.get("accessToken")
-        if not tok:
-            die(3, "FAILED: login returned 200 without an accessToken. Nothing was sent.")
-        cl = jwt_claims(tok)
+        cl = jwt_claims(tok) if tok else {}
+        if not tok or not isinstance(cl.get("exp"), (int, float)):
+            page("login-malformed", "the login answered 200 without %s — every call would log in "
+                 "again" % ("an accessToken" if not tok else "a readable token expiry"))
         rec = {"accessToken": tok, "refreshToken": j.get("refreshToken", ""),
                "issued_at": t, "exp": cl.get("exp"), "who": who,
                "role": (j.get("user") or {}).get("role")}
@@ -531,9 +557,12 @@ def login(who):
                "sent." % (st, reason, _iso(until)))
     _write_json(NEG_FILE, {"until": t + BACKOFF_500_S, "status": st,
                            "reason": "the app did not answer the login cleanly"})
-    if prev is not None and (prev.get("status") is None or prev.get("status", 0) >= 500):
-        page("login-failing", "two dt-api logins in a row got %s and %s — the app's login is "
-             "failing (a 5xx or no answer), not the password" % (prev.get("status"), st))
+    # r2: a restart makes two failures a minute apart; only two failures at least 10 minutes apart
+    #     with NO successful loopback login between them (anyone's) is "the login is failing"
+    if prev is not None and (prev.get("status") is None or prev.get("status", 0) >= 500) \
+            and t - prev.get("ts", t) >= LOGIN_FAILING_GAP_S:
+        page("login-failing", "loopback logins got %s and then, %d min later, %s — the app's login is "
+             "failing (a 5xx or no answer), not the password" % (prev.get("status"), (t - prev["ts"]) // 60, st))
     die(3, "FAILED: login got %s — backing off %d s and keeping any current token. Nothing was "
            "sent." % (st if st is not None else b.decode("utf-8", "replace"), BACKOFF_500_S))
 
@@ -596,26 +625,28 @@ def do_call(req):
     st, h, b = app_request(req["method"], req["target"], token=rec["accessToken"], body=body,
                     mode=req["mode"])
     if st == 401:
-        verdict = classify_401(rec["accessToken"])
-        if verdict == "dead":
-            first = b
-            try:
+        first = b
+        try:
+            verdict = classify_401(rec["accessToken"])
+            if verdict == "dead":
                 with Lock():
                     cur = cached_token()
                     if cur and cur["accessToken"] != rec["accessToken"]:
                         rec = cur                      # someone re-minted while we checked
                     else:
                         rec = login("dt-api")
-            except SystemExit:
-                # the request itself WAS sent once and answered 401; say so, and hand back its body
-                sys.stdout.buffer.write(first)
-                sys.stdout.buffer.flush()
-                sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered "
-                                 "HTTP 401 (body on stdout); the refusal above is about the re-mint "
-                                 "and the retry, which were NOT sent.\n")
-                raise
+        except SystemExit as e:
+            # the request itself WAS sent once and answered 401: hand back its body, say so, and
+            # exit 1 (the contract's "the app answered non-2xx") — a PAGE keeps its 5 (r2)
+            sys.stdout.buffer.write(first)
+            sys.stdout.buffer.flush()
+            sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered HTTP 401 "
+                             "(body on stdout); the line above is about the check or the re-mint "
+                             "after it, and no retry was sent.\n")
+            raise SystemExit(5 if e.code == 5 else 1)
+        if verdict == "dead":
             st, h, b = app_request(req["method"], req["target"], token=rec["accessToken"], body=body,
-                            mode=req["mode"])          # ONE retry, never more
+                                   mode=req["mode"])   # ONE retry, never more
     if st is None:
         die(3, "FAILED: the app did not answer (%s). For a write, check whether it took effect "
                "before retrying." % b.decode("utf-8", "replace"))

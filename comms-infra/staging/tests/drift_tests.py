@@ -48,7 +48,7 @@ if a[0] == "show":
     if u is None:
         print("LoadState=not-found"); print("NeedDaemonReload=no"); print("DropInPaths="); sys.exit(0)
     print("LoadState=" + u.get("load", "loaded")); print("NeedDaemonReload=" + u.get("reload", "no"))
-    print("DropInPaths=" + " ".join(u.get("dropins", [])))
+    print("DropInPaths=" + " ".join(u.get("dropins", []))); print("FragmentPath=" + u.get("fragment", ""))
 elif a[0] in ("is-enabled", "is-active"):
     v = st["timers"].get(a[1], {}).get(a[0], "disabled" if a[0] == "is-enabled" else "inactive")
     print(v); sys.exit(0 if v in ("enabled", "active") else 1)
@@ -113,12 +113,20 @@ def stamp(age=0):
 
 
 def installed(sha):
-    open(T + "/var/lib/dt-install-drift/installed.sha", "w").write(sha + NL)
+    f = T + "/var/lib/dt-install-drift/installed.sha"
+    open(f, "w").write(sha + NL)
+    os.chmod(f, 0o644)
+
+
+SS = "/etc/systemd/system/"
 
 
 def systemd(**over):
-    st = {"units": {"agent-staging-session.service": {"dropins": ["/etc/systemd/system/agent-staging-session.service.d/onfailure.conf"]},
-                    "dt-install-drift.service": {"dropins": ["/etc/systemd/system/dt-install-drift.service.d/onfailure.conf"]}},
+    st = {"units": {"agent-staging-session.service": {"fragment": SS + "agent-staging-session.service", "dropins": [SS + "agent-staging-session.service.d/onfailure.conf"]},
+                    "agent-staging-session.timer": {"fragment": SS + "agent-staging-session.timer"},
+                    "dt-install-drift.service": {"fragment": SS + "dt-install-drift.service", "dropins": [SS + "dt-install-drift.service.d/onfailure.conf"]},
+                    "dt-install-drift.timer": {"fragment": SS + "dt-install-drift.timer"},
+                    "agent-unit-failure@probe.service": {"fragment": SS + "agent-unit-failure@.service"}},
           "timers": {"agent-staging-session.timer": {"is-enabled": "enabled", "is-active": "active"},
                      "dt-install-drift.timer": {"is-enabled": "enabled", "is-active": "active"}}}
     for k, v in over.items():
@@ -194,6 +202,12 @@ sh("git", "-C", work, *GIT_ID, "commit", "-qm", "t3", env=env)
 sh("git", "-C", bare, "fetch", "-q", work, "HEAD:refs/heads/migration/aws-supabase")
 c, o = run()
 check("an un-installed change over 7 days old -> FAIL", c == 1 and "has waited over 7 days" in o, o)
+open(os.path.join(work, "comms-infra/systemd/agent-staging-session.timer"), "a").write("# a fresh follow-up" + NL)
+sh("git", "-C", work, "add", "-A")
+sh("git", "-C", work, *GIT_ID, "commit", "-qm", "t4")
+sh("git", "-C", bare, "fetch", "-q", work, "HEAD:refs/heads/migration/aws-supabase")
+c, o = run()
+check("r2: a fresh follow-up does NOT reset the clock of a week-old uninstalled change", c == 1 and "has waited over 7 days" in o, o)
 sh("git", "-C", bare, "update-ref", "refs/heads/migration/aws-supabase", C1)
 
 os.unlink(T + "/var/lib/dt-install-drift/installed.sha")
@@ -207,7 +221,11 @@ SIDE = sh("git", "-C", work, "rev-parse", "HEAD")
 sh("git", "-C", bare, "fetch", "-q", work, "side:refs/heads/side")
 installed(SIDE)
 c, o = run()
-check("an installed sha that is NOT on the reviewed branch -> FAIL", c == 1 and "is not on refs/heads/migration/aws-supabase" in o, o)
+check("an installed sha in the source but NOT on the reviewed branch -> INSTALL", c == 1 and "NOT on refs/heads/migration/aws-supabase" in o, o)
+installed("ab" * 20)
+c, o = run()
+check("r2/C8: an installed sha the source has not fetched yet -> SOURCE (mirror health), no INSTALL, no DRIFT",
+      c == 1 and "not in the source yet" in o and "INSTALL" not in open(T + "/run/dt-install-drift.classes").read() and "DRIFT" not in o, o)
 installed(C1)
 
 stamp(age=5 * 3600)
@@ -216,17 +234,31 @@ check("a stale source -> SOURCE, and the installed comparison still runs clean",
       and "DRIFT" not in o and o.count(NL + "OK") >= 9, o)
 stamp()
 
-systemd(units={"dt-install-drift.service": {"reload": "yes", "dropins": ["/etc/systemd/system/dt-install-drift.service.d/onfailure.conf"]}})
+systemd(units={"dt-install-drift.service": {"fragment": SS + "dt-install-drift.service", "reload": "yes", "dropins": [SS + "dt-install-drift.service.d/onfailure.conf"]}})
 c, o = run()
 check("a unit changed on disk but not reloaded -> UNIT", c == 1 and "has not reloaded it" in o, o)
-systemd(units={"dt-install-drift.service": {"dropins": ["/etc/systemd/system/dt-install-drift.service.d/onfailure.conf",
-                                                        "/etc/systemd/system/dt-install-drift.service.d/zz.conf"]}})
+systemd(units={"dt-install-drift.service": {"fragment": SS + "dt-install-drift.service", "dropins": [SS + "dt-install-drift.service.d/onfailure.conf",
+                                                        SS + "dt-install-drift.service.d/zz.conf"]}})
 c, o = run()
 check("an extra drop-in -> UNIT", c == 1 and "drop-ins are" in o, o)
 systemd(timers={"dt-install-drift.timer": {"is-enabled": "disabled", "is-active": "inactive"}})
 c, o = run()
 check("a timer not enabled/active -> UNIT", c == 1 and "dt-install-drift.timer is-enabled says 'disabled'" in o, o)
+systemd(units={"dt-install-drift.timer": {"fragment": SS + "dt-install-drift.timer", "dropins": [SS + "dt-install-drift.timer.d/yearly.conf"]}})
+c, o = run()
+check("r2: a drop-in on the TIMER -> UNIT", c == 1 and "dt-install-drift.timer drop-ins are" in o, o)
+systemd(units={"agent-unit-failure@probe.service": {"fragment": SS + "agent-unit-failure@.service", "dropins": [SS + "agent-unit-failure@.service.d/x.conf"]}})
+c, o = run()
+check("r2: a drop-in on the PAGING TEMPLATE -> UNIT", c == 1 and "agent-unit-failure@probe.service drop-ins are" in o, o)
+systemd(units={"dt-install-drift.service": {"fragment": "/etc/systemd/system.control/dt-install-drift.service",
+                                            "dropins": [SS + "dt-install-drift.service.d/onfailure.conf"]}})
+c, o = run()
+check("r2: a higher-priority copy shadowing the installed unit -> UNIT", c == 1 and "a higher-priority copy shadows it" in o, o)
 systemd()
+os.chmod(T + "/var/lib/dt-install-drift/installed.sha", 0o666)
+c, o = run()
+check("r2: installed.sha with the wrong mode -> PERM", c == 1 and "installed.sha mode/owner is 666" in o, o)
+os.chmod(T + "/var/lib/dt-install-drift/installed.sha", 0o644)
 
 os.rename(key, key + ".x")
 sh("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key)
@@ -252,7 +284,13 @@ open(T + "/var/lib/dt-api/page.json", "w").write('{"ts": "t", "kind": "token-ref
 os.makedirs(T + "/var/lib/dt-api-setter", exist_ok=True)
 mk = T + "/var/lib/dt-api-setter/marker.json"
 open(mk, "w").write("{}")
+open(T + "/etc/shadow", "w").write("dtmint:!:1::::::" + NL + "dtapi:!$6$abc:1::::::" + NL)
+open(T + "/etc/sudoers", "w").write("root ALL=(ALL) ALL" + NL + "dtmint ALL=(ALL) NOPASSWD: ALL" + NL)
+os.makedirs(T + "/etc/sudoers.d", exist_ok=True)
 c, o = run()
+check("r2: dtmint locked with '!' is flagged (the mint needs '*')", "dtmint's password field is" in o, o)
+check("r2: dtapi '!$6$...' (locked with a hash) is NOT flagged", "dtapi has a usable password hash" not in o, o)
+check("r2: a grant in the MAIN sudoers file is flagged", "%s/etc/sudoers also mentions" % T in o, o)
 check("a YOUNG setter marker (a run in progress) is not flagged", "interrupted setter run" not in o, o)
 os.utime(mk, (time.time() - 3 * 3600, time.time() - 3 * 3600))
 c, o = run()

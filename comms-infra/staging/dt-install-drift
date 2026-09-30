@@ -52,6 +52,8 @@ PENDING_DAYS = 7
 MARKER_MAX_AGE_S = 2 * 3600
 GIT_TIMEOUT_S = 30
 
+SS = "/etc/systemd/system/"
+
 BOXES = {
     "dawntrader-staging": {
         "git_as": "deploy",
@@ -81,8 +83,15 @@ BOXES = {
             ("/home/dtmint/.ssh", 0o750, "root", "dtmint"),
             ("/var/lib/dt-install-drift", 0o755, "root", "root"),
         ],
-        "private": [("/etc/dt-api/staging-api.env", 0o600, "dtapi", "dtapi")],
-        "units": {"dt-install-drift.service": ["/etc/systemd/system/dt-install-drift.service.d/onfailure.conf"]},
+        "private": [("/etc/dt-api/staging-api.env", 0o600, "dtapi", "dtapi"),
+                    ("/var/lib/dt-api/login-ledger.jsonl", 0o600, "dtapi", "dtapi"),
+                    ("/var/lib/dt-api/lock", 0o600, "dtapi", "dtapi"),
+                    ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root")],
+        # show-name -> (the fragment it must load from, the exact drop-ins it may carry) — services,
+        # the timer AND the paging template (r2: a drop-in on any of them can silence the chain)
+        "units": {"dt-install-drift.service": (SS + "dt-install-drift.service", [SS + "dt-install-drift.service.d/onfailure.conf"]),
+                  "dt-install-drift.timer": (SS + "dt-install-drift.timer", []),
+                  "dt-unit-failure@probe.service": (SS + "dt-unit-failure@.service", [])},
         "timers": ["dt-install-drift.timer"],
         "checks": ["dt_api_page", "setter_marker", "accounts", "sudoers_others", "no_authorized_keys2"],
     },
@@ -106,9 +115,13 @@ BOXES = {
             ("comms-infra/tools/agent-unit-failure-alert", "/usr/local/bin/agent-unit-failure-alert", 0o755, "root", "root"),
         ],
         "dirs": [("/var/lib/dt-install-drift", 0o755, "root", "root")],
-        "private": [("/root/.ssh/dtmint_ed25519", 0o600, "root", "root")],
-        "units": {"agent-staging-session.service": ["/etc/systemd/system/agent-staging-session.service.d/onfailure.conf"],
-                  "dt-install-drift.service": ["/etc/systemd/system/dt-install-drift.service.d/onfailure.conf"]},
+        "private": [("/root/.ssh/dtmint_ed25519", 0o600, "root", "root"),
+                    ("/var/lib/dt-install-drift/installed.sha", 0o644, "root", "root")],
+        "units": {"agent-staging-session.service": (SS + "agent-staging-session.service", [SS + "agent-staging-session.service.d/onfailure.conf"]),
+                  "agent-staging-session.timer": (SS + "agent-staging-session.timer", []),
+                  "dt-install-drift.service": (SS + "dt-install-drift.service", [SS + "dt-install-drift.service.d/onfailure.conf"]),
+                  "dt-install-drift.timer": (SS + "dt-install-drift.timer", []),
+                  "agent-unit-failure@probe.service": (SS + "agent-unit-failure@.service", [])},
         "timers": ["agent-staging-session.timer", "dt-install-drift.timer"],
         "checks": ["mint_key_pairing", "staging_host_key"],
     },
@@ -204,8 +217,8 @@ def systemctl(*args):
 
 
 def check_units(box):
-    for unit, dropins in box["units"].items():
-        rc, o = systemctl("show", "-p", "LoadState,NeedDaemonReload,DropInPaths", unit)
+    for unit, (fragment, dropins) in box["units"].items():
+        rc, o = systemctl("show", "-p", "LoadState,NeedDaemonReload,DropInPaths,FragmentPath", unit)
         props = dict(ln.split("=", 1) for ln in o.splitlines() if "=" in ln) if rc == 0 else {}
         if rc != 0 or props.get("LoadState") != "loaded":
             out("UNIT", "%s is not loaded (%s)" % (unit, props.get("LoadState") or o), "UNIT")
@@ -213,6 +226,9 @@ def check_units(box):
         if props.get("NeedDaemonReload") != "no":
             out("UNIT", "%s changed on disk and systemd has not reloaded it — the running definition "
                         "is not the installed one" % unit, "UNIT")
+        if props.get("FragmentPath") != fragment:
+            out("UNIT", "%s loads from %s, not the installed %s (a higher-priority copy shadows it)"
+                % (unit, props.get("FragmentPath") or "nowhere", fragment), "UNIT")
         have = sorted(x for x in props.get("DropInPaths", "").split() if x)
         if have != sorted(dropins):
             out("UNIT", "%s drop-ins are %s, wanted exactly %s (an extra drop-in can override "
@@ -260,26 +276,28 @@ def check_extra(name, box):
         try:
             for ln in open(P("/etc/shadow")):
                 f = ln.split(":")
-                if f[0] in ("dtmint", "dtapi") and len(f) > 1 and f[1] not in ("*", "!", "!*"):
-                    out("STATE", "%s has a usable password hash in shadow; it must have none" % f[0], "ACCOUNT")
+                if f[0] == "dtmint" and len(f) > 1 and f[1] != "*":
+                    out("STATE", "dtmint's password field is %s, not '*' — a locked account can refuse the "
+                        "mint's key login, and a hash is a usable password" % ("a hash" if f[1][:1] not in ("!", "") else repr(f[1][:2])), "ACCOUNT")
+                if f[0] == "dtapi" and len(f) > 1 and not (f[1] in ("*", "") or f[1].startswith("!")):
+                    out("STATE", "dtapi has a usable password hash in shadow; it must have none", "ACCOUNT")
         except OSError as e:
             out("STATE", "cannot read the shadow file: %s" % e, "ACCOUNT")
     elif name == "sudoers_others":
         d = P("/etc/sudoers.d")
+        paths = [P("/etc/sudoers")]             # r2: the main file too, not only the drop-in dir
         try:
-            for fn in sorted(os.listdir(d)):
-                if fn == "dtapi":
-                    continue
-                try:
-                    txt = open(os.path.join(d, fn), encoding="utf-8", errors="replace").read()
-                except OSError as e:
-                    out("STATE", "cannot read %s/%s: %s" % (d, fn, e), "SUDO")
-                    continue
-                if "dtapi" in txt or "dtmint" in txt:
-                    out("STATE", "%s/%s also mentions dtapi or dtmint — only /etc/sudoers.d/dtapi may"
-                        % (d, fn), "SUDO")
+            paths += [os.path.join(d, fn) for fn in sorted(os.listdir(d)) if fn != "dtapi"]
         except OSError as e:
             out("STATE", "cannot list %s: %s" % (d, e), "SUDO")
+        for fp in paths:
+            try:
+                txt = open(fp, encoding="utf-8", errors="replace").read()
+            except OSError as e:
+                out("STATE", "cannot read %s: %s" % (fp, e), "SUDO")
+                continue
+            if "dtapi" in txt or "dtmint" in txt:
+                out("STATE", "%s also mentions dtapi or dtmint — only /etc/sudoers.d/dtapi may" % fp, "SUDO")
     elif name == "no_authorized_keys2":
         p = P("/home/dtmint/.ssh/authorized_keys2")
         if os.path.lexists(p):
@@ -349,8 +367,9 @@ def pending(box, sha, head):
         b, _ = git(box, "rev-parse", "--verify", "%s:%s" % (head, repo_path))
         if a == b:
             continue
-        ct, _ = git(box, "log", "-1", "--format=%ct", sha + ".." + head, "--", repo_path)
-        age = (time.time() - int(ct)) / 86400 if ct and ct.isdigit() else None
+        cts, _ = git(box, "log", "--reverse", "--format=%ct", sha + ".." + head, "--", repo_path)
+        ct = (cts or "").split()[:1]
+        age = (time.time() - int(ct[0])) / 86400 if ct and ct[0].isdigit() else None
         text = "%s changed on the branch after the install at %s (%s)" % (
             repo_path, sha[:12], "age unknown" if age is None else "%.1f days ago" % age)
         out("PENDING", text)
@@ -387,10 +406,17 @@ def run():
         out("STATE", "the installed sha %r is not a 40-hex sha" % sha[:60], "INSTALL")
         sha = None
     if sha and head:
-        anc, aerr = git(box, "merge-base", "--is-ancestor", sha, head)
-        if anc is None:
-            out("STATE", "the installed sha %s is not on %s — installed from an unreviewed commit? (%s)"
-                % (sha[:12], box["ref"], aerr), "INSTALL")
+        have, _ = git(box, "cat-file", "-e", sha + "^{commit}")
+        if have is None:
+            # C8: the source has not fetched the installed commit yet — mirror health, not drift
+            out("SOURCE", "the installed sha %s is not in the source yet (it fetches every 30 min) — "
+                          "the installed files are NOT compared this run" % sha[:12])
+            sha = None
+        else:
+            anc, aerr = git(box, "merge-base", "--is-ancestor", sha, head)
+            if anc is None:
+                out("STATE", "the installed sha %s is in the source but NOT on %s — installed from an "
+                    "unreviewed commit? (%s)" % (sha[:12], box["ref"], aerr), "INSTALL")
     box["_sha"] = sha
     print("# %s — installed files vs %s (branch head %s, source refreshed %s)" % (
         host, sha[:12] if sha else "NO INSTALLED SHA", head[:12] if head else "UNREADABLE",
@@ -426,21 +452,26 @@ def run():
     return 0 if not PROBLEMS else 1
 
 
+def write_classes(text):
+    try:
+        tmp = P(CLASSES_OUT) + ".tmp"
+        with open(tmp, "w") as fh:
+            fh.write(text + "\n")
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, P(CLASSES_OUT))
+    except OSError:
+        pass
+
+
 def main():
+    write_classes("CRASH")                      # r2: a run killed mid-way must not leave the LAST run's classes
     try:
         code = run()
     except Exception as e:
         print("STATE    dt-install-drift itself failed: %s" % type(e).__name__, flush=True)
         CLASSES.add("CRASH")
         code = 1
-    try:                                        # the failure class, for the alert's dedupe key
-        tmp = P(CLASSES_OUT) + ".tmp"
-        with open(tmp, "w") as fh:
-            fh.write(",".join(sorted(CLASSES)) + "\n")
-        os.chmod(tmp, 0o644)
-        os.replace(tmp, P(CLASSES_OUT))
-    except OSError:
-        pass
+    write_classes(",".join(sorted(CLASSES)))    # the failure classes, one alert each
     return code
 
 

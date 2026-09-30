@@ -36,6 +36,7 @@ import calendar
 import json
 import os
 import pwd
+import stat
 import ssl
 import subprocess
 import sys
@@ -65,7 +66,8 @@ def state_file(agent):
 
 def mint():
     """One ssh; the forced command on staging decides what runs. We pass NO command."""
-    cmd = [SSH, "-i", MINT_KEY, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+    # -F /dev/null: root's own ssh config (a ControlPath, a ProxyCommand) must not shape this call (r2)
+    cmd = [SSH, "-F", "/dev/null", "-i", MINT_KEY, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
            "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + KNOWN_HOSTS,
            "-o", "ConnectTimeout=20", "-T", MINT_TARGET]
     try:
@@ -145,8 +147,13 @@ def check(agent):
     """⛔ ASK THE API, DO NOT STAT THE FILE — through the route the crew login's own control uses
     (OBJ-1(a): GET /api/settings sits behind authenticateToken, which also looks the user up)."""
     try:
-        with open(state_file(agent), encoding="utf-8") as fh:
-            state = json.load(fh)
+        # O_NOFOLLOW|O_NONBLOCK + a regular-file check: an agent-owned path must not hang or
+        # redirect a root read (r2: a FIFO planted there hung --check)
+        fd = os.open(state_file(agent), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as fh:
+            if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+                raise OSError("not a regular file")
+            state = json.loads(fh.read(1 << 20).decode("utf-8"))
         tok = [i["value"] for o in state["origins"] for i in o["localStorage"]
                if i["name"] == "accessToken"][0]
     except Exception as e:
@@ -184,12 +191,18 @@ def main():
     if a.user:
         ap.error("--user only goes with --check: one mint always refreshes both agents")
     tokens = mint()
+    failed = []
     for agent in AGENTS:
-        write_state(agent, tokens)
-    print("Refreshed %s — both browsers will open staging signed in (token %s, expires %s)."
-          % (", ".join(state_file(x) for x in AGENTS),
-             "reused" if tokens.get("reused") else "fresh", tokens.get("exp")))
-    return 0
+        # ⛔ one agent's failure must never skip the other (C-10; r2: an agent could otherwise block
+        #    the other's refresh by planting a directory where its own state file goes)
+        try:
+            write_state(agent, tokens)
+            print("Refreshed %s (token %s, expires %s)." % (state_file(agent),
+                  "reused" if tokens.get("reused") else "fresh", tokens.get("exp")))
+        except Exception as e:
+            failed.append(agent)
+            print("FAILED to write %s's session: %s. The other agent is unaffected." % (agent, type(e).__name__))
+    return 5 if failed else 0
 
 
 if __name__ == "__main__":

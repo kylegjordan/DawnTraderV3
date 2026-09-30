@@ -269,6 +269,19 @@ c, o, e = r.run()
 check("reconcile + login 500: exit 3, marker kept, nothing touched", c == 3 and r.marker() == m0 and r.env_value() == V1, o + e)
 r.close()
 
+# ── 11b. reconcile: ONLY the live env's login gets a 500 — still not an answer, even though the
+#         temp env would now log in (the spec: a 500 on either login touches nothing) ──
+r = Rig(live_env=V1, kill="2")
+r.run()
+r.kill = None
+r.write_setter()
+r.app.login_status, r.app.login_status_times = 500, 1
+m0 = r.marker()
+c, o, e = r.run()
+check("reconcile: a 500 on the live login alone -> exit 3, touch nothing (no temp login, no rename)",
+      c == 3 and r.marker() == m0 and r.env_value() == V1, o + e)
+r.close()
+
 # ── 12. neither logs in, but the row never changed: nothing to restore ──
 r = Rig()
 os.makedirs(r.p("setter"), mode=0o700)
@@ -385,6 +398,63 @@ vals = [S.gen_value() for _ in range(2000)]
 check("gen_value: 2000 draws, all valid, all distinct", len(set(vals)) == 2000 and all(
     re.fullmatch(r"[A-Za-z0-9_]{41}", x) and x.count("_") == 1 and re.search("[A-Z]", x) and re.search(r"\d", x) for x in vals))
 check("gen_value: validatePasswordStrength's special set holds '_'", "_" in "!@#$%^&*()_+=-{};:'\",.<>?")
+r.close()
+
+# ── 17b. r2: an interrupt BEFORE the commit point restores; one AFTER it lets the run finish ──
+import signal as _sig  # noqa: E402
+r = Rig(live_env=V1, db_extra={"sleep_on_write": 3})
+pg = r.pgpass()
+pr = subprocess.Popen([sys.executable, r.setter], env={"PATH": "/usr/bin:/bin", "PGPASSFILE": pg},
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+time.sleep(1.5)                                    # inside (2)'s psql, which runs in its own session
+pr.send_signal(_sig.SIGTERM)
+o, e = pr.communicate(timeout=120)
+row = r.dbrow()
+check("r2: SIGTERM during the commit -> acted on at the next checkpoint, restored, exit 1",
+      pr.returncode == 1 and "acted on before" in o and row["role"] == "owner" and matches(V1, row["password"])
+      and r.env_value() == V1 and clean(r), o + e)
+r.close()
+r = Rig(live_env=V1, verify=["/bin/sh", "-c", "sleep 3; exec \"$0\" \"$@\"", sys.executable, "PLACEHOLDER", "GET", "/api/settings"])
+r.verify[4] = r.dt
+r.write_setter()
+pr = subprocess.Popen([sys.executable, r.setter], env={"PATH": "/usr/bin:/bin", "PGPASSFILE": r.pgpass()},
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+for _ in range(100):                               # wait until the run is inside (6)
+    if os.path.exists(r.p("setter", "run.log")) and "(5) purged" in open(r.p("setter", "run.log")).read():
+        break
+    time.sleep(0.1)
+pr.send_signal(_sig.SIGTERM)
+o, e = pr.communicate(timeout=120)
+v = r.env_value()
+check("r2: SIGTERM after the commit point -> the run FINISHES (exit 0), new value in place",
+      pr.returncode == 0 and "(7) removed the marker" in o and v != V1 and matches(v, r.dbrow()["password"]) and clean(r), o + e)
+r.close()
+
+# ── 17c. r2: a restored pre-run env that does NOT log in is paged, not reported as success ──
+r = Rig(live_env="WrongOld_1zzzzzzzzzzz")
+os.makedirs(r.p("setter"), mode=0o700)
+row0 = r.dbrow()
+json.dump({"started": "x", "old_hash": row0["password"], "old_role": "owner", "had_env": True, "phase": "renamed"},
+          open(r.p("setter", "marker.json"), "w"))
+with open(r.p("setter", "old-env"), "w") as fh:
+    fh.write("DT_API_USER=testuser123" + NL + "DT_API_PASS=AlsoWrong_2zzzzzzzzzz" + NL)
+c, o, e = r.run()
+check("r2: the restored env refuses to log in -> exit 1 and a DURABLE page", c == 1 and "does NOT log in" in e
+      and os.path.exists(r.p("state", "page.json")), o + e)
+r.close()
+
+# ── 17d. r2: a 'temp-written' marker whose row HAS changed is not trusted ──
+r = Rig(live_env=V1, kill="2")
+r.run()
+m = json.load(open(r.p("setter", "marker.json")))
+m["phase"] = "temp-written"                        # as if the phase write had not reached disk
+json.dump(m, open(r.p("setter", "marker.json"), "w"))
+r.kill = None
+r.write_setter()
+c, o, e = r.run()
+v = r.env_value()
+check("r2: a stale early phase over a landed commit -> reconciled by login to the NEW value",
+      c == 0 and "reconciling by login" in o and v != V1 and matches(v, r.dbrow()["password"]) and clean(r), o + e)
 r.close()
 
 # ── 18. the run log survives the terminal ──

@@ -105,5 +105,24 @@ except OSError:
     ok = True
 check("a home that is a symlink is refused (O_NOFOLLOW on the directory)", ok)
 
+# r2: a directory planted where the FIRST agent's state goes must not stop the SECOND
+homes = {}
+for ag in ("nobody", "daemon"):
+    h = os.path.join(T, "h-" + ag)
+    os.makedirs(h)
+    os.chown(h, pwd.getpwnam(ag).pw_uid, pwd.getpwnam(ag).pw_gid)
+    homes[ag] = h
+A.state_file = lambda agent: os.path.join(homes[agent], ".staging-session.json")
+A.AGENTS = ("nobody", "daemon")
+os.makedirs(os.path.join(homes["nobody"], ".staging-session.json.tmp", "blocker"))
+fake_ssh(json.dumps(good))
+sys.argv = ["agent-staging-session"]
+try:
+    rc = A.main()
+except SystemExit as e:
+    rc = e.code
+check("r2: the first agent failing does NOT skip the second (and the run reports the failure)",
+      rc == 5 and os.path.isfile(os.path.join(homes["daemon"], ".staging-session.json")), str(rc))
+
 print("staging-session suite: %d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
