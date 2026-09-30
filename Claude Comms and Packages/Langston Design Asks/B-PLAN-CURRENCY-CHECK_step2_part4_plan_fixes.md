@@ -4,6 +4,18 @@
 
 Ref `f4ceb7e48` · full document: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` · detail for any id below: grep the full document at the ref · change-class `non_architecture` · Step-2 document = this pre-audit (RETROACTIVE it is not — it is the real Step 2). Your binding rulings: scope §10c (OBJ-8 and OBJ-9 approved; condition 5 — OBJ-9 sweeps the whole `<file>:<line>`-citation class), §10b Q5 (a named, positioned POST_AUDIT_ROADMAP item counts as placed). Rules written to settle reader disagreements: R1 OPEN issue, R2 dated HOME, R3 "after X" (§1.1).
 
+## SINCE THIS BRIEF WAS WRITTEN — WHAT YOUR LATER RULINGS ALREADY SETTLE HERE (added 2026-09-30, ref of this addition = the commit that carries it)
+
+The body below is unchanged and is stamped at `f4ceb7e48`; every `file:line` in it is at that ref. Three rulings made since then reach into this area:
+1. **Part 1 (scope §10d; re-cut at `34c8c836e`, `B_PLAN_CURRENCY_CHECK_OBJ1_RECUT.md`).** OBJ-1 is now a STATE check, so two plan items here are superseded by the re-cut rather than ruled here:
+   - **P12** (rows 35/87 *re-pointed* to residuals) is replaced by the re-cut's **N4**: mark each row done with its report link on the shipped id, and put each residual on its own lettered row. Re-pointing would make the two positive-control rows pass by losing their id. Rule it as N4 in part 1 r2; P12's row-55 half (status names `#535`/`#532`) is covered by the re-cut's **N5** (row 55 fails today on an OBJ-1-only report; its text is fixed in P4 there).
+   - **P9** (§5 `B-DEPLOY-DRIFT-LINE` → `✅ closed 2026-09-09` + report path) depends on the re-cut's **C2** (whether §5 lists windows or batches, and which form grades it). Under form C it is exactly the fix that makes that leg pass.
+   - **P13a** (row 138a's stray 8th cell) is the re-cut's malformed-row positive control: it is still the only malformed row at `05af099da` (line 256, 8 cells).
+2. **Part 2 (scope §10e).** **Q9(b) is confirmed:** any batch id on a HOME line places it, and "Parked by Kyle" counts as placed, as its own sub-count. So **R2-Q10's clause "Same for `#483`'s L511 leg if Q9(b) does not count the parked list" dissolves.** **R1-Q13 → (c)** (item/batch cells always, note cells only in the named forms) and **R3-Q9** (a `(CC-x` head token is the FILER, not the owner) bear on Q24's and R1-Q5's routing: route by the HOME line's owner, and print `filer` where that is all there is.
+3. **Part 3 (scope §10f).** **"The plan cites governed rows by name, never by line"** is now your ruling, not only OBJ-9's condition 5. That backs **P7**'s by-name form, and it is the reason `PRE_LIVE_SPRINT.md:25`'s wording (the deploy-hold row named) is carried over `plan:76`'s line citation. **R3-Q4:** CC-C is told about its 18 task-list rows and CC-A corrects its two at Step 10 — P10 already says so. The task lists are derived views; their refresh trigger is homed on `B-SLOT-PLACEMENT-CHECK`.
+
+**Still yours in this part:** R2-Q7, Q22, Q24, Q25, Q26, Q27, Q28, R1-Q3, R1-Q4, R1-Q5, R2-Q8, R2-Q9, R2-Q10 (without the dissolved clause), R3-Q6, R3-Q7, and plan items P6, P7, P8, P10, P11, P13, P14, P15, P16.
+
 ## THE ASK
 Rule on this area's questions and approve this area's plan items, or name what is wrong.
 
