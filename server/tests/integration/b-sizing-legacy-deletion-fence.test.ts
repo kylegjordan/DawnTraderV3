@@ -432,7 +432,7 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       ['the cap universe split (2e Pe4)', /\b(control_cohort|b67_3_universe_split_active|splitActive)\b/],
       ['the pattern-list size cap (2e Pe5)', /\b(pattern_max_position_pct|XSTOCK_SPOT_PATTERN_(MAX_POSITION_PCT|FINAL_SCORE_FLOOR|POOL_GUARDRAILS))\b|\.MAX_POSITION_PCT\b/],
       ['the correlation shrink in the sizer (2e Pe10)', /correlationScale\s*=\s*getScalingFactor|\[9\.4\]\[SIZE\]/],
-      ['the AI chat action path (2e Pe8)', /\b(intentExecutor|IntentExecutionService|ApprovalPrompt|SafeInteractiveNotification)\b|intent-executor|\/intent\/(execute|audit|approve|reject|dismiss|clear|cleanup-ghosts)\b/],
+      ['the AI chat action path (2e Pe8)', /\b(intentExecutor|IntentExecutionService|ApprovalPrompt|(Safe)?InteractiveNotification)\b|intent-executor|\/intent\/(execute|audit|approve|reject|dismiss|clear|cleanup-ghosts)\b/],
     ];
     for (const [label, rx] of GONE) {
       it(`${label} does not come back`, () => {

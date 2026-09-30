@@ -1934,10 +1934,9 @@ export const closedTradesTable = pgTable("closed_trades", {
   exitRestOutcome: varchar("exit_rest_outcome", { length: 8 }),
   exitRestedAtPrice: decimal("exit_rested_at_price", { precision: 20, scale: 10 }),
   exitRestDurationMs: integer("exit_rest_duration_ms"),
-  // B67.3 — A/B universe-split cohort marker. CRC32(symbol) % 2 at trade open.
-  // Cohort 0: per-underlying cap ENABLED. Cohort 1: cap DISABLED (control).
-  // ⛔ RETIRED 2026-09-30 (B-SIZING-DEC-RESTORE 2e, Kyle): the split is gone and the cap covers every coin. The column
-  // stays as DATA (KEEP-AS-DATA, J2) — historical rows carry it; nothing branches on it.
+  // B67.3 — CRC32(symbol) % 2 at trade open: a HISTORICAL cohort hash, DATA ONLY (KEEP-AS-DATA, J2). It drove the
+  // per-underlying cap's A/B universe split (0 = capped, 1 = uncapped control) until 2026-09-30, when B-SIZING-DEC-RESTORE
+  // 2e retired the split (Kyle): the cap now covers every coin and nothing branches on this value.
   // NULL on trades opened before B67.3 deploy.
   pairIdHash: integer("pair_id_hash"),
   // B67.2.1 — Regime classifier confidence + macro modifier + phase persisted

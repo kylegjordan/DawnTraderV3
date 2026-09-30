@@ -655,7 +655,7 @@ Every authenticated route is wrapped in a `<Profiler>` component via `ProfiledRo
 | System | 21 | `/api/system/*`, `/api/health/*`, `/api/maintenance/*`, `/api/database/*`, `/api/config` |
 | AI / Orchestrator | 21 | `/api/orchestrator/*`, `/api/ai/*`, `/api/semantic/*`, `/api/actuation/*` |
 | Filter / Diagnostics | 20 | `/api/filters/*`, `/api/diagnostics/*`, `/api/screeners/*`, `/api/schedulers/*` |
-| Walter / Bob / Chats | 18 at this census; 7 since deleted | `/api/walter/*`, `/api/transcribe` (the seven `/api/intent/*` routes were deleted 2026-09-30, B-SIZING-DEC-RESTORE 2e) |
+| Walter / Bob / Chats | 11 (18 at the census, 7 deleted 2026-09-30) | `/api/walter/*`, `/api/transcribe` (the seven `/api/intent/*` routes were deleted 2026-09-30, B-SIZING-DEC-RESTORE 2e) |
 | VTS / ML | 16 | `/api/vts/*`, `/api/metrics/*` |
 | Learning | 9 | `/api/learning/*`, `/api/historic-signals/*` |
 | Auth | 3 | `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh` |

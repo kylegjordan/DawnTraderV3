@@ -4560,7 +4560,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 >
 > | | the path | home |
 > |---|---|---|
-> | `#928` | an **HTTP intent path** takes a price triple straight from the request body into execution, validating symbol and strategy only — **while its own error string claims it checks prices**; the downstream distance check uses `Math.abs`, so an **inverted** triple passes silently | `B-INTENT-ENTRY-PARITY` |
+> | `#928` | ~~the HTTP intent path (price triple straight from the request body)~~ — **deleted 2026-09-30** with the AI chat's action path (B-SIZING-DEC-RESTORE 2e). **Survives:** `POST /api/paper/trade/test` (quantity from the request body, no sizer, no guardrail check) and `#929` | `B-INTENT-ENTRY-PARITY` (scope shrank to the survivors) |
 > | `#929` | **position sizing has TWO callers**; the fallback-sizing arm of the promoted-signal path never consults the VPG | folded into `#928` |
 > | `#927` | the promotion path **invents** a target (`entry * 1.02`) in **three** places, one of which is the RTB **ranking** key — so pool ORDER can depend on an invented number | `B-TARGET-FABRICATION` |
 > | `#923` | the **trailing exit controller DOES NOT call the VPG** and ratchets a live stop off-grid | row **3f.b**, `B-POST-GRID-MUTATION-CENSUS` — **not** `F-G-2` (corrected 2026-08-28) |
@@ -9812,7 +9812,7 @@ Every authenticated route is wrapped in a `<Profiler>` component via `ProfiledRo
 | System | 21 | `/api/system/*`, `/api/health/*`, `/api/maintenance/*`, `/api/database/*`, `/api/config` |
 | AI / Orchestrator | 21 | `/api/orchestrator/*`, `/api/ai/*`, `/api/semantic/*`, `/api/actuation/*` |
 | Filter / Diagnostics | 20 | `/api/filters/*`, `/api/diagnostics/*`, `/api/screeners/*`, `/api/schedulers/*` |
-| Walter / Bob / Chats | 18 at this census; 7 since deleted | `/api/walter/*`, `/api/transcribe` (the seven `/api/intent/*` routes were deleted 2026-09-30, B-SIZING-DEC-RESTORE 2e) |
+| Walter / Bob / Chats | 11 (18 at the census, 7 deleted 2026-09-30) | `/api/walter/*`, `/api/transcribe` (the seven `/api/intent/*` routes were deleted 2026-09-30, B-SIZING-DEC-RESTORE 2e) |
 | VTS / ML | 16 | `/api/vts/*`, `/api/metrics/*` |
 | Learning | 9 | `/api/learning/*`, `/api/historic-signals/*` |
 | Auth | 3 | `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh` |

@@ -157,7 +157,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 57 | #699 | #699 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | RTB: does promotion evict, or is the screen stale |
 | 58 | 19.2 Audit & Debug — - Verify FinalScore, Hybrid Score, Confidenc | roadmap 19.2 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | SQE: verify every score calculates correctly |
 | 59 | B-ENTRY-LEVEL-RECHECK | B-ENTRY-LEVEL-RECHECK | CC-B (New Claude) | QUEUED | — | open: re-check a signal's levels against the current price before the fill |
-| 60 | B-INTENT-ENTRY-PARITY | B-INTENT-ENTRY-PARITY | CC-C (Analyst Claude) | QUEUED | — | open: two entry routes bypass the price grid |
+| 60 | B-INTENT-ENTRY-PARITY | B-INTENT-ENTRY-PARITY | CC-C (Analyst Claude) | QUEUED | — | open: entry routes bypass the price grid and the sizer. ⛔ SCOPE SHRANK 2026-09-30: the HTTP intent path (`intent-executor.ts`) is DELETED (B-SIZING-DEC-RESTORE 2e); what remains is `POST /api/paper/trade/test` (quantity from the request body) and `#929` (`RUNNING_ISSUES` #928 amendment) |
 | 61 | B-GRID-LIVE-PATH-PARITY | B-GRID-LIVE-PATH-PARITY | CC-C (Analyst Claude) | QUEUED | — | open: grid rounding on the live order path |
 | 62 | A resting order's deadline must run whether or not a price is usable | — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | open: a resting order's deadline runs even when no price is usable |
 | 63 | #630 | #630 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | open: exercise the maker-order deadline once |

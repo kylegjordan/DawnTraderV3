@@ -817,3 +817,15 @@ Read at `99a050da5`; the four A2 production files byte-identical at `13c00d85f` 
 | **nit** | `toFixed(0)` could misstate a non-integer buffer; `??` misses an empty message | `Number((f × 100).toFixed(4))%` (0.97 → 97%, 0.975 → 97.5%); `\|\|` for the error text |
 | out of A2 | RULE_012 now accepts `p = 0.5` (200 slots) | **Kyle's decision (§19, `#1105` closed):** no floor and no hidden limit on the max position %; the derived-slots test pins p = 0.5 ⇒ 200 slots, the loops do not halt, RULE_012 accepts it |
 tsc 339 = baseline; the six touched test files pass (derived-slots, risk-retired, fail-loud, cascade, consumer-swaps, legacy-deletion fence).
+
+### 20.10 STEP 4, GATE B — LANGSTON: APPROVED (code); A1's C1 + C4 MET; one governance blocker, three conditions, one nit — all built (2026-09-30, CC-C)
+Ref note (his): gate B's content is in `06fa8ba04` and A1's conditions in `4fcccb896` (CI `36657763636` 4/4) — name the ref per gate. He re-derived the baseline drop 367 → 339 at `309394337` → `4fcccb896`: 0 entries added, 0 counts changed, 10 removed across exactly 2 files (the deleted routes + the executor), sums equal the totals — the removed code, not a partial parse. Nothing reaches the executor; the §9.5(a-ii) state-write census passes (`walter_pending_approvals` has no surviving reader).
+| # | ruling | as built |
+|---|---|---|
+| **BLOCKER-1** | the SIM's cross-cutting registry named `intent-executor.ts` as the carrier of unguarded `tradingEngines` writers | SIM entry rewritten: the agent-intent half deleted; five reader files remain, each guard named; **`routes.ts:3990` names a bare `tradingEngines` declared nowhere** (baselined TS2552 ×2) ⇒ the live force-stop throws a caught `ReferenceError` — recorded on `#297` (its live-engine half; no effect today, live mode off) |
+| **CONDITION-1** | `#928`'s intent limb is gone; plan row 3h/60 would be scoped against a deleted file | `#928` amendment: intent limb discharged; survivors `POST /api/paper/trade/test` and `#929`; `SPRINT_TO_LIVE_PLAN` row 60, SIM `:983` and the System Manual `#928` row updated |
+| **CONDITION-2** | the fence missed the primary `InteractiveNotification` export | pattern `(Safe)?InteractiveNotification` |
+| **CONDITION-3** | list what the fence cannot see | one `DELETED_COMPONENTS_LOG` line: the docs snapshot, `.baseline-userid-files.txt:61`, the dated route-manifest proof |
+| **C4 residue** | `schema.ts:1937` stacked the retirement UNDER the stale present-tense text | the comment itself rewritten (historical cohort hash, data only) |
+| **nit** | "18 at this census; 7 since deleted" in a count column | `11 (18 at the census, 7 deleted 2026-09-30)`, System Manual and PHASE9 |
+**Recorded so nobody "fixes" it (his note):** the Pe5 GONE pattern forbids `XSTOCK_SPOT_PATTERN_FINAL_SCORE_FLOOR` while a control requires `\bFINAL_SCORE_FLOOR\b` present. Both hold: the fence scans comment-STRIPPED source (so the prefixed token in `xstock_spot/pattern-pool-filters.ts`'s header is invisible to it), and `\b` keeps the bare control from matching the prefixed form. Correct, though it reads as a contradiction at a glance.
