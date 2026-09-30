@@ -1,6 +1,6 @@
 # B-PLAN-CURRENCY-CHECK — P44 DRY RUN (the committed baseline the first live census differs from)
 
-Langston, Step 4 G7-12 (2026-09-30): the full stdout, the exact command line and the ref, in the file — not a summary. Produced by the census code at the code-branch head (G7 conditions applied, not yet on the review branch), reading governed files AT the ref named in each run (`git show <ref>:<path>`).
+**THIS FILE REPLACES the pre-audit's hand-counted placement figures (352 / 117, 354 / 115)** — they were counts from scratch scripts not kept, so the residual (−7 / −9 placed at the same ref and denominator, the `--open-r1` run below) cannot be attributed per issue; Langston ruled them retired, not reconciled (G7-8, round 2). Langston, Step 4 G7-12 (2026-09-30): the full stdout, the exact command line and the ref, in the file — not a summary. Produced by the census code at the code-branch head (G7 conditions applied, not yet on the review branch), reading governed files AT the ref named in each run (`git show <ref>:<path>`).
 
 ## `node scripts/governance-checker/census.mjs --dry-run --ref e18cb870b01c943c91bff03d5f2e6760820ee1be `
 
