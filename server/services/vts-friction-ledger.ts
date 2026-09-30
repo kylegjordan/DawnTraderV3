@@ -6,12 +6,14 @@
  *   - `legacyBasis` — closes of a trade opened before every writer stamped `entryPriceBasis`; the positive control while
  *                     pre-stamp trades close. CUMULATIVE since boot, so it PLATEAUS rather than falling: what decays to 0
  *                     is its per-interval increase, once every pre-stamp trade has closed (≤ MAX_HOLD after the deploy).
- *                     A restart resets all three counters, so a plateau is read within one boot (the Step-7 extract).
+ *                     A restart resets all four counters, so a plateau is read within one boot (the Step-7 extract).
  *   - `refused`     — a close missing SOME cost inputs (a writer lost one); the stamped scalar was booked
- *                     (`frictionBasis = 'stamped'`). Must stay 0.
- *   - `unpriced`    — a close whose record carried NO cost input at all (the shadow lane, which books `frictionCost: 0`);
- *                     counted separately and never alerted — it is a lane that was never priced, not a lost stamp. Each refusal logs, and raises ONE alert (dedupe `vts-friction-recompose-refused`) —
- *                     RESOLVE it with evidence, never ACK: an unresolved row blocks the key's next mint (`#982`).
+ *                     (`frictionBasis = 'stamped'`). Must stay 0. Each refusal logs, and raises ONE alert (dedupe
+ *                     `vts-friction-recompose-refused`) — RESOLVE it with evidence, never ACK: an unresolved row blocks
+ *                     the key's next mint (`#982`).
+ *   - `unpriced`    — a close whose record carried NO cost input at all, not even `chosenEntryMode` (the shadow lane,
+ *                     which books `frictionCost: 0`); counted separately and NEVER alerted — a lane never priced, not a
+ *                     lost stamp.
  * Its own module (not inline in the runner) so the refusal arm is exercised at build (plan §C3.8).
  */
 import type { VtsCloseFriction } from '../core/trading/vts-friction.js';

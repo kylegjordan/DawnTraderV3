@@ -7,7 +7,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { vtsSpreadShareByLeg } from '../core/trading/vts-friction.js';
+import { vtsSpreadShareByLeg, vtsFeeByLeg } from '../core/trading/vts-friction.js';
 
 interface TradeRecord {
   // B65.2-HF2 (2026-04-23): widened to include boolean so trailing-engine
@@ -88,13 +88,19 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   grossProfitPercent: string;
   costs: number;
   // P19-B8.7 Step-9: cost 5-col split, derived from the friction COMPONENTS
-  // captured at open (costFee/Slippage/SpreadFraction on the record). Spread is
-  // allocated half to each slip leg so the four columns sum exactly to `costs`.
-  // null on records opened before the components were captured (em-dash).
+  // captured at open (the per-leg fee and slippage/spread fractions on the record). Each leg
+  // carries its own fee and its share of the spread under the per-leg rule (`vtsFeeByLeg`,
+  // `vtsSpreadShareByLeg`, `8a-P4c` 3a-ii), so the four columns sum to `costs`; legacy rows
+  // keep the blended fee and a ½ + ½ spread. null on records opened before the components
+  // were captured (em-dash).
   costEntryFee: number | null;
   costEntrySlippage: number | null;
   costExitFee: number | null;
   costExitSlippage: number | null;
+  /** `8a-P4c` 3a-ii: how the row's friction was composed, and the bookings it read (declared — r2 census). */
+  frictionBasis: 'recomposed' | 'stamped' | 'unpriced' | null;
+  entryPriceBasis: 'ask' | 'level' | 'limit' | null;
+  exitBookingArm: string | null;
   netProfitValue: number;
   netProfitPercent: string;
   finalScore: number;
@@ -218,6 +224,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
               countsInAggregates: false,
               grossProfitValue: 0, grossProfitPercent: '0.00%', costs: 0,
               costEntryFee: null, costEntrySlippage: null, costExitFee: null, costExitSlippage: null,
+              frictionBasis: null, entryPriceBasis: null, exitBookingArm: null, // every row carries the same columns
               netProfitValue: 0, netProfitPercent: '0.00%',
               finalScore: 0, hybridScore: 0, expectedEdge: 0, regimeWeight: 0,
               entryTime: new Date(trade.entryTime).toISOString(),
@@ -331,10 +338,11 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
                 return { costEntryFee: null, costEntrySlippage: null, costExitFee: null, costExitSlippage: null };
               }
               const _sh = vtsSpreadShareByLeg(trade, true);
+              const _fee = vtsFeeByLeg(trade) as { entry: number; exit: number }; // finite _f checked above
               return {
-                costEntryFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
+                costEntryFee: parseFloat((tradeDollarValue * _fee.entry).toFixed(4)), // the leg's own fee (r2 FINDING-1)
                 costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.entry)).toFixed(4)),
-                costExitFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
+                costExitFee: parseFloat((tradeDollarValue * _fee.exit).toFixed(4)),
                 costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.exit)).toFixed(4)),
               };
             })(),

@@ -89,7 +89,7 @@ import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled 
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
 import { resolveVtsBookedExitPrice, type VtsBookingArm } from '../core/trading/vts-exit-booking.js';
-import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, vtsSpreadShareByLeg, type EntryPriceBasis, type VtsFrictionBasis } from '../core/trading/vts-friction.js';
+import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, vtsSpreadShareByLeg, vtsFeeByLeg, type EntryPriceBasis, type VtsFrictionBasis } from '../core/trading/vts-friction.js';
 import { noteVtsCloseFriction, vtsFrictionSinceBoot } from './vts-friction-ledger.js';
 import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-no-trigger-streak.js';
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
@@ -6347,10 +6347,11 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
         // `8a-P4c` 3a-ii (FINDING-1): the spread goes to a leg only where the per-leg rule charged it — an OPEN row's
         // `costs` is the open-time estimate (exit assumed on its side). A legacy row keeps ½ + ½.
         const _sh = vtsSpreadShareByLeg(trade, false);
+        const _fee = vtsFeeByLeg(trade) as { entry: number; exit: number }; // finite _f checked above ⇒ never null here
         return {
-          costEntryFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
+          costEntryFee: parseFloat((tradeDollarValue * _fee.entry).toFixed(4)), // the leg's own fee (r2 FINDING-1)
           costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.entry)).toFixed(4)),
-          costExitFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
+          costExitFee: parseFloat((tradeDollarValue * _fee.exit).toFixed(4)),
           costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.exit)).toFixed(4)),
         };
       })(),

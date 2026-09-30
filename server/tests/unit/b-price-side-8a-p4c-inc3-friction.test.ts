@@ -23,6 +23,7 @@ import {
   entryPriceBasisFor,
   recomposeVtsCloseFriction,
   vtsSpreadShareByLeg,
+  vtsFeeByLeg,
   type VtsFrictionRecord,
 } from '../../core/trading/vts-friction.js';
 import { planTwin } from '../../core/trading/pending-maker-logic.js';
@@ -322,5 +323,41 @@ describe('8a-P4c 3a-ii r2 — the cost split sums to the booked friction, per le
       expect(src).toMatch(/vtsSpreadShareByLeg\(trade, (true|false)\)/);
       expect(src).not.toMatch(/_sp \/ 2/);
     }
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// Langston 3a-ii r2 — BLOCKER-1 (the predicate reads the fence's set) and FINDING-1 (the fee columns per leg).
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('8a-P4c 3a-ii r3 — unpriced needs ALL FIVE absent; the fee columns carry each leg\'s own fee', () => {
+  beforeEach(() => addAlert.mockClear());
+
+  it('r2 BLOCKER-1: chosenEntryMode present, all four fractions lost ⇒ REFUSED + alerted (the maximal lost-input case)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const lost = { frictionCost: 0.01, chosenEntryMode: 'taker' } as VtsFrictionRecord;
+    const fr = recomposeVtsCloseFriction(lost, 'bid');
+    expect(fr).toMatchObject({ basis: 'stamped', missing: 'costEntryFeeFraction' });
+    noteVtsCloseFriction('vts', { symbol: 'L/USD' }, fr);
+    await vi.waitFor(() => expect(addAlert).toHaveBeenCalledTimes(1));
+    errSpy.mockRestore();
+  });
+
+  it('vtsFeeByLeg: the leg\'s own fee when both are present (a maker rebate stays NEGATIVE); else the blended; else null', () => {
+    expect(vtsFeeByLeg({ costFeeFraction: 0.006, costEntryFeeFraction: 0.004, costExitFeeFraction: 0.008 })).toEqual({ entry: 0.004, exit: 0.008 });
+    expect(vtsFeeByLeg({ costFeeFraction: 0.0004, costEntryFeeFraction: -0.0002, costExitFeeFraction: 0.001 })).toEqual({ entry: -0.0002, exit: 0.001 });
+    expect(vtsFeeByLeg({ costFeeFraction: 0.006 })).toEqual({ entry: 0.006, exit: 0.006 }); // pre-OBJ-5b row
+    expect(vtsFeeByLeg({})).toBeNull();
+  });
+
+  it('both display sites take the fee per leg (no blended fee on either column), and the never_filled export row carries the new columns', () => {
+    for (const f of ['server/services/vts-runner.ts', 'server/utils/export-csv.ts']) {
+      const src = readFileSync(join(process.cwd(), f), 'utf-8');
+      expect(src).toMatch(/costEntryFee: parseFloat\(\(tradeDollarValue \* _fee\.entry\)\.toFixed\(4\)\)/);
+      expect(src).toMatch(/costExitFee: parseFloat\(\(tradeDollarValue \* _fee\.exit\)\.toFixed\(4\)\)/);
+      expect(src).not.toMatch(/costEntryFee: parseFloat\(\(tradeDollarValue \* _f\)/);
+    }
+    const csv = readFileSync(join(process.cwd(), 'server/utils/export-csv.ts'), 'utf-8');
+    expect(csv).toMatch(/frictionBasis: null, entryPriceBasis: null, exitBookingArm: null,/);
+    expect(csv).toMatch(/frictionBasis: 'recomposed' \| 'stamped' \| 'unpriced' \| null;/);
   });
 });

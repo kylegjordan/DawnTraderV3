@@ -63,6 +63,20 @@ export function vtsSpreadShareByLeg(t: { entryPriceBasis?: EntryPriceBasis; fric
   return { entry, exit };
 }
 
+/**
+ * The fee per leg for the P19-B8.7 cost columns (Langston 3a-ii r2 FINDING-1): the leg's OWN fee fraction when the record
+ * carries both (F-G-2 OBJ-5b onward) — so a maker entry shows the maker fee, and on xStock a REBATE shows as negative —
+ * else the blended `costFeeFraction` on both legs (a pre-OBJ-5b row carries nothing finer; its SUM is still right).
+ * Returns null when there is no fee figure at all (the columns render em-dashes).
+ */
+export function vtsFeeByLeg(t: { costFeeFraction?: number; costEntryFeeFraction?: number; costExitFeeFraction?: number }):
+  { entry: number; exit: number } | null {
+  const fin = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+  if (fin(t.costEntryFeeFraction) && fin(t.costExitFeeFraction)) return { entry: t.costEntryFeeFraction, exit: t.costExitFeeFraction };
+  if (fin(t.costFeeFraction)) return { entry: t.costFeeFraction, exit: t.costFeeFraction };
+  return null;
+}
+
 /** The fields a closing VTS trade carries (all optional on the record: absent on pre-B8.7 / pre-F-G-2 rows). */
 export interface VtsFrictionRecord {
   frictionCost: number;
@@ -97,8 +111,12 @@ const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFi
 export function recomposeVtsCloseFriction(t: VtsFrictionRecord, exitArm: VtsBookingArm): VtsCloseFriction {
   const refuse = (missing: string): VtsCloseFriction =>
     ({ friction: t.frictionCost, basis: 'stamped', entryPriceBasis: null, legacyBasis: false, missing });
+  // `unpriced` needs ALL FIVE absent — the four fractions AND `chosenEntryMode` (Langston r2 BLOCKER-1): every priced writer
+  // stamps `chosenEntryMode`, so a record that still carries it but lost all four fractions is the MAXIMAL lost-input case
+  // and must refuse (and alert), not read as unpriced. The predicate reads exactly the set the shadow-lane fence pins.
+  // `legacyBasis: false` is structural on this arm: with no `chosenEntryMode` there is no legacy reading to take.
   const components = [t.costEntryFeeFraction, t.costExitFeeFraction, t.costSlippageFraction, t.costSpreadFraction];
-  if (components.every((c) => c === undefined || c === null)) {
+  if (t.chosenEntryMode === undefined && components.every((c) => c === undefined || c === null)) {
     return { friction: t.frictionCost, basis: 'unpriced', entryPriceBasis: null, legacyBasis: false, missing: null };
   }
   if (t.chosenEntryMode !== 'maker' && t.chosenEntryMode !== 'taker') return refuse('chosenEntryMode');
