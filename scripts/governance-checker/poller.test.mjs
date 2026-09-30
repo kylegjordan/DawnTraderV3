@@ -730,6 +730,43 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
   const unterminated = parseExceptions(exLedger('<!--', exRow('B-SWALLOWED', 'open', 'open since 2026-09-01T00:00:00Z', 'langston')));
   ok('EX P21: an UNTERMINATED <!-- is surfaced as malformed, never swallowed silently',
     !unterminated.open.has('B-SWALLOWED') && unterminated.malformed.length === 1 && unterminated.malformed[0].batchId === '_ledger');
+  ok('EX Step-4 CONDITION-1: the unterminated-comment reason names how many table rows it swallowed',
+    /including 1 table row/.test(unterminated.malformed[0]?.reason || ''), unterminated.malformed[0]?.reason);
+
+  // Step 4 BLOCKER-1: a valid row carrying an INLINE comment is honoured — with its positive control beside it,
+  // and the legacy rule as the reference (it honours both). Plus a close-then-reopen line, which must keep the
+  // second comment open.
+  const inline = exLedger(
+    exRow('B-INLINE', 'na-skip', 'scope', 'langston', 'a note <!-- aside --> and more'),
+    exRow('B-CLEAN', 'na-skip', 'scope', 'langston', 'a plain note'),
+    exRow('B-TWO-SPANS', 'na-skip', 'scope', 'langston', '<!-- a --> x <!-- b | c --> y'),
+  );
+  const vi = parseExceptions(inline), li = parseExceptionsLegacy(inline);
+  ok('EX BLOCKER-1 control: the legacy rule honours the clean row and the inline-comment row',
+    li.naConfirmed.has('B-CLEAN:scope') && li.naConfirmed.has('B-INLINE:scope'));
+  ok('EX BLOCKER-1: the new rule honours a row whose note holds a complete <!-- … --> span',
+    vi.naConfirmed.has('B-INLINE:scope') && vi.naConfirmed.has('B-CLEAN:scope') && vi.malformed.length === 0, JSON.stringify([...vi.naConfirmed]));
+  ok('EX BLOCKER-1: two complete spans on one row (one holding a `|`) are both stripped and the row is honoured',
+    vi.naConfirmed.has('B-TWO-SPANS:scope'));
+  const reopen = parseExceptions(exLedger('<!-- first', 'still first --> then <!-- second',
+    exRow('B-IN-SECOND', 'open', 'open since 2026-09-01T00:00:00Z', 'langston'), '-->'));
+  ok('EX BLOCKER-1: a line that closes one comment and opens another keeps the second one open',
+    !reopen.open.has('B-IN-SECOND') && reopen.malformed.length === 0);
+}
+{
+  // Step 4 G4-7 (Langston): pin the invariant the flip rests on — on the ledger AS THIS BATCH LEAVES IT, the new
+  // rule and the legacy rule return the same honoured sets. A COMMITTED FIXTURE frozen at the G4 push commit,
+  // never the live ledger (a legitimate future malformed row must raise its alert, not turn this test red).
+  const fx = readFileSync(new URL('./fixtures/exceptions-ledger-at-a3097dc6a.md', import.meta.url), 'utf8');
+  const nv = parseExceptions(fx), lv = parseExceptionsLegacy(fx);
+  const same = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
+  const sameMap = (a, b) => a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
+  ok('EX G4-7: the frozen fixture is the real ledger (non-empty sets — the pin can fail)',
+    nv.open.size > 0 && nv.naConfirmed.size > 0 && nv.classOverride.size > 0, `${nv.open.size}/${nv.naConfirmed.size}/${nv.classOverride.size}`);
+  ok('EX G4-7: new and legacy rules agree on open', same(nv.open, lv.open), `${nv.open.size} vs ${lv.open.size}`);
+  ok('EX G4-7: … on naConfirmed', same(nv.naConfirmed, lv.naConfirmed), `${nv.naConfirmed.size} vs ${lv.naConfirmed.size}`);
+  ok('EX G4-7: … on classOverride', sameMap(nv.classOverride, lv.classOverride), `${nv.classOverride.size} vs ${lv.classOverride.size}`);
+  ok('EX G4-7: … and the new rule finds 0 malformed rows on it', nv.malformed.length === 0, JSON.stringify(nv.malformed));
 }
 {
   // P25 (Q30): malformed rows → gov-exceptions-malformed:<batchId>:<type-slug> at warning; the tick resolves

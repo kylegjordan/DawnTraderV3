@@ -735,12 +735,27 @@ export function parseExceptions(raw) {
   const lines = raw.split('\n');
   let commentFrom = 0; // line number of an open `<!--` block; 0 = outside a comment
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i], lineNo = i + 1;
-    // Round 2 (R2-HY-4): an HTML comment block — from a line containing `<!--` to one containing `-->` —
-    // is prose, never rows, however many `|` its lines hold.
-    if (commentFrom) { if (line.includes('-->')) commentFrom = 0; continue; }
-    const at = line.indexOf('<!--');
-    if (at !== -1) { if (!line.includes('-->', at + 4)) commentFrom = lineNo; continue; }
+    const lineNo = i + 1;
+    // Round 2 (R2-HY-4): an HTML comment is prose, never rows, however many `|` it holds.
+    // Step 4 BLOCKER-1 (Langston, 2026-09-30): COMPLETE `<!-- … -->` spans are STRIPPED from the line —
+    // repeatedly — and only an UNCLOSED opener enters block mode. The earlier form skipped every line that
+    // merely contained `<!--`, so a valid row carrying an inline aside vanished with no alert (the #464
+    // shape), and a line that closed one comment and opened another left the block closed. Strip the class,
+    // not the instance: the text after a block's `-->` is read like any other line.
+    let line = lines[i];
+    if (commentFrom) {
+      const end = line.indexOf('-->');
+      if (end === -1) continue;
+      line = line.slice(end + 3);
+      commentFrom = 0;
+    }
+    for (;;) {
+      const s = line.indexOf('<!--');
+      if (s === -1) break;
+      const e = line.indexOf('-->', s + 4);
+      if (e === -1) { commentFrom = lineNo; line = line.slice(0, s); break; }
+      line = line.slice(0, s) + line.slice(e + 3);
+    }
     const cells = line.split('|').map((c) => c.trim());
     if (cells.length < 7) continue;
     const [, , bid, type, value, confirmedBy] = cells;
@@ -765,9 +780,14 @@ export function parseExceptions(raw) {
     }
   }
   // An unterminated `<!--` swallowed every later line as prose — surface it rather than grade silently
-  // on the rows above it alone.
-  if (commentFrom) malformed.push({ lineNo: commentFrom, batchId: '_ledger', typeSlug: 'comment',
-    reason: 'unterminated `<!--` comment: every later line was skipped as prose' });
+  // on the rows above it alone, and STATE THE MAGNITUDE (Step 4 CONDITION-1): the number of table-shaped
+  // lines (7+ cells) below the opener is how many exceptions may have been voided.
+  if (commentFrom) {
+    const swallowed = lines.slice(commentFrom).filter((l) => l.split('|').length >= 7).length;
+    malformed.push({ lineNo: commentFrom, batchId: '_ledger', typeSlug: 'comment',
+      reason: `unterminated \`<!--\` comment at line ${commentFrom}: every later line was skipped as prose, `
+        + `including ${swallowed} table row(s) (lines with 7 or more cells) — each may be an exception that is no longer honoured` });
+  }
   return { open, openSince, naConfirmed, classOverride, malformed };
 }
 
