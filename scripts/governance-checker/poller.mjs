@@ -26,7 +26,13 @@ import {
   UMBRELLA_NOT_IMPLEMENTED, CLASS_OVERRIDE_VALUE,
   EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, EXCEPTIONS_MALFORMED_BID_CAP,
   GOV_REF, PLAN_LINE, DOCS,
+  WEEKLY_CENSUS_ENABLED, MISTAKE_PASS_ENABLED, CENSUS_HOUR_UTC, isoWeek,
 } from './config.mjs';
+import {
+  runCensus, censusCounts, censusLists, censusMetadata, censusAlert, tallyMistakes, mistakePassAlert,
+  gitReaders as censusGitReaders, writeCensusBoxFile,
+  CENSUS_KEY_PREFIX, MISTAKEPASS_KEY_PREFIX, CENSUS_FAILED_KEY, MISTAKEPASS_FAILED_KEY,
+} from './census.mjs';
 import {
   checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass,
   docPresent, completionReportCommitTime, scopeCommitTime, checkLedgerRows,
@@ -600,15 +606,24 @@ export function resolveGradedRef(resolver = resolveGovRefSha) {
   gradedRefSha = r.fetchOk ? r.sha : null;
   return r;
 }
+// B-PLAN-CURRENCY-CHECK P41 (round 3): the add command, as an exported PURE function. For every existing caller
+// (no category, no metadata, no storeDedupeKey) the string is byte-identical to the pre-P41 inline template
+// (poller.test.mjs compares it with a literal captured before the edit). The weekly census and mistake pass pass
+// `category` ('verification', §10e Q1 (ii)), their own counts-first `metadata` JSON (P45), and `storeDedupeKey`
+// (`--dedupe-key`, the store's write-idempotency guard, §10e Q6) — appended LAST, and only when given.
+export function buildAddCommand({ nowMs, category = 'governance', severity, title, body, dedupeKey, metadata, storeDedupeKey, repo = STAGING_REPO }) {
+  const meta = metadata ?? JSON.stringify({ dedupe_key: dedupeKey, source: 'governance-checker' });
+  return `cd ${repo} && npm run -s system-alerts -- add ` +
+    `--triggers-at ${new Date(nowMs).toISOString()} --category ${category} --severity ${severity} ` +
+    `--title ${shq(title)} --body ${shq(body)} --metadata ${shq(meta)}` +
+    (storeDedupeKey ? ` --dedupe-key ${shq(storeDedupeKey)}` : '');
+}
 const alertSink = {
-  add({ dedupeKey, severity, title, body }, nowMs) {
+  add({ dedupeKey, severity, title, body, category, metadata, storeDedupeKey }, nowMs) {
     // OBJ-2: shadow → log-only, no queue write. Return null so the tick does NOT record it in
     // state.openAlerts (there is no real alert id), and resolve() stays a no-op in shadow.
-    if (SHADOW_MODE) { appendShadowLog({ phase: 'add', dedupeKey, severity, title, body }); return null; }
-    const meta = JSON.stringify({ dedupe_key: dedupeKey, source: 'governance-checker' });
-    const cmd = `cd ${STAGING_REPO} && npm run -s system-alerts -- add ` +
-      `--triggers-at ${new Date(nowMs).toISOString()} --category governance --severity ${severity} ` +
-      `--title ${shq(title)} --body ${shq(body)} --metadata ${shq(meta)}`;
+    if (SHADOW_MODE) { appendShadowLog({ phase: 'add', dedupeKey, severity, title, body, ...(category ? { category } : {}) }); return null; }
+    const cmd = buildAddCommand({ nowMs, category, severity, title, body, dedupeKey, metadata, storeDedupeKey });
     const out = runCli(cmd);
     const m = out.match(/"id":\s*"([0-9a-f-]+)"/);
     return m ? m[1] : null;
@@ -820,9 +835,10 @@ export function decideMalformedAlerts(malformed, openAlertKeys, refSha) {
 // checker PROCESS on the box, because both run from this one clone and pick up new code only through
 // the poller's ExecStartPre fast-forward (CE-A12): the poller (`ExecStart=node poller.mjs`; poller
 // imports `./config.mjs` + `./checker.mjs`; checker imports `./config.mjs`) and the heartbeat
-// (`node heartbeat-check.mjs`, its own unit; it imports `./config.mjs`). config imports nothing local, so
-// the closure is exactly the list below. ⛔ A file joins this list ONLY in the commit that creates it
-// (`census.mjs` joins in P43's commit, never earlier): poller.test.mjs asserts every entry exists
+// (`node heartbeat-check.mjs`, its own unit; it imports `./config.mjs`). P43: the poller also imports
+// `./census.mjs` (which imports `./config.mjs` + `./checker.mjs`). config imports nothing local, so the
+// closure is exactly the list below. ⛔ A file joins this list ONLY in the commit that creates it
+// (`census.mjs` joined in P43's commit, the one that created it): poller.test.mjs asserts every entry exists
 // beside this file. The other files in the dir (README.md, the tests, backtest, the previews, the
 // differential harness, the .service/.timer units) are NOT loaded by a checker process, so a
 // docs/test/unit-only push must NOT flip the drift signal (the surviving false-positive in the subtree
@@ -836,7 +852,7 @@ export function decideMalformedAlerts(malformed, openAlertKeys, refSha) {
 // such path no longer blinds the check for every other file. Absent at ONE ref only is still a read
 // failure and still fails open (P29's named residual: a listed file deleted on the branch while the box
 // is behind; this batch deletes no listed file).
-export const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs', 'heartbeat-check.mjs'];
+export const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs', 'heartbeat-check.mjs', 'census.mjs'];
 // The blob id of one checker file at a ref, or null when the path is absent there. Throws on any other
 // failure (a bad ref, a non-blob at the path, unexpected output) — the caller fails open on a throw.
 function gitBlobAt(ref, file) {
@@ -870,6 +886,111 @@ export function driftAlertBody(drift) {
   return `Deployed checker loaded-code (${drift.compared.join('|')}) ${drift.local} differs from origin ${drift.origin}. The box is ` +
     `running governance logic that no longer matches what was reviewed and pushed; grading may be wrong. ` +
     `Redeploy scripts/governance-checker/ (git pull on the checker box) and this clears. (#490 recurrence guard.)`;
+}
+
+// ── B-PLAN-CURRENCY-CHECK OBJ-3 / OBJ-4 (P40, P42, P46) — the weekly gate ─────────────────────────────────────
+// ⛔ DORMANT: with WEEKLY_CENSUS_ENABLED and MISTAKE_PASS_ENABLED false (config.mjs, committed source) this
+// function returns without touching `state`, so a tick is exactly today's. Called at TWO sites in tick() — the
+// rulebook-unreadable branch before its saveState, and after the orphan sweep before the final saveState — and
+// NEVER on the fetch-fail path (there is no graded ref to read at).
+// Each leg (the census; the mistake pass) has its OWN state keys and failure key, so one leg's fault never blocks
+// the other. Per leg, when its flag is on:
+//   • `<leg>EnabledSince` is set on the FIRST tick that reads the flag on — here, before the gate, whether or not
+//     an add follows — and persisted by that tick's save (P28's liveness anchor; FR1-CE-8).
+//   • THE GATE (condition 1: the SOLE dedupe; §10e Q10 catch-up): isoWeek(now) differs from the last recorded
+//     week AND now ≥ Monday CENSUS_HOUR_UTC:00Z of this ISO week. A tick that fails leaves the week unset, so the
+//     next successful tick of the week fires (a Tuesday catch-up); a first enable mid-week fires at once.
+//   • SUCCESS = the add returned (an id, a null id after exit 0 — the store's `--dedupe-key` found the row, §10e
+//     Q6 — or a logged shadow add). The week, its time, the graded ref and the alert id (or null) are recorded and
+//     saveState runs IMMEDIATELY, before anything else can fail; then any open failure alert is resolved.
+//   • FAILURE = anything thrown (a read, a parse, the box file, the add). The fixed-key failure alert opens
+//     (`warning`, once), the week stays unset, the tick's other results are unchanged.
+//   • SEVERITY (§10e Q13/Q14): `info`; `warning` when any EARLIER week's key of this leg is still live in this
+//     tick's store snapshot, or when the store could not be read (liveIds null — the body says so). Category
+//     `verification` at every severity (§10e Q1 (ii)): severity alone drives Discord delivery.
+//   • The weekly keys are recorded in state.openAlerts, never resolved by the checker (owner CC-A resolves them),
+//     and pruned only by the store reconcile (decideOrphanSweep does not match them).
+// deps: { sink, save, readers, flags: { census, mistakePass }, ref, writeBox } — the tests pass fakes.
+const WEEKLY_LEGS = [
+  { name: 'census', flag: 'census', prefix: CENSUS_KEY_PREFIX, failKey: CENSUS_FAILED_KEY, what: 'weekly plan census',
+    since: 'censusEnabledSince', week: 'lastCensusWeek', at: 'lastCensusAt', ref: 'lastCensusRef', id: 'lastCensusAlertId' },
+  { name: 'mistakePass', flag: 'mistakePass', prefix: MISTAKEPASS_KEY_PREFIX, failKey: MISTAKEPASS_FAILED_KEY, what: 'weekly mistake-pattern pass',
+    since: 'mistakePassEnabledSince', week: 'lastMistakePassWeek', at: 'lastMistakePassAt', ref: 'lastMistakePassRef', id: 'lastMistakePassAlertId' },
+];
+const DAY_MS = 24 * HOUR_MS;
+// Monday CENSUS_HOUR_UTC:00Z of the ISO week containing `ms`.
+export function weekGateMs(ms) {
+  const d = new Date(ms);
+  const fromMonday = (d.getUTCDay() + 6) % 7;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - fromMonday, CENSUS_HOUR_UTC);
+}
+// P42 / §10e Q13: `warning` iff an earlier week's key of this leg is live, or the store is unreadable.
+export function weeklySeverity(openAlerts, prefix, week, liveIds) {
+  if (liveIds == null) return { severity: 'warning', storeUnreadable: true };
+  const earlierLive = Object.entries(openAlerts || {}).some(([k, id]) => k.startsWith(prefix) && k.slice(prefix.length) < week && id && liveIds.has(id));
+  return { severity: earlierLive ? 'warning' : 'info', storeUnreadable: false };
+}
+function buildWeeklyIntent(leg, { state, week, nowMs, liveIds, ref, prevRef, d }) {
+  const dedupeKey = `${leg.prefix}${week}`;
+  const { severity, storeUnreadable } = weeklySeverity(state.openAlerts, leg.prefix, week, liveIds);
+  if (leg.name === 'census') {
+    const r = runCensus({ ref, prevRef, readers: d.readers, prevF: state.census?.prevF ?? null });
+    const counts = censusCounts(r), lists = censusLists(r);
+    const text = censusAlert(r, { week, severity, storeUnreadable });
+    // §10e Q19: the box file is written BEFORE the add; a failure throws (the week is not recorded).
+    d.writeBox(week, { week, ref, prevRef, generatedAt: new Date(nowMs).toISOString(), counts, selfCheck: r.selfCheck,
+      a: r.a, b: { ...r.b }, c: r.c, d: r.d, e: r.e, f: { all: r.f.all, new: r.f.new }, g: r.g, ownerSources: r.ownerSources });
+    return { intent: { dedupeKey, storeDedupeKey: dedupeKey, category: 'verification', severity, title: text.title, body: text.body,
+      metadata: censusMetadata({ counts, dedupeKey, week, ref, lists }) }, after: () => { state.census = { prevF: r.f.all }; } };
+  }
+  const t = tallyMistakes(d.readers.bodies(prevRef, ref));
+  const m = mistakePassAlert(t, { week, ref, prevRef, severity, storeUnreadable });
+  return { intent: { dedupeKey, storeDedupeKey: dedupeKey, category: 'verification', severity, title: m.title, body: m.body, metadata: m.metadata }, after: () => {} };
+}
+function runWeeklyLeg(leg, state, nowMs, liveIds, d) {
+  if (state[leg.since] == null) state[leg.since] = nowMs;
+  const week = isoWeek(nowMs);
+  if (state[leg.week] === week) return { ran: false, reason: 'week already run' };
+  if (nowMs < weekGateMs(nowMs)) return { ran: false, reason: `before Monday ${CENSUS_HOUR_UTC}:00Z` };
+  try {
+    if (!d.ref) throw new Error('no graded ref this tick');
+    // List (a)'s and the trailer count's window is by REF (FR1-CE-9, FR2-CE-4); the first run's is the branch as
+    // of 7 days before it (R1-Q14 (b)).
+    const prevRef = state[leg.ref] ?? d.readers.refBefore(d.ref, nowMs - 7 * DAY_MS);
+    const { intent, after } = buildWeeklyIntent(leg, { state, week, nowMs, liveIds, ref: d.ref, prevRef, d });
+    const id = d.sink.add(intent, nowMs);
+    state[leg.week] = week; state[leg.at] = nowMs; state[leg.ref] = d.ref; state[leg.id] = id ?? null;
+    if (id) state.openAlerts[intent.dedupeKey] = id;
+    after();
+    d.save(state);                                      // saved AT the add (CE-A7): a later throw cannot re-add
+    const failId = state.openAlerts[leg.failKey];
+    if (failId) { d.sink.resolve(failId); delete state.openAlerts[leg.failKey]; }
+    console.log(`[gov-checker] ${leg.what} ${week}: added ${id ?? '(no id: shadow, or the store key already held a row)'} at ${intent.severity}`);
+    return { ran: true, id: id ?? null, severity: intent.severity, week };
+  } catch (e) {
+    const msg = String(e.message || e);
+    console.error(`[gov-checker] ${leg.what} ${week} FAILED (week not recorded; the next tick retries): ${msg.slice(0, 300)}`);
+    if (!state.openAlerts[leg.failKey]) {
+      const fid = d.sink.add({ dedupeKey: leg.failKey, severity: 'warning',
+        title: `governance-checker ${leg.what} failed — the week is not recorded`,
+        body: `The ${leg.what} for ${week} threw at ${d.ref ?? 'no graded ref'}: ${msg.slice(0, 300)}. Enforcement results this tick are unaffected. ` +
+          `The week stays unrecorded, so the next tick retries; this alert resolves on the first success. Check the governance-checker poller's journal on staging.` }, nowMs);
+      if (fid) state.openAlerts[leg.failKey] = fid;
+    }
+    return { ran: false, error: msg, week };
+  }
+}
+export function maybeRunWeekly(state, nowMs, liveIds, deps = {}) {
+  const d = { sink: alertSink, save: saveState, readers: censusGitReaders, ref: gradedRefSha, writeBox: writeCensusBoxFile,
+    ...deps, flags: { census: WEEKLY_CENSUS_ENABLED, mistakePass: MISTAKE_PASS_ENABLED, ...(deps.flags || {}) } };
+  const out = {};
+  for (const leg of WEEKLY_LEGS) {
+    if (!d.flags[leg.flag]) continue;
+    // The leg's own catch covers its work; this one keeps even a failing failure-alert add from killing the tick.
+    try { out[leg.name] = runWeeklyLeg(leg, state, nowMs, liveIds, d); }
+    catch (e) { console.error(`[gov-checker] ${leg.what}: could not raise its failure alert: ${String(e.message || e).slice(0, 300)}`); out[leg.name] = { ran: false, error: String(e.message || e) }; }
+  }
+  return out;
 }
 
 export function tick(nowMs = Date.now()) {
@@ -982,6 +1103,8 @@ export function tick(nowMs = Date.now()) {
         title: `governance-checker cannot read its rulebook at ${BRANCH} — grading paused`, body }, nowMs);
       if (id) state.openAlerts[EXC_KEY] = id;
     }
+    // P40: the weekly legs still run with an unreadable rulebook — they read other files at the same sha.
+    maybeRunWeekly(state, nowMs, liveIds);
     state.gradedRefSha = gradedRefSha; // #637: fetch succeeded, so the sha is real
     state.lastTick = nowMs; saveState(state);
     return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: true, rulebookUnreadable: true };
@@ -1093,6 +1216,9 @@ export function tick(nowMs = Date.now()) {
     console.warn(`[gov-checker] orphan-sweep KEPT ${key} (still missing out-of-window — real gap, not silenced)`);
   }
   if (untaggedCode > 0) console.warn(`[gov-checker] ${untaggedCode} untagged CODE commits in window (low-sev; see Obj-9)`);
+  // P40: the weekly census and mistake pass (DORMANT behind their config.mjs flags), after every enforcement
+  // decision of this tick, so a weekly fault can never change what the tick graded.
+  maybeRunWeekly(state, nowMs, liveIds);
   // #637: publish the graded sha so the SEPARATE heartbeat process can cite it.
   state.gradedRefSha = gradedRefSha;
   state.lastTick = nowMs;

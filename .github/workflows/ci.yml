@@ -139,6 +139,13 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/governance-checker/heartbeat-check.test.mjs
 
+      # B-PLAN-CURRENCY-CHECK P43 (P30/Q33 form): the weekly census's rule
+      # fixtures, pure over text (no git, no network, no files). Its own step
+      # and its own `if`, like the two above, so no checker step hides another.
+      - name: Governance checker tests (census)
+        if: ${{ !cancelled() }}
+        run: node scripts/governance-checker/census.test.mjs
+
   build:
     name: Build
     runs-on: ubuntu-latest
