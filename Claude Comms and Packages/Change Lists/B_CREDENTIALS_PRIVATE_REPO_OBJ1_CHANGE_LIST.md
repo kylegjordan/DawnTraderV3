@@ -1,6 +1,6 @@
 # B-CREDENTIALS-PRIVATE-REPO — STEP 4 CHANGE LIST, INCREMENT 2: OBJ-1 (the crew login)
 
-**Owner:** Infra Claude (CC-INFRA) · **Issue:** `#1023` · **READY AT:** NOT YET — round 3's should-fixes are open (below); the code at `82dc4edd2` is what round 3 read · **First build:** `bd698603a` (code) + `8cc41792b` (exec bits) · **Nothing is installed** — Step 6 follows this review. **Deadline:** the agents' stored staging session stopped refreshing at 2026-09-30 04:40Z and lapses 2026-10-06 04:40Z.
+**Owner:** Infra Claude (CC-INFRA) · **Issue:** `#1023` · **READY AT:** the round-3 fix commit named in the dispatch (round 3 read `82dc4edd2`) · **First build:** `bd698603a` (code) + `8cc41792b` (exec bits) · **Nothing is installed** — Step 6 follows this review. **Deadline:** the agents' stored staging session stopped refreshing at 2026-09-30 04:40Z and lapses 2026-10-06 04:40Z.
 
 ## THE THREE HEADER FIELDS
 | # | field | value |
@@ -34,14 +34,15 @@
 ## THE FRESH-READER RECORD
 - `REVIEWER r1: object (8cc41792b) · 3 object readers (dt-api; setter; drift+paging+mint) + 1 claim-only (5 claims) · 3 blockers (setter reconcile deleting the only copy of the old value; agent-staging-session chown-by-path root escalation; drift hourly-against-HEAD) + ~30 should-fix/minor · fixed at 4659ce6eb · re-derived y (each fix has a mutation control)`
 - `REVIEWER r2: object (718892dee) · 3 fresh object readers, none shown r1 · 2 blockers (the alert's dedupe class never read under systemd's %N name; a Ctrl-C during (7) restoring from deleted material) + ~20 should-fix/minor · fixed at `d53b5047f` (+ `82dc4edd2`, an exec bit) · re-derived y`
-- `REVIEWER r3: object (82dc4edd2) · 3 fresh object readers, none shown r1-r2 · 0 blockers · 15 should-fix + ~22 minor · NOT YET FIXED — the cap is reached; the list below is the first work of the next session, then the full round record goes to Langston with the dispatch`
+- `REVIEWER r3: object (82dc4edd2) · 3 fresh object readers, none shown r1-r2 · 0 blockers · 15 should-fix + ~22 minor · all fixed at the round-3 fix commit ("ROUND 3" below) · re-derived y (S4 re-measured with a control first) · the three-round cap is reached, so this full record goes to Langston with the dispatch and no fourth round was run`
 
 **Where I did NOT do what a reviewer proposed — rule on these first:**
 1. **The setter's interrupts are acted on only at checkpoints BEFORE the commit point; after (4) a SIGTERM/SIGINT is ignored and the run finishes** (r2's blocker, fixed by design rather than by guarding each statement). The cost: a person cannot abort the (6) wait of up to 900 s. I judged finishing a verified change safer than any abort path after it.
 2. **A committed change that is not yet installed is PENDING, and pages only after 7 days** (r1 drift blocker). A shorter clock pages through every review; a longer one hides a forgotten install. The age is the OLDEST commit since the install (r2).
 3. **`token-refused` pages are recorded and alerted but NOT sticky; wrong-password / missing-row / login-failing / malformed-login pages ARE sticky** (r2). A DB blip heals; a wrong password does not.
-4. **"login-failing" needs two failed loopback logins at least 10 minutes apart with no success between** (r2: two a minute apart is an app restart).
-5. **Not built: a direct-append fallback when the alert CLI itself fails** (r2 minor). The staging watchdog has one; I left this path with the journal as its floor and state it.
+4. **"login-failing" needs two failed loopback logins 10 to 60 minutes apart with no success between** (r2: a minute apart is an app restart; r3: a day apart is two self-healed blips).
+5. **Not built: a direct-append fallback when the alert CLI itself fails** (r2 minor, r3 S7). The alert store is rewritten by rename under a lock, so an unlocked append can be lost; the unit now RETRIES every 10 minutes instead, with the journal as the floor.
+8. **The r2 early-phase rule is reversed (r3 S2)** — see ROUND 3, setter S2.
 6. **Not built: hashing the host key's VALUE in root's known_hosts** (r2 minor). The mint pages on its own failure.
 7. **The ledger is dtapi:dtapi 0600, not "root-owned" as §2.2 item 4 said** — dt-api must append to it. So the budgeted account can rewrite the budget's record. Accident guard, stated.
 
@@ -102,28 +103,35 @@
 - The setter's hash is a SQL literal: on a server-side SQL error it can appear in Supabase's own log and, during the UPDATE, in `pg_stat_activity`. Client-side output is scrubbed.
 - A loopback login outside the ledger (e.g. `CLAUDE.md` §7's curl) spends the bucket unseen; the setter then fails safe (restores a verified value).
 
-## ROUND 3 — OPEN FINDINGS (0 blockers; the fix list for the next session, each to be re-derived at the object first)
+## ROUND 3 — WHAT EACH FINDING GOT (0 blockers; every should-fix fixed; each fix has a test that fails on the round-3 code, and a mutation control where one can be built)
 **dt-api**
-- S1 `login-failing` has no UPPER bound on the gap: two self-healed failures a day apart (a mint during a restart, then a brief 5xx) make a sticky page; and every non-200/401/404/429 status (400/403/3xx) lands on the 5xx branch. ⇒ bound the window (e.g. both failures inside 60 min) and classify statuses.
-- S2 the page merge keeps the FIRST kind, so a later STICKY cause (`crew-password-wrong` after a standing `token-refused`) is hidden from the drift class and the refusal text. ⇒ the class must reflect the worst/sticky cause; stickiness must be read from the kind too (a hand-written page has no flag).
-- minors: an unguarded negative-cache write bypasses the page; `classify_401`'s token unlink runs outside the lock; `/api/settings` as the probe mixes auth with handler health (a handler 500 blocks the mint daily); non-object JSON bodies raise; BrokenPipe on stdout exits 3; the query grammar cannot express `?symbol=BTC/USD` (spec limit — name it to Langston).
+- **S1 login-failing** — two failed loopback logins now page only when they are **10 to 60 minutes** apart with no success between (`LOGIN_FAILING_WINDOW_S`); and every answer that is not 200/401/404/429/5xx (400, 403, a 3xx) is its own **sticky** page, `login-unexpected`, never retried (it fell into the 5xx branch before). Tests: 83 min apart → no page; 400/403/302 → page, no second login.
+- **S2 the page's kind** — ONE merge rule, `page_merge`, now used by dt-api AND the setter: a sticky cause **replaces** a standing non-sticky kind (the old cause moves to `later`); otherwise the first kind stays. Stickiness is read from the flag **and** the kind (a hand-written page has no flag); an unreadable page file is sticky. Tests for each, including a merge under a standing sticky page (the first test did not reach the merge — its mutant survived; the replacement test kills it).
+- minors, all fixed: the negative-cache write is guarded (an unwritable one still pages); the dead-token drop now runs under the lock and removes the cache only if it still holds THAT token; the probe asks only "did `authenticateToken` pass" — any answer but 401/403 means yes, so a settings-handler 5xx no longer blocks the mint, and a 403 (a row with no role) pages `token-refused`; a JSON body that is not an object no longer raises; a closed stdout keeps the app's exit code (0/1, not 3); **the query grammar now allows `/`** (`?symbol=BTC/USD`) — a query never routes, and `%`, `#`, `..`, `//` stay refused on the whole target.
+
 **setter**
-- S1 reconcile's live login accepts an env naming ANOTHER user → can delete the only copy of the new value and exit 0. ⇒ require `DT_API_USER == CREW_USER`.
-- S2 in phases saved/temp-written a CHANGED row means someone else changed it; the code then restores over their change. ⇒ page and stop, do not restore.
-- S3 the reconcile's third login treats 429/5xx/no-answer as "refused" → sticky page + over budget. ⇒ not an answer = exit 3, no page.
-- S4 a failure at (6) clears the page at (5) and restores without a durable page. ⇒ re-raise the page on that restore.
-- S5 an env-restored reconcile exits 0 while a sticky page still blocks dt-api. ⇒ clear the page when the restored value logs in.
-- minors: exit-code contract (checkpoint interrupt → 3; orphan → 2; uncaught `ensure_state`/lock errors; (7) errors); restore the env copy's existence BEFORE the DB; reconcile temp-ok path order; PDEATHSIG fork race; hash as SQL literal (stated); PGPASSFILE not removed on `pg_env` refusals + prefix check; `PGSSLMODE=require` (no cert check — use `verify-full` with the system CA if Supabase's chain validates); dt-api `die()` texts inside the setter; the (6) wait's +2 margin cut at 900; fsync `/etc/dt-api` after the temp env; `durable_page` overwrites the first cause.
+- **S1** an env naming another user: a fresh run refuses (2); a reconcile touches nothing and exits 4 (marker and temp env kept).
+- **S2** a changed row under a `saved`/`temp-written` marker is someone else's change (`committing` is fsynced BEFORE the write): page `setter-row-changed`, exit 4, touch nothing. ⚠️ **This REVERSES r2's "reconcile a stale early phase by login"** — that case needs the fsynced phase write to have lied; this one is an ordinary concurrent edit, and restoring over it destroys someone's change. **Rule on this reversal.**
+- **S3** the restored env's check login getting a 429/5xx/no answer exits 3 with **no** page.
+- **S4** a failure at (6) puts back the page (5) cleared, with `setter-restored` added (a durable `setter-restored` page if there was none).
+- **S5** a restored env that logs in clears a standing page (dt-api is not left blocked).
+- minors: exit contract — an interrupt at a checkpoint restores then exits **3**, an orphan exits **2**, setup and dt-api-lock errors exit 3 with the setter's own text, a (7) tidy-up error exits 0 with a warning (the value is proved; the next run tidies); the env copy is checked BEFORE the database is restored; the reconcile's temp-ok path removes the marker before the old-env copy; the PDEATHSIG fork race is closed (the child checks its parent after arming it); `/home` is checked on the RESOLVED path, relative paths refused; **a refused PGPASSFILE is left in place and the text says so** — removing an arbitrary root 0600 file on a refusal could delete a key; the (6) wait keeps its +2 margin; the temp env's directory is fsynced; a 200 login dt-api would call malformed is "no answer", not "ok".
+- **`PGSSLMODE` stays `require`, measured not assumed:** Supabase's chain ends in its own private root (`openssl s_client -starttls postgres` → self-signed in chain), so `verify-full` needs that root pinned. And the check turned up that **the app's own 8 connections use no TLS at all** (`pg_stat_ssl`, controls `t`) — filed on `#1022` for `B-SEC-HARDEN` (plan row 158), with the proposal that it ride the 10-02 release restart. The setter is no weaker than the app; stated.
+
 **install-drift / alert / mint**
-- S1 = dt-api S2 (the class from the first page kind).
-- S2 one key per CLASS still swallows a new failure of the same class on a different file. ⇒ key per (class, subject).
-- S3 the paging INSTANCE (`dt-unit-failure@dt-install-drift.service`, `agent-unit-failure@…`) is not checked, only a `@probe` instance. ⇒ check the real instances.
-- S4 staging's freshness stamp is FETCH_HEAD, which a FAILED fetch still refreshes — the stale check can never fire there (after the flip the checker's fetch fails). ⇒ use the ref's own movement or the checker's fetch-ok signal.
-- S5 a script that cannot start leaves the LAST run's classes file. ⇒ `ExecStartPre=` clears it.
-- S6 two install flows own the same Helsinki files (the systemd README flow and `installed.sha`). ⇒ drop the shared files from this manifest, or make `installed.sha` per-file.
-- S7 a failure of the paging step itself is silent. ⇒ OnFailure on the failure unit (journal-only floor) or a direct-append fallback.
-- S8 a git error reads as "waited over 7 days"; both rev-parses failing is a silent skip. ⇒ SOURCE, never PENDING-STALE.
-- minors: empty dtapi shadow field passes; sudoers `@include`/`%group` gaps; stamp/page read by path (FIFO); a hand run within 30 min of an install fails SOURCE (document the wait); README overstates dtmint's protection; `.gitattributes` has no `eol=lf` for these trees (the shebangs break from a Windows copy — measured this session); the README points at this change list.
+- **S1** = dt-api S2 (the kind is the worst cause).
+- **S2** the alert key is per **(class, subject)**: drift writes one `<class> <subject>` line per failure; the alert hashes the subject into the key. Two DRIFT files → two alerts (tested).
+- **S3** the REAL paging instances are checked (`dt-unit-failure@dt-install-drift.service`; `agent-unit-failure@agent-staging-session.service`, `@dt-install-drift.service`), not a `@probe` name.
+- **S4 re-derived first, with a control:** git 2.43 on Helsinki — a failed fetch **empties `FETCH_HEAD` and refreshes its mtime** (0 bytes after; a good fetch writes content). ⇒ a stamp counts only if it has content.
+- **S5** `ExecStartPre=/bin/rm -f /run/dt-install-drift.classes`.
+- **S6** `installed.sha` is per-file: line 1 the default sha, then optional `<sha> <repo path>` lines (the last wins); `comms-infra/systemd/README.md` now tells that flow to append its line. Tested both ways (control: without the line the other flow's install is DRIFT).
+- **S7** `dt-unit-failure@` retries every 10 minutes on failure (`Restart=on-failure`, `StartLimitIntervalSec=0`), each try in the journal. **No second channel** — stated, not solved.
+- **S8** a git error in the PENDING check is SOURCE naming the file; both reads failing is no longer a silent skip.
+- minors: an EMPTY dtapi password field fails; sudoers `@include`/`@includedir` are followed to any depth, a rule for `ALL` users is flagged, and membership of any supplementary group is flagged (a `%group` rule would reach it — ⚠️ **not testable here**: it reads the real `/etc/group`); page.json and the stamps are read without following links and **without blocking** (a FIFO used to hang the run 30 min); the hand-run wait (up to 30 min for the source to fetch the installed sha) is in the README; the README's dtmint claim is corrected — **`/home/dtmint` becomes root:dtmint** (a dtmint-owned home could rename `.ssh` away); the README no longer points at this change list; `.gitattributes` gains `eol=lf` for `comms-infra/staging/**` and `agent-staging-session` (all 23 blobs were already LF — no content change).
+
+**Not mutation-proved, stated:** the PDEATHSIG race, the (6) wait margin, the (7) tidy-up path, the setter's dt-api-lock refusal text (it waits 120 s), the classify-under-the-lock ordering, the reconcile's temp-ok order, and the sudoers group check. Each is a small, read-checkable change.
+
+**§9.4, found while testing the unit files:** `systemd-analyze verify` on Helsinki reports seven installed langston/coltrane units whose `Documentation=` value is not a URL (systemd ignores it). **DISPOSITION: added to `B-LANGSTON-RECONCILE-VERB`** (mine, next) as a one-line fix per unit — cosmetic, no behaviour.
 
 ## THE FILE-ROUTE FINDING — LANGSTON RULED 2026-09-30T00:33Z, KYLE APPROVED THE PROBE
 - **Ruling:** hotfix YES for an EDGE mitigation, NO for an app deploy (a named-sha deploy still drags 72 h of others' pending work — `#1001` shape). **The edge rule is an ALLOWLIST** — the final segment must match `^[A-Za-z0-9_.-]+\.json$` for the report routes (and the download route's own allowed shape), case-insensitive on the path; name which layer terminates (Caddy vs nginx) by the probe; file the repo-canonical mirror of the nginx change in the same turn (`#1004`). **B (a containment check in the three handlers) rides the next normal deploy**, placed first in `B-SEC-HARDEN` (`#1022`) — the plan row must be NAMED. **Pre-registered flip:** if the pre-block probe shows reach from outside AND the census finds a secret-bearing file, B becomes its own coordinated deploy that day.
