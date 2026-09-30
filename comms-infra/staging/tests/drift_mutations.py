@@ -18,7 +18,7 @@ TARGETS = {
 MUTATIONS = [
     ("drift", "compare against the branch head, not the installed sha", "        compare_files(box, sha)\n", "        compare_files(box, head or sha)\n"),
     ("drift", "PENDING never goes stale", "        if age is None or age > PENDING_DAYS:", "        if False:"),
-    ("drift", "no ancestry check on the installed sha", '        if anc is None:\n            out("STATE", "the installed sha', '        if False:\n            out("STATE", "the installed sha'),
+    ("drift", "no ancestry check on the installed sha", '            if anc is None:\n                out("STATE", "the installed sha', '            if False:\n                out("STATE", "the installed sha'),
     ("drift", "no reload check", '        if props.get("NeedDaemonReload") != "no":', "        if False:"),
     ("drift", "extra drop-ins ignored", "        if have != sorted(dropins):", "        if False:"),
     ("drift", "timers not checked", '    for t in box["timers"]:', "    for t in []:"),

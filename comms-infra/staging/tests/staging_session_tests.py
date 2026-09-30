@@ -121,6 +121,8 @@ try:
     rc = A.main()
 except SystemExit as e:
     rc = e.code
+except Exception as e:                             # an escaped exception IS the failure being tested
+    rc = "escaped %s" % type(e).__name__
 check("r2: the first agent failing does NOT skip the second (and the run reports the failure)",
       rc == 5 and os.path.isfile(os.path.join(homes["daemon"], ".staging-session.json")), str(rc))
 

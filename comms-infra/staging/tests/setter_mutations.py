@@ -17,8 +17,9 @@ MUTATIONS = [
     ("the budget check skipped", "    if recent:\n        last = max(", "    if False:\n        last = max("),
     ("(6) failure: env not restored", "                restore_db(m)\n                restore_env(m)\n                purge_cache()\n                cleanup_run_files()",
      "                restore_db(m)\n                purge_cache()\n                cleanup_run_files()"),
-    ("no 'committing' marker before the commit", '        m["phase"] = phase = "committing"\n        write_marker(m)\n',
-     '        phase = "committing"\n'),
+    # RETIRED at r2 as an EQUIVALENT mutant: since reconcile reads the row before trusting an early
+    # phase, dropping the 'committing' marker write changes no observable end state. The write stays as
+    # defence in depth; "r2: an early phase trusted without reading the row" is the live control for it.
     ("(5) purge skipped", '        purge_cache(clear_page=True)\n        say("(5) purged', '        say("(5) purged'),
     ("(6) result ignored", '        if rc != 0 or "HTTP 200 GET /api/settings" not in err:', "        if False:"),
     ("r2: signals raise asynchronously", "    INTERRUPTED.append(signum)", '    raise Interrupted("signal %d" % signum)'),

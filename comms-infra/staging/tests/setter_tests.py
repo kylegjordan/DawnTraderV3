@@ -411,7 +411,7 @@ pr.send_signal(_sig.SIGTERM)
 o, e = pr.communicate(timeout=120)
 row = r.dbrow()
 check("r2: SIGTERM during the commit -> acted on at the next checkpoint, restored, exit 1",
-      pr.returncode == 1 and "acted on before" in o and row["role"] == "owner" and matches(V1, row["password"])
+      pr.returncode == 1 and "acted on before (3)" in o and row["role"] == "owner" and matches(V1, row["password"])
       and r.env_value() == V1 and clean(r), o + e)
 r.close()
 r = Rig(live_env=V1, verify=["/bin/sh", "-c", "sleep 3; exec \"$0\" \"$@\"", sys.executable, "PLACEHOLDER", "GET", "/api/settings"])
