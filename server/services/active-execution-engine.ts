@@ -487,7 +487,7 @@ import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_clas
 import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
 // B-XSTOCK-FEED-SANITY (#943, closes #567) — the book-state guard: the tracker is the one reader every
 // label site calls; the comparator advances ONLY here, after a two_sided verdict at the decision site.
-import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis } from '../asset_classes/xstock_spot/book-state-tracker.js';
+import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis, readThresholdBasis } from '../asset_classes/xstock_spot/book-state-tracker.js';
 import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { xstockTransactableSides } from '../asset_classes/xstock_spot/transactable-sides.js';
@@ -1899,6 +1899,8 @@ export class ActiveExecutionEngine {
         // carried to the exit check for the LOG ONLY: the bid-trigger measurement window the re-land row needs.
         let xsSpread: number | null = null;
         let xsThr: number | null = null;
+        // `3n.q7` inc-1 amendment (Langston inc-2 Step-1 BLOCKER-2): what that threshold was built from — log only.
+        let xsThrBasis: { trail: number | null; ret: number | null; tb: 'j' | 'v' } | null = null;
         // `3n.q7` increment 1 (Langston condition 2) — WHY an evaluated xStock tick has no transactable sides. Set on the
         // four arms that reach the evaluator with `xsBid` null; every other failure `continue`s before the evaluator.
         let xsFrameReason: string | null = null;
@@ -2229,6 +2231,7 @@ export class ActiveExecutionEngine {
                   xsSideBasis = 'raw_guarded';
                   xsSpread = _r.inputs.spreadFrac ?? null;
                   xsThr = _r.inputs.departureThresholdFrac ?? null;
+                  xsThrBasis = readThresholdBasis(position.symbol);
                 } else {
                   // Step 4 r2 residual (Langston): name WHICH fact refused, so this line carries one fact at both sites.
                   // Below the refusal both sides are finite-positive (`book-state.ts` `pos`), so today only a cross
@@ -2687,7 +2690,7 @@ export class ActiveExecutionEngine {
           //   The bid trigger re-lands under row `3n.q7` (`B-XSTOCK-BID-TRIGGER-RELAND`), on Langston's three conditions.
           _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null,
           // Log only: the frame X3 WOULD have read, so the containment interval is the re-land's measurement window.
-          _posClass === 'xstock_spot' ? { bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason } : null,
+          _posClass === 'xstock_spot' ? { bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis?.trail ?? null, ret: xsThrBasis?.ret ?? null, tb: xsThrBasis?.tb ?? null } : null,
         );
 
         // I7-ROOT-FIX: Track exit evaluation for diagnostics
@@ -2981,7 +2984,7 @@ export class ActiveExecutionEngine {
     //    on the mark, unchanged (the explicit third arm at the evaluator call).
     triggerBid: number | null = null,
     // `8a-P4b` Step 9 C1 — LOG ONLY, never a decision input: the xStock frame the bid trigger would have read.
-    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null; basis?: string | null; reason?: string | null } | null = null,
+    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null; basis?: string | null; reason?: string | null; trail?: number | null; ret?: number | null; tb?: 'j' | 'v' | null } | null = null,
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
     const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;

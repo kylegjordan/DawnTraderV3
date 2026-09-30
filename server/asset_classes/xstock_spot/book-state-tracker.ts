@@ -214,6 +214,25 @@ export function takeChainRefusalBasis(symbol: string): {
 }
 
 /**
+ * `3n.q7` increment 1 amendment (Langston inc-2 Step-1 BLOCKER-2, 2026-09-30) — WHAT THE ARM-(i) THRESHOLD WAS BUILT
+ * FROM, for the per-tick frame line. PURE READ: unlike `takeChainRefusalBasis` it sets no flag, so the log can call it on
+ * every tick without changing what the refusal path prints.
+ * ⛔ WHY IT IS NEEDED: `assessBookState` builds the threshold from the CHAIN'S OWN trailing median spread
+ * (`book-state-tracker.ts` passes `medianOf(cmp.spreads)`), so on a chain that was seeded inside a blowout the
+ * threshold is itself blown, and a would-refuse test computed from it cannot fire. `tb` says whether that chain's
+ * seed was ever judged against an outside ring (`j`) or seeded vacuously (`v`); `ret` is the live retained ring's
+ * median (null when there is none) — the outside datum a reader needs to tell a real would-refuse from a
+ * self-referential one.
+ */
+export function readThresholdBasis(symbol: string): { trail: number | null; ret: number | null; tb: 'j' | 'v' } | null {
+  const key = symbol.toUpperCase();
+  const cmp = _comparators.get(key);
+  if (!cmp) return null;
+  const live = _retainedSpreads.get(key);
+  return { trail: medianOf(cmp.spreads), ret: live ? medianOf(live.spreads) : null, tb: seedWasJudged(cmp) ? 'j' : 'v' };
+}
+
+/**
  * Advance the pair's comparator. Called on a `two_sided` verdict, and — since the seeding fix —
  * on the FIRST frame of a symbol, where the predicate can only return `unknown`/`no_comparator`.
  *

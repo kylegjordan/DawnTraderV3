@@ -31,6 +31,14 @@ export interface XsExitFrame {
   basis?: string | null;
   /** Why there are no transactable sides on an evaluated tick; null when there are. */
   reason?: string | null;
+  /**
+   * The threshold's basis (Langston inc-2 Step-1 BLOCKER-2): `trail` = the chain's own trailing median spread the
+   * threshold was built from; `ret` = the live retained ring's median (the outside datum), null when none; `tb` = `j`
+   * when the chain's seed was judged against a ring, `v` when it seeded vacuously. Null on the unguarded arm.
+   */
+  trail?: number | null;
+  ret?: number | null;
+  tb?: 'j' | 'v' | null;
 }
 
 export type ExitEvalClass = 'crypto' | 'xstock' | 'other';
@@ -79,6 +87,7 @@ export function xsExitFrameLine(i: XsExitFrameLineInput): string | null {
       : !evalIsXs ? ` class_mismatch evalCls=${i.evalCls} posClass=xstock_spot`
         : '';
   const sides = i.frame === null ? ''
-    : ` bid=${i.frame.bid ?? 'none'} ask=${i.frame.ask ?? 'none'} spread=${f5(i.frame.spread)} thr=${f5(i.frame.thr)}`;
+    : ` bid=${i.frame.bid ?? 'none'} ask=${i.frame.ask ?? 'none'} spread=${f5(i.frame.spread)} thr=${f5(i.frame.thr)}` +
+      ` trail=${f5(i.frame.trail ?? null)} ret=${f5(i.frame.ret ?? null)} tb=${i.frame.tb ?? 'none'}`;
   return `[3n.q7][XS_FRAME] ${i.symbol} pos=${i.positionId} ${state}${mismatch} mark=${i.mark} sl=${i.stopLoss ?? 'none'} tp=${i.takeProfit ?? 'none'}${sides} bidWouldFire=${i.bidWouldFire} markExit=${i.markExit ? 'y' : 'n'} exitReason=${i.exitReason ?? 'none'}`;
 }
