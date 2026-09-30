@@ -8,6 +8,18 @@
  * inverts the trade's own geometry: an ask AT OR THROUGH the target (the "win" is already spent) or AT OR THROUGH the
  * stop (the trade is born stopped out). Long-only, as every VTS trade is.
  *
+ * WHY THE MAKER ARM IS EXEMPT, PER LANE (Langston 3b r2 condition 2): a maker books at its limit, which is the level.
+ *   - crypto: BY CONSTRUCTION — `vts-runner.ts` builds `adjustedStopLoss = entryPrice − distance` and
+ *     `adjustedTakeProfit = entryPrice + distance` from that same level, so the level sits strictly between them.
+ *   - xStock: stop, target and entry are three independent `strategySignal` fields; the level is taken to sit between
+ *     them by the signal's own geometry. That half is INFERRED-FROM-CODE — what `invalid_geometry` in `eval-cycle.ts`
+ *     enforces has not been read for this purpose.
+ *
+ * WHAT EACH ARM BUYS on crypto (Langston 3b r2): the TARGET arm is genuinely new protection — the B53 geometry guard
+ * refuses on the MID near the target, so an ASK through the target with the mid inside the band reaches here. The STOP
+ * arm is reachable only through divergence between two non-simultaneous reads (the cached mid, which the B53 guard
+ * already requires to sit above the stop, and the touch read at booking time). It is NOT dead code — keep it.
+ *
  * QUANTITY is the fixed dollars at the BOOKED price; a non-positive or non-finite price yields NO quantity (the caller
  * refuses) — never a zero-size trade, never a divide by zero (RIDER-A: one policy for all three sites).
  */

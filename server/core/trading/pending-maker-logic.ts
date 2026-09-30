@@ -78,6 +78,11 @@ export function makerFillPrice(limit: number): number {
 // regression the B79.0m.b lock existed to catch).
 // ═════════════════════════════════════════════════════════════════════════════
 
+// ⚠️ NOT THE COMPLETE LIST OF WHY A TWIN DOES NOT OPEN (`8a-P4c` 3b, Langston r2 condition 1). This union is what
+// `planTwin` decides from its own inputs. Three more skips live at the caller, `maybeOpenTwin` in `vts-runner.ts`,
+// because they need the chosen trade's stop/target and dollars, which `planTwin` is not given:
+// `ask_at_or_through_target` / `ask_at_or_through_stop` (refuseTakerBooking, taker twin only) and
+// `booked_price_invalid` (bookedQuantity). A census of twin skips must read BOTH places.
 export type TwinPlan =
   | { kind: 'skip'; reason: 'twin_disabled' | 'marketable_maker' | 'degenerate_fallback' | 'no_entry_ask' | 'chosen_leg_unpriced' }
   | {

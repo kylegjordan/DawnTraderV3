@@ -1061,7 +1061,7 @@ export async function evaluateXstockPairForVTS(
         // at-entry-context features block can read the SAME values the trade opens
         // with — pure reads, no re-derivation — then archive admitted, then register
         // the identical object. Hoist is side-effect-free: `dollarValue` is a literal,
-        // `quantity` is pure arithmetic over the `const entryPrice`, and nothing
+        // `quantity` is `bookedQuantity(dollarValue, _xBookedEntry)` at the BOOKED price (8a-P4c 3b), and nothing
         // between here and the register call mutates an input. Archive-before-register
         // ordering preserved (admitted-archival stays decoupled from open success).
         const dollarValue = 150;
