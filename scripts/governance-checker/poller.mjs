@@ -1097,7 +1097,9 @@ export function tick(nowMs = Date.now()) {
   state.gradedRefSha = gradedRefSha;
   state.lastTick = nowMs;
   saveState(state);
-  // planOpened / planResolved count CONFIRMED sink calls, kept apart from the intent counts beside them (#1107).
+  // planOpened counts adds the sink CONFIRMED (it returned an id). planResolved counts resolve CALLS issued on a stored
+  // id — NOT confirmed resolves: alertSink.resolve swallows a failed resolve and returns nothing — and it excludes the
+  // per-leg orphan-sweep resolves, which sit in `resolved` (an intent count). Neither is a precision measure (#1107).
   return { opened: toOpen.length, resolved: toResolveKeys.length + orphanResolve.length, untaggedCode, planOpened, planResolved };
 }
 
