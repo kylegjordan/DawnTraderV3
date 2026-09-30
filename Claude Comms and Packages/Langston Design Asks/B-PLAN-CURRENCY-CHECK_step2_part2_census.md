@@ -1,5 +1,9 @@
 # B-PLAN-CURRENCY-CHECK — Step 2, PART 2 of 5: OBJ-3 / OBJ-4 (weekly plan census, weekly mistake-pattern pass)
 
+**THE PLAN FILE THIS BATCH GRADES: `1-system-manual/SPRINT_TO_LIVE_PLAN.md`** (not `PHASE_19_PLAN.md`, which is history). Full record: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` at `f4ceb7e48`.
+
+**Since part 1 (your ruling 2026-09-30T02:33Z, scope §10d):** OBJ-1 is now a state check (status exactly `QUEUED` or empty, or a report cell not naming the completion file, at close); Q7 = no F-G pattern in this batch (row 16 gets a parseable dual-form id; the grammar is `B-BATCH-ID-ALIAS-GRAMMAR`, row 1b) — which answers Q9(b) and R2-Q2 below. Census list (f)'s 'OBJ-1 exemptions' premise changes accordingly: under the state form there is no permanent-exemption set.
+
 Ref `f4ceb7e48` · full document: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` · detail for any id below: grep the full document at the ref · change-class `non_architecture` · Step-2 document = this pre-audit (RETROACTIVE it is not — it is the real Step 2). Your binding rulings: scope §10b (OBJ-3/OBJ-4), §10, §10c. Note: text carried from the CE read uses its own P/Q numbers; CE `P1…P12` = P27, P40, P41, P42, P43, P44, P45, P46, P28, P29, P49, P50; CE `Q1…Q9` = Questions 1, 2, 10, 6, 13, 14, 9(b), 19, 20 (FR2-CE-5).
 
 ## THE ASK

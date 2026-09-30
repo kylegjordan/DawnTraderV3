@@ -1,5 +1,7 @@
 # B-PLAN-CURRENCY-CHECK — Step 2, PART 5 of 5: OBJ-10 (checker hygiene, CI, SIM/workflow-10 governance) + §8 out-of-scope dispositions + UNAUDITED items
 
+**THE PLAN FILE THIS BATCH GRADES: `1-system-manual/SPRINT_TO_LIVE_PLAN.md`** (not `PHASE_19_PLAN.md`, which is history). Full record: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` at `f4ceb7e48`.
+
 Ref `f4ceb7e48` · full document: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` · detail for any id below: grep the full document at the ref · change-class `non_architecture` · Step-2 document = this pre-audit (RETROACTIVE it is not — it is the real Step 2). Your binding rulings: scope §10c conditions 2-4 and 6, the mandatory CI job, your `CLAUDE.md` §14 re-point; §10 Q9 (committed flag), Q10 (checker and heartbeat tests into CI).
 
 ## THE ASK

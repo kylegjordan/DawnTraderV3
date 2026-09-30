@@ -1,5 +1,7 @@
 # B-PLAN-CURRENCY-CHECK — Step 2, PART 4 of 5: OBJ-8 / OBJ-9 (dated homes, one-time plan correction)
 
+**THE PLAN FILE THIS BATCH GRADES: `1-system-manual/SPRINT_TO_LIVE_PLAN.md`** (not `PHASE_19_PLAN.md`, which is history). Full record: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` at `f4ceb7e48`.
+
 Ref `f4ceb7e48` · full document: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` · detail for any id below: grep the full document at the ref · change-class `non_architecture` · Step-2 document = this pre-audit (RETROACTIVE it is not — it is the real Step 2). Your binding rulings: scope §10c (OBJ-8 and OBJ-9 approved; condition 5 — OBJ-9 sweeps the whole `<file>:<line>`-citation class), §10b Q5 (a named, positioned POST_AUDIT_ROADMAP item counts as placed). Rules written to settle reader disagreements: R1 OPEN issue, R2 dated HOME, R3 "after X" (§1.1).
 
 ## THE ASK

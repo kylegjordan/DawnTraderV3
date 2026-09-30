@@ -1,5 +1,7 @@
 # B-PLAN-CURRENCY-CHECK — Step 2, PART 3 of 5: OBJ-5 / OBJ-6 (the four deletions, the second working order)
 
+**THE PLAN FILE THIS BATCH GRADES: `1-system-manual/SPRINT_TO_LIVE_PLAN.md`** (not `PHASE_19_PLAN.md`, which is history). Full record: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` at `f4ceb7e48`.
+
 Ref `f4ceb7e48` · full document: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` · detail for any id below: grep the full document at the ref · change-class `non_architecture` · Step-2 document = this pre-audit (RETROACTIVE it is not — it is the real Step 2). Your binding ruling for this area: scope §10c (Q4 DELETE `plan_doc.py`, `sort.py`, `order.py`, `push_keys.json` under rule 18, nothing else in `scripts/inventory/` touched; condition 1 reconcile before delete; the regenerate-and-diff check withdrawn).
 
 ## THE ASK
