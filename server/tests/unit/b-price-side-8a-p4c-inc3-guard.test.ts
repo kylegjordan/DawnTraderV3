@@ -11,6 +11,7 @@ import { XsVtsInstrument, XS_LIVE_REASONS, type XsQuoteRow } from '../../asset_c
 import { assertVtsXstockTouchKnobsAtBoot, readVtsXstockExitMaxSpread } from '../../asset_classes/xstock_spot/vts-xs-touch-config.js';
 import { stepNoTriggerStreak } from '../../core/trading/vts-no-trigger-streak.js';
 import { _seedModuleCacheForTests, clearModuleConstantsCache } from '../../services/module-constants-service.js';
+import { STRATEGY_DISPLAY_NAMES } from '../../config/canonical-regime-strategy-map.js';
 
 const NOW = Date.parse('2026-09-30T14:00:00Z');
 const row = (o: Partial<XsQuoteRow> = {}): XsQuoteRow => ({ last: 100, bid: 99.95, ask: 100.05, atMs: NOW - 5_000, ...o });
@@ -135,14 +136,27 @@ function prefetchedModules(): Set<string> {
   return set;
 }
 
-/** The DECLARED exceptions — a module read sync but deliberately not prefetched, each with its reason and its placed home.
- *  The census asserts this list is exactly its misses: an exception that stops missing is stale and fails too. */
-const PREFETCH_EXCEPTIONS: Array<{ module: string; reason: string; home: string }> = [
+/** The DECLARED exceptions — a module read sync but deliberately not prefetched, each with its reason and its PLACED home.
+ *  The census asserts this list is exactly its misses (an exception that stops missing is stale and fails), and r3 BLOCKER-4:
+ *  the home is checked by READING THE PLAN for the row, never by the shape of a sentence. */
+const PREFETCH_EXCEPTIONS: Array<{ module: string; reason: string; batch: string; owner: string; planRow: string }> = [
   { module: 'feed_health',
     reason: 'prefetching it ARMS the feed-liveness grade (feed-integrity-monitor.ts, the only reader), which mints feed_health '
       + 'alerts for both classes — a switch-on of another owner\'s component, not a VTS-instrumentation change (Langston r2)',
-    home: 'B-FEED-HEALTH-GRADE-ARM, owner CC-B, placed in SPRINT_TO_LIVE_PLAN.md after row 3 (#1123)' },
+    batch: 'B-FEED-HEALTH-GRADE-ARM', owner: 'CC-B', planRow: '3a' },
 ];
+
+/** The active plan's §4 rows as the plan's own tally rule defines them: a table line of exactly 7 cells whose first cell
+ *  is a row id (digits plus at most one letter). Returns id → { batch cell, owner cell }. */
+function planRows(): Map<string, { batch: string; owner: string }> {
+  const out = new Map<string, { batch: string; owner: string }>();
+  for (const line of read('1-system-manual/SPRINT_TO_LIVE_PLAN.md').split('\n')) {
+    if (!line.startsWith('|')) continue;
+    const c = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((x) => x.trim());
+    if (c.length === 7 && /^\d+[a-z]?$/.test(c[0])) out.set(c[0], { batch: c[2], owner: c[3] });
+  }
+  return out;
+}
 
 /** Non-literal first arguments, each resolved to its module by a definition this test re-reads (never trusted). */
 const RESOLVED_NON_LITERALS: Array<{ file: string; expr: string; module: string | null; def: { file: string; re: RegExp } | null }> = [
@@ -154,7 +168,8 @@ const RESOLVED_NON_LITERALS: Array<{ file: string; expr: string; module: string 
     def: { file: 'server/services/amr-context-bonus-shadow.ts', re: /const MOD\s*=\s*'ranking_context_bonus'/ } },
   { file: 'server/services/passive-archive/ohlc-frame-skip-tracker.ts', expr: 'OHLC_FRAME_SKIP_ALERT_KNOB.module', module: 'passive_archive',
     def: { file: 'server/services/passive-archive/ohlc-frame-skip-tracker.ts', re: /OHLC_FRAME_SKIP_ALERT_KNOB = \{ module: 'passive_archive'/ } },
-  // `strategy.${…}` — dynamic over strategy names; every strategy module is prefetched by name (the controls assert it).
+  // `strategy.${…}` — dynamic over strategy names: sound only while EVERY strategy in the SSOT (`STRATEGY_DISPLAY_NAMES`)
+  // has its module prefetched — asserted below from the SSOT itself (Langston r3 condition), so strategy 20 cannot land unwarm.
   { file: 'server/services/data-archive/decision-provenance.ts', expr: 'moduleName', module: null,
     def: { file: 'server/services/data-archive/decision-provenance.ts', re: /const moduleName = `strategy\.\$\{strategy\}`;/ } },
   { file: 'server/services/strategy-engine.ts', expr: '`strategy.${signal.strategy}`', module: null, def: null },
@@ -222,13 +237,27 @@ describe('8a-P4c inc 3 — BLOCKER-1 class: every sync-read module_constants mod
 
   it('the ONLY misses are the declared exceptions — each with a reason and a placed home — and none is stale', () => {
     expect(PREFETCH_EXCEPTIONS.map((e) => e.module)).toEqual(['feed_health']);
+    const rows = planRows();
+    expect(rows.size).toBeGreaterThan(200); // the plan parsed (229 rows at build)
     for (const e of PREFETCH_EXCEPTIONS) {
       expect(e.reason.length).toBeGreaterThan(20);
-      expect(e.home).toMatch(/^B-[A-Z0-9-]+, owner CC-[A-Z]+, placed in \S+ /);
+      const row = rows.get(e.planRow);
+      expect(row, `plan row ${e.planRow} must exist in SPRINT_TO_LIVE_PLAN.md`).toBeDefined();
+      expect((row as { batch: string }).batch).toContain(e.batch);
+      expect((row as { owner: string }).owner.startsWith(e.owner)).toBe(true);
       expect(prefetched.has(e.module)).toBe(false);
     }
+    // CAPABILITY: the plan check fails on a home that is named but not placed
+    expect([...rows.values()].some((r) => r.batch.includes('B-NOT-A-PLACED-BATCH'))).toBe(false);
+    expect(rows.get('3')?.batch).toContain('B-VTS-MARK-SIDE'); // a known row reads as itself
     expect([...new Set(census.misses.map((m) => m.module))].sort()).toEqual(PREFETCH_EXCEPTIONS.map((e) => e.module).sort());
     for (const m of ['vts_xstock_touch', 'strategy.orb']) expect(prefetched.has(m)).toBe(true);
+  });
+
+  it('r3 condition — EVERY strategy in the SSOT has its module prefetched (the dynamic `strategy.${…}` readers are sound)', () => {
+    const keys = Object.keys(STRATEGY_DISPLAY_NAMES);
+    expect(keys.length).toBeGreaterThanOrEqual(19); // 19 at build
+    expect(keys.filter((k) => !prefetched.has(`strategy.${k}`))).toEqual([]);
   });
 
   it('every NON-literal module argument is resolved, and each resolution is re-read at its definition', () => {
