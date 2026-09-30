@@ -1,115 +1,95 @@
-# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-09-24
+# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-09-30
 
 > ⛔ **KYLE'S STANDING RULE, 2026-09-05:** every session keeps its own task list.
 > - **It holds:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — in working order.
 > - **It is updated:** every time a batch closes, and every time something new is decided and slotted.
-> - **Every update lands in three places, in the same turn:** this file, then `1-system-manual/PHASE_19_PLAN.md`, then `POST_AUDIT_ROADMAP.md` where the item is roadmap-level.
+> - **Every update lands in the same turn:** this file, then the active plan `1-system-manual/SPRINT_TO_LIVE_PLAN.md` (or its after-live list), then `POST_AUDIT_ROADMAP.md` where the item is roadmap-level.
 >
-> ⚠️ **The plan is the authority; this file is the index.** Every row below is derived from `PHASE_19_PLAN.md`. If the two disagree, the plan wins and this file is stale.
+> ⚠️ **The plan is the authority; this file is the index.** Every row below is derived from `SPRINT_TO_LIVE_PLAN.md` (Kyle, 2026-09-28: the active plan; `PHASE_19_PLAN.md` is history). If the two disagree, the plan wins and this file is stale.
 >
-> ⚠️ **Created late — 2026-09-11.** Kyle's rule landed on 2026-09-05; this list did not exist until the governance checker flagged its missing ledger row (alert `2ec36624`, routed by Langston).
+> ⚠️ **Re-derived 2026-09-30** (Langston's `B-PLAN-CURRENCY-CHECK` Step-2 part-3 ruling, finding DL-r3-5, relayed by OLD Claude): the 2026-09-24 version was built from `PHASE_19_PLAN.md` and named 18 rows the sprint plan gives to other sessions (Infra Claude: 18, 19, 25-29, 75, 76, 85, 91, 92; NEW Claude: 119, 121, 123, 137; OLD Claude: 169, 170). The queue below is generated from the plan's owner column, so it names only rows the plan gives to CC-C.
 
 ---
 
-## 0a. OPEN AND STALLED — batches I have started and not closed
+## 0a. FINISH FIRST — the plan's §0 line for CC-C (Kyle: no sprint work until every session has finished its §0 list)
 
-| plan row | batch | where it stands | waiting on |
-|---|---|---|---|
-| 3b.h-6 | `B-OHLC-FRAME-GUARD` (`#1028`) | deployed `29cce1076`; Step 4 approved; **paused at Step 7** — only the on-screen panel check is left | me (behind the Codex experiment) |
-| 3 | `F-G-1` `B-GRID-REPRESENTABILITY` | window closed 2026-09-04; **conversion to a completion report owed**; OBJ-9 re-opened, bounded to the ordering guarantee (`#1031`) | me |
-| 3c | `F-G-2` `B-EXIT-TRANSACTABLE-SIDE` | crypto half deployed 2026-09-02; **observation window VOID since 2026-09-05** | the level-basis and reachability work, then re-open |
-| 3n / 3n.q / 3n.q2 | `B-PRICE-SIDE-BY-JOB` — exit and fill side (`8a-P2`, `8a-P3`, `8a-P4`; one batch, two halves) | `8a-P2` + `8a-P3` + `8a-P4a` + `8a-P4b` (with C1) deployed; the `8a-P3` window closed 2026-09-22 12:16:07Z; **Step 10 governance landed 2026-09-22**; progress report `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md` | me — **`8a-P4c` (VTS xStock)**: increment 1 (the instrument) deployed `bc199185e` + Step-8 confirmed 2026-09-22; window to 2026-09-30T00:00Z, then increments 2-3; one completion report when both halves land |
-| 3n (`8c`) | `B-PRICE-SIDE-BY-JOB` row `8c` | P1 only; **HELD** | the decision recorded on the row |
-| 3n.l | `B-REST-SIDES-TO-CACHE` (`#1056`) | scope APPROVED r4 2026-09-13 (`6036fd1a6`); Step 2 next | built during `8c`'s window, deployed after it |
-| RUN ORDER banner | `B-SIZING-DEC-RESTORE` | obj-1, obj-10, obj-11 LIVE at `213e162dc` (it sizes every trade); obj-2..5 and Steps 4-11 not built; declared in `GOVERNANCE_EXCEPTIONS.md` 2026-09-12 | **Kyle** — its queue position against the price work is his |
-| 3b.f-c | `B-XSTOCK-SESSION-FRESHNESS` | open; the entry-side flat 15 s ceiling is its subject | me |
-| 3n.q8 | `B-BOOK-STATE-RESTART-DURABLE` (`#1066`) | **started 2026-09-24:** Step 1 approved (`6e2c5ec20`), Step 2 in progress, positive control captured (`87b4597d5`) | me; deploy after the `8a-P4c` window (2026-09-30T00:00Z) |
-
-**Closed 2026-09-11:** 3b.b `B-XSTOCK-FEED-SANITY` (`#943`) — window INCONCLUSIVE, stopped; the acceptance re-arms on the post-OBJ-7 instrument · 3b.f `B-PRICE-AGE-TRUTH` (`#951`) — Langston confirmed Step 11.
+| plan row | batch | where it stands (2026-09-30) |
+|---|---|---|
+| 13 | `B-OHLC-FRAME-GUARD` (`#1028`) | r6 Step 5 done (`21d7e84a2`, CI `36475941280`); Step 6 in the held deploy (≥ 2026-10-02T20:10Z), then Step 7; declared OPEN in `GOVERNANCE_EXCEPTIONS` |
+| 16 | `F-G-1` reopened (`#1031`) | Step 5 done; deploy with the held window; conversion to a completion report owed |
+| 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` increment 2 at Step 5 (deploy with the held window); increment 3 at Step 2 with Langston (plan §C3, `#1118` folded as P14); then `B-XSTOCK-BID-TRIGGER-RELAND` (row 2, after row 15), `B-VTS-NO-DECISION-VALVE`, and `8c` per-leg levels (held) |
+| 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | built and reviewed; ship in the one held deploy |
+| 9 | `B-SIZING-DEC-RESTORE` | 2e Step 4: gates A1 and B approved, A2 round 3 with Langston; deploy ≥ 2026-10-02T20:10Z (2e's rollback first), then Kyle's $3,000 paper reset |
+| 40 | `B-XSTOCK-SESSION-FRESHNESS` | open; continues as its sprint row |
+| — | `F-G-2` | ✅ closed as absorbed into `B-PRICE-SIDE-BY-JOB` (2026-09-28, `0ccad12f5`) |
 
 ## 0b. OUTSIDE THE PLAN — current direction from Kyle
 
 | item | state |
 |---|---|
-| **The Codex experiment** (Kyle, 2026-09-11) — `Scope Files/CODEX_FINDINGS_BY_GROUP.md` | r3 sent to Coltrane 2026-09-11; **waiting on his per-group design report** |
-| **Standing ownership:** `1-system-manual/ACTIVE_PATH_FLOW.md` | updated as Phase-19 batches land |
+| **The Codex experiment** (Kyle, 2026-09-11) — `Scope Files/CODEX_FINDINGS_BY_GROUP.md` | register r14 ready; not to Coltrane until `#1027` clears |
+| **Standing ownership:** `1-system-manual/ACTIVE_PATH_FLOW.md` | updated as batches land |
 
-## 0. THE QUEUE — every plan row naming CC-C as owner, in plan order
+## 1. THE QUEUE — every sprint-plan row naming CC-C as owner, in plan order (the §0a rows above excluded)
 
-Derived 2026-09-11 from the plan's own rows; the `3n.*` rows re-derived 2026-09-22 (plan lines 87-125, owner column read per row). Rows marked ⚠️ carry a closed or withdrawn word somewhere in the row; **confirm the row before working them.**
+Generated from the plan's owner column. The state is the plan's own; the description is its first clause.
 
-| plan row | item |
-|---|---|
-| 3b.b-c | `B-ROLLBACK-EPOCH-FORWARD` (`#1045`) — placed 2026-09-11; after OBJ-7 deploys, before OBJ-8's build |
-| 3b.d | `B-XSTOCK-BOOK-LADDER` (`#949`) — prerequisite of F-G-2's xStock legs |
-| 3b.e | ⚠️ `B-XSTOCK-LIVE-FEED` (`#950`) |
-| 3b.f-a | `B-OPENTRADE-REFRESH-LANE` (`#977`) — placed before 3b.f-b by Kyle |
-| 3b.f-b | `B-PRICE-AGE-REFUSAL` — gated on `#971` |
-| 3b.f-d | `B-OBS-WINDOW-EVIDENCE-CAPTURE` (`#1044`) — placed 2026-09-11 after 3b.f-c |
-| 3b.b-b | `B-XSTOCK-ENTRY-COMPARATOR` (`#996`) |
-| 3b.g | `B-DECIDED-INTENT-INDEX` (`#956`) — precedes the exit-path redesign |
-| 3b.h-1 | `B-TICKER-BBO-TRIGGER` (`#1017`) — immediately before 3n |
-| 3b.h-2 | `B-UNIVERSE-REFRESH-ACTS` (`#1018`) |
-| 3n.0 | `B-VTS-MARK-SIDE` |
-| 3b.h-4 | `B-SYMBOL-CLASS-IDENTITY` (`#1024`) |
-| 3b.h-7 | `B-FUTURES-BAR-FINAL` (`#1030`) |
-| 3b.h-8 | `B-ARCHIVE-WRITER-LIFECYCLE` (`#1034`, `#1032`; Step 1 also reviews `#1036`, `#1037`; ➕ `#1072` added 2026-09-22 — the crypto snapshot archiver's membership is frozen at each restart, three legs) — position proposed, Langston to confirm |
-| 3b.i | `B-DISPATCH-STAGING-VERIFY` (`#964`) |
-| 3b.j | ⚠️ `B-SCANNER-DEDUPE-DEAD-TABLE` (`#965`) |
-| 3b.k | ⚠️ `B-CHANGE-CLASS-PARSER` (`#968`) |
-| 3b.l | `B-TWO-CACHE-INTENT` (`#971`) |
-| 3b.m | `B-PROVENANCE-LOSS-CENSUS` (`#976`) |
-| 3c.a | `B-DEPLOY-REF-DECLARATION` (`#988`) |
-| 3d | ⚠️ `B-MIN-STOP-DISTANCE` |
-| 3e | `B-GUARD-COVERAGE-AUDIT` (`#919`) |
-| 3f | `B-VALIDATE-OBSERVABILITY` (`#922`) |
-| 3g | `B-GRID-LIVE-PATH-PARITY` (`#939`) |
-| 3h | `B-INTENT-ENTRY-PARITY` (`#928`, `#929`) |
-| 3i | `B-TARGET-FABRICATION` (`#927`) |
-| 3i.b | `B-STRING-TRUTHINESS-GUARDS` (`#930`) |
-| 3i.c | `B-CANONICAL-FREEZE` (`#948`) — governance hygiene |
-| 3j | `B-FUNNEL-PERP-CLASSES` (`#925`) |
-| 3k | `B-VENUE-PAIRS-REINIT` (`#933`) |
-| 3l | `B-VPG-ROW-ALIGN` (`#934`) |
-| 3m | ⚠️ `B-RATE-LIMITER-RESET-DISPOSITION` (`#936`) |
-| 3n.a | `B-ORPHAN-ROOT-SCANNER` |
-| 3n.b | `B-ORPHAN-LEVEL-TABLES` |
-| 3n.c | `B-TRAILING-STATE-DURABILITY` |
-| 3n.d | `B-GRID-REFUSAL-RATE` |
-| 3n.e | `B-CANONICAL-CORPUS-ACCURACY` (`#733`) |
-| 3n.f | `B-DIAG-READ-INTEGRITY` (`#1014`) |
-| 3n.g | `B-QUOTE-PEG-DEVIATION-WATCH` |
-| 3n.h | `B-QUOTE-LEG-INTEGRITY` (`#1050`) |
-| 3n.i | `B-QUOTE-ADMISSION-LEGACY-SWEEP` (`#937`) |
-| 3n.k | `B-FAMILY-POOL-REACHABILITY` (`#1052`) |
-| 3n.l | `B-REST-SIDES-TO-CACHE` (`#1056`) — see §0a |
-| 3n.m | `B-BOOK-SUBSCRIPTION-REACH` |
-| 3n.n | `B-DECISION-INSTANT-QUOTE` |
-| 3n.q2 | **`8a-P4c` — VTS xStock**, the remainder of the xStock half (the list is on the plan row) — increment 1 LIVE and Step-8 confirmed; read rules A-D at the 2026-09-30T00:00Z window close, then build increments 2-3 |
-| 3n.q3 | `B-VTS-NO-DECISION-VALVE` |
-| 3n.q4 | `B-EXIT-LINE-IDENTITY` |
-| 3n.q5 | `B-BOOK-STATE-RING-INDEPENDENT-BOUND` |
-| 3n.q6 | `B-EXIT-DECISION-RUNG-STAMP` (`#1064`) |
-| 3n.q8 | `B-BOOK-STATE-RESTART-DURABLE` (`#1066`) — before 3n.q7 — **in progress, see §0a** |
-| 3n.q7 | `B-XSTOCK-BID-TRIGGER-RELAND` — after 3n.q8 |
-| 3n.r | `B-TSC-COVERS-TESTS` |
-| 3n.o | `B-CRYPTO-MARK-AGE-GATE` |
-| 3n.p | `B-EXIT-TICKER-LEG-ADAPTER-SIDES` |
-| 4 | `F-5` — the per-strategy reach STRUCTURE is delivered (`B-GEOMETRY-REACH-BASELINE` OBJ-A.1, 2026-09-13); what remains is the reach FIT on `F-E` |
-| 4.b | `B-KILLSWITCH-DENOMINATOR` (`#618` remaining legs) |
-| 4.c | `B-MODE-PREDICATE-SWEEP` (`#736`) — three mode-blind raw-SQL readers + delete `getClosedTradesGlobal`; placed 2026-09-23 at `B-BALANCE-TRUTH`'s close |
-| 5.a | `B-NONFIAT-QUOTE-DENOMINATION` (`#966`) |
-| 5.b | `B-PRICE-FLOOR-REVIEW` (`#967`) — **the decision is Kyle's** |
-| 3z | `B-TOTAL-DRAWDOWN-WARNING` (`#303`) — placed at the end of Phase 19 |
+| plan row | item | state | what it is |
+|---|---|---|---|
+| 2 | B-XSTOCK-BID-TRIGGER-RELAND | QUEUED | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
+| 9a | B-TRADE-LOSS-BOUND-DECISION (`#1105`) | DONE — decided (Kyle 2026-09-30: NO bound) | Kyle: no buffer and no limit on the max position % tied to the kill switch; if a large position fails and the kill switch trips past its limit, so… |
+| 9b | B-SETTINGS-REAL-TYPE (`#1106`) | QUEUED | after row 9a: the builder returns the legacy table's type, so 24 fields read at ~50 sites are always undefined (engine blacklist/whitelist, AI-prom… |
+| 9c | B-LIVE-READERS-CLOSED-TRADES (`#1108`, was `#668`) | QUEUED | after row 9b, before the go-live switch (Kyle 2026-08-07: its own batch right after B-SIZING-DEC-RESTORE; named then, placed 2026-09-29): live's ba… |
+| 9d | B-STRATEGY-SETTINGS-KNOBS (`#1109`) | QUEUED | after row 9c: shown and editable on the strategies screen, enforced nowhere; only feeds the strategy-settings approval rule, so removing it is a ch… |
+| 9e | B-CLAMP-ESTIMAND-RESPEC (`#1110`) | QUEUED | after row 9d, before Phase 25 reads it: the clamp-bind stream is retired in B-SIZING-DEC-RESTORE 2d because its ratio is always 0.97 × one factor;… |
+| 9f | B-CAP-COHORT-SPLIT-DECISION (`#1111`) | DONE — decided (Kyle 2026-09-30: split OFF, every coin under the rule; removed in B-SIZING-DEC-RESTORE 2e, `#1111`) | after row 9e: the limit turns on for real at the 2d deploy, and a switch seeded 2026-04-28 for an experiment that never ran exempts ~half the unive… |
+| 9g | B-M5D-HARNESS-CENSUS (`#1112`) | QUEUED | after row 9f: the M5E harness was deleted in 2d after a census; M5D is its unaudited sibling (routes still live) — census its callers and state wri… |
+| 9h | B-OPEN-POSITION-INDEX-TRUTH (`#1113`) | QUEUED | after row 9g: the duplicate-open handler names one index, the schema declares a second, and the database holds a third shape (symbol + side); decid… |
+| 10 | #628 — batch named at Step 1 | QUEUED | with B-SIZING-DEC-RESTORE: its two sizing sites |
+| 31 | B-XSTOCK-LIVE-FEED | QUEUED | the xStock feed became our trading feed without a decision — decide and fix |
+| 32 | plan row 6 | QUEUED | a bound on how old a price may be when used |
+| 33 | B-PRICE-STALENESS-BOUND | QUEUED | the last-known-good price is re-served with no age bound |
+| 34 | B-EQUITY-RECONNECT-STALL-TIMER | QUEUED | a stalled xStock reconnect leaves positions unwatched |
+| 36 | #506 — batch named at Step 1 | QUEUED | book subscriptions never unsubscribe |
+| 37 | B-BOOK-SUBSCRIPTION-REACH | QUEUED | after #506: subscribe the order book for the whole pool, not ~3 coins |
+| 38 | B-CRYPTO-MARK-AGE-GATE | QUEUED | crypto mark age |
+| 39 | #977 — batch named at Step 1 | QUEUED | the shared price-cache refresh lane for open positions runs but nothing subscribes - staleness hits selection (CC-C) |
+| 40 | B-XSTOCK-SESSION-FRESHNESS | QUEUED | xStock entry-age limit vs the exit standard Kyle ruled |
+| 41 | B-XSTOCK-ENTRY-COMPARATOR | QUEUED | xStock entry-price cross-check |
+| 42 | B-DECIDED-INTENT-INDEX | QUEUED | xStock's three definitions of 'the price' from one frame |
+| 43 | B-POST-GRID-MUTATION-CENSUS | QUEUED | what changes a stop after it is rounded |
+| 44 | plan row 7 | QUEUED | the VTS reads prices through the shared accessor |
+| 45 | #1033 — batch named at Step 1 | QUEUED | an absent volume is stored as zero and the liquidity filter reads it |
+| 53 | B-TARGET-FABRICATION | QUEUED | signals: default targets the strategy never chose |
+| 60 | B-INTENT-ENTRY-PARITY | QUEUED | open: entry routes bypass the price grid and the sizer. ⛔ SCOPE SHRANK 2026-09-30: the HTTP intent path (`intent-executor.ts`) is DELETED (B-SIZING… |
+| 61 | B-GRID-LIVE-PATH-PARITY | QUEUED | open: grid rounding on the live order path |
+| 62 | — batch named at Step 1 | QUEUED | open: a resting order's deadline runs even when no price is usable |
+| 63 | #630 — batch named at Step 1 | QUEUED | open: exercise the maker-order deadline once |
+| 64 | B-EXIT-TRIGGER-FILL-PARITY | QUEUED | close: exits fire on the price they would fill at |
+| 65 | B-EXIT-TICKER-LEG-ADAPTER-SIDES | QUEUED | close: the exit path sees both price sides |
+| 66 | B-BOOK-STATE-RING-INDEPENDENT-BOUND | QUEUED | close: xStock exit plausibility bound |
+| 67 | #204 — batch named at Step 1 | QUEUED | close: xStock stop prices at the wrong scale |
+| 68 | plan row 3h.b | QUEUED | close: remove the second exit implementation |
+| 69 | B-EXIT-LATCH-INVESTIGATION | QUEUED | close: is the hold-past-target a label or a real exit defect |
+| 70 | — batch named at Step 1 | QUEUED | close: map the exit audit's items to homes |
+| 86 | plan row 8 | QUEUED | paper truth: fill-integrity detector |
+| 89 | B-IMPLEMENTATION-SHORTFALL | QUEUED | paper truth: separate stale-signal cost from execution cost |
+| 90 | B-GRID-REFUSAL-RATE | QUEUED | paper truth: how often the grid refuses |
+| 111 | #513 — batch named at Step 1 | QUEUED | the VTS books maker target exits the way the paper lane would |
+| 112 | B-DECISION-INSTANT-QUOTE | QUEUED | the exact quote at decision time |
+| 113 | B-EXIT-DECISION-RUNG-STAMP | QUEUED | which price rung an exit used |
+| 118 | #1072 — batch named at Step 1 | QUEUED | the price-history recorder's frozen symbol set |
+| 124a | B-AMR-INPUT-INTEGRITY-ARC (`#600`, `#604` leg A, `#608`, `#609`, `#610`, `#611`, `#612`) | QUEUED | after row 124 |
+| 135b | B-CONCENTRATION-SCORE-UNITS | QUEUED | after row 135a (Langston 2026-09-30, `B-SIZING-DEC-RESTORE` 2e J1b): the score mixes dollars with a 2.5 cap and is computed once at boot on an empt… |
+| 138a | B-PATTERN-SIZE-CAP-REVIEW (`#1115`) | DONE — decided (Kyle 2026-09-30: cap OFF; removed in B-SIZING-DEC-RESTORE 2e) | SUPERSEDED: |
+| 166 | #692 — batch named at Step 1 | QUEUED | operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options |
+| 176 | #296 — batch named at Step 1 | QUEUED | one rate-limited path for placing and cancelling orders |
+| 183a | B-MAKER-CANCEL-ON-DROP (`#1103`) | QUEUED | after row 183, with row 176 (#296): in live mode a dropped resting buy must be cancelled at Kraken, or it can fill into a position nothing tracks (… |
+| 192 | B-KRAKEN-FEE-WATCH | QUEUED | notice when the exchange changes fees |
+| 194 | — batch named at Step 1 | QUEUED | after KRAKEN-LIVE-KEY: confirm live fees |
 
-**Not in the queue, and why:**
-- 3b.h `B-EXIT-BOOK-AGE-STAMP` — closed 2026-09-07.
-- 3b.c `B-EXIT-TRIGGER-FILL-PARITY` — withdrawn 2026-08-31 and folded into 3b.b.
-- 3b.f-c-a — absorbed into 3b.b on 2026-09-03.
-- 3b.f-d — CC-B's row.
-
-## THE OTHER THREE LISTS — listed so they can be seen, not touched
+## THE OTHER LISTS — listed so they can be seen, not touched
 
 - `CC_A_SESSION_TASK_LIST.md` (OLD Claude)
 - `CC_INFRA_SESSION_TASK_LIST.md` (Infra Claude)
-- `CC_B_SESSION_TASK_LIST.md` (NEW Claude) — does not exist yet. Langston has placed that as an item on the `B-TASK-LIST-SLOT` follow-on.
+- `CC_B_SESSION_TASK_LIST.md` (NEW Claude)
