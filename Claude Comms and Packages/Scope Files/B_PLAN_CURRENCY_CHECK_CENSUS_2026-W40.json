@@ -1,0 +1,1417 @@
+{
+  "week": "2026-W40",
+  "ref": "13fa6bbcedba68829852742d13112bb9fccc4762",
+  "prevRef": "7f472d1c4fbea63c6db105aa7a38c160a8a95637",
+  "generatedAt": "2026-09-30T19:30:49.035Z",
+  "counts": {
+    "h": 797,
+    "n": 691,
+    "o": 539,
+    "a": [
+      0,
+      1
+    ],
+    "b": [
+      391,
+      148,
+      230,
+      150,
+      2,
+      9,
+      51,
+      50,
+      5,
+      3,
+      16,
+      23
+    ],
+    "c": [
+      12,
+      13,
+      13
+    ],
+    "cx": 1,
+    "d": 0,
+    "dx": 0,
+    "e": [
+      57,
+      0
+    ],
+    "f": [
+      5,
+      5
+    ],
+    "g": 0,
+    "sc": 3,
+    "r": 8
+  },
+  "selfCheck": {
+    "heads": 797,
+    "numbers": 691,
+    "open": 539,
+    "openR1": 487,
+    "s1": 46,
+    "s2": 8
+  },
+  "a": [
+    {
+      "file": "F_G_2_COMPLETION_REPORT.md",
+      "verdict": "in-no-plan-line",
+      "owner": null
+    }
+  ],
+  "b": {
+    "placed": {
+      "number": 230,
+      "homeBatch": 150,
+      "parked": 2,
+      "roadmap": 9
+    },
+    "unplaced": [
+      {
+        "n": 146,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 160,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 170,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 174,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 200,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 211,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 212,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 214,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 225,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 227,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 228,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 230,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 232,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 236,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 238,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 295,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 299,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 300,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 301,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 303,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 320,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 321,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 323,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 325,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 326,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner ?"
+      },
+      {
+        "n": 327,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 328,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?"
+      },
+      {
+        "n": 329,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?"
+      },
+      {
+        "n": 331,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "owner ?"
+      },
+      {
+        "n": 342,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 343,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 345,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 346,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 347,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 348,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 381,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 384,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?"
+      },
+      {
+        "n": 385,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 388,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?"
+      },
+      {
+        "n": 389,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?"
+      },
+      {
+        "n": 390,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?"
+      },
+      {
+        "n": 393,
+        "code": "U4",
+        "why": "HOME cites PHASE_19_PLAN or a row with no id",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 395,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 403,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?"
+      },
+      {
+        "n": 404,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?"
+      },
+      {
+        "n": 406,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 407,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 409,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 410,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 411,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 418,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 422,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 431,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 433,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 435,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 437,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 439,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 440,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?"
+      },
+      {
+        "n": 442,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner ?"
+      },
+      {
+        "n": 445,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-B"
+      },
+      {
+        "n": 461,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 462,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 500,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 509,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 511,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-A"
+      },
+      {
+        "n": 516,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 520,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 523,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 524,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 525,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 536,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 541,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 554,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-C"
+      },
+      {
+        "n": 555,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 562,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 565,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 575,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 576,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 578,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 580,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 582,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 584,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 586,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 587,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 591,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 595,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 596,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 607,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 613,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 620,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 623,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 624,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "filer CC-C"
+      },
+      {
+        "n": 633,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 650,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 667,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-C"
+      },
+      {
+        "n": 674,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 677,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "filer CC-A"
+      },
+      {
+        "n": 691,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 696,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 702,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 703,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 732,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 749,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 750,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 751,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 754,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 756,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-A"
+      },
+      {
+        "n": 908,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 911,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 913,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 915,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 916,
+        "code": "U4",
+        "why": "HOME cites PHASE_19_PLAN or a row with no id",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 924,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "owner CC-INFRA"
+      },
+      {
+        "n": 936,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 937,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 938,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "filer CC-C"
+      },
+      {
+        "n": 939,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 945,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "filer CC-C"
+      },
+      {
+        "n": 948,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 949,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 950,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 952,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 953,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 954,
+        "code": "U4",
+        "why": "HOME cites PHASE_19_PLAN or a row with no id",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 955,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 956,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 957,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 958,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 960,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 961,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 962,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 964,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 969,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 971,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 992,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 997,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 1001,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 1021,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 1027,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-INFRA"
+      },
+      {
+        "n": 1047,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?"
+      },
+      {
+        "n": 1065,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-C"
+      },
+      {
+        "n": 1073,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 1075,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 1076,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 1083,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 1085,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 1086,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 1098,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-B"
+      }
+    ],
+    "byWhy": {
+      "U1": 51,
+      "U2": 50,
+      "U3": 5,
+      "U4": 3,
+      "U5": 16,
+      "U6": 23
+    },
+    "selfContradicting": [
+      {
+        "issue": 1098,
+        "headLine": 165,
+        "filer": "CC-B",
+        "reason": "head carries \"CLOSED\" before its final OPEN"
+      },
+      {
+        "issue": 532,
+        "headLine": 315,
+        "filer": null,
+        "reason": "head carries \"CLOSED\" before its final OPEN"
+      },
+      {
+        "issue": 348,
+        "headLine": 563,
+        "filer": "CC-A",
+        "reason": "head carries \"RESOLVED\" before its final OPEN"
+      }
+    ],
+    "reused": [
+      559,
+      561,
+      642,
+      646,
+      648,
+      660,
+      741,
+      921
+    ]
+  },
+  "c": {
+    "issues": [
+      {
+        "n": 444,
+        "lines": [
+          546
+        ],
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 451,
+        "lines": [
+          428
+        ],
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 455,
+        "lines": [
+          429
+        ],
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 480,
+        "lines": [
+          531
+        ],
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 481,
+        "lines": [
+          529
+        ],
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 485,
+        "lines": [
+          496
+        ],
+        "owner": "owner CC-A"
+      },
+      {
+        "n": 680,
+        "lines": [
+          3629
+        ],
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 681,
+        "lines": [
+          3647
+        ],
+        "owner": "owner CC-INFRA"
+      },
+      {
+        "n": 682,
+        "lines": [
+          3600
+        ],
+        "owner": "owner CC-INFRA"
+      },
+      {
+        "n": 684,
+        "lines": [
+          3697,
+          3717
+        ],
+        "owner": "owner CC-B"
+      },
+      {
+        "n": 705,
+        "lines": [
+          3732
+        ],
+        "owner": "owner CC-C"
+      },
+      {
+        "n": 908,
+        "lines": [
+          5090
+        ],
+        "owner": "owner CC-C"
+      }
+    ],
+    "lineCount": 13,
+    "matchCount": 13,
+    "excluded": [
+      {
+        "issue": 696,
+        "lines": [
+          3774,
+          3776
+        ],
+        "reason": "length-is-the-content date (the date of a data read, not a deadline), Langston Q25, scope §10h"
+      }
+    ]
+  },
+  "d": {
+    "rows": [],
+    "excluded": []
+  },
+  "e": {
+    "refs": [
+      {
+        "row": "9c",
+        "target": "B-SIZING-DEC-RESTORE"
+      },
+      {
+        "row": "9j",
+        "target": "9i"
+      },
+      {
+        "row": "19",
+        "target": "B-UNIVERSE-REFRESH-ACTS"
+      },
+      {
+        "row": "20",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "21",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "22",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "23",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "37",
+        "target": "#506"
+      },
+      {
+        "row": "39a",
+        "target": "#977"
+      },
+      {
+        "row": "80a",
+        "target": "B-SQE-DEADCODE-PURGE"
+      },
+      {
+        "row": "97a",
+        "target": "#561"
+      },
+      {
+        "row": "100",
+        "target": "B-XSTOCK-BID-TRIGGER-RELAND"
+      },
+      {
+        "row": "100",
+        "target": "B-VTS-MARK-SIDE"
+      },
+      {
+        "row": "100",
+        "target": "B-VTS-NO-DECISION-VALVE"
+      },
+      {
+        "row": "100",
+        "target": "B-SIZING-DEC-RESTORE"
+      },
+      {
+        "row": "100",
+        "target": "#628"
+      },
+      {
+        "row": "100",
+        "target": "B-REST-SIDES-TO-CACHE"
+      },
+      {
+        "row": "100",
+        "target": "B-BOOK-STATE-RESTART-DURABLE"
+      },
+      {
+        "row": "100",
+        "target": "B-PRICE-SIDE-BY-JOB"
+      },
+      {
+        "row": "100",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "100",
+        "target": "B-RTB-SIGNAL-IDENTITY"
+      },
+      {
+        "row": "100",
+        "target": "B-XSTOCK-LIVE-FEED"
+      },
+      {
+        "row": "100",
+        "target": "B-PRICE-STALENESS-BOUND"
+      },
+      {
+        "row": "100",
+        "target": "B-CRYPTO-MARK-AGE-GATE"
+      },
+      {
+        "row": "100",
+        "target": "#977"
+      },
+      {
+        "row": "100",
+        "target": "B-XSTOCK-SESSION-FRESHNESS"
+      },
+      {
+        "row": "100",
+        "target": "B-XSTOCK-ENTRY-COMPARATOR"
+      },
+      {
+        "row": "100",
+        "target": "B-DECIDED-INTENT-INDEX"
+      },
+      {
+        "row": "100",
+        "target": "B-POST-GRID-MUTATION-CENSUS"
+      },
+      {
+        "row": "100",
+        "target": "#972"
+      },
+      {
+        "row": "100",
+        "target": "#566"
+      },
+      {
+        "row": "100",
+        "target": "B-TARGET-FABRICATION"
+      },
+      {
+        "row": "100",
+        "target": "B-ENTRY-LEVEL-RECHECK"
+      },
+      {
+        "row": "100",
+        "target": "B-INTENT-ENTRY-PARITY"
+      },
+      {
+        "row": "100",
+        "target": "B-GRID-LIVE-PATH-PARITY"
+      },
+      {
+        "row": "100",
+        "target": "B-EXIT-TRIGGER-FILL-PARITY"
+      },
+      {
+        "row": "100",
+        "target": "B-EXIT-TICKER-LEG-ADAPTER-SIDES"
+      },
+      {
+        "row": "100",
+        "target": "B-BOOK-STATE-RING-INDEPENDENT-BOUND"
+      },
+      {
+        "row": "100",
+        "target": "#204"
+      },
+      {
+        "row": "100",
+        "target": "#166"
+      },
+      {
+        "row": "100",
+        "target": "B-CLOSE-WRITER-COSTS"
+      },
+      {
+        "row": "100",
+        "target": "B-COST-MATH-CONSOLIDATION"
+      },
+      {
+        "row": "100",
+        "target": "#527"
+      },
+      {
+        "row": "100",
+        "target": "B-EPOCH-PARITY-FENCE"
+      },
+      {
+        "row": "107",
+        "target": "B-PAPER-LANE-PROVENANCE"
+      },
+      {
+        "row": "107a",
+        "target": "T-W20C-SCALAR-LEG"
+      },
+      {
+        "row": "129",
+        "target": "B-EXCURSION-RECORD"
+      },
+      {
+        "row": "135a",
+        "target": "#221"
+      },
+      {
+        "row": "158a",
+        "target": "B-SEC-HARDEN"
+      },
+      {
+        "row": "158b",
+        "target": "B-PATH-SINK-CENSUS"
+      },
+      {
+        "row": "160a",
+        "target": "#615"
+      },
+      {
+        "row": "160a",
+        "target": "B-CREDENTIALS-PRIVATE-REPO"
+      },
+      {
+        "row": "164a",
+        "target": "164"
+      },
+      {
+        "row": "166a",
+        "target": "#692"
+      },
+      {
+        "row": "166b",
+        "target": "166a"
+      },
+      {
+        "row": "179",
+        "target": "#517"
+      },
+      {
+        "row": "186",
+        "target": "P19-B6.10"
+      }
+    ],
+    "unmatched": [],
+    "viaS0": [
+      {
+        "row": "160a",
+        "target": "B-CREDENTIALS-PRIVATE-REPO"
+      }
+    ],
+    "rowRefs": 62,
+    "rowUnmatched": []
+  },
+  "f": {
+    "all": [
+      "§4:55:B-RTB-REFRESH-CONSOLIDATE",
+      "§0:B-MEASURE-GATE",
+      "§0:B-XSTOCK-FEE-CONTRACT",
+      "§0:B-WAKE-LEAD-NAME",
+      "§5:B-XSTOCK-FEE-CONTRACT"
+    ],
+    "new": [
+      {
+        "key": "§4:55:B-RTB-REFRESH-CONSOLIDATE",
+        "id": "B-RTB-REFRESH-CONSOLIDATE",
+        "closed": false,
+        "owner": "CC-B",
+        "where": "§4 row 55"
+      },
+      {
+        "key": "§0:B-MEASURE-GATE",
+        "id": "B-MEASURE-GATE",
+        "closed": false,
+        "owner": "CC-A",
+        "where": "§0"
+      },
+      {
+        "key": "§0:B-XSTOCK-FEE-CONTRACT",
+        "id": "B-XSTOCK-FEE-CONTRACT",
+        "closed": false,
+        "owner": "CC-B",
+        "where": "§0"
+      },
+      {
+        "key": "§0:B-WAKE-LEAD-NAME",
+        "id": "B-WAKE-LEAD-NAME",
+        "closed": false,
+        "owner": "CC-INFRA",
+        "where": "§0"
+      },
+      {
+        "key": "§5:B-XSTOCK-FEE-CONTRACT",
+        "id": "B-XSTOCK-FEE-CONTRACT",
+        "closed": false,
+        "owner": "CC-B",
+        "where": "§5"
+      }
+    ]
+  },
+  "g": {
+    "recount": {
+      "CC-A": 63,
+      "CC-INFRA": 57,
+      "CC-C": 66,
+      "CC-B": 58
+    },
+    "table": {
+      "CC-C": 66,
+      "CC-INFRA": 57,
+      "CC-B": 58,
+      "CC-A": 63
+    },
+    "agree": true,
+    "diffs": [],
+    "cellSum": 244,
+    "statedTotal": 244,
+    "totalAgree": true,
+    "alert": false
+  },
+  "ownerSources": {
+    "ownerLine": 368,
+    "homeLine": 43,
+    "filer": 25,
+    "unknown": 103
+  }
+}
