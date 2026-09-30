@@ -83,6 +83,7 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
         state: 'pending',
         makerLimitPrice: 100,
         makerDeadline: NOW + MAX_PENDING,
+        entryPrice: 100, // `8a-P4c` 3b r1 BLOCKER-1: the maker twin's OWN entry is its limit
       },
     });
   });

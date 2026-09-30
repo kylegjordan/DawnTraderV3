@@ -165,7 +165,7 @@ describe('8a-P3 — the call sites read the transactable side, and xStock is exp
 
   // `8a-P4c` 3b (P7a/P8c): xStock moved off its mark — both shared placement sites read the SAME guarded ask.
   it('xStock reads its guarded ASK at both shared placement sites (X4 + X9 in one commit)', () => {
-    expect(XS).toMatch(/const _xEntryAsk = selectVtsXstockEntryAsk\(symbol, entryQuote, stopLoss, Date\.now\(\)\)\.ask;/);
+    expect(XS).toMatch(/const _xEntryAsk = selectVtsXstockEntryAsk\(symbol, entryQuote, stopLoss, pairNowMs\)\.ask;/);
     expect(XS).toMatch(/isMarketableAtPlacement\(\{\s*side:\s*'buy',\s*transactablePrice:\s*_xEntryAsk/);
     expect(XS).toMatch(/placementTransactablePrice:\s*_xEntryAsk/);
     expect(XS).not.toMatch(/transactablePrice:\s*lastPrice/);

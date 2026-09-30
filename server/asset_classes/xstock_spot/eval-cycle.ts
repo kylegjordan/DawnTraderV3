@@ -90,6 +90,7 @@ import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
 import { getCachedCostMetrics, getFrictionForAssetClass } from '../../core/math/cost-model.js';
 import { composeVtsLegFriction, entryPriceBasisFor } from '../../core/trading/vts-friction.js';
 import { selectVtsXstockEntryAsk } from './vts-xs-select.js';
+import { refuseTakerBooking, bookedQuantity } from '../../core/trading/entry-booking.js';
 import type { XsQuoteRow } from './vts-xs-instrument.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver.js'; // B-NEW-53 shared forming-bar snapshot
@@ -332,6 +333,8 @@ export async function evaluateXstockPairForVTS(
   entryQuote: XsQuoteRow | null = null,
 ): Promise<void> {
   counters.pairsEntered++;
+  // `8a-P4c` 3b (Langston RIDER-B): ONE clock for the pair — the entry guard judges every lane against the same instant.
+  const pairNowMs = Date.now();
 
   try {
     // ── 0. Market-hours gate (per-symbol; B79.0c handles 24/7 names) ──
@@ -961,7 +964,7 @@ export async function evaluateXstockPairForVTS(
         // ⛔ `8a-P4c` 3b (P7a/P8c, X4 + X9 in one commit): the placement test and the taker booking read the GUARDED ASK —
         // paper's risk-derived age ceiling over the scanner's own quote, no spread ceiling on an entry leg. Never the bar
         // close, never the mark. `null` ⇒ a maker RESTS (P11, as paper and crypto) and a taker is REFUSED (P9, J4).
-        const _xEntryAsk = selectVtsXstockEntryAsk(symbol, entryQuote, stopLoss, Date.now()).ask;
+        const _xEntryAsk = selectVtsXstockEntryAsk(symbol, entryQuote, stopLoss, pairNowMs).ask;
         if (_xMtDecision.chosenMode === 'maker') {
           if (_xEntryAsk !== null && isMarketableAtPlacement({ side: 'buy', transactablePrice: _xEntryAsk, limit: entryPrice })) {
             if (_xMtDecision.takerNetEV > 0) {
@@ -1009,25 +1012,26 @@ export async function evaluateXstockPairForVTS(
             _xPendingMaker = true;
           }
         }
-        // ⛔ `8a-P4c` 3b (P9, C8; J4): a TAKER entry books the guarded ask; with none it is REFUSED — never the level.
-        if (_xEffectiveMode === 'taker' && _xEntryAsk === null) {
-          console.log(`[8a-P4c][VTS][TAKER_NO_ASK_REFUSED] ${symbol}/${strategyKey} (xstock_spot): taker entry at level ${entryPrice} — no usable ask, refused (non-trade)`);
+        // ⛔ `8a-P4c` 3b (P9, C8; J4; Langston r1 FINDING-1 + RIDER-A) — ONE refusal path for every entry-booking reason,
+        // mirroring `maker_marketable_dropped` (counters + archive), then `continue` at the call site.
+        const _xRefuseBooking = (reason: string, detail: string): void => {
+          console.log(`[8a-P4c][VTS][ENTRY_BOOKING_REFUSED] ${symbol}/${strategyKey} (xstock_spot) reason=${reason}: ${detail} (non-trade)`);
           counters.signalsRejectedBySQE++;
           if (lane.kind === 'pattern') counters.patternSignalsRejected++;
           else counters.quantSignalsRejected++;
           counters.byStrategy[strategyKey].rejected++;
-          counters.nullReasonAggregate['taker_no_entry_ask'] = (counters.nullReasonAggregate['taker_no_entry_ask'] ?? 0) + 1;
+          counters.nullReasonAggregate[reason] = (counters.nullReasonAggregate[reason] ?? 0) + 1;
           if (lane.kind === 'pattern') {
-            counters.patternNullReasonAggregate['taker_no_entry_ask'] = (counters.patternNullReasonAggregate['taker_no_entry_ask'] ?? 0) + 1;
+            counters.patternNullReasonAggregate[reason] = (counters.patternNullReasonAggregate[reason] ?? 0) + 1;
           } else {
-            counters.quantNullReasonAggregate['taker_no_entry_ask'] = (counters.quantNullReasonAggregate['taker_no_entry_ask'] ?? 0) + 1;
+            counters.quantNullReasonAggregate[reason] = (counters.quantNullReasonAggregate[reason] ?? 0) + 1;
           }
           try {
             archiveSignalEval({
               mode: 'vts',
               ...archiveCommon,
               rejectStage: 'tcl',
-              gateDecision: { gate: 'entry_ask', accepted: false, reason: 'taker_no_entry_ask' },
+              gateDecision: { gate: 'entry_ask', accepted: false, reason },
               features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() },
               provenance: _provBase
                 ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
@@ -1035,10 +1039,22 @@ export async function evaluateXstockPairForVTS(
             });
             counters.signalsArchived++;
           } catch { counters.archiveFailures++; /* hot path */ }
+        };
+        // A TAKER entry books the guarded ask; with none it is REFUSED — never the level.
+        if (_xEffectiveMode === 'taker' && _xEntryAsk === null) {
+          _xRefuseBooking('taker_no_entry_ask', `taker entry at level ${entryPrice} — no usable ask`);
           continue;
         }
-        // The booked entry: a taker at the guarded ask, a maker at its limit (the level). Stop and target stay the levels.
+        // The booked entry: a taker at the guarded ask, a maker at its limit (the level). Stop and target stay the levels —
+        // and a taker's ask AT OR THROUGH either one would invert the trade, so it is refused (FINDING-1).
         const _xBookedEntry = _xEffectiveMode === 'taker' ? (_xEntryAsk as number) : entryPrice;
+        if (_xEffectiveMode === 'taker') {
+          const _xInv = refuseTakerBooking(_xBookedEntry, stopLoss, takeProfit);
+          if (_xInv !== null) {
+            _xRefuseBooking(_xInv, `taker ask ${_xBookedEntry} vs stop ${stopLoss} / target ${takeProfit}`);
+            continue;
+          }
+        }
 
         // Net EV passes — open the VTS trade. B-NEW-53.2 (#208): build the
         // open-trade record FIRST (hoisted above the admitted archive) so the
@@ -1049,7 +1065,13 @@ export async function evaluateXstockPairForVTS(
         // between here and the register call mutates an input. Archive-before-register
         // ordering preserved (admitted-archival stays decoupled from open success).
         const dollarValue = 150;
-        const quantity = _xBookedEntry > 0 ? dollarValue / _xBookedEntry : 0; // at the BOOKED price (`8a-P4c` 3b)
+        // At the BOOKED price, through the one quantity rule (RIDER-A): no size ⇒ refused, never a zero-size trade.
+        const _xQty = bookedQuantity(dollarValue, _xBookedEntry);
+        if (_xQty === null) {
+          _xRefuseBooking('booked_price_invalid', `booked entry ${_xBookedEntry} cannot size a trade`);
+          continue;
+        }
+        const quantity = _xQty;
         // F-G-2 OBJ-5b (P11 iii): the xStock lane composed `totalFriction` taker-both-legs at
         // :772 while :1012 records the mode-aware entry fee — same divergence as crypto, second
         // file. Booked friction priced at the EFFECTIVE mode; `totalFriction` stays the

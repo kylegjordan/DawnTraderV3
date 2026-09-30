@@ -104,8 +104,9 @@ export type TwinPlan =
         costExitFeeFraction?: number;
         /** `8a-P4c` 3a-ii: the TWIN's own entry basis (its own mode), never the chosen leg's. */
         entryPriceBasis?: EntryPriceBasis;
-        /** `8a-P4c` 3b (P9): a TAKER twin books the guarded ask (a maker twin rests at the limit and sets none). */
-        entryPrice?: number;
+        /** `8a-P4c` 3b (P9; Langston r1 BLOCKER-1): the twin's OWN entry price on BOTH arms — a maker twin at its limit (the
+         *  level), a taker twin at the guarded ask. Never inherited from the chosen leg, whose `entryPrice` is its booked price. */
+        entryPrice: number;
       };
     };
 
@@ -195,7 +196,7 @@ export function planTwin(params: {
       entryPriceBasis: twinEntryPriceBasis, // the twin's OWN basis, fenced
       ...repriced,
       ...(twinMode === 'maker'
-        ? { state: 'pending' as const, makerLimitPrice: params.limitPrice, makerDeadline: params.nowMs + params.makerMaxPendingMs() }
+        ? { state: 'pending' as const, makerLimitPrice: params.limitPrice, makerDeadline: params.nowMs + params.makerMaxPendingMs(), entryPrice: params.limitPrice }
         : { state: 'open' as const, makerLimitPrice: undefined, makerDeadline: undefined, entryPrice: _ask as number }),
     },
   };

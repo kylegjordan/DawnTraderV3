@@ -92,6 +92,7 @@ import { resolveVtsBookedExitPrice, type VtsBookingArm } from '../core/trading/v
 import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, vtsSpreadShareByLeg, vtsFeeByLeg, type EntryPriceBasis, type VtsFrictionBasis } from '../core/trading/vts-friction.js';
 import { noteVtsCloseFriction, vtsFrictionSinceBoot } from './vts-friction-ledger.js';
 import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-no-trigger-streak.js';
+import { refuseTakerBooking, bookedQuantity } from '../core/trading/entry-booking.js';
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
 import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk } from '../asset_classes/xstock_spot/vts-xs-select.js';
@@ -2380,7 +2381,23 @@ async function generatePhase10Signal(
     return null;
   }
   const _vtsBookedEntry = _vtsEffectiveMode === 'taker' ? (placementAsk as number) : entryPrice;
-  const _vtsBookedQuantity = dollarValue / _vtsBookedEntry;
+  // A taker's ask AT OR THROUGH its own target or stop would invert the trade — refused (Langston r1 FINDING-1).
+  if (_vtsEffectiveMode === 'taker') {
+    const _inv = refuseTakerBooking(_vtsBookedEntry, adjustedStopLoss, adjustedTakeProfit);
+    if (_inv !== null) {
+      console.log(`[8a-P4c][VTS][ENTRY_BOOKING_REFUSED] ${symbol}/${strategy} (${_assetClass}) reason=${_inv}: taker ask ${_vtsBookedEntry} vs stop ${adjustedStopLoss} / target ${adjustedTakeProfit} (non-trade)`);
+      setNullReason(_inv);
+      return null;
+    }
+  }
+  // The one quantity rule (RIDER-A): no size ⇒ refused, never a divide by zero.
+  const _vtsBookedQuantityOrNull = bookedQuantity(dollarValue, _vtsBookedEntry);
+  if (_vtsBookedQuantityOrNull === null) {
+    console.log(`[8a-P4c][VTS][ENTRY_BOOKING_REFUSED] ${symbol}/${strategy} (${_assetClass}) reason=booked_price_invalid: booked entry ${_vtsBookedEntry} (non-trade)`);
+    setNullReason('booked_price_invalid');
+    return null;
+  }
+  const _vtsBookedQuantity = _vtsBookedQuantityOrNull;
 
   // ── F-G-2 OBJ-5b: the BOOKED friction, priced at the EFFECTIVE entry mode ──────────────
   // `frictionCost` (born :1795, taker both legs) stays the PRE-decision estimate the admission
@@ -4028,9 +4045,11 @@ async function resolveOpenVirtualTrades(): Promise<{
           // chosen_entry_mode + entry_fee_rate actually do (Langston, Step-4):
           //   chosenEntryMode + entryFeeRate — THE maker-vs-taker entry-policy record.
           //     Nothing else preserves them for the VTS corpus. Genuinely unrecoverable.
-          //   makerLimitPrice — ⚠️ NOT unrecoverable. It is a COPY of entryPrice (both
-          //     writers set `makerLimitPrice: entryPrice`; a maker fills AT its limit and
-          //     entryPrice is never rewritten), and entryPrice is already archived above.
+          //   makerLimitPrice — ⚠️ NOT unrecoverable. On a MAKER row it equals entryPrice (every
+          //     maker writer — crypto open, xStock open, the maker twin's overlay since `8a-P4c` 3b —
+          //     sets entryPrice to its limit; a maker fills AT its limit and entryPrice is never
+          //     rewritten). A TAKER row books the ask as entryPrice and carries no makerLimitPrice.
+          //     entryPrice is already archived above.
           //     Kept for ONE reason only: it keeps the archived row self-contained and
           //     gives a coherence check if a future writer ever diverges limit from entry.
           //   makerDeadline — ★ THE ONE THAT EARNS ITS KEY. Set at placement as
@@ -4903,6 +4922,21 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       // twin_disabled: silent, exactly as the inline `if (resolveTwinEnabled(...))` wrapper was.
       return;
     }
+    // ⛔ `8a-P4c` 3b (Langston r1 BLOCKER-1): the overlay sets the twin's OWN entry price on BOTH arms — the maker twin at its
+    // limit (the level), the taker twin at the guarded ask — because the chosen leg's `entryPrice` is now its BOOKED price
+    // (the ask, for a chosen taker). Quantity is ALWAYS recomputed at the twin's own price; nothing is inherited.
+    if (plan.twinMode === 'taker') {
+      const _inv = refuseTakerBooking(plan.overlay.entryPrice, chosenTrade.stopLoss, chosenTrade.takeProfit);
+      if (_inv !== null) {
+        console.log(`[8a-P4c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=${_inv}: taker twin ask ${plan.overlay.entryPrice} vs stop ${chosenTrade.stopLoss} / target ${chosenTrade.takeProfit}`);
+        return;
+      }
+    }
+    const _twinQty = bookedQuantity(chosenTrade.dollarValue, plan.overlay.entryPrice);
+    if (_twinQty === null) {
+      console.error(`[8a-P4c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=booked_price_invalid: twin entry ${plan.overlay.entryPrice}`);
+      return;
+    }
     const twinId = `${input.chosenTradeId}_twin`;
     const twinTrade: OpenVirtualTrade = {
       ...chosenTrade,
@@ -4910,8 +4944,7 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       mtTwin: true,
       mtPairId: input.chosenTradeId,
       ...plan.overlay,
-      // `8a-P4c` 3b: a taker twin booked at the ask holds the same dollars at that price
-      ...(plan.overlay.entryPrice !== undefined ? { quantity: chosenTrade.dollarValue / plan.overlay.entryPrice } : {}),
+      quantity: _twinQty,
     };
     const { insertOpenTrade } = await import('./vts-trade-persistence.js');
     await insertOpenTrade(twinTrade as any);
