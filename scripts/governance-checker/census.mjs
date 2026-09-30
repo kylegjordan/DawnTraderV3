@@ -242,7 +242,10 @@ const DUE_RE = /\bdue\b\W{0,3}(20\d\d-\d\d-\d\d)/gi;
 // quote directly follows `READ` or `Was` (`:` optional), or inside a parenthetical that opens with `Was`. Narrow on
 // purpose: a live `HOME: … due <date>`, quoted or not, still hits. RESIDUALS (Langston, named not fixed): the match is
 // case-insensitive, so lowercase prose `was "…"` strikes too; and the parenthetical arm needs only NO `)` before the date,
-// so an UNCLOSED `(Was …` strikes a live `due` later on the same line. Neither shape occurs in the corpus at 13fa6bbce.
+// so an UNCLOSED `(Was …` strikes a live `due` later on the same line; and the quote test is a PARITY scan that assumes
+// balanced quotes before the match, so one stray earlier `"` flips it — striking a live date or missing a struck one.
+// None of the three shapes occurs among the 13 lines at 13fa6bbce. ⚠️ LIMIT: after this fix the corpus holds NO live dated
+// home, so list (c)'s ability to fire is proven on fixtures only — a future 0 does not prove itself (#546).
 export function historyStruck(line, idx) {
   let q = -1;
   for (let k = 0; k < idx; k++) if (line[k] === '"') q = q === -1 ? k : -1;   // q = the opening quote idx is inside, or -1
