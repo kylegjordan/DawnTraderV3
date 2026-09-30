@@ -58,7 +58,7 @@ r1 said "re-deploy `bc199185e`, then run the rollbacks in reverse." That puts OL
 |---|---|---|---|---|
 | A | B-BOOK-STATE-RESTART-DURABLE · B-REST-SIDES-TO-CACHE · F-G-1 reopen · B-OHLC-FRAME-GUARD · B-XSTOCK-BID-TRIGGER-RELAND · B-GUARDRAIL-FAIL-CLOSED | ANALYST Claude | 2026-09-30 ~11:20 | — |
 | B | B-SIZING-DEC-RESTORE (5 migrations; `PAPER-RESET-3000` runs once, after B) · B-PRICE-SIDE-BY-JOB 8a-P4c | ANALYST Claude | 2026-09-30 ~11:20 | — |
-| B | B-CHAPLET-OFF-HOTFIX (`53045a6d7`, the code unmount) | Infra Claude | 2026-09-30 ~11:20 | ✅ nothing must land first; no manual step (the nginx edge block is outside `dt-deploy`); their post-deploy check is the hotfix scope's pre-registered (b) |
+| B | B-CHAPLET-OFF-HOTFIX (`53045a6d7`, the code unmount) | Infra Claude | 2026-09-30 ~11:20 | ✅ (11:31Z, confirmed per deploy) nothing in A; for B nothing must land first and no manual step (the nginx edge block is outside `dt-deploy`); post-deploy check: the log no longer prints "Chaplet mounted at /chaplet", `localhost:5000/chaplet/health` returns the app's 404, and the edge block holds |
 | A/B | B-GOV-REPORTING | OLD Claude | 2026-09-30 ~11:20 | — |
 | A | B-FEED-MISMATCH-FIX (window paused, Kyle 09-30), B-XSTOCK-FEE-CONTRACT | NEW Claude | — | the release itself; the fee window is closed and read first |
 **Behaviour census (Langston):** 51 commits touch `server/client/shared/drizzle` since the hold. Every batch among them is listed here except `B-BALANCE-TRUTH` (`23f81527a`), which is a docblock strike in `storage.ts`, so this table is complete for behaviour.
