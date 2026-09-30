@@ -4,6 +4,22 @@
 
 Ref `f4ceb7e48` · full document: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md` · detail for any id below: grep the full document at the ref · change-class `non_architecture` · Step-2 document = this pre-audit (RETROACTIVE it is not — it is the real Step 2). Your binding rulings: scope §10c conditions 2-4 and 6, the mandatory CI job, your `CLAUDE.md` §14 re-point; §10 Q9 (committed flag), Q10 (checker and heartbeat tests into CI).
 
+## SINCE THIS BRIEF WAS WRITTEN — WHAT YOUR LATER RULINGS SETTLE HERE, AND WHAT THEY DO NOT (added 2026-09-30)
+
+The body below is unchanged and is stamped at `f4ceb7e48`; every `file:line` in it is at that ref. **Nothing below removes an item from your ruling list unless it quotes the ruling that decides it.**
+1. **Part 2 (scope §10e).**
+   - **Q20 is ruled** (*"Q20 → fold in: `saveState` made atomic (tmp + rename)"*). So §8's line *"`saveState` not atomic — pending Q20"* is decided: disposition 1, folded (a Group 7 item). Nothing to rule there.
+   - **R1-Q7** was already withdrawn in this brief; your §10e ruling on R1-Q15 (*"absent at both refs = no-op, fail open elsewhere"*) is the one that stands, as the body says.
+   - ⚠️ **Q3 (the heartbeat tests do not exist; P28 adds a `decideHeartbeat` seam and the first heartbeat test file) is NOT ruled, but your part-2 ruling now leans on it:** you accepted the quiet census on the condition that *"P28's liveness row is a different key at `warning`"* — *"if P28 slips, (ii) is unsafe."* So Q3 is no longer only a scope question: declining the refactor would also remove the condition your Q1 ruling rests on.
+2. **Part 3 (scope §10f).** **Q34 is ruled (b):** `draft.py`/`render.py` and six more scripts get their own batch, `B-INVENTORY-SCRIPT-ROOT-REDIRECT` (`#1119`, CC-A, sprint row 1c). So §8's line *"`draft.py`/`render.py` into CC-B's clone … yours: 1 or 3; Q34"* is decided: disposition 3, placed.
+3. **Your 02:55Z ruling on the drift alerts (recorded on `#1117`).** ⛔ **P59 as written is wrong and is withdrawn by me:** it says *"CC-A resolves `d9caf6f5` with the held deploy's sha"*. You ruled *"Do not hand-resolve it. `clear_open_rows()` sweeps `deploy-drift-rung-*` and `deploy-drift-file-gate-undecidable` at the `ZERO` exit, by the machine actor"*. **P59 is replaced by: after the held deploy, CC-A reads `d9caf6f5` and `9acca871` back and confirms the resolver is the monitor, not a session; the escalation trigger is the hold's expiry (2026-10-02T20:10Z), posted in channel if it slips.** And `#1117` itself now rides `B-CREDENTIALS-PRIVATE-REPO` (Infra's drift conversion) — so whichever lands first, that or the held deploy, clears `9acca871`.
+4. **Part 1 r2 (the re-cut at `34c8c836e`, not yet ruled).** Its **N8** proposes fixing the checker's two-fetch problem inside this batch: `gradedRefSha = resolveGovRefSha()` at `poller.mjs:580`, so every read and every resolve stamp lands on one sha. **That overlaps P58's *"two-fetch finding to `#1099`"*:** if you approve N8, that P58 leg becomes disposition 1 (fixed here) instead of a note on `#1099`; if you decline it, P58's leg stands. Rule them together.
+
+**STILL YOURS IN THIS PART — the complete list.**
+- **Questions:** Q3 (see 1 above), Q4, Q11, Q33, R1-Q6, Q29, Q30, Q31, Q32, R1-Q8, R1-Q9, R2-Q1, R3-Q10, R3-Q11. (R1-Q7 withdrawn; Q20 ruled in part 2; Q34 ruled in part 3.)
+- **Plan items:** P21, P22, P23, P24, P25, P26, P30, P47, P48, P50, P51, P52, P53, P55, P56, P57, P58 (its two-fetch leg with N8), **P59 as replaced above**, P60.
+- **§8 dispositions:** every line in the §8 list except the two now decided (`saveState`, `draft.py`/`render.py`).
+
 ## THE ASK
 Rule on this area's questions and approve this area's plan items, or name what is wrong; rule the §8 dispositions. **Once all five parts are ruled, approve the whole Step 2** (the document's §6: P1-P63 plus P13a).
 
