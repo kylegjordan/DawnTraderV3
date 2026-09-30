@@ -121,14 +121,19 @@ export function decideHeartbeat({ lastTick, lastCensusAt, lastMistakePassAt, cen
   return { intents, notes };
 }
 
-// The alert text for an OPEN intent. The silent-poller title and body are byte-for-byte the
-// pre-P28 text (the differential compares them).
+// The alert text for an OPEN intent. The silent-poller TITLE is the pre-P28 text. Its BODY changed once,
+// deliberately, AFTER the byte-parity was recorded (Step 4 G5-7, Langston; the parity commit is the one before
+// this): the parent read "last tick: never ago" when no tick was recorded, and would have read "NaNm ago" for
+// the junk tick BLOCKER-1 now catches. The tick clause now says what is actually known.
 export function heartbeatAlertText(intent, { nowMs, lastTick }) {
   if (intent.dedupeKey === SILENT_KEY) {
-    const ageMin = lastTick == null ? 'never' : Math.round((nowMs - lastTick) / 60000) + 'm';
+    const tick = lastTick == null ? 'no tick has ever been recorded'
+      : !Number.isFinite(lastTick) ? 'the recorded last tick is not a time'
+      : lastTick > nowMs ? `the recorded last tick is ${Math.round((lastTick - nowMs) / 60000)}m in the future`
+      : `last tick: ${Math.round((nowMs - lastTick) / 60000)}m ago`;
     return {
       title: 'governance-checker appears SILENT — no tick within the dead-man window',
-      body: `The governance-checker poller has not written a heartbeat in over ${TICK_MINUTES * HEARTBEAT_MISS_LIMIT}m (last tick: ${ageMin} ago). It may be dead — enforcement is OFF until it resumes. Check the governance-checker.timer on staging.`,
+      body: `The governance-checker poller has not written a heartbeat in over ${TICK_MINUTES * HEARTBEAT_MISS_LIMIT}m (${tick}). It may be dead — enforcement is OFF until it resumes. Check the governance-checker.timer on staging.`,
     };
   }
   if (intent.dedupeKey !== CENSUS_SILENT_KEY && intent.dedupeKey !== MISTAKEPASS_SILENT_KEY) {

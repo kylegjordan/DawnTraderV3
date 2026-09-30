@@ -225,12 +225,19 @@ for (const [key, en, last, since, label] of [
   ok('P28 apply: an unknown action throws rather than being skipped', threw);
 }
 
-// ─── alert text: the silent-poller title and body are the parent's, byte for byte ───
+// ─── alert text: the silent-poller title is the parent's; the body's tick clause changed at G5-7 (after parity) ───
 {
   const t = heartbeatAlertText({ dedupeKey: SILENT_KEY }, { nowMs: NOW, lastTick: NOW - 61 * MIN });
   ok('P28 text: silent-poller title unchanged', t.title === 'governance-checker appears SILENT — no tick within the dead-man window');
-  ok('P28 text: silent-poller body unchanged',
+  ok('P28 text: silent-poller body unchanged for a real age',
     t.body === 'The governance-checker poller has not written a heartbeat in over 60m (last tick: 61m ago). It may be dead — enforcement is OFF until it resumes. Check the governance-checker.timer on staging.', t.body);
+  // G5-7 (Langston, Step 4): the parent's "last tick: never ago" is gone; the clause says what is known.
+  const never = heartbeatAlertText({ dedupeKey: SILENT_KEY }, { nowMs: NOW, lastTick: null }).body;
+  ok('G5-7: no tick recorded → says so, never "never ago"', never.includes('(no tick has ever been recorded)') && !/never ago/.test(never), never);
+  const junk = heartbeatAlertText({ dedupeKey: SILENT_KEY }, { nowMs: NOW, lastTick: 'garbage' }).body;
+  ok('G5-7: a junk tick → "not a time", never NaN', junk.includes('is not a time') && !/NaN/.test(junk), junk);
+  const fut = heartbeatAlertText({ dedupeKey: SILENT_KEY }, { nowMs: NOW, lastTick: NOW + 600 * MIN }).body;
+  ok('G5-7: a far-future tick → says it is in the future', fut.includes('600m in the future'), fut);
   const c = heartbeatAlertText({ dedupeKey: CENSUS_SILENT_KEY, reason: 'R-census' }, { nowMs: NOW, lastTick: NOW });
   const m = heartbeatAlertText({ dedupeKey: MISTAKEPASS_SILENT_KEY, reason: 'R-pass' }, { nowMs: NOW, lastTick: NOW });
   ok('P28 text: the census alert names its flag and carries the reason', /WEEKLY_CENSUS_ENABLED/.test(c.body) && c.body.includes('R-census'));
