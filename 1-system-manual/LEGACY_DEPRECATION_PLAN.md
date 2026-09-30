@@ -920,7 +920,7 @@ When the Walter backend is removed in Wave 3, the following frontend files will 
 | `components/layout/top-bar.tsx` | 1,042 | Walter approvals notification bell | Remove bell + pending approvals query |
 | `pages/settings.tsx` | 1,122 | Walter Approvals tab, Walter memory config | Remove Walter tab + memory settings |
 | `components/DailyBriefCard.tsx` | 332 | `/api/walter/auto-resolved-today` | Remove Walter auto-maintenance section |
-| `components/ai/InteractiveNotification.tsx` | 315 | Walter approval workflow | Remove or repurpose for non-Walter approvals |
+| ~~`components/ai/InteractiveNotification.tsx`~~ | — | Walter approval workflow | ✅ **REMOVED 2026-09-30** (B-SIZING-DEC-RESTORE 2e, Kyle: the chat's action path removed with finality) |
 | `pages/ai-transparency.tsx` | 2,074 | "Walter Command"/"Walter Action" log categories | Remove Walter-specific log filtering |
 | `hooks/useWalterPreferences.tsx` | 38 | Walter preference management | Remove entirely |
 
@@ -988,7 +988,7 @@ This component references ~60 API endpoints across speculative namespaces that l
 - Remove Walter Approvals tab and Walter memory config from `client/src/pages/settings.tsx`
 - Remove Walter approvals notification bell from `client/src/components/layout/top-bar.tsx`
 - Remove Walter auto-maintenance section from `client/src/components/DailyBriefCard.tsx`
-- Remove or repurpose Walter approval workflow in `client/src/components/ai/InteractiveNotification.tsx`
+- ✅ DONE 2026-09-30 — the Walter approval workflow (`client/src/components/ai/InteractiveNotification.tsx`) was removed with the chat's action path (B-SIZING-DEC-RESTORE 2e); the rest of the chat is `B-AI-CHAT-REMOVAL` on the after-live list
 - Remove "Walter Command"/"Walter Action" log filtering in `client/src/pages/ai-transparency.tsx`
 - Remove `/walter` route from `client/src/App.tsx`
 - Remove `WalterFloatingAssistant` render from `client/src/App.tsx`

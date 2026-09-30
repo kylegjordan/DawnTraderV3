@@ -24,13 +24,6 @@
 
 import type { GuardrailsV2 } from '@shared/schema';
 import { b5SizingAudit } from './b5-sizing-audit.js';
-import { getScalingFactor } from './risk-concentration.js';
-// B79.0n.ORCHESTRATOR (2026-05-27): per-asset-class pattern pool guardrails
-// dispatcher. Replaces the prior class-bound `PATTERN_POOL_GUARDRAILS` import
-// from `crypto_spot/pattern-pool-filters.js`. xstock pattern signals now
-// correctly read XSTOCK_PATTERN_POOL_GUARDRAILS (DB-resolved 0.50 cap vs
-// crypto's literal 0.15) via the dispatcher.
-import { getPatternPoolGuardrailsForAssetClass } from '../asset_classes/pattern-pool-dispatch.js';
 import type { AssetClass } from '../../shared/asset-classes.js';
 // B72 (2026-05-05): getMaxPositionBufferFactor() moved to module='active_sizing'.
 import { getCachedNumberRequired } from './module-constants-service.js';
@@ -43,16 +36,11 @@ import { rtbMetricsService } from './rtb-metrics-service.js';
  * exposure budget. The sizer AND the slot derivation (`deriveSlotCount`) read it, so a term added here
  * — obj-5's posture multiplier must land HERE — moves both together, and §1's named breach (N slots
  * sized at ×1.25 = 125% of the budget) cannot re-arm through the slot count.
- * Pattern-pool signals are capped at their class's pattern share; the quant pool is uncapped.
+ * ⛔ B-SIZING-DEC-RESTORE 2e (Pe5, Kyle 2026-09-30): the pattern-list cap that lived here is GONE — every trade, pattern
+ * or quant, takes the max position % exactly. The function stays as the identity SEAM (Langston: obj-5 lands here).
  */
-export function resolveEffectivePositionPct(
-  maxPositionPct: number,
-  sourcePool: string, // 'pattern' caps; anything else is the quant pool (the sizer's own semantics)
-  assetClass?: AssetClass,
-): number {
-  if (sourcePool !== 'pattern') return maxPositionPct;
-  const patternMaxPct = getPatternPoolGuardrailsForAssetClass(assetClass as AssetClass).MAX_POSITION_PCT * 100;
-  return Math.min(maxPositionPct, patternMaxPct);
+export function resolveEffectivePositionPct(maxPositionPct: number): number {
+  return maxPositionPct;
 }
 
 /**
@@ -62,13 +50,10 @@ export function resolveEffectivePositionPct(
  * budget = balance × e, trade = budget × p × 0.97), so the budget holds `floor(100 / effectiveP)` trades,
  * independent of `e`. ⚠️ Deliberately ~3% conservative: N FULL-SIZE slots commit N × p × 0.97 = 97% of the
  * budget at p = 100/N. Do not "correct" the floor to use the buffer.
- * ⚠️ IT COUNTS FULL-SIZE SLOTS, AND POSITIONS ARE OFTEN SMALLER (Langston Step-4 FINDING-1, measured 2026-09-29):
- * the covariance `correlationScale` shrinks quantity AFTER this share is applied (≤ 1, never up), so the count
- * gate (engine `maxOpenTrades`) caps POSITIONS while the budget holds DOLLARS — on 09-29, 8 open positions, 5 of
- * them $51-56 against a ~$160 full size, held 91.5% of the budget. The count therefore stays an UPPER bound on
- * committed dollars (safe direction) and UNDER-uses the budget whenever correlation scaling is active. Whether
- * that is intended is increment 2b's scope decision, not this function's.
- * Callers pass the QUANT-pool `effectiveP` (the largest per-trade share, so the fewest slots).
+ * The count gate (engine `maxOpenTrades`) caps POSITIONS while the budget holds DOLLARS. ⛔ CORRECTED in 2e (Langston,
+ * §20 Pe5): the under-use measured on 09-29 (8 open, 5 of them $51-56 against a ~$160 full size, 91.5% of the budget)
+ * was the PATTERN-LIST CAP, not `correlationScale` as this comment said — that factor was identically 1 (§20.4 J1b).
+ * 2e removed both, so every position is a full slot. Callers pass `resolveEffectivePositionPct(p)`.
  * Non-finite or non-positive input returns `NaN`, `Infinity` or a negative number; every caller HALTS
  * on `!Number.isFinite(slots) || slots <= 0` rather than inventing a cap.
  */
@@ -76,7 +61,7 @@ export function deriveSlotCount(effectivePositionPct: number): number {
   return Math.floor(100 / effectivePositionPct);
 }
 
-function getMaxPositionBufferFactor(): number {
+export function getMaxPositionBufferFactor(): number {
   return getCachedNumberRequired('active_sizing', 'max_position_buffer_factor',
     { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
 }
@@ -98,9 +83,13 @@ export function bufferedTradeNotional(balance: number, maxTotalExposurePct: numb
 }
 
 /**
- * AJ9: Buffer factor for max position sizing.
- * Size positions at 97% of max to provide 3% wiggle room for price fluctuations.
- * This prevents trades from being blocked by MAX_POSITION during execution.
+ * AJ9: Buffer factor for max position sizing — WHAT IT ACTUALLY DOES (corrected in 2e, Langston §20.4 J1a).
+ * AJ9's stated reason ("room for price fluctuations … prevents a block at MAX_POSITION during execution") is dead:
+ * the max-position check trusts the size fixed at signal birth and compares p × e/100 × 0.97 against p on a strict `>`,
+ * so it cannot block. Its LIVE job is the TOTAL EXPOSURE check (`checkMaxTotalExposure`): open positions are summed at
+ * their frozen entry notionals against a budget that moves with the balance. At p = 5 the 20 slots fill the budget
+ * EXACTLY, so without the 0.97 a ~3% dip in the balance would refuse the last slot. The buffer keeps a full book
+ * inside the exposure limit through a small drawdown.
  *
  * B72: literal removed — value now read via getMaxPositionBufferFactor()
  * declared above (module_constants 'active_sizing.max_position_buffer_factor',
@@ -117,25 +106,18 @@ export interface ActivePositionSizingParams {
   symbol: string;
   strategy: StrategyType;
   /**
-   * B-NEW-43 chunk 3 (2026-05-22): the signal's source pool ('quant' | 'pattern').
-   * Phase 14.5 pattern-pool reduced sizing keys off this. Optional — absent
-   * defaults to 'quant' (the standard lane). Previously read from an undeclared
-   * `signal` reference (TS2304); now passed explicitly by callers.
+   * B-NEW-43 chunk 3 (2026-05-22): the signal's source pool ('quant' | 'pattern'). Since 2e it no longer changes the
+   * size (the pattern-list cap is gone, Kyle 2026-09-30); callers still pass it and it is kept for the record.
    */
   sourcePool?: string;
   /**
-   * B79.0n.ORCHESTRATOR (2026-05-27): REQUIRED per-class pattern pool guardrails
-   * dispatcher key. Resolved deterministically by callers via
-   * `resolveAssetClass(symbol, 'kraken')` per Langston Step 2 no-silent-fallback
-   * disposition. No default — explicit class required. xstock pattern signals
-   * route to XSTOCK_PATTERN_POOL_GUARDRAILS (0.50 cap, DB-resolved); crypto
-   * signals route to PATTERN_POOL_GUARDRAILS (0.15 cap, literal).
+   * B79.0n.ORCHESTRATOR (2026-05-27): the signal's asset class — REQUIRED, no default. It keyed the pattern-list
+   * cap until 2e removed it; it is kept as a required input so a future per-class term has its key.
    */
   assetClass: AssetClass;
   /**
-   * P19-B4b D5 (S4 isolation): the trading mode this sizing is for. Threaded so the
-   * correlation/concentration scaling factor is read from the correct per-mode store
-   * (paper vs live position weights are isolated). Required — no silent default.
+   * P19-B4b D5 (S4 isolation): the trading mode this sizing is for — required, no silent default. It named the
+   * per-mode concentration store until 2e removed the correlation shrink (§20.4 J1b); it still labels the read-fail rail.
    */
   mode: 'live' | 'paper';
 }
@@ -172,10 +154,10 @@ export interface ActivePositionSizingResult {
  * What runs (B-SIZING-DEC-RESTORE obj-1, fixed-notional; the risk-based steps this header used to list
  * were retired 2026-08-07 and cost a withdrawn ratification when read as current — Langston §13.4 F):
  * 1. Exposure budget: portfolioValue × (maxTotalExposurePct / 100)
- * 2. Per-trade share: effectiveP = resolveEffectivePositionPct(maxPositionPercentPct, pool, class)
+ * 2. Per-trade share: effectiveP = resolveEffectivePositionPct(maxPositionPercentPct) — today the max position % itself
  * 3. Per-trade notional: exposureBudget × (effectiveP / 100), then × the 0.97 buffer
- * 4. quantity = notional / entryPrice; the stop plays no part in the size
- * 5. The covariance correlationScale may scale it down afterwards (never up)
+ * 4. quantity = notional / entryPrice; the stop plays no part in the size, and nothing scales it afterwards
+ *    (2e removed the correlation shrink — it was identically 1 and mis-unitted, §20.4 J1b)
  * 
  * Returns { quantity: 0, estimatedValue: 0 } for any invalid input
  * (NaN, zero, negative values, malformed data)
@@ -235,19 +217,9 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
   rtbMetricsService.recordSizingGuardrailReadOk();
   const safeMaxPositionPct = parsedInputs.maxPositionPercentPct;
   const safeMaxTotalExposurePct = parsedInputs.maxTotalExposurePct;
-  // Phase 14.5: Pattern pool signals use reduced position sizing (15% vs 25%)
-  // B-NEW-43 chunk 3 (2026-05-22): sourcePool now arrives as a typed param —
-  // the prior `signal` reference was undeclared (TS2304).
-  const signalSourcePool = params.sourcePool || 'quant';
-  // B-SIZING-DEC-RESTORE §14.4: the ONE resolver (shared with deriveSlotCount). B79.0n.ORCHESTRATOR's
-  // per-class pattern cap lives there — both classes DB-resolved (pattern_pool_gates.pattern_max_position_pct).
-  const effectiveMaxPositionPct = resolveEffectivePositionPct(safeMaxPositionPct, signalSourcePool, params.assetClass);
-  if (signalSourcePool === 'pattern') {
-    const patternMaxPct = effectiveMaxPositionPct;
-    if (patternMaxPct < safeMaxPositionPct) {
-      console.log(`[14.5][SIZING][B79.0n.ORCHESTRATOR] Pattern pool signal — capping position at ${patternMaxPct}% (vs ${safeMaxPositionPct}% quant) assetClass=${params.assetClass}`);
-    }
-  }
+  // B-SIZING-DEC-RESTORE §14.4: the ONE resolver (shared with deriveSlotCount). 2e removed the pattern-list cap that
+  // lived there (Kyle 2026-09-30), so a pattern signal and a quant signal take the same share.
+  const effectiveMaxPositionPct = resolveEffectivePositionPct(safeMaxPositionPct);
   
   // ══════════════════════════════════════════════════════════════════════════════
   // obj-1: FIXED-NOTIONAL SIZING — B-SIZING-DEC-RESTORE (Kyle's ruling, 2026-08-06)
@@ -263,28 +235,26 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
   // than the cap, so the cap WAS the size, and the risk percentage was decorative.
   //
   // Now the notional is stated directly and the stop plays no part in sizing it. The
-  // exposure budget still bounds total deployment, and the same buffer keeps a rounding
-  // error from tipping a fill over the venue's limit.
+  // exposure budget still bounds total deployment, and the 0.97 buffer keeps a full book of slots inside that budget
+  // through a small balance dip (see getMaxPositionBufferFactor's docblock; corrected in 2e).
   const exposureBudget = portfolioValue * (safeMaxTotalExposurePct / 100);
   const perTradeNotional = exposureBudget * (effectiveMaxPositionPct / 100);
   // B-SIZING-DEC-RESTORE increment 2c: the ONE formula, shared with every caller that needs a normal trade's size.
   const bufferedMaxNotional = bufferedTradeNotional(portfolioValue, safeMaxTotalExposurePct, effectiveMaxPositionPct);
 
-  let quantity = bufferedMaxNotional / entryPrice;
+  const quantity = bufferedMaxNotional / entryPrice;
 
   if (!Number.isFinite(quantity) || quantity <= 0) {
     console.log(`[B6][SIZING] Invalid fixed-notional quantity (${quantity}) for ${symbol} - returning 0`);
     return invalidResult;
   }
 
-  let estimatedValue = quantity * entryPrice;
-
-  const correlationScale = getScalingFactor(mode, symbol); // P19-B4b D5: per-mode scaling
-  if (correlationScale < 1) {
-    quantity = quantity * correlationScale;
-    estimatedValue = quantity * entryPrice;
-    console.log(`[9.4][SIZE] ${symbol} scaled ${correlationScale.toFixed(2)}× due to covariance`);
-  }
+  const estimatedValue = quantity * entryPrice;
+  // ⛔ B-SIZING-DEC-RESTORE 2e (Pe10, §20.4 J1b): the covariance `correlationScale` that stood here is REMOVED. It was
+  // identically 1 (scores computed once at boot on an empty weights map, cached forever) and mis-unitted (dollar
+  // weights against a 2.5 cap), so a restart with open positions would have latched every boot-20 symbol at 0.25×.
+  // Kyle kept it only if justified; it was not. The block `isCorrelatedExposure` (trade-safety) stays.
+  // HOME for a real concentration score: B-CONCENTRATION-SCORE-UNITS, SPRINT_TO_LIVE_PLAN row 135b.
 
   // What survives is the DOLLAR RISK ITSELF, which is now an OUTPUT rather than an input:
   // it varies with stop distance instead of pinning it. Reported for the Phase-25

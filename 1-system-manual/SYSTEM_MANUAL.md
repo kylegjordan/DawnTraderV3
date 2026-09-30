@@ -9668,7 +9668,7 @@ See [Dead Code & Dead Pages](#14-dead-code--dead-pages) for full details.
 
 | Component | Lines | API Endpoints | Notes |
 |-----------|-------|--------------|-------|
-| `InteractiveNotification.tsx` | 315 | `/api/intent/approve|reject|dismiss|clear` | Core Walter approval workflow. Legacy/new field fallbacks |
+| ~~`InteractiveNotification.tsx`~~ | — | ~~`/api/intent/approve|reject|dismiss|clear`~~ | **DELETED 2026-09-30** (B-SIZING-DEC-RESTORE 2e, Kyle): the AI chat's action path, with `ApprovalPrompt.tsx`, `intent-executor.ts` and all seven `/api/intent/*` routes. It was mounted nowhere, and the routes called storage methods that do not exist. `DELETED_COMPONENTS_LOG` |
 
 ### System Components
 
@@ -9701,7 +9701,7 @@ Despite Walter being deprecated on the backend, the frontend has extensive Walte
 | `top-bar.tsx` | Walter pending approvals notification bell |
 | `walter-floating-assistant.tsx` | Floating Walter chat widget on all authenticated pages |
 | `DailyBriefCard.tsx` | Fetches `/api/walter/auto-resolved-today` |
-| `InteractiveNotification.tsx` | Walter approval workflow (approve/reject/dismiss/clear) |
+| ~~`InteractiveNotification.tsx`~~ | **DELETED 2026-09-30** (B-SIZING-DEC-RESTORE 2e) — the Walter approval workflow went with the chat's action path |
 | `ai-transparency.tsx` | "Walter Command" and "Walter Action" log categories |
 
 ### Walter API Endpoints Referenced by Frontend
@@ -9812,7 +9812,7 @@ Every authenticated route is wrapped in a `<Profiler>` component via `ProfiledRo
 | System | 21 | `/api/system/*`, `/api/health/*`, `/api/maintenance/*`, `/api/database/*`, `/api/config` |
 | AI / Orchestrator | 21 | `/api/orchestrator/*`, `/api/ai/*`, `/api/semantic/*`, `/api/actuation/*` |
 | Filter / Diagnostics | 20 | `/api/filters/*`, `/api/diagnostics/*`, `/api/screeners/*`, `/api/schedulers/*` |
-| Walter / Bob / Chats | 18 | `/api/walter/*`, `/api/transcribe`, `/api/intent/*` |
+| Walter / Bob / Chats | 18 at this census; 7 since deleted | `/api/walter/*`, `/api/transcribe` (the seven `/api/intent/*` routes were deleted 2026-09-30, B-SIZING-DEC-RESTORE 2e) |
 | VTS / ML | 16 | `/api/vts/*`, `/api/metrics/*` |
 | Learning | 9 | `/api/learning/*`, `/api/historic-signals/*` |
 | Auth | 3 | `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh` |

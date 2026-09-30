@@ -12,8 +12,8 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 vi.mock('../../services/system-alerts.js', () => ({ addAlert: vi.fn(async () => ({ id: 'test-alert' })) }));
-// The sizer's 0.97 buffer and the pattern pool's per-class cap are both read through the cached-required path.
-// The cap is set to 0.15 here (a test value) so the pattern leg below has a cap BELOW p to bite on.
+// The sizer's 0.97 buffer is read through the cached-required path. The retired pattern cap's key still answers 0.15
+// here (a test value BELOW p = 20) so the 2e mutation below — re-introducing the pattern branch — has a cap to bite on.
 vi.mock('../../services/module-constants-service.js', () => ({
   getCachedNumberRequired: vi.fn((module: string, key: string) =>
     module === 'pattern_pool_gates' && key === 'pattern_max_position_pct' ? 0.15 : 0.97),
@@ -61,13 +61,13 @@ describe('deriveSlotCount — floor(100 / effectiveP)', () => {
     expect(loopsHalt(deriveSlotCount(-5))).toBe(true);
   });
 
-  // §14.4 D4: p = 0.5 is FINITE and the loops do NOT halt on it — 200 slots. Increment 2b closes it at ENTRY:
-  // RULE_012 and the DB CHECK refuse p < 1 (the derivation itself stays a pure function).
-  it('p = 0.5 ⇒ 200 slots, the loops do not halt — and 2b refuses p = 0.5 at entry', () => {
+  // §14.4 D4: p = 0.5 is FINITE and the loops do NOT halt on it — 200 slots. Increment 2b's entry floor of 1 was
+  // WITHDRAWN in 2e (Kyle: no limit on the max position %): p = 0.5 is a legal setting; the size band alert sees it.
+  it('p = 0.5 ⇒ 200 slots, the loops do not halt — and RULE_012 accepts it (no floor above 0)', () => {
     expect(deriveSlotCount(0.5)).toBe(200);
     expect(loopsHalt(deriveSlotCount(0.5))).toBe(false);
     const failures = guardrailPolicy.validate({ mode: 'paper', maxPositionPercentPct: 0.5 } as any).failures.map((f) => f.ruleId);
-    expect(failures).toContain('RULE_012');
+    expect(failures).not.toContain('RULE_012');
   });
 });
 
@@ -78,7 +78,7 @@ describe('the invariant — N slots never commit more than the exposure budget',
   for (const multiplier of [1, 1.25]) {
     it(`slots × effectiveP ≤ 100 for every p from 0.5% to 100%, posture ×${multiplier}`, () => {
       for (let p = 0.5; p <= 100; p += 0.25) {
-        const effectiveP = resolveEffectivePositionPct(p * multiplier, 'quant');
+        const effectiveP = resolveEffectivePositionPct(p * multiplier);
         expect(deriveSlotCount(effectiveP) * effectiveP, `p=${p} ×${multiplier}`).toBeLessThanOrEqual(100);
       }
     });
@@ -93,17 +93,29 @@ describe('the invariant — N slots never commit more than the exposure budget',
       strategy: 'breakout' as any, assetClass: 'crypto_spot' as any,
       guardrails: { maxPositionPercentPct: '5.00', maxTotalExposurePct: '100.00' } as any,
     });
-    const slots = deriveSlotCount(resolveEffectivePositionPct(5, 'quant'));
+    const slots = deriveSlotCount(resolveEffectivePositionPct(5));
     expect(slots).toBe(20);
     expect(r.estimatedValue).toBeCloseTo(145.5, 2);
     expect(slots * r.estimatedValue).toBeLessThanOrEqual(3000);
   });
 
-  it('the pattern pool is capped at its class share and never raised above p', () => {
-    // with the pattern share at 15% (the mocked row): a p above it is cut to 15, a p below it is left alone.
-    expect(resolveEffectivePositionPct(20, 'pattern', 'crypto_spot' as any)).toBe(15);
-    expect(resolveEffectivePositionPct(5, 'pattern', 'crypto_spot' as any)).toBe(5);
-    expect(resolveEffectivePositionPct(20, 'quant')).toBe(20);
+  // 2e Pe5 (Kyle 2026-09-30): the pattern-list cap is GONE — the resolver is the identity, so a pattern trade takes the
+  // max position % exactly. MUTATION: put a cap back into the resolver and 20 no longer returns 20.
+  it('the resolver is the identity — no pattern-list cap (2e)', () => {
+    expect(resolveEffectivePositionPct(20)).toBe(20);
+    expect(resolveEffectivePositionPct(5)).toBe(5);
+  });
+
+  // And through the REAL sizer: a pattern signal and a quant signal of the same inputs size identically. MUTATION:
+  // re-introduce the pattern branch (the mocked 15% row) and the p = 20 pattern trade shrinks to 15%.
+  it('through the sizer: a pattern signal at p = 20 sizes the same as a quant one (2e)', () => {
+    const base = { mode: 'paper' as const, portfolioValue: 3000, entryPrice: 100, stopPrice: 97, symbol: 'TEST/USD',
+      strategy: 'breakout' as any, assetClass: 'crypto_spot' as any,
+      guardrails: { maxPositionPercentPct: '20.00', maxTotalExposurePct: '100.00' } as any };
+    const quant = sizeActivePositionForSignal({ ...base, sourcePool: 'quant' });
+    const pattern = sizeActivePositionForSignal({ ...base, sourcePool: 'pattern' });
+    expect(quant.estimatedValue).toBeCloseTo(582, 2); // 3000 x 100% x 20% x 0.97
+    expect(pattern.estimatedValue).toBeCloseTo(quant.estimatedValue, 6);
   });
 });
 
@@ -149,7 +161,7 @@ describe('ONE derivation (§14.4 BLOCKER-1) — every slot reader calls it, noth
 
   it('the sizer sizes from the resolver', () => {
     expect(src('server/services/active-position-sizing.ts'))
-      .toContain('const effectiveMaxPositionPct = resolveEffectivePositionPct(safeMaxPositionPct, signalSourcePool, params.assetClass);');
+      .toContain('const effectiveMaxPositionPct = resolveEffectivePositionPct(safeMaxPositionPct);');
   });
 
   // (m5e left this list in increment 2d — the harness is deleted, P-11.)
@@ -166,17 +178,22 @@ describe('ONE derivation (§14.4 BLOCKER-1) — every slot reader calls it, noth
 // (2a's test that POST /orchestrator/updateGuardrail refused maxOpenPositions is gone with the route itself —
 //  increment 2d, #1090; the legacy-deletion fence now asserts the route and its schema do not come back.)
 
-describe('P3 (increment 2b, §15.1 G2) — the fallback sizer reads the working balance', () => {
+describe('2e Pe2 (Kyle 2026-09-30: no backup sizing path) — an unsized signal is REFUSED, never re-sized (source-text)', () => {
+  // SOURCE-TEXT, not behaviour: driving processSignal needs the whole engine. P3 (2b) gave the fallback the working
+  // balance; 2e deletes the fallback itself. MUTATION: restore the B6 fallback branch and every assertion fails.
   const src = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf-8').replace(/\r\n/g, '\n');
-  const i = src.indexOf('[B6][FALLBACK_SIZING]');
-  const branch = src.slice(i, i + 1400);
-  // MUTATION: put `storage.getPortfolioState` back in the fallback branch and the first assertion fails.
-  it('the fallback branch sizes from getPortfolioBalanceV2, not the bare anchor', () => {
+  const i = src.indexOf('if (hasQuantity && hasEstimatedValue) {');
+  const tail = src.slice(i, i + 4000);
+  it('the fallback sizer is gone — no second sizing path in processSignal', () => {
     expect(i).toBeGreaterThan(0);
-    expect(branch).not.toContain('getPortfolioState');
-    expect(branch).toContain('await getPortfolioBalanceV2(this.mode)');
+    expect(src).not.toContain('[B6][FALLBACK_SIZING]');
+    expect(src).not.toContain('[B6][FALLBACK_SIZED]');
+    expect(src).not.toContain('sizeActivePositionForSignal({');
   });
-  it('its log line no longer claims it sizes somewhere else', () => {
-    expect(branch).not.toContain('will size in executeSimulatedTrade');
+  it('the else of the two-field test refuses, counts, alerts once per engine session, and returns SIZING_INVALID', () => {
+    expect(tail).toContain('[B-SIZING-DEC-RESTORE][UNSIZED_SIGNAL_REFUSED:');
+    expect(tail).toContain("rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', 'signal arrived unsized");
+    expect(tail).toMatch(/dedupe_key: `unsized-signal-\$\{this\.mode\}-\$\{_sessionStart \? _sessionStart\.toISOString\(\) : 'no-session'\}`/);
+    expect(tail).toContain("return { opened: false, stage: 'SIZING_INVALID', reason: 'signal arrived unsized");
   });
 });

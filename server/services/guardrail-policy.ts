@@ -331,24 +331,23 @@ class GuardrailPolicyService {
       }
     }
 
-    // RULE_012 / RULE_013 (B-SIZING-DEC-RESTORE P5; RULE_012's floor raised to 1 by increment 2b, PRE_AUDIT §15.1 G1):
-    // RULE_012: 1 <= p <= 100. The floor of 1 is HEADROOM (p = 1 holds a $145 trade up to a ~$14,950 balance) and a
-    // guard against a decimal slip below 1 (0.5 for 5 would derive 200 slots now the slot count is floor(100 / p)).
-    // It is NOT a micro-position guard (p = 1 at $3,000 is 100 slots of ~$29) — the band alert is the only check that
-    // sees dollars, on both sides. RULE_013 keeps 0 < e <= 100: an e typo is loud (the budget collapses; the band fires).
+    // RULE_012 / RULE_013 (B-SIZING-DEC-RESTORE P5): 0 < p <= 100 and 0 < e <= 100 — a percentage, nothing more.
+    // Increment 2b's floor of 1 was WITHDRAWN before it ever deployed (increment 2e, PRE_AUDIT §20.4 Pe1; Kyle 2026-09-30:
+    // no limit on the max position %). A decimal slip (0.5 for 5) derives 200 slots; the paper size band alert is what
+    // catches it, in dollars. An e typo is loud (the budget collapses; the band fires).
     // Nothing refused a mistyped value before: 50 typed for 5 saved (trades 10x larger), an emptied box
     // saved 0 (the sizer then refuses every open, active-position-sizing.ts:180-184). The sizer is
     // B x e x p (:225-227), so p above e is coherent and NOT refused (PRE_AUDIT §13 F13). Same
     // present-but-non-finite => FAIL rule as RULE_011: a skipped check would read as a pass.
     const pctRangeRules: Array<{ id: string; name: string; param: 'maxPositionPercentPct' | 'maxTotalExposurePct'; fallbackMsg: string }> = [
-      { id: 'RULE_012', name: 'Position Size Range', param: 'maxPositionPercentPct', fallbackMsg: 'Max position % must satisfy 1 <= p <= 100 (got {value})' },
+      { id: 'RULE_012', name: 'Position Size Range', param: 'maxPositionPercentPct', fallbackMsg: 'Max position % must satisfy 0 < p <= 100 (got {value})' },
       { id: 'RULE_013', name: 'Total Exposure Range', param: 'maxTotalExposurePct', fallbackMsg: 'Max total exposure % must satisfy 0 < e <= 100 (got {value})' },
     ];
     const lowerBoundOk: Record<string, (v: number) => boolean> = {
-      RULE_012: (v) => v >= 1,
+      RULE_012: (v) => v > 0,
       RULE_013: (v) => v > 0,
     };
-    const expectedRange: Record<string, string> = { RULE_012: '1 <= p <= 100', RULE_013: '0 < e <= 100' };
+    const expectedRange: Record<string, string> = { RULE_012: '0 < p <= 100', RULE_013: '0 < e <= 100' };
     for (const r of pctRangeRules) {
       const raw = (guardrail as Record<string, unknown>)[r.param];
       if (raw === undefined) continue;

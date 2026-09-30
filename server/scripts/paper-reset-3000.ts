@@ -12,7 +12,7 @@
  * calls the ledger's single writers directly for the two database-only steps (the re-anchor, the dashboard epoch).
  * No in-process reset route exists — a reset endpoint left behind would be a re-runnable destructive affordance.
  *
- * RUNS: on staging, once, by CC-C, on Kyle's go, immediately after the window's deploy (2a + 2b + 3):
+ * RUNS: on staging, once, by CC-C, on Kyle's go, immediately after the window's deploy (increments 2a-2e and 3):
  *   set -a && . ./.env && set +a && DT_API_TOKEN=<crew login token> npx tsx server/scripts/paper-reset-3000.ts
  * ⛔ The token comes from the server-held crew login (B-CREDENTIALS-PRIVATE-REPO OBJ-1) at run time. It is never
  *    typed into this file, never committed, never printed. The reset's own guardrail write therefore signs as the
@@ -20,7 +20,7 @@
  *
  * ORDER, and it stops at the FIRST failure (no retry). Every refusal and every crash names the step AND the state it
  * leaves (engine stopped? anchor written?):
- *   (0) preconditions — the window's three migrations in the db:migrate ledger, 2b's floor and 3's band rows at the
+ *   (0) preconditions — the window's three migrations in the db:migrate ledger, increment 1's position-% range and 3's band rows at the
  *       objects, no earlier PAPER-RESET-3000 anchor (A1), the engine running, the paper KILL SWITCH NOT TRIPPED, no
  *       open closed_trades row without a position
  *   (1) the READ-ONLY pre-check — every open paper position is closable (priced, or a pending maker)
@@ -57,10 +57,11 @@ const TARGET_BALANCE = 3000;
 const TARGET_P = 5;
 const TARGET_SLOTS = 20;
 const RESET_TAG = 'PAPER-RESET-3000';
-// The window's three increments (2a, 2b, 3), as the db:migrate ledger names them.
+// The three migrations the reset depends on, as the db:migrate ledger names them: increment 1's position-% range,
+// 2a's retired slot column, 3's size band. (2b's floor migration was WITHDRAWN before deploy — increment 2e, PRE_AUDIT §20.4.)
 const MIGRATIONS = [
+  '2026-09-29-b-sizing-p5-guardrail-pct-range.sql',
   '2026-09-29-b-sizing-inc2a-retire-max-open-positions.sql',
-  '2026-09-29-b-sizing-inc2b-position-pct-floor.sql',
   '2026-09-29-b-sizing-inc3-paper-size-band.sql',
 ] as const;
 // A close that lands between the stop request and the engine blocking new work is legitimate; these may appear.
@@ -148,14 +149,16 @@ async function main() {
   // ── (0) preconditions ────────────────────────────────────────────────────────────────────────────────────────
   // The migration ledger for all three increments. 2a is checked ONLY here: its database half drops the retired
   // open-slots column, whose name the legacy-deletion fence bans from source (rightly — a reference that keeps the name
-  // alive is how a dead mechanism comes back). 2b and 3 are ALSO checked at their objects.
+  // alive is how a dead mechanism comes back). Increment 1's range and 3's band are ALSO checked at their objects.
   const migrated = new Set((await rows<{ name: string }>(sql`
     SELECT name FROM _migrations WHERE name IN (${MIGRATIONS[0]}, ${MIGRATIONS[1]}, ${MIGRATIONS[2]})`)).map((r) => r.name));
   const notMigrated = MIGRATIONS.filter((m) => !migrated.has(m));
   if (notMigrated.length) refuse(`not in the migration ledger: ${notMigrated.join(', ')} — the window's deploy has not run here`);
   const floor = (await rows<{ def: string }>(sql`
     SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'guardrails_v2_max_position_percent_pct_range'`))[0];
-  if (!floor?.def || !/>=\s*\(?1\)?/.test(floor.def)) refuse(`increment 2b's position-% floor is not in place (reads: ${floor?.def ?? 'absent'})`);
+  if (!floor?.def || !/max_position_percent_pct\s*>\s*\(?0\b/.test(floor.def) || !/<=\s*\(?100\b/.test(floor.def)) {
+    refuse(`increment 1's position-% range (0 < p <= 100) is not in place (reads: ${floor?.def ?? 'absent'})`);
+  }
   const band = await readBand();
   if (await count(sql`SELECT count(*)::int AS n FROM portfolio_anchor_events WHERE mode = 'paper' AND note LIKE ${'%' + RESET_TAG + '%'}`) > 0) {
     refuse(`a ${RESET_TAG} anchor already exists — this reset has run past step 3; it is NOT re-runnable (A1)`);
@@ -177,7 +180,7 @@ async function main() {
   // The "nothing deleted" population: every paper row opened before this run began. Counted again at step 7.
   const runStart = new Date();
   const rowsBefore = await count(sql`SELECT count(*)::int AS n FROM closed_trades WHERE mode = 'paper' AND opened_at < ${runStart}`);
-  log(`ok — ledger has 2a/2b/3; floor ${floor.def}; band $${band.low}-$${band.high} (target $${band.target}); engine running; kill switch clear; anchor v${anchorBefore.anchorVersion} $${anchorBefore.balance}; 0 stale rows; paper rows opened before ${runStart.toISOString()}: ${rowsBefore}`);
+  log(`ok — ledger has 1/2a/3; range ${floor.def}; band $${band.low}-$${band.high} (target $${band.target}); engine running; kill switch clear; anchor v${anchorBefore.anchorVersion} $${anchorBefore.balance}; 0 stale rows; paper rows opened before ${runStart.toISOString()}: ${rowsBefore}`);
 
   // ── (1) the read-only pre-check ───────────────────────────────────────────────────────────────────────────────
   state.step = '1';

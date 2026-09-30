@@ -20,12 +20,15 @@ const TAG = 'B-SIZING-INC2B-COOLDOWN-DB';
 const SHORT = 'ZQC/USD';
 const LONG = 'LZQC/USD';
 const BOTH = 'ZQDASH/USD';
+const NF = 'ZQNF/USD'; // 2e Pe3: a never-filled maker
+const NOEXIT = 'ZQNX/USD'; // its control: a close with no exit price and an ordinary reason
 let dbReachable = true;
 
 const T0 = new Date('2026-09-29T10:00:00.000Z'); // SHORT's own close (xStock)
 const T1 = new Date('2026-09-29T10:03:00.000Z'); // LONG's close — NEWER, and a substring match for SHORT
 const T2 = new Date('2026-09-29T11:00:00.000Z'); // BOTH, crypto
 const T3 = new Date('2026-09-29T11:04:00.000Z'); // BOTH, xStock — newer
+const T4 = new Date('2026-09-29T12:00:00.000Z'); // NF's never_filled drop; NOEXIT's reasonless close
 
 async function seed(symbol: string, assetClass: string, closedAt: Date) {
   await db.execute(sql`
@@ -48,16 +51,24 @@ beforeAll(async () => {
     return;
   }
   if (!isTestDb) return;
-  await db.execute(sql`DELETE FROM closed_trades WHERE symbol IN (${SHORT}, ${LONG}, ${BOTH})`);
+  await db.execute(sql`DELETE FROM closed_trades WHERE symbol IN (${SHORT}, ${LONG}, ${BOTH}, ${NF}, ${NOEXIT})`);
   await seed(SHORT, 'xstock_spot', T0);
   await seed(LONG, 'crypto_spot', T1);
   await seed(BOTH, 'crypto_spot', T2);
   await seed(BOTH, 'xstock_spot', T3);
+  // A dropped, never-filled maker: no exit price, close_reason 'never_filled' (what _dropUnfilledMaker writes).
+  for (const [sym, reason] of [[NF, 'never_filled'], [NOEXIT, 'take_profit']] as const) {
+    await db.execute(sql`
+      INSERT INTO closed_trades (mode, symbol, base_currency, quantity, entry_price, exit_price, strategy_name, side,
+                                 pnl, net_pnl, close_reason, opened_at, closed_at, asset_class)
+      VALUES ('paper', ${sym}, 'ZZ', '1', '1', NULL, 'vwap_pullback', 'buy', '0', '0', ${reason},
+              ${new Date(T4.getTime() - 3_600_000)}, ${T4}, 'crypto_spot')`);
+  }
 });
 
 afterAll(async () => {
   if (!dbReachable || !isTestDb) return;
-  await db.execute(sql`DELETE FROM closed_trades WHERE symbol IN (${SHORT}, ${LONG}, ${BOTH})`);
+  await db.execute(sql`DELETE FROM closed_trades WHERE symbol IN (${SHORT}, ${LONG}, ${BOTH}, ${NF}, ${NOEXIT})`);
 });
 
 describe('#1093 — getLastClosedAtForSymbol is exact', () => {
@@ -94,5 +105,20 @@ describe('#1093 — getLastClosedAtForSymbol is exact', () => {
     if (!dbReachable || !isTestDb) ctx.skip();
     expect(await storage.getLastClosedAtForSymbol('paper', 'ZQNONE/USD', null)).toBeNull();
     expect(await storage.getLastClosedAtForSymbol('live', SHORT, 'xstock_spot')).toBeNull();
+  });
+});
+
+// B-SIZING-DEC-RESTORE 2e Pe3 — Kyle 2026-09-30: an order that never fills STARTS the cooldown, as it does today.
+// DECIDED, pinned here at the object it lives in (`storage.getLastClosedAtForSymbol`'s predicate), not the closed-list
+// clause. MUTATION: drop the `close_reason = 'never_filled'` arm and the first test returns null.
+describe('2e Pe3 — a never-filled maker starts the symbol cooldown (decided, Kyle 2026-09-30)', () => {
+  it('a never_filled row with no exit price IS the last close for the cooldown', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+    expect((await storage.getLastClosedAtForSymbol('paper', NF, 'crypto_spot'))?.getTime()).toBe(T4.getTime());
+  });
+
+  it('CONTROL — a row with no exit price and an ordinary reason does NOT count (the arm is what admits never_filled)', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+    expect(await storage.getLastClosedAtForSymbol('paper', NOEXIT, 'crypto_spot')).toBeNull();
   });
 });

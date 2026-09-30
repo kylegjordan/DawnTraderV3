@@ -385,7 +385,7 @@ import { buildSettingsFromGuardrails, getPortfolioBalanceV2 } from './guardrail-
 import type { TradingSettings, PriceData, InsertExecutionAttemptAudit } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
-import { sizeActivePositionForSignal, validateActivePortfolioValue, type StrategyType } from './active-position-sizing';
+import { validateActivePortfolioValue, type StrategyType } from './active-position-sizing';
 // B67.3 follow-up: re-export the cohort-hash function under a clearer name for use
 // at trade-open. Same FNV-1a hash the admission gate uses — keeping a single source.
 import { assignCohortHash as assignCohortHashForPersistence } from './per-underlying-cap';
@@ -5086,7 +5086,7 @@ export class ActiveExecutionEngine {
     // ⛔ B-SIZING-DEC-RESTORE increment 2c (PRE_AUDIT §17 P-1; Kyle 2026-09-29: Portfolio Risk per Trade removed in paper AND
     // live): EVERY mode takes the fixed-notional quantity sized upstream. `processSignal`'s B6 block always runs before
     // this (the only call is `processSignal`'s `return await this.executeSimulatedTrade(...)`): it trusts a pre-sized
-    // signal or sizes it through `sizeActivePositionForSignal` — the same sizer, the same rule (§17.4 C2).
+    // signal, and since 2e REFUSES an unsized one (§20.4 Pe2) — there is no second sizer here any more.
     // The live arm used to DISCARD that quantity and re-size as balance × risk% ÷ stop distance: an UNBOUNDED sizer — 200%
     // of the balance in one position at a 2% stop — with nothing after it re-checking exposure or max position (Langston
     // J-1). ⚠️ That arm had NO live instance: this engine is only ever started in paper (`active-engine-service.ts`,
@@ -5095,7 +5095,7 @@ export class ActiveExecutionEngine {
     // A signal that reaches here unsized is REFUSED, never re-sized by another rule.
     let quantity: number = signal.quantity ?? 0;
     if (!(quantity > 0)) {
-      // Reachable today only if B6's posture overlay zeroed a sized signal (`positionSizeMultiplier` 0 in either B6 arm).
+      // Reachable today only if B6's posture overlay zeroed a sized signal (`positionSizeMultiplier` 0 on the TRUST_SIZED arm — the only B6 arm since 2e removed the fallback sizer; it multiplies AFTER the two-field test).
       console.error(`[B-SIZING-DEC-RESTORE][UNSIZED_AT_EXECUTION:${this.mode}] ${signal.symbol} reached execution with no positive quantity (${signal.quantity}) — refused, not re-sized (a zero from the B6 sizer or from its posture multiplier)`);
       rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', `unsized at execution (quantity=${signal.quantity})`);
       return { opened: false, stage: 'SIZING_INVALID', reason: `unsized at execution (quantity=${signal.quantity})` };
@@ -6195,56 +6195,30 @@ export class ActiveExecutionEngine {
         signalAny.preComputedNotional = signalAny.estimatedValue;
         console.log(`[B6][TRUST_SIZED] ${signal.symbol}: qty=${signalAny.quantity.toFixed(8)}, value=$${signalAny.estimatedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay?.positionSizeMultiplier ?? 1})`);
       } else {
-        console.log(`[B6][FALLBACK_SIZING] Signal missing sizing fields for ${signal.symbol}, sizing here from guardrails_v2 and the working balance`);
-        const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
-        // B-SIZING-DEC-RESTORE P3 (PRE_AUDIT §15.1 G2): the fallback sizer's balance is the WORKING balance
-        // (anchor + realized P&L since the session start, getPortfolioBalanceV2) — the same one the main sizers and
-        // the `settings` passed on below use. It read the bare anchor (portfolio_state.balance) before, so a signal
-        // sized here would have been sized from a different number than every other trade in the session.
-        const portfolioValue = await getPortfolioBalanceV2(this.mode);
-        
-        if (portfolioValue > 0) {
-          // P19-B4a (C4): prefer the signal stamp; reuse the _amrClass resolved
-          // upstream (line ~2590) otherwise. Skip sizing on an unclassifiable
-          // symbol rather than throw — mirrors the SIZING_FAILED skip-return below.
-          const _sizeClass = asValidAssetClass(signal.metadata?.assetClass) ?? _amrClass;
-          if (_sizeClass === null) {
-            console.warn('[B6][SIZING_SKIP] unclassifiable ' + signal.symbol + ' — cannot size, skipping');
-            return { opened: false, stage: 'OTHER', reason: 'unclassifiable symbol at fallback sizing' };
-          }
-          const sizingResult = sizeActivePositionForSignal({
-            mode: this.mode, // P19-B4b D5: per-mode concentration sizing
-            portfolioValue,
-            guardrails,
-            entryPrice: signal.entryPrice,
-            stopPrice: signal.stopPrice,
-            symbol: signal.symbol,
-            strategy: signal.strategy as any,
-            // B-NEW-43 chunk 3: thread the signal's source pool so Phase 14.5
-            // pattern-pool reduced sizing applies (was an undeclared ref in TS2304).
-            sourcePool: (signal as any)?.metadata?.sourcePool,
-            // B79.0n.ORCHESTRATOR (2026-05-27): REQUIRED per-class dispatch key.
-            // P19-B4a (C4): stamp-preferred / _amrClass-reuse, skip-guarded above —
-            // no silent crypto_spot fallback (Langston Step 2 Probe 8 ACK).
-            assetClass: _sizeClass,
+        // B-SIZING-DEC-RESTORE 2e (Pe2, Kyle 2026-09-30: "There should not be a backup sizing path"): a signal is sized
+        // ONCE, at birth, by the one formula (balance × max exposure × max position % × the buffer). One that arrives
+        // without BOTH fields is REFUSED here — never re-sized by a second path. The fallback that stood here (B6) sized
+        // it again from the guardrails and was never used (0 FALLBACK_SIZING against every promoted signal pre-sized).
+        // An unsized signal means the sizing seam broke, so it is LOUD: logged, counted, and one alert per engine
+        // session — the key carries the session start, so the first one never silences a later session's (Langston
+        // condition 7; RESOLVE the row, never ack it — an acked row blocks every later occurrence, system-alerts.ts).
+        const _sessionStart = getEngineSessionStart(this.mode);
+        console.error(`[B-SIZING-DEC-RESTORE][UNSIZED_SIGNAL_REFUSED:${this.mode}] ${signal.symbol}/${signal.strategy}: arrived without quantity AND estimated value (quantity=${signalAny.quantity}, estimatedValue=${signalAny.estimatedValue}) — refused, not re-sized`);
+        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'SIZING_INVALID', 'signal arrived unsized — sizing happens at signal birth');
+        try {
+          const { addAlert } = await import('./system-alerts.js');
+          await addAlert({
+            triggers_at: new Date(),
+            category: 'breakage',
+            severity: 'warning',
+            title: `An unsized ${this.mode} signal reached execution and was refused (${signal.symbol})`,
+            body: `A ${this.mode} signal for ${signal.symbol} (${signal.strategy}) arrived at execution without a size, so it was refused rather than sized a second way. Every signal is sized once, when it is created; this means that step did not run for it. Resolve this alert (do not acknowledge it) once the cause is known.`,
+            dedupe_key: `unsized-signal-${this.mode}-${_sessionStart ? _sessionStart.toISOString() : 'no-session'}`,
           });
-
-          if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
-            // 11.7S: Apply mode overlay to position size
-            const adjustedQuantity = sizingResult.quantity * (modeOverlay?.positionSizeMultiplier ?? 1);
-            const adjustedValue = sizingResult.estimatedValue * (modeOverlay?.positionSizeMultiplier ?? 1);
-            signalAny.quantity = adjustedQuantity;
-            signalAny.estimatedValue = adjustedValue;
-            signalAny.preComputedNotional = adjustedValue;
-            console.log(`[B6][FALLBACK_SIZED] ${signal.symbol}: qty=${adjustedQuantity.toFixed(8)}, value=$${adjustedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay?.positionSizeMultiplier ?? 1})`);
-          } else {
-            console.log(`[B6][SIZING_FAILED] Zero sizing result for ${signal.symbol} - skipping`);
-            return { opened: false, stage: 'SIZING_INVALID', reason: 'zero sizing result (fallback)' };
-          }
-        } else {
-          console.error(`[B6][SIZING_ERROR] Invalid portfolio value for fallback sizing: ${portfolioValue}`);
-          return { opened: false, stage: 'SIZING_INVALID', reason: `invalid portfolio value for fallback sizing (${portfolioValue})` };
+        } catch (alertErr) {
+          console.error('[B-SIZING-DEC-RESTORE][UNSIZED_SIGNAL_REFUSED] alert raise failed (the loud log above stands):', alertErr instanceof Error ? alertErr.message : alertErr);
         }
+        return { opened: false, stage: 'SIZING_INVALID', reason: 'signal arrived unsized — sizing happens at signal birth' };
       }
 
       // Note: Directive 11.7R-E hard governance filter applied before sizing (lines 2134-2160)

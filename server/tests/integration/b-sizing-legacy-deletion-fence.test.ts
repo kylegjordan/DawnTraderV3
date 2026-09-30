@@ -427,6 +427,12 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       ['the clamp-bind stream', /\b(recordSizingClampSample|getSizingClampProof|SIZING_BIND_THRESHOLD|sizingClampSamples)\b/],
       ['the retired sizer fields', /\b(effectiveRiskFractionRatio|wasClamped)\b/],
       ['the M5E harness', /\b(startFullM5EValidation|getM5EStatus|disablePassiveLearning\(\);\s*const simResult)\b/],
+      // increment 2e (PRE_AUDIT §20, Kyle 2026-09-30) — Pe7
+      ['the fallback sizer (2e Pe2)', /\[B6\]\[FALLBACK_SIZ(ING|ED)\]/],
+      ['the cap universe split (2e Pe4)', /\b(control_cohort|b67_3_universe_split_active|splitActive)\b/],
+      ['the pattern-list size cap (2e Pe5)', /\b(pattern_max_position_pct|XSTOCK_SPOT_PATTERN_(MAX_POSITION_PCT|FINAL_SCORE_FLOOR|POOL_GUARDRAILS))\b|\.MAX_POSITION_PCT\b/],
+      ['the correlation shrink in the sizer (2e Pe10)', /correlationScale\s*=\s*getScalingFactor|\[9\.4\]\[SIZE\]/],
+      ['the AI chat action path (2e Pe8)', /\b(intentExecutor|IntentExecutionService|ApprovalPrompt|SafeInteractiveNotification)\b|intent-executor|\/intent\/(execute|audit|approve|reject|dismiss|clear|cleanup-ghosts)\b/],
     ];
     for (const [label, rx] of GONE) {
       it(`${label} does not come back`, () => {
@@ -483,6 +489,16 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       expect(hitsFor(/\bgetEffectiveATR\b/).length).toBeGreaterThan(0);     // the word boundary is real
       expect(hitsFor(/orchestrator\/updateStrategy\b/).length).toBeGreaterThan(0); // the sibling route stayed
       expect(hitsFor(/validation\/run-m5d/).length).toBeGreaterThan(0);     // M5D is not M5E (unaudited, not touched)
+    });
+
+    // 2e's controls: the survivors beside each removal are still seen by the same scan.
+    it('POSITIVE CONTROL (2e): the pattern quality floor, the cap reader, the cohort hash (kept for pair_id_hash), the correlation BLOCK and getScalingFactor itself (left-intentionally, row 135b) are all present', () => {
+      expect(hitsFor(/\bpattern_final_score_min\b/).length).toBeGreaterThan(0);
+      expect(hitsFor(/\bFINAL_SCORE_FLOOR\b/).length).toBeGreaterThan(0);
+      expect(hitsFor(/\breadPerUnderlyingCapConfig\b/).length).toBeGreaterThan(0);
+      expect(hitsFor(/\bassignCohortHash\b/).length).toBeGreaterThan(0);
+      expect(hitsFor(/\bisCorrelatedExposure\b/).length).toBeGreaterThan(0);
+      expect(hitsFor(/\bgetScalingFactor\b/).length).toBeGreaterThan(0);
     });
   });
 });

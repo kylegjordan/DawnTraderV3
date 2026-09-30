@@ -27,12 +27,11 @@
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../../services/module-constants-service.js', () => ({
-  getCachedNumberRequired: (module: string, name: string, key: { assetClass?: string }) => {
+  getCachedNumberRequired: (module: string, name: string, _key: { assetClass?: string }) => {
     if (module === 'pattern_pool_gates') {
       if (name === 'pattern_final_score_min') return 0.45;
-      if (name === 'pattern_max_position_pct') {
-        return key.assetClass === 'xstock_spot' ? 0.50 : 0.15;
-      }
+      // pattern_max_position_pct is NOT answered: the pattern-list size cap was removed in B-SIZING-DEC-RESTORE 2e, so a
+      // re-introduced read throws here (loud) instead of sizing from a stale test value.
     }
     if (module === 'active_sizing' && name === 'max_position_buffer_factor') return 0.97;
     throw new Error(`[mock] unrecognized constant ${module}.${name}`);
@@ -46,7 +45,7 @@ describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
   // ──────────────────────────────────────────────────────────────────────
   // Test 1: Sizing cascade — xstock vs crypto get different position caps
   // ──────────────────────────────────────────────────────────────────────
-  describe('sizing cascade (Chunk B end-to-end)', () => {
+  describe('sizing cascade — no per-class pattern cap since 2e (Kyle 2026-09-30)', () => {
     const baseParams = {
       portfolioValue: 10000,
       guardrails: {
@@ -58,52 +57,17 @@ describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
       stopPrice: 97,
       sourcePool: 'pattern' as const,
       mode: 'paper' as const, // P19-B4b D5: per-mode sizing param (S4 isolation)
+      strategy: 'breakout' as const,
     };
 
-    it('xstock pattern signal sized against xstock 0.50 MAX_POSITION_PCT', () => {
-      const result = sizeActivePositionForSignal({
-        ...baseParams,
-        symbol: 'AAPLx/USD',
-        strategy: 'breakout',
-        assetClass: 'xstock_spot',
-      });
-      // Sizing should NOT be clamped below the xstock 50% cap
-      // (baseParams.guardrails.maxPositionPct=25; xstock pattern cap=50;
-      // effective = min(25, 50) = 25). Earlier when import was hardcoded to
-      // crypto's 15%, effective would have been min(25, 15) = 15.
-      // Compare to crypto path below.
-      expect(result.quantity).toBeGreaterThan(0);
-      expect(result.estimatedValue).toBeGreaterThan(0);
-    });
-
-    it('crypto pattern signal sized against crypto 0.15 MAX_POSITION_PCT (unchanged)', () => {
-      const result = sizeActivePositionForSignal({
-        ...baseParams,
-        symbol: 'BTC/USD',
-        strategy: 'breakout',
-        assetClass: 'crypto_spot',
-      });
-      expect(result.quantity).toBeGreaterThan(0);
-      expect(result.estimatedValue).toBeGreaterThan(0);
-    });
-
-    it('xstock pattern signal allows LARGER position than crypto for the same risk inputs (0.50 vs 0.15 cap)', () => {
-      const xstockResult = sizeActivePositionForSignal({
-        ...baseParams,
-        symbol: 'AAPLx/USD',
-        strategy: 'breakout',
-        assetClass: 'xstock_spot',
-      });
-      const cryptoResult = sizeActivePositionForSignal({
-        ...baseParams,
-        symbol: 'BTC/USD',
-        strategy: 'breakout',
-        assetClass: 'crypto_spot',
-      });
-      // With baseParams.guardrails.maxPositionPct=25, neither hits the per-class
-      // cap (xstock 50, crypto 15). Crypto's 15 < 25 = effectiveMaxPositionPct=15.
-      // Xstock's 50 > 25 = effectiveMaxPositionPct=25. So xstock allows MORE.
-      expect(xstockResult.estimatedValue).toBeGreaterThan(cryptoResult.estimatedValue);
+    // The three tests that stood here asserted the removed per-class cap (xStock 0.50 vs crypto 0.15) as their SUBJECT,
+    // so they went with it (Langston §20 r2 condition 1). What replaces them: both classes size at exactly
+    // balance x e x p x 0.97. MUTATION: re-introduce the pattern branch and the mock throws on the retired key.
+    it('an xStock and a crypto pattern signal size identically — $10,000 x 100% x 25% x 0.97 = $2,425', () => {
+      const xstock = sizeActivePositionForSignal({ ...baseParams, symbol: 'AAPLx/USD', assetClass: 'xstock_spot' });
+      const crypto = sizeActivePositionForSignal({ ...baseParams, symbol: 'BTC/USD', assetClass: 'crypto_spot' });
+      expect(xstock.estimatedValue).toBeCloseTo(2425, 6);
+      expect(crypto.estimatedValue).toBeCloseTo(2425, 6);
     });
   });
 

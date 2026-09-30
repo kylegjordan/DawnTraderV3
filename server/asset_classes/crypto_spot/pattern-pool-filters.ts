@@ -36,12 +36,12 @@ export const PATTERN_POOL_THRESHOLDS = {
 };
 
 // --- Pattern Pool Guardrails ---
-// Elevated quality floor compensates for lower-quality pair metrics
-// Position sizing capped to reflect higher uncertainty of pattern-pool pairs
+// Elevated quality floor compensates for lower-quality pair metrics.
+// (The pattern-list POSITION SIZE cap that stood here — "to reflect higher uncertainty of pattern-pool pairs",
+// 2026-03-17 — was removed in B-SIZING-DEC-RESTORE 2e, Kyle 2026-09-30: a pattern trade sizes like any other.)
 
 export const PATTERN_POOL_GUARDRAILS = {
   get FINAL_SCORE_FLOOR(): number { return getCachedNumberRequired('pattern_pool_gates', 'pattern_final_score_min', _PATTERN_KEY); },
-  get MAX_POSITION_PCT(): number { return getCachedNumberRequired('pattern_pool_gates', 'pattern_max_position_pct', _PATTERN_KEY); },
   // NO MAX_CONCURRENT — merit-based competition within normal risk limits (Kyle decision)
 };
 

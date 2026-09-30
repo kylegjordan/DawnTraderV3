@@ -4,8 +4,8 @@
   "frozen_at_commit": "d3e643032",
   "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 367,
-  "file_count": 47,
+  "total_errors": 339,
+  "file_count": 46,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -103,8 +103,6 @@
           "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: string; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: string | undefined; mode: \"live\" | \"paper\"; strategy: string; assetClass: string; }'.": 2,
           "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: any; enabled: boolean; params: { riskPerTrade: number; cooldownMinutes: number; maxConcurrentPositions: number; takeProfitR: number; stopLossR: number; }; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper": 1,
           "Argument of type '{ mode: \"live\" | \"paper\"; strategy: any; prevParams: any; nextParams: any; actorType: string; actorId: string; reason: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakou": 1,
-          "Argument of type '{ mode: any; strategy: any; enabled: true; params: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_boun": 1,
-          "Argument of type '{ mode: any; strategy: any; prevParams: any; nextParams: any; actorType: string; actorId: string; reason: string; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean": 1,
           "Argument of type '{ userId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: str": 1,
           "Argument of type '{ userId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"pap": 1,
           "Argument of type 'string | undefined' is not assignable to parameter of type '\"bias\" | \"instability\" | \"low_confidence\" | \"conflict\" | \"performance_drop\" | undefined'.": 1
@@ -130,8 +128,6 @@
           "Property 'upsertExecutionConfig' does not exist on type 'DatabaseStorage'.": 1,
           "Property 'deleteExecutionConfig' does not exist on type 'DatabaseStorage'.": 1,
           "Property 'updateTradingSettings' does not exist on type 'DatabaseStorage'.": 1,
-          "Property 'getPendingApprovals' does not exist on type 'DatabaseStorage'.": 5,
-          "Property 'updateApprovalStatus' does not exist on type 'DatabaseStorage'.": 5,
           "Property 'systemState' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
           "Property 'mode' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
           "Property 'outcome' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
@@ -176,11 +172,7 @@
         },
         "TS2554": {
           "Expected 0 arguments, but got 1.": 1,
-          "Expected 1 arguments, but got 3.": 3,
           "Expected 1 arguments, but got 2.": 1
-        },
-        "TS7006": {
-          "Parameter 'a' implicitly has an 'any' type.": 7
         },
         "TS2741": {
           "Property 'where' is missing in type 'Omit<PgSelectBase<\"ethical_violation_log\", { id: PgColumn<{ name: \"id\"; tableName: \"ethical_violation_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false": 1
@@ -466,19 +458,6 @@
       }
     },
     {
-      "path": "server/services/intent-executor.ts",
-      "phase_tag": "TBD (audit pending)",
-      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
-      "errors": {
-        "TS2345": {
-          "Argument of type 'string' is not assignable to parameter of type '\"live\" | \"paper\"'.": 3,
-          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; use": 1,
-          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: Record<string, any>; }' is not assignable to parameter of ty": 1,
-          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: {}; }' is not assignable to parameter of type '{ mode: \"live": 1
-        }
-      }
-    },
-    {
       "path": "server/services/knowledge-retrieval.ts",
       "phase_tag": "TBD (audit pending)",
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
@@ -721,6 +700,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-09-29T20:25:18.536Z",
-  "last_synced_by_batch": "B-SIZING-DEC-RESTORE-2d"
+  "last_synced_at_iso": "2026-09-30T00:50:21.882Z",
+  "last_synced_by_batch": "B-SIZING-DEC-RESTORE-2e"
 }

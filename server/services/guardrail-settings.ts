@@ -208,7 +208,7 @@ export async function buildSettingsFromGuardrails(
     // closed by increment 2b's rule-18 census, not by this line.
     // P19-B8.7's rule still holds: no fabricated cap. An unreadable p gives NaN (p = 0 gives Infinity),
     // and the engine's promotion loops HALT on !Number.isFinite rather than invent a number.
-    maxOpenTrades: deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(guardrails.maxPositionPercentPct)), 'quant')),
+    maxOpenTrades: deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(guardrails.maxPositionPercentPct)))),
     // P19-B8.8: the ': "7.00"' kill-switch default is GONE (same dead-but-dangerous
     // family as above — a defaulted KILL SWITCH is the worst number to fabricate).
     dailyLossKillSwitch: String(guardrails.dailyLossKillSwitchPct),

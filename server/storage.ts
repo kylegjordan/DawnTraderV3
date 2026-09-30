@@ -208,9 +208,9 @@ export interface IStorage {
   // Legacy guardrails table is obsolete. Use getGuardrailsV2() instead.
   // P19-B8.2: the zero-caller getGuardrails + getGuardrailsLegacy accessors were
   // DELETED (rule 18; DELETED_COMPONENTS_LOG 2026-07-05). upsertGuardrails is
-  // INTENTIONALLY RETAINED — it still has two live callers (routes.ts legacy
-  // guardrails route + intent-executor executeGuardrailsUpdate) that throw at
-  // runtime today; that trio is B6.10's guardrails-v1 retirement work (RUNNING_ISSUES).
+  // INTENTIONALLY RETAINED — it still has ONE live caller (routes.ts legacy
+  // guardrails route; the intent-executor caller went in B-SIZING-DEC-RESTORE 2e) that throws at
+  // runtime today; that PAIR is B6.10's guardrails-v1 retirement work (RUNNING_ISSUES #436).
   /** @deprecated [9.7] Use upsertGuardrailsV2() instead. This method throws an error. */
   upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails>;
   
@@ -766,9 +766,9 @@ export class DatabaseStorage implements IStorage {
   /**
    * @deprecated [9.7] Use upsertGuardrailsV2() instead. Legacy guardrails table is obsolete.
    * This method now throws an error to prevent accidental writes.
-   * P19-B8.2: RETAINED (two live callers — routes.ts legacy guardrails route +
-   * intent-executor executeGuardrailsUpdate — both throw at runtime today);
-   * the trio retires together in B6.10 (RUNNING_ISSUES).
+   * P19-B8.2: RETAINED (ONE live caller — routes.ts legacy guardrails route; the
+   * intent-executor caller was deleted in B-SIZING-DEC-RESTORE 2e — it throws at runtime today);
+   * the PAIR retires together in B6.10 (RUNNING_ISSUES #436).
    */
   async upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails> {
     throw new Error('[9.7] Deprecated: Legacy guardrails update blocked – use guardrails_v2 instead.');
@@ -3620,6 +3620,8 @@ export class DatabaseStorage implements IStorage {
       eq(closedTradesTable.mode, mode),
       eq(closedTradesTable.symbol, symbol),
       sql`${closedTradesTable.closedAt} IS NOT NULL`,
+      // A never-filled maker STARTS the cooldown — DECIDED (Kyle 2026-09-30, B-SIZING-DEC-RESTORE 2e Pe3); pinned by
+      // integration/b-sizing-inc2b-cooldown-db.test.ts. Do not narrow this arm without a new decision.
       sql`(
         ${closedTradesTable.closeReason} = 'never_filled'
         OR (

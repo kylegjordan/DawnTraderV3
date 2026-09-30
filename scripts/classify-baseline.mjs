@@ -142,7 +142,7 @@ function classifyByPath(path, errors) {
   // memory / reasoning / drift / state / learning / validation / etc).
   // Broadened ruleset to catch more services post-initial-pass.
   if (
-    /^server\/services\/(autonomy|ethics|ethical|knowledge|memory|experience-memory|reasoning|reasoner|drift|state-aware|learning|continuous-learning|adaptive|gemini|m5d|m5e|c13|paper_validation|pre-execution-validator|alert-action|strategic-planner|intent-executor|actuation-policy|diagnostic|cle-orchestrator|system-config|auto_test_harness|commitTradeAndUpdatePortfolio|guardrail-policy|telemetry-aggregator|trading-engine|per-underlying-cap|trailing-exit|factor-ablation-emitter|screener-recalibration|narrative-feed|ai-summary-task|run-mode-controller|market-scan-task|system-health-check-task)/.test(
+    /^server\/services\/(autonomy|ethics|ethical|knowledge|memory|experience-memory|reasoning|reasoner|drift|state-aware|learning|continuous-learning|adaptive|gemini|m5d|m5e|c13|paper_validation|pre-execution-validator|alert-action|strategic-planner|actuation-policy|diagnostic|cle-orchestrator|system-config|auto_test_harness|commitTradeAndUpdatePortfolio|guardrail-policy|telemetry-aggregator|trading-engine|per-underlying-cap|trailing-exit|factor-ablation-emitter|screener-recalibration|narrative-feed|ai-summary-task|run-mode-controller|market-scan-task|system-health-check-task)/.test(
       path,
     )
   ) {

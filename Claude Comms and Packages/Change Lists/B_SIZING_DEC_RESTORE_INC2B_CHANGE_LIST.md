@@ -1,5 +1,8 @@
 # B-SIZING-DEC-RESTORE — increment 2b change list (Step 4): the position-% floor, the fallback sizer's balance
 
+> ⛔ **WITHDRAWN IN PART (2026-09-30, increment 2e — PRE_AUDIT §20.4 Pe1; Kyle: no limit on the max position %).** The `p >= 1` floor below (its migration `2026-09-29-b-sizing-inc2b-position-pct-floor.sql`, its rollback and RULE_012's floor) never deployed and is deleted; RULE_012 is back to `0 < p <= 100`. The rest of 2b (P3's balance, `#1093`'s exact cooldown lookup) stands — P3's fallback sizer itself was later deleted in 2e (Pe2).
+
+
 ## Dispatch header (the three fields)
 | # | field | value |
 |---|---|---|

@@ -261,7 +261,7 @@ class StateAwarenessService {
       // [9.7] Return percentage-based fields from guardrails_v2
       symbolCooldownMinutes: result.symbolCooldownMinutes,
       // B-SIZING-DEC-RESTORE obj-4: the open-positions setting is retired; how many can be open is derived.
-      derivedSlots: deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(result.maxPositionPercentPct)), 'quant')),
+      derivedSlots: deriveSlotCount(resolveEffectivePositionPct(parseFloat(String(result.maxPositionPercentPct)))),
       dailyLossKillSwitchPct: result.dailyLossKillSwitchPct ? parseFloat(String(result.dailyLossKillSwitchPct)) : null,
       maxPositionPercentPct: result.maxPositionPercentPct ? parseFloat(String(result.maxPositionPercentPct)) : null,
       maxTotalExposurePct: result.maxTotalExposurePct ? parseFloat(String(result.maxTotalExposurePct)) : null,

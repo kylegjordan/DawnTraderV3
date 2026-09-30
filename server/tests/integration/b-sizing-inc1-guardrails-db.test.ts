@@ -147,18 +147,19 @@ describe(TAG, () => {
   });
 
   // Increment 2b: the edges of the new position range are accepted — 1 and 100.
-  it('CONTROL (2b) — the position CHECK accepts its edges, 1 and 100', async (ctx) => {
+  it('CONTROL — the position CHECK accepts 0.5, 1 and 100 (increment 1\'s range; 2b\'s floor withdrawn in 2e)', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
+    await db.execute(sql`UPDATE guardrails_v2 SET max_position_percent_pct = 0.50 WHERE mode = 'paper'`);
+    expect(Number((await paperRow())!.max_position_percent_pct)).toBe(0.5);
     await db.execute(sql`UPDATE guardrails_v2 SET max_position_percent_pct = 1.00 WHERE mode = 'paper'`);
     expect(Number((await paperRow())!.max_position_percent_pct)).toBe(1);
     await db.execute(sql`UPDATE guardrails_v2 SET max_position_percent_pct = 100.00 WHERE mode = 'paper'`);
     expect(Number((await paperRow())!.max_position_percent_pct)).toBe(100);
   });
 
-  // MUTATION: drop the migrations' constraints and these fail — the bad value saves. Increment 2b replaced the
-  // position constraint's floor (> 0 → >= 1, 2026-09-29-b-sizing-inc2b-position-pct-floor.sql): 0 and 0.99 are below
-  // it, 100.01 and 500 above the ceiling; exposure keeps increment 1's > 0.
-  for (const [col, v] of [['max_position_percent_pct', 0], ['max_position_percent_pct', 0.99], ['max_position_percent_pct', 100.01], ['max_position_percent_pct', 500], ['max_total_exposure_pct', 0]] as const) {
+  // MUTATION: drop the migrations' constraints and these fail — the bad value saves. Increment 1's range: 0 is not
+  // above it, 100.01 and 500 are above the ceiling; exposure the same. (2b's floor of 1 was withdrawn in 2e.)
+  for (const [col, v] of [['max_position_percent_pct', 0], ['max_position_percent_pct', 100.01], ['max_position_percent_pct', 500], ['max_total_exposure_pct', 0]] as const) {
     it(`the database refuses ${col} = ${v}`, async (ctx) => {
       if (!dbReachable || !isTestDb) ctx.skip(); // run-time skip: it.each hands no test context
       await expect(db.execute(sql.raw(`UPDATE guardrails_v2 SET ${col} = ${v} WHERE mode = 'paper'`))).rejects.toThrow();

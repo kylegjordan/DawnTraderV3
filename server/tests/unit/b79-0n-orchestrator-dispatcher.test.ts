@@ -5,10 +5,9 @@
  *
  * Verifies:
  *   - `getPatternPoolGuardrailsForAssetClass('crypto_spot')` returns crypto's
- *     literal constants (FINAL_SCORE_FLOOR=0.45, MAX_POSITION_PCT=0.15)
+ *     FINAL_SCORE_FLOOR (0.45); since B-SIZING-DEC-RESTORE 2e there is no MAX_POSITION_PCT
  *   - `getPatternPoolGuardrailsForAssetClass('xstock_spot')` returns xstock's
- *     DB-resolved values (FINAL_SCORE_FLOOR=0.45, MAX_POSITION_PCT=0.50 from
- *     module_constants — placeholder-cloned today but real per-class plumbing)
+ *     DB-resolved FINAL_SCORE_FLOOR (0.45) through its own per-class getter chain
  *   - All 6 non-spot classes throw with `[CLASS_NOT_WIRED]` in error message
  *   - `_exhaustive: never` discipline catches new AssetClass enum members at
  *     compile time (TypeScript-level lock, not runtime — covered by the
@@ -24,19 +23,13 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-// DB mock that mirrors the actual staging DB state per class — crypto and
-// xstock have DIFFERENT `pattern_max_position_pct` rows (0.15 vs 0.50) per
-// the psql probe documented in pre-audit §3 Probe 3. Both `PATTERN_POOL_GUARDRAILS`
-// and `XSTOCK_PATTERN_POOL_GUARDRAILS` use DB-resolved getters with different
-// `_PATTERN_KEY.assetClass` values — that's how the differentiation works.
+// DB mock: both `PATTERN_POOL_GUARDRAILS` and `XSTOCK_PATTERN_POOL_GUARDRAILS` use DB-resolved getters keyed by
+// `_PATTERN_KEY.assetClass`. `pattern_max_position_pct` is deliberately NOT answered: the pattern-list size cap was
+// removed in B-SIZING-DEC-RESTORE 2e, so a re-introduced read throws here.
 vi.mock('../../services/module-constants-service.js', () => ({
-  getCachedNumberRequired: (module: string, name: string, key: { assetClass?: string }) => {
+  getCachedNumberRequired: (module: string, name: string, _key: { assetClass?: string }) => {
     if (module === 'pattern_pool_gates') {
       if (name === 'pattern_final_score_min') return 0.45; // same value both classes today
-      if (name === 'pattern_max_position_pct') {
-        // Mirror staging DB rows: crypto 0.15, xstock 0.50
-        return key.assetClass === 'xstock_spot' ? 0.50 : 0.15;
-      }
       if (name === 'pattern_rsi_min') return 15;
       if (name === 'pattern_rsi_max') return 85;
     }
@@ -56,26 +49,14 @@ describe('B79.0n.ORCHESTRATOR — pattern-pool-dispatch', () => {
     it('crypto_spot returns crypto PATTERN_POOL_GUARDRAILS (DB-resolved via _PATTERN_KEY.assetClass=crypto_spot)', () => {
       const guardrails = getPatternPoolGuardrailsForAssetClass('crypto_spot');
       expect(guardrails.FINAL_SCORE_FLOOR).toBe(0.45);
-      expect(guardrails.MAX_POSITION_PCT).toBe(0.15);
     });
 
     it('xstock_spot returns XSTOCK_PATTERN_POOL_GUARDRAILS (DB-resolved via _PATTERN_KEY.assetClass=xstock_spot)', () => {
       const guardrails = getPatternPoolGuardrailsForAssetClass('xstock_spot');
       expect(guardrails.FINAL_SCORE_FLOOR).toBe(0.45);
-      // Behavioral correction: xstock's 0.50 vs crypto's 0.15 — pre-batch
-      // xstock pattern signals were sized against crypto's 0.15 due to the
-      // class-bound import; post-batch routes correctly through the xstock
-      // module's getter chain.
-      expect(guardrails.MAX_POSITION_PCT).toBe(0.50);
     });
-
-    it('crypto_spot vs xstock_spot return DIFFERENT MAX_POSITION_PCT (0.15 vs 0.50)', () => {
-      const crypto = getPatternPoolGuardrailsForAssetClass('crypto_spot');
-      const xstock = getPatternPoolGuardrailsForAssetClass('xstock_spot');
-      expect(crypto.MAX_POSITION_PCT).not.toBe(xstock.MAX_POSITION_PCT);
-      // 3.3× — flag for WIRE-IN #14 active-trading flip + Phase 19 calibration.
-      expect(xstock.MAX_POSITION_PCT / crypto.MAX_POSITION_PCT).toBeCloseTo(3.33, 1);
-    });
+    // (The per-class MAX_POSITION_PCT assertions that stood here had the removed pattern size cap as their SUBJECT and
+    // went with it — B-SIZING-DEC-RESTORE 2e, Langston §20 r2 condition 1.)
   });
 
   // §2. Perp-class CLASS_NOT_WIRED throws
@@ -115,11 +96,13 @@ describe('B79.0n.ORCHESTRATOR — pattern-pool-dispatch', () => {
 
   // §4. Return-type shape contract
   describe('PatternPoolGuardrails type-lock', () => {
-    it('returned object has FINAL_SCORE_FLOOR + MAX_POSITION_PCT keys', () => {
+    // Re-pointed in 2e (condition 1): MAX_POSITION_PCT was a PROBE of the per-class contract here; its subject,
+    // FINAL_SCORE_FLOOR, survives. The removed key must be ABSENT (MUTATION: put the getter back and this fails).
+    it('returned object has the FINAL_SCORE_FLOOR key and no MAX_POSITION_PCT', () => {
       const guardrails = getPatternPoolGuardrailsForAssetClass('crypto_spot');
       const keys = Object.keys(guardrails);
       expect(keys).toContain('FINAL_SCORE_FLOOR');
-      expect(keys).toContain('MAX_POSITION_PCT');
+      expect(keys).not.toContain('MAX_POSITION_PCT');
     });
 
     it('FINAL_SCORE_FLOOR is a number', () => {
@@ -127,9 +110,10 @@ describe('B79.0n.ORCHESTRATOR — pattern-pool-dispatch', () => {
       expect(typeof guardrails.FINAL_SCORE_FLOOR).toBe('number');
     });
 
-    it('MAX_POSITION_PCT is a number', () => {
-      const guardrails = getPatternPoolGuardrailsForAssetClass('crypto_spot');
-      expect(typeof guardrails.MAX_POSITION_PCT).toBe('number');
+    it('the xStock guardrails carry the same contract (FINAL_SCORE_FLOOR only)', () => {
+      const keys = Object.keys(getPatternPoolGuardrailsForAssetClass('xstock_spot'));
+      expect(keys).toContain('FINAL_SCORE_FLOOR');
+      expect(keys).not.toContain('MAX_POSITION_PCT');
     });
   });
 });
@@ -142,5 +126,5 @@ describe('B79.0n.ORCHESTRATOR — pattern-pool-dispatch', () => {
 //
 // `PatternPoolGuardrails` interface must be exported from the dispatcher
 // module — proved by the import at the top of this file.
-const _typeCheck: PatternPoolGuardrails = { FINAL_SCORE_FLOOR: 0, MAX_POSITION_PCT: 0 };
+const _typeCheck: PatternPoolGuardrails = { FINAL_SCORE_FLOOR: 0 };
 void _typeCheck;

@@ -61,38 +61,16 @@ export const XSTOCK_PATTERN_POOL_THRESHOLDS = {
  *
  * Day-1 values (post-rename migration):
  *   - pattern_final_score_min  = 0.45   (was: final_score_floor — renamed)
- *   - pattern_max_position_pct = 0.50   (was: max_position_pct  — renamed)
  *
  * Elevated relative to quant path (~0.35 floor) because pattern-pool
- * relaxations shift more responsibility to scoring quality. The 0.50
- * position cap is higher than crypto's 0.15 cap by intentional design (xStock
- * sizing band per B79.0m.b2 — verified during xstock pattern path
- * commissioning).
+ * relaxations shift more responsibility to scoring quality. (The pattern-list position
+ * size cap, `pattern_max_position_pct`, was removed in B-SIZING-DEC-RESTORE 2e, Kyle 2026-09-30.)
  */
 export const XSTOCK_PATTERN_POOL_GUARDRAILS = {
   get FINAL_SCORE_FLOOR(): number { return getCachedNumberRequired('pattern_pool_gates', 'pattern_final_score_min', _PATTERN_KEY); },
-  get MAX_POSITION_PCT(): number { return getCachedNumberRequired('pattern_pool_gates', 'pattern_max_position_pct', _PATTERN_KEY); },
   // NO MAX_CONCURRENT — merit-based competition within normal risk limits
   // (same posture as crypto-side guardrails).
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-// Legacy literal exports — DEPRECATED SHIM (Phase 16 removal target)
-// ════════════════════════════════════════════════════════════════════════════
-// Zero importers verified at B79.0n.PATTERN-DETECT Step 2 pre-audit §-0 grep
-// (full corpus: server/, shared/, scripts/). These const exports were the
-// pre-batch file's only public surface and remain here as belt-and-suspenders
-// forward-load per Langston Step 2 ACK. Future Phase 16 cleanup deletes
-// alongside other userId-coupled legacy. RUNNING_ISSUES #136 (u).
-
-/** @deprecated B79.0n.PATTERN-DETECT — use XSTOCK_PATTERN_POOL_GUARDRAILS.FINAL_SCORE_FLOOR. Phase 16 removal. */
-export const XSTOCK_SPOT_PATTERN_FINAL_SCORE_FLOOR = 0.45;
-
-/** @deprecated B79.0n.PATTERN-DETECT — use XSTOCK_PATTERN_POOL_GUARDRAILS.MAX_POSITION_PCT. Phase 16 removal. */
-export const XSTOCK_SPOT_PATTERN_MAX_POSITION_PCT = 0.50;
-
-/** @deprecated B79.0n.PATTERN-DETECT — use XSTOCK_PATTERN_POOL_GUARDRAILS. Phase 16 removal. */
-export const XSTOCK_SPOT_PATTERN_POOL_GUARDRAILS = Object.freeze({
-  finalScoreFloor: XSTOCK_SPOT_PATTERN_FINAL_SCORE_FLOOR,
-  maxPositionPct: XSTOCK_SPOT_PATTERN_MAX_POSITION_PCT,
-});
+// (The three `@deprecated` XSTOCK_SPOT_PATTERN_* literal exports — a Phase-16 removal shim with zero importers —
+// were deleted in B-SIZING-DEC-RESTORE 2e, rule 18: touched, so deleted, not left. DELETED_COMPONENTS_LOG.)

@@ -45,14 +45,15 @@ describe('B79.0n.ORCHESTRATOR — consumer-site swap regression locks', () => {
       expect(typeof mod.sizeActivePositionForSignal).toBe('function');
     });
 
-    it('production source file imports getPatternPoolGuardrailsForAssetClass (not PATTERN_POOL_GUARDRAILS)', () => {
+    // B-SIZING-DEC-RESTORE 2e (Pe5, Kyle 2026-09-30): the sizer no longer reads ANY pattern guardrail — the pattern-list
+    // size cap is gone, so neither the dispatcher nor the old direct literal is imported. (The SQE's FINAL_SCORE_FLOOR
+    // read below still goes through the dispatcher.)
+    it('production source file imports NO pattern guardrails — the pattern size cap is removed (2e)', () => {
       const src = readFileSync(
         join(process.cwd(), 'server/services/active-position-sizing.ts'),
         'utf-8',
       );
-      // Positive assertion: dispatcher import present
-      expect(src).toMatch(/import \{ getPatternPoolGuardrailsForAssetClass \}/);
-      // Negative assertion: direct PATTERN_POOL_GUARDRAILS import removed
+      expect(src).not.toMatch(/import \{ getPatternPoolGuardrailsForAssetClass \}/);
       expect(src).not.toMatch(/import \{ PATTERN_POOL_GUARDRAILS \} from '\.\.\/asset_classes\/crypto_spot/);
     });
   });

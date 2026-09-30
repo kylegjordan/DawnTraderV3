@@ -41,13 +41,12 @@ const xstock = (symbol: string) => ({ symbol, assetClass: 'xstock_spot' });
 
 function seed() {
   _rows['b67_3_enabled'] = true;
-  _rows['b67_3_universe_split_active'] = false;
   _rows['b67_3_max_concurrent_per_underlying'] = 2;
 }
 beforeEach(() => { for (const k of Object.keys(_rows)) delete _rows[k]; _throw = null; seed(); });
 
-describe('P-9 — the per-underlying cap reads its three rows with no fallback', () => {
-  it('CONTROL: the seeded rows (true, false, 2) give a real decision — the cap reached at 2 open', async () => {
+describe('P-9 — the per-underlying cap reads its two rows with no fallback (the split row is gone, 2e)', () => {
+  it('CONTROL: the seeded rows (true, 2) give a real decision — the cap reached at 2 open', async () => {
     const d = await checkPerUnderlyingCap(crypto('ETH/USD'), [crypto('ETH/USD'), crypto('ETH/EUR')]);
     expect(d.allowed).toBe(false);
     expect(d.reason).toBe('cap_reached');
@@ -60,8 +59,8 @@ describe('P-9 — the per-underlying cap reads its three rows with no fallback',
     await expect(checkPerUnderlyingCap(crypto('ETH/USD'), [])).rejects.toBeInstanceOf(PerUnderlyingCapConfigError);
   });
 
-  it('a missing split row, a missing cap row, and malformed values are config errors too', async () => {
-    for (const [k, v] of [['b67_3_universe_split_active', undefined], ['b67_3_max_concurrent_per_underlying', undefined],
+  it('a missing cap row and malformed values are config errors too', async () => {
+    for (const [k, v] of [['b67_3_max_concurrent_per_underlying', undefined],
       ['b67_3_max_concurrent_per_underlying', '2'], ['b67_3_max_concurrent_per_underlying', 0], ['b67_3_enabled', 'true']] as const) {
       seed();
       if (v === undefined) delete _rows[k]; else _rows[k] = v;
@@ -104,6 +103,22 @@ describe('Step-4 FINDING-1 — the cap counts SAME-CLASS opens only', () => {
     const e = await checkPerUnderlyingCap({ symbol: 'DASH/USD', assetClass: '' }, [crypto('DASH/USD')]).catch((x) => x);
     expect(e).toBeInstanceOf(Error);
     expect(classifyPerUnderlyingCapFailure(e)).toBe('lookup_failed');
+  });
+});
+
+describe('2e Pe4 — the universe split is gone: the cap covers every coin (Kyle 2026-09-30)', () => {
+  // ETH/USD hashed to the old "control" half (cohort 1), which the split exempted before the cap test. MUTATION: put the
+  // split branch back (with its row seeded true) and this returns allowed / control_cohort.
+  it('a symbol from the old exempt half is capped like any other', async () => {
+    _rows['b67_3_universe_split_active'] = true; // a stale row, if one survived, must be IGNORED
+    const d = await checkPerUnderlyingCap(crypto('ETH/USD'), [crypto('ETH/USD'), crypto('ETH/GBP')]);
+    expect(d.allowed).toBe(false);
+    expect(d.reason).toBe('cap_reached');
+  });
+
+  it('the decision no longer carries a cohort', async () => {
+    const d = await checkPerUnderlyingCap(crypto('ETH/USD'), []);
+    expect(d).not.toHaveProperty('cohort');
   });
 });
 

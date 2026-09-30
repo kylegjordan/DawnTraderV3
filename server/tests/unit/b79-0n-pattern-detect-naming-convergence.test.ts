@@ -58,21 +58,7 @@ describe('B79.0n.PATTERN-DETECT — DB naming-convergence (getter key shape)', (
       );
     });
 
-    it('MAX_POSITION_PCT reads pattern_max_position_pct @ xstock_spot scope', async () => {
-      mockGetCachedNumberRequired.mockReturnValueOnce(0.50);
-      const { XSTOCK_PATTERN_POOL_GUARDRAILS } = await import(
-        '../../asset_classes/xstock_spot/pattern-pool-filters'
-      );
-
-      const value = XSTOCK_PATTERN_POOL_GUARDRAILS.MAX_POSITION_PCT;
-
-      expect(value).toBe(0.50);
-      expect(mockGetCachedNumberRequired).toHaveBeenCalledWith(
-        'pattern_pool_gates',
-        'pattern_max_position_pct',
-        { exchange: '*', assetClass: 'xstock_spot', strategy: 'pattern', regime: '*' },
-      );
-    });
+    // (The MAX_POSITION_PCT getter test went with the getter — pattern-list size cap removed, B-SIZING-DEC-RESTORE 2e.)
   });
 
   describe('xstock_spot/pattern-pool-filters.ts XSTOCK_PATTERN_POOL_THRESHOLDS', () => {
@@ -127,30 +113,6 @@ describe('B79.0n.PATTERN-DETECT — DB naming-convergence (getter key shape)', (
     });
   });
 
-  describe('Legacy deprecated shim const exports (Phase 16 register #136 (u))', () => {
-    it('XSTOCK_SPOT_PATTERN_FINAL_SCORE_FLOOR remains 0.45 (back-compat)', async () => {
-      const { XSTOCK_SPOT_PATTERN_FINAL_SCORE_FLOOR } = await import(
-        '../../asset_classes/xstock_spot/pattern-pool-filters'
-      );
-      expect(XSTOCK_SPOT_PATTERN_FINAL_SCORE_FLOOR).toBe(0.45);
-    });
-
-    it('XSTOCK_SPOT_PATTERN_MAX_POSITION_PCT remains 0.50 (back-compat)', async () => {
-      const { XSTOCK_SPOT_PATTERN_MAX_POSITION_PCT } = await import(
-        '../../asset_classes/xstock_spot/pattern-pool-filters'
-      );
-      expect(XSTOCK_SPOT_PATTERN_MAX_POSITION_PCT).toBe(0.50);
-    });
-
-    it('XSTOCK_SPOT_PATTERN_POOL_GUARDRAILS frozen object preserves shape', async () => {
-      const { XSTOCK_SPOT_PATTERN_POOL_GUARDRAILS } = await import(
-        '../../asset_classes/xstock_spot/pattern-pool-filters'
-      );
-      expect(XSTOCK_SPOT_PATTERN_POOL_GUARDRAILS).toEqual({
-        finalScoreFloor: 0.45,
-        maxPositionPct: 0.50,
-      });
-      expect(Object.isFrozen(XSTOCK_SPOT_PATTERN_POOL_GUARDRAILS)).toBe(true);
-    });
-  });
+  // (The three deprecated XSTOCK_SPOT_PATTERN_* shim exports were DELETED in B-SIZING-DEC-RESTORE 2e — rule 18; their
+  // back-compat tests went with them. #136 (u).)
 });

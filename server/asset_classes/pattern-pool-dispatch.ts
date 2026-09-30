@@ -54,7 +54,7 @@ import { XSTOCK_PATTERN_POOL_GUARDRAILS } from './xstock_spot/pattern-pool-filte
  */
 export interface PatternPoolGuardrails {
   readonly FINAL_SCORE_FLOOR: number;
-  readonly MAX_POSITION_PCT: number;
+  // MAX_POSITION_PCT (the pattern-list size cap) was REMOVED in B-SIZING-DEC-RESTORE 2e (Kyle 2026-09-30).
 }
 
 /**
@@ -85,7 +85,7 @@ export function getPatternPoolGuardrailsForAssetClass(
         `[B79.0n.ORCHESTRATOR][CLASS_NOT_WIRED] assetClass='${assetClass}' has no pattern-pool guardrails wired. ` +
         `Pattern-pool gates are not configured for perpetual futures or reserved-future classes in the ` +
         `current B79.0n umbrella arc. If activating: (1) create server/asset_classes/${assetClass}/pattern-pool-filters.ts ` +
-        `with the same FINAL_SCORE_FLOOR + MAX_POSITION_PCT contract; (2) seed module_constants ` +
+        `with the same FINAL_SCORE_FLOOR contract; (2) seed module_constants ` +
         `pattern_pool_gates rows for the new class; (3) add a case here. See ` +
         `ASSET_CLASS_ONBOARDING_WORKFLOW.md §4.22 for the per-class consumer-site swap pattern.`,
       );

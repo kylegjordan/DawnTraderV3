@@ -16,15 +16,14 @@
  *
  * On signal admission:
  *   1. Extract base currency from symbol via fxConversionService.parseSymbol.
- *   2. If signal's pair_id_hash cohort is the CONTROL (cohort 1) AND the A/B
- *      universe-split is active, allow without cap.
- *   3. Otherwise count current open trades sharing the base currency.
+ *   2. Count current open trades of the SAME asset class sharing the base currency.
  *      If count >= b67_3_max_concurrent_per_underlying, REJECT with
  *      RejectionReason 'PER_UNDERLYING_CAP'.
  *
- * Cohort assignment (from `assignCohortHash`) is deterministic on the
- * symbol so repeated entries on the same pair land in the same cohort.
- * Hash is `crc32(symbol) % 2`.
+ * ⛔ THE A/B UNIVERSE SPLIT IS GONE (B-SIZING-DEC-RESTORE 2e Pe4, Kyle 2026-09-30): it exempted the "control" half of the
+ * symbols (160 of 321 traded) for an experiment that never produced a data point — the active lane counted 0 opens for
+ * five months. The rule now covers EVERY coin. `assignCohortHash` STAYS: the trade writers still stamp `pair_id_hash`
+ * on every row, kept as historical data (J2: its readers are the CSV export and a client pass-through only).
  *
  * ETH/BTC counts toward the BASE currency only (ETH in this case). Cross-
  * quote correlation (e.g., ETH/BTC pulling on both ETH and BTC concurrent-
@@ -51,11 +50,10 @@ import { getConstant, GLOBAL_KEY } from './module-constants-service.js';
  */
 export interface PerUnderlyingCapDecision {
   allowed: boolean;
-  reason?: 'cap_reached' | 'cap_disabled' | 'control_cohort' | 'no_open_trades';
+  reason?: 'cap_reached' | 'cap_disabled' | 'no_open_trades';
   baseCurrency: string;
   currentOpenCount: number;
   cap: number;
-  cohort: 0 | 1;
   shadowMode: boolean; // true when b67_3_enabled is false; gate is observational only
 }
 
@@ -118,6 +116,20 @@ export interface CapPosition {
   assetClass: string;
 }
 
+/**
+ * B-SIZING-DEC-RESTORE 2e (Pe6): the cap's two rows, read with no fallback — the ONE reader, shared by the cap and the
+ * Guardrails tab's read-only display so the screen can never show a different rule from the one enforced.
+ */
+export async function readPerUnderlyingCapConfig(): Promise<{ enabled: boolean; cap: number }> {
+  const enabledRaw = await getConstant<unknown>('per_underlying_cap', 'b67_3_enabled', GLOBAL_KEY);
+  if (typeof enabledRaw !== 'boolean') throw new PerUnderlyingCapConfigError('b67_3_enabled', enabledRaw);
+  const capRaw = await getConstant<unknown>('per_underlying_cap', 'b67_3_max_concurrent_per_underlying', GLOBAL_KEY);
+  if (typeof capRaw !== 'number' || !Number.isInteger(capRaw) || capRaw < 1) {
+    throw new PerUnderlyingCapConfigError('b67_3_max_concurrent_per_underlying', capRaw);
+  }
+  return { enabled: enabledRaw, cap: capRaw };
+}
+
 export async function checkPerUnderlyingCap(
   candidate: CapPosition,
   openPositions: readonly CapPosition[],
@@ -127,23 +139,12 @@ export async function checkPerUnderlyingCap(
   if (!candidate.assetClass) {
     throw new Error(`[B-SIZING-DEC-RESTORE] per-underlying cap: ${symbol} carries no asset-class stamp`);
   }
-  // Resolve module_constants (the global wildcard rows the migrations seed: enabled true, split true, cap 2).
+  // Resolve module_constants (the global wildcard rows the migrations seed: enabled true, cap 2; the split row is gone, 2e).
   // ⛔ B-SIZING-DEC-RESTORE 2d (P-9): NO FALLBACKS (rule 15). The comment that stood here said "default to safe
   // values" and did the OPPOSITE — a missing `b67_3_enabled` row DISABLED the cap (`?? false`), and a missing cap row
   // invented a 2. A missing or malformed row now throws PerUnderlyingCapConfigError and both callers REFUSE the signal.
-  const enabledRaw = await getConstant<unknown>('per_underlying_cap', 'b67_3_enabled', GLOBAL_KEY);
-  if (typeof enabledRaw !== 'boolean') throw new PerUnderlyingCapConfigError('b67_3_enabled', enabledRaw);
-  const splitRaw = await getConstant<unknown>('per_underlying_cap', 'b67_3_universe_split_active', GLOBAL_KEY);
-  if (typeof splitRaw !== 'boolean') throw new PerUnderlyingCapConfigError('b67_3_universe_split_active', splitRaw);
-  const capRaw = await getConstant<unknown>('per_underlying_cap', 'b67_3_max_concurrent_per_underlying', GLOBAL_KEY);
-  if (typeof capRaw !== 'number' || !Number.isInteger(capRaw) || capRaw < 1) {
-    throw new PerUnderlyingCapConfigError('b67_3_max_concurrent_per_underlying', capRaw);
-  }
-  const enabled: boolean = enabledRaw;
-  const splitActive: boolean = splitRaw;
-  const cap: number = capRaw;
+  const { enabled, cap } = await readPerUnderlyingCapConfig();
 
-  const cohort = assignCohortHash(symbol);
   const shadowMode = !enabled;
 
   const parsed = fxConversionService.parseSymbol(symbol);
@@ -162,19 +163,6 @@ export async function checkPerUnderlyingCap(
   });
   const currentOpenCount = matchingOpens.length;
 
-  // A/B split: if active and this signal is in the control cohort (1), allow.
-  if (splitActive && cohort === 1) {
-    return {
-      allowed: true,
-      reason: 'control_cohort',
-      baseCurrency,
-      currentOpenCount,
-      cap,
-      cohort,
-      shadowMode,
-    };
-  }
-
   // Below cap → allow.
   if (currentOpenCount < cap) {
     return {
@@ -183,7 +171,6 @@ export async function checkPerUnderlyingCap(
       baseCurrency,
       currentOpenCount,
       cap,
-      cohort,
       shadowMode,
     };
   }
@@ -196,7 +183,6 @@ export async function checkPerUnderlyingCap(
       baseCurrency,
       currentOpenCount,
       cap,
-      cohort,
       shadowMode,
     };
   }
@@ -208,7 +194,6 @@ export async function checkPerUnderlyingCap(
     baseCurrency,
     currentOpenCount,
     cap,
-    cohort,
     shadowMode,
   };
 }
@@ -217,12 +202,11 @@ export async function checkPerUnderlyingCap(
  * Format a decision for PM2 log lines. Use at the call site to make
  * shadow-mode observations visible in logs alongside real rejections.
  *
- *   [B67.3] AVAX/USD base=AVAX cohort=0 open=2/2 → REJECTED (cap_reached)
- *   [B67.3] BTC/USD  base=BTC  cohort=1 open=3/2 → allowed (control_cohort)
- *   [B67.3] ETH/USD  base=ETH  cohort=0 open=2/2 → SHADOW would-reject (cap_disabled)
+ *   [B67.3] AVAX/USD base=AVAX open=2/2 → REJECTED (cap_reached)
+ *   [B67.3] ETH/USD  base=ETH  open=2/2 → SHADOW would-reject (cap_disabled)
  */
 export function formatDecisionLog(symbol: string, d: PerUnderlyingCapDecision): string {
-  const head = `[B67.3] ${symbol} base=${d.baseCurrency} cohort=${d.cohort} open=${d.currentOpenCount}/${d.cap}`;
+  const head = `[B67.3] ${symbol} base=${d.baseCurrency} open=${d.currentOpenCount}/${d.cap}`;
   if (!d.allowed) {
     return `${head} → REJECTED (${d.reason})`;
   }
