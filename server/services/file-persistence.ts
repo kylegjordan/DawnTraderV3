@@ -139,8 +139,14 @@ class FilePersistenceService {
       await this.ensureDirectories();
 
       const basePath = this.BASE_PATHS[category];
+      // B-SEC-HARDEN (#1022), Langston review 2026-09-30, Condition 1: the WRITE side is
+      // deliberately NOT guarded by resolveWithin. Its callers legitimately pass NESTED names —
+      // command-logger.ts:85/90/123 writes 'command_history/<...>.jsonl' — which resolveWithin
+      // rejects by design. All 7 saveFile callers use internal literal / date-built names, never
+      // request input, so there is no live traversal here. If a caller ever passes request-derived
+      // input to saveFile, it must be contained at that caller (or with a nested-name-aware guard).
       const filePath = path.join(basePath, filename);
-      
+
       const writePromise = append 
         ? fs.appendFile(filePath, content, 'utf-8')
         : fs.writeFile(filePath, content, 'utf-8');

@@ -54,7 +54,10 @@ export function resolveWithin(baseDir: string, name: string): string {
   }
   const base = path.resolve(baseDir);
   const resolved = path.resolve(base, name);
-  // resolved must be a direct child of base: base + separator + something.
+  // Defence in depth, NOT the load-bearing check (Langston review 2026-09-30): once the
+  // separator/NUL/`..` rejection above has passed, `resolved === path.join(base, name)` always
+  // holds, so this branch is dead-but-harmless on POSIX. It stays as a second net; the basename
+  // rejection is what actually closes the traversal.
   if (resolved !== path.join(base, name) || !resolved.startsWith(base + path.sep)) {
     throw new UnsafePathError('resolved path escapes its base directory');
   }
