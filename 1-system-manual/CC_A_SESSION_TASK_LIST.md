@@ -44,7 +44,7 @@
 | 12.1 | rulings-durability fix (`#671`) | sub-item | **FIRST BREAK** — exempt from the sequencing |
 | 12.2 | lookalike register (`#672`) | sub-item | **FIRST BREAK** |
 | 4.7 | `B-HEARTBEAT-RESCOPE` (`#999`) | batch | Langston's condition from `#995` |
-| 4.8 | `B-SLOT-PLACEMENT-CHECK` (`#1009` P2) | batch | the slot-time half, split out of 4.57 at Step 2 |
+| 4.8 | `B-SLOT-PLACEMENT-CHECK` (`#1009` P2) | batch | the slot-time half, split out of 4.57 at Step 2 · input: `scripts/governance-checker/checker.mjs` `planRowsByBatch` (B-PLAN-CURRENCY-CHECK) |
 | 3.5 | `B-INSTRUMENTS-OVER-RULES` | batch | placed 2026-09-02 |
 | 4 | `B-REVIEWER-LOOP` (`#758`) | batch | placed 2026-08-28 |
 | 5 | `B-CHUNK-ADDRESSING` (`#749`/`#761`) | batch | placed 2026-08-29 |

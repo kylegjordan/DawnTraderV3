@@ -15,7 +15,7 @@ import {
   DOCS, CLASS_DOCSET, DEFAULT_CLASS, HOLLOW_NET_LINE_FLOOR, REQUIRED_IF,
   CODE_PREFIXES, GOVERNANCE_PREFIXES, HOUSEKEEPING_ONLY_PATHS, HOUSEKEEPING_ONLY_BASENAMES,
   SCOPE_DIR, CHANGE_CLASS_MARKER, VALID_CLASSES, CORE_ENGINE_PATHS,
-  extractBatchId, batchIdToFileRegex, LEDGER_ROWS, GOV_REF,
+  extractBatchId, batchIdToFileRegex, LEDGER_ROWS, GOV_REF, PLAN_LINE, extractLeadingBatchId,
 } from './config.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -147,10 +147,13 @@ export function classifyCommit(files) {
 // ── presence ─────────────────────────────────────────────────────────────────
 // file-glob doc: does a file in `dir` whose name matches BOTH the batch-id and the
 // doc's `match` pattern exist? Returns the matching path(s).
-export function findGlobDoc(batchId, docKey) {
+// `names` (B-PLAN-CURRENCY-CHECK P34, Langston §10g C1): a listing the caller has ALREADY read — the plan rule
+// reads the Batch Completion listing ONCE per tick and threads it through here, so one filter implementation
+// serves both paths and no per-id ls-tree runs. Omitted, it is read here exactly as before.
+export function findGlobDoc(batchId, docKey, names = lsTreeNames(DOCS[docKey].dir)) {
   const spec = DOCS[docKey];
   const re = batchIdToFileRegex(batchId);
-  return lsTreeNames(spec.dir)
+  return names
     .filter((name) => re.test(name) && spec.match.test(name))
     .map((name) => join(spec.dir, name));
 }
@@ -285,6 +288,121 @@ export function checkLedgerRows(batchId, io = { findGlobDoc, completionReportCom
   }
   return out;
 }
+// ── B-PLAN-CURRENCY-CHECK OBJ-1 (P33, P34; the re-cut's §1) — the PLAN-STATE check ─────────────────────────
+// Grades the active plan's own obligation (its §3: "The owner updates its row at every batch close (status +
+// report link)") as a STATE at the graded ref — no diff, no bound, no window (Langston §10d). PURE: text in, rows
+// and legs out; the tick does the two reads (the plan and the Batch Completion listing, both at ONE resolved sha).
+//
+// planRowsByBatch — the exported plan-row JOIN (Langston Step-1 Q7: B-SLOT-PLACEMENT-CHECK's named input).
+//   Lines are split on \n with one trailing \r stripped, numbered from 1. `## N.` starts section N; only §4 and
+//   §5 are read (§0 and §6 are never graded). A table line is one whose trimmed text starts with `|`; its cells are
+//   the trimmed line less ONE leading and ONE trailing `|`, split on every `|`, each trimmed (the plan carries no
+//   `\|` escapes). §4: a line whose first cell is `#` is a header and must equal PLAN_LINE.s4Header after a
+//   right-trim — EVERY such header, so a column added to one wave table fails closed instead of dropping that
+//   wave (R1-Q12 (iii)); a separator is skipped; a line whose first cell is a row number (`35`, `138a`) is a row
+//   when it has exactly the header's cell count, and otherwise goes to `malformed` with its line number and cell
+//   count. §5: exactly ONE line equal to PLAN_LINE.s5Header (right-trimmed); its rows are the table lines after
+//   it up to the first non-table line, separators skipped, the header's cell count exactly or `malformed`.
+//   The id is extract(deMark(cell)) on the §4 BATCH cell or the §5 ITEM cell (the leading-token rule, so
+//   `#628 — batch named at Step 1`, `plan row 6` and `F-G-1 (venue price grid)` have none: `unparsed`).
+//   THROWS — never a partial join — on empty text, no §4 header, any §4 header that differs, or a §5 header
+//   count other than one; the tick turns a throw into `gov-planline-unreadable` and grades nothing.
+export function deMark(s) { return String(s ?? '').replace(/[*`]/g, '').replace(/\u00a0/g, ' ').trim(); }
+function planCells(line) {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (s.endsWith('|')) s = s.slice(0, -1);
+  return s.split('|').map((c) => c.trim());
+}
+const PLAN_SEPARATOR = /^\|[\s:|-]+\|?\s*$/;
+const PLAN_ROW_NO = /^\d+[a-z]?$/;
+export function planRowsByBatch(planText, extract = extractLeadingBatchId) {
+  if (typeof planText !== 'string' || planText.trim() === '') throw new Error('the plan text is empty or absent');
+  const s4Width = planCells(PLAN_LINE.s4Header).length, s5Width = planCells(PLAN_LINE.s5Header).length;
+  const rows = new Map(), unparsed = [], malformed = [];
+  const s4Headers = [], badHeaders = [], s5Headers = [];
+  let rows4 = 0, rows5 = 0, section = null, inS5Table = false;
+  const add = (row) => {
+    if (!row.id) { unparsed.push(row); return; }
+    if (!rows.has(row.id)) rows.set(row.id, { s4: [], s5: [] });
+    rows.get(row.id)[row.section === 4 ? 's4' : 's5'].push(row);
+  };
+  planText.split('\n').forEach((raw, i) => {
+    const line = raw.replace(/\r$/, ''), lineNo = i + 1;
+    const h = /^## (\d+)\./.exec(line);
+    if (h) { section = Number(h[1]); inS5Table = false; return; }
+    if (!line.trim().startsWith('|')) { inS5Table = false; return; }
+    const cells = planCells(line);
+    if (section === 4) {
+      if (cells[0] === '#') { s4Headers.push(lineNo); if (line.trimEnd() !== PLAN_LINE.s4Header) badHeaders.push(lineNo); return; }
+      if (PLAN_SEPARATOR.test(line.trim()) || !PLAN_ROW_NO.test(cells[0])) return;
+      if (cells.length !== s4Width) { malformed.push({ section: 4, rowNo: cells[0], lineNo, cellCount: cells.length }); return; }
+      rows4++;
+      const [rowNo, item, batch, owner, status, report, note] = cells;
+      add({ section: 4, rowNo, item, batch, owner, status, report, note, lineNo, id: extract(deMark(batch)) });
+    } else if (section === 5) {
+      if (line.trimEnd() === PLAN_LINE.s5Header) { s5Headers.push(lineNo); inS5Table = true; return; }
+      if (!inS5Table || PLAN_SEPARATOR.test(line.trim())) return;
+      if (cells.length !== s5Width) { malformed.push({ section: 5, rowNo: null, lineNo, cellCount: cells.length }); return; }
+      rows5++;
+      const [item, owner, closes, report] = cells;
+      add({ section: 5, rowNo: null, item, owner, closes, report, lineNo, id: extract(deMark(item)) });
+    }
+  });
+  if (s4Headers.length === 0) throw new Error(`no §4 table header (${PLAN_LINE.s4Header})`);
+  if (badHeaders.length) throw new Error(`a §4 table header differs from PLAN_LINE.s4Header at line(s) ${badHeaders.join(', ')}`);
+  if (s5Headers.length !== 1) {
+    throw new Error(`the §5 header (${PLAN_LINE.s5Header}) appears ${s5Headers.length} times${s5Headers.length ? ` (lines ${s5Headers.join(', ')})` : ''}; exactly one is required`);
+  }
+  return { rows, unparsed, malformed, rows4, rows5 };
+}
+
+// The STATUS test — fail on the machine default only (Langston §10g N6): FAIL iff deMark(status) is EMPTY or
+// matches /^queued\b/i. Empty = nothing left after markup is stripped and whitespace (NBSP included) and dash
+// characters (- ‒ – — ― −) are removed: the plan's placeholder for an empty cell. Any other text passes — no
+// terminal token (DONE, CLOSED, ✅) is ever looked for; the REPORT test is the real gate (R2).
+const PLAN_EMPTY_CELL = /^[\s\u2012-\u2015\u2212-]*$/;
+export function statusIsDefault(cell) {
+  const d = deMark(cell);
+  return PLAN_EMPTY_CELL.test(d) || /^queued\b/i.test(d);
+}
+// The REPORT test — does the cell NAME `basename`? A basename match on the de-marked cell: the character before
+// it is not a name character or `.` (so OLD_B_X_… and a path's `/` are told apart), and after it comes neither
+// a name character nor a `.` that is followed by one — a sentence-final `.` is punctuation, `.bak` / `.md.2`
+// are other files (re-cut §1.4, r2). A full path, a `Batch Completion/`-relative path, a bare name and a
+// markdown link all pass.
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function cellNamesFile(cell, basename) {
+  return new RegExp(`(?<![A-Za-z0-9_.-])${escRe(basename)}(?![A-Za-z0-9_-])(?!\\.[A-Za-z0-9_-])`).test(deMark(cell));
+}
+// checkPlanState(join, reportsFor) — the predicate (Langston §10g C1, C3, N6; §10j 3(a)). `reportsFor(bid)` →
+// the basenames findGlobDoc resolves for the batch's completion report (INJECTED: the tick threads the ONE
+// listing it read; nothing here calls completionReportCommitTime, C1). A batch is GRADED once it has a report
+// and its id is in the plan. PER SECTION the id is in: 2+ rows FAIL as ambiguous; exactly one row is graded; 0
+// rows = that leg is not required (no leg). The §4 row FAILs on the status test OR the report test; the §5 row
+// (C′: its `report` column) on the report test. Returns { legs, graded }, one leg per REQUIRED leg:
+//   { bid, leg: 's4'|'s5', fail, why: ('ambiguous'|'status'|'report')[], rowNos, lineNos, reports }.
+export function checkPlanState(join, reportsFor) {
+  const legs = [], graded = [];
+  for (const [bid, sections] of join.rows) {
+    const reports = reportsFor(bid) || [];
+    if (reports.length === 0) continue;
+    graded.push(bid);
+    const named = (cell) => reports.some((n) => cellNamesFile(cell, n));
+    for (const leg of ['s4', 's5']) {
+      const rs = sections[leg];
+      if (rs.length === 0) continue;
+      const base = { bid, leg, rowNos: rs.map((r) => r.rowNo), lineNos: rs.map((r) => r.lineNo), reports };
+      if (rs.length > 1) { legs.push({ ...base, fail: true, why: ['ambiguous'] }); continue; }
+      const r = rs[0], why = [];
+      if (leg === 's4' && statusIsDefault(r.status)) why.push('status');
+      if (!named(r.report)) why.push('report');
+      legs.push({ ...base, fail: why.length > 0, why });
+    }
+  }
+  return { legs, graded };
+}
+
 // LATEST scope first-add (Math.MAX, not min) — Langston Step-4 Finding 1. The re-open signal is a
 // NEW scope rev filed AFTER the completion report; Math.min would always collapse to the original
 // Step-1 scope (< completion) and the re-open branch would be inert (cry-silence on a genuine
