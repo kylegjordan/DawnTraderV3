@@ -147,10 +147,15 @@ const PREFETCH_EXCEPTIONS: Array<{ module: string; reason: string; batch: string
 ];
 
 /** The active plan's §4 rows as the plan's own tally rule defines them: a table line of exactly 7 cells whose first cell
- *  is a row id (digits plus at most one letter). Returns id → { batch cell, owner cell }. */
+ *  is a row id (digits plus at most one letter), read ONLY inside §4 (Langston r4 residual 1 — a 7-cell id-shaped table in
+ *  another section must not silently widen the check). Returns id → { batch cell, owner cell }. */
 function planRows(): Map<string, { batch: string; owner: string }> {
   const out = new Map<string, { batch: string; owner: string }>();
-  for (const line of read('1-system-manual/SPRINT_TO_LIVE_PLAN.md').split('\n')) {
+  const text = read('1-system-manual/SPRINT_TO_LIVE_PLAN.md');
+  const start = text.search(/^## 4\. /m);
+  const end = text.slice(start + 1).search(/^## 5\. /m);
+  if (start < 0 || end < 0) throw new Error('SPRINT_TO_LIVE_PLAN.md: §4 or §5 heading not found — the plan changed shape');
+  for (const line of text.slice(start, start + 1 + end).split('\n')) {
     if (!line.startsWith('|')) continue;
     const c = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((x) => x.trim());
     if (c.length === 7 && /^\d+[a-z]?$/.test(c[0])) out.set(c[0], { batch: c[2], owner: c[3] });
@@ -244,7 +249,7 @@ describe('8a-P4c inc 3 — BLOCKER-1 class: every sync-read module_constants mod
       const row = rows.get(e.planRow);
       expect(row, `plan row ${e.planRow} must exist in SPRINT_TO_LIVE_PLAN.md`).toBeDefined();
       expect((row as { batch: string }).batch).toContain(e.batch);
-      expect((row as { owner: string }).owner.startsWith(e.owner)).toBe(true);
+      expect(/^(CC-[A-Z]|Infra Claude)/.exec((row as { owner: string }).owner)?.[0]).toBe(e.owner); // exact session (r4 residual 3)
       expect(prefetched.has(e.module)).toBe(false);
     }
     // CAPABILITY: the plan check fails on a home that is named but not placed
