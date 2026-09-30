@@ -4,4 +4,6 @@
 -- every first seed after a restart is unjudged. No trade state lives here.
 BEGIN;
 DROP TABLE IF EXISTS xstock_book_state_rings;
+-- Clear the forward file's ledger row so a later redeploy re-applies it (release-plan review, Langston 2026-09-30).
+DELETE FROM _migrations WHERE name = '2026-09-24-b-book-state-restart-durable.sql';
 COMMIT;

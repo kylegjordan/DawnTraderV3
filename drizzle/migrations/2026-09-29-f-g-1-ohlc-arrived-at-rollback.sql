@@ -9,4 +9,6 @@ ALTER TABLE crypto_spot_ohlc_1m DROP COLUMN IF EXISTS arrived_at;
 ALTER TABLE xstock_spot_ohlc_1m DROP COLUMN IF EXISTS arrived_at;
 ALTER TABLE xstock_perp_ohlc_1m DROP COLUMN IF EXISTS arrived_at;
 ALTER TABLE crypto_perp_ohlc_1m DROP COLUMN IF EXISTS arrived_at;
+-- Clear the forward file's ledger row so a later redeploy re-applies it (release-plan review, Langston 2026-09-30).
+DELETE FROM _migrations WHERE name = '2026-09-29-f-g-1-ohlc-arrived-at.sql';
 COMMIT;

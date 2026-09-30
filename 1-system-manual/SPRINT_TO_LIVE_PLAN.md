@@ -304,6 +304,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 162 | #681 | #681 — batch named at Step 1 | Infra Claude | QUEUED | — | a deploy must not outrun CI |
 | 163 | #168 | #168 — batch named at Step 1 | Infra Claude | QUEUED | — | with #681: CI catches a build that crashes on boot |
 | 164 | P19-B12 | P19-B12 | Infra Claude | QUEUED | — | the deploy tool's own executable comes from the reviewed code · carries `#1004` and `#652` |
+| 164a | Every rollback file clears its own migration-ledger row | B-ROLLBACK-LEDGER-CLEAR (`#1129`) | CC-B (New Claude) | QUEUED | — | rollback safety, after 164: 88 of 98 rollback files leave `_migrations` saying "applied", so a rollback then redeploy silently skips the migration. A CI check so the class cannot regrow, a backfill for rollbacks that can still be run, and the rule written into the deploy step. Placed 2026-09-30 |
 
 ### Wave B2 — TRACK B · Risk controls and restart safety — fixed in paper, carried to live
 
@@ -376,7 +377,7 @@ Kyle 2026-09-28: an even split by connected groups; earlier ownership is not a f
 |---|---|---:|
 | CC-C (Analyst Claude) | Prices and the exit price path; paper sizing (in flight); the paper standard and judging the evidence | 65 |
 | Infra Claude | Identity, the coin list and exclusions; restarts, deploys, security and the servers; what the diagnostic screens show | 54 |
-| CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 55 |
+| CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 56 |
 | CC-A (Old Claude) | Trade records and costs; scores, regimes and gates; the xStock tuning studies; risk controls; the live engine; the final end-to-end audit | 60 |
 
 **How the tally is counted (recounted 2026-09-30 at the commit that carries this line, `B-PLAN-CURRENCY-CHECK` P11; re-counted by CC-C adding rows 3a and 154a; re-counted by CC-A adding rows 1h and 1i, 2026-09-30):** each §4 row — a table line of exactly 7 cells whose first cell is a row id — counted once, for the FIRST session named in its owner cell; Langston, Coltrane and Kyle own no rows. Total 234. **This table is hand-maintained:** recount it under this rule in the same commit as any change that adds, removes or re-owns a §4 row (the weekly census will carry the recount once it is live — `B-PLAN-CURRENCY-CHECK` R3-Q7).
