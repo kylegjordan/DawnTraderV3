@@ -277,6 +277,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 152 | 25-15 DATA-BLOCKED STUDY (intraday-coverage gap) — HCE rejected-ar | roadmap 25-15 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | gates: does the Net Expectancy gate reject winners - after row 125; cell = gate verdict x class; population = REJECTED (name the instrument first; its title still says DATA-BLOCKED); a cell below the floor is published UNDERPOWERED, never fitted |
 | 153 | 25-19 Net-Expectancy gate JUDGMENT-QUALITY validation (Kyle 2026-0 | roadmap 25-19 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | gates: the Net Expectancy gate's measured judgement - after row 125; cell = gate verdict x class; population = REJECTED + ACTIVE (name the instrument first); a cell below the floor is published UNDERPOWERED, never fitted · + `#370` and `#375` (does Net Expectancy judge well; do the sub-1.0-RR strategies survive EV) |
 | 154 | #644 | #644 — batch named at Step 1 | CC-A (Old Claude) | QUEUED | — | gates: the exploration-subsidy decision. NO gate clause, reason: a decision, not a per-cell fit - and it is one of the answers for a permanently underpowered cell, so row 125's Step 1 re-argues its position |
+| 154a | Maker fill probability: replace the 0.50 assumption with the measured rate | B-MAKER-PFILL-CALIBRATION (`#738`) | CC-C (Analyst Claude) | QUEUED | — | after row 154 (the exploration-subsidy decision — the same lane and the same evidence): the exploration lane bought 240 trades to measure the maker fill rate and measured 75%, while the maker/taker decision still assumes 0.50, pushing crypto to taker ~2:1. ⭐ A KYLE DECISION, not a tune: it moves the START-TIGHT conservatism he set 2026-07-01 and rules paper trade-through fills admissible as calibration evidence. Read on clean data after the reset |
 
 ### Wave A5 — TRACK A · The evidence — runs continuously; judged at the end
 
@@ -368,12 +369,12 @@ Kyle 2026-09-28: an even split by connected groups; earlier ownership is not a f
 
 | session | group | items |
 |---|---|---:|
-| CC-C (Analyst Claude) | Prices and the exit price path; paper sizing (in flight); the paper standard and judging the evidence | 64 |
+| CC-C (Analyst Claude) | Prices and the exit price path; paper sizing (in flight); the paper standard and judging the evidence | 65 |
 | Infra Claude | Identity, the coin list and exclusions; restarts, deploys, security and the servers; what the diagnostic screens show | 54 |
 | CC-B (New Claude) | Signals, strategies, the SQE and RTB; learning data; trade-distance and strategy tuning | 54 |
 | CC-A (Old Claude) | Trade records and costs; scores, regimes and gates; the xStock tuning studies; risk controls; the live engine; the final end-to-end audit | 57 |
 
-**How the tally is counted (recounted 2026-09-30 at the commit that carries this line, `B-PLAN-CURRENCY-CHECK` P11; re-counted by CC-C adding row 3a):** each §4 row — a table line of exactly 7 cells whose first cell is a row id — counted once, for the FIRST session named in its owner cell; Langston, Coltrane and Kyle own no rows. Total 229. **This table is hand-maintained:** recount it under this rule in the same commit as any change that adds, removes or re-owns a §4 row (the weekly census will carry the recount once it is live — `B-PLAN-CURRENCY-CHECK` R3-Q7).
+**How the tally is counted (recounted 2026-09-30 at the commit that carries this line, `B-PLAN-CURRENCY-CHECK` P11; re-counted by CC-C adding rows 3a and 154a):** each §4 row — a table line of exactly 7 cells whose first cell is a row id — counted once, for the FIRST session named in its owner cell; Langston, Coltrane and Kyle own no rows. Total 230. **This table is hand-maintained:** recount it under this rule in the same commit as any change that adds, removes or re-owns a §4 row (the weekly census will carry the recount once it is live — `B-PLAN-CURRENCY-CHECK` R3-Q7).
 
 ## 7. Coltrane — proposed role (for Langston's view, then Kyle)
 
