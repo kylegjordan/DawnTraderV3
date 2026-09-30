@@ -1004,7 +1004,7 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
 // ── B-PLAN-CURRENCY-CHECK P32: the PLAN_LINE table — dormant at landing, key disjoint from DOCS and LEDGER_ROWS ──
 // Planted faults: `enabled: true` fails the first; `naKey: 'task_lists'` (or any DOCS key) fails the second.
 {
-  ok('P32 PLAN_LINE.enabled === false at landing (rewritten only by the P61 flip commit)', PLAN_LINE.enabled === false);
+  ok('P61 PLAN_LINE.enabled === true (the flip commit; it was pinned false at landing, P32)', PLAN_LINE.enabled === true);
   ok('P32 PLAN_LINE.naKey is disjoint from the DOCS and LEDGER_ROWS keys (one flat na-skip namespace)',
     ![...Object.keys(DOCS), ...Object.keys(LEDGER_ROWS)].includes(PLAN_LINE.naKey));
   ok('P32 no sinceMs (re-cut: a state check has no first-add gate)', !('sinceMs' in PLAN_LINE));

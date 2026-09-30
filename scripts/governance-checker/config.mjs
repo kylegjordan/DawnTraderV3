@@ -200,7 +200,7 @@ export const LEDGER_ROWS = {
 export const PLAN_LINE = {
   path: '1-system-manual/SPRINT_TO_LIVE_PLAN.md',
   naKey: 'plan_line',
-  enabled: false,
+  enabled: true,   // P61 flip (B-PLAN-CURRENCY-CHECK, Langston Step 4) — this commit; the comment above records the gate.
   s4Header: '| # | item | batch / reference | owner | status | report | note |',
   s5Header: '| item | owner | closes | report |',
 };
