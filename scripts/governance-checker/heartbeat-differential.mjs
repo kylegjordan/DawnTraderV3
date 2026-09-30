@@ -39,6 +39,9 @@ const MIN = 60000;
 const TICKS = {
   absent: null, corrupt: null, 'lastTick-null': null,
   'fresh-10m': -10, 'boundary-60m': -60, 'stale-61m': -61, 'stale-600m': -600, 'future+5m': 5,
+  // Step 4 BLOCKER-1: states NOT derived from the code's own branches — a present-but-non-numeric lastTick
+  // and one far in the future. The parent fails OPEN on both; the fix makes both silent (a pinned divergence).
+  'lastTick-junk': 'junk', 'lastTick-future-far': 600,
 };
 const HBS = ['absent', 'null', 'open'];
 export function states() {
@@ -101,7 +104,7 @@ export async function runDifferential(source) {
     rmSync(stateFile, { force: true }); rmSync(hbFile, { force: true }); writeFileSync(log, '');
     if (s.tick === 'corrupt') writeFileSync(stateFile, '{"lastTick": 17854');
     else if (s.tick !== 'absent') {
-      const st = { lastTick: TICKS[s.tick] == null ? null : NOW + TICKS[s.tick] * MIN, openAlerts: {} };
+      const st = { lastTick: TICKS[s.tick] == null ? null : TICKS[s.tick] === 'junk' ? 'garbage' : NOW + TICKS[s.tick] * MIN, openAlerts: {} };
       if (s.sha) st.gradedRefSha = s.sha;
       writeFileSync(stateFile, JSON.stringify(st));
     }

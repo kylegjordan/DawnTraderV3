@@ -54,6 +54,9 @@ These cannot be open-ended deferrals — without them, flipping the timer on mis
 | `poller.mjs` | live watcher: pure decision logic (`computeBatchStates`, `decideAlerts`) + side-effect wrappers (git fetch, alert sink via the staging `system-alerts` CLI, state IO, exceptions ledger read) | `poller.test.mjs` (23 cases) |
 | `backtest.mjs` | **Obj-11 GATE**: replays the detector over real history; must pass clean closes + flag B3b's missing pre-audit + flag a hollow doc | self |
 | `poller.test.mjs` | pure decision-logic unit tests (no git/ssh/fs) | self |
+| `heartbeat-check.mjs` | the dead-man heartbeat — a SEPARATE process with its own unit: pure `decideHeartbeat` (poller silence + the census and mistake-pass liveness legs) and an IO shell | `heartbeat-check.test.mjs` (CI) |
+| `heartbeat-check.test.mjs` | the heartbeat's unit tests, including the parent-outcome differential table | self (CI, Test Suite) |
+| `heartbeat-differential.mjs` | **hand-run, not CI** (needs git, bash and npm): runs a chosen version's real `checkHeartbeat` once per state against temp files and a fake alert CLI, so a refactor of the heartbeat can be compared against its parent | self |
 | `governance-checker.{service,timer}` | systemd oneshot + 30-min timer (own process, isolated, local clone only) | — |
 
 ## Run locally

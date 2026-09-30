@@ -1454,6 +1454,29 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
   }
 }
 
+// ─── Step 4 BLOCKER-2 (Langston, 2026-09-30): pin the WRAPPER, not only writeStateAtomic ───
+// rename() installs a NEW inode; writeFileSync truncates the SAME one. So saveState replacing the file's inode is
+// the discriminator: reverting the one-line wrapper to writeFileSync keeps the inode and turns this red.
+// Linux only (CI): Windows file ids are not a POSIX inode contract.
+if (process.platform !== 'win32') {
+  const dir = mkdtempSync(join(tmpdir(), 'savestate-'));
+  const target = join(dir, 'state.json');
+  writeFileSync(target, '{"old":1}');
+  const before = statSync(target).ino;
+  const prev = process.env.GOV_STATE_FILE;
+  process.env.GOV_STATE_FILE = target;
+  const fresh = await import('./poller.mjs?savestate-inode-test');
+  fresh.saveState({ openAlerts: {}, lastTick: 1 });
+  const after = statSync(target).ino;
+  if (prev === undefined) delete process.env.GOV_STATE_FILE; else process.env.GOV_STATE_FILE = prev;
+  ok('BLOCKER-2: saveState REPLACES the state file (new inode — an atomic rename, not an in-place write)', after !== before, `${before} -> ${after}`);
+  ok('BLOCKER-2: … and the new file holds the state', JSON.parse(readFileSync(target, 'utf8')).lastTick === 1);
+  ok('BLOCKER-2: … and leaves no temp file behind', readdirSync(dir).length === 1, readdirSync(dir).join(','));
+  rmSync(dir, { recursive: true, force: true });
+} else {
+  console.log('  (BLOCKER-2 inode test skipped on win32 — CI runs it on Linux)');
+}
+
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
 

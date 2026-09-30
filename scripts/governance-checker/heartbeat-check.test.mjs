@@ -92,6 +92,37 @@ const only = (intents, key) => intents.filter((i) => i.dedupeKey === key);
   }
 }
 
+// ─── Step 4 BLOCKER-1 — the DIVERGENCE, pinned (Langston, 2026-09-30) ───
+// States the branch-derived enumeration above could not contain: a present-but-non-numeric lastTick and one
+// far in the future. PARENT outcomes MEASURED by running the parent's own checkHeartbeat:
+//   node scripts/governance-checker/heartbeat-differential.mjs 5be9c4c41   (the P29 commit, as rebased)
+// — the parent did not merely stay quiet: with the dead-man alert open it RESOLVED it. The same harness on the
+// fixed code gives the right-hand column, and the 30 states above stayed byte-identical between the two runs.
+{
+  const DIVERGENCE = [
+    ['lastTick-junk/absent', 'none', 'open'],
+    ['lastTick-junk/null', 'none', 'open'],
+    ['lastTick-junk/open', 'resolve', 'none'],
+    ['lastTick-future-far/absent', 'none', 'open'],
+    ['lastTick-future-far/null', 'none', 'open'],
+    ['lastTick-future-far/open', 'resolve', 'none'],
+  ];
+  const TICK = { 'lastTick-junk': 'garbage', 'lastTick-future-far': NOW + 600 * MIN };
+  const H = { absent: {}, null: { [SILENT_KEY]: null }, open: { [SILENT_KEY]: 'hb-open-1' } };
+  for (const [state, parent, fixed] of DIVERGENCE) {
+    const [tick, hb] = state.split('/');
+    const intents = decide({ lastTick: TICK[tick], openAlertIds: H[hb] });
+    const got = intents.length === 0 ? 'none' : intents.map((i) => `${i.action}:${i.dedupeKey}`).join('+');
+    const want = fixed === 'none' ? 'none' : `${fixed}:${SILENT_KEY}`;
+    ok(`DIVERGENCE ${state}: parent ${parent} (measured), fixed ${fixed}`, got === want, `got ${got}`);
+  }
+  ok('BLOCKER-1 pollerSilent: a non-numeric lastTick is silent', pollerSilent('garbage', NOW) === true && pollerSilent(NaN, NOW) === true);
+  ok('BLOCKER-1 pollerSilent: a lastTick 600m in the future is silent', pollerSilent(NOW + 600 * MIN, NOW) === true);
+  ok('BLOCKER-1 pollerSilent: a lastTick 5m in the future (skew) is NOT silent, as before', pollerSilent(NOW + 5 * MIN, NOW) === false);
+  const r = decide({ lastTick: 'garbage' })[0];
+  ok('BLOCKER-1: the reason says the tick is not a time (never "NaNm ago")', r && /not a time/.test(r.reason) && !/NaN/.test(r.reason), r && r.reason);
+}
+
 // ─── the silent-poller leg, stated directly (HY-A11's list) ───
 {
   const edge = TICK_MINUTES * HEARTBEAT_MISS_LIMIT * MIN;
@@ -108,6 +139,19 @@ const only = (intents, key) => intents.filter((i) => i.dedupeKey === key);
   ok('P28 every intent carries dedupeKey, severity, action and a reason',
     [...open, ...res].every((i) => typeof i.dedupeKey === 'string' && typeof i.severity === 'string'
       && (i.action === 'open' || i.action === 'resolve') && typeof i.reason === 'string' && i.reason.length > 0));
+}
+
+// ─── Step 4 G5-1 and G5-2 (Langston, 2026-09-30) ───
+{
+  const d = decideHeartbeat({ ...base, censusEnabled: false, openAlertIds: { [CENSUS_SILENT_KEY]: 'c-open' } }, NOW);
+  ok('G5-1: flag OFF with its alert open → no intent (never resolved by a flip)', only(d.intents, CENSUS_SILENT_KEY).length === 0);
+  ok('G5-1: … and a note naming the key and the disable, for the journal', d.notes.length === 1 && d.notes[0].includes(CENSUS_SILENT_KEY) && /OFF/.test(d.notes[0]), JSON.stringify(d.notes));
+  ok('G5-1: nothing open → no note', decideHeartbeat({ ...base }, NOW).notes.length === 0);
+  const u = heartbeatAlertText({ dedupeKey: CENSUS_SILENT_KEY, severity: 'warning', action: 'open', unreadable: true, reason: 'R-unreadable' }, { nowMs: NOW, lastTick: NOW });
+  ok('G5-2: an unreadable anchor has its own title — no measured age asserted', /UNREADABLE/.test(u.title) && !/no run in over/.test(u.title), u.title);
+  ok('G5-2: … and its body carries the reason', u.body.includes('R-unreadable'));
+  const opened = only(decide({ censusEnabled: true, lastCensusAt: 'x' }), CENSUS_SILENT_KEY)[0];
+  ok('G5-2: the unreadable leg marks its intent unreadable', opened && opened.unreadable === true);
 }
 
 // ─── the census and mistake-pass liveness legs (OBJ-3; §12 P28: the liveness row is `warning`) ───

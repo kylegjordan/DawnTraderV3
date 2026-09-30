@@ -1,0 +1,13 @@
+# B-PLAN-CURRENCY-CHECK Step 4 G5-6(b) — the governance heartbeat reports its OWN failure (OnFailure= hook on
+# governance-checker-heartbeat.service). Modelled on dawntrader-watchdog-failed-notify.service
+# (B-STAGING-LIVENESS-WATCH). One alert per outage: the CLI's --dedupe-key makes the store refuse a repeat
+# while the first is unresolved. If this unit itself cannot run, journald is the floor.
+[Unit]
+Description=Governance heartbeat self-failure alert
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/dawntrader
+ExecStart=/bin/bash -lc 'npm run -s system-alerts -- add --triggers-at "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" --category governance --severity warning --dedupe-key governance-heartbeat-self-fail --title "governance heartbeat FAILED — the checker dead-man watcher is not running" --body "The governance-checker-heartbeat.service run FAILED (systemd OnFailure hook). While it fails, a dead governance checker goes unreported. Check journalctl -u governance-checker-heartbeat.service on staging."'
+TimeoutStartSec=120

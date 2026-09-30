@@ -26,7 +26,7 @@ import {
   UMBRELLA_NOT_IMPLEMENTED, CLASS_OVERRIDE_VALUE,
   EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, EXCEPTIONS_MALFORMED_BID_CAP,
   GOV_REF, PLAN_LINE, DOCS,
-  WEEKLY_CENSUS_ENABLED, MISTAKE_PASS_ENABLED, CENSUS_HOUR_UTC, isoWeek,
+  WEEKLY_CENSUS_ENABLED, MISTAKE_PASS_ENABLED, CENSUS_HOUR_UTC, isoWeek, writeStateAtomic,
 } from './config.mjs';
 import {
   runCensus, censusCounts, censusLists, censusMetadata, censusAlert, tallyMistakes, mistakePassAlert,
@@ -559,17 +559,16 @@ function runCli(cmd) {
 // the fetch-fail streak, and re-open alerts that are already open. What makes a torn file unlikely is
 // the atomic write below, not a catch here.
 function loadState() { return existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : { openAlerts: {}, lastTick: null }; }
-function saveState(s) { writeStateAtomic(STATE_FILE, s); }
+// Exported for its own test (Step 4 BLOCKER-2): only this wrapper decides WHICH writer the poller's state uses.
+export function saveState(s) { writeStateAtomic(STATE_FILE, s); }
 // P64 (§10e Q20; §10i): write the whole JSON to a temp file in the SAME directory as the target, then
 // rename() it over the target. A rename within one directory (one filesystem) replaces the target in a
 // single step, so a crash or a failure between the write and the rename leaves the previous complete
 // state in place, and a reader (this tick's next run, or the heartbeat) never sees a half-written file.
 // Nothing is caught: a failed write or rename throws out of the tick (fail-closed, as above).
-export function writeStateAtomic(path, s) {
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(s, null, 2));
-  renameSync(tmp, path);
-}
+// The writer itself moved to config.mjs (Step 4 G5-6(a)) so the heartbeat uses the same one; re-exported
+// here because the tests import it from this module.
+export { writeStateAtomic };
 
 // B-GOV-3 OBJ-2: SHADOW = LOG-ONLY. In shadow mode the sink writes the intended alert to a
 // local log and NEVER touches the §10.5 queue. Why at the SINK (the producer), not the §10.5

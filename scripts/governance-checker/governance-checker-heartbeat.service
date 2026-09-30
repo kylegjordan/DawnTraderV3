@@ -4,6 +4,10 @@
 Description=B-GOV-2 governance-checker dead-man heartbeat (is the checker alive?)
 After=network-online.target
 Wants=network-online.target
+# B-PLAN-CURRENCY-CHECK Step 4 G5-6(b) (Langston, 2026-09-30): the dead-man watcher's OWN death had no reader —
+# no OnFailure= here, and a failed unit on this box reaches nobody (token-watch-followup.service sat `failed`
+# unnoticed on 2026-09-30). The weekly flags must not flip before this lands.
+OnFailure=governance-checker-heartbeat-failed-notify.service
 
 [Service]
 Type=oneshot

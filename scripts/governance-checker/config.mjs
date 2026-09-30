@@ -9,6 +9,8 @@
 //    code-push discipline is ~100% (pre-audit §1.b.i).
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { openSync, writeFileSync, fsyncSync, closeSync, renameSync } from 'node:fs';
+
 // Ordered most-specific → least-specific so the first match wins (sub-batch before batch).
 export const BATCH_ID_PATTERNS = [
   /\bP\d{1,3}-B\d+(?:\.\d+)?[a-z]?\b/,      // P19-B6, P19-B6.5a  (phase-scoped batch + sub-batch)
@@ -407,4 +409,20 @@ export function isoWeek(ms) {
   const week1Monday = jan4 - ((new Date(jan4).getUTCDay() + 6) % 7) * DAY_MS;
   const week = Math.floor((thursday - week1Monday) / (7 * DAY_MS)) + 1;
   return `${weekYear}-W${String(week).padStart(2, '0')}`;
+}
+
+// ── THE ATOMIC STATE WRITER (B-PLAN-CURRENCY-CHECK P64; Step 4 G5-6(a), Langston 2026-09-30) ──────────────
+// ONE home, here, because BOTH processes already import this file: the poller (its state file) and the
+// heartbeat (HB_STATE). Before G5-6(a) the heartbeat wrote HB_STATE with a plain writeFileSync, so a torn
+// file threw on every run — fail-closed, but its unit has no reader of its own death (see the OnFailure
+// unit). Write the whole JSON to a temp file in the SAME directory, fsync it, then rename() it over the
+// target: a rename within one directory replaces the target in one step, and the fsync first means a HOST
+// crash cannot commit the rename with the data still unwritten (Langston's #448 standard: temp + fsync +
+// atomic rename). The pid in the temp name removes the shared-temp-name class if two writers ever overlap.
+// Nothing is caught: a failed write or rename throws (fail-closed).
+export function writeStateAtomic(path, s) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  const fd = openSync(tmp, 'w');
+  try { writeFileSync(fd, JSON.stringify(s, null, 2)); fsyncSync(fd); } finally { closeSync(fd); }
+  renameSync(tmp, path);
 }
