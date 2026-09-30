@@ -1,4 +1,5 @@
 -- Rollback for 2026-09-29-f-g-1-ohlc-arrived-at.sql (F-G-1 reopen P3, #1031).
+-- ⚠️ For the 10-02 release, the release plan's rollback order governs (pm2 stop → rollbacks → redeploy), which makes "code first" moot: `Change Lists/RELEASE_DEPLOY_2026-10-02_PREP.md` §4.
 -- ⚠️ Revert the CODE first: the batch writer inserts `arrived_at` on every flush and its upsert
 -- guard reads it, so dropping the column under the running code fails every OHLC flush — and a
 -- missing column is classified PERMANENT, so those rows are DROPPED (the #704 shape).
