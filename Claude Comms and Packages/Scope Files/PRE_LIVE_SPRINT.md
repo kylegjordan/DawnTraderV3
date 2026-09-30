@@ -16,7 +16,7 @@
 | 6. Live-mode readiness — the live engine, risk controls on real money, security, the key, the environment | 48 |
 | 7. The evidence — trading profitably and consistently in paper | 3 |
 
-> ⛔ **HAND-MAINTAINED SINCE 2026-09-29 — EDIT THIS FILE DIRECTLY; DO NOT RE-RUN `scripts/inventory/`** (Langston ruling 2026-09-29). It was first BUILT from `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) by `scripts/inventory/sort.py`, with the working order from `order.py` and Kyle's decisions in `kyle_decisions.json`; those scripts are now history. Re-running `sort.py` would overwrite this file and silently drop every edit made by hand since (three sessions' edits so far). The working plan is `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, also hand-maintained. ⚠️ A green `order.py` coverage run grades the frozen `push_keys.json`, not this list, so it is not evidence the plan is complete. Making the scripts refuse to write is folded into sprint row 1 `B-PLAN-CURRENCY-CHECK` (CC-A).
+> ⛔ **HAND-MAINTAINED SINCE 2026-09-29 — EDIT THIS FILE DIRECTLY; DO NOT RE-RUN `scripts/inventory/`** (Langston ruling 2026-09-29). It was first BUILT from `PRE_LIVE_INVENTORY_DRAFT.md` (Langston-approved r8) by `scripts/inventory/sort.py`, with the working order from `order.py` and Kyle's decisions in `kyle_decisions.json`; those scripts are now history. Re-running `sort.py` would overwrite this file and silently drop every edit made by hand since (three sessions' edits so far). The working plan is `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, also hand-maintained. ⚠️ A green `order.py` coverage run grades the frozen `push_keys.json`, not this list, so it is not evidence the plan is complete. Making the scripts refuse to write is sprint row 1c `B-INVENTORY-SCRIPT-ROOT-REDIRECT` (CC-A, `#1119`): every script there takes its repo root from the environment and fails closed when unset. Row 1 `B-PLAN-CURRENCY-CHECK` deletes `plan_doc.py`, `sort.py`, `order.py` and `push_keys.json` and does not discharge it (Langston, 2026-09-30).
 
 ## THE WORKING ORDER
 
@@ -458,7 +458,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - B-OBS-WINDOW-EVIDENCE-CAPTURE (CC-C) — capture observation-window evidence at the event — measurement quality
 - B-PRICE-DOC-CONSOLIDATE (Kyle) — merge two price documents into one — Kyle wants it done, but it is documentation
 - B-QUOTE-PEG-DEVIATION-WATCH (CC-C) — watch for quote-peg deviation; its row says it gates nothing
-- B-SLOT-PLACEMENT-CHECK (CC-A) — Kyle's own ask: a newly slotted item reaches the plan and the owning task list at the moment it is slotted — the failure this inventory is repairing by hand
+- B-SLOT-PLACEMENT-CHECK (CC-A) — Kyle's own ask: a newly slotted item reaches the plan and the owning task list at the moment it is slotted — the failure this inventory is repairing by hand ➕ **Also carries (Langston, `B-PLAN-CURRENCY-CHECK` Step-2 part 3, 2026-09-30): the session task lists are DERIVED views of the plan, and their refresh trigger is stated and homed here** — three ownership copies with two drifting (the reconcile found 18 CC-C and 2 CC-A task-list divergences) is how a fourth number appears.
 - B-STORAGE-CATALOG (CC-A) — unmanaged app-local file store
 - B-TOKEN-WATCH Steps 7-11 (Infra Claude) — research feed paused at Step 7; no trading link
 - B-TSC-BASELINE-TS2345-AUDIT (CC-B) — 32 suppressed type errors in the routes file, one tied to the balance
