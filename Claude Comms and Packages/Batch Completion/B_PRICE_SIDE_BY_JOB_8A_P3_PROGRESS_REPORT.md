@@ -451,3 +451,85 @@ CHANGE-CLASS: architecture
 ### 9.5 THE HELD DEPLOY CARRIES TWO BATCHES, AND EACH NAMES THE OTHER'S FILES (CC-C, 2026-09-26; Langston's Step-4 note on `3n.l`)
 - **Staging is on `bc199185e`.** The next deploy carries `3n.q8` `B-BOOK-STATE-RESTART-DURABLE` (`book-state-ring-store.ts`, `book-state-tracker.ts`, `server/index.ts`, `shared/schema.ts`, its migration, plus comment-only `storage.ts`) AND `3n.l` `B-REST-SIDES-TO-CACHE` increment 1 (`kraken-symbol-map.ts`, `price-cache.ts`, `market-data/rest-write-keys.ts`). **Each batch's Step 7 and Step 8 names the other batch's files and excludes them by mechanism, never by assuming them inert.**
 - **The drift rungs (`93480f03`, `5d6b67cf`, `d9caf6f5`) are NOT hand-resolved and the drift run is NOT hand-triggered** (Langston, 21:23Z). After the deploy, the next UNATTENDED hourly `dt-deploy-drift.sh` run clears them through `clear_open_rows()` (`:477`, called from the `ZERO`, `NO_RUNTIME_PATHS` and `BELOW_FLOOR` exits), which names the discharging condition. **A rung that survives two consecutive unattended post-deploy runs is a finding against `#1021`'s repair, taken to Langston.**
+
+### 9.6 THE WINDOW CLOSED — RULES A-D READ AS PRE-REGISTERED (CC-C, extracted 2026-09-30 00:01:00Z; the buckets were read for the first time here)
+**Extract (§9.1 range `2026-09-22T14:38:49.748Z` → `2026-09-30T00:00:00.000Z`, per-line timestamp cut):** nine archives named `error__2026-09-22` … `error__2026-09-30` plus the live `error.log`. `error__2026-09-22` (it holds 09-21) returned **0** instrument lines (negative control); the live file's **220** lines are all after 00:00Z and excluded; 0 unparsed timestamps. First line 14:39:53Z, last 23:59:11Z. **No restart and no build change in the window** (`restart_time` 627 and `pm_uptime` 2026-09-22T14:38:49.748Z unchanged, `dist/BUILD_SHA` = `bc199185e`), and the per-pass `regular` looks equal the per-symbol roll-up's on both lanes (vts 284,105 = 284,105; shadow 203,607 = 203,607) — no partial hours lost. Script: `p4c_extract.py` (fixture-tested on a synthetic file before the close; every rule hand-checked).
+**Fault rules — clean.** `ageUnknown` = **0** in every session on both lanes; `regular` looks > 0; `noRow` > 0 in `regular` (vts 1,250, shadow 706). **Langston's §9.1 rider (1) is now discharged by exercise:** `noRow` and every non-`regular` label (pre, after, overnight, weekend) carry live counts.
+**Symbol floor — clears on both lanes.** `regular` symbols with ≥ 120 looks: **vts 308 of 346**, **shadow 295 of 336** (floor: ≥ 50).
+
+| rule | `lane=vts` | `lane=shadow` |
+|---|---|---|
+| **B — `regular` age-refusal share** at 15 / 30 / 60 / 120 / 300 s | 2.32% / 1.47% / 1.09% / **0.76%** / 0.44% | 1.91% / 1.19% / **0.86%** / 0.59% / 0.35% |
+| **B — `c*`** (smallest ≤ 1%) | **120 s** | **60 s** |
+| **A — K** (floor symbols with own union share > 50% at `c*`) | **0** | **0** |
+| **A — U** (union refusal share of `regular` looks at `c*`) | **1.76%** (floor symbols only: 1.72%) | **1.47%** (1.46%) |
+| **A — verdict** | **K ≤ 2 and U ≤ 5% ⇒ the STATELESS guard** | **the STATELESS guard** |
+
+**Beside rule B (§B4, free):** the paper lane's entry ceiling is 15 s (`xstock_fill_safety.active_fill_max_age_ms`); **39** `xStock active fill blocked — stale price` alerts were minted inside the window (105 all-time).
+**Rule A, both lanes:** build the stateless guard — the age ceiling `c*`, the 1.11% spread ceiling (re-derived at build from the then-current p10 stop distance), and the shared usable-side predicate. **The lanes differ only in `c*` (vts 120 s, shadow 60 s), so increment 3's Step 2 carries both and says why** (FINDING-4).
+**Rule C (descriptive; off-hours is accepted by design, Kyle 2026-09-03, `#994`):** union refusal share at `c*` — vts pre 61.3% · after 47.4% · overnight 64.2%; shadow pre 63.8% · after 52.2% · overnight 65.7%. Logged, never notified; a `regular`-hours streak notifies.
+**Rule D (descriptive; `bidFiresStop` is a LOWER BOUND — static stop; the 20:00 ET edge binds only this rule):**
+
+| session | vts `bidFiresStop` | vts `lastFiresTarget` | shadow `bidFiresStop` | shadow `lastFiresTarget` |
+|---|---|---|---|---|
+| regular | 2,020 / 284,105 (0.71%) | 98 (0.034%) | 1,512 / 203,607 (0.74%) | 60 (0.029%) |
+| pre | 28,835 / 205,671 (14.0%) | 18 | 20,890 / 126,976 (16.5%) | 13 |
+| after | 17,232 / 211,691 (8.1%) | 25 | 15,129 / 163,326 (9.3%) | 67 |
+| overnight | 29,477 / 333,929 (8.8%) | 13 | 19,195 / 208,775 (9.2%) | 7 |
+
+**Resting entries (real lane):** 2,124 pending looks (regular 44, after 78, overnight 1, weekend 2,001); `askAtOrBelow` 0 and `lastAtOrBelow` 0 — no resting entry would have filled by either rule in the window. The shadow lane rests none.
+**What follows (plan §C):** increment 2 (X0), then increment 3 — the stateless guard per lane — each through its own Step 2. The results are recorded here BEFORE increment 2, as the plan requires.
+
+### 9.7 THE RULE-8 ENUMERATION AT THE WINDOW CLOSE (CC-C, 2026-09-30; `ADJUSTMENT_FRAMEWORK` calibration-epoch rule 8, Classes A and B)
+Population: `exit_decision_archive`, `mode = 'vts'`, `exit_reason = 'time_stop'`, `trade_id NOT LIKE 'vts_xstock_spot_%'`, 2026-09-15T11:59:22Z → 2026-09-30T00:00:00Z, keyed by `trade_id` (45 distinct; xStock control 53). Discriminator per rule 8: the booked price against the nearest `crypto_spot_ticker_snap` frame within 60 s — equal to the bid and to neither other side ⇒ non-member; Class B ⟺ exit = entry; instant captures settle KII, FOLD, ETH/GBP and EGLD. Direction of an undetermined row = the booked price against the nearest frame's bid (its gap is shown), UNKNOWN with no frame.
+**45 crypto VTS `time_stop` closes, 2026-09-15T11:59:22Z to 2026-09-30T00:00:00Z** - members 1 (all Class B) / non-members 6 / undetermined 38.
+
+| closed (UTC) | symbol | bucket | why | direction if a member |
+|---|---|---|---|---|
+| 09-15 23:40:07.871 | VVV/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-15 23:40:07.970 | VVV/USD | NON-MEMBER | the bid alone (before 24.5 s) | - |
+| 09-19 02:50:09.898 | MET/USD | UNDETERMINED | no frame within 60 s | UNDERSTATED vs bid 0.268 (1556.7 s) |
+| 09-22 16:49:53.628 | KII/USD | NON-MEMBER | capture: booked the bid | - |
+| 09-22 21:21:53.984 | ALIGN/USD | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-23 22:40:56.224 | FOLD/USD | NON-MEMBER | capture: not the mark | - |
+| 09-24 00:58:56.368 | DASH/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-24 01:50:56.416 | DASH/USD | UNDETERMINED | frame 50.6 s before: not the bid alone | UNDERSTATED vs bid 57.186 (50.6 s) |
+| 09-24 02:50:56.442 | TRAC/USD | UNDETERMINED | no frame within 60 s | OVERSTATED vs bid 0.3666 (97.1 s) |
+| 09-24 03:36:56.465 | ZEC/USD | UNDETERMINED | frame 3.3 s before: not the bid alone | OVERSTATED vs bid 1499.9 (3.3 s) |
+| 09-25 01:33:59.125 | CFG/USD | UNDETERMINED | frame 33.7 s after: not the bid alone | UNDERSTATED vs bid 0.1489 (33.7 s) |
+| 09-25 02:34:59.144 | WLD/USD | NON-MEMBER | the bid alone (after 4.4 s) | - |
+| 09-25 03:20:59.165 | CRV/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-25 03:20:59.197 | CRV/USD | UNDETERMINED | frame 23.9 s before: not the bid alone | OVERSTATED vs bid 0.34154 (23.9 s) |
+| 09-25 03:23:59.153 | ARB/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-25 05:16:59.210 | NPC/USD | UNDETERMINED | frame 8.4 s after: not the bid alone | OVERSTATED vs bid 0.022038 (8.4 s) |
+| 09-25 10:59:59.423 | SKY/USD | UNDETERMINED | frame 2.3 s before: not the bid alone | OVERSTATED vs bid 0.07446 (2.3 s) |
+| 09-25 13:24:59.837 | NIGHT/USD | UNDETERMINED | frame 15.0 s after: not the bid alone | OVERSTATED vs bid 0.0246 (15.0 s) |
+| 09-25 17:55:01.051 | EIGEN/USD | UNDETERMINED | no frame within 60 s | OVERSTATED vs bid 0.2451 (94.8 s) |
+| 09-26 00:11:01.432 | AVL/USD | UNDETERMINED | no frame within 60 s | UNDERSTATED vs bid 0.024749 (458.4 s) |
+| 09-26 03:17:01.677 | PIEVERSE/USD | UNDETERMINED | no frame within 60 s | UNDERSTATED vs bid 1.5815 (180.2 s) |
+| 09-26 07:01:01.776 | XTZ/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-26 07:41:01.947 | POL/USD | NON-MEMBER | the bid alone (before 3.7 s) | - |
+| 09-26 08:35:02.083 | AR/USD | UNDETERMINED | frame 44.1 s before: not the bid alone | AT BID vs bid 4.612 (44.1 s) |
+| 09-26 09:04:02.102 | EGLD/USD | MEMBER B | capture; exit = entry | OVERSTATED (+0.03) |
+| 09-26 14:37:02.503 | XTZ/USD | UNDETERMINED | no frame within 60 s | UNDERSTATED vs bid 0.3288 (66.5 s) |
+| 09-26 19:04:02.835 | INJ/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-26 19:04:02.875 | ZAMA/USD | UNDETERMINED | no frame within 60 s | OVERSTATED vs bid 0.08931 (93.5 s) |
+| 09-26 19:24:02.844 | INJ/USD | UNDETERMINED | frame 2.6 s after: not the bid alone | AT BID vs bid 7.65 (2.6 s) |
+| 09-27 01:55:03.321 | ZBCN/USD | UNDETERMINED | frame 31.6 s after: not the bid alone | UNDERSTATED vs bid 0.002105 (31.6 s) |
+| 09-27 03:37:03.559 | MORPHO/USD | UNDETERMINED | frame 34.9 s before: not the bid alone | UNDERSTATED vs bid 2.76397 (34.9 s) |
+| 09-27 13:19:04.324 | ALGO/USDT | UNDETERMINED | no frame within 60 s | OVERSTATED vs bid 0.11586 (268.7 s) |
+| 09-27 18:36:05.357 | AKE/USD | UNDETERMINED | frame 2.3 s after: not the bid alone | OVERSTATED vs bid 0.0322292 (2.3 s) |
+| 09-27 20:09:05.474 | S/USD | UNDETERMINED | no frame within 60 s | AT BID vs bid 0.0404 (139.6 s) |
+| 09-28 01:47:05.668 | PTB/USD | UNDETERMINED | no frame within 60 s | OVERSTATED vs bid 0.000963 (137.5 s) |
+| 09-28 03:46:06.078 | MINA/USD | UNDETERMINED | frame 52.5 s after: not the bid alone | OVERSTATED vs bid 0.14007 (52.5 s) |
+| 09-28 09:29:07.242 | BTC/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-28 09:35:07.252 | ETH/GBP | NON-MEMBER | capture: bid arm | - |
+| 09-28 09:50:07.195 | ETH/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-28 09:55:07.184 | BTC/AUD | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-28 17:36:08.287 | CHIP/USD | UNDETERMINED | no frame within 60 s | UNDERSTATED vs bid 0.04392 (334.2 s) |
+| 09-28 19:16:09.319 | VET/USD | UNDETERMINED | frame 42.8 s after: not the bid alone | UNDERSTATED vs bid 0.008788 (42.8 s) |
+| 09-28 20:30:08.558 | DGAI/USD | UNDETERMINED | no frame within 60 s | OVERSTATED vs bid 1.00922 (196.9 s) |
+| 09-29 00:27:08.933 | WIF/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+| 09-29 08:38:10.012 | XRP/EUR | UNDETERMINED | no frame (non-USD pair or archiver gap) | UNKNOWN |
+
+Undetermined, direction if members: {'UNKNOWN': 12, 'UNDERSTATED': 10, 'OVERSTATED': 13, 'AT': 3}
