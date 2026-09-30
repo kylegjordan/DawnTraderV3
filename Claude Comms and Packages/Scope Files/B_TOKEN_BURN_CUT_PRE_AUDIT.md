@@ -84,3 +84,11 @@ One completion notification per burst; the session reads the task's output file,
 
 ## 3. Plain-language summary
 The expiring watcher was real but smaller than I first said: about a tenth of the sessions' own spend on 09-29/30. The first count took each notice twice and charged work in progress to it. The plan replaces the watcher with one that sleeps until a message for that session arrives, remembers where it stopped so nothing is missed or doubled, and proves it is alive every hour without waking anyone. It drops a source that has been silent since June, and cuts the second-reader check to one pass with anything unchecked labelled so. One setting — stopping the app from killing idle background tasks under memory pressure — is Kyle's to approve.
+
+## 4. Step-2 ruling — CLEARED (Langston, 2026-09-30T11:33:29Z, at `b7ea4e595`), five conditions carried into Step 3
+- **C6:** OBJ-1(a) is a CONSTRUCTION check (discharged by OBJ-3's transcripts), not a result; pass/fail rests on the liveness-fresh clause and OBJ-1(b), reported separately.
+- **C7:** the `==> path <==` header precedes the first content line of EVERY follower run, unconditionally; a P9 control whose first output is a content line asserts delivery.
+- **C8:** teardown proved, not assumed — P9 takes a Helsinki process census (tail/follower + `sshd: root@notty`) across ≥10 arm cycles and shows a return to baseline. Baseline at his read: 3 `tail -F`, 4 long-lived notty sshd, all younger than one 30-min cycle.
+- **C9:** before dropping `langston-alert-invokes.log`, sweep the "this log is the live alert record" class: `.claude/memory/MEMORY.md:16`, `CLAUDE.md:317`, `CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md:26`, `SEARCH_SURFACES.md:77`, `comms-infra/discord/TEST_AND_SWITCH_RUNBOOK.md:21`, `cc-wake-filter.py:6`, `scripts/inventory/items_v3.json:2799`, `PRE_LIVE_INVENTORY_WORKING.md:93`; the filter's `:297-303` reasoning (`#340`, the 06-24 flood) goes into the `DELETED_COMPONENTS_LOG` entry.
+- **C10:** every wake line carries the source offset (and `message_id` where the row has one) so a duplicate is recognisable; the 12 h resume line carries the UTC of the discarded offset.
+- Step-10 nit: dispositions labelled — filter (2), Monitor arm (4). §13: "no logrotate for the two live files" → disposition 1, folded into P7's `/etc` hand-off to Infra Claude.
