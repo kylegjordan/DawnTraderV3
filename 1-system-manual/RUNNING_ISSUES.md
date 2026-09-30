@@ -4763,7 +4763,7 @@ if (!state.targetLatched && !targetLockDiscontinuity.active) {
 ⛔ **AND PRIORITISING IT WOULD NOT HAVE FIXED IT SOONER ANYWAY** — the decisive record (`EXIT_TRIGGER`) is gone and cannot be recovered, so ANY version of this work starts by capturing evidence going forward and then WAITING for the next occurrence (~3 days). **Urgency buys nothing here; an instrument does.**
 
 **RESCHEDULED: after B-MISTAKES-FILE closes and after the `CLAUDE.md` slim + skills build. Owner CC-A.**
-★★ **THE TRIPWIRE — SO THE DEFERRAL IS A MECHANISM, NOT AN INTENTION (§9.4, and the lesson of this very batch):** the check rides the **already-scheduled weekly mistake-pattern pass** (alert `8a07c40b`) — **no new scheduled job, no new token cost.** The pass runs:
+★★ **THE TRIPWIRE — SO THE DEFERRAL IS A MECHANISM, NOT AN INTENTION (§9.4, and the lesson of this very batch):** the check rides the **already-scheduled weekly mistake-pattern pass** (alert `8a07c40b`) — **no new scheduled job, no new token cost.** ⚠️ **MECHANISM CHANGED 2026-09-30 (`B-PLAN-CURRENCY-CHECK` P49): that pass stopped firing after 2026-09-03 and `8a07c40b`'s self-chaining is replaced by the governance checker's weekly gate `gov-mistakepass:<YYYY-Www>` (OBJ-4), dormant until `MISTAKE_PASS_ENABLED` flips at P62. This tripwire rides THAT pass; `8a07c40b` resolves on the first `gov-mistakepass` row.** The pass runs:
 ```sql
 select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
  where close_reason = 'trailing_stop_hit'
