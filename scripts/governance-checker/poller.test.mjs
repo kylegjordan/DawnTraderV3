@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence } from './poller.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF, PLAN_LINE } from './config.mjs';
-import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt } from './checker.mjs';
+import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt, planRowsByBatch, statusIsDefault, cellNamesFile, checkPlanState, findGlobDoc } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse('2026-06-17T12:00:00Z');
@@ -965,6 +965,128 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
     ![...Object.keys(DOCS), ...Object.keys(LEDGER_ROWS)].includes(PLAN_LINE.naKey));
   ok('P32 no sinceMs (re-cut: a state check has no first-add gate)', !('sinceMs' in PLAN_LINE));
   ok('C′ the §5 header carries the report column', PLAN_LINE.s5Header === '| item | owner | closes | report |');
+}
+
+// ── B-PLAN-CURRENCY-CHECK P33: planRowsByBatch — the plan-row parser and the exported join (re-cut §1.2) ──
+// A synthetic plan in the live plan's shape: a §0 table and a §6 table that must never be read, two §4 wave
+// tables, and the §5 table with its C′ report column. Expected first, per case below. Planted faults run before
+// trusting the pass: dropping the §4 header-equality check (throw on a mismatched wave header) fails the
+// "one of the wave headers differs" case; reading §6 as §5 fails the "§0/§6 never classified" case; a §4 width
+// of 8 fails the malformed case.
+const H4 = PLAN_LINE.s4Header, H5 = PLAN_LINE.s5Header;
+const SEP4 = '|---|---|---|---|---|---|---|', SEP5 = '|---|---|---|---|';
+const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } = {}) => [
+  '# Sprint', '', '## 0. Clear the plates first', '', '| session | item | batch | owner |', '|---|---|---|---|',
+  '| 1 | B-ZERO | B-ZERO | CC-A |', '', '## 4. The plan', '', '### Wave A', '', H4, SEP4,
+  '| 1 | Plan checker | B-PLAN-X | CC-A (Old Claude) | QUEUED | — | the first row |',
+  '| 6 | a pointer | plan row 6 | CC-B | QUEUED | — | x |',
+  '| 7 | T-W20C-SCALAR-LEG | — batch named at Step 1 | CC-B | QUEUED | — | item-cell-only id |',
+  ...s4a, '', '### Wave B', '', waveB, SEP4,
+  '| 9 | **B-BOLD** | `B-BOLD` | CC-C | **QUEUED** | — | marked-up id |',
+  ...s4b, '', '## 5. Running now — observation windows', '', ...s5, SEP5,
+  '| B-WIN | CC-B | 2026-10-10 | — |', ...s5rows, '',
+  '## 6. Who owns what', '', '| session | item | owner | closes |', '|---|---|---|---|', '| CC-A | B-SIX | x | y |', '',
+].join('\n');
+{
+  const j = planRowsByBatch(planFixture());
+  ok('P33 a §4 row with its id in the batch cell joins by that id', j.rows.get('B-PLAN-X')?.s4.length === 1 && j.rows.get('B-PLAN-X').s4[0].rowNo === '1');
+  ok('P33 a §4 row keeps its status, report and line number', j.rows.get('B-PLAN-X')?.s4[0].status === 'QUEUED' && j.rows.get('B-PLAN-X').s4[0].report === '—' && j.rows.get('B-PLAN-X').s4[0].lineNo === 15);
+  ok('P33 `plan row 6` has no id (unparsed)', j.unparsed.some((r) => r.rowNo === '6' && r.id === null));
+  ok('P33 an item-cell-only id (the 107/120 shape) has no id (unparsed)', j.unparsed.some((r) => r.rowNo === '7') && !j.rows.has('T-W20C-SCALAR-LEG'));
+  ok('P33 a marked-up batch cell (**B-BOLD**, `B-BOLD`) is de-marked before the id is read', j.rows.get('B-BOLD')?.s4.length === 1);
+  ok('P33 §0 and §6 lines are never classified', !j.rows.has('B-ZERO') && !j.rows.has('B-SIX') && !j.unparsed.some((r) => r.lineNo < 9 || r.lineNo > 30));
+  ok('P33 the §5 row joins by its item cell, with its closes and report cells', j.rows.get('B-WIN')?.s5.length === 1 && j.rows.get('B-WIN').s5[0].closes === '2026-10-10' && j.rows.get('B-WIN').s5[0].report === '—');
+  ok('P33 counts: rows4 = every 7-cell numbered §4 row, rows5 = every §5 row', j.rows4 === 4 && j.rows5 === 1, `${j.rows4}/${j.rows5}`);
+  ok('P33 no malformed rows in a clean plan', j.malformed.length === 0);
+  const m = planRowsByBatch(planFixture({ s4b: ['| 138a | Decide | B-PATTERN-SIZE-CAP-REVIEW | CC-C | DONE | — | SUPERSEDED: | stray |'] }));
+  ok('P33 an 8-cell numbered row (the 138a shape) → malformed with its line number and cell count, not a row',
+    m.malformed.length === 1 && m.malformed[0].section === 4 && m.malformed[0].rowNo === '138a' && m.malformed[0].cellCount === 8
+      && m.malformed[0].lineNo === 24 && !m.rows.has('B-PATTERN-SIZE-CAP-REVIEW'), JSON.stringify(m.malformed));
+  const m5 = planRowsByBatch(planFixture({ s5rows: ['| B-OLD | CC-A | 2026-10-02 |'] }));
+  ok('P33 a 3-cell line under the 4-cell §5 header (the pre-C′ shape) → malformed §5, rowNo null',
+    m5.malformed.length === 1 && m5.malformed[0].section === 5 && m5.malformed[0].rowNo === null && m5.malformed[0].cellCount === 3 && !m5.rows.has('B-OLD'));
+  const throws = (text) => { try { planRowsByBatch(text); return null; } catch (e) { return e.message; } };
+  ok('P33 all wave headers exact → no throw', throws(planFixture()) === null);
+  const wb = throws(planFixture({ waveB: '| # | item | batch / reference | owner | status | report | note | extra |' }));
+  ok('P33 ONE of the §4 wave headers with an extra column → throws, naming its line', wb !== null && /line\(s\) 21/.test(wb), wb);
+  ok('P33 no §4 header → throws', throws(planFixture().split('\n').filter((l) => l !== H4).join('\n')) !== null);
+  ok('P33 no §5 header → throws', /appears 0 times/.test(throws(planFixture({ s5: [] })) || ''));
+  ok('P33 the pre-C′ §5 header alone (a lone header edit) → throws', /appears 0 times/.test(throws(planFixture({ s5: ['| item | owner | closes |'] })) || ''));
+  ok('P33 two §5 headers → throws', /appears 2 times/.test(throws(planFixture({ s5: [H5, SEP5, H5] })) || ''));
+  ok('P33 empty text → throws; null → throws', throws('') !== null && throws('   \n') !== null && throws(null) !== null);
+  const crlf = planRowsByBatch(planFixture().replace(/\n/g, '\r\n'));
+  ok('P33 CRLF line endings parse the same', crlf.rows.get('B-PLAN-X')?.s4[0].lineNo === 15 && crlf.rows4 === 4);
+}
+
+// ── P34: the status and report tests (re-cut §1.4, with Langston §10g N6's case-insensitive prefix) ──
+// Expected first; planted faults: an exact `=== 'QUEUED'` status test fails the prefix and lower-case cases;
+// dropping the `(?!\.[A-Za-z0-9_-])` guard fails the .bak/.md.2 cases; a `.` in the right boundary class fails
+// the sentence-dot passes.
+{
+  const X = 'B_X_COMPLETION_REPORT.md';
+  const st = [
+    ['QUEUED', true], ['**QUEUED**', true], ['`QUEUED`', true], ['', true], ['—', true], ['–', true], ['-', true],
+    ['— —', true], ['   ', true], ['\u00a0', true], ['\u00a0\u00a0', true],
+    ["QUEUED — next in CC-A's list", true], ['queued', true], ['Queued (Kyle)', true],
+    ['DONE — decided', false], ['BUILT — deploy after 2026-09-30', false], ['QUEUEDX', false], ['IN FLIGHT — Step 7', false],
+  ];
+  for (const [cell, want] of st) ok(`P34 statusIsDefault(${JSON.stringify(cell)}) === ${want}`, statusIsDefault(cell) === want);
+  const rp = [
+    ['`Claude Comms and Packages/Batch Completion/B_X_COMPLETION_REPORT.md`', true], ['`Batch Completion/B_X_COMPLETION_REPORT.md`', true],
+    [X, true], ['[report](../Claude Comms and Packages/Batch Completion/B_X_COMPLETION_REPORT.md)', true],
+    ['report: `B_X_COMPLETION_REPORT.md`.', true], ['B_X_COMPLETION_REPORT.md.', true],
+    ['**`Batch Completion/B_X_COMPLETION_REPORT.md`.**', true], ['B_X_COMPLETION_REPORT.md. Closed.', true],
+    ['—', false], ['B_X_PROGRESS_REPORT.md', false], ['OLD_B_X_COMPLETION_REPORT.md', false], ['B_X_COMPLETION_REPORT.md.bak', false],
+    ['B_X_COMPLETION_REPORT.md.2', false], ['B_X_COMPLETION_REPORT.md_x', false], ['B_X_COMPLETION_REPORT', false],
+  ];
+  for (const [cell, want] of rp) ok(`P34 cellNamesFile(${JSON.stringify(cell)}) === ${want}`, cellNamesFile(cell, X) === want);
+}
+
+// ── P34: checkPlanState — graded once there is a report and the id is in the plan; per section 0/1/2+ rows ──
+{
+  const R = (bid) => `${bid.replace(/-/g, '_')}_COMPLETION_REPORT.md`;
+  const reportsFor = (have) => (bid) => (have.includes(bid) ? [R(bid)] : []);
+  const legOf = (res, bid, leg) => res.legs.find((l) => l.bid === bid && l.leg === leg);
+  const s4row = (no, bid, status, report) => `| ${no} | item | ${bid} | CC-A | ${status} | ${report} | note |`;
+  const s5row = (bid, report) => `| ${bid} | CC-B | 2026-10-10 | ${report} |`;
+  const run = (opts, have) => checkPlanState(planRowsByBatch(planFixture(opts)), reportsFor(have));
+  const q = run({}, ['B-PLAN-X']);
+  ok('P34 one row QUEUED / — → s4 FAIL on both tests', legOf(q, 'B-PLAN-X', 's4')?.fail === true && legOf(q, 'B-PLAN-X', 's4').why.join('+') === 'status+report');
+  ok('P34 a graded id with no §5 line has no s5 leg (not required)', !legOf(q, 'B-PLAN-X', 's5') && q.legs.length === 1);
+  ok('P34 an id with no completion report is not graded (no legs)', !q.graded.includes('B-BOLD') && !legOf(q, 'B-BOLD', 's4'));
+  const done = run({ s4a: [s4row('2', 'B-DONE', 'DONE — x', `\`Batch Completion/${R('B-DONE')}\``)] }, ['B-DONE']);
+  ok('P34 DONE — x + the report named → s4 PASS', legOf(done, 'B-DONE', 's4')?.fail === false && legOf(done, 'B-DONE', 's4').why.length === 0);
+  const qn = run({ s4a: [s4row('2', 'B-QN', 'QUEUED — next in the list', R('B-QN'))] }, ['B-QN']);
+  ok('P34 `QUEUED — next …` + the report named → s4 FAIL on the status test only (N6: /^queued\\b/i)',
+    legOf(qn, 'B-QN', 's4')?.fail === true && legOf(qn, 'B-QN', 's4').why.join('+') === 'status');
+  const built = run({ s4a: [s4row('2', 'B-BUILT', 'BUILT — deploy after 2026-09-30', '—')] }, ['B-BUILT']);
+  ok('P34 BUILT — … + — → s4 FAIL on the report test only', legOf(built, 'B-BUILT', 's4')?.why.join('+') === 'report');
+  const amb = run({ s4a: [s4row('2', 'B-AMB', 'DONE', R('B-AMB'))], s4b: [s4row('36', 'B-AMB', 'DONE', R('B-AMB'))] }, ['B-AMB']);
+  const al = legOf(amb, 'B-AMB', 's4');
+  ok('P34 an id in two §4 rows → s4 FAIL ambiguous, naming both rows', al?.fail === true && al.why.join() === 'ambiguous' && al.rowNos.join() === '2,36', JSON.stringify(al));
+  const s5only = run({}, ['B-WIN']);
+  ok('P34 an id in §5 only → an s5 leg only, failing on its report cell `—`',
+    legOf(s5only, 'B-WIN', 's5')?.fail === true && legOf(s5only, 'B-WIN', 's5').why.join() === 'report' && !legOf(s5only, 'B-WIN', 's4'));
+  const s5ok = run({ s5rows: [s5row('B-WIN2', R('B-WIN2'))] }, ['B-WIN2']);
+  ok('P34 a §5 report cell naming the report → s5 PASS (the synthetic §5 PASS fixture; §10h)', legOf(s5ok, 'B-WIN2', 's5')?.fail === false);
+  const s5amb = run({ s5rows: [s5row('B-WIN', R('B-WIN'))] }, ['B-WIN']);
+  ok('P34 two §5 lines for one id → s5 FAIL ambiguous', legOf(s5amb, 'B-WIN', 's5')?.why.join() === 'ambiguous');
+  const both = run({ s4a: [s4row('2', 'B-WIN', 'DONE', R('B-WIN'))] }, ['B-WIN']);
+  ok('P34 C3: the §5 leg is required independently of §4 — s4 passes while s5 fails',
+    legOf(both, 'B-WIN', 's4')?.fail === false && legOf(both, 'B-WIN', 's5')?.fail === true);
+  const any = checkPlanState(planRowsByBatch(planFixture({ s4a: [s4row('2', 'B-TWO', 'DONE', 'B_TWO_B_COMPLETION_REPORT.md')] })),
+    () => ['B_TWO_A_COMPLETION_REPORT.md', 'B_TWO_B_COMPLETION_REPORT.md']);
+  ok('P34 several resolved reports: naming ANY one of them passes', legOf(any, 'B-TWO', 's4')?.fail === false);
+}
+
+// ── P34 (Langston §10g C1): findGlobDoc filters a listing the caller already read — no second ls-tree ──
+{
+  const calls = [];
+  __setGitExecForTest((cmd, args) => { calls.push(args); return ''; });
+  const got = findGlobDoc('B-X', 'completion_report', ['B_X_COMPLETION_REPORT.md', 'B_X_PROGRESS_REPORT.md', 'B_Y_COMPLETION_REPORT.md']);
+  ok('P34 findGlobDoc(bid, doc, names) filters the given listing', got.length === 1 && /B_X_COMPLETION_REPORT\.md$/.test(got[0]), JSON.stringify(got));
+  ok('P34 ...and runs no git at all', calls.length === 0, JSON.stringify(calls));
+  __setGitExecForTest(null);
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
