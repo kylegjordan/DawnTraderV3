@@ -1,7 +1,7 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
 import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts } from './poller.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP } from './config.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
@@ -742,6 +742,24 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
     !['gov-docgap:', 'gov-ledgerrow:', 'gov-planline'].some((p) => EXCEPTIONS_MALFORMED_PREFIX.startsWith(p) || p.startsWith(EXCEPTIONS_MALFORMED_PREFIX)));
   ok('EX P25: no sha → the body says so rather than inventing one',
     decideMalformedAlerts(r.malformed, [], null).toOpen.every((a) => /sha was unavailable/.test(a.body)));
+}
+
+// ─── B-PLAN-CURRENCY-CHECK P27: isoWeek — the weekly gate's week key (UTC, ISO week-year) ───
+// Expected outputs stated before the run (pre-audit P27's list, plus the week edges and a year
+// whose Jan 1 is a Friday): a wrong week-year or an off-by-one at the Monday/Sunday edge fails here.
+{
+  const w = (iso) => isoWeek(Date.parse(iso));
+  ok('P27 isoWeek 2026-09-28 (Monday) → 2026-W40', w('2026-09-28T00:00:00Z') === '2026-W40', w('2026-09-28T00:00:00Z'));
+  ok('P27 isoWeek 2026-10-04 23:59:59Z (Sunday) → still 2026-W40', w('2026-10-04T23:59:59Z') === '2026-W40', w('2026-10-04T23:59:59Z'));
+  ok('P27 isoWeek 2026-10-05 → 2026-W41', w('2026-10-05T00:00:00Z') === '2026-W41', w('2026-10-05T00:00:00Z'));
+  ok('P27 isoWeek 2026-12-28 → 2026-W53', w('2026-12-28T12:00:00Z') === '2026-W53', w('2026-12-28T12:00:00Z'));
+  ok('P27 isoWeek 2027-01-03 → 2026-W53 (the ISO week-year, not the calendar year)', w('2027-01-03T12:00:00Z') === '2026-W53', w('2027-01-03T12:00:00Z'));
+  ok('P27 isoWeek 2027-01-04 → 2027-W01', w('2027-01-04T00:00:00Z') === '2027-W01', w('2027-01-04T00:00:00Z'));
+  ok('P27 isoWeek 2024-12-30 → 2025-W01 (a December day in the next year\'s week 1)', w('2024-12-30T00:00:00Z') === '2025-W01', w('2024-12-30T00:00:00Z'));
+  ok('P27 isoWeek 2021-01-01 (Friday) → 2020-W53', w('2021-01-01T00:00:00Z') === '2020-W53', w('2021-01-01T00:00:00Z'));
+  ok('P27 isoWeek 2025-12-31 (Wednesday; its Thursday is 2026-01-01) → 2026-W01', w('2025-12-31T23:00:00Z') === '2026-W01', w('2025-12-31T23:00:00Z'));
+  let threw = false; try { isoWeek(NaN); } catch { threw = true; }
+  ok('P27 isoWeek throws on a non-finite input rather than keying a week "NaN-WNaN"', threw);
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
