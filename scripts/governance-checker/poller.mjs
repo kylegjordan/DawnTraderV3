@@ -375,7 +375,8 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
 }
 
 // ── B-PLAN-CURRENCY-CHECK OBJ-1 (P36-P38) — the plan-state rule's decisions (`gov-planline`) ────────────────
-// DORMANT: the tick reaches any of this only when PLAN_LINE.enabled (config.mjs, false in committed source).
+// ENABLED since the P61 flip (84b1dbb71, 2026-09-30): the tick reaches this only when PLAN_LINE.enabled (config.mjs) is true;
+// it was dormant (false in committed source) from landing until that flip.
 // Keys (Langston §10d Q15, §10g N7): one PER LEG, `gov-planline:<bid>:s4|s5`, at `warning` (Q17); and three
 // singletons the tick owns — the plan unreadable (a GOVERNANCE problem: the plan text or its headers), the Batch
 // Completion listing empty (an INFRA problem: the checker's git read), and the malformed-row list. The singletons
@@ -1176,7 +1177,7 @@ export function tick(nowMs = Date.now()) {
     b.declaredClass = ovr;
     b.classDeclared = true;
   }
-  // P38 (B-PLAN-CURRENCY-CHECK OBJ-1), DORMANT behind PLAN_LINE.enabled: the plan-state rule. It reads NOTHING with
+  // P38 (B-PLAN-CURRENCY-CHECK OBJ-1), gated by PLAN_LINE.enabled (ON since the P61 flip, 84b1dbb71): the plan-state rule. It reads NOTHING with
   // the flag off (so a plan edit cannot page while the rule is dormant). On: the plan and the Batch Completion
   // listing are each read ONCE, at gradedRefSha (the resolver's sha — the one the resolve evidence carries).
   // Resolves run BEFORE opens, so a changed malformed list resolves the old singleton and re-opens it. The

@@ -188,8 +188,8 @@ export const LEDGER_ROWS = {
 // obligation (its §3: "The owner updates its row at every batch close (status + report link)") as a STATE at the
 // graded ref: a batch is graded once it has a completion report and its id is in the plan (§4 batch cell or §5 item
 // cell); the rule and its keys live in checker.mjs checkPlanState and poller.mjs decidePlanLineAlerts.
-// ⛔ DORMANT: `enabled: false` in committed source — flipped by ONE committed change after Langston's Step 4 and the
-// committed P39 runs (P61). NOT env-overridable (push is deploy; an env default is invisible at the graded ref).
+// ⛔ WAS DORMANT: `enabled: false` in committed source until it was flipped by ONE committed change after Langston's Step 4
+// and the committed P39 runs (P61, 84b1dbb71, 2026-09-30). NOT env-overridable (push is deploy; an env default is invisible at the graded ref).
 // No `sinceMs` (re-cut P32): a first-add gate would re-create the diff design's permanent exemption.
 // `naKey` shares the ONE flat `batchId:value` na-skip set with DOCS and LEDGER_ROWS, so it must equal neither's
 // keys; poller.test.mjs asserts the three key sets are disjoint.
