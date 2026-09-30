@@ -356,8 +356,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 |---|---|---|
 | 8a-P4c (VTS xStock price instrument) | CC-C | 2026-09-30T00:00Z |
 | B-FEED-MISMATCH-FIX | CC-B | 300 taker closes or 2026-10-10 |
-| B-REACH-BASELINE-ADJUST | CC-B | ✅ closed 2026-09-29 |
-| B-XSTOCK-FEE-CONTRACT | CC-B | 21 days from 2026-09-11 |
+| B-XSTOCK-FEE-CONTRACT | CC-B | 2026-10-02T20:09:47Z, not extended (Langston 2026-09-29) |
 | F-G-1 (venue price grid) | CC-C | window closed 2026-09-04 — conversion owed; reopened, see Wave 0 |
 | B-INSTRUMENTS-OVER-RULES | CC-A | 2026-10-02 |
 
