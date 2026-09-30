@@ -214,3 +214,10 @@ Resting (pending) xStock entries are counted separately: looks, and `askAtOrBelo
 | **C5** | one graded marker | struck above |
 | **NIT-6** | `DELETED_COMPONENTS_LOG` line, no archive owed | done |
 **P6b's control, as read at the closed window (`hour` cut):** after-session SYM looks = TOUCH looks on both lanes (vts 211,691 · shadow 163,326); **per-(hour, session) equality holds in every graded cell — vts 182 of 182 over 177 hours, shadow 179 of 179 over 174** (TOUCH lines placed by stream order, so a pass straddling an hour counts where its looks were recorded). Rule readings unchanged: c* vts 120 s / shadow 60 s, U 1.76% / 1.47%, K 0.
+
+### C2.4 STEP 4 — LANGSTON: APPROVED, FOUR CONDITIONS + ONE NIT, NO BLOCKER (2026-09-30 ~02:3xZ; re-derived at `1b5d9d9e2`)
+**The restart arm's EXPECTED output, stated BEFORE its first run (FINDING-2; the two-clause rider on `#744`)** — `scripts/analysis/p4c-window-extract-selftest.py`, a synthetic one-lane corpus (a pass every 10 min, 2 looks each, 10:40Z-15:00Z, window [10:30Z, 15:00Z)):
+- **A, a restart at 12:25Z:** hours excluded BY NAME = {11:00, 12:00}; 6 TOUCH looks lost at the restart (the 12:00/12:10/12:20 passes); graded = {13:00, 14:00} ⇒ 2 cells, 0 unequal, holds.
+- **B, the same corpus with the restart removed from the PM2 log (the negative control):** nothing excluded; hour 12 reads sym 6 vs touch 12 ⇒ 1 unequal, does NOT hold — the exclusion arm is what keeps a restarted hour from reading as a broken reader.
+- **C, a PM2 log that starts inside the window:** exit 2, "does not reach the window start" (FINDING-3's reach assertion).
+
