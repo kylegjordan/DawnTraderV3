@@ -79,7 +79,7 @@ export function makerFillPrice(limit: number): number {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export type TwinPlan =
-  | { kind: 'skip'; reason: 'twin_disabled' | 'marketable_maker' | 'degenerate_fallback' }
+  | { kind: 'skip'; reason: 'twin_disabled' | 'marketable_maker' | 'degenerate_fallback' | 'no_entry_ask' }
   | {
       kind: 'open';
       twinMode: 'taker' | 'maker';
@@ -104,6 +104,8 @@ export type TwinPlan =
         costExitFeeFraction?: number;
         /** `8a-P4c` 3a-ii: the TWIN's own entry basis (its own mode), never the chosen leg's. */
         entryPriceBasis?: EntryPriceBasis;
+        /** `8a-P4c` 3b (P9): a TAKER twin books the guarded ask (a maker twin rests at the limit and sets none). */
+        entryPrice?: number;
       };
     };
 
@@ -123,12 +125,14 @@ export function planTwin(params: {
   pendingMaker: boolean;
   /** The DECISION's chosenMode (PRE-marketable-fallback). */
   decisionChosenMode: 'taker' | 'maker';
-  /** The chosen leg's entry price — the maker twin's resting limit. */
+  /** The signal's entry LEVEL — the maker twin's resting limit (`8a-P4c` 3b: never the chosen leg's booked price, which
+   *  is the ask when the chosen leg is a taker). */
   limitPrice: number;
   /**
-   * `8a-P3`: the price the twin's placement check reads — the ASK on crypto, the mark on xStock (explicit, `8a-P4`).
-   * `null` = no usable ask ⇒ NOT marketable, so a maker twin rests: the permissive arm, matching paper's placement
-   * (`_b72cBestAsk != null &&`). Named, not fixed; the policy for both lanes is homed at `8a-P4`.
+   * The guarded ASK at placement — crypto's touch, xStock's scanner quote (`8a-P4c` 3b, P7a). Two jobs:
+   *  - the maker twin's marketability test; `null` = no usable ask ⇒ NOT marketable, so a maker twin RESTS (the no-ask
+   *    placement policy, P11 — the same arm as paper's `_b72cBestAsk != null &&`);
+   *  - the price a TAKER twin books (P9); `null` ⇒ the taker twin is SKIPPED (`no_entry_ask`), never booked at a level.
    */
   placementTransactablePrice: number | null;
   feeRateMaker: number;
@@ -156,12 +160,17 @@ export function planTwin(params: {
     return { kind: 'skip', reason: 'marketable_maker' };
   }
   if (twinMode == null) return { kind: 'skip', reason: 'degenerate_fallback' };
+  // `8a-P4c` 3b (P9, J4): a taker twin books the guarded ask; with none, there is no honest price to book.
+  const _ask = params.placementTransactablePrice;
+  if (twinMode === 'taker' && (_ask === null || !Number.isFinite(_ask) || _ask <= 0)) {
+    return { kind: 'skip', reason: 'no_entry_ask' };
+  }
   const twinEntryFee = twinMode === 'maker' ? params.feeRateMaker : params.feeRateTaker;
   // ⛔ `8a-P4c` increment 3a-ii (Langston BLOCKER-1): the twin COMPOSES its friction over its OWN leg — it no longer
   // derives it as the chosen leg's friction plus the entry-fee delta. That derivation assumed "slippage and spread are
   // the chosen leg's own, so only the entry-fee delta moves", which is false under the per-leg rule: a taker chosen leg
   // booked at a level carries an entry half-spread its maker twin never pays. Same composer as every writer.
-  const twinEntryPriceBasis = entryPriceBasisFor(twinMode, false); // 3b books a taker twin at the guarded ask
+  const twinEntryPriceBasis = entryPriceBasisFor(twinMode, true); // 3b (P9): a taker twin books the guarded ask
   const repriced =
     Number.isFinite(params.chosenSlippage) && Number.isFinite(params.chosenSpread)
       ? {
@@ -185,7 +194,7 @@ export function planTwin(params: {
       ...repriced,
       ...(twinMode === 'maker'
         ? { state: 'pending' as const, makerLimitPrice: params.limitPrice, makerDeadline: params.nowMs + params.makerMaxPendingMs() }
-        : { state: 'open' as const, makerLimitPrice: undefined, makerDeadline: undefined }),
+        : { state: 'open' as const, makerLimitPrice: undefined, makerDeadline: undefined, entryPrice: _ask as number }),
     },
   };
 }

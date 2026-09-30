@@ -93,12 +93,9 @@ import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, t
 import { noteVtsCloseFriction, vtsFrictionSinceBoot } from './vts-friction-ledger.js';
 import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-no-trigger-streak.js';
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
-import { guardXstockQuote } from '../asset_classes/xstock_spot/vts-xs-guard.js';
-import { computeStalenessCeiling } from '../asset_classes/xstock_spot/mark-staleness.js';
-import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
-import { readVtsXstockExitMaxSpread } from '../asset_classes/xstock_spot/vts-xs-touch-config.js';
-import type { XsLiveReason } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
-import { getCachedSigma, ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
+import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
+import { selectVtsXstockExitBid, selectVtsXstockEntryAsk } from '../asset_classes/xstock_spot/vts-xs-select.js';
+import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
 import { isInXstockWeekendClose } from '../asset_classes/xstock_spot/market-hours.js';
 import {
@@ -185,47 +182,8 @@ const _vtsShadowTouch = { looks: 0, noTransactableSide: 0 };
 const _xsVtsInstrument = new XsVtsInstrument('vts');
 const _xsShadowInstrument = new XsVtsInstrument('shadow');
 
-// ⛔ `8a-P4c` increment 3 (P7, J2 r2; plan §C3.5-§C3.8) — THE VTS xSTOCK EXIT SIDE. A VTS xStock stop/target fires and
-// books on the BID, and only on a quote fit to transact: no older than PAPER'S risk-derived per-symbol ceiling
-// (`computeStalenessCeiling` over the shared σ cache — VTS owns no age knob, so a paper tuning moves VTS by design) and
-// no wider than the VTS exit spread ceiling (`vts_xstock_touch.exit_max_spread_fraction`, a DB row — the one standard
-// VTS carries that paper does not, and what refuses the `#1065` stub-bid frame). STATELESS (rule A). A missing knob, row
-// or usable side ⇒ `bid = null` ⇒ the evaluator makes NO DECISION (`no_transactable_side`) — never the mark.
-// `ceilingMs` is the age ceiling actually applied and `reason` the guard's own verdict — BOTH go to the instrument
-// (Langston Step-4 BLOCKER-2: S1 reads the live guard, never a re-derivation). With no row the ceiling is the floor, so a
-// no-row look counts as applied and refused, as rule B counted it. A guard that cannot run (`knobs_unavailable`) applies
-// no ceiling, is counted by reason, and LOGS — at most once a minute, with the reads it missed — so an outage can never
-// read as "no open xStock trades" (paper's equivalent logs at `aee` too).
-let _xsKnobsLastLogMs = 0;
-let _xsKnobsMissedSinceLog = 0;
-function selectVtsXstockExitBid(symbol: string, row: XsQuoteRow | null, stop: number | null, nowMs: number):
-  { bid: number | null; ceilingMs: number | null; reason: XsLiveReason } {
-  let msCfg: ReturnType<typeof readXstockMarkStalenessConfig>;
-  let sigmaCfg: ReturnType<typeof readXstockSigmaCacheConfig>;
-  let maxSpread: number;
-  try {
-    msCfg = readXstockMarkStalenessConfig();
-    sigmaCfg = readXstockSigmaCacheConfig();
-    maxSpread = readVtsXstockExitMaxSpread();
-  } catch (err) {
-    _xsKnobsMissedSinceLog++;
-    if (nowMs - _xsKnobsLastLogMs >= 60_000) {
-      console.error(`[8a-P4c][VTS_XS_KNOBS_UNAVAILABLE] ${_xsKnobsMissedSinceLog} xStock VTS exit look(s) made NO decision since the `
-        + `last line — the guard's knobs are unreadable: ${err instanceof Error ? err.message : String(err)}`);
-      _xsKnobsLastLogMs = nowMs;
-      _xsKnobsMissedSinceLog = 0;
-    }
-    return { bid: null, ceilingMs: null, reason: 'knobs_unavailable' };
-  }
-  if (row === null) return { bid: null, ceilingMs: msCfg.floorMs, reason: 'no_row' };
-  const sigma = getCachedSigma(symbol, sigmaCfg, nowMs);
-  const ceiling = computeStalenessCeiling(
-    { currentPrice: row.last, stopPrice: stop, sigmaRatePerSec: sigma?.sigmaRatePerSec ?? null, sigmaAgeMs: sigma?.ageMs ?? null },
-    msCfg,
-  );
-  const g = guardXstockQuote(row, nowMs, { maxAgeMs: ceiling.ceilingMs, maxSpreadFraction: maxSpread });
-  return { bid: g.sides?.bid ?? null, ceilingMs: ceiling.ceilingMs, reason: g.reason };
-}
+// `8a-P4c` increment 3 — the VTS xStock side selectors (exit BID, entry ASK) live in `vts-xs-select.ts`, shared with the
+// xStock evaluator so every VTS xStock leg is judged by one rule.
 // `8a-P4c` 3a-ii (P14, J7): the close-time friction counters + refusal alert live in `vts-friction-ledger.ts`.
 
 /** Kicks the SHARED σ cache for a lane's open xStock symbols — non-blocking, the same config paper uses. A cold knob or a
@@ -1579,6 +1537,15 @@ async function generatePhase10Signal(
     // to do — caller treats null return as "no signal possible for this pair".
     return null;
   }
+  // ⛔ `8a-P4c` 3b (P13, audit E6): THIS PATH PRICES OFF THE CRYPTO PRICE CACHE. Its pairs come from the FX5 scan batch
+  // over Kraken REST (crypto only), so a non-crypto symbol does not reach it today — but only because of the data source,
+  // not a guard. The assumption is now a rule: a non-crypto symbol is REFUSED here, loudly, rather than priced off the
+  // crypto mark. xStock VTS entries come from `evaluateXstockPairForVTS` (the xStock scanner).
+  if (_assetClass !== 'crypto_spot') {
+    console.error(`[8a-P4c][P13][VTS_GENERATE_NON_CRYPTO_REFUSED] ${symbol} (${_assetClass}): the crypto generate path would price it off the crypto mark — refused`);
+    setNullReason('generate_non_crypto_refused');
+    return null;
+  }
 
   // Phase 13: MCE computes regime (uses cache from main loop call)
   const mce = getMarketContextEngine();
@@ -2374,15 +2341,14 @@ async function generatePhase10Signal(
   // ⛔⛔ `8a-P3` P5 — THE PLACEMENT CHECK READS THE ASK: a post-only BUY is rejected iff the ASK is at or through its
   // limit. A SEPARATE variable, used ONLY here and at the twin — `currentMarketPrice` above stays the midpoint because
   // it also feeds the B53 admission guard, an estimate, where the rule keeps the mid (Langston r1 F2).
-  // Crypto only; any other class passes its mark explicitly (`8a-P4`).
-  const placementAsk: number | null = _assetClass === 'crypto_spot'
-    ? transactableSide(
-        selectCryptoTouch(symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
-          maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: ENTRY_LEG_NO_SPREAD_CEILING,
-        }).selection,
-        'buy',
-      )
-    : currentMarketPrice;
+  // Crypto only — P13 refuses every other class at this function's entry. `8a-P4c` 3b (P9): it is also the price a
+  // TAKER entry books.
+  const placementAsk: number | null = transactableSide(
+    selectCryptoTouch(symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
+      maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: ENTRY_LEG_NO_SPREAD_CEILING,
+    }).selection,
+    'buy',
+  );
   if (_vtsMtDecision.chosenMode === 'maker') {
     if (placementAsk !== null && isMarketableAtPlacement({ side: 'buy', transactablePrice: placementAsk, limit: entryPrice })) {
       if (_vtsMtDecision.takerNetEV > 0) {
@@ -2398,11 +2364,23 @@ async function generatePhase10Signal(
       // into a refusal on this lane only — opposite policies on one seam would break the comparison VTS exists for.
       // The optimistic direction, so every rest is LOGGED with its ask, in the placement path itself: `ask=none` lines are
       // the numerator and all `MAKER_RESTED` lines the denominator (Langston Step-4 C2 — a counter printed by the next
-      // resolve pass pooled this with the wrong cycle and had no denominator). Policy for both lanes: `8a-P4`.
+      // resolve pass pooled this with the wrong cycle and had no denominator). The policy for both lanes is SETTLED (`8a-P4c` 3b, P11): a MAKER with no usable ask RESTS; a TAKER with no usable ask is REFUSED (VTS) — never booked at a level or the mark.
       console.log(`[8a-P3][VTS][MAKER_RESTED] ${symbol}/${strategy} (${_assetClass}): limit=${entryPrice} ask=${placementAsk ?? 'none'}`);
       _vtsPendingMaker = true;
     }
   }
+
+  // ⛔⛔ `8a-P4c` 3b (P9, C8; J4) — A TAKER ENTRY BOOKS THE GUARDED ASK, NOT THE SIGNAL LEVEL. A market buy pays the ask;
+  // booking the level handed every VTS taker the half-spread it never paid (and P14 then stopped charging it in friction).
+  // NO USABLE ASK ⇒ THE TAKER ENTRY IS REFUSED — never the level, never the mark. A maker rests (P11) and fills at its limit.
+  // The stop and target stay the signal's levels; the quantity is recomputed at the booked price.
+  if (_vtsEffectiveMode === 'taker' && placementAsk === null) {
+    console.log(`[8a-P4c][VTS][TAKER_NO_ASK_REFUSED] ${symbol}/${strategy} (${_assetClass}): taker entry at level ${entryPrice} — no usable ask, refused (non-trade)`);
+    setNullReason('taker_no_entry_ask');
+    return null;
+  }
+  const _vtsBookedEntry = _vtsEffectiveMode === 'taker' ? (placementAsk as number) : entryPrice;
+  const _vtsBookedQuantity = dollarValue / _vtsBookedEntry;
 
   // ── F-G-2 OBJ-5b: the BOOKED friction, priced at the EFFECTIVE entry mode ──────────────
   // `frictionCost` (born :1795, taker both legs) stays the PRE-decision estimate the admission
@@ -2413,7 +2391,7 @@ async function generatePhase10Signal(
   // `8a-P4c` increment 3a-ii (P14, `#1118`): per leg — the entry basis stamped here (`entryPriceBasisFor`), the exit
   // estimated as side-booked (VTS exits book the bid, both classes). The CLOSED record carries the friction RECOMPOSED
   // at close from these parts (`recomposeVtsCloseFriction`) — this open figure is an estimate, never what P&L reads.
-  const _vtsEntryPriceBasis = entryPriceBasisFor(_vtsEffectiveMode, false); // 3b books a taker at the guarded ask
+  const _vtsEntryPriceBasis = entryPriceBasisFor(_vtsEffectiveMode, true); // 3b (P9): a taker books the guarded ask
   const bookedFrictionCost = composeVtsLegFriction({
     entryFee: _vtsEntryFee, exitFee: _vtsExitFee, slippage: costMetrics.slippage, spread: costMetrics.spread,
     entryPriceBasis: _vtsEntryPriceBasis, exitSideBooked: true,
@@ -2436,12 +2414,12 @@ async function generatePhase10Signal(
       makerLimitPrice: entryPrice,
       makerDeadline: Date.now() + resolveMakerMaxPendingMs(tradeAssetClass),
     } : {}),
-    entryPrice,
+    entryPrice: _vtsBookedEntry,      // `8a-P4c` 3b (P9): a taker at the guarded ask; a maker at its limit (the level)
     stopLoss: adjustedStopLoss,       // 11.7S: Mode-adjusted stop loss
     takeProfit: adjustedTakeProfit,   // 11.7S: Mode-adjusted take profit
     positionSize,
     dollarValue,      // Directive 11.6H: Fixed USD exposure
-    quantity,         // Directive 11.6H: Variable coin units
+    quantity: _vtsBookedQuantity, // Directive 11.6H: Variable coin units — at the BOOKED price (`8a-P4c` 3b)
     frictionCost: bookedFrictionCost,
     // P19-B8.7 Step-9: the components behind frictionCost, persisted (context
     // jsonb) so the UI cost 5-col split renders honestly. Fractions, per leg.
@@ -2600,6 +2578,7 @@ async function generatePhase10Signal(
     feeRateMaker: _vtsFriction.feeRateMaker,
     feeRateTaker: _vtsFriction.feeRateTaker,
     placementTransactablePrice: placementAsk,
+    levelPrice: entryPrice, // `8a-P4c` 3b: the maker twin rests at the LEVEL, not at a taker leg's booked ask
   });
 
   // Batch 47f15: Record setup hash to prevent identical re-entry
@@ -2684,7 +2663,7 @@ async function generatePhase10Signal(
     entryPriceBasis: _vtsEntryPriceBasis, // `8a-P4c` 3a-ii (P14): stamped on EVERY open (BLOCKER-3)
     costSlippageFraction: costMetrics.slippage,
     costSpreadFraction: costMetrics.spread,
-    entry: entryPrice,
+    entry: _vtsBookedEntry, // `8a-P4c` 3b (P9): the booked entry
     exit: undefined, // Directive 11.6: Exit determined by real price resolution
     profit: undefined, // Directive 11.6: P&L calculated at exit
     positionSize,
@@ -3354,7 +3333,8 @@ async function resolveOpenVirtualTrades(): Promise<{
       }
       // ONE outcome per tick via the shared PURE logic (same module as paper — R2 parity).
       // ⛔⛔ `8a-P3` C3 — A RESTING BUY FILLS ON THE ASK, NEVER THE MIDPOINT (paper's C1, same rule). Crypto reads the
-      // touch fresh; `null` ⇒ no fill this tick. xStock passes its mark explicitly — unchanged by statement (`8a-P4`).
+      // touch fresh; xStock its guarded ask (`8a-P4c` 3b); `null` ⇒ no fill this tick. The initial value is overwritten
+      // for both classes below.
       let _pFillPrice: number | null = currentPrice;
       if (trade.assetClass === 'crypto_spot') {
         const _pt = selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, now, {
@@ -3371,8 +3351,12 @@ async function resolveOpenVirtualTrades(): Promise<{
         try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_entry_fill' }, _pt.selection); } catch { /* a recorder never breaks the resolve loop */ }
       }
       if (trade.assetClass === 'xstock_spot') {
-        // `8a-P4c` increment 1 — would the ASK have filled this rest, beside today's `last` rule? Counted, never decided on.
-        _xsVtsInstrument.recordPendingLook(xstockPriceMap.get(trade.symbol)?.rawQuote ?? null, _pLimit);
+        // `8a-P4c` increment 1 — would the ASK have filled this rest, beside the `last` rule? (kept: the S1 comparison.)
+        const _pxRow = xstockPriceMap.get(trade.symbol)?.rawQuote ?? null;
+        _xsVtsInstrument.recordPendingLook(_pxRow, _pLimit);
+        // ⛔ `8a-P4c` 3b (P8d, X5): A RESTING xSTOCK BUY FILLS ON THE GUARDED ASK — the same rule as crypto and paper. No
+        // usable ask ⇒ no fill this tick (the rest keeps its deadline). Entry legs carry no spread ceiling (P7a).
+        _pFillPrice = selectVtsXstockEntryAsk(trade.symbol, _pxRow, trade.stopLoss ?? null, now).ask;
       }
       const _pOutcome = evaluatePendingMaker({
         side: 'buy', // VTS trades are long-only by construction
@@ -3383,7 +3367,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         trade.state = 'open';
         const { markPendingMakerFilled } = await import('./vts-trade-persistence.js');
         await markPendingMakerFilled(tradeId);
-        console.log(`[P19-B7.2c][VTS][MAKER_FILLED] ${trade.symbol}: ${trade.assetClass === 'crypto_spot' ? 'ask' : 'mark'} ${_pFillPrice} (mark ${currentPrice}) traded through limit ${_pLimit} — pending→open at ${makerFillPrice(_pLimit)} + maker fee`);
+        console.log(`[P19-B7.2c][VTS][MAKER_FILLED] ${trade.symbol}: ask ${_pFillPrice} (mark ${currentPrice}) traded through limit ${_pLimit} — pending→open at ${makerFillPrice(_pLimit)} + maker fee`);
         continue; // fills this tick; exit-eval starts next cycle
       }
       if (_pOutcome === 'drop') {
@@ -3462,7 +3446,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     // ⛔⛔ `8a-P3` C5/C6 — VTS CRYPTO STOPS/TARGETS ARE DECIDED, AND ITS EXITS BOOKED, ON THE BID.
     // One touch read per crypto trade per resolve tick with the VTS exit lane's OWN ceilings (derivations at
     // `VTS_EXIT_TOUCH_MAX_AGE_MS` / `_SPREAD_FRACTION`). `null` ⇒ the evaluator makes NO DECISION this cycle
-    // (`no_transactable_side`), never a midpoint fallback. xStock: the mark, explicitly (`8a-P4`).
+    // (`no_transactable_side`), never a midpoint fallback. xStock: its guarded bid (`8a-P4c` 3a-i, below).
     let _vtsExitBid: number | null = null;
     let _vtsTriggerPrice: number | null = currentPrice;
     if (trade.assetClass === 'xstock_spot') {
@@ -4293,8 +4277,8 @@ async function shadowClose(
  * are PARAMETERS/ACTIONS, not forked math: `maxHoldMs = SHADOW_MAX_HOLD_MS` (6h vs
  * 7d), and the close ACTION is `shadowClose` (isolated sink) vs the real cascade.
  *
- * No-op while `openShadowTrades` is empty — which it is until paper-mode active
- * trading is turned on (the promotion boundary is dormant at rtb_total=0 today).
+ * No-op while `openShadowTrades` is empty. (A "dormant at rtb_total=0" note stood here; paper active trading has been ON
+ * since Phase 19 and the shadow pool is populated — corrected `8a-P4c` 3b, P11.)
  */
 async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
   const now = Date.now();
@@ -4868,8 +4852,12 @@ export interface MaybeOpenTwinInput {
   /** Per-class DB-governed fee rates (getFrictionForAssetClass at the caller). */
   feeRateMaker: number;
   feeRateTaker: number;
-  /** `8a-P3`: the price the twin's placement check reads — the ASK on crypto, the mark on xStock (explicit, `8a-P4`); `null` = no usable ask ⇒ not marketable (the permissive arm, as paper). */
+  /** The guarded ASK at placement (crypto touch; xStock the scanner quote, `8a-P4c` 3b P7a). It is the maker twin's
+   *  marketability test AND the price a taker twin books (`null` ⇒ a maker twin rests; a taker twin is skipped). */
   placementTransactablePrice: number | null;
+  /** `8a-P4c` 3b: the signal's entry LEVEL — a maker twin's limit. Separate from the chosen leg's booked `entryPrice`,
+   *  which is the ASK when the chosen leg is a taker. */
+  levelPrice: number;
 }
 
 export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
@@ -4881,7 +4869,8 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
     }
     // symbol/strategy/entryPrice/assetClass read off the chosen leg's record —
     // identical to the caller's locals by construction (the record was built from them).
-    const { symbol, strategy, entryPrice } = chosenTrade;
+    const { symbol, strategy } = chosenTrade;
+    const entryPrice = input.levelPrice; // the maker twin's limit is the LEVEL, not the chosen leg's booked price
     const tradeAssetClass = chosenTrade.assetClass;
     const plan = planTwin({
       twinEnabled: resolveTwinEnabled(tradeAssetClass),
@@ -4904,6 +4893,8 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
     if (plan.kind === 'skip') {
       if (plan.reason === 'marketable_maker') {
         console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=marketable_maker: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} ask=${input.placementTransactablePrice})`);
+      } else if (plan.reason === 'no_entry_ask') {
+        console.log(`[8a-P4c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=no_entry_ask: the taker twin has no usable ask to book (level=${entryPrice})`);
       } else if (plan.reason === 'degenerate_fallback') {
         console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=degenerate_fallback: chosen leg was the marketable taker-fallback — comparison degenerate`);
       }
@@ -4917,6 +4908,8 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       mtTwin: true,
       mtPairId: input.chosenTradeId,
       ...plan.overlay,
+      // `8a-P4c` 3b: a taker twin booked at the ask holds the same dollars at that price
+      ...(plan.overlay.entryPrice !== undefined ? { quantity: chosenTrade.dollarValue / plan.overlay.entryPrice } : {}),
     };
     const { insertOpenTrade } = await import('./vts-trade-persistence.js');
     await insertOpenTrade(twinTrade as any);

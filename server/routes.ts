@@ -7638,7 +7638,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         timestamp: diag.lastTickAt ? new Date(diag.lastTickAt).toISOString() : new Date().toISOString(),
         mode: 'paper' as const,
         // Scanned count = pairs ENTERED the eval pipeline this cycle (the
-        // fresh-pair set after freshness gate). Reflects what the funnel
+        // pairs with enough OHLC history — there is no tick-freshness gate since B-NEW-34). Reflects what the funnel
         // started with — what the UI label "Scanned" should show.
         //
         // Field is named `totalPairsScanned` for crypto-parity (the shared
@@ -8236,7 +8236,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       const now = Date.now();
-      const FRESH_THRESHOLD_S = 90;     // matches B79.0a freshness window 90,000 ms
+      const FRESH_THRESHOLD_S = 90;     // display threshold only (it once mirrored the B79.0a gate's 90 s window; that module is deleted)
       const STALE_THRESHOLD_S = 600;    // 10 minutes — beyond this is "dead"
       const rows = rawRows.map((r: any) => {
         const lastTickAt = r.lastTickAt ? new Date(r.lastTickAt).getTime() : null;

@@ -5169,7 +5169,7 @@ export class ActiveExecutionEngine {
         // "fix" this into a refusal on ONE lane only: VTS models this lane, and opposite policies on one seam would
         // make the comparison meaningless. It is the optimistic direction, so every rest is LOGGED with its ask, here in
         // the placement path: `ask=none` lines are the numerator, all `MAKER_RESTED` lines the denominator (Langston
-        // Step-4 C2). The policy for both lanes is homed at `8a-P4`.
+        // Step-4 C2). The policy for both lanes is SETTLED (`8a-P4c` 3b, P11): a MAKER with no usable ask RESTS; a TAKER with no usable ask is REFUSED (VTS) — never booked at a level or the mark.
         console.log(`[8a-P3][MAKER_RESTED:${this.mode}] ${signal.symbol} (${_openClass}): limit=${_b72cLimit} ask=${_b72cBestAsk ?? 'none'}`);
         _b72cPendingMaker = true;
         _b72cRestAsk = _b72cBestAsk ?? null;

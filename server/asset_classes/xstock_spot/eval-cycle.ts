@@ -4,7 +4,7 @@
  * ════════════════════════════════════════════════════════════════════════════
  *
  * Per-pair post-filter chain for xstock_spot. Called from xstockSpotScanner
- * after the per-pair freshness gate succeeds. Mirrors crypto's `fx5-scanner.ts`
+ * for each pair with enough OHLC history (the old per-pair freshness gate is gone — B-NEW-34). Mirrors crypto's `fx5-scanner.ts`
  * + `vts-runner.ts` shape EXACTLY (architectural lock per Kyle directive
  * 2026-05-11 + Langston rev2 sign-off): same 6 filter paths (5 quant families
  * + 1 pattern), same fan-out (a pair passing N families + pattern produces
@@ -89,6 +89,8 @@ import { getPredictiveConfidence } from '../../core/utils/score-calculator.js';
 import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
 import { getCachedCostMetrics, getFrictionForAssetClass } from '../../core/math/cost-model.js';
 import { composeVtsLegFriction, entryPriceBasisFor } from '../../core/trading/vts-friction.js';
+import { selectVtsXstockEntryAsk } from './vts-xs-select.js';
+import type { XsQuoteRow } from './vts-xs-instrument.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver.js'; // B-NEW-53 shared forming-bar snapshot
 import { buildMacroSnapshot } from './macro-snapshot.js'; // P19-B5b (#94): xStock decision-time macro snapshot
@@ -325,6 +327,9 @@ export async function evaluateXstockPairForVTS(
   // callers/tests compiling.
   askDepthUsd: number = -1,
   bidDepthUsd: number = -1,
+  // `8a-P4c` 3b (P7a): the scanner's own ticker quote for this symbol — the ENTRY legs price off its guarded ASK, not
+  // the 15-minute bar close (`lastPrice`, which stays the EV/geometry input). null ⇒ no usable ask this cycle.
+  entryQuote: XsQuoteRow | null = null,
 ): Promise<void> {
   counters.pairsEntered++;
 
@@ -953,14 +958,17 @@ export async function evaluateXstockPairForVTS(
         // skip the trade entirely (non-trade).
         let _xEffectiveMode: 'taker' | 'maker' = _xMtDecision.chosenMode;
         let _xPendingMaker = false;
+        // ⛔ `8a-P4c` 3b (P7a/P8c, X4 + X9 in one commit): the placement test and the taker booking read the GUARDED ASK —
+        // paper's risk-derived age ceiling over the scanner's own quote, no spread ceiling on an entry leg. Never the bar
+        // close, never the mark. `null` ⇒ a maker RESTS (P11, as paper and crypto) and a taker is REFUSED (P9, J4).
+        const _xEntryAsk = selectVtsXstockEntryAsk(symbol, entryQuote, stopLoss, Date.now()).ask;
         if (_xMtDecision.chosenMode === 'maker') {
-          // `8a-P3`: xStock passes its mark EXPLICITLY — unchanged by statement; it moves in `8a-P4`.
-          if (isMarketableAtPlacement({ side: 'buy', transactablePrice: lastPrice, limit: entryPrice })) {
+          if (_xEntryAsk !== null && isMarketableAtPlacement({ side: 'buy', transactablePrice: _xEntryAsk, limit: entryPrice })) {
             if (_xMtDecision.takerNetEV > 0) {
               _xEffectiveMode = 'taker';
-              console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} already marketable (price=${lastPrice}) — takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
+              console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} already marketable (ask=${_xEntryAsk}) — takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
             } else {
-              console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} marketable (price=${lastPrice}) and takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
+              console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} marketable (ask=${_xEntryAsk}) and takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
               counters.signalsRejectedBySQE++;
               if (lane.kind === 'pattern') counters.patternSignalsRejected++;
               else counters.quantSignalsRejected++;
@@ -995,9 +1003,42 @@ export async function evaluateXstockPairForVTS(
               continue;
             }
           } else {
+            // P11 — the no-ask placement policy: a maker with no usable ask RESTS (the optimistic direction, as paper and
+            // crypto); logged with its ask so the `ask=none` share is readable.
+            console.log(`[8a-P4c][VTS][MAKER_RESTED] ${symbol}/${strategyKey} (xstock_spot): limit=${entryPrice} ask=${_xEntryAsk ?? 'none'}`);
             _xPendingMaker = true;
           }
         }
+        // ⛔ `8a-P4c` 3b (P9, C8; J4): a TAKER entry books the guarded ask; with none it is REFUSED — never the level.
+        if (_xEffectiveMode === 'taker' && _xEntryAsk === null) {
+          console.log(`[8a-P4c][VTS][TAKER_NO_ASK_REFUSED] ${symbol}/${strategyKey} (xstock_spot): taker entry at level ${entryPrice} — no usable ask, refused (non-trade)`);
+          counters.signalsRejectedBySQE++;
+          if (lane.kind === 'pattern') counters.patternSignalsRejected++;
+          else counters.quantSignalsRejected++;
+          counters.byStrategy[strategyKey].rejected++;
+          counters.nullReasonAggregate['taker_no_entry_ask'] = (counters.nullReasonAggregate['taker_no_entry_ask'] ?? 0) + 1;
+          if (lane.kind === 'pattern') {
+            counters.patternNullReasonAggregate['taker_no_entry_ask'] = (counters.patternNullReasonAggregate['taker_no_entry_ask'] ?? 0) + 1;
+          } else {
+            counters.quantNullReasonAggregate['taker_no_entry_ask'] = (counters.quantNullReasonAggregate['taker_no_entry_ask'] ?? 0) + 1;
+          }
+          try {
+            archiveSignalEval({
+              mode: 'vts',
+              ...archiveCommon,
+              rejectStage: 'tcl',
+              gateDecision: { gate: 'entry_ask', accepted: false, reason: 'taker_no_entry_ask' },
+              features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() },
+              provenance: _provBase
+                ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
+                : undefined,
+            });
+            counters.signalsArchived++;
+          } catch { counters.archiveFailures++; /* hot path */ }
+          continue;
+        }
+        // The booked entry: a taker at the guarded ask, a maker at its limit (the level). Stop and target stay the levels.
+        const _xBookedEntry = _xEffectiveMode === 'taker' ? (_xEntryAsk as number) : entryPrice;
 
         // Net EV passes — open the VTS trade. B-NEW-53.2 (#208): build the
         // open-trade record FIRST (hoisted above the admitted archive) so the
@@ -1008,7 +1049,7 @@ export async function evaluateXstockPairForVTS(
         // between here and the register call mutates an input. Archive-before-register
         // ordering preserved (admitted-archival stays decoupled from open success).
         const dollarValue = 150;
-        const quantity = entryPrice > 0 ? dollarValue / entryPrice : 0;
+        const quantity = _xBookedEntry > 0 ? dollarValue / _xBookedEntry : 0; // at the BOOKED price (`8a-P4c` 3b)
         // F-G-2 OBJ-5b (P11 iii): the xStock lane composed `totalFriction` taker-both-legs at
         // :772 while :1012 records the mode-aware entry fee — same divergence as crypto, second
         // file. Booked friction priced at the EFFECTIVE mode; `totalFriction` stays the
@@ -1017,7 +1058,7 @@ export async function evaluateXstockPairForVTS(
         const _xEntryFee = _xEffectiveMode === 'maker' ? _xFriction.feeRateMaker : _xFriction.feeRateTaker;
         const _xExitFee = _xFriction.feeRateTaker;
         // `8a-P4c` 3a-ii (P14, `#1118`): per leg, the entry basis stamped; the closed record is recomposed at close.
-        const _xEntryPriceBasis = entryPriceBasisFor(_xEffectiveMode, false); // 3b books a taker at the guarded ask
+        const _xEntryPriceBasis = entryPriceBasisFor(_xEffectiveMode, true); // 3b (P9): a taker books the guarded ask
         const _xBookedFriction = composeVtsLegFriction({
           entryFee: _xEntryFee, exitFee: _xExitFee, slippage: costMetrics.slippage, spread: costMetrics.spread,
           entryPriceBasis: _xEntryPriceBasis, exitSideBooked: true,
@@ -1044,7 +1085,7 @@ export async function evaluateXstockPairForVTS(
             makerLimitPrice: entryPrice,
             makerDeadline: Date.now() + resolveMakerMaxPendingMs(ASSET_CLASS),
           } : {}),
-          entryPrice,
+          entryPrice: _xBookedEntry, // `8a-P4c` 3b (P9): a taker at the guarded ask; a maker at its limit
           stopLoss,
           takeProfit,
           positionSize: dollarValue,
@@ -1239,7 +1280,8 @@ export async function evaluateXstockPairForVTS(
             pendingMaker: _xPendingMaker,
             feeRateMaker: _xFriction.feeRateMaker,
             feeRateTaker: _xFriction.feeRateTaker,
-            placementTransactablePrice: lastPrice, // `8a-P3`: xStock mark, explicit (`8a-P4`)
+            placementTransactablePrice: _xEntryAsk, // `8a-P4c` 3b (P8c, X9): the guarded ask, the same one X4 read
+            levelPrice: entryPrice,
           });
         }
       }

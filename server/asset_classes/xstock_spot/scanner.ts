@@ -13,8 +13,9 @@
  *   1. Market-open gate (`isXstockMarketOpenUTC`) — short-circuit if closed.
  *   2. Batched DB read of latest ticker prices for ALL xstock_spot symbols
  *      from `xstock_spot_ticker_snap` (single round-trip, Langston rev 2 #1).
- *   3. Per-pair freshness gate via `isPairDataFresh` (window=90s for Day 1,
- *      empirical p99 + buffer per Langston Q2).
+ *   3. (Was a per-pair freshness gate, `isPairDataFresh`; B-NEW-34 replaced it with local-DB OHLC history as the source
+ *      of truth, and `8a-P4c` 3b deleted the orphaned module. The VTS entry legs judge the ticker quote's age themselves,
+ *      per leg — `vts-xs-select.ts`.)
  *   4. Update xstock TelemetryAggregator instance counters (cycle count,
  *      fresh-pair count). NO signal-orchestrator / strategy-engine path
  *      activation — that's a B79.x downstream batch gated on Layer-3
@@ -53,6 +54,7 @@ import { computeDirectionalBias } from '../../core/metrics/directional-bias.js';
 import { DEFAULT_DBS_CONFIG, type DBSConfig } from '../../types/directional-bias.types.js';
 import { xstockDirectionalBiasStore } from '../../core/metrics/directional-bias-store.js';
 import type { OHLCData } from '../../types/market-regime.types.js';
+import { parseQuoteNumber, type XsQuoteRow } from './vts-xs-instrument.js';
 
 /**
  * B-PHASE-A2 (2026-05-17): ATR helper for DBS pre-compute (mirrors fx5-scanner.ts:66-78).
@@ -479,7 +481,7 @@ class XstockSpotScannerService {
 
   /**
    * Per-cycle scan. Market-open gated. Reads ALL xstock prices in one
-   * batched query (Langston rev 2 #1), gates each by freshness, updates
+   * batched query (Langston rev 2 #1), gates each on OHLC history (no tick-freshness gate — see step 3 above), updates
    * telemetry. Logs `[B79.0a][SCAN_CYCLE_DONE]` with metrics.
    */
   private async runCycle(tick: ClockTick): Promise<void> {
@@ -651,7 +653,9 @@ class XstockSpotScannerService {
       const dbDurationMs = Date.now() - dbStart;
       const tickerRawRows = (tickerResult as any).rows ?? (tickerResult as unknown as TickerSnapRow[]);
       const tickerRows: TickerSnapRow[] = Array.isArray(tickerRawRows) ? tickerRawRows : [];
-      const tickerEnrichmentBySymbol = new Map<string, { bidAskSpreadPct: number; volume24hShares: number }>();
+      // `8a-P4c` 3b (P7a): the ask EXISTED here and was thrown away — the map kept only the spread (audit E5). It now also
+      // carries the quote itself, so the VTS xStock ENTRY legs price off the guarded ASK, not the 15-minute bar close.
+      const tickerEnrichmentBySymbol = new Map<string, { bidAskSpreadPct: number; volume24hShares: number; quote: XsQuoteRow }>();
       for (const row of tickerRows) {
         const bidRaw = row.bid ?? null;
         const askRaw = row.ask ?? null;
@@ -660,9 +664,17 @@ class XstockSpotScannerService {
         const bidAskSpreadPct = (Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0 && ask >= bid)
           ? ((ask - bid) / ((ask + bid) / 2)) * 100
           : -1;
+        const capturedMs = row.capturedAt instanceof Date ? row.capturedAt.getTime() : Date.parse(String(row.capturedAt));
         tickerEnrichmentBySymbol.set(row.symbol, {
           bidAskSpreadPct,
           volume24hShares: parseFloat(row.volume24h ?? '0'),
+          // Sides are parsed as-is (never defaulted to zero); the entry guard judges age and usability.
+          quote: {
+            last: parseQuoteNumber(row.price) ?? NaN,
+            bid: parseQuoteNumber(row.bid),
+            ask: parseQuoteNumber(row.ask),
+            atMs: Number.isFinite(capturedMs) ? capturedMs : null,
+          },
         });
       }
 
@@ -935,6 +947,7 @@ class XstockSpotScannerService {
             symbol, ohlc, price, volume24hUSD, 'paper',
             cycleCounters, cycleConfigs, bidAskSpreadPct, propagatedDbs,
             askDepthUsd, bidDepthUsd,
+            enrich?.quote ?? null, // `8a-P4c` 3b (P7a): the entry legs' quote — null ⇒ no usable ask this cycle
           );
         }
 

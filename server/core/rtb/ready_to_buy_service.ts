@@ -1892,7 +1892,7 @@ class ReadyToBuyService {
     // just the top-`limit` that get promoted) open a counterfactual shadow trade +
     // record the decision-time ranking inputs into the isolated rtb_shadow_pairings
     // sink. Fire-and-forget OFF the hot path (own catch); the return value is
-    // unchanged. DORMANT until paper active trading is on (rtb_total=0 today).
+    // unchanged. LIVE: paper active trading is on (the "DORMANT, rtb_total=0" note here predated Phase 19 — `8a-P4c` 3b P11).
     void this.captureShadowPool(mode, validSignals, limit, assetClass).catch((err) => {
       console.warn(`[reorg-B4][SHADOW_CAPTURE] capture threw (promotion unaffected):`, err instanceof Error ? err.message : err);
     });
