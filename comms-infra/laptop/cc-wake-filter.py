@@ -29,6 +29,10 @@ from datetime import datetime, timezone
 # Windows: pipe stdout defaults to cp1252 which cannot encode arrows/emoji in
 # message text -> print raises UnicodeEncodeError -> event silently lost.
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+# Langston (amendment 1): stderr too — the LINE DROPPED handler prints inbox content there, and an encode error raised
+# inside an `except` would escape the loop and end the watcher. (Measured on this laptop: stderr is cp1252 with
+# backslashreplace, which cannot raise; this removes the dependence on that default.)
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Session addressing: argv[1] = this session's alias ("CC-A" or "CC-B").
 # Friendly-name registry (Kyle 2026-06-12): names may appear ANYWHERE in the
