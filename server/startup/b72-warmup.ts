@@ -170,6 +170,16 @@ const PREFETCH_MODULES = [
   // line above — the exit loop reads them SYNC on every tick; unlisted = every read throws.
   // Seeds: 2026-09-0x-b-xstock-feed-sanity.sql. Asserted at boot below (count + ranges).
   'book_state',
+  // `8a-P4c` increment 3 (Langston Step-4 BLOCKER-1, 2026-09-30): the VTS xStock exit guard's spread ceiling — read SYNC
+  // on every xStock VTS exit look, both lanes. Unlisted = every look refuses. Seeds: 2026-09-30-b-price-side-8a-p4c-inc3.sql.
+  // Asserted at boot below.
+  'vts_xstock_touch',
+  // `#1123` (the class fix that came with BLOCKER-1): two modules READ SYNC but never listed here — their warmth rested on
+  // an incidental async read. `feed_health` = P19-B6.7's per-class liveness thresholds (`feed-integrity-monitor.ts`
+  // skips the liveness grade on a cold module); `strategy.orb` = B79.0d's ORB thresholds (`orb.ts` returns null — no
+  // ORB signal — on a cold module). The swept regression in `b-price-side-8a-p4c-inc3-guard.test.ts` keeps this list whole.
+  'feed_health',
+  'strategy.orb',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
@@ -350,6 +360,15 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     const { assertBookStateKnobsAtBoot } = await import('../asset_classes/xstock_spot/book-state-config.js');
     const r = assertBookStateKnobsAtBoot();
     console.log(`[B-XSTOCK-FEED-SANITY][warmup] book_state knobs verified for xstock_spot (12 rows; enabled=${r.enabled} k_rel=${r.single_side_departure_k_rel} floor=${r.single_side_departure_floor_pct}% hold=${r.other_side_hold_pct}% cap=${r.hollow_skip_cap} feed_read=${r.feed_read_enabled})`);
+  }
+
+  // ── `8a-P4c` increment 3 (Langston Step-4 BLOCKER-1) — the VTS xStock exit spread ceiling, asserted at BOOT. ────────
+  // Same reasoning as book_state above: the guard fails CLOSED on a cold or missing knob (no xStock VTS exit decision),
+  // which would read as quiet rather than broken. xstock_spot only — crypto VTS exits use their own touch ceilings.
+  {
+    const { assertVtsXstockTouchKnobsAtBoot } = await import('../asset_classes/xstock_spot/vts-xs-touch-config.js');
+    const v = assertVtsXstockTouchKnobsAtBoot();
+    console.log(`[8a-P4c][warmup] vts_xstock_touch.exit_max_spread_fraction verified for xstock_spot (${v})`);
   }
 
   // reorg-B2 (Piece A/B, 2026-06-20): per-class ROI gate + target-floor/min-RR must be seeded

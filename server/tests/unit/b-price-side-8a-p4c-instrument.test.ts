@@ -200,7 +200,7 @@ describe('8a-P4c — the xStock VTS exits read the guarded bid (increment 3); th
     expect(count(VTS, /let _pFillPrice: number \| null = currentPrice;/g)).toBe(1);
     expect(count(VTS, /const _xsExit = selectVtsXstockExitBid\(trade\.symbol, _xsRow, trade\.stopLoss \?\? null, Date\.now\(\)\);/g)).toBe(1);
     expect(count(VTS, /_vtsExitBid = _xsExit\.bid;\s*_vtsTriggerPrice = _vtsExitBid;/g)).toBe(1);
-    expect(count(VTS, /resolveVtsBookedExitPrice\(trade\.assetClass, _vtsExitBid, currentPrice, decision\.exitPrice\)/g)).toBe(1);
+    expect(count(VTS, /resolveVtsBookedExitPrice\(_vtsExitBid, currentPrice, decision\.exitPrice\)/g)).toBe(1);
   });
 
   it('shadow lane: xStock triggers on the same guard', () => {

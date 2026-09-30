@@ -100,10 +100,15 @@ export function getCachedSigma(symbol: string, cfg: SigmaCacheConfig, nowMs = Da
  * evaluation loop, and its consequence is already correct — the entry simply ages out and
  * `getCachedSigma` starts returning `null` (⇒ floor ⇒ safe).
  */
-export function ensureSigmaFresh(symbols: string[], cfg: SigmaCacheConfig, nowMs = Date.now()): void {
+/** Returns what this call ENQUEUED (per-symbol queries, and whether the class-wide σ was kicked) — `8a-P4c` inc 3:
+ *  the width of a kick is logged by its caller, so a cold tick's fan-out is a number, not a guess (Langston nit). */
+export function ensureSigmaFresh(symbols: string[], cfg: SigmaCacheConfig, nowMs = Date.now()): { enqueued: number; classwide: boolean } {
+  let enqueued = 0;
+  let classwideKicked = false;
   // The inherited class-wide σ underpins every not-yet-earned symbol — refresh it first.
   if (!classwideInFlight && (classwide === null || nowMs - classwide.computedAtMs > cfg.refreshAfterMs)) {
     classwideInFlight = true;
+    classwideKicked = true;
     void getClasswideSigmaRate(cfg.windowMs, cfg.minObservations, cfg.classwidePercentile, cfg.queryTimeoutMs)
       .then((v) => {
         if (v !== null && Number.isFinite(v) && v > 0) classwide = { value: v, computedAtMs: Date.now() };
@@ -124,6 +129,7 @@ export function ensureSigmaFresh(symbols: string[], cfg: SigmaCacheConfig, nowMs
     if (hit && nowMs - hit.computedAtMs <= cfg.refreshAfterMs) continue;
 
     inFlight.add(symbol);
+    enqueued++;
     void getSigmaRateStats(symbol, cfg.windowMs, cfg.queryTimeoutMs)
       .then((own) => {
         const resolved = resolveSigmaRate(own, classwide?.value ?? null, cfg.minObservations);
@@ -139,6 +145,7 @@ export function ensureSigmaFresh(symbols: string[], cfg: SigmaCacheConfig, nowMs
       })
       .finally(() => { inFlight.delete(symbol); });
   }
+  return { enqueued, classwide: classwideKicked };
 }
 
 /**

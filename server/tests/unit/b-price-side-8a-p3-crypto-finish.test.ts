@@ -113,16 +113,16 @@ describe('8a-P3 — divergent fixtures: the midpoint and the transactable side d
   });
 
   it('C6. crypto books the BID; every clamp arm is named', () => {
-    expect(resolveVtsBookedExitPrice('crypto_spot', 99.5, 100, 101)).toEqual({ price: 99.5, arm: 'bid' });
-    expect(resolveVtsBookedExitPrice('crypto_spot', null, 100, 101)).toEqual({ price: 101, arm: 'clamp_no_bid' });
-    expect(resolveVtsBookedExitPrice('crypto_spot', 99.5, null, 101)).toEqual({ price: 101, arm: 'clamp_no_mark' });
+    expect(resolveVtsBookedExitPrice(99.5, 100, 101)).toEqual({ price: 99.5, arm: 'bid' });
+    expect(resolveVtsBookedExitPrice(null, 100, 101)).toEqual({ price: 101, arm: 'clamp_no_bid' });
+    expect(resolveVtsBookedExitPrice(99.5, null, 101)).toEqual({ price: 101, arm: 'clamp_no_mark' });
   });
 
   // `8a-P4c` increment 3 (P8b): the xStock class seam is GONE — xStock books on the same three arms as crypto.
   it('C6b. xStock books the BID too, on the same three arms — no class seam', () => {
-    expect(resolveVtsBookedExitPrice('xstock_spot', 99.5, 100, 101)).toEqual({ price: 99.5, arm: 'bid' });
-    expect(resolveVtsBookedExitPrice('xstock_spot', null, 100, 101)).toEqual({ price: 101, arm: 'clamp_no_bid' });
-    expect(resolveVtsBookedExitPrice('xstock_spot', 99.5, null, 101)).toEqual({ price: 101, arm: 'clamp_no_mark' });
+    expect(resolveVtsBookedExitPrice(99.5, 100, 101)).toEqual({ price: 99.5, arm: 'bid' });
+    expect(resolveVtsBookedExitPrice(null, 100, 101)).toEqual({ price: 101, arm: 'clamp_no_bid' });
+    expect(resolveVtsBookedExitPrice(99.5, null, 101)).toEqual({ price: 101, arm: 'clamp_no_mark' });
     const src = readFileSync(join(process.cwd(), 'server/core/trading/vts-exit-booking.ts'), 'utf-8');
     expect(src).not.toMatch(/arm: 'clamp_class_seam'/);
   });
@@ -151,7 +151,7 @@ describe('8a-P3 — the call sites read the transactable side, and xStock is exp
   it('VTS C3/C5/C6: ask for the fill, bid for the trigger and the booking — no midpoint fallback', () => {
     expect(VTS).toMatch(/transactablePrice:\s*_pFillPrice/);
     expect(VTS).toMatch(/triggerPrice:\s*_vtsTriggerPrice/);
-    expect(VTS).toMatch(/resolveVtsBookedExitPrice\(trade\.assetClass,\s*_vtsExitBid,\s*currentPrice/);
+    expect(VTS).toMatch(/resolveVtsBookedExitPrice\(_vtsExitBid,\s*currentPrice/); // `8a-P4c` inc 3: the unread class arg is gone
     expect(VTS).not.toMatch(/_vtsTriggerPrice\s*=\s*_vtsExitBid\s*\?\?/);
     expect(VTS).not.toMatch(/triggerPrice:\s*currentPrice,/);
   });
@@ -174,14 +174,14 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
   const VTS = read('server/services/vts-runner.ts');
 
   it('BLOCKER-1: a VTS exit refusal is tracked PER TRADE ID with a once-per-streak alert, and cleared on a decision', () => {
-    expect(VTS).toMatch(/_vtsNoTriggerStreak\.get\(tradeId\)/);
-    expect(VTS).toMatch(/if \(!_nt\.alerted && _ntNow - _nt\.sinceMs >= VTS_NO_TRIGGER_ALERT_AFTER_MS\)/);
+    // `8a-P4c` increment 3 (Langston Step-4 FINDING-1): the streak step is the pure `stepNoTriggerStreak` (behaviour-tested
+    // in b-price-side-8a-p4c-inc3-guard.test.ts); here, only that the runner routes every trade through it, keyed by id.
+    expect(VTS).toMatch(/stepNoTriggerStreak\(_vtsNoTriggerStreak\.get\(tradeId\), decision\.noDecisionReason, _ntPages, _ntNow,/);
     expect(VTS).toMatch(/dedupe_key: `no-trigger-vts-\$\{trade\.symbol\}`/);
-    // r3: the streak runs over EVERY no-decision reason and clears ONLY on a real decision. `8a-P4c` increment 3 (P10):
-    // xStock joins the rail in the US regular session only (Kyle's `#994`: off-hours staleness never pages).
-    expect(VTS).toMatch(/if \(decision\.noDecisionReason !== undefined\s*&& \(trade\.assetClass === 'crypto_spot' \|\| \(trade\.assetClass === 'xstock_spot' && !_ntXsOffHours\)\)\) \{/);
+    // r3 + P10: the streak runs over EVERY no-decision reason, BOTH classes, every session; only the PAGE is session-gated.
+    expect(VTS).toMatch(/const _ntPages = trade\.assetClass === 'crypto_spot' \|\| \(trade\.assetClass === 'xstock_spot' && !_ntXsOffHours\);/);
     expect(VTS).toMatch(/const _ntXsOffHours = trade\.assetClass === 'xstock_spot'\s*&& \(isInXstockWeekendClose\(new Date\(\)\) \|\| getXstockSession\(Date\.now\(\)\) !== 'regular'\);/);
-    expect(VTS).toMatch(/\} else \{\s*_vtsNoTriggerStreak\.delete\(tradeId\);/);
+    expect(VTS).toMatch(/if \(_ntStep\.next\) _vtsNoTriggerStreak\.set\(tradeId, _ntStep\.next\);\s*else _vtsNoTriggerStreak\.delete\(tradeId\);/);
     expect(VTS).not.toMatch(/if \(decision\.noDecisionReason === 'no_transactable_side'\) \{\s*_vtsTouch\.exitNoTransactableSide\+\+;\s*const _ntNow/);
     expect(VTS).not.toMatch(/_vtsNoTriggerStreak\.get\(trade\.symbol\)/);
   });

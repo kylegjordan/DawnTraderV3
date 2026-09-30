@@ -37,20 +37,20 @@ describe('OBJ-5a — resolveVtsBookedExitPrice (the class seam + the null arm)',
     const clamp = 100;      // TEC's stop
     const mark = 99.85;     // where the bid actually was
     expect(mark).not.toBe(clamp);
-    expect(resolveVtsBookedExitPrice('crypto_spot', mark, mark, clamp).price).toBe(mark);
+    expect(resolveVtsBookedExitPrice(mark, mark, clamp).price).toBe(mark);
   });
 
   // `8a-P4c` increment 3 (P8b): the §7.4 class seam is CLOSED — xStock books the guarded bid on the same arms as crypto.
   it('xStock: books the observed bid like crypto — the §7.4 class seam is closed (8a-P4c increment 3)', () => {
-    expect(resolveVtsBookedExitPrice('xstock_spot', 118.75, 118.75, 122.0)).toEqual({ price: 118.75, arm: 'bid' });
+    expect(resolveVtsBookedExitPrice(118.75, 118.75, 122.0)).toEqual({ price: 118.75, arm: 'bid' });
   });
 
   it('null arm: no live mark ⇒ the evaluator\'s own price, never NaN/0', () => {
-    expect(resolveVtsBookedExitPrice('crypto_spot', null, null, 100).price).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', undefined, undefined, 100).price).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', NaN, NaN, 100).price).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', 0, 0, 100).price).toBe(100);
-    expect(resolveVtsBookedExitPrice('crypto_spot', -1, -1, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(null, null, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(undefined, undefined, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(NaN, NaN, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(0, 0, 100).price).toBe(100);
+    expect(resolveVtsBookedExitPrice(-1, -1, 100).price).toBe(100);
   });
 });
 

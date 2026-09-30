@@ -91,10 +91,13 @@ import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin
 import { resolveVtsBookedExitPrice, type VtsBookingArm } from '../core/trading/vts-exit-booking.js';
 import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, type EntryPriceBasis } from '../core/trading/vts-friction.js';
 import { noteVtsCloseFriction, vtsFrictionSinceBoot } from './vts-friction-ledger.js';
+import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-no-trigger-streak.js';
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
 import { guardXstockQuote } from '../asset_classes/xstock_spot/vts-xs-guard.js';
 import { computeStalenessCeiling } from '../asset_classes/xstock_spot/mark-staleness.js';
 import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
+import { readVtsXstockExitMaxSpread } from '../asset_classes/xstock_spot/vts-xs-touch-config.js';
+import type { XsLiveReason } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
 import { getCachedSigma, ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
 import { isInXstockWeekendClose } from '../asset_classes/xstock_spot/market-hours.js';
@@ -174,7 +177,7 @@ const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
 // `no_usable_mark` (the evaluator's could-not-look arms). The harm is identical for both (no HWM, no latch, no rung, then a
 // timeout at the mark), and clearing on the other reason let a feed that flaps between them reset the clock forever.
 // It clears ONLY on a real decision (`noDecisionReason === undefined`). The last reason rides into the alert body.
-const _vtsNoTriggerStreak = new Map<string, { sinceMs: number; alerted: boolean; lastReason: string }>();
+const _vtsNoTriggerStreak = new Map<string, NoTriggerStreak>();
 // The shadow lane's floor (BLOCKER-1): one count, not a streak, so its starvation is visible without pooling into the real lane.
 const _vtsShadowTouch = { looks: 0, noTransactableSide: 0 };
 // `8a-P4c` increment 1 — the VTS xStock decision-quote instrument, one per lane. TELEMETRY ONLY: nothing reads it to
@@ -188,19 +191,30 @@ const _xsShadowInstrument = new XsVtsInstrument('shadow');
 // no wider than the VTS exit spread ceiling (`vts_xstock_touch.exit_max_spread_fraction`, a DB row — the one standard
 // VTS carries that paper does not, and what refuses the `#1065` stub-bid frame). STATELESS (rule A). A missing knob, row
 // or usable side ⇒ `bid = null` ⇒ the evaluator makes NO DECISION (`no_transactable_side`) — never the mark.
-// `ceilingMs` is the age ceiling actually applied (the instrument's S1 `refusedLive` reads it); with no row it is the
-// floor, so a no-row look counts as applied and refused, as rule B counted it.
-const XSTOCK_KNOB_KEY = { exchange: '*', assetClass: 'xstock_spot' as const, strategy: '*', regime: '*' };
+// `ceilingMs` is the age ceiling actually applied and `reason` the guard's own verdict — BOTH go to the instrument
+// (Langston Step-4 BLOCKER-2: S1 reads the live guard, never a re-derivation). With no row the ceiling is the floor, so a
+// no-row look counts as applied and refused, as rule B counted it. A guard that cannot run (`knobs_unavailable`) applies
+// no ceiling, is counted by reason, and LOGS — at most once a minute, with the reads it missed — so an outage can never
+// read as "no open xStock trades" (paper's equivalent logs at `aee` too).
+let _xsKnobsLastLogMs = 0;
+let _xsKnobsMissedSinceLog = 0;
 function selectVtsXstockExitBid(symbol: string, row: XsQuoteRow | null, stop: number | null, nowMs: number):
-  { bid: number | null; ceilingMs: number | null; reason: string } {
+  { bid: number | null; ceilingMs: number | null; reason: XsLiveReason } {
   let msCfg: ReturnType<typeof readXstockMarkStalenessConfig>;
   let sigmaCfg: ReturnType<typeof readXstockSigmaCacheConfig>;
   let maxSpread: number;
   try {
     msCfg = readXstockMarkStalenessConfig();
     sigmaCfg = readXstockSigmaCacheConfig();
-    maxSpread = getCachedNumberRequired('vts_xstock_touch', 'exit_max_spread_fraction', XSTOCK_KNOB_KEY);
-  } catch {
+    maxSpread = readVtsXstockExitMaxSpread();
+  } catch (err) {
+    _xsKnobsMissedSinceLog++;
+    if (nowMs - _xsKnobsLastLogMs >= 60_000) {
+      console.error(`[8a-P4c][VTS_XS_KNOBS_UNAVAILABLE] ${_xsKnobsMissedSinceLog} xStock VTS exit look(s) made NO decision since the `
+        + `last line — the guard's knobs are unreadable: ${err instanceof Error ? err.message : String(err)}`);
+      _xsKnobsLastLogMs = nowMs;
+      _xsKnobsMissedSinceLog = 0;
+    }
     return { bid: null, ceilingMs: null, reason: 'knobs_unavailable' };
   }
   if (row === null) return { bid: null, ceilingMs: msCfg.floorMs, reason: 'no_row' };
@@ -215,12 +229,17 @@ function selectVtsXstockExitBid(symbol: string, row: XsQuoteRow | null, stop: nu
 // `8a-P4c` 3a-ii (P14, J7): the close-time friction counters + refusal alert live in `vts-friction-ledger.ts`.
 
 /** Kicks the SHARED σ cache for a lane's open xStock symbols — non-blocking, the same config paper uses. A cold knob or a
- *  failing refresh can only let σ age out, which floors the ceiling (fail-closed, as on paper). */
-function kickVtsXstockSigma(symbols: Iterable<string>): void {
+ *  failing refresh can only let σ age out, which floors the ceiling (fail-closed, as on paper). The cache's own in-flight
+ *  and due-gating bound the fan-out to the union of open symbols once per refresh period; what a kick ENQUEUED is logged
+ *  whenever it is non-zero, so the width of a cold tick is a measured number (Langston Step-4 nit, `5c2e53a2` context). */
+function kickVtsXstockSigma(lane: 'vts' | 'shadow', symbols: Iterable<string>): void {
   const list = Array.from(symbols);
   if (list.length === 0) return;
   try {
-    ensureSigmaFresh(list, readXstockSigmaCacheConfig());
+    const k = ensureSigmaFresh(list, readXstockSigmaCacheConfig());
+    if (k.enqueued > 0 || k.classwide) {
+      console.warn(`[8a-P4c][VTS_XS_SIGMA] lane=${lane} enqueued=${k.enqueued} classwide=${k.classwide} of openSymbols=${list.length}`);
+    }
   } catch (err) {
     console.warn('[8a-P4c][VTS_XS_SIGMA] refresh kick skipped (knobs cold — xStock exits will floor):', err instanceof Error ? err.message : err);
   }
@@ -3312,7 +3331,7 @@ async function resolveOpenVirtualTrades(): Promise<{
   // The B64b 7-day MAX_HOLD_MS safety valve is preserved as a stale-cleanup
   // outer bound.
   _xsVtsInstrument.beginPass(Date.now()); // `8a-P4c` increment 1 — one pass per resolve call
-  kickVtsXstockSigma(xstockSymbols); // `8a-P4c` increment 3 — the shared σ cache for this lane's open xStock symbols
+  kickVtsXstockSigma('vts', xstockSymbols); // `8a-P4c` increment 3 — the shared σ cache for this lane's open xStock symbols
   for (const [tradeId, trade] of openVirtualTrades) {
     // B-NEW-36 (2026-05-20): skip weekend-suspended trades. See the
     // symbol-collection loop above for full rationale (pre-audit §4.2).
@@ -3451,7 +3470,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       // records the look with the ceiling actually applied (S1).
       const _xsRow = xstockPriceMap.get(trade.symbol)?.rawQuote ?? null;
       const _xsExit = selectVtsXstockExitBid(trade.symbol, _xsRow, trade.stopLoss ?? null, Date.now());
-      _xsVtsInstrument.recordLook(trade.symbol, _xsRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _xsExit.ceilingMs);
+      _xsVtsInstrument.recordLook(trade.symbol, _xsRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _xsExit);
       _vtsExitBid = _xsExit.bid;
       _vtsTriggerPrice = _vtsExitBid;
     }
@@ -3497,48 +3516,52 @@ async function resolveOpenVirtualTrades(): Promise<{
         seed: tecSeed,
       });
       if (decision.noDecisionReason === 'no_transactable_side') _vtsTouch.exitNoTransactableSide++;
-      // `8a-P4c` increment 3 (P10, rule C / Kyle's `#994`): xStock JOINS the rail, keyed on the trade id, but only in the
-      // US `regular` session — an off-hours xStock no-decision is refused and logged by the instrument, never paged
-      // (Kyle, 2026-09-03). The 2026-09-15 crypto-only condition that stood here (53 streaks, 14+ of them xStock with no
-      // usable mark) is replaced by that session rule, not dropped.
+      // `8a-P4c` increment 3 (P10, rule C / Kyle's `#994`; Langston Step-4 FINDING-1): xStock JOINS the rail, keyed on the
+      // trade id. Kyle cut the PAGE, not the measurement: the STREAK is tracked in every session for both classes, and
+      // only the page is gated — an xStock no-decision pages only on time spent in the US `regular` session, whose clock
+      // (`pageSinceMs`) restarts after any off-hours gap (so a quote slow to resume at the open cannot page on an
+      // overnight streak). Every streak's full length is logged when it ends — the cost of "we just hold" is measured.
+      // The 2026-09-15 crypto-only condition (53 streaks, 14+ of them xStock with no usable mark) is replaced, not dropped.
       const _ntXsOffHours = trade.assetClass === 'xstock_spot'
         && (isInXstockWeekendClose(new Date()) || getXstockSession(Date.now()) !== 'regular');
-      if (decision.noDecisionReason !== undefined
-        && (trade.assetClass === 'crypto_spot' || (trade.assetClass === 'xstock_spot' && !_ntXsOffHours))) {
-        const _ntNow = Date.now();
-        const _nt = _vtsNoTriggerStreak.get(tradeId) ?? { sinceMs: _ntNow, alerted: false, lastReason: decision.noDecisionReason };
-        _nt.lastReason = decision.noDecisionReason;
-        _vtsNoTriggerStreak.set(tradeId, _nt);
-        if (!_nt.alerted && _ntNow - _nt.sinceMs >= VTS_NO_TRIGGER_ALERT_AFTER_MS) {
-          _nt.alerted = true; // ONCE per streak — the `_recordPriceSkip` idiom; the dedupe key alone would leave an inert rail
-          const _ntMins = Math.round((_ntNow - _nt.sinceMs) / 60_000);
-          console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] ${trade.symbol} trade ${tradeId}: no exit decision for ${_ntMins} min (last reason ${_nt.lastReason}) — raising system alert`);
-          try {
-            const { addAlert } = await import('./system-alerts.js');
-            await addAlert({
-              triggers_at: new Date(),
-              category: 'breakage',
-              severity: 'warning',
-              title: `VTS exit decisions unavailable — ${_ntMins} min with no decision for ${trade.symbol}`,
-              body: `VTS has made NO exit decision for ${_ntMins} minutes on open virtual trade ${tradeId} in ${trade.symbol} `
-                + `(most recent reason: ${_nt.lastReason}). \`no_transactable_side\` means a mark exists but no usable BID within the VTS `
-                + (trade.assetClass === 'xstock_spot'
-                  ? `xStock exit ceilings (paper's risk-derived age ceiling for the symbol, and the \`vts_xstock_touch\` spread ceiling; `
-                    + `this rail pages in the US regular session only); \`no_usable_mark\` means `
-                  : `exit ceilings (${VTS_EXIT_TOUCH_MAX_AGE_MS} ms, ${VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION * 100}% spread); \`no_usable_mark\` means `)
-                + `no live price at all. While this lasts the trade's stop and target are NOT evaluated, `
-                + `its high-water mark and latches do not advance, and if it reaches the max-hold valve it books a timeout at the `
-                + `mark — a wrong outcome in the post-epoch VTS corpus. Read the symbol's cached sides first (a bid equal to the ask `
-                + `means the cache never received real sides) before touching either ceiling. `
-                + `DISPOSITION: RESOLVE this row, do not ACK it — an ack silences the dedupe key permanently; resolving re-arms it.`,
-              dedupe_key: `no-trigger-vts-${trade.symbol}`,
-            });
-          } catch (alertErr) {
-            console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] addAlert failed for ${trade.symbol}:`, alertErr);
-          }
+      const _ntPages = trade.assetClass === 'crypto_spot' || (trade.assetClass === 'xstock_spot' && !_ntXsOffHours);
+      const _ntNow = Date.now();
+      const _ntStep = stepNoTriggerStreak(_vtsNoTriggerStreak.get(tradeId), decision.noDecisionReason, _ntPages, _ntNow,
+        VTS_NO_TRIGGER_ALERT_AFTER_MS);
+      if (_ntStep.next) _vtsNoTriggerStreak.set(tradeId, _ntStep.next);
+      else _vtsNoTriggerStreak.delete(tradeId);
+      if (_ntStep.ended !== null && _ntNow - _ntStep.ended.sinceMs >= 60_000) {
+        console.warn(`[8a-P4c][VTS_NO_TRIGGER_END] ${trade.symbol} trade ${tradeId} class=${trade.assetClass} `
+          + `streakMs=${_ntNow - _ntStep.ended.sinceMs} lastReason=${_ntStep.ended.lastReason} paged=${_ntStep.ended.alerted}`);
+      }
+      if (_ntStep.page && _ntStep.next !== null && _ntStep.next.pageSinceMs !== null) {
+        const _nt = _ntStep.next;
+        const _ntMins = Math.round((_ntNow - _ntStep.next.pageSinceMs) / 60_000);
+        const _ntTotalMins = Math.round((_ntNow - _nt.sinceMs) / 60_000);
+        console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] ${trade.symbol} trade ${tradeId}: no exit decision for ${_ntMins} min in paging time (${_ntTotalMins} min in all) (last reason ${_nt.lastReason}) — raising system alert`);
+        try {
+          const { addAlert } = await import('./system-alerts.js');
+          await addAlert({
+            triggers_at: new Date(),
+            category: 'breakage',
+            severity: 'warning',
+            title: `VTS exit decisions unavailable — ${_ntMins} min with no decision for ${trade.symbol}`,
+            body: `VTS has made NO exit decision for ${_ntMins} minutes of paging time (${_ntTotalMins} minutes in all) on open `
+              + `virtual trade ${tradeId} in ${trade.symbol} (most recent reason: ${_nt.lastReason}). \`no_transactable_side\` means a mark exists but no usable BID within the VTS `
+              + (trade.assetClass === 'xstock_spot'
+                ? `xStock exit ceilings (paper's risk-derived age ceiling for the symbol, and the \`vts_xstock_touch\` spread ceiling; `
+                  + `this rail pages in the US regular session only); \`no_usable_mark\` means `
+                : `exit ceilings (${VTS_EXIT_TOUCH_MAX_AGE_MS} ms, ${VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION * 100}% spread); \`no_usable_mark\` means `)
+              + `no live price at all. While this lasts the trade's stop and target are NOT evaluated, `
+              + `its high-water mark and latches do not advance, and if it reaches the max-hold valve it books a timeout at the `
+              + `mark — a wrong outcome in the post-epoch VTS corpus. Read the symbol's cached sides first (a bid equal to the ask `
+              + `means the cache never received real sides) before touching either ceiling. `
+              + `DISPOSITION: RESOLVE this row, do not ACK it — an ack silences the dedupe key permanently; resolving re-arms it.`,
+            dedupe_key: `no-trigger-vts-${trade.symbol}`,
+          });
+        } catch (alertErr) {
+          console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] addAlert failed for ${trade.symbol}:`, alertErr);
         }
-      } else {
-        _vtsNoTriggerStreak.delete(tradeId);
       }
     } catch (tecExitErr) {
       console.error(
@@ -3652,7 +3675,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     // longer the mark. A live mark with no usable bid falls to the clamp arm and is COUNTED: that arm is the
     // free-exit fiction, and without the counter its growth past today's "no live mark" set is invisible
     // (Langston r1 F3). xStock keeps the clamp behind the §7.4 seam. Shared resolver with the shadow lane.
-    const _vtsBooked = resolveVtsBookedExitPrice(trade.assetClass, _vtsExitBid, currentPrice, decision.exitPrice);
+    const _vtsBooked = resolveVtsBookedExitPrice(_vtsExitBid, currentPrice, decision.exitPrice);
     if (_vtsBooked.arm === 'clamp_no_bid') _vtsTouch.bookedNoBidClamp++;
     tradesToClose.push({
       id: tradeId,
@@ -4334,7 +4357,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
   const { getTrailingState } = await import('./trailing-exit-controller.js');
   const toClose: Array<{ id: string; trade: OpenVirtualTrade; exitPrice: number; exitReason: string; exitArm: VtsBookingArm }> = [];
   _xsShadowInstrument.beginPass(Date.now()); // `8a-P4c` P4b — the shadow lane is measured and read on its own
-  kickVtsXstockSigma(xstockSymbols); // `8a-P4c` increment 3 — the shared σ cache for the shadow lane's open xStock symbols
+  kickVtsXstockSigma('shadow', xstockSymbols); // `8a-P4c` increment 3 — the shared σ cache for the shadow lane's open xStock symbols
   for (const [tradeId, trade] of openShadowTrades) {
     if (!trade.assetClass) { openShadowTrades.delete(tradeId); continue; }
     const holdDurationMs = now - trade.openedAt;
@@ -4353,7 +4376,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
       // `8a-P4c` increment 3 (P8a): the shadow lane judges xStock with the SAME guard as the real lane.
       const _sxRow = xstockPriceMap.get(trade.symbol)?.rawQuote ?? null;
       const _sx = selectVtsXstockExitBid(trade.symbol, _sxRow, trade.stopLoss ?? null, Date.now());
-      _xsShadowInstrument.recordLook(trade.symbol, _sxRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _sx.ceilingMs);
+      _xsShadowInstrument.recordLook(trade.symbol, _sxRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _sx);
       _sExitBid = _sx.bid;
     }
     const existingTecState = getTrailingState(tradeId);
@@ -4405,7 +4428,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     if (!decision.shouldExit) continue;
     const reason = decision.exitReason === 'stale_timeout' ? 'shadow_max_hold' : (decision.exitReason ?? 'timeout');
     // F-G-2 OBJ-5a: same resolver as the real lane (:3238) — the shadow lane books the same way.
-    const _sBooked = resolveVtsBookedExitPrice(trade.assetClass, _sExitBid, currentPrice, decision.exitPrice);
+    const _sBooked = resolveVtsBookedExitPrice(_sExitBid, currentPrice, decision.exitPrice);
     toClose.push({ id: tradeId, trade, exitPrice: _sBooked.price, exitReason: reason, exitArm: _sBooked.arm });
   }
 

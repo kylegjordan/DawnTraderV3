@@ -15,6 +15,16 @@
 import { xstockTransactableSides } from './transactable-sides.js';
 import { getXstockSession, type XstockSession } from './time-of-day.js';
 import { isInXstockWeekendClose } from './market-hours.js';
+import type { XsGuardReason } from './vts-xs-guard.js';
+
+/** `8a-P4c` increment 3 (Langston Step-4 BLOCKER-2): what the LIVE guard decided on a look — its own reason, never a
+ *  re-derivation. `knobs_unavailable` = the guard could not run (no ceiling applied); it is counted, never dropped. */
+export type XsLiveReason = XsGuardReason | 'knobs_unavailable';
+export interface XsLiveJudgement { reason: XsLiveReason; ceilingMs: number | null }
+/** The order of the per-reason vector on the pass and roll-up lines (`live=[…]`). */
+export const XS_LIVE_REASONS: readonly XsLiveReason[] = ['ok', 'no_row', 'age_unknown', 'too_old', 'side_unusable', 'too_wide', 'knobs_unavailable'];
+/** The AGE refusals — S1's numerator. The guard judges age first, so these are exactly the looks refused on age. */
+const AGE_REFUSALS: ReadonlySet<XsLiveReason> = new Set<XsLiveReason>(['no_row', 'age_unknown', 'too_old']);
 
 /**
  * The spread ceiling the instrument measures against — an INSTRUMENT constant fixed by the pre-registration, not a
@@ -123,12 +133,15 @@ interface PassCounters {
   /** `8a-P4c` increment 3, S1 (plan §C3.7-§C3.8): looks judged against the ceiling ACTUALLY applied, and those it
    *  refused on AGE (no row, unknown age, or older than the applied ceiling) — the successor measurement to rule B. */
   appliedLooks: number; refusedLive: number;
+  /** Looks by the LIVE guard's reason, in `XS_LIVE_REASONS` order (Langston BLOCKER-2). */
+  live: number[];
 }
 
 interface SymbolCounters {
   looks: number; noRow: number; ageUnknown: number; sideUnusable: number; wide: number;
   ageOver: number[]; refused: number[];
   appliedLooks: number; refusedLive: number;
+  live: number[];
 }
 
 const zeros = (n: number) => new Array<number>(n).fill(0);
@@ -140,7 +153,7 @@ function emptyPass(): PassCounters {
     ageOver: zeros(XS_VTS_AGE_CANDIDATES_MS.length), refused: zeros(XS_VTS_AGE_CANDIDATES_MS.length),
     bidFiresStop: 0, lastFiresTarget: 0,
     pendingLooks: 0, pendingNoRow: 0, pendingAskAtOrBelow: 0, pendingLastAtOrBelow: 0,
-    appliedLooks: 0, refusedLive: 0,
+    appliedLooks: 0, refusedLive: 0, live: zeros(XS_LIVE_REASONS.length),
   };
 }
 
@@ -148,7 +161,7 @@ function emptySymbol(): SymbolCounters {
   return {
     looks: 0, noRow: 0, ageUnknown: 0, sideUnusable: 0, wide: 0,
     ageOver: zeros(XS_VTS_AGE_CANDIDATES_MS.length), refused: zeros(XS_VTS_AGE_CANDIDATES_MS.length),
-    appliedLooks: 0, refusedLive: 0,
+    appliedLooks: 0, refusedLive: 0, live: zeros(XS_LIVE_REASONS.length),
   };
 }
 
@@ -183,10 +196,14 @@ export class XsVtsInstrument {
   /** `appliedCeilingMs` — the age ceiling the decision ACTUALLY used for this look (S1); `null` before increment 3's guard
    *  or when no ceiling could be derived. */
   recordLook(symbol: string, row: XsQuoteRow | null, nowMs: number, stop: number | null, target: number | null,
-    appliedCeilingMs: number | null = null): void {
+    live: XsLiveJudgement | null = null): void {
     const l = classifyXstockVtsLook(row, nowMs, stop, target);
-    const applied = appliedCeilingMs !== null && Number.isFinite(appliedCeilingMs);
-    const refusedLive = applied && (l.noRow || l.ageUnknown || (l.ageMs as number) > (appliedCeilingMs as number));
+    // S1 (plan §C3.7-§C3.8), from the LIVE guard's own reason (Langston BLOCKER-2): `applied` = a ceiling was applied;
+    // `refusedLive` = refused on AGE by the guard. Every reason is also counted in `live`, so a spread or side refusal,
+    // and a guard that could not run at all, are each visible — none reads as "no looks".
+    const applied = live !== null && live.ceilingMs !== null && Number.isFinite(live.ceilingMs);
+    const refusedLive = applied && AGE_REFUSALS.has((live as XsLiveJudgement).reason);
+    const liveIdx = live === null ? -1 : XS_LIVE_REASONS.indexOf(live.reason);
     const p = this.pass;
     p.looks++;
     if (l.noRow) p.noRow++;
@@ -201,6 +218,7 @@ export class XsVtsInstrument {
     if (l.lastFiresTarget) p.lastFiresTarget++;
     if (applied) p.appliedLooks++;
     if (refusedLive) p.refusedLive++;
+    if (liveIdx >= 0) p.live[liveIdx]++;
 
     const key = `${this.passSession}|${symbol}`;
     const s = this.symbols.get(key) ?? emptySymbol();
@@ -213,6 +231,7 @@ export class XsVtsInstrument {
     l.refusedAt.forEach((v, i) => { if (v) s.refused[i]++; });
     if (applied) s.appliedLooks++;
     if (refusedLive) s.refusedLive++;
+    if (liveIdx >= 0) s.live[liveIdx]++;
     this.symbols.set(key, s);
   }
 
@@ -234,7 +253,7 @@ export class XsVtsInstrument {
       + `ageUnknown=${p.ageUnknown} sideUnusable=${p.sideUnusable} wide=${p.wide} age=${list(p.age)} spread=${list(p.spread)} `
       + `ageOver=${list(p.ageOver)} refused=${list(p.refused)} bidFiresStop=${p.bidFiresStop} lastFiresTarget=${p.lastFiresTarget} `
       + `pendingLooks=${p.pendingLooks} pendingNoRow=${p.pendingNoRow} pendingAskAtOrBelow=${p.pendingAskAtOrBelow} `
-      + `pendingLastAtOrBelow=${p.pendingLastAtOrBelow} appliedLooks=${p.appliedLooks} refusedLive=${p.refusedLive}`,
+      + `pendingLastAtOrBelow=${p.pendingLastAtOrBelow} appliedLooks=${p.appliedLooks} refusedLive=${p.refusedLive} live=${list(p.live)}`,
     );
   }
 
@@ -247,7 +266,7 @@ export class XsVtsInstrument {
       this.emit(
         `[8a-P4c][VTS_XS_SYM] lane=${this.lane} hour=${hourIso} session=${session} symbol=${symbol} looks=${s.looks} `
         + `noRow=${s.noRow} ageUnknown=${s.ageUnknown} sideUnusable=${s.sideUnusable} wide=${s.wide} `
-        + `ageOver=${list(s.ageOver)} refused=${list(s.refused)} appliedLooks=${s.appliedLooks} refusedLive=${s.refusedLive}`,
+        + `ageOver=${list(s.ageOver)} refused=${list(s.refused)} appliedLooks=${s.appliedLooks} refusedLive=${s.refusedLive} live=${list(s.live)}`,
       );
     }
     this.symbols.clear();
