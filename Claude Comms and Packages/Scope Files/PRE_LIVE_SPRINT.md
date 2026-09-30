@@ -315,7 +315,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 - #1043 (CC-INFRA) — a pinned GitHub read served the wrong file — reviewer tooling
 - #169 (—) — the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed
 - #219 (—) — dormant flip-rate governance input
-- #449 (CC-B) — governance checker read a frozen rulebook
+- ~~#449 (CC-B) — governance checker read a frozen rulebook~~ — **CLOSED 2026-09-30 by its filer (CC-B): `B_GOV_INTEGRITY_0_COMPLETION_REPORT.md` line 55 records it fully resolved.**
 - #655 (CC-A) — stateless parallel rulings — crew process
 - #669 (CC-B) — Langston Step-4 finding (B) — contents need the owner's read
 - #670 (—) — crew-status cold hand-off
@@ -508,7 +508,7 @@ Two tracks run side by side and meet at go-live. **Track A** is the trading syst
 ## Parked by Kyle — 7 (unchanged)
 
 - B-ALERT-DEDUPE-REASON-DRIFT — parked by Kyle, deliberately undated
-- B-GOV-INTEGRITY-2 — parked by Kyle, deliberately undated · carries `#481` (the general governed-read helper and lint; the dangerous shape is already blocked by a hook)
+- B-GOV-INTEGRITY-2 — parked by Kyle, deliberately undated · carries `#481` (the general governed-read helper and lint; the dangerous shape is already blocked by a hook) · `#480` · `#485` (CC-B's leg) — added 2026-09-30 when their dated homes were placed here
 - B-RULES-1E-LANGSTON-SLIM — parked by Kyle, deliberately undated
 - #392 — parked by Kyle, deliberately undated
 - #668 — the governance-standardisation arc — a DIFFERENT thing from B-SIZING-DEC-RESTORE, which only cites it
