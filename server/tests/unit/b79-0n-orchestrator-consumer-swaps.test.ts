@@ -4,7 +4,8 @@
  * ════════════════════════════════════════════════════════════════════════════
  *
  * Verifies that the 4 consumer-site swaps from Chunks B/C/D/E land correctly:
- *   - active-position-sizing.ts: assetClass is REQUIRED on ActivePositionSizingParams
+ *   - active-position-sizing.ts: assetClass WAS required on ActivePositionSizingParams (the pattern-list cap's dispatch
+ *     key); since B-SIZING-DEC-RESTORE 2e the field is GONE with the cap, and the test below pins its ABSENCE
  *   - signal_quality_evaluator.ts: input.assetClass routes to dispatcher
  *   - routes.ts diagnostic: per-class JSON shape
  *   - signal-orchestrator.ts: dead imports (PATTERN_POOL_GUARDRAILS,
@@ -13,8 +14,8 @@
  * The factory interface contract is verified by `b79-0b-asset-class-instances.test.ts`
  * post-refactor (ratioManager field removed).
  *
- * Type-lock tests use `@ts-expect-error` to prove the API contract holds at
- * compile time — these catch local removal of the REQUIRED keyword.
+ * (The sizer's contract is now pinned by source text — no `assetClass` and no `sourcePool` on the params — since there
+ *  is no REQUIRED keyword left to type-lock.)
  * ════════════════════════════════════════════════════════════════════════════
  */
 

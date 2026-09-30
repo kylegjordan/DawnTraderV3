@@ -400,7 +400,8 @@ export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
               Size buffer:{' '}
               {typeof guardrails.sizingFactors?.bufferFactor === 'number' ? (
                 <>
-                  {/* the setting itself, never a rounded figure (A2 nit): 0.97 → 97%, 0.975 → 97.5% */}
+                  {/* the setting to four decimal places of a percent (A2 nits): 0.97 → 97%, 0.975 → 97.5% — exact for
+                      any buffer with at most six decimals, rounded beyond that */}
                   <span className="font-semibold text-foreground">{Number((guardrails.sizingFactors.bufferFactor * 100).toFixed(4))}%</span>
                   {' '}— each trade is sized at this share of its slot, so a full book still fits under the exposure limit after a small drop in the balance.
                 </>
@@ -427,11 +428,14 @@ export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
                 </span>
               )}
             </li>
-            {/* Step-4 A2 BLOCKER-2: the venue's lot step is a third factor — the sized quantity is rounded DOWN to it and
-                the rounded amount is what fills (active-execution-engine.ts, roundQuantityForVenue). No number: it
-                varies by coin. */}
+            {/* Step-4 A2 BLOCKER-2 + re-review BLOCKER-2/CONDITION-1: the venue's lot rules are a third factor. In PAPER
+                mode the engine applies them itself (`roundQuantityForVenue`, inside the paper-only block of
+                active-execution-engine.ts): the quantity rounds DOWN to the coin's step, and below the coin's minimum it
+                returns null and the open is REFUSED (VALIDATE_REJECTED). In LIVE mode the exchange enforces the same
+                rules on the real order. The sentence is mode-neutral because both modes meet the same rules. No
+                number: they vary by coin. */}
             <li data-testid="sizing-factor-lot-rounding">
-              Exchange rounding: the final amount is rounded down to the smallest amount the exchange will trade for that coin, so a fill can land slightly under the figure shown.
+              Exchange rounding: the exchange only trades whole steps of each coin, so the final amount is rounded down to the nearest step and a fill can land slightly under the figure shown. Below the exchange's minimum for that coin, the trade is skipped rather than shrunk.
             </li>
           </ul>
         </div>

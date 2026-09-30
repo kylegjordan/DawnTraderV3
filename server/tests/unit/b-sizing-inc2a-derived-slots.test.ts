@@ -181,14 +181,21 @@ describe('ONE derivation (§14.4 BLOCKER-1) — every slot reader calls it, noth
   // type-clean and behaves the same today — until obj-5's posture term lands inside the resolver, when an unwrapped
   // site would report a slot count the engine does not use. So every call site is SWEPT, never listed: a new unwrapped
   // call in a new file fails here. The hit count is printed as the positive control.
+  // Step-4 A2 re-review BLOCKER-1: EVERY JS/TS source extension (.ts .tsx .mts .cts .js .jsx .mjs .cjs — the first walk
+  // missed four .cjs scripts), and tests excluded BY PREDICATE, not by one hardcoded folder: any path under a `tests` or
+  // `__tests__` directory, and any `*.test.*` / `*.spec.*` file wherever it sits. The printed count is of the non-test
+  // JS/TS source files under the four roots.
   const ROOTS = ['server', 'client', 'shared', 'scripts'];
+  const SOURCE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+  const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
+  const TEST_DIR = new Set(['tests', '__tests__']);
   const walk = (dir: string, out: string[] = []): string[] => {
     for (const name of readdirSync(dir)) {
       const full = join(dir, name);
-      if (name === 'node_modules' || name === 'dist' || full.replace(/\\/g, '/') === 'server/tests') continue;
+      if (name === 'node_modules' || name === 'dist' || TEST_DIR.has(name)) continue;
       const st = statSync(full);
       if (st.isDirectory()) walk(full, out);
-      else if (/\.(ts|tsx|mts|mjs|js)$/.test(name)) out.push(full);
+      else if (SOURCE.test(name) && !TEST_FILE.test(name)) out.push(full);
     }
     return out;
   };
@@ -219,7 +226,7 @@ describe('ONE derivation (§14.4 BLOCKER-1) — every slot reader calls it, noth
       calls += hits;
       if (unwrapped(text) > 0) bad.push(f);
     }
-    console.log(`[A2 BLOCKER-1 sweep] ${files.length} files, ${calls} deriveSlotCount( occurrences incl. the definition`);
+    console.log(`[A2 BLOCKER-1 sweep] ${files.length} non-test JS/TS source files, ${calls} deriveSlotCount( occurrences incl. the definition`);
     expect(files.length).toBeGreaterThan(500);   // the walk reached the tree
     expect(calls).toBeGreaterThanOrEqual(5);      // positive control: the definition + today's four call sites
     expect(bad).toEqual([]);

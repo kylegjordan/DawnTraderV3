@@ -829,3 +829,15 @@ Ref note (his): gate B's content is in `06fa8ba04` and A1's conditions in `4fccc
 | **C4 residue** | `schema.ts:1937` stacked the retirement UNDER the stale present-tense text | the comment itself rewritten (historical cohort hash, data only) |
 | **nit** | "18 at this census; 7 since deleted" in a count column | `11 (18 at the census, 7 deleted 2026-09-30)`, System Manual and PHASE9 |
 **Recorded so nobody "fixes" it (his note):** the Pe5 GONE pattern forbids `XSTOCK_SPOT_PATTERN_FINAL_SCORE_FLOOR` while a control requires `\bFINAL_SCORE_FLOOR\b` present. Both hold: the fence scans comment-STRIPPED source (so the prefixed token in `xstock_spot/pattern-pool-filters.ts`'s header is invisible to it), and `\b` keeps the bare control from matching the prefixed form. Correct, though it reads as a contradiction at a glance.
+
+### 20.11 STEP 4, GATE A2 RE-REVIEW — LANGSTON: CHANGES-NEEDED (two blockers, three conditions, one nit); all built (2026-09-30, CC-C)
+He re-derived the 876 (his own census of the tree) and the five occurrences by enumeration; Pe6 and the six fixes substantively right.
+| # | ruling | as built |
+|---|---|---|
+| **BLOCKER-1** | the sweep omitted `.cjs`/`.cts`/`.jsx` (four `.cjs` scripts) and excluded tests by ONE hardcoded path (four test files under `server/__tests__` and `server/services/**/*.test.ts` were inside it) — `enumerator-blind-spot` | every JS/TS source extension; tests excluded by predicate (a `tests`/`__tests__` directory, or a `*.test.*`/`*.spec.*` filename); the printed count names what it counts: **non-test JS/TS source files** under the four roots — **875**, enumerated against the old walk: +4 `.cjs` (`scripts/analysis/obj_pa_pb.cjs`, `scripts/b5c-diag.cjs`, `scripts/b5c-poll.cjs`, `scripts/b5c-verify.cjs`), −5 test files (his four, plus a fifth he did not list: `scripts/governance-checker/poller.test.mjs`); 876 + 4 − 5 = 875; still 5 `deriveSlotCount(` occurrences, all wrapped |
+| **BLOCKER-2** | the lot line stated the small half — below a coin's minimum the engine REFUSES the open (`roundQuantityForVenue` → null → `VALIDATE_REJECTED`) | *"Below the exchange's minimum for that coin, the trade is skipped rather than shrunk."* |
+| **CONDITION-1** | the cited mechanism is paper-only; the panel renders both modes | the sentence is mode-neutral; the code comment names the split (paper applies the rules in the engine; live meets them at the exchange) |
+| **CONDITION-2** | the consumer-swaps docblock still said `assetClass` is REQUIRED | rewritten: it WAS required, is gone with the cap, and the test pins its absence |
+| **CONDITION-3** | a seventh doc debt | **Step-10 debt added:** §20 Pe6's line (`sizingFactors` *or `sizingFactorsError`*) — the field FINDING-1 deleted |
+| **nit** | `toFixed(4)` is exact to four decimals of a percent, not exact | the comment states that magnitude |
+**Routing note:** his alert line routed `dff68e3b` (this batch open > 7 d) to CC-B; the batch is CC-C's and the row stays active until the close (`GOVERNANCE_EXCEPTIONS` row 35).
