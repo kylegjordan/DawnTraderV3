@@ -385,7 +385,7 @@ export const EXCEPTIONS_MALFORMED_BID_CAP = 64;
 // P44 dry run is committed, Langston has ruled its figures and his Step 4 is done (P62).
 // Committed source, never env: push is deploy, and an env default is invisible at the graded ref.
 export const WEEKLY_CENSUS_ENABLED = true;   // P62 census flip (B-PLAN-CURRENCY-CHECK) — see the block above
-export const MISTAKE_PASS_ENABLED = false;
+export const MISTAKE_PASS_ENABLED = true;   // P62 mistake-pass flip (B-PLAN-CURRENCY-CHECK) — see the block above
 
 // The weekly gate fires on the first successful tick at or after Monday CENSUS_HOUR_UTC:00Z of an
 // ISO week not yet run (§10e Q10, catch-up). The heartbeat raises a `warning` liveness alert when an

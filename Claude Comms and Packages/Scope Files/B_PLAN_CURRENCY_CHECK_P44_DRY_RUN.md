@@ -244,3 +244,16 @@ Weekly plan census 2026-W40 at ac7a218. owner=CC-A, do not ack. action="run the 
 (g) §6 recount agrees with the table
 Full lists: metadata.lists of this row (read by id in /var/log/dawntrader/system-alerts.jsonl); box file /var/lib/governance-checker/census/2026-W40.json.
 ```
+
+## P62 pre-registration (mistake pass) — `node scripts/governance-checker/census.mjs --ref e5aa960c1e5a2297db17a859687b6366c9691629 --dry-run --mistake-pass` (2026-09-30, the base of the mistake-pass flip)
+
+The flip fires the 2026-W40 pass on its first tick (a mid-week first enable fires at once). The window is the same seven-day ref as the census (R1-Q14 option (b)); the 09-03 to 09-28 gap is NOT re-counted (its instances were filed ad hoc — the 2026-09-30 run-log row). Expected:
+
+```
+mistake pass: {"slugs":{"wrong-object":58,"measurement-provenance":1,"enumerator-blind-spot":11,"fix-follows-pointer":10,"inflated-the-gap":1,"count-from-search":1,"shared-tmp-message":1,"plan-tally-not-recounted":1,"verification-weaker-than-claim":4,"sibling-left-stale":5,"announced-before-done":3,"row-id-grammar":1,"silence-not-evidence":2,"shell-mangled-text":1,"partial-apply-reported-as-complete":4,"fragment-not-whole":4,"grain-not-gloss":2,"control-not-discriminating":1,"summary-not-object":3,"history-not-read":1,"ownership-misread":1,"rule-relaxed-by-interim":1,"unmeasured-duration":1,"skipped-the-gate":1,"republished-secret":1,"document-value-quoted-as-live-value":1,"memory-over-cap":1},"total":122,"tripwire":0,"skippedGate":1,"commits":647}
+Weekly mistake-pattern pass 2026-W40 (owner CC-A)
+OLD Claude — weekly mistake-pattern pass 2026-W40, commits 7f472d1..e5aa960 (647). CC-A owns it: do not ack.
+MISTAKE: trailers by slug: wrong-object 58, enumerator-blind-spot 11, fix-follows-pointer 10, sibling-left-stale 5, fragment-not-whole 4, partial-apply-reported-as-complete 4, verification-weaker-than-claim 4, announced-before-done 3, summary-not-object 3, grain-not-gloss 2, silence-not-evidence 2, control-not-discriminating 1, count-from-search 1, document-value-quoted-as-live-value 1, history-not-read 1, inflated-the-gap 1, measurement-provenance 1, memory-over-cap 1, ownership-misread 1, plan-tally-not-recounted 1, republished-secret 1, row-id-grammar 1, rule-relaxed-by-interim 1, shared-tmp-message 1, shell-mangled-text 1, skipped-the-gate 1, unmeasured-duration 1 (total 122; skipped-the-gate 1).
+#754 step-skip tripwire grep: 0 hit line(s). It sees commits only, so zero is weak evidence. Whether a new slug names a workflow step is CC-A's judgement and is not counted here.
+Run THE WEEKLY PASS in MISTAKE_PATTERNS.md, write the run-log row, resolve with the run-log commit sha.
+```
