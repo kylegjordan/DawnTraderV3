@@ -3,8 +3,8 @@
 // what the box honoured before this commit?" (Langston, scope §10i R1-Q6; round 3, §1 R3-HY-1).
 //   OLD side = TODAY'S RULE (a verbatim copy of the pre-batch loadExceptions loop, below) applied to the
 //              ledger at the PARENT of the push commit;
-//   NEW side = parseExceptions (poller.mjs, the working tree — refused unless it is the push commit's own
-//              blob) applied to the ledger AT the push commit.
+//   NEW side = parseExceptions (poller.mjs + the grammar in config.mjs, the working tree — refused unless
+//              BOTH are the push commit's own blobs) applied to the ledger AT the push commit.
 // Run from the repo root:
 //   node scripts/governance-checker/exceptions-preview.mjs [<pushRef>]        (default HEAD; parent = <pushRef>^)
 // ⚠️ PRE-REGISTERED (scope §10i R1-Q6; pre-audit §12.1): exactly 3 set removals, classOverride 13→13,
@@ -64,13 +64,17 @@ const pushRef = process.argv[2] || 'HEAD';
 const pushSha = git('rev-parse', pushRef).trim();
 const parentSha = git('rev-parse', `${pushSha}^`).trim();
 
-// The NEW side must be the push commit's parser, not a working-tree edit: refuse on any difference.
-const wtBlob = git('hash-object', join(REPO_ROOT, 'scripts/governance-checker/poller.mjs')).trim();
-const refBlob = git('rev-parse', `${pushSha}:scripts/governance-checker/poller.mjs`).trim();
-if (wtBlob !== refBlob) {
-  console.error(`REFUSED: working-tree poller.mjs (${wtBlob}) is not ${pushSha.slice(0, 9)}'s (${refBlob}) — ` +
-    `the NEW side would not be the push commit's parser. Check out ${pushSha.slice(0, 9)} (or stash) and re-run.`);
-  process.exit(2);
+// The NEW side must be the push commit's parser, not a working-tree edit: refuse on any difference. config.mjs
+// is checked too — it holds the grammar parseExceptions applies (EXCEPTION_*, CLASS_OVERRIDE_VALUE) and the
+// VALID_CLASSES the OLD side reads, so a working-tree edit there changes either side just as silently.
+for (const file of ['poller.mjs', 'config.mjs']) {
+  const wtBlob = git('hash-object', join(REPO_ROOT, 'scripts/governance-checker', file)).trim();
+  const refBlob = git('rev-parse', `${pushSha}:scripts/governance-checker/${file}`).trim();
+  if (wtBlob !== refBlob) {
+    console.error(`REFUSED: working-tree ${file} (${wtBlob}) is not ${pushSha.slice(0, 9)}'s (${refBlob}) — ` +
+      `the NEW side would not be the push commit's parser. Check out ${pushSha.slice(0, 9)} (or stash) and re-run.`);
+    process.exit(2);
+  }
 }
 
 const rawParent = git('show', `${parentSha}:${LEDGER}`);
