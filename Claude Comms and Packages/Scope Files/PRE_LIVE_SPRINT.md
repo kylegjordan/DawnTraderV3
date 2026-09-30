@@ -24,7 +24,7 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 213 after live (+6 moved to the sprint, listed below)
+## After live — 215 after live (+6 moved to the sprint, listed below)
 
 > Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (3). Recounted 2026-09-30: 221 − 6 − 3 = 212. The theme headings below use the same rule.
 
@@ -97,7 +97,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-ALERT-ACK-PROCEDURE-DOCFIX (CC-B) — alert procedure doc
 - B-ALERT-LIFECYCLE (CC-C) — alert-tooling quality of life; its own row says it does not block the trading sequence · owner from `RUNNING_ISSUES` `#912`'s HOME line, the only explicit owner statement (`#443`, the originating issue, names none): *"HOME: `B-ALERT-LIFECYCLE`, owner CC-C, slotted with the rest of that batch's checker-hardening scope."* (B-PLAN-CURRENCY-CHECK, Langston 2026-09-30; CC-C told — if CC-C declines, this cell records the disagreement and it returns to Langston) · `#1125`: `recurrence_interval_seconds` is written on every alert and read by nothing; wire native recurrence or delete it (`B-PLAN-CURRENCY-CHECK`, Langston 2026-09-30)
 - B-ALERT-OWNERSHIP-REGISTER (CC-B) — alert ownership transfer
-- B-ALERT-TAXONOMY (CC-A) — alert categories · `#38`'s original scope was absorbed by `B-GOV-INTEGRITY-1` (2026-07-10: one category constant, validated at `addAlert`) · this line now carries `#448`'s residual: the creatable vocabulary still offers `soak_verification`, `verification` and `reminder`, one family with three creatable members — a scope decision, not a defect (Langston 2026-09-30)
+- B-ALERT-TAXONOMY (CC-A) — alert categories · `#38`'s original scope was absorbed by `B-GOV-INTEGRITY-1` (2026-07-10: one category constant, validated at `addAlert`) · this line now carries `#448`'s residual: the creatable vocabulary still offers `soak_verification`, `verification` and `reminder`, one family with three creatable members — a scope decision, not a defect (Langston 2026-09-30) · carries `#445` OBJ-6b, the mint-time observability check (added 2026-09-30, W40 census)
 - B-ALERT-WINDOW-EXPIRY (CC-A) — no terminal alert state for 'can no longer be observed' — alert tooling
 - B-CANONICAL-CORPUS-ACCURACY (CC-C) — accuracy of the pre-governance reference corpus
 - B-CANONICAL-FREEZE (CC-C) — its own row says governance hygiene, not on the trading path
@@ -147,9 +147,10 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 20.3 Test Infrastructure — - Add unified test runner scripts ( te (—) — test runner and frontend test tooling
 - row:1 (CC-A) — crew-process rule mechanisms (B-RULES-1e) — governance tooling, no effect on trading
 
-### Legacy and dead-code cleanup (the reachability census may pull some forward) — 20
+### Legacy and dead-code cleanup (the reachability census may pull some forward) — 21
 
 - B-AI-CHAT-REMOVAL (CC-C) — Kyle 2026-09-30: the AI chat is dead code, remove it with finality. Its ACTION path (intent executor + the seven `/intent/*` routes + the approval components) goes NOW in `B-SIZING-DEC-RESTORE` 2e because it touches paper trading; THIS entry is the rest — conversation, saved chats, chat logs/costs routes, and the unmounted assistant/panel/container/sidebar/insights components (`ai-opportunities-tab` is mounted and stays). 0 calls in ~11 days of access logs. Pull forward if Kyle wants it before live.
+- #422 (CC-B) — `/api/active-engine/diagnostics/scan-24h` has no client consumer; the reachability census rules on it (added 2026-09-30, W40 census)
 
 - #1042 (CC-B) — `calibration_ledger.decision_grade` is a flag no code reads and no screen shows; it read true on wrong xStock fee rates (added 2026-09-29)
 - #507 rider (CC-B) — `triggerSoftResubscribe` in the mini-book integrity monitor is kept and never called; #507's own checksum work is done (added 2026-09-29)
@@ -171,10 +172,11 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 16.9 resetRateLimiter() — INERT ON THE ONLY ENVIRONMENT WE RUN (a (—) — inert rate-limiter reset — Kyle slotted it in Phase 16
 - row:3n.b (CC-C) — orphan level tables (disposition 5) — legacy removal
 
-### Other (research, UI, refactors) — 75
+### Other (research, UI, refactors) — 76
 
 - #1020 (CC-A) — push guard inherits the previous call's working directory and refuses on a false zero (hit again building this draft)
 - #148 (—) — health check permission error on a Replit-era path
+- #395 (CC-B) — the null-reason tracker is a module global, safe only while evaluation is serial; refactor to return values (added 2026-09-30, W40 census)
 - #151 (—) — Phase 16 register entry
 - #152 (—) — document the locked-module override boundary
 - #156 (—) — audit candidate for per-class consumer swaps
