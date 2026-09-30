@@ -109,17 +109,30 @@ def open_log(p):
 
 
 # ── restarts: PM2's own record. Only a restart AFTER a lane's first instrument line can cut an hour short.
+# Step-4 FINDING-3 (Langston): the restart source's REACH is asserted, not assumed — its first stamp must be at or before
+# the window start, or a zero restart count is unreadable (the log could simply not go back that far).
 restarts = []
+pm2_first = None
+pm2_starting_total = 0
 if not os.path.exists(args.pm2_log):
     die(f'{args.pm2_log} missing — restarts cannot be enumerated, so hour-equality cannot be graded')
+PM2_STAMP = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}): ')
 with open_log(args.pm2_log) as fh:
     for line in fh:
+        if pm2_first is None:
+            m0 = PM2_STAMP.match(line)
+            if m0:
+                pm2_first = datetime.fromisoformat(m0.group(1)).replace(tzinfo=timezone.utc)
         m = re.match(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}): PM2 log: App \[dawntrader:\d+\] starting', line)
         if m:
+            pm2_starting_total += 1
             t = datetime.fromisoformat(m.group(1)).replace(tzinfo=timezone.utc)
             if START_S <= t < END + HOUR:
                 restarts.append(t)
 restarts.sort()
+if pm2_first is None or pm2_first > START_S:
+    die(f'{args.pm2_log} does not reach the window start (first stamp {pm2_first}, start {START_S}) — a zero restart '
+        'count would be unreadable')
 
 touch, sym = {}, {}
 per_file = []
@@ -222,7 +235,9 @@ while ri < len(restarts):
 
 out = {'window': [START.isoformat(), END.isoformat()], 'sym_cut': args.sym_cut, 'first_line': str(first_ts),
        'last_line': str(last_ts), 'files': per_file, 'unparsed_ts': bad,
-       'restarts_in_range': [r.isoformat() for r in restarts], 'lanes': {}}
+       'restarts_in_range': [r.isoformat() for r in restarts],
+       'restart_source': {'path': args.pm2_log, 'first_stamp': pm2_first.isoformat(), 'starting_lines_total': pm2_starting_total},
+       'lanes': {}}
 lanes = sorted({k[0] for k in touch} | {k[0] for k in sym})
 for lane in lanes:
     L = {}

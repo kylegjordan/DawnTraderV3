@@ -14,7 +14,8 @@ const count = (src: string, re: RegExp) => (src.match(re) ?? []).length;
 
 // A side defaulted to zero, in any spelling this file has used: `parseFloat(r.bid) || 0`, `Number(x.ask) ?? 0`, …
 const ZERO_DEFAULTED_SIDE = /\b(bid|ask)\s*:\s*[^,\n]*\b(bid|ask)\b[^,\n]*(\|\||\?\?)\s*0\b/g;
-const REAL_LANE_ENTRY_TYPE = /const xstockPriceMap = new Map<string, \{ symbol: string; price: number; rawQuote: XsQuoteRow \}>\(\);/g;
+// Step-4 NIT-5: the real lane's unread `symbol` went too, so BOTH lanes now declare the same side-free entry type.
+const ENTRY_TYPE = /const xstockPriceMap = new Map<string, \{ price: number; rawQuote: XsQuoteRow \}>\(\);/g;
 const HELPER_SIGNATURE = /get\(symbol: string, assetClass\?: string\): \{ price: number \} \| undefined \{/g;
 const SIDE_ON_A_MAP_TYPE = /new Map<string, \{[^}]*\b(bid|ask)\??\s*:/g;
 const SIDE_IN_HELPER_RETURN = /\{ price: [\w.]+, (bid|ask): /g;
@@ -39,8 +40,8 @@ describe('8a-P4c X0 — the fence on vts-runner.ts', () => {
     expect(count(VTS, ZERO_DEFAULTED_SIDE)).toBe(0);
   });
 
-  it('the real-lane xStock entry type carries no side (C3)', () => {
-    expect(count(VTS, REAL_LANE_ENTRY_TYPE)).toBe(1);
+  it('the xStock entry type on BOTH lanes is { price, rawQuote } — no side, no unread symbol (C3, NIT-5)', () => {
+    expect(count(VTS, ENTRY_TYPE)).toBe(2);
     expect(count(VTS, SIDE_ON_A_MAP_TYPE)).toBe(0);
   });
 

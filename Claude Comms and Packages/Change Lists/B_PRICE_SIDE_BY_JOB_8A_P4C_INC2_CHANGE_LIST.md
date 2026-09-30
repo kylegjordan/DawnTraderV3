@@ -67,3 +67,10 @@ And the type is the first wall: with the entry type side-free, re-adding the `||
 1. **Stream-order attribution for (d)** instead of the TOUCH line's own stamp — it relies on a lane's flush block being written synchronously inside `beginPass`, before that pass's first look (`vts-xs-instrument.ts:169-172`). If a same-lane TOUCH could land inside a flush block, the attribution would be wrong.
 2. **The restart rule excludes the restart's hour AND the hour before it** (the flush due at the hour change is lost too). Over-exclusive by design; it excluded nothing here.
 3. **Building `{ price }` in the xStock branch** rather than returning the entry: it narrows what the helper exposes to exactly its type, so a future caller cannot reach `rawQuote` through it by a cast.
+
+## Step 4 — APPROVED (four conditions + one nit, no blocker); all built — plan §C2.4
+- **FINDING-1:** correction 1's weight re-attributed to the negative control + construction; the per-hour equality is an identity, and the +5 cells-over-hours on both lanes (the five 09:30 ET opens) is the informative corroboration.
+- **FINDING-2:** `scripts/analysis/p4c-window-extract-selftest.py` exercises the restart arm; expectation committed first (`a5efad289`), first run 10/10 PASS, including the negative control (restart handling off ⇒ hour 12 unequal).
+- **FINDING-3:** the extract asserts the PM2 log reaches the window start and publishes its first stamp; re-run on staging unchanged.
+- **FINDING-4:** S28's stale line refs — Step-10 debt, listed.
+- **NIT-5:** the real lane's unread `symbol` dropped; both lanes declare `{ price; rawQuote }`.

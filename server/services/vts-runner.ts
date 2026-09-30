@@ -3167,7 +3167,7 @@ async function resolveOpenVirtualTrades(): Promise<{
   // `parseFloat(side) || 0` — a missing side fabricated as ZERO, which a SELL comparator would read as a price every stop
   // clears. Nothing read them, so they are deleted rather than retyped (plan §C2, Langston C3). A side is read from
   // `rawQuote`, where a missing side is `null`, never zero.
-  const xstockPriceMap = new Map<string, { symbol: string; price: number; rawQuote: XsQuoteRow }>();
+  const xstockPriceMap = new Map<string, { price: number; rawQuote: XsQuoteRow }>();
   if (xstockSymbols.size > 0) {
     try {
       const xstockSymbolListSql = Array.from(xstockSymbols)
@@ -3191,7 +3191,6 @@ async function resolveOpenVirtualTrades(): Promise<{
           const price = parseFloat(r.price);
           if (Number.isFinite(price) && price > 0) {
             xstockPriceMap.set(r.symbol, {
-              symbol: r.symbol,
               price,
               rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms) },
             });
