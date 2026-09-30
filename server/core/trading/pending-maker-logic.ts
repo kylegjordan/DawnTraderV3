@@ -79,7 +79,7 @@ export function makerFillPrice(limit: number): number {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export type TwinPlan =
-  | { kind: 'skip'; reason: 'twin_disabled' | 'marketable_maker' | 'degenerate_fallback' | 'no_entry_ask' }
+  | { kind: 'skip'; reason: 'twin_disabled' | 'marketable_maker' | 'degenerate_fallback' | 'no_entry_ask' | 'chosen_leg_unpriced' }
   | {
       kind: 'open';
       twinMode: 'taker' | 'maker';
@@ -144,9 +144,11 @@ export function planTwin(params: {
   makerMaxPendingMs: () => number;
   nowMs: number;
   /** `8a-P4c` 3a-ii (BLOCKER-1): the chosen leg's slippage and spread — the twin composes its OWN friction over them.
-   *  (Replaces F-G-2 OBJ-5b's chosen friction + chosen entry fee, whose fee-delta derivation the per-leg rule broke.) */
-  chosenSlippage?: number;
-  chosenSpread?: number;
+   *  (Replaces F-G-2 OBJ-5b's chosen friction + chosen entry fee, whose fee-delta derivation the per-leg rule broke.)
+   *  REQUIRED (Langston 3a-ii FINDING-2): a non-finite value SKIPS the twin (`chosen_leg_unpriced`) — the old optional
+   *  arm let a twin inherit the chosen leg's fee fractions under its OWN basis and recompose to neither leg's number. */
+  chosenSlippage: number | undefined;
+  chosenSpread: number | undefined;
 }): TwinPlan {
   if (!params.twinEnabled) return { kind: 'skip', reason: 'twin_disabled' };
   const twinMode: 'taker' | 'maker' | null =
@@ -165,25 +167,25 @@ export function planTwin(params: {
   if (twinMode === 'taker' && (_ask === null || !Number.isFinite(_ask) || _ask <= 0)) {
     return { kind: 'skip', reason: 'no_entry_ask' };
   }
+  if (!Number.isFinite(params.chosenSlippage) || !Number.isFinite(params.chosenSpread)) {
+    return { kind: 'skip', reason: 'chosen_leg_unpriced' };
+  }
   const twinEntryFee = twinMode === 'maker' ? params.feeRateMaker : params.feeRateTaker;
   // ⛔ `8a-P4c` increment 3a-ii (Langston BLOCKER-1): the twin COMPOSES its friction over its OWN leg — it no longer
   // derives it as the chosen leg's friction plus the entry-fee delta. That derivation assumed "slippage and spread are
   // the chosen leg's own, so only the entry-fee delta moves", which is false under the per-leg rule: a taker chosen leg
   // booked at a level carries an entry half-spread its maker twin never pays. Same composer as every writer.
   const twinEntryPriceBasis = entryPriceBasisFor(twinMode, true); // 3b (P9): a taker twin books the guarded ask
-  const repriced =
-    Number.isFinite(params.chosenSlippage) && Number.isFinite(params.chosenSpread)
-      ? {
-          frictionCost: composeVtsLegFriction({
-            entryFee: twinEntryFee, exitFee: params.feeRateTaker,
-            slippage: params.chosenSlippage as number, spread: params.chosenSpread as number,
-            entryPriceBasis: twinEntryPriceBasis, exitSideBooked: true,
-          }),
-          costFeeFraction: (twinEntryFee + params.feeRateTaker) / 2,
-          costEntryFeeFraction: twinEntryFee,
-          costExitFeeFraction: params.feeRateTaker,
-        }
-      : {};
+  const repriced = {
+    frictionCost: composeVtsLegFriction({
+      entryFee: twinEntryFee, exitFee: params.feeRateTaker,
+      slippage: params.chosenSlippage as number, spread: params.chosenSpread as number,
+      entryPriceBasis: twinEntryPriceBasis, exitSideBooked: true,
+    }),
+    costFeeFraction: (twinEntryFee + params.feeRateTaker) / 2,
+    costEntryFeeFraction: twinEntryFee,
+    costExitFeeFraction: params.feeRateTaker,
+  };
   return {
     kind: 'open',
     twinMode,

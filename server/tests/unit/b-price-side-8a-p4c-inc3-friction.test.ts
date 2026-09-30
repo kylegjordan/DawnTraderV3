@@ -22,6 +22,7 @@ import {
   composeVtsLegFriction,
   entryPriceBasisFor,
   recomposeVtsCloseFriction,
+  vtsSpreadShareByLeg,
   type VtsFrictionRecord,
 } from '../../core/trading/vts-friction.js';
 import { planTwin } from '../../core/trading/pending-maker-logic.js';
@@ -133,13 +134,21 @@ describe('8a-P4c 3a-ii (2) — NO DOUBLE COUNT, on the chosen leg and on the twi
     expect(plan.overlay.frictionCost).not.toBeCloseTo(chosen - FEE_T + FEE_M, 6); // BLOCKER-1's fee-delta mutant
   });
 
-  it('taker twin: its OWN entry half at the level; its exit on its side carries none', () => {
+  // `8a-P4c` 3b (P9): a taker twin books the guarded ask — on its side at both legs, so no spread half at all.
+  it('taker twin: booked at the ASK — no spread half at either leg (not the level\'s half, not the full spread)', () => {
     const plan = planTwin({ ...base, pendingMaker: true, decisionChosenMode: 'maker' });
     expect(plan.kind).toBe('open');
     if (plan.kind !== 'open') return;
-    expect(plan.overlay.entryPriceBasis).toBe('level');
-    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_T * 2 + 2 * SLIP + S / 2, 12);
+    expect(plan.overlay.entryPriceBasis).toBe('ask');
+    expect(plan.overlay.entryPrice).toBe(101);
+    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_T * 2 + 2 * SLIP, 12);
+    expect(plan.overlay.frictionCost).not.toBeCloseTo(FEE_T * 2 + 2 * SLIP + S / 2, 6); // the level mutant
     expect(plan.overlay.frictionCost).not.toBeCloseTo(OLD_FULL_SPREAD(FEE_T, FEE_T), 6);
+  });
+
+  it('taker twin with NO usable ask is skipped (no_entry_ask) — never booked at the level', () => {
+    expect(planTwin({ ...base, pendingMaker: true, decisionChosenMode: 'maker', placementTransactablePrice: null }))
+      .toEqual({ kind: 'skip', reason: 'no_entry_ask' });
   });
 
   it('the twin record recomposes at close to what planTwin stamped (one rule at both ends)', () => {
@@ -226,13 +235,15 @@ describe('8a-P4c 3a-ii (4) — fence: every production writer of the cost compon
         if (!/\bentryPriceBasis\b/.test(win)) missing.push(`${f}:${i + 1}`);
       });
     }
-    expect(sites.length).toBeGreaterThanOrEqual(6); // the census at build: 7 — a collapse to few means the walk broke
+    // Langston nit (a): EQUALITY to the census, so a collapse cannot read green. 8 at build: eval-cycle (1), vts-runner (5 —
+    // two open writers, two close payloads, registerOpenVtsTrade), vts-service (2 close records).
+    expect(sites.length).toBe(8);
     expect(missing).toEqual([]);
   });
 
   it('the twin overlay stamps its OWN basis (never inherited from the chosen leg)', () => {
     const src = readFileSync(join(ROOT, 'core/trading/pending-maker-logic.ts'), 'utf-8');
-    expect(src).toMatch(/const twinEntryPriceBasis = entryPriceBasisFor\(twinMode, false\);/);
+    expect(src).toMatch(/const twinEntryPriceBasis = entryPriceBasisFor\(twinMode, true\);/);
     expect(src).toMatch(/entryPriceBasis: twinEntryPriceBasis, \/\/ the twin's OWN basis/);
   });
 
@@ -241,5 +252,75 @@ describe('8a-P4c 3a-ii (4) — fence: every production writer of the cost compon
     expect(vts).not.toMatch(/grossPnl\s*-\s*trade\.frictionCost/);
     expect((vts.match(/recomposeVtsCloseFriction\(/g) ?? []).length).toBe(2);
     expect(vts).not.toMatch(/composeBookedFriction/);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// Langston 3a-ii r1 BLOCKER-1 — a record that never carried ANY cost input is UNPRICED, not refused: counted, no alert.
+// Only a PARTIAL absence (a writer lost an input) is the tripwire.
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('8a-P4c 3a-ii r2 — unpriced vs refused', () => {
+  beforeEach(() => addAlert.mockClear());
+  const bare = { frictionCost: 0 } as VtsFrictionRecord; // the shadow lane's shape: frictionCost 0, no components
+
+  it('ALL four components absent ⇒ unpriced (the stamped 0 kept), not stamped', () => {
+    expect(recomposeVtsCloseFriction(bare, 'bid')).toEqual({ friction: 0, basis: 'unpriced', entryPriceBasis: null, legacyBasis: false, missing: null });
+  });
+
+  it('unpriced is COUNTED separately and raises NO alert; partial absence still refuses and alerts', async () => {
+    const before = vtsFrictionSinceBoot();
+    noteVtsCloseFriction('shadow', { symbol: 'S/USD' }, recomposeVtsCloseFriction(bare, 'bid'));
+    await new Promise((r) => setTimeout(r, 10));
+    const mid = vtsFrictionSinceBoot();
+    expect(mid.unpriced).toBe(before.unpriced + 1);
+    expect(mid.refused).toBe(before.refused);
+    expect(addAlert).not.toHaveBeenCalled();
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    noteVtsCloseFriction('vts', { symbol: 'P/USD' }, recomposeVtsCloseFriction(rec({ costSpreadFraction: undefined }), 'bid'));
+    await vi.waitFor(() => expect(addAlert).toHaveBeenCalledTimes(1));
+    expect(vtsFrictionSinceBoot().refused).toBe(mid.refused + 1);
+    errSpy.mockRestore();
+  });
+
+  it('FENCE: the shadow lane registers NO cost components today — the day it gains them, this flips and unpriced must reach 0', () => {
+    const vts = readFileSync(join(process.cwd(), 'server/services/vts-runner.ts'), 'utf-8').replace(/\r\n/g, '\n');
+    const start = vts.indexOf('export async function registerOpenShadowTrade(');
+    const lit = vts.slice(vts.indexOf('const shadowTrade: OpenVirtualTrade = {', start));
+    const body = lit.slice(0, lit.indexOf('\n  };'));
+    expect(body).toMatch(/frictionCost: 0,/);
+    expect(body).not.toMatch(/cost(Entry|Exit)FeeFraction|costSlippageFraction|costSpreadFraction|chosenEntryMode/);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// Langston 3a-ii r1 FINDING-1 — the P19-B8.7 five-column split must sum to the booked `costs` under the per-leg rule.
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('8a-P4c 3a-ii r2 — the cost split sums to the booked friction, per leg', () => {
+  const split = (t: Parameters<typeof vtsSpreadShareByLeg>[0], closed: boolean) => {
+    const sh = vtsSpreadShareByLeg(t, closed);
+    return FEE_T * 2 + (SLIP + S * sh.entry) + (SLIP + S * sh.exit);
+  };
+  it.each([
+    ['level', 'bid', FEE_T * 2 + 2 * SLIP + S / 2],
+    ['level', 'clamp_no_bid', FEE_T * 2 + 2 * SLIP + S],
+    ['ask', 'bid', FEE_T * 2 + 2 * SLIP],
+    ['limit', 'clamp_no_mark', FEE_T * 2 + 2 * SLIP + S / 2],
+  ] as const)('closed, recomposed: entry %s + exit %s ⇒ the columns equal the recomposed friction', (basis, arm, want) => {
+    const fr = recomposeVtsCloseFriction(rec({ entryPriceBasis: basis }), arm);
+    expect(fr.friction).toBeCloseTo(want, 12);
+    expect(split({ entryPriceBasis: basis, frictionBasis: 'recomposed', exitBookingArm: arm }, true)).toBeCloseTo(fr.friction, 12);
+  });
+  it('an OPEN row matches the open-time estimate (exit on its side); a LEGACY row keeps ½ + ½ (the full-spread stamp)', () => {
+    const openEst = composeVtsLegFriction({ entryFee: FEE_T, exitFee: FEE_T, slippage: SLIP, spread: S, entryPriceBasis: 'level', exitSideBooked: true });
+    expect(split({ entryPriceBasis: 'level' }, false)).toBeCloseTo(openEst, 12);
+    expect(split({}, false)).toBeCloseTo(OLD_FULL_SPREAD(FEE_T, FEE_T), 12);
+    expect(split({}, true)).toBeCloseTo(OLD_FULL_SPREAD(FEE_T, FEE_T), 12);
+  });
+  it('both display sites use the helper (no hard-coded _sp / 2 left)', () => {
+    for (const f of ['server/services/vts-runner.ts', 'server/utils/export-csv.ts']) {
+      const src = readFileSync(join(process.cwd(), f), 'utf-8');
+      expect(src).toMatch(/vtsSpreadShareByLeg\(trade, (true|false)\)/);
+      expect(src).not.toMatch(/_sp \/ 2/);
+    }
   });
 });

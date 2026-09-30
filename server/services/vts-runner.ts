@@ -89,7 +89,7 @@ import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled 
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
 import { resolveVtsBookedExitPrice, type VtsBookingArm } from '../core/trading/vts-exit-booking.js';
-import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, type EntryPriceBasis } from '../core/trading/vts-friction.js';
+import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, vtsSpreadShareByLeg, type EntryPriceBasis, type VtsFrictionBasis } from '../core/trading/vts-friction.js';
 import { noteVtsCloseFriction, vtsFrictionSinceBoot } from './vts-friction-ledger.js';
 import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-no-trigger-streak.js';
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
@@ -673,7 +673,7 @@ interface Phase10TradeRecord {
   entryPriceBasis?: EntryPriceBasis;
   /** `8a-P4c` 3a-ii (P14, J7): the booked friction was recomposed at close under the per-leg rule, or the stamped
    *  scalar was kept because an input was missing (refused — alerted and counted). Set on CLOSED records only. */
-  frictionBasis?: 'recomposed' | 'stamped';
+  frictionBasis?: VtsFrictionBasis;
   /** The exit booking arm the close used (`bid` ⇒ the exit leg carries no spread half). CLOSED records only. */
   exitBookingArm?: VtsBookingArm;
 }
@@ -3658,7 +3658,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     // F-G-2 OBJ-5a + `8a-P3` C6: crypto books the BID — the price a seller receives — not TEC's clamp and no
     // longer the mark. A live mark with no usable bid falls to the clamp arm and is COUNTED: that arm is the
     // free-exit fiction, and without the counter its growth past today's "no live mark" set is invisible
-    // (Langston r1 F3). xStock keeps the clamp behind the §7.4 seam. Shared resolver with the shadow lane.
+    // (Langston r1 F3). xStock books on the same arms since `8a-P4c` increment 3. Shared resolver with the shadow lane.
     const _vtsBooked = resolveVtsBookedExitPrice(_vtsExitBid, currentPrice, decision.exitPrice);
     if (_vtsBooked.arm === 'clamp_no_bid') _vtsTouch.bookedNoBidClamp++;
     tradesToClose.push({
@@ -3673,7 +3673,7 @@ async function resolveOpenVirtualTrades(): Promise<{
   // `8a-P3` — one line per resolve pass when there was anything to look at, denominators beside numerators, then reset.
   if (_vtsTouch.exitLooks + _vtsTouch.entryFillLooks > 0) {
     console.log(`[8a-P3][VTS_TOUCH] exitLooks=${_vtsTouch.exitLooks} exitNoTransactableSide=${_vtsTouch.exitNoTransactableSide} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} bookedNoBidClamp=${_vtsTouch.bookedNoBidClamp} openNoTriggerStreaks=${_vtsNoTriggerStreak.size} `
-      + `frictionSinceBoot=${(({ recomposed, legacyBasis, refused }) => `recomposed:${recomposed},legacyBasis:${legacyBasis},refused:${refused}`)(vtsFrictionSinceBoot())}`);
+      + `frictionSinceBoot=${(({ recomposed, legacyBasis, refused, unpriced }) => `recomposed:${recomposed},legacyBasis:${legacyBasis},refused:${refused},unpriced:${unpriced}`)(vtsFrictionSinceBoot())}`);
   }
   for (const k of Object.keys(_vtsTouch) as Array<keyof typeof _vtsTouch>) _vtsTouch[k] = 0;
   _xsVtsInstrument.endPass(); // `8a-P4c` increment 1 — `console.warn`, so it lands in the ~14-day error.log
@@ -4893,6 +4893,8 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
     if (plan.kind === 'skip') {
       if (plan.reason === 'marketable_maker') {
         console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=marketable_maker: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} ask=${input.placementTransactablePrice})`);
+      } else if (plan.reason === 'chosen_leg_unpriced') {
+        console.error(`[8a-P4c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=chosen_leg_unpriced: the chosen leg carries no finite slippage/spread — its writer lost them (the twin is skipped rather than priced to neither leg)`);
       } else if (plan.reason === 'no_entry_ask') {
         console.log(`[8a-P4c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=no_entry_ask: the taker twin has no usable ask to book (level=${entryPrice})`);
       } else if (plan.reason === 'degenerate_fallback') {
@@ -6332,21 +6334,24 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
       grossProfitPercent: (parseFloat(grossProfitPercent) >= 0 ? '+' : '') + grossProfitPercent + '%',
       costs: parseFloat(costsDollar.toFixed(4)),
       // P19-B8.7 Step-9: cost 5-col split, derived from the captured friction
-      // COMPONENTS (never back-derived from the blend). Convention: the spread
-      // cost is allocated HALF to each slip leg, so the four columns sum exactly
-      // to `costs` (frictionCost = fee×2 + slippage×2 + spread). Rows opened
-      // before the components were captured render em-dashes.
+      // COMPONENTS (never back-derived from the blend), so the four columns sum
+      // to `costs`. The spread share per slip leg follows the per-leg rule
+      // (`vtsSpreadShareByLeg`, `8a-P4c` 3a-ii). Rows opened before the
+      // components were captured render em-dashes.
       ...(() => {
         const _f = trade.costFeeFraction, _s = trade.costSlippageFraction, _sp = trade.costSpreadFraction;
         if (typeof _f !== 'number' || typeof _s !== 'number' || typeof _sp !== 'number'
             || !isFinite(_f) || !isFinite(_s) || !isFinite(_sp)) {
           return { costEntryFee: null, costEntrySlippage: null, costExitFee: null, costExitSlippage: null };
         }
+        // `8a-P4c` 3a-ii (FINDING-1): the spread goes to a leg only where the per-leg rule charged it — an OPEN row's
+        // `costs` is the open-time estimate (exit assumed on its side). A legacy row keeps ½ + ½.
+        const _sh = vtsSpreadShareByLeg(trade, false);
         return {
           costEntryFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
-          costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp / 2)).toFixed(4)),
+          costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.entry)).toFixed(4)),
           costExitFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
-          costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp / 2)).toFixed(4)),
+          costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.exit)).toFixed(4)),
         };
       })(),
       netProfitValue: parseFloat(netProfitValue.toFixed(2)),

@@ -3,13 +3,14 @@
  * reader of the mark-staleness knobs. Every refusal arm fires on a known input (capability, `#661`); the `#1065` MDB
  * stub-bid frame is the known positive the stateless spread ceiling exists to refuse.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { guardXstockQuote } from '../../asset_classes/xstock_spot/vts-xs-guard.js';
 import { XsVtsInstrument, XS_LIVE_REASONS, type XsQuoteRow } from '../../asset_classes/xstock_spot/vts-xs-instrument.js';
 import { assertVtsXstockTouchKnobsAtBoot, readVtsXstockExitMaxSpread } from '../../asset_classes/xstock_spot/vts-xs-touch-config.js';
 import { stepNoTriggerStreak } from '../../core/trading/vts-no-trigger-streak.js';
+import { selectVtsXstockSide, selectVtsXstockEntryAsk, selectVtsXstockExitBid } from '../../asset_classes/xstock_spot/vts-xs-select.js';
 import { _seedModuleCacheForTests, clearModuleConstantsCache } from '../../services/module-constants-service.js';
 import { STRATEGY_DISPLAY_NAMES } from '../../config/canonical-regime-strategy-map.js';
 
@@ -55,15 +56,18 @@ describe('8a-P4c inc 3 — guardXstockQuote: every arm fires', () => {
 
 const read = (f: string) => readFileSync(join(process.cwd(), f), 'utf-8').replace(/\r\n/g, '\n');
 const VTS = read('server/services/vts-runner.ts');
+const SEL = read('server/asset_classes/xstock_spot/vts-xs-select.ts'); // `8a-P4c` 3b: the selectors moved here, shared
 
 describe('8a-P4c inc 3 — the exit wiring', () => {
-  it('both lanes route xStock exits through ONE helper, and the helper fails closed on missing knobs and rows', () => {
+  it('both lanes route xStock exits through ONE shared helper (vts-xs-select.ts), and it fails closed on knobs and rows', () => {
     expect((VTS.match(/selectVtsXstockExitBid\(trade\.symbol,/g) ?? []).length).toBe(2); // real + shadow
-    expect(VTS).toMatch(/return \{ bid: null, ceilingMs: null, reason: 'knobs_unavailable' \};/);
-    expect(VTS).toMatch(/if \(row === null\) return \{ bid: null, ceilingMs: msCfg\.floorMs, reason: 'no_row' \};/);
-    expect(VTS).toMatch(/maxSpread = readVtsXstockExitMaxSpread\(\);/);
+    expect(VTS).toMatch(/import \{ selectVtsXstockExitBid, selectVtsXstockEntryAsk \} from '\.\.\/asset_classes\/xstock_spot\/vts-xs-select\.js';/);
+    expect(VTS).not.toMatch(/function selectVtsXstockExitBid/); // one definition, in the shared module
+    expect(SEL).toMatch(/return \{ price: null, ceilingMs: null, reason: 'knobs_unavailable' \};/);
+    expect(SEL).toMatch(/if \(row === null\) return \{ price: null, ceilingMs: msCfg\.floorMs, reason: 'no_row' \};/);
+    expect(SEL).toMatch(/maxSpread = side === 'bid' \? readVtsXstockExitMaxSpread\(\) : Number\.POSITIVE_INFINITY;/);
     expect(VTS).not.toMatch(/'vts_xstock_touch'/); // one reader: vts-xs-touch-config.ts
-    expect(VTS).toMatch(/computeStalenessCeiling\(/);
+    expect(SEL).toMatch(/computeStalenessCeiling\(/);
   });
   it('both lanes kick the SHARED σ cache for their open xStock symbols', () => {
     expect(VTS).toMatch(/kickVtsXstockSigma\('vts', xstockSymbols\);/);
@@ -388,7 +392,7 @@ describe('8a-P4c inc 3 — BLOCKER-2: the instrument counts the LIVE guard by it
   it('both lanes hand the guard verdict itself to the instrument (never a re-derived proxy)', () => {
     expect(VTS).toMatch(/_xsVtsInstrument\.recordLook\(trade\.symbol, _xsRow, Date\.now\(\), trade\.stopLoss \?\? null, trade\.takeProfit \?\? null, _xsExit\);/);
     expect(VTS).toMatch(/_xsShadowInstrument\.recordLook\(trade\.symbol, _sxRow, Date\.now\(\), trade\.stopLoss \?\? null, trade\.takeProfit \?\? null, _sx\);/);
-    expect(VTS).toMatch(/\[8a-P4c\]\[VTS_XS_KNOBS_UNAVAILABLE\]/); // and the outage logs
+    expect(SEL).toMatch(/\[8a-P4c\]\[VTS_XS_KNOBS_UNAVAILABLE\]/); // and the outage logs (from the shared selector)
   });
 });
 
@@ -457,5 +461,53 @@ describe('8a-P4c inc 3 — FINDING-1: the streak is tracked in every session; on
 
   it('a decision with no streak ends nothing', () => {
     expect(stepNoTriggerStreak(undefined, undefined, true, 0, TH)).toEqual({ next: null, page: false, ended: null });
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// `8a-P4c` 3b — the shared selectors, by BEHAVIOUR: one age rule for both legs; the exit is spread-capped, the entry is not.
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+describe('8a-P4c 3b — vts-xs-select: exit BID (spread-capped) and entry ASK (no spread ceiling), one age rule', () => {
+  const T = Date.parse('2026-09-30T15:00:00Z');
+  const k = (constantName: string, value: number, module = 'mark_staleness') => ({
+    moduleName: module, exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*', constantName, value,
+  }) as never;
+  const seed = () => {
+    _seedModuleCacheForTests('mark_staleness', [
+      k('budget_k', 0.5), k('null_stop_budget_pct', 1), k('floor_ms', 15_000), k('cap_ms', 300_000),
+      k('sigma_refresh_after_ms', 60_000), k('sigma_window_ms', 3_600_000), k('sigma_max_age_ms', 600_000),
+      k('sigma_min_observations', 30), k('sigma_classwide_percentile', 50), k('sigma_query_timeout_ms', 4_000),
+    ]);
+    _seedModuleCacheForTests('vts_xstock_touch', [k('exit_max_spread_fraction', 0.0107, 'vts_xstock_touch')]);
+  };
+  const q = (o: Partial<XsQuoteRow> = {}): XsQuoteRow => ({ last: 100, bid: 99.95, ask: 100.05, atMs: T - 5_000, ...o });
+  beforeEach(() => clearModuleConstantsCache());
+
+  it('cold knobs ⇒ knobs_unavailable on BOTH sides, no ceiling applied, no price', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(selectVtsXstockSide('bid', 'AAA/USD', q(), 95, T)).toEqual({ price: null, ceilingMs: null, reason: 'knobs_unavailable' });
+    expect(selectVtsXstockSide('ask', 'AAA/USD', q(), 95, T)).toEqual({ price: null, ceilingMs: null, reason: 'knobs_unavailable' });
+    errSpy.mockRestore();
+  });
+
+  it('a fresh tight quote: the exit takes the BID, the entry takes the ASK', () => {
+    seed();
+    expect(selectVtsXstockExitBid('AAA/USD', q(), 95, T)).toMatchObject({ bid: 99.95, reason: 'ok' });
+    expect(selectVtsXstockEntryAsk('AAA/USD', q(), 95, T)).toMatchObject({ ask: 100.05, reason: 'ok' });
+  });
+
+  it('a WIDE quote (2%): the exit is refused on width, the entry still takes the ask (no spread ceiling on an entry leg)', () => {
+    seed();
+    const wide = q({ bid: 99, ask: 101 });
+    expect(selectVtsXstockExitBid('AAA/USD', wide, 95, T)).toMatchObject({ bid: null, reason: 'too_wide' });
+    expect(selectVtsXstockEntryAsk('AAA/USD', wide, 95, T)).toMatchObject({ ask: 101, reason: 'ok' });
+  });
+
+  it('a STALE quote is refused on BOTH legs by the same age rule; no row ⇒ the floor is the ceiling applied', () => {
+    seed();
+    const stale = q({ atMs: T - 400_000 }); // past the 300 s cap
+    expect(selectVtsXstockExitBid('AAA/USD', stale, 95, T)).toMatchObject({ bid: null, reason: 'too_old' });
+    expect(selectVtsXstockEntryAsk('AAA/USD', stale, 95, T)).toMatchObject({ ask: null, reason: 'too_old' });
+    expect(selectVtsXstockEntryAsk('AAA/USD', null, 95, T)).toEqual({ ask: null, ceilingMs: 15_000, reason: 'no_row' });
   });
 });

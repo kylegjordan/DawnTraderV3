@@ -113,7 +113,8 @@ describe('OBJ-5b — planTwin re-prices the twin\'s OWN entry fee (the majority 
     expect(plan.overlay.frictionCost).not.toBeCloseTo(chosenFriction - FEE_TAKER + FEE_MAKER, 10);
   });
 
-  it('taker twin of a PENDING-MAKER chosen leg: its OWN per-leg friction — a taker at the level carries the entry half', () => {
+  // `8a-P4c` 3b (P9): a taker twin now books the guarded ASK — on its side at entry, so no spread half at either leg.
+  it('taker twin of a PENDING-MAKER chosen leg: its OWN per-leg friction — booked at the ask, no spread half', () => {
     const plan = planTwin({
       ...base,
       pendingMaker: true,
@@ -124,17 +125,19 @@ describe('OBJ-5b — planTwin re-prices the twin\'s OWN entry fee (the majority 
     expect(plan.kind).toBe('open');
     if (plan.kind !== 'open') return;
     expect(plan.twinMode).toBe('taker');
-    expect(plan.overlay.entryPriceBasis).toBe('level');
-    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_TAKER + FEE_TAKER + 2 * SLIP + SPREAD / 2, 10);
+    expect(plan.overlay.entryPriceBasis).toBe('ask');
+    expect(plan.overlay.entryPrice).toBe(101); // the placement ask
+    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_TAKER + FEE_TAKER + 2 * SLIP, 10);
     expect(plan.overlay.costEntryFeeFraction).toBe(FEE_TAKER);
   });
 
-  it('without the chosen leg\'s figures the overlay carries NO friction (degrades to inherit, never to 0)', () => {
-    const plan = planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker' });
-    expect(plan.kind).toBe('open');
-    if (plan.kind !== 'open') return;
-    expect(plan.overlay.frictionCost).toBeUndefined();
-    expect(plan.overlay.costFeeFraction).toBeUndefined();
+  // `8a-P4c` 3a-ii FINDING-2 (Langston): the old optional arm let a twin inherit the chosen leg's fee fractions under its
+  // OWN basis and recompose to neither leg's number. The inputs are required now: without them the twin is SKIPPED.
+  it('without the chosen leg\'s figures the twin is SKIPPED (chosen_leg_unpriced) — never inherited, never 0', () => {
+    expect(planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker', chosenSlippage: undefined, chosenSpread: undefined }))
+      .toEqual({ kind: 'skip', reason: 'chosen_leg_unpriced' });
+    expect(planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker', chosenSlippage: SLIP, chosenSpread: Number.NaN }))
+      .toEqual({ kind: 'skip', reason: 'chosen_leg_unpriced' });
   });
 
   it('the skip paths are untouched by the re-price inputs', () => {

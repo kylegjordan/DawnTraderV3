@@ -100,6 +100,7 @@ describe('8a-P3 — divergent fixtures: the midpoint and the transactable side d
   const twin = (placementTransactablePrice: number | null) => planTwin({
     twinEnabled: true, pendingMaker: false, decisionChosenMode: 'taker', limitPrice: 100,
     placementTransactablePrice, feeRateMaker: 0.004, feeRateTaker: 0.008, makerMaxPendingMs: () => 3_600_000, nowMs: 0,
+    chosenSlippage: 0.0005, chosenSpread: 0.001, // `8a-P4c` 3a-ii FINDING-2: required
   });
 
   it('C7. the maker twin skips when the ASK is marketable', () => {
@@ -162,9 +163,12 @@ describe('8a-P3 — the call sites read the transactable side, and xStock is exp
     expect(VTS).toMatch(/const currentMarketPrice = priceData\.price;/);
   });
 
-  it('xStock passes its mark explicitly at both shared placement sites (8a-P4 moves it)', () => {
-    expect(XS).toMatch(/isMarketableAtPlacement\(\{\s*side:\s*'buy',\s*transactablePrice:\s*lastPrice/);
-    expect(XS).toMatch(/placementTransactablePrice:\s*lastPrice/);
+  // `8a-P4c` 3b (P7a/P8c): xStock moved off its mark — both shared placement sites read the SAME guarded ask.
+  it('xStock reads its guarded ASK at both shared placement sites (X4 + X9 in one commit)', () => {
+    expect(XS).toMatch(/const _xEntryAsk = selectVtsXstockEntryAsk\(symbol, entryQuote, stopLoss, Date\.now\(\)\)\.ask;/);
+    expect(XS).toMatch(/isMarketableAtPlacement\(\{\s*side:\s*'buy',\s*transactablePrice:\s*_xEntryAsk/);
+    expect(XS).toMatch(/placementTransactablePrice:\s*_xEntryAsk/);
+    expect(XS).not.toMatch(/transactablePrice:\s*lastPrice/);
   });
 });
 

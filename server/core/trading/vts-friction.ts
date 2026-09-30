@@ -45,6 +45,24 @@ export function composeVtsLegFriction(i: VtsLegFrictionInput): number {
   return i.entryFee + i.exitFee + i.slippage * 2 + entrySpread + exitSpread;
 }
 
+/**
+ * The spread's share per leg in the P19-B8.7 five-column cost split (`costEntrySlippage` / `costExitSlippage`), so the
+ * columns sum to the booked `costs` under the SAME per-leg rule (Langston 3a-ii FINDING-1: the split still added a full
+ * spread after P14, overstating by D×spread on a maker + bid close and D×spread/2 on a taker-at-level + bid close).
+ *   - a row with no `entryPriceBasis` is LEGACY: its `frictionCost` was composed with the full spread ⇒ ½ + ½;
+ *   - entry: ½ iff the entry was booked at a `'level'`;
+ *   - exit: on a CLOSED row whose friction was recomposed, ½ iff the exit booked on a clamp (not `'bid'`); on an OPEN row
+ *     or a `stamped` close, 0 — the open-time estimate assumes the exit books its side.
+ * Returns the fractions of `spread` for each leg.
+ */
+export function vtsSpreadShareByLeg(t: { entryPriceBasis?: EntryPriceBasis; frictionBasis?: VtsFrictionBasis; exitBookingArm?: string },
+  closed: boolean): { entry: number; exit: number } {
+  if (t.entryPriceBasis === undefined) return { entry: 0.5, exit: 0.5 };
+  const entry = t.entryPriceBasis === 'level' ? 0.5 : 0;
+  const exit = closed && t.frictionBasis === 'recomposed' && t.exitBookingArm !== 'bid' ? 0.5 : 0;
+  return { entry, exit };
+}
+
 /** The fields a closing VTS trade carries (all optional on the record: absent on pre-B8.7 / pre-F-G-2 rows). */
 export interface VtsFrictionRecord {
   frictionCost: number;
@@ -56,9 +74,15 @@ export interface VtsFrictionRecord {
   costSpreadFraction?: number;
 }
 
+export type VtsFrictionBasis = 'recomposed' | 'stamped' | 'unpriced';
+
 export interface VtsCloseFriction {
   friction: number;
-  basis: 'recomposed' | 'stamped';
+  /** `recomposed` — the per-leg rule ran. `stamped` — a writer LOST an input (partial absence): the stamped scalar is
+   *  kept, and that is the tripwire (alerted). `unpriced` — the record never carried ANY cost input (all four absent):
+   *  a lane that was never priced (today the shadow lane, which books `frictionCost: 0`); counted, never alerted
+   *  (Langston 3a-ii BLOCKER-1 — a tripwire that fires ~1,870/day on a non-defect decides nothing). */
+  basis: VtsFrictionBasis;
   /** The entry basis the recomposition used (`null` when it was refused). */
   entryPriceBasis: EntryPriceBasis | null;
   /** The stamp was absent and the legacy reading was used (counted by the caller; no NEW ones once every pre-stamp trade
@@ -73,6 +97,10 @@ const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFi
 export function recomposeVtsCloseFriction(t: VtsFrictionRecord, exitArm: VtsBookingArm): VtsCloseFriction {
   const refuse = (missing: string): VtsCloseFriction =>
     ({ friction: t.frictionCost, basis: 'stamped', entryPriceBasis: null, legacyBasis: false, missing });
+  const components = [t.costEntryFeeFraction, t.costExitFeeFraction, t.costSlippageFraction, t.costSpreadFraction];
+  if (components.every((c) => c === undefined || c === null)) {
+    return { friction: t.frictionCost, basis: 'unpriced', entryPriceBasis: null, legacyBasis: false, missing: null };
+  }
   if (t.chosenEntryMode !== 'maker' && t.chosenEntryMode !== 'taker') return refuse('chosenEntryMode');
   if (!finite(t.costEntryFeeFraction)) return refuse('costEntryFeeFraction');
   if (!finite(t.costExitFeeFraction)) return refuse('costExitFeeFraction');

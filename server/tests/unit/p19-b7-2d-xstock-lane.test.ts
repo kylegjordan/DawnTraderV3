@@ -39,6 +39,8 @@ function base(over: Partial<Parameters<typeof planTwin>[0]> = {}) {
     ...FEES,
     makerMaxPendingMs: () => MAX_PENDING,
     nowMs: NOW,
+    chosenSlippage: 0.0005, // `8a-P4c` 3a-ii FINDING-2: required
+    chosenSpread: 0.001,
     ...over,
   };
 }
@@ -52,10 +54,15 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
       overlay: {
         chosenEntryMode: 'taker',
         entryFeeRate: FEES.feeRateTaker,
-        entryPriceBasis: 'level', // `8a-P4c` 3a-ii: the twin stamps its OWN entry basis
+        entryPriceBasis: 'ask', // `8a-P4c` 3b (P9): a taker twin books the guarded ask
+        frictionCost: expect.closeTo(FEES.feeRateTaker * 2 + 2 * 0.0005, 12), // on its side at both legs: no spread half
+        costFeeFraction: FEES.feeRateTaker,
+        costEntryFeeFraction: FEES.feeRateTaker,
+        costExitFeeFraction: FEES.feeRateTaker,
         state: 'open',
         makerLimitPrice: undefined,
         makerDeadline: undefined,
+        entryPrice: 101, // the placement ask
       },
     });
   });
@@ -69,6 +76,10 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
         chosenEntryMode: 'maker',
         entryFeeRate: FEES.feeRateMaker,
         entryPriceBasis: 'limit', // `8a-P4c` 3a-ii: the twin stamps its OWN entry basis
+        frictionCost: expect.closeTo(FEES.feeRateMaker + FEES.feeRateTaker + 2 * 0.0005, 12),
+        costFeeFraction: (FEES.feeRateMaker + FEES.feeRateTaker) / 2,
+        costEntryFeeFraction: FEES.feeRateMaker,
+        costExitFeeFraction: FEES.feeRateTaker,
         state: 'pending',
         makerLimitPrice: 100,
         makerDeadline: NOW + MAX_PENDING,

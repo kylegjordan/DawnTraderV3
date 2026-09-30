@@ -61,6 +61,10 @@ export interface VirtualSignal {
   decayPenalty: number;
   expectedEdge: number;
   frictionCost: number; // M50: Added for schema parity
+  /** `8a-P4c` 3a-ii: how the closed row's friction was composed, and the bookings it read (declared, not excess). */
+  frictionBasis?: 'recomposed' | 'stamped' | 'unpriced';
+  entryPriceBasis?: 'ask' | 'level' | 'limit';
+  exitBookingArm?: string;
   // P19-B3b: net expected value attached by generatePhase10Signal (vts-runner) so the
   // caller-side Net-EV floor check can read it. Computed by computeNetExpectancyKernel.
   netEV?: number;
@@ -102,6 +106,10 @@ export interface VirtualTrade {
   decayPenalty: number;
   expectedEdge: number;
   frictionCost: number;
+  /** `8a-P4c` 3a-ii — declared (see VirtualSignal). */
+  frictionBasis?: 'recomposed' | 'stamped' | 'unpriced';
+  entryPriceBasis?: 'ask' | 'level' | 'limit';
+  exitBookingArm?: string;
   signalType: string;
   strategy: string;
   regime: string;
@@ -879,7 +887,7 @@ export class VTSService extends EventEmitter {
     costEntryFeeFraction?: number;
     costExitFeeFraction?: number;
     /** `8a-P4c` 3a-ii (P14): how the closed row's friction was composed, and the bookings it read. */
-    frictionBasis?: 'recomposed' | 'stamped';
+    frictionBasis?: 'recomposed' | 'stamped' | 'unpriced';
     entryPriceBasis?: 'ask' | 'level' | 'limit';
     exitBookingArm?: string;
     pool: 'ideal' | 'rotational';

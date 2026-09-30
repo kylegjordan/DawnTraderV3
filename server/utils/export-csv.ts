@@ -7,6 +7,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { vtsSpreadShareByLeg } from '../core/trading/vts-friction.js';
 
 interface TradeRecord {
   // B65.2-HF2 (2026-04-23): widened to include boolean so trailing-engine
@@ -321,21 +322,26 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             grossProfitValue: parseFloat(grossProfitValue.toFixed(2)),
             grossProfitPercent: (parseFloat(grossProfitPercent) >= 0 ? '+' : '') + grossProfitPercent + '%',
             costs: parseFloat(costsDollar.toFixed(4)),
-            // P19-B8.7 Step-9: cost 5-col split from the captured components
-            // (spread halved into each slip leg — sums exactly to `costs`).
+            // P19-B8.7 Step-9: cost 5-col split from the captured components, summing to `costs`. The spread share per
+            // slip leg follows the per-leg rule (`vtsSpreadShareByLeg`, `8a-P4c` 3a-ii FINDING-1); legacy rows keep ½ + ½.
             ...(() => {
               const _f = trade.costFeeFraction, _s = trade.costSlippageFraction, _sp = trade.costSpreadFraction;
               if (typeof _f !== 'number' || typeof _s !== 'number' || typeof _sp !== 'number'
                   || !isFinite(_f) || !isFinite(_s) || !isFinite(_sp)) {
                 return { costEntryFee: null, costEntrySlippage: null, costExitFee: null, costExitSlippage: null };
               }
+              const _sh = vtsSpreadShareByLeg(trade, true);
               return {
                 costEntryFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
-                costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp / 2)).toFixed(4)),
+                costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.entry)).toFixed(4)),
                 costExitFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
-                costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp / 2)).toFixed(4)),
+                costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.exit)).toFixed(4)),
               };
             })(),
+            // `8a-P4c` 3a-ii (Langston census addition): how this row's friction was composed and the bookings it read.
+            frictionBasis: trade.frictionBasis ?? null,
+            entryPriceBasis: trade.entryPriceBasis ?? null,
+            exitBookingArm: trade.exitBookingArm ?? null,
             netProfitValue: parseFloat(netProfitValue.toFixed(2)),
             netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
             finalScore: trade.finalScore || trade.signal?.finalScore || 0,
