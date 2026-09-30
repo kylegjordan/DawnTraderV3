@@ -13,7 +13,8 @@ import {
   XSTOCK_SPOT_TAKER_FEE,
   seedFeeModelForTests,
 } from '../helpers/fee-model-fixture.js';
-import { getFrictionForAssetClass, composeBookedFriction } from '../../core/math/cost-model.js';
+import { getFrictionForAssetClass } from '../../core/math/cost-model.js';
+import { composeVtsLegFriction } from '../../core/trading/vts-friction.js';
 import { slippageFeeModel } from '../../services/slippage-fee-model.js';
 import { computeRealizedPnl } from '../../core/math/trade-pnl.js';
 import { resolveValidatorFeeRates } from '../../services/pre-execution-validator.js';
@@ -84,9 +85,14 @@ describe('B-XSTOCK-FEE-CONTRACT — booking treats a rebate as a signed cost', (
       .toEqual({ makerFeePct: XSTOCK_SPOT_MAKER_FEE, takerFeePct: XSTOCK_SPOT_TAKER_FEE });
   });
 
+  // `8a-P4c` 3a-ii re-point: `composeBookedFriction` was deleted (`#1118`); the per-leg composer carries the same signed
+  // sum. A maker entry fills at its limit and a bid-booked exit is on its side, so neither leg carries a spread half.
   it('booked friction with a maker entry sums signed components', () => {
-    // −0.0002 entry + 0.0010 exit + 2×0.0005 slippage + 0.0012 spread = 0.0030
-    expect(composeBookedFriction(XSTOCK_SPOT_MAKER_FEE, XSTOCK_SPOT_TAKER_FEE, 0.0005, 0.0012)).toBeCloseTo(0.003, 12);
+    // −0.0002 entry + 0.0010 exit + 2×0.0005 slippage + 0 spread = 0.0018
+    expect(composeVtsLegFriction({
+      entryFee: XSTOCK_SPOT_MAKER_FEE, exitFee: XSTOCK_SPOT_TAKER_FEE, slippage: 0.0005, spread: 0.0012,
+      entryPriceBasis: 'limit', exitSideBooked: true,
+    })).toBeCloseTo(0.0018, 12);
   });
 });
 

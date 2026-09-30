@@ -52,6 +52,7 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
       overlay: {
         chosenEntryMode: 'taker',
         entryFeeRate: FEES.feeRateTaker,
+        entryPriceBasis: 'level', // `8a-P4c` 3a-ii: the twin stamps its OWN entry basis
         state: 'open',
         makerLimitPrice: undefined,
         makerDeadline: undefined,
@@ -67,6 +68,7 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
       overlay: {
         chosenEntryMode: 'maker',
         entryFeeRate: FEES.feeRateMaker,
+        entryPriceBasis: 'limit', // `8a-P4c` 3a-ii: the twin stamps its OWN entry basis
         state: 'pending',
         makerLimitPrice: 100,
         makerDeadline: NOW + MAX_PENDING,

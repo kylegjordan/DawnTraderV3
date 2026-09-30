@@ -14,6 +14,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { resolveVtsBookedExitPrice } from '../../core/trading/vts-exit-booking.js';
 import { planTwin } from '../../core/trading/pending-maker-logic.js';
+import { composeVtsLegFriction } from '../../core/trading/vts-friction.js';
 
 vi.mock('../../services/module-constants-service.js', () => ({
   getCachedNumberRequired: () => { throw new Error('not needed by these tests'); },
@@ -84,40 +85,47 @@ describe('OBJ-5b — planTwin re-prices the twin\'s OWN entry fee (the majority 
     nowMs: 1_000_000,
   };
 
-  it('maker twin of a TAKER-chosen leg: friction = chosen − taker + maker; fractions honest', () => {
-    const chosenFriction = composeBooked(FEE_TAKER, FEE_TAKER, SLIP, SPREAD);
+  // `8a-P4c` 3a-ii (BLOCKER-1) re-point: the twin COMPOSES its own friction over its own leg (per-leg spread rule) — it
+  // is no longer the chosen leg's friction plus the entry-fee delta, which the per-leg rule makes wrong by ½·spread.
+  it('maker twin of a TAKER-chosen leg: its OWN per-leg friction — a limit fill and a bid exit carry no spread half', () => {
+    const chosenFriction = composeVtsLegFriction({
+      entryFee: FEE_TAKER, exitFee: FEE_TAKER, slippage: SLIP, spread: SPREAD, entryPriceBasis: 'level', exitSideBooked: true,
+    });
     const plan = planTwin({
       ...base,
       pendingMaker: false,
       decisionChosenMode: 'taker',
-      chosenFrictionCost: chosenFriction,
-      chosenEntryFeeRate: FEE_TAKER,
+      chosenSlippage: SLIP,
+      chosenSpread: SPREAD,
     });
     expect(plan.kind).toBe('open');
     if (plan.kind !== 'open') return;
     expect(plan.twinMode).toBe('maker');
     expect(plan.overlay.entryFeeRate).toBe(FEE_MAKER);
-    expect(plan.overlay.frictionCost).toBeCloseTo(composeBooked(FEE_MAKER, FEE_TAKER, SLIP, SPREAD), 10);
+    expect(plan.overlay.entryPriceBasis).toBe('limit');
+    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_MAKER + FEE_TAKER + 2 * SLIP, 10);
     expect(plan.overlay.costEntryFeeFraction).toBe(FEE_MAKER);
     expect(plan.overlay.costExitFeeFraction).toBe(FEE_TAKER);
     expect(plan.overlay.costFeeFraction).toBeCloseTo((FEE_MAKER + FEE_TAKER) / 2, 10);
-    // the defect this kills: the twin used to INHERIT the chosen leg's taker friction under a maker stamp
+    // F-G-2's defect stays dead: the twin does not INHERIT the chosen leg's taker friction under a maker stamp
     expect(plan.overlay.frictionCost).not.toBeCloseTo(chosenFriction, 10);
+    // BLOCKER-1: nor is it the old fee-delta derivation, which carried the chosen taker leg's entry spread half
+    expect(plan.overlay.frictionCost).not.toBeCloseTo(chosenFriction - FEE_TAKER + FEE_MAKER, 10);
   });
 
-  it('taker twin of a PENDING-MAKER chosen leg: friction = chosen − maker + taker', () => {
-    const chosenFriction = composeBooked(FEE_MAKER, FEE_TAKER, SLIP, SPREAD);
+  it('taker twin of a PENDING-MAKER chosen leg: its OWN per-leg friction — a taker at the level carries the entry half', () => {
     const plan = planTwin({
       ...base,
       pendingMaker: true,
       decisionChosenMode: 'maker',
-      chosenFrictionCost: chosenFriction,
-      chosenEntryFeeRate: FEE_MAKER,
+      chosenSlippage: SLIP,
+      chosenSpread: SPREAD,
     });
     expect(plan.kind).toBe('open');
     if (plan.kind !== 'open') return;
     expect(plan.twinMode).toBe('taker');
-    expect(plan.overlay.frictionCost).toBeCloseTo(composeBooked(FEE_TAKER, FEE_TAKER, SLIP, SPREAD), 10);
+    expect(plan.overlay.entryPriceBasis).toBe('level');
+    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_TAKER + FEE_TAKER + 2 * SLIP + SPREAD / 2, 10);
     expect(plan.overlay.costEntryFeeFraction).toBe(FEE_TAKER);
   });
 
@@ -135,8 +143,8 @@ describe('OBJ-5b — planTwin re-prices the twin\'s OWN entry fee (the majority 
       placementTransactablePrice: 99,  // marketable at placement ⇒ maker twin skipped
       pendingMaker: false,
       decisionChosenMode: 'taker',
-      chosenFrictionCost: 0.02,
-      chosenEntryFeeRate: FEE_TAKER,
+      chosenSlippage: SLIP,
+      chosenSpread: SPREAD,
     });
     expect(plan).toEqual({ kind: 'skip', reason: 'marketable_maker' });
   });

@@ -166,18 +166,9 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
   return (fee * 2) + (slippage * 2) + spread;
 }
 
-/**
- * F-G-2 OBJ-5b — the BOOKED round-trip friction for a trade whose ENTRY leg paid a
- * mode-specific fee. `feeEntry` is the effective entry mode's rate (maker or taker);
- * `feeExit` is ALWAYS the taker rate — exits take liquidity. One maker leg, never two
- * (Langston condition 3, 2026-09-02). Shared by all three VTS write paths (crypto
- * inline, the twin overlay via planTwin, the xStock eval-cycle) so the formula cannot
- * drift between them — computeTotalRoundTripCost above stays the PRE-decision,
- * taker-both-legs estimate the admission guard reads (pre-audit P13).
- */
-export function composeBookedFriction(feeEntry: number, feeExit: number, slippage: number, spread: number): number {
-  return feeEntry + feeExit + (slippage * 2) + spread;
-}
+// F-G-2 OBJ-5b's `composeBookedFriction` (full spread on both legs) was DELETED by `8a-P4c` increment 3a-ii (`#1118`):
+// VTS booked friction is now per-leg — `server/core/trading/vts-friction.ts` `composeVtsLegFriction`, the one composer
+// every VTS write path and the close-time recomposition call. Record: DELETED_COMPONENTS_LOG.md.
 
 /**
  * ⛔⛔ B-PRICE-SIDE-BY-JOB (plan row 3n) — ROUND-TRIP FRICTION FOR A **SIDED** TRIPLE.
@@ -203,7 +194,7 @@ export function composeBookedFriction(feeEntry: number, feeExit: number, slippag
  * `computeTotalRoundTripCost`'s 24 call sites, and **never find the formula that actually
  * applies to their lane.** That is `fix-follows-pointer` and `enumerator-blind-spot` in one
  * move. A named function is greppable and shows up in the instrument we actually use.
- * House precedent is `composeBookedFriction` directly above: ONE FUNCTION PER QUESTION.
+ * House precedent is `composeVtsLegFriction` (`vts-friction.ts`): ONE FUNCTION PER QUESTION.
  *
  * ⚠️ AND `computeTotalRoundTripCost` IS DELIBERATELY LEFT UNTOUCHED. It is the CORRECT formula
  * for a mid-priced triple, and after this batch three of four lanes still have one — measured:

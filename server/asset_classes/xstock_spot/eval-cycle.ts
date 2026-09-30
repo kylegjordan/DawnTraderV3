@@ -87,7 +87,8 @@ import { getPerClassTargetGate } from '../../core/calculations/expectancy.js';
 import { computeRealHybridScore, computeRealDecayPenalty } from '../../core/utils/vts-real-score.js';
 import { getPredictiveConfidence } from '../../core/utils/score-calculator.js';
 import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
-import { getCachedCostMetrics, getFrictionForAssetClass, composeBookedFriction } from '../../core/math/cost-model.js';
+import { getCachedCostMetrics, getFrictionForAssetClass } from '../../core/math/cost-model.js';
+import { composeVtsLegFriction, entryPriceBasisFor } from '../../core/trading/vts-friction.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver.js'; // B-NEW-53 shared forming-bar snapshot
 import { buildMacroSnapshot } from './macro-snapshot.js'; // P19-B5b (#94): xStock decision-time macro snapshot
@@ -1015,7 +1016,12 @@ export async function evaluateXstockPairForVTS(
         // §0 xStock hold (Langston (b), 2026-09-02).
         const _xEntryFee = _xEffectiveMode === 'maker' ? _xFriction.feeRateMaker : _xFriction.feeRateTaker;
         const _xExitFee = _xFriction.feeRateTaker;
-        const _xBookedFriction = composeBookedFriction(_xEntryFee, _xExitFee, costMetrics.slippage, costMetrics.spread);
+        // `8a-P4c` 3a-ii (P14, `#1118`): per leg, the entry basis stamped; the closed record is recomposed at close.
+        const _xEntryPriceBasis = entryPriceBasisFor(_xEffectiveMode, false); // 3b books a taker at the guarded ask
+        const _xBookedFriction = composeVtsLegFriction({
+          entryFee: _xEntryFee, exitFee: _xExitFee, slippage: costMetrics.slippage, spread: costMetrics.spread,
+          entryPriceBasis: _xEntryPriceBasis, exitSideBooked: true,
+        });
         const xOpenTrade = {
           symbol,
           assetClass: ASSET_CLASS,
@@ -1052,6 +1058,7 @@ export async function evaluateXstockPairForVTS(
           costFeeFraction: (_xEntryFee + _xExitFee) / 2,
           costEntryFeeFraction: _xEntryFee,
           costExitFeeFraction: _xExitFee,
+          entryPriceBasis: _xEntryPriceBasis, // `8a-P4c` 3a-ii (P14): stamped on EVERY open
           costSlippageFraction: costMetrics.slippage,
           costSpreadFraction: costMetrics.spread,
           regime,
