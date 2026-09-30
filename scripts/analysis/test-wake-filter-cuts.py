@@ -7,7 +7,10 @@ import json, subprocess, sys, io
 
 # argv[1] runs the suite against another copy - the repo file BEFORE it is installed, or the live
 # file to show which new cases the unfixed filter FAILS (B-WAKE-LEAD-NAME).
-FILTER = sys.argv[1] if len(sys.argv) > 1 else r'C:\Users\kyleg\.claude\cc-wake-filter.py'
+# Default = the REPO copy, found relative to this file, so the suite runs anywhere the repo is (Langston
+# could not reach a laptop path: B-TOKEN-BURN-CUT Step 4 condition 2). Pass the live copy explicitly.
+import os
+FILTER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'comms-infra', 'laptop', 'cc-wake-filter.py')
 LOG = '/var/log/cc-discord-inbox.jsonl'
 
 def row(kind, sender, text):

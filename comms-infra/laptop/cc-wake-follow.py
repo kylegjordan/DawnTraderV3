@@ -81,6 +81,12 @@ def main(argv):
         if ino is not None:
             emit(f"#@AT {path} {ino} {off}")
     last_path = None          # C7: None forces a header before the first content line of THIS run
+    # ⛔ 0.0 IS DELIBERATE: the first keepalive goes out on the FIRST pass, so a watcher is marked
+    # alive the moment it arms. Setting this to time.time() would leave every arm younger than 300 s
+    # without an .alive file and turn it into a false DEAD - a phone ping for Kyle (Langston, Step 4).
+    # ⚠️ REACH: .alive proves this pipeline STARTED, not that the filter can DELIVER - a filter that
+    # crashes after the keepalive is re-armed every 30 s and re-touches .alive while the session is
+    # deaf. Only the daily WATCHER-CONTROL line reaches the read path (#661 leg 3).
     last_keepalive = 0.0
     while True:
         new = False
@@ -100,6 +106,17 @@ def main(argv):
                 f.seek(off)
                 data = f.read(min(st.st_size - off, MAX_READ))
             end = data.rfind(b"\n")
+            if end < 0 and len(data) == MAX_READ:
+                # one line longer than MAX_READ: keep reading to its newline instead of stalling on
+                # this source forever (live max row 15,519 B, so latent - Langston, Step 4 nit)
+                with open(path, "rb") as f:
+                    f.seek(off + len(data))
+                    while end < 0:
+                        more = f.read(MAX_READ)
+                        if not more:
+                            break
+                        data += more
+                        end = data.rfind(b"\n")
             if end < 0:                           # only a partial line so far: wait for its newline
                 s[1], s[2] = ino, off
                 continue

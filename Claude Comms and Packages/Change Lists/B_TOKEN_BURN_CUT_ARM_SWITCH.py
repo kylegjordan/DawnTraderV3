@@ -8,7 +8,9 @@ So: Langston reviews this file at Step 4 as part of the diff; at Step 6 the live
 (sha256 against the blob at the ref) and this script is run in the SAME turn, then committed.
 
 Every edit is an exact, unique-match replacement; the script aborts on any miss and writes nothing.
-usage: python B_TOKEN_BURN_CUT_ARM_SWITCH.py <repo-root> [--dry]
+usage: python B_TOKEN_BURN_CUT_ARM_SWITCH.py <repo-root> --ref=<reviewed sha> [--install] [--dry]
+  --install writes the three live copies from the blob at --ref, then verifies them (sha256);
+  without it the gate only verifies. --dry reports the gate and the edit matches, writes nothing.
 """
 import sys, os
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -81,6 +83,35 @@ EDITS = [
      "Recommend: update §4.5 + the runbook to arm with the 30-minute maximum and re-arm on every expiry, then test that a session idle between turns actually re-arms. | (Kyle decision: pending)",
      "Recommend: update §4.5 + the runbook to arm with the 30-minute maximum and re-arm on every expiry, then test that a session idle between turns actually re-arms. | (Kyle decision: pending) → **ACTED ON 2026-09-30: `B-TOKEN-BURN-CUT` (`#1127`) — the watcher became an event-only background task; the 15 days in between are `#1128`.**"),
 ]
+
+# ── THE GATE (Langston, Step 4 condition 4 — `#1004`): VERIFY, THEN SWITCH, IN THAT ORDER. ──────────
+# The three live copies must exist and each must be byte-identical (sha256) to its blob at the reviewed
+# ref. `--install` writes them FROM the blob first (git show <ref>:<path>, so the bytes are the blob's);
+# without it the script only verifies. Any miss aborts before a single instruction is edited.
+import hashlib, subprocess
+REF = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--ref=")), None)
+if not REF:
+    sys.exit("ABORT: --ref=<reviewed sha> is required; the live copies are verified against it")
+LIVE = [
+    ("comms-infra/laptop/cc-wake-filter.py", "C:/Users/kyleg/.claude/cc-wake-filter.py"),
+    ("comms-infra/laptop/cc-wake-follow.py", "C:/Users/kyleg/.claude/cc-wake-follow.py"),
+    ("comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat/SKILL.md",
+     "C:/Users/kyleg/.claude/scheduled-tasks/wake-watcher-heartbeat/SKILL.md"),
+]
+for rel, live in LIVE:
+    blob = subprocess.run(["git", "-C", ROOT, "show", f"{REF}:{rel}"], capture_output=True, check=True).stdout
+    if "--install" in sys.argv and not DRY:
+        os.makedirs(os.path.dirname(live), exist_ok=True)
+        open(live, "wb").write(blob)
+    want = hashlib.sha256(blob).hexdigest()
+    got = hashlib.sha256(open(live, "rb").read()).hexdigest() if os.path.exists(live) else None
+    if got != want:
+        msg = f"{live}: {'MISSING' if got is None else 'sha256 ' + got[:12]} != blob {REF[:9]}:{rel} {want[:12]}"
+        if not DRY:
+            sys.exit("ABORT (gate): " + msg)
+        print("gate WOULD ABORT:", msg)
+    else:
+        print("verified", live, want[:12])
 
 files = {}
 for rel, a, b in EDITS:

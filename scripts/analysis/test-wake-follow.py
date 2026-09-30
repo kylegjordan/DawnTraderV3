@@ -168,6 +168,11 @@ WOKE[0] += len(w)
 case("T11 stale state: one 'resumed after' wake with the discarded UTC, the old message NOT replayed",
      rc == 0 and len(w) == 1 and "resumed after" in w[0] and "long absence" not in " ".join(w), f"rc={rc} w={w}")
 
+# 11b. one line longer than the follower's 1 MiB read (Langston's Step-4 nit): delivered whole, not stalled.
+rc, w, fa = arm(during=lambda: append(INBOX, kyle("OLD Claude - oversized " + "x" * (1 << 20 | 4096))), wait=15)
+WOKE[0] += len(w)
+case("T11b a line longer than 1 MiB is delivered, not stalled on", rc == 0 and len(w) == 1 and "oversized" in w[0], f"rc={rc} n={len(w)}")
+
 # 12. the heartbeat's new watcher/control fields (streaming mode, the filter's own routing): an all-clear
 # and "not armed" stay silent (#995 OBJ-10 unchanged); a DEAD watcher or an unanswered control is delivered.
 def hb(text):

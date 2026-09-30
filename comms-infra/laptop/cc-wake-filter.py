@@ -307,7 +307,7 @@ STALE_S = 12 * 3600      # a state older than this is discarded rather than repl
 _flags = sys.argv[2:]
 ONCE = "--once" in _flags
 POSITIONS = "--positions" in _flags
-STATE = (_flags[_flags.index("--state") + 1] if "--state" in _flags
+STATE = (_flags[_flags.index("--state") + 1] if "--state" in _flags[:-1]
          else os.path.join(os.path.expanduser("~"), ".claude", "cc-wake-state", f"{ALIAS}.json"))
 
 
