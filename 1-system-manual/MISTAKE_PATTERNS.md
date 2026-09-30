@@ -227,7 +227,7 @@ I enumerated book subscribers by grepping `subscribeToSymbols`, classified every
 ⛔⛔ **AND THE META-LESSON IS THE ONE WORTH THE SLOT: I ASKED FOR A FALSE GOVERNANCE GAP TO BE FILED.** Had it landed, `§9.5` would carry a recorded weakness it does not have — **eroding a rule on a false premise, which is `#453` aimed at our own governance.** ★ **A miss diagnosed as a rule's fault is a claim about the rule, and it needs presence-evidence exactly like any other absence claim.** *(Langston: "filing 'the rule could not reach this' on a case the rule does reach".)*
 ➕ **INSTANCE, 2026-09-29 (Langston r8; `B-GOV-REPORTING`):** `cd1943763` corrected the gated reviewer's "two days" in the copies its census found — four skills, the scope's edit-9 section, CC-A's memory — and missed `MISTAKE_PATTERNS.md:399`. The census enumerated by ROLE (skills, scope, memory); the missed copy was a RECORD file, a class the enumeration's own categories excluded. No completeness claim was made, so it is not `partial-apply`. Cross-referenced at `fix-follows-pointer`, where `afcc86469`'s trailer put it (that trailer welds this event with a 10.b copy miss, which is under `partial-apply`).
 
-### `shared-tmp-message` — **THE PATH WAS MINE, THE FILE WAS SHARED, AND THE CONTENT ARRIVED THROUGH A CHANNEL NO GUARD INSPECTS** — **NEW 2026-08-31, n=1** · mechanism: **NONE YET — `B-SHARED-TMP-ISOLATION`, `PHASE_19_PLAN` 2.6**
+### `shared-tmp-message` — **THE PATH WAS MINE, THE FILE WAS SHARED, AND THE CONTENT ARRIVED THROUGH A CHANNEL NO GUARD INSPECTS** — **NEW 2026-08-31, n=3 across 3 batches (2026-09-30) — at the promotion floor** · mechanism: **NONE YET — `B-SHARED-TMP-ISOLATION`, `PHASE_19_PLAN` 2.6**
 
 **INSTANCE 1 — `B-CROSS-SESSION-BLEED` P9, CC-B, 2026-08-31.** `git commit -F /tmp/m14.txt -- <my explicit paths>` produced **my change set carrying another session's commit message** (`#969: retroactive pre-audit filed…`). Artifact `a9366f5e4`; corrected at `0264f24f7` with an **identical tree hash**, so only the message moved.
 **MEASURED CAUSE (the first label said `ESTABLISHED` and Langston ruled it over-claimed — a foreign message proves a shared FILE, not WHICH file):** `cd /tmp && pwd -W` → `C:/Users/kyleg/AppData/Local/Temp` · `os.tmpdir()` → the same · **positive control: a file written via `/tmp` from one session read back at the Windows path any session would use.**
@@ -237,6 +237,10 @@ I enumerated book subscribers by grepping `subscribeToSymbols`, classified every
 ⚠️ **I DID IT AGAIN TEN MINUTES AFTER FILING THE ISSUE**, for a Discord message file. **The habit is stickier than the knowledge, which is the argument against fixing this with a rule.**
 
 ⇔ `wrong-object` (a matching NAME is not a matching THING — here the name was right and the FILE was another session's) · `#753` (**same class, one level up: no session wrote into another's CLONE, but the sessions share a HOST**).
+
+**INSTANCE 2 — `B-OHLC-FRAME-GUARD` Step-2 review, Langston, 2026-09-11/12** (`RUNNING_ISSUES` `#979`, the two amendments; they may record one event). On his server a fetch to `/tmp/pa.md` / `/tmp/scope.md` failed silently against root-owned July files, and he read another batch's document as the one under review. **A READ, not a commit** — the class is the shared namespace, not the syscall.
+**INSTANCE 3 — `B-PLAN-CURRENCY-CHECK` review, Langston, 2026-09-30** (`#979`, recurrence). **The same two files**, never removed after instance 2 named them. New faces: a piped read reports exit 0 over the failed redirect, and a root write over a langston-named file succeeds with no error to suppress. **Both decoys moved to `/root/tmp-decoy-evidence-979/`.**
+★ **What three instances show: every reader who got caught fixed their OWN habit, and the shared hazard stayed in place for everyone else.** That is the argument for a mechanism over a practice.
 
 ---
 
