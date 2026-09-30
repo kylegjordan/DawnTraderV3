@@ -5,7 +5,7 @@
 import {
   statusWord, parseLedger, datedHomes, parsePlan, parseAfterLive, parseRoadmap, placement, cellClosed, listD, listE,
   listF, listA, planLines, recountS6, s6AlertDecision, runCensus, censusCounts, censusLists, censusMetadata, censusAlert,
-  tallyMistakes, mistakePassAlert, ownerOfIssue, idsIn, hasId, headStatement, DATED_EXCLUSIONS, TITLE_MAX,
+  tallyMistakes, mistakePassAlert, ownerOfIssue, idsIn, hasId, headStatement, DATED_EXCLUSIONS, TITLE_MAX, gitReaders,
 } from './census.mjs';
 import { CENSUS_BODY_MAX } from './config.mjs';
 
@@ -273,6 +273,13 @@ const plan = parsePlan(PLAN);
   const dec = s6AlertDecision(recountS6(parsePlan(untouched)), [{ sha: 'c2', text: untouched }, { sha: 'c1', text: PLAN }, { sha: null, text: PLAN }]);
   ok('§6 alerted when the §4 change left §6 untouched, naming that commit', dec.alert === true && dec.commit === 'c2' && dec.sameCommit === false);
   ok('§6 alerted when no tally change is found in the window (cannot be shown)', s6AlertDecision(recOff, [{ sha: 'c1', text: off }, { sha: null, text: off }]).alert === true);
+  // the live history reader (fakes injected): a failed read at a commit the log named refuses, never reads as ''
+  // (as '' it would parse to no tally and report §6 as touched there — the alert above would be suppressed)
+  const log = () => 'c2\nc1\n';
+  const texts = { c2: untouched, c1: PLAN, 'c1^': null };
+  const h = gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => texts[sha] });
+  ok('§6 history: newest first, the oldest one\'s absent parent reads as \'\'', h.map((x) => x.sha).join() === 'c2,c1,' && h[2].text === '' && h[0].text === untouched);
+  ok('§6 history: a failed read at a logged commit REFUSES', throws(() => gitReaders.planHistory('r', 'plan.md', 20, { log, show: (sha) => (sha === 'c1' ? null : texts[sha]) }), /returned nothing at a commit that touched it/));
 }
 
 // ── runCensus refusals and a whole fixture run ──
