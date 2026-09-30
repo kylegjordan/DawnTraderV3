@@ -5,7 +5,9 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdi
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence, decidePlanLineAlerts, decidePlanReadAlerts, decidePlanLineTick, runPlanLineRule, makeVerifyPlanLine, planMalformedSignature, PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY } from './poller.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence, decidePlanLineAlerts, decidePlanReadAlerts, decidePlanLineTick, runPlanLineRule, makeVerifyPlanLine, planMalformedSignature, PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY, maybeRunWeekly, buildAddCommand, weekGateMs, weeklySeverity } from './poller.mjs';
+import { decideHeartbeat, CENSUS_SILENT_KEY } from './heartbeat-check.mjs';
+import { CENSUS_FAILED_KEY, MISTAKEPASS_FAILED_KEY } from './census.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF, PLAN_LINE } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt, planRowsByBatch, statusIsDefault, cellNamesFile, checkPlanState, findGlobDoc } from './checker.mjs';
 
@@ -804,17 +806,17 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
   const blobs = (over = {}) => (ref, f) => {
     const k = `${ref === 'HEAD' ? 'H' : 'O'}:${f}`;
     if (k in over) { const v = over[k]; if (v instanceof Error) throw v; return v; }
-    return f === 'census.mjs' ? null : `blob-${f}`;
+    return f === 'not-yet-created.mjs' ? null : `blob-${f}`;  // a listed name absent at both refs (census.mjs now exists)
   };
   const same = checkerCodeDrift(blobs());
   ok('P29 identical blobs → not drifted', same.drifted === false && !same.error && same.compared.length === DRIFT_LOADED_FILES.length);
   ok('P29 a differing heartbeat-check.mjs blob → drifted', checkerCodeDrift(blobs({ 'O:heartbeat-check.mjs': 'blob-new' })).drifted === true);
   const readme = checkerCodeDrift(blobs({ 'H:README.md': 'r-old', 'O:README.md': 'r-new' }));
   ok('P29 a README-only difference → not drifted (README is not a loaded file)', readme.drifted === false && !readme.error);
-  const withCensus = [...DRIFT_LOADED_FILES, 'census.mjs'];
+  const withCensus = [...DRIFT_LOADED_FILES, 'not-yet-created.mjs'];
   const skip = checkerCodeDrift(blobs(), withCensus);
   ok('P29 a listed file absent at BOTH refs is a no-op, and COUNTED',
-    skip.drifted === false && !skip.error && skip.absentBoth.length === 1 && skip.absentBoth[0] === 'census.mjs', JSON.stringify(skip));
+    skip.drifted === false && !skip.error && skip.absentBoth.length === 1 && skip.absentBoth[0] === 'not-yet-created.mjs', JSON.stringify(skip));
   const stillSees = checkerCodeDrift(blobs({ 'O:poller.mjs': 'blob-new' }), withCensus);
   ok('P29 ...and does not blind the check: a real poller.mjs difference beside it still reads as drift',
     stillSees.drifted === true && stillSees.absentBoth.length === 1);
@@ -1231,6 +1233,187 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
   decideOrphanSweep(['gov-planline:B-X-Y:s4'], new Set(['B-X-Y']), noop, noop, noop, (bid, leg) => { seen.push(`${bid}|${leg}`); return true; });
   ok('P37 the per-leg key is verified by its bid (group 1), never as `<bid>:s4`; the commit window does not skip it',
     seen.join() === 'B-X-Y|s4', seen.join());
+}
+
+// ─── B-PLAN-CURRENCY-CHECK P41: the add command is a pure builder, byte-identical for every existing caller ───
+{
+  // The literal was produced BEFORE the P41 edit by evaluating the pre-edit alertSink.add template (poller.mjs at
+  // 225480e9d, :608-611, copied verbatim with its shq) on these inputs.
+  const LITERAL = "cd /home/deploy/dawntrader && npm run -s system-alerts -- add --triggers-at 2026-09-28T09:00:00.000Z --category governance --severity warning --title 'It'\\''s a title' --body 'Body with `ticks` and $vars' --metadata '{\"dedupe_key\":\"gov-deadline:B-X\",\"source\":\"governance-checker\"}'";
+  const args = { nowMs: Date.parse('2026-09-28T09:00:00Z'), severity: 'warning', title: "It's a title", body: 'Body with `ticks` and $vars', dedupeKey: 'gov-deadline:B-X', repo: '/home/deploy/dawntrader' };
+  ok('P41 an existing caller\'s add command is byte-identical to the pre-edit template', buildAddCommand(args) === LITERAL, buildAddCommand(args));
+  const w = buildAddCommand({ ...args, category: 'verification', metadata: '{"counts":{}}', storeDedupeKey: 'gov-plancensus:2026-W40' });
+  ok('P41 the weekly add carries --category verification, its own metadata, and --dedupe-key LAST',
+    / --category verification /.test(w) && w.includes(`--metadata '{"counts":{}}'`) && w.endsWith(" --dedupe-key 'gov-plancensus:2026-W40'"), w);
+  ok('P41 no --dedupe-key unless given', !buildAddCommand(args).includes('--dedupe-key'));
+  const res = decideOrphanSweep(['gov-plancensus:2026-W40', 'gov-mistakepass:2026-W40', CENSUS_FAILED_KEY, MISTAKEPASS_FAILED_KEY], new Set(), () => true, () => true, () => true, () => true);
+  ok('P41 decideOrphanSweep leaves the weekly keys untouched (neither resolved nor kept)', res.resolve.length === 0 && res.keep.length === 0, JSON.stringify(res));
+  ok('P43 census.mjs is in DRIFT_LOADED_FILES (P29: it joins in the commit that creates it)', DRIFT_LOADED_FILES.includes('census.mjs'));
+}
+
+// ─── B-PLAN-CURRENCY-CHECK P40 / P42 / P46: the weekly gate, run through the SHIPPED maybeRunWeekly with fakes ───
+{
+  const MON = Date.parse('2026-09-28T09:00:00Z');                   // Monday of ISO week 2026-W40
+  const DAY = 24 * HOUR;
+  const W40 = '2026-W40', W41 = '2026-W41';
+  const PLANTEXT = ['## 0. x', '| session | in flight now | disposition |', '|---|---|---|', '| CC-A (Old Claude) | B-FOO — Step 3 | FINISH |',
+    '## 4. The plan', '| # | item | batch / reference | owner | status | report | note |', '|---:|---|---|---|---|---|---|',
+    '| 1 | foo | B-FOO | CC-A (Old Claude) | QUEUED | — | — |', '## 5. Running now', '| item | owner | closes | report |', '|---|---|---|---|',
+    '## 6. Who', '| session | group | items |', '|---|---|---:|', '| CC-A (Old Claude) | g | 1 |', '## 7. end'].join('\n');
+  const FILES = { '1-system-manual/RUNNING_ISSUES.md': '### #100 OPEN 2026-09-01 (CC-A) x\nHOME: B-FOO (CC-A)\n### #101 OPEN (CC-B) y',
+    '1-system-manual/SPRINT_TO_LIVE_PLAN.md': PLANTEXT, 'Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md': '## After live — 1\n- B-BAR — x\n',
+    '1-system-manual/POST_AUDIT_ROADMAP.md': '| 19-1 | a | b |' };
+  const world = (log, over = {}) => {
+    const calls = [], boxes = [], saved = [];
+    let n = 0;
+    const sink = {
+      add: (a, nowMs) => { calls.push({ op: 'add', ...a, nowMs }); log.push(`add:${a.dedupeKey}`); if (over.addThrows) throw new Error('cli exit 1'); return over.nullId ? null : `id-${++n}`; },
+      resolve: (id) => { calls.push({ op: 'resolve', id }); log.push(`resolve:${id}`); if (over.resolveThrows) throw new Error('resolve blew up'); },
+    };
+    const readers = {
+      show: (ref, p) => (over.brokenRead ? null : FILES[p]), names: () => ['B_OLD_COMPLETION_REPORT.md'],
+      added: (prev, ref) => { calls.push({ op: 'added', prev, ref }); return []; }, planHistory: () => [],
+      refBefore: (ref, ms) => { calls.push({ op: 'refBefore', ref, ms }); return 'b'.repeat(40); },
+      bodies: (prev, ref) => { calls.push({ op: 'bodies', prev, ref }); return ['fix\n\nMISTAKE: wrong-object [B-X] — y']; },
+    };
+    const deps = { sink, readers, ref: over.ref === undefined ? 'a'.repeat(40) : over.ref, writeBox: (week) => { boxes.push(week); log.push(`box:${week}`); return `/x/${week}.json`; },
+      save: (st) => { saved.push(JSON.parse(JSON.stringify(st))); log.push('save'); }, flags: over.flags ?? { census: true, mistakePass: false } };
+    return { deps, calls, boxes, saved };
+  };
+  const fresh = () => ({ openAlerts: {}, lastTick: null });
+  const adds = (calls) => calls.filter((c) => c.op === 'add');
+
+  // flags off (the committed state) → no state change, no call at all
+  {
+    const st = fresh(), before = JSON.stringify(st), w = world([], { flags: { census: false, mistakePass: false } });
+    maybeRunWeekly(st, MON, new Set(), w.deps);
+    ok('P40 flags OFF → state byte-identical and nothing called', JSON.stringify(st) === before && w.calls.length === 0 && w.saved.length === 0);
+    const def = fresh(); maybeRunWeekly(def, MON, new Set(), { sink: { add: () => { throw new Error('must not be called'); } } });
+    ok('P40 the COMMITTED flags (config.mjs) are off: the default deps touch nothing', JSON.stringify(def) === JSON.stringify(fresh()));
+  }
+  // two simulated Mondays → two distinct adds; a later tick in a run week → none
+  {
+    const st = fresh(), w = world([]);
+    maybeRunWeekly(st, MON, new Set(), w.deps);
+    maybeRunWeekly(st, MON + 2 * DAY, new Set(), w.deps);           // Wednesday of the same, already-run week
+    maybeRunWeekly(st, MON + 7 * DAY, new Set(['id-1']), w.deps);    // next Monday
+    const keys = adds(w.calls).map((c) => c.dedupeKey);
+    ok('P40 two simulated Mondays → two distinct adds; a non-Monday tick in a censused week → none',
+      keys.join() === `gov-plancensus:${W40},gov-plancensus:${W41}`, keys.join());
+    ok('P40 state records the week, the time, the graded ref and the id', st.lastCensusWeek === W41 && st.lastCensusAt === MON + 7 * DAY && st.lastCensusRef === 'a'.repeat(40) && st.lastCensusAlertId === 'id-2');
+    ok('P41 the weekly key is recorded in openAlerts', st.openAlerts[`gov-plancensus:${W40}`] === 'id-1' && st.openAlerts[`gov-plancensus:${W41}`] === 'id-2');
+    ok('P40 list (a)\'s window is by REF: the second run reads lastCensusRef..ref, the first the branch 7 days back',
+      w.calls.filter((c) => c.op === 'added').map((c) => c.prev).join() === ['b'.repeat(40), 'a'.repeat(40)].join() &&
+      w.calls.find((c) => c.op === 'refBefore').ms === MON - 7 * DAY);
+  }
+  // catch-up and the Monday-09:00Z edge
+  {
+    const st = fresh(), w = world([]);
+    maybeRunWeekly(st, MON - 1, new Set(), w.deps);
+    ok('P40 Monday 08:59:59.999Z → no add (the gate is 09:00Z)', adds(w.calls).length === 0);
+    maybeRunWeekly(st, MON + DAY, new Set(), w.deps);
+    ok('P40 (Q10 catch-up) a Tuesday tick in an uncensused week → fires', adds(w.calls).length === 1 && st.lastCensusWeek === W40);
+    ok('P40 weekGateMs is Monday 09:00Z of the ISO week', weekGateMs(MON + 3 * DAY + 5 * HOUR) === MON && weekGateMs(Date.parse('2027-01-03T12:00:00Z')) === Date.parse('2026-12-28T09:00:00Z'));
+  }
+  // resolve-then-tick on the same Monday → no second add (condition 1: the gate is the SOLE dedupe)
+  {
+    const st = fresh(), w = world([]);
+    maybeRunWeekly(st, MON, new Set(['id-1']), w.deps);
+    delete st.openAlerts[`gov-plancensus:${W40}`];                   // resolved out-of-band and pruned by the reconcile
+    maybeRunWeekly(st, MON + HOUR, new Set(), w.deps);
+    ok('P40 resolve-then-tick on the same Monday → no second add', adds(w.calls).length === 1);
+  }
+  // save at the add; a throw after the add cannot re-add
+  {
+    const log = [], st = fresh(), w = world(log, { resolveThrows: true });
+    st.openAlerts[CENSUS_FAILED_KEY] = 'fail-1';                     // a failure alert is open, so a resolve follows the save
+    maybeRunWeekly(st, MON, new Set(['fail-1']), w.deps);
+    ok('P40 the box file is written BEFORE the add, and saveState runs right AFTER it (before the resolve that throws)',
+      log.slice(0, 4).join() === `box:${W40},add:gov-plancensus:${W40},save,resolve:fail-1`, log.join());
+    const reloaded = w.saved[0];
+    const w2 = world([]);
+    maybeRunWeekly(reloaded, MON + HOUR, new Set(), w2.deps);
+    ok('P40 ...so a state reloaded from that save does not re-add this week', reloaded.lastCensusWeek === W40 && adds(w2.calls).length === 0);
+  }
+  // a census failure: the failure alert opens, the week is not recorded; the next success resolves it
+  {
+    const st = fresh(), w = world([], { brokenRead: true });
+    const r = maybeRunWeekly(st, MON, new Set(), w.deps);
+    const a = adds(w.calls);
+    ok('P40 a census throw → gov-census-failed at warning, the week NOT recorded', a.length === 1 && a[0].dedupeKey === CENSUS_FAILED_KEY && a[0].severity === 'warning' &&
+      st.lastCensusWeek === undefined && st.openAlerts[CENSUS_FAILED_KEY] === 'id-1' && r.census.ran === false);
+    maybeRunWeekly(st, MON + HOUR, new Set(), w.deps);
+    ok('P40 a repeated failure does not add a second failure alert', adds(w.calls).length === 1);
+    const ok2 = world([]);
+    maybeRunWeekly(st, MON + 2 * HOUR, new Set(), ok2.deps);
+    ok('P40 the next success adds the census and resolves the failure alert', adds(ok2.calls).length === 1 && ok2.calls.some((c) => c.op === 'resolve' && c.id === 'id-1') && !st.openAlerts[CENSUS_FAILED_KEY] && st.lastCensusWeek === W40);
+    const noRef = fresh(), wn = world([], { ref: null });
+    maybeRunWeekly(noRef, MON, new Set(), wn.deps);
+    ok('P40 no graded ref → a failure, never a census at a guessed ref', adds(wn.calls)[0]?.dedupeKey === CENSUS_FAILED_KEY && noRef.lastCensusWeek === undefined);
+    const dead = fresh(), wd = world([], { brokenRead: true, addThrows: true });
+    let threw = false; try { maybeRunWeekly(dead, MON, new Set(), wd.deps); } catch { threw = true; }
+    ok('P40 even a failing failure-alert add does not throw out of the tick', !threw);
+  }
+  // Q6: a null id after exit 0 → the week is censused, lastCensusAlertId null, no retry; shadow is logged once a week
+  {
+    const st = fresh(), w = world([], { nullId: true });
+    maybeRunWeekly(st, MON, new Set(), w.deps);
+    maybeRunWeekly(st, MON + HOUR, new Set(), w.deps);
+    ok('P40 (Q6) a null id after exit 0 marks the week, records lastCensusAlertId null, and does not retry (also the shadow case: once a week)',
+      adds(w.calls).length === 1 && st.lastCensusWeek === W40 && st.lastCensusAlertId === null && !(`gov-plancensus:${W40}` in st.openAlerts));
+  }
+  // the liveness seed: set on the first tick that reads the flag on, before the gate
+  {
+    const st = fresh(), w = world([], { brokenRead: true });
+    st.lastCensusWeek = W40;
+    maybeRunWeekly(st, MON + DAY, new Set(), w.deps);
+    ok('P40 censusEnabledSince is set on the first flag-on tick even when the gate does not match', st.censusEnabledSince === MON + DAY && adds(w.calls).length === 0);
+    const failing = fresh(), wf = world([], { brokenRead: true });
+    for (let d = 0; d <= 9; d++) maybeRunWeekly(failing, MON + d * DAY, new Set(), wf.deps);
+    const hb = decideHeartbeat({ lastTick: MON + 9 * DAY, lastCensusAt: failing.lastCensusAt ?? null, lastMistakePassAt: null,
+      censusEnabledSince: failing.censusEnabledSince, mistakePassEnabledSince: null, censusEnabled: true, mistakePassEnabled: false, openAlertIds: {} }, MON + 9 * DAY);
+    ok('P40+P28 flag on for 9 days and no census ever run → the heartbeat raises ONE census warning',
+      hb.intents.length === 1 && hb.intents[0].dedupeKey === CENSUS_SILENT_KEY && hb.intents[0].severity === 'warning', JSON.stringify(hb.intents));
+  }
+  // P42 severity (§10e Q13)
+  {
+    const sev = (open, live) => weeklySeverity(open, 'gov-plancensus:', W41, live);
+    ok('P42 prior week live → warning', sev({ [`gov-plancensus:${W40}`]: 'p' }, new Set(['p'])).severity === 'warning');
+    ok('P42 prior week resolved (pruned from state) → info', sev({}, new Set()).severity === 'info');
+    ok('P42 prior week acknowledged (still live in the snapshot) → warning', sev({ [`gov-plancensus:${W40}`]: 'p' }, new Set(['p', 'q'])).severity === 'warning');
+    ok('P42 two weeks back still live, the prior week resolved → warning', sev({ 'gov-plancensus:2026-W39': 'o' }, new Set(['o'])).severity === 'warning');
+    ok('P42 a key held but not live → info', sev({ [`gov-plancensus:${W40}`]: 'p' }, new Set()).severity === 'info');
+    ok('P42 the store unreadable (liveIds null) → warning, flagged', sev({}, null).severity === 'warning' && sev({}, null).storeUnreadable === true);
+    ok('P42 the SAME week\'s key does not escalate itself', sev({ [`gov-plancensus:${W41}`]: 'p' }, new Set(['p'])).severity === 'info');
+    const st = fresh(), w = world([]);
+    maybeRunWeekly(st, MON, new Set(), w.deps);
+    maybeRunWeekly(st, MON + 7 * DAY, new Set(['id-1']), w.deps);
+    const [a1, a2] = adds(w.calls);
+    ok('P42 an unresolved prior week does not block this week\'s add, and raises it to warning', a1.severity === 'info' && a2.severity === 'warning' && a2.dedupeKey === `gov-plancensus:${W41}`);
+    ok('P41/Q1 (ii) category verification at EVERY severity, with --dedupe-key = the week key', [a1, a2].every((a) => a.category === 'verification' && a.storeDedupeKey === a.dedupeKey));
+    ok('P45 the census metadata leads with its counts', a1.metadata.startsWith('{"counts":{"h":'));
+    const u = fresh(), wu = world([]);
+    maybeRunWeekly(u, MON, null, wu.deps);
+    ok('P42 liveIds null at mint → warning, and the body says the prior week could not be read', adds(wu.calls)[0].severity === 'warning' && /Alert store unreadable/.test(adds(wu.calls)[0].body));
+  }
+  // P46: the mistake pass, independent of the census
+  {
+    const st = fresh(), w = world([], { brokenRead: true, flags: { census: true, mistakePass: true } });
+    maybeRunWeekly(st, MON, new Set(), w.deps);
+    const a = adds(w.calls);
+    const pass1 = a.find((x) => x.dedupeKey === `gov-mistakepass:${W40}`);
+    ok('P46 a census fault does not block the pass (its own keys and gate)', a.some((x) => x.dedupeKey === CENSUS_FAILED_KEY) && pass1 && st.lastMistakePassWeek === W40 && st.lastCensusWeek === undefined);
+    ok('P46 the pass is verification/info with a counts-first body', pass1.category === 'verification' && pass1.severity === 'info' && /wrong-object 1/.test(pass1.body) && pass1.metadata.startsWith('{"counts":'));
+    st.openAlerts[`gov-mistakepass:${W40}`] = 'ack-1';                  // acknowledged, never resolved (the 8a07c40b shape)
+    maybeRunWeekly(st, MON + 7 * DAY, new Set(['ack-1']), w.deps);
+    const pass2 = adds(w.calls).find((x) => x.dedupeKey === `gov-mistakepass:${W41}`);
+    ok('P46 week N+1 is minted while week N is acknowledged-unresolved, at warning (still verification)', pass2 && pass2.severity === 'warning' && pass2.category === 'verification');
+    ok('P46 the trailer window is by REF: lastMistakePassRef..ref', w.calls.filter((c) => c.op === 'bodies').map((c) => c.prev).join() === ['b'.repeat(40), 'a'.repeat(40)].join());
+    const pf = fresh(), wp = world([], { flags: { census: false, mistakePass: true } });
+    wp.deps.readers.bodies = () => { throw new Error('git log failed'); };
+    maybeRunWeekly(pf, MON, new Set(), wp.deps);
+    ok('P46 a pass failure opens gov-mistakepass-failed, not the census key', adds(wp.calls)[0].dedupeKey === MISTAKEPASS_FAILED_KEY && pf.lastMistakePassWeek === undefined);
+  }
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
