@@ -1,6 +1,10 @@
 # DawnTrader CI Pipeline
-# Runs on every pull request to any branch.
-# Checks: TypeScript compilation, test suite.
+# Runs on a push to dawntrader-v4, main or any 'migration/**' branch, and on a
+# pull request whose BASE branch has no '/' in its name. The pull_request
+# filter '*' does not match '/', so a PR into migration/aws-supabase gets NO
+# CI run; the push to the branch is what runs it (B-PLAN-CURRENCY-CHECK, §10i).
+# Checks: TypeScript compilation, test suite (vitest, plus the governance
+# checker's plain-node tests as steps inside Test Suite), build, Docker build.
 #
 # Note: No linting step — the project does not have ESLint configured.
 # Tests use Vitest (see package.json).
@@ -113,6 +117,21 @@ jobs:
           # engine) would otherwise crash. Demo is the safe test default — the
           # feed isn't actually polled during tests.
           COINGECKO_API_TIER: demo
+
+      # B-PLAN-CURRENCY-CHECK P30 (OBJ-10, Langston Q10: mandatory). The
+      # governance checker's own tests. A push to the checker deploys to the
+      # staging box within ~30 min (its ExecStartPre fast-forward), outside
+      # dt-deploy, so this step DETECTS a failing checker commit after the
+      # push; it does not gate that deploy. The pre-push local run is the gate.
+      # LABELLED DEPARTURE (Q33, scope §10i): §10c approved "the CI job"; this
+      # is a STEP inside Test Suite instead, so the four-job count stays true.
+      # `if: !cancelled()` runs it even when vitest fails, so a vitest failure
+      # cannot hide a checker failure. Plain node, node builtins only: needs
+      # neither npm ci nor Postgres. The heartbeat step is added with P28,
+      # which creates heartbeat-check.test.mjs.
+      - name: Governance checker tests (poller)
+        if: ${{ !cancelled() }}
+        run: node scripts/governance-checker/poller.test.mjs
 
   build:
     name: Build
