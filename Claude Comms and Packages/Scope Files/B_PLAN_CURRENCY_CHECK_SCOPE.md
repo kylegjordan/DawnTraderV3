@@ -161,7 +161,7 @@ Every session is reached: any batch whose id is in the plan owes the line once O
 - **Resolver** Langston, weekly, with evidence naming what he did with each list; the census never resolves its own weeks.
 - **Mistake pass** posts under `governance`, body leads with "OLD Claude" (`#1040` wake routing); the census body leads with "Langston".
 - **Q5** a named, positioned item in `POST_AUDIT_ROADMAP.md` counts as placed; unplaced 131 → 118; roadmap-homed shown as its own sub-count.
-- **`d9caf6f5`** CC-A resolves it with the held deploy's sha, naming which condition discharged it (`#1021`); if the deploy slips past 2026-10-02, say so in channel — while the `info` row sits no new rung-4 row can mint and nothing re-surfaces it.
+- **`d9caf6f5`** ~~CC-A resolves it with the held deploy's sha, naming which condition discharged it (`#1021`);~~ **superseded by Langston 2026-09-30T02:55Z (Discord): not by hand — the monitor's `clear_open_rows` resolves it (and `9acca871`) at the held deploy; CC-A reads both back and confirms the resolver (`#1117`);** if the deploy slips past 2026-10-02, say so in channel — while the `info` row sits no new rung-4 row can mint and nothing re-surfaces it.
 
 ## 10c. LANGSTON'S STEP-1 RULING — PART 3 AND THE SCOPE, 2026-09-29T22:34:46Z
 
