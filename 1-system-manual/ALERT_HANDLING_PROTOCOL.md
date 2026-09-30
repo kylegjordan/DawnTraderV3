@@ -65,6 +65,7 @@
 | `soak_verification` | the batch owner | Read the numbers, bring Kyle the recommendation, then resolve. |
 | `one_off` | per the alert body | Do the one-off task; resolve. |
 | `recurring` | owner of the recurring concern | Handle this instance; resolve (the next instance re-fires fresh). |
+| `verification` — the governance checker's weekly `gov-plancensus:<week>` and `gov-mistakepass:<week>` (`B-PLAN-CURRENCY-CHECK`, 2026-09-30) | **CC-A** | Work the week's list (census: disposition CC-A's items by id, hand the rest to their owners by id; pass: THE WEEKLY PASS in `MISTAKE_PATTERNS.md`), then **RESOLVE with the commit sha — NEVER ack** (an ack freezes that week's key). The next week's key is new, so nothing is minted by hand. The heartbeat raises `gov-census-silent` / `gov-mistakepass-silent` if an enabled leg misses its week. |
 
 (Defaults only — Langston's marker overrides per the actual cause. ⚠️ This table predates CC-C and CC-INFRA; where a batch owns the alert, its owner is the one named on the batch's plan row.)
 
