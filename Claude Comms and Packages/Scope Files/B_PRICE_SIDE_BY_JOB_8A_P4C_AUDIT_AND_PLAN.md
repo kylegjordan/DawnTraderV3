@@ -357,15 +357,15 @@ Accepted as stated: J3, J4, J5; E1-E6, E8-E10; the 3a/3b split.
 **Reader census of the persisted closed-row `frictionCost`** (every non-test `server/`+`shared/` reference, plus `scripts/` and `client/src`, at `eea2dca65`), one decision each:
 | reader | what it does with it | decision |
 |---|---|---|
-| `vts-service.ts` `expectedEdge = tpDistance − frictionCost` (closed-row persist) | books the row's edge | **reads the recomposed figure — correct; this is the intent** |
-| `vts-service.ts` `fees = frictionCost × positionSize` | the closed row's dollar fees | **same — correct** |
-| `utils/export-csv.ts` costs column | CSV dollar costs | **same — correct** |
-| `data-aggregator.ts` `avgFrictionCost` | an average across trades | **no change: it spans the deploy, so any reading must be per calibration epoch (`ADJUSTMENT_FRAMEWORK` epoch rule 7) — the epoch step in this increment's migration is what separates them** |
-| `ml-calibration.ts` `frictionCost?` (fed from `vts-service.ts` `t.frictionCost ?? t.signal.frictionCost`) | declared on the input type, **never read** | **no effect; a written-never-read field, recorded here, not removed in this batch (outside its scope)** |
-| `scripts/b5-amr-correctness-audit.ts`, `scripts/hce/hce_study.py` | offline one-offs | **no change; a re-run must split by epoch** |
+| `vts-service.ts` `expectedEdge = tpDistance − frictionCost` (closed-row persist) | books the row's edge | **accept-with-declaration:** reads the recomposed figure — this is the intent |
+| `vts-service.ts` `fees = frictionCost × positionSize` | the closed row's dollar fees | **accept-with-declaration:** same |
+| `utils/export-csv.ts` costs column | CSV dollar costs | **accept-with-declaration:** same |
+| `data-aggregator.ts` `avgFrictionCost` | an average across trades | **partition:** it spans the deploy, so a reading is per calibration epoch (`ADJUSTMENT_FRAMEWORK` epoch rule 7) — the epoch step in this increment's migration is the partition key; no code change |
+| `ml-calibration.ts` `frictionCost?` (fed from `vts-service.ts` `t.frictionCost ?? t.signal.frictionCost`) | declared on the input type, **never read** | **accept-with-declaration:** no effect — a written-never-read field, recorded here, not removed in this batch (outside its scope) |
+| `scripts/b5-amr-correctness-audit.ts`, `scripts/hce/hce_study.py` | offline one-offs | **partition:** a re-run splits by epoch |
 | the UI (`client/src`) | — | **no reference** |
 ⇒ **No reader needs a code change.** The ones that book money read the recomposed figure, which is the fix.
 
-**legacyBasis peak (J7 / BLOCKER-3):** the counter is since-boot on every VTS_TOUCH line; its PEAK is read from `error.log`/`out.log` by the Step-7 extract before MAX_HOLD (7 d) decays it to 0 — `p4c-window-extract.py` gains the field with the S1 fields (owed before Step 7). **Failure condition, stated now:** `refused > 0` at any reading, or `legacyBasis` still > 0 after MAX_HOLD from the deploy.
+**legacyBasis peak (J7 / BLOCKER-3):** the counter is CUMULATIVE since boot (printed on every `[8a-P3][VTS_TOUCH]` line), so it PLATEAUS — what decays to 0 is its per-interval increase, once every pre-stamp trade has closed (≤ MAX_HOLD, 7 d, after the deploy). A restart resets it, so the plateau is read within one boot. The Step-7 read records the plateau value and the time its increase stopped. **Failure condition, stated now:** `refused > 0` at any reading, or `legacyBasis` still RISING more than MAX_HOLD after the deploy (a writer lost its stamp).
 
 **3a-i Step-4 (Langston 04:46Z, CHANGES-NEEDED) — each point fixed at `93c6ed052`:** BLOCKER-1 `vts_xstock_touch` prefetched + boot-asserted + one reader (`vts-xs-touch-config.ts`); the CLASS: a swept census of every sync-read module found `feed_health` and `strategy.orb` also unlisted (`#1123`, folded here) — all three listed, a regression keeps it whole. BLOCKER-2 the guard's reason reaches the instrument; `live=[…]` per reason; S1 unchanged in meaning and now exact; `knobs_unavailable` counted and logged. FINDING-1 `stepNoTriggerStreak` (pure): tracked always, page gated, page clock restarts after off-hours, ended streaks logged. Nits: σ-kick width logged; `resolveVtsBookedExitPrice`'s unread class argument removed (§15 (a)); the one-reader fence broadened. Mutation-proved (3 / 2 / 2 red).

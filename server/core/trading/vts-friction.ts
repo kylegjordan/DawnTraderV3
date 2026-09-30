@@ -61,7 +61,8 @@ export interface VtsCloseFriction {
   basis: 'recomposed' | 'stamped';
   /** The entry basis the recomposition used (`null` when it was refused). */
   entryPriceBasis: EntryPriceBasis | null;
-  /** The stamp was absent and the legacy reading was used (counted by the caller; must reach 0 after MAX_HOLD). */
+  /** The stamp was absent and the legacy reading was used (counted by the caller; no NEW ones once every pre-stamp trade
+   *  has closed, i.e. within MAX_HOLD of the deploy). */
   legacyBasis: boolean;
   /** The first missing input, when refused. */
   missing: string | null;

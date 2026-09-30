@@ -4,7 +4,9 @@
  * plus the refusal alert.
  *   - `recomposed`  — closes booked under the per-leg rule (`recomposeVtsCloseFriction`).
  *   - `legacyBasis` — closes of a trade opened before every writer stamped `entryPriceBasis`; the positive control while
- *                     pre-stamp trades close. Its PEAK is recorded before it decays to 0 at MAX_HOLD.
+ *                     pre-stamp trades close. CUMULATIVE since boot, so it PLATEAUS rather than falling: what decays to 0
+ *                     is its per-interval increase, once every pre-stamp trade has closed (≤ MAX_HOLD after the deploy).
+ *                     A restart resets all three counters, so a plateau is read within one boot (the Step-7 extract).
  *   - `refused`     — a close missing a cost input; the stamped scalar was booked (`frictionBasis = 'stamped'`). Must
  *                     stay 0. Each refusal logs, and raises ONE alert (dedupe `vts-friction-recompose-refused`) —
  *                     RESOLVE it with evidence, never ACK: an unresolved row blocks the key's next mint (`#982`).

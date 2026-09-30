@@ -23,6 +23,11 @@ CONTROLS (Langston Step-2 BLOCKER-1 + CONDITION-2, 2026-09-30):
       hour (`flushSymbols` runs only from `beginPass` on an hour change), so an hour holding a restart after the lane's
       first line is EXCLUDED BY NAME, with its count published. The predicate is fixed here; it is not relaxed at run time.
 
+S1 (increment 3, plan §C3.7-§C3.8, pre-registered): per lane and session, `refusedLive / appliedLooks` from the LIVE
+guard's own reasons (the pass line's `appliedLooks`, `refusedLive`, `live=[…]`, emitted from `93c6ed052`), judged against
+the bracket re-derived from the window's OWN `ageOver` at 300 s and 15 s, with the frozen [0.44%, 2.32%] published beside
+it. A window whose lines predate those fields reads `readable: false` — never a zero share.
+
 Usage on staging (as root or deploy):
   python3 - [--dir /var/log/dawntrader] [--pm2-log /home/deploy/.pm2/pm2.log] [--sym-cut hour|stamp] < p4c-window-extract.py
 Exit status: 0 = ran, controls reported (read them); 2 = a required input could not be read (nothing is printed as a result).
@@ -52,6 +57,8 @@ def iso(s):
 START, END = iso(args.start), iso(args.end)
 START_S = START.replace(microsecond=0)  # line stamps have second resolution; the first pass ran 14:39:53Z
 CANDS = [15, 30, 60, 120, 300]
+LIVE_REASONS = ['ok', 'no_row', 'age_unknown', 'too_old', 'side_unusable', 'too_wide', 'knobs_unavailable']  # XS_LIVE_REASONS
+S1_FROZEN_BRACKET = [0.0044, 0.0232]
 TS = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \+00:00: ')
 KV = re.compile(r'(\w+)=(\[[^\]]*\]|\S+)')
 HOUR = timedelta(hours=1)
@@ -297,5 +304,22 @@ for lane in lanes:
         U = refused[ci] / looks_n if looks_n else None
         K_syms = sorted(s for s, v in floor.items() if v['looks'] and v['refused'][ci] / v['looks'] > 0.5)
         L['ruleA_' + tag] = {'c_used': CANDS[ci], 'U': U, 'K': len(K_syms), 'K_symbols': K_syms}
+
+    # S1 — the successor measurement (plan §C3.8). Per session; weekend looks are labelled and never read.
+    L['S1'] = {}
+    for (ln, s), v in sorted(touch.items()):
+        if ln != lane or s == 'weekend':
+            continue
+        applied, refused_live, lk = v.get('appliedLooks', 0), v.get('refusedLive', 0), v.get('looks', 0)
+        ao = v.get('ageOver', [0] * len(CANDS))
+        live_v = v.get('live')
+        L['S1'][s] = {
+            'readable': applied > 0 and isinstance(live_v, list) and len(live_v) == len(LIVE_REASONS),
+            'looks': lk, 'appliedLooks': applied, 'refusedLive': refused_live,
+            'share': (refused_live / applied) if applied else None,
+            'bracket_own_window': [(ao[CANDS.index(300)] / lk) if lk else None, (ao[CANDS.index(15)] / lk) if lk else None],
+            'bracket_frozen': S1_FROZEN_BRACKET,
+            'live_by_reason': dict(zip(LIVE_REASONS, live_v)) if isinstance(live_v, list) and len(live_v) == len(LIVE_REASONS) else None,
+        }
     out['lanes'][lane] = L
 print(json.dumps(out, indent=1, default=str))

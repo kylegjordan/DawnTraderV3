@@ -291,6 +291,13 @@ describe('8a-P4c inc 3 — BLOCKER-2: the instrument counts the LIVE guard by it
     expect(r.pass).toMatch(/\bwide=0\b/); // the pre-registered instrument band, unchanged by design
   });
 
+  it('the Step-7 extract labels the live vector in the SAME order the instrument emits it', () => {
+    const py = read('scripts/analysis/p4c-window-extract.py');
+    const m = /^LIVE_REASONS = (\[[^\]]*\])/m.exec(py);
+    expect(m).not.toBeNull();
+    expect(JSON.parse((m as RegExpExecArray)[1].replace(/'/g, '"'))).toEqual([...XS_LIVE_REASONS]);
+  });
+
   it('both lanes hand the guard verdict itself to the instrument (never a re-derived proxy)', () => {
     expect(VTS).toMatch(/_xsVtsInstrument\.recordLook\(trade\.symbol, _xsRow, Date\.now\(\), trade\.stopLoss \?\? null, trade\.takeProfit \?\? null, _xsExit\);/);
     expect(VTS).toMatch(/_xsShadowInstrument\.recordLook\(trade\.symbol, _sxRow, Date\.now\(\), trade\.stopLoss \?\? null, trade\.takeProfit \?\? null, _sx\);/);
