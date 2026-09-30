@@ -2,6 +2,8 @@
 
 `PHASE_19_PLAN` row `3n.u` · owner **CC-B** · **CHANGE-CLASS: architecture** · deployed **`323ae277641368acb057e8ffa7643894aa1c2799`** 2026-09-19 00:02:43Z · **STEP: 10 of 11 · NEXT STEP: 11 of 11 (this report converts to the completion report when the window closes).**
 
+> ⏸ **PAUSED FOR THE SPRINT START — Kyle, 2026-09-30 (Desktop): "treat it as paused and go ahead."** The window and its pre-registered criterion (§4) are unchanged and run unattended. This report still converts to the completion report when the window closes. The pause only means an open observation window does not hold the sprint start.
+
 ## 1. What the batch is for
 Kyle, 2026-09-19: *"fix the incorrect feeds that are not going to be fixed by analyst."* The `3n.t` per-situation audit sorted every price defect into two piles; everything about which SIDE a price comes from went to CC-C's `B-PRICE-SIDE-BY-JOB`. What was left is the CLOSE: how a position is priced when it is forced out. Finished outcome: **no close books a price nobody was offering, and no close invents one when none exists.**
 

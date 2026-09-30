@@ -6,7 +6,7 @@
 
 | batch | step | waiting on |
 |---|---|---|
-| **`B-FEED-MISMATCH-FIX`** (row `3n.u`) | **STEP 10 of 11 — observation window** | the data: 300 taker closes or 2026-10-10T00:02:43Z, whichever first. How it is read (per side of each boundary, the short-n rule, the reset excluded) is fixed in amendment 4a (`0c8918c5d`), Langston-confirmed. Then the progress report converts to the completion report. |
+| **`B-FEED-MISMATCH-FIX`** (row `3n.u`) | **STEP 10 of 11 — observation window · ⏸ PAUSED for the sprint start (Kyle 2026-09-30)** | the data: 300 taker closes or 2026-10-10T00:02:43Z, whichever first. How it is read (per side of each boundary, the short-n rule, the reset excluded) is fixed in amendment 4a (`0c8918c5d`), Langston-confirmed. Then the progress report converts to the completion report. |
 | **`B-XSTOCK-FEE-CONTRACT`** (`#1010`, row 2.4-FEE) | **closed batch, observation still open** | 2026-10-02T20:09:47Z: P8 closes INCONCLUSIVE (Langston 2026-09-29 — PASS was unreachable by construction); Arm B's verdict of record is re-run after the window and Langston re-derives it. The held deploy may go at or after 20:10Z. Successor: `B-FEE-BASIS-STAMP` (`#1097`, sprint row 107a). |
 | **`T-W20C-SCALAR-LEG`** (sprint row 107) | **scope r1 drafted 2026-09-13 (`6e97a8f1c`), never ruled** | its turn in the sprint, after row 106 `B-PAPER-LANE-PROVENANCE` |
 

@@ -17,7 +17,7 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 | CC-A (Old Claude) | B-PLAN-CURRENCY-CHECK (row 1) — Step 1 APPROVED 2026-09-29 (Langston); Step 2 next | FINISH before the sprint starts — **Kyle 2026-09-30 (Desktop): it is PRE-SPRINT work**, so the plan-row check and the weekly census are working when the sprint starts, which is when the plan starts moving fast. The exception to the no-sprint-work rule below is this one row only. |
 | CC-A (Old Claude) | B-TOKEN-BURN-CUT (row 1h) — Step 1, scope `Claude Comms and Packages/Scope Files/B_TOKEN_BURN_CUT_SCOPE.md` | FINISH before the sprint starts — **Kyle 2026-09-30 (Desktop): the token burn must be fixed or figured out before the sprint.** A second pre-sprint exception, alongside row 1. |
 | CC-B (New Claude) | B-REACH-BASELINE-ADJUST — 7-day review read 2026-09-28 | ✅ CLOSED 2026-09-29: the crowding arm fired; Kyle overrode the rollback and kept the rows |
-| CC-B (New Claude) | B-FEED-MISMATCH-FIX — observation to ~2026-10-10 | FINISH: convert at close |
+| CC-B (New Claude) | B-FEED-MISMATCH-FIX — observation to ~2026-10-10 | ⏸ **PAUSED — Kyle 2026-09-30 (Desktop): does not hold the sprint start.** The window runs unattended; the report converts at its close |
 | CC-B (New Claude) | B-XSTOCK-FEE-CONTRACT — observation (~21 days from 09-11) | FINISH: convert at close |
 | CC-B (New Claude) | B-ARCHIVE-RETENTION-SIZING — was waiting on Kyle | ✅ CLOSED 2026-09-29 as a decision item; the October 1 move check stays CC-B's alert |
 | CC-B (New Claude) | T-W20C-SCALAR-LEG — not started | stays as its sprint row (Wave A3) |
@@ -361,7 +361,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 
 | item | owner | closes |
 |---|---|---|
-| B-FEED-MISMATCH-FIX | CC-B | 300 taker closes or 2026-10-10 |
+| B-FEED-MISMATCH-FIX | CC-B | 300 taker closes or 2026-10-10 (paused for the sprint start, Kyle 2026-09-30) |
 | B-XSTOCK-FEE-CONTRACT | CC-B | 2026-10-02T20:09:47Z, not extended (Langston 2026-09-29) |
 | B-INSTRUMENTS-OVER-RULES | CC-A | 2026-10-02 |
 
