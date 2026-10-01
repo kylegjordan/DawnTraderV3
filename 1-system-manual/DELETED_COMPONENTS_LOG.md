@@ -1132,3 +1132,10 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **ARCHIVE:** no file removed — a branch inside a kept file; git history is authoritative.
 **COMMIT:** the `B-TOKEN-BURN-CUT` Step-3 code commit (the commit that adds this entry).
 
+
+## 2026-10-01 — the unregistered per-session heartbeat `wake-watcher-heartbeat-cc-a` — B-TOKEN-BURN-CUT (#1127, sprint row 1h), CC-A
+**WHAT:** `comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat-cc-a/SKILL.md` and its laptop copy `~/.claude/scheduled-tasks/wake-watcher-heartbeat-cc-a/SKILL.md` (byte-identical, CR-stripped, compared before removal).
+**WHY:** a pre-shared-heartbeat task that is NOT registered (absent from the app's scheduled-task list, read 2026-10-01 ~21:55Z; `RUNNING_ISSUES` line 7628 already recorded it "exists and has NEVER RUN", and the 2026-09-29 registry read at line 9478 found no per-session heartbeat). Its text describes exactly the hourly wake this batch removed ("wake the CC-A session so it can re-verify + re-arm"), and it reads alerts with `tail -20`, the method banned after `#980`. Left on disk, it is a ready-made way to re-introduce both. The live heartbeat is the shared `wake-watcher-heartbeat`, unchanged in role. Disposition (5): disconnected, stays disconnected.
+**BLAST RADIUS:** `git grep wake-watcher-heartbeat-cc-a` at the ref returns only history (issue entries, change lists, the B-WAKE-QUIET scope, the feature-watch ledger, CC-A's memory); no runtime reader; the task was never scheduled, so no run stops.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/wake-watcher-heartbeat-cc-a.SKILL.20261001-B-TOKEN-BURN-CUT.md.removed`.
+**COMMIT:** the `B-TOKEN-BURN-CUT` Step-10 governance commit that adds this entry.
