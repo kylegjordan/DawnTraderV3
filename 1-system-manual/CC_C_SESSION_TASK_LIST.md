@@ -37,6 +37,10 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | plan row | item | state | what it is |
 |---|---|---|---|
 | 2 | B-XSTOCK-BID-TRIGGER-RELAND | QUEUED | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
+| 4 | B-VTS-NO-DECISION-VALVE | IN FLIGHT — Step 2 APPROVED 2026-10-02; Step 3 next | midpoint off, before the sprint: a VTS trade with no usable sell price no longer books its timeout at the midpoint |
+| 4a | B-VTS-TELEMETRY-AGGREGATES (`#1141`) | QUEUED | after row 4: the SQE's predictive confidence counts VTS records flagged "never count" — investigation first |
+| 4b | B-VTS-NO-DECISION-VALVE increment 2 (`#1073`) | QUEUED | after row 4a: measure whether a paper maker rest fills after its deadline while a price is refused |
+| 4c | B-SHADOW-HOLD-CLOCK (`#1144`) | QUEUED | after row 4b: decide whether the shadow lane's 48 h hold pauses while xStock is shut |
 | 9a | B-TRADE-LOSS-BOUND-DECISION (`#1105`) | DONE — decided (Kyle 2026-09-30: NO bound) | Kyle: no buffer and no limit on the max position % tied to the kill switch; if a large position fails and the kill switch trips past its limit, so… |
 | 9b | B-SETTINGS-REAL-TYPE (`#1106`) | QUEUED | after row 9a: the builder returns the legacy table's type, so 24 fields read at ~50 sites are always undefined (engine blacklist/whitelist, AI-prom… |
 | 9c | B-LIVE-READERS-CLOSED-TRADES (`#1108`, was `#668`) | QUEUED | after row 9b, before the go-live switch (Kyle 2026-08-07: its own batch right after B-SIZING-DEC-RESTORE; named then, placed 2026-09-29): live's ba… |
