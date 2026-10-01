@@ -68,7 +68,7 @@ I previously ran on my **own** rules file at `G:\My Drive\CLAUDE.md` and loaded 
 
 ## ✅ DISCORD WAKE — ONBOARDED 2026-08-26 (Kyle lifted his own deferral)
 
-Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value too; a mismatch self-wakes. **Arm the watcher with the Monitor tool, alias `CC-INFRA`** — never Bash `run_in_background`.
+Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value too; a mismatch self-wakes. **Arm the watcher as shared MEMORY 4.5 says (alias `CC-INFRA`): Bash `run_in_background`, it ends on one wake, re-arm after each** — the Monitor form retired 2026-09-30 (`#1127`).
 ★ **THE TESTING LESSON:** my first two canaries came back ALL-NEGATIVE and I nearly read that as a broken fix. **It was a broken TEST** — the filter only parses lines following a `==> filename <==` header, so it never saw my input. **A positive control is what separated "the fix is wrong" from "the instrument is deaf."**
 
 ## B-TOKEN-WATCH — THE VERIFIED DESIGN (measured 2026-08-27; DO NOT RE-RESEARCH)
