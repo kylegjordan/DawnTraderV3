@@ -1257,7 +1257,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **Everything went live the same evening, and each first run was written down in advance and matched.** The plan check flagged one missing report link; the owner fixed it and the alert cleared itself on the next run. The first census found 148 open issues with no place in the plan: CC-A's 31 were closed, withdrawn or placed; the other sessions got theirs by number; the 55 with no clear owner became one scheduled triage row. NEW Claude spotted that the census was counting old due dates inside history notes as live ones, and Langston that it could not tell a handed-over item from a never-raised one; both were fixed before the next census.
 
-### 2026-10-01 — B-TOKEN-BURN-CUT (CC-A, sprint plan row 1h) — ⏳ CLOSING
+### 2026-10-02 — B-TOKEN-BURN-CUT (CC-A, sprint plan row 1h) — ✅ CLOSED
 
 **The sessions stopped waking up for nothing.** Since an app update in mid-September, every session was woken about twice an hour, around the clock, with nothing to say — 45 to 76 empty wake-ups per session on 2026-09-29, each one spending tokens. The watcher now ends on the first message actually for that session and picks up where it left off, so nothing is lost between wakes. On 2026-10-01 all four sessions had zero empty wake-ups, and the hourly health check showed every watcher alive. Each session now also sees only its own alerts, and a Langston reply wakes only the session it is addressed to.
 
