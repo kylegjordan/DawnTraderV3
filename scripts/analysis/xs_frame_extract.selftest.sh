@@ -13,7 +13,8 @@ done
 printf 'live\n' > "$T/logs/error.log"
 printf '2026-09-22T14:38:49: PM2 log: App [dawntrader:0] exited with code [0]\n2026-09-22T14:38:49: PM2 log: App [dawntrader:0] starting in -fork mode-\nnoise\n' > "$T/pm2.log"
 printf 'sha=abc\ndeployed_at=2026-09-22T14:39:00Z\n' > "$T/rec"
-run() { LOG_DIR="$T/logs" ARCHIVE="$T/arch" PM2_LOG="$T/pm2.log" DEPLOY_RECORD="$T/rec" NO_ALERT=1 NOW_EPOCH=$(date -u -d '2026-09-30 12:00' +%s) bash "$S"; }
+printf 'aaa abc deploy <d> 1790087913 +0000\treset: moving to abc\n' > "$T/reflog"
+run() { LOG_DIR="$T/logs" ARCHIVE="$T/arch" PM2_LOG="$T/pm2.log" DEPLOY_RECORD="$T/rec" REFLOG="$T/reflog" NO_ALERT=1 NOW_EPOCH=$(date -u -d '2026-09-30 12:00' +%s) bash "$S"; }
 ok=1; check() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1 (got '$2', want '$3')"; ok=0; fi; }
 
 run; check "run1 exits 0" "$?" 0
@@ -21,7 +22,11 @@ check "run1 extracts the 3 rotated files, never the live log" "$(wc -l < "$T/arc
 check "run1 keeps both XS_FRAME line kinds and nothing else" "$(gzip -dc "$T/arch/error__2026-09-17_00-00-00.xs.gz" | wc -l)" 2
 check "run1 archives both restart markers" "$(grep -c 'App \[dawntrader' "$T/arch/boundaries.log")" 2
 check "run1 archives the deploy record verbatim" "$(grep -c 'sha=abc' "$T/arch/boundaries.log")" 1
+check "run1 archives the reflog deploy line" "$(grep -c 'reset: moving to abc' "$T/arch/boundaries.log")" 1
+# two deploys inside one cadence: the record keeps only the last; the reflog keeps both
+printf 'abc def deploy <d> 1790100000 +0000\treset: moving to def\nabc ghi deploy <d> 1790100100 +0000\treset: moving to ghi\n' >> "$T/reflog"
 run; check "run2 is idempotent (manifest unchanged)" "$(wc -l < "$T/arch/manifest.tsv")" 3
+check "run2 archives BOTH intra-cadence deploys from the reflog, each once" "$(grep -c 'reset: moving to ' "$T/arch/boundaries.log")" 3
 echo "error__2026-09-16_00-00-00.log" >> "$T/arch/last_seen.txt"
 run; check "run3: a file seen last run and gone unextracted is a GAP (exit 3)" "$?" 3
 rm "$T"/logs/error__2026-09-1[78]_00-00-00.log; touch -d '2026-09-30 11:00 UTC' "$T/logs/error__2026-09-19_00-00-00.log"
