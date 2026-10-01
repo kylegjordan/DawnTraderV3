@@ -455,7 +455,7 @@ def page(kind, detail, drop_token=None):
     ⛔ No re-mint happens on a page: a login would spend the shared loopback bucket on a
     problem a login cannot fix.
     ★ STICKY for the faults a login cannot fix (fresh-reader r1): a wrong password, a missing
-    row, a login that keeps failing, a malformed login answer — while such a page stands dt-api
+    row, a row with no role, a malformed login answer — while such a page stands dt-api
     makes NO login (a timer re-trying a known-bad password spent the bucket and kept the setter's
     quiet-900-s precondition from ever holding). A token-refused page (a DB or lookup failure,
     which may heal) and a login-failing page (the app's login down, which heals) are recorded and
@@ -655,8 +655,12 @@ def login(who):
             continue
         break                                          # a success, or a different cause: the run ends
     if run_start is not None and t - run_start >= LOGIN_FAILING_GAP_S:
-        page("login-failing", "%d loopback logins in a row over %d min got no answer or a 5xx, with no "
-             "success between — the app's login is failing, not the password" % (run_n, (t - run_start) // 60))
+        # Gate 1-1 r4 FINDING-2: say what was measured — N ATTEMPTS spanning M min, never M min of
+        # continuous failure (a daily mint's two attempts span 24 h with nothing observed between)
+        page("login-failing", "%d loopback login attempts spanning %d min all got no answer or a 5xx, "
+             "with no successful login between them — attempts, not continuous monitoring; there may "
+             "have been no attempt in between. The app's login is failing, not the password"
+             % (run_n, (t - run_start) // 60))
     die(3, "FAILED: login got %s — backing off %d s and keeping any current token. Nothing was "
            "sent." % (st if st is not None else b.decode("utf-8", "replace"), BACKOFF_500_S))
 
@@ -789,14 +793,25 @@ def do_call(req):
         # authorization rule answers 403 too. The same probe the 401 path uses tells them apart:
         # if GET /api/settings also answers 403, the fault is the row, and it pages. Otherwise —
         # including no answer — the 403 is the route's, and the call exits 1 as before.
-        with Lock():
-            pst, _, _ = app_request("GET", "/api/settings", token=rec["accessToken"],
-                                    timeout=PROBE_TIMEOUT_S)
-            if pst == 403:
-                _emit(b)
-                sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered HTTP "
-                                 "403 (body on stdout); the page below is why.\n")
-                page_role_missing()
+        # Gate 1-1 r4 BLOCKER-1 (Langston): the request is already SENT and ANSWERED here, so a lock
+        # held right now (a password change or mint in progress) must not escape as the lock's own
+        # "Nothing was sent" exit 3 — the r2 401-path class, on this branch. The probe is skipped
+        # instead: no page on a check that did not run, the body goes back ONCE (the _emit below),
+        # exit 1. A role-less row answers 403 again on the next call and pages then.
+        pst = None
+        try:
+            with Lock():
+                pst, _, _ = app_request("GET", "/api/settings", token=rec["accessToken"],
+                                        timeout=PROBE_TIMEOUT_S)
+        except SystemExit:
+            sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered HTTP 403 "
+                             "(body on stdout); the line above is about the role check after it, which "
+                             "did not run, so nothing was paged and no retry was sent.\n")
+        if pst == 403:
+            _emit(b)
+            sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered HTTP "
+                             "403 (body on stdout); the page below is why.\n")
+            page_role_missing()
     if st is None:
         die(3, "FAILED: the app did not answer (%s). For a write, check whether it took effect "
                "before retrying." % b.decode("utf-8", "replace"))

@@ -577,6 +577,52 @@ check("Gate 1-1: a route's own 403 with a role-bearing row: exit 1, no page", c 
       and not os.path.exists(R.st("page.json")), e)
 R.close()
 
+
+# Gate 1-1 r4 BLOCKER-1 (Langston's repro, lifted): the lock is taken AFTER the request was sent and
+# answered 403 but BEFORE the role probe asks for it. The answer must come back once, exit 1, with no
+# "Nothing was sent" as the last word and no page — never the lock's own exit 3 with an empty stdout.
+class SlowSet(set):
+    """`path in route_403` sleeps for the target path only, so the lock can be taken mid-flight."""
+
+    def __init__(self, target, delay):
+        set.__init__(self)
+        self.target, self.delay = target, delay
+
+    def __contains__(self, p):
+        if p == self.target:
+            time.sleep(self.delay)
+            return True
+        return False
+
+
+import threading  # noqa: E402
+
+# (one case: the probe never runs, so the row's role cannot matter)
+R = Rig()
+R.run("GET", "/api/settings")
+R.app.route_403 = SlowSet("/api/guarded/route", 3.0)
+lfd = os.open(R.st("lock"), os.O_RDWR | os.O_CREAT, 0o600)
+taken = threading.Event()
+
+def _grab():
+    time.sleep(1.5)                                 # the request is in flight, the app is sleeping
+    fcntl.flock(lfd, fcntl.LOCK_EX)
+    taken.set()
+
+th = threading.Thread(target=_grab)
+th.start()
+c, o, e = R.run("GET", "/api/guarded/route")
+th.join()
+if taken.is_set():
+    fcntl.flock(lfd, fcntl.LOCK_UN)
+os.close(lfd)
+check("Gate 1-1 r4 BLOCKER-1: lock held between a sent 403 and its role probe: exit 1, the body "
+      "once, a NOTE that it WAS sent, no page",
+      taken.is_set() and c == 1 and o.count("this route's own rule refuses") == 1
+      and "WAS sent once" in e and "did not run" in e
+      and not os.path.exists(R.st("page.json")), "%s %r %s" % (c, o, e))
+R.close()
+
 # minor: a reader that goes away does not turn an answered request into exit 3
 R = Rig()
 R.run("GET", "/api/settings")
@@ -624,8 +670,12 @@ now = time.time()
 ledger_rows(R, [{"ts": now - 86400, "status": 503}])
 R.app.login_status = 500
 c, o, e = R.run("GET", "/api/settings")
+pg = jload(R.st("page.json"))
 check("Gate 1-1 BLOCKER-1: two failed logins 24 h apart, nothing between, PAGE login-failing",
       c == 5 and "login-failing" in e, e)
+check("Gate 1-1 r4 FINDING-2: the login-failing page says ATTEMPTS spanning M min, not continuous failure",
+      "2 loopback login attempts spanning 1440 min" in pg.get("detail", "")
+      and "not continuous monitoring" in pg.get("detail", ""), pg)
 R.close()
 
 # ... but a success between them ends the run: no page
