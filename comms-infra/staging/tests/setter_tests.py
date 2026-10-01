@@ -31,6 +31,16 @@ V1 = "OldValue_1abcdefghij"
 NL = chr(10)
 
 
+
+def jpage(path):
+    """A page/side file read that FAILS a check instead of crashing the suite: a truncated or
+    missing file returns {} (a mutant that cuts a write short must read as a failed check, which
+    the mutation runner counts as a kill — a crash it counts as a problem)."""
+    try:
+        return json.load(open(path))
+    except (FileNotFoundError, ValueError):
+        return {}
+
 def check(name, ok, detail=""):
     global PASS, FAIL
     if ok:
@@ -463,7 +473,7 @@ v = r.env_value()
 check("r3 S2: an early phase over a changed row is NOT reconciled: exit 4, marker kept, nothing restored, PAGE",
       c == 4 and "someone else" in e and r.marker() is not None and v == V1 and not matches(V1, r.dbrow()["password"])
       and os.path.exists(r.p("state", "page.json"))
-      and json.load(open(r.p("state", "page.json"))).get("kind") == "setter-row-changed", o + e)
+      and jpage(r.p("state", "page.json")).get("kind") == "setter-row-changed", o + e)
 r.close()
 
 # ── r3 S2: the plain case — someone else changed the row while the marker said 'temp-written' ──
@@ -477,7 +487,7 @@ r.kill = None
 r.write_setter()
 n_sent = len([x for x in r.ledger() if x.get("phase") == "sent"])
 c, o, e = r.run()
-pg = json.load(open(r.p("state", "page.json"))) if os.path.exists(r.p("state", "page.json")) else {}
+pg = jpage(r.p("state", "page.json"))
 check("r3 S2: someone else's change during a 'temp-written' run is KEPT (not restored over), exit 4, PAGE setter-row-changed, no login",
       c == 4 and r.dbrow()["password"] == theirs and r.marker() is not None and pg.get("kind") == "setter-row-changed"
       and len([x for x in r.ledger() if x.get("phase") == "sent"]) == n_sent, o + e + str(pg))
@@ -536,13 +546,13 @@ r.close()
 r = Rig(live_env=V1, verify=["/bin/false"])
 json.dump({"ts": "t", "kind": "crew-password-wrong", "detail": "d", "sticky": True}, open(r.p("state", "page.json"), "w"))
 c, o, e = r.run()
-pg = json.load(open(r.p("state", "page.json"))) if os.path.exists(r.p("state", "page.json")) else {}
+pg = jpage(r.p("state", "page.json"))
 check("r3 S4: fail at (6) with a standing page -> restored, the page is BACK (first cause kept) with setter-restored added",
       c == 1 and pg.get("kind") == "crew-password-wrong" and any("setter-restored" in x for x in pg.get("later", [])), o + e + str(pg))
 r.close()
 r = Rig(live_env=V1, verify=["/bin/false"])
 c, o, e = r.run()
-pg = json.load(open(r.p("state", "page.json"))) if os.path.exists(r.p("state", "page.json")) else {}
+pg = jpage(r.p("state", "page.json"))
 check("r3 S4: fail at (6) with no page -> a DURABLE setter-restored page", c == 1 and pg.get("kind") == "setter-restored", o + e + str(pg))
 r.close()
 
@@ -597,7 +607,7 @@ try:
         ok = S2.durable_page("setter-restored", "short-write detail " * 20)
 finally:
     os.write = _real_write
-pg = json.load(open(pagef)) if os.path.exists(pagef) else {}
+pg = jpage(pagef)
 check("Gate 1-1 carry: a short write still lands the WHOLE page (the write loops)",
       ok is True and pg.get("kind") == "setter-restored" and pg.get("detail", "").count("short-write") == 20, str(pg)[:120])
 os.unlink(pagef)
@@ -624,7 +634,7 @@ buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
     ok = S2.durable_page("setter-row-changed", "d")
 side = [f for f in os.listdir(r.p("state")) if f.startswith("page.json.unreadable.")]
-sp = json.load(open(r.p("state", side[0]))) if side else {}
+sp = jpage(r.p("state", side[0])) if side else {}
 check("Gate 1-1 carry: an unreadable page.json is left byte-for-byte; the setter's cause goes to a side file",
       ok is True and open(pagef, "rb").read() == garbage and len(side) == 1 and sp.get("kind") == "setter-row-changed"
       and "_unreadable" not in sp and "NOT written over" in buf.getvalue(), "%s %s %s" % (side, sp, buf.getvalue()[-200:]))
