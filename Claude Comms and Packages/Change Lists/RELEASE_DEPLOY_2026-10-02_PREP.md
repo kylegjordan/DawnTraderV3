@@ -37,8 +37,8 @@ Langston re-derived the list as a SET, not a count: `comm` of head's MANIFEST ag
 
 | # | deploy | forward file | batch | rollback (in git) clears its ledger row? |
 |---|---|---|---|---|
-| 1 | A | `2026-09-24-b-book-state-restart-durable.sql` | B-BOOK-STATE-RESTART-DURABLE | ✅ **added 2026-09-30** (Langston BLOCKER-1) |
-| 2 | A | `2026-09-29-f-g-1-ohlc-arrived-at.sql` | F-G-1 reopen (`#1031`) | ✅ **added 2026-09-30** (Langston BLOCKER-1) |
+| 1 | A | `2026-09-24-b-book-state-restart-durable.sql` | B-BOOK-STATE-RESTART-DURABLE | ✅ **added 2026-09-30** (Langston BLOCKER-1) — **at head only, NOT in A's tree** (see the rollback order) |
+| 2 | A | `2026-09-29-f-g-1-ohlc-arrived-at.sql` | F-G-1 reopen (`#1031`) | ✅ **added 2026-09-30** (Langston BLOCKER-1) — **at head only, NOT in A's tree** (see the rollback order) |
 | 3 | B | `2026-09-29-b-sizing-p5-guardrail-pct-range.sql` | B-SIZING-DEC-RESTORE | ✅ |
 | 4 | B | `2026-09-29-b-sizing-inc2a-retire-max-open-positions.sql` | B-SIZING-DEC-RESTORE | ✅ |
 | 5 | B | `2026-09-29-b-sizing-inc3-paper-size-band.sql` | B-SIZING-DEC-RESTORE | ✅ |
@@ -52,6 +52,7 @@ Langston re-derived the list as a SET, not a count: `comm` of head's MANIFEST ag
 r1 said "re-deploy `bc199185e`, then run the rollbacks in reverse." That puts OLD code on the NEW schema. At `bc199185e`, `guardrail-settings.ts:45,:244` read `portfolioRiskPerTradePct` and `maxOpenPositions`, and sizing treats `portfolioRiskPerTradePct` as a **required** input, so every signal would fail sizing in that window.
 - **Undo B:** `pm2 stop dawntrader` → rollback files **8, 7, 6, 5, 4, 3** → `dt-deploy <A sha> --by cc-b`.
 - **Undo A:** `pm2 stop dawntrader` → rollback files **2, 1** → `dt-deploy bc199185e --by cc-b`.
+  ⛔ **RUN THE HEAD COPIES OF FILES 2 AND 1, NOT THE ONES IN A's TREE (ANALYST Claude, 2026-10-01).** The ledger-clear lines came in `1e09332a2` / `902d4d302`, and both exit 1 against `ea456ad40` (checked 2026-10-01 ~21:00Z; A's copy of file 1 has 0 `_migrations` lines, head's has 1). Use `git show origin/migration/aws-supabase:drizzle/migrations/<file>-rollback.sql` on staging; A's own copies would leave the ledger rows behind, so a later re-deploy would skip the migration.
 - ⛔ **Reverse MANIFEST order is a REQUIREMENT, not a convention (C3):** inc2c's rollback (6) must run before inc2a's (4), because inc2a's rollback re-creates views that select `portfolio_risk_per_trade_pct`, the column inc2c's rollback restores.
 - **The asymmetry, named (C2):** the two A rollback files' headers say "revert the CODE first"; inc2c's says "THE SQL GOES BEFORE THE CODE". Both are right for their own case. An **additive** migration (A's two) is safe code-first, because only the new code touches the new table or column. A **destructive** one (B's five) must go schema-first. **The `pm2 stop` above makes the order moot for both**, and both A headers now point here. Do not carry the A habit to B: that is BLOCKER-2's failure verbatim.
 - `--pre-restart` cannot do this: it runs `npm run "$PRE_RESTART"` (`dt-deploy.sh:229`), and no such script exists at those shas.
@@ -64,7 +65,7 @@ r1 said "re-deploy `bc199185e`, then run the rollbacks in reverse." That puts OL
 
 | deploy | batch | owner | asked (UTC) | answer |
 |---|---|---|---|---|
-| A | B-BOOK-STATE-RESTART-DURABLE · B-REST-SIDES-TO-CACHE · F-G-1 reopen · B-OHLC-FRAME-GUARD · B-XSTOCK-BID-TRIGGER-RELAND · B-GUARDRAIL-FAIL-CLOSED | ANALYST Claude | 2026-09-30 ~11:20; re-asked 2026-10-01 ~20:45Z | — |
+| A | B-BOOK-STATE-RESTART-DURABLE · B-REST-SIDES-TO-CACHE · F-G-1 reopen · B-OHLC-FRAME-GUARD · B-XSTOCK-BID-TRIGGER-RELAND · B-GUARDRAIL-FAIL-CLOSED | ANALYST Claude | 2026-09-30 ~11:20; re-asked 2026-10-01 ~20:45Z | ✅ (~21:00Z, `RELEASE_DEPLOY_2026-10-02_CCC_ANSWERS.md`, `eed4e1552`) nothing before A beyond this plan; nothing manual after A (REST-sides reads harvested the same day; leave `4512aafb` active). **Split by B: YES for all six** — book-state NEEDS B's restart as its Step-7 restart; bid-trigger inc 1's 21-day window starts at A and B is a recorded boundary; the rest have no window. After B, read guardrail `CHECK_THREW` per check, not the bucket |
 | B | B-SIZING-DEC-RESTORE (5 migrations; `PAPER-RESET-3000` runs once, after B) | ANALYST Claude | 2026-09-30 ~11:20 | — |
 | B | B-PRICE-SIDE-BY-JOB 8a-P4c incs 2-3 (migration 8) | ANALYST Claude | 2026-09-30 ~11:20 | ✅ (~12:00Z) consents to ship in B at/after 10-02 20:10Z; inc 3 merged at `6eaac010d` under the shared-tree guard's tier 2 (42 of 42 staged paths verified) |
 | B | B-SEC-HARDEN `#1022` path-traversal fix (`f54df9ce8`, `145877b87`, `8b365c720`; Langston-approved 2026-09-30; timing is Kyle's call, and an edge block before B is Infra's option) | Infra Claude | 2026-09-30 ~13:15 | ✅ (~13:20Z) server-only (`safe-path.ts` + guards in `audit.ts`, `tlva.ts`, `file-persistence.ts`, `routes.ts`, from `cb2c166fd`), no migrations, no config. Post-deploy check: a legitimate report download still works, and a traversal name gets 400. Not in A (`cb2c166fd` exit 1 against `ea456ad40`) |
