@@ -1,6 +1,8 @@
 # B-XSTOCK-BID-TRIGGER-RELAND (row `3n.q7`) — SCOPE
 
-change-class: sub_batch
+change-class: architecture
+
+> ⛔ **RE-DECLARED `architecture` 2026-10-02 (Langston-approved, alert `4cae3f6e`):** increment 2 put a branch in `assessBookState` (`server/asset_classes/xstock_spot/`, a core engine path) and Step 10 already owes the System Manual and the SIM as REQUIRED rows; increment 3 turns the arm on. The Step-2 `sub_batch` (C1, 2026-09-28) was right for increment 1 and expired rather than erred. Was: ~~change-class: sub_batch~~
 
 > **Why this file exists (Langston, Step-2 C1, cleared 2026-09-28T22:58Z):** the governance checker reads the change-class only from a file whose name carries `SCOPE` (`checker.mjs:327`). With the marker only in the pre-audit, it defaulted this batch to `architecture` and made the System Manual a REQUIRED row, which the plan judges N/A. Under `sub_batch` that N/A is legitimate (`config.mjs:138`).
 
@@ -19,7 +21,7 @@ change-class: sub_batch
 
 ## §INC-2 — INCREMENT 2 SCOPE, r2 (Step 1, 2026-09-30; Kyle: *"start the next pricing piece, the xStock bid trigger"*)
 
-change-class: sub_batch (unchanged — one increment of the row; declared again so this section stands alone)
+~~change-class: sub_batch (unchanged — one increment of the row; declared again so this section stands alone)~~ → the batch is `architecture` since 2026-10-02 (header).
 
 > **r2 (Langston SENT BACK r1 at 12:14Z — three blockers, (a)-(c)).** BLOCKER-1 (the corpus rotates before the window closes) → OBJ-2's durable sink. BLOCKER-2 (the threshold is self-referential) → folded into increment 1 at `565e784ce` (the line now carries `trail= ret= tb=`; its own Step-4 gate) plus the cold-chain fixture in OBJ-1. BLOCKER-3 (wrong §L label, wrong cost) → relabelled (V), costs re-sourced, OBJ-5 added. (a) no knob ships. (b) horizons and the print test rewritten. (c) 1-4 each folded where named.
 > **One correction to BLOCKER-2's mechanism, recorded because it moves where the fix lives:** at the frame line the threshold's `trailing` is the CHAIN'S OWN median spread (`book-state-tracker.ts` passes `medianOf(cmp.spreads)`), which is never null while a chain exists — so the prior-frame fallback is not the path there. The consequence is the one ruled: a chain seeded vacuously inside a blowout carries a blown median and its threshold cannot flag the blowout.
