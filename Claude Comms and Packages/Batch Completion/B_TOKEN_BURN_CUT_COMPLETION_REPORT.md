@@ -50,7 +50,7 @@ Every scope objective is met. The work this batch surfaced and did not do has pl
 | T1 | `COMPLETION_REPORT` | ✅ | this file |
 | T1 | the `Observation` column | N/A | no observation window: every objective was measured before close |
 | T1 | session task lists | ✅ mine / N/A — not mine ×3 | CC_A's in-flight and slotted section added (1h, 1o, 1p, 1l, 1i, 1j, 1k, 1n), this batch flipped to closed with this report |
-| T1 | Langston's `MEMORY.md` | ✅ | STUCK read-site line (`ca861caf…`, net −11 B); close line with this report |
+| T1 | Langston's `MEMORY.md` | ✅ | one line under STANDING NOTES: the batch closed, the heartbeat's `STUCK: <alias> (<n> running)` token means stale `.alive` with the process alive (not dead), read-sites the heartbeat skill's step 2b and `~/.claude/cc-wake-count.sh`; written through `langston-memory-write`, net negative |
 | T2 | `SYSTEM_MANUAL.md` | N/A | comms tooling; nothing under architecture, strategy, regime, filter, pipeline or math changed |
 | T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | Discord Comms Fabric: two stale lines corrected, B-TOKEN-BURN-CUT block added (`07f8d7fa3`) |
 | T2 | `RUNNING_ISSUES.md` | ✅ | `#1127` closed; `#1128`, `#1137`, `#1140`, `#1142` opened and placed |
@@ -73,7 +73,7 @@ Every scope objective is met. The work this batch surfaced and did not do has pl
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | ✅ | the 2026-09-15 finding (CC 2.1.271: every Monitor now expires within 30 min) entered in the ledger (Step 6, `a89c72d6b`) |
 | — | `CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md`, `COMMS_BRIDGE_RUNBOOK.md`, `SEARCH_SURFACES.md`, five step skills, `session-reminder.mjs`, `alert-split.mjs`, `inject-due-alerts.mjs`, heartbeat skill | ✅ | arm procedure, count-first, STUCK, one-pass reader, per-session alerts |
 
-**CI:** see the closing commit's run (per-job, quoted in the Step-11 dispatch). The filter and its tests are Python outside the CI jobs; the tests ran on Windows (CC-A) and POSIX (Langston).
+**CI:** run `36937103054` at `2ec01088b` — the last commit carrying any of this batch's code; every code commit is its ancestor — **4/4 per job, attempt 1:** Test Suite `success` · TypeScript Check (baseline gate) `success` · Build `success` · Docker Build `success` (Langston re-derived the job census at Step 11: `total_count 4`). The closing commits are documents only, so their runs are not the gate. The filter and its tests are Python outside the CI jobs; the tests ran on Windows (CC-A) and POSIX (Langston).
 
 ## HONEST RESIDUAL
 
