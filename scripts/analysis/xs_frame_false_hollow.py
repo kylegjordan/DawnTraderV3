@@ -89,7 +89,7 @@ def read_frames(paths):
 def read_boundaries(pm2log, deploy_record):
     b = []
     if pm2log:
-        rx = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}): PM2 log: App \[dawntrader:\d+\] (starting|exited)')
+        rx = PM2_RE  # one constant for both readers (Langston inc-2 Step-4 nit)
         with open(pm2log, errors='replace') as f:
             for line in f:
                 m = rx.match(line)
@@ -103,7 +103,7 @@ def read_boundaries(pm2log, deploy_record):
 
 
 REFLOG_RE = re.compile(r'^([0-9a-f]{7,40}) ([0-9a-f]{7,40}) .*? (\d{9,11}) [+-]\d{4}\t(.*)$')
-PM2_RE = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}): PM2 log: App \[dawntrader:\d+\] (starting|exited)')
+PM2_RE = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}): PM2 log: App \[dawntrader:\d+\] (starting|online|exited)')  # the extractor's alternation
 
 
 def read_boundary_archive(path):
@@ -185,6 +185,38 @@ def read_prints(snaps_path=None, rows=None):
     return prints
 
 
+def merge_episodes(runs, boundaries):
+    """Langston inc-2 Step-4 attack (2): a book OSCILLATING around the threshold fragments into many one-frame runs whose
+    +90 s horizons overlap, so one print gets counted against many of them (measured: 60 frames -> 30 runs, one print
+    below the stop -> 25 of 30 FALSE). Runs of one position are merged into one EPISODE when the next run starts inside
+    the previous run's primary horizon (<= PRIMARY_S after its end) and no restart/deploy boundary lies between them.
+    Episodes, not runs, are classified; both counts are published."""
+    eps = []
+    by_pos = collections.defaultdict(list)
+    for r in runs:
+        by_pos[r['pos']].append(r)
+    for pos, rs in by_pos.items():
+        rs.sort(key=lambda r: r['t0'])
+        cur = None
+        for r in rs:
+            crossed = cur is not None and bisect.bisect_right(boundaries, cur['t1']) != bisect.bisect_right(boundaries, r['t0'])
+            if cur is not None and r['t0'] - cur['t1'] <= PRIMARY_S and not crossed:
+                cur['frames'] = cur['frames'] + r['frames']; cur['t1'] = r['t1']; cur['n_runs'] += 1
+            else:
+                if cur is not None:
+                    eps.append(cur)
+                cur = dict(r); cur['frames'] = list(r['frames']); cur['n_runs'] = 1
+        if cur is not None:
+            eps.append(cur)
+    for e in eps:
+        fr = e['frames']
+        e['leg'] = 'stop' if any(f['fire'] == 'stop' for f in fr) else 'target' if any(f['fire'] == 'target' for f in fr) else 'none'
+        e['sl'] = fr[-1]['sl']; e['tp'] = fr[-1]['tp']
+        tbs = {f['tb'] for f in fr}
+        e['tb'] = 'v' if 'v' in tbs else 'j' if 'j' in tbs else 'none'
+    return eps
+
+
 def classify(run, prints, horizon):
     xs = prints.get(run['sym'], [])
     lo = bisect.bisect_left(xs, (run['t0'], float('-inf')))
@@ -197,17 +229,20 @@ def classify(run, prints, horizon):
     return 'FALSE' if run['tp'] is not None and any(p >= run['tp'] for p in window) else 'TRUE'
 
 
-def report(runs, prints, lock_flips):
-    print('# XS_FRAME would-refuse runs — FALSE / TRUE / NOT_COMPUTABLE per split (primary horizon: inside the run or <= +90 s)')
+def report(runs, prints, lock_flips, boundaries=()):
+    episodes = merge_episodes(runs, list(boundaries))
+    print(f"# XS_FRAME would-refuse EPISODES (runs merged when the next starts inside the previous run's +90 s horizon): "
+          f"{len(episodes)} episodes from {len(runs)} runs — FALSE / TRUE / NOT_COMPUTABLE per split (primary horizon: inside the episode or <= +90 s)")
     print('# biases: (i) masked print -> toward NOT_COMPUTABLE; (ii) intra-interval print-and-recover invisible -> toward TRUE (supports refusing);'
-          ' (iii) later horizons over-count FALSE (delayed, not withheld). volume_24h is units, not a trade count.')
+          ' (iii) later horizons over-count FALSE (delayed, not withheld); (iv) RESIDUAL after episode merging: the +5/+30 min sensitivity'
+          ' horizons of adjacent episodes can still share a print -> toward FALSE in those columns only. volume_24h is units, not a trade count.')
     if lock_flips:
         print(f'# lock flips in window at {lock_flips}: the stop leg is a LOWER BOUND after each; splits below are before/after')
     groups = collections.defaultdict(list)
-    for r in runs:
+    for r in episodes:
         era = sum(1 for f in lock_flips if r['t0'] >= f)
         groups[(r['seg'], r['tb'], r['leg'], era)].append(r)
-    print('split(seg,tb,leg,era) runs frames primary(F/T/NC) +5min(F/T/NC) +30min(F/T/NC) flips_primary_to_5min verdict')
+    print('split(seg,tb,leg,era) episodes frames primary(F/T/NC) +5min(F/T/NC) +30min(F/T/NC) flips_primary_to_5min verdict')
     for key in sorted(groups):
         rs = groups[key]
         nfr = sum(len(r['frames']) for r in rs)
@@ -268,6 +303,20 @@ def self_test():
     print(f"{'ok ' if b_good == [] else 'FAIL'} an intact reflog chain (with a re-read duplicate) has no breaks")
     print(f"{'ok ' if b_gap == [1] else 'FAIL'} a missing reflog line is flagged as a chain break")
     ok &= b_good == [] and b_gap == [1]
+    # oscillation (Langston attack 2): 60 frames alternating across thr -> 30 one-frame runs; one print below the stop must
+    # count ONCE (one episode), not against 25 of 30 runs
+    osc = [line(T + 1.5 * k, 'OSC/USD', 'p-osc', 0.05 if k % 2 == 0 else 0.005, 0.012, 100.0, 'stop') for k in range(60)]
+    fd, path = tempfile.mkstemp(suffix='.log'); os.write(fd, ('\n'.join(osc) + '\n').encode()); os.close(fd)
+    osc_runs = build_runs(read_frames([path]), []); os.unlink(path)
+    osc_eps = merge_episodes(osc_runs, [])
+    oprints = read_prints(rows=[('OSC/USD', T + 10, 101.0, 1), ('OSC/USD', T + 15, 99.0, 2)])
+    n_false = sum(1 for e in osc_eps if classify(e, oprints, PRIMARY_S) == 'FALSE')
+    got = (len(osc_runs), len(osc_eps), n_false)
+    print(f"{'ok ' if got == (30, 1, 1) else 'FAIL'} an oscillating book: {got[0]} runs -> {got[1]} episode, the one print counts {got[2]} time (want 30, 1, 1)")
+    ok &= got == (30, 1, 1)
+    split_eps = merge_episodes(osc_runs, [T + 30.0])
+    print(f"{'ok ' if len(split_eps) == 2 else 'FAIL'} a restart inside the horizon keeps two episodes (got {len(split_eps)})")
+    ok &= len(split_eps) == 2
     print('SELF-TEST', 'PASS' if ok else 'FAIL')
     return 0 if ok else 1
 
@@ -298,7 +347,7 @@ def main(argv):
     runs = build_runs(frames, bounds)
     print(f'# frames read: {len(frames)} (frame=ok {sum(1 for f in frames if f["ok"])}), positions: {len({f["pos"] for f in frames})},'
           f' restart/deploy boundaries: {len(bounds)}, runs: {len(runs)}')
-    report(runs, read_prints(many('--snaps')[0]), flips)
+    report(runs, read_prints(many('--snaps')[0]), flips, bounds)
     return 0
 
 

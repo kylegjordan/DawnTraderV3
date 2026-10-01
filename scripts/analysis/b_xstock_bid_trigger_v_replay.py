@@ -41,7 +41,9 @@ def sim(frames, arm):
         nonlocal cur
         if cur:
             dur = t_end - cur_t0
-            if cur > best[cur_seg][0]: best[cur_seg] = (cur, dur)
+            # the LONGEST stretch is the longest in TIME (Langston inc-2 Step-4 BLOCKER-1: it was chosen by frame count and
+            # its duration then reported, so a dense short run could hide a sparse long one)
+            if dur > best[cur_seg][1]: best[cur_seg] = (cur, dur)
             if dur > 3600: runs_over_1h[cur_seg] += 1
         cur = 0
 
@@ -99,7 +101,7 @@ per = []
 for s, f in sorted(rows.items()):
     o1, b1, h1 = sim(f, True); o0, b0, h0 = sim(f, False)
     tot[True].update(o1); tot[False].update(o0)
-    per.append((s, b1['off'], b0['off'], h1['off'], b1['rth']))
+    per.append((s, b1['off'], b0['off'], h1['off'], b1['rth'], h0['off']))
 
 
 def summ(c, seg):
@@ -116,10 +118,10 @@ for seg in ('rth', 'off'):
 if LEGACY:
     sys.exit(0)
 print()
-over1h = [p for p in per if p[1][1] > 3600]
+over1h = [p for p in per if p[3] > 0]  # the direct object: symbols with >= 1 off-hours run over 1 h (runs_over_1h)
 print(f"# OFF-HOURS: symbols whose longest no-decision stretch exceeds 1 h with the arm ON: {len(over1h)} of {len(per)}"
-      f" (arm OFF: {sum(1 for p in per if p[2][1] > 3600)} of {len(per)})")
+      f" (arm OFF: {sum(1 for p in per if p[5] > 0)} of {len(per)})")
 print("symbol longest_off_arm(frames,s) longest_off_noarm(frames,s) off_runs_over_1h_arm longest_rth_arm(frames,s)")
 per.sort(key=lambda x: -x[1][1])
-for s, b1, b0, h1, r1 in per:
+for s, b1, b0, h1, r1, _h0 in per:
     print(f"{s} ({b1[0]},{b1[1]:.0f}s) ({b0[0]},{b0[1]:.0f}s) {h1} ({r1[0]},{r1[1]:.0f}s)")

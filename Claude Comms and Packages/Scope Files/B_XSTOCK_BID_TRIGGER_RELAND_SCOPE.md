@@ -57,6 +57,7 @@ change-class: sub_batch (unchanged — one increment of the row; declared again 
 ### Out of scope (declared)
 - Turning the arm on, making it a knob, moving the trigger to the bid, and the overnight hold policy — increment 3; **the hold policy is Kyle's decision, brought with OBJ-5's numbers and the window's.**
 - The arm's effect on the ENTRY gate (the engine's entry check refuses on `hollow`) — named now so increment 3's Step 2 audits it; off here.
+- **An attribution shift at switch-on, named now (Langston, inc-2 Step 4):** `spread_blown` returns BEFORE (ii) feed-health and (iii) own-mark deviation, so with the arm ON a blown frame loses its `feed_*` annotations and the `feed_burst` / `mark_deviation` counts DROP — an attribution shift, not a decision change. Increment 3's verification must not read that drop as the feed improving.
 
 ### Provenance (1.b)
 Corpora: `git log -S` (not path-limited) on `SEED_ESCAPED`, `clearBookStateComparator`, `XS_FRAME` and the false-hollow script; `BATCH_CATALOG` / `RUNNING_ISSUES` / completion reports by symbol; `8A_P4B_AUDIT_AND_PLAN` §L; `B_XSTOCK_FEED_SANITY_COMPLETION_REPORT` §6(c).

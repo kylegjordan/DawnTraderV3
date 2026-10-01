@@ -27,7 +27,7 @@
 #      `reset: moving to <sha>` per deploy, with a unix time — so EVERY deploy's sha<->time pair survives, including
 #      two deploys inside one cadence. A manual `git reset` also lands here; it is a code boundary all the same.
 #
-# Usage: xs_frame_extract.sh            (env overrides for tests: LOG_DIR ARCHIVE PM2_LOG DEPLOY_RECORD APP_DIR NOW_EPOCH NO_ALERT)
+# Usage: xs_frame_extract.sh            (env overrides for tests: LOG_DIR ARCHIVE PM2_LOG DEPLOY_RECORD APP_DIR REFLOG NOW_EPOCH NO_ALERT)
 set -u
 LOG_DIR="${LOG_DIR:-/var/log/dawntrader}"
 ARCHIVE="${ARCHIVE:-/home/deploy/xs_frame_archive}"
@@ -87,7 +87,12 @@ fi
 oldest=$(printf '%s\n' $present | head -1)
 if [ -n "$oldest" ]; then
   age=$(( NOW - $(stat -c %Y "$LOG_DIR/$oldest") ))
-  if [ "$age" -lt $((2 * CADENCE_S)) ]; then
+  if [ "$age" -lt "$CADENCE_S" ]; then
+    # Langston inc-2 Step-4 attack (3): a loss the last_seen check cannot see needs >= retain rotations inside one cadence,
+    # which forces oldest-age <= cadence — so this is not a warning any more, files may ALREADY be gone unseen.
+    alert "xs-frame-extract-gap" warning "XS_FRAME archive: rotation faster than the extraction cadence"       "The oldest retained error__ file ($oldest) is only ${age}s old (< the ${CADENCE_S}s cadence): rotated files can have been evicted between two runs without either run seeing them. Treat the corpus as possibly incomplete since the last run and shorten the cadence. (3n.q7 inc-2 P4)"
+    status=3
+  elif [ "$age" -lt $((2 * CADENCE_S)) ]; then
     alert "xs-frame-extract-reach" warning "XS_FRAME archive reach below 2x cadence" \
       "The oldest retained error__ file ($oldest) is only ${age}s old (< $((2 * CADENCE_S))s): rotation is outpacing the 6 h extraction. Shorten the cadence before a file is lost. (3n.q7 inc-2 P4)"
   fi

@@ -557,3 +557,12 @@ describe('3n.q7 inc-2 OBJ-1 — spread_blown', () => {
     expect(BOOK_STATE_KNOBS as readonly string[]).not.toContain('spread_blown_enabled');
   });
 });
+
+// Langston inc-2 Step-4 BLOCKER-2: tsc does not check scripts/ (outside tsconfig) and tsx strips types, so the historical
+// hollow-recut labeller's config literal must be kept in step by hand — this fence is the check the compiler cannot make.
+describe('3n.q7 inc-2 — the recut labeller judges with the production predicate', () => {
+  it('scripts/xstock-hollow-recut.ts carries spreadBlownEnabled: false, as the production resolver does', () => {
+    const src = readFileSync(join(process.cwd(), 'scripts/xstock-hollow-recut.ts'), 'utf8');
+    expect(src).toMatch(/const CFG: BookStateConfig = \{[\s\S]*?spreadBlownEnabled: false,[\s\S]*?\};/);
+  });
+});

@@ -99,8 +99,12 @@ export interface BookStateConfig {
   /**
    * `3n.q7` increment 2 (OBJ-1) — the `spread_blown` arm. ⛔ NOT A KNOB YET: the resolver sets it `false` as a code
    * constant (`book-state-config.ts`), and only a test injects `true`. Increment 3 makes it the thirteenth knob when it
-   * becomes tunable, gated on the bid-trigger window's read and Kyle's overnight-hold decision. Required (not optional)
-   * so the compiler lists every config literal.
+   * becomes tunable, gated on the bid-trigger window's read and Kyle's overnight-hold decision. Required (not optional),
+   * but ⛔ tsc does NOT list every config literal: `tsconfig.json` covers `server/`, `shared/` and `client/src` only and
+   * excludes test files, so `scripts/` and the tests are invisible to it (Langston inc-2 Step-4 BLOCKER-2). The literal
+   * census is a repo-wide grep for `ownMarkDeviationDPct` (a field every literal carries): the resolver, three tests, and
+   * `scripts/xstock-hollow-recut.ts` — the historical hollow-recut labeller, which must cut labels under the predicate
+   * production runs. Re-run that census whenever a field is added.
    */
   spreadBlownEnabled: boolean;
 }

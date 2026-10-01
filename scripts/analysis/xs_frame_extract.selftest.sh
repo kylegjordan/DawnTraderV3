@@ -29,9 +29,12 @@ run; check "run2 is idempotent (manifest unchanged)" "$(wc -l < "$T/arch/manifes
 check "run2 archives BOTH intra-cadence deploys from the reflog, each once" "$(grep -c 'reset: moving to ' "$T/arch/boundaries.log")" 3
 echo "error__2026-09-16_00-00-00.log" >> "$T/arch/last_seen.txt"
 run; check "run3: a file seen last run and gone unextracted is a GAP (exit 3)" "$?" 3
-rm "$T"/logs/error__2026-09-1[78]_00-00-00.log; touch -d '2026-09-30 11:00 UTC' "$T/logs/error__2026-09-19_00-00-00.log"
-run; check "run4 exits 0 (extracted files leaving is not a gap)" "$?" 0
+rm "$T"/logs/error__2026-09-1[78]_00-00-00.log; touch -d '2026-09-30 04:00 UTC' "$T/logs/error__2026-09-19_00-00-00.log"
+run; check "run4 exits 0 (extracted files leaving is not a gap; oldest 8 h is between cadence and 2x cadence)" "$?" 0
 check "run4 raises the pre-loss reach rung" "$(grep -c 'reach below 2x cadence' "$T/arch/runs.log")" 1
+touch -d '2026-09-30 11:00 UTC' "$T/logs/error__2026-09-19_00-00-00.log"
+run; check "run4b: oldest younger than ONE cadence is a realized GAP (exit 3; Langston Step-4 attack 3)" "$?" 3
+check "run4b names the sub-cadence rotation" "$(grep -c 'rotation faster than the extraction cadence' "$T/arch/runs.log")" 1
 printf 'short\n' > "$T/pm2.log"
 run >/dev/null; check "run5 detects pm2.log shrinking" "$(grep -c 'pm2.log shrank' "$T/arch/runs.log")" 1
 # the reflog arms (Langston P4 r4: he exercised both by hand; kept proven here)
