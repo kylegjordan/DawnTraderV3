@@ -1135,8 +1135,10 @@ export class VTSService extends EventEmitter {
         const netPnlPct = tradeData.pnl * 100;
         // B79.0n.CONFIDENCE-CHAIN: per-class store key — resolve via the
         // tradeData.symbol so VTS-side close hooks isolate crypto vs xstock.
-        const { safeResolveAssetClass } = await import('../../shared/asset-classes.js');
-        const _assetClass = safeResolveAssetClass(tradeData.symbol, 'kraken');
+        // ⛔ `3n.q3` P9 (`#1075`/`#1145`, Step-4 reader): the CARRIED class first. Re-deriving from the ticker put every
+        // collision-ticker xStock close (MET, DASH, … and the 8 added 2026-10-02) into the CRYPTO EMA and EV-gap buckets.
+        const { asValidAssetClass, safeResolveAssetClass } = await import('../../shared/asset-classes.js');
+        const _assetClass = asValidAssetClass(tradeData.assetClass) ?? safeResolveAssetClass(tradeData.symbol, 'kraken');
         if (_assetClass !== null) {
           // B-5 AMR (F6): per-class EV-gap observation — predicted edge at
           // entry vs realized net P&L, BOTH percent-of-notional. Sits in the

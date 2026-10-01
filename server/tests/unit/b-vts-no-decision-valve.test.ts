@@ -175,6 +175,13 @@ describe('P2 — the real-lane unpriced close', () => {
   });
 });
 
+describe('P9 — the outcome feedback keys on the carried class (Step-4 reader, `#1145`)', () => {
+  it('persistRealPriceTrade prefers the carried class over the ticker', () => {
+    const svc = readFileSync(join(process.cwd(), 'server/services/vts-service.ts'), 'utf-8');
+    expect(svc).toMatch(/const _assetClass = asValidAssetClass\(tradeData\.assetClass\) \?\? safeResolveAssetClass\(tradeData\.symbol, 'kraken'\);/);
+  });
+});
+
 describe('P6 — the shadow pass skips xStock while the weekend window is shut', () => {
   it('keyed on the window (never trade.state), placed BEFORE the instrument look', () => {
     const skip = VTS.indexOf("if (trade.assetClass === 'xstock_spot' && isInXstockWeekendClose(new Date(now))) continue;");
