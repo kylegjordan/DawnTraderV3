@@ -556,7 +556,8 @@ check("Gate 1-1: a DIRECT call's 403 from a role-less row PAGEs crew-role-missin
       c == 5 and "crew-role-missing" in e and "WAS sent once" in e and "no role assigned" in o
       and pg.get("kind") == "crew-role-missing" and pg.get("sticky") is True and len(R.app.logins()) == n0,
       "%s %r %s %s" % (c, o[:60], e, pg))
-os.unlink(R.st("page.json"))
+if os.path.exists(R.st("page.json")):            # absent when the check above failed: fail cleanly, never crash
+    os.unlink(R.st("page.json"))
 c, o, e = R.run("mint", env={"SUDO_USER": "dtmint"})
 pg = jload(R.st("page.json"))
 check("Gate 1-1: the mint's probe 403 (a row with no role) PAGEs crew-role-missing, hands out nothing",
