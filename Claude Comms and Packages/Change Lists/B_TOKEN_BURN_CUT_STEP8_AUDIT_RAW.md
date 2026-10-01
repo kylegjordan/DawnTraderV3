@@ -4,7 +4,7 @@ Instrument: `scripts/analysis/b-token-burn-cut-wake-audit.py` at the commit that
 
 **What it settles:** CC-A's transcript `66dbb030` spans 2026-04-15 to now — the 20:37Z resume did NOT open a new transcript. The `--all` run finds one other CC-A file touched today (`f235cb15`, a 4-minute scheduled-task run, 0 notifications). Over CC-A's idle stretch (window `2026-09-30T21:29`..`2026-10-01T20:37`) the transcript holds ONE notification, a timer of mine (OTHER), and zero watcher, empty or Monitor.
 
-## 1. Newest transcript per alias, window 2026-10-01T00
+## 1. Newest transcript per alias — window 2026-10-01T00:00 .. 2026-10-01T23:59 UTC
 
 ```
 CC-A 66dbb030-b3cb-4448-8086-39344c645007.jsonl  entries 2026-04-15T21:42:24 .. 2026-10-01T22:27:52  first arm in window: 2026-10-01T20:37:35
@@ -27,7 +27,7 @@ CC-INFRA 644fc5fe-3be9-4b77-8317-91cba9fe8f43.jsonl  entries 2026-09-30T12:24:11
    OTHER x1: Background command "Run the three mutation runners at the current head
 ```
 
-## 2. Every transcript touched since window start (--all), same window
+## 2. Every transcript touched since window start (--all) — window 2026-10-01T00:00 .. 2026-10-01T23:59 UTC
 
 ```
 CC-A 66dbb030-b3cb-4448-8086-39344c645007.jsonl  entries 2026-04-15T21:42:24 .. 2026-10-01T22:27:52  first arm in window: 2026-10-01T20:37:35
@@ -54,7 +54,7 @@ CC-INFRA 644fc5fe-3be9-4b77-8317-91cba9fe8f43.jsonl  entries 2026-09-30T12:24:11
    OTHER x1: Background command "Run the three mutation runners at the current head
 ```
 
-## 3. CC-A's idle stretch, --all, window 2026-09-30T21
+## 3. CC-A's idle stretch, --all — window 2026-09-30T21:29 .. 2026-10-01T20:37 UTC
 
 ```
 CC-A 66dbb030-b3cb-4448-8086-39344c645007.jsonl  entries 2026-04-15T21:42:24 .. 2026-10-01T22:28:27  first arm in window: None

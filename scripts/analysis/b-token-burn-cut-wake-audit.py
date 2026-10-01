@@ -38,6 +38,7 @@ def files_for(d):
     return sorted(f for f in fs if os.path.getmtime(f) >= t0)
 
 
+print(f"WINDOW {T0} .. {T1} (UTC, both ends inclusive){' --all' if ALL else ' newest transcript only'}")
 for alias, d in SESS.items():
     for f in files_for(d):
         stats = {'watcher_wake': 0, 'watcher_empty': 0, 'watcher_unreadable': 0, 'monitor': 0, 'other_task': 0}
