@@ -34,5 +34,11 @@ run; check "run4 exits 0 (extracted files leaving is not a gap)" "$?" 0
 check "run4 raises the pre-loss reach rung" "$(grep -c 'reach below 2x cadence' "$T/arch/runs.log")" 1
 printf 'short\n' > "$T/pm2.log"
 run >/dev/null; check "run5 detects pm2.log shrinking" "$(grep -c 'pm2.log shrank' "$T/arch/runs.log")" 1
-rm "$T/rec"; run; check "run6: an unreadable deploy record is a GAP (exit 3)" "$?" 3
+# the reflog arms (Langston P4 r4: he exercised both by hand; kept proven here)
+printf 'aaa abc deploy <d> 1790087913 +0000\treset: moving to abc\n' > "$T/reflog"
+run >/dev/null; check "run6 detects the reflog shrinking (reach alert)" "$(grep -c 'reflog shrank' "$T/arch/runs.log")" 1
+check "run6 re-reads the shrunk reflog from its start" "$(grep -c 'reset: moving to ' "$T/arch/boundaries.log")" 4
+mv "$T/reflog" "$T/reflog.gone"; run; check "run7: an unreadable reflog is a GAP (exit 3)" "$?" 3
+mv "$T/reflog.gone" "$T/reflog"
+rm "$T/rec"; run; check "run8: an unreadable deploy record is a GAP (exit 3)" "$?" 3
 [ "$ok" = 1 ] && echo "SELF-TEST PASS" || { echo "SELF-TEST FAIL"; exit 1; }

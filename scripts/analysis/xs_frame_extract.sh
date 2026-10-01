@@ -20,9 +20,11 @@
 #      the last run, a flush/rotation happened => warn on the reach alert and read it from the start.
 #      A run that cannot read pm2.log or the deploy record exits 3 on the gap alert.
 #      THE DEPLOY RECORD IS SELF-DATING (sha + deployed_at) and is the primary source; pm2.log restarts carry a TIME
-#      but no sha, and a time inferred from them is >= the true deploy time (non-deploy restarts land in between).
-#   5. THE APP CLONE'S REFLOG (P4 r4, Langston): the `.git/logs/HEAD` lines added since the last run — one
-#      `reset: moving to <sha>` per deploy, with a unix time — so EVERY deploy's sha<->time pair survives, including
+#      but no sha. The classifier splits runs at EVERY pm2 restart, a superset of code boundaries, so the degraded path
+#      (no record sample, no reflog line) loses the SHA ATTRIBUTION of a span, never the BOUNDARY â€” and it cannot be silent:
+#      an unreadable record, pm2.log or reflog exits 3 on xs-frame-extract-gap (Langston P4 r4 correction).
+#   5. THE APP CLONE'S REFLOG (P4 r4, Langston): the `.git/logs/HEAD` lines added since the last run â€” one
+#      `reset: moving to <sha>` per deploy, with a unix time â€” so EVERY deploy's sha<->time pair survives, including
 #      two deploys inside one cadence. A manual `git reset` also lands here; it is a code boundary all the same.
 #
 # Usage: xs_frame_extract.sh            (env overrides for tests: LOG_DIR ARCHIVE PM2_LOG DEPLOY_RECORD APP_DIR NOW_EPOCH NO_ALERT)

@@ -28,8 +28,8 @@ flagged INCONCLUSIVE.
 without them is counted under `tb=none` and never folded into `j`/`v`.
 
 Usage:
-  python3 xs_frame_false_hollow.py --frames <file|glob>... --snaps snaps.csv [--pm2log ~/.pm2/pm2.log]
-                                   [--deploy-record ~/dawntrader-deploy.record] [--lock-flip ISO ...]
+  python3 xs_frame_false_hollow.py --frames <file|glob>... --snaps snaps.csv [--boundaries <archive>/boundaries.log]
+                                   [--pm2log ~/.pm2/pm2.log] [--deploy-record ~/dawntrader-deploy.record] [--lock-flip ISO ...]
   python3 xs_frame_false_hollow.py --self-test
 snaps.csv rows: symbol,epoch_seconds,last,volume_24h — exported by `xs_frame_false_hollow_snaps.sql`.
 """
@@ -100,6 +100,39 @@ def read_boundaries(pm2log, deploy_record):
             if line.startswith('deployed_at='):
                 b.append(datetime.strptime(line.strip().split('=', 1)[1], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).timestamp())
     return sorted(b)
+
+
+REFLOG_RE = re.compile(r'^([0-9a-f]{7,40}) ([0-9a-f]{7,40}) .*? (\d{9,11}) [+-]\d{4}\t(.*)$')
+PM2_RE = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}): PM2 log: App \[dawntrader:\d+\] (starting|exited)')
+
+
+def read_boundary_archive(path):
+    """The extractor's boundaries.log (P4): pm2 restart markers + reflog lines. Returns (times, reflog_entries).
+    Langston P4 r4 rider: the reflog lines chain `old_sha -> new_sha`, so the archive is SELF-CONTIGUOUS — assert the chain
+    instead of trusting the extractor's byte offsets (that also catches a rewrite-and-regrow inside one cadence)."""
+    times, reflog = [], []
+    for line in open(path, errors='replace'):
+        line = line.rstrip('\n')
+        m = PM2_RE.match(line)
+        if m:
+            times.append(datetime.strptime(m.group(1), '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc).timestamp())
+            continue
+        m = REFLOG_RE.match(line)
+        if m:
+            reflog.append((m.group(1), m.group(2), float(m.group(3)), m.group(4)))
+            times.append(float(m.group(3)))
+    return sorted(times), reflog
+
+
+def reflog_chain_breaks(reflog):
+    """Indices i where entry i's OLD sha is not entry i-1's NEW sha (duplicates from a re-read are skipped first)."""
+    seen, uniq = set(), []
+    for e in reflog:
+        if e in seen:
+            continue
+        seen.add(e); uniq.append(e)
+    uniq.sort(key=lambda e: e[2])
+    return [i for i in range(1, len(uniq)) if uniq[i][0] != uniq[i - 1][1]], uniq
 
 
 def build_runs(frames, boundaries):
@@ -228,6 +261,13 @@ def self_test():
     n_mdb = sum(1 for r in split if r['sym'] == 'MDB/USD')
     print(f"{'ok ' if n_mdb == 2 else 'FAIL'} a restart between frames splits the run (MDB runs: {n_mdb}, expected 2)")
     ok &= n_mdb == 2
+    # the reflog chain (Langston P4 r4 rider): an intact chain has no breaks; a missing deploy line is a break
+    good = [('a', 'b', 1.0, 'reset: moving to b'), ('b', 'c', 2.0, 'reset: moving to c'), ('b', 'c', 2.0, 'reset: moving to c')]
+    gapped = [('a', 'b', 1.0, 'x'), ('c', 'd', 3.0, 'x')]
+    b_good, _ = reflog_chain_breaks(good); b_gap, _ = reflog_chain_breaks(gapped)
+    print(f"{'ok ' if b_good == [] else 'FAIL'} an intact reflog chain (with a re-read duplicate) has no breaks")
+    print(f"{'ok ' if b_gap == [1] else 'FAIL'} a missing reflog line is flagged as a chain break")
+    ok &= b_good == [] and b_gap == [1]
     print('SELF-TEST', 'PASS' if ok else 'FAIL')
     return 0 if ok else 1
 
@@ -247,6 +287,13 @@ def main(argv):
         return out
     frames = read_frames(many('--frames'))
     bounds = read_boundaries((many('--pm2log') or [None])[0], (many('--deploy-record') or [None])[0])
+    for path in many('--boundaries'):
+        t, rl = read_boundary_archive(path)
+        bounds = sorted(set(bounds) | set(t))
+        breaks, uniq = reflog_chain_breaks(rl)
+        print(f'# boundary archive {path}: {len(t)} boundary times, {len(uniq)} reflog entries, chain breaks: {len(breaks)}'
+              + (' — spans after a break are NOT sha-attributable: ' + ', '.join(
+                  datetime.fromtimestamp(uniq[i][2], timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ') for i in breaks) if breaks else ''))
     flips = sorted(datetime.fromisoformat(x.replace('Z', '+00:00')).timestamp() for x in many('--lock-flip'))
     runs = build_runs(frames, bounds)
     print(f'# frames read: {len(frames)} (frame=ok {sum(1 for f in frames if f["ok"])}), positions: {len({f["pos"] for f in frames})},'

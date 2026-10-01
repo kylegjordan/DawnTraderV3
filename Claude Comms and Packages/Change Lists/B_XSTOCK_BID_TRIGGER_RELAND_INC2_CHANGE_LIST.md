@@ -17,6 +17,8 @@
 | `7cf32622c` | **P5** the false-hollow classifier + its export | `scripts/analysis/xs_frame_false_hollow.py` (NEW, 259), `xs_frame_false_hollow_snaps.sql` (NEW, 10) |
 | `d105a676c` | **P3** OBJ-3, the chain through the real exit loop | `server/tests/unit/b-xstock-bid-trigger-reland-inc2-chain.test.ts` (NEW, 447) |
 | `91c4c6f4a` | **P4 r2/r3** the durable corpus extractor | `scripts/analysis/xs_frame_extract.sh` (NEW, 113), `xs_frame_extract.selftest.sh` (NEW, 33) |
+| `f5506512b` | **P4 r4** the app reflog archived each run | the extractor + self-test; this change list |
+| *(this commit)* | **P4 r4 folds** (Langston 01:14Z): the bias restated; two reflog self-test arms; **P5 r2** the reflog CHAIN check; the stray non-UTF-8 byte | the extractor, its self-test, the classifier, the pre-audit |
 
 ## Load-bearing hunks
 
@@ -37,7 +39,7 @@ if (cfg.spreadBlownEnabled && spreadFrac !== null && spreadFrac > threshold) {
 
 **P5 — the classifier.** Runs end at `frame=none`, back inside the threshold, the position's last frame, a > 10 s gap, or a restart/deploy boundary. FALSE / TRUE / NOT_COMPUTABLE against the per-frame `sl=`/`tp=` on prints (strict `volume_24h` rises) inside the run or ≤ +90 s; +5/+30 min sensitivity with flip counts; INCONCLUSIVE when the primary and +5 min majorities differ; the three biases printed every read. `--self-test`: MDB-shaped ⇒ TRUE, real move ⇒ FALSE, frozen `last` below the stop with no volume rise ⇒ NOT_COMPUTABLE (never FALSE), a restart splits a run — PASS. The export is bounded by time AND symbols (all symbols is ~1,100 rows a minute).
 
-**P4 — the extractor.** Stderr only; sequential gzip so a manifest row never precedes a complete archive; contiguity (seen-last-run and gone unextracted ⇒ gap, exit 3); pre-loss reach rung (oldest file < 2× cadence); boundary file (new pm2 restart markers + the deploy record verbatim each run; pm2.log shrinking ⇒ flush warned; an unreadable record or pm2.log ⇒ gap). Self-test 11/11 PASS. **Not yet installed** — the crontab line goes to Infra Claude after this review.
+**P4 — the extractor.** Stderr only; sequential gzip so a manifest row never precedes a complete archive; contiguity (seen-last-run and gone unextracted ⇒ gap, exit 3); pre-loss reach rung (oldest file < 2× cadence); boundary file (new pm2 restart markers + the deploy record verbatim each run; pm2.log shrinking ⇒ flush warned; an unreadable record or pm2.log ⇒ gap). **P4 r4:** the deploy record is the self-dating primary; the app clone's reflog (`.git/logs/HEAD`) is archived each run by byte offset (shrink ⇒ reach alert + re-read; unreadable ⇒ gap, exit 3); the degraded path loses SHA attribution, never a boundary (runs split at every pm2 restart). Self-test **15/15** PASS (incl. two intra-cadence deploys recovered once each, reflog shrink, reflog unreadable). The classifier (`--boundaries`) asserts the reflog `old → new` chain and names any break; its self-test **6/6** PASS; it parses real staging reflog + pm2 lines (3 + 2, chain intact). **Not yet installed** — the crontab line goes to Infra Claude after this review.
 
 ## What I want attacked
 1. P3's harness: is anything the decision depends on stubbed that should run real? (The four mocked decision-adjacent reads are `resolveTECConfig`, the mark-staleness and σ knobs, and the frame source.)
