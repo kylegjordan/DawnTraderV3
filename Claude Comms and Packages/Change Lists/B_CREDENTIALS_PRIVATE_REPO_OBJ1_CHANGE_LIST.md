@@ -85,7 +85,7 @@
 
 ## TESTS — all on Helsinki as root, each running a copy of the COMMITTED file that differs only in its CONSTANTS block (asserted)
 - **Re-run 2026-10-01 at `1f8092e96`** (committed blobs via `git archive`, Helsinki root, `/root/b-cred-step4`), each exit 0: dt-api **374/374** · setter **162/162** · install-drift **43/43** · alert **12/12** · staging-session **11/11**.
-- Mutation controls at the same tree: dt-api **43 applied, 43 killed, 0 problems** (exit 0) · setter and install-drift+alert+staging-session **running — reported with Gate 1-2**. *(The first build's 333/125/32/9/11 and 31/20/22 are superseded by these.)*
+- Mutation controls at the same tree: dt-api **43 applied, 43 killed, 0 problems** · setter **34 applied, 34 killed, 0 problems** · install-drift + alert + staging-session **32 applied, 32 killed, 0 problems** — each runner exit 0. *(The first build's 333/125/32/9/11 and 31/20/22 are superseded by these.)*
 - Mutation controls (each breaks ONE property; the runner refuses to report unless the unmutated suite passes, and counts a crash as a problem, not a kill): see "MUTATIONS" below.
 ⚠️ **Two of my own instrument failures, caught by those rules:** the first mutation run reported 20/20 kills against a suite that did not parse; a later run died on Windows line endings in the stand-in `psql`. Both now fail loudly.
 
