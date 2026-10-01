@@ -51,7 +51,7 @@ The rule reads "active ≥5 days **in each session's 14-day window**"; a restart
 | Infra Claude | 09-11T14:12 .. 09-18T19:16 | **5 / 5** | 0 |
 | CC-A | 09-11T14:12 .. 09-15T05:17 | 11 / 11 | 6 (the demo) |
 
-Every admissible window for CC-B, CC-C and Infra holds ≥5 active days and zero calls, so the FAIL condition holds whichever start is true. ⚠️ Infra's worst case is exactly 5 — on the line, not clear of it (Langston's own derivation read ≥6; this instrument reads 5, both meet the bar).
+Every admissible window for CC-B, CC-C and Infra holds ≥5 active days and zero calls, so the FAIL condition holds whichever start is true. ⚠️ **The bar, quoted verbatim from `#1038` at the ref (pre-registered 2026-09-11): *"FAIL: a session active ≥5 days with zero calls"*.** Infra's worst case is exactly 5 — it meets "≥5" on the line, not clear of it. (Langston's Step-2 note read "≥6"; that was his own worst-case derivation of Infra's active days, not the bar. The bar is 5 and this instrument reads 5.)
 **Subagents (condition 2):** across 421 transcript files including every `subagents/` folder, LSP calls outside the demo are **0** — so "used by no session" holds for the main chain AND the subagents.
 
 ## VERDICT — FAIL, by the pre-registered rule

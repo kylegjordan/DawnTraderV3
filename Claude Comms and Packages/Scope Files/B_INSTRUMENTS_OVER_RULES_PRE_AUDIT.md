@@ -26,6 +26,7 @@ change-class: non_architecture (unchanged from the scope)
 4. Why `toCanonical`, not the resolver: the resolver's slashed branch maps only XBT; `toCanonical` maps both. The resolver's consolidation is `#229`.
 5. Blast radius: one map serves base and quote, so 56 of 1,437 wsnames change, including the 31 BTC-quoted pairs.
 6. **Consequence, kept as a conclusion:** those 31 become eligible to be assessed, not tradable — the volume gate compares a quote-denominated amount against a USD threshold (`#966`), and the active-path price floor is its own decision (`#967`).
+6b. **The qualifier that makes 6 true, and the pointer to the fence that enforces it (Langston Step-2 condition 1):** the conclusion holds on the STANDARD profile only; the strong_trend route has no volume floor and is fenced by `isStrongBullDbs`'s `quoteIsNonUsdCrypto` conjunct — keep it when this map or the symbol modules change (`#229`); widening it is not conservative (`#966`). Plus Langston's nit, kept as one clause: leaving the quote slot unmapped re-emits a rejected form (`#966`).
 7. The slashed-only guard: why non-slashed entries are left byte-identical.
 
 ### 2.2 Removed — and where each fact already lives (fact-preservation census, run 2026-10-01 by distinctive string)
@@ -44,10 +45,11 @@ change-class: non_architecture (unchanged from the scope)
 | `/XBT` `low_volume` 21,574 rows, 31 of 31 | completion report, change list, pre-audit, scope, `RUNNING_ISSUES` |
 | the units defect (medians 10,218 vs 0.08) | change list, `RUNNING_ISSUES` (#966) |
 | `pairInfo.wsname` not recoverable when absent | change list, scope |
-| compact-key hazards (`XTZUSD` → `T/USD`; the `PF_`/`PI_` throw) | completion report, change list, scope |
+| ~~the strong_trend qualifier ("FALSE for the strong_trend route, which has no volume floor — hence the guard")~~ — **NOT removed after all: kept as 6b** (Langston condition 1). Recorded besides in SIM, `PHASE_HISTORY`, the completion report, the change list and `#966` am. 2 (Langston's census) | kept |
 | every first-person correction ("my first version… was wrong") | the B-SCANNER-EGRESS-NORMALISE change list and review record — narration, deliberately not kept in source |
 
 **Instrument limit:** a match on a distinctive string shows the fact is recorded there; it does not prove the wording is identical. Nothing removed is unrecorded.
+**Census corrections (Langston condition 2):** r1 of this table (a) did not enumerate the strong_trend qualifier at all — so "nothing removed is unrecorded" was asserted over an incomplete enumeration; it is now kept (6b) and listed above — and (b) filed the compact-key hazards as removed while the proposed text keeps them; that row is deleted. **Folded (§9.4 #1, Langston):** the sibling guard's comment in the same file cited `:714`, `:789` and `:855`, all three drifted; they now name the normalisation, `ohlcCache.getOHLCData` and the volume gate.
 
 ### 2.3 Citations (condition 5)
 The new comment cites **issue numbers and symbol names, never `file:line`** — the current block's `RUNNING_ISSUES:4571` already points into a different issue (`#735`) because the ledger grew. No positional reference is kept: the new text names `pairsObj[pairName]?.wsname`, the ticker/pairInfo join and the refill dedupe by what they are.

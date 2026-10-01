@@ -624,103 +624,35 @@ export async function collectAdaptiveBatch(
     console.log(`[11.4C-R2][AdaptiveScan] Refilled batch: +${fillPairs.length} pairs from Kraken (total=${batch.length})`);
   }
   
-  // ── B-SCANNER-EGRESS-NORMALISE (#906/#909) — NORMALISE ONCE, HERE, AND ONLY HERE.
-  // `pair.symbol` is Kraken's own `wsname` (:563 `pairsObj[pairName]?.wsname`). Every egress
-  // below then treated it as the INTERNAL symbol, which it is not for two bases.
+  // ── B-SCANNER-EGRESS-NORMALISE (#909): normalise the batch's symbols ONCE, here, to the internal form.
+  // `pair.symbol` is Kraken's own wsname (`pairsObj[pairName]?.wsname`). Kraken's OHLC endpoint rejects its
+  // own wsname for two bases, XBT and XDG (`XBT/USD` -> `EQuery:Unknown asset pair`, `BTC/USD` -> candles).
+  // That null is cached by `getPairHistoryDays` and `passesHistoryFilter` fails closed on it, so without this
+  // line Bitcoin and Dogecoin are rejected permanently and silently.
   //
-  // ⛔ WHY THIS IS NOT COSMETIC — MEASURED AGAINST THE LIVE VENUE (RUNNING_ISSUES:4571):
-  //   XBT/USD -> 0 candles, `EQuery:Unknown asset pair`     <- the form WE were sending
-  //   BTC/USD -> 721 candles, ok
-  //   ETH/USD -> 721 candles, ok                            <- also a wsname; accepted
-  // Kraken's OHLC endpoint REJECTS Kraken's own wsname for Bitcoin. That null is cached by
-  // `getPairHistoryDays` (kraken.ts:648-653) and `passesHistoryFilter` fails CLOSED on null
-  // (:380-381, "be conservative & fail") => a permanent, silent rejection. Universe-wide the
-  // class is exactly TWO bases of 661: XBT and XDG (#909's sweep). Both were at ZERO trades.
+  // Why here: this is the first point where the batch is final and unconsumed. The ticker/pairInfo join and
+  // the refill dedupe above both key on the RAW wsname, so normalising earlier breaks the join or admits
+  // duplicates. Why not at the venue call instead: that would fix only the venue request, not the membership
+  // and archive legs below (`poolSymbols`, the stablecoin check, `benchmarkSet`, `capturePreFilterReject`,
+  // `evaluatedSymbols`), which all read `pair.symbol` too.
   //
-  // ⛔ WHY *HERE* AND NOWHERE ELSE — this is the ONE point where the batch is FINAL and
-  // UNCONSUMED. Earlier is unsafe: the ticker/pairInfo join at :600 keys on the RAW wsname,
-  // and the refill dedupe at :611 compares `usedSymbols` against `allPairs` in RAW form, so
-  // normalising above either breaks the join or silently admits duplicates.
-  // ⛔ AND THE HONEST ARGUMENT FOR *NOT* GOING LATER — my first version of this comment said
-  //   "later would mean N call-site edits", WHICH IS FALSE and shipped as such for one commit.
-  //   `server/exchanges/kraken/kraken.ts:296` hands the string to Kraken VERBATIM with no
-  //   resolver (NOT the deprecated 5-line B78 shim at `server/services/kraken.ts`), so ONE edit
-  //   would fix every caller of getOHLCData/getPairHistoryDays. The real reason to fix HERE is
-  //   that a venue-boundary fix reaches ONLY the venue call: it would NOT repair the membership
-  //   and archive legs above (`poolSymbols`, the stablecoin regex, `benchmarkSet`,
-  //   `capturePreFilterReject`, `evaluatedSymbols`), which never reach that call.
+  // Why `toCanonical` and not the Kraken symbol resolver: the resolver's slashed branch maps only XBT->BTC and
+  // returns `XDG/USD` unchanged; `toCanonical` maps XBT->BTC and XDG->DOGE. Consolidating the symbol modules
+  // is #229.
   //
-  // ⛔⛔ WHAT THIS FIXES IS BITCOIN IN THE ACTIVE LANE **AND DOGECOIN IN THE VTS LANE** — and
-  //   my "it does nothing for Dogecoin" was measured with an instrument that CANNOT SEE VTS.
-  //   Every `capturePreFilterReject` call is gated `!isPassiveLearning` (`:900`, `:907`, `:914`,
-  //   `:1055`+), so `signal_eval_archive` is ACTIVE-LANE ONLY. Live `screener_filters`: the
-  //   seven `vts_*` crypto profiles carry `min_price` 0.05, so Dogecoin at 0.0851 CLEARS the
-  //   VTS floor, reaches `passesHistoryFilter` at `:922` under the wsname, and fails closed —
-  //   venue-probed: `XDG/USD` -> EQuery, `DOGE/USD` -> 721 (controls `ADA/USD` -> 721,
-  //   `XBT/USD` -> EQuery, `BTC/USD` -> 721). CORROBORATED: the VTS closed corpus
-  //   `logs/virtual_trades` holds ONE doge/xdg occurrence across 151 daily files, against
-  //   `ADA/` in 74 of 151. ⇒ Dogecoin is absent from the learning population, not present in
-  //   it, and THIS LINE REPAIRS THAT.
-  // ⛔ SEPARATELY, IN THE ACTIVE LANE ONLY, DOGECOIN IS EXCLUDED BY A WORKING PRICE FLOOR —
-  //   measured 24h: `XBT/USD` has ZERO archive rows (it passes volume and price and
-  //   dies at the history filter, whose branches carry no `capturePreFilterReject`, so the
-  //   rejection is never archived), while `XDG/USD` has 545 rows carrying `low_price`,
-  //   observed 0.0851 against a threshold of 0.25. The active path's min price is 0.25 on
-  //   every profile but strong_trend (live `screener_filters`); VTS's is 0.05, so the ACTIVE
-  //   floor is what excludes Dogecoin there — a separate, working gate, not this batch's bug.
-  //   CONTROL: `ADA/USD` fails the identical gate at 0.2013. ⇒ Dogecoin is excluded BY A
-  //   WORKING PRICE FLOOR, not by a symbol form. Whether 0.25 is the right floor is a
-  //   DECISION, not a defect, and it is homed as its own item.
+  // Blast radius: `toCanonical` applies one map to base AND quote, so 56 of Kraken's 1,437 wsnames change,
+  // including the 31 BTC-quoted pairs (`ADA/XBT` -> `ADA/BTC`), whose venue calls now resolve. On the STANDARD
+  // profile they become eligible to be assessed, not tradable: the volume and min-price gates compare a
+  // quote-denominated amount with a USD threshold, which only holds for a USD quote (#966); the active-path
+  // price floor is #967. The strong_trend route has NO volume floor, so it is fenced separately below:
+  // `isStrongBullDbs` refuses a BTC-quoted pair (the `quoteIsNonUsdCrypto` conjunct). Keep that conjunct when
+  // this map or the symbol modules change (#229) — widening it to other quotes is not conservative (#966).
+  // Leaving the quote slot unmapped is not the answer either: it re-emits a form the venue rejects (#966).
   //
-  // ⛔ `toCanonical`, NOT `normalizeToInternalSymbol` — AND THE NAME THAT MOTIVATED IT.
-  // The resolver's slashed branch (kraken-symbol-resolver.ts:94-99) short-circuits on a
-  // ONE-ENTRY table {XBT:BTC} and never reads its own `mapByWsPair`, so it returns XDG/USD
-  // unchanged. `toCanonical` (symbol-canonicalizer.ts:98-124) carries XBT->BTC AND XDG->DOGE.
-  // That resolver is a 🔒 LOCKED MODULE and its consolidation is homed to Phase 20 (#229),
-  // so it is not this batch's to edit.
-  //
-  // ⛔ BLAST RADIUS — 56 WSNAMES, NOT 26, AND MY FIRST VERSION OF THIS COMMENT WAS WRONG AT
-  // THE LINE (Langston, Step 4). `toCanonical` applies ONE map to BOTH positions:
-  //   `krakenToStandard[base] || base`  AND  `krakenToStandard[quote] || quote`  (:121-122)
-  // The `// Base currencies` / `// Quote currencies` headings in that table are COMMENTS, not
-  // structure — so XBT maps in the QUOTE slot too. Census of the live AssetPairs payload
-  // (1,437 wsnames): 26 base-side + 31 quote-side, 1 overlap = 56 changed.
-  // ⇒ THE 31 ARE THE BTC-QUOTED PAIRS, `AAVE/XBT … ZRX/XBT` — venue-probed: `ADA/XBT` -> 0
-  //   candles / `EQuery`, `ADA/BTC` -> 721. After this line their venue calls RESOLVE.
-  // ⛔ BUT THEY DO *NOT* BECOME TRADABLE, AND MY FIRST WORDING ("eligible for the survivor set
-  //   FOR THE FIRST TIME") WAS THE SAME OVER-REACH TWICE CORRECTED ABOVE — a consequence
-  //   asserted without checking the next gate. MEASURED, 24h, source='market-scanner',
-  //   symbol LIKE '%/XBT': `low_volume` = 21,574 rows across 31 of 31 distinct symbols.
-  //   Every one already REACHES the volume gate and fails it, on the venue-supplied 24h volume
-  //   attached at the `:600` join — ABOVE this line, so nothing here moves that number.
-  //   ⇒ correct claim FOR THE STANDARD PROFILE: they become ELIGIBLE TO BE ASSESSED. ⛔ It is
-  //   FALSE for the strong_trend route, which has no volume floor — hence the guard at `:889`.
-  // ⚠️ AND THE REASON THEY FAIL IS A UNITS DEFECT THAT IS LIVE TODAY, INDEPENDENT OF THIS FIX:
-  //   `:855` computes `volume24hCoins * currentPrice`, and `currentPrice` is `ticker.c[0]` —
-  //   the price in the QUOTE currency. The comment at `:818` states the invariant ("All filter
-  //   thresholds are in USD. Must compare like units") and the arithmetic satisfies it ONLY
-  //   when the quote IS USD. For `/XBT` the product is BTC-denominated and is compared against
-  //   a flat 500,000; measured medians: `/USD` 10,218 vs `/XBT` 0.08. The min-price floor has
-  //   the same shape (0.25, quote-denominated). ⇒ a BTC-quoted pair would need ~500,000 BTC of
-  //   daily volume to clear a bar meant to read $500,000. Homed as its own item — see the
-  //   change list. Excluding the quote slot is NOT the answer: it re-emits a rejected form.
-  // ⛔ AND "the raw form stays recoverable at `pair.pairInfo.wsname`" WAS ALSO FALSE — `wsname`
-  //   is undefined for exactly the entries that fall back to the REST key, which is precisely
-  //   when it would be needed. The guard above makes it moot: those entries are not touched.
-  // ⛔⛔ SLASHED-ONLY GUARD — ADDED AFTER A SECOND READER FOUND MY FIRST VERSION UNSAFE.
-  // `:564` is `pairsObj[pairName]?.wsname || pairName`, and `wsname` is OPTIONAL
-  // (`kraken-pair-metadata-service.ts:15`). When it is absent `symbol` is the COMPACT REST key
-  // (`XXBTZUSD`), not a slashed pair — and on non-slashed input `toCanonical` leaves the safe
-  // slashed branch entirely:
-  //   • Pattern 1 (`symbol-canonicalizer.ts:188-192`) splits on `lastIndexOf('Z')`, so
-  //     `XTZUSD` -> base `T`, quote `USD` -> `T/USD`. SILENTLY WRONG, no throw.
-  //   • the `PF_`/`PI_` branch (`:157-166`) can THROW — inside this unguarded `.map`, that
-  //     would take down the scan cycle.
-  //   • and for exactly those entries `pairInfo.wsname` is UNDEFINED, so the raw form is NOT
-  //     recoverable afterwards — which is why "recoverable at pairInfo.wsname" was too strong.
-  // ⇒ CONVERT ONLY WHAT WE KNOW THE SHAPE OF. A non-slashed entry is left byte-identical, i.e.
-  //   exactly as it behaves today, so this cannot regress the compact-key path. The two target
-  //   bases are slashed in the venue's own wsname (`XBT/USD`, `XDG/USD`), so the fix still lands.
+  // Slashed-only guard: `wsname` is optional, and without it the symbol is the compact REST key (`XXBTZUSD`).
+  // On that form `toCanonical` can return a wrong pair (`XTZUSD` -> `T/USD`) or throw inside this unguarded
+  // map. Entries that are not slashed are therefore left byte-identical; both target bases have slashed
+  // wsnames, so the fix still reaches them.
   batch = batch.map(p => ({
     ...p,
     symbol: p.symbol?.includes('/') ? toCanonical(p.symbol) : p.symbol,
@@ -900,7 +832,8 @@ export async function collectAdaptiveBatch(
       const cachedDbs = dbsCache.get(pair.symbol);
       // ⛔⛔ B-SCANNER-EGRESS-NORMALISE GUARD — A BTC-QUOTED PAIR MAY NOT TAKE THE STRONG-DBS
       // BYPASS. Langston, Step-4 round 3, and it is a REAL deploy risk this batch created.
-      // The normalisation at `:714` sits ABOVE the B63.3 prefetch at `:789`, so post-fix the
+      // The symbol normalisation above (B-SCANNER-EGRESS-NORMALISE) runs BEFORE the B63.3 OHLC prefetch
+      // (`ohlcCache.getOHLCData`), so post-fix the
       // 31 `%/XBT` pairs resolve, gain OHLC, gain a DBS score, and any scoring >= 0.35 lands
       // HERE — on a profile whose live values are `minVolume = 0`, `minPrice = 0.001`
       // (`screener_filters.active_strong_trend`). MEASURED: at least 8 of the 31 clear a
@@ -910,7 +843,7 @@ export async function collectAdaptiveBatch(
       // ⇒ THE WHOLE "they only become eligible to be ASSESSED" ARGUMENT RESTS ON THE STANDARD
       //   PROFILE'S VOLUME FLOOR, AND THIS ROUTE DOES NOT HAVE ONE.
       // ⚠️ WHY THE BYPASS IS UNSAFE HERE SPECIFICALLY, rather than merely untested: the money
-      //   gates it skips are denominated wrong for a non-USD quote (`:855` multiplies coin
+      //   gates it skips are denominated wrong for a non-USD quote (the volume gate multiplies coin
       //   volume by the QUOTE-currency price — see #966). A zero-volume bypass is only ever
       //   safe if the thing being bypassed was measuring the right quantity.
       // ✅ THIS IS A NO-OP FOR TODAY: the 31 already fail `low_volume` on the standard profile
