@@ -10,6 +10,11 @@
 # ⚠️ An accident guard, not a boundary, until #1102 removes deploy's `NOPASSWD: ALL`.
 #    In sudoers a `*` matches across words, so `GET *` also matches `GET mint`; dt-api refuses
 #    that itself (the path grammar), and refuses `mint` unless SUDO_USER is dtmint.
+# ⚠️ `--write *` PRE-AUTHORISES every future entry in dt-api's WRITE_ALLOW (Langston, Gate 1-1):
+#    while WRITE_ALLOW is empty sudo and dt-api agree, but the first entry added there is reachable
+#    with no sudoers change, so sudo stops being an independent second gate. ⇒ the FIRST WRITE_ALLOW
+#    entry must come with a REVIEWED change to THIS file that names that one write (method + path),
+#    replacing `--write *`.
 
 deploy ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api GET *, /usr/local/bin/dt-api --write *
 dtmint ALL=(dtapi) NOPASSWD: /usr/local/bin/dt-api mint

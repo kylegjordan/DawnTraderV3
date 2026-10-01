@@ -73,8 +73,7 @@ WINDOW_S = 900
 DTAPI_CAP = 2                     # dt-api's own logins (calls + mints) per 900 s, whatever the reason
 NEG_S = 900                       # after a login 401 / 404 / 429 (a 429 uses its RateLimit-Reset)
 BACKOFF_500_S = 60                # after a login 5xx or no answer: back off, keep the current token
-LOGIN_FAILING_GAP_S = 600         # two failed logins at least this far apart, no success between ...
-LOGIN_FAILING_WINDOW_S = 3600     # ... and at most this far apart (r3: two self-healed blips a day apart are not "failing")
+LOGIN_FAILING_GAP_S = 600         # a run of failed logins, no success between, spanning at least this (no ceiling — Gate 1-1)
 MINT_REUSE_S = 20 * 3600          # a mint younger than this is handed out again (C-10)
 MIN_EXP_LEFT_S = 6 * 86400        # ... and only if it still has 6 days left (OBJ-1(e))
 PROBE_TIMEOUT_S = 10              # /api/settings and /api/auth/verify probes: short, the lock may be held
@@ -106,11 +105,15 @@ READ_DENY_PREFIXES = ("/api/admin", "/api/auth", "/api/user")
 #     control, GET /api/system/formula-audit, is a route no path match finds. ":x" matches one
 #     path segment. ⚠️ C11: calls deeper than one level were not traced exhaustively, so this
 #     list can be incomplete. It is an accident guard. (Method + table: the OBJ-1 change list.)
-#     Denied: a GET whose PURPOSE is a job — an audit, a test harness, a scan, an export or
-#     report file, a learning update, a pool initialisation, a size log. ALLOWED on purpose,
-#     stated rather than implied: ordinary dashboard reads whose side effect is incidental
-#     and which the website triggers on every load anyway — price refresh on a stale price,
-#     cost-cache fill, a cached recompute or broadcast, a first-run config row.
+#     ★ THE RULE (Langston, Gate 1-1, 2026-10-01 — use it for any NEW route): DENY a GET when the
+#     CALLER'S ARGUMENTS STEER its side effect, or when it WRITES THE FILESYSTEM OR A DB ROW;
+#     ALLOW it when its side effect is a cache or price refresh the dashboard already drives on
+#     its own (the price refresh on a stale price, the cost-cache fill, a cached recompute or
+#     broadcast, a first-run config row). That is the line every entry below actually follows —
+#     e.g. /api/strategic/recommendations is denied (generateRecommendations) while
+#     /api/optimization/recommendations is allowed (a log read); /api/vts/export is denied for
+#     its fs.writeFile, the streaming exports are allowed. "The side effect is incidental" alone
+#     is an opinion, not the rule.
 READ_DENY_JOBS = (
     "/api/audit/run",                          # routes/audit.ts — unauthenticated; runs the audit, writes a report
     "/api/signal-audit/run",                   # routes/signal-audit.ts — unauthenticated; writes a report
@@ -374,7 +377,12 @@ def die(code, text):
     raise SystemExit(code)
 
 
-STICKY_KINDS = ("crew-password-wrong", "crew-user-missing", "login-failing", "login-malformed",
+# STICKY = a login cannot fix it, so dt-api stops logging in until a person acts. Gate 1-1
+# (Langston, 2026-10-01): crew-role-missing joins (a row with no role, routes.ts:226 — config, not a
+# blip); login-failing LEAVES — it is an availability fault a login fixes once the app is back, and
+# the 5xx backoff (BACKOFF_500_S) already paces logins during an outage, so stickiness bought no
+# bucket protection and would block the mint after recovery until a person cleared it.
+STICKY_KINDS = ("crew-password-wrong", "crew-user-missing", "crew-role-missing", "login-malformed",
                 "login-unexpected")
 
 
@@ -392,7 +400,23 @@ def page_standing():
     if not os.path.lexists(PAGE_FILE):
         return None
     pg = _read_json(PAGE_FILE)
-    return pg if isinstance(pg, dict) else {"kind": "unreadable-page", "sticky": True}
+    return pg if isinstance(pg, dict) else {"kind": "unreadable-page", "sticky": True, "_unreadable": True}
+
+
+def page_write(standing, merged, kind, detail, sticky):
+    """Writes a page. Gate 1-1 FINDING-2 (Langston, 2026-10-01): a page.json that cannot be read is
+    NEVER written over — it holds the cause a person is being paged to read, and merging into the
+    placeholder replaced it. The new cause goes to a side file beside it and stderr names it; the
+    unreadable file still makes the page sticky (fail closed). dt-api and the setter both use this.
+    Returns the path written."""
+    if isinstance(standing, dict) and standing.get("_unreadable"):
+        side = "%s.unreadable.%d" % (PAGE_FILE, os.getpid())
+        _write_json(side, page_merge(None, kind, detail, sticky))
+        sys.stderr.write("dt-api: NOTE — %s could not be read and was NOT written over; this page's "
+                         "cause is in %s\n" % (PAGE_FILE, side))
+        return side
+    _write_json(PAGE_FILE, merged)
+    return PAGE_FILE
 
 
 def page_merge(old, kind, detail, sticky):
@@ -426,7 +450,8 @@ def page(kind, detail, drop_token=None):
     row, a login that keeps failing, a malformed login answer — while such a page stands dt-api
     makes NO login (a timer re-trying a known-bad password spent the bucket and kept the setter's
     quiet-900-s precondition from ever holding). A token-refused page (a DB or lookup failure,
-    which may heal) is recorded and alerted but NOT sticky (r2). Calls on a good cached token go on.
+    which may heal) and a login-failing page (the app's login down, which heals) are recorded and
+    alerted but NOT sticky (r2; Gate 1-1). The kinds are STICKY_KINDS. Calls on a good cached token go on.
     The page is cleared by a person (after the cause is fixed) or by the setter when it succeeds.
     drop_token: the DEAD token's text — the cache is removed only if it still holds that token
     (r3: never a token another caller minted meanwhile). Callers hold the Lock."""
@@ -439,7 +464,8 @@ def page(kind, detail, drop_token=None):
                 pass
     sticky = kind in STICKY_KINDS
     try:
-        _write_json(PAGE_FILE, page_merge(page_standing(), kind, detail, sticky))
+        standing = page_standing()
+        page_write(standing, page_merge(standing, kind, detail, sticky), kind, detail, sticky)
     except OSError:
         pass
     die(5, "PAGE (dt-api, %s): %s\nInfra Claude owns this. Nothing was re-minted.%s The daily "
@@ -549,7 +575,6 @@ def login(who):
             and last.get("ts", 0) + int(last["reset"]) > t:
         die(3, "REFUSED: the last loopback login (%s) left the bucket empty until %s. Nothing was sent."
             % (last.get("who"), _iso(last["ts"] + int(last["reset"]))))
-    prev = last
     _append(LEDGER, json.dumps({"ts": t, "who": who, "phase": "sent", "bucket": "loopback"}))
     st, h, b = app_request("POST", "/api/auth/login",
                            body={"username": env["DT_API_USER"], "password": env["DT_API_PASS"]},
@@ -605,14 +630,25 @@ def login(who):
         page("login-unexpected", "login answered %d — not a password (401), user (404), rate (429) "
              "or availability (5xx) answer; the login request or the app's login route has changed" % st)
     _neg(t + BACKOFF_500_S, st, "the app did not answer the login cleanly")
-    # r2: a restart makes two failures a minute apart; only two failures at least 10 minutes apart
-    #     with NO successful loopback login between them (anyone's) is "the login is failing".
-    # r3: ... and at most LOGIN_FAILING_WINDOW_S apart: two self-healed blips a day apart are not.
-    ps, pts = (prev or {}).get("status"), (prev or {}).get("ts")
-    if prev is not None and (ps is None or (isinstance(ps, int) and ps >= 500)) \
-            and isinstance(pts, (int, float)) and LOGIN_FAILING_GAP_S <= t - pts <= LOGIN_FAILING_WINDOW_S:
-        page("login-failing", "loopback logins got %s and then, %d min later, %s — the app's login is "
-             "failing (a 5xx or no answer), not the password" % (ps, (t - pts) // 60, st))
+    # "The login is failing" = THIS failure plus the run of failed loopback logins (anyone's)
+    # directly before it — no answer or a 5xx; any other result ends the run, and a 200 always
+    # does — spanning at least LOGIN_FAILING_GAP_S. The floor stops one app restart (two failures
+    # a minute apart) from paging (r2). ⛔ NO CEILING (Langston, Gate 1-1 BLOCKER-1, 2026-10-01):
+    # r3's 60-minute ceiling meant the daily mint (failures 24 h apart) and an interactive burst
+    # could never page. "No success between" is what the run already guarantees; a heal nobody
+    # observed is not evidence of health (#453).
+    run_start, run_n = None, 1
+    for e in reversed(results):
+        s = e.get("status")
+        if s is None or (isinstance(s, int) and s >= 500):
+            run_n += 1
+            if isinstance(e.get("ts"), (int, float)):
+                run_start = e["ts"]
+            continue
+        break                                          # a success, or a different cause: the run ends
+    if run_start is not None and t - run_start >= LOGIN_FAILING_GAP_S:
+        page("login-failing", "%d loopback logins in a row over %d min got no answer or a 5xx, with no "
+             "success between — the app's login is failing, not the password" % (run_n, (t - run_start) // 60))
     die(3, "FAILED: login got %s — backing off %d s and keeping any current token. Nothing was "
            "sent." % (st if st is not None else b.decode("utf-8", "replace"), BACKOFF_500_S))
 
@@ -644,12 +680,22 @@ def get_token():
 # ───────────────────────────── the 401 path (C6: three cases) ─────────────────────────────
 
 def auth_passed(status):
-    """r3: the probe asks ONE question — did authenticateToken (routes.ts:180-240) let the token
+    """r3: the probe asks ONE question — did authenticateToken (routes.ts:181-243) let the token
     through? It answers only 401 (no/bad/expired token, no DB row, ANY exception) or 403 (a row
     with no role); every other answer means it called next(), so a handler 5xx is the HANDLER's
     health, not the token's. (/api/settings used to be read as "200 or unknown", so a settings
     handler failure blocked the daily mint.)"""
     return status is not None and status not in (401, 403)
+
+
+def page_role_missing():
+    """Gate 1-1 FINDING-1: authenticateToken answers 403 for a crew row with NO ROLE (routes.ts:226,
+    'User account improperly configured - no role assigned'). A login cannot fix it, so it is its
+    own STICKY kind — it used to be filed under the non-sticky token-refused, and each later call
+    then spent another login from the shared bucket on it. The caller holds the Lock."""
+    page("crew-role-missing", "GET /api/settings answered 403 — the crew row has no role "
+         "(routes.ts:226 'User account improperly configured - no role assigned'); a login cannot "
+         "fix it — give the row its role, then clear the page")
 
 
 def classify_401(token):
@@ -663,8 +709,7 @@ def classify_401(token):
         die(3, "FAILED: the route answered 401 and the probe GET /api/settings got no answer — "
                "dt-api cannot tell whether the token is good. Nothing was re-minted.")
     if st == 403:
-        page("token-refused", "the token is accepted but GET /api/settings answered 403 — the crew "
-             "row has no role (routes.ts: 'User account improperly configured')")
+        page_role_missing()
     probe_err = _obj(b).get("error")
     vs, _, vb = app_request("GET", "/api/auth/verify", token=token, timeout=PROBE_TIMEOUT_S)
     if vs == 401:
@@ -672,11 +717,11 @@ def classify_401(token):
     if vs != 200:
         die(3, "FAILED: /api/auth/verify answered %s — dt-api cannot classify the 401. Nothing "
                "was re-minted." % vs)
-    # The signature is good, so a login cannot help (routes.ts:216-240: the DB lookup runs after it).
-    if probe_err == "User account not found":        # routes.ts:219
+    # The signature is good, so a login cannot help (routes.ts:215-241: the DB lookup runs after it).
+    if probe_err == "User account not found":        # routes.ts:220
         page("crew-user-missing", "the token is signature-valid but the API says 'User account "
              "not found' — the crew row has been deleted or replaced", drop_token=token)
-    if probe_err == "Invalid or expired token":      # routes.ts:240 — ANY exception, a DB error included
+    if probe_err == "Invalid or expired token":      # routes.ts:241 — ANY exception, a DB error included
         page("token-refused", "the token is signature-valid but GET /api/settings refuses it — "
              "the app's user lookup or its database is failing")
     page("token-refused-unknown", "the token is signature-valid but GET /api/settings answered 401 "
@@ -731,6 +776,19 @@ def do_call(req):
         if verdict == "dead":
             st, h, b = app_request(req["method"], req["target"], token=rec["accessToken"], body=body,
                                    mode=req["mode"])   # ONE retry, never more
+    if st == 403:                                      # Gate 1-1: a role-less row, or the route's own rule?
+        # authenticateToken answers 403 for a row with NO ROLE (routes.ts:226); a route's own
+        # authorization rule answers 403 too. The same probe the 401 path uses tells them apart:
+        # if GET /api/settings also answers 403, the fault is the row, and it pages. Otherwise —
+        # including no answer — the 403 is the route's, and the call exits 1 as before.
+        with Lock():
+            pst, _, _ = app_request("GET", "/api/settings", token=rec["accessToken"],
+                                    timeout=PROBE_TIMEOUT_S)
+            if pst == 403:
+                _emit(b)
+                sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered HTTP "
+                                 "403 (body on stdout); the page below is why.\n")
+                page_role_missing()
     if st is None:
         die(3, "FAILED: the app did not answer (%s). For a write, check whether it took effect "
                "before retrying." % b.decode("utf-8", "replace"))

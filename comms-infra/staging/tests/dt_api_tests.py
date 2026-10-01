@@ -435,8 +435,9 @@ check("two 5xx logins over 10 minutes apart, no success between, PAGE login-fail
 neg = jload(R.st("negcache.json"))
 neg["until"] = time.time() - 1
 json.dump(neg, open(R.st("negcache.json"), "w"))
-c, o, e = R.run("GET", "/api/settings")            # another 90 s: the page stands, no third login
-check("... and no further login while that page stands", c == 5 and len(R.app.logins()) == 3, e)
+c, o, e = R.run("GET", "/api/settings")            # after the backoff: login-failing is NOT sticky (Gate 1-1)
+check("Gate 1-1: login-failing is NOT sticky — after the backoff the next call logs in again (and pages again)",
+      c == 5 and "login-failing" in e and len(R.app.logins()) == 4 and "PAGE STANDING" not in e, e)
 R.app.login_status = None
 R.close()
 
@@ -545,14 +546,32 @@ c, o, e = R.run("mint", env={"SUDO_USER": "dtmint"})
 check("r3: a settings handler 500 does not block the daily mint (the token is reused)",
       c == 0 and json.loads(o)["reused"] is True and len(R.app.logins()) == 1, e)
 R.app.route_500.clear()
-R.app.no_role = True                                # every authenticated route now answers 403 (:222-224)
+R.app.no_role = True                                # every authenticated route now answers 403 (routes.ts:226)
+n0 = len(R.app.logins())
 c, o, e = R.run("GET", "/api/some/route")
-check("r3: with no role a call's own 403 is the app's answer: exit 1, no page", c == 1 and "HTTP 403" in e
-      and not os.path.exists(R.st("page.json")), e)
+pg = jload(R.st("page.json"))
+check("Gate 1-1: a DIRECT call's 403 from a role-less row PAGEs crew-role-missing (sticky), body on stdout, no login",
+      c == 5 and "crew-role-missing" in e and "WAS sent once" in e and "no role assigned" in o
+      and pg.get("kind") == "crew-role-missing" and pg.get("sticky") is True and len(R.app.logins()) == n0,
+      "%s %r %s %s" % (c, o[:60], e, pg))
+os.unlink(R.st("page.json"))
 c, o, e = R.run("mint", env={"SUDO_USER": "dtmint"})
 pg = jload(R.st("page.json"))
-check("r3: the mint's probe 403 (a row with no role) PAGEs token-refused, hands out nothing",
-      c == 5 and o == "" and pg.get("kind") == "token-refused" and "403" in pg.get("detail", ""), "%s %s" % (e, pg))
+check("Gate 1-1: the mint's probe 403 (a row with no role) PAGEs crew-role-missing, hands out nothing",
+      c == 5 and o == "" and pg.get("kind") == "crew-role-missing" and "403" in pg.get("detail", ""), "%s %s" % (e, pg))
+R.app.revoke_all()                                  # force the next call to need a login
+c, o, e = R.run("GET", "/api/settings")
+check("Gate 1-1: while crew-role-missing stands NO login is made (sticky)",
+      c == 5 and "PAGE STANDING" in e and len(R.app.logins()) == n0, e)
+R.close()
+
+# Gate 1-1: a route's OWN 403 (the row HAS a role) is the app's answer — exit 1, no page
+R = Rig()
+R.run("GET", "/api/settings")
+R.app.route_403.add("/api/guarded/route")
+c, o, e = R.run("GET", "/api/guarded/route")
+check("Gate 1-1: a route's own 403 with a role-bearing row: exit 1, no page", c == 1 and "HTTP 403" in e
+      and not os.path.exists(R.st("page.json")), e)
 R.close()
 
 # minor: a reader that goes away does not turn an answered request into exit 3
@@ -587,6 +606,48 @@ except SystemExit:
 sys.stderr = _stderr
 check("r3: a page keeps a token another caller minted meanwhile, and drops the dead one",
       kept and not os.path.exists(R.st("token.json")))
+R.close()
+
+# ═══════════════════════════ Gate 1-1 (Langston, 2026-10-01) ═══════════════════════════
+def ledger_rows(rig, rows):
+    with open(rig.st("login-ledger.jsonl"), "w") as fh:
+        for x in rows:
+            fh.write(json.dumps(dict({"who": "mint", "phase": "result", "bucket": "loopback"}, **x)) + chr(10))
+
+
+# BLOCKER-1: the daily mint's two failures are 24 h apart — that IS "the login is failing"
+R = Rig()
+now = time.time()
+ledger_rows(R, [{"ts": now - 86400, "status": 503}])
+R.app.login_status = 500
+c, o, e = R.run("GET", "/api/settings")
+check("Gate 1-1 BLOCKER-1: two failed logins 24 h apart, nothing between, PAGE login-failing",
+      c == 5 and "login-failing" in e, e)
+R.close()
+
+# ... but a success between them ends the run: no page
+R = Rig()
+now = time.time()
+ledger_rows(R, [{"ts": now - 90000, "status": 503}, {"ts": now - 86400, "status": 200}])
+R.app.login_status = 500
+c, o, e = R.run("GET", "/api/settings")
+check("Gate 1-1: a success between two failures ends the run: no page, exit 3",
+      c == 3 and "PAGE" not in e and not os.path.exists(R.st("page.json")), e)
+R.close()
+
+# FINDING-2: a page.json that cannot be read is NEVER written over; the new cause goes beside it
+R = Rig()
+R.run("GET", "/api/settings")                       # a cached token, so the call reaches the 401 path
+garbage = b'{"kind": "crew-password-wrong", "detail": "trunc'
+open(R.st("page.json"), "wb").write(garbage)
+R.app.db_ok = False
+c, o, e = R.run("GET", "/api/other")
+side = [f for f in os.listdir(os.path.join(R.tmp, "state")) if f.startswith("page.json.unreadable.")]
+sp = jload(os.path.join(R.tmp, "state", side[0])) if side else {}
+check("Gate 1-1 FINDING-2: an unreadable page.json is left byte-for-byte, the new cause is in a side file named on stderr",
+      c == 5 and open(R.st("page.json"), "rb").read() == garbage and len(side) == 1
+      and sp.get("kind") == "token-refused" and "NOT written over" in e and side[0] in e,
+      "%s %s %s %s" % (c, side, sp, e))
 R.close()
 
 print("dt-api suite: %d passed, %d failed" % (PASS, FAIL))

@@ -37,6 +37,7 @@ class App:
         self.user_missing = False
         self.route_401 = set()
         self.route_500 = set()            # r3: a route whose HANDLER fails after authenticateToken passed
+        self.route_403 = set()            # Gate 1-1: a route's OWN authorization rule (the row has a role)
         self.no_role = False              # r3: the row has no role -> authenticateToken answers 403 (:222-224)
         self.login_body = None            # r3: replace a 200 login body (e.g. a JSON list)
         self.tokens = {}                  # token -> {"exp":, "revoked":}
@@ -181,6 +182,8 @@ def make_handler(app):
                 return self._send(401, {"error": "this route refuses"})
             if self.path.split("?")[0] in app.route_500:
                 return self._send(500, {"error": "Failed to fetch settings"})
+            if self.path.split("?")[0] in app.route_403:
+                return self._send(403, {"error": "this route's own rule refuses"})
             return self._send(200, {"ok": True, "path": self.path,
                                     "mode": self.headers.get("x-app-mode")})
 
