@@ -60,6 +60,11 @@ describe('P1 — a clamp arm books NO price', () => {
     expect(VTS).not.toMatch(/'shadow_max_hold'/); // the unreachable relabel is removed (rule 18)
   });
 
+  it('the real-lane trigger starts NULL, never the mark (Langston Step-4 condition 2)', () => {
+    expect(VTS).toMatch(/let _vtsTriggerPrice: number \| null = null;/);
+    expect(VTS).not.toMatch(/let _vtsTriggerPrice: number \| null = currentPrice;/);
+  });
+
   it('a class VTS does not trade fails closed at evaluation (never reaches a clamp arm)', () => {
     expect(VTS).toMatch(/if \(trade\.assetClass !== 'crypto_spot' && trade\.assetClass !== 'xstock_spot'\) \{\s*console\.error\(`\[3n\.q3\]\[VTS_CLASS_UNSUPPORTED\]/);
   });

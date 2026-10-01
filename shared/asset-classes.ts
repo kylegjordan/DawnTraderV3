@@ -522,10 +522,12 @@ export function getXstockName(pair: string): string | null {
  * (A, ADI, CAT, ES, IR, STRK, STX, WELL — all on Kraken as BASE/USD AND BASE/EUR, AssetPairs 2026-10-02) were
  * missing. A missing ticker resolves `xstock_spot` on `kraken`, so the VTS crypto lane stamped the STX and STRK
  * TOKENS as xStocks and judged them against the equity's price: 79 instant fake target hits since 2026-09-01.
- * The re-audit now has a real trigger: a scheduled system alert (`collision-set-reaudit`), re-armed at each audit.
+ * ⛔ AND A RE-AUDIT RUNS IN BOTH DIRECTIONS (Langston, Step 4): `BDX/USD` was REMOVED — Kraken no longer lists a BDX
+ * crypto pair (only BDXN), while BDX/USD (Becton Dickinson) is a live xStock, so the stale entry forced a real xStock to
+ * `crypto_spot` on `kraken` — the harm this set exists to prevent. An intersection that only tests for additions is half
+ * an audit. The re-audit has a real trigger: a scheduled system alert (`collision-set-reaudit`), re-armed at each audit.
  */
 export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
-  'BDX/USD',  // xStock: Becton Dickinson | Crypto: BDX
   'CVX/USD',  // xStock: Chevron          | Crypto: Convex Finance
   'DASH/USD', // xStock: DoorDash         | Crypto: Dash
   'EDU/USD',  // xStock: New Oriental     | Crypto: Open Campus

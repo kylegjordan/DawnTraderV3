@@ -31,7 +31,7 @@ import {
 } from '../../../shared/asset-classes';
 import { UNIVERSE_BOOTSTRAP_SET } from '../../asset_classes/xstock_spot/universe-bootstrap.js';
 
-const USD_COLLISIONS = ['BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
+const USD_COLLISIONS = ['CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
   // `3n.q3` P9 / `#1145` — the 2026-10-02 re-audit
   'A/USD','ADI/USD','CAT/USD','ES/USD','IR/USD','STRK/USD','STX/USD','WELL/USD'];
 
@@ -63,11 +63,13 @@ const EUR_COLLISIONS = ['CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP
   'A/EUR','ADI/EUR','CAT/EUR','ES/EUR','IR/EUR','STRK/EUR','STX/EUR','WELL/EUR'];
 
 describe('B79.0f — XSTOCK_SPOT_KRAKEN_COLLISIONS membership', () => {
-  it('contains exactly 33 entries (17 USD + 16 EUR — the 2026-10-02 re-audit added 8 of each)', () => {
-    expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.size).toBe(33);
+  it('contains exactly 32 entries (16 USD + 16 EUR — the 2026-10-02 re-audit added 8 of each and removed BDX/USD)', () => {
+    expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.size).toBe(32);
+    // ⛔ `3n.q3` (Langston Step 4): BDX is no longer a Kraken crypto pair; BDX/USD is a live xStock.
+    expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.has('BDX/USD')).toBe(false);
   });
 
-  it('contains all 17 documented USD-quote collisions', () => {
+  it('contains all 16 documented USD-quote collisions', () => {
     for (const sym of USD_COLLISIONS) {
       expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.has(sym)).toBe(true);
     }

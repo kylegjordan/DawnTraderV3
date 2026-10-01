@@ -12,7 +12,10 @@
  * schema change is also the build boundary (MEMORY 0.a-2: split a boundary by counter schema, never by a clock).
  *  - `unpricedNoBid`  — the arm `clamp_no_bid`: a live mark, no usable bid (Class A).
  *  - `unpricedNoMark` — the arm `clamp_no_mark`: no live mark (Class B).
- *  - `closedUnpriced` — unpriced closes the close loop COMPLETED; it should equal the two arms' sum (a reconcile check).
+ *  - `closedUnpriced` — unpriced closes the close loop COMPLETED (twins included, though a twin writes no archive row).
+ *    ⚠️ NOT a per-line reconcile with the two arms: the arms are counted BEFORE the pass's reset and the closes AFTER it,
+ *    so a pass's `closedUnpriced` prints on the NEXT line (and waits, or is lost on a restart, if the map empties first).
+ *    Summed over a window it should equal the arms' sum, less those edge cases (Langston Step-4 record item).
  */
 import type { VtsBookingArm } from './vts-exit-booking.js';
 

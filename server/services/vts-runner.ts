@@ -3782,7 +3782,10 @@ async function resolveOpenVirtualTrades(): Promise<{
     // `VTS_EXIT_TOUCH_MAX_AGE_MS` / `_SPREAD_FRACTION`). `null` ⇒ the evaluator makes NO DECISION this cycle
     // (`no_transactable_side`), never a midpoint fallback. xStock: its guarded bid (`8a-P4c` 3a-i, below).
     let _vtsExitBid: number | null = null;
-    let _vtsTriggerPrice: number | null = currentPrice;
+    // ⛔ `3n.q3` (Langston Step-4 condition 2): starts NULL, never the mark — each traded class assigns its own bid below, so
+    // a class with no branch makes NO level decision (no_transactable_side) instead of deciding on the mark and then
+    // reaching a clamp arm. Byte-identical for crypto and xStock; the shadow lane already passes its bid straight through.
+    let _vtsTriggerPrice: number | null = null;
     // `3n.q3` P8 (OBJ-4): the selector's OWN refusal, carried into the no-decision streak and the alert body — the two
     // ceilings cannot explain a crossed book.
     let _vtsExitRefusal: string | null = null;
@@ -3998,7 +4001,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       console.log(
         `[11.6][STALE_CLEANUP] Force-closing ${trade.symbol}/${trade.strategy} after ${Math.round(
           holdDurationMs / 3600000,
-        )}h (price=${hasLivePrice ? 'live' : 'entry-fallback'})`,
+        )}h (price=${hasLivePrice ? 'live' : 'none — closes unpriced (3n.q3)'})`,
       );
     }
 
