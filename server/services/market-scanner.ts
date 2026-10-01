@@ -626,9 +626,12 @@ export async function collectAdaptiveBatch(
   
   // ── B-SCANNER-EGRESS-NORMALISE (#909): normalise the batch's symbols ONCE, here, to the internal form.
   // `pair.symbol` is Kraken's own wsname (`pairsObj[pairName]?.wsname`). Kraken's OHLC endpoint rejects its
-  // own wsname for two bases, XBT and XDG (`XBT/USD` -> `EQuery:Unknown asset pair`, `BTC/USD` -> candles).
-  // That null is cached by `getPairHistoryDays` and `passesHistoryFilter` fails closed on it, so without this
-  // line Bitcoin and Dogecoin are rejected permanently and silently.
+  // own wsname for exactly two of its 661 bases, XBT and XDG (#909's sweep; `XBT/USD` -> `EQuery:Unknown asset
+  // pair`, `BTC/USD` -> candles) — a third rejected base would be a venue change or a gap in that sweep. That null
+  // is cached by `getPairHistoryDays` and `passesHistoryFilter` fails closed on it, so without this line Bitcoin
+  // and Dogecoin are rejected permanently and silently. Dogecoin returns to the VTS population only: the active
+  // profiles' price floor still excludes it (#967), so do not verify this fix by looking for Dogecoin in
+  // active-lane trades.
   //
   // Why here: this is the first point where the batch is final and unconsumed. The ticker/pairInfo join and
   // the refill dedupe above both key on the RAW wsname, so normalising earlier breaks the join or admits
@@ -636,15 +639,18 @@ export async function collectAdaptiveBatch(
   // and archive legs below (`poolSymbols`, the stablecoin check, `benchmarkSet`, `capturePreFilterReject`,
   // `evaluatedSymbols`), which all read `pair.symbol` too.
   //
-  // Why `toCanonical` and not the Kraken symbol resolver: the resolver's slashed branch maps only XBT->BTC and
-  // returns `XDG/USD` unchanged; `toCanonical` maps XBT->BTC and XDG->DOGE. Consolidating the symbol modules
-  // is #229.
+  // Why `toCanonical` and not `normalizeToInternalSymbol` (`server/markets/kraken-symbol-resolver.ts`): its
+  // slashed branch maps only XBT->BTC and returns `XDG/USD` unchanged; `toCanonical` maps XBT->BTC and XDG->DOGE.
+  // That resolver is a LOCKED MODULE — do not fix its map to make it serve here; consolidating the four symbol
+  // modules is #229.
   //
-  // Blast radius: `toCanonical` applies one map to base AND quote, so 56 of Kraken's 1,437 wsnames change,
+  // Blast radius: `toCanonical` applies one map to base AND quote (the base/quote headings in its table are
+  // comments, not structure), so 56 of ~1,440 wsnames change (1,437 in the 2026-08-30 census),
   // including the 31 BTC-quoted pairs (`ADA/XBT` -> `ADA/BTC`), whose venue calls now resolve. On the STANDARD
   // profile they become eligible to be assessed, not tradable: the volume and min-price gates compare a
   // quote-denominated amount with a USD threshold, which only holds for a USD quote (#966); the active-path
-  // price floor is #967. The strong_trend route has NO volume floor, so it is fenced separately below:
+  // price floor is #967. "Not tradable" holds only while #966 is open: once the volume gate is denominated
+  // correctly, some of the 31 may clear it, and this sentence must be revisited with that fix. The strong_trend route has NO volume floor, so it is fenced separately below:
   // `isStrongBullDbs` refuses a BTC-quoted pair (the `quoteIsNonUsdCrypto` conjunct). Keep that conjunct when
   // this map or the symbol modules change (#229) — widening it to other quotes is not conservative (#966).
   // Leaving the quote slot unmapped is not the answer either: it re-emits a form the venue rejects (#966).
