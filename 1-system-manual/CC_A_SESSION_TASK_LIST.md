@@ -74,6 +74,16 @@
 - **After live, crew tooling (`PRE_LIVE_SPRINT.md`):** `B-RULES-CHANGE-CLASS` (the rules_change class, before `B-GATE-GUARD`) · `B-CHECKER-BLOCK-GATE` (`#1107`, gated on measuring the checker's precision) · `B-GOV-LEDGER-GRADE` (`#1099`).
 - ✅ **`#947` `B-GOV-CLASS-PARSE` CLOSED 2026-09-29 as `#968`'s duplicate** (Langston) — the parser fix is CC-C's `B-CHANGE-CLASS-PARSER`.
 
+### ➕ IN FLIGHT AND SLOTTED — the pre-sprint pair and their homes (2026-09-30 / 10-01; order is the sprint plan's, which is the authority)
+- ⏳ **IN FLIGHT: `B-TOKEN-BURN-CUT`** (`#1127`) — sprint row 1h: sessions woken only by a message for them. Steps 1-8 done (Step 8 CONFIRMED by Langston 2026-10-01); Step 10 governance in progress, then Step 11.
+- ⏳ **IN FLIGHT: `B-WAKE-ARM-EXCLUSIVE`** (`#1140`) — sprint row 1o, after 1h: one wake watcher per session, enforced by a lease. Step 1 APPROVED with seven conditions (scope §7); Step 2 next.
+- ▶ **QUEUED: `B-WAKE-OWNER-LOSS-VISIBLE`** (`#1142`) — sprint row 1p, after 1o: a lost alert routing is counted into the owner record where the alert list can show it.
+- ▶ **QUEUED: `B-ALERT-OWNER-ON-ROW`** (`#1137`) — sprint row 1l: each alert's owner on the alert record itself, so Langston stops re-guessing it.
+- ▶ **QUEUED: `B-FEATURE-WATCH-ROUTING`** (`#1128`) — sprint row 1i: a feature-watch finding that changes how sessions operate gets a disposition the day it is surfaced.
+- ▶ **QUEUED: `B-GOV-ENROLMENT-WINDOW-OBJECT`** (`#1133`) — sprint row 1j: the checker's enrolment window becomes a chosen object, not the last 300 commits.
+- ▶ **QUEUED: `B-PLAN-ROW-DISAPPEARANCE`** (`#1134`) — sprint row 1k: deleting a batch's plan row must not silently resolve its plan alert.
+- ▶ **QUEUED: `B-CENSUS-OWNERLESS-TRIAGE`** (`#1139`) — sprint row 1n: an owner and a place for the 55 ownerless open issues from the W40 census.
+
 ### ⛔ OPEN LOOPS THAT ARE NOT BATCHES — they have no row and will be lost if they are not listed here
 - ✅ **Langston's `AWAITING KYLE` block (his MEMORY :23) — ANSWERED BY KYLE 2026-07-10** (Discord messages `1525131232940130386` and `1525135850265120838`, `kind=''`): the checker may block work, real issues only (the blocking is now `#1107` `B-CHECKER-BLOCK-GATE`, mine, after live); a closing records why, with references; the pending-verification state. Only his memory line was stale; its replacement text is Langston's own and lands with `B-GOV-REPORTING`'s Step 10. The 📊 REPORT label is the one thing put back to Kyle (2026-09-29). *(This line had said the block was re-homed to Infra Claude on 08-30 — wrong: Kyle's 08-30 re-home was the MEMORY trim.)*
 - ⛔ **OWED TO LANGSTON: the alert-verb design (`#982`)** — two questions put to him and unanswered: must a hold leave the back-off untouched, and must it require an existing ack so it can never orphan.
