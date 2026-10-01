@@ -58,6 +58,8 @@ export type ExitReason =
   | 'TP_target_hit'
   | 'TRAIL_hit'
   | 'time_stop'
+  /** `3n.q3`: a VTS max-hold exit with no usable sell side — closed with no price; exit_price, pnl_pct, r_multiple NULL. */
+  | 'time_stop_unpriced'
   | 'regime_flip'
   | 'manual'
   | 'other';

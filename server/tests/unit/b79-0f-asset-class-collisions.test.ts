@@ -31,7 +31,9 @@ import {
 } from '../../../shared/asset-classes';
 import { UNIVERSE_BOOTSTRAP_SET } from '../../asset_classes/xstock_spot/universe-bootstrap.js';
 
-const USD_COLLISIONS = ['BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD'];
+const USD_COLLISIONS = ['BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
+  // `3n.q3` P9 / `#1145` — the 2026-10-02 re-audit
+  'A/USD','ADI/USD','CAT/USD','ES/USD','IR/USD','STRK/USD','STX/USD','WELL/USD'];
 
 // B79.0n.UNIVERSE-DISCOVERY 2026-05-21: registry is now DB-backed + empty at
 // module-init time. Tests below assume the 9 USD-collision symbols + the
@@ -57,20 +59,21 @@ beforeAll(() => {
   }
   _replaceXstockUniverse(fixture);
 });
-const EUR_COLLISIONS = ['CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR'];
+const EUR_COLLISIONS = ['CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR',
+  'A/EUR','ADI/EUR','CAT/EUR','ES/EUR','IR/EUR','STRK/EUR','STX/EUR','WELL/EUR'];
 
 describe('B79.0f — XSTOCK_SPOT_KRAKEN_COLLISIONS membership', () => {
-  it('contains exactly 17 entries (9 USD + 8 EUR pre-emptive)', () => {
-    expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.size).toBe(17);
+  it('contains exactly 33 entries (17 USD + 16 EUR — the 2026-10-02 re-audit added 8 of each)', () => {
+    expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.size).toBe(33);
   });
 
-  it('contains all 9 documented USD-quote collisions', () => {
+  it('contains all 17 documented USD-quote collisions', () => {
     for (const sym of USD_COLLISIONS) {
       expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.has(sym)).toBe(true);
     }
   });
 
-  it('contains all 8 documented EUR-quote collisions (regression-lock for /EUR extension)', () => {
+  it('contains all 16 documented EUR-quote collisions (regression-lock for /EUR extension)', () => {
     for (const sym of EUR_COLLISIONS) {
       expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.has(sym)).toBe(true);
     }

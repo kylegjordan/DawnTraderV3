@@ -213,3 +213,4 @@
 2026-09-29-b-sizing-inc2c-retire-portfolio-risk.sql
 2026-09-30-b-sizing-inc2e-retire-split-and-pattern-cap.sql
 2026-09-30-b-price-side-8a-p4c-inc3.sql
+2026-10-02-b-vts-no-decision-valve-shadow-arm.sql

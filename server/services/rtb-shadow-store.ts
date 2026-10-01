@@ -94,12 +94,15 @@ export interface ShadowPoolMemberRow {
 
 /** Realized outcome, written once at shadow close. */
 export interface ShadowPairingCloseOutcome {
-  grossPnl: number;
-  netPnl: number;
+  /** `3n.q3`: `null` on an unpriced close (`timeout_unpriced`) — and then net, R and the exit price are `null` too. */
+  grossPnl: number | null;
+  netPnl: number | null;
   rMultiple?: number | null;
-  closeReason: string;   // stop_hit | target_hit | shadow_max_hold | ...
-  exitPrice: number;
+  closeReason: string;   // stop_hit | target_hit | timeout | timeout_unpriced (3n.q3) | ...
+  exitPrice: number | null;
   holdingMs: number;
+  /** `3n.q3` P5: how the close was booked (`VtsBookingArm`). The column is NULL only on rows written before it existed. */
+  exitBookingArm: string;
 }
 
 /**
@@ -181,6 +184,7 @@ export async function updateShadowPairingOutcome(
            close_reason  = ${outcome.closeReason},
            exit_price    = ${outcome.exitPrice},
            holding_ms    = ${outcome.holdingMs},
+           exit_booking_arm = ${outcome.exitBookingArm},
            closed        = true,
            closed_at     = NOW()
      WHERE id = ${id}

@@ -515,9 +515,14 @@ export function getXstockName(pair: string): string | null {
  * is by-construction crypto. WARN log fires on this path so future drift
  * in the invariant is detectable.
  *
- * STANDING RULE: re-audit this set quarterly via `/0/public/AssetPairs`
- * (calendar trigger in MULTI_ASSET_VTS_EXPANSION_PLAN.md §10c.X). Kraken
- * adds tokens regularly; new collisions can emerge.
+ * STANDING RULE: re-audit this set quarterly via `/0/public/AssetPairs`.
+ * Kraken adds tokens regularly; new collisions can emerge.
+ * ⛔ `3n.q3` P9 (`#1075`, `#1145`) — RE-AUDITED 2026-10-02, AND THE MISS WAS REAL: the cited trigger
+ * (`MULTI_ASSET_VTS_EXPANSION_PLAN.md §10c.X`) never existed, the set went 145 days unaudited, and 8 tickers
+ * (A, ADI, CAT, ES, IR, STRK, STX, WELL — all on Kraken as BASE/USD AND BASE/EUR, AssetPairs 2026-10-02) were
+ * missing. A missing ticker resolves `xstock_spot` on `kraken`, so the VTS crypto lane stamped the STX and STRK
+ * TOKENS as xStocks and judged them against the equity's price: 79 instant fake target hits since 2026-09-01.
+ * The re-audit now has a real trigger: a scheduled system alert (`collision-set-reaudit`), re-armed at each audit.
  */
 export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
   'BDX/USD',  // xStock: Becton Dickinson | Crypto: BDX
@@ -529,6 +534,15 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
   'PEP/USD',  // xStock: PepsiCo          | Crypto: Pepe-related
   'SUI/USD',  // xStock: Sun Communities  | Crypto: Sui Network
   'T/USD',    // xStock: AT&T             | Crypto: T
+  // `3n.q3` P9 / `#1145` — the 2026-10-02 re-audit (Kraken AssetPairs wsname BASE/USD ∩ the live xStock universe):
+  'A/USD',    // xStock: Agilent
+  'ADI/USD',  // xStock: Analog Devices
+  'CAT/USD',  // xStock: Caterpillar
+  'ES/USD',   // xStock: Eversource
+  'IR/USD',   // xStock: Ingersoll Rand
+  'STRK/USD', // xStock: Strategy (STRK)  | Crypto: STRK — 16 crypto VTS closes mis-stamped xstock_spot since 09-01
+  'STX/USD',  // xStock: Seagate          | Crypto: STX  — 63 crypto VTS closes mis-stamped xstock_spot since 09-01
+  'WELL/USD', // xStock: Welltower
   // EUR-quote regression-locks: XSTOCK_SPOT_SYMBOLS is /USD-only today, but
   // these 8 tickers ALSO exist as Kraken crypto /EUR pairs. If a future
   // commit extends XSTOCK_SPOT_SYMBOLS to /EUR, the same collision arises.
@@ -542,6 +556,15 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
   'PEP/EUR',
   'SUI/EUR',
   'T/EUR',
+  // `3n.q3` P9: the 2026-10-02 additions — all eight are also Kraken crypto /EUR pairs (AssetPairs 2026-10-02).
+  'A/EUR',
+  'ADI/EUR',
+  'CAT/EUR',
+  'ES/EUR',
+  'IR/EUR',
+  'STRK/EUR',
+  'STX/EUR',
+  'WELL/EUR',
 ]);
 
 /*

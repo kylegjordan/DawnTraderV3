@@ -145,16 +145,26 @@ describe('B79.0g — vts-trade-persistence', () => {
       mockExecute.mockImplementationOnce(async () => ({ rows: [{ count: '0' }] } as any));
       const result = await bootstrapOpenTradesFromMemory([makeTrade('BTC/USD', 'crypto_spot')]);
       expect(result).toBe(1);
-      // Verify the re-resolve was invoked.
-      expect(resolverCalls.length).toBe(1);
+      // `3n.q3` P9: the trade CARRIES a valid class, so the ticker is not consulted (it was re-resolved before).
+      expect(resolverCalls.length).toBe(0);
       const inserts = dbCalls.filter((c) => c.sql.includes('INSERT INTO vts_open_trades'));
       expect(inserts.length).toBe(1);
     });
 
-    it('re-resolves asset_class via safeResolveAssetClass — defeats stale legacy values', async () => {
-      // Trade carries STALE assetClass='xstock_spot' from pre-B79.0f resolver.
-      // bootstrapOpenTradesFromMemory must re-resolve to crypto_spot.
-      const staleTrade = makeTrade('SUI/USD', 'xstock_spot');
+    // ⛔ `3n.q3` P9 (`#1075`, Langston-approved Step 2) — INVERTED. B79.0g re-resolved EVERY carried class from the ticker
+    // to defeat pre-B79.0f stale values; that same re-resolution turned a collision-ticker xStock (SUI, MET, …) into
+    // crypto_spot in memory AND in the table. Every trade has been stamped at source since B79.0f, so a VALID carried class
+    // is kept and the ticker is the fallback only for a missing or invalid one.
+    it('keeps a valid CARRIED class — a collision-ticker xStock stays xstock_spot; the ticker is not consulted', async () => {
+      const xs = makeTrade('SUI/USD', 'xstock_spot');
+      await bootstrapOpenTradesFromMemory([xs]);
+      expect(resolverCalls).toEqual([]);
+      expect(dbCalls.find((c) => c.sql.includes('INSERT INTO vts_open_trades'))).toBeDefined();
+      expect(xs.assetClass).toBe('xstock_spot');
+    });
+
+    it('re-resolves a MISSING or INVALID class from the ticker (the fallback)', async () => {
+      const staleTrade = makeTrade('SUI/USD', 'not_a_class');
       await bootstrapOpenTradesFromMemory([staleTrade]);
 
       // Verify re-resolve was called.
@@ -171,7 +181,7 @@ describe('B79.0g — vts-trade-persistence', () => {
     });
 
     it('skips trades whose symbol fails resolver (returns null)', async () => {
-      const unresolvable = makeTrade('UNKNOWN/USD', 'crypto_spot');
+      const unresolvable = makeTrade('UNKNOWN/USD', 'not_a_class'); // `3n.q3`: a valid carried class would not reach the resolver
       const result = await bootstrapOpenTradesFromMemory([unresolvable]);
       expect(result).toBe(0);
       // No INSERT should have happened (only the COUNT check).
@@ -181,15 +191,17 @@ describe('B79.0g — vts-trade-persistence', () => {
 
     it('seeds multiple trades when table is empty', async () => {
       const trades = [
-        makeTrade('SUI/USD', 'xstock_spot'),  // stale → re-resolves to crypto_spot
+        makeTrade('SUI/USD', 'xstock_spot'),  // `3n.q3`: carried, valid → kept (no longer re-resolved to crypto_spot)
         makeTrade('AAPL/USD', 'xstock_spot'), // stays xstock_spot
-        makeTrade('BTC/USD', 'crypto_spot'),
+        makeTrade('BTC/USD', 'not_a_class'),  // invalid → re-resolved from the ticker
       ];
       const result = await bootstrapOpenTradesFromMemory(trades);
       expect(result).toBe(3);
 
-      // 3 distinct re-resolves
-      expect(resolverCalls.length).toBe(3);
+      // only the invalid one consults the ticker
+      expect(resolverCalls).toEqual([{ symbol: 'BTC/USD', exchange: 'kraken' }]);
+      expect(trades[0].assetClass).toBe('xstock_spot');
+      expect(trades[2].assetClass).toBe('crypto_spot');
       // 3 INSERTs
       const inserts = dbCalls.filter((c) => c.sql.includes('INSERT INTO vts_open_trades'));
       expect(inserts.length).toBe(3);

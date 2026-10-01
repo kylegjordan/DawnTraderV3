@@ -38,7 +38,7 @@
 
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
-import { safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 
 /**
  * reorg-B4 (2026-06-25) — the CANONICAL shadow-exclusion predicate for every
@@ -406,7 +406,10 @@ export async function bootstrapOpenTradesFromMemory(
   let bootstrapped = 0;
   for (const trade of inMemoryTrades) {
     // Re-resolve asset_class — defeats stale value from pre-B79.0f resolver.
-    const reResolved = safeResolveAssetClass(trade.symbol, 'kraken');
+    // ⛔ `3n.q3` P9 (`#1075`): a CARRIED valid class is kept. Re-resolving from the ticker OVERWROTE it, in memory and in
+    // `vts_open_trades`, so a collision-ticker xStock trade (MET, DASH, …) became `crypto_spot` and its decision and booking
+    // inherited the wrong class. Every trade has been stamped at source since B79.0f; the ticker is the fallback only.
+    const reResolved = asValidAssetClass(trade.assetClass) ?? safeResolveAssetClass(trade.symbol, 'kraken');
     if (!reResolved) {
       console.warn(`[B79.0g][BOOTSTRAP] symbol=${trade.symbol} failed re-resolve; skipping`);
       continue;

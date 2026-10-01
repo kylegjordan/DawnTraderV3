@@ -140,6 +140,10 @@ Scope §4's tier-1 reads stand (valve `dd1f53726`, resolver `d3e643032`, alert `
 
 ---
 
+### P9 AMENDMENT (Step 3, 2026-10-02) — the collision re-run found 8 missing tickers, and two were contaminating the VTS — `#1145`
+Re-running the intersection (P9) found **14 tickers that are both an xStock and a Kraken crypto pair; the set held 9; 8 were missing** (A, ADI, CAT, ES, IR, STRK, STX, WELL). A missing ticker resolves `xstock_spot` on `kraken`, and the VTS crypto open stamps that class on the trade — so the STX and STRK TOKENS were judged against the equities' prices: **STX 63 of 63 and STRK 16 of 16 crypto-lane closes since 2026-09-01 are `TP_target_hit`, median hold 1.0 and 11.5 min, against 1,106 min for the other 888 crypto target hits.**
+**Built in Step 3:** the 8 tickers join the set (USD and EUR, 33 entries); the comment drops the non-existent `§10c.X` trigger. **Owed:** the re-audit's real trigger (a scheduled system alert, armed at Step 6) and the contaminated rows' exclusion selector in the `ADJUSTMENT_FRAMEWORK` register (Step 10). ⚖️ **For Langston at Step 4:** this changes what the resolver returns for 8 tickers on `exchange = 'kraken'` (now `crypto_spot`); xStock trades are stamped at source and unaffected, and the two re-derivation sites `#1075` named are fixed in this batch (P9).
+
 ## 3. Langston's three conditions — where each landed
 - **C1** (per-class counters, both lanes) → P7.
 - **C2** (the class of outcome computations, the third sink) → A3 (17 computations, four stores) → P2, P3, P4.

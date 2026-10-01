@@ -16,11 +16,15 @@
  *
  * THE ARMS, and why they are returned rather than hidden:
  *  - `bid`              — live mark, usable bid ⇒ the bid (either class; the caller's guard chose the bid).
- *  - `clamp_no_mark`    — no live mark (stale/entry-fallback force-close) ⇒ the evaluator's own price,
- *                         which is the entry-fallback on `stale_timeout` — never NaN, never 0. Unchanged.
- *  - `clamp_no_bid`     — ⚠️ NEW with `8a-P3`: a live mark but no usable bid ⇒ the clamp. The clamp is
- *                         the free-exit fiction this file exists to kill, and this set is strictly larger
- *                         than before, so the caller COUNTS it (Langston r1 F3).
+ *  - `clamp_no_mark`    — no live mark ⇒ NO PRICE (`3n.q3`). It used to book the evaluator's entry-fallback.
+ *  - `clamp_no_bid`     — a live mark but no usable bid ⇒ NO PRICE (`3n.q3`). It used to book the clamp (the mark).
+ *
+ * ⛔⛔ `3n.q3` B-VTS-NO-DECISION-VALVE (P1) — A CLAMP ARM BOOKS NOTHING. Both clamp arms are reachable ONLY at the max-hold
+ * valve: the VTS trigger IS the exit bid on both classes and both lanes, so a missing bid refuses every level decision
+ * (`tec-evaluator.ts` step 2b) and only the two valve arms above it can still fire. Kyle's rule for the price side: a SELL
+ * takes the BID, and a missing side ⇒ no decision. The valve is the one place a VTS sell is FORCED, so it closes the
+ * RECORD (we will not carry an unbounded observation) and books NO PRICE (we never saw one) — `price: null`, and the caller
+ * closes the trade `timeout_unpriced` with empty outcomes. The arm names stay: they say WHY there was no price.
  *  ⛔ `8a-P4c` increment 3 (P8b): the `clamp_class_seam` arm is GONE — xStock books on the same three arms as crypto,
  *     its bid from the VTS xStock exit guard (`selectVtsXstockExitBid` in vts-runner.ts). With no class branch left,
  *     the `assetClass` argument was unread and is removed (Langston Step-4 nit; §15 disposition (a)).
@@ -28,7 +32,8 @@
 export type VtsBookingArm = 'bid' | 'clamp_no_mark' | 'clamp_no_bid';
 
 export interface VtsBookedExit {
-  price: number;
+  /** `null` ⇔ a clamp arm: the exit closes with no recorded price (`3n.q3`). */
+  price: number | null;
   arm: VtsBookingArm;
 }
 
@@ -37,9 +42,8 @@ const usable = (x: number | null | undefined): x is number => x != null && Numbe
 export function resolveVtsBookedExitPrice(
   observedBid: number | null | undefined,
   observedMark: number | null | undefined,
-  clampPrice: number,
 ): VtsBookedExit {
-  if (!usable(observedMark)) return { price: clampPrice, arm: 'clamp_no_mark' };
-  if (!usable(observedBid)) return { price: clampPrice, arm: 'clamp_no_bid' };
+  if (!usable(observedMark)) return { price: null, arm: 'clamp_no_mark' };
+  if (!usable(observedBid)) return { price: null, arm: 'clamp_no_bid' };
   return { price: observedBid, arm: 'bid' };
 }

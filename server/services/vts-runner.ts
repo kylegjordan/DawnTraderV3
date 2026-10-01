@@ -89,6 +89,9 @@ import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled 
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
 import { resolveVtsBookedExitPrice, type VtsBookingArm } from '../core/trading/vts-exit-booking.js';
+import {
+  anyVtsExitCount, countersFor, countUnpricedArm, formatVtsExitCounters, newVtsExitCounters, resetVtsExitCounters,
+} from '../core/trading/vts-exit-counters.js';
 import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, vtsSpreadShareByLeg, vtsFeeByLeg, type EntryPriceBasis, type VtsFrictionBasis } from '../core/trading/vts-friction.js';
 import { noteVtsCloseFriction, vtsFrictionSinceBoot } from './vts-friction-ledger.js';
 import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-no-trigger-streak.js';
@@ -152,13 +155,13 @@ const VTS_CRYPTO_TOUCH_READERS: CryptoTouchReaders = {
   getCached: (s) => priceCache.getCachedPrice(s),
 };
 const _vtsTouch = {
-  exitLooks: 0,
-  exitNoTransactableSide: 0,
   entryFillLooks: 0,
   entryFillRefusedFirstLook: 0,
   entryFillRefusedSteady: 0,
-  bookedNoBidClamp: 0,
 };
+// ⛔ `3n.q3` P7 (Langston C1): the EXIT counters are keyed per asset class (`vts-exit-counters.ts` says why). The entry-fill
+// counters above stay crypto-only because the entry-fill guard is crypto-only.
+const _vtsExitByClass = newVtsExitCounters();
 const _vtsEntryFillLooked = new Set<string>();
 // ⛔⛔ `8a-P3` (Langston Step-4 BLOCKER-1) — THE PER-TRADE REFUSAL RAIL. A pooled per-pass total cannot tell one trade
 // starved for hours from many trades refusing once, and on VTS a refusal is NOT conservative: a skip advances no
@@ -177,7 +180,8 @@ const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
 // It clears ONLY on a real decision (`noDecisionReason === undefined`). The last reason rides into the alert body.
 const _vtsNoTriggerStreak = new Map<string, NoTriggerStreak>();
 // The shadow lane's floor (BLOCKER-1): one count, not a streak, so its starvation is visible without pooling into the real lane.
-const _vtsShadowTouch = { looks: 0, noTransactableSide: 0 };
+// `3n.q3` P7: per asset class, as on the real lane — it counted crypto only, so every xStock unpriced close would read 0.
+const _vtsShadowByClass = newVtsExitCounters();
 // `8a-P4c` increment 1 — the VTS xStock decision-quote instrument, one per lane. TELEMETRY ONLY: nothing reads it to
 // decide; every xStock decision still reads `last`. Pre-registration: `Scope Files/B_PRICE_SIDE_BY_JOB_8A_P4C_AUDIT_AND_PLAN.md` §B4.
 const _xsVtsInstrument = new XsVtsInstrument('vts');
@@ -1023,7 +1027,7 @@ export async function registerOpenShadowTrade(
     console.warn(
       `[reorg-B4][SHADOW_CAP] openShadowTrades at cap (${SHADOW_CAP}); rejecting NEW shadow for ` +
       `${input.symbol}/${input.strategy} (mode=${input.mode}). shadowDropCount=${shadowDropCount}. ` +
-      `This is a runaway backstop — the 6h TTL should keep steady-state well below the cap; ` +
+      `This is a runaway backstop — the 48h TTL should keep steady-state well below the cap; ` +
       `investigate if shadowDropCount climbs.`,
     );
     return null;
@@ -1211,6 +1215,10 @@ function getMaxOpenTrades(): number {
 // Batch 45+47f15: Post-close re-entry suppression — prevents same symbol+strategy from reopening
 // with identical setup. Two layers: time cooldown + setup-hash matching.
 const recentCloses: Map<string, number> = new Map(); // key → close timestamp
+/** `3n.q3` — READ-ONLY test seam: the close timestamp under a cooldown key (Langston C6 requires a test on the LEGACY key). */
+export function getVtsRecentCloseAt(key: string): number | undefined {
+  return recentCloses.get(key);
+}
 // B72: cooldown + hash tolerance/expiry from module='vts_runner'.
 function getReentryCooldownMs(): number {
   return getCachedNumberRequired('vts_runner', 'reentry_cooldown_ms', _VTS_GK);
@@ -1269,12 +1277,12 @@ const MAX_HOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (safety valve only)
 
 /**
  * P19-B8.5j — the max-hold master switch for the VTS lane. Gates BOTH the real
- * 7-day valve and the shadow 6h cap by resolving `enabled_vts` from
+ * 7-day valve and the shadow 48h cap by resolving `enabled_vts` from
  * `module_constants.max_hold_switch`. FAIL-SAFE: cold module throws / absent key
  * returns undefined → both resolve to OFF. When OFF, the call sites pass
  * `maxHoldMs: Infinity`, disabling the evaluator's timeout branch WITHOUT touching
  * `evaluateTECExit` (mirrors the active path's own `maxHoldMs: Infinity` idiom).
- * ⚠️ The VTS "max hold" is a zombie/stale-sim CLEANUP valve (7-day / 6h shadow), NOT a
+ * ⚠️ The VTS "max hold" is a zombie/stale-sim CLEANUP valve (7-day / 48h shadow), NOT a
  * 24h trade rule — so it ships ON (enabled_vts=true). Seeding it OFF (→ Infinity) would
  * re-introduce the pre-Batch-18I unbounded-trade-map bug (a B63 hotfix set MAX_HOLD_MS=Infinity;
  * Langston flagged it; B64 restored the valve — BATCH_64_SCOPE.md). The switch still EXISTS so
@@ -3195,6 +3203,305 @@ async function getIdealPoolPairs(): Promise<Array<{ symbol: string; pool: 'ideal
 }
 
 /**
+ * `3n.q3` P2 — the ONE exit-decision archive write for a closed real-lane VTS trade, used by the priced close and the
+ * unpriced close alike (moved here from the close loop, content unchanged except where `3n.q3` is marked). An unpriced
+ * close passes `null` for the price and every outcome, so the row carries `exit_price`, `pnl_pct` and `r_multiple` NULL.
+ * Fire-and-forget, try/catch wrapped — must never block the VTS exit loop.
+ */
+async function archiveVtsExit(
+  trade: OpenVirtualTrade,
+  c: {
+    exitReason: string;
+    exitArm: VtsBookingArm;
+    exitPrice: number | null;
+    pnlPercent: string | null;
+    grossPnl: number | null;
+    netPnl: number | null;
+    finalTradeMode: 'TARGET' | 'TRAILING_TAKE';
+    now: number;
+  },
+): Promise<void> {
+  const { exitReason, exitArm, exitPrice, pnlPercent, grossPnl, netPnl, finalTradeMode, now } = c;
+  // B70 Step 3.5: exit-decision archive — actual exit (parallel to B73 counterfactual).
+  // Fire-and-forget, try/catch wrapped — must never block the VTS exit loop.
+  try {
+    const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
+    const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'time_stop_unpriced' | 'other'> = {
+      stop_hit: 'SL_hit',
+      target_hit: 'TP_target_hit',
+      trailing_stop_hit: 'TRAIL_hit',
+      moonbag_timeout: 'TRAIL_hit',
+      break_even_stop: 'BE_stop',
+      timeout: 'time_stop',
+      // `3n.q3` (Langston C3): its own value, or it funnels to 'other'. The archive's `time_stop` family.
+      timeout_unpriced: 'time_stop_unpriced',
+    };
+    const mappedReason = exitReasonMap[exitReason] ?? 'other';
+    // openedAt is stored as a number (ms epoch) per OpenVirtualTrade interface,
+    // not a Date — calling .getTime() throws and silently failed every exit
+    // until 2026-05-05.
+    const openedAtMs =
+      typeof trade.openedAt === 'number'
+        ? trade.openedAt
+        : new Date(trade.openedAt as any).getTime();
+    const durationMin = (now - openedAtMs) / 60000;
+    // ⛔ `3n.q3` P4 (`#546`): the EXIT price is guarded too — it guarded entry and stop only, so a missing exit was not
+    // NaN-proof here. An unpriced close has no R.
+    const rMultiple =
+      exitPrice !== null && Number.isFinite(exitPrice) && trade.entryPrice && trade.stopLoss && trade.entryPrice !== trade.stopLoss
+        ? (exitPrice - trade.entryPrice) / Math.abs(trade.entryPrice - trade.stopLoss)
+        : undefined;
+    archiveExitDecision({
+      mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
+      tradeId: trade.id,
+      symbol: trade.symbol,
+      exchange: 'kraken',
+      // ⛔ `3n.q3` P9 (`#1075`): the CARRIED class — the ticker re-derivation labelled every collision-ticker xStock close
+      // (MET, DASH, CVX, …) `crypto_spot`. The ticker resolver is only the fallback for a missing or invalid stamp.
+      assetClass: asValidAssetClass(trade.assetClass) ?? vtsResolveClassOrLoggedDefault(trade.symbol),
+      source: 'vts-runner',
+      strategy: trade.strategy,
+      exitReason: mappedReason,
+      entryPrice: trade.entryPrice,
+      exitPrice: exitPrice ?? undefined,
+      pnlPct: pnlPercent !== null ? Number(pnlPercent) : undefined,
+      rMultiple,
+      durationMin,
+      regimeAtEntry: trade.regime,
+      dbsAtEntry: trade.pairDirectionalBiasScore,
+      // B70.2 (2026-05-05) — full closed-trade context per Kyle directive.
+      // Capture every field that appears in the closed-trades CSV export.
+      stateSnapshot: {
+        // Exit semantics
+        rawExitReason: exitReason,
+        // `3n.q3` OBJ-2: the booking arm on the archive row too — for an unpriced close this row is the ONLY durable record.
+        exitBookingArm: exitArm,
+        tradeMode: finalTradeMode,
+        ladderRungsHit: trade.ladderRungsHit ?? 0,
+        originalStopPrice: trade.originalStopPrice,
+        latchTriggerPrice: trade.latchTriggerPrice,
+        rungTargetHistory: trade.rungTargetHistory,
+        // Trade economics (raw values; pnlPct flat already)
+        dollarValue: trade.positionSize,
+        quantity: trade.quantity,
+        target: trade.takeProfit,
+        stopLoss: trade.stopLoss,
+        grossPnl,
+        netPnl,
+        fees: trade.fees ?? null,
+        // Signal context at entry
+        signalType: trade.signalType,
+        patternType: trade.patternType,
+        pool: trade.pool,
+        sourcePool: trade.sourcePool,
+        filterTier: trade.filterTier,
+        // Scoring
+        finalScore: trade.finalScore ?? 0, // #558 A2: coalesce (field now optional/unwritten)
+        hybridScore: trade.hybridScore,
+        predictiveConfidence: trade.predictiveConfidence,
+        expectedEdge: trade.expectedEdge,
+        decayPenalty: trade.decayPenalty,
+        // Regime + bias context
+        globalRegime: trade.globalRegime,
+        pairFriction: trade.pairFriction,
+        globalFriction: trade.globalFriction,
+        pairDirectionalBias: trade.pairDirectionalBias,
+        globalDirectionalBias: trade.globalDirectionalBias,
+        pairDirectionalBiasScore: trade.pairDirectionalBiasScore,
+        globalDirectionalBiasScore: trade.globalDirectionalBiasScore,
+        // Confidence chain (raw + modulated)
+        regimeWeight: trade.regimeWeight,
+        regimeConfidenceRaw: trade.regimeConfidenceRaw,
+        regimeConfidenceModulated: trade.regimeConfidenceModulated,
+        macroModifierValue: trade.macroModifierValue,
+        phase: trade.phase,
+        phaseAgeSeconds: trade.phaseAgeSeconds,
+        strategyPhaseWeight: trade.strategyPhaseWeight,
+        // Cohort marker
+        pairIdHash: trade.pairIdHash,
+        // ATR at open (B73.1)
+        atrAtOpen: trade.atrAtOpen,
+        // ── B-TRADE-RECORD-RETENTION leg 2 (2026-07-30) — entry-mode preservation ──
+        // These four live ONLY as typed columns on vts_open_trades (split out of the
+        // `context` residue by splitTradeForPersist), and that table's closed rows are
+        // hard-DELETEd by the boot GC with no archive leg. Archiving them here is the
+        // forward-protection half: from now on the entry-mode record survives the sweep.
+        // Scoped to exactly these four by measurement — `pool` and every key the
+        // factor-replay consumer reads off `context` are already present above, and
+        // `calibration_state` is preserved independently on the alternates row.
+        // ⚠️ maker* are MAKER-PATH-ONLY by design: null on a taker row is a legitimate
+        // value, not an absence (verified: 0 of 1,822 taker rows carry them).
+        //
+        // ★ PER-KEY RATIONALE — they are NOT equally load-bearing, and an earlier draft
+        // of this batch's docs wrongly credited maker_limit_price with the work that
+        // chosen_entry_mode + entry_fee_rate actually do (Langston, Step-4):
+        //   chosenEntryMode + entryFeeRate — THE maker-vs-taker entry-policy record.
+        //     Nothing else preserves them for the VTS corpus. Genuinely unrecoverable.
+        //   makerLimitPrice — ⚠️ NOT unrecoverable. On a MAKER row it equals entryPrice (every
+        //     maker writer — crypto open, xStock open, the maker twin's overlay since `8a-P4c` 3b —
+        //     sets entryPrice to its limit; a maker fills AT its limit and entryPrice is never
+        //     rewritten). A TAKER row books the ask as entryPrice and carries no makerLimitPrice.
+        //     entryPrice is already archived above.
+        //     Kept for ONE reason only: it keeps the archived row self-contained and
+        //     gives a coherence check if a future writer ever diverges limit from entry.
+        //   makerDeadline — ★ THE ONE THAT EARNS ITS KEY. Set at placement as
+        //     `Date.now() + resolveMakerMaxPendingMs(assetClass)` (same instant as
+        //     openedAt in practice, but it is NOT an exact derivation from it — do not
+        //     teach it as one), and `maker_max_pending_ms` is a TUNABLE. Once that knob
+        //     moves you cannot recover the patience budget an order was actually working
+        //     under — exactly what a fill-rate-versus-patience read needs.
+        //
+        // ⚠️ WHY THESE KEY NAMES WERE VERIFIED AGAINST THE INTERFACE — and the mechanism
+        // corrected (Langston, Step-4): the risk is NOT on the read side. There is no
+        // index signature in this file, so `trade.<typo>` would FAIL tsc. The exposure is
+        // entirely on the WRITE side — this snapshot is untyped jsonb, so a mistyped KEY
+        // here archives silently, forever, with nothing failing. Same class as the
+        // B-NEW-53.1 hollow-capture defect. Verify the KEY, not just the field.
+        //
+        // ⚠️ THE 186-vs-150 GAP IS NOT A SYMPTOM — my candidate was REFUTED from the code
+        // (Langston): the marketable fallback sets `_vtsEffectiveMode='taker'` and the
+        // stamp is the EFFECTIVE mode, so an "effective-maker row that never went pending"
+        // CANNOT EXIST; `planTwin` gives taker twins both fields `undefined`. What I
+        // actually did was split on the DATE 2026-07-02 when B7.2c landed MID-DAY, so
+        // maker rows opened that morning are feature-age but fell in my after-bucket.
+        // ★★ RE-SPLIT DONE — THERE IS NO ANOMALY. Boundary = the B7.2c commit
+        // 2026-07-02 18:31:26Z (crypto) / B7.2d 22:45:51Z (xStock), i.e. the EARLIEST
+        // possible deploy, so the test is conservative against my own claim. Result:
+        //   crypto_spot 181 maker rows — 33 pre-commit, 148 post-commit, 0 MISSING
+        //   xstock_spot   5 maker rows —  3 pre-commit,   2 post-commit, 0 MISSING
+        // ⇒ ZERO post-deploy maker rows lack the columns, and 33 + 3 = 36 reconciles
+        // EXACTLY to the gap (186 − 36 = 150). The "24 unexplained" was ENTIRELY an
+        // artifact of splitting on the DATE 2026-07-02 when the feature landed at 18:31Z
+        // that day. The data now agrees with the code: no path produces a maker-chosen
+        // row without these columns. NOTHING TO FILE.
+        chosenEntryMode: trade.chosenEntryMode,
+        entryFeeRate: trade.entryFeeRate,
+        makerLimitPrice: trade.makerLimitPrice,
+        makerDeadline: trade.makerDeadline,
+      },
+    });
+  } catch (b70Err) {
+    console.warn(
+      `[B70][ARCH] vts exit-decision archive enqueue failed:`,
+      b70Err instanceof Error ? b70Err.message : b70Err,
+    );
+  }
+}
+
+/**
+ * `3n.q3` P2 — the finishing steps of a real-lane VTS close, used by the priced close and the unpriced close alike (moved
+ * here from the close loop, content unchanged): Map delete FIRST, the soft-close, the re-entry cooldown (BOTH keys for
+ * crypto — Langston C6: a single-key write re-opens the same crypto symbol/strategy next cycle), the trailing state.
+ */
+async function finishVtsClose(id: string, trade: OpenVirtualTrade): Promise<void> {
+  // Remove from open trades registry FIRST (synchronous, can't fail).
+  // The Map gate is the correctness invariant against re-running the
+  // non-idempotent close cascade (persistRealPriceTrade → closedTrades.push,
+  // session P&L, JSON ledger, B73 ablation replay, B70 archive enqueue,
+  // ML calibration). Must run before the soft-delete UPDATE so a thrown
+  // UPDATE cannot let the next exit cycle re-evaluate this trade and
+  // double-execute the cascade.
+  openVirtualTrades.delete(id);
+  // B79.0g-tx: AWAITED soft-delete UPDATE (no re-throw). Replaces the
+  // B79.0g fire-and-log async DELETE. UPDATE is idempotent via
+  // `WHERE closed=false`. If this fails, the DB row stays closed=false
+  // and rehydrate-on-next-boot re-adds the trade to the Map; a
+  // subsequent close cycle retries the cascade idempotently. Soft-
+  // delete is NOT a transactional close-time invariant — only Option C
+  // would be; this is observability + bounded-history for vts_open_trades.
+  try {
+    const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
+    await markOpenTradeClosed(id);
+  } catch (err) {
+    console.error(
+      `[B79.0g-tx][MARK_CLOSED_FAIL] trade=${id} soft-delete UPDATE failed; ` +
+      `JSON ledger + session metrics OK; DB row stays closed=false until rehydrate-on-next-boot ` +
+      `re-adds to Map and a subsequent close cycle retries. Investigate if recurring:`,
+      err instanceof Error ? err.message : err,
+    );
+    // Intentional: do NOT re-throw. Re-throw would let the next exit
+    // cycle re-execute the non-idempotent close cascade.
+  }
+  // Batch 45: Record close timestamp for re-entry cooldown.
+  // B79.0m.b2: assetClass-keyed namespace so xstock closes don't block crypto
+  // re-entries (or vice versa). The crypto-side generatePhase10Signal check
+  // at line 1258 still reads the legacy `${symbol}:${strategy}` key; write
+  // BOTH formats during the transition so neither path misses cooldowns.
+  // Future cleanup: migrate generatePhase10Signal to assetClass-keyed format
+  // and drop the legacy write.
+  // P19-B6.5d (Langston JC#3): a STAMP read, not a resolver — prefer the carried trade
+  // stamp; on a missing/invalid stamp, LOG the mislabel (passive telemetry, never silent)
+  // before the crypto_spot cooldown-key default. Folded in so vts-runner is fully
+  // consistent with the five sibling default-sites converted this batch.
+  const _cooldownStamp = asValidAssetClass(trade.assetClass);
+  if (_cooldownStamp === null) {
+    console.warn(`[P19-B6.5d][VTS] cooldown-key: trade ${trade.symbol}/${trade.strategy} missing/invalid asset-class stamp — labeled crypto_spot (logged passive default)`);
+  }
+  const assetClass = _cooldownStamp ?? 'crypto_spot';
+  recentCloses.set(`${assetClass}:${trade.symbol}:${trade.strategy}`, Date.now());
+  if (assetClass === 'crypto_spot') {
+    recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
+  }
+
+  // B65.2 / B80 (2026-05-13): clear trailing engine state for THIS TRADE.
+  // Pre-B80 keyed by symbol — wiped state for ALL concurrent trades on the
+  // symbol. Post-B80 keyed by tradeId — only this trade's state is cleared,
+  // other concurrent trades on the same symbol are untouched.
+  await clearVtsTrailingState(id, trade.symbol);
+}
+
+/** B65.2 / B80: clear the TEC trailing state for THIS trade (keyed by trade id since B80). Never throws. */
+async function clearVtsTrailingState(id: string, symbol: string): Promise<void> {
+  try {
+    const { clearTrailingState } = await import('./trailing-exit-controller.js');
+    clearTrailingState(id);
+  } catch (err) {
+    console.error(`[B65.2][TEC] Failed to clear trailing state for tradeId=${id} symbol=${symbol}:`, err);
+  }
+}
+
+/**
+ * ⛔⛔ `3n.q3` B-VTS-NO-DECISION-VALVE (P2) — THE UNPRICED CLOSE. A max-hold exit with no usable sell side (the arm says
+ * which: `clamp_no_bid` a live mark without a bid, `clamp_no_mark` no live mark) closes the RECORD — we will not carry an
+ * unbounded observation — and books NO PRICE, because we never saw one.
+ * WHAT IT WRITES: the trade leaves the open Map, its row is soft-closed, its cooldown and trailing state are handled exactly
+ * as a priced close's, and ONE exit-decision archive row records it (`time_stop_unpriced`, price/P&L/R NULL, the arm and the
+ * carried class in the row). A TWIN writes no archive row and no comparison record (twins never archive).
+ * WHAT IT NEVER WRITES, BY CONSTRUCTION: friction, `phase10SessionTrades`, telemetry, `persistRealPriceTrade` (the
+ * `virtual_trades` JSON, `closedTrades`, ML, session P&L, the B73 replay, outcome feedback).
+ */
+export async function closeVtsTradeUnpriced(
+  id: string,
+  trade: OpenVirtualTrade,
+  exitArm: VtsBookingArm,
+  now: number,
+  holdDurationStr: string,
+): Promise<void> {
+  const isTwin = (trade as any).mtTwin === true;
+  if (isTwin) {
+    openVirtualTrades.delete(id);
+    try {
+      const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
+      await markOpenTradeClosed(id);
+    } catch (err) {
+      console.error(`[3n.q3][VTS_UNPRICED_CLOSE] twin ${id} soft-close failed:`, err instanceof Error ? err.message : err);
+    }
+    await clearVtsTrailingState(id, trade.symbol);
+  } else {
+    const { getTrailingState } = await import('./trailing-exit-controller.js');
+    const finalTradeMode: 'TARGET' | 'TRAILING_TAKE' = getTrailingState(id)?.tradeMode ?? 'TARGET';
+    await archiveVtsExit(trade, {
+      exitReason: 'timeout_unpriced', exitArm, exitPrice: null, pnlPercent: null, grossPnl: null, netPnl: null, finalTradeMode, now,
+    });
+    await finishVtsClose(id, trade);
+  }
+  const _c = countersFor(_vtsExitByClass, trade.assetClass);
+  if (_c) _c.closedUnpriced++;
+  console.warn(`[3n.q3][VTS_UNPRICED_CLOSE] ${trade.symbol} trade ${id} class=${trade.assetClass} arm=${exitArm} `
+    + `held=${holdDurationStr}${isTwin ? ' twin (no record)' : ''} — max-hold reached with no usable sell side; closed with no price`);
+}
+
+/**
  * Directive 11.6 Task 4: Resolution Loop
  * Checks real Kraken prices against open virtual trades and closes them when stop/target is hit
  * Runs aligned with VTS simulation cycle (every 60 seconds)
@@ -3210,7 +3517,8 @@ async function resolveOpenVirtualTrades(): Promise<{
   let stopHits = 0;
   let targetHits = 0;
   let timeouts = 0;
-  
+  let unpriced = 0; // `3n.q3` P2: unpriced closes are not stops, targets or timeouts — counted on their own
+
   if (openVirtualTrades.size === 0) {
     return { resolved, stopHits, targetHits, timeouts };
   }
@@ -3313,9 +3621,10 @@ async function resolveOpenVirtualTrades(): Promise<{
   const tradesToClose: Array<{
     id: string;
     trade: OpenVirtualTrade;
-    exitPrice: number;
-    exitReason: 'stop_hit' | 'target_hit' | 'timeout' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop';
-    /** `8a-P4c` 3a-ii (P14): how the exit was booked — its spread half is charged only on a clamp arm. */
+    /** `3n.q3` P1: `null` ⇔ an unpriced close (`timeout_unpriced`): no booked price, no outcome. */
+    exitPrice: number | null;
+    exitReason: 'stop_hit' | 'target_hit' | 'timeout' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop' | 'timeout_unpriced';
+    /** `8a-P4c` 3a-ii (P14): how the exit was booked. `3n.q3`: a clamp arm now means the exit carries NO price. */
     exitArm: VtsBookingArm;
   }> = [];
   
@@ -3430,6 +3739,14 @@ async function resolveOpenVirtualTrades(): Promise<{
       );
       continue;
     }
+    // ⛔ `3n.q3` P1 — a class VTS does not trade is skipped, LOGGED, never evaluated. Its trigger would stay the mark with no
+    // exit bid (only crypto and xStock set `_vtsExitBid` below), so a stop or target would reach a clamp arm and, under P1,
+    // close with no price. At OPEN the class can only be one of the two (`safeResolveAssetClass`); on REHYDRATE it is cast
+    // from the row unvalidated — this is the guard for that path.
+    if (trade.assetClass !== 'crypto_spot' && trade.assetClass !== 'xstock_spot') {
+      console.error(`[3n.q3][VTS_CLASS_UNSUPPORTED] trade ${tradeId} symbol=${trade.symbol} class=${trade.assetClass} — skipping exit eval`);
+      continue;
+    }
     // B80 (2026-05-13): Option C+ rehydrate seed. Built once on the first
     // exit-cycle for an open trade post-deploy (when TEC engine has no state
     // for this tradeId yet). Passes through trade-record fields so the
@@ -3466,6 +3783,9 @@ async function resolveOpenVirtualTrades(): Promise<{
     // (`no_transactable_side`), never a midpoint fallback. xStock: its guarded bid (`8a-P4c` 3a-i, below).
     let _vtsExitBid: number | null = null;
     let _vtsTriggerPrice: number | null = currentPrice;
+    // `3n.q3` P8 (OBJ-4): the selector's OWN refusal, carried into the no-decision streak and the alert body — the two
+    // ceilings cannot explain a crossed book.
+    let _vtsExitRefusal: string | null = null;
     if (trade.assetClass === 'xstock_spot') {
       // `8a-P4c` increment 3 (P8a): xStock triggers on the GUARDED BID — `null` ⇒ no decision this cycle. The instrument
       // records the look with the ceiling actually applied (S1).
@@ -3474,6 +3794,8 @@ async function resolveOpenVirtualTrades(): Promise<{
       _xsVtsInstrument.recordLook(trade.symbol, _xsRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _xsExit);
       _vtsExitBid = _xsExit.bid;
       _vtsTriggerPrice = _vtsExitBid;
+      _vtsExitRefusal = _xsExit.bid === null ? _xsExit.reason : null;
+      _vtsExitByClass.xstock_spot.exitLooks++;
     }
     if (trade.assetClass === 'crypto_spot') {
       const _et = selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
@@ -3481,7 +3803,8 @@ async function resolveOpenVirtualTrades(): Promise<{
       });
       _vtsExitBid = transactableSide(_et.selection, 'sell');
       _vtsTriggerPrice = _vtsExitBid;
-      _vtsTouch.exitLooks++;
+      _vtsExitRefusal = _et.selection.ok ? (_vtsExitBid === null ? 'no_bid_side' : null) : _et.selection.tickerRefusal;
+      _vtsExitByClass.crypto_spot.exitLooks++;
       try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_exit_trigger' }, _et.selection); } catch { /* a recorder never breaks the resolve loop */ }
     }
     let decision: Awaited<ReturnType<typeof evaluateTECExit>>;
@@ -3516,7 +3839,10 @@ async function resolveOpenVirtualTrades(): Promise<{
         // B80: Option C+ seed (only on first cycle post-restart).
         seed: tecSeed,
       });
-      if (decision.noDecisionReason === 'no_transactable_side') _vtsTouch.exitNoTransactableSide++;
+      if (decision.noDecisionReason === 'no_transactable_side') {
+        const _c = countersFor(_vtsExitByClass, trade.assetClass);
+        if (_c) _c.exitNoTransactableSide++;
+      }
       // `8a-P4c` increment 3 (P10, rule C / Kyle's `#994`; Langston Step-4 FINDING-1): xStock JOINS the rail, keyed on the
       // trade id. Kyle cut the PAGE, not the measurement: the STREAK is tracked in every session for both classes, and
       // only the page is gated — an xStock no-decision pages only on time spent in the US `regular` session, whose clock
@@ -3527,7 +3853,9 @@ async function resolveOpenVirtualTrades(): Promise<{
         && (isInXstockWeekendClose(new Date()) || getXstockSession(Date.now()) !== 'regular');
       const _ntPages = trade.assetClass === 'crypto_spot' || (trade.assetClass === 'xstock_spot' && !_ntXsOffHours);
       const _ntNow = Date.now();
-      const _ntStep = stepNoTriggerStreak(_vtsNoTriggerStreak.get(tradeId), decision.noDecisionReason, _ntPages, _ntNow,
+      const _ntReason = decision.noDecisionReason === 'no_transactable_side' && _vtsExitRefusal !== null
+        ? `no_transactable_side (${_vtsExitRefusal})` : decision.noDecisionReason;
+      const _ntStep = stepNoTriggerStreak(_vtsNoTriggerStreak.get(tradeId), _ntReason, _ntPages, _ntNow,
         VTS_NO_TRIGGER_ALERT_AFTER_MS);
       if (_ntStep.next) _vtsNoTriggerStreak.set(tradeId, _ntStep.next);
       else _vtsNoTriggerStreak.delete(tradeId);
@@ -3554,9 +3882,11 @@ async function resolveOpenVirtualTrades(): Promise<{
                   + `this rail pages in the US regular session only); \`no_usable_mark\` means `
                 : `exit ceilings (${VTS_EXIT_TOUCH_MAX_AGE_MS} ms, ${VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION * 100}% spread); \`no_usable_mark\` means `)
               + `no live price at all. While this lasts the trade's stop and target are NOT evaluated, `
-              + `its high-water mark and latches do not advance, and if it reaches the max-hold valve it books a timeout at the `
-              + `mark — a wrong outcome in the post-epoch VTS corpus. Read the symbol's cached sides first (a bid equal to the ask `
-              + `means the cache never received real sides) before touching either ceiling. `
+              + `its high-water mark and latches do not advance, and if it reaches the max-hold valve it closes with NO recorded `
+              + `price (\`time_stop_unpriced\`) — kept out of every outcome, but its stop or target may have been missed. The reason `
+              + `in brackets is the selector's own refusal: a ceiling (\`too_old\`, \`too_wide\`, a stale age) can be tuned; a `
+              + `\`crossed_book\` or a one-sided book cannot be fixed by any ceiling. Read the symbol's cached sides first (a bid `
+              + `equal to the ask means the cache never received real sides) before touching either ceiling. `
               + `DISPOSITION: RESOLVE this row, do not ACK it — an ack silences the dedupe key permanently; resolving re-arms it.`,
             dedupe_key: `no-trigger-vts-${trade.symbol}`,
           });
@@ -3676,23 +4006,28 @@ async function resolveOpenVirtualTrades(): Promise<{
     // longer the mark. A live mark with no usable bid falls to the clamp arm and is COUNTED: that arm is the
     // free-exit fiction, and without the counter its growth past today's "no live mark" set is invisible
     // (Langston r1 F3). xStock books on the same arms since `8a-P4c` increment 3. Shared resolver with the shadow lane.
-    const _vtsBooked = resolveVtsBookedExitPrice(_vtsExitBid, currentPrice, decision.exitPrice);
-    if (_vtsBooked.arm === 'clamp_no_bid') _vtsTouch.bookedNoBidClamp++;
+    // ⛔ `3n.q3` P1: a clamp arm books NO price — the trade closes `timeout_unpriced`. Only the valve reaches a clamp arm
+    // (`vts-exit-booking.ts` says why), so a level exit is never relabelled here.
+    const _vtsBooked = resolveVtsBookedExitPrice(_vtsExitBid, currentPrice);
+    if (_vtsBooked.price === null) countUnpricedArm(countersFor(_vtsExitByClass, trade.assetClass), _vtsBooked.arm);
     tradesToClose.push({
       id: tradeId,
       trade,
       exitPrice: _vtsBooked.price,
-      exitReason: normalizedReason,
+      exitReason: _vtsBooked.price === null ? 'timeout_unpriced' : normalizedReason,
       exitArm: _vtsBooked.arm,
     });
   }
   
   // `8a-P3` — one line per resolve pass when there was anything to look at, denominators beside numerators, then reset.
-  if (_vtsTouch.exitLooks + _vtsTouch.entryFillLooks > 0) {
-    console.log(`[8a-P3][VTS_TOUCH] exitLooks=${_vtsTouch.exitLooks} exitNoTransactableSide=${_vtsTouch.exitNoTransactableSide} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} bookedNoBidClamp=${_vtsTouch.bookedNoBidClamp} openNoTriggerStreaks=${_vtsNoTriggerStreak.size} `
+  // `3n.q3` P7: printed when ANY class has a count (a pass holding only xStock trades used to print nothing). The reset
+  // runs BEFORE the close loop below, so a pass's `closedUnpriced` lands on the NEXT pass's line.
+  if (anyVtsExitCount(_vtsExitByClass) || _vtsTouch.entryFillLooks > 0) {
+    console.log(`[8a-P3][VTS_TOUCH] ${formatVtsExitCounters(_vtsExitByClass)} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} openNoTriggerStreaks=${_vtsNoTriggerStreak.size} `
       + `frictionSinceBoot=${(({ recomposed, legacyBasis, refused, unpriced }) => `recomposed:${recomposed},legacyBasis:${legacyBasis},refused:${refused},unpriced:${unpriced}`)(vtsFrictionSinceBoot())}`);
   }
   for (const k of Object.keys(_vtsTouch) as Array<keyof typeof _vtsTouch>) _vtsTouch[k] = 0;
+  resetVtsExitCounters(_vtsExitByClass);
   _xsVtsInstrument.endPass(); // `8a-P4c` increment 1 — `console.warn`, so it lands in the ~14-day error.log
   // Prune per-trade state for trades that left by ANY path, not only the fill/decision paths (Langston Step-4 nit).
   for (const id of Array.from(_vtsNoTriggerStreak.keys())) if (!openVirtualTrades.has(id)) _vtsNoTriggerStreak.delete(id);
@@ -3706,7 +4041,19 @@ async function resolveOpenVirtualTrades(): Promise<{
   for (const { id, trade, exitPrice, exitReason, exitArm } of tradesToClose) {
     const holdDurationMs = now - trade.openedAt;
     const holdDurationStr = formatHoldDuration(holdDurationMs);
-    
+
+    // ⛔⛔ `3n.q3` P2 — AN UNPRICED CLOSE LEAVES HERE, BEFORE ANY OUTCOME IS COMPUTED. Every reader of a closed VTS outcome
+    // (17 computations over four stores — the Step-2 census) would turn a null exit into a NUMBER (`null − entry` is
+    // `−entry`, a −100% loss), and the `virtual_trades` JSON is read by the SQE's predictive confidence with no exclusion
+    // flag (`#1141`). So the record is closed and archived with empty outcomes, and NOTHING else is written.
+    // (The two conditions are one fact — the push site sets `timeout_unpriced` exactly when the price is null — and both are
+    // tested so the compiler narrows BOTH the price and the reason on the priced path below.)
+    if (exitPrice === null || exitReason === 'timeout_unpriced') {
+      await closeVtsTradeUnpriced(id, trade, exitArm, now, holdDurationStr);
+      unpriced++;
+      continue;
+    }
+
     // Calculate P&L
     const grossPnl = (exitPrice - trade.entryPrice) / trade.entryPrice;
     // ⛔ `8a-P4c` increment 3a-ii (P14, Langston BLOCKER-1): friction is RECOMPOSED AT CLOSE from the stored parts under
@@ -3758,6 +4105,9 @@ async function resolveOpenVirtualTrades(): Promise<{
       } catch (twinCloseErr) {
         console.error(`[P19-B7.2c][VTS][TWIN_CLOSE_FAIL] ${id}:`, twinCloseErr instanceof Error ? twinCloseErr.message : twinCloseErr);
       }
+      // ⚠️ `3n.q3` (fix-on-find, Step-2 reader r3): a twin is evaluated by the same TEC engine, so it has per-trade trailing
+      // state — and this path never cleared it, so every closed twin kept its state in memory until a restart.
+      await clearVtsTrailingState(id, trade.symbol);
       continue;
     }
 
@@ -3937,225 +4287,11 @@ async function resolveOpenVirtualTrades(): Promise<{
       console.error(`[11.6C][Error] Failed to persist ${trade.symbol}:`, error);
     }
     
-    // B70 Step 3.5: exit-decision archive — actual exit (parallel to B73 counterfactual).
-    // Fire-and-forget, try/catch wrapped — must never block the VTS exit loop.
-    try {
-      const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
-      const { safeResolveAssetClass } = await import('../../shared/asset-classes.js'); // P19-B3a #139: safe variant (alarms + crypto_spot fallback at use site)
-      const exitReasonMap: Record<string, 'BE_stop' | 'SL_hit' | 'TP_target_hit' | 'TRAIL_hit' | 'time_stop' | 'other'> = {
-        stop_hit: 'SL_hit',
-        target_hit: 'TP_target_hit',
-        trailing_stop_hit: 'TRAIL_hit',
-        moonbag_timeout: 'TRAIL_hit',
-        break_even_stop: 'BE_stop',
-        timeout: 'time_stop',
-      };
-      const mappedReason = exitReasonMap[exitReason] ?? 'other';
-      // openedAt is stored as a number (ms epoch) per OpenVirtualTrade interface,
-      // not a Date — calling .getTime() throws and silently failed every exit
-      // until 2026-05-05.
-      const openedAtMs =
-        typeof trade.openedAt === 'number'
-          ? trade.openedAt
-          : new Date(trade.openedAt as any).getTime();
-      const durationMin = (now - openedAtMs) / 60000;
-      const rMultiple =
-        trade.entryPrice && trade.stopLoss && trade.entryPrice !== trade.stopLoss
-          ? (exitPrice - trade.entryPrice) / Math.abs(trade.entryPrice - trade.stopLoss)
-          : undefined;
-      archiveExitDecision({
-        mode: 'vts', // ITEM-4 step 2 (D1): carried entry-stamp
-        tradeId: trade.id,
-        symbol: trade.symbol,
-        exchange: 'kraken',
-        assetClass: vtsResolveClassOrLoggedDefault(trade.symbol), // P19-B6.5d (was safeResolve ?? crypto_spot silent default)
-        source: 'vts-runner',
-        strategy: trade.strategy,
-        exitReason: mappedReason,
-        entryPrice: trade.entryPrice,
-        exitPrice,
-        pnlPct: pnlPercent !== undefined ? Number(pnlPercent) : undefined,
-        rMultiple,
-        durationMin,
-        regimeAtEntry: trade.regime,
-        dbsAtEntry: trade.pairDirectionalBiasScore,
-        // B70.2 (2026-05-05) — full closed-trade context per Kyle directive.
-        // Capture every field that appears in the closed-trades CSV export.
-        stateSnapshot: {
-          // Exit semantics
-          rawExitReason: exitReason,
-          tradeMode: finalTradeMode,
-          ladderRungsHit: trade.ladderRungsHit ?? 0,
-          originalStopPrice: trade.originalStopPrice,
-          latchTriggerPrice: trade.latchTriggerPrice,
-          rungTargetHistory: trade.rungTargetHistory,
-          // Trade economics (raw values; pnlPct flat already)
-          dollarValue: trade.positionSize,
-          quantity: trade.quantity,
-          target: trade.takeProfit,
-          stopLoss: trade.stopLoss,
-          grossPnl,
-          netPnl,
-          fees: trade.fees ?? null,
-          // Signal context at entry
-          signalType: trade.signalType,
-          patternType: trade.patternType,
-          pool: trade.pool,
-          sourcePool: trade.sourcePool,
-          filterTier: trade.filterTier,
-          // Scoring
-          finalScore: trade.finalScore ?? 0, // #558 A2: coalesce (field now optional/unwritten)
-          hybridScore: trade.hybridScore,
-          predictiveConfidence: trade.predictiveConfidence,
-          expectedEdge: trade.expectedEdge,
-          decayPenalty: trade.decayPenalty,
-          // Regime + bias context
-          globalRegime: trade.globalRegime,
-          pairFriction: trade.pairFriction,
-          globalFriction: trade.globalFriction,
-          pairDirectionalBias: trade.pairDirectionalBias,
-          globalDirectionalBias: trade.globalDirectionalBias,
-          pairDirectionalBiasScore: trade.pairDirectionalBiasScore,
-          globalDirectionalBiasScore: trade.globalDirectionalBiasScore,
-          // Confidence chain (raw + modulated)
-          regimeWeight: trade.regimeWeight,
-          regimeConfidenceRaw: trade.regimeConfidenceRaw,
-          regimeConfidenceModulated: trade.regimeConfidenceModulated,
-          macroModifierValue: trade.macroModifierValue,
-          phase: trade.phase,
-          phaseAgeSeconds: trade.phaseAgeSeconds,
-          strategyPhaseWeight: trade.strategyPhaseWeight,
-          // Cohort marker
-          pairIdHash: trade.pairIdHash,
-          // ATR at open (B73.1)
-          atrAtOpen: trade.atrAtOpen,
-          // ── B-TRADE-RECORD-RETENTION leg 2 (2026-07-30) — entry-mode preservation ──
-          // These four live ONLY as typed columns on vts_open_trades (split out of the
-          // `context` residue by splitTradeForPersist), and that table's closed rows are
-          // hard-DELETEd by the boot GC with no archive leg. Archiving them here is the
-          // forward-protection half: from now on the entry-mode record survives the sweep.
-          // Scoped to exactly these four by measurement — `pool` and every key the
-          // factor-replay consumer reads off `context` are already present above, and
-          // `calibration_state` is preserved independently on the alternates row.
-          // ⚠️ maker* are MAKER-PATH-ONLY by design: null on a taker row is a legitimate
-          // value, not an absence (verified: 0 of 1,822 taker rows carry them).
-          //
-          // ★ PER-KEY RATIONALE — they are NOT equally load-bearing, and an earlier draft
-          // of this batch's docs wrongly credited maker_limit_price with the work that
-          // chosen_entry_mode + entry_fee_rate actually do (Langston, Step-4):
-          //   chosenEntryMode + entryFeeRate — THE maker-vs-taker entry-policy record.
-          //     Nothing else preserves them for the VTS corpus. Genuinely unrecoverable.
-          //   makerLimitPrice — ⚠️ NOT unrecoverable. On a MAKER row it equals entryPrice (every
-          //     maker writer — crypto open, xStock open, the maker twin's overlay since `8a-P4c` 3b —
-          //     sets entryPrice to its limit; a maker fills AT its limit and entryPrice is never
-          //     rewritten). A TAKER row books the ask as entryPrice and carries no makerLimitPrice.
-          //     entryPrice is already archived above.
-          //     Kept for ONE reason only: it keeps the archived row self-contained and
-          //     gives a coherence check if a future writer ever diverges limit from entry.
-          //   makerDeadline — ★ THE ONE THAT EARNS ITS KEY. Set at placement as
-          //     `Date.now() + resolveMakerMaxPendingMs(assetClass)` (same instant as
-          //     openedAt in practice, but it is NOT an exact derivation from it — do not
-          //     teach it as one), and `maker_max_pending_ms` is a TUNABLE. Once that knob
-          //     moves you cannot recover the patience budget an order was actually working
-          //     under — exactly what a fill-rate-versus-patience read needs.
-          //
-          // ⚠️ WHY THESE KEY NAMES WERE VERIFIED AGAINST THE INTERFACE — and the mechanism
-          // corrected (Langston, Step-4): the risk is NOT on the read side. There is no
-          // index signature in this file, so `trade.<typo>` would FAIL tsc. The exposure is
-          // entirely on the WRITE side — this snapshot is untyped jsonb, so a mistyped KEY
-          // here archives silently, forever, with nothing failing. Same class as the
-          // B-NEW-53.1 hollow-capture defect. Verify the KEY, not just the field.
-          //
-          // ⚠️ THE 186-vs-150 GAP IS NOT A SYMPTOM — my candidate was REFUTED from the code
-          // (Langston): the marketable fallback sets `_vtsEffectiveMode='taker'` and the
-          // stamp is the EFFECTIVE mode, so an "effective-maker row that never went pending"
-          // CANNOT EXIST; `planTwin` gives taker twins both fields `undefined`. What I
-          // actually did was split on the DATE 2026-07-02 when B7.2c landed MID-DAY, so
-          // maker rows opened that morning are feature-age but fell in my after-bucket.
-          // ★★ RE-SPLIT DONE — THERE IS NO ANOMALY. Boundary = the B7.2c commit
-          // 2026-07-02 18:31:26Z (crypto) / B7.2d 22:45:51Z (xStock), i.e. the EARLIEST
-          // possible deploy, so the test is conservative against my own claim. Result:
-          //   crypto_spot 181 maker rows — 33 pre-commit, 148 post-commit, 0 MISSING
-          //   xstock_spot   5 maker rows —  3 pre-commit,   2 post-commit, 0 MISSING
-          // ⇒ ZERO post-deploy maker rows lack the columns, and 33 + 3 = 36 reconciles
-          // EXACTLY to the gap (186 − 36 = 150). The "24 unexplained" was ENTIRELY an
-          // artifact of splitting on the DATE 2026-07-02 when the feature landed at 18:31Z
-          // that day. The data now agrees with the code: no path produces a maker-chosen
-          // row without these columns. NOTHING TO FILE.
-          chosenEntryMode: trade.chosenEntryMode,
-          entryFeeRate: trade.entryFeeRate,
-          makerLimitPrice: trade.makerLimitPrice,
-          makerDeadline: trade.makerDeadline,
-        },
-      });
-    } catch (b70Err) {
-      console.warn(
-        `[B70][ARCH] vts exit-decision archive enqueue failed:`,
-        b70Err instanceof Error ? b70Err.message : b70Err,
-      );
-    }
+    await archiveVtsExit(trade, {
+      exitReason, exitArm, exitPrice, pnlPercent, grossPnl, netPnl, finalTradeMode, now,
+    });
 
-    // Remove from open trades registry FIRST (synchronous, can't fail).
-    // The Map gate is the correctness invariant against re-running the
-    // non-idempotent close cascade (persistRealPriceTrade → closedTrades.push,
-    // session P&L, JSON ledger, B73 ablation replay, B70 archive enqueue,
-    // ML calibration). Must run before the soft-delete UPDATE so a thrown
-    // UPDATE cannot let the next exit cycle re-evaluate this trade and
-    // double-execute the cascade.
-    openVirtualTrades.delete(id);
-    // B79.0g-tx: AWAITED soft-delete UPDATE (no re-throw). Replaces the
-    // B79.0g fire-and-log async DELETE. UPDATE is idempotent via
-    // `WHERE closed=false`. If this fails, the DB row stays closed=false
-    // and rehydrate-on-next-boot re-adds the trade to the Map; a
-    // subsequent close cycle retries the cascade idempotently. Soft-
-    // delete is NOT a transactional close-time invariant — only Option C
-    // would be; this is observability + bounded-history for vts_open_trades.
-    try {
-      const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
-      await markOpenTradeClosed(id);
-    } catch (err) {
-      console.error(
-        `[B79.0g-tx][MARK_CLOSED_FAIL] trade=${id} soft-delete UPDATE failed; ` +
-        `JSON ledger + session metrics OK; DB row stays closed=false until rehydrate-on-next-boot ` +
-        `re-adds to Map and a subsequent close cycle retries. Investigate if recurring:`,
-        err instanceof Error ? err.message : err,
-      );
-      // Intentional: do NOT re-throw. Re-throw would let the next exit
-      // cycle re-execute the non-idempotent close cascade.
-    }
-    // Batch 45: Record close timestamp for re-entry cooldown.
-    // B79.0m.b2: assetClass-keyed namespace so xstock closes don't block crypto
-    // re-entries (or vice versa). The crypto-side generatePhase10Signal check
-    // at line 1258 still reads the legacy `${symbol}:${strategy}` key; write
-    // BOTH formats during the transition so neither path misses cooldowns.
-    // Future cleanup: migrate generatePhase10Signal to assetClass-keyed format
-    // and drop the legacy write.
-    // P19-B6.5d (Langston JC#3): a STAMP read, not a resolver — prefer the carried trade
-    // stamp; on a missing/invalid stamp, LOG the mislabel (passive telemetry, never silent)
-    // before the crypto_spot cooldown-key default. Folded in so vts-runner is fully
-    // consistent with the five sibling default-sites converted this batch.
-    const _cooldownStamp = asValidAssetClass(trade.assetClass);
-    if (_cooldownStamp === null) {
-      console.warn(`[P19-B6.5d][VTS] cooldown-key: trade ${trade.symbol}/${trade.strategy} missing/invalid asset-class stamp — labeled crypto_spot (logged passive default)`);
-    }
-    const assetClass = _cooldownStamp ?? 'crypto_spot';
-    recentCloses.set(`${assetClass}:${trade.symbol}:${trade.strategy}`, Date.now());
-    if (assetClass === 'crypto_spot') {
-      recentCloses.set(`${trade.symbol}:${trade.strategy}`, Date.now());
-    }
-
-    // B65.2 / B80 (2026-05-13): clear trailing engine state for THIS TRADE.
-    // Pre-B80 keyed by symbol — wiped state for ALL concurrent trades on the
-    // symbol. Post-B80 keyed by tradeId — only this trade's state is cleared,
-    // other concurrent trades on the same symbol are untouched.
-    try {
-      const { clearTrailingState } = await import('./trailing-exit-controller.js');
-      // B83 (2026-05-14): use destructured `id` (was `tradeId` — same BATCH_80
-      // rename bug as line 2349 above; would never execute due to abort there).
-      clearTrailingState(id);
-    } catch (err) {
-      console.error(`[B65.2][TEC] Failed to clear trailing state for tradeId=${id} symbol=${trade.symbol}:`, err);
-    }
+    await finishVtsClose(id, trade);
 
     // Directive 11.6 Task 6: Verification logging
     const pnlSign = netPnl >= 0 ? '+' : '';
@@ -4179,7 +4315,7 @@ async function resolveOpenVirtualTrades(): Promise<{
   // cycles are observable. Removes the `if (resolved > 0)` gate that hid the
   // pipeline-stall from PM2 logs. REMOVE the unconditional log after observability
   // dashboard ships; the resolved>0 block below stays as the success-path detail.
-  console.log(`[B83-CYCLE] ${openVirtualTrades.size} evaluated, ${resolved} closed (stops=${stopHits}, targets=${targetHits}, timeouts=${timeouts}), pending=${tradesToClose.length}`);
+  console.log(`[B83-CYCLE] ${openVirtualTrades.size} evaluated, ${resolved} closed (stops=${stopHits}, targets=${targetHits}, timeouts=${timeouts}), unpriced=${unpriced}, pending=${tradesToClose.length}`);
   if (resolved > 0) {
     console.log(`[11.6][Resolution] Cycle complete: ${resolved} trades closed (stops=${stopHits}, targets=${targetHits}, timeouts=${timeouts}), ${openVirtualTrades.size} still open`);
     // Directive 11.6D: Sanity check - all trades resolved via real-price
@@ -4209,13 +4345,17 @@ async function resolveOpenVirtualTrades(): Promise<{
  */
 export function computeShadowOutcomeMath(input: {
   entryPrice: number;
-  exitPrice: number;
+  /** `3n.q3` P3: `null` ⇔ an unpriced close — every outcome is `null` (never NaN, never the −1 a null exit would give). */
+  exitPrice: number | null;
   stopLoss: number;
   frictionCost?: number;
   openedAt: number;
   now: number;
-}): { grossPnl: number; netPnl: number; rMultiple: number | null; holdingMs: number } {
+}): { grossPnl: number | null; netPnl: number | null; rMultiple: number | null; holdingMs: number } {
   const { entryPrice, exitPrice, stopLoss, frictionCost = 0, openedAt, now } = input;
+  if (exitPrice === null || !Number.isFinite(exitPrice)) {
+    return { grossPnl: null, netPnl: null, rMultiple: null, holdingMs: now - openedAt };
+  }
   const grossPnl = (exitPrice - entryPrice) / entryPrice;
   const netPnl = grossPnl - frictionCost;
   const holdingMs = now - openedAt;
@@ -4229,19 +4369,20 @@ export function computeShadowOutcomeMath(input: {
 async function shadowClose(
   id: string,
   trade: OpenVirtualTrade,
-  exitPrice: number,
+  exitPrice: number | null,
   exitReason: string,
   now: number,
   exitArm: VtsBookingArm,
 ): Promise<void> {
   // `8a-P4c` 3a-ii (P14): the shadow lane's friction is recomposed at close by the same rule as the real lane.
-  const _sFr = recomposeVtsCloseFriction(trade, exitArm);
-  noteVtsCloseFriction('shadow', trade, _sFr);
+  // `3n.q3` P3: an unpriced close has no exit, so it carries NO friction and is not noted in the friction ledger.
+  const _sFr = exitPrice === null ? null : recomposeVtsCloseFriction(trade, exitArm);
+  if (_sFr !== null) noteVtsCloseFriction('shadow', trade, _sFr);
   const { grossPnl, netPnl, rMultiple, holdingMs } = computeShadowOutcomeMath({
     entryPrice: trade.entryPrice,
     exitPrice,
     stopLoss: trade.stopLoss,
-    frictionCost: _sFr.friction,
+    frictionCost: _sFr?.friction,
     openedAt: trade.openedAt,
     now,
   });
@@ -4256,6 +4397,7 @@ async function shadowClose(
       closeReason: exitReason,
       exitPrice,
       holdingMs: Math.round(holdingMs),
+      exitBookingArm: exitArm, // `3n.q3` P5 / OBJ-2: the arm, in its own column (C7: NULL only on rows written before it)
     });
   } catch (err) {
     console.error(`[reorg-B4][SHADOW_OUTCOME_FAIL] shadow=${id} symbol=${trade.symbol}:`, err instanceof Error ? err.message : err);
@@ -4293,7 +4435,7 @@ async function shadowClose(
  * nothing on the learning path BY CONSTRUCTION. Reuses the SAME exit-math service
  * `evaluateTECExit` the real resolver uses (vts-runner:2458) — ZERO drift: a change
  * to the exit math is auto-applied to shadows. The ONLY shadow-specific differences
- * are PARAMETERS/ACTIONS, not forked math: `maxHoldMs = SHADOW_MAX_HOLD_MS` (6h vs
+ * are PARAMETERS/ACTIONS, not forked math: `maxHoldMs = SHADOW_MAX_HOLD_MS` (48h vs
  * 7d), and the close ACTION is `shadowClose` (isolated sink) vs the real cascade.
  *
  * No-op while `openShadowTrades` is empty. (A "dormant at rtb_total=0" note stood here; paper active trading has been ON
@@ -4358,11 +4500,21 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
   };
 
   const { getTrailingState } = await import('./trailing-exit-controller.js');
-  const toClose: Array<{ id: string; trade: OpenVirtualTrade; exitPrice: number; exitReason: string; exitArm: VtsBookingArm }> = [];
+  const toClose: Array<{ id: string; trade: OpenVirtualTrade; exitPrice: number | null; exitReason: string; exitArm: VtsBookingArm }> = [];
   _xsShadowInstrument.beginPass(Date.now()); // `8a-P4c` P4b — the shadow lane is measured and read on its own
   kickVtsXstockSigma('shadow', xstockSymbols); // `8a-P4c` increment 3 — the shared σ cache for the shadow lane's open xStock symbols
   for (const [tradeId, trade] of openShadowTrades) {
     if (!trade.assetClass) { openShadowTrades.delete(tradeId); continue; }
+    // ⛔⛔ `3n.q3` P6 / OBJ-6 (Langston ruled the SKIP) — while the xStock weekend window is shut, xStock shadow trades are
+    // NOT evaluated, exactly as the real lane's suspended trades are not. Without this, a shadow opened late in the week
+    // reached its 48 h cap inside the closure and closed at its ENTRY price (216 of 217 xStock no-mark closes since
+    // 2026-09-15 fell on a Saturday or Sunday), or on a stale weekend snapshot quote that read as a real outcome.
+    // Keyed on the WINDOW, never on `trade.state`: a shadow rehydrated inside the closure keeps `weekend_suspended` in
+    // memory (the Sunday restore mirrors only the real map). Placed BEFORE the instrument's `recordLook`, so weekend looks
+    // are not recorded. The 48 h clock keeps running, as the real lane's 7-day clock does — so a trade whose cap fell
+    // inside the closure closes in the first passes after the reopen, mostly with no price (pre-registered, Step 7 (f));
+    // whether the clock should pause instead is `#1144` (row 4c).
+    if (trade.assetClass === 'xstock_spot' && isInXstockWeekendClose(new Date(now))) continue;
     const holdDurationMs = now - trade.openedAt;
     const currentPrice = getShadowPrice(trade.symbol, trade.assetClass);
     // `8a-P3`: the shadow lane reads the same touch as the real lane — without counters or funnel records, so the
@@ -4375,12 +4527,14 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
         }).selection,
         'sell',
       );
+      _vtsShadowByClass.crypto_spot.exitLooks++;
     } else if (trade.assetClass === 'xstock_spot') {
       // `8a-P4c` increment 3 (P8a): the shadow lane judges xStock with the SAME guard as the real lane.
       const _sxRow = xstockPriceMap.get(trade.symbol)?.rawQuote ?? null;
       const _sx = selectVtsXstockExitBid(trade.symbol, _sxRow, trade.stopLoss ?? null, Date.now());
       _xsShadowInstrument.recordLook(trade.symbol, _sxRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _sx);
       _sExitBid = _sx.bid;
+      _vtsShadowByClass.xstock_spot.exitLooks++;
     }
     const existingTecState = getTrailingState(tradeId);
     const tecSeed = existingTecState ? undefined : {
@@ -4424,27 +4578,36 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     if (decision.newStopPrice !== undefined && decision.newStopPrice > trade.stopLoss) {
       trade.stopLoss = decision.newStopPrice;
     }
-    if (trade.assetClass === 'crypto_spot') {
-      _vtsShadowTouch.looks++;
-      if (decision.noDecisionReason === 'no_transactable_side') _vtsShadowTouch.noTransactableSide++;
+    if (decision.noDecisionReason === 'no_transactable_side') {
+      const _c = countersFor(_vtsShadowByClass, trade.assetClass);
+      if (_c) _c.exitNoTransactableSide++;
     }
     if (!decision.shouldExit) continue;
-    const reason = decision.exitReason === 'stale_timeout' ? 'shadow_max_hold' : (decision.exitReason ?? 'timeout');
-    // F-G-2 OBJ-5a: same resolver as the real lane (:3238) — the shadow lane books the same way.
-    const _sBooked = resolveVtsBookedExitPrice(_sExitBid, currentPrice, decision.exitPrice);
+    // F-G-2 OBJ-5a: same resolver as the real lane — the shadow lane books the same way.
+    // ⛔ `3n.q3` P1/P3: a clamp arm books NO price ⇒ `timeout_unpriced`. That includes every `stale_timeout` (no mark), so
+    // the old `stale_timeout → shadow_max_hold` relabel is unreachable and is removed (rule 18); rows written before this
+    // keep `shadow_max_hold`, which means a no-mark close booked at its ENTRY price.
+    const _sBooked = resolveVtsBookedExitPrice(_sExitBid, currentPrice);
+    if (_sBooked.price === null) countUnpricedArm(countersFor(_vtsShadowByClass, trade.assetClass), _sBooked.arm);
+    const reason = _sBooked.price === null ? 'timeout_unpriced' : (decision.exitReason ?? 'timeout');
     toClose.push({ id: tradeId, trade, exitPrice: _sBooked.price, exitReason: reason, exitArm: _sBooked.arm });
   }
 
-  if (_vtsShadowTouch.looks > 0) {
-    console.log(`[8a-P3][VTS_SHADOW_TOUCH] looks=${_vtsShadowTouch.looks} noTransactableSide=${_vtsShadowTouch.noTransactableSide}`);
+  // `3n.q3` P7: per asset class (it counted crypto only). The reset runs before the close loop below, so a pass's
+  // `closedUnpriced` lands on the NEXT pass's line.
+  if (anyVtsExitCount(_vtsShadowByClass)) {
+    console.log(`[8a-P3][VTS_SHADOW_TOUCH] ${formatVtsExitCounters(_vtsShadowByClass)}`);
   }
-  _vtsShadowTouch.looks = 0;
-  _vtsShadowTouch.noTransactableSide = 0;
+  resetVtsExitCounters(_vtsShadowByClass);
   _xsShadowInstrument.endPass();
 
   for (const { id, trade, exitPrice, exitReason, exitArm } of toClose) {
     await shadowClose(id, trade, exitPrice, exitReason, now, exitArm);
     shadowResolved++;
+    if (exitPrice === null) {
+      const _c = countersFor(_vtsShadowByClass, trade.assetClass);
+      if (_c) _c.closedUnpriced++;
+    }
   }
   if (shadowResolved > 0) {
     console.log(`[reorg-B4][SHADOW_RESOLVE] closed ${shadowResolved} shadow trades, ${openShadowTrades.size} still open (dropCount=${shadowDropCount})`);
@@ -4704,8 +4867,10 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
   const resolvedGlobalRegime: MarketRegimeType | undefined = input.globalRegime ?? undefined;
   const resolvedPairFriction = input.pairFriction ?? (() => {
     try {
-      // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
-      const cm = getCachedCostMetrics(input.symbol, vtsResolveClassOrLoggedDefault(input.symbol)); // P19-B6.5d (was safeResolve ?? crypto_spot)
+      // B79.0n.MCE: assetClass REQUIRED. ⛔ `3n.q3` P9 (`#1075`): the CARRIED class — resolving from the ticker priced a
+      // collision-ticker xStock (MET, DASH, …) from CRYPTO cost metrics, and the cost cache can write a default into the
+      // crypto entry as it does. The ticker resolver is only the fallback for a missing or invalid stamp.
+      const cm = getCachedCostMetrics(input.symbol, asValidAssetClass(input.assetClass) ?? vtsResolveClassOrLoggedDefault(input.symbol));
       return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
     } catch {
       return undefined;

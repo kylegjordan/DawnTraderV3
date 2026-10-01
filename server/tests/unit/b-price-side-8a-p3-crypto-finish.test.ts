@@ -113,17 +113,18 @@ describe('8a-P3 — divergent fixtures: the midpoint and the transactable side d
     expect(plan.kind === 'open' && plan.twinMode).toBe('maker');
   });
 
-  it('C6. crypto books the BID; every clamp arm is named', () => {
-    expect(resolveVtsBookedExitPrice(99.5, 100, 101)).toEqual({ price: 99.5, arm: 'bid' });
-    expect(resolveVtsBookedExitPrice(null, 100, 101)).toEqual({ price: 101, arm: 'clamp_no_bid' });
-    expect(resolveVtsBookedExitPrice(99.5, null, 101)).toEqual({ price: 101, arm: 'clamp_no_mark' });
+  // `3n.q3` P1: a clamp arm books NO price (it used to book the clamp).
+  it('C6. crypto books the BID; every clamp arm is named and books no price', () => {
+    expect(resolveVtsBookedExitPrice(99.5, 100)).toEqual({ price: 99.5, arm: 'bid' });
+    expect(resolveVtsBookedExitPrice(null, 100)).toEqual({ price: null, arm: 'clamp_no_bid' });
+    expect(resolveVtsBookedExitPrice(99.5, null)).toEqual({ price: null, arm: 'clamp_no_mark' });
   });
 
   // `8a-P4c` increment 3 (P8b): the xStock class seam is GONE — xStock books on the same three arms as crypto.
   it('C6b. xStock books the BID too, on the same three arms — no class seam', () => {
-    expect(resolveVtsBookedExitPrice(99.5, 100, 101)).toEqual({ price: 99.5, arm: 'bid' });
-    expect(resolveVtsBookedExitPrice(null, 100, 101)).toEqual({ price: 101, arm: 'clamp_no_bid' });
-    expect(resolveVtsBookedExitPrice(99.5, null, 101)).toEqual({ price: 101, arm: 'clamp_no_mark' });
+    expect(resolveVtsBookedExitPrice(99.5, 100)).toEqual({ price: 99.5, arm: 'bid' });
+    expect(resolveVtsBookedExitPrice(null, 100)).toEqual({ price: null, arm: 'clamp_no_bid' });
+    expect(resolveVtsBookedExitPrice(99.5, null)).toEqual({ price: null, arm: 'clamp_no_mark' });
     const src = readFileSync(join(process.cwd(), 'server/core/trading/vts-exit-booking.ts'), 'utf-8');
     expect(src).not.toMatch(/arm: 'clamp_class_seam'/);
   });
@@ -180,7 +181,9 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
   it('BLOCKER-1: a VTS exit refusal is tracked PER TRADE ID with a once-per-streak alert, and cleared on a decision', () => {
     // `8a-P4c` increment 3 (Langston Step-4 FINDING-1): the streak step is the pure `stepNoTriggerStreak` (behaviour-tested
     // in b-price-side-8a-p4c-inc3-guard.test.ts); here, only that the runner routes every trade through it, keyed by id.
-    expect(VTS).toMatch(/stepNoTriggerStreak\(_vtsNoTriggerStreak\.get\(tradeId\), decision\.noDecisionReason, _ntPages, _ntNow,/);
+    // `3n.q3` P8: the streak's reason is the evaluator's, with the selector's own refusal appended when it has one.
+    expect(VTS).toMatch(/stepNoTriggerStreak\(_vtsNoTriggerStreak\.get\(tradeId\), _ntReason, _ntPages, _ntNow,/);
+    expect(VTS).toMatch(/const _ntReason = decision\.noDecisionReason === 'no_transactable_side' && _vtsExitRefusal !== null/);
     expect(VTS).toMatch(/dedupe_key: `no-trigger-vts-\$\{trade\.symbol\}`/);
     // r3 + P10: the streak runs over EVERY no-decision reason, BOTH classes, every session; only the PAGE is session-gated.
     expect(VTS).toMatch(/const _ntPages = trade\.assetClass === 'crypto_spot' \|\| \(trade\.assetClass === 'xstock_spot' && !_ntXsOffHours\);/);
@@ -190,8 +193,8 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     expect(VTS).not.toMatch(/_vtsNoTriggerStreak\.get\(trade\.symbol\)/);
   });
 
-  it('BLOCKER-1 floor: the shadow lane counts its refusals', () => {
-    expect(VTS).toMatch(/_vtsShadowTouch\.noTransactableSide\+\+/);
+  it('BLOCKER-1 floor: the shadow lane counts its refusals (per asset class since `3n.q3` P7)', () => {
+    expect(VTS).toMatch(/const _c = countersFor\(_vtsShadowByClass, trade\.assetClass\);\s*if \(_c\) _c\.exitNoTransactableSide\+\+;/);
     expect(VTS).toMatch(/\[8a-P3\]\[VTS_SHADOW_TOUCH\]/);
   });
 
