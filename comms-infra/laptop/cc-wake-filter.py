@@ -346,6 +346,15 @@ def save_state(st):
     tmp = STATE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(st, f)
+    # B-TOKEN-BURN-CUT Step 7 (2026-10-01, measured on CC-B): on Windows os.replace is REFUSED (WinError 5) while another
+    # process holds the destination open — reproduced with a second process holding it. Retry briefly; the hold is
+    # transient. A save that still fails raises, as before (a wake must never be printed without its position saved).
+    for _attempt in range(25):
+        try:
+            os.replace(tmp, STATE)
+            return
+        except PermissionError:
+            time.sleep(0.2)
     os.replace(tmp, STATE)
 
 
@@ -539,7 +548,12 @@ for raw in sys.stdin:
             _p, _i, _o = line.split(" ", 1)[1].rsplit(" ", 2)
             POS_NOW[_p] = [int(_i), int(_o)]        # a start point needs no line to be processed first
         elif parts[0] == "#@KEEPALIVE":
-            _checkpoint()
+            try:
+                _checkpoint()
+            except OSError as _e:
+                # A keepalive save carries no delivered line, so a failure here loses nothing: the next save (a wake's,
+                # or the next keepalive) writes the same position. Never let it kill the watcher (measured on CC-B).
+                print(f"[cc-wake-filter] keepalive save skipped: {_e}", file=sys.stderr, flush=True)
             try:
                 with open(STATE + ".alive", "w", encoding="utf-8") as f:
                     f.write(_utc() + "\n")

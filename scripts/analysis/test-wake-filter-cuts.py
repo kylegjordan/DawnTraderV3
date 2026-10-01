@@ -189,6 +189,20 @@ _pok = (_pmeta.get("skipped_as_prose") == 3 and len(_prej) == 4
 if not _pok: fails += 1
 print(f"  {'PASS' if _pok else '** FAIL **':10} prose rule: 3 quotations skipped and counted, 4 real defects reported (incl. no-id-with-owner and a spaced id) "
       f"(skipped_as_prose={_pmeta.get('skipped_as_prose')}, rejects={len(_prej)})")
+# Step 7 finding (CC-B, 2026-10-01): Windows refuses os.replace while another process holds the state file open. Hold it
+# for 1.5 s while the filter runs a keepalive and then a wake: it must deliver the wake, exit 0 and save the position.
+_HDIR = tempfile.mkdtemp(prefix="wakehold-"); _HST = os.path.join(_HDIR, "CC-A.json")
+open(_HST, "w", encoding="utf-8").write('{"pos": {}}')
+_holder = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_HST}'); time.sleep(1.5)"])
+import time as _t; _t.sleep(0.4)
+_hin = "\n".join(["==> /var/log/cc-wake.log <==", "#@AT /var/log/cc-wake.log 7 0", "#@KEEPALIVE",
+                  "#@POS /var/log/cc-wake.log 7 0", "Claude Old: held-file wake", "#@POS /var/log/cc-wake.log 7 30"]) + "\n"
+_hp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _HST], input=_hin.encode("utf-8"), capture_output=True, timeout=120)
+_holder.wait()
+_hst = json.load(open(_HST, encoding="utf-8"))
+_hok = _hp.returncode == 0 and b"held-file wake" in _hp.stdout and b"Traceback" not in _hp.stderr and (_hst.get("pos") or {})
+if not _hok: fails += 1
+print(f"  {'PASS' if _hok else '** FAIL **':10} a state file held open by another process: the wake is delivered and the position saved (rc={_hp.returncode}, saved={bool((_hst.get('pos') or {}))})")
 print()
 print(f"({sum(1 for _, w in results if w)} of {len(CASES)} cases produced a wake — the instrument speaks)")
 print("ALL PASS" if fails == 0 else f"{fails} FAILED")
