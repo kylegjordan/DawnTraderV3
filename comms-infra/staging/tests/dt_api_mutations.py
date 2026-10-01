@@ -44,6 +44,7 @@ MUTATIONS = [
     ("Gate 1-1: crew-role-missing not sticky", '"crew-user-missing", "crew-role-missing", "login-malformed",', '"crew-user-missing", "login-malformed",'),
     ("Gate 1-1: a direct 403 is never probed", "    if st == 403:                                      # Gate 1-1", "    if False:                                      # Gate 1-1"),
     ("Gate 1-1: an unreadable page is written over", '    if isinstance(standing, dict) and standing.get("_unreadable"):', "    if False:"),
+    ("Gate 1-1: the placeholder flag leaks into a page file", '    old = {k: v for k, v in old.items() if k != "_unreadable"}', "    pass"),
     ("r2: every page sticky", "    sticky = kind in STICKY_KINDS", "    sticky = True"),
     ("r2: a later page overwrites the first cause", "    return dict(old, later=later, sticky=page_sticky(old) or sticky)",
      '    return {"ts": now, "kind": kind, "detail": detail, "sticky": page_sticky(old) or sticky, "later": later}'),

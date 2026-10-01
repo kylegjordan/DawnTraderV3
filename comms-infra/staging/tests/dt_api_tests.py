@@ -652,5 +652,17 @@ check("Gate 1-1 FINDING-2: an unreadable page.json is left byte-for-byte, the ne
       "%s %s %s %s" % (c, side, sp, e))
 R.close()
 
+# ... and the placeholder's internal flag never reaches a page file (the setter writes page_merge's
+#     output directly — a persisted flag would make a readable page.json read as unreadable forever)
+R = Rig()
+spec = importlib.util.spec_from_loader("dtapi_mod2", SourceFileLoader("dtapi_mod2", R.bin))
+M2 = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(M2)
+open(R.st("page.json"), "wb").write(b"not json")
+merged = M2.page_merge(M2.page_standing(), "setter-restored", "d", True)
+check("Gate 1-1: page_merge never emits the placeholder's _unreadable flag", "_unreadable" not in merged
+      and merged.get("sticky") is True, str(merged))
+R.close()
+
 print("dt-api suite: %d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

@@ -425,6 +425,10 @@ def page_merge(old, kind, detail, sticky):
     now = _iso(_now())
     if old is None:
         return {"ts": now, "kind": kind, "detail": detail, "sticky": sticky}
+    # `_unreadable` marks page_standing()'s placeholder for page_write() ONLY — it must never be
+    # written into a page file, or a readable page.json would read as unreadable from then on
+    # (the setter writes this function's output directly).
+    old = {k: v for k, v in old.items() if k != "_unreadable"}
     later = old.get("later")
     later = list(later)[-20:] if isinstance(later, list) else []
     if sticky and not page_sticky(old):
