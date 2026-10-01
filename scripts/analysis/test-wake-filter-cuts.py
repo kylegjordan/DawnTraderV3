@@ -203,6 +203,18 @@ _hst = json.load(open(_HST, encoding="utf-8"))
 _hok = _hp.returncode == 0 and b"held-file wake" in _hp.stdout and b"Traceback" not in _hp.stderr and (_hst.get("pos") or {})
 if not _hok: fails += 1
 print(f"  {'PASS' if _hok else '** FAIL **':10} a state file held open by another process: the wake is delivered and the position saved (rc={_hp.returncode}, saved={bool((_hst.get('pos') or {}))})")
+# Langston (Step 7 approval): a save that keeps failing must NOT leave a fresh-and-green .alive. Hold the state file
+# open for 7 s (beyond the ~5 s retry) during a KEEPALIVE: the filter must survive, skip the save, and NOT write .alive.
+_KDIR = tempfile.mkdtemp(prefix="wakestale-"); _KST = os.path.join(_KDIR, "CC-A.json")
+open(_KST, "w", encoding="utf-8").write('{"pos": {}}')
+_kh = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_KST}'); time.sleep(7)"])
+_t.sleep(0.4)
+_kin = "\n".join(["==> /var/log/cc-wake.log <==", "#@AT /var/log/cc-wake.log 7 0", "#@KEEPALIVE"]) + "\n"
+_kp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _KST], input=_kin.encode("utf-8"), capture_output=True, timeout=120)
+_kh.wait()
+_kok = (not os.path.exists(_KST + ".alive")) and b"keepalive save skipped" in _kp.stderr and b"Traceback" not in _kp.stderr
+if not _kok: fails += 1
+print(f"  {'PASS' if _kok else '** FAIL **':10} a save that keeps failing leaves .alive UNWRITTEN (stale), and the watcher survives (alive_written={os.path.exists(_KST + '.alive')})")
 print()
 print(f"({sum(1 for _, w in results if w)} of {len(CASES)} cases produced a wake — the instrument speaks)")
 print("ALL PASS" if fails == 0 else f"{fails} FAILED")

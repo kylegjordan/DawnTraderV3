@@ -343,12 +343,14 @@ def save_state(st):
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
     st["alias"] = ALIAS
     st["saved_at"] = _utc()
-    tmp = STATE + ".tmp"
+    tmp = STATE + f".tmp.{os.getpid()}"   # per process: two watchers of one alias must not share a temp file (Langston nit)
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(st, f)
     # B-TOKEN-BURN-CUT Step 7 (2026-10-01, measured on CC-B): on Windows os.replace is REFUSED (WinError 5) while another
     # process holds the destination open — reproduced with a second process holding it. Retry briefly; the hold is
-    # transient. A save that still fails raises, as before (a wake must never be printed without its position saved).
+    # transient. A save that still fails RAISES: the order is print-then-save (see #@CAUGHTUP), so a raise re-delivers
+    # the wake on the next run rather than losing it — swallowing it would exit 0 having advanced nothing, silently.
+    # (Corrected per Langston: this comment first said the reverse.)
     for _attempt in range(25):
         try:
             os.replace(tmp, STATE)
@@ -553,12 +555,15 @@ for raw in sys.stdin:
             except OSError as _e:
                 # A keepalive save carries no delivered line, so a failure here loses nothing: the next save (a wake's,
                 # or the next keepalive) writes the same position. Never let it kill the watcher (measured on CC-B).
-                print(f"[cc-wake-filter] keepalive save skipped: {_e}", file=sys.stderr, flush=True)
-            try:
-                with open(STATE + ".alive", "w", encoding="utf-8") as f:
-                    f.write(_utc() + "\n")
-            except OSError:
-                pass
+                # And do NOT refresh .alive (Langston): a watcher that cannot save its position must read STALE, never
+                # fresh-and-green while nothing is delivered — the heartbeat calls it DEAD after 15 minutes.
+                print(f"[cc-wake-filter] keepalive save skipped, .alive NOT refreshed: {_e}", file=sys.stderr, flush=True)
+            else:
+                try:
+                    with open(STATE + ".alive", "w", encoding="utf-8") as f:
+                        f.write(_utc() + "\n")
+                except OSError:
+                    pass
         elif parts[0] == "#@CAUGHTUP" and TAP.delivered:
             _checkpoint()          # print-then-save (judgement call (a)): a kill between the two
             sys.exit(0)            # re-delivers — a duplicate wake, never a lost one
