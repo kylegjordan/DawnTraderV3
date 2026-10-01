@@ -55,6 +55,7 @@ MUTATIONS = [
     ("alert", "r3: one key per class, not per subject", '    --dedupe-key "dt-unit-failure:$unit:$cls:$key"', '    --dedupe-key "dt-unit-failure:$unit:$cls"'),
     ("session", "one agent's failure stops the other", "        except Exception as e:\n            failed.append(agent)", "        except ZeroDivisionError as e:\n            failed.append(agent)"),
     ("session", "short token accepted", "    if exp - time.time() < MIN_EXP_LEFT_S:", "    if False:"),
+    ("drift", "Gate 1-2: the primary group is not checked", "            if prim != who:", "            if False:"),
 ]
 
 bad = 0

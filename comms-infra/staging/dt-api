@@ -74,6 +74,10 @@ DTAPI_CAP = 2                     # dt-api's own logins (calls + mints) per 900 
 NEG_S = 900                       # after a login 401 / 404 / 429 (a 429 uses its RateLimit-Reset)
 BACKOFF_500_S = 60                # after a login 5xx or no answer: back off, keep the current token
 LOGIN_FAILING_GAP_S = 600         # a run of failed logins, no success between, spanning at least this (no ceiling — Gate 1-1)
+# ⚠️ BOUND, three constants in three files, nothing binds them (Langston, Gate 1-2): the app's token
+#    life (7 d, server/routes.ts:159 `expiresIn: '7d'`) − MINT_REUSE_S (20 h) must EXCEED MIN_EXP_LEFT_S
+#    (6 d, here AND agent-staging-session) — a 4-hour margin today. Break it and the mint fails loud
+#    (it refuses a token under the floor). Change any of the three only with the other two in view.
 MINT_REUSE_S = 20 * 3600          # a mint younger than this is handed out again (C-10)
 MIN_EXP_LEFT_S = 6 * 86400        # ... and only if it still has 6 days left (OBJ-1(e))
 PROBE_TIMEOUT_S = 10              # /api/settings and /api/auth/verify probes: short, the lock may be held

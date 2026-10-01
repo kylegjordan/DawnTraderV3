@@ -580,5 +580,65 @@ log = open(r.p("setter", "run.log")).read() if os.path.exists(r.p("setter", "run
 check("every step is in the run log too (an ssh that drops loses nothing)", "(7) removed the marker" in log, log[-200:])
 r.close()
 
+# ── Gate 1-2 (Langston, 2026-10-01) + the Gate 1-1 carries: durable_page in-process ──
+import contextlib  # noqa: E402
+import io  # noqa: E402
+r = Rig(live_env=V1)
+os.makedirs(r.p("setter"), mode=0o700, exist_ok=True)
+spec = importlib.util.spec_from_loader("setter_g12", SourceFileLoader("setter_g12", r.setter))
+S2 = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(S2)
+pagef = r.p("state", "page.json")
+# (a) a short write: the page still lands WHOLE
+_real_write = os.write
+os.write = lambda fd, data: _real_write(fd, bytes(data[:7]))
+try:
+    with contextlib.redirect_stdout(io.StringIO()):
+        ok = S2.durable_page("setter-restored", "short-write detail " * 20)
+finally:
+    os.write = _real_write
+pg = json.load(open(pagef)) if os.path.exists(pagef) else {}
+check("Gate 1-1 carry: a short write still lands the WHOLE page (the write loops)",
+      ok is True and pg.get("kind") == "setter-restored" and pg.get("detail", "").count("short-write") == 20, str(pg)[:120])
+os.unlink(pagef)
+# (b) a page that cannot be written returns False and says so; the callers' text follows it
+_real_open = os.open
+def _failing_open(path, *a, **k):
+    if ".setter." in str(path):
+        raise OSError(28, "No space left on device")
+    return _real_open(path, *a, **k)
+os.open = _failing_open
+buf = io.StringIO()
+try:
+    with contextlib.redirect_stdout(buf):
+        ok = S2.durable_page("setter-restored", "d")
+finally:
+    os.open = _real_open
+check("Gate 1-2: an unwritten page returns False, says 'could NOT be written', and the callers' text is not 'PAGE raised'",
+      ok is False and "could NOT be written" in buf.getvalue() and not os.path.exists(pagef)
+      and S2.page_said(ok) != "PAGE raised" and S2.page_said(True) == "PAGE raised", buf.getvalue()[-200:])
+# (c) an unreadable page.json is never written over; the cause goes to a side file
+garbage = b'{"kind": "crew-pass'
+open(pagef, "wb").write(garbage)
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    ok = S2.durable_page("setter-row-changed", "d")
+side = [f for f in os.listdir(r.p("state")) if f.startswith("page.json.unreadable.")]
+sp = json.load(open(r.p("state", side[0]))) if side else {}
+check("Gate 1-1 carry: an unreadable page.json is left byte-for-byte; the setter's cause goes to a side file",
+      ok is True and open(pagef, "rb").read() == garbage and len(side) == 1 and sp.get("kind") == "setter-row-changed"
+      and "_unreadable" not in sp and "NOT written over" in buf.getvalue(), "%s %s %s" % (side, sp, buf.getvalue()[-200:]))
+r.close()
+
+# (d) the setter's lock cannot be opened -> exit 3 with its own text (1 is "failed and restored")
+r = Rig(live_env=V1)
+os.makedirs(r.p("setter.lock"))                    # a directory: opening it O_RDWR fails (EISDIR)
+pgp = r.pgpass()
+c, o, e = r.run(pgpass=pgp)
+check("Gate 1-2: an unopenable setter lock -> exit 3 with its own text, no traceback, PGPASSFILE kept, nothing changed",
+      c == 3 and "could not open the setter's lock" in o + e and "Traceback" not in o + e
+      and os.path.exists(pgp) and r.env_value() == V1, o + e)
+r.close()
+
 print("setter suite: %d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

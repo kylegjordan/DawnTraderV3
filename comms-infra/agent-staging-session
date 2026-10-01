@@ -51,6 +51,8 @@ SSH = "/usr/bin/ssh"
 MINT_KEY = "/root/.ssh/dtmint_ed25519"
 MINT_TARGET = "dtmint@188.245.193.8"
 KNOWN_HOSTS = "/root/.ssh/known_hosts"
+# ⚠️ BOUND (Langston, Gate 1-2): token life (7 d, server/routes.ts:159) − dt-api's MINT_REUSE_S (20 h)
+#    must EXCEED this (6 d) — 4 h of margin; the same value is in dt-api. See dt-api's note.
 MIN_EXP_LEFT_S = 6 * 86400
 NL = chr(10)
 

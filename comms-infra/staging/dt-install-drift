@@ -222,7 +222,11 @@ def source_fresh(box):
     """The newest SUCCESSFUL refresh. r3 S4, measured on git 2.43: a FAILED fetch truncates
     FETCH_HEAD to 0 bytes AND refreshes its mtime, so an mtime alone reads a dead fetch as fresh —
     after the repo goes private the checker's fetch fails and the stale check could never fire. A
-    stamp counts only if it has CONTENT (a successful fetch writes the refs it fetched)."""
+    stamp counts only if it has CONTENT (a successful fetch writes the refs it fetched).
+    ⚠️ FORWARD (Langston, Gate 1-2): when the repo goes private (OBJ-6) the checker's fetch starts
+    failing → FETCH_HEAD 0 bytes → None here → SOURCE → a DAILY PAGE on staging. That is correct and
+    loud, but it will read as drift rather than a credentials gap — OBJ-6 must move the checker's
+    fetch credentials in the same change, or say explicitly that it expects this page."""
     newest = None
     for s in box["stamps"]:
         try:
@@ -321,6 +325,16 @@ def check_extra(name, box):
                 if who in g.gr_mem:
                     out("STATE", "%s is a member of group %s — a %%%s sudoers rule would apply to it"
                         % (who, g.gr_name, g.gr_name), "SUDO", who)
+        # Gate 1-2 (Langston, an enumerator-blind-spot): gr_mem does NOT list PRIMARY-group members,
+        # so `usermod -g staff dtapi` was invisible above. Each account's primary group must be its own.
+        for who in ("dtapi", "dtmint"):
+            try:
+                prim = grp.getgrgid(pwd.getpwnam(who).pw_gid).gr_name
+            except KeyError:
+                continue                                   # a missing account is the account check's to report
+            if prim != who:
+                out("STATE", "%s's PRIMARY group is %s, not its own — a %%%s sudoers rule would apply to it"
+                    % (who, prim, prim), "SUDO", who)
     elif name == "sudoers_others":
         # r2: the main file too, not only the drop-in dir. r3: and every file an @include /
         # @includedir (or the older #include / #includedir) pulls in, followed to any depth.

@@ -374,5 +374,42 @@ check("r3: a FIFO planted at page.json does not hang the run, and still FAILS as
       c == 1 and "raised a PAGE" in o and "unreadable" in o, o[-300:])
 os.unlink(T + "/var/lib/dt-api/page.json")
 
+# ── Gate 1-2 (Langston): a PRIMARY group is invisible to gr_mem — in-process, fake pwd/grp, so the
+#    test does not depend on this box's real accounts ──
+import contextlib  # noqa: E402
+import importlib.util  # noqa: E402
+import io  # noqa: E402
+import types  # noqa: E402
+from importlib.machinery import SourceFileLoader  # noqa: E402
+_spec = importlib.util.spec_from_loader("drift_g12", SourceFileLoader("drift_g12", SRC))
+DM = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(DM)
+_root = tempfile.mkdtemp(prefix="drift-g12-")
+os.makedirs(_root + "/etc")
+open(_root + "/etc/shadow", "w").write("dtapi:*:1:0:99999:7:::" + NL + "dtmint:*:1:0:99999:7:::" + NL)
+DM.ROOT = _root
+_users = {"dtapi": types.SimpleNamespace(pw_shell="/usr/sbin/nologin", pw_gid=2001),
+          "dtmint": types.SimpleNamespace(pw_shell="/bin/sh", pw_gid=2002)}
+_groups = {2001: "dtapi", 2002: "staff"}                # dtmint's primary group is NOT its own
+DM.pwd = types.SimpleNamespace(getpwnam=lambda n: _users[n])
+DM.grp = types.SimpleNamespace(getgrall=lambda: [], getgrgid=lambda g: types.SimpleNamespace(gr_name=_groups[g]))
+
+
+def _accounts_problems():
+    DM.PROBLEMS.clear()
+    DM.CLASSES.clear()
+    with contextlib.redirect_stdout(io.StringIO()):
+        DM.check_extra("accounts", {})
+    return list(DM.PROBLEMS)
+
+
+pr = _accounts_problems()
+check("Gate 1-2: dtmint's PRIMARY group 'staff' (absent from every gr_mem) is flagged",
+      sum("PRIMARY group is staff" in x and "dtmint" in x for x in pr) == 1, str(pr))
+_groups[2002] = "dtmint"
+pr = _accounts_problems()
+check("... and an account whose primary group is its own is NOT flagged (control)", not any("PRIMARY" in x for x in pr), str(pr))
+shutil.rmtree(_root)
+
 print("drift suite: %d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
