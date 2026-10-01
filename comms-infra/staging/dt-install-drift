@@ -329,9 +329,18 @@ def check_extra(name, box):
         # so `usermod -g staff dtapi` was invisible above. Each account's primary group must be its own.
         for who in ("dtapi", "dtmint"):
             try:
-                prim = grp.getgrgid(pwd.getpwnam(who).pw_gid).gr_name
+                gid = pwd.getpwnam(who).pw_gid
             except KeyError:
                 continue                                   # a missing account is the account check's to report
+            try:
+                prim = grp.getgrgid(gid).gr_name
+            except KeyError:
+                # Gate 1-2 r2 (Langston): an ORPHAN primary gid (`usermod -g 9999 dtapi`) is not a missing
+                # account, and nothing else sees it — the sudoers scan matches neither the numeric
+                # `%#9999` form nor the bare gid. Report it; never skip it.
+                out("STATE", "%s's PRIMARY group id %d resolves to NO group — a %%#%d sudoers rule would "
+                    "apply to it" % (who, gid, gid), "SUDO", who)
+                continue
             if prim != who:
                 out("STATE", "%s's PRIMARY group is %s, not its own — a %%%s sudoers rule would apply to it"
                     % (who, prim, prim), "SUDO", who)

@@ -409,6 +409,11 @@ check("Gate 1-2: dtmint's PRIMARY group 'staff' (absent from every gr_mem) is fl
 _groups[2002] = "dtmint"
 pr = _accounts_problems()
 check("... and an account whose primary group is its own is NOT flagged (control)", not any("PRIMARY" in x for x in pr), str(pr))
+_users["dtapi"].pw_gid = 9999                           # Gate 1-2 r2: an ORPHAN primary gid
+pr = _accounts_problems()
+check("Gate 1-2 r2: an orphan primary gid (no such group) is REPORTED, not skipped",
+      sum("PRIMARY group id 9999 resolves to NO group" in x and "dtapi" in x for x in pr) == 1, str(pr))
+_users["dtapi"].pw_gid = 2001
 shutil.rmtree(_root)
 
 print("drift suite: %d passed, %d failed" % (PASS, FAIL))
